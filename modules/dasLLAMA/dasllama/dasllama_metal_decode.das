@@ -383,7 +383,7 @@ var private g_rope_sin_next_swa : array<float>
 //! `deepest` = -1 means the step's rows reach no further than `pos`.
 //! the single row builds its side row on the device: the pre-step serves the model and the token's id reaches the step
 //! (`btok_in`, or a chained step's argmax)
-def private metal_ple_decode_dev(t : Model) : bool => metal_ple_dev_ok(t) && emb_dev_gather_ok(t)
+def private metal_ple_decode_dev(t : Model) : bool => metal_ple_dev_said("decode", t) && emb_dev_gather_ok(t)
 
 //! The E-series pre-step on the device over `nrows` decode rows (`enc_ple_pre`): the embedded rows `bx` projected into `bproj` on
 //! the GEMV forms - the bf16 rows, else the f32 router GEMV
@@ -438,7 +438,7 @@ def private ple_step_release(var r : StepRes) {
 [unused_argument(s, pos)]
 def private metal_ple_decode_gate(t : Model; s : Session; npos, pos : int64) : bool {
     return false if (active_decode_override() != "metal")
-    return npos == 1l ? metal_ple_decode_dev(t) : metal_ple_dev_ok(t)
+    return npos == 1l ? metal_ple_decode_dev(t) : metal_ple_dev_said("batch decode", t)
 }
 
 def private acquire_step(t : Model; s : Session; pos : int64; koff, voff : uint64; cap : int64; draft : bool = false; nrows : int64 = 1l; deepest : int64 = -1l) : StepRes {   // nolint:STYLE037,STYLE038 — flat per-shape buffer/uniform acquire list
@@ -4307,7 +4307,7 @@ def batch_step_build(t : Model; ws : BatchWorkspace; var sessions : array<Sessio
     let bytes_ple = uint64(c.n_layers * nrows * ple_n * 4l)
     var ple_r = StepRes(bytes_ple = bytes_ple)   //! the side rows' buffers, `ple_step_dev`'s
     if (plef) {
-        ple_step_dev(t, ple_r, metal_ple_dev_ok(t))
+        ple_step_dev(t, ple_r, metal_ple_dev_said("decode", t))
     }
     var u_ple = plef ? uniform_u32(uint(ple_n)) : null
     let same_toks = same && g_b_same_toks != null   //! the same-slab rows' ids ride the device already

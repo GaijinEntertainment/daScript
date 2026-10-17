@@ -1601,6 +1601,16 @@ def test_ple_proj_dim_gates(t : T?) {
         t |> success(metal_ple_dev_ok(m), "the bf16 rows serve an even dim (the E2B's 1536)")
         m.config.dim = 1537l
         t |> success(!metal_ple_dev_ok(m), "... and decline an odd one")
+        let odd = metal_ple_pre_unserved(m)
+        t |> success(find(odd, "PLE table") >= 0 && find(odd, "1537") >= 0 && find(odd, "bf16 pair") >= 0,
+            "... naming the site, the dim and the word: '{odd}'")
+        t |> success(!metal_ple_dev_said("decode", m), "the driver's verdict is the predicate's, its reason logged")
+        m.config.n_embd_per_layer = 2048l
+        t |> success(find(metal_ple_pre_unserved(m), "2048") >= 0, "a ple width past the finish's threadgroup is named")
+        m.config.n_embd_per_layer = 0l
+        t |> equal(metal_ple_pre_unserved(m), "", "a model with no PLE has nothing to decline")
+        t |> success(!metal_ple_dev_ok(m), "... and no device pre-step")
+        m.config.n_embd_per_layer = 256l
         m.config.dim = 1538l
         t |> success(metal_ple_dev_ok(m), "the bf16 rows serve an even dim off the float4 lattice")
         m.ple_model_bf16 = false

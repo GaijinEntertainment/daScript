@@ -12,9 +12,10 @@ require dastest/review_gate
 // 1 with findings.
 
 let private FACADE = "modules/dasLLAMA/dasllama/dasllama.das"
-// The TTS surface is a module of its own that dasllama.das re-exports publicly, so its defs
-// are facade defs and the coverage floor reads both files.
-let private FACADE_FILES = [FACADE, "modules/dasLLAMA/dasllama/dasllama_tts.das"]
+// dasllama.das defines nothing itself: it re-exports dasllama_core.das (the facade without the
+// file decoders), which re-exports the TTS surface, so their defs are facade defs and the
+// coverage floor reads all three files.
+let private FACADE_FILES = [FACADE, "modules/dasLLAMA/dasllama/dasllama_core.das", "modules/dasLLAMA/dasllama/dasllama_tts.das"]
 let private TUTORIAL_DIR = "tutorials/dasLLAMA"
 let private RST_DIR = "doc/source/reference/tutorials"
 
@@ -78,7 +79,18 @@ def private read_rst(folder : string; prefix : string; var out : array<string>) 
     }
 }
 
-var private FACADE_DEFS_WITHOUT_TUTORIAL <- {"finalize", "tts_finish_styletts2"}   //! defs the runtime or a loader chain calls, never a user - `ARCHITECTURE_TTS.md#text-to-speech` lists them
+var private FACADE_DEFS_WITHOUT_TUTORIAL <- {
+    "finalize", "tts_finish_styletts2",   //! the runtime or a loader chain calls them, never a user - `ARCHITECTURE_TTS.md#text-to-speech` lists them
+    "gpu_resident_mtp_device_home", "gpu_device_prefill_segments",   //! the scheduler's device-mode and segmented-window decisions; a user's program asks the scheduler
+    "gpu_device_kv_claim", "gpu_device_kv_victim_claims", "gpu_device_kv_parked_pos",   //! the scheduler's region bookkeeping behind park and adopt
+    "gpu_device_kv_checkpoint", "gpu_device_kv_checkpoints",   //! the scheduler's recurrent checkpoints on a parked region
+    "gpu_device_kv_export", "gpu_device_kv_import",   //! the scheduler's moves between a region and its paged prefix pool
+    "gpu_device_kv_snapshot", "gpu_device_kv_parked_snapshot", "prefix_take_spare",   //! the scheduler's recurrent-state copies off a region into its prefix cache
+    "prefix_state_match_len", "prefix_attach_state_split", "prefix_state_touch",   //! the scheduler's lookups of a recurrent checkpoint in its prefix cache
+    "prefix_share_pages", "prefix_insert_snapshot",   //! the scheduler's writes of shared pages and device-taken checkpoints into its prefix cache
+    "gpu_device_kv_pool_armed",   //! the scheduler reads DASLLAMA_DEVICE_POOL through it; a user sets the variable
+    "gpu_device_kv_pool_moves"   //! the region-pool traffic counter a fixture or a bench reads
+}
 
 [arch(at = "ARCHITECTURE_TTS.md#text-to-speech")]
 def private check_floor_of(path : string; var seen : table<string>; tut_texts, rst_texts : array<string>) {
@@ -91,11 +103,11 @@ def private check_floor_of(path : string; var seen : table<string>; tut_texts, r
         seen |> insert(name)
         if (!word_in_any(tut_texts, name)) {
             gate_finding(path, line_no,
-                "facade def {name} appears in no {TUTORIAL_DIR}/*.das - the facade is the public API, and every facade def is demonstrated in a tutorial, or is a def the runtime or a loader chain calls, never a user, that ARCHITECTURE_TTS.md#text-to-speech lists")
+                "facade def {name} appears in no {TUTORIAL_DIR}/*.das - the facade is the public API, and every facade def is demonstrated in a tutorial, or is a def no user program calls (the runtime, a loader chain, the scheduler, a server or a bench does) that REVIEW.das's FACADE_DEFS_WITHOUT_TUTORIAL lists with its reason")
         }
         if (!word_in_any(rst_texts, name)) {
             gate_finding(path, line_no,
-                "facade def {name} appears in no {RST_DIR}/dasLLAMA_*.rst - the tutorial pages narrate every facade def (they are hand-written, not includes), or it is a def the runtime or a loader chain calls, never a user, that ARCHITECTURE_TTS.md#text-to-speech lists")
+                "facade def {name} appears in no {RST_DIR}/dasLLAMA_*.rst - the tutorial pages narrate every facade def (they are hand-written, not includes), or it is a def no user program calls that REVIEW.das's FACADE_DEFS_WITHOUT_TUTORIAL lists with its reason")
         }
     }
 }

@@ -192,14 +192,43 @@ def emb_table_gather_fmt(f : KqFmt) : bool => kq_fmt_gpu_supported(f)
 //! the E-series pre-step serves on the device for this blob model: its table in a format the gather family serves, bound at
 //! whole superblocks (a per-32 pair's binds stay 16-byte aligned), a ple width the finish's threadgroup takes, and a model dim
 //! the projection's word walk steps whole: pairs on the bf16 rows (`enc_ple_proj_bf16`), float4s on the f32 router's
-def metal_ple_dev_ok(t : Model) : bool {
-    return false if (!has_ple(t.config) || !t.metal_blob || t.planes_trimmed)
+def metal_ple_dev_ok(t : Model) : bool => has_ple(t.config) && empty(metal_ple_pre_unserved(t))
+
+//! why the device does not serve the E-series pre-step for this model, named by site, `KqFmt` member and shape; "" when it does
+//! or the model has no PLE. The shapes named here run the CPU pre-step (`followup_metal.md` row 55 holds their device path)
+def metal_ple_pre_unserved(t : Model) : string {
+    return "" if (!has_ple(t.config))
+    let site = kq_site_words("per_layer_token_embd")
+    return "the {site} is not blob-streamed" if (!t.metal_blob)
+    return "the {site}'s planes are trimmed" if (t.planes_trimmed)
+    return "the {site} plane is {t.ple_emb_fmt}, a format the gather family does not read" if (!emb_table_gather_fmt(t.ple_emb_fmt))
     let ple = t.config.n_embd_per_layer
     let all = t.config.n_layers * ple
-    let aligned = t.ple_emb_fmt == KqFmt.q8 || (all % KQ_SB_ELEMS == 0l && t.ple_emb_off % KQ_SB_ELEMS == 0l)
+    if (t.ple_emb_fmt != KqFmt.q8 && (all % KQ_SB_ELEMS != 0l || t.ple_emb_off % KQ_SB_ELEMS != 0l)) {
+        return "the {site} plane ({t.ple_emb_fmt}) binds off a whole superblock: {all} elements a row at offset {t.ple_emb_off}"
+    }
+    return "the {site}'s ple width {ple} is off the finish's {KQ_B32_ELEMS}-lane step" if (ple % KQ_B32_ELEMS != 0l)
+    return "the {site}'s ple width {ple} is past the finish's 1024-lane threadgroup" if (ple > 1024l)
+    let word = t.ple_model_bf16 ? "bf16 pair" : "f32 float4"
     let proj_word = t.ple_model_bf16 ? 2l : 4l
-    return (emb_table_gather_fmt(t.ple_emb_fmt) && aligned && ple % KQ_B32_ELEMS == 0l && ple <= 1024l
-        && t.config.dim % proj_word == 0l)
+    return "the {site}'s projection walks a model dim of {t.config.dim} in {word}s, which do not step it whole" if (t.config.dim % proj_word != 0l)
+    return ""
+}
+
+var private g_ple_decline_said : string   //! the last pre-step decline logged: a decline repeats every step, the line once
+
+//! the pre-step's device verdict for the Metal `kind` driver about to serve this model: `metal_ple_dev_ok`, with a CPU verdict's
+//! reason logged once while the same one repeats, so the fallback never runs unnamed
+[cold_path]
+def metal_ple_dev_said(kind : string; t : Model) : bool {
+    let why = metal_ple_pre_unserved(t)
+    return has_ple(t.config) if (empty(why))
+    let line = "dasLLAMA metal {kind}: the E-series pre-step declined - {why}; the CPU serves the pre-step"
+    if (line != g_ple_decline_said) {
+        g_ple_decline_said = line
+        to_log(LOG_WARNING, "{line}\n")
+    }
+    return false
 }
 
 //! a plane format with a one-row GEMV on this home: q8's, a superblock format's row-batched decode form at one row, or a per-32

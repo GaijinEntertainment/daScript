@@ -15,8 +15,8 @@ step. The reference figures beside them come from the same 48 ids fed through th
 build's C API on the M5 Max, in a scratch driver kept outside the tree - its readings are a
 probe's, never parity evidence (`REVIEW_GPU_PARITY.md`):
 
-- Build: the `~/Work/llama.cpp` checkout at `98c4764b67` (branch `dasprof-instrumented`, its
-  `build/bin` libraries), the driver compiled against it with `clang++ -std=c++17 -O2
+- Build: a llama.cpp checkout at `98c4764b67` with per-stage timing instrumentation (its `build/bin`
+  libraries), the driver compiled against it with `clang++ -std=c++17 -O2
   -I<llama.cpp>/include -I<llama.cpp>/ggml/include <driver>.cpp -L<llama.cpp>/build/bin -lllama
   -lggml -lggml-base`.
 - Model: `gemma-4-E2B-it-Q4_K_M.gguf` from the default models dir.

@@ -202,7 +202,7 @@ row the diff adds.**
 
 **A diff whose race picks a numeric threshold - a cutoff a predicate compares against, or a size a
 kernel variant is compiled for: a row count, a byte size, a lane width - times the chosen value and
-at least one value on each side of it in that race.**
+at least one value on each side of it that the device admits, in that race.**
 
 **A new call site of a CPU or GPU matrix multiply whose weight operand is an f32 plane, outside a
 correctness-comparison path (one whose only job is to produce a reference result to check another

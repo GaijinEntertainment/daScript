@@ -2085,7 +2085,9 @@
     repo limits bind the folder; the kernels and model-free suites on both homes hold the wrapped tree.
 
 214. **The board holds the two GPU homes' prefill throughput at pp512 alone, and the ledger's longest prefill rows stop
-    at 12288 tokens.** A long prompt costs the global layers' attention in the
+    at 12288 tokens.** The pass also reads the Vulkan block-codec (q8_0 / tq4) K/V f16 shadow, rebuilt per layer per
+    window, against the f16 codec at every prompt length - a persistent per-layer shadow or an incremental dequant is
+    the lever if its cost grows with the position. A long prompt costs the global layers' attention in the
     square of its length and every per-window stage in its position, so a stage that grows with
     position hides behind pp512 (`debug-jit`, direction-grade: `lcpp_bench -p <n> -n 0 -r 2` on gemma-4-E2B Q8_0 -
     the pod's RTX PRO 4500 under `DASLLAMA_GPU=1` reads 16,400 tok/s at pp512, 11,600 at 4096, 8,900 at 16384,
@@ -2097,3 +2099,9 @@
     homes, one profiling pass with the per-window stage split on; a model whose pp32768 falls under
     the N-squared expectation set by its global-layer count is investigated to the stage, and the
     stage is fixed in that pass. The rows land in `PERF_LEDGER.md` beside the pp512 rows.
+
+215. **A reserved word used as a parameter or variable name reports `syntax error, unexpected class,
+    expecting $i or name` - the bison token dump, which names no cause.** The parser
+    (`src/parser/ds2_parser.ypp`) catches a keyword token in a name position and reports
+    `'class' is a reserved word and cannot name a parameter`, with the word quoted. A compiler
+    change, not a dasLLAMA one; it sits here because the leg's agents hit it.

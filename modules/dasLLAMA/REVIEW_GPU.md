@@ -144,7 +144,9 @@ value names.** The `grid=` spec carries no number for these classes, so nothing 
 encoded GPU work may be reused skip an input that content was built from - it compares every
 span, element type, layout, position, offset and model shape, the row count, and each row's
 session, or any other state the content was built for, by a stable id (a session's `uid`) or a
-generation, never by its address.** The scheduler moves sessions in memory as it admits and erases
+generation, never by its address; a plane whose source holds still from its load to its release - a weight
+region, a loaded table - may key by address when the key covers every piece and the model's
+release drops it.** The scheduler moves sessions in memory as it admits and erases
 streams, so an address key reuses stale content silently.
 
 **Never key reuse of content that reads a device buffer that growing frees and allocates again
