@@ -69,16 +69,17 @@ the CPU's kernels, on a run with every lever at its default is a defect - add th
 kernels for the format at the site instead.**
 
 **A diff that adds a site, adds a backend's serving call to a site, or changes which `KqFmt`
-members a site serves, serves at it on that backend, in the same change, every `KqFmt` member whose
-block length divides the site's row length (256 for a superblock member, 32 for a per-32 member), or
-makes the load decline a member it does not serve there with a reason naming the site and the
-member.** A site that serves the formats its author's files carried and transcodes the rest serves a
-format matrix nobody chose, and the next file finds the gap at load time with no line saying so.
+members a site serves, serves at it, on each backend whose serving call reaches the site, in the
+same change, every `KqFmt` member whose block length divides the site's row length (256 for a
+superblock member, 32 for a per-32 member), or makes the load decline a member it does not serve
+there with a reason naming the site and the member.** A site that serves only the formats its
+author's files carried converts the rest without saying so, and the first file in another format
+fails or converts at load with no message naming the site.
 
 **A diff that adds or changes a site reading a weight plane whose format is a literal `KqFmt`
 member, or a plane the loader converts to one form whatever its disk type (a `load_big` call with
-no format), is a defect - the loader tags the plane from its disk type (`kq_tag` / `kq_fmt_of` in
-`dasllama/dasllama_load.das`), and the site reads the tag.** A literal at the site is a conversion no
+no format), is a defect - tag the plane from its disk type with `kq_tag` / `kq_fmt_of`
+(`dasllama/dasllama_load.das`) and read that tag at the site instead.** A literal at the site is a conversion no
 report names: every disk type the file carries becomes the literal's form, and each backend that
 copies the literal serves that form in place of the file's.
 
@@ -88,12 +89,15 @@ every lever at its default, a site that backend's serving call reaches reads the
 converted copy or hands a GPU site to the CPU's kernels is a defect - state that site as a gap
 instead, or cite the follow-up row that ledgers it.**
 
-**A diff that states a backend serves a weight format at a site lands, or cites, a test subtest that
-loads a file whose plane at that site carries that format on disk - a requantized local file (a
-`-local` recipe row of `performance/model_specs.das`) where no downloaded row's file does - and
-asserts both that the loader's format tag for the plane equals the disk type and that a kernel
-counter only that site's planes reach on that file rose.** A subtest that asserts the backend ran
-alone passes with the site on a converted copy or on the CPU pre-step.
+**A diff that states, in any document, PR description, test name or predicate, that a backend
+serves a weight format at a site lands or cites a subtest that loads a file whose plane at that
+site is stored in that format on disk, and asserts that the loader's format tag for that plane
+equals its disk type and that a kernel counter - `metal_kernel_count(name)` on Metal, the Vulkan
+driver's per-kernel census count - that only the site's kernel increments rose during the run.**
+The file is a downloaded `performance/model_specs.das` row's file, or, when no downloaded row
+carries the format, a row whose `file` ends `-local.gguf` and whose `recipe` requantizes into it. A
+subtest that only asserts the backend ran still passes when the site reads a converted copy or runs
+on the CPU pre-step.
 
 **A diff that adds a lever, off by default, that makes a site read a weight format through a
 converted copy names the lever in the same change - in `ARCHITECTURE_GPU_ASYMMETRIES.md` where
