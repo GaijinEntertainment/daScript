@@ -44,8 +44,8 @@ superblocks), written outside a Metal or SPIR-V kernel body and outside a defini
 kernel class, the pins of `tests/test_kqformat.das` - is a defect: read it through a `KqFmt` accessor
 (`kq_elems`, `kq_disk_bytes`, ...), through `kq_qsb` / `kq_ssb` on a format id, or through a named
 constant a definition home declares, declared there in the same change when none exists.** A
-number derived from several formats' sizes is such a literal, and so is one inside a string the
-build evaluates (a `requires =` item); a test's expected-message text is not. A literal `32` reads
+number derived from several formats' sizes is such a literal, and so is one inside a kernel
+builder's `requires =` alignment string; a test's expected-message text is not. A literal `32` reads
 like a tile width.
 
 **A diff that writes a per-format quantity of a `KqFmt` member as a bare literal in a Metal or
@@ -60,10 +60,10 @@ value, and its `disk_bytes` inside the walk that checks every row against `ggml_
 Narrowing the row's literal pins or the `ggml_type_bytes` walk is a defect.
 
 A site is a weight plane a backend's (CPU, Metal, Vulkan) serving call reads. A lever is an env
-knob or setter that changes which form a site reads. A converted copy is any form of the weights
-other than a re-layout of their own quantized values whose bytes outlive the one kernel call or
-window that made them, or reach the `.dlim` image; a rounding that lives inside one dispatch's
-shared memory is not one (`ARCHITECTURE_ENGINE_FORMATS.md#served-form`).
+knob or setter that changes which form a site reads. A converted copy is any form of the weights -
+other than a re-encoding of their own quantized values that is value-exact against the disk form
+and has no wider element type (`ARCHITECTURE_ENGINE_FORMATS.md#served-form`) - whose bytes outlive
+the one kernel call or window that made them, or reach the `.dlim` image.
 
 **A diff that makes a site read a weight format through a converted copy, or hands a GPU site to
 the CPU's kernels, on a run with every lever at its default is a defect - add that backend's
@@ -78,11 +78,10 @@ author's files carried converts the rest without saying so, and the first file i
 fails or converts at load with no message naming the site.
 
 **A diff that adds or changes a site reading a weight plane whose format is a literal `KqFmt`
-member is a defect - tag the plane from its disk type with `kq_tag` / `kq_fmt_of`
-(`dasllama/dasllama_load.das`) and read that tag at the site instead.** A `KqFmt` literal that
-keys a tile geometry for a plane with no member of its own (an f32 plane on a q8-keyed tile) reads
-no weights by that member and is not a site literal. A literal at the site is a
-conversion no report names: every disk type the file carries becomes the literal's form, and each
+member - a literal standing for the plane's weight format, not one choosing tile dimensions for a
+plane no member describes (an f32 plane on a q8 tile) - is a defect: tag the plane from its disk
+type with `kq_tag` / `kq_fmt_of` (`dasllama/dasllama_load.das`) and read that tag at the site
+instead.** A literal at the site is a conversion no report names: every disk type the file carries becomes the literal's form, and each
 backend that copies the literal serves that form in place of the file's.
 
 **Weakening `REVIEW.das`'s `check_load_big_format` is a defect.** That check fails every `load_big`
@@ -98,8 +97,9 @@ instead, or cite the follow-up row that ledgers it.**
 **A diff that states, in any document, PR description, test name or predicate, that a backend
 serves a weight format at a site lands or cites a subtest that loads a file whose plane at that
 site is stored in that format on disk, and asserts that the loader's format tag for that plane
-equals its disk type and that a kernel counter - `metal_kernel_count(name)` on Metal, the Vulkan
-driver's per-kernel census count - that no other plane of that file moves rose during the run.**
+equals its disk type, and that a kernel counter (`metal_kernel_count(name)` on Metal, the Vulkan
+driver's per-kernel census count) rose during the run - a counter that reading any other plane of
+that file leaves unchanged.**
 The file is a downloaded `performance/model_specs.das` row's file, or, when no downloaded row
 carries the format, a row whose `file` ends `-local.gguf` and whose `recipe` requantizes into it. A
 subtest that only asserts the backend ran still passes when the site reads a converted copy or runs
