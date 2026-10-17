@@ -10,6 +10,24 @@ and coverage; this ledger is the backlog for the perf pass that follows them. Ev
 what it costs today and what the fix would change.
 
 ## Entries
+- **MEASURED (2026-10-17) - two parity bars the M5's box profile moves, M5 Max (128 GB).** Each reading is a
+  `tests/run.das`-suite file's own cell, one model process on the box, `DASLLAMA_PARITY_FULL=1`, the box profile
+  `performance/m5.tune.json` (39,101 B).
+  - `tests/test_metal_mtp_parity.das`, `vff_cell` (arms `mtp-vff-<tag>`, `mtp-vff5-<tag>`): `MM_TOL` 1.0 now holds a
+    K-quant carrier's two-to-eight-row same-slab verify wherever a rows site's half-x forms serve on the box
+    (`kq_rows_half_<fmt>` crowned and the rail on - the M5 profile crowns thirteen formats'), over every verify row of the
+    twelve rounds; the f32-x forms keep the carrier's own bar. gemma-4-12B-it Q4_K_M (`test_metal_verify_gemma12`, bar
+    0.5 before): four rows read 0.61 over 48 rows on the half-x forms against 0.08 with `DASLLAMA_METAL_KQ_HALF=0`, five
+    rows 0.40 over 60 against 0.24, no argmax flip; the nine-row mul_mm, whose x is half on either rail, reads 0.84 over
+    108. The control, the same verify with its GEMV stage knocked out (`set_metal_decode_skip("gemv")`), reads 56.4 at four
+    rows and 54.1 at five. The Qwen MTP fixtures' `mtp-vff` arms move from `FF_TOL` 0.5 to the same 1.0 on a K-quant carrier with
+    a half-x rows site.
+  - `tests/test_whisper.das`, `test_canary_qwen_oracle`: `CN_TIE_BAR` 0.25 - the largest gap the forced walk over the
+    frozen NeMo SALM ids may read between our argmax logit and the oracle token's, on the f32 lane (f32 K/V), every step
+    of the three clips (jfk 23 ids, `09_1089-134686-0008` 19, `05_1089-134686-0004` 14). jfk and clip 09 read 0 on the CPU
+    chain and on the Metal tower: every oracle id is our argmax. Clip 05's step 9 is a greedy near-tie between "." (13)
+    and " Good" (7684): the CPU chain puts 7684 0.084 above ".", the tower 0.102, where NeMo picked ".". The control, the next oracle id at each step, lands outside the bar at 22 of 22, 18 of 18
+    and 12 of 13 steps.
 - **MEASURED (2026-10-16) - the gemma leg's end re-measure, the M5 half.** Instrument `benchmarks/lcpp_bench.das`
   (`--ngl 99 -p 512 -n 128 -r 5 --for-debug-purposes`, debug-jit), the M5 Max (128 GB) alone on the box, one box profile
   minted at the leg tip (505 s, 39,101 B) and read by both trees: master's own build (33e7910669) against the leg tip

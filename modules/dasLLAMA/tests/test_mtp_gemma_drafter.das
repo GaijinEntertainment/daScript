@@ -78,14 +78,62 @@ def test_gemma_drafter_refusals(t : T?) {
     t |> run("the resolver finds the upstream head beside an unsloth -UD- trunk, a K-quant and an i-quant one, through the facade too") @(t : T?) {
         let dir = scratch_path("ud")
         mkdir_rec(dir)
-        let head = scratch_file("ud/mtp-gemma-4-26B-A4B-it-Q8_0.gguf", "head")
+        let head = arch_gguf("ud/mtp-gemma-4-26B-A4B-it-Q8_0.gguf", "gemma4-assistant")
         for (trunk in ["gemma-4-26B-A4B-it-UD-Q4_K_M.gguf", "gemma-4-26B-A4B-it-UD-IQ3_XXS.gguf", "gemma-4-26B-A4B-it-Q4_K_M.gguf", "gemma-4-26B-A4B-it-IQ4_XS.gguf"]) {
             t |> equal(gemma_drafter_sidecar(path_join(dir, trunk)), head, "{trunk} finds mtp-gemma-4-26B-A4B-it-Q8_0.gguf")
             t |> equal(mtp_drafter_sidecar(path_join(dir, trunk)), head, "{trunk} finds it through the facade")
         }
-        let own = scratch_file("ud/mtp-gemma-4-26B-A4B-it-UD-Q8_0.gguf", "own head")
+        let own = arch_gguf("ud/mtp-gemma-4-26B-A4B-it-UD-Q8_0.gguf", "gemma4-assistant")
         t |> equal(gemma_drafter_sidecar(path_join(dir, "gemma-4-26B-A4B-it-UD-Q4_K_M.gguf")), own, "a head named with the trunk's -UD tag wins over the untagged one")
         t |> equal(gemma_drafter_sidecar(path_join(dir, "gemma-4-12B-it-UD-Q4_K_M.gguf")), "", "the control: another model's trunk finds no head")
+    }
+    t |> run("a split NextN head under the drafter's name is no drafter; the same name carrying an assistant is") @(t : T?) {
+        let dir = scratch_path("nextn")
+        mkdir_rec(dir)
+        let trunk = path_join(dir, "Qwen3.8-27B-Q4_K_M.gguf")
+        arch_gguf("nextn/mtp-Qwen3.8-27B-Q8_0.gguf", "qwen35")
+        t |> equal(gemma_drafter_sidecar(trunk), "", "the qwen35 head beside the trunk is not an assistant drafter")
+        let exact = arch_gguf("nextn/mtp-Qwen3.8-27B-Q4_K_M.gguf", "qwen35")
+        t |> equal(gemma_drafter_sidecar(trunk), "", "nor is the exact-name qwen35 head")
+        let side = arch_gguf("nextn/mtp-Qwen3.8-27B-Q8_0.gguf", "gemma4-assistant")
+        t |> equal(gemma_drafter_sidecar(trunk), side, "the control: the same name carrying gemma4-assistant is found")
+        remove(exact)
+    }
+}
+
+//! a header-only GGUF whose one key is `general.architecture` = `arch`, written to `name` in the scratch directory
+def private arch_gguf(name, arch : string) : string {
+    var b : array<uint8>
+    push_le(b, 0x46554747ul, 4)   //! GGUF
+    push_le(b, 3ul, 4)
+    push_le(b, 0ul, 8)            //! no tensor
+    push_le(b, 1ul, 8)            //! one key
+    push_str(b, "general.architecture")
+    push_le(b, 8ul, 4)            //! a string value
+    push_str(b, arch)
+    let p = scratch_path(name)
+    fopen(p, "wb") $(f) {
+        if (f != null) {
+            fwrite(f, b)
+        }
+    }
+    delete b
+    return p
+}
+
+def private push_le(var b : array<uint8>; v : uint64; nbytes : int) {
+    b |> reserve(length(b) + nbytes)
+    for (i in range(nbytes)) {
+        b |> push(uint8(uint(v >> uint64(i * 8)) & 0xFFu))
+    }
+}
+
+def private push_str(var b : array<uint8>; s : string) {
+    push_le(b, uint64(long_length(s)), 8)
+    peek_data(s) $(d) {
+        for (c in d) {
+            b |> push(c)
+        }
     }
 }
 

@@ -147,14 +147,16 @@ one-step-off control (row 0 against the PREVIOUS plain step must land outside th
 step); ffk = the
 same at depth 2 and 4, every round a k+1-row verify plus the recurrent replay, which re-runs row 0
 from the pre-verify recurrent state; vff = the same-slab batch verify's four rows vs four plain
-steps; count = speculative free-run == plain free-run, token-exact, counting prompt, at depth 1, 2
+steps (on a hyper-connection carrier the rail's `graph` decline instead, its same-slab rows being one session); count = speculative free-run == plain free-run, token-exact, counting prompt, at depth 1, 2
 and 4, and by the kernel census the verify's rows on the fused single-pass attention wherever the
 kernel carries the model's shape (every head class of 64, 96, 128, 256 or 512 on the f16 mirrors, the
 three stamps' counts summed, no chunked dispatch) and on the chunked pair elsewhere, both counts
 logged; at depth 1 every drafted round counted one command buffer (`metal_mtp_chained_rounds`) on a table the device
 gathers, none on an n-gram model or under the assistant's CPU-oracle drafts (`mtp-count-cpu`) (the controls); `mtp-count8-<tag>` = the same at depth 8, the deepest round - nine verify
-rows, a carrier with superblock rows planes counting its nine-row sites on one small-batch dispatch each
-(`metal_kq_mvb_wide_count` above zero) and a Q8_0 carrier none;
+rows, a carrier with a rows site - attention, dense or shared-expert FFN, deltanet projection or classifier - on a superblock
+plane the box leaves on the small-batch forms counting its nine-row sites on one small-batch dispatch each
+(`metal_kq_mvb_wide_count` above zero) and a carrier with none (a Q8_0 one, or one whose formats the box's `kq_rows_<fmt>`
+crowns keep on single passes) none;
 `mtp-codec-<tag>` = the depth-2 counting walk on q8_0, tq4 and f32 sessions, the verify's rows storing and reading
 the session's codec (the codec's fused-attention stamps counted), speculative == plain token for token and drafts
 accepted; every arm fails, never skips, on a carrier the box holds that the Metal load or a driver declines;
@@ -178,14 +180,17 @@ diagnostic arms `mtp-count-cpu` (drafts through the CPU oracle), `mtp-count-trac
 truth logged per round) and `mtp-count-pre` (the pre-norm residual as the drafter's h) ride along
 with the fixture arm. Bars: 0.5 dense, 2.0 plain MoE, 24.0 gemma-MoE = the support matrix's own
 Q4_K_M forced-step bar (the routed experts amplify a float-class difference at a near-tie into
-the K/V history: floor 0.003-0.01, isolated spikes to 11, argmax never flips). Each fixture's
+the K/V history: floor 0.003-0.01, isolated spikes to 11, argmax never flips); a K-quant carrier's nine-row verify, and its
+two-to-eight-row verify where a rows site's half-x forms serve on the box, hold `MM_TOL` (1.0: both stage x to half) at the
+least, each such bar with its control - the same verify with its GEMV stage knocked out outside it. Each fixture's
 trunk-and-served-twin pair prefills on the GPU twin through the metal prefill override (a planar
 27B prefill costs minutes per session), so the fixture shuts down BOTH drivers before its leak
 gate.
 
 The `mtp` suite also carries `test_mtp_gemma_drafter.das` (the gemma-4 assistant drafter, also in the stocked suite; each
 arm's gates and the served arms' GPU home: the file's entry below), its arms:
-- `mtp-gdraft-refuse` - the loader's no-panic refusal contract and the sidecar resolver's two refusals; the attach's target
+- `mtp-gdraft-refuse` - the loader's no-panic refusal contract and the sidecar resolver's refusals (a head path, an absent
+  sibling, a split NextN head under the drafter's name - the same name carrying `gemma4-assistant` found); the attach's target
   check on a gemma-4-26B-shaped shell - a trunk of the drafter's own geometry passing, a two-layer trunk and a capture layer
   of another head size or kv head count each refused by its own clause; the facade's refusal text through the assistant
   registry - every registered backend's own early refusal of a planar shell with no resident driver named, and
@@ -2532,7 +2537,10 @@ decode step's one-lane form against its team publish, both texts logged - and th
 read the whole clip reading its first half token for token as a fresh session does, the half clip
 over 8 tokens, and two more transcriptions on the session leaving the heap where it stood -
 `heap_flat_leg`, which the canary and gemma4a oracle cells run too: a transcription frees what it
-allocates), the Vulkan twin `test_whisper_vulkan_twin` (whisper tiny and large-v3-turbo; the
+allocates; the canary cell on the f32 lane, each clip on the CPU chain with every tower off and then served - the tower's
+encode counted where it serves - in the forced-feed form: the frozen NeMo ids fed one by one, each our argmax or within
+`CN_TIE_BAR` of it, the next oracle id outside the bar at most steps the control, then the greedy ids the oracle's up to the
+step the forced walk's pick leaves the oracle's, both texts logged), the Vulkan twin `test_whisper_vulkan_twin` (whisper tiny and large-v3-turbo; the
 cell described under `test_vulkan_tower_kernels.das`, skipping without the ggml files, without
 jfk.wav, without a Vulkan device under `DASLLAMA_GPU=1`, on a das_metal build, and when
 interpreted), the decoder twin `test_whisper_vulkan_wdec` (tiny and large-v3-turbo on jfk, the q8

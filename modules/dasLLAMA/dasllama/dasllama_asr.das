@@ -89,6 +89,9 @@ def set_asr_kv(dt : KVDtype) {
     g_asr_kv = dt
 }
 
+//! The KV-cache dtype `set_asr_kv` last selected - what the next ASR decoder session takes
+def get_asr_kv() : KVDtype => g_asr_kv
+
 //! Force the fp32 (bit-exact-with-oracle) path for models loaded AFTER this call — the
 //! default load quantizes the encoder GEMMs to Q8_0 (~4x on CPU, tolerance-gated).
 def set_asr_fp32(on : bool) {
