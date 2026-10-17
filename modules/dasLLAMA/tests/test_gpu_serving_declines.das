@@ -204,7 +204,7 @@ def test_perop_dense_ffn_mixed_forms(t : T?) {
         m.w1_fmt[0] = KqFmt.k4
         t |> equal(perop_dense_ffn_decline(m, 0l), "", "one activation form rides the rail")
         m.w3_fmt[0] = KqFmt.mx4
-        t |> success(contains(perop_dense_ffn_decline(m, 0l), "not tier-servable"), "an mx4 up plane is named (the control)")
+        t |> equal(perop_dense_ffn_decline(m, 0l), "FFN gate/up/down formats k4/mx4/k6 not tier-servable", "an mx4 up plane is named by site and member (the control)")
         delete m
     }
 }
@@ -558,6 +558,50 @@ def test_decode_shape_dense_width(t : T?) {
             "and its lattice width passes - the width is what declined, not the rest of the shell")
         delete dense
         set_rope_table_mode(saved_rope)
+    }
+}
+
+//! a plane format the Metal kernels do not read declines with a line naming the site and the `KqFmt` member: a dense plane under
+//! `kquant_native`, a routed stack under `graph`; the enum value the declines-by-reason table counts stays the gate's
+[test]
+def test_metal_fmt_decline_names_site(t : T?) {
+    t |> run("a dense plane's unserved format names its layer, site and member; the decode gate still answers kquant_native") @(t : T?) {
+        var m <- shell(2l, 0ul)
+        m.quant = QuantMode.q8
+        m.kquant_native = true
+        m.wq_fmt <- [KqFmt.k4, KqFmt.k4]
+        m.wk_fmt <- [KqFmt.k4, KqFmt.k4]
+        m.wv_fmt <- [KqFmt.k6, KqFmt.k6]
+        m.wo_fmt <- [KqFmt.k4, KqFmt.k4]
+        m.w1_fmt <- [KqFmt.k4, KqFmt.k4]
+        m.w3_fmt <- [KqFmt.k4, KqFmt.k4]
+        m.w2_fmt <- [KqFmt.k6, KqFmt.k6]
+        t |> equal(kq_load_gpu_unserved(m), "", "every plane in a served format: nothing to name")
+        t |> equal(metal_fmt_decline_line("decode", "kquant_native", m), "", "and no line")
+        m.w3_fmt[1] = KqFmt.mx4
+        t |> equal(kq_load_gpu_unserved(m), "layer 1's FFN up plane is mx4")
+        t |> equal(decode_shape_decline(m, DECODE_NEEDS_OK, true, false, false, mint_time = true), MetalDecodeDecline.kquant_native,
+            "the gate's reason is the enum value the declines table counts")
+        t |> equal(metal_fmt_decline_line("decode", "{MetalDecodeDecline.kquant_native}", m),
+            "dasLLAMA metal decode: declined kquant_native - layer 1's FFN up plane is mx4, a format the Metal kernels do not read there; the CPU serves the call")
+        t |> equal(metal_fmt_decline_line("decode", "{MetalDecodeDecline.shape}", m), "", "a decline no plane format decided says no format line")
+        m.w3_fmt[1] = KqFmt.k4
+        m.emb_fmt = KqFmt.mx4
+        t |> equal(kq_load_gpu_unserved(m), "the token table plane is mx4")
+        m.emb_fmt = KqFmt.q8
+        m.wcls_fmt = KqFmt.mx4
+        t |> equal(kq_load_gpu_unserved(m), "the classifier plane is mx4")
+        delete m
+    }
+    t |> run("a routed stack's unserved format names its layer, site and member under graph") @(t : T?) {
+        var m <- moe_shell(KqFmt.k4)
+        t |> equal(moe_fmts_unserved(m), "", "a k4 stack has the routed block's kernels")
+        m.we2_fmt[1] = KqFmt.mx4
+        t |> success(!moe_metal_ok(m), "the routed block declines the stack")
+        t |> equal(moe_fmts_unserved(m), "layer 1's expert stack down plane is mx4")
+        t |> equal(metal_fmt_decline_line("prefill", "{MetalPrefillDecline.graph}", m),
+            "dasLLAMA metal prefill: declined graph - layer 1's expert stack down plane is mx4, a format the Metal kernels do not read there; the CPU serves the call")
+        delete m
     }
 }
 

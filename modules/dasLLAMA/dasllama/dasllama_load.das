@@ -628,7 +628,7 @@ def conv_profile_report() {
 
 //! The form a converted tensor is served in: a kq plane, the q8 rail's quants and scales, the
 //! q4_0 rail's nibbles and scales, or f32 rows.
-enum private ConvServed {
+enum ConvServed {
     kq
     q8
     q40
@@ -658,9 +658,16 @@ def private conv_reset() {
     g_load_demotions = 0l
 }
 
+//! A load report row's name: the tensor's site, its disk type, and the form it serves in - a kq plane by its `KqFmt` member, any
+//! other form by the conversion that made it
+def conv_row_name(tensor : string; disk_type : int; kind : string; served : ConvServed; fmt : KqFmt) : string {
+    let form = served == ConvServed.kq ? "{fmt} plane" : kind
+    return "{kq_site_words(gguf_tensor_role(tensor))}: {ggml_type_name(disk_type)} -> {form}"
+}
+
 def private conv_account(m : GGUFMeta; name, kind : string; served : ConvServed; fmt : KqFmt; n : int64) {
     let gt = gguf_tensor_type(m, name)
-    let key = "{ggml_type_name(gt)} -> {kind}"
+    let key = conv_row_name(name, gt, kind, served, fmt)
     var b = g_conv_bytes[key]
     b.tensors++
     b.disk += ggml_type_bytes(gt, n)
@@ -686,7 +693,7 @@ def private served_bytes(t : Model; served : ConvServed; fmt : KqFmt; n : int64)
     return n * 4l
 }
 
-//! The load report: the file's bytes, then every (disk type -> conversion kind) as bytes on disk
+//! The load report: the file's bytes, then every (site: disk type -> served form) row as bytes on disk
 //! against bytes served with the delta, biggest overhead first, and the q8-rail demotion count.
 def private log_conversion_report(t : Model; file_bytes : int64) {
     if (empty(g_conv_bytes)) {

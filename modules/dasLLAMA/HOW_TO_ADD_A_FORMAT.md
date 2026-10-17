@@ -757,15 +757,20 @@ never copied between boxes.
 
 A site the format does not serve on a backend is declined at load by that backend's mechanism:
 
-- CPU: the load report (`log_conversion_report`, `dasllama_load.das`) names each disk type's
-  conversion kind and the q8-rail demotion count;
+Every backend's decline names the site (`kq_site_words`, `dasllama_kqformat.das`) and the
+`KqFmt` member in the line the user reads:
+
+- CPU: the load report (`log_conversion_report`, `dasllama_load.das`) carries one row per site
+  and disk type (`conv_row_name`) naming the served form - a kq plane by its member, a converted
+  copy by the conversion that made it - and the q8-rail demotion count;
 - Vulkan: the whole-model driver's `resident_decline_reason` (`dasllama_gpu_resident.das`)
   returns the reason before a byte uploads - a layer's or shared expert's plane format by layer
   through `resident_layer_decline`, the tied classifier through `resident_cls_decline`;
 - Metal: `decode_shape_decline` (`dasllama_metal_shapes.das`) answers
   `MetalDecodeDecline.kquant_native` for a dense or table plane whose format
-  `kq_fmt_gpu_supported` refuses, and `moe_fmt_metal_served` keeps an expert stack off the
-  device.
+  `kq_fmt_gpu_supported` refuses (`kq_load_gpu_unserved` names it), and `moe_fmt_metal_served`
+  keeps an expert stack off the device under `graph` (`moe_fmts_unserved`); the drivers log
+  `metal_fmt_decline_line` once before they count the decline.
 
 The kernel census holds the dispatch counts the cells assert, so a new stamp joins its
 backend's list in the same change:

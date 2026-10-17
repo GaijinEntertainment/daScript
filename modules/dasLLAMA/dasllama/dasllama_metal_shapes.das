@@ -207,28 +207,32 @@ def kq_fmt_one_row_gemv(f : KqFmt; kdim : int64) : bool =>
     (f == KqFmt.q8 || ((kq_sb(int(f)) || kq_dense_b32(f)) && kq_fmt_gpu_supported(f)
         && kdim % kq_unit(f) == 0l))
 
-def private kq_fmts_gpu_supported(a : array<KqFmt>) : bool {
-    for (f in a) {
-        if (!kq_fmt_gpu_supported(f)) {
-            return false
-        }
+//! the first layer of `a` whose plane format no Metal kernel reads, named by layer, site and `KqFmt` member; "" when every one has a kernel
+def private dense_fmts_unserved(a : array<KqFmt>; role : string) : string {
+    for (f, l in a, count()) {
+        return "layer {l}'s {kq_site_words(role)} plane is {f}" if (!kq_fmt_gpu_supported(f))
     }
-    return true
+    return ""
 }
 
-// every tensor fmt a kq load can route to a GPU kernel — the decode/batch/prefill gates all
-// clause on this (the MoE expert planes never reach the llama-family GPU graph, so we1/2/3
-// stay out of scope)
-def kq_load_gpu_supported(t : Model) : bool {
-    if (!t.kquant_native) {
-        return true
-    }
-    return ((kq_fmts_gpu_supported(t.wq_fmt) && kq_fmts_gpu_supported(t.wk_fmt) &&
-             kq_fmts_gpu_supported(t.wv_fmt) && kq_fmts_gpu_supported(t.wo_fmt)) &&
-        (kq_fmts_gpu_supported(t.w1_fmt) && kq_fmts_gpu_supported(t.w2_fmt) &&
-             kq_fmts_gpu_supported(t.w3_fmt)) &&
-        (kq_fmt_gpu_supported(t.wcls_fmt) && kq_fmt_gpu_supported(t.emb_fmt)))
+//! the first dense or table plane of a kq load no Metal kernel reads in its own bytes, named by site and `KqFmt` member; "" when
+//! every one has a kernel - the decode, batch and prefill gates decline `kquant_native` on it
+def kq_load_gpu_unserved(t : Model) : string {
+    return "" if (!t.kquant_native)
+    var why = dense_fmts_unserved(t.wq_fmt, "attn_q")
+    why = empty(why) ? dense_fmts_unserved(t.wk_fmt, "attn_k") : why
+    why = empty(why) ? dense_fmts_unserved(t.wv_fmt, "attn_v") : why
+    why = empty(why) ? dense_fmts_unserved(t.wo_fmt, "attn_output") : why
+    why = empty(why) ? dense_fmts_unserved(t.w1_fmt, "ffn_gate") : why
+    why = empty(why) ? dense_fmts_unserved(t.w3_fmt, "ffn_up") : why
+    why = empty(why) ? dense_fmts_unserved(t.w2_fmt, "ffn_down") : why
+    return why if (!empty(why))
+    return "the {kq_site_words("output")} plane is {t.wcls_fmt}" if (!kq_fmt_gpu_supported(t.wcls_fmt))
+    return "the {kq_site_words("token_embd")} plane is {t.emb_fmt}" if (!kq_fmt_gpu_supported(t.emb_fmt))
+    return ""
 }
+
+def kq_load_gpu_supported(t : Model) : bool => empty(kq_load_gpu_unserved(t))
 
 //! some dense plane - attention, FFN, classifier - is a per-32 format (q51, iq4nl32)
 def kq_dense_b32_any(t : Model) : bool {
@@ -321,6 +325,51 @@ def moe_fmt_metal_served(f : KqFmt) : bool {
         || f == KqFmt.k2 || f == KqFmt.iq4nl || f == KqFmt.iq3s4)
 }
 
+//! layer `l`'s first routed stack (gate `f1`, up `f3`, down `f2`) whose format the Metal routed block has no kernel for, named by
+//! layer, site and `KqFmt` member; "" when it has one for all three
+def private moe_layer_fmt_unserved(l : int64; f1, f3, f2 : KqFmt) : string {
+    return "layer {l}'s {kq_site_words("ffn_gate_exps")} plane is {f1}" if (!moe_fmt_metal_served(f1))
+    return "layer {l}'s {kq_site_words("ffn_up_exps")} plane is {f3}" if (!moe_fmt_metal_served(f3))
+    return "layer {l}'s {kq_site_words("ffn_down_exps")} plane is {f2}" if (!moe_fmt_metal_served(f2))
+    return ""
+}
+
+//! the first routed stack of a MoE whose format the Metal routed block has no kernel for, named by layer, site and `KqFmt` member;
+//! "" when every stack has one (an mx4 stack rides its own arm) - `moe_metal_ok` declines `graph` on it
+def moe_fmts_unserved(t : Model) : string {
+    return "" if (!t.config.moe || t.experts_mx4)
+    for (l in range64(t.config.n_layers + t.config.n_layer_nextn)) {
+        let why = moe_layer_fmt_unserved(l, fmt_at(t.we1_fmt, l), fmt_at(t.we3_fmt, l), fmt_at(t.we2_fmt, l))
+        return why if (!empty(why))
+    }
+    return ""
+}
+
+//! the line a Metal driver logs for a decline `why` names: the site and `KqFmt` member of the plane the gate stopped at, under
+//! `kquant_native` (a dense or table plane) and `graph` (a routed stack); "" for a decline no plane format decided
+def metal_fmt_decline_line(kind, why : string; t : Model) : string {
+    let site = why == "kquant_native" ? kq_load_gpu_unserved(t) : why == "graph" ? moe_fmts_unserved(t) : ""
+    return empty(site) ? "" : "dasLLAMA metal {kind}: declined {why} - {site}, a format the Metal kernels do not read there; the CPU serves the call"
+}
+
+var private g_fmt_decline_said : string   //! the last `metal_fmt_decline_line` logged: a decline repeats every step, the line once
+
+//! log `metal_fmt_decline_line` for a decline the driver is about to count, once while the same line repeats
+[cold_path]
+def fmt_decline_say(kind, why : string; t : Model) {
+    let line = metal_fmt_decline_line(kind, why, t)
+    if (!empty(line) && line != g_fmt_decline_said) {
+        g_fmt_decline_said = line
+        to_log(LOG_WARNING, "{line}\n")
+    }
+}
+
+//! `fmt_decline_say` under a driver's decline enum (`MetalDecodeDecline`, `MetalPrefillDecline`), its name spelled off the hot path
+[cold_path]
+def metal_fmt_decline_say(kind : string; why : auto(E); t : Model) {
+    fmt_decline_say(kind, "{why}", t)
+}
+
 //! The MoE serve gate: plain routed FFN (qwen3moe), the sigmoid-gated shared expert (qwen35moe), gemma4's dense-shared branch,
 //! gpt-oss's gate (softmax_weight, biases) over mx4 experts; no dense lead or selection bias. The stack format is its own axis:
 //! mx4 planes serve under every gate shape, disk-order only (the CPU laneq repack has no GPU carry).
@@ -394,9 +443,7 @@ def moe_metal_ok(t : Model) : bool {   // nolint:STYLE038 — flat per-shape ref
         let f1 = fmt_at(t.we1_fmt, l)
         let f2 = fmt_at(t.we2_fmt, l)
         let f3 = fmt_at(t.we3_fmt, l)
-        if (!moe_fmt_metal_served(f1) || !moe_fmt_metal_served(f2) || !moe_fmt_metal_served(f3)) {
-            return false
-        }
+        return false if (!empty(moe_layer_fmt_unserved(l, f1, f3, f2)))
         // per-site alignment + reduction dims: superblock kq kernels iterate whole 256-rows,
         // the per-32 formats whole 32-blocks (+ the mul_mm's 64-col output tiles)
         let sb1 = kq_sb(f1)

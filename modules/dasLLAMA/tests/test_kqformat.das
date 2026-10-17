@@ -14,6 +14,7 @@ require dasllama/dasllama_kqformat
 require dasllama/dasllama_common   // kq_fmt_row_ok - the dense-row demotion
 require dasllama/dasllama_blocks   // kq_bytes_per_weight - the split estimate's per-format price
 require dasllama/dasllama_gguf   // ggml_type_bytes - the disk-byte oracle of the descriptor rows; gguf_need_tensor's refusal
+require dasllama/dasllama_load   // conv_row_name - the load report row a converted plane reads under
 require strings
 require dasllama/dasllama_gemm_schema   // the int-id delegation under test
 require ?vulkan dasllama/dasllama_vulkan_common   // DAT_KEY_FMTS, the decode block's layer-key radix
@@ -502,5 +503,26 @@ def test_metal_kq_table_constants(t : T?) {
         for (f in [KqFmt.iq4xs, KqFmt.iq4nl, KqFmt.q40, KqFmt.iq3s4]) {
             t |> equal(kq_qsb(f), int64(32u * 4u), "SB_UINTS = 32 on the codebook tables: {f}")
         }
+    }
+}
+
+//! a load report row names the plane's site beside its disk type and the form it serves in: a kq plane by its `KqFmt` member
+[test]
+def test_load_report_row_names_site(t : T?) {
+    t |> run("the GGUF role reads off a tensor name, and the site words off the role") @(t : T?) {
+        t |> equal(gguf_tensor_role("blk.12.attn_q.weight"), "attn_q")
+        t |> equal(gguf_tensor_role("token_embd.weight"), "token_embd")
+        t |> equal(gguf_tensor_role("blk.3.nextn.eh_proj.weight"), "nextn.eh_proj")
+        t |> equal(kq_site_words("ffn_down_exps"), "expert stack down")
+        t |> equal(kq_site_words("per_layer_token_embd"), "PLE table")
+        t |> equal(kq_site_words("nextn.eh_proj"), "nextn.eh_proj", "a role with no words is named as itself")
+    }
+    t |> run("a row names the site, the disk type and the served form") @(t : T?) {
+        t |> equal(conv_row_name("blk.3.attn_q.weight", GGML_TYPE_Q5_K, "kq transcode", ConvServed.kq, KqFmt.k5),
+            "attention q: Q5_K -> k5 plane", "a kq plane by its KqFmt member")
+        t |> equal(conv_row_name("token_embd.weight", GGML_TYPE_BF16, "q8 REQUANT (dequant+quant)", ConvServed.q8, KqFmt.q8),
+            "token table: BF16 -> q8 REQUANT (dequant+quant)", "a converted copy by the conversion that made it")
+        t |> equal(conv_row_name("blk.0.ffn_gate_exps.weight", GGML_TYPE_Q4_K, "kq transcode", ConvServed.kq, KqFmt.k4),
+            "expert stack gate: Q4_K -> k4 plane")
     }
 }

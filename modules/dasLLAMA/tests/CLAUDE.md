@@ -1466,7 +1466,7 @@ only case that isolates the roster, since no format one admits the other refuses
 carries an off-lattice dense width past `mm_tile_widths_64_ok` and past `decode_shape_decline`
 on both the decode and the batch needs mask, and the same width on a dense twin declines
 both. `test_perop_dense_ffn_mixed_forms` holds the per-op FFN rail's admission (`perop_dense_ffn_decline`) on a shell:
-a q51 gate beside a k4 up and one form both ride it, an mx4 up is named. `test_plan_room` is the GPU plan's room arithmetic - the tier cap less headroom, capped by
+a q51 gate beside a k4 up and one form both ride it, an mx4 up is named by its site and `KqFmt` member. `test_metal_fmt_decline_names_site` holds the Metal plane-format declines' line on shells: a dense plane in a format no Metal kernel reads named by layer, site and member (`kq_load_gpu_unserved`, the token table and the classifier too) while `decode_shape_decline` still answers `kquant_native`, a routed stack's under `graph` (`moe_fmts_unserved`), the line `metal_fmt_decline_line` logs for each, a served shell and a decline no format decided naming nothing. `test_plan_room` is the GPU plan's room arithmetic - the tier cap less headroom, capped by
 the OS's room where the OS answers. `test_resident_hot_slots` is the hot expert pool's slot rule
 (`resident_hot_slots`): 64 slots where they fit beside the whole mirror, up to 32 out of the mirror's
 context where they do not, never past the room a mirror at its floor leaves, a count asked served from
@@ -2653,7 +2653,7 @@ gemv or panel row is another format's; it skips on a build without dasLLVM, wher
 ggml block bytes of the type, ids round-trip, `kq_fmt_of_id` refuses an id no format carries),
 `kq_bytes_per_weight` as the stride table's arithmetic on every superblock format, the
 `kq_fmt_stamp` call macro binding every member's tag so a tag-overload family resolves at compile
-time, and the key-radix and lattice-predicate cells.
+time, the key-radix and lattice-predicate cells, and the load report's row name (`conv_row_name`: the site off the GGUF tensor role, the disk type, a kq plane by its `KqFmt` member and a converted copy by its conversion).
 `test_kv_codec.das` - stocked suite; its model-free cell `test_kv_codec_side_stamp` holds the
 `kv_codec_side` macro (`dasllama/dasllama_kv_dtype`): each codec's arm sees its own cache-pointer
 type and, nested once per side, the sixteen K x V pairs each carry the same address.
