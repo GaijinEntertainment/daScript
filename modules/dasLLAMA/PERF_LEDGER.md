@@ -28,25 +28,39 @@ what it costs today and what the fix would change.
   valid readings 825.7-831.7) against 832.6 (cv 0.15 %), +0.4 %, inside the base's own spread. tg128 holds no verdict: every
   reading on both trees is VOID (cv 3.5-4.3 %), its first rep about 2 tok/s under the four after it on both (base 24.5 then
   26.6-27.1, the change 24.7 then 25.7-27.1); readings taken back to back on the box fell by up to a third as it heated and
-  are dropped. The 31B's parity row (`fam-gemma4`, `DASLLAMA_PARITY_FULL=1`) is green on the change.
-- **MEASURED (2026-10-17) - two parity bars the M5's box profile moves, M5 Max (128 GB).** Each reading is a
-  `tests/run.das`-suite file's own cell, one model process on the box, `DASLLAMA_PARITY_FULL=1`, the box profile
-  `performance/m5.tune.json` (39,101 B).
-  - `tests/test_metal_mtp_parity.das`, `vff_cell` (arms `mtp-vff-<tag>`, `mtp-vff5-<tag>`): `MM_TOL` 1.0 now holds a
-    K-quant carrier's two-to-eight-row same-slab verify wherever a rows site's half-x forms serve on the box
-    (`kq_rows_half_<fmt>` crowned and the rail on - the M5 profile crowns thirteen formats'), over every verify row of the
-    twelve rounds; the f32-x forms keep the carrier's own bar. gemma-4-12B-it Q4_K_M (`test_metal_verify_gemma12`, bar
-    0.5 before): four rows read 0.61 over 48 rows on the half-x forms against 0.08 with `DASLLAMA_METAL_KQ_HALF=0`, five
-    rows 0.40 over 60 against 0.24, no argmax flip; the nine-row mul_mm, whose x is half on either rail, reads 0.84 over
-    108. The control, the same verify with its GEMV stage knocked out (`set_metal_decode_skip("gemv")`), reads 56.4 at four
-    rows and 54.1 at five. The Qwen MTP fixtures' `mtp-vff` arms move from `FF_TOL` 0.5 to the same 1.0 on a K-quant carrier with
-    a half-x rows site.
-  - `tests/test_whisper.das`, `test_canary_qwen_oracle`: `CN_TIE_BAR` 0.25 - the largest gap the forced walk over the
-    frozen NeMo SALM ids may read between our argmax logit and the oracle token's, on the f32 lane (f32 K/V), every step
-    of the three clips (jfk 23 ids, `09_1089-134686-0008` 19, `05_1089-134686-0004` 14). jfk and clip 09 read 0 on the CPU
-    chain and on the Metal tower: every oracle id is our argmax. Clip 05's step 9 is a greedy near-tie between "." (13)
-    and " Good" (7684): the CPU chain puts 7684 0.084 above ".", the tower 0.102, where NeMo picked ".". The control, the next oracle id at each step, lands outside the bar at 22 of 22, 18 of 18
-    and 12 of 13 steps.
+  are dropped. The 31B's parity row - cell `gemma4_hetero_row` of `tests/test_metal_support_matrix.das`, tag `gemma4-31b/k4` -
+  is green at c824d8e8a3 (which carries 5677d5b4da) through `tests/run.das -- --suite matrix --arm fam-gemma4 --family
+  gemma4` under the same manifest and `DASLLAMA_PARITY_FULL=1`: the freeform rows within 8 of the CPU's (widest 4.25 at
+  row 20, the CPU's largest logit there 26.9), the counting and B=2 streams token for token.
+- **MEASURED (2026-10-17) - a driver-against-itself bar and an external-reference bar the M5's box profile moves, M5 Max
+  (128 GB).** Every reading below is a `tests/run.das` run at c824d8e8a3, one model process on the box, the box profile
+  `performance/m5.tune.json` (39,101 B), `DAS_TUNE_MANIFEST` at it with `DASLLAMA_ALLOW_UNTUNED=1
+  DASLLAMA_METAL_HAZARD_STRICT=1 DASLLAMA_PARITY_FULL=1`.
+  - The driver-against-itself bar: `tests/test_metal_mtp_parity.das`'s `vff_cell` holds the Metal batch rail's same-slab
+    verify against the Metal plain steps, every plain step counted a Metal decode. `MM_TOL` 1.0 now holds a K-quant
+    carrier's two-to-eight-row verify wherever a rows site's half-x forms serve on the box (`kq_rows_half_<fmt>` crowned, the
+    rail on - the M5 profile crowns thirteen formats'), over every verify row of twelve rounds; the f32-x forms keep the
+    carrier's own bar. Run `tests/run.das -- --suite mtp --arm mtp-vff`, maxd over the rows, the control (the same verify
+    with its GEMV stage knocked out, `set_metal_decode_skip("gemv")`) the widest row of its four rounds:
+    - gemma-4-12B-it Q4_K_M (`test_metal_verify_gemma12`, bar 0.5 before): arm `mtp-vff-g12` 0.61 over 48 rows, control
+      56.4; arm `mtp-vff5-g12` 0.40 over 60 rows, control 54.1; no argmax flip. The nine-row arm `mtp-vff9-g12`, at `MM_TOL`
+      before and after, reads 0.84 over 108.
+    - the Qwen MTP fixtures' arm `mtp-vff-<tag>` (`FF_TOL` 0.5 before), four rows over 48: Qwen3.5-9B-MTP UD-Q5_K_XL
+      (`9b`) 0.0061, control 27.2; Qwen3.6-27B-MTP Q4_K_M (`27b`) 0.0068, control 25.4; Qwen3.6-35B-A3B-MTP UD-Q4_K_M
+      (`35b`) 0.00083, control 20.6; Qwen3.6-35B-A3B-MTP IQ4_XS-pure (`35b-iq4xs`) 0.081, control 17.8; Qwen3.8-27B
+      Q4_K_M with its split Q8_0 head (`3.8-27b`) 0.0038, control 23.4. The Q8_0 fixtures (`0.8b`, `4b`) have no half-x
+      site and keep 0.5.
+    A probe, not evidence: the gemma-12B arms under `DASLLAMA_METAL_KQ_HALF=0` (dastest on the cell, the same tree) read
+    0.08 at four rows and 0.24 at five, the half-x forms' share of the readings above.
+  - The external-reference bar: `tests/test_whisper.das`'s `test_canary_qwen_oracle` holds the decoder's forced walk to the
+    frozen NeMo SALM ids (`harness/canary_qwen_expected.tsv`). `CN_TIE_BAR` 0.25 is the largest gap the walk may read
+    between our argmax logit and the oracle id's, on the f32 lane (f32 K/V), every step of the three clips. Run
+    `tests/run.das -- --area audio`: jfk (23 ids) and `09_1089-134686-0008` (19) read 0 on the CPU chain and on the
+    Metal tower - every oracle id our argmax; `05_1089-134686-0004` (14) reads 0.084 on the CPU chain and 0.102 on the
+    tower at step 9, a greedy near-tie between "." (13) and " Good" (7684) where NeMo picked ".". The control feeds the
+    oracle ids one step early: every step whose input moved lands outside the bar, the nearest 10.58 to 10.62 on jfk's 21
+    steps, 11.55 to 11.61 on clip 09's 17 and 11.40 to 11.41 on clip 05's 12. The same run's `test_vulkan_tower_kernels.das`
+    dies at start (exit 139): the Vulkan files do not run on the M5.
 - **MEASURED (2026-10-17) - the window's f32 per-layer-embedding GEMMs on the staged KHR tile, and the K-quant staged race,
   the pod.** Box: the RunPod RTX PRO 4500 Blackwell 32 GB, driver 580.159.04 (no `VK_NV_cooperative_matrix_decode_vector`:
   the cm2 tiles run the scalar decode arm), `DASLLAMA_GPU=1 DASLLAMA_ALLOW_UNTUNED=1 DASLLAMA_IMAGE_SAVE=0`. The rows
