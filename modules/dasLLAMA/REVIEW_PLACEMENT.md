@@ -6,8 +6,9 @@ docs: `ARCHITECTURE.md`, `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_ENGINE_SERVING.
 `ARCHITECTURE_MEDIA.md`, `ARCHITECTURE_TTS.md`, `ARCHITECTURE_POCKET.md`. Planned work:
 `followup_general.md`, `followup_vulkan.md` for Vulkan, `followup_metal.md` for Metal.
 
-A charter line is a file's line in `ARCHITECTURE.md#file-charters`, or its role row or file
-bullet in `ARCHITECTURE_GPU.md#gpu-backends`.
+A charter line is a file's line in the companion `File charters` section that
+`ARCHITECTURE.md#file-charters` routes that file to, or its role row or file bullet in
+`ARCHITECTURE_GPU.md#gpu-backends`.
 
 **A per-file inventory restated in this checklist is a defect of the checklist.** The charter
 lines own the per-file list; a rule naming what KIND of code lands in which file is the
@@ -50,18 +51,11 @@ stamped from a kernel class template.
 row counts and formats - nothing read off a device) lands in `dasllama/dasllama_vulkan_classes.das`,
 whichever file calls it.**
 
-**A Vulkan host-side ensure/set/encode chain whose pick reads driver state - `g_rd`, or an
-`RLayer` field read from a global or from an argument - lands in the Vulkan driver file of the
-pass whose dispatches read the descriptor set the chain records: `dasllama/dasllama_vulkan_decode.das`
-for the decode step, `dasllama/dasllama_vulkan_prefill.das` for the prefill pass, the tower,
-ASR-decoder or TTS driver file for theirs, and `dasllama/dasllama_vulkan_common.das` when
-dispatches of both the decode step and the prefill pass read that descriptor set.**
-
-**A function that builds a Vulkan descriptor set at model load lands in the driver file of the
-pass whose dispatches read that set - `dasllama/dasllama_vulkan_decode.das` for the decode step,
-`dasllama/dasllama_vulkan_prefill.das` for the prefill pass, the tower, ASR-decoder or TTS driver
-file for theirs, `dasllama/dasllama_vulkan_common.das` when both the decode step and the prefill
-pass read it.**
+**A Vulkan descriptor set's writer - a host-side ensure/set/encode chain whose pick reads driver
+state (`g_rd`, or an `RLayer` field read from a global or an argument), or a function that builds
+the set at model load - lands in the Vulkan driver file of the pass whose dispatches read that
+set, per its role row in `ARCHITECTURE_GPU.md#gpu-backends`, and in
+`dasllama/dasllama_vulkan_common.das` when dispatches of more than one pass read it.**
 
 **A Metal host-side ensure/set/encode chain whose pick reads nothing but a stamp selector it is
 handed lands in the file of the function that decides that stamp, and a diff that moves that
