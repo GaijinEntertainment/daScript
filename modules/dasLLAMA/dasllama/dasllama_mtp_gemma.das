@@ -106,9 +106,9 @@ def private quant_stem(stem : string) : string {
     return cut < 0 ? stem : slice(stem, 0, cut)
 }
 
-//! The gemma-4 drafter sidecar beside `model_path`: `mtp-<stem>-Q8_0.gguf` when it exists (the head's quant is chosen independently
-//! of the trunk's), `<stem>` the quant stem and then that stem with an unsloth `-UD` tag dropped (the upstream head carries none),
-//! else the exact-name `mtp-<basename>` sibling, else "". A path already naming a head never recurses onto itself.
+//! The gemma-4 drafter sidecar beside `model_path` - `mtp-<stem>-Q8_0.gguf` for the quant stem, then for it without `-UD`,
+//! then the exact-name `mtp-<basename>`, each only an assistant's file (never a split NextN head), else "" - and never for a
+//! path naming a head
 [arch(at="../ARCHITECTURE_GPU_MTP_ASSISTANT.md#assistant-drafter-attach")]
 def gemma_drafter_sidecar(model_path : string) : string {
     let name = base_name(model_path)
@@ -119,11 +119,13 @@ def gemma_drafter_sidecar(model_path : string) : string {
     let stem = quant_stem(trim_suffix(name, ".gguf"))
     for (head in [stem, trim_suffix(stem, "-UD")]) {
         let pref = path_join(dir, "mtp-{head}-Q8_0.gguf")
-        return pref if (fexist(pref))
+        return pref if (assistant_file(pref))
     }
     let exact = path_join(dir, "mtp-{name}")
-    return fexist(exact) ? exact : ""
+    return assistant_file(exact) ? exact : ""
 }
+
+def private assistant_file(path : string) : bool => fexist(path) && gguf_is_assistant(path)
 
 // ===== loader =====
 
