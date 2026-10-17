@@ -700,7 +700,7 @@ def private run_ple_f32_shape(name : string; d, n, cnt, rounds : int) {
             }
         }
         print("r{round} {name} one at a time: scalar f32 {lat_scalar} us | staged whole {lat_whole} us  timing-only\n")
-        for (nsplit in fixed_array(2, 3, 4, 6, 8)) {
+        for (nsplit in fixed_array(2, 3, 4, 5, 6, 8)) {
             let ck = cm2_chunk(int64(n), int64(nsplit))
             continue if (ck == 0l)
             let swgs = wgs * nsplit
@@ -3636,6 +3636,8 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
         run_ple_f32_shape("E2B proj", 1536, 256, 512, 3)
         run_ple_f32_shape("E4B gate", 256, 2560, 512, 3)
         run_ple_f32_shape("E4B proj", 2560, 256, 512, 3)
+        run_ple_f32_shape("E2B gate@300", 256, 1536, 300, 3)   //! a window off the tile's 128-token column: the partial-tile store
+        run_ple_f32_shape("E2B proj@300", 1536, 256, 300, 3)
         return
     }
     if (only == "kqst:") {
@@ -3655,6 +3657,7 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
         for (round in range(2)) {
             //! gemma-4 E2B's role shapes at 512 rows (dim 1536, ffn 6144 and the doubled 12288, q 2048, kv 256, ple 256), then the 4B's
             run_kqst_shape(cm2_fmt, "r{round} gate     ", 6144, 1536, 512)
+            run_kqst_shape(cm2_fmt, "r{round} gate@500 ", 6144, 1536, 500)   //! a token count off every column: the partial-tile store path
             run_kqst_shape(cm2_fmt, "r{round} gate2x   ", 12288, 1536, 512)
             run_kqst_shape(cm2_fmt, "r{round} down     ", 1536, 6144, 512)
             run_kqst_shape(cm2_fmt, "r{round} down2x   ", 1536, 12288, 512)
