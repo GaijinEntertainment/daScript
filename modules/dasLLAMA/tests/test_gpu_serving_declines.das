@@ -12,6 +12,10 @@ require dasllama/dasllama_gpu_tier   // install_moe_gpu_resident_bias - the bias
 require ?vulkan dasllama/dasllama_vulkan_decode   // rd_routed_slots_fit - the N-row command's slot cap, where the module exists
 require ?vulkan dasllama/dasllama_vulkan_prefill  // ple_proj_bf16_why - the bf16 projection's dim gate, where the module exists
 require dasllama/dasllama_metal_shapes   // moe_metal_ok - the Metal routed block's admission, portable
+require ?das_metal dasllama/dasllama_metal_common   // decline - the required-mode panic, where the module exists
+require ?das_metal dasllama/dasllama_metal_decode   // the metal decode override `set_metal_mode` selects
+require ?das_metal dasllama/dasllama_metal_prefill   // the metal prefill override beside it
+require dasllama/dasllama_math   // kernel_backend_seat / restore_kernel_backend - the backend pin the metal mode sets, put back
 require dasllama/dasllama_image   // save_model_image / load_model_image / image_identity - the trimmed lane's map under the ring pin
 require dasllama/dasllama_arch_llama   // the arch the trimmed lane's shell names, registered for its map
 require daslib/fio
@@ -603,6 +607,74 @@ def test_metal_fmt_decline_names_site(t : T?) {
         t |> equal(metal_fmt_decline_line("prefill", "{MetalPrefillDecline.graph}", m),
             "dasLLAMA metal prefill: declined graph - layer 1's expert stack down plane is mx4, a format the Metal kernels do not read there; the CPU serves the call")
         delete m
+    }
+    t |> run("a sigmoid-gated shared expert's unserved format names its layer, site and member under graph") @(t : T?) {
+        var m <- moe_shell(KqFmt.k4)
+        m.config.n_ff_shexp = 256l
+        m.config.moe_shexp_gated = true
+        m.wshk1_offs <- [0l, 0l]
+        m.wshk2_offs <- [0l, 0l]
+        m.wshk3_offs <- [0l, 0l]
+        m.wsh1_fmt <- [KqFmt.k4, KqFmt.k4]
+        m.wsh2_fmt <- [KqFmt.k4, KqFmt.k4]
+        m.wsh3_fmt <- [KqFmt.k4, KqFmt.k4]
+        t |> equal(shexp_fmts_unserved(m), "", "k4 shared-expert planes have their one-row GEMVs")
+        m.wsh3_fmt[1] = KqFmt.mx4
+        t |> success(!moe_metal_ok(m), "the routed block declines the shared expert's plane")
+        t |> equal(shexp_fmts_unserved(m), "layer 1's shared expert up plane is mx4")
+        t |> equal(metal_fmt_decline_line("decode", "{MetalDecodeDecline.graph}", m),
+            "dasLLAMA metal decode: declined graph - layer 1's shared expert up plane is mx4, a format the Metal kernels do not read there; the CPU serves the call")
+        delete m
+    }
+    t |> run("a deltanet plane's unserved format names its layer, site and member under graph") @(t : T?) {
+        var m <- shell(3l, 2ul)
+        m.config.dim = 256l
+        m.config.ssm_d_inner = 256l
+        m.config.ssm_d_state = 128l
+        m.config.ssm_d_conv = 4l
+        m.dnqkv_fmt <- [KqFmt.q8, KqFmt.k4, KqFmt.q8]
+        m.dngate_fmt <- [KqFmt.q8, KqFmt.k4, KqFmt.q8]
+        m.dnout_fmt <- [KqFmt.q8, KqFmt.k4, KqFmt.q8]
+        m.dnbeta_fmt <- [KqFmt.q8, KqFmt.k4, KqFmt.q8]
+        m.dnalpha_fmt <- [KqFmt.q8, KqFmt.k4, KqFmt.q8]
+        t |> equal(dn_fmts_unserved(m), "", "k4 deltanet planes have their one-row GEMVs")
+        t |> equal(dn_ba_window_fmts_unserved(m), "", "and the beta/alpha planes their expert-form GEMV")
+        m.dngate_fmt[1] = KqFmt.mx4
+        t |> success(!dn_metal_ok(m), "the deltanet gate declines the hybrid")
+        t |> equal(dn_fmts_unserved(m), "layer 1's deltanet gate plane is mx4")
+        t |> equal(metal_fmt_decline_line("prefill", "{MetalPrefillDecline.graph}", m),
+            "dasLLAMA metal prefill: declined graph - layer 1's deltanet gate plane is mx4, a format the Metal kernels do not read there; the CPU serves the call")
+        m.dngate_fmt[1] = KqFmt.k4
+        m.dnalpha_fmt[1] = KqFmt.mx4
+        t |> success(!dn_ba_metal_window_ok(m), "the window's beta/alpha gate declines an mx4 alpha plane")
+        t |> equal(dn_ba_window_fmts_unserved(m), "layer 1's deltanet alpha plane is mx4")
+        delete m
+    }
+    t |> run("the required-mode panic carries the site and member the warning line names") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            var m <- shell(2l, 0ul)
+            m.quant = QuantMode.q8
+            m.kquant_native = true
+            m.w3_fmt <- [KqFmt.k4, KqFmt.mx4]
+            let words = metal_fmt_decline_words("decode", "{MetalDecodeDecline.kquant_native}", m)
+            t |> equal(words, "kquant_native - layer 1's FFN up plane is mx4, a format the Metal kernels do not read there")
+            let mode0 = get_metal_mode()
+            let seat = kernel_backend_seat()
+            let pf0 = active_prefill_override()
+            let dc0 = active_decode_override()
+            set_metal_mode(MetalMode.required)
+            let why = panic_text() $ { decline(MetalDecodeDecline.kquant_native, words) }
+            let bare = panic_text() $ { decline(MetalDecodeDecline.shape) }
+            set_metal_mode(mode0)
+            select_prefill_override(pf0)
+            select_decode_override(dc0)
+            restore_kernel_backend(seat)
+            t |> success(find(why, "decode declined: {words} (the GPU cannot serve this call)") >= 0, "the panic names the site and member: {why}")
+            t |> success(find(bare, "decode declined: shape (") >= 0, "a decline no plane format decided panics with its reason alone (the control): {bare}")
+            delete m
+        } else {
+            t |> skip("the required-mode panic is the Metal drivers' - no das_metal in this build")
+        }
     }
 }
 
