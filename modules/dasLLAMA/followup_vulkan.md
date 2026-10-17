@@ -2136,14 +2136,3 @@ module) is independent and can land any time - it is pure structure.
     per-op block binds the sink rows and the sliding window and serves gpt-oss's attention layers, and the span, the tail
     fusion and the f16 chain take the routed form, each held by a cell against the CPU chain; this is
     the gpt-oss leg's.
-
-148. **The per-layer-embedding gate and projection windows run the K-quant tile's scalar arm on a driver without
-    decode-vector.** The E-series pre-step's `inp_gate` and `proj` planes serve in their file format (`REVIEW_KQ_FORMATS.md`'s
-    served-not-converted rule), so on the E2B Q4_K_M the 512-row window's gate and projection GEMMs ride the K-quant cm2
-    tile, which the RTX PRO 4500's 580 driver runs on the scalar decode arm (row 147 (a)): per window `ple_gate` reads
-    5950 us and `ple_proj` 4798 us where the q8-converted planes read 1079 and 608 on the commit before the PLE merge
-    (`DASLLAMA_GPU_PROF=1`, every other stage within 2 %), and the file's pp512 reads 12304 against 15917 - the bisect over
-    the gemma leg's first-parent commits names the PLE merge. The fix is a K-quant window form that is fast without
-    decode-vector (a dequant to f16 in shared memory ahead of the KHR tile, as llama.cpp's stripped shaders do), raced
-    against the cm2 arm on this box - it reaches every K-quant GEMM of every window here, the FFN gate and up at 6.2 ms a
-    window among them. The follow-up PR after the gemma leg.
