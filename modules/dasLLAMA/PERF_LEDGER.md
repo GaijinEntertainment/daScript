@@ -30,7 +30,24 @@ what it costs today and what the fix would change.
   12B Q8_0 row on one tree, 1024 -> 256 lanes: pp512 2126 -> 2154; its tg128 read 40.6 and 39.5 at cv 4.8 / 4.2 %, both
   VOID (three more 256-lane readings 39.0-39.7 at cv 4.1-4.3 %, after an hour of GPU suites), so the decode row holds no
   verdict and the switch rests on the race. Every Metal kernel gate, the batched row and the gemma4 and E-series arms are
-  green at 256. The fused seam holds no arm at dim 5376 (`followup_metal.md` row 54). The pod half of this entry follows.
+  green at 256. The fused seam holds no arm at dim 5376 (`followup_metal.md` row 54).
+  **The pod half** (RTX PRO 4500 32 GB, the 580 driver without decode-vector, `-p 512 -n 128 -r 3`, no box profile on either
+  side, one binary for both trees since the leg changes no Vulkan C++): master 33e7910669 -> the leg, pp512 / tg128 tok/s:
+  gemma-2 2B Q8_0 19597 -> 19462 / 217.0 -> 218.1; gemma-3 1B Q8_0 pp VOID on both sides (cv 46 and 58 %: a 20 ms row) /
+  396.5 -> 397.3; gemma-3 4B Q8_0 13049 -> 13134 / 150.7 -> 151.4; gemma-4 E2B Q8_0 16382 -> 16294 (16088 at five reps) /
+  tg VOID on both sides (149 at cv 25 %, 185 at cv 9 %, 188.5 at cv 6.7 % over five reps); E4B Q8_0 9718 -> 9541 / tg VOID
+  (93.6 at cv 16 %, 107 at cv 7 %); E2B Q4_K_M 15917 -> 12304 (12353 at five reps) / 202 at cv 21 % VOID -> 221.6; 12B
+  Q8_0 4158 -> 4094 / 55.75 -> 55.85; 26B-A4B UD-IQ3_XXS 5422 -> 5353 / 143.3 -> 146.2; 26B-A4B Q4_K_M 6405 -> 6240 /
+  135.0 -> 135.3; 31B Q4_K_M (the CPU rows, the card declines it) 1435 -> 1403 / 36.54 -> 36.47. Every prefill row but
+  one holds within 3 % and every valid decode row holds parity or gains; the E2B Q4_K_M prefill loses 23 %, bisected to
+  the PLE merge and split to the window's gate and projection on the K-quant tile's scalar arm (`followup_vulkan.md` row
+  148). The assistant drafter on the 26B Q4_K_M (`--mtp-ab`, 64 tokens, three prompts): 131 -> 193 tok/s (x1.47) at 88 %
+  acceptance on two prompts, x1.35 on the third. The ring at pp8192 on the 26B IQ3_XXS: 4824 tok/s and tg32 147.0 with the
+  ring against 4830 and 147.0 without, host peak RSS 24.4 against 23.8 GB. The house quick probe (one server a model,
+  alone: wall s / first token s / generation tok/s as the client sees), master -> leg: 12B Q8_0 7.21 / 6.87 / 12 ->
+  0.57 / 0.46 / 41; 26B IQ3_XXS 4.24 / 3.60 / 19 -> 0.43 / 0.33 / 106; E4B Q8_0 0.29 / 0.18 / 56 -> 0.36 / 0.23 / 77. The
+  first pass of these rows read `exit=1` on every big model: the volume had hit its quota under the leg's re-minted images,
+  and a chain logging onto the full volume keeps only the lines before the fill - the rows above are the re-runs.
 
 
 - **MEASURED (2026-10-16) - the gemma leg's parity bars, one row a file and bar.** Each row names the cell, the bar
