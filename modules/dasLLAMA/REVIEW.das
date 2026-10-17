@@ -1,5 +1,6 @@
 options gen2
 
+require math
 require strings
 require daslib/strings_boost
 require daslib/strings_convert
@@ -1996,6 +1997,722 @@ def private check_harness_dashv {
     }
 }
 
+//! one `class` a kernel file declares: its base, the constants it sets or declares, and the attribute and `//!` lines above it
+struct private StampDecl {
+    base : string
+    line : int
+    consts : table<string; string>
+    doc : string
+    is_template : bool
+    dispatched : bool
+}
+
+//! the value text of an `override NAME = v` / `@template_constant NAME : T = v` line, its comment dropped
+def private const_value(s : string) : string {
+    let eq = find(s, "=")
+    let cm = find(s, "//")
+    return strip(slice(s, eq + 1, cm >= 0 ? cm : length(s)))
+}
+
+//! the constant a class body line sets or declares, "" on any other line
+def private const_name(s : string) : string {
+    if (s |> starts_with("override ")) {
+        return ident_prefix(slice(s, length("override ")))
+    } elif (s |> starts_with("@template_constant ")) {
+        return ident_prefix(slice(s, length("@template_constant ")))
+    }
+    return ""
+}
+
+def private stamp_decl_at(lines : array<string>; i : int; var out : table<string; StampDecl>) {
+    let tmpl = lines[i] |> starts_with("class template ")
+    let rest = slice(lines[i], tmpl ? length("class template ") : length("class "))
+    let colon = find(rest, ":")
+    var decl <- StampDecl(line = i + 1, is_template = tmpl, base = colon >= 0 ? ident_prefix(strip(slice(rest, colon + 1))) : "")
+    var j = i + 1
+    while (j < length(lines) && !(lines[j] |> starts_with("}"))) {
+        let s = strip(lines[j])
+        let cn = const_name(s)
+        if (!empty(cn) && find(s, "=") >= 0) {
+            decl.consts[cn] = const_value(s)
+        }
+        j++
+    }
+    var k = i - 1
+    while (k >= 0 && (lines[k] |> starts_with("[") || lines[k] |> starts_with("    "))) {
+        decl.dispatched ||= find(lines[k], "_dispatch(") >= 0
+        k--
+    }
+    while (k >= 0 && lines[k] |> starts_with("//!")) {
+        decl.doc = "{lines[k]} {decl.doc}"
+        k--
+    }
+    out |> emplace(ident_prefix(rest), decl)
+}
+
+def private stamp_decls(path : string; var out : table<string; StampDecl>) {
+    var inscope lines <- split(read_lf(path), "\n")
+    for (i in range(length(lines))) {
+        if (lines[i] |> starts_with("class ")) {
+            stamp_decl_at(lines, i, out)
+        }
+    }
+}
+
+//! the base `n` names in `local`, else in `shipped`; "" past the chain's root
+def private stamp_base(n : string; local, shipped : table<string; StampDecl>) : string {
+    var b = ""
+    let found = get(local, n) $(d) {
+        b = d.base
+    }
+    if (!found) {
+        get(shipped, n) $(d) {
+            b = d.base
+        }
+    }
+    return b
+}
+
+//! `name`'s class chain, itself first, through `local` then `shipped`
+def private stamp_chain(name : string; local, shipped : table<string; StampDecl>) : array<string> {
+    var out : array<string>
+    var n = name
+    while (!empty(n) && length(out) < 64) {
+        out |> push(n)
+        n = stamp_base(n, local, shipped)
+    }
+    return <- out
+}
+
+//! the constants `name` compiles with: every class of its chain's settings, the nearest one winning
+def private stamp_consts(name : string; local, shipped : table<string; StampDecl>) : table<string; string> {
+    var out : table<string; string>
+    var inscope chain <- stamp_chain(name, local, shipped)
+    for (i in range(length(chain))) {
+        let n = chain[length(chain) - 1 - i]
+        let found = get(local, n) $(d) {
+            for (k, v in keys(d.consts), values(d.consts)) {
+                out[k] = v
+            }
+        }
+        if (!found) {
+            get(shipped, n) $(d) {
+                for (k, v in keys(d.consts), values(d.consts)) {
+                    out[k] = v
+                }
+            }
+        }
+    }
+    return <- out
+}
+
+//! true when `shipped` holds `n` as a dispatched class
+def private shipped_stamp(n : string; shipped : table<string; StampDecl>) : bool {
+    var hit = false
+    get(shipped, n) $(d) {
+        hit = d.dispatched
+    }
+    return hit
+}
+
+//! the first backticked name of a race stamp's `//!` lines that a shipped dispatched class carries
+def private raced_stamp(doc : string; shipped : table<string; StampDecl>) : string {
+    var inscope parts <- split(doc, "`")
+    for (i in range(length(parts))) {
+        continue if (i % 2 == 0)
+        let n = ident_prefix(parts[i])
+        return n if (!empty(n) && shipped_stamp(n, shipped))
+    }
+    return ""
+}
+
+def private consts_apart(a, b : table<string; string>) : array<string> {
+    var out <- [for (k, v in keys(a), values(a)); k; where(b?[k] ?? "") != v]
+    for (k in keys(b)) {
+        if (!key_exists(a, k)) {
+            out |> push(k)
+        }
+    }
+    out |> sort()
+    return <- out
+}
+
+def private check_bench_stamps_in(path : string; shipped : table<string; StampDecl>) {
+    var inscope local : table<string; StampDecl>
+    stamp_decls(path, local)
+    for (n, d in keys(local), values(local)) {
+        continue if (d.is_template || !d.dispatched)
+        let raced = raced_stamp(d.doc, shipped)
+        continue if (empty(raced))
+        var inscope chain <- stamp_chain(n, local, shipped)
+        let tmpl = stamp_base(raced, shipped, shipped)
+        if (find_index(chain, tmpl) < 0) {
+            gate_finding(path, d.line, "race stamp `{n}` names `{raced}` but does not stamp its template `{tmpl}` - a race stamp is the shipped stamp's template with the raced constant moved, or the race times a kernel that never ships (ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md#kernel-race-fidelity)")
+            continue
+        }
+        var inscope mine <- stamp_consts(n, local, shipped)
+        var inscope theirs <- stamp_consts(raced, shipped, shipped)
+        var inscope apart <- consts_apart(mine, theirs)
+        if (length(apart) > 1) {
+            gate_finding(path, d.line, "race stamp `{n}` names `{raced}` and differs from it in {length(apart)} constants ({join(apart, ", ")}) - a race stamp moves the one constant the race picks and keeps every other the shipped stamp's, or the race times a kernel that never ships (ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md#kernel-race-fidelity)")
+        }
+    }
+}
+
+//! a race stamp - a dispatched class under benchmarks/, harness/ or performance/ whose `//!` names a shipped stamp - is that stamp
+//! with one constant moved
+[arch(at = "ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md#kernel-race-fidelity")]
+def private check_bench_stamps {
+    var inscope shipped : table<string; StampDecl>
+    var inscope engine : array<string>
+    collect_das_files(DASLLAMA_DIR, engine)
+    for (p in engine) {
+        stamp_decls(p, shipped)
+    }
+    var inscope files : array<string>
+    for (folder in ["modules/dasLLAMA/benchmarks", "modules/dasLLAMA/harness", "modules/dasLLAMA/performance"]) {
+        collect_das_files(folder, files, true)
+    }
+    for (p in files) {
+        check_bench_stamps_in(p, shipped)
+    }
+}
+
+//! the index of the `)` closing the `(` at `open`, -1 when the line ends first
+def private paren_close(d; open : int) : int {
+    var depth = 0
+    for (i in range(open, length(d))) {
+        let ch = int(d[i])
+        if (ch == '(' || ch == '[') {
+            depth++
+        } elif (ch == ')' || ch == ']') {
+            depth--
+            return i if (depth == 0)
+        }
+    }
+    return -1
+}
+
+//! true when `inner` holds a ` - ` outside every bracket: a difference
+def private top_level_minus(inner : string) : bool {
+    var depth = 0
+    var found = false
+    peek_data(inner) $(d) {
+        for (i in range(length(d))) {
+            let ch = int(d[i])
+            if (ch == '(' || ch == '[') {
+                depth++
+            } elif (ch == ')' || ch == ']') {
+                depth--
+            } elif (ch == '-' && depth == 0 && i > 0 && int(d[i - 1]) == ' ' && i + 1 < length(d) && int(d[i + 1]) == ' ') {
+                found = true
+            }
+        }
+    }
+    return found
+}
+
+//! true when `line` keeps a running largest difference as `max(m, abs(a - b))`
+def private running_abs_diff_max(line : string) : bool {
+    var hit = false
+    peek_data(line) $(d) {
+        var at = find(d, "max(")
+        while (at >= 0 && !hit) {
+            let from = at + length("max(")
+            let name = ident_prefix(slice(d, from))
+            let tail = from + length(name)
+            if ((at == 0 || !is_ident_byte(int(d[at - 1]))) && !empty(name) && slice(d, tail, tail + 6) == ", abs(") {
+                let open = tail + 5
+                let close = paren_close(d, open)
+                hit = close > open && top_level_minus(slice(d, open + 1, close))
+            }
+            at = find(d, "max(", from)
+        }
+    }
+    return hit
+}
+
+//! a running largest difference over two float rows in a test reads a NaN as infinite: `max` drops a NaN a later finite element follows
+[arch(at = "ARCHITECTURE_ENGINE.md#test-folder-gates")]
+def private check_running_max_nan {
+    var inscope files : array<string>
+    collect_das_files(TESTS_DIR, files)
+    for (path in files) {
+        var line_no = 0
+        for (line in split(strip_line_comments(read_lf(path)), "\n")) {
+            line_no++
+            if (running_abs_diff_max(line)) {
+                gate_finding(path, line_no, "a running largest difference `max(m, abs(a - b))` - `max` drops a NaN that a later finite element follows, so an output holding a NaN passes the bar; take `nan_wide_diff(a, b)` (_compares.das, a NaN on either side infinite) or route the compare through `logits_maxdiff` / `check` (ARCHITECTURE_ENGINE.md#test-folder-gates)")
+            }
+        }
+    }
+}
+
+let private COVERAGE_FILE = "modules/dasLLAMA/tests/test_kernel_coverage.das"
+let private PINNED_DOC = "modules/dasLLAMA/tests/REVIEW_PINNED_GATES.md"
+let private CENSUS_TABLES = ["let private CENSUS_NEVER_DISPATCHED <- [", "let private VK_CENSUS_NEVER_DISPATCHED <- ["]
+
+//! the backticked names of the pinned set's entries, and the files whose entry pins them whole (an entry naming the file and no cell)
+def private pinned_set(var names : table<string>; var whole_files : table<string>) {
+    for (line in split(read_lf(PINNED_DOC), "\n")) {
+        var inscope parts <- split(line, "`")
+        for (i in range(length(parts))) {
+            if (i % 2 == 1) {
+                names |> insert(parts[i])
+            }
+        }
+        if (line |> starts_with("- `") && length(parts) >= 3 && parts[1] |> ends_with(".das") && parts[2] |> starts_with(" must")) {
+            whole_files |> insert(parts[1])
+        }
+    }
+}
+
+//! the evidence names a census table's comment lines cite: the kernel-unit cells (`test_vk*`, `test_metal_*`) and the gates (`*_gate`)
+def private census_evidence(var out : table<string; int>) {
+    let text = read_lf(COVERAGE_FILE)
+    var inscope lines <- split(text, "\n")
+    for (marker in CENSUS_TABLES) {
+        let from = find_line(text, marker)
+        continue if (from <= 0)
+        var i = from
+        while (i < length(lines) && find(lines[i - 1], "\"]") < 0) {
+            let s = strip(lines[i - 1])
+            if (s |> starts_with("//")) {
+                for (tok in census_evidence_tokens(s)) {
+                    if (!key_exists(out, tok)) {
+                        out[tok] = i
+                    }
+                }
+            }
+            i++
+        }
+    }
+}
+
+def private census_evidence_tokens(s : string) : array<string> {
+    var out : array<string>
+    peek_data(s) $(d) {
+        var i = 0
+        while (i < length(d)) {
+            if (!is_ident_byte(int(d[i])) || (i > 0 && is_ident_byte(int(d[i - 1])))) {
+                i++
+                continue
+            }
+            let tok = ident_prefix(slice(d, i))
+            i += max(length(tok), 1)
+            continue if (i < length(d) && int(d[i]) == '.')
+            if (tok |> starts_with("test_vk") || tok |> starts_with("test_metal_") || tok |> ends_with("_gate")) {
+                out |> push(tok)
+            }
+        }
+    }
+    return <- out
+}
+
+//! every file under tests/ by its stem, then every `def` there by its name, each to the file that holds it
+def private tests_homes : table<string; string> {
+    var out : table<string; string>
+    var inscope files : array<string>
+    collect_das_files(TESTS_DIR, files)
+    for (p in files) {
+        out[slice(base_name(p), 0, length(base_name(p)) - length(".das"))] = p
+    }
+    for (p in files) {
+        for (line in split(read_lf(p), "\n")) {
+            if (line |> starts_with("def ")) {
+                let n = def_name_of(line)
+                if (!key_exists(out, n)) {
+                    out[n] = p
+                }
+            }
+        }
+    }
+    return <- out
+}
+
+//! true when a cell the pinned set names in `home` calls `name` - a gate helper a pinned cell runs
+def private called_by_pinned_cell(name, home : string; pinned : table<string>) : bool {
+    var inscope fns <- function_bodies(home) $(header) {
+        return header |> starts_with("def test_") && key_exists(pinned, def_name_of(header))
+    }
+    for (f in fns) {
+        return true if (find(f.body, "{name}(") >= 0)
+    }
+    return false
+}
+
+//! every kernel-unit cell a census table names as a blind spot's evidence is in the pinned set
+[arch(at = "ARCHITECTURE_ENGINE.md#test-folder-gates")]
+def private check_census_evidence_pinned {
+    return if (!fexist(COVERAGE_FILE) || !fexist(PINNED_DOC))
+    var inscope pinned, whole_files : table<string>
+    pinned_set(pinned, whole_files)
+    var inscope evidence : table<string; int>
+    census_evidence(evidence)
+    var inscope homes <- tests_homes()
+    for (name, line in keys(evidence), values(evidence)) {
+        continue if (key_exists(pinned, name))
+        let home = homes?[name] ?? ""
+        if (empty(home)) {
+            gate_finding(COVERAGE_FILE, line, "a census table cites `{name}` as evidence and no file under tests/ defines it - name the cell that dispatches the kernel (ARCHITECTURE_ENGINE.md#test-folder-gates)")
+        } elif (!key_exists(whole_files, base_name(home)) && !called_by_pinned_cell(name, home, pinned)) {
+            gate_finding(COVERAGE_FILE, line, "a census table cites `{name}` ({base_name(home)}) as a blind spot's evidence, and the pinned set does not hold it - a cell a checked-in table names as its evidence is pinned, by a named-cell entry or its file's entry, in tests/REVIEW_PINNED_GATES.md (ARCHITECTURE_ENGINE.md#test-folder-gates)")
+        }
+    }
+}
+
+let private LOAD_FILE = "modules/dasLLAMA/dasllama/dasllama_load.das"
+
+//! the top-level argument count of the call whose `(` sits at `open`
+def private call_arg_count(line : string; open : int) : int {
+    var n = 1
+    var depth = 0
+    peek_data(line) $(d) {
+        for (i in range(open, length(d))) {
+            let ch = int(d[i])
+            if (ch == '(' || ch == '[' || ch == '{') {
+                depth++
+            } elif (ch == ')' || ch == ']' || ch == '}') {
+                depth--
+                break if (depth == 0)
+            } elif (ch == ',' && depth == 1) {
+                n++
+            }
+        }
+    }
+    return n
+}
+
+//! every `load_big` call names the plane's format - a call with none converts the plane to one form whatever its disk type
+[arch(at = "ARCHITECTURE_ENGINE_FORMATS.md#the-load-and-image-rail")]
+def private check_load_big_format {
+    return if (!fexist(LOAD_FILE))
+    var line_no = 0
+    for (line in split(strip_line_comments(read_lf(LOAD_FILE)), "\n")) {
+        line_no++
+        let at = find(line, "load_big(")
+        continue if (at < 0 || find(line, "def ") >= 0)
+        if (call_arg_count(line, at + length("load_big")) < 9) {
+            gate_finding(LOAD_FILE, line_no, "a `load_big` call with no format converts the plane to the q8 rail whatever its disk type, and no report names the conversion - pass the plane's tag (`kq_tag` / `kq_fmt_of`), or the `KqFmt` member the conversion serves (ARCHITECTURE_ENGINE_FORMATS.md#the-load-and-image-rail)")
+        }
+    }
+}
+
+//! every `RdecPass` value has its own sentence in `rdec_pass_words`, the reason a status page prints beside the count
+[arch(at = "ARCHITECTURE_GPU_ASYMMETRIES.md#gpu-asymmetries")]
+def private check_rdec_pass_words {
+    return if (!fexist(RESIDENT_FILE))
+    let text = read_lf(RESIDENT_FILE)
+    let enum_line = find_line(text, "enum private RdecPass \{")
+    var inscope words <- function_bodies(RESIDENT_FILE) $(header) {
+        return header |> starts_with("def private rdec_pass_words(")
+    }
+    if (enum_line <= 0 || empty(words)) {
+        gate_finding(RESIDENT_FILE, "no `enum private RdecPass` or no `def private rdec_pass_words(` - the check that every pass reason has a reader-facing sentence (ARCHITECTURE_GPU_ASYMMETRIES.md#gpu-asymmetries) has nothing to walk; keep the spellings or move this check with them")
+        return
+    }
+    var inscope lines <- split(text, "\n")
+    var i = enum_line
+    while (i < length(lines) && !(strip(lines[i]) |> starts_with("}"))) {
+        let member = ident_prefix(strip(lines[i]))
+        i++
+        continue if (empty(member))
+        if (find(words[0].body, "RdecPass.{member})") < 0) {
+            gate_finding(RESIDENT_FILE, i, "`RdecPass.{member}` has no arm in `rdec_pass_words` - a status page prints the value's machine name where it has no sentence; give it one in plain words that name no part of the engine (ARCHITECTURE_GPU_ASYMMETRIES.md#gpu-asymmetries)")
+        }
+    }
+}
+
+let private TESTS_DOC = "modules/dasLLAMA/tests/CLAUDE.md"
+
+//! every whitespace-separated word of every backtick span in `text`
+def private backticked_words(text : string) : table<string> {
+    var out : table<string>
+    var inscope parts <- split(replace(text, "\n", " "), "`")
+    for (i in range(length(parts))) {
+        continue if (i % 2 == 0)
+        for (w in split(parts[i], " ")) {
+            if (!empty(w)) {
+                out |> insert(w)
+            }
+        }
+    }
+    return <- out
+}
+
+//! the arm a literal `arm_on(t, "...")` names on `line`: the whole token, or the prefix ahead of an interpolation (`mtp-ff-{tag}`)
+def private arm_literals(line : string) : array<tuple<tok : string; prefix : bool>> {
+    var out : array<tuple<tok : string; prefix : bool>>
+    peek_data(line) $(d) {
+        var at = find(d, "arm_on(")
+        while (at >= 0) {
+            let from = at + length("arm_on(")
+            at = find(d, "arm_on(", from)
+            let q = find(d, ", \"", from)
+            continue if (q < 0 || (at >= 0 && q > at))
+            let handle = slice(d, from, q)
+            continue if (find(handle, " ") >= 0 || find(handle, "\\") >= 0)
+            let end = find(d, "\"", q + 3)
+            continue if (end < 0)
+            let tok = slice(d, q + 3, end)
+            let brace = find(tok, "\{")
+            out |> push((tok = brace >= 0 ? slice(tok, 0, brace) : tok, prefix = brace >= 0))
+        }
+    }
+    return <- out
+}
+
+//! every literal arm token a tests file filters on appears backticked in tests/CLAUDE.md
+[arch(at = "ARCHITECTURE_ENGINE.md#test-folder-gates")]
+def private check_arm_tokens_documented(doc_words : table<string>) {
+    dir(TESTS_DIR) $(name) {
+        return if (!(name |> ends_with(".das")))
+        let path = "{TESTS_DIR}/{name}"
+        var line_no = 0
+        for (line in split(strip_line_comments(read_lf(path)), "\n")) {
+            line_no++
+            for (arm in arm_literals(line)) {
+                var known = !arm.prefix && key_exists(doc_words, arm.tok)
+                if (arm.prefix) {
+                    known = empty(arm.tok)
+                    for (w in keys(doc_words)) {
+                        known ||= w |> starts_with(arm.tok)
+                    }
+                }
+                if (!known) {
+                    let shown = arm.prefix ? "{arm.tok}<...>" : arm.tok
+                    gate_finding(path, line_no, "arm `{shown}` appears in no backtick span of tests/CLAUDE.md - an `--arm` filter token a reader cannot find is an arm nobody runs; name it under \"Arm filter mechanics\" (ARCHITECTURE_ENGINE.md#test-folder-gates)")
+                }
+            }
+        }
+    }
+}
+
+//! the folders a `test_*` / `cell_*` name in tests/CLAUDE.md resolves in: the module, and every folder the document names by a path
+def private doc_name_roots(doc_words : table<string>) : array<string> {
+    var roots <- ["modules/dasLLAMA"]
+    for (w in keys(doc_words)) {
+        continue if (find(w, "/") <= 0 || w |> starts_with(".") || !(w |> ends_with(".das")))
+        let d = dir_name(w)
+        if (!empty(d) && fexist(d) && find_index(roots, d) < 0) {
+            roots |> push(d)
+        }
+    }
+    return <- roots
+}
+
+//! every `.das` file name and every `def` under `roots`
+def private names_under(roots : array<string>; var files, defs : table<string>) {
+    for (r in roots) {
+        var inscope paths : array<string>
+        collect_das_files(r, paths)
+        for (p in paths) {
+            files |> insert(base_name(p))
+            for (line in split(read_lf(p), "\n")) {
+                if (line |> starts_with("def ")) {
+                    defs |> insert(def_name_of(line))
+                }
+            }
+        }
+    }
+}
+
+//! the bare name a backticked word spells: punctuation trimmed, a path cut to its last segment
+def private doc_word_name(w : string) : string {
+    var n = length(w)
+    peek_data(w) $(d) {
+        while (n > 0 && find("(),;:.", slice(d, n - 1, n)) >= 0 && !(slice(d, 0, n) |> ends_with(".das"))) {
+            n--
+        }
+    }
+    return base_name(slice(w, 0, n))
+}
+
+//! every backticked `test_*` / `cell_*` name in tests/CLAUDE.md resolves to a file or a `def`
+[arch(at = "ARCHITECTURE_ENGINE.md#test-folder-gates")]
+def private check_doc_names_resolve(doc_words : table<string>) {
+    var inscope roots <- doc_name_roots(doc_words)
+    var inscope files, defs : table<string>
+    names_under(roots, files, defs)
+    let text = read_lf(TESTS_DOC)
+    for (w in keys(doc_words)) {
+        let name = doc_word_name(w)
+        continue if (!(name |> starts_with("test_") || name |> starts_with("cell_")) || find(w, "*") >= 0 || find(w, "<") >= 0 || find(w, "\{") >= 0)
+        let ok = name |> ends_with(".das") ? key_exists(files, name) : (key_exists(defs, name) || key_exists(files, "{name}.das"))
+        if (!ok) {
+            gate_finding(TESTS_DOC, find_line(text, w), "`{w}` names no file and no `def` under the module or a folder the document names by path - a stale or misspelt cell name sends the reader to nothing; rename it to the cell it means or drop it (ARCHITECTURE_ENGINE.md#test-folder-gates)")
+        }
+    }
+}
+
+//! tests/CLAUDE.md is the test discipline, not a ledger: it cites no `followup_*.md` item or row
+[arch(at = "ARCHITECTURE_ENGINE.md#test-folder-gates")]
+def private check_doc_cites_no_ledger {
+    var line_no = 0
+    for (line in split(read_lf(TESTS_DOC), "\n")) {
+        line_no++
+        if (find(line, "followup_") >= 0) {
+            gate_finding(TESTS_DOC, line_no, "cites a `followup_*.md` ledger - the test discipline states what the cells hold, and a ledger item moves or closes under it; state the fact, or drop the clause (ARCHITECTURE_ENGINE.md#test-folder-gates)")
+        }
+    }
+}
+
+//! a cell's name with its articles and counts dropped, lowercased, singular - the form an entry is searched for
+def private cell_name_key(s : string) : string {
+    let k = to_lower(strip(s))
+    var from = 0
+    var moved = true
+    while (moved) {
+        moved = false
+        for (w in ["the ", "and ", "plus ", "two ", "three ", "four ", "five "]) {
+            if (find(k, w, from) == from) {
+                from += length(w)
+                moved = true
+            }
+        }
+    }
+    let to = k |> ends_with("s") ? length(k) - 1 : length(k)
+    return slice(k, from, max(from, to))
+}
+
+//! the phrase naming the text ahead of position `at` in `flat` - back to the last `- `, `, `, `: `, `; ` or `(`
+def private phrase_before(flat : string; at : int) : string {
+    let head = strip(slice(flat, 0, at))
+    var cut = -1
+    for (sep in ["- ", ", ", ": ", "; ", "("]) {
+        cut = max(cut, rfind(head, sep))
+    }
+    return cell_name_key(cut >= 0 ? slice(head, cut + 1) : head)
+}
+
+//! the regions lead's bullets: every `cell_*` a bullet names, with the bullet's head and the cell's own phrase
+def private regions_cell_names(lines : array<string>; var out : table<string; array<string>>) {
+    var in_lead = false
+    var inscope bullet : array<string>
+    for (line in lines) {
+        if (line |> starts_with("`_resident_regions.das`")) {
+            in_lead = true
+            continue
+        }
+        continue if (!in_lead)
+        let in_bullet = !empty(bullet) && bullet[0] |> starts_with("- ")
+        if (line |> starts_with("- ") || (in_bullet && (line |> starts_with("`") || empty(line)))) {
+            regions_bullet_names(join(bullet, " "), out)
+            bullet |> clear()
+            bullet |> push(line)
+            break if (!(line |> starts_with("- ")))
+        } else {
+            bullet |> push(strip(line))
+        }
+    }
+    regions_bullet_names(join(bullet, " "), out)
+}
+
+def private regions_bullet_names(bullet : string; var out : table<string; array<string>>) {
+    return if (!(bullet |> starts_with("- ")))
+    var head_end = length(bullet)
+    for (sep in [" (", ":", ","]) {
+        let at = find(bullet, sep)
+        head_end = at >= 0 ? min(head_end, at) : head_end
+    }
+    let head = cell_name_key(slice(bullet, 2, head_end))
+    peek_data(bullet) $(d) {
+        var at = find(d, "`cell_")
+        while (at >= 0) {
+            let cell = ident_prefix(slice(d, at + 1))
+            let open = rfind(slice(d, 0, at), "(")
+            out[cell] |> push(head)
+            if (open > 0) {
+                out[cell] |> push(phrase_before(bullet, open))
+            }
+            at = find(d, "`cell_", at + 1)
+        }
+    }
+}
+
+//! each `test_gpu_resident_regions*.das` entry's text: the line naming the file and its continuation lines
+def private regions_entries(lines : array<string>; var out : table<string; string>) {
+    var cur = ""
+    var inscope parts : array<string>
+    for (i in range(length(lines) + 1)) {
+        let line = i < length(lines) ? lines[i] : ""
+        let tick = line |> starts_with("`") ? find(line, "`", 1) : -1
+        let opens = tick > 0 && slice(line, tick, tick + 4) == "` - "
+        if (!empty(cur) && !opens && !empty(line) && !(line |> starts_with("- ")) && !(line |> starts_with("#"))) {
+            parts |> push(line)
+            continue
+        }
+        if (!empty(cur)) {
+            out[cur] = join(parts, " ")
+        }
+        parts |> clear()
+        cur = opens && line |> starts_with("`test_gpu_resident_regions") ? slice(line, 1, tick) : ""
+        if (!empty(cur)) {
+            parts |> push(line)
+        }
+    }
+}
+
+//! the `cell_*` functions a file's code calls
+def private called_cells(path : string) : table<string> {
+    var out : table<string>
+    for (line in split(strip_line_comments(read_lf(path)), "\n")) {
+        peek_data(line) $(d) {
+            var at = find(d, "cell_")
+            while (at >= 0) {
+                let cell = ident_prefix(slice(d, at))
+                if ((at == 0 || !is_ident_byte(int(d[at - 1]))) && find(d, "{cell}(") >= 0) {
+                    out |> insert(cell)
+                }
+                at = find(d, "cell_", at + 1)
+            }
+        }
+    }
+    return <- out
+}
+
+//! every `cell_*` a `test_gpu_resident_regions*.das` file calls is named in that file's tests/CLAUDE.md entry
+[arch(at = "ARCHITECTURE_ENGINE.md#test-folder-gates")]
+def private check_regions_entries {
+    var inscope lines <- split(read_lf(TESTS_DOC), "\n")
+    var inscope names : table<string; array<string>>
+    regions_cell_names(lines, names)
+    var inscope entries : table<string; string>
+    regions_entries(lines, entries)
+    dir(TESTS_DIR) $(fname) {
+        return if (!(fname |> starts_with("test_gpu_resident_regions") && fname |> ends_with(".das")))
+        let path = "{TESTS_DIR}/{fname}"
+        let entry = entries?[fname] ?? ""
+        if (empty(entry)) {
+            gate_finding(TESTS_DOC, "`{fname}` has no entry - every regions file has one naming the cells it runs (ARCHITECTURE_ENGINE.md#test-folder-gates)")
+            return
+        }
+        let lowered = to_lower(entry)
+        var inscope called <- called_cells(path)
+        for (cell in keys(called)) {
+            var named = find(entry, cell) >= 0
+            get(names, cell) $(ns) {
+                for (n in ns) {
+                    named ||= !empty(n) && find(lowered, n) >= 0
+                }
+            }
+            if (!named) {
+                let lead = key_exists(names, cell) ? "by the name the `_resident_regions.das` list gives it" : "and the `_resident_regions.das` list names it nowhere"
+                gate_finding(TESTS_DOC, find_line(read_lf(TESTS_DOC), "`{fname}`"), "`{fname}` calls `{cell}`, and its entry does not name it {lead} - an entry lists every cell its file runs (ARCHITECTURE_ENGINE.md#test-folder-gates)")
+            }
+        }
+    }
+}
+
+def private check_tests_doc {
+    return if (!fexist(TESTS_DOC))
+    var inscope doc_words <- backticked_words(read_lf(TESTS_DOC))
+    check_arm_tokens_documented(doc_words)
+    check_doc_names_resolve(doc_words)
+    check_doc_cites_no_ledger()
+    check_regions_entries()
+}
+
 [export]
 def main() : int {
     if (!fexist("modules/dasLLAMA/REVIEW.das") || !fexist(FACADE)) {
@@ -2028,6 +2745,12 @@ def main() : int {
     check_require_bans()
     check_test_heap_model()
     check_harness_dashv()
+    check_bench_stamps()
+    check_running_max_nan()
+    check_census_evidence_pinned()
+    check_load_big_format()
+    check_rdec_pass_words()
+    check_tests_doc()
     var inscope tut_texts : array<string>
     read_das_stripped(TUTORIAL_DIR, tut_texts)
     var inscope rst_texts : array<string>

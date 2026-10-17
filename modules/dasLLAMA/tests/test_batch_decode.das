@@ -85,7 +85,7 @@ def private kv_blob_max_diff(blob : array<uint8>; refb : array<uint8>; pref : ar
                     let hb = reinterpret<uint16 const?>(bp + base + row * rowb)
                     let hr = reinterpret<uint16 const?>(rp + base + row * rowb)
                     for (e in range64(kvd)) {
-                        maxd = max(maxd, abs(f16_to_f32(uint(hb[e])) - f16_to_f32(uint(hr[e]))))
+                        maxd = max(maxd, nan_wide_diff(f16_to_f32(uint(hb[e])), f16_to_f32(uint(hr[e]))))
                     }
                 } elif (dt == KVDtype.q8_0) {
                     let qb = bp + base + row * rowb
@@ -95,7 +95,7 @@ def private kv_blob_max_diff(blob : array<uint8>; refb : array<uint8>; pref : ar
                         let db = f16_to_f32(uint(qb[bb]) | (uint(qb[bb + 1l]) << 8u))
                         let dr = f16_to_f32(uint(qr[bb]) | (uint(qr[bb + 1l]) << 8u))
                         for (k in range64(32l)) {
-                            maxd = max(maxd, abs(float(int8(qb[bb + 2l + k])) * db - float(int8(qr[bb + 2l + k])) * dr))
+                            maxd = max(maxd, nan_wide_diff(float(int8(qb[bb + 2l + k])) * db, float(int8(qr[bb + 2l + k])) * dr))
                         }
                     }
                 } elif (dt == KVDtype.tq4) {
@@ -108,15 +108,15 @@ def private kv_blob_max_diff(blob : array<uint8>; refb : array<uint8>; pref : ar
                         for (k in range64(16l)) {
                             let byb = int(qb[bb + 2l + k])
                             let byr = int(qr[bb + 2l + k])
-                            maxd = max(maxd, abs(float((byb & 15) - 8) * db - float((byr & 15) - 8) * dr))
-                            maxd = max(maxd, abs(float((byb >> 4) - 8) * db - float((byr >> 4) - 8) * dr))
+                            maxd = max(maxd, nan_wide_diff(float((byb & 15) - 8) * db, float((byr & 15) - 8) * dr))
+                            maxd = max(maxd, nan_wide_diff(float((byb >> 4) - 8) * db, float((byr >> 4) - 8) * dr))
                         }
                     }
                 } else {
                     let fb = reinterpret<float const?>(bp + base + row * rowb)
                     let fr = reinterpret<float const?>(rp + base + row * rowb)
                     for (e in range64(kvd)) {
-                        maxd = max(maxd, abs(fb[e] - fr[e]))
+                        maxd = max(maxd, nan_wide_diff(fb[e], fr[e]))
                     }
                 }
             }
@@ -176,7 +176,7 @@ def private batch_vs_ref(t : T?; tr : Model; kdt : KVDtype; nsteps : int64; tol 
         for (i in range64(3l)) {
             let sp = sess[i]
             for (v in range64(vocab)) {
-                maxd = max(maxd, abs(sp.logits[v] - refs[i].lg[st * vocab + v]))
+                maxd = max(maxd, nan_wide_diff(sp.logits[v], refs[i].lg[st * vocab + v]))
             }
             let top = argmax_of(sp.logits, vocab)
             got[i][st] = top
@@ -199,7 +199,7 @@ def private batch_vs_ref(t : T?; tr : Model; kdt : KVDtype; nsteps : int64; tol 
     // the control: row 0 against row 1's reference lands outside the bar - the bar discriminates here
     var xlg = 0.0
     for (v in range64(vocab)) {
-        xlg = max(xlg, abs(s0.logits[v] - refs[1].lg[(nsteps - 1l) * vocab + v]))
+        xlg = max(xlg, nan_wide_diff(s0.logits[v], refs[1].lg[(nsteps - 1l) * vocab + v]))
     }
     t |> success(xlg > tol, "{tag}: control - row 0's logits against row 1's reference exceed {tol} ({xlg})")
     if (!empty(refs[1].dn)) {
@@ -514,7 +514,7 @@ def test_batch_decode_b1_delegation(t : T?) {
             for (st in range64(6l)) {
                 eval_batch_(tr, ws, sess, cur)
                 for (v in range64(vocab)) {
-                    maxd = max(maxd, abs(s.logits[v] - ref.lg[st * vocab + v]))
+                    maxd = max(maxd, nan_wide_diff(s.logits[v], ref.lg[st * vocab + v]))
                 }
                 cur[0] = argmax_of(s.logits, vocab)
                 if (cur[0] != ref.toks[st]) {
@@ -577,7 +577,7 @@ def test_batch_decode_shrink(t : T?) {
                     let ri = live[k]
                     let sp = sess[k]
                     for (v in range64(vocab)) {
-                        maxd = max(maxd, abs(sp.logits[v] - refs[ri].lg[st * vocab + v]))
+                        maxd = max(maxd, nan_wide_diff(sp.logits[v], refs[ri].lg[st * vocab + v]))
                     }
                     cur[k] = argmax_of(sp.logits, vocab)
                     if (cur[k] != refs[ri].toks[st]) {

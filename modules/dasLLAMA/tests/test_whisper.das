@@ -1499,7 +1499,7 @@ def test_mel_state_reuse_deterministic(t : T?) {
             gemma4a_log_mel(enc, samples, 0l, long_length(samples), st)
             var md = 0.0
             for (a, b in mel1, st.mel) {
-                md = max(md, abs(a - b))
+                md = max(md, nan_wide_diff(a, b))
             }
             t |> success(md == 0.0, "gemma4a mel maxdiff across state reuse is 0 (got {md})")
             delete mel1
@@ -1514,7 +1514,7 @@ def test_mel_state_reuse_deterministic(t : T?) {
             canary_log_mel(cenc, samples, cst)
             var cmd = 0.0
             for (a, b in cmel1, cst.mel) {
-                cmd = max(cmd, abs(a - b))
+                cmd = max(cmd, nan_wide_diff(a, b))
             }
             t |> success(cmd == 0.0, "canary mel maxdiff across state reuse is 0 (got {cmd})")
             delete cmel1

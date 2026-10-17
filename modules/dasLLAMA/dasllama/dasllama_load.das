@@ -2788,13 +2788,13 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
                         gguf_read_tensor_f32(m, bytes, "blk.{l}.ffn_gate_inp_shexp.weight", t.fblob, t.shexp_gate_off + l * dim, dim)
                     }
                     if (shexp_plane_q8(t, l, 1)) {   //! the q8 transcode of the planes whose tags left them on q8 alone
-                        load_big(m, bytes, "blk.{l}.ffn_gate_shexp.weight", t, t.wsh1_off + l * she, she, scratch)
+                        load_big(m, bytes, "blk.{l}.ffn_gate_shexp.weight", t, t.wsh1_off + l * she, she, scratch, 0l, KqFmt.q8)
                     }
                     if (shexp_plane_q8(t, l, 2)) {
-                        load_big(m, bytes, "blk.{l}.ffn_down_shexp.weight", t, t.wsh2_off + l * she, she, scratch)
+                        load_big(m, bytes, "blk.{l}.ffn_down_shexp.weight", t, t.wsh2_off + l * she, she, scratch, 0l, KqFmt.q8)
                     }
                     if (shexp_plane_q8(t, l, 3)) {
-                        load_big(m, bytes, "blk.{l}.ffn_up_shexp.weight", t, t.wsh3_off + l * she, she, scratch)
+                        load_big(m, bytes, "blk.{l}.ffn_up_shexp.weight", t, t.wsh3_off + l * she, she, scratch, 0l, KqFmt.q8)
                     }
                     if (l < long_length(t.wshk1_offs)) {   //! the same planes again in the file's K-quant form, beside the transcode above
                         if (t.wshk1_offs[l] >= 0l) {
@@ -2842,8 +2842,8 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
                 let hcd = hc_dim(t.config)
                 let lr = t.config.hc_low_rank
                 gguf_read_tensor_f32(m, bytes, "blk.{layers}.nextn.hc_head_norm.weight", t.fblob, t.mtp_hc_head_norm_off, hcd)
-                load_big(m, bytes, "blk.{layers}.nextn.hc_head_down.weight", t, t.mtp_hc_head_down_off, hcd * lr, scratch)
-                load_big(m, bytes, "blk.{layers}.nextn.hc_head_up.weight", t, t.mtp_hc_head_up_off, lr * hcd, scratch)
+                load_big(m, bytes, "blk.{layers}.nextn.hc_head_down.weight", t, t.mtp_hc_head_down_off, hcd * lr, scratch, 0l, KqFmt.q8)
+                load_big(m, bytes, "blk.{layers}.nextn.hc_head_up.weight", t, t.mtp_hc_head_up_off, lr * hcd, scratch, 0l, KqFmt.q8)
             }
             if (gguf_find_tensor(m, "blk.{layers}.nextn.shared_head_norm.weight") >= 0) {
                 gguf_read_tensor_f32(m, bytes, "blk.{layers}.nextn.shared_head_norm.weight", t.fblob, t.mtp_headnorm_off, dim)
@@ -2863,13 +2863,13 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
                     let si = l * 2l + site
                     gguf_read_tensor_f32(m, bytes, "blk.{l}.hc_{nm}_norm.weight", t.fblob, t.hc_norm_off + si * hcd, hcd)
                     gguf_read_tensor_f32(m, bytes, "blk.{l}.hc_{nm}_inject.weight", t.fblob, t.hc_inject_off + si * hcd * nh, hcd * nh)
-                    load_big(m, bytes, "blk.{l}.hc_{nm}_down.weight", t, t.hc_down_offs[si], hcd * lr, scratch)
-                    load_big(m, bytes, "blk.{l}.hc_{nm}_up.weight", t, t.hc_up_offs[si], lr * hcd, scratch)
+                    load_big(m, bytes, "blk.{l}.hc_{nm}_down.weight", t, t.hc_down_offs[si], hcd * lr, scratch, 0l, KqFmt.q8)
+                    load_big(m, bytes, "blk.{l}.hc_{nm}_up.weight", t, t.hc_up_offs[si], lr * hcd, scratch, 0l, KqFmt.q8)
                 }
             }
             gguf_read_tensor_f32(m, bytes, "output_hc_norm.weight", t.fblob, t.hc_head_norm_off, hcd)
-            load_big(m, bytes, "output_hc_down.weight", t, t.hc_head_down_off, hcd * lr, scratch)
-            load_big(m, bytes, "output_hc_up.weight", t, t.hc_head_up_off, lr * hcd, scratch)
+            load_big(m, bytes, "output_hc_down.weight", t, t.hc_head_down_off, hcd * lr, scratch, 0l, KqFmt.q8)
+            load_big(m, bytes, "output_hc_up.weight", t, t.hc_head_up_off, lr * hcd, scratch, 0l, KqFmt.q8)
         }
         if (has_ple_ngram(t.config)) {   // qwen4exp n-gram side input: the layer's norms, taps and projections + the raw hash table
             let hcd = hc_dim(t.config)
@@ -2879,8 +2879,8 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
             gguf_read_tensor_f32(m, bytes, "blk.{l}.ple_norm_query.weight", t.fblob, t.ple_nquery_off, hcd)
             gguf_read_tensor_f32(m, bytes, "blk.{l}.ple_norm_conv.weight", t.fblob, t.ple_nconv_off, hcd)
             gguf_read_tensor_f32(m, bytes, "blk.{l}.ple_conv1d.weight", t.fblob, t.ple_conv_off, hcd * t.config.ple_conv_kernel)
-            load_big(m, bytes, "blk.{l}.ple_key.weight", t, t.ple_key_off, ind * hcd, scratch)
-            load_big(m, bytes, "blk.{l}.ple_value.weight", t, t.ple_val_off, ind * dim, scratch)
+            load_big(m, bytes, "blk.{l}.ple_key.weight", t, t.ple_key_off, ind * hcd, scratch, 0l, KqFmt.q8)
+            load_big(m, bytes, "blk.{l}.ple_value.weight", t, t.ple_val_off, ind * dim, scratch, 0l, KqFmt.q8)
             let ti = gguf_find_tensor(m, "per_layer_token_embd.weight")
             if (ti < 0) {
                 panic("dasLLAMA: per_layer_token_embd.weight (the PLE n-gram hash table) is missing")
@@ -2941,19 +2941,19 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
             }
             if (t.emb_q8) {
                 // untied Q8: the embedding's linear copy the row reads dequant from (never repacked)
-                load_big(m, bytes, "token_embd.weight", t, t.emb_q8_off, vocab * dim, scratch)
+                load_big(m, bytes, "token_embd.weight", t, t.emb_q8_off, vocab * dim, scratch, 0l, KqFmt.q8)
             }
         } elif (t.cls_q8) {
             // tied Q8: classifier copy (repacked below) + the linear copy embedding rows read.
             // Through load_big (its q8 arm is the same transcode) so the streaming plan records both.
-            load_big(m, bytes, "token_embd.weight", t, t.wcls_off, vocab * dim, scratch)
-            load_big(m, bytes, "token_embd.weight", t, t.emb_q8_off, vocab * dim, scratch)
+            load_big(m, bytes, "token_embd.weight", t, t.wcls_off, vocab * dim, scratch, 0l, KqFmt.q8)
+            load_big(m, bytes, "token_embd.weight", t, t.emb_q8_off, vocab * dim, scratch, 0l, KqFmt.q8)
         } elif (cls_kq(t)) {
             // tied K-quant: ONE plane copy serves the classifier matmul and embedding row reads
             // (the kq planes stay in disk order — no repack, so no second linear copy)
             load_big(m, bytes, "token_embd.weight", t, t.wcls_off, vocab * dim, scratch, 0l, t.emb_fmt)
         } elif (t.cls_q8_copy) {
-            load_big(m, bytes, "token_embd.weight", t, t.wcls_off, vocab * dim, scratch)
+            load_big(m, bytes, "token_embd.weight", t, t.wcls_off, vocab * dim, scratch, 0l, KqFmt.q8)
         }
         // Qwen2 Q/K/V projection biases — small fp32 tensors, kept dense
         if (t.config.attn_qkv_bias) {

@@ -29,7 +29,7 @@ def private fill01(var a : array<float>; salt : uint) {
 def private max_rel_err(a, b : array<float>) : float {
     var m = 0.0
     for (va, vb in a, b) {
-        m = max(m, abs(va - vb) / max(1.0, abs(va)))
+        m = max(m, nan_wide_diff(va, vb) / max(1.0, abs(va)))
     }
     return m
 }

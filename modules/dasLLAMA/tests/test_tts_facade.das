@@ -226,7 +226,7 @@ def test_wav_writer(t : T?) {
         t |> equal(length(back), 2400)
         var worst = 0.0
         for (a, b in pcm, back) {
-            worst = max(worst, abs(a - b))
+            worst = max(worst, nan_wide_diff(a, b))
         }
         t |> success(worst < 1.0 / 32000.0, "round trip within one quantization step ({worst})")
         var inscope raw <- pcm16_bytes(pcm)

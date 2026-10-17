@@ -1294,7 +1294,7 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                     var amax_f = 0l
                     var amax_s = 0l
                     for (i in range64(min(long_length(lg_fused), long_length(lg_splice)))) {
-                        lmax = max(lmax, abs(lg_fused[i] - lg_splice[i]))
+                        lmax = max(lmax, nan_wide_diff(lg_fused[i], lg_splice[i]))
                         if (lg_fused[i] > lg_fused[amax_f]) {
                             amax_f = i
                         }
@@ -1365,7 +1365,7 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                     select_prefill_override("")
                     var gdiff = 0.0
                     for (i in range64(min(long_length(lg_m), long_length(lg_s)))) {
-                        gdiff = max(gdiff, abs(lg_m[i] - lg_s[i]))
+                        gdiff = max(gdiff, nan_wide_diff(lg_m[i], lg_s[i]))
                     }
                     to_log(LOG_INFO, "span-mrope/{kdt} grid-vs-sequential GPU prefill-logits maxdiff = {gdiff}\n")
                     t |> success(gdiff > 1e-3, "{kdt} the grid moves the GPU prefill logits ({gdiff})")
@@ -1428,7 +1428,7 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                         let ag = g_t[i] - g_z[i]
                         let ac = c_t[i] - c_z[i]
                         a_gpu = max(a_gpu, abs(ag))
-                        dd = max(dd, abs(ag - ac))
+                        dd = max(dd, nan_wide_diff(ag, ac))
                     }
                     to_log(LOG_INFO, "span-ds/{kdt} GPU add-contribution max = {a_gpu}, GPU-vs-CPU contribution maxdiff = {dd}\n")
                     // clean dd measures 10-13% of a_gpu (the layer-0..2 add propagates 30+ layers,
@@ -1698,7 +1698,7 @@ def lastrow_ab(t : T?; var trsg : Model; prompt : array<int64>; tag : string; ba
             t |> equal(amax_on, amax_off, "{tag} lastrow: argmax unchanged")
             var row0 = 0.0
             for (i in range64(dim_s)) {
-                row0 = max(row0, abs(s_on.x_b[i] - s_off.x_b[i]))
+                row0 = max(row0, nan_wide_diff(s_on.x_b[i], s_off.x_b[i]))
             }
             let plane = span_maxdiff(s_keep.x_b, s_off.x_b, 0, 0, int(nlr * dim_s)).diff   //! a NaN on either side reads as infinite
             t |> success(row0 > 1e-4, "{tag} lastrow: row 0 visibly narrowed ({row0}) - the arm engaged")

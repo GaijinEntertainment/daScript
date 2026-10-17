@@ -155,7 +155,9 @@ asymmetries a stamp family ledgers - stays in `ARCHITECTURE_GPU.md#gpu-backends`
   `ARCHITECTURE_GPU_VULKAN_PEROP.md`), and the
   per-call resident overrides say each pass-to-CPU reason once per armed model
   (`rdec_pass_once`) and count every pass by reason in the tier (`gpu_cpu_passes`, zeroed as a
-  model arms), which the server's `/v1/stats` carries as `gpu_cpu_passes`. The gap is `followup_vulkan.md` item 1, not a precedent to copy.
+  model arms), which the server's `/v1/stats` carries as `gpu_cpu_passes`; the tier hands out each reason with a
+  reader-facing sentence beside its count (`rdec_pass_words`; `REVIEW.das`'s `check_rdec_pass_words` holds every `RdecPass` value to an arm there,
+  licensing no names). The gap is `followup_vulkan.md` item 1, not a precedent to copy.
 - **Device-home sessions are Vulkan-only.** A session whose K/V lives only in a region of the
   resident driver's mirror (`create_device_session`, the scheduler's device mode, park and
   adopt: `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan`) has no Metal twin, and

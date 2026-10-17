@@ -197,7 +197,9 @@ grouped (qwen3next) file's out plane, whose input columns the load permutes acro
 so the q8 transcode is its only form. A dense or routed plane whose disk type no `KqFmt` member carries - F16, BF16,
 F32, and MXFP4 outside a routed stack - is the q8 transcode on every home, the CPU and both devices; the routed stacks
 MXFP4 on disk, the gate and up stacks apart or as gemma-4's fused gate_up stack, load as the native-MXFP4 planes
-(`experts_mx4`). No stocked gemma file carries such a dense or routed plane.
+(`experts_mx4`). No stocked gemma file carries such a dense or routed plane. Every `load_big` call names the form it
+fills - the plane's tag, or the `KqFmt` member a conversion serves - so the conversion reads at the call;
+`REVIEW.das`'s `check_load_big_format` reds a call with no format, and licenses no names.
 
 - **`dasllama_image.das`** - the prepared-model `.dlim` rail, and it is ONE rail
   (`ARCHITECTURE_IMAGE.md#there-is-one-way-to-load-a`). Nothing
