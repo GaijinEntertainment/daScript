@@ -37,7 +37,7 @@ let ATTN_CHUNK_ROWS = 64l
 // ones the chunked pair — DASLLAMA_METAL_ATTN_SINGLE overrides for A/B (64 measured better than
 // 128 in the 65-128 band: occupancy beats the comb overhead)
 var g_attn_single_max = 64l
-// the fused add+rms kernel's threadgroup row slab — wider models take the unfused pair
+// the threadgroup row slab of the residual step (its columns past the slab re-read) and of the gemma-4 MoE step (dim caps at it)
 let ADD_RMS_MAX_DIM = 4096l
 
 var g_dev : MetalDevice?

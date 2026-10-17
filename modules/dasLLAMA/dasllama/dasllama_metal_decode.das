@@ -3483,8 +3483,7 @@ var private g_bmv = true
 // DASLLAMA_METAL_BATCH_MV8=0 = the GEMM-policy A/B rail.
 var private g_bmv8 = true
 
-// pin the batched unfused add+rms pair (ew2-add + rms_b) that dim > ADD_RMS_MAX_DIM selects —
-// the tests' parity rail for that path on models whose dim fits the fused slab
+// pin the batched residual step's split chain (the rms, ew2-add, rms_b) - the tests' parity rail for the split form
 var private g_b_addrms_unfused = false
 
 def public set_metal_batch_addrms_unfused(v : bool) {

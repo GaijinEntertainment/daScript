@@ -10,6 +10,25 @@ and coverage; this ledger is the backlog for the perf pass that follows them. Ev
 what it costs today and what the fix would change.
 
 ## Entries
+- **MEASURED (2026-10-17) - the Metal residual step past its slab, M5 Max (128 GB).** The step stages a row's first 4096
+  columns in the threadgroup slab and re-reads the columns past it, so the gemma-4 31B's 5376-wide seams take one dispatch
+  where they took the split chain (the rms, the scaled add, the next norm), and the decode rows past the slab run 1024 lanes.
+  The kernel figures are `bench_metal_gk_rows` (`dastest.das -- --bench --test`, debug-jit, the box profile
+  `performance/m5.tune.json` at 39,101 B, `DASLLAMA_ALLOW_UNTUNED=1`) at 5677d5b4da, in
+  `ARCHITECTURE_GPU_SHARED_KERNELS.md`'s seam bullet: at 5376 the seam reads 7.48 / 7.58 us at one / four decode rows against
+  the split chain's 9.59 / 10.00, and 58.94 against 125.3 on the 512-row window. The same run's real 1024-lane stamp reads
+  5.66 / 5.72 us at dim 1152, 6.19 / 6.25 at 2560 and 6.66 / 6.73 at 3840 on the decode rows and 46.17, 54.62 and 63.44 on
+  the window, where the 256-lane builders read 3.24 / 3.35, 4.96 / 5.10, 6.75 / 6.91 and 9.26, 27.65, 40.82: the 2026-10-16
+  entry's "1024-lane bench stamp" readings (3.23 / 3.27 and the rest) were the 256-lane builders, which that race's 1024 arm
+  dispatched once the builders moved to 256 lanes, so 256 lanes wins the decode rows at 1152 and 2560 and ties at 3840, not
+  at every width, and loses past the slab (8.76 / 8.99 at 5376 against 1024's 7.48 / 7.59).
+  The 31B row, `benchmarks/lcpp_bench.das -m gemma-4-31B-it-Q4_K_M.gguf --ngl 99 -p 512 -n 128 -r 5 --for-debug-purposes`
+  under the manifest with `DASLLAMA_ALLOW_UNTUNED=1 DASLLAMA_METAL_HAZARD_STRICT=1`, the base 794cc1ac1a against
+  5677d5b4da, each tree's own copy of the binary, one model process on the box: pp512 829.4 (cv 0.1 %; the base's other
+  valid readings 825.7-831.7) against 832.6 (cv 0.15 %), +0.4 %, inside the base's own spread. tg128 holds no verdict: every
+  reading on both trees is VOID (cv 3.5-4.3 %), its first rep about 2 tok/s under the four after it on both (base 24.5 then
+  26.6-27.1, the change 24.7 then 25.7-27.1); readings taken back to back on the box fell by up to a third as it heated and
+  are dropped. The 31B's parity row (`fam-gemma4`, `DASLLAMA_PARITY_FULL=1`) is green on the change.
 - **MEASURED (2026-10-17) - two parity bars the M5's box profile moves, M5 Max (128 GB).** Each reading is a
   `tests/run.das`-suite file's own cell, one model process on the box, `DASLLAMA_PARITY_FULL=1`, the box profile
   `performance/m5.tune.json` (39,101 B).

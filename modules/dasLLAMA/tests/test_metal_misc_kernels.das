@@ -333,8 +333,9 @@ enum private ArStamp {
 
 //! the residual step against the CPU's sequential form, under the 1e-4 bar (simd_sum reassociation): x = (x + a') . ascale,
 //! a' = rmsnorm(a) . wpa on the sandwich stamps, y = rmsnorm(x) . w; the sandwich stamps' rows told apart from the plain form's
-def private add_rms_gate(t : T?; var dev, queue; stamp : ArStamp; single : bool; dim, nrows : int; ascale : float; window : bool = false) {
-    let tag = "add_rms {stamp}{single ? " 1-row grid" : ""}{window ? " window" : ""} dim={dim} rows={nrows} ascale={ascale}"
+def private add_rms_gate(t : T?; var dev, queue; stamp : ArStamp; single : bool; dim, nrows : int; ascale : float; window : bool = false;
+                         wide : bool = false) {
+    let tag = "add_rms {stamp}{single ? " 1-row grid" : ""}{window ? " window" : ""}{wide ? " 1024-lane" : ""} dim={dim} rows={nrows} ascale={ascale}"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
         var err : string
         let s1 = stamp_of(@@enc_addrms_c)
@@ -350,6 +351,11 @@ def private add_rms_gate(t : T?; var dev, queue; stamp : ArStamp; single : bool;
         let wp = stamp_of(@@pf_enc_preaddrms_b_c)
         let wph = stamp_of(@@pf_enc_preaddrms_bhx_c)
         let wa = stamp_of(@@pf_enc_preadd_b_c)
+        let lb = stamp_of(@@enc_add_rms_bw_c)
+        let lh = stamp_of(@@enc_add_rms_bhxw_c)
+        let lp = stamp_of(@@enc_preaddrms_bw_c)
+        let lph = stamp_of(@@enc_preaddrms_bhxw_c)
+        let la = stamp_of(@@enc_preadd_bw_c)
         var pso = (stamp == ArStamp.plain ? mc |> keep_stamp(s1, err) : (stamp == ArStamp.plain_hx ? mc |> keep_stamp(sh, err)
             : (stamp == ArStamp.pre ? mc |> keep_stamp(p1, err) : (stamp == ArStamp.pre_hx ? mc |> keep_stamp(ph, err) : mc |> keep_stamp(a1, err)))))
         return if (!pso_ok(t, tag, pso, err))
@@ -414,6 +420,28 @@ def private add_rms_gate(t : T?; var dev, queue; stamp : ArStamp; single : bool;
                 } else {
                     stamp_run(wa, pso) {
                         invoke(wa.enc, enc, x, a, w1, ka, int64(nrows))
+                    }
+                }
+            } elif (wide) {   //! the decode rows' builders past the slab: the same kernels at 1024 lanes a row
+                if (stamp == ArStamp.plain) {
+                    stamp_run(lb, pso) {
+                        invoke(lb.enc, enc, x, a, w1, y, ka, int64(nrows))
+                    }
+                } elif (stamp == ArStamp.plain_hx) {
+                    stamp_run(lh, pso) {
+                        invoke(lh.enc, enc, x, a, w1, y, yh, ka, int64(nrows))
+                    }
+                } elif (stamp == ArStamp.pre) {
+                    stamp_run(lp, pso) {
+                        invoke(lp.enc, enc, x, a, w1, y, ka, int64(nrows))
+                    }
+                } elif (stamp == ArStamp.pre_hx) {
+                    stamp_run(lph, pso) {
+                        invoke(lph.enc, enc, x, a, w1, y, yh, ka, int64(nrows))
+                    }
+                } else {
+                    stamp_run(la, pso) {
+                        invoke(la.enc, enc, x, a, w1, ka, int64(nrows))
                     }
                 }
             } elif (stamp == ArStamp.plain) {
@@ -2099,13 +2127,21 @@ def test_metal_misc_kernels(t : T?) {
                     add_rms_gate(t, dev, queue, st, true, 1024, 1, 0.5)    //! the gemma4 layer_out_scale slot
                     add_rms_gate(t, dev, queue, st, false, 1500, 3, 0.75)
                     add_rms_gate(t, dev, queue, st, false, 4096, 2, 1.0)    //! the slab's whole width
+                    add_rms_gate(t, dev, queue, st, true, 5376, 1, 0.75)    //! past the slab: the gemma-4 31B's row
+                    add_rms_gate(t, dev, queue, st, false, 5376, 3, 0.75)
+                    add_rms_gate(t, dev, queue, st, false, 8192, 2, 1.0)    //! twice the slab
                 }
                 for (st in fixed_array(ArStamp.plain_hx, ArStamp.pre_hx)) {
                     add_rms_gate(t, dev, queue, st, false, 1500, 3, 0.75)
+                    add_rms_gate(t, dev, queue, st, false, 5376, 3, 0.75)
                 }
                 for (st in fixed_array(ArStamp.plain, ArStamp.plain_hx, ArStamp.pre, ArStamp.pre_hx, ArStamp.pre_add)) {
                     add_rms_gate(t, dev, queue, st, false, 2560, 5, 0.75, true)
                     add_rms_gate(t, dev, queue, st, false, 4096, 2, 1.0, true)
+                    add_rms_gate(t, dev, queue, st, false, 5376, 5, 0.75, true)
+                    add_rms_gate(t, dev, queue, st, false, 5376, 1, 0.75, false, true)
+                    add_rms_gate(t, dev, queue, st, false, 5376, 4, 0.75, false, true)
+                    add_rms_gate(t, dev, queue, st, false, 8192, 2, 1.0, false, true)
                 }
                 qk_norm_gate(t, dev, queue, 64, 4, 2, 2, false)     // in-place decode shape
                 qk_norm_gate(t, dev, queue, 64, 4, 2, 2, true)      // the no-wv V-fusion shape

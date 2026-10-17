@@ -1637,13 +1637,13 @@ class template MetalTgReduceBase : GkWgReduce {
     def tg_rms_inv(sum_sq : float; dim : uint; eps : float) : float => rsqrt(tg_sum_all(sum_sq, part) / float(dim) + eps)
 }
 
-//! The residual step's Metal stamps on the template both homes stamp (`GkAddRmsRows`), a threadgroup a row, `rsqrt`, the row staged
-//! through the threadgroup slab (dim caps at it, a wider row takes the split chain): the decode rows' and the window's (`pf_`) builders
-//! at 256 lanes alike (the race's pick at every width up to the slab), the loops striding the threadgroup's own size; `PRE` the sandwich arm
+//! The residual step's Metal stamps on `GkAddRmsRows`, a threadgroup a row (its id the row), `rsqrt`, the loops striding the threadgroup:
+//! the first `SLAB` columns staged in the slab, the columns past it re-read from the rows written and the partner rows; the window's
+//! builders at 256 lanes, the decode rows' at 256 within the slab and 1024 past it (`enc_residual`'s pick); `PRE` the sandwich arm
 [ |> template_struct_instance]
 class template MetalAddRmsT : GkAddRmsRows {
     @workgroup xrow : float[SLAB]
-    @template_constant SLAB : int = 4096   //!< the row stash's floats: ADD_RMS_MAX_DIM, a narrower row's own width
+    @template_constant SLAB : int = 4096   //!< the row stash's floats: ADD_RMS_MAX_DIM
     override LANES = 0u
     override RSQRT = true
     override PRE = false
@@ -1651,10 +1651,12 @@ class template MetalAddRmsT : GkAddRmsRows {
     override ARMS = false
 
     def override stash(k : uint; v : float) : void {
-        xrow[k] = v
+        if (k < uint(SLAB)) {
+            xrow[k] = v
+        }
     }
-    def override stashed(k : uint) : float => xrow[k]
-    def override pre_partner(base, k : uint) : float => xrow[k]
+    def override stashed(k : uint) : float => k < uint(SLAB) ? xrow[k] : xs[gl_WorkGroupID.x * pa.dim + k]
+    def override pre_partner(base, k : uint) : float => k < uint(SLAB) ? xrow[k] : apart(base, k)
 
     //! `seam_norms`' layout: the post norm at row 0, the next norm past it on a PRE stamp
     def override norm_base : uint {
@@ -1671,7 +1673,8 @@ class template MetalAddRmsT : GkAddRmsRows {
 //! the plain step, its next norm out as floats
 [metal_dispatch(name = "enc_addrms_c", pso = "g_pso_addrms", tgmem = "metal_add_rms_msl_tgmem", tg = 256, grid = "1"),
     metal_dispatch(name = "enc_add_rms_b_c", pso = "g_pso_addrms", tgmem = "metal_add_rms_msl_tgmem", tg = 256, grid = "nrows", params = "nrows : int64"),
-    metal_dispatch(name = "pf_enc_add_rms_b_c", pso = "g_pso_addrms", tgmem = "metal_add_rms_msl_tgmem", tg = 256, grid = "nrows", params = "nrows : int64")]
+    metal_dispatch(name = "pf_enc_add_rms_b_c", pso = "g_pso_addrms", tgmem = "metal_add_rms_msl_tgmem", tg = 256, grid = "nrows", params = "nrows : int64"),
+    metal_dispatch(name = "enc_add_rms_bw_c", pso = "g_pso_addrms", tgmem = "metal_add_rms_msl_tgmem", tg = 1024, grid = "nrows", params = "nrows : int64")]
 class MetalAddRms : MetalAddRmsT {
     override OUT_F32 = true
 
@@ -1683,7 +1686,8 @@ class MetalAddRms : MetalAddRmsT {
 
 //! ... and the f16 twin beside (the dual-store stamp the half-x GEMM forms read)
 [metal_dispatch(name = "enc_add_rms_bhx_c", pso = "g_pso_addrms_hx", tgmem = "metal_add_rms_hx_msl_tgmem", tg = 256, grid = "nrows", params = "nrows : int64"),
-    metal_dispatch(name = "pf_enc_add_rms_bhx_c", pso = "g_pso_addrms_hx", tgmem = "metal_add_rms_hx_msl_tgmem", tg = 256, grid = "nrows", params = "nrows : int64")]
+    metal_dispatch(name = "pf_enc_add_rms_bhx_c", pso = "g_pso_addrms_hx", tgmem = "metal_add_rms_hx_msl_tgmem", tg = 256, grid = "nrows", params = "nrows : int64"),
+    metal_dispatch(name = "enc_add_rms_bhxw_c", pso = "g_pso_addrms_hx", tgmem = "metal_add_rms_hx_msl_tgmem", tg = 1024, grid = "nrows", params = "nrows : int64")]
 class MetalAddRmsHX : MetalAddRmsT {
     override OUT_F32 = true
     override HX = true
@@ -1697,7 +1701,8 @@ class MetalAddRmsHX : MetalAddRmsT {
 //! the sandwich seam: the branch under its post norm, the add, the next norm out as floats
 [metal_dispatch(name = "enc_preaddrms_c", pso = "g_pso_preaddrms", tgmem = "metal_pre_add_rms_msl_tgmem", tg = 256, grid = "1"),
     metal_dispatch(name = "enc_preaddrms_b_c", pso = "g_pso_preaddrms", tgmem = "metal_pre_add_rms_msl_tgmem", tg = 256, grid = "nrows", params = "nrows : int64"),
-    metal_dispatch(name = "pf_enc_preaddrms_b_c", pso = "g_pso_preaddrms", tgmem = "metal_pre_add_rms_msl_tgmem", tg = 256, grid = "nrows", params = "nrows : int64")]
+    metal_dispatch(name = "pf_enc_preaddrms_b_c", pso = "g_pso_preaddrms", tgmem = "metal_pre_add_rms_msl_tgmem", tg = 256, grid = "nrows", params = "nrows : int64"),
+    metal_dispatch(name = "enc_preaddrms_bw_c", pso = "g_pso_preaddrms", tgmem = "metal_pre_add_rms_msl_tgmem", tg = 1024, grid = "nrows", params = "nrows : int64")]
 class MetalPreAddRms : MetalAddRmsT {
     override PRE = true
     override PRE_SWITCH = false
@@ -1711,7 +1716,9 @@ class MetalPreAddRms : MetalAddRmsT {
 
 //! ... and the f16 twin beside
 [metal_dispatch(name = "enc_preaddrms_bhx_c", pso = "g_pso_preaddrms_hx", tgmem = "metal_pre_add_rms_hx_msl_tgmem", tg = 256, grid = "nrows", params = "nrows : int64"),
-    metal_dispatch(name = "pf_enc_preaddrms_bhx_c", pso = "g_pso_preaddrms_hx", tgmem = "metal_pre_add_rms_hx_msl_tgmem", tg = 256, grid = "nrows", params = "nrows : int64")]
+    metal_dispatch(name = "pf_enc_preaddrms_bhx_c", pso = "g_pso_preaddrms_hx", tgmem = "metal_pre_add_rms_hx_msl_tgmem", tg = 256, grid = "nrows", params = "nrows : int64"),
+    metal_dispatch(name = "enc_preaddrms_bhxw_c", pso = "g_pso_preaddrms_hx", tgmem = "metal_pre_add_rms_hx_msl_tgmem", tg = 1024, grid = "nrows",
+        params = "nrows : int64")]
 class MetalPreAddRmsHX : MetalAddRmsT {
     override PRE = true
     override PRE_SWITCH = false
@@ -1727,7 +1734,8 @@ class MetalPreAddRmsHX : MetalAddRmsT {
 //! the sandwich seam with no norm stored: the stream rows updated alone (the per-layer-embedding residual, the last layer's step)
 [metal_dispatch(name = "enc_preadd_c", pso = "g_pso_preadd", tgmem = "metal_pre_add_msl_tgmem", tg = 256, grid = "1"),
     metal_dispatch(name = "enc_preadd_b_c", pso = "g_pso_preadd", tgmem = "metal_pre_add_msl_tgmem", tg = 256, grid = "nrows", params = "nrows : int64"),
-    metal_dispatch(name = "pf_enc_preadd_b_c", pso = "g_pso_preadd", tgmem = "metal_pre_add_msl_tgmem", tg = 256, grid = "nrows", params = "nrows : int64")]
+    metal_dispatch(name = "pf_enc_preadd_b_c", pso = "g_pso_preadd", tgmem = "metal_pre_add_msl_tgmem", tg = 256, grid = "nrows", params = "nrows : int64"),
+    metal_dispatch(name = "enc_preadd_bw_c", pso = "g_pso_preadd", tgmem = "metal_pre_add_msl_tgmem", tg = 1024, grid = "nrows", params = "nrows : int64")]
 class MetalPreAdd : MetalAddRmsT {
     override PRE = true
     override PRE_SWITCH = false
@@ -5189,7 +5197,7 @@ def private seam_norms(t : Model; sm : ResidualSeam) : MetalBuffer? {
 }
 
 //! x = (x + a') . ascale over `nrows` rows, a' the partner under the seam's post norm, then x's next norm into `by` (`byh` its f16
-//! twin) where the seam names one (`GkAddRmsRows`): one dispatch while the row fits the slab and `split` is off, else the split chain
+//! twin) where the seam names one (`GkAddRmsRows`): one dispatch at any width while `split` is off, else the split chain
 [arch(at="../ARCHITECTURE_GPU_SHARED_KERNELS.md#gpu-kernel-pairs")]
 def enc_residual(enc : MetalComputeEncoder?; t : Model; bx, ba, by, byh : MetalBuffer?; sm : ResidualSeam; nrows : int64; form : ResidualForm;
                  split : bool; u : ResidualUniforms) {
@@ -5199,7 +5207,7 @@ def enc_residual(enc : MetalComputeEncoder?; t : Model; bx, ba, by, byh : MetalB
     let out = sm.norm_off >= 0l
     let one = form == ResidualForm.one_row
     let win = form == ResidualForm.window
-    if (split || dim > ADD_RMS_MAX_DIM || (!pre && !out)) {
+    if (split || (!pre && !out)) {
         unsafe {
             let rb = uint64(dim * 4l)
             if (pre) {
@@ -5217,6 +5225,10 @@ def enc_residual(enc : MetalComputeEncoder?; t : Model; bx, ba, by, byh : MetalB
     }
     var bw = seam_norms(t, sm)
     var ka = GkAddRmsArgs(dim = uint(dim), add_on = 1u, eps = c.norm_eps, ascale = sm.osc_off >= 0l ? t.fblob[sm.osc_off] : 1.0)
+    if (!win && dim > ADD_RMS_MAX_DIM) {
+        enc_residual_wide(enc, bx, ba, bw, by, byh, pre, out, ka, nrows)
+        return
+    }
     if (!out) {
         if (one) {
             enc_preadd_c(enc, bx, ba, bw, ka)
@@ -5251,6 +5263,22 @@ def enc_residual(enc : MetalComputeEncoder?; t : Model; bx, ba, by, byh : MetalB
         pf_enc_add_rms_b_c(enc, bx, ba, bw, by, ka, nrows)
     } else {
         enc_add_rms_b_c(enc, bx, ba, bw, by, ka, nrows)
+    }
+}
+
+//! the decode rows' residual step past the slab, at 1024 lanes a row (the `w` builders): the plain step, the sandwich seam (`pre`), its
+//! no-norm form (`!out`), the f16 twin beside where `byh` is bound
+def enc_residual_wide(enc : MetalComputeEncoder?; bx, ba, bw, by, byh : MetalBuffer?; pre, out : bool; var ka : GkAddRmsArgs; nrows : int64) {
+    if (!out) {
+        enc_preadd_bw_c(enc, bx, ba, bw, ka, nrows)
+    } elif (pre && byh != null) {
+        enc_preaddrms_bhxw_c(enc, bx, ba, bw, by, byh, ka, nrows)
+    } elif (pre) {
+        enc_preaddrms_bw_c(enc, bx, ba, bw, by, ka, nrows)
+    } elif (byh != null) {
+        enc_add_rms_bhxw_c(enc, bx, ba, bw, by, byh, ka, nrows)
+    } else {
+        enc_add_rms_bw_c(enc, bx, ba, bw, by, ka, nrows)
     }
 }
 

@@ -596,7 +596,9 @@ element the control; `geglu_side_gate`, `ple_finish_gate` - the finish's `XSCALE
 prescale its control); the side rows' gather rides the token-table family, the misc file's embed gates. The prefill file's `qk_rope_gate`
 carries the window's V arms (V off the pre-norm k rows, the v-norm in place, the V panel bit for bit untouched with neither), and
 the misc file's `add_rms_gate` every residual stamp (`GkAddRmsRows`: the plain step, the sandwich seam, the seam with no norm
-stored, the f16 twins) through its one-row, rows and window builders, the sandwich rows held off the plain step's as the control. The gemm file's `router_f32_gate` holds the prefill router's tile (`MetalF32ExactMm`) at the 35B-A3B shape and at
+stored, the f16 twins) through its one-row, rows and window builders and the decode rows' 1024-lane builders, at widths within the
+4096-float slab and past it (5376, 8192: the columns past the slab re-read), the sandwich rows held off the plain step's as the
+control. The gemm file's `router_f32_gate` holds the prefill router's tile (`MetalF32ExactMm`) at the 35B-A3B shape and at
 64 experts against the dot in double on operands off the f16 lattice, the half-staged stamp over the same rows missing
 the bar as its control. The
 cells that need no kernel: the misc file's `test_metal_served` (a driver's forward answer through `metal_served`: a
