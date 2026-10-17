@@ -1635,6 +1635,22 @@ def test_ple_proj_dim_gates(t : T?) {
             t |> success(!router_bf16_pairs(1536l, 3l), "... or off an odd base")
         }
     }
+    t |> run("the window's f32 per-layer rows take the staged tile only on its k step") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            var shell = GpuState(coopmat_mode = COOPMAT_CM2, has_coopmat = true, subgroup_size = 32l)   //! a KHR-capable shell at subgroup 32
+            var live = g_gpu
+            g_gpu = unsafe(addr(shell))
+            t |> success(ple_f32_tile_ok(1536l, 256l), "the control: the E2B's dim and ple take the staged tile")
+            t |> equal(pf_f32_split(1536l), 6l, "the E2B gate's K 1536 splits six ways, a chunk of 256 each")
+            t |> equal(pf_f32_split(2560l), 5l, "the E4B gate's K 2560 five ways, the most chunks of 512 cm2_chunk admits")
+            t |> equal(pf_f32_split(256l), 1l, "the projection's K 256 runs whole")
+            t |> success(!ple_f32_tile_ok(1544l, 256l), "a dim off the 32-deep k step keeps the scalar f32 tile (its last row read would pass the plane)")
+            t |> success(!ple_f32_tile_ok(1536l, 48l), "... and so does a ple width off it")
+            shell.subgroup_size = 64l
+            t |> success(!ple_f32_tile_ok(1536l, 256l), "... and a wave64 device, which has no KHR kq tile")
+            g_gpu = live
+        }
+    }
     t |> run("the window's projection names an f16 panel past the device's storage range") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             var shell = GpuState(coopmat_mode = COOPMAT_CM2, msr = 1l << 20l)   //! a cm2 device shell whose storage range is 1 MiB

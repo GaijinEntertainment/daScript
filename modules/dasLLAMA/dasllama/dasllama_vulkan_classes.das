@@ -918,7 +918,8 @@ class RouterGemvBf16 : RouterGemvT {
     override BF16 = true
 }
 
-//! the same bf16 rows a halfword a lane, for an odd dim or base: a row then starts mid-word, off the pairs' word grid
+//! the router GEMV stamp of the template both homes stamp (`GkRouterGemv`) over the bf16 rows a halfword a lane, for an odd dim
+//! or base: a row then starts mid-word, off the pairs' word grid
 [vk_dispatch(name = "router_gemv_bf16_hw_cls", grid = "ne", params = "ne : int64")]
 class RouterGemvBf16Hw : RouterGemvT {
     typedef KT = uint16
@@ -4347,8 +4348,12 @@ class MoeCmBase {
         }
     }
 
+    //! the per-wg map's word offset in `sched`: the push block's, or a stamp's own where every dispatch of it passes one
+    [spirv_inline]
+    def map_word : uint => pa.map_off
+
     def region_rec : uint4 {
-        let rid = sched[pa.map_off + gl_WorkGroupID.x]
+        let rid = sched[map_word() + gl_WorkGroupID.x]
         if (rid == SCHED_NONE) {
             return uint4(0u, 0u, 0u, 0u)
         }
@@ -5850,7 +5855,7 @@ let SC_STRIDE = 130u   //! the cm2 scale cache's sub-block stride: the tile's 12
 [ |> template_struct_instance]
 class template KqCm2BatchT : MoeCmBase {
     @ssbo @binding = 0 @role = "weight" wq : array<BLK>   // the quant plane, read as 16-bit lanes
-    @ssbo @binding = 1 @role = "weight" ws : array<ST>    // the scale plane (q8: f16 per block; kq: 5 words per superblock)
+    @ssbo @binding = 1 @role = "weight" @template_gate = SCALES ws : array<ST>    // the scale plane (q8: f16 per block; kq: 5 words per superblock)
     @ssbo @binding = 3 @role = "alias" xf16 : array<float16>    // f16 activation plane (the tensor loads' view)
     @ssbo @binding = 3 @role = "alias" xf16w4 : array<uint4>    // the same plane as 16-byte words: the KHR arm's activation stage
     @ssbo @binding = 0 @role = "alias" @template_gate = KHR @readonly wq4 : array<uint4>
@@ -5879,6 +5884,7 @@ class template KqCm2BatchT : MoeCmBase {
     @workgroup @template_gate = IQ2XSGRID iq2xs_gridc : uint[1024]
     @template_constant IQ2XXSGRID : bool = false          // stage the 2 KB iq2xxs u64 grid into workgroup memory
     @workgroup @template_gate = IQ2XXSGRID iq2xxs_gridc : uint[512]
+    @template_constant SCALES : bool = true               //!< the format reads a scale plane at binding 1 (a file's f32 rows carry none)
     @template_constant KHR : bool = false                 //!< the KHR cooperative-matrix arm: hand-staged f16 tiles over the format's own decode, no cm2 API (a card without NV_coopmat2)
     @workgroup @template_gate = KHR khr_ao : uint[int(128u * KHR_STRIDE)]   //! the A stage: 128 weight rows of f16 pairs; then the edge tile's f32 store bounce, 8 subgroups x 256 words
     @workgroup @template_gate = KHR khr_b : uint[int(128u * KHR_STRIDE)]    //! the B stage: BN (128) token rows of f16 pairs
@@ -7928,6 +7934,11 @@ class template F32RowsKhrT : KqCm2BatchT {
     typedef BLK = uint4
     typedef ST = float16
     override BLKW = 4u
+    override SCALES = false
+
+    //! one region record ahead of the map: the window's every f32-row GEMM is one region at row 0
+    [spirv_inline]
+    def override map_word : uint => 4u
 
     [spirv_decode]
     def decode(blk : uint4; bc, cib : uint2) : float16 => float16(uint_bits_to_float(blk[int(cib.y & 3u)]))

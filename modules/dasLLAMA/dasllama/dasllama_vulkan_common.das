@@ -169,6 +169,16 @@ def cm2_chunk(n, nsplit : int64) : int64 {
     return ck * (nsplit - 1l) < n ? ck : 0l
 }
 
+//! the most k chunks, up to `want` and eight, `cm2_chunk` admits over K `n` (1: whole)
+[arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
+def cm2_split_fit(n, want : int64) : int64 {
+    var sk = min(want, 8l)
+    while (sk > 1l && cm2_chunk(n, sk) == 0l) {
+        sk--
+    }
+    return max(sk, 1l)
+}
+
 //! workgroups a (d, cnt) GEMM takes at the token column `tc`
 def cm2_tiles_at(d, cnt, tc : int64) : int64 {
     verify(tc >= 32l, "vk prefill: cm2_tiles_at got the e column's class key (CM2_TC_E), which is no column width")
@@ -190,10 +200,7 @@ def cm2_gemm_pick(d, cnt, n : int64; sib_tiles : int64 = 0l; scratch_bytes : int
     let khr = g_gpu.coopmat_mode == COOPMAT_MM
     let forced = cm2_splitk_env()
     if (forced > 0l) {
-        var sk = min(forced, 8l)
-        while (sk > 1l && cm2_chunk(n, sk) == 0l) {
-            sk--
-        }
+        let sk = cm2_split_fit(n, forced)
         return (tc = tc0, nsplit = sk, ksplit = sk > 1l ? cm2_chunk(n, sk) : 0l)
     }
     if (n < 2048l || d < 128l || cnt < tc0) {

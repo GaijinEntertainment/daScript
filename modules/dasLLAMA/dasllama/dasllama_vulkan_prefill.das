@@ -939,7 +939,13 @@ def private pf_ple_block(raw : VkCommandBuffer; var h : VkHaz; l : int64; b : in
 //! the file's f32 per-layer-embedding rows ride the staged KHR tile where the device has it (`DASLLAMA_VK_PLE_F32_TILE` holds
 //! them on the scalar f32 tile)
 [arch(at="../ARCHITECTURE_GPU_VULKAN_KHR.md#f32-rows-staged-tile")]
-def private pf_ple_f32_staged : bool => g_env_vulkan.vk_ple_f32_tile && khr_kq_tile_on()
+def private pf_ple_f32_staged : bool => ple_f32_tile_ok(g_rd.dim, g_rd.ple)
+
+//! the staged tile serves f32 rows of a model dim `dim` and a ple width `ple`: both GEMMs' K on its 32-deep k step, so no 16-wide
+//! row read reaches past the exactly sized plane; else the scalar f32 tile
+[arch(at="../ARCHITECTURE_GPU_VULKAN_KHR.md#f32-rows-staged-tile")]
+def public ple_f32_tile_ok(dim, ple : int64) : bool
+    => g_env_vulkan.vk_ple_f32_tile && khr_kq_tile_on() && dim % 32l == 0l && ple % 32l == 0l
 
 //! the per-layer-embedding gate reads the window's rows as f16: a plane the f16 feed admits, or f32 rows on the staged tile
 def private pf_ple_gate_f16(L : RLayer) : bool => L.bpg < 0l ? pf_ple_f32_staged() : pf_f16_feed(L.fpg)
@@ -950,13 +956,7 @@ def private pf_ple_proj_f16(L : RLayer) : bool => L.bpp < 0l ? pf_ple_f32_staged
 //! the k chunks a staged f32-row GEMM of K `n` takes: the most, up to eight, `cm2_chunk` admits, each a dependent window chain's hop
 //! cut to its deepest chunk's latency (one under 512)
 [arch(at="../ARCHITECTURE_GPU_VULKAN_KHR.md#f32-rows-staged-tile")]
-def pf_f32_split(n : int64) : int64 {
-    var sk = min(8l, n / 256l)
-    while (sk > 1l && cm2_chunk(n, sk) == 0l) {
-        sk--
-    }
-    return max(sk, 1l)
-}
+def pf_f32_split(n : int64) : int64 => cm2_split_fit(n, n / 256l)
 
 //! one f32-row GEMM on the staged KHR tile: y[rows x d] = x[rows x n] w^T over the plane's `d` rows of `n` from element `woff`,
 //! the f16 rows at `xf`; one region at row 0 and the tile's one column, over `pf_f32_split`'s k chunks into the split-k planes and
@@ -970,11 +970,11 @@ def private pf_f32_gemm_enc(raw : VkCommandBuffer; var h : VkHaz; idx : int; w :
         verify(nsplit * rows * d * 4l <= g_rd.pf_splitk_bytes, "vk prefill: the staged f32 tile's split-k planes exceed the scratch bound")
     }
     let groups = int64(fill_arena_batch_sched(g_rd.pf_meta[idx], d, woff / 4l, rows, int(KqFmt.q8), true, nsplit, 0l, 128l))
-    var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u, ksplit = split ? uint(cm2_chunk(n, nsplit)) : 0u)
+    var pc = BatchArgs(n = uint(n), d = uint(d), ksplit = split ? uint(cm2_chunk(n, nsplit)) : 0u)
     var s = cached(g_rd.pf_cls_gemm, idx * 16 + 15) $ {
         verify(ensure_f32_batch_khr_cls(), "vk prefill: the staged f32 tile's class rail must engage")
-        return set_f32_batch_khr_cls(fixed_array(w, g_rd.dummy, g_rd.pf_meta[idx].buf, xf, split ? g_rd.pf_splitk : y),
-            fixed_array(wn, 256l, BATCH_META_BYTES, xn, split ? g_rd.pf_splitk_bytes : yn), fixed_array(0u, 0u, 0u, xbit, split ? VHZ_SK : ybit))
+        return set_f32_batch_khr_cls(fixed_array(w, g_rd.pf_meta[idx].buf, xf, split ? g_rd.pf_splitk : y),
+            fixed_array(wn, BATCH_META_BYTES, xn, split ? g_rd.pf_splitk_bytes : yn), fixed_array(0u, 0u, xbit, split ? VHZ_SK : ybit))
     }
     enc_f32_batch_khr_cls(raw, h, s, pc, groups)
     if (split) {

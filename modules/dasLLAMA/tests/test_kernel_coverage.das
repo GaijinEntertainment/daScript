@@ -1028,7 +1028,12 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // router_gemv_bf16: the BF16 projection's decode column, gemma-4-E2B-it-Q8_0.gguf in test_gpu_resident_gemma4_e2b.das;
     //                   test_vkd_router_gemv_bf16
     // ple_bf16_cvt: the BF16 projection's per-window f16 panel, the same file's prefill windows; test_vkd_ple_bf16_cvt
-    "ple_act_f32_cls_spv", "ple_finish_cls_spv", "router_gemv_bf16_cls_spv", "ple_bf16_cvt_cls_spv",
+    // f32_batch_khr: the staged KHR tile over the F32 per-layer gate and projection rows, gemma-4-E2B-it-Q4_K_M.gguf's
+    //                prefill windows in test_gpu_resident_gemma4_e2b.das (arm g4e-kq, its count asserted); test_vkd_f32_khr_batch
+    // router_gemv_bf16_hw: the BF16 projection's halfword stamp, which serves an odd model dim or base - every stocked E-series
+    //                      carrier's dim is even on an even base, so no file reaches it; test_vkd_router_gemv_cols's halfword arms
+    "ple_act_f32_cls_spv", "ple_finish_cls_spv", "router_gemv_bf16_cls_spv", "ple_bf16_cvt_cls_spv", "f32_batch_khr_cls_spv",
+    "router_gemv_bf16_hw_cls_spv",
     // the scalar router GEMM: on a cm2 box every MoE carrier whose dim the small f16 GEMM's eight
     // 64-deep chunks divide takes the f16 route, so the scalar tile runs only off it (a dim off
     // 512, the KHR route). Its coverage is test_vkd_moe_routing's router arm in test_vulkan_kernels.das
