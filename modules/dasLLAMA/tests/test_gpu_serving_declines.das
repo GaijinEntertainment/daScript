@@ -1641,6 +1641,9 @@ def test_ple_proj_dim_gates(t : T?) {
             var live = g_gpu
             g_gpu = unsafe(addr(shell))
             t |> success(ple_f32_tile_ok(1536l, 256l), "the control: the E2B's dim and ple take the staged tile")
+            t |> equal(pf_f32_split(1536l), 6l, "the E2B gate's K 1536 splits six ways, a chunk of 256 each")
+            t |> equal(pf_f32_split(2560l), 5l, "the E4B gate's K 2560 five ways, the most chunks of 512 cm2_chunk admits")
+            t |> equal(pf_f32_split(256l), 1l, "the projection's K 256 runs whole")
             t |> success(!ple_f32_tile_ok(1544l, 256l), "a dim off the 32-deep k step keeps the scalar f32 tile (its last row read would pass the plane)")
             t |> success(!ple_f32_tile_ok(1536l, 48l), "... and so does a ple width off it")
             shell.subgroup_size = 64l

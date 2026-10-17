@@ -38,6 +38,14 @@ require ?vulkan dasllama/dasllama_moe   // moe_select_core: the host select the 
 require daslib/strings_boost   // join: the spawned fixture's source
 require daslib/math_bits   // float_bits_to_uint / uint_bits_to_float: the NaN sentinel by bit pattern, the read-back planes as floats
 
+//! The Vulkan tier's kernel classes against their CPU oracles, one cell a class family: the decode GEMVs, the tile families
+//! (the cm2 l, m, s and e stamps, the KHR staged tile over every format and over a file's f32 rows, the sdot4 tiles), the
+//! acts, requants and combines, the attention, rope and K/V stores, the routing and schedules, the router GEMV's stamps
+//! (f32, bf16 word pairs, bf16 halfwords at an odd dim), the per-layer-embedding classes, the tile and split picks and the
+//! device roster. Skips: every cell without dasVulkan or a Vulkan device; the cm2 arms off a coopmat2 device created in cm2
+//! mode; the KHR arms (the KHR tiles, the staged f32 tile) without KHR cooperative matrices at subgroup 32; the tile-pick
+//! cell where DASLLAMA_CM2_TILE or DASLLAMA_CM2_SPLITK forces the pick; a class rail a device declines.
+
 let private TILE_SLACK_ROWS = int(TILE_READ_SLACK)   //! the cm2 fixtures' rows past the last region, the engine's count: a stamp that loads partial columns unclamped (`STILE`) reads the last region's column rounded up to its BN, so the slack holds while every such stamp keeps BN <= slack + 1
 let private TILE_CELL_K = 768   //! every per-format tile cell's K: three unrolled superblock passes on both depths (a K-quant width is a multiple of 256, so no K-quant stamp ever takes the k loop's tail; the q8 s and e cells' Q8_CELL_K takes the edge path)
 let private Q8_CELL_K = 544     //! the q8 cm2 s and e cells' K: 512 + 32, off the 64-deep stamp's k grid, so the tile takes its padded edge path (the l and m cells run K = 576, the fast path)

@@ -956,13 +956,7 @@ def private pf_ple_proj_f16(L : RLayer) : bool => L.bpp < 0l ? pf_ple_f32_staged
 //! the k chunks a staged f32-row GEMM of K `n` takes: the most, up to eight, `cm2_chunk` admits, each a dependent window chain's hop
 //! cut to its deepest chunk's latency (one under 512)
 [arch(at="../ARCHITECTURE_GPU_VULKAN_KHR.md#f32-rows-staged-tile")]
-def pf_f32_split(n : int64) : int64 {
-    var sk = min(8l, n / 256l)
-    while (sk > 1l && cm2_chunk(n, sk) == 0l) {
-        sk--
-    }
-    return max(sk, 1l)
-}
+def pf_f32_split(n : int64) : int64 => cm2_split_fit(n, n / 256l)
 
 //! one f32-row GEMM on the staged KHR tile: y[rows x d] = x[rows x n] w^T over the plane's `d` rows of `n` from element `woff`,
 //! the f16 rows at `xf`; one region at row 0 and the tile's one column, over `pf_f32_split`'s k chunks into the split-k planes and

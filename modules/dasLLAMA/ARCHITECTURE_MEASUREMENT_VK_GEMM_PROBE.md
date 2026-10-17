@@ -130,9 +130,11 @@ alternating outputs, the arms in turn inside each round. `kqst:<fmt>` puts a K-q
 l, m and s stamps, on the decode arm the device runs, beside the staged tile at gemma-4 E2B's role
 shapes (dim 1536, the FFN pair at 6144 and the doubled 12288, q 2048, a kv or gate plane of 256,
 the projection over K 256) and the 4B's FFN pair, at 512 rows, the gate again at 500 (the
-partial-tile store); the cm2 l stamp is its alternate. `plef32` puts the scalar f32 tile
+partial-tile store), the arms in turn inside each of two rounds, each arm's row its best round; the
+cm2 l stamp is its alternate. `plef32` puts the scalar f32 tile
 (`DnBaGemm`) beside the staged tile over the same f32 words at the per-layer-embedding gate and
-projection shapes of the E2B and the E4B, at 512 rows and the E2B's again at 300, three rounds;
+projection shapes of the E2B and the E4B, at 512 rows and the E2B's again at 300, the arms in turn
+inside each of three rounds, each arm's row its best round;
 then its one-at-a-time rows hold one output and one hazard rail - the latency the window's
 dependent chain pays the role - over the scalar tile, the staged tile whole, and the staged tile
 over two to eight 256-aligned k chunks chained into the split-k reduce. `narrow:<fmt>` runs a

@@ -1025,7 +1025,10 @@ bytes, the packed f16-pair scale word and the device-timestamp scaffold around a
 `test_vkd_cm2l_batch` / `test_vkd_cm2m_batch` / `test_vkd_cm2s_batch` / `test_vkd_cm2e_batch`,
 and its KHR arm is `test_vkd_q8_khr_batch`, the per-32 plane through the hand-staged KHR tile over the
 same two regions, whole and under a k split with the reduce, wherever the device has KHR cooperative
-matrices at subgroup 32; q51's expert rail rides `test_vkd_q51_cm2_batch` - its s and e stamps
+matrices at subgroup 32; `test_vkd_f32_khr_batch` is the same tile over a file's f32 rows (`F32KhrBatch`, each
+weight rounded to f16 on the stage) against the f16-rounding oracle over one region, whole and in two k chunks
+through the reduce, on the same device condition; `test_vkd_actf16_strided` holds the f16 act over the
+strided side rows (`ubase` / `ustride` / `ulen`) against the CPU form, the contiguous read its control; q51's expert rail rides `test_vkd_q51_cm2_batch` - its s and e stamps
 on a cm2 device and its KHR tile wherever the device has KHR cooperative matrices at subgroup 32,
 over the per-32 plane with hand-packed d | m words - and `test_vkd_q51_gemv`,
 its Q8_0-activation decode GEMV against the scalar dot's float order at 704 and 1408 (every per-32 GEMV cell also runs the
@@ -1146,7 +1149,7 @@ plain and under the router bias; then the two-deep stamp over 512 experts at ten
 the first 256, the same compares, with the one-deep stamp over the same rows as the control that misses the host select's
 picks), `test_vkd_router_gemv_cols` (the router GEMV over three, eight and twelve x rows - twelve in two column tiles,
 `router_enc_cols` - against the one-row
-dispatch a row at a time, bit for bit, on the bf16 and the f32 stamps, with and without the fused
+dispatch a row at a time, bit for bit, on the bf16 and the f32 stamps and the bf16 halfword stamp at the odd dim 2049, with and without the fused
 rms, against a CPU oracle, the widest miss logged with its row and expert, the sentinel past the
 last column standing),
 `test_vkd_q8_gemv_gu_n` (its N-column stamps - two, four and eight columns, and eleven as an eight-column tile and a
