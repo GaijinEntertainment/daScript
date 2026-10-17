@@ -4462,8 +4462,8 @@ static string das2_reservedWordNote ( const string & error ) {
     auto to = error.find(',', from);
     string tok = error.substr(from, to==string::npos ? string::npos : to-from);
     if ( tok.empty() || tok=="name" ) return "";   // "unexpected name" is an identifier out of place, not a keyword
-    for ( char c : tok ) {
-        if ( !((c>='a' && c<='z') || c=='_') ) return "";   // "end of file", "$end", "'('", "integer constant" are not words
+    for ( char c : tok ) {   // "end of file", "$end", "'('", "integer constant" are not words; int2, float4, uint16 are
+        if ( !((c>='a' && c<='z') || (c>='0' && c<='9') || c=='_') ) return "";
     }
     return " - '" + tok + "' is a reserved word and cannot be used as a name";
 }

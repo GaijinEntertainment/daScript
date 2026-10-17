@@ -18,6 +18,10 @@ def test_reserved_word_as_parameter_name(t : T?) {
             "the parser's own token dump stays: {issues}")
         t |> success(find(issues, "'class' is a reserved word and cannot be used as a name") >= 0,
             "and the note names the word")
+        let digits = compile_issues(
+            "{get_das_root()}/tests/typer_errors/_reserved_word_name_digits.das")
+        t |> success(find(digits, "'int2' is a reserved word and cannot be used as a name") >= 0,
+            "a type keyword with digits in it is named too: {digits}")
     }
 }
 
