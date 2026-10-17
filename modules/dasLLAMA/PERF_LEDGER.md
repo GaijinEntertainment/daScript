@@ -10,6 +10,15 @@ and coverage; this ledger is the backlog for the perf pass that follows them. Ev
 what it costs today and what the fix would change.
 
 ## Entries
+- **MEASURED (2026-10-17) - the residual step's race past the slab, widened, M5 Max (128 GB).** `bench_metal_gk_rows`
+  (`dastest.das -- --bench --test`, debug-jit, the box profile `performance/m5.tune.json` at 39,101 B,
+  `DASLLAMA_ALLOW_UNTUNED=1 DASLLAMA_CPU_PREFILL=1 DASLLAMA_METAL_HAZARD_STRICT=1`) at b4b207a287 adds to the entry below the
+  widths 4608 and 5120, the window's plain step past the slab and the decode rows' f16-twin stamps (`enc_preaddrms_bhxw_c`,
+  `enc_add_rms_bhxw_c`); the figures stand in `ARCHITECTURE_GPU_SHARED_KERNELS.md`'s seam bullet. The one dispatch beats the
+  split chain at every width, row count and form timed: the seam at 4608 7.13 / 7.21 us at one / four decode rows against
+  9.26 / 9.52 and 49.10 against 101.4 on the 512-row window; the window's plain step 43.90 against 73.88 at 4608 and 114.9
+  against 136.8 at 8192; the seam with the twin at 5376 7.48 / 7.58 against 9.66 / 9.98. The 1024-lane decode builders beat
+  the 256-lane ones past the slab at every width and form, with the twin and without.
 - **MEASURED (2026-10-17) - the Metal residual step past its slab, M5 Max (128 GB).** The step stages a row's first 4096
   columns in the threadgroup slab and re-reads the columns past it, so the gemma-4 31B's 5376-wide seams take one dispatch
   where they took the split chain (the rms, the scaled add, the next norm), and the decode rows past the slab run 1024 lanes.
