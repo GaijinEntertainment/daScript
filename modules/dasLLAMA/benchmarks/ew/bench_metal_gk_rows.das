@@ -1117,31 +1117,24 @@ struct private SeamStep {
 def private seam_lane_arm(enc : MetalComputeEncoder?; s : SeamStep; lanes : int) {
     var k = s.ks
     let np = int64(s.np)
-    let win = s.np >= 64
-    if (lanes == 1024 && !win && int64(k.dim) > ADD_RMS_MAX_DIM) {
-        enc_residual_wide(enc, s.bx, s.ba, s.bw, s.by, s.hx ? s.bh : null, true, true, k, np)
-    } elif (s.hx) {
-        if (lanes == 128) {
-            bench_enc_preaddrms_bhx_128(enc, s.bx, s.ba, s.bw, s.by, s.bh, k, np)
-        } elif (lanes == 1024) {
-            bench_enc_preaddrms_bhx_1024(enc, s.bx, s.ba, s.bw, s.by, s.bh, k, np)
-        } elif (win) {
-            pf_enc_preaddrms_bhx_c(enc, s.bx, s.ba, s.bw, s.by, s.bh, k, np)
-        } else {
-            enc_preaddrms_bhx_c(enc, s.bx, s.ba, s.bw, s.by, s.bh, k, np)
-        }
+    let form = ar_form(s.np)
+    if (lanes == 128 && s.hx) {
+        bench_enc_preaddrms_bhx_128(enc, s.bx, s.ba, s.bw, s.by, s.bh, k, np)
     } elif (lanes == 128) {
         bench_enc_preaddrms_b_128(enc, s.bx, s.ba, s.bw, s.by, k, np)
+    } elif (lanes == 1024 && residual_wide(form, int64(k.dim))) {
+        enc_residual_fused(enc, form, s.bx, s.ba, s.bw, s.by, s.hx ? s.bh : null, true, true, k, np, true)
+    } elif (lanes == 1024 && s.hx) {
+        bench_enc_preaddrms_bhx_1024(enc, s.bx, s.ba, s.bw, s.by, s.bh, k, np)
     } elif (lanes == 1024) {
         bench_enc_preaddrms_b_1024(enc, s.bx, s.ba, s.bw, s.by, k, np)
-    } elif (win) {
-        pf_enc_preaddrms_b_c(enc, s.bx, s.ba, s.bw, s.by, k, np)
-    } elif (s.np == 1) {
-        enc_preaddrms_c(enc, s.bx, s.ba, s.bw, s.by, k)
     } else {
-        enc_preaddrms_b_c(enc, s.bx, s.ba, s.bw, s.by, k, np)
+        enc_residual_fused(enc, form, s.bx, s.ba, s.bw, s.by, s.hx ? s.bh : null, true, true, k, np, false)
     }
 }
+
+//! the residual form a race's `np` rows take: the window from 64 rows, the one-row grid at one row
+def private ar_form(np : int) : ResidualForm => np >= 64 ? ResidualForm.window : (np == 1 ? ResidualForm.one_row : ResidualForm.rows)
 
 //! the seam's stream rows then its f32 next norm after one dispatch, on the CPU in double off the fixture's pattern inputs
 def private seam_ref(dim, np : int; ascale : double) : array<double> {
@@ -1171,7 +1164,7 @@ def private seam_lane_race(dim, np : int; hx : bool; var rows : array<Reading>) 
         bw = fill_buf(2 * dim, 0.01), ks = GkAddRmsArgs(dim = uint(dim), add_on = 1u, woff = uint(dim), eps = 1e-6, ascale = 0.75, pre_on = 1u,
         pwoff = 0u), np = np, hx = hx)
     let win = np >= 64
-    let past = !win && int64(dim) > ADD_RMS_MAX_DIM
+    let past = residual_wide(ar_form(np), int64(dim))
     let lanes = past ? fixed_array(1024, 256, 128) : fixed_array(256, 128, 1024)
     let names <- (past ? ["1024 lanes (the shipped decode builder past the slab)", "256 lanes (the decode builder within the slab)",
         "128 lanes (bench stamp)"] : [win ? "256 lanes (the shipped window builder)" : "256 lanes (the shipped decode builder)",
@@ -1331,9 +1324,7 @@ struct private ArStep {
     bwp : MetalBuffer?    //! the post norm row alone
     bwn : MetalBuffer?    //! the next norm row alone
     bosc : MetalBuffer?   //! the residual's scale (the split no-norm seam's add)
-    udim : MetalBuffer?
-    ueps : MetalBuffer?
-    utot : MetalBuffer?
+    u : ResidualUniforms
     form : ArForm
 }
 
@@ -1346,102 +1337,34 @@ enum private ArArm {
     lanes256 //! past the slab, the decode rows' one dispatch on the 256-lane builders the rows within the slab take
 }
 
-//! the next norm of `bx`'s rows into `by` (`bh` its f16 twin where `hx`) in the shape `enc_rms_form` dispatches it
-def private ar_next_norm(enc : MetalComputeEncoder?; s : ArStep) {
-    let t = s.st
-    let np = int64(t.np)
-    if (t.np >= 64) {
-        pf_enc_rms_hx(enc, t.bx, 0ul, s.bwn, t.by, s.udim, s.ueps, t.bh, np)
-    } elif (t.hx) {
-        enc_rms_bhx(enc, t.bx, 0ul, s.bwn, t.by, s.udim, s.ueps, t.bh, np)
-    } elif (t.np == 1) {
-        enc_rms(enc, t.bx, 0ul, s.bwn, t.by, s.udim, s.ueps)
-    } else {
-        enc_rms_b(enc, t.bx, 0ul, s.bwn, t.by, s.udim, s.ueps, np)
-    }
-}
-
-//! the add + norm in one dispatch: `ba`'s rows added onto the stream rows, the next norm under `bw` into `by` (`bh` its twin where
-//! `hx`); `single` takes the one-row grid at one row
-def private ar_add_rms(enc : MetalComputeEncoder?; s : ArStep; ba, bw : MetalBuffer?; var k : GkAddRmsArgs; single : bool) {
-    let t = s.st
-    let np = int64(t.np)
-    if (t.np >= 64) {
-        pf_enc_add_rms_bhx_c(enc, t.bx, ba, bw, t.by, t.bh, k, np)
-    } elif (t.hx) {
-        enc_add_rms_bhx_c(enc, t.bx, ba, bw, t.by, t.bh, k, np)
-    } elif (single && t.np == 1) {
-        enc_addrms_c(enc, t.bx, ba, bw, t.by, k)
-    } else {
-        enc_add_rms_b_c(enc, t.bx, ba, bw, t.by, k, np)
-    }
-}
-
-//! the split arms on `s`: the branch's rms, then the add + norm (`split`), the scaled add and the next norm (`split3`), or the scaled
-//! add alone (`nonorm`)
-def private ar_split_arm(enc : MetalComputeEncoder?; s : ArStep; arm : ArArm; var k : GkAddRmsArgs) {
-    let t = s.st
-    let np = int64(t.np)
-    let n = np * int64(k.dim)
-    if (t.np >= 64) {
-        pf_enc_rms(enc, t.ba, 0ul, s.bwp, s.bt, s.udim, s.ueps, np)
-    } elif (t.np == 1 && arm == ArArm.split3) {
-        enc_rms(enc, t.ba, 0ul, s.bwp, s.bt, s.udim, s.ueps)
-    } else {
-        enc_rms_b(enc, t.ba, 0ul, s.bwp, s.bt, s.udim, s.ueps, np)
-    }
-    if (s.form == ArForm.nonorm || arm == ArArm.split3) {
-        enc_add(enc, t.bx, 0ul, s.bt, 0ul, s.utot, n, s.bosc)
-        if (arm == ArArm.split3) {
-            ar_next_norm(enc, s)
-        }
-    } else {
-        ar_add_rms(enc, s, s.bt, s.bwn, k, false)
-    }
-}
-
-//! the residual race's arm `arm` on `s`
+//! the residual race's arm `arm` on `s`; the `split` arm runs the branch's rms on the rows grid at one row
 def private ar_arm(enc : MetalComputeEncoder?; s : ArStep; arm : ArArm) {
     var k = s.st.ks
-    let np = int64(s.st.np)
-    let win = s.st.np >= 64
-    let one = s.st.np == 1
     let t = s.st
-    if (s.form == ArForm.plain) {
+    let np = int64(t.np)
+    let form = ar_form(t.np)
+    let rows_form = t.np >= 64 ? ResidualForm.window : ResidualForm.rows
+    let plain = s.form == ArForm.plain
+    let byh = t.hx ? t.bh : null
+    if (plain) {
         k.ascale = 1.0
     }
-    if (arm == ArArm.fused && !win && int64(k.dim) > ADD_RMS_MAX_DIM) {
-        let plain = s.form == ArForm.plain
-        enc_residual_wide(enc, t.bx, t.ba, plain ? s.bwn : t.bw, t.by, t.hx ? t.bh : null, !plain, s.form != ArForm.nonorm, k, np)
-    } elif (s.form == ArForm.plain && arm == ArArm.split) {
-        enc_add(enc, t.bx, 0ul, t.ba, 0ul, s.utot, np * int64(k.dim))
-        ar_next_norm(enc, s)
-    } elif (s.form == ArForm.plain) {
-        ar_add_rms(enc, s, t.ba, s.bwn, k, true)
+    if (arm == ArArm.wide && t.hx) {
+        bench_enc_preaddrms_bhx_wide(enc, t.bx, t.ba, t.bw, t.by, t.bh, k, np)
     } elif (arm == ArArm.wide) {
-        if (t.hx) {
-            bench_enc_preaddrms_bhx_wide(enc, t.bx, t.ba, t.bw, t.by, t.bh, k, np)
-        } else {
-            bench_enc_preaddrms_b_wide(enc, t.bx, t.ba, t.bw, t.by, k, np)
-        }
-    } elif (arm != ArArm.fused && arm != ArArm.lanes256) {
-        ar_split_arm(enc, s, arm, k)
-    } elif (s.form == ArForm.seam) {
-        if (win) {
-            pf_enc_preaddrms_bhx_c(enc, t.bx, t.ba, t.bw, t.by, t.bh, k, np)
-        } elif (t.hx) {
-            enc_preaddrms_bhx_c(enc, t.bx, t.ba, t.bw, t.by, t.bh, k, np)
-        } elif (one) {
-            enc_preaddrms_c(enc, t.bx, t.ba, t.bw, t.by, k)
-        } else {
-            enc_preaddrms_b_c(enc, t.bx, t.ba, t.bw, t.by, k, np)
-        }
-    } elif (win) {
-        pf_enc_preadd_b_c(enc, t.bx, t.ba, t.bw, k, np)
-    } elif (one) {
-        enc_preadd_c(enc, t.bx, t.ba, t.bw, k)
+        bench_enc_preaddrms_b_wide(enc, t.bx, t.ba, t.bw, t.by, k, np)
+    } elif (arm == ArArm.split3) {
+        enc_residual_split(enc, form, t.bx, t.ba, s.bt, s.bwp, s.bosc, s.bwn, t.by, byh, s.u, int64(k.dim), np)
+    } elif (arm == ArArm.split && plain) {
+        enc_residual_split(enc, form, t.bx, t.ba, null, null, null, s.bwn, t.by, byh, s.u, int64(k.dim), np)
+    } elif (arm == ArArm.split && s.form == ArForm.nonorm) {
+        enc_residual_split(enc, rows_form, t.bx, t.ba, s.bt, s.bwp, s.bosc, null, null, null, s.u, int64(k.dim), np)
+    } elif (arm == ArArm.split) {
+        enc_rms_form(enc, rows_form, t.ba, s.bwp, s.bt, null, s.u, np)
+        enc_residual_fused(enc, rows_form, t.bx, s.bt, s.bwn, t.by, byh, false, true, k, np, false)
     } else {
-        enc_preadd_b_c(enc, t.bx, t.ba, t.bw, k, np)
+        enc_residual_fused(enc, form, t.bx, t.ba, plain ? s.bwn : t.bw, t.by, byh, !plain, s.form != ArForm.nonorm, k, np,
+            arm == ArArm.fused && residual_wide(form, int64(k.dim)))
     }
 }
 
@@ -1510,7 +1433,8 @@ def private ar_race(dim, np : int; form : ArForm; twin : bool; var rows : array<
     var s = ArStep(st = SeamStep(bx = fill_buf(n, 0.5), ba = fill_buf(n, 0.25), by = fill_buf(n, 0.0), bh = metal_new_buffer(g_dev, uint64(n * 2)),
         bw = fill_buf(2 * dim, 0.01), ks = GkAddRmsArgs(dim = uint(dim), add_on = 1u, woff = uint(dim), eps = 1e-6, ascale = 0.75, pre_on = 1u,
         pwoff = 0u), np = np, hx = np >= 64 || twin), bt = fill_buf(n, 0.0), bwp = norm_row_buf(dim, 0), bwn = norm_row_buf(dim, 1),
-        bosc = scale_buf(0.75), udim = uniform_u32(uint(dim)), ueps = uniform_f32(1e-6), utot = uniform_u32(uint(n)), form = form)
+        bosc = scale_buf(0.75), u = ResidualUniforms(bdim = uniform_u32(uint(dim)), beps = uniform_f32(1e-6), btot = uniform_u32(uint(n))),
+        form = form)
     var ref <- (form == ArForm.plain ? ar_plain_ref(dim, np) : seam_ref(dim, np, 0.75lf))
     let race <- ar_arms(dim, np, form)
     if (form == ArForm.nonorm) {
@@ -1530,7 +1454,7 @@ def private ar_race(dim, np : int; form : ArForm; twin : bool; var rows : array<
     for (buf in fixed_array(s.st.bx, s.st.ba, s.st.by, s.st.bh, s.st.bw, s.bt, s.bwp, s.bwn, s.bosc)) {
         metal_release(buf)
     }
-    for (b in fixed_array(s.udim, s.ueps, s.utot)) {
+    for (b in fixed_array(s.u.bdim, s.u.beps, s.u.btot)) {
         pool_release(g_upool, b, 4ul)
     }
 }

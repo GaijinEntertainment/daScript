@@ -5216,32 +5216,45 @@ def enc_residual(enc : MetalComputeEncoder?; t : Model; bx, ba, by, byh : MetalB
     let dim = c.dim
     let pre = sm.pre_off >= 0l
     let out = sm.norm_off >= 0l
-    let one = form == ResidualForm.one_row
-    let win = form == ResidualForm.window
     if (split || (!pre && !out)) {
+        let rb = uint64(dim * 4l)
         unsafe {
-            let rb = uint64(dim * 4l)
-            if (pre) {
-                var bwp = upload_region(addr<void?>(t.fblob[sm.pre_off]), rb)
-                enc_rms_form(enc, form, ba, bwp, ba, null, u, nrows)
-            }
+            var bwp = pre ? upload_region(addr<void?>(t.fblob[sm.pre_off]), rb) : null
             var bosc = sm.osc_off >= 0l ? upload_region(addr<void?>(t.fblob[sm.osc_off]), 4ul) : null
-            enc_add(enc, bx, 0ul, ba, 0ul, u.btot, nrows * dim, bosc)
-            if (out) {
-                var bw = upload_region(addr<void?>(t.fblob[sm.norm_off]), rb)
-                enc_rms_form(enc, form, bx, bw, by, byh, u, nrows)
-            }
+            var bw = out ? upload_region(addr<void?>(t.fblob[sm.norm_off]), rb) : null
+            enc_residual_split(enc, form, bx, ba, ba, bwp, bosc, bw, by, byh, u, dim, nrows)
         }
         return
     }
     var bw = seam_norms(t, sm)
     var ka = GkAddRmsArgs(dim = uint(dim), add_on = 1u, eps = c.norm_eps, ascale = sm.osc_off >= 0l ? t.fblob[sm.osc_off] : 1.0)
-    if (!win && dim > ADD_RMS_MAX_DIM) {
-        enc_residual_wide(enc, bx, ba, bw, by, byh, pre, out, ka, nrows)
-        return
+    enc_residual_fused(enc, form, bx, ba, bw, by, byh, pre, out, ka, nrows, residual_wide(form, dim))
+}
+
+//! true where the step's one dispatch takes the 1024-lane `w` builders: a decode row past the slab
+def residual_wide(form : ResidualForm; dim : int64) : bool => form != ResidualForm.window && dim > ADD_RMS_MAX_DIM
+
+var private g_residual_narrow = 0l   //! the residual step's one dispatches on the 256-lane builders
+var private g_residual_wide = 0l     //! ... and on the decode rows' 1024-lane ones
+
+//! the residual step's one dispatches since load by lane width - which builders a seam past the slab took
+def metal_residual_lanes() : tuple<narrow : int64; wide : int64> => (narrow = g_residual_narrow, wide = g_residual_wide)
+
+//! the residual step's one dispatch in `form`: the plain step, the sandwich seam (`pre`), its no-norm form (`!out`), the f16 twin
+//! beside where `byh` is bound; `wide` the decode rows' 1024-lane `w` builders, else 256 lanes
+def enc_residual_fused(enc : MetalComputeEncoder?; form : ResidualForm; bx, ba, bw, by, byh : MetalBuffer?; pre, out : bool;
+                       var ka : GkAddRmsArgs; nrows : int64; wide : bool) {
+    if (wide) {
+        g_residual_wide++
+    } else {
+        g_residual_narrow++
     }
+    let one = !wide && form == ResidualForm.one_row
+    let win = !wide && form == ResidualForm.window
     if (!out) {
-        if (one) {
+        if (wide) {
+            enc_preadd_bw_c(enc, bx, ba, bw, ka, nrows)
+        } elif (one) {
             enc_preadd_c(enc, bx, ba, bw, ka)
         } elif (win) {
             pf_enc_preadd_b_c(enc, bx, ba, bw, ka, nrows)
@@ -5250,11 +5263,15 @@ def enc_residual(enc : MetalComputeEncoder?; t : Model; bx, ba, by, byh : MetalB
         }
     } elif (pre) {
         if (byh != null) {
-            if (win) {
+            if (wide) {
+                enc_preaddrms_bhxw_c(enc, bx, ba, bw, by, byh, ka, nrows)
+            } elif (win) {
                 pf_enc_preaddrms_bhx_c(enc, bx, ba, bw, by, byh, ka, nrows)
             } else {
                 enc_preaddrms_bhx_c(enc, bx, ba, bw, by, byh, ka, nrows)
             }
+        } elif (wide) {
+            enc_preaddrms_bw_c(enc, bx, ba, bw, by, ka, nrows)
         } elif (one) {
             enc_preaddrms_c(enc, bx, ba, bw, by, ka)
         } elif (win) {
@@ -5263,11 +5280,15 @@ def enc_residual(enc : MetalComputeEncoder?; t : Model; bx, ba, by, byh : MetalB
             enc_preaddrms_b_c(enc, bx, ba, bw, by, ka, nrows)
         }
     } elif (byh != null) {
-        if (win) {
+        if (wide) {
+            enc_add_rms_bhxw_c(enc, bx, ba, bw, by, byh, ka, nrows)
+        } elif (win) {
             pf_enc_add_rms_bhx_c(enc, bx, ba, bw, by, byh, ka, nrows)
         } else {
             enc_add_rms_bhx_c(enc, bx, ba, bw, by, byh, ka, nrows)
         }
+    } elif (wide) {
+        enc_add_rms_bw_c(enc, bx, ba, bw, by, ka, nrows)
     } elif (one) {
         enc_addrms_c(enc, bx, ba, bw, by, ka)
     } elif (win) {
@@ -5277,24 +5298,21 @@ def enc_residual(enc : MetalComputeEncoder?; t : Model; bx, ba, by, byh : MetalB
     }
 }
 
-//! the decode rows' residual step past the slab, at 1024 lanes a row (the `w` builders): the plain step, the sandwich seam (`pre`), its
-//! no-norm form (`!out`), the f16 twin beside where `byh` is bound
-def enc_residual_wide(enc : MetalComputeEncoder?; bx, ba, bw, by, byh : MetalBuffer?; pre, out : bool; var ka : GkAddRmsArgs; nrows : int64) {
-    if (!out) {
-        enc_preadd_bw_c(enc, bx, ba, bw, ka, nrows)
-    } elif (pre && byh != null) {
-        enc_preaddrms_bhxw_c(enc, bx, ba, bw, by, byh, ka, nrows)
-    } elif (pre) {
-        enc_preaddrms_bw_c(enc, bx, ba, bw, by, ka, nrows)
-    } elif (byh != null) {
-        enc_add_rms_bhxw_c(enc, bx, ba, bw, by, byh, ka, nrows)
-    } else {
-        enc_add_rms_bw_c(enc, bx, ba, bw, by, ka, nrows)
+//! the residual step's split chain over `nrows` rows of width `dim`: `ba` under `bwp` into `ban` (skipped where `bwp` is null), x +=
+//! that row . `bosc` (one where null), then x's norm under `bw` into `by` (`byh` its f16 twin; skipped where `bw` is null)
+def enc_residual_split(enc : MetalComputeEncoder?; form : ResidualForm; bx, ba, ban, bwp, bosc, bw, by, byh : MetalBuffer?;
+                       u : ResidualUniforms; dim, nrows : int64) {
+    if (bwp != null) {
+        enc_rms_form(enc, form, ba, bwp, ban, null, u, nrows)
+    }
+    enc_add(enc, bx, 0ul, bwp != null ? ban : ba, 0ul, u.btot, nrows * dim, bosc)
+    if (bw != null) {
+        enc_rms_form(enc, form, bx, bw, by, byh, u, nrows)
     }
 }
 
 //! the split chain's norm: `bx`'s rows under `bw` into `by` (`byh` its f16 twin where bound), in the residual form's shape
-def private enc_rms_form(enc : MetalComputeEncoder?; form : ResidualForm; bx, bw, by, byh : MetalBuffer?; u : ResidualUniforms; nrows : int64) {
+def enc_rms_form(enc : MetalComputeEncoder?; form : ResidualForm; bx, bw, by, byh : MetalBuffer?; u : ResidualUniforms; nrows : int64) {
     if (form == ResidualForm.window) {
         if (byh != null) {
             pf_enc_rms_hx(enc, bx, 0ul, bw, by, u.bdim, u.beps, byh, nrows)

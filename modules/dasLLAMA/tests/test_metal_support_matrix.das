@@ -12,6 +12,7 @@ require dasllama/dasllama_parity   // nolint:STYLE030,LINT019 — cached_ids/cac
 require ?das_metal dasllama/dasllama_metal_decode  // stats/declines/shutdown rails
 require ?das_metal dasllama/dasllama_metal_prefill  // prefill stats/declines rails
 require ?das_metal dasllama/dasllama_metal_common  // the kernel coverage census (tensor-twin cell)
+require ?das_metal dasllama/dasllama_metal_kernels  // metal_residual_lanes - the past-slab seam census's lane witness
 require ?das_metal metal/das_metal_boost  // device probe + metal_live_object_count
 require daslib/jobque_boost
 require daslib/fio   // nolint:STYLE030,LINT019 — used only inside the Apple static_if half
@@ -1129,6 +1130,82 @@ def private seam_counts : int4 {
         int(kernels_sum(["metal_add_rms", "metal_add_rms_hx"])), int(kernels_sum(["MetalRmsNorm_metal_rmsnorm", "MetalRmsNormHX_metal_rmsnorm"])))
 }
 
+//! past the 4096-float slab (`ADD_RMS_MAX_DIM`) the residual seams of the blob twin `trg`'s decode, two single steps and a batched
+//! step over device-prefilled prompts: the fuse rail pinned on, every seam one dispatch on the 1024-lane builders and no split
+//! chain; pinned off, the split chain's norm passes and no one-dispatch seam (the control); the rail and the overrides put back
+[unused_argument(t, trg, tag)]   // off-Apple the gated body is empty
+def private past_slab_seam_cell(t : T?; var trg : Model; tag : string) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        let c = trg.config
+        let nl = int(c.n_layers)
+        let vocab = c.vocab_size
+        t |> success(c.dim > ADD_RMS_MAX_DIM, "{tag}: the row is past the slab (dim {c.dim})")
+        let pa <- encode(trg, counting_prompt(1, 30), true, false)
+        let pb <- encode(trg, counting_prompt(7, 36), true, false)
+        let seat = metal_overrides_seat()
+        let fuse = get_metal_decode_fuse()
+        t |> success(select_prefill_override("metal"), "{tag}: prefill override registered")
+        t |> success(select_decode_override("metal"), "{tag}: decode override registered")
+        set_metal_prefill_min_npos(1l)
+        for (on in fixed_array(true, false)) {
+            set_metal_decode_fuse(on ? 1 : 0)
+            var sa = make_run_state(c, KVDtype.f16, KVDtype.f16)
+            var sb = make_run_state(c, KVDtype.f16, KVDtype.f16)
+            eval_(trg, sa, pa)
+            eval_(trg, sb, pb)
+            let sm0 = seam_counts()
+            let ln0 = metal_residual_lanes()
+            let st0 = metal_decode_stats().decodes
+            let ba0 = metal_batch_decode_stats().steps
+            for (_i in range(2)) {
+                var one <- [argmax_of(sa.logits, vocab)]
+                eval_(trg, sa, one)
+                delete one
+            }
+            var ws <- create_batch_workspace_(trg)
+            var sess : array<Session?>
+            unsafe {
+                sess |> push(addr(sa))
+                sess |> push(addr(sb))
+            }
+            var cur <- [argmax_of(sa.logits, vocab), argmax_of(sb.logits, vocab)]
+            eval_batch_(trg, ws, sess, cur)
+            let sm = seam_counts() - sm0
+            let ln = metal_residual_lanes()
+            let narrow = ln.narrow - ln0.narrow
+            let wide = ln.wide - ln0.wide
+            let nst = metal_decode_stats().decodes - st0
+            let nba = metal_batch_decode_stats().steps - ba0
+            let fused = on ? "fused" : "split"
+            to_log(LOG_INFO, "{tag} past the slab, {fused}: {nst} steps, {nba} batched - pre_add_rms {sm.x}, pre_add {sm.y}, add_rms {sm.z}, rms {sm.w}; one dispatches on 256 lanes {narrow}, on 1024 lanes {wide}\n")
+            t |> success(nst >= 2l && nba == 1l, "{tag} {fused}: the steps and the batched step ran on the device ({nst}, {nba})")
+            if (on) {
+                let nenc = (sm.x + sm.y) / (2 * nl)   //! the encoded layer stacks: two seams a layer
+                t |> success(int64(nenc) >= nst + nba && sm.x + sm.y == nenc * 2 * nl,
+                    "{tag} fused: every seam one dispatch ({sm.x} + {sm.y} over {nenc} stacks of {nl} layers)")
+                t |> equal(sm.z, 0, "{tag} fused: no plain seam on the sandwich")
+                t |> success(sm.w <= nenc, "{tag} fused: no split chain's norm pass ({sm.w} norm passes over {nenc} stacks)")
+                t |> equal(wide, int64(sm.x + sm.y), "{tag} fused: every seam on the decode rows' 1024-lane builders")
+                t |> equal(narrow, 0l, "{tag} fused: no seam on the 256-lane builders")
+            } else {
+                t |> equal(sm.x + sm.y, 0, "{tag} split: no one-dispatch seam - the control")
+                t |> equal(narrow + wide, 0l, "{tag} split: no residual one dispatch on either lane width")
+                t |> success(int64(sm.w) >= (nst + nba) * int64(4 * nl - 1), "{tag} split: the split chain's norm passes ({sm.w} over {nst + nba} stacks)")
+            }
+            sess |> clear()   // drop the borrowed handles: delete of array<T?> cascades to the pointees
+            unsafe {
+                delete ws
+                delete sess
+            }
+            delete cur
+            delete sa
+            delete sb
+        }
+        set_metal_decode_fuse(fuse)
+        restore_metal_overrides(seat)
+    }
+}
+
 //! the E-series side rows' projections the device ran: the bf16 word form's two stamps and the f32 router's
 def private ple_proj_count : int64 => kernels_sum(["metal_ple_proj_bf16", "metal_ple_proj_bf16_one", "metal_moe_router"])
 
@@ -2092,6 +2169,9 @@ def private gemma4_hetero_row(t : T?; path : string; tag : string = "gemma4-12b/
             gpu_bat <- batch_pair_steps(tr, trg, count_prompt, count_prompt2, 4)   // nolint:PERF030,LINT019 — fresh empty target, single move; fires only on the das_metal arm
             restore_metal_overrides(seat)
             served_bat = metal_batch_decode_stats().steps - ba0
+            if (trg.config.dim > ADD_RMS_MAX_DIM) {
+                past_slab_seam_cell(t, trg, tag)
+            }
         }
         to_log(LOG_INFO, "{tag} freeform CPU text (prompt echo + cont): {eyeball_text(tr, cpu_ids)}\n")
         to_log(LOG_INFO, "{tag} freeform GPU greedy-would-be cont (fmaxd {fmaxd} at row {fmax_at}, CPU max |logit| there {fmax_peak}): {eyeball_text(tr, gpu_picks)}\n")

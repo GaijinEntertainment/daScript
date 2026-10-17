@@ -359,7 +359,10 @@ the tail on its unfused chain under
 decode's v-norm arms in the q/k norm's dispatch), every leg's prefill and forced-step rows against the CPU truth one step off
 outside their bars (the bars' control); fam-gemma4's 12B and 31B rows hold the forced-feed freeform decode within 8 over the
 rows the row names (128 on the 12B, the 29 ahead of the 31B's one-token loop), every one of those GPU rows against the CPU row
-one step back outside it (the control);
+one step back outside it (the control); the 31B row, past the 4096-float slab, adds the residual seam census
+(`past_slab_seam_cell`): two device steps and a batched step with the fuse rail pinned on, every seam one dispatch on the
+1024-lane builders (`metal_residual_lanes`) and none on the 256-lane ones or the split chain, then pinned off (put back), the
+split chain's norm passes and no one-dispatch seam (the control);
 fam-qwen35's batch cell asserts the batched step ENGAGES on the deltanet hybrid's blob twin
 and compares it against the single-row GPU step; fam-qwen2moe's batch cell compares the blob
 twin's batched step against the CPU batched stack on the planar model - the two arms the
@@ -593,11 +596,11 @@ columns, pad columns and two column groups, y rows past `d`, on the two-row stam
 64-block row among them) bit for bit against the same form's one-row GEMV a row at a time over x off
 the dyadic lattice, the GEMV within a double dot's envelope, and the routed GEMV (`moe_b32_rows_gate`: q51, iq4nl32, q4032, q5032 and mx4's
 E8M0 path) over several streams in one dispatch bit for bit against one stream a dispatch; the E-series pre-step's cells
-(`ple_proj_bf16_gate`: the bf16 rows through `enc_ple_proj_bf16_rows` - the word-pair stamps at an even dim and base, eight
+(the bf16 and f32 rows' cells one gate, `router_gemv_gate`, over the two weight packings; `ple_proj_bf16_gate`: the bf16 rows through `enc_ple_proj_bf16_rows` - the word-pair stamps at an even dim and base, eight
 columns a simdgroup and the decode column's threadgroup a row at 1536 wide, and the halfword stamps at an odd dim or base,
 1537 and 1536 wide on the decode column past whole strides - past a lead of NaN halves with a NaN word after the rows, exact
 against the dot in double, the poisoned lead element the control; `f32_rows_gate`: the f32 rows through `enc_f32_rows_gemv` -
-the float4 router stamps on the lattice, the element-walk stamps off it (dim 66, base 2, dim 515 on an odd base, the one-column
+the float4 router stamps on the lattice, with and without the bias row, the element-walk stamps off it (dim 66, base 2, dim 515 on an odd base, the one-column
 walk past whole strides) - NaN past both row ends, exact against the dot in double, the poisoned lead element the control; `geglu_side_gate`, `ple_finish_gate` - the finish's `XSCALE` stamp (`GkPleFinish`), the finish without the
 prescale its control); the side rows' gather rides the token-table family, the misc file's embed gates. The prefill file's `qk_rope_gate`
 carries the window's V arms (V off the pre-norm k rows, the v-norm in place, the V panel bit for bit untouched with neither), and
