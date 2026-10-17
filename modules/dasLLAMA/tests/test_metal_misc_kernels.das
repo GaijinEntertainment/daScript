@@ -484,6 +484,8 @@ def private add_rms_gate(t : T?; var dev, queue; stamp : ArStamp; single : bool;
         }
         return if (!ran)
         check_buf(t, "{tag} x", mc.buf[bx], want_x, BAR_TIGHT, Shape(row_width = dim))
+        t |> success(moved_off(want_x, xv, 0, BAR_TIGHT) && moved_off(want_x, xv, total - 1, BAR_TIGHT),
+            "{tag} x in place: the first row's first column and the last row's last column moved off x")
         if (stamp == ArStamp.pre_add) {
             var inscope untouched <- [for (_i in range(total)); PAD_SENTINEL]
             check_buf(t, "{tag} y untouched", mc.buf[by], untouched, BAR_EXACT, Shape(row_width = dim))
