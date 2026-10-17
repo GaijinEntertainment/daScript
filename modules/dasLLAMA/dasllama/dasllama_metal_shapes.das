@@ -452,10 +452,10 @@ def moe_metal_ok(t : Model) : bool {   // nolint:STYLE038 — flat per-shape ref
         let she = c.dim * c.n_ff_shexp
         if (!c.moe_shexp_gated ||
                 (c.n_ff_shexp % 64l) != 0l || (she % 256l) != 0l ||
-                (t.wsh1_off % 256l) != 0l || (t.wsh2_off % 256l) != 0l || (t.wsh3_off % 256l) != 0l) {
+                (t.wsh1_off % 256l) != 0l || (t.wsh2_off % 256l) != 0l || (t.wsh3_off % 256l) != 0l ||
+                !empty(shexp_fmts_unserved(t))) {
             return false
         }
-        return false if (!empty(shexp_fmts_unserved(t)))
     }
     let ne = c.n_expert
     let k = c.n_expert_used

@@ -275,7 +275,8 @@ in prefill) and the tuner calls those public entries.
 
 **Decline REASONS are enum values in the shapes module** (`MetalDecodeDecline`, `MetalPrefillDecline`);
 decline COUNTING lives in `<gpu>_common` beside `require_or_panic`, for both paths. A reason a plane format decided
-(`kquant_native`, `graph` on a routed stack) keeps its enum value in the declines-by-reason table, and the shapes
-module's `metal_fmt_decline_say` logs the site and `KqFmt` member beside it once per line.
+(`kquant_native`; `graph` on a routed stack, a shared expert or a deltanet plane) keeps its enum value in the
+declines-by-reason table; the shapes module's `metal_fmt_decline_say` logs the site and `KqFmt` member beside it once
+per line and hands the same words to the decline, whose required-mode panic prints them in place of the bare reason.
 
 Vulkan is the deliberately-designed model of this shape; Metal converges as it is touched.

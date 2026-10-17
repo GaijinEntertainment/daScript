@@ -764,8 +764,10 @@ Every backend's decline names the site (`kq_site_words`, `dasllama_kqformat.das`
 - Metal: `decode_shape_decline` (`dasllama_metal_shapes.das`) answers
   `MetalDecodeDecline.kquant_native` for a dense or table plane whose format
   `kq_fmt_gpu_supported` refuses (`kq_load_gpu_unserved` names it), and `moe_fmt_metal_served`
-  keeps an expert stack off the device under `graph` (`moe_fmts_unserved`); the drivers log
-  `metal_fmt_decline_line` once before they count the decline.
+  keeps an expert stack off the device under `graph` (`moe_fmts_unserved`), as the shared
+  expert's and the deltanet planes' one-row GEMVs do theirs (`shexp_fmts_unserved`,
+  `dn_fmts_unserved`); the drivers log `metal_fmt_decline_line` once and hand its words to the
+  decline, so the required-mode panic names the same site and member.
 
 The kernel census holds the dispatch counts the cells assert, so a new stamp joins its
 backend's list in the same change:

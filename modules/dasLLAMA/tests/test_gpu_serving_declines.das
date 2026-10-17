@@ -608,6 +608,11 @@ def test_metal_fmt_decline_names_site(t : T?) {
             "dasLLAMA metal prefill: declined graph - layer 1's expert stack down plane is mx4, a format the Metal kernels do not read there; the CPU serves the call")
         delete m
     }
+}
+
+//! the routed block's other `graph` declines name their plane the same way: a sigmoid-gated shared expert's, a deltanet plane's
+[test]
+def test_metal_graph_decline_names_site(t : T?) {
     t |> run("a sigmoid-gated shared expert's unserved format names its layer, site and member under graph") @(t : T?) {
         var m <- moe_shell(KqFmt.k4)
         m.config.n_ff_shexp = 256l
@@ -650,6 +655,11 @@ def test_metal_fmt_decline_names_site(t : T?) {
         t |> equal(dn_ba_window_fmts_unserved(m), "layer 1's deltanet alpha plane is mx4")
         delete m
     }
+}
+
+//! under `MetalMode.required` a plane-format decline panics with the words its warning line logs, not the bare reason
+[test]
+def test_metal_decline_panic_names_site(t : T?) {
     t |> run("the required-mode panic carries the site and member the warning line names") @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
             var m <- shell(2l, 0ul)
