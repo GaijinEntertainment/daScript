@@ -58,6 +58,15 @@ def test_unregister_decode_override(t : T?) {
         select_decode_override(found)
         unregister_decode_override(PROBE)
         t |> equal(active_decode_override(), found, "an inactive override unregistered leaves the selection as found")
+        register_decode_override(PROBE, @@decode_declines)
+        select_decode_override(PROBE)
+        t |> success(!batch_decode_override_armed(), "the batched step went with the override: the name re-registered single-stream arms no batch twin")
+        register_batch_decode_override(PROBE, @@probe_batch)
+        select_decode_override(PROBE)
+        t |> success(batch_decode_override_armed(), "the control: a batched step registered under the name arms with it")
+        select_decode_override(found)
+        unregister_decode_override(PROBE)
+        t |> equal(active_decode_override(), found, "the selection found is put back")
         t |> success(!has_decode_override(PROBE), "the probe is unregistered after the cell")
     }
 }

@@ -2353,6 +2353,10 @@ def test_metal_ring_slack_reload(t : T?) {
         bump_weights_epoch()
         t |> equal(g_mirror_ring_slack, MIRROR_RING_SLACK_MIN, "the reload returns the slack to its floor")
         t |> success(g_arena_epoch > epoch0, "the reload's slack drop stales the steps encoded over the old layout")
+        let epoch1 = g_arena_epoch
+        bump_weights_epoch()
+        t |> equal(g_mirror_ring_slack, MIRROR_RING_SLACK_MIN, "a reload at the floor leaves the slack there")
+        t |> equal(g_arena_epoch, epoch1, "a reload at the floor moves no row, so no encoded step goes stale")
         g_mirror_ring_slack = was
     } else {
         t |> skip("das_metal is not built on this platform; the Metal drivers are not compiled")
