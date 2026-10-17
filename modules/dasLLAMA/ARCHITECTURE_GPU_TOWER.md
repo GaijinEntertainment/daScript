@@ -30,6 +30,14 @@ encode hook, `convs` for a front, conv or chunk hook; for the mel hook `mels` on
 on either tower, `styletts2_gpu_stats(<seat>)`'s or `pocket_gpu_stats(<seat>)`'s `served` for a
 TTS seat.
 
+### The returns to the CPU a Metal chain makes {#tower-cpu-returns}
+
+A stage of a Metal tower or ASR-decoder chain returns its work to the CPU in four cases and no
+other: `DASLLAMA_METAL_TOWER` is 0 (`DASLLAMA_METAL_WDEC` for the cross-KV; `DASLLAMA_METAL_WDEC`
+or `DASLLAMA_METAL_WDEC_STEP` for the decode step), the decoder sits under the decode step's width
+floor (`set_metal_wdec_step_min_d`), no Metal device is present, or the stage's command buffer
+failed.
+
 ### The tower attention routes {#tower-attn-routes}
 
 A tower head width is padded to `hs_pad = max(64, ceil32(hs))` - 72 and 80 both land on 96 -
