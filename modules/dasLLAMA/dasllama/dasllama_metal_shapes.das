@@ -273,28 +273,46 @@ def dn_metal_ok(t : Model) : bool {
     if (c.ssm_d_state != 128l || c.ssm_d_conv < 2l || c.ssm_d_conv > 8l) {
         return false
     }
+    return empty(dn_fmts_unserved(t))
+}
+
+//! layer `l`'s plane (`words`) in format `f` named by layer, site and `KqFmt` member where this home has no one-row GEMV for it at
+//! K `kdim`; "" where it has one
+def private one_row_unserved(l : int64; words : string; f : KqFmt; kdim : int64) : string =>
+    kq_fmt_one_row_gemv(f, kdim) ? "" : "layer {l}'s {words} plane is {f}"
+
+//! the first recurrent layer's deltanet plane this home has no one-row GEMV for, named by layer, site and `KqFmt` member; "" when
+//! every one has its GEMV - `dn_metal_ok` refuses the hybrid on it, and the gates decline `graph`
+def dn_fmts_unserved(t : Model) : string {
+    let c = t.config
     for (l in range64(c.n_layers + c.n_layer_nextn)) {
-        if (layer_is_recurrent(c, l) && (!kq_fmt_one_row_gemv(fmt_at(t.dnqkv_fmt, l), c.dim) ||
-                !kq_fmt_one_row_gemv(fmt_at(t.dngate_fmt, l), c.dim) ||
-                !kq_fmt_one_row_gemv(fmt_at(t.dnout_fmt, l), c.ssm_d_inner) ||
-                !kq_fmt_one_row_gemv(fmt_at(t.dnbeta_fmt, l), c.dim) ||
-                !kq_fmt_one_row_gemv(fmt_at(t.dnalpha_fmt, l), c.dim))) {
-            return false
-        }
+        continue if (!layer_is_recurrent(c, l))
+        var why = one_row_unserved(l, "deltanet qkv", fmt_at(t.dnqkv_fmt, l), c.dim)
+        why = empty(why) ? one_row_unserved(l, "deltanet gate", fmt_at(t.dngate_fmt, l), c.dim) : why
+        why = empty(why) ? one_row_unserved(l, kq_site_words("ssm_out"), fmt_at(t.dnout_fmt, l), c.ssm_d_inner) : why
+        why = empty(why) ? one_row_unserved(l, kq_site_words("ssm_beta"), fmt_at(t.dnbeta_fmt, l), c.dim) : why
+        why = empty(why) ? one_row_unserved(l, kq_site_words("ssm_alpha"), fmt_at(t.dnalpha_fmt, l), c.dim) : why
+        return why if (!empty(why))
     }
-    return true
+    return ""
 }
 
 //! the window's β/α rows: a K-quant plane rides its batched expert-form GEMV (one plane, every row a stream), so its
 //! format needs that form (`moe_fmt_metal_served`); q8 planes ride `pf_enc_dn_ba`, f32 ones the slab GEMV
-def dn_ba_metal_window_ok(t : Model) : bool {
+def dn_ba_metal_window_ok(t : Model) : bool => empty(dn_ba_window_fmts_unserved(t))
+
+//! the first recurrent layer's β/α plane whose format has no batched expert-form GEMV, named by layer, site and `KqFmt` member;
+//! "" when both have it on every layer - the prefill declines `graph` on it
+def dn_ba_window_fmts_unserved(t : Model) : string {
     let c = t.config
     for (l in range64(c.n_layers + c.n_layer_nextn)) {
-        if (layer_is_recurrent(c, l) && (!moe_fmt_metal_served(fmt_at(t.dnbeta_fmt, l)) || !moe_fmt_metal_served(fmt_at(t.dnalpha_fmt, l)))) {
-            return false
-        }
+        continue if (!layer_is_recurrent(c, l))
+        let fb = fmt_at(t.dnbeta_fmt, l)
+        let fa = fmt_at(t.dnalpha_fmt, l)
+        return "layer {l}'s {kq_site_words("ssm_beta")} plane is {fb}" if (!moe_fmt_metal_served(fb))
+        return "layer {l}'s {kq_site_words("ssm_alpha")} plane is {fa}" if (!moe_fmt_metal_served(fa))
     }
-    return true
+    return ""
 }
 
 // (q8 32-blocks, kq 256-superblocks — the expert shift is index math, no base multiple)
@@ -346,30 +364,59 @@ def moe_fmts_unserved(t : Model) : string {
     return ""
 }
 
-//! the line a Metal driver logs for a decline `why` names: the site and `KqFmt` member of the plane the gate stopped at, under
-//! `kquant_native` (a dense or table plane) and `graph` (a routed stack); "" for a decline no plane format decided
-def metal_fmt_decline_line(kind, why : string; t : Model) : string {
-    let site = why == "kquant_native" ? kq_load_gpu_unserved(t) : why == "graph" ? moe_fmts_unserved(t) : ""
-    return empty(site) ? "" : "dasLLAMA metal {kind}: declined {why} - {site}, a format the Metal kernels do not read there; the CPU serves the call"
+//! the first layer's sigmoid-gated shared expert plane this home has no one-row GEMV for, named by layer, site and `KqFmt` member;
+//! "" when every one has its GEMV, or the MoE carries no such branch - `moe_metal_ok` declines `graph` on it
+def shexp_fmts_unserved(t : Model) : string {
+    let c = t.config
+    return "" if (!c.moe || c.n_ff_shexp <= 0l || c.moe_dense_shexp)
+    for (l in range64(c.n_layers + c.n_layer_nextn)) {
+        var why = one_row_unserved(l, kq_site_words("ffn_gate_shexp"), shexp_plane(t, l, 1).f, c.dim)
+        why = empty(why) ? one_row_unserved(l, kq_site_words("ffn_up_shexp"), shexp_plane(t, l, 3).f, c.dim) : why
+        why = empty(why) ? one_row_unserved(l, kq_site_words("ffn_down_shexp"), shexp_plane(t, l, 2).f, c.n_ff_shexp) : why
+        return why if (!empty(why))
+    }
+    return ""
 }
+
+//! the words a Metal decline `why` adds beside its enum value: the site and `KqFmt` member of the plane the gate stopped at, under
+//! `kquant_native` (a dense or table plane) and `graph` (a routed stack, a shared expert, a deltanet plane, and on the `prefill`
+//! window the β/α planes' batched form); "" for a decline no plane format decided
+def metal_fmt_decline_words(kind, why : string; t : Model) : string {
+    var site = ""
+    if (why == "kquant_native") {
+        site = kq_load_gpu_unserved(t)
+    } elif (why == "graph") {
+        site = moe_fmts_unserved(t)
+        site = empty(site) ? shexp_fmts_unserved(t) : site
+        site = empty(site) ? dn_fmts_unserved(t) : site
+        site = empty(site) && kind == "prefill" ? dn_ba_window_fmts_unserved(t) : site
+    }
+    return empty(site) ? "" : "{why} - {site}, a format the Metal kernels do not read there"
+}
+
+//! the line a Metal driver logs for a decline whose `metal_fmt_decline_words` name a plane; "" for one they do not
+def metal_fmt_decline_line(kind, why : string; t : Model) : string => fmt_line(kind, metal_fmt_decline_words(kind, why, t))
+
+def private fmt_line(kind, words : string) : string => empty(words) ? "" : "dasLLAMA metal {kind}: declined {words}; the CPU serves the call"
 
 var private g_fmt_decline_said : string   //! the last `metal_fmt_decline_line` logged: a decline repeats every step, the line once
 
-//! log `metal_fmt_decline_line` for a decline the driver is about to count, once while the same line repeats
+//! log `metal_fmt_decline_line` for a decline the driver is about to count, once while the same line repeats; the words it names,
+//! which the required-mode panic carries ("" for a decline no plane format decided)
 [cold_path]
-def fmt_decline_say(kind, why : string; t : Model) {
-    let line = metal_fmt_decline_line(kind, why, t)
+def fmt_decline_say(kind, why : string; t : Model) : string {
+    let words = metal_fmt_decline_words(kind, why, t)
+    let line = fmt_line(kind, words)
     if (!empty(line) && line != g_fmt_decline_said) {
         g_fmt_decline_said = line
         to_log(LOG_WARNING, "{line}\n")
     }
+    return words
 }
 
 //! `fmt_decline_say` under a driver's decline enum (`MetalDecodeDecline`, `MetalPrefillDecline`), its name spelled off the hot path
 [cold_path]
-def metal_fmt_decline_say(kind : string; why : auto(E); t : Model) {
-    fmt_decline_say(kind, "{why}", t)
-}
+def metal_fmt_decline_say(kind : string; why : auto(E); t : Model) : string => fmt_decline_say(kind, "{why}", t)
 
 //! The MoE serve gate: plain routed FFN (qwen3moe), the sigmoid-gated shared expert (qwen35moe), gemma4's dense-shared branch,
 //! gpt-oss's gate (softmax_weight, biases) over mx4 experts; no dense lead or selection bias. The stack format is its own axis:
@@ -405,14 +452,9 @@ def moe_metal_ok(t : Model) : bool {   // nolint:STYLE038 — flat per-shape ref
         let she = c.dim * c.n_ff_shexp
         if (!c.moe_shexp_gated ||
                 (c.n_ff_shexp % 64l) != 0l || (she % 256l) != 0l ||
-                (t.wsh1_off % 256l) != 0l || (t.wsh2_off % 256l) != 0l || (t.wsh3_off % 256l) != 0l) {
+                (t.wsh1_off % 256l) != 0l || (t.wsh2_off % 256l) != 0l || (t.wsh3_off % 256l) != 0l ||
+                !empty(shexp_fmts_unserved(t))) {
             return false
-        }
-        for (l in range64(c.n_layers + c.n_layer_nextn)) {
-            if (!kq_fmt_one_row_gemv(shexp_plane(t, l, 1).f, c.dim) || !kq_fmt_one_row_gemv(shexp_plane(t, l, 3).f, c.dim) ||
-                    !kq_fmt_one_row_gemv(shexp_plane(t, l, 2).f, c.n_ff_shexp)) {
-                return false
-            }
         }
     }
     let ne = c.n_expert

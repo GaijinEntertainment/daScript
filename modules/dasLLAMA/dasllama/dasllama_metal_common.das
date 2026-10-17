@@ -632,11 +632,11 @@ struct DeclineCounter {
 }
 
 [cold_path]   // the decline leg IS the fall-off-the-GPU path; its bookkeeping is not hot
-def note_decline(var c : DeclineCounter; kind, why : string; policy : bool = false) {
+def note_decline(var c : DeclineCounter; kind, why : string; policy : bool = false; words : string = "") {
     c.total++
     c.by_reason[why]++
     if (!policy) {
-        require_or_panic(kind, why)
+        require_or_panic(kind, empty(words) ? why : words)
     }
 }
 
@@ -650,8 +650,8 @@ def note_decline(var c : DeclineCounter; kind, why : string; missing : MetalNeed
 }
 
 [cold_path]
-def decline(why : MetalDecodeDecline) {
-    note_decline(g_decode_declines, "decode", "{why}")
+def decline(why : MetalDecodeDecline; words : string = "") {   //! words: the site and member a plane-format decline names (`metal_fmt_decline_say`)
+    note_decline(g_decode_declines, "decode", "{why}", words = words)
 }
 
 [cold_path]
@@ -660,8 +660,8 @@ def decline(why : MetalDecodeDecline; missing : MetalNeed) {
 }
 
 [cold_path]
-def batch_decline(why : MetalDecodeDecline) {
-    note_decline(g_batch_declines, "batch decode", "{why}")
+def batch_decline(why : MetalDecodeDecline; words : string = "") {
+    note_decline(g_batch_declines, "batch decode", "{why}", words = words)
 }
 
 [cold_path]
@@ -3132,8 +3132,8 @@ def metal_common_release {
 var g_prefill_declines : DeclineCounter
 
 [cold_path]
-def decline(why : MetalPrefillDecline) {
-    note_decline(g_prefill_declines, "prefill", "{why}", policy = why == MetalPrefillDecline.npos_window)
+def decline(why : MetalPrefillDecline; words : string = "") {
+    note_decline(g_prefill_declines, "prefill", "{why}", policy = why == MetalPrefillDecline.npos_window, words = words)
 }
 
 [cold_path]

@@ -3338,8 +3338,7 @@ def metal_decode_forward(t : Model; var s : Session; token, pos : int64) : bool 
         if (why == MetalDecodeDecline.feature) {
             decline(why, metal_missing_needs(t, DECODE_NEEDS_OK))
         } else {
-            metal_fmt_decline_say("decode", why, t)
-            decline(why)
+            decline(why, metal_fmt_decline_say("decode", why, t))
         }
         return false
     }
@@ -3755,8 +3754,7 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
         if (why == MetalDecodeDecline.feature) {
             batch_decline(why, metal_missing_needs(t, BATCH_NEEDS_OK))
         } else {
-            metal_fmt_decline_say("batch decode", why, t)
-            batch_decline(why)
+            batch_decline(why, metal_fmt_decline_say("batch decode", why, t))
         }
         return false
     }
