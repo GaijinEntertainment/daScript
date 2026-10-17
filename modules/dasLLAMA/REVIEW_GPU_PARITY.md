@@ -39,8 +39,8 @@ marked as a probe's, never as evidence.
 
 **A diff that cites as parity evidence a `tests/run.das` cell that compares a continuous output
 other than within a bar, or a discrete output other than exactly, is a defect.** A continuous
-output is floats, or float rows in an encoding that rounds them; a discrete output is ids, tokens
-or counts.
+output is floats, float rows in an encoding that rounds them, or a tally of matching rows, whose
+bar is the most misses it accepts; a discrete output is ids or tokens compared row by row.
 
 **A diff that adds or changes, in a `PERF_LEDGER.md`, `followup_metal.md` or `followup_vulkan.md`
 entry, a reading offered as parity evidence names in that entry the run
@@ -49,11 +49,12 @@ run - and, for a `tests/run.das` run, the cell that read it; an entry crediting 
 cell that does not produce it is a defect.**
 
 **A diff that cites Metal parity evidence, or Metal driver-against-itself evidence, whose GPU
-side is a decode or prefill step, with no cell assert or logged before/after reading, across every
-GPU call whose reading it cites, of one of these counters rising - `metal_decode_stats`' `decodes`,
-`metal_batch_decode_stats`' `steps`, `metal_prefill_stats`' `prefills`, or a
-`metal_kernel_coverage_of` count of a kernel only the device-served step dispatches - is a
-defect.** Without the counter the run may have measured the CPU.
+side is a decode, prefill or draft step, with no cell assert or logged before/after reading, across
+every GPU call whose reading it cites, of a value only the device-served step produces -
+`metal_decode_stats`' `decodes`, `metal_batch_decode_stats`' `steps` or `metal_prefill_stats`'
+`prefills` rising, `gemma_draft_step_gpu` returning true, or a `metal_kernel_coverage_of` count of
+a kernel only the device-served step dispatches rising - is a defect.** Without that value the run
+may have measured the CPU.
 
 **A diff that cites Metal parity or driver-against-itself evidence of the Metal tower driver or
 the ASR-decoder driver (`dasllama/dasllama_metal_asr_dec.das`) with no cell assert or logged
@@ -98,7 +99,8 @@ compare is evidence for a `PERF_LEDGER.md` row.**
 
 **A diff that holds a model file's serving-call output, in a compare offered as parity evidence,
 to a bar no earlier such compare held that file to, or changes the constant - or the statistic the
-constant multiplies - of such a bar, adds a `PERF_LEDGER.md` row in the same change naming the bar
+constant multiplies - of such a bar, or which rows, steps or positions such a bar reads, adds a
+`PERF_LEDGER.md` row in the same change naming the bar
 (its named constant, where it has one, and its value), the reading it comes from and the box that
 read it.**
 

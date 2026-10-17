@@ -97,8 +97,8 @@ call - lands in a tier file,
 `register_kernel_backend` call in another tier file names, or that two tier files' calls name,
 lands in `dasllama/dasllama_math_default.das`.**
 
-**A branch - one arm of an `if` or a `match` - only one model family takes lands in that family's
-own file (`dasllama/dasllama_arch_<name>.das` for a text model, `dasllama/dasllama_<family>.das`
+**A branch - one arm of an `if` or a `match` - that only one model family takes, in a file whose
+charter line names no concern of that family, lands in that family's own file (`dasllama/dasllama_arch_<name>.das` for a text model, `dasllama/dasllama_<family>.das`
 for a media or speech model).**
 
 **Engine code - a `dasllama/` file in no row of the role table of

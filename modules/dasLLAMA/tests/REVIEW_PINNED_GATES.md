@@ -114,10 +114,13 @@ order; a new input row on an axis the cell already asserts is not an axis gained
 **A diff that widens a pinned test cell's tolerance, swaps its comparison for one more outputs
 pass, rewrites an expected value without updating the cell's entry under the contract-change rule
 above, drops its input, or drops a `run.das` suite listing that reaches it is a defect - keep the
-cell's asserts and fix the code that fails them instead; so is a diff that removes a pinned
-test cell's assert without adding to the same cell, in the same change, an assert that holds the
-same values to an equal or tighter bound, with its control (an extra assert in the same cell
-proving the compare can fail).**
+cell's asserts and fix the code that fails them instead.**
+
+**A diff that removes a pinned test cell's assert adds to the same cell, in the same change, an
+assert that holds the same values to an equal or tighter bound, with its control (an extra assert
+in the same cell proving the compare can fail); when the diff deletes the kernel or function the
+assert checks, the assert moves instead to a pinned cell testing that code's replacement, or the
+cell's entry names the replacement and the cell that tests it.**
 
 **A diff that adds a cell or an assert whose expected value must be kept in step with something
 maintained outside the cell - a document, a checked-in table, a committed artifact's form, a
