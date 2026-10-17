@@ -4348,11 +4348,12 @@ class MoeCmBase {
         }
     }
 
-    def region_rec : uint4 => region_rec_from(pa.map_off)
+    //! the per-wg map's word offset in `sched`: the push block's, or a stamp's own where every dispatch of it passes one
+    [spirv_inline]
+    def map_word : uint => pa.map_off
 
-    //! the region record of this workgroup off the per-wg map at word `moff`
-    def region_rec_from(moff : uint) : uint4 {
-        let rid = sched[moff + gl_WorkGroupID.x]
+    def region_rec : uint4 {
+        let rid = sched[map_word() + gl_WorkGroupID.x]
         if (rid == SCHED_NONE) {
             return uint4(0u, 0u, 0u, 0u)
         }
@@ -5884,7 +5885,6 @@ class template KqCm2BatchT : MoeCmBase {
     @template_constant IQ2XXSGRID : bool = false          // stage the 2 KB iq2xxs u64 grid into workgroup memory
     @workgroup @template_gate = IQ2XXSGRID iq2xxs_gridc : uint[512]
     @template_constant SCALES : bool = true               //!< the format reads a scale plane at binding 1 (a file's f32 rows carry none)
-    @template_constant MAP_OFF : uint = 0u                //!< the per-wg map's word offset where every dispatch of the stamp passes the same one; 0 reads `pa.map_off`
     @template_constant KHR : bool = false                 //!< the KHR cooperative-matrix arm: hand-staged f16 tiles over the format's own decode, no cm2 API (a card without NV_coopmat2)
     @workgroup @template_gate = KHR khr_ao : uint[int(128u * KHR_STRIDE)]   //! the A stage: 128 weight rows of f16 pairs; then the edge tile's f32 store bounce, 8 subgroups x 256 words
     @workgroup @template_gate = KHR khr_b : uint[int(128u * KHR_STRIDE)]    //! the B stage: BN (128) token rows of f16 pairs
@@ -5897,12 +5897,7 @@ class template KqCm2BatchT : MoeCmBase {
 
     [spirv_kernel(local_size_x = 256), arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
     def run {
-        var reg : uint4
-        static_if (MAP_OFF != 0u) {
-            reg = region_rec_from(MAP_OFF)
-        } else {
-            reg = region_rec()
-        }
+        let reg = region_rec()
         let wblk0 = reg.x
         let row0 = reg.y
         let cnt = reg.z
@@ -7940,7 +7935,10 @@ class template F32RowsKhrT : KqCm2BatchT {
     typedef ST = float16
     override BLKW = 4u
     override SCALES = false
-    override MAP_OFF = 4u   //! one region record ahead of the map: the window's every f32-row GEMM
+
+    //! one region record ahead of the map: the window's every f32-row GEMM is one region at row 0
+    [spirv_inline]
+    def override map_word : uint => 4u
 
     [spirv_decode]
     def decode(blk : uint4; bc, cib : uint2) : float16 => float16(uint_bits_to_float(blk[int(cib.y & 3u)]))

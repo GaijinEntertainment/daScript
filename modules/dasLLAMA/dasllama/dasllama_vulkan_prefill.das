@@ -939,7 +939,13 @@ def private pf_ple_block(raw : VkCommandBuffer; var h : VkHaz; l : int64; b : in
 //! the file's f32 per-layer-embedding rows ride the staged KHR tile where the device has it (`DASLLAMA_VK_PLE_F32_TILE` holds
 //! them on the scalar f32 tile)
 [arch(at="../ARCHITECTURE_GPU_VULKAN_KHR.md#f32-rows-staged-tile")]
-def private pf_ple_f32_staged : bool => g_env_vulkan.vk_ple_f32_tile && khr_kq_tile_on()
+def private pf_ple_f32_staged : bool => ple_f32_tile_ok(g_rd.dim, g_rd.ple)
+
+//! the staged tile serves f32 rows of a model dim `dim` and a ple width `ple`: both GEMMs' K on its 32-deep k step, so no 16-wide
+//! row read reaches past the exactly sized plane; else the scalar f32 tile
+[arch(at="../ARCHITECTURE_GPU_VULKAN_KHR.md#f32-rows-staged-tile")]
+def public ple_f32_tile_ok(dim, ple : int64) : bool
+    => g_env_vulkan.vk_ple_f32_tile && khr_kq_tile_on() && dim % 32l == 0l && ple % 32l == 0l
 
 //! the per-layer-embedding gate reads the window's rows as f16: a plane the f16 feed admits, or f32 rows on the staged tile
 def private pf_ple_gate_f16(L : RLayer) : bool => L.bpg < 0l ? pf_ple_f32_staged() : pf_f16_feed(L.fpg)

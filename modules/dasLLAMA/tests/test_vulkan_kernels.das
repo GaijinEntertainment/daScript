@@ -1545,9 +1545,50 @@ def test_vkd_act_gelu_past_clamp(t0 : T?) {
     }
 }
 
+//! the f16 act over the per-layer-embedding side rows (the projection's f16 feed): gelu(gate) x layer 1's slice of four
+//! position-major side rows of three layers (`ubase` / `ustride` / `ulen`) against the CPU form, each half within the act's
+//! approx bar; the control reads the side rows contiguously (the stride ignored) and misses
+[test]
+def test_vkd_actf16_strided(t0 : T?) {
+    t0 |> run("actf16 over the strided side rows == gelu(gate) x the layer's side slice") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!ensure_actf16_cls()) {
+                t |> skip("no Vulkan device, or the actf16 pipeline failed to build")
+                return
+            }
+            let nelem = 1024
+            let ple = 256
+            let all = 3 * ple
+            var gh <- row_fill(nelem, 29, 0, 0.21, 6.0, 61)
+            var side <- row_fill(4 * all, 13, 0, 0.19, 3.0, 53)
+            let want <- [for (i in range(nelem)); act_mul_ref(gh[i], side[(i / ple) * all + ple + i % ple], ACT_GELU)]
+            var got <- actf16_halves(gh, side, nelem, 0, ple, all, ple)
+            var flat <- actf16_halves(gh, side, nelem, 0, ple, 0, 0)   //! the control: the side read as one contiguous row from ubase
+            var bad = 0
+            var flat_bad = 0
+            for (i in range(nelem)) {
+                let w = got[i / 2]
+                let v = unpackHalf2x16(w)[i % 2]
+                let fv = unpackHalf2x16(flat[i / 2])[i % 2]
+                let bar = 2e-3 * max(abs(want[i]), 1.0)
+                bad += abs(v - want[i]) > bar ? 1 : 0
+                flat_bad += abs(fv - want[i]) > bar ? 1 : 0
+            }
+            t |> equal(bad, 0, "every half within the bar of the CPU form over the layer's slice")
+            t |> success(flat_bad > 0, "the control: the contiguous side read misses ({flat_bad} of {nelem})")
+            delete gh
+            delete side
+            delete got
+            delete flat
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
 //! one actf16 dispatch of `nelem` elements from element `elem0` of `g` and `u`: the whole half plane back, every half it was
 //! not written left at -inf
-def private actf16_halves(g, u : array<float>; nelem, elem0 : int) : array<uint> {
+def private actf16_halves(g, u : array<float>; nelem, elem0 : int; ubase : int = 0; ustride : int = 0; ulen : int = 0) : array<uint> {
     var halves : array<uint>
     static_if (typeinfo builtin_module_exists(vulkan)) {
         with_cell_planes() $(var cp : CellPlanes) {
@@ -1555,7 +1596,7 @@ def private actf16_halves(g, u : array<float>; nelem, elem0 : int) : array<uint>
             let pu = cp |> in_(u)
             let ph = cp |> out_words(long_length(g) * 2l, 0xFC00FC00u)
             var sc = cp |> cls_set(fixed_array(pg, pu, ph), @@set_actf16_cls)
-            var pc = ActArgs(nelem = uint(nelem), act = ACT_GELU, nblk = 0u, elem0 = uint(elem0))
+            var pc = ActArgs(nelem = uint(nelem), act = ACT_GELU, nblk = 0u, elem0 = uint(elem0), ubase = uint(ubase), ustride = uint(ustride), ulen = uint(ulen))
             cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
                 enc_actf16_cls(raw, h, sc, pc, int64((nelem / 4 + 255) / 256))
             }
@@ -2905,6 +2946,7 @@ def test_vkd_f32_khr_batch(t0 : T?) {
                 t |> skip("the staged f32 tile needs KHR cooperative matrices at subgroup 32")
                 return
             }
+            verify(ensure_f32_batch_khr_cls(), "the staged f32 tile's class rail must engage on a coopmat device")
             let n = 544   //! seventeen 32-deep k steps, off every 64 and 256 lattice
             var wqh <- [for (i in range(2 * TILE_CELL_D * n)); float_bits_to_uint(float(hash_word(uint(i) + 71u) % 4001u) * 0.0000317 - 0.0634)]   //! f32 words whose low mantissa bits the stage rounds away
             var wsh <- [0u, 0u, 0u, 0u]   //! the fixture's scale plane, which the f32 stamp binds no slot for

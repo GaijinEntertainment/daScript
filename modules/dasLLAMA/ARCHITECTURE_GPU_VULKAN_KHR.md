@@ -54,7 +54,9 @@ a wave64 device (four subgroups per 256-thread workgroup) keeps its kq planes on
 
 **The per-layer-embedding gate and projection over a file's f32 rows run on the KHR staged tile
 wherever the KHR kq tile serves** (`khr_kq_tile_on`: KHR cooperative matrices at subgroup 32, a
-cm2 card included), else on the scalar f32 tile (`DnBaGemm`). The gemma-4 E-series files carry
+cm2 card included) and the model dim and the ple width sit on its 32-deep k step (`ple_f32_tile_ok`:
+the f32 rows carry no block padding, so a row off it would read past its exactly sized plane), else
+on the scalar f32 tile (`DnBaGemm`). The gemma-4 E-series files carry
 those two planes as F32 whatever the file's quant mix (the E2B Q4_K_M's `inp_gate` and `proj`
 among them). The stamp (`F32KhrBatch`) is the template's KHR arm over a block of four f32 words: a
 thread's 16 weights are four 16-byte words of its row, rounded to f16 pairs on the stage, so the
