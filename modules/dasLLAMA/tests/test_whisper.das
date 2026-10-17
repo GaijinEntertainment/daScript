@@ -1310,30 +1310,26 @@ def test_whisper_crowned_word_level(t : T?) {
 //! implementations' rounding flips (`PERF_LEDGER.md`, the Canary-Qwen oracle row)
 let CN_TIE_BAR = 0.25
 
-//! the oracle's ids fed to the decoder after the prompt: at each step our argmax, the gap from its logit down to the oracle
-//! token's (0 where they are one id), and the same gap to the NEXT oracle token - the control's reading
+//! the oracle's ids fed to the decoder after the prompt, `lead` ids ahead of the step that reads them: at each step our argmax
+//! and the gap from its logit down to the oracle token's (0 where they are one id)
 struct private CnForced {
     picks : array<int>
     gap : array<float>
-    off_gap : array<float>
 }
 
-def private canary_forced(m : AsrModel; samples : array<float>; expected : array<int>) : CnForced {
+def private canary_forced(m : AsrModel; samples : array<float>; expected : array<int>; lead : int) : CnForced {
     var r : CnForced
     r.picks |> reserve(length(expected))
     r.gap |> reserve(length(expected))
-    r.off_gap |> reserve(length(expected))
     var inscope s <- create_session(m, "en")
     canary_prefill(m.dec, m.cenc, s.cn, samples)
     var inscope one <- [0l]
     for (i in range(length(expected))) {
         let best = int(argmax_of(s.cn.qctx.logits))
-        let top = s.cn.qctx.logits[best]
         r.picks |> push(best)
-        r.gap |> push(top - s.cn.qctx.logits[expected[i]])
-        if (i + 1 < length(expected)) {
-            r.off_gap |> push(top - s.cn.qctx.logits[expected[i + 1]])
-            one[0] = int64(expected[i])
+        r.gap |> push(s.cn.qctx.logits[best] - s.cn.qctx.logits[expected[i]])
+        if (i + lead + 1 < length(expected)) {
+            one[0] = int64(expected[i + lead])
             eval_(m.dec, s.cn.qctx, one)
         }
     }
@@ -1341,16 +1337,15 @@ def private canary_forced(m : AsrModel; samples : array<float>; expected : array
 }
 
 //! One clip against the frozen oracle on one encoder route, forced-feed: every oracle token is our argmax or within
-//! `CN_TIE_BAR` of it, the next oracle token outside the bar at most steps (the control); then the greedy transcription is
-//! the oracle's ids token for token up to the step where the forced walk's pick leaves the oracle's - all of them where it
-//! never does
+//! `CN_TIE_BAR` of it; the control feeds the oracle's ids one step early, and every step whose input that moved reads the
+//! oracle token outside the bar; then the greedy transcription is the oracle's ids token for token up to the step where the
+//! forced walk's pick leaves the oracle's - all of them where it never does
 def private check_canary_route(t : T?; m : AsrModel; wav, route : string; samples : array<float>; expected : array<int>) {
     let name = "{base_name(wav)} {route}"
-    var inscope fw <- canary_forced(m, samples, expected)
+    var inscope fw <- canary_forced(m, samples, expected, 0)
     var worst = 0.0
     var worst_at = -1
     var agree = length(expected)
-    var off_out = 0
     for (i in range(length(expected))) {
         if (fw.gap[i] > worst) {
             worst = fw.gap[i]
@@ -1360,17 +1355,22 @@ def private check_canary_route(t : T?; m : AsrModel; wav, route : string; sample
             agree = i
         }
     }
-    for (g in fw.off_gap) {
-        off_out += g > CN_TIE_BAR ? 1 : 0
-    }
     t |> success(worst <= CN_TIE_BAR, "{name}: every oracle token is our argmax or within {CN_TIE_BAR} of it (widest {worst} at step {worst_at})")
-    t |> success(off_out * 2 > length(fw.off_gap), "{name} control: the next oracle token sits outside {CN_TIE_BAR} at {off_out} of {length(fw.off_gap)} steps")
+    var inscope ctl <- canary_forced(m, samples, expected, 1)
+    var ctl_in = 0
+    var ctl_least = 1e30
+    for (i in range(1, length(expected) - 1)) {
+        ctl_in += ctl.gap[i] <= CN_TIE_BAR ? 1 : 0
+        ctl_least = min(ctl_least, ctl.gap[i])
+    }
+    let ctl_steps = length(expected) - 2
+    t |> success(ctl_steps > 0 && ctl_in == 0, "{name} control: fed one id early, the oracle token sits outside {CN_TIE_BAR} at every one of {ctl_steps} steps ({ctl_in} inside, nearest {ctl_least})")
     var inscope s <- create_session(m, "en")
     var inscope segs <- session_segs(m, s, samples)
     t |> equal(length(segs), 1, "{name}: one segment")
     var inscope ours <- [for (id in segs[0].tokens); int64(id)]
     var inscope oracle <- [for (id in expected); int64(id)]
-    to_log(LOG_INFO, "canary {name}: the forced walk leaves the oracle's pick at step {agree} of {length(expected)} (widest gap {worst}), the next token outside the bar at {off_out} of {length(fw.off_gap)}\n")
+    to_log(LOG_INFO, "canary {name}: the forced walk leaves the oracle's pick at step {agree} of {length(expected)} (widest gap {worst}), the early-fed control's nearest gap {ctl_least} over {ctl_steps} steps\n")
     to_log(LOG_INFO, "canary {name} oracle text: {eyeball_text(m.dec, oracle)}\n")
     to_log(LOG_INFO, "canary {name} greedy text: {eyeball_text(m.dec, ours)}\n")
     t |> success(length(segs[0].tokens) >= agree, "{name}: the greedy ids reach step {agree}, where the forced walk's pick leaves the oracle's")
