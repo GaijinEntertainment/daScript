@@ -1483,22 +1483,22 @@ class template MetalEmbedB32T {
     }
 }
 
-[metal_dispatch(name = "enc_q51_embed_b32", pso = "g_pso_emb_b32_q51", tg = 64, grid = "units/64, nrows", params = "units : int64, nrows : int64")]
+[metal_dispatch(name = "enc_q51_embed_b32", pso = "g_pso_emb_b32_q51", tg = 64, grid = "units/64, nrows", params = "units : int64, nrows : int64", requires = "ka.dim % 32")]
 class MetalEmbedB32Q51 : MetalEmbedB32T {
     override Q51 = true
     override QW = 5u
     override SH = 2u
 }
 
-[metal_dispatch(name = "enc_iq4nl32_embed_b32", pso = "g_pso_emb_b32_iq4nl32", tg = 64, grid = "units/64, nrows", params = "units : int64, nrows : int64")]
+[metal_dispatch(name = "enc_iq4nl32_embed_b32", pso = "g_pso_emb_b32_iq4nl32", tg = 64, grid = "units/64, nrows", params = "units : int64, nrows : int64", requires = "ka.dim % 32")]
 class MetalEmbedB32Iq4nl32 : MetalEmbedB32T {}
 
-[metal_dispatch(name = "enc_q4032_embed_b32", pso = "g_pso_emb_b32_q4032", tg = 64, grid = "units/64, nrows", params = "units : int64, nrows : int64")]
+[metal_dispatch(name = "enc_q4032_embed_b32", pso = "g_pso_emb_b32_q4032", tg = 64, grid = "units/64, nrows", params = "units : int64, nrows : int64", requires = "ka.dim % 32")]
 class MetalEmbedB32Q4032 : MetalEmbedB32T {
     override Q40L = true
 }
 
-[metal_dispatch(name = "enc_q5032_embed_b32", pso = "g_pso_emb_b32_q5032", tg = 64, grid = "units/64, nrows", params = "units : int64, nrows : int64")]
+[metal_dispatch(name = "enc_q5032_embed_b32", pso = "g_pso_emb_b32_q5032", tg = 64, grid = "units/64, nrows", params = "units : int64, nrows : int64", requires = "ka.dim % 32")]
 class MetalEmbedB32Q5032 : MetalEmbedB32T {
     override Q50 = true
     override QW = 5u
