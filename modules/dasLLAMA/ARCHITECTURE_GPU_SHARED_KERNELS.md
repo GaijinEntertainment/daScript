@@ -87,7 +87,7 @@ per-32 pair bound on the 16-byte grid below it with the blocks past the bind in 
 `b32_bind_rem`), the q8 copy at any element. The finish's lanes stride a slice, so a ple width past 256 runs in as many
 passes as it takes and one off the 32-lane step leaves its last lanes idle. The projection's bf16 rows step word pairs where
 the dim and the base are even and one halfword a lane where a row would start mid-word (`MetalPleProjBf16HwT`, picked by
-`enc_ple_proj_bf16_rows`; Vulkan's `RouterGemvBf16Hw` the same, picked by `router_bf16_pairs`); the f32 rows step float4 words where the dim, the base and the column stride sit on that
+`enc_ple_proj_bf16_rows`; Vulkan's `RouterGemvBf16Hw` the same; both homes pick through `gk_bf16_pairs`); the f32 rows step float4 words where the dim, the base and the column stride sit on that
 lattice and one element a lane elsewhere (`MetalF32RowsT`, picked by `enc_f32_rows_gemv`). The narrow walks are stamps of
 their own, so the word stamps' bodies and both homes' router words stay as they are. The window projects on the bf16 tile where the model dim is whole 32-element chunks and
 layers x ple whole 64-row tiles (`pf_bf16_tile_ok`), else on the position-blocked bf16 GEMV. `metal_ple_pre_unserved`

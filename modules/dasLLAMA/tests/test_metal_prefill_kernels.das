@@ -13,6 +13,7 @@ require dasllama/dasllama_gemm_schema  // kq_qsb — the ONE per-format quant-pl
 require dasllama/dasllama_kqformat  // KqFmt: the expert GEMV and per-32 mul_mm cells' format key
 require ?das_metal dasllama/dasllama_metal_prefill  // the Phase-6 prefill kernel set (Apple builds)
 require ?das_metal dasllama/dasllama_metal_kernels  // the Wave C MoE routing kernel set (Apple builds)
+require dasllama/dasllama_gpu_kernels_common  // gk_bf16_pairs: the bf16 projection cell's stamp pick, the dispatcher's
 require ?das_metal dasllama/dasllama_metal_common   // the pipeline globals the generated builders read
 require ?das_metal metal/das_metal_boost  // device/pipeline/buffer plumbing + the leak gate
 require ?das_metal _metal_kernel_common   // the MetalCell record, check_buf, the device shell, fixtures
@@ -4026,7 +4027,7 @@ def private ple_proj_bf16_gate(t : T?; var dev, queue; dim, ne, npos, lead : int
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
         var err : string
         let base = lead * 2 + skew
-        let pairs = dim % 2 == 0 && base % 2 == 0
+        let pairs = gk_bf16_pairs(int64(dim), int64(base))
         let sp = stamp_of(@@enc_ple_proj_bf16)
         let spo = stamp_of(@@enc_ple_proj_bf16_one)
         let sh = stamp_of(@@enc_ple_proj_bf16_hw)

@@ -18,7 +18,8 @@ options _dasllama_internal = true
 // the cm2 l and m stamps as a race, and fc2's split-k ladder; the sdot4 mm tile skipped (it stalls at 1500 rows on fc1).
 // RefGemmArgs mirrors that blob's push block byte for byte - its constant fields are dead by design.
 // Every arm records once, then times over repeated submits after two untimed warm-up submits a row
-// (`timed_chain`); the serving kernels' oracle gate
+// (`timed_chain`), or interleaved with its sweep's other arms after one untimed warm-up round
+// (`sweep_best_us`, the kqst and plef32 races); the serving kernels' oracle gate
 // is tests/test_vulkan_kernels.das.
 // Args: gate|down|q|kv|kvm|qkv|tl pin a shape (the long-window ngfx GPU Trace vehicle); g3 the gemma-3-1b
 // role shapes with the down's split-k ladder; small the token command's one-workgroup row kernels' floor;
@@ -606,56 +607,50 @@ def private run_cm2_fmt_shape(fmt : int; name : string; d, n, cnt : int; l_stamp
 }
 
 //! one dense role shape under the K-quant window's two forms: the cm2 l, m and s stamps on the decode arm the device runs, and the
-//! staged form - the KHR tile over the format's own bytes - each whole, sixteen dispatches over two alternating output planes, the
-//! arms in turn inside each of `rounds` rounds, each arm's row its best round
+//! staged form - the KHR tile over the format's own bytes - each whole, through `race_arms` (sixteen dispatches over two
+//! alternating output planes) and `sweep_best_us` (the arms interleaved round by round, each arm's row its best round)
 [arch(at="../ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md#vk-gemm-probe")]
-def private run_kqst_shape(fmt : int; name : string; d, n, cnt, rounds : int) {
+def private run_kqst_shape(fmt : int; name : string; d, n, cnt : int) {
     let dv = cm2_shape_upload(fmt, d, n, cnt)
     let flop = 2.0lf * double(cnt) * double(d) * double(n)
     let vnames = fixed_array("cm2l ", "cm2m ", "cm2s ", "staged")
-    var best = fixed_array(0.0lf, 0.0lf, 0.0lf, 0.0lf)
-    var wgs_of = fixed_array(0, 0, 0, 0)
-    for (_round in range(rounds)) {
-        for (v in range(4)) {
-            let ttile = v == 0 ? 256 : (v == 2 ? 32 : 128)
-            continue if (cnt < ttile)
-            let wgs = ((cnt + ttile - 1) / ttile) * ((d + 127) / 128)
-            let sc = one_region_sched(cnt, wgs)
-            let sz = fixed_array(dv.wq_bytes, dv.ws_bytes, sc.bytes, dv.xf_bytes, dv.y_bytes)
-            let gbits5 = fixed_array(1u, 2u, 0u, 4u, 16u)
-            var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u)
-            let khr = v == 3
-            var sa = (khr ? khr_cls_set(fmt, fixed_array(dv.wqd, dv.wsd, sc.buf, dv.xfd, dv.yd), sz, gbits5)
-                : cm2_cls_set(fmt, int64(ttile), fixed_array(dv.wqd, dv.wsd, sc.buf, dv.xfd, dv.yd), sz, gbits5))
-            var sb = (khr ? khr_cls_set(fmt, fixed_array(dv.wqd, dv.wsd, sc.buf, dv.xfd, dv.yd_b), sz, gbits5)
-                : cm2_cls_set(fmt, int64(ttile), fixed_array(dv.wqd, dv.wsd, sc.buf, dv.xfd, dv.yd_b), sz, gbits5))
-            let us = timed_chain() $(raw; var _hzs) {
-                for (k in range(DISPATCHES)) {
-                    var hz : VkHaz
-                    if (khr) {
-                        khr_cls_enc(fmt, raw, hz, k % 2 == 0 ? sa : sb, pc, int64(wgs))
-                    } else {
-                        cm2_cls_enc(fmt, int64(ttile), raw, hz, k % 2 == 0 ? sa : sb, pc, int64(wgs))
-                    }
-                }
-            }
-            best[v] = best[v] == 0.0lf ? us : min(best[v], us)
-            wgs_of[v] = wgs
-        }
-    }
+    var raws <- race_arms(4, n, d, cnt, fmt, dv.yd, dv.yd_b, $(v : int) : int {
+        let tc = kqst_arm_cols(v)
+        return cnt < tc ? 0 : ((cnt + tc - 1) / tc) * ((d + 127) / 128)
+    }, $(v : int; scd : uint64; sc_bytes : int64; y : uint64) : VkDescriptorSet {
+        let bufs = fixed_array(dv.wqd, dv.wsd, scd, dv.xfd, y)
+        let sizes = fixed_array(dv.wq_bytes, dv.ws_bytes, sc_bytes, dv.xf_bytes, dv.y_bytes)
+        let gbits = fixed_array(1u, 2u, 0u, 4u, 16u)
+        return v == 3 ? khr_cls_set(fmt, bufs, sizes, gbits) : cm2_cls_set(fmt, int64(kqst_arm_cols(v)), bufs, sizes, gbits)
+    }, @@kqst_arm_enc)
+    var best <- sweep_best_us(raws)
     for (v in range(4)) {
-        continue if (best[v] == 0.0lf)
-        print("{name} {vnames[v]}: {best[v]} us/dispatch  {flop / (best[v] * 1000000.0lf)} TFLOP/s  wgs={wgs_of[v]}  best of {rounds}  timing-only\n")
+        continue if (raws[v] == null)
+        let tc = kqst_arm_cols(v)
+        print("{name} {vnames[v]}: {best[v]} us/dispatch  {flop / (best[v] * 1000000.0lf)} TFLOP/s  wgs={((cnt + tc - 1) / tc) * ((d + 127) / 128)}  best of {ROUNDS}  timing-only\n")
+    }
+    delete best
+}
+
+//! a kqst arm's token column: the l, m and s stamps' 256, 128 and 32, the staged tile's 128
+def private kqst_arm_cols(v : int) : int => v == 0 ? 256 : (v == 2 ? 32 : 128)
+
+def private kqst_arm_enc(v, fmt : int; raw : VkCommandBuffer; var hz : VkHaz; var s : VkDescriptorSet; var pc : BatchArgs; wgs : int64) {
+    if (v == 3) {
+        khr_cls_enc(fmt, raw, hz, s, pc, wgs)
+    } else {
+        cm2_cls_enc(fmt, int64(kqst_arm_cols(v)), raw, hz, s, pc, wgs)
     }
 }
 
+var private g_ple_f32_rows = 0   //! the scalar f32 tile's row count for `ple_f32_arm_enc`: its push block carries the rows, the race's BatchArgs does not
+
 //! one per-layer-embedding GEMM over a file's f32 rows under the window's two forms: the scalar f32 tile (`DnBaGemm`, f32 rows in
-//! and out) and the staged KHR tile (`F32KhrBatch`, the f16 rows in), each over the same weight words, sixteen dispatches over two
-//! alternating output planes, the arms in turn inside each of `rounds` rounds; then one dispatch at a time over one output and one
-//! hazard rail - the scalar tile, the staged tile whole and over two to eight k chunks into the split-k reduce; each arm's row its
-//! best round
+//! and out) and the staged KHR tile (`F32KhrBatch`, the f16 rows in), each over the same weight words, overlapped through
+//! `race_arms`; then one dispatch at a time over one output and one hazard rail - the scalar tile, the staged tile whole and over
+//! two to eight k chunks into the split-k reduce; every arm through `sweep_best_us`, its row its best round
 [arch(at="../ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md#vk-gemm-probe")]
-def private run_ple_f32_shape(name : string; d, n, cnt, rounds : int) {
+def private run_ple_f32_shape(name : string; d, n, cnt : int) {
     let w_bytes = int64(d * n) * 4l
     var inscope wh : array<uint>
     wh |> resize(d * n)
@@ -670,80 +665,86 @@ def private run_ple_f32_shape(name : string; d, n, cnt, rounds : int) {
     upload_region_at(wd, 0l, unsafe(addr<uint8 const?>(wh[0])), w_bytes)
     let flop = 2.0lf * double(cnt) * double(d) * double(n)
     let wgs = ((cnt + 127) / 128) * ((d + 127) / 128)
-    let sc = one_region_sched(cnt, wgs)
-    var sa = set_dn_ba_cls(fixed_array(wd, x32, ya), fixed_array(w_bytes, int64(cnt * n) * 4l, int64(cnt * d) * 4l), fixed_array(1u, 2u, 4u))
-    var sb = set_dn_ba_cls(fixed_array(wd, x32, yb), fixed_array(w_bytes, int64(cnt * n) * 4l, int64(cnt * d) * 4l), fixed_array(1u, 2u, 8u))
-    let khr_sizes = fixed_array(w_bytes, sc.bytes, int64(cnt * n) * 2l, int64(cnt * d) * 4l)
-    var ka = set_f32_batch_khr_cls(fixed_array(wd, sc.buf, x16, ya), khr_sizes, fixed_array(1u, 0u, 2u, 4u))
-    var kb = set_f32_batch_khr_cls(fixed_array(wd, sc.buf, x16, yb), khr_sizes, fixed_array(1u, 0u, 2u, 8u))
-    var pd = DnBaArgs(npos = uint(cnt), dim = uint(n), nvh = uint(d / 2), woff = 0u, xstride = uint(n), obase_b = 0u, obase_g = uint(d / 2), ostride = uint(d))
-    var pk = BatchArgs(n = uint(n), d = uint(d))
-    verify(ensure_splitk_reduce_cls(), "the split-k reduce's probe pipeline must engage")
-    let max_split = 8
-    let part_bytes = int64(max_split * cnt * d) * 4l
-    let yp = make_device_buf(part_bytes)
-    let splits = fixed_array(2, 3, 4, 5, 6, 8)
-    //! the arms: 0 scalar and 1 staged overlapped, 2 scalar and 3 staged whole one at a time, 4.. the staged splits one at a time
-    var best : array<double>
-    best |> resize(4 + length(splits))
-    for (_round in range(rounds)) {
-        let us_scalar = timed_chain() $(raw; var _hzs) {
-            for (k in range(DISPATCHES)) {
-                var hz : VkHaz
-                enc_dn_ba_cls(raw, hz, k % 2 == 0 ? sa : sb, pd, dn_ba_wgs(int64(cnt), int64(d / 2)))
-            }
+    g_ple_f32_rows = cnt
+    var raws <- race_arms(2, n, d, cnt, 0, ya, yb, $(v : int) : int {
+        return v == 0 ? int(dn_ba_wgs(int64(cnt), int64(d / 2))) : wgs
+    }, $(v : int; scd : uint64; sc_bytes : int64; y : uint64) : VkDescriptorSet {
+        if (v == 0) {
+            return set_dn_ba_cls(fixed_array(wd, x32, y), fixed_array(w_bytes, int64(cnt * n) * 4l, int64(cnt * d) * 4l), fixed_array(1u, 2u, 4u))
         }
-        let us_staged = timed_chain() $(raw; var _hzs) {
-            for (k in range(DISPATCHES)) {
-                var hz : VkHaz
-                enc_f32_batch_khr_cls(raw, hz, k % 2 == 0 ? ka : kb, pk, int64(wgs))
-            }
-        }
-        let lat_scalar = timed_chain() $(raw; var hz) {
-            for (_k in range(DISPATCHES)) {
-                enc_dn_ba_cls(raw, hz, sa, pd, dn_ba_wgs(int64(cnt), int64(d / 2)))
-            }
-        }
-        let lat_whole = timed_chain() $(raw; var hz) {
-            for (_k in range(DISPATCHES)) {
-                enc_f32_batch_khr_cls(raw, hz, ka, pk, int64(wgs))
-            }
-        }
-        let got = fixed_array(us_scalar, us_staged, lat_scalar, lat_whole)
-        for (a in range(4)) {
-            best[a] = best[a] == 0.0lf ? got[a] : min(best[a], got[a])
-        }
-        for (nsplit, si in splits, count()) {
-            let ck = cm2_chunk(int64(n), int64(nsplit))
-            continue if (ck == 0l)
-            let swgs = wgs * nsplit
-            let ssc = one_region_sched(cnt, swgs)
-            var ks = set_f32_batch_khr_cls(fixed_array(wd, ssc.buf, x16, yp),
-                fixed_array(w_bytes, ssc.bytes, int64(cnt * n) * 2l, part_bytes), fixed_array(1u, 0u, 2u, 16u))
-            var rs = set_splitk_reduce_cls(fixed_array(yp, ya), fixed_array(part_bytes, int64(cnt * d) * 4l), fixed_array(16u, 4u))
-            var pks = BatchArgs(n = uint(n), d = uint(d), ksplit = uint(ck))
-            let lat = timed_chain() $(raw; var hz) {
-                for (_k in range(DISPATCHES)) {
-                    enc_f32_batch_khr_cls(raw, hz, ks, pks, int64(swgs))
-                    splitk_reduce_enc(raw, hz, rs, int64(cnt * d), int64(nsplit))
-                }
-            }
-            best[4 + si] = best[4 + si] == 0.0lf ? lat : min(best[4 + si], lat)
-        }
-    }
-    print_ple_f32_rows(name, best, splits, n, flop, rounds)
+        return set_f32_batch_khr_cls(fixed_array(wd, scd, x16, y), fixed_array(w_bytes, sc_bytes, int64(cnt * n) * 2l, int64(cnt * d) * 4l),
+            fixed_array(1u, 0u, 2u, 4u))
+    }, @@ple_f32_arm_enc)
+    var over <- sweep_best_us(raws)
+    print("{name} scalar f32: {over[0]} us/dispatch  {flop / (over[0] * 1000000.0lf)} TFLOP/s  best of {ROUNDS}  timing-only\n")
+    print("{name} staged: {over[1]} us/dispatch  {flop / (over[1] * 1000000.0lf)} TFLOP/s  best of {ROUNDS}  timing-only\n")
+    delete over
+    ple_f32_latency_rows(name, wd, w_bytes, x32, x16, ya, d, n, cnt)
 }
 
-//! `run_ple_f32_shape`'s rows, one an arm: its best round
-def private print_ple_f32_rows(name : string; best : array<double>; splits : int const[6]; n : int; flop : double; rounds : int) {
-    print("{name} scalar f32: {best[0]} us/dispatch  {flop / (best[0] * 1000000.0lf)} TFLOP/s  best of {rounds}  timing-only\n")
-    print("{name} staged: {best[1]} us/dispatch  {flop / (best[1] * 1000000.0lf)} TFLOP/s  best of {rounds}  timing-only\n")
-    print("{name} one at a time: scalar f32 {best[2]} us  best of {rounds}  timing-only\n")
-    print("{name} one at a time: staged whole {best[3]} us  best of {rounds}  timing-only\n")
-    for (nsplit, si in splits, count()) {
-        continue if (best[4 + si] == 0.0lf)
-        print("{name} one at a time: staged split{nsplit} (chunk {cm2_chunk(int64(n), int64(nsplit))}) + reduce {best[4 + si]} us  best of {rounds}  timing-only\n")
+def private ple_f32_arm_enc(v, _fmt : int; raw : VkCommandBuffer; var hz : VkHaz; var s : VkDescriptorSet; var pc : BatchArgs; wgs : int64) {
+    if (v == 0) {
+        var pd = DnBaArgs(npos = uint(g_ple_f32_rows), dim = pc.n, nvh = pc.d / 2u, woff = 0u, xstride = pc.n, obase_b = 0u, obase_g = pc.d / 2u, ostride = pc.d)
+        enc_dn_ba_cls(raw, hz, s, pd, wgs)
+    } else {
+        enc_f32_batch_khr_cls(raw, hz, s, pc, wgs)
     }
+}
+
+//! `run_ple_f32_shape`'s one-dispatch-at-a-time rows: each arm a command of DISPATCHES dispatches under one hazard rail into one
+//! output, the arms interleaved through `sweep_best_us`
+def private ple_f32_latency_rows(name : string; wd : uint64; w_bytes : int64; x32, x16, ya : uint64; d, n, cnt : int) {
+    verify(ensure_splitk_reduce_cls(), "the split-k reduce's probe pipeline must engage")
+    let splits = fixed_array(2, 3, 4, 5, 6, 8)
+    let part_bytes = int64(8 * cnt * d) * 4l
+    let yp = make_device_buf(part_bytes)
+    let wgs = ((cnt + 127) / 128) * ((d + 127) / 128)
+    var raws : array<VkCommandBuffer>
+    var sd = set_dn_ba_cls(fixed_array(wd, x32, ya), fixed_array(w_bytes, int64(cnt * n) * 4l, int64(cnt * d) * 4l), fixed_array(1u, 2u, 4u))
+    var pd = DnBaArgs(npos = uint(cnt), dim = uint(n), nvh = uint(d / 2), woff = 0u, xstride = uint(n), obase_b = 0u, obase_g = uint(d / 2), ostride = uint(d))
+    raws |> push(chained_cmd() $(r; var hz) {
+        enc_dn_ba_cls(r, hz, sd, pd, dn_ba_wgs(int64(cnt), int64(d / 2)))
+    })
+    for (nsplit in fixed_array(1, 2, 3, 4, 5, 6, 8)) {
+        let ck = nsplit > 1 ? cm2_chunk(int64(n), int64(nsplit)) : 0l
+        if (nsplit > 1 && ck == 0l) {
+            var none : VkCommandBuffer
+            raws |> push(none)
+            continue
+        }
+        let swgs = wgs * nsplit
+        let ssc = one_region_sched(cnt, swgs)
+        let out = nsplit > 1 ? yp : ya
+        var ks = set_f32_batch_khr_cls(fixed_array(wd, ssc.buf, x16, out),
+            fixed_array(w_bytes, ssc.bytes, int64(cnt * n) * 2l, nsplit > 1 ? part_bytes : int64(cnt * d) * 4l), fixed_array(1u, 0u, 2u, 16u))
+        var rs = set_splitk_reduce_cls(fixed_array(yp, ya), fixed_array(part_bytes, int64(cnt * d) * 4l), fixed_array(16u, 4u))
+        var pks = BatchArgs(n = uint(n), d = uint(d), ksplit = uint(ck))
+        raws |> push(chained_cmd() $(r; var hz) {
+            enc_f32_batch_khr_cls(r, hz, ks, pks, int64(swgs))
+            if (nsplit > 1) {
+                splitk_reduce_enc(r, hz, rs, int64(cnt * d), int64(nsplit))
+            }
+        })
+    }
+    var best <- sweep_best_us(raws)
+    print("{name} one at a time: scalar f32 {best[0]} us  best of {ROUNDS}  timing-only\n")
+    print("{name} one at a time: staged whole {best[1]} us  best of {ROUNDS}  timing-only\n")
+    for (nsplit, si in splits, count()) {
+        continue if (raws[2 + si] == null)
+        print("{name} one at a time: staged split{nsplit} (chunk {cm2_chunk(int64(n), int64(nsplit))}) + reduce {best[2 + si]} us  best of {ROUNDS}  timing-only\n")
+    }
+    delete best
+}
+
+//! a command of DISPATCHES copies of `body` under one hazard rail: each dispatch waits on the one before, the window's chain
+def private chained_cmd(body : block<(r : VkCommandBuffer; var hz : VkHaz) : void>) : VkCommandBuffer {
+    var raw = alloc_cmd()
+    record_cmd(raw, false) $(r; var hz) {
+        for (_k in range(DISPATCHES)) {
+            invoke(body, r, hz)
+        }
+    }
+    return raw
 }
 
 // ===== the decode head's small kernels in isolation (arg "dec") =====
@@ -3658,12 +3659,12 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
         }
         print("ATTRIBUTION SWEEP plef32: the per-layer-embedding gate and projection over f32 rows, the scalar f32 tile against the staged tile, timing-only rows\n")
         //! gemma-4 E2B (dim 1536) and E4B (dim 2560), ple 256, 512 rows: the gate [ple x dim] and the projection [dim x ple]
-        run_ple_f32_shape("E2B gate", 256, 1536, 512, 3)
-        run_ple_f32_shape("E2B proj", 1536, 256, 512, 3)
-        run_ple_f32_shape("E4B gate", 256, 2560, 512, 3)
-        run_ple_f32_shape("E4B proj", 2560, 256, 512, 3)
-        run_ple_f32_shape("E2B gate@300", 256, 1536, 300, 3)   //! a window off the tile's 128-token column: the partial-tile store
-        run_ple_f32_shape("E2B proj@300", 1536, 256, 300, 3)
+        run_ple_f32_shape("E2B gate", 256, 1536, 512)
+        run_ple_f32_shape("E2B proj", 1536, 256, 512)
+        run_ple_f32_shape("E4B gate", 256, 2560, 512)
+        run_ple_f32_shape("E4B proj", 2560, 256, 512)
+        run_ple_f32_shape("E2B gate@300", 256, 1536, 300)   //! a window off the tile's 128-token column: the partial-tile store
+        run_ple_f32_shape("E2B proj@300", 1536, 256, 300)
         return
     }
     if (only == "narrow:") {
@@ -3708,17 +3709,17 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
             "kqst:<fmt> probe pipelines (the l, m and s stamps, the staged tile) must engage")
         print("ATTRIBUTION SWEEP kqst:{cm2_fmt_names()}: the cm2 stamps ({g_gpu.decvec_on ? "four-wide decode" : "scalar decode"}) against the staged tile, timing-only rows\n")
         //! gemma-4 E2B's role shapes at 512 rows (dim 1536, ffn 6144 and the doubled 12288, q 2048, kv 256, ple 256), then the 4B's
-        run_kqst_shape(cm2_fmt, "gate     ", 6144, 1536, 512, 2)
-        run_kqst_shape(cm2_fmt, "gate@500 ", 6144, 1536, 500, 2)   //! a token count off every column: the partial-tile store path
-        run_kqst_shape(cm2_fmt, "gate2x   ", 12288, 1536, 512, 2)
-        run_kqst_shape(cm2_fmt, "down     ", 1536, 6144, 512, 2)
-        run_kqst_shape(cm2_fmt, "down2x   ", 1536, 12288, 512, 2)
-        run_kqst_shape(cm2_fmt, "q        ", 2048, 1536, 512, 2)
-        run_kqst_shape(cm2_fmt, "wo       ", 1536, 2048, 512, 2)
-        run_kqst_shape(cm2_fmt, "kv|pgate ", 256, 1536, 512, 2)
-        run_kqst_shape(cm2_fmt, "ple_proj ", 1536, 256, 512, 2)
-        run_kqst_shape(cm2_fmt, "4B gate  ", 9728, 2560, 512, 2)
-        run_kqst_shape(cm2_fmt, "4B down  ", 2560, 9728, 512, 2)
+        run_kqst_shape(cm2_fmt, "gate     ", 6144, 1536, 512)
+        run_kqst_shape(cm2_fmt, "gate@500 ", 6144, 1536, 500)   //! a token count off every column: the partial-tile store path
+        run_kqst_shape(cm2_fmt, "gate2x   ", 12288, 1536, 512)
+        run_kqst_shape(cm2_fmt, "down     ", 1536, 6144, 512)
+        run_kqst_shape(cm2_fmt, "down2x   ", 1536, 12288, 512)
+        run_kqst_shape(cm2_fmt, "q        ", 2048, 1536, 512)
+        run_kqst_shape(cm2_fmt, "wo       ", 1536, 2048, 512)
+        run_kqst_shape(cm2_fmt, "kv|pgate ", 256, 1536, 512)
+        run_kqst_shape(cm2_fmt, "ple_proj ", 1536, 256, 512)
+        run_kqst_shape(cm2_fmt, "4B gate  ", 9728, 2560, 512)
+        run_kqst_shape(cm2_fmt, "4B down  ", 2560, 9728, 512)
         return
     }
     if (only == "ts:" || only == "cold:") {

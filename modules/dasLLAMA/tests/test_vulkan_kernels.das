@@ -1555,7 +1555,8 @@ def test_vkd_act_gelu_past_clamp(t0 : T?) {
 
 //! the f16 act over the per-layer-embedding side rows (the projection's f16 feed): gelu(gate) x layer 1's slice of four
 //! position-major side rows of three layers (`ubase` / `ustride` / `ulen`) against the CPU form, each half within the act's
-//! approx bar; the control reads the side rows contiguously (the stride ignored) and misses
+//! approx bar; then the same base with no stride, the contiguous row from `ubase` against its own CPU form (`gk_up_at`'s
+//! stride-0 arm: a form that drops the base reads the row from zero and misses), which misses the strided form - the control
 [test]
 def test_vkd_actf16_strided(t0 : T?) {
     t0 |> run("actf16 over the strided side rows == gelu(gate) x the layer's side slice") <| @(t : T?) {
@@ -1571,19 +1572,21 @@ def test_vkd_actf16_strided(t0 : T?) {
             var side <- row_fill(4 * all, 13, 0, 0.19, 3.0, 53)
             let want <- [for (i in range(nelem)); act_mul_ref(gh[i], side[(i / ple) * all + ple + i % ple], ACT_GELU)]
             var got <- actf16_halves(gh, side, nelem, 0, ple, all, ple)
-            var flat <- actf16_halves(gh, side, nelem, 0, ple, 0, 0)   //! the control: the side read as one contiguous row from ubase
+            var flat <- actf16_halves(gh, side, nelem, 0, ple, 0, 0)   //! the side read as one contiguous row from ubase
+            let want_flat <- [for (i in range(nelem)); act_mul_ref(gh[i], side[ple + i], ACT_GELU)]
             var bad = 0
             var flat_bad = 0
+            var flat_off = 0
             for (i in range(nelem)) {
-                let w = got[i / 2]
-                let v = unpackHalf2x16(w)[i % 2]
+                let v = unpackHalf2x16(got[i / 2])[i % 2]
                 let fv = unpackHalf2x16(flat[i / 2])[i % 2]
-                let bar = 2e-3 * max(abs(want[i]), 1.0)
-                bad += abs(v - want[i]) > bar ? 1 : 0
-                flat_bad += abs(fv - want[i]) > bar ? 1 : 0
+                bad += abs(v - want[i]) > 2e-3 * max(abs(want[i]), 1.0) ? 1 : 0
+                flat_bad += abs(fv - want_flat[i]) > 2e-3 * max(abs(want_flat[i]), 1.0) ? 1 : 0
+                flat_off += abs(fv - want[i]) > 2e-3 * max(abs(want[i]), 1.0) ? 1 : 0
             }
             t |> equal(bad, 0, "every half within the bar of the CPU form over the layer's slice")
-            t |> success(flat_bad > 0, "the control: the contiguous side read misses ({flat_bad} of {nelem})")
+            t |> equal(flat_bad, 0, "with no stride every half reads the contiguous row from ubase")
+            t |> success(flat_off > 0, "the control: the contiguous read misses the strided form ({flat_off} of {nelem})")
             delete gh
             delete side
             delete got

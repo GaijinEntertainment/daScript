@@ -614,6 +614,11 @@ def gk_bf16_at(w : uint; odd : bool) : float => odd ? gk_bf16_hi(w) : gk_bf16_lo
 [spirv_inline]
 def gk_strided_at(e, base, stride, len : uint) : uint => base + (e / max(len, 1u)) * stride + e % max(len, 1u)
 
+//! the up element an act pairs with gate element `e`: rows of `len` `stride` apart from `base` (`gk_strided_at`) where `stride` is
+//! set, else the contiguous row from `base`
+[spirv_inline]
+def gk_up_at(e, base, stride, len : uint) : uint => stride != 0u ? gk_strided_at(e, base, stride, len) : base + e
+
 //! the workgroup reductions every row kernel of either home shares: one barrier a reduce, every thread summing the subgroup
 //! partials in the same order, so every thread holds the same sum or max; the lane primitives are each home's
 //! `gk_subgroup_add` / `gk_subgroup_max`, and the result lands by reference, the statement form the MSL emitter splices
@@ -2640,6 +2645,10 @@ struct GkRouterArgs {
     boff : uint
     yscale : float       //! every logit's scale, 0 reading as 1 (`YSCALE` stamps: the per-layer-embedding projection's 1/sqrt(dim))
 }
+
+//! the router GEMV's bf16 rows step word pairs where the row width `dim` and the base `woff` sit on whole words; elsewhere a row
+//! starts mid-word and a home's halfword stamp walks it (Metal's `MetalPleProjBf16HwT`, Vulkan's `RouterGemvBf16Hw`)
+def gk_bf16_pairs(dim, woff : int64) : bool => dim % 2l == 0l && woff % 2l == 0l
 
 //! The router GEMV: expert row e's logit for every column, the row's weights read once for all of them; `ROW_WG` gives a row a workgroup
 //! of `LANES`, else a subgroup; a lane steps `VW` elements a load: 1 (f32 rows, or bf16 halfwords under `BF16`), 2 (16-bit pairs: f16, or

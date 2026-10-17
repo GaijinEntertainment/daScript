@@ -530,8 +530,7 @@ class template ActRqT : RqT {
     def act_mul(v, u : float) : float => gk_act_mul(v, u, pa.act)
 
     //! the up element paired with gate element `eb`: with `ustride` the rows of `ulen` elements sit `ustride` apart
-    def up_at(eb : uint) : uint => (pa.ustride != 0u ? gk_strided_at(eb, pa.ubase, pa.ustride, pa.ulen)
-        : pa.ubase + eb)   //! four elements never cross a row: ulen is a 4-multiple
+    def up_at(eb : uint) : uint => gk_up_at(eb, pa.ubase, pa.ustride, pa.ulen)   //! four elements never cross a row: ulen is a 4-multiple
 
     def override load4(eb : uint) : float4 {
         let ue = up_at(eb)
@@ -588,7 +587,7 @@ class template ActF16T {
     def act_mul(v, u : float) : float => gk_act_mul(v, u, pa.act)
 
     //! the up element paired with gate element `e`: with `ustride` the rows of `ulen` elements sit `ustride` apart (the per-layer-embedding side rows)
-    def up_at(e : uint) : uint => pa.ustride != 0u ? gk_strided_at(e, pa.ubase, pa.ustride, pa.ulen) : e
+    def up_at(e : uint) : uint => gk_up_at(e, pa.ubase, pa.ustride, pa.ulen)
 
     //! element `e`'s activation as a saturated half
     def hval(e : uint) : float16 {
@@ -926,9 +925,6 @@ class RouterGemvBf16Hw : RouterGemvT {
     typedef XT = float
     override BF16 = true
 }
-
-//! the bf16 rows step word pairs where the row width and the base sit on whole words, else halfwords (`RouterGemvBf16Hw`)
-def router_bf16_pairs(dim, woff : int64) : bool => dim % 2l == 0l && woff % 2l == 0l
 
 //! the router GEMV over `pc.ncols` columns (0 or 1 = one row), past `GEMV_COL_TILE` in tiles of that many, each tile's `col0` its first
 //! column; `bf16` the bf16 rows' stamp (`hw` its halfword walk), else the f32 rows'

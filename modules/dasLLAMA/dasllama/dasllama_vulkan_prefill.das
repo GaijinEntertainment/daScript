@@ -186,14 +186,7 @@ def private pf_gemm_enc(raw : VkCommandBuffer; var h : VkHaz; idx : int; fmt : i
         }
         cm2_cls_enc(fmt, cm2_tc, raw, h, gset, pc, groups)
         if (split) {
-            var rset = cached(g_rd.pf_cls_gemm, idx * 16 + 12) $ {
-                verify(ensure_splitk_reduce_cls(), "vk prefill: the split-k reduce class rail must engage")
-                return set_splitk_reduce_cls(
-                    fixed_array(g_rd.pf_splitk, yb),
-                    fixed_array(g_rd.pf_splitk_bytes, yn),
-                    fixed_array(VHZ_SK, ybit))
-            }
-            splitk_reduce_enc(raw, h, rset, rows * d, nsplit)
+            pf_splitk_reduce_enc(raw, h, idx, yb, yn, ybit, rows * d, nsplit)
         }
     } elif (kq_sb(fmt) || cm2_b32_routed(fmt)) {
         // the role's format is static, so the slot never collides with the q8 router's variants
@@ -891,7 +884,7 @@ def private pf_ple_block(raw : VkCommandBuffer; var h : VkHaz; l : int64; b : in
     let L & = unsafe(g_rd.layers[l])
     let woff = l * ple * dim   //! the layer's first element in either f32 plane
     //! every step runs the whole window, the FFN's last-layer row slice included: the branch is 256 wide, and the sliced rows' results go unread
-    let x6 = pf_ple_gate_f16(L)   //! the gate's feed: the residual rows as f16 (the tile pick and split-k serve the 256-wide GEMM) else their quants
+    let x6 = pf_ple_plane_f16(L.bpg, L.fpg)   //! the gate's feed: the residual rows as f16 (the tile pick and split-k serve the 256-wide GEMM) else their quants
     if (L.bpg < 0l && !x6) {   //! the file's f32 rows read the stream as it is, on the f32 tile
         pfq_ts(raw)
         var pcg = pf_ple_f32_args(wlen, dim, ple, woff)
@@ -909,7 +902,7 @@ def private pf_ple_block(raw : VkCommandBuffer; var h : VkHaz; l : int64; b : in
                 pg.wqb, pg.wsb, xf.qn, xf.sn, np * ple * 4l, VHZ_XQ, VHZ_GATE, dim, ple, L.bpg, wlen, x6)
         }
     }
-    let p6 = pf_ple_proj_f16(L)   //! the projection's feed: the act rows as f16 where the projection's tile reads them, else their quants or f32 rows
+    let p6 = pf_ple_plane_f16(L.bpp, L.fpp)   //! the projection's feed: the act rows as f16 where the projection's tile reads them, else their quants or f32 rows
     if (L.bpp < 0l && !p6) {   //! the act's f32 rows (in the up plane, free here) feed the f32 projection
         var pcf = GkPleActArgs(nelem = uint(wlen * ple), sbase = uint(l * ple), sstride = all, slen = uint(ple))
         enc_ple_act_f32_cls(raw, h, g_rd.pf_sets[b + 18], pcf, (wlen * ple + 255l) / 256l)
@@ -947,11 +940,9 @@ def private pf_ple_f32_staged : bool => ple_f32_tile_ok(g_rd.dim, g_rd.ple)
 def public ple_f32_tile_ok(dim, ple : int64) : bool
     => g_env_vulkan.vk_ple_f32_tile && khr_kq_tile_on() && dim % 32l == 0l && ple % 32l == 0l
 
-//! the per-layer-embedding gate reads the window's rows as f16: a plane the f16 feed admits, or f32 rows on the staged tile
-def private pf_ple_gate_f16(L : RLayer) : bool => L.bpg < 0l ? pf_ple_f32_staged() : pf_f16_feed(L.fpg)
-
-//! the projection reads the act's rows as f16: a plane the f16 feed admits, or f32 rows on the staged tile
-def private pf_ple_proj_f16(L : RLayer) : bool => L.bpp < 0l ? pf_ple_f32_staged() : pf_f16_feed(L.fpp)
+//! a per-layer-embedding plane at arena block `blk` in format `fmt` reads its window rows as f16: a plane the f16 feed admits, or
+//! the file's f32 rows (block -1) on the staged tile
+def private pf_ple_plane_f16(blk : int64; fmt : int) : bool => blk < 0l ? pf_ple_f32_staged() : pf_f16_feed(fmt)
 
 //! the k chunks a staged f32-row GEMM of K `n` takes: the most, up to eight, `cm2_chunk` admits, each a dependent window chain's hop
 //! cut to its deepest chunk's latency (one under 512)
@@ -978,13 +969,18 @@ def private pf_f32_gemm_enc(raw : VkCommandBuffer; var h : VkHaz; idx : int; w :
     }
     enc_f32_batch_khr_cls(raw, h, s, pc, groups)
     if (split) {
-        var rset = cached(g_rd.pf_cls_gemm, idx * 16 + 12) $ {
-            verify(ensure_splitk_reduce_cls(), "vk prefill: the split-k reduce class rail must engage")
-            return set_splitk_reduce_cls(fixed_array(g_rd.pf_splitk, y), fixed_array(g_rd.pf_splitk_bytes, yn), fixed_array(VHZ_SK, ybit))
-        }
-        splitk_reduce_enc(raw, h, rset, rows * d, nsplit)
+        pf_splitk_reduce_enc(raw, h, idx, y, yn, ybit, rows * d, nsplit)
     }
     pfq_ts(raw)
+}
+
+//! a split GEMM role's reduce: the `nsplit` partial planes in the split-k scratch summed into `y`, the role's cached reduce set
+def private pf_splitk_reduce_enc(raw : VkCommandBuffer; var h : VkHaz; idx : int; y : uint64; yn : int64; ybit : uint; nelem, nsplit : int64) {
+    var rset = cached(g_rd.pf_cls_gemm, idx * 16 + 12) $ {
+        verify(ensure_splitk_reduce_cls(), "vk prefill: the split-k reduce class rail must engage")
+        return set_splitk_reduce_cls(fixed_array(g_rd.pf_splitk, y), fixed_array(g_rd.pf_splitk_bytes, yn), fixed_array(VHZ_SK, ybit))
+    }
+    splitk_reduce_enc(raw, h, rset, nelem, nsplit)
 }
 
 //! the f32 tile (`DnBaGemm`) as a plain GEMM: `d` rows of `n` at `woff` over the window's rows into y[p * d + e] - its two output
@@ -1120,7 +1116,7 @@ def private pf_setup {
     for (L in g_rd.layers) {
         any_f16_feed = (any_f16_feed || pf_f16_feed(L.fq) || pf_f16_feed(L.fo) || pf_f16_feed(L.f1) || pf_f16_feed(L.f2)
             || (L.recurrent && (pf_f16_feed(L.fqkv) || pf_f16_feed(L.fz) || pf_f16_feed(L.fout)))
-            || (L.ple && (pf_ple_gate_f16(L) || pf_ple_proj_f16(L))))
+            || (L.ple && (pf_ple_plane_f16(L.bpg, L.fpg) || pf_ple_plane_f16(L.bpp, L.fpp))))
         anykq = (anykq || kq_sb(L.fq) || kq_sb(L.fo) || kq_sb(L.f1) || kq_sb(L.f2) || (L.recurrent && (kq_sb(L.fqkv) || kq_sb(L.fz) || kq_sb(L.fout)))
             || (L.ple && ((L.bpg >= 0l && kq_sb(L.fpg)) || (L.bpp >= 0l && kq_sb(L.fpp)))))
         ple_f32 = ple_f32 || (L.ple && (L.bpg < 0l || L.bpp < 0l))
@@ -1374,18 +1370,18 @@ def private pf_setup {
         if (L.ple) {
             let ple = g_rd.ple
             let side_bytes = np * g_rd.n_layers * ple * 4l
-            if (L.bpg < 0l && !pf_ple_gate_f16(L)) {   //! 17: the f32 gate rows over the stream rows (`pf_ple_f32_args`)
+            if (L.bpg < 0l && !pf_ple_plane_f16(L.bpg, L.fpg)) {   //! 17: the f32 gate rows over the stream rows (`pf_ple_f32_args`)
                 g_rd.pf_sets[b + 17] = set_dn_ba_cls(fixed_array(g_rd.ple_gf32_dev, g_rd.pf_x, g_rd.pf_gate),
                     fixed_array(g_rd.ple_gf32_bytes, np * dim * 4l, np * ple * 4l), fixed_array(0u, VHZ_X, VHZ_GATE))
             } else {
-                g_rd.pf_sets[b + 16] = pf_feed_set(pf_ple_gate_f16(L), g_rd.pf_x, VHZ_X, g_rd.pf_xf, g_rd.pf_xq, g_rd.pf_xs, dim, VHZ_XQ)
+                g_rd.pf_sets[b + 16] = pf_feed_set(pf_ple_plane_f16(L.bpg, L.fpg), g_rd.pf_x, VHZ_X, g_rd.pf_xf, g_rd.pf_xq, g_rd.pf_xs, dim, VHZ_XQ)
             }
-            if (L.bpp < 0l && !pf_ple_proj_f16(L)) {   //! 18: the act's f32 rows into the up plane; 19: the f32 projection over them
+            if (L.bpp < 0l && !pf_ple_plane_f16(L.bpp, L.fpp)) {   //! 18: the act's f32 rows into the up plane; 19: the f32 projection over them
                 g_rd.pf_sets[b + 18] = set_ple_act_f32_cls(fixed_array(g_rd.pf_gate, g_rd.pf_ple, g_rd.pf_up),
                     fixed_array(np * ple * 4l, side_bytes, np * ple * 4l), fixed_array(VHZ_GATE, VHZ_COS, VHZ_UP))
                 g_rd.pf_sets[b + 19] = set_dn_ba_cls(fixed_array(g_rd.ple_pf32_dev, g_rd.pf_up, g_rd.pf_ffnout),
                     fixed_array(g_rd.ple_pf32_bytes, np * ple * 4l, np * dim * 4l), fixed_array(0u, VHZ_UP, VHZ_FFO))
-            } elif (pf_ple_proj_f16(L)) {   //! 18: the act as f16 rows into the hidden plane, the projection's f16 feed
+            } elif (pf_ple_plane_f16(L.bpp, L.fpp)) {   //! 18: the act as f16 rows into the hidden plane, the projection's f16 feed
                 g_rd.pf_sets[b + 18] = set_actf16_cls(fixed_array(g_rd.pf_gate, g_rd.pf_ple, g_rd.pf_hf),
                     fixed_array(np * ple * 4l, side_bytes, np * hid * 2l), fixed_array(VHZ_GATE, VHZ_COS, VHZ_HQ))
             } else {
@@ -1743,13 +1739,13 @@ def ple_proj_gemv_why(dim, all, w16_bytes : int64) : string {
 //! the projection rows' GEMV class rail: the f32 rows', or the bf16 rows' word-pair or halfword stamp by the model dim
 def private ple_proj_rail_ensure(bf16 : bool) : bool {
     if (!bf16) return ensure_router_gemv_cls()
-    return router_bf16_pairs(g_rd.dim, 0l) ? ensure_router_gemv_bf16_cls() : ensure_router_gemv_bf16_hw_cls()
+    return gk_bf16_pairs(g_rd.dim, 0l) ? ensure_router_gemv_bf16_cls() : ensure_router_gemv_bf16_hw_cls()
 }
 
 //! the bf16 projection rows' GEMV set over `bufs`: the word-pair stamp at an even model dim, the halfword stamp at an odd one (every
 //! row then starts mid-word)
 def private ple_proj_bf16_set(bufs : uint64 const[4]; sizes : int64 const[4]; gbits : uint const[4]) : VkDescriptorSet
-    => router_bf16_pairs(g_rd.dim, 0l) ? set_router_gemv_bf16_cls(bufs, sizes, gbits) : set_router_gemv_bf16_hw_cls(bufs, sizes, gbits)
+    => gk_bf16_pairs(g_rd.dim, 0l) ? set_router_gemv_bf16_cls(bufs, sizes, gbits) : set_router_gemv_bf16_hw_cls(bufs, sizes, gbits)
 
 //! The pre-step's projection on device off the file's own rows (bf16 halves `w16`, else f32 `w32`) and its norm row: the router GEMV
 //! under 1/sqrt(dim) at the token command, the window's f16 tile over a panel it converts each window (else the router GEMV) before

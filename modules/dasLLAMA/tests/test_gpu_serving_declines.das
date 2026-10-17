@@ -11,7 +11,7 @@ require dasllama/dasllama_gpu_resident
 require dasllama/dasllama_gpu_tier   // install_moe_gpu_resident_bias - the bias seat a served qwen2 needs
 require ?vulkan dasllama/dasllama_vulkan_decode   // rd_routed_slots_fit - the N-row command's slot cap, where the module exists
 require ?vulkan dasllama/dasllama_vulkan_prefill  // ple_proj_gemv_why - the window projection's tile gate, where the module exists
-require ?vulkan dasllama/dasllama_vulkan_classes  // router_bf16_pairs - the bf16 projection's stamp pick, where the module exists
+require dasllama/dasllama_gpu_kernels_common  // gk_bf16_pairs - the bf16 projection's stamp pick on both homes
 require ?vulkan dasllama/dasllama_vulkan_common   // GpuState / g_gpu - the device shell ple_proj_gemv_why reads, where the module exists
 require dasllama/dasllama_metal_shapes   // moe_metal_ok - the Metal routed block's admission, portable
 require ?das_metal dasllama/dasllama_metal_common   // decline - the required-mode panic, where the module exists
@@ -1590,7 +1590,7 @@ def test_resident_host_layers_pin(t : T?) {
 
 //! the E-series pre-step's shape gates: Metal's `metal_ple_dev_ok` serves any model dim on either projection form, any ple width,
 //! and a table bound on its own format's blocks, naming a table off them; Vulkan's bf16 projection takes the word-pair stamp at an
-//! even dim and base and the halfword stamp off them (`router_bf16_pairs`)
+//! even dim and base and the halfword stamp off them (`gk_bf16_pairs`)
 [test]
 def test_ple_proj_dim_gates(t : T?) {
     t |> run("the pre-step's shapes on each home") @(t : T?) {
@@ -1629,11 +1629,9 @@ def test_ple_proj_dim_gates(t : T?) {
         t |> success(metal_ple_dev_ok(m), "a superblock table on its superblocks serves (256 elements a row)")
         m.ple_emb_off = 32l
         t |> success(find(metal_ple_pre_unserved(m), "256-element") >= 0, "... off them is named at the superblock")
-        static_if (typeinfo builtin_module_exists(vulkan)) {
-            t |> success(router_bf16_pairs(1536l, 0l), "the Vulkan bf16 rows step word pairs at an even dim (the E2B's 1536)")
-            t |> success(!router_bf16_pairs(1537l, 0l), "... and halfwords at an odd one")
-            t |> success(!router_bf16_pairs(1536l, 3l), "... or off an odd base")
-        }
+        t |> success(gk_bf16_pairs(1536l, 0l), "the bf16 rows step word pairs at an even dim (the E2B's 1536)")
+        t |> success(!gk_bf16_pairs(1537l, 0l), "... and halfwords at an odd one")
+        t |> success(!gk_bf16_pairs(1536l, 3l), "... or off an odd base")
     }
     t |> run("the window's f32 per-layer rows take the staged tile only on its k step") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {

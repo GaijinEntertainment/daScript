@@ -7198,7 +7198,7 @@ class MetalPleProjBf16Hw : MetalPleProjBf16HwT {
 //! the projection off the bf16 rows over `nst` columns: the word pairs where the dim and the base step whole words, else the
 //! halfword walk; `blocked` the position-blocked stamps, else a threadgroup a row
 def enc_ple_proj_bf16_rows(enc : MetalComputeEncoder?; bw, bx, by : MetalBuffer?; var ka : GkRouterArgs; ne, nst : int64; blocked : bool) {
-    let pairs = ka.dim % 2u == 0u && ka.woff % 2u == 0u
+    let pairs = gk_bf16_pairs(int64(ka.dim), int64(ka.woff))
     if (pairs && blocked) {
         enc_ple_proj_bf16(enc, bw, bx, by, ka, ne, nst)
     } elif (pairs) {
