@@ -3,7 +3,8 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 doc: `../ARCHITECTURE.md`. Planned work: `../followup_general.md`.
 
-A cell is as `REVIEW.md` (beside this file) defines it. A pinned test cell is a cell the pinned set lists,
+A cell is one `t |> run` subtest, or a `[test]` function that runs no subtest, and owns the asserts
+of every helper it calls. A pinned test cell is a cell the pinned set lists,
 or any cell of a file the pinned set lists whole - a file entry, one naming the file and no cell -
 and the pinned set is the only test of whether a cell is one; a named-cell entry names a `[test]`
 function and pins every cell that function runs. The pinned set, one entry a line, each with what it
@@ -38,11 +39,10 @@ must keep holding:
   - `geglu_side_gate` over the position-major side rows, the contiguous read its control;
   - `ple_finish_gate` on the position-major side rows (`ple_fin_args`), at the E2B's slices
     (35 x 256), at a ple width past 1024 and at one off the 32-lane step, the finish without
-    the prescale its control;
-  - `test_pf_bf16_tile_pick`: the window's projection takes the bf16 tile only where layers x
-    ple is a multiple of 64 and the dim a multiple of 32.
-  The PLE side-row gather's coverage is `test_metal_misc_kernels`' embed gates (entry below),
-  the gemma-4 down-scale fold's the select's down-scale arms.
+    the prescale its control.
+- `test_metal_prefill_kernels.das`'s `test_pf_bf16_tile_pick` cell must hold the window
+  projection's tile pick: the bf16 tile only where layers x ple is a multiple of 64 and the dim a
+  multiple of 32.
 - `test_metal_misc_kernels.das`'s `test_metal_misc_kernels` cell must hold its token-table
   gathers bit for bit: `embed_q8_gate`, `embed_b32_gate` on q51, iq4nl32, q4032 and q5032 at 96
   wide, at 2048 wide past a whole other table's blocks, and at a lead off a superblock boundary
@@ -140,8 +140,8 @@ keep holding, an axis gained or lost - updates that cell's entry in the pinned s
 change; a diff adding a cell to a file with a file entry adds to that entry each axis the cell
 asserts that the entry does not name.**
 An axis is one distinct behaviour the cell asserts - an output form, a refusal path, an argument's
-order; a new input row is an axis gained only where it reaches a kernel argument, form or path no
-earlier row reached.
+order; a new input row is an axis gained only where it runs a kernel stamp, an output form or a
+branch of the kernel or its router that no earlier row of the cell ran.
 
 **A diff that widens a pinned test cell's tolerance, swaps its comparison for one more outputs
 pass, rewrites an expected value without updating that cell's pinned-set entry in the same change,
@@ -160,9 +160,10 @@ asserts the replacement's output to that bound.**
 
 **A diff that adds a cell or an assert whose expected value must be kept in step with something
 maintained outside the cell - a document, a checked-in table, a committed artifact's form, a
-roster, a knob list; not a value the cell's own claim defines - or that a checked-in table (a
-`README.md` model table, or a census list's coverage note) names as its evidence, adds the cell
-carrying it to the pinned set in the same change** - as a named cell, or, when the new cell
+roster, a knob list; not a value the cell's own claim defines - or that a checked-in table - the
+model table in `../README.md`, or a list of kernel names whose coverage note names a test cell as
+the evidence for each - names as its evidence, adds the cell carrying it to the pinned set in the
+same change** - as a named cell, or, when the new cell
 leaves every cell of its file pinned, by replacing the file's named cells with one file entry
 naming what it pins. A new entry in an existing cell's expectation list is not a new assert, and
 an assert that compares against a `../dasllama/` constant by name, not against a literal copy of
