@@ -10,7 +10,7 @@ and coverage; this ledger is the backlog for the perf pass that follows them. Ev
 what it costs today and what the fix would change.
 
 ## Entries
-- **MEASURED (2026-10-18) - the gemma leg's end re-measure, the M5 half.** Instrument `benchmarks/lcpp_bench.das`
+- **MEASURED (2026-10-16) - the gemma leg's end re-measure, the M5 half.** Instrument `benchmarks/lcpp_bench.das`
   (`--ngl 99 -p 512 -n 128 -r 5 --for-debug-purposes`, debug-jit), the M5 Max (128 GB) alone on the box, one box profile
   minted at the leg tip (505 s, 39,101 B) and read by both trees: master's own build (33e7910669) against the leg tip
   (ab97a01251). pp512 / tg128 tok/s, master -> leg: gemma-2 2B Q8_0 10471 -> 10810 / 165 -> 165; gemma-3 1B Q8_0 21663
@@ -31,6 +31,11 @@ what it costs today and what the fix would change.
   (its constant where it has one), the reading and the box. The Vulkan box is the RTX PRO 4500 (32 GB) pod, its cells run
   one file through `dastest` under `DASLLAMA_GPU=1 DASLLAMA_PARITY_FULL=1` with the cell's arm in `DASLLAMA_TEST_ARMS`;
   the Metal box is the M5 Max, through `tests/run.das -- --arm <family>` under `DASLLAMA_PARITY_FULL=1`.
+  - gemma-4-31B Q4_K_M, the forced-feed freeform decode on Metal (`test_metal_support_matrix.das`'s
+    `gemma4_hetero_row`, tag `gemma4-31b/k4`, arm `fam-gemma4`): the 12B's bar, 8.0 on the whole-vocab logit gap, held over
+    the stream's first 29 rows of 128 (`free_rows`) where the 12B rows hold all 128. Reads under 8 on those rows; at the
+    30th row the greedy stream (llama.cpp's too) falls into a one-token loop, both chains pick the loop token, and the gap
+    inside it grows to 18, so the rows past the 29th carry no information the bar could read. M5.
   - gemma-4-26B-A4B Q4_K_M, the assistant drafter's device step against the CPU oracle on Vulkan
     (`test_gemma_drafter_gpu_step`, arm `mtp-gdraft-gpu`): `VK_FEED_FLIP_BAR` 0.5 on the draft logits and on `h_next`,
     the oracle reading Q8_0 activation rows as the device's GEMVs do. Reads 0.30 / 0.29 at the short anchor and 8.6e-6 /

@@ -17,7 +17,8 @@ or the PR description. A serving call is a decode, a prefill, or an encoder or s
 GPU driver fills; a tower driver is the driver filling a family's encoder or synthesis stages
 (`dasllama/dasllama_metal_tower.das`, `dasllama/dasllama_vulkan_tower.das`,
 `dasllama/dasllama_vulkan_tts.das`). A bar is the largest difference a continuous compare accepts -
-a constant, or a constant times a statistic of the reference.
+a constant, or a constant times a statistic of the reference; for a tally of rows whose ids match,
+the most mismatched rows it accepts.
 
 **A diff that cites as parity evidence a compare whose GPU side is a `[vk_dispatch]` or
 `[metal_dispatch]` class the cell dispatches itself applies the `tests/` subfolder's
@@ -39,8 +40,8 @@ marked as a probe's, never as evidence.
 
 **A diff that cites as parity evidence a `tests/run.das` cell that compares a continuous output
 other than within a bar, or a discrete output other than exactly, is a defect.** A continuous
-output is floats, float rows in an encoding that rounds them, or a tally of matching rows, whose
-bar is the most misses it accepts; a discrete output is ids or tokens compared row by row.
+output is floats, float rows in an encoding that rounds them, or a tally of rows whose ids match;
+a discrete output is ids, tokens or any other count, each held equal.
 
 **A diff that adds or changes, in a `PERF_LEDGER.md`, `followup_metal.md` or `followup_vulkan.md`
 entry, a reading offered as parity evidence names in that entry the run
@@ -49,12 +50,12 @@ run - and, for a `tests/run.das` run, the cell that read it; an entry crediting 
 cell that does not produce it is a defect.**
 
 **A diff that cites Metal parity evidence, or Metal driver-against-itself evidence, whose GPU
-side is a decode, prefill or draft step, with no cell assert or logged before/after reading, across
-every GPU call whose reading it cites, of a value only the device-served step produces -
-`metal_decode_stats`' `decodes`, `metal_batch_decode_stats`' `steps` or `metal_prefill_stats`'
-`prefills` rising, `gemma_draft_step_gpu` returning true, or a `metal_kernel_coverage_of` count of
-a kernel only the device-served step dispatches rising - is a defect.** Without that value the run
-may have measured the CPU.
+side is a decode, prefill or draft step (a drafter's step proposing the next token), with neither
+a cell assert or logged before/after reading, across every GPU call whose reading it cites, of one
+of these counters rising - `metal_decode_stats`' `decodes`, `metal_batch_decode_stats`' `steps`,
+`metal_prefill_stats`' `prefills`, or a `metal_kernel_coverage_of` count of a kernel only the
+device-served step dispatches - nor a cell assert of `gemma_draft_step_gpu` returning true, is a
+defect.** Without one of these the run may have measured the CPU.
 
 **A diff that cites Metal parity or driver-against-itself evidence of the Metal tower driver or
 the ASR-decoder driver (`dasllama/dasllama_metal_asr_dec.das`) with no cell assert or logged
@@ -99,10 +100,10 @@ compare is evidence for a `PERF_LEDGER.md` row.**
 
 **A diff that holds a model file's serving-call output, in a compare offered as parity evidence,
 to a bar no earlier such compare held that file to, or changes the constant - or the statistic the
-constant multiplies - of such a bar, or which rows, steps or positions such a bar reads, adds a
-`PERF_LEDGER.md` row in the same change naming the bar
-(its named constant, where it has one, and its value), the reading it comes from and the box that
-read it.**
+constant multiplies - of such a bar, or changes which rows, steps or positions the compare holds
+to such a bar, adds a `PERF_LEDGER.md` row in the same change naming the bar (its named constant,
+where it has one, and its value), the rows, steps or positions it holds, the reading it comes from
+and the box that read it.**
 
 **A diff that renames or moves a bar's named constant updates, in the same change, every
 `PERF_LEDGER.md` row that names that constant.**

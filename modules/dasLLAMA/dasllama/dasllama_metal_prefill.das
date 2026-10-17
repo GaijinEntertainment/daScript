@@ -7158,7 +7158,7 @@ def private pf_enc_narrow_ple(enc : MetalComputeEncoder?; t : Model; l : int64; 
 //! true iff THIS window's metal prefill will engage AND the pre-step kernels cover the model
 [unused_argument(s, start_pos)]
 def private metal_ple_pre_gpu_gate(t : Model; s : Session; npos, start_pos : int64) : bool {
-    if (active_prefill_override() != "metal" || !metal_ple_dev_ok(t) || (t.config.n_layers * t.config.n_embd_per_layer) % 64l != 0l
+    if (active_prefill_override() != "metal" || !metal_ple_dev_said("prefill", t) || (t.config.n_layers * t.config.n_embd_per_layer) % 64l != 0l
             || prefill_decline_caps(t, npos) != MetalPrefillDecline.none) {
         return false
     }
