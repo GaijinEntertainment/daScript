@@ -2837,6 +2837,37 @@ def test_vkd_kq_q40_cm_batch(t0 : T?) {
     }
 }
 
+//! a KHR stamp's split arm over a tile fixture: its first region alone under two 256-aligned k chunks (`want_ck` and the rest) into
+//! the partial planes, then the reduce into the y plane, against the oracle's first region - the k0 / k1 / ybase prologue every KHR
+//! stamp shares with the cm2 tiles
+def private khr_split_arm(t : T?; tag : string; f : TileFixture; y_ref : array<float>; want_ck : int64; set_fn; enc_fn) {
+    verify(ensure_splitk_reduce_cls(), "the split-k reduce's class rail must engage")
+    let nsplit = 2
+    let ck = cm2_chunk(int64(f.n), int64(nsplit))
+    t |> equal(ck, want_ck, "the engine's chunk: K {f.n} in two 256-aligned chunks, {want_ck} and {int64(f.n) - want_ck} deep")
+    let cnt0 = TILE_CELL_ROWS0
+    let d = TILE_CELL_D
+    let swgs = ((cnt0 + 127) / 128) * ((d + 127) / 128) * nsplit
+    var y_ref0 <- copy_span(y_ref, 0, cnt0 * d)   // the oracle's first region is the split arm's whole answer
+    with_cell_planes() $(var cp : CellPlanes) {
+        let pwq = cp |> in_plain(f.wqh)
+        let pws = cp |> in_plain(f.wsh)
+        let psc = cp |> in_plain(one_region_words(cnt0, swgs))   // one region at row 0 over the first weight plane
+        let pxf = cp |> in_plain(f.xfh)
+        let pp = cp |> out_(cnt0 * d * nsplit)
+        let py = cp |> out_(cnt0 * d)
+        var scs = cp |> cls_set(fixed_array(pwq, pws, psc, pxf, pp), set_fn)
+        var srd = cp |> cls_set(fixed_array(pp, py), @@set_splitk_reduce_cls)
+        var pcs = BatchArgs(n = uint(f.n), d = uint(d), map_off = 4u, ksplit = uint(ck))
+        cp |> cell_record() $(raw3 : VkCommandBuffer; var h3 : VkHaz) {
+            invoke(enc_fn, raw3, h3, scs, pcs, int64(swgs))
+            splitk_reduce_enc(raw3, h3, srd, int64(cnt0 * d), int64(nsplit))
+        }
+        check_rows(t, "{tag} split in two k chunks + the reduce vs the CPU oracle", cp |> plane_run(py), y_ref0, cm_bar(y_ref0), d)
+    }
+    delete y_ref0
+}
+
 [test]
 def test_vkd_q8_khr_batch(t0 : T?) {
     t0 |> run("the KHR kq tile over Q8_0 blocks (q8_batch_khr) == the CPU oracle") <| @(t : T?) {
@@ -2855,31 +2886,7 @@ def test_vkd_q8_khr_batch(t0 : T?) {
             var y_ref <- tile_cell_arms(t, "q8", int(KqFmt.q8), f, [ARM_KHR], @@q8f16_gemm_oracle)
             // the split arm: the first region alone under two 256-aligned k chunks (512 and 64 deep) into the partial
             // planes, then the reduce into the y plane - the k0 / k1 / ybase prologue the KHR stamp shares with the cm2 tiles
-            verify(ensure_splitk_reduce_cls(), "the split-k reduce's class rail must engage")
-            let nsplit = 2
-            let ck = cm2_chunk(int64(f.n), int64(nsplit))
-            t |> equal(ck, 512l, "the engine's chunk: K 576 in two 256-aligned chunks, 512 and 64 deep")
-            let cnt0 = TILE_CELL_ROWS0
-            let d = TILE_CELL_D
-            let swgs = ((cnt0 + 127) / 128) * ((d + 127) / 128) * nsplit
-            var y_ref0 <- copy_span(y_ref, 0, cnt0 * d)   // the oracle's first region is the split arm's whole answer
-            with_cell_planes() $(var cp : CellPlanes) {
-                let pwq = cp |> in_plain(f.wqh)
-                let pws = cp |> in_plain(f.wsh)
-                let psc = cp |> in_plain(one_region_words(cnt0, swgs))   // one region at row 0 over the first weight plane
-                let pxf = cp |> in_plain(f.xfh)
-                let pp = cp |> out_(cnt0 * d * nsplit)
-                let py = cp |> out_(cnt0 * d)
-                var scs = cp |> cls_set(fixed_array(pwq, pws, psc, pxf, pp), @@set_q8_batch_khr_cls)
-                var srd = cp |> cls_set(fixed_array(pp, py), @@set_splitk_reduce_cls)
-                var pcs = BatchArgs(n = uint(f.n), d = uint(d), map_off = 4u, ksplit = uint(ck))
-                cp |> cell_record() $(raw3 : VkCommandBuffer; var h3 : VkHaz) {
-                    enc_q8_batch_khr_cls(raw3, h3, scs, pcs, int64(swgs))
-                    splitk_reduce_enc(raw3, h3, srd, int64(cnt0 * d), int64(nsplit))
-                }
-                check_rows(t, "q8 KHR tile split in two k chunks + the reduce vs the CPU oracle", cp |> plane_run(py), y_ref0, cm_bar(y_ref0), d)
-            }
-            delete y_ref0
+            khr_split_arm(t, "q8 KHR tile", f, y_ref, 512l, @@set_q8_batch_khr_cls, @@enc_q8_batch_khr_cls)
             delete y_ref
             delete f
         } else {
@@ -2905,6 +2912,7 @@ def test_vkd_f32_khr_batch(t0 : T?) {
             var wsh <- [0u, 0u, 0u, 0u]   //! the template's scale binding, which the f32 stage never reads
             var f <- tile_fixture(n, 4, wqh, wsh, 3u, 5u)
             var y_ref <- tile_cell_arms(t, "f32", int(KqFmt.q8), f, [ARM_KHR_F32], @@f32f16_gemm_oracle)
+            khr_split_arm(t, "the staged f32 tile", f, y_ref, 512l, @@set_f32_batch_khr_cls, @@enc_f32_batch_khr_cls)   //! the window gate's split form
             delete y_ref
             delete f
         } else {

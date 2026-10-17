@@ -7924,7 +7924,7 @@ class Q8KhrBatch : Q8Cm2T {
 //! a file's f32 rows under the template: a block is one 16-byte word of four f32 bit patterns; only the KHR stamp exists, so the
 //! decode serves the template's uncalled cm2 body alone
 [ |> template_struct_instance]
-class template F32Cm2T : KqCm2BatchT {
+class template F32RowsKhrT : KqCm2BatchT {
     typedef BLK = uint4
     typedef ST = float16
     override BLKW = 4u
@@ -7943,7 +7943,7 @@ class template F32Cm2T : KqCm2BatchT {
 }
 
 [vk_dispatch(name = "f32_batch_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64"), arch(at = "../ARCHITECTURE_GPU_VULKAN_KHR.md#f32-rows-staged-tile")]
-class F32KhrBatch : F32Cm2T {
+class F32KhrBatch : F32RowsKhrT {
     override KHR = true
     override BN = 128u
     override STILE = true
