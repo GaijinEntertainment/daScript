@@ -12925,9 +12925,28 @@ void das2_yyfatalerror ( DAS2_YYLTYPE * lloc, yyscan_t scanner, const string & e
         lloc->first_column,lloc->first_line,lloc->last_column,lloc->last_line),cerr);
 }
 
+// a keyword where the grammar wanted a name is the usual shape behind "unexpected <word>, expecting ... name":
+// the word is bison's token text, so the note names it as the reserved word it is
+static string das2_reservedWordNote ( const string & error ) {
+    const char * prefix = "unexpected ";
+    auto at = error.find(prefix);
+    if ( at==string::npos ) return "";
+    auto expecting = error.find("expecting", at);
+    if ( expecting==string::npos ) return "";
+    if ( error.find(" name", expecting)==string::npos ) return "";   // the expectation list wanted a name
+    auto from = at + strlen(prefix);
+    auto to = error.find(',', from);
+    string tok = error.substr(from, to==string::npos ? string::npos : to-from);
+    if ( tok.empty() || tok=="name" ) return "";   // "unexpected name" is an identifier out of place, not a keyword
+    for ( char c : tok ) {   // "end of file", "$end", "'('", "integer constant" are not words; int2, float4, uint16 are
+        if ( !((c>='a' && c<='z') || (c>='0' && c<='9') || c=='_') ) return "";
+    }
+    return " - '" + tok + "' is a reserved word and cannot be used as a name";
+}
+
 void das2_yyerror ( DAS2_YYLTYPE * lloc, yyscan_t scanner, const string & error ) {
     if ( !yyextra->das_suppress_errors ) {
-        yyextra->g_Program->error(error,"","",LineInfo(yyextra->g_FileAccessStack.back(),
+        yyextra->g_Program->error(error + das2_reservedWordNote(error),"","",LineInfo(yyextra->g_FileAccessStack.back(),
             lloc->first_column,lloc->first_line,lloc->last_column,lloc->last_line),
                 CompilationError::invalid_expression);
     }

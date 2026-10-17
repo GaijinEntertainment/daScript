@@ -6,21 +6,8 @@ options no_aot     // invokes the compiler at runtime (compile_file) — not AOT
 require daslib/ast
 require strings
 require dastest/testing_boost public
+require _compile_issues
 
-
-def compile_issues(file_path : string) : string {
-    var issuesText = ""
-    var inscope access <- make_file_access("")
-    using() $(var mg : ModuleGroup) {
-        using() $(var cop : CodeOfPolicies) {
-            cop.threadlock_context = true
-            compile_file(file_path, access, unsafe(addr(mg)), cop) $(_ok, _program, issues) {
-                issuesText := issues
-            }
-        }
-    }
-    return issuesText
-}
 
 
 [test]
