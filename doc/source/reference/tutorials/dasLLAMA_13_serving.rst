@@ -109,13 +109,17 @@ others by a chunk, not by its whole length. Results come back as
 When the round is over, ``mtp_drafter_stats`` reads the assistant's tally —
 its rounds, the joint verifies that carried two streams or more, and the
 microseconds split between the draft chains, the verify and the plain steps —
-and ``detach_mtp_drafter`` stops its rounds, so plain decode serves again:
+and ``detach_mtp_drafter`` stops its rounds, so plain decode serves again.
+``attach_mtp_sidecar`` is the find-and-attach pair in one call, the form the
+server uses: it answers the drafter's path, or ``""`` where none sits beside
+the model or every driver refused it:
 
 .. code-block:: das
 
    let st = mtp_drafter_stats(m)
    print("drafter: {st.rounds} rounds, {st.joint} joint, verify {st.verify_us / 1000l}ms\n")
    detach_mtp_drafter(m)   // a model with no drafter attached is left as it was
+   let again = attach_mtp_sidecar(m, path)   // "" where none sits beside the model
 
 The tutorial prints one digit — the stream id — per generated piece, so the
 run shows continuous batching literally::
@@ -220,7 +224,12 @@ holds the cache in, which is the codec its sessions are made in: ``f16`` by
 default, ``q8_0`` about half those bytes and ``tq4`` about a quarter - room a
 longer context takes. ``gpu_kv_dtype_pin`` reads back what was asked and
 whether anyone asked at all, and ``reset_gpu_kv_dtype`` takes the ask away, so
-the environment decides again. After the load we ask what we got: ``gpu_device_sessions`` answers the
+the environment decides again. ``set_gpu_host_layers`` serves the first *n*
+routed layers' experts of a plain MoE on the host whatever the card holds -
+device memory traded for speed, the in-process ``DASLLAMA_GPU_HOST_LAYERS``;
+``0`` leaves the split to the card and a negative *n* lifts the pin.
+``gpu_host_layers_pin`` reads it back (``-1`` where nobody pinned).
+After the load we ask what we got: ``gpu_device_sessions`` answers the
 region count (0 on a CPU box, under the per-op rails, and on Metal),
 ``gpu_resident_decline`` says why the driver does not serve,
 ``gpu_device_session_ctx`` answers the positions per region,
@@ -239,9 +248,12 @@ whose speculative round a server leaves off):
    set_gpu_ctx_strict(false)   // a cap; true asks for the 8192 whole
    let kv_pin = gpu_kv_dtype_pin()
    set_gpu_kv_dtype(KVDtype.f16)   // q8_0 or tq4 here takes sessions made in it
+   let host_pin = gpu_host_layers_pin()
+   set_gpu_host_layers(0l)   // n here moves the first n layers' experts to the host
    // ... load_model runs here ...
    set_gpu_ctx_max(pins.ctx_max)
    set_gpu_ctx_strict(pins.strict)
+   set_gpu_host_layers(host_pin)   // -1 lifts the pin again
    if (kv_pin.pinned) {
        set_gpu_kv_dtype(kv_pin.dt)
    } else {
