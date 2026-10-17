@@ -202,8 +202,8 @@ one), states in the cell what makes them compute bit-identical logits - the shar
 an assert pinning the lane, or a lane pin plus the layout that alone differs.**
 
 **A test in this folder that loads a stocked artifact whose producer none of the following names
-is a defect.** Any one of these names the producer: a row in `../performance/model_specs.das`; a row's
-`companions` list; a row in `asr_catalog` (`../performance/profile_common.das`); a convert
+is a defect.** Any one of these names the producer: a row in `../performance/model_specs.das`; a
+row's `companions` list; a row in `asr_catalog` (`../performance/profile_common.das`); a convert
 script in `../harness/`; for an oracle dump, the mint script stocked beside the dumps under
 `models_dir()`, named by the test that loads the dump.
 
