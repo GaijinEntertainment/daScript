@@ -682,6 +682,42 @@ def private run_ple_f32_shape(name : string; d, n, cnt, rounds : int) {
         }
         print("r{round} {name} scalar f32: {us_scalar} us/dispatch  {flop / (us_scalar * 1000000.0lf)} TFLOP/s | staged: {us_staged} us/dispatch  {flop / (us_staged * 1000000.0lf)} TFLOP/s  timing-only\n")
     }
+    //! one dispatch at a time (one hazard rail, one output plane): the latency a dependent window chain pays the role - the scalar
+    //! tile, the staged tile whole, and the staged tile over 256-aligned k chunks chained into the split-k reduce
+    verify(ensure_splitk_reduce_cls(), "the split-k reduce's probe pipeline must engage")
+    let max_split = 8
+    let part_bytes = int64(max_split * cnt * d) * 4l
+    let yp = make_device_buf(part_bytes)
+    for (round in range(rounds)) {
+        let lat_scalar = timed_chain() $(raw; var hz) {
+            for (_k in range(DISPATCHES)) {
+                enc_dn_ba_cls(raw, hz, sa, pd, dn_ba_wgs(int64(cnt), int64(d / 2)))
+            }
+        }
+        let lat_whole = timed_chain() $(raw; var hz) {
+            for (_k in range(DISPATCHES)) {
+                enc_f32_batch_khr_cls(raw, hz, ka, pk, int64(wgs))
+            }
+        }
+        print("r{round} {name} one at a time: scalar f32 {lat_scalar} us | staged whole {lat_whole} us  timing-only\n")
+        for (nsplit in fixed_array(2, 3, 4, 6, 8)) {
+            let ck = cm2_chunk(int64(n), int64(nsplit))
+            continue if (ck == 0l)
+            let swgs = wgs * nsplit
+            let ssc = one_region_sched(cnt, swgs)
+            var ks = set_f32_batch_khr_cls(fixed_array(wd, dummy, ssc.buf, x16, yp),
+                fixed_array(w_bytes, 256l, ssc.bytes, int64(cnt * n) * 2l, part_bytes), fixed_array(1u, 0u, 0u, 2u, 16u))
+            var rs = set_splitk_reduce_cls(fixed_array(yp, ya), fixed_array(part_bytes, int64(cnt * d) * 4l), fixed_array(16u, 4u))
+            var pks = BatchArgs(n = uint(n), d = uint(d), map_off = 4u, ksplit = uint(ck))
+            let lat = timed_chain() $(raw; var hz) {
+                for (_k in range(DISPATCHES)) {
+                    enc_f32_batch_khr_cls(raw, hz, ks, pks, int64(swgs))
+                    splitk_reduce_enc(raw, hz, rs, int64(cnt * d), int64(nsplit))
+                }
+            }
+            print("r{round} {name} one at a time: staged split{nsplit} (chunk {ck}) + reduce {lat} us  timing-only\n")
+        }
+    }
 }
 
 // ===== the decode head's small kernels in isolation (arg "dec") =====

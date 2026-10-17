@@ -10,7 +10,8 @@ require dasllama/dasllama_sampling
 require dasllama/dasllama_gpu_resident
 require dasllama/dasllama_gpu_tier   // install_moe_gpu_resident_bias - the bias seat a served qwen2 needs
 require ?vulkan dasllama/dasllama_vulkan_decode   // rd_routed_slots_fit - the N-row command's slot cap, where the module exists
-require ?vulkan dasllama/dasllama_vulkan_prefill  // ple_proj_bf16_why - the bf16 projection's dim gate, where the module exists
+require ?vulkan dasllama/dasllama_vulkan_prefill  // ple_proj_gemv_why - the window projection's tile gate, where the module exists
+require ?vulkan dasllama/dasllama_vulkan_classes  // router_bf16_pairs - the bf16 projection's stamp pick, where the module exists
 require ?vulkan dasllama/dasllama_vulkan_common   // GpuState / g_gpu - the device shell ple_proj_gemv_why reads, where the module exists
 require dasllama/dasllama_metal_shapes   // moe_metal_ok - the Metal routed block's admission, portable
 require ?das_metal dasllama/dasllama_metal_common   // decline - the required-mode panic, where the module exists
@@ -1588,8 +1589,8 @@ def test_resident_host_layers_pin(t : T?) {
 }
 
 //! the E-series pre-step's shape gates: Metal's `metal_ple_dev_ok` serves any model dim on either projection form, any ple width,
-//! and a table bound on its own format's blocks, naming a table off them; Vulkan's `ple_proj_bf16_why` names an odd dim for the
-//! bf16 stamp
+//! and a table bound on its own format's blocks, naming a table off them; Vulkan's bf16 projection takes the word-pair stamp at an
+//! even dim and base and the halfword stamp off them (`router_bf16_pairs`)
 [test]
 def test_ple_proj_dim_gates(t : T?) {
     t |> run("the pre-step's shapes on each home") @(t : T?) {
@@ -1629,9 +1630,9 @@ def test_ple_proj_dim_gates(t : T?) {
         m.ple_emb_off = 32l
         t |> success(find(metal_ple_pre_unserved(m), "256-element") >= 0, "... off them is named at the superblock")
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            t |> equal(ple_proj_bf16_why(1536l), "", "the Vulkan bf16 stamp serves an even dim")
-            let why = ple_proj_bf16_why(1537l)
-            t |> success(find(why, "even dim") >= 0 && find(why, "1537") >= 0, "... and names an odd one: '{why}'")
+            t |> success(router_bf16_pairs(1536l, 0l), "the Vulkan bf16 rows step word pairs at an even dim (the E2B's 1536)")
+            t |> success(!router_bf16_pairs(1537l, 0l), "... and halfwords at an odd one")
+            t |> success(!router_bf16_pairs(1536l, 3l), "... or off an odd base")
         }
     }
     t |> run("the window's projection names an f16 panel past the device's storage range") @(t : T?) {

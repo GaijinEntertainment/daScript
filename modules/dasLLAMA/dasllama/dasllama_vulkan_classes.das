@@ -918,16 +918,29 @@ class RouterGemvBf16 : RouterGemvT {
     override BF16 = true
 }
 
+//! the same bf16 rows a halfword a lane, for an odd dim or base: a row then starts mid-word, off the pairs' word grid
+[vk_dispatch(name = "router_gemv_bf16_hw_cls", grid = "ne", params = "ne : int64")]
+class RouterGemvBf16Hw : RouterGemvT {
+    typedef KT = uint16
+    typedef XT = float
+    override BF16 = true
+}
+
+//! the bf16 rows step word pairs where the row width and the base sit on whole words, else halfwords (`RouterGemvBf16Hw`)
+def router_bf16_pairs(dim, woff : int64) : bool => dim % 2l == 0l && woff % 2l == 0l
+
 //! the router GEMV over `pc.ncols` columns (0 or 1 = one row), past `GEMV_COL_TILE` in tiles of that many, each tile's `col0` its first
-//! column; `bf16` the bf16 rows' stamp, else the f32 rows'
+//! column; `bf16` the bf16 rows' stamp (`hw` its halfword walk), else the f32 rows'
 [arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-col-tiles")]
-def router_enc_cols(bf16 : bool; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; var pc : GkRouterArgs; ne : int64) {
+def router_enc_cols(bf16 : bool; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; var pc : GkRouterArgs; ne : int64; hw : bool = false) {
     let total = max(pc.ncols, 1u)
     var c0 = 0u
     while (c0 < total) {
         pc.col0 = c0
         pc.ncols = min(total - c0, GEMV_COL_TILE)
-        if (bf16) {
+        if (bf16 && hw) {
+            enc_router_gemv_bf16_hw_cls(raw, h, set_, pc, ne)
+        } elif (bf16) {
             enc_router_gemv_bf16_cls(raw, h, set_, pc, ne)
         } else {
             enc_router_gemv_cls(raw, h, set_, pc, ne)

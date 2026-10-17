@@ -124,6 +124,16 @@ the next dispatch finds its code, descriptors and planes out of every cache - th
 window chain streams between two uses of one stamp; the flush writes the feed's region, so the
 stamp after it waits on the flush and the next flush waits on the stamp.
 
+Two arms race the KHR staged tile (`ARCHITECTURE_GPU_VULKAN_KHR.md#khr-mm-kq-tile`) against what a
+cm2 card serves in its place, each form whole over the same planes, sixteen dispatches over two
+alternating outputs, the arms in turn inside each round. `kqst:<fmt>` puts a K-quant format's cm2
+l, m and s stamps, on the decode arm the device runs, beside the staged tile at gemma-4 E2B's role
+shapes (dim 1536, the FFN pair at 6144 and the doubled 12288, q 2048, a kv or gate plane of 256,
+the projection over K 256) and the 4B's FFN pair, at 512 rows; the cm2 l stamp is its alternate.
+`plef32` puts the scalar f32 tile (`DnBaGemm`) beside the staged tile over the same f32 words at
+the per-layer-embedding gate and projection shapes of the E2B and the E4B, 512 rows, three rounds;
+the scalar tile is its alternate.
+
 `harness/vk_gk_rows_probe.das`, the row kernels' Vulkan ruler, holds one output and one hazard rail
 across each row's 64 dispatches, so each row reads a dependent decode chain's per-hop latency: the
 routed down's summed GEMV against the slot-at-a-time leaf (the rows the combine then reads), the

@@ -9297,11 +9297,16 @@ def test_vkd_topk_n(t0 : T?) {
 }
 
 //! the router GEMV's descriptor set on the stamp `bf16` names
-def private router_set(bf16 : bool; bufs; sizes) => bf16 ? set_router_gemv_bf16_cls(bufs, sizes, fixed_array(0u, 1u, 2u, 0u)) : set_router_gemv_cls(bufs, sizes, fixed_array(0u, 1u, 2u, 0u))
+def private router_set(bf16 : bool; bufs; sizes; hw : bool = false) {
+    if (bf16 && hw) return set_router_gemv_bf16_hw_cls(bufs, sizes, fixed_array(0u, 1u, 2u, 0u))
+    return bf16 ? set_router_gemv_bf16_cls(bufs, sizes, fixed_array(0u, 1u, 2u, 0u)) : set_router_gemv_cls(bufs, sizes, fixed_array(0u, 1u, 2u, 0u))
+}
 
 //! the router GEMV recorded on the stamp `bf16` names
-def private router_enc(bf16 : bool; raw; var h; var sc; var pc; groups : int64) {
-    if (bf16) {
+def private router_enc(bf16 : bool; raw; var h; var sc; var pc; groups : int64; hw : bool = false) {
+    if (bf16 && hw) {
+        enc_router_gemv_bf16_hw_cls(raw, h, sc, pc, groups)
+    } elif (bf16) {
         enc_router_gemv_bf16_cls(raw, h, sc, pc, groups)
     } else {
         enc_router_gemv_cls(raw, h, sc, pc, groups)
@@ -9332,16 +9337,17 @@ def private router_cols_oracle(t : T?; arm : string; got, xh, nh, wdev : array<f
 //! the router GEMV over `ncols` x rows against the one-row dispatch a row at a time (word for word through `nform_cols_cell`:
 //! one kernel body, the same order) and against a CPU oracle of the same dot - the bf16 stamp's weights truncated as the device
 //! reads them, and under `norm_on` each row's rms under a norm row, as the gemma-4 MoE router reads its input
-def private router_cols_arm(t : T?; ncols : int; norm_on, bf16 : bool) {
+def private router_cols_arm(t : T?; ncols : int; norm_on, bf16 : bool; hw : bool = false) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
-        let stamp = bf16 ? "bf16" : "f32"
+        let stamp = bf16 ? (hw ? "bf16 halfword" : "bf16") : "f32"
         let form = "router_gemv {stamp}{norm_on ? " under the fused rms" : ""}"
         let arm = "{form} over {ncols} columns"
-        if (bf16 ? !ensure_router_gemv_bf16_cls() : !ensure_router_gemv_cls()) {
+        let rail = (bf16 ? (hw ? ensure_router_gemv_bf16_hw_cls() : ensure_router_gemv_bf16_cls()) : ensure_router_gemv_cls())
+        if (!rail) {
             t |> skip("{arm}: the class rail declined on this device")
             return
         }
-        let dim = 2048
+        let dim = hw ? 2049 : 2048   //! the halfword stamp's odd dim: every other row starts mid-word
         let ne = 24
         let obase = 8
         let ncol_max = max(ncols, 8)
@@ -9376,14 +9382,14 @@ def private router_cols_arm(t : T?; ncols : int; norm_on, bf16 : bool) {
         var planes <- nform_cols_cell(t, form, [ncols], ncol_max, [NformPlane(name = "the logits", words = ne, head = obase)], 2u,
             $(c : int; raw : VkCommandBuffer; var h : VkHaz; o : NformOuts) {
                 upload_region_at(xd1, 0l, unsafe(addr<uint8 const?>(xh[c * dim])), x1_bytes)
-                var sc1 = router_set(bf16, fixed_array(wd, xd1, o.bufs[0], nd), fixed_array(w_bytes, x1_bytes, o.bytes[0], n_bytes))
+                var sc1 = router_set(bf16, fixed_array(wd, xd1, o.bufs[0], nd), fixed_array(w_bytes, x1_bytes, o.bytes[0], n_bytes), hw)
                 var pc1 = GkRouterArgs(ne = uint(ne), dim = uint(dim), woff = 0u, obase = uint(obase), norm_on = non, nwoff = 0u, eps = eps)
-                router_enc(bf16, raw, h, sc1, pc1, int64(ne))
+                router_enc(bf16, raw, h, sc1, pc1, int64(ne), hw)
             },
             $(nc : int; raw : VkCommandBuffer; var h : VkHaz; o : NformOuts) {
-                var sc = router_set(bf16, fixed_array(wd, xd, o.bufs[0], nd), fixed_array(w_bytes, x_bytes, o.bytes[0], n_bytes))
+                var sc = router_set(bf16, fixed_array(wd, xd, o.bufs[0], nd), fixed_array(w_bytes, x_bytes, o.bytes[0], n_bytes), hw)
                 var pc = GkRouterArgs(ne = uint(ne), dim = uint(dim), woff = 0u, obase = uint(obase), norm_on = non, nwoff = 0u, eps = eps, ncols = uint(nc))
-                router_enc_cols(bf16, raw, h, sc, pc, int64(ne))   //! past eight columns, two tiles (the second's `col0` at eight)
+                router_enc_cols(bf16, raw, h, sc, pc, int64(ne), hw)   //! past eight columns, two tiles (the second's `col0` at eight)
             })
         var got <- plane_floats(planes.nf[0])
         router_cols_oracle(t, arm, got, xh, nh, wdev, ncols, ne, dim, obase, norm_on, eps)
@@ -9509,6 +9515,8 @@ def test_vkd_router_gemv_cols(t0 : T?) {
             router_cols_arm(t, 8, true, false)    // ... at the extent, every partial slot live
             router_cols_arm(t, 12, true, false)   // ... past it, in two column tiles
             router_cols_arm(t, 12, false, true)   // ... the bf16 stamp the same
+            router_cols_arm(t, 3, false, true, true)    // the bf16 rows' halfword stamp at an odd dim
+            router_cols_arm(t, 12, false, true, true)   // ... past the extent, in two column tiles
         } else {
             t |> skip("dasVulkan not present")
         }

@@ -1055,7 +1055,7 @@ def private pf_setup {
                 let gbufs = fixed_array(g_rd.ple_wp_dev, g_rd.pf_x, g_rd.pf_plep, g_rd.ple_pnorm_dev)
                 let gsizes = fixed_array(g_rd.ple_wp_bytes, np * dim * 4l, np * all * 4l, g_rd.ple * 4l)
                 let ggbits = fixed_array(0u, VHZ_X, VHZ_MRT, 0u)
-                g_rd.pf_ple_gemm_set = g_rd.ple_wp_bf16 ? set_router_gemv_bf16_cls(gbufs, gsizes, ggbits) : set_router_gemv_cls(gbufs, gsizes, ggbits)
+                g_rd.pf_ple_gemm_set = g_rd.ple_wp_bf16 ? ple_proj_bf16_set(gbufs, gsizes, ggbits) : set_router_gemv_cls(gbufs, gsizes, ggbits)
             }
             //! the finish over [np x layers] slices of ple: side = (gathered + pnorm . rms(projected)) / sqrt(2)
             g_rd.pf_ple_ar_set = set_ple_finish_cls(fixed_array(g_rd.pf_plep, g_rd.ple_pnorm_dev, g_rd.pf_ple),
@@ -1716,9 +1716,16 @@ def ple_proj_gemv_why(dim, all, w16_bytes : int64) : string {
     return vk_range_ok(w16_bytes) ? "" : "its f16 panel ({w16_bytes} bytes) passes the device's storage range {vk_max_storage_range()}"
 }
 
-//! why the bf16 projection rows have no GEMV at model dim `dim`, "" where they do: the stamp (`router_gemv_bf16_cls`) steps a row a
-//! word pair, so an odd dim drops the row's last element
-def ple_proj_bf16_why(dim : int64) : string => dim % 2l == 0l ? "" : "the bf16 rows' word-pair walk wants an even dim, not {dim}"
+//! the projection rows' GEMV class rail: the f32 rows', or the bf16 rows' word-pair or halfword stamp by the model dim
+def private ple_proj_rail_ensure(bf16 : bool) : bool {
+    if (!bf16) return ensure_router_gemv_cls()
+    return router_bf16_pairs(g_rd.dim, 0l) ? ensure_router_gemv_bf16_cls() : ensure_router_gemv_bf16_hw_cls()
+}
+
+//! the bf16 projection rows' GEMV set over `bufs`: the word-pair stamp at an even model dim, the halfword stamp at an odd one (every
+//! row then starts mid-word)
+def private ple_proj_bf16_set(bufs : uint64 const[4]; sizes : int64 const[4]; gbits : uint const[4]) : VkDescriptorSet
+    => router_bf16_pairs(g_rd.dim, 0l) ? set_router_gemv_bf16_cls(bufs, sizes, gbits) : set_router_gemv_bf16_hw_cls(bufs, sizes, gbits)
 
 //! The pre-step's projection on device off the file's own rows (bf16 halves `w16`, else f32 `w32`) and its norm row: the router GEMV
 //! under 1/sqrt(dim) at the token command, the window's f16 tile over a panel it converts each window (else the router GEMV) before
@@ -1730,14 +1737,9 @@ def vk_rdec_set_ple_proj(w16 : array<uint16>; w32 : array<float>; pnorm : array<
     }
     assert(g_rd != null && g_rd.ple > 0l, "vk_rdec_set_ple_proj before set_ple")
     let bf16 = !empty(w16)
-    let k_why = bf16 ? ple_proj_bf16_why(g_rd.dim) : ""
-    if (k_why != "") {
-        to_log(LOG_WARNING, "dasLLAMA vulkan resident: the per-layer-embedding projection keeps the CPU pre-step - {k_why}\n")
-        return false
-    }
     let n = bf16 ? long_length(w16) : long_length(w32)
     if (n != all * g_rd.dim || long_length(pnorm) != g_rd.ple || g_rd.pf_ready
-            || !((bf16 ? ensure_router_gemv_bf16_cls() : ensure_router_gemv_cls()) && ensure_ple_finish_cls())) {
+            || !(ple_proj_rail_ensure(bf16) && ensure_ple_finish_cls())) {
         return false
     }
     let wp_bytes = n * (bf16 ? 2l : 4l)
@@ -1767,7 +1769,7 @@ def vk_rdec_set_ple_proj(w16 : array<uint16>; w32 : array<float>; pnorm : array<
     let pbufs = fixed_array(g_rd.ple_wp_dev, g_rd.x_dev, g_rd.tok_plep, g_rd.ple_pnorm_dev)
     let psizes = fixed_array(g_rd.ple_wp_bytes, g_rd.dim * 4l * nb, all * 4l * nb, g_rd.ple * 4l)
     let pbits = fixed_array(0u, VHZ_X, VHZ_MRT, 0u)
-    g_rd.s_tok_pleproj = bf16 ? set_router_gemv_bf16_cls(pbufs, psizes, pbits) : set_router_gemv_cls(pbufs, psizes, pbits)
+    g_rd.s_tok_pleproj = bf16 ? ple_proj_bf16_set(pbufs, psizes, pbits) : set_router_gemv_cls(pbufs, psizes, pbits)
     g_rd.s_tok_ple_ar = set_ple_finish_cls(fixed_array(g_rd.tok_plep, g_rd.ple_pnorm_dev, g_rd.ple_dev),
         fixed_array(all * 4l * nb, g_rd.ple * 4l, all * 4l * nb), fixed_array(VHZ_MRT, 0u, VHZ_COS))
     g_rd.ple_gpu = true
