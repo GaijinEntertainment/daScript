@@ -530,7 +530,7 @@ class template ActRqT : RqT {
     def act_mul(v, u : float) : float => gk_act_mul(v, u, pa.act)
 
     //! the up element paired with gate element `eb`: with `ustride` the rows of `ulen` elements sit `ustride` apart
-    def up_at(eb : uint) : uint => gk_up_at(eb, pa.ubase, pa.ustride, pa.ulen)   //! four elements never cross a row: ulen is a 4-multiple
+    def up_at(eb : uint) : uint => gk_up_at(eb, pa)   //! four elements never cross a row: ulen is a 4-multiple
 
     def override load4(eb : uint) : float4 {
         let ue = up_at(eb)
@@ -587,7 +587,7 @@ class template ActF16T {
     def act_mul(v, u : float) : float => gk_act_mul(v, u, pa.act)
 
     //! the up element paired with gate element `e`: with `ustride` the rows of `ulen` elements sit `ustride` apart (the per-layer-embedding side rows)
-    def up_at(e : uint) : uint => gk_up_at(e, pa.ubase, pa.ustride, pa.ulen)
+    def up_at(e : uint) : uint => gk_up_at(e, pa)
 
     //! element `e`'s activation as a saturated half
     def hval(e : uint) : float16 {

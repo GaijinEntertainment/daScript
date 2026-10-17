@@ -614,10 +614,10 @@ def gk_bf16_at(w : uint; odd : bool) : float => odd ? gk_bf16_hi(w) : gk_bf16_lo
 [spirv_inline]
 def gk_strided_at(e, base, stride, len : uint) : uint => base + (e / max(len, 1u)) * stride + e % max(len, 1u)
 
-//! the up element an act pairs with gate element `e`: rows of `len` `stride` apart from `base` (`gk_strided_at`) where `stride` is
-//! set, else the contiguous row from `base`
+//! the up element an act pairs with gate element `e` under the act's args `a` (`ubase`, `ustride`, `ulen`): rows of `ulen` `ustride`
+//! apart from `ubase` (`gk_strided_at`) where `ustride` is set, else the contiguous row from `ubase`
 [spirv_inline]
-def gk_up_at(e, base, stride, len : uint) : uint => stride != 0u ? gk_strided_at(e, base, stride, len) : base + e
+def gk_up_at(e : uint; a) : uint => a.ustride != 0u ? gk_strided_at(e, a.ubase, a.ustride, a.ulen) : a.ubase + e
 
 //! the workgroup reductions every row kernel of either home shares: one barrier a reduce, every thread summing the subgroup
 //! partials in the same order, so every thread holds the same sum or max; the lane primitives are each home's
