@@ -181,6 +181,10 @@ var g_pso_geglu_side : MetalComputePipeline?   //!< the geglu over a position-ma
 var g_pso_ple_proj_bf16 : MetalComputePipeline?   //!< the per-layer-embedding projection off its native-BF16 rows
 var g_pso_ple_proj_bf16_one : MetalComputePipeline?   //!< ... its decode column's stamp
 var g_pso_ple_finish : MetalComputePipeline?   //!< the per-layer-embedding pre-step's rms + combine, in place
+var g_pso_ple_proj_bf16_hw : MetalComputePipeline?       //!< ... a halfword a lane, for an odd dim or base
+var g_pso_ple_proj_bf16_hw_one : MetalComputePipeline?   //!< ... its decode column's stamp
+var g_pso_f32_rows_one : MetalComputePipeline?   //!< the f32 rows' GEMV a lane an element: a dim off the float4 lattice, one column a row
+var g_pso_f32_rows_b : MetalComputePipeline?     //!< ... its position-blocked stamp
 var g_pso_geglu_hx : MetalComputePipeline?    // dual-store stamp
 // ===== tower primitives (compiled in the tower driver's init) =====
 var g_pso_ln : MetalComputePipeline?

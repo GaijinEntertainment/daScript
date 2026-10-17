@@ -1035,17 +1035,6 @@ over a strided stash, or a wider slab on a device that affords it), raced agains
 other widths are (`ARCHITECTURE_GPU_SHARED_KERNELS.md#gpu-shared-kernels`, the seam bullet). Instrument: `bench_metal_gk_rows`'s
 seam race, which holds no fused arm past the slab today.
 
-## 55. The E-series pre-step runs on the CPU for the table shapes `metal_ple_pre_unserved` names
-
-Metal's pre-step (the gather and the projection of a row's per-layer side vector) serves a blob model whose PLE table
-is in a format the gather family reads, bound at whole superblocks, with a ple width the finish's threadgroup takes
-(a 32-lane multiple up to 1024) and a model dim the projection's word steps whole. Every other shape - a trimmed-planes
-load, a per-32 table bound off a superblock, a ple width past 1024, an odd dim on the bf16 rows - runs the CPU
-pre-step, and `metal_ple_dev_said` logs the reason once a load. The fix is kernels for those shapes: a finish that
-walks a ple width in more than one threadgroup pass, a gather bound at the per-32 pair's own alignment, a projection
-whose tail word handles an odd dim; each cell-proven on the device against the CPU row
-(`test_gpu_serving_declines.das`'s `test_ple_proj_dim_gates` names the shapes). The follow-up PR after the gemma leg.
-
 ## 56. Five large-tier `test_metal_mtp_parity.das` cells and the Canary-Qwen oracle clip read red on master's own build
 
 On the M5 under `DASLLAMA_PARITY_FULL=1`, master's build (33e7910669) fails six large-tier cells of

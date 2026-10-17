@@ -1587,11 +1587,12 @@ def test_resident_host_layers_pin(t : T?) {
     }
 }
 
-//! the E-series pre-step's projection K gates: Metal's `metal_ple_dev_ok` serves a model dim the projection's word walk steps
-//! whole - pairs on the bf16 rows, float4s on the f32 router's - and Vulkan's `ple_proj_bf16_why` names an odd dim for the bf16 stamp
+//! the E-series pre-step's shape gates: Metal's `metal_ple_dev_ok` serves any model dim on either projection form, any ple width,
+//! and a table bound on its own format's blocks, naming a table off them; Vulkan's `ple_proj_bf16_why` names an odd dim for the
+//! bf16 stamp
 [test]
 def test_ple_proj_dim_gates(t : T?) {
-    t |> run("the pre-step's projection declines a dim off its word, on each home") @(t : T?) {
+    t |> run("the pre-step's shapes on each home") @(t : T?) {
         var m = Model()
         m.config.n_layers = 2l
         m.config.n_embd_per_layer = 256l
@@ -1600,23 +1601,33 @@ def test_ple_proj_dim_gates(t : T?) {
         m.config.dim = 1536l
         t |> success(metal_ple_dev_ok(m), "the bf16 rows serve an even dim (the E2B's 1536)")
         m.config.dim = 1537l
-        t |> success(!metal_ple_dev_ok(m), "... and decline an odd one")
-        let odd = metal_ple_pre_unserved(m)
-        t |> success(find(odd, "PLE table") >= 0 && find(odd, "1537") >= 0 && find(odd, "bf16 pair") >= 0,
-            "... naming the site, the dim and the word: '{odd}'")
-        t |> success(!metal_ple_dev_said("decode", m), "the driver's verdict is the predicate's, its reason logged")
+        t |> success(metal_ple_dev_ok(m), "... and an odd one")
+        m.ple_model_bf16 = false
+        t |> success(metal_ple_dev_ok(m), "the f32 rows serve a dim off the float4 lattice")
         m.config.n_embd_per_layer = 2048l
-        t |> success(find(metal_ple_pre_unserved(m), "2048") >= 0, "a ple width past the finish's threadgroup is named")
+        t |> success(metal_ple_dev_ok(m), "a ple width past 1024 serves")
+        m.config.n_embd_per_layer = 48l
+        t |> success(metal_ple_dev_ok(m), "... and one off the 32-lane step")
         m.config.n_embd_per_layer = 0l
         t |> equal(metal_ple_pre_unserved(m), "", "a model with no PLE has nothing to decline")
         t |> success(!metal_ple_dev_ok(m), "... and no device pre-step")
-        m.config.n_embd_per_layer = 256l
-        m.config.dim = 1538l
-        t |> success(metal_ple_dev_ok(m), "the bf16 rows serve an even dim off the float4 lattice")
-        m.ple_model_bf16 = false
-        t |> success(!metal_ple_dev_ok(m), "... where the f32 router's float4 walk declines it")
-        m.config.dim = 1536l
-        t |> success(metal_ple_dev_ok(m), "the f32 router serves a dim on the float4 lattice")
+        m.config.n_embd_per_layer = 48l
+        m.ple_emb_fmt = KqFmt.q51
+        m.ple_emb_off = 96l
+        t |> success(metal_ple_dev_ok(m), "a per-32 table off a superblock serves on its own blocks (96 elements a row at 96)")
+        m.ple_emb_off = 112l
+        let off = metal_ple_pre_unserved(m)
+        t |> success(find(off, "PLE table") >= 0 && find(off, "q51") >= 0 && find(off, "112") >= 0 && find(off, "32-element") >= 0,
+            "... a base off them is named by site, format, offset and block: '{off}'")
+        t |> success(!metal_ple_dev_said("decode", m), "the driver's verdict is the predicate's, its reason logged")
+        m.ple_emb_off = 0l
+        m.config.n_embd_per_layer = 40l
+        t |> success(find(metal_ple_pre_unserved(m), "80 elements a row") >= 0, "... and a row off them")
+        m.ple_emb_fmt = KqFmt.k4
+        m.config.n_embd_per_layer = 128l
+        t |> success(metal_ple_dev_ok(m), "a superblock table on its superblocks serves (256 elements a row)")
+        m.ple_emb_off = 32l
+        t |> success(find(metal_ple_pre_unserved(m), "256-element") >= 0, "... off them is named at the superblock")
         static_if (typeinfo builtin_module_exists(vulkan)) {
             t |> equal(ple_proj_bf16_why(1536l), "", "the Vulkan bf16 stamp serves an even dim")
             let why = ple_proj_bf16_why(1537l)

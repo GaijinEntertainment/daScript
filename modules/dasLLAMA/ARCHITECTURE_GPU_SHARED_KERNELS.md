@@ -70,7 +70,7 @@ struct and the body; a stamp sets the template constants its home needs and maps
 | `GkMoeCombine` | `MetalMoeCombine`, `MetalMoeReduce` (`GATHERED`) | `MoeCombine` (`WINDOW`: the chunk window, the accumulate, the zero-weight skip) | `GATHERED`, `WINDOW`, `SLOT_X4` |
 | `GkDnGate` | `MetalDnGate` / `Sig` (`rsqrt`) | `DnScanP3` / `Sig` | `ZSIG`, `RSQRT` |
 | `GkQknRopeKv` | `MetalQknRope16` / `32` (one row), `MetalQknRopeB16` / `B32` (rows), `MetalPfQkn` / `HX` (the window, the q twin) | `QknRopeKv` / `F16` | `KT`, `CLAMP16`, `V_WG`, `LANES` / `EPT`, `HX` |
-| `GkRouterGemv` | one Metal shell (`MetalRouterGemvT`: the grid onto the rows under `ROW_WG`) under two formats - the f32 rows (`MetalMoeRouterT`: `MetalMoeRouter`, a workgroup a row, the decode column; `MetalMoeRouterB`, a subgroup a row, `COL_CLAMP`, 8 columns) and the E-series side rows' projection's bf16 words (`MetalPleProjBf16T`: `MetalPleProjBf16One`, `MetalPleProjBf16`, the same two shapes) | `RouterGemv` (a workgroup a row, `NORM`), `RouterGemvBf16` (the bf16 words under `YSCALE`) | `ROW_WG`, `VW`, `NC`, `COL_CLAMP`, `NORM`, `BIAS`, `BF16`, `YSCALE` |
+| `GkRouterGemv` | one Metal shell (`MetalRouterGemvT`: the grid onto the rows under `ROW_WG`) under two formats - the f32 rows (`MetalMoeRouterT`: `MetalMoeRouter`, a workgroup a row, the decode column; `MetalMoeRouterB`, a subgroup a row, `COL_CLAMP`, 8 columns) and the E-series side rows' projection's bf16 words (`MetalPleProjBf16T`: `MetalPleProjBf16One`, `MetalPleProjBf16`, the same two shapes; `MetalPleProjBf16HwT`: `MetalPleProjBf16HwOne`, `MetalPleProjBf16Hw`, a bf16 halfword a lane), and the f32 rows a lane an element (`MetalF32RowsT`: `MetalF32RowsOne`, `MetalF32RowsB`, the same two shapes) | `RouterGemv` (a workgroup a row, `NORM`), `RouterGemvBf16` (the bf16 words under `YSCALE`) | `ROW_WG`, `VW`, `NC`, `COL_CLAMP`, `NORM`, `BIAS`, `BF16`, `YSCALE` |
 | `GkPkGemv` | `MetalPkGemv*` (f32 rows), `MetalPkGemvQ8*` | `TtsPkGemv*` (`QUAD`) | the epilogues, `QUAD`, `RSQRT` |
 | `GkMoeCombine` `SH` | `MetalMoeCombineSh`, `MetalMoeReduceSh` | the combine twins' `gated` arm | `SH`: the shared row under its gate logit, the router's row `ne` |
 | `GkCat2` | `MetalCat2` | `Cat2` | nothing; position- or stream-major, the a row repeated over the streams |
@@ -80,6 +80,19 @@ struct and the body; a stamp sets the template constants its home needs and maps
 | `GkAddRmsRows` | `MetalAddRms` / `HX` (the plain step), `MetalPreAddRms` / `HX` (the sandwich seam in one dispatch: the branch normed under its post norm, the add, the next norm), `MetalPreAdd` (no norm out; 1024 lanes a decode row, 256 the window) | `ClsArAddRms` / `F16B`, `ClsArAddRmsRqB` and the `ArAddRmsRq*` stamps (Q8_0 out), the combines' `ArCombBase` (256 lanes) | `LANES`, `PRE`, `PRE_SWITCH`, `NORM_SWITCH`, `ARMS`, `X4`, `HX`, `OUT_*`; on Metal, the norm rows' layout |
 | `GkPleAct` | `MetalGegluSide` (in place over the gate rows, 64 lanes) | `PleActF32` (`OUT`: the f32 projection's x, 256 lanes) | `OUT`; the side row's index is `gk_strided_at`, `ActRqT.up_at`'s |
 | `GkPleFinish` | `MetalPleFinish` (`XSCALE`: the projection's 1 / sqrt(dim) in the finish, `rsqrt`) | `PleFinish` (the projection arrives scaled, `1 / sqrt`) | `XSCALE`, `RSQRT`; 256 lanes a slice on both |
+
+**The Metal E-series pre-step serves every table, ple width and model dim a blob model carries.** The gather reads the
+table on its own format's block grid - a K-quant table at whole superblocks, a per-32 table at whole 32-blocks, the
+per-32 pair bound on the 16-byte grid below it with the blocks past the bind in its arguments (`EmbedB32Args.b0`,
+`b32_bind_rem`), the q8 copy at any element. The finish's lanes stride a slice, so a ple width past 256 runs in as many
+passes as it takes and one off the 32-lane step leaves its last lanes idle. The projection's bf16 rows step word pairs where
+the dim and the base are even and one halfword a lane where a row would start mid-word (`MetalPleProjBf16HwT`, picked by
+`enc_ple_proj_bf16_rows`); the f32 rows step float4 words where the dim, the base and the column stride sit on that
+lattice and one element a lane elsewhere (`MetalF32RowsT`, picked by `enc_f32_rows_gemv`). The narrow walks are stamps of
+their own, so the word stamps' bodies and both homes' router words stay as they are. The window projects on the bf16 tile where the model dim is whole 32-element chunks and
+layers x ple whole 64-row tiles (`pf_bf16_tile_ok`), else on the position-blocked bf16 GEMV. `metal_ple_pre_unserved`
+names what is left: a planar load and a trimmed image, which serve no Metal step, and a table off its format's blocks or
+in a format no gather stamp reads, which no load produces.
 
 The gated FFN's activation is one function on both homes (`gk_act_mul`, `dasllama_gpu_math.das`): the Metal ew2 and
 w13 combines and every Vulkan act class call it, the gelu its clamped tanh form.

@@ -219,7 +219,16 @@ let private CENSUS_NEVER_DISPATCHED <- [
     // multiple of 128, and the census prompt pads to 608 rows, which the 32-row stamps take. Their
     // coverage is attn_qk_mm_gate's pair arms and attn_dev_pair_gate in test_metal_gemm_kernels.das and the
     // attn-dev arm's 384-row continuation in test_metal_prefill_parity.das
-    "MetalAttnQKDev128", "MetalAttnAVDev128"
+    "MetalAttnQKDev128", "MetalAttnAVDev128",
+    // the f32 rows' element-walk GEMV pair: it serves an f32 row set whose dim, base or column stride sits off the float4
+    // lattice (an E-series pre-step projection or per-layer plane in f32 rows at such a width), and every stocked carrier's
+    // widths step whole float4s, so no census row reaches it. Its coverage is f32_rows_gate's off-lattice arms in
+    // test_metal_prefill_kernels.das
+    "metal_f32_rows_one", "metal_f32_rows_b",
+    // the E-series projection's bf16 halfword walk: it serves bf16 projection rows whose model dim or base is odd, and every
+    // stocked E-series carrier's dim is even on an even base. Its coverage is ple_proj_bf16_gate's odd arms in
+    // test_metal_prefill_kernels.das
+    "metal_ple_proj_bf16_hw_one", "metal_ple_proj_bf16_hw"
 ]
 
 [unused_argument(t, path, family, kdts, nbs)]   // off-Apple the gated body is empty
