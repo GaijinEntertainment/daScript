@@ -526,3 +526,27 @@ def test_load_report_row_names_site(t : T?) {
             "expert stack gate: Q4_K -> k4 plane")
     }
 }
+
+let private STAMPED_SKIP = "q8/b k4 !b32"
+let private STAMPED_TAILS = "a b"
+
+//! `kq_tile_stamped` answers the pairs a `kq_tile_stamp` over the same words arms: a pair word drops one tail of a member, a member
+//! word every tail, `!b32` every member but the per-32 ones; the same words without `!b32` keep a superblock member (the control)
+[test]
+def test_kq_tile_stamped(t : T?) {
+    let q51 = int(KqFmt.q51)
+    let q5032 = int(KqFmt.q5032)
+    let q8 = int(KqFmt.q8)
+    let k4 = int(KqFmt.k4)
+    let k6 = int(KqFmt.k6)
+    let a = 0
+    let b = 1
+    t |> success(kq_tile_stamped(q51, STAMPED_SKIP, a, STAMPED_TAILS), "a per-32 member keeps its first tail")
+    t |> success(kq_tile_stamped(q5032, STAMPED_SKIP, b, STAMPED_TAILS), "... and its second")
+    t |> success(!kq_tile_stamped(k6, STAMPED_SKIP, a, STAMPED_TAILS), "`!b32` drops a superblock member")
+    t |> success(!kq_tile_stamped(k4, STAMPED_SKIP, b, STAMPED_TAILS), "a member word drops every tail")
+    t |> success(!kq_tile_stamped(q8, STAMPED_SKIP, b, STAMPED_TAILS), "a pair word drops its tail")
+    t |> success(kq_tile_stamped(k6, "q8/b k4", a, STAMPED_TAILS), "without `!b32` the superblock member keeps its tails (the control)")
+    t |> success(kq_tile_stamped(q8, "q8/b k4", a, STAMPED_TAILS), "a pair word keeps the member's other tail")
+    t |> success(!kq_tile_stamped(k4, "q8/b k4", a, STAMPED_TAILS), "... and the member word still drops it")
+}

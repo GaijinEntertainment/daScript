@@ -566,31 +566,8 @@ def cell_regions_batched_side_rows(t : T?; file : string) {
 def private batched_rows_logits(t : T?; tr : Model) : array<array<float>> {
     var prompts <- [ <- prompt_a(), <- prompt_b()]
     var feeds <- [ <- feed_a(), <- feed_b()]
-    var sessions : array<Session>
-    sessions |> reserve(2)
-    for (p in prompts) {
-        sessions |> emplace <| create_session(tr, mirror_kv_dtype())
-        eval(tr, sessions[length(sessions) - 1], p)
-    }
-    var sess <- [for (i in range(2)); unsafe(addr(sessions[i]))]
-    var rows : array<array<float>>
-    let steps0 = rdec_nrow_steps()
-    with_batch_rows(tr, sess) $(var ws; var sx) {
-        for (st in range64(STEPS)) {
-            var toks <- [for (i in range(2)); feeds[i][st]]
-            eval_batch(tr, ws, sx, toks)
-            delete toks
-            for (s in sessions) {
-                rows |> push_clone(s.logits)
-            }
-        }
-    }
-    t |> equal(rdec_nrow_steps() - steps0, STEPS, "every batched step went through the N-row command")
+    var rows <- batched_logits_rows(t, tr, prompts, feeds, mirror_kv_dtype(), STEPS) <| $ => rdec_nrow_steps()
     served_every_call(t)
-    unsafe {
-        delete sess
-    }
-    delete sessions
     delete prompts
     delete feeds
     return <- rows
@@ -626,12 +603,7 @@ def cell_regions_batched_embed_gather(t : T?; file : string) {
                     t |> equal(vk_rdec_nrow_embed_gathered() - g0, 0l, "with the gather off no batched row gathered: the counter's control")
                     t |> equal(batch_rows_host_embedded() - h0, 2l * STEPS, "with the gather off the host embedded every batched row")
                     t |> equal(vk_rdec_nrow_side_gathered() - side0, 0l, "with the gather off no side row gathered off an id: the side-rows cell's control")
-                    t |> equal(long_length(dev), long_length(host), "both loads stepped every row")
-                    for (i in range64(min(long_length(dev), long_length(host)))) {
-                        let diff = logits_maxdiff(dev[i], host[i])
-                        log_logits_pair(tr, "step {i / 2l}, row {i % 2l}: the gathered row against the host row", dev[i], host[i], diff)
-                        t |> equal(diff, 0.0, "step {i / 2l}, row {i % 2l}: the gathered rows' logits bit for bit the host rows' (maxdiff {diff})")
-                    }
+                    gathered_rows_bit_same(t, tr, file, dev, host, 2l)
                 }
             }
             delete dev

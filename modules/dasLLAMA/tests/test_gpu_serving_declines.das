@@ -5,6 +5,7 @@ options persistent_heap   // a dastest root frees what it deletes only on this h
 
 require dastest/testing_boost public
 require dasllama/dasllama_common
+require _override_probes   // decode_declines: the fake override's step
 require dasllama/dasllama_sampling
 require dasllama/dasllama_gpu_resident
 require dasllama/dasllama_gpu_tier   // install_moe_gpu_resident_bias - the bias seat a served qwen2 needs
@@ -1023,9 +1024,6 @@ let private PROBE_UNOWNED = "mtp_seat_probe_unowned"   //! ... and one whose sea
 var private g_probe_owns = false
 var private g_probe_seat_calls = 0l
 
-[unused_argument(t, s, token, pos)]
-def private probe_decode(t : Model; var s : Session; token, pos : int64) : bool => false
-
 [unused_argument(t)]
 def private probe_owner(t : Model) : bool => g_probe_owns
 
@@ -1059,7 +1057,7 @@ struct private SeatDispatch {
 [cold_path]
 def private seat_dispatch(name : string; owns : bool) : SeatDispatch {
     for (nm in [PROBE_OWNED, PROBE_UNOWNED]) {
-        register_decode_override(nm, @@probe_decode)
+        register_decode_override(nm, @@decode_declines)
         register_mtp_spec_override(nm, @@probe_spec)
         register_mtp_round_override(nm, @@probe_round)
         register_mtp_spec_batch_override(nm, @@probe_batch)
@@ -1116,7 +1114,7 @@ def test_mtp_seat_owner(t : T?) {
 //! the CPU round's opening on a session carrying an unconsumed landed pick, under the unowned probe override
 [cold_path]
 def private round_refuses_pick() : bool {
-    register_decode_override(PROBE_UNOWNED, @@probe_decode)
+    register_decode_override(PROBE_UNOWNED, @@decode_declines)
     let prev = active_decode_override()
     select_decode_override(PROBE_UNOWNED)
     var m = Model()
@@ -1236,7 +1234,7 @@ def private round_session() : Session {
 //! row-0 `truth`, the rollback seat's answer
 def private round_seats_arm(pick, truth : int64; rollback_ok : bool) {
     for (nm in [ROUND_SEATS, ROUND_SEATS_NO_ROLLBACK]) {
-        register_decode_override(nm, @@probe_decode)
+        register_decode_override(nm, @@decode_declines)
         register_mtp_seat_owner(nm, @@round_owner)
         register_mtp_draft_override(nm, @@round_draft)
         register_mtp_verify_override(nm, @@round_verify)
@@ -1459,28 +1457,18 @@ def test_trim_lane_ring_pin(t : T?) {
     }
 }
 
-def private ring_floor_panics(var s : Session; pos : int64) : bool {
-    var tripped = false
-    try {
-        kv_ring_floor_check(s, pos)
-    } recover {
-        tripped = true
-    }
-    return tripped
-}
-
 [test]
 def test_kv_ring_floor_check(t : T?) {
     t |> run("a call at or past the ring floor continues, one under it panics, and a start at 0 rebuilds the history and clears the floor") @(t : T?) {
         var s : Session
         s.kv_ring_floor = 6l
-        t |> success(!ring_floor_panics(s, 8l), "a call past the floor continues")
-        t |> success(!ring_floor_panics(s, 6l), "a call at the floor continues")
+        t |> success(empty(panic_text() $ { kv_ring_floor_check(s, 8l) }), "a call past the floor continues")
+        t |> success(empty(panic_text() $ { kv_ring_floor_check(s, 6l) }), "a call at the floor continues")
         t |> equal(s.kv_ring_floor, 6l, "and leaves the floor standing")
-        t |> success(ring_floor_panics(s, 3l), "a call under the floor panics: the ring holds no window under it")
-        t |> success(!ring_floor_panics(s, 0l), "a start at 0 continues nothing")
+        t |> success(!empty(panic_text() $ { kv_ring_floor_check(s, 3l) }), "a call under the floor panics: the ring holds no window under it")
+        t |> success(empty(panic_text() $ { kv_ring_floor_check(s, 0l) }), "a start at 0 continues nothing")
         t |> equal(s.kv_ring_floor, 0l, "and clears the floor")
-        t |> success(!ring_floor_panics(s, 3l), "so the same call at 3 continues the rebuilt history (the control)")
+        t |> success(empty(panic_text() $ { kv_ring_floor_check(s, 3l) }), "so the same call at 3 continues the rebuilt history (the control)")
         delete s
     }
 }

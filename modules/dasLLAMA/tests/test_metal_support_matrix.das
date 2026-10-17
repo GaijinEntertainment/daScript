@@ -1125,16 +1125,12 @@ def private depth_cell(t : T?; tr, trg : Model; tag : string; bar : float; stamp
 
 //! the residual step's seam stamps (`GkAddRmsRows`) the device ran, and the split chain's norm pass
 def private seam_counts : int4 {
-    return int4(int(metal_kernel_count_compiled("metal_pre_add_rms") + metal_kernel_count_compiled("metal_pre_add_rms_hx")),
-        int(metal_kernel_count_compiled("metal_pre_add")), int(metal_kernel_count_compiled("metal_add_rms") + metal_kernel_count_compiled("metal_add_rms_hx")),
-        int(metal_kernel_count_compiled("MetalRmsNorm_metal_rmsnorm") + metal_kernel_count_compiled("MetalRmsNormHX_metal_rmsnorm")))
+    return int4(int(kernels_sum(["metal_pre_add_rms", "metal_pre_add_rms_hx"])), int(kernels_sum(["metal_pre_add"])),
+        int(kernels_sum(["metal_add_rms", "metal_add_rms_hx"])), int(kernels_sum(["MetalRmsNorm_metal_rmsnorm", "MetalRmsNormHX_metal_rmsnorm"])))
 }
 
 //! the E-series side rows' projections the device ran: the bf16 word form's two stamps and the f32 router's
-def private ple_proj_count : int64 {
-    return (metal_kernel_count_compiled("metal_ple_proj_bf16") + metal_kernel_count_compiled("metal_ple_proj_bf16_one")
-        + metal_kernel_count_compiled("metal_moe_router"))
-}
+def private ple_proj_count : int64 => kernels_sum(["metal_ple_proj_bf16", "metal_ple_proj_bf16_one", "metal_moe_router"])
 
 //! the summed census counts of `names` (`metal_kernel_count_compiled`): the dispatches of a format's stamps at a site
 def private kernels_sum(names : array<string>) : int64 {
@@ -1725,14 +1721,7 @@ def private metal_release_row(t : T?; path, tag : string) {
 //! `prompt` evaluated `chunk` rows a call, then `steps` greedy picks each fed back: the prompt's ids and the picks
 def private ring_row_walk(t : Model; var s : Session; prompt : array<int64>; chunk : int64; steps : int) : array<int64> {
     var out := prompt
-    var p = 0l
-    while (p < long_length(prompt)) {
-        let e = min(p + chunk, long_length(prompt))
-        var part <- [for (i in range64(p, e)); prompt[i]]
-        eval_(t, s, part)
-        delete part
-        p = e
-    }
+    eval_chunked(t, s, prompt, long_length(prompt), chunk)
     out |> reserve(length(out) + steps)
     for (_i in range(steps)) {
         let pick = argmax_of(s.logits, t.config.vocab_size)

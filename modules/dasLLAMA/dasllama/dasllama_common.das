@@ -744,6 +744,50 @@ def mtp_round_commit_host(var s : Session; pos, k, a : int64) {
     s.n_past = pos + a + 1l
 }
 
+//! A tick's warm streams, the ones a round's verify carries: each stream's handle, its index among the tick's streams, its
+//! anchor, its rows (the token and its drafts) and the home's word for it (`aux`: the Vulkan region it binds)
+struct MtpRoundGather {
+    @scratch sessions : array<Session?>
+    @scratch idx : array<int64>
+    @scratch pos : array<int64>
+    @scratch nr : array<int64>
+    @scratch aux : array<int64>
+}
+
+//! The round's opening over a tick's streams at depth `k`, every home's: each stream's accepted count zeroed, its round begun,
+//! its depth under its cap; `warm` answers a stream's word (`aux`) or -1 where the stream steps plain this round (the block has
+//! taken its plain step or queued it), and a warm stream's token heads its rows. Returns the warm streams gathered
+[arch(at="../ARCHITECTURE_GPU_MTP_ASSISTANT.md#assistant-drafter-rounds")]
+def mtp_round_gather(var g : MtpRoundGather; var sessions : array<Session?>; toks : array<int64>; k : int64; var acc : array<int64>;
+                     warm : block<(var s : Session; i, pos, ki : int64) : int64>) : int64 {
+    let n = long_length(sessions)
+    acc |> resize(n)   // nolint:PERF026,LINT019 — fires from the [hot_path] rounds' compiles; grows to the stream count once, the callers pass reused scratch
+    g.sessions |> clear()
+    g.idx |> clear()
+    g.pos |> clear()
+    g.nr |> clear()
+    g.aux |> clear()
+    for (i in range64(n)) {
+        var s & = unsafe(*sessions[i])
+        acc[i] = 0l
+        let pos = s.n_past
+        mtp_round_begin(s)
+        if (long_length(s.mtp_vbatch) < MTP_MAX_ROWS) {   // sized for the NextN carriers only at make_run_state
+            s.mtp_vbatch |> reserve_resize(MTP_MAX_ROWS)   // nolint:PERF026,LINT019 — fires from the [hot_path] rounds' compiles; once per session
+        }
+        let ki = mtp_depth_for(s, k)
+        let aux = invoke(warm, s, i, pos, ki)
+        continue if (aux < 0l)
+        s.mtp_vbatch[0] = toks[i]
+        g.sessions |> push(sessions[i])
+        g.idx |> push(i)
+        g.pos |> push(pos)
+        g.nr |> push(ki + 1l)
+        g.aux |> push(aux)
+    }
+    return long_length(g.sessions)
+}
+
 let MTP_COLD_PAST_CONTEXT = "the round would run past the context"   //! the one cold reason that is the work's size
 
 //! why neither home drafts the round ("" where it can): nothing evaled yet (the zero-init `mtp_h_pos1` sentinel collides with
@@ -821,6 +865,13 @@ def attach_mtp_drafter_(t : Model; path : string) : string {
     let none = mtp_attach_refusal(whys)
     to_log(LOG_WARNING, "dasLLAMA: the assistant drafter {path} is not attached - {none}\n")
     return none
+}
+
+//! Attach the assistant drafter that sits beside the model at `model_path` (`mtp_drafter_sidecar_`): its path where it attached,
+//! "" where none sits there or every backend refused it (logged)
+def attach_mtp_sidecar_(t : Model; model_path : string) : string {
+    let side = mtp_drafter_sidecar_(model_path)
+    return !empty(side) && empty(attach_mtp_drafter_(t, side)) ? side : ""
 }
 
 //! The backend `t`'s assistant drafter is attached on ("" = none)
@@ -5006,7 +5057,7 @@ def with_gpu_kv_ring(ring : int; body : block<void>) {
 }
 
 //! Whether the next armed mirror rings its sliding layers
-def gpu_kv_ring_on : bool => g_gpu_kv_ring_pin < 0 ? g_env_gpu.gpu_kv_ring : g_gpu_kv_ring_pin != 0
+def gpu_kv_ring_on : bool => pin_over_env(g_gpu_kv_ring_pin, g_env_gpu.gpu_kv_ring)
 
 //! the K/V mirror rows layer `l` keeps at a context of `ctx` positions when one command writes at most `slack` rows: a sliding layer's
 //! window and the slack, rounded up to the attention tiles' 64-row step, as a ring (`kv_ring_row`); 0 = a row a position (a global
@@ -5371,6 +5422,22 @@ def private cls_softcap_chain(t : Model; var s : Session; cap : float) {
             softcap4(unsafe(lp + r0), r1 - r0, cap)
         }
     }
+}
+
+//! Fill ``dst[at*dim ..]`` with the embedding rows of the first ``n`` ``tokens`` (embed_scale applied)
+def embed_text_rows(t : Model; tokens : array<int64>; var dst : array<float>; at, n : int64) {
+    let dim = t.config.dim
+    for (p in range64(n)) {
+        embed_row(t, tokens[p], unsafe(addr(dst[(at + p) * dim])))
+    }
+    if (t.config.embed_scale != 1.0) {  // Gemma2: scale the embedding by sqrt(dim)
+        scale_inplace(unsafe(addr(dst[at * dim])), t.config.embed_scale, n * dim)
+    }
+}
+
+//! every row of ``tokens`` at ``dst[at*dim ..]`` - the text-span half of a multimodal prefill buffer
+def embed_text_rows(t : Model; tokens : array<int64>; var dst : array<float>; at : int64) {
+    embed_text_rows(t, tokens, dst, at, long_length(tokens))
 }
 
 //! token's embedding row into the residual stream s.x, under the model's embed scale

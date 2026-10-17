@@ -324,6 +324,39 @@ def with_batch_rows(tr : Model; var sess : array<Session?>; body : block<(var ws
     delete ws
 }
 
+//! a session a prompt on codec `kv`, every session stepped `steps` batched steps on its feed's tokens: every row's logits a step,
+//! the batched driver's own step count (`steps_of`) up by every step
+def batched_logits_rows(t : T?; tr : Model; prompts, feeds : array<array<int64>>; kv : KVDtype; steps : int64;
+                        steps_of : block<() : int64>) : array<array<float>> {
+    let n = length(prompts)
+    var sessions : array<Session>
+    sessions |> reserve(n)
+    for (p in prompts) {
+        sessions |> emplace <| create_session(tr, kv)
+        eval(tr, sessions[length(sessions) - 1], p)
+    }
+    var sess <- [for (i in range(n)); unsafe(addr(sessions[i]))]
+    var rows : array<array<float>>
+    rows |> reserve(int64(n) * steps)
+    let steps0 = invoke(steps_of)
+    with_batch_rows(tr, sess) $(var ws; var sx) {
+        for (st in range64(steps)) {
+            var toks <- [for (i in range(n)); feeds[i][st]]
+            eval_batch(tr, ws, sx, toks)
+            delete toks
+            for (s in sessions) {
+                rows |> push_clone(s.logits)
+            }
+        }
+    }
+    t |> equal(invoke(steps_of) - steps0, steps, "every batched step went through the batched driver")
+    unsafe {
+        delete sess
+    }
+    delete sessions
+    return <- rows
+}
+
 //! one speculative round of `tok` on `s` with its draft forced to reject, the reject cadence put back after; true where it accepted
 def forced_reject_round(tr : Model; var s : Session; tok : int64) : bool {
     let reject0 = get_mtp_force_reject_every()
@@ -589,7 +622,7 @@ def bytes_differing(a, b : array<uint8>; a_at, b_at, n : int64) : float {
     return float(differing) / float(n)
 }
 
-let CHAIN_STEPS = 24l   //! the greedy chain cell's fed steps a walk
+let private CHAIN_STEPS = 24l   //! the greedy chain cell's fed steps a walk
 
 //! one walk of `steps` steps after `prompt` on a fresh session under the greedy chain's mode `mode`: each step fed the last
 //! step's argmax, every `off_every`-th one a token off it (0 = never); the fed tokens and every step's logits

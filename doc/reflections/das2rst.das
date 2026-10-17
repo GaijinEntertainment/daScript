@@ -343,7 +343,7 @@ def private dasllama_type_stanza(f : FILE const?; lab : string; tname : string; 
 def document_module_dasllama(_root : string) {  // nolint:STYLE038 — flat doc-group list
     var mod = [find_module("dasllama"), find_module("dasllama_core")]   //! the facade re-exports the core module, which holds the documented functions
     var groups <- array<DocGroup>(
-        group_by_regex("Model loading and sessions", mod, %regex~(load_model|create_session|create_kv_pool|release_kv_pages|create_batch_workspace|setup_dasllama_jobque|with_dasllama_jobque|caps|mtp_drafter_sidecar|attach_mtp_drafter|mtp_capable)$%%),
+        group_by_regex("Model loading and sessions", mod, %regex~(load_model|create_session|create_kv_pool|release_kv_pages|create_batch_workspace|setup_dasllama_jobque|with_dasllama_jobque|caps|mtp_drafter_sidecar|attach_mtp_drafter|attach_mtp_sidecar|detach_mtp_drafter|mtp_drafter_stats|mtp_capable)$%%),
         group_by_regex("Prefix cache", mod, %regex~(create_prefix_cache|prefix_attach|prefix_insert|prefix_insert_snapshot|prefix_checkpoint_at|prefix_match_len|prefix_state_match_len|prefix_attach_state_split|prefix_state_touch|prefix_share_pages|prefix_take_spare|prefix_release|prefix_held_groups|prefix_chain_list)$%%),
         group_by_regex("Device-home streams and the host pool", mod, %regex~(gpu_resident_mtp_device_home|gpu_device_kv_claim|gpu_device_kv_checkpoint|gpu_device_kv_checkpoints|gpu_device_kv_snapshot|gpu_device_kv_parked_pos|gpu_device_kv_parked_snapshot|gpu_device_kv_victim_claims|gpu_device_kv_export|gpu_device_kv_import|gpu_device_kv_pool_armed|gpu_device_kv_pool_moves)$%%),
         group_by_regex("Tokenizer", mod, %regex~(encode|decode|piece)$%%),

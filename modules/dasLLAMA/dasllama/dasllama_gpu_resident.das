@@ -545,7 +545,7 @@ def with_gpu_resident_embed(pin : int; body : block<void>) {
     set_gpu_resident_embed(found)
 }
 
-def private resident_gpu_embed : bool => g_rdec_emb_pin < 0 ? g_env_vulkan.vk_gpu_embed : g_rdec_emb_pin != 0
+def private resident_gpu_embed : bool => pin_over_env(g_rdec_emb_pin, g_env_vulkan.vk_gpu_embed)
 
 //! the format a device gather serves a token table - or the per-layer-embedding table - in: q8, a superblock format or a per-32 one
 def private resident_emb_fmt_ok(f : KqFmt) : bool => f == KqFmt.q8 || kq_sb(f) || kq_dense_b32(f)

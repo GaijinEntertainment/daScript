@@ -785,10 +785,7 @@ def rows_ctx_need(plen, ngen, bplen : int64; npl : int; spec_rows : int64) : int
 // Non-private: tests/test_tok_seed.das gates the header walk.
 //! `--mtp-ab` on a model with no NextN head: the assistant drafter beside `mpath` attached to `t` through the facade - false where
 //! no sidecar sits beside the model or no backend takes it, which the bench refuses
-def mtp_ab_drafter_attach(t : Model; mpath : string) : bool {
-    let side = mtp_drafter_sidecar_(mpath)
-    return !empty(side) && empty(attach_mtp_drafter_(t, side))
-}
+def mtp_ab_drafter_attach(t : Model; mpath : string) : bool => !empty(attach_mtp_sidecar_(t, mpath))
 
 //! `--mtp-ab`'s drafter line: the attached drafter's rounds, its draft chain and verify a round, its cold steps' whole time
 def mtp_ab_drafter_line(gs : MtpAssistantStats) : string {

@@ -58,5 +58,8 @@ draft their chain at their own anchor from their own token and carried hidden; o
 the verify's first command buffer, its inputs written into a slot a stream, the token rows a stream's group in one token list. One verify
 then carries every warm stream's [token, drafts]: on Metal the batch driver's same-slab step in groups
 (`verify_batch_groups`, a group a stream's consecutive rows over its own mirror), on Vulkan the N-row token command
-(`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-assistant-drafter`). Each stream's accept walk and host commit are the shared
-pair (`mtp_accept_walk`, `mtp_round_commit_host`); its carry becomes the verify's hidden row at the accepted count.
+(`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-assistant-drafter`). Both homes open the round through one gather
+(`mtp_round_gather`: each stream's round begun, its depth under its cap, the home's cold test answering a plain step or the
+stream's word - the Vulkan region it binds), and each stream's accept walk and host commit are the shared pair
+(`mtp_accept_walk`, `mtp_round_commit_host`); its carry becomes the verify's hidden row at the accepted count. Each home
+keeps its rounds' tallies as one `MtpAssistantStats`, reset at the attach, which its `stats` seam answers.

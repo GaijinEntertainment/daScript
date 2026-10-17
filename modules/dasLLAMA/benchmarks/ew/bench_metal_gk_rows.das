@@ -109,32 +109,23 @@ def private round_stats(times : array<double>) : tuple<med : double; best : doub
     return (med = sorted[length(sorted) / 2], best = sorted[0], cv = sqrt(var2 / double(length(times))) / mean)
 }
 
-//! the median per-dispatch GPU time in us of `body` over the rounds, and the rounds' cv
-def private time_rows(name : string; body : block<(enc : MetalComputeEncoder?) : void>) : tuple<us : double; cv : double> {
-    let rounds = max(g_env_bench.lab_rounds, MIN_ROUNDS)
-    var times : array<double>
-    times |> reserve(rounds + 1)
-    for (_r in range(rounds + 1)) {
-        var err : string
-        var ms = 0.0lf
-        let ok = with_compute_encoder_timed(g_queue, err, ms) $(enc) {
-            for (_i in range(REPS)) {
-                invoke(body, enc)
-            }
-        }
-        if (!ok) {
-            to_log(LOG_ERROR, "{name}: dispatch failed: {err}\n")
-            return (us = -1.0lf, cv = 1.0lf)
-        }
-        times |> push(ms * 1000.0lf / double(REPS))
-    }
-    times |> erase(0)   //! the first round warms the pipeline
-    let st = round_stats(times)
-    to_log(LOG_INFO, "{name}: {st.med} us a dispatch (cv {st.cv * 100.0lf}%{st.cv > 0.03lf ? " - VOID" : ""}) - timing-only\n")
-    return (us = st.med, cv = st.cv)
-}
-
 typedef Reading = tuple<us : double; cv : double>
+
+//! `reps` dispatches of arm `arm` of `body` on one timed encoder, waited on: the per-dispatch GPU time in us, or -1 on a failure
+def private timed_dispatches(name : string; arm, reps : int; body : block<(enc : MetalComputeEncoder?; arm : int) : void>) : double {
+    var err : string
+    var ms = 0.0lf
+    let ok = with_compute_encoder_timed(g_queue, err, ms) $(enc) {
+        for (_i in range(reps)) {
+            invoke(body, enc, arm)
+        }
+    }
+    if (!ok) {
+        to_log(LOG_ERROR, "{name}: arm {arm} dispatch failed: {err}\n")
+        return -1.0lf
+    }
+    return ms * 1000.0lf / double(reps)
+}
 
 //! the per-dispatch GPU times in us of `narms` arms, a list an arm, interleaved: a round times each arm's REPS dispatches of `body`
 //! in turn, and the first round warms every arm and drops; empty on a dispatch failure
@@ -144,38 +135,32 @@ def private race_arms(name : string; narms : int; body : block<(enc : MetalCompu
     times |> resize(narms)
     for (r in range(rounds + 1)) {
         for (a in range(narms)) {
-            var err : string
-            var ms = 0.0lf
-            let ok = with_compute_encoder_timed(g_queue, err, ms) $(enc) {
-                for (_i in range(REPS)) {
-                    invoke(body, enc, a)
-                }
-            }
-            if (!ok) {
-                to_log(LOG_ERROR, "{name}: arm {a} dispatch failed: {err}\n")
+            let us = timed_dispatches(name, a, REPS, body)
+            if (us < 0.0lf) {
                 var none : array<array<double>>
                 return <- none
             }
             if (r > 0) {
-                times[a] |> push(ms * 1000.0lf / double(REPS))
+                times[a] |> push(us)
             }
         }
     }
     return <- times
 }
 
-//! arm `arm` of `body` dispatched once and waited on
-def private dispatch_once(arm : int; body : block<(enc : MetalComputeEncoder?; arm : int) : void>) : bool {
-    var err : string
-    var ms = 0.0lf
-    let ok = with_compute_encoder_timed(g_queue, err, ms) $(enc) {
-        invoke(body, enc, arm)
+//! the median per-dispatch GPU time in us of `body` over the rounds (`race_arms` at one arm), and the rounds' cv
+def private time_rows(name : string; body : block<(enc : MetalComputeEncoder?) : void>) : Reading {
+    var times <- race_arms(name, 1) $(enc; _arm) {
+        invoke(body, enc)
     }
-    if (!ok) {
-        to_log(LOG_ERROR, "arm {arm} dispatch failed: {err}\n")
-    }
-    return ok
+    return (us = -1.0lf, cv = 1.0lf) if (empty(times))
+    let st = round_stats(times[0])
+    to_log(LOG_INFO, "{name}: {st.med} us a dispatch (cv {st.cv * 100.0lf}%{st.cv > 0.03lf ? " - VOID" : ""}) - timing-only\n")
+    return (us = st.med, cv = st.cv)
 }
+
+//! arm `arm` of `body` dispatched once and waited on
+def private dispatch_once(arm : int; body : block<(enc : MetalComputeEncoder?; arm : int) : void>) : bool => timed_dispatches("once", arm, 1, body) >= 0.0lf
 
 struct private ArmCompare {
     err : double    //! max |gpu - ref| over the compare region, over its max |ref|

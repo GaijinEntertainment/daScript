@@ -121,8 +121,11 @@ def private strip_trailing_sep(p : string) : string {
     return empty(trimmed) || ends_with(trimmed, ":") ? p : trimmed
 }
 
-def public catalog_local_path(dir : string; e : CatalogEntry) : string {
-    let p = path_join(dir, e.file)
+def public catalog_local_path(dir : string; e : CatalogEntry) : string => present_path(dir, e.file)
+
+//! `file` under `dir` where it is on disk, else ""
+def private present_path(dir, file : string) : string {
+    let p = path_join(dir, file)
     return stat(p).is_valid ? p : ""
 }
 
@@ -310,10 +313,14 @@ def private download_start_item(dir, id, file, url, want_sha : string; want_byte
 //! "drafter") - the `download.name` a caller polls
 def public catalog_download_id(e : CatalogEntry; tower : string) : string => empty(tower) ? e.name : "{tower}:{e.name}"
 
+//! The companion a request's `tower` word names: "vision" the vision tower, any other the drafter
+def public catalog_companion_kind(tower : string) : CatalogCompanionKind
+    => tower == "vision" ? CatalogCompanionKind.vision : CatalogCompanionKind.drafter
+
 //! The POST /catalog/download ACCEPTED body for entry `e`'s own file (`tower` "") or its companion: the download id and the bytes
 //! the download brings
 def public catalog_download_accepted_json(e : CatalogEntry; tower : string) : string {
-    let bytes = empty(tower) ? e.bytes : catalog_companion(e, tower == "vision" ? CatalogCompanionKind.vision : CatalogCompanionKind.drafter).bytes
+    let bytes = empty(tower) ? e.bytes : catalog_companion(e, catalog_companion_kind(tower)).bytes
     var doc = JV((ok = true, name = catalog_download_id(e, tower), bytes = bytes))
     let text = write_json_compact(doc)
     unsafe {
@@ -377,8 +384,7 @@ def public catalog_download_tick() {
 //! companion `c`'s path under `dir` where it is present, else ""
 def private companion_local_path(dir : string; c : CatalogCompanion) : string {
     return "" if (empty(c.file))
-    let path = path_join(dir, c.file)
-    return stat(path).is_valid ? path : ""
+    return present_path(dir, c.file)
 }
 
 //! The GET /catalog document: entries with local presence (model AND vision tower), the ASR

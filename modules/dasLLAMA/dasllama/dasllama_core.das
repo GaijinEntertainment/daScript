@@ -720,6 +720,12 @@ def attach_mtp_drafter(model : Model; path : string) : bool {
     return empty(attach_mtp_drafter_(model, path))
 }
 
+def attach_mtp_sidecar(model : Model; model_path : string) : string {
+    //! Attach the assistant drafter that sits beside the model at `model_path` (`mtp_drafter_sidecar`): the drafter's path
+    //! where it attached, "" where none sits there or every driver refused it (each refusal logged).
+    return attach_mtp_sidecar_(model, model_path)
+}
+
 def detach_mtp_drafter(model : Model) {
     //! Detach `model`'s assistant drafter, if one is attached; its rounds stop and plain decode serves.
     detach_mtp_drafter_(model)

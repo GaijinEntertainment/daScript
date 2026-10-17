@@ -3663,7 +3663,7 @@ let FUSE_BX_POST_ATT_RQ = 16l  //! the post-attention one (and the wo epilogue, 
 let FUSE_BX_POST_FFN_RQ = 32l  //! the post-FFN one (and the down epilogue)
 let FUSE_BX_QKN_ROPE = 64l     //! the fused qk-norm + rope + store
 
-def vk_fuse_on : bool => g_vk_fuse >= 0 ? g_vk_fuse != 0 : g_env_vulkan.vk_fuse
+def vk_fuse_on : bool => pin_over_env(g_vk_fuse, g_env_vulkan.vk_fuse)
 
 //! the greedy chain's mode as `DASLLAMA_VK_CHAIN` asks it
 def vk_chain_env : int => g_env_vulkan.vk_chain

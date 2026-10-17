@@ -2694,10 +2694,15 @@ def private rd_encode_ple(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
     rd_ts(raw, "p:proj")
 }
 
+//! layer l's gemma-4 routed feed as a residual step with no partner: x under the routed branch's pre norm, the decode's and the
+//! window's
+def rd_g4_pre2_args(l : int64) : GkAddRmsArgs
+    => GkAddRmsArgs(dim = uint(g_rd.dim), add_on = 0u, woff = uint(rd_norm_off(l, RD_NORM_PRE_FFN2)), eps = g_rd.eps, ascale = 1.0)
+
 //! the gemma-4 routed feed: x under the routed branch's pre norm into xb, or (`fused`) straight into the experts' Q8 image
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-gemma4-moe-block")]
 def private rd_encode_g4_pre2(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; l, nrows : int64; fused : bool) {
-    var pcn = GkAddRmsArgs(dim = uint(g_rd.dim), add_on = 0u, woff = uint(rd_norm_off(l, RD_NORM_PRE_FFN2)), eps = g_rd.eps, ascale = 1.0)
+    var pcn = rd_g4_pre2_args(l)
     if (fused) {
         enc_ar_rq_stamp(L.pre2_stamp, raw, h, L.s_pre2_rq, pcn)
         rd_ts(raw, "m:pre2_rq")

@@ -19,6 +19,7 @@ require daslib/linq
 require daslib/fio
 require daslib/strings_boost
 require _model_tier   // models_dir() + model_available() presence/size-tier gate (see the file's header)
+require _override_probes   // decode_declines: the fake override's step
 require _resident_feed   // head_k_row_bytes
 
 // MTP/NextN self-speculative decode gates, on the qwen35-family -MTP- GGUFs (the files ship one
@@ -234,9 +235,6 @@ var private g_probe_seam_pos = -1l
 var private g_probe_window_active = false
 var private g_probe_prefill_calls = 0l
 
-[unused_argument(t, s, token, pos)]
-def private probe_decode(t : Model; var s : Session; token, pos : int64) : bool => false
-
 [unused_argument(t)]
 def private probe_owner(t : Model) : bool => true
 
@@ -290,7 +288,7 @@ def private seam_row_kept(var tr : Model; serves, blob : bool) : bool {
         forward_prefill(tr, s, first, SEAM_PROMPT, 0l)
         s.n_past = SEAM_PROMPT
         poison_head_k_row(tr, s, SEAM_PROMPT - 1l)
-        register_decode_override(PROBE_SEAM, @@probe_decode)
+        register_decode_override(PROBE_SEAM, @@decode_declines)
         register_mtp_seat_owner(PROBE_SEAM, @@probe_owner)
         register_mtp_seam_override(PROBE_SEAM, @@probe_seam)
         register_prefill_override(PROBE_PREFILL, @@probe_prefill)

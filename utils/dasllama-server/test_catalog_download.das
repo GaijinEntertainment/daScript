@@ -11,14 +11,6 @@ require daslib/fio
 require daslib/json_boost
 require strings
 
-def private tmp_dir(tag : string) : string {
-    var terr : string
-    let base = temp_directory(terr)
-    let dir = path_join(empty(base) ? "." : base, "dasllama_catalog_dl_{tag}_{ref_time_ticks()}")
-    mkdir_rec(dir)
-    return dir
-}
-
 [unused_argument(path)]
 def private no_packs(path : string) : bool => false
 
@@ -37,8 +29,10 @@ def private download_field(dir, key : string) : string {
 def test_companion_download_starts(t : T?) {
     t |> run("a pinned drafter starts its download under the id drafter:<name>, and the worker refuses bytes off the pinned sha") @(t : T?) {
         catalog_events_init()
-        let src_dir = tmp_dir("src")
-        let dir = tmp_dir("models")
+        let src_dir = path_join(test_temp_dir(), "src")
+        mkdir_rec(src_dir)
+        let dir = path_join(test_temp_dir(), "models")
+        mkdir_rec(dir)
         let src = path_join(src_dir, "head.bin")
         fopen(src, "wb") $(f) {
             if (f != null) {
@@ -65,8 +59,5 @@ def test_companion_download_starts(t : T?) {
         t |> success(find(download_field(dir, "error"), "sha256 MISMATCH") >= 0, "the failure names the sha mismatch: {download_field(dir, "error")}")
         t |> success(!stat(path_join(dir, e.drafter.file)).is_valid, "no drafter file lands beside the models")
         catalog_events_shutdown()
-        remove(src)
-        rmdir(src_dir)
-        rmdir(dir)
     }
 }

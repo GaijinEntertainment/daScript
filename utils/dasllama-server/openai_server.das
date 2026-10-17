@@ -1638,7 +1638,7 @@ def private handle_catalog_download(req : FrontReq; var resp : Reply) : http_sta
     }
     for (e in model_catalog()) {
         if (e.name == want) {
-            let kind = tower == "vision" ? CatalogCompanionKind.vision : CatalogCompanionKind.drafter
+            let kind = catalog_companion_kind(tower)
             let refusal = empty(tower) ? catalog_download_start(g_catalog_dir, e) : catalog_download_start_companion(g_catalog_dir, e, kind)
             if (!empty(refusal)) {
                 return resp |> JSON(error_body(refusal, "invalid_request_error"), http_status.CONFLICT)
@@ -7083,8 +7083,8 @@ def private init_one_scheduler(var s : ModelSlot) {
     var spec = slot_mtp_arms(s.opts, g_sched_defaults.mtp, s_streams, slot_flavor(s) == "metal",
                              s.backend_effective, gpu_resident_experts_host())
     if (spec && s.model.config.n_layer_nextn <= 0l) {
-        let side = mtp_drafter_sidecar(s.path)
-        if (!empty(side) && attach_mtp_drafter(s.model, side)) {
+        let side = attach_mtp_sidecar(s.model, s.path)
+        if (!empty(side)) {
             to_log(LOG_INFO, "dasllama-server: {s.name} speculates through the assistant drafter {base_name(side)}\n")
         } elif (want > 0) {
             to_log(LOG_WARNING, "dasllama-server: mtp requested for {s.name} but the model has no NextN head and no assistant drafter beside it — self-spec stays off\n")
