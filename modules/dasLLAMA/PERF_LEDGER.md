@@ -30,7 +30,13 @@ what it costs today and what the fix would change.
   82.8, down 71.7 / 83.7, q 27.1 / 29.2, 4B down 184.9 / 212.1; k6 gate 82.0 / 96.2, down2x 156.6 / 195.4; k5 gate 81.6 /
   96.7, 4B down 199.7 / 249.4; iq4xs gate 79.0 / 86.4, down2x 150.5 / 183.9; at 500 rows the m stamp / staged: k4 90.5 /
   83.8, k6 99.0 / 96.4, k5 99.8 / 96.8, iq4xs 99.2 / 87.7 (`followup_vulkan.md` row 149). Decision: the f32 rows take the
-  staged tile on every coopmat device at subgroup 32; the K-quant planes stay on the cm2 tiles.
+  staged tile on every coopmat device at subgroup 32; the K-quant planes stay on the cm2 tiles. The tile pick's narrow rule
+  (`narrow:<fmt>`, every K-quant format, K 1536, the same box) one dispatch at a time, us s / m / l at 512 rows: k4 256 and
+  512 wide 23.1 / 35.5 / 60.0, k6 25.2 / 39.5 / 64.1, iq4xs 27.2 / 39.5 / 61.8, k2 36.2 / 51.6 / 76.4, iq2xxs 45.7 / 55.0 /
+  81.6, iq2s at 256 wide 53.1 / 53.9; at 768 wide m wins (k4 35.8 / 43.6 s); overlapped sixteen deep the order turns (k4 at
+  256 wide 9.8 / 5.1 / 6.0). The E2B Q4_K_M window with its K-quant k and v taken off the s column (the wave model's m):
+  k 496 -> 632 us, v 477 -> 661, the window 31859 -> 32227. Decision: the narrow rule stands for the K-quants; the
+  overlapped reading that suggested otherwise is not the cost a window pays.
 - **MEASURED (2026-10-16) - the gemma leg's end re-measure, the M5 half.** Instrument `benchmarks/lcpp_bench.das`
   (`--ngl 99 -p 512 -n 128 -r 5 --for-debug-purposes`, debug-jit), the M5 Max (128 GB) alone on the box, one box profile
   minted at the leg tip (505 s, 39,101 B) and read by both trees: master's own build (33e7910669) against the leg tip

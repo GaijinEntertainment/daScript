@@ -8619,6 +8619,13 @@ def test_vk_coopmat_default_and_tile_pick(t0 : T?) {
             t |> equal(cm2_tile_cols(256l, 512l), 32l, "gemma-3-1b's k/v shape (8 m tiles of 84): the s column")
             t |> equal(cm2_tile_cols(1024l, 512l), 128l, "... its q shape (32 m tiles): m")
             g_gpu.sm_count = 82
+            //! the narrow rule at the gemma-4 E2B's K-quant k/v widths on 82 SMs (`narrow:<fmt>`'s one-dispatch rows): every K-quant's s stamp
+            //! under its m stamp through 640, the m stamp under s past it
+            t |> equal(cm2_tile_cols(256l, 512l), 32l, "E2B's 256-wide k/v (8 m tiles of 82): the s column")
+            t |> equal(cm2_tile_cols(512l, 512l), 32l, "... its 512-wide k/v (16 m tiles): s")
+            t |> equal(cm2_tile_cols(640l, 512l), 32l, "... the widest plane the rule takes (20 m tiles, 80 of 82)")
+            t |> equal(cm2_tile_cols(768l, 512l), 128l, "... the first it leaves to the wave model (24 m tiles): m")
+            t |> equal(cm2_tile_cols(256l, 300l), 32l, "... a 300-row window's 256-wide k/v: s")
             let SPLIT_K_SCRATCH_PER_SM = 262_144l   //! the split-k scratch the prefill allocates an SM
             let scratch82 = SPLIT_K_SCRATCH_PER_SM * 82l
             t |> equal(pick_str(cm2_gemm_pick(1536l, 512l, 12288l, 0l, scratch82)), "256x3x4096", "E2B's 12288-deep down on 82 SMs: three l chunks")

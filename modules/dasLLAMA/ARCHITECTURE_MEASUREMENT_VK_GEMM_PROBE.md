@@ -135,7 +135,11 @@ partial-tile store); the cm2 l stamp is its alternate. `plef32` puts the scalar 
 projection shapes of the E2B and the E4B, at 512 rows and the E2B's again at 300, three rounds;
 then its one-at-a-time rows hold one output and one hazard rail - the latency the window's
 dependent chain pays the role - over the scalar tile, the staged tile whole, and the staged tile
-over two to eight 256-aligned k chunks chained into the split-k reduce. The scalar tile is its
+over two to eight 256-aligned k chunks chained into the split-k reduce. `narrow:<fmt>` runs a
+K-quant format's l, m and s stamps at the widths the tile pick's narrow rule decides - 256, 512
+and 640 wide, which the rule gives s at 512 rows on 82 SMs, and 768, the first it leaves to the
+wave model - over K 1536 at 512 and 300 rows, overlapped and one dispatch at a time; the m stamp
+is its alternate. The scalar tile is its
 alternate. Every shape of both arms is a compute-bound GEMM over a plane the L2 holds, which the
 window's per-layer planes are not; the served window's `ple_gate` and `ple_proj` stamps
 (`DASLLAMA_GPU_PROF=1`, `PERF_LEDGER.md`) are the production reading.

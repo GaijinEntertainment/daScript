@@ -2138,11 +2138,9 @@ module) is independent and can land any time - it is pure structure.
     the gpt-oss leg's.
 
 149. **The K-quant window pick on the cm2 scalar decode arm reads its races at whole columns only.** On the RTX PRO 4500
-    (driver 580, no decode-vector; `harness/vk_gemm_probe.das kqst:<fmt>`) three readings sit off the pick: (a) a window
+    (driver 580, no decode-vector; `harness/vk_gemm_probe.das kqst:<fmt>`) two readings sit off the pick: (a) a window
     off the l column - the E2B gate at 500 rows - runs the l stamp's edge path, and the staged KHR tile reads 3-12% under
-    the m stamp there (k4 83.8 against 90.5 us, iq4xs 87.7 against 99.2); (b) the s column the pick gives a narrow GEMM
-    (`tiles_m * 4 <= cores`, the E2B's 256-wide k and v) reads 2.3-2.5x the l stamp at the 256 x 1536 shape on k4, k5, k6
-    and iq4xs (11.5 against 4.5 us), where the rule's figures are q8's; (c) the per-layer-embedding gate over q8 and q4_0
+    the m stamp there (k4 83.8 against 90.5 us, iq4xs 87.7 against 99.2); (b) the per-layer-embedding gate over q8 and q4_0
     planes reads 1090 and 1270 us a 512-row window - eight workgroups whose one-dispatch latency the window pays, since K
     under 2048 never splits - where the f32 planes' split staged gate reads 718. Done = each pick raced one dispatch at a
     time at whole and partial windows on both decode arms, the winners in `cm2_gemm_pick`, the E2B and 4B K-quant rows

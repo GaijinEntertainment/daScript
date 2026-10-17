@@ -10,6 +10,7 @@ options _dasllama_internal = true
 // ATTRIBUTION SWEEP cm2g:<fmt> - a format's dense role shapes at 512 rows, overlapped and one dispatch at a time.
 // ATTRIBUTION SWEEP g3|gemma|splitk - the gemma role shapes and the down's split-k ladder, whole against split.
 // ATTRIBUTION SWEEP plef32 - the per-layer-embedding gate and projection over f32 rows: the scalar f32 tile against the staged KHR tile.
+// ATTRIBUTION SWEEP narrow:<fmt> - the tile pick's narrow-GEMM s rule: a format's l, m and s stamps at the widths the rule decides.
 // ATTRIBUTION SWEEP kqst:<fmt> - the K-quant window's two forms: the cm2 l/m/s stamps on the device's decode arm against the staged KHR tile.
 // ATTRIBUTION SWEEP khrsk - the KHR arm's q8 race (DASLLAMA_COOPMAT=mm): the q8 mul_mm tile against the KHR kq tile whole and split, one process.
 // ATTRIBUTION SWEEP small|barform - the token command's one-workgroup row kernels alone, chained, and by barrier form.
@@ -3488,7 +3489,7 @@ def private twin_rounds(body : block<(round, arm, arms : int; tag : string) : vo
 
 //! the per-format arm `a` names - its `<arm>:` prefix, the format name past it - or "" where it names none
 def private fmt_arm_of(a : string) : string {
-    for (pre in fixed_array("cm2:", "cm2d:", "cm2w:", "moe:", "cm2g:", "moesk:", "ts:", "cold:", "kqst:")) {
+    for (pre in fixed_array("cm2:", "cm2d:", "cm2w:", "moe:", "cm2g:", "moesk:", "ts:", "cold:", "kqst:", "narrow:")) {
         return pre if (a |> starts_with(pre))
     }
     return ""
@@ -3638,6 +3639,33 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
         run_ple_f32_shape("E4B proj", 2560, 256, 512, 3)
         run_ple_f32_shape("E2B gate@300", 256, 1536, 300, 3)   //! a window off the tile's 128-token column: the partial-tile store
         run_ple_f32_shape("E2B proj@300", 1536, 256, 300, 3)
+        return
+    }
+    if (only == "narrow:") {
+        if (!g_gpu.has_coopmat2 || g_gpu.coopmat_mode != COOPMAT_CM2) {
+            print("narrow:<fmt> reads the cm2 stamps; run on a coopmat2 device with DASLLAMA_COOPMAT=cm2\n")
+            g_probe_exit = 1
+            return
+        }
+        if (cm2_fmt < 0 || !kq_sb(cm2_fmt)) {
+            print("narrow:<fmt> needs a kq superblock format name ({cm2_fmt_names()})\n")
+            g_probe_exit = 1
+            return
+        }
+        verify(cm2_cls_ensure(cm2_fmt, 256l) && cm2_cls_ensure(cm2_fmt, 128l) && cm2_cls_ensure(cm2_fmt, 32l)
+            && (!probe_stwin_has(cm2_fmt) || probe_stwin_ensure(cm2_fmt)) && kq_batch_cls_ensure(cm2_fmt, false),
+            "narrow:<fmt> probe pipelines (the l, m and s stamps, the twin, the kq tile) must engage")
+        print("ATTRIBUTION SWEEP narrow:{cm2_fmt_names()}: the narrow-GEMM s rule's shapes ({g_gpu.sm_count} SMs, {g_gpu.decvec_on ? "four-wide" : "scalar"} decode), timing-only rows\n")
+        for (round in range(2)) {
+            //! the gemma-4 E2B k/v at K 1536 (256 and 512 wide), the widest plane the rule takes at 512 rows on 82 SMs (640) and the
+            //! first it leaves to the wave model (768); 512 rows and a 300-row window; overlapped, then one dispatch at a time
+            for (d in fixed_array(256, 512, 640, 768)) {
+                for (cnt in fixed_array(512, 300)) {
+                    run_cm2_fmt_shape(cm2_fmt, "r{round} d{d} K1536 rows{cnt}", d, 1536, cnt)
+                    run_cm2_fmt_shape(cm2_fmt, "r{round} d{d} K1536 rows{cnt}", d, 1536, cnt, false, true)
+                }
+            }
+        }
         return
     }
     if (only == "kqst:") {

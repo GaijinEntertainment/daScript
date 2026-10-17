@@ -91,6 +91,15 @@ whole 128 rows instead - in bounds, unclamped, its overlap with the tile before 
 values - since a clamped weight load runs every tile at a third the speed (the fast path's own layout
 clamped: q8 E2B down 268 -> 612 us) and through the edge path the dispatch waited on the partial workgroups (the 26B's shared expert, k6: 164 us against 71 whole). `STILE` is inert on the KHR classes.
 
+**The narrow rule reads one dispatch's latency, the cost a window pays a GEMM of few workgroups.** On the
+scalar decode arm every K-quant format's s stamp takes less time than its m stamp one dispatch at a time
+at every width the rule takes (`narrow:<fmt>`, K 1536, 512 rows, us s / m / l: k4 at 256 and 512 wide 23.1 /
+35.5 / 60.0, k5 25.2 / 39.5, k6 25.2 / 39.5, q40 25.3 / 39.5, iq4xs 27.2 / 39.5, k2 36.2 / 51.6, iq3xxs 43.6 /
+54.0, iq2s 43.6 / 54.0 at 512 wide and 53.1 / 53.9 at 256; at 640 wide the same; at a 300-row window the same), and the m stamp wins at 768,
+the first width the rule leaves to the wave model (k4 35.8 against 43.6). Overlapped sixteen deep the order
+turns - the l and m stamps read under s there (k4 at 256 wide: 6.0 / 5.1 / 9.8) - and the window follows the
+latency: the E2B Q4_K_M's k and v read 496 and 477 us a window on s against 632 and 661 with them off it.
+
 **The k step follows the column and the decode; the k loop is unrolled by hand, a superblock per
 block.** The template's k step (`BK`) is 64 on the dense l and m tiles and on the expert stamps of the K-quants, q4_0, q8 and
 the 4-bit LUT formats - there the e column IS the m stamp (`KQ_CM2E_ALIASES_M` in `dasllama_kqformat.das` names them, the
