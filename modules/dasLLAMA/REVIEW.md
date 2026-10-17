@@ -205,9 +205,10 @@ at least one value on each side of it in that race.**
 **A new call site of a CPU or GPU matrix multiply whose weight operand is an f32 plane, outside a
 correctness-comparison path (one whose only job is to produce a reference result to check another
 against), where the same backend already serves the same weights and shape through a kernel on a
-quantized or f16 form of them, is a defect - call that kernel instead.** A site that must stay f32 for another reason is
-ledgered on its file's charter line (the line, in the companion that `ARCHITECTURE.md#file-charters`
-routes to, that says what the file holds); a comment at the call site does not discharge this.
+quantized or f16 form of them, is a defect - call that kernel instead.** A site that must stay f32
+for another reason is ledgered on its file's charter line (the line, in the companion that
+`ARCHITECTURE.md#file-charters` routes to, that says what the file holds); a comment at the call
+site does not discharge this.
 
 **A caller never re-checks a guard its callee checks - drop the caller's copy, or, where the
 caller's check also gates its own work, compute the decision once and pass it to the callee.**
