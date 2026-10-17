@@ -465,6 +465,7 @@ struct RowStats {
     flip_margin_max : float
     plain_steps : int64     //!< the plain side's steps, and of them the ones the Metal decode served
     plain_decodes : int64
+    verify_decodes : int64  //!< the Metal decode count across the verify side's batch steps - the plain count's control
 }
 
 def private compare_row(plain, store : array<float>; soff, n : int64; var st : RowStats; tag : string; pos : int64; verbose : bool) {
@@ -483,6 +484,28 @@ def private compare_row(plain, store : array<float>; soff, n : int64; var st : R
         if (verbose) {
             feint("FLIP {tag} pos={pos}: plain {ap} vs verify {av} margin {mg} maxd {mx}\n")
         }
+    }
+}
+
+//! one round's verify rows against the plain steps' stored rows: each row compared, its widest difference kept a row
+def private vff_round_rows(store, verify : array<float>; vocab, nr, pos : int64; var st : RowStats; var rowmax : array<float>;
+                           verbose : bool) {
+    for (i in range64(nr)) {
+        var plain : array<float>
+        plain |> resize(vocab)
+        for (v in range64(vocab)) {
+            plain[v] = store[i * vocab + v]
+        }
+        compare_row(plain, verify, i * vocab, vocab, st, "vrow{i}", pos + i, verbose)
+        var rmx = 0.0
+        for (v in range64(vocab)) {
+            rmx = max(rmx, nan_wide_diff(plain[v], verify[i * vocab + v]))
+        }
+        rowmax[i] = max(rowmax[i], rmx)
+        if (verbose) {
+            to_log(LOG_INFO, "vff round pos={pos + i} row={i} maxd={rmx} plain_top={argmax_of(plain, 0l, vocab)} verify_top={argmax_of(verify, i * vocab, vocab)} margin={top2_margin(plain, vocab)}\n")
+        }
+        delete plain
     }
 }
 
@@ -534,27 +557,14 @@ def private vff_pair(tr, trg : Model; prompt : array<int64>; nrounds, nr : int64
                     tok = argmax_of(sa.logits, vocab)
                 }
                 // B: the same nr tokens as one same-slab verify; row i is the step on toks[i]
-                if (!verify_batch_step(trg, ws, sb, toks, pos, nr)) {
+                let v0 = metal_decode_stats().decodes
+                let verified = verify_batch_step(trg, ws, sb, toks, pos, nr)
+                st.verify_decodes += metal_decode_stats().decodes - v0
+                if (!verified) {
                     break
                 }
                 sb.n_past = pos + nr
-                for (i in range64(nr)) {
-                    var plain : array<float>
-                    plain |> resize(vocab)
-                    for (v in range64(vocab)) {
-                        plain[v] = store[i * vocab + v]
-                    }
-                    compare_row(plain, sb.mtp_logits_b, i * vocab, vocab, st, "vrow{i}", pos + i, verbose)
-                    var rmx = 0.0
-                    for (v in range64(vocab)) {
-                        rmx = max(rmx, nan_wide_diff(plain[v], sb.mtp_logits_b[i * vocab + v]))
-                    }
-                    rowmax[i] = max(rowmax[i], rmx)
-                    if (verbose) {
-                        to_log(LOG_INFO, "vff round pos={pos + i} row={i} maxd={rmx} plain_top={argmax_of(plain, 0l, vocab)} verify_top={argmax_of(sb.mtp_logits_b, i * vocab, vocab)} margin={top2_margin(plain, vocab)}\n")
-                    }
-                    delete plain
-                }
+                vff_round_rows(store, sb.mtp_logits_b, vocab, nr, pos, st, rowmax, verbose)
                 pos += nr
             }
             served = metal_batch_decode_stats().steps - before
@@ -702,7 +712,12 @@ def private vff_cell(t : T?; tr, trg : Model; tag : string; prompt : array<int64
         let bar = half ? max(tol, MM_TOL) : tol
         t |> success(st.rows > 0l, "{tag} vff: rows compared ({st.rows})")
         t |> success(st.plain_steps > 0l && st.plain_decodes == st.plain_steps, "{tag} vff: every plain step was a Metal decode ({st.plain_decodes} of {st.plain_steps})")
-        t |> success(st.max_abs <= bar, "{tag} vff: batch same-slab verify rows vs plain steps within {bar} over {st.rows} rows (maxd {st.max_abs}, argmax flips {st.flips}, widest flipped margin {st.flip_margin_max}, half-x sites {half})")
+        t |> equal(0l, st.verify_decodes, "{tag} vff: the batch verify counted no single-row Metal decode (the plain count's control)")
+        var kq_half = true   // nolint:LINT003,LINT019 — DASLLAMA_METAL_KQ_HALF, read in the das_metal half
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            kq_half = get_metal_kq_half()
+        }
+        t |> success(st.max_abs <= bar, "{tag} vff: batch same-slab verify rows vs plain steps within {bar} over {st.rows} rows (maxd {st.max_abs}, argmax flips {st.flips}, widest flipped margin {st.flip_margin_max}, half-x sites {half}, DASLLAMA_METAL_KQ_HALF {kq_half})")
         to_log(LOG_INFO, "metal vff {tag}: maxd={st.max_abs} flips={st.flips}/{st.rows} widest_margin={st.flip_margin_max} steps={served} half_x={half}\n")
         if (bar > tol) {
             vff_control_cell(t, tr, trg, tag, prompt, nr, bar)
@@ -723,6 +738,7 @@ def private vff_control_cell(t : T?; tr, trg : Model; tag : string; prompt : arr
             t |> failure("{tag} vff{nr} control: the metal batch rail declined the same-slab verify")
         } else {
             t |> success(st.plain_steps > 0l && st.plain_decodes == st.plain_steps, "{tag} vff{nr} control: every plain step was a Metal decode ({st.plain_decodes} of {st.plain_steps})")
+            t |> equal(0l, st.verify_decodes, "{tag} vff{nr} control: the batch verify counted no single-row Metal decode")
             t |> success(st.max_abs > bar, "{tag} vff{nr} control: the {nr}-row verify with its GEMV stage knocked out reds the {bar} bar (maxd {st.max_abs} over {st.rows} rows)")
         }
     }
