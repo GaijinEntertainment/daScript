@@ -13,7 +13,10 @@ clause stating a fact about the file (named with or without its `.das` suffix), 
 or one of its gate functions, wherever in `CLAUDE.md` the clause sits; a brace list naming several
 files at once (`test_metal_{prefill,decode}_kernels`) or a suite roster states none. A compare's
 two sides are the two computations whose mismatch reds the assert; a reference that only decides
-where the compare stops is neither side.
+where the compare stops is neither side. A stocked artifact is a file a test reads from under
+`models_dir()` that neither this repo's build nor its tests produce - model files, mmprojs,
+front-end packs, image fixtures, oracle dumps. An area is one of the file groups `run.das`'s
+`area_tests` table names, which `--changed` maps the changed paths to.
 
 **A kernel-unit cell - one in which its own code, a helper in its file or a `_*.das` helper module
 dispatches a `[metal_dispatch]` / `[vk_dispatch]` class or calls a `../dasllama/dasllama_math*.das`
@@ -30,10 +33,12 @@ or a knob list) - never a value the cell's own claim defines - or that a checked
 its evidence, applies `REVIEW_PINNED_GATES.md` too.** An assert that compares against a
 `../dasllama/` constant by name, not against a literal copy of it, keeps nothing in step.
 
-**A cell that calls a driver setter as `REVIEW_LANE_PINS.md` defines it, in its own code or
-through a helper it calls, passes a loader parameter that takes a family's lane, or whose
-claim depends on which route or serving lane runs it - a lane pin, a driver hook, a CPU-vs-GPU
-compare - applies `REVIEW_LANE_PINS.md` (beside this file) too.**
+**A cell that calls - in its own code or through a helper - a `../dasllama/` call that sets a
+module or process global a later load, route choice or kernel dispatch reads (a `set_*`, `pin_*`,
+`register_*`, `select_*_override` or `unset_*` call), or that passes a loader parameter choosing
+a family's serving lane (the q8 or float weight form the family runs), or whose claim depends on
+which route or serving lane runs it - a lane pin, a driver hook, a CPU-vs-GPU compare - applies
+`REVIEW_LANE_PINS.md` (beside this file) too.**
 
 **A cell that feeds, preprocesses, or asserts on media bytes an encoder consumes - pixels or
 audio samples - compares an encoder's output rows against a second source, or compares ASR
@@ -78,7 +83,7 @@ every suite.
 touches the filesystem is a defect - do that work inside the function that needs it.** Anything
 that fires on require fires inside every test that requires `run` by bare same-dir name.
 
-**A diff that gives `_model_tier.das`, or a `tests/` fixture it requires, an `[init]` that
+**A diff that gives `_model_tier.das`, or a fixture in this folder it requires, an `[init]` that
 declares the CPU-prefill intent (`allow_cpu_prefill`) is a defect - the intent is declared in
 the `[init]` of the test file that needs it.** `test_cpu_prefill_tripwire.das` requires
 `_model_tier` and asserts that the guard trips while the intent is undeclared.
@@ -197,16 +202,14 @@ one), states in the cell what makes them compute bit-identical logits - the shar
 an assert pinning the lane, or a lane pin plus the layout that alone differs.**
 
 **A test in this folder that loads a stocked artifact whose producer none of the following names
-is a defect.** A stocked artifact is anything the test reads out of `models_dir()` that this
-repo's build does not produce - model files, mmprojs, front-end packs, image fixtures, oracle
-dumps. Any one of these names the producer: a row in `../performance/model_specs.das`; a row's
+is a defect.** Any one of these names the producer: a row in `../performance/model_specs.das`; a row's
 `companions` list; a row in `asr_catalog` (`../performance/profile_common.das`); a convert
 script in `../harness/`; for an oracle dump, the mint script stocked beside the dumps under
 `models_dir()`, named by the test that loads the dump.
 
-**A diff that adds a cell reading a stocked artifact - a file neither this repo's build nor its
-tests produce - from a model file's directory names that artifact in the `companions` of that model
-file's row in `../performance/model_specs.das`, in the same change.** A box that fetches the row
+**A diff that adds a cell reading a stocked artifact from a model file's directory names that
+artifact in the `companions` of that model file's row in `../performance/model_specs.das`, in the
+same change.** A box that fetches the row
 alone then has what the cell reads.
 
 **A test that reads a vision encode oracle dump without naming the minting arm in its header - the

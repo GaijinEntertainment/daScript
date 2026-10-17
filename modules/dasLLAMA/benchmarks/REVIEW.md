@@ -17,10 +17,11 @@ times two implementations of one computation in one process, each one either a f
 serves or a candidate a file under this folder defines - a function, or a kernel a GPU kernel
 emitter generates (two values of one lever are not two implementations); an A/B is timed runs in
 one process differing only in one lever's value. An arm is every timed run of one implementation
-or one lever value; a round is one timed run of one arm; a compared arm is one whose output, from
-any run of it, the run reads back and measures against another arm's output or a CPU reference
-over the compare region, the output elements the instrument's header names; the baseline arm is
-the one the header names as baseline. A run of an arm refuses when it produces no figure or
+or one lever value; a round is one timed run of one arm, and a warmup round is a round the
+instrument's header comment says the row drops; a compared arm is one whose output, from any run
+of it, the run reads back and measures against another arm's output or a CPU reference over the
+compare region, the output elements the instrument's header comment names; the baseline arm is
+the one the header comment names as baseline. A run of an arm refuses when it produces no figure or
 output, or runs on a backend other than the backend name the row records. A board cell is a run
 whose reading lands as a row of `../performance/records/<box>.json` or a figure in
 `../PERF_LEDGER.md`. A mode is one selectable run of the file, chosen by its own flag or argument;
@@ -36,7 +37,7 @@ puts it, applies `../REVIEW_GPU_RACE.md` too.**
 **A diff that adds or changes the timed body of an instrument that requires
 `../performance/profile_common.das` and dispatches a kernel of a `[tune]` family or a `[tuned]`
 kernel - one whose form the tune sidecar (the `.tune.json` beside the file or the box's) or
-`DAS_TUNE_MANIFEST` picks - calls `tune_gate()` before its first timed rep.** Without the gate the
+`DAS_TUNE_MANIFEST` picks - calls `tune_gate()` before its first round.** Without the gate the
 instrument measures fallback kernels silently.
 
 **A diff that adds or changes the timed body of an instrument that dispatches a kernel of a
@@ -45,13 +46,13 @@ stamps every row with the tune manifest `DAS_TUNE_MANIFEST` names or the class p
 (`../performance/defaults/<class>.tune-defaults.json`) the run compiled against.**
 
 **A diff that adds a compared arm to an instrument, or changes a compared arm's run or report line,
-makes the instrument's header name the baseline arm and the compare region.**
+makes the instrument's header comment name the baseline arm and the compare region.**
 
 **A diff that adds or changes a race times its arms in turn - one round of each arm, then the
 next round of each - never all of one arm's rounds before the next arm's.**
 
-**A diff that adds or changes a race reports each arm's best round across the rounds as that
-arm's row.**
+**A diff that adds or changes a race reports each arm's best round, warmup rounds dropped, as
+that arm's row.**
 
 **A diff that adds or changes a race reports each arm's row on its own - never two arms' numbers
 on one row.**
@@ -73,11 +74,11 @@ it passed.** Two arms can agree and both be wrong; only the reference makes the 
 **A diff that adds a race arm that is not a compared arm, or changes its run or report line,
 makes that arm carry the literal token `timing-only` on its report line.**
 
-**A diff that adds a race or A/B mode with no compared arm - its arms in one process, or in
-processes the mode spawns where they would otherwise make one - or changes such a mode's arms,
-makes that mode carry the literal text `ATTRIBUTION SWEEP` on its own header-comment line, naming
-the mode and what its arms attribute.** Without the line a
-reader takes the mode's arms for an adoption decision it never made.
+**A diff that adds a race or A/B mode with no compared arm - its arms run in one process, or
+each in a process the mode spawns - or changes such a mode's arms, makes that mode carry the
+literal text `ATTRIBUTION SWEEP` on its own header-comment line, naming the mode and what its
+arms attribute.** Without the line a reader takes the mode's arms for an adoption decision it
+never made.
 
 **A new instrument that puts its own clock around a served turn - one whole request the engine
 serves, a prefill-plus-decode run, or a transcription or synthesis end to end - is a defect: add a
@@ -126,13 +127,13 @@ arm reads or how the arm reports, makes that arm report one row per prompt, neve
 ratio alone.** Prompts differ in how much the lever helps, so a per-prompt loss hides inside a
 winning mean.
 
-**A diff that adds a row measured over reps, or changes the instrument's timed body, an input
-picking a rep's backend, codec or session shape, or how the row is computed, states in the
-instrument's header comment how many warmup reps a row drops, zero included, and computes every
-number the row reports over the reps after them.**
+**A diff that adds a row measured over rounds, or changes the instrument's timed body, an input
+picking a round's backend, codec or session shape, or how the row is computed, states in the
+instrument's header comment how many warmup rounds a row drops, zero included, and computes
+every number the row reports over the rounds after them.**
 
-**A diff that adds a row measured over reps, or changes the instrument's timed body, an input
-picking a rep's backend, codec or session shape, or how the row is computed or reported, prints no
-number on the row when any run of the row's arm refuses - a timed rep, a warmup rep, or the run
+**A diff that adds a row measured over rounds, or changes the instrument's timed body, an input
+picking a round's backend, codec or session shape, or how the row is computed or reported, prints
+no number on the row when any run of the row's arm refuses - a round, a warmup round, or the run
 whose output the compare reads - only the refusal and its reason.** A partial row reads like a
 measured one and is a different quantity.
