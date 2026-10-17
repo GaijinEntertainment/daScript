@@ -1820,7 +1820,8 @@ def private per32_sum_rows_cell(t : T?; fmt : KqFmt; n, wq_words : int; wq_seed,
             for (wi in range(3)) {
                 let w = widths[wi]
                 var inscope want <- [for (i in range(w * d)); ys_ref[i]]
-                check(t, "{fmt} GEMV summed over {w} token row(s) at n {n}: every row its k slots' dots under their weights", outs[wi], want, BAR_APPROX, Shape(row_width = d))
+                check(t, "{fmt} GEMV summed over {w} token row(s) at n {n}: every row its k slots' dots under their weights", outs[wi], want,
+                    Bar(rel = APPROX_REL, poison = 2.0, poison_of_max = true, poison_abs = 1.0), Shape(row_width = d))
                 if (wi > 0) {
                     let pw = widths[wi - 1]
                     var inscope head <- [for (i in range(pw * d)); outs[wi][i]]
@@ -7907,7 +7908,7 @@ def test_vkd_router_gemv_bf16(t0 : T?) {
                 }
                 var inscope g4 <- [for (i in range(ne)); got4[obase + i]]
                 var inscope w4 <- [for (i in range(ne)); want4[obase + i]]
-                check(t, "router_gemv_bf16 under the output scale: every output the dot scaled", g4, w4, Bar(rel = 1e-3, abs_floor = 1e-3), FLAT_SHAPE)
+                check(t, "router_gemv_bf16 under the output scale: every output the dot scaled", g4, w4, Bar(rel = 1e-3, abs_floor = 1e-3, poison_scaled = true), FLAT_SHAPE)
                 t |> success(rel_mismatches(got4, want, obase, ne) > 0, "router_gemv_bf16 under the output scale: the control - the unscaled dot must miss")
                 delete got4
                 delete want4
