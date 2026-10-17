@@ -169,11 +169,12 @@ def cm2_chunk(n, nsplit : int64) : int64 {
     return ck * (nsplit - 1l) < n ? ck : 0l
 }
 
-//! the most k chunks, up to `want` and eight, `cm2_chunk` admits over K `n` (1: whole)
+//! the most k chunks, up to `want` and eight, `cm2_chunk` admits over K `n` whose partial planes of `plane_bytes` each fit
+//! `scratch_bytes` (1: whole)
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
-def cm2_split_fit(n, want : int64) : int64 {
+def cm2_split_fit(n, want : int64; plane_bytes : int64 = 0l; scratch_bytes : int64 = 9_223_372_036_854_775_807l) : int64 {
     var sk = min(want, 8l)
-    while (sk > 1l && cm2_chunk(n, sk) == 0l) {
+    while (sk > 1l && (cm2_chunk(n, sk) == 0l || sk * plane_bytes > scratch_bytes)) {
         sk--
     }
     return max(sk, 1l)

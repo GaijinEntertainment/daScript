@@ -932,13 +932,13 @@ def private pf_ple_block(raw : VkCommandBuffer; var h : VkHaz; l : int64; b : in
 //! the file's f32 per-layer-embedding rows ride the staged KHR tile where the device has it (`DASLLAMA_VK_PLE_F32_TILE` holds
 //! them on the scalar f32 tile)
 [arch(at="../ARCHITECTURE_GPU_VULKAN_KHR.md#f32-rows-staged-tile")]
-def private pf_ple_f32_staged : bool => ple_f32_tile_ok(g_rd.dim, g_rd.ple)
+def private pf_ple_f32_staged : bool => ple_f32_tile_ok(g_rd.dim, g_rd.ple, g_env_vulkan.vk_ple_f32_tile)
 
 //! the staged tile serves f32 rows of a model dim `dim` and a ple width `ple`: both GEMMs' K on its 32-deep k step, so no 16-wide
 //! row read reaches past the exactly sized plane; else the scalar f32 tile
 [arch(at="../ARCHITECTURE_GPU_VULKAN_KHR.md#f32-rows-staged-tile")]
-def public ple_f32_tile_ok(dim, ple : int64) : bool
-    => g_env_vulkan.vk_ple_f32_tile && khr_kq_tile_on() && dim % 32l == 0l && ple % 32l == 0l
+def public ple_f32_tile_ok(dim, ple : int64; knob : bool) : bool
+    => knob && khr_kq_tile_on() && dim % 32l == 0l && ple % 32l == 0l
 
 //! a per-layer-embedding plane at arena block `blk` in format `fmt` reads its window rows as f16: a plane the f16 feed admits, or
 //! the file's f32 rows (block -1) on the staged tile
@@ -947,7 +947,7 @@ def private pf_ple_plane_f16(blk : int64; fmt : int) : bool => blk < 0l ? pf_ple
 //! the k chunks a staged f32-row GEMM of K `n` takes: the most, up to eight, `cm2_chunk` admits, each a dependent window chain's hop
 //! cut to its deepest chunk's latency (one under 512)
 [arch(at="../ARCHITECTURE_GPU_VULKAN_KHR.md#f32-rows-staged-tile")]
-def pf_f32_split(n : int64) : int64 => cm2_split_fit(n, n / 256l)
+def pf_f32_split(n, rows, d, scratch_bytes : int64) : int64 => cm2_split_fit(n, n / 256l, rows * d * 4l, scratch_bytes)
 
 //! one f32-row GEMM on the staged KHR tile: y[rows x d] = x[rows x n] w^T over the plane's `d` rows of `n` from element `woff`,
 //! the f16 rows at `xf`; one region at row 0 and the tile's one column, over `pf_f32_split`'s k chunks into the split-k planes and
@@ -955,7 +955,7 @@ def pf_f32_split(n : int64) : int64 => cm2_split_fit(n, n / 256l)
 [arch(at="../ARCHITECTURE_GPU_VULKAN_KHR.md#f32-rows-staged-tile")]
 def private pf_f32_gemm_enc(raw : VkCommandBuffer; var h : VkHaz; idx : int; w : uint64; wn : int64; xf : uint64; xn : int64; xbit : uint;
                             y : uint64; yn : int64; ybit : uint; n, d, woff, rows : int64) {
-    let nsplit = pf_f32_split(n)
+    let nsplit = pf_f32_split(n, rows, d, g_rd.pf_splitk_bytes)
     let split = nsplit > 1l
     if (split) {
         verify(nsplit * rows * d * 4l <= g_rd.pf_splitk_bytes, "vk prefill: the staged f32 tile's split-k planes exceed the scratch bound")
@@ -1739,13 +1739,13 @@ def ple_proj_gemv_why(dim, all, w16_bytes : int64) : string {
 //! the projection rows' GEMV class rail: the f32 rows', or the bf16 rows' word-pair or halfword stamp by the model dim
 def private ple_proj_rail_ensure(bf16 : bool) : bool {
     if (!bf16) return ensure_router_gemv_cls()
-    return gk_bf16_pairs(g_rd.dim, 0l) ? ensure_router_gemv_bf16_cls() : ensure_router_gemv_bf16_hw_cls()
+    return ple_proj_bf16_hw(g_rd.dim) ? ensure_router_gemv_bf16_hw_cls() : ensure_router_gemv_bf16_cls()
 }
 
 //! the bf16 projection rows' GEMV set over `bufs`: the word-pair stamp at an even model dim, the halfword stamp at an odd one (every
 //! row then starts mid-word)
 def private ple_proj_bf16_set(bufs : uint64 const[4]; sizes : int64 const[4]; gbits : uint const[4]) : VkDescriptorSet
-    => gk_bf16_pairs(g_rd.dim, 0l) ? set_router_gemv_bf16_cls(bufs, sizes, gbits) : set_router_gemv_bf16_hw_cls(bufs, sizes, gbits)
+    => ple_proj_bf16_hw(g_rd.dim) ? set_router_gemv_bf16_hw_cls(bufs, sizes, gbits) : set_router_gemv_bf16_cls(bufs, sizes, gbits)
 
 //! The pre-step's projection on device off the file's own rows (bf16 halves `w16`, else f32 `w32`) and its norm row: the router GEMV
 //! under 1/sqrt(dim) at the token command, the window's f16 tile over a panel it converts each window (else the router GEMV) before

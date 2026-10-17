@@ -926,6 +926,10 @@ class RouterGemvBf16Hw : RouterGemvT {
     override BF16 = true
 }
 
+//! the pre-step projection's bf16 rows of model dim `dim` take the halfword stamp: every row starts at a multiple of `dim`, so an odd
+//! dim puts every other row mid-word
+def public ple_proj_bf16_hw(dim : int64) : bool => !gk_bf16_pairs(dim, 0l)
+
 //! the router GEMV over `pc.ncols` columns (0 or 1 = one row), past `GEMV_COL_TILE` in tiles of that many, each tile's `col0` its first
 //! column; `bf16` the bf16 rows' stamp (`hw` its halfword walk), else the f32 rows'
 [arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-col-tiles")]

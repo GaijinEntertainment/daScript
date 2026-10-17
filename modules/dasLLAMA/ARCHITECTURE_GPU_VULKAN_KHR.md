@@ -65,8 +65,9 @@ The window feeds both GEMMs f16 rows - the stream rows through the clamp convert
 the act's gelu x side rows through `ActF16`'s strided side read ahead of the projection - and the
 region record's block base is the layer's first element over four. The tile's one geometry
 serves the 256-deep projection whole, and the gate over the most 256-aligned k chunks up to eight
-`cm2_chunk` admits (`pf_f32_split`: six on the E2B's 1536, five on the E4B's 2560) into the
-split-k planes and their reduce: the gate is eight workgroups at 512 rows, so one dispatch's
+`cm2_chunk` admits and whose partial planes fit the window's split-k scratch (`pf_f32_split` through
+`cm2_split_fit`: six on the E2B's 1536, five on the E4B's 2560, fewer on a card whose scratch holds
+fewer) into the split-k planes and their reduce: the gate is eight workgroups at 512 rows, so one dispatch's
 latency is its 48 k steps in a row, and the window pays that latency, not the throughput (the
 E2B gate one dispatch at a time 53.8 us whole, 17.0 split six ways).
 On the RTX PRO 4500 (driver 580.159.04, `./bin/daslang -jit modules/dasLLAMA/harness/vk_gemm_probe.das -- plef32`

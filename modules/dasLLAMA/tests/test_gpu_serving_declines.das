@@ -12,6 +12,7 @@ require dasllama/dasllama_gpu_tier   // install_moe_gpu_resident_bias - the bias
 require ?vulkan dasllama/dasllama_vulkan_decode   // rd_routed_slots_fit - the N-row command's slot cap, where the module exists
 require ?vulkan dasllama/dasllama_vulkan_prefill  // ple_proj_gemv_why - the window projection's tile gate, where the module exists
 require dasllama/dasllama_gpu_kernels_common  // gk_bf16_pairs - the bf16 projection's stamp pick on both homes
+require ?vulkan dasllama/dasllama_vulkan_classes   // ple_proj_bf16_hw - the resident projection's halfword pick, where the module exists
 require ?vulkan dasllama/dasllama_vulkan_common   // GpuState / g_gpu - the device shell ple_proj_gemv_why reads, where the module exists
 require dasllama/dasllama_metal_shapes   // moe_metal_ok - the Metal routed block's admission, portable
 require ?das_metal dasllama/dasllama_metal_common   // decline - the required-mode panic, where the module exists
@@ -1633,22 +1634,6 @@ def test_ple_proj_dim_gates(t : T?) {
         t |> success(!gk_bf16_pairs(1537l, 0l), "... and halfwords at an odd one")
         t |> success(!gk_bf16_pairs(1536l, 3l), "... or off an odd base")
     }
-    t |> run("the window's f32 per-layer rows take the staged tile only on its k step") @(t : T?) {
-        static_if (typeinfo builtin_module_exists(vulkan)) {
-            var shell = GpuState(coopmat_mode = COOPMAT_CM2, has_coopmat = true, subgroup_size = 32l)   //! a KHR-capable shell at subgroup 32
-            var live = g_gpu
-            g_gpu = unsafe(addr(shell))
-            t |> success(ple_f32_tile_ok(1536l, 256l), "the control: the E2B's dim and ple take the staged tile")
-            t |> equal(pf_f32_split(1536l), 6l, "the E2B gate's K 1536 splits six ways, a chunk of 256 each")
-            t |> equal(pf_f32_split(2560l), 5l, "the E4B gate's K 2560 five ways, the most chunks of 512 cm2_chunk admits")
-            t |> equal(pf_f32_split(256l), 1l, "the projection's K 256 runs whole")
-            t |> success(!ple_f32_tile_ok(1544l, 256l), "a dim off the 32-deep k step keeps the scalar f32 tile (its last row read would pass the plane)")
-            t |> success(!ple_f32_tile_ok(1536l, 48l), "... and so does a ple width off it")
-            shell.subgroup_size = 64l
-            t |> success(!ple_f32_tile_ok(1536l, 256l), "... and a wave64 device, which has no KHR kq tile")
-            g_gpu = live
-        }
-    }
     t |> run("the window's projection names an f16 panel past the device's storage range") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             var shell = GpuState(coopmat_mode = COOPMAT_CM2, msr = 1l << 20l)   //! a cm2 device shell whose storage range is 1 MiB
@@ -1664,6 +1649,34 @@ def test_ple_proj_dim_gates(t : T?) {
             g_gpu = live
         } else {
             t |> skip("no dasVulkan module on this build")
+        }
+    }
+}
+
+//! the window's f32 per-layer rows: the staged tile on its k step under the knob, the scalar tile off either; the gate's k chunks
+//! fit the split-k scratch; the resident projection's bf16 rows take the halfword stamp at an odd dim
+[test]
+def test_ple_f32_tile_gates(t : T?) {
+    t |> run("the window's f32 per-layer rows take the staged tile only on its k step") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            var shell = GpuState(coopmat_mode = COOPMAT_CM2, has_coopmat = true, subgroup_size = 32l)   //! a KHR-capable shell at subgroup 32
+            var live = g_gpu
+            g_gpu = unsafe(addr(shell))
+            t |> success(ple_f32_tile_ok(1536l, 256l, true), "the control: the E2B's dim and ple take the staged tile")
+            t |> success(!ple_f32_tile_ok(1536l, 256l, false), "... and the knob off (DASLLAMA_VK_PLE_F32_TILE=0) keeps the scalar f32 tile")
+            let roomy = 1l << 30l
+            t |> equal(pf_f32_split(1536l, 512l, 256l, roomy), 6l, "the E2B gate's K 1536 splits six ways, a chunk of 256 each")
+            t |> equal(pf_f32_split(2560l, 512l, 256l, roomy), 5l, "the E4B gate's K 2560 five ways, the most chunks of 512 cm2_chunk admits")
+            t |> equal(pf_f32_split(256l, 512l, 256l, roomy), 1l, "the projection's K 256 runs whole")
+            t |> equal(pf_f32_split(1536l, 512l, 256l, 3l * 512l * 256l * 4l), 3l, "a scratch of three 512-row partial planes cuts the E2B gate to three chunks")
+            t |> equal(pf_f32_split(1536l, 512l, 256l, 512l * 256l * 4l), 1l, "... one plane's room runs it whole - never a split past the scratch")
+            t |> success(!ple_f32_tile_ok(1544l, 256l, true), "a dim off the 32-deep k step keeps the scalar f32 tile (its last row read would pass the plane)")
+            t |> success(!ple_f32_tile_ok(1536l, 48l, true), "... and so does a ple width off it")
+            shell.subgroup_size = 64l
+            t |> success(!ple_f32_tile_ok(1536l, 256l, true), "... and a wave64 device, which has no KHR kq tile")
+            t |> success(!ple_proj_bf16_hw(1536l), "the resident projection's bf16 rows take the word-pair stamp at the E2B's even dim")
+            t |> success(ple_proj_bf16_hw(1537l), "... and the halfword stamp at an odd one")
+            g_gpu = live
         }
     }
 }

@@ -8683,6 +8683,8 @@ def test_vk_coopmat_default_and_tile_pick(t0 : T?) {
             t |> equal(cm2_tile_cols(640l, 512l), 32l, "... the widest plane the rule takes (20 m tiles, 80 of 82)")
             t |> equal(cm2_tile_cols(768l, 512l), 128l, "... the first it leaves to the wave model (24 m tiles): m")
             t |> equal(cm2_tile_cols(256l, 300l), 32l, "... a 300-row window's 256-wide k/v: s")
+            t |> equal(cm2_split_fit(224l, 224l / 256l), 1l, "a K under one 256-aligned chunk (224) asks no chunk and runs whole, never zero pieces")
+            t |> equal(cm2_split_fit(1536l, 6l, 512l * 256l * 4l, 2l * 512l * 256l * 4l), 2l, "the chunk count fits the scratch: two planes of room, two chunks")
             let SPLIT_K_SCRATCH_PER_SM = 262_144l   //! the split-k scratch the prefill allocates an SM
             let scratch82 = SPLIT_K_SCRATCH_PER_SM * 82l
             t |> equal(pick_str(cm2_gemm_pick(1536l, 512l, 12288l, 0l, scratch82)), "256x3x4096", "E2B's 12288-deep down on 82 SMs: three l chunks")
