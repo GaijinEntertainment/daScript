@@ -44,10 +44,12 @@ superblocks), written outside a Metal or SPIR-V kernel body and outside a defini
 kernel class, the pins of `tests/test_kqformat.das` - is a defect: read it through a `KqFmt` accessor
 (`kq_elems`, `kq_disk_bytes`, ...), through `kq_qsb` / `kq_ssb` on a format id, or through a named
 constant a definition home declares, declared there in the same change when none exists.** A
-literal `32` reads like a tile width.
+number derived from several formats' sizes is such a literal, and so is one inside a string the
+build evaluates (a `requires =` item); a test's expected-message text is not. A literal `32` reads
+like a tile width.
 
-**A diff that writes a per-format quantity as a bare literal in a Metal or SPIR-V kernel body is a
-defect - read it through a `@template_constant` declared on the shared base of its class family, or
+**A diff that writes a per-format quantity of a `KqFmt` member as a bare literal in a Metal or
+SPIR-V kernel body is a defect - read it through a `@template_constant` declared on the shared base of its class family, or
 on the class when it has none; a diff that declares such a constant pins its value against the
 format's `kq_desc` row in `tests/test_kqformat.das` in the same change.**
 
@@ -58,11 +60,10 @@ value, and its `disk_bytes` inside the walk that checks every row against `ggml_
 Narrowing the row's literal pins or the `ggml_type_bytes` walk is a defect.
 
 A site is a weight plane a backend's (CPU, Metal, Vulkan) serving call reads. A lever is an env
-knob or setter that changes which form a site reads. A format's served form is a re-layout of its
-own quantized values, value-exact against the disk form, with no wider element type (a `KqFmt`
-member over the same GGUF type, `ARCHITECTURE_ENGINE_FORMATS.md#served-form`). A converted copy is
-any other form of the weights whose bytes outlive the one kernel call or window that made them,
-or reach the `.dlim` image.
+knob or setter that changes which form a site reads. A converted copy is any form of the weights
+other than a re-layout of their own quantized values whose bytes outlive the one kernel call or
+window that made them, or reach the `.dlim` image; a rounding that lives inside one dispatch's
+shared memory is not one (`ARCHITECTURE_ENGINE_FORMATS.md#served-form`).
 
 **A diff that makes a site read a weight format through a converted copy, or hands a GPU site to
 the CPU's kernels, on a run with every lever at its default is a defect - add that backend's
@@ -78,7 +79,9 @@ fails or converts at load with no message naming the site.
 
 **A diff that adds or changes a site reading a weight plane whose format is a literal `KqFmt`
 member is a defect - tag the plane from its disk type with `kq_tag` / `kq_fmt_of`
-(`dasllama/dasllama_load.das`) and read that tag at the site instead.** A literal at the site is a
+(`dasllama/dasllama_load.das`) and read that tag at the site instead.** A `KqFmt` literal that
+keys a tile geometry for a plane with no member of its own (an f32 plane on a q8-keyed tile) reads
+no weights by that member and is not a site literal. A literal at the site is a
 conversion no report names: every disk type the file carries becomes the literal's form, and each
 backend that copies the literal serves that form in place of the file's.
 
@@ -96,7 +99,7 @@ instead, or cite the follow-up row that ledgers it.**
 serves a weight format at a site lands or cites a subtest that loads a file whose plane at that
 site is stored in that format on disk, and asserts that the loader's format tag for that plane
 equals its disk type and that a kernel counter - `metal_kernel_count(name)` on Metal, the Vulkan
-driver's per-kernel census count - that only the site's kernel increments rose during the run.**
+driver's per-kernel census count - that no other plane of that file moves rose during the run.**
 The file is a downloaded `performance/model_specs.das` row's file, or, when no downloaded row
 carries the format, a row whose `file` ends `-local.gguf` and whose `recipe` requantizes into it. A
 subtest that only asserts the backend ran still passes when the site reads a converted copy or runs
