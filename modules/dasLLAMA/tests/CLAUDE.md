@@ -183,7 +183,8 @@ Q4_K_M forced-step bar (the routed experts amplify a float-class difference at a
 the K/V history: floor 0.003-0.01, isolated spikes to 11, argmax never flips); a K-quant carrier's nine-row verify, and its
 two-to-eight-row verify where a rows site's half-x forms serve on the box, hold `MM_TOL` (1.0: both stage x to half) at the
 least, each such bar with its control - the same verify with its GEMV stage knocked out outside it; every vff compare counts
-each plain step a Metal decode (`metal_decode_stats().decodes`) beside the batch side's served steps, its control's too. Each fixture's
+each plain step a Metal decode (`metal_decode_stats().decodes`) beside the batch side's served steps, its control's too, and
+the batch verify's steps counting none (the decode count's control). Each fixture's
 trunk-and-served-twin pair prefills on the GPU twin through the metal prefill override (a planar
 27B prefill costs minutes per session), so the fixture shuts down BOTH drivers before its leak
 gate.
@@ -2540,7 +2541,7 @@ decode step's one-lane form against its team publish, both texts logged - and th
 read the whole clip reading its first half token for token as a fresh session does, the half clip
 over 8 tokens, and two more transcriptions on the session leaving the heap where it stood -
 `heap_flat_leg`, which the canary and gemma4a oracle cells run too: a transcription frees what it
-allocates; the canary cell, an external-reference compare, on the f32 lane, each clip on the CPU chain with every tower off and then served - the tower's
+allocates; the canary cell, an external-reference compare, on the f32 lane over the pair built in memory (no `.dlim`), each clip on the CPU chain with every tower off - the tower's encode count unmoved - and then served - the tower's
 encode counted where it serves - in the forced-feed form: the frozen NeMo ids fed one by one, each our argmax or within
 `CN_TIE_BAR` of it, the control the same walk fed each id one step early - the oracle id outside the bar at every step
 whose input moved - then the greedy ids the oracle's up to the
