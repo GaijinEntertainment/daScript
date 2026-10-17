@@ -1088,7 +1088,7 @@ def vk_rdec_dn_own(l : int64; stp : float?; histp : float?) {
 def ple_proj_enc(raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; ncols : uint) {
     let all = g_rd.n_layers * g_rd.ple
     var pcr = GkRouterArgs(ne = uint(all), dim = uint(g_rd.dim), eps = g_rd.eps, ncols = ncols, yscale = 1.0 / sqrt(float(g_rd.dim)))
-    router_enc_cols(g_rd.ple_wp_bf16, raw, h, set_, pcr, all)
+    router_enc_cols(g_rd.ple_wp_bf16, raw, h, set_, pcr, all, !router_bf16_pairs(g_rd.dim, 0l))
 }
 
 //! The per-layer-embedding seats: the side-input row buffers at the model's ple width (after prepare, before the layers)

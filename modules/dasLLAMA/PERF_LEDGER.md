@@ -28,6 +28,27 @@ what it costs today and what the fix would change.
     chain and on the Metal tower: every oracle id is our argmax. Clip 05's step 9 is a greedy near-tie between "." (13)
     and " Good" (7684): the CPU chain puts 7684 0.084 above ".", the tower 0.102, where NeMo picked ".". The control, the next oracle id at each step, lands outside the bar at 22 of 22, 18 of 18
     and 12 of 13 steps.
+- **MEASURED (2026-10-17) - the window's f32 per-layer-embedding GEMMs on the staged KHR tile, and the K-quant staged race,
+  the pod.** Box: the RunPod RTX PRO 4500 Blackwell 32 GB, driver 580.159.04 (no `VK_NV_cooperative_matrix_decode_vector`:
+  the cm2 tiles run the scalar decode arm), `DASLLAMA_GPU=1 DASLLAMA_ALLOW_UNTUNED=1 DASLLAMA_IMAGE_SAVE=0`. The rows
+  (`benchmarks/lcpp_bench.das -- -m <file> -p 512 -n 0 -r 3 --for-debug-purposes`, `-jit`; the stages
+  `DASLLAMA_GPU_PROF=1`'s `vk_rdpf` line, us a 512-row window) ran on the branch base b06df183e8 and on this change.
+  The gemma-4 E2B Q4_K_M ships its `inp_gate` and `proj` planes F32, which the window ran on the scalar f32 tile
+  (`DnBaGemm`) and now runs on the staged tile (`ARCHITECTURE_GPU_VULKAN_KHR.md#f32-rows-staged-tile`): pp512
+  12754 (cv 0.8 %) -> 16555 (cv 0.3 %); window 41056 -> 31859 us; `ple_gate` 5932 -> 718 (whole on the staged tile
+  2292, split six ways 718), `ple_proj` 4770 -> 516, `ple_rq` 621 -> 848 (now the f16 convert of the stream rows); every
+  other stage within 1 %. The E-series files without f32 planes, base -> change: E2B Q4_0 15378 -> 15386, E2B Q8_0
+  16097 -> 16390, E4B Q8_0 9728 -> 9745 (cv 1.6 %); their `ple_proj` now takes the f16 feed on the cm2 tiles (Q8_0
+  575 -> 569, Q4_0 646 -> 672). The races (`harness/vk_gemm_probe.das plef32` and `kqst:<fmt>` for k4, k5, k6, iq4xs,
+  `-jit`, the same box and command family): the scalar f32 tile 3.1 TFLOP/s at the E2B and E4B gate and projection shapes,
+  the staged tile 75-85 at 512 rows (E2B gate 128.3 -> 5.06 us, proj 128.5 -> 5.37, E4B gate 212.7 -> 7.91, proj 212.7
+  -> 8.24); one dispatch at a time, the E2B gate 164.7 us scalar, 54.0 staged whole, 33.1 / 25.2 / 17.0 split 2 / 3 / 6
+  with the reduce, the E4B gate 274.2, 86.6, 25.2 split 5; at 300 rows the E2B gate 106.3 -> 19.0 split six ways, the
+  proj 82.5 -> 14.9. The K-quant planes against the staged tile, us at 512 rows, cm2 l stamp / staged: k4 gate 75.7 /
+  82.8, down 71.7 / 83.7, q 27.1 / 29.2, 4B down 184.9 / 212.1; k6 gate 82.0 / 96.2, down2x 156.6 / 195.4; k5 gate 81.6 /
+  96.7, 4B down 199.7 / 249.4; iq4xs gate 79.0 / 86.4, down2x 150.5 / 183.9; at 500 rows the m stamp / staged: k4 90.5 /
+  83.8, k6 99.0 / 96.4, k5 99.8 / 96.8, iq4xs 99.2 / 87.7 (`followup_vulkan.md` row 149). Decision: the f32 rows take the
+  staged tile on every coopmat device at subgroup 32; the K-quant planes stay on the cm2 tiles.
 - **MEASURED (2026-10-16) - the gemma leg's end re-measure, the M5 half.** Instrument `benchmarks/lcpp_bench.das`
   (`--ngl 99 -p 512 -n 128 -r 5 --for-debug-purposes`, debug-jit), the M5 Max (128 GB) alone on the box, one box profile
   minted at the leg tip (505 s, 39,101 B) and read by both trees: master's own build (33e7910669) against the leg tip
@@ -58,8 +79,8 @@ what it costs today and what the fix would change.
   Q8_0 4158 -> 4094 / 55.75 -> 55.85; 26B-A4B UD-IQ3_XXS 5422 -> 5353 / 143.3 -> 146.2; 26B-A4B Q4_K_M 6405 -> 6240 /
   135.0 -> 135.3; 31B Q4_K_M (the CPU rows, the card declines it) 1435 -> 1403 / 36.54 -> 36.47. Every prefill row but
   one holds within 3 % and every valid decode row holds parity or gains; the E2B Q4_K_M prefill loses 23 %, bisected to
-  the PLE merge and split to the window's gate and projection on the K-quant tile's scalar arm (`followup_vulkan.md` row
-  148). The assistant drafter on the 26B Q4_K_M (`--mtp-ab`, 64 tokens, three prompts): 131 -> 193 tok/s (x1.47) at 88 %
+  the PLE merge and split to the window's gate and projection planes, which that file stores in f32 and the window ran
+  on the scalar f32 tile; the staged KHR tile (the MEASURED (2026-10-17) entry above) returns the row to 16555. The assistant drafter on the 26B Q4_K_M (`--mtp-ab`, 64 tokens, three prompts): 131 -> 193 tok/s (x1.47) at 88 %
   acceptance on two prompts, x1.35 on the third. The ring at pp8192 on the 26B IQ3_XXS: 4824 tok/s and tg32 147.0 with the
   ring against 4830 and 147.0 without, host peak RSS 24.4 against 23.8 GB. The house quick probe (one server a model,
   alone: wall s / first token s / generation tok/s as the client sees), master -> leg: 12B Q8_0 7.21 / 6.87 / 12 ->

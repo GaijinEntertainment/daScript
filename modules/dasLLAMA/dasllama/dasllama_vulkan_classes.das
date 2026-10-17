@@ -587,6 +587,9 @@ class template ActF16T {
 
     def act_mul(v, u : float) : float => gk_act_mul(v, u, pa.act)
 
+    //! the up element paired with gate element `e`: with `ustride` the rows of `ulen` elements sit `ustride` apart (the per-layer-embedding side rows)
+    def up_at(e : uint) : uint => pa.ustride != 0u ? gk_strided_at(e, pa.ubase, pa.ustride, pa.ulen) : e
+
     //! element `e`'s activation as a saturated half
     def hval(e : uint) : float16 {
         static_if (BIASED) {
@@ -594,7 +597,7 @@ class template ActF16T {
             let c = e % pa.brow
             return half_sat(act_mul(gate[e] + gb[pa.gboff + ex * pa.brow + c], up[e] + ub[pa.uboff + ex * pa.brow + c]))
         } else {
-            return half_sat(act_mul(gate[e], up[e]))
+            return half_sat(act_mul(gate[e], up[up_at(e)]))
         }
     }
 
@@ -915,16 +918,29 @@ class RouterGemvBf16 : RouterGemvT {
     override BF16 = true
 }
 
+//! the same bf16 rows a halfword a lane, for an odd dim or base: a row then starts mid-word, off the pairs' word grid
+[vk_dispatch(name = "router_gemv_bf16_hw_cls", grid = "ne", params = "ne : int64")]
+class RouterGemvBf16Hw : RouterGemvT {
+    typedef KT = uint16
+    typedef XT = float
+    override BF16 = true
+}
+
+//! the bf16 rows step word pairs where the row width and the base sit on whole words, else halfwords (`RouterGemvBf16Hw`)
+def router_bf16_pairs(dim, woff : int64) : bool => dim % 2l == 0l && woff % 2l == 0l
+
 //! the router GEMV over `pc.ncols` columns (0 or 1 = one row), past `GEMV_COL_TILE` in tiles of that many, each tile's `col0` its first
-//! column; `bf16` the bf16 rows' stamp, else the f32 rows'
+//! column; `bf16` the bf16 rows' stamp (`hw` its halfword walk), else the f32 rows'
 [arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-col-tiles")]
-def router_enc_cols(bf16 : bool; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; var pc : GkRouterArgs; ne : int64) {
+def router_enc_cols(bf16 : bool; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; var pc : GkRouterArgs; ne : int64; hw : bool = false) {
     let total = max(pc.ncols, 1u)
     var c0 = 0u
     while (c0 < total) {
         pc.col0 = c0
         pc.ncols = min(total - c0, GEMV_COL_TILE)
-        if (bf16) {
+        if (bf16 && hw) {
+            enc_router_gemv_bf16_hw_cls(raw, h, set_, pc, ne)
+        } elif (bf16) {
             enc_router_gemv_bf16_cls(raw, h, set_, pc, ne)
         } else {
             enc_router_gemv_cls(raw, h, set_, pc, ne)
@@ -1290,7 +1306,7 @@ let SCHED_S_ROWS = 32u    //! the s column: the ladder's small-bucket and remain
 let SCHED_M_ROWS = 128u   //! the m column: whole columns over a big bucket, the last one partial
 let CM2_TC_E = -1l        //! the class ladders' `tc` key for the expert schedule's e column: a sentinel no column width can be (the dense m stamp already keys by its 128 rows)
 
-[arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#khr-mm-kq-tile")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_KHR.md#khr-mm-kq-tile")]
 def khr_cls_ensure(fmt : int) : bool {   // nolint:STYLE037 — kq_tile_stamp's generated arms, one a format's stamp
     var r = false
     kq_tile_stamp(fmt) <| $() {
@@ -1299,7 +1315,7 @@ def khr_cls_ensure(fmt : int) : bool {   // nolint:STYLE037 — kq_tile_stamp's 
     return r
 }
 
-[arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#khr-mm-kq-tile")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_KHR.md#khr-mm-kq-tile")]
 def khr_cls_set(fmt : int; bufs : uint64 const[5]; sizes : int64 const[5]; gbits : uint const[5]) : VkDescriptorSet {   // nolint:STYLE037 — kq_tile_stamp's generated arms, one a format's stamp
     var r : VkDescriptorSet
     kq_tile_stamp(fmt) <| $() {
@@ -1308,7 +1324,7 @@ def khr_cls_set(fmt : int; bufs : uint64 const[5]; sizes : int64 const[5]; gbits
     return r
 }
 
-[arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#khr-mm-kq-tile")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_KHR.md#khr-mm-kq-tile")]
 def khr_cls_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : BatchArgs; groups : int64) {   // nolint:STYLE037 — kq_tile_stamp's generated arms, one a format's stamp
     kq_tile_stamp(fmt) <| $() {
         tile_enc_khr_cls(raw, h, s, pc, groups)
@@ -6180,7 +6196,7 @@ class template KqCm2BatchT : MoeCmBase {
         }
     }
 
-    [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#khr-mm-kq-tile")]
+    [arch(at="../ARCHITECTURE_GPU_VULKAN_KHR.md#khr-mm-kq-tile")]
     def khr_tile(wblk0, row0, cnt, k0, k1, ybase, xt, wt : uint) {   // nolint:STYLE038 — the staged k loop and its fast/edge store are one register set
         static_if (KHR) {   // the gated staging arrays exist on the KHR instantiations alone
         let t0 = row0 + xt * BN
@@ -7896,6 +7912,38 @@ class K4KhrBatch : K4Cm2T {
 
 [vk_dispatch(name = "q8_batch_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Q8KhrBatch : Q8Cm2T {
+    override KHR = true
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+}
+
+//! a file's f32 rows under the template: a block is one 16-byte word of four f32 bit patterns; only the KHR stamp exists, so the
+//! decode serves the template's uncalled cm2 body alone
+[ |> template_struct_instance]
+class template F32RowsKhrT : KqCm2BatchT {
+    typedef BLK = uint4
+    typedef ST = float16
+    override BLKW = 4u
+
+    [spirv_decode]
+    def decode(blk : uint4; bc, cib : uint2) : float16 => float16(uint_bits_to_float(blk[int(cib.y & 3u)]))
+
+    def override khr_stage16(blk, e0, sbase : uint) : void {
+        static_if (KHR) {
+            for [unroll_full] (c in range(4)) {
+                let w4 = wq4[blk + uint(c)]   //! the row's 16 weights are four consecutive words from block `blk` (e0 is always 0 at BLKW 4)
+                khr_put4(sbase + uint(c) * 2u, float4(uint_bits_to_float(w4.x), uint_bits_to_float(w4.y), uint_bits_to_float(w4.z), uint_bits_to_float(w4.w)))
+            }
+        }
+    }
+}
+
+[vk_dispatch(name = "f32_batch_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64"), arch(at = "../ARCHITECTURE_GPU_VULKAN_KHR.md#f32-rows-staged-tile")]
+class F32KhrBatch : F32RowsKhrT {
     override KHR = true
     override BN = 128u
     override STILE = true
