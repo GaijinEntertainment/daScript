@@ -1,7 +1,8 @@
 # dasLLAMA GPU Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `ARCHITECTURE_GPU.md`, `ARCHITECTURE_GPU_ASYMMETRIES.md`. Planned work: `followup_metal.md`, `followup_vulkan.md`.
+docs: `ARCHITECTURE_GPU.md`, `ARCHITECTURE_GPU_ASYMMETRIES.md`. Planned work: `followup_metal.md`,
+`followup_vulkan.md`.
 
 **A diff touching a GPU kernel timing arm - code that dispatches a kernel to measure it rather
 than to serve a call: a timing race between kernels, a knockout, an overhead measurement -
@@ -69,7 +70,8 @@ driver's `resident driver armed (...)` line, the per-op tier's `GPU MoE tier:` r
 family, backend arm or session shape with a batched decode step; calls `create_device_session`,
 `set_device_kv` or `moe_gpu_drop_model`; calls a `set_gpu_*` or `reset_gpu_*` function; adds an
 `RdecPass` value; changes `trim_model_planes`; stores into, gathers from or releases a device buffer
-holding K or V rows; changes a resident override or a byte copy of mirror rows; or adds or changes a
+holding K or V rows; adds or changes a resident override (a decode/prefill hook the resident driver
+registers) or a byte copy of mirror rows (the device copy of the K/V cache); or adds or changes a
 GPU path that runs a recurrent forward, applies `REVIEW_GPU_RESIDENT.md` too.**
 
 **A diff that changes a restated property of a kernel class - a binding number, a kargs or

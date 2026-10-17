@@ -9,18 +9,20 @@ constants or unroll counts that one value selects: a template constant, a typede
 shell's method they inherit, or a run-time count of live entries inside a fixed extent (a column
 count, a row count). A base shell is the dispatch-less base class whose methods the emitter
 splices flat into each deriving class. A stamp is a kernel class that compiles to a shader module -
-standalone, a template instance or a base-shell derivative.
+standalone, a template instance or a base-shell derivative. A census key is a kernel name
+`modules/dasLLAMA/tests/test_kernel_coverage.das` counts, that the engine's Metal or Vulkan driver
+compiles at run time - at its init or at a model's load - and that the pre-change tree does not
+compile. A crown is a kernel family a box's tune sidecar enables.
 
 **A kernel twin that binds a different kargs (kernel-argument struct) type than its sibling twin
 is a defect, even where one twin ignores a field of it.**
 
 **Kernel twins keep every `@binding` number they both declare; a field a `@template_gate` omits on
-one twin leaves a hole at its number and renumbers nothing, and the kargs slot the lens assigns -
-one past the stamp's highest kept binding - follows each stamp's own builder.** Two stamps whose
-declared numbers differ never share a host function that binds by number: the moe mul_mm tensor
-twins (`MetalMoeMulMmQ8T` / `MetalMoeMulMmMx4T`, the compact slots) and the family layouts
-(`MetalMoeMulMmQ8` / `MetalMoeMulMmMx4` on `MetalMoeMulMmBase`, the combine pair alike) bind
-through their own builders, the two layouts ledgered apart (`ARCHITECTURE_GPU.md#gpu-backends`).
+one twin leaves a hole at its number and renumbers nothing.**
+
+**Two stamps whose `@binding` numbers or kargs slots differ never share a host function that binds
+by number - each binds through its own generated builder.** The layouts that differ this way are
+ledgered at `ARCHITECTURE_GPU.md#gpu-backends`.
 
 **Kernel twins are written once: as stamps of one `class template`, as classes deriving one base
 shell, or - where the value that selects the difference is a run-time count - as one class whose
@@ -41,9 +43,9 @@ class as a `@template_constant` where the class's stamps differ on it, pass it a
 argument of the shared method the stamp's kernel calls, or write it as a literal or a module `let`
 in the body - never a module `var`.**
 
-**A stamp, or an intermediate template between a stamp and its base, sets only
-`@template_constant`s the stamp's compiled body reads: a `static_if` arm, a `@template_gate`, an
-expression, a loop bound, an array extent.** A constant
+**A stamp, or an intermediate template between a stamp and its class template or base shell, sets
+only `@template_constant`s that at least one stamp built from it reads in its compiled body: a
+`static_if` arm, a `@template_gate`, an expression, a loop bound, an array extent.** A constant
 no such site reads is a defect - move it to the template whose body reads it, or make the body
 read it. A read that sits only inside a `static_if` arm the stamp's own constants compile out is
 not a read.
@@ -74,7 +76,7 @@ shell they derive from, gives the class a `//!` line above its `[metal_dispatch]
 `[vk_dispatch]` declaration naming the body difference that keeps it out of that template or
 shell.**
 
-**A diff that makes a kernel class stamp or derive - through an intermediate template too - a
+**A diff that makes a kernel class stamp or derive from - through an intermediate template too - a
 template both backends (Metal and Vulkan) stamp (`dasllama/dasllama_gpu_kernels_common.das`), which
 it did not before, gives the class a `//!` line above its own declaration naming the template it
 joined.**
@@ -89,13 +91,9 @@ bind; such a field either omits `@role` or names the access its body performs.**
 orders a `weight` read after the write that refilled the buffer, and neither refuses the role on a
 field the body only reads.
 
-A new census key is a kernel name that `modules/dasLLAMA/tests/test_kernel_coverage.das` counts,
-that the engine's Metal or Vulkan driver compiles at run time - at its init or at a model's load -
-and that the pre-change tree does not compile. A crown is a kernel family a box's tune sidecar enables.
-
-**A diff that adds a `[metal_dispatch]` or `[vk_dispatch]` class under `dasllama/` that no init of
-the engine's Metal or Vulkan driver compiles is a defect - the class moves under `modules/dasLLAMA/benchmarks/`,
-into the bench that compiles it.**
+**A diff that adds a `[metal_dispatch]` or `[vk_dispatch]` class under `dasllama/` that the engine's
+Metal or Vulkan driver never compiles, at its init or at a model's load, is a defect - the class
+moves under `modules/dasLLAMA/benchmarks/`, into the bench that compiles it.**
 
 **A diff that adds a new census key a census row dispatches names, in the PR body, that row and
 its nonzero count for the key, read from a census run on the key's backend.**
