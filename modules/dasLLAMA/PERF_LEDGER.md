@@ -22,9 +22,15 @@ what it costs today and what the fix would change.
   wrap: 12B tg after a 512-token prefill 41.0 with the ring, 40.9 without; E4B 89.5 / 89.8; at position zero 41.0 / 41.0
   and 88.9 / 89.4. The house replay's quick probe (22 short replies, wall median s), master -> leg: 12B Q8_0 1.882 -> 1.259,
   26B-A4B UD-IQ4_XS 0.710 -> 0.633, E4B Q8_0 0.614 -> 0.533. The row races (`bench_metal_gk_rows`, 109 rows, none VOID) stand
-  in `ARCHITECTURE_GPU_SHARED_KERNELS.md`'s tables; the seam's decode builders at dim 1152 read 5.78 / 5.83 us at 1024
-  lanes against 3.25 / 3.36 at 256 (the lanes ruling's row). The fused seam holds no arm at dim 5376 (`followup_metal.md`
-  row 54). The pod half of this entry follows.
+  in `ARCHITECTURE_GPU_SHARED_KERNELS.md`'s tables. The seam's decode builders moved from 1024 to 256 lanes at this
+  re-measure: the builders at 1024 read 5.76 / 5.83 us at one / four rows at dim 1152 and 6.14 / 6.30 at 2560 where the
+  256-lane builders read 3.19 / 3.28 and 4.87 / 5.04 (3840: 6.67 / 6.74 against 6.71 / 6.83), a 1024-lane bench stamp
+  reads with the 256-lane one at every width (3.23 / 3.27, 4.88 / 5.07, 6.71 / 6.85), and 128 lanes loses everywhere; the
+  window's stamps keep 256 (27.10 against 1024's 27.10 and 128's 34.50 at dim 2560, 40.33 / 40.30 / 54.31 at 3840). The
+  12B Q8_0 row on one tree, 1024 -> 256 lanes: pp512 2126 -> 2154; its tg128 read 40.6 and 39.5 at cv 4.8 / 4.2 %, both
+  VOID (three more 256-lane readings 39.0-39.7 at cv 4.1-4.3 %, after an hour of GPU suites), so the decode row holds no
+  verdict and the switch rests on the race. Every Metal kernel gate, the batched row and the gemma4 and E-series arms are
+  green at 256. The fused seam holds no arm at dim 5376 (`followup_metal.md` row 54). The pod half of this entry follows.
 
 
 - **MEASURED (2026-10-16) - the gemma leg's parity bars, one row a file and bar.** Each row names the cell, the bar

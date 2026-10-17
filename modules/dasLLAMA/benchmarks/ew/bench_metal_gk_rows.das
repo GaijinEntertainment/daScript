@@ -1078,7 +1078,7 @@ struct private SeamStep {
     hx : bool           //! the f16 twin's pipeline (`MetalPreAddRmsHX`), else `MetalPreAddRms`
 }
 
-//! the lane race's arm at `lanes` on `s`'s pipeline: 1024 the shipped decode builders, 256 the shipped window builder, 128 the bench
+//! the lane race's arm at `lanes` on `s`'s pipeline: 256 the shipped builders (decode rows and window), 1024 and 128 the bench
 //! stamp
 def private seam_lane_arm(enc : MetalComputeEncoder?; s : SeamStep; lanes : int) {
     var k = s.ks
@@ -1131,8 +1131,8 @@ def private seam_lane_race(dim, np : int; hx : bool; var rows : array<Reading>) 
         pwoff = 0u), np = np, hx = hx)
     let win = np >= 64
     let lanes = win ? fixed_array(256, 128, 1024) : fixed_array(1024, 256, 128)
-    let names <- (win ? ["256 lanes (the shipped window builder)", "128 lanes (bench stamp)", "1024 lanes (the decode builder)"]
-        : ["1024 lanes (the shipped decode builder)", "256 lanes (the window builder)", "128 lanes (bench stamp)"])
+    let names <- (win ? ["256 lanes (the shipped window builder)", "128 lanes (bench stamp)", "1024 lanes (bench stamp)"]
+        : ["1024 lanes (bench stamp)", "256 lanes (the shipped decode builder)", "128 lanes (bench stamp)"])
     let ref <- seam_ref(dim, np, 0.75lf)
     race_rows("ar dim={dim} {np} rows sandwich seam pre_add_rms{hx ? " hx" : ""}", names, ref, rows, $ {
         fill_pattern(s.bx, n, 0.5)

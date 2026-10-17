@@ -107,11 +107,12 @@ least 9), any other row the median. Vulkan: `./bin/daslang -jit modules/dasLLAMA
 - **The residual step's sandwich seam is one dispatch on both homes** (`GkAddRmsRows.PRE`: the branch normed under its post
   norm, the add and the next norm in one pass). The M5's 512-row window, `debug-jit`, at dim 2560 reads 27.51 us against the
   rms + add_rms pair's 36.56 (the no-norm seam 18.79 against 39.04), at dim 3840 40.69 against 55.80 (27.74 against 56.72).
-  The window's stamps run 256 lanes and the decode builders 1024. At 512 rows on the f16 twin's pipeline the seam reads 27.54
-  us at 256 lanes against 34.95 at 128 and 52.71 at 1024 (dim 2560), 40.39 against 53.98 and 59.85 (dim 3840). At the decode
-  rows on the plain pipeline, dim 3840, 1024 lanes reads 6.67 / 6.74 us at one / four rows against 256's 6.68 / 6.87 and 128's
-  11.19 / 11.61; at dim 2560 256 lanes reads 4.87 / 5.09 against 1024's 6.14 / 6.30 (128: 7.81 / 8.13); at dim 1152
-  256 lanes reads 3.24 / 3.37 against 1024's 5.76 / 5.83 (128: 4.25 / 4.41). The fused seam stages a row through a
+  The window's stamps and the decode builders run 256 lanes, the count that ties 1024 at every width and row count where
+  128 loses. At 512 rows on the f16 twin's pipeline the shipped window builder reads 27.10 us at dim 2560 and 40.33 at
+  3840; a 1024-lane stamp reads 27.10 and 40.30, a 128-lane one 34.50 and 54.31. At the decode
+  rows on the plain pipeline the shipped 256-lane builder reads, at one / four rows, 3.19 / 3.28 us at dim 1152, 4.87 / 5.04
+  at 2560 and 6.71 / 6.83 at 3840; a 1024-lane stamp reads 3.23 / 3.27, 4.88 / 5.07 and 6.71 / 6.85, a 128-lane one 4.24 /
+  4.35, 7.76 / 8.07 and 11.24 / 11.59. The fused seam stages a row through a
   4096-float threadgroup slab (`MetalAddRmsT.SLAB`), so a row wider than that - the 31B's 5376 - takes the split
   chain (the rms, then the add and the next norm) at every seam, and the race holds no fused arm at that width.
 - **The Vulkan MoE step stores its next norm four elements in flight a lane** (`GkMoeCombG4.OUT_X4`, the residual step's
