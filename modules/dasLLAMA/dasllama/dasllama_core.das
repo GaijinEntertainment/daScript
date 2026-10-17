@@ -723,8 +723,7 @@ def attach_mtp_drafter(model : Model; path : string) : bool {
 def attach_mtp_sidecar(model : Model; model_path : string) : string {
     //! Attach the assistant drafter that sits beside the model at `model_path` (`mtp_drafter_sidecar`): the drafter's path
     //! where it attached, "" where none sits there or every driver refused it (each refusal logged).
-    let side = mtp_drafter_sidecar(model_path)
-    return !empty(side) && attach_mtp_drafter(model, side) ? side : ""
+    return attach_mtp_sidecar_(model, model_path)
 }
 
 def detach_mtp_drafter(model : Model) {

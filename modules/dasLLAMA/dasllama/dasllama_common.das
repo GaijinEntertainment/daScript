@@ -867,6 +867,13 @@ def attach_mtp_drafter_(t : Model; path : string) : string {
     return none
 }
 
+//! Attach the assistant drafter that sits beside the model at `model_path` (`mtp_drafter_sidecar_`): its path where it attached,
+//! "" where none sits there or every backend refused it (logged)
+def attach_mtp_sidecar_(t : Model; model_path : string) : string {
+    let side = mtp_drafter_sidecar_(model_path)
+    return !empty(side) && empty(attach_mtp_drafter_(t, side)) ? side : ""
+}
+
 //! The backend `t`'s assistant drafter is attached on ("" = none)
 def private mtp_assistant_backend(t : Model) : string {
     for (name, seams in keys(g_mtp_assistants), values(g_mtp_assistants)) {
