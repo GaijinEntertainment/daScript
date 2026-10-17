@@ -168,8 +168,9 @@ def private time_rows(name : string; body : block<(enc : MetalComputeEncoder?) :
 def private dispatch_once(arm : int; body : block<(enc : MetalComputeEncoder?; arm : int) : void>) : bool => timed_dispatches("once", arm, 1, body) >= 0.0lf
 
 struct private ArmCompare {
-    err : double    //! max |gpu - ref| over the compare region, over its max |ref|
-    text : string   //! the row's compare
+    err : double        //! max |gpu - ref| over the compare region, over its max |ref|
+    text : string       //! the row's compare
+    refusal : string    //! why the arm's compare dispatch did not run; empty where it ran
 }
 
 //! arm `arm`'s compare over its compare region `got`: bit-exact vs the baseline arm's `base` where an arm past the baseline matches
@@ -193,8 +194,12 @@ def private arm_compare(arm : int; base_name : string; got, base : array<float>;
 }
 
 //! race arm `arm`'s row off the race's `times` (`race_arms`): its best round, the median and cv beside, and its compare - or the
-//! miss and the bound alone
+//! refusal, or the miss and the bound, alone
 def private arm_row(name : string; times : array<array<double>>; arm : int; cmp : ArmCompare) : Reading {
+    if (!empty(cmp.refusal)) {
+        to_log(LOG_INFO, "{name}: REFUSED - {cmp.refusal}\n")
+        return (us = -1.0lf, cv = 1.0lf)
+    }
     if (cmp.err > RACE_BOUND) {
         to_log(LOG_INFO, "{name}: MISS - {cmp.err} past the bound {RACE_BOUND} vs CPU reference\n")
         return (us = -1.0lf, cv = 1.0lf)
@@ -217,7 +222,7 @@ def private race_rows(title : string; names : array<string>; ref : array<double>
     for (arm in range(narms)) {
         invoke(reset)
         if (!dispatch_once(arm, body)) {
-            cmps |> push(ArmCompare(err = 1.0lf, text = "no dispatch"))
+            cmps |> push(ArmCompare(refusal = "no dispatch"))
             continue
         }
         var inscope got : array<float>

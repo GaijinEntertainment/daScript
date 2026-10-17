@@ -1,13 +1,19 @@
 # dasLLAMA tests Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `../ARCHITECTURE.md`, `../ARCHITECTURE_IMAGE_LEDGER.md` (the suite cells that mint an image by
-design are ledgered at its `#suite-image-mints`). Planned work: `../followup_general.md`,
-`../followup_vulkan.md`, `../followup_metal.md`.
+docs: `../ARCHITECTURE.md`, `../ARCHITECTURE_IMAGE_LEDGER.md`. Planned work:
+`../followup_general.md`, `../followup_vulkan.md`, `../followup_metal.md`.
 
 A cell is one `t |> run` subtest, or a `[test]` function that runs no subtest, and owns the asserts
 of every helper it calls; a test file is a `.das` dastest runs - one holding a `[test]` function, or
-one whose `cant_`, `failed_` or `invalid_` prefix makes its compile the assertion.
+one whose `cant_`, `failed_` or `invalid_` prefix makes its compile the assertion. A gate function
+is a named function a cell of a `test_metal_*_kernels.das` or `test_vulkan_*kernels.das` file calls
+to compare one kernel against its CPU oracle. A file's `CLAUDE.md` entry is every `CLAUDE.md`
+clause stating a fact about the file (named with or without its `.das` suffix), one of its cells,
+or one of its gate functions, wherever in `CLAUDE.md` the clause sits; a brace list naming several
+files at once (`test_metal_{prefill,decode}_kernels`) or a suite roster states none. A compare's
+two sides are the two computations whose mismatch reds the assert; a reference that only decides
+where the compare stops is neither side.
 
 **A kernel-unit cell - one in which its own code, a helper in its file or a `_*.das` helper module
 dispatches a `[metal_dispatch]` / `[vk_dispatch]` class or calls a `../dasllama/dasllama_math*.das`
@@ -89,21 +95,20 @@ a run of skips is not the coverage the suite owes.
 **A diff that registers a test file in this folder in a `CMakeLists.txt` is a defect - a
 `run.das` suite listing is the only registration these files get.**
 
-**A diff that adds a test file here adds its `CLAUDE.md` entry in the same change.** A file's
-entry is the clause that describes the file, named with or without its `.das` suffix.
+**A diff that adds a test file here adds its `CLAUDE.md` entry in the same change.**
 
-**A diff that adds, removes, moves or renames a cell or a gate function (a named function a cell
-of a `test_metal_*_kernels.das` or `test_vulkan_*kernels.das` file calls to compare one kernel
-against its CPU oracle), or changes a cell's suite, its skip condition, or any fact a `CLAUDE.md`
-entry states about it - the class it dispatches, the shapes, lengths, formats or lanes it sweeps,
-the predicate an assert reads, the bar it holds, its controls - corrects in the same change the
-`CLAUDE.md` entry of every test file running the cell, counts and skip clauses included; a file
-with no entry owes none.** A `{a,b}` shorthand or a suite roster needs no update, and an input row
-that adds no fact the entry states changes no claim.
+**A diff that adds a cell or a gate function to a file whose `CLAUDE.md` entry lists that file's
+cells or gates by name adds the new name to each such list in the same change.**
 
-**A diff that adds or changes a cell a `CLAUDE.md` clause describes as one of a class - the cells
-of one helper, the arms of one name pattern (`mtp-ff-<tag>`) - keeps that clause's counts and skip
-clauses true for every cell in the class.**
+**A diff that removes, moves or renames a cell or a gate function, or changes a cell's suite, its
+skip condition, or any fact a `CLAUDE.md` entry states about it - the class it dispatches, the
+shapes, lengths, formats or lanes it sweeps, the predicate an assert reads, the bar it holds, its
+controls - corrects in the same change the `CLAUDE.md` entry of every test file running the cell,
+counts and skip clauses included.**
+
+**A diff that adds, removes or changes a cell that a `CLAUDE.md` clause describes as one of a
+class - the cells of one helper, or the arms of one name pattern - keeps that clause's counts and
+skip clauses true for every cell in the class.**
 
 **A diff that adds, renames, or drops an arm name - the literal passed to `arm_on(t, name)`
 (`_model_tier.das`), what `--arm` matches - updates the arm census in `CLAUDE.md`'s "Arm filter
@@ -148,19 +153,20 @@ set.** `DASLLAMA_PARITY_FULL=1` is a final pre-PR switch, not the iteration loop
 **A test - or a program a test builds or spawns - whose subject is not the `.dlim` image rail (a
 cell whose subject is a lane knob's effect on the image identity has the rail as its subject)
 never mints or maps a MODEL image: it either runs with `DASLLAMA_IMAGE=0` in its environment, or
-calls no baking loader - `load_<family>_tower`, `load_<family>_embedder`, `load_model_cached`,
-`load_tts_model`, each of which writes a `.dlim` beside the model when `DASLLAMA_IMAGE` is
-unset.** Such a test loads a media carrier in memory from the family's `stage_*` staging - its
-`mint_*` twin, or `cache_via_image_staged` with an empty image path.
+calls nothing that reaches a baking loader - one that writes a `.dlim` beside the model when
+`DASLLAMA_IMAGE` is unset: `load_<family>_tower`, `load_<family>_embedder`, `load_model_cached`,
+`load_tts_model`.** Such a test loads a media carrier in memory from the family's `stage_*`
+staging - its `mint_*` twin, or `cache_via_image_staged` with an empty image path.
 
 **A predicate whose value the BOX decides (a device capability, a policy default) and that
 therefore cannot differ between two runs on one machine is never tested through its own
 value; test it through the argv it gates or the mode it selects.**
 
-**A test for an added, moved, or edited registration reaches the registered thing through its
-registry, and never calls it directly.** A registry is the storage a `register_*` call writes
-and a lookup reads at dispatch - a table, a list, or a single hook global - or the `[EnvConfig]`
-env registry.
+**A test for an added, moved, or edited registration - the `register_*` call, its key, or the
+lookup that reads it - reaches the registered thing through its registry, and never calls it
+directly.** A registry is the storage
+a `register_*` call writes and a lookup reads at dispatch - a table, a list, or a single hook
+global - or the `[EnvConfig]` env registry.
 
 **A `corpus_case` call in `test_tokenizer.das` that does not assert BOTH the exact reference ids
 and a lossless round-trip is a defect.**
@@ -175,17 +181,15 @@ float difference.
 
 **A size, depth, or row count that a cell's name, a comment inside the cell, on the `[test]`
 function that runs it or in a helper it calls, or an assert's text claims about what the cell
-exercises, and that the cell does not pass
-as a literal argument to the kernel or function under test that it itself dispatches or calls, is
-asserted in that cell by an assert on the count.** A cap, a resize, or a counter asserted to show
-a route ran is not evidence the number was reached; a device's geometry (subgroup width, SM count)
-is no coverage claim.
+exercises, and that the cell does not pass as a literal argument to the kernel or function under
+test that it itself dispatches or calls, is asserted in that cell by an assert on the count.** A
+cap, a resize, or a counter asserted to show a route ran is not evidence the number was reached;
+a device's geometry (subgroup width, SM count) is no coverage claim.
 
 **An exact token or id compare over a prompt whose continuation can tie, whose two sides run
 different lanes, backends, batch shapes or kernel forms, is a defect - it takes the forced-feed
 logits-tolerance form: the same fixed tokens fed to both sides, the logits compared within a
-bar. A counting cell, whose prompt forces a continuation that cannot tie, stays exact on any two
-sides.**
+bar.**
 
 **An exact token or id compare over a prompt whose continuation can tie, whose two sides run one
 code path or the same kernels over another storage layout (a flat K/V cache against a paged
@@ -249,13 +253,17 @@ computation reads - a zeroed weight region, a poisoned input element, a mechanis
 re-runs the compare, or holds the output against the reference computed over inputs one row off
 (the row one step off); a value added to the output after the fact is not one.**
 
-**A float compare against a bar that a diff adds, changes, moves or extracts into a helper reads a
-NaN in the output, the reference, or their difference as outside the bar: it passes on
-`d <= bar`, counts a miss on `!(d <= bar)`, and any largest difference it keeps reads a NaN
-element as infinite - or it routes through `_compares.das`' `check`, `check_count` or
-`sweep_check`, which do.** `d > bar` is false on a NaN, and a running `max` drops a NaN that a
-later finite element follows, so an output holding one, or a NaN sentinel the kernel never
-overwrote, passes.
+**A within-bar float compare that a diff adds, changes, moves or extracts into a helper reds on a
+NaN in the output, the reference or their difference: it passes on `d <= bar`, counts a miss on
+`!(d <= bar)`, and reads a NaN element as infinite in any largest difference it keeps - or it
+routes through `_compares.das`' `check`, `check_count` or `sweep_check`, which do.** `d > bar` is
+false on a NaN, and a running `max` drops a NaN that a later finite element follows, so an output
+holding one, or a NaN sentinel the kernel never overwrote, passes.
+
+**A must-exceed assert - one that passes only when a value lands outside its bar, by `d > bar` or
+by a miss count above zero, as a control does - that a diff adds, changes, moves or extracts into
+a helper asserts every value it reads finite first.** A NaN read as infinite, or counted as a
+miss, passes it.
 
 **A poison control on a tower a GPU driver serves - a run of the gate with a block's weights
 zeroed, which must fail - zeroes that block's GEMM weights in every plane the served route reads

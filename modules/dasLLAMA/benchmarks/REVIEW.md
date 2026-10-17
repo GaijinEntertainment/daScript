@@ -10,16 +10,21 @@ timestamps), printed or returned for printing; a serving path's profiler report 
 output is not one. Its timed body is the statements between its clock reads, and what they call.
 
 A lever is a flag, an environment switch, a runtime setter or a profile key that picks what the
-run executes - never an input's size or content. A race times two
-implementations of one computation in one process, either of which the run could adopt (two
-values of one lever are not two implementations); an A/B is timed runs in one process differing
-only in one lever's value. An arm is every timed run of one implementation or one lever value; a
-compared arm is one whose output, from any run of it, the run reads back and measures against
-another arm's output or a CPU reference over the compare region, the output elements the
-instrument's header names; the baseline arm is the one the header names as baseline. A board cell
-is a run whose reading lands as a row of `../performance/records/<box>.json` or a figure in
-`../PERF_LEDGER.md`. A mode is one selectable run of the file, chosen by its own flag or argument; a
-file with none is one mode.
+run executes - never an input's size or content. A form is one compiled variant of a kernel. A
+GPU kernel emitter is code that generates a pipeline or a dispatch builder - a `[vk_dispatch]`
+class, a `[metal_kernel]` body, a `[metal_dispatch]` builder, or a `*_msl` source global. A race
+times two implementations of one computation in one process, each one either a form the engine
+serves or a candidate a file under this folder defines - a function, or a kernel a GPU kernel
+emitter generates (two values of one lever are not two implementations); an A/B is timed runs in
+one process differing only in one lever's value. An arm is every timed run of one implementation
+or one lever value; a round is one timed run of one arm; a compared arm is one whose output, from
+any run of it, the run reads back and measures against another arm's output or a CPU reference
+over the compare region, the output elements the instrument's header names; the baseline arm is
+the one the header names as baseline. A run of an arm refuses when it produces no figure or
+output, or runs on a backend other than the backend name the row records. A board cell is a run
+whose reading lands as a row of `../performance/records/<box>.json` or a figure in
+`../PERF_LEDGER.md`. A mode is one selectable run of the file, chosen by its own flag or argument;
+a file with none is one mode.
 
 **A diff that changes a board cell's input corpus or the pinned reference build
 (`DEFAULT_REF_SHA` in `setup_lcpp_ref.das`, or anything else deciding which reference binary or
@@ -28,19 +33,25 @@ environment the run measures) applies `../REVIEW_MEASUREMENT.md` too.**
 **Code that dispatches a GPU kernel to measure it rather than to serve a call, wherever the diff
 puts it, applies `../REVIEW_GPU_RACE.md` too.**
 
-**A diff that adds or changes the timed body of an instrument dispatching a kernel whose form a
-tune sidecar (the `.tune.json` beside the file or the box's) or `DAS_TUNE_MANIFEST` picks calls
-`tune_gate()` (`../performance/profile_common.das`) before its first timed rep, or - where the
-instrument cannot require this module's performance tree - stamps its rows with the tune manifest
-`DAS_TUNE_MANIFEST` names or the class profile (`../performance/defaults/<class>.tune-defaults.json`)
-the run compiled against.** Without the gate or the stamp the instrument measures fallback kernels
-silently.
+**A diff that adds or changes the timed body of an instrument that requires
+`../performance/profile_common.das` and dispatches a kernel of a `[tune]` family or a `[tuned]`
+kernel - one whose form the tune sidecar (the `.tune.json` beside the file or the box's) or
+`DAS_TUNE_MANIFEST` picks - calls `tune_gate()` before its first timed rep.** Without the gate the
+instrument measures fallback kernels silently.
+
+**A diff that adds or changes the timed body of an instrument that dispatches a kernel of a
+`[tune]` family or a `[tuned]` kernel and does not require `../performance/profile_common.das`
+stamps every row with the tune manifest `DAS_TUNE_MANIFEST` names or the class profile
+(`../performance/defaults/<class>.tune-defaults.json`) the run compiled against.**
 
 **A diff that adds a compared arm to an instrument, or changes a compared arm's run or report line,
 makes the instrument's header name the baseline arm and the compare region.**
 
-**A diff that adds or changes a race alternates its arms - one timed round per arm, best-of
-across rounds.**
+**A diff that adds or changes a race times its arms in turn - one round of each arm, then the
+next round of each - never all of one arm's rounds before the next arm's.**
+
+**A diff that adds or changes a race reports each arm's best round across the rounds as that
+arm's row.**
 
 **A diff that adds or changes a race reports each arm's row on its own - never two arms' numbers
 on one row.**
@@ -90,14 +101,13 @@ re-derives.
 what it times or that report line, also prints both of those times on that report line.** A
 plain elapsed-time row - one clock pair, no attribution across stages - is not a difference.
 
-**A diff that adds a GPU kernel emitter under this folder - a `[vk_dispatch]` or `[metal_kernel]`
-body or a `*_msl` source global - ships rows for a board cell or instrument that times the
-kernel** (the engine's own emitters answer to `../REVIEW_GPU.md`).
+**A diff that adds a GPU kernel emitter under this folder ships rows in `../PERF_LEDGER.md` for a
+board cell or instrument that times the kernel.**
 
-**A diff that changes a GPU kernel emitter under this folder either ships before/after rows for a
-board cell or instrument that times the kernel, or names in the PR body the compare showing the
-emitted kernel code byte-identical before and after: the `*_msl` source text, the AIR it builds
-into, or the SPIR-V words `DASLLAMA_VK_SPV_DUMP` writes.**
+**A diff that changes a GPU kernel emitter under this folder either ships before/after rows in
+`../PERF_LEDGER.md` for a board cell or instrument that times the kernel, or names in the PR body
+the compare showing the emitted kernel code byte-identical before and after: the `*_msl` source
+text, the AIR it builds into, or the SPIR-V words `DASLLAMA_VK_SPV_DUMP` writes.**
 
 **A diff that adds a result-row mode - one reporting rows that carry a time, a rate, or a
 per-kernel occupancy count - to an instrument, or changes how such a mode reports or exits, makes
@@ -117,11 +127,12 @@ ratio alone.** Prompts differ in how much the lever helps, so a per-prompt loss 
 winning mean.
 
 **A diff that adds a row measured over reps, or changes the instrument's timed body, an input
-picking a rep's backend, codec or session shape, or how the row is computed, computes every number
-the row reports over all the reps after the warmup reps the instrument's header comment names.**
+picking a rep's backend, codec or session shape, or how the row is computed, states in the
+instrument's header comment how many warmup reps a row drops, zero included, and computes every
+number the row reports over the reps after them.**
 
 **A diff that adds a row measured over reps, or changes the instrument's timed body, an input
 picking a rep's backend, codec or session shape, or how the row is computed or reported, prints no
-number on the row when any rep refuses, only the refusal and its reason.** A rep refuses when
-it produces no figure or runs on a backend other than the row's backend stamp, the backend name
-the row records. A partial row reads like a measured one and is a different quantity.
+number on the row when any run of the row's arm refuses - a timed rep, a warmup rep, or the run
+whose output the compare reads - only the refusal and its reason.** A partial row reads like a
+measured one and is a different quantity.
