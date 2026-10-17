@@ -395,14 +395,10 @@ def enc_ple_pre_dev(enc : MetalComputeEncoder?; t : Model; btok : MetalBuffer?; 
         if (t.ple_model_bf16) {
             let bw = plane_of(g_dev, t, t.bf16blob, t.ple_model_off)
             ka.woff = uint(bw.boff / 2ul)
-            if (nrows == 1l) {
-                enc_ple_proj_bf16_one(enc, bw.buf, bx, bproj, ka, all, 1l)
-            } else {
-                enc_ple_proj_bf16(enc, bw.buf, bx, bproj, ka, all, nrows)
-            }
+            enc_ple_proj_bf16_rows(enc, bw.buf, bx, bproj, ka, all, nrows, nrows > 1l)
         } else {
             var bw = upload_region(unsafe(addr < void? >(t.fblob[t.ple_model_off])), uint64(all * c.dim * 4l))
-            enc_moe_router(enc, bw, bx, bproj, g_one, ka, all, nrows)
+            enc_f32_rows_gemv(enc, bw, bx, bproj, g_one, ka, all, nrows, false)
         }
     }
 }
@@ -1559,11 +1555,11 @@ struct template LayerEncT {
 }
 
 //! `nrows` rows through a per-layer gate (dim -> ple) or projection (ple -> dim) plane off the file's f32 rows: the router GEMV
-//! (`GkRouterGemv`), a column a row
+//! (`GkRouterGemv`, `enc_f32_rows_gemv`'s word), a column a row
 def private enc_ple_f32(enc : MetalComputeEncoder?; t : Model; pp : PlePlane; bx, by : MetalBuffer?; nrows : int64) {
     var bw = upload_region(unsafe(addr < void? >(t.fblob[pp.off])), uint64(pp.n * pp.d * 4l))
     var ka = moe_router_args(pp.d, pp.n, nrows)
-    enc_moe_router(enc, bw, bx, by, g_one, ka, pp.d, nrows)
+    enc_f32_rows_gemv(enc, bw, bx, by, g_one, ka, pp.d, nrows, false)
 }
 
 //! layer l's PLE branch over `nrows` rows between the FFN residual and the layer's last seam: proj·(gelu(gate·x) ⊙ side[l]) into

@@ -3626,9 +3626,22 @@ def test_metal_prefill_kernels(t : T?) {
                 ple_proj_bf16_gate(t, dev, queue, 96, 70, 1, 3)
                 ple_proj_bf16_gate(t, dev, queue, 96, 70, 11, 3)   // two eight-column groups, the second clamped
                 ple_proj_bf16_gate(t, dev, queue, 1536, 70, 1, 3, true)   // the decode column, every lane past the row's first 512
+                ple_proj_bf16_gate(t, dev, queue, 97, 70, 11, 3)          //! an odd dim: the halfword walk
+                ple_proj_bf16_gate(t, dev, queue, 97, 70, 1, 3, true)
+                ple_proj_bf16_gate(t, dev, queue, 96, 70, 11, 3, false, 1)   //! an even dim off an odd base: every row mid-word
+                ple_proj_bf16_gate(t, dev, queue, 1537, 70, 1, 2, true, 1)   //! the decode column past 256 lanes, an odd dim off an odd base
+                f32_rows_gate(t, dev, queue, 64, 7, 1, 0, false)    //! the float4 lattice: the router's words
+                f32_rows_gate(t, dev, queue, 64, 7, 13, 0, true)
+                f32_rows_gate(t, dev, queue, 66, 7, 1, 0, false)    //! a dim off the lattice: the element walk
+                f32_rows_gate(t, dev, queue, 66, 7, 13, 0, true)
+                f32_rows_gate(t, dev, queue, 64, 7, 3, 2, false)    //! a base off the lattice
+                f32_rows_gate(t, dev, queue, 515, 5, 9, 1, true)    //! past the blocked stamp's lanes, an odd dim off an odd base
                 geglu_side_gate(t, dev, queue, 64, 3, 2, 5)
                 ple_finish_gate(t, dev, queue, 3, 64, 5)
                 ple_finish_gate(t, dev, queue, 35, 256, 2)   //! the E2B's slices
+                ple_finish_gate(t, dev, queue, 2, 2048, 3)   //! a slice past 1024: eight passes of the 256 lanes
+                ple_finish_gate(t, dev, queue, 3, 48, 2)     //! a slice off the 32-lane step: one pass, its last lanes idle
+                ple_finish_gate(t, dev, queue, 2, 300, 2)    //! past one pass by a part of one
                 add_bias_rows_gate(t, dev, queue, 7, 96)
                 cat2_gate(t, dev, queue, 5, 48, 1, 0, 0, 0, 0)
                 cat2_gate(t, dev, queue, 3, 40, 4, 0, 0, 0, 0)       // the hc draft and warm: the a row repeats per stream
@@ -4000,27 +4013,38 @@ def private moe_reduce_gate(t : T?; var dev, queue; dim, npos, nk : int) {
 
 // ===== prefill misc gates (PLE pre-step, bias epilogue, MTP cat, deltanet ba GEMV) =====
 
-//! the per-layer-embedding projection's bf16 word form (`MetalPleProjBf16`, `GkRouterGemv` under BF16; `one` its decode column's
-//! stamp, a threadgroup a row): ne rows of dim bf16 weights past `lead` words of NaN pairs (a read off the rows' base is a NaN), over
-//! npos columns, against the dot in double over the same values - dyadic and bf16-exact, so the compare is exact; the lead element
-//! poisoned is the control
-def private ple_proj_bf16_gate(t : T?; var dev, queue; dim, ne, npos, lead : int; one : bool = false) {
-    let tag = "ple_proj_bf16{one ? " one" : ""} dim={dim} ne={ne} np={npos} lead={lead}"
+//! the per-layer-embedding projection off its bf16 rows through its pick (`enc_ple_proj_bf16_rows`): the word pairs
+//! (`MetalPleProjBf16` / `One`, `GkRouterGemv` at VW 2) where the dim and the base step whole words, else the halfword walk
+//! (`MetalPleProjBf16Hw` / `HwOne`, VW 1); `one` the decode column's stamps, a threadgroup a row. ne rows of dim bf16 weights
+//! past `lead` words and `skew` halves of NaN (a read off the rows' base, or past their end into the NaN word after them, is a
+//! NaN), over npos columns, against the dot in double over the same values - dyadic and bf16-exact, so the compare is exact;
+//! the lead element poisoned is the control
+def private ple_proj_bf16_gate(t : T?; var dev, queue; dim, ne, npos, lead : int; one : bool = false; skew : int = 0) {
+    let tag = "ple_proj_bf16{one ? " one" : ""} dim={dim} ne={ne} np={npos} lead={lead} skew={skew}"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
         var err : string
-        let sr = one ? stamp_of(@@enc_ple_proj_bf16_one) : stamp_of(@@enc_ple_proj_bf16)
-        var pso = mc |> keep_stamp(sr, err)
+        let base = lead * 2 + skew
+        let pairs = dim % 2 == 0 && base % 2 == 0
+        let sp = stamp_of(@@enc_ple_proj_bf16)
+        let spo = stamp_of(@@enc_ple_proj_bf16_one)
+        let sh = stamp_of(@@enc_ple_proj_bf16_hw)
+        let sho = stamp_of(@@enc_ple_proj_bf16_hw_one)
+        var pso = (pairs ? (one ? mc |> keep_stamp(spo, err) : mc |> keep_stamp(sp, err))
+            : (one ? mc |> keep_stamp(sho, err) : mc |> keep_stamp(sh, err)))
         return if (!pso_ok(t, tag, pso, err))
+        let nh = base + ne * dim
         var inscope w : array<uint>
-        w |> resize(lead + ne * dim / 2)
-        for (i in range(lead)) {
-            w[i] = 0x7FC07FC0u
+        w |> resize((nh + 1) / 2 + 1)
+        for (k in range(length(w))) {
+            w[k] = 0x7FC07FC0u
         }
         var inscope wf : array<float>
         wf |> resize(ne * dim)
         for (i in range(ne * dim)) {
             wf[i] = float((i * 5) % 9 - 4) * 0.5
-            w[lead + i / 2] |= (float_bits_to_uint(wf[i]) >> 16u) << uint(16 * (i % 2))
+            let h = base + i
+            let sh16 = uint(16 * (h % 2))
+            w[h / 2] = (w[h / 2] & ~(0xFFFFu << sh16)) | ((float_bits_to_uint(wf[i]) >> 16u) << sh16)
         }
         var inscope x <- [for (i in range(npos * dim)); float((i * 7 + 2) % 9 - 4) * 0.25]
         var inscope want : array<float>
@@ -4038,10 +4062,89 @@ def private ple_proj_bf16_gate(t : T?; var dev, queue; dim, ne, npos, lead : int
         let bx = mc |> in_(x)
         let by = mc |> out_words(npos * ne, -1000.0)
         var ka = moe_router_args(int64(ne), int64(dim), int64(npos))
-        ka.woff = uint(lead * 2)
+        ka.woff = uint(base)
+        //! the pick's stamp seated with the cell's pipeline: the call below dispatches the one `pairs` and `one` name
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
-            stamp_run(sr, pso) {
-                invoke(sr.enc, enc, mc.buf[bw], mc.buf[bx], mc.buf[by], ka, int64(ne), int64(npos))
+            if (pairs && one) {
+                stamp_run(spo, pso) {
+                    enc_ple_proj_bf16_rows(enc, mc.buf[bw], mc.buf[bx], mc.buf[by], ka, int64(ne), int64(npos), !one)
+                }
+            } elif (pairs) {
+                stamp_run(sp, pso) {
+                    enc_ple_proj_bf16_rows(enc, mc.buf[bw], mc.buf[bx], mc.buf[by], ka, int64(ne), int64(npos), !one)
+                }
+            } elif (one) {
+                stamp_run(sho, pso) {
+                    enc_ple_proj_bf16_rows(enc, mc.buf[bw], mc.buf[bx], mc.buf[by], ka, int64(ne), int64(npos), !one)
+                }
+            } else {
+                stamp_run(sh, pso) {
+                    enc_ple_proj_bf16_rows(enc, mc.buf[bw], mc.buf[bx], mc.buf[by], ka, int64(ne), int64(npos), !one)
+                }
+            }
+        }
+        return if (!ran)
+        check_buf(t, tag, mc.buf[by], want, lead_poisoned(BAR_EXACT, want), Shape(row_width = ne))
+    }
+}
+
+//! the f32 rows' GEMV through its word pick (`enc_f32_rows_gemv`): the float4 router stamps where dim, base and column stride
+//! step whole float4s, else the element walk (`MetalF32RowsOne` / `B`); ne rows of dim past `woff` NaN elements, a NaN after the
+//! last row, over npos columns, against the dot in double over dyadic values, so the compare is exact; the lead element poisoned
+//! is the control
+def private f32_rows_gate(t : T?; var dev, queue; dim, ne, npos, woff : int; blocked : bool) {
+    let tag = "f32_rows{blocked ? " b" : " one"} dim={dim} ne={ne} np={npos} woff={woff}"
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let lattice = dim % 4 == 0 && woff % 4 == 0
+        let sr = stamp_of(@@enc_moe_router)
+        let srb = stamp_of(@@enc_moe_router_b)
+        let so = stamp_of(@@enc_f32_rows_one)
+        let sb = stamp_of(@@enc_f32_rows_b)
+        var pso = (lattice ? (blocked ? mc |> keep_stamp(srb, err) : mc |> keep_stamp(sr, err))
+            : (blocked ? mc |> keep_stamp(sb, err) : mc |> keep_stamp(so, err)))
+        return if (!pso_ok(t, tag, pso, err))
+        var inscope w : array<float>
+        w |> resize(woff + ne * dim + 1)
+        for (i in range(length(w))) {
+            w[i] = i < woff || i >= woff + ne * dim ? uint_bits_to_float(0x7FC00000u) : float(((i - woff) * 5) % 9 - 4) * 0.5
+        }
+        var inscope x <- [for (i in range(npos * dim)); float((i * 7 + 2) % 9 - 4) * 0.25]
+        var inscope want : array<float>
+        want |> resize(npos * ne)
+        for (s in range(npos)) {
+            for (e in range(ne)) {
+                var acc = 0.0lf
+                for (c in range(dim)) {
+                    acc += double(w[woff + e * dim + c]) * double(x[s * dim + c])
+                }
+                want[s * ne + e] = float(acc)
+            }
+        }
+        let bw = mc |> in_(w)
+        let bx = mc |> in_(x)
+        let by = mc |> out_words(npos * ne, -1000.0)
+        let brb = mc |> in_([for (_e in range(ne)); 0.0])   //! the router stamps' bias rows, read only under `hasb`
+        var ka = moe_router_args(int64(ne), int64(dim), int64(npos))
+        ka.woff = uint(woff)
+        //! the pick's stamp seated with the cell's pipeline: the call below dispatches the one `lattice` and `blocked` name
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            if (lattice && blocked) {
+                stamp_run(srb, pso) {
+                    enc_f32_rows_gemv(enc, mc.buf[bw], mc.buf[bx], mc.buf[by], mc.buf[brb], ka, int64(ne), int64(npos), blocked)
+                }
+            } elif (lattice) {
+                stamp_run(sr, pso) {
+                    enc_f32_rows_gemv(enc, mc.buf[bw], mc.buf[bx], mc.buf[by], mc.buf[brb], ka, int64(ne), int64(npos), blocked)
+                }
+            } elif (blocked) {
+                stamp_run(sb, pso) {
+                    enc_f32_rows_gemv(enc, mc.buf[bw], mc.buf[bx], mc.buf[by], mc.buf[brb], ka, int64(ne), int64(npos), blocked)
+                }
+            } else {
+                stamp_run(so, pso) {
+                    enc_f32_rows_gemv(enc, mc.buf[bw], mc.buf[bx], mc.buf[by], mc.buf[brb], ka, int64(ne), int64(npos), blocked)
+                }
             }
         }
         return if (!ran)
@@ -5143,6 +5246,20 @@ def test_tallkq_pick(t : T?) {
         t |> success(!tallkq_pick(512l, 4096l, 4096l, true), "under the byte knee declines")
     } else {
         t |> skip("das_metal is not built on this platform; the knee predicate is not compiled")
+    }
+}
+
+//! device-free: the window's pre-step projection pick - the bf16 tile at a dim of whole 32-element chunks and layers x ple of
+//! whole 64-row tiles, the position-blocked GEMV off either grid
+[test]
+def test_pf_bf16_tile_pick(t : T?) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        t |> success(pf_bf16_tile_ok(1536l, 35l * 256l), "the E2B's projection takes the tile")
+        t |> success(!pf_bf16_tile_ok(1537l, 35l * 256l), "an odd dim rides the GEMV")
+        t |> success(!pf_bf16_tile_ok(1552l, 35l * 256l), "... and an even one off the 32-element chunk")
+        t |> success(!pf_bf16_tile_ok(1536l, 35l * 48l), "layers x ple off the 64-row tile rides the GEMV")
+    } else {
+        t |> skip("das_metal is not built on this platform; the tile predicate is not compiled")
     }
 }
 

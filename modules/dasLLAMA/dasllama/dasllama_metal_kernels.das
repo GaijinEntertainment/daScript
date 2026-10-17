@@ -1287,6 +1287,14 @@ struct EmbedKqArgs {
     escale : float   //!< embed_scale (gemma: sqrt(dim); 1.0 elsewhere)
 }
 
+//! the per-32 gather's args: the K-quant gather's, the row's 32-blocks in `nsb`, and the table's first block past its bind
+struct EmbedB32Args {
+    dim : uint
+    nsb : uint
+    escale : float
+    b0 : uint        //!< `b32_bind_rem`'s blocks: the bind sits on the 16-byte grid below the table
+}
+
 //! The K-quant token-table gather: `nrows` token ids' rows off a format's blob-form planes (kq_scales_of / kq_quants_of),
 //! dequantized in f32 by the format's own math; one invocation decodes one 16-element half of a 32-element sub-block,
 //! a format stamp supplying `unit16`.
@@ -1435,7 +1443,7 @@ class template MetalEmbedB32T {
     @ssbo @binding = 1 @role = "weight" @off = "qoff" kqu : array<uint>       //!< the quant plane, uint view
     @ssbo @binding = 2 @off = "toff" tok : array<uint>         //!< one token id an output row
     @ssbo @binding = 3 @off = "xoff" xo : array<float>         //!< [nrows x dim] residual input rows
-    @kargs ka : EmbedKqArgs                                    //!< `nsb` carries the row's 32-blocks
+    @kargs ka : EmbedB32Args
     @template_constant Q51 : bool = false
     @template_constant Q40L : bool = false
     @template_constant Q50 : bool = false   //!< a Q5_0 table (q5032): q51's quant block under one d, d * (q + 16 h - 16)
@@ -1449,7 +1457,7 @@ class template MetalEmbedB32T {
             return
         }
         let row = gl_WorkGroupID.y
-        let blk = tok[row] * ka.nsb + u / 2u
+        let blk = ka.b0 + tok[row] * ka.nsb + u / 2u
         let half = u & 1u
         let ob = row * ka.dim + u * 16u
         let d = float(kdh[blk * SH])
@@ -3974,6 +3982,10 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_ple_proj_bf16 = compile_stamp(metal_ple_proj_bf16_msl, ok)
     g_pso_ple_proj_bf16_one = compile_stamp(metal_ple_proj_bf16_one_msl, ok)
     g_pso_ple_finish = compile_stamp(metal_ple_finish_msl, ok)
+    g_pso_ple_proj_bf16_hw = compile_stamp(metal_ple_proj_bf16_hw_msl, ok)
+    g_pso_ple_proj_bf16_hw_one = compile_stamp(metal_ple_proj_bf16_hw_one_msl, ok)
+    g_pso_f32_rows_one = compile_stamp(metal_f32_rows_one_msl, ok)
+    g_pso_f32_rows_b = compile_stamp(metal_f32_rows_b_msl, ok)
     g_pso_geglu_hx = compile_stamp(MetalGegluHX_metal_ew2_msl, ok)
     g_pso_ln = compile_stamp(metal_layernorm_msl, ok)
     g_pso_f32mm = compile_stamp(metal_f32_mulmm_msl, ok)
@@ -4946,6 +4958,10 @@ def enc_embed_dev(enc : MetalComputeEncoder?; t : Model; btok : MetalBuffer?; to
     }
 }
 
+//! the blocks a per-32 table at element `off` sits past the 16-byte bind below it: eight blocks keep every format's quant
+//! (16 or 20 bytes a block) and scale (2 or 4) binds on 16 bytes, so a table off that grid binds there and its gather skips these
+def b32_bind_rem(off : int64) : int64 => (off / KQ_B32_ELEMS) % 8l
+
 //! The rows of `nrows` token ids (btok at toff) off the table plane `fmt` at element `off`, `width` elements a row under `escale`, into
 //! bx at xoff: the token table's gather and the E-series per-layer table's (layers x ple under sqrt(ple)); the q8 copy's stamp
 //! reads the width and the scale off the uniforms `bwidth` / `bescale` (null = 1)
@@ -4955,8 +4971,9 @@ def enc_embed_table(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; off, wid
         let bemb = blob_of(g_dev, t, off)
         enc_embed(enc, bemb.buf, bemb.boff, btok, bx, bwidth, bescale, width, toff, xoff, nrows)
     } elif (kq_dense_b32(fmt)) {
-        let qp = b32_planes_of(g_dev, t, fmt, off)
-        var ka = EmbedKqArgs(dim = uint(width), nsb = uint(width / KQ_B32_ELEMS), escale = escale)
+        let rem = b32_bind_rem(off)
+        let qp = b32_planes_of(g_dev, t, fmt, off - rem * KQ_B32_ELEMS)
+        var ka = EmbedB32Args(dim = uint(width), nsb = uint(width / KQ_B32_ELEMS), escale = escale, b0 = uint(rem))
         let units = width / 16l
         let slot = int(fmt)
         kq_tile_stamp(slot, "!b32", "embed") <| $() {   //! the per-32 table gather (`MetalEmbedB32T`) stamps the per-32 formats alone
@@ -5567,7 +5584,8 @@ def metal_kernels_release {
         g_pso_kq_mvb2h_iq2xs, g_pso_kq_mvb4h_iq2xs, g_pso_kq_mvb8h_iq2xs, g_pso_kq_mvb2h_iq2xxs, g_pso_kq_mvb4h_iq2xxs, g_pso_kq_mvb8h_iq2xxs)
     release_handles(g_pso_addrms, g_pso_preaddrms, g_pso_preaddrms_hx, g_pso_preadd, g_one, g_zero)
     release_handles(g_pso_geglu, g_pso_geglu_hx)
-    release_handles(g_pso_geglu_side, g_pso_ple_proj_bf16, g_pso_ple_proj_bf16_one, g_pso_ple_finish)
+    release_handles(g_pso_geglu_side, g_pso_ple_proj_bf16, g_pso_ple_proj_bf16_one, g_pso_ple_finish, g_pso_f32_rows_one, g_pso_f32_rows_b)
+    release_handles(g_pso_ple_proj_bf16_hw, g_pso_ple_proj_bf16_hw_one)
     release_handles(g_pso_ln, g_pso_bias_act, g_pso_act_rows, g_pso_posadd, g_pso_q3v_stem, g_pso_clamp, g_pso_clamp_copy)
     release_handles(g_pso_rope2d, g_pso_head_pad, g_pso_head_unpad, g_pso_geglu_quick, g_pso_wdec_kv, g_pso_wdec_kv_h)
     release_handles(g_pso_im2col2d, g_pso_wdec_attn_part, g_pso_wdec_attn_comb, g_pso_bias_add_res)
@@ -7102,6 +7120,101 @@ class template MetalPleProjBf16T : MetalRouterGemvT {
     typedef XT = float
     override VW = 2u
     override BF16 = true
+}
+
+//! the same rows a halfword a lane, for an odd dim or base: a row then starts mid-word, off the pairs' word grid
+[ |> template_struct_instance]
+class template MetalPleProjBf16HwT : MetalRouterGemvT {
+    typedef KT = uint16
+    typedef XT = float
+    override BF16 = true
+}
+
+//! the halfword walk's decode-column stamp (`MetalPleProjBf16HwT`), a threadgroup of 256 a row
+[metal_dispatch(name = "enc_ple_proj_bf16_hw_one", pso = "g_pso_ple_proj_bf16_hw_one", tgmem = "metal_ple_proj_bf16_hw_one_msl_tgmem", tg = 256, grid = "ne, nst", params = "ne : int64, nst : int64")]
+class MetalPleProjBf16HwOne : MetalPleProjBf16HwT {
+    override NC = 1
+
+    [metal_kernel(name="metal_ple_proj_bf16_hw_one_msl")]
+    def metal_ple_proj_bf16_hw_one {
+        grid_row()
+    }
+}
+
+//! the halfword walk's position-blocked stamp (`MetalPleProjBf16HwT`), a simdgroup a row and eight columns a simdgroup
+[metal_dispatch(name = "enc_ple_proj_bf16_hw", pso = "g_pso_ple_proj_bf16_hw", tg = 128, grid = "ne/4, nst/8", params = "ne : int64, nst : int64")]
+class MetalPleProjBf16Hw : MetalPleProjBf16HwT {
+    override ROW_WG = false
+    override COL_CLAMP = true
+    override NC = 8
+
+    [metal_kernel(name="metal_ple_proj_bf16_hw_msl")]
+    def metal_ple_proj_bf16_hw {
+        grid_row()
+    }
+}
+
+//! the projection off the bf16 rows over `nst` columns: the word pairs where the dim and the base step whole words, else the
+//! halfword walk; `blocked` the position-blocked stamps, else a threadgroup a row
+def enc_ple_proj_bf16_rows(enc : MetalComputeEncoder?; bw, bx, by : MetalBuffer?; var ka : GkRouterArgs; ne, nst : int64; blocked : bool) {
+    let pairs = ka.dim % 2u == 0u && ka.woff % 2u == 0u
+    if (pairs && blocked) {
+        enc_ple_proj_bf16(enc, bw, bx, by, ka, ne, nst)
+    } elif (pairs) {
+        enc_ple_proj_bf16_one(enc, bw, bx, by, ka, ne, nst)
+    } elif (blocked) {
+        enc_ple_proj_bf16_hw(enc, bw, bx, by, ka, ne, nst)
+    } else {
+        enc_ple_proj_bf16_hw_one(enc, bw, bx, by, ka, ne, nst)
+    }
+}
+
+//! the f32 rows a lane an element, for a dim, base or column stride off the float4 lattice the f32 router's words step
+[ |> template_struct_instance]
+class template MetalF32RowsT : MetalRouterGemvT {
+    typedef KT = float
+    typedef XT = float
+}
+
+//! the f32 rows' one-column stamp, a threadgroup of 256 a row as the f32 router's (`MetalF32RowsT`)
+[metal_dispatch(name = "enc_f32_rows_one", pso = "g_pso_f32_rows_one", tgmem = "metal_f32_rows_one_msl_tgmem", tg = 256, grid = "ne, nst", params = "ne : int64, nst : int64")]
+class MetalF32RowsOne : MetalF32RowsT {
+    override NC = 1
+
+    [metal_kernel(name="metal_f32_rows_one_msl")]
+    def metal_f32_rows_one {
+        grid_row()
+    }
+}
+
+//! the f32 rows' position-blocked stamp, a simdgroup a row and eight columns a simdgroup (`MetalF32RowsT`)
+[metal_dispatch(name = "enc_f32_rows_b", pso = "g_pso_f32_rows_b", tg = 128, grid = "ne/4, nst/8", params = "ne : int64, nst : int64")]
+class MetalF32RowsB : MetalF32RowsT {
+    override ROW_WG = false
+    override COL_CLAMP = true
+    override NC = 8
+
+    [metal_kernel(name="metal_f32_rows_b_msl")]
+    def metal_f32_rows_b {
+        grid_row()
+    }
+}
+
+//! the f32 rows' GEMV over `nst` columns: the float4 router words (`MetalMoeRouter` / `B`, the bias row `brb`) where the dim, the
+//! base and the column stride step whole float4s, else the element walk; `blocked` the position-blocked stamps
+def enc_f32_rows_gemv(enc : MetalComputeEncoder?; bw, bx, by, brb : MetalBuffer?; var ka : GkRouterArgs; ne, nst : int64; blocked : bool) {
+    let xs = ka.xs == 0u ? ka.dim : ka.xs
+    if (ka.dim % 4u == 0u && ka.woff % 4u == 0u && xs % 4u == 0u) {
+        if (blocked) {
+            enc_moe_router_b(enc, bw, bx, by, brb, ka, ne, nst)
+        } else {
+            enc_moe_router(enc, bw, bx, by, brb, ka, ne, nst)
+        }
+    } elif (blocked) {
+        enc_f32_rows_b(enc, bw, bx, by, ka, ne, nst)
+    } else {
+        enc_f32_rows_one(enc, bw, bx, by, ka, ne, nst)
+    }
 }
 
 //! the one-column stamp: a threadgroup of 256 an expert row, grid.y the streams of a batched decode step (one on the single row)

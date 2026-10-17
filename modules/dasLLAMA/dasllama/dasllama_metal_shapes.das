@@ -189,29 +189,24 @@ def emb_kq_gather_fmt(f : KqFmt) : bool => f != KqFmt.q8 && kq_fmt_gpu_supported
 //! plane format the Metal kernels read
 def emb_table_gather_fmt(f : KqFmt) : bool => kq_fmt_gpu_supported(f)
 
-//! the E-series pre-step serves on the device for this blob model: its table in a format the gather family serves, bound at
-//! whole superblocks (a per-32 pair's binds stay 16-byte aligned), a ple width the finish's threadgroup takes, and a model dim
-//! the projection's word walk steps whole: pairs on the bf16 rows (`enc_ple_proj_bf16`), float4s on the f32 router's
+//! the E-series pre-step serves on the device for this blob model: its table in a format the gather family serves, bound on
+//! the format's own block grid (the table's base and its row of layers x ple each whole blocks of the format)
 def metal_ple_dev_ok(t : Model) : bool => has_ple(t.config) && empty(metal_ple_pre_unserved(t))
 
 //! why the device does not serve the E-series pre-step for this model, named by site, `KqFmt` member and shape; "" when it does
-//! or the model has no PLE. The shapes named here run the CPU pre-step (`followup_metal.md` row 55 holds their device path)
+//! or the model has no PLE. A planar load or a trimmed image serves no Metal step at all; every other shape the gather reads
+//! on its block grid, the finish walks any ple width and the projection any model dim
 def metal_ple_pre_unserved(t : Model) : string {
     return "" if (!has_ple(t.config))
     let site = kq_site_words("per_layer_token_embd")
     return "the {site} is not blob-streamed" if (!t.metal_blob)
     return "the {site}'s planes are trimmed" if (t.planes_trimmed)
     return "the {site} plane is {t.ple_emb_fmt}, a format the gather family does not read" if (!emb_table_gather_fmt(t.ple_emb_fmt))
-    let ple = t.config.n_embd_per_layer
-    let all = t.config.n_layers * ple
-    if (t.ple_emb_fmt != KqFmt.q8 && (all % KQ_SB_ELEMS != 0l || t.ple_emb_off % KQ_SB_ELEMS != 0l)) {
-        return "the {site} plane ({t.ple_emb_fmt}) binds off a whole superblock: {all} elements a row at offset {t.ple_emb_off}"
+    let all = t.config.n_layers * t.config.n_embd_per_layer
+    let unit = kq_unit(t.ple_emb_fmt)
+    if (t.ple_emb_fmt != KqFmt.q8 && (all % unit != 0l || t.ple_emb_off % unit != 0l)) {
+        return "the {site} plane ({t.ple_emb_fmt}) binds off its {unit}-element blocks: {all} elements a row at offset {t.ple_emb_off}"
     }
-    return "the {site}'s ple width {ple} is off the finish's {KQ_B32_ELEMS}-lane step" if (ple % KQ_B32_ELEMS != 0l)
-    return "the {site}'s ple width {ple} is past the finish's 1024-lane threadgroup" if (ple > 1024l)
-    let word = t.ple_model_bf16 ? "bf16 pair" : "f32 float4"
-    let proj_word = t.ple_model_bf16 ? 2l : 4l
-    return "the {site}'s projection walks a model dim of {t.config.dim} in {word}s, which do not step it whole" if (t.config.dim % proj_word != 0l)
     return ""
 }
 

@@ -2642,8 +2642,8 @@ struct GkRouterArgs {
 }
 
 //! The router GEMV: expert row e's logit for every column, the row's weights read once for all of them; `ROW_WG` gives a row a workgroup
-//! of `LANES`, else a subgroup; a lane steps `VW` elements a load: 1 (f32 rows), 2 (16-bit pairs: f16, or bf16 under `BF16`), 4 (f32 rows
-//! and x as float4); `YSCALE` scales every logit by `pa.yscale`
+//! of `LANES`, else a subgroup; a lane steps `VW` elements a load: 1 (f32 rows, or bf16 halfwords under `BF16`), 2 (16-bit pairs: f16, or
+//! bf16 under `BF16`), 4 (f32 rows and x as float4); `YSCALE` scales every logit by `pa.yscale`
 [ |> template_struct_instance]
 class template GkRouterGemv {
     @ssbo @binding = 0 @role = "weight" w : array<KT>                                 //! the rows, row-major [ne x dim] a layer, VW elements a word
@@ -2659,7 +2659,7 @@ class template GkRouterGemv {
     @template_constant COL_CLAMP : bool = false   //!< the columns past the last read it again and store nothing, no branch in the dot; else they skip
     @template_constant NORM : bool = false
     @template_constant BIAS : bool = false
-    @template_constant BF16 : bool = false   //!< VW 2: the pair is two bf16 halves, each widened by its bit shift (exact)
+    @template_constant BF16 : bool = false   //!< VW 2: the pair is two bf16 halves, VW 1 one halfword, each widened by its bit shift (exact)
     @template_constant YSCALE : bool = false
 
     //! x's element i of the column at element xb (VW 1 and 2), under the norm row when `norm_on`
@@ -2689,7 +2689,11 @@ class template GkRouterGemv {
                     d = unpackHalf2x16(wv).x * xn(xb, 2u * i) + unpackHalf2x16(wv).y * xn(xb, 2u * i + 1u)
                 }
             } else {
-                d = float(wv) * xn(xb, i)   // nolint:PERF020,LINT019 - KT converts; the f32 stamp's cast is free, the rule fires where it lands
+                static_if (BF16) {
+                    d = gk_bf16_lo(uint(wv)) * xn(xb, i)
+                } else {
+                    d = float(wv) * xn(xb, i)   // nolint:PERF020,LINT019 - KT converts; the f32 stamp's cast is free, the rule fires where it lands
+                }
             }
         }
     }

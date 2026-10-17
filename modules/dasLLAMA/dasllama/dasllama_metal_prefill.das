@@ -7112,7 +7112,7 @@ def enc_av_mm(enc : MetalComputeEncoder?; batt, bv, bxb : MetalBuffer?; var ka :
 //! Batched f32-slab GEMV on MetalMoeRouterB's builder: d rows per position, y[p*d + row].
 def private pf_enc_slab_gemv_b(enc : MetalComputeEncoder?; bw, bx, by : MetalBuffer?; n, d, npos : int64) {
     var ka = moe_router_args(d, n, npos)
-    enc_moe_router_b(enc, bw, bx, by, g_one, ka, d, npos)
+    enc_f32_rows_gemv(enc, bw, bx, by, g_one, ka, d, npos, true)
 }
 
 //! the window's rows through the file's f32 rows at `off` in fblob (`n` in, `d` out): the f32 tile (`MetalF32ExactMm`), else the
@@ -7155,10 +7155,14 @@ def private pf_enc_narrow_ple(enc : MetalComputeEncoder?; t : Model; l : int64; 
     pf_enc_slab_gemv_b(enc, bw, bx, by, pp.n, pp.d, 1l)
 }
 
+//! the bf16 tile GEMM (`pf_enc_bf16_mm`) steps a K of `kdim` in its 32-element chunks and its `nd` output rows in 64-row tiles;
+//! a projection off that grid rides the position-blocked bf16 GEMV
+def pf_bf16_tile_ok(kdim, nd : int64) : bool => kdim % 32l == 0l && nd % 64l == 0l
+
 //! true iff THIS window's metal prefill will engage AND the pre-step kernels cover the model
 [unused_argument(s, start_pos)]
 def private metal_ple_pre_gpu_gate(t : Model; s : Session; npos, start_pos : int64) : bool {
-    if (active_prefill_override() != "metal" || !metal_ple_dev_said("prefill", t) || (t.config.n_layers * t.config.n_embd_per_layer) % 64l != 0l
+    if (active_prefill_override() != "metal" || !metal_ple_dev_said("prefill", t)
             || prefill_decline_caps(t, npos) != MetalPrefillDecline.none) {
         return false
     }
@@ -7969,9 +7973,14 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
             if (l == 0l && ple_gpu) {
                 //! the serial encoder orders the three PLE stages: gather -> model_proj GEMM -> rms+combine
                 enc_ple_pre(enc, t, bple_tok, 0ul, bple, bple_proj, u_ple_all, u_ple_sq, npos) $ {
-                    if (t.ple_model_bf16) {
+                    if (t.ple_model_bf16 && pf_bf16_tile_ok(dim, ple_all)) {
                         let bwp = plane_of(g_dev, t, t.bf16blob, t.ple_model_off)
                         pf_enc_bf16_mm(enc, bwp.buf, bwp.boff, bx, bple_proj, u_dim, u_ple_all, mp, ple_all, pf_cvt_panel(enc, bx, mp, dim, g_pf_skip == "act_cvt"), dim)
+                    } elif (t.ple_model_bf16) {
+                        let bwp = plane_of(g_dev, t, t.bf16blob, t.ple_model_off)
+                        var ka = moe_router_args(ple_all, dim, npos)
+                        ka.woff = uint(bwp.boff / 2ul)
+                        enc_ple_proj_bf16_rows(enc, bwp.buf, bx, bple_proj, ka, ple_all, npos, true)
                     } else {
                         pf_enc_f32_rows(enc, t, t.ple_model_off, dim, ple_all, bx, bple_proj, u_dim, u_ple_all, mp, npos)
                     }
