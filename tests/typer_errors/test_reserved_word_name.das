@@ -20,3 +20,13 @@ def test_reserved_word_as_parameter_name(t : T?) {
             "and the note names the word")
     }
 }
+
+[test]
+def test_identifier_out_of_place_draws_no_note(t : T?) {
+    t |> run("an identifier out of place is not called a reserved word") @(t : T?) {
+        let issues = compile_issues("{get_das_root()}/tests/typer_errors/_unexpected_name.das")
+        t |> success(find(issues, "unexpected name") >= 0,
+            "the parser's token dump names the identifier token: {issues}")
+        t |> success(find(issues, "reserved word") < 0, "and no note follows it")
+    }
+}

@@ -8,6 +8,7 @@ tests/language/failed_mismatching_curly_bracers.das
 tests/language/failed_mismatching_parentheses.das
 tests/language/failed_named_call_order.das
 tests/typer_errors/_reserved_word_name.das
+tests/typer_errors/_unexpected_name.das
 utils/detect-dupe/fixture/_fixture_broken_cases.das
 utils/mcp/tests/_fixture_gen1.das
 utils/mcp/tests/_fixture_syntax_error.das

@@ -4455,12 +4455,13 @@ static string das2_reservedWordNote ( const string & error ) {
     const char * prefix = "unexpected ";
     auto at = error.find(prefix);
     if ( at==string::npos ) return "";
-    if ( error.find("expecting")==string::npos ) return "";
-    if ( error.find(" name")==string::npos && error.find(" NAME")==string::npos ) return "";
+    auto expecting = error.find("expecting", at);
+    if ( expecting==string::npos ) return "";
+    if ( error.find(" name", expecting)==string::npos ) return "";   // the expectation list wanted a name
     auto from = at + strlen(prefix);
     auto to = error.find(',', from);
     string tok = error.substr(from, to==string::npos ? string::npos : to-from);
-    if ( tok.empty() ) return "";
+    if ( tok.empty() || tok=="name" ) return "";   // "unexpected name" is an identifier out of place, not a keyword
     for ( char c : tok ) {
         if ( !((c>='a' && c<='z') || c=='_') ) return "";   // "end of file", "$end", "'('", "integer constant" are not words
     }
