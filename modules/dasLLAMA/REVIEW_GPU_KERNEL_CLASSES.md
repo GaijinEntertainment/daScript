@@ -11,8 +11,7 @@ count, a row count). A base shell is the dispatch-less base class whose methods 
 flat into each deriving class. A stamp is a kernel class that compiles to a shader module -
 standalone, a template instance or a base-shell derivative. A census key is a kernel name
 `modules/dasLLAMA/tests/test_kernel_coverage.das` counts, that the engine's Metal or Vulkan driver
-compiles at run time - at its init, at a model's load or at the class's first dispatch - and that
-the pre-change tree does not compile. A crown is a kernel family a box's tune sidecar enables. A lens is the `[metal_dispatch]` /
+compiles at any point of a run, and that the pre-change tree does not compile. A crown is a kernel family a box's tune sidecar enables. A lens is the `[metal_dispatch]` /
 `[vk_dispatch]` macro that generates a class's builder from its bindings; kargs is the
 kernel-argument struct a dispatch hands its kernel.
 
@@ -23,8 +22,10 @@ is a defect, even where one twin ignores a field of it.**
 one twin leaves a hole at its number and renumbers nothing.**
 
 **Two stamps whose `@binding` numbers or kargs slots differ never share a host function that binds
-by number - each binds through its own generated builder, and the diff that makes two layouts
-differ this way ledgers them at `ARCHITECTURE_GPU.md#gpu-backends` in the same change.**
+by number - each binds through its own generated builder.**
+
+**A diff that makes the `@binding` numbers or kargs slots of two stamps differ ledgers the pair at
+`ARCHITECTURE_GPU.md#gpu-backends` in the same change.**
 
 **Kernel twins are written once: as stamps of one `class template`, as classes deriving one base
 shell, or - where the value that selects the difference is a run-time count - as one class whose
@@ -39,8 +40,7 @@ contract a multiply-add into one fma, so two bodies spelled alike round a ulp ap
 
 **A value that no model file and no request can change - a tile width, a math constant, a cap
 fixed by the model architecture the class serves - which every dispatch site under `dasllama/`
-passes identically to one stamp - a value no site varies - never reaches that stamp through a
-per-dispatch argument channel
+passes identically to one stamp never reaches that stamp through a per-dispatch argument channel
 (a uniform, a `@push_constant` field, a kargs field, an `@off` bind offset): stamp it into the
 class as a `@template_constant` where the class's stamps differ on it, pass it as a literal
 argument of the shared method the stamp's kernel calls, or write it as a literal or a module `let`
@@ -82,7 +82,7 @@ shell.**
 **A diff that adds a kernel class stamping or deriving from - through an intermediate template
 too - a template both backends (Metal and Vulkan) stamp
 (`dasllama/dasllama_gpu_kernels_common.das`), or makes an existing class do so, gives the class a `//!` line above its own declaration naming
-that shared template; the intermediate template's name does not stand for it.**
+that shared template itself, not the intermediate one.**
 
 **A diff that adds or changes a `[metal_dispatch]` / `[vk_dispatch]` binding that no site writes
 after arming - a binding filled before the first encode and never written again - puts
