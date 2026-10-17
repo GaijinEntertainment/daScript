@@ -9,6 +9,7 @@ options _dasllama_internal = true
 // ATTRIBUTION SWEEP moe:|moesk: - the expert schedule's s and e stamps by schedule form.
 // ATTRIBUTION SWEEP cm2g:<fmt> - a format's dense role shapes at 512 rows, overlapped and one dispatch at a time.
 // ATTRIBUTION SWEEP g3|gemma|splitk - the gemma role shapes and the down's split-k ladder, whole against split.
+// ATTRIBUTION SWEEP kqst:<fmt> - the K-quant window's two forms: the cm2 l/m/s stamps on the device's decode arm against the staged KHR tile.
 // ATTRIBUTION SWEEP khrsk - the KHR arm's q8 race (DASLLAMA_COOPMAT=mm): the q8 mul_mm tile against the KHR kq tile whole and split, one process.
 // ATTRIBUTION SWEEP small|barform - the token command's one-workgroup row kernels alone, chained, and by barrier form.
 // ATTRIBUTION SWEEP wh - the whisper large-v3-turbo encoder's role shapes at the chunk's 1500 rows and at 1536 (whole l columns):
@@ -25,7 +26,7 @@ options _dasllama_internal = true
 // skew; ts:<fmt> a timestamp or a barrier between two of its m stamps; cold:<fmt> its l, m and s
 // stamps warm and cold, the host schedule, the deep slab, the wide plan and the flush; cm2x|k6x|ref
 // the bisect and reference arms; khrx the KHR kq tile's weight-stage and structural bisect; mmqx the
-// integer tile prototypes; wh the whisper encoder's shapes at 1500 and 1536 rows.
+// integer tile prototypes; kqst:<fmt> the cm2 stamps against the staged tile on the gemma-4 E2B and 4B shapes; wh the whisper encoder's shapes at 1500 and 1536 rows.
 // Shapes default to Llama-3.2-3B Q8 geometry (dim 3072, hidden 8192, kv_dim 1024).
 
 require math
@@ -597,6 +598,42 @@ def private run_cm2_fmt_shape(fmt : int; name : string; d, n, cnt : int; l_stamp
         }
         let tf = flop / (us * 1000000.0lf)
         print("{name} {vnames[v]}: {us / 1000.0lf} ms/dispatch  {tf} TFLOP/s  timing-only{serial ? ", one dispatch at a time" : ""}\n")
+    }
+}
+
+//! one dense role shape under the K-quant window's two forms: the cm2 l, m and s stamps on the decode arm the device runs, and the
+//! staged form - the KHR tile over the format's own bytes - each whole, sixteen dispatches over two alternating output planes
+[arch(at="../ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md#vk-gemm-probe")]
+def private run_kqst_shape(fmt : int; name : string; d, n, cnt : int) {
+    let dv = cm2_shape_upload(fmt, d, n, cnt)
+    let flop = 2.0lf * double(cnt) * double(d) * double(n)
+    let vnames = fixed_array("cm2l ", "cm2m ", "cm2s ", "staged")
+    let sizes5 = fixed_array(dv.wq_bytes, dv.ws_bytes, 0l, dv.xf_bytes, dv.y_bytes)
+    for (v in range(4)) {
+        let ttile = v == 0 ? 256 : (v == 2 ? 32 : 128)
+        continue if (cnt < ttile)
+        let wgs = ((cnt + ttile - 1) / ttile) * ((d + 127) / 128)
+        let sc = one_region_sched(cnt, wgs)
+        var sz = sizes5
+        sz[2] = sc.bytes
+        let gbits5 = fixed_array(1u, 2u, 0u, 4u, 16u)
+        var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u)
+        let khr = v == 3
+        var sa = (khr ? khr_cls_set(fmt, fixed_array(dv.wqd, dv.wsd, sc.buf, dv.xfd, dv.yd), sz, gbits5)
+            : cm2_cls_set(fmt, int64(ttile), fixed_array(dv.wqd, dv.wsd, sc.buf, dv.xfd, dv.yd), sz, gbits5))
+        var sb = (khr ? khr_cls_set(fmt, fixed_array(dv.wqd, dv.wsd, sc.buf, dv.xfd, dv.yd_b), sz, gbits5)
+            : cm2_cls_set(fmt, int64(ttile), fixed_array(dv.wqd, dv.wsd, sc.buf, dv.xfd, dv.yd_b), sz, gbits5))
+        let us = timed_chain() $(raw; var _hzs) {
+            for (k in range(DISPATCHES)) {
+                var hz : VkHaz
+                if (khr) {
+                    khr_cls_enc(fmt, raw, hz, k % 2 == 0 ? sa : sb, pc, int64(wgs))
+                } else {
+                    cm2_cls_enc(fmt, int64(ttile), raw, hz, k % 2 == 0 ? sa : sb, pc, int64(wgs))
+                }
+            }
+        }
+        print("{name} {vnames[v]}: {us} us/dispatch  {flop / (us * 1000000.0lf)} TFLOP/s  wgs={wgs}  timing-only\n")
     }
 }
 
@@ -3368,7 +3405,7 @@ def private twin_rounds(body : block<(round, arm, arms : int; tag : string) : vo
 
 //! the per-format arm `a` names - its `<arm>:` prefix, the format name past it - or "" where it names none
 def private fmt_arm_of(a : string) : string {
-    for (pre in fixed_array("cm2:", "cm2d:", "cm2w:", "moe:", "cm2g:", "moesk:", "ts:", "cold:")) {
+    for (pre in fixed_array("cm2:", "cm2d:", "cm2w:", "moe:", "cm2g:", "moesk:", "ts:", "cold:", "kqst:")) {
         return pre if (a |> starts_with(pre))
     }
     return ""
@@ -3501,6 +3538,35 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
             run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} gate@64", 9728, 2560, 64)
             run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} shexp", 512, 2048, 512)
             run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} shdown", 2048, 512, 512)
+        }
+        return
+    }
+    if (only == "kqst:") {
+        if (!g_gpu.has_coopmat2 || g_gpu.coopmat_mode != COOPMAT_CM2 || !khr_kq_tile_on()) {
+            print("kqst:<fmt> races the cm2 stamps against the staged KHR tile: run on a coopmat2 device at subgroup 32 with DASLLAMA_COOPMAT=cm2\n")
+            g_probe_exit = 1
+            return
+        }
+        if (cm2_fmt < 0 || !kq_sb(cm2_fmt)) {
+            print("kqst:<fmt> needs a kq superblock format name ({cm2_fmt_names()})\n")
+            g_probe_exit = 1
+            return
+        }
+        verify(cm2_cls_ensure(cm2_fmt, 256l) && cm2_cls_ensure(cm2_fmt, 128l) && cm2_cls_ensure(cm2_fmt, 32l) && khr_cls_ensure(cm2_fmt),
+            "kqst:<fmt> probe pipelines (the l, m and s stamps, the staged tile) must engage")
+        print("ATTRIBUTION SWEEP kqst:{cm2_fmt_names()}: the cm2 stamps ({g_gpu.decvec_on ? "four-wide decode" : "scalar decode"}) against the staged tile, timing-only rows\n")
+        for (round in range(2)) {
+            //! gemma-4 E2B's role shapes at 512 rows (dim 1536, ffn 6144 and the doubled 12288, q 2048, kv 256, ple 256), then the 4B's
+            run_kqst_shape(cm2_fmt, "r{round} gate     ", 6144, 1536, 512)
+            run_kqst_shape(cm2_fmt, "r{round} gate2x   ", 12288, 1536, 512)
+            run_kqst_shape(cm2_fmt, "r{round} down     ", 1536, 6144, 512)
+            run_kqst_shape(cm2_fmt, "r{round} down2x   ", 1536, 12288, 512)
+            run_kqst_shape(cm2_fmt, "r{round} q        ", 2048, 1536, 512)
+            run_kqst_shape(cm2_fmt, "r{round} wo       ", 1536, 2048, 512)
+            run_kqst_shape(cm2_fmt, "r{round} kv|pgate ", 256, 1536, 512)
+            run_kqst_shape(cm2_fmt, "r{round} ple_proj ", 1536, 256, 512)
+            run_kqst_shape(cm2_fmt, "r{round} 4B gate  ", 9728, 2560, 512)
+            run_kqst_shape(cm2_fmt, "r{round} 4B down  ", 2560, 9728, 512)
         }
         return
     }
