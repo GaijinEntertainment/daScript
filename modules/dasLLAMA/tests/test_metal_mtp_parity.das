@@ -468,7 +468,8 @@ struct RowStats {
     verify_decodes : int64  //!< the Metal decode count across the verify side's batch steps - the plain count's control
 }
 
-def private compare_row(plain, store : array<float>; soff, n : int64; var st : RowStats; tag : string; pos : int64; verbose : bool) {
+//! one row's compare folded into the stats; the row's widest difference back
+def private compare_row(plain, store : array<float>; soff, n : int64; var st : RowStats; tag : string; pos : int64; verbose : bool) : float {
     var mx = 0.0
     for (i in range64(n)) {
         mx = max(mx, nan_wide_diff(plain[i], store[soff + i]))
@@ -485,6 +486,7 @@ def private compare_row(plain, store : array<float>; soff, n : int64; var st : R
             feint("FLIP {tag} pos={pos}: plain {ap} vs verify {av} margin {mg} maxd {mx}\n")
         }
     }
+    return mx
 }
 
 //! one round's verify rows against the plain steps' stored rows: each row compared, its widest difference kept a row
@@ -496,11 +498,7 @@ def private vff_round_rows(store, verify : array<float>; vocab, nr, pos : int64;
         for (v in range64(vocab)) {
             plain[v] = store[i * vocab + v]
         }
-        compare_row(plain, verify, i * vocab, vocab, st, "vrow{i}", pos + i, verbose)
-        var rmx = 0.0
-        for (v in range64(vocab)) {
-            rmx = max(rmx, nan_wide_diff(plain[v], verify[i * vocab + v]))
-        }
+        let rmx = compare_row(plain, verify, i * vocab, vocab, st, "vrow{i}", pos + i, verbose)
         rowmax[i] = max(rowmax[i], rmx)
         if (verbose) {
             to_log(LOG_INFO, "vff round pos={pos + i} row={i} maxd={rmx} plain_top={argmax_of(plain, 0l, vocab)} verify_top={argmax_of(verify, i * vocab, vocab)} margin={top2_margin(plain, vocab)}\n")

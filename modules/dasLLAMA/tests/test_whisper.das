@@ -1417,12 +1417,11 @@ def private check_canary_clip(t : T?; m : AsrModel; wav : string; expected : arr
 //! the Canary pair behind the ASR facade, built in memory with the encoder on its f32 lane - the facade loader would bake a
 //! `.dlim` of each beside the files
 def private mint_asr_canary(dec, enc : string) : AsrModel {
-    var m = AsrModel(kind = AsrKind.canary)
-    m.dec <- load_model_(dec, QuantMode.q8)
-    m.dec.config.seq_len = min(m.dec.config.seq_len, 8192l)
+    var d <- load_model_(dec, QuantMode.q8)
     var inscope stg <- stage_canary_encoder(enc, false)
-    mint_canary_encoder(stg, m.cenc)
-    return <- m
+    var e = CanaryEncoder()
+    mint_canary_encoder(stg, e)
+    return <- canary_asr_model(d, e, dec)
 }
 
 [test]
