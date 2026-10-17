@@ -137,7 +137,18 @@ least 9), any other row the median. Vulkan: `./bin/daslang -jit modules/dasLLAMA
   builders past the slab reads 8.76 / 9.00 at 5376 and 12.62 / 12.94 at 8192 for the seam, slower than the split chain at
   8192. A bench stamp whose slab holds the 31B's whole row (`BenchPreAddRmsWide`, 5376 floats) reads with the re-read
   form at the 256-lane decode rows (8.76 / 8.98) and 55.35 against 58.94 on the window, under a tenth of a percent of a
-  window, so the stamps keep the one slab.
+  window, so the stamps keep the one slab. A second run of the bench at b4b207a287 (the same knobs) times the low end of the
+  range past the slab, the window's plain step and the decode rows' f16-twin stamps (`enc_preaddrms_bhxw_c`,
+  `enc_add_rms_bhxw_c`, which a rows site carrying the twin dispatches), one dispatch against the split chain, us: the seam at
+  4608 7.13 / 7.21 against 9.26 / 9.52 and 49.10 against 101.4 on the window, at 5120 7.40 / 7.50 against 9.48 / 9.83 and
+  55.05 against 116.0 (the four-row 7.50 a repeat run's, the first VOID at cv 4 %); the no-norm seam at 4608 4.23 / 4.30 against 5.09 / 5.37 and 33.83 against 70.17, at 5120 4.39 / 4.49
+  against 5.26 / 5.54 and 37.62 against 78.30; the plain step at 4608 4.10 / 4.17 against 5.12 / 5.35, at 5120 4.27 / 4.33
+  against 5.27 / 5.51; the window's plain step 43.90, 49.19, 52.60 and 114.9 at 4608, 5120, 5376 and 8192 against 73.88,
+  83.07, 87.29 and 136.8. With the twin the seam reads 7.12 / 7.21 against 9.29 / 9.52 at 4608, 7.41 / 7.50 against 9.61 /
+  9.93 at 5120, 7.48 / 7.58 against 9.66 / 9.98 at 5376 and 8.56 / 8.71 against 10.83 / 11.33 at 8192, and the plain step
+  4.33 / 4.41 against 5.14 / 5.33, 4.54 / 4.60 against 5.31 / 5.53, 4.55 / 4.64 against 5.35 / 5.58 and 5.28 / 5.40 against
+  5.97 / 6.38 at the same widths; the 256-lane builders past the slab read slower than the 1024-lane ones at every width
+  and form, with the twin and without.
 - **The Vulkan MoE step stores its next norm four elements in flight a lane** (`GkMoeCombG4.OUT_X4`, the residual step's
   `GkQ8BlockStore.store_x4` form, which the residual step's `ArBase` stores through): the pod reads 10.37 us with it against
   12.29 with the stride loop (`ProbeArCombG4X1`), `debug-jit`.
