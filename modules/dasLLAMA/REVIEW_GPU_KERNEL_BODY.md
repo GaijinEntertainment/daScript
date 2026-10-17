@@ -14,8 +14,9 @@ push constant, uniform or kargs (kernel-argument struct) field.** A host-fixed b
 or branch inside the main loop whose deciding value the host fixes before it records the dispatch:
 a bounds guard, a tail guard, a nested loop's own bound, or an `[unroll]` count whose live
 iterations run different bodies - the main loop's own trip count is not one. A per-call extent is
-a value the builder takes per dispatch - a `params=` name or a kargs field - that neither the
-kernel's `requires=` contract nor a `@template_constant` fixes to one value. The main loop is a
+a value the builder takes per dispatch - a `params=` name or a kargs field - that sizes or bounds
+the work (a count, a base, a stride) and that neither the kernel's `requires=` contract nor a
+`@template_constant` fixes to one value; a mode flag is not an extent, however it arrives. The main loop is a
 loop whose trip count grows with the work one thread does, per element or per row.
 
 **A host-fixed main-loop branch whose deciding value is a per-call extent is never stamped (baked
@@ -45,10 +46,10 @@ row's bytes.
 
 **A diff that adds or changes host code that declines misaligned shapes before dispatching a
 kernel whose addressing assumes an alignment of a value its builder receives gates each dispatch
-site of that kernel on
-that site's own K - the extent the kernel's fixed-size chunk steps along, in a loop or across
-invocations; one gate shared by several sites conforms only when it tests every one of those
-sites' K.**
+site of that kernel on that site's own K - the extent the kernel's fixed-size chunk steps along, in
+a loop or across invocations; one gate shared by several sites conforms only when it tests every one
+of those sites' K.** Routing a misaligned shape to another stamp that serves it declines it for the
+first stamp.
 
 **A site's alignment gate on a value that site uses only as its K divides by the chunk its
 kernel steps along K, or by the multiple of that chunk the site's split of K across dispatches
@@ -74,9 +75,9 @@ stream it from device instead.** A dequant, a transpose, or a layout or element-
 makes the forms differ. A staged pass-through costs the op more than the reads it saves.
 
 **A loop that fills a `@workgroup` tile computes each lane's tile address - where the lane writes
-in the tile - from the lane's own slot index (the index that steps by one from lane to lane) and
-compile-time constants alone, as a consecutive run of elements per lane or a lane-coalesced stride
-(`i += 32`), never from a div or mod of another run-time value; an `[unroll_full]` loop's counter
+in the tile - from the lane's own slot index (the index that steps by one from lane to lane),
+compile-time constants and the threadgroup size alone, as a consecutive run of elements per lane or
+a lane-coalesced stride (`i += 32`, `i += tg`), never from a div or mod of another run-time value; an `[unroll_full]` loop's counter
 is a compile-time constant once unrolled, and the divisor may be a run-time value.**
 
 **Never decide a row's validity or owner in the bucket-ordered buffer (the routed rows sorted so
@@ -102,10 +103,10 @@ calls its `wg_sum`, `wg_max` or `wg_rms_inv`; a class template in
 separate sums over parts of the workgroup - is not one value; `ARCHITECTURE_GPU.md#gpu-backends`
 names the bodies that fold that way.
 
-**A diff that adds or changes a Metal kernel body that can run one fold call on a `@workgroup`
-array after another on the same array - two calls to `tg_sum_all` / `tg_max_all` or a
-`MetalTgReduceBase` fold method in sequence, or one such call inside a loop - puts a `barrier()`
-between them.**
+**A diff that adds or changes a Metal kernel body that runs one fold over `@workgroup` slots after
+another over the same slots - two `tg_sum_all` / `tg_max_all` calls, two `MetalTgReduceBase` or
+`GkWgReduce` fold methods, or one such call inside a loop - puts a `barrier()` between them; folds
+over disjoint slots need none.**
 
 **Never put an op every lane of its exchange set must reach together - a `barrier()`, a simdgroup
 matrix op, a subgroup shuffle, vote, ballot or reduction, or a call to a function that runs one,
@@ -126,8 +127,9 @@ padding duty. A walk that rounds the extent up to whole chunks reads past the
 live extent, and one read of stale bytes in a shared tile corrupts real rows.
 
 **An encoder that dispatches a kernel form whose `@workgroup` stage is sized by a literal, and
-indexed by a host-chosen count or base offset, declines a shape larger than that literal in the
-dispatching code before the dispatch is recorded.** Workgroup memory has no bounds check, so an
+indexed by a host-chosen count or base offset that can reach past the literal - no guard in the
+body clamps the index under it - declines a shape larger than that literal in the dispatching code
+before the dispatch is recorded.** Workgroup memory has no bounds check, so an
 index past the literal reads or writes another stage's bytes.
 
 **Never let a pad row that feeds the reduction of a live output row - a pad along the reduction
