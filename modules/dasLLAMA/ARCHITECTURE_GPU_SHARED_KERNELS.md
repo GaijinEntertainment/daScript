@@ -110,7 +110,10 @@ least 9), any other row the median. Vulkan: `./bin/daslang -jit modules/dasLLAMA
   The window's stamps run 256 lanes and the decode builders 1024. At 512 rows on the f16 twin's pipeline the seam reads 27.54
   us at 256 lanes against 34.95 at 128 and 52.71 at 1024 (dim 2560), 40.39 against 53.98 and 59.85 (dim 3840). At the decode
   rows on the plain pipeline, dim 3840, 1024 lanes reads 6.67 / 6.74 us at one / four rows against 256's 6.68 / 6.87 and 128's
-  11.19 / 11.61; at dim 2560 256 lanes reads 4.87 / 5.09 against 1024's 6.14 / 6.30 (128: 7.81 / 8.13).
+  11.19 / 11.61; at dim 2560 256 lanes reads 4.87 / 5.09 against 1024's 6.14 / 6.30 (128: 7.81 / 8.13); at dim 1152
+  256 lanes reads 3.24 / 3.37 against 1024's 5.76 / 5.83 (128: 4.25 / 4.41). The fused seam stages a row through a
+  4096-float threadgroup slab (`MetalAddRmsT.SLAB`), so a row wider than that - the 31B's 5376 - takes the split
+  chain (the rms, then the add and the next norm) at every seam, and the race holds no fused arm at that width.
 - **The Vulkan MoE step stores its next norm four elements in flight a lane** (`GkMoeCombG4.OUT_X4`, the residual step's
   `GkQ8BlockStore.store_x4` form, which the residual step's `ArBase` stores through): the pod reads 10.37 us with it against
   12.29 with the stride loop (`ProbeArCombG4X1`), `debug-jit`.

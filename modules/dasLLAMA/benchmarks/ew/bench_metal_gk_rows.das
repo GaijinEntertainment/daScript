@@ -51,7 +51,7 @@ require math
 //   decode row and the window (`g4_tail_race`): the stream rows;
 // - the select with and without the down-scale arm, no row named
 //   (`select_ds_race`): the picks, then their weights;
-// - the residual step at 1152, 2560, 3840 and 5376 (`ar_race`): the plain add +
+// - the residual step at 1152, 2560 and 3840 (`ar_race`; the 4096-float slab caps the fused seam, a wider row takes the split chain): the plain add +
 //   norm (one arm), the sandwich seam and its no-norm form as one
 //   dispatch against the rms and the add (+ norm): the stream rows and,
 //   where the step stores one, the f32 next norm;
@@ -1158,7 +1158,7 @@ def private seam_lane_rows : array<Reading> {
         return <- rows
     }
     rows |> reserve(18)
-    for (dim in fixed_array(1152, 2560, 3840, 5376)) {
+    for (dim in fixed_array(1152, 2560, 3840)) {   //! the fused seam serves rows up to its 4096-float slab; a wider row (the 31B) takes the split chain
         seam_lane_race(dim, 1, false, rows)
         seam_lane_race(dim, 4, false, rows)
         seam_lane_race(dim, 512, true, rows)
@@ -1388,7 +1388,7 @@ def private ar_race(dim, np : int; form : ArForm; var rows : array<Reading>) {
 def private ar_rows : array<Reading> {
     var rows : array<Reading>
     rows |> reserve(40)
-    for (dim in fixed_array(1152, 2560, 3840, 5376)) {
+    for (dim in fixed_array(1152, 2560, 3840)) {   //! the fused seam serves rows up to its 4096-float slab; a wider row (the 31B) takes the split chain
         for (np in fixed_array(1, 4)) {
             ar_race(dim, np, ArForm.plain, rows)
         }

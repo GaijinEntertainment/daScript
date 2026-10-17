@@ -1025,3 +1025,12 @@ round apart from the decode step's at a near-tie; the scheduler keeps the step. 
 work: one dispatch a layer over every segment - a segment table the attention tiles and the scan read their row range,
 key extent and slices from, the batched decode's route-table shape lifted to tiles - so a segment costs its rows alone;
 then the rider is a one-row segment of a window that is no stall.
+
+## 54. The 31B's sandwich seams run the split chain, not the fused dispatch
+
+The fused residual seam (`GkAddRmsRows.PRE`, one dispatch: the branch's post norm, the add, the next norm) stages a row
+through a 4096-float threadgroup slab (`MetalAddRmsT.SLAB`), so a 5376-wide row - the gemma-4 31B's - takes the split chain
+at every seam of every decode step and window. The lever is a seam that serves a row wider than the slab (a two-pass norm
+over a strided stash, or a wider slab on a device that affords it), raced against the split chain at dim 5376 the way the
+other widths are (`ARCHITECTURE_GPU_SHARED_KERNELS.md#gpu-shared-kernels`, the seam bullet). Instrument: `bench_metal_gk_rows`'s
+seam race, which holds no fused arm past the slab today.
