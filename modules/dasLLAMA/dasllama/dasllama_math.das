@@ -207,7 +207,7 @@ def get_jobque_spin_in_force_() : int64 => g_dispatch_gpu_served ? g_jobque_spin
 
 def public get_dispatch_gpu_served() : bool => g_dispatch_gpu_served
 
-[arch(at="../ARCHITECTURE_RUNTIME.md#browser-workers-spin")]
+[arch(at="../ARCHITECTURE_RUNTIME_JOBQUE.md#browser-workers-spin")]
 def public set_dispatch_gpu_served(on : bool) {
     g_dispatch_gpu_served = on
     if (is_job_que_available()) {
@@ -309,7 +309,7 @@ def private register_trace_categories() {
 //! Configure the job queue for dasLLAMA's pure fork/join matmul dispatch: pooled fork contexts,
 //! batched dispatch, spin-before-park window, join-poll level. Call INSIDE `with_job_que` (or
 //! after `create_job_que`) — the queue must exist. Engine spelling of `setup_dasllama_jobque`.
-[arch(at="../ARCHITECTURE_RUNTIME.md#browser-workers-spin")]
+[arch(at="../ARCHITECTURE_RUNTIME_JOBQUE.md#browser-workers-spin")]
 def setup_dasllama_jobque_() {
     set_jobque_fork_pool(true, true)
     set_jobque_batch_dispatch(true)
@@ -338,7 +338,7 @@ def with_dasllama_jobque_(blk : block<void>) {
     }
 }
 
-[init, arch(at="../ARCHITECTURE_RUNTIME.md#hybrid-pool-policy")]
+[init, arch(at="../ARCHITECTURE_RUNTIME_JOBQUE.md#hybrid-pool-policy")]
 def dasllama_jobque_threads_cap() {
     if (get_running_platform_name() == "emscripten") {   // a browser's core count can be a fingerprint cap of 2: the runtime's floor and cap size the pool there
         return
@@ -452,14 +452,14 @@ def public get_phase_decode_workers() : int => g_phase_decode_workers
 def private phase_parking_armed() : bool =>
     g_phase_decode_workers >= 0 && g_dispatch_worker_limit <= 0 && is_job_que_available() && !get_single_thread_()
 
-[arch(at="../ARCHITECTURE_RUNTIME.md#hybrid-pool-policy")]
+[arch(at="../ARCHITECTURE_RUNTIME_JOBQUE.md#hybrid-pool-policy")]
 def public dispatch_phase_decode {
     if (phase_parking_armed()) {
         set_jobque_worker_limit(g_phase_decode_workers)
     }
 }
 
-[arch(at="../ARCHITECTURE_RUNTIME.md#hybrid-pool-policy")]
+[arch(at="../ARCHITECTURE_RUNTIME_JOBQUE.md#hybrid-pool-policy")]
 def public dispatch_phase_batch {
     if (phase_parking_armed()) {
         set_jobque_worker_limit(-1)
@@ -469,7 +469,7 @@ def public dispatch_phase_batch {
 //! A CPU encode is batch-shaped work: a tower/ASR encode entry calls this with its row count
 //! so a preceding decode's parked pool wakes for it; under 32 rows the slow tier cannot fill
 //! past the dispatch grain, so short encodes keep the parked pool (the prefill guard's shape).
-[arch(at="../ARCHITECTURE_RUNTIME.md#hybrid-pool-policy")]
+[arch(at="../ARCHITECTURE_RUNTIME_JOBQUE.md#hybrid-pool-policy")]
 def public dispatch_phase_encode(rows : int64) {
     if (rows >= 32l) {
         dispatch_phase_batch()

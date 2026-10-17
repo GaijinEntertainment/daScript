@@ -1,7 +1,8 @@
 # dasLLAMA Architecture - the prepared-image rail
 
 Companion to `ARCHITECTURE.md`; a section is cited by its anchor. The vulkan lane's mint off the gguf is
-`ARCHITECTURE_IMAGE_VULKAN.md`.
+`ARCHITECTURE_IMAGE_VULKAN.md`; the rail's ledgered cases - the drafter's non-image lane and the suite cells that mint an
+image by design - are `ARCHITECTURE_IMAGE_LEDGER.md`.
 
 ### There is ONE way to load a model {#there-is-one-way-to-load-a}
 
@@ -169,7 +170,7 @@ to a runtime one. The first served prefill seeds the resident-panel cache with z
 and holds no dedicated memory; sites the bake does not cover (q51 - the dev-W route has no
 dequant kernel for it - and owned gguf loads) stay on the runtime path, resident under
 `DASLLAMA_METAL_DEVW_RESIDENT` or scratch. Which form a site's prefill takes under the lever, and
-why the default is a per-window scratch panel rather than a stored one, is `ARCHITECTURE_GPU_PREFILL.md#devw-panel-knees`.
+why the default is a per-window scratch panel rather than a stored one, is `ARCHITECTURE_GPU_PREFILL_GEMM.md#devw-panel-knees`.
 
 The bake set is the minting PROGRAM's, not the box's: the split-scale formats bake only where
 the Metal prefill module registered its mirror, so a program on the same box whose module graph
@@ -223,14 +224,6 @@ path would re-save over each other forever. Because the fold changes the path, t
 needed no `IMAGE_VERSION` bump: no image at an unchanged path changed content. The fold lives in
 the path and not yet in the baked identity string (`followup_general.md` #99), so two different
 heads on one trunk share the lane and re-bake each other.
-
-### The assistant drafter is a ledgered non-image lane {#drafter-non-image-lane}
-
-**The gemma-4 assistant drafter (`dasllama_mtp_gemma.das`) reads its Q8_0 sidecar straight into
-its own blob and never mints a `.dlim`.** The sidecar is 440 MiB, its Q8_0 blocks are already the
-34-byte form the Metal encoder uploads unrepacked, and the copy takes a fraction of a second - an
-image would shorten nothing. The lane is optional (no sidecar, no drafter) and invisible to
-`dasllama-convert`'s list and GC by design.
 
 ### The layout stamp is one hash over the code that places bytes {#image-layout-stamp}
 

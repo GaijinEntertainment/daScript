@@ -2,14 +2,12 @@
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 docs: `ARCHITECTURE.md`, `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_ENGINE_SERVING.md`,
-`ARCHITECTURE_ENGINE_FORMATS.md`, `ARCHITECTURE_GPU.md`, `ARCHITECTURE_MEDIA.md`,
-`ARCHITECTURE_TTS.md`, `ARCHITECTURE_POCKET.md`. Planned work: `followup_general.md`,
-`followup_vulkan.md` for Vulkan, `followup_metal.md` for Metal.
+`ARCHITECTURE_ENGINE_FORMATS.md`, `ARCHITECTURE_GPU.md`, `ARCHITECTURE_GPU_SHARED_KERNELS.md`,
+`ARCHITECTURE_MEDIA.md`, `ARCHITECTURE_TTS.md`, `ARCHITECTURE_POCKET.md`. Planned work:
+`followup_general.md`, `followup_vulkan.md` for Vulkan, `followup_metal.md` for Metal.
 
-A charter line is the one line saying what a file under `dasllama/` holds: in
-`ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_ENGINE_SERVING.md`, `ARCHITECTURE_ENGINE_FORMATS.md`,
-`ARCHITECTURE_MEDIA.md`, `ARCHITECTURE_TTS.md` or `ARCHITECTURE_POCKET.md`
-(`ARCHITECTURE.md#file-charters` names which), or a role row or a file bullet of
+A charter line is the one line saying what a file under `dasllama/` holds: in the companion
+`ARCHITECTURE.md#file-charters` lists for that file, or a role row or a file bullet of
 `ARCHITECTURE_GPU.md#gpu-backends`.
 
 **A per-file inventory restated in this checklist is a defect of the checklist.** The charter
@@ -46,7 +44,8 @@ state, lands in `dasllama/dasllama_vulkan_classes.das`; a stamp selector it is h
 naming the stamp, such as a variant ordinal - is one of those arguments.** A stamp is one class
 stamped from a kernel class template.
 
-**A Vulkan predicate over shape values alone lands in `dasllama/dasllama_vulkan_classes.das`,
+**A Vulkan predicate over shape values alone (a model's dims, row counts and formats - nothing read
+off a device) lands in `dasllama/dasllama_vulkan_classes.das`,
 whichever file calls it.**
 
 **A Vulkan host-side ensure/set/encode chain whose pick reads driver state - `g_rd`, or an
@@ -65,8 +64,11 @@ function moves the chain with it.**
 **A kernel-side helper - a free `def` outside any class that a kernel body calls - that one
 backend's kernels splice lands in that backend's kernel file (`dasllama/dasllama_metal_kernels.das`,
 `dasllama/dasllama_vulkan_classes.das`); one that both backends' kernels splice and that reads no
-codebook table lands in `dasllama/dasllama_gpu_math.das`, never as a copy per home; a method of a
-class template both homes stamp lands with its template.**
+codebook table lands once, never as a copy per backend: in
+`dasllama/dasllama_gpu_kernels_common.das` when it carries `[spirv_inline]`, in
+`dasllama/dasllama_gpu_math.das` otherwise.**
+
+**A method of a class template both backends stamp lands with its template.**
 
 **A disk-order -> compute-order transform lands by its consumer: a transform into the layout
 the CPU kernels read row by row in `dasllama/dasllama_repack.das`, a transform into the layout a
@@ -83,7 +85,7 @@ tokenizer's own file (`dasllama/dasllama_spm.das` / `dasllama/dasllama_bpe.das`)
 `[metal_dispatch]` or `[vk_dispatch]` declares) picks one variant of - lands in its backend's
 kernel file, `dasllama/dasllama_metal_kernels.das` or `dasllama/dasllama_vulkan_classes.das`, where
 one backend stamps it, and as a `class template` in `dasllama/dasllama_gpu_kernels_common.das` where
-both do (`ARCHITECTURE_GPU.md#gpu-shared-kernels`).** A
+both do (`ARCHITECTURE_GPU_SHARED_KERNELS.md#gpu-shared-kernels`).** A
 class stamped from a template declared elsewhere is not a kernel body: it compiles its own
 pipeline where it is stamped.
 
@@ -95,8 +97,8 @@ call - lands in a tier file,
 `register_kernel_backend` call in another tier file names, or that two tier files' calls name,
 lands in `dasllama/dasllama_math_default.das`.**
 
-**A branch - one arm of an `if` or a `match` - only one model family takes lands in that family's
-own file (`dasllama/dasllama_arch_<name>.das` for a text model, `dasllama/dasllama_<family>.das`
+**A branch - one arm of an `if` or a `match` - that only one model family takes, in a file whose
+charter line names no concern of that family, lands in that family's own file (`dasllama/dasllama_arch_<name>.das` for a text model, `dasllama/dasllama_<family>.das`
 for a media or speech model).**
 
 **Engine code - a `dasllama/` file in no row of the role table of

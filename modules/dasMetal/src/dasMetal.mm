@@ -8,6 +8,7 @@
 
 #import <Metal/Metal.h>
 #import <Foundation/Foundation.h>
+#include <mach/mach.h>
 
 #include <atomic>
 #include <mutex>
@@ -301,8 +302,10 @@ namespace das {
 
     void * metal_buffer_contents ( MetalBuffer * buf, Context * ctx, LineInfoArg * at ) {
         if ( !buf ) ctx->throw_error_at(at, "metal_buffer_contents: null buffer");
-        id<MTLBuffer> b = (__bridge id<MTLBuffer>)(void *) buf;
-        return b.contents;
+        @autoreleasepool {
+            id<MTLBuffer> b = (__bridge id<MTLBuffer>)(void *) buf;
+            return b.contents;
+        }
     }
 
     // ===== dispatch =====
@@ -674,6 +677,13 @@ namespace das {
         release_handle(h);
     }
 
+    uint64_t metal_process_footprint () {
+        task_vm_info_data_t info;
+        mach_msg_type_number_t count = TASK_VM_INFO_COUNT;
+        if ( task_info(mach_task_self(), TASK_VM_INFO, (task_info_t) &info, &count) != KERN_SUCCESS ) return 0;
+        return info.phys_footprint;
+    }
+
     int64_t metal_live_object_count () {
         return g_metalLiveObjects.load(std::memory_order_relaxed);
     }
@@ -881,6 +891,8 @@ namespace das {
             addExtern<DAS_BIND_FUN(metal_release_residency_set)>(*this, lib, "metal_release",
                 SideEffects::modifyExternal, "metal_release_residency_set")->args({"handle"});
 
+            addExtern<DAS_BIND_FUN(metal_process_footprint)>(*this, lib, "metal_process_footprint",
+                SideEffects::modifyExternal, "metal_process_footprint");
             addExtern<DAS_BIND_FUN(metal_live_object_count)>(*this, lib, "metal_live_object_count",
                 SideEffects::modifyExternal, "metal_live_object_count");
             addExtern<DAS_BIND_FUN(metal_live_object_report)>(*this, lib, "metal_live_object_report",

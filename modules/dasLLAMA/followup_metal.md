@@ -67,7 +67,7 @@ activation planes (norms, residual adds, rope, swiglu, activation converts, glue
 slice: ~1.7 ms.
 
 **What already exists** - the producer-fused f16 twin family (`_hx`): `pf_enc_rms_hx`,
-`pf_enc_add_rms_bhx` (add+norm+half-emit in one), `enc_swiglu_hx`/`enc_geglu_hx`,
+`pf_enc_add_rms_bhx_c` / `enc_preaddrms_bhx_c` (add+norm+half-emit in one, the sandwich seam too), `enc_swiglu_hx`/`enc_geglu_hx`,
 `enc_qk_rope_hx`. On the dense path these cover the norm and activation producers; the
 standalone `tw_half` fires only through `pf_cvt_panel` fallbacks and at the sites below.
 Measured ceiling of ALL remaining converts (`DASLLAMA_METAL_PREFILL_SKIP=act_cvt` knockout on
@@ -105,7 +105,7 @@ zoo. Facts that decide the order:
   `REVIEW_GPU_KERNEL_CLASSES.md`); the f4-slab GEMV crowns `MetalKqGemvIq3sF4` / `Iq3xxsF4` /
   `Iq2xxsF4` and `MetalKqGemvK5C` beside `K5T` (per-box crowns with their numbers,
   `ARCHITECTURE_GPU_QUANT_PLANES.md#metal-iquant-gemv-grid`); the `*Db` double-buffered shells beside the
-  single-tile shells (`ARCHITECTURE_GPU_PREFILL.md#prefill-gemm-ladder` carries the measurement); the
+  single-tile shells (`ARCHITECTURE_GPU_PREFILL_GEMM.md#prefill-gemm-ladder` carries the measurement); the
   compact-kargs and unread-bind asymmetries (`ARCHITECTURE_GPU.md#gpu-backends`); the four dense
   mul_mm shells (`MetalF32MulMm` xf/y at 1/2, `MetalQ8MulMm` and `MetalBf16MulMm` at 2/3,
   `MetalKqMulMmK45T` at 3/4, the MoE base's kargs at 5); the codebook grid
@@ -155,7 +155,7 @@ zoo. Facts that decide the order:
 
 The nine iquant/split-scale tensor mul_mm twins stamp `T` and `TH` only. k4/k5/k6 additionally
 carry the tall (`TH128`) and double-buffered (`THDb`, `THDb128`) stamps, and that is where the
-tall in-kernel-dequant win lives (`ARCHITECTURE_GPU_PREFILL.md#prefill-gemm-ladder` form 1). Race a tall
+tall in-kernel-dequant win lives (`ARCHITECTURE_GPU_PREFILL_GEMM.md#prefill-gemm-ladder` form 1). Race a tall
 stamp for the iquant scaffold before assuming the k6 result transfers; the arc-end matrix's
 soft spot is the deep-K w2 column (k6 0.91x / iq3s 0.88x / iq3xxs 0.92x vs llama.cpp on m5),
 which is exactly the column a tall stamp serves.
@@ -263,7 +263,7 @@ The three iquant rows are re-times: the sweep first read them 0.91, 0.93 and 0.8
 IQ3_XXS stop), every split-scale site on the staged mul_mm stamp that re-dequantizes W per
 32-row tile, while the K-quant twin rode the image's baked dev-W panels. The nine split-scale
 formats now carry a dev-W dequant pass on their tensor class and bake into the image's
-`devwf16` plane (IMAGE_VERSION 37, `ARCHITECTURE_GPU_PREFILL.md#prefill-kq-tensor-scaffold`): 1.05 on the
+`devwf16` plane (IMAGE_VERSION 37, `ARCHITECTURE_GPU_PREFILL_GEMM.md#prefill-kq-tensor-scaffold`): 1.05 on the
 scratch route, the rows above resident. The IQ2_XS file skips "19" on llama.cpp too; its
 fixture is frozen off that file. The 40-token tg128 reads on a 1B move +-10% between cool
 slots (the IQ2_XXS 1.09 / 1.26 / 1.30 across three re-times); the pp512 reads hold to 1%.
@@ -418,7 +418,7 @@ as `DASLLAMA_METAL_WAIT_SPIN` (`ARCHITECTURE_GPU_MTP_DECODE.md` 2.38): decode 0.
 0.96 -> 1.03 (1.5B), 0.95 -> 1.00 (Llama Q8), 0.93 -> 1.00 (Llama Q4_K_M).
 
 The fourth: **the 128-row tall stamps lose on this GPU** (Llama-1B 5%, the 30B 1%, the 9B
-even) and open only behind the `hmm_tall` crown the mint races (`ARCHITECTURE_GPU_PREFILL.md`,
+even) and open only behind the `hmm_tall` crown the mint races (`ARCHITECTURE_GPU_PREFILL_GEMM.md#prefill-gemm-ladder`,
 the occupancy-floor paragraph); the M5's sidecars carry the crown by hand until its next mint.
 The table above is the family under all four.
 
@@ -440,12 +440,11 @@ mechanisms landed on the way:
   the prefill's device pre-step gate at one position; the Metal gate answered yes, the CPU pre-step
   was skipped, and the Metal decode copied the unfilled host rows - every E-series q8 file served
   garbage from the second token on both boxes. The gate is now two seats, one per direction
-  (`register_ple_gpu_decode_gate`), and Metal registers the prefill one alone (sec.13 is the
-  decode-side gather).
+  (`register_ple_gpu_decode_gate`).
 - **The k4/k5/q40 PLE token tables gather on device.** The prefill's GPU pre-step took q8 tables
   only; every other table fell to the serial CPU gather, and the E2B Q4_0 and Q4_K_M files
-  prefilled at 0.49 and 0.51 of llama.cpp on the M5. `MetalPleGatherKqT` stamps the three formats
-  off their native planes; the rows below read 1.11 and 1.18.
+  prefilled at 0.49 and 0.51 of llama.cpp on the M5. The token-table gather family (`MetalEmbed*`)
+  reads them off their native planes; the rows below read 1.11 and 1.18.
 - **The dev-W bake left the expert stacks in.** gemma-4 splits its fused expert stacks per expert
   at load, every slice passed the bake's format-and-size predicate, and a 26B image carried 32 GB of
   panels the routed block never reads (47 GB, an eight-minute bake). The bake refuses expert
@@ -507,9 +506,9 @@ fixture flips at token 21 on a 0.03-logit near-tie the Metal chain lands on with
 (the k5 tensor twin holds the double-precision oracle at the production width - the kernel cells
 now run kdim 3840); the token gate is no instrument for that row (`followup_general.md` row 151,
 the fixture margin floor). (b) The routed block serves thirteen expert-plane formats, q40 among
-them: the ggml-org Q4_0 26B carries q40 fused gate_up stacks beside q8 down stacks (a 704-wide
-down row is no multiple of 256, so the loader demotes that plane) and runs the routed block on
-both boxes through the q40 split twins and the q40 expert GEMV. (c) The Google QAT file is the ggml-org checkpoint's twin (its scale tensors are
+them: the ggml-org Q4_0 26B carries q40 fused gate_up stacks beside 704-wide Q4_0 down stacks, which
+serve in their per-32 form (q4032), and runs the routed block on both boxes through the q40 split twins, the q40
+expert GEMV and the q4032 routed stamps. (c) The Google QAT file is the ggml-org checkpoint's twin (its scale tensors are
 byte-identical; only the token table's format and the Q4_0 rounding differ) and diverges on the
 CPU kq-native rails at one token: a top-8 router pick at layer 29 on an 8e-5 margin, which the
 arm64-sdot backend lands the other way - the CPU pregate refuses the file, so its rows stay
@@ -570,16 +569,6 @@ wants the row form at n=2048 and d=4096 where the M5 wants the split (sec.9). Un
 two-axis pick over n and d, raced per box in `metal_tensor_race_decode` at both the projection
 and the classifier widths. The bar is no loss on either box.
 
-## 13. The Metal decode builds the E-series PLE side input on the CPU
-
-The Metal decode reads the side input `ple_pre_decode` builds on the host - the token row's
-gather plus the model_proj GEMV (E2B 1536x8960 bf16, E4B 27 MB) and its norm - between the step
-wait and the next commit, while the Vulkan token command gathers the row and projects on device
-(`register_ple_gpu_decode_gate`). Unquirked: a decode-side twin of the prefill's `MetalPleGatherQ8`
-+ `pf_enc_bf16_mm` + `MetalPleFinish` chain at one position, registered as the Metal decode gate.
-The bar is our own E-series tg128 rows of sec.7.2 not regressing on either box (no reference-build
-run: the ratio to llama.cpp is sec.7.2's, re-taken through its rig), the served-pipeline fixture green.
-
 ## 14. The MoE expert mul_mm f32-X (`t`) form has no model-less cell in any format
 
 `moe_split_twin` in `tests/test_metal_gemm_kernels.das` stamps `th`, `th128` and `thr` only, so
@@ -594,11 +583,9 @@ uses. The bar is the eight `*T` entries of `CENSUS_NEVER_DISPATCHED` in
 ## 15. Metal review gates found the shape of
 
 (a) A `REVIEW.das` check that reads every per-format dispatch ladder in
-`dasllama/dasllama_metal_kernels.das` and `dasllama/dasllama_metal_prefill.das` (twelve today -
+`dasllama/dasllama_metal_kernels.das` and `dasllama/dasllama_metal_prefill.das` (nine today -
 `enc_kq_gemv`, `enc_kq_mvb`, `enc_kq_gemm_mm_b`, `enc_moe_gemv`, `pf_kq_dq_pso`,
-`pf_moe_kq_row`, `pf_moe_th_pso`, `pf_enc_kq_dq`, `pf_kq_dense_stamps`, plus the PLE pre-step's
-pair `ple_gather_pso_of` and `pf_enc_ple_gather_fmt`, whose format sets must agree with each
-other and with the gate's alignment arm) against the served-format predicates
+`pf_moe_kq_row`, `pf_moe_th_pso`, `pf_enc_kq_dq`, `pf_kq_dense_stamps`) against the served-format predicates
 (`kq_fmt_gpu_supported`, `moe_fmt_metal_served`, `moe_site_ok` in
 `dasllama/dasllama_metal_shapes.das`; `pf_kq_split_fmt` and the rows `pf_moe_kq_row` returns in the prefill) and
 reports an arm whose format no predicate serves - today the ladders' `panic` default arms are the
@@ -630,17 +617,6 @@ kargs uniform instead of a clone, so materializing the builder's function type r
 a class that binds a kargs uniform is un-addressable; the split pickers table only because their
 classes pass scalars through `params=`. The fix is a cloned parameter type in the lens; the table
 follows, and the sec.15(a) gate then reads one table.
-
-## 19. The batched and rows w13sw kernels have no activation axis
-
-`MetalQ8GemvW13SwT.put_act` branches on the `act` uniform between `msl_silu_mul` and
-`msl_geglu_mul`; the batched family (`enc_gemv_w13sw_b`, `enc_gemv_w13sw_rows`) binds no `act`
-and computes SiLU only. Every live caller is SiLU today: the dense batch gates `fuse13` off
-under geglu, the MTP verify declines non-silu, and gemma's shared expert is the
-`moe_dense_shexp` form through `enc_geglu`, so no gelu architecture reaches the `u_moe_nsh`
-path. A gelu MoE with a loaded `n_ff_shexp` would compute its shared expert with the wrong
-activation; the fix is the `act` binding on the batched family, the same uniform the single-row
-form takes.
 
 ## 20. The mv shells' per-format decode cannot cross a free-function boundary
 
@@ -964,7 +940,7 @@ the route and the tiles at 8, 32, 64 and 128 tokens on the M1 Max and the M5 Max
 ## 48. The dense K-quant sites keep the tile from nine rows up
 
 A dense K-quant or grid-format projection rides the decode's row-batched GEMV forms on a window of eight rows or fewer
-(`ARCHITECTURE_GPU_PREFILL.md#gemv-tail-peel`) and the 32-row mul_mm tile from nine rows up, remainder included - the
+(`ARCHITECTURE_GPU_PREFILL_GEMM.md#gemv-tail-peel`) and the 32-row mul_mm tile from nine rows up, remainder included - the
 q8 blob's peel takes the remainder off a padded tile, the K-quant sites' takes the whole window or nothing. A window of
 9 to 31 rows on Qwen3.6-27B Q4_K_M pays the tile's floor on the M1 Max - 235 to 282 ms, 3.6 decode steps, flat across
 the band - and 80 ms on the M5 Max's tensor twins (`debug-jit`, the window probe; the board row is the metal pp512 cell of
@@ -1049,3 +1025,39 @@ round apart from the decode step's at a near-tie; the scheduler keeps the step. 
 work: one dispatch a layer over every segment - a segment table the attention tiles and the scan read their row range,
 key extent and slices from, the batched decode's route-table shape lifted to tiles - so a segment costs its rows alone;
 then the rider is a one-row segment of a window that is no stall.
+
+## 54. The 31B's sandwich seams run the split chain, not the fused dispatch
+
+The fused residual seam (`GkAddRmsRows.PRE`, one dispatch: the branch's post norm, the add, the next norm) stages a row
+through a 4096-float threadgroup slab (`MetalAddRmsT.SLAB`), so a 5376-wide row - the gemma-4 31B's - takes the split chain
+at every seam of every decode step and window. The lever is a seam that serves a row wider than the slab (a two-pass norm
+over a strided stash, or a wider slab on a device that affords it), raced against the split chain at dim 5376 the way the
+other widths are (`ARCHITECTURE_GPU_SHARED_KERNELS.md#gpu-shared-kernels`, the seam bullet). Instrument: `bench_metal_gk_rows`'s
+seam race, which holds no fused arm past the slab today.
+
+## 55. The E-series pre-step runs on the CPU for the table shapes `metal_ple_pre_unserved` names
+
+Metal's pre-step (the gather and the projection of a row's per-layer side vector) serves a blob model whose PLE table
+is in a format the gather family reads, bound at whole superblocks, with a ple width the finish's threadgroup takes
+(a 32-lane multiple up to 1024) and a model dim the projection's word steps whole. Every other shape - a trimmed-planes
+load, a per-32 table bound off a superblock, a ple width past 1024, an odd dim on the bf16 rows - runs the CPU
+pre-step, and `metal_ple_dev_said` logs the reason once a load. The fix is kernels for those shapes: a finish that
+walks a ple width in more than one threadgroup pass, a gather bound at the per-32 pair's own alignment, a projection
+whose tail word handles an odd dim; each cell-proven on the device against the CPU row
+(`test_gpu_serving_declines.das`'s `test_ple_proj_dim_gates` names the shapes). The follow-up PR after the gemma leg.
+
+## 56. Five large-tier `test_metal_mtp_parity.das` cells and the Canary-Qwen oracle clip read red on master's own build
+
+On the M5 under `DASLLAMA_PARITY_FULL=1`, master's build (33e7910669) fails six large-tier cells of
+`test_metal_mtp_parity.das` and the gemma leg's tip fails five of them (the leg's `test_metal_verify_gemma26` passes):
+`test_metal_mtp_parity_35b` and `_35b_iq4xs` (the k8 dispatch count disagrees with `has_sb_rows_planes` in both
+directions - 6 past-eight dispatches on a carrier the predicate calls plain, none on one it calls superblock),
+`test_metal_mtp_parity_flashnext` (the same count), `test_metal_verify_qwen38_27b` (the drafter beside the carrier does
+not attach), and `test_metal_verify_gemma12` (the batch same-slab verify rows against the plain steps read 0.61 over 48
+rows on the leg, 0.52 over 60 and 1.06 over 108 on master, against bars of 0.5 and 1, no argmax flip). The Canary-Qwen
+greedy oracle cell (`test_whisper.das`, `test_canary_qwen_oracle`) diverges from the NeMo oracle on clip 05 at the same
+token on master and the leg. None of these runs under an arm filter, so the leg's arm chains skipped them; the whole
+file under the full parity gate is where they show. The Qwen cells belong to the Qwen leg's follow-up; the gemma-12B
+verify bar and the clip-05 divergence are the next Metal pass's first rows: decide per cell whether the kernel or the
+bar moved (`REVIEW_GPU_PARITY.md`'s bar-change rule, `tests/REVIEW_PINNED_GATES.md`'s loosening rule), then fix the
+code or ledger the bar.

@@ -3,6 +3,7 @@ options stack = 524288   // every dasLLAMA program root takes this budget
 options _function_length = 0        // per-kernel gates: fixture + builder dispatch + oracle compare, one flat run each
 options _cyclomatic_complexity = 0  // same — the arm ladders follow the kernel's own binding/variant axes
 options _dasllama_internal = true
+options persistent_heap   // a dastest root frees what it deletes only on this heap; the linear heap holds every carrier a cell deleted until the context ends
 
 require dastest/testing_boost public
 require dasllama/dasllama_whisper   // nolint:STYLE030,LINT019 — wdec_kscale, read in the Apple half alone
@@ -13,6 +14,7 @@ require dasllama/dasllama_qwen3v   // q3v_reorder_src - the stem assemble gate's
 require _kernel_oracles   // pos_add_2d_ref
 require ?das_metal dasllama/dasllama_metal_kernels  // the decode elementwise/misc kernel set (Apple builds)
 require ?das_metal dasllama/dasllama_metal_common   // the pipeline globals the generated builders read
+require dasllama/dasllama_common   // bump_weights_epoch: the region and ring-slack drops; the layout shell's Model
 require ?das_metal dasllama/dasllama_kqformat   // kq_fmt_of_id - the token-table gather gates name their format
 require ?das_metal dasllama/dasllama_convert    // dequant_b32_plane_block - the per-32 gather gate's rows
 require ?das_metal dasllama/dasllama_metal_prefill  // metal_moe_kq_twin_pick + its knee knob - the K-quant MoE twins' pick cell
@@ -245,10 +247,10 @@ def private embed_b32_gate(t : T?; var dev, queue; f : KqFmt; dim, vocab, lead :
     let tag = "embed_b32 {f} dim={dim} vocab={vocab} lead={lead}"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
         var err : string
-        let sq = stamp_of(@@enc_embed_b32_q51)
-        let si = stamp_of(@@enc_embed_b32_iq4nl32)
-        let s4 = stamp_of(@@enc_embed_b32_q4032)
-        let s5 = stamp_of(@@enc_embed_b32_q5032)
+        let sq = stamp_of(@@enc_q51_embed_b32)
+        let si = stamp_of(@@enc_iq4nl32_embed_b32)
+        let s4 = stamp_of(@@enc_q4032_embed_b32)
+        let s5 = stamp_of(@@enc_q5032_embed_b32)
         var pso = f == KqFmt.q51 ? mc |> keep_stamp(sq, err) : (f == KqFmt.iq4nl32 ? mc |> keep_stamp(si, err)
             : (f == KqFmt.q5032 ? mc |> keep_stamp(s5, err) : mc |> keep_stamp(s4, err)))
         return if (!pso_ok(t, tag, pso, err))
@@ -318,111 +320,164 @@ def private embed_b32_gate(t : T?; var dev, queue; f : KqFmt; dim, vocab, lead :
     }
 }
 
-// the fused add+rms family: sequential CPU mirror, simd_sum reassociation under the 1e-4 bar
-def private add_rms_gate(t : T?; var dev, queue; batched : bool; dim, nrows : int; ascale : float) {
-    let tag = "add_rms{batched ? "_b" : ""} dim={dim} rows={nrows} ascale={ascale}"
+//! the residual step's Metal stamps (`GkAddRmsRows`): which builder a cell dispatches
+enum private ArStamp {
+    plain        //! the add + norm
+    plain_hx     //! ... with the f16 twin beside
+    pre          //! the sandwich seam: the partner under its post norm, the add, the norm
+    pre_hx       //! ... with the f16 twin beside
+    pre_add      //! the sandwich seam with no norm stored
+}
+
+//! the residual step against the CPU's sequential form, under the 1e-4 bar (simd_sum reassociation): x = (x + a') . ascale,
+//! a' = rmsnorm(a) . wpa on the sandwich stamps, y = rmsnorm(x) . w; the sandwich stamps' rows told apart from the plain form's
+def private add_rms_gate(t : T?; var dev, queue; stamp : ArStamp; single : bool; dim, nrows : int; ascale : float; window : bool = false) {
+    let tag = "add_rms {stamp}{single ? " 1-row grid" : ""}{window ? " window" : ""} dim={dim} rows={nrows} ascale={ascale}"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
         var err : string
         let s1 = stamp_of(@@enc_addrms_c)
         let sb = stamp_of(@@enc_add_rms_b_c)
-        var pso = mc |> keep_stamp(s1, err)   //! the single-row and batched builders dispatch the one MetalAddRms kernel
+        let sh = stamp_of(@@pf_enc_add_rms_bhx_c)
+        let p1 = stamp_of(@@enc_preaddrms_c)
+        let pb = stamp_of(@@enc_preaddrms_b_c)
+        let ph = stamp_of(@@enc_preaddrms_bhx_c)
+        let a1 = stamp_of(@@enc_preadd_c)
+        let ab = stamp_of(@@enc_preadd_b_c)
+        let wb = stamp_of(@@pf_enc_add_rms_b_c)
+        let wh = stamp_of(@@pf_enc_add_rms_bhx_c)
+        let wp = stamp_of(@@pf_enc_preaddrms_b_c)
+        let wph = stamp_of(@@pf_enc_preaddrms_bhx_c)
+        let wa = stamp_of(@@pf_enc_preadd_b_c)
+        var pso = (stamp == ArStamp.plain ? mc |> keep_stamp(s1, err) : (stamp == ArStamp.plain_hx ? mc |> keep_stamp(sh, err)
+            : (stamp == ArStamp.pre ? mc |> keep_stamp(p1, err) : (stamp == ArStamp.pre_hx ? mc |> keep_stamp(ph, err) : mc |> keep_stamp(a1, err)))))
         return if (!pso_ok(t, tag, pso, err))
+        let pre = stamp != ArStamp.plain && stamp != ArStamp.plain_hx
         let total = nrows * dim
         var inscope xv, av, w : array<float>
         xv |> resize(total)
         av |> resize(total)
-        w |> resize(dim)
+        w |> resize(2 * dim)   //! [post norm | norm], `seam_norms`' layout on a sandwich stamp; a plain stamp binds the norm row alone
         for (i in range(total)) {
             xv[i] = 0.11 * float(i % 43) - 2.3
             av[i] = 0.07 * float(i % 31) - 1.1
         }
-        for (i in range(dim)) {
-            w[i] = 0.5 + 0.04 * float(i % 13)
+        for (i in range(2 * dim)) {
+            w[i] = i < dim ? 0.4 + 0.05 * float(i % 11) : 0.5 + 0.04 * float(i % 13)
         }
-        var inscope want_x, want_y : array<float>
+        var inscope want_x, want_y, plain_x, an : array<float>
         want_x |> resize(total)
         want_y |> resize(total)
+        plain_x |> resize(total)
+        an |> resize(total)
+        unsafe {
+            for (r in range(nrows)) {
+                rmsnorm(addr(an[r * dim]), addr<float const?>(av[r * dim]), addr<float const?>(w[0]), int64(dim), EPS)
+            }
+        }
         for (i in range(total)) {
-            want_x[i] = (xv[i] + av[i]) * ascale
+            want_x[i] = (xv[i] + (pre ? an[i] : av[i])) * ascale
+            plain_x[i] = (xv[i] + av[i]) * ascale
         }
         unsafe {
             for (r in range(nrows)) {
-                rmsnorm(addr(want_y[r * dim]), addr<float const?>(want_x[r * dim]), addr<float const?>(w[0]), int64(dim), EPS)
+                rmsnorm(addr(want_y[r * dim]), addr<float const?>(want_x[r * dim]), addr<float const?>(w[dim]), int64(dim), EPS)
             }
         }
+        var ka = GkAddRmsArgs(dim = uint(dim), add_on = 1u, eps = EPS, ascale = ascale)
+        var inscope wnorm <- [for (i in range(dim)); w[dim + i]]
         let bx = mc |> io_(xv)
         let ba = mc |> in_(av)
-        let bw = mc |> in_(w)
+        let bw = pre ? mc |> in_(w) : mc |> in_(wnorm)
         let by = mc |> out_words(total, PAD_SENTINEL)
-        let bdim = mc |> in_plain([uint(dim)])
-        let beps = mc |> in_plain([EPS])
-        let basc = mc |> in_plain([ascale])
+        let bh = mc |> out_words(total, float16(PAD_SENTINEL))
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
-            let (x, a, w1, y, d, e, s) = (mc.buf[bx], mc.buf[ba], mc.buf[bw], mc.buf[by], mc.buf[bdim], mc.buf[beps], mc.buf[basc])
-            if (batched) {
-                stamp_run(sb, pso) {
-                    invoke(sb.enc, enc, x, a, w1, y, d, e, s, int64(nrows))
+            let (x, a, w1, y, yh) = (mc.buf[bx], mc.buf[ba], mc.buf[bw], mc.buf[by], mc.buf[bh])
+            if (window) {   //! the window's builders: the same kernels at 256 lanes a row
+                if (stamp == ArStamp.plain) {
+                    stamp_run(wb, pso) {
+                        invoke(wb.enc, enc, x, a, w1, y, ka, int64(nrows))
+                    }
+                } elif (stamp == ArStamp.plain_hx) {
+                    stamp_run(wh, pso) {
+                        invoke(wh.enc, enc, x, a, w1, y, yh, ka, int64(nrows))
+                    }
+                } elif (stamp == ArStamp.pre) {
+                    stamp_run(wp, pso) {
+                        invoke(wp.enc, enc, x, a, w1, y, ka, int64(nrows))
+                    }
+                } elif (stamp == ArStamp.pre_hx) {
+                    stamp_run(wph, pso) {
+                        invoke(wph.enc, enc, x, a, w1, y, yh, ka, int64(nrows))
+                    }
+                } else {
+                    stamp_run(wa, pso) {
+                        invoke(wa.enc, enc, x, a, w1, ka, int64(nrows))
+                    }
                 }
-            } else {   // the single-row builder's one threadgroup: nrows is 1 on every unbatched arm
-                stamp_run(s1, pso) {
-                    invoke(s1.enc, enc, x, a, w1, y, d, e, s)
+            } elif (stamp == ArStamp.plain) {
+                if (single) {   //! the single-row builder's one threadgroup
+                    stamp_run(s1, pso) {
+                        invoke(s1.enc, enc, x, a, w1, y, ka)
+                    }
+                } else {
+                    stamp_run(sb, pso) {
+                        invoke(sb.enc, enc, x, a, w1, y, ka, int64(nrows))
+                    }
+                }
+            } elif (stamp == ArStamp.plain_hx) {
+                stamp_run(sh, pso) {
+                    invoke(sh.enc, enc, x, a, w1, y, yh, ka, int64(nrows))
+                }
+            } elif (stamp == ArStamp.pre) {
+                if (single) {
+                    stamp_run(p1, pso) {
+                        invoke(p1.enc, enc, x, a, w1, y, ka)
+                    }
+                } else {
+                    stamp_run(pb, pso) {
+                        invoke(pb.enc, enc, x, a, w1, y, ka, int64(nrows))
+                    }
+                }
+            } elif (stamp == ArStamp.pre_hx) {
+                stamp_run(ph, pso) {
+                    invoke(ph.enc, enc, x, a, w1, y, yh, ka, int64(nrows))
+                }
+            } elif (single) {
+                stamp_run(a1, pso) {
+                    invoke(a1.enc, enc, x, a, w1, ka)
+                }
+            } else {
+                stamp_run(ab, pso) {
+                    invoke(ab.enc, enc, x, a, w1, ka, int64(nrows))
                 }
             }
         }
         return if (!ran)
         check_buf(t, "{tag} x", mc.buf[bx], want_x, BAR_TIGHT, Shape(row_width = dim))
-        check_buf(t, "{tag} y", mc.buf[by], want_y, BAR_TIGHT, Shape(row_width = dim))
+        if (stamp == ArStamp.pre_add) {
+            var inscope untouched <- [for (_i in range(total)); PAD_SENTINEL]
+            check_buf(t, "{tag} y untouched", mc.buf[by], untouched, BAR_EXACT, Shape(row_width = dim))
+        } else {
+            check_buf(t, "{tag} y", mc.buf[by], want_y, BAR_TIGHT, Shape(row_width = dim))
+        }
+        if (stamp == ArStamp.plain_hx || stamp == ArStamp.pre_hx) {
+            check_hx_narrow(t, "{tag} y twin", mc.buf[bh], mc.buf[by], total, total)
+        }
+        if (pre) {
+            var inscope got <- buf_download(mc.buf[bx], total, type<float>)
+            t |> success(check_count(got, plain_x, BAR_TIGHT) > 0, "{tag}: the rows read off the plain step's (the partner is normed)")
+        }
     }
 }
 
-def private pre_add_rms_gate(t : T?; var dev, queue; dim : int) {
-    let tag = "pre_add_rms dim={dim}"
-    with_metal_cell(dev, queue) $(var mc : MetalCell) {
-        var err : string
-        let st = stamp_of(@@enc_preaddrms_c)
-        var pso = mc |> keep_stamp(st, err)
-        return if (!pso_ok(t, tag, pso, err))
-        var inscope xv, av, wpa, wffn : array<float>
-        xv |> resize(dim)
-        av |> resize(dim)
-        wpa |> resize(dim)
-        wffn |> resize(dim)
-        for (i in range(dim)) {
-            xv[i] = 0.09 * float(i % 41) - 1.9
-            av[i] = 0.13 * float(i % 37) - 2.1
-            wpa[i] = 0.4 + 0.05 * float(i % 11)
-            wffn[i] = 0.6 + 0.03 * float(i % 17)
-        }
-        var inscope want_x, want_y : array<float>
-        want_x |> resize(dim)
-        want_y |> resize(dim)
-        rmsnorm(want_x, av, wpa, int64(dim), EPS)
-        for (i in range(dim)) {
-            want_x[i] = xv[i] + want_x[i]
-        }
-        rmsnorm(want_y, want_x, wffn, int64(dim), EPS)
-        let bx = mc |> io_(xv)
-        let ba = mc |> in_(av)
-        let bwpa = mc |> in_(wpa)
-        let bwffn = mc |> in_(wffn)
-        let by = mc |> out_words(dim, PAD_SENTINEL)
-        let bdim = mc |> in_plain([uint(dim)])
-        let beps = mc |> in_plain([EPS])
-        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
-            stamp_run(st, pso) {
-                invoke(st.enc, enc, mc.buf[bx], mc.buf[ba], mc.buf[bwpa], mc.buf[bwffn], mc.buf[by], mc.buf[bdim], mc.buf[beps])
-            }
-        }
-        return if (!ran)
-        check_buf(t, "{tag} x", mc.buf[bx], want_x, BAR_TIGHT, FLAT_SHAPE)
-        check_buf(t, "{tag} y", mc.buf[by], want_y, BAR_TIGHT, FLAT_SHAPE)
-    }
-}
+let private QKN_V_NONE = 0
+let private QKN_V_FK = 1     //! the k groups also write V: the raw k row under its rms (a layer with no v plane)
+let private QKN_V_NORM = 2   //! nk more groups norm the V rows in place, weightless (gemma-4's v-norm)
 
 // per-head QK-norm: vfusion=false is the in-place decode shape (soffe == koffe), vfusion=true
-// the no-wv form (reads the pre-norm K slice, writes the v segment)
-def private qk_norm_gate(t : T?; var dev, queue; hs, nq, nk, nrows : int; vfusion : bool) {
-    let tag = "qk_norm hs={hs} nq={nq} nk={nk} rows={nrows} vfusion={vfusion}"
+// the no-wv form (reads the pre-norm K slice, writes the v segment); `vmode` the V arms of the in-place shape
+def private qk_norm_gate(t : T?; var dev, queue; hs, nq, nk, nrows : int; vfusion : bool; vmode : int = QKN_V_NONE) {
+    let tag = "qk_norm hs={hs} nq={nq} nk={nk} rows={nrows} vfusion={vfusion} vmode={vmode}"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
         var err : string
         let st = stamp_of(@@enc_qk_norm)
@@ -443,6 +498,8 @@ def private qk_norm_gate(t : T?; var dev, queue; hs, nq, nk, nrows : int; vfusio
             w[i] = 0.5 + 0.04 * float(i % 19)
         }
         var inscope want := xv
+        var inscope ones <- [for (_i in range(hs)); 1.0]
+        let vbase = qd + kvd
         for (r in range(nrows)) {
             for (tg2 in range(nq + nk)) {
                 let isK = tg2 >= nq
@@ -453,13 +510,29 @@ def private qk_norm_gate(t : T?; var dev, queue; hs, nq, nk, nrows : int; vfusio
                     rmsnorm(addr(want[wbase]), addr<float const?>(xv[rbase]), addr<float const?>(w[isK ? hs : 0]), int64(hs), EPS)
                 }
             }
+            for (h in range(nk)) {
+                let vrow = r * rstride + vbase + h * hs
+                if (vmode == QKN_V_FK) {
+                    unsafe {
+                        rmsnorm(addr(want[vrow]), addr<float const?>(xv[r * rstride + soffe + h * hs]), addr<float const?>(ones[0]), int64(hs), EPS)
+                    }
+                } elif (vmode == QKN_V_NORM) {
+                    unsafe {
+                        rmsnorm(addr(want[vrow]), addr<float const?>(xv[vrow]), addr<float const?>(ones[0]), int64(hs), EPS)
+                    }
+                }
+            }
         }
         let bx = mc |> io_(xv)
         let bw = mc |> in_(w)
         var ka = qk_norm_args(uint(nq), uint(nk), uint(hs), uint(rstride), uint(soffe), uint(koffe), uint(hs), EPS)
+        ka.vfk = vmode == QKN_V_FK ? 1u : 0u
+        ka.vnorm = vmode == QKN_V_NORM ? 1u : 0u
+        ka.vbase = uint(vbase)
+        let ngroups = nq + nk + (vmode == QKN_V_NORM ? nk : 0)
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
             stamp_run(st, pso) {
-                invoke(st.enc, enc, mc.buf[bx], mc.buf[bx], mc.buf[bw], ka, int64(nq + nk), int64(nrows))
+                invoke(st.enc, enc, mc.buf[bx], mc.buf[bx], mc.buf[bw], ka, int64(ngroups), int64(nrows))
             }
         }
         return if (!ran)
@@ -817,8 +890,8 @@ def private gelu_form_delta(t : T?) {
     var max_lut = 0.0
     var max_erf = 0.0
     for (i in range(n)) {
-        max_lut = max(max_lut, abs(an[i] - lut[i]))
-        max_erf = max(max_erf, abs(an[i] - erfv[i]))
+        max_lut = max(max_lut, nan_wide_diff(an[i], lut[i]))
+        max_erf = max(max_erf, nan_wide_diff(an[i], erfv[i]))
     }
     to_log(LOG_INFO, "gelu_form_delta over [-10,10]: |analytic-lut| max {max_lut}, |analytic-erf| max {max_erf}\n")
     // measured 3.90625e-3 = the f16 HALF-ULP at the range edge (|x|~10, spacing 2^-7): the LUT
@@ -1399,67 +1472,34 @@ def private im2col2d_gate(t : T?; var dev, queue; iw, ih, cin, kd, sstride : int
     }
 }
 
-def private suppress_row_gate(t : T?; var dev, queue; total, nids : int) {
-    let tag = "suppress_row total={total} nids={nids}"
+//! the classifier epilogue (`MetalClsEpilogue`) over `rows` logits rows `vocab` wide in one dispatch: the final softcap at `cap`
+//! (0: none) against `cap * tanh(x / cap)`, then the `nids` suppressed ids (0: none) pinned to -1e30 on every row
+def private cls_epi_gate(t : T?; var dev, queue; vocab, rows, nids : int; cap : float) {
+    let tag = "cls_epi vocab={vocab} rows={rows} nids={nids} cap={cap}"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
         var err : string
-        let st = stamp_of(@@enc_suppress_row)
+        let st = stamp_of(@@enc_cls_epi)
         var pso = mc |> keep_stamp(st, err)
         return if (!pso_ok(t, tag, pso, err))
-        var inscope xv : array<float>
-        xv |> resize(total)
-        for (i in range(total)) {
-            xv[i] = 0.19 * float(i % 53) - 4.9
-        }
-        var inscope ids : array<uint>
-        ids |> resize(nids)
-        for (i in range(nids)) {
-            ids[i] = uint((i * 37 + 5) % total)
-        }
-        var inscope want := xv
-        for (i in range(nids)) {
-            want[int(ids[i])] = -1.0e30
+        let total = vocab * rows
+        var inscope xv <- [for (i in range(total)); 0.31 * float(i % 61) - 9.2]   //! spans well past +-cap so the saturation arms run
+        var inscope ids <- [for (i in range(max(nids, 1))); uint((i * 37 + 5) % vocab)]
+        var inscope want <- [for (v in xv); cap > 0.0 ? cap * tanh(v / cap) : v]
+        for (r in range(rows)) {
+            for (i in range(nids)) {
+                want[r * vocab + int(ids[i])] = -1.0e30
+            }
         }
         let bx = mc |> io_(xv)
         let bids = mc |> in_plain(ids)
-        let bn = mc |> in_plain([uint(nids)])
+        var ka = GkClsEpiArgs(vocab = uint(vocab), cap = cap, nsupp = uint(nids), rows = uint(rows))
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
             stamp_run(st, pso) {
-                invoke(st.enc, enc, mc.buf[bx], 0ul, mc.buf[bids], mc.buf[bn], int64(nids))
+                invoke(st.enc, enc, mc.buf[bx], mc.buf[bids], ka, int64(total))
             }
         }
         return if (!ran)
-        check_buf(t, tag, mc.buf[bx], want, BAR_BITS, FLAT_SHAPE)
-    }
-}
-
-def private softcap_row_gate(t : T?; var dev, queue; total : int; cap : float) {
-    let tag = "softcap_row total={total} cap={cap}"
-    with_metal_cell(dev, queue) $(var mc : MetalCell) {
-        var err : string
-        let st = stamp_of(@@enc_softcap_row)
-        var pso = mc |> keep_stamp(st, err)
-        return if (!pso_ok(t, tag, pso, err))
-        var inscope xv : array<float>
-        xv |> resize(total)
-        for (i in range(total)) {
-            xv[i] = 0.31 * float(i % 61) - 9.2   // spans well past +-cap so the saturation arms run
-        }
-        var inscope want : array<float>
-        want |> resize(total)
-        for (i in range(total)) {
-            want[i] = cap * tanh(xv[i] / cap)    // softcap4's scalar reference
-        }
-        let bx = mc |> io_(xv)
-        let btot = mc |> in_plain([uint(total)])
-        let bcap = mc |> in_plain([cap])
-        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
-            stamp_run(st, pso) {
-                invoke(st.enc, enc, mc.buf[bx], 0ul, mc.buf[btot], mc.buf[bcap], int64(total))
-            }
-        }
-        return if (!ran)
-        check_buf(t, tag, mc.buf[bx], want, BAR_TIGHT, FLAT_SHAPE)
+        check_buf(t, tag, mc.buf[bx], want, BAR_TIGHT, Shape(row_width = vocab))
     }
 }
 
@@ -1930,6 +1970,95 @@ def private mtl_toy_lens_gate(t : T?; var dev, queue; n : int) {
     g_mtl_toy_shift_pso = null
 }
 
+// The alignments the ringed attention, router and PLE projection builders declare (`requires =`): an aligned value passes every
+// builder silently, a misaligned one trips each builder whose contract it breaks, by the builder's name and the broken item. The
+// builders record into a graph capture the cell discards, so no misaligned dispatch reaches the device.
+var private g_align_trips : array<string>
+
+def private record_align_trip(msg : string) {
+    g_align_trips |> push(msg)
+}
+
+def private want_trips(var want : array<string>; names : array<string>; item : string) {
+    want |> reserve(length(want) + length(names))
+    for (n in names) {
+        want |> push("{n}: {item} != 0")
+    }
+}
+
+def private dispatch_align_gate(t : T?; var dev, queue) {
+    let ring64 <- [ "enc_attnp16_c", "enc_attnp32_c", "enc_attnp_q8_c", "enc_attnp_tq4_c", "enc_attnpb16_c", "enc_attnpb32_c",
+                    "enc_attnpb_q8_c", "enc_attnpb_tq4_c", "enc_qk_dev_c", "enc_qk_dev128_c" ]
+    let ring32 <- [ "enc_attnd16_c", "enc_attnd32_c", "enc_attndw16_c", "enc_attndw32_c", "enc_attndx16_c", "enc_attndx32_c",
+                    "enc_attnd_q8_c", "enc_attnd_tq4_c", "enc_attndw_q8_c", "enc_attndw_tq4_c", "enc_attndx_q8_c", "enc_attndx_tq4_c" ]
+    let routers <- [ "enc_moe_router", "enc_moe_router_b" ]
+    let projs <- [ "enc_ple_proj_bf16", "enc_ple_proj_bf16_one" ]
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        let b = mc.buf[mc |> out_words(64, 0.0)]
+        let saved_hook = metal_requires_hook()
+        set_metal_requires_hook(@@record_align_trip)
+        var inscope want : array<string>
+        gr_arm(true)
+        for (ring in fixed_array(0u, 128u, 96u, 48u)) {
+            var pk = SqAttnPartArgs(ring = ring)
+            var pb = SqAttnPartBArgs(ring = ring)
+            var dk = SqAttnDArgs(ring = ring)
+            var qk = AttnArgs(ring = ring)
+            enc_attnp16_c(null, b, 0ul, b, 0ul, b, b, pk, 1l, 32l)
+            enc_attnp32_c(null, b, 0ul, b, 0ul, b, b, pk, 1l, 32l)
+            enc_attnp_q8_c(null, b, 0ul, b, b, 0ul, b, b, b, pk, 1l, 32l)
+            enc_attnp_tq4_c(null, b, 0ul, b, b, 0ul, b, b, b, pk, 1l, 32l)
+            enc_attnpb16_c(null, b, b, b, b, b, 0ul, pb, 1l, 32l)
+            enc_attnpb32_c(null, b, b, b, b, b, 0ul, pb, 1l, 32l)
+            enc_attnpb_q8_c(null, b, b, b, b, b, b, b, 0ul, pb, 1l, 32l)
+            enc_attnpb_tq4_c(null, b, b, b, b, b, b, b, 0ul, pb, 1l, 32l)
+            enc_qk_dev_c(null, b, 0ul, b, 0ul, b, qk, 32l, 64l, 1l)
+            enc_qk_dev128_c(null, b, 0ul, b, 0ul, b, qk, 128l, 64l, 1l)
+            enc_attnd16_c(null, b, b, b, b, b, 0ul, dk, 1l, 4l, 1l)
+            enc_attnd32_c(null, b, b, b, b, b, 0ul, dk, 1l, 4l, 1l)
+            enc_attndw16_c(null, b, b, b, b, b, 0ul, dk, 1l, 4l, 1l)
+            enc_attndw32_c(null, b, b, b, b, b, 0ul, dk, 1l, 4l, 1l)
+            enc_attndx16_c(null, b, b, b, b, b, 0ul, dk, 1l, 4l, 1l)
+            enc_attndx32_c(null, b, b, b, b, b, 0ul, dk, 1l, 4l, 1l)
+            enc_attnd_q8_c(null, b, b, b, b, b, b, b, 0ul, dk, 1l, 4l, 1l)
+            enc_attnd_tq4_c(null, b, b, b, b, b, b, b, 0ul, dk, 1l, 4l, 1l)
+            enc_attndw_q8_c(null, b, b, b, b, b, b, b, 0ul, dk, 1l, 4l, 1l)
+            enc_attndw_tq4_c(null, b, b, b, b, b, b, b, 0ul, dk, 1l, 4l, 1l)
+            enc_attndx_q8_c(null, b, b, b, b, b, b, b, 0ul, dk, 1l, 4l, 1l)
+            enc_attndx_tq4_c(null, b, b, b, b, b, b, b, 0ul, dk, 1l, 4l, 1l)
+            if (ring % 64u != 0u) {
+                want |> want_trips(ring64, "ka.ring % 64")
+            }
+            if (ring % 32u != 0u) {
+                want |> want_trips(ring32, "ka.ring % 32")
+            }
+        }
+        //! (dim, woff, xs): the aligned control, an even dim and woff off the float4 lattice, an odd pair, an xs off the lattice
+        for (s in fixed_array((8l, 4u, 0u), (6l, 2u, 0u), (5l, 1u, 0u), (8l, 0u, 6u))) {
+            var pa = moe_router_args(4l, s._0, 1l, int64(s._2))
+            pa.woff = s._1
+            enc_moe_router(null, b, b, b, b, pa, 4l, 1l)
+            enc_moe_router_b(null, b, b, b, b, pa, 4l, 1l)
+            enc_ple_proj_bf16(null, b, b, b, pa, 4l, 1l)
+            enc_ple_proj_bf16_one(null, b, b, b, pa, 4l, 1l)
+            for (n in routers) {
+                want |> want_trips(s._0 % 4l != 0l ? [n] : array<string>(), "pa.dim % 4")
+                want |> want_trips(s._1 % 4u != 0u ? [n] : array<string>(), "pa.woff % 4")
+                want |> want_trips(s._2 % 4u != 0u ? [n] : array<string>(), "pa.xs % 4")
+            }
+            for (n in projs) {
+                want |> want_trips(s._0 % 2l != 0l ? [n] : array<string>(), "pa.dim % 2")
+                want |> want_trips(s._1 % 2u != 0u ? [n] : array<string>(), "pa.woff % 2")
+            }
+        }
+        gr_arm(false)
+        restore_metal_requires_hook(saved_hook)
+        t |> equal(length(want), 46, "dispatch_align: the misaligned rings and router shapes owe forty-six trips")
+        t |> equal(join(g_align_trips, "\n"), join(want, "\n"), "dispatch_align: each builder trips on exactly the items its value breaks")
+        delete g_align_trips
+    }
+}
+
 [test]
 def test_metal_misc_kernels(t : T?) {
     t |> run("decode elementwise/misc kernels == direct CPU oracles") @(t : T?) {
@@ -1961,15 +2090,26 @@ def test_metal_misc_kernels(t : T?) {
                 embed_kq_gate(t, dev, queue, stamp_of(@@enc_embed_kq_iq2xxs), 25, 768, 5)
                 embed_f32_gate(t, dev, queue, 96, 5, 3, 0)
                 embed_f32_gate(t, dev, queue, 512, 3, 2, 64)
-                add_rms_gate(t, dev, queue, false, 1500, 1, 1.0)
-                add_rms_gate(t, dev, queue, false, 1024, 1, 0.5)    // the gemma4 layer_out_scale slot
-                add_rms_gate(t, dev, queue, true, 1500, 3, 1.0)
-                pre_add_rms_gate(t, dev, queue, 1500)
+                for (st in fixed_array(ArStamp.plain, ArStamp.pre, ArStamp.pre_add)) {
+                    add_rms_gate(t, dev, queue, st, true, 1500, 1, 1.0)
+                    add_rms_gate(t, dev, queue, st, true, 1024, 1, 0.5)    //! the gemma4 layer_out_scale slot
+                    add_rms_gate(t, dev, queue, st, false, 1500, 3, 0.75)
+                    add_rms_gate(t, dev, queue, st, false, 4096, 2, 1.0)    //! the slab's whole width
+                }
+                for (st in fixed_array(ArStamp.plain_hx, ArStamp.pre_hx)) {
+                    add_rms_gate(t, dev, queue, st, false, 1500, 3, 0.75)
+                }
+                for (st in fixed_array(ArStamp.plain, ArStamp.plain_hx, ArStamp.pre, ArStamp.pre_hx, ArStamp.pre_add)) {
+                    add_rms_gate(t, dev, queue, st, false, 2560, 5, 0.75, true)
+                    add_rms_gate(t, dev, queue, st, false, 4096, 2, 1.0, true)
+                }
                 qk_norm_gate(t, dev, queue, 64, 4, 2, 2, false)     // in-place decode shape
                 qk_norm_gate(t, dev, queue, 64, 4, 2, 2, true)      // the no-wv V-fusion shape
                 qk_norm_gate(t, dev, queue, 128, 2, 1, 1, false)
                 qk_norm_gate(t, dev, queue, 512, 2, 1, 2, false)     // past the 256 lanes: a second element a lane (gemma-4's global heads)
                 qk_norm_gate(t, dev, queue, 96, 3, 1, 2, true)       // a head off the lane lattice
+                qk_norm_gate(t, dev, queue, 256, 4, 2, 2, false, QKN_V_NORM)   // gemma-4's v-norm in the same dispatch (the block-codec decode)
+                qk_norm_gate(t, dev, queue, 512, 2, 1, 2, false, QKN_V_FK)     // ... and its no-wv global layers: V off the pre-norm K
                 // the tanh-form CPU geglu; the GPU's exp identity agrees inside the approx bar
                 ew2_act_gate(t, dev, queue, "geglu", stamp_of(@@enc_geglu), 800) $(var want : array<float>; g, u : array<float>) {
                     geglu(want, u, int64(length(g)))
@@ -2037,8 +2177,9 @@ def test_metal_misc_kernels(t : T?) {
                 im2col2d_gate(t, dev, queue, 10, 12, 1, 32, 1)      // conv1 shape: cin 1, K padded 9->32
                 im2col2d_gate(t, dev, queue, 10, 8, 4, 36, 8)       // dense K, strided source (padded rows)
                 im2col2d_gate(t, dev, queue, 5, 6, 4, 36, 4)        // odd grid, tight source
-                suppress_row_gate(t, dev, queue, 2000, 37)
-                softcap_row_gate(t, dev, queue, 900, 30.0)
+                cls_epi_gate(t, dev, queue, 900, 3, 7, 30.0)   //! a row off the threadgroup grid, three rows in the one dispatch
+                cls_epi_gate(t, dev, queue, 2000, 1, 37, 0.0)  //! the pins alone
+                cls_epi_gate(t, dev, queue, 900, 2, 0, 30.0)   //! the cap alone
                 // ===== the hyper-connection mixer + the n-gram side input (qwen4exp) =====
                 hc_norm_gate(t, dev, queue, 2560, 4, 1)      // the served shape, the single row
                 hc_norm_gate(t, dev, queue, 100, 3, 5)       // under one threadgroup stride, five rows
@@ -2060,6 +2201,7 @@ def test_metal_misc_kernels(t : T?) {
                 ple_conv_gate(t, dev, queue, 100, 3, 4, 3, 10, 0, 14, true)     // the window form from position 0: taps before the sequence and inside the panel
                 ple_conv_gate(t, dev, queue, 100, 3, 4, 3, 10, 23, 6, true)     // a later window: taps in the ring (wrapped) and in the panel
                 mtl_toy_lens_gate(t, dev, queue, 1000)      // n%64 != 0 — the tail workgroup's guard
+                dispatch_align_gate(t, dev, queue)
             }
         } else {
             t |> skip("das_metal is not built on this platform; misc kernel checks skipped")
@@ -2165,6 +2307,104 @@ def test_metal_served(t : T?) {
         t |> success(!metal_served(false), "a later decline still passes through")
         t |> success(get_dispatch_gpu_served(), "and the window stays until the next weights load")
         set_dispatch_gpu_served(was)
+    } else {
+        t |> skip("das_metal is not built on this platform; the Metal drivers are not compiled")
+    }
+}
+
+//! the concatenated weight regions key on every piece: two concats over one first piece and two different second pieces each
+//! hold their own bytes, and a repeat of either is its cached buffer
+[test]
+def test_metal_region_cat_keys(t : T?) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        with_metal_decode_gate(t) $(var _queue) {
+            var inscope a <- [for (i in range(64)); float(i)]
+            var inscope b <- [for (i in range(64)); 100.0 + float(i)]
+            var inscope c <- [for (i in range(64)); 200.0 + float(i)]
+            let rb = 256ul
+            let regions0 = weight_regions_cached()
+            unsafe {
+                let ab = upload_region_cat(addr<void?>(a[0]), rb, addr<void?>(b[0]), rb)
+                let ac = upload_region_cat(addr<void?>(a[0]), rb, addr<void?>(c[0]), rb)
+                var inscope got_ab <- buf_download(ab, 128, type<float>)
+                var inscope got_ac <- buf_download(ac, 128, type<float>)
+                t |> equal(got_ab[64], 100.0, "the first concat's second piece is b's")
+                t |> equal(got_ac[64], 200.0, "the second concat's second piece is c's, not the first concat's")
+                t |> equal(got_ac[63], 63.0, "both concats lead with a")
+                t |> success(upload_region_cat(addr<void?>(a[0]), rb, addr<void?>(b[0]), rb) == ab, "a repeat of the first concat is its cached buffer")
+                t |> success(upload_region_cat(addr<void?>(a[0]), rb, addr<void?>(c[0]), rb) == ac, "... and of the second")
+            }
+            t |> equal(weight_regions_cached() - regions0, 2l, "two concats, two cached regions")
+            bump_weights_epoch()
+        }
+    } else {
+        t |> skip("das_metal is not built on this platform; the Metal drivers are not compiled")
+    }
+}
+
+//! a model swap returns the mirror rings' slack to its floor: the next model's rings are cut at its own windows, not the
+//! outgoing model's widest, and the steps encoded over the old layout are stale
+[test]
+def test_metal_ring_slack_reload(t : T?) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        let was = g_mirror_ring_slack
+        g_mirror_ring_slack = 4l * MIRROR_RING_SLACK_MIN
+        let epoch0 = g_arena_epoch
+        bump_weights_epoch()
+        t |> equal(g_mirror_ring_slack, MIRROR_RING_SLACK_MIN, "the reload returns the slack to its floor")
+        t |> success(g_arena_epoch > epoch0, "the reload's slack drop stales the steps encoded over the old layout")
+        let epoch1 = g_arena_epoch
+        bump_weights_epoch()
+        t |> equal(g_mirror_ring_slack, MIRROR_RING_SLACK_MIN, "a reload at the floor leaves the slack there")
+        t |> equal(g_arena_epoch, epoch1, "a reload at the floor moves no row, so no encoded step goes stale")
+        g_mirror_ring_slack = was
+    } else {
+        t |> skip("das_metal is not built on this platform; the Metal drivers are not compiled")
+    }
+}
+
+//! a four-layer shell, every other layer sliding at `window`, one 64-wide K/V head a layer
+def private layout_shell(window : int64) : Model {
+    var t = Model()
+    t.config.n_layers = 4l
+    t.config.n_heads = 1l
+    t.config.n_kv_heads = 1l
+    t.config.head_size = 64l
+    t.config.dim = 64l
+    t.config.sliding_window = window
+    t.config.swa_pattern = 2l
+    t.kv_row_prefix <- [0l, 64l, 128l, 192l]
+    return <- t
+}
+
+//! device-free: the mirror's layout key names its layout - one field moved, the key moves
+[test]
+def test_metal_mirror_layout_key(t : T?) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        let slack0 = g_mirror_ring_slack
+        var a <- layout_shell(512l)
+        var b <- layout_shell(512l)
+        with_gpu_kv_ring(1) {
+            let ka = mirror_layout_key_of(a)
+            t |> equal(mirror_layout_key_of(b), ka, "two shells of one layout share a key (the control)")
+            b.config.sliding_window = 256l
+            t |> success(mirror_layout_key_of(b) != ka, "another sliding window is another key")
+            b.config.sliding_window = 512l
+            b.kv_row_prefix[3] = 256l
+            t |> success(mirror_layout_key_of(b) != ka, "another row prefix is another key")
+            b.kv_row_prefix[3] = 192l
+            b.kv_row_prefix |> push(256l)
+            t |> success(mirror_layout_key_of(b) != ka, "another layer count is another key")
+            set_gpu_kv_ring(0)
+            t |> success(mirror_layout_key_of(a) != ka, "the ring pin off is another key")
+            set_gpu_kv_ring(1)
+            g_mirror_ring_slack = 2l * MIRROR_RING_SLACK_MIN
+            t |> success(mirror_layout_key_of(a) != ka, "another slack is another key")
+            g_mirror_ring_slack = slack0
+            t |> equal(mirror_layout_key_of(a), ka, "the slack put back is the first key again")
+        }
+        delete a
+        delete b
     } else {
         t |> skip("das_metal is not built on this platform; the Metal drivers are not compiled")
     }

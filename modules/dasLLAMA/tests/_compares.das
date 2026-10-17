@@ -126,9 +126,7 @@ def span_maxdiff(got, want : array<float>; gbase, wbase, n : int) : tuple<diff :
     var m = 0.0
     var at = 0
     for (i in range(n)) {
-        let g = got[gbase + i]
-        let w = want[wbase + i]
-        let dd = (is_nan(g) || is_nan(w)) ? INFINITE_DIFF : abs(g - w)
+        let dd = nan_wide_diff(got[gbase + i], want[wbase + i])
         if (dd > m) {
             m = dd
             at = i
@@ -138,6 +136,12 @@ def span_maxdiff(got, want : array<float>; gbase, wbase, n : int) : tuple<diff :
 }
 
 let INFINITE_DIFF = uint_bits_to_float(0x7f800000u)   //! what a compare reads where no bar may hold: a NaN on either side, or rows of two lengths
+
+//! |g - w|, infinite where either side is a NaN - the term a running largest difference takes, since `max` drops a NaN a
+//! later finite element follows
+def nan_wide_diff(g, w : float) : float => (is_nan(g) || is_nan(w)) ? INFINITE_DIFF : abs(g - w)
+
+def nan_wide_diff(g, w : double) : double => (is_nan(g) || is_nan(w)) ? double(INFINITE_DIFF) : abs(g - w)
 
 //! true when every element of `a` is bit-equal to `v`
 def elem_all(a : array<float>; v : float) : bool => all(a, $(e) => e == v)
@@ -462,6 +466,9 @@ def bf16_value(h : uint16) : float => uint_bits_to_float(uint(h) << 16u)
 
 //! `x`'s bf16 word by TRUNCATION - its top 16 bits, rounding toward zero (the engine's own bf16 narrowing rounds to nearest-even)
 def bf16_bits_truncated(x : float) : uint16 => uint16(float_bits_to_uint(x) >> 16u)
+
+//! `src` as bf16 words, each truncated (`bf16_bits_truncated`; `bf16_value` reads them back)
+def pack_bf16(src : array<float>) : array<uint16> => <- [for (v in src); bf16_bits_truncated(v)]
 
 //! the index of the first largest of `v`'s first `n` elements - the engine's `parallel_argmax`
 def argmax_of(v : array<float>; n : int64) : int64 => parallel_argmax(v, n)

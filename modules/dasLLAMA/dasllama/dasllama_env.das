@@ -138,7 +138,7 @@ struct public GpuTierEnv {
     gpu_ctx_strict : bool = false
 
     @clarg_default_doc = "0 (the plan's own count)"
-    @clarg_doc = "Serve at least this many routed layers' experts on the host - the first in layer order - on the whole-model driver of a plain MoE, whatever the card holds (set_gpu_host_layers in process): the host-layers form, with its split token command and cut window chain, reached on any card. A hyper-connection model serves every routed layer on the host regardless."
+    @clarg_doc = "Serve at least this many routed layers' experts on the host - the first in layer order - on the whole-model driver of any MoE that routes no more picks a row than the split command serves, the gemma-4 MoE with its parallel dense expert included, whatever the card holds (set_gpu_host_layers in process): the host-layers form, with its split token command and cut window chain, reached on any card. A hyper-connection model serves every routed layer on the host regardless."
     gpu_host_layers : int64 = 0l
 
     @clarg_doc = "The K/V codec the whole-model driver's mirror is asked to arm at, where no caller set one in process (set_gpu_kv_dtype): f16 (the default), q8_0 (half the mirror's bytes) or tq4 (a quarter). Sessions of the armed codec are served; any other spelling reads as f16."
@@ -146,6 +146,9 @@ struct public GpuTierEnv {
 
     @clarg_doc = "The whole-model resident driver for a model that fits the card, MoE included; 0 keeps the per-op rails (the A/B lever)."
     gpu_resident : bool = true
+
+    @clarg_doc = "A sliding-window layer's K/V mirror rows on a GPU home hold its window plus the rows one command writes, a position's row at its slot of that ring (both homes); 0 keeps every position's row (the flat slab, the A/B lever). A ringed history serves a continuation that starts no more than that slack under the rows it holds; one further back prefills again."
+    gpu_kv_ring : bool = true
 
     @clarg_default_doc = "follows DASLLAMA_GPU"
     @clarg_doc = "DeltaNet rail on the GPU."
@@ -311,7 +314,7 @@ struct public MetalEnv {
     @clarg_doc = "Concurrent encoder for the single-stream decode step, with barriers only at detected hazards."
     decode_concurrent : bool = true
 
-    @clarg_doc = "The R1 epilogue-fusion kernel (post_attn_rms + add_rms); 0 restores separate dispatches for A/B."
+    @clarg_doc = "Every decode sandwich seam as one residual step (the branch's post norm, the add, the next norm); 0 restores the split chain for A/B."
     fuse : bool = true
 
     @clarg_default_doc = "-1 (adaptive)"
@@ -336,10 +339,10 @@ struct public MetalEnv {
     @clarg_doc = "An f16-KV prefill writes its K/V rows into the session's KV mirror and its attention reads the cached rows there (the device pair, at any row count), so a continuation gathers nothing on the CPU and the first decode step uploads nothing; without the attn_dev crown the attention keeps its f32 panels and the gather, and the whole panel still converts into the mirror, so that first step uploads nothing there either; 0 keeps the panels and leaves the mirror to the decode step's upload - the A/B rail."
     pf_mirror : bool = true
 
-    @clarg_doc = "Pin the served working set (weight regions, planes, the recycled pool buffers) in an MTLResidencySet, macOS 15+: the per-commit residency pass stays a no-op, so the first submission after a CPU-only window stops repaying it (~15 ms/encode on the M1 Max released-rig image cell; ARCHITECTURE_RUNTIME.md 2.12); 0 is the A/B rail."
+    @clarg_doc = "Pin the served working set (weight regions, planes, the recycled pool buffers) in an MTLResidencySet, macOS 15+: the per-commit residency pass stays a no-op, so the first submission after a CPU-only window stops repaying it (~15 ms/encode on the M1 Max released-rig image cell; 0 is the A/B rail."
     residency : bool = true
 
-    @clarg_doc = "Seconds the residency-set heartbeat keeps re-requesting residency after the last served step (a requested set still un-wires over a long CPU-only window; ARCHITECTURE_RUNTIME.md 2.12); 0 disables the heartbeat - the A/B rail."
+    @clarg_doc = "Seconds the residency-set heartbeat keeps re-requesting residency after the last served step (a requested set still un-wires over a long CPU-only window; 0 disables the heartbeat - the A/B rail."
     heartbeat_s : int = 180
 
     @clarg_doc = "Barrier at every dispatch instead of at tracker-detected hazards (correctness bisect)."
@@ -449,7 +452,7 @@ struct public VulkanEnv {
     @clarg_doc = "Prefill record/execute overlap: the window chain submits in ramped chunks (1,2,4,8 layers) so the GPU starts while the CPU still records; 0 pins the single fenced submit (the per-role GPU profile pins it too, so a chunk gap never bills to a role)."
     vk_overlap : bool = true
 
-    @clarg_doc = "Device-side token-embedding gather for the resident prefill and the one-row decode step: a q8 or K-quant table off its own plane (the tied classifier's, or an untied table's where it fits the room past the weights and the K/V), an F32/F16/BF16 table off its exact f32 rows uploaded under a 512 MB cap; a Q4_1 table keeps the CPU embed; 0 keeps the CPU embed loop."
+    @clarg_doc = "Device-side token-embedding gather for the resident prefill and every token command (the one-row step, the N-row command, the NextN verify and draft): a q8 or K-quant table off its own plane (the tied classifier's, or an untied table's where it fits the room past the weights and the K/V), an F32/F16/BF16 table off its exact f32 rows uploaded under a 512 MB cap; 0 keeps the CPU embed loop. `set_gpu_resident_embed` pins it for the next loads in process."
     vk_gpu_embed : bool = true
 
     @clarg_doc = "Pin REQUIRE_FULL_SUBGROUPS on every class pipeline (instrument; measured slower than plain pipelines on the mm_a gate shape, so those are the default)."
@@ -1017,3 +1020,6 @@ def public registered_env_names() : array<string> {
     delete extras
     return <- out
 }
+
+//! a tri-state pin over an environment knob: -1 the environment's `env`, 0 off, any other value on
+def pin_over_env(pin : int; env : bool) : bool => pin < 0 ? env : pin != 0

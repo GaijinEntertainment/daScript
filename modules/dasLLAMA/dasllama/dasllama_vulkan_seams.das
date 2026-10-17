@@ -47,7 +47,7 @@ def vk_add_rms(var x : array<float>; a : array<float>; w : array<float>; var y :
             upload_region_at(g_gpu.ar_a_dev, 0l, addr<uint8 const?>(a[0]), bytes)
         }
         cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-            var pc = ArArgs(dim = uint(dim), add_on = add ? 1u : 0u, woff = 0u, eps = eps, ascale = ascale)
+            var pc = GkAddRmsArgs(dim = uint(dim), add_on = add ? 1u : 0u, woff = 0u, eps = eps, ascale = ascale)
             enc_cls_ar(raw, h, g_gpu.ar_set, pc, 1l)
             vhz_dep(raw, h, VHG_YO, 0u, true)   // x reads back post-fence in the second cmd
             cmd_copy_whole(raw, g_gpu.ar_y_dev, g_gpu.ar_host.buf, bytes)

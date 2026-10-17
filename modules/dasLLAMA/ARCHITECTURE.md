@@ -26,7 +26,8 @@ A companion's sections are listed in three places: its line in this document's r
 (under `File charters` or `Mechanisms`), the companion's own opening, and the routing sentence of
 any sibling companion that sends a reader to it.
 
-- `ARCHITECTURE_ENGINE.md` - the engine core, arch-registration and support charters.
+- `ARCHITECTURE_ENGINE.md` - the engine core, arch-registration and support charters, and the gates that hold the
+  test folder's documents to its files (`ARCHITECTURE_ENGINE.md#test-folder-gates`).
 - `ARCHITECTURE_ENGINE_MECHANISMS.md` - the RoPE scaling the loader folds into the `Model` once
   (`ARCHITECTURE_ENGINE_MECHANISMS.md#rope-scaling-bake`), and the decode pick tape a parity cell
   pins one arm's routing on another with (`ARCHITECTURE_ENGINE_MECHANISMS.md#moe-pick-tape`).
@@ -62,6 +63,8 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
 
 - `ARCHITECTURE_IMAGE_VULKAN.md` - the vulkan lane's mint: the GPU walk inside the streaming save, the job-span view, the
   trimmed lane, the walk's decline
+- `ARCHITECTURE_IMAGE_LEDGER.md` - the image rail's ledgered cases: the assistant drafter's non-image lane and the suite
+  cells that mint a model image by design
 - `ARCHITECTURE_IMAGE.md` - the prepared-image rail, the baked dev-W f16 plane, the lattice-only
   per-format plane table both halves of the rail skip around, the baked tower twin-W plane, the
   layout stamp `REVIEW.das` keeps over the byte-placing code, the meta-field tripwire every
@@ -83,12 +86,15 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
   Vulkan default.
 - `ARCHITECTURE_GPU_QUANT_PLANES.md` - the Metal kq split scale plane, the iquant GEMV grid read
   with its f4-slab twin, and the Metal GEMV site abstraction.
-- `ARCHITECTURE_GPU_PREFILL.md` - the Metal prefill driver's GEMM form ladder, dev-W knee map,
-  attention slab, chunked submission, the f16 twin dual-store, the last-layer FFN tail, and the
-  dense-KQ tensor mul_mm scaffold.
+- `ARCHITECTURE_GPU_PREFILL.md` - the Metal prefill driver's attention slab, pad rows, chunked
+  submission, the f16 twin dual-store, the last-layer FFN tail, and the hyper-connection window.
+- `ARCHITECTURE_GPU_PREFILL_GEMM.md` - the Metal prefill driver's GEMM form ladder, dev-W knee map,
+  GEMV tail peel, and the dense-KQ tensor mul_mm scaffold.
 - `ARCHITECTURE_GPU_PREFILL_MOE.md` - the Metal prefill driver's routed block - the MoE bucket
   rail, its tensor-twin scaffold and the split-format expert twins, the K-quant twins' crowns and
-  the knee that picks them, and the short window's gathered expert route.
+  the knee that picks them, and the short window's gathered expert route; the gemma-4 MoE tail as one step
+  (`ARCHITECTURE_GPU_PREFILL_MOE.md#metal-g4-moe-step`).
+
 - `ARCHITECTURE_GPU_PREFILL_WINDOW.md` - the Metal prefill driver's device attention pair (the
   K/V twins, the device-direct QK and AV with the tail stamp of a head off the 64 lattice, the row
   softmax written in place), the mirror-fed window and mirror adoption
@@ -120,7 +126,9 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
   trunk: the draft command that steps it, the prompt warm the window chain gives its slab, the
   rollback a rejected device verify takes from the verify command's own copies, the verify
   window a declined verify seat runs the CPU verify in, and the speculative knob's per-step
-  gate on the carry.
+  gate on the carry; the assistant drafter beside a head-less trunk
+  (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-assistant-drafter`).
+
 - `ARCHITECTURE_GPU_VULKAN_NROW.md` - the N-row token command a batched step's rows go through,
   the N-column leaf every format has, the column tiles a dispatch past eight columns runs in,
   its same-slab form the speculative verify steps one stream's rows through, and the residual
@@ -135,19 +143,25 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
   hybrid token command and prefill (recurrent layers, gated attention, partial rotary, the
   prefill-to-decode state handoff).
 - `ARCHITECTURE_GPU_VULKAN_PEROP.md` - the per-op tier's dense FFN rail: a dense layer's FFN triple on the dense rail
-  and the decode row it runs on the device.
+  and the decode row it runs on the device; the attention-quad chain's gemma decline
+  (`ARCHITECTURE_GPU_VULKAN_PEROP.md#perop-attn-gemma`).
+
 - `ARCHITECTURE_GPU_VULKAN_MOE.md` - the resident driver's routed block in its two eras - the MoE
   block of the prefill window with its Q8-fed chain, and the whole-model driver's MoE token
   command - the select that reaches 512 experts two logits a thread, and the gemma-4 form both
   eras take.
 - `ARCHITECTURE_GPU_MTP.md` - the Metal speculative round over the batch driver's same-slab
   verify, and the box knob that sets the depth a round drafts.
+- `ARCHITECTURE_GPU_KV_RING.md` - both homes' sliding-layer K/V ring: a sliding layer's mirror rows as a ring of its
+  window and one command's rows (`ARCHITECTURE_GPU_KV_RING.md#kv-sliding-ring`).
+- `ARCHITECTURE_GPU_MTP_ASSISTANT.md` - the gemma-4 assistant drafter on both GPU homes: one
+  drafter step, the sidecar and the attach, and the rounds of a scheduler tick.
 - `ARCHITECTURE_GPU_MTP_DECODE.md` - the kernel argument-alignment contract enforced at every
   dispatch, the K-quant small-batch crown and the row-buffer pad a multi-row verify dispatches
   under, the single-row driver's greedy chain, and the decode layer encoder.
-- `ARCHITECTURE_RUNTIME.md` - kernel shape, caches, lint policy, knobs, coverage, the GPU ramp,
-  the hybrid worker pool, the MoE region split, the job queue the engine dispatches on, and the
-  mode that dispatches to none.
+- `ARCHITECTURE_RUNTIME.md` - kernel shape, caches, lint policy, knobs, coverage, the GPU ramp.
+- `ARCHITECTURE_RUNTIME_JOBQUE.md` - the hybrid worker pool, the MoE region split, the job queue
+  the engine dispatches on, and the mode that dispatches to none.
 - `ARCHITECTURE_MEDIA.md` - the padded tower GEMM widths, the family GPU hooks, the tower weight
   lane, the plain-Model ASR decoders, and the parakeet decode step.
 - `ARCHITECTURE_MEASUREMENT.md` - the benchmark rig, the tune gate, the sanctioned
@@ -159,6 +173,8 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
   (`ARCHITECTURE_MEASUREMENT_FAT_START.md#box-runtime-file`).
 - `ARCHITECTURE_MEASUREMENT_SERVED.md` - the client clock around a live chat server's turns and
   what its figures are (`ARCHITECTURE_MEASUREMENT_SERVED.md#served-turn-instrument`).
+- `ARCHITECTURE_MEASUREMENT_FORCED_FEED.md` - the reference build's forced feed on the E2B Q4_K_M:
+  its driver, build, command line and readings (`ARCHITECTURE_MEASUREMENT_FORCED_FEED.md#reference-forced-feed`).
 - `ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md` - the Vulkan GEMM probe's arms, the shapes they run
   at, and the alternates they are read against.
 - `ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md` - the instruments that time a kernel away from the
@@ -169,7 +185,9 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
   row-group decodes, the VBMI symbol lattice, the tier that selects on the target rather than the
   host, the score dot classic prefill shares with decode, the module-scope visibility a lifted
   worker lambda needs of its kernel, the two interleaves a grp<mr> repack is made of, the bf16
-  tile that keeps its sum in the matrix unit, and the JIT partition a hot leaf instantiates in.
+  tile that keeps its sum in the matrix unit, and the JIT partition a hot leaf instantiates in; the q8 chain's activation forms against the reference's
+  (`ARCHITECTURE_CPU_KERNELS.md#q8-activation-forms`).
+
 - `ARCHITECTURE_TTS.md` - the TTS block home's two layouts, tap stacking, the padded concat
   width, the served carrier on the image rail, the sine source's operation order, the heteronym
   context, the rig's scoring, and the two-tier phoneme pack.

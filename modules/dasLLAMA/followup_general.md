@@ -40,23 +40,6 @@
    holding raw session pointers; plus `metal_decode_flush` calls at the test helpers' teardown as
    the interim belt.
 
-4. **The GPU-PLE prefill pre-step never engages on the E4B even though the model qualifies.**
-   The census (family-scoped E4B row, metal prefill serving on device - `attn_qk_mm` counted)
-   shows `metal_ple_gather_q8`, `metal_ple_finish`, and `metal_bf16_mulmm` at zero, yet every
-   static leg of `metal_ple_pre_gpu_gate` holds for the E4B gguf: `per_layer_model_proj` is
-   native BF16, `per_layer_token_embd` is Q8_0, ple=256 passes the shape gates, and the prefill
-   itself did not decline. So the gate returns false on a dynamic leg (consult-time override /
-   `prefill_decline` / `metal_prefill_init` ordering) - the PLE pre-step silently runs its CPU
-   fallback (`ple_pre_prefill`) on every metal prefill window. Done = instrument the gate legs,
-   find the refusing one, fix or document it, and the census E4B row counts all three kernels.
-   One hypothesis is ELIMINATED: the census is not blind to graph-captured dispatches -
-   `kn_pipeline` counts on the immediate path and `gr_encode_node` counts again on replay
-   (`dasllama_metal_common.das:1402`), so a captured dispatch is still tallied. The zero is real.
-   Consequence for reviewers: these three kernels have NO runtime coverage, so a change to them
-   (the PleArgs kargs fold is one) can only be verified structurally - emitted-MSL signature plus
-   bind-list-vs-signature match - until this gap closes or a synthetic gate lands the way
-   `moe_mulmm_q51_gate` does for the gathered q51 mul_mm.
-
 5. **The metal kernel zoo carries four different rope addressing schemes.** Factoring the
    sq_attn family showed the rope-store family does NOT share one skeleton the way attention
    did - its eleven kernels split four ways: pair-per-thread WITH partial rotation
@@ -1575,8 +1558,9 @@
 144. **A 16-bit weight file never serves in its own format.** A bf16 or f16 GGUF (Qwen3-8B-BF16
     on the M5) is requantized to q8 at load under the default mode, and the fp32 mode widens it
     to f32, which the Metal blob form declines, so it serves on the CPU alone; the only native
-    16-bit region is the gemma-4 E-series per-layer-embedding projection, which the
-    `metal_bf16_mulmm` stamps serve. The Metal sweep's bf16 row therefore has no like-for-like
+    16-bit region is the gemma-4 E-series per-layer-embedding projection, which the bf16 word form
+    of `GkRouterGemv` serves at decode on both homes and the `metal_bf16_mulmm` stamps serve in the
+    Metal window. The Metal sweep's bf16 row therefore has no like-for-like
     pair: llama.cpp runs the bf16 weights, das the q8 requant (`followup_metal.md` sec.7).
     Unquirked, one day, because a bf16 file is what a model ships as before anyone quantizes it:
     the loader keeps bf16/f16 planes in their format under a 16-bit quant mode, the dense prefill
@@ -1922,10 +1906,6 @@
    scoring 0` for both arms and then scores them anyway (the mint on `i-02a87cabc8fcd2e4c`
    confirmed the q8 bf16 crown on those scores). Done = the child's stamp line reaches the parser,
    or the check is dropped as the dead code it is.
-186. **A Q4_1 tensor refuses the load.** bartowski's `Llama-3.2-1B-Instruct-Q4_0.gguf` keeps
-   `ffn_down` at Q4_1 (GGUF type 3), and the loader stops at `type 3 not supported`; the reference
-   build's Q4_0 carriers routinely mix one. Done = Q4_1 decoded to the q51-style per-32 (d, m) plane, or the
-   loader names the tensor and the format it wants re-quantized to.
 188. **The bf16 panel scatter is written three times.** The
    folds left unapplied: the int8 walk inside `kq_batch_cell_gen` onto `bf16_walk` (the same
    control flow at one group and the tile's four tokens, and since the walk's `tile4` arm the
@@ -2103,3 +2083,25 @@
     or `-` is its own statement, so an arithmetic tail goes inside `(...)` and a kernel stamp's MSL or
     SPIR-V text splits at its own grammar - then delete the `[line_length]` table and the file, so the
     repo limits bind the folder; the kernels and model-free suites on both homes hold the wrapped tree.
+
+214. **The board holds the two GPU homes' prefill throughput at pp512 alone, and the ledger's longest prefill rows stop
+    at 12288 tokens.** The pass also reads the Vulkan block-codec (q8_0 / tq4) K/V f16 shadow, rebuilt per layer per
+    window, against the f16 codec at every prompt length - a persistent per-layer shadow or an incremental dequant is
+    the lever if its cost grows with the position. A long prompt costs the global layers' attention in the
+    square of its length and every per-window stage in its position, so a stage that grows with
+    position hides behind pp512 (`debug-jit`, direction-grade: `lcpp_bench -p <n> -n 0 -r 2` on gemma-4-E2B Q8_0 -
+    the pod's RTX PRO 4500 under `DASLLAMA_GPU=1` reads 16,400 tok/s at pp512, 11,600 at 4096, 8,900 at 16384,
+    3,900 at 65536 and 2,600 at 120000; the M5 Max under `--ngl 1` with the box profile older than the binary
+    reads 9,488 / 10,888 / 5,292 / 2,570 at 512 / 4096 / 16384 / 65536, the score-slab attention's shape; the
+    long-context cells of `tests/test_gpu_resident_regions_gemma4_e2b_ctx128k.das` run their 360k device tokens
+    in about 170 s on the pod). The pass, after the gemma leg lands and before the dasCUDA arc: `lcpp_bench` at pp512
+    and pp32768 (and pp65536 where the model's context admits it) on every stocked model on both
+    homes, one profiling pass with the per-window stage split on; a model whose pp32768 falls under
+    the N-squared expectation set by its global-layer count is investigated to the stage, and the
+    stage is fixed in that pass. The rows land in `PERF_LEDGER.md` beside the pp512 rows.
+
+215. **A reserved word used as a parameter or variable name reports `syntax error, unexpected class,
+    expecting $i or name` - the bison token dump, which names no cause.** The parser
+    (`src/parser/ds2_parser.ypp`) catches a keyword token in a name position and reports
+    `'class' is a reserved word and cannot name a parameter`, with the word quoted. A compiler
+    change, not a dasLLAMA one; it sits here because the leg's agents hit it.

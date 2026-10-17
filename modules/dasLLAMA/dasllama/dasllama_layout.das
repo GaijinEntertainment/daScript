@@ -15,6 +15,7 @@ require dasllama/dasllama_gguf          // K6_SSB — the k6 disk scale stride
 require dasllama/dasllama_gemm_schema   // kq_qsb/kq_ssb — the fmt-id plane strides
 require dasllama/dasllama_par           // maybe_parallel_for + jobque probes
 require dasllama/dasllama_load   // StreamReg + the streaming-fill hook contract this file registers into
+require dasllama/dasllama_ple   // ple_planes: the per-layer-embedding planes the walkers pack
 require daslib/enum_trait   // the plane table walks the KqFmt enum
 require strings   // the scale-plane name's format prefix
 require math
@@ -98,13 +99,14 @@ def private metal_blob_layout_ok(t : Model) : bool {
     if (!c.shared_weights && emb_kq(t) && !metal_blob_off_ok(t.emb_kq_off, t.emb_fmt)) {
         return false
     }
-    // E-series PLE gate/proj q8 planes bind per layer; the token table / model-proj stay CPU-side
+    // E-series PLE gate/proj planes bind per layer at their tags (the f32 rows ride fblob); the token table / model-proj stay CPU-side
     if (has_ple(c)) {
         let ples = c.dim * c.n_embd_per_layer
-        if ((ples % 256l) != 0l ||
-                !metal_blob_off_ok(t.ple_gate_off, KqFmt.q8) ||
-                !metal_blob_off_ok(t.ple_proj_off, KqFmt.q8)) {
-            return false
+        return false if ((ples % KQ_SB_ELEMS) != 0l)
+        for (l in range64(c.n_layers)) {
+            for (pp in ple_planes(t, l)) {
+                return false if (!pp.f32 && !metal_blob_off_ok(pp.off, pp.f))
+            }
         }
     }
     if (c.hyper_conn) {   // qwen4exp: the mixers' q8 down/up planes bind per site, the head pair once
@@ -275,7 +277,7 @@ def private compact_kq_scale_strip(var ks : array<uint8>) {
 
 // ===== CPU repack walkers (backend grp<mr> interleave, in place at load) =====
 
-// A repack work item is common's StreamReg (fmt: 0 = q8, 1 = mx4, 2 = q51, 4/5/6/40 = kq).
+// A repack work item is common's StreamReg (fmt: the format's stream code, 0 = q8).
 // Chunking splits huge regions (the classifier) for load balance; 1024 is a multiple of every
 // backend mr, so row groups never straddle a boundary.
 def private push_repack(var regs : array<StreamReg>; fmt : int; off, n, d : int64) {
@@ -335,7 +337,7 @@ def private repack_regions(var t : Model; regs : array<StreamReg>) {
                     let f = rp[i].fmt
                     if (f == 0) {
                         invoke(rq8, qbp + rp[i].off, qsp + rp[i].off / Q8_BLOCK_ELEMS, rp[i].n, rp[i].d)
-                    } elif (f == 1) {
+                    } elif (f == MX4_STREAM_TAG) {
                         let mb = rp[i].off / KQ_B32_ELEMS
                         invoke(rmx, mxqp + rp[i].off / 2l, mxsp + mb, rp[i].n, rp[i].d)
                     } else {
@@ -404,14 +406,22 @@ def private collect_q8_regions(t : Model; var regs : array<StreamReg>) {
                 push_repack(regs, 0, t.dnout_offs[l], c.ssm_d_inner, dim)
             }
         }
-        if (has_ple(c)) {  // gemma-4 E-series per-layer PLE gate/proj (the emb table stays linear, unpacked)
-            let ple = c.n_embd_per_layer
-            push_repack(regs, 0, t.ple_gate_off + l * dim * ple, dim, ple)
-            push_repack(regs, 0, t.ple_proj_off + l * ple * dim, ple, dim)
+        if (has_ple(c) && l < c.n_layers) {  // gemma-4 E-series per-layer PLE gate/proj (the emb table stays linear, unpacked)
+            for (pp in ple_planes(t, l)) {
+                if (!pp.f32 && pp.f == KqFmt.q8) {
+                    push_repack(regs, 0, pp.off, pp.n, pp.d)
+                }
+            }
         }
         if (c.n_expert > 0l && l >= c.n_layer_dense_lead) {   // MoE: each expert slice is its own 2D tensor, repacked per its shape
             let ege = dim * c.n_ff_exp
-            if (!t.experts_mx4) {   // native-MXFP4 stacks live in mxq/mxs, row-major (no Q8 repack)
+            if (t.experts_mx4) {   //! native-MXFP4 stacks live in mxq/mxs and take the mx layout of the q8 walk's backend
+                for (e in range64(c.n_expert)) {
+                    push_repack(regs, MX4_STREAM_TAG, t.we1_offs[l] + e * ege, dim, c.n_ff_exp)
+                    push_repack(regs, MX4_STREAM_TAG, t.we2_offs[l] + e * ege, c.n_ff_exp, dim)
+                    push_repack(regs, MX4_STREAM_TAG, t.we3_offs[l] + e * ege, dim, c.n_ff_exp)
+                }
+            } else {
                 for (e in range64(c.n_expert)) {
                     if (fmt_at(t.we1_fmt, l) == KqFmt.q8) {
                         push_repack(regs, 0, t.we1_offs[l] + e * ege, dim, c.n_ff_exp)
@@ -534,6 +544,13 @@ def private collect_kq_regions(t : Model; var regs : array<StreamReg>) {
         if (t.wo_offs[l] >= 0l) {
             push_repack_kq(regs, fmt_at(t.wo_fmt, l), t.wo_offs[l], qd, dim)
         }
+        if (has_ple(c) && l < c.n_layers) {
+            for (pp in ple_planes(t, l)) {
+                if (!pp.f32) {
+                    push_repack_kq(regs, pp.f, pp.off, pp.n, pp.d)
+                }
+            }
+        }
         if (c.n_expert > 0l && l >= c.n_layer_dense_lead) {
             if (!t.experts_mx4) {   // each expert slice grp-repacks independently, like the Q8 loop
                 let ege = dim * c.n_ff_exp
@@ -581,26 +598,6 @@ def private collect_kq_regions(t : Model; var regs : array<StreamReg>) {
 def private repack_kq_weights(var t : Model) {
     var regs : array<StreamReg>
     collect_kq_regions(t, regs)
-    repack_regions(t, regs)
-    delete regs
-}
-
-// Repack the native-MXFP4 expert stacks into the active backend's interleaved mx layout, IN PLACE
-// (each expert slice is its own 2D tensor). Mirrors repack_q8_weights' contract: called only after
-// select_matmul_backend_for_load_ picks a repack backend; the pointer is otherwise identity.
-def private repack_mx4_stacks(var t : Model) {
-    let c = t.config
-    let dim = c.dim
-    let ege = dim * c.n_ff_exp
-    var regs : array<StreamReg>
-    for (l in range64(c.n_layers)) {
-        for (e in range64(c.n_expert)) {
-            let base = e * ege
-            push_repack(regs, 1, t.we1_offs[l] + base, dim, c.n_ff_exp)
-            push_repack(regs, 1, t.we2_offs[l] + base, c.n_ff_exp, dim)
-            push_repack(regs, 1, t.we3_offs[l] + base, dim, c.n_ff_exp)
-        }
-    }
     repack_regions(t, regs)
     delete regs
 }
@@ -679,6 +676,13 @@ def private collect_b32_table_regions(t : Model; var regs : array<StreamReg>; fm
                 }
             }
         }
+        if (has_ple(c) && l < c.n_layers) {
+            for (pp in ple_planes(t, l)) {
+                if (!pp.f32 && pp.f == fmt) {
+                    push_repack(regs, code, pp.off, pp.n, pp.d)
+                }
+            }
+        }
         if (c.n_ff_shexp > 0l && l < long_length(t.wshk1_offs)) {
             for (r in [(f = fmt_at(t.wsh1_fmt, l), off = t.wshk1_offs[l], n = dim, d = c.n_ff_shexp),
                        (f = fmt_at(t.wsh2_fmt, l), off = t.wshk2_offs[l], n = c.n_ff_shexp, d = dim),
@@ -726,7 +730,9 @@ def private stream_repack_one(fmt : int; qp, sp : void?; n, d : int64) {
         }
         var q = reinterpret<uint8?>(qp)
         var s = reinterpret<uint8?>(sp)
-        if (kq_dense_b32(rf)) {
+        if (rf == KqFmt.mx4) {
+            invoke(active_repack_mx4(), q, s, n, d)
+        } elif (kq_dense_b32(rf)) {
             invoke(active_repack_b32(rf), q, s, n, d)
         } else {
             invoke(active_repack_kq(), kq_schema_id(rf), q, s, n, d)
@@ -817,6 +823,37 @@ def q8_gather_rows(wp : int8 const?; s16p : uint16 const?; s32p : float const?; 
             }
         }
     }
+}
+
+//! the GGUF's 34-byte Q8_0 blocks of `tensors` (byte offset in `blob`, elements) split into the device plane pair the q8 GEMV
+//! reads: 32 quant bytes a block, an f16 scale a block; each tensor's first block index back, in the list's order (the Vulkan
+//! assistant drafter's upload form)
+def q8_repack(blob : array<uint8>; tensors : array<tuple<boff : int64; n : int64>>; @exact_size var quants : array<uint8>;
+              @exact_size var scales : array<uint16>) : array<int64> {
+    var nblk = 0l
+    for (te in tensors) {
+        nblk += te.n / Q8_BLOCK_ELEMS
+    }
+    quants |> reserve(nblk * Q8_QPB)
+    quants |> resize(nblk * Q8_QPB)
+    scales |> reserve(nblk)
+    scales |> resize(nblk)
+    var bases : array<int64>
+    bases |> reserve(long_length(tensors))
+    var cur = 0l
+    for (te in tensors) {
+        bases |> push(cur)
+        unsafe {
+            let src = addr<uint8 const?>(blob[te.boff])
+            for (b in range64(te.n / Q8_BLOCK_ELEMS)) {
+                let bp = src + b * (Q8_SPB + Q8_QPB)
+                scales[cur] = uint16(uint(bp[0]) | (uint(bp[1]) << 8u))
+                memcpy(addr<void?>(quants[cur * Q8_QPB]), reinterpret<void?>(bp + Q8_SPB), Q8_QPB)
+                cur++
+            }
+        }
+    }
+    return <- bases
 }
 
 // Interleave one PREPARED Q8 region (split planes, f32 scales, possibly grp<mr>-repacked) into
@@ -1212,8 +1249,7 @@ def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice
 
 [init]
 def private register_layout_hooks {
-    register_model_layout(@@repack_q8_weights, @@repack_kq_weights, @@repack_mx4_stacks,
-        @@repack_b32_stacks, @@moe_gpu_gather_stack, @@moe_gpu_gather_stack_kq,
+    register_model_layout(@@repack_q8_weights, @@repack_kq_weights, @@repack_b32_stacks, @@moe_gpu_gather_stack, @@moe_gpu_gather_stack_kq,
         @@moe_gpu_gather_b32_stack, @@moe_gpu_gather_stack_mx4)
     register_stream_layout(@@collect_q8_regions, @@collect_kq_regions, @@collect_b32_regions,
         @@stream_repack_one, @@metal_blob_eligible, @@metal_blob_scale_plane)

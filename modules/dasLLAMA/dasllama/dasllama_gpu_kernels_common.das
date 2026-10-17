@@ -5,6 +5,7 @@ module dasllama_gpu_kernels_common shared public
 require dasllama/dasllama_lint public
 require daslib/typemacro_boost
 require math
+require daslib/math_bits   // uint_bits_to_float: the bf16 word form widens each half by its bit shift
 require spirv/spirv_shader   // [spirv_inline]: the helpers the SPIR-V emitter visits at their call sites
 
 struct GkAxpyArgs {
@@ -595,6 +596,23 @@ class template GkDwConvRows {
         }
     }
 }
+
+//! a bf16 pair word's low half widened to f32 by its bit shift (exact)
+[spirv_inline]
+def gk_bf16_lo(w : uint) : float => uint_bits_to_float(w << 16u)
+
+//! a bf16 pair word's high half widened to f32 (exact)
+[spirv_inline]
+def gk_bf16_hi(w : uint) : float => uint_bits_to_float(w & 0xFFFF0000u)
+
+//! a bf16 pair word's half widened to f32 (exact): the high one where `odd`
+[spirv_inline]
+def gk_bf16_at(w : uint; odd : bool) : float => odd ? gk_bf16_hi(w) : gk_bf16_lo(w)
+
+//! element `e`'s index in rows of `len` elements stored `stride` apart from `base` (a side input stored position-major); a zero
+//! `len` divides as one
+[spirv_inline]
+def gk_strided_at(e, base, stride, len : uint) : uint => base + (e / max(len, 1u)) * stride + e % max(len, 1u)
 
 //! the workgroup reductions every row kernel of either home shares: one barrier a reduce, every thread summing the subgroup
 //! partials in the same order, so every thread holds the same sum or max; the lane primitives are each home's
@@ -1528,6 +1546,303 @@ class template GkQ8BlockStore : GkWgReduce {
             }
         }
     }
+
+    def put_out(i : uint; v : float) : void {}   //! element `i` of a normed row stored in the stamp's out form
+
+    //! the normed row from `normed_at` under `inv`, `n` wide, stored at `base` over `tg` lanes, a column a lane a step
+    def store_rows(base, n, tg : uint; inv : float) {
+        var j = gl_LocalInvocationID.x
+        while (j < n) {
+            let nj = normed_at(j, 0.0, inv)
+            let ij = base + j
+            put_out(ij, nj)
+            j += tg
+        }
+    }
+
+    //! the normed row from `normed_at` under `inv`, `n` wide, stored at `base` over `tg` lanes with four elements in flight a lane
+    [arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#residual-step-fma")]
+    def store_x4(base, n, tg : uint; inv : float) {
+        let last = n - 1u
+        var j = gl_LocalInvocationID.x
+        while (j < n) {
+            let j1 = min(j + tg, last)
+            let j2 = min(j + 2u * tg, last)
+            let j3 = min(j + 3u * tg, last)
+            let n0 = normed_at(j, 0.0, inv)
+            let n1 = normed_at(j1, 0.0, inv)
+            let n2 = normed_at(j2, 0.0, inv)
+            let n3 = normed_at(j3, 0.0, inv)
+            put_out(base + j, n0)
+            if (j + tg < n) {
+                put_out(base + j1, n1)
+            }
+            if (j + 2u * tg < n) {
+                put_out(base + j2, n2)
+            }
+            if (j + 3u * tg < n) {
+                put_out(base + j3, n3)
+            }
+            j += 4u * tg
+        }
+    }
+}
+
+//! the residual step's arguments, every stamp of `GkResidualRow` reading its fields under these names
+struct GkAddRmsArgs {
+    dim : uint
+    add_on : uint
+    woff : uint      //! the norm weight row's base in wn
+    eps : float
+    ascale : float
+    row0 : uint
+    slots : uint     //! the combine twins: routed slots per position
+    lstride : uint   //! the combine twins: the logits row stride (the gate logit, when `gated`, is the row's last)
+    gated : uint     //! the combine twins: the shared expert's gate scales its row
+    pre_on : uint    //! the add partner is rms-normed with the row at `pwoff` before the add (a gemma's post-attention / post-FFN norm)
+    pwoff : uint
+    no_norm : uint   //! the requant twins quantize the updated row as it is - the E-series residual feeding its per-layer-embedding gate
+    dbias_on : uint  //! the combine twins: each routed row takes its expert's down bias (gpt-oss) before its routing weight scales it
+    dboff : uint     //! ... this layer's row base in the down-bias plane ([ne x dim] rows a layer)
+    abias_on : uint  //! the add partner carries a bias row out of wn before the add (gpt-oss's attention output bias)
+    aboff : uint     //! ... that row's base in wn
+}
+
+//! The residual step's shell, a workgroup of `LANES` a row: x = (x + a) . ascale, under `pre_on` the add partner rms-normed under
+//! its weight row first (the gemma sandwich), the updated row kept and its squares summed; a stamp supplies the accessors and a
+//! `pa` carrying `GkAddRmsArgs`' fields under their names
+[ |> template_struct_instance]
+class template GkResidualRow : GkQ8BlockStore {
+    @template_constant LANES : uint = 256u          //!< the workgroup's lanes, the row loops' stride; 0 = the threadgroup's own size
+    @template_constant NORM_SWITCH : bool = false   //!< the runtime `no_norm` arm of `pa`
+    @template_constant PRE : bool = true            //!< the sandwich arm
+    @template_constant PRE_SWITCH : bool = true     //!< `pa.pre_on` switches the sandwich arm at run time; off, a PRE stamp always norms the partner
+    @template_constant X4 : bool = true             //!< four columns in flight a lane where the partner is not normed first
+    @template_constant ARMS : bool = true           //!< the run-time `add_on` and `abias_on` arms; off, the stamp always adds and carries no bias row
+
+    def abstract width : uint                         //! the row's width
+    def abstract xin(i : uint) : float                //! the residual stream's element `i`, a row base folded in
+    def abstract xout(i : uint; v : float) : void     //! ... written back
+    def abstract partner(i : uint) : float            //! the add partner's element `i`
+    def abstract stash(k : uint; v : float) : void    //! the row's column `k` kept for the re-read - a slab, or nothing where the row is re-read
+    def abstract stashed(k : uint) : float            //! ... read back
+    def abstract pre_partner(base, k : uint) : float  //! the sandwich form's partner column: off the stash, or recomputed
+
+    //! column `k` stepped a lane-stride on: `LANES`, or the threadgroup's own size where the stamp leaves it 0
+    [spirv_inline]
+    def next_col(var k : uint&) {
+        static_if (LANES == 0u) {
+            k += gl_WorkGroupSize.x
+        } else {
+            k += LANES
+        }
+    }
+
+    //! the next norm's weight row base in wn: `pa.woff`, or the stamp's own where its layout fixes it
+    [spirv_inline]
+    def norm_base : uint => pa.woff
+
+    //! the add partner's post-norm weight row base in wn: `pa.pwoff`, or the stamp's own where its layout fixes it
+    [spirv_inline]
+    def pre_base : uint => pa.pwoff
+
+    def norm_weight(e : uint) : float {
+        static_if (NORM_SWITCH) {
+            return pa.no_norm != 0u ? 1.0 : wn[norm_base() + e]
+        } else {
+            return wn[norm_base() + e]
+        }
+    }
+
+    //! the add partner's element `j` of the row at `base`, its bias row added under `abias_on`
+    def apart(base, j : uint) : float => partner(base + j) + (ARMS && pa.abias_on != 0u ? wn[pa.aboff + j] : 0.0)
+
+    //! the residual add, the row stash and the sum of squares over the row at `base` into `ss`; under `pre_on` the partner is normed
+    //! first (its own reduce, the stash holding it meanwhile)
+    [arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#residual-step-fma")]
+    def accum_row_into(base : uint; var ss : float&) {
+        ss = 0.0
+        static_if (PRE) {
+            static_if (PRE_SWITCH) {
+                if (pa.pre_on != 0u) {
+                    pre_cols_into(base, ss)
+                } else {
+                    add_cols_into(base, ss)
+                }
+            } else {
+                pre_cols_into(base, ss)
+            }
+        } else {
+            add_cols_into(base, ss)
+        }
+    }
+
+    //! the sandwich form over the row at `base`: the partner normed first, then off the row stash a column a round
+    def pre_cols_into(base : uint; var ss : float&) {
+        let dim = width()
+        var ainv = 0.0
+        if ((!ARMS || pa.add_on != 0u)) {
+            var sa = 0.0
+            var j = gl_LocalInvocationID.x
+            while (j < dim) {
+                let a = apart(base, j)
+                stash(j, a)
+                sa = mad(a, a, sa)
+                next_col(j)
+            }
+            wg_rms_inv_into(sa, dim, pa.eps, 0u, ainv)
+        }
+        var k = gl_LocalInvocationID.x
+        while (k < dim) {
+            let v = (!ARMS || pa.add_on != 0u) ? mad(wn[pre_base() + k], pre_partner(base, k) * ainv, xin(base + k)) * pa.ascale : xin(base + k)
+            keep(base, k, v, ss)
+            next_col(k)
+        }
+    }
+
+    //! the plain add over the row at `base`: four columns in flight a lane under `X4`
+    def add_cols_into(base : uint; var ss : float&) {
+        let dim = width()
+        var k = gl_LocalInvocationID.x
+        static_if (X4) {
+            let last = dim - 1u
+            while (k < dim) {
+                let k1 = min(k + LANES, last)
+                let k2 = min(k + 2u * LANES, last)
+                let k3 = min(k + 3u * LANES, last)
+                var v0 = xin(base + k)
+                var v1 = xin(base + k1)
+                var v2 = xin(base + k2)
+                var v3 = xin(base + k3)
+                if ((!ARMS || pa.add_on != 0u)) {
+                    let a0 = apart(base, k)
+                    let a1 = apart(base, k1)
+                    let a2 = apart(base, k2)
+                    let a3 = apart(base, k3)
+                    v0 = (v0 + a0) * pa.ascale
+                    v1 = (v1 + a1) * pa.ascale
+                    v2 = (v2 + a2) * pa.ascale
+                    v3 = (v3 + a3) * pa.ascale
+                }
+                keep(base, k, v0, ss)
+                if (k + LANES < dim) {
+                    keep(base, k1, v1, ss)
+                }
+                if (k + 2u * LANES < dim) {
+                    keep(base, k2, v2, ss)
+                }
+                if (k + 3u * LANES < dim) {
+                    keep(base, k3, v3, ss)
+                }
+                k += 4u * LANES
+            }
+        } else {
+            while (k < dim) {
+                let x = xin(base + k)
+                let v = (!ARMS || pa.add_on != 0u) ? (x + apart(base, k)) * pa.ascale : x
+                keep(base, k, v, ss)
+                next_col(k)
+            }
+        }
+    }
+
+    //! column `k` of the row at `base` kept: written back, stashed for the re-read, its square added to `ss`
+    def keep(base, k : uint; v : float; var ss : float&) {
+        xout(base + k, v)
+        stash(k, v)
+        ss = mad(v, v, ss)
+    }
+
+    //! the row's norm inverse off its sum of squares (slot 1: the add partner's norm took slot 0) - one under `no_norm` on a
+    //! NORM_SWITCH stamp (the reduce still runs: its barrier is every thread's)
+    def row_inv_into(ss : float; var inv : float&) {
+        wg_rms_inv_into(ss, width(), pa.eps, 1u, inv)
+        static_if (NORM_SWITCH) {
+            if (pa.no_norm != 0u) {
+                inv = 1.0
+            }
+        }
+    }
+
+    //! the normed row quantized out of the stash into Q8_0 blocks from block `qb0` (the block pass over the stash's columns)
+    def quant32(qb0 : uint; inv : float) {
+        static_if (OUT_Q8) {
+            blk_pass(0u, width() / KQ_B32_ELEMS_U, qb0, 0.0, inv)
+        }
+    }
+
+    def override normed_at(e : uint; mean, inv : float) : float => norm_weight(e) * (stashed(e) * inv)
+}
+
+//! The residual step a workgroup a row over the step's planes (`GkResidualRow`), its normed row out in the stamp's form - f32
+//! (`HX`: its f16 twin beside), f16, Q8_0 blocks, or none (the stream rows updated alone); the stamp supplies the row stash
+[ |> template_struct_instance]
+class template GkAddRmsRows : GkResidualRow {
+    @ssbo @binding = 0 @role = "readwrite" xs : array<float>   //! the residual stream's rows, updated in place
+    @ssbo @binding = 1 @role = "read" aa : array<float>        //! the add partner rows
+    @ssbo @binding = 2 @role = "weight" wn : array<float>      //! the norms plane: the norm row at `woff`, the post norm at `pwoff`, the bias row at `aboff`
+    @ssbo @binding = 3 @role = "write" @template_gate = OUT_F32 yo : array<float>
+    @ssbo @binding = 3 @role = "write" @template_gate = OUT_F16 outh : array<float16>
+    @ssbo @binding = 3 @role = "write" @template_gate = OUT_Q8 outq : array<int8>
+    @ssbo @binding = 10 @role = "write" @template_gate = OUT_Q8 outs : array<float>   //! past every combine family's own bindings
+    @ssbo @binding = 12 @role = "write" @template_gate = HX yh : array<float16>       //! the f32 row's f16 twin
+    @kargs pa : GkAddRmsArgs
+    @template_constant OUT_F32 : bool = false
+    @template_constant OUT_F16 : bool = false
+    @template_constant HX : bool = false
+
+    def override width : uint => pa.dim
+    def override xin(i : uint) : float => xs[i]
+    def override xout(i : uint; v : float) : void {
+        xs[i] = v
+    }
+    def override partner(i : uint) : float => aa[i]
+
+    //! row `r` stepped, its normed row stored in the stamp's out form or quantized into its Q8_0 blocks
+    def add_rms_row(r : uint) {
+        let base = r * pa.dim
+        var ss = 0.0
+        accum_row_into(base, ss)
+        static_if (OUT_Q8) {
+            var inv = 0.0
+            row_inv_into(ss, inv)
+            quant32(r * (pa.dim / KQ_B32_ELEMS_U), inv)
+        } else {
+            static_if (OUT_F32 || OUT_F16) {
+                var inv = 0.0
+                row_inv_into(ss, inv)
+                store_out(base, inv)
+            }
+        }
+    }
+
+    //! the normed row of the row at `base` under `inv`, four columns in flight a lane under `X4`
+    [arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#residual-step-fma")]
+    def store_out(base : uint; inv : float) {
+        static_if (X4) {
+            store_x4(base, pa.dim, LANES, inv)
+        } else {
+            static_if (LANES == 0u) {
+                let tg = gl_WorkGroupSize.x
+                store_rows(base, pa.dim, tg, inv)
+            } else {
+                store_rows(base, pa.dim, LANES, inv)
+            }
+        }
+    }
+
+    //! the normed row's element `i` stored in the stamp's out form: floats to `yo` (and halves to `yh` under `HX`), halves to `outh`
+    def override put_out(i : uint; v : float) : void {
+        static_if (OUT_F32) {
+            yo[i] = v
+        }
+        static_if (OUT_F16) {
+            outh[i] = float16(v)
+        }
+        static_if (HX) {
+            yh[i] = float16(v)
+        }
+    }
 }
 
 struct GkWdecCombArgs {
@@ -1910,13 +2225,23 @@ struct GkClampArgs {
 class template GkClampRows {
     @template_constant OUT16 : bool = false
     @template_constant COPY : bool = false
-    @ssbo @binding = 0 @role = "readwrite" x : array<float>
+    @template_constant BF16IN : bool = false   //!< the input is bf16 pairs a word, each widened by its bit shift
+    @ssbo @binding = 0 @role = "readwrite" @template_gate = "!BF16IN" x : array<float>
+    @ssbo @binding = 0 @role = "read" @template_gate = BF16IN xw : array<uint>
     @ssbo @binding = 1 @role = "write" @template_gate = OUT16 outh : array<float16>
     @ssbo @binding = 2 @role = "write" @template_gate = COPY dst : array<float>
     @kargs pa : GkClampArgs
 
+    def load_in(e : uint) : float {
+        static_if (BF16IN) {
+            return gk_bf16_at(xw[(pa.xoff + e) / 2u], (pa.xoff + e) % 2u != 0u)
+        } else {
+            return x[pa.xoff + e]
+        }
+    }
+
     def store_clamped(e : uint) : void {
-        let v = x[pa.xoff + e] * pa.scale
+        let v = load_in(e) * pa.scale
         static_if (OUT16) {
             outh[pa.hoff + e] = float16(min(max(v, max(pa.lo, -65504.0)), min(pa.hi, 65504.0)))   // nolint:STYLE019,LINT019 - the MSL subset has no clamp lowering; the rule fires where the stamp lands
         } else {
@@ -1962,16 +2287,19 @@ struct GkRopeKvArgs {
     rows : uint        //! the rows a dispatch covers (0 reads as one)
     mirbase : uint     //! the layer's base in the mirror planes, ahead of a row's own (the Vulkan token block's; Metal binds the row), or the
                        //! layer index where a row table carries the per-layer stride (Metal's window form)
+    ring : uint        //! a sliding layer's ring rows: a row lands at `kv_ring_row` of its position; 0 = the flat slab
+    layr : uint        //! the row-table form: the rings' rows ahead of the layer in a stream's slice, past `mirbase` layers of its stride
 }
 
 //! the rope-and-store args a home builds: the one-row defaults (one row, every stride 0, the bias row, the cos row and the mirror
 //! base bound at their own offsets), and the N-row form's strides and bases where a home passes them
 def gk_rope_kv_args(qd, kvd, hs, npairs_q, npairs : int64; neox, has_bias : bool; rot : int64; boff : int64 = 0l; cbase : int64 = 0l;
-                    rows : int64 = 1l; kvrow : int64 = 0l; qrow : int64 = 0l; cosrow : int64 = 0l; mirbase : int64 = 0l) : GkRopeKvArgs
+                    rows : int64 = 1l; kvrow : int64 = 0l; qrow : int64 = 0l; cosrow : int64 = 0l; mirbase : int64 = 0l;
+                    ring : int64 = 0l) : GkRopeKvArgs
     => GkRopeKvArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs), npairs_q = uint(npairs_q), npairs = uint(npairs),
         neox = neox ? 1u : 0u, has_bias = has_bias ? 1u : 0u, rot = uint(rot),
         qrow = uint(qrow), kvrow = uint(kvrow), boff = uint(boff), cstride = uint(cosrow), ccos = uint(cbase),
-        rows = uint(rows), mirbase = uint(mirbase))
+        rows = uint(rows), mirbase = uint(mirbase), ring = uint(ring))
 
 //! The fused rope and K/V store, an invocation a rotation pair of a row: a q pair ropes in place, a k pair ropes into the mirror
 //! K row and copies its v pair into the V row, the bias rows added first, the f16 stamps clamped into the half range, the pairs
@@ -2038,7 +2366,7 @@ class template GkRopeKvStore {
     //! its mirror K and V bases, the per-layer stride `pa.mirbase` layers of which sit ahead, and its depth (the row lands at depth - 1)
     def rope_kv_tabled(gid, row : uint; rrow : uint4) {
         if (gid < pa.npairs) {
-            let ahead = pa.mirbase * rrow.z + (rrow.w - 1u) * pa.kvd
+            let ahead = pa.mirbase * rrow.z + pa.layr + kv_ring_row(rrow.w - 1u, pa.ring) * pa.kvd
             rope_kv_pair(row, gid, rrow.x + ahead, rrow.y + ahead)
         }
     }
@@ -2109,6 +2437,8 @@ struct GkQknRopeArgs {
     nreal : uint       //! the live rows: past them a q head copies its row into its twin and a k head stores nothing; 0 = every row
     skipnorm : uint    //! the rope alone, no per-head norm
     hscale : float     //! the q twin's scale (`HX` stamps)
+    ring : uint        //! a sliding layer's ring rows: a row lands at `kv_ring_row` of its position; 0 = the flat slab
+    layr : uint        //! Metal's rows form: the rings' rows ahead of the layer in a stream's slice, past its `layerbase` stride
 }
 
 //! The fused per-head q/k RMSNorm, rope and K/V store, a workgroup of `LANES` a head (`ARCHITECTURE_GPU_SHARED_KERNELS.md`):
@@ -2124,11 +2454,13 @@ class template GkQknRopeKv : GkWgReduce {
     @ssbo @binding = 5 @role = "weight" wn : array<float>                //! the q and k norm-weight rows
     @ssbo @binding = 7 @role = "weight" bias : array<float>              //! the [q | k | v] projection biases (`hasb`), else a placeholder
     @ssbo @binding = 9 @role = "write" @template_gate = HX qh : array<float16>   //! the q rows' half twin, under `hscale`
+    @ssbo @binding = 10 @role = "read" vsrc : array<float>   //! the V projection rows: the [q | k | v] rows again, or the window's own V panel
     @kargs pa : GkQknRopeArgs
     @template_constant CLAMP16 : bool = true
     @template_constant LANES : uint = 256u
     @template_constant EPT : int = 1   //!< the rotation pairs a thread holds: LANES x EPT covers the widest head's, 256
     @template_constant V_WG : bool = false   //!< the V rows take workgroups of their own past the k heads; else a k head's stores its V row
+    @template_constant V_IN_PLACE : bool = false   //!< the V store's target is the V source itself: a k head stores its V row only under an arm
     @template_constant HX : bool = false
 
     def abstract mir_base(rowi : uint) : uint2           //! row rowi's mirror K and V row bases, ahead of the head's own
@@ -2200,8 +2532,8 @@ class template GkQknRopeKv : GkWgReduce {
             b[c] = 0.0
             if (p < npair) {
                 let ix = pair_ix(p)
-                a[c] = (rdk || vplain ? kvsrc[sbase + ix.x] : qrows[sbase + ix.x]) + (pa.hasb != 0u ? bias[pa.boff + bbase + ix.x] : 0.0)
-                b[c] = (rdk || vplain ? kvsrc[sbase + ix.y] : qrows[sbase + ix.y]) + (pa.hasb != 0u ? bias[pa.boff + bbase + ix.y] : 0.0)
+                a[c] = (rdk ? kvsrc[sbase + ix.x] : (vplain ? vsrc[sbase + ix.x] : qrows[sbase + ix.x])) + (pa.hasb != 0u ? bias[pa.boff + bbase + ix.x] : 0.0)
+                b[c] = (rdk ? kvsrc[sbase + ix.y] : (vplain ? vsrc[sbase + ix.y] : qrows[sbase + ix.y])) + (pa.hasb != 0u ? bias[pa.boff + bbase + ix.y] : 0.0)
                 ss += a[c] * a[c] + b[c] * b[c]
             }
         }
@@ -2252,7 +2584,7 @@ class template GkQknRopeKv : GkWgReduce {
             }
         }
         static_if (!V_WG) {
-            if (is_k) {
+            if (is_k && (!V_IN_PLACE || pa.vfk != 0u || pa.vnorm != 0u)) {
                 var wa, wb : float[EPT]
                 var ws = 0.0
                 for [unroll_full] (c in range(EPT)) {
@@ -2264,8 +2596,8 @@ class template GkQknRopeKv : GkWgReduce {
                         wb[c] = b[c] * inv
                     } elif (p < npair) {
                         let ix = pair_ix(p)
-                        wa[c] = kvsrc[vi + ix.x] + (pa.hasb != 0u ? bias[pa.boff + vb + ix.x] : 0.0)
-                        wb[c] = kvsrc[vi + ix.y] + (pa.hasb != 0u ? bias[pa.boff + vb + ix.y] : 0.0)
+                        wa[c] = vsrc[vi + ix.x] + (pa.hasb != 0u ? bias[pa.boff + vb + ix.x] : 0.0)
+                        wb[c] = vsrc[vi + ix.y] + (pa.hasb != 0u ? bias[pa.boff + vb + ix.y] : 0.0)
                         ws += wa[c] * wa[c] + wb[c] * wb[c]
                     }
                 }
@@ -2306,11 +2638,12 @@ struct GkRouterArgs {
     xs : uint            //! a column's stride in x, elements (0 = dim)
     hasb : uint          //! the bias row at `boff` added (`BIAS` stamps: gpt-oss)
     boff : uint
+    yscale : float       //! every logit's scale, 0 reading as 1 (`YSCALE` stamps: the per-layer-embedding projection's 1/sqrt(dim))
 }
 
-//! The router GEMV: expert row e's logit for every column, the row's weights read once for all of them; `ROW_WG` gives a row a
-//! workgroup of `LANES` (the subgroups' partials crossing the workgroup slab), else a subgroup (`gl_NumSubgroups` rows a
-//! workgroup); a lane steps `VW` elements a load: 1 (the f32 rows), 2 (the f16 rows as half pairs), 4 (f32 rows and x as float4)
+//! The router GEMV: expert row e's logit for every column, the row's weights read once for all of them; `ROW_WG` gives a row a workgroup
+//! of `LANES`, else a subgroup; a lane steps `VW` elements a load: 1 (f32 rows), 2 (16-bit pairs: f16, or bf16 under `BF16`), 4 (f32 rows
+//! and x as float4); `YSCALE` scales every logit by `pa.yscale`
 [ |> template_struct_instance]
 class template GkRouterGemv {
     @ssbo @binding = 0 @role = "weight" w : array<KT>                                 //! the rows, row-major [ne x dim] a layer, VW elements a word
@@ -2326,6 +2659,8 @@ class template GkRouterGemv {
     @template_constant COL_CLAMP : bool = false   //!< the columns past the last read it again and store nothing, no branch in the dot; else they skip
     @template_constant NORM : bool = false
     @template_constant BIAS : bool = false
+    @template_constant BF16 : bool = false   //!< VW 2: the pair is two bf16 halves, each widened by its bit shift (exact)
+    @template_constant YSCALE : bool = false
 
     //! x's element i of the column at element xb (VW 1 and 2), under the norm row when `norm_on`
     [spirv_inline]
@@ -2348,7 +2683,11 @@ class template GkRouterGemv {
             d = dot4_seq(wv, x[xb / 4u + i])
         } else {
             static_if (VW == 2u) {
-                d = unpackHalf2x16(wv).x * xn(xb, 2u * i) + unpackHalf2x16(wv).y * xn(xb, 2u * i + 1u)
+                static_if (BF16) {
+                    d = gk_bf16_lo(wv) * xn(xb, 2u * i) + gk_bf16_hi(wv) * xn(xb, 2u * i + 1u)
+                } else {
+                    d = unpackHalf2x16(wv).x * xn(xb, 2u * i) + unpackHalf2x16(wv).y * xn(xb, 2u * i + 1u)
+                }
             } else {
                 d = float(wv) * xn(xb, i)   // nolint:PERF020,LINT019 - KT converts; the f32 stamp's cast is free, the rule fires where it lands
             }
@@ -2371,7 +2710,11 @@ class template GkRouterGemv {
         if (pa.ne_split != 0u && e >= pa.ne_split) {
             o = pa.obase_split + cc * (pa.ne - pa.ne_split) + (e - pa.ne_split)
         }
-        logits[o] = v + bias_at(e)
+        static_if (YSCALE) {
+            logits[o] = v * (pa.yscale != 0.0 ? pa.yscale : 1.0) + bias_at(e)
+        } else {
+            logits[o] = v + bias_at(e)
+        }
     }
 
     //! a column's lane partial `v` summed over the subgroup in place, and under `ROW_WG` published at slot `slot` x 128 of the slab
@@ -2542,6 +2885,82 @@ class template GkGeglu {
             if (e + 3u < pa.nelem) {
                 geglu_at(e + 3u)
             }
+        }
+    }
+}
+
+struct GkPleActArgs {
+    nelem : uint     //! the gate elements: rows x ple
+    sbase : uint     //! the side rows' first element: layer l's slice of row 0
+    sstride : uint   //! a side row's stride: layers x ple
+    slen : uint      //! a slice's width: ple
+}
+
+//! The E-series per-layer-embedding act, an invocation an element: gelu(gate) x the side row's element (`gk_strided_at`: the side
+//! rows position-major, a row's slice `sstride` past the one before); in place over the gate rows, or under `OUT` into `outp`
+[ |> template_struct_instance]
+class template GkPleAct {
+    @ssbo @binding = 0 @role = "readwrite" @template_gate = "!OUT" g : array<float>
+    @ssbo @binding = 0 @role = "read" @template_gate = OUT gin : array<float>
+    @ssbo @binding = 1 @role = "read" side : array<float>
+    @ssbo @binding = 2 @role = "write" @template_gate = OUT outp : array<float>
+    @kargs pa : GkPleActArgs
+    @template_constant OUT : bool = false   //!< the act out of place into `outp` (the f32 projection's x), else over the gate rows
+
+    def act_elem(e : uint) {
+        if (e < pa.nelem) {
+            let u = side[gk_strided_at(e, pa.sbase, pa.sstride, pa.slen)]
+            static_if (OUT) {
+                outp[e] = gk_act_mul(gin[e], u, 1u)   //! 1u: the tanh gelu (`ACT_GELU`)
+            } else {
+                g[e] = gk_act_mul(g[e], u, 1u)
+            }
+        }
+    }
+}
+
+struct GkPleFinArgs {
+    ple : uint      //! a slice's width
+    eps : float
+    inv_sd : float  //! the projection's 1 / sqrt(dim), read by the `XSCALE` stamps
+}
+
+//! The E-series pre-step's finish, a workgroup a (row, layer) slice in place on the position-major side rows (the CPU
+//! `ple_pre_finish` after its gather): side = (side + pnorm . rms(proj)) / sqrt(2); under `XSCALE` the projection rows take their
+//! 1 / sqrt(dim) here, else they arrive scaled
+[ |> template_struct_instance]
+class template GkPleFinish : GkWgReduce {
+    @ssbo @binding = 0 @role = "read" proj : array<float>     //! [rows x layers*ple] the projected rows
+    @ssbo @binding = 1 @role = "weight" pnorm : array<float>  //! [ple] the projection's norm row
+    @ssbo @binding = 2 @role = "readwrite" y : array<float>   //! [rows x layers*ple] the gathered side rows, in place
+    @kargs pa : GkPleFinArgs
+    @template_constant TG : uint = 256u       //!< the workgroup's lanes, the slice loops' stride
+    @template_constant XSCALE : bool = false
+
+    def proj_at(i : uint) : float {
+        static_if (XSCALE) {
+            return proj[i] * pa.inv_sd
+        } else {
+            return proj[i]
+        }
+    }
+
+    def finish_slice(sl : uint) {
+        let base = sl * pa.ple
+        let tid = gl_LocalInvocationID.x
+        var ss = 0.0
+        var k = tid
+        while (k < pa.ple) {
+            let v = proj_at(base + k)
+            ss += v * v
+            k += TG
+        }
+        var inv = 0.0
+        wg_rms_inv_into(ss, pa.ple, pa.eps, 0u, inv)
+        k = tid
+        while (k < pa.ple) {
+            y[base + k] = mad(pnorm[k], proj_at(base + k) * inv, y[base + k]) * 0.70710677   //! 1 / sqrt(2), the f32 the host's division rounds to
+            k += TG
         }
     }
 }
@@ -3500,6 +3919,40 @@ class template GkPleConv {
     }
 }
 
+struct GkClsEpiArgs {
+    vocab : uint
+    cap : float     //! the final logit softcap; 0 = none
+    nsupp : uint    //! suppressed token ids in `supp`
+    rows : uint     //! logits rows in `y`, `vocab` apart
+}
+
+//! The classifier tail's epilogue in place, an invocation a logit over `rows` rows: the final logit softcap (`softcap_exp`), then
+//! the checkpoint's suppressed ids pinned to -1e30 - after the cap, so the pin survives it; each logit scans the few ids
+[ |> template_struct_instance]
+class template GkClsEpilogue {
+    @ssbo @binding = 0 @role = "readwrite" y : array<float>   //! the logits rows
+    @ssbo @binding = 1 @role = "weight" supp : array<uint>    //! the suppressed ids (a placeholder when nsupp is 0)
+    @kargs pa : GkClsEpiArgs
+
+    def epi_elem(gid : uint) {
+        if (gid < pa.vocab * pa.rows) {
+            let id = pa.nsupp > 0u ? gid % pa.vocab : 0u   //! the row's id, wanted by the pins alone
+            var v = y[gid]
+            if (pa.cap > 0.0) {
+                v = softcap_exp(v, pa.cap)
+            }
+            var j = 0u
+            while (j < pa.nsupp) {
+                if (supp[j] == id) {
+                    v = -1.0e30
+                }
+                j++
+            }
+            y[gid] = v
+        }
+    }
+}
+
 let GK_NO_DSCALE = 0xFFFFFFFFu   //! `GkTopKArgs.dsoff`'s "no per-expert down scale" sentinel
 
 struct GkTopKArgs {
@@ -3530,12 +3983,17 @@ class template GkTopKRow : GkWgReduce {
     @kargs pa : GkTopKArgs
     @template_constant LANES : uint = 256u   //!< the workgroup's lanes
     @template_constant DEPTH : int = 1       //!< the logits a lane holds
+    @template_constant DSCALE : bool = false   //!< the per-expert down scale row folds into the picked weights where `dsoff` names one
+    @template_constant DSOFF_SWITCH : bool = true   //!< `pa.dsoff` names the row or `GK_NO_DSCALE` at run time; off, a DSCALE stamp always scales
     @workgroup parti : uint[64]
     @workgroup pick : uint[64]
     @workgroup pickw : float[64]
 
     //! row `p`'s logit of expert `e` as the select reads it; a stamp reads the row's plane
     def abstract logit_at(p, e : uint) : float
+
+    //! expert `e`'s down scale in the layer's row at `dsoff`; a DSCALE stamp reads its plane
+    def abstract down_scale(e : uint) : float
 
     [arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-topk-depth")]
     def select_row(row, ne, k : uint; raw : bool) {   // nolint:STYLE038 - the softmax and the k argmax passes over the lane's register logits, one pass a pick
@@ -3633,14 +4091,29 @@ class template GkTopKRow : GkWgReduce {
         ws = moe_renorm_sum(ws)
     }
 
-    //! pick jj's routing weight into `wj`: renormalized over the sum `ws` when norm is set, then scaled
-    def pick_weight_into(jj, norm : uint; ws, wscale : float; var wj : float&) {
+    //! pick jj (expert `ex`)'s routing weight into `wj`: renormalized over the sum `ws` when norm is set, then scaled
+    def pick_weight_into(jj, ex, norm : uint; ws, wscale : float; var wj : float&) {
         wj = pickw[jj]
         if (norm != 0u) {
             wj /= ws
         }
+        scale_weight(ex, wscale, wj)
+    }
+
+    //! a picked weight of expert `ex` under the model's global scale, then its down scale - the CPU select's order
+    [arch(at="../ARCHITECTURE_GPU_PREFILL_MOE.md#moe-wscale")]
+    def scale_weight(ex : uint; wscale : float; var wj : float&) {
         if (wscale != 0.0 && wscale != 1.0) {
             wj *= wscale
+        }
+        static_if (DSCALE) {
+            static_if (DSOFF_SWITCH) {
+                if (pa.dsoff != 0xFFFFFFFFu) {   //! GK_NO_DSCALE: the Metal emitter reads no module global
+                    wj *= down_scale(ex)
+                }
+            } else {
+                wj *= down_scale(ex)
+            }
         }
     }
 }
@@ -3883,13 +4356,20 @@ struct GkMoeCombArgs {
     woff : uint      //! the weights' base in a row (the Metal selection rows' k, past the picks)
     gstride : uint   //! the shared expert's gate logit: a row's stride in `gate` and its index there (`SH` stamps)
     goff : uint
+    eps : float      //! the gemma-4 step's (`GkMoeCombG4`): the norms' epsilon
+    ascale : float   //! ... the layer's output scale over the updated residual
+    presummed : uint //! ... the routed rows arrive summed under their weights, one row a position (the down GEMV folded them)
+    rpost_off : uint //! ... the norms plane's rows: the routed post norm, the dense post norm, the post-FFN norm, the next norm
+    dpost_off : uint
+    spost_off : uint
+    nwoff : uint
 }
 
 //! The routed experts' combine, row p's element i its k slots' down rows under their weights in slot order (the CPU axpy chain's);
 //! `WINDOW` skips a slot outside the dispatch's window or at zero weight, `GATHERED` reads the slot rows at `slot_idx`, `SH` adds the
 //! shared expert's row under its gate logit's sigmoid (`ARCHITECTURE_GPU_SHARED_KERNELS.md`)
 [ |> template_struct_instance]
-class template GkMoeCombine {
+class template GkMoeCombine : GkQ8BlockStore {
     @ssbo @binding = 0 @role = "readwrite" acc_rows : array<float>                     //! [rows x n] the combined rows (in and out)
     @ssbo @binding = 1 @role = "read" @template_gate = GATHERED slot_idx : array<uint>  //! row -> its k slot rows
     @ssbo @binding = 2 @role = "read" slot_w : array<float>                            //! ... and their routing weights
@@ -3900,6 +4380,7 @@ class template GkMoeCombine {
     @template_constant GATHERED : bool = true
     @template_constant SH : bool = false
     @template_constant WINDOW : bool = true   //!< the [r0, r1) window, the accumulate and the zero-weight skip (the Vulkan chunked chain); off, every slot sums from zero
+    @template_constant SLOT_X4 : bool = true  //!< off the window, four slots' loads in flight a step (the sum's order the same)
 
     def slot_row(p, j : uint) : uint {
         static_if (GATHERED) {
@@ -3918,12 +4399,26 @@ class template GkMoeCombine {
         }
     }
 
-    def comb_elem(p, i : uint) {
+    //! row p's k slots at element i added onto `acc` under their weights, in slot order
+    [spirv_inline]
+    def slot_sum_into(p, i : uint; var acc : float&) {
         let n = pa.n
         let k = pa.k
         let wb = p * (pa.wstride == 0u ? k : pa.wstride) + pa.woff
-        var acc = acc_start(p * n + i)
         var j = 0u
+        static_if (!WINDOW && SLOT_X4) {
+            while (j + 4u <= k) {
+                let d0 = down_rows[slot_row(p, j) * n + i]
+                let d1 = down_rows[slot_row(p, j + 1u) * n + i]
+                let d2 = down_rows[slot_row(p, j + 2u) * n + i]
+                let d3 = down_rows[slot_row(p, j + 3u) * n + i]
+                acc += slot_w[wb + j] * d0
+                acc += slot_w[wb + j + 1u] * d1
+                acc += slot_w[wb + j + 2u] * d2
+                acc += slot_w[wb + j + 3u] * d3
+                j += 4u
+            }
+        }
         while (j < k) {
             let jb = slot_row(p, j)
             let wj = slot_w[wb + j]
@@ -3936,9 +4431,151 @@ class template GkMoeCombine {
             }
             j++
         }
+    }
+
+    def comb_elem(p, i : uint) {
+        let n = pa.n
+        var acc = acc_start(p * n + i)
+        slot_sum_into(p, i, acc)
         static_if (SH) {
             acc += sig_gate(sh_rows[p * n + i], gate[p * pa.gstride + pa.goff])
         }
         acc_rows[p * n + i] = acc
+    }
+}
+
+//! The gemma-4 MoE layer's residual step, a workgroup a row (the CPU `gemma4_moe_ffn`'s tail): the routed sum and the dense row
+//! each under its post norm, their sum under the post-FFN norm, x = (x + that) . ascale, then x's next norm out in the stamp's
+//! form - f32 (`HX`: its f16 twin beside), f16, Q8_0 blocks, or none; the stamp supplies the row stash and its lanes (`TG`)
+[ |> template_struct_instance]
+class template GkMoeCombG4 : GkMoeCombine {
+    @ssbo @binding = 6 @role = "read" dense : array<float>      //! [rows x n] the dense branch's down rows
+    @ssbo @binding = 7 @role = "weight" wn : array<float>       //! the norms plane
+    @ssbo @binding = 8 @role = "write" @template_gate = OUT_F32 yo : array<float>
+    @ssbo @binding = 8 @role = "write" @template_gate = OUT_F16 outh : array<float16>
+    @ssbo @binding = 8 @role = "write" @template_gate = OUT_Q8 outq : array<int8>
+    @ssbo @binding = 9 @role = "write" @template_gate = OUT_Q8 outs : array<float>
+    @ssbo @binding = 10 @role = "write" @template_gate = HX yh : array<float16>
+    @template_constant TG : uint = 256u          //!< the workgroup's lanes, the row loops' stride
+    @template_constant OUT_F32 : bool = false
+    @template_constant OUT_F16 : bool = false
+    @template_constant HX : bool = false
+    @template_constant OUT_X4 : bool = false     //!< the next norm's stores four elements in flight a lane
+    @template_constant PRESUM_SWITCH : bool = true   //!< `pa.presummed` picks the summed rows at run time; off, the stamp sums the slots
+    override WINDOW = false
+
+    def abstract stash(k : uint; v : float) : void   //! column `k` of the row kept for the lane's own re-read
+    def abstract stashed(k : uint) : float
+
+    //! the routed rows of row `p` at element `k`
+    def routed_into(p, k : uint; var r : float&) {
+        static_if (PRESUM_SWITCH) {
+            if (pa.presummed != 0u) {
+                r = down_rows[p * pa.n + k]
+            } else {
+                r = 0.0
+                slot_sum_into(p, k, r)
+            }
+        } else {
+            r = 0.0
+            slot_sum_into(p, k, r)
+        }
+    }
+
+    //! the norms plane's row bases - the routed post norm, the dense post norm, the post-FFN norm, the next norm: `pa`'s, or the
+    //! stamp's own where its layout fixes them
+    [spirv_inline]
+    def rpost_base : uint => pa.rpost_off
+
+    [spirv_inline]
+    def dpost_base : uint => pa.dpost_off
+
+    [spirv_inline]
+    def spost_base : uint => pa.spost_off
+
+    [spirv_inline]
+    def next_base : uint => pa.nwoff
+
+    def override normed_at(e : uint; mean, inv : float) : float => wn[next_base() + e] * (stashed(e) * inv)
+
+    //! row `r`'s step: four reductions over the stash (slots 0, 1, 0, then the next norm's 1 - each reduce's barrier sits every
+    //! thread past the readers of the slot the next one writes)
+    [arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-gemma4-moe-block")]
+    def comb_g4_row(r : uint) {
+        let n = pa.n
+        let base = r * n
+        let tid = gl_LocalInvocationID.x
+        var sr = 0.0
+        var k = tid
+        while (k < n) {
+            var rv = 0.0
+            routed_into(r, k, rv)
+            stash(k, rv)
+            sr += rv * rv
+            k += TG
+        }
+        var inv_r = 0.0
+        wg_rms_inv_into(sr, n, pa.eps, 0u, inv_r)
+        var sd = 0.0
+        k = tid
+        while (k < n) {
+            let a = dense[base + k]
+            sd += a * a
+            k += TG
+        }
+        var inv_d = 0.0
+        wg_rms_inv_into(sd, n, pa.eps, 1u, inv_d)
+        var sc = 0.0
+        k = tid
+        while (k < n) {
+            let c = wn[rpost_base() + k] * (stashed(k) * inv_r) + wn[dpost_base() + k] * (dense[base + k] * inv_d)
+            stash(k, c)
+            sc += c * c
+            k += TG
+        }
+        var inv_c = 0.0
+        wg_rms_inv_into(sc, n, pa.eps, 0u, inv_c)
+        var ss = 0.0
+        k = tid
+        while (k < n) {
+            let vv = (acc_rows[base + k] + wn[spost_base() + k] * (stashed(k) * inv_c)) * pa.ascale
+            acc_rows[base + k] = vv
+            stash(k, vv)
+            ss += vv * vv
+            k += TG
+        }
+        store_next(r, ss)
+    }
+
+    //! row `r`'s next norm out of the residual's sum of squares `ss`, in the stamp's form (Q8_0 blocks, or the element stores)
+    def store_next(r : uint; ss : float) {
+        let n = pa.n
+        static_if (OUT_F32 || OUT_F16 || OUT_Q8) {
+            var inv = 0.0
+            wg_rms_inv_into(ss, n, pa.eps, 1u, inv)
+            static_if (OUT_Q8) {
+                blk_pass(0u, n / KQ_B32_ELEMS_U, r * (n / KQ_B32_ELEMS_U), 0.0, inv)
+            } else {
+                let base = r * n
+                static_if (OUT_X4) {
+                    store_x4(base, n, TG, inv)
+                } else {
+                    store_rows(base, n, TG, inv)
+                }
+            }
+        }
+    }
+
+    //! element `i` of the next norm stored in the stamp's out forms
+    def override put_out(i : uint; v : float) : void {
+        static_if (OUT_F32) {
+            yo[i] = v
+        }
+        static_if (OUT_F16) {
+            outh[i] = float16(v)
+        }
+        static_if (HX) {
+            yh[i] = float16(v)
+        }
     }
 }

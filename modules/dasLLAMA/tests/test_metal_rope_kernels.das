@@ -3,6 +3,7 @@ options stack = 524288   // every dasLLAMA program root takes this budget
 options _function_length = 0        // per-kernel gates: fixture + builder dispatch + oracle compare, one flat run each
 options _cyclomatic_complexity = 0  // same — the arm ladders follow the kernel's own binding/variant axes
 options _dasllama_internal = true
+options persistent_heap   // a dastest root frees what it deletes only on this heap; the linear heap holds every carrier a cell deleted until the context ends
 
 require dastest/testing_boost public
 require dasllama/dasllama_kv_codec  // quantize_q8kv_row / quantize_tq4kv_row / fwht rows / tq4_fill_signs
@@ -137,7 +138,7 @@ def private qkn_record_rows(t : T?; var mc : MetalCell; tag : string; st : auto(
     return mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
         stamp_run(st, pso) {
             invoke(st.enc, enc, mc.buf[b[0]], mc.buf[b[0]], mc.buf[b[1]], 0ul, mc.buf[b[2]], 0ul, mc.buf[b[3]], 0ul, mc.buf[b[4]], mc.buf[b[5]], 0ul,
-                mc.buf[b[6]], mc.buf[b[7]], 0ul, ka, nwg, nb, int64(ka.hs / 2u))
+                mc.buf[b[6]], mc.buf[b[7]], 0ul, mc.buf[b[0]], ka, nwg, nb, int64(ka.hs / 2u))
         }
     }
 }
@@ -150,7 +151,7 @@ def private qkn_record_one(t : T?; var mc : MetalCell; tag : string; st : auto(S
     return mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
         stamp_run(st, pso) {
             invoke(st.enc, enc, mc.buf[b[0]], mc.buf[b[0]], mc.buf[b[1]], koffb, mc.buf[b[2]], voffb, mc.buf[b[3]], 0ul, mc.buf[b[4]], mc.buf[b[5]], 0ul,
-                mc.buf[b[6]], ka, nwg, int64(ka.hs / 2u))
+                mc.buf[b[6]], mc.buf[b[0]], ka, nwg, int64(ka.hs / 2u))
         }
     }
 }

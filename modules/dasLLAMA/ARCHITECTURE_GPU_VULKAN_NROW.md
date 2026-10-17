@@ -12,7 +12,10 @@ decode era, whose routed block the command's rows form mirrors, is `ARCHITECTURE
 ### The N-row token command: a batched step's rows through one weight pass {#nrow-token-command}
 
 **A batched decode step runs its rows through ONE recorded command, so a layer's weights stream
-once for the step instead of once a row.** The driver sizes every per-token plane to `RDec.nb`
+once for the step instead of once a row.** Its rows come as their token ids - the batched steps', the
+peel's and the assistant drafter's verify's - and the command gathers each off the resident table as
+the one-row command does (`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#vk-token-gather`), so the host embeds
+no batched row. The driver sizes every per-token plane to `RDec.nb`
 rows - `RD_NB_MAX` (`RDEC_NROW_MAX`, sixteen: two of the N-column leaves' eight-column tiles,
 `ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-col-tiles`) whatever the region
 count, so the short window's peel and the speculative verify
@@ -27,8 +30,8 @@ MoE, per-layer-embedding, shared-KV and recurrent layers and a gated q, and none
 the tail has no N-row form - a routed block beside a per-layer-embedding
 branch, more routed slots than the block's slot planes hold, or a routed layer whose experts serve on
 the host on a plain MoE (the one-row split command serves it, `ARCHITECTURE_GPU_VULKAN_HC.md#hc-token-command`) -
-and logs the reason once per armed model. The classifier epilogue (the final softcap and the suppressed ids, `ClsEpilogue`)
-runs once over the rows' logits planes, `ClsEpiArgs.rows` planes `vocab` apart, the id a row's
+and logs the reason once per armed model. The classifier epilogue (the final softcap and the suppressed ids, `ClsEpilogue`, the
+`GkClsEpilogue` stamp) runs once over the rows' logits planes, `GkClsEpiArgs.rows` planes `vocab` apart, the id a row's
 own; the one-row command and the prefill's tail pass one row. The pins matter on the one-row
 path alone: the batch driver's host tail pins the suppressed ids again on every row after the
 override (`dasllama_batch.das`), where the one-row decode returns before its host tail when the
@@ -95,8 +98,11 @@ dispatches the same stamp at one workgroup) writes row p's k slots at `p * k` - 
 feed blocks (`GkTopKArgs.xnb1`), the down records each slot's hidden row; and the gate, up and
 down GEMVs are the one-row leaves over `nrows * k` regions (`GemvArgs.nreg`), the act over every
 slot, the combine per row (`ClsArComb`'s position is its workgroup). The rows take the split
-gate and up forms - each fused stamp's twin byte for byte, by the stamps' own cells - and the
-unfolded down, whose fold under the routing weights is the combine's; the site before the block
+gate and up forms - each fused stamp's twin byte for byte, by the stamps' own cells - and the down
+the one-row command takes: where it folds each row's k slots under their routing weights (a per-32
+gemma-4 down, `Blk32GemvT.sum_shell` a subgroup a (row, output row) over the row's own k regions) so
+do the rows, row p's sum the one-row command's arithmetic over its slots (`test_vkd_*_gemv`'s summed
+rows), and the combine reads one presummed row a row; elsewhere the combine sums. The site before the block
 takes the split add-rms and requant pair, since the router reads the normed rows as floats. The
 routed planes hold `nb` rows (`moe_dlog_dev`, `moe_xq_dev` and `moe_xs_dev`, `egate_dev`,
 `eup_dev`, `edown_dev`), every set binding them whole (the one-row command reads row 0), and the rail declines a
@@ -117,12 +123,13 @@ stamp and the bisect knob past it, the sets one and the same. The router's parti
 sixteen subgroups' worth, twice the tier's floor.
 
 **An E-series row carries its own per-layer-embedding side input, and a shared-KV layer projects
-q alone.** The command takes the rows' side inputs position-major (`RdecTokenNFn`'s `ple` rows:
-the table rows the batch driver gathers from each row's token where the device finishes the
-pre-step, else the pre-step's finished rows as the workspace holds them), uploads them on the
-cos plane's hazard bit, and where the device finishes the pre-step runs the projection as one
-N-column dispatch (`RouterArgs.ncols`, the rows the columns, into `tok_plep`'s rows) and the per-slice
-finish over every row's slices. A layer's branch takes the one-row branch's forms over the rows:
+q alone.** The command takes the rows' side inputs position-major on the cos plane's hazard bit:
+where the driver holds the table and the projection, each row's side row gathered off its token id
+through the table's `emb_cls` stamp (`RdecTokenNFn`'s `ids`, staged in the one-row command's id plane;
+a row without one stages its table row for the gather to copy, `EMB_ID_HOST`), else the pre-step's
+finished rows as the workspace holds them, uploaded whole. Where the device finishes the pre-step it
+runs the projection as one N-column dispatch (`GkRouterArgs.ncols`, the rows the columns, into
+`tok_plep`'s rows) and the per-slice finish over every row's slices. A layer's branch takes the one-row branch's forms over the rows:
 the gate as an N-column GEMV into `pleg_dev`'s rows, then where the one-row branch fuses
 (`RLayer.ple_fused`) the FFN step's rows stamp quantizing the rows as they are and the fused act +
 requant + proj over the columns (`Q8GemvPleAct` with `PleActArgs.ncols`: every column's x built
@@ -208,7 +215,8 @@ reads the one-row command's logits bit for bit wherever the N-row command does.
 
 **The draft head re-warms in the same command, in Metal's shape**
 (`ARCHITECTURE_GPU_MTP.md#mtp-verify-draft-warm`). After the picks, head row i takes
-`[enorm(embed tok_i) ; hnorm(h_i)]` - `h_0` the pre-draft carry the host uploads, `h_i` the trunk's
+`[enorm(embed tok_i) ; hnorm(h_i)]` - `embed tok_i` gathered unscaled off row i's id as the trunk row
+is (the draft command's gather), `h_0` the pre-draft carry the host uploads, `h_i` the trunk's
 post-norm row `i - 1`, copied out of `xb` into the cat plane on the device - through eh_proj with the
 rows as columns, the head's attention norm and requant, and its k and v projections, norm, rope and
 store: its K/V rows `pos - 1` .. `pos + n - 2` and nothing past them, since no verify reads the
@@ -271,20 +279,21 @@ price the seat's whole wall from the engine's side, the draft's `mtp.draft`.
 
 ### The residual step's two forms spell the sandwich add as one fma {#residual-step-fma}
 
-The residual step has two forms on the decode rail: the row kernel (`ArBase.accum_row`, a
-row a workgroup, the N-row command's every site) and the q8 GEMV's epilogue
+The residual step has two forms on the decode rail: the row kernel (`ArBase`, a stamp of
+`GkAddRmsRows`, a row a workgroup, the N-row command's every site) and the q8 GEMV's epilogue
 (`Q8GemvAr.epilogue`, the one-row command's post-attention and post-FFN sites), and the
-regions cells hold the two commands bit for bit. The forms are ONE text - `ResidualT.accum_row`
-and `ResidualT.quant32`, the template shell both classes stamp, its reads and writes behind
-accessor overrides (the row kernel's stash slab against the GEMV's re-read of its row) - so the
+regions cells hold the two commands bit for bit. The forms are ONE text - `GkResidualRow.accum_row_into`
+and `GkResidualRow.quant32`, the shell both classes stamp (`dasllama_gpu_kernels_common.das`, the
+Metal residual stamps' shell too), its reads and writes behind accessor overrides (the row kernel's
+stash slab against the GEMV's re-read of its row) - so the
 reduce, the four-column round and the requant cannot drift apart; a driver still decides per kernel whether a multiply
 feeding an add contracts into one fma: contracting one kernel's sandwich column (`x + wn * (a *
 ainv)`, a gemma's post norm over the add partner) and not the other's rounds the two one ulp
 apart on a few percent of the row, and the batched rows drift from the session alone. Both forms
 spell that add as `mad` - the GLSL `Fma` instruction, fused by definition - so the driver has no
 contraction to choose; the plain column carries no multiply before its add. The row kernel walks
-its row four columns a round - `accum_row` issues a round's four loads before its adds,
-`ArBase.store_out` its four loads before its stores - because a one-workgroup row kernel's time
+its row four columns a round - `accum_row_into` issues a round's four loads before its adds,
+`GkQ8BlockStore.store_x4` its four loads before its stores - because a one-workgroup row kernel's time
 is its load rounds.
 `test_vkd_q8_gemv_ar_row_twin` holds the epilogue to the row kernel bit for bit on both columns,
 fed the GEMV's own y row.

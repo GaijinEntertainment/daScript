@@ -1,14 +1,25 @@
 options gen2
 options stack = 524288   // three Model shells live in one cell's frame - the default test stack overflows on them
 options _dasllama_internal = true
+options persistent_heap   // a dastest root frees what it deletes only on this heap; the linear heap holds every carrier a cell deleted until the context ends
 
 require dastest/testing_boost public
 require dasllama/dasllama_common
+require _override_probes   // decode_declines: the fake override's step
 require dasllama/dasllama_sampling
 require dasllama/dasllama_gpu_resident
 require dasllama/dasllama_gpu_tier   // install_moe_gpu_resident_bias - the bias seat a served qwen2 needs
 require ?vulkan dasllama/dasllama_vulkan_decode   // rd_routed_slots_fit - the N-row command's slot cap, where the module exists
+require ?vulkan dasllama/dasllama_vulkan_prefill  // ple_proj_bf16_why - the bf16 projection's dim gate, where the module exists
+require ?vulkan dasllama/dasllama_vulkan_common   // GpuState / g_gpu - the device shell ple_proj_gemv_why reads, where the module exists
 require dasllama/dasllama_metal_shapes   // moe_metal_ok - the Metal routed block's admission, portable
+require ?das_metal dasllama/dasllama_metal_common   // decline - the required-mode panic, where the module exists
+require ?das_metal dasllama/dasllama_metal_decode   // the metal decode override `set_metal_mode` selects
+require ?das_metal dasllama/dasllama_metal_prefill   // the metal prefill override beside it
+require dasllama/dasllama_math   // kernel_backend_seat / restore_kernel_backend - the backend pin the metal mode sets, put back
+require dasllama/dasllama_image   // save_model_image / load_model_image / image_identity - the trimmed lane's map under the ring pin
+require dasllama/dasllama_arch_llama   // the arch the trimmed lane's shell names, registered for its map
+require daslib/fio
 require strings
 require daslib/strings_boost
 require daslib/enum_trait   // the format-set drift guard walks the whole KqFmt enum
@@ -113,6 +124,20 @@ def test_attn_chain_unserved_features(t : T?) {
         p.rope_dim = 64l
         t |> equal(attn_chain_unserved_features(p), "")
     }
+    t |> run("the chain names every gemma generation's attention as unserved: the sandwich norms, gemma-2's softcap, gemma-4's v-norm") @(t : T?) {
+        var g3 = Config()
+        g3.rope_neox = true
+        g3.qk_norm = true
+        g3.pre_post_norm = true
+        t |> equal(attn_chain_unserved_features(g3), "pre/post norms", "gemma-3")
+        var g2 := g3
+        g2.qk_norm = false
+        g2.attn_logit_softcap = 50.0
+        t |> equal(attn_chain_unserved_features(g2), "attention logit softcap, pre/post norms", "gemma-2")
+        var g4 := g3
+        g4.v_norm = true
+        t |> equal(attn_chain_unserved_features(g4), "v-norm, pre/post norms", "gemma-4")
+    }
 }
 
 //! a three-layer shell whose layer 1 is recurrent with every deltanet plane at offset 0, its qkv/z/out planes Q4_K
@@ -185,7 +210,31 @@ def test_perop_dense_ffn_mixed_forms(t : T?) {
         m.w1_fmt[0] = KqFmt.k4
         t |> equal(perop_dense_ffn_decline(m, 0l), "", "one activation form rides the rail")
         m.w3_fmt[0] = KqFmt.mx4
-        t |> success(contains(perop_dense_ffn_decline(m, 0l), "not tier-servable"), "an mx4 up plane is named (the control)")
+        t |> equal(perop_dense_ffn_decline(m, 0l), "FFN gate/up/down formats k4/mx4/k6 not tier-servable", "an mx4 up plane is named by site and member (the control)")
+        delete m
+    }
+}
+
+//! the tied classifier on a table no device plane carries: an F16 table (no q8 tag, no K-quant plane, no Metal-mode copy) is named,
+//! where the resident plan would seat a q8 plane at an offset that holds no bytes; a Q8_0, a K-quant and an untied table pass
+[test]
+def test_resident_cls_decline(t : T?) {
+    t |> run("the tied classifier of an F32/F16/BF16 token table declines the whole-model driver by name") @(t : T?) {
+        var m = Model()
+        m.config.shared_weights = true
+        t |> success(contains(resident_cls_decline(m), "tied classifier"), "a tied table with no classifier plane is named")
+        m.cls_q8 = true
+        t |> equal(resident_cls_decline(m), "", "a tied Q8_0 table's plane serves (the control)")
+        m.cls_q8 = false
+        m.cls_q8_copy = true
+        t |> equal(resident_cls_decline(m), "", "a tied F16 table whose load kept the classifier's q8 copy serves off the copy")
+        m.cls_q8_copy = false
+        m.kquant_native = true
+        m.emb_fmt = KqFmt.k6
+        t |> equal(resident_cls_decline(m), "", "a tied K-quant table's plane serves")
+        m.emb_fmt = KqFmt.q8
+        m.config.shared_weights = false
+        t |> equal(resident_cls_decline(m), "", "an untied classifier carries its own plane")
         delete m
     }
 }
@@ -475,10 +524,10 @@ def test_moe_metal_expert_count(t : T?) {
 
 [test]
 def test_moe_metal_expert_weights_scale(t : T?) {
-    t |> run("a global expert_weights_scale serves on Metal: the select's scale pass carries it") @(t : T?) {
+    t |> run("a global expert_weights_scale serves on Metal: the select carries it") @(t : T?) {
         var m <- moe_shell(KqFmt.k4)
         m.config.expert_weights_scale = 2.5
-        t |> success(moe_metal_ok(m), "a scale of 2.5 serves (MetalMoeWScale over the scale row behind the select)")
+        t |> success(moe_metal_ok(m), "a scale of 2.5 serves (the select's args carry it)")
         m.config.n_expert = 513l
         t |> success(!moe_metal_ok(m), "the control: the same shell past the select stamps' reach still declines")
         delete m
@@ -515,6 +564,128 @@ def test_decode_shape_dense_width(t : T?) {
             "and its lattice width passes - the width is what declined, not the rest of the shell")
         delete dense
         set_rope_table_mode(saved_rope)
+    }
+}
+
+//! a plane format the Metal kernels do not read declines with a line naming the site and the `KqFmt` member: a dense plane under
+//! `kquant_native`, a routed stack under `graph`; the enum value the declines-by-reason table counts stays the gate's
+[test]
+def test_metal_fmt_decline_names_site(t : T?) {
+    t |> run("a dense plane's unserved format names its layer, site and member; the decode gate still answers kquant_native") @(t : T?) {
+        var m <- shell(2l, 0ul)
+        m.quant = QuantMode.q8
+        m.kquant_native = true
+        m.wq_fmt <- [KqFmt.k4, KqFmt.k4]
+        m.wk_fmt <- [KqFmt.k4, KqFmt.k4]
+        m.wv_fmt <- [KqFmt.k6, KqFmt.k6]
+        m.wo_fmt <- [KqFmt.k4, KqFmt.k4]
+        m.w1_fmt <- [KqFmt.k4, KqFmt.k4]
+        m.w3_fmt <- [KqFmt.k4, KqFmt.k4]
+        m.w2_fmt <- [KqFmt.k6, KqFmt.k6]
+        t |> equal(kq_load_gpu_unserved(m), "", "every plane in a served format: nothing to name")
+        t |> equal(metal_fmt_decline_line("decode", "kquant_native", m), "", "and no line")
+        m.w3_fmt[1] = KqFmt.mx4
+        t |> equal(kq_load_gpu_unserved(m), "layer 1's FFN up plane is mx4")
+        t |> equal(decode_shape_decline(m, DECODE_NEEDS_OK, true, false, false, mint_time = true), MetalDecodeDecline.kquant_native,
+            "the gate's reason is the enum value the declines table counts")
+        t |> equal(metal_fmt_decline_line("decode", "{MetalDecodeDecline.kquant_native}", m),
+            "dasLLAMA metal decode: declined kquant_native - layer 1's FFN up plane is mx4, a format the Metal kernels do not read there; the CPU serves the call")
+        t |> equal(metal_fmt_decline_line("decode", "{MetalDecodeDecline.shape}", m), "", "a decline no plane format decided says no format line")
+        m.w3_fmt[1] = KqFmt.k4
+        m.emb_fmt = KqFmt.mx4
+        t |> equal(kq_load_gpu_unserved(m), "the token table plane is mx4")
+        m.emb_fmt = KqFmt.q8
+        m.wcls_fmt = KqFmt.mx4
+        t |> equal(kq_load_gpu_unserved(m), "the classifier plane is mx4")
+        delete m
+    }
+    t |> run("a routed stack's unserved format names its layer, site and member under graph") @(t : T?) {
+        var m <- moe_shell(KqFmt.k4)
+        t |> equal(moe_fmts_unserved(m), "", "a k4 stack has the routed block's kernels")
+        m.we2_fmt[1] = KqFmt.mx4
+        t |> success(!moe_metal_ok(m), "the routed block declines the stack")
+        t |> equal(moe_fmts_unserved(m), "layer 1's expert stack down plane is mx4")
+        t |> equal(metal_fmt_decline_line("prefill", "{MetalPrefillDecline.graph}", m),
+            "dasLLAMA metal prefill: declined graph - layer 1's expert stack down plane is mx4, a format the Metal kernels do not read there; the CPU serves the call")
+        delete m
+    }
+}
+
+//! the routed block's other `graph` declines name their plane the same way: a sigmoid-gated shared expert's, a deltanet plane's
+[test]
+def test_metal_graph_decline_names_site(t : T?) {
+    t |> run("a sigmoid-gated shared expert's unserved format names its layer, site and member under graph") @(t : T?) {
+        var m <- moe_shell(KqFmt.k4)
+        m.config.n_ff_shexp = 256l
+        m.config.moe_shexp_gated = true
+        m.wshk1_offs <- [0l, 0l]
+        m.wshk2_offs <- [0l, 0l]
+        m.wshk3_offs <- [0l, 0l]
+        m.wsh1_fmt <- [KqFmt.k4, KqFmt.k4]
+        m.wsh2_fmt <- [KqFmt.k4, KqFmt.k4]
+        m.wsh3_fmt <- [KqFmt.k4, KqFmt.k4]
+        t |> equal(shexp_fmts_unserved(m), "", "k4 shared-expert planes have their one-row GEMVs")
+        m.wsh3_fmt[1] = KqFmt.mx4
+        t |> success(!moe_metal_ok(m), "the routed block declines the shared expert's plane")
+        t |> equal(shexp_fmts_unserved(m), "layer 1's shared expert up plane is mx4")
+        t |> equal(metal_fmt_decline_line("decode", "{MetalDecodeDecline.graph}", m),
+            "dasLLAMA metal decode: declined graph - layer 1's shared expert up plane is mx4, a format the Metal kernels do not read there; the CPU serves the call")
+        delete m
+    }
+    t |> run("a deltanet plane's unserved format names its layer, site and member under graph") @(t : T?) {
+        var m <- shell(3l, 2ul)
+        m.config.dim = 256l
+        m.config.ssm_d_inner = 256l
+        m.config.ssm_d_state = 128l
+        m.config.ssm_d_conv = 4l
+        m.dnqkv_fmt <- [KqFmt.q8, KqFmt.k4, KqFmt.q8]
+        m.dngate_fmt <- [KqFmt.q8, KqFmt.k4, KqFmt.q8]
+        m.dnout_fmt <- [KqFmt.q8, KqFmt.k4, KqFmt.q8]
+        m.dnbeta_fmt <- [KqFmt.q8, KqFmt.k4, KqFmt.q8]
+        m.dnalpha_fmt <- [KqFmt.q8, KqFmt.k4, KqFmt.q8]
+        t |> equal(dn_fmts_unserved(m), "", "k4 deltanet planes have their one-row GEMVs")
+        t |> equal(dn_ba_window_fmts_unserved(m), "", "and the beta/alpha planes their expert-form GEMV")
+        m.dngate_fmt[1] = KqFmt.mx4
+        t |> success(!dn_metal_ok(m), "the deltanet gate declines the hybrid")
+        t |> equal(dn_fmts_unserved(m), "layer 1's deltanet gate plane is mx4")
+        t |> equal(metal_fmt_decline_line("prefill", "{MetalPrefillDecline.graph}", m),
+            "dasLLAMA metal prefill: declined graph - layer 1's deltanet gate plane is mx4, a format the Metal kernels do not read there; the CPU serves the call")
+        m.dngate_fmt[1] = KqFmt.k4
+        m.dnalpha_fmt[1] = KqFmt.mx4
+        t |> success(!dn_ba_metal_window_ok(m), "the window's beta/alpha gate declines an mx4 alpha plane")
+        t |> equal(dn_ba_window_fmts_unserved(m), "layer 1's deltanet alpha plane is mx4")
+        delete m
+    }
+}
+
+//! under `MetalMode.required` a plane-format decline panics with the words its warning line logs, not the bare reason
+[test]
+def test_metal_decline_panic_names_site(t : T?) {
+    t |> run("the required-mode panic carries the site and member the warning line names") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            var m <- shell(2l, 0ul)
+            m.quant = QuantMode.q8
+            m.kquant_native = true
+            m.w3_fmt <- [KqFmt.k4, KqFmt.mx4]
+            let words = metal_fmt_decline_words("decode", "{MetalDecodeDecline.kquant_native}", m)
+            t |> equal(words, "kquant_native - layer 1's FFN up plane is mx4, a format the Metal kernels do not read there")
+            let mode0 = get_metal_mode()
+            let seat = kernel_backend_seat()
+            let pf0 = active_prefill_override()
+            let dc0 = active_decode_override()
+            set_metal_mode(MetalMode.required)
+            let why = panic_text() $ { decline(MetalDecodeDecline.kquant_native, words) }
+            let bare = panic_text() $ { decline(MetalDecodeDecline.shape) }
+            set_metal_mode(mode0)
+            select_prefill_override(pf0)
+            select_decode_override(dc0)
+            restore_kernel_backend(seat)
+            t |> success(find(why, "decode declined: {words} (the GPU cannot serve this call)") >= 0, "the panic names the site and member: {why}")
+            t |> success(find(bare, "decode declined: shape (") >= 0, "a decline no plane format decided panics with its reason alone (the control): {bare}")
+            delete m
+        } else {
+            t |> skip("the required-mode panic is the Metal drivers' - no das_metal in this build")
+        }
     }
 }
 
@@ -573,6 +744,18 @@ def test_resident_fit_ctx(t : T?) {
         t |> equal(resident_fit_ctx(plan, asked, 0l), ((room - 100l * mb) / 8l * 7l) / kv_pos, "the hot pool's bytes come off the room")
         plan.weight_bytes = 900l * mb
         t |> equal(resident_fit_ctx(plan, asked, 0l), 0l, "weights past the room: no context fits")
+    }
+    t |> run("a ringed mirror's rings are bytes the context does not scale: they come off the room, and the rest of the mirror scales") @(t : T?) {
+        let mb = 1_048_576l
+        let asked = 100000l
+        let flat_pos = 1000l        //! the global layers' rows a position
+        let ring_bytes = 40l * mb   //! the sliding layers' rings, fixed at any context past their reach
+        let plan = ResidentPlan(usable_bytes = 800l * mb, weight_bytes = 500l * mb, kv_bytes = asked * flat_pos + ring_bytes, kv_ring_bytes = ring_bytes)
+        let room = 800l * mb - 500l * mb - ring_bytes
+        let want = (room / 8l * 7l) / flat_pos
+        t |> equal(resident_fit_ctx(plan, asked, 0l), want, "the room past the weights and the rings, over the global layers' bytes a position")
+        let scaled = ((800l * mb - 500l * mb) / 8l * 7l) / ((asked * flat_pos + ring_bytes) / asked)
+        t |> success(scaled < want, "the rings charged a position at the asked context hold fewer positions ({scaled} against {want})")
     }
 }
 
@@ -924,9 +1107,6 @@ let private PROBE_UNOWNED = "mtp_seat_probe_unowned"   //! ... and one whose sea
 var private g_probe_owns = false
 var private g_probe_seat_calls = 0l
 
-[unused_argument(t, s, token, pos)]
-def private probe_decode(t : Model; var s : Session; token, pos : int64) : bool => false
-
 [unused_argument(t)]
 def private probe_owner(t : Model) : bool => g_probe_owns
 
@@ -960,7 +1140,7 @@ struct private SeatDispatch {
 [cold_path]
 def private seat_dispatch(name : string; owns : bool) : SeatDispatch {
     for (nm in [PROBE_OWNED, PROBE_UNOWNED]) {
-        register_decode_override(nm, @@probe_decode)
+        register_decode_override(nm, @@decode_declines)
         register_mtp_spec_override(nm, @@probe_spec)
         register_mtp_round_override(nm, @@probe_round)
         register_mtp_spec_batch_override(nm, @@probe_batch)
@@ -1017,7 +1197,7 @@ def test_mtp_seat_owner(t : T?) {
 //! the CPU round's opening on a session carrying an unconsumed landed pick, under the unowned probe override
 [cold_path]
 def private round_refuses_pick() : bool {
-    register_decode_override(PROBE_UNOWNED, @@probe_decode)
+    register_decode_override(PROBE_UNOWNED, @@decode_declines)
     let prev = active_decode_override()
     select_decode_override(PROBE_UNOWNED)
     var m = Model()
@@ -1123,6 +1303,7 @@ def private round_shell(recurrent : bool) : Model {
 //! sized so a snapshot has something to copy
 def private round_session() : Session {
     var s <- Session(n_past = 1l, mtp_h_pos1 = 1l)
+    s.mtp_h |> reserve(ROUND_DIM)
     s.mtp_h |> resize(ROUND_DIM)
     s.mtp_vbatch |> resize(2l)
     s.dn_conv_state |> reserve(ROUND_CONV)
@@ -1136,7 +1317,7 @@ def private round_session() : Session {
 //! row-0 `truth`, the rollback seat's answer
 def private round_seats_arm(pick, truth : int64; rollback_ok : bool) {
     for (nm in [ROUND_SEATS, ROUND_SEATS_NO_ROLLBACK]) {
-        register_decode_override(nm, @@probe_decode)
+        register_decode_override(nm, @@decode_declines)
         register_mtp_seat_owner(nm, @@round_owner)
         register_mtp_draft_override(nm, @@round_draft)
         register_mtp_verify_override(nm, @@round_verify)
@@ -1246,7 +1427,7 @@ def test_peel_shape_arms(t : T?) {
         t |> equal(rdec_peel_shape_why(hc.config), "a hyper-connection chain", "a hyper-connection chain keeps the chain")
         var ple <- shell(2l, 0ul)
         ple.config.n_embd_per_layer = 64l
-        t |> equal(rdec_peel_shape_why(ple.config), "a per-layer-embedding model", "a per-layer embedding keeps the chain")
+        t |> equal(rdec_peel_shape_why(ple.config), "", "a per-layer embedding fits the peel: the token commands carry the side rows")
         var recr <- shell(2l, 1ul)
         let recr_why = rdec_token_seq_installed() ? "" : "a recurrent model (no in-order rows command installed)"
         t |> equal(rdec_peel_shape_why(recr.config), recr_why, "a recurrent state keeps the chain unless the in-order rows command is installed")
@@ -1256,6 +1437,122 @@ def test_peel_shape_arms(t : T?) {
         delete hc
         delete ple
         delete recr
+    }
+}
+
+//! gemma-4-26B-A4B's attention geometry on a shell: thirty layers, every sixth global (two kv heads of 512), the other twenty-five
+//! sliding over 1024 positions (eight kv heads of 256)
+def private gemma4_26b_shell() : Model {
+    var m <- shell(30l, 0ul)
+    m.config.sliding_window = 1024l
+    m.config.swa_pattern = 6l
+    m.config.head_size = 512l
+    m.config.n_kv_heads = 2l
+    m.config.head_size_swa = 256l
+    m.config.n_kv_heads_swa = 8l
+    m.config.n_heads = 16l
+    return <- m
+}
+
+let private HOUSE_26B_FLAT_PLAN_MB = 39949l   //! the 26B UD-IQ3_XXS's strict 32768 x 4 plan with every mirror row flat, read on the pod's 32 GB card
+let private HOUSE_32GB_ROOM_MB = 28527l       //! that card's plan room, read in the same load log
+
+//! the sliding layers' rings in the plan (`../ARCHITECTURE_GPU_KV_RING.md#kv-sliding-ring`): on the 26B at 32768 positions over four
+//! regions - the house shape - a sliding layer holds its window and the window chain's 512 rows, rounded to 64, and a global layer
+//! every position; the flat pin charges every layer the whole context, and the ring bytes are what the context does not scale;
+//! the pod's flat plan less the flat mirror plus the ringed one fits that card's room
+[test]
+def test_resident_ring_mirror(t : T?) {
+    t |> run("the 26B's mirror at 32768 x 4 under the rings: 1536 rows a sliding layer, every position a global one") @(t : T?) {
+        var m <- gemma4_26b_shell()
+        with_gpu_kv_ring(1) {
+            t |> equal(kv_ring_rows(m.config, 0l, 32768l, 512l), 1536l, "a sliding layer: its 1024-position window and the 512 rows a window writes")
+            t |> equal(kv_ring_rows(m.config, 5l, 32768l, 512l), 0l, "a global layer keeps every position")
+            t |> equal(kv_ring_rows(m.config, 0l, 1536l, 512l), 0l, "a ring that would reach the context keeps every position")
+            t |> equal(kv_ring_rows(m.config, 0l, 32768l, 100l), 1152l, "the slack rounds the ring up to the tiles' 64-row step")
+            t |> equal(resident_layer_ring(m, 0l, 32768l), 1536l, "the plan's ring: the window chain's 512 rows of slack")
+            let sliding_units = 25l * 1536l * 2048l
+            let global_units = 5l * 32768l * 1024l
+            t |> equal(resident_ring_bytes(m, 32768l, KVDtype.f16, 4l), 2l * 4l * sliding_units * 2l, "the rings' bytes: both sides of every region, f16")
+            let ringed = resident_mirror_bytes(m, 32768l, KVDtype.f16, 4l)
+            t |> success(ringed >= 2l * 4l * (sliding_units + global_units) * 2l, "the ringed mirror charges every row it seats ({ringed >> 20l} MB)")
+            set_gpu_kv_ring(0)
+            let flat = resident_mirror_bytes(m, 32768l, KVDtype.f16, 4l)
+            t |> equal(resident_ring_bytes(m, 32768l, KVDtype.f16, 4l), 0l, "control: the flat pin rings nothing")
+            t |> success(flat >= 2l * 4l * 32768l * (25l * 2048l + 5l * 1024l) * 2l, "the flat mirror charges the whole context on every layer ({flat >> 20l} MB)")
+            to_log(LOG_INFO, "26B at 32768 x 4, f16: the ringed mirror {ringed >> 20l} MB against {flat >> 20l} MB flat\n")
+            t |> success(ringed * 7l < flat, "the rings cut the mirror past seven times ({ringed >> 20l} MB against {flat >> 20l} MB)")
+            let rest = HOUSE_26B_FLAT_PLAN_MB - (flat >> 20l)
+            t |> success((ringed >> 20l) + rest < HOUSE_32GB_ROOM_MB,
+                "the house plan fits the 32 GB card's room under the rings: {(ringed >> 20l) + rest} MB of {HOUSE_32GB_ROOM_MB} (flat {HOUSE_26B_FLAT_PLAN_MB})")
+        }
+        delete m
+    }
+}
+
+//! the ring pin sits outside a trimmed vulkan lane's identity (`../ARCHITECTURE_IMAGE_VULKAN.md#image-vulkan-mint`): it moves the
+//! mirror the plan charges, the plan a lane's map asks again, and no byte of the image - so a lane mapped by name declines under
+//! the run's knobs and names the pin among the knobs its identity leaves out
+[test]
+def test_trim_lane_ring_pin(t : T?) {
+    t |> run("the ring pin moves the plan a trimmed lane's map asks again, never the lane's identity, and the map's decline names it") @(t : T?) {
+        var m <- gemma4_26b_shell()
+        var ids : array<string>
+        var mirrors : array<int64>
+        for (pin in [1, 0]) {
+            with_gpu_kv_ring(pin) {
+                ids |> push(image_identity(moe_gpu_bake_tag()))
+                mirrors |> push(resident_mirror_bytes(m, 32768l, KVDtype.f16, 4l))
+            }
+        }
+        t |> equal(ids[0], ids[1], "the lane's identity reads the same under either pin: the image holds no K/V row")
+        t |> success(mirrors[0] * 7l < mirrors[1], "the plan charges the ringed mirror under one pin and the flat one under the other ({mirrors[0] >> 20l} MB against {mirrors[1] >> 20l} MB)")
+        var terr = ""
+        let path = path_join(temp_directory(terr), "dasllama_trim_lane_ring_{ref_time_ticks()}.dlim")
+        let route = gpu_resident_route_lever()
+        set_gpu_resident_route(false)   //! the route off: the decline is this run's on every box, a device or none
+        for (trimmed in [true, false]) {
+            var lane = Model()
+            lane.arch = "llama"
+            lane.quant = QuantMode.q8
+            lane.config.n_layers = 2l
+            lane.planes_trimmed = trimmed
+            t |> success(save_model_image(lane, path), "a {trimmed ? "trimmed" : "planar"} shell's image saves")
+            var mapped = false
+            let why = panic_text() $ {
+                var back = Model()
+                mapped = load_model_image(path, back)
+                delete back
+            }
+            if (trimmed) {
+                t |> success(find(why, "is a trimmed vulkan lane") >= 0 && find(why, "DASLLAMA_GPU_KV_RING / set_gpu_kv_ring") >= 0
+                    && find(why, "sit outside the lane's identity") >= 0, "the trimmed lane's map declines under this run's knobs, naming the ring pin: {why}")
+            } else {
+                t |> success(empty(why) && mapped, "control: the planar shell maps with no decline ({why})")
+            }
+            delete lane
+            remove(path)
+        }
+        set_gpu_resident_route(route)
+        delete ids
+        delete mirrors
+        delete m
+    }
+}
+
+[test]
+def test_kv_ring_floor_check(t : T?) {
+    t |> run("a call at or past the ring floor continues, one under it panics, and a start at 0 rebuilds the history and clears the floor") @(t : T?) {
+        var s : Session
+        s.kv_ring_floor = 6l
+        t |> success(empty(panic_text() $ { kv_ring_floor_check(s, 8l) }), "a call past the floor continues")
+        t |> success(empty(panic_text() $ { kv_ring_floor_check(s, 6l) }), "a call at the floor continues")
+        t |> equal(s.kv_ring_floor, 6l, "and leaves the floor standing")
+        t |> success(!empty(panic_text() $ { kv_ring_floor_check(s, 3l) }), "a call under the floor panics: the ring holds no window under it")
+        t |> success(empty(panic_text() $ { kv_ring_floor_check(s, 0l) }), "a start at 0 continues nothing")
+        t |> equal(s.kv_ring_floor, 0l, "and clears the floor")
+        t |> success(empty(panic_text() $ { kv_ring_floor_check(s, 3l) }), "so the same call at 3 continues the rebuilt history (the control)")
+        delete s
     }
 }
 
@@ -1287,5 +1584,60 @@ def test_resident_host_layers_pin(t : T?) {
         t |> equal(resident_host_layers_want(hc, 24l, 4l), -1l, "a hyper-connection model takes no ask: every routed layer serves on the host regardless")
         let dense = Config()
         t |> equal(resident_host_layers_want(dense, 0l, 4l), -1l, "a dense model takes no ask")
+    }
+}
+
+//! the E-series pre-step's projection K gates: Metal's `metal_ple_dev_ok` serves a model dim the projection's word walk steps
+//! whole - pairs on the bf16 rows, float4s on the f32 router's - and Vulkan's `ple_proj_bf16_why` names an odd dim for the bf16 stamp
+[test]
+def test_ple_proj_dim_gates(t : T?) {
+    t |> run("the pre-step's projection declines a dim off its word, on each home") @(t : T?) {
+        var m = Model()
+        m.config.n_layers = 2l
+        m.config.n_embd_per_layer = 256l
+        m.metal_blob = true
+        m.ple_model_bf16 = true
+        m.config.dim = 1536l
+        t |> success(metal_ple_dev_ok(m), "the bf16 rows serve an even dim (the E2B's 1536)")
+        m.config.dim = 1537l
+        t |> success(!metal_ple_dev_ok(m), "... and decline an odd one")
+        let odd = metal_ple_pre_unserved(m)
+        t |> success(find(odd, "PLE table") >= 0 && find(odd, "1537") >= 0 && find(odd, "bf16 pair") >= 0,
+            "... naming the site, the dim and the word: '{odd}'")
+        t |> success(!metal_ple_dev_said("decode", m), "the driver's verdict is the predicate's, its reason logged")
+        m.config.n_embd_per_layer = 2048l
+        t |> success(find(metal_ple_pre_unserved(m), "2048") >= 0, "a ple width past the finish's threadgroup is named")
+        m.config.n_embd_per_layer = 0l
+        t |> equal(metal_ple_pre_unserved(m), "", "a model with no PLE has nothing to decline")
+        t |> success(!metal_ple_dev_ok(m), "... and no device pre-step")
+        m.config.n_embd_per_layer = 256l
+        m.config.dim = 1538l
+        t |> success(metal_ple_dev_ok(m), "the bf16 rows serve an even dim off the float4 lattice")
+        m.ple_model_bf16 = false
+        t |> success(!metal_ple_dev_ok(m), "... where the f32 router's float4 walk declines it")
+        m.config.dim = 1536l
+        t |> success(metal_ple_dev_ok(m), "the f32 router serves a dim on the float4 lattice")
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            t |> equal(ple_proj_bf16_why(1536l), "", "the Vulkan bf16 stamp serves an even dim")
+            let why = ple_proj_bf16_why(1537l)
+            t |> success(find(why, "even dim") >= 0 && find(why, "1537") >= 0, "... and names an odd one: '{why}'")
+        }
+    }
+    t |> run("the window's projection names an f16 panel past the device's storage range") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            var shell = GpuState(coopmat_mode = COOPMAT_CM2, msr = 1l << 20l)   //! a cm2 device shell whose storage range is 1 MiB
+            var live = g_gpu
+            g_gpu = unsafe(addr(shell))
+            let dim = int64(F16G_BK) * F16G_SPLIT
+            t |> equal(ple_proj_gemv_why(dim, 256l, 1l << 20l), "", "the control: a panel at the range takes the tile")
+            let past = ple_proj_gemv_why(dim, 256l, (1l << 20l) + 2l)
+            t |> success(find(past, "f16 panel ({(1l << 20l) + 2l} bytes) passes the device's storage range {1l << 20l}") >= 0,
+                "a panel two bytes past the range names both: '{past}'")
+            t |> success(find(ple_proj_gemv_why(dim + 1l, 256l, (1l << 20l) + 2l), "no f16 tile serves it") >= 0,
+                "an off-lattice width names the tile first")
+            g_gpu = live
+        } else {
+            t |> skip("no dasVulkan module on this build")
+        }
     }
 }

@@ -24,4 +24,7 @@ def test_gpu_resident_gemma4_26b(t : T?) {
         assert_pf_window(t)
         ppl_compare(t, 520l, 80l, GEMMA4_26B_FILE, GEMMA4_26B_HITS_SLACK, GEMMA_MOE_PPL_RATIO)
     }
+    t |> run("gemma-4-26B-A4B IQ3_XXS: every site in its own format - the expert stacks and the token table among them - and the driver serving every call") @(t : T?) {
+        gemma_format_cell(t, GEMMA4_26B_FILE, false)
+    }
 }

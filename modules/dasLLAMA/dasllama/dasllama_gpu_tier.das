@@ -159,6 +159,7 @@ def public rdec_norms_len(n_layers, dim, qk_hs : int64; head : bool) : int64
 struct RdecLayerGeom {
     hs, qd, kvd, hid, rot : int64
     window : int64                  //! positions a sliding layer attends over; 0 = every position
+    ring : int64                    //! a sliding layer's ring rows in the mirror (`kv_ring_row`); 0 = its rows at every position
     mir_base : int64                //! its first unit in its K/V mirror slab (one region's layout; the region stride is the slab's)
     mir_slab : int64                //! the K/V mirror slab its rows sit in (a contiguous run of attention layers under one binding's range)
     cbase : int64                   //! its rope class's row inside a position's cos/sin plane
@@ -674,14 +675,14 @@ def public rdec_land_carry(row : int64; var dst : array<float>) { invoke(g_rdec_
 //! the NextN draft head's arm, after the classifier: its eh_proj plane `beh` in format `feh`, its attention quad and FFN triple
 //! at layer index n_layers; false = a class rail declined and the head stays off the device
 typedef RdecSetHeadFn = function<(beh : int64; feh : int; bq : int64; bk : int64; bv : int64; bo : int64; b1 : int64; b3 : int64; b2 : int64; fq : int; fk : int; fv : int; fo : int; f1 : int; f3 : int; f2 : int; g : RdecLayerGeom) : bool>
-//! one NextN draft at head row `row` of the selected region: the host head rows [hyd0, row) at `kp` / `vp` (the head's cache from row 0)
-//! come up, then `x` (the embedded token) and the carry `h` run the head; `rdec_land_carry`'s row 0 takes its hidden, `logits` its logits
-//! unless `pick_only` (they stay on the device), row `row`'s K/V stays on the device (`rdec_kv_read` at layer n_layers on a pass). Answers the argmax id, -1 where the driver holds no head
-typedef RdecDraftFn = function<(x : array<float>; h : array<float>; cossin : array<float>; row : int64; hyd0 : int64; var kp : uint8?; var vp : uint8?; pick_only : bool; var logits : array<float>; experts : RdecHostExpertsFn) : int64>
+//! one NextN draft at head row `row` of the selected region: the host head rows [hyd0, row) at `kp` / `vp` (from row 0) come up, then the token -
+//! its id `token`, gathered on the device, or at -1 `x`, its unscaled row - and the carry `h` run the head; `rdec_land_carry`'s row 0 takes its hidden,
+//! `logits` its logits unless `pick_only`, row `row`'s K/V stays on the device (`rdec_kv_read` at layer n_layers on a pass). The argmax id, -1 with no head
+typedef RdecDraftFn = function<(x : array<float>; token : int64; h : array<float>; cossin : array<float>; row : int64; hyd0 : int64; var kp : uint8?; var vp : uint8?; pick_only : bool; var logits : array<float>; experts : RdecHostExpertsFn) : int64>
 [unused_argument(beh, feh, bq, bk, bv, bo, b1, b3, b2, fq, fk, fv, fo, f1, f3, f2, g)]
 def private rdec_unset_set_head(beh : int64; feh : int; bq, bk, bv, bo, b1, b3, b2 : int64; fq, fk, fv, fo, f1, f3, f2 : int; g : RdecLayerGeom) : bool => false
-[unused_argument(x, h, cossin, row, hyd0, kp, vp, pick_only, logits, experts)]
-def private rdec_unset_draft(x : array<float>; h : array<float>; cossin : array<float>; row, hyd0 : int64; var kp : uint8?; var vp : uint8?; pick_only : bool; var logits : array<float>; experts : RdecHostExpertsFn) : int64 => -1l
+[unused_argument(x, token, h, cossin, row, hyd0, kp, vp, pick_only, logits, experts)]
+def private rdec_unset_draft(x : array<float>; token : int64; h : array<float>; cossin : array<float>; row, hyd0 : int64; var kp : uint8?; var vp : uint8?; pick_only : bool; var logits : array<float>; experts : RdecHostExpertsFn) : int64 => -1l
 var g_rdec_set_head = @@rdec_unset_set_head
 var g_rdec_draft = @@rdec_unset_draft
 var g_rdec_draft_installed = false
@@ -712,15 +713,15 @@ def public rdec_draft_installed() : bool => g_rdec_draft_installed
 def public rdec_set_head(beh : int64; feh : int; bq, bk, bv, bo, b1, b3, b2 : int64; fq, fk, fv, fo, f1, f3, f2 : int; g : RdecLayerGeom) : bool
     => invoke(g_rdec_set_head, beh, feh, bq, bk, bv, bo, b1, b3, b2, fq, fk, fv, fo, f1, f3, f2, g)
 //! `experts` sums a routed head's experts on the host between the draft's segments (the hyper-connection chain); a dense head never calls it
-def public rdec_draft(x : array<float>; h : array<float>; cossin : array<float>; row, hyd0 : int64; var kp : uint8?; var vp : uint8?; pick_only : bool; var logits : array<float>; experts : RdecHostExpertsFn) : int64
-    => invoke(g_rdec_draft, x, h, cossin, row, hyd0, kp, vp, pick_only, logits, experts)
+def public rdec_draft(x : array<float>; token : int64; h : array<float>; cossin : array<float>; row, hyd0 : int64; var kp : uint8?; var vp : uint8?; pick_only : bool; var logits : array<float>; experts : RdecHostExpertsFn) : int64
+    => invoke(g_rdec_draft, x, token, h, cossin, row, hyd0, kp, vp, pick_only, logits, experts)
 
-//! the same-slab verify of one stream's `n` rows at `pos` in the selected region: `x` / `cossin` the rows' residuals and rope rows,
-//! `hemb` / `hcos` the head rows' unscaled embeds and rope rows a position below, `h0` the pre-draft carry; the rows' picks and hidden land
-//! in `picks` / `hid`, their logits in `logits` unless `pick_only` (a guard step lands them for the over-commit check); the head's K/V rows `pos - 1` .. stay on the device. False where it steps no `n` rows
-typedef RdecVerifyFn = function<(x : array<float>; cossin : array<float>; hemb : array<float>; hcos : array<float>; h0 : array<float>; side : array<float>; pos : int64; n : int64; pick_only : bool; var logits : array<float>; var picks : array<int64>; var hid : array<float>; experts : RdecHostExpertsRowsFn) : bool>
-[unused_argument(x, cossin, hemb, hcos, h0, side, pos, n, pick_only, logits, picks, hid, experts)]
-def private rdec_unset_verify(x, cossin, hemb, hcos, h0, side : array<float>; pos, n : int64; pick_only : bool; var logits : array<float>; var picks : array<int64>; var hid : array<float>; experts : RdecHostExpertsRowsFn) : bool => false
+//! the same-slab verify of `n` rows at `pos` in the selected region: `x` / `cossin` the rows and rope rows, `hemb` / `hcos` the head's unscaled embeds and rope
+//! rows a position below (`ids`, where the driver gathers the rows: `x` / `hemb` unread), `h0` the pre-draft carry; picks and hidden land in `picks` / `hid`,
+//! logits in `logits` unless `pick_only` (a guard step lands them); the head's K/V rows `pos - 1` .. stay on the device. False where it steps no `n` rows
+typedef RdecVerifyFn = function<(x : array<float>; cossin : array<float>; hemb : array<float>; hcos : array<float>; h0 : array<float>; side : array<float>; ids : array<int64>; pos : int64; n : int64; pick_only : bool; var logits : array<float>; var picks : array<int64>; var hid : array<float>; experts : RdecHostExpertsRowsFn) : bool>
+[unused_argument(x, cossin, hemb, hcos, h0, side, ids, pos, n, pick_only, logits, picks, hid, experts)]
+def private rdec_unset_verify(x, cossin, hemb, hcos, h0, side : array<float>; ids : array<int64>; pos, n : int64; pick_only : bool; var logits : array<float>; var picks : array<int64>; var hid : array<float>; experts : RdecHostExpertsRowsFn) : bool => false
 def private rdec_no_verify_rows : int64 => 0l
 def public rdec_no_verify_landed_logits : bool => false   //! public: a default argument resolves at the caller's site
 var g_rdec_verify = @@rdec_unset_verify
@@ -742,8 +743,8 @@ def public rdec_verify_installed() : bool => g_rdec_verify_installed
 def public rdec_verify_rows() : int64 => invoke(g_rdec_verify_rows)
 def public rdec_verify_landed_logits() : bool => invoke(g_rdec_verify_landed_logits)
 //! `side` the rows' n-gram side rows and `experts` the host's routed sums of the rows between a hyper-connection chain's segments; empty and unreached elsewhere
-def public rdec_verify(x, cossin, hemb, hcos, h0, side : array<float>; pos, n : int64; pick_only : bool; var logits : array<float>; var picks : array<int64>; var hid : array<float>; experts : RdecHostExpertsRowsFn) : bool
-    => invoke(g_rdec_verify, x, cossin, hemb, hcos, h0, side, pos, n, pick_only, logits, picks, hid, experts)
+def public rdec_verify(x, cossin, hemb, hcos, h0, side : array<float>; ids : array<int64>; pos, n : int64; pick_only : bool; var logits : array<float>; var picks : array<int64>; var hid : array<float>; experts : RdecHostExpertsRowsFn) : bool
+    => invoke(g_rdec_verify, x, cossin, hemb, hcos, h0, side, ids, pos, n, pick_only, logits, picks, hid, experts)
 
 //! the same-slab verify's reject in the selected region: every recurrent slot and ring pair back to the copy the verify command
 //! took after its row `a` - the last row the round committed - so the round takes no host snapshot and replays no step; false
@@ -862,16 +863,16 @@ struct public RdecKvSpan {
 }
 
 //! Every span moved up (`up`) or down in as few submits as the driver's staging allows; false where no driver serves the batch
-typedef RdecKvXferFn = function<(spans : array<RdecKvSpan>; up : bool) : bool>
+typedef RdecKvXferFn = function<(var spans : array<RdecKvSpan>; up : bool) : bool>
 [unused_argument(spans, up)]
-def private rdec_unset_kv_xfer(spans : array<RdecKvSpan>; up : bool) : bool => false
+def private rdec_unset_kv_xfer(var spans : array<RdecKvSpan>; up : bool) : bool => false
 var g_rdec_kv_xfer = @@rdec_unset_kv_xfer
 
 def public install_rdec_kv_xfer(xfer : RdecKvXferFn) {
     g_rdec_kv_xfer = xfer
 }
 
-def public rdec_kv_xfer(spans : array<RdecKvSpan>; up : bool) : bool => invoke(g_rdec_kv_xfer, spans, up)
+def public rdec_kv_xfer(var spans : array<RdecKvSpan>; up : bool) : bool => invoke(g_rdec_kv_xfer, spans, up)
 def public rdec_dn_snap_save(slot : int64) : bool => invoke(g_rdec_dn_snap_save, slot)
 def public rdec_dn_snap_load(slot : int64) : bool => invoke(g_rdec_dn_snap_load, slot)
 
@@ -899,19 +900,24 @@ def public rdec_head_warm_rows() : int64 => invoke(g_rdec_head_warm_rows)
 
 //! the per-layer-embedding seats (gemma-4 E-series): `set_ple` sizes the side-input rows at the model's ple width
 //! (after prepare, before the layers); `set_ple_layer` wires one layer's gate [dim x ple] and proj [ple x dim] planes
-typedef RdecSetPleFn = function<(ple : int64) : bool>
-typedef RdecSetPleLayerFn = function<(l : int64; bgate : int64; bproj : int64; fmt : int) : void>
-//! the pre-step's projection on device: `w` the per-layer model projection [layers*ple x dim] as f32 rows, `pnorm` its [ple] norm row; false = the driver keeps the CPU pre-step
-typedef RdecSetPleProjFn = function<(w : array<float>; pnorm : array<float>; all : int64) : bool>
+//! `gate_f32` / `proj_f32`: every layer's gate / projection rows where the kind ships F32 (empty where it rides the arena)
+typedef RdecSetPleFn = function<(ple : int64; gate_f32 : array<float>; proj_f32 : array<float>) : bool>
+//! a block of -1 names the kind's f32 rows (`RdecSetPleFn`), else the plane in its format slot (`fgate` / `fproj`)
+typedef RdecSetPleLayerFn = function<(l : int64; bgate : int64; bproj : int64; fgate : int; fproj : int) : void>
+//! the pre-step's projection on device: the per-layer model projection [layers*ple x dim] in the file's own rows - `w16` its bf16
+//! halves, or `w32` its f32 rows - and `pnorm` its [ple] norm row; false = the driver keeps the CPU pre-step
+typedef RdecSetPleProjFn = function<(w16 : array<uint16>; w32 : array<float>; pnorm : array<float>; all : int64) : bool>
 //! the per-layer-embedding token table placed in the arena (`blk`, a plane [vocab x layers*ple] in format slot `fmt`, the table's
 //! own tag): the window chain gathers its side rows on device off the token ids
 typedef RdecSetPleTableFn = function<(blk : int64; fmt : int) : bool>
-[unused_argument(ple)]
-def private rdec_unset_set_ple(ple : int64) : bool => false
-[unused_argument(l, bgate, bproj, fmt)]
-def private rdec_unset_set_ple_layer(l, bgate, bproj : int64; fmt : int) {}
-[unused_argument(w, pnorm, all)]
-def private rdec_unset_set_ple_proj(w : array<float>; pnorm : array<float>; all : int64) : bool => false
+[unused_argument(ple, gate_f32, proj_f32)]
+def private rdec_unset_set_ple(ple : int64; gate_f32 : array<float>; proj_f32 : array<float>) : bool => false
+[unused_argument(l, bgate, bproj, fgate, fproj)]
+def private rdec_unset_set_ple_layer(l, bgate, bproj : int64; fgate, fproj : int) {
+    panic("dasLLAMA: resident per-layer-embedding layer planes hit without an installed GPU driver - require dasllama/dasllama_math_vulkan (the Vulkan tier installs it)")
+}
+[unused_argument(w16, w32, pnorm, all)]
+def private rdec_unset_set_ple_proj(w16 : array<uint16>; w32 : array<float>; pnorm : array<float>; all : int64) : bool => false
 [unused_argument(blk, fmt)]
 def private rdec_unset_set_ple_table(blk : int64; fmt : int) : bool => false
 
@@ -935,11 +941,11 @@ def public install_rdec_ple(set_ple : RdecSetPleFn; set_ple_layer : RdecSetPleLa
 def public rdec_set_ple_table(blk : int64; fmt : int) : bool => invoke(g_rdec_set_ple_table, blk, fmt)
 
 def public rdec_ple_installed() : bool => g_rdec_ple_installed
-def public rdec_set_ple(ple : int64) : bool => invoke(g_rdec_set_ple, ple)
-def public rdec_set_ple_layer(l, bgate, bproj : int64; fmt : int) { invoke(g_rdec_set_ple_layer, l, bgate, bproj, fmt) }
+def public rdec_set_ple(ple : int64; gate_f32 : array<float>; proj_f32 : array<float>) : bool => invoke(g_rdec_set_ple, ple, gate_f32, proj_f32)
+def public rdec_set_ple_layer(l, bgate, bproj : int64; fgate, fproj : int) { invoke(g_rdec_set_ple_layer, l, bgate, bproj, fgate, fproj) }
 //! true once the driver took the pre-step's projection: the prefill then wants the gather half alone (`ple_raw`)
-def public rdec_set_ple_proj(w : array<float>; pnorm : array<float>; all : int64) : bool {
-    g_rdec_ple_proj_on = invoke(g_rdec_set_ple_proj, w, pnorm, all)
+def public rdec_set_ple_proj(w16 : array<uint16>; w32 : array<float>; pnorm : array<float>; all : int64) : bool {
+    g_rdec_ple_proj_on = invoke(g_rdec_set_ple_proj, w16, w32, pnorm, all)
     return g_rdec_ple_proj_on
 }
 def public rdec_ple_proj_on() : bool => g_rdec_ple_proj_on
@@ -1838,13 +1844,13 @@ def public install_rdec_note_weight_bytes(f : function<(bytes : int64) : void>) 
     g_rdec_note_weight_bytes = f
 }
 
-//! the N-row token command: `nrows` rows of x, cos/sin and the per-layer-embedding side input (empty where the model has none; `ple_raw` says the rows are the gathered table rows the device projects, not the finished pre-step), each row's position, cached count and mirror region, each row's
+//! the N-row token command: `nrows` rows of x, cos/sin and the per-layer-embedding side input (empty where the model has none; `ple_raw` says the rows are the gathered table rows the device projects, not the finished pre-step; a row with its token id in `ids` brings no side row - the device gathers it off the id), each row's position, cached count and mirror region, each row's
 //! logits landed at its own `lrows` pointer (a session's logits row) - or, where the pointer is null, the row's argmax id alone into `picks` (-1 on a landed row); two rows at least - a one-row step is the one-row command's
-typedef RdecTokenNFn = function<(x : array<float>; cossin : array<float>; ple : array<float>; ple_raw : bool; poss : array<int64>; cnts : array<int64>; regs : array<int64>; nrows : int64; lrows : array<float?>; var picks : array<int64>) : void>
+typedef RdecTokenNFn = function<(x : array<float>; cossin : array<float>; ple : array<float>; ple_raw : bool; ids : array<int64>; poss : array<int64>; cnts : array<int64>; regs : array<int64>; nrows : int64; lrows : array<float?>; var picks : array<int64>) : void>
 
-[unused_argument(x, cossin, ple, ple_raw, poss, cnts, regs, nrows, lrows, picks)]
-def private rdec_unset_token_n(x : array<float>; cossin : array<float>; ple : array<float>; ple_raw : bool; poss : array<int64>; cnts : array<int64>; regs : array<int64>; nrows : int64; lrows : array<float?>; var picks : array<int64>) {
-    panic("dasLLAMA: resident N-row token hit without an installed GPU driver")
+[unused_argument(x, cossin, ple, ple_raw, ids, poss, cnts, regs, nrows, lrows, picks)]
+def private rdec_unset_token_n(x : array<float>; cossin : array<float>; ple : array<float>; ple_raw : bool; ids : array<int64>; poss : array<int64>; cnts : array<int64>; regs : array<int64>; nrows : int64; lrows : array<float?>; var picks : array<int64>) {
+    panic("dasLLAMA: resident N-row token hit without an installed GPU driver - require dasllama/dasllama_math_vulkan (the Vulkan tier installs it)")
 }
 def private rdec_no_token_n_rows : int64 => 0l
 var private g_rdec_token_n = @@rdec_unset_token_n
@@ -1858,8 +1864,8 @@ def public install_moe_gpu_resident_batch(token_n : RdecTokenNFn; rows : functio
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
-def public rdec_token_n(x : array<float>; cossin : array<float>; ple : array<float>; ple_raw : bool; poss : array<int64>; cnts : array<int64>; regs : array<int64>; nrows : int64; lrows : array<float?>; var picks : array<int64>) {
-    invoke(g_rdec_token_n, x, cossin, ple, ple_raw, poss, cnts, regs, nrows, lrows, picks)
+def public rdec_token_n(x : array<float>; cossin : array<float>; ple : array<float>; ple_raw : bool; ids : array<int64>; poss : array<int64>; cnts : array<int64>; regs : array<int64>; nrows : int64; lrows : array<float?>; var picks : array<int64>) {
+    invoke(g_rdec_token_n, x, cossin, ple, ple_raw, ids, poss, cnts, regs, nrows, lrows, picks)
     g_rdec_nrow_steps++
 }
 
@@ -2347,10 +2353,16 @@ def public matmul_moe_gpu_attn_dec(var xb2 : array<float>; var k : array<float>;
     }
 }
 
+var private g_dense_gemm_rows = 0l   //! the activation rows the dense rail's batched GEMMs ran on the device, process-wide
+
+//! the activation rows the dense rail's batched GEMMs (`matmul_gpu_dense`) ran on the device so far, every plane summed
+def public moe_gpu_dense_gemm_rows() : int64 => g_dense_gemm_rows
+
 //! Dense batched GEMM on the GPU tier — y [nrows x d] = X·Wᵀ over the resident plane ([d x n]
 //! at woff). xq/xs is the row-major pre-quantized activation image in the plane's own quant form
 //! (q8_0 per-32 for q8, Q8_K per-256 for kq); per-16 block sums are recomputed in-kernel.
 def public matmul_gpu_dense(var y : array<float>; woff : int64; xq : array<int8>; xs : array<float>; n, d, nrows : int64; fmt : int) {
+    g_dense_gemm_rows += nrows
     unsafe {
         invoke(g_moe_gpu_dense, addr(y[0]), woff, addr<int8 const?>(xq[0]), addr<float const?>(xs[0]), n, d, nrows, fmt)
     }

@@ -1,8 +1,11 @@
 options gen2
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
+options _dasllama_internal = true
+options persistent_heap   // a dastest root frees what it deletes only on this heap; the linear heap holds every carrier a cell deleted until the context ends
 
 require dastest/testing_boost public
 require ../benchmarks/lcpp_bench.das   // tok_read_seed — file-relative require, explicit .das
+require dasllama/dasllama_common   // Model, MtpAssistantStats and the assistant registry the --mtp-ab seams read
 require _scratch_dir   // scratch_file: the corpus fixtures' files
 
 // The --tok corpus reader's header walk, model-free: leading '#' lines are provenance headers and
@@ -79,5 +82,30 @@ def test_tok_seed_unterminated_header(t : T?) {
     t |> run("headers, then a LAST header line with no newline, keeps that one") @(t : T?) {
         let p = scratch_file("last_header_no_nl.txt", "# first\n# second with no newline")
         t |> equal(tok_read_seed(p), "# second with no newline")
+    }
+}
+
+[test]
+def test_mtp_ab_drafter_line(t : T?) {
+    t |> run("--mtp-ab's drafter line: the rounds, the joint verifies, the draft and verify a round, the cold steps' total") @(t : T?) {
+        t |> equal(mtp_ab_drafter_line(MtpAssistantStats(rounds = 4l, joint = 1l, draft_us = 8000l, verify_us = 2000l, cold_us = 1500l)),
+            "  gemma drafter: 4 rounds (1 joint), draft chain 2.00 ms/round, verify+commit 0.50 ms/round, cold 1.5 ms total\n")
+        t |> equal(mtp_ab_drafter_line(MtpAssistantStats(cold_us = 250l)),
+            "  gemma drafter: 0 rounds (0 joint), draft chain 0.00 ms/round, verify+commit 0.00 ms/round, cold 0.2 ms total\n",
+            "no round: the per-round figures read 0, never a division by zero")
+    }
+}
+
+[test]
+def test_mtp_ab_drafter_attach(t : T?) {
+    t |> run("--mtp-ab on a headless model attaches the drafter beside it through the facade, and refuses where none attaches") @(t : T?) {
+        var shell = Model()
+        let trunk = scratch_path("gemma-4-26B-A4B-it-Q4_K_M.gguf")
+        t |> success(!mtp_ab_drafter_attach(shell, trunk), "no sidecar beside the model: nothing attaches")
+        scratch_file("mtp-gemma-4-26B-A4B-it-Q8_0.gguf", "a head file no backend can read")
+        t |> equal(mtp_drafter_sidecar_(trunk), scratch_path("mtp-gemma-4-26B-A4B-it-Q8_0.gguf"), "the facade resolves the planted sidecar")
+        t |> success(!mtp_ab_drafter_attach(shell, trunk), "a sidecar no backend takes attaches nothing - the bench refuses the A/B")
+        t |> success(!mtp_assistant_attached(shell), "and the drafter line stays off")
+        delete shell
     }
 }

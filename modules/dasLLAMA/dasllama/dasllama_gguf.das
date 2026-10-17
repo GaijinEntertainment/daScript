@@ -82,11 +82,28 @@ let private GGML_TYPE_NAMES <- {
     GGML_TYPE_Q4_0 => "Q4_0", GGML_TYPE_Q5_0 => "Q5_0", GGML_TYPE_Q5_1 => "Q5_1", GGML_TYPE_Q8_0 => "Q8_0", GGML_TYPE_MXFP4 => "MXFP4",
     GGML_TYPE_Q2_K => "Q2_K", GGML_TYPE_Q3_K => "Q3_K", GGML_TYPE_Q4_K => "Q4_K", GGML_TYPE_Q5_K => "Q5_K", GGML_TYPE_Q6_K => "Q6_K",
     GGML_TYPE_IQ2_XXS => "IQ2_XXS", GGML_TYPE_IQ2_XS => "IQ2_XS", GGML_TYPE_IQ2_S => "IQ2_S",
-    GGML_TYPE_IQ3_XXS => "IQ3_XXS", GGML_TYPE_IQ3_S => "IQ3_S", GGML_TYPE_IQ4_NL => "IQ4_NL", GGML_TYPE_IQ4_XS => "IQ4_XS"
+    GGML_TYPE_IQ3_XXS => "IQ3_XXS", GGML_TYPE_IQ3_S => "IQ3_S", GGML_TYPE_IQ4_NL => "IQ4_NL", GGML_TYPE_IQ4_XS => "IQ4_XS",
+    GGML_TYPE_Q4_1 => "Q4_1", GGML_TYPE_IQ1_S => "IQ1_S", GGML_TYPE_IQ1_M => "IQ1_M", GGML_TYPE_TQ1_0 => "TQ1_0", GGML_TYPE_TQ2_0 => "TQ2_0"
 }
 
 //! The ggml type's upstream spelling for logs ("Q4_K", "IQ3_S"); "type N" for one the loader does not know.
 def ggml_type_name(gt : int) : string => GGML_TYPE_NAMES?[gt] ?? "type {gt}"
+
+//! the served type nearest an unread one: Q4_1's (d, m) per-32 plane is Q5_1's shape at one bit less, the 1-bit iquants
+//! sit under IQ2_XXS, the ternaries under Q4_0
+let private NEAREST_SERVED_TYPE <- {
+    GGML_TYPE_Q4_1 => "Q5_1", GGML_TYPE_IQ1_S => "IQ2_XXS", GGML_TYPE_IQ1_M => "IQ2_XXS", GGML_TYPE_TQ1_0 => "Q4_0", GGML_TYPE_TQ2_0 => "Q4_0"
+}
+
+//! The load's decline of a file carrying a tensor type the reader has no arm for (Q4_1, IQ1_S, IQ1_M, TQ1_0, TQ2_0, ...):
+//! one panic before any plane is read, naming the tensor, its type and the served type to requantize it to
+def gguf_decline_unread_types(m : GGUFMeta) {
+    let bad = find_index_if(m.tensors) $(ti) => ggml_type_bytes(ti.ggml_type, ti.n_elem) == 0l
+    if (bad >= 0) {
+        let gt = m.tensors[bad].ggml_type
+        panic("dasLLAMA: tensor '{m.tensors[bad].name}' is {ggml_type_name(gt)} on disk - the GGUF reader carries no arm for that type; requantize it to {NEAREST_SERVED_TYPE?[gt] ?? "a served type (Q8_0)"} (llama-quantize --tensor-type)")
+    }
+}
 
 // MXFP4 e2m1 magnitudes DOUBLED (nibble -> ±{0,.5,1,1.5,2,3,4,6}×2, OCP MX spec); the E8M0
 // block scale below is halved to compensate.

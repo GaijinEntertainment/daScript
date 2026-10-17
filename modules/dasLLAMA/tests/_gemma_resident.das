@@ -27,6 +27,7 @@ let GEMMA_RIG_CTX = 32768l
 struct GemmaFile {
     file : string
     arm : string
+    host_experts : bool   //! the load asks the rig's context whole on a card that cannot hold every expert stack beside it: the driver arms with the first routed layers' experts on the host
 }
 
 [init]
@@ -42,6 +43,8 @@ require dasllama/dasllama_gpu_tier   // moe_gpu_tier_installed / gpu_want_auto: 
 require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active: did the whole-model driver take the model
 require _model_tier public   // models_dir() + model_available() presence/size-tier gate, arm_on, live_maxabs, SUPPRESSED_LOGIT
 require _resident_feed public   // resident_ready, load_resident, resident_then_cpu_feed, feed_steps_within, feed_logits
+require _format_census   // census_cell: the routed files' every site in its own format
+require _child_run   // run_child / child_cmd - the load-log child
 
 //! the logits bar, a fraction of the step's max live |logit|. gemma-3-1b's logits move with the activation rounding itself: the CPU
 //! chain's OWN prefill kernel and decode kernel land 0.06-0.10 of the max logit apart on the same
@@ -75,18 +78,36 @@ def private prose_tokens(tr : Model; count : int64) : array<int64> {
     return <- [for (i in range64(count)); ids[i]]
 }
 
+//! a prose feed: the first `n` prose ids the prompt, the next `steps` the fed tokens
+struct private ProseFeed {
+    prompt : array<int64>
+    toks : array<int64>
+}
+
+def private prose_feed(tr : Model; n, steps : int64) : ProseFeed {
+    var ids <- prose_tokens(tr, n + steps)
+    var f <- ProseFeed(prompt <- [for (i in range64(n)); ids[i]], toks <- [for (i in range64(n, n + steps)); ids[i]])
+    delete ids
+    return <- f
+}
+
 //! the fixture loaded on the armed driver, or an empty model (`n_layers` 0) after the skip that says why
-def private gemma_model(t : T?; file : string) : Model {
-    let path = path_join(models_dir(), file)
-    if (!resident_ready(t, path)) return <- Model()
-    var tr <- load_resident(path)
-    if (!resident_admitted(t, "the whole-model driver armed on the model (the load log names any decline)", " - DASLLAMA_GPU_MIN_CTX=1024 arms the 12B Q8_0 file on a 16 GB card")) {
-        delete tr
-        return <- Model()
+def private gemma_model(t : T?; gf : GemmaFile) : Model {
+    let path = path_join(models_dir(), gf.file)
+    var tr <- resident_trunk(t, path, GEMMA_RIG_CTX, " - DASLLAMA_GPU_MIN_CTX=1024 arms the 12B Q8_0 file on a 16 GB card") $() : Model {
+        var m <- load_resident(path, 0l, gf.host_experts ? GEMMA_RIG_CTX : 0l)
+        if (gf.host_experts) {   //! the pinned cap decides the plan whatever the card: a memory decline is the form missing, never a skip
+            t |> success(moe_gpu_resident_active(), "the whole-model driver armed with host experts ({gpu_resident_decline_()})")
+        }
+        return <- m
+    }
+    return <- tr if (tr.config.n_layers == 0l)
+    if (gf.host_experts) {
+        let host = gpu_resident_host_layers()
+        t |> success(host > 0l && host < tr.config.n_layers, "the first {host} of {tr.config.n_layers} routed layers' experts serve on the host, the rest on the device")
     }
     t |> success(tr.config.pre_post_norm && tr.config.sliding_window > 0l && tr.config.ffn_act == FfnAct.gelu,
         "the fixture carries the sandwich norms, a sliding window and the GeGLU FFN (the arms this file gates)")
-    tr.config.seq_len = min(tr.config.seq_len, GEMMA_RIG_CTX)   //! the sessions size their caches to the mirror's cap, not the model's max
     return <- tr
 }
 
@@ -94,7 +115,7 @@ def private gemma_model(t : T?; file : string) : Model {
 //! `body` inside the engine's job queue, the model deleted after
 def with_gemma_rig(t : T?; gf : GemmaFile; body : block<(tr : Model) : void>) {
     return if (!arm_on(t, gf.arm))
-    var tr <- gemma_model(t, gf.file)
+    var tr <- gemma_model(t, gf)
     if (tr.config.n_layers > 0l) {
         with_dasllama_jobque_() {
             invoke(body, tr)
@@ -103,26 +124,163 @@ def with_gemma_rig(t : T?; gf : GemmaFile; body : block<(tr : Model) : void>) {
     delete tr
 }
 
-//! prefill `n` tokens + 8 fed steps on the resident driver, then the same on the all-CPU chain; the
-//! prefill logits and every step's within the bar, the one-step-off control past it.
-def gemma_forced_feed(t : T?; n : int64; gf : GemmaFile) {
+//! the routed model's weight-format census on the armed driver's load: every site the file carries in its own format, the
+//! expert stacks the native-MXFP4 planes exactly where `mx4` names them, then a 40-token prompt and two fed steps on the driver
+//! with every call served, the steps' mx4 stamps counted where `mx4` and none dispatched where not
+[cold_path]
+def gemma_format_cell(t : T?; gf : GemmaFile; mx4 : bool) {
     with_gemma_rig(t, gf) $(tr) {
-        var ids <- prose_tokens(tr, n + 8l)
-        var prompt <- [for (i in range64(n)); ids[i]]
-        var toks <- [for (i in range64(n, n + 8l)); ids[i]]
-        delete ids
-        var fed <- resident_then_cpu_feed(t, tr, prompt, toks) $ {}
-        feed_steps_within(t, tr, "", n, fed.gpu, fed.cpu, toks, GEMMA_LOGIT_BAR_REL)
-        delete fed
-        delete prompt
-        delete toks
+        census_cell(t, tr, path_join(models_dir(), gf.file), gf.file, ["attention q/k/v/o", "routed experts", "token table", "classifier"])
+        t |> equal(tr.experts_mx4, mx4, "{gf.file}: the expert stacks load as the native-MXFP4 planes exactly where the file carries them")
+        var inscope feed <- prose_feed(tr, 40l, 2l)
+        var sg <- create_session(tr, mirror_kv_dtype())
+        let served0 = moe_gpu_resident_prefills()
+        let gu0 = census("mx4_gemv_gu_cls_spv")
+        let sum0 = census("mx4_gemv_sum_cls_spv")
+        var rows <- feed_logits(tr, sg, feed.prompt, feed.toks) $ {}
+        t |> equal(moe_gpu_resident_prefills(), served0 + 1l, "{gf.file}: the resident window chain served the prompt")
+        served_every_call(t)
+        if (gu0 != NO_CENSUS) {   //! the fed steps' routed sites on the mx4 stamps: the fused gate + up and the summed down
+            let gu_n = census("mx4_gemv_gu_cls_spv") - gu0
+            let sum_n = census("mx4_gemv_sum_cls_spv") - sum0
+            if (mx4) {
+                t |> success(gu_n > 0l && sum_n > 0l, "{gf.file}: the steps' routed gate + up ({gu_n}) and summed down ({sum_n}) on the mx4 stamps")
+            } else {   //! the control: a file with no MXFP4 stack dispatches neither stamp
+                t |> equal(gu_n + sum_n, 0l, "{gf.file}: no mx4 stack, no mx4 stamp dispatched (gate + up {gu_n}, summed down {sum_n})")
+            }
+        }
+        for (r, i in rows, count()) {
+            let bad = length([for (v in r); v; where !is_finite(v)])
+            t |> equal(bad, 0, "{gf.file}: row {i}'s logits finite")
+        }
+        delete rows
+        delete sg
     }
+}
+
+//! prefill `n` tokens + 8 fed steps on the resident driver with every call served, then the same on the all-CPU chain; the
+//! prefill logits and every step's within the bar, the one-step-off control past it. `exact` holds the rows against the file's f32
+//! chain (`f32_chain_rows`) where the CPU q8 chain is no reference: on the E2B Q4_K_M file the Q8_K activations make the feed
+//! chaotic, so step 4's top logit reads 17.85 (arm64), 16.70 (x64) and 18.50 (x64 on the reference kernel bodies) where the f32
+//! chain reads 19.14, and the reference build's quantized CPU path reads 17.8 to 20.1 by its attention form and batching, each
+//! chain summing as far from the f32 rows - and adds that the device sits no further from that chain than the CPU q8 chain
+//! (`f32_chain_witness`)
+[cold_path, arch(at="../ARCHITECTURE_MEASUREMENT_FORCED_FEED.md#reference-forced-feed")]
+def gemma_forced_feed(t : T?; n : int64; gf : GemmaFile; exact : bool = false) {
+    with_gemma_rig(t, gf) $(tr) {
+        var inscope feed <- prose_feed(tr, n, 8l)
+        var fed <- resident_then_cpu_feed(t, tr, feed.prompt, feed.toks) $ {
+            served_every_call(t)
+        }
+        if (exact) {
+            var f32_rows <- f32_chain_rows(path_join(models_dir(), gf.file), feed.prompt, feed.toks)
+            feed_steps_within(t, tr, "", n, fed.gpu, f32_rows, feed.toks, GEMMA_LOGIT_BAR_REL, "resident", "the f32 chain")
+            f32_chain_witness(t, tr, "{gf.file}: {n} tokens against the f32 chain", fed, f32_rows)
+            delete f32_rows
+        } else {
+            feed_steps_within(t, tr, "", n, fed.gpu, fed.cpu, feed.toks, GEMMA_LOGIT_BAR_REL)
+        }
+        delete fed
+    }
+}
+
+//! one load's run in `ring_vs_flat`: the logits rows, whether the driver armed the rings, and the mirror's bytes on the card
+struct private RingRun {
+    rows : array<array<float>>
+    slack : int64
+    mirror : int64
+    window : int64
+}
+
+//! `path` loaded at mirror codec `kv` under the ring pin `ring` (`with_gpu_kv_ring`), the `n` prose ids and eight fed steps through
+//! it; `ok` false after the skip `resident_trunk` names
+def private ring_run(t : T?; path : string; kv : KVDtype; ring : int; n : int64) : tuple<ok : bool; run : RingRun> {
+    var tr <- resident_trunk(t, path, GEMMA_RIG_CTX, "") $() : Model {
+        var m <- Model()
+        with_gpu_kv_ring(ring) {
+            delete m
+            m <- load_resident_at(path, kv)
+        }
+        return <- m
+    }
+    var run : RingRun
+    let ok = tr.config.n_layers > 0l
+    if (ok) {
+        var inscope feed <- prose_feed(tr, n, 8l)
+        run.rows <- feed_alone(tr, kv, feed.prompt, feed.toks)
+        served_every_call(t)
+        run.slack = gpu_resident_kv_ring_slack()
+        run.mirror = gpu_resident_mirror_bytes()
+        run.window = tr.config.sliding_window
+    }
+    moe_gpu_drop_model()
+    delete tr
+    return <- (ok = ok, run <- run)
+}
+
+//! The sliding layers' rings against the flat mirror on one driver: `n` prose ids past the window and eight fed steps on a load that
+//! rings them and on one that keeps every row (`set_gpu_kv_ring`), at mirror codec `kv` - the logits bit for bit at the prompt and every
+//! step, since a ring moves where a row sits and never which rows a query reads or their order; the ringed load arms its rings and charges
+//! the card less mirror than the flat one, which arms none, and the row a step off is the control the compare tells apart
+[cold_path]
+def ring_vs_flat(t : T?; n : int64; gf : GemmaFile; kv : KVDtype) {
+    return if (!arm_on(t, gf.arm))
+    let path = path_join(models_dir(), gf.file)
+    return if (!resident_ready(t, path))
+    with_dasllama_jobque_() {
+        var inscope ringed <- ring_run(t, path, kv, 1, n)
+        var inscope flat <- ring_run(t, path, kv, 0, n)
+        if (ringed.ok && flat.ok) {
+            t |> success(n > ringed.run.window && ringed.run.window > 0l, "the {n}-token prompt runs past the {ringed.run.window}-position window")
+            t |> success(ringed.run.slack > 0l && flat.run.slack == 0l, "the ringed load armed its rings (slack {ringed.run.slack}), the flat load none ({flat.run.slack})")
+            t |> success(ringed.run.mirror < flat.run.mirror, "the rings charge the card less mirror ({ringed.run.mirror >> 20l} MB) than every row ({flat.run.mirror >> 20l} MB)")
+            for (st in range(length(ringed.run.rows))) {
+                let what = st == 0 ? "the prompt's logits" : "step {st - 1}"
+                check_exact(t, "{what}: the ringed mirror against the flat one, bit for bit", ringed.run.rows[st], flat.run.rows[st])
+                t |> success(logits_maxdiff(ringed.run.rows[st], flat.run.rows[st > 0 ? st - 1 : 1]) > 0.0, "{what} control: the row a step off differs")
+            }
+        }
+    }
+}
+
+let RESIDENT_RING_ON = "dasLLAMA: resident driver - the sliding layers' K/V rows ride rings of their window plus"
+let RESIDENT_RING_OFF = "dasLLAMA: resident driver - the sliding layers' K/V rows keep every position's row, no ring, as asked"
+let RESIDENT_EMBED_OFF = "dasLLAMA: resident driver - the host embeds every token row as asked"
+
+//! the whole-model driver's load log for `gf` - what to_log prints, which no in-process cell reads - from one resident load in a
+//! child (`_resident_load_root.das`) at the context `ctx` asked whole (0 none) under `envs`; "" with the skip `resident_ready` names
+def resident_load_log(t : T?; gf : GemmaFile; ctx : int64; envs : array<tuple<name : string; value : string>>) : string {
+    let path = path_join(models_dir(), gf.file)
+    return "" if (!resident_ready(t, path))
+    var out : string
+    let rc = run_child(child_cmd("_resident_load_root.das", envs, "\"{path}\" {ctx}", true), out)
+    t |> equal(rc, 0, "the load root ran:\n{out}")
+    t |> success(find(out, "RESIDENT_LOAD active=true") >= 0, "the whole-model driver armed in the child:\n{out}")
+    return out
+}
+
+//! The resident driver's load-time announces off its log under both pin states: the ringed load names its rings, the flat one
+//! (`DASLLAMA_GPU_KV_RING=0`) its every-row mirror as asked; with the token gather off (`DASLLAMA_VK_GPU_EMBED=0`) the host embed
+//! says so, a gathering load saying nothing
+[cold_path]
+def ring_load_announces(t : T?; gf : GemmaFile) {
+    return if (!arm_on(t, gf.arm))
+    let ringed = resident_load_log(t, gf, 0l, [(name = "DASLLAMA_GPU_KV_RING", value = "1"), (name = "DASLLAMA_VK_GPU_EMBED", value = "1"),
+        (name = "DAS_LOG_LEVEL", value = "info")])
+    return if (empty(ringed))
+    let flat = resident_load_log(t, gf, 0l, [(name = "DASLLAMA_GPU_KV_RING", value = "0"), (name = "DASLLAMA_VK_GPU_EMBED", value = "0"),
+        (name = "DAS_LOG_LEVEL", value = "info")])
+    t |> success(find(ringed, RESIDENT_RING_ON) >= 0 && find(ringed, RESIDENT_RING_OFF) < 0, "the ringed load names its rings alone:\n{ringed}")
+    t |> success(find(flat, RESIDENT_RING_OFF) >= 0 && find(flat, RESIDENT_RING_ON) < 0, "the flat load names its every-row mirror alone:\n{flat}")
+    t |> success(find(flat, RESIDENT_EMBED_OFF) >= 0, "the host embed under the gather pin says so:\n{flat}")
+    t |> success(find(ringed, RESIDENT_EMBED_OFF) < 0, "the gathering load says nothing of the host embed")
 }
 
 //! the same tokens through the window chain at once and through the token command one at a time,
 //! on one arm: the two GPU paths' logits at every shared position against each other, then the CPU
 //! arm's own pair as the yardstick of how far a prefill kernel and a decode kernel sit apart on
 //! this model by rounding alone
+[cold_path]
 def prefill_vs_decode(t : T?; n : int64; gf : GemmaFile) {
     with_gemma_rig(t, gf) $(tr) {
         let RESIDENT = 0
@@ -140,6 +298,9 @@ def prefill_vs_decode(t : T?; n : int64; gf : GemmaFile) {
             let name = arm == RESIDENT ? "resident" : "cpu"
             var a <- feed_alone(tr, mirror_kv_dtype(), window_prompt, window_steps)
             var b <- feed_alone(tr, mirror_kv_dtype(), token_prompt, token_steps)
+            if (arm == RESIDENT) {
+                served_every_call(t)
+            }
             var worst = 0.0
             var worst_off = 0.0
             for (k in range64(long_length(a))) {
@@ -217,6 +378,7 @@ def private forced_nll(tr : Model; var s : Session; ids : array<int64>; n, steps
 //! On the 12B the logits sit within a few points at whole stretches of positions (the reference exe's own
 //! margins read 0.6 to 16 on this text), so a maxdiff bar on a single position measures the model, not the driver;
 //! a routed model's near-tie flips move whole positions, so its slack is wider.
+[cold_path]
 def ppl_compare(t : T?; n, steps : int64; gf : GemmaFile; hits_slack : int64 = 3l; ppl_ratio : float = GEMMA_PPL_RATIO) {
     with_gemma_rig(t, gf) $(tr) {
         var ids <- prose_tokens(tr, n + steps + 1l)
@@ -225,6 +387,7 @@ def ppl_compare(t : T?; n, steps : int64; gf : GemmaFile; hits_slack : int64 = 3
         let g = forced_nll(tr, sg, ids, n, steps)
         t |> success(moe_gpu_resident_active(), "the whole-model driver stayed armed through the run")
         t |> equal(moe_gpu_resident_prefills(), served0 + 1l, "the resident window chain served the {n}-token prompt")
+        served_every_call(t)
         delete sg
         moe_gpu_drop_model()   // every later step is the CPU chain
         var sc <- create_session(tr, mirror_kv_dtype())

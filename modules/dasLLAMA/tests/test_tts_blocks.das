@@ -1138,7 +1138,7 @@ def test_causal_attention(t : T?) {
         var worst = 0.0
         for (h in range64(CATT_HEADS)) {
             for (e in range64(CATT_HIDDEN / CATT_HEADS)) {
-                worst = max(worst, abs(got[h * (CATT_HIDDEN / CATT_HEADS) + e] - kc.v[(h * kc.cap + 11l) * (CATT_HIDDEN / CATT_HEADS) + e]))
+                worst = max(worst, nan_wide_diff(got[h * (CATT_HIDDEN / CATT_HEADS) + e], kc.v[(h * kc.cap + 11l) * (CATT_HIDDEN / CATT_HEADS) + e]))
             }
         }
         t |> success(worst < 1.0e-6, "a one-key window returns that key's value row (max |diff| {worst})")
@@ -1175,7 +1175,7 @@ def test_elu_and_layer_scale(t : T?) {
         elu_rows(x, 4096l)
         var worst = 0.0
         for (g, w in x, want) {
-            worst = max(worst, abs(g - w))
+            worst = max(worst, nan_wide_diff(g, w))
         }
         t |> success(worst <= 1.0e-6, "elu_rows against the scalar form (max |diff| {worst})")
         var inscope y : array<float>
@@ -1302,14 +1302,14 @@ def test_rope_rows_and_var_scale_norm(t : T?) {
     var_scale_norm(vx, valpha, 256l, 1.0e-5)
     var norm_worst = 0.0
     for (g, w in vx, want_norm) {
-        norm_worst = max(norm_worst, abs(g - w))
+        norm_worst = max(norm_worst, nan_wide_diff(g, w))
     }
     t |> success(norm_worst <= 1.0e-6, "var_scale_norm against the double form (max |diff| {norm_worst})")
     // the control: a poisoned double form lands outside the bar
     want_norm[3] += 1.0e-5
     var poisoned_worst = 0.0
     for (g, w in vx, want_norm) {
-        poisoned_worst = max(poisoned_worst, abs(g - w))
+        poisoned_worst = max(poisoned_worst, nan_wide_diff(g, w))
     }
     t |> success(poisoned_worst > 1.0e-6, "the norm bar discriminates a poisoned expectation")
 }

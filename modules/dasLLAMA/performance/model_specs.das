@@ -73,7 +73,8 @@ struct ModelSpec {
     serve_ctx : int = 0             // trained context window
     serve_vram_gb : float = 0.0     // advertised working-set hint, not a fit check
     serve_default : bool = false    // the one the getting-started path recommends
-    serve_vision : string           // vision-tower companion NAME ("" = text only); [[serve_vision_tower]] resolves it
+    serve_vision : string           // vision-tower companion NAME ("" = text only); [[serve_companion]] resolves it
+    serve_drafter : string          //! the assistant drafter companion NAME the server attaches beside the file ("" = none); [[serve_companion]] resolves it
     serve_tts : bool = false        // a speech model of the served text-to-speech set ([[serve_tts_set]]); its packs ride the companions
     serve_mtp : string              //! the platforms ("metal", "vulkan", comma list) where the model's self-speculation measured a win at one stream (PERF_LEDGER.md); "" = the server's unset `mtp` decodes plain
 }
@@ -474,7 +475,8 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             bytes = 16947541728l, sha256 = "f2c28b3dc4776931ac6f879e11f203dec637ea0f14267a86ec8f6165f63f293f",
             serve_name = "gemma-4-26b-a4b", serve_display = "Gemma 4 26B-A4B",
             serve_note = "the MoE - 26B quality at 4B active weights per token",
-            serve_ctx = 131072, serve_vram_gb = 19.0, serve_mtp = "metal"),
+            serve_ctx = 131072, serve_vram_gb = 19.0, serve_mtp = "metal",
+            serve_drafter = "mtp-gemma-4-26B-A4B-it-Q8_0.gguf"),
         ModelSpec(file = "Qwen3.8-27B-UD-Q4_K_M.gguf",
             url = "{HF}/unsloth/Qwen3.8-27B-GGUF/resolve/27af057ecb382ddfea5d12837360a8980560e3ed/Qwen3.8-27B-UD-Q4_K_M.gguf",
             bytes = 16464440224l, sha256 = "322e194ff79741c7baa497c240f677f54b201b0efab44ca8e50f122b39123482",
@@ -539,6 +541,23 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
         ModelSpec(file = "gemma-4-E2B-it-emb-Q4_0-local.gguf", bytes = 3591765440l,
             sha256 = "bec56582221c7025f8310b9fa6c258a651a4bd92f029afc77b9e5f20f80c3988",
             recipe = "llama-quantize --allow-requantize --token-embedding-type q4_0 gemma-4-E2B-it-Q8_0.gguf gemma-4-E2B-it-emb-Q4_0-local.gguf Q8_0"),
+        // the per-layer-embedding format carriers (tests/test_metal_support_matrix.das gemma4e rows): the token and PLE tables
+        // in a K-quant and an IQ format, the per-layer gate and projection planes in Q6_K and Q5_0
+        ModelSpec(file = "gemma-4-E2B-it-emb-Q6_K-local.gguf", bytes = 4301127104l,
+            sha256 = "51e4cbeb06dc097f63162f0998c03d689a1d7493f992282b0d8c7aca26abac24",
+            recipe = "llama-quantize --allow-requantize --token-embedding-type q6_k gemma-4-E2B-it-Q8_0.gguf gemma-4-E2B-it-emb-Q6_K-local.gguf Q8_0"),
+        ModelSpec(file = "gemma-4-E2B-it-emb-IQ4_XS-local.gguf", bytes = 3505782208l,
+            sha256 = "474fa20d7d00860e38b02c939fdaf89ba8b1d0a53583e11d0426ebbbe53d3174",
+            recipe = "llama-quantize --allow-requantize --token-embedding-type iq4_xs gemma-4-E2B-it-Q8_0.gguf gemma-4-E2B-it-emb-IQ4_XS-local.gguf Q8_0"),
+        ModelSpec(file = "gemma-4-E2B-it-ple-Q6_K-local.gguf", bytes = 4960830912l,
+            sha256 = "0cb8588ddae62932f3cd4978278565be7e06c1a0e9d3d5f33e2aecfff5fddfe6",
+            recipe = "llama-quantize --allow-requantize --tensor-type inp_gate=q6_k --tensor-type 'blk\\.[0-9]+\\.proj\\.weight=q6_k' gemma-4-E2B-it-Q8_0.gguf gemma-4-E2B-it-ple-Q6_K-local.gguf Q8_0"),
+        ModelSpec(file = "gemma-4-E2B-it-ple-Q5_0-local.gguf", bytes = 4957175232l,
+            sha256 = "1262a7e8f58ed271f4aa898ecea38f56bc22c6cbd5810da3a8d1b877ed58969d",
+            recipe = "llama-quantize --allow-requantize --tensor-type inp_gate=q5_0 --tensor-type 'blk\\.[0-9]+\\.proj\\.weight=q5_0' gemma-4-E2B-it-Q8_0.gguf gemma-4-E2B-it-ple-Q5_0-local.gguf Q8_0"),
+        // the tied float table: token_embd and per_layer_token_embd F16 - the classifier's decline by name, the PLE table's q8 transcode
+        ModelSpec(file = "gemma-4-E2B-it-Q8_0-embf16-local.gguf",
+            recipe = "llama-quantize --allow-requantize --token-embedding-type f16 gemma-4-E2B-it-Q8_0.gguf gemma-4-E2B-it-Q8_0-embf16-local.gguf q8_0"),
         // the resident gates' large-tier carriers (tests/test_gpu_resident_gemma4_12b_q8 / _26b / _31b): provenance rows,
         // not board rows - resolve/main floats, so the bytes and sha256 pin the file
         ModelSpec(file = "gemma-4-12B-it-Q8_0.gguf",
@@ -549,6 +568,13 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             url = "{HF}/unsloth/gemma-4-26B-A4B-it-GGUF/resolve/main/gemma-4-26B-A4B-it-UD-IQ3_XXS.gguf",
             bytes = 11416548832l, sha256 = "3b7aec683e176e1d957d007e0fb590611d82aec4db358d99b7f9714b6bc7bfc2",
             parity <- ev_gemma_count([kq_native = true])),
+        // the native-MXFP4 gemma-4 expert carriers (the fused gate_up and the down stacks MXFP4, every other plane the source's):
+        // the M5's off the Q8_0 file, the pod's off the Q4_K_M file the pod stocks
+        ModelSpec(file = "gemma-4-26B-A4B-it-MXFP4_MOE-local.gguf", bytes = 14727181312l,
+            sha256 = "37b45b5b2865a290c83377542b19c9058321b188264990866372d2e10fda69a8",
+            recipe = "llama-quantize --allow-requantize gemma-4-26B-A4B-it-Q8_0.gguf gemma-4-26B-A4B-it-MXFP4_MOE-local.gguf MXFP4_MOE"),
+        ModelSpec(file = "gemma-4-26B-A4B-it-MXFP4_MOE-q4km-local.gguf",
+            recipe = "llama-quantize --allow-requantize gemma-4-26B-A4B-it-Q4_K_M.gguf gemma-4-26B-A4B-it-MXFP4_MOE-q4km-local.gguf MXFP4_MOE"),
         ModelSpec(file = "gemma-4-31B-it-Q4_K_M.gguf",
             url = "{HF}/lmstudio-community/gemma-4-31B-it-GGUF/resolve/main/gemma-4-31B-it-Q4_K_M.gguf",
             bytes = 18687063904l, sha256 = "8f3479643461601703f717931e399cc440dbd5ada598c025d6296c8165d94be9"),
@@ -663,11 +689,15 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
         ModelSpec(file = "gemma-4-26B-A4B-it-Q4_K_M.gguf", display = "gemma-4-26B-A4B-q4k", quant_label = "q4_k_m", official = true,
             url = "{HF}/unsloth/gemma-4-26B-A4B-it-GGUF/resolve/main/gemma-4-26B-A4B-it-UD-Q4_K_M.gguf",
             bytes = 16947541728l, sha256 = "f2c28b3dc4776931ac6f879e11f203dec637ea0f14267a86ec8f6165f63f293f",
-            // the assistant drafter rides as a companion: the mtp suite and the ruler attach it beside this target
+            // the assistant drafter rides as a companion: the mtp suite and the ruler attach it beside this target; its Q4_0
+            // twin is the drafter file's type-decline fixture (the drafter serves a Q8_0 sidecar alone)
             companions <- [
                 ProvEntry(name = "mtp-gemma-4-26B-A4B-it-Q8_0.gguf", root = "llm",
-                    url = "{HF}/ggml-org/gemma-4-26B-A4B-it-GGUF/resolve/main/mtp-gemma-4-26B-A4B-it-Q8_0.gguf",
-                    bytes = 461766784l, sha256 = "ea4f772ffb70e02127c5f142f9ed9af97add7ca0f2bcc7b277244a9771b436bd")],
+                    url = "{HF}/ggml-org/gemma-4-26B-A4B-it-GGUF/resolve/bb4531cda34d1ea09d9814959ed4d5833cf2a4c8/mtp-gemma-4-26B-A4B-it-Q8_0.gguf",
+                    bytes = 461766784l, sha256 = "ea4f772ffb70e02127c5f142f9ed9af97add7ca0f2bcc7b277244a9771b436bd"),
+                ProvEntry(name = "mtp-gemma-4-26B-A4B-it-Q4_0.gguf", root = "llm",
+                    url = "{HF}/ggml-org/gemma-4-26B-A4B-it-GGUF/resolve/bb4531cda34d1ea09d9814959ed4d5833cf2a4c8/mtp-gemma-4-26B-A4B-it-Q4_0.gguf",
+                    bytes = 251939520l, sha256 = "e00b0ce326d03d8f6f6972ad2320fe90b6ff25a3da5fc51bec15efe283052aa2")],
             // the q51 tier gate: this recipe's ffn_down_exps are Q5_1 on 29 layers, riding the
             // native q51 planes; the Q4_K gate_up stacks ride the kq planes
             parity <- ev_gemma4_26b_q4km()),
@@ -950,10 +980,11 @@ def serve_asr_tower() : ProvEntry {
         bytes = 2508463079l, sha256 = "b17956ca991a7f084c978a8a9d4c9785864260b6dd9b72f884344759d913ae7f")
 }
 
-//! The pinned vision-tower companion behind a serving row's `serve_vision` name, resolved
-//! across every row's companions (the tower is size-invariant, so the pinning row and the
-//! serving row may differ). Empty `name` back = no pinned match — the tower reads as absent.
-def serve_vision_tower(name : string) : ProvEntry {
+//! The pinned companion behind a serving row's `serve_vision` or `serve_drafter` name, resolved
+//! across every row's companions (a tower is size-invariant and a drafter rides several quants of
+//! its trunk, so the pinning row and the serving row may differ). Empty `name` back = no pinned
+//! match — the companion reads as absent.
+def serve_companion(name : string) : ProvEntry {
     var all <- model_specs()
     var out <- ProvEntry()
     if (!empty(name)) {

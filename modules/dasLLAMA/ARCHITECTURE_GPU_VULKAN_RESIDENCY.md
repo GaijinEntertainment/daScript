@@ -13,7 +13,7 @@ cooperative-matrix GEMM tiles in `ARCHITECTURE_GPU_VULKAN_GEMM.md`, the per-op t
 
 The resident driver is all-or-nothing, so the plan IS the decision, and it is computed from
 `Model` metadata alone. It sizes four numbers against the tier's weight budget: the dense weight
-planes, the KV mirror at `seq_cap`, the driver's own device scratch, and the headroom the auto
+planes, the KV mirror at `seq_cap` (a sliding layer's ring at its window, `ARCHITECTURE_GPU_KV_RING.md#kv-sliding-ring`), the driver's own device scratch, and the headroom the auto
 arm leaves unfilled (zero when the user pins VRAM). The weight planes are ONE list in placement order
 (`resident_planes`: per plane a row length, row count, format, offset and the role the upload registers it as):
 the plan sums its bytes and the upload reserves it and places it in order (`place_plane` panics on a role out of turn), so the two cannot drift; the router rows,
@@ -32,13 +32,15 @@ built-in 4096 positions, `DASLLAMA_GPU_MIN_CTX` where set, and the caller's own 
 it once per walk, not for a prediction of the plan) where that sits under either, since a caller that
 pinned its context named the shape it serves (`resident_arm_floor`); a pin asked whole
 (`set_gpu_ctx_strict`, `DASLLAMA_GPU_CTX_STRICT`, the server's `--ctx`) is the floor whatever its size.
-Where the asked mirror leaves no room for every plane, a plain MoE moves routed layers' experts to the
+Where the asked mirror leaves no room for every plane, a MoE moves routed layers' experts to the
 host (`resident_plan_host_layers`, `ARCHITECTURE_GPU_VULKAN_HC.md#hc-hot-pool`) and a dense model declines
 naming the context it would fit at; a mirror under the asked context says why (`resident_ctx_shortened_say`). The eighth held back is for
 fragmentation: a mirror sized to the last byte fails on a heap the previous model fragmented
 (`resident_plan_pick`). The pin is what lets a
 four-stream bench row home a 12B at 648 positions a region on a 16 GB card, where the binding
-cap's 6238 a region asks for more K/V than the weights leave.
+cap's 6238 a region asks for more K/V than the weights leave. **A layer's q/k/v, and its gate/up, read one activation image, so a
+group of two activation forms declines the driver** (`resident_layer_decline`); no stocked gemma file mixes them - each group shares
+one form layer by layer - and a file that mixes gate and up rides the per-op dense FFN rail, which feeds each plane its own image.
 
 **The mirror is a run of slabs, each a buffer pair bound as one SSBO range a side, and the
 device's single-binding range caps the context at the widest layer's row before any byte is
@@ -81,9 +83,10 @@ session alone. A session past the region count takes another's region and brings
 from the host, as every session did on the single mirror. An owner whose region another session
 took is served from the host or not at all: where its rows never came down, its next prefill or
 decode panics rather than read another session's history. A batched step over a
-per-layer-embedding model gives each row its own side input (`rdec_batch_ple_row`): the table
-row gathered on device where the driver holds the projection, else that row of the pre-step
-`eval_batch` already ran.
+per-layer-embedding model gives each row its own side input: the table row gathered on device
+off the row's id where the driver holds the table and the projection (the N-row command's ids,
+`RdecTokenNFn`'s `ids`), else that row of the pre-step `eval_batch` already ran
+(`rdec_batch_ple_row`).
 
 **A device-home session's region is its only copy.** `create_device_session` makes a session
 with scratch and no host cache (`Session.device_kv`), so nothing is allocated per request and
@@ -205,16 +208,16 @@ crosses the bus: a save and a load are device copies.
 
 ### The token rows gather on the device off the table's own plane {#vk-token-gather}
 
-**Where the table sits on the device in a format a gather reads, neither the window nor the one-row
-step brings a row across the bus: the window gathers its rows off the token ids, the step off its
-one token id.** Which gather a table takes is its disk type's:
+**Where the table sits on the device in a format a gather reads, neither the window nor a token
+command brings a row across the bus: the window gathers its rows off the token ids, the one-row step
+off its one token id, the N-row command, the verify and the draft off their rows' ids.** Which gather
+a table takes is its disk type's:
 
 | Table on disk | Gather | Its plane |
 |---|---|---|
 | Q8_0 | `EmbGather` (four elements a thread off the per-32 plane) | the tied classifier's at its block, or an untied table's linear q8 copy |
 | a superblock format (the 14 `kq_sb` tags) | its `KqEmb<Fmt>` leaf | the tied classifier's K-quant plane, or an untied table's own (`resident_emb_plane`) |
 | F32, F16, BF16 | `EmbGatherF32` | the table's exact f32 rows (F16/BF16 widen without loss, `Model.emb_f32_exact`) uploaded whole under `RDEC_EMB_F32_CAP` |
-| Q4_1 | none: the host embeds | the fp32 rows are a dequant - a converted copy, disclosed at load |
 
 A `KqEmb<Fmt>` leaf is the format's own decode GEMV leaf stamped under `KqGemvLeafT`'s `EMB`: a
 thread a 32-block, element k the int8 lane `blk_decode` leaves and the term pair `blk_fold` reads (the
@@ -222,21 +225,18 @@ per-format arithmetic is the GEMV's own, never re-spelled), the grid formats sta
 the GEMV does. A per-32 table (q51, iq4nl32, q4032, q5032) is the `Blk32GemvRunT` family's `EMB` leaf
 (`Q51Emb`, `Iq4nl32Emb`, `Q4032Emb`, `Q5032Emb`), its block decode the GEMV's own; mx4 never tags a table.
 `resident_arm_emb` hands the plane to the tier (`rdec_set_emb` for a quantized plane in the arena,
-`rdec_upload_emb_f32` for the f32 rows) and logs why the host embeds where it does: a Q4_1 table,
-a prepared image (it does not carry `emb_f32_exact`), a plane past the room or the cap, a trimmed
+`rdec_upload_emb_f32` for the f32 rows) and logs why the host embeds where it does: a prepared image (it does not carry `emb_f32_exact`), a plane past the room or the cap, a trimmed
 image, a per-layer-embedding model whose side table stays on the host, a hyper-connection model (its
-window reads the pre-step's rows). The window binds its ids plane (`pf_ids`); the one-row token command records the gather in place of
-the x upload when the table is placed, reading the step's id from a host-visible word
-(`tok_ids_host`) and, for a step that brings no id (`EMB_ID_HOST`: the peel's row, the split
-command's caller), the host's row from a host-visible staging row (`tok_xh_host`) in place - so the
-recorded command serves both. A step that brings no id writes `EMB_ID_HOST` into the id word itself, the
-split command's entry (`vk_rdec_token_split`) included: the word otherwise still holds the pick the chained
-step's prologue copied in (`rd_chain_prologue`), and the gather would embed that last landed pick in place
-of the fed row. The engine leaves a decode step's row unembedded where the driver
-answers the decode gate (`register_embed_dev_gates("vulkan", ...)`, the table placed); the override
-embeds it itself where its path reads a host row (the split command) and the engine backfills it
-where the override declines. The N-row and verify commands keep their row upload: their rows come
-embedded from the batch engine and the round.
+window reads the pre-step's rows). The window binds its ids plane (`pf_ids`); every token command but the in-order rows
+command (the recurrent peel) records the gather in place of the x upload, each row's id read from `tok_ids_host` and, for a row
+with none (`EMB_ID_HOST`: a non-text row, the split command's caller), the host's row staged in `tok_xh_host` (`nb` of each).
+A step that brings no id writes `EMB_ID_HOST` into the id word itself, the split command's entry (`vk_rdec_token_split`)
+included: the word otherwise still holds the pick the chained step's prologue copied in (`rd_chain_prologue`), and the gather
+would embed that last landed pick in place of the fed row. The engine leaves a decode step's row unembedded under the decode
+gate (`register_embed_dev_gates`), a batched step's rows under the batch gate (`register_embed_batch_gate`: no routed layer's
+experts on the host), and embeds them late where the override declines; the split command embeds its own row.
+`vk_rdec_nrow_embed_gathered` counts the N-row and verify rows, `vk_rdec_head_embed_gathered` the NextN head's;
+`set_gpu_resident_embed` pins `DASLLAMA_VK_GPU_EMBED` for a load.
 
 **A MoE is planned like a dense model with bigger FFN planes.** Its weight planes are the
 attention quads, every MoE layer's expert triple (`[ne x nfe x dim]` twice and `[ne x dim x

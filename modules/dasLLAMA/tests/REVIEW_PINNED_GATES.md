@@ -20,7 +20,35 @@ must keep holding:
   sits in a subfolder).
 - `test_metal_prefill_kernels.das`'s `test_metal_prefill_kernels` cell must hold every kernel gate
   it calls, at the bar each gate sets, with its `attn_trio_gate` calls whose `AttnKeys` sets
-  `softcap`, `hass`, `uend` or `ulo`.
+  `softcap`, `hass`, `uend` or `ulo`; and by name:
+  - `qk_rope_gate`'s V-panel arms (`QKR_V_FK`, `QKR_V_NORM`), and the V panel untouched on every
+    other arm;
+  - `moe_select_gate`'s down-scale arms: the weights within `fapprox` of the host select times
+    the down scales, and through `moe_select_fold_exact` bit for bit the plain twin's weight
+    under the global scale times the expert's down scale - the kernel's fold order;
+  - under the global scale, the swapped fold order (down scale, then global scale) parting from
+    the kernel's order on the fixture and missing the device's weights - a reference-side
+    control: the Metal compiler reorders the two multiplies, so a swap of them in the kernel's
+    source reads the same bits on the device and this cell cannot see it, while a wrong fold
+    value reds every weight;
+  - the global scale on the softmax_weight picks;
+  - `moe_comb_g4_gate` at the decode row and the 26B's row;
+  - `ple_proj_bf16_gate` on both stamps, exact, with its poisoned lead element;
+  - `geglu_side_gate` over the position-major side rows, the contiguous read its control;
+  - `ple_finish_gate` on the position-major side rows (`ple_fin_args`), at the E2B's slices
+    (35 x 256) too, the finish without the prescale its control.
+  The PLE side-row gather and the gemma-4 down-scale fold left this cell: the gather is
+  `test_metal_misc_kernels`' embed gates (entry below), the fold the select's down-scale arms.
+- `test_metal_misc_kernels.das`'s `test_metal_misc_kernels` cell must hold its token-table
+  gathers bit for bit: `embed_q8_gate`, `embed_b32_gate` on q51, iq4nl32, q4032 and q5032 at 96
+  wide and at 2048 wide past a whole other table's blocks, `embed_kq_gate` on every K-quant
+  format it lists, and `embed_f32_gate` past a lead of foreign floats.
+- `test_metal_gemm_kernels.das`'s `test_metal_gemm_kernels` cell must hold every kernel gate it calls, at the bar
+  each gate sets - the census's evidence among them: `kq_mulmm_gate`, `kq_devw_gate`, `kq_dbuf_gate`,
+  `moe_mulmm_kq_gate`, `moe_mulmm_split_gate`, `attn_qk_mm_gate` and `attn_dev_pair_gate`.
+- `test_metal_gemv_kernels.das`'s `test_metal_kq_gemv_kernels` cell must hold every GEMV gate it calls, at the bar
+  each gate sets - `kq_mvb_gate` and `moe_kq_gemv_gate` among them - and its `test_metal_kq_half_forms` cell every
+  format's half-x route against the CPU reference at every row count the dispatcher serves.
 - `test_site_records.das` must hold the byte-compare of `site/files/dasllama/bench_records.json`
   and of `site/files/dasllama/bench_cells.json` (repo root) - the smaller copy the site page loads
   first - against a fresh `merge_site_records` run, and `bench_cells.json` keeping every field
@@ -46,6 +74,42 @@ must keep holding:
   on every input of the prefill's tile-and-split pick.
 - `test_vulkan_kernels.das`'s `test_vkd_ext_roster` cell must hold the device-init roster's
   entries against the arming's fields.
+- `test_vulkan_kernels.das`'s `test_vkd_ple_finish` cell must hold the finish's 256-wide slices
+  in place against the CPU finish a slice at a time, one norm over every slice its control.
+- `test_vulkan_kernels.das`'s `test_vkd_ple_act_f32` cell must hold gelu(gate) x the side rows'
+  layer slice, position-major rows apart, the contiguous read its control.
+- `test_vulkan_kernels.das`'s `test_vkd_ple_bf16_cvt` cell must hold the bf16 rows as f16 bit
+  for bit the widened value's half, saturated past the half range, the elements past the count
+  kept.
+- `test_vulkan_kernels.das`'s `test_vkd_router_gemv_bf16` cell must hold the bf16 router-form
+  rows against the CPU dot at a row base and an output base, the two-base form and the
+  norm-folded form.
+- `test_vulkan_kernels.das`'s `test_vkd_kq_gemv_k4_gu` cell must hold the fused gate + up + act
+  + requant on Q4_K, IQ4_XS, iq3s4 and IQ2_S against the three-kernel path byte for byte and the
+  CPU chain.
+- `test_vulkan_kernels.das`'s `test_vkd_q51_gemv`, `test_vkd_iq4nl32_gemv`,
+  `test_vkd_q4032_gemv`, `test_vkd_q5032_gemv` and `test_vkd_mx4_gemv` cells must hold the
+  format's GEMV against its scalar dot, and its summed twin (`per32_sum_rows_cell`) over one,
+  two and four token rows - every row its slots' dots under their weights, a poisoned last row
+  the control, a wider dispatch's rows bit for bit the narrower one's.
+- `test_vulkan_kernels.das`'s `test_vkd_q51_cm2_batch`, `test_vkd_mx4_cm2_batch`, `test_vkd_iq4nl32_cm2_batch`,
+  `test_vkd_iq3s4_cm2_batch`, `test_vkd_mx4_gemv_gu`, `test_vkd_gemv_ncol`, `test_vkd_q8_gemv_gu_n`,
+  `test_vkd_q8_gemv_pleact`, `test_vkd_act_family`, `test_vkd_moe_routing`, `test_vkd_dn_family`, `test_vkd_hc_seams`,
+  `test_vkd_hc_rows`, `test_vkd_ple_side`, `test_vkd_f16_gemm_khr`, `test_vkd_fa_cm2`, `test_vkd_fa_khr`,
+  `test_vkd_fa_khr_h256_softcap`, `test_vkd_da_attn`, `test_vkd_da_attn_rqk` and `test_vkd_da_attn_bw` cells - the
+  census's evidence for the classes no zoo row dispatches - must hold each class against its CPU oracle at the bar the
+  cell sets, with the cell's poisoned-element control.
+- `test_vulkan_tower_kernels.das`'s `test_vkt_fa_bidir`, `test_vkt_tower_rows`, `test_vkt_tower_ln_rows`,
+  `test_vkt_tower_f16_feeds`, `test_vkt_tower_vision_rows`, `test_vkt_tower_win_rows`, `test_vkt_tower_tail_rows`,
+  `test_vkt_tower_front_movers`, `test_vkt_tower_front_mel`, `test_vkt_tower_cn_attn_rel_plane`,
+  `test_vkt_tower_conformer`, `test_vkt_tower_fastconformer`, `test_vkt_tower_dw2d`, `test_vkt_wdec_classes` and
+  `test_vkt_wdec_fused_rq` cells - the census's evidence for the tower classes - must hold each class against its
+  CPU oracle at the bar the cell sets, with the cell's poisoned-element control.
+- `test_vulkan_kv_codec_kernels.das`'s `test_vkc_q8_da_attn` and `test_vkc_tq4_da_attn` cells must hold the codec
+  attention arms (`codec_attn_arms`) against the CPU attention over the codec's rows, each arm with its controls.
+- `test_gpu_tier.das`'s `test_override_announces` cell must hold every override line the GPU
+  homes announce - its setter and env spellings - in step with the knob list
+  (`../ENVIRONMENT.md`), and no line where the override takes no effect.
 - `test_tts_pocket.das`'s `test_pocket_seat_stats` cell must hold `pocket_gpu_seats()`'s stage
   names in dispatch order, and `pocket_gpu_stats` panicking on a name it does not list.
 - `test_tts_pocket.das`'s `test_pocket_q8_file` cell must hold the published file's tensor
@@ -69,12 +133,19 @@ An axis is one distinct behaviour the cell asserts - an output form, a refusal p
 order; a new input row on an axis the cell already asserts is not an axis gained.
 
 **A diff that widens a pinned test cell's tolerance, swaps its comparison for one more outputs
-pass, rewrites an expected value without updating the cell's entry under the contract-change rule
-above, drops its input, or drops a `run.das` suite listing that reaches it is a defect - keep the
-cell's asserts and fix the code that fails them instead; so is a diff that removes a pinned
-test cell's assert without adding to the same cell, in the same change, an assert that holds the
-same values to an equal or tighter bound, with its control (an extra assert in the same cell
-proving the compare can fail).**
+pass, rewrites an expected value without updating that cell's pinned-set entry in the same change,
+drops its input, or drops a `run.das` suite listing that reaches it is a defect - fix the code
+that fails the cell instead.**
+
+**A diff that removes a pinned test cell's assert while the code it checks stays adds to the same
+cell, in the same change, an assert that holds the same values to an equal or tighter bound, with
+its control (an extra assert in the same cell proving the compare can fail).**
+
+**A diff that deletes the kernel or function a pinned test cell's assert checks and routes its
+callers to other code - the replacement - adds, in the same change, an assert holding the
+replacement's output to the deleted assert's bound or tighter, with its control, to a pinned cell
+testing the replacement, or names in the old cell's pinned-set entry the pinned cell that already
+asserts the replacement's output to that bound.**
 
 **A diff that adds a cell or an assert whose expected value must be kept in step with something
 maintained outside the cell - a document, a checked-in table, a committed artifact's form, a

@@ -1633,22 +1633,18 @@ def private handle_catalog_download(req : FrontReq; var resp : Reply) : http_sta
         let why = empty(jerr) ? "" : " ({jerr})"
         return resp |> JSON(error_body("body must name a catalog entry: \{\"name\": ...}{why}", "invalid_request_error"), http_status.BAD_REQUEST)
     }
-    if (!empty(tower) && tower != "vision") {
-        return resp |> JSON(error_body("unknown tower '{tower}' (vision | asr | tts)", "invalid_request_error"), http_status.BAD_REQUEST)
+    if (!empty(tower) && tower != "vision" && tower != "drafter") {
+        return resp |> JSON(error_body("unknown tower '{tower}' (vision | drafter | asr | tts)", "invalid_request_error"), http_status.BAD_REQUEST)
     }
-    for (e in model_catalog()) {
+    for (e in catalog_download_rows()) {
         if (e.name == want) {
-            let refusal = (tower == "vision" ? catalog_download_start_vision(g_catalog_dir, e)
-                                             : catalog_download_start(g_catalog_dir, e))
+            let kind = catalog_companion_kind(tower)
+            let refusal = empty(tower) ? catalog_download_start(g_catalog_dir, e) : catalog_download_start_companion(g_catalog_dir, e, kind)
             if (!empty(refusal)) {
                 return resp |> JSON(error_body(refusal, "invalid_request_error"), http_status.CONFLICT)
             }
-            // echo the id the download state machine registered, so a caller can match the
-            // ACCEPTED body to the download.name it will poll
-            let dl_name = tower == "vision" ? "vision:{e.name}" : e.name
-            let bytes = tower == "vision" ? e.vision_bytes : e.bytes
-            to_log(LOG_INFO, "dasllama-server: catalog download started: {dl_name} ({bytes >> 20l} MB into {g_catalog_dir})\n")
-            return resp |> JSON("\{\"ok\":true,\"name\":{json_str(dl_name)},\"bytes\":{bytes}}", http_status.ACCEPTED)
+            to_log(LOG_INFO, "dasllama-server: catalog download started: {catalog_download_id(e, tower)} (into {g_catalog_dir})\n")
+            return resp |> JSON(catalog_download_accepted_json(e, tower), http_status.ACCEPTED)
         }
     }
     return resp |> JSON(error_body("unknown catalog entry '{want}'", "invalid_request_error"), http_status.NOT_FOUND)
@@ -7087,8 +7083,8 @@ def private init_one_scheduler(var s : ModelSlot) {
     var spec = slot_mtp_arms(s.opts, g_sched_defaults.mtp, s_streams, slot_flavor(s) == "metal",
                              s.backend_effective, gpu_resident_experts_host())
     if (spec && s.model.config.n_layer_nextn <= 0l) {
-        let side = mtp_drafter_sidecar(s.path)
-        if (!empty(side) && attach_mtp_drafter(s.model, side)) {
+        let side = attach_mtp_sidecar(s.model, s.path)
+        if (!empty(side)) {
             to_log(LOG_INFO, "dasllama-server: {s.name} speculates through the assistant drafter {base_name(side)}\n")
         } elif (want > 0) {
             to_log(LOG_WARNING, "dasllama-server: mtp requested for {s.name} but the model has no NextN head and no assistant drafter beside it — self-spec stays off\n")

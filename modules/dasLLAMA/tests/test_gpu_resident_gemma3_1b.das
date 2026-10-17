@@ -61,3 +61,14 @@ def test_gpu_resident_gemma3_block_codecs(t : T?) {
         }
     }
 }
+
+//! the sliding layers' rings against the flat mirror (`ring_vs_flat`): 1300 prose ids past the 512-position window and eight steps,
+//! bit for bit, on the f16 mirror and the q8_0 one
+[test]
+def test_gpu_resident_gemma3_ring(t : T?) {
+    for (kv in fixed_array(KVDtype.f16, KVDtype.q8_0)) {
+        t |> run("gemma-3-1b Q8_0: the sliding layers' rings against every row kept, a {kv} mirror, 1300 ids and eight steps") @(t : T?) {
+            ring_vs_flat(t, 1300l, GEMMA3_FILE, kv)
+        }
+    }
+}

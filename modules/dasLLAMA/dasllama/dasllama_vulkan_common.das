@@ -13,6 +13,7 @@ require spirv/spirv_dis
 require dasllama/dasllama_math
 require dasllama/dasllama_gpu_tier
 require dasllama/dasllama_kv_dtype   // KVDtype and its unit arithmetic: the mirror's codec
+require dasllama/dasllama_gpu_math   // kv_ring_row: a mirror position's row
 require dasllama/dasllama_gemm_schema
 require dasllama/dasllama_env
 require dasllama/dasllama_config
@@ -1200,10 +1201,10 @@ def public vk_ext_roster(phys : VkPhysicalDevice) : array<VkExtEntry> {
         VkExtEntry(name = "VK_KHR_shader_integer_dot_product", present = integer_dot_product_supported(phys),
             rides = "the sdot4 integer tiles and the quant dot kernels; the tier is disabled without it"),
         VkExtEntry(name = "VK_KHR_cooperative_matrix", present = has_cm,
-            rides = "the KHR f16 and int8 tiles (the mm mode), the resident MoE block's expert pieces in mm mode, the KHR flash tile and its sink stamps, the KHR f16 GEMM off cm2 (at subgroup 32), the h128 attention twin, the tower driver's KHR route (the vision and whisper-class bidirectional flash tiles, the qwen25v f16 GEMM off cm2 and the audio fronts' f16 GEMMs - the conv stems, the qwen3a and canary fronts), and the TTS seats' f16 tile off cm2 (the StyleTTS2 decoder and generator convs, at subgroup 32); without it the sdot4 tiles and the chunked attention serve, a resident MoE's routed block rides the Q8-fed chain, the tower driver declines `device` off cm2, and the TTS decoder convs ride the f32 tile"),
+            rides = "the KHR f16 and int8 tiles (the mm mode), the resident MoE block's expert pieces in mm mode, the KHR flash tile and its sink stamps, the KHR f16 GEMM off cm2 (at subgroup 32), the h128 attention twin, the tower driver's KHR route (the vision and whisper-class bidirectional flash tiles, the qwen25v f16 GEMM off cm2 and the audio fronts' f16 GEMMs - the conv stems, the qwen3a and canary fronts), the TTS seats' f16 tile off cm2 (the StyleTTS2 decoder and generator convs, at subgroup 32), and the per-layer-embedding window projection's f16 tile off cm2 (at subgroup 32, dim and rows 16-multiples); without it the sdot4 tiles and the chunked attention serve, a resident MoE's routed block rides the Q8-fed chain, the tower driver declines `device` off cm2, the TTS decoder convs ride the f32 tile, and the per-layer-embedding window projection rides the router GEMV"),
         VkExtEntry(name = "VK_NV_cooperative_matrix2 (workgroup scope, flexible dimensions, tensor addressing, block loads, bufferDeviceAddress)",
             present = has_cm2,
-            rides = "the cm2 decode-in-load prefill tiles, the served default; without it the KHR tiles serve (DASLLAMA_COOPMAT picks a mode by name)"),
+            rides = "the cm2 decode-in-load prefill tiles, the served default, and the per-layer-embedding window projection's f16 tile (dim a multiple of the small f16 GEMM's eight 64-deep chunks, else the router GEMV); without it the KHR tiles serve, the projection on the KHR f16 tile where that fits and on the router GEMV where none does (DASLLAMA_COOPMAT picks a mode by name)"),
         VkExtEntry(name = "VK_NV_cooperative_matrix2 reductions, conversions and per-element operations",
             present = has_cm2 && cooperative_matrix2_fa_supported(phys),
             knob = "DASLLAMA_COOPMAT", off = resolve_coopmat_mode(has_cm, has_cm2) != COOPMAT_CM2,
@@ -2374,7 +2375,8 @@ struct RLayer {
     hs, qd, kvd, hid, rot : int64   //! head size, query width, kv width, dense FFN width, rotary width per head
     kv_mul : int64                  //! query heads per kv head
     window : int64                  //! positions a sliding layer attends over; 0 = every position
-    mir_base : int64                //! this layer's first unit in its K/V mirror slab, one region's layout (its rows are seq_cap x the row's units from there)
+    ring : int64                    //! a sliding layer's ring rows (`kv_ring_row`); 0 = seq_cap rows, a position each
+    mir_base : int64                //! this layer's first unit in its K/V mirror slab, one region's layout (its rows are seq_cap x the row's units from there, or `ring` rows)
     mir_slab : int64                //! the K/V mirror slab the layer's rows sit in (`rd_k_slab` / `rd_v_slab`)
     cbase : int64                   //! its rope class's row base inside a position's cos/sin plane
     boff : int64                    //! its row base in the q/k/v bias plane
@@ -2389,13 +2391,13 @@ struct RLayer {
     attn_cap : float                //! the attention logit softcap on the scaled scores (gemma-2: 50); 0 = none - the cm2 flash tile's cap stamps take it at h256
     // the per-layer-embedding branch (gemma-4 E-series): gate [dim x ple] and proj [ple x dim] planes, their sets and metas
     ple : bool
-    bpg, bpp : int64
-    fpg : int
+    bpg, bpp : int64                //! the arena blocks; -1 where the plane is the file's f32 rows (`ple_gf32_dev` / `ple_pf32_dev`)
+    fpg, fpp : int                  //! the gate's and the projection's formats
     s_ple_x : VkDescriptorSet       //! the residual row requantized as it is (the gate GEMV's feed)
     s_ple_gate, s_ple_proj : VkDescriptorSet
     s_ple_act : VkDescriptorSet     //! gelu(gate) x this layer's side-input row, requantized (the proj GEMV's feed)
     ple_fused : bool                //! the branch in three dispatches: the FFN residual step quantizes the row it writes (the gate's feed), the act rides the proj GEMV
-    s_ple_ar_rq : VkDescriptorSet   //! the residual step + raw Q8_0 requant (`ArArgs.no_norm`)
+    s_ple_ar_rq : VkDescriptorSet   //! the residual step + raw Q8_0 requant (`GkAddRmsArgs.no_norm`)
     s_ple_pa : VkDescriptorSet      //! the act + requant + proj GEMV (`Q8GemvPleAct`)
     m_pg, m_pp : HostBuf
     // the recurrent (deltanet) form - the attention fields above stay unused on such a layer
@@ -2436,8 +2438,7 @@ struct RLayer {
     s_router, s_topk : VkDescriptorSet
     s_egate, s_eup : VkDescriptorSet
     s_eact : VkDescriptorSet
-    egu : bool                      //! the Q4_K gate and up GEMVs, the act and its Q8_0 requant as one dispatch (`KqGemvK4Gu`)
-    egu_mx4 : bool                  //! ... the mx4 twin under the slots' expert bias rows (`Mx4GemvGu`, gpt-oss)
+    egu : bool                      //! the gate and up GEMVs, the act and its Q8_0 requant as one dispatch (`GEMV_SHELL_GU`'s stamps)
     s_egu : VkDescriptorSet
     s_edown : VkDescriptorSet
     edown_sum : bool                //! the routed down GEMV sums the k rows under their weights itself (`Q51GemvSum`): the combine reads one row
@@ -2587,6 +2588,7 @@ struct RDec {
     ch : RdChain                  //! the chained step in flight
     carry : bool                  //! the plan's carry, whatever the knob said at the load: the landing's planes exist, and the final site can store the rows' post-final-norm hidden in xb_dev and land it into hid_host beside the logits (a NextN-headed model whose tier installed the landing)
     carry_live : bool             //! the carry as this step wants it - `carry` and the speculative round on; a flip re-records the commands whose last site stores or lands the row (`rd_carry_sync`)
+    carry_assist : bool           //! an attached assistant drafter reads the carry every step, the speculative knob notwithstanding (`vk_rdec_carry_arm`)
     hid_host : HostBuf            //! the landed carry rows: the token command's, or the window chain's last row at row 0
     head_norm_base : int64        //! the NextN draft head's norm block in the norms plane (`rdec_head_norm_base`); 0 = prepared without the head
     head_on : bool                //! the head is set (`vk_rdec_set_head`): the draft command serves
@@ -2667,12 +2669,20 @@ struct RDec {
     ple : int64
     ple_host : HostBuf
     ple_dev, pleg_dev : uint64
+    //! the gate / projection planes that ship F32, every layer's rows in the file's f32 (0 where the kind rides the arena), and
+    //! the act's f32 rows the f32 projection reads [nb x ple]
+    ple_gf32_dev, ple_pf32_dev, pleact_dev : uint64
+    ple_gf32_bytes, ple_pf32_bytes : int64
     pf_ple : uint64
     // the pre-step's projection on device (cm2 route): the per-layer model projection as an f16 mirror [layers*ple x dim],
     // its [ple] norm row, the window's f16 embedding rows and the projected [np x layers*ple] plane, and the three steps' sets
     ple_gpu : bool
-    ple_w16_dev, ple_pnorm_dev : uint64
+    ple_wp_dev, ple_pnorm_dev : uint64   //! the projection's own rows (bf16 halves under `ple_wp_bf16`, else f32) and its norm row
+    ple_wp_bytes : int64
+    ple_wp_bf16 : bool
+    ple_w16_dev : uint64                 //! the window's f16 panel of the projection, rewritten every window (0 where no f16 tile serves it)
     ple_w16_bytes : int64
+    pf_ple_wcvt_set : VkDescriptorSet    //! the panel's conversion off the own rows
     pf_plexf, pf_plep : uint64
     pf_ple_cvt_set, pf_ple_gemm_set, pf_ple_ar_set : VkDescriptorSet
     //! the token command's half of the pre-step: the projected [layers*ple] row and the two steps' sets (the f16 GEMV over the embedded row, the per-slice finish)
@@ -2706,12 +2716,14 @@ struct RDec {
     emb_f32_bytes : int64
     emb_fmt : int                      //! ... its format, the gather's stamp (`emb_cls_ensure`)
     emb_scale : float                  //! ... and the embed scale the one-row command's gather applies
-    tok_ids_host : HostBuf             //! the one-row command's token id, read by its gather where the step brings one (`EMB_ID_HOST` = the row below)
-    tok_xh_host : HostBuf              //! the host's row for a step that brings no token id, read in place by the same gather
+    tok_ids_host : HostBuf             //! the token commands' ids a row, read by their gathers where a row brings one (`EMB_ID_HOST` = the row below)
+    tok_xh_host : HostBuf              //! the host's rows for the rows that bring no token id, `nb` of them, read in place by the same gather
     s_tok_emb : VkDescriptorSet        //! the one-row command's gather set
     ple_tbl_blk : int64 = -1l          //! the E-series token table's arena block: the ids prefill gathers pf_ple from it
     ple_tbl_fmt : int                  //! ... its format slot, the table's own tag - the gather's stamp (`emb_cls_ensure`)
     pf_ple_tbl_set : VkDescriptorSet
+    s_tok_ple : VkDescriptorSet        //! the one-row command's gather of the step's side row off the table, the host's staged row for a step without an id
+    ple_tok_on : bool                  //! ... built: the table placed, the projection held and the step's id on the device
     pf_ids : uint64                    // [MAX_NPOS] token ids for the device-side embed gather
     pf_emb_set : VkDescriptorSet
     pf_arq_sets : array<VkDescriptorSet>   // fused ar+rq|f16 per layer: [l*2] = the ffn site, [l*2+1] = addr_next
@@ -2867,6 +2879,23 @@ def rd_mir_base(L : RLayer) : int64 => rd_mir_base(L, g_rd.region)
 
 //! ... and in region `region`: a segment's
 def rd_mir_base(L : RLayer; region : int64) : int64 => L.mir_base + region * g_rd.mir_units
+
+//! position `pos`'s row in layer `L`'s slab of region `region`, in units: the layer's base, the region's stride and the row's slot of a
+//! sliding layer's ring (`kv_ring_row`) - every host-side read or write of a mirror row and the drafter's borrow address it here
+[arch(at="../ARCHITECTURE_GPU_KV_RING.md#kv-sliding-ring")]
+def rd_mir_row(L : RLayer; region, pos : int64) : int64 => rd_mir_base(L, region) + kv_ring_row(pos, L.ring) * rd_kv_row_units(L.kvd)
+
+//! ... in the selected region
+def rd_mir_row(L : RLayer; pos : int64) : int64 => rd_mir_row(L, g_rd.region, pos)
+
+//! positions [row0, row0 + nrows) of layer `L` as runs whose rows sit back to back in its slab, `blk(p0, n)` a run each: the span
+//! whole on a flat layer; on a ring its last `ring` positions (the rows before them share their slots), cut where the slots wrap
+[arch(at="../ARCHITECTURE_GPU_KV_RING.md#kv-sliding-ring")]
+def rd_ring_runs(L : RLayer; row0, nrows : int64; blk : block<(p0, n : int64) : void>) {
+    kv_ring_runs(row0, row0 + nrows, L.ring) $(p0, n, _slot : int64) {
+        invoke(blk, p0, n)
+    }
+}
 
 //! one slab's binding, either side: all `regions` copies end to end (every slab the same size)
 def rd_mir_bytes : int64 => g_rd.regions * g_rd.mir_units * kv_unit_bytes(g_rd.kv_dt)
@@ -3634,7 +3663,7 @@ let FUSE_BX_POST_ATT_RQ = 16l  //! the post-attention one (and the wo epilogue, 
 let FUSE_BX_POST_FFN_RQ = 32l  //! the post-FFN one (and the down epilogue)
 let FUSE_BX_QKN_ROPE = 64l     //! the fused qk-norm + rope + store
 
-def vk_fuse_on : bool => g_vk_fuse >= 0 ? g_vk_fuse != 0 : g_env_vulkan.vk_fuse
+def vk_fuse_on : bool => pin_over_env(g_vk_fuse, g_env_vulkan.vk_fuse)
 
 //! the greedy chain's mode as `DASLLAMA_VK_CHAIN` asks it
 def vk_chain_env : int => g_env_vulkan.vk_chain

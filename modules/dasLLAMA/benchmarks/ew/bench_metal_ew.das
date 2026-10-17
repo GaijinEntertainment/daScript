@@ -17,6 +17,10 @@ require strings
 // add is not in its norm+weight fusion window).
 // Slot B (1x per layer): our one-thread-per-element swiglu.
 // Shapes: dim 3072, hidden 8192, B=2 rows.
+// Each slot runs one arm, its baseline the CPU reference in float off the same inputs: the
+// add+rms arm's compare region is x (in place, bound 1e-4) and y (bound 1e-3) over the B rows,
+// the swiglu arm's g over the B rows (bound 1e-3). A slot past its bound prints the miss and no
+// time; a slot whose timed rep fails to dispatch prints REFUSED and no time.
 //
 //   bin/daslang -jit dastest/dastest.das -- --bench --test modules/dasLLAMA/benchmarks/ew/bench_metal_ew.das
 
@@ -31,13 +35,6 @@ def private upload_array(dev; arr; bytes : int64) {
 def private upload_u32(dev; v : uint) {
     var buf = metal_new_buffer(dev, 4ul)
     var p = unsafe(reinterpret<uint?>(metal_buffer_contents(buf)))
-    unsafe(p[0]) = v
-    return buf
-}
-
-def private upload_f32(dev; v : float) {
-    var buf = metal_new_buffer(dev, 4ul)
-    var p = unsafe(reinterpret<float?>(metal_buffer_contents(buf)))
     unsafe(p[0]) = v
     return buf
 }
@@ -67,16 +64,29 @@ def private time_seq(queue; psos; bufss; groupss; threadss; tgmems; reps : int) 
     return gpu_ms / double(reps)
 }
 
+//! the best per-dispatch ms over `rounds` timed reps, or -1 the moment a rep fails to dispatch
 def private best_of(queue; psos; bufss; groupss; threadss; tgmems; rounds : int; est : double) : double {
     var best = 1.0e30lf
     for (_round in range(rounds)) {
         let reps = clamp(int(5.0lf / max(est, 0.002lf)) + 1, 1, 512)
         let ms = time_seq(queue, psos, bufss, groupss, threadss, tgmems, reps)
-        if (ms > 0.0lf && ms < best) {
-            best = ms
+        if (ms <= 0.0lf) {
+            return -1.0lf
         }
+        best = min(best, ms)
     }
     return best
+}
+
+//! a slot's report line: the miss and its bound, REFUSED where a rep failed to dispatch, else the time
+def private slot_row(name : string; ok : bool; bound : string; ms : double) {
+    if (!ok) {
+        to_log(LOG_INFO, "{name}: MISS - past the bound {bound} vs the CPU reference\n")
+    } elif (ms < 0.0lf) {
+        to_log(LOG_INFO, "{name}: REFUSED - a timed rep failed to dispatch (the error above)\n")
+    } else {
+        to_log(LOG_INFO, "{name}: {ms * 1000.0lf} us - within {bound} vs the CPU reference\n")
+    }
 }
 
 def private run_ew_lab(b) {   // nolint:STYLE038 — flat lab driver: buffers bound once, then one timed slot per kernel
@@ -92,7 +102,7 @@ def private run_ew_lab(b) {   // nolint:STYLE038 — flat lab driver: buffers bo
     }
     var queue = metal_new_command_queue(dev)
     var err : string
-    var pso_addrms = pipeline_from_source(dev, MetalAddRms_metal_add_rms_msl, MetalAddRms_metal_add_rms_msl_entry, true, err)
+    var pso_addrms = pipeline_from_source(dev, metal_add_rms_msl, metal_add_rms_msl_entry, true, err)
     b |> success(pso_addrms != null, "production add+rms kernel compiles")
     var pso_swiglu = pipeline_from_source(dev, MetalSwiglu_metal_ew2_msl, MetalSwiglu_metal_ew2_msl_entry, true, err)
     b |> success(pso_swiglu != null, "production swiglu kernel compiles")
@@ -124,20 +134,21 @@ def private run_ew_lab(b) {   // nolint:STYLE038 — flat lab driver: buffers bo
     var abuf = upload_array(dev, aa, nb * dim * 4l)
     var wbuf = upload_array(dev, w, dim * 4l)
     var ybuf = metal_new_buffer(dev, uint64(nb * dim * 4l))
-    var dimbuf = upload_u32(dev, uint(dim))
-    var epsbuf = upload_f32(dev, eps)
-    var ascalebuf = upload_f32(dev, 1.0)   // (x + a) * ascale — every non-gemma4 site binds 1.0
+    var argbuf = metal_new_buffer(dev, uint64(typeinfo sizeof(type<GkAddRmsArgs>)))
+    unsafe {
+        *reinterpret<GkAddRmsArgs?>(metal_buffer_contents(argbuf)) = GkAddRmsArgs(dim = uint(dim), add_on = 1u, eps = eps, ascale = 1.0)
+    }
     // swiglu: ours in place on g
     var gbuf = upload_array(dev, gg, nb * hidden * 4l)
     var ubuf = upload_array(dev, uu, nb * hidden * 4l)
     var totalbuf = upload_u32(dev, uint(nb * hidden))
     // arm descriptors
     var psos_oa <- [pso_addrms]
-    var bufs_oa <- [xbuf, abuf, wbuf, ybuf, dimbuf, epsbuf, ascalebuf]
+    var bufs_oa <- [xbuf, abuf, wbuf, ybuf, argbuf]   //! the lab binds by slot (its one timing loop over raw pipelines): the stamp's args ride the binding past the class's highest bound buffer, 4
     var bufss_oa <- [bufs_oa]
     var groups_oa <- [uint3(uint(nb), 1u, 1u)]
     var threads_oa <- [1024u]
-    var tgm_oa <- [MetalAddRms_metal_add_rms_msl_tgmem]
+    var tgm_oa <- [metal_add_rms_msl_tgmem]
     var psos_os <- [pso_swiglu]
     var bufs_os <- [gbuf, ubuf, totalbuf]
     var bufss_os <- [bufs_os]
@@ -176,12 +187,15 @@ def private run_ew_lab(b) {   // nolint:STYLE038 — flat lab driver: buffers bo
     // interleaved best-of
     var b_oa = 1.0e30lf
     var b_os = 1.0e30lf
-    for (_round in range(rounds)) {
-        b_oa = min(b_oa, best_of(queue, psos_oa, bufss_oa, groups_oa, threads_oa, tgm_oa, 1, e_oa))
-        b_os = min(b_os, best_of(queue, psos_os, bufss_os, groups_os, threads_os, tgm_os, 1, e_os))
+    for (_round in range(max(rounds, 1))) {
+        let t_oa = best_of(queue, psos_oa, bufss_oa, groups_oa, threads_oa, tgm_oa, 1, e_oa)
+        let t_os = best_of(queue, psos_os, bufss_os, groups_os, threads_os, tgm_os, 1, e_os)
+        b_oa = b_oa < 0.0lf || t_oa < 0.0lf ? -1.0lf : min(b_oa, t_oa)
+        b_os = b_os < 0.0lf || t_os < 0.0lf ? -1.0lf : min(b_os, t_os)
     }
-    to_log(LOG_INFO, "ew B2 addrms: ours(1 disp) {b_oa * 1000.0lf} us\n")
-    to_log(LOG_INFO, "ew B2 swiglu: ours {b_os * 1000.0lf} us\n")
+    b |> success(b_oa > 0.0lf && b_os > 0.0lf, "every timed rep dispatched")
+    slot_row("ew B2 addrms: ours(1 disp)", ok_oa, "1e-4 x, 1e-3 y", b_oa)
+    slot_row("ew B2 swiglu: ours", ok_os, "1e-3 g", b_os)
     psos_oa |> clear()
     psos_os |> clear()
     bufs_oa |> clear()
@@ -206,9 +220,7 @@ def private run_ew_lab(b) {   // nolint:STYLE038 — flat lab driver: buffers bo
     metal_release(abuf)
     metal_release(wbuf)
     metal_release(ybuf)
-    metal_release(dimbuf)
-    metal_release(epsbuf)
-    metal_release(ascalebuf)
+    metal_release(argbuf)
     metal_release(gbuf)
     metal_release(ubuf)
     metal_release(totalbuf)

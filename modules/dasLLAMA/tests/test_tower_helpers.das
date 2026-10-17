@@ -1,6 +1,7 @@
 options gen2
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 options _dasllama_internal = true
+options persistent_heap   // a dastest root frees what it deletes only on this heap; the linear heap holds every carrier a cell deleted until the context ends
 
 require dastest/testing_boost public
 require dasllama/dasllama_tower   // the shared encoder-tower pieces under test
@@ -9,6 +10,7 @@ require dasllama/dasllama_rope    // build_rope_tabs_rows — the 2-axis rope's 
 require dasllama/dasllama_plane
 require daslib/jobque_boost
 require _attn_oracle
+require _compares   // nan_wide_diff: the running largest differences' term
 require daslib/f16_cvt   // the binary16 round-trip the geglu table property checks
 require math
 
@@ -89,14 +91,14 @@ def test_rms_rows(t : T?) {
             }
             let scale = 1.0 / sqrt(ss / 4.0 + 1e-6)
             for (i in range(4)) {
-                maxdiff = max(maxdiff, abs(out[r * 4 + i] - w[i] * (x[r * 4 + i] * scale)))
+                maxdiff = max(maxdiff, nan_wide_diff(out[r * 4 + i], w[i] * (x[r * 4 + i] * scale)))
             }
         }
         t |> success(maxdiff < 1e-6, "rms_rows maxdiff {maxdiff}")
         rms_rows(x, x, wp, 0l, 4l, 4l, 1e-6)
         var inplace_diff = 0.0
         for (i in range(16)) {
-            inplace_diff = max(inplace_diff, abs(x[i] - out[i]))
+            inplace_diff = max(inplace_diff, nan_wide_diff(x[i], out[i]))
         }
         t |> success(inplace_diff == 0.0, "in-place form is bit-identical")
         wp.p = null
@@ -129,7 +131,7 @@ def test_geglu_quick_lut_rows(t : T?) {
             let exact = g * (1.0 / (1.0 + exp(-1.702 * g))) * up[i]
             // two binary16 round-trips: ≤ 2 × 2^-11 relative, plus the f16-rounded input's slope term
             let tol = abs(exact) * 2e-3 + 1e-4
-            maxrel = max(maxrel, abs(h[i] - exact) - tol)
+            maxrel = max(maxrel, nan_wide_diff(h[i], exact) - tol)
         }
         t |> success(maxrel <= 0.0, "within the f16 envelope of the exact form (worst excess {maxrel})")
         t |> success(h[0] == 0.0, "gelu_quick(0) = 0")
@@ -204,8 +206,8 @@ def test_rope_neox_2d_rows(t : T?) {
                         let v1 = ref[off + j + 2]
                         let want0 = v0 * cos(ang) - v1 * sin(ang)
                         let want1 = v0 * sin(ang) + v1 * cos(ang)
-                        maxdiff = max(maxdiff, abs(v[off + j] - want0))
-                        maxdiff = max(maxdiff, abs(v[off + j + 2] - want1))
+                        maxdiff = max(maxdiff, nan_wide_diff(v[off + j], want0))
+                        maxdiff = max(maxdiff, nan_wide_diff(v[off + j + 2], want1))
                     }
                 }
             }
@@ -319,7 +321,7 @@ def test_attention_bidir(t : T?) {
                 var inscope ref <- attention_ref(qq, kk, vv, tt, d, n_head, scale)
                 var maxdiff = 0.0
                 for (i in range(int(tt * d))) {
-                    maxdiff = max(maxdiff, abs(out[i] - ref[i]))
+                    maxdiff = max(maxdiff, nan_wide_diff(out[i], ref[i]))
                 }
                 t |> success(maxdiff < 1e-5, "scale {scale}: maxdiff {maxdiff} vs the naive reference")
             }

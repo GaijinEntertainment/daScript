@@ -199,9 +199,14 @@ def test_gpu_resident_format_census_perop(t : T?) {
     }
 }
 
-//! the per-op FFN rail's carriers: a q8, a K-quant (Q8_K feed) and a per-32 (q51) dense FFN
-let private PEROP_FFN = fixed_array("Llama-3.2-1B-Instruct-Q8_0.gguf", "Llama-3.2-1B-Instruct-Q4_K_M.gguf", "Llama-3.2-1B-Instruct-Q5_1-local.gguf")
-let private PEROP_FFN_BAR = 0.06   //! of the step's max |logit|: the llama resident file's bar
+//! the per-op FFN rail's carriers: a q8, a K-quant (Q8_K feed) and a per-32 (q51) dense FFN at the llama resident file's bar (of the
+//! step's max |logit|), and a per-32 file whose table and classifier are per-32 too (iq4nl32) at 0.08: its per-op chain - the window's
+//! GEMMs on the device's f16 tiles beside the CPU's int8 dots - reads 0.44-0.73 of a 10.7-19.6 max logit (3.7-6.1%), argmax flips only
+//! at near-ties, the one-step-off control 7.4 and past
+let private PEROP_FFN = fixed_array((file = "Llama-3.2-1B-Instruct-Q8_0.gguf", family = "llama", bar = 0.06),
+    (file = "Llama-3.2-1B-Instruct-Q4_K_M.gguf", family = "llama", bar = 0.06),
+    (file = "Llama-3.2-1B-Instruct-Q5_1-local.gguf", family = "llama", bar = 0.06),
+    (file = "Qwen2.5-0.5B-Instruct-IQ4_NL-pure-local.gguf", family = "qwen2", bar = 0.08))
 
 //! `path` loaded with the whole-model route off and the per-op FFN rail pinned to `ffn` (0 or 1), both levers put back
 def private load_perop(path : string; ffn : int) : Model {
@@ -217,9 +222,10 @@ def private load_perop(path : string; ffn : int) : Model {
 
 [test]
 def test_gpu_perop_dense_ffn(t : T?) {
-    for (file in PEROP_FFN) {
+    for (spec in PEROP_FFN) {
+        let file = spec.file
         t |> run("{file} with the whole-model route off: the per-op FFN rail runs every layer's FFN row on the device, the steps against the CPU chain") @(t : T?) {
-            if (!family_on(t, "llama") || !arm_on(t, "vk-perop-ffn")) return
+            if (!family_on(t, spec.family) || !arm_on(t, "vk-perop-ffn")) return
             let path = path_join(models_dir(), file)
             if (!resident_ready(t, path)) return
             with_dasllama_jobque_() {
@@ -235,17 +241,29 @@ def test_gpu_perop_dense_ffn(t : T?) {
                 delete off
                 var tr <- load_perop(path, 1)
                 t |> success(!moe_gpu_resident_active(), "the whole-model route is off: the per-op rails serve")
+                var qo_marked = 0l
                 for (l in range64(tr.config.n_layers)) {
                     t |> equal(perop_dense_ffn_decline(tr, l), "", "layer {l}'s FFN triple is the per-op rail's formats")
+                    let on_q = moe_gpu_dense_on_gpu(int(fmt_at(tr.wq_fmt, l)), tr.wq_offs[l])
+                    qo_marked += on_q && moe_gpu_dense_on_gpu(int(fmt_at(tr.wo_fmt, l)), tr.wo_offs[l]) ? 1l : 0l
                 }
+                t |> equal(qo_marked, tr.config.n_layers, "the dense rail holds every layer's q/o pair in the file's format ({qo_marked} of {tr.config.n_layers})")
+                let cls_fmt = tr.config.shared_weights ? tr.emb_fmt : tr.wcls_fmt
+                t |> success(moe_gpu_cls_on_gpu(tr.wcls_off), "the classifier plane (format {int(cls_fmt)}) is the tier's")
                 let rows0 = moe_gpu_dense_ffn_rows()
+                let gemm0 = moe_gpu_dense_gemm_rows()
                 var sg <- create_session(tr, mirror_kv_dtype())
                 var gpu <- feed_logits(tr, sg, prompt, toks)
                 let rows = moe_gpu_dense_ffn_rows() - rows0
+                let gemm = moe_gpu_dense_gemm_rows() - gemm0
+                t |> success(gemm >= 5l * tr.config.n_layers * PROMPT,
+                    "the window's q/o and FFN GEMMs ran on the device over every layer's planes ({gemm} rows, {5l * tr.config.n_layers * PROMPT} owed)")
                 delete sg
                 moe_gpu_drop_model()
+                let cpu_gemm0 = moe_gpu_dense_gemm_rows()
                 var cpu <- feed_alone(tr, mirror_kv_dtype(), prompt, toks)
-                feed_steps_within(t, tr, "{file} per-op FFN ", PROMPT, gpu, cpu, toks, PEROP_FFN_BAR, "per-op")
+                t |> equal(moe_gpu_dense_gemm_rows() - cpu_gemm0, 0l, "the CPU chain with the model's device state dropped runs no dense GEMM row on the device (the GEMM counter's control)")
+                feed_steps_within(t, tr, "{file} per-op FFN ", PROMPT, gpu, cpu, toks, spec.bar, "per-op")
                 t |> equal(rows, STEPS * tr.config.n_layers, "every fed step ran each layer's FFN row on the device ({rows} rows)")
                 delete gpu
                 delete cpu
@@ -273,7 +291,6 @@ def test_gpu_resident_format_census_ba_f32(t : T?) {
                 var prompt <- resident_prompt(PROMPT)
                 var toks <- resident_feed(STEPS)
                 let ba0 = census("dn_ba_cls_spv")
-                let f16_0 = census("router_gemv_f16_cls_spv")
                 var rt0 = 0l
                 var fed <- resident_then_cpu_feed(t, tr, prompt, toks, $ {
                     pf_ba = census("dn_ba_cls_spv") - ba0
@@ -286,7 +303,6 @@ def test_gpu_resident_format_census_ba_f32(t : T?) {
                 if (ba0 != NO_CENSUS) {
                     t |> equal(pf_ba, nrec, "the window's f32 beta/alpha tile ran once per recurrent layer")
                     t |> success(st_rt >= nrec, "the token command recorded an f32 router-form GEMV per recurrent layer at least ({st_rt} over {nrec})")
-                    t |> equal(census("router_gemv_f16_cls_spv") - f16_0, 0l, "no f16 router-form GEMV ran: no f16 copy of the beta/alpha rows")
                 }
                 delete fed
                 delete prompt

@@ -19,6 +19,7 @@ require dasllama/dasllama_gpu_tier   // moe_gpu_tier_installed / gpu_want_auto: 
 require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active: did the whole-model driver take the hybrid
 require ?vulkan dasllama/dasllama_vulkan_common   // PF_WINDOW, the resolved coopmat mode and the kernel census, where the module exists
 require ?vulkan dasllama/dasllama_vulkan_prefill   // pf_f16_feed: the feed admission the driver acts on
+require ?vulkan dasllama/dasllama_vulkan_decode   // vk_rdec_head_embed_gathered: the head's rows gathered off their ids
 require _model_tier   // models_dir() + model_available() presence/size-tier gate
 require _resident_feed
 require _kv_codec_cells   // the K/V codec cells' rig: the gated carrier under a block-codec mirror
@@ -61,8 +62,6 @@ let private DN_LOGIT_BAR_REL_KQ_QUANT_FEED = 0.10
 //! for out), so the device and the CPU chain round on either side of the file's f32 chain - one step reads 0.91 of a 12.3 max
 //! logit apart (the device 0.63 and the CPU chain 0.50 from the f32 row, the device's pick the f32 chain's), the rest 0.42-0.60
 let private DN_LOGIT_BAR_REL_KQ_Q8OUT = 0.08
-//! the device's summed distance from the file's f32 chain, as a ratio of the CPU q8 chain's own: reads a 0.91 ratio (3.42 against 3.77)
-let private F32_DIST_REL = 1.15
 //! the head's K row is the f16-stored projection of a trunk hidden row that already sits within DN_LOGIT_BAR_REL of the CPU chain's, so the row's own rounding stacks on the trunk's: twice the deltanet bar
 let private HEAD_K_BAR_REL = 0.08
 //! the CPU row one down misses a device row by at least this many bars, or the bar is too wide to tell the row from its neighbour
@@ -84,23 +83,9 @@ def private f16_feed_admits_kq() : bool {
     }
 }
 
-//! The mixed twin's same-or-better witness: the same tokens through the file's f32 chain on the CPU (`path` loaded again at
-//! `QuantMode.fp32`, its device state dropped), and the device no further from it than `F32_DIST_REL` of the CPU q8 chain's
-//! own distance, the f32 rows one step off past that bound. `tr` decodes the logged picks.
-def private f32_chain_witness(t : T?; tr : Model; path : string; n : int64; prompt, toks : array<int64>; fed : FeedPair) {
-    var f32_model <- load_model_(path, QuantMode.fp32)
-    moe_gpu_drop_model()
-    var f32_rows <- feed_alone(f32_model, mirror_kv_dtype(), prompt, toks)
-    let what = "{n} tokens against the f32 chain [{tile_arm_tag()}]"
-    let dist = chain_distances(t, tr, what, fed.gpu, fed.cpu, f32_rows, 0, "the f32 chain", "the CPU q8 chain")
-    t |> success(dist.dev_ref <= F32_DIST_REL * dist.cpu_ref, "{what}: the device sits no further from the f32 chain ({dist.dev_ref}) than {F32_DIST_REL} of the CPU q8 chain's own distance ({dist.cpu_ref})")
-    t |> success(dist.dev_ref_ctrl > F32_DIST_REL * dist.cpu_ref, "{what} control: the f32 rows one step off sit past that bound ({dist.dev_ref_ctrl})")
-    delete f32_rows
-    delete f32_model
-}
-
 // prefill `n` tokens + 8 fed steps on the resident driver, then the same on the all-CPU chain; the
 // prefill logits and every step's within the deltanet bar, the one-step-off control past it.
+[cold_path]
 def private hybrid_forced_feed(t : T?; n : int64; file : string; planes : HybridPlanes) {
     let kq = planes != HybridPlanes.q8
     let q8out = planes == HybridPlanes.kq_q8out
@@ -146,8 +131,10 @@ def private hybrid_forced_feed(t : T?; n : int64; file : string; planes : Hybrid
         let f16_rel = q8out ? DN_LOGIT_BAR_REL_KQ_Q8OUT : DN_LOGIT_BAR_REL_KQ_F16_FEED
         let rel = kq ? (f16_feed_admits_kq() ? f16_rel : DN_LOGIT_BAR_REL_KQ_QUANT_FEED) : DN_LOGIT_BAR_REL
         feed_steps_within(t, tr, "", n, fed.gpu, fed.cpu, toks, rel)
-        if (q8out) {
-            f32_chain_witness(t, tr, path, n, prompt, toks, fed)
+        if (q8out) {   //! the mixed twin's same-or-better witness
+            var f32_rows <- f32_chain_rows(path, prompt, toks)
+            f32_chain_witness(t, tr, "{n} tokens against the f32 chain [{tile_arm_tag()}]", fed, f32_rows)
+            delete f32_rows
         }
         delete fed
         delete prompt
@@ -816,6 +803,26 @@ def private declined_draft_rounds(tr : Model; var s : Session; toks : array<int6
     return <- out
 }
 
+//! the NextN head rows and the N-row command's rows the device gathered off their ids so far; zeros with no vulkan module
+def private head_gathers() : int2 {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        return int2(int(vk_rdec_head_embed_gathered()), int(vk_rdec_nrow_embed_gathered()))
+    } else {
+        return int2(0, 0)
+    }
+}
+
+//! since `g0`: `head` NextN head rows and `trunk` verify trunk rows gathered off their ids where the driver holds the table (the
+//! draft's embed half, the re-warm's halves and the verify's trunk rows), none where the host embeds them
+def private head_gathers_held(t : T?; g0 : int2; head, trunk : int64) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        let on = vk_rdec_token_gather_on()
+        let d = head_gathers() - g0
+        t |> equal(int64(d.x), on ? head : 0l, "the head's embed halves gathered off their ids on the device ({d.x}; the table {on ? "on" : "off"} the device)")
+        t |> equal(int64(d.y), on ? trunk : 0l, "the verify's trunk rows gathered off their ids on the device ({d.y})")
+    }
+}
+
 [test]
 def test_gpu_resident_hybrid_mtp_verify(t : T?) {
     t |> run("Qwen3.5-0.8B-MTP: the round's two verify rows as same-slab rows through the resident seat, bit for bit the two one-row steps of the same tokens; the head's rows stay on the device and come down on a pass, the re-warm's row bit for bit the draft's") @(t : T?) {
@@ -844,11 +851,13 @@ def test_gpu_resident_hybrid_mtp_verify(t : T?) {
             let spec0 = get_mtp_spec()
             set_mtp_spec(true)
             let verifies0 = moe_gpu_resident_verifies()
+            let gathers0 = head_gathers()
             var acc = 0l
             let hit = mtp_spec_eval(tr, s, DRAFT_TOKEN, acc)
             set_mtp_spec(spec0)
             t |> equal(moe_gpu_resident_verifies(), verifies0 + 1l, "the round's verify ran on the device")
             t |> equal(moe_gpu_resident_drafts(), drafts0 + 2l, "the round's draft ran on the device")
+            head_gathers_held(t, gathers0, 1l + VERIFY_ROWS, VERIFY_ROWS)
             served_every_call(t)
             let d = s.mtp_vbatch[1]
             t |> equal(long_length(s.mtp_logits_b), VERIFY_ROWS * c.vocab_size, "every verify row's logits landed: no pick was asked")

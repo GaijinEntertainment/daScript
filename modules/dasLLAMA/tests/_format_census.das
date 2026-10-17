@@ -9,8 +9,9 @@ module _format_census shared public
 require dasllama/dasllama_lint public
 require dastest/testing_boost public
 require dasllama/dasllama_common   // Model, fmt_at
+require dasllama/dasllama_ple   // ple_plane
 require dasllama/dasllama_gguf   // GGUFMeta, parse_gguf_meta, gguf_tensor_type, ggml_type_name
-require dasllama/dasllama_kqformat   // kq_ggml_type, GGML_TYPE_F32
+require dasllama/dasllama_kqformat   // kq_ggml_type, GGML_TYPE_F32, GGML_TYPE_MXFP4
 require daslib/fio
 
 //! one site's tally: how many of its planes the file carries and how many the load serves in another form
@@ -22,12 +23,13 @@ struct SiteCensus {
 }
 
 //! one plane `name` of the file against the tag `tag` the load gave it; `f32_native`: an F32 tensor on disk is served as the
-//! file's f32 rows (the beta/alpha planes on the f32 arm, which carry no tag)
-def census_plane(var c : SiteCensus; m : GGUFMeta; name : string; tag : KqFmt; f32_native : bool = false) {
+//! file's f32 rows (the beta/alpha planes on the f32 arm, which carry no tag); `mx4_native`: an MXFP4 tensor on disk is served as
+//! the native-MXFP4 stacks (`experts_mx4`, a stack property, no tag)
+def census_plane(var c : SiteCensus; m : GGUFMeta; name : string; tag : KqFmt; f32_native : bool = false; mx4_native : bool = false) {
     return if (gguf_find_tensor(m, name) < 0)
     c.planes++
     let disk = gguf_tensor_type(m, name)
-    return if (f32_native && disk == GGML_TYPE_F32)
+    return if ((f32_native && disk == GGML_TYPE_F32) || (mx4_native && disk == GGML_TYPE_MXFP4))
     if (kq_ggml_type(tag) != disk) {
         if (c.copies == 0) {
             c.first = "{name}: {ggml_type_name(disk)} on disk, served as {tag}"
@@ -47,15 +49,25 @@ def format_census(tr : Model; m : GGUFMeta) : array<SiteCensus> {
     var emb = SiteCensus(site = "token table")
     var cls = SiteCensus(site = "classifier")
     var eh = SiteCensus(site = "NextN eh_proj")
+    var ple = SiteCensus(site = "per-layer embeddings")
     let c = tr.config
+    if (has_ple(c)) {   //! the gate and projection planes a layer (an F32 kind served as the file's f32 rows) and the token table
+        for (l in range64(c.n_layers)) {
+            census_plane(ple, m, "blk.{l}.inp_gate.weight", ple_plane(tr, l, false).f, tr.ple_gate_f32)
+            census_plane(ple, m, "blk.{l}.proj.weight", ple_plane(tr, l, true).f, tr.ple_proj_f32)
+        }
+        census_plane(ple, m, "per_layer_token_embd.weight", tr.ple_emb_fmt)
+    }
     for (l in range64(c.n_layers + c.n_layer_nextn)) {
         census_plane(attn, m, "blk.{l}.attn_q.weight", fmt_at(tr.wq_fmt, l))
         census_plane(attn, m, "blk.{l}.attn_k.weight", fmt_at(tr.wk_fmt, l))
         census_plane(attn, m, "blk.{l}.attn_v.weight", fmt_at(tr.wv_fmt, l))
         census_plane(attn, m, "blk.{l}.attn_output.weight", fmt_at(tr.wo_fmt, l))
-        census_plane(exps, m, "blk.{l}.ffn_gate_exps.weight", fmt_at(tr.we1_fmt, l))
-        census_plane(exps, m, "blk.{l}.ffn_up_exps.weight", fmt_at(tr.we3_fmt, l))
-        census_plane(exps, m, "blk.{l}.ffn_down_exps.weight", fmt_at(tr.we2_fmt, l))
+        census_plane(exps, m, "blk.{l}.ffn_gate_exps.weight", fmt_at(tr.we1_fmt, l), false, tr.experts_mx4)
+        census_plane(exps, m, "blk.{l}.ffn_up_exps.weight", fmt_at(tr.we3_fmt, l), false, tr.experts_mx4)
+        census_plane(exps, m, "blk.{l}.ffn_down_exps.weight", fmt_at(tr.we2_fmt, l), false, tr.experts_mx4)
+        census_plane(exps, m, "blk.{l}.ffn_gate_up_exps.weight", fmt_at(tr.we1_fmt, l), false, tr.experts_mx4)   //! the fused stack (gemma-4): both halves' tags
+        census_plane(exps, m, "blk.{l}.ffn_gate_up_exps.weight", fmt_at(tr.we3_fmt, l), false, tr.experts_mx4)
         if (c.n_ff_shexp > 0l) {
             census_plane(shexp, m, "blk.{l}.ffn_gate_shexp.weight", shexp_plane(tr, l, 1).f)
             census_plane(shexp, m, "blk.{l}.ffn_up_shexp.weight", shexp_plane(tr, l, 3).f)
@@ -70,10 +82,10 @@ def format_census(tr : Model; m : GGUFMeta) : array<SiteCensus> {
     census_plane(emb, m, "token_embd.weight", tr.emb_fmt)
     census_plane(cls, m, c.shared_weights ? "token_embd.weight" : "output.weight", cls_fmt_of(tr))
     census_plane(eh, m, "blk.{c.n_layers}.nextn.eh_proj.weight", tr.mtp_ehproj_fmt)
-    return <- [attn, exps, shexp, dn, ba, emb, cls, eh]
+    return <- [attn, exps, shexp, dn, ba, emb, cls, eh, ple]
 }
 
-//! every site the census tallies, in its order: what a cell on a file carrying them all wants
+//! every site the census tallies but the E-series' per-layer embeddings, in its order: what a cell on a file carrying them all wants
 def census_sites_all() : array<string> {
     return <- ["attention q/k/v/o", "routed experts", "shared expert", "deltanet qkv/gate/out", "deltanet beta/alpha", "token table",
         "classifier", "NextN eh_proj"]

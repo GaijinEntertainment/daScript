@@ -1,6 +1,7 @@
 options gen2
 options _comment_hygiene = true
 options _dasllama_internal = true
+options persistent_heap   // a dastest root frees what it deletes only on this heap; the linear heap holds every carrier a cell deleted until the context ends
 
 // The device-cooperation seam (dasllama_gpu_tier) tested as a CONTRACT, model-free and
 // device-free: uninstalled slots decline (never panic on the probe surface), installed das-side
@@ -17,6 +18,9 @@ require dasllama/dasllama_config
 require dasllama/dasllama_kv_dtype   // KVDtype: the mirror codec crosses the seam as its ordinal
 require dasllama/dasllama_env   // g_env_gpu: an exported DASLLAMA_GPU answers gpu_want_auto ahead of the want state
 require dasllama/dasllama_common   // segs_served_by_override, the prefill override registry
+require strings
+require daslib/strings_boost
+require _child_run   // the override announces print through to_log and DASLLAMA_METAL_FUSE is read at context init
 
 // ===== rdec doubles: record what arrives, answer distinctively =====
 
@@ -170,6 +174,7 @@ def private d_land_carry(row : int64; var dst : array<float>) {
 
 var private g_head_feh = -1
 var private g_draft_row = -1l
+var private g_draft_token = -2l
 var private g_draft_hyd0 = -1l
 var private g_draft_pick_only = false
 
@@ -189,9 +194,10 @@ def private d_no_experts_rows(l : int64; xb : float const?; logits : float const
     panic("the test's verify double never asks the host for experts")
 }
 
-//! the draft double: the row, the hydrate start and the pick ask it was asked for, a sentinel logit where the logits land, a distinctive pick
+//! the draft double: the token, the row, the hydrate start and the pick ask it was asked for, a sentinel logit where the logits land, a distinctive pick
 [unused_argument(x, h, cossin, kp, vp, experts)]
-def private d_draft(x : array<float>; h : array<float>; cossin : array<float>; row, hyd0 : int64; var kp : uint8?; var vp : uint8?; pick_only : bool; var logits : array<float>; experts : RdecHostExpertsFn) : int64 {
+def private d_draft(x : array<float>; token : int64; h : array<float>; cossin : array<float>; row, hyd0 : int64; var kp : uint8?; var vp : uint8?; pick_only : bool; var logits : array<float>; experts : RdecHostExpertsFn) : int64 {
+    g_draft_token = token
     g_draft_row = row
     g_draft_hyd0 = hyd0
     g_draft_pick_only = pick_only
@@ -204,10 +210,12 @@ def private d_draft(x : array<float>; h : array<float>; cossin : array<float>; r
 var private g_verify_pos = -1l
 var private g_verify_n = -1l
 var private g_verify_pick_only = false
+var private g_verify_id_last = -1l
 
-//! the verify double: the position, row count and pick ask it was asked for, a sentinel logit where the logits land, a sentinel hidden, a distinctive pick a row
+//! the verify double: the position, row count, pick ask and last row's id it was asked for, a sentinel logit where the logits land, a sentinel hidden, a distinctive pick a row
 [unused_argument(x, cossin, hemb, hcos, h0, side, experts)]
-def private d_verify(x, cossin, hemb, hcos, h0, side : array<float>; pos, n : int64; pick_only : bool; var logits : array<float>; var picks : array<int64>; var hid : array<float>; experts : RdecHostExpertsRowsFn) : bool {
+def private d_verify(x, cossin, hemb, hcos, h0, side : array<float>; ids : array<int64>; pos, n : int64; pick_only : bool; var logits : array<float>; var picks : array<int64>; var hid : array<float>; experts : RdecHostExpertsRowsFn) : bool {
+    g_verify_id_last = empty(ids) ? -1l : ids[long_length(ids) - 1l]
     g_verify_pos = pos
     g_verify_n = n
     g_verify_pick_only = pick_only
@@ -396,28 +404,30 @@ def test_rdec_draft_seat(t : T?) {
         var logits : array<float>
         logits |> resize(4)
         t |> success(!rdec_draft_installed(), "no draft seat before its install")
-        t |> equal(rdec_draft(rows, rows, rows, 3l, 1l, null, null, false, logits, @@d_no_experts), -1l, "an unset draft seat declines - the CPU draft serves")
+        t |> equal(rdec_draft(rows, -1l, rows, rows, 3l, 1l, null, null, false, logits, @@d_no_experts), -1l, "an unset draft seat declines - the CPU draft serves")
         install_rdec_draft(@@d_set_head, @@d_draft)
         t |> success(rdec_draft_installed(), "the draft install must flip its witness")
         t |> success(rdec_set_head(1l, 5, 2l, 3l, 4l, 5l, 6l, 7l, 8l, 0, 0, 0, 0, 0, 0, 0, RdecLayerGeom()), "the head double's answer forwards")
         t |> equal(g_head_feh, 5)
-        t |> equal(rdec_draft(rows, rows, rows, 9l, 4l, null, null, false, logits, @@d_no_experts), 7l, "the double's pick forwards")
+        t |> equal(rdec_draft(rows, 31l, rows, rows, 9l, 4l, null, null, false, logits, @@d_no_experts), 7l, "the double's pick forwards")
+        t |> equal(g_draft_token, 31l, "the token's id forwards")
         t |> equal(g_draft_row, 9l)
         t |> equal(g_draft_hyd0, 4l)
         t |> success(!g_draft_pick_only, "the logits ask forwards")
         t |> equal(logits[0], 44.0, "the double writes through the logits the forwarder handed it")
         logits[0] = 0.0
-        t |> equal(rdec_draft(rows, rows, rows, 9l, 4l, null, null, true, logits, @@d_no_experts), 7l, "the pick ask forwards and the double still answers the pick")
+        t |> equal(rdec_draft(rows, -1l, rows, rows, 9l, 4l, null, null, true, logits, @@d_no_experts), 7l, "the pick ask forwards and the double still answers the pick")
         t |> success(g_draft_pick_only, "the pick ask reaches the double")
+        t |> equal(g_draft_token, -1l, "a host row's -1 forwards")
         t |> equal(logits[0], 0.0, "under the pick ask the double leaves the logits alone")
         let seat = unset_rdec_draft()
         t |> success(!rdec_draft_installed(), "the unset flips the witness back")
         g_draft_row = -1l
-        t |> equal(rdec_draft(rows, rows, rows, 9l, 4l, null, null, false, logits, @@d_no_experts), -1l, "the unset seat declines")
+        t |> equal(rdec_draft(rows, -1l, rows, rows, 9l, 4l, null, null, false, logits, @@d_no_experts), -1l, "the unset seat declines")
         t |> equal(g_draft_row, -1l, "the unset seat never reaches the installed double")
         reinstall_rdec_draft(seat)
         t |> success(rdec_draft_installed(), "the reinstall flips the witness")
-        t |> equal(rdec_draft(rows, rows, rows, 11l, 0l, null, null, false, logits, @@d_no_experts), 7l, "the seat the unset answered serves again")
+        t |> equal(rdec_draft(rows, -1l, rows, rows, 11l, 0l, null, null, false, logits, @@d_no_experts), 7l, "the seat the unset answered serves again")
         t |> equal(g_draft_row, 11l)
         unset_rdec_draft()   // back to the declining form the cell found: a later cell in this process reads the seat as it was
         t |> success(!rdec_draft_installed(), "the seat is back at its uninstalled state for the rest of the process")
@@ -438,6 +448,8 @@ def test_rdec_draft_seat(t : T?) {
 def test_rdec_verify_seat(t : T?) {
     t |> run("the same-slab verify seat installs apart and forwards the rows, the position, the pick ask and every landing") @(t : T?) {
         let rows : array<float>
+        let noids : array<int64>
+        var ids <- [5l, 6l, 77l]
         var logits, hid : array<float>
         var picks : array<int64>
         logits |> resize(4)
@@ -445,11 +457,12 @@ def test_rdec_verify_seat(t : T?) {
         picks |> resize(3)
         t |> success(!rdec_verify_installed(), "no verify seat before its install")
         t |> equal(rdec_verify_rows(), 0l, "an unset verify steps no rows")
-        t |> success(!rdec_verify(rows, rows, rows, rows, rows, rows, 5l, 2l, false, logits, picks, hid, @@d_no_experts_rows), "an unset verify declines - the CPU verify serves")
+        t |> success(!rdec_verify(rows, rows, rows, rows, rows, rows, noids, 5l, 2l, false, logits, picks, hid, @@d_no_experts_rows), "an unset verify declines - the CPU verify serves")
         install_rdec_verify(@@d_verify, @@d_verify_rows)
         t |> success(rdec_verify_installed(), "the verify install must flip its witness")
         t |> equal(rdec_verify_rows(), 4l, "the rows answer forwards")
-        t |> success(rdec_verify(rows, rows, rows, rows, rows, rows, 41l, 3l, false, logits, picks, hid, @@d_no_experts_rows), "the double's answer forwards")
+        t |> success(rdec_verify(rows, rows, rows, rows, rows, rows, ids, 41l, 3l, false, logits, picks, hid, @@d_no_experts_rows), "the double's answer forwards")
+        t |> equal(g_verify_id_last, 77l, "the rows' ids forward")
         t |> equal(g_verify_pos, 41l)
         t |> equal(g_verify_n, 3l)
         t |> success(!g_verify_pick_only, "the logits ask forwards")
@@ -459,14 +472,16 @@ def test_rdec_verify_seat(t : T?) {
         logits[0] = 0.0
         hid[0] = 0.0
         picks[2] = 0l
-        t |> success(rdec_verify(rows, rows, rows, rows, rows, rows, 43l, 3l, true, logits, picks, hid, @@d_no_experts_rows), "the double's answer forwards under the pick ask")
+        t |> success(rdec_verify(rows, rows, rows, rows, rows, rows, noids, 43l, 3l, true, logits, picks, hid, @@d_no_experts_rows), "the double's answer forwards under the pick ask")
         t |> success(g_verify_pick_only, "the pick ask reaches the double")
+        t |> equal(g_verify_id_last, -1l, "a call with no ids forwards none")
         t |> equal(logits[0], 0.0, "under the pick ask the double leaves the logits alone")
         t |> equal(hid[0], 46.0, "... and still lands the hidden rows")
         t |> equal(picks[2], 12l, "... and every row's pick")
         delete logits
         delete hid
         delete picks
+        delete ids
     }
 }
 
@@ -643,5 +658,110 @@ def test_gpu_said_once(t : T?) {
         t |> success(gpu_said_once(said, LOG_INFO, "the test's prefix - ", "a reason"), "a cleared set (an arm) says the reason again")
         t |> equal(length(said), 1, "... and records it again")
         delete said
+    }
+}
+
+//! an unset seat with no CPU form panics naming the module that installs it
+[test]
+def test_unset_seats_name_their_module(t : T?) {
+    t |> run("the N-row token command and the per-layer planes, unset, panic naming dasllama/dasllama_math_vulkan") @(t : T?) {
+        let token_why = panic_text() $ {
+            var picks : array<int64>
+            rdec_token_n(default<array<float>>, default<array<float>>, default<array<float>>, false, default<array<int64>>,
+                default<array<int64>>, default<array<int64>>, default<array<int64>>, 2l, default<array<float?>>, picks)
+        }
+        t |> success(find(token_why, "require dasllama/dasllama_math_vulkan") >= 0, "the N-row token command names the module: {token_why}")
+        let ple_why = panic_text() $ {
+            rdec_set_ple_layer(0l, 0l, 0l, 0, 0)
+        }
+        t |> success(find(ple_why, "require dasllama/dasllama_math_vulkan") >= 0, "the per-layer planes name the module: {ple_why}")
+    }
+}
+
+//! the lines `out` holds between the `CASE <name>` record and the next one ("" where the child ran no such case)
+def private case_lines(out, name : string) : string {
+    let mark = "CASE {name}\n"
+    let at = find(out, mark)
+    return "" if (at < 0)
+    let from = at + length(mark)
+    let next = find(out, "CASE ", from)
+    return slice(out, from, next < 0 ? length(out) : next)
+}
+
+let private RING_ON = "dasLLAMA: probe home - the sliding layers' K/V rows ride rings of the probe's rows (set_gpu_kv_ring, DASLLAMA_GPU_KV_RING=0 keeps every row)"
+let private RING_OFF = "dasLLAMA: probe home - the sliding layers' K/V rows keep every position's row, no ring, as asked (set_gpu_kv_ring, DASLLAMA_GPU_KV_RING=0)"
+let private METAL_RING_ON = "dasLLAMA: metal decode - the sliding layers' K/V rows ride rings of their window plus the rows the longest window"
+let private METAL_RING_OFF = "dasLLAMA: metal decode - the sliding layers' K/V rows keep every position's row, no ring, as asked (set_gpu_kv_ring, DASLLAMA_GPU_KV_RING=0)"
+let private EMBED_OFF = "dasLLAMA: resident driver - the host embeds every token row as asked (set_gpu_resident_embed, DASLLAMA_VK_GPU_EMBED=0)"
+let private GATHER_TAIL = " for the prefill window, the one-row step, the N-row command and the NextN draft and verify (set_gpu_resident_embed, DASLLAMA_VK_GPU_EMBED=0 keeps the host embed)"
+let private GATHER_OFF = "dasLLAMA metal batch decode: the batched rows take the rows the host embeds, not the device gather off their ids, as asked (set_metal_batch_gather)"
+let private G4_UNFUSED = "dasLLAMA metal decode: the gemma-4 MoE tail runs its unfused chain, not the one-step form, as asked (set_metal_moe_g4_unfused)"
+let private NO_SIDECAR_RESOLVER = "dasLLAMA: no assistant drafter sidecar resolver is registered - require dasllama/dasllama_mtp_gemma (dasllama/dasllama_transformer requires it)"
+let private FUSE_OFF = "dasLLAMA metal decode: every decode sandwich seam runs the split chain (the branch's post norm, the add, the next norm) on the one-row step and every batched row step, as asked (set_metal_decode_fuse, DASLLAMA_METAL_FUSE=0)"
+
+//! the announce root under `fuse` for DASLLAMA_METAL_FUSE ("" unset), at the info floor the ringed and gather lines print at
+def private announce_child(t : T?; fuse : string) : string {
+    var out : string
+    let rc = run_child(child_cmd("_override_announce_root.das", [(name = "DASLLAMA_METAL_FUSE", value = fuse), (name = "DAS_LOG_LEVEL", value = "info")]), out)
+    t |> equal(rc, 0, "the announce root ran (DASLLAMA_METAL_FUSE='{fuse}'):\n{out}")
+    t |> success(find(out, "ROOT_DONE") >= 0, "the announce root reached its end:\n{out}")
+    return out
+}
+
+//! every override the GPU homes announce prints its line where it takes effect, naming the setter and the env spelling, and
+//! prints nothing where it does not
+[test]
+def test_override_announces(t : T?) {
+    let out = announce_child(t, "")
+    t |> run("the sliding layers' rings announce both states, and a model with no sliding layer says nothing") @(t : T?) {
+        t |> success(find(case_lines(out, "ring_on"), RING_ON) >= 0, "the ringed line:\n{case_lines(out, "ring_on")}")
+        t |> success(find(case_lines(out, "ring_on"), RING_OFF) < 0, "... and no flat line beside it")
+        t |> success(find(case_lines(out, "ring_off"), RING_OFF) >= 0, "the flat line under the pin:\n{case_lines(out, "ring_off")}")
+        t |> success(find(case_lines(out, "ring_off"), RING_ON) < 0, "... and no ringed line beside it")
+        t |> success(find(case_lines(out, "ring_none"), "sliding layers") < 0, "no sliding layer, no line in either state:\n{case_lines(out, "ring_none")}")
+    }
+    t |> run("the host embed announces under the pin where the ids seat would gather, and the device gather names every token command") @(t : T?) {
+        t |> success(find(case_lines(out, "embed_pinned_off"), EMBED_OFF) >= 0, "the pinned host embed:\n{case_lines(out, "embed_pinned_off")}")
+        t |> success(find(case_lines(out, "embed_pinned_off_no_seat"), EMBED_OFF) < 0, "no ids seat, no line")
+        t |> success(find(case_lines(out, "embed_pinned_off_hc"), EMBED_OFF) < 0, "a hyper-connection model, no line")
+        t |> success(find(case_lines(out, "embed_on"), EMBED_OFF) < 0, "the gather on, no line")
+        let lines = case_lines(out, "embed_gather_lines")
+        t |> success(find(lines, "the token rows gather on the device off the table's exact f32 rows{GATHER_TAIL}") >= 0, "the f32 rows' line:\n{lines}")
+        t |> success(find(lines, "the token rows gather on the device off the table's own Q4_1 plane{GATHER_TAIL}") >= 0, "the plane's line:\n{lines}")
+    }
+    t |> run("the assistant drafter's sidecar lookup with no resolver registered finds none and names the module to require") @(t : T?) {
+        let lines = case_lines(out, "sidecar_no_resolver")
+        t |> success(find(lines, NO_SIDECAR_RESOLVER) >= 0, "the warning names the module:\n{lines}")
+        t |> success(find(lines, "SIDECAR ''") >= 0, "... and the lookup finds no file:\n{lines}")
+    }
+    let metal = find(out, "CASE metal_gather_off") >= 0
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        t |> success(metal, "a das_metal build runs the Metal cases")
+    } else {
+        t |> success(!metal, "a build without das_metal runs no Metal case")
+    }
+    return if (!metal)
+    t |> run("the Metal ring announces once a layout, ringed and flat") @(t : T?) {
+        t |> equal(count(case_lines(out, "metal_ring_twice"), METAL_RING_ON), 1, "two reads of one layout, one ringed line:\n{case_lines(out, "metal_ring_twice")}")
+        t |> equal(count(case_lines(out, "metal_ring_flat"), METAL_RING_OFF), 1, "the flat layout's line:\n{case_lines(out, "metal_ring_flat")}")
+    }
+    t |> run("the batch gather and the gemma-4 MoE tail pins announce their off state alone") @(t : T?) {
+        t |> success(find(case_lines(out, "metal_gather_off"), GATHER_OFF) >= 0, "the gather off:\n{case_lines(out, "metal_gather_off")}")
+        t |> success(find(case_lines(out, "metal_gather_on"), GATHER_OFF) < 0, "the gather back on, no line")
+        t |> success(find(case_lines(out, "metal_g4_unfused"), G4_UNFUSED) >= 0, "the unfused tail:\n{case_lines(out, "metal_g4_unfused")}")
+        t |> success(find(case_lines(out, "metal_g4_fused"), G4_UNFUSED) < 0, "the pin put back, no line")
+    }
+    t |> run("the fuse knob announces once a state: unset, the setter's off says it once and an off after an on again") @(t : T?) {
+        t |> equal(count(out, FUSE_OFF), 2, "two off states, two lines:\n{out}")
+        t |> equal(count(case_lines(out, "metal_fuse_restore"), FUSE_OFF), 0, "restoring the default on says nothing")
+        t |> equal(count(case_lines(out, "metal_fuse_off"), FUSE_OFF), 1, "two offs, one line")
+        t |> equal(count(case_lines(out, "metal_fuse_on_off"), FUSE_OFF), 1, "on then off, one line")
+    }
+    let off = announce_child(t, "0")
+    t |> run("DASLLAMA_METAL_FUSE=0 announces at context init, and the setter's restore and second off say nothing more") @(t : T?) {
+        t |> equal(count(off, FUSE_OFF), 2, "the init's line and the off after an on:\n{off}")
+        t |> equal(count(case_lines(off, "metal_fuse_restore"), FUSE_OFF), 0, "the restore to the knob's off says nothing")
+        t |> equal(count(case_lines(off, "metal_fuse_off"), FUSE_OFF), 0, "the setter's off, already said, says nothing")
+        t |> equal(count(case_lines(off, "metal_fuse_on_off"), FUSE_OFF), 1, "on then off says it again")
     }
 }

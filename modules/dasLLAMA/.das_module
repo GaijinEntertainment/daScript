@@ -17,7 +17,7 @@ def initialize(project_path : string) {
         "dasllama_gemm_schema", "dasllama_vulkan_common", "dasllama_vulkan_classes",
         "dasllama_vulkan_seams", "dasllama_vulkan_decode", "dasllama_vulkan_prefill",
         "dasllama_vulkan_tower", "dasllama_vulkan_asr_dec", "dasllama_tts_slab",
-        "dasllama_vulkan_tts", "dasllama_convert", "dasllama_gguf", "dasllama_unicode",
+        "dasllama_vulkan_tts", "dasllama_vulkan_mtp_gemma", "dasllama_convert", "dasllama_gguf", "dasllama_unicode",
         "dasllama_pretok", "dasllama_tokenizer", "dasllama_spm", "dasllama_bpe", "dasllama_common",
         "dasllama_layout", "dasllama_gpu_resident", "dasllama_load", "dasllama_ple",
         "dasllama_sampling", "dasllama_blocks", "dasllama_moe", "dasllama_batch",

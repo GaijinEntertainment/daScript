@@ -77,7 +77,7 @@ def private kv_row_max_diff_one(cache_a, cache_b : array<uint8>; base_a, base_b 
             let ha = reinterpret<uint16 const?>(pa)
             let hb = reinterpret<uint16 const?>(pb)
             for (e in range64(kv_dim)) {
-                maxd = max(maxd, abs(f16_to_f32(uint(ha[e])) - f16_to_f32(uint(hb[e]))))
+                maxd = max(maxd, nan_wide_diff(f16_to_f32(uint(ha[e])), f16_to_f32(uint(hb[e]))))
             }
         } elif (dt == KVDtype.q8_0 || dt == KVDtype.tq4) {
             // block codecs compare dequantized (tq4: in the rotated basis both rows share)
@@ -92,7 +92,7 @@ def private kv_row_max_diff_one(cache_a, cache_b : array<uint8>; base_a, base_b 
                 cvt_tq4kv_to_f32(addr(db[0]), pb, kv_dim)
             }
             for (e in range64(kv_dim)) {
-                maxd = max(maxd, abs(da[e] - db[e]))
+                maxd = max(maxd, nan_wide_diff(da[e], db[e]))
             }
             delete da
             delete db
@@ -100,7 +100,7 @@ def private kv_row_max_diff_one(cache_a, cache_b : array<uint8>; base_a, base_b 
             let fa = reinterpret<float const?>(pa)
             let fb = reinterpret<float const?>(pb)
             for (e in range64(kv_dim)) {
-                maxd = max(maxd, abs(fa[e] - fb[e]))
+                maxd = max(maxd, nan_wide_diff(fa[e], fb[e]))
             }
         }
     }
@@ -152,7 +152,7 @@ def private single_step_gate(t : T?; tr, trg : Model; prompt : array<int64>; kdt
         } else {
             var maxd = 0.0
             for (v in range64(vocab)) {
-                maxd = max(maxd, abs(sa.logits[v] - sb.logits[v]))
+                maxd = max(maxd, nan_wide_diff(sa.logits[v], sb.logits[v]))
             }
             t |> success(maxd <= tol_logits, "{tag}: one-step logits within {tol_logits} (max diff {maxd})")
             let kvd = kv_row_max_diff(sa, sb, c, sa.n_past - 1l)
@@ -349,7 +349,7 @@ def private batch_step_gate(t : T?; tr, trg : Model; nb : int; kdt : KVDtype; to
             var maxkv = 0.0
             for (i in range(nb)) {
                 for (v in range64(vocab)) {
-                    maxl = max(maxl, abs(sa[i].logits[v] - sb[i].logits[v]))
+                    maxl = max(maxl, nan_wide_diff(sa[i].logits[v], sb[i].logits[v]))
                 }
                 maxkv = max(maxkv, kv_row_max_diff(sa[i], sb[i], c, sa[i].n_past - 1l))
             }
@@ -405,7 +405,7 @@ def private batch_ff_pair(tr, trg : Model; prompts : array<array<int64>>; nsteps
                 for (i in range(nb)) {
                     var mx = 0.0
                     for (a, b in sa[i].logits, sb[i].logits) {
-                        mx = max(mx, abs(a - b))
+                        mx = max(mx, nan_wide_diff(a, b))
                     }
                     st.maxd = max(st.maxd, mx)
                     if (argmax_of(sb[i].logits, vocab) != cur[i]) {
@@ -1386,7 +1386,7 @@ def private forced_maxd_pair(tr, trg : Model; prompt : array<int64>; nsteps : in
         for (_i in range(nsteps)) {
             let tok = argmax_of(sa.logits, vocab)
             for (a, b in sa.logits, sb.logits) {
-                maxd = max(maxd, abs(a - b))
+                maxd = max(maxd, nan_wide_diff(a, b))
             }
             var inscope one <- [tok]
             eval_(tr, sa, one)
@@ -1394,7 +1394,7 @@ def private forced_maxd_pair(tr, trg : Model; prompt : array<int64>; nsteps : in
             delete one
         }
         for (a, b in sa.logits, sb.logits) {
-            maxd = max(maxd, abs(a - b))
+            maxd = max(maxd, nan_wide_diff(a, b))
         }
         select_decode_override("")
         delete sa

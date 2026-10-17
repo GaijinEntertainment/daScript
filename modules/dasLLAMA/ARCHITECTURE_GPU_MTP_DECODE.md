@@ -269,7 +269,7 @@ deltanet gate's sigma(z) form is the `MetalDnGateSig` stamp of `MetalDnGateT`, p
 `Config.dn_z_sigmoid` by every row form through `enc_dn_zgate`.
 
 The row shapes share their adapters. `VerifyLayerEnc` and `BatchLayerEnc` bind one generic per
-slot - `rms_rows`, `add_rows`, `add_rms_rows`, `moe_args_rows` and `total_rows` - each written
+slot - `rms_rows`, `add_rows`, `residual_rows`, `moe_args_rows` and `total_rows` - each written
 over `auto(ET)` and reading nothing but the stamp's `StepRes`, so a new row shape binds the set
 instead of copying it. Their weight site is the batch ladder under `rows_tier`, one `BatchTier`
 with every arm off (`use_mm` and `use_gemm` false, `mp = nrows`, no split-K buffer): a row chain

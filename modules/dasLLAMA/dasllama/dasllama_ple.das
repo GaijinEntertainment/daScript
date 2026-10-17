@@ -22,6 +22,32 @@ require math
 // A per-(token, layer) side input mixed into each layer's output. ple_inp is POSITION-major:
 // (p, l, i) at p*(layers*ple)+l*ple+i.
 
+//! gemma-4's per-expert down scales folded into the first `n` picks' routing weights `w` (their experts `idx`) of layer l: the CPU
+//! chain's fold, which the resident driver's host rows share; no-op off a gemma-4 MoE
+[arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-gemma4-moe-block")]
+def moe_down_scale_fold(t : Model; l : int64; idx : array<int64>; var w : array<float>; n : int64) {
+    return if (!t.config.moe_dense_shexp)
+    let row = t.moe_down_scale_off + l * t.config.n_expert
+    for (j in range64(n)) {
+        w[j] *= t.fblob[row + idx[j]]
+    }
+}
+
+typedef PlePlane = tuple<f : KqFmt; off : int64; f32 : bool; n : int64; d : int64>
+
+//! layer l's per-layer-embedding plane - the gate (dim -> ple), or with `proj` the projection (ple -> dim): its tag and offset
+//! in that tag's planes, or `f32` and the offset of the file's f32 rows in fblob; `n` its input width, `d` its output rows
+def ple_plane(t : Model; l : int64; proj : bool) : PlePlane {
+    let c = t.config
+    if (proj) {
+        return (f = fmt_at(t.ple_proj_fmt, l), off = t.ple_proj_offs[l], f32 = t.ple_proj_f32, n = c.n_embd_per_layer, d = c.dim)
+    }
+    return (f = fmt_at(t.ple_gate_fmt, l), off = t.ple_gate_offs[l], f32 = t.ple_gate_f32, n = c.dim, d = c.n_embd_per_layer)
+}
+
+//! layer l's two per-layer-embedding planes, the gate then the projection (`ple_plane`)
+def ple_planes(t : Model; l : int64) : PlePlane[2] => fixed_array(ple_plane(t, l, false), ple_plane(t, l, true))
+
 // Pre-step finish (shared by decode/prefill): given the gathered+sqrt(ple)-scaled token rows already
 // in s.ple_inp[0..npos*all), add the projected embedding branch. proj = rmsnorm((1/√dim)·(model_proj·
 // embd)); ple_inp = (gathered + proj)/√2. embd_scaled is the sqrt(dim)-scaled residual (s.x / s.x_b).
@@ -92,8 +118,19 @@ def ple_gather_row(t : Model; row : int64; var dst : array<float>; doff : int64)
     }
 }
 
+var private g_ple_cpu_rows = 0l   //! the rows the CPU pre-step built (decode, prefill, the padded media form)
+
+//! the rows the CPU pre-step built since load: a device-served pre-step leaves it where it was
+def ple_cpu_pre_rows() : int64 => g_ple_cpu_rows
+
+var private g_ple_host_gather_rows = 0l
+
+//! the table rows the host gathered for a device to finish since load: a device that gathers off the ids leaves it where it was
+def ple_host_gather_rows() : int64 => g_ple_host_gather_rows
+
 // Decode pre-step: gather the single token's per-layer embedding row, then finish.
 def private ple_pre_decode_impl(t : Model; var s : Session; token : int64) {
+    g_ple_cpu_rows++
     ple_gather_row(t, token, s.ple_inp, 0l)
     ple_pre_finish(t, s, s.x, 1l)
 }
@@ -101,6 +138,7 @@ def private ple_pre_decode_impl(t : Model; var s : Session; token : int64) {
 //! Prefill pre-step: gather every position's per-layer embedding row, then finish (batched).
 //! Public as the late-decline fallback for a driver that claimed the pre-step via the gate.
 def private ple_pre_prefill_impl(t : Model; var s : Session; tokens : array<int64>; npos : int64) {
+    g_ple_cpu_rows += npos
     let all = t.config.n_layers * t.config.n_embd_per_layer
     for (p in range64(npos)) {
         ple_gather_row(t, tokens[p], s.ple_inp, p * all)
@@ -111,6 +149,7 @@ def private ple_pre_prefill_impl(t : Model; var s : Session; tokens : array<int6
 // Prefill-from-embeddings (multimodal) pre-step: no token ids, so the gather uses the padding token
 // (id 0) broadcast across positions.
 def private ple_pre_prefill_pad_impl(t : Model; var s : Session; npos : int64) {
+    g_ple_cpu_rows += npos
     let all = t.config.n_layers * t.config.n_embd_per_layer
     ple_gather_row(t, 0l, s.ple_inp, 0l)
     unsafe {
@@ -122,16 +161,36 @@ def private ple_pre_prefill_pad_impl(t : Model; var s : Session; npos : int64) {
     ple_pre_finish(t, s, s.x_b, npos)
 }
 
+//! one row through layer l's gate (dim -> ple) or projection (ple -> dim) in the plane's own format
+def private ple_mm(t : Model; var s : Session; var y : array<float>; x : array<float>; l : int64; proj : bool) {
+    let pp = ple_plane(t, l, proj)
+    if (pp.f32) {
+        mm_fblob(y, t, pp.off, x, pp.n, pp.d)
+    } else {
+        mm_f(y, t, pp.f, pp.off, x, s.xq, s.xs, s.xbs, pp.n, pp.d)
+    }
+}
+
+//! `npos` rows through layer l's gate or projection, the batched form of `ple_mm`
+def private ple_mm_b(t : Model; var s : Session; var y : array<float>; x : array<float>; l, npos : int64; proj : bool) {
+    let pp = ple_plane(t, l, proj)
+    if (pp.f32) {
+        mm_fblob_b(y, t, pp.off, x, pp.n, pp.d, npos)
+    } else {
+        mm_b_f(s, y, t, pp.f, pp.off, x, pp.n, pp.d, npos)
+    }
+}
+
 // Per-layer block (decode): cur += post_norm(proj · (gelu(inp_gate·cur) ⊙ ple_inp[l])). In place on s.x.
 def private ple_block_decode(t : Model; var s : Session; l : int64) {
     trace_tag(TRACE_TAG_PLE)
     let c = t.config
     let dim = c.dim
     let ple = c.n_embd_per_layer
-    mm(s.ple_gate, t, t.ple_gate_off + l * dim * ple, s.x, s.xq, s.xs, dim, ple)   // dim -> ple
+    ple_mm(t, s, s.ple_gate, s.x, l, false)
     gelu(s.ple_gate, ple)
     mul_inplace(unsafe(addr(s.ple_gate[0])), unsafe(addr(s.ple_inp[l * ple])), ple)  // ⊙ this layer's side input
-    mm(s.xb, t, t.ple_proj_off + l * ple * dim, s.ple_gate, s.xq, s.xs, ple, dim)   // ple -> dim
+    ple_mm(t, s, s.xb, s.ple_gate, l, true)
     rms_at(s.xb, t, t.ple_post_off + l * dim, s.xb, dim)
     add_inplace(unsafe(addr(s.x[0])), unsafe(addr(s.xb[0])), dim)   // residual (pe_in + projected)
 }
@@ -145,12 +204,12 @@ def private ple_block_prefill(t : Model; var s : Session; l : int64; npos : int6
     let dim = c.dim
     let ple = c.n_embd_per_layer
     let all = c.n_layers * ple
-    mm_b(s.ple_gate, t, t.ple_gate_off + l * dim * ple, s.x_b, s.xqb, s.xsb, dim, ple, npos)
+    ple_mm_b(t, s, s.ple_gate, s.x_b, l, npos, false)
     gelu(s.ple_gate, npos * ple)
     for (p in range64(npos)) {
         mul_inplace(unsafe(addr(s.ple_gate[p * ple])), unsafe(addr(s.ple_inp[p * all + l * ple])), ple)
     }
-    mm_b(s.xb_b, t, t.ple_proj_off + l * ple * dim, s.ple_gate, s.xqb, s.xsb, ple, dim, npos)
+    ple_mm_b(t, s, s.xb_b, s.ple_gate, l, npos, true)
     rms_batch(s.xb_b, s.xb_b, t, t.ple_post_off + l * dim, dim, npos)
     add_inplace(unsafe(addr(s.x_b[0])), unsafe(addr(s.xb_b[0])), npos * dim)
 }
@@ -172,9 +231,7 @@ def private gemma4_moe_ffn(t : Model; var s : Session; l : int64) {
     gemma4_router(t, s.xb2, s.moe_ao, l, dim, 1l)
     mm_fblob(s.moe_logits, t, t.router_off + l * ne * dim, s.xb2, dim, ne)
     moe_select(c, unsafe(addr(s.moe_logits[0])), s.moe_idx, s.moe_w, 0l)
-    for (j in range64(k)) {   // each expert's down output is scaled by ffn_down_exps_s — fold it into w_j
-        s.moe_w[j] *= t.fblob[t.moe_down_scale_off + l * ne + s.moe_idx[j]]
-    }
+    moe_down_scale_fold(t, l, s.moe_idx, s.moe_w, k)
     prof_add("moe_route", ts_route)
     moe_experts_apply(t, s, l)
     let ts_norm1 = prof_ticks()
@@ -292,7 +349,7 @@ def gemma4_router(t : Model; var rin : array<float>; src : array<float>; l, dim,
 // gemma4 MoE prefill, grouped: batched twin of gemma4_moe_ffn (26B-A4B). Routes, buckets by expert,
 // runs one Q8 batch GEMM chain per touched expert, then the dense shared expert over all positions.
 // Bit-identical per row to the naive per-position path — g_moe_grouped_prefill is a pure perf lever.
-[arch(at="../ARCHITECTURE_RUNTIME.md#moe-region-split")]
+[arch(at="../ARCHITECTURE_RUNTIME_JOBQUE.md#moe-region-split")]
 def private gemma4_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos : int64) { // nolint:STYLE037,STYLE038 — the grouped gemma4 MoE prefill is one bucketed pipeline; its stages share scratch and must stay together
     let c = t.config
     let dim = c.dim
@@ -344,10 +401,8 @@ def private gemma4_moe_prefill_grouped(t : Model; var s : Session; l : int64; np
     mm_fblob_b(s.moe_rlog, t, t.router_off + l * ne * dim, s.xb2_b, dim, ne, npos)
     for (p in range64(npos)) {
         moe_select(c, unsafe(addr(s.moe_rlog[p * ne])), s.moe_idx_b, s.moe_w_b, p * k)
-        for (j in range64(k)) {
-            s.moe_w_b[p * k + j] *= t.fblob[t.moe_down_scale_off + l * ne + s.moe_idx_b[p * k + j]]
-        }
     }
+    moe_down_scale_fold(t, l, s.moe_idx_b, s.moe_w_b, nk)
     // bucket (position, slot) pairs by expert — CSR in-place cursor trick (moe_cnt[e] ends as its run END)
     for (e in range64(ne)) {
         s.moe_cnt[e] = 0l
@@ -485,13 +540,12 @@ def private gemma4_moe_prefill_grouped(t : Model; var s : Session; l : int64; np
         moe_gather_rows(s, b0, cnt, dim, k, moe_kform, moe_kform)
         prof_add("moe_gather", ts_gather)
         let base = e * dim * nfe
-        mm_b_f_pre(s.moe_ghb, t, f1, t.we1_offs[l] + base, s.moe_gxq, s.moe_gxs, s.moe_gxbs, dim, nfe, cnt)
-        mm_b_f_pre(s.moe_ghb2, t, f3, t.we3_offs[l] + base, s.moe_gxq, s.moe_gxs, s.moe_gxbs, dim, nfe, cnt)
+        moe_expert_gate_up(t, s, f1, f3, t.we1_offs[l] + base, t.we3_offs[l] + base, dim, nfe, cnt)
         let ts_act = prof_ticks()
         gate_batch(s.moe_ghb, s.moe_ghb2, c.ffn_act, nfe, cnt)
         prof_add("act", ts_act)
         requant_rows_f(f2, s.moe_ghb, nfe, cnt, s.moe_hq, s.moe_hs, s.moe_hbs)
-        mm_b_f_pre(s.moe_gout, t, f2, t.we2_offs[l] + base, s.moe_hq, s.moe_hs, s.moe_hbs, nfe, dim, cnt)
+        moe_expert_down(t, s, f2, t.we2_offs[l] + base, dim, nfe, cnt)
         let ts_park = prof_ticks()
         for (r in range64(cnt)) {
             copy_floats(s.moe_gout, r * dim, s.moe_eout, s.moe_bkt[b0 + r] * dim, dim)
@@ -565,6 +619,7 @@ def private ple_gather_rows_impl(t : Model; tokens : array<int64>; npos : int64;
         }
     }
     scale_inplace(unsafe(addr(dst[0])), sqrt(float(t.config.n_embd_per_layer)), npos * all)
+    g_ple_host_gather_rows += npos
 }
 
 [init]

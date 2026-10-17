@@ -78,3 +78,22 @@ def test_per_position_accept_telemetry(t : T?) {
     let clean = mtp_pos_report()
     t |> success(find(clean, "p1") < 0, "reset clears every counter: {clean}")
 }
+
+// Why neither home drafts a round (`mtp_round_cold_why`), one reason at a time on a Session shell over a 64-position context:
+// each call fails one arm with every other arm's input held ready, and "" where the round drafts.
+[test]
+def test_mtp_round_cold_why(t : T?) {
+    var m = Model()
+    m.config.seq_len = 64l
+    var s <- Session(mtp_h_pos1 = 10l, mtp_h <- [for (_i in range64(8l)); 0.5])
+    t |> equal(mtp_round_cold_why(m, s, 10l, 3l, 8l), "", "the control: a carried row at the position, at the drafter's width, inside the context drafts")
+    t |> success(!mtp_round_cold_host(m, s, 10l, 3l, 8l), "... and the host predicate reads it warm")
+    t |> equal(mtp_round_cold_why(m, s, 0l, 3l, 8l), "nothing is evaled at position 0", "position 0 holds no evaled row")
+    t |> equal(mtp_round_cold_why(m, s, 11l, 3l, 8l), "the carried hidden row is from another position", "a row carried for position 10 read at 11")
+    t |> equal(mtp_round_cold_why(m, s, 10l, 3l, 9l), "the carried hidden row is shorter than the drafter's width", "an 8-wide row for a 9-wide drafter")
+    t |> equal(mtp_round_cold_why(m, s, 10l, 54l, 8l), MTP_COLD_PAST_CONTEXT, "a depth-54 round from position 10 runs past the 64-position context")
+    t |> equal(mtp_round_cold_why(m, s, 10l, 53l, 8l), "", "the depth-53 round ends on the context's last position and drafts")
+    t |> success(mtp_round_cold_host(m, s, 10l, 54l, 8l), "the host predicate reads the past-context round cold")
+    delete s
+    delete m
+}

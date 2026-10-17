@@ -463,7 +463,7 @@ def test_vision_chat_deepstack(t : T?) {   // nolint:STYLE038 — one sequential
             var a1 = 0l
             var a2 = 0l
             for (i in range64(long_length(s1.logits))) {
-                dmax = max(dmax, abs(s1.logits[i] - s2.logits[i]))
+                dmax = max(dmax, nan_wide_diff(s1.logits[i], s2.logits[i]))
                 if (s1.logits[i] > s1.logits[a1]) {
                     a1 = i
                 }

@@ -1,7 +1,7 @@
 // The CPU references the Metal and the Vulkan kernel cells share - the engine's table rope by its pairing, the gated
 // activation, dense GEMM rows with their envelope, an expert's FFN rows, the Q8_0 requant block check, the attention cells'
-// query rows, the MoE route's padded-CSR prefix - with no device type and no backend require, so a build without either GPU
-// module reads it.
+// query rows, the MoE route's padded-CSR prefix, the gemma-4 MoE step - with no device type and no backend require, so a
+// build without either GPU module reads it.
 
 options gen2
 options _dasllama_internal = true
@@ -288,6 +288,58 @@ def q8_blocks_off(oq : array<int8>; os : array<float>; a : array<float>; nblk : 
         }
     }
     return off
+}
+
+//! The gemma-4 MoE step's rows (`GkMoeCombG4`) over `npos` rows `n` wide: row p's routed sum - its `k` slots at `sidx[p k + j]`
+//! of `rows` under `sw[p k + j]` in slot order, or under `presummed` row p of `rows` - and its dense row each under their post
+//! norm, the two summed under the post-FFN norm, x = (x + that) . ascale, then x under the next norm; `wn` carries the norm rows
+//! at 0 (the next), n (the dense post), 2n (the routed post), 3n (the post-FFN). Returns the updated residual rows and the
+//! normed ones.
+def g4_comb_ref(n, k, npos : int; sidx : array<uint>; sw, rows, dense, xs, wn : array<float>; eps, ascale : float;
+                presummed : bool) : tuple<x : array<float>; y : array<float>> {
+    var wx, wy, r, c : array<float>
+    wx |> resize(npos * n)
+    wy |> resize(npos * n)
+    r |> resize(n)
+    c |> resize(n)
+    for (p in range(npos)) {
+        var sr = 0.0
+        var sd = 0.0
+        for (i in range(n)) {
+            var v = 0.0
+            if (presummed) {
+                v = rows[p * n + i]
+            } else {
+                for (j in range(k)) {
+                    v += sw[p * k + j] * rows[int(sidx[p * k + j]) * n + i]
+                }
+            }
+            r[i] = v
+            sr += v * v
+            sd += dense[p * n + i] * dense[p * n + i]
+        }
+        let inv_r = 1.0 / sqrt(sr / float(n) + eps)
+        let inv_d = 1.0 / sqrt(sd / float(n) + eps)
+        var sc = 0.0
+        for (i in range(n)) {
+            c[i] = wn[2 * n + i] * (r[i] * inv_r) + wn[n + i] * (dense[p * n + i] * inv_d)
+            sc += c[i] * c[i]
+        }
+        let inv_c = 1.0 / sqrt(sc / float(n) + eps)
+        var ss = 0.0
+        for (i in range(n)) {
+            let xv = (xs[p * n + i] + wn[3 * n + i] * (c[i] * inv_c)) * ascale
+            wx[p * n + i] = xv
+            ss += xv * xv
+        }
+        let inv = 1.0 / sqrt(ss / float(n) + eps)
+        for (i in range(n)) {
+            wy[p * n + i] = wn[i] * (wx[p * n + i] * inv)
+        }
+    }
+    delete r
+    delete c
+    return <- (x <- wx, y <- wy)
 }
 
 //! The front convs' CPU form on an image odd along one axis and even along the other, so each edge drops its own taps:

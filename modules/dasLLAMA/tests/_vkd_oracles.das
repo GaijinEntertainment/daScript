@@ -27,6 +27,23 @@ require _kernel_oracles public   // act_mul_ref: the gated activation the Metal 
 //! the flash tiles' shadow planes carry sixteen zero rows past the last position: the KHR tile's last key step loads a whole 16-row fragment
 let FA_SHADOW_SLACK_ROWS = int(RDEC_MIR_SLACK_ROWS)   //! the flash fixtures pad their shadows the rows the driver's mirrors carry past their planes
 
+//! `src`'s K or V rows laid as rings of `ring` rows, `regions` regions of `keys` rows each from word `base`: slot `s` of a region
+//! holds the one position of the last `ring` under `kpos` whose `kv_ring_row` it is, every other word past `base` `fill`; `src`
+//! as it is with no ring
+def ring_laid_rows(src : array<float>; regions, keys, kpos, kvd, ring, base : int; fill : float) : array<float> {
+    return <- clone_to_move(src) if (ring == 0)
+    var out <- [for (i in range(length(src))); i < base ? src[i] : fill]
+    for (r in range(regions)) {
+        for (p in range(kpos - ring, kpos)) {
+            let slot = int(kv_ring_row(int64(p), int64(ring)))
+            for (i in range(kvd)) {
+                out[base + (r * keys + slot) * kvd + i] = src[base + (r * keys + p) * kvd + i]
+            }
+        }
+    }
+    return <- out
+}
+
 let MR_SENT = 0x5A5A5A5Au   //! the schedule planes' fill: a word the kernel never writes stays this on both sides
 
 //! NaN-fills a device output's [off, off + bytes) before its dispatch: a stale or unwritten output cannot sit inside any bar

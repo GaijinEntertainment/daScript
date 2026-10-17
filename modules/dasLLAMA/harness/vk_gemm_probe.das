@@ -2790,7 +2790,7 @@ def private run_lastwg(dim : int) {   // nolint:STYLE038 — one linear measurem
     }
     let wgs = (int64(dim) + 4l * g_gpu.rows_per_wg - 1l) / (4l * g_gpu.rows_per_wg)
     var pc = PxLwArgs(n = uint(dim), d = uint(dim), eps = 1.0e-6)
-    var pca = ArArgs(dim = uint(dim), add_on = 1u, woff = 0u, eps = 1.0e-6, ascale = 1.0)
+    var pca = GkAddRmsArgs(dim = uint(dim), add_on = 1u, woff = 0u, eps = 1.0e-6, ascale = 1.0)
     var out_split, out_fused : array<float>
     out_split |> resize(dim)
     out_fused |> resize(dim)
@@ -2897,7 +2897,7 @@ def private run_barrier_forms(dim : int) {
     let ad = rk.ad
     let wnd = rk.wnd
     let yd = rk.yd
-    var pc = ArArgs(dim = uint(dim), add_on = 1u, woff = 0u, eps = 1.0e-6, ascale = 1.0)
+    var pc = GkAddRmsArgs(dim = uint(dim), add_on = 1u, woff = 0u, eps = 1.0e-6, ascale = 1.0)
     let names = fixed_array("rail (global, compute+transfer)", "global, compute only", "global, shader bits only", "buffer barrier on the row", "execution only", "no barrier")
     for (form in range(6)) {
         var sc = set_cls_ar(fixed_array(xd, ad, wnd, yd), fixed_array(nb, nb, nb, nb), fixed_array(0u, 0u, 0u, 0u))   //! the rail sees no bits: the barriers below are the probe's own
@@ -2969,7 +2969,7 @@ def private run_small_kernels(dim : int) {
     let xqd = make_device_buf(int64(dim))
     let xsd = make_device_buf(int64(dim / 32) * 4l)
     verify(ensure_cls_ar() && ensure_cls_ar_rq_b(), "the add+rms class rails must engage")
-    var pc = ArArgs(dim = uint(dim), add_on = 1u, woff = 0u, eps = 1.0e-6, ascale = 1.0)
+    var pc = GkAddRmsArgs(dim = uint(dim), add_on = 1u, woff = 0u, eps = 1.0e-6, ascale = 1.0)
     for (dep in range(2)) {
         let bit = dep == 1 ? 1u : 0u   //! the dependency: x read and written by every dispatch, so the rail barriers between them
         var sc = set_cls_ar(fixed_array(xd, ad, wnd, yd), fixed_array(nb, nb, nb, nb), fixed_array(bit, 0u, 0u, 2u * bit))

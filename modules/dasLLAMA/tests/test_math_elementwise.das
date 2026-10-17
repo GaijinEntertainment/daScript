@@ -1,11 +1,12 @@
 options gen2
 options _dasllama_internal = true
+options persistent_heap   // a dastest root frees what it deletes only on this heap; the linear heap holds every carrier a cell deleted until the context ends
 
 require dastest/testing_boost public
 require dasllama/dasllama_math
 require dasllama/dasllama_convert
 require math
-require _compares   // Sweep: the length sweeps' tally and verdict; opaque: the seeds' taint seam; bf16_value / bf16_bits_truncated
+require _compares   // Sweep: the length sweeps' tally and verdict; opaque: the seeds' taint seam; bf16_value / pack_bf16
 
 //! The [tuned] elementwise kernels - dot, dot_bf16, axpy, add_inplace, add_scale_inplace,
 //! mul_inplace, scale_inplace, copy_floats - swept over tail lengths against fp64 references.
@@ -44,9 +45,6 @@ def private lcg_unit(n : int; seed : uint) : array<float> {
     }
     return <- a
 }
-
-def private to_bf16(src : array<float>) : array<uint16> =>
-    <- [for (v in src); bf16_bits_truncated(v)]
 
 //! one swept length of an in-place kernel: bit-exact, and the elements left where they were counted
 def private tally(var r : Sweep; n : int; got, want, before : array<float>) {
@@ -95,7 +93,7 @@ def private sweep_dot_bf16_exact() : Sweep {
     for (n in SWEEP) {
         var inscope a <- lcg_grid(n, opaque(0x3c07u) + uint(n), 0.125, true)
         var inscope bf <- lcg_grid(n, opaque(0x7b91u) + uint(n), 0.375, true)
-        var inscope b <- to_bf16(bf)
+        var inscope b <- pack_bf16(bf)
         var want = 0.0lf
         for (av, bw in a, b) {
             want += double(av) * double(bf16_value(bw))
@@ -111,7 +109,7 @@ def private sweep_dot_bf16_bar() : Sweep {
     for (n in SWEEP) {
         var inscope a <- lcg_unit(n, opaque(0x2f6eu) + uint(n))
         var inscope bf <- lcg_unit(n, opaque(0xc0deu) + uint(n))
-        var inscope b <- to_bf16(bf)
+        var inscope b <- pack_bf16(bf)
         var want = 0.0lf
         for (av, bw in a, b) {
             want += double(av) * double(bf16_value(bw))
@@ -246,7 +244,7 @@ def private zero_length_moves() : int {
 def private zero_length_dots() : float {
     let a <- lcg_grid(4, opaque(0x0e13u), 0.125, true)
     let bf <- lcg_grid(4, opaque(0x0e14u), 0.375, true)
-    let b <- to_bf16(bf)
+    let b <- pack_bf16(bf)
     unsafe {
         return abs(dot(addr(a[0]), addr(a[0]), 0l)) + abs(dot_bf16(addr(a[0]), addr(b[0]), 0l))
     }

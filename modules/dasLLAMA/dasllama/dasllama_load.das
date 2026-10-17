@@ -311,6 +311,9 @@ def private layout_offsets(var t : Model) : LayoutSizes {   // nolint:STYLE037,S
     }
     var mx = 0l
     var pleq8 = 0l
+    //! the file's f32 gate / proj rows in fblob, where they ship F32 (`ple_gate_f32`, `ple_proj_f32`)
+    let pg32 = ple_f32_base(has_ple(c) && t.ple_gate_f32, fo, layers * dim * c.n_embd_per_layer)
+    let pp32 = ple_f32_base(has_ple(c) && t.ple_proj_f32, fo, layers * dim * c.n_embd_per_layer)
     if (c.n_expert > 0l) {
         // MoE: routed expert stacks — expert e of layer l is a normal 2D matrix at we*_off + (l*n_expert+e)*(dim*n_ff_exp)
         let ege = dim * c.n_ff_exp   // per-expert element count (same for gate/up and down)
@@ -352,7 +355,7 @@ def private layout_offsets(var t : Model) : LayoutSizes {   // nolint:STYLE037,S
     } else {
         fill_dense_ffn_offsets(t, cur, layers, dim, hidden)
     }
-    if (has_ple(c)) {  // gemma-4 E-series PLE big weights: the token table + per-layer Q8 gate/proj
+    if (has_ple(c)) {  // gemma-4 E-series PLE big weights: the token table + the per-layer gate/proj
         let ple = c.n_embd_per_layer
         // gather-only rows, NOT repacked — pinned to the DISK-format plane in every serving mode (the mode owns the wo region, never the table)
         if (t.ple_emb_fmt == KqFmt.q8 && t.quant != QuantMode.q8) {
@@ -361,10 +364,8 @@ def private layout_offsets(var t : Model) : LayoutSizes {   // nolint:STYLE037,S
         } else {
             t.ple_emb_off = kq_take(cur, t.ple_emb_fmt, c.vocab_size * ple * layers)
         }
-        t.ple_gate_off = cur.wo
-        cur.wo += layers * dim * ple
-        t.ple_proj_off = cur.wo
-        cur.wo += layers * ple * dim
+        ple_kind_offs(t.ple_gate_offs, cur, t.ple_gate_fmt, t.ple_gate_f32, pg32, layers, dim * ple)
+        ple_kind_offs(t.ple_proj_offs, cur, t.ple_proj_fmt, t.ple_proj_f32, pp32, layers, ple * dim)
     }
     if (c.shared_weights) {
         if (t.cls_q8) {
@@ -617,7 +618,7 @@ def conv_profile_report() {
 
 //! The form a converted tensor is served in: a kq plane, the q8 rail's quants and scales, the
 //! q4_0 rail's nibbles and scales, or f32 rows.
-enum private ConvServed {
+enum ConvServed {
     kq
     q8
     q40
@@ -647,9 +648,16 @@ def private conv_reset() {
     g_load_demotions = 0l
 }
 
+//! A load report row's name: the tensor's site, its disk type, and the form it serves in - a kq plane by its `KqFmt` member, any
+//! other form by the conversion that made it
+def conv_row_name(tensor : string; disk_type : int; kind : string; served : ConvServed; fmt : KqFmt) : string {
+    let form = served == ConvServed.kq ? "{fmt} plane" : kind
+    return "{kq_site_words(gguf_tensor_role(tensor))}: {ggml_type_name(disk_type)} -> {form}"
+}
+
 def private conv_account(m : GGUFMeta; name, kind : string; served : ConvServed; fmt : KqFmt; n : int64) {
     let gt = gguf_tensor_type(m, name)
-    let key = "{ggml_type_name(gt)} -> {kind}"
+    let key = conv_row_name(name, gt, kind, served, fmt)
     var b = g_conv_bytes[key]
     b.tensors++
     b.disk += ggml_type_bytes(gt, n)
@@ -675,7 +683,7 @@ def private served_bytes(t : Model; served : ConvServed; fmt : KqFmt; n : int64)
     return n * 4l
 }
 
-//! The load report: the file's bytes, then every (disk type -> conversion kind) as bytes on disk
+//! The load report: the file's bytes, then every (site: disk type -> served form) row as bytes on disk
 //! against bytes served with the delta, biggest overhead first, and the q8-rail demotion count.
 def private log_conversion_report(t : Model; file_bytes : int64) {
     if (empty(g_conv_bytes)) {
@@ -711,8 +719,8 @@ struct FillJob {
     kdim : int64   // the source tensor's row width (dims[0]), so n / kdim is the panel's row count; 0 = the plan resolved no tensor
 }
 
-//! One repack region over a plane (element offset + 2D shape). fmt ids follow the repack
-//! walkers: 0 = q8, 1 = mx4, 2 = q51, 4/5/6/40 = the kq plane pairs.
+//! One repack region over a plane (element offset + 2D shape). fmt is the format's stream code
+//! (`kq_stream_code`), 0 = q8.
 struct StreamReg {
     off : int64
     n : int64
@@ -839,6 +847,8 @@ def stream_field_of(t : Model; fmt : KqFmt) : string {
         return "q4032q"
     } elif (fmt == KqFmt.q5032) {
         return "q5032q"
+    } elif (fmt == KqFmt.mx4) {
+        return "mxq"
     } elif (t.quant == QuantMode.q8) {
         // the blob flavor carries q8 as gguf-native 34B blocks in ONE plane, never the split pair
         return t.metal_blob ? "mblob" : "qblob"
@@ -846,9 +856,12 @@ def stream_field_of(t : Model; fmt : KqFmt) : string {
     return ""
 }
 
+//! a format whose streamed planes stride per superblock or per 32-block: the kq table's, the per-32 pairs, the native-MXFP4 pair
+def private stream_strided(fmt : KqFmt) : bool => kq_sb(fmt) || kq_b32_planes(fmt) || fmt == KqFmt.mx4
+
 // (q plane bytes, scale plane bytes, region fmt id) for one streamed job — pure taxonomy reads
 def private stream_job_shape(t : Model; j : FillJob) : tuple<qb : int64; sb : int64; rfmt : int> {
-    if (kq_sb(j.fmt) || kq_b32_planes(j.fmt)) {
+    if (stream_strided(j.fmt)) {
         let e = kq_elems(j.fmt)
         return (qb = (j.n / e) * kq_qsb(j.fmt), sb = (j.n / e) * kq_ssb(j.fmt), rfmt = kq_stream_code(j.fmt))
     }
@@ -860,7 +873,7 @@ def private stream_job_shape(t : Model; j : FillJob) : tuple<qb : int64; sb : in
 
 // a job's byte offset within its plane (woff is elems; kq/q51 planes stride per superblock/block)
 def private stream_job_qoff(t : Model; j : FillJob) : int64 {
-    if (kq_sb(j.fmt) || kq_b32_planes(j.fmt)) {
+    if (stream_strided(j.fmt)) {
         return (j.woff / kq_elems(j.fmt)) * kq_qsb(j.fmt)
     }
     if (t.metal_blob) {
@@ -922,7 +935,10 @@ def private stream_job_transcode(m : GGUFMeta; bytes : array<uint8> | #; var dst
     let t0 = g_conv_prof ? ref_time_ticks() : 0l
     var kind = ""
     var served = ConvServed.q8
-    if (kq_sb(j.fmt) || kq_b32_planes(j.fmt)) {
+    if (j.fmt == KqFmt.mx4) {   // the file's own nibble and E8M0 bytes, no conversion to account
+        tmp.s |> grow_resize(int(sh.sb))
+        gguf_transcode_mx4(m, bytes, j.name, tmp.q, tmp.s, 0l, 0l, j.n, j.src_off)
+    } elif (stream_strided(j.fmt)) {
         tmp.s |> grow_resize(int(sh.sb))
         kind = transcode_kq_tensor(m, bytes, j.name, j.fmt, tmp.q, tmp.s, 0l, j.n, j.src_off)
         served = ConvServed.kq
@@ -931,23 +947,18 @@ def private stream_job_transcode(m : GGUFMeta; bytes : array<uint8> | #; var dst
         tmp.sf |> grow_resize(int(j.n / Q8_BLOCK_ELEMS))
         kind = transcode_q8_tensor(m, bytes, j.name, tmp.q8, tmp.sf, 0l, 0l, j.n, j.src_off, tmp.scratch)
     }
-    if (account) {
+    if (account && !empty(kind)) {
         conv_note(kind, t0, j.n)
         conv_account(m, j.name, kind, served, j.fmt, j.n)
     }
     let soff = j.woff - rebase
-    unsafe {
-        if (kq_sb(j.fmt)) {
-            memcpy(addr<void?>(dst.kq[int(j.fmt)].s[(soff / kq_elems(j.fmt)) * kq_ssb(j.fmt)]), addr<void?>(tmp.s[0]), sh.sb)
-        } elif (j.fmt == KqFmt.q51) {
-            memcpy(addr<void?>(dst.q51s[(soff / KQ_B32_ELEMS) * Q51_SB]), addr<void?>(tmp.s[0]), sh.sb)
-        } elif (j.fmt == KqFmt.iq4nl32) {
-            memcpy(addr<void?>(dst.iq4nl32s[(soff / KQ_B32_ELEMS) * IQ4NL32_SB]), addr<void?>(tmp.s[0]), sh.sb)
-        } elif (j.fmt == KqFmt.q4032) {
-            memcpy(addr<void?>(dst.q4032s[(soff / KQ_B32_ELEMS) * Q4032_SB]), addr<void?>(tmp.s[0]), sh.sb)
-        } elif (j.fmt == KqFmt.q5032) {
-            memcpy(addr<void?>(dst.q5032s[(soff / KQ_B32_ELEMS) * Q5032_SB]), addr<void?>(tmp.s[0]), sh.sb)
-        } elif (sh.sb == 0l && j.n > 0l && !dst.metal_blob) {
+    let paired = kq_plane_pair(dst, j.fmt) $(var q : array<uint8>; var s : array<uint8>) {
+        unsafe {
+            memcpy(addr<void?>(s[(soff / kq_elems(j.fmt)) * kq_ssb(j.fmt)]), addr<void?>(tmp.s[0]), sh.sb)
+        }
+    }
+    if (!paired && sh.sb == 0l && j.n > 0l && !dst.metal_blob) {
+        unsafe {
             memcpy(addr<void?>(dst.qscales[soff / Q8_BLOCK_ELEMS]), addr<void?>(tmp.sf[0]), (j.n / Q8_BLOCK_ELEMS) * 4l)
         }
     }
@@ -960,17 +971,16 @@ def private stream_job_transcode(m : GGUFMeta; bytes : array<uint8> | #; var dst
             if (r.fmt == Q8_STREAM_TAG) {
                 invoke(g_stream_repack, Q8_STREAM_TAG, addr<void?>(tmp.q8[r.off - j.woff]),
                     addr<void?>(dst.qscales[roff / Q8_BLOCK_ELEMS]), r.n, r.d)
-            } elif (r.fmt == kq_stream_code(KqFmt.q51)) {
-                invoke(g_stream_repack, r.fmt, addr<void?>(tmp.q[((r.off - j.woff) / KQ_B32_ELEMS) * Q51_QPB]),
-                    addr<void?>(dst.q51s[(roff / KQ_B32_ELEMS) * Q51_SPB]), r.n, r.d)
-            } elif (r.fmt == IQ4NL32_STREAM_TAG) {
-                invoke(g_stream_repack, IQ4NL32_STREAM_TAG, addr<void?>(tmp.q[((r.off - j.woff) / KQ_B32_ELEMS) * IQ4NL32_QB]),
-                    addr<void?>(dst.iq4nl32s[(roff / KQ_B32_ELEMS) * IQ4NL32_SB]), r.n, r.d)
             } else {
+                //! every plane-pair format's regions repack here, the quant half in the job's temp and the scale half in place
                 var rf = KqFmt.q8
-                if (kq_fmt_of_stream_code(r.fmt, rf) && kq_sb(rf)) {
-                    invoke(g_stream_repack, r.fmt, addr<void?>(tmp.q[((r.off - j.woff) / kq_elems(rf)) * kq_qsb(rf)]),
-                        addr<void?>(dst.kq[int(rf)].s[(roff / kq_elems(rf)) * kq_ssb(rf)]), r.n, r.d)
+                let qrow = r.off - j.woff
+                let repacked = kq_fmt_of_stream_code(r.fmt, rf) && kq_plane_pair(dst, rf) $(var q : array<uint8>; var s : array<uint8>) {
+                    invoke(g_stream_repack, r.fmt, addr<void?>(tmp.q[(qrow / kq_elems(rf)) * kq_qsb(rf)]),
+                        addr<void?>(s[(roff / kq_elems(rf)) * kq_ssb(rf)]), r.n, r.d)
+                }
+                if (!repacked) {
+                    panic("dasLLAMA: a streamed repack region carries code {r.fmt}, which names no plane-pair format")
                 }
             }
         }
@@ -1074,25 +1084,14 @@ def stream_job_view(m : GGUFMeta; bytes : array<uint8> | #; t : Model; jobs : ar
     for (i in run) {
         total += jobs[i].n
     }
-    let strided = kq_sb(f) || kq_b32_planes(f)
+    let strided = stream_strided(f)
     let qb = strided ? (total / kq_elems(f)) * kq_qsb(f) : total
     let sb = strided ? (total / kq_elems(f)) * kq_ssb(f) : total / Q8_BLOCK_ELEMS
-    if (kq_sb(f)) {
-        sv.kq[int(f)].q |> grow_resize(qb)
-        sv.kq[int(f)].s |> grow_resize(sb)
-    } elif (f == KqFmt.q51) {
-        sv.q51q |> grow_resize(qb)
-        sv.q51s |> grow_resize(sb)
-    } elif (f == KqFmt.iq4nl32) {
-        sv.iq4nl32q |> grow_resize(qb)
-        sv.iq4nl32s |> grow_resize(sb)
-    } elif (f == KqFmt.q4032) {
-        sv.q4032q |> grow_resize(qb)
-        sv.q4032s |> grow_resize(sb)
-    } elif (f == KqFmt.q5032) {
-        sv.q5032q |> grow_resize(qb)
-        sv.q5032s |> grow_resize(sb)
-    } else {
+    let paired = kq_plane_pair(sv, f) $(var q : array<uint8>; var s : array<uint8>) {
+        q |> grow_resize(qb)
+        s |> grow_resize(sb)
+    }
+    if (!paired) {
         sv.qblob |> grow_resize(qb)
         sv.qscales |> grow_resize(sb)
     }
@@ -1102,18 +1101,13 @@ def stream_job_view(m : GGUFMeta; bytes : array<uint8> | #; t : Model; jobs : ar
         stream_job_transcode(m, bytes, sv, j, regs, rebase, tmp, false)
         let sh = stream_job_shape(sv, j)
         let qoff = strided ? ((j.woff - rebase) / kq_elems(f)) * kq_qsb(f) : j.woff - rebase
-        unsafe {
-            if (kq_sb(f)) {
-                memcpy(addr<void?>(sv.kq[int(f)].q[qoff]), addr<void?>(tmp.q[0]), sh.qb)
-            } elif (f == KqFmt.q51) {
-                memcpy(addr<void?>(sv.q51q[qoff]), addr<void?>(tmp.q[0]), sh.qb)
-            } elif (f == KqFmt.iq4nl32) {
-                memcpy(addr<void?>(sv.iq4nl32q[qoff]), addr<void?>(tmp.q[0]), sh.qb)
-            } elif (f == KqFmt.q4032) {
-                memcpy(addr<void?>(sv.q4032q[qoff]), addr<void?>(tmp.q[0]), sh.qb)
-            } elif (f == KqFmt.q5032) {
-                memcpy(addr<void?>(sv.q5032q[qoff]), addr<void?>(tmp.q[0]), sh.qb)
-            } else {
+        let landed = kq_plane_pair(sv, f) $(var q : array<uint8>; var s : array<uint8>) {
+            unsafe {
+                memcpy(addr<void?>(q[qoff]), addr<void?>(tmp.q[0]), sh.qb)
+            }
+        }
+        if (!landed) {
+            unsafe {
                 memcpy(addr<void?>(sv.qblob[qoff]), addr<void?>(tmp.q8[0]), sh.qb)
             }
         }
@@ -1578,8 +1572,8 @@ def private detect_kq_formats(var t : Model; m : GGUFMeta) {   // nolint:STYLE03
         any ||= t.wo_fmt[l] != KqFmt.q8 || t.w1_fmt[l] != KqFmt.q8 || t.w2_fmt[l] != KqFmt.q8
         any ||= t.w3_fmt[l] != KqFmt.q8
     }
-    // MoE routed expert stacks: one tag per (layer, kind). Biased-experts arches (gpt-oss) stay q8 — the kq groupn carries no bias form
-    if (t.config.n_expert > 0l && !t.config.moe_exps_bias
+    // MoE expert stacks: a tag per (layer, kind); biased (gpt-oss: no kq bias form) and native-MXFP4 (`experts_mx4`) stacks take none
+    if (t.config.n_expert > 0l && !t.config.moe_exps_bias && !t.experts_mx4
             && (t.config.dim * t.config.n_ff_exp) % 256l == 0l) {
         t.we1_fmt |> resize(layers)
         t.we2_fmt |> resize(layers)
@@ -1626,6 +1620,10 @@ def private detect_kq_formats(var t : Model; m : GGUFMeta) {   // nolint:STYLE03
     }
     let dn_kq = detect_dn_formats(t, m, layers)
     any ||= dn_kq
+    if (has_ple(t.config)) {
+        let ple_kq = detect_ple_formats(t, m)   //! its own statement: `||=` would skip the tags once `any` holds
+        any ||= ple_kq
+    }
     // E-series PLE token table: gather-only whole rows; row length must be superblock-aligned
     if (has_ple(t.config) && (t.config.n_layers * t.config.n_embd_per_layer) % 256l == 0l) {
         t.ple_emb_fmt = kq_fmt_of(gguf_tensor_type(m, "per_layer_token_embd.weight"))
@@ -1647,8 +1645,68 @@ def private detect_kq_formats(var t : Model; m : GGUFMeta) {   // nolint:STYLE03
         delete t.dnout_fmt
         delete t.dnbeta_fmt
         delete t.dnalpha_fmt
+        delete t.ple_gate_fmt
+        delete t.ple_proj_fmt
     }
     t.kquant_native = any
+}
+
+//! the per-layer-embedding gate and projection planes' tags, one a layer each, true when any is not q8; a kind whose every layer
+//! ships F32 keeps the file's f32 rows (`ple_gate_f32` / `ple_proj_f32`), and a kind mixing F32 with another type declines the load
+def detect_ple_formats(var t : Model; m : GGUFMeta) : bool {
+    let c = t.config
+    let gate = detect_ple_kind(m, c.n_layers, "inp_gate", c.dim, t.ple_gate_fmt, t.ple_gate_f32)
+    let proj = detect_ple_kind(m, c.n_layers, "proj", c.n_embd_per_layer, t.ple_proj_fmt, t.ple_proj_f32)
+    return gate || proj
+}
+
+//! one per-layer-embedding kind's tags into `fmts`, `rows` a tensor's row width, and whether it keeps the file's f32 rows into
+//! `f32`: true when any layer's tag is not q8
+def private detect_ple_kind(m : GGUFMeta; layers : int64; kind : string; rows : int64; var fmts : array<KqFmt>; var f32 : bool&) : bool {
+    f32 = ple_kind_f32(m, layers, kind)
+    fmts |> reserve(layers)
+    fmts |> resize(layers)
+    var any = false
+    for (l in range64(layers)) {
+        fmts[l] = f32 ? KqFmt.q8 : kq_tag(m, "blk.{l}.{kind}.weight", rows)
+        any ||= fmts[l] != KqFmt.q8
+    }
+    return any
+}
+
+//! where a per-layer-embedding kind ships F32 (`on`) the base of its `n` floats in fblob at the cursor `fo`, which moves past them;
+//! -1 elsewhere
+def private ple_f32_base(on : bool; var fo : int64&; n : int64) : int64 {
+    return -1l if (!on)
+    let base = fo
+    fo += n
+    return base
+}
+
+//! one per-layer-embedding kind's plane offsets, a layer each: its f32 rows `n` floats a layer from `base`, or its plane in its own
+//! format off the cursors
+def private ple_kind_offs(var offs : array<int64>; var cur : KqCursors; fmts : array<KqFmt>; f32 : bool; base, layers, n : int64) {
+    offs |> clear()
+    offs |> reserve(layers)
+    for (l in range64(layers)) {
+        offs |> push(f32 ? base + l * n : kq_take(cur, fmt_at(fmts, l), n))
+    }
+}
+
+//! whether the per-layer tensors `blk.N.<kind>.weight` ship F32, layer 0's answer; the first layer that answers otherwise
+//! declines the load, naming that tensor and both element types
+def private ple_kind_f32(m : GGUFMeta; layers : int64; kind : string) : bool {
+    let first = "blk.0.{kind}.weight"
+    let gt0 = gguf_tensor_type(m, first)
+    let f32 = gt0 == GGML_TYPE_F32
+    for (l in range64(1l, layers)) {
+        let name = "blk.{l}.{kind}.weight"
+        let gt = gguf_tensor_type(m, name)
+        if ((gt == GGML_TYPE_F32) != f32) {
+            panic("dasLLAMA: the per-layer-embedding {kind} planes mix F32 with other types - tensor '{name}' is {ggml_type_name(gt)}, '{first}' is {ggml_type_name(gt0)}; no site serves a mixed stack, requantize the kind whole")
+        }
+    }
+    return f32
 }
 
 //! a device driver on this load reads the shared expert and the tied classifier off planes of their own: an armed GPU tier, or a Metal mode
@@ -1848,10 +1906,22 @@ def private load_gguf_impl(path : string; var mode : QuantMode) : Model {
     return <- t
 }
 
+//! `n` MXFP4 elements of tensor `name`, from its element `src`, into the native planes at element `off`: the nibble plane
+//! `MX4_QB` bytes a 32-block, the E8M0 plane `MX4_SB`; under a streaming plan the job is recorded and the fill writes it
+def private mx4_transcode_at(m : GGUFMeta; bytes : array<uint8> | #; name : string; var t : Model; off, n : int64; src : int64 = 0l) {
+    if (g_fill_plan_mode) {
+        g_fill_plan |> push(FillJob(name = name, woff = off, n = n, src_off = src, fmt = KqFmt.mx4, kdim = fill_job_kdim(m, name)))
+        return
+    }
+    let blk = off / KQ_B32_ELEMS
+    gguf_transcode_mx4(m, bytes, name, t.mxq, t.mxs, blk * MX4_QB, blk * MX4_SB, n, src)
+}
+
 // The load once metadata is parsed and the byte view carrying the KVs (shard 0 for splits) is
 // mapped — config, vocab, plane sizing, tensor reads/transcodes, repack, wscale.
 def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> | #; var mode : QuantMode; ts_load : int64) {   // nolint:STYLE037,STYLE038 — the load pipeline: ordered phases over one shared cursor; splitting it needs its own pass
     var ts_stage = ref_time_ticks()
+    gguf_decline_unread_types(m)
     {
         let arch = gguf_str(m, bytes, "general.architecture")
         resolve_arch(t, arch)   // registry lookup: apply config flags + bind the arch's block kernels
@@ -2375,6 +2445,14 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
             let ba0 = t.dn_grouped ? "blk.{frl}.ssm_ba.weight" : "blk.{frl}.ssm_beta.weight"
             t.dn_ba_f32 = gguf_tensor_type(m, ba0) == GGML_TYPE_F32
         }
+        // Native-MXFP4 expert stacks (gpt-oss, a gemma-4 MXFP4_MOE file): on a q8 load whose routed expert stacks are all
+        // MXFP4 on disk - the gate and up stacks apart or as gemma-4's fused gate_up stack - keep them in their native nibble +
+        // E8M0 planes (see Model.experts_mx4) instead of transcoding to Q8: half the resident bytes and decode traffic, exact disk bits.
+        let mx4_gu = ((gguf_tensor_type(m, "blk.0.ffn_gate_exps.weight") == GGML_TYPE_MXFP4
+                && gguf_tensor_type(m, "blk.0.ffn_up_exps.weight") == GGML_TYPE_MXFP4)
+            || gguf_tensor_type(m, "blk.0.ffn_gate_up_exps.weight") == GGML_TYPE_MXFP4)
+        t.experts_mx4 = (t.config.n_expert > 0l && mode == QuantMode.q8 && mx4_gu
+            && gguf_tensor_type(m, "blk.0.ffn_down_exps.weight") == GGML_TYPE_MXFP4)
         // per-tensor K-quant format tags (kquant_native rail; no-op when the knob is off or the
         // file has no K-quant tensors) — must precede layout_offsets, which walks the tags
         detect_kq_formats(t, m)
@@ -2416,24 +2494,17 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
         }
         // per-layer output scalars (gemma4 layer_output_scale) — presence detected from the tensors
         t.config.layer_out_scale = gguf_find_tensor(m, "blk.0.layer_output_scale.weight") >= 0
-        // Native-MXFP4 expert stacks (gpt-oss): on a q8 load whose routed expert stacks are all
-        // MXFP4 on disk, keep them in their native nibble + E8M0 planes (see Model.experts_mx4)
-        // instead of transcoding to Q8 — half the resident bytes and decode traffic, exact disk bits.
-        t.experts_mx4 = (t.config.n_expert > 0l && mode == QuantMode.q8
-            && gguf_tensor_type(m, "blk.0.ffn_gate_exps.weight") == GGML_TYPE_MXFP4
-            && gguf_tensor_type(m, "blk.0.ffn_down_exps.weight") == GGML_TYPE_MXFP4
-            && gguf_tensor_type(m, "blk.0.ffn_up_exps.weight") == GGML_TYPE_MXFP4)
         // gemma-4 E-series: keep per_layer_model_proj in its native BF16 — half the per-token
         // read; dot_bf16's widen is the exact bit shift, so the values match the fp32 expand
         t.ple_model_bf16 = (has_ple(t.config)
             && gguf_tensor_type(m, "per_layer_model_proj.weight") == GGML_TYPE_BF16)
         let kv = t.config.kv_dim
         let qd = t.config.n_heads * t.config.head_size   // query width (== dim except Gemma2)
-        // streaming covers the q8-mode load_big rails; models with direct-write loaders
-        // (mx4 experts, grouped deltanet, bf16 PLE) disarm HERE — before sizing — so the
-        // eager path proceeds with fully materialized planes and an empty job list
-        if (g_fill_plan_mode && (mode != QuantMode.q8 || t.experts_mx4 || t.dn_grouped || t.ple_model_bf16)) {
-            to_log(LOG_INFO, "dasLLAMA: streaming plan disarmed - unstreamed rail (mode {mode}, mx4 {t.experts_mx4}, dn-grouped {t.dn_grouped}, bf16-ple {t.ple_model_bf16}); converting eagerly\n")
+        // streaming covers the q8-mode load_big rails and the native-MXFP4 expert stacks; models with direct-write
+        // loaders (grouped deltanet, bf16 PLE) disarm HERE — before sizing — so the eager path proceeds with fully
+        // materialized planes and an empty job list
+        if (g_fill_plan_mode && (mode != QuantMode.q8 || t.dn_grouped || t.ple_model_bf16)) {
+            to_log(LOG_INFO, "dasLLAMA: streaming plan disarmed - unstreamed rail (mode {mode}, dn-grouped {t.dn_grouped}, bf16-ple {t.ple_model_bf16}); converting eagerly\n")
             g_fill_plan_mode = false
         }
         let sz = layout_offsets(t)
@@ -2442,12 +2513,6 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
         if (sz.bf16_n > 0l) {
             t.bf16blob |> reserve(sz.bf16_n)
             t.bf16blob |> resize(sz.bf16_n)
-        }
-        if (sz.mx_n > 0l) {
-            t.mxq |> reserve(sz.mx_n / 2l)
-            t.mxq |> resize(sz.mx_n / 2l)
-            t.mxs |> reserve(sz.mx_n / 32l)
-            t.mxs |> resize(sz.mx_n / 32l)
         }
         // streaming: big q-halves never materialize (jobs stream them to the writer); small
         // scale halves stay in RAM. Decided HERE — offsets exist, nothing is sized yet — and a
@@ -2475,6 +2540,7 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
             g_stream_plane_total["iq4nl32q"] = (sz.iq4nl32_n / KQ_B32_ELEMS) * IQ4NL32_QB
             g_stream_plane_total["q4032q"] = (sz.q4032_n / KQ_B32_ELEMS) * Q4032_QB
             g_stream_plane_total["q5032q"] = (sz.q5032_n / KQ_B32_ELEMS) * Q5032_QB
+            g_stream_plane_total["mxq"] = (sz.mx_n / KQ_B32_ELEMS) * MX4_QB
             let wb = mode == QuantMode.q8 ? sz.wblob_n : 0l
             g_stream_plane_total[t.metal_blob ? "mblob" : "qblob"] = (t.metal_blob
                 ? (wb / Q8_BLOCK_ELEMS) * (Q8_QPB + Q8_SPB) : wb)
@@ -2488,8 +2554,8 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
                 reserve_resize(t.kq[int(f)].s, nsb * kq_ssb(f))
             }
         }
-        for (f, ne in [KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032, KqFmt.q5032],
-                [sz.q51_n, sz.iq4nl32_n, sz.q4032_n, sz.q5032_n]) {
+        for (f, ne in [KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032, KqFmt.q5032, KqFmt.mx4],
+                [sz.q51_n, sz.iq4nl32_n, sz.q4032_n, sz.q5032_n, sz.mx_n]) {
             continue if (ne <= 0l)
             let nb = ne / KQ_B32_ELEMS
             kq_plane_pair(t, f) $(var q : array<uint8>; var s : array<uint8>) {
@@ -2681,9 +2747,19 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
                     let mo1 = t.we1_offs[l]
                     let mo2 = t.we2_offs[l]
                     let mo3 = t.we3_offs[l]
-                    gguf_transcode_mx4(m, bytes, "blk.{l}.ffn_gate_exps.weight", t.mxq, t.mxs, mo1 / 2l, mo1 / 32l, ne * ege)
-                    gguf_transcode_mx4(m, bytes, "blk.{l}.ffn_down_exps.weight", t.mxq, t.mxs, mo2 / 2l, mo2 / 32l, ne * ege)
-                    gguf_transcode_mx4(m, bytes, "blk.{l}.ffn_up_exps.weight", t.mxq, t.mxs, mo3 / 2l, mo3 / 32l, ne * ege)
+                    if (gguf_find_tensor(m, "blk.{l}.ffn_gate_up_exps.weight") >= 0) {
+                        //! gemma-4's fused stack: expert e's [gate | up] rows split into the gate and up planes, as the q8 rail splits them
+                        for (e in range64(ne)) {
+                            let dst = e * ege
+                            let src = e * 2l * ege
+                            mx4_transcode_at(m, bytes, "blk.{l}.ffn_gate_up_exps.weight", t, mo1 + dst, ege, src)
+                            mx4_transcode_at(m, bytes, "blk.{l}.ffn_gate_up_exps.weight", t, mo3 + dst, ege, src + ege)
+                        }
+                    } else {
+                        mx4_transcode_at(m, bytes, "blk.{l}.ffn_gate_exps.weight", t, mo1, ne * ege)
+                        mx4_transcode_at(m, bytes, "blk.{l}.ffn_up_exps.weight", t, mo3, ne * ege)
+                    }
+                    mx4_transcode_at(m, bytes, "blk.{l}.ffn_down_exps.weight", t, mo2, ne * ege)
                 } elif (t.config.moe_dense_shexp) {
                     // gemma4: experts ship FUSED as ffn_gate_up_exps {dim, 2*nfe, ne} — expert-major,
                     // each [2*nfe x dim] with rows [0..nfe)=gate, [nfe..2*nfe)=up. Split per expert
@@ -2712,13 +2788,13 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
                         gguf_read_tensor_f32(m, bytes, "blk.{l}.ffn_gate_inp_shexp.weight", t.fblob, t.shexp_gate_off + l * dim, dim)
                     }
                     if (shexp_plane_q8(t, l, 1)) {   //! the q8 transcode of the planes whose tags left them on q8 alone
-                        load_big(m, bytes, "blk.{l}.ffn_gate_shexp.weight", t, t.wsh1_off + l * she, she, scratch)
+                        load_big(m, bytes, "blk.{l}.ffn_gate_shexp.weight", t, t.wsh1_off + l * she, she, scratch, 0l, KqFmt.q8)
                     }
                     if (shexp_plane_q8(t, l, 2)) {
-                        load_big(m, bytes, "blk.{l}.ffn_down_shexp.weight", t, t.wsh2_off + l * she, she, scratch)
+                        load_big(m, bytes, "blk.{l}.ffn_down_shexp.weight", t, t.wsh2_off + l * she, she, scratch, 0l, KqFmt.q8)
                     }
                     if (shexp_plane_q8(t, l, 3)) {
-                        load_big(m, bytes, "blk.{l}.ffn_up_shexp.weight", t, t.wsh3_off + l * she, she, scratch)
+                        load_big(m, bytes, "blk.{l}.ffn_up_shexp.weight", t, t.wsh3_off + l * she, she, scratch, 0l, KqFmt.q8)
                     }
                     if (l < long_length(t.wshk1_offs)) {   //! the same planes again in the file's K-quant form, beside the transcode above
                         if (t.wshk1_offs[l] >= 0l) {
@@ -2747,10 +2823,15 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
                 load_big(m, bytes, "blk.{l}.ffn_up.weight", t, t.w3_offs[l], dim * h, scratch, 0l, fmt_at(t.w3_fmt, l))
                 load_big(m, bytes, "blk.{l}.ffn_down.weight", t, t.w2_offs[l], h * dim, scratch, 0l, fmt_at(t.w2_fmt, l))
             }
-            if (has_ple(t.config)) {  // gemma-4 E-series: per-layer PLE gate (dim->ple) + proj (ple->dim), Q8
+            if (has_ple(t.config)) {  // gemma-4 E-series: per-layer PLE gate (dim->ple) + proj (ple->dim), each in its tag's planes
                 let ple = t.config.n_embd_per_layer
-                load_big(m, bytes, "blk.{l}.inp_gate.weight", t, t.ple_gate_off + l * dim * ple, dim * ple, scratch)
-                load_big(m, bytes, "blk.{l}.proj.weight", t, t.ple_proj_off + l * ple * dim, ple * dim, scratch)
+                for (pp, name in ple_planes(t, l), ["blk.{l}.inp_gate.weight", "blk.{l}.proj.weight"]) {
+                    if (pp.f32) {
+                        gguf_read_tensor_f32(m, bytes, name, t.fblob, pp.off, dim * ple)
+                    } else {
+                        load_big(m, bytes, name, t, pp.off, dim * ple, scratch, 0l, pp.f)
+                    }
+                }
             }
         }
         if (t.config.n_layer_nextn > 0l) {   // MTP/NextN extras (block index n_layers = `layers`)
@@ -2761,8 +2842,8 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
                 let hcd = hc_dim(t.config)
                 let lr = t.config.hc_low_rank
                 gguf_read_tensor_f32(m, bytes, "blk.{layers}.nextn.hc_head_norm.weight", t.fblob, t.mtp_hc_head_norm_off, hcd)
-                load_big(m, bytes, "blk.{layers}.nextn.hc_head_down.weight", t, t.mtp_hc_head_down_off, hcd * lr, scratch)
-                load_big(m, bytes, "blk.{layers}.nextn.hc_head_up.weight", t, t.mtp_hc_head_up_off, lr * hcd, scratch)
+                load_big(m, bytes, "blk.{layers}.nextn.hc_head_down.weight", t, t.mtp_hc_head_down_off, hcd * lr, scratch, 0l, KqFmt.q8)
+                load_big(m, bytes, "blk.{layers}.nextn.hc_head_up.weight", t, t.mtp_hc_head_up_off, lr * hcd, scratch, 0l, KqFmt.q8)
             }
             if (gguf_find_tensor(m, "blk.{layers}.nextn.shared_head_norm.weight") >= 0) {
                 gguf_read_tensor_f32(m, bytes, "blk.{layers}.nextn.shared_head_norm.weight", t.fblob, t.mtp_headnorm_off, dim)
@@ -2782,13 +2863,13 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
                     let si = l * 2l + site
                     gguf_read_tensor_f32(m, bytes, "blk.{l}.hc_{nm}_norm.weight", t.fblob, t.hc_norm_off + si * hcd, hcd)
                     gguf_read_tensor_f32(m, bytes, "blk.{l}.hc_{nm}_inject.weight", t.fblob, t.hc_inject_off + si * hcd * nh, hcd * nh)
-                    load_big(m, bytes, "blk.{l}.hc_{nm}_down.weight", t, t.hc_down_offs[si], hcd * lr, scratch)
-                    load_big(m, bytes, "blk.{l}.hc_{nm}_up.weight", t, t.hc_up_offs[si], lr * hcd, scratch)
+                    load_big(m, bytes, "blk.{l}.hc_{nm}_down.weight", t, t.hc_down_offs[si], hcd * lr, scratch, 0l, KqFmt.q8)
+                    load_big(m, bytes, "blk.{l}.hc_{nm}_up.weight", t, t.hc_up_offs[si], lr * hcd, scratch, 0l, KqFmt.q8)
                 }
             }
             gguf_read_tensor_f32(m, bytes, "output_hc_norm.weight", t.fblob, t.hc_head_norm_off, hcd)
-            load_big(m, bytes, "output_hc_down.weight", t, t.hc_head_down_off, hcd * lr, scratch)
-            load_big(m, bytes, "output_hc_up.weight", t, t.hc_head_up_off, lr * hcd, scratch)
+            load_big(m, bytes, "output_hc_down.weight", t, t.hc_head_down_off, hcd * lr, scratch, 0l, KqFmt.q8)
+            load_big(m, bytes, "output_hc_up.weight", t, t.hc_head_up_off, lr * hcd, scratch, 0l, KqFmt.q8)
         }
         if (has_ple_ngram(t.config)) {   // qwen4exp n-gram side input: the layer's norms, taps and projections + the raw hash table
             let hcd = hc_dim(t.config)
@@ -2798,8 +2879,8 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
             gguf_read_tensor_f32(m, bytes, "blk.{l}.ple_norm_query.weight", t.fblob, t.ple_nquery_off, hcd)
             gguf_read_tensor_f32(m, bytes, "blk.{l}.ple_norm_conv.weight", t.fblob, t.ple_nconv_off, hcd)
             gguf_read_tensor_f32(m, bytes, "blk.{l}.ple_conv1d.weight", t.fblob, t.ple_conv_off, hcd * t.config.ple_conv_kernel)
-            load_big(m, bytes, "blk.{l}.ple_key.weight", t, t.ple_key_off, ind * hcd, scratch)
-            load_big(m, bytes, "blk.{l}.ple_value.weight", t, t.ple_val_off, ind * dim, scratch)
+            load_big(m, bytes, "blk.{l}.ple_key.weight", t, t.ple_key_off, ind * hcd, scratch, 0l, KqFmt.q8)
+            load_big(m, bytes, "blk.{l}.ple_value.weight", t, t.ple_val_off, ind * dim, scratch, 0l, KqFmt.q8)
             let ti = gguf_find_tensor(m, "per_layer_token_embd.weight")
             if (ti < 0) {
                 panic("dasLLAMA: per_layer_token_embd.weight (the PLE n-gram hash table) is missing")
@@ -2860,19 +2941,19 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
             }
             if (t.emb_q8) {
                 // untied Q8: the embedding's linear copy the row reads dequant from (never repacked)
-                load_big(m, bytes, "token_embd.weight", t, t.emb_q8_off, vocab * dim, scratch)
+                load_big(m, bytes, "token_embd.weight", t, t.emb_q8_off, vocab * dim, scratch, 0l, KqFmt.q8)
             }
         } elif (t.cls_q8) {
             // tied Q8: classifier copy (repacked below) + the linear copy embedding rows read.
             // Through load_big (its q8 arm is the same transcode) so the streaming plan records both.
-            load_big(m, bytes, "token_embd.weight", t, t.wcls_off, vocab * dim, scratch)
-            load_big(m, bytes, "token_embd.weight", t, t.emb_q8_off, vocab * dim, scratch)
+            load_big(m, bytes, "token_embd.weight", t, t.wcls_off, vocab * dim, scratch, 0l, KqFmt.q8)
+            load_big(m, bytes, "token_embd.weight", t, t.emb_q8_off, vocab * dim, scratch, 0l, KqFmt.q8)
         } elif (cls_kq(t)) {
             // tied K-quant: ONE plane copy serves the classifier matmul and embedding row reads
             // (the kq planes stay in disk order — no repack, so no second linear copy)
             load_big(m, bytes, "token_embd.weight", t, t.wcls_off, vocab * dim, scratch, 0l, t.emb_fmt)
         } elif (t.cls_q8_copy) {
-            load_big(m, bytes, "token_embd.weight", t, t.wcls_off, vocab * dim, scratch)
+            load_big(m, bytes, "token_embd.weight", t, t.wcls_off, vocab * dim, scratch, 0l, KqFmt.q8)
         }
         // Qwen2 Q/K/V projection biases — small fp32 tensors, kept dense
         if (t.config.attn_qkv_bias) {
@@ -2909,10 +2990,7 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
                     kq_freeze_repack_mr(t)
                 }
             } else {
-                layout_repack_q8(t)
-                if (t.experts_mx4) {
-                    layout_repack_mx4(t)
-                }
+                layout_repack_q8(t)   //! the native-MXFP4 expert stacks ride the q8 walk's regions
                 for (f in type<KqFmt>) {
                     if (kq_dense_b32(f) && active_b32_layout_mr(f) > 1l) {
                         layout_repack_b32(t, f)

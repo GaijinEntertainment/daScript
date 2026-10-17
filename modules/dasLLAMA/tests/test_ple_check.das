@@ -1,12 +1,16 @@
 options gen2
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 options _dasllama_internal = true
+options persistent_heap   // a dastest root frees what it deletes only on this heap; the linear heap holds every carrier a cell deleted until the context ends
 
 require dastest/testing_boost public
 require dasllama/dasllama_common
 require dasllama/dasllama_ple
+require dasllama/dasllama_gguf   // GGUFMeta / GGUFTensorInfo - the per-layer planes' disk types for the format detection
+require dasllama/dasllama_load   // detect_ple_formats - the per-layer planes' tags off the file's types
 require ?das_metal dasllama/dasllama_metal_shapes   // ffn_second_hidden — the width-servability unit
 require math
+require strings
 
 // The PLE go-live tripwire (ple_check_table) and the MatFormer width classifier
 // (ffn_second_hidden): both decided from a synthetic Model, no weights on disk.
@@ -146,5 +150,46 @@ def test_ffn_second_hidden(t : T?) {
         } else {
             feint("das_metal is not built on this platform - the width classifier is Metal-side\n")
         }
+    }
+}
+
+//! a two-layer E-series shell's per-layer gate and projection planes on disk: `gate` and `proj` the ggml types of layer 0 and 1
+def private ple_planes_meta(gate, proj : array<int>) : GGUFMeta {
+    return <- GGUFMeta(tensors <- [
+        GGUFTensorInfo(name = "blk.0.inp_gate.weight", ggml_type = gate[0], n_elem = 256l * 256l),
+        GGUFTensorInfo(name = "blk.0.proj.weight", ggml_type = proj[0], n_elem = 256l * 256l),
+        GGUFTensorInfo(name = "blk.1.inp_gate.weight", ggml_type = gate[1], n_elem = 256l * 256l),
+        GGUFTensorInfo(name = "blk.1.proj.weight", ggml_type = proj[1], n_elem = 256l * 256l)])
+}
+
+[test]
+def test_ple_plane_formats(t : T?) {
+    t |> run("a per-layer plane kind whose every layer ships F32 keeps the f32 rows, and a kind mixing F32 with another type declines the load") @(t : T?) {
+        var shell <- ple_shell(KqFmt.q8)
+        shell.config.dim = 256l
+        var f32 <- ple_planes_meta([GGML_TYPE_F32, GGML_TYPE_F32], [GGML_TYPE_F32, GGML_TYPE_F32])
+        t |> success(!detect_ple_formats(shell, f32), "an all-F32 file tags every plane q8 (the f32 rows' slot)")
+        t |> success(shell.ple_gate_f32 && shell.ple_proj_f32, "and marks both kinds f32")
+        var kq <- ple_planes_meta([GGML_TYPE_Q6_K, GGML_TYPE_Q6_K], [GGML_TYPE_F32, GGML_TYPE_F32])
+        t |> success(detect_ple_formats(shell, kq), "a Q6_K gate stack tags its own format")
+        t |> success(!shell.ple_gate_f32 && shell.ple_proj_f32, "the Q6_K kind is not f32, the F32 one is")
+        t |> equal(shell.ple_gate_fmt[1], KqFmt.k6, "the gate's tag is the file's")
+        var mixed <- ple_planes_meta([GGML_TYPE_F32, GGML_TYPE_Q8_0], [GGML_TYPE_F32, GGML_TYPE_F32])
+        let why = panic_text() ${
+            detect_ple_formats(shell, mixed)
+        }
+        t |> success(find(why, "inp_gate planes mix F32 with other types - tensor 'blk.1.inp_gate.weight' is Q8_0, 'blk.0.inp_gate.weight' is F32") >= 0,
+            "a gate stack of one F32 and one Q8_0 layer declines naming the differing tensor and both types: {why}")
+        var mixed_proj <- ple_planes_meta([GGML_TYPE_Q8_0, GGML_TYPE_Q8_0], [GGML_TYPE_Q6_K, GGML_TYPE_F32])
+        let why_proj = panic_text() ${
+            detect_ple_formats(shell, mixed_proj)
+        }
+        t |> success(find(why_proj, "proj planes mix F32 with other types - tensor 'blk.1.proj.weight' is F32, 'blk.0.proj.weight' is Q6_K") >= 0,
+            "and a projection stack the same, whichever side layer 0 takes: {why_proj}")
+        delete mixed_proj
+        delete mixed
+        delete kq
+        delete f32
+        delete shell
     }
 }

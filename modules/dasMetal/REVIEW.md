@@ -57,6 +57,14 @@ root).
   fixture without its call leaves a rejection unpinned, and a call without its fixture is a
   rejection the emitter no longer makes.
 
+- **Weakening `REVIEW.das`'s shim pool check is a defect.** That check requires every Objective-C
+  property read in `src/dasMetal.mm` - `obj.prop`, or `[obj prop]` with no argument - to sit inside
+  an `@autoreleasepool` block, in its own function or in every caller of the `static` helper it
+  sits in. A getter that returns an object or an inner pointer (`contents`) autoreleases, and no
+  pool drains on a daslang host thread, so the object leaks without a message. Adding a getter that
+  returns an object or an inner pointer to its `SCALAR_GETTERS` list weakens it; a getter that
+  returns a scalar autoreleases nothing and may join the list.
+
 - **Never zero a cooperative tensor element by element, in a `[metal_kernel]` body or in emitted
   MSL, before a `matmul2d` `run` accumulates into it - `get_destination_cooperative_tensor`
   already hands it back zeroed.** That walk forces every element into real storage before the

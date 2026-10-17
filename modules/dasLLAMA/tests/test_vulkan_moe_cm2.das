@@ -3,6 +3,7 @@ options _comment_hygiene = true
 options _function_length = 0   // one flat gate per arm: fixture build, hook install, dispatch, CPU-reference compare
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 options _dasllama_internal = true
+options persistent_heap   // a dastest root frees what it deletes only on this heap; the linear heap holds every carrier a cell deleted until the context ends
 
 require dastest/testing_boost public
 require dasllama/dasllama_math

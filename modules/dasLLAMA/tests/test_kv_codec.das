@@ -649,7 +649,7 @@ def test_kv_f16_decode(t : T?) {
             t |> equal(0, id_bad)
             var worst = 0.0
             for (i in range64(c.vocab_size)) {
-                worst = max(worst, abs(lg32[i] - lg16[i]))
+                worst = max(worst, nan_wide_diff(lg32[i], lg16[i]))
             }
             t |> success(worst < 1.0, "f16-vs-f32 final logits within the structural bound (worst |diff| = {worst})")
             // fused vs std, BOTH under f16: identical rounding both sides -> bit-exact

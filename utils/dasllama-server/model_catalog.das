@@ -22,9 +22,23 @@ require strings
 //! rides no ladder.
 let public TTS_FRONT_END_PACKS : array<string> <- ["tts_g2p.bin", "tts_postag.bin"]
 
+//! A catalog row's pinned companion artifact: the file beside the model, its commit-pinned URL, its canonical size and sha
+//! (`file` "" = none).
+struct public CatalogCompanion {
+    file : string
+    url : string
+    bytes : int64
+    sha256 : string
+}
+
+//! The companion kinds a catalog row carries - its download id is "<kind>:<name>".
+enum public CatalogCompanionKind {
+    vision    //! the pinned vision tower (mmproj); none = text only
+    drafter   //! the pinned assistant drafter the load attaches beside the file
+}
+
 //! One curated model: a commit-pinned, ungated HF file this engine serves today.
-//! `vram_hint_gb` is the advertised working-set hint, not a fit check. The `vision_*`
-//! fields carry the row's pinned vision tower (mmproj) when it has one — "" = text only.
+//! `vram_hint_gb` is the advertised working-set hint, not a fit check.
 struct public CatalogEntry {
     name : string          // route/catalog id (kebab, stable)
     display : string       // human name on the card
@@ -36,20 +50,23 @@ struct public CatalogEntry {
     ctx : int              // trained context length
     vram_hint_gb : float
     is_default : bool      // the one the getting-started path recommends
-    vision_file : string   // pinned vision-tower artifact ("" = text only)
-    vision_url : string
-    vision_bytes : int64
-    vision_sha256 : string
+    vision : CatalogCompanion
+    drafter : CatalogCompanion
 }
 
+def private companion_of(p : ProvEntry) : CatalogCompanion => CatalogCompanion(file = p.name, url = p.url, bytes = p.bytes, sha256 = p.sha256)
+
+//! entry `e`'s companion of kind `kind`
+def public catalog_companion(e : CatalogEntry; kind : CatalogCompanionKind) : CatalogCompanion => kind == CatalogCompanionKind.vision ? e.vision : e.drafter
+
 def private catalog_entry_of(s : ModelSpec) : CatalogEntry {
-    let tower <- serve_vision_tower(s.serve_vision)
+    let tower <- serve_companion(s.serve_vision)
+    let drafter <- serve_companion(s.serve_drafter)
     return CatalogEntry(name = s.serve_name, display = s.serve_display,
         note = s.serve_note, file = s.file, url = s.url, bytes = s.bytes,
         sha256 = s.sha256, ctx = s.serve_ctx, vram_hint_gb = s.serve_vram_gb,
         is_default = s.serve_default,
-        vision_file = tower.name, vision_url = tower.url,
-        vision_bytes = tower.bytes, vision_sha256 = tower.sha256)
+        vision = companion_of(tower), drafter = companion_of(drafter))
 }
 
 //! The serving catalog: a VIEW over `model_specs()` (the one model set) — rows carrying a
@@ -57,6 +74,21 @@ def private catalog_entry_of(s : ModelSpec) : CatalogEntry {
 //! load-tested on this engine before it ships.
 def public model_catalog() : array<CatalogEntry> =>
     <- [for (s in model_specs()); catalog_entry_of(s); where !empty(s.serve_name)]
+
+var private g_catalog_pinned : array<CatalogEntry>   //! rows `catalog_pin_row` added in this context
+
+//! Adds `e` to the rows POST /catalog/download resolves a name against, after the curated set, in this context alone - a test's
+//! row whose artifacts sit at a local `file://` source, so the route starts a download with no network
+def public catalog_pin_row(e : CatalogEntry) {
+    g_catalog_pinned |> push(e)
+}
+
+//! The rows POST /catalog/download resolves a name against: the curated set, then the rows `catalog_pin_row` added
+def public catalog_download_rows() : array<CatalogEntry> {
+    var rows <- model_catalog()
+    rows |> push_from(g_catalog_pinned)
+    return <- rows
+}
 
 //! The pure resolution core: env override > config key > `<dasllama home>/models`;
 //! no trailing separator. Split from the wrapper so every arm is testable without
@@ -104,8 +136,11 @@ def private strip_trailing_sep(p : string) : string {
     return empty(trimmed) || ends_with(trimmed, ":") ? p : trimmed
 }
 
-def public catalog_local_path(dir : string; e : CatalogEntry) : string {
-    let p = path_join(dir, e.file)
+def public catalog_local_path(dir : string; e : CatalogEntry) : string => present_path(dir, e.file)
+
+//! `file` under `dir` where it is on disk, else ""
+def private present_path(dir, file : string) : string {
+    let p = path_join(dir, file)
     return stat(p).is_valid ? p : ""
 }
 
@@ -289,16 +324,38 @@ def private download_start_item(dir, id, file, url, want_sha : string; want_byte
     return ""
 }
 
+//! The download id the state machine registers for entry `e`'s own file (`tower` "") or its companion (`tower` "vision" |
+//! "drafter") - the `download.name` a caller polls
+def public catalog_download_id(e : CatalogEntry; tower : string) : string => empty(tower) ? e.name : "{tower}:{e.name}"
+
+//! The companion a request's `tower` word names: "vision" the vision tower, any other the drafter
+def public catalog_companion_kind(tower : string) : CatalogCompanionKind
+    => tower == "vision" ? CatalogCompanionKind.vision : CatalogCompanionKind.drafter
+
+//! The POST /catalog/download ACCEPTED body for entry `e`'s own file (`tower` "") or its companion: the download id and the bytes
+//! the download brings
+def public catalog_download_accepted_json(e : CatalogEntry; tower : string) : string {
+    let bytes = empty(tower) ? e.bytes : catalog_companion(e, catalog_companion_kind(tower)).bytes
+    var doc = JV((ok = true, name = catalog_download_id(e, tower), bytes = bytes))
+    let text = write_json_compact(doc)
+    unsafe {
+        delete doc
+    }
+    return text
+}
+
 //! Start downloading catalog entry `e` into `dir`. One at a time; "" on success, else the refusal.
 def public catalog_download_start(dir : string; e : CatalogEntry) : string =>
-    download_start_item(dir, e.name, e.file, e.url, e.sha256, e.bytes)
+    download_start_item(dir, catalog_download_id(e, ""), e.file, e.url, e.sha256, e.bytes)
 
-//! Start downloading entry `e`'s vision tower (download id "vision:<name>"). "" on success.
-def public catalog_download_start_vision(dir : string; e : CatalogEntry) : string {
-    if (empty(e.vision_file)) {
-        return "'{e.name}' has no vision tower"
+//! Start downloading entry `e`'s companion of kind `kind` (download id "<kind>:<name>") beside its file, where the load's
+//! sidecar resolver finds it. "" on success.
+def public catalog_download_start_companion(dir : string; e : CatalogEntry; kind : CatalogCompanionKind) : string {
+    let c = catalog_companion(e, kind)
+    if (empty(c.file)) {
+        return "'{e.name}' has no {kind == CatalogCompanionKind.vision ? "vision tower" : "assistant drafter"}"
     }
-    return download_start_item(dir, "vision:{e.name}", e.vision_file, e.vision_url, e.vision_sha256, e.vision_bytes)
+    return download_start_item(dir, catalog_download_id(e, "{kind}"), c.file, c.url, c.sha256, c.bytes)
 }
 
 //! Start downloading the ASR tower (parakeet v3; download id "asr"). "" on success.
@@ -339,6 +396,12 @@ def public catalog_download_tick() {
     }
 }
 
+//! companion `c`'s path under `dir` where it is present, else ""
+def private companion_local_path(dir : string; c : CatalogCompanion) : string {
+    return "" if (empty(c.file))
+    return present_path(dir, c.file)
+}
+
 //! The GET /catalog document: entries with local presence (model AND vision tower), the ASR
 //! tower, the `tts` list (the two front-end packs, then every served speech model; a model row's
 //! `needs_packs` is `needs_packs(path)` on the file once it is here - the server passes the
@@ -350,16 +413,18 @@ def public catalog_state_json(dir : string; ram_gb : int; vram_mb : int64; needs
     entries |> reserve(length(cat))
     for (e in cat) {
         let local = catalog_local_path(dir, e)
-        let vision_path = empty(e.vision_file) ? "" : path_join(dir, e.vision_file)
-        let vision_present = !empty(vision_path) && stat(vision_path).is_valid
+        let vision_path = companion_local_path(dir, e.vision)
+        let drafter_path = companion_local_path(dir, e.drafter)
         entries |> push(JV((
             name = e.name, display = e.display, note = e.note, file = e.file,
             bytes = e.bytes, sha256 = e.sha256, ctx = e.ctx,
             vram_hint_gb = e.vram_hint_gb, is_default = e.is_default,
             present = !empty(local), path = local,
-            vision_file = e.vision_file, vision_bytes = e.vision_bytes,
-            vision_present = vision_present,
-            vision_path = vision_present ? vision_path : "")))
+            vision_file = e.vision.file, vision_bytes = e.vision.bytes,
+            vision_present = !empty(vision_path),
+            vision_path = vision_path,
+            drafter_file = e.drafter.file, drafter_bytes = e.drafter.bytes,
+            drafter_present = !empty(drafter_path))))
     }
     let asr_tower <- serve_asr_tower()
     let asr_path = path_join(dir, asr_tower.name)

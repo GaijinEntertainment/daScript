@@ -51,7 +51,7 @@ def private make_embd_at(dim, perturb_row : int64) : array<float> {
 def private row_maxdiff(a, b : array<float>; row, dim : int64) : float {
     var m = 0.0
     for (i in range64(dim)) {
-        m = max(m, abs(a[row * dim + i] - b[row * dim + i]))
+        m = max(m, nan_wide_diff(a[row * dim + i], b[row * dim + i]))
     }
     return m
 }
@@ -108,7 +108,7 @@ def private fused_plane(t : Model; embd : array<float>) : array<float> {
 def private arr_maxdiff(a, b : array<float>) : float {
     var m = 0.0
     for (i in range64(min(long_length(a), long_length(b)))) {
-        m = max(m, abs(a[i] - b[i]))
+        m = max(m, nan_wide_diff(a[i], b[i]))
     }
     return m
 }
@@ -513,7 +513,7 @@ def test_deepstack_rail(t : T?) {
             delete one2
             var dd = 0.0
             for (i in range64(long_length(s.logits))) {
-                dd = max(dd, abs(s.logits[i] - s2.logits[i]))
+                dd = max(dd, nan_wide_diff(s.logits[i], s2.logits[i]))
             }
             tt |> equal(dd, 0.0, "a text eval after the wide quantum is deterministic (no stale plane)")
             delete s

@@ -12,8 +12,11 @@ runs do not serve correct output - is arm code, whoever sets it), or an overhead
 chain timed with and without an interposed stage). A same-build knob A/B - two runs under an
 environment override, both serving correct output - is not an arm; its knob answers to the
 checklist that owns the knob's engine (`REVIEW_GPU.md` for a Metal or Vulkan engine knob,
-`REVIEW_TOWER.md` for a tower's). A data race between serving dispatches is not this list's
-subject. An arm's ranking is decided once a checked-in document or a committed box profile records
+`REVIEW_TOWER.md` for a tower's). A two-candidate figure is a recorded timing comparing two candidates
+for one computation - from a race, a same-build knob A/B, or one run on each of two builds; the
+two-candidate figure rule below applies to every one of them, the knob itself still answering to
+its engine's checklist. A data race between
+serving dispatches is not this list's subject. An arm's ranking is decided once a checked-in document or a committed box profile records
 the arm's figure or names the arm as the shipped form, and always where the race's winner is a
 crown - a verdict each box's tune sidecar records. A ranking input is a shape dimension or layer
 kind the ranking's selection reads. An A/B lab is a timing script that picks between spellings of
@@ -66,6 +69,11 @@ ranking covers - or names, in the document that records the figure, the producti
 served rows measure each untimed kind.** A layer kind is one weight matrix a layer multiplies by -
 qkv, w13, w2, an expert stack - whose shape differs from the others'.
 
+**A diff that applies a decided ranking to a kernel no arm of that race dispatches - gives it a
+setting that race chose - adds an arm dispatching that kernel to the race, or names,
+in the document that records the figure, the production run whose served rows measure it, in the
+same change.** A ranking holds only for the kernels its arms timed.
+
 **A diff that widens the gate admitting ranking inputs to a kernel whose ranking is decided times
 the ranked arms at a newly admitted input, at each end when the new admission spans a range, in
 the same change.** The widened gate otherwise applies the ranking at values it was never ranked
@@ -110,8 +118,9 @@ clock charges the clock's ramp-up to the arm that ran it.
 timed encoder in an arm of a race whose ranking is decided, makes each timed encoder issue its
 dispatches back to back.** An encoder that leaves gaps between its dispatches times an idle clock.
 
-**A diff never records the figure of a race whose code the tree does not hold - it lands the
-race's code in the same change.** A figure without its race cannot be re-run.
+**A diff that records a two-candidate figure lands in the tree, in the same change, the program
+that timed it, and writes beside the figure the command line that ran it and the commit of each
+build it ran on.** A figure that cannot be re-run cannot be checked.
 
 **A diff that replaces or removes a race whose figure a document carries re-measures that figure
 with a race the tree holds, deletes the figure, or moves the old race under `harness/`, in the

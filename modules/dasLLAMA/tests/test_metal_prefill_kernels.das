@@ -3,9 +3,10 @@ options stack = 524288   // every dasLLAMA program root takes this budget
 options _function_length = 0        // per-kernel gates: hand-bound buffers/uniforms + dispatch + oracle compare, one flat run each
 options _cyclomatic_complexity = 0  // same — the arm ladders follow the kernel's own binding/variant axes
 options _dasllama_internal = true
+options persistent_heap   // a dastest root frees what it deletes only on this heap; the linear heap holds every carrier a cell deleted until the context ends
 
 require dastest/testing_boost public
-require daslib/math_bits           // float<->uint bits — the moe_wscale sel-buffer pun
+require daslib/math_bits           // float<->uint bits — the selection buffer pun
 require dasllama/dasllama_math
 require dasllama/dasllama_convert  // used only inside the Apple static_if half; off-Apple lint sees the branch compiled out
 require dasllama/dasllama_gemm_schema  // kq_qsb — the ONE per-format quant-plane stride source
@@ -58,9 +59,14 @@ let EPS = 1.0e-5
 let private BAR_FP = Bar(rel = 1e-4, poison_scaled = true)   //! the shared fp bar (fapprox); the poisoned last element moves 0.5 of its magnitude floored at 1
 
 //! GENERIC (untyped dev/queue) so it instantiates only inside the Apple static_if.
+let private QKR_V_NONE = 0
+let private QKR_V_FK = 1     //! the k heads store V: the raw k row under its own rms (a layer with no v plane)
+let private QKR_V_NORM = 2   //! the k heads norm the V panel's rows in place, weightless (gemma-4's v-norm)
+
+//! the window's q/k norm and rope in place over its panels, and under `vmode` the V panel's rows: with no arm the V panel stands
 [arch(at="../ARCHITECTURE_GPU_PREFILL.md#prefill-twin-dual-store")]
-def private qk_rope_gate(t : T?; var dev, queue; hx, donorm, neox, partial : bool) {
-    let tag = "qk_rope{hx ? " hx" : ""}{donorm ? " norm" : ""}{neox ? " neox" : ""}{partial ? " part" : ""}"
+def private qk_rope_gate(t : T?; var dev, queue; hx, donorm, neox, partial : bool; vmode : int = QKR_V_NONE) {
+    let tag = "qk_rope{hx ? " hx" : ""}{donorm ? " norm" : ""}{neox ? " neox" : ""}{partial ? " part" : ""} v={vmode}"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
         var err : string
         let kr = kernel_of(@@enc_pf_qkn)
@@ -78,9 +84,10 @@ def private qk_rope_gate(t : T?; var dev, queue; hx, donorm, neox, partial : boo
         let k_panel_lead = 24   //! the K panel's rows sit this many floats into their buffer
         let rot = partial ? hs / 2 : hs
         let halfr = rot / 2
-        var inscope xv, kv, wv, tc, ts, want, wantk : array<float>
+        var inscope xv, kv, vv, wv, tc, ts, want, wantk, wantv : array<float>
         xv |> resize(nrows * rstride)
         kv |> resize(k_panel_lead + nrows * kvd)
+        vv |> resize(k_panel_lead + nrows * kvd)
         wv |> resize(2 * hs)
         tc |> resize(nreal * halfr)
         ts |> resize(nreal * halfr)
@@ -89,6 +96,7 @@ def private qk_rope_gate(t : T?; var dev, queue; hx, donorm, neox, partial : boo
         }
         for (k in range(k_panel_lead + nrows * kvd)) {
             kv[k] = 0.17 * float(k % 23) - 1.5
+            vv[k] = 0.13 * float(k % 19) - 1.1
         }
         for (k in range(2 * hs)) {
             wv[k] = 0.8 + 0.05 * float(k % 7) + (k >= hs ? 0.1 : 0.0)
@@ -99,8 +107,18 @@ def private qk_rope_gate(t : T?; var dev, queue; hx, donorm, neox, partial : boo
         }
         want := xv
         wantk := kv
+        wantv := vv
+        var inscope ones <- [for (_k in range(hs)); 1.0]
         unsafe {
             for (p in range(nreal)) {
+                for (h in range(nk)) {
+                    let rb = k_panel_lead + p * kvd + h * hs
+                    if (vmode == QKR_V_FK) {
+                        rmsnorm(addr(wantv[rb]), addr<float const?>(kv[rb]), addr<float const?>(ones[0]), int64(hs), EPS)
+                    } elif (vmode == QKR_V_NORM) {
+                        rmsnorm(addr(wantv[rb]), addr<float const?>(vv[rb]), addr<float const?>(ones[0]), int64(hs), EPS)
+                    }
+                }
                 if (donorm) {
                     for (h in range(nh)) {
                         let rb = p * rstride + h * hs
@@ -122,26 +140,35 @@ def private qk_rope_gate(t : T?; var dev, queue; hx, donorm, neox, partial : boo
         t |> success(moved > 0, "{tag}: oracle is not the identity ({moved} moved)")
         let bx = mc |> io_(xv)
         let bk = mc |> io_(kv)
+        let bv = mc |> io_(vv)
         let bw = mc |> in_(wv)
         let btc = mc |> in_(tc)
         let bts = mc |> in_(ts)
         let bxh = hx ? (mc |> out_words(nrows * rstride, float16(-77.0))) : -1
         var ka = GkQknRopeArgs(kvd = uint(kvd), hs = uint(hs), half = uint(halfr), neox = neox || partial ? 1u : 0u, nh = uint(nh),
             kwoff = uint(hs), eps = EPS, win = 1u, kbase = uint(k_panel_lead), kvrow = uint(kvd), qrow = uint(rstride), cosrow = uint(halfr),
-            nreal = uint(nreal), skipnorm = donorm ? 0u : 1u, hscale = 1.0)
+            nreal = uint(nreal), skipnorm = donorm ? 0u : 1u, hscale = 1.0, vbase = uint(k_panel_lead), vfk = vmode == QKR_V_FK ? 1u : 0u,
+            vnorm = vmode == QKR_V_NORM ? 1u : 0u)
         let nwg = int64(nh + nk)
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
             if (hx) {
-                invoke(krh.enc, enc, pso, mc.buf[bx], mc.buf[bk], mc.buf[bk], 0ul, mc.buf[bk], 0ul, mc.buf[btc], 0ul, mc.buf[bw], mc.buf[bts],
-                    mc.buf[btc], mc.buf[bxh], ka, nwg, int64(nrows), int64(hs / 2))
+                invoke(krh.enc, enc, pso, mc.buf[bx], mc.buf[bk], mc.buf[bk], 0ul, mc.buf[bv], 0ul, mc.buf[btc], 0ul, mc.buf[bw], mc.buf[bts],
+                    mc.buf[btc], mc.buf[bxh], mc.buf[bv], ka, nwg, int64(nrows), int64(hs / 2))
             } else {
-                invoke(kr.enc, enc, pso, mc.buf[bx], mc.buf[bk], mc.buf[bk], 0ul, mc.buf[bk], 0ul, mc.buf[btc], 0ul, mc.buf[bw], mc.buf[bts],
-                    mc.buf[btc], ka, nwg, int64(nrows), int64(hs / 2))
+                invoke(kr.enc, enc, pso, mc.buf[bx], mc.buf[bk], mc.buf[bk], 0ul, mc.buf[bv], 0ul, mc.buf[btc], 0ul, mc.buf[bw], mc.buf[bts],
+                    mc.buf[btc], mc.buf[bv], ka, nwg, int64(nrows), int64(hs / 2))
             }
         }
         return if (!ran)
         check_buf(t, tag, mc.buf[bx], want, BAR_FP, Shape(row_width = rstride, head_width = hs))
         check_buf(t, "{tag} K panel", mc.buf[bk], wantk, BAR_FP, Shape(row_width = kvd, head_width = hs))
+        if (vmode == QKR_V_NONE) {
+            check_buf_exact(t, "{tag} V panel untouched", mc.buf[bv], vv)
+        } else {
+            check_buf(t, "{tag} V panel", mc.buf[bv], wantv, BAR_FP, Shape(row_width = kvd, head_width = hs))
+            var inscope got <- buf_download(mc.buf[bv], length(vv), type<float>)
+            t |> success(check_count(got, vv, BAR_FP) > 0, "{tag}: the V rows moved off their input")
+        }
         if (hx) {
             check_hx_narrow(t, "{tag} f16 twin", mc.buf[bxh], mc.buf[bx], nrows * rstride, nrows * rstride)
         }
@@ -3313,6 +3340,8 @@ def test_metal_prefill_kernels(t : T?) {
                 qk_rope_gate(t, dev, queue, false, true, false, false)   //! classic pairing with norm
                 qk_rope_gate(t, dev, queue, true, false, false, false)   //! rope-only + twin, llama class
                 qk_rope_gate(t, dev, queue, false, false, true, true)    //! partial rot, Wave D class
+                qk_rope_gate(t, dev, queue, false, true, true, false, QKR_V_FK)    //! gemma-4's global layers: V off the pre-norm k rows
+                qk_rope_gate(t, dev, queue, true, true, true, false, QKR_V_NORM)   //! ... its v-norm in place, the twin beside
 
                 tower_flash_kvhc_gate(t, dev, queue)
                 tower_win_gate(t, dev, queue)
@@ -3475,7 +3504,11 @@ def test_metal_prefill_kernels(t : T?) {
                 moe_select_gate(t, dev, queue, 300, 8, 2, true)    // past 256 with pad lanes and exact ties, two stream rows
                 moe_select_gate(t, dev, queue, 128, 8, 3, false)   // batch: one stream row per tg
                 moe_select_gate(t, dev, queue, 32, 4, 1, false, 1)  // gpt-oss softmax_weight mode
-                moe_select_gate(t, dev, queue, 128, 8, 3, false, 0, 2.5)   // a global expert_weights_scale behind the select
+                moe_select_gate(t, dev, queue, 128, 8, 3, false, 0, 2.5)   // a global expert_weights_scale in the select
+                moe_select_gate(t, dev, queue, 128, 8, 3, false, 0, 1.0, true)   // gemma-4: the per-expert down scales in the select
+                moe_select_gate(t, dev, queue, 128, 8, 2, false, 0, 2.5, true)  // ... after the global scale, the CPU order
+                moe_select_gate(t, dev, queue, 32, 4, 2, false, 1, 2.5)          // the global scale on the softmax_weight picks
+                moe_select_gate(t, dev, queue, 300, 8, 2, true, 0, 1.0, true)    // the 16-deep down-scale stamp, past 256 with exact ties
                 moe_router_gate(t, dev, queue, 64, 128, 1, false)
                 moe_gemv_gate(t, dev, queue, KqFmt.q8, 96, 24, 5, 3, 1, false)   // shared x (the gate/up sites)
                 moe_gemv_gate(t, dev, queue, KqFmt.q8, 64, 32, 7, 4, 1, true)    // per-slot x rows (the down site)
@@ -3574,12 +3607,13 @@ def test_metal_prefill_kernels(t : T?) {
                 dn_deint_sigmul_gate(t, dev, queue, 3, 64, 2)
                 combine_sh_gate(t, dev, queue, 1, 96, 8, 257, 256)   // the decode shape: the gate logit the router's row ne
                 combine_sh_gate(t, dev, queue, 5, 64, 4, 1, 0)       // ... and the window's: a gate logit a position
+                moe_comb_g4_gate(t, dev, queue, 3, 96, 8)            // the gemma-4 step: a row under the threadgroup's lanes
+                moe_comb_g4_gate(t, dev, queue, 2, 2816, 8)          // ... the 26B's row, three columns a lane
 
                 // ===== MoE plumbing (router batch GEMV, CSR pair, wscale, reduce, swiglu-oai) =====
                 swiglu_oai_gate(t, dev, queue, 256)
                 swiglu_oai_pf_gate(t, dev, queue, 16, [32, 40, 8], 32)   // 32 ghost rows stay untouched
                 g4_router_norm_gate(t, dev, queue, 5, 96)
-                moe_wscale_gate(t, dev, queue, 13, 2, 7)
                 moe_router_gate(t, dev, queue, 64, 7, 13, false)         // ne=7: row guard; np=13: stream clamp
                 moe_router_gate(t, dev, queue, 64, 7, 13, true)
                 moe_csr_gate(t, dev, queue, 13, 5, 2)
@@ -3588,16 +3622,13 @@ def test_metal_prefill_kernels(t : T?) {
                 moe_reduce_gate(t, dev, queue, 96, 9, 2)
 
                 // ===== prefill misc (PLE pre-step, bias epilogue, MTP cat, deltanet ba) =====
-                ple_gather_gate(t, dev, queue, 0, 11, 3, 32, 5, 0)
-                // the kq table twins: 300 superblocks of table past a non-zero base, one row per
-                // token = 3 superblocks, so every arm walks the row-stride and sub-block math
-                ple_gather_gate(t, dev, queue, 4, 100, 3, 256, 5, 7)
-                ple_gather_gate(t, dev, queue, 5, 100, 3, 256, 5, 7)
-                ple_gather_gate(t, dev, queue, 40, 100, 3, 256, 5, 7)
-                // the per-32 table twins bound at the table past 8 blocks of another table (off % 256, as the gate admits)
-                ple_gather_b32_gate(t, dev, queue, KqFmt.q51, 100, 3, 256, 5, 8)
-                ple_gather_b32_gate(t, dev, queue, KqFmt.q5032, 100, 3, 256, 5, 8)
+                // the side rows gather on the token-table family (`enc_embed_table`), whose cells are the misc file's embed gates
+                ple_proj_bf16_gate(t, dev, queue, 96, 70, 1, 3)
+                ple_proj_bf16_gate(t, dev, queue, 96, 70, 11, 3)   // two eight-column groups, the second clamped
+                ple_proj_bf16_gate(t, dev, queue, 1536, 70, 1, 3, true)   // the decode column, every lane past the row's first 512
+                geglu_side_gate(t, dev, queue, 64, 3, 2, 5)
                 ple_finish_gate(t, dev, queue, 3, 64, 5)
+                ple_finish_gate(t, dev, queue, 35, 256, 2)   //! the E2B's slices
                 add_bias_rows_gate(t, dev, queue, 7, 96)
                 cat2_gate(t, dev, queue, 5, 48, 1, 0, 0, 0, 0)
                 cat2_gate(t, dev, queue, 3, 40, 4, 0, 0, 0, 0)       // the hc draft and warm: the a row repeats per stream
@@ -3719,46 +3750,6 @@ def private g4_router_norm_gate(t : T?; var dev, queue; rows, dim : int) {
         }
         return if (!ran)
         check_buf(t, tag, mc.buf[by], want, BAR_FP, Shape(row_width = dim))
-    }
-}
-
-// gemma4 per-expert down-scale fold (MetalMoeWScale): selw[r][j] *= ds[seli[r][j]] in place on
-// the mixed sel buffer (uint idx half + float w half) — compared as raw uint bits
-def private moe_wscale_gate(t : T?; var dev, queue; rows, nk, ne : int) {
-    let tag = "moe_wscale rows={rows} nk={nk}"
-    with_metal_cell(dev, queue) $(var mc : MetalCell) {
-        var err : string
-        let st = stamp_of(@@enc_moe_wscale)
-        var pso = mc |> keep_stamp(st, err)
-        return if (!pso_ok(t, tag, pso, err))
-        var inscope ds : array<float>
-        ds |> resize(ne)
-        for (e in range(ne)) {
-            ds[e] = float((e * 3) % 7 - 3) * 0.5
-        }
-        var inscope sel, want : array<uint>
-        sel |> resize(rows * 2 * nk)
-        want |> resize(rows * 2 * nk)
-        for (r in range(rows)) {
-            for (j in range(nk)) {
-                let idx = uint((r * 3 + j * 5) % ne)
-                let w = float((r + j * 7) % 9 - 4) * 0.25
-                sel[r * 2 * nk + j] = idx
-                sel[r * 2 * nk + nk + j] = float_bits_to_uint(w)
-                want[r * 2 * nk + j] = idx
-                want[r * 2 * nk + nk + j] = float_bits_to_uint(w * ds[int(idx)])
-            }
-        }
-        let bsel = mc |> in_plain(sel)
-        let bds = mc |> in_(ds)
-        let bnk = mc |> in_plain([uint(nk)])
-        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
-            stamp_run(st, pso) {   // the sel buffer twice: its uint idx view and its float w view
-                invoke(st.enc, enc, mc.buf[bsel], mc.buf[bsel], mc.buf[bds], mc.buf[bnk], int64(rows))
-            }
-        }
-        return if (!ran)
-        check_buf_exact(t, tag, mc.buf[bsel], want)
     }
 }
 
@@ -4009,171 +4000,105 @@ def private moe_reduce_gate(t : T?; var dev, queue; dim, npos, nk : int) {
 
 // ===== prefill misc gates (PLE pre-step, bias epilogue, MTP cat, deltanet ba GEMV) =====
 
-//! the PLE gather kernel of a token table's format
-def private ple_gather_make(f) {   //! generic, as the gates are: the Apple half alone instantiates it
-    if (f == KqFmt.q8) return kernel_of(@@pf_enc_ple_gather).make
-    if (f == KqFmt.k4) return kernel_of(@@pf_enc_ple_gather_k4).make
-    if (f == KqFmt.k5) return kernel_of(@@pf_enc_ple_gather_k5).make
-    if (f != KqFmt.q40) {
-        panic("ple_gather_make: {f} has no PLE gather kernel")
-    }
-    return kernel_of(@@pf_enc_ple_gather_q40).make
-}
-
-//! the PLE gather builder of `f` through `pso`: the scale plane `ks` at `soff` (q8: the blob, bound twice - its half-scale
-//! and byte views), the quant plane `kq` at `qoff` where the format has one
-def private ple_gather_dispatch(f; enc; pso; ks; soff : uint64; tok, y; var ka : auto&; kq; qoff : uint64; nlayers, npos, ple : int64) {
-    if (f == KqFmt.q8) {
-        pf_enc_ple_gather_pso(enc, pso, ks, soff, ks, tok, y, ka, nlayers, npos, ple)
-    } elif (f == KqFmt.k4) {
-        pf_enc_ple_gather_k4_pso(enc, pso, ks, soff, ks, tok, y, ka, kq, qoff, nlayers, npos, ple)
-    } elif (f == KqFmt.k5) {
-        pf_enc_ple_gather_k5_pso(enc, pso, ks, soff, ks, tok, y, ka, kq, qoff, nlayers, npos, ple)
-    } else {
-        pf_enc_ple_gather_q40_pso(enc, pso, ks, soff, tok, y, ka, kq, qoff, nlayers, npos, ple)
-    }
-}
-
-//! PLE stage 1: fmt 0 the q8 table bound twice vs its exact dequant; a kq id its native planes bound at sb0, as production binds them, vs kq_row_ref; exact in fp32.
-def private ple_gather_gate(t : T?; var dev, queue; fmt, vocab, nlayers, ple, npos, sb0 : int) {
-    let tag = "ple_gather f={fmt} v={vocab} nl={nlayers} ple={ple} np={npos} sb0={sb0}"
+//! the per-layer-embedding projection's bf16 word form (`MetalPleProjBf16`, `GkRouterGemv` under BF16; `one` its decode column's
+//! stamp, a threadgroup a row): ne rows of dim bf16 weights past `lead` words of NaN pairs (a read off the rows' base is a NaN), over
+//! npos columns, against the dot in double over the same values - dyadic and bf16-exact, so the compare is exact; the lead element
+//! poisoned is the control
+def private ple_proj_bf16_gate(t : T?; var dev, queue; dim, ne, npos, lead : int; one : bool = false) {
+    let tag = "ple_proj_bf16{one ? " one" : ""} dim={dim} ne={ne} np={npos} lead={lead}"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
         var err : string
-        let f = fmt == 0 ? KqFmt.q8 : kq_fmt_of_id(fmt, "ple_gather_gate")
-        var pso = mc |> keep_pso(invoke(ple_gather_make(f), dev, err))
+        let sr = one ? stamp_of(@@enc_ple_proj_bf16_one) : stamp_of(@@enc_ple_proj_bf16)
+        var pso = mc |> keep_stamp(sr, err)
         return if (!pso_ok(t, tag, pso, err))
-        let rowlen = nlayers * ple
-        let rowsb = rowlen / 256          // superblocks per token row - the quants gate's `all % 256` clause
-        let nsb = sb0 + vocab * rowsb
-        var inscope quants : array<uint8>             // fmt 0: the q8 blob
-        var inscope ks : array<uint8>
-        var inscope wdeq : array<float>
-        if (fmt == 0) {
-            q8_blob_fill(1, vocab * rowlen / 32, quants, wdeq)
-        } else {
-            kq_fill_planes(fmt, nsb, quants, ks)
+        var inscope w : array<uint>
+        w |> resize(lead + ne * dim / 2)
+        for (i in range(lead)) {
+            w[i] = 0x7FC07FC0u
         }
-        var inscope tok : array<uint>
-        tok |> resize(npos)
-        for (p in range(npos)) {
-            tok[p] = uint((p * 23 + 5) % vocab)
+        var inscope wf : array<float>
+        wf |> resize(ne * dim)
+        for (i in range(ne * dim)) {
+            wf[i] = float((i * 5) % 9 - 4) * 0.5
+            w[lead + i / 2] |= (float_bits_to_uint(wf[i]) >> 16u) << uint(16 * (i % 2))
         }
-        let sc0 = sqrt(float(ple))
-        var inscope wrow, want : array<float>
-        wrow |> resize(rowlen)
-        want |> resize(nlayers * npos * ple)
-        for (p in range(npos)) {
-            if (fmt == 0) {
-                for (i in range(rowlen)) {
-                    wrow[i] = wdeq[int(tok[p]) * rowlen + i]
+        var inscope x <- [for (i in range(npos * dim)); float((i * 7 + 2) % 9 - 4) * 0.25]
+        var inscope want : array<float>
+        want |> resize(npos * ne)
+        for (st in range(npos)) {
+            for (e in range(ne)) {
+                var acc = 0.0lf
+                for (c in range(dim)) {
+                    acc += double(wf[e * dim + c]) * double(x[st * dim + c])
                 }
-            } else {
-                kq_row_ref(fmt, sb0 + int(tok[p]) * rowsb, rowsb, nsb, quants, ks, wrow)
-            }
-            for (l in range(nlayers)) {
-                for (i in range(ple)) {
-                    want[(l * npos + p) * ple + i] = wrow[l * ple + i] * sc0
-                }
+                want[st * ne + e] = float(acc)
             }
         }
-        var ka = PleArgs(npos = uint(npos), ple = uint(ple), nlayers = uint(nlayers), sc0 = sc0,
-            inv_sd = 1.0, eps = 1.0e-6, inv_s2 = 1.0)
-        let bkq = mc |> in_plain(quants)
-        let bks = fmt == 0 ? bkq : (mc |> in_plain(ks))
-        let btok = mc |> in_plain(tok)
-        let by = mc |> out_words(nlayers * npos * ple, -1000.0)
-        let soff = fmt == 0 ? 0ul : uint64(sb0 * 16)
-        let qoff = fmt == 0 ? 0ul : uint64(int64(sb0) * kq_qsb(fmt))
+        let bw = mc |> in_plain(w)
+        let bx = mc |> in_(x)
+        let by = mc |> out_words(npos * ne, -1000.0)
+        var ka = moe_router_args(int64(ne), int64(dim), int64(npos))
+        ka.woff = uint(lead * 2)
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
-            ple_gather_dispatch(f, enc, pso, mc.buf[bks], soff, mc.buf[btok], mc.buf[by], ka, mc.buf[bkq], qoff, int64(nlayers), int64(npos), int64(ple))
-        }
-        return if (!ran)
-        check_buf(t, tag, mc.buf[by], want, lead_poisoned(Bar(rel = 1e-4), want), Shape(row_width = ple))
-    }
-}
-
-//! PLE stage 1 on a per-32 table (q51, q5032): the plane pair bound AT the table (`blk0` blocks of another table before it), each
-//! token row against `dequant_b32_plane_block` of its blocks x sqrt(ple), bit for bit (the fixtures' values are dyadic); the
-//! lead element poisoned is the control, and the fixture's qh word must move the reference (a qh-blind gather would miss)
-def private ple_gather_b32_gate(t : T?; var dev, queue; f : KqFmt; vocab, nlayers, ple, npos, blk0 : int) {
-    let tag = "ple_gather_b32 f={f} v={vocab} nl={nlayers} ple={ple} np={npos} blk0={blk0}"
-    with_metal_cell(dev, queue) $(var mc : MetalCell) {
-        var err : string
-        var pso = mc |> keep_pso(invoke(f == KqFmt.q51 ? kernel_of(@@pf_enc_ple_gather_q51).make : kernel_of(@@pf_enc_ple_gather_q5032).make, dev, err))
-        return if (!pso_ok(t, tag, pso, err))
-        let rowlen = nlayers * ple
-        let rowblk = rowlen / 32
-        let nblk = blk0 + vocab * rowblk
-        var inscope qp, sp : array<uint8>
-        var inscope wref : array<float>
-        if (f == KqFmt.q51) {
-            q51_test_planes(1, nblk * 32, qp, sp, wref)
-        } else {
-            q5032_test_planes(1, nblk * 32, qp, sp, wref)
-        }
-        var inscope tok : array<uint>
-        tok |> resize(npos)
-        for (p in range(npos)) {
-            tok[p] = uint((p * 23 + 5) % vocab)
-        }
-        let sc0 = sqrt(float(ple))
-        var inscope wrow, want, noqh : array<float>
-        wrow |> resize(rowlen)
-        want |> resize(nlayers * npos * ple)
-        noqh |> resize(rowlen)
-        var qhmoves = false
-        for (p in range(npos)) {
-            let b0 = blk0 + int(tok[p]) * rowblk
-            for (b in range(rowblk)) {
-                dequant_b32_plane_block(f, qp, sp, int64(b0 + b), wrow, int64(b * 32))
-            }
-            for (l in range(nlayers)) {
-                for (i in range(ple)) {
-                    want[(l * npos + p) * ple + i] = wrow[l * ple + i] * sc0
-                }
-            }
-            var inscope qz := qp
-            for (b in range(rowblk)) {
-                for (k in range(4)) {
-                    qz[(b0 + b) * int(kq_qsb(f)) + 16 + k] = uint8(0)
-                }
-                dequant_b32_plane_block(f, qz, sp, int64(b0 + b), noqh, int64(b * 32))
-            }
-            qhmoves ||= mismatch_exact(noqh, wrow) > 0
-        }
-        t |> success(qhmoves, "{tag}: the qh word moves the reference rows (the gather's fifth bit is under test)")
-        var ka = PleArgs(npos = uint(npos), ple = uint(ple), nlayers = uint(nlayers), sc0 = sc0,
-            inv_sd = 1.0, eps = 1.0e-6, inv_s2 = 1.0)
-        let bkq = mc |> in_plain(qp)
-        let bks = mc |> in_plain(sp)
-        let btok = mc |> in_plain(tok)
-        let by = mc |> out_words(nlayers * npos * ple, -1000.0)
-        let soff = uint64(int64(blk0) * kq_ssb(f))
-        let qoff = uint64(int64(blk0) * kq_qsb(f))
-        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
-            if (f == KqFmt.q51) {
-                pf_enc_ple_gather_q51_pso(enc, pso, mc.buf[bks], soff, mc.buf[btok], mc.buf[by], ka, mc.buf[bkq], qoff, int64(nlayers), int64(npos), int64(ple))
-            } else {
-                pf_enc_ple_gather_q5032_pso(enc, pso, mc.buf[bks], soff, mc.buf[btok], mc.buf[by], ka, mc.buf[bkq], qoff, int64(nlayers), int64(npos), int64(ple))
+            stamp_run(sr, pso) {
+                invoke(sr.enc, enc, mc.buf[bw], mc.buf[bx], mc.buf[by], ka, int64(ne), int64(npos))
             }
         }
         return if (!ran)
-        check_buf(t, tag, mc.buf[by], want, lead_poisoned(BAR_EXACT, want), Shape(row_width = ple))
+        check_buf(t, tag, mc.buf[by], want, lead_poisoned(BAR_EXACT, want), Shape(row_width = ne))
     }
 }
 
-// PLE stage 3 (MetalPleFinish): per (layer, position) slice, in place on the panel —
+//! the geglu over a position-major side input (`MetalGegluSide`, a `GkPleAct` stamp): npos rows' gate slices g [npos x ple] against
+//! the side rows' layer-l slice, rows `stride` apart past `l * ple` - gelu_tanh(g) x side against the CPU form at the approx bar; the rows read
+//! contiguously (as the stride were ple) land elsewhere, the control
+def private geglu_side_gate(t : T?; var dev, queue; ple, nlayers, l, npos : int) {
+    let tag = "geglu_side ple={ple} nl={nlayers} l={l} np={npos}"
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let st = stamp_of(@@enc_geglu_side)
+        var pso = mc |> keep_stamp(st, err)
+        return if (!pso_ok(t, tag, pso, err))
+        let all = nlayers * ple
+        var inscope g <- [for (i in range(npos * ple)); 0.21 * float(i % 43) - 4.3]
+        var inscope side <- [for (i in range(npos * all)); 0.17 * float(i % 23) - 1.9]
+        var inscope want, flat : array<float>
+        want |> resize(npos * ple)
+        flat |> resize(npos * ple)
+        for (p in range(npos)) {
+            for (i in range(ple)) {
+                want[p * ple + i] = act_mul_ref(g[p * ple + i], side[p * all + l * ple + i], true)
+                flat[p * ple + i] = act_mul_ref(g[p * ple + i], side[l * ple + p * ple + i], true)
+            }
+        }
+        t |> success(mismatch_exact(want, flat) > 0, "{tag}: the strided rows differ from the contiguous read (the control)")
+        let bg = mc |> io_(g)
+        let bs = mc |> in_(side)
+        var ka = GkPleActArgs(nelem = uint(npos * ple), sbase = uint(l * ple), sstride = uint(all), slen = uint(ple))
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            stamp_run(st, pso) {
+                invoke(st.enc, enc, mc.buf[bg], mc.buf[bs], ka, int64(npos * ple))
+            }
+        }
+        return if (!ran)
+        check_buf(t, tag, mc.buf[bg], want, lead_poisoned(BAR_APPROX, want), Shape(row_width = ple))
+    }
+}
+
+// PLE stage 3 (MetalPleFinish, a `GkPleFinish` stamp): per (layer, position) slice, in place on the position-major side rows —
 // side = (side + pnorm * (v * rsqrt(mean(v^2) + eps))) / sqrt(2), v = proj/sqrt(dim)
 def private ple_finish_gate(t : T?; var dev, queue; nlayers, ple, npos : int) {
     let tag = "ple_finish nl={nlayers} ple={ple} np={npos}"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
         var err : string
-        var pso = mc |> keep_stamp(kernel_of(@@pf_enc_ple_finish), err)
+        let sf = stamp_of(@@enc_ple_finish)
+        var pso = mc |> keep_stamp(sf, err)
         return if (!pso_ok(t, tag, pso, err))
         let rowlen = nlayers * ple
         let eps = 1.0e-5
-        let inv_sd = 0.125   // stands in for 1/sqrt(dim)
+        let inv_sd = 0.125
         let inv_s2 = 1.0 / sqrt(2.0)
+        let dim = 64   //! inv_sd's 1 / sqrt(dim)
         var inscope proj, pnorm, side : array<float>
         proj |> resize(npos * rowlen)
         pnorm |> resize(ple)
@@ -4187,31 +4112,39 @@ def private ple_finish_gate(t : T?; var dev, queue; nlayers, ple, npos : int) {
         for (i in range(nlayers * npos * ple)) {
             side[i] = 0.07 * float(i % 19) - 0.6
         }
-        var inscope want, v : array<float>
+        var inscope want, unscaled, v, u : array<float>
         want |> resize(nlayers * npos * ple)
+        unscaled |> resize(nlayers * npos * ple)
         v |> resize(ple)
+        u |> resize(ple)
         for (l in range(nlayers)) {
             for (p in range(npos)) {
                 for (i in range(ple)) {
-                    v[i] = proj[p * rowlen + l * ple + i] * inv_sd
+                    u[i] = proj[p * rowlen + l * ple + i]
+                    v[i] = u[i] * inv_sd
                 }
                 rmsnorm(v, v, pnorm, int64(ple), eps)
+                rmsnorm(u, u, pnorm, int64(ple), eps)
                 for (i in range(ple)) {
-                    let yi = (l * npos + p) * ple + i
+                    let yi = p * rowlen + l * ple + i
                     want[yi] = (side[yi] + v[i]) * inv_s2
+                    unscaled[yi] = (side[yi] + u[i]) * inv_s2
                 }
             }
         }
-        var ka = PleArgs(npos = uint(npos), ple = uint(ple), nlayers = uint(nlayers), sc0 = 1.0,
-            inv_sd = inv_sd, eps = eps, inv_s2 = inv_s2)
+        var ka = ple_fin_args(int64(ple), int64(dim), eps)
         let bproj = mc |> in_(proj)
         let bpn = mc |> in_(pnorm)
         let by = mc |> io_(side)
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
-            pf_enc_ple_finish_pso(enc, pso, mc.buf[bproj], mc.buf[bpn], mc.buf[by], ka, int64(nlayers), int64(npos), int64(ple))
+            stamp_run(sf, pso) {
+                invoke(sf.enc, enc, mc.buf[bproj], mc.buf[bpn], mc.buf[by], ka, int64(nlayers * npos))
+            }
         }
         return if (!ran)
         check_buf(t, tag, mc.buf[by], want, BAR_FP, Shape(row_width = ple))
+        var inscope got <- buf_download(mc.buf[by], nlayers * npos * ple, type<float>)
+        t |> success(check_count(got, unscaled, BAR_FP) > 0, "{tag}: the rows read off the finish without the prescale")
     }
 }
 
@@ -4431,38 +4364,61 @@ def private mulmm_gate(t : T?; var dev, queue; k, d, m : int) {
 
 //! the select buffer against one expectation pair - winner ids exact, weights within `approx`;
 //! the gate runs it twice, once on the reference and once on the poisoned control expectation
-def private moe_select_bad(bsel; widx : array<uint>; ww : array<float>; nst, k : int) : tuple<idx : int; w : int> {
+def private moe_select_bad(bsel; widx : array<uint>; ww : array<float>; nst, k : int) : tuple<idx : int; w : int; first_idx : int; wmax : float; wmax_at : int> {
     var bidx = 0
     var bw = 0
+    var first_idx = -1
+    var wmax = 0.0
+    var wmax_at = -1
     unsafe {
         var pi = reinterpret<uint?>(metal_buffer_contents(bsel))
         var pw = reinterpret<float?>(metal_buffer_contents(bsel))
         for (s in range(nst)) {
             for (j in range(k)) {
-                bidx += pi[s * 2 * k + j] != widx[s * k + j] ? 1 : 0
+                if (pi[s * 2 * k + j] != widx[s * k + j]) {
+                    bidx++
+                    first_idx = first_idx < 0 ? s * k + j : first_idx
+                }
+                let dw = abs(pw[s * 2 * k + k + j] - ww[s * k + j])
+                if (wmax_at < 0 || dw > wmax) {
+                    wmax = dw
+                    wmax_at = s * k + j
+                }
                 bw += fapprox(pw[s * 2 * k + k + j], ww[s * k + j]) ? 0 : 1
             }
         }
     }
-    return (idx = bidx, w = bw)
+    return (idx = bidx, w = bw, first_idx = first_idx, wmax = wmax, wmax_at = wmax_at)
+}
+
+//! the select buffer's picks as two runs, stream after stream: the expert ids and their weights
+def private moe_select_rows(bsel; nst, k : int) : tuple<idx : array<uint>; w : array<float>> {
+    var inscope words <- buf_download(bsel, nst * 2 * k, type<uint>)
+    var inscope fw <- buf_download(bsel, nst * 2 * k, type<float>)
+    var idx <- [for (i in range(nst * k)); words[(i / k) * 2 * k + i % k]]
+    var w <- [for (i in range(nst * k)); fw[(i / k) * 2 * k + k + i % k]]
+    return <- (idx = idx, w = w)
 }
 
 // The select kernel vs the host select `moe_select_core` (softmax + top-k + norm_topk renorm),
 // one stream row per threadgroup ([k idx u32][k w f32] per row). idx must match EXACTLY — ties
 // are exact-equal logits, so both sides agree by the lowest-index rule; w compares within the
 // shared fp tolerance (hardware exp vs the CPU's exp).
-//! `wscale` other than 1 runs `MetalMoeWScale` over a row of that scale behind the select - the global
-//! `expert_weights_scale` arm of `enc_moe_select_rows` - against the host select at the same scale
-def private moe_select_gate(t : T?; var dev, queue; ne, k, nst : int; ties : bool; gmode : int = 0; wscale : float = 1.0) {
-    let tag = "moe select ne={ne} k={k} nst={nst} wscale={wscale}"
+//! `wscale` other than 1 is the model's global `expert_weights_scale` in the select's args, against the host select at the same
+//! scale; `dscale` binds a per-expert down-scale row (gemma-4) the select folds into each pick after it
+def private moe_select_gate(t : T?; var dev, queue; ne, k, nst : int; ties : bool; gmode : int = 0; wscale : float = 1.0; dscale : bool = false) {
+    let tag = "moe select ne={ne} k={k} nst={nst} wscale={wscale} dscale={dscale}"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
         var err : string
-        let st = ne > 256 ? stamp_of(@@enc_moe_select_512) : stamp_of(@@enc_moe_select)
-        let sws = stamp_of(@@enc_moe_wscale)
-        var pso = mc |> keep_stamp(st, err)
+        let sd = ne > 256 ? stamp_of(@@enc_moe_select_512_ds) : stamp_of(@@enc_moe_select_ds)
+        let sp = ne > 256 ? stamp_of(@@enc_moe_select_512) : stamp_of(@@enc_moe_select)
+        var pso = dscale ? (mc |> keep_stamp(sd, err)) : (mc |> keep_stamp(sp, err))
         return if (!pso_ok(t, "moe select", pso, err))
-        var pso_ws = mc |> keep_stamp(sws, err)
-        return if (!pso_ok(t, "moe wscale", pso_ws, err))
+        var pso_pl : MetalComputePipeline?   //! the down-scale arms' plain twin: the weights the fold starts from
+        if (dscale) {
+            pso_pl = mc |> keep_stamp(sp, err)
+            return if (!pso_ok(t, "moe select plain twin", pso_pl, err))
+        }
         var inscope lg : array<float>
         lg |> resize(nst * ne)
         for (i in range(nst * ne)) {
@@ -4486,26 +4442,40 @@ def private moe_select_gate(t : T?; var dev, queue; ne, k, nst : int; ties : boo
             }
         }
         var inscope widx <- [for (i in sidx); uint(i)]
+        var inscope ds <- [for (e in range(ne)); float(1 + (e * 3) % 7) * 0.25]
+        var inscope wunds := ww
+        if (dscale) {
+            for (i in range(nst * k)) {
+                ww[i] *= ds[sidx[i]]
+            }
+        }
         let blg = mc |> in_(lg)
         let bsel = mc |> out_words(nst * 2 * k, NAN_SENTINEL_BITS)
-        let bnk = mc |> in_plain([uint(k)])
-        var ka = GkTopKArgs(ne = uint(ne), k = uint(k), norm = gmode == 0 ? 1u : 0u, lstride = uint(ne), raw = gmode == 1 ? 1u : 0u)
-        var inscope wrow <- [for (_e in range(ne)); wscale]
-        let bws = mc |> in_(wrow)
+        let bds = mc |> in_(ds)
+        var ka = GkTopKArgs(ne = uint(ne), k = uint(k), norm = gmode == 0 ? 1u : 0u, wscale = wscale, lstride = uint(ne), raw = gmode == 1 ? 1u : 0u)
+        var ka1 = ka
+        ka1.wscale = 1.0
+        let bpl = dscale ? (mc |> out_words(nst * 2 * k, NAN_SENTINEL_BITS)) : -1
+        let bun = dscale ? (mc |> out_words(nst * 2 * k, NAN_SENTINEL_BITS)) : -1
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
-            stamp_run(st, pso) {   // sel twice: the idx view and the float w view - row layout is in-kernel
-                invoke(st.enc, enc, mc.buf[blg], mc.buf[bsel], mc.buf[bsel], ka, int64(nst))
-            }
-            if (wscale != 1.0) {
-                stamp_run(sws, pso_ws) {
-                    invoke(sws.enc, enc, mc.buf[bsel], mc.buf[bsel], mc.buf[bws], mc.buf[bnk], int64(nst))
+            if (dscale) {
+                stamp_run(sd, pso) {   // sel twice: the idx view and the float w view - row layout is in-kernel
+                    invoke(sd.enc, enc, mc.buf[blg], mc.buf[bsel], mc.buf[bsel], mc.buf[bds], ka, int64(nst))
+                }
+                stamp_run(sp, pso_pl) {   //! the plain twin at the arm's global scale, then at none
+                    invoke(sp.enc, enc, mc.buf[blg], mc.buf[bpl], mc.buf[bpl], ka, int64(nst))
+                    invoke(sp.enc, enc, mc.buf[blg], mc.buf[bun], mc.buf[bun], ka1, int64(nst))
+                }
+            } else {
+                stamp_run(sp, pso) {
+                    invoke(sp.enc, enc, mc.buf[blg], mc.buf[bsel], mc.buf[bsel], ka, int64(nst))
                 }
             }
         }
         return if (!ran)
         let bad = moe_select_bad(mc.buf[bsel], widx, ww, nst, k)
-        t |> equal(bad.idx, 0)
-        t |> equal(bad.w, 0)
+        t |> equal(bad.idx, 0, "moe_select: every winner id the host select's ({bad.idx} differ, the first at {bad.first_idx})")
+        t |> equal(bad.w, 0, "moe_select: every weight within the shared tolerance ({bad.w} off, the largest difference {bad.wmax} at {bad.wmax_at})")
         // the control: the same compares must RED on a poisoned expectation - the first winner moved
         // to its neighbour id (no id can satisfy both) and its weight off by an added 1.0 + a tenth of
         // itself, past any band `approx` admits on a renormalized weight
@@ -4519,7 +4489,32 @@ def private moe_select_gate(t : T?; var dev, queue; ne, k, nst : int; ties : boo
             var inscope wun <- [for (v in ww); v / wscale]
             t |> success(moe_select_bad(mc.buf[bsel], widx, wun, nst, k).w > 0, "{tag}: the unscaled weights miss the device's")
         }
+        if (dscale) {
+            t |> success(moe_select_bad(mc.buf[bsel], widx, wunds, nst, k).w > 0, "{tag}: the weights without the down scales miss the device's")
+            moe_select_fold_exact(t, tag, mc.buf[bsel], mc.buf[bpl], mc.buf[bun], widx, ds, nst, k, wscale)
+        }
     }
+}
+
+//! The down-scale fold bit for bit in the kernel's order (`GkTopKRow.scale_weight`): the plain twin's renormalized weight under
+//! the global scale, then the expert's down scale - each device weight that product exactly. The plain twin's picks are the
+//! host's, its scaled weights its unscaled ones times the scale exactly; under a global scale the swapped order (the down scale,
+//! then the global scale) parts from the kernel's order on the fixture and misses the device's weights, the control
+def private moe_select_fold_exact(t : T?; tag : string; bsel, bpl, bun; widx : array<uint>; ds : array<float>; nst, k : int; wscale : float) {
+    var inscope dv <- moe_select_rows(bsel, nst, k)
+    var inscope pl <- moe_select_rows(bpl, nst, k)
+    var inscope un <- moe_select_rows(bun, nst, k)
+    check_exact(t, "{tag}: the plain twin's picks", pl.idx, widx)
+    var inscope scaled <- [for (i in range(nst * k)); un.w[i] * wscale]
+    check(t, "{tag}: the plain twin's weights under the global scale, bit for bit", pl.w, scaled, BAR_EXACT, Shape(row_width = k))
+    var inscope want <- [for (i in range(nst * k)); pl.w[i] * ds[widx[i]]]
+    check(t, "{tag}: the down scale folded after the global scale, bit for bit", dv.w, want, BAR_EXACT, Shape(row_width = k))
+    return if (wscale == 1.0)
+    var inscope swapped <- [for (i in range(nst * k)); (un.w[i] * ds[widx[i]]) * wscale]
+    let parted = check_count(want, swapped, BAR_EXACT)
+    to_log(LOG_INFO, "{tag}: the swapped fold order parts {parted} of {nst * k} weights\n")
+    t |> success(parted > 0, "{tag}: the swapped fold order parts from the kernel's on the fixture")
+    t |> success(check_count(dv.w, swapped, BAR_EXACT) > 0, "{tag}: the swapped fold order misses the device's weights")
 }
 
 //! the mx4 nibble values: the signed doubled-e2m1 table
@@ -6000,6 +5995,120 @@ def private combine_sh_gate(t : T?; var dev, queue; npos, dim, k, gs, go : int) 
         return if (!ran)
         check_buf(t, tag, mc.buf[bacc], want, BAR_FP, Shape(row_width = dim))
     }
+}
+
+//! The gemma-4 MoE step's three stamps against `g4_comb_ref` over `npos` rows `dim` wide, `k` slots a row whose weights sit in
+//! the selection rows (past the k picks): the decode stamp (the slots at p k + j, the next norm's row in f32) and its f16-twin
+//! stamp, the window's stamp (the slots through a permutation, no norm out) and the window's over rows the route summed
+//! (`presummed`); each residual moved off its input, the twin the RNE narrow of the f32 row, the slot map's step the control
+//! the presummed rows' device step misses
+def private moe_comb_g4_gate(t : T?; var dev, queue; npos, dim, k : int) {
+    let tag = "moe_comb_g4 npos={npos} dim={dim} k={k}"
+    let eps = 1.0e-6
+    let ascale = 0.75
+    var inscope sel : array<uint>
+    var inscope sw <- [for (i in range(npos * k)); 0.125 + float(i % 5) * 0.25]
+    var inscope ident <- [for (i in range(npos * k)); uint(i)]
+    var inscope perm <- [for (i in range(npos * k)); uint((i * 7) % (npos * k))]
+    sel |> resize(npos * 2 * k)
+    for (p in range(npos)) {
+        for (j in range(k)) {
+            sel[p * 2 * k + j] = uint(j)
+            sel[p * 2 * k + k + j] = float_bits_to_uint(sw[p * k + j])
+        }
+    }
+    var inscope dn <- row_fill(npos * k * dim, 7, 0, 0.13, 5.5, 93)
+    var inscope dense <- row_fill(npos * dim, 5, 0, 0.2, 3.0, 41)
+    var inscope xs <- row_fill(npos * dim, 11, 0, 0.1, 1.7, 37)
+    var inscope summed <- row_fill(npos * dim, 13, 0, 0.11, 4.5, 59)
+    var inscope wn <- [for (i in range(4 * dim)); 0.5 + float((i * 3) % 7) * 0.125]
+    var inscope wor : array<float>   //! the oracle's row order: the next norm, the dense post, the routed post, the post-FFN
+    wor |> reserve(4 * dim)
+    wor |> push_from([for (i in range(dim)); wn[3 * dim + i]])
+    wor |> push_from([for (i in range(dim)); wn[dim + i]])
+    wor |> push_from([for (i in range(dim)); wn[i]])
+    wor |> push_from([for (i in range(dim)); wn[2 * dim + i]])
+    var want <- g4_comb_ref(dim, k, npos, ident, sw, dn, dense, xs, wor, eps, ascale, false)
+    var wantp <- g4_comb_ref(dim, k, npos, perm, sw, dn, dense, xs, wor, eps, ascale, false)
+    var wants <- g4_comb_ref(dim, k, npos, perm, sw, summed, dense, xs, wor, eps, ascale, true)
+    var ka = moe_g4_args(int64(dim), int64(k), eps, ascale, false)
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let st = stamp_of(@@enc_moe_comb_g4)
+        var pso = mc |> keep_stamp(st, err)
+        return if (!pso_ok(t, tag, pso, err))
+        let bx = mc |> io_(xs)
+        let bsel = mc |> in_plain(sel)
+        let bdn = mc |> in_(dn)
+        let bden = mc |> in_(dense)
+        let bwn = mc |> in_(wn)
+        let by = mc |> out_(npos * dim)
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            stamp_run(st, pso) {
+                invoke(st.enc, enc, mc.buf[bx], mc.buf[bsel], mc.buf[bdn], mc.buf[bden], mc.buf[bwn], mc.buf[by], ka, int64(npos))
+            }
+        }
+        return if (!ran)
+        var inscope gx <- buf_download(mc.buf[bx], npos * dim, type<float>)
+        t |> success(mismatch_approx(gx, xs) > 0, "{tag}: the in-place residual rows moved off their input")
+        check_buf(t, "{tag} residual", mc.buf[bx], want.x, BAR_APPROX, Shape(row_width = dim))
+        check_buf(t, "{tag} next norm", mc.buf[by], want.y, BAR_APPROX, Shape(row_width = dim))
+    }
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let st = stamp_of(@@enc_moe_comb_g4_hx)
+        var pso = mc |> keep_stamp(st, err)
+        return if (!pso_ok(t, tag, pso, err))
+        let bx = mc |> io_(xs)
+        let bsel = mc |> in_plain(sel)
+        let bdn = mc |> in_(dn)
+        let bden = mc |> in_(dense)
+        let bwn = mc |> in_(wn)
+        let by = mc |> out_(npos * dim)
+        let bh = mc |> out_words(npos * dim / 2, NAN_SENTINEL_BITS)
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            stamp_run(st, pso) {
+                invoke(st.enc, enc, mc.buf[bx], mc.buf[bsel], mc.buf[bdn], mc.buf[bden], mc.buf[bwn], mc.buf[by], mc.buf[bh], ka, int64(npos))
+            }
+        }
+        return if (!ran)
+        check_buf(t, "{tag} hx: next norm", mc.buf[by], want.y, BAR_APPROX, Shape(row_width = dim))
+        check_hx_narrow(t, "{tag} hx: the f16 twin", mc.buf[bh], mc.buf[by], npos * dim, npos * dim)
+    }
+    var kps = moe_g4_args(int64(dim), int64(k), eps, ascale, true)
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let st = stamp_of(@@enc_moe_comb_g4_pf)
+        var pso = mc |> keep_stamp(st, err)
+        return if (!pso_ok(t, tag, pso, err))
+        let bx = mc |> io_(xs)
+        let bperm = mc |> in_plain(perm)
+        let bsel = mc |> in_plain(sel)
+        let bdn = mc |> in_(dn)
+        let bsum = mc |> in_(summed)
+        let bden = mc |> in_(dense)
+        let bwn = mc |> in_(wn)
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            stamp_run(st, pso) {
+                invoke(st.enc, enc, mc.buf[bx], mc.buf[bperm], mc.buf[bsel], mc.buf[bdn], mc.buf[bden], mc.buf[bwn], ka, int64(npos))
+            }
+        }
+        return if (!ran)
+        check_buf(t, "{tag} pf: residual", mc.buf[bx], wantp.x, BAR_APPROX, Shape(row_width = dim))
+        mc |> plane_upload(bx, xs)
+        let ran2 = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            stamp_run(st, pso) {
+                invoke(st.enc, enc, mc.buf[bx], mc.buf[bperm], mc.buf[bsel], mc.buf[bsum], mc.buf[bden], mc.buf[bwn], kps, int64(npos))
+            }
+        }
+        return if (!ran2)
+        check_buf(t, "{tag} pf presummed: residual", mc.buf[bx], wants.x, BAR_APPROX, Shape(row_width = dim))
+        var inscope gx <- buf_download(mc.buf[bx], npos * dim, type<float>)
+        t |> success(mismatch_approx(gx, wantp.x) > 0, "{tag}: the slot map's step misses the presummed rows' device step")
+    }
+    delete want
+    delete wantp
+    delete wants
 }
 
 //! a routing of npos tokens over k distinct experts each, from a seeded walk; the per-expert counts the bucket rail pads

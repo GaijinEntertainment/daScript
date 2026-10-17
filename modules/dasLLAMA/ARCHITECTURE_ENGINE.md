@@ -55,6 +55,10 @@ the module declares every such buffer `@exact_size` and sizes it through a reser
   projection (`q_gated`: a 2x-wide q whose second half sigmoid-gates the output) among them - one
   kernel every arch shares, its arms chosen by the model's flags. **Not** the load walk (`ARCHITECTURE_ENGINE_FORMATS.md#the-load-and-image-rail`) and **not** GPU residency
   (`ARCHITECTURE_GPU.md#gpu-backends`) - both left; the seam each left is a registered hook, so neither comes back.
+  The one GPU-residency concern it keeps is the sliding-window K/V ring's engine half, which both homes' mirrors and the
+  `Session` read (`ARCHITECTURE_GPU_KV_RING.md#kv-sliding-ring`): the ring's knob (`set_gpu_kv_ring`, `with_gpu_kv_ring`,
+  `gpu_kv_ring_on`), the rows a layer's mirror keeps (`kv_ring_rows`) and the session's floor (`kv_ring_floor_check`); the
+  mirror itself stays the backends'.
   It remains the module's debt sink; what sits here that is family-specific or platform-specific is
   debt, **not precedent**. Ledgered exceptions the sidecar-apply seam forces
   (the knob rail lives here, and the backends require this module, so their sidecar knobs cannot):
@@ -96,17 +100,16 @@ the module declares every such buffer `@exact_size` and sizes it through a reser
 - **`dasllama_mtp_gemma.das`** - the gemma-4 assistant drafter (`gemma4-assistant`), which is a
   SIDECAR head, not a trunk block: it owns no K/V projection and borrows the target trunk's cache
   at two capture layers, so it never rides the arch registry or `forward_mtp`. The file holds the
-  sidecar resolver, the refusing loader (`GemmaDrafter`, whose `blob` is raw GGUF Q8_0 = the Metal
-  34B form, so the GPU encoder uploads it with no repack), and the CPU reference forward the GPU
-  encoder is scored against. That oracle carries its own Q8_0 dot and GEMV and its own attention
-  dot over decoded rows - reference arithmetic, not a tier kernel or a codec primitive, so no
-  tier specializes it. A refusal is `ok = false` plus a `why`, never a panic - a drafter is
+  sidecar resolver, the refusing loader (`GemmaDrafter`, its `blob` raw GGUF Q8_0), the trunk check
+  every attach asks (`gemma_drafter_target_why`), and the CPU reference forward the GPU encoders
+  are scored against (`ARCHITECTURE_GPU_MTP_ASSISTANT.md`). That oracle carries its own Q8_0 dot and
+  GEMV and its own attention dot over decoded rows - reference arithmetic, not a tier kernel or a
+  codec primitive, so no tier specializes it. A refusal is `ok = false` plus a `why`, never a panic - a drafter is
   optional and a bad sidecar must degrade to plain decode. A server or scheduler reaches the
-  drafter through the engine's assistant seams (`MtpAssistantSeams` in `dasllama_common`:
-  `mtp_drafter_sidecar_`, `attach_mtp_drafter_`, `mtp_capable_`), which the Metal drafter driver
-  registers at init and which read as "no assistant" where no driver did - `mtp_capable_` is what
-  a scheduler's `mtp` asks for, a NextN head of the model's own or an attached drafter, so a
-  head-less target speculates once attached and never before.
+  drafter through the engine's assistant seams (`MtpAssistantSeams` in `dasllama_common`, one set
+  a backend), which each GPU drafter driver registers at init and which read as "no assistant" where no
+  driver took the trunk - `mtp_capable_` is what a scheduler's `mtp` asks for, a NextN head of the
+  model's own or an attached drafter, so a head-less target speculates once attached and never before.
 - **`dasllama_sampling.das`** - token sampling and the generation drivers: the sampler over
   `dasllama_common`'s `SamplingParams`. A top-k within `SAMPLE_TOPK_FAST_CAP` is a candidate-list
   sampler - one pass over the row selects the k largest logits into a heap (ties at the k-th all
@@ -128,11 +131,9 @@ the module declares every such buffer `@exact_size` and sizes it through a reser
   argmax, so every greedy-chain shortcut stands down for it. The engine knows only the class; the
   grammar behind it is the server's (`utils/dasllama-server/constraints.das` over `modules/dasLR1`).
 - **`dasllama_ple.das`** - gemma-4 E-series per-layer embeddings and the gemma4 MoE FFN. The
-  forward sequence reaches it only through the hooks it registers at init. The Metal token-table
-  gather (`dasllama_metal_prefill.das`) carries one format list in three places - the compiled
-  `g_pf_pso_ple_gather*` pipelines, the `ple_gather_pso_of` pick and the `pf_enc_ple_gather_fmt`
-  encode ladder - and `REVIEW.das`'s `check_ple_gather_sites` holds the three sets equal,
-  licensing no names.
+  forward sequence reaches it only through the hooks it registers at init. The Metal per-layer
+  token-table gather rides the token embed's own dispatch (`enc_embed_table`,
+  `dasllama_metal_kernels.das`), one format dispatch for both tables.
 - **`dasllama_config.das`** - `DlimConfiguration`: every input that changes `.dlim` image BYTES,
   in one struct, plus its identity formatter. A knob that does not change image bytes does not
   belong here; a knob that does and is missing is an image-aliasing bug.
@@ -144,7 +145,7 @@ the module declares every such buffer `@exact_size` and sizes it through a reser
 - **`dasllama_chat.das`** - conversation turns and chat-template application. Per-arch template
   *content* is registered by the arch file (`ARCHITECTURE_ENGINE.md#architecture-registrations`), not written here.
 - **`dasllama_par.das`** - `maybe_parallel_for` plus the dispatch counters its arms call at RUN
-  time, so the module AOTs, and the single-thread gate those arms read (`set_single_thread_`, `ARCHITECTURE_RUNTIME.md#single-thread`). Threading policy (job counts, thresholds) belongs to the caller.
+  time, so the module AOTs, and the single-thread gate those arms read (`set_single_thread_`, `ARCHITECTURE_RUNTIME_JOBQUE.md#single-thread`). Threading policy (job counts, thresholds) belongs to the caller.
 - **`dasllama_boot_restore.das`** - the `[boot_restore]` function annotation: on a module's
   empty `[init]` function it writes the boot-restore guard of every global the module initializes
   `= @@fn`, so the restore list cannot miss a seat; `dasllama_gpu_tier.das` restores its seats
@@ -218,11 +219,11 @@ reference below the indexer's `indexer_top_k` budget.
   (the tune-generator contract).
 - **`performance/model_specs.das`** - the ONE model-set table: per carrier, the profiled-catalog
   fields, the official-board flag, the serving-catalog fields (`serve_*`, incl. `serve_vision`
-  naming a tower companion by name), the provenance pin (exact HF repo + revision + sha256, or the
+  and `serve_drafter` naming a tower or drafter companion by name), the provenance pin (exact HF repo + revision + sha256, or the
   on-box conversion recipe; companions hang off their owning entry, and a companion shared by
   several rows is referenced from the others by name), and the frozen parity evidence as data
   (pinned ids + arms). `llm_catalog` / `official_catalog` / `models_provenance` are views over it;
-  `serve_vision_tower` resolves a tower name to its pinned companion, and `serve_asr_tower` is the
+  `serve_companion` resolves a tower or drafter name to its pinned companion, and `serve_asr_tower` is the
   one standalone pinned artifact the file carries - the serving ASR tower (parakeet v3), consumed
   by `asr_catalog`'s v3 row in `profile_common.das` (the pin's single source lives here, not there).
 - **`performance/box_ident.das`** - the hardware-keyed box tag: the fleet table maps every
@@ -261,3 +262,24 @@ names `dasllama.io`: the exchange module is the sidecar exchange host's one clie
 tool reaches it through `dasllama/dasllama_exchange`. It licenses no names.
 
 The decode pick tape: `ARCHITECTURE_ENGINE_MECHANISMS.md#moe-pick-tape`.
+
+### The test folder's documents track its files {#test-folder-gates}
+
+`tests/CLAUDE.md` is the map a reader finds a cell or an arm in, `tests/REVIEW_PINNED_GATES.md` the set of cells whose
+asserts hold fixed, and `tests/_compares.das` the compares the bars read. `REVIEW.das` holds each to the files, and each
+check licenses no names:
+
+- `check_arm_tokens_documented` - every literal `arm_on` token a tests file filters on (an interpolated one by the prefix
+  ahead of its first `{`) is a word of a backtick span in `tests/CLAUDE.md`.
+- `check_doc_names_resolve` - every backticked `test_*` / `cell_*` name in `tests/CLAUDE.md` is a `.das` file or a
+  `def` under the module or under a folder the document names by a `.das` path; a pattern (`*`, `<...>`, `{...}`)
+  names none.
+- `check_doc_cites_no_ledger` - `tests/CLAUDE.md` cites no `followup_*.md`, whose items move or close under it.
+- `check_regions_entries` - every `cell_*` a `test_gpu_resident_regions*.das` file calls is named in that file's entry:
+  by its function name, by the name the `_resident_regions.das` list gives it (the phrase ahead of its parenthetical),
+  or by the head of the bullet that holds it.
+- `check_census_evidence_pinned` - every `test_vk*` / `test_metal_*` cell and `*_gate` a census table's comments in
+  `tests/test_kernel_coverage.das` cite as a blind spot's evidence is in the pinned set: named in an entry, in a file a
+  file entry pins, or a gate a pinned cell calls.
+- `check_running_max_nan` - no tests file keeps a running largest difference as `max(m, abs(a - b))`: `max` drops a
+  NaN a later finite element follows, and `nan_wide_diff(a, b)` reads a NaN on either side as infinite.

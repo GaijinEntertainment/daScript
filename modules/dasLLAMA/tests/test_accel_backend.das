@@ -1,5 +1,6 @@
 options gen2
 options _dasllama_internal = true
+options persistent_heap   // a dastest root frees what it deletes only on this heap; the linear heap holds every carrier a cell deleted until the context ends
 
 require dastest/testing_boost public
 require dasllama/dasllama_math
@@ -28,7 +29,7 @@ def private fill01(var a : array<float>; salt : uint) {
 def private max_rel_err(a, b : array<float>) : float {
     var m = 0.0
     for (va, vb in a, b) {
-        m = max(m, abs(va - vb) / max(1.0, abs(va)))
+        m = max(m, nan_wide_diff(va, vb) / max(1.0, abs(va)))
     }
     return m
 }
@@ -154,7 +155,7 @@ def private check_bf16(t : T?; ntok : int; f16_lane : bool) {
     var w : array<float>
     w |> resize(D * N)
     fill01(w, 3u)
-    let wbf <- [for (v in w); bf16_bits_truncated(v)]
+    let wbf <- pack_bf16(w)
     check_batch(t, wbf, ntok, false, f16_lane)
 }
 

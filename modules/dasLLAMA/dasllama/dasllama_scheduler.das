@@ -580,12 +580,15 @@ def private advance_with(m : Model; var st : Stream; tok : int64; var events : a
     return true
 }
 
+//! the stream's reasoning budget can still force a close: a token it emits may queue one, so its round drafts one token
+def private think_budget_armed(st : Stream) : bool => st.think_budget > 0l && !empty(st.think_marks.close) && st.think_state != 2
+
 //! Where the emitted token stands against the reasoning budget: the span's open token enters it, every token inside it counts,
 //! the close token the model writes leaves it, and the budget reached inside it - or the length cap drawing closer than the
 //! forced close is long - queues the forced close for the steps that follow.
 [arch(at="../ARCHITECTURE_ENGINE_SERVING.md#think-budget")]
 def private think_budget_track(var st : Stream; tok : int64) {
-    return if (st.think_budget <= 0l || empty(st.think_marks.close) || st.think_state == 2)
+    return if (!think_budget_armed(st))
     if (st.think_state == 0) {
         let nopen = length(st.think_marks.open)
         return if (nopen == 0)
@@ -859,10 +862,11 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
             continue   // a constrained stream, or one with a forced close pending, decodes plain, after the speculative round (below)
         }
         if (sch.mtp) {
-            // self-spec tick: the stream trades its cross-stream batch row for up to two positions per
+            // self-spec tick: the stream trades its cross-stream batch row for the round's positions per
             // tick, every stream's round verified together below.
             sch.streams[i].session.spec_params = unsafe(addr(sch.streams[i].params))
             sch.streams[i].session.pick_asked = sampler_is_argmax(sch.streams[i].params)
+            sch.streams[i].session.mtp_depth_cap = think_budget_armed(sch.streams[i]) ? 1l : 0l
         }
         sch.batch_rows |> push(unsafe(addr(sch.streams[i].session)))
         sch.batch_toks |> push(sch.streams[i].cur_tok)
@@ -876,8 +880,9 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
         sch.mtp_joined_max = max(sch.mtp_joined_max, joined)
         prof_add("sched_eval_batch", ts_step)
         for (i, acc in sch.batch_idx, sch.mtp_acc) {
-            if (acc >= 0l) {
-                if (advance_with(m, sch.streams[i], acc, events)) {
+            for (j in range64(1l, acc + 1l)) {   //! the round's accepted drafts in order, each evaled already
+                break if (sch.streams[i].state != StreamState.decoding)
+                if (advance_with(m, sch.streams[i], sch.streams[i].session.mtp_vbatch[j], events)) {
                     sch.gen_tokens ++
                 }
                 if (sch.streams[i].state == StreamState.done) {

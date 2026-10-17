@@ -141,7 +141,7 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
     r.carry = carry
     r.carry_live = carry && get_mtp_spec()
     r.x_dev = make_device_buf(dim * 4l * nb)
-    r.xb_dev = make_device_buf(dim * 4l * nb, carry && r.log_xfer)   // the carry's rows leave on the transfer queue as the logits do
+    r.xb_dev = make_device_buf(dim * 4l * nb, r.log_xfer)   //! the carry's rows leave on the transfer queue as the logits do - an assistant drafter arms the carry after the load (`vk_rdec_carry_arm`)
     if (carry) {
         r.hid_host = make_host_buf(dim * 4l * nb, false, [cached = true, xfer_shared = r.log_xfer])
     }
@@ -430,6 +430,7 @@ def private rd_layer_geom(var L : RLayer; g : RdecLayerGeom) {
     L.attn_cap = g.attn_cap
     L.moe_g4 = g.moe_g4
     L.window = g.window
+    L.ring = g.ring
     L.mir_base = g.mir_base
     L.mir_slab = g.mir_slab
     L.cbase = g.cbase
@@ -520,10 +521,11 @@ def private rd_attn_sets(var L : RLayer; mir_idx : int64; bq, bk, bv, bo : int64
             L.s_qkn = set_qk_rms_cls(fixed_array(g_rd.q_dev, g_rd.kv_dev, g_rd.norms_dev),
                 fixed_array(qplane, (qd + 2l * kvd) * 4l * nb, g_rd.norms_bytes),
                 fixed_array(VHZ_Q, VHZ_KVK, 0u))
-            // the fused twin (class): norm rows bind the norms buffer, mirror row rides TokMeta, the bias rows their buffer
-            let qrbufs = fixed_array(g_rd.q_dev, g_rd.kv_dev, kstore, vstore, cos, g_rd.norms_dev, storetok, bias_bind.buf)
-            let qrsizes = fixed_array(qplane, (qd + 2l * kvd) * 4l * nb, storebytes, storebytes, cosbytes * nb, g_rd.norms_bytes, TOK_META_BYTES * nb, bias_bind.bytes)
-            let qrbits = fixed_array(VHZ_Q, VHZ_KVK | VHZ_KVV, storebit, storebit, VHZ_COS, 0u, 0u, 0u)
+            // the fused twin (class): norm rows bind the norms buffer, mirror row rides TokMeta, the bias rows their buffer, the V source the projection rows
+            let qrbufs = fixed_array(g_rd.q_dev, g_rd.kv_dev, kstore, vstore, cos, g_rd.norms_dev, storetok, bias_bind.buf, g_rd.kv_dev)
+            let qrsizes = fixed_array(qplane, (qd + 2l * kvd) * 4l * nb, storebytes, storebytes, cosbytes * nb, g_rd.norms_bytes, TOK_META_BYTES * nb, bias_bind.bytes,
+                (qd + 2l * kvd) * 4l * nb)
+            let qrbits = fixed_array(VHZ_Q, VHZ_KVK | VHZ_KVV, storebit, storebit, VHZ_COS, 0u, 0u, 0u, VHZ_KVK | VHZ_KVV)
             L.s_qkn_rope = (kv16 ? set_qkn_rope_f16_cls(qrbufs, qrsizes, qrbits)
                 : set_qkn_rope_cls(qrbufs, qrsizes, qrbits))
         }
@@ -690,13 +692,21 @@ def private rd_moe_sets(var L : RLayer) {
     let k = g_rd.k
     if (g_rd.experts_host && L.be1 < 0l) {
         L.experts_host = true
-        L.s_router = set_router_gemv_cls(fixed_array(g_rd.router_dev, g_rd.xb_dev, g_rd.moe_dlog_dev, g_rd.norms_dev),
-            fixed_array(g_rd.router_bytes, dim * 4l * nb, g_rd.ner * 4l * nb, g_rd.norms_bytes), fixed_array(0u, VHZ_XB, VHZ_MRT, 0u))
+        let rx = L.moe_g4 ? g_rd.x_dev : g_rd.xb_dev   //! the gemma-4 router norms x itself: xb holds the routed feed the host reads
+        L.s_router = set_router_gemv_cls(fixed_array(g_rd.router_dev, rx, g_rd.moe_dlog_dev, g_rd.norms_dev),
+            fixed_array(g_rd.router_bytes, dim * 4l * nb, g_rd.ner * 4l * nb, g_rd.norms_bytes), fixed_array(0u, L.moe_g4 ? VHZ_X : VHZ_XB, VHZ_MRT, 0u))
         if (!g_rd.hc) {
-            verify(!L.moe_g4, "vk decode: a gemma-4 routed block has no host form")
-            verify(ensure_cls_ar_comb(), "vk decode: a host layer's combine-folded residual class rail must engage on a live device")
             let rows_bytes = dim * 4l * nb
             let slots_bytes = MAX_ROUTED_SLOTS * 4l
+            if (L.moe_g4) {   //! the host's sum lands as the one routed row of weight one
+                verify(ensure_cls_ar_comb_g4(), "vk decode: a host layer's gemma-4 combine class rail must engage on a live device")
+                L.s_addr_next = set_cls_ar_comb_g4(fixed_array(g_rd.x_dev, g_rd.moe_ident_dev, g_rd.ones_dev, g_rd.hacc_dev,
+                        g_rd.ffnout_dev, g_rd.norms_dev, g_rd.xb_dev),
+                    fixed_array(rows_bytes, slots_bytes, slots_bytes, rows_bytes, rows_bytes, g_rd.norms_bytes, rows_bytes),
+                    fixed_array(VHZ_X, 0u, 0u, VHZ_MDN, VHZ_FFO, 0u, VHZ_XB))
+                return
+            }
+            verify(ensure_cls_ar_comb(), "vk decode: a host layer's combine-folded residual class rail must engage on a live device")
             L.s_addr_next = set_cls_ar_comb(fixed_array(g_rd.x_dev, g_rd.ffnout_dev, g_rd.norms_dev, g_rd.xb_dev,
                     g_rd.moe_ident_dev, g_rd.ones_dev, g_rd.hacc_dev, g_rd.moe_dlog_dev, g_rd.moe_db_dev, g_rd.moe_eidx_dev),
                 fixed_array(rows_bytes, rows_bytes, g_rd.norms_bytes, rows_bytes, slots_bytes, slots_bytes, rows_bytes, g_rd.ner * 4l * nb, g_rd.moe_db_bytes, slots_bytes),
@@ -715,7 +725,7 @@ def private rd_moe_sets(var L : RLayer) {
     let xqb = L.xe_own ? g_rd.moe_xq_dev : g_rd.xq_dev
     let xsb = L.xe_own ? g_rd.moe_xs_dev : g_rd.xs_dev
     let xq_bytes = dim * nb
-    let xs_bytes = (dim / 32l) * 4l * nb
+    let xs_bytes = (dim / Q8_BLOCK_ELEMS) * 4l * nb
     let rows_bytes = dim * 4l * nb
     let egu_bytes = nb * k * nfe * 4l
     let edn_bytes = nb * k * dim * 4l
@@ -745,35 +755,34 @@ def private rd_moe_sets(var L : RLayer) {
             fixed_array(egu_bytes, egu_bytes, BATCH_HQ_BYTES, BATCH_HS_BYTES),
             fixed_array(VHZ_GATE, VHZ_UP, VHZ_HQ, VHZ_HQ))
     }
-    //! one slab: the gate and up stacks share the quant buffer the fused dispatch binds once
-    L.egu = (L.fe1 == int(KqFmt.k4) && L.fe3 == int(KqFmt.k4) && !kq_sb(L.fe2) && nfe % 32l == 0l && pe1.wq == pe3.wq
-        && !g_rd.exps_bias && !g_rd.act_oai && vk_fuse_on() && ensure_kq_gemv_k4_gu_cls())   //! the k4 twin carries no bias rows and no clamped act: a biased or gpt-oss-activated k4 stack takes the three dispatches
-    if (L.egu) {
+    //! one slab: the gate and up stacks share the quant buffer the fused dispatch binds once; the kq twins carry no bias rows and no
+    //! clamped act, so a biased or gpt-oss-activated kq stack takes the three dispatches; the per-32 twin (`Mx4GemvGu`, gpt-oss and
+    //! gemma-4's MXFP4 stacks) carries both, under its own set layout
+    let gu_b32 = !kq_sb(L.fe1)
+    L.egu = (L.fe1 == L.fe3 && gemv_shell_fmt(L.fe1, GEMV_SHELL_GU) && !kq_sb(L.fe2) && nfe % Q8_BLOCK_ELEMS == 0l && pe1.wq == pe3.wq
+        && (gu_b32 || !g_rd.exps_bias && !g_rd.act_oai) && vk_fuse_on() && gemv_shell_ensure(L.fe1, GEMV_SHELL_GU))
+    if (L.egu && gu_b32) {
+        L.s_egu = set_mx4_gemv_gu_cls(fixed_array(pe1.wq, pe1.ws, g_rd.moe_meta1_dev, xqb, xsb, g_rd.egate_dev, g_rd.moe_meta3_dev, g_rd.moe_gb_dev, g_rd.moe_ub_dev, g_rd.moe_eidx_dev, g_gpu.hq_dev, g_gpu.hs_dev),
+            fixed_array(pe1.wqb, pe1.wsb, META_BYTES, dim, (dim / Q8_BLOCK_ELEMS) * 4l, k * nfe * 4l, META_BYTES, g_rd.moe_gub_bytes, g_rd.moe_gub_bytes, MAX_ROUTED_SLOTS * 4l, BATCH_HQ_BYTES, BATCH_HS_BYTES),
+            fixed_array(0u, 0u, VHZ_MRT, VHZ_XQ, VHZ_XQ, VHZ_GATE, VHZ_MRT, 0u, 0u, VHZ_MRT, VHZ_HQ, VHZ_HQ))
+    } elif (L.egu) {
         L.s_egu = set_kq_gemv_k4_gu_cls(fixed_array(pe1.wq, pe1.ws, g_rd.moe_meta1_dev, xqb, xsb, g_rd.egate_dev, kq_grid_dev(), g_rd.moe_meta3_dev, g_gpu.hq_dev, g_gpu.hs_dev),
-            fixed_array(pe1.wqb, pe1.wsb, META_BYTES, dim, (dim / 32l) * 4l, k * nfe * 4l, KQ_GRID_BYTES, META_BYTES, BATCH_HQ_BYTES, BATCH_HS_BYTES),
+            fixed_array(pe1.wqb, pe1.wsb, META_BYTES, dim, (dim / Q8_BLOCK_ELEMS) * 4l, k * nfe * 4l, KQ_GRID_BYTES, META_BYTES, BATCH_HQ_BYTES, BATCH_HS_BYTES),
             fixed_array(0u, 0u, VHZ_MRT, VHZ_XQ, VHZ_XQ, VHZ_GATE, 0u, VHZ_MRT, VHZ_HQ, VHZ_HQ))
     }
-    //! the mx4 twin (gpt-oss): the gate and up stacks in one slab, the biased act and the Q8_0 requant in the same dispatch
-    L.egu_mx4 = (L.fe1 == int(KqFmt.mx4) && L.fe3 == int(KqFmt.mx4) && !kq_sb(L.fe2) && nfe % 32l == 0l && pe1.wq == pe3.wq
-        && vk_fuse_on() && ensure_mx4_gemv_gu_cls())
-    if (L.egu_mx4) {
-        L.s_egu = set_mx4_gemv_gu_cls(fixed_array(pe1.wq, pe1.ws, g_rd.moe_meta1_dev, xqb, xsb, g_rd.egate_dev, g_rd.moe_meta3_dev, g_rd.moe_gb_dev, g_rd.moe_ub_dev, g_rd.moe_eidx_dev, g_gpu.hq_dev, g_gpu.hs_dev),
-            fixed_array(pe1.wqb, pe1.wsb, META_BYTES, dim, (dim / 32l) * 4l, k * nfe * 4l, META_BYTES, g_rd.moe_gub_bytes, g_rd.moe_gub_bytes, MAX_ROUTED_SLOTS * 4l, BATCH_HQ_BYTES, BATCH_HS_BYTES),
-            fixed_array(0u, 0u, VHZ_MRT, VHZ_XQ, VHZ_XQ, VHZ_GATE, VHZ_MRT, 0u, 0u, VHZ_MRT, VHZ_HQ, VHZ_HQ))
-    }
     L.s_edown = gemv_planes_set(L.fe2, pe2, g_rd.moe_meta2_dev, META_BYTES, VHZ_MRT, g_gpu.hq_dev, g_gpu.hs_dev, BATCH_HQ_BYTES, BATCH_HS_BYTES, VHZ_HQ, g_rd.edown_dev, edn_bytes, VHZ_MDN)
-    L.edown_sum = L.moe_g4 && L.fe2 == int(KqFmt.q51) && vk_fuse_on() && ensure_q51_gemv_sum_cls()
+    L.edown_sum = L.moe_g4 && gemv_shell_fmt(L.fe2, GEMV_SHELL_SUM) && vk_fuse_on() && gemv_shell_ensure(L.fe2, GEMV_SHELL_SUM)
     if (L.edown_sum) {
         L.s_edown_sum = set_q51_gemv_sum_cls(fixed_array(pe2.wq, pe2.ws, g_rd.moe_meta2_dev, g_gpu.hq_dev, g_gpu.hs_dev, g_rd.edown_dev, g_rd.moe_dw_dev),
-            fixed_array(pe2.wqb, pe2.wsb, META_BYTES, BATCH_HQ_BYTES, BATCH_HS_BYTES, k * dim * 4l, slots_bytes),
+            fixed_array(pe2.wqb, pe2.wsb, META_BYTES, BATCH_HQ_BYTES, BATCH_HS_BYTES, edn_bytes, slots_bytes),
             fixed_array(0u, 0u, VHZ_MRT, VHZ_HQ, VHZ_HQ, VHZ_MDN, VHZ_MRT))
     }
     if (L.moe_g4) {
         verify(ensure_cls_ar_comb_g4(), "vk decode: the gemma-4 combine-folded residual class rail must engage on a live device")
-        L.s_addr_next = set_cls_ar_comb_g4(fixed_array(g_rd.x_dev, g_rd.ffnout_dev, g_rd.norms_dev, g_rd.xb_dev,
-                g_rd.moe_ident_dev, g_rd.moe_dw_dev, g_rd.edown_dev),
-            fixed_array(rows_bytes, rows_bytes, g_rd.norms_bytes, rows_bytes, slots_bytes, slots_bytes, edn_bytes),
-            fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XB, 0u, VHZ_MRT, VHZ_MDN))
+        L.s_addr_next = set_cls_ar_comb_g4(fixed_array(g_rd.x_dev, g_rd.moe_ident_dev, g_rd.moe_dw_dev, g_rd.edown_dev,
+                g_rd.ffnout_dev, g_rd.norms_dev, g_rd.xb_dev),
+            fixed_array(rows_bytes, slots_bytes, slots_bytes, edn_bytes, rows_bytes, g_rd.norms_bytes, rows_bytes),
+            fixed_array(VHZ_X, 0u, VHZ_MRT, VHZ_MDN, VHZ_FFO, 0u, VHZ_XB))
         return
     }
     verify(ensure_cls_ar_comb(), "vk decode: the combine-folded residual class rail must engage on a live device")
@@ -799,13 +808,13 @@ def private rd_ensure_comb_sets {
         L.comb_rq = vk_fuse_on() && fn.fmt == int(KqFmt.q8) && !fn.storex && (L.moe_g4 ? ensure_cls_ar_comb_g4_rq() : ensure_cls_ar_comb_rq())
         continue if (!L.comb_rq)
         if (L.moe_g4) {
-            L.s_comb_rq = set_cls_ar_comb_g4_rq(fixed_array(g_rd.x_dev, g_rd.ffnout_dev, g_rd.norms_dev, g_rd.xq_dev, g_rd.moe_ident_dev, g_rd.moe_dw_dev, g_rd.edown_dev, g_rd.xs_dev),
-                fixed_array(rows_bytes, rows_bytes, g_rd.norms_bytes, dim * nb, slots_bytes, slots_bytes, edn_bytes, (dim / 32l) * 4l * nb),
-                fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XQ, 0u, VHZ_MRT, VHZ_MDN, VHZ_XQ))
+            L.s_comb_rq = set_cls_ar_comb_g4_rq(fixed_array(g_rd.x_dev, g_rd.moe_ident_dev, g_rd.moe_dw_dev, g_rd.edown_dev, g_rd.ffnout_dev, g_rd.norms_dev, g_rd.xq_dev, g_rd.xs_dev),
+                fixed_array(rows_bytes, slots_bytes, slots_bytes, edn_bytes, rows_bytes, g_rd.norms_bytes, dim * nb, (dim / Q8_BLOCK_ELEMS) * 4l * nb),
+                fixed_array(VHZ_X, 0u, VHZ_MRT, VHZ_MDN, VHZ_FFO, 0u, VHZ_XQ, VHZ_XQ))
         } else {
             L.s_comb_rq = set_cls_ar_comb_rq(fixed_array(g_rd.x_dev, g_rd.ffnout_dev, g_rd.norms_dev, g_rd.xq_dev,
                     g_rd.moe_ident_dev, g_rd.moe_dw_dev, g_rd.edown_dev, g_rd.moe_dlog_dev, g_rd.moe_db_dev, g_rd.moe_eidx_dev, g_rd.xs_dev),
-                fixed_array(rows_bytes, rows_bytes, g_rd.norms_bytes, dim * nb, slots_bytes, slots_bytes, edn_bytes, g_rd.ner * 4l * nb, g_rd.moe_db_bytes, slots_bytes, (dim / 32l) * 4l * nb),
+                fixed_array(rows_bytes, rows_bytes, g_rd.norms_bytes, dim * nb, slots_bytes, slots_bytes, edn_bytes, g_rd.ner * 4l * nb, g_rd.moe_db_bytes, slots_bytes, (dim / Q8_BLOCK_ELEMS) * 4l * nb),
                 fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XQ, 0u, VHZ_MRT, VHZ_MDN, VHZ_MRT, 0u, VHZ_MRT, VHZ_XQ))
         }
     }
@@ -1075,28 +1084,48 @@ def vk_rdec_dn_own(l : int64; stp : float?; histp : float?) {
     rdn_state_upload(st, stp, histp, g_rd.dn_parity[slot])
 }
 
+//! the pre-step's projection rows over `ncols` columns of x into the plane its set binds, under the CPU's 1/sqrt(dim) (`ple_pre_finish`)
+def ple_proj_enc(raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; ncols : uint) {
+    let all = g_rd.n_layers * g_rd.ple
+    var pcr = GkRouterArgs(ne = uint(all), dim = uint(g_rd.dim), eps = g_rd.eps, ncols = ncols, yscale = 1.0 / sqrt(float(g_rd.dim)))
+    router_enc_cols(g_rd.ple_wp_bf16, raw, h, set_, pcr, all)
+}
+
 //! The per-layer-embedding seats: the side-input row buffers at the model's ple width (after prepare, before the layers)
 [arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
-def vk_rdec_set_ple(ple : int64) : bool {
+def vk_rdec_set_ple(ple : int64; gate_f32 : array<float>; proj_f32 : array<float>) : bool {
     if (g_gpu != null && g_gpu.dry) {
         return true
     }
     assert(g_rd != null, "vk_rdec_set_ple before prepare")
-    if (ple <= 0l || ple % 32l != 0l) {
-        return false   //! the gate GEMV's output and the act's requant take 32-blocks
+    //! the gate GEMV's output and the act's requant take 32-blocks; the f32 rows want the router GEMV and the f32 act
+    if (ple <= 0l || ple % 32l != 0l || ((!empty(gate_f32) || !empty(proj_f32)) && !(ensure_router_gemv_cls() && ensure_ple_act_f32_cls()))) {
+        return false
+    }
+    let gate_bytes = long_length(gate_f32) * 4l
+    let proj_bytes = long_length(proj_f32) * 4l
+    if (!vk_range_ok(gate_bytes) || !vk_range_ok(proj_bytes)) {   //! each f32 plane binds whole in its router GEMV set
+        to_log(LOG_WARNING, "dasLLAMA vulkan resident: the per-layer-embedding f32 gate rows ({gate_bytes} bytes) or projection rows ({proj_bytes}) pass the device's storage range {vk_max_storage_range()}\n")
+        return false
     }
     g_rd.ple = ple
     let row_bytes = g_rd.n_layers * ple * 4l * g_rd.nb
     g_rd.ple_host = make_host_buf(row_bytes, false, [cached = true])
     g_rd.ple_dev = make_device_buf(row_bytes)
     g_rd.pleg_dev = make_device_buf(ple * 4l * g_rd.nb)
+    g_rd.pleact_dev = make_device_buf(ple * 4l * g_rd.nb)
+    g_rd.ple_gf32_bytes = gate_bytes
+    g_rd.ple_gf32_dev = empty(gate_f32) ? 0ul : rd_upload_rows(gate_f32)
+    g_rd.ple_pf32_bytes = proj_bytes
+    g_rd.ple_pf32_dev = empty(proj_f32) ? 0ul : rd_upload_rows(proj_f32)
     rd_unmake_sets()
     rd_invalidate_token()
     return true
 }
 
-//! One layer's per-layer-embedding branch: the gate [dim x ple] and proj [ple x dim] planes and the sets of its four steps
-def vk_rdec_set_ple_layer(l, bgate, bproj : int64; fmt : int) {
+//! One layer's per-layer-embedding branch: the gate [dim x ple] and proj [ple x dim] planes and the sets of its four steps; a
+//! block of -1 is the kind's f32 rows, on the router GEMV (`GkRouterGemv`) with the act's f32 rows between
+def vk_rdec_set_ple_layer(l, bgate, bproj : int64; fgate, fproj : int) {
     if (g_gpu != null && g_gpu.dry) {
         return
     }
@@ -1107,24 +1136,43 @@ def vk_rdec_set_ple_layer(l, bgate, bproj : int64; fmt : int) {
     let ple = g_rd.ple
     var L & = unsafe(g_rd.layers[l])
     L.ple = true
-    L.bpg = bgate; L.bpp = bproj; L.fpg = fmt
-    let pg = arena_planes(fmt, bgate)
-    let pp = arena_planes(fmt, bproj)
-    verify(gemv_cls_ensure(fmt) && ensure_q8_actrq_cls() && ensure_cls_dn_rq(), "vk decode: the per-layer-embedding rails must engage on a live device")
+    L.bpg = bgate; L.bpp = bproj; L.fpg = fgate; L.fpp = fproj
+    let gf32 = bgate < 0l
+    let pf32 = bproj < 0l
+    verify((gf32 || gemv_cls_ensure(fgate)) && (pf32 || gemv_cls_ensure(fproj))
+        && (pf32 || (kq_sb(fproj) ? ensure_q8k_actrq_cls() : ensure_q8_actrq_cls())) && ensure_cls_dn_rq() && (!kq_sb(fgate) || ensure_cls_q8k_rq()),
+        "vk decode: the per-layer-embedding rails must engage on a live device")
     L.m_pg = rd_meta(); L.m_pp = rd_meta()
     let all = g_rd.n_layers * ple
-    // the residual row as it is -> xq/xs (the gate reads the unnormed stream)
+    // the residual row as it is -> xq/xs in the gate's feed form (the gate reads the unnormed stream)
     L.s_ple_x = rd_rq_set(g_rd.x_dev, VHZ_X, g_rd.xq_dev, g_rd.xs_dev, VHZ_XQ, dim)
     // gate GEMV [dim -> ple] into pleg (the FFN gate plane's hazard bit, free by then)
-    L.s_ple_gate = arena_gemv_set_x(fmt, pg, L.m_pg.buf, g_rd.pleg_dev, ple * 4l * nb, VHZ_GATE)
-    // gelu(gate) x this layer's side-input row -> hq/hs (the row's layer base rides the push; the side rows ride the cos plane's bit)
-    L.s_ple_act = set_actrq_cls(fixed_array(g_rd.pleg_dev, g_rd.ple_dev, g_gpu.hq_dev, g_gpu.hs_dev),
-        fixed_array(ple * 4l * nb, all * 4l * nb, BATCH_HQ_BYTES, BATCH_HS_BYTES),
-        fixed_array(VHZ_GATE, VHZ_COS, VHZ_HQ, VHZ_HQ))
-    // proj GEMV [ple -> dim] into ffnout (the residual step's add partner slot)
-    L.s_ple_proj = gemv_planes_set(fmt, pp, L.m_pp.buf, META_BYTES, 0u, g_gpu.hq_dev, g_gpu.hs_dev, ple * nb, (ple / 32l) * 4l * nb, VHZ_HQ, g_rd.ffnout_dev, dim * 4l * nb, VHZ_FFO)
-    L.ple_fused = vk_fuse_on() && fmt == int(KqFmt.q8) && ple <= 256l && ple % 32l == 0l && ensure_cls_ar_rq_b() && ensure_q8_gemv_pleact_cls()
+    if (gf32) {
+        L.s_ple_gate = set_router_gemv_cls(fixed_array(g_rd.ple_gf32_dev, g_rd.x_dev, g_rd.pleg_dev, g_rd.norms_dev),
+            fixed_array(g_rd.ple_gf32_bytes, dim * 4l * nb, ple * 4l * nb, g_rd.norms_bytes), fixed_array(0u, VHZ_X, VHZ_GATE, 0u))
+    } else {
+        L.s_ple_gate = arena_gemv_set_x(fgate, arena_planes(fgate, bgate), L.m_pg.buf, g_rd.pleg_dev, ple * 4l * nb, VHZ_GATE)
+    }
+    // gelu(gate) x this layer's side-input row -> the proj's feed: hq/hs, or the f32 rows (the row's layer base rides the push;
+    // the side rows ride the cos plane's bit)
+    if (pf32) {
+        L.s_ple_act = set_ple_act_f32_cls(fixed_array(g_rd.pleg_dev, g_rd.ple_dev, g_rd.pleact_dev),
+            fixed_array(ple * 4l * nb, all * 4l * nb, ple * 4l * nb), fixed_array(VHZ_GATE, VHZ_COS, VHZ_HQ))
+        L.s_ple_proj = set_router_gemv_cls(fixed_array(g_rd.ple_pf32_dev, g_rd.pleact_dev, g_rd.ffnout_dev, g_rd.norms_dev),
+            fixed_array(g_rd.ple_pf32_bytes, ple * 4l * nb, dim * 4l * nb, g_rd.norms_bytes), fixed_array(0u, VHZ_HQ, VHZ_FFO, 0u))
+    } else {
+        L.s_ple_act = set_actrq_cls(fixed_array(g_rd.pleg_dev, g_rd.ple_dev, g_gpu.hq_dev, g_gpu.hs_dev),
+            fixed_array(ple * 4l * nb, all * 4l * nb, BATCH_HQ_BYTES, BATCH_HS_BYTES),
+            fixed_array(VHZ_GATE, VHZ_COS, VHZ_HQ, VHZ_HQ))
+        // proj GEMV [ple -> dim] into ffnout (the residual step's add partner slot)
+        L.s_ple_proj = gemv_planes_set(fproj, arena_planes(fproj, bproj), L.m_pp.buf, META_BYTES, 0u, g_gpu.hq_dev, g_gpu.hs_dev, ple * nb,
+            (ple / Q8_BLOCK_ELEMS) * 4l * nb, VHZ_HQ, g_rd.ffnout_dev, dim * 4l * nb, VHZ_FFO)
+    }
+    L.ple_fused = (vk_fuse_on() && !gf32 && !pf32 && kq_fmt_of_slot(fgate) == KqFmt.q8 && kq_fmt_of_slot(fproj) == KqFmt.q8 && ple <= 256l
+        && ple % Q8_BLOCK_ELEMS == 0l
+        && ensure_cls_ar_rq_b() && ensure_q8_gemv_pleact_cls())
     if (L.ple_fused) {
+        let pp = arena_planes(fproj, bproj)
         L.s_ple_ar_rq = set_ar_rq_stamp(RqStamp.rq, g_rd.ffnout_dev, VHZ_FFO, g_rd.xq_dev, g_rd.xs_dev)
         L.s_ple_pa = set_q8_gemv_pleact_cls(fixed_array(pp.wq, pp.ws, g_rd.pleg_dev, g_rd.ple_dev, g_rd.ffnout_dev),
             fixed_array(pp.wqb, pp.wsb, ple * 4l * nb, all * 4l * nb, dim * 4l * nb),
@@ -1382,6 +1430,19 @@ def vk_rdec_set_ngram(l, ind, nrows, kern, dil, bkey, bval : int64; norm_rows : 
     }
     rd_invalidate_token()
     return true
+}
+
+//! the one-row command's side row as its last step left it - gathered and finished on the device under the projection - read back
+//! into `out` (a cell's witness of the device pre-step against the CPU's)
+[cold_path]
+def vk_rdec_ple_side_row(@exact_size var out : array<float>) {
+    assert(g_rd != null && g_rd.ple > 0l, "vk_rdec_ple_side_row before set_ple")
+    let n = g_rd.n_layers * g_rd.ple
+    out |> reserve(n)
+    out |> resize(n)
+    var stage = make_host_buf(n * 4l, false, [cached = true])
+    readback_range(g_rd.ple_dev, VHZ_COS, 0l, stage, unsafe(addr(out[0])), n * 4l)
+    destroy_host_buf(stage)
 }
 
 //! The selected region's conv ring against the session's host ring (`RdecNgramRingFn`): the host's rows up after a CPU prefill or
@@ -1671,9 +1732,12 @@ def private rd_encode_routed_sum(raw : VkCommandBuffer; var h : VkHaz; l : int64
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-token-command")]
-def private rd_encode_host_cut(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; nrows : int64; stamp : string) {
+def private rd_encode_host_cut(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; l, nrows : int64; stamp : string) {
+    if (L.moe_g4) {   //! the routed feed the host reads; the router norms x itself
+        rd_encode_g4_pre2(raw, h, L, l, nrows, false)
+    }
     var pcr = GkRouterArgs(ne = uint(g_rd.ner), dim = uint(g_rd.dim), woff = uint(L.router_slot * g_rd.ner * g_rd.dim), obase = 0u,
-        norm_on = 0u, nwoff = 0u, eps = g_rd.eps, ncols = uint(nrows))
+        norm_on = L.moe_g4 ? 1u : 0u, nwoff = L.moe_g4 ? uint(rd_norm_off(l, RD_NORM_ROUTER)) : 0u, eps = g_rd.eps, ncols = uint(nrows))
     router_enc_cols(false, raw, h, L.s_router, pcr, g_rd.ner)
     if (!empty(stamp)) {
         rd_ts(raw, stamp)
@@ -1748,7 +1812,7 @@ def private rd_record_hc_segments_n(nrows : int64; seq : bool; var segs : array<
             rd_encode_hc_layer(raw, h, L, l, nrows, seq, fuse_qkr, nlfin)
             if (L.moe) {
                 verify(L.experts_host, "vk decode: the hyper-connection chain serves routed experts on the host alone")
-                rd_encode_host_cut(raw, h, L, nrows, "")
+                rd_encode_host_cut(raw, h, L, l, nrows, "")
                 seg++
                 rd_host_resume(raw, segs[seg0 + seg], h, l, nrows)
             }
@@ -1799,7 +1863,7 @@ def private rd_encode_hc_verify_warm(raw : VkCommandBuffer; var h : VkHaz; nrows
     vhz_dep(raw, h, VHZ_X | rd_carry_bit(), VHZ_GATE, true)
     cmd_copy_whole(raw, g_rd.hccarry_dev, g_rd.hcsrc_dev, wrowb)
     cmd_copy_range(raw, g_rd.hccarry_out_dev, 0l, g_rd.hcsrc_dev, wrowb, (nrows - 1l) * wrowb)
-    var pce = ArArgs(dim = uint(dim), add_on = 0u, woff = hb + uint(RDEC_HEAD_ENORM * dim), eps = g_rd.eps, ascale = 1.0, row0 = 0u)
+    var pce = GkAddRmsArgs(dim = uint(dim), add_on = 0u, woff = hb + uint(RDEC_HEAD_ENORM * dim), eps = g_rd.eps, ascale = 1.0, row0 = 0u)
     enc_cls_ar(raw, h, g_rd.head_s_emb_ar, pce, nrows)
     var pcn = GkHcNormArgs(dim = uint(dim), hc = uint(hc), woff = uint(g_rd.hc_hnorm_row * hcd), row0 = 0u, eps = g_rd.eps)
     enc_hc_norm_cls(raw, h, g_rd.s_hc_norm_vsrc, pcn, hc * nrows)
@@ -1831,6 +1895,18 @@ def private rd_stage_row(x : array<float>; token : int64) {
             } else {
                 g_rdec_tok_gathered++
             }
+        }
+    }
+}
+
+//! the draft's head row under the device gather: the token id, or `EMB_ID_HOST` and the host's unscaled row beside it where `token` is -1
+def private rd_stage_head_id(x : array<float>; token : int64) {
+    unsafe {
+        *reinterpret<uint?>(g_rd.tok_ids_host.mapped) = token >= 0l ? uint(token) : EMB_ID_HOST
+        if (token < 0l) {
+            memcpy(g_rd.tok_xh_host.mapped, addr<void?>(x[0]), g_rd.dim * 4l)
+        } else {
+            g_rdec_head_emb_gathered++
         }
     }
 }
@@ -1885,7 +1961,7 @@ def rd_cls_epi_on : bool => g_rd.cls_cap > 0.0 || g_rd.nsupp > 0l
 
 //! the epilogue over the `nrows` logits rows the classifier GEMV just wrote (the prefill's tail encodes one row the same)
 def rd_enc_cls_epi(raw : VkCommandBuffer; var h : VkHaz; nrows : int64 = 1l) {
-    var pce = ClsEpiArgs(vocab = uint(g_rd.vocab), cap = g_rd.cls_cap, nsupp = uint(g_rd.nsupp), rows = uint(nrows))
+    var pce = GkClsEpiArgs(vocab = uint(g_rd.vocab), cap = g_rd.cls_cap, nsupp = uint(g_rd.nsupp), rows = uint(nrows))
     enc_cls_epi(raw, h, g_rd.cls_epi_set, pce, (g_rd.vocab * nrows + 255l) / 256l)
 }
 
@@ -2088,8 +2164,12 @@ def private rd_fill_layer_regions(L : RLayer) {
         fill_gemv_regions(L.m_down, L.b2)
     }
     if (L.ple) {
-        fill_gemv_regions(L.m_pg, L.bpg)
-        fill_gemv_regions(L.m_pp, L.bpp)
+        if (L.bpg >= 0l) {
+            fill_gemv_regions(L.m_pg, L.bpg)
+        }
+        if (L.bpp >= 0l) {
+            fill_gemv_regions(L.m_pp, L.bpp)
+        }
     }
 }
 
@@ -2136,7 +2216,7 @@ def private ensure_ar_rq_stamp(stamp : RqStamp) : bool {
 }
 
 //! the stamp's dispatch: one workgroup on the one-row stamps, a workgroup a row on the rows stamp
-def private enc_ar_rq_stamp(stamp : RqStamp; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : ArArgs; rows : int64 = 1l) {
+def private enc_ar_rq_stamp(stamp : RqStamp; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : GkAddRmsArgs; rows : int64 = 1l) {
     if (stamp == RqStamp.rq || stamp == RqStamp.rq_b) {
         enc_cls_ar_rq_b(raw, h, s, pc, stamp == RqStamp.rq ? 1l : rows)
     } elif (stamp == RqStamp.rqx) {
@@ -2264,9 +2344,10 @@ def private rd_attn_rqk(L : RLayer) : uint {
 //! at consecutive positions from `pos0`. tq4's store also rotates `nqh` q heads a row in place (`qrow` a row's stride in the q
 //! plane, `qstride` a head's); `nkh` is the K heads a row stores, 0 on a shared-KV layer.
 [arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-kv-block-codecs"), arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-kv-tq4-basis")]
-def rd_enc_kv_store(raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; window : bool; kvd, hs, rows, nqh, nkh : int64; layerbase, pos0, qrow, qstride : uint) {
+def rd_enc_kv_store(raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; window : bool; kvd, hs, rows, nqh, nkh : int64; layerbase, pos0, qrow, qstride : uint;
+                    ring : int64) {
     if (rd_kvq8() && nkh > 0l) {
-        var pcs = KvQStoreArgs(kvd = uint(kvd), rows = uint(rows), layerbase = layerbase, pos0 = pos0)
+        var pcs = KvQStoreArgs(kvd = uint(kvd), rows = uint(rows), layerbase = layerbase, pos0 = pos0, ring = uint(ring))
         let wgs = (kv_row_units(KVDtype.q8_0, kvd) * rows + int64(WG_X) - 1l) / int64(WG_X)
         if (window) {
             enc_kv_q8_store_b_cls(raw, h, s, pcs, wgs)
@@ -2275,7 +2356,7 @@ def rd_enc_kv_store(raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSe
         }
     } elif (rd_kvtq4() && nqh + nkh > 0l) {
         var pct = KvTqStoreArgs(kvd = uint(kvd), hs = uint(hs), layerbase = layerbase, pos0 = pos0, nqh = uint(nqh), nkh = uint(nkh),
-            qrow = qrow, qstride = qstride, inv_sqrt_hs = 1.0 / sqrt(float(hs)))
+            qrow = qrow, qstride = qstride, inv_sqrt_hs = 1.0 / sqrt(float(hs)), ring = uint(ring))
         if (window) {
             enc_kv_tq4_store_b_cls(raw, h, s, pct, rows * (nqh + 2l * nkh))
         } else {
@@ -2345,7 +2426,7 @@ def private rd_encode_attn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RL
             qwoff = uint(nlfin + dim + l * 2l * hsmax), kwoff = uint(nlfin + dim + (l * 2l + 1l) * hsmax),
             eps = g_rd.eps, qstride = qstride, boff = rd_bias_off(L), hasb = g_rd.has_bias ? 1u : 0u, cbase = uint(L.cbase),
             vfk = L.vfk ? 1u : 0u, vnorm = L.vnorm ? 1u : 0u,
-            rowwg = uint(nqh + nkh), kvrow = kvrow, qrow = q_plane_row, cosrow = uint(g_rd.cos_elems))
+            rowwg = uint(nqh + nkh), kvrow = kvrow, qrow = q_plane_row, cosrow = uint(g_rd.cos_elems), ring = uint(L.ring))
         if (rd_kv16()) {
             enc_qkn_rope_f16_cls(raw, h, L.s_qkn_rope, pcf, (nqh + nkh) * nrows)
         } else {
@@ -2365,7 +2446,7 @@ def private rd_encode_attn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RL
         let npairs = qpairs + (L.kv_shared ? 0l : kvd / 2l)   // the k pairs also store the mirror row: none on a shared-KV layer
         //! the whole head rotates (`rot = hs`): a partial-rope class's table carries the (1, 0) pairs past its rotated width
         var pcr = gk_rope_kv_args(qd, kvd, hs, qpairs, npairs, g_rd.neox, g_rd.has_bias, hs, int64(rd_bias_off(L)), L.cbase,
-            int64(nr), int64(kvrow), int64(q_plane_row), g_rd.cos_elems, int64(storebase))
+            int64(nr), int64(kvrow), int64(q_plane_row), g_rd.cos_elems, int64(storebase), L.ring)
         let rwgs = (npairs * nrows + int64(WG_X) - 1l) / int64(WG_X)
         if (rd_kv16()) {
             enc_rope_kv_f16_cls(raw, h, L.s_rope, pcr, rwgs)
@@ -2375,7 +2456,7 @@ def private rd_encode_attn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RL
         rd_ts(raw, "{pfx}rope")
     }
     if ((nrow_bx & NROW_BX_ROPE) == 0) {
-        rd_enc_kv_store(raw, h, L.s_kv_store, false, kvd, hs, nrows, nqh, nkh, mirbase, 0u, q_plane_row, qstride)
+        rd_enc_kv_store(raw, h, L.s_kv_store, false, kvd, hs, nrows, nqh, nkh, mirbase, 0u, q_plane_row, qstride, L.ring)
     }
     return if (kv_only)
     let rqk = rd_attn_rqk(L)
@@ -2383,7 +2464,7 @@ def private rd_encode_attn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RL
     var pca = DaAttnArgs(kvd = uint(kvd), hs = uint(hs), kv_mul = uint(L.kv_mul),
         kbase = mirbase, vbase = mirbase, scale = g_rd.scale, qstride = qstride, gated = rd_attn_gated() ? 1u : 0u,
         window = uint(L.window), cap = L.attn_cap, nsplit = uint(nsplit), rqk = rqk, sinkoff = uint(l * g_rd.n_heads),
-        rowwg = uint(rowwgs), qrow = q_plane_row, cntoff = uint(g_rd.attn_cnt_off))
+        rowwg = uint(rowwgs), qrow = q_plane_row, cntoff = uint(g_rd.attn_cnt_off), ring = uint(L.ring))
     if ((nrow_bx & NROW_BX_ATTN) == 0) {
         da_attn_stamp_enc(g_rd.kv_dt, da_slab_of(g_rd.has_sinks, L.kv_mul), raw, h, L.s_attn, pca, rowwgs * nrows)
         if (rd_kvtq4()) {
@@ -2580,11 +2661,16 @@ def private rd_encode_ple(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
     let dim = g_rd.dim
     let ple = g_rd.ple
     let nr = uint(nrows)
-    if (!L.ple_fused) {   //! unfused: the gate's feed still wants its own Q8_0 quants of the rows
-        rq_enc(raw, h, L.s_ple_x, false, 0l, dim * nrows)
-        rd_ts(raw, "p:rq_x")
+    if (L.bpg < 0l) {   //! the f32 rows read the stream as it is
+        var pcg = GkRouterArgs(ne = uint(ple), dim = uint(dim), woff = uint(l * ple * dim), ncols = nr)
+        router_enc_cols(false, raw, h, L.s_ple_gate, pcg, ple)
+    } else {
+        if (!L.ple_fused) {   //! unfused: the gate's feed still wants its own quants of the rows
+            rq_enc(raw, h, L.s_ple_x, kq_sb(L.fpg), 0l, dim * nrows)
+            rd_ts(raw, "p:rq_x")
+        }
+        rd_gemv(L.fpg, raw, h, L.s_ple_gate, dim, ple, ncols, uint(ple))
     }
-    rd_gemv(L.fpg, raw, h, L.s_ple_gate, dim, ple, ncols, uint(ple))
     rd_ts(raw, "p:gate")
     if (L.ple_fused) {
         var pcf = PleActArgs(n = uint(ple), d = uint(dim), wblk = uint(arena_local_blk(L.bpp)), ubase = uint(l * ple), act = ACT_GELU,
@@ -2593,12 +2679,37 @@ def private rd_encode_ple(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
         rd_ts(raw, "p:actproj")
         return
     }
-    var pca = ActArgs(nelem = uint(ple) * nr, act = ACT_GELU, nblk = uint(ple / 32l) * nr,
-        ubase = uint(l * ple), ustride = uint(g_rd.n_layers * ple), ulen = uint(ple))
-    enc_q8_actrq_cls(raw, h, L.s_ple_act, pca, (ple * nrows / 4l + 255l) / 256l)
-    rd_ts(raw, "p:act")
-    rd_gemv(L.fpg, raw, h, L.s_ple_proj, ple, dim, ncols, uint(dim))
+    if (L.bpp < 0l) {
+        var pcf = GkPleActArgs(nelem = uint(ple) * nr, sbase = uint(l * ple), sstride = uint(g_rd.n_layers * ple), slen = uint(ple))
+        enc_ple_act_f32_cls(raw, h, L.s_ple_act, pcf, (ple * nrows + 255l) / 256l)
+        rd_ts(raw, "p:act")
+        var pcp = GkRouterArgs(ne = uint(dim), dim = uint(ple), woff = uint(l * ple * dim), ncols = nr)
+        router_enc_cols(false, raw, h, L.s_ple_proj, pcp, dim)
+    } else {
+        var pca = ActArgs(nelem = uint(ple) * nr, act = ACT_GELU, ubase = uint(l * ple), ustride = uint(g_rd.n_layers * ple), ulen = uint(ple))
+        actrq_enc(raw, h, L.s_ple_act, kq_sb(L.fpp), pca, ple * nrows)
+        rd_ts(raw, "p:act")
+        rd_gemv(L.fpp, raw, h, L.s_ple_proj, ple, dim, ncols, uint(dim))
+    }
     rd_ts(raw, "p:proj")
+}
+
+//! layer l's gemma-4 routed feed as a residual step with no partner: x under the routed branch's pre norm, the decode's and the
+//! window's
+def rd_g4_pre2_args(l : int64) : GkAddRmsArgs
+    => GkAddRmsArgs(dim = uint(g_rd.dim), add_on = 0u, woff = uint(rd_norm_off(l, RD_NORM_PRE_FFN2)), eps = g_rd.eps, ascale = 1.0)
+
+//! the gemma-4 routed feed: x under the routed branch's pre norm into xb, or (`fused`) straight into the experts' Q8 image
+[arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-gemma4-moe-block")]
+def private rd_encode_g4_pre2(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; l, nrows : int64; fused : bool) {
+    var pcn = rd_g4_pre2_args(l)
+    if (fused) {
+        enc_ar_rq_stamp(L.pre2_stamp, raw, h, L.s_pre2_rq, pcn)
+        rd_ts(raw, "m:pre2_rq")
+    } else {
+        enc_cls_ar(raw, h, L.s_addr_ffn, pcn, nrows)
+        rd_ts(raw, "m:pre2")
+    }
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#resident-moe-token")]
@@ -2608,22 +2719,15 @@ def private rd_encode_moe(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
     let k = g_rd.k
     let one = nrows == 1l
     let nr = uint(nrows)
-    if (L.moe_g4) {   //! the routed feed: x under the routed branch's pre norm into xb (the dense triple's requant took the FFN-normed row already)
-        var pcn = ArArgs(dim = uint(dim), add_on = 0u, woff = uint(rd_norm_off(l, RD_NORM_PRE_FFN2)), eps = g_rd.eps, ascale = 1.0)
-        if (one && L.pre2_fused) {
-            enc_ar_rq_stamp(L.pre2_stamp, raw, h, L.s_pre2_rq, pcn)
-            rd_ts(raw, "m:pre2_rq")
-        } else {
-            enc_cls_ar(raw, h, L.s_addr_ffn, pcn, nrows)
-            rd_ts(raw, "m:pre2")
-        }
+    if (L.moe_g4) {   //! the dense triple's requant took the FFN-normed row already
+        rd_encode_g4_pre2(raw, h, L, l, nrows, one && L.pre2_fused)
     }
     if (L.xe_own && !(one && L.pre2_fused)) {
         rq_enc(raw, h, L.s_quant_xe, L.fe1, dim * nrows)
         rd_ts(raw, "m:rq_e")
     }
     if (L.moe_g4 && !L.rtn_fused) {   //! the router's input: a weightless rms of x under the router scale over sqrt(dim), into xb
-        var pcn = ArArgs(dim = uint(dim), add_on = 0u, woff = uint(rd_norm_off(l, RD_NORM_ROUTER)), eps = g_rd.eps, ascale = 1.0)
+        var pcn = GkAddRmsArgs(dim = uint(dim), add_on = 0u, woff = uint(rd_norm_off(l, RD_NORM_ROUTER)), eps = g_rd.eps, ascale = 1.0)
         enc_cls_ar(raw, h, L.s_addr_ffn, pcn, nrows)
         rd_ts(raw, "m:rtn")
     }
@@ -2645,17 +2749,13 @@ def private rd_encode_moe(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
     }
     rd_ts(raw, "m:topk")
     var pcg = GemvArgs(n = uint(dim), d = uint(nfe), nreg = uint(k) * nr, ybase = 0u)
-    if (one && L.egu) {
+    if (one && L.egu) {   //! a workgroup an activated Q8_0 block of the hidden rows
         pcg.lanes_per_row = gemv_lanes_per_row(L.fe1, dim)
-        pcg.act = g_rd.is_gelu ? ACT_GELU : ACT_SILU
-        enc_kq_gemv_k4_gu_cls(raw, h, L.s_egu, pcg, k * nfe / 32l)
-        rd_ts(raw, "m:e_gu")
-    } elif (one && L.egu_mx4) {
         pcg.act = act_code(g_rd.act_oai, g_rd.is_gelu)
         pcg.bias_on = g_rd.exps_bias ? 1u : 0u
         pcg.gboff = uint(L.router_slot * g_rd.ne * nfe)
         pcg.uboff = uint(L.router_slot * g_rd.ne * nfe)
-        enc_mx4_gemv_gu_cls(raw, h, L.s_egu, pcg, k * nfe / 32l)
+        gemv_shell_enc(L.fe1, GEMV_SHELL_GU, raw, h, L.s_egu, pcg, k * nfe / Q8_BLOCK_ELEMS)
         rd_ts(raw, "m:e_gu")
     } else {
         gemv_enc(L.fe1, raw, h, L.s_egate, pcg, k * nfe * nrows)
@@ -2675,8 +2775,9 @@ def private rd_encode_moe(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
         rd_ts(raw, "m:e_act")
     }
     var pcd = GemvArgs(n = uint(nfe), d = uint(dim), nreg = uint(k) * nr, ybase = 0u)
-    if (one && L.edown_sum) {
-        enc_q51_gemv_sum_cls(raw, h, L.s_edown_sum, pcd, gemv_wgs(dim, 0u))
+    if (L.edown_sum) {   //! each row's k slots folded under their weights into the row's own output row, the one-row command's sum
+        pcd.ncols = nr
+        gemv_shell_enc(L.fe2, GEMV_SHELL_SUM, raw, h, L.s_edown_sum, pcd, gemv_wgs(dim * nrows, 0u))
         rd_ts(raw, "m:e_down_sum")
     } else {
         gemv_enc(L.fe2, raw, h, L.s_edown, pcd, k * dim * nrows)
@@ -2684,19 +2785,21 @@ def private rd_encode_moe(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
     }
 }
 
+//! the gemma-4 step's args (`GkMoeCombG4`): the k slots off the slot map, both branches normed, their sum normed, the step scaled,
+//! the next norm at `woff`; `presummed` where the down GEMV folded the k rows; a host layer's sum is one slot of weight one
+def rd_g4_comb_args(L : RLayer; l, woff : int64; presummed : bool) : GkMoeCombArgs
+    => GkMoeCombArgs(n = uint(g_rd.dim), k = L.experts_host ? 1u : uint(g_rd.k), eps = g_rd.eps, ascale = L.out_scale, presummed = presummed ? 1u : 0u,
+        rpost_off = uint(rd_norm_off(l, RD_NORM_POST_FFN2)), dpost_off = uint(rd_norm_off(l, RD_NORM_POST_FFN1)),
+        spost_off = uint(rd_norm_off(l, RD_NORM_POST_FFN)), nwoff = uint(woff))
+
 //! The residual step's push block over a MoE layer's combine: the shared row at its gate when the layer has
 //! one, the k routed rows through the slot map, then the norm at `woff`.
-def rd_ar_comb_args(L : RLayer; l, woff : int64) : ArArgs {
-    if (L.moe_g4) {   //! both branches normed, their sum normed, the step scaled: the gemma-4 form's rows
-        return ArArgs(dim = uint(g_rd.dim), add_on = 1u, woff = uint(woff), eps = g_rd.eps, ascale = L.out_scale,
-            slots = uint(g_rd.k), pwoff = uint(rd_norm_off(l, RD_NORM_POST_FFN1)),
-            routed_post_off = uint(rd_norm_off(l, RD_NORM_POST_FFN2)), sum_post_off = uint(rd_norm_off(l, RD_NORM_POST_FFN)))
-    }
+def rd_ar_comb_args(L : RLayer; woff : int64) : GkAddRmsArgs {
     if (L.experts_host) {   // the host's sum lands as one row of weight one, the expert bias already in it
-        return ArArgs(dim = uint(g_rd.dim), add_on = has_dense_triple(L) ? 1u : 0u, woff = uint(woff), eps = g_rd.eps, ascale = 1.0,
+        return GkAddRmsArgs(dim = uint(g_rd.dim), add_on = has_dense_triple(L) ? 1u : 0u, woff = uint(woff), eps = g_rd.eps, ascale = 1.0,
             slots = 1u, lstride = uint(g_rd.ner), gated = g_rd.sh_gated ? 1u : 0u, dbias_on = 0u, dboff = uint(L.router_slot * g_rd.ne * g_rd.dim))
     }
-    return ArArgs(dim = uint(g_rd.dim), add_on = has_dense_triple(L) ? 1u : 0u, woff = uint(woff), eps = g_rd.eps, ascale = 1.0,
+    return GkAddRmsArgs(dim = uint(g_rd.dim), add_on = has_dense_triple(L) ? 1u : 0u, woff = uint(woff), eps = g_rd.eps, ascale = 1.0,
         slots = uint(g_rd.k), lstride = uint(g_rd.ner), gated = g_rd.sh_gated ? 1u : 0u,
         dbias_on = g_rd.exps_bias ? 1u : 0u, dboff = uint(L.router_slot * g_rd.ne * g_rd.dim))
 }
@@ -2715,32 +2818,32 @@ def private rd_encode_token(var first_seg_raw : VkCommandBuffer; nrows, nsplit :
     unsafe {
         var h = cmd_open(raw, true, one && !verify)   //! the one-row command: a chained step submits it again while the running step still holds it
         rd_stamps_begin(raw)
-        if (one && !verify && rd_emb_on()) {   //! the row off the step's token id, or the host's staged row in place: no row crosses the bus ahead of the command
-            rd_emb_enc(raw, h, g_rd.s_tok_emb, 1l, g_rd.emb_scale)
+        if (!seq && rd_emb_on()) {   //! each row off its token id, or the host's staged row in place: no gathered row crosses the bus ahead of the command
+            rd_emb_enc(raw, h, g_rd.s_tok_emb, nrows, g_rd.emb_scale)
         } else {
             vhz_dep(raw, h, 0u, VHZ_X, true)
             cmd_copy_whole(raw, g_rd.x_host.buf, g_rd.x_dev, dim * 4l * nrows)
         }
         vhz_dep(raw, h, 0u, VHZ_COS, true)
         cmd_copy_whole(raw, g_rd.cos_host.buf, g_rd.cos_dev, g_rd.cos_elems * 4l * nrows)
-        if (g_rd.ple > 0l) {   //! the side-input rows ride the cos plane's hazard bit: written here, read by the act step
+        if (g_rd.ple > 0l && !verify && !seq && g_rd.ple_tok_on) {   //! each row's side row off the table at its token id (the cos plane's hazard bit, as the copy's)
+            emb_cls_enc(g_rd.ple_tbl_fmt, raw, h, g_rd.s_tok_ple, nrows, g_rd.n_layers * g_rd.ple, arena_local_blk(g_rd.ple_tbl_blk), sqrt(float(g_rd.ple)))
+        } elif (g_rd.ple > 0l) {   //! the side-input rows ride the cos plane's hazard bit: written here, read by the act step
             cmd_copy_whole(raw, g_rd.ple_host.buf, g_rd.ple_dev, g_rd.n_layers * g_rd.ple * 4l * nrows)
         }
         rd_ts(raw, "p:upload")
         if (g_rd.ple > 0l && g_rd.ple_gpu) {   //! the pre-step's finish: the projection of the embedded rows, normed a slice at a time and averaged into the gathered rows
-            let all = g_rd.n_layers * g_rd.ple
-            var pcr = GkRouterArgs(ne = uint(all), dim = uint(dim), woff = 0u, obase = 0u, norm_on = 0u, nwoff = 0u, eps = g_rd.eps, ncols = nr, ne_split = 0u, obase_split = 0u)
-            router_enc_cols(true, raw, h, g_rd.s_tok_pleproj, pcr, all)
+            ple_proj_enc(raw, h, g_rd.s_tok_pleproj, nr)
             rd_ts(raw, "t:pleproj")
-            var pca = ArArgs(dim = uint(g_rd.ple), add_on = 1u, woff = 0u, eps = g_rd.eps, ascale = 1.0 / sqrt(2.0), pre_on = 1u, pwoff = 0u)
-            enc_cls_ar(raw, h, g_rd.s_tok_ple_ar, pca, g_rd.n_layers * nrows)
+            var pcf = GkPleFinArgs(ple = uint(g_rd.ple), eps = g_rd.eps)
+            enc_ple_finish_cls(raw, h, g_rd.s_tok_ple_ar, pcf, g_rd.n_layers * nrows)
             rd_ts(raw, "t:plefin")
         }
         let (fuse, fuse_qkr) = rd_fuse_gates()
         if (one && fuse) {
             rd_ensure_fused_sets()
         }
-        var pc_pro = ArArgs(dim = uint(dim), add_on = 0u, woff = 0u, eps = g_rd.eps, ascale = 1.0)
+        var pc_pro = GkAddRmsArgs(dim = uint(dim), add_on = 0u, woff = 0u, eps = g_rd.eps, ascale = 1.0)
         //! the rows form fuses a site wherever its feed is Q8_0 (the `rq_b` stamp, a row a workgroup); the one-row form fuses under the lever and its bisect
         let bx = vk_fuse_bisect_bits()
         let f0 = rd_head_feed(g_rd.layers[0])
@@ -2772,7 +2875,7 @@ def private rd_encode_token(var first_seg_raw : VkCommandBuffer; nrows, nsplit :
             } else {
                 rd_encode_attn_head(raw, h, L, l, fuse_qkr, nlfin, rd_layer_pieces(L, nsplit, nrows), nrows, ncols, nrow_bx)
             }
-            var pc8 = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(rd_norm_off(l, RD_NORM_FFN)), eps = g_rd.eps, ascale = 1.0,
+            var pc8 = GkAddRmsArgs(dim = uint(dim), add_on = 1u, woff = uint(rd_norm_off(l, RD_NORM_FFN)), eps = g_rd.eps, ascale = 1.0,
                 pre_on = L.pre_post ? 1u : 0u, pwoff = uint(rd_norm_off(l, RD_NORM_POST_ATT)),
                 abias_on = g_rd.has_obias ? 1u : 0u, aboff = uint(rd_norm_off(l, RD_NORM_OBIAS)))
             let ffn_fused = one ? att_fused : (!kq_sb(L.f1) && !L.moe)   //! the rows form: the shared expert's feed, or on a bare routed block the experts' own (their format is the layer's f1)
@@ -2798,11 +2901,16 @@ def private rd_encode_token(var first_seg_raw : VkCommandBuffer; nrows, nsplit :
             }
             if (L.moe && L.experts_host) {
                 verify(one && split_seg_base >= 0l, "vk decode: a host layer takes the one-row split command alone")
-                rd_encode_host_cut(raw, h, L, 1l, "m:router")
+                rd_encode_host_cut(raw, h, L, l, 1l, "m:router")
                 seg++
                 rd_host_resume(raw, g_rd.cmd_seg[split_seg_base + seg], h, l, 1l)
-                var pc14h = rd_ar_comb_args(L, l, nxt)
-                enc_cls_ar_comb(raw, h, L.s_addr_next, pc14h, 1l)
+                if (L.moe_g4) {   //! the host's sum is the one routed row of weight one: the gemma-4 step over the set its class built
+                    var pcg = rd_g4_comb_args(L, l, nxt, false)
+                    enc_cls_ar_comb_g4(raw, h, L.s_addr_next, pcg, 1l)
+                } else {
+                    var pc14h = rd_ar_comb_args(L, nxt)
+                    enc_cls_ar_comb(raw, h, L.s_addr_next, pc14h, 1l)
+                }
                 rd_ts(raw, "m:ar2")
                 xq_ready = false
                 continue
@@ -2812,7 +2920,7 @@ def private rd_encode_token(var first_seg_raw : VkCommandBuffer; nrows, nsplit :
             }
             if (L.ple) {
                 // the FFN residual first (no scale, the normed output unused); the branch leaves its projection in ffnout for the step below
-                var pc14a = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(nxt), eps = g_rd.eps, ascale = 1.0,
+                var pc14a = GkAddRmsArgs(dim = uint(dim), add_on = 1u, woff = uint(nxt), eps = g_rd.eps, ascale = 1.0,
                     pre_on = L.pre_post ? 1u : 0u, pwoff = uint(rd_norm_off(l, RD_NORM_POST_FFN)))
                 if (one && L.down_ar) {   //! the down GEMV's epilogue took the step
                 } elif (L.ple_fused) {   //! the step quantizes the rows it writes, as they are: the gate's feed
@@ -2829,17 +2937,24 @@ def private rd_encode_token(var first_seg_raw : VkCommandBuffer; nrows, nsplit :
                 }
                 rd_encode_ple(raw, h, L, l, nrows, ncols)
             }
-            var pc14 = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(nxt), eps = g_rd.eps, ascale = L.out_scale,
+            var pc14 = GkAddRmsArgs(dim = uint(dim), add_on = 1u, woff = uint(nxt), eps = g_rd.eps, ascale = L.out_scale,
                 pre_on = (L.pre_post || L.ple) ? 1u : 0u, pwoff = uint(rd_norm_off(l, L.ple ? RD_NORM_PLE_POST : RD_NORM_POST_FFN)))
+            if (L.moe_g4) {
+                //! the summing down GEMV folded each row's k slots, on the one-row command and the rows alike
+                var pcg = rd_g4_comb_args(L, l, nxt, L.edown_sum)
+                if (L.comb_rq) {   //! the next head's Q8_0 feed quantized here
+                    enc_cls_ar_comb_g4_rq(raw, h, L.s_comb_rq, pcg, nrows)
+                } else {
+                    enc_cls_ar_comb_g4(raw, h, L.s_addr_next, pcg, nrows)
+                }
+                rd_ts(raw, "m:ar2")
+                xq_ready = L.comb_rq
+                continue
+            }
             if (L.moe) {
-                var pc14c = rd_ar_comb_args(L, l, nxt)
-                pc14c.presummed = (one && L.edown_sum) ? 1u : 0u   //! the one-row command's summing down GEMV folded the k rows; the rows and the window chain write them apart
-                if (L.comb_rq && L.moe_g4) {   //! the next head's Q8_0 feed quantized here
-                    enc_cls_ar_comb_g4_rq(raw, h, L.s_comb_rq, pc14c, nrows)
-                } elif (L.comb_rq) {
+                var pc14c = rd_ar_comb_args(L, nxt)
+                if (L.comb_rq) {   //! the next head's Q8_0 feed quantized here
                     enc_cls_ar_comb_rq(raw, h, L.s_comb_rq, pc14c, nrows)
-                } elif (L.moe_g4) {
-                    enc_cls_ar_comb_g4(raw, h, L.s_addr_next, pc14c, nrows)
                 } else {
                     enc_cls_ar_comb(raw, h, L.s_addr_next, pc14c, nrows)
                 }
@@ -3083,7 +3198,7 @@ def private rdq_host_add(var led : RdqLedger; ts0, t1, t2, t3, t4 : int64) {
 //! re-records every command and landing copy whose last site stores or lands the row, so a round switched off pays no carry
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-spec-knob-gate")]
 def rd_carry_sync {
-    let want = g_rd.carry && get_mtp_spec()
+    let want = g_rd.carry && (get_mtp_spec() || g_rd.carry_assist)
     return if (want == g_rd.carry_live)
     g_rd.carry_live = want
     rd_unmake_sets()
@@ -3109,6 +3224,27 @@ var private g_rdec_tok_gathered = 0l
 
 //! The one-row steps whose row the device gathered off the step's token id, in this process (a cell's served witness)
 def vk_rdec_token_gathered : int64 => g_rdec_tok_gathered
+
+var private g_rdec_nrow_gathered = 0l
+
+//! The N-row commands' rows whose side row the device gathered off the row's token id, in this process (a cell's served witness)
+def vk_rdec_nrow_side_gathered : int64 => g_rdec_nrow_gathered
+
+var private g_rdec_nrow_emb_gathered = 0l
+
+//! The N-row commands' rows whose token row the device gathered off the row's token id, in this process (a cell's served witness)
+def vk_rdec_nrow_embed_gathered : int64 => g_rdec_nrow_emb_gathered
+
+var private g_rdec_head_emb_gathered = 0l
+
+//! The NextN head rows - a draft's, a verify re-warm's - whose embed half the device gathered off the row's token id, in this process (a cell's served witness)
+def vk_rdec_head_embed_gathered : int64 => g_rdec_head_emb_gathered
+
+//! the token commands gather the E-series side rows off the rows' ids: the per-layer table, the projection and the ids ride the device
+def vk_rdec_side_gather_on : bool => g_rd != null && g_rd.ple_tok_on
+
+//! the token commands gather their token rows off the rows' ids: the driver holds the table
+def vk_rdec_token_gather_on : bool => g_rd != null && rd_emb_on()
 
 let private RD_CHAIN_ENV = -2   //! `g_vk_chain_pin` unset: the mode is the environment's
 var private g_vk_chain_pin = RD_CHAIN_ENV
@@ -3146,7 +3282,7 @@ def vk_rdec_chain_stats : tuple<hits : int64; misses : int64> => (hits = g_rdec_
 [arch(at="../ARCHITECTURE_GPU_VULKAN_LANDING.md#vk-greedy-chain")]
 def vk_rdec_chain_wanted : bool {
     return false if (g_rd == null || !g_rd.ready || vk_rdec_chain_mode() == 0)
-    return (g_rd.log_xfer && rd_emb_on() && g_rd.ple == 0l && !g_rd.carry_live && !g_rd.experts_host && !g_rd.hc
+    return (g_rd.log_xfer && rd_emb_on() && (g_rd.ple == 0l || g_rd.ple_tok_on) && !g_rd.carry_live && !g_rd.experts_host && !g_rd.hc
         && !vk_prof() && !vk_rdec_rerecord_on())
 }
 
@@ -3378,7 +3514,7 @@ def vk_rdec_token(x : array<float>; cossin : array<float>; ple_row : array<float
     rd_stage_row(x, token)
     unsafe {
         memcpy(g_rd.cos_host.mapped, addr<void?>(cossin[0]), g_rd.cos_elems * 4l)
-        if (g_rd.ple > 0l) {
+        if (g_rd.ple > 0l && !(g_rd.ple_tok_on && token >= 0l)) {   //! a step the device gathers brings no row
             assert(long_length(ple_row) >= g_rd.n_layers * g_rd.ple, "vk_rdec_token: the per-layer-embedding row is short")
             memcpy(g_rd.ple_host.mapped, addr<void?>(ple_row[0]), g_rd.n_layers * g_rd.ple * 4l)
         }
@@ -3477,7 +3613,7 @@ def private rd_ensure_n_rail : bool {
             && (!has_dense_triple(L) || (rd_triple_all(L.f1, L.f3, L.f2) $(f) => gemv_cls_ensure_n(f, nb)))
             && (!L.gu_on || q8_gemv_gu_n_ensure(nb))   //! the fused gate-up's N form declines the rail whole, as the GEMV leaves do
             && (!L.moe || topk_n_ensure(g_rd.ne))
-            && (!L.ple || gemv_cls_ensure_n(L.fpg, nb)))
+            && (!L.ple || ((L.bpg < 0l || gemv_cls_ensure_n(L.fpg, nb)) && (L.bpp < 0l || gemv_cls_ensure_n(L.fpp, nb)))))
     }
     if (!ok) {
         to_log(LOG_WARNING, "dasLLAMA vulkan resident: a class of the N-row command declined on this device (an N-column GEMV leaf, the fused add+rms+requant rows stamp, the fused gate-up N form, the per-row top-k, or the per-layer-embedding gate's N leaf) - the batched step runs a row at a time\n")
@@ -3554,6 +3690,20 @@ def private rd_carry_src : uint64 => g_rd.hc ? g_rd.hccarry_out_dev : g_rd.xb_de
 
 def private rd_carry_bit : uint => g_rd.hc ? VHZ_X : VHZ_XB
 
+//! An assistant drafter's carry, armed after the load (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-spec-knob-gate`): the landing's host rows made
+//! where the plan made none, and every step lands the post-final-norm row while `on` holds, the speculative knob notwithstanding; the
+//! next served entry re-records the commands whose last site stores or lands it (`rd_carry_sync`). False where no driver is armed
+[arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-spec-knob-gate")]
+def vk_rdec_carry_arm(on : bool) : bool {
+    return false if (g_rd == null || !g_rd.ready || g_rd.hc)
+    if (on && !g_rd.carry) {
+        g_rd.hid_host = make_host_buf(g_rd.dim * 4l * g_rd.nb, false, [cached = true, xfer_shared = g_rd.log_xfer])
+        g_rd.carry = true
+    }
+    g_rd.carry_assist = on
+    return true
+}
+
 [hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_LANDING.md#logits-transfer-queue")]   //! per token, reached through the tier's registered seat
 def vk_rdec_land_carry(row : int64; var dst : array<float>) {
     assert(g_rd != null && g_rd.carry, "vk_rdec_land_carry on a driver prepared without the carry")
@@ -3584,7 +3734,7 @@ def private rd_record_draft {
     rd_stamps_begin(raw)
     rd_encode_head_cat_eh(raw, h, 1l, "p:upload", "p:draft_", g_rd.s_prologue, L.s_quant_xb)
     rd_encode_attn_head(raw, h, L, l, rd_head_fuse_qkr(), rd_norm_final(), rd_layer_pieces(L, rd_split_pieces(), 1l), 1l, 1u, 0)
-    var pcf = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(hb + RDEC_HEAD_FFN * dim), eps = g_rd.eps, ascale = 1.0)
+    var pcf = GkAddRmsArgs(dim = uint(dim), add_on = 1u, woff = uint(hb + RDEC_HEAD_FFN * dim), eps = g_rd.eps, ascale = 1.0)
     enc_cls_ar(raw, h, L.s_addr_ffn, pcf, 1l)
     rd_ts(raw, "a:ar1")
     rq_enc(raw, h, L.s_quant_xb2, L.f1, dim)
@@ -3593,16 +3743,16 @@ def private rd_record_draft {
     rd_encode_ffn(raw, h, L, l, nxt, 1l, 1u, 0)
     if (L.moe) {   //! a routed head's block as a routed trunk layer's: the experts on the shared expert's feed, the combine's residual step
         rd_encode_moe(raw, h, L, l, 1l)
-        var pcc = rd_ar_comb_args(L, l, nxt)
-        pcc.presummed = L.edown_sum ? 1u : 0u
         if (L.moe_g4) {
-            enc_cls_ar_comb_g4(raw, h, L.s_addr_next, pcc, 1l)
+            var pcg = rd_g4_comb_args(L, l, nxt, L.edown_sum)
+            enc_cls_ar_comb_g4(raw, h, L.s_addr_next, pcg, 1l)
         } else {
+            var pcc = rd_ar_comb_args(L, nxt)
             enc_cls_ar_comb(raw, h, L.s_addr_next, pcc, 1l)
         }
         rd_ts(raw, "m:ar2")
     } else {
-        var pco = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(nxt), eps = g_rd.eps, ascale = 1.0)
+        var pco = GkAddRmsArgs(dim = uint(dim), add_on = 1u, woff = uint(nxt), eps = g_rd.eps, ascale = 1.0)
         enc_cls_ar(raw, h, L.s_addr_next, pco, 1l)
     }
     rd_encode_draft_pick(raw, h)
@@ -3664,14 +3814,14 @@ def private rd_record_hc_draft {
     vhz_dep(raw, h, 0u, VHZ_COS, true)
     cmd_copy_whole(raw, g_rd.head_cos_host.buf, g_rd.head_cos_dev, g_rd.cos_elems * 4l)
     rd_ts(raw, "p:upload")
-    var pce = ArArgs(dim = uint(dim), add_on = 0u, woff = uint(g_rd.head_norm_base + RDEC_HEAD_ENORM * dim), eps = g_rd.eps, ascale = 1.0, row0 = 0u)
+    var pce = GkAddRmsArgs(dim = uint(dim), add_on = 0u, woff = uint(g_rd.head_norm_base + RDEC_HEAD_ENORM * dim), eps = g_rd.eps, ascale = 1.0, row0 = 0u)
     enc_cls_ar(raw, h, g_rd.head_s_cat_ar, pce, 1l)
     var pcn = GkHcNormArgs(dim = uint(dim), hc = uint(hc), woff = uint(g_rd.hc_hnorm_row * hcd), row0 = 0u, eps = g_rd.eps)
     enc_hc_norm_cls(raw, h, g_rd.s_hc_norm_carry, pcn, hc)
     vhz_dep(raw, h, VHZ_XB | VHZ_XB2, VHZ_XB, true)
     rd_encode_hc_cat_eh(raw, h, 1l, true, "p:draft_")
     rd_encode_hc_layer(raw, h, L, l, 1l, false, fuse_qkr, nlfin)
-    rd_encode_host_cut(raw, h, L, 1l, "")
+    rd_encode_host_cut(raw, h, L, l, 1l, "")
     pfq_end(raw)
     cmd_close(raw)
     rd_take_stamps(g_rdq_draft, g_pfq_n)
@@ -3695,7 +3845,7 @@ def private rd_record_hc_draft {
 }
 
 [hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-draft-head"), arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-draft-head")]   //! per speculative round, reached through the tier's registered seat
-def vk_rdec_draft(x : array<float>; h : array<float>; cossin : array<float>; row, hyd0 : int64; var kp : uint8?; var vp : uint8?; pick_only : bool; var logits : array<float>; experts : RdecHostExpertsFn) : int64 {
+def vk_rdec_draft(x : array<float>; token : int64; h : array<float>; cossin : array<float>; row, hyd0 : int64; var kp : uint8?; var vp : uint8?; pick_only : bool; var logits : array<float>; experts : RdecHostExpertsFn) : int64 {
     rd_chain_settle()
     return -1l if (g_rd == null || !g_rd.ready || !g_rd.head_on || !g_rd.carry)
     rd_carry_sync()
@@ -3713,7 +3863,11 @@ def vk_rdec_draft(x : array<float>; h : array<float>; cossin : array<float>; row
                 rd_record_draft()
             }
         }
-        memcpy(g_rd.head_cat_host.mapped, addr<void?>(x[0]), dim * 4l)
+        if (rd_emb_on() && !g_rd.hc_nextn) {   //! the embed half off the token's id (the host's row staged for the gather where the call brings none)
+            rd_stage_head_id(x, token)
+        } else {
+            memcpy(g_rd.head_cat_host.mapped, addr<void?>(x[0]), dim * 4l)
+        }
         memcpy(reinterpret<void?>(reinterpret<uint8?>(g_rd.head_cat_host.mapped) + dim * 4l), addr<void?>(h[0]), rd_carry_width() * 4l)
         memcpy(g_rd.head_cos_host.mapped, addr<void?>(cossin[0]), g_rd.cos_elems * 4l)
         var tm = reinterpret<TokMeta?>(g_rd.head_tok.mapped)
@@ -3781,17 +3935,25 @@ def vk_rdec_verify_rows : int64 {
 
 def private rd_v_idx(n : int64) : int64 => (g_rd.hybrid ? g_rd.region : 0l) * (g_rd.nb + 1l) + n
 
-//! the head's prologue over `nrows` head rows, the draft command's and the verify re-warm's one shape: the host's [embed ; carry] row pairs and
-//! head rope rows up, row i's carry half from the trunk's post-norm row i - 1 on the device (rows past the first), the embed and carry norms, the
-//! pair's requant, eh_proj with the rows as columns, the head's attention norm into `norm_set`, its feed requant through `rq_set`; stamps `{pfx}cat` / `eh` / `attnorm` behind `upload_stamp` ("" for none)
+//! the head's prologue over `nrows` head rows, the draft's and the verify re-warm's one shape: the [embed ; carry] pairs and rope rows up,
+//! the norms, the pair's requant, eh_proj with the rows as columns, the attention norm into `norm_set`, its feed requant through `rq_set`;
+//! stamps `{pfx}cat` / `eh` / `attnorm` behind `upload_stamp` ("" for none)
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-draft-head"), arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command")]
 def private rd_encode_head_cat_eh(raw : VkCommandBuffer; var h : VkHaz; nrows : int64; upload_stamp, pfx : string; var norm_set : VkDescriptorSet; var rq_set : VkDescriptorSet) {
     let dim = g_rd.dim
     let hb = uint(g_rd.head_norm_base)
     let row_bytes = dim * 4l
     let L & = unsafe(g_rd.head)
-    vhz_dep(raw, h, 0u, VHZ_X, true)
-    cmd_copy_whole(raw, g_rd.head_cat_host.buf, g_rd.head_cat_in_dev, 2l * row_bytes * nrows)
+    if (rd_emb_on()) {
+        rd_emb_enc(raw, h, g_rd.s_tok_emb, nrows, 1.0)   // unscaled, as `forward_mtp` embeds
+        vhz_dep(raw, h, VHZ_X, VHZ_X, true)
+        cmd_copy_rows(raw, g_rd.x_dev, 0l, row_bytes, g_rd.head_cat_in_dev, 0l, 2l * row_bytes, row_bytes, nrows)
+        vhz_dep(raw, h, 0u, VHZ_X, true)
+        cmd_copy_range(raw, g_rd.head_cat_host.buf, row_bytes, g_rd.head_cat_in_dev, row_bytes, row_bytes)
+    } else {
+        vhz_dep(raw, h, 0u, VHZ_X, true)
+        cmd_copy_whole(raw, g_rd.head_cat_host.buf, g_rd.head_cat_in_dev, 2l * row_bytes * nrows)
+    }
     vhz_dep(raw, h, 0u, VHZ_COS, true)
     cmd_copy_whole(raw, g_rd.head_cos_host.buf, g_rd.head_cos_dev, g_rd.cos_elems * 4l * nrows)
     if (!empty(upload_stamp)) {
@@ -3802,16 +3964,16 @@ def private rd_encode_head_cat_eh(raw : VkCommandBuffer; var h : VkHaz; nrows : 
         cmd_copy_rows(raw, g_rd.xb_dev, 0l, row_bytes, g_rd.head_cat_in_dev, 3l * row_bytes, 2l * row_bytes, row_bytes, nrows - 1l)
     }
     for (i in range64(nrows)) {   // a row pair a head row: the norms differ between the pair's halves, so each half takes its own dispatch
-        var pce = ArArgs(dim = uint(dim), add_on = 0u, woff = hb + uint(RDEC_HEAD_ENORM * dim), eps = g_rd.eps, ascale = 1.0, row0 = uint(2l * i))
+        var pce = GkAddRmsArgs(dim = uint(dim), add_on = 0u, woff = hb + uint(RDEC_HEAD_ENORM * dim), eps = g_rd.eps, ascale = 1.0, row0 = uint(2l * i))
         enc_cls_ar(raw, h, g_rd.head_s_cat_ar, pce, 1l)
-        var pch = ArArgs(dim = uint(dim), add_on = 0u, woff = hb + uint(RDEC_HEAD_HNORM * dim), eps = g_rd.eps, ascale = 1.0, row0 = uint(2l * i + 1l))
+        var pch = GkAddRmsArgs(dim = uint(dim), add_on = 0u, woff = hb + uint(RDEC_HEAD_HNORM * dim), eps = g_rd.eps, ascale = 1.0, row0 = uint(2l * i + 1l))
         enc_cls_ar(raw, h, g_rd.head_s_cat_ar, pch, 1l)
     }
     rq_enc(raw, h, g_rd.head_s_cat_rq, g_rd.head_eh_fmt, 2l * dim * nrows)
     rd_ts(raw, "{pfx}cat")
     rd_gemv(g_rd.head_eh_fmt, raw, h, g_rd.head_s_eh, 2l * dim, dim, uint(nrows), uint(dim))
     rd_ts(raw, "{pfx}eh")
-    var pca = ArArgs(dim = uint(dim), add_on = 0u, woff = hb + uint(RDEC_HEAD_ATT * dim), eps = g_rd.eps, ascale = 1.0)
+    var pca = GkAddRmsArgs(dim = uint(dim), add_on = 0u, woff = hb + uint(RDEC_HEAD_ATT * dim), eps = g_rd.eps, ascale = 1.0)
     enc_cls_ar(raw, h, norm_set, pca, nrows)
     rq_enc(raw, h, rq_set, L.fq, dim * nrows)
     rd_ts(raw, "{pfx}attnorm")
@@ -3881,11 +4043,21 @@ def private rd_v_rows_mismatch(n : int64) : bool {
     return false
 }
 
-def private rd_verify_stage(x, cossin, hcos : array<float>; pos, n : int64) {
+//! the verify's rows up: the host's rows, or - `ids` not empty - every row's token id, the trunk row and the head's embed half gathered off it
+def private rd_verify_stage(x, cossin, hcos : array<float>; ids : array<int64>; pos, n : int64) {
     let r = g_rd.region
     let par = g_rd.hybrid ? g_rd.dn_parity[r] : 0
     unsafe {
-        memcpy(g_rd.x_host.mapped, addr<void?>(x[0]), g_rd.dim * 4l * n)
+        if (empty(ids)) {
+            memcpy(g_rd.x_host.mapped, addr<void?>(x[0]), g_rd.dim * 4l * n)
+        } else {
+            var idp = reinterpret<uint?>(g_rd.tok_ids_host.mapped)
+            for (i in range64(n)) {
+                idp[i] = uint(ids[i])
+            }
+            g_rdec_nrow_emb_gathered += n
+            g_rdec_head_emb_gathered += n
+        }
         memcpy(g_rd.cos_host.mapped, addr<void?>(cossin[0]), g_rd.cos_elems * 4l * n)
         memcpy(g_rd.head_cos_host.mapped, addr<void?>(hcos[0]), g_rd.cos_elems * 4l * n)
         var tm = reinterpret<TokMeta?>(g_rd.tok_meta.mapped)
@@ -3985,7 +4157,8 @@ def private rd_hc_verify(x, cossin, hemb, hcos, h0, side : array<float>; pos, n 
     g_rd_verify_landed_logits = !picks_only
     let prof = vk_prof()
     let ts0 = ref_time_ticks()
-    rd_verify_stage(x, cossin, hcos, pos, n)
+    let noids : array<int64>   //! the hyper-connection chain gathers no row on the device
+    rd_verify_stage(x, cossin, hcos, noids, pos, n)
     unsafe {
         memcpy(g_rd.hemb_host.mapped, addr<void?>(hemb[0]), dim * 4l * n)
         memcpy(reinterpret<void?>(reinterpret<uint8?>(g_rd.head_cat_host.mapped) + dim * 4l), addr<void?>(h0[0]), hcd * 4l)
@@ -4016,7 +4189,7 @@ def private rd_hc_verify(x, cossin, hemb, hcos, h0, side : array<float>; pos, n 
 }
 
 [hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command")]   //! per speculative round, reached through the tier's registered seat
-def vk_rdec_verify(x, cossin, hemb, hcos, h0, side : array<float>; pos, n : int64; pick_only : bool; var logits : array<float>; var picks : array<int64>; var hid : array<float>; experts : RdecHostExpertsRowsFn) : bool {
+def vk_rdec_verify(x, cossin, hemb, hcos, h0, side : array<float>; ids : array<int64>; pos, n : int64; pick_only : bool; var logits : array<float>; var picks : array<int64>; var hid : array<float>; experts : RdecHostExpertsRowsFn) : bool {
     rd_chain_settle()
     if (g_rd != null && g_rd.ready && g_rd.hc) {
         return rd_hc_verify(x, cossin, hemb, hcos, h0, side, pos, n, pick_only, logits, picks, hid, experts)
@@ -4036,11 +4209,16 @@ def vk_rdec_verify(x, cossin, hemb, hcos, h0, side : array<float>; pos, n : int6
     g_rd_verify_landed_logits = !picks_only
     let prof = vk_prof()
     let ts0 = ref_time_ticks()
-    rd_verify_stage(x, cossin, hcos, pos, n)
+    let gather = rd_emb_on()   //! the recorded command gathers the trunk rows and the head's embed halves off the rows' ids
+    verify(!gather || long_length(ids) >= n, "vk_rdec_verify: the device gathers the rows, and the call brings no id a row")
+    let noids : array<int64>
+    rd_verify_stage(x, cossin, hcos, gather ? ids : noids, pos, n)
     unsafe {
         let cat = reinterpret<uint8?>(g_rd.head_cat_host.mapped)
-        for (i in range64(n)) {
-            memcpy(reinterpret<void?>(cat + 2l * i * dim * 4l), addr<void?>(hemb[i * dim]), dim * 4l)
+        if (!gather) {
+            for (i in range64(n)) {
+                memcpy(reinterpret<void?>(cat + 2l * i * dim * 4l), addr<void?>(hemb[i * dim]), dim * 4l)
+            }
         }
         memcpy(reinterpret<void?>(cat + dim * 4l), addr<void?>(h0[0]), dim * 4l)
     }
@@ -4179,16 +4357,46 @@ def private rd_land_rows_n(lrows : array<float?>; var picks : array<int64>; nrow
     }
 }
 
+//! the N-row command's rows under the device gather: a row's token id where `ids` carries one - its token row and, where the side
+//! rows gather (`ple_tok_on`), its side row off the tables - else `EMB_ID_HOST` with the row's `x` row and side row staged
+def private rd_stage_rows_ids(x, ple : array<float>; ids : array<int64>; nrows : int64) {
+    let dim = g_rd.dim
+    let w = g_rd.n_layers * g_rd.ple
+    let side = g_rd.ple > 0l && g_rd.ple_tok_on
+    unsafe {
+        var idp = reinterpret<uint?>(g_rd.tok_ids_host.mapped)
+        for (i in range64(nrows)) {
+            let id = i < long_length(ids) ? ids[i] : -1l
+            if (id >= 0l) {
+                idp[i] = uint(id)
+                g_rdec_nrow_emb_gathered++
+                if (side) {
+                    g_rdec_nrow_gathered++
+                }
+                continue
+            }
+            verify(long_length(x) >= (i + 1l) * dim, "vk_rdec_token_n: a row without its id brings no token row")
+            idp[i] = EMB_ID_HOST
+            memcpy(reinterpret<void?>(reinterpret<float?>(g_rd.tok_xh_host.mapped) + i * dim), addr<void?>(x[i * dim]), dim * 4l)
+            if (side) {
+                verify(long_length(ple) >= (i + 1l) * w, "vk_rdec_token_n: a row without its id brings no side row")
+                memcpy(reinterpret<void?>(reinterpret<float?>(g_rd.ple_host.mapped) + i * w), addr<void?>(ple[i * w]), w * 4l)
+            }
+        }
+    }
+}
+
 //! the N-row submit: `nrows` rows through one command, each row's logits landed at its own pointer, or - where the
 //! pointer is null - the row's argmax id alone into `picks` (`RdecTokenNFn`)
 [hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
-def vk_rdec_token_n(x : array<float>; cossin : array<float>; ple : array<float>; ple_raw : bool; poss : array<int64>; cnts : array<int64>; regs : array<int64>; nrows : int64; lrows : array<float?>; var picks : array<int64>) {
+def vk_rdec_token_n(x : array<float>; cossin : array<float>; ple : array<float>; ple_raw : bool; ids : array<int64>; poss : array<int64>; cnts : array<int64>; regs : array<int64>; nrows : int64; lrows : array<float?>; var picks : array<int64>) {
     rd_chain_settle()
     assert(g_rd != null && g_rd.ready, "vk_rdec_token_n before prepare/set_cls")
     verify(long_length(picks) >= nrows, "vk_rdec_token_n: fewer pick slots than rows")
     verify(nrows >= 2l && nrows <= g_rd.nb, "vk_rdec_token_n: the row count is outside the per-row planes (a one-row step is the one-row command's: its region rides the push, the N-row rows' ride TokMeta)")
     verify(long_length(lrows) >= nrows, "vk_rdec_token_n: fewer logits rows than rows")
-    verify(g_rd.ple <= 0l || long_length(ple) >= g_rd.n_layers * g_rd.ple * nrows, "vk_rdec_token_n: the per-layer-embedding rows are short")
+    verify(g_rd.ple <= 0l || (g_rd.ple_tok_on && long_length(ids) >= nrows) || long_length(ple) >= g_rd.n_layers * g_rd.ple * nrows,
+        "vk_rdec_token_n: the per-layer-embedding rows are short")
     var all_pick = true   //! every row wants its argmax alone: the logits never leave the device
     for (i in range64(nrows)) {
         all_pick = all_pick && lrows[i] == null
@@ -4216,9 +4424,14 @@ def vk_rdec_token_n(x : array<float>; cossin : array<float>; ple : array<float>;
     let prof = vk_prof()
     let ts0 = ref_time_ticks()
     unsafe {
-        memcpy(g_rd.x_host.mapped, addr<void?>(x[0]), g_rd.dim * 4l * nrows)
+        if (rd_emb_on()) {
+            rd_stage_rows_ids(x, ple, ids, nrows)
+        } else {
+            verify(long_length(x) >= g_rd.dim * nrows, "vk_rdec_token_n: the rows are short, and no table on the device gathers them")
+            memcpy(g_rd.x_host.mapped, addr<void?>(x[0]), g_rd.dim * 4l * nrows)
+        }
         memcpy(g_rd.cos_host.mapped, addr<void?>(cossin[0]), g_rd.cos_elems * 4l * nrows)
-        if (g_rd.ple > 0l) {
+        if (g_rd.ple > 0l && !g_rd.ple_tok_on) {
             memcpy(g_rd.ple_host.mapped, addr<void?>(ple[0]), g_rd.n_layers * g_rd.ple * 4l * nrows)
         }
         var tm = reinterpret<TokMeta?>(g_rd.tok_meta.mapped)
@@ -4322,11 +4535,13 @@ def vk_rdec_kv_sync(l, row0, nrows : int64; kp : uint8 const?; vp : uint8 const?
     let L & = unsafe(l == g_rd.n_layers ? g_rd.head : g_rd.layers[l])
     return if (L.mir_idx < 0l)
     let rowb = rd_kv_row_units(L.kvd) * kv_unit_bytes(g_rd.kv_dt)
-    let base = rd_mir_base(L) * kv_unit_bytes(g_rd.kv_dt) + row0 * rowb
-    unsafe {
-        let slab = rd_slab(L)
-        upload_region_at(slab.k, base, kp + row0 * rowb, nrows * rowb)
-        upload_region_at(slab.v, base, vp + row0 * rowb, nrows * rowb)
+    let slab = rd_slab(L)
+    rd_ring_runs(L, row0, nrows) $(p0, n : int64) {
+        let base = rd_mir_row(L, p0) * kv_unit_bytes(g_rd.kv_dt)
+        unsafe {
+            upload_region_at(slab.k, base, kp + p0 * rowb, n * rowb)
+            upload_region_at(slab.v, base, vp + p0 * rowb, n * rowb)
+        }
     }
 }
 
@@ -4341,34 +4556,46 @@ def vk_rdec_kv_read(l, row0, nrows : int64; var kp : uint8?; var vp : uint8?) {
     let L & = unsafe(l == g_rd.n_layers ? g_rd.head : g_rd.layers[l])
     return if (L.mir_idx < 0l)
     let rowb = rd_kv_row_units(L.kvd) * kv_unit_bytes(g_rd.kv_dt)
-    var p0 = 0l
     var raw = alloc_transient_cmd()   // re-recorded per chunk (the pool allows reset), freed below
-    while (p0 < nrows) {
-        let rows = min(KV_READBACK_ROWS, nrows - p0)
-        let bytes = rows * rowb
-        let off = rd_mir_base(L) * kv_unit_bytes(g_rd.kv_dt) + (row0 + p0) * rowb
-        record_submit_wait(raw, false) $(r : VkCommandBuffer) {
-            let slab = rd_slab(L)
-            cmd_copy_range(r, slab.k, off, g_rd.kv_readback.buf, 0l, bytes)
-            cmd_copy_range(r, slab.v, off, g_rd.kv_readback.buf, bytes, bytes)
+    rd_ring_runs(L, row0, nrows) $(r0, nr : int64) {
+        var p0 = 0l
+        while (p0 < nr) {
+            let rows = min(KV_READBACK_ROWS, nr - p0)
+            let bytes = rows * rowb
+            let off = rd_mir_row(L, r0 + p0) * kv_unit_bytes(g_rd.kv_dt)
+            record_submit_wait(raw, false) $(r : VkCommandBuffer) {
+                let slab = rd_slab(L)
+                cmd_copy_range(r, slab.k, off, g_rd.kv_readback.buf, 0l, bytes)
+                cmd_copy_range(r, slab.v, off, g_rd.kv_readback.buf, bytes, bytes)
+            }
+            unsafe {
+                memcpy(reinterpret<void?>(kp + (r0 + p0) * rowb), g_rd.kv_readback.mapped, bytes)
+                memcpy(reinterpret<void?>(vp + (r0 + p0) * rowb), reinterpret<uint8?>(g_rd.kv_readback.mapped) + bytes, bytes)
+            }
+            p0 += rows
         }
-        unsafe {
-            memcpy(reinterpret<void?>(kp + (row0 + p0) * rowb), g_rd.kv_readback.mapped, bytes)
-            memcpy(reinterpret<void?>(vp + (row0 + p0) * rowb), reinterpret<uint8?>(g_rd.kv_readback.mapped) + bytes, bytes)
-        }
-        p0 += rows
     }
     free_transient_cmd(raw)
 }
 
 let private POOL_XFER_CAP = 256l * 1024l * 1024l   //! the pool staging's ceiling: a move past it runs in batches of this size
+var private @scratch g_pool_xfer_runs : array<RdecKvSpan>
 
 //! The selected region's mirror rows of every span moved to (`up` = false) or from the host in one submit a batch of up to
 //! `POOL_XFER_CAP` bytes, where a span a call would move as a submit each (`vk_rdec_kv_read`): a pooled opening is many short page runs
 [cold_path, arch(at="../ARCHITECTURE_ENGINE_SERVING.md#device-home-pool")]   //! once per pool move, reached through the tier's registered seat
-def vk_rdec_kv_xfer(spans : array<RdecKvSpan>; up : bool) : bool {
+def vk_rdec_kv_xfer(var spans_in : array<RdecKvSpan>; up : bool) : bool {
     rd_chain_settle()
     return false if (g_rd == null || !g_rd.ready)
+    g_pool_xfer_runs |> clear()   //! each span cut to the runs its rows sit in back to back (`rd_ring_runs`)
+    g_pool_xfer_runs |> reserve(length(spans_in))
+    for (sp in spans_in) {
+        let L & = unsafe(sp.l == g_rd.n_layers ? g_rd.head : g_rd.layers[sp.l])
+        rd_ring_runs(L, sp.row0, sp.nrows) $(p0, n : int64) {
+            g_pool_xfer_runs |> push(RdecKvSpan(l = sp.l, row0 = p0, nrows = n, kp = sp.kp, vp = sp.vp))
+        }
+    }
+    let spans & = g_pool_xfer_runs
     var i = 0
     while (i < length(spans)) {
         var j = i
@@ -4398,10 +4625,10 @@ def private pool_xfer_batch(spans : array<RdecKvSpan>; i, j : int; up : bool) {
         pool_xfer_host(spans, i, j, true)
     }
     batch_cmd_one_shot() $(raw : VkCommandBuffer) {
-        pool_xfer_walk(spans, i, j) $(sp : RdecKvSpan; off, bytes, rowb : int64) {
+        pool_xfer_walk(spans, i, j) $(sp : RdecKvSpan; off, bytes, _rowb : int64) {
             let L & = unsafe(sp.l == g_rd.n_layers ? g_rd.head : g_rd.layers[sp.l])
             let slab = rd_slab(L)
-            let at = rd_mir_base(L) * kv_unit_bytes(g_rd.kv_dt) + sp.row0 * rowb
+            let at = rd_mir_row(L, sp.row0) * kv_unit_bytes(g_rd.kv_dt)   //! a span the xfer cut to a ring's run (`rd_ring_runs`)
             if (up) {
                 cmd_copy_range(raw, g_rd.pool_xfer.buf, off, slab.k, at, bytes)
                 cmd_copy_range(raw, g_rd.pool_xfer.buf, off + bytes, slab.v, at, bytes)
@@ -5034,7 +5261,7 @@ def private tail_cmd_for(s1, s3, s2, sq : int; woq_next : int64; fq_next : int; 
             ffn_chain_enc(raw, h, fc, s1, s3, s2, nrows, n, nfe, is_gelu)
             var pcc = DecCombineArgs(n = uint(n), k = uint(nrows))
             enc_dec_combine_cls(raw, h, tc.s_comb, pcc, (n + 255l) / 256l)
-            var pca = ArArgs(dim = uint(n), add_on = 0u, woff = 0u, eps = eps, ascale = 1.0)
+            var pca = GkAddRmsArgs(dim = uint(n), add_on = 0u, woff = 0u, eps = eps, ascale = 1.0)
             enc_cls_ar(raw, h, tc.s_ar, pca, 1l)
             rq_enc(raw, h, tc.s_rq, fq_next, n)
             vhz_dep(raw, h, VHG_XRES | VHG_ACTS, 0u, true)
@@ -5161,7 +5388,7 @@ def private span_record(a : MoeSpanDec) {
         at_chain_enc(raw, h, L, a.fq[li], a.fk[li], a.fv[li], a.fo[li], dim, qd, kvd, a.hs, a.n_heads, a.kv_mul, a.scale, a.eps, a.neox, a.qk_norm)
         vhz_dep(raw, h, VHZ_XB2 | VHZ_KVK | VHZ_KVV, 0u, true)
         cmd_copy_range(raw, g_gpu.dat_kv_dev, qd * 4l, g_gpu.span_out.buf, li * 2l * kvd * 4l, 2l * kvd * 4l)
-        var pcar = ArArgs(dim = uint(dim), add_on = 1u, woff = uint((li * 2l + 1l) * dim), eps = a.eps, ascale = 1.0)
+        var pcar = GkAddRmsArgs(dim = uint(dim), add_on = 1u, woff = uint((li * 2l + 1l) * dim), eps = a.eps, ascale = 1.0)
         enc_cls_ar(raw, h, SL.s_ar_ffn, pcar, 1l)
         rq_enc(raw, h, SL.s_rq_g1, a.f1[li], dim)
         rq_enc(raw, h, SL.s_rq_g3, a.f3[li], dim)
@@ -5194,7 +5421,7 @@ def private span_record(a : MoeSpanDec) {
             enc_dec_combine_cls(raw, h, SL.s_comb, pcc, (dim + 255l) / 256l)
         }
         if (li + 1l < nl) {
-            var pca2 = ArArgs(dim = uint(dim), add_on = 0u, woff = uint((li + 1l) * 2l * dim), eps = a.eps, ascale = 1.0)
+            var pca2 = GkAddRmsArgs(dim = uint(dim), add_on = 0u, woff = uint((li + 1l) * 2l * dim), eps = a.eps, ascale = 1.0)
             enc_cls_ar(raw, h, SL.s_ar_att, pca2, 1l)
             rq_enc(raw, h, SL.s_rq_att, a.fq[li + 1l], dim)
             vhz_dep(raw, h, VHS_ACTS, 0u)
@@ -5660,9 +5887,9 @@ def private dat_layer_sets(woq, wok, wov, woo : int64; fq, fk, fv, fo : int; rms
             upload_region_at(L.norms, hs * 4l, reinterpret<uint8 const?>(rmskp), hs * 4l)
         }
         L.s_qkr = set_qkn_rope_f16_cls(
-            fixed_array(g_gpu.dat_q_dev, g_gpu.dat_kv_dev, L.k_mir, L.v_mir, g_gpu.dat_cos.buf, L.norms, g_gpu.dat_tok.buf, bbuf),
-            fixed_array(qd * 4l, (qd + 2l * kvd) * 4l, mirbytes, mirbytes, hs * 4l, 2l * hs * 4l, TOK_META_BYTES, bbytes),
-            fixed_array(VHZ_Q, VHZ_KVK | VHZ_KVV, VHZ_MIR, VHZ_MIR, 0u, 0u, 0u, 0u))
+            fixed_array(g_gpu.dat_q_dev, g_gpu.dat_kv_dev, L.k_mir, L.v_mir, g_gpu.dat_cos.buf, L.norms, g_gpu.dat_tok.buf, bbuf, g_gpu.dat_kv_dev),
+            fixed_array(qd * 4l, (qd + 2l * kvd) * 4l, mirbytes, mirbytes, hs * 4l, 2l * hs * 4l, TOK_META_BYTES, bbytes, (qd + 2l * kvd) * 4l),
+            fixed_array(VHZ_Q, VHZ_KVK | VHZ_KVV, VHZ_MIR, VHZ_MIR, 0u, 0u, 0u, 0u, VHZ_KVK | VHZ_KVV))
     } else {
         L.s_qkr = set_rope_kv_f16_cls(
             fixed_array(g_gpu.dat_q_dev, g_gpu.dat_kv_dev, g_gpu.dat_kv_dev, L.k_mir, L.v_mir, bbuf, g_gpu.dat_cos.buf, g_gpu.dat_cos.buf, g_gpu.dat_tok.buf),

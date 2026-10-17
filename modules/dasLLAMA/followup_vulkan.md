@@ -101,8 +101,7 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
      D2: one dispatch, or f16/q8 rows), add+rms pairs 0.68 ms + requants 0.16 (the fused ar+rq twin
      is off on a hybrid because the f32 GEMVs read xb - D3).
    STILL OPEN in this item:
-   (b) the other families Metal serves - MoE (Wave C), gemma4 (PLE, sandwich norms), gpt-oss
-   (sinks, swiglu_oai) - stay per-op; (c) the decode-role profiler (`rdq_sample`) has no
+   (c) the decode-role profiler (`rdq_sample`) has no
    per-role table for the hybrid stamp count - it reports the whole span only, and the prefill's
    per-role table labels a recurrent layer's stamps with the attention head's role names; (d) DONE
    9/5 - the f32 arm is `dn_ba_cls`, gated by `test_vkd_dn_ba` (partial and full tiles) and
@@ -113,8 +112,6 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
 4. **Real batched decode** - the resident mirror is single-sequence; batch rows round-trip
    their KV per step (`rdec_kv_sync` in, `rdec_kv_read` out). Metal has a true batched driver
    (P4). Options: multi-sequence mirror slabs, or per-row device KV like Metal's `KVMirror`.
-6. **mx4 / q51 device kernels** - absent on Vulkan (CPU+Metal only). Needed before gpt-oss
-   (mx4 experts) or gemma-4-26B (q51 stacks) can go resident on PC.
 7. **Tune-race parity** - Metal races tensor-op twins per box (`metal_tensor_race*`); Vulkan
    picks coopmat variants by env (`DASLLAMA_COOPMAT`). Fold the choice into the tune rail.
 8. **Compile-time dispatch census** - Metal's `[lint_macro]` manual-dispatch census
@@ -336,15 +333,6 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
    fallback vs upstream 202.4 / 14986 - 18% / 3%. Fix shape: per-row `+ b[row]` epilogue in
    the qkv class GEMV (bias rows ride the arena or one extra binding, offset in the push),
    same arm for q/k/v; then drop `attn_qkv_bias` from the :534 gate.
-
-14. **The gemma cluster arms - medium family unlock covering gemma2 AND gemma3 (walkthrough
-   2026-08-06: both UNSUPPORTED, per-op fallback; gemma2-2b 22.8 tg / 327 pp vs upstream
-   124.1 / 9566, gemma3-1b 58.5 / 636 vs 236.2 / 21540).** The shared base: sandwich norms
-   (`pre_post_norm` - an extra norm role per layer) + sliding-window alternation (a
-   window-start word in decode attention - TokMeta has room). That pair alone unlocks
-   gemma3; gemma2 additionally needs the two softcap clamps (attn epilogue tanh + cls
-   epilogue); gemma4-dense sits on the same base (plus PLE - its own story). Biggest
-   family-count unlock on the board after qwen2's one-flag bias.
 
 15. **mm L-tile zeroes its whole dispatch on a non-128-multiple weight dim (latent, found by
    the CPU-oracle conversion).** The mode-3 `MmBatch` L-tile GEMM writes all-zeros for the
@@ -895,8 +883,7 @@ module) is independent and can land any time - it is pure structure.
     any new family, every carrier dasLLAMA serves today gets its Vulkan arm at parity - the
     existing families, and the vision and audio towers, whose GPU drivers are Metal today.
     The known gaps on the family side are this ledger's items 3 (the quant KV codecs), 4 (batched
-    decode), 5 (the speculative round), 6 (the mx4 and q51 device kernels behind gpt-oss and
-    gemma-4-26B), the gemma4 pre/post-norm attention decline, and the fully-resident MoE chain:
+    decode), 5 (the speculative round), and the fully-resident MoE chain:
     the 5060 Ti holds Qwen1.5-MoE Q6_K, Qwen3-30B-A3B UD-Q3_K_XL, Qwen3.6-35B-A3B UD-IQ3_S and
     gemma-4-26B-A4B UD-IQ4_XS whole (12.8 to 13.8 GB), the resident driver declines every MoE by
     construction, and the per-op tier reads 0.14x prefill / 0.75x decode against the reference
@@ -1180,7 +1167,7 @@ module) is independent and can land any time - it is pure structure.
     DECODE (the reference exe's logger, one token): the 9B 8.40 ms against our 11.0 profiled, per recurrent
     layer 254 us against 321 - our step 23.5 us against its GATED_DELTA_NET 4.1 + SSM_CONV 5.2 (one
     256-thread workgroup a head with single-thread loops over the 128 columns, against 4096 32-lane
-    workgroups, a state column each), ba 17 against its two MUL_MAT rows ~10 (two `RouterGemvF16` dispatches
+    workgroups, a state column each), ba 17 against its two MUL_MAT rows ~10 (two router GEMV dispatches
     of 32 workgroups with a hazard barrier between them), out 30.7 against its MUL_MAT ~20, up 49.6 against
     its MUL_MAT 42, ar1 + ar2 26 against its ADD + RMS_NORM 18; every GEMV over 12 MB runs at 700-820 GB/s
     on both. The same step and ba floors
@@ -1320,30 +1307,6 @@ module) is independent and can land any time - it is pure structure.
     window on E2B - the q8 table is 2.35 GB, a device copy is the alternative). Also here: the driver's prefill GEMMs for the branch run the
     q8 batch tile on the cm2 route (the gate at 256 outputs, the proj at K 256) - a small f16
     route for them is a perf lever once the E-series rows have a baseline.
-48. **The KV mirror keeps every sliding layer's rows at the full context.** The reference exe sizes
-    a sliding layer's cache rows to its window (gemma-3: 1024 on 28 of 34 layers of the 4b, 512 on
-    the 1b; gemma-4: 1024 / 512 on five of six); the mirror sizes every layer to the context, so a
-    gemma-3-4b mirror at 32768 positions holds 4.3 GB where a ringed one holds about 1 GB (the six
-    global layers at the context, the rest at 1024). The ring is a position-modulo on the sliding
-    layers' mirror row (`layerbase + (pos mod window) * kvd`) in the rope store, the attention
-    kernels' key index and the prefill's K/V writes, plus the plan's row count per layer; the
-    decode attention already masks keys below the window, so the ring changes which row a key
-    lives in, not which keys score. Worth its lever on every gemma and on the 26B (30 layers,
-    25 sliding).
-49. **The gemma-4-26B-A4B passes a 16 GB card in every quant.** Its `ffn_down_exps` rows are 704
-    wide, a width only the 32-block formats (IQ4_NL, Q5_0, Q5_1, Q8_0) quantize, and
-    the K-quant rails' 256-multiple rule (`kq_fmt_row_ok`: the Q8_K activation superblock) demotes
-    an IQ4_NL or Q5_0 down stack to q8 at load - the UD-IQ3_XXS file's 3947 MB of down planes
-    become 7456 MB, and the resident image reads 14905 MB against a 16 GB card's 12677 MB usable
-    (measured 2026-09-12 on the RTX 5060 Ti; the plan declines on memory and the cells skip). The
-    q51 expert rail (`Q51Cm2T`'s s and e stamps, `Q51Gemv`; `ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block`) serves the UD-Q4_K_M file's native Q5_1 down stacks at 704; the IQ3_XXS and
-    IQ4_NL files still demote their IQ4_NL down stacks. Two levers, either of which puts those
-    on 16 GB: an iq4nl expert rail at 32-wide rows (the same per-32 form as q51: Q8_0 activations
-    in place of Q8_K - the CPU dot, the decode GEMV twin, the tune rows and kernel cells; the cm2
-    e stamps are f16-fed and already step K by 64, which 704 divides), or the streamed-experts
-    form (attention and the dense triple resident, the expert planes streamed a layer at a
-    time - the 16 GB story for every MoE past the card). The block itself holds on a 32 GB card
-    (`test_gpu_resident_gemma4_26b.das`, the RunPod RTX PRO 4500 rows).
 50. **The prefill flash tile runs one workgroup a (head, q tile), which leaves a low-head model's
     attention on a few SMs.** A key split of the tile (every (head, q tile) cut into equal pieces
     with f32 partials and a combine kernel, `pf_fa_nsplit` covering the SM count twice) lost on
@@ -1603,7 +1566,7 @@ module) is independent and can land any time - it is pure structure.
     regions at 660 positions each and read 151 and 104 summed against the reference's paged 106
     and 46 (`PERF_LEDGER.md`, the gemma section's 5060 Ti rows), where the per-op rails read 15
     and 14. What stands: a model whose weights alone do not fit (the Q8_0 on a 12 GB card, the
-    31B and the 26B IQ3_XXS on this one - the 26B's demoted down-expert rows take its served weights to 15.4 GB; `PERF_LEDGER.md`, the MoE section's 5060 Ti bullet) - a streamed-weights arm, the layers' planes through a device ring the
+    31B on this one) - a streamed-weights arm, the layers' planes through a device ring the
     step refills ahead of the decode, in layer order, the way the MoE block streams its expert
     groups (`ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-expert-chain`), which beats the driver's blind paging
     because the order is known and the reads are one pass a token; the rate then reads as PCIe's
@@ -1618,17 +1581,6 @@ module) is independent and can land any time - it is pure structure.
     row now, but its grouped-row (interleaved) branch still spells each format's stride by hand
     where every other lookup walks `kq_desc`. Done looks like: a grouped-row stride column on the
     descriptor row and the branch reading it, the resident MoE files bit for bit before and after.
-
-83. **The N-row command's routed block takes the unfolded down GEMV where the one-row command folds
-    it.** On a gemma-4 MoE with Q5_1 down stacks the one-row command sums the k slots under their
-    routing weights inside the down GEMV (`Q51GemvSum`, `RLayer.edown_sum`) and the combine reads
-    one row; the rows form runs the q51 leaf a slot at a time and the combine sums them, so the two
-    sums round apart, and on gemma-4-26B-A4B Q4_K_M the 26B's router near-ties turn that into
-    whole-position flips - five of thirty-two batched compares off by up to 0.13 of the peak
-    against the fused one-row command, none against the split one (`DASLLAMA_VK_FUSE=0`), which
-    `test_gpu_resident_regions_gemma4moe.das` pins for its load. The work: the folded form over
-    `nb` rows - `Q51GemvSum` summing each row's own k slots into that row's output row - so the
-    file compares against the fused one-row command the server runs.
 
 84. **The workgroup argmax fold has two kernel-side spellings.** `ClsArgmaxBase.fold`
     (`dasllama_vulkan_classes.das`) and the k-loop's inner fold of `GkTopKRow.select_row` are the
@@ -1694,7 +1646,7 @@ module) is independent and can land any time - it is pure structure.
     Still open, each a fold only after its probe row reads flat: the 8-row / 4-row flash Q-tiles (`FaT`),
     `MmBatchT`'s two tile edges, the hand-unrolled `DnScan` / `DaAttnBH128T` register blocks, the batch
     tiles' `stage_w` lane helpers against `KqGemvLeafT.grid4`; and the Q8 byte store spelled by
-    `GkQ8BlockStore.blk_store` and `ResidualT.quant32` (a template fold, pinned by the codec stamps' dump).
+    `GkQ8BlockStore.blk_store` and `GkResidualRow.quant32` (a template fold, pinned by the codec stamps' dump).
 94. **The qwen25v Vulkan chain's remaining f16 sources.** The chain (`ARCHITECTURE_GPU_TOWER_VULKAN.md`
     2.2ar) holds the exact CPU chain within 1e-2 x rms through eight blocks and within 0.02 to 0.09
     x rms at 32 blocks (the Metal rung's order) with the window layers in f32; what re-rolls the
@@ -1922,7 +1874,7 @@ module) is independent and can land any time - it is pure structure.
     MoltenVK's converter accepts, and the three files read green under MoltenVK.
 
 115. **The TTS kernel pairs still under two shells, and what each fold costs.** The kernels both GPU
-    homes run as one `class template` (`ARCHITECTURE_GPU.md#gpu-shared-kernels`) cover the Pocket
+    homes run as one `class template` (`ARCHITECTURE_GPU_SHARED_KERNELS.md#gpu-shared-kernels`) cover the Pocket
     row copy, rope and attention, the duration sums, the whole harmonic source, the STFT pair, AdaIN,
     the depthwise rows conv, the residual add-and-scale, Axpy and Concat. What stays twice, by kind:
     (a) the same output under a different thread-to-work split - `TtsElemT` /
@@ -1939,9 +1891,10 @@ module) is independent and can land any time - it is pure structure.
     ping-pong, the concat when the width differs, the head-block loop - is identical and could run
     once over an encoder interface, about 450 lines.
 
-116. **The speculative round has no Vulkan round seat.** The round's four backend seats
+116. **The NextN speculative round has no Vulkan round seat.** The round's four backend seats
     (`register_mtp_spec_override`, `_spec_batch_`, `_round_`, `_seam_` in `dasllama_common.das`)
-    are filled by the Metal decode driver and the Metal gemma drafter alone. The resident driver
+    are filled by the Metal decode driver alone; the gemma assistant drafter's rounds ride their own seams on both
+    homes (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-assistant-drafter`). The resident driver
     homes the NextN draft head and serves the round's draft through its own seat
     (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-draft-head`), under the Vulkan owner
     (`register_mtp_seat_owner`, "the resident driver is armed on t"), serves the round's
@@ -1970,11 +1923,11 @@ module) is independent and can land any time - it is pure structure.
     resident driver: the Vulkan round seat (`register_mtp_round_override("vulkan", ...)`) - a
     round at depth k > 1 (the verify's per-row planes and the rollback scratch already hold the
     box knob's depth plus one, sixteen rows at most, and the scratch's rows serve a reject to any
-    `a < k`) and the joint verify across streams - then the gemma assistant drafter. Carriers: Qwen3.5-0.8B-MTP first,
+    `a < k`) and the joint verify across streams. Carriers: Qwen3.5-0.8B-MTP first,
     Qwen3.8-27B with its split Q8_0 head for the rate (Metal reads 1.23x at depth 1, 1.31x at
-    depth 3 on the M5 Max), gemma-4-26B with the assistant drafter as the second round kind; the
-    invariance cells of `tests/test_mtp.das` and the scheduler arm are the parity, `lcpp_bench
-    --mtp-ab` on the pod the rate, a CUDA reference row per carrier beside it.
+    depth 3 on the M5 Max); the invariance cells of `tests/test_mtp.das` and the scheduler arm hold the speculating run to
+    the plain one (the driver against itself, not a parity), `lcpp_bench --mtp-ab` on the pod the rate, a CUDA reference
+    row per carrier beside it.
 118. **Two vulkan-lane arms still bake from RAM with the planar families kept.** The streaming mint
     (`ARCHITECTURE_IMAGE_VULKAN.md#image-vulkan-mint`) serves the cold load; a planar image already
     mapped (a CPU-mode load's lane found under an armed tier) and the eager rail (a gguf that would
@@ -2183,3 +2136,14 @@ module) is independent and can land any time - it is pure structure.
     per-op block binds the sink rows and the sliding window and serves gpt-oss's attention layers, and the span, the tail
     fusion and the f16 chain take the routed form, each held by a cell against the CPU chain; this is
     the gpt-oss leg's.
+
+148. **The per-layer-embedding gate and projection windows run the K-quant tile's scalar arm on a driver without
+    decode-vector.** The E-series pre-step's `inp_gate` and `proj` planes serve in their file format (`REVIEW_KQ_FORMATS.md`'s
+    served-not-converted rule), so on the E2B Q4_K_M the 512-row window's gate and projection GEMMs ride the K-quant cm2
+    tile, which the RTX PRO 4500's 580 driver runs on the scalar decode arm (row 147 (a)): per window `ple_gate` reads
+    5950 us and `ple_proj` 4798 us where the q8-converted planes read 1079 and 608 on the commit before the PLE merge
+    (`DASLLAMA_GPU_PROF=1`, every other stage within 2 %), and the file's pp512 reads 12304 against 15917 - the bisect over
+    the gemma leg's first-parent commits names the PLE merge. The fix is a K-quant window form that is fast without
+    decode-vector (a dequant to f16 in shared memory ahead of the KHR tile, as llama.cpp's stripped shaders do), raced
+    against the cm2 arm on this box - it reaches every K-quant GEMM of every window here, the FFN gate and up at 6.2 ms a
+    window among them. The follow-up PR after the gemma leg.

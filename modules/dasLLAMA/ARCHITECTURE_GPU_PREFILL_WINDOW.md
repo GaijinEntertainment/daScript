@@ -142,7 +142,8 @@ session's own slice past the cap still gets room, the arena grown to that slice 
 mirror evicted (`mirror_ceiling_for`). The device's largest buffer bounds both, since the arena is one
 buffer. A slice is the session's rows rounded up to a power of two, never past its context, so a
 session's context in unified memory is what sizes its mirror; a batch step's or a segmented window's
-reservation asks the cap, or its largest slice where that passes the cap.
+reservation asks the cap, or its largest slice where that passes the cap. The rows-capacity sizes the flat
+layers alone: a sliding layer holds a ring of its window past them (`ARCHITECTURE_GPU_KV_RING.md#kv-sliding-ring`).
 
 **The forms that address the arena from its start reach 2^32 units.** A route table - the batch
 step's, the verify's and the single row's fused attention - carries each slice's base in elements

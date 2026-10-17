@@ -40,7 +40,7 @@ require dasllama/dasllama_gemm_schema   // the q8 block geometry the mint's zero
 // WhisperModel.enc) contribute their planes under dotted names ("enc.fblob"); string-array
 // fields ride the meta blob via serialize_strings — raw string pointers can't be planes.
 
-let IMAGE_VERSION = 49   // the q5032 plane pair rides the image and a Q5_0 plane keeps its bytes at every site
+let IMAGE_VERSION = 51   // a streamed mint's q4032 and q5032 planes carry the repack interleave the eager load gives them
 
 //! The metal (blob-only) flavor's identity tag: q8 planes ride the 34B block_q8_0 blob and the
 //! kq scale planes their GPU forms (convert_model_to_metal_blob) — flavors are per-config and
@@ -784,8 +784,8 @@ def serialize_image_meta(var arch : Archive; var t : Model) {
     arch |> serialize_raw(t.ple_emb_off)
     arch |> serialize_raw(t.ple_model_off)
     arch |> serialize_raw(t.ple_pnorm_off)
-    arch |> serialize_raw(t.ple_gate_off)
-    arch |> serialize_raw(t.ple_proj_off)
+    arch |> serialize_raw(t.ple_gate_f32)
+    arch |> serialize_raw(t.ple_proj_f32)
     arch |> serialize_raw(t.ple_post_off)
     arch |> serialize_raw(t.wscale_f16)
     arch |> serialize_raw(t.metal_blob)
@@ -1232,6 +1232,7 @@ def private streamed_q_planes() : array<string> {
     names |> push("iq4nl32q")
     names |> push("q4032q")
     names |> push("q5032q")
+    names |> push("mxq")
     return <- names
 }
 
@@ -1980,7 +1981,7 @@ def load_model_image(path : string; var t : Model; tag : string = ""; quant : st
         if (!empty(why)) {
             vulkan_bake_disarm()
             if (resident_trim_decline_is_run_mode(why)) {
-                panic("dasLLAMA: '{path}' is a trimmed vulkan lane, and the whole-model driver would not serve it under this run's knobs ({why}) - a trimmed lane carries no planar families for the per-op rails; lift the knob, or load the source gguf, which serves planar from memory")
+                panic("dasLLAMA: '{path}' is a trimmed vulkan lane, and the whole-model driver would not serve it under this run's knobs ({why}; {trim_lane_run_knobs()} sit outside the lane's identity) - a trimmed lane carries no planar families for the per-op rails; lift the knob, or load the source gguf, which serves planar from memory")
             }
             panic("dasLLAMA: '{path}' is a trimmed vulkan lane the whole-model driver no longer serves ({why}) - a trimmed lane carries no planar families for the per-op rails; load the source gguf, which mints the lane again with its planar families")
         }
@@ -2072,7 +2073,7 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32;
                 //! frozen artifacts are never deleted
                 if (resident_trim_decline_is_run_mode(trim_why)) {
                     kept_why = trim_why
-                    to_log(LOG_WARNING, "dasLLAMA: the trimmed vulkan lane '{img_v}' maps, and this run cannot serve it ({trim_why}; DASLLAMA_GPU_CTX_MAX, DASLLAMA_VK_KV32, DASLLAMA_GPU_KV / set_gpu_kv_dtype, DASLLAMA_GPU_RESIDENT / set_gpu_resident_route and the prefill pin or override sit outside the lane's identity) - the lane stays on disk and the streamed build serves planar from memory\n")
+                    to_log(LOG_WARNING, "dasLLAMA: the trimmed vulkan lane '{img_v}' maps, and this run cannot serve it ({trim_why}; {trim_lane_run_knobs()} sit outside the lane's identity) - the lane stays on disk and the streamed build serves planar from memory\n")
                 } elif (g_image_frozen) {
                     panic("dasLLAMA: the trimmed vulkan lane '{img_v}' maps, and the whole-model driver no longer serves it ({trim_why}) - artifacts are frozen, so it is kept; mint it again with the artifacts unfrozen")
                 } else {

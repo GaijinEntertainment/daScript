@@ -1,8 +1,56 @@
-# dasLLAMA Architecture - the kernel pairs of the two GPU homes
+# dasLLAMA Architecture - the kernels both GPU homes stamp
 
-Companion to `ARCHITECTURE_GPU.md`; a section is cited by its anchor. This document carries the ledger of the kernels
-the Metal and the Vulkan home both run: which ride one template of `dasllama_gpu_kernels_common.das` and what each stamp
-reads there, and which stay per home and why. The template mechanism itself stays in `ARCHITECTURE_GPU.md#gpu-shared-kernels`.
+Companion to `ARCHITECTURE_GPU.md`; a section is cited by its anchor. This document carries the kernels the Metal and
+the Vulkan home both run: the template mechanism of `dasllama_gpu_kernels_common.das`, and the ledger of which kernels
+ride one template and what each stamp reads there, and which stay per home and why.
+
+### Kernels both homes stamp {#gpu-shared-kernels}
+
+A kernel the Metal and the Vulkan home both run is one `class template` in
+`dasllama_gpu_kernels_common.das`: its `@ssbo` buffers with their `@role`s, its argument struct and its
+body. The module requires no backend and no shader vocabulary - a template's body resolves in the module
+that stamps it. Each home stamps the template as a leaf class under its own dispatch annotation and its
+own kernel method, which calls the body, so a kernel keeps the dispatch name, the pipeline and the census
+key it has on that home.
+
+- **The arguments are one `@kargs` member.** `kargs_as` (`dasllama_kernel_access.das`) runs in both
+  dispatch lenses ahead of the kernel's emission and gives the member the form that home's emitter reads:
+  a `@push_constant` block on Vulkan, a by-value `@uniform` at the binding past the class's highest on
+  Metal - once: a class under two dispatch annotations passes through the lens twice, and the second pass
+  keeps the binding the first gave, so each builder and the kernel agree on it. The struct is a member and
+  not a parameter of the body: a parameter is passed by value, and the
+  emitted kernel then copies the whole struct where a member is read a field at a time.
+- **A body that reads a buffer at an offset takes it as an element offset in its arguments.** Vulkan caches
+  a descriptor set by its binding tuple, so an offset bound per dispatch would be a set per offset; an offset
+  in the arguments is one set. A kernel every site reads from element zero carries none.
+- **The two emitters place the body differently.** The MSL emitter splices a called method flat into the
+  kernel; the SPIR-V emitter keeps it a function the entry point calls. A kernel moved here therefore
+  reads, on Vulkan, as its old words plus one call. Because the MSL emitter splices, a template method of
+  more than one statement cannot sit in value position: a helper that returns a value - a workgroup
+  reduction, a partial sum - is written as a statement method that lands its result in a `var` reference
+  (`wg_max_into`, `wg_sum_into`, `value_sum_into` in `GkPkAttn`). The same splice names a parameter as
+  many times as the body does, so an argument that is a computed expression is refused where the body
+  names the parameter twice: the caller hoists it to a local first. A fixed-array local in a body hoists
+  to a program-scope constant table only when every element is a scalar integer or float literal; a
+  vector literal does not hoist, so a `float4` table is spelled as four scalars a word.
+- **A home's lane primitive is reached by one name.** A template method resolves in the module that
+  stamps it, so a shared reduction calls `gk_subgroup_add` / `gk_subgroup_max`, and each kernel home
+  defines the pair over its own primitive (`subgroupAdd` on Vulkan, `simd_sum` on Metal). A free function
+  in the common module resolves in the common module and sees neither home, so a body that needs a
+  home's primitive keeps it in a method.
+- **A binding a stamp does not use is gated, and a stamp names its element types.** `@template_gate`
+  erases the field at stamping (`daslib/typemacro_boost`, before either emitter reads the class): a gated
+  f16 output or bias row is no parameter of that stamp's builder (`GkRestride`). A body writing one output
+  in two precisions spells its element type as a `typedef` each stamp declares (`OT`), which both emitters take.
+- **A number the drivers verify is a `let` beside the template, and a scale both homes must round
+  alike is computed on the host.** A template constant's default is a literal, so the window a kernel is
+  stamped for is spelled twice - the default and the `let` each driver checks against (`GK_G4A_ATTN_PAST`).
+  A shape-derived scale (`gemma4a_attn_scales`) is passed in the arguments: in the kernel, the homes' intrinsics round it apart.
+- **What stays per home:** the GEMM and attention tiles, which each home builds on its own matrix
+  primitives. A pair whose two forms differ in shape (the TTS elementwise maps run one element a thread on
+  Metal and four an invocation on Vulkan) folds onto one body when both homes profile the same on it, and
+  until then shares its per-element function through `dasllama_gpu_math.das`. Which pairs ride a template, what each stamp
+  reads on its home, and why the rest stay per home: `ARCHITECTURE_GPU_SHARED_KERNELS.md#gpu-kernel-pairs`.
 
 ### The kernel pairs of the two homes {#gpu-kernel-pairs}
 
@@ -18,22 +66,68 @@ struct and the body; a stamp sets the template constants its home needs and maps
 | `GkPleGate` | `MetalPleGate` (the ring or the panel at `cin`) | `PleGate` (the ring slot off `tok`, or the panel) | `TG`, `RSQRT`, `cin_base` / `cin_store` |
 | `GkPleConv` | `MetalPleConv` | `PleConv` | `row_pos` / `tap`; the CPU chain's (res + gated) + silu(conv) |
 | `GkQkRms` | `MetalQkNorm` (the q and k heads of one buffer, `kwd` the no-wv V fill) | `QkRms` | the grid decode |
-| `GkTopKRow` | `MetalMoeSelect` / `512` (32 lanes, DEPTH 8 / 16, `raw` the gpt-oss form) | `TopKRecords`' `TopKN` / `TopKN2` / `TopKRows` / `TopKRows2` (256 lanes, DEPTH 1 / 2) | `LANES`, `DEPTH` |
-| `GkMoeCombine` | `MetalMoeCombine`, `MetalMoeReduce` (`GATHERED`) | `MoeCombine` (`WINDOW`: the chunk window, the accumulate, the zero-weight skip) | `GATHERED`, `WINDOW` |
+| `GkTopKRow` | `MetalMoeSelect` / `512` (32 lanes, DEPTH 8 / 16, `raw` the gpt-oss form), their `Ds` twins (`DSCALE`: gemma-4's per-expert down scales, the layer's row bound) | `TopKRecords`' `TopKN` / `TopKN2` / `TopKRows` / `TopKRows2` (256 lanes, DEPTH 1 / 2, `DSCALE`, the row named at run time) | `LANES`, `DEPTH`, `DSCALE`, `DSOFF_SWITCH` |
+| `GkMoeCombine` | `MetalMoeCombine`, `MetalMoeReduce` (`GATHERED`) | `MoeCombine` (`WINDOW`: the chunk window, the accumulate, the zero-weight skip) | `GATHERED`, `WINDOW`, `SLOT_X4` |
 | `GkDnGate` | `MetalDnGate` / `Sig` (`rsqrt`) | `DnScanP3` / `Sig` | `ZSIG`, `RSQRT` |
 | `GkQknRopeKv` | `MetalQknRope16` / `32` (one row), `MetalQknRopeB16` / `B32` (rows), `MetalPfQkn` / `HX` (the window, the q twin) | `QknRopeKv` / `F16` | `KT`, `CLAMP16`, `V_WG`, `LANES` / `EPT`, `HX` |
-| `GkRouterGemv` | `MetalMoeRouter` (a workgroup a row, the decode column), `MetalMoeRouterB` (a subgroup a row, `COL_CLAMP`, 8 columns) | `RouterGemv` / `F16` (a workgroup a row, `NORM`) | `ROW_WG`, `VW`, `NC`, `COL_CLAMP`, `NORM`, `BIAS` |
+| `GkRouterGemv` | one Metal shell (`MetalRouterGemvT`: the grid onto the rows under `ROW_WG`) under two formats - the f32 rows (`MetalMoeRouterT`: `MetalMoeRouter`, a workgroup a row, the decode column; `MetalMoeRouterB`, a subgroup a row, `COL_CLAMP`, 8 columns) and the E-series side rows' projection's bf16 words (`MetalPleProjBf16T`: `MetalPleProjBf16One`, `MetalPleProjBf16`, the same two shapes) | `RouterGemv` (a workgroup a row, `NORM`), `RouterGemvBf16` (the bf16 words under `YSCALE`) | `ROW_WG`, `VW`, `NC`, `COL_CLAMP`, `NORM`, `BIAS`, `BF16`, `YSCALE` |
 | `GkPkGemv` | `MetalPkGemv*` (f32 rows), `MetalPkGemvQ8*` | `TtsPkGemv*` (`QUAD`) | the epilogues, `QUAD`, `RSQRT` |
 | `GkMoeCombine` `SH` | `MetalMoeCombineSh`, `MetalMoeReduceSh` | the combine twins' `gated` arm | `SH`: the shared row under its gate logit, the router's row `ne` |
 | `GkCat2` | `MetalCat2` | `Cat2` | nothing; position- or stream-major, the a row repeated over the streams |
 | `GkDnConv` | `MetalDnConvN` / `N4` (`PB` 1 / 4, `RING` 8: a group of 16 rows or fewer) | `DnConv` (`PB` 32, `RING` 4) | `PB`, `RING` |
+| `GkMoeCombG4` | `MetalMoeCombG4` / `Hx` (the selection rows' slots, the next norm in f32, `Hx` its f16 twin), `MetalMoeCombG4Pf` (the bucket inverse's slots, no norm out; 1024 lanes, `rsqrt`) | `ClsArCombG4` / `F16B` / `Rq` (the slot map, the next norm in f32, f16 or Q8_0 blocks; 256 lanes, `1 / sqrt`) | `TG`, `RSQRT`, `GATHERED`, `OUT_F32` / `OUT_F16` / `OUT_Q8`, `HX`, `PRESUM_SWITCH`; the stash and, on Metal, the norm rows' layout |
+| `GkClsEpilogue` | `MetalClsEpilogue` | `ClsEpilogue` | nothing; every row in one dispatch |
+| `GkAddRmsRows` | `MetalAddRms` / `HX` (the plain step), `MetalPreAddRms` / `HX` (the sandwich seam in one dispatch: the branch normed under its post norm, the add, the next norm), `MetalPreAdd` (no norm out; 1024 lanes a decode row, 256 the window) | `ClsArAddRms` / `F16B`, `ClsArAddRmsRqB` and the `ArAddRmsRq*` stamps (Q8_0 out), the combines' `ArCombBase` (256 lanes) | `LANES`, `PRE`, `PRE_SWITCH`, `NORM_SWITCH`, `ARMS`, `X4`, `HX`, `OUT_*`; on Metal, the norm rows' layout |
+| `GkPleAct` | `MetalGegluSide` (in place over the gate rows, 64 lanes) | `PleActF32` (`OUT`: the f32 projection's x, 256 lanes) | `OUT`; the side row's index is `gk_strided_at`, `ActRqT.up_at`'s |
+| `GkPleFinish` | `MetalPleFinish` (`XSCALE`: the projection's 1 / sqrt(dim) in the finish, `rsqrt`) | `PleFinish` (the projection arrives scaled, `1 / sqrt`) | `XSCALE`, `RSQRT`; 256 lanes a slice on both |
 
 The gated FFN's activation is one function on both homes (`gk_act_mul`, `dasllama_gpu_math.das`): the Metal ew2 and
 w13 combines and every Vulkan act class call it, the gelu its clamped tanh form.
 
+**Where the figures below come from** (the bullets and the table, every reading `debug-jit`, at under 3% cv). Metal:
+`./bin/daslang -jit dastest/dastest.das -- --bench --test modules/dasLLAMA/benchmarks/ew/bench_metal_gk_rows.das` on the M5
+Max under `DAS_TUNE_MANIFEST=modules/dasLLAMA/performance/m5.tune.json`, `DAS_TUNE_POLICY` unset - direction-grade, since the
+box profile predates the binary; a race is its `race <kernel>` lines (the arms in one process, an arm's best round of at
+least 9), any other row the median. Vulkan: `./bin/daslang -jit modules/dasLLAMA/harness/vk_gk_rows_probe.das` on the RTX PRO
+4500 Blackwell pod, `DASLLAMA_COOPMAT` unset, the median of 9 rounds of 8 submits of 64 dispatches; the device clock steps by
+2.05 us at these sizes, so a cell under 8 us moves by whole steps. A bullet's pair is raced in one process.
+
 - **The inverse rms keeps each home's spelling.** The CPU rmsnorm and the Vulkan bodies spell `1 / sqrt`, the Metal bodies
   `rsqrt`, and a decode parity cell reads the two apart only past the bars it holds; a shared row template therefore carries
   the spelling as its `RSQRT` constant (`GkWgReduce.wg_rms_inv_into`, `GkDnGate`) and no body picks one for both homes.
+- **The gemma-4 MoE step sums the routed rows with the routed combine's own sum** (`GkMoeCombine.slot_sum_into`): `GkMoeCombG4`
+  derives `GkMoeCombine`, which derives `GkQ8BlockStore` for the step's Q8_0 out; the `@workgroup` slab the store declares
+  sits on every combine stamp's class, read by the Q8_0 out alone.
+- **The routed sum keeps four slots' loads in flight off the window** (`GkMoeCombine.SLOT_X4`, the sum's order unchanged), and
+  the gemma-4 window stamp (`MetalMoeCombG4Pf`) sums one slot a step. On against off on the M5, `debug-jit`: the decode combine
+  at dim 2048 k 8 reads 1.28 against 1.82 us at one row and 1.31 against 1.91 at four (the gated one 1.42 against 1.98, 1.46
+  against 2.02); the gemma-4 decode step at dim 2816 k 8 12.01 against 13.36 at one row and 12.06 against 13.50 at four (`Hx`
+  11.98 against 13.33, 12.03 against 13.43); the window's reduce at 512 rows of 2048 38.10 against 38.86 (the gated one 41.83
+  against 42.56); the gemma-4 window stamp 136.91 against 121.38.
+- **The residual step's sandwich seam is one dispatch on both homes** (`GkAddRmsRows.PRE`: the branch normed under its post
+  norm, the add and the next norm in one pass). The M5's 512-row window, `debug-jit`, at dim 2560 reads 27.51 us against the
+  rms + add_rms pair's 36.56 (the no-norm seam 18.79 against 39.04), at dim 3840 40.69 against 55.80 (27.74 against 56.72).
+  The window's stamps and the decode builders run 256 lanes, the count that ties 1024 at every width and row count where
+  128 loses. At 512 rows on the f16 twin's pipeline the shipped window builder reads 27.10 us at dim 2560 and 40.33 at
+  3840; a 1024-lane stamp reads 27.10 and 40.30, a 128-lane one 34.50 and 54.31. At the decode
+  rows on the plain pipeline the shipped 256-lane builder reads, at one / four rows, 3.19 / 3.28 us at dim 1152, 4.87 / 5.04
+  at 2560 and 6.71 / 6.83 at 3840; a 1024-lane stamp reads 3.23 / 3.27, 4.88 / 5.07 and 6.71 / 6.85, a 128-lane one 4.24 /
+  4.35, 7.76 / 8.07 and 11.24 / 11.59. The fused seam stages a row through a
+  4096-float threadgroup slab (`MetalAddRmsT.SLAB`), so a row wider than that - the 31B's 5376 - takes the split
+  chain (the rms, then the add and the next norm) at every seam, and the race holds no fused arm at that width.
+- **The Vulkan MoE step stores its next norm four elements in flight a lane** (`GkMoeCombG4.OUT_X4`, the residual step's
+  `GkQ8BlockStore.store_x4` form, which the residual step's `ArBase` stores through): the pod reads 10.37 us with it against
+  12.29 with the stride loop (`ProbeArCombG4X1`), `debug-jit`.
+- **The select's down-scale arm is a stamp of its own on Metal.** With no row named the arm costs the plain stamps 0.20 us a
+  dispatch on the M5, `debug-jit` (2.83 against 3.04 us at 256 experts k 8, 3.65 against 3.90 at 512 k 10), so a down-scale
+  row selects the `Ds` stamps (`ARCHITECTURE_GPU_PREFILL_MOE.md#moe-wscale`), which bind the layer's row and scale every pick,
+  and the plain stamps bind no down-scale buffer; the Vulkan top-k carries the arm on its one stamp, its row named or
+  `GK_NO_DSCALE` (`DSOFF_SWITCH`).
+- **A value one home fixes and the other varies is a run-time read on the varying home alone.** A `*_SWITCH` constant compiles
+  the read in where a site varies the field (`PRE_SWITCH`: the Vulkan sandwich arm off a layer's `pre_post`; `PRESUM_SWITCH`:
+  the window step's down-GEMV route; `DSOFF_SWITCH`: the Vulkan top-k's row) and out where every site passes one value; a row
+  offset the Metal home's own upload fixes (`seam_norms`, `moe_g4_norms`) is that stamp's accessor over its width, the args'
+  field read only on Vulkan.
 - **A one-subgroup stamp skips the workgroup stage.** `GkTopKRow` at `LANES` 32 takes its max, its sum and every pick off the
   subgroup's own reduction, the Metal select's register form; at 256 lanes the subgroups' partials cross the workgroup slab.
 - **The Metal row kernels' value-form reduces sit on `GkWgReduce`'s slab** (`MetalTgReduceBase`), so a Metal row kernel and a
@@ -43,10 +137,13 @@ w13 combines and every Vulkan act class call it, the gelu its clamped tanh form.
 - **The grid-codebook decode GEMVs ride one shell on Metal** (`MetalKqGridGemvT`: iq3s, iq3xxs, iq2s, iq2xs, iq2xxs, dense and
   routed); a format supplies its block's term (`blk_sum`), and the iq2xxs F4 stamp its staged grid (`grid_prologue`).
 
-**What each stamp reads on its home.** One dispatch alone, the kernel bench (`benchmarks/ew/bench_metal_gk_rows.das`, M5 Max)
-and the Vulkan probe (`harness/vk_gk_rows_probe.das`, RTX PRO 4500 Blackwell), median of the rounds at under 3% cv, the
-per-home body before the template against the stamp, in us (`PERF_LEDGER.md`, the 2026-10-13 entry on the shared row
-templates' stamps, carries the run):
+**What each stamp reads on its home.** One dispatch alone, in us, the per-home body before the template against the stamp. A
+before cell is the same instrument at the parent of the commit that brought its row in, `direction-grade`: `4459db710d` for the
+rows the templates landed with (`PERF_LEDGER.md`, the 2026-10-13 entry on the shared row templates' stamps), `5d3db7852d` for
+the router's one- and eight-column f32 rows, `1d357ad171` for the projection's Vulkan rows, `611775848f` for its fold onto the
+router's Metal shell, `7f5c27186a` for the gemma-4 select, MoE tail (Vulkan) and classifier epilogue rows; the gemma-4 MoE tail's
+M5 before cells are the unfused chain raced in one process. The projection's f32 rows are
+its in-process alternate on both homes:
 
 | Kernel, shape | M5 before | M5 stamp | Vulkan before | Vulkan stamp |
 |---|---:|---:|---:|---:|
@@ -65,16 +162,25 @@ templates' stamps, carries the run):
 | the same, 4 rows f16 | 3.66 | 1.95 | - | - |
 | the same, 1 row f16, against the half-twin rope store it replaced | 1.79 | 1.93 | - | - |
 | the window's pass with its q twin, 512 rows | 26.9 | 26.5 | - | - |
-| router, 256 experts dim 2048, 1 column, f32 rows (f16 rows) | 3.82 | 3.37 | 4.2 (4.10) | 4.43 (4.11) |
-| router, 8 columns, f32 rows (f16 rows) | - | - | 14.34 (10.24) | 14.34 (10.24) |
+| router, 256 experts dim 2048, 1 column, f32 rows | 3.82 | 3.37 | 4.2 | 4.43 |
+| router, 8 columns, f32 rows | - | - | 14.34 | 14.34 |
 | router, 512 columns (the window) | 141.6 | 144.4 | - | - |
+| E-series side rows' projection, 35 x 256 rows of 1536, bf16 rows, 1 column (the M5 before: the CPU; Vulkan before: an f16 copy of the rows) | - | 45.47 | 32.83 | 32.86 |
+| the same, 4 columns | - | 79.98 | 74.15 | 74.07 |
+| the same, the f32 rows (the alternate), 1 / 4 columns | - | 72.83 / 149.11 | - | 34.79 / 94.15 |
+| the same over a ring of 8 weight copies, bf16 / f32 at 1 column, then at 4 | - | 56.08 / 103.30, 80.14 / 163.00 | - | 45.59 / 69.61, 83.86 / 108.44 |
+| the same, the bf16 stamps on the router's Metal shell (`MetalRouterGemvT`; Metal before: the stamps off `GkRouterGemv` directly), the decode column's stamp / the blocked stamp at 1 and 4 columns | 46.00 / 77.40 / 79.91 | 45.14 / 77.90 / 80.49 | - | - |
 | shared gate: its own GEMV, then the routed combine and the gated add | 3.08 + 2.93 | - | - | - |
 | shared gate as the router's row `ne`, the combine's `SH` arm | - | 0 + 2.01 | - | - |
 | Pocket row GEMV, 1024 x 1024 | 9.67 | 9.79 | 5.4-5.8 | 5.2-5.7 |
 | Pocket row GEMV, LayerNorm + SiLU | 12.79 | 12.99 | 6.14 | 6.14 |
 | gated attention's deinterleave + sigmoid epilogue, 8 heads of 256, 1 row (4 rows) | 2.19 (2.23) | 0 | - | - |
+| select, 128 experts k 8, the down scales (Metal before: the select, then its scale pass) | 3.89 | 3.30 | 6.14 | 6.14 |
+| gemma-4 MoE tail, dim 2816 k 8, 1 row (Metal before: the combine, three norms, the add, the add-norm) | 17.29 | 11.98 | 10.41 | 10.44 |
+| the same, 512 rows (Metal before: the reduce, three norms, two adds) | 188.75 | 120.30 | - | - |
+| classifier epilogue, vocab 262144 cap 30 two pins, 1 row (Metal before: the softcap row, then the suppress row) | 6.46 | 3.68 | 4.10 | 4.10 |
+| the same, 4 rows (Metal before: the pair a row) | 25.75 | 10.65 | 6.15 | 6.15 |
 
-The Vulkan clock reads in steps of 2.05 us at these sizes, so a Vulkan cell under 8 us moves by whole steps.
 The template stamps' Vulkan words keep their helpers' bodies in place: the router's methods, the Pocket GEMV's and the
 `gk_subgroup_*` shims carry `[spirv_inline]` - the SPIR-V emitter visits such a helper's body at each call site, so the
 stamp pays no function call for it - since the driver compiled the stamp 1.9 us slower with the subgroup reductions
@@ -105,9 +211,8 @@ M5 against the 512-row window's 5.6 us back.
 - `MetalMoeCount` / `MetalMoeBucket` / `MoeSched`: an ordered atomics-free schedule against an atomic ladder; and with it the
   expert-row gather (`MetalMoeGatherX` gathers a bucket row off its slot, `MoeGatherF16` scatters a slot into its bucket row:
   the Vulkan schedule writes no bucket-to-slot map). Both clamp into the half range (`half_sat`).
-- `MetalMoeMulMmQ8TensorT` off the kq scaffold, the ADAPT walks, `MetalG4RouterNorm`'s compensated sum, `MetalMoeWScale`
-  against the top-k fold, the gate-up fusion with its Q8 requant against the f32 act, the driver chains, and the hc head
-  mixer's GEMV against its tile.
+- `MetalMoeMulMmQ8TensorT` off the kq scaffold, the ADAPT walks, `MetalG4RouterNorm`'s compensated sum, the gate-up fusion
+  with its Q8 requant against the f32 act, the driver chains, and the hc head mixer's GEMV against its tile.
 - `MetalMoeGemvMx4`: its measured lane map (sixteen blocks in flight, uint2 loads).
 - The router's lane split parts by shape, not by home: a workgroup a row serves the decode column on both homes (M5 3.37
   against the subgroup form's 3.82 us), a subgroup a row the Metal window (144 against the workgroup form's 745 us at 512

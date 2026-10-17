@@ -181,34 +181,88 @@ def kq_fmt_gpu_supported(f : KqFmt) : bool =>
         || f == KqFmt.iq4nl || f == KqFmt.q40 || f == KqFmt.k2 || f == KqFmt.iq2s || f == KqFmt.iq2xs || f == KqFmt.iq2xxs || f == KqFmt.iq3s4
         || kq_dense_b32(f))
 
+//! the formats the K-quant token-table gather has a stamp for: every
+//! served plane format but q8
+def emb_kq_gather_fmt(f : KqFmt) : bool => f != KqFmt.q8 && kq_fmt_gpu_supported(f)
+
+//! a table plane in format `fmt` the gather family serves: the q8 linear copy, a per-32 plane or a K-quant plane with a stamp - every
+//! plane format the Metal kernels read
+def emb_table_gather_fmt(f : KqFmt) : bool => kq_fmt_gpu_supported(f)
+
+//! the E-series pre-step serves on the device for this blob model: its table in a format the gather family serves, bound at
+//! whole superblocks (a per-32 pair's binds stay 16-byte aligned), a ple width the finish's threadgroup takes, and a model dim
+//! the projection's word walk steps whole: pairs on the bf16 rows (`enc_ple_proj_bf16`), float4s on the f32 router's
+def metal_ple_dev_ok(t : Model) : bool => has_ple(t.config) && empty(metal_ple_pre_unserved(t))
+
+//! why the device does not serve the E-series pre-step for this model, named by site, `KqFmt` member and shape; "" when it does
+//! or the model has no PLE. The shapes named here run the CPU pre-step (`followup_metal.md` row 55 holds their device path)
+def metal_ple_pre_unserved(t : Model) : string {
+    return "" if (!has_ple(t.config))
+    let site = kq_site_words("per_layer_token_embd")
+    return "the {site} is not blob-streamed" if (!t.metal_blob)
+    return "the {site}'s planes are trimmed" if (t.planes_trimmed)
+    return "the {site} plane is {t.ple_emb_fmt}, a format the gather family does not read" if (!emb_table_gather_fmt(t.ple_emb_fmt))
+    let ple = t.config.n_embd_per_layer
+    let all = t.config.n_layers * ple
+    if (t.ple_emb_fmt != KqFmt.q8 && (all % KQ_SB_ELEMS != 0l || t.ple_emb_off % KQ_SB_ELEMS != 0l)) {
+        return "the {site} plane ({t.ple_emb_fmt}) binds off a whole superblock: {all} elements a row at offset {t.ple_emb_off}"
+    }
+    return "the {site}'s ple width {ple} is off the finish's {KQ_B32_ELEMS}-lane step" if (ple % KQ_B32_ELEMS != 0l)
+    return "the {site}'s ple width {ple} is past the finish's 1024-lane threadgroup" if (ple > 1024l)
+    let word = t.ple_model_bf16 ? "bf16 pair" : "f32 float4"
+    let proj_word = t.ple_model_bf16 ? 2l : 4l
+    return "the {site}'s projection walks a model dim of {t.config.dim} in {word}s, which do not step it whole" if (t.config.dim % proj_word != 0l)
+    return ""
+}
+
+var private g_ple_decline_said : string   //! the last pre-step decline logged: a decline repeats every step, the line once
+
+//! the pre-step's device verdict for the Metal `kind` driver about to serve this model: `metal_ple_dev_ok`, with a CPU verdict's
+//! reason logged once while the same one repeats, so the fallback never runs unnamed
+[cold_path]
+def metal_ple_dev_said(kind : string; t : Model) : bool {
+    let why = metal_ple_pre_unserved(t)
+    return has_ple(t.config) if (empty(why))
+    let line = "dasLLAMA metal {kind}: the E-series pre-step declined - {why}; the CPU serves the pre-step"
+    if (line != g_ple_decline_said) {
+        g_ple_decline_said = line
+        to_log(LOG_WARNING, "{line}\n")
+    }
+    return false
+}
+
 //! a plane format with a one-row GEMV on this home: q8's, a superblock format's row-batched decode form at one row, or a per-32
 //! plane's GEMV, whose K (`kdim`) is whole blocks of the format's unit and whose format the Metal kernels serve
 def kq_fmt_one_row_gemv(f : KqFmt; kdim : int64) : bool =>
     (f == KqFmt.q8 || ((kq_sb(int(f)) || kq_dense_b32(f)) && kq_fmt_gpu_supported(f)
         && kdim % kq_unit(f) == 0l))
 
-def private kq_fmts_gpu_supported(a : array<KqFmt>) : bool {
-    for (f in a) {
-        if (!kq_fmt_gpu_supported(f)) {
-            return false
-        }
+//! the first layer of `a` whose plane format no Metal kernel reads, named by layer, site and `KqFmt` member; "" when every one has a kernel
+def private dense_fmts_unserved(a : array<KqFmt>; role : string) : string {
+    for (f, l in a, count()) {
+        return "layer {l}'s {kq_site_words(role)} plane is {f}" if (!kq_fmt_gpu_supported(f))
     }
-    return true
+    return ""
 }
 
-// every tensor fmt a kq load can route to a GPU kernel — the decode/batch/prefill gates all
-// clause on this (the MoE expert planes never reach the llama-family GPU graph, so we1/2/3
-// stay out of scope)
-def kq_load_gpu_supported(t : Model) : bool {
-    if (!t.kquant_native) {
-        return true
-    }
-    return ((kq_fmts_gpu_supported(t.wq_fmt) && kq_fmts_gpu_supported(t.wk_fmt) &&
-             kq_fmts_gpu_supported(t.wv_fmt) && kq_fmts_gpu_supported(t.wo_fmt)) &&
-        (kq_fmts_gpu_supported(t.w1_fmt) && kq_fmts_gpu_supported(t.w2_fmt) &&
-             kq_fmts_gpu_supported(t.w3_fmt)) &&
-        (kq_fmt_gpu_supported(t.wcls_fmt) && kq_fmt_gpu_supported(t.emb_fmt)))
+//! the first dense or table plane of a kq load no Metal kernel reads in its own bytes, named by site and `KqFmt` member; "" when
+//! every one has a kernel - the decode, batch and prefill gates decline `kquant_native` on it
+def kq_load_gpu_unserved(t : Model) : string {
+    return "" if (!t.kquant_native)
+    var why = dense_fmts_unserved(t.wq_fmt, "attn_q")
+    why = empty(why) ? dense_fmts_unserved(t.wk_fmt, "attn_k") : why
+    why = empty(why) ? dense_fmts_unserved(t.wv_fmt, "attn_v") : why
+    why = empty(why) ? dense_fmts_unserved(t.wo_fmt, "attn_output") : why
+    why = empty(why) ? dense_fmts_unserved(t.w1_fmt, "ffn_gate") : why
+    why = empty(why) ? dense_fmts_unserved(t.w3_fmt, "ffn_up") : why
+    why = empty(why) ? dense_fmts_unserved(t.w2_fmt, "ffn_down") : why
+    return why if (!empty(why))
+    return "the {kq_site_words("output")} plane is {t.wcls_fmt}" if (!kq_fmt_gpu_supported(t.wcls_fmt))
+    return "the {kq_site_words("token_embd")} plane is {t.emb_fmt}" if (!kq_fmt_gpu_supported(t.emb_fmt))
+    return ""
 }
+
+def kq_load_gpu_supported(t : Model) : bool => empty(kq_load_gpu_unserved(t))
 
 //! some dense plane - attention, FFN, classifier - is a per-32 format (q51, iq4nl32)
 def kq_dense_b32_any(t : Model) : bool {
@@ -248,28 +302,46 @@ def dn_metal_ok(t : Model) : bool {
     if (c.ssm_d_state != 128l || c.ssm_d_conv < 2l || c.ssm_d_conv > 8l) {
         return false
     }
+    return empty(dn_fmts_unserved(t))
+}
+
+//! layer `l`'s plane (`words`) in format `f` named by layer, site and `KqFmt` member where this home has no one-row GEMV for it at
+//! K `kdim`; "" where it has one
+def private one_row_unserved(l : int64; words : string; f : KqFmt; kdim : int64) : string =>
+    kq_fmt_one_row_gemv(f, kdim) ? "" : "layer {l}'s {words} plane is {f}"
+
+//! the first recurrent layer's deltanet plane this home has no one-row GEMV for, named by layer, site and `KqFmt` member; "" when
+//! every one has its GEMV - `dn_metal_ok` refuses the hybrid on it, and the gates decline `graph`
+def dn_fmts_unserved(t : Model) : string {
+    let c = t.config
     for (l in range64(c.n_layers + c.n_layer_nextn)) {
-        if (layer_is_recurrent(c, l) && (!kq_fmt_one_row_gemv(fmt_at(t.dnqkv_fmt, l), c.dim) ||
-                !kq_fmt_one_row_gemv(fmt_at(t.dngate_fmt, l), c.dim) ||
-                !kq_fmt_one_row_gemv(fmt_at(t.dnout_fmt, l), c.ssm_d_inner) ||
-                !kq_fmt_one_row_gemv(fmt_at(t.dnbeta_fmt, l), c.dim) ||
-                !kq_fmt_one_row_gemv(fmt_at(t.dnalpha_fmt, l), c.dim))) {
-            return false
-        }
+        continue if (!layer_is_recurrent(c, l))
+        var why = one_row_unserved(l, "deltanet qkv", fmt_at(t.dnqkv_fmt, l), c.dim)
+        why = empty(why) ? one_row_unserved(l, "deltanet gate", fmt_at(t.dngate_fmt, l), c.dim) : why
+        why = empty(why) ? one_row_unserved(l, kq_site_words("ssm_out"), fmt_at(t.dnout_fmt, l), c.ssm_d_inner) : why
+        why = empty(why) ? one_row_unserved(l, kq_site_words("ssm_beta"), fmt_at(t.dnbeta_fmt, l), c.dim) : why
+        why = empty(why) ? one_row_unserved(l, kq_site_words("ssm_alpha"), fmt_at(t.dnalpha_fmt, l), c.dim) : why
+        return why if (!empty(why))
     }
-    return true
+    return ""
 }
 
 //! the window's β/α rows: a K-quant plane rides its batched expert-form GEMV (one plane, every row a stream), so its
 //! format needs that form (`moe_fmt_metal_served`); q8 planes ride `pf_enc_dn_ba`, f32 ones the slab GEMV
-def dn_ba_metal_window_ok(t : Model) : bool {
+def dn_ba_metal_window_ok(t : Model) : bool => empty(dn_ba_window_fmts_unserved(t))
+
+//! the first recurrent layer's β/α plane whose format has no batched expert-form GEMV, named by layer, site and `KqFmt` member;
+//! "" when both have it on every layer - the prefill declines `graph` on it
+def dn_ba_window_fmts_unserved(t : Model) : string {
     let c = t.config
     for (l in range64(c.n_layers + c.n_layer_nextn)) {
-        if (layer_is_recurrent(c, l) && (!moe_fmt_metal_served(fmt_at(t.dnbeta_fmt, l)) || !moe_fmt_metal_served(fmt_at(t.dnalpha_fmt, l)))) {
-            return false
-        }
+        continue if (!layer_is_recurrent(c, l))
+        let fb = fmt_at(t.dnbeta_fmt, l)
+        let fa = fmt_at(t.dnalpha_fmt, l)
+        return "layer {l}'s {kq_site_words("ssm_beta")} plane is {fb}" if (!moe_fmt_metal_served(fb))
+        return "layer {l}'s {kq_site_words("ssm_alpha")} plane is {fa}" if (!moe_fmt_metal_served(fa))
     }
-    return true
+    return ""
 }
 
 // (q8 32-blocks, kq 256-superblocks — the expert shift is index math, no base multiple)
@@ -300,6 +372,80 @@ def moe_fmt_metal_served(f : KqFmt) : bool {
         || f == KqFmt.iq4xs || f == KqFmt.iq3s || f == KqFmt.iq3xxs || f == KqFmt.iq2s || f == KqFmt.iq2xs || f == KqFmt.iq2xxs
         || f == KqFmt.k2 || f == KqFmt.iq4nl || f == KqFmt.iq3s4)
 }
+
+//! layer `l`'s first routed stack (gate `f1`, up `f3`, down `f2`) whose format the Metal routed block has no kernel for, named by
+//! layer, site and `KqFmt` member; "" when it has one for all three
+def private moe_layer_fmt_unserved(l : int64; f1, f3, f2 : KqFmt) : string {
+    return "layer {l}'s {kq_site_words("ffn_gate_exps")} plane is {f1}" if (!moe_fmt_metal_served(f1))
+    return "layer {l}'s {kq_site_words("ffn_up_exps")} plane is {f3}" if (!moe_fmt_metal_served(f3))
+    return "layer {l}'s {kq_site_words("ffn_down_exps")} plane is {f2}" if (!moe_fmt_metal_served(f2))
+    return ""
+}
+
+//! the first routed stack of a MoE whose format the Metal routed block has no kernel for, named by layer, site and `KqFmt` member;
+//! "" when every stack has one (an mx4 stack rides its own arm) - `moe_metal_ok` declines `graph` on it
+def moe_fmts_unserved(t : Model) : string {
+    return "" if (!t.config.moe || t.experts_mx4)
+    for (l in range64(t.config.n_layers + t.config.n_layer_nextn)) {
+        let why = moe_layer_fmt_unserved(l, fmt_at(t.we1_fmt, l), fmt_at(t.we3_fmt, l), fmt_at(t.we2_fmt, l))
+        return why if (!empty(why))
+    }
+    return ""
+}
+
+//! the first layer's sigmoid-gated shared expert plane this home has no one-row GEMV for, named by layer, site and `KqFmt` member;
+//! "" when every one has its GEMV, or the MoE carries no such branch - `moe_metal_ok` declines `graph` on it
+def shexp_fmts_unserved(t : Model) : string {
+    let c = t.config
+    return "" if (!c.moe || c.n_ff_shexp <= 0l || c.moe_dense_shexp)
+    for (l in range64(c.n_layers + c.n_layer_nextn)) {
+        var why = one_row_unserved(l, kq_site_words("ffn_gate_shexp"), shexp_plane(t, l, 1).f, c.dim)
+        why = empty(why) ? one_row_unserved(l, kq_site_words("ffn_up_shexp"), shexp_plane(t, l, 3).f, c.dim) : why
+        why = empty(why) ? one_row_unserved(l, kq_site_words("ffn_down_shexp"), shexp_plane(t, l, 2).f, c.n_ff_shexp) : why
+        return why if (!empty(why))
+    }
+    return ""
+}
+
+//! the words a Metal decline `why` adds beside its enum value: the site and `KqFmt` member of the plane the gate stopped at, under
+//! `kquant_native` (a dense or table plane) and `graph` (a routed stack, a shared expert, a deltanet plane, and on the `prefill`
+//! window the β/α planes' batched form); "" for a decline no plane format decided
+def metal_fmt_decline_words(kind, why : string; t : Model) : string {
+    var site = ""
+    if (why == "kquant_native") {
+        site = kq_load_gpu_unserved(t)
+    } elif (why == "graph") {
+        site = moe_fmts_unserved(t)
+        site = empty(site) ? shexp_fmts_unserved(t) : site
+        site = empty(site) ? dn_fmts_unserved(t) : site
+        site = empty(site) && kind == "prefill" ? dn_ba_window_fmts_unserved(t) : site
+    }
+    return empty(site) ? "" : "{why} - {site}, a format the Metal kernels do not read there"
+}
+
+//! the line a Metal driver logs for a decline whose `metal_fmt_decline_words` name a plane; "" for one they do not
+def metal_fmt_decline_line(kind, why : string; t : Model) : string => fmt_line(kind, metal_fmt_decline_words(kind, why, t))
+
+def private fmt_line(kind, words : string) : string => empty(words) ? "" : "dasLLAMA metal {kind}: declined {words}; the CPU serves the call"
+
+var private g_fmt_decline_said : string   //! the last `metal_fmt_decline_line` logged: a decline repeats every step, the line once
+
+//! log `metal_fmt_decline_line` for a decline the driver is about to count, once while the same line repeats; the words it names,
+//! which the required-mode panic carries ("" for a decline no plane format decided)
+[cold_path]
+def fmt_decline_say(kind, why : string; t : Model) : string {
+    let words = metal_fmt_decline_words(kind, why, t)
+    let line = fmt_line(kind, words)
+    if (!empty(line) && line != g_fmt_decline_said) {
+        g_fmt_decline_said = line
+        to_log(LOG_WARNING, "{line}\n")
+    }
+    return words
+}
+
+//! `fmt_decline_say` under a driver's decline enum (`MetalDecodeDecline`, `MetalPrefillDecline`), its name spelled off the hot path
+[cold_path]
+def metal_fmt_decline_say(kind : string; why : auto(E); t : Model) : string => fmt_decline_say(kind, "{why}", t)
 
 //! The MoE serve gate: plain routed FFN (qwen3moe), the sigmoid-gated shared expert (qwen35moe), gemma4's dense-shared branch,
 //! gpt-oss's gate (softmax_weight, biases) over mx4 experts; no dense lead or selection bias. The stack format is its own axis:
@@ -335,14 +481,9 @@ def moe_metal_ok(t : Model) : bool {   // nolint:STYLE038 — flat per-shape ref
         let she = c.dim * c.n_ff_shexp
         if (!c.moe_shexp_gated ||
                 (c.n_ff_shexp % 64l) != 0l || (she % 256l) != 0l ||
-                (t.wsh1_off % 256l) != 0l || (t.wsh2_off % 256l) != 0l || (t.wsh3_off % 256l) != 0l) {
+                (t.wsh1_off % 256l) != 0l || (t.wsh2_off % 256l) != 0l || (t.wsh3_off % 256l) != 0l ||
+                !empty(shexp_fmts_unserved(t))) {
             return false
-        }
-        for (l in range64(c.n_layers + c.n_layer_nextn)) {
-            if (!kq_fmt_one_row_gemv(shexp_plane(t, l, 1).f, c.dim) || !kq_fmt_one_row_gemv(shexp_plane(t, l, 3).f, c.dim) ||
-                    !kq_fmt_one_row_gemv(shexp_plane(t, l, 2).f, c.n_ff_shexp)) {
-                return false
-            }
         }
     }
     let ne = c.n_expert
@@ -374,9 +515,7 @@ def moe_metal_ok(t : Model) : bool {   // nolint:STYLE038 — flat per-shape ref
         let f1 = fmt_at(t.we1_fmt, l)
         let f2 = fmt_at(t.we2_fmt, l)
         let f3 = fmt_at(t.we3_fmt, l)
-        if (!moe_fmt_metal_served(f1) || !moe_fmt_metal_served(f2) || !moe_fmt_metal_served(f3)) {
-            return false
-        }
+        return false if (!empty(moe_layer_fmt_unserved(l, f1, f3, f2)))
         // per-site alignment + reduction dims: superblock kq kernels iterate whole 256-rows,
         // the per-32 formats whole 32-blocks (+ the mul_mm's 64-col output tiles)
         let sb1 = kq_sb(f1)
@@ -485,7 +624,7 @@ def decode_shape_decline(t : Model; needs_ok : MetalNeed; allow_moe : bool = fal
         if ((hs_l % 32l) != 0l || hs_l > 512l || (layer_kv_dim(c, l) % 32l) != 0l) {
             return MetalDecodeDecline.shape
         }
-        // E-series KV sharing: only the single-stream driver has the Q-only arm (allow_kv_share)
+        // E-series KV sharing: a driver with the Q-only arm passes allow_kv_share (the single-row and the batched step both do)
         if (t.kv_src[l] != l && !(allow_kv_share && kv_share_ok(t, l))) {
             return MetalDecodeDecline.layers
         }

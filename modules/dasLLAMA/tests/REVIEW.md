@@ -1,8 +1,9 @@
 # dasLLAMA tests Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-doc: `../ARCHITECTURE.md`. Planned work: `../followup_general.md`, `../followup_vulkan.md`,
-`../followup_metal.md`.
+docs: `../ARCHITECTURE.md`, `../ARCHITECTURE_IMAGE_LEDGER.md` (the suite cells that mint an image by
+design are ledgered at its `#suite-image-mints`). Planned work: `../followup_general.md`,
+`../followup_vulkan.md`, `../followup_metal.md`.
 
 A cell is one `t |> run` subtest, or a `[test]` function that runs no subtest, and owns the asserts
 of every helper it calls; a test file is a `.das` dastest runs - one holding a `[test]` function, or
@@ -198,6 +199,11 @@ dumps. Any one of these names the producer: a row in `../performance/model_specs
 `companions` list; a row in `asr_catalog` (`../performance/profile_common.das`); a convert
 script in `../harness/`; for an oracle dump, the mint script stocked beside the dumps under
 `models_dir()`, named by the test that loads the dump.
+
+**A diff that adds a cell reading a stocked artifact - a file neither this repo's build nor its
+tests produce - from a model file's directory names that artifact in the `companions` of that model
+file's row in `../performance/model_specs.das`, in the same change.** A box that fetches the row
+alone then has what the cell reads.
 
 **A test that reads a vision encode oracle dump without naming the minting arm in its header - the
 backend, the flash-attention setting and the mmproj precision the dump came from - is a defect.**

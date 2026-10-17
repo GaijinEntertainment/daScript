@@ -201,12 +201,9 @@ let private CENSUS_NEVER_DISPATCHED <- [
     // out at 128 (Qwen3-30B-A3B), 60 (Qwen1.5-MoE) and 32 (gpt-oss-20b). Its coverage is
     // moe_select_gate's ne=512 and ne=300 cases in test_metal_prefill_kernels.das
     "MetalMoeSelect512",
-    // the PLE token-table gather twins: the census's only E-series carrier is the E4B Q8_0, whose
-    // table sits on the q8 plane and takes the q8 stamp. A k4/k5/q40 table needs an E-series file
-    // whose per_layer_token_embd is K-quant or Q4_0, and the zoo stocks none. Their coverage is
-    // ple_gather_gate in test_metal_prefill_kernels.das
-    "MetalPleGatherK4_metal_ple_gather_kq", "MetalPleGatherK5_metal_ple_gather_kq",
-    "MetalPleGatherQ40_metal_ple_gather_kq",
+    // its down-scale twin: a gemma-4 MoE past 256 experts, which no file carries (the 26B routes 128). Its coverage is
+    // moe_select_gate's ne=300 down-scale case in test_metal_prefill_kernels.das
+    "MetalMoeSelect512Ds",
     // the unconverted geglu arm of the bound-total MoE activation: the gemma4moe row picks the
     // geglu family on moe_dense_shexp, and its panel always clears CVT_MIN_ROWS, so the HX twin
     // serves and this one never does. Its coverage is ew2_hx_gate(geglu = true, bounded = true) in
@@ -347,8 +344,8 @@ def private census_zoo(t : T?) {
     cov_model(t, path_join(models_dir(), "Qwen1.5-MoE-A2.7B-Chat.Q8_0.gguf"), "qwen2moe",
         [KVDtype.f16], none)
     // gemma4moe: the only carrier of a Q4_0 routed expert plane - the gemma-4 dense-shared MoE
-    // whose fused gate_up stacks are Q4_0 (the 704-wide down stacks demote to q8: no multiple of
-    // 256). No batch shapes, same reason as the other MoE rows; large tier
+    // whose fused gate_up stacks are Q4_0 (the 704-wide down stacks serve as q4032, off the 256
+    // lattice). No batch shapes, same reason as the other MoE rows; large tier
     cov_model(t, path_join(models_dir(), "gemma-4-26B-A4B-it-Q4_0.gguf"), "gemma4moe",
         [KVDtype.f16], none)
     cov_tower(t)
@@ -885,6 +882,9 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // the mx4 experts' fused gate+up+act+requant GEMV (gpt-oss's token command, above the zoo's tier); its coverage is
     // test_vkd_mx4_gemv_gu in test_vulkan_kernels.das
     "mx4_gemv_gu_cls_spv",
+    // the IQ4_XS, iq3s4 and IQ2_S experts' fused gate+up+act+requant GEMVs (the gemma-4 26B's Unsloth dynamic files' gate_up stacks,
+    // above the zoo's tier); their coverage is test_vkd_kq_gemv_k4_gu in test_vulkan_kernels.das
+    "kq_gemv_iq4xs_gu_cls_spv", "kq_gemv_iq3s4_gu_cls_spv", "kq_gemv_iq2s_gu_cls_spv",
     // the biased act twins (gpt-oss's expert stacks carry gate and up bias rows: a carrier above the zoo's tier) - the
     // Q8_0 requant form the token command runs and the f16 form the window chain runs; their coverage is test_vkd_act_family
     "q8_actrq_b_cls_spv", "actf16_b_cls_spv",
@@ -1008,8 +1008,25 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // the batched windowed decode attention and its f16 twin (a sliding window over the batch rows: the gemma
     // carriers, no zoo row); its coverage is test_vkd_da_attn_bw in test_vulkan_kernels.das
     "da_attn_bw_cls_spv", "da_attn_bw_f16_cls_spv",
-    // the q51 routed down GEMV's summing twin (the 26B-A4B Q4_K_M, above the zoo's tier); its coverage is test_vkd_q51_gemv
-    "q51_gemv_sum_cls_spv",
+    // the per-32 routed down GEMVs' summing twins serve only the gemma-4 MoE's device experts, and no zoo row loads a 26B-A4B file
+    // (above the zoo's tier). A key a line - its carrier's down stacks, the stocked file that runs it, the model-free cell's summed arm:
+    // q51: gemma-4-26B-A4B-it-Q4_K_M.gguf (Q5_1 down), test_gpu_resident_gemma4_26b_k.das and
+    //      test_gpu_resident_regions_gemma4moe.das; test_vkd_q51_gemv
+    // iq4nl32: gemma-4-26B-A4B-it-UD-IQ3_XXS.gguf (IQ4_NL down), test_gpu_resident_gemma4_26b.das; test_vkd_iq4nl32_gemv
+    // q4032: gemma-4-26B-A4B-it-Q4_0.gguf (Q4_0 down), no stocked Vulkan file (the Metal census's gemma4moe row alone loads it);
+    //        test_vkd_q4032_gemv
+    // q5032: no stocked file carries a Q5_0 down stack; test_vkd_q5032_gemv
+    // mx4: gemma-4-26B-A4B-it-MXFP4_MOE-q4km-local.gguf (MXFP4 down), test_gpu_resident_gemma4_26b_mx4.das; test_vkd_mx4_gemv
+    "q51_gemv_sum_cls_spv", "iq4nl32_gemv_sum_cls_spv", "q4032_gemv_sum_cls_spv", "q5032_gemv_sum_cls_spv", "mx4_gemv_sum_cls_spv",
+    // the E-series per-layer-embedding pre-step's classes serve only an E-series load, and no Vulkan census row loads one (the
+    // E-series rows are Metal's). A key a line - the stocked file that dispatches it, the model-free cell:
+    // ple_act_f32: gemma-4-E2B-it-Q4_K_M.gguf's F32 per-layer planes, test_gpu_resident_gemma4_e2b.das (arm g4e-kq, its count
+    //              asserted); test_vkd_ple_act_f32
+    // ple_finish: every E-series device pre-step, gemma-4-E2B-it-Q8_0.gguf in test_gpu_resident_gemma4_e2b.das; test_vkd_ple_finish
+    // router_gemv_bf16: the BF16 projection's decode column, gemma-4-E2B-it-Q8_0.gguf in test_gpu_resident_gemma4_e2b.das;
+    //                   test_vkd_router_gemv_bf16
+    // ple_bf16_cvt: the BF16 projection's per-window f16 panel, the same file's prefill windows; test_vkd_ple_bf16_cvt
+    "ple_act_f32_cls_spv", "ple_finish_cls_spv", "router_gemv_bf16_cls_spv", "ple_bf16_cvt_cls_spv",
     // the scalar router GEMM: on a cm2 box every MoE carrier whose dim the small f16 GEMM's eight
     // 64-deep chunks divide takes the f16 route, so the scalar tile runs only off it (a dim off
     // 512, the KHR route). Its coverage is test_vkd_moe_routing's router arm in test_vulkan_kernels.das
@@ -1258,9 +1275,9 @@ def test_vulkan_kernel_coverage_rail(tst : T?) {
             if (!arm_on(t, "coverage")) {
                 return
             }
-            // no device, no dispatches — the unit pins that the compile-time lens spec parses
-            // into the census universe and every kernel starts at zero. The serving census runs
-            // on the PC box beside the vulkan tier suites.
+            //! the compile-time lens spec parses into the census universe, every kernel at zero after a reset - the
+            //! cells before this one in the file may have dispatched on a live device
+            vk_kernel_coverage_reset()
             var cov <- vk_kernel_coverage()
             t |> success(length(cov) >= 40, "the lens spec seeds {length(cov)} kernels (floor 40)")
             var zeros = 0

@@ -138,7 +138,7 @@ def private twin_encode(tt : T?; tw : Qwen25vTower; var st : Qwen25vState; kind 
                 if (is_nan(a)) {
                     nans++
                 }
-                m = max(m, abs(a - cpu[tok * pd + i]))
+                m = max(m, nan_wide_diff(a, cpu[tok * pd + i]))
             }
             if (m > bar) {
                 over++

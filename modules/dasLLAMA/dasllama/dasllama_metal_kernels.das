@@ -466,6 +466,7 @@ struct SqAttnPartArgs {
     window : uint
     qhs : uint
     gated : uint
+    ring : uint     //! a sliding layer's ring rows: a key's row is its `kv_ring_row` slot; 0 = a row a position
 }
 
 // The comb pair binds ONE kargs shape at slot 2 (both stamps of MetalSqAttnCombT): `nch` is the
@@ -494,6 +495,7 @@ struct SqAttnBArgs {
     hass : uint
     qhs : uint
     gated : uint
+    layr : uint     //! the rings' rows ahead of the layer in a stream's slice (elements, or bytes under a block codec): its base is `lay * cap + layr`
 }
 
 struct SqAttnPartBArgs {
@@ -509,6 +511,8 @@ struct SqAttnPartBArgs {
     window : uint
     qhs : uint
     gated : uint
+    layr : uint     //! the rings' rows ahead of the layer in a stream's slice (elements, or bytes under a block codec): its base is `lay * cap + layr`
+    ring : uint     //! a sliding layer's ring rows: a key's row is its `kv_ring_row` slot; 0 = a row a position
 }
 
 // The split-K "D" attention family binds its uniforms as ONE kargs value. `kstride` is the
@@ -526,6 +530,8 @@ struct SqAttnDArgs {
     softcap : float //! the attention-logit soft cap, 0 where the model has none
     qhs : uint
     gated : uint
+    layr : uint     //! the rings' rows ahead of the layer in a stream's slice (elements, or bytes under a block codec): its base is `lay * cap + layr`
+    ring : uint     //! a sliding layer's ring rows: a key's row is its `kv_ring_row` slot; 0 = a row a position
 }
 
 //! a q head's stride: `hs`, or the gated head's `2 hs` the args carry
@@ -697,14 +703,14 @@ class template MetalSqAttnPartKvT {
         if (c1 <= wstart) {
             return
         }
-        sq_fill_scores(kc, q, scores, 0u, c0, nrows, kv_dim, khoff, qoff, hs, scale, softcap)
+        sq_fill_scores(kc, q, scores, 0u, kv_ring_row(c0, ka.ring), nrows, kv_dim, khoff, qoff, hs, scale, softcap)
         barrier()
         sq_mask_window(scores, c0, nrows, wstart, lid, nt)
         let mm = sq_score_max(scores, red, nrows, lid, nt)
         barrier()                           // red[] is reused for the sum below
         let tot = sq_exp_sum(scores, red, mm, nrows, lid, nt)
         let pbase = ((bb * nheads + h) * nchunks + ci) * (hs + 2u)
-        part[pbase + lid] = sq_gated(sq_vacc(vc, scores, 0u, c0, nrows, kv_dim, khoff, lid), q, qoff + lid, hs, ka.gated)   //! the gate is linear, so a chunk's partial takes it
+        part[pbase + lid] = sq_gated(sq_vacc(vc, scores, 0u, kv_ring_row(c0, ka.ring), nrows, kv_dim, khoff, lid), q, qoff + lid, hs, ka.gated)   //! the gate is linear, so a chunk's partial takes it
         if (lid == 0u) {
             part[pbase + hs] = mm
             part[pbase + hs + 1u] = tot
@@ -712,13 +718,13 @@ class template MetalSqAttnPartKvT {
     }
 }
 
-[metal_dispatch(name = "enc_attnp16_c", pso = "g_pso_attnp16", tgmem = "MetalSqAttnPartF16_metal_sq_attn_part_msl_tgmem", tg = "head_size", grid = "ntg", params = "ntg : int64, head_size : int64")]
+[metal_dispatch(name = "enc_attnp16_c", pso = "g_pso_attnp16", tgmem = "MetalSqAttnPartF16_metal_sq_attn_part_msl_tgmem", tg = "head_size", grid = "ntg", params = "ntg : int64, head_size : int64", requires = "ka.ring % 64")]
 class MetalSqAttnPartF16 : MetalSqAttnPartKvT {
     typedef KT = float16
 }
 
 // f32-mirror twin — same math, f32 K/V loads.
-[metal_dispatch(name = "enc_attnp32_c", pso = "g_pso_attnp32", tgmem = "MetalSqAttnPartF32_metal_sq_attn_part_msl_tgmem", tg = "head_size", grid = "ntg", params = "ntg : int64, head_size : int64")]
+[metal_dispatch(name = "enc_attnp32_c", pso = "g_pso_attnp32", tgmem = "MetalSqAttnPartF32_metal_sq_attn_part_msl_tgmem", tg = "head_size", grid = "ntg", params = "ntg : int64, head_size : int64", requires = "ka.ring % 64")]
 class MetalSqAttnPartF32 : MetalSqAttnPartKvT {
     typedef KT = float
 }
@@ -768,14 +774,14 @@ class template MetalSqAttnPartQuantT {
         if (c1 <= wstart) {
             return
         }
-        sq_fill_scores_q(ksh, kqb, q, scores, 0u, 0u, c0, nrows, nblk, khblk, qoff, hs, scale, softcap)
+        sq_fill_scores_q(ksh, kqb, q, scores, 0u, 0u, kv_ring_row(c0, ka.ring), nrows, nblk, khblk, qoff, hs, scale, softcap)
         barrier()
         sq_mask_window(scores, c0, nrows, wstart, lid, nt)
         let mm = sq_score_max(scores, red, nrows, lid, nt)
         barrier()                           // red[] is reused for the sum below
         let tot = sq_exp_sum(scores, red, mm, nrows, lid, nt)
         let pbase = ((bb * nheads + h) * nchunks + ci) * (hs + 2u)
-        part[pbase + lid] = sq_gated(sq_vacc_q(vsh, vqb, scores, 0u, 0u, c0, nrows, nblk, khblk, lid), q, qoff + lid, hs, ka.gated)
+        part[pbase + lid] = sq_gated(sq_vacc_q(vsh, vqb, scores, 0u, 0u, kv_ring_row(c0, ka.ring), nrows, nblk, khblk, lid), q, qoff + lid, hs, ka.gated)
         if (lid == 0u) {
             part[pbase + hs] = mm
             part[pbase + hs + 1u] = tot
@@ -784,13 +790,13 @@ class template MetalSqAttnPartQuantT {
 }
 
 // q8_0 instance — 34B/32-elem q8_0 blocks.
-[metal_dispatch(name = "enc_attnp_q8_c", pso = "g_pso_attnp_q8", tgmem = "MetalSqAttnPartQ8_metal_sq_attn_part_msl_tgmem", tg = "head_size", grid = "ntg", params = "ntg : int64, head_size : int64")]
+[metal_dispatch(name = "enc_attnp_q8_c", pso = "g_pso_attnp_q8", tgmem = "MetalSqAttnPartQ8_metal_sq_attn_part_msl_tgmem", tg = "head_size", grid = "ntg", params = "ntg : int64, head_size : int64", requires = "ka.ring % 64")]
 class MetalSqAttnPartQ8 : MetalSqAttnPartQuantT {
     typedef QB = int8
 }
 
 // tq4 instance — 18B rotated 4-bit blocks (rotated basis; fwht-unsign runs downstream).
-[metal_dispatch(name = "enc_attnp_tq4_c", pso = "g_pso_attnp_tq4", tgmem = "MetalSqAttnPartTq4_metal_sq_attn_part_msl_tgmem", tg = "head_size", grid = "ntg", params = "ntg : int64, head_size : int64")]
+[metal_dispatch(name = "enc_attnp_tq4_c", pso = "g_pso_attnp_tq4", tgmem = "MetalSqAttnPartTq4_metal_sq_attn_part_msl_tgmem", tg = "head_size", grid = "ntg", params = "ntg : int64, head_size : int64", requires = "ka.ring % 64")]
 class MetalSqAttnPartTq4 : MetalSqAttnPartQuantT {
     typedef QB = uint8
     override sq_fill_scores_q = @@sq_fill_scores_tq4
@@ -1469,22 +1475,22 @@ class template MetalEmbedB32T {
     }
 }
 
-[metal_dispatch(name = "enc_embed_b32_q51", pso = "g_pso_emb_b32_q51", tg = 64, grid = "units/64, nrows", params = "units : int64, nrows : int64")]
+[metal_dispatch(name = "enc_q51_embed_b32", pso = "g_pso_emb_b32_q51", tg = 64, grid = "units/64, nrows", params = "units : int64, nrows : int64")]
 class MetalEmbedB32Q51 : MetalEmbedB32T {
     override Q51 = true
     override QW = 5u
     override SH = 2u
 }
 
-[metal_dispatch(name = "enc_embed_b32_iq4nl32", pso = "g_pso_emb_b32_iq4nl32", tg = 64, grid = "units/64, nrows", params = "units : int64, nrows : int64")]
+[metal_dispatch(name = "enc_iq4nl32_embed_b32", pso = "g_pso_emb_b32_iq4nl32", tg = 64, grid = "units/64, nrows", params = "units : int64, nrows : int64")]
 class MetalEmbedB32Iq4nl32 : MetalEmbedB32T {}
 
-[metal_dispatch(name = "enc_embed_b32_q4032", pso = "g_pso_emb_b32_q4032", tg = 64, grid = "units/64, nrows", params = "units : int64, nrows : int64")]
+[metal_dispatch(name = "enc_q4032_embed_b32", pso = "g_pso_emb_b32_q4032", tg = 64, grid = "units/64, nrows", params = "units : int64, nrows : int64")]
 class MetalEmbedB32Q4032 : MetalEmbedB32T {
     override Q40L = true
 }
 
-[metal_dispatch(name = "enc_embed_b32_q5032", pso = "g_pso_emb_b32_q5032", tg = 64, grid = "units/64, nrows", params = "units : int64, nrows : int64")]
+[metal_dispatch(name = "enc_q5032_embed_b32", pso = "g_pso_emb_b32_q5032", tg = 64, grid = "units/64, nrows", params = "units : int64, nrows : int64")]
 class MetalEmbedB32Q5032 : MetalEmbedB32T {
     override Q50 = true
     override QW = 5u
@@ -1623,105 +1629,106 @@ class template MetalTgReduceBase : GkWgReduce {
     def tg_rms_inv(sum_sq : float; dim : uint; eps : float) : float => rsqrt(tg_sum_all(sum_sq, part) / float(dim) + eps)
 }
 
-// Fused residual-add + rmsnorm, one threadgroup per row: x += a in place, then y = rms(x)·w
-// (the row stages through the tgmem slab — barrier() is a threadgroup fence only; dim caps at the
-// slab, wider models take enc_add_rms_site). Single-row = the lensed grid=1; batch = enc_add_rms_b.
+//! The residual step's Metal stamps on the template both homes stamp (`GkAddRmsRows`), a threadgroup a row, `rsqrt`, the row staged
+//! through the threadgroup slab (dim caps at it, a wider row takes the split chain): the decode rows' and the window's (`pf_`) builders
+//! at 256 lanes alike (the race's pick at every width up to the slab), the loops striding the threadgroup's own size; `PRE` the sandwich arm
 [ |> template_struct_instance]
-class template MetalAddRmsT : MetalTgReduceBase {
-    @ssbo @binding = 0 x : array<float>     // [dim] residual stream, add target
-    @ssbo @binding = 1 a : array<float>     // [dim] addend (fully read before y is written — y may alias a)
-    @ssbo @binding = 2 @role = "weight" w : array<float>     // [dim] norm weight
-    @ssbo @binding = 3 y : array<float>     // [dim] normed out
-    @uniform @binding = 4 dim : uint
-    @uniform @binding = 5 eps : float
-    @uniform @binding = 6 @role = "weight" ascale : float    // (x + a) * ascale — gemma4 layer_out_scale scales
-                                            // the whole layer output; every other site binds 1.0 (g_one)
-    @ssbo @binding = 7 @role = "write" @template_gate = HX yh : array<float16>   // f16 twin of y (the dual-store stamp)
-    @template_constant HX : bool = false
-    @workgroup xrow : float[4096]           // == ADD_RMS_MAX_DIM
+class template MetalAddRmsT : GkAddRmsRows {
+    @workgroup xrow : float[SLAB]
+    @template_constant SLAB : int = 4096   //!< the row stash's floats: ADD_RMS_MAX_DIM, a narrower row's own width
+    override LANES = 0u
+    override RSQRT = true
+    override PRE = false
+    override X4 = false
+    override ARMS = false
 
-    [metal_kernel]
+    def override stash(k : uint; v : float) : void {
+        xrow[k] = v
+    }
+    def override stashed(k : uint) : float => xrow[k]
+    def override pre_partner(base, k : uint) : float => xrow[k]
+
+    //! `seam_norms`' layout: the post norm at row 0, the next norm past it on a PRE stamp
+    def override norm_base : uint {
+        static_if (PRE) {
+            return pa.dim
+        } else {
+            return 0u
+        }
+    }
+
+    def override pre_base : uint => 0u
+}
+
+//! the plain step, its next norm out as floats
+[metal_dispatch(name = "enc_addrms_c", pso = "g_pso_addrms", tgmem = "metal_add_rms_msl_tgmem", tg = 256, grid = "1"),
+    metal_dispatch(name = "enc_add_rms_b_c", pso = "g_pso_addrms", tgmem = "metal_add_rms_msl_tgmem", tg = 256, grid = "nrows", params = "nrows : int64"),
+    metal_dispatch(name = "pf_enc_add_rms_b_c", pso = "g_pso_addrms", tgmem = "metal_add_rms_msl_tgmem", tg = 256, grid = "nrows", params = "nrows : int64")]
+class MetalAddRms : MetalAddRmsT {
+    override OUT_F32 = true
+
+    [metal_kernel(name="metal_add_rms_msl")]
     def metal_add_rms {
-        let row = gl_WorkGroupID.x
-        let lid = gl_LocalInvocationID.x
-        var ss = 0.0
-        var k = lid
-        while (k < dim) {
-            let vv = (x[row * dim + k] + a[row * dim + k]) * ascale
-            x[row * dim + k] = vv
-            xrow[k] = vv
-            ss += vv * vv
-            k += gl_WorkGroupSize.x
-        }
-        let inv = tg_rms_inv(ss, dim, eps)
-        k = lid
-        while (k < dim) {
-            let ov = w[k] * (xrow[k] * inv)
-            y[row * dim + k] = ov
-            static_if (HX) {
-                yh[row * dim + k] = float16(ov)
-            }
-            k += gl_WorkGroupSize.x
-        }
+        add_rms_row(gl_WorkGroupID.x)
     }
 }
 
-[metal_dispatch(name = "enc_addrms_c", pso = "g_pso_addrms", tgmem = "MetalAddRms_metal_add_rms_msl_tgmem", tg = 1024, grid = "1"),
-    metal_dispatch(name = "enc_add_rms_b_c", pso = "g_pso_addrms", tgmem = "MetalAddRms_metal_add_rms_msl_tgmem", tg = 1024, grid = "nrows", params = "nrows : int64")]
-class MetalAddRms : MetalAddRmsT {
-}
-
-[metal_dispatch(name = "pf_enc_add_rms_bhx_c", pso = "g_pso_addrms_hx", tgmem = "MetalAddRmsHX_metal_add_rms_msl_tgmem", tg = 1024, grid = "nrows", params = "nrows : int64")]
+//! ... and the f16 twin beside (the dual-store stamp the half-x GEMM forms read)
+[metal_dispatch(name = "enc_add_rms_bhx_c", pso = "g_pso_addrms_hx", tgmem = "metal_add_rms_hx_msl_tgmem", tg = 256, grid = "nrows", params = "nrows : int64"),
+    metal_dispatch(name = "pf_enc_add_rms_bhx_c", pso = "g_pso_addrms_hx", tgmem = "metal_add_rms_hx_msl_tgmem", tg = 256, grid = "nrows", params = "nrows : int64")]
 class MetalAddRmsHX : MetalAddRmsT {
+    override OUT_F32 = true
     override HX = true
+
+    [metal_kernel(name="metal_add_rms_hx_msl")]
+    def metal_add_rms_hx {
+        add_rms_row(gl_WorkGroupID.x)
+    }
 }
 
-// Fused post-attn-norm + residual add + ffn-norm: a_n = rms(a)·wpa; x += a_n; y = rms(x)·wffn — one
-// dispatch collapsing the pre_post_norm chain (enc_rms(a) + enc_add_rms_site) with two register
-// reductions, no inter-dispatch barrier. x is staged for the trailing norm; same slab cap as MetalAddRms.
-[metal_dispatch(name = "enc_preaddrms_c", pso = "g_pso_preaddrms", tgmem = "metal_pre_add_rms_msl_tgmem", tg = 1024, grid = "1")]
-class MetalPreAddRms : MetalTgReduceBase {
-    @ssbo @binding = 0 x : array<float>     // [dim] residual stream, add target + written back
-    @ssbo @binding = 1 a : array<float>     // [dim] attn out (post-wo); wpa norm applies inline during the add
-    @ssbo @binding = 2 @role = "weight" wpa : array<float>   // [dim] post-attention norm weight
-    @ssbo @binding = 3 @role = "weight" wffn : array<float>  // [dim] ffn norm weight
-    @ssbo @binding = 4 y : array<float>     // [dim] ffn-normed out
-    @uniform @binding = 5 dim : uint
-    @uniform @binding = 6 eps : float
-    @workgroup xrow : float[4096]           // == ADD_RMS_MAX_DIM — stages x for the trailing norm
+//! the sandwich seam: the branch under its post norm, the add, the next norm out as floats
+[metal_dispatch(name = "enc_preaddrms_c", pso = "g_pso_preaddrms", tgmem = "metal_pre_add_rms_msl_tgmem", tg = 256, grid = "1"),
+    metal_dispatch(name = "enc_preaddrms_b_c", pso = "g_pso_preaddrms", tgmem = "metal_pre_add_rms_msl_tgmem", tg = 256, grid = "nrows", params = "nrows : int64"),
+    metal_dispatch(name = "pf_enc_preaddrms_b_c", pso = "g_pso_preaddrms", tgmem = "metal_pre_add_rms_msl_tgmem", tg = 256, grid = "nrows", params = "nrows : int64")]
+class MetalPreAddRms : MetalAddRmsT {
+    override PRE = true
+    override PRE_SWITCH = false
+    override OUT_F32 = true
 
     [metal_kernel(name="metal_pre_add_rms_msl")]
     def metal_pre_add_rms {
-        let lid = gl_LocalInvocationID.x
-        // reduction 1: mean(a²) → inv_a
-        var ssa = 0.0
-        var k = lid
-        while (k < dim) {
-            let av = a[k]
-            ssa += av * av
-            k += gl_WorkGroupSize.x
-        }
-        let inva = tg_rms_inv(ssa, dim, eps)
-        // x += a·inva·wpa; stage x; reduction 2: mean(x²) → inv_x
-        var ssx = 0.0
-        k = lid
-        while (k < dim) {
-            let xv = x[k] + a[k] * inva * wpa[k]
-            x[k] = xv
-            xrow[k] = xv
-            ssx += xv * xv
-            k += gl_WorkGroupSize.x
-        }
-        barrier()
-        let invx = tg_rms_inv(ssx, dim, eps)
-        k = lid
-        while (k < dim) {
-            y[k] = wffn[k] * (xrow[k] * invx)
-            k += gl_WorkGroupSize.x
-        }
+        add_rms_row(gl_WorkGroupID.x)
     }
 }
 
+//! ... and the f16 twin beside
+[metal_dispatch(name = "enc_preaddrms_bhx_c", pso = "g_pso_preaddrms_hx", tgmem = "metal_pre_add_rms_hx_msl_tgmem", tg = 256, grid = "nrows", params = "nrows : int64"),
+    metal_dispatch(name = "pf_enc_preaddrms_bhx_c", pso = "g_pso_preaddrms_hx", tgmem = "metal_pre_add_rms_hx_msl_tgmem", tg = 256, grid = "nrows", params = "nrows : int64")]
+class MetalPreAddRmsHX : MetalAddRmsT {
+    override PRE = true
+    override PRE_SWITCH = false
+    override OUT_F32 = true
+    override HX = true
+
+    [metal_kernel(name="metal_pre_add_rms_hx_msl")]
+    def metal_pre_add_rms_hx {
+        add_rms_row(gl_WorkGroupID.x)
+    }
+}
+
+//! the sandwich seam with no norm stored: the stream rows updated alone (the per-layer-embedding residual, the last layer's step)
+[metal_dispatch(name = "enc_preadd_c", pso = "g_pso_preadd", tgmem = "metal_pre_add_msl_tgmem", tg = 256, grid = "1"),
+    metal_dispatch(name = "enc_preadd_b_c", pso = "g_pso_preadd", tgmem = "metal_pre_add_msl_tgmem", tg = 256, grid = "nrows", params = "nrows : int64"),
+    metal_dispatch(name = "pf_enc_preadd_b_c", pso = "g_pso_preadd", tgmem = "metal_pre_add_msl_tgmem", tg = 256, grid = "nrows", params = "nrows : int64")]
+class MetalPreAdd : MetalAddRmsT {
+    override PRE = true
+    override PRE_SWITCH = false
+
+    [metal_kernel(name="metal_pre_add_msl")]
+    def metal_pre_add {
+        add_rms_row(gl_WorkGroupID.x)
+    }
+}
 
 //! The fused rope and K/V store at one row, the f16-mirror stamp of the template both homes stamp (`GkRopeKvStore`): the q and
 //! k projections in the one QKV buffer (ksrc its second view, vsrc its view at the v offset), the mirror K and V rows bound at
@@ -1797,7 +1804,7 @@ class template MetalQknRopeRowsT : GkQknRopeKv {
     override EPT = 1
     override V_WG = true
 
-    def row_ahead(lay, depth : uint) : uint => pa.layerbase * lay + (depth - 1u) * pa.kvd
+    def row_ahead(lay, depth : uint) : uint => pa.layerbase * lay + pa.layr + kv_ring_row(depth - 1u, pa.ring) * pa.kvd
 
     def override mir_base(rowi : uint) : uint2 => uint2(rt[rowi].x + row_ahead(rt[rowi].z, rt[rowi].w), rt[rowi].y + row_ahead(rt[rowi].z, rt[rowi].w))
 
@@ -2154,6 +2161,7 @@ class template MetalGemvB24T {
     @uniform @binding = 5 ndim : uint
     @uniform @binding = 6 ddim : uint       // output rows (W13: the hidden width, which is also the y stride)
     @uniform @binding = 7 @template_gate = "!W13" ys : uint         // y ROW stride (== ddim dense)
+    @uniform @binding = 7 @role = "weight" @template_gate = W13 act : uint   //! the W13 stamps' gate activation (`gk_act_mul`: 0 silu, 1 gelu)
     @ssbo @binding = 8 @role = "weight" @off = "w3off" @template_gate = W13 wqb3 : array<int8>
     @ssbo @binding = 9 @role = "weight" @off = "w3off" @template_gate = W13 wsh3 : array<float16>
     @workgroup txp : float4[PANEL]          // [NR streams x 64 float4] X panel chunk
@@ -2232,7 +2240,7 @@ class template MetalGemvB24T {
             static_if (W13) {
                 let u = simd_sum(acc_up[b])
                 if (lane == 0u) {
-                    y[uint(b) * ddim + row] = gk_act_mul(g, u, 0u)
+                    y[uint(b) * ddim + row] = gk_act_mul(g, u, act)
                 }
             } else {
                 if (lane == 0u) {
@@ -2726,8 +2734,8 @@ class template MetalSqAttnBKvT {
         let nt = gl_WorkGroupSize.x
         let rrow = rt[bb]
         let cnt = rrow.w
-        let kb0 = rrow.x + lay * rrow.z   // lay = the layer's KV-row ELEMENT prefix (Σ kv_dim below l)
-        let vb0 = rrow.y + lay * rrow.z
+        let kb0 = rrow.x + lay * rrow.z + ka.layr   // lay = the layer's flat KV-row ELEMENT prefix, layr the rings' rows ahead
+        let vb0 = rrow.y + lay * rrow.z + ka.layr
         let khoff = (h / kv_mul) * hs
         let qoff = bb * qstride + h * sq_qhs(ka.qhs, hs)
         let yoff = bb * (nheads * hs) + h * hs
@@ -2785,8 +2793,8 @@ class template MetalSqAttnBQuantT {
         let nt = gl_WorkGroupSize.x
         let rrow = rt[bb]
         let cnt = rrow.w
-        let kb0b = rrow.x + lay * rrow.z   // layer slab base, BYTES (lay = the layer's row-BYTE prefix)
-        let vb0b = rrow.y + lay * rrow.z
+        let kb0b = rrow.x + lay * rrow.z + ka.layr   // layer slab base, BYTES (lay = the layer's flat row-BYTE prefix, layr the rings')
+        let vb0b = rrow.y + lay * rrow.z + ka.layr
         let kb0h = kb0b / 2u                      // ... and HALFWORDS for the scale view
         let vb0h = vb0b / 2u
         let khblk = (h / kv_mul) * (hs / 32u)
@@ -2849,8 +2857,8 @@ class template MetalSqAttnPartBKvT {
         }
         let lid = gl_LocalInvocationID.x
         let nt = gl_WorkGroupSize.x
-        let kb0 = rrow.x + lay * rrow.z   // lay = the layer's KV-row ELEMENT prefix (Σ kv_dim below l)
-        let vb0 = rrow.y + lay * rrow.z
+        let kb0 = rrow.x + lay * rrow.z + ka.layr   // lay = the layer's flat KV-row ELEMENT prefix, layr the rings' rows ahead
+        let vb0 = rrow.y + lay * rrow.z + ka.layr
         let khoff = (h / kv_mul) * hs
         let qoff = bb * qstride + h * sq_qhs(ka.qhs, hs)
         let c1 = min(c0 + 64u, cnt)
@@ -2861,14 +2869,14 @@ class template MetalSqAttnPartBKvT {
         if (c1 <= wstart) {
             return
         }
-        sq_fill_scores(kc, q, scores, kb0, c0, nrows, kv_dim, khoff, qoff, hs, scale, softcap)
+        sq_fill_scores(kc, q, scores, kb0, kv_ring_row(c0, ka.ring), nrows, kv_dim, khoff, qoff, hs, scale, softcap)
         barrier()
         sq_mask_window(scores, c0, nrows, wstart, lid, nt)
         let mm = sq_score_max(scores, red, nrows, lid, nt)
         barrier()                           // red[] is reused for the sum below
         let tot = sq_exp_sum(scores, red, mm, nrows, lid, nt)
         let pbase = ((bb * nheads + h) * nchmax + ci) * (hs + 2u)
-        part[pbase + lid] = sq_gated(sq_vacc(vc, scores, vb0, c0, nrows, kv_dim, khoff, lid), q, qoff + lid, hs, ka.gated)
+        part[pbase + lid] = sq_gated(sq_vacc(vc, scores, vb0, kv_ring_row(c0, ka.ring), nrows, kv_dim, khoff, lid), q, qoff + lid, hs, ka.gated)
         if (lid == 0u) {
             part[pbase + hs] = mm
             part[pbase + hs + 1u] = tot
@@ -2876,13 +2884,13 @@ class template MetalSqAttnPartBKvT {
     }
 }
 
-[metal_dispatch(name = "enc_attnpb16_c", pso = "g_pso_attnpb16", tgmem = "MetalSqAttnPartBF16_metal_sq_attn_part_b_msl_tgmem", tg = "head_size", grid = "wgs", params = "wgs : int64, head_size : int64")]
+[metal_dispatch(name = "enc_attnpb16_c", pso = "g_pso_attnpb16", tgmem = "MetalSqAttnPartBF16_metal_sq_attn_part_b_msl_tgmem", tg = "head_size", grid = "wgs", params = "wgs : int64, head_size : int64", requires = "ka.ring % 64")]
 class MetalSqAttnPartBF16 : MetalSqAttnPartBKvT {
     typedef KT = float16
 }
 
 // f32-mirror twin.
-[metal_dispatch(name = "enc_attnpb32_c", pso = "g_pso_attnpb32", tgmem = "MetalSqAttnPartBF32_metal_sq_attn_part_b_msl_tgmem", tg = "head_size", grid = "wgs", params = "wgs : int64, head_size : int64")]
+[metal_dispatch(name = "enc_attnpb32_c", pso = "g_pso_attnpb32", tgmem = "MetalSqAttnPartBF32_metal_sq_attn_part_b_msl_tgmem", tg = "head_size", grid = "wgs", params = "wgs : int64, head_size : int64", requires = "ka.ring % 64")]
 class MetalSqAttnPartBF32 : MetalSqAttnPartBKvT {
     typedef KT = float
 }
@@ -2928,8 +2936,8 @@ class template MetalSqAttnPartBQuantT {
         }
         let lid = gl_LocalInvocationID.x
         let nt = gl_WorkGroupSize.x
-        let kb0b = rrow.x + lay * rrow.z   // lay = the layer's row-BYTE prefix
-        let vb0b = rrow.y + lay * rrow.z
+        let kb0b = rrow.x + lay * rrow.z + ka.layr   // lay = the layer's flat row-BYTE prefix, layr the rings'
+        let vb0b = rrow.y + lay * rrow.z + ka.layr
         let kb0h = kb0b / 2u
         let vb0h = vb0b / 2u
         let khblk = (h / kv_mul) * (hs / 32u)
@@ -2942,14 +2950,14 @@ class template MetalSqAttnPartBQuantT {
         if (c1 <= wstart) {
             return
         }
-        sq_fill_scores_q(ksh, kqb, q, scores, kb0h, kb0b, c0, nrows, nblk, khblk, qoff, hs, scale, softcap)
+        sq_fill_scores_q(ksh, kqb, q, scores, kb0h, kb0b, kv_ring_row(c0, ka.ring), nrows, nblk, khblk, qoff, hs, scale, softcap)
         barrier()
         sq_mask_window(scores, c0, nrows, wstart, lid, nt)
         let mm = sq_score_max(scores, red, nrows, lid, nt)
         barrier()                           // red[] is reused for the sum below
         let tot = sq_exp_sum(scores, red, mm, nrows, lid, nt)
         let pbase = ((bb * nheads + h) * nchmax + ci) * (hs + 2u)
-        part[pbase + lid] = sq_gated(sq_vacc_q(vsh, vqb, scores, vb0h, vb0b, c0, nrows, nblk, khblk, lid), q, qoff + lid, hs, ka.gated)
+        part[pbase + lid] = sq_gated(sq_vacc_q(vsh, vqb, scores, vb0h, vb0b, kv_ring_row(c0, ka.ring), nrows, nblk, khblk, lid), q, qoff + lid, hs, ka.gated)
         if (lid == 0u) {
             part[pbase + hs] = mm
             part[pbase + hs + 1u] = tot
@@ -2958,13 +2966,13 @@ class template MetalSqAttnPartBQuantT {
 }
 
 // q8_0 instance.
-[metal_dispatch(name = "enc_attnpb_q8_c", pso = "g_pso_attnpb_q8", tgmem = "MetalSqAttnPartBQ8_metal_sq_attn_part_b_msl_tgmem", tg = "head_size", grid = "wgs", params = "wgs : int64, head_size : int64")]
+[metal_dispatch(name = "enc_attnpb_q8_c", pso = "g_pso_attnpb_q8", tgmem = "MetalSqAttnPartBQ8_metal_sq_attn_part_b_msl_tgmem", tg = "head_size", grid = "wgs", params = "wgs : int64, head_size : int64", requires = "ka.ring % 64")]
 class MetalSqAttnPartBQ8 : MetalSqAttnPartBQuantT {
     typedef QB = int8
 }
 
 // tq4 instance — nibble reads.
-[metal_dispatch(name = "enc_attnpb_tq4_c", pso = "g_pso_attnpb_tq4", tgmem = "MetalSqAttnPartBTq4_metal_sq_attn_part_b_msl_tgmem", tg = "head_size", grid = "wgs", params = "wgs : int64, head_size : int64")]
+[metal_dispatch(name = "enc_attnpb_tq4_c", pso = "g_pso_attnpb_tq4", tgmem = "MetalSqAttnPartBTq4_metal_sq_attn_part_b_msl_tgmem", tg = "head_size", grid = "wgs", params = "wgs : int64, head_size : int64", requires = "ka.ring % 64")]
 class MetalSqAttnPartBTq4 : MetalSqAttnPartBQuantT {
     typedef QB = uint8
     override sq_fill_scores_q = @@sq_fill_scores_tq4
@@ -3060,6 +3068,8 @@ struct RopeStoreBQ8Args {
     rot : uint
     qhs : uint
     qrow : uint         //! a q row's stride in `qr` (0: `qstride`)
+    layr : uint     //! the rings' rows ahead of the layer in a stream's slice (elements, or bytes under a block codec): its base is `lay * cap + layr`
+    ring : uint     //! a sliding layer's ring rows: a key's row is its `kv_ring_row` slot; 0 = a row a position
 }
 
 // The tq4 mirror is head-cooperative (the FWHT spans a whole head), so it counts heads.
@@ -3086,6 +3096,8 @@ struct RopeStoreBTq4Args {
     rot : uint
     qhs : uint
     qrow : uint
+    layr : uint     //! the rings' rows ahead of the layer in a stream's slice (elements, or bytes under a block codec): its base is `lay * cap + layr`
+    ring : uint     //! a sliding layer's ring rows: a key's row is its `kv_ring_row` slot; 0 = a row a position
 }
 
 // The DeltaNet layer's geometry as ONE kargs value: conv, history advance, per-head L2, the
@@ -3367,8 +3379,8 @@ class template MetalSqAttnDKvT {
             return
         }
         let sl = gl_SubgroupInvocationID
-        let kb0 = rrow.x + lay * rrow.z   // lay = the layer's KV-row ELEMENT prefix (Σ kv_dim below l)
-        let vb0 = rrow.y + lay * rrow.z
+        let kb0 = rrow.x + lay * rrow.z + ka.layr   // lay = the layer's flat KV-row ELEMENT prefix, layr the rings' rows ahead
+        let vb0 = rrow.y + lay * rrow.z + ka.layr
         let khoff = (h / kv_mul) * hs
         let qoff = bb * qstride + h * sq_qhs(ka.qhs, hs)
         let kv4 = kv_dim / 4u
@@ -3386,8 +3398,9 @@ class template MetalSqAttnDKvT {
         while (ss * 32u < cnt) {
             let c0 = ss * 32u
             let nrows = min(c0 + 32u, cnt) - c0
-            var kp = unsafe(addr(kc[(kb0 + c0 * kv_dim + khoff) / 4u + hp * 32u + slc]))
-            var vp = unsafe(addr(vc[(vb0 + c0 * kv_dim + khoff) / 4u + hp * 32u + slc]))
+            let cr = kv_ring_row(c0, ka.ring)   //! a 32-key slice sits whole in a ring: the slice and the ring are multiples of 32
+            var kp = unsafe(addr(kc[(kb0 + cr * kv_dim + khoff) / 4u + hp * 32u + slc]))
+            var vp = unsafe(addr(vc[(vb0 + cr * kv_dim + khoff) / 4u + hp * 32u + slc]))
             // invalid tail lanes keep the -inf seed -> weight 0
             var keep = sqd_score_blk(kp, q4, WIDE ? 0.0 : -3.0e38, nrows, kv4, sl)
             static_if (WIDE) {
@@ -3407,26 +3420,26 @@ class template MetalSqAttnDKvT {
     }
 }
 
-[metal_dispatch(name = "enc_attnd16_c", pso = "g_pso_attnd16", tgmem = "MetalSqAttnDF16_metal_sq_attn_d_msl_tgmem", tg = 128, grid = "nheads, nsgs/4, nrows", params = "nheads : int64, nsgs : int64, nrows : int64")]
+[metal_dispatch(name = "enc_attnd16_c", pso = "g_pso_attnd16", tgmem = "MetalSqAttnDF16_metal_sq_attn_d_msl_tgmem", tg = 128, grid = "nheads, nsgs/4, nrows", params = "nheads : int64, nsgs : int64, nrows : int64", requires = "ka.ring % 32")]
 class MetalSqAttnDF16 : MetalSqAttnDKvT {
     typedef KT = half4
 }
 
 // f32-mirror twin — float4 view, no conversion.
-[metal_dispatch(name = "enc_attnd32_c", pso = "g_pso_attnd32", tgmem = "MetalSqAttnDF32_metal_sq_attn_d_msl_tgmem", tg = 128, grid = "nheads, nsgs/4, nrows", params = "nheads : int64, nsgs : int64, nrows : int64")]
+[metal_dispatch(name = "enc_attnd32_c", pso = "g_pso_attnd32", tgmem = "MetalSqAttnDF32_metal_sq_attn_d_msl_tgmem", tg = 128, grid = "nheads, nsgs/4, nrows", params = "nheads : int64, nsgs : int64, nrows : int64", requires = "ka.ring % 32")]
 class MetalSqAttnDF32 : MetalSqAttnDKvT {
     typedef KT = float4
 }
 
 // the head-of-256 pair: a threadgroup a slice group, two simdgroups each half the head
-[metal_dispatch(name = "enc_attndw16_c", pso = "g_pso_attndw16", tgmem = "MetalSqAttnDWF16_metal_sq_attn_d_msl_tgmem", tg = 64, grid = "nheads, nsgs, nrows", params = "nheads : int64, nsgs : int64, nrows : int64")]
+[metal_dispatch(name = "enc_attndw16_c", pso = "g_pso_attndw16", tgmem = "MetalSqAttnDWF16_metal_sq_attn_d_msl_tgmem", tg = 64, grid = "nheads, nsgs, nrows", params = "nheads : int64, nsgs : int64, nrows : int64", requires = "ka.ring % 32")]
 class MetalSqAttnDWF16 : MetalSqAttnDKvT {
     typedef KT = half4
     override WIDE = true
     override PARTS = 2u
 }
 
-[metal_dispatch(name = "enc_attndw32_c", pso = "g_pso_attndw32", tgmem = "MetalSqAttnDWF32_metal_sq_attn_d_msl_tgmem", tg = 64, grid = "nheads, nsgs, nrows", params = "nheads : int64, nsgs : int64, nrows : int64")]
+[metal_dispatch(name = "enc_attndw32_c", pso = "g_pso_attndw32", tgmem = "MetalSqAttnDWF32_metal_sq_attn_d_msl_tgmem", tg = 64, grid = "nheads, nsgs, nrows", params = "nheads : int64, nsgs : int64, nrows : int64", requires = "ka.ring % 32")]
 class MetalSqAttnDWF32 : MetalSqAttnDKvT {
     typedef KT = float4
     override WIDE = true
@@ -3434,14 +3447,14 @@ class MetalSqAttnDWF32 : MetalSqAttnDKvT {
 }
 
 // the head-of-512 pair: four simdgroups each a quarter of the head
-[metal_dispatch(name = "enc_attndx16_c", pso = "g_pso_attndx16", tgmem = "MetalSqAttnDXF16_metal_sq_attn_d_msl_tgmem", tg = 128, grid = "nheads, nsgs, nrows", params = "nheads : int64, nsgs : int64, nrows : int64")]
+[metal_dispatch(name = "enc_attndx16_c", pso = "g_pso_attndx16", tgmem = "MetalSqAttnDXF16_metal_sq_attn_d_msl_tgmem", tg = 128, grid = "nheads, nsgs, nrows", params = "nheads : int64, nsgs : int64, nrows : int64", requires = "ka.ring % 32")]
 class MetalSqAttnDXF16 : MetalSqAttnDKvT {
     typedef KT = half4
     override WIDE = true
     override PARTS = 4u
 }
 
-[metal_dispatch(name = "enc_attndx32_c", pso = "g_pso_attndx32", tgmem = "MetalSqAttnDXF32_metal_sq_attn_d_msl_tgmem", tg = 128, grid = "nheads, nsgs, nrows", params = "nheads : int64, nsgs : int64, nrows : int64")]
+[metal_dispatch(name = "enc_attndx32_c", pso = "g_pso_attndx32", tgmem = "MetalSqAttnDXF32_metal_sq_attn_d_msl_tgmem", tg = 128, grid = "nheads, nsgs, nrows", params = "nheads : int64, nsgs : int64, nrows : int64", requires = "ka.ring % 32")]
 class MetalSqAttnDXF32 : MetalSqAttnDKvT {
     typedef KT = float4
     override WIDE = true
@@ -3587,8 +3600,8 @@ class template MetalSqAttnDQuantT {
             return
         }
         let sl = gl_SubgroupInvocationID
-        let kb0b = rrow.x + lay * rrow.z   // lay = the layer's row-BYTE prefix
-        let vb0b = rrow.y + lay * rrow.z
+        let kb0b = rrow.x + lay * rrow.z + ka.layr   // lay = the layer's flat row-BYTE prefix, layr the rings'
+        let vb0b = rrow.y + lay * rrow.z + ka.layr
         let kb0h = kb0b / 2u
         let vb0h = vb0b / 2u
         let khblk = (h / kv_mul) * (hs / 32u) + hp * 4u
@@ -3607,14 +3620,14 @@ class template MetalSqAttnDQuantT {
         while (ss * 32u < cnt) {
             let c0 = ss * 32u
             let nrows = min(c0 + 32u, cnt) - c0
-            var keep = sqd_score_blk_q(kqb, ksh, q4, WIDE ? 0.0 : -3.0e38, c0, nrows, nblk, blkoff, kb0b, kb0h, inb, sl)
+            var keep = sqd_score_blk_q(kqb, ksh, q4, WIDE ? 0.0 : -3.0e38, kv_ring_row(c0, ka.ring), nrows, nblk, blkoff, kb0b, kb0h, inb, sl)
             static_if (WIDE) {
                 keep = sqd_wide_sum(wsc, hp, sl, keep, PARTS == 4u)
             }
             var bm = 0.0
             var btot = 0.0
             let w = sqd_block_weights(keep, sl, nrows, c0, wstart, scale, ka.softcap, bm, btot)
-            let bacc = sqd_vacc_blk_q(vqb, vsh, w, c0, nrows, nblk, blkoff, vb0b, vb0h, inb)
+            let bacc = sqd_vacc_blk_q(vqb, vsh, w, kv_ring_row(c0, ka.ring), nrows, nblk, blkoff, vb0b, vb0h, inb)
             sqd_merge(wacc, wo, bacc, bm, btot, mm, tot)
             ss += nsgs
         }
@@ -3627,27 +3640,27 @@ class template MetalSqAttnDQuantT {
 
 // q8_0 instance — K/V loads are 4 scalar int8s + block scale per position (34B blocks break
 // half4 alignment); scale folds in before the simd_sum.
-[metal_dispatch(name = "enc_attnd_q8_c", pso = "g_pso_attnd_q8", tgmem = "MetalSqAttnDQ8_metal_sq_attn_d_msl_tgmem", tg = 128, grid = "nheads, nsgs/4, nrows", params = "nheads : int64, nsgs : int64, nrows : int64")]
+[metal_dispatch(name = "enc_attnd_q8_c", pso = "g_pso_attnd_q8", tgmem = "MetalSqAttnDQ8_metal_sq_attn_d_msl_tgmem", tg = 128, grid = "nheads, nsgs/4, nrows", params = "nheads : int64, nsgs : int64, nrows : int64", requires = "ka.ring % 32")]
 class MetalSqAttnDQ8 : MetalSqAttnDQuantT {
     typedef QB = int8
 }
 
 // tq4 instance — nibble reads: lane's 4 elements = 2 nibble bytes of block sl/8.
-[metal_dispatch(name = "enc_attnd_tq4_c", pso = "g_pso_attnd_tq4", tgmem = "MetalSqAttnDTq4_metal_sq_attn_d_msl_tgmem", tg = 128, grid = "nheads, nsgs/4, nrows", params = "nheads : int64, nsgs : int64, nrows : int64")]
+[metal_dispatch(name = "enc_attnd_tq4_c", pso = "g_pso_attnd_tq4", tgmem = "MetalSqAttnDTq4_metal_sq_attn_d_msl_tgmem", tg = 128, grid = "nheads, nsgs/4, nrows", params = "nheads : int64, nsgs : int64, nrows : int64", requires = "ka.ring % 32")]
 class MetalSqAttnDTq4 : MetalSqAttnDQuantT {
     typedef QB = uint8
     override LANE_BYTES = 2u
 }
 
 // the head-of-256 quant pair: a threadgroup a slice group, two simdgroups each half the head
-[metal_dispatch(name = "enc_attndw_q8_c", pso = "g_pso_attndw_q8", tgmem = "MetalSqAttnDWQ8_metal_sq_attn_d_msl_tgmem", tg = 64, grid = "nheads, nsgs, nrows", params = "nheads : int64, nsgs : int64, nrows : int64")]
+[metal_dispatch(name = "enc_attndw_q8_c", pso = "g_pso_attndw_q8", tgmem = "MetalSqAttnDWQ8_metal_sq_attn_d_msl_tgmem", tg = 64, grid = "nheads, nsgs, nrows", params = "nheads : int64, nsgs : int64, nrows : int64", requires = "ka.ring % 32")]
 class MetalSqAttnDWQ8 : MetalSqAttnDQuantT {
     typedef QB = int8
     override WIDE = true
     override PARTS = 2u
 }
 
-[metal_dispatch(name = "enc_attndw_tq4_c", pso = "g_pso_attndw_tq4", tgmem = "MetalSqAttnDWTq4_metal_sq_attn_d_msl_tgmem", tg = 64, grid = "nheads, nsgs, nrows", params = "nheads : int64, nsgs : int64, nrows : int64")]
+[metal_dispatch(name = "enc_attndw_tq4_c", pso = "g_pso_attndw_tq4", tgmem = "MetalSqAttnDWTq4_metal_sq_attn_d_msl_tgmem", tg = 64, grid = "nheads, nsgs, nrows", params = "nheads : int64, nsgs : int64, nrows : int64", requires = "ka.ring % 32")]
 class MetalSqAttnDWTq4 : MetalSqAttnDQuantT {
     typedef QB = uint8
     override LANE_BYTES = 2u
@@ -3656,14 +3669,14 @@ class MetalSqAttnDWTq4 : MetalSqAttnDQuantT {
 }
 
 // the head-of-512 quant pair: four simdgroups each a quarter of the head
-[metal_dispatch(name = "enc_attndx_q8_c", pso = "g_pso_attndx_q8", tgmem = "MetalSqAttnDXQ8_metal_sq_attn_d_msl_tgmem", tg = 128, grid = "nheads, nsgs, nrows", params = "nheads : int64, nsgs : int64, nrows : int64")]
+[metal_dispatch(name = "enc_attndx_q8_c", pso = "g_pso_attndx_q8", tgmem = "MetalSqAttnDXQ8_metal_sq_attn_d_msl_tgmem", tg = 128, grid = "nheads, nsgs, nrows", params = "nheads : int64, nsgs : int64, nrows : int64", requires = "ka.ring % 32")]
 class MetalSqAttnDXQ8 : MetalSqAttnDQuantT {
     typedef QB = int8
     override WIDE = true
     override PARTS = 4u
 }
 
-[metal_dispatch(name = "enc_attndx_tq4_c", pso = "g_pso_attndx_tq4", tgmem = "MetalSqAttnDXTq4_metal_sq_attn_d_msl_tgmem", tg = 128, grid = "nheads, nsgs, nrows", params = "nheads : int64, nsgs : int64, nrows : int64")]
+[metal_dispatch(name = "enc_attndx_tq4_c", pso = "g_pso_attndx_tq4", tgmem = "MetalSqAttnDXTq4_metal_sq_attn_d_msl_tgmem", tg = 128, grid = "nheads, nsgs, nrows", params = "nheads : int64, nsgs : int64, nrows : int64", requires = "ka.ring % 32")]
 class MetalSqAttnDXTq4 : MetalSqAttnDQuantT {
     typedef QB = uint8
     override LANE_BYTES = 2u
@@ -3725,11 +3738,11 @@ class MetalRopeStoreBQ8 : MetalRopeStoreQ8Base {
         var id = 0.0
         q8_scale(vals, d, id)
         if (isV) {
-            let vb0b = rrow.y + lay * rrow.z + (rrow.w - 1u) * rowb   // lay = row-byte prefix
+            let vb0b = rrow.y + lay * rrow.z + ka.layr + kv_ring_row(rrow.w - 1u, ka.ring) * rowb   // lay = the flat row-byte prefix, layr the rings'
             let vb0h = vb0b / 2u
             q8_store(vsh, vqb, vals, d, id, vb0h, vb0b, blk)
         } else {
-            let kb0b = rrow.x + lay * rrow.z + (rrow.w - 1u) * rowb
+            let kb0b = rrow.x + lay * rrow.z + ka.layr + kv_ring_row(rrow.w - 1u, ka.ring) * rowb
             let kb0h = kb0b / 2u
             q8_store(ksh, kqb, vals, d, id, kb0h, kb0b, blk)
         }
@@ -3801,10 +3814,10 @@ class MetalRopeStoreBTq4 : MetalRopeStoreTq4Base {
         let rowb = (kv_dim / 32u) * 18u
         let blk = hh * (hs / 32u) + lid / 32u   // block within the K/V row
         if (isK) {
-            let kb0b = rrow.x + lay * rrow.z + (rrow.w - 1u) * rowb   // lay = row-byte prefix
+            let kb0b = rrow.x + lay * rrow.z + ka.layr + kv_ring_row(rrow.w - 1u, ka.ring) * rowb   // lay = the flat row-byte prefix, layr the rings'
             tq4_store(ksh, kqb, d, qv, qother, kb0b, blk, lid, sl)
         } else {
-            let vb0b = rrow.y + lay * rrow.z + (rrow.w - 1u) * rowb
+            let vb0b = rrow.y + lay * rrow.z + ka.layr + kv_ring_row(rrow.w - 1u, ka.ring) * rowb
             tq4_store(vsh, vqb, d, qv, qother, vb0b, blk, lid, sl)
         }
     }
@@ -3935,9 +3948,11 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_rms = compile_stamp(MetalRmsNorm_metal_rmsnorm_msl, ok)
     g_pso_rms_hx = compile_stamp(MetalRmsNormHX_metal_rmsnorm_msl, ok)
     g_pso_add = compile_stamp(MetalAdd_metal_ew2_msl, ok)
-    g_pso_addrms = compile_stamp(MetalAddRms_metal_add_rms_msl, ok)
-    g_pso_addrms_hx = compile_stamp(MetalAddRmsHX_metal_add_rms_msl, ok)
+    g_pso_addrms = compile_stamp(metal_add_rms_msl, ok)
+    g_pso_addrms_hx = compile_stamp(metal_add_rms_hx_msl, ok)
     g_pso_preaddrms = compile_stamp(metal_pre_add_rms_msl, ok)
+    g_pso_preaddrms_hx = compile_stamp(metal_pre_add_rms_hx_msl, ok)
+    g_pso_preadd = compile_stamp(metal_pre_add_msl, ok)
     g_pso_swiglu = compile_stamp(MetalSwiglu_metal_ew2_msl, ok)
     g_pso_swiglu_hx = compile_stamp(MetalSwigluHX_metal_ew2_msl, ok)
     g_pso_swiglu_hxb = compile_stamp(MetalSwigluHXB_metal_ew2_msl, ok)
@@ -3955,6 +3970,10 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
         zp[0] = 0u
     }
     g_pso_geglu = compile_stamp(MetalGeglu_metal_ew2_msl, ok)
+    g_pso_geglu_side = compile_stamp(metal_geglu_side_msl, ok)
+    g_pso_ple_proj_bf16 = compile_stamp(metal_ple_proj_bf16_msl, ok)
+    g_pso_ple_proj_bf16_one = compile_stamp(metal_ple_proj_bf16_one_msl, ok)
+    g_pso_ple_finish = compile_stamp(metal_ple_finish_msl, ok)
     g_pso_geglu_hx = compile_stamp(MetalGegluHX_metal_ew2_msl, ok)
     g_pso_ln = compile_stamp(metal_layernorm_msl, ok)
     g_pso_f32mm = compile_stamp(metal_f32_mulmm_msl, ok)
@@ -3974,8 +3993,7 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_wdec_attn_part = compile_stamp(metal_wdec_attn_part_msl, ok)
     g_pso_wdec_attn_comb = compile_stamp(metal_wdec_attn_comb_msl, ok)
     g_pso_bias_add_res = compile_stamp(metal_bias_add_res_msl, ok)
-    g_pso_softcap = compile_stamp(metal_softcap_row_msl, ok)
-    g_pso_suppress = compile_stamp(metal_suppress_row_msl, ok)
+    g_pso_cls_epi = compile_stamp(metal_cls_epi_msl, ok)
     g_pso_attn16 = compile_stamp(MetalSqAttnF16_metal_sq_attn_msl, ok)
     g_pso_attn32 = compile_stamp(MetalSqAttnF32_metal_sq_attn_msl, ok)
     g_pso_attnp16 = compile_stamp(MetalSqAttnPartF16_metal_sq_attn_part_msl, ok)
@@ -4002,6 +4020,8 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_dn_ba = compile_stamp(MetalDnBa_metal_q8_gemv_msl, ok)
     g_pso_moe_select = compile_stamp(MetalMoeSelect_metal_moe_select_msl, ok)
     g_pso_moe_select_512 = compile_stamp(MetalMoeSelect512_metal_moe_select_msl, ok)
+    g_pso_moe_select_ds = compile_stamp(MetalMoeSelectDs_metal_moe_select_msl, ok)
+    g_pso_moe_select_512_ds = compile_stamp(MetalMoeSelect512Ds_metal_moe_select_msl, ok)
     g_pso_moe_gemv_q8 = compile_stamp(metal_moe_gemv_q8_msl, ok)
     g_pso_moe_kq_k4 = compile_stamp(metal_moe_gemv_k4_msl, ok)
     g_pso_moe_kq_k3 = compile_stamp(metal_moe_gemv_k3_msl, ok)
@@ -4019,8 +4039,10 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_moe_kq_k6 = compile_stamp(metal_moe_gemv_k6_msl, ok)
     g_pso_moe_combine = compile_stamp(metal_moe_combine_msl, ok)
     g_pso_moe_combine_sh = compile_stamp(metal_moe_combine_sh_msl, ok)
+    g_pso_moe_comb_g4 = compile_stamp(metal_moe_comb_g4_msl, ok)
+    g_pso_moe_comb_g4_hx = compile_stamp(metal_moe_comb_g4_hx_msl, ok)
+    g_pso_moe_comb_g4_pf = compile_stamp(metal_moe_comb_g4_pf_msl, ok)
     g_pso_g4rnorm = compile_stamp(metal_g4_router_norm_msl, ok)
-    g_pso_moe_wscale = compile_stamp(metal_moe_wscale_msl, ok)
     g_pso_swiglu_oai = compile_stamp(MetalSwigluOai_metal_swiglu_oai_msl, ok)
     g_pso_moe_gemv_mx4 = compile_stamp(metal_moe_gemv_mx4_msl, ok)
     g_pso_moe_gemv_q51 = compile_stamp(metal_moe_gemv_q51_msl, ok)
@@ -4827,9 +4849,9 @@ def enc_qkn_rope(enc : MetalComputeEncoder?; f16 : bool; bqkv, kmb, vmb : MetalB
                  bcos, bsin : MetalBuffer?; toff : uint64; bqkw, bbias : MetalBuffer?; var ka : GkQknRopeArgs; nwg : int64; bq : MetalBuffer? = null) {
     let bqr = bq != null ? bq : bqkv
     if (f16) {
-        enc_qkn_rope16(enc, bqr, bqkv, kmb, koff, vmb, voff, bcos, toff, bqkw, bsin, toff, bbias, ka, nwg, int64(ka.hs / 2u))
+        enc_qkn_rope16(enc, bqr, bqkv, kmb, koff, vmb, voff, bcos, toff, bqkw, bsin, toff, bbias, bqkv, ka, nwg, int64(ka.hs / 2u))
     } else {
-        enc_qkn_rope32(enc, bqr, bqkv, kmb, koff, vmb, voff, bcos, toff, bqkw, bsin, toff, bbias, ka, nwg, int64(ka.hs / 2u))
+        enc_qkn_rope32(enc, bqr, bqkv, kmb, koff, vmb, voff, bcos, toff, bqkw, bsin, toff, bbias, bqkv, ka, nwg, int64(ka.hs / 2u))
     }
 }
 
@@ -4838,9 +4860,9 @@ def enc_qkn_rope_b(enc : MetalComputeEncoder?; f16 : bool; bqkv, bcos, bsin, brt
                    nwg, nrows : int64; rtoff : uint64 = 0ul; bq : MetalBuffer? = null) {
     let bqr = bq != null ? bq : bqkv
     if (f16) {
-        enc_qkn_rope_b16(enc, bqr, bqkv, g_arena, 0ul, g_arena, 0ul, bcos, 0ul, bqkw, bsin, 0ul, bbias, brt, rtoff, ka, nwg, nrows, int64(ka.hs / 2u))
+        enc_qkn_rope_b16(enc, bqr, bqkv, g_arena, 0ul, g_arena, 0ul, bcos, 0ul, bqkw, bsin, 0ul, bbias, brt, rtoff, bqkv, ka, nwg, nrows, int64(ka.hs / 2u))
     } else {
-        enc_qkn_rope_b32(enc, bqr, bqkv, g_arena, 0ul, g_arena, 0ul, bcos, 0ul, bqkw, bsin, 0ul, bbias, brt, rtoff, ka, nwg, nrows, int64(ka.hs / 2u))
+        enc_qkn_rope_b32(enc, bqr, bqkv, g_arena, 0ul, g_arena, 0ul, bcos, 0ul, bqkw, bsin, 0ul, bbias, brt, rtoff, bqkv, ka, nwg, nrows, int64(ka.hs / 2u))
     }
 }
 
@@ -4912,26 +4934,9 @@ def enc_embed_dev(enc : MetalComputeEncoder?; t : Model; btok : MetalBuffer?; to
                   bdim, bescale : MetalBuffer?) {
     let dim = t.config.dim
     if (t.emb_q8) {
-        let bemb = blob_of(g_dev, t, t.emb_q8_off)
-        enc_embed(enc, bemb.buf, bemb.boff, btok, bx, bdim, bescale, dim, toff, xoff, nrows)
-    } elif (emb_kq(t) && kq_dense_b32(t.emb_fmt)) {
-        let qp = b32_planes_of(g_dev, t, t.emb_fmt, emb_kq_plane_off(t))
-        var ka = EmbedKqArgs(dim = uint(dim), nsb = uint(dim / KQ_B32_ELEMS), escale = t.config.embed_scale)
-        let units = dim / 16l
-        if (t.emb_fmt == KqFmt.q51) {
-            enc_embed_b32_q51(enc, qp.sbuf, qp.soff, qp.qbuf, qp.qoff, btok, toff, bx, xoff, ka, units, nrows)
-        } elif (t.emb_fmt == KqFmt.iq4nl32) {
-            enc_embed_b32_iq4nl32(enc, qp.sbuf, qp.soff, qp.qbuf, qp.qoff, btok, toff, bx, xoff, ka, units, nrows)
-        } elif (t.emb_fmt == KqFmt.q5032) {
-            enc_embed_b32_q5032(enc, qp.sbuf, qp.soff, qp.qbuf, qp.qoff, btok, toff, bx, xoff, ka, units, nrows)
-        } else {
-            enc_embed_b32_q4032(enc, qp.sbuf, qp.soff, qp.qbuf, qp.qoff, btok, toff, bx, xoff, ka, units, nrows)
-        }
+        enc_embed_table(enc, t, KqFmt.q8, t.emb_q8_off, dim, t.config.embed_scale, btok, toff, bx, xoff, nrows, bdim, bescale)
     } elif (emb_kq(t)) {
-        let off = emb_kq_plane_off(t)
-        let bq = kq_quants_of(g_dev, t, t.emb_fmt, off)
-        let bs = kq_scales_of(g_dev, t, t.emb_fmt, off)
-        enc_embed_kq_rows(enc, t.emb_fmt, bq.buf, bq.qoff, bs.buf, bs.soff, bs.doff, btok, toff, bx, xoff, dim, nrows, t.config.embed_scale)
+        enc_embed_table(enc, t, t.emb_fmt, emb_kq_plane_off(t), dim, t.config.embed_scale, btok, toff, bx, xoff, nrows, bdim, bescale)
     } else {
         assert(toff == 0ul, "the fp32 table's gather reads its token ids from the buffer's start")
         let bemb = plane_of(g_dev, t, t.fblob, t.tok_emb_off)
@@ -4941,9 +4946,28 @@ def enc_embed_dev(enc : MetalComputeEncoder?; t : Model; btok : MetalBuffer?; to
     }
 }
 
-//! the formats the K-quant token-table gather has a stamp for: every
-//! served plane format but q8
-def emb_kq_gather_fmt(f : KqFmt) : bool => f != KqFmt.q8 && kq_fmt_gpu_supported(f)
+//! The rows of `nrows` token ids (btok at toff) off the table plane `fmt` at element `off`, `width` elements a row under `escale`, into
+//! bx at xoff: the token table's gather and the E-series per-layer table's (layers x ple under sqrt(ple)); the q8 copy's stamp
+//! reads the width and the scale off the uniforms `bwidth` / `bescale` (null = 1)
+def enc_embed_table(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; off, width : int64; escale : float; btok : MetalBuffer?; toff : uint64;
+                    bx : MetalBuffer?; xoff : uint64; nrows : int64; bwidth, bescale : MetalBuffer?) {
+    if (fmt == KqFmt.q8) {
+        let bemb = blob_of(g_dev, t, off)
+        enc_embed(enc, bemb.buf, bemb.boff, btok, bx, bwidth, bescale, width, toff, xoff, nrows)
+    } elif (kq_dense_b32(fmt)) {
+        let qp = b32_planes_of(g_dev, t, fmt, off)
+        var ka = EmbedKqArgs(dim = uint(width), nsb = uint(width / KQ_B32_ELEMS), escale = escale)
+        let units = width / 16l
+        let slot = int(fmt)
+        kq_tile_stamp(slot, "!b32", "embed") <| $() {   //! the per-32 table gather (`MetalEmbedB32T`) stamps the per-32 formats alone
+            tile_enc_b32(enc, qp.sbuf, qp.soff, qp.qbuf, qp.qoff, btok, toff, bx, xoff, ka, units, nrows)
+        }
+    } else {
+        let bq = kq_quants_of(g_dev, t, fmt, off)
+        let bs = kq_scales_of(g_dev, t, fmt, off)
+        enc_embed_kq_rows(enc, fmt, bq.buf, bq.qoff, bs.buf, bs.soff, bs.doff, btok, toff, bx, xoff, width, nrows, escale)
+    }
+}
 
 //! the K-quant table rows of `nrows` token ids (btok at toff) into bx at xoff, row stride dim: the scale buffer binds as the
 //! d halves (the compact block at soff, the split plane's d tail at doff) and as the sub-scale strips, the quant plane once
@@ -5112,25 +5136,121 @@ def enc_moe_act(enc : MetalComputeEncoder?; c : Config; bg, bu : MetalBuffer?; u
     }
 }
 
-// fused add + rms when dim fits the kernel's row slab, the unfused pair otherwise
-def enc_add_rms_site(enc : MetalComputeEncoder?; bx, ba, bw, by, bdim, beps : MetalBuffer?; dim : int64; bascale : MetalBuffer? = null) {
-    if (dim <= ADD_RMS_MAX_DIM) {
-        enc_addrms_c(enc, bx, ba, bw, by, bdim, beps, bascale != null ? bascale : g_one)
-    } else {
-        enc_add(enc, bx, 0ul, ba, 0ul, bdim, dim, bascale)
-        enc_rms(enc, bx, 0ul, bw, by, bdim, beps)
+//! the uniforms the residual step's split chain reads: the row width, the epsilon and the rows' element count
+struct ResidualUniforms {
+    bdim : MetalBuffer?
+    beps : MetalBuffer?
+    btot : MetalBuffer?
+}
+
+//! the residual step's dispatch shape: a decode row, a decode step's rows (1024 lanes a row), the prefill window's rows (256)
+enum ResidualForm {
+    one_row
+    rows
+    window
+}
+
+//! one layer seam of the residual step: the branch's post norm (a model-blob row, -1 none), the next norm the seam stores (-1 none)
+//! and the layer's output scale (its model-blob element, -1 for one)
+struct ResidualSeam {
+    pre_off : int64
+    norm_off : int64
+    osc_off : int64
+}
+
+def seam(pre_off, norm_off : int64; osc_off : int64 = -1l) : ResidualSeam => ResidualSeam(pre_off = pre_off, norm_off = norm_off, osc_off = osc_off)
+
+//! the seam's norm rows as one buffer, the post norm first: the args' `pwoff` 0 and `woff` past it
+def private seam_norms(t : Model; sm : ResidualSeam) : MetalBuffer? {
+    let rb = uint64(t.config.dim * 4l)
+    unsafe {
+        if (sm.pre_off >= 0l && sm.norm_off >= 0l) {
+            return upload_region_cat(addr<void?>(t.fblob[sm.pre_off]), rb, addr<void?>(t.fblob[sm.norm_off]), rb)
+        }
+        return upload_region(addr<void?>(t.fblob[sm.pre_off >= 0l ? sm.pre_off : sm.norm_off]), rb)
     }
 }
 
-// Fused post-attn-norm + residual add + ffn-norm for pre_post_norm models: a = rms(a)·wpa in place,
-// x += a, y = rms(x)·wffn — one dispatch collapsing enc_rms(a) + enc_add_rms_site. Falls back to the
-// separate pair past the slab cap. `ba` is normed in place (matches the un-fused enc_rms(a) write).
-def enc_pre_add_rms_site(enc : MetalComputeEncoder?; bx, ba, bwpa, bwffn, by, bdim, beps : MetalBuffer?; dim : int64) {
-    if (dim <= ADD_RMS_MAX_DIM) {
-        enc_preaddrms_c(enc, bx, ba, bwpa, bwffn, by, bdim, beps)
+//! x = (x + a') . ascale over `nrows` rows, a' the partner under the seam's post norm, then x's next norm into `by` (`byh` its f16
+//! twin) where the seam names one (`GkAddRmsRows`): one dispatch while the row fits the slab and `split` is off, else the split chain
+[arch(at="../ARCHITECTURE_GPU_SHARED_KERNELS.md#gpu-kernel-pairs")]
+def enc_residual(enc : MetalComputeEncoder?; t : Model; bx, ba, by, byh : MetalBuffer?; sm : ResidualSeam; nrows : int64; form : ResidualForm;
+                 split : bool; u : ResidualUniforms) {
+    let c = t.config
+    let dim = c.dim
+    let pre = sm.pre_off >= 0l
+    let out = sm.norm_off >= 0l
+    let one = form == ResidualForm.one_row
+    let win = form == ResidualForm.window
+    if (split || dim > ADD_RMS_MAX_DIM || (!pre && !out)) {
+        unsafe {
+            let rb = uint64(dim * 4l)
+            if (pre) {
+                var bwp = upload_region(addr<void?>(t.fblob[sm.pre_off]), rb)
+                enc_rms_form(enc, form, ba, bwp, ba, null, u, nrows)
+            }
+            var bosc = sm.osc_off >= 0l ? upload_region(addr<void?>(t.fblob[sm.osc_off]), 4ul) : null
+            enc_add(enc, bx, 0ul, ba, 0ul, u.btot, nrows * dim, bosc)
+            if (out) {
+                var bw = upload_region(addr<void?>(t.fblob[sm.norm_off]), rb)
+                enc_rms_form(enc, form, bx, bw, by, byh, u, nrows)
+            }
+        }
+        return
+    }
+    var bw = seam_norms(t, sm)
+    var ka = GkAddRmsArgs(dim = uint(dim), add_on = 1u, eps = c.norm_eps, ascale = sm.osc_off >= 0l ? t.fblob[sm.osc_off] : 1.0)
+    if (!out) {
+        if (one) {
+            enc_preadd_c(enc, bx, ba, bw, ka)
+        } elif (win) {
+            pf_enc_preadd_b_c(enc, bx, ba, bw, ka, nrows)
+        } else {
+            enc_preadd_b_c(enc, bx, ba, bw, ka, nrows)
+        }
+    } elif (pre) {
+        if (byh != null) {
+            if (win) {
+                pf_enc_preaddrms_bhx_c(enc, bx, ba, bw, by, byh, ka, nrows)
+            } else {
+                enc_preaddrms_bhx_c(enc, bx, ba, bw, by, byh, ka, nrows)
+            }
+        } elif (one) {
+            enc_preaddrms_c(enc, bx, ba, bw, by, ka)
+        } elif (win) {
+            pf_enc_preaddrms_b_c(enc, bx, ba, bw, by, ka, nrows)
+        } else {
+            enc_preaddrms_b_c(enc, bx, ba, bw, by, ka, nrows)
+        }
+    } elif (byh != null) {
+        if (win) {
+            pf_enc_add_rms_bhx_c(enc, bx, ba, bw, by, byh, ka, nrows)
+        } else {
+            enc_add_rms_bhx_c(enc, bx, ba, bw, by, byh, ka, nrows)
+        }
+    } elif (one) {
+        enc_addrms_c(enc, bx, ba, bw, by, ka)
+    } elif (win) {
+        pf_enc_add_rms_b_c(enc, bx, ba, bw, by, ka, nrows)
     } else {
-        enc_rms(enc, ba, 0ul, bwpa, ba, bdim, beps)
-        enc_add_rms_site(enc, bx, ba, bwffn, by, bdim, beps, dim)
+        enc_add_rms_b_c(enc, bx, ba, bw, by, ka, nrows)
+    }
+}
+
+//! the split chain's norm: `bx`'s rows under `bw` into `by` (`byh` its f16 twin where bound), in the residual form's shape
+def private enc_rms_form(enc : MetalComputeEncoder?; form : ResidualForm; bx, bw, by, byh : MetalBuffer?; u : ResidualUniforms; nrows : int64) {
+    if (form == ResidualForm.window) {
+        if (byh != null) {
+            pf_enc_rms_hx(enc, bx, 0ul, bw, by, u.bdim, u.beps, byh, nrows)
+        } else {
+            pf_enc_rms(enc, bx, 0ul, bw, by, u.bdim, u.beps, nrows)
+        }
+    } elif (byh != null) {
+        enc_rms_bhx(enc, bx, 0ul, bw, by, u.bdim, u.beps, byh, nrows)
+    } elif (form == ResidualForm.one_row) {
+        enc_rms(enc, bx, 0ul, bw, by, u.bdim, u.beps)
+    } else {
+        enc_rms_b(enc, bx, 0ul, bw, by, u.bdim, u.beps, nrows)
     }
 }
 
@@ -5247,19 +5367,20 @@ def enc_mv_site(enc : MetalComputeEncoder?; bwblob : MetalBuffer?; wboff : uint6
 // layout), by is the [B x hidden] swiglu output. Replaces the w1 + w3 GEMVs + the swiglu ew2
 // with one dispatch. Same 4-rows/tg geometry, gridded over the hidden output rows.
 def enc_gemv_w13sw_b(enc : MetalComputeEncoder?; four : bool; bw : MetalBuffer?; w1off, w3off : uint64;
-                     bx, by, bn, bhid : MetalBuffer?; hidden : int64; xoff : uint64 = 0ul; yoff : uint64 = 0ul) {
+                     bx, by, bn, bhid, bact : MetalBuffer?; hidden : int64; xoff : uint64 = 0ul; yoff : uint64 = 0ul) {
     if (four) {
-        enc_w13sw_b4_c(enc, bw, w1off, bw, bx, xoff, by, yoff, bn, bhid, bw, w3off, bw, hidden)
+        enc_w13sw_b4_c(enc, bw, w1off, bw, bx, xoff, by, yoff, bn, bhid, bact, bw, w3off, bw, hidden)
     } else {
-        enc_w13sw_b2_c(enc, bw, w1off, bw, bx, xoff, by, yoff, bn, bhid, bw, w3off, bw, hidden)
+        enc_w13sw_b2_c(enc, bw, w1off, bw, bx, xoff, by, yoff, bn, bhid, bact, bw, w3off, bw, hidden)
     }
 }
 
-// the fused W1|W3 + swiglu site at nrows live rows (enc_gemv_rows's tiling; y stride = hidden)
+// the fused W1|W3 + activation site at nrows live rows (enc_gemv_rows's tiling; y stride = hidden), `bact` the act code (0 silu,
+// 1 gelu)
 def enc_gemv_w13sw_rows(enc : MetalComputeEncoder?; nrows : int64; bw : MetalBuffer?; w1off, w3off : uint64;
-                        bx, by, bn, bhid : MetalBuffer?; n, hidden : int64) {
+                        bx, by, bn, bhid, bact : MetalBuffer?; n, hidden : int64) {
     enc_rows_tiles(nrows, n, hidden) $(four; _live; xo, yo) {
-        enc_gemv_w13sw_b(enc, four, bw, w1off, w3off, bx, by, bn, bhid, hidden, xo, yo)
+        enc_gemv_w13sw_b(enc, four, bw, w1off, w3off, bx, by, bn, bhid, bact, hidden, xo, yo)
     }
 }
 
@@ -5416,14 +5537,6 @@ def enc_rope_store_b_q8(enc : MetalComputeEncoder?; bqkv, bcos, bsin, brt, bbias
     enc_rpstb_q8_c(enc, bqkv, g_arena, g_arena, g_arena, g_arena, bcos, bsin, brt, rtoff, bbias, ka, bq != null ? bq : bqkv, nthreads, nrows)
 }
 
-def enc_add_rms_b(enc : MetalComputeEncoder?; bx, ba, bw, by, bdim, beps : MetalBuffer?; nrows : int64; bascale : MetalBuffer? = null) {
-    enc_add_rms_b_c(enc, bx, ba, bw, by, bdim, beps, bascale != null ? bascale : g_one, nrows)
-}
-
-def pf_enc_add_rms_bhx(enc : MetalComputeEncoder?; bx, ba, bw, by, bdim, beps, bxh : MetalBuffer?; nrows : int64; bascale : MetalBuffer? = null) {
-    pf_enc_add_rms_bhx_c(enc, bx, ba, bw, by, bdim, beps, bascale != null ? bascale : g_one, bxh, nrows)
-}
-
 // enc_rms_b (the batched prologue) and pf_enc_rms (the prefill 256/tg shape) are
 // [metal_dispatch]-generated from MetalRmsNorm alongside enc_rms.
 
@@ -5452,11 +5565,13 @@ def metal_kernels_release {
         g_pso_kq_mvb2h_iq3s, g_pso_kq_mvb4h_iq3s, g_pso_kq_mvb8h_iq3s, g_pso_kq_mvb2h_iq3xxs, g_pso_kq_mvb4h_iq3xxs, g_pso_kq_mvb8h_iq3xxs,
         g_pso_kq_mvb2h_k2, g_pso_kq_mvb4h_k2, g_pso_kq_mvb8h_k2, g_pso_kq_mvb2h_iq2s, g_pso_kq_mvb4h_iq2s, g_pso_kq_mvb8h_iq2s,
         g_pso_kq_mvb2h_iq2xs, g_pso_kq_mvb4h_iq2xs, g_pso_kq_mvb8h_iq2xs, g_pso_kq_mvb2h_iq2xxs, g_pso_kq_mvb4h_iq2xxs, g_pso_kq_mvb8h_iq2xxs)
-    release_handles(g_pso_addrms, g_pso_preaddrms, g_one, g_zero, g_pso_geglu, g_pso_geglu_hx)
+    release_handles(g_pso_addrms, g_pso_preaddrms, g_pso_preaddrms_hx, g_pso_preadd, g_one, g_zero)
+    release_handles(g_pso_geglu, g_pso_geglu_hx)
+    release_handles(g_pso_geglu_side, g_pso_ple_proj_bf16, g_pso_ple_proj_bf16_one, g_pso_ple_finish)
     release_handles(g_pso_ln, g_pso_bias_act, g_pso_act_rows, g_pso_posadd, g_pso_q3v_stem, g_pso_clamp, g_pso_clamp_copy)
     release_handles(g_pso_rope2d, g_pso_head_pad, g_pso_head_unpad, g_pso_geglu_quick, g_pso_wdec_kv, g_pso_wdec_kv_h)
     release_handles(g_pso_im2col2d, g_pso_wdec_attn_part, g_pso_wdec_attn_comb, g_pso_bias_add_res)
-    release_handles(g_pso_f32mm, g_pso_softcap, g_pso_suppress, g_pso_swiglu, g_pso_swiglu_hx, g_pso_swiglu_hxb)
+    release_handles(g_pso_f32mm, g_pso_cls_epi, g_pso_swiglu, g_pso_swiglu_hx, g_pso_swiglu_hxb)
     release_handles(g_pso_swiglu_b, g_pso_geglu_hxb, g_pso_geglu_b, g_pso_attn16, g_pso_attn32, g_pso_attnp16)
     release_handles(g_pso_attnp32, g_pso_attn_q8, g_pso_attnp_q8, g_pso_rpst_q8, g_pso_attn_tq4, g_pso_attnp_tq4)
     release_handles(g_pso_rpst_tq4, g_pso_unsign, g_pso_qknorm, g_pso_attncomb, g_pso_rpst16, g_pso_qkn16)
@@ -5466,10 +5581,11 @@ def metal_kernels_release {
     release_handles(g_pso_emb_kq_k2, g_pso_emb_kq_iq3s, g_pso_emb_kq_iq3xxs, g_pso_emb_kq_iq2s, g_pso_emb_kq_iq2xs, g_pso_emb_kq_iq2xxs)
     release_handles(g_pso_emb_b32_q51, g_pso_emb_b32_iq4nl32, g_pso_emb_b32_q4032, g_pso_emb_b32_q5032)
     release_handles(g_pso_moe_router, g_pso_moe_select, g_pso_moe_select_512, g_pso_moe_gemv_q8, g_pso_moe_kq_k4, g_pso_moe_kq_k3)
+    release_handles(g_pso_moe_select_ds, g_pso_moe_select_512_ds)
     release_handles(g_pso_moe_kq_iq3s, g_pso_moe_kq_iq3xxs, g_pso_moe_kq_iq2s, g_pso_moe_kq_iq2xs, g_pso_moe_kq_iq2xxs, g_pso_moe_kq_iq4xs)
     release_handles(g_pso_moe_kq_iq3s_f4)
-    release_handles(g_pso_moe_kq_q40, g_pso_moe_kq_k5, g_pso_moe_kq_k6, g_pso_moe_combine, g_pso_g4rnorm, g_pso_moe_wscale)
-    release_handles(g_pso_moe_combine_sh)
+    release_handles(g_pso_moe_kq_q40, g_pso_moe_kq_k5, g_pso_moe_kq_k6, g_pso_moe_combine, g_pso_g4rnorm)
+    release_handles(g_pso_moe_combine_sh, g_pso_moe_comb_g4, g_pso_moe_comb_g4_hx, g_pso_moe_comb_g4_pf)
     release_handles(g_pso_swiglu_oai, g_pso_moe_gemv_mx4, g_pso_moe_gemv_q51, g_pso_moe_gemv_iq4nl32, g_pso_dn_conv, g_pso_dn_conv_n, g_pso_dn_conv_n4, g_pso_dn_hist, g_pso_dn_l2)
     release_handles(g_pso_moe_kq_iq4nl, g_pso_moe_kq_k2, g_pso_kq_q51, g_pso_kq_iq4nl32, g_pso_kq_mm_b51, g_pso_kq_mm_b4n32)
     release_handles(g_pso_b32_mvb2_q51, g_pso_b32_mvb4_q51, g_pso_b32_mvb8_q51, g_pso_b32_mvb2_iq4nl32, g_pso_b32_mvb4_iq4nl32, g_pso_b32_mvb8_iq4nl32)
@@ -6954,30 +7070,54 @@ class MetalKqMulMmQ5032 : MetalKqMulMmK45T {
     override B32W = 5u
 }
 
-//! The router GEMV on the template both homes stamp (`GkRouterGemv`) over the f32 router rows, a lane stepping a float4, the bias row
-//! where `hasb` (gpt-oss)
+//! The router GEMV's Metal shell on the template both homes stamp (`GkRouterGemv`): the stamp's grid onto its rows - a threadgroup
+//! of 256 a row under `ROW_WG`, else a simdgroup a row of the threadgroup's four; a format's template sets the row words
 [ |> template_struct_instance]
-class template MetalMoeRouterT : GkRouterGemv {
+class template MetalRouterGemvT : GkRouterGemv {
+    def grid_row {
+        static_if (ROW_WG) {
+            router_row(gl_WorkGroupID.x, gl_LocalInvocationID.x, 256u)
+        } else {
+            let row = gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID
+            if (row < pa.ne) {
+                router_row(row, gl_SubgroupInvocationID, gl_SubgroupSize)
+            }
+        }
+    }
+}
+
+//! the f32 router rows, a lane stepping a float4, the bias row where `hasb` (gpt-oss)
+[ |> template_struct_instance]
+class template MetalMoeRouterT : MetalRouterGemvT {
     typedef KT = float4
     typedef XT = float4
     override VW = 4u
     override BIAS = true
 }
 
+//! the per-layer-embedding pre-step's projection off its native-BF16 rows: the bf16 word pairs (the finish applies the 1/sqrt(dim))
+[ |> template_struct_instance]
+class template MetalPleProjBf16T : MetalRouterGemvT {
+    typedef KT = uint
+    typedef XT = float
+    override VW = 2u
+    override BF16 = true
+}
+
 //! the one-column stamp: a threadgroup of 256 an expert row, grid.y the streams of a batched decode step (one on the single row)
-[metal_dispatch(name = "enc_moe_router", pso = "g_pso_moe_router", tgmem = "metal_moe_router_msl_tgmem", tg = 256, grid = "ne, nst", params = "ne : int64, nst : int64")]
+[metal_dispatch(name = "enc_moe_router", pso = "g_pso_moe_router", tgmem = "metal_moe_router_msl_tgmem", tg = 256, grid = "ne, nst", params = "ne : int64, nst : int64", requires = "pa.dim % 4, pa.woff % 4, pa.xs % 4")]
 class MetalMoeRouter : MetalMoeRouterT {
     override NC = 1
 
     [metal_kernel(name="metal_moe_router_msl")]
     def metal_moe_router {
-        router_row(gl_WorkGroupID.x, gl_LocalInvocationID.x, 256u)
+        grid_row()
     }
 }
 
 //! the position-blocked prefill stamp: a simdgroup an expert row, eight positions a simdgroup (the prefill router's cost is the
 //! rows' traffic); also the prefill's f32 GEMV
-[metal_dispatch(name = "enc_moe_router_b", pso = "g_pso_moe_router_b", tg = 128, grid = "ne/4, nst/8", params = "ne : int64, nst : int64")]
+[metal_dispatch(name = "enc_moe_router_b", pso = "g_pso_moe_router_b", tg = 128, grid = "ne/4, nst/8", params = "ne : int64, nst : int64", requires = "pa.dim % 4, pa.woff % 4, pa.xs % 4")]
 class MetalMoeRouterB : MetalMoeRouterT {
     override ROW_WG = false
     override COL_CLAMP = true
@@ -6985,29 +7125,90 @@ class MetalMoeRouterB : MetalMoeRouterT {
 
     [metal_kernel(name="metal_moe_router_b_msl")]
     def metal_moe_router_b {
-        let row = gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID
-        if (row < pa.ne) {
-            router_row(row, gl_SubgroupInvocationID, gl_SubgroupSize)
-        }
+        grid_row()
     }
+}
+
+//! the projection's position-blocked stamp of the template both homes stamp (`GkRouterGemv`): a simdgroup a row, eight columns a simdgroup
+[metal_dispatch(name = "enc_ple_proj_bf16", pso = "g_pso_ple_proj_bf16", tg = 128, grid = "ne/4, nst/8", params = "ne : int64, nst : int64", requires = "pa.dim % 2, pa.woff % 2")]
+class MetalPleProjBf16 : MetalPleProjBf16T {
+    override ROW_WG = false
+    override COL_CLAMP = true
+    override NC = 8
+
+    [metal_kernel(name="metal_ple_proj_bf16_msl")]
+    def metal_ple_proj_bf16 {
+        grid_row()
+    }
+}
+
+//! the projection's decode-column stamp of the template both homes stamp (`GkRouterGemv`): a threadgroup of 256 a row, as the f32
+//! router's one-column stamp reads its rows
+[metal_dispatch(name = "enc_ple_proj_bf16_one", pso = "g_pso_ple_proj_bf16_one", tgmem = "metal_ple_proj_bf16_one_msl_tgmem", tg = 256, grid = "ne, nst", params = "ne : int64, nst : int64", requires = "pa.dim % 2, pa.woff % 2")]
+class MetalPleProjBf16One : MetalPleProjBf16T {
+    override NC = 1
+
+    [metal_kernel(name="metal_ple_proj_bf16_one_msl")]
+    def metal_ple_proj_bf16_one {
+        grid_row()
+    }
+}
+
+//! the pre-step's finish args: slices of `ple`, the projection scaled by 1 / sqrt(dim) in the finish
+def ple_fin_args(ple, dim : int64; eps : float) : GkPleFinArgs => GkPleFinArgs(ple = uint(ple), eps = eps, inv_sd = 1.0 / sqrt(float(dim)))
+
+//! The pre-step's finish on the template both homes stamp (`GkPleFinish`), a threadgroup of 256 a (row, layer) slice: the
+//! projection scaled here, the inverse norm `rsqrt`
+[metal_dispatch(name = "enc_ple_finish", pso = "g_pso_ple_finish", tgmem = "metal_ple_finish_msl_tgmem", tg = 256, grid = "nslices", params = "nslices : int64")]
+class MetalPleFinish : GkPleFinish {
+    override XSCALE = true
+    override RSQRT = true
+
+    [metal_kernel(name="metal_ple_finish_msl")]
+    def metal_ple_finish {
+        finish_slice(gl_WorkGroupID.x)
+    }
+}
+
+//! The E-series pre-step on the device over `nrows` rows - the CPU's `ple_gather_rows` + `ple_pre_finish`: the side rows off the
+//! table at the token ids in `btok` into `bple`, the embedded rows projected into `bproj` (`project`: the driver's projection form),
+//! the finish; `ball` / `bsq` the layers x ple and sqrt(ple) uniforms
+def enc_ple_pre(enc : MetalComputeEncoder?; t : Model; btok : MetalBuffer?; toff : uint64; bple, bproj, ball, bsq : MetalBuffer?; nrows : int64;
+                project : block<() : void>) {
+    let c = t.config
+    let ple = c.n_embd_per_layer
+    enc_embed_table(enc, t, t.ple_emb_fmt, t.ple_emb_off, c.n_layers * ple, sqrt(float(ple)), btok, toff, bple, 0ul, nrows, ball, bsq)
+    invoke(project)
+    var bpn = upload_region(unsafe(addr < void? >(t.fblob[t.ple_pnorm_off])), uint64(ple * 4l))
+    var kf = ple_fin_args(ple, c.dim, c.norm_eps)
+    enc_ple_finish(enc, bproj, bpn, bple, kf, c.n_layers * nrows)
 }
 
 //! the router GEMV's args: `ne` rows of `dim` over `ncols` columns `xs` apart (0 = dim), the bias row where `hasb`
 def moe_router_args(ne, dim, ncols : int64; xs : int64 = 0l; hasb : bool = false) : GkRouterArgs
     => GkRouterArgs(ne = uint(ne), dim = uint(dim), ncols = uint(ncols), xs = uint(xs), hasb = hasb ? 1u : 0u)
 
-//! The router select on the template both homes stamp (`GkTopKRow`): one simdgroup a stream, DEPTH logits a lane; lane 0 writes
-//! the stream's selection row - the picks (`seli`), then their weights (`selw`, the same buffer's float view): the softmax
-//! weights renormed under `norm`, or under `raw` (gpt-oss softmax_weight, the select on the raw logits) the softmax over the picks
+//! The router select on the template both homes stamp (`GkTopKRow`): one simdgroup a stream, DEPTH logits a lane; lane 0 writes the
+//! picks (`seli`), then their weights (`selw`, the float view): renormed under `norm`, or under `raw` (gpt-oss) the softmax over
+//! the picks, then under the global and the per-expert down scales (`scale_weight`)
 [ |> template_struct_instance]
 class template MetalMoeSelectT : GkTopKRow {
     @ssbo @binding = 0 logits : array<float>                 //! [streams x lstride] router logits
     @ssbo @binding = 1 @role = "write" seli : array<uint>    //! the selection rows, uint view: stream s's picks at s 2k
     @ssbo @binding = 2 @role = "alias" selw : array<float>   //! the same rows' float view: stream s's weights at s 2k + k
+    @ssbo @binding = 3 @role = "weight" @template_gate = DSCALE ds : array<float>   //! the layer's per-expert down-scale row (gemma-4)
     override LANES = 32u
     override DEPTH = 8
 
     def override logit_at(p, e : uint) : float => logits[p * pa.lstride + e]
+
+    def override down_scale(e : uint) : float {
+        static_if (DSCALE) {
+            return ds[e]
+        } else {
+            return 1.0
+        }
+    }
 
     [metal_kernel]
     def metal_moe_select {
@@ -7035,10 +7236,12 @@ class template MetalMoeSelectT : GkTopKRow {
             jj = 0u
             while (jj < pa.k) {
                 var wj = 0.0
+                let ex = min(pick[jj], pa.ne - 1u)
                 if (pa.raw != 0u) {
                     wj = exp(max(pickw[jj] - mxw, -80.0)) / sw
+                    scale_weight(ex, pa.wscale, wj)
                 } else {
-                    pick_weight_into(jj, pa.norm, sw, 0.0, wj)
+                    pick_weight_into(jj, ex, pa.norm, sw, pa.wscale, wj)
                 }
                 selw[sel0 + pa.k + jj] = wj
                 jj++
@@ -7054,6 +7257,20 @@ class MetalMoeSelect : MetalMoeSelectT {
 [metal_dispatch(name = "enc_moe_select_512", pso = "g_pso_moe_select_512", tgmem = "MetalMoeSelect512_metal_moe_select_msl_tgmem", tg = 32, grid = "nst", params = "nst : int64")]
 class MetalMoeSelect512 : MetalMoeSelectT {
     override DEPTH = 16
+}
+
+//! the gemma-4 stamps: the down scales in the select (`ARCHITECTURE_GPU_PREFILL_MOE.md#moe-wscale` says why they are stamps of their own)
+[metal_dispatch(name = "enc_moe_select_ds", pso = "g_pso_moe_select_ds", tgmem = "MetalMoeSelectDs_metal_moe_select_msl_tgmem", tg = 32, grid = "nst", params = "nst : int64")]
+class MetalMoeSelectDs : MetalMoeSelectT {
+    override DSCALE = true
+    override DSOFF_SWITCH = false
+}
+
+[metal_dispatch(name = "enc_moe_select_512_ds", pso = "g_pso_moe_select_512_ds", tgmem = "MetalMoeSelect512Ds_metal_moe_select_msl_tgmem", tg = 32, grid = "nst", params = "nst : int64")]
+class MetalMoeSelect512Ds : MetalMoeSelectT {
+    override DEPTH = 16
+    override DSCALE = true
+    override DSOFF_SWITCH = false
 }
 
 // q4_K/q5_K kmask scale decode for ONE 32-element sub-block js (0..7): the 6-bit sc and min -
@@ -7210,7 +7427,7 @@ class MetalMoeGemvMx4 {
 
 //! the routed combine on the template both homes stamp (`GkMoeCombine`), a thread an element of a stream's row: the slots
 //! at p k + j, their weights the selection rows' float view (a row's 2k words, the weights past the k picks)
-[metal_dispatch(name = "enc_moe_combine", pso = "g_pso_moe_combine", tg = 256, grid = "dim/256, nst", params = "dim : int64, nst : int64")]
+[metal_dispatch(name = "enc_moe_combine", pso = "g_pso_moe_combine", tgmem = "metal_moe_combine_msl_tgmem", tg = 256, grid = "dim/256, nst", params = "dim : int64, nst : int64")]
 class MetalMoeCombine : GkMoeCombine {
     override GATHERED = false
     override WINDOW = false
@@ -7225,7 +7442,7 @@ class MetalMoeCombine : GkMoeCombine {
 
 //! ... and its shared-expert stamp: the shared expert's rows under their gate logit's sigmoid added in the same pass
 //! derives GkMoeCombine, the template both homes stamp
-[metal_dispatch(name = "enc_moe_combine_sh", pso = "g_pso_moe_combine_sh", tg = 256, grid = "dim/256, nst", params = "dim : int64, nst : int64")]
+[metal_dispatch(name = "enc_moe_combine_sh", pso = "g_pso_moe_combine_sh", tgmem = "metal_moe_combine_sh_msl_tgmem", tg = 256, grid = "dim/256, nst", params = "dim : int64, nst : int64")]
 class MetalMoeCombineSh : GkMoeCombine {
     override GATHERED = false
     override WINDOW = false
@@ -7237,6 +7454,79 @@ class MetalMoeCombineSh : GkMoeCombine {
             comb_elem(gl_WorkGroupID.y, gl_GlobalInvocationID.x)
         }
     }
+}
+
+//! The gemma-4 MoE step on the template both homes stamp (`GkMoeCombG4`): a threadgroup of 1024 lanes a row over the add-rms slab's
+//! stash; the decode stamps read the selection rows' slots and store the next norm in f32 (`Hx`: with its f16 twin), the window's
+//! (`Pf`) reads them through the bucket inverse and stores none (`ARCHITECTURE_GPU_PREFILL_MOE.md#metal-g4-moe-step`)
+[ |> template_struct_instance]
+class template MetalMoeCombG4T : GkMoeCombG4 {
+    @workgroup xrow : float[4096]
+    override TG = 1024u
+    override RSQRT = true
+    override GATHERED = false
+    override OUT_F32 = true
+
+    def override stash(k : uint; v : float) : void {
+        xrow[k] = v
+    }
+    def override stashed(k : uint) : float => xrow[k]
+
+    //! `moe_g4_norms`' layout: the four rows a row width apart
+    def override rpost_base : uint => 0u
+    def override dpost_base : uint => pa.n
+    def override spost_base : uint => 2u * pa.n
+    def override next_base : uint => 3u * pa.n
+}
+
+[metal_dispatch(name = "enc_moe_comb_g4", pso = "g_pso_moe_comb_g4", tgmem = "metal_moe_comb_g4_msl_tgmem", tg = 1024, grid = "nst", params = "nst : int64")]
+class MetalMoeCombG4 : MetalMoeCombG4T {
+    override PRESUM_SWITCH = false
+
+    [metal_kernel(name="metal_moe_comb_g4_msl")]
+    def metal_moe_comb_g4 {
+        comb_g4_row(gl_WorkGroupID.x)
+    }
+}
+
+[metal_dispatch(name = "enc_moe_comb_g4_hx", pso = "g_pso_moe_comb_g4_hx", tgmem = "metal_moe_comb_g4_hx_msl_tgmem", tg = 1024, grid = "nst", params = "nst : int64")]
+class MetalMoeCombG4Hx : MetalMoeCombG4T {
+    override HX = true
+    override PRESUM_SWITCH = false
+
+    [metal_kernel(name="metal_moe_comb_g4_hx_msl")]
+    def metal_moe_comb_g4_hx {
+        comb_g4_row(gl_WorkGroupID.x)
+    }
+}
+
+[metal_dispatch(name = "enc_moe_comb_g4_pf", pso = "g_pso_moe_comb_g4_pf", tgmem = "metal_moe_comb_g4_pf_msl_tgmem", tg = 1024, grid = "npos", params = "npos : int64")]
+class MetalMoeCombG4Pf : MetalMoeCombG4T {
+    override GATHERED = true
+    override OUT_F32 = false
+    override SLOT_X4 = false   //! 121.4 us off against 136.9 on at 512 rows, `debug-jit` (ARCHITECTURE_GPU_SHARED_KERNELS.md's race provenance)
+
+    [metal_kernel(name="metal_moe_comb_g4_pf_msl")]
+    def metal_moe_comb_g4_pf {
+        comb_g4_row(gl_WorkGroupID.x)
+    }
+}
+
+//! the gemma-4 step's args over `nk` slots a row at width `dim`, the weights the selection rows' (`moe_comb_args`); the stamps read
+//! the norm rows at `moe_g4_norms`' layout
+def moe_g4_args(dim, nk : int64; eps, ascale : float; presummed : bool) : GkMoeCombArgs {
+    var ka = moe_comb_args(dim, nk)
+    ka.eps = eps
+    ka.ascale = ascale
+    ka.presummed = presummed ? 1u : 0u
+    return ka
+}
+
+//! the gemma-4 step's args for layer l: the model's norm epsilon and the layer's output scale, `presummed` as `moe_g4_args`
+def moe_g4_layer_args(t : Model; l : int64; presummed : bool) : GkMoeCombArgs {
+    let c = t.config
+    let osc = c.layer_out_scale ? t.fblob[t.out_scale_off + l] : 1.0
+    return moe_g4_args(c.dim, c.n_expert_used, c.norm_eps, osc, presummed)
 }
 
 //! the combine's args over `nk` slots a stream at row width `dim`, the weights the selection rows' (the Metal stamps sum every
@@ -7342,71 +7632,25 @@ class MetalG4RouterNorm {
     }
 }
 
-// gemma4 per-expert down-scale fold (stage 3): selw[row][j] *= ds[seli[row][j]] — the CPU
-// folds ffn_down_exps_s into the selection weights right after select.
-[metal_dispatch(name = "enc_moe_wscale", pso = "g_pso_moe_wscale", tg = 32, grid = "nst", params = "nst : int64")]
-class MetalMoeWScale {
-    @ssbo @binding = 0 seli : array<uint>   // selection rows, uint view (idx of row r at r*2k)
-    @ssbo @binding = 1 @role = "alias" selw : array<float>  // the same buffer, float view (w of row r at r*2k + k)
-    @ssbo @binding = 2 @role = "weight" ds : array<float>    // [ne] this layer's per-expert down scales
-    @uniform @binding = 3 nk : uint
-
-    [metal_kernel(name="metal_moe_wscale_msl")]
-    def metal_moe_wscale {
-        let row = gl_WorkGroupID.x
-        let j = gl_LocalInvocationID.x
-        if (j < nk) {
-            selw[row * 2u * nk + nk + j] *= ds[seli[row * 2u * nk + j]]
-        }
-    }
-}
-
-var private g_wscale_row : MetalBuffer?   //! the model's `expert_weights_scale` once an expert, the scale row `MetalMoeWScale` multiplies by
-var private g_wscale_val = 0.0
-var private g_wscale_ne = 0l
-
-def private wscale_row_drop {
-    if (g_wscale_row != null) {
-        metal_release(g_wscale_row)
-        g_wscale_row = null
-    }
-    g_wscale_ne = 0l
-}
-
-[init]
-def private wscale_row_register {
-    register_reload_prep(@@wscale_row_drop)
-}
-
+//! the router select over `nrows` streams' logits into `bsel`, every picked weight under the model's `expert_weights_scale` and,
+//! where `bds` is the layer's per-expert down-scale row (gemma-4), that expert's scale - the select's own fold, no pass after it
 [arch(at="../ARCHITECTURE_GPU_PREFILL_MOE.md#moe-wscale")]
-def enc_moe_select_rows(enc : MetalComputeEncoder?; c : Config; blg, bsel, bnk : MetalBuffer?; nrows : int64; lstride : int64 = 0l) {
+def enc_moe_select_rows(enc : MetalComputeEncoder?; c : Config; blg, bsel : MetalBuffer?; nrows : int64; lstride : int64 = 0l;
+                        bds : MetalBuffer? = null) {
     let sw = c.moe_gate == MoeGate.softmax_weight
     var ka = GkTopKArgs(ne = uint(c.n_expert), k = uint(c.n_expert_used), norm = !sw && c.norm_topk_prob ? 1u : 0u,
-        lstride = uint(lstride > 0l ? lstride : c.n_expert), raw = sw ? 1u : 0u)
-    if (c.n_expert > 256l) {
+        wscale = c.expert_weights_scale, lstride = uint(lstride > 0l ? lstride : c.n_expert), raw = sw ? 1u : 0u)
+    if (bds != null) {
+        if (c.n_expert > 256l) {
+            enc_moe_select_512_ds(enc, blg, bsel, bsel, bds, ka, nrows)
+        } else {
+            enc_moe_select_ds(enc, blg, bsel, bsel, bds, ka, nrows)
+        }
+    } elif (c.n_expert > 256l) {
         enc_moe_select_512(enc, blg, bsel, bsel, ka, nrows)
     } else {
         enc_moe_select(enc, blg, bsel, bsel, ka, nrows)
     }
-    let ws = c.expert_weights_scale
-    if (ws != 0.0 && ws != 1.0) {
-        if (g_wscale_row == null || g_wscale_val != ws || g_wscale_ne != c.n_expert) {
-            wscale_row_build(ws, c.n_expert)
-        }
-        enc_moe_wscale(enc, bsel, bsel, g_wscale_row, bnk, nrows)
-    }
-}
-
-[cold_path]   // once a model
-def private wscale_row_build(ws : float; ne : int64) {
-    wscale_row_drop()
-    g_wscale_row = metal_new_buffer(g_dev, uint64(ne * 4l))
-    var row = unsafe(reinterpret<float?>(metal_buffer_contents(g_wscale_row)))
-    for (e in range64(ne)) {
-        unsafe(row[e]) = ws
-    }
-    g_wscale_val = ws
-    g_wscale_ne = ne
 }
 
 //! The q8 dot's inner forms (four quants against a float4, a block's eight against two), spelled once: this sum order is the one every q8 kernel's parity holds.
@@ -11474,8 +11718,7 @@ class template MetalEw2T {
                 return
             }
         }
-        let vv = g[gid]
-        let res = combine(vv, u[gid])
+        let res = combine(g[gid], u[gid])
         static_if (OUT) {
             o[gid] = res
         } else {
@@ -11509,6 +11752,15 @@ class MetalSwigluB : MetalEw2T {
 [metal_dispatch(name = "enc_geglu", pso = "g_pso_geglu", tg = 64, grid = "total/64", params = "total : int64")]
 class MetalGeglu : MetalEw2T {
     override ACT = 1
+}
+
+//! the geglu over the E-series' side rows on the template both homes stamp (`GkPleAct`): in place over the gate rows
+[metal_dispatch(name = "enc_geglu_side", pso = "g_pso_geglu_side", tg = 64, grid = "total/64", params = "total : int64")]
+class MetalGegluSide : GkPleAct {
+    [metal_kernel(name = "metal_geglu_side_msl")]
+    def metal_geglu_side {
+        act_elem(gl_GlobalInvocationID.x)
+    }
 }
 
 [metal_dispatch(name = "enc_geglu_hxb", pso = "g_pso_geglu_hxb", tg = 64, grid = "total/64", params = "total : int64")]
@@ -11553,41 +11805,20 @@ class MetalSigmul : MetalEw2T {
     override ACT = 3
 }
 
-// Suppress-token pinning (gemma4): logits[ids[i]] = -1e30 after the soft cap — the CPU
-// forward's pin value exactly; one thread per suppressed id.
-[metal_dispatch(name = "enc_suppress_row", pso = "g_pso_suppress", tg = 64, grid = "n/64", params = "n : int64")]
-class MetalSuppressRow {
-    @ssbo @binding = 0 @off = "xoff" x : array<float>
-    @ssbo @binding = 1 @role = "weight" ids : array<uint>
-    @uniform @binding = 2 n : uint
-
-    [metal_kernel(name="metal_suppress_row_msl")]
-    def metal_suppress_row {
-        let gid = gl_GlobalInvocationID.x
-        if (gid >= n) {
-            return
-        }
-        x[ids[gid]] = -1.0e30
+//! the classifier tail's epilogue on the template both homes stamp (`GkClsEpilogue`), a thread a logit over every row
+[metal_dispatch(name = "enc_cls_epi", pso = "g_pso_cls_epi", tg = 256, grid = "total/256", params = "total : int64")]
+class MetalClsEpilogue : GkClsEpilogue {
+    [metal_kernel(name="metal_cls_epi_msl")]
+    def metal_cls_epi {
+        epi_elem(gl_GlobalInvocationID.x)
     }
 }
 
-// Logit soft-cap, one thread per element: x = cap * tanh(x / cap) — softcap4's scalar reference
-// (gemma2/gemma4 final_logit_softcap on the GPU classifier row).
-[metal_dispatch(name = "enc_softcap_row", pso = "g_pso_softcap", tg = 64, grid = "total/64", params = "total : int64")]
-class MetalSoftcapRow {
-    @ssbo @binding = 0 @off = "xoff" @span = "total*4" x : array<float>
-    @uniform @binding = 1 total : uint      // grid guard
-    @uniform @binding = 2 cap : float
-
-    [metal_kernel(name="metal_softcap_row_msl")]
-    def metal_softcap_row {
-        let gid = gl_GlobalInvocationID.x
-        if (gid >= total) {
-            return
-        }
-        // tanh via the exp identity (the CPU softcap4's form; Metal tanh NaNs past ~44)
-        x[gid] = softcap_exp(x[gid], cap)
-    }
+//! the epilogue over `rows` logits rows `vocab` wide in `by` from element 0: the final softcap (`cap` 0 = none), then the `nsupp`
+//! suppressed ids in `bsupp` pinned - one dispatch; `bsupp` null carries no pin
+def enc_cls_epi_rows(enc : MetalComputeEncoder?; by, bsupp : MetalBuffer?; vocab, rows : int64; cap : float; nsupp : int64) {
+    var ka = GkClsEpiArgs(vocab = uint(vocab), cap = cap, nsupp = bsupp != null ? uint(nsupp) : 0u, rows = uint(rows))
+    enc_cls_epi(enc, by, bsupp != null ? bsupp : by, ka, vocab * rows)
 }
 
 // Causal depthwise conv over the fused [q;k;v] rows + SiLU (dn_conv_step's batch form): one

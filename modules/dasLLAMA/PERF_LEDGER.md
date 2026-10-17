@@ -10,6 +10,169 @@ and coverage; this ledger is the backlog for the perf pass that follows them. Ev
 what it costs today and what the fix would change.
 
 ## Entries
+- **MEASURED (2026-10-16) - the gemma leg's end re-measure, the M5 half.** Instrument `benchmarks/lcpp_bench.das`
+  (`--ngl 99 -p 512 -n 128 -r 5 --for-debug-purposes`, debug-jit), the M5 Max (128 GB) alone on the box, one box profile
+  minted at the leg tip (505 s, 39,101 B) and read by both trees: master's own build (33e7910669) against the leg tip
+  (ab97a01251). pp512 / tg128 tok/s, master -> leg: gemma-2 2B Q8_0 10471 -> 10810 / 165 -> 165; gemma-3 1B Q8_0 21663
+  -> 22857 / 317 -> 321; gemma-3 4B Q8_0 7058 -> 7225 / 112 -> 114; gemma-4 E2B Q8_0 9479 -> 9936 / 157 -> 158; E4B Q8_0
+  5470 -> 5640 / 89.6 -> 89.5 (the first leg reading, 81.6 at cv 11.7 %, VOID); 12B Q8_0 2101 -> 2154 / 40.7 -> 41.0
+  (a first leg reading of 32.1 at cv 3.6 % did not reproduce: 41.0 with the ring, 40.9 without, at the same form); 26B-A4B
+  UD-IQ4_XS 3952 -> 4059 / 121 -> 122; 26B-A4B Q4_K_M 4143 -> 4271 / 118 -> 120 (the leg's first tg at cv 13.7 % VOID; a
+  master repeat at cv 8.6 % VOID). Prefill gains 2 to 5 % on every row; decode holds parity. The ring costs nothing at the
+  wrap: 12B tg after a 512-token prefill 41.0 with the ring, 40.9 without; E4B 89.5 / 89.8; at position zero 41.0 / 41.0
+  and 88.9 / 89.4. The house replay's quick probe (22 short replies, wall median s), master -> leg: 12B Q8_0 1.882 -> 1.259,
+  26B-A4B UD-IQ4_XS 0.710 -> 0.633, E4B Q8_0 0.614 -> 0.533. The row races (`bench_metal_gk_rows`, 109 rows, none VOID) stand
+  in `ARCHITECTURE_GPU_SHARED_KERNELS.md`'s tables. The seam's decode builders moved from 1024 to 256 lanes at this
+  re-measure: the builders at 1024 read 5.76 / 5.83 us at one / four rows at dim 1152 and 6.14 / 6.30 at 2560 where the
+  256-lane builders read 3.19 / 3.28 and 4.87 / 5.04 (3840: 6.67 / 6.74 against 6.71 / 6.83), a 1024-lane bench stamp
+  reads with the 256-lane one at every width (3.23 / 3.27, 4.88 / 5.07, 6.71 / 6.85), and 128 lanes loses everywhere; the
+  window's stamps keep 256 (27.10 against 1024's 27.10 and 128's 34.50 at dim 2560, 40.33 / 40.30 / 54.31 at 3840). The
+  12B Q8_0 row on one tree, 1024 -> 256 lanes: pp512 2126 -> 2154; its tg128 read 40.6 and 39.5 at cv 4.8 / 4.2 %, both
+  VOID (three more 256-lane readings 39.0-39.7 at cv 4.1-4.3 %, after an hour of GPU suites), so the decode row holds no
+  verdict and the switch rests on the race. Every Metal kernel gate, the batched row and the gemma4 and E-series arms are
+  green at 256. The fused seam holds no arm at dim 5376 (`followup_metal.md` row 54).
+  **The pod half** (RTX PRO 4500 32 GB, the 580 driver without decode-vector, `-p 512 -n 128 -r 3`, no box profile on either
+  side, one binary for both trees since the leg changes no Vulkan C++): master 33e7910669 -> the leg, pp512 / tg128 tok/s:
+  gemma-2 2B Q8_0 19597 -> 19462 / 217.0 -> 218.1; gemma-3 1B Q8_0 pp VOID on both sides (cv 46 and 58 %: a 20 ms row) /
+  396.5 -> 397.3; gemma-3 4B Q8_0 13049 -> 13134 / 150.7 -> 151.4; gemma-4 E2B Q8_0 16382 -> 16294 (16088 at five reps) /
+  tg VOID on both sides (149 at cv 25 %, 185 at cv 9 %, 188.5 at cv 6.7 % over five reps); E4B Q8_0 9718 -> 9541 / tg VOID
+  (93.6 at cv 16 %, 107 at cv 7 %); E2B Q4_K_M 15917 -> 12304 (12353 at five reps) / 202 at cv 21 % VOID -> 221.6; 12B
+  Q8_0 4158 -> 4094 / 55.75 -> 55.85; 26B-A4B UD-IQ3_XXS 5422 -> 5353 / 143.3 -> 146.2; 26B-A4B Q4_K_M 6405 -> 6240 /
+  135.0 -> 135.3; 31B Q4_K_M (the CPU rows, the card declines it) 1435 -> 1403 / 36.54 -> 36.47. Every prefill row but
+  one holds within 3 % and every valid decode row holds parity or gains; the E2B Q4_K_M prefill loses 23 %, bisected to
+  the PLE merge and split to the window's gate and projection on the K-quant tile's scalar arm (`followup_vulkan.md` row
+  148). The assistant drafter on the 26B Q4_K_M (`--mtp-ab`, 64 tokens, three prompts): 131 -> 193 tok/s (x1.47) at 88 %
+  acceptance on two prompts, x1.35 on the third. The ring at pp8192 on the 26B IQ3_XXS: 4824 tok/s and tg32 147.0 with the
+  ring against 4830 and 147.0 without, host peak RSS 24.4 against 23.8 GB. The house quick probe (one server a model,
+  alone: wall s / first token s / generation tok/s as the client sees), master -> leg: 12B Q8_0 7.21 / 6.87 / 12 ->
+  0.57 / 0.46 / 41; 26B IQ3_XXS 4.24 / 3.60 / 19 -> 0.43 / 0.33 / 106; E4B Q8_0 0.29 / 0.18 / 56 -> 0.36 / 0.23 / 77. The
+  first pass of these rows read `exit=1` on every big model: the volume had hit its quota under the leg's re-minted images,
+  and a chain logging onto the full volume keeps only the lines before the fill - the rows above are the re-runs.
+
+
+- **MEASURED (2026-10-16) - the gemma leg's parity bars, one row a file and bar.** Each row names the cell, the bar
+  (its constant where it has one), the reading and the box. The Vulkan box is the RTX PRO 4500 (32 GB) pod, its cells run
+  one file through `dastest` under `DASLLAMA_GPU=1 DASLLAMA_PARITY_FULL=1` with the cell's arm in `DASLLAMA_TEST_ARMS`;
+  the Metal box is the M5 Max, through `tests/run.das -- --arm <family>` under `DASLLAMA_PARITY_FULL=1`.
+  - gemma-4-31B Q4_K_M, the forced-feed freeform decode on Metal (`test_metal_support_matrix.das`'s
+    `gemma4_hetero_row`, tag `gemma4-31b/k4`, arm `fam-gemma4`): the 12B's bar, 8.0 on the whole-vocab logit gap, held over
+    the stream's first 29 rows of 128 (`free_rows`) where the 12B rows hold all 128. Reads under 8 on those rows; at the
+    30th row the greedy stream (llama.cpp's too) falls into a one-token loop, both chains pick the loop token, and the gap
+    inside it grows to 18, so the rows past the 29th carry no information the bar could read. M5.
+  - gemma-4-26B-A4B Q4_K_M, the assistant drafter's device step against the CPU oracle on Vulkan
+    (`test_gemma_drafter_gpu_step`, arm `mtp-gdraft-gpu`): `VK_FEED_FLIP_BAR` 0.5 on the draft logits and on `h_next`,
+    the oracle reading Q8_0 activation rows as the device's GEMVs do. Reads 0.30 / 0.29 at the short anchor and 8.6e-6 /
+    8.1e-6 one past the sliding window, both drafts' argmax the oracle's; the oracle drafting off the next token id lands
+    past the bar (the control). Pod.
+  - gemma-4-E2B Q4_K_M, the forced feed held to the file's f32 chain on Vulkan (`test_gpu_resident_gemma4_e2b_ple_planes`,
+    arm `g4e-kq`): `GEMMA_LOGIT_BAR_REL` 0.16 of each row's max |logit|, the prompt and eight steps. Reads 0.26 at the prompt
+    (bar 4.05) and 0.73-1.82 over the steps (bars 2.88-3.95), every row's argmax the f32 chain's, the one-step-off control
+    17-26; step 4's top logit 19.28 on the device where the f32 chain reads 19.14. Pod.
+  - the same file and cell, `F32_DIST_REL` 1.15 (`f32_chain_witness`): the device's summed distance from the f32 chain over
+    the CPU q8 chain's own. Reads 9.54 against 13.50 (0.71), the f32 rows one step off 188.7. Pod.
+  - gemma-4-E2B Q8_0, the decode step's side row built on the device against the CPU pre-step's row on Vulkan
+    (`test_gpu_resident_gemma4_e2b_ple_pre_step`, arm `g4e-pre`): 1e-4 of the CPU row's largest value. Reads 2.9e-6 of a
+    1.6e-3 bar (largest 15.98); another token's CPU row 7.69 off (the control). Pod.
+  - gemma-4-E2B Q4_0, the forced feed against the CPU chain on Vulkan (`test_gpu_resident_gemma4_e2b_ple_planes`, arm
+    `g4e-kq-q40`): `GEMMA_LOGIT_BAR_REL` 0.16. Reads 1.25 at the prompt (bar 4.43) and 0.75-1.77 over the steps (bars
+    3.29-4.25), every argmax agreeing, the one-step-off control 14.4 and past. Pod.
+  - the four format carriers off the E2B Q8_0 on Vulkan, the forced feed against the CPU chain: `GEMMA_LOGIT_BAR_REL` 0.16.
+    emb-Q6_K and emb-IQ4_XS (`test_gpu_resident_gemma4_e2b_ple_tables`, arm `g4e-ple`) read 0.76 and 0.62 at the prompt
+    (bars 4.17, 4.14), 0.51-1.74 and 0.49-1.17 over the steps (bars 2.91-4.02); ple-Q6_K and ple-Q5_0
+    (`test_gpu_resident_gemma4_e2b_ple_planes`, arms `g4e-kq-ple-q6k`, `g4e-kq-ple-q50`) read 0.86 and 0.71 at the prompt
+    (bar 4.17), 0.59-1.54 and 0.43-0.87 over the steps (bars 2.92-3.97). Every argmax agrees but ple-Q6_K's step 4, a near
+    tie the cell's tie bar admits (the CPU's ' river' 19.61 against the device's ' miller' 19.59). Pod.
+  - Qwen2.5-0.5B IQ4_NL-pure (`-local`), the per-op FFN rail's per-32 carrier on Vulkan, its table and classifier per-32
+    too (`test_gpu_resident_format_census`, arm `vk-perop-ffn`): 0.08 of each row's max |logit|, moved from the llama
+    carriers' 0.06. Reads 0.44-0.73 over the prompt and six steps (bars 0.86-1.57, max logits 10.7-19.6), every argmax
+    agreeing but step 4's near tie (10.70 against 10.79); the one-step-off control 7.4 and past. Pod.
+  - gemma-4-26B-A4B MXFP4_MOE (`-MXFP4_MOE-q4km-local`) on Vulkan, 150 prose ids prefilled and 150 teacher-forced
+    (`test_gpu_resident_gemma4_26b_mx4_ppl`, arm `mx26`): `GEMMA_MOE_PPL_RATIO` 2.0 on the perplexity, and the argmax hits
+    held within 12 of the CPU chain's (`GEMMA4_26B_MX4_HITS_SLACK`). Reads 4.25 against the CPU chain's 3.14 (1.35x), hits
+    128 against 136; the one-position-off control's hits 2. Pod.
+  - gemma-4-26B-A4B UD-IQ3_XXS under an 8000 MB plan room, the first routed layers' experts on the host
+    (`test_gpu_resident_gemma4_26b_host_experts`, arm `host26`): `GEMMA_MOE_PPL_RATIO` 2.0, hits within 12
+    (`GEMMA4_26B_HITS_SLACK`). Reads 3.00 against 4.02 (0.75x), hits 129 against 130; the control's hits 2. Pod.
+  - gemma-4-E4B Q8_0 under a tq4 mirror (`test_gpu_resident_gemma4_e4b_block_codecs`, arm `g4f-codec`): `GEMMA_PPL_RATIO`
+    1.05, hits within 3 (`ppl_compare`'s default). Reads 1.076 against 1.064 (1.011x), hits 148 against 148; the control's
+    hits 0. Its q8_0 forced feed reads 0.53-1.57 against bars 4.11-4.65 at `GEMMA_LOGIT_BAR_REL`. Pod.
+  - gemma-3-12b Q4_K_M on Metal (`test_metal_support_matrix`, row `gemma3-12b/k4/f16`, arm `fam-gemma3`): the overrides'
+    greedy generate held to the CPU chain token for token, eight tokens after the 30-number count prompt. Reads every
+    token equal. M5.
+  - gemma-4-26B-A4B UD-IQ3_XXS, UD-IQ4_XS and MXFP4_MOE (`-MXFP4_MOE-local`) on Metal (`gemma4moe_row`, arm
+    `fam-gemma4moe`): 8.0 on the post-prefill logits and 24.0 on the forced step, on the fused tail, the unfused tail and
+    a q8_0 mirror. Read post-prefill / forced step: UD-IQ3_XXS 3.45 / 5.28, 3.38 / 6.69, 3.13 / 15.95; UD-IQ4_XS 2.07 /
+    5.34, 2.25 / 5.02, 1.73 / 4.95; MXFP4_MOE 2.11 / 10.60, 2.02 / 11.71, 2.40 / 14.02; the eyeball picks agree on every
+    row. M5.
+  - gemma-4-E2B Q4_0 and the four format carriers off the E2B Q8_0 (emb-Q6_K, emb-IQ4_XS, ple-Q6_K, ple-Q5_0 `-local`
+    mints) on Metal (`gemma4e_row`, arms `fam-gemma4e-q40` and `fam-gemma4e-e2b-*`): 4.0 on the single-stream forced step,
+    the batched step's two rows and the depth cell. Read single / batched / depth: Q4_0 0.63 / 1.28 / 1.08; emb-Q6_K 0.30 /
+    0.51 / 0.67; emb-IQ4_XS 0.43 / 0.75 / 0.72; ple-Q6_K 0.72 / 0.73 / 0.64; ple-Q5_0 0.33 / 0.53 / 0.55; every argmax
+    agreeing. M5.
+- **STATED (2026-10-16) - the lasting buffers the gemma leg adds: the resident assistant drafter on both homes, the
+  per-layer-embedding planes on the device, the carry's host rows, the concat norm regions and the round scratch.** Not
+  measured; the formulas are the record. The drafter is `mtp-gemma-4-26B-A4B-it-Q8_0.gguf` (`dim` 1024, `tdim` 2816,
+  4 layers of head sizes 256, 256, 256, 512 - `hs_mx` 512, 16 heads, `hidden` 8192, `vocab` 262144; 419,692,544 q8
+  elements) on the 26B-A4B target (`dim` 2816, 30 layers, rope widths 512 + 256, so `cos_elems` 768); the PLE models are
+  gemma-4-E2B (35 layers, `dim` 1536, `ple` 256, `per_layer_model_proj` BF16) and E4B (42, 2560, 256, BF16). `nb` is
+  `RD_NB_MAX` (16), the N-row command's rows; `regions` the mirror regions, one a stream served at once.
+  - Vulkan drafter weights (`dasllama_vulkan_mtp_gemma.das` `vk_buffers_make`), kept while the drafter is attached: the
+    q8 planes as 1 byte an element plus an f16 scale a 32-block (34 / 32 bytes an element) and the f32 rows (norms, q
+    norms, rope table): 445,923,328 B (425.3 MiB) plus 75,776 B on the 26B's drafter - the device twin of the 440 MiB
+    host sidecar row in the MTP depth-N section, which the attach keeps. The repack (`q8_repack`) holds the same 425.3
+    MiB on the host until the upload returns, so the attach's host peak holds the sidecar at least twice.
+  - Vulkan drafter activations: device `4 x (3 tdim + 2 dim + 2 qdm + 2 hidden + vocab) + 2 tdim + dim + qdm + hidden`
+    plus the q8 scale rows (`/ 8` of the four requantized widths), the attention partials (`4 x heads x (hs_mx + 3)`) and
+    528 B of ids and pick partials, `qdm` = heads x `hs_mx`: 1,281,040 B on the 26B's drafter, the `4 x vocab` logits
+    1 MiB of it; host `4 x (vocab + tdim)` landed logits and hidden, `4 x tdim + 16` input, `4 x cos_elems` rope row,
+    4096 B of GEMV meta a site (3 + 5 a layer) and 68 B of step meta: 1,168,468 B. The recorded draft commands are
+    `regions x 9` command buffers (one a region and depth, `MTP_MAX_ROWS`) from the driver's pool, plus `regions x 9`
+    bytes of recorded flags.
+  - Metal drafter slots (`dasllama_metal_mtp_gemma.das` `gemma_slot`): `4 x tdim + 8 x hs_mx` bytes a speculating
+    stream (its carried hidden and the two rope classes' cos/sin rows), grown to the widest tick: 15,360 B a stream on the
+    26B, 61,440 B at four streams; the tick's token rows `bvtok` hold `4 x` the rows at most doubled, 288 B at four
+    streams of nine rows.
+  - Vulkan `ple_wp_dev` (`dasllama_vulkan_prefill.das` `vk_rdec_set_ple_proj`): the PLE projection on its own rows,
+    `n_layers x ple x dim` elements at 2 bytes (BF16) or 4 (F32), beside the window's f16 panel (`ple_w16_dev`, 2 bytes an
+    element) where the shape admits it: 27,525,120 B (26.25 MiB) on E2B, 55,050,240 B (52.5 MiB) on E4B.
+  - The F32 PLE planes, on a file whose gate or projection kind ships F32: `4 x n_layers x dim x ple` bytes a kind, on
+    the Vulkan device (`ple_gf32_dev` / `ple_pf32_dev`) and in the Metal region cache (`enc_ple_f32`,
+    `pf_enc_ple_site`): 55,050,240 B a kind on E2B, 110,100,480 B on E4B. The Metal window's F32 projection rows
+    (`ple_model_off`, a file whose `per_layer_model_proj` ships F32) are the same `4 x n_layers x ple x dim` in the
+    region cache.
+  - Vulkan `pleact_dev` (`dasllama_vulkan_decode.das` `vk_rdec_set_ple`): `4 x ple x nb` = 16,384 B on E2B and E4B
+    (both `ple` 256).
+  - Vulkan `hid_host` (`vk_rdec_carry_arm`), reached by an assistant-armed model with no NextN head: `4 x dim x nb`
+    bytes, cached host memory: 180,224 B on the 26B, 98,304 B on E2B.
+  - Metal concat norm regions (`dasllama_metal_common.das` `upload_region_cat`, `g_regions_cat3`), kept until the region
+    cache drains: a residual seam's post and next norm rows, `8 x dim` bytes, at most two a layer (`seam_norms`) -
+    860,160 B on E2B; the gemma-4 MoE step's routed, dense, post-FFN and next attention norms, `16 x dim` a routed layer
+    and `12 x dim` the last (`moe_g4_norms`) - 1,340,416 B on the 26B, beside its attention seams' 675,840.
+  - Session verify rows under the assistant drafter's verify (`gpu_resident_assist_verify`): `mtp_logits_b` `4 x vocab`
+    and `mtp_hrows` `4 x dim` a row, nine rows at depth 8 - 9,437,184 + 101,376 B a speculating session on the 26B,
+    grown once (the depth-N section's footprint row states the same buffer at Qwen's vocabulary).
+  - Module scratch: `g_rdec_av_hid` `4 x dim` (11,264 B on the 26B); `g_vk_cosrow` `4 x cos_elems` (3,072 B);
+    `g_rdec_row_ids` 8 bytes a row of one command, 128 B at `nb`; `g_b_grp_nr` 8 bytes a row of a batched Metal step;
+    `g_gw_*` and `g_vk_*` 8 bytes a stream each, their token lists `8 x 9` a stream. None passes 12 KiB at four streams.
+  - Measured - the Metal release pair (the binding reads `contents` inside an autorelease pool; `REVIEW_MEMORY.md`'s
+    before/after rule). The shape: the support matrix's `fam-gemma4` arm under `DASLLAMA_PARITY_FULL=1` on the M5 Max
+    (128 GB) - gemma-4 12B Q4_K_M and Q8_0, 31B Q4_K_M, the 26B-A4B in six formats, E4B and the E2B rows, a planar load
+    and its blob twin a row, the next row's load the only release between rows. Before: every blob and plane buffer a row
+    uploaded stayed resident after its release - the IOAccelerator category 9 -> 22 -> 45 -> 113 -> 174 GB row over row -
+    and the per-process limit killed the run 9 minutes in at a 193 GB footprint. After: a row's device memory leaves at the
+    next load; the footprint peaks at 75 GB (`phys_footprint_peak`, the 26B Q8_0 row's load; the 31B row holds 71 GB, its
+    planar load beside its blob twin - 47 GB host, 22 GB IOAccelerator, the most IOAccelerator any 5 s sample read) and the
+    arm passes whole in 433 s. One E2B load-serve-delete cycle closed at the drivers' shutdown (`metal_release_row`) adds
+    5,435 MB before and 30 MB after.
+
+- **STATED (2026-10-16) - two conclusions of the 2026-09-21 MoE-carriers entry are replaced.** Its 15.4 GB served-weight
+  figure for gemma-4-26B-A4B UD-IQ3_XXS named "demoted down-expert rows": the 704-wide down-expert rows serve in their own
+  per-32 formats, nothing demotes them (`ARCHITECTURE_ENGINE_FORMATS.md`), so the 15.4 GB is the served weights at their
+  own formats inside a plan figure that tallied each routed layer's dense shared expert twice. Its "fits no plan on this
+  card" conclusion for the same file on a 16 GB card is replaced: the host-experts plan serves it under an 8000 MB room
+  with the first routed layers' experts on the host and every call served (`tests/test_gpu_resident_gemma4_26b_host.das`,
+  arm `host26`, the pod's RTX PRO 4500 under `DASLLAMA_PARITY_FULL=1`); the rate rows of that form land with the leg's
+  re-measure entry.
 
 - **STATED (2026-10-15) - the host pool's pages under a speculating device-home scheduler carry the NextN head's rows
   beside the trunk's.** A pooled opening of `n` tokens holds `n - 1` rows of the head's K/V slab (`layer_kv_dim(c,
@@ -4493,7 +4656,7 @@ under the same command line the same hour (every llama.cpp figure `external`). E
   the served weights alone to 15.4 GB - a plan figure that tallied each routed layer's dense shared
   expert twice, the low-format N-row arc's section below; the per-op rails serve 16 summed) where the reference
   pages: 109 on Vulkan, 275 on CUDA - row 81's shape. Against CUDA the two homed carriers read
-  0.66 and 0.84. The expert-bucket form (`followup_vulkan.md` item 83's neighbour: the N-column
+  0.66 and 0.84. The expert-bucket form (the N-column
   expert GEMV a bucket, which decodes a weight block once for every row that picked its expert)
   is the lever that room names; it would serve a fifth of gpt-oss's slots at four rows and a
   tenth of the 30B's.
@@ -4504,7 +4667,8 @@ under the same command line the same hour (every llama.cpp figure `external`). E
   Q4_K_M within the wide bar against the split one-row command and off by up to 0.13 of the peak
   on five of thirty-two compares against the fused one (the same cells run before the file pinned
   the fused forms off, the pod, cm2 arm) - the folded down sum's rounding through the 26B's
-  router near-ties, item 83. The routed planes at `nb` rows cost the resident image nothing a
+  router near-ties (the N-row routed down now sums its k rows in the GEMV,
+  `ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-block32-leaf`). The routed planes at `nb` rows cost the resident image nothing a
   reader sees: gpt-oss-20b's image reads 10914 MB with a 123 MB mirror at 660 x 4 and 220 MB of
   scratch on the pod, the planes' growth inside the scratch's rounding.
 

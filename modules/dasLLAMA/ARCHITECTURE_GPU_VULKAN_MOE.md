@@ -164,9 +164,11 @@ the driver's router plane - every MoE layer's rows and, when the shared expert i
 row last - into one logits row; the top-k (`TopKN` at one workgroup, the span's kernel over the decode's core)
 writes the k routing weights and the three expert GEMVs' slot regions, each a `(block, feed
 block)` pair whose block is the expert plane's slab-local base plus the pick's stride; gate and
-up run the class GEMV over k regions, the act writes k hidden rows (Q4_K gate and up stacks in one
-slab feeding a Q8_0 down take `KqGemvK4Gu` for the three - both dots, the act and its requant a
-32-row block a workgroup, one dispatch where three ran; `RLayer.egu`), down runs k regions into the
+up run the class GEMV over k regions, the act writes k hidden rows (Q4_K, IQ4_XS, iq3s4 or IQ2_S gate and up stacks in one
+slab feeding a per-32 down take the leaf template's fused arm for the three - `KqGemvLeafT.gu_shell`, stamped `KqGemvK4Gu`,
+`KqGemvIq4xsGu`, `KqGemvIq3s4Gu`, `KqGemvIq2sGu` (a grid format's codebook staged over the 256 lanes first): both dots, the act
+and its requant a 32-row block a workgroup, one dispatch where three
+ran; `RLayer.egu`), down runs k regions into the
 routed rows; and the residual step that follows folds the combine in (`ClsArComb`, the prefill's
 `ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block` kernel at one row): the shared expert's row in `ffnout` at the sigmoid of its gate
 logit, the k weighted routed rows through the top-k's slot map, then the next layer's norm - a
@@ -186,7 +188,7 @@ k on the raw logits (under the router bias) and softmaxes over the picks alone, 
 softmax over every expert renormalized over the picks - the weights the `norm_topk` arm already
 computes - so the host passes `norm_topk` for it and the top-k kernels carry no second gate.
 Native-MXFP4 routed stacks take `KqGemvK4Gu`'s fusion (`Mx4GemvGu` on `Mx4Gemv`'s row dot;
-`RLayer.egu_mx4`): a workgroup owns 32 hidden rows of one slot, a subgroup a row over both
+the `GEMV_SHELL_GU` stamp `RLayer.egu` reads, under its own set layout): a workgroup owns 32 hidden rows of one slot, a subgroup a row over both
 stacks - the up stack's regions at their own binding, inside the gate stack's slab - and the
 first subgroup adds the slot's expert bias rows, activates and quantizes the block with the
 requant kernel's own amax and quant, so the bytes are the split path's. The slot regions are
@@ -250,18 +252,28 @@ The top-k folds the checkpoint's per-expert down scale into each routing weight 
 renormalization (`GkTopKArgs.dsoff`, in the decode's and the window's top-k alike, names the layer's row in the
 `[n_moe x ne]` scale plane `rdec_prepare_moe` uploads; `GK_NO_DSCALE` on every other model, the
 binding filled and never read), where the CPU chain scales the picked weights before the expert
-GEMVs. The combine (`ClsArCombG4`, the f16 normed-row twin `ClsArCombG4F16B`) is the residual step
-of the CPU chain's `gemma4_moe_ffn`: the k weighted routed rows summed and normed under the
-routed post norm (`ArArgs.routed_post_off`), the dense row in `ffnout` normed under the dense post norm
-(`pwoff`), the two added and normed under the layer's post-FFN norm (`sum_post_off`), the residual
-`(x + that) * out_scale`, then the next layer's norm - four workgroup reductions over one row
-stash, the dense row re-read from `ffnout` rather than staged twice. Where the down experts are
-Q5_1 the token command's down GEMV folds the k rows itself (`Q51GemvSum`: a subgroup a row of the
-model dim, the k regions' dots summed under the routing weights), so the combine reads one row
-(`ArArgs.presummed`) where it read k through the slot map; and where the next head's feed is Q8_0
+GEMVs - the select's `DSCALE` arm both homes stamp (`ARCHITECTURE_GPU_PREFILL_MOE.md#moe-wscale`). The combine
+(`ClsArCombG4`, the f16 normed-row twin `ClsArCombG4F16B`) is the residual step of the CPU chain's `gemma4_moe_ffn` on
+the template both homes stamp (`GkMoeCombG4`, args `GkMoeCombArgs`): the k weighted routed rows summed in slot order
+(`GkMoeCombine.slot_sum_into`, the routed combine's own sum) and normed under the routed post norm (`rpost_off`), the
+dense row in `ffnout` normed under the dense post norm (`dpost_off`), the two added and normed under the layer's post-FFN
+norm (`spost_off`), the residual `(x + that) * out_scale`, then the next layer's norm (`nwoff`) - four workgroup
+reductions over one row stash, the dense row re-read from `ffnout` rather than staged twice. Where the down experts are a
+per-32 format (Q5_1, IQ4_NL off the lattice, Q4_0, Q5_0, MXFP4) the token commands' down GEMV folds the k rows itself
+(`Blk32GemvT.sum_shell`, stamped `Q51GemvSum` and its four twins: a subgroup a (token row, model-dim row), the row's k
+regions' dots summed under the routing weights), so the combine reads that row
+(`GkMoeCombArgs.presummed`) where it read k through the slot map; and where the next head's feed is Q8_0
 the token command's combine quantizes it itself (`ClsArCombG4Rq`, `RLayer.comb_rq`), so the requant
 dispatch that opened the next layer (or the classifier) goes. The norms plane grows by the
 four rows (`RDEC_NORM_ROWS` 10 with the output-bias row of `ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-attn-planes`; zero on every other model). The plan's unserved list names the
 dense shared expert only where no backend installed the MoE seats; the plan sizes an MoE layer
 at its expert triple plus the FFN triple, and the layer decline reads the FFN triple's formats on
 the dense rail.
+
+**A gemma-4 layer whose experts serve on the host keeps the rest of the block on the device.** Where the plan moves the
+first routed layers' experts to the host (`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan`), such a layer runs the dense
+triple, writes the routed feed into xb and runs the router GEMV off its own rms of x (`norm_on`, so xb keeps the feed), and the
+segment lands the feed and the logits (`ARCHITECTURE_GPU_VULKAN_HC.md#hc-token-command`; the window chain the same over its rows).
+The host selects, folds the down scale into the weights (`moe_down_scale_fold`, the CPU `gemma4_moe_ffn`'s own fold) and sums the
+experts; the next segment's combine reads that sum as one routed row of weight one (`ArArgs.slots` 1 over the ramp map and the
+ones row) under the same three norms. The hot expert pool stays off a gemma-4 model: its device sums carry no down scale.

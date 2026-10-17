@@ -9,7 +9,8 @@ require _resident_regions
 // gemma-3-1b-it Q8_0: the batched-step cells of the rig on the gemma-3 dense base - the sandwich norms, the sliding-window
 // layers beside the global ones with their own rope class, the GeGLU FFN - so the N-row token command serves two rows
 // bit for bit against the sessions alone: at one window, past the unsplit position so the split attention form
-// records, and a batched step before any one-row step. Skips off the JIT, without DASLLAMA_GPU=1 on a device the
+// records, and a batched step before any one-row step; then, on a ringed load, the session's ring floor through every rail that
+// moves its rows (a continuation, a prompt from 0, a park, an export, an import). Skips off the JIT, without DASLLAMA_GPU=1 on a device the
 // driver serves, or without the file under models_dir().
 let private REGIONS_FILE = "gemma-3-1b-it-Q8_0.gguf"
 
@@ -26,4 +27,9 @@ def test_regions_batched_steps_split_g3(t : T?) {
 [test]
 def test_regions_batched_first_g3(t : T?) {
     cell_regions_batched_first(t, REGIONS_FILE)
+}
+
+[test]
+def test_regions_ring_floor_g3(t : T?) {
+    cell_ring_floor(t, REGIONS_FILE)
 }

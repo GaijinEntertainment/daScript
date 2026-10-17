@@ -202,7 +202,7 @@ def test_gemma4v_clamps_bind(t : T?) {
         }
         var maxdiff = 0.0
         for (p in range(o.npos)) {
-            maxdiff = max(maxdiff, abs(out[p * int(tw.proj_dim)] - o.v0[p]))
+            maxdiff = max(maxdiff, nan_wide_diff(out[p * int(tw.proj_dim)], o.v0[p]))
         }
         to_log(LOG_INFO, "gemma4v clamp knockout cb 336x336: maxdiff {maxdiff} (floor {KNOCKOUT_FLOOR})\n")
         tt |> success(maxdiff > KNOCKOUT_FLOOR, "disarmed clamps miss the oracle by {maxdiff}")
@@ -227,7 +227,7 @@ def test_gemma4v_clamps_bind(t : T?) {
         }
         var maxdiffq = 0.0
         for (p in range(o.npos)) {
-            maxdiffq = max(maxdiffq, abs(outq[p * int(twq.proj_dim)] - o.v0[p]))
+            maxdiffq = max(maxdiffq, nan_wide_diff(outq[p * int(twq.proj_dim)], o.v0[p]))
         }
         tt |> success(twq.q8 && maxdiffq > KNOCKOUT_FLOOR, "q8 lane: disarmed clamps miss the oracle by {maxdiffq}")
         set_every_gpu_tower(true)
@@ -288,8 +288,8 @@ def test_gemma4v_std_guard(t : T?) {
         var neutral_diff = 0.0
         var biased_diff = 0.0
         for (p0, pn, pb in plain, neutral, biased) {
-            neutral_diff = max(neutral_diff, abs(pn - p0))
-            biased_diff = max(biased_diff, abs(pb - p0))
+            neutral_diff = max(neutral_diff, nan_wide_diff(pn, p0))
+            biased_diff = max(biased_diff, nan_wide_diff(pb, p0))
         }
         tt |> success(neutral_diff == 0.0, "bias 0 / scale 1 leaves the encode bit-identical (diff {neutral_diff})")
         tt |> success(biased_diff > 1e-2, "bias 0.25 / scale -1 moves the tokens (diff {biased_diff})")

@@ -123,3 +123,11 @@ flush row is the split-k reduce copying a 128 MB plane between two dispatches of
 the next dispatch finds its code, descriptors and planes out of every cache - the weight a
 window chain streams between two uses of one stamp; the flush writes the feed's region, so the
 stamp after it waits on the flush and the next flush waits on the stamp.
+
+`harness/vk_gk_rows_probe.das`, the row kernels' Vulkan ruler, holds one output and one hazard rail
+across each row's 64 dispatches, so each row reads a dependent decode chain's per-hop latency: the
+routed down's summed GEMV against the slot-at-a-time leaf (the rows the combine then reads), the
+gemma-4 MoE step against `ProbeArCombG4X1` (`ClsArCombG4` storing its next norm with the stride
+loop, `OUT_X4` off), and the side rows' projection, whose f32 rows and bf16 words also run over a
+ring of eight weight copies past the device's 64 MiB L2
+(`ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md#kernel-race-fidelity`).

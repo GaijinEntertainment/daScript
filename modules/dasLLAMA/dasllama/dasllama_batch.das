@@ -201,23 +201,31 @@ def attention_batch_decode(t : Model; var ws : BatchWorkspace; sessions : array<
     attn_out_suffix(t, ws.scr, l, nrows)
 }
 
-//! the per-step row prep every batch shape shares: positions already in ws.positions / rope_positions, and `ple_on_device` skips the CPU per-layer-embedding pre-step the armed override runs itself
-def private batch_rows_prep_(t : Model; var ws : BatchWorkspace; tokens : array<int64>; nrows : int64; ple_on_device : bool = false) {
+var private g_batch_rows_embedded = 0l
+
+//! The batched steps' rows the host embedded, in this process (a cell's witness that a device gather left the host none)
+def batch_rows_host_embedded() : int64 => g_batch_rows_embedded
+
+//! the rows' token embeddings into ws.scr.x_b, under the model's embed scale
+def private batch_rows_embed(t : Model; var ws : BatchWorkspace; tokens : array<int64>; nrows : int64) {
+    g_batch_rows_embedded += nrows
+    let ts_embed = prof_ticks()
+    embed_text_rows(t, tokens, ws.scr.x_b, 0l, nrows)
+    prof_add("embed", ts_embed)
+}
+
+//! the per-step row prep every batch shape shares: positions already in ws.positions / rope_positions; `ple_on_device` skips the CPU
+//! per-layer-embedding pre-step the armed override runs itself, `emb_on_device` the rows' embeddings it gathers itself
+def private batch_rows_prep_(t : Model; var ws : BatchWorkspace; tokens : array<int64>; nrows : int64; ple_on_device : bool = false; emb_on_device : bool = false) {
     let c = t.config
     batch_decode_alloc(t, ws.scr, nrows)
     ws.row_tokens |> grow_resize(nrows)
     for (i in range64(nrows)) {
         ws.row_tokens[i] = tokens[i]
     }
-    let dim = c.dim
-    let ts_embed = prof_ticks()
-    for (i in range64(nrows)) {
-        embed_row(t, tokens[i], unsafe(addr(ws.scr.x_b[i * dim])))
+    if (!emb_on_device) {
+        batch_rows_embed(t, ws, tokens, nrows)
     }
-    if (c.embed_scale != 1.0) {  // Gemma2: scale the embedding by sqrt(dim)
-        scale_inplace(unsafe(addr(ws.scr.x_b[0])), c.embed_scale, nrows * dim)
-    }
-    prof_add("embed", ts_embed)
     if (has_ple(c) && !ple_on_device) {  // gemma-4 E-series: per-(row, layer) side input (token-indexed, position-free)
         let ts_ple = prof_ticks()
         ple_pre_prefill(t, ws.scr, tokens, nrows)
@@ -251,42 +259,75 @@ def private verify_bind_codec(var ws : BatchWorkspace; s : Session) {
 }
 
 def verify_batch_step(t : Model; var ws : BatchWorkspace; var s : Session; tokens : array<int64>; pos, nrows : int64) : bool {
+    g_verify_one_s |> resize(1)
+    g_verify_one_s[0] = unsafe(addr(s))
+    g_verify_one_pos |> resize(1)
+    g_verify_one_pos[0] = pos
+    g_verify_one_nr |> resize(1)
+    g_verify_one_nr[0] = nrows
+    let done = verify_batch_groups(t, ws, g_verify_one_s, tokens, g_verify_one_pos, g_verify_one_nr)
+    g_verify_one_s[0] = null   // borrowed
+    return done
+}
+
+var private @scratch g_verify_one_s : array<Session?>
+var private @scratch g_verify_one_pos : array<int64>
+var private @scratch g_verify_one_nr : array<int64>
+
+//! The JOINT same-slab verify: group g is `nr[g]` rows of `sessions[g]` at `pos[g] ..`, its tokens next in `tokens`, every group's rows
+//! in one batch step (`ARCHITECTURE_GPU_MTP.md#batch-same-slab`). One codec and one K/V pool across the groups. True when the batch
+//! rail served it; each group's rows land in its session as `verify_batch_step`'s do
+def verify_batch_groups(t : Model; var ws : BatchWorkspace; var sessions : array<Session?>; tokens : array<int64>; pos, nr : array<int64>) : bool {
     let c = t.config
-    if (nrows <= 0l || long_length(tokens) < nrows || pos + nrows > c.seq_len || !batch_decode_override_armed()) {
+    let ng = long_length(sessions)
+    var nrows = 0l
+    for (g in range64(ng)) {
+        return false if (nr[g] <= 0l || pos[g] + nr[g] > c.seq_len)
+        nrows += nr[g]
+    }
+    var s0 = sessions[0]
+    if (nrows <= 0l || long_length(tokens) < nrows || !batch_decode_override_armed()) {
         return false
     }
+    for (g in range64(1l, ng)) {
+        return false if (sessions[g].kv_dtype_k != s0.kv_dtype_k || sessions[g].kv_dtype_v != s0.kv_dtype_v || sessions[g].kv_pool != s0.kv_pool)
+    }
     g_verify_sessions |> grow_resize(nrows)
-    for (i in range64(nrows)) {
-        g_verify_sessions[i] = unsafe(addr(s))
+    ws.scr.kv_dtype_k = s0.kv_dtype_k
+    ws.scr.kv_dtype_v = s0.kv_dtype_v
+    if (ws.scr_codec_uid != s0.uid) {
+        verify_bind_codec(ws, *s0)
     }
-    ws.scr.kv_dtype_k = s.kv_dtype_k
-    ws.scr.kv_dtype_v = s.kv_dtype_v
-    if (ws.scr_codec_uid != s.uid) {
-        verify_bind_codec(ws, s)
-    }
-    ws.scr.kv_pool = s.kv_pool
+    ws.scr.kv_pool = s0.kv_pool
     ws.positions |> grow_resize(nrows)
     ws.rope_positions |> grow_resize(nrows)
     ws.kbase |> grow_resize(nrows)
     ws.vbase |> grow_resize(nrows)
-    kv_ensure(s, pos + nrows)
-    for (i in range64(nrows)) {
-        ws.positions[i] = pos + i
-        ws.rope_positions[i] = pos + i + s.rope_pos_delta
-        if (s.kv_pool == null) {
-            unsafe {
-                ws.kbase[i] = addr(s.key_cache[0])
-                ws.vbase[i] = addr(s.value_cache[0])
+    var row = 0l
+    for (g in range64(ng)) {
+        var s & = unsafe(*sessions[g])
+        kv_ensure(s, pos[g] + nr[g])
+        for (i in range64(nr[g])) {
+            g_verify_sessions[row] = sessions[g]
+            ws.positions[row] = pos[g] + i
+            ws.rope_positions[row] = pos[g] + i + s.rope_pos_delta
+            if (s.kv_pool == null) {
+                unsafe {
+                    ws.kbase[row] = addr(s.key_cache[0])
+                    ws.vbase[row] = addr(s.value_cache[0])
+                }
+            } else {
+                ws.kbase[row] = null
+                ws.vbase[row] = null
             }
-        } else {
-            ws.kbase[i] = null
-            ws.vbase[i] = null
+            row++
         }
     }
-    let ple_on_device = has_ple(c) && ple_gpu_decode_gate(t, s, nrows, pos)
+    let ple_on_device = has_ple(c) && ng == 1l && ple_gpu_decode_gate(t, *s0, nrows, pos[0])
     batch_rows_prep_(t, ws, tokens, nrows, ple_on_device)
     ws.scr.ple_gpu_pending = ple_on_device
     batch_decode_logits_reset()
+    set_batch_same_groups(nr)
     set_batch_same_slab(true)
     let done = batch_decode_override_invoke(t, ws, g_verify_sessions, nrows)
     set_batch_same_slab(false)
@@ -367,7 +408,9 @@ def eval_batch_(t : Model; var ws : BatchWorkspace; var sessions : array<Session
         }
     }
     let ple_on_device = has_ple(c) && batch_decode_override_armed() && ple_gpu_decode_gate(t, *sessions[0], nrows, ws.positions[0])
-    batch_rows_prep_(t, ws, tokens, nrows, ple_on_device)
+    //! the CPU pre-step reads the embedded rows, so the rows gather on the device only beside the device's own pre-step
+    let emb_on_device = (!has_ple(c) || ple_on_device) && batch_decode_override_armed() && embed_batch_on_device(t, *sessions[0], nrows, ws.positions[0])
+    batch_rows_prep_(t, ws, tokens, nrows, ple_on_device, emb_on_device)
     ws.scr.ple_gpu_pending = ple_on_device   //! the CPU stack's tripwire: a skipped pre-step that reaches it panics instead of reading stale rows
     let dim = c.dim
     // layer stack: batched attention + the arch's batched FFN. An active batch-decode override may
@@ -380,6 +423,9 @@ def eval_batch_(t : Model; var ws : BatchWorkspace; var sessions : array<Session
     if (!stack_done && (t.metal_blob || no_cpu_form)) {
         batch_rows_one_at_a_time(t, sessions, tokens, nrows)
         return
+    }
+    if (!stack_done && emb_on_device) {   //! the override declined the step: the rows embed late for the stacks below
+        batch_rows_embed(t, ws, tokens, nrows)
     }
     if (!stack_done && ple_on_device) {   //! the override declined the step: the CPU pre-step runs late for the stacks below
         let ts_ple = prof_ticks()
