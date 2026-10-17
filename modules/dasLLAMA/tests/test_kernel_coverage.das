@@ -63,15 +63,10 @@ require dasllama/dasllama_env   // nolint:STYLE030,LINT019 — the read sites si
 // against the report's NEVER DISPATCHED warnings — a name here that the report shows dispatched
 // is stale, and a warning with no entry here is a coverage gap to close with a row.
 let private CENSUS_NEVER_DISPATCHED <- [
-    // the MoE expert mul_mm tall M-tile pairs (128-row floor + remainder), ALL formats: the
-    // tall stamps engage at npos * n_expert_used >= 128 * n_expert, and the stocked MoE
-    // carriers (128/8, 60/4, 32/4 experts) put that floor at 1024-2048 rows - past the
-    // ~590-token census prompt under the 1024-row session cap. Their coverage is the
-    // tall-pair kernel-unit gate in test_metal_gemm_kernels.das
-    "MetalMoeMulMmK4TH128", "MetalMoeMulMmK4THR",
+    // the MoE expert mul_mm tall M-tile pair (128-row floor + remainder) in q5_K: the zoo
+    // stocks no Q5_K MoE carrier, where every other format's pair rides a census row's
+    // window. Its coverage is the tall-pair kernel-unit gate in test_metal_gemm_kernels.das
     "MetalMoeMulMmK5TH128", "MetalMoeMulMmK5THR",
-    "MetalMoeMulMmK6TH128", "MetalMoeMulMmK6THR",
-    "MetalMoeMulMmQ8TH128",
     // the q5_1 MoE tensor twins, ALL stamps: no stocked carrier holds a Q5_1 expert plane
     // (the zoo's MoE carriers are Q8_0 / Q5_K_M / Q4_K_M / mxfp4; Q5_1 appears only when
     // expert_ffn % 256 != 0 forces the converter off K-quants). Their coverage is the
