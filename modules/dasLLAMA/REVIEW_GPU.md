@@ -196,7 +196,7 @@ path served faster or slower is not a behavior.
 backend computes or serves, lands its own entry, naming the operation the other backend's API or
 device lacks, in `ARCHITECTURE_GPU_ASYMMETRIES.md#gpu-asymmetries`; a diff that removes one deletes
 its entry; in the same change.** A variable that changes only how fast the backend serves the same
-output is not one; one entry serves this rule and the rule above.
+output is not one; a variable that also adds a backend-only behavior takes one entry, not two.
 
 **A diff that adds or extends, on one GPU backend (Metal or Vulkan), a prefill or decode path or
 a K/V cache feature for a model family the other backend also serves - a capability being any
