@@ -8,6 +8,7 @@ options indenting = 4
 
 require dastest/testing_boost public
 require _spirv_common
+require _texture_grad_shaders
 require spirv/spirv_dis
 require spirv/spirv_grammar
 
@@ -65,6 +66,7 @@ def test_opcode_census(t : T?) { // nolint:STYLE038 — a flat one-add_set-per-f
         add_set(present, imgfmt_words())
         add_set(present, lsvmember_words())
         add_set(present, texlod_words())
+        add_set(present, clone_to_move(texture_grad_spv))
         add_set(present, dims_words())
         add_set(present, septex_words())
         add_set(present, tern_words())

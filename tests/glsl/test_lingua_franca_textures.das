@@ -20,6 +20,7 @@ require glsl/glsl_opengl
 require strings
 
 // Host-bind dummies (see header): each sampler uniform's generated bind function calls these by name.
+[unused_argument(unit, tex)] def bind_sampler_3d(unit : int; tex : uint) {}
 [unused_argument(unit, tex)] def bind_sampler_2d(unit : int; tex : uint) {}
 [unused_argument(unit, tex)] def bind_sampler_cube(unit : int; tex : uint) {}
 [unused_argument(unit, tex)] def bind_sampler_2d_array(unit : int; tex : uint) {}
@@ -28,6 +29,7 @@ require strings
 
 var @in @location tx_pos : float2
 var @inout tx_uv : float2
+var @uniform tx_volume : sampler3D
 var @uniform tx_tex    : sampler2D
 var @uniform tx_cube   : samplerCube
 var @uniform tx_array  : sampler2DArray
@@ -66,10 +68,25 @@ def tx_shadow_fragment {
     tx_shadow_color = float4(s, s, s, 1.0)
 }
 
+[fragment_program(name="tx_grad_fs_glsl")]
+def tx_grad_fragment {
+    let dx = dFdx(tx_uv)
+    let dy = dFdy(tx_uv)
+    tx_color = textureGrad(tx_tex, tx_uv, dx, dy)
+        + textureGrad(tx_volume, float3(tx_uv,0.5), float3(dx,0.0), float3(dy,0.0))
+        + textureGrad(tx_cube, float3(tx_uv,1.0), float3(dx,0.0), float3(dy,0.0))
+        + textureGrad(tx_array, float3(tx_uv,2.0), dx, dy)
+}
+
 def private has(hay, needle : string) : bool => find(hay, needle) >= 0
 
 [test]
 def test_lingua_franca_textures(t : T?) {
+    t |> run("textureGrad preserves explicit gradients for every sampler dimensionality") <| @(t : T?) {
+        for (sampler_name in fixed_array("tx_tex", "tx_volume", "tx_cube", "tx_array")) {
+            t |> success(has(tx_grad_fs_glsl, "textureGrad({sampler_name},"), "textureGrad call for {sampler_name}")
+        }
+    }
     t |> run("textureLod lowers name-identically on the GL rail") <| @(t : T?) {
         t |> success(has(tx_fs_glsl, "textureLod("), "fragment shader emits textureLod(...)")
     }

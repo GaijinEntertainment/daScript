@@ -149,6 +149,10 @@ backends; `modules/REVIEW_SHADER_EMITTERS.md` routes a diff here. The primary co
 is the CPU-reference run of the same das body - cheaper and stricter than a second GPU.
 Cross-GPU parity of one source is secondary. Current entries:
 
+- **`textureGrad` sampling is SPIR-V/GLSL-only; native MSL support is pending.** The shared
+  sampler2D/3D/Cube/2DArray overloads lower to explicit gradient operands in SPIR-V.
+  Native `metal_kernel` rejects the call by name; it must not execute the marker-type CPU stub.
+
 - **`family=` surface sharing is Vulkan-only.** Both emitters accept N kernel methods per class
   with `kernel=` picking per instance (the sibling fixtures are
   `modules/dasLLAMA/tests/_mtl_toy.das` and `modules/dasLLAMA/tests/_vkd_toy.das`); `family=`

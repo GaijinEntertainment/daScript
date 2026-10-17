@@ -56,6 +56,7 @@ def private check_rejects(t : T?; fixture, needle : string) {
 [test]
 def test_fail_closed_rejections(t : T?) {
     t |> run("emitter rejects kernel-illegal constructs cleanly") <| @(t : T?) {
+        check_rejects(t, "_fc_texture_grad", "call `textureGrad`")
         check_rejects(t, "_fc_uniform_written", "@uniform member `n` is written")
         check_rejects(t, "_fc_nan_literal", "non-finite float literal has no MSL form")
         check_rejects(t, "_fc_math_mad_int", "mad lowers for float classes only")
