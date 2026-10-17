@@ -30,6 +30,7 @@ require math
 struct GemmaDrafter {
     ok : bool
     why : string
+    fmt : KqFmt                 //! the weight planes' format, tagged from the sidecar's disk type - the GEMV sites read it
     dim : int64
     tdim : int64
     hidden : int64
@@ -153,6 +154,9 @@ def private plan_tensor(var dr : GemmaDrafter; m : GGUFMeta; var plans : array<D
     let want_type = q8 ? GGML_TYPE_Q8_0 : GGML_TYPE_F32
     if (m.tensors[ti].ggml_type != want_type) {
         return refuse_off(dr, "tensor '{name}' is {ggml_type_name(m.tensors[ti].ggml_type)}, expected {ggml_type_name(want_type)}: the drafter serves a Q8_0 sidecar alone")
+    }
+    if (q8) {
+        dr.fmt = gguf_kq_fmt_of_type(m.tensors[ti].ggml_type)
     }
     if (m.tensors[ti].n_elem != want_n) {
         return refuse_off(dr, "tensor '{name}' has {m.tensors[ti].n_elem} elements, expected {want_n}")

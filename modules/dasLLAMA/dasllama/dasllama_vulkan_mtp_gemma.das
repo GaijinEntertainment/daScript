@@ -60,6 +60,7 @@ struct private GemmaVkGemv {
 //! The attached drafter on the Vulkan driver: its planes, activation planes and sets, the recorded draft commands
 struct private GemmaDrafterVk {
     ready : bool
+    fmt : KqFmt                 // the weight planes' format, the sidecar loader's tag
     wq : uint64                 // the q8 quant words, every tensor's blocks one after another
     ws : uint64                 // ... their f16 scales
     wqb : int64
@@ -196,9 +197,9 @@ def private vk_buffers_release(var g : GemmaDrafterVk) {
 }
 
 //! the classes the drafter's command dispatches, compiled on the live device
-def private vk_classes_ok(dt : KVDtype; slabs : array<DaSlab>) : bool {
+def private vk_classes_ok(fmt : KqFmt; dt : KVDtype; slabs : array<DaSlab>) : bool {
     var ok = (ensure_cls_ar_rq_b() && ensure_cls_dn_rq() && ensure_q8_actrq_cls() && ensure_qk_rms_cls() && ensure_rope_kv_cls()
-        && gemv_cls_ensure(int(KqFmt.q8)) && ensure_cls_argmax_part() && ensure_cls_argmax_fin()
+        && gemv_cls_ensure(int(fmt)) && ensure_cls_argmax_part() && ensure_cls_argmax_fin()
         && (g_rd.emb_blk >= 0l ? emb_cls_ensure(g_rd.emb_fmt) : ensure_emb_gather_f32_cls())
         && (dt != KVDtype.tq4 || (ensure_kv_tq4_store_cls() && ensure_kv_tq4_unrot_cls())))
     for (sl in slabs) {
@@ -258,7 +259,7 @@ def private gemv_set(g : GemmaDrafterVk; base, n, d : int64; xq, xs : uint64; xb
         mp[0] = uint(base)
         mp[1] = 0u
     }
-    gv.set_ = gemv_planes_set(int(KqFmt.q8), (wq = g.wq, ws = g.ws, wqb = g.wqb, wsb = g.wsb), gv.meta.buf, META_BYTES, 0u,
+    gv.set_ = gemv_planes_set(int(g.fmt), (wq = g.wq, ws = g.ws, wqb = g.wqb, wsb = g.wsb), gv.meta.buf, META_BYTES, 0u,
         xq, xs, n, (n / Q8_BLOCK_ELEMS) * 4l, xbit, y, d * 4l, ybit)
     return gv
 }
@@ -272,7 +273,7 @@ def private vk_drafter_init(dr : GemmaDrafter; var g : GemmaDrafterVk) : bool {
     g.hs_mx = hs_mx
     let dt = g_rd.kv_dt
     var slabs <- [for (l in range64(dr.n_layers)); da_slab_of(false, dr.n_heads / dr.kvh[l])]
-    if (!vk_classes_ok(dt, slabs)) {
+    if (!vk_classes_ok(dr.fmt, dt, slabs)) {
         return false
     }
     var @exact_size quants : array<uint8>
@@ -306,6 +307,7 @@ def private vk_drafter_init(dr : GemmaDrafter; var g : GemmaDrafterVk) : bool {
 //! the drafter's weight planes (the repacked q8 `quants` / `scales`, the f32 blob) and scratch on the device and its host
 //! buffers; false where the card has no room
 def private vk_buffers_make(dr : GemmaDrafter; var g : GemmaDrafterVk; quants : array<uint8>; scales : array<uint16>) : bool {
+    g.fmt = dr.fmt
     var oom = false
     g.wqb = long_length(quants)
     g.wsb = long_length(scales) * 2l
@@ -418,7 +420,7 @@ def private vk_sets_make(dr : GemmaDrafter; var g : GemmaDrafterVk; slabs : arra
 def private gemv_site(var g : GemmaDrafterVk; raw : VkCommandBuffer; var h : VkHaz; site : int) {
     var gv & = unsafe(g.gemvs[site])
     var pc = GemvArgs(n = uint(gv.n), d = uint(gv.d), nreg = 1u, ybase = 0u, ncols = 1u, ystride = uint(gv.d))
-    gemv_enc(int(KqFmt.q8), raw, h, gv.set_, pc, gv.d)
+    gemv_enc(int(g.fmt), raw, h, gv.set_, pc, gv.d)
 }
 
 //! the residual step and the next norm's Q8_0 feed in one dispatch: x += rms(o) . pw (under `add`), then rms(x) . w quantized
