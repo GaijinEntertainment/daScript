@@ -80,9 +80,11 @@ fails or converts at load with no message naming the site.
 member is a defect - tag the plane from its disk type with `kq_tag` / `kq_fmt_of`
 (`dasllama/dasllama_load.das`) and read that tag at the site instead.** A literal at the site is a
 conversion no report names: every disk type the file carries becomes the literal's form, and each
-backend that copies the literal serves that form in place of the file's. A `load_big` call with no
-format is that conversion with the literal unwritten; `REVIEW.das`'s `check_load_big_format` reds
-it, and weakening that check is a defect.
+backend that copies the literal serves that form in place of the file's.
+
+**Weakening `REVIEW.das`'s `check_load_big_format` is a defect.** That check fails every `load_big`
+call in `dasllama/dasllama_load.das` that passes no format: such a call converts the plane to one
+form, whatever its disk type, and no report names the conversion.
 
 **A diff that states a backend serves a weight format - in any document, PR description, test
 name, or a predicate that returns true for "this backend runs this format" - while, on a run with
