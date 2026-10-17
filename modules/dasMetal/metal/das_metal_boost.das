@@ -234,7 +234,8 @@ let private SETTLE_MS = 100u
 let private SETTLE_BYTES = 16ul * 1024ul * 1024ul
 let private SETTLE_READS = 30
 
-//! The process footprint (`metal_process_footprint`) once the device has landed the frees a release defers: read until two
+//! The process footprint (`metal_process_footprint`) once the device
+//! has landed the frees a release defers: read until two
 //! reads 100 ms apart differ by under 16 MB, at most 3 s.
 def public metal_footprint_settled() : uint64 {
     var prev = metal_process_footprint()

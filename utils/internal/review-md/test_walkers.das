@@ -239,9 +239,14 @@ def test_dasllama_gate_fixtures(t : T?) {
     if (empty(fixture)) return
     make_dasllama_fixture(t, tree, fixture)
     restamp_dasllama_gate(t, fixture)
-    // the test-root heap gate's clean controls: a root on the persistent heap, a fixture module holding no test
-    write_at(t, fixture, "modules/dasLLAMA/tests/test_heaped.das", "options gen2\noptions persistent_heap\n\n[test]\ndef test_x(t : T?) \{\n\}\n")
-    write_at(t, fixture, "modules/dasLLAMA/tests/_fixture.das", "options gen2\n\ndef helper() \{\n\}\n")
+    // the test-root heap gate's clean controls: a root on the
+    // persistent heap, a fixture module holding no test
+    write_at(t, fixture, "modules/dasLLAMA/tests/test_heaped.das", "options gen2\n"
+                                                                 + "options persistent_heap\n\n"
+                                                                 + "[test]\ndef test_x(t : T?) \{\n"
+                                                                 + "\}\n")
+    write_at(t, fixture, "modules/dasLLAMA/tests/_fixture.das", "options gen2\n\ndef helper() \{\n"
+                                                              + "\}\n")
 
     let green = spawn_at(fixture, [path_join(fixture, "modules/dasLLAMA/REVIEW.das")])
     t |> equal(0, green.rc, "covered fixture is green: {green.out}")
@@ -277,7 +282,8 @@ def test_dasllama_gate_fixtures(t : T?) {
     // a dequant pass its k8 member has
     write_at(t, fixture, "modules/dasLLAMA/dasllama/dasllama_metal_prefill.das",
         METAL_FORM_MATRIX_RED)
-    write_at(t, fixture, "modules/dasLLAMA/tests/test_heapless.das", "options gen2\n\n[test]\ndef test_x(t : T?) \{\n\}\n")
+    write_at(t, fixture, "modules/dasLLAMA/tests/test_heapless.das", "options gen2\n\n[test]\n"
+                                                                   + "def test_x(t : T?) \{\n\}\n")
 
     let red = spawn_at(fixture, [path_join(fixture, "modules/dasLLAMA/REVIEW.das")])
     t |> equal(1, red.rc, "planted fixture is red")
@@ -387,105 +393,224 @@ def test_dasllama_cite_require_gates(t : T?) {
     t |> success(rmdir_rec_result(fixture) is value, "fixture removed")
 }
 
-//! the shipped toy stamp a race stamp names: the template's three constants, the stamp moving one
-let LEG_SHIPPED_STAMPS = ("options gen2\n\nclass template ToyT : GkToy \{\n    @template_constant A : int = 1\n"
-    + "    @template_constant B : bool = false   //!< a comment past the value\n    @template_constant C : bool = false\n\}\n\n"
+//! the shipped toy stamp a race stamp names: the template's three
+//! constants, the stamp moving one
+let LEG_SHIPPED_STAMPS = ("options gen2\n\nclass template ToyT : GkToy \{\n"
+                        + "    @template_constant A : int = 1\n"
+    + "    @template_constant B : bool = false   //!< a comment past the value\n"
+    + "    @template_constant C : bool = false\n\}\n\n"
     + "class template OtherT : GkToy \{\n\}\n\n"
-    + "[metal_dispatch(name = \"enc_toy\", pso = \"g_p\")]\nclass MetalToy : ToyT \{\n    override B = true\n\}\n")
+    + "[metal_dispatch(name = \"enc_toy\", pso = \"g_p\")]\nclass MetalToy : ToyT \{\n"
+    + "    override B = true\n\}\n")
 
-let LEG_RACE_GREEN = ("options gen2\n\n//! `MetalToy` with A moved\n[metal_dispatch(name = \"bench_toy_a2\", pso = \"g_b\",\n    tg = 32)]\n"
+let LEG_RACE_GREEN = ("options gen2\n\n//! `MetalToy` with A moved\n"
+                    + "[metal_dispatch(name = \"bench_toy_a2\", pso = \"g_b\",\n    tg = 32)]\n"
     + "class BenchToyA2 : ToyT \{\n    override A = 2\n    override B = true\n\}\n\n"
-    + "//! a probe naming no shipped stamp\n[metal_dispatch(name = \"probe_toy\", pso = \"g_q\")]\nclass ProbeToy : ToyT \{\n    override A = 3\n    override C = true\n\}\n")
+    + "//! a probe naming no shipped stamp\n[metal_dispatch(name = \"probe_toy\", pso = \"g_q\")]\n"
+    + "class ProbeToy : ToyT \{\n    override A = 3\n    override C = true\n\}\n")
 
-let LEG_RACE_RED = ("//! `MetalToy` with A moved and C flipped\n[metal_dispatch(name = \"bench_toy_ac\", pso = \"g_b2\")]\n"
-    + "class BenchToyAC : ToyT \{\n    override A = 2\n    override B = true\n    override C = true\n\}\n\n"
-    + "//! `MetalToy` off another template\n[metal_dispatch(name = \"bench_toy_other\", pso = \"g_b3\")]\nclass BenchToyOther : OtherT \{\n\}\n")
+let LEG_RACE_RED = ("//! `MetalToy` with A moved and C flipped\n"
+                  + "[metal_dispatch(name = \"bench_toy_ac\", pso = \"g_b2\")]\n"
+    + "class BenchToyAC : ToyT \{\n    override A = 2\n    override B = true\n"
+    + "    override C = true\n\}\n\n"
+    + "//! `MetalToy` off another template\n"
+    + "[metal_dispatch(name = \"bench_toy_other\", pso = \"g_b3\")]\n"
+    + "class BenchToyOther : OtherT \{\n\}\n")
 
-let LEG_RESIDENT = "options gen2\n\nenum private RdecPass \{\n    codec\n    gap\n\{EXTRA\}\}\n\ndef private rdec_pass_words(kind : RdecPass) : string \{\n    if (kind == RdecPass.codec) return \"a\"\n    if (kind == RdecPass.gap) return \"b\"\n    return \"\{kind\}\"\n\}\n"
+let LEG_RESIDENT = ("options gen2\n\nenum private RdecPass \{\n    codec\n    gap\n\{EXTRA\}\}\n\n"
+                 + "def private rdec_pass_words(kind : RdecPass) : string \{\n"
+                 + "    if (kind == RdecPass.codec) return \"a\"\n"
+                 + "    if (kind == RdecPass.gap) return \"b\"\n    return \"\{kind\}\"\n\}\n")
 
-let LEG_TESTS_DOC = ("# tests\n\nArms: `alpha beta-<tag>`.\n\n`test_dummy_cell`, `cell_toy` and `test_dummy_file.das` resolve.\n\n"
-    + "`_resident_regions.das` - the cells, by the names the file entries use,\n`set_gpu_resident_regions_` a lead line:\n"
-    + "- the toy cell (`cell_toy`, a parenthetical): a toy;\n- the group cells, on a shape: the inner cell (`cell_inner`), the other\n  (`cell_other`).\n\n"
-    + "`test_gpu_resident_regions_toy.das` - the toy file: the toy cell and\n`a_knob` the group cells.\n")
+let LEG_TESTS_DOC = ("# tests\n\nArms: `alpha beta-<tag>`.\n\n"
+                   + "`test_dummy_cell`, `cell_toy` and `test_dummy_file.das` resolve.\n\n"
+    + "`_resident_regions.das` - the cells, by the names the file entries use,\n"
+    + "`set_gpu_resident_regions_` a lead line:\n"
+    + "- the toy cell (`cell_toy`, a parenthetical): a toy;\n"
+    + "- the group cells, on a shape: the inner cell (`cell_inner`), the other\n  (`cell_other`).\n"
+    + "\n"
+    + "`test_gpu_resident_regions_toy.das` - the toy file: the toy cell and\n"
+    + "`a_knob` the group cells.\n")
 
 def private leg_resident(extra : string) : string => replace(LEG_RESIDENT, "\{EXTRA\}", extra)
 
-//! the leg's dasllama gates on one planted tree: the green run carries a clean control per gate (a race stamp one constant off the
-//! stamp it names, a probe naming none, a NaN-wide running max, a pinned evidence cell, a format-named `load_big`, a worded pass
-//! reason, a documented arm, resolving names, a regions entry naming its cells by the lead's names); the red run one plant per arm
+//! the leg's dasllama gates on one planted tree: the green run
+//! carries a clean control per gate (a race stamp one constant off
+//! the
+//! stamp it names, a probe naming none, a NaN-wide running max, a
+//! pinned evidence cell, a format-named `load_big`, a worded pass
+//! reason, a documented arm, resolving names, a regions entry naming
+//! its cells by the lead's names); the red run one plant per arm
 [test]
-def test_dasllama_leg_gates(t : T?) {
+def test_dasllama_leg_gates(t : T?) {   // nolint:STYLE038 - one planted tree, read in gate order
     let tree = getcwd()
     let fixture = repo_fixture(t, "modules/dasLLAMA/REVIEW.das", "review_dasllama_leg")
     if (empty(fixture)) return
     make_dasllama_fixture(t, tree, fixture)
     restamp_dasllama_gate(t, fixture)
     let gate = path_join(fixture, "modules/dasLLAMA/REVIEW.das")
-    write_at(t, fixture, "modules/dasLLAMA/.das_module", "\"dasllama_metal_kernels\", \"dasllama_load\", \"dasllama_gpu_resident\", " + DASLLAMA_MODULE_LIST)
+    write_at(t, fixture, "modules/dasLLAMA/.das_module",
+        "\"dasllama_metal_kernels\", \"dasllama_load\", "
+        + "\"dasllama_gpu_resident\", " + DASLLAMA_MODULE_LIST)
     write_at(t, fixture, "modules/dasLLAMA/dasllama/dasllama_metal_kernels.das", LEG_SHIPPED_STAMPS)
     write_at(t, fixture, "modules/dasLLAMA/benchmarks/ew/bench_toy.das", LEG_RACE_GREEN)
-    write_at(t, fixture, "modules/dasLLAMA/tests/_maxes.das", "options gen2\n\ndef f(a, b : array<float>) \{\n    var m = 0.0\n    var p = 0.0\n    for (i in range(length(a))) \{\n        m = max(m, nan_wide_diff(a[i], b[i]))\n        p = max(p, abs(a[i]))\n    \}\n\}\n")
-    write_at(t, fixture, "modules/dasLLAMA/tests/test_kernel_coverage.das", "options gen2\n\nlet private VK_CENSUS_NEVER_DISPATCHED <- [\n    // its coverage is test_vkd_pinned_cell in test_vulkan_kernels.das\n    \"a_cls_spv\"]\n")
-    write_at(t, fixture, "modules/dasLLAMA/tests/_vk_cells.das", "options gen2\n\ndef test_vkd_pinned_cell(t : T?) \{\n\}\n\ndef test_vkd_loose_cell(t : T?) \{\n\}\n")
-    write_at(t, fixture, "modules/dasLLAMA/tests/REVIEW_PINNED_GATES.md", "- `_vk_cells.das`'s `test_vkd_pinned_cell` cell must hold the class.\n")
-    write_at(t, fixture, "modules/dasLLAMA/dasllama/dasllama_load.das", "options gen2\n\ndef private load_big(m : int; fmt : KqFmt = KqFmt.q8) \{\n\}\n\ndef private walk() \{\n    load_big(m, bytes, \"a\", t, 0l, 32l, scratch, 0l, fmt_at(t.w_fmt, l))\n\}\n")
+    write_at(t, fixture, "modules/dasLLAMA/tests/_maxes.das", "options gen2\n\n"
+                                                            + "def f(a, b : array<float>) \{\n"
+                                                            + "    var m = 0.0\n    var p = 0.0\n"
+                                                            + "    for (i in range(length(a))) \{\n"
+                                                            + "        m = max(m, "
+                                                            + "nan_wide_diff(a[i], b[i]))\n"
+                                                            + "        p = max(p, abs(a[i]))\n"
+                                                            + "    \}\n\}\n")
+    write_at(t, fixture, "modules/dasLLAMA/tests/test_kernel_coverage.das",
+        "options gen2\n\nlet private VK_CENSUS_NEVER_DISPATCHED <- [\n"
+        + "    // its coverage is test_vkd_pinned_cell in test_vulkan_kernels.das\n"
+        + "    \"a_cls_spv\"]\n")
+    write_at(t, fixture, "modules/dasLLAMA/tests/_vk_cells.das", "options gen2\n\n"
+                                                               + "def test_vkd_pinned_cell(t : T?) "
+                                                               + "\{\n\}\n\n"
+                                                               + "def test_vkd_loose_cell(t : T?) "
+                                                               + "\{\n\}\n")
+    write_at(t, fixture, "modules/dasLLAMA/tests/REVIEW_PINNED_GATES.md", "- `_vk_cells.das`'s "
+                                                                        + "`test_vkd_pinned_cell` "
+                                                                        + "cell must hold the "
+                                                                        + "class.\n")
+    write_at(t, fixture, "modules/dasLLAMA/dasllama/dasllama_load.das", "options gen2\n\n"
+                                                                      + "def private load_big(m : "
+                                                                      + "int; fmt : KqFmt = "
+                                                                      + "KqFmt.q8) \{\n\}\n\n"
+                                                                      + "def private walk() \{\n"
+                                                                      + "    load_big(m, bytes, "
+                                                                      + "\"a\", t, 0l, 32l, "
+                                                                      + "scratch, 0l, "
+                                                                      + "fmt_at(t.w_fmt, l))\n\}\n")
     write_at(t, fixture, "modules/dasLLAMA/dasllama/dasllama_gpu_resident.das", leg_resident(""))
     write_at(t, fixture, "modules/dasLLAMA/tests/CLAUDE.md", LEG_TESTS_DOC)
-    write_at(t, fixture, "modules/dasLLAMA/tests/_arms.das", "options gen2\n\ndef test_dummy_cell(t : T?) \{\n    if (arm_on(t, \"alpha\")) \{\n    \}\n    let s = \"arm_on(t, \\\"\{tok\}\")\"\n    if (arm_on(t, \"beta-\{tag\}\")) \{\n    \}\n\}\n\ndef cell_toy() \{\n\}\n\ndef cell_inner() \{\n\}\n\ndef cell_other() \{\n\}\n")
+    write_at(t, fixture, "modules/dasLLAMA/tests/_arms.das", "options gen2\n\n"
+                                                           + "def test_dummy_cell(t : T?) \{\n"
+                                                           + "    if (arm_on(t, \"alpha\")) \{\n"
+                                                           + "    \}\n"
+                                                           + "    let s = \"arm_on(t, "
+                                                           + "\\\"\{tok\}\")\"\n"
+                                                           + "    if (arm_on(t, \"beta-\{tag\}\")) "
+                                                           + "\{\n    \}\n\}\n\ndef cell_toy() \{\n"
+                                                           + "\}\n\ndef cell_inner() \{\n\}\n\n"
+                                                           + "def cell_other() \{\n\}\n")
     write_at(t, fixture, "modules/dasLLAMA/tests/test_dummy_file.das", "options gen2\n")
-    write_at(t, fixture, "modules/dasLLAMA/tests/test_gpu_resident_regions_toy.das", "options gen2\n\ndef run() \{\n    cell_toy(t)\n    cell_inner(t)\n    cell_other(t)\n\}\n")
+    write_at(t, fixture, "modules/dasLLAMA/tests/test_gpu_resident_regions_toy.das",
+        "options gen2\n\ndef run() \{\n    cell_toy(t)\n    cell_inner(t)\n    cell_other(t)\n\}\n")
     let green = spawn_at(fixture, [gate])
     t |> equal(0, green.rc, "the leg gates' controls are green: {green.out}")
 
-    write_at(t, fixture, "modules/dasLLAMA/benchmarks/ew/bench_toy.das", LEG_RACE_GREEN + LEG_RACE_RED)
-    write_at(t, fixture, "modules/dasLLAMA/tests/_maxes.das", "options gen2\n\ndef f(a, b : array<float>) \{\n    var m = 0.0\n    for (i in range(length(a))) \{\n        m = max(m, abs(a[i] - b[i]))\n    \}\n\}\n")
-    write_at(t, fixture, "modules/dasLLAMA/tests/test_kernel_coverage.das", "options gen2\n\nlet private VK_CENSUS_NEVER_DISPATCHED <- [\n    // its coverage is test_vkd_pinned_cell in test_vulkan_kernels.das\n    // their coverage is test_vkd_loose_cell and test_vkd_ghost_cell\n    \"a_cls_spv\"]\n")
-    write_at(t, fixture, "modules/dasLLAMA/dasllama/dasllama_load.das", "options gen2\n\ndef private load_big(m : int; fmt : KqFmt = KqFmt.q8) \{\n\}\n\ndef private walk() \{\n    load_big(m, bytes, \"a\", t, 0l, 32l, scratch, 0l, fmt_at(t.w_fmt, l))\n    load_big(m, bytes, \"b\", t, f(1, 2), 32l, scratch)\n\}\n")
-    write_at(t, fixture, "modules/dasLLAMA/dasllama/dasllama_gpu_resident.das", leg_resident("    busy\n"))
-    write_at(t, fixture, "modules/dasLLAMA/tests/CLAUDE.md", LEG_TESTS_DOC + "\n`test_ghost_cell` and `followup_general.md` row 3.\n\n`test_gpu_resident_regions_bare.das` - nothing named.\n")
-    write_at(t, fixture, "modules/dasLLAMA/tests/_arms.das", "options gen2\n\ndef test_dummy_cell(t : T?) \{\n    if (arm_on(t, \"alpha\") || arm_on(t, \"gamma\")) \{\n    \}\n\}\n\ndef cell_toy() \{\n\}\n\ndef cell_inner() \{\n\}\n\ndef cell_other() \{\n\}\n")
-    write_at(t, fixture, "modules/dasLLAMA/tests/test_gpu_resident_regions_toy.das", "options gen2\n\ndef run() \{\n    cell_toy(t)\n    cell_inner(t)\n    cell_other(t)\n    cell_unlisted(t)\n\}\n")
-    write_at(t, fixture, "modules/dasLLAMA/tests/test_gpu_resident_regions_bare.das", "options gen2\n\ndef run() \{\n    cell_inner(t)\n\}\n")
-    write_at(t, fixture, "modules/dasLLAMA/tests/test_gpu_resident_regions_none.das", "options gen2\n")
+    write_at(t, fixture, "modules/dasLLAMA/benchmarks/ew/bench_toy.das",
+             LEG_RACE_GREEN + LEG_RACE_RED)
+    write_at(t, fixture, "modules/dasLLAMA/tests/_maxes.das", "options gen2\n\n"
+                                                            + "def f(a, b : array<float>) \{\n"
+                                                            + "    var m = 0.0\n"
+                                                            + "    for (i in range(length(a))) \{\n"
+                                                            + "        m = max(m, abs(a[i] - "
+                                                            + "b[i]))\n    \}\n\}\n")
+    write_at(t, fixture, "modules/dasLLAMA/tests/test_kernel_coverage.das",
+        "options gen2\n\nlet private VK_CENSUS_NEVER_DISPATCHED <- [\n"
+        + "    // its coverage is test_vkd_pinned_cell in test_vulkan_kernels.das\n"
+        + "    // their coverage is test_vkd_loose_cell and test_vkd_ghost_cell\n"
+        + "    \"a_cls_spv\"]\n")
+    write_at(t, fixture, "modules/dasLLAMA/dasllama/dasllama_load.das", "options gen2\n\n"
+                                                                      + "def private load_big(m : "
+                                                                      + "int; fmt : KqFmt = "
+                                                                      + "KqFmt.q8) \{\n\}\n\n"
+                                                                      + "def private walk() \{\n"
+                                                                      + "    load_big(m, bytes, "
+                                                                      + "\"a\", t, 0l, 32l, "
+                                                                      + "scratch, 0l, "
+                                                                      + "fmt_at(t.w_fmt, l))\n"
+                                                                      + "    load_big(m, bytes, "
+                                                                      + "\"b\", t, f(1, 2), 32l, "
+                                                                      + "scratch)\n\}\n")
+    write_at(t, fixture, "modules/dasLLAMA/dasllama/dasllama_gpu_resident.das",
+        leg_resident("    busy\n"))
+    write_at(t, fixture, "modules/dasLLAMA/tests/CLAUDE.md",
+        LEG_TESTS_DOC + "\n`test_ghost_cell` and `followup_general.md` row 3.\n\n"
+        + "`test_gpu_resident_regions_bare.das` - nothing named.\n")
+    write_at(t, fixture, "modules/dasLLAMA/tests/_arms.das", "options gen2\n\n"
+                                                           + "def test_dummy_cell(t : T?) \{\n"
+                                                           + "    if (arm_on(t, \"alpha\") || "
+                                                           + "arm_on(t, \"gamma\")) \{\n    \}\n"
+                                                           + "\}\n\ndef cell_toy() \{\n\}\n\n"
+                                                           + "def cell_inner() \{\n\}\n\n"
+                                                           + "def cell_other() \{\n\}\n")
+    write_at(t, fixture, "modules/dasLLAMA/tests/test_gpu_resident_regions_toy.das",
+        "options gen2\n\ndef run() \{\n    cell_toy(t)\n    cell_inner(t)\n    cell_other(t)\n"
+        + "    cell_unlisted(t)\n\}\n")
+    write_at(t, fixture, "modules/dasLLAMA/tests/test_gpu_resident_regions_bare.das",
+        "options gen2\n\ndef run() \{\n    cell_inner(t)\n\}\n")
+    write_at(t, fixture, "modules/dasLLAMA/tests/test_gpu_resident_regions_none.das", "options "
+                                                                                    + "gen2\n")
     let red = spawn_at(fixture, [gate])
     t |> equal(1, red.rc, "planted fixture is red")
-    for (needle in ["bench_toy.das:19: race stamp `BenchToyAC` names `MetalToy` and differs from it in 2 constants (A, C)",
-                    "bench_toy.das:27: race stamp `BenchToyOther` names `MetalToy` but does not stamp its template `ToyT`",
+    for (needle in ["bench_toy.das:19: race stamp `BenchToyAC` names `MetalToy` and differs from "
+                  + "it in 2 constants (A, C)",
+                    "bench_toy.das:27: race stamp `BenchToyOther` names `MetalToy` but does not "
+                  + "stamp its template `ToyT`",
                     "_maxes.das:6: a running largest difference `max(m, abs(a - b))`",
-                    "test_kernel_coverage.das:5: a census table cites `test_vkd_loose_cell` (_vk_cells.das) as a blind spot's evidence, and the pinned set does not hold it",
-                    "test_kernel_coverage.das:5: a census table cites `test_vkd_ghost_cell` as evidence and no file under tests/ defines it",
+                    "test_kernel_coverage.das:5: a census table cites `test_vkd_loose_cell` "
+                  + "(_vk_cells.das) as a blind spot's evidence, and the pinned set does not hold "
+                  + "it",
+                    "test_kernel_coverage.das:5: a census table cites `test_vkd_ghost_cell` as "
+                  + "evidence and no file under tests/ defines it",
                     "dasllama_load.das:8: a `load_big` call with no format",
                     "dasllama_gpu_resident.das:6: `RdecPass.busy` has no arm in `rdec_pass_words`",
                     "_arms.das:4: arm `gamma` appears in no backtick span of tests/CLAUDE.md",
                     "CLAUDE.md:16: `test_ghost_cell` names no file and no `def`",
                     "CLAUDE.md:16: cites a `followup_*.md` ledger",
-                    "`test_gpu_resident_regions_toy.das` calls `cell_unlisted`, and its entry does not name it and the `_resident_regions.das` list names it nowhere",
-                    "`test_gpu_resident_regions_bare.das` calls `cell_inner`, and its entry does not name it by the name the `_resident_regions.das` list gives it",
+                    "`test_gpu_resident_regions_toy.das` calls `cell_unlisted`, and its entry does "
+                  + "not name it and the `_resident_regions.das` list names it nowhere",
+                    "`test_gpu_resident_regions_bare.das` calls `cell_inner`, and its entry does "
+                  + "not name it by the name the `_resident_regions.das` list gives it",
                     "`test_gpu_resident_regions_none.das` has no entry"]) {
         t |> success(find(red.out, needle) >= 0, "finding fired: {needle}")
     }
-    for (quiet in ["BenchToyA2", "ProbeToy", "test_vkd_pinned_cell", "dasllama_load.das:7", "RdecPass.gap", "arm `alpha`", "arm `beta",
-                   "`test_dummy_cell` names", "`cell_toy` names", "`test_dummy_file.das` names", "calls `cell_toy`", "calls `cell_other`"]) {
-        t |> success(find(red.out, quiet) < 0, "the control drew no finding beside the plants: {quiet}")
+    for (quiet in ["BenchToyA2", "ProbeToy", "test_vkd_pinned_cell", "dasllama_load.das:7",
+                   "RdecPass.gap", "arm `alpha`", "arm `beta",
+                   "`test_dummy_cell` names", "`cell_toy` names", "`test_dummy_file.das` names",
+                   "calls `cell_toy`", "calls `cell_other`"]) {
+        t |> success(find(red.out, quiet) < 0, "the control drew no finding beside the plants: "
+                                             + "{quiet}")
     }
 
     t |> success(rmdir_rec_result(fixture) is value, "fixture removed")
 }
 
 let METAL_SHIM_GREEN = ("namespace das \{\n\n"
-    + "    static char * err_text ( NSError * err, Context * ctx ) \{\n        const char * msg = err ? err.localizedDescription.UTF8String : nullptr;\n        return ctx->allocateString(msg, nullptr);\n    \}\n\n"
-    + "    bool dev_unified ( MetalDevice * dev ) \{\n        id<MTLDevice> d = (__bridge id<MTLDevice>)(void *) dev;\n        return d.hasUnifiedMemory;\n    \}\n\n"
-    + "    void * buf_contents ( MetalBuffer * buf ) \{\n        @autoreleasepool \{\n            id<MTLBuffer> b = (__bridge id<MTLBuffer>)(void *) buf;\n            return b.contents;\n        \}\n    \}\n\n"
-    + "    char * compile_text ( NSError * e2, Context * ctx ) \{\n        @autoreleasepool \{\n            return err_text(e2, ctx);\n        \}\n    \}\n\n"
-    + "    void set_label ( MetalBuffer * buf ) \{\n        id<MTLBuffer> b = (__bridge id<MTLBuffer>)(void *) buf;\n        b.label = @\"x \{ y\";\n    \}\n\n")
+    + "    static char * err_text ( NSError * err, Context * ctx ) \{\n"
+    + "        const char * msg = err ? err.localizedDescription.UTF8String : nullptr;\n"
+    + "        return ctx->allocateString(msg, nullptr);\n    \}\n\n"
+    + "    bool dev_unified ( MetalDevice * dev ) \{\n"
+    + "        id<MTLDevice> d = (__bridge id<MTLDevice>)(void *) dev;\n"
+    + "        return d.hasUnifiedMemory;\n    \}\n\n"
+    + "    void * buf_contents ( MetalBuffer * buf ) \{\n        @autoreleasepool \{\n"
+    + "            id<MTLBuffer> b = (__bridge id<MTLBuffer>)(void *) buf;\n"
+    + "            return b.contents;\n        \}\n    \}\n\n"
+    + "    char * compile_text ( NSError * e2, Context * ctx ) \{\n        @autoreleasepool \{\n"
+    + "            return err_text(e2, ctx);\n        \}\n    \}\n\n"
+    + "    void set_label ( MetalBuffer * buf ) \{\n"
+    + "        id<MTLBuffer> b = (__bridge id<MTLBuffer>)(void *) buf;\n"
+    + "        b.label = @\"x \{ y\";\n    \}\n\n")
 
-let METAL_SHIM_RED = ("    void * raw_contents ( MetalBuffer * buf ) \{\n        id<MTLBuffer> b = (__bridge id<MTLBuffer>)(void *) buf;\n        return b.contents;   // a read outside the pool\n    \}\n\n"
-    + "    NSString * dev_name ( MetalDevice * dev ) \{\n        id<MTLDevice> d = (__bridge id<MTLDevice>)(void *) dev;\n        return [d name];\n    \}\n\n"
-    + "    static const char * leak_text ( NSError * err ) \{\n        return err.localizedDescription.UTF8String;\n    \}\n\n"
+let METAL_SHIM_RED = ("    void * raw_contents ( MetalBuffer * buf ) \{\n"
+                    + "        id<MTLBuffer> b = (__bridge id<MTLBuffer>)(void *) buf;\n"
+                    + "        return b.contents;   // a read outside the pool\n    \}\n\n"
+    + "    NSString * dev_name ( MetalDevice * dev ) \{\n"
+    + "        id<MTLDevice> d = (__bridge id<MTLDevice>)(void *) dev;\n        return [d name];\n"
+    + "    \}\n\n"
+    + "    static const char * leak_text ( NSError * err ) \{\n"
+    + "        return err.localizedDescription.UTF8String;\n    \}\n\n"
     + "    void use_leak ( NSError * e ) \{\n        leak_text(e);\n    \}\n\n")
 
-//! the dasMetal gate's shim check on a planted tree: the green run's controls - a scalar getter outside a pool, an object getter inside
-//! one, a static helper every call of which sits in a pool, a setter - and the red run's plants: a dot getter and a bracket getter
+//! the dasMetal gate's shim check on a planted tree: the green run's
+//! controls - a scalar getter outside a pool, an object getter inside
+//! one, a static helper every call of which sits in a pool, a setter
+//! - and the red run's plants: a dot getter and a bracket getter
 //! outside a pool, a static helper called outside one
 [test]
 def test_dasmetal_gate_fixtures(t : T?) {
@@ -497,21 +622,27 @@ def test_dasmetal_gate_fixtures(t : T?) {
     write_at(t, fixture, "tests/msl/_fail_closed/README.txt", "fixtures\n")
     write_at(t, fixture, "modules/dasMetal/src/dasMetal.mm", METAL_SHIM_GREEN + "\}\n")
     var err : string
-    t |> success(copy_file(path_join(tree, "modules/dasMetal/REVIEW.das"), path_join(fixture, "modules/dasMetal/REVIEW.das"), true, err), "copied the real dasmetal gate")
+    t |> success(copy_file(path_join(tree, "modules/dasMetal/REVIEW.das"),
+        path_join(fixture, "modules/dasMetal/REVIEW.das"), true, err),
+        "copied the real dasmetal gate")
     let gate = path_join(fixture, "modules/dasMetal/REVIEW.das")
     let green = spawn_at(fixture, [gate])
     t |> equal(0, green.rc, "the shim's controls are green: {green.out}")
 
-    write_at(t, fixture, "modules/dasMetal/src/dasMetal.mm", METAL_SHIM_GREEN + METAL_SHIM_RED + "\}\n")
+    write_at(t, fixture, "modules/dasMetal/src/dasMetal.mm",
+        METAL_SHIM_GREEN + METAL_SHIM_RED + "\}\n")
     let red = spawn_at(fixture, [gate])
     t |> equal(1, red.rc, "planted fixture is red")
-    for (needle in ["dasMetal.mm:33: `raw_contents` reads `b.contents` outside an `@autoreleasepool`",
+    for (needle in ["dasMetal.mm:33: `raw_contents` reads `b.contents` outside an "
+                  + "`@autoreleasepool`",
                     "dasMetal.mm:38: `dev_name` reads `d.name` outside an `@autoreleasepool`",
-                    "dasMetal.mm:42: `leak_text` reads `err.localizedDescription` outside an `@autoreleasepool`"]) {
+                    "dasMetal.mm:42: `leak_text` reads `err.localizedDescription` outside an "
+                  + "`@autoreleasepool`"]) {
         t |> success(find(red.out, needle) >= 0, "finding fired: {needle}")
     }
     for (quiet in ["hasUnifiedMemory", "`buf_contents`", "`err_text`", "label"]) {
-        t |> success(find(red.out, quiet) < 0, "the control drew no finding beside the plants: {quiet}")
+        t |> success(find(red.out, quiet) < 0, "the control drew no finding beside the plants: "
+                                             + "{quiet}")
     }
 
     t |> success(rmdir_rec_result(fixture) is value, "fixture removed")

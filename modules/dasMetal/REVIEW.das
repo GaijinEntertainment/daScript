@@ -65,10 +65,13 @@ def private check_fail_closed_sync {
 
 let private SHIM = "modules/dasMetal/src/dasMetal.mm"
 
-//! the getters a read outside a pool may send: each returns a scalar, so ARC autoreleases nothing behind it
-let private SCALAR_GETTERS <- {"hasUnifiedMemory", "maxTotalThreadsPerThreadgroup", "threadExecutionWidth", "maxBufferLength"}
+//! the getters a read outside a pool may send: each returns a scalar,
+//! so ARC autoreleases nothing behind it
+let private SCALAR_GETTERS <- {"hasUnifiedMemory", "maxTotalThreadsPerThreadgroup",
+    "threadExecutionWidth", "maxBufferLength"}
 
-//! the line with its `//` comment and its string literals' text dropped
+//! the line with its `//` comment and its string literals' text
+//! dropped
 def private shim_code(line : string) : string {
     var out = ""
     var in_str = false
@@ -91,7 +94,8 @@ def private shim_code(line : string) : string {
     return out
 }
 
-//! the Objective-C object a declaration on `code` names (`id<P> x`, `id x`, `NSFoo * x`, `MTLFoo * x`), "" on any other line
+//! the Objective-C object a declaration on `code` names (`id<P> x`,
+//! `id x`, `NSFoo * x`, `MTLFoo * x`), "" on any other line
 def private objc_decl(code : string) : string {
     let s = strip(code)
     var rest = ""
@@ -113,7 +117,8 @@ def private objc_decl(code : string) : string {
     return slice(r, 0, n)
 }
 
-//! the parameters of a function header typed as an Objective-C object (`NSError * err`)
+//! the parameters of a function header typed as an Objective-C object
+//! (`NSError * err`)
 def private objc_params(code : string; var out : table<string>) {
     let open = find(code, "(")
     return if (open < 0)
@@ -125,7 +130,8 @@ def private objc_params(code : string; var out : table<string>) {
     }
 }
 
-//! the property `code` reads off `obj` (`obj.prop` not assigned, `[obj prop]` with no argument), "" when none
+//! the property `code` reads off `obj` (`obj.prop` not assigned,
+//! `[obj prop]` with no argument), "" when none
 def private getter_read(code, obj : string) : string {
     var found = ""
     peek_data(code) $(d) {
@@ -138,7 +144,8 @@ def private getter_read(code, obj : string) : string {
                 n++
             }
             let after = strip(slice(d, n))
-            if (before_ok && n > from && !(after |> starts_with("=") && !(after |> starts_with("==")))) {
+            if (before_ok && n > from
+                    && !(after |> starts_with("=") && !(after |> starts_with("==")))) {
                 found = slice(d, from, n)
             }
             at = find(d, "{obj}.", at + 1)
@@ -163,7 +170,8 @@ struct private ShimLine {
     pooled : bool
 }
 
-//! every shim line with the function it sits in, whether that function is a `static` helper, and whether an
+//! every shim line with the function it sits in, whether that
+//! function is a `static` helper, and whether an
 //! `@autoreleasepool` block holds the line
 def private shim_lines : array<ShimLine> {
     var out : array<ShimLine>
@@ -197,7 +205,8 @@ def private shim_lines : array<ShimLine> {
     return <- out
 }
 
-//! true when every call of `fn` on the shim's lines, its own header aside, sits inside a pool
+//! true when every call of `fn` on the shim's lines, its own header
+//! aside, sits inside a pool
 def private called_only_pooled(fn : string; lines : array<ShimLine>) : bool {
     var seen = false
     for (l in lines) {
@@ -208,7 +217,8 @@ def private called_only_pooled(fn : string; lines : array<ShimLine>) : bool {
     return seen
 }
 
-//! a shim binding reads an Objective-C property only inside an `@autoreleasepool`
+//! a shim binding reads an Objective-C property only inside an
+//! `@autoreleasepool`
 def private check_shim_getters_pooled {
     return if (!fexist(SHIM))
     var inscope lines <- shim_lines()
@@ -229,7 +239,14 @@ def private check_shim_getters_pooled {
         for (obj in keys(objs)) {
             let prop = getter_read(l.code, obj)
             if (!empty(prop) && !key_exists(SCALAR_GETTERS, prop)) {
-                gate_finding(SHIM, i + 1, "`{fn}` reads `{obj}.{prop}` outside an `@autoreleasepool` - a getter that returns an object or an inner pointer autoreleases, and no pool drains on a daslang host thread, so the object leaks silently; read it inside the function's `@autoreleasepool` (modules/dasMetal/ARCHITECTURE.md, the extern surface); a getter returning a scalar is named in REVIEW.das's SCALAR_GETTERS")
+                gate_finding(SHIM, i + 1, "`{fn}` reads `{obj}.{prop}` outside an "
+                    + "`@autoreleasepool` - "
+                    + "a getter that returns an object or an inner pointer "
+                    + "autoreleases, and no pool drains on a daslang host thread, "
+                    + "so the object leaks silently; read it inside the function's "
+                    + "`@autoreleasepool` (modules/dasMetal/ARCHITECTURE.md, the "
+                    + "extern surface); a getter returning a scalar is named in "
+                    + "REVIEW.das's SCALAR_GETTERS")
             }
         }
     }
