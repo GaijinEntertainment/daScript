@@ -10,6 +10,22 @@ and coverage; this ledger is the backlog for the perf pass that follows them. Ev
 what it costs today and what the fix would change.
 
 ## Entries
+- **MEASURED (2026-10-18) - the gemma leg's end re-measure, the M5 half.** Instrument `benchmarks/lcpp_bench.das`
+  (`--ngl 99 -p 512 -n 128 -r 5 --for-debug-purposes`, debug-jit), the M5 Max (128 GB) alone on the box, one box profile
+  minted at the leg tip (505 s, 39,101 B) and read by both trees: master's own build (33e7910669) against the leg tip
+  (ab97a01251). pp512 / tg128 tok/s, master -> leg: gemma-2 2B Q8_0 10471 -> 10810 / 165 -> 165; gemma-3 1B Q8_0 21663
+  -> 22857 / 317 -> 321; gemma-3 4B Q8_0 7058 -> 7225 / 112 -> 114; gemma-4 E2B Q8_0 9479 -> 9936 / 157 -> 158; E4B Q8_0
+  5470 -> 5640 / 89.6 -> 89.5 (the first leg reading, 81.6 at cv 11.7 %, VOID); 12B Q8_0 2101 -> 2154 / 40.7 -> 41.0
+  (a first leg reading of 32.1 at cv 3.6 % did not reproduce: 41.0 with the ring, 40.9 without, at the same form); 26B-A4B
+  UD-IQ4_XS 3952 -> 4059 / 121 -> 122; 26B-A4B Q4_K_M 4143 -> 4271 / 118 -> 120 (the leg's first tg at cv 13.7 % VOID; a
+  master repeat at cv 8.6 % VOID). Prefill gains 2 to 5 % on every row; decode holds parity. The ring costs nothing at the
+  wrap: 12B tg after a 512-token prefill 41.0 with the ring, 40.9 without; E4B 89.5 / 89.8; at position zero 41.0 / 41.0
+  and 88.9 / 89.4. The house replay's quick probe (22 short replies, wall median s), master -> leg: 12B Q8_0 1.882 -> 1.259,
+  26B-A4B UD-IQ4_XS 0.710 -> 0.633, E4B Q8_0 0.614 -> 0.533. The row races (`bench_metal_gk_rows`, 109 rows, none VOID) stand
+  in `ARCHITECTURE_GPU_SHARED_KERNELS.md`'s tables; the seam's decode builders at dim 1152 read 5.78 / 5.83 us at 1024
+  lanes against 3.25 / 3.36 at 256 (the lanes ruling's row). The fused seam holds no arm at dim 5376 (`followup_metal.md`
+  row 54). The pod half of this entry follows.
+
 
 - **MEASURED (2026-10-16) - the gemma leg's parity bars, one row a file and bar.** Each row names the cell, the bar
   (its constant where it has one), the reading and the box. The Vulkan box is the RTX PRO 4500 (32 GB) pod, its cells run
