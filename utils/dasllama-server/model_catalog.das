@@ -75,6 +75,21 @@ def private catalog_entry_of(s : ModelSpec) : CatalogEntry {
 def public model_catalog() : array<CatalogEntry> =>
     <- [for (s in model_specs()); catalog_entry_of(s); where !empty(s.serve_name)]
 
+var private g_catalog_pinned : array<CatalogEntry>   //! rows `catalog_pin_row` added in this context
+
+//! Adds `e` to the rows POST /catalog/download resolves a name against, after the curated set, in this context alone - a test's
+//! row whose artifacts sit at a local `file://` source, so the route starts a download with no network
+def public catalog_pin_row(e : CatalogEntry) {
+    g_catalog_pinned |> push(e)
+}
+
+//! The rows POST /catalog/download resolves a name against: the curated set, then the rows `catalog_pin_row` added
+def public catalog_download_rows() : array<CatalogEntry> {
+    var rows <- model_catalog()
+    rows |> push_from(g_catalog_pinned)
+    return <- rows
+}
+
 //! The pure resolution core: env override > config key > `<dasllama home>/models`;
 //! no trailing separator. Split from the wrapper so every arm is testable without
 //! touching the process environment.

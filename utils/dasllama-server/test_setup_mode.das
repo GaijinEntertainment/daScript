@@ -35,11 +35,29 @@ def private plant_picker_dir : string {
     return path_join(g_picker_dir, "planted.gguf")
 }
 
+let private PINNED_ROW = "pinned-companion-row"   //! a catalog row the server thread pins, its drafter at a local file:// source
+let private PINNED_HEAD = "pinned-head.bin"
+let private PINNED_BYTES = "not the pinned head"
+
+//! the row whose drafter POST /catalog/download fetches offline: its source in the picker dir, its sha a value no bytes carry
+def private pin_companion_row {
+    let src = path_join(g_picker_dir, PINNED_HEAD)
+    fopen(src, "wb") $(f) {
+        if (f != null) {
+            f |> fwrite(PINNED_BYTES)
+        }
+    }
+    var row = CatalogEntry(name = PINNED_ROW, file = "pinned-row.gguf", bytes = 4l, sha256 = "00", url = "https://example.invalid/pinned-row")
+    row.drafter = CatalogCompanion(file = "mtp-pinned-row-Q8_0.gguf", url = "file://{src}", bytes = long_length(PINNED_BYTES),
+        sha256 = "0000000000000000000000000000000000000000000000000000000000000000")
+    catalog_pin_row(row)
+}
+
 def private remove_picker_dir {
     if (empty(g_picker_dir)) {
         return
     }
-    for (fname in ["planted.gguf", "planted.gguf.0xdead.dlim"]) {
+    for (fname in ["planted.gguf", "planted.gguf.0xdead.dlim", PINNED_HEAD]) {
         remove(path_join(g_picker_dir, fname))
     }
     rmdir(g_picker_dir)
@@ -54,6 +72,7 @@ def private with_setup_server(port : int; blk : block<(base_url : string) : void
             let tmp = temp_directory(terr)
             set_catalog_dir(path_join(empty(tmp) ? "." : tmp, "dasllama_setup_test_{ref_time_ticks()}"))
             let picker_gguf = plant_picker_dir()
+            pin_companion_row()
             var surf <- {
                 "config" => JV((port = port, model = "", streams = 4)),
                 "sources" => JV((port = "cli")),
@@ -115,6 +134,46 @@ def private check_tower_routes(t : T?; base_url, cat_dir, asr_file : string) {
     GET("{base_url}/favicon.ico") $(resp) {
         t |> success(resp != null && resp.status_code == http_status.OK, "the tray mark serves as the tab icon (404 = tray.ico missing)")
     }
+}
+
+//! the download machine's `download` record off GET /catalog
+def private download_record(base_url, key : string) : string {
+    var v = ""
+    GET("{base_url}/catalog") $(resp) {
+        var jerr = ""
+        var js = read_json(resp != null ? string(resp.body) : "", jerr)
+        v = "{js?["download"]?[key] ?? ""}"
+        unsafe {
+            delete js
+        }
+    }
+    return v
+}
+
+//! the drafter route's ACCEPTED arm: the pinned row's companion starts under its download id, the 202 body names it and the bytes
+//! it brings, and the worker refuses the source's bytes off the pinned sha, leaving no drafter in the models dir
+def private check_pinned_companion(t : T?; base_url, cat_dir : string) {
+    POST("{base_url}/catalog/download", "\{\"name\":\"{PINNED_ROW}\",\"tower\":\"drafter\"}") $(resp) {
+        t |> success(resp != null && resp.status_code == http_status.ACCEPTED, "the pinned drafter's download starts (202)")
+        var jerr = ""
+        var js = read_json(resp != null ? string(resp.body) : "", jerr)
+        t |> equal(js?["ok"] ?? false, true, "the 202 body reads ok")
+        t |> equal(js?["name"] ?? "", "drafter:{PINNED_ROW}", "the 202 body names the companion's download id")
+        t |> equal(js?["bytes"] ?? -1l, long_length(PINNED_BYTES), "the 202 body carries the companion's bytes")
+        unsafe {
+            delete js
+        }
+    }
+    t |> equal(download_record(base_url, "name"), "drafter:{PINNED_ROW}", "the machine names the download by the id the 202 body echoed")
+    var state = download_record(base_url, "state")
+    for (_ in range(600)) {
+        break if (state != "downloading" && state != "verifying")
+        sleep(100u)
+        state = download_record(base_url, "state")
+    }
+    t |> equal(state, "failed", "bytes off the pinned sha fail the verify")
+    t |> success(find(download_record(base_url, "error"), "sha256 MISMATCH") >= 0, "the failure names the sha mismatch")
+    t |> success(!stat(path_join(cat_dir, "mtp-pinned-row-Q8_0.gguf")).is_valid, "no drafter file lands in the models dir")
 }
 
 //! A host the server cannot hold (past its 63-byte field) stops the start: before the check, the refused
@@ -186,6 +245,7 @@ def test_setup_mode(t : T?) {
                 t |> success(resp != null && resp.status_code == http_status.NOT_FOUND, "unknown catalog entry is a 404")
             }
             check_tower_routes(t, base_url, cat_dir, asr_file)
+            check_pinned_companion(t, base_url, cat_dir)
             GET("{base_url}/v1/stats") $(resp) {
                 t |> success(resp != null && resp.status_code == http_status.OK, "still serving after the fail-closed round")
             }

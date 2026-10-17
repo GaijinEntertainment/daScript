@@ -44,6 +44,7 @@ require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active: did the who
 require _model_tier public   // models_dir() + model_available() presence/size-tier gate, arm_on, live_maxabs, SUPPRESSED_LOGIT
 require _resident_feed public   // resident_ready, load_resident, resident_then_cpu_feed, feed_steps_within, feed_logits
 require _format_census   // census_cell: the routed files' every site in its own format
+require _child_run   // run_child / child_cmd - the load-log child
 
 //! the logits bar, a fraction of the step's max live |logit|. gemma-3-1b's logits move with the activation rounding itself: the CPU
 //! chain's OWN prefill kernel and decode kernel land 0.06-0.10 of the max logit apart on the same
@@ -240,6 +241,39 @@ def ring_vs_flat(t : T?; n : int64; gf : GemmaFile; kv : KVDtype) {
             }
         }
     }
+}
+
+let RESIDENT_RING_ON = "dasLLAMA: resident driver - the sliding layers' K/V rows ride rings of their window plus"
+let RESIDENT_RING_OFF = "dasLLAMA: resident driver - the sliding layers' K/V rows keep every position's row, no ring, as asked"
+let RESIDENT_EMBED_OFF = "dasLLAMA: resident driver - the host embeds every token row as asked"
+
+//! the whole-model driver's load log for `gf` - what to_log prints, which no in-process cell reads - from one resident load in a
+//! child (`_resident_load_root.das`) at the context `ctx` asked whole (0 none) under `envs`; "" with the skip `resident_ready` names
+def resident_load_log(t : T?; gf : GemmaFile; ctx : int64; envs : array<tuple<name : string; value : string>>) : string {
+    let path = path_join(models_dir(), gf.file)
+    return "" if (!resident_ready(t, path))
+    var out : string
+    let rc = run_child(child_cmd("_resident_load_root.das", envs, "\"{path}\" {ctx}", true), out)
+    t |> equal(rc, 0, "the load root ran:\n{out}")
+    t |> success(find(out, "RESIDENT_LOAD active=true") >= 0, "the whole-model driver armed in the child:\n{out}")
+    return out
+}
+
+//! The resident driver's load-time announces off its log under both pin states: the ringed load names its rings, the flat one
+//! (`DASLLAMA_GPU_KV_RING=0`) its every-row mirror as asked; with the token gather off (`DASLLAMA_VK_GPU_EMBED=0`) the host embed
+//! says so, a gathering load saying nothing
+[cold_path]
+def ring_load_announces(t : T?; gf : GemmaFile) {
+    return if (!arm_on(t, gf.arm))
+    let ringed = resident_load_log(t, gf, 0l, [(name = "DASLLAMA_GPU_KV_RING", value = "1"), (name = "DASLLAMA_VK_GPU_EMBED", value = "1"),
+        (name = "DAS_LOG_LEVEL", value = "info")])
+    return if (empty(ringed))
+    let flat = resident_load_log(t, gf, 0l, [(name = "DASLLAMA_GPU_KV_RING", value = "0"), (name = "DASLLAMA_VK_GPU_EMBED", value = "0"),
+        (name = "DAS_LOG_LEVEL", value = "info")])
+    t |> success(find(ringed, RESIDENT_RING_ON) >= 0 && find(ringed, RESIDENT_RING_OFF) < 0, "the ringed load names its rings alone:\n{ringed}")
+    t |> success(find(flat, RESIDENT_RING_OFF) >= 0 && find(flat, RESIDENT_RING_ON) < 0, "the flat load names its every-row mirror alone:\n{flat}")
+    t |> success(find(flat, RESIDENT_EMBED_OFF) >= 0, "the host embed under the gather pin says so:\n{flat}")
+    t |> success(find(ringed, RESIDENT_EMBED_OFF) < 0, "the gathering load says nothing of the host embed")
 }
 
 //! the same tokens through the window chain at once and through the token command one at a time,

@@ -239,6 +239,9 @@ def test_dasllama_gate_fixtures(t : T?) {
     if (empty(fixture)) return
     make_dasllama_fixture(t, tree, fixture)
     restamp_dasllama_gate(t, fixture)
+    // the test-root heap gate's clean controls: a root on the persistent heap, a fixture module holding no test
+    write_at(t, fixture, "modules/dasLLAMA/tests/test_heaped.das", "options gen2\noptions persistent_heap\n\n[test]\ndef test_x(t : T?) \{\n\}\n")
+    write_at(t, fixture, "modules/dasLLAMA/tests/_fixture.das", "options gen2\n\ndef helper() \{\n\}\n")
 
     let green = spawn_at(fixture, [path_join(fixture, "modules/dasLLAMA/REVIEW.das")])
     t |> equal(0, green.rc, "covered fixture is green: {green.out}")
@@ -274,6 +277,7 @@ def test_dasllama_gate_fixtures(t : T?) {
     // a dequant pass its k8 member has
     write_at(t, fixture, "modules/dasLLAMA/dasllama/dasllama_metal_prefill.das",
         METAL_FORM_MATRIX_RED)
+    write_at(t, fixture, "modules/dasLLAMA/tests/test_heapless.das", "options gen2\n\n[test]\ndef test_x(t : T?) \{\n\}\n")
 
     let red = spawn_at(fixture, [path_join(fixture, "modules/dasLLAMA/REVIEW.das")])
     t |> equal(1, red.rc, "planted fixture is red")
@@ -326,7 +330,8 @@ let DASLLAMA_RED_NEEDLE_CENSUS <- [
     "AudioKind arm dasllama_ghostfam has no modules/dasLLAMA/dasllama/dasllama_ghostfam.das",
     "dasllama_unlisted.das: absent from modules/dasLLAMA/.das_module",
     "dasllama_toyvis.das: absent from modules/dasLLAMA/.das_module",
-    "names dasllama_gone, but no census dir (modules/dasLLAMA/dasllama) holds dasllama_gone.das"]
+    "names dasllama_gone, but no census dir (modules/dasLLAMA/dasllama) holds dasllama_gone.das",
+    "test_heapless.das:1: a dastest root with no `options persistent_heap`"]
 
 //! the citation, require-ban and harness-dashv gates on the same planted tree: the green run carries a clean control per gate
 //! (every citation form the rule licenses, the tower file on a shape helper, the two decoder files on their containers, a harness

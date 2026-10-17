@@ -1636,7 +1636,7 @@ def private handle_catalog_download(req : FrontReq; var resp : Reply) : http_sta
     if (!empty(tower) && tower != "vision" && tower != "drafter") {
         return resp |> JSON(error_body("unknown tower '{tower}' (vision | drafter | asr | tts)", "invalid_request_error"), http_status.BAD_REQUEST)
     }
-    for (e in model_catalog()) {
+    for (e in catalog_download_rows()) {
         if (e.name == want) {
             let kind = tower == "vision" ? CatalogCompanionKind.vision : CatalogCompanionKind.drafter
             let refusal = empty(tower) ? catalog_download_start(g_catalog_dir, e) : catalog_download_start_companion(g_catalog_dir, e, kind)
