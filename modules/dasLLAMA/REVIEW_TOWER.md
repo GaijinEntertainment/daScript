@@ -9,8 +9,8 @@ A tower is the Metal or the Vulkan GPU driver set that runs a family's encoder o
 stages through hooks - stage seats the CPU chain calls, drop hooks, reload or weights-epoch
 listeners - registered by `dasllama_metal_tower_register` (Metal) or by
 `dasllama_vulkan_tower_register` and `dasllama_vulkan_tts_register` (Vulkan)
-(`ARCHITECTURE_GPU_TOWER.md#tower-reach`). A diff reaches a tower when a function it touches is,
-calls - directly or through any chain of calls - or is reachable from one of those hooks, or when it touches a kernel class or builder a
+(`ARCHITECTURE_GPU_TOWER.md#tower-reach`). A diff reaches a tower when a function it touches is
+one of those hooks, calls one directly, or is reachable from one through any chain of calls, or when it touches a kernel class or builder a
 driver of that tower or its ASR decoder dispatches, a kernel-argument struct such a driver fills,
 or a kernel template such a class stamps (instantiates into a concrete kernel); the Metal tower is
 also reached by a touch of `dasllama/dasllama_metal_asr_dec.das` or
@@ -58,7 +58,8 @@ the hook's counter rising on a leg where that hook is the only reachable hook ra
 the cell in the same change.** The counter each hook kind raises: `encodes` and `blocks` for a
 blocks hook, `encodes` for an encode hook, `convs` for a front, conv or chunk hook (each in
 `metal_tower_stats()` or `vulkan_tower_stats()`), `mels` on Vulkan or `metal_tower_mel_encodes()`
-on Metal for the mel hook, `metal_tower_tail_encodes()` for the whisper-class tail hook, and a TTS
+on Metal for the mel hook, `metal_tower_tail_encodes()` on Metal or
+`vulkan_tower_tail_encodes()` on Vulkan for the whisper-class tail hook, and a TTS
 seat's `served` in `styletts2_gpu_stats(<seat>)` or `pocket_gpu_stats(<seat>)`.
 
 **A diff that adds a tower kernel (a kernel class a tower driver dispatches), widens the rows an
@@ -83,14 +84,13 @@ call site skips when the hook serves.
 compute changes that CPU code the same way, in the same diff.**
 
 **A diff that adds or changes a family's chain in the Metal tower or in the Metal ASR-decoder
-driver (`dasllama/dasllama_metal_asr_dec.das`) runs every stage of that family's served chain - the
-mel, the front, the blocks, the tail, the cross-KV and the decode step - on the device, for every
-model and weight lane the family serves, whenever a Metal device is present, the stage's knob is on
+driver (`dasllama/dasllama_metal_asr_dec.das`) and leaves a stage of that family's served chain -
+the mel, the front, the blocks, the tail, the cross-KV or the decode step - on the CPU, for any
+model or weight lane the family serves, while a Metal device is present, the stage's knob is on
 (`DASLLAMA_METAL_TOWER`; `DASLLAMA_METAL_WDEC` for the cross-KV; both `DASLLAMA_METAL_WDEC` and
-`DASLLAMA_METAL_WDEC_STEP` for the decode step), the decoder is at or above the decode step's width
-floor (`set_metal_wdec_step_min_d`), and the stage's command buffer succeeds; a stage it leaves on
-the CPU under those conditions is filed in `followup_metal.md`, with the stage and the model named,
-in the same change.** A stage on the CPU behind a Metal chain reads as served and sets the whole
+`DASLLAMA_METAL_WDEC_STEP` for the decode step), the decode step's decoder is at or above its width
+floor (`set_metal_wdec_step_min_d`) and the stage's command buffer succeeded, is a defect - put
+that stage on the device in the same change.** A stage on the CPU behind a Metal chain reads as served and sets the whole
 chain's rate.
 
 **A diff that changes what a TTS seat's chain computes in a tower driver applies `REVIEW_TTS.md`

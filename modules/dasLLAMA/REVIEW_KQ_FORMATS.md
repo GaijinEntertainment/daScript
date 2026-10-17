@@ -77,11 +77,10 @@ there with a reason naming the site and the member.** A site that serves only th
 author's files carried converts the rest without saying so, and the first file in another format
 fails or converts at load with no message naming the site.
 
-**A diff that adds or changes a site reading a weight plane whose format is a literal `KqFmt`
-member - a literal standing for the plane's weight format, not one choosing tile dimensions for a
-plane no member describes (an f32 plane on a q8 tile) - is a defect: tag the plane from its disk
-type with `kq_tag` / `kq_fmt_of` (`dasllama/dasllama_load.das`) and read that tag at the site
-instead.** A literal at the site is a conversion no report names: every disk type the file carries becomes the literal's form, and each
+**A diff that adds or changes a site that names, with a literal `KqFmt` member, the format of a
+weight plane whose disk type some `KqFmt` member describes is a defect: tag the plane from its
+disk type with `kq_tag` / `kq_fmt_of` (`dasllama/dasllama_load.das`) and read that tag at the
+site instead.** A literal at the site is a conversion no report names: every disk type the file carries becomes the literal's form, and each
 backend that copies the literal serves that form in place of the file's.
 
 **Weakening `REVIEW.das`'s `check_load_big_format` is a defect.** That check fails every `load_big`
@@ -96,10 +95,9 @@ instead, or cite the follow-up row that ledgers it.**
 
 **A diff that states, in any document, PR description, test name or predicate, that a backend
 serves a weight format at a site lands or cites a subtest that loads a file whose plane at that
-site is stored in that format on disk, and asserts that the loader's format tag for that plane
-equals its disk type, and that a kernel counter (`metal_kernel_count(name)` on Metal, the Vulkan
-driver's per-kernel census count) rose during the run - a counter that reading any other plane of
-that file leaves unchanged.**
+site is in that format on disk, and asserts that the loader's format tag for that plane
+equals its disk type and that a kernel counter (`metal_kernel_count(name)` on Metal, the Vulkan
+driver's per-kernel census count) that no other plane of that file moves rose during the run.**
 The file is a downloaded `performance/model_specs.das` row's file, or, when no downloaded row
 carries the format, a row whose `file` ends `-local.gguf` and whose `recipe` requantizes into it. A
 subtest that only asserts the backend ran still passes when the site reads a converted copy or runs
