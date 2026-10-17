@@ -73,9 +73,9 @@ def tx_grad_fragment {
     let dx = dFdx(tx_uv)
     let dy = dFdy(tx_uv)
     tx_color = textureGrad(tx_tex, tx_uv, dx, dy)
-        + textureGrad(tx_volume, float3(tx_uv,0.5), float3(dx,0.0), float3(dy,0.0))
-        + textureGrad(tx_cube, float3(tx_uv,1.0), float3(dx,0.0), float3(dy,0.0))
-        + textureGrad(tx_array, float3(tx_uv,2.0), dx, dy)
+        + textureGrad(tx_volume, float3(tx_uv, 0.5), float3(dx, 0.0), float3(dy, 0.0))
+        + textureGrad(tx_cube, float3(tx_uv, 1.0), float3(dx, 0.0), float3(dy, 0.0))
+        + textureGrad(tx_array, float3(tx_uv, 2.0), dx, dy)
 }
 
 def private has(hay, needle : string) : bool => find(hay, needle) >= 0
