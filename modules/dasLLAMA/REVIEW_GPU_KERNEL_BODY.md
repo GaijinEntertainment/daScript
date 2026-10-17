@@ -47,8 +47,8 @@ row's bytes.
 kernel whose addressing assumes an alignment of a value its builder receives gates each dispatch
 site of that kernel on that site's own K - the extent the kernel's fixed-size chunk steps along, in
 a loop or across invocations; one gate shared by several sites conforms only when it tests every one
-of those sites' K.** Routing a misaligned shape to another stamp that serves it declines it for the
-first stamp.
+of those sites' K.** Routing a misaligned shape to another kernel form (a kernel class or a template instance) that
+serves it counts as declining it for the kernel this gate protects.
 
 **A site's alignment gate on a value that site uses only as its K divides by the chunk its
 kernel steps along K, or by the multiple of that chunk the site's split of K across dispatches
@@ -74,11 +74,11 @@ stream it from device instead.** A dequant, a transpose, or a layout or element-
 makes the forms differ. A staged pass-through costs the op more than the reads it saves.
 
 **A loop that fills a `@workgroup` tile computes each lane's tile address - where the lane writes
-in the tile - from the lane's own slot index (the index that steps by one from lane to lane),
-compile-time constants and the threadgroup size, as a consecutive run of elements per lane or a
-lane-coalesced stride of a constant or of the threadgroup size, never from a div or mod by a
-run-time value, the threadgroup size included; an `[unroll_full]` loop's counter
-is a compile-time constant once unrolled, and the divisor may be a run-time value.**
+in the tile - from the lane's slot index (the index that steps by one from lane to lane),
+compile-time constants and the workgroup size. The address is either a consecutive run of elements
+per lane, or a stride where each step advances every lane by the same constant or by the workgroup
+size. It never comes from a div or mod whose dividend and divisor are both run-time values. The
+workgroup size is a run-time value; an `[unroll_full]` loop's counter is a compile-time value.**
 
 **Never decide a row's validity or owner in the bucket-ordered buffer (the routed rows sorted so
 each expert's rows form one contiguous run, a bucket) by scanning the per-bucket base and count
@@ -103,10 +103,10 @@ calls its `wg_sum`, `wg_max` or `wg_rms_inv`; a class template in
 separate sums over parts of the workgroup - is not one value; `ARCHITECTURE_GPU.md#gpu-backends`
 names the bodies that fold that way.
 
-**A diff that adds or changes a Metal kernel body that runs one fold over `@workgroup` slots after
-another over the same slots - two `tg_sum_all` / `tg_max_all` calls, two `MetalTgReduceBase` or
-`GkWgReduce` fold methods on either backend, or one such call inside a loop - puts a `barrier()`
-between them.**
+**A diff that adds or changes a kernel body that runs one fold over a `@workgroup` array after
+another over the same array - two calls among `tg_sum_all`, `tg_max_all` and the fold methods of
+`MetalTgReduceBase` or `GkWgReduce`, or one such call inside a loop - puts a `barrier()` between
+them.**
 
 **Never put an op every lane of its exchange set must reach together - a `barrier()`, a simdgroup
 matrix op, a subgroup shuffle, vote, ballot or reduction, or a call to a function that runs one,
