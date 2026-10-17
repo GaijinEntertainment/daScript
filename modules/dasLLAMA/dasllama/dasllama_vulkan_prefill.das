@@ -889,36 +889,102 @@ def private pf_ple_block(raw : VkCommandBuffer; var h : VkHaz; l : int64; b : in
     let ple = g_rd.ple
     let all = uint(g_rd.n_layers * ple)   //! the side rows' position stride
     let L & = unsafe(g_rd.layers[l])
+    let woff = l * ple * dim   //! the layer's first element in either f32 plane
     //! every step runs the whole window, the FFN's last-layer row slice included: the branch is 256 wide, and the sliced rows' results go unread
-    if (L.bpg < 0l) {   //! the file's f32 rows read the stream as it is, on the f32 tile
+    let x6 = pf_ple_gate_f16(L)   //! the gate's feed: the residual rows as f16 (the tile pick and split-k serve the 256-wide GEMM) else their quants
+    if (L.bpg < 0l && !x6) {   //! the file's f32 rows read the stream as it is, on the f32 tile
         pfq_ts(raw)
-        var pcg = pf_ple_f32_args(wlen, dim, ple, l * ple * dim)
+        var pcg = pf_ple_f32_args(wlen, dim, ple, woff)
         enc_dn_ba_cls(raw, h, g_rd.pf_sets[b + 17], pcg, dn_ba_wgs(wlen, ple / 2l))
         pfq_ts(raw)
     } else {
-        let x6 = pf_f16_feed(L.fpg)   //! the gate's feed: the residual rows as f16 (the tile pick and split-k serve the 256-wide GEMM) else their quants
         pf_feed_enc(raw, h, g_rd.pf_sets[b + 16], x6, kq_sb(L.fpg) && !x6, 0l, wlen * dim)
         pfq_ts(raw)
         let xf = pf_feed_planes(x6, g_rd.pf_xf, g_rd.pf_xq, g_rd.pf_xs, dim)
-        let pg = arena_planes(L.fpg, L.bpg)
-        pf_gemm_enc(raw, h, b + 17, L.fpg, pg.wq, pg.ws, xf.q, xf.s, g_rd.pf_gate,
-            pg.wqb, pg.wsb, xf.qn, xf.sn, np * ple * 4l, VHZ_XQ, VHZ_GATE, dim, ple, L.bpg, wlen, x6)
+        if (L.bpg < 0l) {
+            pf_f32_gemm_enc(raw, h, b + 17, g_rd.ple_gf32_dev, g_rd.ple_gf32_bytes, xf.q, xf.qn, VHZ_XQ, g_rd.pf_gate, np * ple * 4l, VHZ_GATE, dim, ple, woff, wlen)
+        } else {
+            let pg = arena_planes(L.fpg, L.bpg)
+            pf_gemm_enc(raw, h, b + 17, L.fpg, pg.wq, pg.ws, xf.q, xf.s, g_rd.pf_gate,
+                pg.wqb, pg.wsb, xf.qn, xf.sn, np * ple * 4l, VHZ_XQ, VHZ_GATE, dim, ple, L.bpg, wlen, x6)
+        }
     }
-    var pca = ActArgs(nelem = uint(wlen * ple), act = ACT_GELU, ubase = uint(l * ple), ustride = all, ulen = uint(ple))
-    if (L.bpp < 0l) {   //! the act's f32 rows (in the up plane, free here) feed the f32 projection
+    let p6 = pf_ple_proj_f16(L)   //! the projection's feed: the act rows as f16 where the projection's tile reads them, else their quants or f32 rows
+    if (L.bpp < 0l && !p6) {   //! the act's f32 rows (in the up plane, free here) feed the f32 projection
         var pcf = GkPleActArgs(nelem = uint(wlen * ple), sbase = uint(l * ple), sstride = all, slen = uint(ple))
         enc_ple_act_f32_cls(raw, h, g_rd.pf_sets[b + 18], pcf, (wlen * ple + 255l) / 256l)
         pfq_ts(raw)
-        var pcp = pf_ple_f32_args(wlen, ple, dim, l * ple * dim)
+        var pcp = pf_ple_f32_args(wlen, ple, dim, woff)
         enc_dn_ba_cls(raw, h, g_rd.pf_sets[b + 19], pcp, dn_ba_wgs(wlen, dim / 2l))
         pfq_ts(raw)
         return
     }
-    actrq_enc(raw, h, g_rd.pf_sets[b + 18], kq_sb(L.fpp), pca, wlen * ple)
+    var pca = ActArgs(nelem = uint(wlen * ple), act = ACT_GELU, ubase = uint(l * ple), ustride = all, ulen = uint(ple))
+    if (p6) {
+        enc_actf16_cls(raw, h, g_rd.pf_sets[b + 18], pca, (wlen * ple / 4l + 255l) / 256l)
+    } else {
+        actrq_enc(raw, h, g_rd.pf_sets[b + 18], kq_sb(L.fpp), pca, wlen * ple)
+    }
     pfq_ts(raw)
+    let pf = pf_feed_planes(p6, g_rd.pf_hf, g_gpu.hq_dev, g_gpu.hs_dev, ple)
+    if (L.bpp < 0l) {
+        pf_f32_gemm_enc(raw, h, b + 19, g_rd.ple_pf32_dev, g_rd.ple_pf32_bytes, pf.q, pf.qn, VHZ_HQ, g_rd.pf_ffnout, np * dim * 4l, VHZ_FFO, ple, dim, woff, wlen)
+        return
+    }
     let pp = arena_planes(L.fpp, L.bpp)
-    pf_gemm_enc(raw, h, b + 19, L.fpp, pp.wq, pp.ws, g_gpu.hq_dev, g_gpu.hs_dev, g_rd.pf_ffnout,
-        pp.wqb, pp.wsb, np * ple, np * (ple / 32l) * 4l, np * dim * 4l, VHZ_HQ, VHZ_FFO, ple, dim, L.bpp, wlen, false)
+    pf_gemm_enc(raw, h, b + 19, L.fpp, pp.wq, pp.ws, pf.q, pf.s, g_rd.pf_ffnout,
+        pp.wqb, pp.wsb, pf.qn, pf.sn, np * dim * 4l, VHZ_HQ, VHZ_FFO, ple, dim, L.bpp, wlen, p6)
+}
+
+//! the file's f32 per-layer-embedding rows ride the staged KHR tile where the device has it (`DASLLAMA_VK_PLE_F32_TILE` holds
+//! them on the scalar f32 tile)
+[arch(at="../ARCHITECTURE_GPU_VULKAN_KHR.md#f32-rows-staged-tile")]
+def private pf_ple_f32_staged : bool => g_env_vulkan.vk_ple_f32_tile && khr_kq_tile_on()
+
+//! the per-layer-embedding gate reads the window's rows as f16: a plane the f16 feed admits, or f32 rows on the staged tile
+def private pf_ple_gate_f16(L : RLayer) : bool => L.bpg < 0l ? pf_ple_f32_staged() : pf_f16_feed(L.fpg)
+
+//! the projection reads the act's rows as f16: a plane the f16 feed admits, or f32 rows on the staged tile
+def private pf_ple_proj_f16(L : RLayer) : bool => L.bpp < 0l ? pf_ple_f32_staged() : pf_f16_feed(L.fpp)
+
+//! the k chunks a staged f32-row GEMM of K `n` takes: the most, up to eight, `cm2_chunk` admits, each a dependent window chain's hop
+//! cut to its deepest chunk's latency (one under 512)
+[arch(at="../ARCHITECTURE_GPU_VULKAN_KHR.md#f32-rows-staged-tile")]
+def pf_f32_split(n : int64) : int64 {
+    var sk = min(8l, n / 256l)
+    while (sk > 1l && cm2_chunk(n, sk) == 0l) {
+        sk--
+    }
+    return max(sk, 1l)
+}
+
+//! one f32-row GEMM on the staged KHR tile: y[rows x d] = x[rows x n] w^T over the plane's `d` rows of `n` from element `woff`,
+//! the f16 rows at `xf`; one region at row 0 and the tile's one column, over `pf_f32_split`'s k chunks into the split-k planes and
+//! their reduce
+[arch(at="../ARCHITECTURE_GPU_VULKAN_KHR.md#f32-rows-staged-tile")]
+def private pf_f32_gemm_enc(raw : VkCommandBuffer; var h : VkHaz; idx : int; w : uint64; wn : int64; xf : uint64; xn : int64; xbit : uint;
+                            y : uint64; yn : int64; ybit : uint; n, d, woff, rows : int64) {
+    let nsplit = pf_f32_split(n)
+    let split = nsplit > 1l
+    if (split) {
+        verify(nsplit * rows * d * 4l <= g_rd.pf_splitk_bytes, "vk prefill: the staged f32 tile's split-k planes exceed the scratch bound")
+    }
+    let groups = int64(fill_arena_batch_sched(g_rd.pf_meta[idx], d, woff / 4l, rows, int(KqFmt.q8), true, nsplit, 0l, 128l))
+    var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u, ksplit = split ? uint(cm2_chunk(n, nsplit)) : 0u)
+    var s = cached(g_rd.pf_cls_gemm, idx * 16 + 15) $ {
+        verify(ensure_f32_batch_khr_cls(), "vk prefill: the staged f32 tile's class rail must engage")
+        return set_f32_batch_khr_cls(fixed_array(w, g_rd.dummy, g_rd.pf_meta[idx].buf, xf, split ? g_rd.pf_splitk : y),
+            fixed_array(wn, 256l, BATCH_META_BYTES, xn, split ? g_rd.pf_splitk_bytes : yn), fixed_array(0u, 0u, 0u, xbit, split ? VHZ_SK : ybit))
+    }
+    enc_f32_batch_khr_cls(raw, h, s, pc, groups)
+    if (split) {
+        var rset = cached(g_rd.pf_cls_gemm, idx * 16 + 12) $ {
+            verify(ensure_splitk_reduce_cls(), "vk prefill: the split-k reduce class rail must engage")
+            return set_splitk_reduce_cls(fixed_array(g_rd.pf_splitk, y), fixed_array(g_rd.pf_splitk_bytes, yn), fixed_array(VHZ_SK, ybit))
+        }
+        splitk_reduce_enc(raw, h, rset, rows * d, nsplit)
+    }
+    pfq_ts(raw)
 }
 
 //! the f32 tile (`DnBaGemm`) as a plain GEMM: `d` rows of `n` at `woff` over the window's rows into y[p * d + e] - its two output
@@ -1013,7 +1079,7 @@ def private pf_setup {
                 let gbufs = fixed_array(g_rd.ple_wp_dev, g_rd.pf_x, g_rd.pf_plep, g_rd.ple_pnorm_dev)
                 let gsizes = fixed_array(g_rd.ple_wp_bytes, np * dim * 4l, np * all * 4l, g_rd.ple * 4l)
                 let ggbits = fixed_array(0u, VHZ_X, VHZ_MRT, 0u)
-                g_rd.pf_ple_gemm_set = g_rd.ple_wp_bf16 ? set_router_gemv_bf16_cls(gbufs, gsizes, ggbits) : set_router_gemv_cls(gbufs, gsizes, ggbits)
+                g_rd.pf_ple_gemm_set = g_rd.ple_wp_bf16 ? ple_proj_bf16_set(gbufs, gsizes, ggbits) : set_router_gemv_cls(gbufs, gsizes, ggbits)
             }
             //! the finish over [np x layers] slices of ple: side = (gathered + pnorm . rms(projected)) / sqrt(2)
             g_rd.pf_ple_ar_set = set_ple_finish_cls(fixed_array(g_rd.pf_plep, g_rd.ple_pnorm_dev, g_rd.pf_ple),
@@ -1054,7 +1120,7 @@ def private pf_setup {
     for (L in g_rd.layers) {
         any_f16_feed = (any_f16_feed || pf_f16_feed(L.fq) || pf_f16_feed(L.fo) || pf_f16_feed(L.f1) || pf_f16_feed(L.f2)
             || (L.recurrent && (pf_f16_feed(L.fqkv) || pf_f16_feed(L.fz) || pf_f16_feed(L.fout)))
-            || (L.ple && L.bpg >= 0l && pf_f16_feed(L.fpg)))
+            || (L.ple && (pf_ple_gate_f16(L) || pf_ple_proj_f16(L))))
         anykq = (anykq || kq_sb(L.fq) || kq_sb(L.fo) || kq_sb(L.f1) || kq_sb(L.f2) || (L.recurrent && (kq_sb(L.fqkv) || kq_sb(L.fz) || kq_sb(L.fout)))
             || (L.ple && ((L.bpg >= 0l && kq_sb(L.fpg)) || (L.bpp >= 0l && kq_sb(L.fpp)))))
         ple_f32 = ple_f32 || (L.ple && (L.bpg < 0l || L.bpp < 0l))
@@ -1308,17 +1374,20 @@ def private pf_setup {
         if (L.ple) {
             let ple = g_rd.ple
             let side_bytes = np * g_rd.n_layers * ple * 4l
-            if (L.bpg < 0l) {   //! 17: the f32 gate rows over the stream rows (`pf_ple_f32_args`)
+            if (L.bpg < 0l && !pf_ple_gate_f16(L)) {   //! 17: the f32 gate rows over the stream rows (`pf_ple_f32_args`)
                 g_rd.pf_sets[b + 17] = set_dn_ba_cls(fixed_array(g_rd.ple_gf32_dev, g_rd.pf_x, g_rd.pf_gate),
                     fixed_array(g_rd.ple_gf32_bytes, np * dim * 4l, np * ple * 4l), fixed_array(0u, VHZ_X, VHZ_GATE))
             } else {
-                g_rd.pf_sets[b + 16] = pf_feed_set(pf_f16_feed(L.fpg), g_rd.pf_x, VHZ_X, g_rd.pf_xf, g_rd.pf_xq, g_rd.pf_xs, dim, VHZ_XQ)
+                g_rd.pf_sets[b + 16] = pf_feed_set(pf_ple_gate_f16(L), g_rd.pf_x, VHZ_X, g_rd.pf_xf, g_rd.pf_xq, g_rd.pf_xs, dim, VHZ_XQ)
             }
-            if (L.bpp < 0l) {   //! 18: the act's f32 rows into the up plane; 19: the f32 projection over them
+            if (L.bpp < 0l && !pf_ple_proj_f16(L)) {   //! 18: the act's f32 rows into the up plane; 19: the f32 projection over them
                 g_rd.pf_sets[b + 18] = set_ple_act_f32_cls(fixed_array(g_rd.pf_gate, g_rd.pf_ple, g_rd.pf_up),
                     fixed_array(np * ple * 4l, side_bytes, np * ple * 4l), fixed_array(VHZ_GATE, VHZ_COS, VHZ_UP))
                 g_rd.pf_sets[b + 19] = set_dn_ba_cls(fixed_array(g_rd.ple_pf32_dev, g_rd.pf_up, g_rd.pf_ffnout),
                     fixed_array(g_rd.ple_pf32_bytes, np * ple * 4l, np * dim * 4l), fixed_array(0u, VHZ_UP, VHZ_FFO))
+            } elif (pf_ple_proj_f16(L)) {   //! 18: the act as f16 rows into the hidden plane, the projection's f16 feed
+                g_rd.pf_sets[b + 18] = set_actf16_cls(fixed_array(g_rd.pf_gate, g_rd.pf_ple, g_rd.pf_hf),
+                    fixed_array(np * ple * 4l, side_bytes, np * hid * 2l), fixed_array(VHZ_GATE, VHZ_COS, VHZ_HQ))
             } else {
                 g_rd.pf_sets[b + 18] = set_actrq_cls(fixed_array(g_rd.pf_gate, g_rd.pf_ple, g_gpu.hq_dev, g_gpu.hs_dev),
                     fixed_array(np * ple * 4l, side_bytes, BATCH_HQ_BYTES, BATCH_HS_BYTES),
@@ -1671,9 +1740,16 @@ def ple_proj_gemv_why(dim, all, w16_bytes : int64) : string {
     return vk_range_ok(w16_bytes) ? "" : "its f16 panel ({w16_bytes} bytes) passes the device's storage range {vk_max_storage_range()}"
 }
 
-//! why the bf16 projection rows have no GEMV at model dim `dim`, "" where they do: the stamp (`router_gemv_bf16_cls`) steps a row a
-//! word pair, so an odd dim drops the row's last element
-def ple_proj_bf16_why(dim : int64) : string => dim % 2l == 0l ? "" : "the bf16 rows' word-pair walk wants an even dim, not {dim}"
+//! the projection rows' GEMV class rail: the f32 rows', or the bf16 rows' word-pair or halfword stamp by the model dim
+def private ple_proj_rail_ensure(bf16 : bool) : bool {
+    if (!bf16) return ensure_router_gemv_cls()
+    return router_bf16_pairs(g_rd.dim, 0l) ? ensure_router_gemv_bf16_cls() : ensure_router_gemv_bf16_hw_cls()
+}
+
+//! the bf16 projection rows' GEMV set over `bufs`: the word-pair stamp at an even model dim, the halfword stamp at an odd one (every
+//! row then starts mid-word)
+def private ple_proj_bf16_set(bufs : uint64 const[4]; sizes : int64 const[4]; gbits : uint const[4]) : VkDescriptorSet
+    => router_bf16_pairs(g_rd.dim, 0l) ? set_router_gemv_bf16_cls(bufs, sizes, gbits) : set_router_gemv_bf16_hw_cls(bufs, sizes, gbits)
 
 //! The pre-step's projection on device off the file's own rows (bf16 halves `w16`, else f32 `w32`) and its norm row: the router GEMV
 //! under 1/sqrt(dim) at the token command, the window's f16 tile over a panel it converts each window (else the router GEMV) before
@@ -1685,14 +1761,9 @@ def vk_rdec_set_ple_proj(w16 : array<uint16>; w32 : array<float>; pnorm : array<
     }
     assert(g_rd != null && g_rd.ple > 0l, "vk_rdec_set_ple_proj before set_ple")
     let bf16 = !empty(w16)
-    let k_why = bf16 ? ple_proj_bf16_why(g_rd.dim) : ""
-    if (k_why != "") {
-        to_log(LOG_WARNING, "dasLLAMA vulkan resident: the per-layer-embedding projection keeps the CPU pre-step - {k_why}\n")
-        return false
-    }
     let n = bf16 ? long_length(w16) : long_length(w32)
     if (n != all * g_rd.dim || long_length(pnorm) != g_rd.ple || g_rd.pf_ready
-            || !((bf16 ? ensure_router_gemv_bf16_cls() : ensure_router_gemv_cls()) && ensure_ple_finish_cls())) {
+            || !(ple_proj_rail_ensure(bf16) && ensure_ple_finish_cls())) {
         return false
     }
     let wp_bytes = n * (bf16 ? 2l : 4l)
@@ -1722,7 +1793,7 @@ def vk_rdec_set_ple_proj(w16 : array<uint16>; w32 : array<float>; pnorm : array<
     let pbufs = fixed_array(g_rd.ple_wp_dev, g_rd.x_dev, g_rd.tok_plep, g_rd.ple_pnorm_dev)
     let psizes = fixed_array(g_rd.ple_wp_bytes, g_rd.dim * 4l * nb, all * 4l * nb, g_rd.ple * 4l)
     let pbits = fixed_array(0u, VHZ_X, VHZ_MRT, 0u)
-    g_rd.s_tok_pleproj = bf16 ? set_router_gemv_bf16_cls(pbufs, psizes, pbits) : set_router_gemv_cls(pbufs, psizes, pbits)
+    g_rd.s_tok_pleproj = bf16 ? ple_proj_bf16_set(pbufs, psizes, pbits) : set_router_gemv_cls(pbufs, psizes, pbits)
     g_rd.s_tok_ple_ar = set_ple_finish_cls(fixed_array(g_rd.tok_plep, g_rd.ple_pnorm_dev, g_rd.ple_dev),
         fixed_array(all * 4l * nb, g_rd.ple * 4l, all * 4l * nb), fixed_array(VHZ_MRT, 0u, VHZ_COS))
     g_rd.ple_gpu = true

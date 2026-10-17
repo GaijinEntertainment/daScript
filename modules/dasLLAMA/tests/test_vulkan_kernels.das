@@ -54,24 +54,30 @@ let private ARM_KHR = 3
 let private ARM_CM2_E = 4
 let private ARM_TOY_STRIP = 5   //! the q8 l-tile toy stamp built with the four-wide decode stripped to the scalar callback
 let private ARM_TOY_TWIN = 6    //! ... and built as the device builds it
+let private ARM_KHR_F32 = 7     //! the staged KHR tile over a file's f32 rows (`F32KhrBatch`), the KHR arm's geometry
 
 def private cell_arm_name(arm : int) : string {
+    if (arm == ARM_KHR_F32) return "khr f32"
     if (arm >= ARM_TOY_STRIP) return arm == ARM_TOY_STRIP ? "stripped toy l" : "twin toy l"
     return arm == ARM_CM2_L ? "l" : (arm == ARM_CM2_M ? "m" : (arm == ARM_CM2_S ? "s" : (arm == ARM_KHR ? "khr" : "e")))
 }
 
 //! the arm helpers stay generic on purpose - a build without the vulkan module must never infer these bodies
 //! 256 is the l stamps' BN default, a column no schedule constant names (the l column is never a schedule piece)
-def private cell_arm_rows_per_wg(arm) => arm == ARM_CM2_L || arm >= ARM_TOY_STRIP ? 256 : int(arm == ARM_CM2_S ? SCHED_S_ROWS : SCHED_M_ROWS)
+def private cell_arm_rows_per_wg(arm) => arm == ARM_CM2_L || arm == ARM_TOY_STRIP || arm == ARM_TOY_TWIN ? 256 : int(arm == ARM_CM2_S ? SCHED_S_ROWS : SCHED_M_ROWS)
 
 def private cell_arm_tc(arm) => arm == ARM_CM2_E ? CM2_TC_E : int64(cell_arm_rows_per_wg(arm))
 
-def private cell_arm_served(arm) => arm == ARM_KHR ? khr_kq_tile_on() : (g_gpu.coopmat_mode == COOPMAT_CM2 && g_gpu.has_coopmat2)
+def private cell_arm_served(arm) => arm == ARM_KHR || arm == ARM_KHR_F32 ? khr_kq_tile_on() : (g_gpu.coopmat_mode == COOPMAT_CM2 && g_gpu.has_coopmat2)
 
 def private cell_arm_set(arm, fmt : int; bufs; sizes; gbits) {
     if (arm == ARM_KHR) {
         if (!khr_cls_ensure(fmt)) panic("the KHR class rail for format {fmt} must engage on a coopmat device")
         return khr_cls_set(fmt, bufs, sizes, gbits)
+    }
+    if (arm == ARM_KHR_F32) {
+        if (!ensure_f32_batch_khr_cls()) panic("the staged f32 tile's class rail must engage on a coopmat device")
+        return set_f32_batch_khr_cls(bufs, sizes, gbits)
     }
     verify(g_gpu.coopmat_mode == COOPMAT_CM2, "a cm2 arm dispatched off cm2 mode - the ladder would hand back the KHR stamp")
     if (arm >= ARM_TOY_STRIP) return arm == ARM_TOY_STRIP ? set_toy_q8_cm2_strip_cls(bufs, sizes, gbits) : set_toy_q8_cm2_twin_cls(bufs, sizes, gbits)
@@ -82,6 +88,8 @@ def private cell_arm_set(arm, fmt : int; bufs; sizes; gbits) {
 def private cell_arm_enc(arm, fmt : int; raw; var h; var s; var pc; groups : int64) {
     if (arm == ARM_KHR) {
         khr_cls_enc(fmt, raw, h, s, pc, groups)
+    } elif (arm == ARM_KHR_F32) {
+        enc_f32_batch_khr_cls(raw, h, s, pc, groups)
     } elif (arm == ARM_TOY_STRIP) {
         enc_toy_q8_cm2_strip_cls(raw, h, s, pc, groups)
     } elif (arm == ARM_TOY_TWIN) {
@@ -2829,6 +2837,37 @@ def test_vkd_kq_q40_cm_batch(t0 : T?) {
     }
 }
 
+//! a KHR stamp's split arm over a tile fixture: its first region alone under two 256-aligned k chunks (`want_ck` and the rest) into
+//! the partial planes, then the reduce into the y plane, against the oracle's first region - the k0 / k1 / ybase prologue every KHR
+//! stamp shares with the cm2 tiles
+def private khr_split_arm(t : T?; tag : string; f : TileFixture; y_ref : array<float>; want_ck : int64; set_fn; enc_fn) {
+    verify(ensure_splitk_reduce_cls(), "the split-k reduce's class rail must engage")
+    let nsplit = 2
+    let ck = cm2_chunk(int64(f.n), int64(nsplit))
+    t |> equal(ck, want_ck, "the engine's chunk: K {f.n} in two 256-aligned chunks, {want_ck} and {int64(f.n) - want_ck} deep")
+    let cnt0 = TILE_CELL_ROWS0
+    let d = TILE_CELL_D
+    let swgs = ((cnt0 + 127) / 128) * ((d + 127) / 128) * nsplit
+    var y_ref0 <- copy_span(y_ref, 0, cnt0 * d)   // the oracle's first region is the split arm's whole answer
+    with_cell_planes() $(var cp : CellPlanes) {
+        let pwq = cp |> in_plain(f.wqh)
+        let pws = cp |> in_plain(f.wsh)
+        let psc = cp |> in_plain(one_region_words(cnt0, swgs))   // one region at row 0 over the first weight plane
+        let pxf = cp |> in_plain(f.xfh)
+        let pp = cp |> out_(cnt0 * d * nsplit)
+        let py = cp |> out_(cnt0 * d)
+        var scs = cp |> cls_set(fixed_array(pwq, pws, psc, pxf, pp), set_fn)
+        var srd = cp |> cls_set(fixed_array(pp, py), @@set_splitk_reduce_cls)
+        var pcs = BatchArgs(n = uint(f.n), d = uint(d), map_off = 4u, ksplit = uint(ck))
+        cp |> cell_record() $(raw3 : VkCommandBuffer; var h3 : VkHaz) {
+            invoke(enc_fn, raw3, h3, scs, pcs, int64(swgs))
+            splitk_reduce_enc(raw3, h3, srd, int64(cnt0 * d), int64(nsplit))
+        }
+        check_rows(t, "{tag} split in two k chunks + the reduce vs the CPU oracle", cp |> plane_run(py), y_ref0, cm_bar(y_ref0), d)
+    }
+    delete y_ref0
+}
+
 [test]
 def test_vkd_q8_khr_batch(t0 : T?) {
     t0 |> run("the KHR kq tile over Q8_0 blocks (q8_batch_khr) == the CPU oracle") <| @(t : T?) {
@@ -2847,31 +2886,33 @@ def test_vkd_q8_khr_batch(t0 : T?) {
             var y_ref <- tile_cell_arms(t, "q8", int(KqFmt.q8), f, [ARM_KHR], @@q8f16_gemm_oracle)
             // the split arm: the first region alone under two 256-aligned k chunks (512 and 64 deep) into the partial
             // planes, then the reduce into the y plane - the k0 / k1 / ybase prologue the KHR stamp shares with the cm2 tiles
-            verify(ensure_splitk_reduce_cls(), "the split-k reduce's class rail must engage")
-            let nsplit = 2
-            let ck = cm2_chunk(int64(f.n), int64(nsplit))
-            t |> equal(ck, 512l, "the engine's chunk: K 576 in two 256-aligned chunks, 512 and 64 deep")
-            let cnt0 = TILE_CELL_ROWS0
-            let d = TILE_CELL_D
-            let swgs = ((cnt0 + 127) / 128) * ((d + 127) / 128) * nsplit
-            var y_ref0 <- copy_span(y_ref, 0, cnt0 * d)   // the oracle's first region is the split arm's whole answer
-            with_cell_planes() $(var cp : CellPlanes) {
-                let pwq = cp |> in_plain(f.wqh)
-                let pws = cp |> in_plain(f.wsh)
-                let psc = cp |> in_plain(one_region_words(cnt0, swgs))   // one region at row 0 over the first weight plane
-                let pxf = cp |> in_plain(f.xfh)
-                let pp = cp |> out_(cnt0 * d * nsplit)
-                let py = cp |> out_(cnt0 * d)
-                var scs = cp |> cls_set(fixed_array(pwq, pws, psc, pxf, pp), @@set_q8_batch_khr_cls)
-                var srd = cp |> cls_set(fixed_array(pp, py), @@set_splitk_reduce_cls)
-                var pcs = BatchArgs(n = uint(f.n), d = uint(d), map_off = 4u, ksplit = uint(ck))
-                cp |> cell_record() $(raw3 : VkCommandBuffer; var h3 : VkHaz) {
-                    enc_q8_batch_khr_cls(raw3, h3, scs, pcs, int64(swgs))
-                    splitk_reduce_enc(raw3, h3, srd, int64(cnt0 * d), int64(nsplit))
-                }
-                check_rows(t, "q8 KHR tile split in two k chunks + the reduce vs the CPU oracle", cp |> plane_run(py), y_ref0, cm_bar(y_ref0), d)
+            khr_split_arm(t, "q8 KHR tile", f, y_ref, 512l, @@set_q8_batch_khr_cls, @@enc_q8_batch_khr_cls)
+            delete y_ref
+            delete f
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
+[test]
+def test_vkd_f32_khr_batch(t0 : T?) {
+    t0 |> run("the staged KHR tile over a file's f32 rows (f32_batch_khr) == the CPU oracle") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!ensure_q8_batch_cls()) {   // engage the device without touching coopmat rails
+                t |> skip("no Vulkan device")
+                return
             }
-            delete y_ref0
+            if (!khr_kq_tile_on()) {
+                t |> skip("the staged f32 tile needs KHR cooperative matrices at subgroup 32")
+                return
+            }
+            let n = 544   //! seventeen 32-deep k steps, off every 64 and 256 lattice
+            var wqh <- [for (i in range(2 * TILE_CELL_D * n)); float_bits_to_uint(float(hash_word(uint(i) + 71u) % 4001u) * 0.0000317 - 0.0634)]   //! f32 words whose low mantissa bits the stage rounds away
+            var wsh <- [0u, 0u, 0u, 0u]   //! the template's scale binding, which the f32 stage never reads
+            var f <- tile_fixture(n, 4, wqh, wsh, 3u, 5u)
+            var y_ref <- tile_cell_arms(t, "f32", int(KqFmt.q8), f, [ARM_KHR_F32], @@f32f16_gemm_oracle)
+            khr_split_arm(t, "the staged f32 tile", f, y_ref, 512l, @@set_f32_batch_khr_cls, @@enc_f32_batch_khr_cls)   //! the window gate's split form
             delete y_ref
             delete f
         } else {
@@ -9264,11 +9305,16 @@ def test_vkd_topk_n(t0 : T?) {
 }
 
 //! the router GEMV's descriptor set on the stamp `bf16` names
-def private router_set(bf16 : bool; bufs; sizes) => bf16 ? set_router_gemv_bf16_cls(bufs, sizes, fixed_array(0u, 1u, 2u, 0u)) : set_router_gemv_cls(bufs, sizes, fixed_array(0u, 1u, 2u, 0u))
+def private router_set(bf16 : bool; bufs; sizes; hw : bool = false) {
+    if (bf16 && hw) return set_router_gemv_bf16_hw_cls(bufs, sizes, fixed_array(0u, 1u, 2u, 0u))
+    return bf16 ? set_router_gemv_bf16_cls(bufs, sizes, fixed_array(0u, 1u, 2u, 0u)) : set_router_gemv_cls(bufs, sizes, fixed_array(0u, 1u, 2u, 0u))
+}
 
 //! the router GEMV recorded on the stamp `bf16` names
-def private router_enc(bf16 : bool; raw; var h; var sc; var pc; groups : int64) {
-    if (bf16) {
+def private router_enc(bf16 : bool; raw; var h; var sc; var pc; groups : int64; hw : bool = false) {
+    if (bf16 && hw) {
+        enc_router_gemv_bf16_hw_cls(raw, h, sc, pc, groups)
+    } elif (bf16) {
         enc_router_gemv_bf16_cls(raw, h, sc, pc, groups)
     } else {
         enc_router_gemv_cls(raw, h, sc, pc, groups)
@@ -9299,16 +9345,17 @@ def private router_cols_oracle(t : T?; arm : string; got, xh, nh, wdev : array<f
 //! the router GEMV over `ncols` x rows against the one-row dispatch a row at a time (word for word through `nform_cols_cell`:
 //! one kernel body, the same order) and against a CPU oracle of the same dot - the bf16 stamp's weights truncated as the device
 //! reads them, and under `norm_on` each row's rms under a norm row, as the gemma-4 MoE router reads its input
-def private router_cols_arm(t : T?; ncols : int; norm_on, bf16 : bool) {
+def private router_cols_arm(t : T?; ncols : int; norm_on, bf16 : bool; hw : bool = false) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
-        let stamp = bf16 ? "bf16" : "f32"
+        let stamp = bf16 ? (hw ? "bf16 halfword" : "bf16") : "f32"
         let form = "router_gemv {stamp}{norm_on ? " under the fused rms" : ""}"
         let arm = "{form} over {ncols} columns"
-        if (bf16 ? !ensure_router_gemv_bf16_cls() : !ensure_router_gemv_cls()) {
+        let rail = (bf16 ? (hw ? ensure_router_gemv_bf16_hw_cls() : ensure_router_gemv_bf16_cls()) : ensure_router_gemv_cls())
+        if (!rail) {
             t |> skip("{arm}: the class rail declined on this device")
             return
         }
-        let dim = 2048
+        let dim = hw ? 2049 : 2048   //! the halfword stamp's odd dim: every other row starts mid-word
         let ne = 24
         let obase = 8
         let ncol_max = max(ncols, 8)
@@ -9343,14 +9390,14 @@ def private router_cols_arm(t : T?; ncols : int; norm_on, bf16 : bool) {
         var planes <- nform_cols_cell(t, form, [ncols], ncol_max, [NformPlane(name = "the logits", words = ne, head = obase)], 2u,
             $(c : int; raw : VkCommandBuffer; var h : VkHaz; o : NformOuts) {
                 upload_region_at(xd1, 0l, unsafe(addr<uint8 const?>(xh[c * dim])), x1_bytes)
-                var sc1 = router_set(bf16, fixed_array(wd, xd1, o.bufs[0], nd), fixed_array(w_bytes, x1_bytes, o.bytes[0], n_bytes))
+                var sc1 = router_set(bf16, fixed_array(wd, xd1, o.bufs[0], nd), fixed_array(w_bytes, x1_bytes, o.bytes[0], n_bytes), hw)
                 var pc1 = GkRouterArgs(ne = uint(ne), dim = uint(dim), woff = 0u, obase = uint(obase), norm_on = non, nwoff = 0u, eps = eps)
-                router_enc(bf16, raw, h, sc1, pc1, int64(ne))
+                router_enc(bf16, raw, h, sc1, pc1, int64(ne), hw)
             },
             $(nc : int; raw : VkCommandBuffer; var h : VkHaz; o : NformOuts) {
-                var sc = router_set(bf16, fixed_array(wd, xd, o.bufs[0], nd), fixed_array(w_bytes, x_bytes, o.bytes[0], n_bytes))
+                var sc = router_set(bf16, fixed_array(wd, xd, o.bufs[0], nd), fixed_array(w_bytes, x_bytes, o.bytes[0], n_bytes), hw)
                 var pc = GkRouterArgs(ne = uint(ne), dim = uint(dim), woff = 0u, obase = uint(obase), norm_on = non, nwoff = 0u, eps = eps, ncols = uint(nc))
-                router_enc_cols(bf16, raw, h, sc, pc, int64(ne))   //! past eight columns, two tiles (the second's `col0` at eight)
+                router_enc_cols(bf16, raw, h, sc, pc, int64(ne), hw)   //! past eight columns, two tiles (the second's `col0` at eight)
             })
         var got <- plane_floats(planes.nf[0])
         router_cols_oracle(t, arm, got, xh, nh, wdev, ncols, ne, dim, obase, norm_on, eps)
@@ -9476,6 +9523,8 @@ def test_vkd_router_gemv_cols(t0 : T?) {
             router_cols_arm(t, 8, true, false)    // ... at the extent, every partial slot live
             router_cols_arm(t, 12, true, false)   // ... past it, in two column tiles
             router_cols_arm(t, 12, false, true)   // ... the bf16 stamp the same
+            router_cols_arm(t, 3, false, true, true)    // the bf16 rows' halfword stamp at an odd dim
+            router_cols_arm(t, 12, false, true, true)   // ... past the extent, in two column tiles
         } else {
             t |> skip("dasVulkan not present")
         }

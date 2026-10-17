@@ -65,7 +65,7 @@ chain (a sixth of the scan's time there). The conv, the scan and the requant fam
 fold map their 32-lane blocks and clusters from the invocation id, never from the subgroup id:
 every shuffle in them carries an xor mask under 32, which stays inside such a block on any
 subgroup width the tier admits (32 or more), so the kernels hold on a 64-lane device as on a
-32-lane one; only the KHR tile keys on the width itself (`ARCHITECTURE_GPU_VULKAN_GEMM.md#khr-mm-kq-tile`). The conv and smalls bindings are NonWritable, as every
+32-lane one; only the KHR tile keys on the width itself (`ARCHITECTURE_GPU_VULKAN_KHR.md#khr-mm-kq-tile`). The conv and smalls bindings are NonWritable, as every
 binding no kernel of a class writes is (`ARCHITECTURE_GPU_VULKAN.md#vk-readonly-lens`). The decoration is load-bearing: without it the driver orders each token's k and q
 loads behind the previous token's o store (the two buffers may alias), and the same kernel ran
 2.35x slower (19004 against 8084 us over the 0.8B's 18 layers on the Linux RTX 5080; the staged

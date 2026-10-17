@@ -202,5 +202,5 @@ asymmetries a stamp family ledgers - stays in `ARCHITECTURE_GPU.md#gpu-backends`
   serves a routed block of few tokens through the decode step's gathered GEMVs instead of its bucketed tiles; the
   Vulkan window chain's routed block rides its expert tiles over a device-side gather at every window size - the
   cm2 expert chain (`ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-expert-chain`), the KHR tile
-  (`ARCHITECTURE_GPU_VULKAN_GEMM.md#khr-mm-kq-tile`) or, on a device with neither, the Q8-fed chain's batch tiles
+  (`ARCHITECTURE_GPU_VULKAN_KHR.md#khr-mm-kq-tile`) or, on a device with neither, the Q8-fed chain's batch tiles
   (`ARCHITECTURE_GPU_VULKAN_MOE.md#vk-moe-q8-chain`) - and has no tile-per-expert form to route away from.
