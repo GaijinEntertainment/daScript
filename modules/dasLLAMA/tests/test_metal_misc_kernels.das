@@ -2000,9 +2000,9 @@ def private mtl_toy_lens_gate(t : T?; var dev, queue; n : int) {
     g_mtl_toy_shift_pso = null
 }
 
-// The alignments the ringed attention, router and PLE projection builders declare (`requires =`): an aligned value passes every
-// builder silently, a misaligned one trips each builder whose contract it breaks, by the builder's name and the broken item. The
-// builders record into a graph capture the cell discards, so no misaligned dispatch reaches the device.
+// The alignments the ringed attention, router, PLE projection and per-32 gather builders declare (`requires =`): an aligned value
+// passes every builder silently, a misaligned one trips each builder whose contract it breaks, by the builder's name and the
+// broken item. The builders record into a graph capture the cell discards, so no misaligned dispatch reaches the device.
 var private g_align_trips : array<string>
 
 def private record_align_trip(msg : string) {
@@ -2023,6 +2023,7 @@ def private dispatch_align_gate(t : T?; var dev, queue) {
                     "enc_attnd_q8_c", "enc_attnd_tq4_c", "enc_attndw_q8_c", "enc_attndw_tq4_c", "enc_attndx_q8_c", "enc_attndx_tq4_c" ]
     let routers <- [ "enc_moe_router", "enc_moe_router_b" ]
     let projs <- [ "enc_ple_proj_bf16", "enc_ple_proj_bf16_one" ]
+    let gathers <- [ "enc_q51_embed_b32", "enc_iq4nl32_embed_b32", "enc_q4032_embed_b32", "enc_q5032_embed_b32" ]
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
         let b = mc.buf[mc |> out_words(64, 0.0)]
         let saved_hook = metal_requires_hook()
@@ -2081,9 +2082,20 @@ def private dispatch_align_gate(t : T?; var dev, queue) {
                 want |> want_trips(s._1 % 2u != 0u ? [n] : array<string>(), "pa.woff % 2")
             }
         }
+        //! the per-32 gathers' row width: the aligned control, then one off the 32-block (the body counts a row's blocks as dim / 32)
+        for (dim in fixed_array(64u, 48u)) {
+            var ga = EmbedB32Args(dim = dim, escale = 1.0)
+            enc_q51_embed_b32(null, b, 0ul, b, 0ul, b, 0ul, b, 0ul, ga, 4l, 1l)
+            enc_iq4nl32_embed_b32(null, b, 0ul, b, 0ul, b, 0ul, b, 0ul, ga, 4l, 1l)
+            enc_q4032_embed_b32(null, b, 0ul, b, 0ul, b, 0ul, b, 0ul, ga, 4l, 1l)
+            enc_q5032_embed_b32(null, b, 0ul, b, 0ul, b, 0ul, b, 0ul, ga, 4l, 1l)
+            if (dim % 32u != 0u) {
+                want |> want_trips(gathers, "ka.dim % 32")
+            }
+        }
         gr_arm(false)
         restore_metal_requires_hook(saved_hook)
-        t |> equal(length(want), 46, "dispatch_align: the misaligned rings and router shapes owe forty-six trips")
+        t |> equal(length(want), 50, "dispatch_align: the misaligned rings, router shapes and gather widths owe fifty trips")
         t |> equal(join(g_align_trips, "\n"), join(want, "\n"), "dispatch_align: each builder trips on exactly the items its value breaks")
         delete g_align_trips
     }
