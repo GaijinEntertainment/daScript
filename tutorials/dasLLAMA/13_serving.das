@@ -258,13 +258,10 @@ def section_gpu_slots(m : Model) {
 // gpu_kv_dtype_pin reads back what was asked and whether anyone asked at all;
 // reset_gpu_kv_dtype takes the ask away, and the environment decides again.
 // set_gpu_host_layers(n) serves the first n routed layers' experts of
-// a plain
-// MoE on the host whatever the card holds - device memory traded for
-// speed, the
-// in-process DASLLAMA_GPU_HOST_LAYERS; 0 leaves the split to the
-// card, and a
-// negative n lifts the pin. gpu_host_layers_pin reads it back (-1 =
-// none).
+// a plain MoE on the host whatever the card holds - device memory
+// traded for speed, the in-process DASLLAMA_GPU_HOST_LAYERS; 0 leaves
+// the split to the card, and a negative n lifts the pin.
+// gpu_host_layers_pin reads it back (-1 = none).
 //
 // After the load, gpu_device_sessions answers how many regions the driver armed
 // (0 on a CPU box, under the per-op rails, and on Metal). gpu_resident_decline
