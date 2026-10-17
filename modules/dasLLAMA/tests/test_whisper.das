@@ -1375,12 +1375,12 @@ def private check_canary_route(t : T?; m : AsrModel; wav, route : string; sample
     to_log(LOG_INFO, "canary {name} greedy text: {eyeball_text(m.dec, ours)}\n")
     t |> success(length(segs[0].tokens) >= agree, "{name}: the greedy ids reach step {agree}, where the forced walk's pick leaves the oracle's")
     for (i in range(min(agree, length(segs[0].tokens)))) {
-        t |> equal(segs[0].tokens[i], expected[i], "{name}: token id {i}")
+        t |> equal(expected[i], segs[0].tokens[i], "{name}: token id {i}")
     }
     if (agree == length(expected)) {
-        t |> equal(length(segs[0].tokens), length(expected), "{name}: token count")
+        t |> equal(length(expected), length(segs[0].tokens), "{name}: token count")
     }
-    t |> equal(s.detected_lang, "en", "{name}: english")
+    t |> equal("en", s.detected_lang, "{name}: english")
 }
 
 //! the clip on the CPU chain (every GPU tower off), then on the route the box serves - the Metal tower's encode counted where

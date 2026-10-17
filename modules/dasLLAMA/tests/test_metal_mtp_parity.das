@@ -704,7 +704,7 @@ def private vff_cell(t : T?; tr, trg : Model; tag : string; prompt : array<int64
     }
 }
 
-//! the wider nine-row bar's control: the same nine-row verify with the GEMV stage knocked out must
+//! a widened verify bar's control: the same `nr`-row verify with the GEMV stage knocked out must
 //! land OUTSIDE the bar - a bar nothing exceeds is not known to discriminate
 def private vff_control_cell(t : T?; tr, trg : Model; tag : string; prompt : array<int64>; nr : int64; bar : float) {   // nolint:LINT012,LINT019 — the body is the das_metal half
     static_if (typeinfo builtin_module_exists(das_metal)) {
