@@ -257,6 +257,10 @@ def section_gpu_slots(m : Model) {
 // about half those bytes and tq4 about a quarter, room a longer context takes.
 // gpu_kv_dtype_pin reads back what was asked and whether anyone asked at all;
 // reset_gpu_kv_dtype takes the ask away, and the environment decides again.
+// set_gpu_host_layers(n) serves the first n routed layers' experts of a plain
+// MoE on the host whatever the card holds - device memory traded for speed, the
+// in-process DASLLAMA_GPU_HOST_LAYERS; 0 leaves the split to the card, and a
+// negative n lifts the pin. gpu_host_layers_pin reads it back (-1 = none).
 //
 // After the load, gpu_device_sessions answers how many regions the driver armed
 // (0 on a CPU box, under the per-op rails, and on Metal). gpu_resident_decline
@@ -334,9 +338,12 @@ def main() {
     set_gpu_ctx_strict(false)      // a cap, not a demand: a card short of room shortens it and says so
     let kv_pin = gpu_kv_dtype_pin()
     set_gpu_kv_dtype(KVDtype.f16)  // the device cache in the sessions' codec; q8_0 or tq4 here takes sessions made in it
+    let host_pin = gpu_host_layers_pin()   // -1: nobody pinned, DASLLAMA_GPU_HOST_LAYERS decides
+    set_gpu_host_layers(0l)        // a plain MoE's experts where the card holds them; n here moves the first n layers' to the host
     var m <- load_model(path, QuantMode.q8)
     set_gpu_ctx_max(pins.ctx_max)   // the pins back, for whoever loads next in this process
     set_gpu_ctx_strict(pins.strict)
+    set_gpu_host_layers(host_pin)   // -1 lifts the pin again
     if (kv_pin.pinned) {
         set_gpu_kv_dtype(kv_pin.dt)
     } else {
@@ -368,6 +375,11 @@ def main() {
             print("drafter: {st.rounds} rounds, {st.joint} joint, draft {st.draft_us / 1000l}ms, verify {st.verify_us / 1000l}ms, plain {st.cold_us / 1000l}ms\n")
         }
         detach_mtp_drafter(m)   // plain decode serves from here; a model with no drafter attached is left as it was
+        let again = attach_mtp_sidecar(m, path)   // the find-and-attach pair above in one call: the drafter's path, "" where none sits beside the model or every driver refused it
+        if (!empty(again)) {
+            print("attached again in one call: {again}\n")
+            detach_mtp_drafter(m)
+        }
 
         section_gpu_slots(m)
     }

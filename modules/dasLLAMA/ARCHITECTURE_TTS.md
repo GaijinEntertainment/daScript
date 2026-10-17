@@ -153,8 +153,9 @@ buffers, the chunk cap and the idle release, the streamed source - is `ARCHITECT
   facade's constant plus the chunk's index, so consecutive sentences of one request never share a
   draw, and `synthesize` and `synthesize_stream` stay sample-identical because both walk the same
   chunk list in the same order. Requires no `audio` module. `REVIEW.das`'s `check_tutorial_floor`
-  walks both facade files - `dasllama.das` and this one - and licenses a `def private` one, a
-  `def operator` overload, and the names in the check's `FACADE_DEFS_WITHOUT_TUTORIAL` set: `finalize`, the
+  walks the facade files - `dasllama.das`, `dasllama_core.das` and this one - and licenses a `def private` one, a
+  `def operator` overload, and the names in the check's `FACADE_DEFS_WITHOUT_TUTORIAL` set, each beside its
+  reason. This file's two are `finalize`, the
   language's own teardown hook the compiler calls at `delete`, and `tts_finish_styletts2`, the
   loader's tail that the parity rail's in-memory minter shares and that a user reaches only through
   `load_tts_model`. No tutorial calls any of them by name, so none carries a teaching duty.
