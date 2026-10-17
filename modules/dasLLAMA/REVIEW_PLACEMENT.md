@@ -3,8 +3,8 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 docs: `ARCHITECTURE.md`, `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_ENGINE_SERVING.md`,
 `ARCHITECTURE_ENGINE_FORMATS.md`, `ARCHITECTURE_GPU.md`, `ARCHITECTURE_GPU_SHARED_KERNELS.md`,
-`ARCHITECTURE_MEDIA.md`, `ARCHITECTURE_TTS.md`, `ARCHITECTURE_POCKET.md`. Planned work: `followup_general.md`,
-`followup_vulkan.md` for Vulkan, `followup_metal.md` for Metal.
+`ARCHITECTURE_MEDIA.md`, `ARCHITECTURE_TTS.md`, `ARCHITECTURE_POCKET.md`. Planned work:
+`followup_general.md`, `followup_vulkan.md` for Vulkan, `followup_metal.md` for Metal.
 
 A charter line is the one line saying what a file under `dasllama/` holds: in
 `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_ENGINE_SERVING.md`, `ARCHITECTURE_ENGINE_FORMATS.md`,
