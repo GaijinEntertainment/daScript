@@ -71,8 +71,7 @@ let private CENSUS_NEVER_DISPATCHED <- [
     "MetalMoeMulMmK4TH128", "MetalMoeMulMmK4THR",
     "MetalMoeMulMmK5TH128", "MetalMoeMulMmK5THR",
     "MetalMoeMulMmK6TH128", "MetalMoeMulMmK6THR",
-    "MetalMoeMulMmQ8TH128", "MetalMoeMulMmQ8THR",
-    "MetalMoeMulMmMx4TH128", "MetalMoeMulMmMx4THR",
+    "MetalMoeMulMmQ8TH128",
     // the q5_1 MoE tensor twins, ALL stamps: no stocked carrier holds a Q5_1 expert plane
     // (the zoo's MoE carriers are Q8_0 / Q5_K_M / Q4_K_M / mxfp4; Q5_1 appears only when
     // expert_ffn % 256 != 0 forces the converter off K-quants). Their coverage is the
@@ -155,7 +154,7 @@ let private CENSUS_NEVER_DISPATCHED <- [
     "MetalKqMulMmIq4xsTHDb128", "MetalKqMulMmIq3s4THDb128", "MetalKqMulMmIq4nlTHDb128", "MetalKqMulMmQ40THDb128", "MetalKqMulMmK3THDb128", "MetalKqMulMmK2THDb128", "MetalKqMulMmIq2sTHDb128", "MetalKqMulMmIq2xsTHDb128", "MetalKqMulMmIq2xxsTHDb128", "MetalKqMulMmIq3sTHDb128", "MetalKqMulMmIq3xxsTHDb128",
     "MetalKqMulMmQ51T", "MetalKqMulMmQ51TH", "MetalKqMulMmQ51TH128", "MetalKqMulMmQ51THDb", "MetalKqMulMmQ51THDb128", "MetalKqDequantQ51",
     "MetalKqMulMmIq4nl32T", "MetalKqMulMmIq4nl32TH", "MetalKqMulMmIq4nl32TH128", "MetalKqMulMmIq4nl32THDb", "MetalKqMulMmIq4nl32THDb128", "MetalKqDequantIq4nl32",
-    "MetalKqMulMmQ4032T", "MetalKqMulMmQ4032TH", "MetalKqMulMmQ4032TH128", "MetalKqMulMmQ4032THDb", "MetalKqMulMmQ4032THDb128", "MetalKqDequantQ4032",
+    "MetalKqMulMmQ4032T", "MetalKqMulMmQ4032TH", "MetalKqMulMmQ4032TH128", "MetalKqMulMmQ4032THDb", "MetalKqMulMmQ4032THDb128",
     "MetalKqMulMmQ5032T", "MetalKqMulMmQ5032TH", "MetalKqMulMmQ5032TH128", "MetalKqMulMmQ5032THDb", "MetalKqMulMmQ5032THDb128", "MetalKqDequantQ5032",
     // the split-format MoE expert mul_mm stamps, all four forms (f32-X base, half-X twin, and the
     // tall pair): no stocked MoE carrier holds an expert plane in these formats - the zoo's MoE
@@ -179,7 +178,6 @@ let private CENSUS_NEVER_DISPATCHED <- [
     // the T stamp has NO model-less cell, in q40 or in the seven formats above. followup_metal.md
     // sec.14 owes that arm
     "MetalMoeMulMmQ40T_metal_moe_mulmm_iq4xs_t",
-    "MetalMoeMulMmQ40TH128_metal_moe_mulmm_iq4xs_t", "MetalMoeMulMmQ40THR_metal_moe_mulmm_iq4xs_t",
     // the expert-indexed GEMVs of the same formats, on the same expert planes nothing stocks.
     // Their coverage is moe_kq_gemv_gate in test_metal_gemv_kernels.das
     "metal_moe_gemv_k3", "metal_moe_gemv_iq4xs", "metal_moe_gemv_iq3s", "metal_moe_gemv_iq3xxs",

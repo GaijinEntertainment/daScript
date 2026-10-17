@@ -101,41 +101,6 @@ def test_gemma_drafter_refusals(t : T?) {
     }
 }
 
-//! a header-only GGUF whose one key is `general.architecture` = `arch`, written to `name` in the scratch directory
-def private arch_gguf(name, arch : string) : string {
-    var b : array<uint8>
-    push_le(b, 0x46554747ul, 4)   //! GGUF
-    push_le(b, 3ul, 4)
-    push_le(b, 0ul, 8)            //! no tensor
-    push_le(b, 1ul, 8)            //! one key
-    push_str(b, "general.architecture")
-    push_le(b, 8ul, 4)            //! a string value
-    push_str(b, arch)
-    let p = scratch_path(name)
-    fopen(p, "wb") $(f) {
-        if (f != null) {
-            fwrite(f, b)
-        }
-    }
-    delete b
-    return p
-}
-
-def private push_le(var b : array<uint8>; v : uint64; nbytes : int) {
-    b |> reserve(length(b) + nbytes)
-    for (i in range(nbytes)) {
-        b |> push(uint8(uint(v >> uint64(i * 8)) & 0xFFu))
-    }
-}
-
-def private push_str(var b : array<uint8>; s : string) {
-    push_le(b, uint64(long_length(s)), 8)
-    peek_data(s) $(d) {
-        for (c in d) {
-            b |> push(c)
-        }
-    }
-}
 
 [test]
 def test_gemma_drafter_attach_checks(t : T?) {
