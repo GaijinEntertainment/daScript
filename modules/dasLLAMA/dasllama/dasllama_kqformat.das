@@ -1385,3 +1385,28 @@ def kq_stream_code(f : KqFmt) : int => kq_desc(f).stream_code
 //! the stream code's format; false for a code no format carries
 def kq_fmt_of_stream_code(code : int; var out : KqFmt&) : bool => kq_fmt_where(out) <| $(f : KqFmt) => kq_desc(f).stream_code == code
 
+//! a weight plane's site in the words a decline line and the load report name it by, keyed by its GGUF tensor role
+let private KQ_SITE_WORDS <- {
+    "token_embd" => "token table", "per_layer_token_embd" => "PLE table", "output" => "classifier",
+    "attn_q" => "attention q", "attn_k" => "attention k", "attn_v" => "attention v", "attn_output" => "attention o",
+    "attn_qkv" => "attention qkv", "attn_gate" => "attention gate",
+    "ffn_gate" => "FFN gate", "ffn_up" => "FFN up", "ffn_down" => "FFN down",
+    "ffn_gate_exps" => "expert stack gate", "ffn_up_exps" => "expert stack up", "ffn_down_exps" => "expert stack down",
+    "ffn_gate_up_exps" => "expert stack gate-up",
+    "ffn_gate_shexp" => "shared expert gate", "ffn_up_shexp" => "shared expert up", "ffn_down_shexp" => "shared expert down",
+    "ssm_out" => "deltanet out", "ssm_alpha" => "deltanet alpha", "ssm_beta" => "deltanet beta", "ssm_ba" => "deltanet beta-alpha"
+}
+
+//! the site words of a GGUF tensor role (`attn_q`, `ffn_down_exps`, `token_embd`); a role with no words is named as itself
+def kq_site_words(role : string) : string => KQ_SITE_WORDS?[role] ?? role
+
+//! a GGUF tensor name's role: the name past a `blk.<n>.` prefix and short of a `.weight` suffix
+def gguf_tensor_role(name : string) : string {
+    var role = name
+    if (starts_with(role, "blk.")) {
+        let dot = find(role, ".", 4)
+        role = dot >= 0 ? slice(role, dot + 1) : role
+    }
+    return ends_with(role, ".weight") ? slice(role, 0, length(role) - 7) : role
+}
+

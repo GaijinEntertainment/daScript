@@ -751,16 +751,21 @@ never copied between boxes.
 A site the format does not serve on a GPU backend is declined at load by that backend's
 mechanism; the CPU declines nothing:
 
+Every backend's decline names the site (`kq_site_words`, `dasllama_kqformat.das`) and the
+`KqFmt` member in the line the user reads:
+
 - CPU: no decline - the CPU serves every member at every site whose row length the block length
   divides through step 4's kernels; a q8-rail demotion on such a row is a converted copy and a
-  defect, never a decline;
+  defect, never a decline; the load report's row (`conv_row_name`, `dasllama_load.das`) names the
+  site beside the disk type and the served form;
 - Vulkan: the whole-model driver's `resident_decline_reason` (`dasllama_gpu_resident.das`)
   returns the reason before a byte uploads - a layer's or shared expert's plane format by layer
   through `resident_layer_decline`, the tied classifier through `resident_cls_decline`;
 - Metal: `decode_shape_decline` (`dasllama_metal_shapes.das`) answers
   `MetalDecodeDecline.kquant_native` for a dense or table plane whose format
-  `kq_fmt_gpu_supported` refuses, and `moe_fmt_metal_served` keeps an expert stack off the
-  device.
+  `kq_fmt_gpu_supported` refuses (`kq_load_gpu_unserved` names it), and `moe_fmt_metal_served`
+  keeps an expert stack off the device under `graph` (`moe_fmts_unserved`); the drivers log
+  `metal_fmt_decline_line` once before they count the decline.
 
 The kernel census holds the dispatch counts the cells assert, so a new stamp joins its
 backend's list in the same change:

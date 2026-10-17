@@ -7411,6 +7411,7 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
         if (why == MetalPrefillDecline.feature) {
             decline(why, metal_missing_needs(t, PF_NEEDS_OK))
         } else {
+            metal_fmt_decline_say("prefill", why, t)
             decline(why)
         }
         return false
