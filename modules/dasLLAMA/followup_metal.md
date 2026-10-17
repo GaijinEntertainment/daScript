@@ -1045,19 +1045,3 @@ pre-step, and `metal_ple_dev_said` logs the reason once a load. The fix is kerne
 walks a ple width in more than one threadgroup pass, a gather bound at the per-32 pair's own alignment, a projection
 whose tail word handles an odd dim; each cell-proven on the device against the CPU row
 (`test_gpu_serving_declines.das`'s `test_ple_proj_dim_gates` names the shapes). The follow-up PR after the gemma leg.
-
-## 56. Five large-tier `test_metal_mtp_parity.das` cells and the Canary-Qwen oracle clip read red on master's own build
-
-On the M5 under `DASLLAMA_PARITY_FULL=1`, master's build (33e7910669) fails six large-tier cells of
-`test_metal_mtp_parity.das` and the gemma leg's tip fails five of them (the leg's `test_metal_verify_gemma26` passes):
-`test_metal_mtp_parity_35b` and `_35b_iq4xs` (the k8 dispatch count disagrees with `has_sb_rows_planes` in both
-directions - 6 past-eight dispatches on a carrier the predicate calls plain, none on one it calls superblock),
-`test_metal_mtp_parity_flashnext` (the same count), `test_metal_verify_qwen38_27b` (the drafter beside the carrier does
-not attach), and `test_metal_verify_gemma12` (the batch same-slab verify rows against the plain steps read 0.61 over 48
-rows on the leg, 0.52 over 60 and 1.06 over 108 on master, against bars of 0.5 and 1, no argmax flip). The Canary-Qwen
-greedy oracle cell (`test_whisper.das`, `test_canary_qwen_oracle`) diverges from the NeMo oracle on clip 05 at the same
-token on master and the leg. None of these runs under an arm filter, so the leg's arm chains skipped them; the whole
-file under the full parity gate is where they show. The Qwen cells belong to the Qwen leg's follow-up; the gemma-12B
-verify bar and the clip-05 divergence are the next Metal pass's first rows: decide per cell whether the kernel or the
-bar moved (`REVIEW_GPU_PARITY.md`'s bar-change rule, `tests/REVIEW_PINNED_GATES.md`'s loosening rule), then fix the
-code or ledger the bar.
