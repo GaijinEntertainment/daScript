@@ -5,7 +5,7 @@ docs: `ARCHITECTURE_GPU_MTP.md`, `ARCHITECTURE_GPU_VULKAN_NROW.md`. Planned work
 `followup_metal.md`, `followup_vulkan.md`.
 
 **A diff never hands a whole GPU decode or prefill call that the device served before the diff to
-the CPU path - it keeps that call on the device.** A call that
+the CPU path - the shape it cannot serve on the device declines by name instead.** A call that
 runs on the CPU gives the user who selected the GPU a fraction of its speed.
 
 **A diff that lands a model family, a backend arm or a session shape whose batched decode step
@@ -18,11 +18,11 @@ does not serve, and then that backend's architecture doc -
 is what the batch amortizes.
 
 **A diff in `dasllama/` that calls `create_device_session`, or turns a scheduler's device mode
-on (`set_device_kv`), checks at that call site, before the call, that the live device-home
-sessions - a device-home session keeps its K/V only in a device K/V region and has no host cache -
-stay within
-`gpu_device_sessions()`, a scheduler counting as its own `max_streams` of them.** The driver
-panics on a device-home session that finds no region.
+on (`set_device_kv`), guards the call in code with a check that the live device-home sessions - a
+device-home session keeps its K/V only in a device K/V region and has no host cache - stay within
+`gpu_device_sessions()`, a scheduler in device mode counting as `max_streams` device-home
+sessions, and declines the call when they would not.** The driver panics on a device-home session
+that finds no region.
 
 **A diff that calls a `set_gpu_*` or `reset_gpu_*` function of `dasllama/dasllama_core.das` that
 forwards into `dasllama/dasllama_gpu_resident.das` calls it before the load it governs.** The load
@@ -53,14 +53,15 @@ the donor's slab of the Vulkan resident mirror - through the borrowing layer; do
 the donor.** A borrower that gathers, stores or releases them again frees the donor's storage
 twice or overwrites its rows.
 
-**A resident override - a decode/prefill hook `dasllama/dasllama_gpu_resident.das` registers in
-`dasllama/dasllama_common.das`'s override registries - checks that the session's K/V rows use the
-codec the mirror is armed with (the row encoding - f16, q8_0, tq4 or f32 - the mirror was built
-in) before it touches the mirror (the device copy of the K/V cache a GPU decode reads and
-writes).**
+**A diff that adds or changes a resident override - a decode/prefill hook
+`dasllama/dasllama_gpu_resident.das` registers in `dasllama/dasllama_common.das`'s override
+registries - makes it check that the session's K/V rows use the codec the mirror is armed with (the
+row encoding - f16, q8_0, tq4 or f32 - the mirror was built in) before it touches the mirror (the
+device copy of the K/V cache a GPU decode reads and writes).**
 
-**A resident override that byte-copies mirror bytes across codecs is a defect - bytes move only
-between same-codec session rows and mirror rows.** A cross-codec copy corrupts the host's
+**A resident override that byte-copies mirror rows across codecs - the mirror and the codec as the
+rule above defines them - is a defect: bytes move only between same-codec session rows and mirror
+rows.** A cross-codec copy corrupts the host's
 authoritative cache.
 
 **A diff that adds or changes a GPU path that runs a recurrent (deltanet) forward itself makes it
