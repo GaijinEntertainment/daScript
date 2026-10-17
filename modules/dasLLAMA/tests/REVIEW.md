@@ -146,7 +146,8 @@ set.** `DASLLAMA_PARITY_FULL=1` is a final pre-PR switch, not the iteration loop
 
 **A test - or a program a test builds or spawns - whose subject is not the `.dlim` image rail (a
 cell whose subject is a lane knob's effect on the image identity has the rail as its subject)
-never mints or maps a MODEL image: it either runs with `DASLLAMA_IMAGE=0` in its environment, or
+never mints or maps a MODEL image, unless `../ARCHITECTURE_IMAGE_LEDGER.md#suite-image-mints`
+ledgers the file: it either runs with `DASLLAMA_IMAGE=0` in its environment, or
 calls no baking loader - `load_<family>_tower`, `load_<family>_embedder`, `load_model_cached`,
 `load_tts_model`, each of which writes a `.dlim` beside the model when `DASLLAMA_IMAGE` is
 unset.** Such a test loads a media carrier in memory from the family's `stage_*` staging - its
