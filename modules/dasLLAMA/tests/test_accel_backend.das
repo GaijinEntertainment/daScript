@@ -155,7 +155,7 @@ def private check_bf16(t : T?; ntok : int; f16_lane : bool) {
     var w : array<float>
     w |> resize(D * N)
     fill01(w, 3u)
-    let wbf <- [for (v in w); bf16_bits_truncated(v)]
+    let wbf <- pack_bf16(w)
     check_batch(t, wbf, ntok, false, f16_lane)
 }
 

@@ -274,6 +274,9 @@ each module races its OWN families (`metal_tensor_race_decode` in kernels, `meta
 in prefill) and the tuner calls those public entries.
 
 **Decline REASONS are enum values in the shapes module** (`MetalDecodeDecline`, `MetalPrefillDecline`);
-decline COUNTING lives in `<gpu>_common` beside `require_or_panic`, for both paths.
+decline COUNTING lives in `<gpu>_common` beside `require_or_panic`, for both paths. A reason a plane format decided
+(`kquant_native`, `graph` on a routed stack) keeps its enum value in the declines-by-reason table, and the shapes
+module's `metal_fmt_decline_say` logs the site and `KqFmt` member beside it once per line. Each driver has one decline enum: Metal's live in `dasllama/dasllama_metal_shapes.das`, and a
+Vulkan driver's lives in that driver's own file.
 
 Vulkan is the deliberately-designed model of this shape; Metal converges as it is touched.

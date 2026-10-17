@@ -1020,3 +1020,6 @@ def public registered_env_names() : array<string> {
     delete extras
     return <- out
 }
+
+//! a tri-state pin over an environment knob: -1 the environment's `env`, 0 off, any other value on
+def pin_over_env(pin : int; env : bool) : bool => pin < 0 ? env : pin != 0

@@ -11,14 +11,6 @@ require daslib/fio
 require daslib/json_boost
 require strings
 
-def private tmp_models_dir(tag : string) : string {
-    var terr : string
-    let base = temp_directory(terr)
-    let dir = path_join(empty(base) ? "." : base, "dasllama_catalog_test_{tag}_{ref_time_ticks()}")
-    mkdir_rec(dir)
-    return dir
-}
-
 [test]
 def test_catalog_drafters(t : T?) {
     t |> run("every assistant drafter resolves pinned, and the gemma-4 26B card carries the upstream head") @(t : T?) {
@@ -142,7 +134,8 @@ def test_models_dir_resolution(t : T?) {
 [test]
 def test_local_presence(t : T?) {
     t |> run("an absent file is not present; a planted one is, at its path") @(t : T?) {
-        let dir = tmp_models_dir("presence")
+        let dir = path_join(test_temp_dir(), "presence")
+        mkdir_rec(dir)
         let probe = CatalogEntry(name = "probe", file = "probe.gguf")
         t |> equal(catalog_local_path(dir, probe), "")
         let planted = path_join(dir, "probe.gguf")
@@ -152,23 +145,22 @@ def test_local_presence(t : T?) {
             }
         }
         t |> equal(catalog_local_path(dir, probe), planted)
-        remove(planted)
-        rmdir(dir)
     }
 }
 
 [test]
 def test_download_refusals(t : T?) {
     t |> run("no events channel refuses instead of spawning a doomed worker") @(t : T?) {
-        let dir = tmp_models_dir("chan")
+        let dir = path_join(test_temp_dir(), "chan")
+        mkdir_rec(dir)
         let e = CatalogEntry(name = "x", file = "x.gguf", bytes = 4l, sha256 = "00", url = "https://example.invalid/x")
         let refusal = catalog_download_start(dir, e)
         t |> success(find(refusal, "not initialized") >= 0, "got: {refusal}")
-        rmdir(dir)
     }
     t |> run("an already-present file refuses the re-download") @(t : T?) {
         catalog_events_init()
-        let dir = tmp_models_dir("present")
+        let dir = path_join(test_temp_dir(), "present")
+        mkdir_rec(dir)
         let e = CatalogEntry(name = "x", file = "x.gguf", bytes = 4l, sha256 = "00", url = "https://example.invalid/x")
         let planted = path_join(dir, "x.gguf")
         fopen(planted, "wb") $(f) {
@@ -179,17 +171,16 @@ def test_download_refusals(t : T?) {
         let refusal = catalog_download_start(dir, e)
         t |> success(find(refusal, "already present") >= 0, "got: {refusal}")
         catalog_events_shutdown()
-        remove(planted)
-        rmdir(dir)
     }
     t |> run("a file outside the text-to-speech set refuses its download by name") @(t : T?) {
-        let dir = tmp_models_dir("tts")
+        let dir = path_join(test_temp_dir(), "tts")
+        mkdir_rec(dir)
         let refusal = catalog_download_start_tts(dir, "nobody.gguf")
         t |> success(find(refusal, "not in the text-to-speech set") >= 0, "got: {refusal}")
-        rmdir(dir)
     }
     t |> run("a towerless entry refuses the vision download; an unpinned item refuses too") @(t : T?) {
-        let dir = tmp_models_dir("tower")
+        let dir = path_join(test_temp_dir(), "tower")
+        mkdir_rec(dir)
         let bare = CatalogEntry(name = "x", file = "x.gguf", bytes = 4l, sha256 = "00", url = "https://example.invalid/x")
         let r1 = catalog_download_start_companion(dir, bare, CatalogCompanionKind.vision)
         t |> success(find(r1, "no vision tower") >= 0, "got: {r1}")
@@ -197,10 +188,10 @@ def test_download_refusals(t : T?) {
         unpinned.vision.file = "mmproj-x.gguf"
         let r2 = catalog_download_start_companion(dir, unpinned, CatalogCompanionKind.vision)
         t |> success(find(r2, "no pinned artifact") >= 0, "got: {r2}")
-        rmdir(dir)
     }
     t |> run("an entry with no assistant drafter refuses the drafter download; an unpinned drafter refuses too") @(t : T?) {
-        let dir = tmp_models_dir("drafter")
+        let dir = path_join(test_temp_dir(), "drafter")
+        mkdir_rec(dir)
         let bare = CatalogEntry(name = "x", file = "x.gguf", bytes = 4l, sha256 = "00", url = "https://example.invalid/x")
         let r1 = catalog_download_start_companion(dir, bare, CatalogCompanionKind.drafter)
         t |> success(find(r1, "no assistant drafter") >= 0, "got: {r1}")
@@ -208,7 +199,6 @@ def test_download_refusals(t : T?) {
         unpinned.drafter.file = "mtp-x-Q8_0.gguf"
         let r2 = catalog_download_start_companion(dir, unpinned, CatalogCompanionKind.drafter)
         t |> success(find(r2, "no pinned artifact") >= 0, "got: {r2}")
-        rmdir(dir)
     }
 }
 
@@ -219,7 +209,8 @@ def private needs_packs_by_name(path : string) : bool => find(base_name(path), "
 [test]
 def test_state_json(t : T?) {
     t |> run("the /catalog document carries every entry with presence and an idle machine") @(t : T?) {
-        let dir = tmp_models_dir("doc")
+        let dir = path_join(test_temp_dir(), "doc")
+        mkdir_rec(dir)
         var jerr = ""
         var doc = read_json(catalog_state_json(dir, 64, 8192l, @@needs_packs_by_name), jerr)
         t |> success(doc != null, "state json parses: {jerr}")
@@ -244,10 +235,10 @@ def test_state_json(t : T?) {
         unsafe {
             delete doc
         }
-        rmdir(dir)
     }
     t |> run("a planted tower reads present at its path") @(t : T?) {
-        let dir = tmp_models_dir("towerdoc")
+        let dir = path_join(test_temp_dir(), "towerdoc")
+        mkdir_rec(dir)
         var first_tower = ""
         for (e in model_catalog()) {
             if (empty(first_tower) && !empty(e.vision.file)) {
@@ -279,15 +270,14 @@ def test_state_json(t : T?) {
         unsafe {
             delete doc
         }
-        remove(planted)
-        rmdir(dir)
     }
 }
 
 [test]
 def test_state_json_drafter(t : T?) {
     t |> run("a planted drafter reads present, its file and canonical bytes named; the other rows' drafters read absent") @(t : T?) {
-        let dir = tmp_models_dir("drafterdoc")
+        let dir = path_join(test_temp_dir(), "drafterdoc")
+        mkdir_rec(dir)
         var want : CatalogEntry
         for (e in model_catalog()) {
             if (empty(want.name) && !empty(e.drafter.file)) {
@@ -324,8 +314,6 @@ def test_state_json_drafter(t : T?) {
         unsafe {
             delete doc
         }
-        remove(planted)
-        rmdir(dir)
     }
 }
 
@@ -353,7 +341,8 @@ def test_download_accepted_json(t : T?) {
 [test]
 def test_state_json_tts(t : T?) {
     t |> run("the tts list: the front-end packs the route loads, then the models, each saying whether it reads them") @(t : T?) {
-        let dir = tmp_models_dir("ttsdoc")
+        let dir = path_join(test_temp_dir(), "ttsdoc")
+        mkdir_rec(dir)
         let planted = path_join(dir, "pocket-tts-en-stuart-kq.gguf")
         fopen(planted, "wb") $(f) {
             if (f != null) {
@@ -390,8 +379,6 @@ def test_state_json_tts(t : T?) {
         unsafe {
             delete doc
         }
-        remove(planted)
-        rmdir(dir)
     }
 }
 

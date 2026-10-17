@@ -5,6 +5,7 @@ options persistent_heap   // a dastest root frees what it deletes only on this h
 
 require dastest/testing_boost public
 require dasllama/dasllama_common
+require _override_probes   // decode_declines: the fake override's step
 require dasllama/dasllama_sampling
 require dasllama/dasllama_gpu_resident
 require dasllama/dasllama_gpu_tier   // install_moe_gpu_resident_bias - the bias seat a served qwen2 needs
@@ -205,7 +206,7 @@ def test_perop_dense_ffn_mixed_forms(t : T?) {
         m.w1_fmt[0] = KqFmt.k4
         t |> equal(perop_dense_ffn_decline(m, 0l), "", "one activation form rides the rail")
         m.w3_fmt[0] = KqFmt.mx4
-        t |> success(contains(perop_dense_ffn_decline(m, 0l), "not tier-servable"), "an mx4 up plane is named (the control)")
+        t |> equal(perop_dense_ffn_decline(m, 0l), "FFN gate/up/down formats k4/mx4/k6 not tier-servable", "an mx4 up plane is named by site and member (the control)")
         delete m
     }
 }
@@ -559,6 +560,50 @@ def test_decode_shape_dense_width(t : T?) {
             "and its lattice width passes - the width is what declined, not the rest of the shell")
         delete dense
         set_rope_table_mode(saved_rope)
+    }
+}
+
+//! a plane format the Metal kernels do not read declines with a line naming the site and the `KqFmt` member: a dense plane under
+//! `kquant_native`, a routed stack under `graph`; the enum value the declines-by-reason table counts stays the gate's
+[test]
+def test_metal_fmt_decline_names_site(t : T?) {
+    t |> run("a dense plane's unserved format names its layer, site and member; the decode gate still answers kquant_native") @(t : T?) {
+        var m <- shell(2l, 0ul)
+        m.quant = QuantMode.q8
+        m.kquant_native = true
+        m.wq_fmt <- [KqFmt.k4, KqFmt.k4]
+        m.wk_fmt <- [KqFmt.k4, KqFmt.k4]
+        m.wv_fmt <- [KqFmt.k6, KqFmt.k6]
+        m.wo_fmt <- [KqFmt.k4, KqFmt.k4]
+        m.w1_fmt <- [KqFmt.k4, KqFmt.k4]
+        m.w3_fmt <- [KqFmt.k4, KqFmt.k4]
+        m.w2_fmt <- [KqFmt.k6, KqFmt.k6]
+        t |> equal(kq_load_gpu_unserved(m), "", "every plane in a served format: nothing to name")
+        t |> equal(metal_fmt_decline_line("decode", "kquant_native", m), "", "and no line")
+        m.w3_fmt[1] = KqFmt.mx4
+        t |> equal(kq_load_gpu_unserved(m), "layer 1's FFN up plane is mx4")
+        t |> equal(decode_shape_decline(m, DECODE_NEEDS_OK, true, false, false, mint_time = true), MetalDecodeDecline.kquant_native,
+            "the gate's reason is the enum value the declines table counts")
+        t |> equal(metal_fmt_decline_line("decode", "{MetalDecodeDecline.kquant_native}", m),
+            "dasLLAMA metal decode: declined kquant_native - layer 1's FFN up plane is mx4, a format the Metal kernels do not read there; the CPU serves the call")
+        t |> equal(metal_fmt_decline_line("decode", "{MetalDecodeDecline.shape}", m), "", "a decline no plane format decided says no format line")
+        m.w3_fmt[1] = KqFmt.k4
+        m.emb_fmt = KqFmt.mx4
+        t |> equal(kq_load_gpu_unserved(m), "the token table plane is mx4")
+        m.emb_fmt = KqFmt.q8
+        m.wcls_fmt = KqFmt.mx4
+        t |> equal(kq_load_gpu_unserved(m), "the classifier plane is mx4")
+        delete m
+    }
+    t |> run("a routed stack's unserved format names its layer, site and member under graph") @(t : T?) {
+        var m <- moe_shell(KqFmt.k4)
+        t |> equal(moe_fmts_unserved(m), "", "a k4 stack has the routed block's kernels")
+        m.we2_fmt[1] = KqFmt.mx4
+        t |> success(!moe_metal_ok(m), "the routed block declines the stack")
+        t |> equal(moe_fmts_unserved(m), "layer 1's expert stack down plane is mx4")
+        t |> equal(metal_fmt_decline_line("prefill", "{MetalPrefillDecline.graph}", m),
+            "dasLLAMA metal prefill: declined graph - layer 1's expert stack down plane is mx4, a format the Metal kernels do not read there; the CPU serves the call")
+        delete m
     }
 }
 
@@ -980,9 +1025,6 @@ let private PROBE_UNOWNED = "mtp_seat_probe_unowned"   //! ... and one whose sea
 var private g_probe_owns = false
 var private g_probe_seat_calls = 0l
 
-[unused_argument(t, s, token, pos)]
-def private probe_decode(t : Model; var s : Session; token, pos : int64) : bool => false
-
 [unused_argument(t)]
 def private probe_owner(t : Model) : bool => g_probe_owns
 
@@ -1016,7 +1058,7 @@ struct private SeatDispatch {
 [cold_path]
 def private seat_dispatch(name : string; owns : bool) : SeatDispatch {
     for (nm in [PROBE_OWNED, PROBE_UNOWNED]) {
-        register_decode_override(nm, @@probe_decode)
+        register_decode_override(nm, @@decode_declines)
         register_mtp_spec_override(nm, @@probe_spec)
         register_mtp_round_override(nm, @@probe_round)
         register_mtp_spec_batch_override(nm, @@probe_batch)
@@ -1073,7 +1115,7 @@ def test_mtp_seat_owner(t : T?) {
 //! the CPU round's opening on a session carrying an unconsumed landed pick, under the unowned probe override
 [cold_path]
 def private round_refuses_pick() : bool {
-    register_decode_override(PROBE_UNOWNED, @@probe_decode)
+    register_decode_override(PROBE_UNOWNED, @@decode_declines)
     let prev = active_decode_override()
     select_decode_override(PROBE_UNOWNED)
     var m = Model()
@@ -1193,7 +1235,7 @@ def private round_session() : Session {
 //! row-0 `truth`, the rollback seat's answer
 def private round_seats_arm(pick, truth : int64; rollback_ok : bool) {
     for (nm in [ROUND_SEATS, ROUND_SEATS_NO_ROLLBACK]) {
-        register_decode_override(nm, @@probe_decode)
+        register_decode_override(nm, @@decode_declines)
         register_mtp_seat_owner(nm, @@round_owner)
         register_mtp_draft_override(nm, @@round_draft)
         register_mtp_verify_override(nm, @@round_verify)
@@ -1416,28 +1458,18 @@ def test_trim_lane_ring_pin(t : T?) {
     }
 }
 
-def private ring_floor_panics(var s : Session; pos : int64) : bool {
-    var tripped = false
-    try {
-        kv_ring_floor_check(s, pos)
-    } recover {
-        tripped = true
-    }
-    return tripped
-}
-
 [test]
 def test_kv_ring_floor_check(t : T?) {
     t |> run("a call at or past the ring floor continues, one under it panics, and a start at 0 rebuilds the history and clears the floor") @(t : T?) {
         var s : Session
         s.kv_ring_floor = 6l
-        t |> success(!ring_floor_panics(s, 8l), "a call past the floor continues")
-        t |> success(!ring_floor_panics(s, 6l), "a call at the floor continues")
+        t |> success(empty(panic_text() $ { kv_ring_floor_check(s, 8l) }), "a call past the floor continues")
+        t |> success(empty(panic_text() $ { kv_ring_floor_check(s, 6l) }), "a call at the floor continues")
         t |> equal(s.kv_ring_floor, 6l, "and leaves the floor standing")
-        t |> success(ring_floor_panics(s, 3l), "a call under the floor panics: the ring holds no window under it")
-        t |> success(!ring_floor_panics(s, 0l), "a start at 0 continues nothing")
+        t |> success(!empty(panic_text() $ { kv_ring_floor_check(s, 3l) }), "a call under the floor panics: the ring holds no window under it")
+        t |> success(empty(panic_text() $ { kv_ring_floor_check(s, 0l) }), "a start at 0 continues nothing")
         t |> equal(s.kv_ring_floor, 0l, "and clears the floor")
-        t |> success(!ring_floor_panics(s, 3l), "so the same call at 3 continues the rebuilt history (the control)")
+        t |> success(empty(panic_text() $ { kv_ring_floor_check(s, 3l) }), "so the same call at 3 continues the rebuilt history (the control)")
         delete s
     }
 }

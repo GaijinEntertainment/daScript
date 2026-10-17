@@ -232,6 +232,9 @@ def private word_in(list, word : string) : bool {
     return false
 }
 
+//! whether a stamp macro's skip words drop member `f`: the member named, or `!b32` and `f` no per-32 format
+def private stamp_skips(skip : string; f : KqFmt) : bool => word_in(skip, "{f}") || (word_in(skip, "!b32") && !kq_dense_b32(f))
+
 //! a stamp macro's word list: a string literal, or a module `let` of one in the module the call compiles in
 def private macro_words(prog : ProgramPtr; arg : ExpressionPtr) : string {
     if (arg is ExprConstString) {
@@ -265,8 +268,8 @@ def private stamp_block(prog : ProgramPtr; var expr : ExprCallMacro?; what : str
 [call_macro(name = "kq_tile_stamp")]
 class KqTileStamp : AstCallMacro {
     //! ``kq_tile_stamp(fmt[, skip[, family[, tail, tails]]]) <| $() { ... tile_<verb>_<tail>(...) ... }``: the block once per KqFmt member
-    //! on a ladder over ``fmt``, each placeholder renamed by ``kq_tile_target``; ``skip`` members get no arm. With ``tail``/``tails``
-    //! a ``tile_<verb>`` placeholder takes arm ``j``'s word from ``tails`` on an inner ladder over ``tail``, ``<fmt>/<tail>`` skips a pair
+    //! on a ladder over ``fmt``, each placeholder renamed by ``kq_tile_target``; ``skip`` members (``!b32``: all but the per-32 ones) get
+    //! no arm. With ``tail``/``tails`` a ``tile_<verb>`` placeholder takes arm ``j``'s word from ``tails`` on an inner ladder over ``tail``, ``<fmt>/<tail>`` skips a pair
     def override visit(prog : ProgramPtr; mod : Module?; var expr : ExprCallMacro?) : ExpressionPtr {
         let nargs = length(expr.arguments)
         macro_verify((nargs >= 2 && nargs <= 4 || nargs == 6) && expr.arguments[nargs - 1] is ExprMakeBlock, prog, expr.at,
@@ -286,7 +289,7 @@ class KqTileStamp : AstCallMacro {
         var ladder : ExpressionPtr
         for (f in type<KqFmt>) {
             let fname = "{f}"
-            continue if (word_in(skip, fname))
+            continue if (stamp_skips(skip, f))
             var arm : ExpressionPtr
             if (empty(tails)) {
                 arm = renamed_arm(expr.at, root, names) $(n) => kq_tile_target(n, fname, family, "")
@@ -319,6 +322,30 @@ class KqTileStamp : AstCallMacro {
             }
         }
         return ladder
+    }
+}
+
+[call_macro(name = "kq_tile_stamped")]
+class KqTileStamped : AstCallMacro {
+    //! ``kq_tile_stamped(fmt, skip, tail, tails)``: whether ``kq_tile_stamp`` over the same ``skip`` and ``tails`` has an arm for the
+    //! pair (``fmt``, ``tail``) - the pairs read at compile time off the words the stamp itself reads
+    def override visit(prog : ProgramPtr; mod : Module?; var expr : ExprCallMacro?) : ExpressionPtr {
+        macro_verify(length(expr.arguments) == 4 && expr.arguments[0] is ExprVar && expr.arguments[2] is ExprVar, prog, expr.at,
+            "expecting kq_tile_stamped(fmt, skip, tail, tails), the format and the tail plain variables")
+        let skip = macro_words(prog, expr.arguments[1])
+        let tails <- macro_word_list(prog, expr.arguments[3])
+        macro_verify(!empty(tails), prog, expr.at, "kq_tile_stamped's tails are a string literal or a module `let` of one")
+        var fmt = expr.arguments[0]
+        var tail = expr.arguments[2]
+        var any = qmacro(false)
+        for (f in type<KqFmt>) {
+            continue if (stamp_skips(skip, f))
+            for (t, j in tails, count()) {
+                continue if (word_in(skip, "{f}/{t}"))
+                any = qmacro($e(any) || ($e(fmt) == int($v(f)) && $e(tail) == $v(j)))
+            }
+        }
+        return any
     }
 }
 
@@ -1384,4 +1411,29 @@ def kq_stream_code(f : KqFmt) : int => kq_desc(f).stream_code
 
 //! the stream code's format; false for a code no format carries
 def kq_fmt_of_stream_code(code : int; var out : KqFmt&) : bool => kq_fmt_where(out) <| $(f : KqFmt) => kq_desc(f).stream_code == code
+
+//! a weight plane's site in the words a decline line and the load report name it by, keyed by its GGUF tensor role
+let private KQ_SITE_WORDS <- {
+    "token_embd" => "token table", "per_layer_token_embd" => "PLE table", "output" => "classifier",
+    "attn_q" => "attention q", "attn_k" => "attention k", "attn_v" => "attention v", "attn_output" => "attention o",
+    "attn_qkv" => "attention qkv", "attn_gate" => "attention gate",
+    "ffn_gate" => "FFN gate", "ffn_up" => "FFN up", "ffn_down" => "FFN down",
+    "ffn_gate_exps" => "expert stack gate", "ffn_up_exps" => "expert stack up", "ffn_down_exps" => "expert stack down",
+    "ffn_gate_up_exps" => "expert stack gate-up",
+    "ffn_gate_shexp" => "shared expert gate", "ffn_up_shexp" => "shared expert up", "ffn_down_shexp" => "shared expert down",
+    "ssm_out" => "deltanet out", "ssm_alpha" => "deltanet alpha", "ssm_beta" => "deltanet beta", "ssm_ba" => "deltanet beta-alpha"
+}
+
+//! the site words of a GGUF tensor role (`attn_q`, `ffn_down_exps`, `token_embd`); a role with no words is named as itself
+def kq_site_words(role : string) : string => KQ_SITE_WORDS?[role] ?? role
+
+//! a GGUF tensor name's role: the name past a `blk.<n>.` prefix and short of a `.weight` suffix
+def gguf_tensor_role(name : string) : string {
+    var role = name
+    if (starts_with(role, "blk.")) {
+        let dot = find(role, ".", 4)
+        role = dot >= 0 ? slice(role, dot + 1) : role
+    }
+    return ends_with(role, ".weight") ? slice(role, 0, length(role) - 7) : role
+}
 

@@ -20,6 +20,7 @@ require daslib/env_registry   // nolint:STYLE030,LINT019 - env_is_set, inside th
 require daslib/jobque_boost
 require daslib/fio   // nolint:STYLE030,LINT019 - path_join, inside the das_metal halves
 require _model_tier
+require _resident_feed   // batched_logits_rows: the batched gather cell's sessions and steps
 
 // The batched bench row on the Metal batched driver: `bench_tg_batched_rep` homes its streams on the
 // host where no whole-model driver homes them, and every timed step goes through ONE batched
@@ -97,28 +98,9 @@ def private metal_batched_logits(t : T?; tr : Model) : array<array<float>> {   /
         var prompts <- [ <- encode(tr, "Count from one to twenty: one, two, three,", true, false),
                          <- encode(tr, "The letters of the alphabet in order: a, b, c, d,", true, false),
                          <- encode(tr, "List the days of the week: Monday, Tuesday,", true, false)]
-        var sessions : array<Session>
-        sessions |> reserve(3)
-        for (p in prompts) {
-            sessions |> emplace <| create_session(tr, KVDtype.f16)
-            eval(tr, sessions[length(sessions) - 1], p)
-        }
-        var sess <- [for (i in range(3)); unsafe(addr(sessions[i]))]
-        var ws <- create_batch_workspace(tr)
-        rows |> reserve(3l * GATHER_STEPS)
-        let steps0 = metal_batch_decode_stats().steps
-        for (st in range64(GATHER_STEPS)) {
-            var toks <- [for (i in range(3)); 400l + 37l * st + 11l * int64(i)]
-            eval_batch(tr, ws, sess, toks)
-            delete toks
-            for (s in sessions) {
-                rows |> push_clone(s.logits)
-            }
-        }
-        t |> equal(metal_batch_decode_stats().steps - steps0, GATHER_STEPS, "every batched step went through the Metal batched driver")
-        sess |> clear()   // borrowed handles: a delete of array<T?> frees the pointees
-        delete ws
-        delete sessions
+        var feeds <- [for (i in range(3)); [for (st in range64(GATHER_STEPS)); 400l + 37l * st + 11l * int64(i)]]
+        rows <- batched_logits_rows(t, tr, prompts, feeds, KVDtype.f16, GATHER_STEPS) <| $ => metal_batch_decode_stats().steps
+        delete feeds
         delete prompts
     }
     return <- rows
@@ -152,12 +134,7 @@ def private metal_batch_gather_cell(t : T?; file, family : string) {
                 t |> equal(metal_batch_rows_gathered() - g1, 0l, "with the gather off no batched row gathered: the counter's control")
                 t |> equal(batch_rows_host_embedded() - h1, 3l * GATHER_STEPS, "with the gather off the host embedded every batched row")
                 set_metal_batch_gather(gather0)
-                t |> equal(long_length(dev), long_length(host), "both runs stepped every row")
-                for (i in range64(min(long_length(dev), long_length(host)))) {
-                    let diff = logits_maxdiff(dev[i], host[i])
-                    log_logits_pair(tr, "{file} step {i / 3l}, row {i % 3l}: the gathered row against the host row", dev[i], host[i], diff)
-                    t |> equal(diff, 0.0, "step {i / 3l}, row {i % 3l}: the gathered rows' logits bit for bit the host rows' (maxdiff {diff})")
-                }
+                gathered_rows_bit_same(t, tr, file, dev, host, 3l)
                 delete dev
                 delete host
             }

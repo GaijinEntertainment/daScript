@@ -3170,14 +3170,17 @@ CPU large-language-model inference in pure daslang: load a GGUF model, tokenize,
 
 ### Model loading and sessions
 
-- `attach_mtp_drafter` - Attach the assistant drafter at `path` to `model` for speculative decode; false where the driver refused it (a drafter made for another target) or no driver carries one.
+- `attach_mtp_drafter` - Attach the assistant drafter at `path` to `model` for speculative decode on the GPU driver that serves it (Metal or the Vulkan resident driver); false where every driver refused it (a drafter made for another target, a model the driver does not serve whole), each refusal logged.
+- `attach_mtp_sidecar` - Attach the assistant drafter that sits beside the model at `model_path` (`mtp_drafter_sidecar`): the drafter's path where it attached, "" where none sits there or every driver refused it (each refusal logged).
 - `caps` - What `model` honestly supports at the chat layer (see LlmCaps) — e.g.
 - `create_batch_workspace` - Create the caller-owned scratch that `eval_batch` steps through — one per concurrent batch, reused across calls (buffers grow to the largest batch seen).
 - `create_kv_pool` - Create a caller-owned PAGED KV pool over `model`'s cache geometry.
 - `create_session` - Create a fresh session (KV cache + scratch) sized to `model.config.seq_len` — one model, many independent conversations.
+- `detach_mtp_drafter` - Detach `model`'s assistant drafter, if one is attached; its rounds stop and plain decode serves.
 - `load_model` - Load a model AND its tokenizer from a GGUF file — architecture and tokenizer backend are auto-selected from metadata; `mode` picks the weight quantization.
 - `mtp_capable` - Whether `model` can run a speculative round: a NextN head of its own, or an assistant drafter attached - what a scheduler's `mtp` asks for.
-- `mtp_drafter_sidecar` - The assistant drafter file a model ships beside it (gemma-4: `mtp-<stem>-Q8_0.gguf`), "" where there is none or no driver carries one.
+- `mtp_drafter_sidecar` - The assistant drafter file a model ships beside it (gemma-4: `mtp-<stem>-Q8_0.gguf`, `<stem>` the file name before its quant token, an unsloth `-UD` tag dropped where the head has none), "" where there is none.
+- `mtp_drafter_stats` - The attached drafter's device rounds since its attach: drafts made, drafts accepted, rounds, and the verifies whose rows carried two streams or more.
 - `release_kv_pages` - Return `session`'s KV pages to its pool (no-op on flat sessions).
 - `setup_dasllama_jobque` - Configure the job queue for dasLLAMA's fork/join matmul dispatch: pooled fork contexts, batched dispatch, the worker spin-before-park window (`jobque_spin_us`; 0 disables).
 - `with_dasllama_jobque` - Run `blk` inside a fresh `with_job_que()` that `setup_dasllama_jobque()` has configured — the one-call form of the pair.

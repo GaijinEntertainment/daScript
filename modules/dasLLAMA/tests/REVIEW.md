@@ -1,8 +1,9 @@
 # dasLLAMA tests Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-doc: `../ARCHITECTURE.md`. Planned work: `../followup_general.md`, `../followup_vulkan.md`,
-`../followup_metal.md`.
+docs: `../ARCHITECTURE.md`, `../ARCHITECTURE_IMAGE_LEDGER.md` (the suite cells that mint an image by
+design are ledgered at its `#suite-image-mints`). Planned work: `../followup_general.md`,
+`../followup_vulkan.md`, `../followup_metal.md`.
 
 A cell is one `t |> run` subtest, or a `[test]` function that runs no subtest, and owns the asserts
 of every helper it calls; a test file is a `.das` dastest runs - one holding a `[test]` function, or
@@ -146,8 +147,7 @@ set.** `DASLLAMA_PARITY_FULL=1` is a final pre-PR switch, not the iteration loop
 
 **A test - or a program a test builds or spawns - whose subject is not the `.dlim` image rail (a
 cell whose subject is a lane knob's effect on the image identity has the rail as its subject)
-never mints or maps a MODEL image, unless `../ARCHITECTURE_IMAGE_LEDGER.md#suite-image-mints`
-ledgers the file: it either runs with `DASLLAMA_IMAGE=0` in its environment, or
+never mints or maps a MODEL image: it either runs with `DASLLAMA_IMAGE=0` in its environment, or
 calls no baking loader - `load_<family>_tower`, `load_<family>_embedder`, `load_model_cached`,
 `load_tts_model`, each of which writes a `.dlim` beside the model when `DASLLAMA_IMAGE` is
 unset.** Such a test loads a media carrier in memory from the family's `stage_*` staging - its
@@ -200,9 +200,10 @@ dumps. Any one of these names the producer: a row in `../performance/model_specs
 script in `../harness/`; for an oracle dump, the mint script stocked beside the dumps under
 `models_dir()`, named by the test that loads the dump.
 
-**A diff that adds a cell reading a companion artifact beside a model file names that companion in
-the `companions` of that model file's row in `../performance/model_specs.das`, in the same change.**
-A box that fetches the row alone then has what the cell reads.
+**A diff that adds a cell reading a stocked artifact - a file neither this repo's build nor its
+tests produce - from a model file's directory names that artifact in the `companions` of that model
+file's row in `../performance/model_specs.das`, in the same change.** A box that fetches the row
+alone then has what the cell reads.
 
 **A test that reads a vision encode oracle dump without naming the minting arm in its header - the
 backend, the flash-attention setting and the mmproj precision the dump came from - is a defect.**

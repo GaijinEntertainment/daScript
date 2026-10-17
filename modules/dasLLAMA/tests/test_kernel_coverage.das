@@ -1275,9 +1275,9 @@ def test_vulkan_kernel_coverage_rail(tst : T?) {
             if (!arm_on(t, "coverage")) {
                 return
             }
-            // no device, no dispatches — the unit pins that the compile-time lens spec parses
-            // into the census universe and every kernel starts at zero. The serving census runs
-            // on the PC box beside the vulkan tier suites.
+            //! the compile-time lens spec parses into the census universe, every kernel at zero after a reset - the
+            //! cells before this one in the file may have dispatched on a live device
+            vk_kernel_coverage_reset()
             var cov <- vk_kernel_coverage()
             t |> success(length(cov) >= 40, "the lens spec seeds {length(cov)} kernels (floor 40)")
             var zeros = 0

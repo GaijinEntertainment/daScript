@@ -37,7 +37,7 @@ task before the first edit, and fix it in the same session when a step turns out
 
 | Document | Read BEFORE... |
 |---|---|
-| `HOW_TO_ADD_A_FORMAT.md` | Adding a weight format (a new `KqFmt`), a served form of one, or a backend's (CPU, Vulkan, Metal) kernels for one at a site that reads it through a converted copy: GGUF type -> planes -> CPU kernels -> tune family -> Vulkan -> Metal -> the served cells per site x backend |
+| `HOW_TO_ADD_A_FORMAT.md` | Adding a weight format (a new `KqFmt`), a served form of one, or a backend's (CPU, Vulkan, Metal) kernels for one at a site (a weight plane a backend's serving call reads) that reads it through a converted copy (any other form of its weights that outlives the kernel call or reaches the `.dlim`): GGUF type -> planes -> CPU kernels -> tune family -> Vulkan -> Metal -> the served cells per site x backend |
 | `BRINGUP.md` | Bringing a profiling box up from zero (the records rig; `METHODOLOGY.md` is the published method) |
 | `HOW_TO_GET_SIDECAR.md` | Taking an untuned box to a committed CPU-class profile (`performance/defaults/<class>.tune-defaults.json`) |
 

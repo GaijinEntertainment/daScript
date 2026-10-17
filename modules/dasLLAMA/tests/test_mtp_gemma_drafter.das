@@ -1106,14 +1106,7 @@ def private ring_draft_run(t : T?; ring : int; budget : int64) : RingDraftRun {
             var prompt <- encode(trg, "Count from 1 to 600, separated by commas: {counting_prompt(1, 500)}", true, false)
             let npos = long_length(prompt)
             var s <- make_run_state(trg.config, KVDtype.f16, KVDtype.f16)
-            var p0 = 0l
-            while (p0 < npos - 1l) {
-                let n = min(RING_PF_CHUNK, npos - 1l - p0)
-                var part <- [for (i in range64(p0, p0 + n)); prompt[i]]
-                eval_(trg, s, part)
-                delete part
-                p0 += n
-            }
+            eval_chunked(trg, s, prompt, npos - 1l, RING_PF_CHUNK)
             var one <- [prompt[npos - 1l]]
             eval_(trg, s, one)   //! the one-row chain's step at the prompt's last position
             static_if (typeinfo builtin_module_exists(das_metal)) {

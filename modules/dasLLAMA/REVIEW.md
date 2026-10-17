@@ -2,7 +2,8 @@
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 docs: `ARCHITECTURE.md`, `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_MEASUREMENT.md`. Planned work:
-`followup_general.md`, `followup_vulkan.md`, `followup_metal.md`.
+`followup_general.md`, `followup_vulkan.md`, `followup_metal.md`. `tests/`, `benchmarks/`,
+`performance/` and `harness/` carry their own `REVIEW.md`.
 
 **A change to the tokenizer - `dasllama/dasllama_tokenizer.das`, `dasllama/dasllama_spm.das`,
 `dasllama/dasllama_bpe.das` or `dasllama/dasllama_pretok.das` - or to a string any `special_id`
@@ -47,12 +48,11 @@ to a function-typed one, or the `[init]` that sets one; or that adds or changes 
 in a forked context or code reachable from a `team_parallel_*` or `maybe_parallel_for*` body,
 wherever the diff puts it, applies `REVIEW_MEMORY.md` (beside this file) too.**
 
-**A change to what enters `performance/records/`, or to a model file's provenance - its source url,
-byte size, sha256 or conversion recipe, wherever it is declared - answers to
-`performance/REVIEW.md`.** A change to WHICH model file a recorded row or a manifest pins answers to
-it too. A model file here is a `.gguf`, a `.dlim`, an mmproj (a multimodal projector weight file),
-or an image or audio fixture. A test or tool merely opening a stocked model file by name does not
-route.
+**A change to what enters `performance/records/`, to a model file's provenance - its source url,
+byte size, sha256 or conversion recipe, wherever it is declared - or to WHICH model file a recorded
+row or a provenance declaration pins, answers to `performance/REVIEW.md`.** A model file here is a
+`.gguf`, a `.dlim`, an mmproj (a multimodal projector weight file), or a picture or audio fixture
+file. A test or tool merely opening by name a model file the catalog already stocks does not route.
 
 **A change to the sidecar-exchange client (`dasllama/dasllama_exchange.das`) - the code that
 downloads tune winners to a box and submits that box's winners back - its schema, or a
@@ -97,12 +97,13 @@ change, or a change to a `kv_*` function that a GPU driver file (`dasllama_metal
 `dasllama_vulkan*.das`, `dasllama_gpu*.das`) calls, wherever the diff puts it, applies
 `REVIEW_GPU.md`.**
 
-**A GPU kernel timing race (two kernels timed against each other to pick one - not a data
-race), a call that makes, arms or tears down device-home serving - a session whose K/V region
-lives only on the device (`create_device_session`, `set_device_kv`, `moe_gpu_drop_model`) - a
-knockout (an arm that skips a stage to measure that stage's cost), a hand-binding arm (one that
-writes buffer or kernel-argument (kargs) binding numbers as literals), or a kernel cell or probe
-that fills or binds a `TokMeta` block, wherever the diff puts it, applies `REVIEW_GPU.md`.**
+**A GPU kernel timing race (two kernels timed against each other to pick one - not a data race), a
+call that makes, arms or tears down device-home serving - a session whose K/V region lives only on
+the device (`create_device_session`, `set_device_kv`, `moe_gpu_drop_model`), a call of a `set_gpu_*`
+or `reset_gpu_*` function of `dasllama/dasllama_core.das`, a knockout (an arm that skips a stage to
+measure that stage's cost), a hand-binding arm (one that writes buffer or kernel-argument (kargs)
+binding numbers as literals), or a kernel cell or probe that fills or binds a `TokMeta` block,
+wherever the diff puts it, applies `REVIEW_GPU.md`.**
 
 **A kernel body or a function a kernel calls - a `[metal_kernel]` def, a class a
 `[metal_dispatch]` / `[vk_dispatch]` declares, or a fixture the Metal or SPIR-V emitter
@@ -157,15 +158,18 @@ what-lands-where rules.
 to a require, new or existing, in `dasllama/dasllama.das` or in a file it reaches through `public`
 requires alone, or adds an `[EnvConfig]` area struct, applies `REVIEW_FACADE.md` too.**
 
-**A diff that does any of these, wherever it sits, applies `REVIEW_KQ_FORMATS.md`: adds a site a
-backend serves a weight plane at, or changes which `KqFmt` members a site serves; turns a
+**A diff that does any of these, wherever it sits, applies `REVIEW_KQ_FORMATS.md`: adds a weight
+plane a backend's serving call reads, or changes which `KqFmt` members such a plane is served in;
+makes a backend's serving call read a weight format in a form other than its disk bytes; or states,
+in checked-in text, a commit message or the PR body, that a backend serves a weight format.**
+
+**A diff that does any of these, wherever it sits, applies `REVIEW_KQ_FORMATS.md` too: turns a
 weight-format id (a `KqFmt` member, a GGUF type number, or the int a generated kernel takes as its
 format parameter) into plane strides; reads a per-block or per-element byte count of one weight
 format; writes as a literal a number fixed by one weight format (its kernel format id, its element
-or word count per block, a plane stride); adds or changes a `stamp = "<family>:<fmt>:<form>"` kernel
-class, a `kq_mulmm_<fmt>` or `moe_mulmm_<fmt>` race, a dev-W dequant pass or a format's twin pick;
-makes a backend's serving call read a weight format in a form other than its disk bytes; or states,
-in checked-in text, a commit message or the PR body, that a backend serves a weight format.**
+or word count per block, a plane stride); or adds or changes a `stamp = "<family>:<fmt>:<form>"`
+kernel class, a `kq_mulmm_<fmt>` or `moe_mulmm_<fmt>` race, a dev-W dequant pass (the pass that
+dequantizes weights into an f16 panel on the device) or a format's twin pick.**
 
 **A diff that bumps `DASLLAMA_RELEASE` (`dasllama/dasllama_version.das`) cites in the PR body the
 maintainer's ruling that rows measured before it can no longer be compared with rows after it.**
@@ -196,16 +200,17 @@ changed, so their timings pick nothing.
 race's output lines, one per candidate and each naming it, in the PR body or in a `PERF_LEDGER.md`
 row the diff adds.**
 
-**A race that picks a numeric threshold - a cutoff a predicate compares against, or a size a kernel
-variant is compiled for: a row count, a byte size, a lane width - times the chosen value and at
-least one value on each side of it.**
+**A diff whose race picks a numeric threshold - a cutoff a predicate compares against, or a size a
+kernel variant is compiled for: a row count, a byte size, a lane width - times the chosen value and
+at least one value on each side of it in that race.**
 
-**A new CPU or GPU matrix multiply whose weight operand is an f32 plane, outside a
+**A new call site of a CPU or GPU matrix multiply whose weight operand is an f32 plane, outside a
 correctness-comparison path (one whose only job is to produce a reference result to check another
-against), where a faster-format twin on the same backend already serves the same weights and
-shape, is a defect - call that twin instead.** A site that must stay f32 for another reason is
-ledgered on its file's charter line (the line, in the companion that `ARCHITECTURE.md#file-charters`
-routes to, that says what the file holds); a comment at the call site does not discharge this.
+against), where the same backend already serves the same weights and shape through a kernel on a
+quantized or f16 form of them, is a defect - call that kernel instead.** A site that must stay f32
+for another reason is ledgered on its file's charter line (the line, in the companion that
+`ARCHITECTURE.md#file-charters` routes to, that says what the file holds); a comment at the call
+site does not discharge this.
 
 **A caller never re-checks a guard its callee checks - drop the caller's copy, or, where the
 caller's check also gates its own work, compute the decision once and pass it to the callee.**

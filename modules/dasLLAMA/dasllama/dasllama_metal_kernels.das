@@ -4946,10 +4946,6 @@ def enc_embed_dev(enc : MetalComputeEncoder?; t : Model; btok : MetalBuffer?; to
     }
 }
 
-//! the members the per-32 table gather (`MetalEmbedB32T`) has no stamp for: q8 (its linear copy's gather), the superblock members
-//! (the K-quant gather) and mx4 (no table carries it)
-let EMBED_B32_SKIP = "q8 k4 k5 k6 q40 iq4xs k3 iq3s iq3xxs iq4nl k2 iq2s iq2xs iq2xxs mx4 iq3s4"
-
 //! The rows of `nrows` token ids (btok at toff) off the table plane `fmt` at element `off`, `width` elements a row under `escale`, into
 //! bx at xoff: the token table's gather and the E-series per-layer table's (layers x ple under sqrt(ple)); the q8 copy's stamp
 //! reads the width and the scale off the uniforms `bwidth` / `bescale` (null = 1)
@@ -4958,12 +4954,12 @@ def enc_embed_table(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; off, wid
     if (fmt == KqFmt.q8) {
         let bemb = blob_of(g_dev, t, off)
         enc_embed(enc, bemb.buf, bemb.boff, btok, bx, bwidth, bescale, width, toff, xoff, nrows)
-    } elif (kq_dense_b32(fmt) && kq_fmt_gpu_supported(fmt)) {
+    } elif (kq_dense_b32(fmt)) {
         let qp = b32_planes_of(g_dev, t, fmt, off)
         var ka = EmbedKqArgs(dim = uint(width), nsb = uint(width / KQ_B32_ELEMS), escale = escale)
         let units = width / 16l
         let slot = int(fmt)
-        kq_tile_stamp(slot, EMBED_B32_SKIP, "embed") <| $() {
+        kq_tile_stamp(slot, "!b32", "embed") <| $() {   //! the per-32 table gather (`MetalEmbedB32T`) stamps the per-32 formats alone
             tile_enc_b32(enc, qp.sbuf, qp.soff, qp.qbuf, qp.qoff, btok, toff, bx, xoff, ka, units, nrows)
         }
     } else {
@@ -7172,6 +7168,20 @@ class MetalPleFinish : GkPleFinish {
     def metal_ple_finish {
         finish_slice(gl_WorkGroupID.x)
     }
+}
+
+//! The E-series pre-step on the device over `nrows` rows - the CPU's `ple_gather_rows` + `ple_pre_finish`: the side rows off the
+//! table at the token ids in `btok` into `bple`, the embedded rows projected into `bproj` (`project`: the driver's projection form),
+//! the finish; `ball` / `bsq` the layers x ple and sqrt(ple) uniforms
+def enc_ple_pre(enc : MetalComputeEncoder?; t : Model; btok : MetalBuffer?; toff : uint64; bple, bproj, ball, bsq : MetalBuffer?; nrows : int64;
+                project : block<() : void>) {
+    let c = t.config
+    let ple = c.n_embd_per_layer
+    enc_embed_table(enc, t, t.ple_emb_fmt, t.ple_emb_off, c.n_layers * ple, sqrt(float(ple)), btok, toff, bple, 0ul, nrows, ball, bsq)
+    invoke(project)
+    var bpn = upload_region(unsafe(addr < void? >(t.fblob[t.ple_pnorm_off])), uint64(ple * 4l))
+    var kf = ple_fin_args(ple, c.dim, c.norm_eps)
+    enc_ple_finish(enc, bproj, bpn, bple, kf, c.n_layers * nrows)
 }
 
 //! the router GEMV's args: `ne` rows of `dim` over `ncols` columns `xs` apart (0 = dim), the bias row where `hasb`

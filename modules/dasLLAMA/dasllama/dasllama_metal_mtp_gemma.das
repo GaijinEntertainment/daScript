@@ -75,10 +75,7 @@ var g_gemma_gpu : GemmaDrafterGpu
 var g_gemma_attached = false
 var g_gemma_ws : BatchWorkspace
 var g_gemma_ws_ok = false
-var g_gemma_drafted = 0l
-var g_gemma_accepted = 0l
-var g_gemma_rounds = 0l
-var g_gemma_joint = 0l   //! verifies whose rows carried two streams or more
+var g_gemma_stats : MtpAssistantStats   //! the rounds since the attach
 
 def private ubuf_u32(v : uint) : MetalBuffer? => scalar_buffer(metal_new_buffer_untracked(g_dev, 4ul), v)
 
@@ -214,13 +211,7 @@ def public attach_gemma_drafter(t : Model; path : string) : string {
     set_metal_mtp_carry_hidden(true, g_gemma_carry_pre)
     set_mtp_round_kind(MtpRoundKind.assistant)
     g_gemma_attached = true
-    g_gemma_drafted = 0l
-    g_gemma_accepted = 0l
-    g_gemma_rounds = 0l
-    g_gemma_joint = 0l
-    g_gemma_us_draft = 0l
-    g_gemma_us_verify = 0l
-    g_gemma_us_cold = 0l
+    g_gemma_stats = MtpAssistantStats()
     to_log(LOG_INFO, "dasLLAMA gemma drafter attached: {path} ({g_gemma_drafter.n_layers} Q-only layers over target layers {g_gemma_drafter.kv_layer})\n")
     return ""
 }
@@ -451,10 +442,10 @@ def private encode_gemma_chain(t : Model; s : Session; var g : GemmaDrafterGpu; 
 [arch(at="../ARCHITECTURE_GPU_MTP.md#mtp-round-one-join")]
 def private gemma_encode_chains(t : Model; enc : MetalComputeEncoder?) {
     var row0 = 0l
-    for (gi in range64(long_length(g_gw_sessions))) {
-        let s & = unsafe(*g_gw_sessions[gi])
-        encode_gemma_chain(t, s, g_gemma_gpu, enc, gi, row0, s.mtp_vbatch[0], s.mtp_h, g_gw_pos[gi], g_gw_nr[gi] - 1l)
-        row0 += g_gw_nr[gi]
+    for (gi in range64(long_length(g_gw.sessions))) {
+        let s & = unsafe(*g_gw.sessions[gi])
+        encode_gemma_chain(t, s, g_gemma_gpu, enc, gi, row0, s.mtp_vbatch[0], s.mtp_h, g_gw.pos[gi], g_gw.nr[gi] - 1l)
+        row0 += g_gw.nr[gi]
     }
 }
 
@@ -484,9 +475,6 @@ var private g_gemma_draft_cpu = false
 var private g_gemma_trace = false
 var private g_gemma_carry_pre = false
 var private g_gemma_cpu_out : GemmaDraftOut
-var private g_gemma_us_draft = 0l   // round time split since attach: the draft chains ...
-var private g_gemma_us_verify = 0l  // ... the same-slab verify + walk + commit
-var private g_gemma_us_cold = 0l    // ... cold rounds (one plain step)
 
 //! Bring-up levers: `set_gemma_draft_on_cpu(true)` routes every draft step through the CPU oracle
 //! (the target's live K/V, the same inputs), `set_gemma_trace(true)` logs drafts vs truth per round.
@@ -536,7 +524,7 @@ def private gemma_plain_step(t : Model; var s : Session; tok, pos : int64) {
     let tc = ref_time_ticks()
     forward(t, s, tok, pos)
     s.n_past = pos + 1l
-    g_gemma_us_cold += int64(get_time_usec(tc))
+    g_gemma_stats.cold_us += int64(get_time_usec(tc))
 }
 
 //! a stream that cannot speculate this round: no Metal blob or device, no carried hidden at its position, a round past the
@@ -550,10 +538,7 @@ def private gemma_round_cold(t : Model; s : Session; pos, k : int64) : bool {
     return mr.watermark < pos || mr.cap_rows < pos + k + 1l
 }
 
-var private @scratch g_gw_sessions : array<Session?>   //! the tick's warm streams, a verify group each
-var private @scratch g_gw_idx : array<int64>          //! ... their index among the tick's streams
-var private @scratch g_gw_pos : array<int64>
-var private @scratch g_gw_nr : array<int64>
+var private @scratch g_gw : MtpRoundGather   //! the tick's warm streams, a verify group each
 var private @scratch g_gw_toks : array<int64>
 
 //! The gemma speculative ROUNDS of a tick's streams at depth `k_req` (each stream's under its `mtp_depth_cap`): every warm
@@ -564,43 +549,22 @@ var private @scratch g_gw_toks : array<int64>
 [hot_path, arch(at="../ARCHITECTURE_GPU_MTP.md#mtp-round-one-join"), arch(at="../ARCHITECTURE_GPU_MTP_ASSISTANT.md#assistant-drafter-rounds")]
 def private gemma_mtp_spec_rounds(t : Model; var sessions : array<Session?>; toks : array<int64>; k_req : int64; var acc : array<int64>) : int64 {   // nolint:STYLE038 — draft chains / one verify / accept walks / commits is one sequential protocol on shared locals
     let c = t.config
-    let n = long_length(sessions)
     let k = clamp(k_req, 1l, MTP_MAX_ROWS - 1l)
     let dr & = g_gemma_drafter
-    acc |> resize(n)   // nolint:PERF026 — grows to the stream count once; the callers pass reused scratch
-    g_gw_sessions |> clear()
-    g_gw_idx |> clear()
-    g_gw_pos |> clear()
-    g_gw_nr |> clear()
     g_gemma_h |> grow_resize(dr.tdim)
     g_gemma_hn |> grow_resize(dr.tdim)
-    for (i in range64(n)) {
-        var s & = unsafe(*sessions[i])
-        acc[i] = 0l
-        let pos = s.n_past
-        mtp_round_begin(s)
-        if (long_length(s.mtp_vbatch) < MTP_MAX_ROWS) {   // sized for the NextN carriers only at make_run_state
-            s.mtp_vbatch |> reserve_resize(MTP_MAX_ROWS)   // nolint:PERF026 — once per session
-        }
-        let ki = mtp_depth_for(s, k)
-        if (gemma_round_cold(t, s, pos, ki)) {
-            gemma_plain_step(t, s, toks[i], pos)
-            continue
-        }
-        s.mtp_vbatch[0] = toks[i]
-        g_gw_sessions |> push(sessions[i])
-        g_gw_idx |> push(i)
-        g_gw_pos |> push(pos)
-        g_gw_nr |> push(ki + 1l)
+    let ng = mtp_round_gather(g_gw, sessions, toks, k, acc) $(var s : Session; i, pos, ki : int64) : int64 {
+        return 0l if (!gemma_round_cold(t, s, pos, ki))
+        gemma_plain_step(t, s, toks[i], pos)
+        return -1l
     }
-    let ng = long_length(g_gw_sessions)
     return 0l if (ng == 0l)
     finish_pending_step()
     let td = ref_time_ticks()
     let ts_draft = prof_ticks()
     let gpu_chain = !g_gemma_draft_cpu
     var rows = 0l
-    for (nr in g_gw_nr) {
+    for (nr in g_gw.nr) {
         rows += nr
     }
     var chain_ok = true
@@ -608,43 +572,43 @@ def private gemma_mtp_spec_rounds(t : Model; var sessions : array<Session?>; tok
         gemma_token_rows(g_gemma_gpu, rows)
     } else {
         for (gi in range64(ng)) {
-            var s & = unsafe(*g_gw_sessions[gi])
-            chain_ok = chain_ok && gemma_draft_chain_cpu(t, s, g_gw_pos[gi], g_gw_nr[gi] - 1l) == g_gw_nr[gi] - 1l
+            var s & = unsafe(*g_gw.sessions[gi])
+            chain_ok = chain_ok && gemma_draft_chain_cpu(t, s, g_gw.pos[gi], g_gw.nr[gi] - 1l) == g_gw.nr[gi] - 1l
         }
     }
-    g_gemma_us_draft += int64(get_time_usec(td))
+    g_gemma_stats.draft_us += int64(get_time_usec(td))
     prof_add("mtp.draft", ts_draft)
     let tv = ref_time_ticks()
     let ts_verify = prof_ticks()
     g_gw_toks |> resize(rows)
     var row = 0l
     for (gi in range64(ng)) {
-        for (i in range64(g_gw_nr[gi])) {
-            g_gw_toks[row] = g_gw_sessions[gi].mtp_vbatch[i]   //! the device rows gather their own ids; the host rows read these where it does not
+        for (i in range64(g_gw.nr[gi])) {
+            g_gw_toks[row] = g_gw.sessions[gi].mtp_vbatch[i]   //! the device rows gather their own ids; the host rows read these where it does not
             row++
         }
     }
     if (gpu_chain) {
         set_batch_same_slab_chain(g_gemma_gpu.bvtok, @@gemma_encode_chains)
     }
-    let vok = chain_ok && verify_batch_groups(t, g_gemma_ws, g_gw_sessions, g_gw_toks, g_gw_pos, g_gw_nr)
+    let vok = chain_ok && verify_batch_groups(t, g_gemma_ws, g_gw.sessions, g_gw_toks, g_gw.pos, g_gw.nr)
     set_batch_same_slab_tokens(null)
     finish_pending_step()
     if (!vok) {
         for (gi in range64(ng)) {
-            var s & = unsafe(*g_gw_sessions[gi])
-            gemma_plain_step(t, s, s.mtp_vbatch[0], g_gw_pos[gi])
+            var s & = unsafe(*g_gw.sessions[gi])
+            gemma_plain_step(t, s, s.mtp_vbatch[0], g_gw.pos[gi])
         }
-        g_gw_sessions |> clear()
+        g_gw.sessions |> clear()
         return 0l
     }
     prof_add("mtp.verify", ts_verify)
     let ts_walk = prof_ticks()
     row = 0l
     for (gi in range64(ng)) {
-        var s & = unsafe(*g_gw_sessions[gi])
-        let pos = g_gw_pos[gi]
-        let kd = g_gw_nr[gi] - 1l
+        var s & = unsafe(*g_gw.sessions[gi])
+        let pos = g_gw.pos[gi]
+        let kd = g_gw.nr[gi] - 1l
         let r0 = row
         if (gpu_chain) {
             unsafe {
@@ -660,27 +624,25 @@ def private gemma_mtp_spec_rounds(t : Model; var sessions : array<Session?>; tok
         }
         mtp_round_take(s, a, kd, c.dim)
         mtp_round_commit(s, pos, kd, a)
-        g_gemma_drafted += kd
-        g_gemma_accepted += a
-        g_gemma_rounds++
-        acc[g_gw_idx[gi]] = a
-        row += g_gw_nr[gi]
+        g_gemma_stats.drafted += kd
+        g_gemma_stats.accepted += a
+        g_gemma_stats.rounds++
+        acc[g_gw.idx[gi]] = a
+        row += g_gw.nr[gi]
     }
     if (ng > 1l) {
-        g_gemma_joint++
+        g_gemma_stats.joint++
     }
-    g_gemma_us_verify += int64(get_time_usec(tv))
+    g_gemma_stats.verify_us += int64(get_time_usec(tv))
     prof_add("mtp.walk", ts_walk)
-    g_gw_sessions |> clear()   // borrowed handles
+    g_gw.sessions |> clear()   // borrowed handles
     return ng
 }
 
 [unused_argument(t), hot_path]   //! one drafter a process: the attach checked it against its target; the batch tick asks every step
 def private gemma_drafter_attached_to(t : Model) : bool => g_gemma_attached
 
-def private gemma_drafter_seam_stats() : MtpAssistantStats
-    => MtpAssistantStats(drafted = g_gemma_drafted, accepted = g_gemma_accepted, rounds = g_gemma_rounds, joint = g_gemma_joint,
-        draft_us = g_gemma_us_draft, verify_us = g_gemma_us_verify, cold_us = g_gemma_us_cold)
+def private gemma_drafter_seam_stats() : MtpAssistantStats => g_gemma_stats
 
 [init]
 def gemma_mtp_init {

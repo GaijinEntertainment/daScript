@@ -492,8 +492,8 @@ def tier_expert_decline(t : Model; l : int64) : string {
     let f1 = expert_fmt(t, t.we1_fmt, l)
     let f3 = expert_fmt(t, t.we3_fmt, l)
     let f2 = expert_fmt(t, t.we2_fmt, l)
-    if (!expert_chain_fmt_ok(f1) || !expert_chain_fmt_ok(f3) || !expert_chain_fmt_ok(f2)) return "gate/up/down formats {int(f1)}/{int(f3)}/{int(f2)} outside the expert chain"
-    if (t.config.moe_exps_bias && kq_sb(f2)) return "the biased act has no Q8_K form for the down format {int(f2)}"
+    if (!expert_chain_fmt_ok(f1) || !expert_chain_fmt_ok(f3) || !expert_chain_fmt_ok(f2)) return "gate/up/down formats {f1}/{f3}/{f2} outside the expert chain"
+    if (t.config.moe_exps_bias && kq_sb(f2)) return "the biased act has no Q8_K form for the down format {f2}"
     return ""
 }
 
@@ -545,7 +545,7 @@ def with_gpu_resident_embed(pin : int; body : block<void>) {
     set_gpu_resident_embed(found)
 }
 
-def private resident_gpu_embed : bool => g_rdec_emb_pin < 0 ? g_env_vulkan.vk_gpu_embed : g_rdec_emb_pin != 0
+def private resident_gpu_embed : bool => pin_over_env(g_rdec_emb_pin, g_env_vulkan.vk_gpu_embed)
 
 //! the format a device gather serves a token table - or the per-layer-embedding table - in: q8, a superblock format or a per-32 one
 def private resident_emb_fmt_ok(f : KqFmt) : bool => f == KqFmt.q8 || kq_sb(f) || kq_dense_b32(f)
@@ -2148,10 +2148,10 @@ def private resident_shexp_decline(t : Model; l : int64) : string {
             return "layer {l} lacks its dense shared expert's planes"
         }
         if (!resident_plane_ok(t, lf.f1) || !resident_plane_ok(t, lf.f3) || !resident_plane_ok(t, lf.f2)) {
-            return "layer {l}'s dense shared expert carries a format ({int(lf.f1)}/{int(lf.f3)}/{int(lf.f2)}) the dense rail does not serve"
+            return "layer {l}'s dense shared expert carries a format ({lf.f1}/{lf.f3}/{lf.f2}) the dense rail does not serve"
         }
         if (rdec_quant_class(lf.f1) != rdec_quant_class(lf.f3)) {
-            return "layer {l}'s dense shared expert mixes activation-quant forms ({int(lf.f1)}/{int(lf.f3)})"
+            return "layer {l}'s dense shared expert mixes activation-quant forms ({lf.f1}/{lf.f3})"
         }
         return ""
     }
@@ -2182,16 +2182,16 @@ def resident_layer_decline(t : Model; l : int64) : string {
         let fe2 = expert_fmt(t, t.we2_fmt, l)
         if (!resident_host_experts(c)) {   //! the host's routed chain reads the CPU planes in any format
             if (c.moe_exps_bias && kq_sb(fe2)) {
-                return "layer {l}'s biased expert stacks feed a K-quant down plane ({int(fe2)}) - the biased act has no Q8_K form"
+                return "layer {l}'s biased expert stacks feed a K-quant down plane ({fe2}) - the biased act has no Q8_K form"
             }
             if (!rdec_moe_ok(int(fe1), int(fe3), int(fe2))) {
-                return "layer {l}'s expert formats {int(fe1)}/{int(fe3)}/{int(fe2)} are outside the resident MoE block's tile families (the f16-fed cm2 or KHR tiles, the Q8-fed batch tiles)"
+                return "layer {l}'s expert formats {fe1}/{fe3}/{fe2} are outside the resident MoE block's tile families (the f16-fed cm2 or KHR tiles, the Q8-fed batch tiles)"
             }
             if (kq_sb(fe1) != kq_sb(fe3)) {
-                return "layer {l}'s expert gate and up stacks mix activation-quant forms ({int(fe1)}/{int(fe3)}) - one feed serves both"
+                return "layer {l}'s expert gate and up stacks mix activation-quant forms ({fe1}/{fe3}) - one feed serves both"
             }
             if (!kq_rows_ok(c.n_ff_exp, fe2)) {
-                return "layer {l}'s expert width {c.n_ff_exp} is not a block multiple of its down plane's format {int(fe2)}"
+                return "layer {l}'s expert width {c.n_ff_exp} is not a block multiple of its down plane's format {fe2}"
             }
         }
         let shexp_why = resident_shexp_decline(t, l)
@@ -2200,7 +2200,7 @@ def resident_layer_decline(t : Model; l : int64) : string {
         return "layer {l} lacks an expert plane"
     } else {
         let lf = resident_layer_fmts(t, l)
-        if (rdec_quant_class(lf.f1) != rdec_quant_class(lf.f3)) return "layer {l} mixes activation-quant forms (ffn {int(lf.f1)}/{int(lf.f3)})"
+        if (rdec_quant_class(lf.f1) != rdec_quant_class(lf.f3)) return "layer {l} mixes activation-quant forms (ffn gate/up {lf.f1}/{lf.f3})"
     }
     if (layer_is_recurrent(c, l)) {
         if (l >= long_length(t.dnqkv_offs) || t.dnqkv_offs[l] < 0l || t.dngate_offs[l] < 0l || t.dnout_offs[l] < 0l) {
@@ -2209,20 +2209,20 @@ def resident_layer_decline(t : Model; l : int64) : string {
         let fqkv = fmt_at(t.dnqkv_fmt, l)
         let fz = fmt_at(t.dngate_fmt, l)
         if (!rdec_dn_fmt_ok(fqkv, c.dim) || !rdec_dn_fmt_ok(fz, c.dim)) {
-            return "layer {l}'s deltanet qkv/z planes carry a format ({int(fqkv)}/{int(fz)}) the resident GEMVs do not serve at width {c.dim}"
+            return "layer {l}'s deltanet qkv/z planes carry a format ({fqkv}/{fz}) the resident GEMVs do not serve at width {c.dim}"
         }
         if (rdec_quant_class(fqkv) != rdec_quant_class(fz)) {
-            return "layer {l}'s deltanet qkv and z planes mix activation-quant forms ({int(fqkv)}/{int(fz)}) - one x feed serves both"
+            return "layer {l}'s deltanet qkv and z planes mix activation-quant forms ({fqkv}/{fz}) - one x feed serves both"
         }
         let fout = fmt_at(t.dnout_fmt, l)
         if (!rdec_dn_fmt_ok(fout, c.ssm_d_inner)) {
-            return "layer {l}'s deltanet out plane carries a format ({int(fout)}) the resident GEMVs do not serve at width {c.ssm_d_inner}"
+            return "layer {l}'s deltanet out plane carries a format ({fout}) the resident GEMVs do not serve at width {c.ssm_d_inner}"
         }
         if (!t.dn_ba_f32 && (t.dnbeta_offs[l] < 0l || t.dnalpha_offs[l] < 0l)) return "layer {l} lacks its beta/alpha planes"
         let fbeta = fmt_at(t.dnbeta_fmt, l)
         let falpha = fmt_at(t.dnalpha_fmt, l)
         if (!t.dn_ba_f32 && (!rdec_dn_fmt_ok(fbeta, c.dim) || !rdec_dn_fmt_ok(falpha, c.dim))) {
-            return "layer {l}'s beta/alpha planes carry a format ({int(fbeta)}/{int(falpha)}) the resident GEMVs and window tiles do not serve at width {c.dim}"
+            return "layer {l}'s beta/alpha planes carry a format ({fbeta}/{falpha}) the resident GEMVs and window tiles do not serve at width {c.dim}"
         }
         if (!rdec_dn_installed()) return "layer {l} is recurrent and the tier installed no deltanet seats for the whole-model driver"
         return ""
@@ -2242,7 +2242,7 @@ def private resident_attn_layer_decline(t : Model; l : int64) : string {
     let lf = resident_layer_fmts(t, l)
     let cq = rdec_quant_class(lf.fq)
     if (!kvsh && (cq != rdec_quant_class(lf.fk) || (!resident_v_from_k(c, l) && cq != rdec_quant_class(lf.fv)))) {
-        return "layer {l} mixes activation-quant forms (qkv {int(lf.fq)}/{int(lf.fk)}/{int(lf.fv)})"
+        return "layer {l} mixes activation-quant forms (qkv {lf.fq}/{lf.fk}/{lf.fv})"
     }
     return ""
 }
@@ -5657,7 +5657,7 @@ def perop_dn_decline(t : Model; l : int64) : string {
     let fz = fmt_at(t.dngate_fmt, l)
     let fout = fmt_at(t.dnout_fmt, l)
     if (!rdec_dn_fmt_ok(fqkv, c.dim) || !rdec_dn_fmt_ok(fz, c.dim) || !rdec_dn_fmt_ok(fout, c.ssm_d_inner)) {
-        return "deltanet plane formats {int(fqkv)}/{int(fz)}/{int(fout)} outside the chain's tiles and GEMVs"
+        return "deltanet qkv/z/out plane formats {fqkv}/{fz}/{fout} outside the chain's tiles and GEMVs"
     }
     return ""
 }
@@ -5708,9 +5708,9 @@ def perop_dense_ffn_decline(t : Model; l : int64) : string {
     let f3 = fmt_at(t.w3_fmt, l)
     let f2 = fmt_at(t.w2_fmt, l)
     if (!perop_ffn_plane_ok(t, f1) || !perop_ffn_plane_ok(t, f3) || !perop_ffn_plane_ok(t, f2)) {
-        return "FFN formats {int(f1)}/{int(f3)}/{int(f2)} not tier-servable"
+        return "FFN gate/up/down formats {f1}/{f3}/{f2} not tier-servable"
     }
-    if (!kq_rows_ok(layer_hidden(t, l), f2)) return "FFN width {layer_hidden(t, l)} is not a block multiple of the down plane's format {int(f2)}"
+    if (!kq_rows_ok(layer_hidden(t, l), f2)) return "FFN width {layer_hidden(t, l)} is not a block multiple of the down plane's format {f2}"
     return ""
 }
 
@@ -5873,7 +5873,7 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
                 if (t.wq_offs[l] < 0l || t.wo_offs[l] < 0l) {
                     walk_skip(dense_skips, l, "no q/o planes")
                 } elif (!resident_plane_ok(t, fq) || !resident_plane_ok(t, fo)) {
-                    walk_skip(dense_skips, l, "q/o formats {int(fq)}/{int(fo)} not tier-servable")
+                    walk_skip(dense_skips, l, "q/o formats {fq}/{fo} not tier-servable")
                 } else {
                     uploads |> push((f = fq, woff = t.wq_offs[l], n = dim, rows = t.config.q_gated ? 2l * qd : qd))
                     uploads |> push((f = fo, woff = t.wo_offs[l], n = qd, rows = dim))
@@ -6017,7 +6017,7 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
                 fmts_ok = fmts_ok && dense_plane_ok(t, f)
             }
             if (!fmts_ok) {
-                walk_skip(at_skips, l, "q/k/v/o formats {int(fq)}/{int(fk)}/{int(fv)}/{int(fo)} not tier-servable as one chain")
+                walk_skip(at_skips, l, "q/k/v/o formats {fq}/{fk}/{fv}/{fo} not tier-servable as one chain")
                 continue
             }
             if (!(hs == 128l || hs == 256l) || qd > 8192l || kvd > 2048l
@@ -6067,7 +6067,7 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
             let cls_ok = (fq == KqFmt.q8) == (fk == KqFmt.q8) && (fq == KqFmt.q8) == (fv == KqFmt.q8)
             if (t.wq_offs[l] < 0l || t.wk_offs[l] < 0l || t.wv_offs[l] < 0l || !cls_ok
                     || !kq_servable(t, fq) || !kq_servable(t, fk) || !kq_servable(t, fv)) {
-                walk_skip(qkv_skips, l, "q/k/v formats {int(fq)}/{int(fk)}/{int(fv)} not tier-servable as one image")
+                walk_skip(qkv_skips, l, "q/k/v formats {fq}/{fk}/{fv} not tier-servable as one image")
                 continue
             }
             var inscope ups <- [plane_up(fq, t.wq_offs[l], dim, t.config.q_gated ? 2l * qd : qd),

@@ -19,6 +19,7 @@ require dasllama/dasllama_kv_dtype   // KVDtype: the mirror codec crosses the se
 require dasllama/dasllama_env   // g_env_gpu: an exported DASLLAMA_GPU answers gpu_want_auto ahead of the want state
 require dasllama/dasllama_common   // segs_served_by_override, the prefill override registry
 require strings
+require daslib/strings_boost
 require _child_run   // the override announces print through to_log and DASLLAMA_METAL_FUSE is read at context init
 
 // ===== rdec doubles: record what arrives, answer distinctively =====
@@ -687,16 +688,6 @@ def private case_lines(out, name : string) : string {
     return slice(out, from, next < 0 ? length(out) : next)
 }
 
-def private count_in(haystack, needle : string) : int {
-    var n = 0
-    var at = find(haystack, needle)
-    while (at >= 0) {
-        n++
-        at = find(haystack, needle, at + length(needle))
-    }
-    return n
-}
-
 let private RING_ON = "dasLLAMA: probe home - the sliding layers' K/V rows ride rings of the probe's rows (set_gpu_kv_ring, DASLLAMA_GPU_KV_RING=0 keeps every row)"
 let private RING_OFF = "dasLLAMA: probe home - the sliding layers' K/V rows keep every position's row, no ring, as asked (set_gpu_kv_ring, DASLLAMA_GPU_KV_RING=0)"
 let private METAL_RING_ON = "dasLLAMA: metal decode - the sliding layers' K/V rows ride rings of their window plus the rows the longest window"
@@ -751,8 +742,8 @@ def test_override_announces(t : T?) {
     }
     return if (!metal)
     t |> run("the Metal ring announces once a layout, ringed and flat") @(t : T?) {
-        t |> equal(count_in(case_lines(out, "metal_ring_twice"), METAL_RING_ON), 1, "two reads of one layout, one ringed line:\n{case_lines(out, "metal_ring_twice")}")
-        t |> equal(count_in(case_lines(out, "metal_ring_flat"), METAL_RING_OFF), 1, "the flat layout's line:\n{case_lines(out, "metal_ring_flat")}")
+        t |> equal(count(case_lines(out, "metal_ring_twice"), METAL_RING_ON), 1, "two reads of one layout, one ringed line:\n{case_lines(out, "metal_ring_twice")}")
+        t |> equal(count(case_lines(out, "metal_ring_flat"), METAL_RING_OFF), 1, "the flat layout's line:\n{case_lines(out, "metal_ring_flat")}")
     }
     t |> run("the batch gather and the gemma-4 MoE tail pins announce their off state alone") @(t : T?) {
         t |> success(find(case_lines(out, "metal_gather_off"), GATHER_OFF) >= 0, "the gather off:\n{case_lines(out, "metal_gather_off")}")
@@ -761,16 +752,16 @@ def test_override_announces(t : T?) {
         t |> success(find(case_lines(out, "metal_g4_fused"), G4_UNFUSED) < 0, "the pin put back, no line")
     }
     t |> run("the fuse knob announces once a state: unset, the setter's off says it once and an off after an on again") @(t : T?) {
-        t |> equal(count_in(out, FUSE_OFF), 2, "two off states, two lines:\n{out}")
-        t |> equal(count_in(case_lines(out, "metal_fuse_restore"), FUSE_OFF), 0, "restoring the default on says nothing")
-        t |> equal(count_in(case_lines(out, "metal_fuse_off"), FUSE_OFF), 1, "two offs, one line")
-        t |> equal(count_in(case_lines(out, "metal_fuse_on_off"), FUSE_OFF), 1, "on then off, one line")
+        t |> equal(count(out, FUSE_OFF), 2, "two off states, two lines:\n{out}")
+        t |> equal(count(case_lines(out, "metal_fuse_restore"), FUSE_OFF), 0, "restoring the default on says nothing")
+        t |> equal(count(case_lines(out, "metal_fuse_off"), FUSE_OFF), 1, "two offs, one line")
+        t |> equal(count(case_lines(out, "metal_fuse_on_off"), FUSE_OFF), 1, "on then off, one line")
     }
     let off = announce_child(t, "0")
     t |> run("DASLLAMA_METAL_FUSE=0 announces at context init, and the setter's restore and second off say nothing more") @(t : T?) {
-        t |> equal(count_in(off, FUSE_OFF), 2, "the init's line and the off after an on:\n{off}")
-        t |> equal(count_in(case_lines(off, "metal_fuse_restore"), FUSE_OFF), 0, "the restore to the knob's off says nothing")
-        t |> equal(count_in(case_lines(off, "metal_fuse_off"), FUSE_OFF), 0, "the setter's off, already said, says nothing")
-        t |> equal(count_in(case_lines(off, "metal_fuse_on_off"), FUSE_OFF), 1, "on then off says it again")
+        t |> equal(count(off, FUSE_OFF), 2, "the init's line and the off after an on:\n{off}")
+        t |> equal(count(case_lines(off, "metal_fuse_restore"), FUSE_OFF), 0, "the restore to the knob's off says nothing")
+        t |> equal(count(case_lines(off, "metal_fuse_off"), FUSE_OFF), 0, "the setter's off, already said, says nothing")
+        t |> equal(count(case_lines(off, "metal_fuse_on_off"), FUSE_OFF), 1, "on then off says it again")
     }
 }
