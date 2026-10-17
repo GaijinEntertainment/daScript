@@ -361,7 +361,7 @@ def gemma_drafter_target_why(t : Model; dr : GemmaDrafter) : string {
 //! Load the gemma-4 assistant drafter sidecar at `path`. Never panics: any refusal - a wrong
 //! architecture, a missing or non-Q8_0 weight, a stray K/V tensor - lands as `ok = false` plus a
 //! `why`. `target_n_layers > 0` binds `kv_layer` in the same call.
-[arch(at="../ARCHITECTURE_IMAGE.md#drafter-non-image-lane")]
+[arch(at="../ARCHITECTURE_IMAGE_LEDGER.md#drafter-non-image-lane")]
 def load_gemma_drafter(path : string; target_n_layers : int64 = 0l) : GemmaDrafter {
     var dr : GemmaDrafter
     if (!fexist(path)) {
