@@ -1336,10 +1336,10 @@ def private canary_forced(m : AsrModel; samples : array<float>; expected : array
     return <- r
 }
 
-//! One clip against the frozen oracle on one encoder route, forced-feed: every oracle token is our argmax or within
-//! `CN_TIE_BAR` of it; the control feeds the oracle's ids one step early, and every step whose input that moved reads the
-//! oracle token outside the bar; then the greedy transcription is the oracle's ids token for token up to the step where the
-//! forced walk's pick leaves the oracle's - all of them where it never does
+//! One clip against the frozen oracle on one encoder route, an external-reference compare in the forced-feed form: every
+//! oracle token is our argmax or within `CN_TIE_BAR` of it; the control feeds the oracle's ids one step early, every step
+//! whose input moved reading the oracle token outside the bar; then the greedy ids are the oracle's up to the step where
+//! the forced walk's pick leaves the oracle's - all of them where it never does
 def private check_canary_route(t : T?; m : AsrModel; wav, route : string; samples : array<float>; expected : array<int>) {
     let name = "{base_name(wav)} {route}"
     var inscope fw <- canary_forced(m, samples, expected, 0)
