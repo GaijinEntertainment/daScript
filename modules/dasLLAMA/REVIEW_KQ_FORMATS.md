@@ -44,8 +44,10 @@ superblocks), written outside a Metal or SPIR-V kernel body and outside a defini
 kernel class, the pins of `tests/test_kqformat.das` - is a defect: read it through a `KqFmt` accessor
 (`kq_elems`, `kq_disk_bytes`, ...), through `kq_qsb` / `kq_ssb` on a format id, or through a named
 constant a definition home declares, declared there in the same change when none exists.** A
-number derived from several formats' sizes is such a literal, and so is one inside a kernel
-builder's `requires =` alignment string; a test's expected-message text is not. A literal `32` reads
+number derived from several formats' sizes is such a literal; a kernel builder's `requires =`
+alignment string takes a literal integer alone (the lens accepts no name there), so that literal is
+pinned in `tests/test_kqformat.das` against the format's block length; a test's expected-message
+text is not a literal of this rule. A literal `32` reads
 like a tile width.
 
 **A diff that writes a per-format quantity of a `KqFmt` member as a bare literal in a Metal or

@@ -6,26 +6,26 @@ docs: `ARCHITECTURE.md`, `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_ENGINE_SERVING.
 `ARCHITECTURE_MEDIA.md`, `ARCHITECTURE_TTS.md`, `ARCHITECTURE_POCKET.md`. Planned work:
 `followup_general.md`, `followup_vulkan.md` for Vulkan, `followup_metal.md` for Metal.
 
-A charter line is the one line saying what a file under `dasllama/` holds: in the companion
-`ARCHITECTURE.md#file-charters` lists for that file, or a role row or a file bullet of
-`ARCHITECTURE_GPU.md#gpu-backends`.
+A charter line is a file's line in `ARCHITECTURE.md#file-charters`, or its role row or file
+bullet in `ARCHITECTURE_GPU.md#gpu-backends`.
 
 **A per-file inventory restated in this checklist is a defect of the checklist.** The charter
 lines own the per-file list; a rule naming what KIND of code lands in which file is the
 checklist's own.
 
-**A function, a class (a kernel class among them), a module global (`let` or `var`, private or
-not), a named constant or a `require` under `dasllama/` lands in the file whose charter line
-names its concern, or the diff adds the concern to the charter line of the file it lands in.
+**A top-level declaration under `dasllama/` - a function, a class (a kernel class among them), a
+struct, an enum, a typedef, a module global (`let` or `var`, private or not), a named constant or
+a `require` - lands in the file whose charter line names its concern, or the diff adds the concern to the charter line of the file it lands in.
 Another file's charter naming the same kind of code does not license the landing.**
 
 **A landing in a file whose charter row carries a `must not hold` cell - the concerns that file
 never holds - naming the landed concern is a defect - land it where its concern is chartered, or
 change that charter row in the same change.**
 
-**A concern that a two-file role row of `ARCHITECTURE_GPU.md#gpu-backends` scopes to one backend
-("on Vulkan ...", "Metal's ...", "on a build without das_metal" - the Vulkan file) licenses only
-that backend's file; a concern the row names without a backend licenses both.**
+**A diff that lands, in one backend's file, a concern a two-file role row of
+`ARCHITECTURE_GPU.md#gpu-backends` scopes to the other backend ("on Vulkan ...", "Metal's ...",
+"on a build without das_metal" - the Vulkan file) is a defect; a concern the row names without a
+backend lands in either.**
 
 **A diff adding a new item of the sort a charter line's parenthetical lists (a model family, a
 weight format, a dispatch arm) lands it in that charter line's file, whether or not the
@@ -34,9 +34,10 @@ parenthetical names it, and adds it to the parenthetical in the same change.**
 **Never add a charter line for a file outside `dasllama/` - that file answers to its own
 folder's checklist.**
 
-**The grid rule - the expression that computes a dispatch's workgroup counts - of a class whose
-family ships more than one coopmat form (cm2, KHR) lands in
-`dasllama/dasllama_vulkan_classes.das`.**
+**The expression that computes a dispatch's workgroup counts for a class whose family - the
+stamps of one class template, through intermediate templates too - ships more than one coopmat
+form (cm2, KHR) lands in `dasllama/dasllama_vulkan_classes.das`; a count a shared schedule builder
+computes for every form alike is the builder's, not the class's.**
 
 **A Vulkan host-side ensure/set/encode chain (an if/else over stamps) whose pick reads nothing but
 its arguments and the device's cooperative-matrix mode (`g_gpu.coopmat_mode`), and no driver
@@ -44,16 +45,16 @@ state, lands in `dasllama/dasllama_vulkan_classes.das`; a stamp selector it is h
 naming the stamp, such as a variant ordinal - is one of those arguments.** A stamp is one class
 stamped from a kernel class template.
 
-**A Vulkan predicate over shape values alone (a model's dims, row counts and formats - nothing read
-off a device) lands in `dasllama/dasllama_vulkan_classes.das`,
+**A Vulkan function whose result - a bool or a count - reads shape values alone (a model's dims,
+row counts and formats - nothing read off a device) lands in `dasllama/dasllama_vulkan_classes.das`,
 whichever file calls it.**
 
 **A Vulkan host-side ensure/set/encode chain whose pick reads driver state - `g_rd`, or an
-`RLayer` field read from a global or from an argument - lands in the Vulkan driver file whose
-pass calls it -
-`dasllama/dasllama_vulkan_decode.das` for the decode step, `dasllama/dasllama_vulkan_prefill.das`
-for the prefill pass, the tower, ASR-decoder or TTS driver file for theirs - and in
-`dasllama/dasllama_vulkan_common.das` when both the decode step and the prefill pass call it.**
+`RLayer` field read from a global or from an argument - lands in the Vulkan driver file of the
+pass whose dispatches read the set it records - `dasllama/dasllama_vulkan_decode.das` for the
+decode step, `dasllama/dasllama_vulkan_prefill.das` for the prefill pass, the tower, ASR-decoder or
+TTS driver file for theirs - and in `dasllama/dasllama_vulkan_common.das` when both the decode step
+and the prefill pass read it; a load-time builder of a set lands with the pass that reads it.**
 
 **A Metal host-side ensure/set/encode chain whose pick reads nothing but a stamp selector it is
 handed lands in the file of the function that decides that stamp, and a diff that moves that
