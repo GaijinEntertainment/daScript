@@ -2595,7 +2595,8 @@ cleanly with no model open.
 `test_asr_verbs.das` - model-free: the family-owned ASR facade verbs (`asr_exec_fmt` /
 `asr_encode_bucket`) over constructed structs, the audio families' lane knobs (qwen3a /
 gemma4a / canary / parakeet: the un-pinned default against the predicate the policy itself consults, both
-pins, and reset from the EXACT pin), and parakeet's SPM detokenizer over a toy vocab.
+pins, and reset from the EXACT pin), the ASR decoder's K/V dtype knob (`get_asr_kv`: f16 by default, each `set_asr_kv`
+value read back, put back as found), and parakeet's SPM detokenizer over a toy vocab.
 `test_mtp_gemma_drafter.das` - stocked suite AND the `mtp` suite: the gemma-4 assistant
 drafter (`dasllama/dasllama_mtp_gemma`), its arms under "Arm filter mechanics" above. Only `mtp-gdraft-refuse`'s shell cells
 run with no model - its gather cell gates on the 440 MiB sidecar, `--family gemma4moe` and a das_metal build, its
