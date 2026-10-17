@@ -14,8 +14,7 @@ by a statement in test code - the cell itself, or a helper in its own file or in
 test-helper module - itself or through a router, a `../dasllama/` function whose only job is to
 pick which compiled form (stamp) of the dispatched class or the CPU kernel runs; a kernel run
 inside any other `../dasllama/` function does not make a cell a kernel-unit cell. A kernel run is a
-dispatch or a CPU kernel call whose output an assert of the cell reads, directly or through the
-input of a later run in the same cell. A gate is any call site that supplies a kernel's dispatch count or
+dispatch or a CPU kernel call. A gate is any call site that supplies a kernel's dispatch count or
 fills its kargs (kernel-argument) struct itself, other than a serving call in `../dasllama/` the
 kernel exists for - a cell, a probe, a harness. A stamp is a `[vk_dispatch]` or
 `[metal_dispatch]` class that compiles to its own shader module - a class no other class derives
@@ -116,9 +115,10 @@ assert, in the same change.**
 
 **A size, depth, row count or block offset that a kernel-unit cell's name, a comment inside the
 cell, or an assert's text claims, and that the cell passes as a literal argument to the kernel it dispatches
-or calls, is asserted in that cell by an assert on that value or by comparing against the oracle
-every output element the value sizes or places.** A count the dispatch pads, clamps or derives from that
-literal gets its own assert.
+or calls, is asserted in that cell - by an assert that a figure the run produces (the count it
+wrote, the offset it read or wrote at) equals that value, or by comparing against the oracle every
+output element the value sizes or places.** A count or offset the dispatch pads, clamps or derives from
+that literal gets its own assert.
 
 **A kernel-unit cell whose kernel computes at a narrower precision than its oracle at any
 step - operands, accumulator, or the stored result - bounds that step's error by construction
