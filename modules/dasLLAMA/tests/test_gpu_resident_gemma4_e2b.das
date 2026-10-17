@@ -298,4 +298,7 @@ def test_gpu_resident_gemma4_e2b_ring(t : T?) {
             ring_vs_flat(t, 1300l, GEMMA4E_FILE, kv)
         }
     }
+    t |> run("gemma-4-E2B Q8_0: the resident driver's load log names the rings, the flat mirror and the host embed under their pins") @(t : T?) {
+        ring_load_announces(t, GEMMA4E_FILE)
+    }
 }

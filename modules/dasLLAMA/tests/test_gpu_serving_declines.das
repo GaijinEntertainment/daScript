@@ -11,6 +11,7 @@ require dasllama/dasllama_gpu_resident
 require dasllama/dasllama_gpu_tier   // install_moe_gpu_resident_bias - the bias seat a served qwen2 needs
 require ?vulkan dasllama/dasllama_vulkan_decode   // rd_routed_slots_fit - the N-row command's slot cap, where the module exists
 require ?vulkan dasllama/dasllama_vulkan_prefill  // ple_proj_bf16_why - the bf16 projection's dim gate, where the module exists
+require ?vulkan dasllama/dasllama_vulkan_common   // GpuState / g_gpu - the device shell ple_proj_gemv_why reads, where the module exists
 require dasllama/dasllama_metal_shapes   // moe_metal_ok - the Metal routed block's admission, portable
 require ?das_metal dasllama/dasllama_metal_common   // decline - the required-mode panic, where the module exists
 require ?das_metal dasllama/dasllama_metal_decode   // the metal decode override `set_metal_mode` selects
@@ -1610,6 +1611,23 @@ def test_ple_proj_dim_gates(t : T?) {
             t |> equal(ple_proj_bf16_why(1536l), "", "the Vulkan bf16 stamp serves an even dim")
             let why = ple_proj_bf16_why(1537l)
             t |> success(find(why, "even dim") >= 0 && find(why, "1537") >= 0, "... and names an odd one: '{why}'")
+        }
+    }
+    t |> run("the window's projection names an f16 panel past the device's storage range") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            var shell = GpuState(coopmat_mode = COOPMAT_CM2, msr = 1l << 20l)   //! a cm2 device shell whose storage range is 1 MiB
+            var live = g_gpu
+            g_gpu = unsafe(addr(shell))
+            let dim = int64(F16G_BK) * F16G_SPLIT
+            t |> equal(ple_proj_gemv_why(dim, 256l, 1l << 20l), "", "the control: a panel at the range takes the tile")
+            let past = ple_proj_gemv_why(dim, 256l, (1l << 20l) + 2l)
+            t |> success(find(past, "f16 panel ({(1l << 20l) + 2l} bytes) passes the device's storage range {1l << 20l}") >= 0,
+                "a panel two bytes past the range names both: '{past}'")
+            t |> success(find(ple_proj_gemv_why(dim + 1l, 256l, (1l << 20l) + 2l), "no f16 tile serves it") >= 0,
+                "an off-lattice width names the tile first")
+            g_gpu = live
+        } else {
+            t |> skip("no dasVulkan module on this build")
         }
     }
 }

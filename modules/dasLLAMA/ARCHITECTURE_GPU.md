@@ -278,5 +278,7 @@ decline COUNTING lives in `<gpu>_common` beside `require_or_panic`, for both pat
 (`kquant_native`; `graph` on a routed stack, a shared expert or a deltanet plane) keeps its enum value in the
 declines-by-reason table; the shapes module's `metal_fmt_decline_say` logs the site and `KqFmt` member beside it once
 per line and hands the same words to the decline, whose required-mode panic prints them in place of the bare reason.
+Each driver has one decline enum: Metal's live in `dasllama/dasllama_metal_shapes.das`, and a Vulkan driver's lives in
+that driver's own file.
 
 Vulkan is the deliberately-designed model of this shape; Metal converges as it is touched.

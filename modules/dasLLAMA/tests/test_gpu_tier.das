@@ -696,6 +696,7 @@ let private EMBED_OFF = "dasLLAMA: resident driver - the host embeds every token
 let private GATHER_TAIL = " for the prefill window, the one-row step, the N-row command and the NextN draft and verify (set_gpu_resident_embed, DASLLAMA_VK_GPU_EMBED=0 keeps the host embed)"
 let private GATHER_OFF = "dasLLAMA metal batch decode: the batched rows take the rows the host embeds, not the device gather off their ids, as asked (set_metal_batch_gather)"
 let private G4_UNFUSED = "dasLLAMA metal decode: the gemma-4 MoE tail runs its unfused chain, not the one-step form, as asked (set_metal_moe_g4_unfused)"
+let private NO_SIDECAR_RESOLVER = "dasLLAMA: no assistant drafter sidecar resolver is registered - require dasllama/dasllama_mtp_gemma (dasllama/dasllama_transformer requires it)"
 let private FUSE_OFF = "dasLLAMA metal decode: every decode sandwich seam runs the split chain (the branch's post norm, the add, the next norm) on the one-row step and every batched row step, as asked (set_metal_decode_fuse, DASLLAMA_METAL_FUSE=0)"
 
 //! the announce root under `fuse` for DASLLAMA_METAL_FUSE ("" unset), at the info floor the ringed and gather lines print at
@@ -727,6 +728,11 @@ def test_override_announces(t : T?) {
         let lines = case_lines(out, "embed_gather_lines")
         t |> success(find(lines, "the token rows gather on the device off the table's exact f32 rows{GATHER_TAIL}") >= 0, "the f32 rows' line:\n{lines}")
         t |> success(find(lines, "the token rows gather on the device off the table's own Q4_1 plane{GATHER_TAIL}") >= 0, "the plane's line:\n{lines}")
+    }
+    t |> run("the assistant drafter's sidecar lookup with no resolver registered finds none and names the module to require") @(t : T?) {
+        let lines = case_lines(out, "sidecar_no_resolver")
+        t |> success(find(lines, NO_SIDECAR_RESOLVER) >= 0, "the warning names the module:\n{lines}")
+        t |> success(find(lines, "SIDECAR ''") >= 0, "... and the lookup finds no file:\n{lines}")
     }
     let metal = find(out, "CASE metal_gather_off") >= 0
     static_if (typeinfo builtin_module_exists(das_metal)) {

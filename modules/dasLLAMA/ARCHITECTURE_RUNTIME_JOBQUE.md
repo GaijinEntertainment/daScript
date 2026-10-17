@@ -38,7 +38,7 @@ The spin-before-park window (`g_jobque_spin_us`, 30 ms) keeps a worker hot throu
 of a token, and a browser takes it on the same terms as a desktop: `setup_dasllama_jobque` pushes
 the one value to the queue on every platform, and nothing special-cases emscripten. Spinning is
 the faster arm where it was measured - the spin loop no longer crosses into JS twice an iteration
-(`src/misc/ARCHITECTURE.md` sec.8), and the K-quant dot makes parallel sections about twice as
+(the spin window's clock stride, `src/misc/ARCHITECTURE.md`), and the K-quant dot makes parallel sections about twice as
 long: Pocket TTS in Chrome reads 1.7x real time parked against 2.3x spinning, the same text, three
 runs each. A slower box may still prefer parking, and the knobs are unchanged for it - a box
 profile's `jobque_spin_us` and the setter override the default, and a program reads the value in

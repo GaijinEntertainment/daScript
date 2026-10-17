@@ -602,7 +602,7 @@ answering what it replaced), `test_metal_region_cat_keys` (the concatenated weig
 every piece: two concats over one first piece and two different second pieces each hold their own
 bytes, a repeat of either is its cached buffer, two cached regions counted) and
 `test_metal_ring_slack_reload` (a model swap returns the mirror rings' slack to its floor and stales
-the steps encoded over the old layout), and the prefill file's `test_moe_padded_bound` (the bucket panel's
+the steps encoded over the old layout; a swap with the slack at its floor moves no epoch), and the prefill file's `test_moe_padded_bound` (the bucket panel's
 row bound against the rail's own padded prefix over seeded routings, reached exactly where every
 routed expert is distinct, a bound for one row fewer sitting under the rail's pad as the control)
 and `test_resident_panel_charge` (the resident panel registry on the
@@ -1298,7 +1298,8 @@ to the CPU rails as `codec`.
 `test_mtp_snapshot.das` - model-free: the speculative round's deltanet rollback sizes its two
 snapshot buffers on a bare session carrying a 27B-class recurrent state (151 MB, past the
 `max_unreserved_size` guard) and restores the state from them, the n-gram window and the ring
-row a rejected draft wrote among it.
+row a rejected draft wrote among it; and why a round stays cold (`mtp_round_cold_why` on a Session shell): each of its four
+reasons alone, a round ending on the context's last position drafting.
 `test_mtp_sampled_walk.das` - model-free: the speculative round's sampled accept walk
 (sample-and-match) over a bare 8-token session against plain sampled decode of the same rows -
 every draft accepted plus the parked bonus draw, the first miss, RNG state equality (one draw
@@ -1448,7 +1449,8 @@ and the logits left alone); the unset N-row token command and per-layer planes p
 `_override_announce_root.das` through `_child_run.das`, unset and under `DASLLAMA_METAL_FUSE=0`, each case's lines read between
 its `CASE` records - the sliding layers' rings ringed, flat and silent on a model with none, on Metal once a layout; the pinned
 host embed only where the ids seat would gather; both device-gather lines; the Metal batch gather, gemma-4 MoE tail and fuse
-pins, the fuse line once a state, the knob's at context init).
+pins, the fuse line once a state, the knob's at context init; the assistant drafter's sidecar lookup, no resolver registered in
+the root, finding none and naming the module to require).
 `test_gpu_serving_declines.das` - model-free: the whole-model driver's decline reasons decided
 from a Config or a synthetic Model shell (`resident_unserved_features`,
 `attn_chain_unserved_features`, `resident_layer_decline`) - every unserved feature and layer
@@ -2303,7 +2305,8 @@ official UD-Q4_K_M file, whose 704-wide down stacks are native Q5_1 and ride the
 asked whole: the plan moves the first routed layers' experts to the host (`gpu_resident_host_layers` past zero and short of
 every layer), the device keeping the dense branch, the norms, the router and the routed feed
 (`../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-gemma4-moe-block`), and the 150 + 150 perplexity cell holds the CPU chain at the same
-ratio and slack with every call served (`served_every_call`); the cap binds the device's weight budget at the tier's first
+ratio and slack with every call served (`served_every_call`), and a child load under the same room (`resident_load_log`) logs
+no hot expert pool, naming the gemma-4 MoE's down scale the pool's sums do not carry; the cap binds the device's weight budget at the tier's first
 init, so the cell has its own file, and it skips before the load where the cap does not decide the plan -
 `DASLLAMA_GPU_VRAM_MB` set to another room, or a device room under 8000 MB. `test_gpu_resident_gemma4_26b_mx4.das` (large
 tier) holds the MXFP4_MOE mint of the Q4_K_M file (`../performance/model_specs.das`): the format cell and the 150 + 150
@@ -2335,7 +2338,10 @@ perplexity form under tq4 (reads 1.032 against 1.032, 148 of 150 hits each).
 (`../ARCHITECTURE_GPU_KV_RING.md#kv-sliding-ring`, `ring_vs_flat` in `_gemma_resident.das`): 1300 prose ids past the window and
 eight fed steps on a ringed load and on a flat one (`set_gpu_kv_ring`, put back) - the logits bit for bit at the prompt and every
 step, the ringed load arming rings and charging less mirror, the row a step off the control - on the f16 and q8_0 mirrors, and
-tq4 too on the E2B. Arm `g4e-ple`
+tq4 too on the E2B. The E2B's ring test also reads the driver's load log (`ring_load_announces`: two loads in a child,
+`_resident_load_root.das`, which `resident_load_log` spawns through `_child_run.das`) - the ringed load naming its rings, the flat
+one under `DASLLAMA_GPU_KV_RING=0` its every-row mirror, the host embed under `DASLLAMA_VK_GPU_EMBED=0` saying so and the
+gathering load not. Arm `g4e-ple`
 (`test_gpu_resident_gemma4_e2b_ple_tables`): the E2B Q8_0 file and its emb-Q5_0 / emb-Q5_1 / emb-Q4_0 / emb-Q6_K / emb-IQ4_XS
 mints - the plan seats the PLE table in its own tag (q8, q5032, q51, q40, k6, iq4xs) and the forced feed's prefill gathers the side
 rows off it against the CPU chain, the format's gather leaf counted (`<fmt>_emb_cls_spv` / `kq_emb_<fmt>_cls_spv`) and every
@@ -2761,8 +2767,9 @@ a body that delegates to methods. Without das_metal the device-pair cell skips a
 pass after logging that the lens does not load.
 `test_driver_knob_getters.das` - model-free: the driver knobs' getters and the decode registry's removal verb -
 `mtp_depth_pin` reads whether `set_mtp_depth` pinned a depth and the depth, and `restore_mtp_depth` puts back a pinned and an
-unpinned depth; `unregister_decode_override` drops an override and its batched step, deselecting it where it is active and
-leaving another selection as found; on a das_metal build `get_metal_decode_fuse`, `get_metal_prefill_lastrow`, `gemma_trace` and
+unpinned depth; `unregister_decode_override` drops an override and its batched step - the name re-registered single-stream arms no batch twin,
+its batched step registered again arming one (the control) - deselecting it where it is active and leaving another selection as
+found; on a das_metal build `get_metal_decode_fuse`, `get_metal_prefill_lastrow`, `gemma_trace` and
 `gemma_carry_pre_norm` read back every value their setters write and the value found once it is put back, the h reading set with no
 drafter attached leaving the decode's carry alone (skips without das_metal).
 `test_kernel_backend.das` - model-free: the kernel-backend registry - the portable backend

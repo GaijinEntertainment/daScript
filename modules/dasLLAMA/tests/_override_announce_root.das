@@ -99,10 +99,18 @@ def private metal_cases {
     }
 }
 
+//! no module of this root registers the assistant drafter's sidecar resolver (dasllama/dasllama_mtp_gemma does)
+def private sidecar_cases {
+    mark("sidecar_no_resolver")
+    let side = mtp_drafter_sidecar_("gemma-4-26B-A4B-it-Q4_K_M.gguf")
+    to_log(LOG_INFO, "SIDECAR '{side}'\n")
+}
+
 [export]
 def main() {
     ring_cases()
     embed_cases()
+    sidecar_cases()
     metal_cases()
     mark("end")
     print("ROOT_DONE\n")

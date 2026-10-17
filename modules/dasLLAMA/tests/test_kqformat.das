@@ -457,6 +457,14 @@ def test_gguf_decline_unread_types(t : T?) {
                 "{name}: the decline names the tensor, the type and the served type {target}: {why}")
             delete m
         }
+        let q8_1 = 9   //! ggml's Q8_1: the reader carries no arm for it, the nearest-type table no row
+        var unrowed <- GGUFMeta(tensors <- [GGUFTensorInfo(name = "blk.0.ffn_gate.weight", ggml_type = q8_1, n_elem = 256l)])
+        let why = panic_text() ${
+            gguf_decline_unread_types(unrowed)
+        }
+        t |> success(find(why, "blk.0.ffn_gate.weight") >= 0 && find(why, "type 9 on disk") >= 0 && find(why, "requantize it to a served type (Q8_0)") >= 0,
+            "a type with no nearest-type row names the tensor, its type id and the Q8_0 fallback: {why}")
+        delete unrowed
         var served <- GGUFMeta(tensors <- [for (gt in [GGML_TYPE_F32, GGML_TYPE_BF16, GGML_TYPE_Q8_0, GGML_TYPE_Q4_K, GGML_TYPE_IQ2_XXS, GGML_TYPE_MXFP4]);
             GGUFTensorInfo(name = "t{gt}", ggml_type = gt, n_elem = 256l)])
         let none = panic_text() ${

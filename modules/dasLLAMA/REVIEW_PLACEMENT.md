@@ -6,10 +6,8 @@ docs: `ARCHITECTURE.md`, `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_ENGINE_SERVING.
 `ARCHITECTURE_MEDIA.md`, `ARCHITECTURE_TTS.md`, `ARCHITECTURE_POCKET.md`. Planned work:
 `followup_general.md`, `followup_vulkan.md` for Vulkan, `followup_metal.md` for Metal.
 
-A charter line is the one line saying what a file under `dasllama/` holds: in
-`ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_ENGINE_SERVING.md`, `ARCHITECTURE_ENGINE_FORMATS.md`,
-`ARCHITECTURE_MEDIA.md`, `ARCHITECTURE_TTS.md` or `ARCHITECTURE_POCKET.md`
-(`ARCHITECTURE.md#file-charters` names which), or a role row or a file bullet of
+A charter line is the one line saying what a file under `dasllama/` holds: in the companion
+`ARCHITECTURE.md#file-charters` lists for that file, or a role row or a file bullet of
 `ARCHITECTURE_GPU.md#gpu-backends`.
 
 **A per-file inventory restated in this checklist is a defect of the checklist.** The charter
@@ -46,7 +44,8 @@ state, lands in `dasllama/dasllama_vulkan_classes.das`; a stamp selector it is h
 naming the stamp, such as a variant ordinal - is one of those arguments.** A stamp is one class
 stamped from a kernel class template.
 
-**A Vulkan predicate over shape values alone lands in `dasllama/dasllama_vulkan_classes.das`,
+**A Vulkan predicate over shape values alone (a model's dims, row counts and formats - nothing read
+off a device) lands in `dasllama/dasllama_vulkan_classes.das`,
 whichever file calls it.**
 
 **A Vulkan host-side ensure/set/encode chain whose pick reads driver state - `g_rd`, or an

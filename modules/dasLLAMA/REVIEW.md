@@ -2,7 +2,8 @@
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 docs: `ARCHITECTURE.md`, `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_MEASUREMENT.md`. Planned work:
-`followup_general.md`, `followup_vulkan.md`, `followup_metal.md`.
+`followup_general.md`, `followup_vulkan.md`, `followup_metal.md`. `tests/`, `benchmarks/`,
+`performance/` and `harness/` carry their own `REVIEW.md`.
 
 **A change to the tokenizer - `dasllama/dasllama_tokenizer.das`, `dasllama/dasllama_spm.das`,
 `dasllama/dasllama_bpe.das` or `dasllama/dasllama_pretok.das` - or to a string any `special_id`
@@ -96,12 +97,13 @@ change, or a change to a `kv_*` function that a GPU driver file (`dasllama_metal
 `dasllama_vulkan*.das`, `dasllama_gpu*.das`) calls, wherever the diff puts it, applies
 `REVIEW_GPU.md`.**
 
-**A GPU kernel timing race (two kernels timed against each other to pick one - not a data
-race), a call that makes, arms or tears down device-home serving - a session whose K/V region
-lives only on the device (`create_device_session`, `set_device_kv`, `moe_gpu_drop_model`) - a
-knockout (an arm that skips a stage to measure that stage's cost), a hand-binding arm (one that
-writes buffer or kernel-argument (kargs) binding numbers as literals), or a kernel cell or probe
-that fills or binds a `TokMeta` block, wherever the diff puts it, applies `REVIEW_GPU.md`.**
+**A GPU kernel timing race (two kernels timed against each other to pick one - not a data race), a
+call that makes, arms or tears down device-home serving - a session whose K/V region lives only on
+the device (`create_device_session`, `set_device_kv`, `moe_gpu_drop_model`), a call of a `set_gpu_*`
+or `reset_gpu_*` function of `dasllama/dasllama_core.das`, a knockout (an arm that skips a stage to
+measure that stage's cost), a hand-binding arm (one that writes buffer or kernel-argument (kargs)
+binding numbers as literals), or a kernel cell or probe that fills or binds a `TokMeta` block,
+wherever the diff puts it, applies `REVIEW_GPU.md`.**
 
 **A kernel body or a function a kernel calls - a `[metal_kernel]` def, a class a
 `[metal_dispatch]` / `[vk_dispatch]` declares, or a fixture the Metal or SPIR-V emitter
