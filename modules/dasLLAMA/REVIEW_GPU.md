@@ -113,16 +113,18 @@ previous write is encoded - rotate through as many buffers as the chain has disp
 between a write and its read.** One shared scratch serializes the whole chain through its
 write-after-read hazards.
 
-**A diff that makes a path split one op - a split path divides an op's K, key span, row count or
-other work size across two or more dispatches whose partial outputs combine - gates the split in
-the same change on the quantity it divides, or ships it ungated where it wins at both measured
-ends. The duty covers every work size at which one dispatch's scratch fits under the path's byte
-ceiling (the largest scratch buffer the path lets one dispatch allocate), and every work size on a
-path with no ceiling; and a diff that sets or changes that gate's threshold, or ships the path
-ungated, takes the threshold, or the decision to ship no gate, from measurements at the smallest
-and the largest value the gated quantity takes on the workloads the path serves, both in the PR
-body.** Whole steps of an op run one after another are not a split. The small-work regression
-hides behind the big-work win.
+**A diff that makes a path split one op - dividing an op's K, key span, row count or other work
+size across two or more dispatches whose partial outputs combine - gates the split on the quantity
+it divides, or ships it ungated, in the same change, at every work size at which one dispatch's
+scratch fits under the path's byte ceiling (the largest scratch buffer the path lets one dispatch
+allocate), and at every work size on a path with no ceiling.** Whole steps of an op run one after
+another are not a split.
+
+**A diff that sets or changes the threshold of a gate on a path that splits one op's work size
+across dispatches whose partial outputs combine, or ships such a path ungated, takes the threshold
+- or the evidence that the split wins at both ends - from measurements at the smallest and the
+largest value the gated quantity takes on the workloads the path serves, both in the PR body.**
+The small-work regression hides behind the big-work win.
 
 **A diff that changes a tile, grid, threadgroup, or uniform constant sets the new value at every
 authoritative site its kind has, in the same change.** The sites per kind: the generated `*_msl`
@@ -133,10 +135,10 @@ the `grid=` spec (a CEIL divide), or the `wgs` decode plus its host helper, for 
 
 **A diff that adds a `grid = "wgs"` kernel class, changes how such a body decodes its workgroup
 index, or changes how the host computes that class's `wgs`, shows in the same change that the
-host's count covers exactly the indices the body's decode reads - by a decode that permutes the
-host's index set, or, where the body's decode and the host's count both read one shared function,
-by showing that for every shape the encoder dispatches that class on, the stamp it picks is the one
-that function's value names; a change to one side alone is a defect.** The `grid=` spec carries no number for these classes, so nothing else ties the two.
+host's count covers exactly the indices the body's decode reads - by changing the decode and the
+count together, by a decode that permutes the same index set, or, where the decode and the count
+both read one shared function, by showing that for every shape the encoder dispatches that class
+on, the stamp it picks is the one that function's value names.** The `grid=` spec carries no number for these classes, so nothing else ties the two.
 
 **Never let a key that decides whether uploaded bytes, a cached descriptor set or bind list, or
 encoded GPU work may be reused skip an input that content was built from - it compares every
@@ -194,11 +196,12 @@ path served faster or slower is not a behavior.
 backend computes or serves, lands its own entry, naming the operation the other backend's API or
 device lacks, in `ARCHITECTURE_GPU_ASYMMETRIES.md#gpu-asymmetries`; a diff that removes one deletes
 its entry; in the same change.** A variable that changes only how fast the backend serves the same
-output is not one.
+output is not one; one entry serves this rule and the rule above.
 
 **A diff that adds or extends, on one GPU backend (Metal or Vulkan), a prefill or decode path or
 a K/V cache feature for a model family the other backend also serves - a capability being any
-behavior a served call shows, or that a test shows by driving a setter or knob the engine exposes -
+behavior a served call shows, or that a test shows by driving a setter or an environment variable
+the engine exposes -
 lands the same capability on the other backend
 in the same change, wherever the other backend's API offers the operations it
 uses on any device it supports; a PR body that defers it is a defect.** A capability one backend

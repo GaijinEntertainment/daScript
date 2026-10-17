@@ -13,11 +13,10 @@ takes that value from a `@template_constant`, a literal or a module `let` - neve
 push constant, uniform or kargs (kernel-argument struct) field.** A host-fixed branch is a bound
 or branch inside the main loop whose deciding value the host fixes before it records the dispatch:
 a bounds guard, a tail guard, a nested loop's own bound, or an `[unroll]` count whose live
-iterations run different bodies - the main loop's own trip count is not one. A per-call extent is
-a value the builder takes per dispatch - a `params=` name or a kargs field - that sizes or bounds
-the work (a count, a base, a stride) and that neither the kernel's `requires=` contract nor a
-`@template_constant` fixes to one value; a mode flag is not an extent, however it arrives. The main loop is a
-loop whose trip count grows with the work one thread does, per element or per row.
+iterations run different bodies - not the main loop's own trip count. A per-call extent is a count,
+base or stride the builder takes per dispatch - a `params=` name or a kargs field - that neither
+the kernel's `requires=` contract nor a `@template_constant` fixes to one value. The main loop is
+the loop whose trip count grows with the work one thread does.
 
 **A host-fixed main-loop branch whose deciding value is a per-call extent is never stamped (baked
 into the kernel as a `@template_constant` or literal): peel it (the full chunks run under the
@@ -76,8 +75,9 @@ makes the forms differ. A staged pass-through costs the op more than the reads i
 
 **A loop that fills a `@workgroup` tile computes each lane's tile address - where the lane writes
 in the tile - from the lane's own slot index (the index that steps by one from lane to lane),
-compile-time constants and the threadgroup size alone, as a consecutive run of elements per lane or
-a lane-coalesced stride (`i += 32`, `i += tg`), never from a div or mod of another run-time value; an `[unroll_full]` loop's counter
+compile-time constants and the threadgroup size, as a consecutive run of elements per lane or a
+lane-coalesced stride of a constant or of the threadgroup size, never from a div or mod by a
+run-time value, the threadgroup size included; an `[unroll_full]` loop's counter
 is a compile-time constant once unrolled, and the divisor may be a run-time value.**
 
 **Never decide a row's validity or owner in the bucket-ordered buffer (the routed rows sorted so
@@ -105,8 +105,8 @@ names the bodies that fold that way.
 
 **A diff that adds or changes a Metal kernel body that runs one fold over `@workgroup` slots after
 another over the same slots - two `tg_sum_all` / `tg_max_all` calls, two `MetalTgReduceBase` or
-`GkWgReduce` fold methods, or one such call inside a loop - puts a `barrier()` between them; folds
-over disjoint slots need none.**
+`GkWgReduce` fold methods on either backend, or one such call inside a loop - puts a `barrier()`
+between them.**
 
 **Never put an op every lane of its exchange set must reach together - a `barrier()`, a simdgroup
 matrix op, a subgroup shuffle, vote, ballot or reduction, or a call to a function that runs one,
