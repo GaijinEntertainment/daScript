@@ -1696,11 +1696,12 @@ var private g_rdec_ring_slack = 0l   //! the rows past a ringed layer's window i
 [arch(at="../ARCHITECTURE_GPU_KV_RING.md#kv-ring-floor")]
 def private rdec_ring_floor(hw : int64) : int64 => g_rdec_ring_slack > 0l ? max(0l, hw - g_rdec_ring_slack) : 0l
 
-//! region `r` holds `cnt` of `s`'s rows: the claim's high-water mark rises with it, and the session's ring floor with that
+//! region `r` holds `cnt` of `s`'s rows: the claim's high-water mark rises with it, and the session's ring floor with that; one
+//! row held is row 0 decoded - a history rebuilt from the start, whose mark is that row alone
 [arch(at="../ARCHITECTURE_GPU_KV_RING.md#kv-ring-floor")]
 def private rdec_rows_hold(var s : Session; r, cnt : int64) {
     g_rdec_regions[r].cnt = cnt
-    g_rdec_regions[r].hw = max(g_rdec_regions[r].hw, cnt)
+    g_rdec_regions[r].hw = cnt == 1l ? cnt : max(g_rdec_regions[r].hw, cnt)
     s.kv_ring_floor = max(s.kv_ring_floor, rdec_ring_floor(g_rdec_regions[r].hw))
 }
 

@@ -1609,6 +1609,19 @@ def cell_ring_floor(t : T?; file : string) {
             s.n_past = 0l
             eval(tr, s, short)
             t |> equal(s.kv_ring_floor, 0l, "a prompt from 0 rebuilds the history: its 40 rows reach no ring, so no floor")
+            s.n_past = 0l
+            eval(tr, s, prompt)
+            t |> equal(s.kv_ring_floor, floor, "the long prompt again raises the floor")
+            s.n_past = 0l
+            var row0 <- [short[0]]
+            eval(tr, s, row0)
+            t |> equal(s.kv_ring_floor, 0l, "a one-token decode of row 0 rebuilds the history too: the claim's high-water mark drops with it, so no floor")
+            let why1 = panic_text() ${
+                var row1 <- [short[1]]
+                eval(tr, s, row1)
+            }
+            t |> equal(why1, "", "and the decode at 1 continues (a bench's tg rows after its pp rows)")
+            delete row0
             delete s
             var d <- device_session(tr)
             eval(tr, d, prompt)
