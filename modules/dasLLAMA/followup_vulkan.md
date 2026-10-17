@@ -2138,10 +2138,14 @@ module) is independent and can land any time - it is pure structure.
     the gpt-oss leg's.
 
 149. **The K-quant window pick on the cm2 scalar decode arm reads its races at whole columns only.** On the RTX PRO 4500
-    (driver 580, no decode-vector; `harness/vk_gemm_probe.das kqst:<fmt>`) two readings sit off the pick: (a) a window
-    off the l column - the E2B gate at 500 rows - runs the l stamp's edge path, and the staged KHR tile reads 3-12% under
-    the m stamp there (k4 83.8 against 90.5 us, iq4xs 87.7 against 99.2); (b) the per-layer-embedding gate over q8 and q4_0
-    planes reads 1090 and 1270 us a 512-row window - eight workgroups whose one-dispatch latency the window pays, since K
-    under 2048 never splits - where the f32 planes' split staged gate reads 718. Done = each pick raced one dispatch at a
+    (driver 580.159.04, no decode-vector) two readings sit off the pick: (a) a window off the l column - the E2B gate at 500
+    rows - runs the l stamp's edge path, and the staged KHR tile reads 2-11% under the m stamp there (k4 83.0 against 90.0
+    us, iq4xs 87.1 against 98.4; `DASLLAMA_GPU=1 DASLLAMA_MODELS_DIR=/workspace/models DASLLAMA_ALLOW_UNTUNED=1 ./bin/daslang
+    -jit modules/dasLLAMA/harness/vk_gemm_probe.das -- kqst:<fmt>` at 0fea2d9f3a, an arm's best round); (b) the
+    per-layer-embedding gate over q8 and q4_0 planes reads 1090 and 1270 us a 512-row window - eight workgroups whose
+    one-dispatch latency the window pays, since K under 2048 never splits - where the f32 planes' split staged gate reads
+    718 (`DASLLAMA_GPU_PROF=1 DAS_LOG_LEVEL=info DASLLAMA_IMAGE_SAVE=0 ./bin/daslang -jit
+    modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m /workspace/models/<file> -p 512 -n 0 -r 3 --for-debug-purposes` at
+    5e46f3acb3 on gemma-4-E2B-it-Q8_0, -Q4_0 and -Q4_K_M). Done = each pick raced one dispatch at a
     time at whole and partial windows on both decode arms, the winners in `cm2_gemm_pick`, the E2B and 4B K-quant rows
     re-read.

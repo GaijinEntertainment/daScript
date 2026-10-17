@@ -68,18 +68,20 @@ serves the 256-deep projection whole, and the gate over the most 256-aligned k c
 `cm2_chunk` admits (`pf_f32_split`: six on the E2B's 1536, five on the E4B's 2560) into the
 split-k planes and their reduce: the gate is eight workgroups at 512 rows, so one dispatch's
 latency is its 48 k steps in a row, and the window pays that latency, not the throughput (the
-E2B gate one dispatch at a time 54 us whole, 17 split six ways).
-On the RTX PRO 4500 (`harness/vk_gemm_probe.das plef32`'s rows, `PERF_LEDGER.md`) the scalar
-tile reads 3.1 TFLOP/s at both E2B shapes and the staged tile 75-80. `DASLLAMA_VK_PLE_F32_TILE=0`
+E2B gate one dispatch at a time 53.8 us whole, 17.0 split six ways).
+On the RTX PRO 4500 (driver 580.159.04, `./bin/daslang -jit modules/dasLLAMA/harness/vk_gemm_probe.das -- plef32`
+at 0fea2d9f3a, each figure an arm's best round, `PERF_LEDGER.md`) the scalar tile reads 3.1 TFLOP/s at both E2B
+shapes and the staged tile 75-79. `DASLLAMA_VK_PLE_F32_TILE=0`
 holds the scalar tile, the same-build A/B.
 
 **A K-quant window plane stays on the cm2 tiles whichever decode arm the driver runs.** On the
 scalar arm (a driver without `VK_NV_cooperative_matrix_decode_vector`) the cm2 l stamp takes
 7-25% less time than the staged tile at every FFN, q and wo shape of the E2B and the 4B for k4,
 k5, k6 and iq4xs at whole 512-row windows, the staged tile reads level with the m stamp, and the
-two read within 6% of each other at the 256-wide shapes (`kqst:<fmt>`); the staged tile's
+two read within 7% of each other at the 256-wide shapes (`./bin/daslang -jit
+modules/dasLLAMA/harness/vk_gemm_probe.das -- kqst:<fmt>` at 0fea2d9f3a, the same box); the staged tile's
 128-token column and its two staging arrays give up the l column's reach, which the decode's
 cost on the scalar arm does not buy back. A window off the l column (the gate at 500 rows) turns
-the order: the l stamp takes its edge path, and the staged tile reads 3-12% under the m stamp
+the order: the l stamp takes its edge path, and the staged tile reads 2-11% under the m stamp
 there (`followup_vulkan.md` row 149).
 
