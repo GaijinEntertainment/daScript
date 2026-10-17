@@ -84,6 +84,12 @@ must keep holding:
 - `test_vulkan_kernels.das`'s `test_vkd_router_gemv_bf16` cell must hold the bf16 router-form
   rows against the CPU dot at a row base and an output base, the two-base form and the
   norm-folded form.
+- `test_vulkan_kernels.das`'s `test_vkd_router_gemv_cols` cell must hold the router GEMV over x
+  rows as columns against the one-row dispatch bit for bit and the CPU dot, the bf16 rows'
+  halfword stamp at an odd dim among its arms.
+- `test_vulkan_kernels.das`'s `test_vkd_f32_khr_batch` cell must hold the staged KHR tile over
+  f32 rows against the CPU oracle with each weight rounded to f16, whole and in two k chunks
+  through the reduce.
 - `test_vulkan_kernels.das`'s `test_vkd_kq_gemv_k4_gu` cell must hold the fused gate + up + act
   + requant on Q4_K, IQ4_XS, iq3s4 and IQ2_S against the three-kernel path byte for byte and the
   CPU chain.

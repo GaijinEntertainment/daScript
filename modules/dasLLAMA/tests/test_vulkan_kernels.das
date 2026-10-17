@@ -54,10 +54,8 @@ let private ARM_KHR = 3
 let private ARM_CM2_E = 4
 let private ARM_TOY_STRIP = 5   //! the q8 l-tile toy stamp built with the four-wide decode stripped to the scalar callback
 let private ARM_TOY_TWIN = 6    //! ... and built as the device builds it
-let private ARM_KHR_F32 = 7     //! the staged KHR tile over a file's f32 rows (`F32KhrBatch`), the KHR arm's geometry
 
 def private cell_arm_name(arm : int) : string {
-    if (arm == ARM_KHR_F32) return "khr f32"
     if (arm >= ARM_TOY_STRIP) return arm == ARM_TOY_STRIP ? "stripped toy l" : "twin toy l"
     return arm == ARM_CM2_L ? "l" : (arm == ARM_CM2_M ? "m" : (arm == ARM_CM2_S ? "s" : (arm == ARM_KHR ? "khr" : "e")))
 }
@@ -68,16 +66,12 @@ def private cell_arm_rows_per_wg(arm) => arm == ARM_CM2_L || arm == ARM_TOY_STRI
 
 def private cell_arm_tc(arm) => arm == ARM_CM2_E ? CM2_TC_E : int64(cell_arm_rows_per_wg(arm))
 
-def private cell_arm_served(arm) => arm == ARM_KHR || arm == ARM_KHR_F32 ? khr_kq_tile_on() : (g_gpu.coopmat_mode == COOPMAT_CM2 && g_gpu.has_coopmat2)
+def private cell_arm_served(arm) => arm == ARM_KHR ? khr_kq_tile_on() : (g_gpu.coopmat_mode == COOPMAT_CM2 && g_gpu.has_coopmat2)
 
 def private cell_arm_set(arm, fmt : int; bufs; sizes; gbits) {
     if (arm == ARM_KHR) {
         if (!khr_cls_ensure(fmt)) panic("the KHR class rail for format {fmt} must engage on a coopmat device")
         return khr_cls_set(fmt, bufs, sizes, gbits)
-    }
-    if (arm == ARM_KHR_F32) {
-        if (!ensure_f32_batch_khr_cls()) panic("the staged f32 tile's class rail must engage on a coopmat device")
-        return set_f32_batch_khr_cls(bufs, sizes, gbits)
     }
     verify(g_gpu.coopmat_mode == COOPMAT_CM2, "a cm2 arm dispatched off cm2 mode - the ladder would hand back the KHR stamp")
     if (arm >= ARM_TOY_STRIP) return arm == ARM_TOY_STRIP ? set_toy_q8_cm2_strip_cls(bufs, sizes, gbits) : set_toy_q8_cm2_twin_cls(bufs, sizes, gbits)
@@ -88,8 +82,6 @@ def private cell_arm_set(arm, fmt : int; bufs; sizes; gbits) {
 def private cell_arm_enc(arm, fmt : int; raw; var h; var s; var pc; groups : int64) {
     if (arm == ARM_KHR) {
         khr_cls_enc(fmt, raw, h, s, pc, groups)
-    } elif (arm == ARM_KHR_F32) {
-        enc_f32_batch_khr_cls(raw, h, s, pc, groups)
     } elif (arm == ARM_TOY_STRIP) {
         enc_toy_q8_cm2_strip_cls(raw, h, s, pc, groups)
     } elif (arm == ARM_TOY_TWIN) {
@@ -2839,12 +2831,13 @@ def test_vkd_kq_q40_cm_batch(t0 : T?) {
 
 //! a KHR stamp's split arm over a tile fixture: its first region alone under two 256-aligned k chunks (`want_ck` and the rest) into
 //! the partial planes, then the reduce into the y plane, against the oracle's first region - the k0 / k1 / ybase prologue every KHR
-//! stamp shares with the cm2 tiles
-def private khr_split_arm(t : T?; tag : string; f : TileFixture; y_ref : array<float>; want_ck : int64; set_fn; enc_fn) {
+//! stamp shares with the cm2 tiles; `nsplit` 1 is the whole GEMM, its one partial plane through the reduce
+def private khr_split_arm(t : T?; tag : string; f : TileFixture; y_ref : array<float>; want_ck : int64; set_fn; enc_fn; nsplit : int = 2) {
     verify(ensure_splitk_reduce_cls(), "the split-k reduce's class rail must engage")
-    let nsplit = 2
-    let ck = cm2_chunk(int64(f.n), int64(nsplit))
-    t |> equal(ck, want_ck, "the engine's chunk: K {f.n} in two 256-aligned chunks, {want_ck} and {int64(f.n) - want_ck} deep")
+    let ck = nsplit > 1 ? cm2_chunk(int64(f.n), int64(nsplit)) : 0l
+    if (nsplit > 1) {
+        t |> equal(ck, want_ck, "the engine's chunk: K {f.n} in two 256-aligned chunks, {want_ck} and {int64(f.n) - want_ck} deep")
+    }
     let cnt0 = TILE_CELL_ROWS0
     let d = TILE_CELL_D
     let swgs = ((cnt0 + 127) / 128) * ((d + 127) / 128) * nsplit
@@ -2863,7 +2856,8 @@ def private khr_split_arm(t : T?; tag : string; f : TileFixture; y_ref : array<f
             invoke(enc_fn, raw3, h3, scs, pcs, int64(swgs))
             splitk_reduce_enc(raw3, h3, srd, int64(cnt0 * d), int64(nsplit))
         }
-        check_rows(t, "{tag} split in two k chunks + the reduce vs the CPU oracle", cp |> plane_run(py), y_ref0, cm_bar(y_ref0), d)
+        let form = nsplit > 1 ? "split in two k chunks + the reduce" : "whole, one region"
+        check_rows(t, "{tag} {form} vs the CPU oracle", cp |> plane_run(py), y_ref0, cm_bar(y_ref0), d)
     }
     delete y_ref0
 }
@@ -2895,6 +2889,10 @@ def test_vkd_q8_khr_batch(t0 : T?) {
     }
 }
 
+//! the f32 stamp's set off the KHR arm's five planes: it binds no scale plane, so the second plane stays unbound
+def private set_f32_khr_wo_scales(bufs; sizes; gbits) => set_f32_batch_khr_cls(fixed_array(bufs[0], bufs[2], bufs[3], bufs[4]),
+    fixed_array(sizes[0], sizes[2], sizes[3], sizes[4]), fixed_array(gbits[0], gbits[2], gbits[3], gbits[4]))
+
 [test]
 def test_vkd_f32_khr_batch(t0 : T?) {
     t0 |> run("the staged KHR tile over a file's f32 rows (f32_batch_khr) == the CPU oracle") <| @(t : T?) {
@@ -2909,10 +2907,16 @@ def test_vkd_f32_khr_batch(t0 : T?) {
             }
             let n = 544   //! seventeen 32-deep k steps, off every 64 and 256 lattice
             var wqh <- [for (i in range(2 * TILE_CELL_D * n)); float_bits_to_uint(float(hash_word(uint(i) + 71u) % 4001u) * 0.0000317 - 0.0634)]   //! f32 words whose low mantissa bits the stage rounds away
-            var wsh <- [0u, 0u, 0u, 0u]   //! the template's scale binding, which the f32 stage never reads
+            var wsh <- [0u, 0u, 0u, 0u]   //! the fixture's scale plane, which the f32 stamp binds no slot for
             var f <- tile_fixture(n, 4, wqh, wsh, 3u, 5u)
-            var y_ref <- tile_cell_arms(t, "f32", int(KqFmt.q8), f, [ARM_KHR_F32], @@f32f16_gemm_oracle)
-            khr_split_arm(t, "the staged f32 tile", f, y_ref, 512l, @@set_f32_batch_khr_cls, @@enc_f32_batch_khr_cls)   //! the window gate's split form
+            let d = TILE_CELL_D
+            var y_ref : array<float>
+            y_ref |> resize(f.rows * d)
+            var recs <- one_region_words(TILE_CELL_ROWS0, ((TILE_CELL_ROWS0 + 127) / 128) * ((d + 127) / 128))
+            f32f16_gemm_oracle(f.wqh, f.wsh, f.xfh, recs, 1, n, d, y_ref)   //! the stamp's one schedule form: a region at row 0, its map at word 4
+            khr_split_arm(t, "the staged f32 tile", f, y_ref, 0l, @@ < (bufs : uint64 const[5]; sizes : int64 const[5]; gbits : uint const[5]) : VkDescriptorSet > set_f32_khr_wo_scales, @@enc_f32_batch_khr_cls, 1)//! the projection's whole form
+            khr_split_arm(t, "the staged f32 tile", f, y_ref, 512l, @@ < (bufs : uint64 const[5]; sizes : int64 const[5]; gbits : uint const[5]) : VkDescriptorSet > set_f32_khr_wo_scales, @@enc_f32_batch_khr_cls)//! the window gate's split form
+            delete recs
             delete y_ref
             delete f
         } else {

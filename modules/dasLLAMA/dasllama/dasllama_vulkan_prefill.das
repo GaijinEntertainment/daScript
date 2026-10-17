@@ -970,11 +970,11 @@ def private pf_f32_gemm_enc(raw : VkCommandBuffer; var h : VkHaz; idx : int; w :
         verify(nsplit * rows * d * 4l <= g_rd.pf_splitk_bytes, "vk prefill: the staged f32 tile's split-k planes exceed the scratch bound")
     }
     let groups = int64(fill_arena_batch_sched(g_rd.pf_meta[idx], d, woff / 4l, rows, int(KqFmt.q8), true, nsplit, 0l, 128l))
-    var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u, ksplit = split ? uint(cm2_chunk(n, nsplit)) : 0u)
+    var pc = BatchArgs(n = uint(n), d = uint(d), ksplit = split ? uint(cm2_chunk(n, nsplit)) : 0u)
     var s = cached(g_rd.pf_cls_gemm, idx * 16 + 15) $ {
         verify(ensure_f32_batch_khr_cls(), "vk prefill: the staged f32 tile's class rail must engage")
-        return set_f32_batch_khr_cls(fixed_array(w, g_rd.dummy, g_rd.pf_meta[idx].buf, xf, split ? g_rd.pf_splitk : y),
-            fixed_array(wn, 256l, BATCH_META_BYTES, xn, split ? g_rd.pf_splitk_bytes : yn), fixed_array(0u, 0u, 0u, xbit, split ? VHZ_SK : ybit))
+        return set_f32_batch_khr_cls(fixed_array(w, g_rd.pf_meta[idx].buf, xf, split ? g_rd.pf_splitk : y),
+            fixed_array(wn, BATCH_META_BYTES, xn, split ? g_rd.pf_splitk_bytes : yn), fixed_array(0u, 0u, xbit, split ? VHZ_SK : ybit))
     }
     enc_f32_batch_khr_cls(raw, h, s, pc, groups)
     if (split) {

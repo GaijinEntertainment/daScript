@@ -656,18 +656,17 @@ def private run_ple_f32_shape(name : string; d, n, cnt, rounds : int) {
     let x16 = make_device_buf(int64(cnt * n) * 2l)
     let ya = make_device_buf(int64(cnt * d) * 4l)
     let yb = make_device_buf(int64(cnt * d) * 4l)
-    let dummy = make_device_buf(256l)
     upload_region_at(wd, 0l, unsafe(addr<uint8 const?>(wh[0])), w_bytes)
     let flop = 2.0lf * double(cnt) * double(d) * double(n)
     let wgs = ((cnt + 127) / 128) * ((d + 127) / 128)
     let sc = one_region_sched(cnt, wgs)
     var sa = set_dn_ba_cls(fixed_array(wd, x32, ya), fixed_array(w_bytes, int64(cnt * n) * 4l, int64(cnt * d) * 4l), fixed_array(1u, 2u, 4u))
     var sb = set_dn_ba_cls(fixed_array(wd, x32, yb), fixed_array(w_bytes, int64(cnt * n) * 4l, int64(cnt * d) * 4l), fixed_array(1u, 2u, 8u))
-    let khr_sizes = fixed_array(w_bytes, 256l, sc.bytes, int64(cnt * n) * 2l, int64(cnt * d) * 4l)
-    var ka = set_f32_batch_khr_cls(fixed_array(wd, dummy, sc.buf, x16, ya), khr_sizes, fixed_array(1u, 0u, 0u, 2u, 4u))
-    var kb = set_f32_batch_khr_cls(fixed_array(wd, dummy, sc.buf, x16, yb), khr_sizes, fixed_array(1u, 0u, 0u, 2u, 8u))
+    let khr_sizes = fixed_array(w_bytes, sc.bytes, int64(cnt * n) * 2l, int64(cnt * d) * 4l)
+    var ka = set_f32_batch_khr_cls(fixed_array(wd, sc.buf, x16, ya), khr_sizes, fixed_array(1u, 0u, 2u, 4u))
+    var kb = set_f32_batch_khr_cls(fixed_array(wd, sc.buf, x16, yb), khr_sizes, fixed_array(1u, 0u, 2u, 8u))
     var pd = DnBaArgs(npos = uint(cnt), dim = uint(n), nvh = uint(d / 2), woff = 0u, xstride = uint(n), obase_b = 0u, obase_g = uint(d / 2), ostride = uint(d))
-    var pk = BatchArgs(n = uint(n), d = uint(d), map_off = 4u)
+    var pk = BatchArgs(n = uint(n), d = uint(d))
     for (round in range(rounds)) {
         let us_scalar = timed_chain() $(raw; var _hzs) {
             for (k in range(DISPATCHES)) {
@@ -706,10 +705,10 @@ def private run_ple_f32_shape(name : string; d, n, cnt, rounds : int) {
             continue if (ck == 0l)
             let swgs = wgs * nsplit
             let ssc = one_region_sched(cnt, swgs)
-            var ks = set_f32_batch_khr_cls(fixed_array(wd, dummy, ssc.buf, x16, yp),
-                fixed_array(w_bytes, 256l, ssc.bytes, int64(cnt * n) * 2l, part_bytes), fixed_array(1u, 0u, 0u, 2u, 16u))
+            var ks = set_f32_batch_khr_cls(fixed_array(wd, ssc.buf, x16, yp),
+                fixed_array(w_bytes, ssc.bytes, int64(cnt * n) * 2l, part_bytes), fixed_array(1u, 0u, 2u, 16u))
             var rs = set_splitk_reduce_cls(fixed_array(yp, ya), fixed_array(part_bytes, int64(cnt * d) * 4l), fixed_array(16u, 4u))
-            var pks = BatchArgs(n = uint(n), d = uint(d), map_off = 4u, ksplit = uint(ck))
+            var pks = BatchArgs(n = uint(n), d = uint(d), ksplit = uint(ck))
             let lat = timed_chain() $(raw; var hz) {
                 for (_k in range(DISPATCHES)) {
                     enc_f32_batch_khr_cls(raw, hz, ks, pks, int64(swgs))
