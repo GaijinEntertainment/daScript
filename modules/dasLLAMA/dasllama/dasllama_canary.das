@@ -1217,12 +1217,10 @@ def create_canary_asr_session(dec : Model; lang : string; kv : KVDtype = KVDtype
     return <- CanaryAsrSession(qctx <- create_session_(dec, kv, kv))
 }
 
-// Canary-Qwen transcription: FastConformer-32 encode + projector, the SALM/Qwen prompt with the
-// audio soft tokens spliced at the placeholder, greedy decode over the Qwen3-1.7B decoder until
-// the text EOS (151645, which is included in the emitted ids by convention).
-def canary_transcribe(dec : Model; enc : CanaryEncoder; var s : CanaryAsrSession;
-                      samples : array<float> | #; blk : block<(seg : TranscribeSegment)>;
-                      var detected_lang : string&) : int {
+//! The transcription's prompt: FastConformer-32 encode + projector, the SALM/Qwen prompt with the audio soft tokens spliced
+//! at the placeholder, prefilled on the decoder session from position 0 - its logits row the first reply token's; the
+//! prompt's row count back
+def canary_prefill(dec : Model; enc : CanaryEncoder; var s : CanaryAsrSession; samples : array<float> | #) : int64 {
     let tp = ref_time_ticks()
     canary_window_frames(enc, samples, s.cst)
     let n_audio = canary_encode(enc, s.cst)   // s.cst.out holds [n_audio × proj_dim] soft tokens
@@ -1252,7 +1250,16 @@ def canary_transcribe(dec : Model; enc : CanaryEncoder; var s : CanaryAsrSession
     s.qctx.n_past = 0l   // fresh sequence per transcribe
     eval_embd_body_(dec, s.qctx, embd, npos, 0l, 0l, int2(0))
     asr_prof_add("cn.prefill", tpf)
+    return npos
+}
 
+// Canary-Qwen transcription: the prompt's prefill, then greedy decode over the Qwen3-1.7B decoder until
+// the text EOS (151645, which is included in the emitted ids by convention).
+def canary_transcribe(dec : Model; enc : CanaryEncoder; var s : CanaryAsrSession;
+                      samples : array<float> | #; blk : block<(seg : TranscribeSegment)>;
+                      var detected_lang : string&) : int {
+    let npos = canary_prefill(dec, enc, s, samples)
+    let im_end = special_id(dec, "<|im_end|>")
     let max_new = min(dec.config.seq_len - npos - 1l, CN_MAX_NEW)
     var inscope one : array<int64>
     one |> resize(1)
