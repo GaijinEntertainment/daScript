@@ -262,3 +262,24 @@ names `dasllama.io`: the exchange module is the sidecar exchange host's one clie
 tool reaches it through `dasllama/dasllama_exchange`. It licenses no names.
 
 The decode pick tape: `ARCHITECTURE_ENGINE_MECHANISMS.md#moe-pick-tape`.
+
+### The test folder's documents track its files {#test-folder-gates}
+
+`tests/CLAUDE.md` is the map a reader finds a cell or an arm in, `tests/REVIEW_PINNED_GATES.md` the set of cells whose
+asserts hold fixed, and `tests/_compares.das` the compares the bars read. `REVIEW.das` holds each to the files, and each
+check licenses no names:
+
+- `check_arm_tokens_documented` - every literal `arm_on` token a tests file filters on (an interpolated one by the prefix
+  ahead of its first `{`) is a word of a backtick span in `tests/CLAUDE.md`.
+- `check_doc_names_resolve` - every backticked `test_*` / `cell_*` name in `tests/CLAUDE.md` is a `.das` file or a
+  `def` under the module or under a folder the document names by a `.das` path; a pattern (`*`, `<...>`, `{...}`)
+  names none.
+- `check_doc_cites_no_ledger` - `tests/CLAUDE.md` cites no `followup_*.md`, whose items move or close under it.
+- `check_regions_entries` - every `cell_*` a `test_gpu_resident_regions*.das` file calls is named in that file's entry:
+  by its function name, by the name the `_resident_regions.das` list gives it (the phrase ahead of its parenthetical),
+  or by the head of the bullet that holds it.
+- `check_census_evidence_pinned` - every `test_vk*` / `test_metal_*` cell and `*_gate` a census table's comments in
+  `tests/test_kernel_coverage.das` cite as a blind spot's evidence is in the pinned set: named in an entry, in a file a
+  file entry pins, or a gate a pinned cell calls.
+- `check_running_max_nan` - no tests file keeps a running largest difference as `max(m, abs(a - b))`: `max` drops a
+  NaN a later finite element follows, and `nan_wide_diff(a, b)` reads a NaN on either side as infinite.

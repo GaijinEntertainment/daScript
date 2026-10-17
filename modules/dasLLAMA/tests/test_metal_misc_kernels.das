@@ -890,8 +890,8 @@ def private gelu_form_delta(t : T?) {
     var max_lut = 0.0
     var max_erf = 0.0
     for (i in range(n)) {
-        max_lut = max(max_lut, abs(an[i] - lut[i]))
-        max_erf = max(max_erf, abs(an[i] - erfv[i]))
+        max_lut = max(max_lut, nan_wide_diff(an[i], lut[i]))
+        max_erf = max(max_erf, nan_wide_diff(an[i], erfv[i]))
     }
     to_log(LOG_INFO, "gelu_form_delta over [-10,10]: |analytic-lut| max {max_lut}, |analytic-erf| max {max_erf}\n")
     // measured 3.90625e-3 = the f16 HALF-ULP at the range edge (|x|~10, spacing 2^-7): the LUT

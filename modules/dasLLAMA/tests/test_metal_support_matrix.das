@@ -582,7 +582,7 @@ def private cont_logits_cell(t : T?; tr, trg : Model; tag : string; tol : float)
             select_prefill_override("")
             served = metal_prefill_stats().prefills - pf0
             for (i in range64(vocab)) {
-                d = max(d, abs(sb.logits[i] - sc.logits[i]))
+                d = max(d, nan_wide_diff(sb.logits[i], sc.logits[i]))
             }
             cpk = argmax_of(sc.logits, vocab)
             gpk = argmax_of(sb.logits, vocab)
@@ -743,14 +743,14 @@ def private qwen35_row(t : T?; path, family, tag : string; expect_needs : uint; 
                 t |> equal(metal_batch_decode_stats().steps - ba1, 1l, "{tag} batch kv={kdt}: the driver served the step")
                 var bmaxd = 0.0
                 for (i in range64(vocab)) {
-                    bmaxd = max(bmaxd, abs(sa.logits[i] - sa2.logits[i]))
-                    bmaxd = max(bmaxd, abs(sb.logits[i] - sb2.logits[i]))
+                    bmaxd = max(bmaxd, nan_wide_diff(sa.logits[i], sa2.logits[i]))
+                    bmaxd = max(bmaxd, nan_wide_diff(sb.logits[i], sb2.logits[i]))
                 }
                 to_log(LOG_INFO, "{tag} batched step kv={kdt}: single-row next '{eyeball_str(piece_(tr, argmax_of(sa2.logits, vocab)))}' / '{eyeball_str(piece_(tr, argmax_of(sb2.logits, vocab)))}' vs batched next '{eyeball_str(piece_(tr, argmax_of(sa.logits, vocab)))}' / '{eyeball_str(piece_(tr, argmax_of(sb.logits, vocab)))}' (maxd {bmaxd})\n")
                 t |> success(bmaxd <= 2.0, "{tag} kv={kdt}: batched-step logits within 2.0 of the single-row GPU step, both rows (maxd {bmaxd})")
                 var xmaxd = 0.0   //! the control: row A against row B lands outside the bar, so a step that bound one row's slice to the other would red
                 for (i in range64(vocab)) {
-                    xmaxd = max(xmaxd, abs(sa.logits[i] - sb2.logits[i]))
+                    xmaxd = max(xmaxd, nan_wide_diff(sa.logits[i], sb2.logits[i]))
                 }
                 t |> success(xmaxd > 2.0, "{tag} kv={kdt}: the cross-row compare lands outside the bar (maxd {xmaxd})")
                 select_decode_override("")
@@ -1590,14 +1590,14 @@ def private gptoss_row(t : T?; path : string) {
             var s = make_run_state(trg.config, KVDtype.f16, KVDtype.f16)
             eval_(trg, s, prompt)
             for (v in range64(vocab)) {
-                mpf = max(mpf, abs(lg0[v] - s.logits[v]))
+                mpf = max(mpf, nan_wide_diff(lg0[v], s.logits[v]))
             }
             gpk0 = argmax_of(s.logits, vocab)
             var one <- [t0]
             eval_(trg, s, one)
             delete one
             for (v in range64(vocab)) {
-                m1 = max(m1, abs(lg1[v] - s.logits[v]))
+                m1 = max(m1, nan_wide_diff(lg1[v], s.logits[v]))
             }
             gpk1 = argmax_of(s.logits, vocab)
             served = (metal_prefill_stats().prefills - pf0) + (metal_decode_stats().decodes - d0)
@@ -1937,7 +1937,7 @@ def private gemma4_hetero_q8_row(t : T?; path : string) {
             select_decode_override("")
             served_bat = metal_batch_decode_stats().steps - ba0
             for (i in range(length(cpu_bl))) {
-                d4 = max(d4, abs(cpu_bl[i] - gpu_bl[i]))
+                d4 = max(d4, nan_wide_diff(cpu_bl[i], gpu_bl[i]))
             }
             let vocab = tr.config.vocab_size
             for (s4 in range64(4l)) {

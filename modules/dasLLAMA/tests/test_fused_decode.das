@@ -159,7 +159,7 @@ def test_fused_flash_deep_ctx(t : T?) {
                         }
                     } else {
                         for (i in range64(c.vocab_size)) {
-                            worst = max(worst, abs(lg_std[base + i] - s.logits[i]))
+                            worst = max(worst, nan_wide_diff(lg_std[base + i], s.logits[i]))
                         }
                     }
                 }
@@ -222,7 +222,7 @@ def test_fused_flash_deep_ctx_q8(t : T?) {
                         }
                     } else {
                         for (i in range64(c.vocab_size)) {
-                            worst = max(worst, abs(lg_std[base + i] - s.logits[i]))
+                            worst = max(worst, nan_wide_diff(lg_std[base + i], s.logits[i]))
                         }
                     }
                 }

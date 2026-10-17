@@ -2132,8 +2132,8 @@ cells, by the names the file entries use:
 - the driver's reports (`cell_driver_reports`): every pass reason reads in words of its own, the plan's K/V scales with the
   region count and a count under one plans one, the tier status counts both mirror sides, a load under a switched-off route
   says `not attempted`;
-- the two passes that bring their rows down first (`cell_passes_with_their_rows`): a prefill that skips positions (`gap`)
-  and one past the region's context (`cap`, on a load capped at 4096 positions);
+- the two passes (`cell_passes_with_their_rows`), each bringing its rows down first: a prefill that skips positions
+  (`gap`) and one past the region's context (`cap`, on a load capped at 4096 positions);
 - the long-context cells, on the file's `LongCtx` shape: the slab cell (`cell_regions_slabbed_mirror`), the CPU-chain cell
   (`cell_long_prompt_against_cpu`), the continuation (`cell_long_continuation`), the streams (`cell_long_streams`) and the
   rows through the host (`cell_long_rows_through_host`); each long-context entry gives its numbers. The long-context cells
@@ -2144,12 +2144,15 @@ cells, by the names the file entries use:
 steps, the two batched-step cells, the device-home cells, the scheduler's device mode, the handoff cell, the prefill-chunks
 cell, the tolerance cells at the 6% bar of `test_gpu_resident_qwen2.das`, the paged cell, the pool cell, the guards, the driver's reports and the two
 passes.
-`test_gpu_resident_regions_q8kv.das` - the qwen2 file's cells but the handover, paged and pool cells, with the K/V mirror
-asked in q8_0 (an `[init]` pins it through `set_gpu_kv_dtype`; the sessions take the armed codec, `mirror_kv_dtype`): the
-staged stores and the codec's store pass at one row and at N rows, the decode attention's codec stamps, the prefill's
-attention over the f16 shadow, the rows a pass brings down as the CPU cache's own bytes.
-`test_gpu_resident_regions_tq4kv.das` - the q8kv file's form with the mirror asked in tq4, tq4's un-rotation among what it
-reaches. Under a tq4 mirror no share of the peak holds a tolerance cell - two window splits of one prompt, and the split q/k
+`test_gpu_resident_regions_q8kv.das` - the qwen2 file's carrier with the K/V mirror asked in q8_0 (an `[init]` pins it
+through `set_gpu_kv_dtype`; the sessions take the armed codec, `mirror_kv_dtype`): the interleaved single steps, the two
+batched-step cells, the device-home cells, the scheduler's device mode, the handoff cell, the prefill-chunks cell, the
+tolerance cells, the guards, the driver's reports and the two passes - the staged stores and the codec's store pass at one
+row and at N rows, the decode attention's codec stamps, the prefill's attention over the f16 shadow, the rows a pass
+brings down as the CPU cache's own bytes.
+`test_gpu_resident_regions_tq4kv.das` - the q8kv file's cells with the mirror asked in tq4 (the interleaved single steps,
+the two batched-step cells, the device-home cells, the scheduler's device mode, the handoff cell, the prefill-chunks cell,
+the tolerance cells, the guards, the driver's reports and the two passes), tq4's un-rotation among what they reach. Under a tq4 mirror no share of the peak holds a tolerance cell - two window splits of one prompt, and the split q/k
 norm against the fused one on the qwen3 file, read as far apart as a bit-for-bit carrier's row one off - so the rig holds each such row to a share of
 its distance from the one-token-off row instead (`tq4_within`, the share `TQ4_CTRL_SHARE` in `_resident_feed.das`: above
 the widest reading on any card the suite runs on - the 900-token prompt cut at 300 reads widest - and under 1.0, the

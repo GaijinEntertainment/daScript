@@ -98,7 +98,7 @@ def private hc_mix_reference(t : Model; res : array<float>; var mixed : array<fl
 def private maxdiff(a, b : array<float>; n : int64) : float {
     var m = 0.0
     for (i in range64(n)) {
-        m = max(m, abs(a[i] - b[i]))
+        m = max(m, nan_wide_diff(a[i], b[i]))
     }
     return m
 }
@@ -240,11 +240,11 @@ def test_hc_mixer_batched(t : T?) {
             hc_mix_reference(m, row, want_mixed, want_inject)
             var dm = 0.0
             for (i in range64(DIM)) {
-                dm = max(dm, abs(threaded.mixed[p * DIM + i] - want_mixed[i]))
+                dm = max(dm, nan_wide_diff(threaded.mixed[p * DIM + i], want_mixed[i]))
             }
             var di = 0.0
             for (ch in range64(HC)) {
-                di = max(di, abs(threaded.inject[p * HC + ch] - want_inject[ch]))
+                di = max(di, nan_wide_diff(threaded.inject[p * HC + ch], want_inject[ch]))
             }
             t |> success(dm < 1.0e-5, "row {p}: mixed within 1e-5 of the reference (maxdiff {dm})")
             t |> success(di < 1.0e-4, "row {p}: inject within 1e-4 of the reference (maxdiff {di})")
@@ -255,11 +255,11 @@ def test_hc_mixer_batched(t : T?) {
                 hc_mix_reference(m, next, off_mixed, off_inject)
                 var dc = 0.0
                 for (i in range64(DIM)) {
-                    dc = max(dc, abs(threaded.mixed[p * DIM + i] - off_mixed[i]))
+                    dc = max(dc, nan_wide_diff(threaded.mixed[p * DIM + i], off_mixed[i]))
                 }
                 var dci = 0.0
                 for (ch in range64(HC)) {
-                    dci = max(dci, abs(threaded.inject[p * HC + ch] - off_inject[ch]))
+                    dci = max(dci, nan_wide_diff(threaded.inject[p * HC + ch], off_inject[ch]))
                 }
                 t |> success(dc >= 1.0e-5, "row {p}: the next row's reference misses the mixed bar (maxdiff {dc})")
                 t |> success(dci >= 1.0e-4, "row {p}: the next row's reference misses the inject bar (maxdiff {dci})")

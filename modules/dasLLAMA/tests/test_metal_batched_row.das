@@ -236,8 +236,8 @@ def test_metal_batched_row_shexp_sameslab(t : T?) {
                     var d = 0.0
                     var doff = 0.0
                     for (v in range64(vocab)) {
-                        d = max(d, abs(sa.logits[v] - sb.mtp_logits_b[v]))
-                        doff = max(doff, abs(prev[v] - sb.mtp_logits_b[v]))
+                        d = max(d, nan_wide_diff(sa.logits[v], sb.mtp_logits_b[v]))
+                        doff = max(doff, nan_wide_diff(prev[v], sb.mtp_logits_b[v]))
                     }
                     maxd = max(maxd, d)
                     off_min = min(off_min, doff)

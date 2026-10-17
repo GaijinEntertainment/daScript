@@ -148,13 +148,13 @@ def private ff_pair(tr, trg : Model; prompt : array<int64>; nsteps : int64; veri
             for (_i in range64(nsteps)) {
                 var mx = 0.0
                 for (a, b in sa.logits, sb.logits) {
-                    mx = max(mx, abs(a - b))
+                    mx = max(mx, nan_wide_diff(a, b))
                 }
                 st.maxd = max(st.maxd, mx)
                 if (!empty(prev)) {
                     var off = 0.0
                     for (p, b in prev, sb.logits) {
-                        off = max(off, abs(p - b))
+                        off = max(off, nan_wide_diff(p, b))
                     }
                     st.off_min = min(st.off_min, off)
                 }
@@ -444,7 +444,7 @@ struct RowStats {
 def private compare_row(plain, store : array<float>; soff, n : int64; var st : RowStats; tag : string; pos : int64; verbose : bool) {
     var mx = 0.0
     for (i in range64(n)) {
-        mx = max(mx, abs(plain[i] - store[soff + i]))
+        mx = max(mx, nan_wide_diff(plain[i], store[soff + i]))
     }
     st.rows++
     st.max_abs = max(st.max_abs, mx)
@@ -518,7 +518,7 @@ def private vff_pair(tr, trg : Model; prompt : array<int64>; nrounds, nr : int64
                     compare_row(plain, sb.mtp_logits_b, i * vocab, vocab, st, "vrow{i}", pos + i, verbose)
                     var rmx = 0.0
                     for (v in range64(vocab)) {
-                        rmx = max(rmx, abs(plain[v] - sb.mtp_logits_b[i * vocab + v]))
+                        rmx = max(rmx, nan_wide_diff(plain[v], sb.mtp_logits_b[i * vocab + v]))
                     }
                     rowmax[i] = max(rowmax[i], rmx)
                     if (verbose) {
@@ -592,8 +592,8 @@ def private dff_pair(tr, trg : Model; prompts : array<array<int64>>; nsteps : in
                     var mxs = 0.0
                     var mxb = 0.0
                     for (v in range64(vocab)) {
-                        mxs = max(mxs, abs(sc.logits[v] - sa[0].logits[v]))
-                        mxb = max(mxb, abs(sc.logits[v] - sb[0].logits[v]))
+                        mxs = max(mxs, nan_wide_diff(sc.logits[v], sa[0].logits[v]))
+                        mxb = max(mxb, nan_wide_diff(sc.logits[v], sb[0].logits[v]))
                     }
                     to_log(LOG_INFO, "metal dff cpu-ref B={nb}: cpu-vs-single maxd={mxs} cpu-vs-batch maxd={mxb} cpu top={argmax_of(sc.logits, vocab)} single top={argmax_of(sa[0].logits, vocab)} batch top={argmax_of(sb[0].logits, vocab)}\n")
                 }

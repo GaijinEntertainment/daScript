@@ -29,10 +29,11 @@ forwards into `dasllama/dasllama_gpu_resident.das` calls it before the load it g
 reads these values once, to decide what the whole-model GPU driver holds on the device; a value set
 after the load never reaches that decision.
 
-**A diff that adds an `RdecPass` value gives it its own reader-facing sentence in
-`rdec_pass_words`, in plain words that name no part of the engine - no pass, region, mirror,
-resident driver, tier or rails - in the same change.** A status page prints those words; a
-value with none prints its machine name instead.
+**A diff that adds or rewords an `RdecPass` value's sentence in `rdec_pass_words` writes it in
+plain words that name no part of the engine - no pass, region, mirror, resident driver, tier or
+rails.** A status page prints those
+words to a reader who never saw the engine. `REVIEW.das`'s `check_rdec_pass_words` holds every
+value to a sentence there, and weakening that check is a defect.
 
 **A diff that drops a model (`moe_gpu_drop_model`) a device-mode scheduler serves turns that
 scheduler's device mode off (`set_device_kv(sch, false)`) before its next step, in the same

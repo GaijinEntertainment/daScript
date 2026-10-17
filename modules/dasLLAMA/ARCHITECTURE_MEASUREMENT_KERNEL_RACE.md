@@ -85,6 +85,11 @@ The step and combine races' down rows (46 MB at the gemma-4 window, 33.5 MB at t
 before the step reads it, so production reads them as warm as the race does, and they take no ring;
 every other race streams activations of a few MB.
 
+A race stamp - a dispatched class under `benchmarks/`, `harness/` or `performance/` whose `//!` names the shipped stamp it
+times - stamps that stamp's template and moves one constant, the one the race picks; a second difference times a kernel
+that never ships. `REVIEW.das`'s `check_bench_stamps` holds each to that (the constants a class chain sets or declares,
+the nearest winning), and licenses no names; a probe stamp naming no shipped stamp - another form on purpose - is outside it.
+
 A race arm owns a transient command queue for its timed pairs and releases it before returning -
 the one exception to the family's shared device and queue (`ARCHITECTURE_GPU.md#gpu-backends`) - so
 the tune-time race never queues behind served work.

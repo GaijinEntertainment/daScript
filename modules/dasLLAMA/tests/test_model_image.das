@@ -762,7 +762,7 @@ def private forced_logits_maxd(tc, tg : Model; prompt, teach : array<int64>; tag
         eval_(tc, sa, prompt)
         eval_(tg, sb, prompt)
         for (a, b in sa.logits, sb.logits) {
-            maxd = max(maxd, abs(a - b))
+            maxd = max(maxd, nan_wide_diff(a, b))
         }
         for (tok in teach) {
             picks |> push(argmax_of(sb.logits))
@@ -771,7 +771,7 @@ def private forced_logits_maxd(tc, tg : Model; prompt, teach : array<int64>; tag
             eval_(tc, sa, one)
             eval_(tg, sb, one)
             for (a, b in sa.logits, sb.logits) {
-                maxd = max(maxd, abs(a - b))
+                maxd = max(maxd, nan_wide_diff(a, b))
             }
             delete one
         }
