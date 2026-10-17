@@ -7,12 +7,14 @@ Kernel twins are two classes with the same dispatch grid formula, the same mappi
 work and the same index and guard arithmetic, whose compiled bodies differ only in expressions,
 constants or unroll counts that one value selects: a template constant, a typedef, which base
 shell's method they inherit, or a run-time count of live entries inside a fixed extent (a column
-count, a row count). A base shell is the dispatch-less base class whose methods the emitter
-splices flat into each deriving class. A stamp is a kernel class that compiles to a shader module -
+count, a row count). A base shell is the dispatch-less base class whose methods the emitter splices
+flat into each deriving class. A stamp is a kernel class that compiles to a shader module -
 standalone, a template instance or a base-shell derivative. A census key is a kernel name
 `modules/dasLLAMA/tests/test_kernel_coverage.das` counts, that the engine's Metal or Vulkan driver
 compiles at run time - at its init or at a model's load - and that the pre-change tree does not
-compile. A crown is a kernel family a box's tune sidecar enables.
+compile. A crown is a kernel family a box's tune sidecar enables. A lens is the `[metal_dispatch]` /
+`[vk_dispatch]` macro that generates a class's builder from its bindings; kargs is the
+kernel-argument struct a dispatch hands its kernel.
 
 **A kernel twin that binds a different kargs (kernel-argument struct) type than its sibling twin
 is a defect, even where one twin ignores a field of it.**

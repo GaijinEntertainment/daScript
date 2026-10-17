@@ -162,8 +162,7 @@ and the `note_decline` / `note` call its common file declares on it, or, in
 `dasllama/dasllama_gpu_resident.das`, through `note_gpu_cpu_pass` (`dasllama/dasllama_gpu_tier.das`)
 over an `RdecPass` value, and builds the counter key - `note_decline`'s `why`, `note`'s `reason` -
 from a value of the decline enum of the driver it declines for, and from nothing else; a key held
-as a string literal is a defect. Each driver has one enum: Metal's live in
-`dasllama/dasllama_metal_shapes.das`, and a Vulkan driver's lives in that driver's own file.**
+as a string literal is a defect.**
 
 **Never give a `*_decline_caps` predicate a parameter beyond the model, the row count, and
 whether the call carries a uniform attention span - however that parameter is derived; window
@@ -175,7 +174,8 @@ a seat is a module-level variable that holds a function and has a public setter,
 setter is named - names the seat, by its setter's name, in the `dasllama_gpu_tier.das` entry of
 `ARCHITECTURE_GPU.md#gpu-backends`; a diff that removes one deletes that name; in the same change.**
 
-**A diff that adds a hook a GPU driver registers in a model family's registry, or a prefill
+**A diff that adds a hook a GPU driver registers in a model family's registry (the hook table
+`dasllama/dasllama_common.das` declares for that family), or a prefill
 builder a tower driver borrows, names it - the hook by the seat's register function, the builder
 by its name - in that driver's row of the role table in `ARCHITECTURE_GPU.md#gpu-backends`; a
 diff that removes one deletes its name from that row; in the same change.**
@@ -191,8 +191,9 @@ backend role table at `ARCHITECTURE_GPU.md#gpu-backends` instead of an entry of 
 path served faster or slower is not a behavior.
 
 **A diff that adds or extends, on one GPU backend (Metal or Vulkan), a prefill or decode path or
-a K/V cache feature for a model family the other backend also serves lands the same capability on
-the other backend in the same change, wherever the other backend's API offers the operations it
+a K/V cache feature for a model family the other backend also serves - a capability being any
+behavior a served call or a test's lever can show - lands the same capability on the other backend
+in the same change, wherever the other backend's API offers the operations it
 uses on any device it supports; a PR body that defers it is a defect.** A capability one backend
 has makes a served model's behavior depend on the box it runs on.
 

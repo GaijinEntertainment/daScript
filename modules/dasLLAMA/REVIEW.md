@@ -2,7 +2,8 @@
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 docs: `ARCHITECTURE.md`, `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_MEASUREMENT.md`. Planned work:
-`followup_general.md`, `followup_vulkan.md`, `followup_metal.md`.
+`followup_general.md`, `followup_vulkan.md`, `followup_metal.md`. `tests/`, `benchmarks/`,
+`performance/` and `harness/` carry their own `REVIEW.md`.
 
 **A change to the tokenizer - `dasllama/dasllama_tokenizer.das`, `dasllama/dasllama_spm.das`,
 `dasllama/dasllama_bpe.das` or `dasllama/dasllama_pretok.das` - or to a string any `special_id`
@@ -168,6 +169,9 @@ format; writes as a literal a number fixed by one weight format (its kernel form
 or word count per block, a plane stride); or adds or changes a `stamp = "<family>:<fmt>:<form>"`
 kernel class, a `kq_mulmm_<fmt>` or `moe_mulmm_<fmt>` race, a dev-W dequant pass (the pass that
 dequantizes weights into an f16 panel on the device) or a format's twin pick.**
+
+**A diff that calls a `set_gpu_*` or `reset_gpu_*` function of `dasllama/dasllama_core.das`,
+wherever it sits, applies `REVIEW_GPU_RESIDENT.md` too.**
 
 **A diff that bumps `DASLLAMA_RELEASE` (`dasllama/dasllama_version.das`) cites in the PR body the
 maintainer's ruling that rows measured before it can no longer be compared with rows after it.**
