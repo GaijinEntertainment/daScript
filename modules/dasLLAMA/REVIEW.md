@@ -97,12 +97,13 @@ change, or a change to a `kv_*` function that a GPU driver file (`dasllama_metal
 `dasllama_vulkan*.das`, `dasllama_gpu*.das`) calls, wherever the diff puts it, applies
 `REVIEW_GPU.md`.**
 
-**A GPU kernel timing race (two kernels timed against each other to pick one - not a data
-race), a call that makes, arms or tears down device-home serving - a session whose K/V region
-lives only on the device (`create_device_session`, `set_device_kv`, `moe_gpu_drop_model`) - a
-knockout (an arm that skips a stage to measure that stage's cost), a hand-binding arm (one that
-writes buffer or kernel-argument (kargs) binding numbers as literals), or a kernel cell or probe
-that fills or binds a `TokMeta` block, wherever the diff puts it, applies `REVIEW_GPU.md`.**
+**A GPU kernel timing race (two kernels timed against each other to pick one - not a data race), a
+call that makes, arms or tears down device-home serving - a session whose K/V region lives only on
+the device (`create_device_session`, `set_device_kv`, `moe_gpu_drop_model`), a call of a `set_gpu_*`
+or `reset_gpu_*` function of `dasllama/dasllama_core.das`, a knockout (an arm that skips a stage to
+measure that stage's cost), a hand-binding arm (one that writes buffer or kernel-argument (kargs)
+binding numbers as literals), or a kernel cell or probe that fills or binds a `TokMeta` block,
+wherever the diff puts it, applies `REVIEW_GPU.md`.**
 
 **A kernel body or a function a kernel calls - a `[metal_kernel]` def, a class a
 `[metal_dispatch]` / `[vk_dispatch]` declares, or a fixture the Metal or SPIR-V emitter
@@ -169,9 +170,6 @@ format; writes as a literal a number fixed by one weight format (its kernel form
 or word count per block, a plane stride); or adds or changes a `stamp = "<family>:<fmt>:<form>"`
 kernel class, a `kq_mulmm_<fmt>` or `moe_mulmm_<fmt>` race, a dev-W dequant pass (the pass that
 dequantizes weights into an f16 panel on the device) or a format's twin pick.**
-
-**A diff that calls a `set_gpu_*` or `reset_gpu_*` function of `dasllama/dasllama_core.das`,
-wherever it sits, applies `REVIEW_GPU_RESIDENT.md` too.**
 
 **A diff that bumps `DASLLAMA_RELEASE` (`dasllama/dasllama_version.das`) cites in the PR body the
 maintainer's ruling that rows measured before it can no longer be compared with rows after it.**
