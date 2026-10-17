@@ -506,7 +506,7 @@ def test_metal_support_matrix(t : T?) {
             }
 
             // ===== the dim ladder (M2.6): batch dim caps retired =====
-            // past ADD_RMS_MAX_DIM the batched add+rms runs as the unfused pair, and past the
+            // past ADD_RMS_MAX_DIM the batched add+rms re-reads the columns past its slab, and past the
             // mv8 probe's dim 3072 the B > 4 GEMM tier serves any width — an 8B (dim 4096)
             // batches at every B and a 70B-class kq model (dim 8192) serves all three paths.
             // Both are large-tier: they run only under DASLLAMA_PARITY_FULL (the pre-commit gate).
