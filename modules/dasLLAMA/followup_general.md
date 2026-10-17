@@ -2099,9 +2099,3 @@
     homes, one profiling pass with the per-window stage split on; a model whose pp32768 falls under
     the N-squared expectation set by its global-layer count is investigated to the stage, and the
     stage is fixed in that pass. The rows land in `PERF_LEDGER.md` beside the pp512 rows.
-
-215. **A reserved word used as a parameter or variable name reports `syntax error, unexpected class,
-    expecting $i or name` - the bison token dump, which names no cause.** The parser
-    (`src/parser/ds2_parser.ypp`) catches a keyword token in a name position and reports
-    `'class' is a reserved word and cannot name a parameter`, with the word quoted. A compiler
-    change, not a dasLLAMA one; it sits here because the leg's agents hit it.
