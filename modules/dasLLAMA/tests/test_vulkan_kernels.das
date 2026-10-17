@@ -54,24 +54,30 @@ let private ARM_KHR = 3
 let private ARM_CM2_E = 4
 let private ARM_TOY_STRIP = 5   //! the q8 l-tile toy stamp built with the four-wide decode stripped to the scalar callback
 let private ARM_TOY_TWIN = 6    //! ... and built as the device builds it
+let private ARM_KHR_F32 = 7     //! the staged KHR tile over a file's f32 rows (`F32KhrBatch`), the KHR arm's geometry
 
 def private cell_arm_name(arm : int) : string {
+    if (arm == ARM_KHR_F32) return "khr f32"
     if (arm >= ARM_TOY_STRIP) return arm == ARM_TOY_STRIP ? "stripped toy l" : "twin toy l"
     return arm == ARM_CM2_L ? "l" : (arm == ARM_CM2_M ? "m" : (arm == ARM_CM2_S ? "s" : (arm == ARM_KHR ? "khr" : "e")))
 }
 
 //! the arm helpers stay generic on purpose - a build without the vulkan module must never infer these bodies
 //! 256 is the l stamps' BN default, a column no schedule constant names (the l column is never a schedule piece)
-def private cell_arm_rows_per_wg(arm) => arm == ARM_CM2_L || arm >= ARM_TOY_STRIP ? 256 : int(arm == ARM_CM2_S ? SCHED_S_ROWS : SCHED_M_ROWS)
+def private cell_arm_rows_per_wg(arm) => arm == ARM_CM2_L || arm == ARM_TOY_STRIP || arm == ARM_TOY_TWIN ? 256 : int(arm == ARM_CM2_S ? SCHED_S_ROWS : SCHED_M_ROWS)
 
 def private cell_arm_tc(arm) => arm == ARM_CM2_E ? CM2_TC_E : int64(cell_arm_rows_per_wg(arm))
 
-def private cell_arm_served(arm) => arm == ARM_KHR ? khr_kq_tile_on() : (g_gpu.coopmat_mode == COOPMAT_CM2 && g_gpu.has_coopmat2)
+def private cell_arm_served(arm) => arm == ARM_KHR || arm == ARM_KHR_F32 ? khr_kq_tile_on() : (g_gpu.coopmat_mode == COOPMAT_CM2 && g_gpu.has_coopmat2)
 
 def private cell_arm_set(arm, fmt : int; bufs; sizes; gbits) {
     if (arm == ARM_KHR) {
         if (!khr_cls_ensure(fmt)) panic("the KHR class rail for format {fmt} must engage on a coopmat device")
         return khr_cls_set(fmt, bufs, sizes, gbits)
+    }
+    if (arm == ARM_KHR_F32) {
+        if (!ensure_f32_batch_khr_cls()) panic("the staged f32 tile's class rail must engage on a coopmat device")
+        return set_f32_batch_khr_cls(bufs, sizes, gbits)
     }
     verify(g_gpu.coopmat_mode == COOPMAT_CM2, "a cm2 arm dispatched off cm2 mode - the ladder would hand back the KHR stamp")
     if (arm >= ARM_TOY_STRIP) return arm == ARM_TOY_STRIP ? set_toy_q8_cm2_strip_cls(bufs, sizes, gbits) : set_toy_q8_cm2_twin_cls(bufs, sizes, gbits)
@@ -82,6 +88,8 @@ def private cell_arm_set(arm, fmt : int; bufs; sizes; gbits) {
 def private cell_arm_enc(arm, fmt : int; raw; var h; var s; var pc; groups : int64) {
     if (arm == ARM_KHR) {
         khr_cls_enc(fmt, raw, h, s, pc, groups)
+    } elif (arm == ARM_KHR_F32) {
+        enc_f32_batch_khr_cls(raw, h, s, pc, groups)
     } elif (arm == ARM_TOY_STRIP) {
         enc_toy_q8_cm2_strip_cls(raw, h, s, pc, groups)
     } elif (arm == ARM_TOY_TWIN) {
@@ -2872,6 +2880,31 @@ def test_vkd_q8_khr_batch(t0 : T?) {
                 check_rows(t, "q8 KHR tile split in two k chunks + the reduce vs the CPU oracle", cp |> plane_run(py), y_ref0, cm_bar(y_ref0), d)
             }
             delete y_ref0
+            delete y_ref
+            delete f
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
+[test]
+def test_vkd_f32_khr_batch(t0 : T?) {
+    t0 |> run("the staged KHR tile over a file's f32 rows (f32_batch_khr) == the CPU oracle") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!ensure_q8_batch_cls()) {   // engage the device without touching coopmat rails
+                t |> skip("no Vulkan device")
+                return
+            }
+            if (!khr_kq_tile_on()) {
+                t |> skip("the staged f32 tile needs KHR cooperative matrices at subgroup 32")
+                return
+            }
+            let n = 544   //! seventeen 32-deep k steps, off every 64 and 256 lattice
+            var wqh <- [for (i in range(2 * TILE_CELL_D * n)); float_bits_to_uint(float(hash_word(uint(i) + 71u) % 4001u) * 0.0000317 - 0.0634)]   //! f32 words whose low mantissa bits the stage rounds away
+            var wsh <- [0u, 0u, 0u, 0u]   //! the template's scale binding, which the f32 stage never reads
+            var f <- tile_fixture(n, 4, wqh, wsh, 3u, 5u)
+            var y_ref <- tile_cell_arms(t, "f32", int(KqFmt.q8), f, [ARM_KHR_F32], @@f32f16_gemm_oracle)
             delete y_ref
             delete f
         } else {

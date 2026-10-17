@@ -395,6 +395,13 @@ def f16_gemm_walk(xf, recs : array<uint>; nrec, n, d, blkw : int; var y : array<
     }
 }
 
+//! f32 rows x f16 GEMM oracle (the staged KHR tile over a file's f32 rows): a block is four f32 bit patterns, each weight
+//! rounded to f16 as the tile's stage rounds it
+def f32f16_gemm_oracle(wq : array<uint>; _wsu : array<uint>; xf : array<uint>;
+                       recs : array<uint>; nrec, n, d : int; var y : array<float>) {
+    f16_gemm_walk(xf, recs, nrec, n, d, 4, y) $(sb, e : int) : float => float(float16(uint_bits_to_float(wq[sb * 4 + e])))
+}
+
 //! Q4_K x f16 GEMM oracle (the cm2 k4 tile's shape): per weight d*sc*q - dmin*mn off the repacked planes
 def k4f16_gemm_oracle(wq : array<uint>; wsu : array<uint>; xf : array<uint>;
                       recs : array<uint>; nrec, n, d : int; var y : array<float>) {

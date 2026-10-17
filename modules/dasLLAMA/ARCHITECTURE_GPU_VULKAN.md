@@ -195,7 +195,7 @@ model's first kq set rebuilds it.
 
 ### The tile probe's arms share one descriptor set layout {#khrx-shared-set-layout}
 
-`khrx` is the lever sweep of the KHR kq tile (`ARCHITECTURE_GPU_VULKAN_GEMM.md#khr-mm-kq-tile`) in
+`khrx` is the lever sweep of the KHR kq tile (`ARCHITECTURE_GPU_VULKAN_KHR.md#khr-mm-kq-tile`) in
 `harness/vk_gemm_probe.das` (`ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md#vk-gemm-probe`): eight arms
 timed over one shape. Two are shipped bodies - the KHR class, the reference each compared arm
 is checked against, and the sdot4 kq tile. `ship` is the KHR tile copied with no lever moved,

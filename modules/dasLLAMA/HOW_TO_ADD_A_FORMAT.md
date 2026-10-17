@@ -556,7 +556,7 @@ process); a format whose four-wide row loses to its scalar row ships a twin that
 axes off. Gate: a device-form CPU oracle (`<fmt>f16_gemm_oracle`) and an l/m/s/e cell in
 `tests/test_vulkan_kernels.das`.
 
-The KHR instantiation adds one method (`ARCHITECTURE_GPU_VULKAN_GEMM.md#khr-mm-kq-tile`, its first
+The KHR instantiation adds one method (`ARCHITECTURE_GPU_VULKAN_KHR.md#khr-mm-kq-tile`, its first
 paragraph): on the format template a `def override khr_stage16(blk, e0, sbase : uint) : void`
 under `static_if (KHR)` that writes the weight row's 16 values `e0 .. e0 + 16` of block `blk`
 into `khr_ao[sbase .. sbase + 8)` as f16 pairs, reading the plane as words - `wq4[...]` (`uint4`,
