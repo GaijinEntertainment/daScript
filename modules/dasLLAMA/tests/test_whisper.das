@@ -1595,7 +1595,9 @@ def test_mel_state_reuse_deterministic(t : T?) {
         }
         let g4a_path = path_join(models_dir(), "mmproj-gemma-4-E2B-it-bf16.gguf")
         if (model_available(t, g4a_path)) {
-            var inscope enc <- load_gemma4a_encoder(g4a_path)
+            var inscope g4a_stg <- stage_gemma4a_encoder(g4a_path)   //! minted in memory: the loader would bake a `.dlim` beside the file
+            var inscope enc = Gemma4aEncoder()
+            mint_gemma4a_encoder(g4a_stg, enc)
             var st = Gemma4aState()
             gemma4a_log_mel(enc, samples, 0l, long_length(samples), st)
             var mel1 := st.mel
@@ -1610,7 +1612,9 @@ def test_mel_state_reuse_deterministic(t : T?) {
         }
         let cn_path = path_join(models_dir(), "canary-qwen-2.5b-encoder-f32.bin")
         if (model_available(t, cn_path)) {
-            var inscope cenc <- load_canary_encoder(cn_path)
+            var inscope cn_stg <- stage_canary_encoder(cn_path, false)   //! minted in memory, the f32 lane: no `.dlim` beside the file
+            var inscope cenc = CanaryEncoder()
+            mint_canary_encoder(cn_stg, cenc)
             var cst = CanaryState()
             canary_log_mel(cenc, samples, cst)
             var cmel1 := cst.mel

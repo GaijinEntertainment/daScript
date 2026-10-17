@@ -2583,7 +2583,7 @@ f32-enc/q8-dec serving mode and its `asr_exec_fmt` stamp; the strict token-ident
 pins the simdgroup lane, and its tolerance-graded twin pins the crowns ON and asserts WORD
 equality - the tensor twins' quality gate), the q8-gate CPU-vs-CPU claims
 (CPU-claim cells, wdec knob pinned OFF), and the mel state-reuse determinism cell (gemma4a +
-canary: `gemm_f32` accumulates, so a reused state's `st.reim` must start zeroed - bit-equal
+canary, both encoders minted in memory with no `.dlim`: `gemm_f32` accumulates, so a reused state's `st.reim` must start zeroed - bit-equal
 mels across calls); its ungated cells are the model-free half.
 `test_dasllama_core.das` - model-free: walks the module dependencies in-process; no module
 `dasllama_core` depends on is `audio` or `stbimage`, while `dasllama/dasllama` depends on both.
