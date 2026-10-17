@@ -51,12 +51,14 @@ require math
 //   decode row and the window (`g4_tail_race`): the stream rows;
 // - the select with and without the down-scale arm, no row named
 //   (`select_ds_race`): the picks, then their weights;
-// - the residual step at 1152, 2560, 3840, 5376 and 8192 (`ar_race`,
-//   `ar_arms`): the plain add + norm, the sandwich seam and its no-norm
-//   form as one dispatch against the rms and the add (+ norm) - past
-//   the 4096-float slab against the split chain, and the seam against
-//   a wide-slab bench stamp where its slab holds the row: the stream
-//   rows and, where the step stores one, the f32 next norm;
+// - the residual step at 1152, 2560, 3840, 4608, 5120, 5376 and 8192
+//   (`ar_race`, `ar_arms`): the plain add + norm, the sandwich seam and
+//   its no-norm form as one dispatch against the rms and the add (+
+//   norm) - past the 4096-float slab against the split chain, the
+//   plain step on the window and the decode rows' f16-twin stamps
+//   too, and the seam against a wide-slab bench stamp where its slab
+//   holds the row: the stream rows and, where the step stores one, the
+//   f32 next norm;
 // - the sandwich seam at 256, 128 and 1024 lanes over one and four rows
 //   of the plain pipeline and 512 rows of the f16 twin's, at 1152, 2560,
 //   3840 and 5376 (`seam_lane_race`): the stream rows and the f32 next
@@ -1071,13 +1073,14 @@ class BenchPreAddRmsHX : BenchPreAddRmsT {
 }
 
 //! `MetalPreAddRms` with a slab as wide as the 31B's row (`WIDE_SLAB`), at 256 lanes: the whole row staged, no column re-read
+//! joins `GkAddRmsRows`, the template both homes stamp
 [metal_dispatch(name = "bench_enc_preaddrms_b_wide", pso = "g_bench_pso_preaddrms_wide", tgmem = "BenchPreAddRmsWide_bench_pre_add_rms_msl_tgmem",
     tg = 256, grid = "nrows", params = "nrows : int64")]
 class BenchPreAddRmsWide : BenchPreAddRmsT {
     override SLAB = 5376
 }
 
-//! `MetalPreAddRmsHX` with the wide slab
+//! `MetalPreAddRmsHX` with the wide slab; joins `GkAddRmsRows`, the template both homes stamp
 [metal_dispatch(name = "bench_enc_preaddrms_bhx_wide", pso = "g_bench_pso_preaddrms_hx_wide",
     tgmem = "BenchPreAddRmsHXWide_bench_pre_add_rms_msl_tgmem", tg = 256, grid = "nrows", params = "nrows : int64")]
 class BenchPreAddRmsHXWide : BenchPreAddRmsT {
@@ -1338,16 +1341,57 @@ enum private ArArm {
     lanes256 //! past the slab, the decode rows' one dispatch on the 256-lane builders the rows within the slab take
 }
 
-//! the next norm of `bx`'s rows into `by` (`bh` its f16 twin on the window) in the shape `enc_rms_form` dispatches it
+//! the next norm of `bx`'s rows into `by` (`bh` its f16 twin where `hx`) in the shape `enc_rms_form` dispatches it
 def private ar_next_norm(enc : MetalComputeEncoder?; s : ArStep) {
     let t = s.st
     let np = int64(t.np)
     if (t.np >= 64) {
         pf_enc_rms_hx(enc, t.bx, 0ul, s.bwn, t.by, s.udim, s.ueps, t.bh, np)
+    } elif (t.hx) {
+        enc_rms_bhx(enc, t.bx, 0ul, s.bwn, t.by, s.udim, s.ueps, t.bh, np)
     } elif (t.np == 1) {
         enc_rms(enc, t.bx, 0ul, s.bwn, t.by, s.udim, s.ueps)
     } else {
         enc_rms_b(enc, t.bx, 0ul, s.bwn, t.by, s.udim, s.ueps, np)
+    }
+}
+
+//! the add + norm in one dispatch: `ba`'s rows added onto the stream rows, the next norm under `bw` into `by` (`bh` its twin where
+//! `hx`); `single` takes the one-row grid at one row
+def private ar_add_rms(enc : MetalComputeEncoder?; s : ArStep; ba, bw : MetalBuffer?; var k : GkAddRmsArgs; single : bool) {
+    let t = s.st
+    let np = int64(t.np)
+    if (t.np >= 64) {
+        pf_enc_add_rms_bhx_c(enc, t.bx, ba, bw, t.by, t.bh, k, np)
+    } elif (t.hx) {
+        enc_add_rms_bhx_c(enc, t.bx, ba, bw, t.by, t.bh, k, np)
+    } elif (single && t.np == 1) {
+        enc_addrms_c(enc, t.bx, ba, bw, t.by, k)
+    } else {
+        enc_add_rms_b_c(enc, t.bx, ba, bw, t.by, k, np)
+    }
+}
+
+//! the split arms on `s`: the branch's rms, then the add + norm (`split`), the scaled add and the next norm (`split3`), or the scaled
+//! add alone (`nonorm`)
+def private ar_split_arm(enc : MetalComputeEncoder?; s : ArStep; arm : ArArm; var k : GkAddRmsArgs) {
+    let t = s.st
+    let np = int64(t.np)
+    let n = np * int64(k.dim)
+    if (t.np >= 64) {
+        pf_enc_rms(enc, t.ba, 0ul, s.bwp, s.bt, s.udim, s.ueps, np)
+    } elif (t.np == 1 && arm == ArArm.split3) {
+        enc_rms(enc, t.ba, 0ul, s.bwp, s.bt, s.udim, s.ueps)
+    } else {
+        enc_rms_b(enc, t.ba, 0ul, s.bwp, s.bt, s.udim, s.ueps, np)
+    }
+    if (s.form == ArForm.nonorm || arm == ArArm.split3) {
+        enc_add(enc, t.bx, 0ul, s.bt, 0ul, s.utot, n, s.bosc)
+        if (arm == ArArm.split3) {
+            ar_next_norm(enc, s)
+        }
+    } else {
+        ar_add_rms(enc, s, s.bt, s.bwn, k, false)
     }
 }
 
@@ -1358,64 +1402,41 @@ def private ar_arm(enc : MetalComputeEncoder?; s : ArStep; arm : ArArm) {
     let win = s.st.np >= 64
     let one = s.st.np == 1
     let t = s.st
-    let n = np * int64(k.dim)
     if (s.form == ArForm.plain) {
         k.ascale = 1.0
     }
     if (arm == ArArm.fused && !win && int64(k.dim) > ADD_RMS_MAX_DIM) {
         let plain = s.form == ArForm.plain
-        enc_residual_wide(enc, t.bx, t.ba, plain ? s.bwn : t.bw, t.by, null, !plain, s.form != ArForm.nonorm, k, np)
-        return
-    }
-    if (s.form == ArForm.plain) {
-        if (arm == ArArm.split) {
-            enc_add(enc, t.bx, 0ul, t.ba, 0ul, s.utot, n)
-            ar_next_norm(enc, s)
-        } elif (one) {
-            enc_addrms_c(enc, t.bx, t.ba, s.bwn, t.by, k)
-        } else {
-            enc_add_rms_b_c(enc, t.bx, t.ba, s.bwn, t.by, k, np)
-        }
+        enc_residual_wide(enc, t.bx, t.ba, plain ? s.bwn : t.bw, t.by, t.hx ? t.bh : null, !plain, s.form != ArForm.nonorm, k, np)
+    } elif (s.form == ArForm.plain && arm == ArArm.split) {
+        enc_add(enc, t.bx, 0ul, t.ba, 0ul, s.utot, np * int64(k.dim))
+        ar_next_norm(enc, s)
+    } elif (s.form == ArForm.plain) {
+        ar_add_rms(enc, s, t.ba, s.bwn, k, true)
     } elif (arm == ArArm.wide) {
-        if (win) {
+        if (t.hx) {
             bench_enc_preaddrms_bhx_wide(enc, t.bx, t.ba, t.bw, t.by, t.bh, k, np)
         } else {
             bench_enc_preaddrms_b_wide(enc, t.bx, t.ba, t.bw, t.by, k, np)
         }
-    } elif ((arm == ArArm.fused || arm == ArArm.lanes256) && s.form == ArForm.seam) {
+    } elif (arm != ArArm.fused && arm != ArArm.lanes256) {
+        ar_split_arm(enc, s, arm, k)
+    } elif (s.form == ArForm.seam) {
         if (win) {
             pf_enc_preaddrms_bhx_c(enc, t.bx, t.ba, t.bw, t.by, t.bh, k, np)
+        } elif (t.hx) {
+            enc_preaddrms_bhx_c(enc, t.bx, t.ba, t.bw, t.by, t.bh, k, np)
         } elif (one) {
             enc_preaddrms_c(enc, t.bx, t.ba, t.bw, t.by, k)
         } else {
             enc_preaddrms_b_c(enc, t.bx, t.ba, t.bw, t.by, k, np)
         }
-    } elif (arm == ArArm.fused || arm == ArArm.lanes256) {
-        if (win) {
-            pf_enc_preadd_b_c(enc, t.bx, t.ba, t.bw, k, np)
-        } elif (one) {
-            enc_preadd_c(enc, t.bx, t.ba, t.bw, k)
-        } else {
-            enc_preadd_b_c(enc, t.bx, t.ba, t.bw, k, np)
-        }
+    } elif (win) {
+        pf_enc_preadd_b_c(enc, t.bx, t.ba, t.bw, k, np)
+    } elif (one) {
+        enc_preadd_c(enc, t.bx, t.ba, t.bw, k)
     } else {
-        if (win) {
-            pf_enc_rms(enc, t.ba, 0ul, s.bwp, s.bt, s.udim, s.ueps, np)
-        } elif (one && arm == ArArm.split3) {
-            enc_rms(enc, t.ba, 0ul, s.bwp, s.bt, s.udim, s.ueps)
-        } else {
-            enc_rms_b(enc, t.ba, 0ul, s.bwp, s.bt, s.udim, s.ueps, np)
-        }
-        if (s.form == ArForm.nonorm) {
-            enc_add(enc, t.bx, 0ul, s.bt, 0ul, s.utot, n, s.bosc)
-        } elif (arm == ArArm.split3) {
-            enc_add(enc, t.bx, 0ul, s.bt, 0ul, s.utot, n, s.bosc)
-            ar_next_norm(enc, s)
-        } elif (win) {
-            pf_enc_add_rms_bhx_c(enc, t.bx, s.bt, s.bwn, t.by, t.bh, k, np)
-        } else {
-            enc_add_rms_b_c(enc, t.bx, s.bt, s.bwn, t.by, k, np)
-        }
+        enc_preadd_b_c(enc, t.bx, t.ba, t.bw, k, np)
     }
 }
 
@@ -1477,12 +1498,13 @@ def private ar_plain_ref(dim, np : int) : array<double> {
 
 //! the residual step at width `dim` over `np` rows in `form` (`ar_arms`): the plain add + norm, the sandwich seam and its no-norm
 //! form, the one dispatch - the shipped form, the baseline, checked against the CPU - raced against the split chain; the window's
-//! rows ride the f16 twin's pipelines. The compare region is the stream rows and, where the step stores one, the f32 next norm
-def private ar_race(dim, np : int; form : ArForm; var rows : array<Reading>) {
+//! rows ride the f16 twin's pipelines, the decode rows too under `twin` (a rows site that carries the twin). The compare region
+//! is the stream rows and, where the step stores one, the f32 next norm
+def private ar_race(dim, np : int; form : ArForm; twin : bool; var rows : array<Reading>) {
     let n = np * dim
     var s = ArStep(st = SeamStep(bx = fill_buf(n, 0.5), ba = fill_buf(n, 0.25), by = fill_buf(n, 0.0), bh = metal_new_buffer(g_dev, uint64(n * 2)),
         bw = fill_buf(2 * dim, 0.01), ks = GkAddRmsArgs(dim = uint(dim), add_on = 1u, woff = uint(dim), eps = 1e-6, ascale = 0.75, pre_on = 1u,
-        pwoff = 0u), np = np, hx = np >= 64), bt = fill_buf(n, 0.0), bwp = norm_row_buf(dim, 0), bwn = norm_row_buf(dim, 1),
+        pwoff = 0u), np = np, hx = np >= 64 || twin), bt = fill_buf(n, 0.0), bwp = norm_row_buf(dim, 0), bwn = norm_row_buf(dim, 1),
         bosc = scale_buf(0.75), udim = uniform_u32(uint(dim)), ueps = uniform_f32(1e-6), utot = uniform_u32(uint(n)), form = form)
     var ref <- (form == ArForm.plain ? ar_plain_ref(dim, np) : seam_ref(dim, np, 0.75lf))
     let race <- ar_arms(dim, np, form)
@@ -1490,7 +1512,7 @@ def private ar_race(dim, np : int; form : ArForm; var rows : array<Reading>) {
         ref |> resize(n)
     }
     let what = form == ArForm.plain ? "add + norm" : (form == ArForm.seam ? "sandwich seam" : "sandwich seam no norm out")
-    race_rows("ar dim={dim} {np} rows {what}{np >= 64 ? " hx" : ""}", race.names, ref, rows, $ {
+    race_rows("ar dim={dim} {np} rows {what}{s.st.hx ? " hx" : ""}", race.names, ref, rows, $ {
         fill_pattern(s.st.bx, n, 0.5)
     }, $(var got) {
         got |> push_from(read_floats(s.st.bx, n))
@@ -1508,22 +1530,34 @@ def private ar_race(dim, np : int; form : ArForm; var rows : array<Reading>) {
     }
 }
 
-//! the residual step at the gemma-3-12b, E4B and gemma-4 31B widths and twice the slab: the plain step at a decode row and a
-//! verify's four, the sandwich seam and its no-norm form there and over the 512-row window
+//! the residual step at the gemma-3-12b and E4B widths, past the slab at the two widths a stocked model could take next above
+//! it, the gemma-4 31B's and twice the slab: the plain step at a decode row and a verify's four (and the 512-row window past the
+//! slab), the sandwich seam and its no-norm form there and over the window; past the slab the plain step and the seam again on
+//! the decode rows with the f16 twin beside
 def private ar_rows : array<Reading> {
     var rows : array<Reading>
     if (!seam_bench_psos_init()) {
         rows |> push((us = -1.0lf, cv = 1.0lf))
         return <- rows
     }
-    rows |> reserve(90)
-    for (dim in fixed_array(1152, 2560, 3840, 5376, 8192)) {
+    rows |> reserve(160)
+    for (dim in fixed_array(1152, 2560, 3840, 4608, 5120, 5376, 8192)) {
+        let past = int64(dim) > ADD_RMS_MAX_DIM
         for (np in fixed_array(1, 4)) {
-            ar_race(dim, np, ArForm.plain, rows)
+            ar_race(dim, np, ArForm.plain, false, rows)
+        }
+        if (past) {
+            ar_race(dim, 512, ArForm.plain, false, rows)
         }
         for (np in fixed_array(1, 4, 512)) {
-            ar_race(dim, np, ArForm.seam, rows)
-            ar_race(dim, np, ArForm.nonorm, rows)
+            ar_race(dim, np, ArForm.seam, false, rows)
+            ar_race(dim, np, ArForm.nonorm, false, rows)
+        }
+        if (past) {
+            for (np in fixed_array(1, 4)) {
+                ar_race(dim, np, ArForm.plain, true, rows)
+                ar_race(dim, np, ArForm.seam, true, rows)
+            }
         }
     }
     seam_bench_psos_release()
