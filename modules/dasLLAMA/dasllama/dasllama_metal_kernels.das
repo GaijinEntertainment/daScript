@@ -1447,6 +1447,7 @@ class template MetalEmbedB32T {
     @template_constant Q51 : bool = false
     @template_constant Q40L : bool = false
     @template_constant Q50 : bool = false   //!< a Q5_0 table (q5032): q51's quant block under one d, d * (q + 16 h - 16)
+    @template_constant BE : uint = 32u      //!< a block's weights, KQ_B32_ELEMS (`test_kqformat.das` pins it)
     @template_constant QW : uint = 4u       //!< quant words a block: 5 on q51, q5032 (qh last)
     @template_constant SH : uint = 1u       //!< scale halves a block: 2 on q51 (d then m)
 
@@ -1457,7 +1458,7 @@ class template MetalEmbedB32T {
             return
         }
         let row = gl_WorkGroupID.y
-        let blk = ka.b0 + tok[row] * (ka.dim / 32u) + u / 2u
+        let blk = ka.b0 + tok[row] * (ka.dim / BE) + u / 2u
         let half = u & 1u
         let ob = row * ka.dim + u * 16u
         let d = float(kdh[blk * SH])
@@ -4966,9 +4967,19 @@ def enc_embed_dev(enc : MetalComputeEncoder?; t : Model; btok : MetalBuffer?; to
     }
 }
 
-//! the blocks a per-32 table at element `off` sits past the 16-byte bind below it: eight blocks keep every format's quant
-//! (16 or 20 bytes a block) and scale (2 or 4) binds on 16 bytes, so a table off that grid binds there and its gather skips these
-def b32_bind_rem(off : int64) : int64 => (off / KQ_B32_ELEMS) % 8l
+//! the per-32 blocks of format `fmt` that span a whole number of 16-byte steps in both its quant plane and its scale plane:
+//! a bind every that many blocks sits on the 16-byte grid in both
+def b32_bind_blocks(fmt : KqFmt) : int64 {
+    var k = 1l
+    while ((k * kq_qsb(fmt)) % 16l != 0l || (k * kq_ssb(fmt)) % 16l != 0l) {
+        k++
+    }
+    return k
+}
+
+//! the blocks a per-32 table of format `fmt` at element `off` sits past the 16-byte bind below it (`b32_bind_blocks`): a table
+//! off that grid binds there and its gather skips these
+def b32_bind_rem(off : int64; fmt : KqFmt) : int64 => (off / KQ_B32_ELEMS) % b32_bind_blocks(fmt)
 
 //! The rows of `nrows` token ids (btok at toff) off the table plane `fmt` at element `off`, `width` elements a row under `escale`, into
 //! bx at xoff: the token table's gather and the E-series per-layer table's (layers x ple under sqrt(ple)); the q8 copy's stamp
@@ -4979,7 +4990,7 @@ def enc_embed_table(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; off, wid
         let bemb = blob_of(g_dev, t, off)
         enc_embed(enc, bemb.buf, bemb.boff, btok, bx, bwidth, bescale, width, toff, xoff, nrows)
     } elif (kq_dense_b32(fmt)) {
-        let rem = b32_bind_rem(off)
+        let rem = b32_bind_rem(off, fmt)
         let qp = b32_planes_of(g_dev, t, fmt, off - rem * KQ_B32_ELEMS)
         var ka = EmbedB32Args(dim = uint(width), escale = escale, b0 = uint(rem))
         let units = width / 16l
