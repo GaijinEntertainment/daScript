@@ -3630,12 +3630,14 @@ def test_metal_prefill_kernels(t : T?) {
                 ple_proj_bf16_gate(t, dev, queue, 97, 70, 1, 3, true)
                 ple_proj_bf16_gate(t, dev, queue, 96, 70, 11, 3, false, 1)   //! an even dim off an odd base: every row mid-word
                 ple_proj_bf16_gate(t, dev, queue, 1537, 70, 1, 2, true, 1)   //! the decode column past 256 lanes, an odd dim off an odd base
+                ple_proj_bf16_gate(t, dev, queue, 1536, 70, 1, 3, true, 1)   //! the decode column's halfword walk over whole strides
                 f32_rows_gate(t, dev, queue, 64, 7, 1, 0, false)    //! the float4 lattice: the router's words
                 f32_rows_gate(t, dev, queue, 64, 7, 13, 0, true)
                 f32_rows_gate(t, dev, queue, 66, 7, 1, 0, false)    //! a dim off the lattice: the element walk
                 f32_rows_gate(t, dev, queue, 66, 7, 13, 0, true)
                 f32_rows_gate(t, dev, queue, 64, 7, 3, 2, false)    //! a base off the lattice
                 f32_rows_gate(t, dev, queue, 515, 5, 9, 1, true)    //! past the blocked stamp's lanes, an odd dim off an odd base
+                f32_rows_gate(t, dev, queue, 515, 5, 1, 1, false)   //! the one-column walk past whole strides of its 256 lanes
                 geglu_side_gate(t, dev, queue, 64, 3, 2, 5)
                 ple_finish_gate(t, dev, queue, 3, 64, 5)
                 ple_finish_gate(t, dev, queue, 35, 256, 2)   //! the E2B's slices
@@ -4235,6 +4237,7 @@ def private ple_finish_gate(t : T?; var dev, queue; nlayers, ple, npos : int) {
                 }
             }
         }
+        t |> success(moved_off(want, side, 0, BAR_FP), "{tag}: the finished rows moved off the gathered side rows")
         var ka = ple_fin_args(int64(ple), int64(dim), eps)
         let bproj = mc |> in_(proj)
         let bpn = mc |> in_(pnorm)

@@ -1141,10 +1141,11 @@ def private kernels_sum(names : array<string>) : int64 {
     return n
 }
 
-//! `kernels`: the stamps only the carrier's format at its site dispatches - their summed count rises over the row
-[cold_path, unused_argument(t, path, tag, hetero_hidden, tokexact, bar, arm, kernels)]   // off-Apple the gated body is empty
+//! `kernels`: the stamps only the carrier's format at its site dispatches - their summed count rises over the row; `ple_fmt`,
+//! where set, the PLE table's disk format, whose tag the load keeps
+[cold_path, unused_argument(t, path, tag, hetero_hidden, tokexact, bar, arm, kernels, ple_fmt)]   // off-Apple the gated body is empty
 def private gemma4e_row(t : T?; path, tag : string; hetero_hidden : bool = false; tokexact : bool = true; bar : float = 8.0;
-                        arm : string = "fam-gemma4e"; kernels : array<string> = array<string>()) {
+                        arm : string = "fam-gemma4e"; kernels : array<string> = array<string>(); ple_fmt : int = -1) {
     // gemma-4 E-series (E4B): PLE (per-layer embeddings — MetalNeed.ple) + cross-layer KV
     // sharing (the last 18 layers are Q-only and alias layer 22/23's slab/panels). Decode,
     // prefill and the batched step ENGAGE on the blob twin; the batched step is compared row
@@ -1155,6 +1156,10 @@ def private gemma4e_row(t : T?; path, tag : string; hetero_hidden : bool = false
         }
         var tr <- load_model_(path, QuantMode.q8)
         tr.config.seq_len = min(tr.config.seq_len, 512l)
+        if (ple_fmt >= 0) {
+            to_log(LOG_INFO, "{tag}: the PLE table's format tag {tr.ple_emb_fmt}\n")
+            t |> equal(int(tr.ple_emb_fmt), ple_fmt, "{tag}: the PLE table keeps its disk format's tag ({tr.ple_emb_fmt})")
+        }
         let want_bits = (MetalNeed.neox | MetalNeed.qk_norm | MetalNeed.v_norm | MetalNeed.attn_scale |
             MetalNeed.sliding | MetalNeed.pre_post_norm | MetalNeed.out_scale | MetalNeed.geglu |
             MetalNeed.ple | MetalNeed.qd_neq_dim)
@@ -1378,6 +1383,7 @@ def private gemma4e_row(t : T?; path, tag : string; hetero_hidden : bool = false
         cont_logits_cell(t, tr, trg, "{tag}/q8/f16", bar)
         if (!empty(kernels)) {
             let fk = kernels_sum(kernels) - fk0
+            to_log(LOG_INFO, "{tag}: the site's format stamps dispatched ({kernels}: {fk})\n")
             t |> success(fk > 0l, "{tag}: the site's format stamps dispatched ({kernels}: {fk})")
         }
         delete trg
@@ -2262,17 +2268,24 @@ def test_metal_family_matrix(t : T?) {
             // the file's rows sit closer together (the batch cell's two rows 6.6 apart), so its bar is 4.0 (reads 0.6 to 1.3)
             gemma4e_row(t, path_join(models_dir(), "gemma-4-E2B-it-Q4_0.gguf"), "gemma4e-e2b-q40", true, false, 4.0, "fam-gemma4e-q40",
                 ["MetalKqGemvQ40_metal_kq_gemv_iq4", "MetalKqMvB2Q40_metal_kq_mv_iq4", "MetalKqMvB2Q40H_metal_kq_mv_iq4"])
-            // ... and the format carriers off the E2B Q8_0: the token and PLE tables Q6_K and IQ4_XS (the gather family's K-quant and
-            // IQ stamps at width layers x ple, which the token table's gather shares), the per-layer gate and projection planes Q6_K and
-            // Q5_0 (no other plane of the file carries the format, so the stamps count the site alone)
-            for (carrier in [(file = "gemma-4-E2B-it-emb-Q6_K-local.gguf", tag = "gemma4e-e2b-emb-q6k", kernels <- ["MetalEmbedK6_metal_embed_kq"]),
-                             (file = "gemma-4-E2B-it-emb-IQ4_XS-local.gguf", tag = "gemma4e-e2b-emb-iq4xs", kernels <- ["MetalEmbedIq4xs_metal_embed_kq"]),
+            // ... and the format carriers off the E2B Q8_0: the token and PLE tables Q6_K, IQ4_XS, Q5_0 and Q5_1 (the gather family's
+            // K-quant, IQ and per-32 stamps at width layers x ple, which the token table's gather shares), the per-layer gate and
+            // projection planes Q6_K and Q5_0 (no other plane of the file carries the format, so the stamps count the site alone)
+            for (carrier in [(file = "gemma-4-E2B-it-emb-Q6_K-local.gguf", tag = "gemma4e-e2b-emb-q6k", kernels <- ["MetalEmbedK6_metal_embed_kq"],
+                              fmt = int(KqFmt.k6)),
+                             (file = "gemma-4-E2B-it-emb-IQ4_XS-local.gguf", tag = "gemma4e-e2b-emb-iq4xs", kernels <- ["MetalEmbedIq4xs_metal_embed_kq"],
+                              fmt = int(KqFmt.iq4xs)),
+                             (file = "gemma-4-E2B-it-emb-Q5_0-local.gguf", tag = "gemma4e-e2b-emb-q50",
+                              kernels <- ["MetalEmbedB32Q5032_metal_embed_b32"], fmt = int(KqFmt.q5032)),
+                             (file = "gemma-4-E2B-it-emb-Q5_1-local.gguf", tag = "gemma4e-e2b-emb-q51",
+                              kernels <- ["MetalEmbedB32Q51_metal_embed_b32"], fmt = int(KqFmt.q51)),
                              (file = "gemma-4-E2B-it-ple-Q6_K-local.gguf", tag = "gemma4e-e2b-ple-q6k",
-                              kernels <- ["metal_kq_gemv_k6", "MetalKqMvB2K6_metal_kq_mv_k6"]),
+                              kernels <- ["metal_kq_gemv_k6", "MetalKqMvB2K6_metal_kq_mv_k6"], fmt = -1),
                              (file = "gemma-4-E2B-it-ple-Q5_0-local.gguf", tag = "gemma4e-e2b-ple-q50",
                               kernels <- ["metal_kq_gemv_q5032", "metal_kq_gemv_q5032_ks", "MetalB32MvB2Q5032_metal_b32_mvb",
-                                          "MetalB32MvB2Q5032Ks_metal_b32_mvb"])]) {
-                gemma4e_row(t, path_join(models_dir(), carrier.file), carrier.tag, true, false, 4.0, "fam-{carrier.tag}", carrier.kernels)
+                                          "MetalB32MvB2Q5032Ks_metal_b32_mvb"], fmt = -1)]) {
+                gemma4e_row(t, path_join(models_dir(), carrier.file), carrier.tag, true, false, 4.0, "fam-{carrier.tag}", carrier.kernels,
+                    carrier.fmt)
             }
             // gpt-oss-20b (Wave C stage 4): mx4 experts + sinks + softmax_weight + biases
             gptoss_row(t, path_join(models_dir(), "gpt-oss-20b-mxfp4.gguf"))
