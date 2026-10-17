@@ -14,8 +14,8 @@ calls - directly or through any chain of calls - or is reachable from one of tho
 driver of that tower or its ASR decoder dispatches, a kernel-argument struct such a driver fills,
 or a kernel template such a class stamps (instantiates into a concrete kernel); the Metal tower is
 also reached by a touch of `dasllama/dasllama_metal_asr_dec.das` or
-`dasllama/dasllama_metal_common.das`. An edit that changes no compiled code - a comment, a doc
-citation - reaches no tower. The TTS seat cells are `test_kitten_synthesis_metal` and
+`dasllama/dasllama_metal_common.das`. An edit that changes no compiled code - a comment, an
+`[arch(at=...)]` citation - reaches no tower. The TTS seat cells are `test_kitten_synthesis_metal` and
 `test_kitten_oracle` in `tests/test_tts_kitten.das`, `test_kokoro_synthesis_metal` and
 `test_kokoro_oracle` in `tests/test_tts_kokoro.das`, and `test_pocket_codec_metal`,
 `test_pocket_codec_metal_served`, `test_pocket_frames_metal`, `test_pocket_frames_metal_served`,
@@ -44,7 +44,7 @@ reaches the ASR decoder with no line of its file touched.
 `test_qwen3a_vulkan_front` in `tests/test_audio.das`, `tests/test_vulkan_tower_kernels.das`, the
 TTS kernel gates `tests/test_vulkan_tts_kernels.das`, `tests/test_vulkan_tts_conv_kernels.das`,
 `tests/test_vulkan_tts_source_kernels.das` and `tests/test_vulkan_tts_pocket_kernels.das`, and
-the TTS seat cells, which serve through the Vulkan TTS driver there; each
+the TTS seat cells; each
 named `test_*` cell sees the counter of every hook it covers rise.**
 
 **A change to `dasllama/dasllama_vulkan_asr_dec.das`, to a kernel class it dispatches, or to a
@@ -83,15 +83,15 @@ call site skips when the hook serves.
 compute changes that CPU code the same way, in the same diff.**
 
 **A diff that adds or changes a family's chain in the Metal tower or in the Metal ASR-decoder
-driver (`dasllama/dasllama_metal_asr_dec.das`) leaves every stage of that family's served chain -
-the mel, the front, the blocks, the tail, the cross-KV and the decode step - on the device for
-every model and every weight lane the family serves, apart from the returns to the CPU
-`ARCHITECTURE_GPU_TOWER.md#tower-cpu-returns` states.** A stage on the CPU behind a Metal chain
-reads as served and sets the whole chain's rate.
-
-**A diff that leaves a stage of a Metal tower or ASR-decoder chain on the CPU for a reason
-`ARCHITECTURE_GPU_TOWER.md#tower-cpu-returns` does not state files it in `followup_metal.md`, with
-the stage and the model named, in the same change.**
+driver (`dasllama/dasllama_metal_asr_dec.das`) runs every stage of that family's served chain - the
+mel, the front, the blocks, the tail, the cross-KV and the decode step - on the device, for every
+model and weight lane the family serves, whenever a Metal device is present, the stage's knob is on
+(`DASLLAMA_METAL_TOWER`; `DASLLAMA_METAL_WDEC` for the cross-KV; both `DASLLAMA_METAL_WDEC` and
+`DASLLAMA_METAL_WDEC_STEP` for the decode step), the decoder is at or above the decode step's width
+floor (`set_metal_wdec_step_min_d`), and the stage's command buffer succeeds; a stage it leaves on
+the CPU under those conditions is filed in `followup_metal.md`, with the stage and the model named,
+in the same change.** A stage on the CPU behind a Metal chain reads as served and sets the whole
+chain's rate.
 
 **A diff that changes what a TTS seat's chain computes in a tower driver applies `REVIEW_TTS.md`
 too.**
