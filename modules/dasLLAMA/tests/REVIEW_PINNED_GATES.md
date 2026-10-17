@@ -113,19 +113,18 @@ order; a new input row on an axis the cell already asserts is not an axis gained
 
 **A diff that widens a pinned test cell's tolerance, swaps its comparison for one more outputs
 pass, rewrites an expected value without updating that cell's pinned-set entry in the same change,
-drops its input, or drops a `run.das` suite listing that reaches it is a defect - keep the cell's
-bar, comparison, expected values, input and suite listing, and fix the code that fails them
-instead.**
+drops its input, or drops a `run.das` suite listing that reaches it is a defect - fix the code
+that fails the cell instead.**
 
 **A diff that removes a pinned test cell's assert while the code it checks stays adds to the same
 cell, in the same change, an assert that holds the same values to an equal or tighter bound, with
 its control (an extra assert in the same cell proving the compare can fail).**
 
-**A diff that deletes the kernel or function a pinned test cell's assert checks adds, in the same
-change, an assert holding the replacement's output to an equal or tighter bound, with its control,
-to a pinned cell testing the replacement - or names, in the old cell's pinned-set entry, the pinned
-cell that already holds it so; a deletion with no replacement drops that assert's axis from the
-cell's entry.**
+**A diff that deletes the kernel or function a pinned test cell's assert checks and routes its
+callers to other code - the replacement - adds, in the same change, an assert holding the
+replacement's output to the deleted assert's bound or tighter, with its control, to a pinned cell
+testing the replacement, or names in the old cell's pinned-set entry the pinned cell that already
+asserts the replacement's output to that bound.**
 
 **A diff that adds a cell or an assert whose expected value must be kept in step with something
 maintained outside the cell - a document, a checked-in table, a committed artifact's form, a

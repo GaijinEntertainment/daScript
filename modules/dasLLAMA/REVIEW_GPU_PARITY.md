@@ -50,12 +50,13 @@ run - and, for a `tests/run.das` run, the cell that read it; an entry crediting 
 cell that does not produce it is a defect.**
 
 **A diff that cites Metal parity evidence, or Metal driver-against-itself evidence, whose GPU
-side is a decode, prefill or draft step (a drafter's step proposing the next token), with neither
-a cell assert or logged before/after reading, across every GPU call whose reading it cites, of one
-of these counters rising - `metal_decode_stats`' `decodes`, `metal_batch_decode_stats`' `steps`,
-`metal_prefill_stats`' `prefills`, or a `metal_kernel_coverage_of` count of a kernel only the
-device-served step dispatches - nor a cell assert of `gemma_draft_step_gpu` returning true, is a
-defect.** Without one of these the run may have measured the CPU.
+side is a decode, prefill or draft step (a drafter's step proposing the next token) is a defect
+unless a cell assert or a logged before/after reading, across every GPU call whose reading it
+cites, shows one of these counters rising - `metal_decode_stats`' `decodes`,
+`metal_batch_decode_stats`' `steps`, `metal_prefill_stats`' `prefills`, or a
+`metal_kernel_coverage_of` count of a kernel only the device-served step dispatches - or, for a
+draft step only, a cell assert that the drafter's GPU step call (`gemma_draft_step_gpu` for gemma)
+returned true.** Without one of these the run may have measured the CPU.
 
 **A diff that cites Metal parity or driver-against-itself evidence of the Metal tower driver or
 the ASR-decoder driver (`dasllama/dasllama_metal_asr_dec.das`) with no cell assert or logged
