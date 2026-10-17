@@ -1,4 +1,4 @@
-expect 30302
+expect 30341
 options gen2
 require spirv/spirv_shader
 require spirv/spirv_builtins public
