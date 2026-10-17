@@ -369,8 +369,9 @@ qwen35 rows open on the format census of their blob twin, every site the file ca
 is the Flash-Next UD-IQ4_XS served image alone - the planar file and the image do not fit the box together - its Metal
 prefill and decode token for token the file's frozen counting fixture, the drivers' counters rising and no decline,
 PARITY_FULL-gated). The E2B format carriers have their own rows: `fam-gemma4e-q40` (the Q4_0 file) and `fam-<carrier.tag>`
-(built from the carrier list's tag: `fam-gemma4e-e2b-emb-q6k fam-gemma4e-e2b-emb-iq4xs fam-gemma4e-e2b-ple-q6k
-fam-gemma4e-e2b-ple-q50`); `--arm fam-gemma4e` selects them all.
+(built from the carrier list's tag: `fam-gemma4e-e2b-emb-q6k fam-gemma4e-e2b-emb-iq4xs fam-gemma4e-e2b-emb-q50
+fam-gemma4e-e2b-emb-q51 fam-gemma4e-e2b-ple-q6k fam-gemma4e-e2b-ple-q50`; an emb carrier's row also asserts the PLE table's
+format tag); `--arm fam-gemma4e` selects them all.
 
 Metal format census (`test_metal_format_census.das`, entry below): `census-iq4xs census-tied
 census-f16 census-iq3s4 census-iq3s4-moe` and the per-32 mints `census-q51 census-iq4nl32
@@ -581,7 +582,7 @@ under a sliding window (inside one slice, cutting a slice, wider than every stre
 logit that differs head to head and the logit cap, on the float, quantized and wide stamps. The
 gemm file's device pair arms (`attn_qk_mm_gate` with `pair_mt`, `attn_dev_pair_gate`) run both
 tile heights at a head of 96 too - QK's reduction width is the head, AV's 64-wide tiles plus the
-32-column tail stamp - and the misc file's `embed_kq_gate` the token-table gather of every K-quant format the Metal tier serves (three rows off the engine's own plane-row dequant, bit for bit), `embed_b32_gate` the per-32 gather (q51, iq4nl32, q4032, q5032; three rows against `dequant_b32_plane_block`, bit for bit, at 96 wide and at 2048 wide past a whole other table's blocks - an untied table's offset) and `embed_f32_gate` the greedy chain's fp32-table gather (the
+32-column tail stamp - and the misc file's `embed_kq_gate` the token-table gather of every K-quant format the Metal tier serves (three rows off the engine's own plane-row dequant, bit for bit), `embed_b32_gate` the per-32 gather (q51, iq4nl32, q4032, q5032; three rows against `dequant_b32_plane_block`, bit for bit, at 96 wide and at 2048 wide past a whole other table's blocks - an untied table's offset - and at 96 and 288 wide off the 16-byte grid, bound on the grid below as `enc_embed_table` binds it, the blocks past the bind asserted and both binds asserted on 16 bytes) and `embed_f32_gate` the greedy chain's fp32-table gather (the
 row gather at one row under the embed scale) at a 96-wide row and past a lead of foreign floats. The gemv file's
 small-batch cells run every superblock format's eight-column form at 9 and 16 rows too - two column groups in one
 dispatch over an x of the live rows alone - and every kernel cell of the iq4 family carries the iq3s4 stamps (format 35:
@@ -591,9 +592,12 @@ columns, pad columns and two column groups, y rows past `d`, on the two-row stam
 64-block row among them) bit for bit against the same form's one-row GEMV a row at a time over x off
 the dyadic lattice, the GEMV within a double dot's envelope, and the routed GEMV (`moe_b32_rows_gate`: q51, iq4nl32, q4032, q5032 and mx4's
 E8M0 path) over several streams in one dispatch bit for bit against one stream a dispatch; the E-series pre-step's cells
-(`ple_proj_bf16_gate`: the bf16 word form of the router GEMV on both stamps - eight columns a simdgroup, and the decode
-column's threadgroup a row at 1536 wide - past a lead of NaN pairs, exact against the dot in double, the poisoned lead
-element the control; `geglu_side_gate`, `ple_finish_gate` - the finish's `XSCALE` stamp (`GkPleFinish`), the finish without the
+(`ple_proj_bf16_gate`: the bf16 rows through `enc_ple_proj_bf16_rows` - the word-pair stamps at an even dim and base, eight
+columns a simdgroup and the decode column's threadgroup a row at 1536 wide, and the halfword stamps at an odd dim or base,
+1537 and 1536 wide on the decode column past whole strides - past a lead of NaN halves with a NaN word after the rows, exact
+against the dot in double, the poisoned lead element the control; `f32_rows_gate`: the f32 rows through `enc_f32_rows_gemv` -
+the float4 router stamps on the lattice, the element-walk stamps off it (dim 66, base 2, dim 515 on an odd base, the one-column
+walk past whole strides) - NaN past both row ends, exact against the dot in double, the poisoned lead element the control; `geglu_side_gate`, `ple_finish_gate` - the finish's `XSCALE` stamp (`GkPleFinish`), the finish without the
 prescale its control); the side rows' gather rides the token-table family, the misc file's embed gates. The prefill file's `qk_rope_gate`
 carries the window's V arms (V off the pre-norm k rows, the v-norm in place, the V panel bit for bit untouched with neither), and
 the misc file's `add_rms_gate` every residual stamp (`GkAddRmsRows`: the plain step, the sandwich seam, the seam with no norm
@@ -612,7 +616,9 @@ bytes, a repeat of either is its cached buffer, two cached regions counted) and
 `test_metal_ring_slack_reload` (a model swap returns the mirror rings' slack to its floor and stales
 the steps encoded over the old layout; a swap with the slack at its floor moves no epoch), and the prefill file's `test_moe_padded_bound` (the bucket panel's
 row bound against the rail's own padded prefix over seeded routings, reached exactly where every
-routed expert is distinct, a bound for one row fewer sitting under the rail's pad as the control)
+routed expert is distinct, a bound for one row fewer sitting under the rail's pad as the control), `test_pf_bf16_tile_pick`
+(the window's pre-step projection takes the bf16 tile at a dim of whole 32-element chunks and layers x ple of whole 64-row
+tiles, the position-blocked GEMV off either)
 and `test_resident_panel_charge` (the resident panel registry on the
 driver's device: an uncharged ask makes its panel and charges nothing, the same key answers again,
 another size under it is refused, a charged ask counts its bytes exactly when the budget serves it,
