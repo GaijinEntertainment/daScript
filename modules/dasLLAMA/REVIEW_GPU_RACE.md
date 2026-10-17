@@ -66,6 +66,11 @@ ranking covers - or names, in the document that records the figure, the producti
 served rows measure each untimed kind.** A layer kind is one weight matrix a layer multiplies by -
 qkv, w13, w2, an expert stack - whose shape differs from the others'.
 
+**A diff that applies a decided ranking to a kernel no arm of that race dispatches - gives it the
+winning arm's lane count, tile or form - adds an arm dispatching that kernel to the race, or names,
+in the document that records the figure, the production run whose served rows measure it, in the
+same change.** A ranking holds only for the kernels its arms timed.
+
 **A diff that widens the gate admitting ranking inputs to a kernel whose ranking is decided times
 the ranked arms at a newly admitted input, at each end when the new admission spans a range, in
 the same change.** The widened gate otherwise applies the ranking at values it was never ranked
@@ -110,8 +115,9 @@ clock charges the clock's ramp-up to the arm that ran it.
 timed encoder in an arm of a race whose ranking is decided, makes each timed encoder issue its
 dispatches back to back.** An encoder that leaves gaps between its dispatches times an idle clock.
 
-**A diff never records the figure of a race whose code the tree does not hold - it lands the
-race's code in the same change.** A figure without its race cannot be re-run.
+**A diff never records a figure comparing two candidates for one computation, however it was
+timed - a race in one process or a run on each of two builds - whose timing code the tree does not
+hold; it lands that code in the same change.** A figure without its race cannot be re-run.
 
 **A diff that replaces or removes a race whose figure a document carries re-measures that figure
 with a race the tree holds, deletes the figure, or moves the old race under `harness/`, in the
