@@ -3,11 +3,16 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 docs: `dasMetal/ARCHITECTURE.md`, `dasSpirv/ARCHITECTURE.md`, `dasSpirv/ARCHITECTURE_COOPMAT.md`.
 A kernel is a function carrying `[metal_kernel]`, `[spirv_kernel]`, or an annotation from
-`dasSpirv`, `dasVulkan` or `dasMetal` whose name ends in `_shader`. A global-rooted-array read is a
-module global, a `@workgroup` array or a `self.<member>` resource read in a kernel body or a `def`
-it calls; slack is an allocation past a region's end that the kernel's module-root
+`dasSpirv`, `dasVulkan` or `dasMetal` whose name ends in `_shader`. A global-rooted-array read is a read, in a
+kernel body or a `def` it calls, of a module global, a `@workgroup` array or a `self.<member>`
+resource; slack is an allocation past a region's end that the kernel's module-root
 `ARCHITECTURE*.md` names. A kernel-model capability is a construct a kernel body may use - an op,
-a type, an attribute, a memory class - that an emitter lowers.
+a type, an attribute, a memory class - that an emitter lowers. Emitted shape is the structure of
+the emitted kernel - its signature, its parameter attributes and binding numbers, its statement
+forms - and the constants that structure carries: a tile, an unroll width, a SPIR-V kernel's local
+size (the `LocalSize` execution mode the SPIR-V words carry), the extent of a local or `@workgroup`
+array; a grid and a Metal threadgroup size are dispatch arguments, read at the encoder call site,
+and are not emitted shape.
 
 **A kernel body that computes on a marker struct with anything but the device ops it exists for -
 the coopmat and `tmm2d` load, multiply-accumulate, convert and store builtins with the layout or
@@ -63,18 +68,12 @@ or, for a no-change claim, that the artifacts before and after the diff matched.
 what the emitted text contains or leaves out is a claim about the emitted shape whatever das
 mechanism produces it; a statement whose subject is a das construct (a `static_if` arm, a template
 constant) and that says nothing of the emitted text or words is not one, and a section moved between
-architecture docs with its text unchanged makes no new claim. Emitted shape is the structure of
-the emitted kernel - its signature, its parameter attributes and binding numbers, its statement
-forms - and the constants that structure carries: a tile, an unroll width, a SPIR-V kernel's local
-size (the `LocalSize` execution mode the SPIR-V words carry), the extent of a local or `@workgroup`
-array. A grid is not one, and neither is a Metal threadgroup size - both are dispatch arguments,
-read at the encoder call site.
+architecture docs with its text unchanged makes no new claim.
 
-**A diff that gives one emitter a kernel-model capability the other lacks - by teaching that
-emitter a construct, or by adding a kernel body that uses a construct only that emitter lowers -
-adds the capability to the other emitter, or leaves the shared ledger
-(`dasMetal/ARCHITECTURE.md#kernel-model-asymmetry-ledger`) naming it, under the row that names its
-family or a row the diff adds.** A
+**A diff that teaches one emitter a kernel-model capability the other lacks, or adds a kernel body
+that uses a capability only one emitter has, adds that capability to the other emitter or leaves
+the shared ledger (`dasMetal/ARCHITECTURE.md#kernel-model-asymmetry-ledger`) naming it, under the
+row that names its family or a row the diff adds.** A
 kernel-model capability is present on an emitter when the emitted text or words carry its effect -
 an emitter that accepts the construct and emits nothing for it does not have it - and a family is
 the set of constructs one ledger row names.
