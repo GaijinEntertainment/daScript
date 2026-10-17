@@ -295,7 +295,7 @@ def private embed_b32_gate(t : T?; var dev, queue; f : KqFmt; dim, vocab, lead :
         let btok = mc |> in_plain([0x7FFFFFFFu, uint(toks[0]), uint(toks[1]), uint(toks[2])])
         let bxo = mc |> out_words(4 * dim, PAD_SENTINEL)
         let rem = int(b32_bind_rem(int64(lead) * KQ_B32_ELEMS))
-        var ka = EmbedB32Args(dim = uint(dim), nsb = uint(nb), escale = escale, b0 = uint(rem))
+        var ka = EmbedB32Args(dim = uint(dim), escale = escale, b0 = uint(rem))
         let soff = uint64((lead - rem) * sb)
         let qoff = uint64((lead - rem) * qb)
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {

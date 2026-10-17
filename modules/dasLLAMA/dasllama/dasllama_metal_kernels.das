@@ -1287,10 +1287,10 @@ struct EmbedKqArgs {
     escale : float   //!< embed_scale (gemma: sqrt(dim); 1.0 elsewhere)
 }
 
-//! the per-32 gather's args: the K-quant gather's, the row's 32-blocks in `nsb`, and the table's first block past its bind
+//! the per-32 gather's args: the row width (its 32-blocks derived in the body), the embed scale, and the table's first block
+//! past its bind
 struct EmbedB32Args {
-    dim : uint
-    nsb : uint
+    dim : uint       //!< the table row width, whole 32-blocks
     escale : float
     b0 : uint        //!< `b32_bind_rem`'s blocks: the bind sits on the 16-byte grid below the table
 }
@@ -1457,7 +1457,7 @@ class template MetalEmbedB32T {
             return
         }
         let row = gl_WorkGroupID.y
-        let blk = ka.b0 + tok[row] * ka.nsb + u / 2u
+        let blk = ka.b0 + tok[row] * (ka.dim / 32u) + u / 2u
         let half = u & 1u
         let ob = row * ka.dim + u * 16u
         let d = float(kdh[blk * SH])
@@ -4981,7 +4981,7 @@ def enc_embed_table(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; off, wid
     } elif (kq_dense_b32(fmt)) {
         let rem = b32_bind_rem(off)
         let qp = b32_planes_of(g_dev, t, fmt, off - rem * KQ_B32_ELEMS)
-        var ka = EmbedB32Args(dim = uint(width), nsb = uint(width / KQ_B32_ELEMS), escale = escale, b0 = uint(rem))
+        var ka = EmbedB32Args(dim = uint(width), escale = escale, b0 = uint(rem))
         let units = width / 16l
         let slot = int(fmt)
         kq_tile_stamp(slot, "!b32", "embed") <| $() {   //! the per-32 table gather (`MetalEmbedB32T`) stamps the per-32 formats alone
@@ -7158,7 +7158,8 @@ class template MetalPleProjBf16HwT : MetalRouterGemvT {
     override BF16 = true
 }
 
-//! the halfword walk's decode-column stamp (`MetalPleProjBf16HwT`), a threadgroup of 256 a row
+//! the halfword walk's decode-column stamp of the template both homes stamp (`GkRouterGemv`, through `MetalPleProjBf16HwT`),
+//! a threadgroup of 256 a row
 [metal_dispatch(name = "enc_ple_proj_bf16_hw_one", pso = "g_pso_ple_proj_bf16_hw_one", tgmem = "metal_ple_proj_bf16_hw_one_msl_tgmem", tg = 256, grid = "ne, nst", params = "ne : int64, nst : int64")]
 class MetalPleProjBf16HwOne : MetalPleProjBf16HwT {
     override NC = 1
@@ -7169,7 +7170,8 @@ class MetalPleProjBf16HwOne : MetalPleProjBf16HwT {
     }
 }
 
-//! the halfword walk's position-blocked stamp (`MetalPleProjBf16HwT`), a simdgroup a row and eight columns a simdgroup
+//! the halfword walk's position-blocked stamp of the template both homes stamp (`GkRouterGemv`, through `MetalPleProjBf16HwT`),
+//! a simdgroup a row and eight columns a simdgroup
 [metal_dispatch(name = "enc_ple_proj_bf16_hw", pso = "g_pso_ple_proj_bf16_hw", tg = 128, grid = "ne/4, nst/8", params = "ne : int64, nst : int64")]
 class MetalPleProjBf16Hw : MetalPleProjBf16HwT {
     override ROW_WG = false
@@ -7204,7 +7206,8 @@ class template MetalF32RowsT : MetalRouterGemvT {
     typedef XT = float
 }
 
-//! the f32 rows' one-column stamp, a threadgroup of 256 a row as the f32 router's (`MetalF32RowsT`)
+//! the f32 rows' one-column stamp of the template both homes stamp (`GkRouterGemv`, through `MetalF32RowsT`), a threadgroup
+//! of 256 a row as the f32 router's
 [metal_dispatch(name = "enc_f32_rows_one", pso = "g_pso_f32_rows_one", tgmem = "metal_f32_rows_one_msl_tgmem", tg = 256, grid = "ne, nst", params = "ne : int64, nst : int64")]
 class MetalF32RowsOne : MetalF32RowsT {
     override NC = 1
@@ -7215,7 +7218,8 @@ class MetalF32RowsOne : MetalF32RowsT {
     }
 }
 
-//! the f32 rows' position-blocked stamp, a simdgroup a row and eight columns a simdgroup (`MetalF32RowsT`)
+//! the f32 rows' position-blocked stamp of the template both homes stamp (`GkRouterGemv`, through `MetalF32RowsT`), a
+//! simdgroup a row and eight columns a simdgroup
 [metal_dispatch(name = "enc_f32_rows_b", pso = "g_pso_f32_rows_b", tg = 128, grid = "ne/4, nst/8", params = "ne : int64, nst : int64")]
 class MetalF32RowsB : MetalF32RowsT {
     override ROW_WG = false
