@@ -72,7 +72,7 @@ architecture docs with its text unchanged makes no new claim.
 
 **A diff that teaches one emitter a kernel-model capability the other lacks, or adds a kernel body
 that uses a capability only one emitter has, adds that capability to the other emitter or leaves
-the shared ledger (`dasMetal/ARCHITECTURE.md#kernel-model-asymmetry-ledger`) naming it, under the
+the shared ledger (`dasMetal/ARCHITECTURE_PARITY.md`) naming it, under the
 row that names its family or a row the diff adds.** A
 kernel-model capability is present on an emitter when the emitted text or words carry its effect -
 an emitter that accepts the construct and emits nothing for it does not have it - and a family is

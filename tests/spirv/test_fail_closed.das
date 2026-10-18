@@ -59,6 +59,8 @@ def private check_rejects_once(t : T?; fixture, needle : string) {
 [test]
 def test_fail_closed_rejections(t : T?) {   // nolint:STYLE038 — flat one-check-per-fixture list
     t |> run("emitter rejects shader-illegal constructs cleanly") <| @(t : T?) {
+        check_rejects(t, "_fc_texture_grad_array_gradient", "textureGrad")
+        check_rejects(t, "_fc_texture_grad_scalar_gradient", "textureGrad")
         check_rejects(t, "_fc_call", "cannot call 'safe_acos'")
         check_rejects(t, "_fc_global", "unsupported global 'g_scale'")
         check_rejects(t, "_fc_image_format", "unsupported @format")

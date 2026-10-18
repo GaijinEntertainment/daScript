@@ -8,6 +8,7 @@ options indenting = 4
 
 module scene_helpers
 
+require math
 require vulkan public
 require vulkan/vulkan_boost public
 require compute_shaders
@@ -328,10 +329,13 @@ def public compute_image_rgba8(var words : array<uint>; w, h : int) : array<uint
     return <- compute_to_storage_image(words, w, h)
 }
 
-//! the dasSpirv texelFetch GPU gate: upload `src` (w*h RGBA8) as a sampled texture at set=0/binding=0,
-//! run a compute blob (`words`) that texelFetch-copies it into a storage image at binding=1, read back.
-//! Exact-analytic: the caller asserts readback == `src`, proving texelFetch indexes the right texel.
-def public texelfetch_copy_rgba8(var words : array<uint>; var src : array<uint8>; w, h : int) : array<uint8> {   // nolint:STYLE038 - flat command-record run
+//! Upload RGBA8 mips, run compute, and read back the base level.
+//! Shared by texelFetch and textureGrad device tests. Source: binding
+//! 0; storage output: binding 1. Defaults to one source mip.
+def public texelfetch_copy_rgba8( // nolint:STYLE038 - flat command-record run
+                                 var words : array<uint>; var src : array<uint8>;
+                                 w, h : int; mip_levels : uint = 1u
+                                 ) : array<uint8> {
     // the dispatch is w/8 x h/8 (8x8 local size); require exact multiples so no texels are silently
     // skipped and extents are never 0/negative -- a misuse fails deterministically here.
     assert(w > 0 && h > 0 && (w % 8) == 0 && (h % 8) == 0,
@@ -350,11 +354,18 @@ def public texelfetch_copy_rgba8(var words : array<uint>; var src : array<uint8>
     let queue = get_device_queue(device, gfx, 0u)
     let fmt = VkFormat.R8G8B8A8_UNORM
     let byte_count = uint64(w) * uint64(h) * 4ul
-    assert(uint64(long_length(src)) == byte_count, "texelfetch_copy_rgba8: src must be exactly w*h*4 bytes")
+    assert(mip_levels > 0u && mip_levels <= 32u && (uint(max(w, h)) >> (mip_levels - 1u)) > 0u,
+        "texelfetch_copy_rgba8: invalid mip count")
+    var source_bytes = 0ul
+    for (level in range(mip_levels)) {
+        source_bytes += uint64(max(1, w >> level)) * uint64(max(1, h >> level)) * 4ul
+    }
+    assert(uint64(long_length(src)) == source_bytes,
+        "texelfetch_copy_rgba8: src must contain tightly packed mip levels")
 
     // source sampled texture (SAMPLED + TRANSFER_DST), device-local + view + NEAREST sampler
     var sici = ImageCreateInfo(imageType = VkImageType._2D, format = fmt,
-        mipLevels = 1u, arrayLayers = 1u, tiling = VkImageTiling.OPTIMAL,
+        mipLevels = mip_levels, arrayLayers = 1u, tiling = VkImageTiling.OPTIMAL,
         initialLayout = VkImageLayout.UNDEFINED)
     sici.extent.width = uint(w)
     sici.extent.height = uint(h)
@@ -373,17 +384,17 @@ def public texelfetch_copy_rgba8(var words : array<uint>; var src : array<uint8>
     vk_check(vkBindImageMemory(dev, boost_value_to_vk(src_image), boost_value_to_vk(src_mem), 0ul), null)
     var svci = ImageViewCreateInfo(image = weak_copy(src_image), viewType = VkImageViewType._2D, format = fmt)
     svci.subresourceRange.aspectMask.color = true
-    svci.subresourceRange.levelCount = 1u
+    svci.subresourceRange.levelCount = mip_levels
     svci.subresourceRange.layerCount = 1u
     var inscope src_view <- create_image_view(device, svci)
     let sci = SamplerCreateInfo(magFilter = VkFilter.NEAREST, minFilter = VkFilter.NEAREST,
-        mipmapMode = VkSamplerMipmapMode.NEAREST)
+        mipmapMode = VkSamplerMipmapMode.NEAREST, maxLod = float(mip_levels - 1u))
     var inscope sampler <- create_sampler(device, sci)
 
     // staging buffer with the source bytes
     var staging_usage : VkBufferUsageFlags
     staging_usage.transfer_src = true
-    var inscope staging <- make_host_buffer(device, phys, byte_count, staging_usage)
+    var inscope staging <- make_host_buffer(device, phys, source_bytes, staging_usage)
     upload(device, staging.memory, src)
 
     // destination storage image (STORAGE + TRANSFER_SRC), device-local + view
@@ -482,19 +493,38 @@ def public texelfetch_copy_rgba8(var words : array<uint>; var src : array<uint8>
         var comp : VkPipelineStageFlags
         comp.compute_shader = true
         // upload the source: UNDEFINED -> TRANSFER_DST, copy, -> SHADER_READ_ONLY
-        transition_image(cmd, src_image, VkImageLayout.UNDEFINED, VkImageLayout.TRANSFER_DST_OPTIMAL,
-            none, to_dst, top, xfer)
-        var region : BufferImageCopy
-        region.imageSubresource.aspectMask.color = true
-        region.imageSubresource.layerCount = 1u
-        region.imageExtent.width = uint(w)
-        region.imageExtent.height = uint(h)
-        region.imageExtent.depth = 1u
+        var barrier = ImageMemoryBarrier(srcAccessMask = none, dstAccessMask = to_dst,
+            oldLayout = VkImageLayout.UNDEFINED, newLayout = VkImageLayout.TRANSFER_DST_OPTIMAL,
+            srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            image = weak_copy(src_image))
+        barrier.subresourceRange.aspectMask.color = true
+        barrier.subresourceRange.levelCount = mip_levels
+        barrier.subresourceRange.layerCount = 1u
+        let no_mem : array<MemoryBarrier>
+        let no_buf : array<BufferMemoryBarrier>
+        let no_dep : VkDependencyFlags
+        var barriers <- [barrier]
+        cmd_pipeline_barrier(cmd, top, xfer, no_dep, no_mem, no_buf, barriers)
         var regions : array<BufferImageCopy>
-        regions |> emplace(region)
+        var offset = 0ul
+        for (level in range(mip_levels)) {
+            var region = BufferImageCopy(bufferOffset = offset)
+            region.imageSubresource.aspectMask.color = true
+            region.imageSubresource.layerCount = 1u
+            region.imageSubresource.mipLevel = uint(level)
+            region.imageExtent.width = uint(max(1, w >> level))
+            region.imageExtent.height = uint(max(1, h >> level))
+            region.imageExtent.depth = 1u
+            offset += uint64(region.imageExtent.width) * uint64(region.imageExtent.height) * 4ul
+            regions |> emplace(region)
+        }
         cmd_copy_buffer_to_image(cmd, staging.buffer, src_image, VkImageLayout.TRANSFER_DST_OPTIMAL, regions)
-        transition_image(cmd, src_image, VkImageLayout.TRANSFER_DST_OPTIMAL, VkImageLayout.SHADER_READ_ONLY_OPTIMAL,
-            to_dst, shader_read, xfer, comp)
+        barriers[0].oldLayout = VkImageLayout.TRANSFER_DST_OPTIMAL
+        barriers[0].newLayout = VkImageLayout.SHADER_READ_ONLY_OPTIMAL
+        barriers[0].srcAccessMask = to_dst
+        barriers[0].dstAccessMask = shader_read
+        cmd_pipeline_barrier(cmd, xfer, comp, no_dep, no_mem, no_buf, barriers)
         // destination storage image: UNDEFINED -> GENERAL
         transition_image(cmd, dst_image, VkImageLayout.UNDEFINED, VkImageLayout.GENERAL,
             none, shader_write, top, comp)

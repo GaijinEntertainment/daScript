@@ -6152,6 +6152,23 @@ class SpirvEmit : AstVisitor {
             e2id[k] = res
             return expr
         }
+        // Explicit gradients are supplied by the caller, so sampling
+        // is valid in any stage.
+        if (name == "textureGrad") {
+            let rs = resolve_sampler_arg(expr.arguments[0], "textureGrad")
+            if (!rs.ok) return expr
+            let uv = value_of(expr.arguments[1])
+            let dx = value_of(expr.arguments[2])
+            let dy = value_of(expr.arguments[3])
+            if (uv == 0u || dx == 0u || dy == 0u) return expr
+            let rt = emit_type(bm, expr._type)
+            let res = alloc_id(bm)
+            var ops <- [rt, res, rs.simg, uv, uint(SpvImageOperands.Grad), dx, dy]
+            emit_n(bm, SEC_FUNCS, SpvOp.ImageSampleExplicitLod, ops)
+            delete ops
+            e2id[k] = res
+            return expr
+        }
         // texelFetch(sampler, coord, lod): OpImage to extract the image from the sampled image, then
         // OpImageFetch by integer coordinate + Lod. Unfiltered; stage-agnostic.
         // texelFetch(textureBuffer, index): the two-argument form. The global IS the image (no sampler
