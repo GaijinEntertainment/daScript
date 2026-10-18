@@ -68,7 +68,7 @@ names in its PR body the artifact read and the value read there, or, for a no-ch
 the artifacts before and after the diff matched.**
 
 **A diff that adds a kernel-model capability to one emitter adds it to the other, or leaves the
-shared ledger (`dasMetal/ARCHITECTURE.md#kernel-model-asymmetry-ledger`) naming that
+shared ledger (`dasMetal/ARCHITECTURE_PARITY.md`) naming that
 capability - covered by the row that names its family, or by a row the diff adds.** A
 kernel-model capability is present on an emitter when the emitted text or words carry its effect -
 an emitter that accepts the construct and emits nothing for it does not have it - and a family is
