@@ -361,8 +361,8 @@ outside their bars (the bars' control); fam-gemma4's 12B and 31B rows hold the f
 rows the row names (128 on the 12B, the 29 ahead of the 31B's one-token loop), every one of those GPU rows against the CPU row
 one step back outside it (the control); the 31B row, past the 4096-float slab, adds the residual seam census
 (`past_slab_seam_cell`): two device steps and a batched step with the fuse rail pinned on, every seam one dispatch on the
-1024-lane builders (`metal_residual_lanes`) and none on the 256-lane ones or the split chain, then pinned off (put back), the
-split chain's norm passes and no one-dispatch seam (the control);
+1024-lane builders (`metal_residual_lanes`) and none on the 256-lane ones, then pinned off (put back), every seam's split
+chain norm passes over the fused run's to the pass and no one-dispatch seam (the control);
 fam-qwen35's batch cell asserts the batched step ENGAGES on the deltanet hybrid's blob twin
 and compares it against the single-row GPU step; fam-qwen2moe's batch cell compares the blob
 twin's batched step against the CPU batched stack on the planar model - the two arms the

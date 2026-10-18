@@ -1132,7 +1132,8 @@ def private seam_counts : int4 {
 
 //! past the 4096-float slab (`ADD_RMS_MAX_DIM`) the residual seams of the blob twin `trg`'s decode, two single steps and a batched
 //! step over device-prefilled prompts: the fuse rail pinned on, every seam one dispatch on the 1024-lane builders and no split
-//! chain; pinned off, the split chain's norm passes and no one-dispatch seam (the control); the rail and the overrides put back
+//! chain; pinned off, every seam's split chain norm passes over the fused run's and no one-dispatch seam (the control); the
+//! rail and the overrides put back
 [unused_argument(t, trg, tag)]   // off-Apple the gated body is empty
 def private past_slab_seam_cell(t : T?; var trg : Model; tag : string) {
     static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -1147,6 +1148,8 @@ def private past_slab_seam_cell(t : T?; var trg : Model; tag : string) {
         t |> success(select_prefill_override("metal"), "{tag}: prefill override registered")
         t |> success(select_decode_override("metal"), "{tag}: decode override registered")
         set_metal_prefill_min_npos(1l)
+        var fused_stacks = 0
+        var fused_norms = 0
         for (on in fixed_array(true, false)) {
             set_metal_decode_fuse(on ? 1 : 0)
             var sa = make_run_state(c, KVDtype.f16, KVDtype.f16)
@@ -1184,13 +1187,15 @@ def private past_slab_seam_cell(t : T?; var trg : Model; tag : string) {
                 t |> success(int64(nenc) >= nst + nba && sm.x + sm.y == nenc * 2 * nl,
                     "{tag} fused: every seam one dispatch ({sm.x} + {sm.y} over {nenc} stacks of {nl} layers)")
                 t |> equal(sm.z, 0, "{tag} fused: no plain seam on the sandwich")
-                t |> success(sm.w <= nenc, "{tag} fused: no split chain's norm pass ({sm.w} norm passes over {nenc} stacks)")
+                fused_stacks = nenc
+                fused_norms = sm.w
                 t |> equal(wide, int64(sm.x + sm.y), "{tag} fused: every seam on the decode rows' 1024-lane builders")
                 t |> equal(narrow, 0l, "{tag} fused: no seam on the 256-lane builders")
             } else {
                 t |> equal(sm.x + sm.y, 0, "{tag} split: no one-dispatch seam - the control")
                 t |> equal(narrow + wide, 0l, "{tag} split: no residual one dispatch on either lane width")
-                t |> success(int64(sm.w) >= (nst + nba) * int64(4 * nl - 1), "{tag} split: the split chain's norm passes ({sm.w} over {nst + nba} stacks)")
+                t |> equal(sm.w - fused_norms, fused_stacks * (4 * nl - 1),
+                    "{tag} split: every seam's split chain norm passes past the fused run's ({sm.w} against {fused_norms}, {fused_stacks} stacks)")
             }
             sess |> clear()   // drop the borrowed handles: delete of array<T?> cascades to the pointees
             unsafe {
