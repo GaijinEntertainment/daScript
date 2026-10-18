@@ -12,6 +12,7 @@ require daslib/fio
 require math
 require strings
 require daslib/enum_trait
+require _gguf_fixture   // gguf_header, gguf_push_le, gguf_push_str: the synthetic file's bytes
 
 // Byte-level GGUF quant-format gates on a synthetic in-memory file: the dequant arm must match an
 // independently hand-rolled reference, and the exact-transcode rails must be bit-exact against
@@ -33,35 +34,15 @@ def private q5_ref(blk, k : int) : float {
     return float((nib | hi) - 16) * Q5_D_VALS[blk]
 }
 
-def private push_u16(var b : array<uint8>; v : uint) {
-    b |> push(uint8(v & 0xFFu))
-    b |> push(uint8((v >> 8u) & 0xFFu))
-}
-
-def private push_u32(var b : array<uint8>; v : uint) {
-    push_u16(b, v & 0xFFFFu)
-    push_u16(b, v >> 16u)
-}
-
-def private push_u64(var b : array<uint8>; v : uint64) {
-    b |> reserve(length(b) + 8)
-    for (sh in range(8)) {
-        b |> push(uint8(uint(v >> uint64(sh * 8)) & 0xFFu))
-    }
-}
-
 // Minimal single-tensor GGUF: v3 header, 0 KVs, one 1-D tensor "t" of `gtype`, data at alignment 32.
 def private synth_gguf(gtype : int; n_elem : int64; data : array<uint8>) : array<uint8> {
-    var b <- [uint8('G'), uint8('G'), uint8('U'), uint8('F')]
-    push_u32(b, 3u)
-    push_u64(b, 1ul)   // n_tensors
-    push_u64(b, 0ul)   // n_kv
-    push_u64(b, 1ul)   // name len
-    b |> push(uint8('t'))
-    push_u32(b, 1u)    // n_dims
-    push_u64(b, uint64(n_elem))
-    push_u32(b, uint(gtype))
-    push_u64(b, 0ul)   // offset in data blob
+    var b : array<uint8>
+    gguf_header(b, 1ul, 0ul)
+    gguf_push_str(b, "t")
+    gguf_push_le(b, 1ul, 4)   // n_dims
+    gguf_push_le(b, uint64(n_elem), 8)
+    gguf_push_le(b, uint64(gtype), 4)
+    gguf_push_le(b, 0ul, 8)   // offset in data blob
     while ((long_length(b) % 32l) != 0l) {
         b |> push(uint8(0))
     }
@@ -73,8 +54,8 @@ def private synth_q5_0_bytes : array<uint8> {
     var data : array<uint8>
     data |> reserve(3 * 22)
     for (blk in range(3)) {
-        push_u16(data, Q5_D_BITS[blk])   // fp16 d
-        push_u32(data, Q5_QH[blk])       // 32 high bits
+        gguf_push_le(data, uint64(Q5_D_BITS[blk]), 2)   // fp16 d
+        gguf_push_le(data, uint64(Q5_QH[blk]), 4)       // 32 high bits
         for (j in range(16)) {
             data |> push(uint8(q5_qs_byte(blk, j)))
         }

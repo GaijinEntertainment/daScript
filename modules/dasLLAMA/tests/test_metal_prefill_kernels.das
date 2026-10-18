@@ -27,7 +27,7 @@ require dasllama/dasllama_moe
 require dasllama/dasllama_common
 require dasllama/dasllama_rope   // build_rope_tabs - the Pk rope gates' tables
 require _attn_oracle
-require _compares   // Bar, Shape: the cells' bars; mismatch_rel, span_maxdiff
+require _compares   // Bar, Shape: the cells' bars; mismatch_rel
 require _kernel_oracles   // padded_bases: the MoE route's padded-CSR prefix the GEMM cells read too; rope_tab_ref
 require _tts_kernel_oracles   // the StyleTTS2 cells' fixtures and double forms the Vulkan TTS cells share
 require daslib/jobque_boost
@@ -3510,7 +3510,7 @@ def test_metal_prefill_kernels(t : T?) {
                 moe_select_gate(t, dev, queue, 128, 8, 2, false, 0, 2.5, true)  // ... after the global scale, the CPU order
                 moe_select_gate(t, dev, queue, 32, 4, 2, false, 1, 2.5)          // the global scale on the softmax_weight picks
                 moe_select_gate(t, dev, queue, 300, 8, 2, true, 0, 1.0, true)    // the 16-deep down-scale stamp, past 256 with exact ties
-                moe_router_gate(t, dev, queue, 64, 128, 1, false)
+                f32_rows_gate(t, dev, queue, 64, 128, 1, 0, false)   //! the decode router's float4 stamp
                 moe_gemv_gate(t, dev, queue, KqFmt.q8, 96, 24, 5, 3, 1, false)   // shared x (the gate/up sites)
                 moe_gemv_gate(t, dev, queue, KqFmt.q8, 64, 32, 7, 4, 1, true)    // per-slot x rows (the down site)
                 moe_gemv_gate(t, dev, queue, KqFmt.q8, 64, 24, 5, 3, 3, false)   // batch streams, shared-x form
@@ -3615,8 +3615,7 @@ def test_metal_prefill_kernels(t : T?) {
                 swiglu_oai_gate(t, dev, queue, 256)
                 swiglu_oai_pf_gate(t, dev, queue, 16, [32, 40, 8], 32)   // 32 ghost rows stay untouched
                 g4_router_norm_gate(t, dev, queue, 5, 96)
-                moe_router_gate(t, dev, queue, 64, 7, 13, false)         // ne=7: row guard; np=13: stream clamp
-                moe_router_gate(t, dev, queue, 64, 7, 13, true)
+                f32_rows_gate(t, dev, queue, 64, 7, 13, 0, true, true)   //! the bias row; ne=7: row guard; np=13: stream clamp
                 moe_csr_gate(t, dev, queue, 13, 5, 2)
                 moe_csr_gate(t, dev, queue, 40, 3, 4)                    // an expert crosses one 32-pad tile
                 moe_gather_x_gate(t, dev, queue, 7, 3, 2, 64)            // stale tail words: in-range copies, >= total zeroes
@@ -3766,66 +3765,6 @@ def private g4_router_norm_gate(t : T?; var dev, queue; rows, dim : int) {
         }
         return if (!ran)
         check_buf(t, tag, mc.buf[by], want, BAR_FP, Shape(row_width = dim))
-    }
-}
-
-//! The router GEMV BIT-exact on dyadic data: npos 1 = MetalMoeRouter (BATCHED gates slot 8 out); past one MetalMoeRouterB, 8 streams a column, pad stores gated.
-def private moe_router_gate(t : T?; var dev, queue; dim, ne, npos : int; hasb : bool) {
-    let tag = "moe_router{npos > 1 ? "_b" : ""} dim={dim} ne={ne} np={npos}{hasb ? " bias" : ""}"
-    with_metal_cell(dev, queue) $(var mc : MetalCell) {
-        var err : string
-        let sr = stamp_of(@@enc_moe_router)
-        let srb = stamp_of(@@enc_moe_router_b)
-        var pso = npos > 1 ? mc |> keep_stamp(srb, err) : mc |> keep_stamp(sr, err)
-        return if (!pso_ok(t, tag, pso, err))
-        var inscope w, x, rb : array<float>
-        w |> resize(ne * dim)
-        x |> resize(npos * dim)
-        rb |> resize(ne)
-        for (i in range(ne * dim)) {
-            w[i] = float((i * 5) % 9 - 4) * 0.5
-        }
-        for (i in range(npos * dim)) {
-            x[i] = float((i * 7 + 2) % 9 - 4) * 0.25
-        }
-        for (e in range(ne)) {
-            rb[e] = float((e * 11) % 9 - 4) * 0.125
-        }
-        var inscope want : array<float>
-        want |> resize(npos * ne)
-        for (st in range(npos)) {
-            for (e in range(ne)) {
-                var acc = 0.0lf
-                for (c in range(dim)) {
-                    acc += double(w[e * dim + c]) * double(x[st * dim + c])
-                }
-                if (hasb) {
-                    acc += double(rb[e])
-                }
-                want[st * ne + e] = float(acc)
-            }
-        }
-        let bw = mc |> in_(w)
-        let bx = mc |> in_(x)
-        let by = mc |> out_words(npos * ne, -1000.0)
-        let brb = mc |> in_(rb)
-        var ka = moe_router_args(int64(ne), int64(dim), int64(npos), 0l, hasb)
-        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
-            if (npos > 1) {
-                stamp_run(srb, pso) {
-                    invoke(srb.enc, enc, mc.buf[bw], mc.buf[bx], mc.buf[by], mc.buf[brb], ka, int64(ne), int64(npos))
-                }
-            } else {
-                stamp_run(sr, pso) {
-                    invoke(sr.enc, enc, mc.buf[bw], mc.buf[bx], mc.buf[by], mc.buf[brb], ka, int64(ne), int64(npos))
-                }
-            }
-        }
-        return if (!ran)
-        check_buf(t, tag, mc.buf[by], want, BAR_EXACT, Shape(row_width = ne))
-        var inscope got <- mc |> plane_run(by)
-        let (mx, at) = span_maxdiff(got, want, 0, 0, npos * ne)
-        to_log(LOG_INFO, "{tag}: max |gpu - cpu| {mx} at stream {at / ne} expert {at % ne}\n")
     }
 }
 
@@ -4016,142 +3955,87 @@ def private moe_reduce_gate(t : T?; var dev, queue; dim, npos, nk : int) {
 
 // ===== prefill misc gates (PLE pre-step, bias epilogue, MTP cat, deltanet ba GEMV) =====
 
-//! the per-layer-embedding projection off its bf16 rows through its pick (`enc_ple_proj_bf16_rows`): the word pairs
-//! (`MetalPleProjBf16` / `One`, `GkRouterGemv` at VW 2) where the dim and the base step whole words, else the halfword walk
-//! (`MetalPleProjBf16Hw` / `HwOne`, VW 1); `one` the decode column's stamps, a threadgroup a row. ne rows of dim bf16 weights
-//! past `lead` words and `skew` halves of NaN (a read off the rows' base, or past their end into the NaN word after them, is a
-//! NaN), over npos columns, against the dot in double over the same values - dyadic and bf16-exact, so the compare is exact;
-//! the lead element poisoned is the control
-def private ple_proj_bf16_gate(t : T?; var dev, queue; dim, ne, npos, lead : int; one : bool = false; skew : int = 0) {
-    let tag = "ple_proj_bf16{one ? " one" : ""} dim={dim} ne={ne} np={npos} lead={lead} skew={skew}"
-    with_metal_cell(dev, queue) $(var mc : MetalCell) {
-        var err : string
-        let base = lead * 2 + skew
-        let pairs = gk_bf16_pairs(int64(dim), int64(base))
-        let sp = stamp_of(@@enc_ple_proj_bf16)
-        let spo = stamp_of(@@enc_ple_proj_bf16_one)
-        let sh = stamp_of(@@enc_ple_proj_bf16_hw)
-        let sho = stamp_of(@@enc_ple_proj_bf16_hw_one)
-        var pso = (pairs ? (one ? mc |> keep_stamp(spo, err) : mc |> keep_stamp(sp, err))
-            : (one ? mc |> keep_stamp(sho, err) : mc |> keep_stamp(sh, err)))
-        return if (!pso_ok(t, tag, pso, err))
-        let nh = base + ne * dim
-        var inscope w : array<uint>
-        w |> resize((nh + 1) / 2 + 1)
-        for (k in range(length(w))) {
-            w[k] = 0x7FC07FC0u
-        }
-        var inscope wf : array<float>
-        wf |> resize(ne * dim)
-        for (i in range(ne * dim)) {
-            wf[i] = float((i * 5) % 9 - 4) * 0.5
-            let h = base + i
+//! the router GEMV's weight plane as words: ne rows of dim values `wf`, as f32 rows past `woff` NaN floats with a NaN after the
+//! last row, or under `bf16` as halves past `woff` NaN halves with a NaN word after the rows
+def private router_plane(wf : array<float>; woff : int; bf16 : bool) : array<uint> {
+    let nan_word = bf16 ? 0x7FC07FC0u : 0x7FC00000u
+    let n = length(wf)
+    var w : array<uint>
+    w |> resize(bf16 ? (woff + n + 1) / 2 + 1 : woff + n + 1)
+    for (v in w) {
+        v = nan_word
+    }
+    for (i in range(n)) {
+        if (bf16) {
+            let h = woff + i
             let sh16 = uint(16 * (h % 2))
             w[h / 2] = (w[h / 2] & ~(0xFFFFu << sh16)) | ((float_bits_to_uint(wf[i]) >> 16u) << sh16)
+        } else {
+            w[woff + i] = float_bits_to_uint(wf[i])
         }
+    }
+    return <- w
+}
+
+//! The router GEMV gate (`GkRouterGemv`'s stamps) through a pick: ne rows of dim weights past `woff` (`router_plane`), dyadic and
+//! bf16-exact, over npos columns, against the dot in double plus the bias row under `hasb`, so the compare is exact; the lead
+//! element poisoned is the control. `st` is the stamp the pick dispatches, seated with the cell's pipeline around `run`
+def private router_gemv_gate(t : T?; var dev, queue; tag : string; dim, ne, npos, woff : int; bf16, hasb : bool; st : auto(ST);
+                             run : block<(enc : MetalComputeEncoder?; bw, bx, by, brb : MetalBuffer?; var ka : GkRouterArgs) : void>) {
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        var pso = mc |> keep_stamp(st, err)
+        return if (!pso_ok(t, tag, pso, err))
+        var inscope wf <- [for (i in range(ne * dim)); float((i * 5) % 9 - 4) * 0.5]
         var inscope x <- [for (i in range(npos * dim)); float((i * 7 + 2) % 9 - 4) * 0.25]
-        var inscope want : array<float>
-        want |> resize(npos * ne)
-        for (st in range(npos)) {
-            for (e in range(ne)) {
-                var acc = 0.0lf
-                for (c in range(dim)) {
-                    acc += double(wf[e * dim + c]) * double(x[st * dim + c])
-                }
-                want[st * ne + e] = float(acc)
+        var inscope rb <- [for (e in range(ne)); float((e * 11) % 9 - 4) * 0.125]
+        var inscope ref <- dense_ref_rows(wf, x, npos, dim, ne)
+        if (hasb) {
+            for (i in range(npos * ne)) {
+                ref.want[i] = float(double(ref.want[i]) + double(rb[i % ne]))
             }
         }
-        let bw = mc |> in_plain(w)
+        let bw = mc |> in_plain(router_plane(wf, woff, bf16))
         let bx = mc |> in_(x)
         let by = mc |> out_words(npos * ne, -1000.0)
-        var ka = moe_router_args(int64(ne), int64(dim), int64(npos))
-        ka.woff = uint(base)
-        //! the pick's stamp seated with the cell's pipeline: the call below dispatches the one `pairs` and `one` name
+        let brb = mc |> in_(rb)
+        var ka = moe_router_args(int64(ne), int64(dim), int64(npos), 0l, hasb)
+        ka.woff = uint(woff)
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
-            if (pairs && one) {
-                stamp_run(spo, pso) {
-                    enc_ple_proj_bf16_rows(enc, mc.buf[bw], mc.buf[bx], mc.buf[by], ka, int64(ne), int64(npos), !one)
-                }
-            } elif (pairs) {
-                stamp_run(sp, pso) {
-                    enc_ple_proj_bf16_rows(enc, mc.buf[bw], mc.buf[bx], mc.buf[by], ka, int64(ne), int64(npos), !one)
-                }
-            } elif (one) {
-                stamp_run(sho, pso) {
-                    enc_ple_proj_bf16_rows(enc, mc.buf[bw], mc.buf[bx], mc.buf[by], ka, int64(ne), int64(npos), !one)
-                }
-            } else {
-                stamp_run(sh, pso) {
-                    enc_ple_proj_bf16_rows(enc, mc.buf[bw], mc.buf[bx], mc.buf[by], ka, int64(ne), int64(npos), !one)
-                }
+            stamp_run(st, pso) {
+                invoke(run, enc, mc.buf[bw], mc.buf[bx], mc.buf[by], mc.buf[brb], ka)
             }
         }
         return if (!ran)
-        check_buf(t, tag, mc.buf[by], want, lead_poisoned(BAR_EXACT, want), Shape(row_width = ne))
+        check_buf(t, tag, mc.buf[by], ref.want, lead_poisoned(BAR_EXACT, ref.want), Shape(row_width = ne))
     }
 }
 
-//! the f32 rows' GEMV through its word pick (`enc_f32_rows_gemv`): the float4 router stamps where dim, base and column stride
-//! step whole float4s, else the element walk (`MetalF32RowsOne` / `B`); ne rows of dim past `woff` NaN elements, a NaN after the
-//! last row, over npos columns, against the dot in double over dyadic values, so the compare is exact; the lead element poisoned
-//! is the control
-def private f32_rows_gate(t : T?; var dev, queue; dim, ne, npos, woff : int; blocked : bool) {
-    let tag = "f32_rows{blocked ? " b" : " one"} dim={dim} ne={ne} np={npos} woff={woff}"
-    with_metal_cell(dev, queue) $(var mc : MetalCell) {
-        var err : string
-        let lattice = dim % 4 == 0 && woff % 4 == 0
-        let sr = stamp_of(@@enc_moe_router)
-        let srb = stamp_of(@@enc_moe_router_b)
-        let so = stamp_of(@@enc_f32_rows_one)
-        let sb = stamp_of(@@enc_f32_rows_b)
-        var pso = (lattice ? (blocked ? mc |> keep_stamp(srb, err) : mc |> keep_stamp(sr, err))
-            : (blocked ? mc |> keep_stamp(sb, err) : mc |> keep_stamp(so, err)))
-        return if (!pso_ok(t, tag, pso, err))
-        var inscope w : array<float>
-        w |> resize(woff + ne * dim + 1)
-        for (i in range(length(w))) {
-            w[i] = i < woff || i >= woff + ne * dim ? uint_bits_to_float(0x7FC00000u) : float(((i - woff) * 5) % 9 - 4) * 0.5
-        }
-        var inscope x <- [for (i in range(npos * dim)); float((i * 7 + 2) % 9 - 4) * 0.25]
-        var inscope want : array<float>
-        want |> resize(npos * ne)
-        for (s in range(npos)) {
-            for (e in range(ne)) {
-                var acc = 0.0lf
-                for (c in range(dim)) {
-                    acc += double(w[woff + e * dim + c]) * double(x[s * dim + c])
-                }
-                want[s * ne + e] = float(acc)
-            }
-        }
-        let bw = mc |> in_(w)
-        let bx = mc |> in_(x)
-        let by = mc |> out_words(npos * ne, -1000.0)
-        let brb = mc |> in_([for (_e in range(ne)); 0.0])   //! the router stamps' bias rows, read only under `hasb`
-        var ka = moe_router_args(int64(ne), int64(dim), int64(npos))
-        ka.woff = uint(woff)
-        //! the pick's stamp seated with the cell's pipeline: the call below dispatches the one `lattice` and `blocked` name
-        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
-            if (lattice && blocked) {
-                stamp_run(srb, pso) {
-                    enc_f32_rows_gemv(enc, mc.buf[bw], mc.buf[bx], mc.buf[by], mc.buf[brb], ka, int64(ne), int64(npos), blocked)
-                }
-            } elif (lattice) {
-                stamp_run(sr, pso) {
-                    enc_f32_rows_gemv(enc, mc.buf[bw], mc.buf[bx], mc.buf[by], mc.buf[brb], ka, int64(ne), int64(npos), blocked)
-                }
-            } elif (blocked) {
-                stamp_run(sb, pso) {
-                    enc_f32_rows_gemv(enc, mc.buf[bw], mc.buf[bx], mc.buf[by], mc.buf[brb], ka, int64(ne), int64(npos), blocked)
-                }
-            } else {
-                stamp_run(so, pso) {
-                    enc_f32_rows_gemv(enc, mc.buf[bw], mc.buf[bx], mc.buf[by], mc.buf[brb], ka, int64(ne), int64(npos), blocked)
-                }
-            }
-        }
-        return if (!ran)
-        check_buf(t, tag, mc.buf[by], want, lead_poisoned(BAR_EXACT, want), Shape(row_width = ne))
+//! the per-layer-embedding projection off its bf16 rows through its pick (`enc_ple_proj_bf16_rows`): the word pairs
+//! (`MetalPleProjBf16` / `One`, `GkRouterGemv` at VW 2) where the dim and the base step whole words, else the halfword walk
+//! (`MetalPleProjBf16Hw` / `HwOne`, VW 1); `one` the decode column's stamps, a threadgroup a row; the rows past `lead` words
+//! and `skew` halves of NaN (a read off the rows' base, or past their end into the NaN word after them, is a NaN)
+def private ple_proj_bf16_gate(t : T?; var dev, queue; dim, ne, npos, lead : int; one : bool = false; skew : int = 0) {
+    let tag = "ple_proj_bf16{one ? " one" : ""} dim={dim} ne={ne} np={npos} lead={lead} skew={skew}"
+    let base = lead * 2 + skew
+    let pairs = gk_bf16_pairs(int64(dim), int64(base))
+    let st = (pairs ? (one ? stamp_of(@@enc_ple_proj_bf16_one) : stamp_of(@@enc_ple_proj_bf16))
+        : (one ? stamp_of(@@enc_ple_proj_bf16_hw_one) : stamp_of(@@enc_ple_proj_bf16_hw)))
+    router_gemv_gate(t, dev, queue, tag, dim, ne, npos, base, true, false, st) $(enc, bw, bx, by, _brb; var ka) {
+        enc_ple_proj_bf16_rows(enc, bw, bx, by, ka, int64(ne), int64(npos), !one)
+    }
+}
+
+//! the f32 rows' GEMV through its word pick (`enc_f32_rows_gemv`): the float4 router stamps (`MetalMoeRouter` / `B`, the bias row
+//! under `hasb`) where dim, base and column stride step whole float4s, else the element walk (`MetalF32RowsOne` / `B`); the
+//! rows past `woff` NaN elements, a NaN after the last row
+def private f32_rows_gate(t : T?; var dev, queue; dim, ne, npos, woff : int; blocked : bool; hasb : bool = false) {
+    let tag = "f32_rows{blocked ? " b" : " one"} dim={dim} ne={ne} np={npos} woff={woff}{hasb ? " bias" : ""}"
+    let lattice = dim % 4 == 0 && woff % 4 == 0
+    let st = (lattice ? (blocked ? seat_of(stamp_of(@@enc_moe_router_b)) : seat_of(stamp_of(@@enc_moe_router)))
+        : (blocked ? seat_of(stamp_of(@@enc_f32_rows_b)) : seat_of(stamp_of(@@enc_f32_rows_one))))
+    router_gemv_gate(t, dev, queue, tag, dim, ne, npos, woff, false, hasb, st) $(enc, bw, bx, by, brb; var ka) {
+        enc_f32_rows_gemv(enc, bw, bx, by, brb, ka, int64(ne), int64(npos), blocked)
     }
 }
 
