@@ -32,10 +32,13 @@ SET(DAS_AOT_DASMETAL_MODULE_DEPENDS ${DASMETAL_AOT_DEPENDS})
 
 # Module-lib AOT sources are owned by each module (set in modules/<M>/CMakeLists.txt, empty when
 # the module is disabled). Bridge them to the suite-named vars the loops below consume. spirv/msl
-# also pull one test-side fixture; dasMetal/dasSpirv are always enabled so no gate is needed.
+# also pull test-side fixtures; dasMetal/dasSpirv are always enabled so no gate is needed.
 SET(AOT_STBIMAGE_MODULE_FILES ${DASSTBIMAGE_AOT_FILES})
 SET(AOT_GLSL_MODULE_FILES ${DASGLSL_AOT_FILES})
-SET(AOT_SPIRV_MODULE_FILES ${DASSPIRV_AOT_FILES} tests/spirv/_spirv_common.das)
+SET(AOT_SPIRV_MODULE_FILES ${DASSPIRV_AOT_FILES}
+    tests/spirv/_spirv_common.das
+    tests/spirv/_texture_grad_shaders.das
+)
 SET(AOT_MSL_MODULE_FILES ${DASMETAL_AOT_FILES} tests/msl/_msl_common.das)
 
 FILE(GLOB AOT_TESTS_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/aot/*.das")

@@ -1,4 +1,5 @@
 options gen2
+options no_aot     // requires daslib/ast (no_aot) to invoke compile_file at runtime
 
 module _compile_issues public
 
