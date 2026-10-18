@@ -6,7 +6,7 @@ require spirv/spirv_dis
 require spirv/spirv_grammar
 
 // Read the first component of a vector constant through its result ID.
-def private first_lane_bits(var words : array<uint>; vector_id : uint) : uint {
+def private first_lane_bits(words : array<uint>; vector_id : uint) : uint {
     var scalar_id = 0u
     var i = 5
     while (i < length(words)) {
