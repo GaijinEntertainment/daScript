@@ -9,7 +9,7 @@ options _dasllama_internal = true
 // chain and the split token command write the mirror the decode reads.
 
 require dastest/testing_boost public
-require dasllama/dasllama_transformer
+require dasllama/dasllama_kv_dtype
 require dasllama/dasllama
 require daslib/jobque_boost
 require dasllama/dasllama_math
@@ -22,7 +22,8 @@ require _kv_codec_cells
 
 let private CARRIER = "Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf"
 let private STRICT_CTX = 32768l
-let private ROWS_BARS = StoredRowsBars(k = 0.02, v_step = 0.05, v_prefill_of_ctrl = 0.6)
+//! the device prefill's f16 K/V rows read 0.006 (K) and 0.013 (V) of the CPU rows' magnitude from them, a row held to the next 0.68
+let private ROWS_BARS = StoredRowsBars(k = 0.02, v_step = 0.05, v_prefill_of_ctrl = 0.6, f16_dist = 0.05)
 
 [test]
 def test_gpu_resident_moe_host_rows(t : T?) {

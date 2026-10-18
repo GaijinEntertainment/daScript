@@ -1703,10 +1703,14 @@ var private g_rd_hot_dma_said : table<string>   //! the DMA fill's declines, a r
 //! RdecHotDmaFn: false where no transfer queue serves, the tier is dry, or the stream stacks do not hold the expert - the host's fill then takes it
 [arch(at="../ARCHITECTURE_GPU_VULKAN_POOL.md#pool-dma-fill")]
 def vk_rdec_hot_dma(l, slot, e, woff1 : int64; f1 : int) : bool {
-    return false if (g_gpu == null || g_gpu.dry || g_gpu.xfer_fam < 0)
-    let g = vk_stream_stack_at(woff1, f1) / 3
+    return false if (g_gpu == null || g_gpu.dry)
+    if (g_gpu.xfer_fam < 0) {
+        gpu_said_once(g_rd_hot_dma_said, LOG_WARNING, "vk_rdec_hot_dma: ", "no transfer queue serves (DASLLAMA_VK_XFERQ) - the host fill takes every miss of the pool")
+        return false
+    }
+    let g = vk_stream_stack_at(woff1, f1) / STREAM_PLANE_KINDS
     if (g < 0) {
-        gpu_said_once(g_rd_hot_dma_said, LOG_WARNING, "vk_rdec_hot_dma: ", "layer {l}'s expert stack at {woff1} (fmt {f1}) is not a streamed stack - the host fill takes its misses")
+        gpu_said_once(g_rd_hot_dma_said, LOG_WARNING, "vk_rdec_hot_dma: ", "a routed layer's expert stack (fmt {f1}) is not a streamed stack - the host fill takes its misses")
         return false
     }
     let H & = unsafe(g_rd.hot_layers[l])
@@ -5712,21 +5716,12 @@ def vk_moe_qkv(var yq : float?; var yk : float?; var yv : float?; woq, wok, wov 
 // Per-layer slot pools live in the SYNTHETIC offset space, so the whole decode FFN GEMV rail
 // (find_stack, metas, FfnCmd) serves hit sets verbatim; uploads DMA-slice the pinned stream mirrors — no CPU gather on the decode path.
 
-def private heat_stream_src(base : int64; fmt : int) : int {
-    for (i in range(length(g_gpu.stream_stacks))) {
-        if (g_gpu.stream_stacks[i].base == base && g_gpu.stream_stacks[i].fmt == fmt) {
-            return i
-        }
-    }
-    return -1
-}
-
 def private heat_pool_make(l : int64; b1, b3, b2 : int64; f1, f3, f2 : int; n, nfe : int64) {
     ensure_batch_state()   // advise records its slice copies into batch_cmd
     var pool = HeatPool(ege = n * nfe)
-    let src1 = heat_stream_src(b1, f1)
-    let src3 = heat_stream_src(b3, f3)
-    let src2 = heat_stream_src(b2, f2)
+    let src1 = vk_stream_stack_at(b1, f1)
+    let src3 = vk_stream_stack_at(b3, f3)
+    let src2 = vk_stream_stack_at(b2, f2)
     let want = gpu_want_heat()
     // a gate and up of two activation forms each read their own image (`moe_gpu_image2`); the mid-step form follows the down
     if (src1 < 0 || src3 < 0 || src2 < 0 || want <= 0l
@@ -6175,4 +6170,14 @@ def vk_moe_attn_dec(var xb2p : float?; var kp : float?; var vp : float?; woq, wo
             }
         }
     }
+}
+
+//! the DMA fill's say-once declines are a model's: the next model says its own
+def private rd_hot_dma_forget {
+    g_rd_hot_dma_said |> clear()
+}
+
+[init]
+def private rd_hot_dma_register_drop {
+    register_vk_drop_hook(@@rd_hot_dma_forget)
 }

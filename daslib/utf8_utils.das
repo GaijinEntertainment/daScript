@@ -203,17 +203,13 @@ def public is_utf8_string_valid(utf8_string : string const) : bool {
     return state == UTF8_ACCEPT
 }
 
-let UTF8_REJECT = 12u //! DFA reject state: the byte cannot continue or start a sequence from here.
-
-def private utf8_push_replacement(var out : array<uint8>) {
-    out |> push(uint8(0xEF))
-    out |> push(uint8(0xBF))
-    out |> push(uint8(0xBD))
-}
+let UTF8_REJECT = 12u //! DFA reject state: no byte continues or starts a sequence from here
+let UTF8_REPLACEMENT = 0xFFFDu //! what a sanitizer writes for an invalid or incomplete sequence
 
 def public utf8_sanitize(utf8_string : string const) : string {
-    //! Returns the string with every invalid or incomplete UTF-8 sequence replaced by U+FFFD (a byte that cannot start
-    //! a sequence stands for one replacement; a sequence cut short stands for one), the string itself where it is valid.
+    //! Returns the string with every invalid or incomplete UTF-8
+    //! sequence replaced by U+FFFD, one a maximal subpart (the byte
+    //! that cut a sequence is read again on its own); valid input as is.
     return utf8_string if (is_utf8_string_valid(utf8_string))
     var out : array<uint8>
     out |> reserve(length(utf8_string) + 3)
@@ -224,13 +220,15 @@ def public utf8_sanitize(utf8_string : string const) : string {
         let byte = uint(b)
         var next = s_utf8d[256u + state + s_utf8d[byte]]
         if (next == UTF8_REJECT) {
-            utf8_push_replacement(out)
+            utf8_encode(out, UTF8_REPLACEMENT)
             pending_sequence |> clear()
             if (state == UTF8_ACCEPT) {
                 continue
             }
             next = s_utf8d[256u + s_utf8d[byte]]
             if (next == UTF8_REJECT) {
+                //! the byte that cut the sequence starts none: its own replacement
+                utf8_encode(out, UTF8_REPLACEMENT)
                 state = 0u
                 continue
             }
@@ -245,7 +243,7 @@ def public utf8_sanitize(utf8_string : string const) : string {
         state = next
     }
     if (state != UTF8_ACCEPT) {
-        utf8_push_replacement(out)
+        utf8_encode(out, UTF8_REPLACEMENT)
     }
     return string(out)
 }

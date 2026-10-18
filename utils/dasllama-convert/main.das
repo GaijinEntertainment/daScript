@@ -70,10 +70,10 @@ struct ConvertArgs {
     @clarg_doc = "Print this box's DlimConfiguration JSON (or write it to -o) and exit"
     dump_config : bool
 
-    @clarg_doc = "P3 trim (with -f vulkan): drop the big CPU weight families from the image — pure resident-driver dense models only; serve with DASLLAMA_TRIM=1"
+    @clarg_doc = "Mint the trimmed vulkan lane (with -f vulkan): the planar families dropped"
     trim : bool
 
-    @clarg_doc = "Streaming conversion (planar, metal q8, or the vulkan lane minted off the gguf through the dry walk): big planes go source->transcode->image without materializing in RAM; unstreamable models fall back to eager automatically"
+    @clarg_doc = "Streaming conversion: planes go source->transcode->image without RAM"
     stream : bool
 
     @clarg_doc = "List every .dlim beside -m (a GGUF, or a directory): size, version, verdict, baked identity"
@@ -520,6 +520,7 @@ def main() : int {
             vkc = probed.vulkan
         }
         vkc.trim = cfg.trim
+        set_vulkan_trim(cfg.trim)   //! the lane's tag folds the trim the bake writes
         if (!moe_gpu_dry_bake_arm(vkc)) {
             to_log(LOG_ERROR, "dasllama-convert: offline vulkan bake could not arm — see the log above\n")
             return 2
@@ -552,7 +553,8 @@ def main() : int {
             // and re-reading the sidecar would revert the config's pinned knobs AFTER the
             // fail-closed identity verify (silently un-pinning a cross-box streamed bake)
             if (cfg.flavor == Flavor.vulkan) {
-                vulkan_bake_begin()   //! the streaming save mints the lane off the gguf through the dry walk, one entry at a time - the live load's rail
+                //! the streaming save mints the lane off the gguf by the dry walk
+                vulkan_bake_begin()
             }
             var mt = Model()
             var jobs : array<FillJob>

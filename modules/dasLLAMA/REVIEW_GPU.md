@@ -43,8 +43,10 @@ function stores, applies `REVIEW_TOWER.md` too.**
 `dasllama/dasllama_gpu_resident.das`, `dasllama/dasllama_gpu_tier.das`, a `[vk_dispatch]` class,
 a `[spirv_decode]` callback, or a
 cooperative-matrix GEMM class stamped per weight format and column width, on the NV
-cooperative-matrix-2 arm or the KHR cooperative-matrix arm, or a kernel cell or probe that fills
-or binds a `TokMeta` block - wherever the diff puts it - applies `REVIEW_GPU_VULKAN.md` too.**
+cooperative-matrix-2 arm or the KHR cooperative-matrix arm, a kernel cell or probe that fills
+or binds a `TokMeta` block, a branch whose true arm calls a `moe_gpu_*`, `vk_*` or `rdec_*`
+entry, or a call of `vk_moe_init` - wherever the diff puts it - applies `REVIEW_GPU_VULKAN.md`
+too.**
 
 **A diff that adds or changes a GPU kernel class - a `[metal_kernel]` def, a class carrying
 `[metal_dispatch]` or `[vk_dispatch]`, a base shell one derives from, or a class template one
@@ -68,7 +70,9 @@ driver's `resident driver armed (...)` line, the per-op tier's `GPU MoE tier:` r
 
 **A diff that hands a GPU decode or prefill call the device served to the CPU path; lands a model
 family, backend arm or session shape with a batched decode step; calls `create_device_session`,
-`set_device_kv` or `moe_gpu_drop_model`; calls a `set_gpu_*` or `reset_gpu_*` function; adds an
+`set_device_kv` or `moe_gpu_drop_model`; calls or defines a `set_*` or `reset_*` function in
+`dasllama/dasllama_core.das`, `dasllama/dasllama_env.das` or a GPU driver file
+(`dasllama/dasllama_metal*.das`, `dasllama/dasllama_vulkan*.das`, `dasllama/dasllama_gpu*.das`); adds an
 `RdecPass` value; changes `trim_model_planes`; stores into, gathers from or releases a device buffer
 holding K or V rows; adds or changes a resident override (a decode/prefill hook the resident driver
 registers) or a byte copy of mirror rows (the device copy of the K/V cache); or adds or changes a

@@ -149,12 +149,12 @@ struct public GpuTierEnv {
     @clarg_doc = "The context pin (DASLLAMA_GPU_CTX_MAX, set_gpu_ctx_max) is the context asked, not a cap: a K/V mirror the card cannot hold at it declines the resident driver instead of shortening, and the per-op rails serve the asked context; the load log names the room."
     gpu_ctx_strict : bool = false
 
-    @clarg_default_doc = "512"
+    @clarg_default_doc = "2048"
     @clarg_doc = "The whole-model driver's prompt window in rows: the prefill panels' size, and the rows a hyper-connection model's host expert step and the hot pool's window chain take at once; a longer prompt runs as sequential windows, each paying every routed layer's expert pass again. Rounded down to a multiple of 128, never under 128; the plan charges the panels at this count, so a wider window shortens the K/V mirror or the pool."
-    gpu_pf_rows : int64 = 512l
+    gpu_pf_rows : int64 = 2048l
 
     @clarg_doc = "Stream each routed layer's expert stack to the device for the prompt, where the routed experts serve on the host (a hyper-connection model): pinned device-layout mirrors of every routed layer at load, two device slots of a layer's stack, the next layer's copy on the transfer queue while this one computes, the host summing nothing. 0 keeps the host's sums and the hot pool's window chain."
-    gpu_pf_stream : bool = false
+    gpu_pf_stream : bool = true
 
     @clarg_default_doc = "0 (every host layer)"
     @clarg_doc = "Under DASLLAMA_GPU_PF_STREAM, mirror only the first this many host layers' expert stacks; the rest keep the host's sums. A parity cell's lever: a few layers' mirrors beside a planar load, where every layer's would not fit the box."
@@ -220,7 +220,7 @@ struct public GpuTierEnv {
     gpu_dec_meet : bool = false
 
     @clarg_doc = "The hot expert pool fills by DMA: a token's miss is copied off its pinned stack into the pool's coldest unpicked slot on the transfer queue, every miss a step and no host time, so the next token finds it; and a prompt's streamed window serves the pool's hits off their slots first and lands its busiest misses in the pool's free and coldest slots, so the decode behind the prompt starts warm. 0 keeps the host's gather-and-upload fill under its step budget and the window off the pool. The A/B knob."
-    gpu_hot_dma : bool = false
+    gpu_hot_dma : bool = true
 
     @clarg_doc = "Decode FFN tail: a resident expert layer's FFN carries the combine, the residual and the next layer's attention feed on the device, so the two submits share one fence wait; 0 collects every FFN on the host."
     gpu_dec_tail : bool = true
@@ -229,7 +229,7 @@ struct public GpuTierEnv {
     gpu_dec_span : bool = true
 
     @clarg_default_doc = "0"
-    @clarg_doc = "Hot expert slots a layer. On the per-op tier: hold the N hottest experts of a streamed layer resident (unset = none). On the whole-model driver with the routed experts on the host (a hyper-connection MoE): the slots of the hot expert pool - unset = 64 where the card has the room past the weights and the mirror, else up to 32 out of the mirror's context; a count asks that many; 0 keeps every routed expert on the host."
+    @clarg_doc = "Hot expert slots a layer. On the per-op tier: hold the N hottest experts of a streamed layer resident (unset = none). On the whole-model driver with the routed experts on the host (a hyper-connection MoE): the slots of the hot expert pool - unset = every slot that fits beside the weights and the mirror, else up to 32 out of the mirror's context; a count asks that many; 0 keeps every routed expert on the host."
     gpu_heat : Option<int64>
 
     @clarg_doc = "Report lifetime GPU queue submissions (real commands plus staging round-trips), and trace every routed row the host sums - the split token command's host segment and the CPU forward alike - as one moe_k line (the layer, the session, the first pick, the L1 of the feed row and of the routed sum)."
@@ -956,6 +956,9 @@ var private g_pf_rows_pin = 0l   //! the prompt window a program pinned in proce
 def public set_pf_window_rows_pin(rows : int64) {
     g_pf_rows_pin = rows
 }
+
+//! the pin as it was written (0 = none): a fixture puts back what it found
+def public pf_window_rows_pin : int64 => g_pf_rows_pin
 
 def public pf_window_rows : int64 {
     let units = (g_pf_rows_pin > 0l ? g_pf_rows_pin : g_env_gpu.gpu_pf_rows) / PF_WINDOW_MIN

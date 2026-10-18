@@ -101,7 +101,7 @@ too, each over its own region's state slot and ring (`DnConvArgs.row0`, `DnScanA
 and the gated out-norm stay window-wide), the region's ring image advancing a window part at a time
 (`ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-dn-block`). Under a block-codec mirror the window holds one
 segment: the codec stages the window's rows window-local (the rope-and-store's `pos0` is the segment's window
-row), so its store and shadow run once over the whole window. A window past `PF_WINDOW` rows loops as the
+row), so its store and shadow run once over the whole window. A window past the prompt window's rows (`pf_window_rows`) loops as the
 one-session chain does, the parts of the segments inside each window the window's own (`pf_window_segs`).
 Every segment whose last row a window holds takes the final requant and the classifier at that row, its logits
 landing at its slot of the host buffer (`pf_logits_host`, `regions` slots of `vocab`); a segmented window runs

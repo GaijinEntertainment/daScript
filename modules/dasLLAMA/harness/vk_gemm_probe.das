@@ -999,7 +999,7 @@ def private moefn_bucket_counts(ne, nk : int) : array<int> {
         cnt[e] = e < touched ? max(int(raw[e] * float(nk) / sum), 1) : 0
         placed += cnt[e]
     }
-    cnt[0] += nk - placed   //! the rows left onto the biggest bucket
+    cnt[0] += nk - placed
     return <- cnt
 }
 

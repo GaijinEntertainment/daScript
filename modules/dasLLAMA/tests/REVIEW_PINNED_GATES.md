@@ -10,8 +10,9 @@ and the pinned set is the only test of whether a cell is one; a named-cell entry
 function and pins every cell that function runs. The pinned set, one entry a line, each with what it
 must keep holding:
 
-- `test_run_suites.das` must hold the per-PR split, the folder census, the area tables and the
-  `--exclude` filter.
+- `test_run_suites.das` must hold the per-PR split, the folder census, the area tables, the
+  `--exclude` filter, and the `options persistent_heap` line in every test file `run.das`'s
+  `stocked` suite lists.
 - `test_program_roots.das` must hold the `ROOT_DIRS` sweep, `options stack = 524288` and the
   prefill intent.
 - `test_env_registry.das` must hold the `../ENVIRONMENT.md` knob contract.
@@ -138,7 +139,7 @@ must keep holding:
 - `test_tts_pocket.das`'s `test_pocket_quiet_floor` cell must hold the served lane's quiet floor
   against the f32 lane's.
 - `test_whisper.das`'s `test_canary_qwen_oracle` cell, an external-reference compare, must hold the forced walk over
-  `harness/canary_qwen_expected.tsv`'s ids within `CN_TIE_BAR` of our argmax at every step of its
+  `../harness/canary_qwen_expected.tsv`'s ids within `CN_TIE_BAR` of our argmax at every step of its
   three clips, on the CPU chain and on the Metal tower, its control the same walk fed each id one step early
   with the oracle id outside the bar at every step that input moved, and the greedy ids equal to the
   oracle's up to the first tie.

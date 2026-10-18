@@ -4,6 +4,9 @@ options _dasllama_internal = true
 
 require dasllama/dasllama_common
 require dasllama/dasllama_gpu_resident
+require dasllama/dasllama_gpu_tier   // set_gpu_hot_dma, set_gpu_dec_meet
+require dasllama/dasllama_blocks     // set_rare_onepass, set_rare_batched, set_rare_arena, set_moe_host_first
+require dasllama/dasllama_env        // set_pf_window_rows_pin
 require ?das_metal dasllama/dasllama_metal_common
 require ?das_metal dasllama/dasllama_metal_decode
 
@@ -106,11 +109,36 @@ def private sidecar_cases {
     to_log(LOG_INFO, "SIDECAR '{side}'\n")
 }
 
+//! the streamed prompt's levers: every one at its default says nothing; every one moved says its line once, and put back says nothing
+def private stream_lever_cases {
+    mark("stream_levers_default")
+    stream_levers_say()
+    mark("stream_levers_moved")
+    set_gpu_hot_dma(0)
+    set_gpu_dec_meet(1)
+    set_rare_onepass(0)
+    set_rare_batched(0)
+    set_rare_arena(0)
+    set_moe_host_first(8l)
+    set_pf_window_rows_pin(300l)
+    stream_levers_say()
+    mark("stream_levers_restored")
+    set_gpu_hot_dma(-1)
+    set_gpu_dec_meet(-1)
+    set_rare_onepass(-1)
+    set_rare_batched(-1)
+    set_rare_arena(-1)
+    set_moe_host_first(-1l)
+    set_pf_window_rows_pin(0l)
+    stream_levers_say()
+}
+
 [export]
 def main() {
     ring_cases()
     embed_cases()
     sidecar_cases()
+    stream_lever_cases()
     metal_cases()
     mark("end")
     print("ROOT_DONE\n")

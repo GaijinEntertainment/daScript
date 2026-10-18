@@ -67,6 +67,9 @@ def private chain_cell(t : T?; tag : string; n, nfe, npos, k, cnt_a : int64; wof
         let woff3 = woff + stride
         let woff2 = woff + 2l * stride
         var w1, w3, w2 : array<float>
+        if (stream) {
+            moe_gpu_stream_cache_layer(NE, 0l)   //! a streamed stack holds NE experts, every one resident with its slot
+        }
         if (!plane_up(1, NE * nfe, n, 21l + woff % 7l, woff1, w1, true, stream)) {
             t |> skip("{tag}: no Vulkan device (or probe/budget refused the upload)")
             return

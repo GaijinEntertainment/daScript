@@ -14,11 +14,11 @@ require dasllama/dasllama_vulkan_prefill public
 require vulkan
 require vulkan/vulkan_boost
 require dasllama/dasllama_math
+require dasllama/dasllama_math_default   // dot_q8q8_f16s - the q8 twin's block dot
 require dasllama/dasllama_gpu_tier
 require dasllama/dasllama_config
 require dasllama/dasllama_kqformat
 require dasllama/dasllama_gemm_schema
-require daslib/f16_cvt
 
 // dasLLAMA Vulkan GPU tier — the backend ENTRY: capability probe + arm, the dry-bake arm, the
 // .dlim identity source, the FFN router, and the [init] that installs every hook. The backend
@@ -263,7 +263,7 @@ def private vk_resident_bytes : int64 => (g_gpu != null ? g_gpu.resident_bytes :
 def private vk_weight_budget : int64 => vk_moe_init() ? carved_budget() : 0l
 
 //! what the carve took off the cap: the streamed slot and the decode block's mirrors
-def private vk_weight_carve : int64 => vk_moe_init() ? g_gpu.weight_budget - carved_budget() : 0l
+def private vk_weight_carve : int64 => gpu_want_arms_tier() && vk_moe_init() ? g_gpu.weight_budget - carved_budget() : 0l
 
 // the largest legal single-SSBO binding range (maxStorageBufferRange) — the KV mirror's ceiling
 //! the range a KV mirror side may bind, less the slack each of its `regions` carries past its planes (at the f32 codec's
@@ -460,10 +460,7 @@ struct private VkHostTwin {
 }
 
 //! MoeGpuHostServesFn: the formats the host twin reads - every expert format the tier streams
-def vk_host_twin_serves(fmt : int) : bool {
-    let f = unsafe(reinterpret<KqFmt>(uint8(fmt)))
-    return kq_sb(f) || kq_dense_b32(f) || f == KqFmt.mx4 || f == KqFmt.q8
-}
+def vk_host_twin_serves(fmt : int) : bool => expert_chain_fmt_ok(kq_fmt_of_slot(fmt))
 
 //! MoeGpuHostTwinFn: a per-lane host twin for `fmt` - null for a format the twin does not serve
 [arch(at="../ARCHITECTURE_GPU_VULKAN_STREAM.md#streamed-layer-arena")]
@@ -471,19 +468,16 @@ def vk_host_twin(fmt : int) : void? {
     return null if (!vk_host_twin_serves(fmt))
     let f = unsafe(reinterpret<KqFmt>(uint8(fmt)))   //! the tier's stack-format space is int(KqFmt)
     var tw = new VkHostTwin()
+    let b = dev_block_bytes(f)
+    tw.qsb = b.qsb
+    tw.ssb = b.ssb
     if (kq_sb(f)) {
         tw.fam = VkTwinFamily.superblock
         tw.k = vk_host_kq_cls(fmt)
-        tw.qsb = kq_qsb(f)
-        tw.ssb = kq_dev_ssb_i(fmt)
     } elif (f == KqFmt.q8) {
         tw.fam = VkTwinFamily.q8
-        tw.qsb = 32l
-        tw.ssb = 2l
     } else {
         tw.fam = VkTwinFamily.block32
-        tw.qsb = kq_qsb(f)
-        tw.ssb = kq_ssb(f)
         if (f == KqFmt.q51) {
             tw.q51 = new Q51Gemv()
         } elif (f == KqFmt.iq4nl32) {
@@ -530,17 +524,7 @@ def private vk_q8_rows(var yp : float?; q : uint8 const?; s : uint8 const?; xq :
         let wq = reinterpret<int8 const?>(q)
         let ws = reinterpret<uint16 const?>(s)
         for (r in range64(rb, re)) {
-            var acc = 0.0
-            for (b in range64(nb)) {
-                var idot = 0
-                let wrow = wq + (r * nb + b) * 32l
-                let xb = xq + b * 32l
-                for (i in range64(32l)) {
-                    idot += int(wrow[i]) * int(xb[i])
-                }
-                acc += float(idot) * f16_to_f32(uint(ws[r * nb + b])) * xs[b]
-            }
-            yp[r] = acc
+            yp[r] = dot_q8q8_f16s(wq + r * n, ws + r * nb, xq, xs, n)
         }
     }
 }
@@ -610,7 +594,6 @@ def dasllama_math_vulkan_register() {
     set_moe_gpu_dry_bake_arm(@@vulkan_dry_bake_arm)
     set_moe_gpu_unmap_notify(@@vk_unmap_notify)
     set_moe_gpu_would_accept_fn(@@vk_moe_would_accept)
-    set_moe_gpu_stream_plane_fn(@@vk_stream_plane)
     set_moe_gpu_stream_cache_fns(@@vk_stream_expert, @@vk_stream_fetch, @@vk_stream_cache_layer, @@vk_stream_cache_ring, @@vk_stream_ring_release)
     set_moe_gpu_stream_view_fn(@@vk_stream_view)
     set_moe_gpu_stream_request_fns(@@vk_stream_request, @@vk_stream_ready)

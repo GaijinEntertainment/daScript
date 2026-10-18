@@ -1,7 +1,7 @@
 # dasLLAMA GPU Kernel Class Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-doc: `ARCHITECTURE_GPU.md`. Planned work: `followup_metal.md`, `followup_vulkan.md`.
+doc: `ARCHITECTURE_GPU.md`. Planned work: the `followup_*.md` ledgers beside this file.
 
 Kernel twins are two classes with the same dispatch grid formula, the same mapping of threads to
 work and the same index and guard arithmetic, whose compiled bodies differ only in expressions,
@@ -21,11 +21,12 @@ is a defect, even where one twin ignores a field of it.**
 **Kernel twins keep every `@binding` number they both declare; a field a `@template_gate` omits on
 one twin leaves a hole at its number and renumbers nothing.**
 
-**Two stamps whose `@binding` numbers or kargs slots differ never share a host function that binds
-by number - each binds through its own generated builder.**
+**Two stamps whose `@binding` numbers or kargs field offsets differ never share a host function
+that binds by number - each binds through its own generated builder.**
 
-**A diff that makes the `@binding` numbers or kargs slots of two stamps differ ledgers the pair at
-`ARCHITECTURE_GPU.md#gpu-backends` in the same change.**
+**A diff that makes the `@binding` numbers or kargs field offsets of two stamps of one class
+template or base shell differ ledgers the pair at `ARCHITECTURE_GPU.md#gpu-backends` in the same
+change.**
 
 **Kernel twins are written once: as stamps of one `class template`, as classes deriving one base
 shell, or - where the value that selects the difference is a run-time count - as one class whose
@@ -94,9 +95,10 @@ bind; such a field either omits `@role` or names the access its body performs.**
 orders a `weight` read after the write that refilled the buffer, and neither refuses the role on a
 field the body only reads.
 
-**A diff that adds a `[metal_dispatch]` or `[vk_dispatch]` class under `dasllama/` that the engine's
-Metal or Vulkan driver never compiles, at its init or at a model's load, is a defect - the class
-moves under `modules/dasLLAMA/benchmarks/`, into the bench that compiles it.**
+**A diff that adds a `[metal_dispatch]` or `[vk_dispatch]` class under `dasllama/` that the
+engine's Metal or Vulkan driver never compiles at any point of a run is a defect - the class
+moves into the file under `modules/dasLLAMA/benchmarks/` or `modules/dasLLAMA/tests/` that
+compiles it, and a class nothing compiles is deleted.**
 
 **A diff that adds a new census key a census row dispatches names, in the PR body, that row and
 its nonzero count for the key, read from a census run on the key's backend.**
@@ -128,7 +130,7 @@ an entry matches a compiled census key, and that it matches no dispatched one - 
 derives each field's access and generates the builder - makes at compile time, or any
 `test_lens_*` / `test_vkd_lens_*` cell that holds one, is a defect.**
 
-**Weakening any refusal the manual-dispatch census in `dasllama/dasllama_metal_lens.das` makes in a
+**Weakening any refusal the manual-dispatch check in `dasllama/dasllama_metal_lens.das` makes in a
 module whose name starts with `dasllama` and contains `metal` - a direct
 `metal_dispatch_threadgroups` call, an `@ssbo` field with no `@role`, a function binding
 `kn_kargs` on fewer paths than it calls `kn_dispatch` - is a defect; a module that adds
@@ -149,7 +151,7 @@ hazard range.
 
 **A diff that adds or changes an ordered argument list into a generated setter (the
 `set_*(bufs, sizes, gbits)` function a `[vk_dispatch]` class's family generates) gives it one
-entry per distinct `@binding` number the stamp keeps - the class and its base declare it and no
+entry per distinct `@binding` number the stamp keeps - the class or its base declares it and no
 template gate drops it for that stamp - in ascending order; fields sharing a binding share one
 entry, a number nothing keeps gets none.** The setter checks only how many arguments it got,
 never which field each position carries.

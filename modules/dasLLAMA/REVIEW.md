@@ -97,13 +97,14 @@ change, or a change to a `kv_*` function that a GPU driver file (`dasllama_metal
 `dasllama_vulkan*.das`, `dasllama_gpu*.das`) calls, wherever the diff puts it, applies
 `REVIEW_GPU.md`.**
 
-**A GPU kernel timing race (two kernels timed against each other to pick one - not a data race), a
-call that makes, arms or tears down device-home serving - a session whose K/V region lives only on
-the device (`create_device_session`, `set_device_kv`, `moe_gpu_drop_model`), a call of a `set_gpu_*`
-or `reset_gpu_*` function of `dasllama/dasllama_core.das`, a knockout (an arm that skips a stage to
-measure that stage's cost), a hand-binding arm (one that writes buffer or kernel-argument (kargs)
-binding numbers as literals), or a kernel cell or probe that fills or binds a `TokMeta` block,
-wherever the diff puts it, applies `REVIEW_GPU.md`.**
+**A call that creates, enables or tears down device-home serving (`create_device_session`, `set_device_kv`,
+`moe_gpu_drop_model`), or a call or definition of a `set_*` / `reset_*` function in `dasllama/dasllama_core.das`,
+`dasllama_env.das` or a `dasllama_{gpu,vulkan,metal}*.das` file, wherever the diff puts it, applies `REVIEW_GPU.md`.**
+
+**A GPU kernel timing race (two kernels timed against each other to pick one - not a data race), a knockout (an
+arm that skips a stage to measure that stage's cost), a hand-binding arm (one that writes buffer or kernel-argument
+(kargs) binding numbers as literals), a cell or probe that fills or binds a `TokMeta` block, a branch whose true arm
+calls a `moe_gpu_*`, `vk_*` or `rdec_*` entry, or a call of `vk_moe_init`, wherever the diff puts it, applies `REVIEW_GPU.md`.**
 
 **A kernel body or a function a kernel calls - a `[metal_kernel]` def, a class a
 `[metal_dispatch]` / `[vk_dispatch]` declares, or a fixture the Metal or SPIR-V emitter

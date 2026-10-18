@@ -13,6 +13,8 @@ require dasllama/dasllama_kqformat
 require dasllama/dasllama_gemm_schema
 require llvm   // nolint:STYLE030 - the witness, unguarded on purpose: the `_variants()` registries this bench runs exist only with dasLLVM, so a host without it skips this program as missing its prerequisite
 require llvm/daslib/llvm_env
+require llvm/daslib/llvm_tune
+require llvm/daslib/llvm_cpu_class
 require math
 require strings
 require daslib/strings_boost
@@ -24,7 +26,9 @@ require daslib/strings_boost
 //! (one token), TILE the prefill batch. Every row of a kernel's `_variants()` registry is timed,
 //! the rows of one format interleaved round-robin so frequency drift cancels: under
 //! DAS_TUNE_MODE=tune that is the whole [tune_perm] grid, under normal mode the stamped winner
-//! alone. Timing only - a spelling's correctness is gen_tune_probe's TEST mode.
+//! alone. Timing only - a spelling's correctness is gen_tune_probe's TEST mode. A row drops its warm rounds:
+//! SOLO_BURN (3) solo, TEAM_BURN (6) under --team. Every row carries the tune profile the kernel version came
+//! from - the manifest DAS_TUNE_MANIFEST names, else the box class's tune-defaults profile.
 //! Run: DAS_TUNE_MODE=tune bin/daslang -jit modules/dasLLAMA/benchmarks/matmul/kq_kernel_bench.das -- --fmt iq3s
 //! The reference row at the same shape: GGML_BENCH_THREADS=1 test-backend-ops perf -o MUL_MAT -p "type_a=iq3_s"
 //! (its default MUL_MAT perf case is m=4096 rows, k=14336, n in {1, 512} tokens - this bench's defaults);
@@ -123,11 +127,8 @@ struct PlaneShape {
 
 //! the DEVICE planes' bytes per row: q8 int8 rows + f16 scales, a superblock format its quant stride + the decoded scale row, a per-32 format and mx4 their disk block
 def rm_rows_bytes(f : KqFmt; n : int64) : tuple<int64; int64> {
-    if (f == KqFmt.q8) {
-        return (n, n / 32l * 2l)
-    }
-    let units = n / kq_elems(f)
-    return (units * kq_qsb(f), units * (kq_sb(f) ? kq_dev_ssb(f) : kq_ssb(f)))
+    let b = dev_rows_bytes(f, n, 1l)
+    return (b.q, b.s)
 }
 
 def plane_shape(f : KqFmt; mx4 : bool; n : int64) : PlaneShape {
@@ -326,9 +327,12 @@ def emit_row(var rows : int&; name, tier : string; var st : RowStat; n, d, ntok,
     if (g_each_round) {
         each = "\t" + join(st.us, ",")
     }
-    print("{name}\t{tier}\t{perm}\t{n}\t{d}\t{ntok}\t{best}\t{med}\t{ns_per_sb}\t{gbs}\t{gflops}{lanes}{each}\n")
+    print("{name}\t{tier}\t{perm}\t{n}\t{d}\t{ntok}\t{best}\t{med}\t{ns_per_sb}\t{gbs}\t{gflops}{lanes}{each}\t{tune_profile_stamp()}\ttiming-only\n")
     rows++
 }
+
+//! the tune profile this run's kernel versions came from: the manifest DAS_TUNE_MANIFEST names, else the box class's defaults
+def tune_profile_stamp() : string => tune_manifest_explicit() ? tune_manifest_path() : "{jit_baseline_class()}.tune-defaults.json"
 
 def perm_wanted(spec, suffix : string) : bool {
     if (empty(spec)) {
@@ -793,7 +797,7 @@ def main : int {
     var fs <- formats_of(cfg.fmt)
     if (!cfg.tsv) {
         print("kq_kernel_bench: n={cfg.n} d={cfg.d} ntok={cfg.ntok} rounds={cfg.rounds} team={cfg.team} tune_mode={g_env_tune.tune_mode}\n")
-        print("fmt\ttier\tperm\tn\td\tntok\tbest_us\tmedian_us\tns_per_sb\tGB/s\tGFLOP/s{cfg.team ? "\tlane_lo\tlane_hi" : ""}\n")
+        print("fmt\ttier\tperm\tn\td\tntok\tbest_us\tmedian_us\tns_per_sb\tGB/s\tGFLOP/s{cfg.team ? "\tlane_lo\tlane_hi" : ""}\tprofile\tcompare\n")
     }
     var rows = 0
     if (cfg.team) {

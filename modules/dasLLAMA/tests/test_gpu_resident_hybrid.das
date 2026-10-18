@@ -7,17 +7,21 @@ require dastest/testing_boost public
 require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration (qwen35)
 require dasllama/dasllama   // create_session, moe_gpu_drop_model
 
+let private HYBRID_WINDOW = 512l   //! the file's prompt window: the two-window cells read the seam, not the window's width, and a 600-token prompt holds it
+
 [init]
 def private allow_cpu_prefill_intent() {
     allow_cpu_prefill()   // the control arm (the model dropped off the device) prefills on the CPU by design
+    set_pf_window_rows_pin(HYBRID_WINDOW)   //! before every load of the file: the plan and the window chain read it
 }
 require daslib/jobque_boost
 require daslib/fio
 require daslib/strings_boost
 require dasllama/dasllama_math   // with_dasllama_jobque_ (the engine-standard jobque config)
 require dasllama/dasllama_gpu_tier   // moe_gpu_tier_installed / gpu_want_auto: is the tier armed
+require dasllama/dasllama_env   // set_pf_window_rows_pin: the file's 512-row window
 require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active: did the whole-model driver take the hybrid
-require ?vulkan dasllama/dasllama_vulkan_common   // PF_WINDOW, the resolved coopmat mode and the kernel census, where the module exists
+require ?vulkan dasllama/dasllama_vulkan_common   // the resolved coopmat mode and the kernel census, where the module exists
 require ?vulkan dasllama/dasllama_vulkan_prefill   // pf_f16_feed: the feed admission the driver acts on
 require ?vulkan dasllama/dasllama_vulkan_decode   // vk_rdec_head_embed_gathered: the head's rows gathered off their ids
 require _model_tier   // models_dir() + model_available() presence/size-tier gate
@@ -153,7 +157,7 @@ def test_gpu_resident_hybrid_decode(t : T?) {
 [test]
 def test_gpu_resident_hybrid_two_windows(t : T?) {
     t |> run("Qwen3.5-0.8B: the resident prefill across two windows (the conv tail and state carry the seam)") @(t : T?) {
-        hybrid_forced_feed(t, PF_WINDOW_ROWS + 88l, "Qwen3.5-0.8B-Q8_0.gguf", HybridPlanes.q8)
+        hybrid_forced_feed(t, HYBRID_WINDOW + 88l, "Qwen3.5-0.8B-Q8_0.gguf", HybridPlanes.q8)
     }
 }
 
@@ -163,7 +167,7 @@ def test_gpu_resident_hybrid_two_windows(t : T?) {
 [test]
 def test_gpu_resident_hybrid_short_windows(t : T?) {
     t |> run("Qwen3.5-0.8B: a prompt one past the window - the last window still carries the conv taps") @(t : T?) {
-        hybrid_forced_feed(t, PF_WINDOW_ROWS + 1l, "Qwen3.5-0.8B-Q8_0.gguf", HybridPlanes.q8)
+        hybrid_forced_feed(t, HYBRID_WINDOW + 1l, "Qwen3.5-0.8B-Q8_0.gguf", HybridPlanes.q8)
     }
     t |> run("Qwen3.5-0.8B: a two-token prompt - one window shorter than the conv taps") @(t : T?) {
         hybrid_forced_feed(t, 2l, "Qwen3.5-0.8B-Q8_0.gguf", HybridPlanes.q8)
@@ -183,8 +187,8 @@ def test_gpu_resident_hybrid_kq(t : T?) {
         hybrid_forced_feed(t, 40l, "Qwen3.5-0.8B-Q4_K_M.gguf", HybridPlanes.kq)
     }
     t |> run("Qwen3.5-0.8B-Q4_K_M: the same across two windows") @(t : T?) {
-        assert_pf_window(t)
-        hybrid_forced_feed(t, PF_WINDOW_ROWS + 88l, "Qwen3.5-0.8B-Q4_K_M.gguf", HybridPlanes.kq)
+        return if (!assert_pf_window(t, HYBRID_WINDOW))
+        hybrid_forced_feed(t, HYBRID_WINDOW + 88l, "Qwen3.5-0.8B-Q4_K_M.gguf", HybridPlanes.kq)
     }
 }
 
@@ -194,8 +198,8 @@ def test_gpu_resident_hybrid_kq_q8out(t : T?) {
         hybrid_forced_feed(t, 40l, "Qwen3.5-0.8B-Q4_K_M-q8out.gguf", HybridPlanes.kq_q8out)
     }
     t |> run("Qwen3.5-0.8B-Q4_K_M-q8out: the same across two windows") @(t : T?) {
-        assert_pf_window(t)
-        hybrid_forced_feed(t, PF_WINDOW_ROWS + 88l, "Qwen3.5-0.8B-Q4_K_M-q8out.gguf", HybridPlanes.kq_q8out)
+        return if (!assert_pf_window(t, HYBRID_WINDOW))
+        hybrid_forced_feed(t, HYBRID_WINDOW + 88l, "Qwen3.5-0.8B-Q4_K_M-q8out.gguf", HybridPlanes.kq_q8out)
     }
 }
 
@@ -1207,8 +1211,8 @@ def test_gpu_resident_hybrid_mtp_head_warm(t : T?) {
         head_warm_rows_cell(t, DRAFT_PROMPT)
     }
     t |> run("Qwen3.5-0.8B-MTP: the same over two windows - the second window's carry row is its row 0, the head's rope a row behind the trunk's - every head K row of a prompt one window plus 88 rows long against the CPU warm's") @(t : T?) {
-        assert_pf_window(t)
-        head_warm_rows_cell(t, PF_WINDOW_ROWS + 88l)
+        return if (!assert_pf_window(t, HYBRID_WINDOW))
+        head_warm_rows_cell(t, HYBRID_WINDOW + 88l)
     }
 }
 

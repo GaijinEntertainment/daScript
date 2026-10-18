@@ -65,12 +65,7 @@ void * das_dwrite_band ( void * h, uint64_t * avail );
 bool das_dwrite_commit ( void * h, uint64_t bytes );
 uint64_t das_dwrite_stat ( void * h, int which );
 bool das_dwrite_close ( void * h );
-// The direct random reader (dread_*): positional reads of any pointer at any size off a file
-// opened cache-bypassing (FILE_FLAG_NO_BUFFERING on Windows, O_DIRECT on Linux, F_NOCACHE on
-// macOS), so a cache of on-demand blocks in pinned memory is not doubled in the page cache. One
-// handle a reader thread; the handle owns an aligned bounce band for the sectors a span's head
-// and tail share with their neighbours, and a span aligned at both ends lands in the caller's
-// buffer straight off the device. Implemented per-platform at the bottom of this file.
+// src/builtin/ARCHITECTURE_FIO.md#direct-reader
 void * das_dread_open ( const char * path, uint64_t band_bytes );
 int64_t das_dread_at ( void * h, uint64_t off, void * dst, uint64_t bytes );
 bool das_dread_close ( void * h );
@@ -779,17 +774,11 @@ namespace das {
         return das_dwrite_close(h);
     }
 
-    // dread: open a file for cache-bypassing positional reads. `band_bytes` sizes the handle's
-    // aligned bounce band (0 = the default). Null where the file does not open. One handle per
-    // reader thread - the handle is not shared.
     void * builtin_dread_open ( const char * name, uint64_t band_bytes, Context * context, LineInfoArg * at ) {
         if ( !name ) context->throw_error_at(at, "dread_open: null path");
         return das_dread_open(name, band_bytes);
     }
 
-    // `bytes` at file offset `off` into `dst` - any pointer, any offset, any size; the handle
-    // re-blocks the unaligned head and tail through its band and reads an aligned middle straight
-    // into `dst`. The bytes read: short at the end of the file, -1 where a read failed.
     int64_t builtin_dread_at ( void * h, uint64_t off, void * dst, uint64_t bytes, Context * context, LineInfoArg * at ) {
         if ( !h ) context->throw_error_at(at, "dread_at: null reader");
         if ( !dst && bytes ) context->throw_error_at(at, "dread_at: null dst");
@@ -3720,6 +3709,19 @@ static inline uint64_t das_dwrite_now_ns () {
 
 #if _WIN32
 
+static const DWORD DAS_DIRECT_MIN_SECTOR = 4096;
+
+// src/builtin/ARCHITECTURE_FIO.md#direct-reader
+static DWORD das_direct_sector_size ( const wchar_t * wpath ) {
+    DWORD sector = DAS_DIRECT_MIN_SECTOR;
+    if ( wpath[0] && wpath[1] == L':' ) {
+        wchar_t root[4] = { wpath[0], L':', L'\\', 0 };
+        DWORD spc = 0, bps = 0, freec = 0, totalc = 0;
+        if ( GetDiskFreeSpaceW(root, &spc, &bps, &freec, &totalc) && bps > sector ) sector = bps;
+    }
+    return sector;
+}
+
 void * das_dwrite_open ( const char * path, uint64_t total_bytes, uint64_t band_bytes ) {
     if ( !path ) return nullptr;
     int wlen = MultiByteToWideChar(CP_UTF8, 0, path, -1, nullptr, 0);
@@ -3727,14 +3729,7 @@ void * das_dwrite_open ( const char * path, uint64_t total_bytes, uint64_t band_
     wchar_t * wpath = (wchar_t *) malloc(sizeof(wchar_t) * wlen);
     if ( !wpath ) return nullptr;
     MultiByteToWideChar(CP_UTF8, 0, path, -1, wpath, wlen);
-    // sector size decides the alignment NO_BUFFERING enforces; fall back to 4096 if the volume
-    // won't say (a path with no drive letter, a UNC share)
-    DWORD sector = 4096;
-    if ( wlen > 2 && wpath[1] == L':' ) {
-        wchar_t root[4] = { wpath[0], L':', L'\\', 0 };
-        DWORD spc = 0, bps = 0, freec = 0, totalc = 0;
-        if ( GetDiskFreeSpaceW(root, &spc, &bps, &freec, &totalc) && bps ) sector = bps;
-    }
+    DWORD sector = das_direct_sector_size(wpath);
     HANDLE h = CreateFileW(wpath, GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_ALWAYS,
         FILE_ATTRIBUTE_NORMAL | FILE_FLAG_NO_BUFFERING | FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
     if ( h == INVALID_HANDLE_VALUE ) {
@@ -4073,8 +4068,6 @@ bool das_dwrite_commit ( void * hh, uint64_t bytes ) {
 
 #endif
 
-// ===== dread: the direct random reader =====
-
 #if DAS_NO_FILEIO
 
 void * das_dread_open ( const char *, uint64_t ) { return nullptr; }
@@ -4083,13 +4076,11 @@ bool das_dread_close ( void * ) { return false; }
 
 #else
 
-// A direct read wants the file offset, the count and the destination aligned to the sector; the
-// band takes the sectors a span shares with its neighbours (the head before `off`, the tail past
-// `off + bytes`) and any span whose destination is not aligned, in band-sized pieces.
+// src/builtin/ARCHITECTURE_FIO.md#direct-reader
 struct DasDirectReader {
     uint8_t *   band = nullptr;
     uint64_t    band_bytes = 0;
-    uint64_t    align = 4096;      // the sector size, never under 4096: modern drives report 512 logical over 4096 physical
+    uint64_t    align = 4096;
 #if _WIN32
     HANDLE      h = INVALID_HANDLE_VALUE;
 #else
@@ -4101,8 +4092,6 @@ static const uint64_t DAS_DREAD_DEFAULT_BAND = 4u << 20;
 
 static inline bool das_dread_aligned ( const DasDirectReader * r, uint64_t v ) { return (v % r->align) == 0; }
 
-// exactly `bytes` (a multiple of the sector) at the sector-aligned `off` into the sector-aligned `dst`; the bytes read
-// (short at the end of the file), -1 on failure
 static int64_t das_dread_raw ( DasDirectReader * r, uint64_t off, uint8_t * dst, uint64_t bytes );
 
 int64_t das_dread_at ( void * hh, uint64_t off, void * dstp, uint64_t bytes ) {
@@ -4111,7 +4100,6 @@ int64_t das_dread_at ( void * hh, uint64_t off, void * dstp, uint64_t bytes ) {
     if ( !bytes ) return 0;
     uint8_t * dst = (uint8_t *) dstp;
     uint64_t done = 0;
-    // the head: from `off` to the next sector boundary, through the band
     if ( !das_dread_aligned(r, off) ) {
         uint64_t base = off - (off % r->align);
         uint64_t skip = off - base;
@@ -4121,9 +4109,9 @@ int64_t das_dread_at ( void * hh, uint64_t off, void * dstp, uint64_t bytes ) {
         uint64_t take = avail < bytes ? avail : bytes;
         memcpy(dst, r->band + skip, (size_t) take);
         done += take;
-        if ( take < bytes && (uint64_t) got < r->align ) return (int64_t) done;   // the file ended inside the head sector
+        bool file_ended_in_head = take < bytes && (uint64_t) got < r->align;
+        if ( file_ended_in_head ) return (int64_t) done;
     }
-    // the middle: whole sectors; straight into `dst` where it is aligned, through the band otherwise
     while ( done < bytes ) {
         uint64_t left = bytes - done;
         uint64_t whole = left - (left % r->align);
@@ -4142,7 +4130,6 @@ int64_t das_dread_at ( void * hh, uint64_t off, void * dstp, uint64_t bytes ) {
             if ( (uint64_t) got < piece ) return (int64_t) done;
         }
     }
-    // the tail: the last partial sector, through the band
     if ( done < bytes ) {
         int64_t got = das_dread_raw(r, off + done, r->band, r->align);
         if ( got < 0 ) return -1;
@@ -4157,20 +4144,11 @@ int64_t das_dread_at ( void * hh, uint64_t off, void * dstp, uint64_t bytes ) {
 
 void * das_dread_open ( const char * path, uint64_t band_bytes ) {
     if ( !path ) return nullptr;
-    int wlen = MultiByteToWideChar(CP_UTF8, 0, path, -1, nullptr, 0);
-    if ( wlen <= 0 ) return nullptr;
-    wchar_t * wpath = (wchar_t *) malloc(sizeof(wchar_t) * wlen);
-    if ( !wpath ) return nullptr;
-    MultiByteToWideChar(CP_UTF8, 0, path, -1, wpath, wlen);
-    DWORD sector = 4096;
-    if ( wlen > 2 && wpath[1] == L':' ) {
-        wchar_t root[4] = { wpath[0], L':', L'\\', 0 };
-        DWORD spc = 0, bps = 0, freec = 0, totalc = 0;
-        if ( GetDiskFreeSpaceW(root, &spc, &bps, &freec, &totalc) && bps > sector ) sector = bps;
-    }
-    HANDLE h = CreateFileW(wpath, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING,
+    std::wstring wpath = das::utf8_file_path_to_wide(path);
+    if ( wpath.empty() ) return nullptr;
+    DWORD sector = das_direct_sector_size(wpath.c_str());
+    HANDLE h = CreateFileW(wpath.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING,
         FILE_ATTRIBUTE_NORMAL | FILE_FLAG_NO_BUFFERING, nullptr);
-    free(wpath);
     if ( h == INVALID_HANDLE_VALUE ) return nullptr;
     DasDirectReader * r = new DasDirectReader();
     r->align = sector;
@@ -4193,7 +4171,7 @@ static int64_t das_dread_raw ( DasDirectReader * r, uint64_t off, uint8_t * dst,
         uint64_t left = bytes - at;
         DWORD chunk = (DWORD) (left < uint64_t(1u << 30) ? left : uint64_t(1u << 30));
         DWORD got = 0;
-        memset(&ov, 0, sizeof(ov));   // the position rides the OVERLAPPED on a synchronous handle: no seek, so threads share nothing
+        memset(&ov, 0, sizeof(ov));
         ov.Offset = (DWORD) ((off + at) & 0xffffffffu);
         ov.OffsetHigh = (DWORD) ((off + at) >> 32);
         if ( !ReadFile(r->h, dst + at, chunk, &got, &ov) ) {
@@ -4201,7 +4179,7 @@ static int64_t das_dread_raw ( DasDirectReader * r, uint64_t off, uint8_t * dst,
             return -1;
         }
         at += got;
-        if ( got < chunk ) break;   // the end of the file
+        if ( got < chunk ) break;
     }
     return (int64_t) at;
 }
@@ -4226,7 +4204,7 @@ void * das_dread_open ( const char * path, uint64_t band_bytes ) {
     if ( !path ) return nullptr;
 #if defined(__linux__)
     int fd = open(path, O_RDONLY | O_DIRECT);
-    if ( fd < 0 ) fd = open(path, O_RDONLY);   // a filesystem with no direct reads (tmpfs) serves buffered
+    if ( fd < 0 ) fd = open(path, O_RDONLY);
 #else
     int fd = open(path, O_RDONLY);
 #endif

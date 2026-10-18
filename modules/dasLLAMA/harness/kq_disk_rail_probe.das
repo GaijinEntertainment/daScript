@@ -5,8 +5,8 @@ options _dasllama_internal = true
 // ATTRIBUTION SWEEP - the rare-experts rail's CPU cost by weight layout, one format (iq3s4, Flash-Next's gate and
 // up stacks) over one synthetic expert (d rows of n): the tuned grp<mr> body over a plane repacked once (the serving
 // form), the same body with the repack paid on every read (an arena in disk order, interleaved into a scratch as
-// the rail reads it), and the untuned portable body over the disk order itself (what a device-layout twin reads
-// today). Each form at 1, 2 and 4 activation rows an expert - the rail's shape - as microseconds an expert, the
+// the rail reads it), and the untuned portable body over the disk order itself (the body a device-layout twin
+// starts from). Each form at 1, 2 and 4 activation rows an expert - the rail's shape - as microseconds an expert, the
 // forms' rows held to each other. Args: [n] [d] (default 2560 512).
 
 require strings
@@ -14,7 +14,6 @@ require math
 require dasllama/dasllama_math
 require dasllama/dasllama_math_gen
 require dasllama/dasllama_kqformat
-require dasllama/dasllama_gemm_schema
 require ../tests/_kq_fixtures.das
 
 let private ROUNDS = 100
@@ -62,8 +61,8 @@ def private max_rel(a, b : array<float>) : float {
     for (v in b) {
         scale = max(scale, abs(v))
     }
-    for (i in range(length(a))) {
-        m = max(m, abs(a[i] - b[i]) / scale)
+    for (x, y in a, b) {
+        m = max(m, abs(x - y) / scale)
     }
     return m
 }
@@ -85,23 +84,23 @@ def private run_probe(n, d : int64) {
     scratch_s |> resize(sbytes)
     for (ntok in [1l, 2l, 4l]) {
         var inscope acts <- [for (t in range64(ntok)); build_q8k_acts(1l, n, Wave(a = 0.7, fa = 0.013 + 0.002 * float(t), b = 0.4, fb = 0.031))]
-        var y_packed, y_read, y_disk : array<float>
+        var inscope y_packed, y_read, y_disk : array<float>
         y_packed |> resize(ntok * d)
         y_read |> resize(ntok * d)
         y_disk |> resize(ntok * d)
-        let us_packed = mean_us(ROUNDS) $() {
+        let us_packed = mean_us(ROUNDS) $ {
             for (t in range64(ntok)) {
                 gemv_rows(packed_q, packed_s, acts[t], y_packed, t, n, d)
             }
         }
-        let us_repack = mean_us(ROUNDS) $() {
+        let us_repack = mean_us(ROUNDS) $ {
             unsafe {
                 memcpy(addr<void?>(scratch_q[0]), addr<void const?>(disk_q[0]), qbytes)
                 memcpy(addr<void?>(scratch_s[0]), addr<void const?>(disk_s[0]), sbytes)
             }
             repack_kq_weight(FMT_IQ3S4, scratch_q, scratch_s, 0l, n, d)
         }
-        let us_read = mean_us(ROUNDS) $() {
+        let us_read = mean_us(ROUNDS) $ {
             unsafe {
                 memcpy(addr<void?>(scratch_q[0]), addr<void const?>(disk_q[0]), qbytes)
                 memcpy(addr<void?>(scratch_s[0]), addr<void const?>(disk_s[0]), sbytes)
@@ -111,7 +110,7 @@ def private run_probe(n, d : int64) {
                 gemv_rows(scratch_q, scratch_s, acts[t], y_read, t, n, d)
             }
         }
-        let us_disk = mean_us(ROUNDS) $() {
+        let us_disk = mean_us(ROUNDS) $ {
             for (t in range64(ntok)) {
                 gemv_disk_ref(disk_q, disk_s, acts[t], y_disk, t, n, d)
             }

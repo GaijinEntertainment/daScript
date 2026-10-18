@@ -1935,8 +1935,7 @@ module) is independent and can land any time - it is pure structure.
     `vulkan_bake_flavor` off the mapping or the loaded planes - one file, but the families ride it,
     the eager rail writes the CPU lane beside it and serves that, and under `DASLLAMA_TRIM` the
     lane's identity says trimmed while its meta says not (the image serves, with the extra planes;
-    the arm warns). The untrimmed lane is the default, so the mint's lane carries the planar families
-    unless the lever is on, and an fp32 token table rides `fblob` whole under the trim (nothing packs
+    the arm warns). An fp32 token table rides `fblob` whole under the trim (nothing packs
     it). `vulkan_bake_begin` on those arms collects the twin into RAM even under
     `DASLLAMA_IMAGE_SAVE=0`, where `vulkan_bake_flavor` deletes it unsaved. Done = both arms re-read
     the gguf through the streaming mint, the collect skipped where nothing saves, and the trimmed
@@ -1945,11 +1944,9 @@ module) is independent and can land any time - it is pure structure.
     `dasllama-convert -f vulkan --trim` (`trim_model_planes`) refuses a NextN head, while the cold
     load's trimmed mint (`resident_would_serve`) admits one the driver's draft seat serves - the
     0.8B-MTP trims at runtime and is refused offline - and both write the lane under the same
-    trim-folded tag; the converter's streamed `-f vulkan` rail still refuses with a text that
-    predates the mint ("collects whole planes"). Done = one admission predicate on both rails
-    (`resident_would_serve` with `planes_trimmed` set before the converter's save), the refusal text
-    naming what still holds, and `dasllama-convert --trim` proven on a q8, a K-quant and a
-    third-format model.
+    trim-folded tag. Done = one admission predicate on both rails
+    (`resident_would_serve` with `planes_trimmed` set before the converter's save), and
+    `dasllama-convert --trim` proven on a q8, a K-quant and a third-format model.
 120. **The served one-stream round on a Vulkan device is unmeasured.** `dasllama-server` arms the
     speculative round by default on a one-stream slot whose whole model is resident
     (`mtp_auto_arms`, `utils/dasllama-server/openai_server.das`), and an armed slot serves
@@ -2149,3 +2146,24 @@ module) is independent and can land any time - it is pure structure.
     Q8_0 and Q4_0 rows re-read. A window off the l column (the E2B gate at 500 rows) runs the m stamp's edge path, where
     the staged KHR tile reads 2-11% under it (the figures beside the pick rule in `ARCHITECTURE_GPU_VULKAN_GEMM.md`);
     that stays as measured - a tail shape, one stage, a shape-keyed switch between two tile families is not worth it.
+
+150. **A short prompt's rate under the streamed layers is unmeasured against the code before them.** Every rate the
+    prefill rotation arc reads is pp3000 and pp9000 (the rows under "From the prefill rotation arc" in `PERF_LEDGER.md`):
+    the expert cache, the ring slot, the pool prefix and the meet pay their fixed costs a window - the reader threads'
+    fetches, the per-expert chain's bundles, the host-first claim - and a 256- or 512-row prompt pays them against a
+    window that holds few rows, where the whole-layer slot and the host sums before the arc had none. Done = pp256 and
+    pp512 on Qwen3.6-35B UD-Q4_K_M and Qwen3.8-Flash-Next UD-IQ4_XS, the arc's tip against a28ffe7e83 (the commit before
+    it), the same box and the frozen fixture's gate, as ledger rows; where the old rate wins at a short prompt, a short-
+    prompt path - the whole-layer slot or the host sums for a window under a row count the race names - keyed on the
+    window's rows, raced in, and the knee it switches at in the row beside it.
+
+151. **The prompt window has never run wider than 2048 rows, so a 9k prompt is five calls.** `DASLLAMA_GPU_PF_ROWS`
+    sizes the window; a recurrent model's window is cut at `DN_WINDOW` (2048, the rows the deltanet smalls planes and the
+    scan workspace hold: `DN_WS_BYTES` is 64 MB at 2048 and grows with the window, 302 MB at 9216), the prefill panels,
+    the x rows, the expert chain's bundle lists and the staged activation rows are sized off the window too, and nothing
+    has measured where the rate stops climbing or the room runs out. Done = pp9000 on Qwen3.6-35B UD-Q4_K_M and
+    Qwen3.8-Flash-Next UD-IQ4_XS at windows of 2048, 4096 and 9216 rows (`DN_WINDOW` raised beside the knob, since a
+    recurrent carrier cuts at it), the plan's room and the rate at each as ledger rows, the frozen fixture's gate 8/8 on
+    every run; the widest window the card holds at pp9000 named, and a 9k prompt in one window call where it does. Where
+    a wider window wins, the default moves to it; where the scan workspace is what stops it, the scan over row chunks
+    inside one window is the lever.

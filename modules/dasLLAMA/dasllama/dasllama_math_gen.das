@@ -4058,15 +4058,13 @@ def private kq_batch_kernel_gen(fmt : int; var yp : float?; kqp : uint8 const?; 
 }
 
 //! one expert's batched kq GEMM over `ntok` contiguous activation rows on the calling lane, y token-major; `tb` (kq_token_block) and `panel` (kq_walk_panel_bytes, null for a packed format) taken in the main context
-def kq_expert_batch_core(fmt : int; var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d, ntok, tb : int64; var panel : uint8?) {
+def kq_expert_batch_core(fmt : int; var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d, ntok, tb : int64; var panel : uint8?) {   // nolint:STYLE037 — one dispatch ladder a format
     let mr = kq_layout_of(fmt)
     let ng = d / mr
     let form = int64(kq_tileform_of(fmt))
     let t4 = (ntok / 4l) * 4l
     if (t4 > 0l) {
-        unsafe {
-            kq_batch_cell_gen(fmt, yp, kqp, ksp, xqp, xsp, xbsp, reinterpret<uint8 const?>(null), n, d, mr, tb, 0, int(ng), 0l, t4, form > 0l, panel)
-        }
+        kq_batch_cell_gen(fmt, yp, kqp, ksp, xqp, xsp, xbsp, null, n, d, mr, tb, 0, int(ng), 0l, t4, form > 0l, panel)
     }
     let kf = kq_fmt_of_id(fmt, "kq_expert_batch_core")
     kq_fmt_stamp(kf) $(F) {

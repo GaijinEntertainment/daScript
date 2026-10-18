@@ -109,6 +109,9 @@ namespace das {
     DAS_API void builtin_fbinary(const FILE* _f);
     DAS_API int64_t builtin_ftell ( const FILE * f, Context * context, LineInfoArg * at );
     DAS_API int64_t builtin_fseek ( const FILE * f, int64_t offset, int32_t mode, Context * context, LineInfoArg * at );
+    DAS_API void * builtin_dread_open ( const char * name, uint64_t band_bytes, Context * context, LineInfoArg * at );
+    DAS_API int64_t builtin_dread_at ( void * h, uint64_t off, void * dst, uint64_t bytes, Context * context, LineInfoArg * at );
+    DAS_API bool builtin_dread_close ( void * h, Context * context, LineInfoArg * at );
     DAS_API vec4f builtin_read ( Context &, SimNode_CallBase * call, vec4f * args );
     DAS_API vec4f builtin_write ( Context &, SimNode_CallBase * call, vec4f * args );
     DAS_API vec4f builtin_read64 ( Context &, SimNode_CallBase * call, vec4f * args );

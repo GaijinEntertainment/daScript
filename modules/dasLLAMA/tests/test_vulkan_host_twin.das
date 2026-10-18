@@ -16,6 +16,7 @@ require dasllama/dasllama_layout
 require dasllama/dasllama_convert
 require dasllama/dasllama_kqformat
 require dasllama/dasllama_math_default
+require dasllama/dasllama_math   // e8m0_half: the mx4 oracle's scale
 require dasllama/dasllama_gpu_tier
 require dasllama/dasllama_math_gen
 require ?vulkan dasllama/dasllama_math_vulkan
@@ -84,15 +85,100 @@ def private put_planar(var m : Model; f : KqFmt; rows, n : int64) {
         }
     }
     kq_plane_pair(m, f) $(var q : array<uint8>; var s : array<uint8>) {
+        delete q
+        delete s
         q <- kq
         s <- ks
     }
 }
 
-//! the planar dispatcher's rows (`mm_f`; the mx4 scalar dot, which no planar dispatcher takes off a bare shell)
-def private planar_rows(m : Model; f : KqFmt; x : array<float>; n, rows : int64) : array<float> {
+//! `rows` outputs holding the sentinel no kernel writes: a row a kernel skips reads as a miss, never as a zero inside the bar
+def private sentinel_rows(rows : int64) : array<float> {
     var y : array<float>
     y |> resize(rows)
+    for (v in y) {
+        v = unsafe(reinterpret<float>(0x7FC00000u))
+    }
+    return <- y
+}
+
+//! a Model shell holding ROWS x `n` of format `f` in disk order, in the q8 serving mode the gathers read
+def private planar_shell(f : KqFmt; n : int64) : Model {
+    var m = Model()
+    m.quant = QuantMode.q8
+    put_planar(m, f, ROWS, n)
+    return <- m
+}
+
+//! the bar every cell here holds: the control moves a tenth of a percent, ten bars, whatever the row's magnitude
+def private twin_bar(want : array<float>) : Bar => Bar(rel = 1e-4, abs_floor = 1e-5 * logits_maxabs(want), poison_rel = 1e-3)
+
+//! the activation as the kernels read it, widened back to floats: Q8_K a scale a superblock under a superblock format, Q8_0 a scale a 32-block otherwise
+def private act_floats(f : KqFmt; x : array<float>; n : int64) : array<float> {
+    var xq : array<int8>
+    var xs : array<float>
+    var xbs : array<int>
+    xq |> resize(n)
+    let blk = kq_sb(f) ? 256l : 32l
+    xs |> resize(n / blk)
+    if (kq_sb(f)) {
+        xbs |> resize(n / 16l)
+        quantize_q8_k_into(x, n, xq, xs, xbs, 0l, 0l, 0l)
+    } else {
+        quantize_q8_0_into(x, n, xq, xs, 0l, 0l)
+    }
+    return <- [for (i in range64(n)); float(xq[i]) * xs[i / blk]]
+}
+
+//! the plain oracle: each row's planar planes widened to floats (the engine's dequantizer a block; the nibble table under the
+//! halved E8M0 scale for mx4; the int8 under its scale for q8) and dotted with the widened activation in plain float
+def private ref_rows(m : Model; f : KqFmt; x : array<float>; n, rows : int64) : array<float> {
+    var inscope xa <- act_floats(f, x, n)
+    var y <- sentinel_rows(rows)
+    var w : array<float>
+    w |> resize(n)
+    let nb = n / 32l
+    for (r in range64(rows)) {
+        if (f == KqFmt.q8) {
+            for (i in range64(n)) {
+                w[i] = float(m.qblob[r * n + i]) * m.qscales[(r * n + i) / 32l]
+            }
+        } elif (f == KqFmt.mx4) {
+            let lut = mx4_lut()
+            for (bi in range64(nb)) {
+                let sc = e8m0_half(uint(m.mxs[(r * nb + bi) * MX4_SB]))
+                for (j in range64(16l)) {
+                    let b = int(m.mxq[(r * nb + bi) * MX4_QB + j])
+                    w[bi * 32l + j] = float(lut[b & 15]) * sc
+                    w[bi * 32l + j + 16l] = float(lut[b >> 4]) * sc
+                }
+            }
+        } else {
+            kq_plane_pair(m, f) $(q : array<uint8>; s : array<uint8>) {
+                if (kq_sb(f)) {
+                    let nsb = n / 256l
+                    for (sb in range64(nsb)) {
+                        dequant_kq_plane_sb(f, q, s, r * nsb + sb, false, w, sb * 256l)
+                    }
+                } else {
+                    for (bi in range64(nb)) {
+                        dequant_b32_plane_block(f, q, s, r * nb + bi, w, bi * 32l)
+                    }
+                }
+            }
+        }
+        var acc = 0.0
+        for (i in range64(n)) {
+            acc += w[i] * xa[i]
+        }
+        y[r] = acc
+    }
+    return <- y
+}
+
+//! the planar dispatcher's rows (`mm_f`; the mx4 scalar dot, which no planar dispatcher takes off a bare shell)
+def private planar_rows(m : Model; f : KqFmt; x : array<float>; n, rows : int64) : array<float> {
+    var y <- sentinel_rows(rows)
     var xq : array<int8>
     var xs : array<float>
     var xbs : array<int>
@@ -133,8 +219,7 @@ def private twin_rows(m : Model; f : KqFmt; x : array<float>; n, rows : int64) :
         xs |> resize(n / 32l)
         quantize_q8_0_into(x, n, xq, xs, 0l, 0l)
     }
-    var y : array<float>
-    y |> resize(rows)
+    var y <- sentinel_rows(rows)
     let twin = moe_gpu_host_twin(int(f))
     unsafe {
         moe_gpu_host_rows(twin, addr(y[0]), addr<uint8 const?>(wq[0]), addr<uint8 const?>(ws[0]), addr<int8 const?>(xq[0]), addr<float const?>(xs[0]), n, 0l, rows)
@@ -149,14 +234,13 @@ def private twin_cell(t : T?; f : KqFmt) {
     }
     t |> success(moe_gpu_host_twin_serves(int(f)), "the host twin serves {f}")
     let n = kq_sb(f) ? N_SB : N_B32
-    var m = Model()
-    m.quant = QuantMode.q8
-    put_planar(m, f, ROWS, n)
+    var inscope m <- planar_shell(f, n)
     var inscope x <- x_row(n)
     var inscope want <- planar_rows(m, f, x, n, ROWS)
+    var inscope ref <- ref_rows(m, f, x, n, ROWS)
     var inscope got <- twin_rows(m, f, x, n, ROWS)
-    let bar = Bar(rel = 1e-4, abs_floor = 1e-5 * logits_maxabs(want), poison_rel = 1e-3)   //! the control moves a tenth of a percent, ten bars, whatever the row's magnitude
-    check(t, "the host twin over the {f} device planes against the planar kernels", got, want, bar, Shape(row_width = int(ROWS)))
+    check(t, "the planar kernels over the {f} planes against the plain dequantized dot", want, ref, twin_bar(ref), Shape(row_width = int(ROWS)))
+    check(t, "the host twin over the {f} device planes against the planar kernels", got, want, twin_bar(want), Shape(row_width = int(ROWS)))
 }
 
 [test]
@@ -182,9 +266,7 @@ def test_host_twin_block32(t : T?) {
 def test_host_rm_q8(t : T?) {
     let f = KqFmt.q8
     let n = N_B32
-    var m = Model()
-    m.quant = QuantMode.q8
-    put_planar(m, f, ROWS, n)
+    var inscope m <- planar_shell(f, n)
     var inscope x <- x_row(n)
     var inscope want <- planar_rows(m, f, x, n, ROWS)
     var wq, ws : array<uint8>
@@ -194,13 +276,11 @@ def test_host_rm_q8(t : T?) {
     xq |> resize(n)
     xs |> resize(n / 32l)
     quantize_q8_0_into(x, n, xq, xs, 0l, 0l)
-    var got : array<float>
-    got |> resize(ROWS)
+    var inscope got <- sentinel_rows(ROWS)
     unsafe {
         q8q8_rm_gemv_gen(addr(got[0]), addr<int8 const?>(wq[0]), addr<uint16 const?>(ws[0]), addr<int8 const?>(xq[0]), addr<float const?>(xs[0]), n, 0l, ROWS)
     }
-    let bar = Bar(rel = 1e-4, abs_floor = 1e-5 * logits_maxabs(want), poison_rel = 1e-3)
-    check(t, "the row-major q8 kernel over the device planes against the planar kernels", got, want, bar, Shape(row_width = int(ROWS)))
+    check(t, "the row-major q8 kernel over the device planes against the planar kernels", got, want, twin_bar(want), Shape(row_width = int(ROWS)))
 }
 
 //! the per-32 and MXFP4 row-major kernels over the device planes against the planar kernels
@@ -212,8 +292,7 @@ def private rm_b32_rows(m : Model; f : KqFmt; x : array<float>; n, rows : int64)
     xq |> resize(n)
     xs |> resize(n / 32l)
     quantize_q8_0_into(x, n, xq, xs, 0l, 0l)
-    var got : array<float>
-    got |> resize(rows)
+    var got <- sentinel_rows(rows)
     unsafe {
         let q = addr<uint8 const?>(wq[0])
         let s = addr<uint8 const?>(ws[0])
@@ -240,14 +319,11 @@ def test_host_rm_block32(t : T?) {
     for (f in [KqFmt.iq4nl32, KqFmt.q4032, KqFmt.q51, KqFmt.q5032, KqFmt.mx4]) {
         t |> run("the row-major kernel over a {f} expert stack") <| @(ct : T?) {
             let n = N_B32
-            var m = Model()
-            m.quant = QuantMode.q8
-            put_planar(m, f, ROWS, n)
+            var inscope m <- planar_shell(f, n)
             var inscope x <- x_row(n)
             var inscope want <- planar_rows(m, f, x, n, ROWS)
             var inscope got <- rm_b32_rows(m, f, x, n, ROWS)
-            let bar = Bar(rel = 1e-4, abs_floor = 1e-5 * logits_maxabs(want), poison_rel = 1e-3)
-            check(ct, "the row-major kernel over the {f} device planes against the planar kernels", got, want, bar, Shape(row_width = int(ROWS)))
+            check(ct, "the row-major kernel over the {f} device planes against the planar kernels", got, want, twin_bar(want), Shape(row_width = int(ROWS)))
         }
     }
 }
@@ -263,8 +339,7 @@ def private rm_kq_rows(m : Model; f : KqFmt; x : array<float>; n, rows : int64) 
     xs |> resize(n / 256l)
     xbs |> resize(n / 16l)
     quantize_q8_k_into(x, n, xq, xs, xbs, 0l, 0l, 0l)
-    var got : array<float>
-    got |> resize(rows)
+    var got <- sentinel_rows(rows)
     unsafe {
         let q = addr<uint8 const?>(wq[0])
         let s = addr<uint8 const?>(ws[0])
@@ -311,14 +386,11 @@ def test_host_rm_superblock(t : T?) {
                KqFmt.iq3s, KqFmt.iq3xxs, KqFmt.iq2s, KqFmt.iq2xs, KqFmt.iq2xxs]) {
         t |> run("the row-major kernel over a {f} expert stack") <| @(ct : T?) {
             let n = N_SB
-            var m = Model()
-            m.quant = QuantMode.q8
-            put_planar(m, f, ROWS, n)
+            var inscope m <- planar_shell(f, n)
             var inscope x <- x_row(n)
             var inscope want <- planar_rows(m, f, x, n, ROWS)
             var inscope got <- rm_kq_rows(m, f, x, n, ROWS)
-            let bar = Bar(rel = 1e-4, abs_floor = 1e-5 * logits_maxabs(want), poison_rel = 1e-3)
-            check(ct, "the row-major kernel over the {f} device planes against the planar kernels", got, want, bar, Shape(row_width = int(ROWS)))
+            check(ct, "the row-major kernel over the {f} device planes against the planar kernels", got, want, twin_bar(want), Shape(row_width = int(ROWS)))
         }
     }
 }
@@ -335,20 +407,19 @@ def private rm_tile4_rows(m : Model; f : KqFmt; xs4 : array<float>; n, rows : in
     xq |> resize(4l * n)
     xs |> resize(4l * nsc)
     xbs |> resize(4l * (n / 16l))
-    for (t in range64(4l)) {
+    for (tk in range64(4l)) {
         var inscope xr : array<float>
         xr |> resize(n)
         for (i in range64(n)) {
-            xr[i] = xs4[t * n + i]
+            xr[i] = xs4[tk * n + i]
         }
         if (sb) {
-            quantize_q8_k_into(xr, n, xq, xs, xbs, t * n, t * nsc, t * (n / 16l))
+            quantize_q8_k_into(xr, n, xq, xs, xbs, tk * n, tk * nsc, tk * (n / 16l))
         } else {
-            quantize_q8_0_into(xr, n, xq, xs, t * n, t * nsc)
+            quantize_q8_0_into(xr, n, xq, xs, tk * n, tk * nsc)
         }
     }
-    var got : array<float>
-    got |> resize(4l * rows)
+    var got <- sentinel_rows(4l * rows)
     unsafe {
         let q = addr<uint8 const?>(wq[0])
         let s = addr<uint8 const?>(ws[0])
@@ -393,9 +464,7 @@ def test_host_rm_tile4(t : T?) {
                KqFmt.iq3s, KqFmt.iq3xxs, KqFmt.iq2s, KqFmt.iq2xs, KqFmt.iq2xxs]) {
         t |> run("the row-major tile over a {f} expert stack") <| @(ct : T?) {
             let n = kq_sb(f) ? N_SB : N_B32
-            var m = Model()
-            m.quant = QuantMode.q8
-            put_planar(m, f, ROWS, n)
+            var inscope m <- planar_shell(f, n)
             var xs4, want : array<float>
             xs4 |> resize(4l * n)
             want |> resize(4l * ROWS)
@@ -411,8 +480,7 @@ def test_host_rm_tile4(t : T?) {
                 }
             }
             var inscope got <- rm_tile4_rows(m, f, xs4, n, ROWS)
-            let bar = Bar(rel = 1e-4, abs_floor = 1e-5 * logits_maxabs(want), poison_rel = 1e-3)
-            check(ct, "the row-major tile over the {f} device planes against the planar kernels a row", got, want, bar, Shape(row_width = int(ROWS)))
+            check(ct, "the row-major tile over the {f} device planes against the planar kernels a row", got, want, twin_bar(want), Shape(row_width = int(ROWS)))
         }
     }
 }

@@ -3,8 +3,10 @@
 Companion to `ARCHITECTURE_GPU_VULKAN.md`; a section is cited by its anchor. This document carries the
 whole-model driver's form for a hyper-connection model (qwen4exp, Qwen3.8-Flash-Next): the wide residual
 and its mixer seams on the device, the n-gram side input, the split token command whose routed
-experts run on the host, the hot expert pool beside it (`ARCHITECTURE_GPU_VULKAN_POOL.md`), and the NextN head riding the chain with its
-verify's rows. The heads the chain runs between its seams are
+experts run on the host, the streamed prompt window the host and the device meet in
+(`#hc-stream-window`), and the NextN head riding the chain with its verify's rows; the hot expert
+pool beside the split command is `ARCHITECTURE_GPU_VULKAN_POOL.md#hc-hot-pool`. The heads the chain
+runs between its seams are
 `ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command`'s; the residency plan that admits the model is
 `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan`.
 

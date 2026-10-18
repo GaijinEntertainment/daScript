@@ -2,8 +2,11 @@
 
 Companion to `ARCHITECTURE_GPU_VULKAN.md`; a section is cited by its anchor. This document
 carries the prefill of an expert layer whose stacks live on the host - the streamed layers of a
-model past the card's weight budget: the GPU/CPU split of its routed experts and the per-expert
-chain the GPU head runs. The tier's decode era is in `ARCHITECTURE_GPU_VULKAN_DECODE.md`, the cm2
+model past the card's weight budget: the GPU/CPU split of its routed experts
+(`#streamed-layer-split`), the per-expert chain the GPU head runs, the pinned stacks in the device
+layout the host reads through row-major kernels (`#streamed-layer-arena`), the streamed slot as a
+ring of experts (`#stream-slot-ring`) and the expert cache whose misses read off the lane
+(`#expert-cache`). The tier's decode era is in `ARCHITECTURE_GPU_VULKAN_DECODE.md`, the cm2
 tiles and the expert chain they carry in `ARCHITECTURE_GPU_VULKAN_GEMM.md`, the model's residency
 on the card in `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`.
 
@@ -96,7 +99,8 @@ place in it (`vk_image_source_set`), the slice walk records a streamed entry's t
 instead of copying its twin out of the mapping (`moe_gpu_stream_source`), and the stack reads its
 planes off the file straight into its pinned memory (`vk_read_plane`: a seek and a 64-bit read),
 so the mapping's expert pages are never faulted - on the reference box the 30B's warm load drops
-from 8.5 to 7.7 s and its peak working set by the streamed layers' twin, 8 GB. A chunk-built image
+from 8.5 to 7.7 s and its peak working set by the streamed layers' twin, 8 GB (`DASLLAMA_VK_STREAM_FILE_READ`
+against `=0`, the prefill rotation rows of `PERF_LEDGER.md`). A chunk-built image
 has no file and copies as before (`DASLLAMA_VK_STREAM_FILE_READ=0` is the same arm on a file); the
 mapped-image import (`VK_EXT_external_memory_host`) stays the first choice where a driver takes it,
 and the NVIDIA Windows driver does not. Under the file-read arm the tier never tries the import: the
@@ -158,16 +162,21 @@ of which a window ever held a few bundles. The driver decides the form once a lo
 (`resident_stream_need`: the split on, and the f16 feed admitting every routed layer's formats at the
 prompt window), tells the tier (`set_moe_gpu_stream_ring`), and carves the slot's bytes accordingly
 before the plan - the budget's probe brings the device up first, since the chain's admission asks it
-- so what the ring leaves is the hot pool's (`ARCHITECTURE_GPU_VULKAN_POOL.md#hc-hot-pool`). Under the
+- so what the ring leaves is the hot pool's (`ARCHITECTURE_GPU_VULKAN_POOL.md#hc-hot-pool`). The carve
+is taken only where the model does not fit whole: the plan runs once without it, and a plan with host
+layers runs again behind it (`resident_plan_carved`); where the carve leaves the uncarved plan's
+mirror no room and the context is not asked whole, more routed layers go to the host at that mirror
+(`resident_plan_host_layers`) rather than the driver declining to the per-op rails. Under the
 ring the window's copy list names every stream region's expert (the pool window hook, with no pool
 prefix), a bundle's regions take the next positions (`xf_assign_land`), its copies land there
-(`xf_expert_copy_ring`), its lists name the positions (`xf_bundle_lists`), and the copy of a bundle
+(`xf_push_copy`, the region's position as the slot), its lists name the positions (`xf_bundle_lists`), and the copy of a bundle
 waits the compute value of the last chain that read any position it lands in (`land_val`, the
 transfer submit's wait) - the ring's reuse gate, where the whole-layer form had none to need. A
 whole-layer copy asserts under the ring, and a meet that declines takes the same chain's begin form,
 routed by the pool window's group. On Flash-Next the slot falls from 1.7 GB to 445 MB and the plan
 counts it honestly for the first time: 41 slots a layer against 44 that sat 1.7 GB past the plan's
-room; on Qwen3.6-35B the pool grows from 64 to 80 slots a layer, the frozen fixture holding 8/8 on both.
+room; on Qwen3.6-35B the pool grows from 64 to 76 slots a layer, `lcpp_bench`'s frozen-fixture gate
+holding 8/8 on both (the prefill rotation rows of `PERF_LEDGER.md` carry the runs).
 
 ### The streamed stacks are an expert cache, its misses read off the lane on demand {#expert-cache}
 
@@ -197,7 +206,8 @@ The reads are buffered, not direct: the lane stays mapped for the planes the hos
 kernel serializes unbuffered reads of a mapped file behind its coherency flush - eight readers at one
 reader's rate, 0.77 against 1.97 GB/s unmapped on the reference box's NVMe - where buffered reads
 through the same cache keep their parallelism (1.68 GB/s mapped), and the pages they leave are
-standby. A channel's timed pop waits only while a job is outstanding, so each channel carries one
+standby (`harness/kq_disk_rail_probe.das` reads the kernels, the rates are the prefill rotation
+rows of `PERF_LEDGER.md`). A channel's timed pop waits only while a job is outstanding, so each channel carries one
 for the readers' lifetime; the readers quit at the ring's drop and at the context's shutdown
 (`vk_stream_readers_quit`, a `[finalize]`), since the job queue's teardown waits on every thread.
 Every slot frees at the window's join, the window sum's end and the decode step's end
@@ -215,7 +225,9 @@ model's drop and at the context's shutdown ("HEAT", the layer and expert counts,
 an earlier file's counts added), and the next arm reads it and seats each layer's hottest experts
 (`expert_heat_load`, `expert_heat_order` -> `moe_gpu_stream_cache_order`). On Qwen3.6-35B at half
 its experts resident the profile halves the on-demand reads and doubles the decode rate; on
-Flash-Next at half, pp3000 577 and tg128 19.0 against 598 and 21.1 with every expert resident. The
+Flash-Next at half, pp3000 577 and tg128 19.0 against 598 and 21.1 with every expert resident
+(`lcpp_bench` at `DASLLAMA_EXPERT_CACHE_MB` half the experts' bytes against unset, the prefill rotation
+rows of `PERF_LEDGER.md`). The
 `gpu_prof` line `expert_cache:` reports a window's fetches, the wait on them, and the readers' busy
 sum against their wall. The matrix's cache cell loads the small carrier through its lane under a
 budget of half and feeds it twice, the second feed reading fewer planes under the profile.

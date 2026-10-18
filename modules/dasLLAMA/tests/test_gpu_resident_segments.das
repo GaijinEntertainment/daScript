@@ -39,7 +39,13 @@ def private allow_cpu_prefill_intent() {
 let private OPEN_ROWS = 40l
 let private TAIL_A = 23l
 let private TAIL_B = 31l
-let private LONG_TAIL = 300l   //! two of them run past the default window (512), so the segmented call runs two windows, the second holding B's rows alone
+let private SEG_WINDOW = 512l   //! the file's prompt window: two LONG_TAILs run past it, so the segmented call runs two windows, the second holding B's rows alone
+let private LONG_TAIL = 300l
+
+[init]
+def private window_intent() {
+    set_pf_window_rows_pin(SEG_WINDOW)   //! before every load of the file: the plan and the window chain read it
+}
 let private STEPS = 8l
 //! the bar a segment's rows hold against its solo window: the split bar, the routed bar on a routed model - its windows' expert
 //! tiles schedule other row counts than the solo window's, and the router's near-ties part the two (the 35B reads 0.56-0.88 of a
@@ -106,7 +112,7 @@ def private tails_as_segments(t : T?; tr : Model; ta, tb : int64; what : string)
     chunks |> push_clone(tail_b)
     eval_segments_(tr, sess, chunks)
     sess |> clear()
-    t |> equal(segment_windows() - sw0, shared_windows(ta), "{what}: the two tails rode one segmented call, {shared_windows(ta)} window holding both segments")
+    t |> equal(segment_windows() - sw0, shared_windows(ta), "{what}: the two tails rode one segmented call, {shared_windows(ta)} window holding both segments at the {pf_window_rows()}-row window")
     t |> equal(moe_gpu_resident_prefills() - pf0, 2l, "{what}: the driver counted a prefill a segment")
     t |> equal(sa.n_past, OPEN_ROWS + ta, "{what}: session A's position moved by its tail")
     t |> equal(sb.n_past, OPEN_ROWS + tb, "{what}: session B's position moved by its tail")

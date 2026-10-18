@@ -201,7 +201,14 @@ that a question answered for one backend has an obvious address in the other. Th
   (`rdec_select_region` names the region every mirror address and the next token command resolve against; a tier
   without it serves one region), its N-row batch seat `install_moe_gpu_resident_batch` (the N-row token command beside
   the resident driver: `rows` answers how many rows it steps at once on the armed model, 0 = none; `rdec_token_n` steps
-  them), all behind the route lever `set_gpu_resident_route` / `gpu_want_resident`, the
+  them), all behind the route lever `set_gpu_resident_route` / `gpu_want_resident`, the streamed layers' seats
+  the Vulkan family alone fills - the pool's DMA fill `install_moe_gpu_resident_hot_dma`, the meet's device/host claim
+  `set_moe_gpu_ffn_xf_meet_hooks`, the lane's stream sources `set_moe_gpu_stream_source_fn`, the host twin
+  `set_moe_gpu_host_twin_fns`, the checkpoint row's ring `install_rdec_dn_snap_ring`, the slot's carve `set_moe_gpu_carve_fn`,
+  the expert cache's view, order, stats, slot and request seats `set_moe_gpu_stream_view_fn` / `_cache_order_fn` /
+  `_cache_stats_fn` / `_cache_fns` / `_request_fns`, the pool window `set_moe_gpu_xf_pool_window_fn`, the dry mint
+  `set_moe_gpu_mint_dry_fn` and the host-bytes census `set_moe_gpu_host_bytes_fn` (`ARCHITECTURE_GPU_VULKAN_STREAM.md`,
+  `ARCHITECTURE_GPU_VULKAN_POOL.md`) - the
   OS video-memory seat `install_moe_gpu_os_memory` the residency plan sizes against, the weight-bytes seat
   `install_rdec_note_weight_bytes` the decode warm-up guard reads, the segmented prefill `install_rdec_prefill_segs` (`ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-segments`), the speculative carry's landing `install_rdec_carry` (`ARCHITECTURE_GPU_VULKAN_LANDING.md#logits-transfer-queue`), the NextN draft head's seat `install_rdec_draft` (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-draft-head`), its prompt warm on the window chain `install_rdec_head_warm` (the ask and the rows written; the head's K/V row ranges move up and down through the resident driver's two K/V row seats, `rdec_kv_sync` / `rdec_kv_read` (filled by `install_moe_gpu_resident`'s `kv_sync` / `kv_read` arguments), at layer `n_layers`; `ARCHITECTURE_GPU_VULKAN_MTP.md#resident-head-prompt-warm`), the same-slab verify's `install_rdec_verify` (`ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command`), the reject's device rollback `install_rdec_rollback` (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-rollback`), and the per-layer-embedding seats `install_rdec_ple`
   - the branch's width, its per-layer gate and proj planes, the pre-step's projection and the token table on the

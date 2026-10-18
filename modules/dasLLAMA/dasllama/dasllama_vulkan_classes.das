@@ -842,7 +842,7 @@ class MoeCombine : GkMoeCombine {
     }
 }
 
-//! the per-expert chain's combine on the same stamp: one workgroup a window row, its weighted down row added onto its
+//! GkMoeCombine's by-row form for the per-expert chain: one workgroup a window row, its weighted down row added onto its
 //! position's accumulated row (the chain zeroes the accumulator at its first expert)
 [vk_dispatch(name = "combine_row_cls", grid = "rows", params = "rows : int64")]
 class MoeCombineRow : GkMoeCombine {

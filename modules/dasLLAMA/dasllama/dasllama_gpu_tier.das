@@ -473,7 +473,7 @@ def public rdec_hot_submit(l, nhit : int64; slots : int64 const?; w : float cons
 //! the DMA fill: expert `e` off the pinned stream stacks of the layer at `woff1` into slot `slot` of layer `l`'s pool, on the transfer
 //! queue into the layer's open batch; false = the tier cannot (no transfer queue, a dry tier, the stacks do not hold it)
 typedef RdecHotDmaFn = function<(l, slot, e, woff1 : int64; f1 : int) : bool>
-//! ... and the batch submitted; the layer's next hit chain waits its landing
+//! layer l's open DMA batch submitted on the transfer queue; the layer's next hit chain waits its landing
 typedef RdecHotDmaFlushFn = function<(l : int64) : void>
 
 [unused_argument(l, slot, e, woff1, f1)]
@@ -1834,6 +1834,30 @@ def public set_gpu_want_pf_stream(pin : int) {
     g_pf_stream_pin = pin
 }
 
+//! the pin as it was written (-1 = none): a fixture puts back what it found
+def public gpu_want_pf_stream_pin : int => g_pf_stream_pin
+
+var private g_hot_dma_pin = -1    //! `set_gpu_hot_dma`'s pin: -1 reads the environment
+var private g_dec_meet_pin = -1   //! `set_gpu_dec_meet`'s pin: -1 reads the environment
+
+//! the pool's DMA fill (`DASLLAMA_GPU_HOT_DMA`): a decode step's misses copied into the pool on the transfer queue, a prompt window's hits served off the pool first; the pin is a fixture's in-process twin, -1 lifts it
+def public gpu_hot_dma : bool => g_hot_dma_pin >= 0 ? g_hot_dma_pin == 1 : g_env_gpu.gpu_hot_dma
+
+def public set_gpu_hot_dma(pin : int) {
+    g_hot_dma_pin = pin
+}
+
+def public gpu_hot_dma_pin : int => g_hot_dma_pin
+
+//! the decode meet (`DASLLAMA_GPU_DEC_MEET`): a decode token's picks on a streamed layer claimed through the prefill's meet; the pin is a fixture's in-process twin, -1 lifts it
+def public gpu_dec_meet : bool => g_dec_meet_pin >= 0 ? g_dec_meet_pin == 1 : g_env_gpu.gpu_dec_meet
+
+def public set_gpu_dec_meet(pin : int) {
+    g_dec_meet_pin = pin
+}
+
+def public gpu_dec_meet_pin : int => g_dec_meet_pin
+
 def public gpu_want_dnd : bool
     => g_env_gpu.gpu_dnd ?? (g_gpu_want.dnd || gpu_want_auto())
 
@@ -2049,22 +2073,6 @@ def public set_moe_gpu_stream_source_fn(f : function<(woff : int64; fmt : int) :
 
 def public moe_gpu_stream_source(woff : int64; fmt : int) : MoeGpuStreamSource => invoke(g_moe_gpu_stream_source, woff, fmt)
 
-//! A streamed stack's pinned planes as the host reads them: the device-layout quant and scale planes of the stack at
-//! element `woff` in the tier's `fmt` space. q == null = no streamed stack at (woff, fmt).
-typedef MoeGpuStreamPlane = tuple<q : uint8 const?; s : uint8 const?; qbytes : int64; sbytes : int64>
-
-[unused_argument(woff, fmt)]
-def private moe_gpu_no_stream_plane(woff : int64; fmt : int) : MoeGpuStreamPlane =>
-    default<MoeGpuStreamPlane>
-
-var private g_moe_gpu_stream_plane = @@moe_gpu_no_stream_plane
-
-def public set_moe_gpu_stream_plane_fn(f : function<(woff : int64; fmt : int) : MoeGpuStreamPlane>) {
-    g_moe_gpu_stream_plane = f
-}
-
-def public moe_gpu_stream_plane(woff : int64; fmt : int) : MoeGpuStreamPlane => invoke(g_moe_gpu_stream_plane, woff, fmt)
-
 //! One expert of a streamed stack as the expert cache holds it: the slot's quant and scale pointers for the host's reads, the
 //! slot's buffer handles and offsets for the DMA; `present` false where the expert has no slot (resident or ring)
 typedef MoeGpuStreamExpert = tuple<q : uint8 const?; s : uint8 const?; qbuf : uint64; qoff : int64; sbuf : uint64; soff : int64; present : bool>
@@ -2082,6 +2090,15 @@ typedef MoeGpuStreamView = tuple<q : uint8 const?; s : uint8 const?; slot_of : i
 
 //! the page a direct lane read aligns to: a ring slot holds its expert's span widened to it, the expert's bytes `(plane offset + e * plane stride) % STREAM_PAGE` in
 let public STREAM_PAGE = 4096l
+
+//! the lane span of expert `e`'s plane at `off` + e * `len`, widened to the page: a direct read lands it whole in one aligned call
+//! (an unaligned span goes through the handle's bounce band a piece at a time, three times the cost), and the expert's bytes
+//! start `skew` into the slot
+def public stream_page_span(off, len, e : int64) : tuple<aoff : int64; alen : int64; skew : int64> {
+    let o = off + e * len
+    let aoff = o & ~(STREAM_PAGE - 1l)
+    return (aoff = aoff, alen = ((o + len + STREAM_PAGE - 1l) & ~(STREAM_PAGE - 1l)) - aoff, skew = o - aoff)
+}
 
 let STREAM_RING_BASE = 1 << 30   //! `slot_of` values from here name a ring slot of the expert cache's transient ring
 
@@ -2222,9 +2239,8 @@ def public moe_gpu_stream_ring_release {
 }
 
 //! The host's rows core over a streamed stack's device-layout planes - the tier's own block decode run on the CPU:
-//! y[rb, re) = the rows' dots with one Q8_K activation row (quants `xq`, a scale a superblock `xs`) over the quant plane
-//! `q` and scale plane `s` of a region of `n`-wide rows; `twin` is the per-lane handle `moe_gpu_host_twin` makes for the
-//! format IN THE MAIN CONTEXT (a lane's context holds every global as zero).
+//! y[rb, re) = the rows' dots with one Q8_K activation row (`xq`, a scale a superblock `xs`) over the quant plane `q` and
+//! scale plane `s` of `n`-wide rows; `twin` is the per-lane handle `moe_gpu_host_twin` makes for the format in the main context
 typedef MoeGpuHostRowsFn = function<(twin : void?; var yp : float?; q : uint8 const?; s : uint8 const?; xq : int8 const?; xs : float const?; n, rb, re : int64) : void>
 typedef MoeGpuHostTwinFn = function<(fmt : int) : void?>
 typedef MoeGpuHostServesFn = function<(fmt : int) : bool>
@@ -2316,16 +2332,25 @@ def public set_moe_gpu_total_layers(n : int64) {
     g_installed_marks.total_layers = n
 }
 
-let MOE_GPU_LAND_EXPERTS = 128l   //! the streamed slot as a ring: this many experts' planes - the chain's bundles in flight, four of its widest
+let MOE_GPU_LAND_EXPERTS = 128l   //! the streamed slot as a ring: at most this many experts' planes - the chain's bundles in flight, four of its widest
 
 var private g_moe_gpu_stream_ring = false
+var private g_moe_gpu_stream_ring_experts = 0l
 
-//! the streamed slot is the per-expert chain's ring of MOE_GPU_LAND_EXPERTS experts, not a whole layer's planes: the driver sets it where the chain serves every streamed layer
-def public set_moe_gpu_stream_ring(on : bool) {
+//! the experts a ring of `n_expert` holds: every expert of a layer under the cap, the cap past it
+def public moe_gpu_ring_experts(n_expert : int64) : int64 => clamp(n_expert, 1l, MOE_GPU_LAND_EXPERTS)
+
+//! the streamed slot is the per-expert chain's ring of `experts` experts, not a whole layer's planes: the driver sets it where the
+//! chain serves every streamed layer it is about to upload, and clears it where the per-op rails serve instead and at the drop
+def public set_moe_gpu_stream_ring(on : bool; experts : int64 = 0l) {
     g_moe_gpu_stream_ring = on
+    g_moe_gpu_stream_ring_experts = on ? experts : 0l
 }
 
 def public moe_gpu_stream_ring() : bool => g_moe_gpu_stream_ring
+
+//! the ring's experts where the ring form is on, 0 otherwise
+def public moe_gpu_stream_ring_experts() : int64 => g_moe_gpu_stream_ring_experts
 
 var private g_moe_gpu_stream_need = 0l
 

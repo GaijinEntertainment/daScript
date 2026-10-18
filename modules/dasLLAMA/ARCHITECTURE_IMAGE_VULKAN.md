@@ -72,7 +72,10 @@ hot-pool fills (`ARCHITECTURE_GPU_VULKAN_STREAM.md#streamed-layer-arena`) - so t
 takes a plan of arena and expert roles with every host layer's stream mirror made, and declines by name a model whose
 host still reads the planar planes: one with per-layer embeddings, biased expert stacks or the gemma-4 MoE form
 (`resident_trim_decline`), and, as this run's knobs, the stream arm or the rare rail's arena or one-pass form off
-(`TRIM_STREAM_DECLINE`, `TRIM_RAIL_DECLINE`: run-mode, so no lane is written). On the mapped trimmed lane a planar read of
+(`TRIM_STREAM_DECLINE`, `TRIM_RAIL_DECLINE`: run-mode). A run-mode decline with no trimmed lane on disk writes the
+untrimmed lane at the lane's path under the untrimmed identity (`untrimmed_lane_tag`), and a trimmed load falls back to it
+while the decline holds; a run that can serve the trim mints the trimmed lane over it. A run-mode decline while a trimmed
+lane sits on disk writes nothing: the lane stays for the next run and this run serves planar from memory. On the mapped trimmed lane a planar read of
 an expert stack - the rail or the mirror declined after all - is a panic by name (`trim_planar_guard`), as a live gather
 is. A lane baked under one host-layers count and mapped under another leaves the baked plan at
 the first routed layer the counts disagree on, and the walk regathers its expert entries live off those planes from

@@ -246,7 +246,7 @@ transcode the CPU chain reads (`wshk*_offs`, `shexp_plane`; it keeps them on a l
 them on - an armed GPU tier or a Metal mode - so a CPU-only load carries the transcode alone), the
 transcode otherwise - the classifier, and the
 router plane - every MoE layer's f32 rows with a gated shared expert's gate row beside them. The scratch adds the window's routed planes: the gathered f16
-rows, the gate and up rows, the f16 hidden rows and the routed down rows over `PF_WINDOW x k`
+rows, the gate and up rows, the f16 hidden rows and the routed down rows over `pf_window_rows() x k`
 bucket rows plus `TILE_READ_SLACK` rows of tile slack (128 - the m column's unclamped partial
 load, `dasllama/dasllama_gpu_tier.das`), and the routing smalls. The dense planes size at the shared
 expert's width, or the expert width where no layer has one. The plan is all-or-nothing as ever:

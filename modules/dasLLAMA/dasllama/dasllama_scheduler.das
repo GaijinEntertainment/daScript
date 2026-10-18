@@ -708,10 +708,8 @@ def private reap_finished(m : Model; var sch : Scheduler) {
                 done_at = ref_time_ticks()))
             if (sch.streams[i].session.device_kv) {
                 let t_park = prof_ticks()
-                let t_park_wall = ref_time_ticks()
                 park_stream(m, sch, sch.streams[i])
                 prof_add("sched_park", t_park)
-                to_log(LOG_INFO, "[stream {sch.streams[i].id}] parked in {get_time_usec(t_park_wall) / 1000} ms (the close turn, the openings' snapshots to the pool, the claim)\n")
             } elif (sch.paged) {
                 if (sch.streams[i].finish != "media_lost") {
                     donate_stream(m, sch, sch.streams[i])
@@ -750,12 +748,10 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
         st.think_state = st.think_marks.opened ? 1 : 0
         if (sch.device_kv) {
             let t_attach = prof_ticks()
-            let t_attach_wall = ref_time_ticks()
             st.session <- create_device_session(m, gpu_device_session_dtype())
-            let hit = device_attach(m, sch, st.session, st.prompt)   // a model whose prefill cannot continue parks and pools nothing, so nothing matches
+            let hit = device_attach(m, sch, st.session, st.prompt)
             prof_add("sched_device_attach", t_attach)
             let matched = hit.n
-            to_log(LOG_INFO, "[stream {st.id}] attached in {get_time_usec(t_attach_wall) / 1000} ms (the session, the victims' tails to the pool, the prefix taken up or adopted)\n")
             device_checkpoints_plan(st, sch.queue[0], matched)
             st.n_prefilled = matched
             st.n_cached = matched
@@ -1296,12 +1292,12 @@ def private pool_keep(m : Model; var sch : Scheduler; claim : int64; tokens : ar
         delete snap
         return
     }
+    pool_carrier(m, sch)   //! made before the seed reads its id window: the first opening a fresh scheduler pools has no carrier yet
     if (recurrent && !empty(sch.pool_host.ple_prev)) {
         snap.ple_prev |> resize(long_length(sch.pool_host.ple_prev))
         ple_window_seed(snap.ple_prev, tokens, n)
     }
     let t0 = prof_ticks()
-    pool_carrier(m, sch)
     let held = prefix_share_pages(sch.prefix, sch.pool, sch.pool_host, tokens, n)
     let moved = gpu_device_kv_export(m, claim, sch.pool_host, held, n)
     if (moved && recurrent) {

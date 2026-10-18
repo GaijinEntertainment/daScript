@@ -3973,7 +3973,7 @@ def private rm_kq_gen(var gc : LlvmCodeCtx; nt : int) : bool { // nolint:STYLE03
     let fieldSc = twoWord && !iq4xs       //! the field's sub-scale is 1 + 2 x field
     let strips16 = fmt == KqFmt.iq2s || fmt == KqFmt.iq2xs   //! sixteen per-16 strip scales after the f16 d
     let perBlockD = q40 || iq4nl          //! a per-block f16 d, no sub-scales
-    let dmin = k4 || k5 || k2             //! the min term off the activation sums
+    let min_term = k4 || k5 || k2         //! the min term off the activation sums
     let offset = k6 ? 32 : (k3 ? 4 : 0)   //! the signed code's offset, folded as sub-scale x activation-sum terms
     var te = TileEmit(q40 = q40, iq4nl32 = iq4nl || iq4xs, kq = iq3s4 ? 35 : (grid ? kq_desc(fmt).schema_id : 0))
     if (!setup_tile_emit(te, gc, p, lut)) return false
@@ -4109,7 +4109,7 @@ def private rm_kq_gen(var gc : LlvmCodeCtx; nt : int) : bool { // nolint:STYLE03
                 for (t in range(nt)) {
                     var i0 = LLVMBuildAdd(b, sb16, te.types->ConstI64(uint64(2 * jj)), "")
                     var i1 = LLVMBuildAdd(b, sb16, te.types->ConstI64(uint64(2 * jj + 1)), "")
-                    if (dmin) {
+                    if (min_term) {
                         var t0 = LLVMBuildMul(b, mn0[tb], rm_xbs_at(te, i0, t, ""), "")
                         var t1 = LLVMBuildMul(b, mn1[tb], rm_xbs_at(te, i1, t, ""), "")
                         min_sum[t] = LLVMBuildAdd(b, min_sum[t], LLVMBuildAdd(b, t0, t1, ""), "bsum{t}")
@@ -4197,7 +4197,7 @@ def private rm_kq_gen(var gc : LlvmCodeCtx; nt : int) : bool { // nolint:STYLE03
                     var cv0 = LLVMBuildInsertElement(b, LLVMConstNull(te.vnf32), corr, te.types->ConstI32(0ul), "")
                     f[t] = LLVMBuildFSub(b, f[t], cv0, "fo{t}")
                 }
-                if (dmin) {   //! the min term: f -= dmin x xs x sum(min x block sum)
+                if (min_term) {   //! the min term: f -= dmin x xs x sum(min x block sum)
                     var bsf = LLVMBuildSIToFP(b, min_sum[t], te.types.t_float, "")
                     var dmq = LLVMBuildFMul(b, dmn, xsv[t], "")
                     var corr = LLVMBuildFMul(b, bsf, dmq, "mcorr")

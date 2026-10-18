@@ -2922,7 +2922,7 @@ def private ensure_comb_state {
     if (g_gpu.comb_ready) {
         return
     }
-    g_gpu.comb_stage = make_host_buf(3l * COMB_WI_BYTES, false)   // transfer_src staging: w, inv, then the inverse map
+    g_gpu.comb_stage = make_host_buf(3l * COMB_WI_BYTES, storage = false)   //! transfer_src staging: w, inv, then the inverse map
     g_gpu.comb_w_dev = make_device_buf(COMB_WI_BYTES)
     g_gpu.comb_inv_dev = make_device_buf(COMB_WI_BYTES)
     g_gpu.comb_bkt_dev = make_device_buf(COMB_WI_BYTES)
@@ -2950,7 +2950,7 @@ def private ensure_batch_set(si : int; ybuf, xqbuf, xsbuf : uint64; xqbytes, xsb
         return
     }
     if (!g_gpu.stacks[si].batch_made) {
-        g_gpu.stacks[si].batch_meta = make_host_buf(int64(g_gpu.stacks[si].batch_meta_ring) * BATCH_META_BYTES, false)   // transfer_src staging, one entry a ring slot
+        g_gpu.stacks[si].batch_meta = make_host_buf(int64(g_gpu.stacks[si].batch_meta_ring) * BATCH_META_BYTES, storage = false)   //! transfer_src staging, one entry a ring slot
         g_gpu.stacks[si].batch_meta_dev = make_device_buf(BATCH_META_BYTES)
         g_gpu.stacks[si].batch_made = true
     }
@@ -3789,30 +3789,39 @@ def private ensure_stream_slots {
     }
     g_gpu.stream_ready = true
     g_gpu.land_val |> clear()
-    g_gpu.land_val |> resize(MOE_GPU_LAND_EXPERTS)
+    g_gpu.land_val |> resize(max(moe_gpu_stream_ring_experts(), 1l))
     g_gpu.land_at = 0l
     let slot_bytes = 2l * (cap.gu_wq + cap.gu_ws) + cap.dn_wq + cap.dn_ws
     // same read-time carve carved_budget() subtracts — overcommit silently hits the WDDM paging cliff
     let need = moe_gpu_stream_need()
     let reserve = need > 0l ? int64(nslots) * need : STREAM_RESERVE
     assert(int64(nslots) * slot_bytes <= reserve, "dasLLAMA vulkan tier: stream slots exceed the carved stream reserve")
-    let form = moe_gpu_stream_ring() ? "a ring of {MOE_GPU_LAND_EXPERTS} experts" : "a whole layer"
+    assert(XF_AHEAD * XF_BUNDLE <= MOE_GPU_LAND_EXPERTS,
+        "dasLLAMA vulkan tier: the ring holds fewer experts than the chain keeps in flight - a position would be reused under a command still reading it")
+    let form = moe_gpu_stream_ring() ? "a ring of {moe_gpu_stream_ring_experts()} experts" : "a whole layer"
     to_log(LOG_INFO, "dasLLAMA vulkan tier: streamed prefill engaged ({length(g_gpu.stream_stacks) / 3} layers, slot {slot_bytes} bytes x {length(g_gpu.stream_slots)}, {form}); host-visible buffers {g_gpu.host_bytes >> 20l} MB, das heap {int64(heap_bytes_allocated()) >> 20l} MB\n")
 }
 
-//! a stream slot's plane capacities: a whole layer's widest planes, or MOE_GPU_LAND_EXPERTS experts of the widest expert planes under the ring form
+//! a stream slot's plane capacities: a whole layer's widest planes, or the ring's experts of the widest expert planes under the ring
+//! form, each plane bound as one storage range the device admits
 def private stream_slot_caps : tuple<gu_wq : int64; gu_ws : int64; dn_wq : int64; dn_ws : int64> {
     var cap = (gu_wq = g_gpu.stream_max_gu_wq, gu_ws = g_gpu.stream_max_gu_ws, dn_wq = g_gpu.stream_max_dn_wq, dn_ws = g_gpu.stream_max_dn_ws)
     return cap if (!moe_gpu_stream_ring())
+    let ring = moe_gpu_stream_ring_experts()
     cap = (gu_wq = 0l, gu_ws = 0l, dn_wq = 0l, dn_ws = 0l)
     for (k in range(length(g_gpu.stream_stacks))) {
         let ss & = unsafe(g_gpu.stream_stacks[k])
-        if (k % 3 == 2) {
-            cap.dn_wq = max(cap.dn_wq, ss.qlen * MOE_GPU_LAND_EXPERTS)
-            cap.dn_ws = max(cap.dn_ws, ss.slen * MOE_GPU_LAND_EXPERTS)
+        if (k % STREAM_PLANE_KINDS == 2) {
+            cap.dn_wq = max(cap.dn_wq, ss.qlen * ring)
+            cap.dn_ws = max(cap.dn_ws, ss.slen * ring)
         } else {
-            cap.gu_wq = max(cap.gu_wq, ss.qlen * MOE_GPU_LAND_EXPERTS)
-            cap.gu_ws = max(cap.gu_ws, ss.slen * MOE_GPU_LAND_EXPERTS)
+            cap.gu_wq = max(cap.gu_wq, ss.qlen * ring)
+            cap.gu_ws = max(cap.gu_ws, ss.slen * ring)
+        }
+    }
+    for (b in [cap.gu_wq, cap.gu_ws, cap.dn_wq, cap.dn_ws]) {
+        if (!vk_range_ok(b)) {
+            panic("dasLLAMA vulkan tier: the ring slot's plane of {b} bytes ({ring} experts) is past the device's storage range {vk_max_storage_range()} - DASLLAMA_GPU_PF_STREAM=0 serves the prompt off the host sums")
         }
     }
     return cap
@@ -3899,7 +3908,8 @@ def private stream_group_bind(g : int; nrows : int64; f3, f2 : int) {
 }
 
 def private stream_group_check(g : int; nrows : int64; f3, f2 : int) {
-    assert(nrows >= BATCH_TILE || g_env_gpu.gpu_dec_meet, "dasLLAMA vulkan tier: streamed layers serve prefill batches only")
+    let one_row_meet = gpu_dec_meet()
+    assert(nrows >= BATCH_TILE || one_row_meet, "dasLLAMA vulkan tier: streamed layers serve prefill batches only")
     assert(g_gpu.stream_stacks[g * 3 + 1].fmt == f3 && g_gpu.stream_stacks[g * 3 + 2].fmt == f2,
         "dasLLAMA vulkan tier: streamed group format mismatch")
     ensure_stream_slots()
@@ -3954,7 +3964,7 @@ def vk_moe_ffn_streamed_xf(g : int; var goutp : float?; offs1 : int64 const?; of
 //! inside the f32 x plane's cap. The combined (npos > 0) form only.
 [arch(at="../ARCHITECTURE_RUNTIME.md#activation-scale-lattice"), arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-expert-chain")]
 def vk_moe_ffn_xf_ok(npos, n : int64; f1, f3, f2 : int) : bool {
-    if (g_gpu == null || g_gpu.dry || !g_gpu.has_coopmat2) {
+    if (g_gpu == null || !g_gpu.has_coopmat2) {   //! the dry walk answers as the live one: the mint's plan is the load's
         return false
     }
     return pf_f16_feed(f1) && pf_f16_feed(f3) && pf_f16_feed(f2) && npos * n * 4l <= BATCH_Y_BYTES
@@ -4107,17 +4117,17 @@ def vk_moe_ffn_batch_xf_begin(offs1 : int64 const?; offs3 : int64 const?; offs2 
 //! MoeGpuFfnXfJoinFn: wait the pending chain (its fence, or the per-expert chain's last timeline value) and copy its combined rows out.
 def vk_moe_ffn_batch_xf_join(var goutp : float?) {
     assert(g_xf_pending, "dasLLAMA vulkan tier: async cm2 chain join with nothing in flight")
-    if (g_xf_pipe) {
+    if (g_xf_per_expert) {
         if (g_xf_empty) {   //! the window pushed no expert: its share of the rows is zero
             for (i in range64(g_xf_pend_bytes / 4l)) {
                 unsafe(goutp[i]) = 0.0
             }
             g_xf_pending = false
-            g_xf_pipe = false
+            g_xf_per_expert = false
             return
         }
         cmp_wait(g_gpu.xf_last)
-        g_xf_pipe = false
+        g_xf_per_expert = false
     } else {
         wait_fence()
     }
@@ -4125,13 +4135,13 @@ def vk_moe_ffn_batch_xf_join(var goutp : float?) {
     g_xf_pending = false
 }
 
-var private g_xf_pipe = false   //! the chain in flight is the per-expert form: the join waits its timeline value, not the fence
-var private g_xf_empty = false  //! ... and it pushed no expert
+var private g_xf_per_expert = false   //! the chain in flight is the per-expert form: the join waits its timeline value, not the fence
+var private g_xf_empty = false        //! ... and it pushed no expert
 
 //! the per-expert chain's rings, made once a model: XF_RING compute and transfer commands with their last signalled values
 [cold_path]
-def private ensure_xf_pipe {
-    return if (g_gpu.xf_pipe_ready)
+def private ensure_xf_rings {
+    return if (g_gpu.xf_rings_ready)
     g_gpu.xf_cmds |> reserve(XF_RING)
     g_gpu.xf_vals |> reserve(XF_RING)
     g_gpu.xf_xcmds |> reserve(XF_RING)
@@ -4144,28 +4154,30 @@ def private ensure_xf_pipe {
         }
         g_gpu.xf_xvals |> push(0ul)
     }
-    g_gpu.xf_pipe_ready = true
+    g_gpu.xf_rings_ready = true
     to_log(LOG_INFO, "dasLLAMA vulkan tier: per-expert streamed chain engaged (ring {XF_RING}, {g_gpu.xfer_fam >= 0 ? "transfer queue" : "one queue"})\n")
 }
 
-//! expert `e` of stream group `g`'s three planes, the cache slot's bytes onto the stream slot's at the expert's offset
-[unused_argument(ege)]
-def private xf_expert_copy(raw : VkCommandBuffer; slot : StreamSlot; g : int; e, ege : int64) {
+//! expert `e` of stream group `g`'s three planes, the cache slot's bytes onto slot `dslot` of the destination stacks `dst`
+//! (plane order gate, up, down); an expert the cache does not hold is a panic naming `who` - the window's fetch missed it
+def private xf_expert_copy(raw : VkCommandBuffer; g : int; e : int64; dst : int[3]; dslot : int64; who : string) {
     for (k in range(3)) {
         let sk = g * 3 + k
-        let psi = stream_slot_stack(slot, k)
         let src = vk_stream_slot(sk, e)
         if (!src.present) {
-            panic("dasLLAMA vulkan tier: the expert chain claimed expert {e} of streamed stack {sk}, which the expert cache does not hold - the window's fetch missed it")
+            panic("dasLLAMA vulkan tier: {who} claimed expert {e} of streamed stack {sk}, which the expert cache does not hold - the window's fetch missed it")
         }
         let qlen = g_gpu.stream_stacks[sk].qlen
         let slen = g_gpu.stream_stacks[sk].slen
-        cmd_copy_range(raw, src.qbuf, src.qoff, g_gpu.stacks[psi].wqbuf, e * qlen, qlen)
+        cmd_copy_range(raw, src.qbuf, src.qoff, g_gpu.stacks[dst[k]].wqbuf, dslot * qlen, qlen)
         if (slen > 0l) {
-            cmd_copy_range(raw, src.sbuf, src.soff, g_gpu.stacks[psi].wsbuf, e * slen, slen)
+            cmd_copy_range(raw, src.sbuf, src.soff, g_gpu.stacks[dst[k]].wsbuf, dslot * slen, slen)
         }
     }
 }
+
+//! the stream slot's three stacks in plane order
+def private stream_slot_stacks(slot : StreamSlot) : int[3] => fixed_array(slot.s1, slot.s3, slot.s2)
 
 //! one bundle's chain over its `rows` chunk rows, grid entries at [r0, r1) of the grid-list ring; `first` lands the window and zeroes the accumulator
 [arch(at="../ARCHITECTURE_GPU_VULKAN_STREAM.md#streamed-layer-split")]
@@ -4271,26 +4283,13 @@ def vk_xf_pool_window(copies : int const?; npool, l, woff1 : int64; fmt1 : int) 
     }
 }
 
-//! region `r`'s expert `e` of stream group `g` copied into the pool slot the region's offsets name, a plane at its slot stride
+//! region `r`'s expert `e` of stream group `g` copied into the pool slot the region's gate offset names (the three planes
+//! sit at one slot index, a plane at its stack's stride)
 def private xf_expert_copy_pool(raw : VkCommandBuffer; g : int; r, e : int64) {
     let m & = unsafe(g_xfm)
-    for (k in range(3)) {
-        let sk = g * 3 + k
-        let src = vk_stream_slot(sk, e)
-        if (!src.present) {
-            panic("dasLLAMA vulkan tier: the pool window claimed expert {e} of streamed stack {sk}, which the expert cache does not hold")
-        }
-        let ds = k == 0 ? m.p1 : (k == 1 ? m.p3 : m.p2)
-        let offs = k == 0 ? m.offs1 : (k == 1 ? m.offs3 : m.offs2)
-        let slot = (unsafe(offs[r * 3l]) - g_gpu.stacks[ds].base) / m.ege
-        let qlen = g_gpu.stream_stacks[sk].qlen
-        let slen = g_gpu.stream_stacks[sk].slen
-        assert(g_gpu.stacks[ds].wqbytes / (g_gpu.stacks[ds].elems / m.ege) == qlen, "dasLLAMA vulkan tier: a pool slot and a streamed expert differ in bytes")
-        cmd_copy_range(raw, src.qbuf, src.qoff, g_gpu.stacks[ds].wqbuf, slot * qlen, qlen)
-        if (slen > 0l) {
-            cmd_copy_range(raw, src.sbuf, src.soff, g_gpu.stacks[ds].wsbuf, slot * slen, slen)
-        }
-    }
+    let slot = (unsafe(m.offs1[r * 3l]) - g_gpu.stacks[m.p1].base) / m.ege
+    assert(g_gpu.stacks[m.p1].wqbytes / (g_gpu.stacks[m.p1].elems / m.ege) == g_gpu.stream_stacks[g * 3].qlen, "dasLLAMA vulkan tier: a pool slot and a streamed expert differ in bytes")
+    xf_expert_copy(raw, g, e, fixed_array(m.p1, m.p3, m.p2), slot, "the pool window")
 }
 
 var private @scratch g_xf_pos : array<int64>   //! the ring form: the opened window's region -> its ring position (a stream region's, once its bundle is pushed)
@@ -4302,7 +4301,7 @@ def private xf_assign_land(r_lo, r_hi : int64) : uint64 {
     let m & = unsafe(g_xfm)
     var wait = XFER_NO_WAIT
     for (r in range64(max(r_lo, m.npool), r_hi)) {
-        let pos = g_gpu.land_at % MOE_GPU_LAND_EXPERTS
+        let pos = g_gpu.land_at % moe_gpu_stream_ring_experts()
         g_gpu.land_at++
         g_xf_pos[r] = pos
         wait = max(wait, g_gpu.land_val[pos])
@@ -4318,26 +4317,6 @@ def private xf_land_done(r_lo, r_hi : int64; val : uint64) {
     }
 }
 
-//! the ring form: region `r`'s expert `e` of stream group `g` copied onto the stream slot at the region's ring position
-def private xf_expert_copy_ring(raw : VkCommandBuffer; g : int; r, e : int64) {
-    let m & = unsafe(g_xfm)
-    let pos = g_xf_pos[r]
-    for (k in range(3)) {
-        let sk = g * 3 + k
-        let psi = stream_slot_stack(m.slot, k)
-        let src = vk_stream_slot(sk, e)
-        if (!src.present) {
-            panic("dasLLAMA vulkan tier: the expert chain claimed expert {e} of streamed stack {sk}, which the expert cache does not hold - the window's fetch missed it")
-        }
-        let qlen = g_gpu.stream_stacks[sk].qlen
-        let slen = g_gpu.stream_stacks[sk].slen
-        cmd_copy_range(raw, src.qbuf, src.qoff, g_gpu.stacks[psi].wqbuf, pos * qlen, qlen)
-        if (slen > 0l) {
-            cmd_copy_range(raw, src.sbuf, src.soff, g_gpu.stacks[psi].wsbuf, pos * slen, slen)
-        }
-    }
-}
-
 //! a bundle region's copy: into its pool slot for a pool region (none for a hit), onto the stream slot otherwise - at the
 //! region's ring position under the ring form, at the expert's own index in a whole-layer slot
 def private xf_push_copy(raw : VkCommandBuffer; r, base : int64) {
@@ -4347,11 +4326,10 @@ def private xf_push_copy(raw : VkCommandBuffer; r, base : int64) {
         if (e >= 0l) {
             xf_expert_copy_pool(raw, m.g, r, e)
         }
-    } elif (moe_gpu_stream_ring()) {
-        xf_expert_copy_ring(raw, m.g, r, int64(unsafe(g_xf_pool_copies[r])))
-    } else {
-        xf_expert_copy(raw, m.slot, m.g, (unsafe(m.offs1[r * 3l]) - base) / m.ege, m.ege)
+        return
     }
+    let e = (unsafe(m.offs1[r * 3l]) - base) / m.ege   //! the expert off the live offset table: the meet rotates the regions after the window opened
+    xf_expert_copy(raw, m.g, e, stream_slot_stacks(m.slot), moe_gpu_stream_ring() ? g_xf_pos[r] : e, "the expert chain")
 }
 
 //! MoeGpuFfnXfOpenFn's streamed form: group `g`'s window prepared - the slot rebased, the x rows, the weights and the map staged; nothing submitted until a push
@@ -4364,7 +4342,9 @@ def vk_moe_ffn_xf_open_experts(g : int; offs1 : int64 const?; offs3 : int64 cons
         to_log(LOG_INFO, "dasLLAMA vulkan tier: streamed prefill split engaged (DASLLAMA_GPU_MOE_SPLIT=0 streams whole layers)\n")
     }
     stream_group_check(g, nrows, f3, f2)
-    ensure_xf_pipe()
+    if (!g_gpu.xf_rings_ready) {
+        ensure_xf_rings()
+    }
     g_xfm.t0 = ref_time_ticks()
     let si = g % length(g_gpu.stream_slots)
     let slot = g_gpu.stream_slots[si]
@@ -4404,8 +4384,8 @@ def vk_moe_ffn_xf_open_experts(g : int; offs1 : int64 const?; offs3 : int64 cons
 //! the rows of regions [r_lo, r_hi) of the opened window; -1 past the chunk cap or the bundle's expert count
 def private xf_bundle_rows(r_lo, r_hi : int64) : int64 {
     let m & = unsafe(g_xfm)
-    // a sixteenth of the layer's experts (`vk_xf_bundle` pins it); a window over the pool alone takes a token's device share in one submit
-    let cap_experts = m.npool == m.nregions && m.npool > 0l ? XF_BUNDLE : (g_env_vulkan.vk_xf_bundle > 0l ? min(g_env_vulkan.vk_xf_bundle, XF_BUNDLE) : clamp(m.nregions / 16l, 1l, XF_BUNDLE))
+    //! a window over the pool alone takes a token's device share in one submit
+    let cap_experts = m.npool == m.nregions && m.npool > 0l ? XF_BUNDLE : (g_env_vulkan.vk_xf_bundle > 0l ? min(g_env_vulkan.vk_xf_bundle, XF_BUNDLE) : clamp(m.nregions / XF_BUNDLE_SHARE, 1l, XF_BUNDLE))
     return -1l if (r_hi - r_lo > cap_experts || (r_lo < m.npool && r_hi > m.npool))   //! a bundle binds one stack set: the pool's or the slot's, never across the seam
     var rows = 0l
     for (r in range64(r_lo, r_hi)) {
@@ -4548,7 +4528,7 @@ def vk_moe_ffn_xf_close_experts {
     g_gpu.stacks[m.p3].batch_meta_at = 0
     g_gpu.stacks[m.p2].batch_meta_at = 0
     g_xf_pending = true
-    g_xf_pipe = true
+    g_xf_per_expert = true
     g_xf_empty = m.pushed == 0l
     g_xf_pend_bytes = m.npos * m.n * 4l
     if (vk_prof()) {

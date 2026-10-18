@@ -9,6 +9,7 @@ require _override_probes   // decode_declines: the fake override's step
 require dasllama/dasllama_sampling
 require dasllama/dasllama_gpu_resident
 require dasllama/dasllama_gpu_tier   // install_moe_gpu_resident_bias - the bias seat a served qwen2 needs
+require dasllama/dasllama_env   // set_pf_window_rows_pin - the ring cells' 512-row window
 require ?vulkan dasllama/dasllama_vulkan_decode   // rd_routed_slots_fit - the N-row command's slot cap, where the module exists
 require ?vulkan dasllama/dasllama_vulkan_prefill  // ple_proj_gemv_why - the window projection's tile gate, where the module exists
 require dasllama/dasllama_gpu_kernels_common  // gk_bf16_pairs - the bf16 projection's stamp pick on both homes
@@ -1006,10 +1007,10 @@ def test_plan_room(t : T?) {
 
 [test]
 def test_resident_hot_slots(t : T?) {
-    t |> run("the hot expert pool's slots: 64 beside the whole mirror, up to 32 out of the mirror's context, a count asked from the floor's room, none under four") @(t : T?) {
+    t |> run("the hot expert pool's slots: every slot that fits beside the whole mirror, up to 32 out of the mirror's context, a count asked from the floor's room, none under four") @(t : T?) {
         let mib = 1_048_576l
         let column = 125l * mib
-        t |> equal(64l, resident_hot_slots(-1l, 9000l * mib, 12000l * mib, column, 512l), "unasked, 64 slots fit beside the whole mirror: the pool takes them and the mirror keeps its context")
+        t |> equal(72l, resident_hot_slots(-1l, 9000l * mib, 12000l * mib, column, 512l), "unasked, 72 slots fit beside the whole mirror: the pool takes every one and the mirror keeps its context")
         t |> equal(40l, resident_hot_slots(-1l, 5000l * mib, 12000l * mib, column, 512l), "unasked, 40 fit beside the mirror: past 32, the mirror yields nothing")
         t |> equal(32l, resident_hot_slots(-1l, 681l * mib, 5600l * mib, column, 512l), "unasked, five fit beside the mirror: the mirror's context yields the room of 32")
         t |> equal(20l, resident_hot_slots(-1l, 681l * mib, 2500l * mib, column, 512l), "... and no more than the floor's room holds")
@@ -1459,14 +1460,18 @@ def private gemma4_26b_shell() : Model {
 let private HOUSE_26B_FLAT_PLAN_MB = 39949l   //! the 26B UD-IQ3_XXS's strict 32768 x 4 plan with every mirror row flat, read on the pod's 32 GB card
 let private HOUSE_32GB_ROOM_MB = 28527l       //! that card's plan room, read in the same load log
 
+let private RING_CELL_WINDOW = 512l   //! the ring cells' prompt window: the rows a sliding ring holds past its window
+
 //! the sliding layers' rings in the plan (`../ARCHITECTURE_GPU_KV_RING.md#kv-sliding-ring`): on the 26B at 32768 positions over four
-//! regions - the house shape - a sliding layer holds its window and the window chain's 512 rows, rounded to 64, and a global layer
-//! every position; the flat pin charges every layer the whole context, and the ring bytes are what the context does not scale;
-//! the pod's flat plan less the flat mirror plus the ringed one fits that card's room
+//! regions - the house shape - a sliding layer holds its window and the window chain's rows (pinned at 512 here), rounded to 64, and a
+//! global layer every position; the flat pin charges every layer the whole context, and the ring bytes are what the context does not
+//! scale; the pod's flat plan less the flat mirror plus the ringed one fits that card's room
 [test]
 def test_resident_ring_mirror(t : T?) {
     t |> run("the 26B's mirror at 32768 x 4 under the rings: 1536 rows a sliding layer, every position a global one") @(t : T?) {
         var m <- gemma4_26b_shell()
+        let window_was = pf_window_rows_pin()
+        set_pf_window_rows_pin(RING_CELL_WINDOW)
         with_gpu_kv_ring(1) {
             t |> equal(kv_ring_rows(m.config, 0l, 32768l, 512l), 1536l, "a sliding layer: its 1024-position window and the 512 rows a window writes")
             t |> equal(kv_ring_rows(m.config, 5l, 32768l, 512l), 0l, "a global layer keeps every position")
@@ -1488,6 +1493,7 @@ def test_resident_ring_mirror(t : T?) {
             t |> success((ringed >> 20l) + rest < HOUSE_32GB_ROOM_MB,
                 "the house plan fits the 32 GB card's room under the rings: {(ringed >> 20l) + rest} MB of {HOUSE_32GB_ROOM_MB} (flat {HOUSE_26B_FLAT_PLAN_MB})")
         }
+        set_pf_window_rows_pin(window_was)
         delete m
     }
 }
@@ -1501,12 +1507,15 @@ def test_trim_lane_ring_pin(t : T?) {
         var m <- gemma4_26b_shell()
         var ids : array<string>
         var mirrors : array<int64>
+        let window_was = pf_window_rows_pin()
+        set_pf_window_rows_pin(RING_CELL_WINDOW)
         for (pin in [1, 0]) {
             with_gpu_kv_ring(pin) {
                 ids |> push(image_identity(moe_gpu_bake_tag()))
                 mirrors |> push(resident_mirror_bytes(m, 32768l, KVDtype.f16, 4l))
             }
         }
+        set_pf_window_rows_pin(window_was)
         t |> equal(ids[0], ids[1], "the lane's identity reads the same under either pin: the image holds no K/V row")
         t |> success(mirrors[0] * 7l < mirrors[1], "the plan charges the ringed mirror under one pin and the flat one under the other ({mirrors[0] >> 20l} MB against {mirrors[1] >> 20l} MB)")
         var terr = ""
@@ -1679,4 +1688,31 @@ def test_ple_f32_tile_gates(t : T?) {
             g_gpu = live
         }
     }
+}
+
+//! the expert cache's profile beside the lane: a file the writer made reads back whole for its model's shape, and another
+//! model's shape, a bad magic or a short file reads empty (the cache then keeps the first ids)
+[test]
+def test_expert_heat_profile(t : T?) {
+    let path = path_join(test_temp_dir(), "expert_heat_probe.heat")
+    var heat <- [for (i in range64(3l * 4l)); i * 7l + 1l]
+    t |> success(expert_heat_write_to(path, 3l, 4l, heat), "the profile wrote")
+    let back <- expert_heat_read(path, 3l, 4l)
+    t |> equal(long_length(back), 12l, "the model's shape reads every pick")
+    var same = long_length(back) == 12l
+    for (b, h in back, heat) {
+        same = same && b == h
+    }
+    t |> success(same, "... as written")
+    t |> equal(long_length(expert_heat_read(path, 4l, 3l)), 0l, "another model's shape reads empty")
+    t |> equal(long_length(expert_heat_read(path_join(test_temp_dir(), "expert_heat_none.heat"), 3l, 4l)), 0l, "a missing profile reads empty")
+    fopen(path, "wb") $(f) {
+        fwrite(f, [int64(0x12345678), 3l, 4l])
+        fwrite(f, heat)
+    }
+    t |> equal(long_length(expert_heat_read(path, 3l, 4l)), 0l, "a bad magic reads empty")
+    var short_heat <- [for (i in range64(5l)); i]
+    t |> success(expert_heat_write_to(path, 3l, 4l, short_heat), "a short profile wrote")
+    t |> equal(long_length(expert_heat_read(path, 3l, 4l)), 0l, "a short profile reads empty")
+    remove(path)
 }

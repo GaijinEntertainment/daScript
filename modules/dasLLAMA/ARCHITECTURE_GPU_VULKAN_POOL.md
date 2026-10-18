@@ -120,7 +120,8 @@ once a layer. A prompt window's fill stays the host's place under the knob: a wi
 on the same transfer queue, and a DMA fill beside them cost the prompt a fifth. The pool's summary
 line counts the experts the DMA placed. On Qwen3.6-35B with every expert resident the decode harness
 reads 19.8 ms a token against 23.6, the pool serving 97.5% of the picks against 78.7%; on Flash-Next
-56.5 against 62.3. The knob is off by default, for the before-and-after on real prompts.
+56.5 against 62.3 (`lcpp_bench` tg128 under `DASLLAMA_GPU_HOT_DMA=1` against unset, the prefill
+rotation rows of `PERF_LEDGER.md`). The knob is on by default; `=0` keeps the host fill, the before-and-after on real prompts.
 
 ### A prompt's window serves the pool's hits and leaves it warm {#pool-window-prefix}
 
@@ -144,7 +145,8 @@ slot, and the window's compute waits the layer's last DMA fill. After the join a
 device took keeps its slot (`rdec_pool_promote`); the hits count as the pool's. The prompt leaves the
 pool holding its hottest experts, so the decode behind it hits at the warm rate from its first token
 (on Qwen3.6-35B the decode's pool hits read 90.7% against 79.0% with the knob off, its host experts
-2.5 ms a token against 6.0); a 64-row window on layer 12 serves 414 of 512 rows off 29 hits with
+2.5 ms a token against 6.0 - `lcpp_bench`'s tg128 behind its pp3000, the prefill rotation rows of
+`PERF_LEDGER.md`); a 64-row window on layer 12 serves 414 of 512 rows off 29 hits with
 nothing copied. On a long prompt every expert of a layer is picked, so no slot the window reads is a
 victim and the prefix promotes into free slots alone; the decode step's DMA fill moves the pool from there.
 
@@ -155,7 +157,11 @@ and its pool is on - runs the meet over the pool (`rdec_pool_meet_rows`).** The 
 its hits in their slots first, then its misses, each with a victim slot that the device's DMA fills
 as the meet claims the region, then the misses no slot could take, which are the host's alone. The
 device's limit is the hits and half the misses; the host claims the other half from the rare end at
-the same time. After the join, a miss the device took keeps the slot its DMA landed in
+the same time. Under a device limit the host claims off the list's tail and never rotates a region
+up from under the limit: the window's copy and victim lists are frozen by region position, and a
+rotation would move the regions under them (`moe_prefill_meet`, the `dl < nreg` arm - a pinned
+`DASLLAMA_MOE_HOST_FIRST` had the host claim a pool region first, and the device then copied the
+wrong expert into the victim slot). After the join, a miss the device took keeps the slot its DMA landed in
 (`rdec_pool_promote`) and the slot's old expert goes out. A window the chain declines falls to the
 streamed window (`rdec_stream_rows`), then to the host's sums. The knob is off by default: a decode
 token's picks through the meet as a one-row window lost to the DMA fill on every carrier measured.

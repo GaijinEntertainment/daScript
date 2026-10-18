@@ -14,6 +14,7 @@ require daslib/fio                                      // get_env_variable / st
 require daslib/toml                                     // read_toml: POST /config round-trip check
 require math                                            // sqrt
 require strings                                         // find (control-page content-type/body checks)
+require daslib/utf8_utils                               // is_utf8_string_valid: a sanitized tool call's name and arguments
 require daslib/strings_boost                            // split: the SSE body into its data lines
 
 // End-to-end conformance for the OpenAI-compatible server: spin it up on its own thread (a separate
@@ -1473,6 +1474,21 @@ def test_parse_tool_calls(t : T?) {
             t |> equal(calls[0]._function.arguments, "\{}")
             t |> equal(calls[1]._function.name, "b")
             t |> equal(calls[1].id, "call_1_1")
+        }
+        delete calls
+    }
+    t |> run("a call's name and arguments pass through utf8_sanitize: an invalid byte becomes U+FFFD") @(t : T?) {
+        var calls : array<OaiToolCall>
+        let bad = string([uint8(0xC3), uint8(0x28)])   //! a lead with no continuation, then a letter
+        let fixed = string([uint8(0xEF), uint8(0xBF), uint8(0xBD), uint8(0x28)])   //! U+FFFD, then the letter
+        let full = "<tool_call>\n\{\"name\": \"f{bad}\", \"arguments\": \{\"s\": \"x{bad}y\"}}\n</tool_call>"
+        parse_tool_calls(full, "<tool_call>", "</tool_call>", "c", calls)
+        t |> equal(length(calls), 1)
+        if (length(calls) == 1) {
+            t |> success(is_utf8_string_valid(calls[0]._function.name), "the name is valid UTF-8")
+            t |> success(is_utf8_string_valid(calls[0]._function.arguments), "the arguments are valid UTF-8")
+            t |> equal(calls[0]._function.name, "f{fixed}")
+            t |> success(find(calls[0]._function.arguments, "x{fixed}y") >= 0, "the replacement sits where the bad byte was")
         }
         delete calls
     }

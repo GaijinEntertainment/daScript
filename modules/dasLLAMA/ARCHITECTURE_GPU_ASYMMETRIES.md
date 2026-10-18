@@ -42,6 +42,16 @@ asymmetries a stamp family ledgers - stays in `ARCHITECTURE_GPU.md#gpu-backends`
   `DASLLAMA_GPU_HOST_LAYERS`, `ARCHITECTURE_GPU_VULKAN_POOL.md#hc-hot-pool`): it names how many routed
   layers' experts the Vulkan plan moves to the host whatever the card holds; Metal moves no expert off the
   device, so the ask has nothing to move.
+- **The streamed prompt and its levers are the Vulkan driver's alone** (`set_gpu_want_pf_stream`,
+  `DASLLAMA_GPU_PF_STREAM`, `DASLLAMA_GPU_PF_STREAM_LAYERS`, `set_pf_window_rows_pin`, `DASLLAMA_GPU_PF_ROWS`,
+  `set_expert_cache_mb`, `DASLLAMA_EXPERT_CACHE_MB`, `DASLLAMA_EXPERT_RING`, `DASLLAMA_EXPERT_READERS`,
+  `DASLLAMA_VK_XF_BUNDLE`, `DASLLAMA_GPU_HOT_DMA`, `DASLLAMA_GPU_DEC_MEET`,
+  `ARCHITECTURE_GPU_VULKAN_STREAM.md#streamed-layer-split`, `#expert-cache`,
+  `ARCHITECTURE_GPU_VULKAN_POOL.md#pool-dma-fill`): a routed layer whose experts serve on the host streams
+  its stack to the device for the prompt window, the window's rows cut at `DASLLAMA_GPU_PF_ROWS`, the
+  stacks held in pinned memory under the expert cache's budget and read off the lane by its readers, the
+  pool's misses filled by DMA and a decode token's picks met over the pool under the two experiment knobs;
+  Metal holds every expert in unified memory, streams nothing and reads none of these.
 - **The strict context pin is read by the Vulkan plan alone** (`set_gpu_ctx_strict`,
   `DASLLAMA_GPU_CTX_STRICT`, `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan`): Metal's mirror is the
   model's own context in unified memory, so no plan shortens it and the pin has nothing to hold.

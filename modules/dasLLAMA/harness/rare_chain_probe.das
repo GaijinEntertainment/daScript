@@ -20,6 +20,7 @@ require dasllama/dasllama_par
 require ../tests/_kq_fixtures.das
 
 let private ROUNDS = 20
+let private WARM_ROUNDS = 2
 let private DIM = 2560l
 let private NFE = 640l
 let private FMT_GU_IQ3S4 = 35
@@ -54,9 +55,9 @@ def private make_rows(ntok : int64) : Rows {
 
 def private fill_random(var a : array<uint8>; seed : uint) {
     var st = seed
-    for (i in range(length(a))) {
+    for (v in a) {
         st = st * 1664525u + 1013904223u
-        a[i] = uint8(st >> 16u)
+        v = uint8(st >> 16u)
     }
 }
 
@@ -111,23 +112,21 @@ def private rows_p(var r : Rows) : RowsP {
 
 //! the chain over expert `x` with activation `a`, on the calling lane; `step` > 0 runs that many of its five steps only
 def private chain(x : ExpertP; a : Acts; var r : RowsP; gu_fn : MatmulKqRowsFn; step : int) {
-    unsafe {
-        var g = r.g
-        var u = r.u
-        var o = r.o
-        var hq = r.hq
-        var hs = r.hs
-        var hbs = r.hbs
-        invoke(gu_fn, g, x.gq, x.gs, a.xq, a.xs, a.xbs, DIM, 0l, NFE)
-        return if (step == 1)
-        invoke(gu_fn, u, x.uq, x.us, a.xq, a.xs, a.xbs, DIM, 0l, NFE)
-        return if (step == 2)
-        swiglu4(g, u, NFE)
-        return if (step == 3)
-        quantize_q8_0_bs_into_ptr(g, NFE, hq, hs, hbs, 0l, 0l, 0l)
-        return if (step == 4)
-        iq4nl32q8_gemv_gen(o, x.dq, x.ds, hq, hs, hbs, NFE, 0l, DIM)
-    }
+    var g = r.g
+    var u = r.u
+    var o = r.o
+    var hq = r.hq
+    var hs = r.hs
+    var hbs = r.hbs
+    invoke(gu_fn, g, x.gq, x.gs, a.xq, a.xs, a.xbs, DIM, 0l, NFE)
+    return if (step == 1)
+    invoke(gu_fn, u, x.uq, x.us, a.xq, a.xs, a.xbs, DIM, 0l, NFE)
+    return if (step == 2)
+    swiglu4(g, u, NFE)
+    return if (step == 3)
+    quantize_q8_0_bs_into_ptr(g, NFE, hq, hs, hbs, 0l, 0l, 0l)
+    return if (step == 4)
+    iq4nl32q8_gemv_gen(o, x.dq, x.ds, hq, hs, hbs, NFE, 0l, DIM)
 }
 
 //! the chain over expert `x` with `ntok` contiguous activation rows at `a` through the batched expert cores: gate and up
@@ -150,11 +149,12 @@ def private chain_batched(x : ExpertP; a : Acts; var r : RowsP; ntok, tb : int64
     }
 }
 
-def private run_probe(ne, rpe : int64) {
+def private run_probe(ne, rpe : int64) {   // nolint:STYLE038 — one linear measurement sweep
     select_matmul_backend_for_load_()
     let gu_fn = kq_rows_fn(FMT_GU_IQ3S4)
     let lanes = get_dispatch_lanes()
     var experts : array<Expert>
+    experts |> reserve(ne)
     for (e in range64(ne)) {
         experts |> emplace(make_expert(e))
     }
@@ -162,38 +162,28 @@ def private run_probe(ne, rpe : int64) {
     print("backend '{active_kernel_backend()}', {lanes} lanes, {ne} experts x {bytes} bytes = {bytes * ne / 1048576l} MB\n")
     var inscope acts0 <- build_q8k_acts(rpe, DIM, Wave(a = 0.7, fa = 0.013, b = 0.4, fb = 0.031))
     var actv : array<Acts>
+    actv |> reserve(rpe)
     unsafe {
         for (r in range64(rpe)) {
             actv |> push(Acts(xq = addr<int8 const?>(acts0.xq[r * DIM]), xs = addr<float const?>(acts0.xs[r * (DIM / 256l)]), xbs = addr<int const?>(acts0.xbs[r * (DIM / 16l)])))
         }
     }
     let acts = actv[0]
-    var app : Acts const?
-    unsafe {
-        app = addr<Acts const?>(actv[0])
-    }
+    let app = unsafe(addr<Acts const?>(actv[0]))
     var rows : array<Rows>
-    for (i in range(lanes)) {
+    rows |> reserve(lanes)
+    for (_i in range(lanes)) {
         rows |> emplace(make_rows(rpe))
     }
     let tb = effective_token_block(get_q8_token_block(), DIM)
-    var xp : array<ExpertP>
-    for (x in experts) {
-        xp |> push(expert_p(x))
-    }
-    var rp : array<RowsP>
-    for (r in rows) {
-        rp |> push(rows_p(r))
-    }
-    var xpp : ExpertP const?
-    var rpp : RowsP?
-    unsafe {
-        xpp = addr<ExpertP const?>(xp[0])
-        rpp = addr<RowsP?>(rp[0])
-    }
+    var xp <- [for (x in experts); expert_p(x)]
+    var rp <- [for (r in rows); rows_p(r)]
+    let xpp = unsafe(addr<ExpertP const?>(xp[0]))
+    var rpp = unsafe(addr<RowsP?>(rp[0]))
     // one lane, every expert in sequence, whole chain and then each step's prefix
     var cursor = 0l
     var prefix : array<double>
+    prefix |> reserve(5)
     for (step in [0, 1, 2, 3, 4]) {
         for (_w in range(2)) {
             unsafe {
@@ -215,7 +205,7 @@ def private run_probe(ne, rpe : int64) {
     for (per in [1, 4, 16]) {
         var base = 0l
         var us = 0.0lf
-        for (round in range(ROUNDS + 2)) {
+        for (round in range(ROUNDS + WARM_ROUNDS)) {
             let t0 = ref_time_ticks()
             maybe_parallel_for(true, 0, lanes, lanes) $(rb, re) {
                 unsafe {
@@ -228,7 +218,7 @@ def private run_probe(ne, rpe : int64) {
                     }
                 }
             }
-            if (round >= 2) {   //! two warm forks
+            if (round >= WARM_ROUNDS) {
                 us += double(get_time_usec(t0))
             }
             base += int64(lanes * per)
@@ -240,7 +230,7 @@ def private run_probe(ne, rpe : int64) {
     for (per in [1, 4, 16]) {
         var base = 0l
         var us = 0.0lf
-        for (round in range(ROUNDS + 2)) {
+        for (round in range(ROUNDS + WARM_ROUNDS)) {
             let t0 = ref_time_ticks()
             maybe_parallel_for(true, 0, lanes, lanes) $(rb, re) {
                 unsafe {
@@ -251,7 +241,7 @@ def private run_probe(ne, rpe : int64) {
                     }
                 }
             }
-            if (round >= 2) {
+            if (round >= WARM_ROUNDS) {
                 us += double(get_time_usec(t0))
             }
             base += int64(lanes * per)

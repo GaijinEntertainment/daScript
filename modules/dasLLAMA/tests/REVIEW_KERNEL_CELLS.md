@@ -7,10 +7,16 @@ work: `../followup_general.md`, `../followup_vulkan.md`, `../followup_metal.md`.
 
 A cell is one `t |> run` subtest, or a `[test]` function that runs no subtest; a helper's asserts
 belong to every cell that calls it. A CPU kernel is a function that writes an output buffer from
-operand buffers; one that answers a size, a block or a layout is not. To loosen an assert is to let
+operand buffers; one that answers a size, a block or a layout is not. A CPU oracle is the same
+computation written in plain code in this checklist's folder - a cell, or a `_*.das` helper
+module here; it may widen a quantized operand through a `../dasllama/` function that widens a
+quantized block to floats, and calls no other `../dasllama/` function - a kernel under
+`../dasllama/` is never one. A sentinel is a value the kernel cannot write from the cell's own
+inputs - a NaN where every input is finite, or a fixed bit pattern no finite input yields; a
+zero-filled or newly allocated buffer is not one. To loosen an assert is to let
 pass an input the old assert failed. A kernel-unit cell is a cell in which a `[metal_dispatch]` or
 `[vk_dispatch]` class is dispatched, or a CPU kernel in `../dasllama/dasllama_math*.das` is called,
-by a statement in test code - the cell itself, or a helper in its own file or in a `_*.das`
+by a statement in test code outside a CPU oracle - the cell itself, or a helper in its own file or in a `_*.das`
 test-helper module - itself or through a router, a `../dasllama/` function whose only job is to
 pick which compiled form (stamp) of the dispatched class or the CPU kernel runs; a kernel run
 inside any other `../dasllama/` function does not make a cell a kernel-unit cell. A kernel run is a
@@ -18,8 +24,7 @@ dispatch or a CPU kernel call. A gate is any call site that supplies a kernel's 
 fills its kargs (kernel-argument) struct itself, other than a serving call in `../dasllama/` the
 kernel exists for - a cell, a probe, a harness. A stamp is a `[vk_dispatch]` or
 `[metal_dispatch]` class that compiles to its own shader module - a class no other class derives
-from; every rule here treats each stamp as its own class. A CPU oracle is the same computation
-written in plain code and run on the CPU. A path of a class is each branch a value read from the
+from; every rule here treats each stamp as its own class. A path of a class is each branch a value read from the
 kargs or from any bound buffer selects, and each trip-count regime of each loop whose bound such a
 value sets - the regimes read against the loop's stride: zero, under one stride, a whole number of
 strides, and past a whole number of strides (the tail). A branch or loop inside a function the
@@ -75,7 +80,7 @@ shapes.** Two forms can be bit-equal and both wrong.
 
 **A diff that changes an existing `[vk_dispatch]` or `[metal_dispatch]` class's branch
 selection - a branch added, or a predicate widened or narrowed, so that a different set of kargs
-values, or of sentinel values in a bound buffer, reaches a path - ships a kernel-unit cell that
+values, or of marker values a bound buffer holds, reaches a path - ships a kernel-unit cell that
 dispatches that class at a value the change moved onto or off that path, or names the existing
 cell that already does.** A sibling stamp's cell counts. At every value the change left where it
 was the kernel computes what it did before, so a cell that dispatches only those values passes

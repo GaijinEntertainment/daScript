@@ -36,9 +36,10 @@ def private say_row(name : string; bytes : int64; us : array<double>) {
     }
     let mean = sum / double(length(us))
     let gb = double(bytes) / 1e9lf
-    var rounds = ""
-    for (u in us) {
-        rounds += " {int(u / 1000.0lf)}"
+    let rounds = build_string() $(var w : StringBuilderWriter) {
+        for (u in us) {
+            w |> write(" ") |> write(int(u / 1000.0lf))
+        }
     }
     print("{name}: {bytes / 1000000l} MB  best {best / 1000.0lf} ms = {gb / (best / 1e6lf)} GB/s  mean {mean / 1000.0lf} ms = {gb / (mean / 1e6lf)} GB/s  (rounds ms:{rounds})\n")
 }
@@ -46,7 +47,8 @@ def private say_row(name : string; bytes : int64; us : array<double>) {
 //! a device-to-device copy of `bytes` on the compute queue: VRAM reads at the card's rate, a buffer the driver placed in system memory at the link's
 def private dev_copy_row(name : string; src, dst : uint64; bytes : int64) {
     var us : array<double>
-    for (r in range(ROUNDS)) {
+    us |> reserve(ROUNDS)
+    for (_r in range(ROUNDS)) {
         let t0 = ref_time_ticks()
         batch_cmd_one_shot() $(raw : VkCommandBuffer) {
             cmd_copy_whole(raw, src, dst, bytes)
@@ -72,19 +74,19 @@ def private run_probe(bytes : int64) {   // nolint:STYLE038 — one linear measu
     let rebar = key_exists(g_gpu.dev_mapped, dev)
     print("device {rebar ? "ReBAR-mapped" : "not mapped (staged uploads)"}, transfer queue {g_gpu.xfer_fam >= 0 ? "on" : "off"}, {get_total_hw_jobs() + 1} lanes\n")
     unsafe {
-        // (1) the ReBAR direct form: the CPU lanes write the pageable source straight into VRAM
         var us_direct : array<double>
-        for (r in range(ROUNDS)) {
+        us_direct |> reserve(ROUNDS)
+        for (_r in range(ROUNDS)) {
             let t0 = ref_time_ticks()
             upload_region_at(dev, 0l, addr<uint8 const?>(src[0]), bytes)
             us_direct |> push(double(get_time_usec(t0)))
         }
         say_row(rebar ? "direct ReBAR write" : "staged upload", bytes, us_direct)
         dev_copy_row("device -> device copy after the direct write (where the buffer sits)", dev, dev2, bytes)
-        // (2) the DMA form: a pinned staging buffer copied on the transfer queue
-        var pinned = make_host_buf(bytes, false, false, true)
+        var pinned = make_host_buf(bytes, false, [xfer_shared = true])
         par_memcpy(pinned.mapped, reinterpret<void?>(addr<uint8 const?>(src[0])), bytes)
         var us_dma : array<double>
+        us_dma |> reserve(ROUNDS)
         if (g_gpu.xfer_fam >= 0) {
             var raw = alloc_xfer_cmd()
             for (r in range(ROUNDS)) {
@@ -107,17 +109,17 @@ def private run_probe(bytes : int64) {   // nolint:STYLE038 — one linear measu
             }
             say_row("pinned -> VRAM, compute queue", bytes, us_dma)
         }
-        // (3) the host half of the DMA form: a pageable source into the pinned staging, the lanes' memcpy
         var us_host : array<double>
-        for (r in range(ROUNDS)) {
+        us_host |> reserve(ROUNDS)
+        for (_r in range(ROUNDS)) {
             let t0 = ref_time_ticks()
             par_memcpy(pinned.mapped, reinterpret<void?>(addr<uint8 const?>(src[0])), bytes)
             us_host |> push(double(get_time_usec(t0)))
         }
         say_row("pageable -> pinned, the lanes' memcpy", bytes, us_host)
-        // (4) the same memcpy on one thread: the floor a helper thread beside the expert sums would read
         var us_one : array<double>
-        for (r in range(ROUNDS)) {
+        us_one |> reserve(ROUNDS)
+        for (_r in range(ROUNDS)) {
             let t0 = ref_time_ticks()
             memcpy(pinned.mapped, reinterpret<void?>(addr<uint8 const?>(src[0])), bytes)
             us_one |> push(double(get_time_usec(t0)))

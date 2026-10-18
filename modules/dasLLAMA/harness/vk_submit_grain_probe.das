@@ -79,7 +79,7 @@ def private run_probe(bytes, experts : int64) {
     }
     let dev = make_device_buf(bytes, true)
     let dev2 = make_device_buf(bytes, true)
-    let pinned = make_host_buf(bytes, false, false, true)   //! contents are irrelevant to a copy's wall
+    let pinned = make_host_buf(bytes, false, [xfer_shared = true])   //! contents are irrelevant to a copy's wall
     let ne = int(experts)
     var xc, cc : array<VkCommandBuffer>
     xc |> reserve(ne)

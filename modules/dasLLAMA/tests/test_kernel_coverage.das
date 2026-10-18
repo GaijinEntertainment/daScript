@@ -902,9 +902,10 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // the E-series per-layer-embedding tail (the act, its requant and the proj GEMV in one): its carriers are the
     // gemma-4 E2B / E4B, no zoo row; its coverage is test_vkd_q8_gemv_pleact in test_vulkan_kernels.das
     "q8_gemv_pleact_cls_spv",
-    // the per-expert streamed chain's by-row gather and combine (a streamed expert layer's split head on the per-op tier: a
-    // MoE past the card's room, above the zoo's tier); their coverage is test_vkd_moe_gather_row and test_vkd_combine_row in
-    // test_vulkan_kernels.das, the chain's test_vulkan_moe_cm2_split
+    // the per-expert streamed chain's by-row gather and combine: the whole-model driver's streamed layers dispatch them, and
+    // no stocked carrier streams (every zoo MoE fits the card whole); their coverage is test_vkd_moe_gather_row and
+    // test_vkd_combine_row in test_vulkan_kernels.das, the chain's test_vulkan_moe_cm2_split, and the model-level
+    // test_gpu_resident_moe_formats cells (large-tier, DASLLAMA_PARITY_FULL=1)
     "moe_gather_f16_row_cls_spv", "combine_row_cls_spv",
     // the KHR flash-attention tile's 256 and 512 heads: the mode sweep's mm row reaches the 64 and 128 heads through the
     // zoo's qwens, and no zoo row carries a wider head (the gemmas sit above the tier); their coverage is test_vkd_fa_khr

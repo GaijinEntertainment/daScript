@@ -2099,3 +2099,30 @@
     homes, one profiling pass with the per-window stage split on; a model whose pp32768 falls under
     the N-squared expectation set by its global-layer count is investigated to the stage, and the
     stage is fixed in that pass. The rows land in `PERF_LEDGER.md` beside the pp512 rows.
+
+215. **Checklist grooming - the prefill rotation arc's round.** The rule-document round over the arc's diff (one
+    review-md auditor a checklist, two dragon passes a changed document) left the structural findings it could not
+    land as wording: in `REVIEW_GPU_VULKAN.md` the two serving-gate rules carry one definition twice (merge them under one
+    prefix definition), the `unpack8` rule carries its measured exception in the text (the GEMM document's section holds
+    it), the availability-flag rule describes rather than binds (a ban, or a `REVIEW.das` check on writes outside
+    `vk_rdec_prepare`), the `vk_moe_init` and slab rules each hold several duties, the K/V codec rule lists today's codecs
+    where `RDec.kv_dt`'s storage types are the property, and the `DASLLAMA_VK_SPV_DUMP` rule repeats
+    `REVIEW_GPU_KERNEL_CLASSES.md`'s; in `REVIEW_GPU.md` "retained reference" and the two arm ledgers are undefined in the
+    opening, the one-backend asymmetry rule and the cache-key rule carry carve-outs; in `REVIEW.md` the
+    `REVIEW_OVERRIDES.md` route depends on that checklist's definition and the out-of-folder test ledger sits in
+    `tests/CLAUDE.md`; in `REVIEW_GPU_RESIDENT.md` the two resident-override rules merge (the codec mismatch declines by
+    name) and the bake-trim rule's "the three" names nothing; in `REVIEW_GPU_KERNEL_CLASSES.md` the PR-body kind
+    statement is a duty in disguise; in `REVIEW_GPU_RACE.md` the output-buffer rule's ledger exception, the two warm-up
+    rules, and "variable region", "crown" and "ranking-input branch" undefined; in `tests/REVIEW_KERNEL_CELLS.md` the
+    bit-identity rule's head against its tail and the definitions wall; in `tests/REVIEW_PINNED_GATES.md` the kept-in-
+    step rule split in three with its census arm (automated in `REVIEW.das`) deleted, the tolerance rule's binding, and
+    two `REVIEW.das` checks (every pinned entry resolves, every pinned file sits in a `run.das` suite); in the repo's
+    `src/builtin/REVIEW.md` the serializer rules into a routed companion, the bind-flavor rule's exception sentence,
+    "warm start" and the wrapper tables named; in `doc/REVIEW.md` the fetch/run/type rule into a `doc/source/`
+    checklist; in `utils/REVIEW.md` "pull-request lane", "skip-path assertion" and the `watchdog.json` rule's one
+    reading; in `utils/dasllama-server/REVIEW.md` a `REVIEW.das` check that every text field of the wire structs is
+    sanitized; in `harness/REVIEW.md` `check_last_bench_row` extended to the pin-order property and the prose rule
+    deleted; in `modules/REVIEW_SHADER_EMITTERS.md` the emitted-shape definition against the template-constant carve-out
+    and the two global-rooted-array rules merged; and the benchmarks and performance checklists' definition blocks as
+    lists. Done = the rule-doc PR this ledger already owes carries them, each a rewrite under `skills/review_md.md`, two
+    dragon passes a document, none a ruling.

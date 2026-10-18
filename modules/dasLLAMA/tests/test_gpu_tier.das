@@ -19,6 +19,7 @@ require dasllama/dasllama_kv_dtype   // KVDtype: the mirror codec crosses the se
 require dasllama/dasllama_env   // g_env_gpu: an exported DASLLAMA_GPU answers gpu_want_auto ahead of the want state
 require dasllama/dasllama_common   // segs_served_by_override, the prefill override registry
 require strings
+require math   // max: the prompt window's rounding cell
 require daslib/strings_boost
 require _child_run   // the override announces print through to_log and DASLLAMA_METAL_FUSE is read at context init
 
@@ -693,6 +694,13 @@ let private RING_OFF = "dasLLAMA: probe home - the sliding layers' K/V rows keep
 let private METAL_RING_ON = "dasLLAMA: metal decode - the sliding layers' K/V rows ride rings of their window plus the rows the longest window"
 let private METAL_RING_OFF = "dasLLAMA: metal decode - the sliding layers' K/V rows keep every position's row, no ring, as asked (set_gpu_kv_ring, DASLLAMA_GPU_KV_RING=0)"
 let private EMBED_OFF = "dasLLAMA: resident driver - the host embeds every token row as asked (set_gpu_resident_embed, DASLLAMA_VK_GPU_EMBED=0)"
+let private HOT_DMA_OFF = "dasLLAMA: resident driver - the hot expert pool's misses fill on the host (set_gpu_hot_dma, DASLLAMA_GPU_HOT_DMA=0; =1 fills by DMA on the transfer queue)"
+let private DEC_MEET_ON = "dasLLAMA: resident driver - a decode token's picks on a streamed layer go through the prefill's meet (set_gpu_dec_meet, DASLLAMA_GPU_DEC_MEET=1; =0 takes the one-row host step)"
+let private ONEPASS_OFF = "dasLLAMA: resident driver - the rare rail runs its three region-list passes (set_rare_onepass, DASLLAMA_RARE_ONEPASS=0; =1 runs the one-pass lane)"
+let private BATCHED_OFF = "dasLLAMA: resident driver - the one-pass lane runs the rows core a row (set_rare_batched, DASLLAMA_RARE_BATCHED=0; =1 runs the batched expert cores)"
+let private ARENA_OFF = "dasLLAMA: resident driver - the rare rail reads the planar planes (set_rare_arena, DASLLAMA_RARE_ARENA=0; =1 reads the pinned device-layout planes)"
+let private HOST_FIRST_8 = "dasLLAMA: resident driver - the meet hands the host its 8 rarest experts before the device claims (set_moe_host_first, DASLLAMA_MOE_HOST_FIRST=8; 0 lets the sides claim at their own pace)"
+let private PF_ROWS_300 = "dasLLAMA: resident driver - the prompt window is 256 rows (set_pf_window_rows_pin, DASLLAMA_GPU_PF_ROWS=300: rounded down to a multiple of 128, never under it; a recurrent model's window is cut at its deltanet chunk; 2048 is the default)"
 let private GATHER_TAIL = " for the prefill window, the one-row step, the N-row command and the NextN draft and verify (set_gpu_resident_embed, DASLLAMA_VK_GPU_EMBED=0 keeps the host embed)"
 let private GATHER_OFF = "dasLLAMA metal batch decode: the batched rows take the rows the host embeds, not the device gather off their ids, as asked (set_metal_batch_gather)"
 let private G4_UNFUSED = "dasLLAMA metal decode: the gemma-4 MoE tail runs its unfused chain, not the one-step form, as asked (set_metal_moe_g4_unfused)"
@@ -734,6 +742,16 @@ def test_override_announces(t : T?) {
         t |> success(find(lines, NO_SIDECAR_RESOLVER) >= 0, "the warning names the module:\n{lines}")
         t |> success(find(lines, "SIDECAR ''") >= 0, "... and the lookup finds no file:\n{lines}")
     }
+    t |> run("the streamed prompt's levers announce where they move off their defaults, by setter and env spelling, and say nothing at the defaults or put back") @(t : T?) {
+        let quiet = case_lines(out, "stream_levers_default")
+        t |> success(find(quiet, "resident driver - the") < 0, "every lever at its default, no line:\n{quiet}")
+        let moved = case_lines(out, "stream_levers_moved")
+        for (line in [HOT_DMA_OFF, DEC_MEET_ON, ONEPASS_OFF, BATCHED_OFF, ARENA_OFF, HOST_FIRST_8, PF_ROWS_300]) {
+            t |> equal(count(moved, line), 1, "the moved lever's line once:\n{line}\nin\n{moved}")
+        }
+        let back = case_lines(out, "stream_levers_restored")
+        t |> success(find(back, "resident driver - the") < 0, "every lever put back, no line:\n{back}")
+    }
     let metal = find(out, "CASE metal_gather_off") >= 0
     static_if (typeinfo builtin_module_exists(das_metal)) {
         t |> success(metal, "a das_metal build runs the Metal cases")
@@ -763,5 +781,45 @@ def test_override_announces(t : T?) {
         t |> equal(count(case_lines(off, "metal_fuse_restore"), FUSE_OFF), 0, "the restore to the knob's off says nothing")
         t |> equal(count(case_lines(off, "metal_fuse_off"), FUSE_OFF), 0, "the setter's off, already said, says nothing")
         t |> equal(count(case_lines(off, "metal_fuse_on_off"), FUSE_OFF), 1, "on then off says it again")
+    }
+}
+
+//! the prompt window's rows: a pin or the knob rounded down to the chain's 128-row unit, never under it
+[test]
+def test_pf_window_rows_rounding(t : T?) {
+    let was = pf_window_rows_pin()
+    set_pf_window_rows_pin(300l)
+    t |> equal(pf_window_rows(), 256l, "300 pinned rounds down to 256")
+    set_pf_window_rows_pin(50l)
+    t |> equal(pf_window_rows(), 128l, "50 pinned takes the 128 floor")
+    set_pf_window_rows_pin(1024l)
+    t |> equal(pf_window_rows(), 1024l, "a multiple stays")
+    set_pf_window_rows_pin(0l)
+    let knob_units = g_env_gpu.gpu_pf_rows / PF_WINDOW_MIN
+    t |> equal(pf_window_rows(), max(knob_units, 1l) * PF_WINDOW_MIN, "no pin reads the knob, rounded the same way")
+    set_pf_window_rows_pin(was)
+}
+
+//! the n-gram window seeded from a token list: the ids before position n, oldest first, -1 where the prompt is shorter
+[test]
+def test_ple_window_seed(t : T?) {
+    var win : array<int64>
+    win |> resize(4)
+    let tokens <- [10l, 11l, 12l, 13l, 14l, 15l]
+    ple_window_seed(win, tokens, 6l)
+    t |> equal("{win}", "{[12l, 13l, 14l, 15l]}", "the window holds the four ids before the end")
+    ple_window_seed(win, tokens, 2l)
+    t |> equal("{win}", "{[-1l, -1l, 10l, 11l]}", "a position inside the window's reach fills the older slots with -1")
+    ple_window_seed(win, tokens, 0l)
+    t |> equal("{win}", "{[-1l, -1l, -1l, -1l]}", "position zero sees no id")
+    t |> equal(long_length(win), 4l, "the window keeps its length")
+}
+
+//! the vulkan lane mints trimmed unless DASLLAMA_TRIM=0 or set_vulkan_trim says otherwise
+[test]
+def test_vulkan_trim_default(t : T?) {
+    t |> success(VulkanEnv().trim, "the knob's default is the trimmed lane")
+    if (!vulkan_trim_lever_set()) {
+        t |> equal(vulkan_trim(), g_env_vulkan.trim, "with no lever set the lane follows the knob")
     }
 }

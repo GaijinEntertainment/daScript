@@ -4458,15 +4458,14 @@ class template GkMoeCombine : GkQ8BlockStore {
         acc_rows[p * n + i] = acc
     }
 
-    // the by-row form: dispatch row `b` adds chunk row `goff + b`'s weighted down row onto its position's row; a dispatch's rows are one expert's, so no two touch one position
+    // the by-row form: dispatch row `b` adds chunk row `goff + b`'s weighted down row onto its position's row; a dispatch's rows are one expert's, so no two touch one position; the weights come packed, a position's k in a row
     def comb_row_elem(b, i : uint) {
         static_if (BYROW) {
             let n = pa.n
             let k = max(1u, pa.k)
             let g = bkt_grid[pa.r0 + b]
             let p = g / k
-            let wj = slot_w[p * (pa.wstride == 0u ? k : pa.wstride) + pa.woff + g % k]
-            acc_rows[p * n + i] += wj * down_rows[(pa.goff + b) * n + i]
+            acc_rows[p * n + i] += slot_w[g] * down_rows[(pa.goff + b) * n + i]
         }
     }
 }

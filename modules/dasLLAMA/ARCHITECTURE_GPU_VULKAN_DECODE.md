@@ -5,7 +5,7 @@ document carries the decode attention block over per-layer K/V mirrors, the whol
 span, the deltanet decode step's per-session resident state, and the whole-model driver's hybrid
 token command. The prefill window chain and byte stores these build on are in
 `ARCHITECTURE_GPU_VULKAN.md`; a streamed expert layer's prefill - its GPU/CPU split and the
-per-expert chain - is in `ARCHITECTURE_GPU_VULKAN_STREAM.md`; the routed block an MoE
+per-expert chain - is in `ARCHITECTURE_GPU_VULKAN_STREAM.md#streamed-layer-split`; the routed block an MoE
 layer takes in either era - the prefill window's and the token command's - is in
 `ARCHITECTURE_GPU_VULKAN_MOE.md`; the cm2 tiles, the MoE expert chain on them, the KHR arm's kq
 tile and the decode GEMV family's lane split are in `ARCHITECTURE_GPU_VULKAN_GEMM.md`; the

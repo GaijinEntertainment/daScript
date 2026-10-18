@@ -40,7 +40,7 @@ require dasllama/dasllama_gemm_schema   // the q8 block geometry the mint's zero
 // WhisperModel.enc) contribute their planes under dotted names ("enc.fblob"); string-array
 // fields ride the meta blob via serialize_strings — raw string pointers can't be planes.
 
-let IMAGE_VERSION = 51   // a streamed mint's q4032 and q5032 planes carry the repack interleave the eager load gives them
+let IMAGE_VERSION = 52   // a streamed mint's plan is the live load's: the ring and the carve are decided off the formats, not the dry tier
 
 //! The metal (blob-only) flavor's identity tag: q8 planes ride the 34B block_q8_0 blob and the
 //! kq scale planes their GPU forms (convert_model_to_metal_blob) — flavors are per-config and
@@ -1463,7 +1463,7 @@ def private vk_mint_walk(m : GGUFMeta; bytes : array<uint8> | #; var t : Model; 
     if (took) {
         let ms = int64(get_time_usec(ts)) / 1000l
         let mb = int64(w.cur - at) >> 20l
-        to_log(LOG_INFO, "dasLLAMA image:   plane vkblob {mb} MB minted off the gguf in {ms} ms ({length(t.vkplan)} entries{t.planes_trimmed ? ", the planar families dropped under DASLLAMA_TRIM / set_vulkan_trim" : ""})\n")
+        to_log(LOG_INFO, "dasLLAMA image:   plane vkblob {mb} MB minted off the gguf in {ms} ms ({length(t.vkplan)} entries{t.planes_trimmed ? ", the planar families dropped under DASLLAMA_TRIM / set_vulkan_trim (DASLLAMA_TRIM=0 keeps them)" : ""})\n")
         sections |> push(ImgSection(name = "vkblob", off = at, bytes = w.cur - at))
     }
 }
@@ -1844,8 +1844,25 @@ def image_from_model_streaming(var t : Model; var out : Model; m : GGUFMeta; byt
     return ok
 }
 
-def private vulkan_bake_flavor(var t : Model; path : string; vk_tag : string) {
+//! the lane tag with the trim off: the untrimmed lane a run-mode trim decline writes, and the one a trimmed load falls back to
+def private untrimmed_lane_tag() : string {
+    let lever = vulkan_trim_lever_set()
+    let was = vulkan_trim()
+    set_vulkan_trim(false)
+    let tag = moe_gpu_bake_tag()
+    restore_vulkan_trim(lever, was)
+    return tag
+}
+
+//! `kept`: a trimmed lane this run cannot serve sits on disk - the untrimmed lane would land at its path, so none is written
+def private vulkan_bake_flavor(var t : Model; path : string; vk_tag : string; kept : bool) {
     if (vk_tag == "" || !vulkan_bake_take(t)) {
+        return
+    }
+    if (kept) {
+        to_log(LOG_INFO, "dasLLAMA: the trimmed vulkan lane on disk stays - the lane this run collected is not written\n")
+        delete t.vkblob
+        delete t.vkplan
         return
     }
     if (!image_save_enabled()) {
@@ -1854,21 +1871,22 @@ def private vulkan_bake_flavor(var t : Model; path : string; vk_tag : string) {
         delete t.vkplan
         return
     }
+    var save_tag = vk_tag
     if (vulkan_trim()) {
         //! the same rule as the streaming mint's: a lane this run cannot serve (the route, a prefill pin or override, the tier's
-        //! seams, the card's room) is not written under the trimmed identity, or the next run would serve it untrimmed
+        //! seams, the card's room) is not written under the trimmed identity, or the next run would serve it untrimmed - it is
+        //! written as the untrimmed lane, which a trimmed load falls back to
         let trim_why = resident_trim_decline(t)
         if (!empty(trim_why) && resident_trim_decline_is_run_mode(trim_why)) {
-            to_log(LOG_WARNING, "dasLLAMA: DASLLAMA_TRIM / set_vulkan_trim asked for the trimmed vulkan lane, and this run cannot mint it ({trim_why}) - the lane this run collected from RAM is not written\n")
-            delete t.vkblob
-            delete t.vkplan
-            return
+            save_tag = untrimmed_lane_tag()
+            to_log(LOG_WARNING, "dasLLAMA: DASLLAMA_TRIM / set_vulkan_trim asked for the trimmed vulkan lane, and this run cannot mint it ({trim_why}) - the lane this run collected from RAM is written untrimmed\n")
+        } else {
+            to_log(LOG_WARNING, "dasLLAMA: DASLLAMA_TRIM / set_vulkan_trim asked for the trimmed vulkan lane, and this arm bakes the lane from RAM with the planar families kept - the lane's identity still folds the trim\n")
         }
-        to_log(LOG_WARNING, "dasLLAMA: DASLLAMA_TRIM / set_vulkan_trim asked for the trimmed vulkan lane, and this arm bakes the lane from RAM with the planar families kept - the lane's identity still folds the trim\n")
     }
     let ts = ref_time_ticks()
-    let img_v = image_path_for(path, vk_tag)
-    if (save_model_image(t, img_v, vk_tag)) {
+    let img_v = image_path_for(path, save_tag)
+    if (save_model_image(t, img_v, save_tag)) {
         to_log(LOG_INFO, "dasLLAMA: vulkan image baked in {get_time_usec(ts) / 1000} ms - {img_v}\n")
     }
     delete t.vkblob   // this run is already uploaded — the bake only serves the NEXT load
@@ -2106,6 +2124,22 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32;
                     to_log(LOG_ERROR, "dasLLAMA: the trimmed vulkan lane '{img_v}' maps, and the whole-model driver no longer serves it ({trim_why}) - the lane is deleted and minted again with its planar families\n")
                     remove(img_v)
                 }
+            } elif (vulkan_trim() && load_image(image_path_for(path, untrimmed_lane_tag()), t, untrimmed_lane_tag())) {
+                //! no trimmed lane: the untrimmed one a run-mode decline wrote serves while this run cannot serve the trim; a
+                //! run that can serve it mints the trimmed lane again over it
+                let trim_why = resident_trim_decline(t)
+                if (!empty(trim_why) || g_image_frozen) {
+                    ple_check_table(t, "prepared image '{image_path_for(path, untrimmed_lane_tag())}'")
+                    moe_gpu_upload_resident(t)
+                    vulkan_bake_slice_end(t)
+                    let held_why = empty(trim_why) ? "the artifacts are frozen" : trim_why
+                    to_log(LOG_INFO, "dasLLAMA: prepared vulkan image mapped in {get_time_usec(ts_img) / 1000} ms - {image_path_for(path, untrimmed_lane_tag())} (the untrimmed lane: this run cannot serve the trimmed one - {held_why})\n")
+                    return <- t
+                }
+                vulkan_bake_disarm()
+                delete t
+                to_log(LOG_INFO, "dasLLAMA: the untrimmed vulkan lane '{image_path_for(path, untrimmed_lane_tag())}' maps, and this run serves the trim - the lane is minted again trimmed\n")
+                remove(image_path_for(path, untrimmed_lane_tag()))
             } else {
                 vulkan_bake_disarm()
             }
@@ -2117,7 +2151,7 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32;
         }
         let img = image_path_for(path, "", qs)
         if (load_model_image(img, t, "", qs)) {
-            vulkan_bake_flavor(t, path, vk_tag)
+            vulkan_bake_flavor(t, path, vk_tag, !empty(kept_why))
             //! the layout gate must agree, or the rebake below refuses and re-mints the SAME planar
             //! file every load (a repacking backend passes the mint-time shape gate); the mapping's
             //! borrowed planes are not the question - the rebake reads the gguf, never this mapping
@@ -2137,15 +2171,15 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32;
         }
         guard_interp_gguf_load(path)
         {
-            let s_tag = want_metal ? METAL_IMAGE_TAG : vk_tag
+            var s_tag = want_metal ? METAL_IMAGE_TAG : vk_tag
             let s_quant = (want_metal || vk_tag != "") ? "q8" : qs
-            let s_img = want_metal ? image_path_for(path, METAL_IMAGE_TAG) : (vk_tag != "" ? image_path_for(path, vk_tag) : img)
+            var s_img = want_metal ? image_path_for(path, METAL_IMAGE_TAG) : (vk_tag != "" ? image_path_for(path, vk_tag) : img)
             var mt = Model()
             var jobs : array<FillJob>
             var streamed = Model()
             var served = false
             var saved = false
-            var mint_held = false   //! a trim ask this run cannot mint (a run-mode decline): no lane is written, the streamed build serves from memory
+            var mint_held = false   //! a trim ask this run cannot mint while a trimmed lane sits on disk: no lane is written, the streamed build serves from memory
             let ts_s = ref_time_ticks()
             let save = image_save_enabled()
             vk_mint_reset()
@@ -2158,12 +2192,16 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32;
                     let trim_why = resident_trim_decline(mt)
                     mt.planes_trimmed = empty(trim_why)
                     if (!mt.planes_trimmed) {
-                        //! a run-mode decline writes NO lane: an untrimmed lane saved under the trimmed identity would keep serving
-                        //! untrimmed once the knob lifts, and the load-time recheck reads trimmed lanes alone; the build stays on
-                        //! this arm (the eager rail would cache a planar image, and the RAM bake never trims)
-                        if (resident_trim_decline_is_run_mode(trim_why)) {
-                            to_log(LOG_WARNING, "dasLLAMA: DASLLAMA_TRIM / set_vulkan_trim asked for the trimmed vulkan lane, and this run cannot mint it ({trim_why}) - no lane is written; the streamed build serves planar from memory\n")
+                        //! the build stays on this arm (the eager rail would cache a planar image, and the RAM bake never trims)
+                        if (resident_trim_decline_is_run_mode(trim_why) && !empty(kept_why)) {
+                            //! the trimmed lane on disk stays for the next run: the untrimmed one would land at the same path
                             mint_held = true
+                            to_log(LOG_WARNING, "dasLLAMA: DASLLAMA_TRIM / set_vulkan_trim asked for the trimmed vulkan lane, and this run cannot mint it ({trim_why}) - the trimmed lane on disk stays, this run serves planar from memory\n")
+                        } elif (resident_trim_decline_is_run_mode(trim_why)) {
+                            //! the untrimmed lane is written instead: a trimmed load falls back to it, so no start re-streams the gguf
+                            s_tag = untrimmed_lane_tag()
+                            s_img = image_path_for(path, s_tag)
+                            to_log(LOG_WARNING, "dasLLAMA: DASLLAMA_TRIM / set_vulkan_trim asked for the trimmed vulkan lane, and this run cannot mint it ({trim_why}) - the lane is written untrimmed ({s_img})\n")
                         } else {
                             to_log(LOG_WARNING, "dasLLAMA: DASLLAMA_TRIM / set_vulkan_trim asked for the trimmed vulkan lane, and the whole-model driver would not take '{path}' whole ({trim_why}) - the lane keeps its planar families\n")
                         }
@@ -2219,7 +2257,7 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32;
         let metal_flavor = want_metal && metal_model_servable(m) && metal_blob_commit(m)
         if (!metal_flavor) {
             // the stream declined, so load_model_'s GPU walk did the collecting; the image it serves stays planar
-            vulkan_bake_flavor(m, path, vk_tag)
+            vulkan_bake_flavor(m, path, vk_tag, false)
         }
         var built = Model()
         let wrote = cache_via_image_(m, built, metal_flavor ? image_path_for(path, METAL_IMAGE_TAG) : img,

@@ -20,7 +20,7 @@ require dasllama/dasllama_math   // with_dasllama_jobque_ (the engine-standard j
 require dasllama/dasllama_gpu_tier   // moe_gpu_tier_installed / gpu_want_auto: is the tier armed
 require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active: did the whole-model driver take the MoE
 require dasllama/dasllama_moe   // heat_totals, heat_reset and the shared expert's row counters: the per-op heat cell's witnesses
-require ?vulkan dasllama/dasllama_vulkan_common   // PF_WINDOW, the resolved coopmat mode and the kernel census, where the module exists
+require ?vulkan dasllama/dasllama_vulkan_common   // the resolved coopmat mode and the kernel census, where the module exists
 require dasllama/dasllama_kqformat
 require daslib/enum_trait   // the KqFmt members as a loop
 require _model_tier public   // models_dir() + model_available() presence/size-tier gate

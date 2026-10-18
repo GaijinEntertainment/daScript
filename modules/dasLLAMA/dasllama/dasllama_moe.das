@@ -429,9 +429,6 @@ def private moe_gather_feed(xq : array<int8>; xs : array<float>; k, dim, unit : 
 //! `experts_mx4`), so the format is mx4 for every routed stack of such a model
 def public expert_fmt(t : Model; tags : array<KqFmt>; l : int64) : KqFmt => t.experts_mx4 ? KqFmt.mx4 : fmt_at(tags, l)
 
-//! an expert plane format the per-op expert chain reads: q8, a superblock format, a per-32 one (the GEMVs and the batch tiles)
-def public expert_chain_fmt_ok(f : KqFmt) : bool => f == KqFmt.q8 || kq_sb(f) || kq_dense_b32(f) || f == KqFmt.mx4
-
 [arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-token-command")]
 def moe_trace_row(s : Session; l, k, dim : int64) {
     return if (!g_env_gpu.gpu_prof)

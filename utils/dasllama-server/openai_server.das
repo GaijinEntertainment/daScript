@@ -2263,7 +2263,7 @@ def parse_tool_calls(full : string; open_mark, close_mark, id_base : string;
     calls |> reserve(length(calls) + length(tr.calls))
     for (c in tr.calls) {
         calls |> push(OaiToolCall(id = "{id_base}_{length(calls)}", _type = "function",
-                                  _function = OaiToolCallFn(name = c.name, arguments = c.args)))
+                                  _function = OaiToolCallFn(name = utf8_sanitize(c.name), arguments = utf8_sanitize(c.args))))
     }
     let content = tr.content
     delete tr
@@ -2306,7 +2306,7 @@ def private append_json_tool_body(body : JsonValue?; id_base : string;
         return false
     }
     calls |> push(OaiToolCall(id = "{id_base}_{length(calls)}", _type = "function",
-                              _function = OaiToolCallFn(name = cname, arguments = tool_args_text(body))))
+                              _function = OaiToolCallFn(name = utf8_sanitize(cname), arguments = utf8_sanitize(tool_args_text(body)))))
     return true
 }
 
@@ -3921,7 +3921,7 @@ def private oai_calls_of(tcs : array<ToolCall>; id_base : string; var calls : ar
     for (tc in tcs) {
         let id = empty(tc.id) ? "{id_base}_{i}" : tc.id
         calls |> emplace(OaiToolCall(id = id, _type = "function",
-                                     _function = OaiToolCallFn(name = tc.name, arguments = tc.args)))
+                                     _function = OaiToolCallFn(name = utf8_sanitize(tc.name), arguments = utf8_sanitize(tc.args))))
         i ++
     }
 }
@@ -4026,9 +4026,21 @@ def private flush_events(srv : FrontLink) {   // nolint:STYLE037,STYLE038 — on
         } elif (w.streaming) {
             set_writer_keepalive_timeout(srv, w.writer, DEFAULT_WRITER_KEEPALIVE_MS)
             if (!empty(w.utf8_tail)) {
-                // generation ended mid-character (max-tokens cut): the held bytes can never
-                // complete, and emitting them would put invalid UTF-8 on the wire — drop loudly
-                to_log(LOG_WARNING, "dasllama-server: stream {w.id} ended mid-UTF-8-sequence; dropped {length(w.utf8_tail)} byte(s)\n")
+                //! the generation ended inside a character (a max-tokens cut): the held bytes complete nothing, so they go out as U+FFFD
+                to_log(LOG_WARNING, "dasllama-server: stream {w.id} ended mid-UTF-8-sequence; {length(w.utf8_tail)} held byte(s) sent as U+FFFD\n")
+                let last = utf8_sanitize(w.utf8_tail)
+                if (w.is_chat) {
+                    //! the replacement rides the wire's splitter like any delta: inside a reasoning span it is reasoning, under a call envelope the call's
+                    var rsn = ""
+                    var cnt = ""
+                    think_feed(w.think, last, rsn, cnt)
+                    if (w.has_tools) {
+                        cnt = call_hold_pass(*w, cnt)
+                    }
+                    send_chat_halves(srv, *w, rsn, cnt)
+                } else {
+                    send_compl_chunk(srv, w.writer, w.id, w.created, last, "")
+                }
             }
             var finish = e.finish
             if (w.has_tools) {
@@ -5050,8 +5062,8 @@ def private process_asr_job(
         transcribe(model, session, samples) $(seg) {
             vt.segments |> push(OaiVerboseSegment(
                 id = sid, start = float(seg.t0) / 100.0,
-                end = float(seg.t1) / 100.0, text = seg.text))
-            full |> push(seg.text)
+                end = float(seg.t1) / 100.0, text = utf8_sanitize(seg.text)))
+            full |> push(utf8_sanitize(seg.text))
             sid++
         }
         vt.text = join(full, "")
@@ -5064,7 +5076,7 @@ def private process_asr_job(
         delete vt
         return
     }
-    let text = transcribe(model, session, samples)
+    let text = utf8_sanitize(transcribe(model, session, samples))
     let content_type = job.response_format == "text" ? "text/plain; charset=utf-8" : "application/json"
     let body = job.response_format == "text" ? text : sprint_json(OaiTranscription(text = text), false)
     emit_asr_event(events, AsrEvent(

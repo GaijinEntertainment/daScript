@@ -13,6 +13,7 @@ require dastest/testing_boost public
 require dasllama/dasllama_common   // Model, Session, kv_row_bytes
 require dasllama/dasllama   // create_session, moe_gpu_drop_model, set_gpu_resident_route
 require dasllama/dasllama_math   // with_dasllama_jobque_
+require dasllama/dasllama_kv_dtype   // kv_block_codec: the stored-rows cell's f16 arm
 require dasllama/dasllama_gpu_tier   // moe_gpu_attn_on_gpu: the per-op attention block's layer marks
 require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active, the resident prefill pin and its getter
 require _model_tier public
@@ -109,6 +110,7 @@ struct StoredRowsBars {
     k : float                    //! the K rows
     v_step : float               //! the decode steps' V rows
     v_prefill_of_ctrl : float    //! the prefill's V rows, of the share a row held to the next one differs by
+    f16_dist : float = 0.0       //! f16 rows: the prefill's K and V rows' distance of the CPU rows' magnitude (an ulp off flips every low byte)
 }
 
 let private PLAN_PROBE_CTX = 4096l
@@ -119,13 +121,14 @@ def private plan_charges_codec_scratch(t : T?; tr : Model; kv : KVDtype) {
     let kvd = layer_kv_dim(tr.config, 0l)
     let codec_plan = resident_plan(tr, PLAN_PROBE_CTX, kv, kv)
     let f16_plan = resident_plan(tr, PLAN_PROBE_CTX, KVDtype.f16, KVDtype.f16)
-    let want = 2l * PLAN_PROBE_CTX * kvd * 2l + 2l * PF_WINDOW_ROWS * kvd * 4l
+    let want = kv_block_codec(kv) ? 2l * PLAN_PROBE_CTX * kvd * 2l + 2l * PF_WINDOW_ROWS * kvd * 4l : 0l
     t |> equal(codec_plan.scratch_bytes - f16_plan.scratch_bytes, want, "{kv}: the plan charges the shadow planes and the staged rows ({want} B at {PLAN_PROBE_CTX} positions of a {kvd}-wide row)")
 }
 
 //! The stored-rows form: the mirror brought down after a 40-token resident prefill and `CODEC_FED_STEPS` resident steps, layer
-//! 0's bytes against the CPU cache's after the same tokens, within `bars`; a row held to the next one is the control. The
-//! cell also holds the plan's scratch charge for the codec.
+//! 0's bytes against the CPU cache's after the same tokens, within `bars` (f16 rows: the prefill's K and V rows as a distance of
+//! the CPU rows' magnitude, `bars.f16_dist`); a row held to the next one is the control. The cell also holds the plan's scratch
+//! charge for the codec (none for f16).
 [cold_path]
 def cell_codec_stored_rows(t : T?; file : string; kv : KVDtype; bars : StoredRowsBars) {
     with_codec_model(t, file, kv) $(tr) {
@@ -155,9 +158,17 @@ def cell_codec_stored_rows(t : T?; file : string; kv : KVDtype; bars : StoredRow
         let k_ctrl = bytes_differing(dev, host, 0l, rowb, k_bytes - rowb)
         let v_ctrl = bytes_differing(dev, host, k_bytes, k_bytes + rowb, npf * rowb)
         to_log(LOG_INFO, "{kv} layer 0, {rows} rows of {rowb} bytes: K differs at {k_diff} of its bytes, the prefill's V at {v_prefill_diff}, the steps' V at {v_step_diff}; a row against the next - K {k_ctrl}, V {v_ctrl}\n")
-        t |> success(k_diff <= bars.k, "{kv}: the device's K rows are the CPU cache's but for a quant on a rounding edge ({k_diff} of the bytes differ)")
+        if (kv_block_codec(kv)) {
+            t |> success(k_diff <= bars.k, "{kv}: the device's K rows are the CPU cache's but for a quant on a rounding edge ({k_diff} of the bytes differ)")
+            t |> success(v_prefill_diff <= bars.v_prefill_of_ctrl * v_ctrl, "{kv}: the prefill's V rows sit by the CPU cache's ({v_prefill_diff} of the bytes differ against {v_ctrl} for a row held to the next)")
+        } else {
+            let k_dist = f16_rows_distance(dev, host, 0l, 0l, npf * rowb)
+            let v_dist = f16_rows_distance(dev, host, k_bytes, k_bytes, npf * rowb)
+            let k_dist_ctrl = f16_rows_distance(dev, host, 0l, rowb, (npf - 1l) * rowb)
+            to_log(LOG_INFO, "{kv} layer 0: the prefill's K rows sit {k_dist} of the CPU rows' magnitude from them, the V rows {v_dist}; a K row against the next {k_dist_ctrl}\n")
+            t |> success(k_dist <= bars.f16_dist && v_dist <= bars.f16_dist, "{kv}: the device prefill's K and V rows sit by the CPU cache's (K {k_dist}, V {v_dist} of the rows' magnitude; {k_dist_ctrl} for a row held to the next)")
+        }
         t |> success(v_step_diff <= bars.v_step, "{kv}: the decode steps' V rows are the CPU cache's but for a quant on a rounding edge ({v_step_diff} of the bytes differ)")
-        t |> success(v_prefill_diff <= bars.v_prefill_of_ctrl * v_ctrl, "{kv}: the prefill's V rows sit by the CPU cache's ({v_prefill_diff} of the bytes differ against {v_ctrl} for a row held to the next)")
         t |> success(k_ctrl >= CODEC_ROWS_CTRL && v_ctrl >= CODEC_ROWS_CTRL, "{kv} control: a row held to the next one reads apart (K {k_ctrl}, V {v_ctrl})")
         delete dev
         delete host

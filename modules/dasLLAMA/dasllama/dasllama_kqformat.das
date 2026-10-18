@@ -549,6 +549,9 @@ def kq_fmt_of_slot(slot : int) : KqFmt => unsafe(reinterpret<KqFmt>(uint8(slot))
 //! The same predicate over the int id space the GPU drivers carry per stack/plane (pure: it sits in asserts).
 def kq_sb(fmt : int) : bool => fmt >= 0 && fmt < KQ_FMT_COUNT && kq_sb(kq_fmt_of_slot(fmt))
 
+//! an expert plane format the expert chain and the host twin read: q8, a superblock format, a per-32 one, mx4 (the GEMVs and the batch tiles)
+def public expert_chain_fmt_ok(f : KqFmt) : bool => f == KqFmt.q8 || kq_sb(f) || kq_dense_b32(f) || f == KqFmt.mx4
+
 //! a per-32 plane format - Q5_1, Q5_0, the per-32 IQ4_NL and Q4_0 -
 //! served off its own plane pair at the 32-block reduction, never a
 //! superblock plane bind
