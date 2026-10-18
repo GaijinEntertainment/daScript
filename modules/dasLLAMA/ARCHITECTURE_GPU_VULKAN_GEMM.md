@@ -3,8 +3,9 @@
 Companion to `ARCHITECTURE_GPU_VULKAN.md`; a section is cited by its anchor. This document carries the
 cooperative-matrix tiles the Vulkan tier's GEMMs run on and the decode GEMV family's lane split: how a cm2 tile decodes its
 quant bytes, how a tile and the served GEMM mode are picked, the class-pipeline build seat both
-shader instruments hang on, the MoE expert chain on those tiles, the KHR arm's hand-staged
-tile, and how a GEMV subgroup splits across short rows. `ARCHITECTURE_GPU_VULKAN.md` carries
+shader instruments hang on, and the MoE expert chain on those tiles, and how a GEMV subgroup splits across short rows. The
+KHR arm's hand-staged tile and the K-quant window form a cm2 card without decode-vector takes on it
+are in `ARCHITECTURE_GPU_VULKAN_KHR.md`. `ARCHITECTURE_GPU_VULKAN.md` carries
 the prefill window chain that dispatches them (`ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain`) and its recurrent block (`ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-dn-block`),
 the Q8 requant byte store (`ARCHITECTURE_GPU_VULKAN.md#q8-requant-byte-store`), the decode GEMV family's grid codebook buffer
 (`ARCHITECTURE_GPU_VULKAN.md#kq-gemv-grid-buffer`), and the tile probe's shared descriptor set layout (`ARCHITECTURE_GPU_VULKAN.md#khrx-shared-set-layout`). What a model has to
@@ -89,6 +90,18 @@ partial last WEIGHT tile (a 2112-wide plane's 17th, a 704-wide expert's 6th) loa
 whole 128 rows instead - in bounds, unclamped, its overlap with the tile before it rewriting the same
 values - since a clamped weight load runs every tile at a third the speed (the fast path's own layout
 clamped: q8 E2B down 268 -> 612 us) and through the edge path the dispatch waited on the partial workgroups (the 26B's shared expert, k6: 164 us against 71 whole). `STILE` is inert on the KHR classes.
+
+**The narrow rule reads one dispatch's latency, the cost a window pays a GEMM of few workgroups.** On the
+scalar decode arm every K-quant format's s stamp takes less time than its m stamp one dispatch at a time
+at every width the rule takes (RTX PRO 4500, driver 580.159.04, `DASLLAMA_GPU=1 DASLLAMA_ALLOW_UNTUNED=1
+./bin/daslang -jit modules/dasLLAMA/harness/vk_gemm_probe.das -- narrow:<fmt>` at ad39b47963, its second round, K 1536, 512 rows,
+us s / m / l at 512 wide: k4 23.1 / 36.8 / 60.0, k5 25.3 / 39.5 / 63.6, k6 25.2 / 39.5 / 64.1, q40 25.3 / 39.5, iq4xs 27.2 /
+39.5 / 62.0, k2 37.4 / 51.9 / 76.4, iq3xxs 43.7 / 54.0, iq2s 43.6 / 54.0, iq2xxs 45.7 / 55.9 / 81.6; at 256 and 640 wide the
+same order; at a 300-row window the same), and the m stamp wins at 768, the first width the rule leaves to the wave model (k4
+37.3 against 43.6). Overlapped sixteen deep the order turns - the l and m stamps read under s there (k4 at 256 wide: 6.0 / 5.1 /
+10.0) - and the window follows the
+latency: the E2B Q4_K_M's k and v read 496 and 477 us a window on s against 632 and 661 with them off it
+(`DASLLAMA_GPU_PROF=1`, `PERF_LEDGER.md`'s staged-tile entry carries the command and the builds).
 
 **The k step follows the column and the decode; the k loop is unrolled by hand, a superblock per
 block.** The template's k step (`BK`) is 64 on the dense l and m tiles and on the expert stamps of the K-quants, q4_0, q8 and
@@ -227,50 +240,6 @@ the rope - where the CPU chain adds it. v has no prep pass of its own, so a bias
 third `AtPrep` over the raw v window with the rope half 0 and the norm off - a copy plus bias in
 place (`boff` `qd + kv_dim`) - so the copy into the absolute-position v plane and the host readback both
 carry the bias. A model without the bias runs the two passes with `hasb` 0 and never reads the binding, and the attention-quad rail's `arch_ok` test does not name the bias.
-
-### The KHR arm's hand-staged kq tile {#khr-mm-kq-tile}
-
-**The mm mode serves the kq formats through the same template's KHR arm.** A device with
-KHR_cooperative_matrix and no NV_coopmat2 (every AMD and Intel part, the GTX and Turing lines)
-has no decode-in-load tensor API, so the cm2 template carries a second body under its `KHR`
-axis, staged by hand. Each of the 256 threads writes one weight row's 16-wide half of the
-32-wide k step. The weights go through the format's `khr_stage16`. It reads the row's 16
-consecutive values from the quant plane as one or two 16-byte words (`wq4`, the plane aliased
-as `uint4` on its binding; the byte-granular grid formats read 32-bit words through `wqw`),
-reads the row's scale words once, and writes the 16 values into the stage as f16 pairs. The
-activations come straight from the f16 plane as two 16-byte words (that plane aliased as
-`uint4` on its binding), stored as they arrive. Both land in `@workgroup` `uint` arrays at a
-stride of 20 words (16 plus 4 pad, so the fragment loads spread across banks). q8 arrives here too
-(`Q8KhrBatch`, its stage a block's 16-weight half as four int8 words under the block's f16 scale), so a KHR-mode
-card's dense q8 GEMMs take the f16 feed; the q8-fed mul_mm L-tile serves the sdot4 and int8 modes.
-
-**The eight subgroups tile the 128 x 128 step two by four.** Each owns 64 weight rows against
-32 tokens as eight 16x16 f16 accumulators (a `coopmatAcc_f16_16x16[8]` walked under
-`for [unroll_full]`, so every fragment sits in registers) and loads four weight fragments and
-two token fragments per 16-deep multiply-add round: 96 fragment loads per workgroup per k step
-against 144 when every subgroup owned a 16-row strip across all 128 tokens. The accumulators
-widen to f32 (`coopmatConvert`) before the store. A whole tile stores its fragments straight
-into y (token-major, so a fragment's (weight, token) is `y[token * d + weight]`); an edge tile
-bounces each widened fragment through the weight staging array - free once the k loop ends,
-and its 2560 words hold the eight subgroups' 256-word fragments - and writes under the row and
-column bounds through a bit cast. Moving any of the three levers back - the word stage, the f16
-accumulator width, the two-by-four tiling - costs rate, the word stage the most and the tiling the
-least; the probe's `khrx` arms measure them (`ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md#vk-gemm-probe`)
-and `followup_vulkan.md` item 42 keeps the figures. On a partial token column the edge store costs
-nothing beyond the padded rows: per computed row a 300-token window runs at the whole-window rate.
-
-**The two staging arrays are the whole footprint by design.** A third array for the bounce
-costs the tile a seventh of its rate, because 8 KB more shared memory per workgroup is one
-workgroup fewer per SM. The k step is 32 (the reference exe's BK): a 64-deep step doubles the
-staging tiles, halves the workgroups an SM holds, and with the 8 KB iq2s grid beside them
-reaches the 49152 B of workgroup memory the tier requires of a device - the floor the tile is sized to; a device offering less is not a target.
-
-**The arm exists at one geometry** - 128 weights by 128 tokens, k step 32 - so in mm mode the
-tile pick answers 128 and the wave model weighs its k chunks alone (a deep, narrow GEMM splits k
-into the same scratch planes and reduce the cm2 tiles use), and `cm2_cls_ensure/set/enc` take the KHR
-tile as their tail-0 arm (`cm2_tile_tail`), the same `(fmt)` key the kernel cells' `khr_cls_*` ladder stamps. The f16 feed admits a kq format in mm mode
-only on a 32-lane subgroup (`khr_kq_tile_on`): the body indexes eight subgroups over the tile, so
-a wave64 device (four subgroups per 256-thread workgroup) keeps its kq planes on the sdot4 tile.
 
 ### The decode GEMV family splits a subgroup across rows by the row length {#kq-gemv-lanes}
 

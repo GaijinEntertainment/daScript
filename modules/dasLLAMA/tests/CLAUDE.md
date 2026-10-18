@@ -147,14 +147,16 @@ one-step-off control (row 0 against the PREVIOUS plain step must land outside th
 step); ffk = the
 same at depth 2 and 4, every round a k+1-row verify plus the recurrent replay, which re-runs row 0
 from the pre-verify recurrent state; vff = the same-slab batch verify's four rows vs four plain
-steps; count = speculative free-run == plain free-run, token-exact, counting prompt, at depth 1, 2
+steps, a driver-against-itself compare (on a hyper-connection carrier the rail's `graph` decline instead, its same-slab rows being one session); count = speculative free-run == plain free-run, token-exact, counting prompt, at depth 1, 2
 and 4, and by the kernel census the verify's rows on the fused single-pass attention wherever the
 kernel carries the model's shape (every head class of 64, 96, 128, 256 or 512 on the f16 mirrors, the
 three stamps' counts summed, no chunked dispatch) and on the chunked pair elsewhere, both counts
 logged; at depth 1 every drafted round counted one command buffer (`metal_mtp_chained_rounds`) on a table the device
 gathers, none on an n-gram model or under the assistant's CPU-oracle drafts (`mtp-count-cpu`) (the controls); `mtp-count8-<tag>` = the same at depth 8, the deepest round - nine verify
-rows, a carrier with superblock rows planes counting its nine-row sites on one small-batch dispatch each
-(`metal_kq_mvb_wide_count` above zero) and a Q8_0 carrier none;
+rows, a carrier with a rows site - attention, dense or shared-expert FFN, deltanet projection or classifier - on a superblock
+plane the box leaves on the small-batch forms counting its nine-row sites on one small-batch dispatch each
+(`metal_kq_mvb_wide_count` above zero) and a carrier with none (a Q8_0 one, or one whose formats the box's `kq_rows_<fmt>`
+crowns keep on single passes) none;
 `mtp-codec-<tag>` = the depth-2 counting walk on q8_0, tq4 and f32 sessions, the verify's rows storing and reading
 the session's codec (the codec's fused-attention stamps counted), speculative == plain token for token and drafts
 accepted; every arm fails, never skips, on a carrier the box holds that the Metal load or a driver declines;
@@ -178,14 +180,19 @@ diagnostic arms `mtp-count-cpu` (drafts through the CPU oracle), `mtp-count-trac
 truth logged per round) and `mtp-count-pre` (the pre-norm residual as the drafter's h) ride along
 with the fixture arm. Bars: 0.5 dense, 2.0 plain MoE, 24.0 gemma-MoE = the support matrix's own
 Q4_K_M forced-step bar (the routed experts amplify a float-class difference at a near-tie into
-the K/V history: floor 0.003-0.01, isolated spikes to 11, argmax never flips). Each fixture's
+the K/V history: floor 0.003-0.01, isolated spikes to 11, argmax never flips); a K-quant carrier's nine-row verify, and its
+two-to-eight-row verify where a rows site's half-x forms serve on the box, hold `MM_TOL` (1.0: both stage x to half) at the
+least, each such bar with its control - the same verify with its GEMV stage knocked out outside it; every vff compare counts
+each plain step a Metal decode (`metal_decode_stats().decodes`) beside the batch side's served steps, its control's too, and
+the batch verify's steps counting none (the decode count's control). Each fixture's
 trunk-and-served-twin pair prefills on the GPU twin through the metal prefill override (a planar
 27B prefill costs minutes per session), so the fixture shuts down BOTH drivers before its leak
 gate.
 
 The `mtp` suite also carries `test_mtp_gemma_drafter.das` (the gemma-4 assistant drafter, also in the stocked suite; each
 arm's gates and the served arms' GPU home: the file's entry below), its arms:
-- `mtp-gdraft-refuse` - the loader's no-panic refusal contract and the sidecar resolver's two refusals; the attach's target
+- `mtp-gdraft-refuse` - the loader's no-panic refusal contract and the sidecar resolver's refusals (a head path, an absent
+  sibling, a split NextN head under the drafter's name - the same name carrying `gemma4-assistant` found); the attach's target
   check on a gemma-4-26B-shaped shell - a trunk of the drafter's own geometry passing, a two-layer trunk and a capture layer
   of another head size or kv head count each refused by its own clause; the facade's refusal text through the assistant
   registry - every registered backend's own early refusal of a planar shell with no resident driver named, and
@@ -352,7 +359,10 @@ the tail on its unfused chain under
 decode's v-norm arms in the q/k norm's dispatch), every leg's prefill and forced-step rows against the CPU truth one step off
 outside their bars (the bars' control); fam-gemma4's 12B and 31B rows hold the forced-feed freeform decode within 8 over the
 rows the row names (128 on the 12B, the 29 ahead of the 31B's one-token loop), every one of those GPU rows against the CPU row
-one step back outside it (the control);
+one step back outside it (the control); the 31B row, past the 4096-float slab, adds the residual seam census
+(`past_slab_seam_cell`): two device steps and a batched step with the fuse rail pinned on, every seam one dispatch on the
+1024-lane builders (`metal_residual_lanes`) and none on the 256-lane ones, then pinned off (put back), every seam's split
+chain norm passes over the fused run's to the pass and no one-dispatch seam (the control);
 fam-qwen35's batch cell asserts the batched step ENGAGES on the deltanet hybrid's blob twin
 and compares it against the single-row GPU step; fam-qwen2moe's batch cell compares the blob
 twin's batched step against the CPU batched stack on the planar model - the two arms the
@@ -363,8 +373,9 @@ qwen35 rows open on the format census of their blob twin, every site the file ca
 is the Flash-Next UD-IQ4_XS served image alone - the planar file and the image do not fit the box together - its Metal
 prefill and decode token for token the file's frozen counting fixture, the drivers' counters rising and no decline,
 PARITY_FULL-gated). The E2B format carriers have their own rows: `fam-gemma4e-q40` (the Q4_0 file) and `fam-<carrier.tag>`
-(built from the carrier list's tag: `fam-gemma4e-e2b-emb-q6k fam-gemma4e-e2b-emb-iq4xs fam-gemma4e-e2b-ple-q6k
-fam-gemma4e-e2b-ple-q50`); `--arm fam-gemma4e` selects them all.
+(built from the carrier list's tag: `fam-gemma4e-e2b-emb-q6k fam-gemma4e-e2b-emb-iq4xs fam-gemma4e-e2b-emb-q50
+fam-gemma4e-e2b-emb-q51 fam-gemma4e-e2b-ple-q6k fam-gemma4e-e2b-ple-q50`; an emb carrier's row also asserts the PLE table's
+format tag); `--arm fam-gemma4e` selects them all.
 
 Metal format census (`test_metal_format_census.das`, entry below): `census-iq4xs census-tied
 census-f16 census-iq3s4 census-iq3s4-moe` and the per-32 mints `census-q51 census-iq4nl32
@@ -575,7 +586,7 @@ under a sliding window (inside one slice, cutting a slice, wider than every stre
 logit that differs head to head and the logit cap, on the float, quantized and wide stamps. The
 gemm file's device pair arms (`attn_qk_mm_gate` with `pair_mt`, `attn_dev_pair_gate`) run both
 tile heights at a head of 96 too - QK's reduction width is the head, AV's 64-wide tiles plus the
-32-column tail stamp - and the misc file's `embed_kq_gate` the token-table gather of every K-quant format the Metal tier serves (three rows off the engine's own plane-row dequant, bit for bit), `embed_b32_gate` the per-32 gather (q51, iq4nl32, q4032, q5032; three rows against `dequant_b32_plane_block`, bit for bit, at 96 wide and at 2048 wide past a whole other table's blocks - an untied table's offset) and `embed_f32_gate` the greedy chain's fp32-table gather (the
+32-column tail stamp - and the misc file's `embed_kq_gate` the token-table gather of every K-quant format the Metal tier serves (three rows off the engine's own plane-row dequant, bit for bit), `embed_b32_gate` the per-32 gather (q51, iq4nl32, q4032, q5032; three rows against `dequant_b32_plane_block`, bit for bit, at 96 wide and at 2048 wide past a whole other table's blocks - an untied table's offset - and at 96 and 288 wide off the 16-byte grid, bound on the grid below as `enc_embed_table` binds it, the blocks past the bind asserted and both binds asserted on 16 bytes) and `embed_f32_gate` the greedy chain's fp32-table gather (the
 row gather at one row under the embed scale) at a 96-wide row and past a lead of foreign floats. The gemv file's
 small-batch cells run every superblock format's eight-column form at 9 and 16 rows too - two column groups in one
 dispatch over an x of the live rows alone - and every kernel cell of the iq4 family carries the iq3s4 stamps (format 35:
@@ -585,13 +596,18 @@ columns, pad columns and two column groups, y rows past `d`, on the two-row stam
 64-block row among them) bit for bit against the same form's one-row GEMV a row at a time over x off
 the dyadic lattice, the GEMV within a double dot's envelope, and the routed GEMV (`moe_b32_rows_gate`: q51, iq4nl32, q4032, q5032 and mx4's
 E8M0 path) over several streams in one dispatch bit for bit against one stream a dispatch; the E-series pre-step's cells
-(`ple_proj_bf16_gate`: the bf16 word form of the router GEMV on both stamps - eight columns a simdgroup, and the decode
-column's threadgroup a row at 1536 wide - past a lead of NaN pairs, exact against the dot in double, the poisoned lead
-element the control; `geglu_side_gate`, `ple_finish_gate` - the finish's `XSCALE` stamp (`GkPleFinish`), the finish without the
+(the bf16 and f32 rows' cells one gate, `router_gemv_gate`, over the two weight packings; `ple_proj_bf16_gate`: the bf16 rows through `enc_ple_proj_bf16_rows` - the word-pair stamps at an even dim and base, eight
+columns a simdgroup and the decode column's threadgroup a row at 1536 wide, and the halfword stamps at an odd dim or base,
+1537 and 1536 wide on the decode column past whole strides - past a lead of NaN halves with a NaN word after the rows, exact
+against the dot in double, the poisoned lead element the control; `f32_rows_gate`: the f32 rows through `enc_f32_rows_gemv` -
+the float4 router stamps on the lattice, with and without the bias row, the element-walk stamps off it (dim 66, base 2, dim 515 on an odd base, the one-column
+walk past whole strides) - NaN past both row ends, exact against the dot in double, the poisoned lead element the control; `geglu_side_gate`, `ple_finish_gate` - the finish's `XSCALE` stamp (`GkPleFinish`), the finish without the
 prescale its control); the side rows' gather rides the token-table family, the misc file's embed gates. The prefill file's `qk_rope_gate`
 carries the window's V arms (V off the pre-norm k rows, the v-norm in place, the V panel bit for bit untouched with neither), and
 the misc file's `add_rms_gate` every residual stamp (`GkAddRmsRows`: the plain step, the sandwich seam, the seam with no norm
-stored, the f16 twins) through its one-row, rows and window builders, the sandwich rows held off the plain step's as the control. The gemm file's `router_f32_gate` holds the prefill router's tile (`MetalF32ExactMm`) at the 35B-A3B shape and at
+stored, the f16 twins) through its one-row, rows and window builders and the decode rows' 1024-lane builders, at widths within the
+4096-float slab and past it (5376, 8192: the columns past the slab re-read), the sandwich rows held off the plain step's as the
+control. The gemm file's `router_f32_gate` holds the prefill router's tile (`MetalF32ExactMm`) at the 35B-A3B shape and at
 64 experts against the dot in double on operands off the f16 lattice, the half-staged stamp over the same rows missing
 the bar as its control. The
 cells that need no kernel: the misc file's `test_metal_served` (a driver's forward answer through `metal_served`: a
@@ -604,7 +620,9 @@ bytes, a repeat of either is its cached buffer, two cached regions counted) and
 `test_metal_ring_slack_reload` (a model swap returns the mirror rings' slack to its floor and stales
 the steps encoded over the old layout; a swap with the slack at its floor moves no epoch), and the prefill file's `test_moe_padded_bound` (the bucket panel's
 row bound against the rail's own padded prefix over seeded routings, reached exactly where every
-routed expert is distinct, a bound for one row fewer sitting under the rail's pad as the control)
+routed expert is distinct, a bound for one row fewer sitting under the rail's pad as the control), `test_pf_bf16_tile_pick`
+(the window's pre-step projection takes the bf16 tile at a dim of whole 32-element chunks and layers x ple of whole 64-row
+tiles, the position-blocked GEMV off either)
 and `test_resident_panel_charge` (the resident panel registry on the
 driver's device: an uncharged ask makes its panel and charges nothing, the same key answers again,
 another size under it is refused, a charged ask counts its bytes exactly when the budget serves it,
@@ -1025,7 +1043,10 @@ bytes, the packed f16-pair scale word and the device-timestamp scaffold around a
 `test_vkd_cm2l_batch` / `test_vkd_cm2m_batch` / `test_vkd_cm2s_batch` / `test_vkd_cm2e_batch`,
 and its KHR arm is `test_vkd_q8_khr_batch`, the per-32 plane through the hand-staged KHR tile over the
 same two regions, whole and under a k split with the reduce, wherever the device has KHR cooperative
-matrices at subgroup 32; q51's expert rail rides `test_vkd_q51_cm2_batch` - its s and e stamps
+matrices at subgroup 32; `test_vkd_f32_khr_batch` is the same tile over a file's f32 rows (`F32KhrBatch`, each
+weight rounded to f16 on the stage) against the f16-rounding oracle over one region, whole and in two k chunks
+through the reduce, on the same device condition; `test_vkd_actf16_strided` holds the f16 act over the
+strided side rows (`ubase` / `ustride` / `ulen`) against the CPU form, the contiguous read its control; q51's expert rail rides `test_vkd_q51_cm2_batch` - its s and e stamps
 on a cm2 device and its KHR tile wherever the device has KHR cooperative matrices at subgroup 32,
 over the per-32 plane with hand-packed d | m words - and `test_vkd_q51_gemv`,
 its Q8_0-activation decode GEMV against the scalar dot's float order at 704 and 1408 (every per-32 GEMV cell also runs the
@@ -1146,7 +1167,7 @@ plain and under the router bias; then the two-deep stamp over 512 experts at ten
 the first 256, the same compares, with the one-deep stamp over the same rows as the control that misses the host select's
 picks), `test_vkd_router_gemv_cols` (the router GEMV over three, eight and twelve x rows - twelve in two column tiles,
 `router_enc_cols` - against the one-row
-dispatch a row at a time, bit for bit, on the bf16 and the f32 stamps, with and without the fused
+dispatch a row at a time, bit for bit, on the bf16 and the f32 stamps and the bf16 halfword stamp at the odd dim 2049, with and without the fused
 rms, against a CPU oracle, the widest miss logged with its row and expert, the sentinel past the
 last column standing),
 `test_vkd_q8_gemv_gu_n` (its N-column stamps - two, four and eight columns, and eleven as an eight-column tile and a
@@ -2532,7 +2553,11 @@ decode step's one-lane form against its team publish, both texts logged - and th
 read the whole clip reading its first half token for token as a fresh session does, the half clip
 over 8 tokens, and two more transcriptions on the session leaving the heap where it stood -
 `heap_flat_leg`, which the canary and gemma4a oracle cells run too: a transcription frees what it
-allocates), the Vulkan twin `test_whisper_vulkan_twin` (whisper tiny and large-v3-turbo; the
+allocates; the canary cell, an external-reference compare, on the f32 lane over the pair built in memory (no `.dlim`), each clip on the CPU chain with every tower off - the tower's encode count unmoved - and then served - the tower's
+encode counted where it serves - in the forced-feed form: the frozen NeMo ids fed one by one, each our argmax or within
+`CN_TIE_BAR` of it, the control the same walk fed each id one step early - the oracle id outside the bar at every step
+whose input moved - then the greedy ids the oracle's up to the
+step the forced walk's pick leaves the oracle's, both texts logged), the Vulkan twin `test_whisper_vulkan_twin` (whisper tiny and large-v3-turbo; the
 cell described under `test_vulkan_tower_kernels.das`, skipping without the ggml files, without
 jfk.wav, without a Vulkan device under `DASLLAMA_GPU=1`, on a das_metal build, and when
 interpreted), the decoder twin `test_whisper_vulkan_wdec` (tiny and large-v3-turbo on jfk, the q8
@@ -2564,7 +2589,7 @@ f32-enc/q8-dec serving mode and its `asr_exec_fmt` stamp; the strict token-ident
 pins the simdgroup lane, and its tolerance-graded twin pins the crowns ON and asserts WORD
 equality - the tensor twins' quality gate), the q8-gate CPU-vs-CPU claims
 (CPU-claim cells, wdec knob pinned OFF), and the mel state-reuse determinism cell (gemma4a +
-canary: `gemm_f32` accumulates, so a reused state's `st.reim` must start zeroed - bit-equal
+canary, both encoders minted in memory with no `.dlim`: `gemm_f32` accumulates, so a reused state's `st.reim` must start zeroed - bit-equal
 mels across calls); its ungated cells are the model-free half.
 `test_dasllama_core.das` - model-free: walks the module dependencies in-process; no module
 `dasllama_core` depends on is `audio` or `stbimage`, while `dasllama/dasllama` depends on both.
@@ -2573,7 +2598,8 @@ cleanly with no model open.
 `test_asr_verbs.das` - model-free: the family-owned ASR facade verbs (`asr_exec_fmt` /
 `asr_encode_bucket`) over constructed structs, the audio families' lane knobs (qwen3a /
 gemma4a / canary / parakeet: the un-pinned default against the predicate the policy itself consults, both
-pins, and reset from the EXACT pin), and parakeet's SPM detokenizer over a toy vocab.
+pins, and reset from the EXACT pin), the ASR decoder's K/V dtype knob (`get_asr_kv`: f16 by default, each `set_asr_kv`
+value read back, put back as found), and parakeet's SPM detokenizer over a toy vocab.
 `test_mtp_gemma_drafter.das` - stocked suite AND the `mtp` suite: the gemma-4 assistant
 drafter (`dasllama/dasllama_mtp_gemma`), its arms under "Arm filter mechanics" above. Only `mtp-gdraft-refuse`'s shell cells
 run with no model - its gather cell gates on the 440 MiB sidecar, `--family gemma4moe` and a das_metal build, its

@@ -241,9 +241,10 @@ def private embed_kq_gate(t : T?; var dev, queue; st : auto(ST); fmt, dim, vocab
 }
 
 //! the per-32 token-table gather (`MetalEmbedB32T`) of one format: three rows - a middle token, token 0 and the last - off a
-//! plane pair bound past `lead` blocks of other rows (an untied table sits past the classifier's), the token list read past a lead
-//! id and the rows written past a lead row, each row bit for bit the engine's own block dequant under the embed scale
-def private embed_b32_gate(t : T?; var dev, queue; f : KqFmt; dim, vocab, lead : int) {
+//! plane pair past `lead` blocks of other rows (an untied table sits past the classifier's), bound where `enc_embed_table` binds it
+//! (`b32_table_bind`: on the 16-byte grid below, the blocks past it in `b0`), the token list read past a lead id and the rows written past a lead
+//! row, each row bit for bit the engine's own block dequant under the embed scale
+def private embed_b32_gate(t : T?; var dev, queue; f : KqFmt; dim, vocab, lead : int; want_b0 : int = 0) {
     let tag = "embed_b32 {f} dim={dim} vocab={vocab} lead={lead}"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
         var err : string
@@ -293,9 +294,12 @@ def private embed_b32_gate(t : T?; var dev, queue; f : KqFmt; dim, vocab, lead :
         let bkq = mc |> in_plain(kq)
         let btok = mc |> in_plain([0x7FFFFFFFu, uint(toks[0]), uint(toks[1]), uint(toks[2])])
         let bxo = mc |> out_words(4 * dim, PAD_SENTINEL)
-        var ka = EmbedKqArgs(dim = uint(dim), nsb = uint(nb), escale = escale)
-        let soff = uint64(lead * sb)
-        let qoff = uint64(lead * qb)
+        let bind = b32_table_bind(int64(lead) * KQ_B32_ELEMS, f)   //! the engine's own bind (`enc_embed_table`'s)
+        t |> equal(int(bind.b0), want_b0, "{tag}: the table sits {want_b0} blocks past its bind")
+        var ka = EmbedB32Args(dim = uint(dim), escale = escale, b0 = uint(bind.b0))
+        let soff = uint64(bind.off / KQ_B32_ELEMS * int64(sb))
+        let qoff = uint64(bind.off / KQ_B32_ELEMS * int64(qb))
+        t |> success(soff % 16ul == 0ul && qoff % 16ul == 0ul, "{tag}: the binds sit on the 16-byte grid (scale {soff}, quant {qoff})")
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
             if (f == KqFmt.q51) {
                 stamp_run(sq, pso) {
@@ -331,8 +335,9 @@ enum private ArStamp {
 
 //! the residual step against the CPU's sequential form, under the 1e-4 bar (simd_sum reassociation): x = (x + a') . ascale,
 //! a' = rmsnorm(a) . wpa on the sandwich stamps, y = rmsnorm(x) . w; the sandwich stamps' rows told apart from the plain form's
-def private add_rms_gate(t : T?; var dev, queue; stamp : ArStamp; single : bool; dim, nrows : int; ascale : float; window : bool = false) {
-    let tag = "add_rms {stamp}{single ? " 1-row grid" : ""}{window ? " window" : ""} dim={dim} rows={nrows} ascale={ascale}"
+def private add_rms_gate(t : T?; var dev, queue; stamp : ArStamp; single : bool; dim, nrows : int; ascale : float; window : bool = false;
+                         wide : bool = false) {
+    let tag = "add_rms {stamp}{single ? " 1-row grid" : ""}{window ? " window" : ""}{wide ? " 1024-lane" : ""} dim={dim} rows={nrows} ascale={ascale}"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
         var err : string
         let s1 = stamp_of(@@enc_addrms_c)
@@ -348,6 +353,11 @@ def private add_rms_gate(t : T?; var dev, queue; stamp : ArStamp; single : bool;
         let wp = stamp_of(@@pf_enc_preaddrms_b_c)
         let wph = stamp_of(@@pf_enc_preaddrms_bhx_c)
         let wa = stamp_of(@@pf_enc_preadd_b_c)
+        let lb = stamp_of(@@enc_add_rms_bw_c)
+        let lh = stamp_of(@@enc_add_rms_bhxw_c)
+        let lp = stamp_of(@@enc_preaddrms_bw_c)
+        let lph = stamp_of(@@enc_preaddrms_bhxw_c)
+        let la = stamp_of(@@enc_preadd_bw_c)
         var pso = (stamp == ArStamp.plain ? mc |> keep_stamp(s1, err) : (stamp == ArStamp.plain_hx ? mc |> keep_stamp(sh, err)
             : (stamp == ArStamp.pre ? mc |> keep_stamp(p1, err) : (stamp == ArStamp.pre_hx ? mc |> keep_stamp(ph, err) : mc |> keep_stamp(a1, err)))))
         return if (!pso_ok(t, tag, pso, err))
@@ -414,6 +424,28 @@ def private add_rms_gate(t : T?; var dev, queue; stamp : ArStamp; single : bool;
                         invoke(wa.enc, enc, x, a, w1, ka, int64(nrows))
                     }
                 }
+            } elif (wide) {   //! the decode rows' builders past the slab: the same kernels at 1024 lanes a row
+                if (stamp == ArStamp.plain) {
+                    stamp_run(lb, pso) {
+                        invoke(lb.enc, enc, x, a, w1, y, ka, int64(nrows))
+                    }
+                } elif (stamp == ArStamp.plain_hx) {
+                    stamp_run(lh, pso) {
+                        invoke(lh.enc, enc, x, a, w1, y, yh, ka, int64(nrows))
+                    }
+                } elif (stamp == ArStamp.pre) {
+                    stamp_run(lp, pso) {
+                        invoke(lp.enc, enc, x, a, w1, y, ka, int64(nrows))
+                    }
+                } elif (stamp == ArStamp.pre_hx) {
+                    stamp_run(lph, pso) {
+                        invoke(lph.enc, enc, x, a, w1, y, yh, ka, int64(nrows))
+                    }
+                } else {
+                    stamp_run(la, pso) {
+                        invoke(la.enc, enc, x, a, w1, ka, int64(nrows))
+                    }
+                }
             } elif (stamp == ArStamp.plain) {
                 if (single) {   //! the single-row builder's one threadgroup
                     stamp_run(s1, pso) {
@@ -454,6 +486,8 @@ def private add_rms_gate(t : T?; var dev, queue; stamp : ArStamp; single : bool;
         }
         return if (!ran)
         check_buf(t, "{tag} x", mc.buf[bx], want_x, BAR_TIGHT, Shape(row_width = dim))
+        t |> success(moved_off(want_x, xv, 0, BAR_TIGHT) && moved_off(want_x, xv, total - 1, BAR_TIGHT),
+            "{tag} x in place: the first row's first column and the last row's last column moved off x")
         if (stamp == ArStamp.pre_add) {
             var inscope untouched <- [for (_i in range(total)); PAD_SENTINEL]
             check_buf(t, "{tag} y untouched", mc.buf[by], untouched, BAR_EXACT, Shape(row_width = dim))
@@ -1970,9 +2004,9 @@ def private mtl_toy_lens_gate(t : T?; var dev, queue; n : int) {
     g_mtl_toy_shift_pso = null
 }
 
-// The alignments the ringed attention, router and PLE projection builders declare (`requires =`): an aligned value passes every
-// builder silently, a misaligned one trips each builder whose contract it breaks, by the builder's name and the broken item. The
-// builders record into a graph capture the cell discards, so no misaligned dispatch reaches the device.
+// The alignments the ringed attention, router, PLE projection and per-32 gather builders declare (`requires =`): an aligned value
+// passes every builder silently, a misaligned one trips each builder whose contract it breaks, by the builder's name and the
+// broken item. The builders record into a graph capture the cell discards, so no misaligned dispatch reaches the device.
 var private g_align_trips : array<string>
 
 def private record_align_trip(msg : string) {
@@ -1993,6 +2027,7 @@ def private dispatch_align_gate(t : T?; var dev, queue) {
                     "enc_attnd_q8_c", "enc_attnd_tq4_c", "enc_attndw_q8_c", "enc_attndw_tq4_c", "enc_attndx_q8_c", "enc_attndx_tq4_c" ]
     let routers <- [ "enc_moe_router", "enc_moe_router_b" ]
     let projs <- [ "enc_ple_proj_bf16", "enc_ple_proj_bf16_one" ]
+    let gathers <- [ "enc_q51_embed_b32", "enc_iq4nl32_embed_b32", "enc_q4032_embed_b32", "enc_q5032_embed_b32" ]
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
         let b = mc.buf[mc |> out_words(64, 0.0)]
         let saved_hook = metal_requires_hook()
@@ -2051,9 +2086,20 @@ def private dispatch_align_gate(t : T?; var dev, queue) {
                 want |> want_trips(s._1 % 2u != 0u ? [n] : array<string>(), "pa.woff % 2")
             }
         }
+        //! the per-32 gathers' row width: the aligned control, then one off the 32-block (the body counts a row's blocks as dim / 32)
+        for (dim in fixed_array(64u, 48u)) {
+            var ga = EmbedB32Args(dim = dim, escale = 1.0)
+            enc_q51_embed_b32(null, b, 0ul, b, 0ul, b, 0ul, b, 0ul, ga, 4l, 1l)
+            enc_iq4nl32_embed_b32(null, b, 0ul, b, 0ul, b, 0ul, b, 0ul, ga, 4l, 1l)
+            enc_q4032_embed_b32(null, b, 0ul, b, 0ul, b, 0ul, b, 0ul, ga, 4l, 1l)
+            enc_q5032_embed_b32(null, b, 0ul, b, 0ul, b, 0ul, b, 0ul, ga, 4l, 1l)
+            if (dim % 32u != 0u) {
+                want |> want_trips(gathers, "ka.dim % 32")
+            }
+        }
         gr_arm(false)
         restore_metal_requires_hook(saved_hook)
-        t |> equal(length(want), 46, "dispatch_align: the misaligned rings and router shapes owe forty-six trips")
+        t |> equal(length(want), 50, "dispatch_align: the misaligned rings, router shapes and gather widths owe fifty trips")
         t |> equal(join(g_align_trips, "\n"), join(want, "\n"), "dispatch_align: each builder trips on exactly the items its value breaks")
         delete g_align_trips
     }
@@ -2073,6 +2119,9 @@ def test_metal_misc_kernels(t : T?) {
                 for (f in [KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032, KqFmt.q5032]) {
                     embed_b32_gate(t, dev, queue, f, 96, 5, 0)
                     embed_b32_gate(t, dev, queue, f, 2048, 7, 7 * 64)   //! past a whole other table's blocks: an untied table's offset
+                    embed_b32_gate(t, dev, queue, f, 96, 5, 3, 3)       //! a table off a superblock: three blocks past the bind
+                    //! ... and a row of nine blocks past a bind every four blocks (q51's 20- and 4-byte blocks) or eight (the 2-byte scales)
+                    embed_b32_gate(t, dev, queue, f, 288, 4, 7 * 64 + 13, f == KqFmt.q51 ? 1 : 5)
                 }
                 embed_kq_gate(t, dev, queue, stamp_of(@@enc_embed_kq_k4), 4, 512, 5)
                 embed_kq_gate(t, dev, queue, stamp_of(@@enc_embed_kq_k5), 5, 512, 5)
@@ -2095,13 +2144,21 @@ def test_metal_misc_kernels(t : T?) {
                     add_rms_gate(t, dev, queue, st, true, 1024, 1, 0.5)    //! the gemma4 layer_out_scale slot
                     add_rms_gate(t, dev, queue, st, false, 1500, 3, 0.75)
                     add_rms_gate(t, dev, queue, st, false, 4096, 2, 1.0)    //! the slab's whole width
+                    add_rms_gate(t, dev, queue, st, true, 5376, 1, 0.75)    //! past the slab: the gemma-4 31B's row
+                    add_rms_gate(t, dev, queue, st, false, 5376, 3, 0.75)
+                    add_rms_gate(t, dev, queue, st, false, 8192, 2, 1.0)    //! twice the slab
                 }
                 for (st in fixed_array(ArStamp.plain_hx, ArStamp.pre_hx)) {
                     add_rms_gate(t, dev, queue, st, false, 1500, 3, 0.75)
+                    add_rms_gate(t, dev, queue, st, false, 5376, 3, 0.75)
                 }
                 for (st in fixed_array(ArStamp.plain, ArStamp.plain_hx, ArStamp.pre, ArStamp.pre_hx, ArStamp.pre_add)) {
                     add_rms_gate(t, dev, queue, st, false, 2560, 5, 0.75, true)
                     add_rms_gate(t, dev, queue, st, false, 4096, 2, 1.0, true)
+                    add_rms_gate(t, dev, queue, st, false, 5376, 5, 0.75, true)
+                    add_rms_gate(t, dev, queue, st, false, 5376, 1, 0.75, false, true)
+                    add_rms_gate(t, dev, queue, st, false, 5376, 4, 0.75, false, true)
+                    add_rms_gate(t, dev, queue, st, false, 8192, 2, 1.0, false, true)
                 }
                 qk_norm_gate(t, dev, queue, 64, 4, 2, 2, false)     // in-place decode shape
                 qk_norm_gate(t, dev, queue, 64, 4, 2, 2, true)      // the no-wv V-fusion shape

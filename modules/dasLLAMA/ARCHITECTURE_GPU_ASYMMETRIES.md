@@ -25,6 +25,11 @@ asymmetries a stamp family ledgers - stays in `ARCHITECTURE_GPU.md#gpu-backends`
   leaves a hyper-connection MoE's expert stacks on the host by construction (`resident_host_experts`, the
   model's shape, not the card's room), so it cuts its command at every routed block and the host sums the experts between the segments; Metal serves the
   same model whole from unified memory and its drivers split nothing.
+- **The window's f32 per-layer-embedding gate and projection run through an f16 stage on Vulkan alone**
+  (`ARCHITECTURE_GPU_VULKAN_KHR.md#f32-rows-staged-tile`, the knob `DASLLAMA_VK_PLE_F32_TILE`, Vulkan's alone): the
+  staged KHR tile reads the file's f32 rows, rounds each weight to f16 on its stage, feeds f16 rows and accumulates in
+  f16, because the f32 scalar tile is the only f32-exact form the Vulkan tier has and runs at a twenty-fifth of its rate; Metal
+  serves the same planes on its f32-exact tile, and has no form to pick between.
 - **The hot expert pool is Vulkan-only** (`ARCHITECTURE_GPU_VULKAN_HC.md#hc-hot-pool`, the tier's four hot
   seats, `DASLLAMA_GPU_HEAT`): where routed experts live on the host the Vulkan driver keeps the hottest in
   per-layer device slots; Metal has every expert resident, so nothing is hot or cold.
@@ -202,5 +207,5 @@ asymmetries a stamp family ledgers - stays in `ARCHITECTURE_GPU.md#gpu-backends`
   serves a routed block of few tokens through the decode step's gathered GEMVs instead of its bucketed tiles; the
   Vulkan window chain's routed block rides its expert tiles over a device-side gather at every window size - the
   cm2 expert chain (`ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-expert-chain`), the KHR tile
-  (`ARCHITECTURE_GPU_VULKAN_GEMM.md#khr-mm-kq-tile`) or, on a device with neither, the Q8-fed chain's batch tiles
+  (`ARCHITECTURE_GPU_VULKAN_KHR.md#khr-mm-kq-tile`) or, on a device with neither, the Q8-fed chain's batch tiles
   (`ARCHITECTURE_GPU_VULKAN_MOE.md#vk-moe-q8-chain`) - and has no tile-per-expert form to route away from.

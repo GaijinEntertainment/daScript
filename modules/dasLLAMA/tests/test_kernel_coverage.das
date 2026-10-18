@@ -63,16 +63,10 @@ require dasllama/dasllama_env   // nolint:STYLE030,LINT019 — the read sites si
 // against the report's NEVER DISPATCHED warnings — a name here that the report shows dispatched
 // is stale, and a warning with no entry here is a coverage gap to close with a row.
 let private CENSUS_NEVER_DISPATCHED <- [
-    // the MoE expert mul_mm tall M-tile pairs (128-row floor + remainder), ALL formats: the
-    // tall stamps engage at npos * n_expert_used >= 128 * n_expert, and the stocked MoE
-    // carriers (128/8, 60/4, 32/4 experts) put that floor at 1024-2048 rows - past the
-    // ~590-token census prompt under the 1024-row session cap. Their coverage is the
-    // tall-pair kernel-unit gate in test_metal_gemm_kernels.das
-    "MetalMoeMulMmK4TH128", "MetalMoeMulMmK4THR",
+    // the MoE expert mul_mm tall M-tile pair (128-row floor + remainder) in q5_K: the zoo
+    // stocks no Q5_K MoE carrier, where every other format's pair rides a census row's
+    // window. Its coverage is the tall-pair kernel-unit gate in test_metal_gemm_kernels.das
     "MetalMoeMulMmK5TH128", "MetalMoeMulMmK5THR",
-    "MetalMoeMulMmK6TH128", "MetalMoeMulMmK6THR",
-    "MetalMoeMulMmQ8TH128", "MetalMoeMulMmQ8THR",
-    "MetalMoeMulMmMx4TH128", "MetalMoeMulMmMx4THR",
     // the q5_1 MoE tensor twins, ALL stamps: no stocked carrier holds a Q5_1 expert plane
     // (the zoo's MoE carriers are Q8_0 / Q5_K_M / Q4_K_M / mxfp4; Q5_1 appears only when
     // expert_ffn % 256 != 0 forces the converter off K-quants). Their coverage is the
@@ -155,7 +149,7 @@ let private CENSUS_NEVER_DISPATCHED <- [
     "MetalKqMulMmIq4xsTHDb128", "MetalKqMulMmIq3s4THDb128", "MetalKqMulMmIq4nlTHDb128", "MetalKqMulMmQ40THDb128", "MetalKqMulMmK3THDb128", "MetalKqMulMmK2THDb128", "MetalKqMulMmIq2sTHDb128", "MetalKqMulMmIq2xsTHDb128", "MetalKqMulMmIq2xxsTHDb128", "MetalKqMulMmIq3sTHDb128", "MetalKqMulMmIq3xxsTHDb128",
     "MetalKqMulMmQ51T", "MetalKqMulMmQ51TH", "MetalKqMulMmQ51TH128", "MetalKqMulMmQ51THDb", "MetalKqMulMmQ51THDb128", "MetalKqDequantQ51",
     "MetalKqMulMmIq4nl32T", "MetalKqMulMmIq4nl32TH", "MetalKqMulMmIq4nl32TH128", "MetalKqMulMmIq4nl32THDb", "MetalKqMulMmIq4nl32THDb128", "MetalKqDequantIq4nl32",
-    "MetalKqMulMmQ4032T", "MetalKqMulMmQ4032TH", "MetalKqMulMmQ4032TH128", "MetalKqMulMmQ4032THDb", "MetalKqMulMmQ4032THDb128", "MetalKqDequantQ4032",
+    "MetalKqMulMmQ4032T", "MetalKqMulMmQ4032TH", "MetalKqMulMmQ4032TH128", "MetalKqMulMmQ4032THDb", "MetalKqMulMmQ4032THDb128",
     "MetalKqMulMmQ5032T", "MetalKqMulMmQ5032TH", "MetalKqMulMmQ5032TH128", "MetalKqMulMmQ5032THDb", "MetalKqMulMmQ5032THDb128", "MetalKqDequantQ5032",
     // the split-format MoE expert mul_mm stamps, all four forms (f32-X base, half-X twin, and the
     // tall pair): no stocked MoE carrier holds an expert plane in these formats - the zoo's MoE
@@ -179,7 +173,6 @@ let private CENSUS_NEVER_DISPATCHED <- [
     // the T stamp has NO model-less cell, in q40 or in the seven formats above. followup_metal.md
     // sec.14 owes that arm
     "MetalMoeMulMmQ40T_metal_moe_mulmm_iq4xs_t",
-    "MetalMoeMulMmQ40TH128_metal_moe_mulmm_iq4xs_t", "MetalMoeMulMmQ40THR_metal_moe_mulmm_iq4xs_t",
     // the expert-indexed GEMVs of the same formats, on the same expert planes nothing stocks.
     // Their coverage is moe_kq_gemv_gate in test_metal_gemv_kernels.das
     "metal_moe_gemv_k3", "metal_moe_gemv_iq4xs", "metal_moe_gemv_iq3s", "metal_moe_gemv_iq3xxs",
@@ -219,7 +212,16 @@ let private CENSUS_NEVER_DISPATCHED <- [
     // multiple of 128, and the census prompt pads to 608 rows, which the 32-row stamps take. Their
     // coverage is attn_qk_mm_gate's pair arms and attn_dev_pair_gate in test_metal_gemm_kernels.das and the
     // attn-dev arm's 384-row continuation in test_metal_prefill_parity.das
-    "MetalAttnQKDev128", "MetalAttnAVDev128"
+    "MetalAttnQKDev128", "MetalAttnAVDev128",
+    // the f32 rows' element-walk GEMV pair: it serves an f32 row set whose dim, base or column stride sits off the float4
+    // lattice (an E-series pre-step projection or per-layer plane in f32 rows at such a width), and every stocked carrier's
+    // widths step whole float4s, so no census row reaches it. Its coverage is f32_rows_gate's off-lattice arms in
+    // test_metal_prefill_kernels.das
+    "metal_f32_rows_one", "metal_f32_rows_b",
+    // the E-series projection's bf16 halfword walk: it serves bf16 projection rows whose model dim or base is odd, and every
+    // stocked E-series carrier's dim is even on an even base. Its coverage is ple_proj_bf16_gate's odd arms in
+    // test_metal_prefill_kernels.das
+    "metal_ple_proj_bf16_hw_one", "metal_ple_proj_bf16_hw"
 ]
 
 [unused_argument(t, path, family, kdts, nbs)]   // off-Apple the gated body is empty
@@ -1026,7 +1028,12 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // router_gemv_bf16: the BF16 projection's decode column, gemma-4-E2B-it-Q8_0.gguf in test_gpu_resident_gemma4_e2b.das;
     //                   test_vkd_router_gemv_bf16
     // ple_bf16_cvt: the BF16 projection's per-window f16 panel, the same file's prefill windows; test_vkd_ple_bf16_cvt
-    "ple_act_f32_cls_spv", "ple_finish_cls_spv", "router_gemv_bf16_cls_spv", "ple_bf16_cvt_cls_spv",
+    // f32_batch_khr: the staged KHR tile over the F32 per-layer gate and projection rows, gemma-4-E2B-it-Q4_K_M.gguf's
+    //                prefill windows in test_gpu_resident_gemma4_e2b.das (arm g4e-kq, its count asserted); test_vkd_f32_khr_batch
+    // router_gemv_bf16_hw: the BF16 projection's halfword stamp, which serves an odd model dim or base - every stocked E-series
+    //                      carrier's dim is even on an even base, so no file reaches it; test_vkd_router_gemv_cols's halfword arms
+    "ple_act_f32_cls_spv", "ple_finish_cls_spv", "router_gemv_bf16_cls_spv", "ple_bf16_cvt_cls_spv", "f32_batch_khr_cls_spv",
+    "router_gemv_bf16_hw_cls_spv",
     // the scalar router GEMM: on a cm2 box every MoE carrier whose dim the small f16 GEMM's eight
     // 64-deep chunks divide takes the f16 route, so the scalar tile runs only off it (a dim off
     // 512, the KHR route). Its coverage is test_vkd_moe_routing's router arm in test_vulkan_kernels.das

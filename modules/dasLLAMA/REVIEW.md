@@ -150,8 +150,8 @@ card (`harness/convert_pocket.py`, `harness/tts_model_card.md`), or to a call th
 weight lane (`set_tts_q8` / `set_styletts2_q8` / `set_pocket_q8`), wherever the diff puts it,
 applies `REVIEW_TTS.md`.**
 
-**A diff that adds a file under `dasllama/`, or adds or moves a def, a class, a module global or
-named constant, or a `require` in a file under `dasllama/`, applies `REVIEW_PLACEMENT.md`** - the
+**A diff that adds a file under `dasllama/`, or adds or moves a top-level declaration (a `require`
+among them) in a file under `dasllama/`, applies `REVIEW_PLACEMENT.md`** - the
 what-lands-where rules.
 
 **A diff that adds or changes a def in a file `REVIEW.das`'s `FACADE_FILES` lists, or adds `public`

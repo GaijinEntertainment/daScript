@@ -23,12 +23,7 @@ Metal tower), `dasllama_vulkan_tower_register` (the Vulkan tower) and
 hooks a function can reach are the ones those three register.
 
 A gate covers a hook when it asserts the hook's counter rising on a leg where that hook is the
-only reachable hook raising it. The counters: `vulkan_tower_stats()`'s or `metal_tower_stats()`'s
-`encodes` and `blocks` for a blocks hook (the whole-chain vision seats included), `encodes` for an
-encode hook, `convs` for a front, conv or chunk hook; for the mel hook `mels` on Vulkan and
-`metal_tower_mel_encodes()` on Metal; for the whisper-class tail hook `metal_tower_tail_encodes()`;
-on either tower, `styletts2_gpu_stats(<seat>)`'s or `pocket_gpu_stats(<seat>)`'s `served` for a
-TTS seat.
+only reachable hook raising it; `REVIEW_TOWER.md` names the counter each hook kind raises.
 
 ### The tower attention routes {#tower-attn-routes}
 

@@ -113,18 +113,18 @@ previous write is encoded - rotate through as many buffers as the chain has disp
 between a write and its read.** One shared scratch serializes the whole chain through its
 write-after-read hazards.
 
-**A diff that makes a path split one op - a split path divides an op's K, key span, row count or
-other work size across two or more dispatches whose partial outputs combine - gates the split in
-the same change on the quantity it divides, or ships it ungated where it wins at both measured
-ends. The duty covers every work size at which one dispatch's scratch fits under the path's byte
-ceiling (the largest scratch buffer the path lets one dispatch allocate), and every work size on a
-path with no ceiling.** Whole steps of an op run one after another are not a split.
+**A diff that makes a path split one op - dividing an op's K, key span, row count or other work
+size across two or more dispatches whose partial outputs combine - gates the split on the quantity
+it divides, or ships it ungated, in the same change, at every work size at which one dispatch's
+scratch fits under the path's byte ceiling (the largest scratch buffer the path lets one dispatch
+allocate), and at every work size on a path with no ceiling.** Whole steps of an op run one after
+another are not a split.
 
-**A diff that sets or changes the threshold of a gate on a split path - one that divides an op's
-work size across dispatches whose partial outputs combine - or ships such a path ungated, takes the
-threshold, or the decision to ship no gate, from measurements at the smallest
-and the largest value the gated quantity takes on the workloads the path serves, both in the PR
-body.** The small-work regression hides behind the big-work win.
+**A diff that sets or changes the threshold of a gate on a path that splits one op's work size
+across dispatches whose partial outputs combine, or ships such a path ungated, takes the threshold
+- or the evidence that the split wins at both ends - from measurements at the smallest and the
+largest value the gated quantity takes on the workloads the path serves, both in the PR body.**
+The small-work regression hides behind the big-work win.
 
 **A diff that changes a tile, grid, threadgroup, or uniform constant sets the new value at every
 authoritative site its kind has, in the same change.** The sites per kind: the generated `*_msl`
@@ -133,12 +133,12 @@ a `@template_constant`'s default and each stamp's `override` for a constant a te
 the `grid=` spec (a CEIL divide), or the `wgs` decode plus its host helper, for a grid; the
 `tg=` / `local_size_x` spec for a threadgroup; the single writer for a uniform.
 
-**A diff that changes how a `grid = "wgs"` kernel body decodes its workgroup index, or how the host
-computes that class's `wgs`, shows in the same change that the host's count still covers exactly the
-indices the body's decode reads - by changing both, by a decode that permutes the same index set,
-or - where the body's decode and the host's count both read one shared function - by showing that
-for every shape the encoder dispatches that class on, the stamp it picks is the one that function's
-value names.** The `grid=` spec carries no number for these classes, so nothing else ties the two.
+**A diff that adds a `grid = "wgs"` kernel class, changes how such a body decodes its workgroup
+index, or changes how the host computes that class's `wgs`, shows in the same change that the
+host's count covers exactly the indices the body's decode reads - by changing the decode and the
+count together, by a decode that permutes the same index set, or, where the decode and the count
+both read one shared function, by showing that for every shape the encoder dispatches that class
+on, the stamp it picks is the one that function's value names.** The `grid=` spec carries no number for these classes, so nothing else ties the two.
 
 **Never let a key that decides whether uploaded bytes, a cached descriptor set or bind list, or
 encoded GPU work may be reused skip an input that content was built from - it compares every
@@ -183,18 +183,26 @@ by its name - in that driver's row of the role table in `ARCHITECTURE_GPU.md#gpu
 diff that removes one deletes its name from that row; in the same change.**
 
 **A diff that adds a function or export that `dasllama/` code outside the backend's own files
-calls, a hook registration, kernel annotation, setter or environment variable only one GPU backend
-(Metal or Vulkan) has, or a decode or prefill behavior or a step's precision only one has, lands
-its own entry, naming the operation the other backend's API or device lacks, in
+calls, a hook registration, kernel annotation or setter only one GPU backend (Metal or Vulkan) has,
+or a decode or prefill behavior or a step's precision only one has, lands its own entry, naming
+the operation the other backend's API or device lacks, in
 `ARCHITECTURE_GPU_ASYMMETRIES.md#gpu-asymmetries`; a diff that removes one deletes its entry; in
 the same change.** A hook a tower driver registers in a model family's registry and a seat (a hook
 slot `dasllama/dasllama_gpu_tier.das` declares) only the Vulkan backend's files fill land in the
 backend role table at `ARCHITECTURE_GPU.md#gpu-backends` instead of an entry of their own; the same
 path served faster or slower is not a behavior.
 
+**A diff that adds an environment variable only one GPU backend reads, and that changes what that
+backend computes or serves, lands its own entry, naming the operation the other backend's API or
+device lacks, in `ARCHITECTURE_GPU_ASYMMETRIES.md#gpu-asymmetries`; a diff that removes one deletes
+its entry; in the same change.** A variable that changes only how fast the backend serves the same
+output is not one; a variable that also adds a backend-only behavior takes one entry, not two.
+
 **A diff that adds or extends, on one GPU backend (Metal or Vulkan), a prefill or decode path or
 a K/V cache feature for a model family the other backend also serves - a capability being any
-behavior a served call or a test's lever can show - lands the same capability on the other backend
+behavior a served call shows, or that a test shows by driving a setter or an environment variable
+the engine exposes -
+lands the same capability on the other backend
 in the same change, wherever the other backend's API offers the operations it
 uses on any device it supports; a PR body that defers it is a defect.** A capability one backend
 has makes a served model's behavior depend on the box it runs on.
@@ -237,9 +245,11 @@ one format (a range or family test) also tests `kq_fmt_gpu_supported` - for an e
 `moe_fmt_metal_served` - in that condition.** Those predicates are what declines an unserved format,
 so an unlisted format decodes under whatever the pick's default arm holds.
 
-**A diff that gives the Metal PLE (per-layer embedding) token-table gather a weight format makes
-`metal_ple_pre_gpu_gate` admit that format only where the table's base and row stride are each a
-whole number of the format's blocks.** A base off the format's own block grid is gathered
+**A diff that gives the Metal PLE (per-layer embedding) token-table gather a weight format, or
+changes where a format's table sits so its base or row stride moves on or off the format's block
+grid, makes `metal_ple_pre_unserved` decline the format wherever the table's base or row stride is
+not a whole number of the format's blocks, and never decline it on block-grid grounds where both
+are.** A base off the format's own block grid is gathered
 under a layout that is not its own.
 
 **A diff that adds a call that creates a GPU device or a command queue, under a spelling

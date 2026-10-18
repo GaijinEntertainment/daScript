@@ -768,7 +768,7 @@ module) is independent and can land any time - it is pure structure.
     kq-only file. A card without NV_coopmat2 (every AMD and Intel part, the GTX line)
     prefilled a 27B at a third of the reference exe's rate. The fix was the format decode on
     the mul_mm L-tile, the way it moved onto the cm2 template.
-    THE KHR kq TILE LANDED (2026-09-07 evening, `ARCHITECTURE_GPU_VULKAN_GEMM.md#khr-mm-kq-tile`): the
+    THE KHR kq TILE LANDED (2026-09-07 evening, `ARCHITECTURE_GPU_VULKAN_KHR.md#khr-mm-kq-tile`): the
     cm2 template's KHR arm, every kq format, 0 of 89600 off on all thirteen; the 4B Q4_K_M mm
     row 1564 -> 2378 (0.56x of the reference exe's `mul_mm.comp` 4221), the 27B UD-IQ4_XS
     221 -> 395 (0.59x of the same tile's 675), decode unchanged. Its three measured steps: the
@@ -779,7 +779,7 @@ module) is independent and can land any time - it is pure structure.
     edge-store slab the shipped class carried beside its two 10 KB staging arrays - a probe arm
     of that evening (since retired), the copy plus that one array touched on a path no dispatch
     takes, read 28.5: 8 KB more shared memory per workgroup is one workgroup fewer per SM (the
-    two-array footprint is now the tile's own, `ARCHITECTURE_GPU_VULKAN_GEMM.md#khr-mm-kq-tile`). The staging arrays are
+    two-array footprint is now the tile's own, `ARCHITECTURE_GPU_VULKAN_KHR.md#khr-mm-kq-tile`). The staging arrays are
     now `uint` f16 pairs (the activation words stored as they arrive, no unpack) and the edge
     tile's f32 fragments bounce through the weight array once the k loop is done, the row guards
     hoisted out of the loop: the shipped class 25.6 -> 32.1 / 23.9 -> 31.4 / 25.6 -> 32.2 on the
@@ -2137,13 +2137,15 @@ module) is independent and can land any time - it is pure structure.
     fusion and the f16 chain take the routed form, each held by a cell against the CPU chain; this is
     the gpt-oss leg's.
 
-148. **The per-layer-embedding gate and projection windows run the K-quant tile's scalar arm on a driver without
-    decode-vector.** The E-series pre-step's `inp_gate` and `proj` planes serve in their file format (`REVIEW_KQ_FORMATS.md`'s
-    served-not-converted rule), so on the E2B Q4_K_M the 512-row window's gate and projection GEMMs ride the K-quant cm2
-    tile, which the RTX PRO 4500's 580 driver runs on the scalar decode arm (row 147 (a)): per window `ple_gate` reads
-    5950 us and `ple_proj` 4798 us where the q8-converted planes read 1079 and 608 on the commit before the PLE merge
-    (`DASLLAMA_GPU_PROF=1`, every other stage within 2 %), and the file's pp512 reads 12304 against 15917 - the bisect over
-    the gemma leg's first-parent commits names the PLE merge. The fix is a K-quant window form that is fast without
-    decode-vector (a dequant to f16 in shared memory ahead of the KHR tile, as llama.cpp's stripped shaders do), raced
-    against the cm2 arm on this box - it reaches every K-quant GEMM of every window here, the FFN gate and up at 6.2 ms a
-    window among them. The follow-up PR after the gemma leg.
+149. **The cm2 pick never splits k under 2048, so a narrow K-quant GEMM pays one dispatch's latency a window.** On the
+    RTX PRO 4500 (driver 580.159.04, no decode-vector) the per-layer-embedding gate over q8 and q4_0 planes reads 1090 and
+    1270 us a 512-row window - eight workgroups whose one-dispatch latency the window pays - where the f32 planes' split
+    staged gate reads 718 (`DASLLAMA_GPU_PROF=1 DAS_LOG_LEVEL=info DASLLAMA_IMAGE_SAVE=0 ./bin/daslang -jit
+    modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m /workspace/models/<file> -p 512 -n 0 -r 3 --for-debug-purposes` at
+    5e46f3acb3 on gemma-4-E2B-it-Q8_0, -Q4_0 and -Q4_K_M). The fix is a split-k arm in `cm2_gemm_pick` for a GEMM whose
+    workgroups cannot fill the card, with the reduce the f32 path carries, raced per format one dispatch at a time; it
+    lands in the long-prompt pass (`followup_general.md` row 214), where every window stage is measured again. Done = the
+    pick raced per format at whole and partial windows on both decode arms, the winners in `cm2_gemm_pick`, the E2B
+    Q8_0 and Q4_0 rows re-read. A window off the l column (the E2B gate at 500 rows) runs the m stamp's edge path, where
+    the staged KHR tile reads 2-11% under it (the figures beside the pick rule in `ARCHITECTURE_GPU_VULKAN_GEMM.md`);
+    that stays as measured - a tail shape, one stage, a shape-keyed switch between two tile families is not worth it.

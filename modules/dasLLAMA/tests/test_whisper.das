@@ -30,6 +30,7 @@ require ?vulkan dasllama/dasllama_vulkan_tower
 require ?vulkan dasllama/dasllama_vulkan_asr_dec   // set_vulkan_wdec / vulkan_wdec_stats - the decoder twin's seat
 require ?vulkan dasllama/dasllama_math_vulkan   // vk_drop_model - the lifetime cell's model drop between two windows
 require dasllama/dasllama_audio_io
+require dasllama/dasllama_load   // load_model_ - the canary decoder built in memory, off the image rail
 require _tower_twin
 
 // Whisper-proper tests. The f16/gelu/mel/id tests are self-contained; the loader and
@@ -1306,21 +1307,121 @@ def test_whisper_crowned_word_level(t : T?) {
 
 // Transcribe one corpus clip through the uniform ASR surface (fresh session) and gate its ids
 // against the frozen NeMo SALM greedy reference. Skips if the clip is absent.
+//! the widest gap a forced walk may read between its argmax logit and the oracle token's: a greedy near-tie the two
+//! implementations' rounding flips (`PERF_LEDGER.md`, the Canary-Qwen oracle row)
+let CN_TIE_BAR = 0.25
+
+//! the oracle's ids fed to the decoder after the prompt, `lead` ids ahead of the step that reads them: at each step our argmax
+//! and the gap from its logit down to the oracle token's (0 where they are one id)
+struct private CnForced {
+    picks : array<int>
+    gap : array<float>
+}
+
+def private canary_forced(m : AsrModel; samples : array<float>; expected : array<int>; lead : int) : CnForced {
+    var r : CnForced
+    r.picks |> reserve(length(expected))
+    r.gap |> reserve(length(expected))
+    var inscope s <- create_session(m, "en")
+    canary_prefill(m.dec, m.cenc, s.cn, samples)
+    var inscope one <- [0l]
+    for (i in range(length(expected))) {
+        let best = int(argmax_of(s.cn.qctx.logits))
+        r.picks |> push(best)
+        r.gap |> push(s.cn.qctx.logits[best] - s.cn.qctx.logits[expected[i]])
+        if (i + lead + 1 < length(expected)) {
+            one[0] = int64(expected[i + lead])
+            eval_(m.dec, s.cn.qctx, one)
+        }
+    }
+    return <- r
+}
+
+//! One clip against the frozen oracle on one encoder route, an external-reference compare in the forced-feed form: every
+//! oracle token is our argmax or within `CN_TIE_BAR` of it; the control feeds the oracle's ids one step early, every step
+//! whose input moved reading the oracle token outside the bar; then the greedy ids are the oracle's up to the step where
+//! the forced walk's pick leaves the oracle's - all of them where it never does
+def private check_canary_route(t : T?; m : AsrModel; wav, route : string; samples : array<float>; expected : array<int>) {
+    let name = "{base_name(wav)} {route}"
+    var inscope fw <- canary_forced(m, samples, expected, 0)
+    var worst = 0.0
+    var worst_at = -1
+    var agree = length(expected)
+    for (i in range(length(expected))) {
+        if (!(fw.gap[i] <= worst)) {   //! a NaN gap is the widest, so a NaN logit reds the bar
+            worst = fw.gap[i]
+            worst_at = i
+        }
+        if (fw.picks[i] != expected[i] && agree == length(expected)) {
+            agree = i
+        }
+    }
+    var wide_text = ""
+    if (worst_at >= 0) {
+        var inscope ours_at <- [int64(fw.picks[worst_at])]
+        var inscope oracle_at <- [int64(expected[worst_at])]
+        wide_text = ", our '{eyeball_text(m.dec, ours_at)}' against the oracle's '{eyeball_text(m.dec, oracle_at)}'"
+    }
+    t |> success(worst <= CN_TIE_BAR, "{name}: every oracle token is our argmax or within {CN_TIE_BAR} of it (widest {worst} at step {worst_at}{wide_text})")
+    var inscope ctl <- canary_forced(m, samples, expected, 1)
+    var ctl_in = 0
+    var ctl_least = 1e30
+    for (i in range(1, length(expected) - 1)) {
+        ctl_in += !(ctl.gap[i] > CN_TIE_BAR) ? 1 : 0   //! a NaN gap counts inside, so a NaN logit reds the control too
+        ctl_least = min(ctl_least, ctl.gap[i])
+    }
+    let ctl_steps = length(expected) - 2
+    t |> success(ctl_steps > 0 && ctl_in == 0, "{name} control: fed one id early, the oracle token sits outside {CN_TIE_BAR} at every one of {ctl_steps} steps ({ctl_in} inside, nearest {ctl_least})")
+    var inscope s <- create_session(m, "en")
+    var inscope segs <- session_segs(m, s, samples)
+    t |> equal(length(segs), 1, "{name}: one segment")
+    var inscope ours <- [for (id in segs[0].tokens); int64(id)]
+    var inscope oracle <- [for (id in expected); int64(id)]
+    to_log(LOG_INFO, "canary {name}: the forced walk leaves the oracle's pick at step {agree} of {length(expected)} (widest gap {worst} at step {worst_at}{wide_text}), the early-fed control's nearest gap {ctl_least} over {ctl_steps} steps\n")
+    to_log(LOG_INFO, "canary {name} oracle text: {eyeball_text(m.dec, oracle)}\n")
+    to_log(LOG_INFO, "canary {name} greedy text: {eyeball_text(m.dec, ours)}\n")
+    //! up to `agree` the oracle's ids are the forced walk's own picks, and greedy decode computes the walk's logits bit for bit:
+    //! `canary_transcribe` runs the same `canary_prefill` and then one-token `eval_` steps on the same session kind
+    t |> success(length(segs[0].tokens) >= agree, "{name}: the greedy ids reach step {agree}, where the forced walk's pick leaves the oracle's")
+    for (i in range(min(agree, length(segs[0].tokens)))) {
+        t |> equal(expected[i], segs[0].tokens[i], "{name}: token id {i}")
+    }
+    if (agree == length(expected)) {
+        t |> equal(length(expected), length(segs[0].tokens), "{name}: token count")
+    }
+    t |> equal("en", s.detected_lang, "{name}: english")
+}
+
+//! the clip on the CPU chain (every GPU tower off), then on the route the box serves - the Metal tower's encode counted where
+//! it serves the canary blocks
 def private check_canary_clip(t : T?; m : AsrModel; wav : string; expected : array<int>) {
     let samples <- load_audio_16k_mono(wav)
     if (empty(samples)) {
         t |> skip("{base_name(wav)} not present")
         return
     }
-    var inscope s <- create_session(m, "en")
-    var inscope segs <- session_segs(m, s, samples)
-    t |> equal(length(segs), 1, "{base_name(wav)}: one segment")
-    to_log(LOG_INFO, "canary {base_name(wav)} eyeball: '{segs[0].text}'\n")
-    t |> equal(length(segs[0].tokens), length(expected), "{base_name(wav)}: token count")
-    for (a, b in segs[0].tokens, expected) {
-        t |> equal(a, b, "{base_name(wav)}: token id")
+    with_gpu_knobs() {
+        set_every_gpu_tower(false)
+        let off_before = gpu_tower_counters().encodes
+        check_canary_route(t, m, wav, "cpu chain", samples, expected)
+        t |> equal(off_before, gpu_tower_counters().encodes, "{base_name(wav)} cpu chain: the tower encoded nothing with every tower off (the encode count's control)")
+        set_every_gpu_tower(true)
+        let before = gpu_tower_counters().encodes
+        check_canary_route(t, m, wav, "served", samples, expected)
+        if (canary_gpu_serves()) {
+            t |> success(gpu_tower_counters().encodes > before, "{base_name(wav)} served: the tower encoded the clip on the device")
+        }
     }
-    t |> equal(s.detected_lang, "en", "{base_name(wav)}: english")
+}
+
+//! the Canary pair behind the ASR facade, built in memory with the encoder on its f32 lane - the facade loader would bake a
+//! `.dlim` of each beside the files
+def private mint_asr_canary(dec, enc : string) : AsrModel {
+    var d <- load_model_(dec, QuantMode.q8)
+    var inscope stg <- stage_canary_encoder(enc, false)
+    var e = CanaryEncoder()
+    mint_canary_encoder(stg, e)
+    return <- canary_asr_model(d, e, dec)
 }
 
 [test]
@@ -1337,8 +1438,9 @@ def test_canary_qwen_oracle(t : T?) {
             return
         }
         // the two-file route: decoder GGUF (LoRA-merged Qwen3-1.7B) + "CNRY" FastConformer bin
+        let prior_kv = get_asr_kv()
         set_asr_kv(KVDtype.f32)   // the frozen NeMo ids are the f32 parity rail
-        var inscope m <- load_asr_model(dec, enc)
+        var inscope m <- mint_asr_canary(dec, enc)
         let c <- caps(m)
         t |> equal(length(c.languages), 1, "English-only")
         t |> success(!c.translate && c.timestamps == AsrTimestamps.none && !c.streaming, "no translate / timestamps / streaming")
@@ -1360,7 +1462,7 @@ def test_canary_qwen_oracle(t : T?) {
                 heap_flat_leg(t, m, hs, jfk, "canary")
             }
         }
-        set_asr_kv(KVDtype.f16)   // back to the serving default
+        set_asr_kv(prior_kv)
     }
 }
 
@@ -1492,7 +1594,9 @@ def test_mel_state_reuse_deterministic(t : T?) {
         }
         let g4a_path = path_join(models_dir(), "mmproj-gemma-4-E2B-it-bf16.gguf")
         if (model_available(t, g4a_path)) {
-            var inscope enc <- load_gemma4a_encoder(g4a_path)
+            var inscope g4a_stg <- stage_gemma4a_encoder(g4a_path)   //! minted in memory: the loader would bake a `.dlim` beside the file
+            var inscope enc = Gemma4aEncoder()
+            mint_gemma4a_encoder(g4a_stg, enc)
             var st = Gemma4aState()
             gemma4a_log_mel(enc, samples, 0l, long_length(samples), st)
             var mel1 := st.mel
@@ -1507,7 +1611,9 @@ def test_mel_state_reuse_deterministic(t : T?) {
         }
         let cn_path = path_join(models_dir(), "canary-qwen-2.5b-encoder-f32.bin")
         if (model_available(t, cn_path)) {
-            var inscope cenc <- load_canary_encoder(cn_path)
+            var inscope cn_stg <- stage_canary_encoder(cn_path, false)   //! minted in memory, the f32 lane: no `.dlim` beside the file
+            var inscope cenc = CanaryEncoder()
+            mint_canary_encoder(cn_stg, cenc)
             var cst = CanaryState()
             canary_log_mel(cenc, samples, cst)
             var cmel1 := cst.mel

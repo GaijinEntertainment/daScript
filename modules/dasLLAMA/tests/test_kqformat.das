@@ -496,6 +496,9 @@ def test_metal_b32_block_constants(t : T?) {
             "B32S = 2 on the q51 tile stamps, SH = 2 on MetalEmbedB32Q51")
         t |> equal(kq_ssb(KqFmt.iq4nl32), int64(1u * 2u), "B32S = 1 and SH = 1: one d")
         t |> equal(kq_elems(KqFmt.q51), int64(32u), "B32E = 32 on MetalKqMulMmB32TensorT: a per-32 block's elements")
+        for (f in [KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032, KqFmt.q5032]) {
+            t |> equal(kq_elems(f), 32l, "{f}: BE = 32 on MetalEmbedB32T (a row's blocks are dim / BE), and its four stamps' requires = \"ka.dim % 32\"")
+        }
     }
 }
 

@@ -278,7 +278,8 @@ let FF_TOL = 0.5
 //! the plain-MoE bar of the batch-rail fixtures (q30's): the rows and single GEMV forms round the router's
 //! logits apart, and a near-tie flips an expert - Flash-Next prose-a reads 0.89 with zero argmax flips
 let MOE_FF_TOL = 2.0
-//! the nine-row kq mul_mm stages x to half - a wider envelope than the f32-x GEMV forms', flips still zero
+//! the nine-row kq mul_mm and the half-x small-batch forms stage x to half - a wider envelope than the f32-x GEMV forms', flips
+//! still zero
 let MM_TOL = 1.0
 let FF_STEPS = 48l
 let COUNT_STEPS = 40l
@@ -326,10 +327,10 @@ def private count_cell(t : T?; tr, trg : Model; tag : string; count : array<int6
                 t |> equal(chained, chains ? drafted : 0l, "{tag} {kind} k1: every drafted round {chains ? "rode" : "kept off"} one command buffer (table {trg.emb_fmt}, {chained} chained of {drafted} rounds)")
             }
             if (depth == 8l) {
-                //! nine verify rows on a superblock plane are one small-batch dispatch; a carrier with none dispatches none
-                let kq = has_sb_rows_planes(tr)
-                to_log(LOG_INFO, "{tag} {kind} k8: {wide} K-quant dispatches past eight rows (superblock rows planes: {kq})\n")
-                t |> success(kq ? wide > 0l : wide == 0l, "{tag} {kind} k8: the verify's nine rows on superblock planes rode one dispatch a site ({wide} past-eight dispatches)")
+                //! nine verify rows on a small-batch plane are one dispatch; a carrier with none dispatches none
+                let kq = has_wide_rows_sites(tr)
+                to_log(LOG_INFO, "{tag} {kind} k8: {wide} K-quant dispatches past eight rows (small-batch rows sites: {kq})\n")
+                t |> success(kq ? wide > 0l : wide == 0l, "{tag} {kind} k8: the verify's nine rows rode one dispatch a small-batch site and none elsewhere ({wide} past-eight dispatches, small-batch sites {kq})")
             }
         }
     }
@@ -362,29 +363,52 @@ def private count_cell(t : T?; tr, trg : Model; tag : string; count : array<int6
     return drafted
 }
 
-//! whether any layer's rows site - q, k, v, o or the dense FFN triple - reads a k4 / k5 / k6 plane, the formats the half-x
-//! crowns cover
-def private has_kq_rows_planes(t : Model) : bool {
+//! whether any rows site reads a plane `pred` takes: q, k, v, o and the dense FFN triple, and with `every_site` the rest the
+//! verify runs - the shared expert's triple, the deltanet projections and the classifier
+def private any_rows_site(t : Model; every_site : bool; pred : block<(f : KqFmt) : bool>) : bool {
+    return true if (every_site && invoke(pred, t.wcls_fmt))
     for (l in range64(long_length(t.wq_offs))) {
-        for (f in [fmt_at(t.wq_fmt, l), fmt_at(t.wk_fmt, l), fmt_at(t.wv_fmt, l), fmt_at(t.wo_fmt, l), fmt_at(t.w1_fmt, l), fmt_at(t.w3_fmt, l), fmt_at(t.w2_fmt, l)]) {
-            if (f == KqFmt.k4 || f == KqFmt.k5 || f == KqFmt.k6) {
-                return true
+        for (f in [fmt_at(t.wq_fmt, l), fmt_at(t.wk_fmt, l), fmt_at(t.wv_fmt, l), fmt_at(t.wo_fmt, l), fmt_at(t.w1_fmt, l), fmt_at(t.w3_fmt, l),
+                fmt_at(t.w2_fmt, l)]) {
+            return true if (invoke(pred, f))
+        }
+        continue if (!every_site)
+        for (f in [fmt_at(t.dnqkv_fmt, l), fmt_at(t.dngate_fmt, l), fmt_at(t.dnout_fmt, l), fmt_at(t.dnbeta_fmt, l), fmt_at(t.dnalpha_fmt, l)]) {
+            return true if (invoke(pred, f))
+        }
+        if (t.config.n_ff_shexp > 0l) {
+            for (kind in [1, 2, 3]) {
+                return true if (invoke(pred, shexp_plane(t, l, kind).f))
             }
         }
     }
     return false
 }
 
-//! whether any layer's rows site - q, k, v, o, the dense FFN triple or the deltanet triple - reads a superblock plane, the
-//! planes the K-quant small-batch forms serve
-def private has_sb_rows_planes(t : Model) : bool {
-    for (l in range64(long_length(t.wq_offs))) {
-        for (f in [fmt_at(t.wq_fmt, l), fmt_at(t.wk_fmt, l), fmt_at(t.wv_fmt, l), fmt_at(t.wo_fmt, l), fmt_at(t.w1_fmt, l), fmt_at(t.w3_fmt, l),
-                fmt_at(t.w2_fmt, l), fmt_at(t.dnqkv_fmt, l), fmt_at(t.dngate_fmt, l), fmt_at(t.dnout_fmt, l)]) {
-            return true if (kq_sb(f))
-        }
+//! whether any attention or dense FFN site reads a k4 / k5 / k6 plane, the formats the half-x leg pins crowns for
+def private has_kq_rows_planes(t : Model) : bool => any_rows_site(t, false, $(f) => f == KqFmt.k4 || f == KqFmt.k5 || f == KqFmt.k6)
+
+//! a superblock plane the box leaves on the small-batch forms past eight rows: a format whose `kq_rows_<fmt>` crown the box
+//! minted takes single passes at every row count (`ARCHITECTURE_GPU_MTP_DECODE.md#kq-rows-crown`)
+def private rides_small_batch(f : KqFmt) : bool {
+    var rides = kq_sb(f)
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        rides = rides && !metal_kq_rows_crowned(f)
     }
-    return false
+    return rides
+}
+
+//! whether any rows site the nine-row verify runs rides the small-batch forms past eight rows
+def private has_wide_rows_sites(t : Model) : bool => any_rows_site(t, true, $(f) => rides_small_batch(f))
+
+//! whether a verify of two to eight rows reads x in half at some rows site: the format's half-x forms serve on the box
+//! (`ARCHITECTURE_GPU_MTP_DECODE.md#kq-rows-crown`)
+def private has_half_x_rows_sites(t : Model) : bool {   // nolint:LINT012,LINT019 — the body is the das_metal half
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        return any_rows_site(t, true, $(f) => kq_sb(f) && metal_kq_half_on(f))
+    } else {
+        return false
+    }
 }
 
 //! the half-x leg: under the k4 / k5 / k6 half-x crowns the verify's two-to-eight-row K-quant sites read the f16 twin, the
@@ -439,9 +463,13 @@ struct RowStats {
     flips : int64
     max_abs : float
     flip_margin_max : float
+    plain_steps : int64     //!< the plain side's steps, and of them the ones the Metal decode served
+    plain_decodes : int64
+    verify_decodes : int64  //!< the Metal decode count across the verify side's batch steps - the plain count's control
 }
 
-def private compare_row(plain, store : array<float>; soff, n : int64; var st : RowStats; tag : string; pos : int64; verbose : bool) {
+//! one row's compare folded into the stats; the row's widest difference back
+def private compare_row(plain, store : array<float>; soff, n : int64; var st : RowStats; tag : string; pos : int64; verbose : bool) : float {
     var mx = 0.0
     for (i in range64(n)) {
         mx = max(mx, nan_wide_diff(plain[i], store[soff + i]))
@@ -457,6 +485,25 @@ def private compare_row(plain, store : array<float>; soff, n : int64; var st : R
         if (verbose) {
             feint("FLIP {tag} pos={pos}: plain {ap} vs verify {av} margin {mg} maxd {mx}\n")
         }
+    }
+    return mx
+}
+
+//! one round's verify rows against the plain steps' stored rows: each row compared, its widest difference kept a row
+def private vff_round_rows(store, verify : array<float>; vocab, nr, pos : int64; var st : RowStats; var rowmax : array<float>;
+                           verbose : bool) {
+    for (i in range64(nr)) {
+        var plain : array<float>
+        plain |> resize(vocab)
+        for (v in range64(vocab)) {
+            plain[v] = store[i * vocab + v]
+        }
+        let rmx = compare_row(plain, verify, i * vocab, vocab, st, "vrow{i}", pos + i, verbose)
+        rowmax[i] = max(rowmax[i], rmx)
+        if (verbose) {
+            to_log(LOG_INFO, "vff round pos={pos + i} row={i} maxd={rmx} plain_top={argmax_of(plain, 0l, vocab)} verify_top={argmax_of(verify, i * vocab, vocab)} margin={top2_margin(plain, vocab)}\n")
+        }
+        delete plain
     }
 }
 
@@ -497,35 +544,25 @@ def private vff_pair(tr, trg : Model; prompt : array<int64>; nrounds, nr : int64
                 for (i in range64(nr)) {
                     toks[i] = tok
                     one[0] = tok
+                    let d0 = metal_decode_stats().decodes
                     eval_(trg, sa, one)
                     finish_pending_step()
+                    st.plain_decodes += metal_decode_stats().decodes - d0
+                    st.plain_steps++
                     for (v in range64(vocab)) {
                         store[i * vocab + v] = sa.logits[v]
                     }
                     tok = argmax_of(sa.logits, vocab)
                 }
                 // B: the same nr tokens as one same-slab verify; row i is the step on toks[i]
-                if (!verify_batch_step(trg, ws, sb, toks, pos, nr)) {
+                let v0 = metal_decode_stats().decodes
+                let verified = verify_batch_step(trg, ws, sb, toks, pos, nr)
+                st.verify_decodes += metal_decode_stats().decodes - v0
+                if (!verified) {
                     break
                 }
                 sb.n_past = pos + nr
-                for (i in range64(nr)) {
-                    var plain : array<float>
-                    plain |> resize(vocab)
-                    for (v in range64(vocab)) {
-                        plain[v] = store[i * vocab + v]
-                    }
-                    compare_row(plain, sb.mtp_logits_b, i * vocab, vocab, st, "vrow{i}", pos + i, verbose)
-                    var rmx = 0.0
-                    for (v in range64(vocab)) {
-                        rmx = max(rmx, nan_wide_diff(plain[v], sb.mtp_logits_b[i * vocab + v]))
-                    }
-                    rowmax[i] = max(rowmax[i], rmx)
-                    if (verbose) {
-                        to_log(LOG_INFO, "vff round pos={pos + i} row={i} maxd={rmx} plain_top={argmax_of(plain, 0l, vocab)} verify_top={argmax_of(sb.mtp_logits_b, i * vocab, vocab)} margin={top2_margin(plain, vocab)}\n")
-                    }
-                    delete plain
-                }
+                vff_round_rows(store, sb.mtp_logits_b, vocab, nr, pos, st, rowmax, verbose)
                 pos += nr
             }
             served = metal_batch_decode_stats().steps - before
@@ -662,27 +699,45 @@ def private vff_cell(t : T?; tr, trg : Model; tag : string; prompt : array<int64
         t |> success(served == 0l && after > before,
             "{tag}: the metal batch rail declines this graph as {expect_decline} ({before} -> {after}, served {served}; declines {by_key})")
     } elif (served == 0l) {
-        t |> failure("{tag}: the metal batch rail declined the same-slab verify on a carrier it serves")
+        var by_key = ""   // nolint:LINT003,LINT019 — the decline table, read in the das_metal half
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            by_key = "{metal_batch_decode_declines()}"
+        }
+        t |> failure("{tag}: the metal batch rail declined the same-slab verify on a carrier it serves (declines {by_key})")
     } else {
+        //! two to eight rows on a half-x site read x in half, the nine-row mul_mm's envelope - read once the step armed the crowns
+        let half = nr >= 2l && nr <= 8l && has_half_x_rows_sites(trg)
+        let bar = half ? max(tol, MM_TOL) : tol
         t |> success(st.rows > 0l, "{tag} vff: rows compared ({st.rows})")
-        t |> success(st.max_abs <= tol, "{tag} vff: batch same-slab verify rows vs plain steps within {tol} over {st.rows} rows (maxd {st.max_abs}, argmax flips {st.flips}, widest flipped margin {st.flip_margin_max})")
-        to_log(LOG_INFO, "metal vff {tag}: maxd={st.max_abs} flips={st.flips}/{st.rows} widest_margin={st.flip_margin_max} steps={served}\n")
+        t |> success(st.plain_steps > 0l && st.plain_decodes == st.plain_steps, "{tag} vff: every plain step was a Metal decode ({st.plain_decodes} of {st.plain_steps})")
+        t |> equal(0l, st.verify_decodes, "{tag} vff: the batch verify counted no single-row Metal decode (the plain count's control)")
+        var kq_half = true   // nolint:LINT003,LINT019 — DASLLAMA_METAL_KQ_HALF, read in the das_metal half
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            kq_half = get_metal_kq_half()
+        }
+        t |> success(st.max_abs <= bar, "{tag} vff: batch same-slab verify rows vs plain steps within {bar} over {st.rows} rows (maxd {st.max_abs}, argmax flips {st.flips}, widest flipped margin {st.flip_margin_max}, half-x sites {half}, DASLLAMA_METAL_KQ_HALF {kq_half})")
+        to_log(LOG_INFO, "metal vff {tag}: maxd={st.max_abs} flips={st.flips}/{st.rows} widest_margin={st.flip_margin_max} steps={served} half_x={half}\n")
+        if (bar > tol) {
+            vff_control_cell(t, tr, trg, tag, prompt, nr, bar)
+        }
     }
 }
 
-//! the wider nine-row bar's control: the same nine-row verify with the GEMV stage knocked out must
+//! a widened verify bar's control: the same `nr`-row verify with the GEMV stage knocked out must
 //! land OUTSIDE the bar - a bar nothing exceeds is not known to discriminate
-def private vff_control_cell(t : T?; tr, trg : Model; tag : string; prompt : array<int64>; bar : float) {   // nolint:LINT012,LINT019 — the body is the das_metal half
+def private vff_control_cell(t : T?; tr, trg : Model; tag : string; prompt : array<int64>; nr : int64; bar : float) {   // nolint:LINT012,LINT019 — the body is the das_metal half
     static_if (typeinfo builtin_module_exists(das_metal)) {
         var st = RowStats()
         var served = 0l
         set_metal_decode_skip("gemv")
-        vff_pair(tr, trg, prompt, 4l, 9l, st, served, false)
+        vff_pair(tr, trg, prompt, 4l, nr, st, served, false)
         set_metal_decode_skip("")
         if (served == 0l) {
-            t |> failure("{tag} vff9 control: the metal batch rail declined the same-slab verify")
+            t |> failure("{tag} vff{nr} control: the metal batch rail declined the same-slab verify")
         } else {
-            t |> success(st.max_abs > bar, "{tag} vff9 control: the nine-row verify with its GEMV stage knocked out reds the {bar} bar (maxd {st.max_abs} over {st.rows} rows)")
+            t |> success(st.plain_steps > 0l && st.plain_decodes == st.plain_steps, "{tag} vff{nr} control: every plain step was a Metal decode ({st.plain_decodes} of {st.plain_steps})")
+            t |> equal(0l, st.verify_decodes, "{tag} vff{nr} control: the batch verify counted no single-row Metal decode")
+            t |> success(st.max_abs > bar, "{tag} vff{nr} control: the {nr}-row verify with its GEMV stage knocked out reds the {bar} bar (maxd {st.max_abs} over {st.rows} rows)")
         }
     }
 }
@@ -692,7 +747,7 @@ def private vff_control_cell(t : T?; tr, trg : Model; tag : string; prompt : arr
 def private vff9_cell(t : T?; tr, trg : Model; tag : string; prompt : array<int64>; tol : float; expect_decline : string) {
     vff_cell(t, tr, trg, tag, prompt, trg.kquant_native ? max(tol, MM_TOL) : tol, 9l, expect_decline)
     if (trg.kquant_native && empty(expect_decline)) {
-        vff_control_cell(t, tr, trg, tag, prompt, MM_TOL)
+        vff_control_cell(t, tr, trg, tag, prompt, 9l, MM_TOL)
     }
 }
 
@@ -774,8 +829,9 @@ def private run_arms(t : T?; tr, trg : Model; tag : string; prose_a, prose_b, co
         }
 
         // the batch-rail same-slab verify (the gemma drafter's verify) vs plain steps, GPU-vs-GPU
+        //! a hyper-connection carrier's same-slab rows are one session, which the rail declines as `graph`
         if (arm_on(t, "mtp-vff-{tag}")) {
-            vff_cell(t, tr, trg, tag, prose_a, FF_TOL, 4l)
+            vff_cell(t, tr, trg, tag, prose_a, FF_TOL, 4l, trg.config.hyper_conn ? "graph" : "")
         }
 
         if (arm_on(t, "mtp-warm-{tag}")) {
