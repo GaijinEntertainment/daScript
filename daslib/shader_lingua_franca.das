@@ -152,7 +152,8 @@ def public textureLod(s : sampler3D; uv : float3; lod : float) : float4 =>
 def public textureLod(s : sampler2DArray; uv : float3; lod : float) : float4 =>
     float4(0.0, 0.0, 0.0, 0.0)
 
-//! Sample with explicit coordinate gradients. Array-layer coordinates have no derivatives.
+//! Sample with explicit coordinate gradients. Array-layer coordinates
+//! have no derivatives.
 [unused_argument(s, uv, dx, dy), sideeffects]
 def public textureGrad(s : sampler2D; uv : float2; dx, dy : float2) : float4 =>
     float4(0.0, 0.0, 0.0, 0.0)

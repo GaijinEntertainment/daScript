@@ -13,6 +13,8 @@ var @ssbo @binding = 4 grad_out : array<float4>
 def texture_grad_compute {
     grad_out[0] = textureGrad(grad_2d, float2(0.5), float2(0.25, 0.0), float2(0.0, 0.125))
     grad_out[1] = textureGrad(grad_3d, float3(0.5), float3(0.25, 0.0, 0.0), float3(0.0, 0.125, 0.0))
-    grad_out[2] = textureGrad(grad_cube, float3(0.0, 0.0, 1.0), float3(0.25, 0.0, 0.0), float3(0.0, 0.125, 0.0))
-    grad_out[3] = textureGrad(grad_array, float3(0.5, 0.5, 2.0), float2(0.25, 0.0), float2(0.0, 0.125))
+    grad_out[2] = textureGrad(grad_cube, float3(0.0, 0.0, 1.0), float3(0.25, 0.0, 0.0),
+        float3(0.0, 0.125, 0.0))
+    grad_out[3] = textureGrad(grad_array, float3(0.5, 0.5, 2.0), float2(0.25, 0.0),
+        float2(0.0, 0.125))
 }

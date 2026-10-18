@@ -5,7 +5,7 @@ require _texture_grad_shaders
 require spirv/spirv_dis
 require spirv/spirv_grammar
 
-// Read the first component of a vector constant through its result ID.
+// Read a vector constant's first component through its result ID.
 def private first_lane_bits(words : array<uint>; vector_id : uint) : uint {
     var scalar_id = 0u
     var i = 5
@@ -37,9 +37,12 @@ def test_texture_grad(t : T?) {
             let count = int(words[i] >> 16u)
             if ((words[i] & 0xffffu) == uint(SpvOp.ImageSampleExplicitLod)) {
                 t |> success(count == 8, "sample has both gradient operands")
-                t |> success(words[i + 5] == uint(SpvImageOperands.Grad), "Grad operand mask, not Lod")
-                t |> success(first_lane_bits(words, words[i + 6]) == 0x3e800000u, "dx first component is 0.25")
-                t |> success(first_lane_bits(words, words[i + 7]) == 0u, "dy first component is 0.0")
+                t |> success(words[i + 5] == uint(SpvImageOperands.Grad),
+                    "Grad operand mask, not Lod")
+                t |> success(first_lane_bits(words, words[i + 6]) == 0x3e800000u,
+                    "dx first component is 0.25")
+                t |> success(first_lane_bits(words, words[i + 7]) == 0u,
+                    "dy first component is 0.0")
             }
             i += count
         }

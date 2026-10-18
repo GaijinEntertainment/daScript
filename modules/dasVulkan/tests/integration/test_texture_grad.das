@@ -5,9 +5,11 @@ require texture_grad_shaders
 
 [test]
 def test_texture_grad_mips(t : T?) {
-    // Constant coordinates have no implicit derivatives. Each band must still select its mip;
+    // Constant coordinates have no implicit derivatives. Each band
+    // must still select its mip;
     // the top half tests dx alone, the bottom half dy alone.
-    let colors = fixed_array(int4(255, 0, 0, 255), int4(0, 255, 0, 255), int4(0, 0, 255, 255), int4(255))
+    let colors = fixed_array(int4(255, 0, 0, 255), int4(0, 255, 0, 255), int4(0, 0, 255,
+        255), int4(255))
     var src : array<uint8>
     src |> reserve((64 * 64 + 32 * 32 + 16 * 16 + 8 * 8) * 4)
     for (level in range(4)) {

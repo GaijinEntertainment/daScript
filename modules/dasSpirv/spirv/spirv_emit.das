@@ -6152,7 +6152,8 @@ class SpirvEmit : AstVisitor {
             e2id[k] = res
             return expr
         }
-        // Explicit gradients are supplied by the caller, so sampling is valid in any stage.
+        // Explicit gradients are supplied by the caller, so sampling
+        // is valid in any stage.
         if (name == "textureGrad") {
             let rs = resolve_sampler_arg(expr.arguments[0], "textureGrad")
             if (!rs.ok) return expr

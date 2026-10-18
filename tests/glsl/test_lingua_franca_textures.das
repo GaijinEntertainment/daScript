@@ -83,14 +83,15 @@ def private has(hay, needle : string) : bool => find(hay, needle) >= 0
 
 [test]
 def test_lingua_franca_textures(t : T?) {
-    t |> run("textureGrad preserves explicit gradients for every sampler dimensionality") <| @(t : T?) {
+    t |> run("textureGrad contributes all four sampler types to output") <| @(t : T?) {
         var assignment = ""
         for (statement in split(tx_grad_fs_glsl, ";")) {
             if (has(statement, "tx_color =")) { assignment = statement }
         }
         t |> success(assignment != "", "fragment shader assigns its output")
         for (sampler_name in fixed_array("tx_tex", "tx_volume", "tx_cube", "tx_array")) {
-            t |> success(has(assignment, "textureGrad({sampler_name},"), "output assignment includes textureGrad for {sampler_name}")
+            t |> success(has(assignment, "textureGrad({sampler_name},"),
+                "output assignment includes textureGrad for {sampler_name}")
         }
     }
     t |> run("textureLod lowers name-identically on the GL rail") <| @(t : T?) {

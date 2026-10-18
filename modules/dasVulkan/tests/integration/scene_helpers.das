@@ -329,10 +329,13 @@ def public compute_image_rgba8(var words : array<uint>; w, h : int) : array<uint
     return <- compute_to_storage_image(words, w, h)
 }
 
-//! Upload tightly packed RGBA8 mip levels at set=0/binding=0, run a compute shader writing
-//! a storage image at binding=1, and read back its base level. Defaults to one source mip.
-//! Shared by the texelFetch exact-copy and textureGrad mip-selection device tests.
-def public texelfetch_copy_rgba8(var words : array<uint>; var src : array<uint8>; w, h : int; mip_levels : uint = 1u) : array<uint8> {   // nolint:STYLE038 - flat command-record run
+//! Upload RGBA8 mips, run compute, and read back the base level.
+//! Shared by texelFetch and textureGrad device tests. Source: binding
+//! 0; storage output: binding 1. Defaults to one source mip.
+def public texelfetch_copy_rgba8( // nolint:STYLE038 - flat command-record run
+                                 var words : array<uint>; var src : array<uint8>;
+                                 w, h : int; mip_levels : uint = 1u
+                                 ) : array<uint8> {
     // the dispatch is w/8 x h/8 (8x8 local size); require exact multiples so no texels are silently
     // skipped and extents are never 0/negative -- a misuse fails deterministically here.
     assert(w > 0 && h > 0 && (w % 8) == 0 && (h % 8) == 0,
@@ -357,7 +360,8 @@ def public texelfetch_copy_rgba8(var words : array<uint>; var src : array<uint8>
     for (level in range(mip_levels)) {
         source_bytes += uint64(max(1, w >> level)) * uint64(max(1, h >> level)) * 4ul
     }
-    assert(uint64(long_length(src)) == source_bytes, "texelfetch_copy_rgba8: src must contain tightly packed mip levels")
+    assert(uint64(long_length(src)) == source_bytes,
+        "texelfetch_copy_rgba8: src must contain tightly packed mip levels")
 
     // source sampled texture (SAMPLED + TRANSFER_DST), device-local + view + NEAREST sampler
     var sici = ImageCreateInfo(imageType = VkImageType._2D, format = fmt,
@@ -491,7 +495,8 @@ def public texelfetch_copy_rgba8(var words : array<uint>; var src : array<uint8>
         // upload the source: UNDEFINED -> TRANSFER_DST, copy, -> SHADER_READ_ONLY
         var barrier = ImageMemoryBarrier(srcAccessMask = none, dstAccessMask = to_dst,
             oldLayout = VkImageLayout.UNDEFINED, newLayout = VkImageLayout.TRANSFER_DST_OPTIMAL,
-            srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED, dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             image = weak_copy(src_image))
         barrier.subresourceRange.aspectMask.color = true
         barrier.subresourceRange.levelCount = mip_levels
