@@ -58,7 +58,7 @@ def private dev_copy_row(name : string; src, dst : uint64; bytes : int64) {
     say_row(name, bytes, us)
 }
 
-def private run_probe(bytes : int64) {   // nolint:STYLE038 — one linear measurement sweep
+def private run_probe(bytes : int64) {   // nolint:STYLE038,LINT019 — one linear measurement sweep; the length fires where the vulkan arm compiles in
     if (!ensure_q8_batch_cls()) {
         print("no Vulkan device\n")
         return
