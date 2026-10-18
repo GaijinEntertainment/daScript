@@ -58,14 +58,16 @@ matrix between rounds.
 5. Pushed a new tip -> re-request now. No push -> the existing review already covers the tip.
 6. Repeat until Section 0 holds; **only then** wait for CI green and merge.
 
-**Every push that changes a `.das` file since the last push runs the pre-push lint gate
-first**: `daslang utils/internal/preflight/main.das -- --only lint,review-md`
-(rails and cost: `skills/internal/preflight.md`, the lint row). MCP `lint` on the file just
-edited is NOT this gate: this run lints every `.das` the branch changed against
-`origin/master`, exactly as CI does, so a clean single-file lint still pushes red. **A push
-that changes a `REVIEW*.md`, a `REVIEW.das`, or a file a gate reads runs `--only review-md`
-even with no `.das` in the diff** - the gates grep the checklists, and a re-worded rule that
-drops a token they look for is red only there.
+**A push in the loop lints what the round changed, not the branch**: MCP `lint` (or
+`daslang daslib/perf_lint.das -- <file>`) on each `.das` the round touched, plus the
+line-length check on those files. The whole-changed-set gate
+(`daslang utils/internal/preflight/main.das -- --only lint,review-md`, twenty minutes on a
+large branch) ran once before the PR opened and covers everything the round did not touch;
+rerunning it for a one-file fix is the waste the loop exists to avoid. It runs again only
+when a round changes a shared module other changed files require (a signature, a public
+name) or a `REVIEW*.md` / `REVIEW.das` / a file a gate reads - then `--only review-md`
+alone, since the gates grep the checklists and a re-worded rule that drops a token they look
+for is red only there.
 
 CI runs the whole time - watch it, don't block on it. Red early is a free signal: fix, push,
 re-request. Red after Copilot is dry: fix, then back into the loop. Green early means nothing
