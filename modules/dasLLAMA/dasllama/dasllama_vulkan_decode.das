@@ -4283,6 +4283,10 @@ def private rd_snap_alloc {
         L.snap_off = off
         off += L.dn[0].slot_state_bytes + 2l * L.dn[0].ring_image_bytes
     }
+    if (g_rd.ngram) {   //! the n-gram conv ring at the checkpoint's position: a continuation adopted there reads it before its first rows
+        g_rd.snap_ring_off = off
+        off += rd_ngram_ring_bytes()
+    }
     g_rd.snap_row_bytes = off
     let rows = g_rd.regions * int64(RDEC_DN_SNAPS)
     g_rd.snap_par |> resize(rows)
@@ -4310,8 +4314,31 @@ def vk_rdec_dn_snap_save(slot : int64) : bool {
             cmd_copy_range(raw, st.state_dev, st.state_byte_off, g_rd.snap_dev, dst + L.snap_off, st.slot_state_bytes)
             cmd_copy_range(raw, st.smalls_dev, st.hist_off * 4l, g_rd.snap_dev, dst + L.snap_off + st.slot_state_bytes, 2l * st.ring_image_bytes)
         }
+        if (g_rd.ngram) {
+            let rb = rd_ngram_ring_bytes()
+            cmd_copy_range(raw, g_rd.plehist_dev, r * rb, g_rd.snap_dev, dst + g_rd.snap_ring_off, rb)
+        }
     }
     g_rd.snap_par[row] = g_rd.dn_parity[r]
+    return true
+}
+
+//! the n-gram conv ring's bytes a region: `ngram_nrows` rows of hc x dim floats
+def private rd_ngram_ring_bytes() : int64 => g_rd.ngram_nrows * g_rd.hc_n * g_rd.dim * 4l
+
+//! checkpoint row `slot`'s n-gram conv ring (the live region's where `slot` < 0) read back into `host` (`RdecDnSnapRingFn`)
+[cold_path]
+def vk_rdec_dn_snap_ring(slot : int64; var host : float?) : bool {
+    rd_chain_settle()
+    return false if (g_rd == null || !g_rd.ready || !g_rd.ngram || slot >= int64(RDEC_DN_SNAPS) || (slot >= 0l && g_rd.snap_dev == 0ul))
+    let rb = rd_ngram_ring_bytes()
+    var stage = make_host_buf(rb, false, [cached = true])
+    if (slot < 0l) {
+        readback_range(g_rd.plehist_dev, VHZ_DNSM, g_rd.region * rb, stage, host, rb)
+    } else {
+        readback_range(g_rd.snap_dev, VHZ_DNSM, (g_rd.region * int64(RDEC_DN_SNAPS) + slot) * g_rd.snap_row_bytes + g_rd.snap_ring_off, stage, host, rb)
+    }
+    destroy_host_buf(stage)
     return true
 }
 
@@ -4329,6 +4356,10 @@ def vk_rdec_dn_snap_load(slot : int64) : bool {
             let st & = unsafe(L.dn[r])
             cmd_copy_range(raw, g_rd.snap_dev, src + L.snap_off, st.state_dev, st.state_byte_off, st.slot_state_bytes)
             cmd_copy_range(raw, g_rd.snap_dev, src + L.snap_off + st.slot_state_bytes, st.smalls_dev, st.hist_off * 4l, 2l * st.ring_image_bytes)
+        }
+        if (g_rd.ngram) {
+            let rb = rd_ngram_ring_bytes()
+            cmd_copy_range(raw, g_rd.snap_dev, src + g_rd.snap_ring_off, g_rd.plehist_dev, r * rb, rb)
         }
     }
     if (g_rd.dn_parity[r] != g_rd.snap_par[row]) {

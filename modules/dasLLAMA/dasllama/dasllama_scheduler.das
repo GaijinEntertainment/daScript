@@ -1239,16 +1239,19 @@ def private parked_best(sch : Scheduler; prompt : array<int64>) : tuple<at : int
 def private parked_adopt(var sch : Scheduler; var session : Session; at : int; n : int64) : int64 {
     return 0l if (at < 0)
     let adopted = gpu_device_kv_adopt(session, sch.parked[at].claim, n)
+    if (adopted && !empty(session.ple_prev)) {   //! the n-gram pre-step's window: the ids before `n`, which the region cannot hold
+        ple_window_seed(session.ple_prev, sch.parked[at].tokens, n)
+    }
     drop_parked(sch, at)
     return adopted ? n : 0l
 }
 
 //! The host pool serves device mode: a paged scheduler, the pool's pages in the device's codec, a draft head only where the
-//! driver runs its whole round on the device (its rows ride the moves beside the trunk's), no n-gram side input (its ring may
-//! sit on the device), and a model whose device prefill continues past zero
+//! driver runs its whole round on the device (its rows ride the moves beside the trunk's), and a model whose device prefill
+//! continues past zero (a hyper-connection model's n-gram ring rides its checkpoints and snapshots)
 def private device_pool_on(m : Model; sch : Scheduler; session : Session) : bool
     => (gpu_device_kv_pool_armed() && sch.paged && (!sch.mtp || gpu_resident_mtp_device_home(m)) && sch.pool.kdt == gpu_device_session_dtype()
-        && empty(session.ple_conv_hist) && gpu_device_prefill_continues(m)
+        && gpu_device_prefill_continues(m)
         && (empty(session.dn_state_prefix) || sch.prefix.max_states > 0l))
 
 //! the scheduler's carrier session, made at its first move and pointed at the pool where the scheduler stands now (a moved
@@ -1292,6 +1295,10 @@ def private pool_keep(m : Model; var sch : Scheduler; claim : int64; tokens : ar
     if (recurrent && snap.pos != n) {
         delete snap
         return
+    }
+    if (recurrent && !empty(sch.pool_host.ple_prev)) {   //! a device checkpoint's snapshot carries no ids: the n-gram pre-step's window comes from the tokens
+        snap.ple_prev |> resize(long_length(sch.pool_host.ple_prev))
+        ple_window_seed(snap.ple_prev, tokens, n)
     }
     let t0 = prof_ticks()
     pool_carrier(m, sch)

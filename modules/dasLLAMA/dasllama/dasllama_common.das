@@ -5856,6 +5856,16 @@ def private copy_floats_par(src : array<float>; var dst : array<float>; n : int6
     }
 }
 
+//! the n-gram window `win` (its length kept) as the ids before position `n` of `tokens`, oldest first, -1 where the prompt is
+//! shorter: a session adopted or restored at `n` reads them where its own history would stand
+def ple_window_seed(var win : array<int64>; tokens : array<int64>; n : int64) {
+    let w = long_length(win)
+    for (i in range64(w)) {
+        let at = n - w + i
+        win[i] = at >= 0l && at < long_length(tokens) ? tokens[at] : -1l
+    }
+}
+
 //! the n-gram window `src` over `dst`: `grow` sizes `dst` to it, else the copy stops at the shorter of the two
 def private ple_window_copy(src : array<int64>; var dst : array<int64>; grow : bool) {
     if (grow) {
@@ -5887,6 +5897,7 @@ def private dn_snapshot_apply(var s : Session; snap : DnSnapshot) {
     copy_floats_par(snap.state, s.dn_state, long_length(snap.state))
     copy_floats_par(snap.ple_hist, s.ple_conv_hist, min(long_length(snap.ple_hist), long_length(s.ple_conv_hist)))
     ple_window_copy(snap.ple_prev, s.ple_prev, false)
+    s.ple_ring_device = false   //! the restored ring is the host's: the driver takes it up before its next window or token
     s.dn_pos = snap.pos
     moe_gpu_dn_release(s.dn_owner.state_lo, s.dn_owner.state_hi)
 }

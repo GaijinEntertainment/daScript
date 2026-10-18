@@ -390,6 +390,7 @@ def dasllama_math_vulkan_register() {
     install_rdec_rollback(@@vk_rdec_rollback)
     install_rdec_dn_snaps(@@vk_rdec_dn_snap_save, @@vk_rdec_dn_snap_load)
     install_rdec_dn_peek(@@vk_rdec_dn_peek)
+    install_rdec_dn_snap_ring(@@vk_rdec_dn_snap_ring)
     install_rdec_kv_xfer(@@vk_rdec_kv_xfer)
     install_rdec_token_seq(@@vk_rdec_token_seq)
     install_rdec_chain(@@vk_rdec_chain_wanted, @@vk_rdec_chain_ask)

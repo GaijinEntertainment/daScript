@@ -4213,6 +4213,10 @@ def private rdec_trace_write() {
 def private rdec_prefill_hc_run(t : Model; var s : Session; cb : array<float>; npos, start_pos : int64) {
     if (start_pos == 0l) {
         rdec_trace_prompt_start()
+    } elif (has_ple_ngram(t.config) && !s.ple_ring_device) {   //! a continuation's window reads the n-gram ring before its first rows: the host's rows go up where the host holds them (a CPU prefill, a pass, a snapshot restored)
+        rdec_select_region(s.rdec_region)
+        rdec_ngram_ring(unsafe(addr(s.ple_conv_hist[0])), true)
+        s.ple_ring_device = true
     }
     with_host_experts(t, s) {
         rdec_prefill_hc(s.x_b, cb, s.ple_emb_b, npos, start_pos, s.logits, @@rdec_host_experts_rows)
@@ -4418,13 +4422,8 @@ def private rdec_prefill_gate(t : Model; s : Session; npos, start_pos : int64) :
     if (s.attn_uniform_end != 0l) {
         return RdecGate(passes = true, kind = RdecPass.span)
     }
-    if (start_pos != 0l && t.config.recr_mask != 0ul) {
-        if (t.config.hyper_conn) {   //! the n-gram ring the hyper-connection chain reads has no continuation hand-off to the window
-            return RdecGate(passes = true, kind = RdecPass.continuation, a = start_pos)
-        }
-        if (start_pos != s.dn_pos) {
-            return RdecGate(passes = true, kind = RdecPass.rewind, a = start_pos, b = s.dn_pos)
-        }
+    if (start_pos != 0l && t.config.recr_mask != 0ul && start_pos != s.dn_pos) {   //! a hyper-connection model's window continues too: its n-gram ring goes up before it where the host holds it
+        return RdecGate(passes = true, kind = RdecPass.rewind, a = start_pos, b = s.dn_pos)
     }
     if (start_pos + npos > g_rdec_cap) {
         return RdecGate(passes = true, kind = RdecPass.cap, a = start_pos + npos, b = g_rdec_cap)
@@ -5167,8 +5166,10 @@ def gpu_device_sessions_() : int64 => g_rdec_active ? long_length(g_rdec_regions
 def gpu_resident_mtp_device_home_(t : Model) : bool
     => g_rdec_active && g_rdec_head_armed && rdec_verify_rows() >= 2l && (t.config.recr_mask == 0ul || rdec_rollback_installed())
 
-//! A device-home session of `t` prefills from a position past zero - false for a recurrent hyper-connection model, whose prompt prefills whole, from zero.
-def gpu_device_prefill_continues_(t : Model) : bool => t.config.recr_mask == 0ul || !t.config.hyper_conn
+//! A device-home session of `t` prefills from a position past zero: every model the driver serves - a recurrent hyper-connection
+//! model's window continues from its position too, its n-gram conv ring handed off (`rdec_prefill_hc_run`)
+[unused_argument(t)]
+def gpu_device_prefill_continues_(t : Model) : bool => true
 
 //! A finished device-home session lets go of its region and answers the claim its rows stay under (0 = none), which dies when another
 //! session takes the region. A recurrent session's state stays in the region's slots beside its rows, at the session's position.
@@ -5218,6 +5219,9 @@ def gpu_device_kv_adopt_(var s : Session; claim, npos : int64) : bool {
             }
             s.dn_pos = npos
             rdec_dn_own_all(s, long_length(s.dn_state_prefix), true)
+            if (!empty(s.ple_conv_hist)) {   //! the region's n-gram conv ring holds the rows at `npos`: the parked claim's, or the checkpoint row's just loaded
+                s.ple_ring_device = true
+            }
         }
         return true
     }
@@ -5379,7 +5383,7 @@ def gpu_device_kv_victim_claims_(n : int) : array<int64> {
 def gpu_device_kv_parked_snapshot_(claim, at : int64; like : Session; var into : DnSnapshot) : DnSnapshot {
     let r = rdec_region_of(claim)
     let slot = r < 0l ? -1 : (at == g_rdec_regions[r].dn_pos ? -2 : rdec_snap_at(g_rdec_regions[r], at))
-    if (!g_rdec_active || r < 0l || g_rdec_regions[r].pinned || at <= 0l || !empty(like.ple_conv_hist) || slot == -1) {
+    if (!g_rdec_active || r < 0l || g_rdec_regions[r].pinned || at <= 0l || slot == -1) {
         delete into
         return <- DnSnapshot(pos = -1l)
     }
@@ -5413,8 +5417,13 @@ def private rdec_peek_snapshot(like : Session; slot : int; var into : DnSnapshot
             g_rdec_pool_dsts |> push(RdecDnDst(l = l, stp = addr(snap.state[like.dn_state_prefix[l]]), histp = addr(snap.conv[like.dn_conv_prefix[l]])))
         }
     }
-    let held = rdec_dn_peek(int64(slot), g_rdec_pool_dsts)
+    var held = rdec_dn_peek(int64(slot), g_rdec_pool_dsts)
     g_rdec_pool_dsts |> clear()
+    if (held && !empty(like.ple_conv_hist)) {   //! a hyper-connection model's snapshot carries the n-gram conv ring at its position
+        snap.ple_hist |> reserve(long_length(like.ple_conv_hist))
+        snap.ple_hist |> resize_no_init(long_length(like.ple_conv_hist))
+        held = rdec_dn_snap_ring(int64(slot), unsafe(addr(snap.ple_hist[0])))
+    }
     if (!held) {
         delete snap
         return <- DnSnapshot(pos = -1l)
@@ -5469,7 +5478,7 @@ def private rdec_kv_spans_move(up : bool) {
 [arch(at="../ARCHITECTURE_ENGINE_SERVING.md#device-home-pool")]
 def gpu_device_kv_snapshot_(var s : Session; at : int64; var into : DnSnapshot) : DnSnapshot {
     let t0 = ref_time_ticks()
-    let owned = g_rdec_active && s.device_kv && rdec_owns(s, s.rdec_region) && empty(s.ple_conv_hist)
+    let owned = g_rdec_active && s.device_kv && rdec_owns(s, s.rdec_region)
     let slot = !owned || at == s.dn_pos ? -1 : rdec_snap_at(g_rdec_regions[s.rdec_region], at)
     let held = owned && (at == s.dn_pos || slot >= 0)
     if (held) {

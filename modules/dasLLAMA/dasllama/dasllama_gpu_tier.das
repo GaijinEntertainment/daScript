@@ -853,6 +853,19 @@ def public install_rdec_dn_peek(peek : RdecDnPeekFn) {
 
 def public rdec_dn_peek(slot : int64; dsts : array<RdecDnDst>) : bool => invoke(g_rdec_dn_peek, slot, dsts)
 
+//! checkpoint row `slot`'s n-gram conv ring (the live region's where `slot` < 0) into `host`: the ring a continuation adopted there reads first
+typedef RdecDnSnapRingFn = function<(slot : int64; var host : float?) : bool>
+
+[unused_argument(slot, host)]
+def private rdec_unset_dn_snap_ring(slot : int64; var host : float?) : bool => false
+var g_rdec_dn_snap_ring = @@rdec_unset_dn_snap_ring
+
+def public install_rdec_dn_snap_ring(ring : RdecDnSnapRingFn) {
+    g_rdec_dn_snap_ring = ring
+}
+
+def public rdec_dn_snap_ring(slot : int64; var host : float?) : bool => invoke(g_rdec_dn_snap_ring, slot, host)
+
 //! One run of a layer's rows between a host cache and the selected region: row `row0` of the run sits `row0` rows past `kp` / `vp`
 struct public RdecKvSpan {
     l : int64

@@ -2630,6 +2630,7 @@ struct RDec {
     roll_row_bytes : int64
     snap_dev : uint64             //! the regions' recurrent checkpoints: `RDEC_DN_SNAPS` rows a region, a row every recurrent layer's slot state and ring pair (`RLayer.snap_off`); 0 until the first save
     snap_row_bytes : int64
+    snap_ring_off : int64         //! ... and, on a hyper-connection model with the n-gram side input, the row's copy of the region's conv ring past the recurrent state
     snap_par : array<int>         //! a checkpoint row's ring parity, the region's when it was saved
     roll_region : int64 = -1l     //! ... the region whose slots the last verify copied (-1 = none to roll back), and that verify's rows
     roll_vrows : int64
