@@ -73,7 +73,7 @@ struct ConvertArgs {
     @clarg_doc = "P3 trim (with -f vulkan): drop the big CPU weight families from the image — pure resident-driver dense models only; serve with DASLLAMA_TRIM=1"
     trim : bool
 
-    @clarg_doc = "Streaming conversion (planar or metal q8): big planes go source->transcode->image without materializing in RAM; unstreamable models fall back to eager automatically"
+    @clarg_doc = "Streaming conversion (planar, metal q8, or the vulkan lane minted off the gguf through the dry walk): big planes go source->transcode->image without materializing in RAM; unstreamable models fall back to eager automatically"
     stream : bool
 
     @clarg_doc = "List every .dlim beside -m (a GGUF, or a directory): size, version, verdict, baked identity"
@@ -540,10 +540,6 @@ def main() : int {
         return 0
     }
 
-    if (cfg.stream && cfg.flavor == Flavor.vulkan) {
-        to_log(LOG_ERROR, "dasllama-convert: --stream covers the planar and metal flavors (the vulkan bake collects whole planes, so it converts eagerly)\n")
-        return 2
-    }
     let want_blob = cfg.flavor == Flavor.metal
     var rc = 0
     var did_stream = false
@@ -555,6 +551,9 @@ def main() : int {
             // NO apply_box_profile_runtime() here: it already ran before the --config override,
             // and re-reading the sidecar would revert the config's pinned knobs AFTER the
             // fail-closed identity verify (silently un-pinning a cross-box streamed bake)
+            if (cfg.flavor == Flavor.vulkan) {
+                vulkan_bake_begin()   //! the streaming save mints the lane off the gguf through the dry walk, one entry at a time - the live load's rail
+            }
             var mt = Model()
             var jobs : array<FillJob>
             var blk_ran = false
@@ -566,6 +565,14 @@ def main() : int {
                     // identity would be the wrong artifact, so hand this to the eager rail
                     blob_refused = true
                     return false
+                }
+                if (cfg.flavor == Flavor.vulkan && cfg.trim) {
+                    let trim_why = resident_trim_decline(mt)
+                    mt.planes_trimmed = empty(trim_why)
+                    if (!mt.planes_trimmed) {
+                        to_log(LOG_ERROR, "dasllama-convert: --trim declined - {trim_why}\n")
+                        return false
+                    }
                 }
                 if (empty(jobs)) {
                     to_log(LOG_INFO, "dasllama-convert: streaming unavailable for this model — writing eagerly from RAM\n")

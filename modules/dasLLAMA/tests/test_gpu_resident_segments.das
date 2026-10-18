@@ -13,7 +13,7 @@ require dasllama/dasllama_math
 require dasllama/dasllama_gpu_tier
 require dasllama/dasllama_gpu_resident
 require ?vulkan dasllama/dasllama_vulkan_prefill   // nolint:STYLE030,LINT019 - vk_rdec_prefill_segment_windows, read in the vulkan half
-require ?vulkan dasllama/dasllama_vulkan_common   // nolint:STYLE030,LINT019 - PF_WINDOW: the windows a long segmented call runs
+require dasllama/dasllama_env
 require _model_tier
 require _resident_feed
 
@@ -39,7 +39,7 @@ def private allow_cpu_prefill_intent() {
 let private OPEN_ROWS = 40l
 let private TAIL_A = 23l
 let private TAIL_B = 31l
-let private LONG_TAIL = 300l   //! two of them run past PF_WINDOW (512), so the segmented call runs two windows, the second holding B's rows alone
+let private LONG_TAIL = 300l   //! two of them run past the default window (512), so the segmented call runs two windows, the second holding B's rows alone
 let private STEPS = 8l
 //! the bar a segment's rows hold against its solo window: the split bar, the routed bar on a routed model - its windows' expert
 //! tiles schedule other row counts than the solo window's, and the router's near-ties part the two (the 35B reads 0.56-0.88 of a
@@ -76,7 +76,7 @@ def private hold_rows(t : T?; what : string; got, want : array<array<float>>) {
 //! the windows of a segmented call that hold both segments - the one the boundary between A and B falls in; 0 with no vulkan module
 def private shared_windows(ta : int64) : int64 {
     static_if (typeinfo builtin_module_exists(vulkan)) {
-        return ta % PF_WINDOW != 0l ? 1l : 0l
+        return ta % pf_window_rows() != 0l ? 1l : 0l
     } else {
         return 0l
     }

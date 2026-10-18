@@ -807,6 +807,9 @@ The FIO module implements file input/output and filesystem operations. It provid
 
 ### Direct IO and mapping advice
 
+- `dread_at` - Read `bytes` at file offset `off` into `dst` — any pointer, any offset, any size.
+- `dread_close` - Close the reader and free its band.
+- `dread_open` - Open `path` for cache-bypassing positional reads (`FILE_FLAG_NO_BUFFERING` on Windows, `O_DIRECT` on Linux, `F_NOCACHE` on macOS), so a cache of blocks read on demand into pinned memory is not doubled in the page cache.
 - `dwrite_append` - Append `bytes` from `data` at the writer's current end.
 - `dwrite_band` - Hand out the writer's own staging band so a producer can build bytes in place instead of building a buffer and appending a copy.
 - `dwrite_close` - Flush the writer's tail (sector-padded on cache-bypassing platforms), truncate the file to exactly what was appended, and free the handle.
@@ -2366,17 +2369,17 @@ Module strudel_synth
 
 ### Drum renderers
 
-- `render_bd`
-- `render_cowbell`
-- `render_cp`
-- `render_crash`
-- `render_hh`
-- `render_oh`
-- `render_ride`
-- `render_rimshot`
-- `render_sd`
-- `render_tambourine`
-- `render_tom`
+- `render_bd` - Render an 808-style kick drum as a mono buffer at SAMPLE_RATE.
+- `render_cowbell` - Render a cowbell: two detuned square-wave tones through a narrow bandpass, with a second quieter strike 8 ms later.
+- `render_cp` - Render a hand-clap: a sharp bandpassed noise burst (~1.1 kHz) with a metallic bright edge and a long room tail.
+- `render_crash` - Render a crash cymbal: lower-pitched bell partials plus a broadband metallic wash with a medium-fast decay.
+- `render_hh` - Render a closed hi-hat: metallic oscillator bank layered with a short tonal bell (~180 Hz), plus room.
+- `render_oh` - Render an open hi-hat: the same metallic oscillator bank as hh but with a much slower decay.
+- `render_ride` - Render a ride cymbal: two bell partials (~340/387 Hz) plus a metallic shimmer, with a long sustain.
+- `render_rimshot` - Render a rimshot/side-stick: a short woody body (~200 Hz) plus a bandpassed noise snap and a high transient click.
+- `render_sd` - Render a snare drum as a mono buffer: tonal body (~220/330 Hz) plus high-passed noise for the wires, with a short room tail.
+- `render_tambourine` - Render a tambourine: high-passed noise with two narrow bandpass jingle peaks (~3.8 kHz and ~8.8 kHz) and a delayed second hit.
+- `render_tom` - Render a tom drum at `base_freq` with a BD-style body + beater click + impulse + resonant-head overtones and a short room.
 
 ### Oscillator type
 
@@ -6647,7 +6650,7 @@ The LINQ_FOLD module provides the `_fold` and `_old_fold` call macros that rewri
 
 ### Call macros
 
-- `_fold`
+- `_fold` - implements _fold(expression) that folds LINQ expressions into optimized sequnences for example::
 
 ## lint
 

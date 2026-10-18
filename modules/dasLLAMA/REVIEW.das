@@ -904,7 +904,7 @@ let private TTS_BLOCKS_FILE = "modules/dasLLAMA/dasllama/dasllama_tts_blocks.das
 // lines, hashed in file order. A closure change with IMAGE_VERSION unmoved is red; the finding prints the
 // value to re-stamp with.
 let private IMAGE_LAYOUT_STAMP_VERSION = 51
-let private IMAGE_LAYOUT_STAMP_HASH = 0xd233356aacd4064dul
+let private IMAGE_LAYOUT_STAMP_HASH = 0x62336f79812e2849ul
 
 // The helpers that decide WHERE bytes land: the page pad, the plane and total sizing, the
 // writer's append / zero-fill / header patch, the header's scalar stores, the lattice
@@ -1777,7 +1777,7 @@ let private GEMM_GEN_FILES = [
     "modules/dasLLAMA/dasllama/dasllama_gemm_gen.das",
     "modules/dasLLAMA/dasllama/dasllama_gemm_schema.das"
 ]
-let private GEMM_GEN_STAMP_HASH = 0x21e4317ad7604a49ul
+let private GEMM_GEN_STAMP_HASH = 0x7020195e0d6665f1ul
 
 [arch(at = "ARCHITECTURE_ENGINE_FORMATS.md#cpu-kernel-tiers")]
 def private check_gemm_gen_stamp {

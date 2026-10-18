@@ -15,6 +15,8 @@ require dasllama/dasllama_convert
 require dasllama/dasllama_rope     // mrope_span_positions — the image-span position map
 require dasllama/dasllama_kv_codec   // fwht_signs_row/fwht_unsign_row — the Hadamard rotation in gated attention
 require dasllama/dasllama_env       // the g_env_* knob globals ([EnvConfig] declarations; ENVIRONMENT.md is generated from them)
+require dasllama/dasllama_math_gen
+require dasllama/dasllama_gemm_schema
 require math
 
 // The std/dense/MoE transformer block kernels — attention and FFN, decode and prefill — plus the
@@ -1406,7 +1408,6 @@ def gpu_combine_on : bool {
     return g_gpu_combine
 }
 
-//! the split's cost model - the reference box's measurements (ARCHITECTURE_GPU_VULKAN_DECODE.md#streamed-layer-split: the measured values, tuned)
 let private SPLIT_BUS_BPS = 13.5e9
 let private SPLIT_GPU_ROW_S = 1.2e-6
 let private SPLIT_CPU_ROW_S = 10.0e-6
@@ -1596,6 +1597,977 @@ def moe_expert_down(t : Model; var s : Session; f2 : KqFmt; off2, dim, nfe, cnt 
 //! one batched GEMM chain per touched expert (the unfused arm); the raw down rows park for the ordered reduce; under `split`
 //! the experts marked in s.moe_exp_gpu are the device's and take no chain here
 def private moe_prefill_per_expert(t : Model; var s : Session; l : int64; moe_kform : bool; skip_gpu_experts : bool = false) {
+    for (e in range64(t.config.n_expert)) {
+        let cnt = s.moe_cnt[e] - (e == 0l ? 0l : s.moe_cnt[e - 1l])
+        if (cnt == 0l || (skip_gpu_experts && s.moe_exp_gpu[e] != int8(0))) {
+            continue
+        }
+        moe_prefill_expert_chain(t, s, l, e, moe_kform)
+    }
+}
+
+var private g_rare_arena_pin = -1   //! `set_rare_arena`'s pin: -1 reads the environment
+
+//! the rare rail's arena arm (`DASLLAMA_RARE_ARENA`): the host share reads streamed experts off the tier's pinned device-layout planes through the row-major kernels; the pin is a fixture's in-process twin, -1 lifts it
+def rare_arena_on() : bool => g_rare_arena_pin >= 0 ? g_rare_arena_pin == 1 : g_env_engine.rare_arena
+
+//! the formats whose device layout a row-major kernel reads (the one-copy rail): every expert format the tier streams
+def rm_dev_serves(f : KqFmt) : bool {
+    return (f == KqFmt.q8 || f == KqFmt.iq4nl32 || f == KqFmt.q4032 || f == KqFmt.q51 || f == KqFmt.q5032 || f == KqFmt.mx4
+        || f == KqFmt.k4 || f == KqFmt.k5 || f == KqFmt.k6 || f == KqFmt.k3 || f == KqFmt.k2 || f == KqFmt.q40
+        || f == KqFmt.iq4nl || f == KqFmt.iq4xs || f == KqFmt.iq3s4
+        || f == KqFmt.iq3s || f == KqFmt.iq3xxs || f == KqFmt.iq2s || f == KqFmt.iq2xs || f == KqFmt.iq2xxs)
+}
+
+def set_rare_arena(pin : int) {
+    g_rare_arena_pin = pin
+}
+
+//! one plane of the routed triple as the lanes read it: its format, its plane bases, the strides a region's offset resolves
+//! through, and the rows core - every pointer taken in the main context
+struct private RarePlane {
+    f : KqFmt
+    sid : int              //! the schema id (a superblock format)
+    q : uint8 const?       //! the quant plane (a superblock or per-32 format)
+    s : uint8 const?       //! ... and its scale plane
+    qsb : int64            //! bytes a block in each
+    ssb : int64
+    belems : int64         //! elements a block: 256 or 32
+    tb : int64             //! the batched core's token block
+    panel_bytes : int64    //! the batched core's panel scratch a lane (a superblock format whose tile reads an unpacked panel)
+    kqfn : MatmulKqRowsFn  //! the backend's rows core (a superblock format)
+    q8q : int8 const?      //! the q8 planes
+    q8s : float const?
+    q8fn : MatmulQ8Q8RowsFn
+    dev : bool             //! the planes are the tier's pinned device-layout stack, read through the format's row-major kernel
+    base : int64           //! ... the stack's first element (the region offsets are relative to it)
+    ege : int64            //! ... and an expert's elements, the stack's slots an expert each (`rare_dev_ptrs`)
+    view : MoeGpuStreamView   //! ... the cache's layout of the stack, captured in the main context: a lane resolves experts off it alone
+}
+
+//! the device-plane pointers of the block at `woff` of a device-served plane: its expert's cache slot off the captured view plus
+//! the block's offset inside the expert; an expert the cache does not hold is a panic by name (the window's fetch missed it)
+def private rare_dev_ptrs(p : RarePlane; woff : int64) : tuple<q : uint8 const?; s : uint8 const?> {
+    let e = (woff - p.base) / p.ege
+    unsafe {
+        let s = p.view.slot_of[e]
+        if (s < 0) {
+            panic("dasLLAMA: the rare rail asked for expert {e} of the streamed stack at {p.base} (fmt {int(p.f)}), which the expert cache does not hold")
+        }
+        let blk = (woff - p.base - e * p.ege) / p.belems
+        if (s >= STREAM_RING_BASE) {   //! a ring slot holds the expert's page-widened lane span: its bytes start the lane skew in
+            let r = int64(s - STREAM_RING_BASE)
+            return (q = p.view.ring_q + r * p.view.ring_qlen + ((p.view.qoff + e * p.view.qlen) & (STREAM_PAGE - 1l)) + blk * p.qsb,
+                    s = p.view.ring_s + r * p.view.ring_slen + ((p.view.soff + e * p.view.slen) & (STREAM_PAGE - 1l)) + blk * p.ssb)
+        }
+        return (q = p.view.q + int64(s) * p.view.qlen + blk * p.qsb, s = p.view.s + int64(s) * p.view.slen + blk * p.ssb)
+    }
+}
+
+//! expert `e`'s three planes of layer `l` in the cache, read off the lane into the ring where absent; false where the layer's stacks are not device-served
+def rare_fetch_expert(t : Model; l, e : int64) : bool {
+    var ok = true
+    for (f, off in [expert_fmt(t, t.we1_fmt, l), expert_fmt(t, t.we3_fmt, l), expert_fmt(t, t.we2_fmt, l)], [t.we1_offs[l], t.we3_offs[l], t.we2_offs[l]]) {
+        ok = ok && moe_gpu_stream_fetch(off, int(f), e)
+    }
+    return ok
+}
+
+//! the experts of regions [lo, hi] of s.moe_ord in the cache: every one queued in the list's order, then each waited for
+def private rare_fetch_regions(t : Model; s : Session; l, lo, hi : int64) {
+    for (r in range64(lo, hi + 1l)) {
+        rare_request_expert(t, l, int64(s.moe_ord[r].x))
+    }
+    for (r in range64(lo, hi + 1l)) {
+        rare_fetch_expert(t, l, int64(s.moe_ord[r].x))
+    }
+}
+
+var g_expert_heat : array<int64>   //! the picks a (layer, expert) took since the load - a window's rows, a token's one: the expert cache's profile
+var g_expert_heat_layers = 0l      //! the profile's shape
+var g_expert_heat_experts = 0l
+
+//! the profile sized to the model, zero, at the first pick after a load
+[cold_path]
+def private expert_heat_make(t : Model) {
+    g_expert_heat_layers = t.config.n_layers
+    g_expert_heat_experts = t.config.n_expert
+    g_expert_heat |> reserve_resize(g_expert_heat_layers * g_expert_heat_experts)
+}
+
+def expert_heat_add(t : Model; l, e, rows : int64) {
+    if (empty(g_expert_heat)) {
+        expert_heat_make(t)
+    }
+    g_expert_heat[l * g_expert_heat_experts + e] += rows
+}
+
+def private expert_heat_add_regions(t : Model; s : Session; l, lo, hi : int64) {
+    for (r in range64(lo, hi + 1l)) {
+        expert_heat_add(t, l, int64(s.moe_ord[r].x), int64(s.moe_ord[r].y))
+    }
+}
+
+//! expert `e`'s three planes of layer `l` queued for the readers where the cache lacks them (the call returns at once)
+def private rare_request_expert(t : Model; l, e : int64) {
+    for (f, off in [expert_fmt(t, t.we1_fmt, l), expert_fmt(t, t.we3_fmt, l), expert_fmt(t, t.we2_fmt, l)], [t.we1_offs[l], t.we3_offs[l], t.we2_offs[l]]) {
+        moe_gpu_stream_request(off, int(f), e)
+    }
+}
+
+def private rare_expert_ready(t : Model; l, e : int64) : bool {
+    for (f, off in [expert_fmt(t, t.we1_fmt, l), expert_fmt(t, t.we3_fmt, l), expert_fmt(t, t.we2_fmt, l)], [t.we1_offs[l], t.we3_offs[l], t.we2_offs[l]]) {
+        return false if (!moe_gpu_stream_ready(off, int(f), e))
+    }
+    return true
+}
+
+var private @scratch g_rot_ord : array<int2>
+var private @scratch g_rot_offs : array<int64>
+
+//! regions [a, h] of the window's list moved under regions [lo, a): the list and its three offset tables stay one order
+def private moe_regions_rotate(var s : Session; lo, a, h : int64) {
+    let nb = a - lo
+    let n = h - lo + 1l
+    ensure_length(g_rot_ord, n)
+    for (i in range64(n)) {
+        g_rot_ord[i] = s.moe_ord[lo + (i < n - nb ? nb + i : i - (n - nb))]
+    }
+    for (i in range64(n)) {
+        s.moe_ord[lo + i] = g_rot_ord[i]
+    }
+    moe_offs_rotate(s.moe_offs1, lo, nb, n)
+    moe_offs_rotate(s.moe_offs3, lo, nb, n)
+    moe_offs_rotate(s.moe_offs2, lo, nb, n)
+}
+
+//! one offset table's triples of regions [lo, lo + n) rotated by `nb`: the last n - nb triples first
+def private moe_offs_rotate(var offs : array<int64>; lo, nb, n : int64) {
+    ensure_length(g_rot_offs, n * 3l)
+    for (i in range64(n)) {
+        let src = lo + (i < n - nb ? nb + i : i - (n - nb))
+        for (j in range64(3l)) {
+            g_rot_offs[i * 3l + j] = offs[src * 3l + j]
+        }
+    }
+    for (i in range64(n * 3l)) {
+        offs[lo * 3l + i] = g_rot_offs[i]
+    }
+}
+
+//! every expert of the window's `nreg` regions readable now: the meet will rotate no region under the host's claim
+def rare_window_ready(t : Model; s : Session; l, nreg : int64) : bool => rare_ready_prefix(t, s, l, 0l, nreg) == nreg
+
+//! the regions [g, g_hi) cut at the first expert the cache does not hold yet: the device's bundle is the ready prefix
+def private rare_ready_prefix(t : Model; s : Session; l, g, g_hi : int64) : int64 {
+    for (r in range64(g, g_hi)) {
+        return r if (!rare_expert_ready(t, l, int64(s.moe_ord[r].x)))
+    }
+    return g_hi
+}
+
+//! a lane's scratch for the batched rail: an expert's activation rows gathered contiguous, the cores' panel and block sums
+struct private RareLane {
+    xq : array<int8>
+    xs : array<float>
+    xbs : array<int>
+    panel : array<uint8>
+    bsums : array<int>
+}
+
+struct private RareLaneP {
+    xq : int8?
+    xs : float?
+    xbs : int?
+    panel : uint8?
+    bsums : int?
+    hist : int64?   //! RARE_HIST_N pairs of (runs, us) by run row count, this lane's (the gpu_prof report)
+}
+
+let private RARE_HIST_N = 6l   //! 1, 2, 3, 4-7, 8-15, 16+ rows a run
+let private RARE_LANE_STATS = RARE_HIST_N * 2l + 2l   //! a lane's stats: the histogram's (runs, us) pairs, the rows its device-plane cores served, their us
+
+var g_rare_dev_rows = 0l   //! the rows the rare rail read off the device planes, every layer and window (the matrix's witness)
+
+def private rare_hist_bin(ntok : int64) : int64 => ntok <= 3l ? ntok - 1l : (ntok < 8l ? 3l : (ntok < 16l ? 4l : 5l))
+
+var private @scratch g_rare_lanes : array<RareLane>
+var private @scratch g_rare_lanep : array<RareLaneP>
+var private @scratch g_rare_hist : array<int64>
+
+//! the lanes' scratch sized for `rows` rows of `n` under the batch's planes, its pointers taken here in the main context
+def private rare_lanes_size(rows, n, xs_per_row, xbs_per_row : int64; p1, p3, p2 : RarePlane) : RareLaneP? {
+    let slots = get_dispatch_slot_bound()
+    ensure_length(g_rare_lanes, int64(slots))
+    ensure_length(g_rare_lanep, int64(slots))
+    ensure_length(g_rare_hist, int64(slots) * RARE_LANE_STATS)
+    for (i in range64(long_length(g_rare_hist))) {
+        g_rare_hist[i] = 0l
+    }
+    let panel = max(max(p1.panel_bytes, p3.panel_bytes), p2.panel_bytes)
+    let bsums = max(max(b32_expert_bsum_ints(p1.f, n, rows), b32_expert_bsum_ints(p3.f, n, rows)), b32_expert_bsum_ints(p2.f, n, rows))
+    unsafe {
+        for (i in range(slots)) {
+            var ln & = g_rare_lanes[i]
+            ensure_length(ln.xq, rows * n)
+            ensure_length(ln.xs, rows * xs_per_row)
+            ensure_length(ln.xbs, max(rows * xbs_per_row, 1l))
+            ensure_length(ln.panel, max(panel, 1l))
+            ensure_length(ln.bsums, max(bsums, 1l))
+            g_rare_lanep[i] = RareLaneP(xq = addr(ln.xq[0]), xs = addr(ln.xs[0]), xbs = addr(ln.xbs[0]), panel = addr(ln.panel[0]), bsums = addr(ln.bsums[0]),
+                hist = addr(g_rare_hist[int64(i) * RARE_LANE_STATS]))
+        }
+        return addr(g_rare_lanep[0])
+    }
+}
+
+//! the region at element offset `woff` of plane `p` as a batched GEMM over `ntok` contiguous activation rows, on the calling
+//! lane: the superblock and per-32 batch cores read the plane once a tile; a q8 plane has no lane core and runs its rows
+//! core a row
+def private rare_batch_core(p : RarePlane; var yp : float?; woff : int64; xq : int8 const?; xs : float const?; xbs : int const?; n, d, ntok : int64; var ln : RareLaneP) {
+    unsafe {
+        if (p.dev) {
+            let t_dev = ref_time_ticks()
+            var t = 0l
+            let xs_row = n / p.belems   //! a superblock plane's activation carries a scale a superblock, the rest a 32-block; the Q8_K sums sixteen a superblock
+            let ptrs = rare_dev_ptrs(p, woff)
+            while (t + 4l <= ntok && rm_dev_tile4(p, yp + t * d, ptrs.q, ptrs.s, xq + t * n, xs + t * xs_row, xbs != null ? xbs + t * (n / 16l) : null, n, d)) {
+                t += 4l
+            }
+            while (t < ntok) {
+                rare_rows_core(p, yp + t * d, woff, xq + t * n, xs + t * xs_row, xbs != null ? xbs + t * (n / 16l) : null, n, 0l, d)
+                t++
+            }
+            ln.hist[RARE_HIST_N * 2l + 1l] += int64(get_time_usec(t_dev))
+            return
+        }
+        if (p.f == KqFmt.q8) {
+            for (t in range64(ntok)) {
+                invoke(p.q8fn, yp + t * d, p.q8q + woff, p.q8s + woff / 32l, xq + t * n, xs + t * (n / 32l), n, 0l, d)
+            }
+            return
+        }
+        let blk = woff / p.belems
+        let qp = p.q + blk * p.qsb
+        let sp = p.s + blk * p.ssb
+        if (p.belems == 256l) {
+            kq_expert_batch_core(p.sid, yp, qp, sp, xq, xs, xbs, n, d, ntok, p.tb, p.panel_bytes > 0l ? ln.panel : null)
+        } else {
+            b32_expert_batch_core(p.f, yp, qp, sp, xq, xs, n, d, ntok, p.tb, ln.bsums)
+        }
+    }
+}
+
+//! the plane record of format `f`'s region space, `n` the plane's row width; `on` false where the format has no rows core
+//! (mx4, a q8 plane under f16 scales)
+[arch(at="../ARCHITECTURE_GPU_VULKAN_STREAM.md#streamed-layer-arena")]
+def private rare_plane(t : Model; f : KqFmt; n, woff : int64) : tuple<on : bool; p : RarePlane> {
+    var p = RarePlane(f = f)
+    unsafe {
+        if (rare_arena_on() && rm_dev_serves(f)) {
+            let sp = moe_gpu_stream_plane(woff, int(f))
+            if (sp.q != null) {
+                p.dev = true
+                p.base = woff
+                p.ege = t.config.dim * t.config.n_ff_exp
+                p.view = moe_gpu_stream_view(woff, int(f))
+                p.q = sp.q
+                p.s = sp.s
+                if (kq_sb(f)) {
+                    p.qsb = kq_qsb(f)
+                    p.ssb = kq_dev_ssb(f)
+                    p.belems = 256l
+                } elif (f == KqFmt.q8) {
+                    p.qsb = 32l
+                    p.ssb = 2l
+                    p.belems = 32l
+                } else {
+                    p.qsb = kq_qsb(f)
+                    p.ssb = kq_ssb(f)
+                    p.belems = 32l
+                }
+                return (on = true, p = p)
+            }
+        }
+        if (kq_sb(f) && t.kq_repacked) {
+            let i = int(f)   //! the plane slot; the rows core is keyed by the schema id
+            p.sid = kq_schema_id(f)
+            p.q = addr<uint8 const?>(t.kq[i].q[0])
+            p.s = addr<uint8 const?>(t.kq[i].s[0])
+            p.qsb = kq_qsb(f)
+            p.ssb = kq_ssb(f)
+            p.belems = 256l
+            p.tb = kq_token_block(p.sid, n)
+            p.panel_bytes = kq_walk_panel_bytes(p.sid, n, kq_layout_of(p.sid))
+            p.kqfn = kq_rows_fn(p.sid)
+            return (on = true, p = p)
+        }
+        if (f == KqFmt.iq4nl32 || f == KqFmt.q51 || f == KqFmt.q4032 || f == KqFmt.q5032) {
+            kq_plane_pair(t, f) $(q, sp) {
+                p.q = addr<uint8 const?>(q[0])
+                p.s = addr<uint8 const?>(sp[0])
+            }
+            p.qsb = kq_qsb(f)
+            p.ssb = kq_ssb(f)
+            p.belems = 32l
+            p.tb = effective_token_block(get_q8_token_block(), n)
+            return (on = true, p = p)
+        }
+        if (f == KqFmt.q8 && !t.wscale_f16) {
+            p.q8q = addr<int8 const?>(t.qblob[0])
+            p.q8s = addr<float const?>(t.qscales[0])
+            p.q8fn = mm_q8q8_rows_fn()
+            return (on = true, p = p)
+        }
+    }
+    return (on = false, p = p)
+}
+
+//! four activation rows against every row of a device plane's region at `dq` / `ds` through the format's row-major
+//! tile, token t's row at yp + t * d; false for a format with none, which the caller walks a row at a time
+def private rm_dev_tile4(p : RarePlane; var yp : float?; dq, ds : uint8 const?; xq : int8 const?; xs : float const?; xbs : int const?; n, d : int64) : bool { // nolint:STYLE037 - one dispatch ladder a format
+    unsafe {
+        if (p.f == KqFmt.q8) {
+            q8q8_rm_tile4_gen(yp, reinterpret<int8 const?>(dq), reinterpret<uint16 const?>(ds), xq, xs, n, d)
+        } elif (p.f == KqFmt.iq4nl32) {
+            iq4nl32q8_rm_tile4_gen(yp, dq, ds, xq, xs, xbs, n, d)
+        } elif (p.f == KqFmt.q4032) {
+            q4032q8_rm_tile4_gen(yp, dq, ds, xq, xs, xbs, n, d)
+        } elif (p.f == KqFmt.q51) {
+            q51q8_rm_tile4_gen(yp, dq, ds, xq, xs, xbs, n, d)
+        } elif (p.f == KqFmt.q5032) {
+            q5032q8_rm_tile4_gen(yp, dq, ds, xq, xs, xbs, n, d)
+        } elif (p.f == KqFmt.mx4) {
+            mx4q8_rm_tile4_gen(yp, dq, ds, xq, xs, xbs, n, d)
+        } elif (p.f == KqFmt.k4) {
+            k4q8_rm_tile4_gen(yp, dq, ds, xq, xs, xbs, n, d)
+        } elif (p.f == KqFmt.k5) {
+            k5q8_rm_tile4_gen(yp, dq, ds, xq, xs, xbs, n, d)
+        } elif (p.f == KqFmt.k6) {
+            k6q8_rm_tile4_gen(yp, dq, ds, xq, xs, xbs, n, d)
+        } elif (p.f == KqFmt.k3) {
+            k3q8_rm_tile4_gen(yp, dq, ds, xq, xs, xbs, n, d)
+        } elif (p.f == KqFmt.k2) {
+            k2q8_rm_tile4_gen(yp, dq, ds, xq, xs, xbs, n, d)
+        } elif (p.f == KqFmt.q40) {
+            q40q8_rm_tile4_gen(yp, dq, ds, xq, xs, xbs, n, d)
+        } elif (p.f == KqFmt.iq4nl) {
+            iq4nlq8_rm_tile4_gen(yp, dq, ds, xq, xs, xbs, n, d)
+        } elif (p.f == KqFmt.iq4xs) {
+            iq4xsq8_rm_tile4_gen(yp, dq, ds, xq, xs, xbs, n, d)
+        } elif (p.f == KqFmt.iq3s4) {
+            iq3s4q8_rm_tile4_gen(yp, dq, ds, xq, xs, xbs, n, d)
+        } elif (p.f == KqFmt.iq3s) {
+            iq3sq8_rm_tile4_gen(yp, dq, ds, xq, xs, xbs, n, d)
+        } elif (p.f == KqFmt.iq3xxs) {
+            iq3xxsq8_rm_tile4_gen(yp, dq, ds, xq, xs, xbs, n, d)
+        } elif (p.f == KqFmt.iq2s) {
+            iq2sq8_rm_tile4_gen(yp, dq, ds, xq, xs, xbs, n, d)
+        } elif (p.f == KqFmt.iq2xs) {
+            iq2xsq8_rm_tile4_gen(yp, dq, ds, xq, xs, xbs, n, d)
+        } elif (p.f == KqFmt.iq2xxs) {
+            iq2xxsq8_rm_tile4_gen(yp, dq, ds, xq, xs, xbs, n, d)
+        } else {
+            return false
+        }
+    }
+    return true
+}
+
+//! the region at element offset `woff` of plane `p` dotted with one activation row over rows [rb, re), on the calling lane
+def private rare_rows_core(p : RarePlane; var yp : float?; woff : int64; xq : int8 const?; xs : float const?; xbs : int const?; n, rb, re : int64) { // nolint:STYLE037 - one dispatch ladder a format
+    unsafe {
+        if (p.dev) {
+            let ptrs = rare_dev_ptrs(p, woff)
+            let dq = ptrs.q
+            let ds = ptrs.s
+            if (p.f == KqFmt.q8) {
+                q8q8_rm_gemv_gen(yp, reinterpret<int8 const?>(dq), reinterpret<uint16 const?>(ds), xq, xs, n, rb, re)
+            } elif (p.f == KqFmt.iq4nl32) {
+                iq4nl32q8_rm_gemv_gen(yp, dq, ds, xq, xs, xbs, n, rb, re)
+            } elif (p.f == KqFmt.q4032) {
+                q4032q8_rm_gemv_gen(yp, dq, ds, xq, xs, xbs, n, rb, re)
+            } elif (p.f == KqFmt.q51) {
+                q51q8_rm_gemv_gen(yp, dq, ds, xq, xs, xbs, n, rb, re)
+            } elif (p.f == KqFmt.q5032) {
+                q5032q8_rm_gemv_gen(yp, dq, ds, xq, xs, xbs, n, rb, re)
+            } elif (p.f == KqFmt.mx4) {
+                mx4q8_rm_gemv_gen(yp, dq, ds, xq, xs, xbs, n, rb, re)
+            } elif (p.f == KqFmt.k4) {
+                k4q8_rm_gemv_gen(yp, dq, ds, xq, xs, xbs, n, rb, re)
+            } elif (p.f == KqFmt.k5) {
+                k5q8_rm_gemv_gen(yp, dq, ds, xq, xs, xbs, n, rb, re)
+            } elif (p.f == KqFmt.k6) {
+                k6q8_rm_gemv_gen(yp, dq, ds, xq, xs, xbs, n, rb, re)
+            } elif (p.f == KqFmt.k3) {
+                k3q8_rm_gemv_gen(yp, dq, ds, xq, xs, xbs, n, rb, re)
+            } elif (p.f == KqFmt.k2) {
+                k2q8_rm_gemv_gen(yp, dq, ds, xq, xs, xbs, n, rb, re)
+            } elif (p.f == KqFmt.q40) {
+                q40q8_rm_gemv_gen(yp, dq, ds, xq, xs, xbs, n, rb, re)
+            } elif (p.f == KqFmt.iq4nl) {
+                iq4nlq8_rm_gemv_gen(yp, dq, ds, xq, xs, xbs, n, rb, re)
+            } elif (p.f == KqFmt.iq4xs) {
+                iq4xsq8_rm_gemv_gen(yp, dq, ds, xq, xs, xbs, n, rb, re)
+            } elif (p.f == KqFmt.iq3s4) {
+                iq3s4q8_rm_gemv_gen(yp, dq, ds, xq, xs, xbs, n, rb, re)
+            } elif (p.f == KqFmt.iq3s) {
+                iq3sq8_rm_gemv_gen(yp, dq, ds, xq, xs, xbs, n, rb, re)
+            } elif (p.f == KqFmt.iq3xxs) {
+                iq3xxsq8_rm_gemv_gen(yp, dq, ds, xq, xs, xbs, n, rb, re)
+            } elif (p.f == KqFmt.iq2s) {
+                iq2sq8_rm_gemv_gen(yp, dq, ds, xq, xs, xbs, n, rb, re)
+            } elif (p.f == KqFmt.iq2xs) {
+                iq2xsq8_rm_gemv_gen(yp, dq, ds, xq, xs, xbs, n, rb, re)
+            } elif (p.f == KqFmt.iq2xxs) {
+                iq2xxsq8_rm_gemv_gen(yp, dq, ds, xq, xs, xbs, n, rb, re)
+            } else {
+                panic("dasLLAMA: the rare rail's device arm holds a {p.f} plane with no row-major kernel")
+            }
+            return
+        }
+        if (p.f == KqFmt.q8) {
+            invoke(p.q8fn, yp, p.q8q + woff, p.q8s + woff / 32l, xq, xs, n, rb, re)
+            return
+        }
+        let blk = woff / p.belems
+        let qp = p.q + blk * p.qsb
+        let sp = p.s + blk * p.ssb
+        if (p.belems == 256l) {
+            invoke(p.kqfn, yp, qp, sp, xq, xs, xbs, n, rb, re)
+        } elif (p.f == KqFmt.iq4nl32) {
+            iq4nl32q8_gemv_gen(yp, qp, sp, xq, xs, xbs, n, rb, re)
+        } elif (p.f == KqFmt.q51) {
+            q51q8_gemv_gen(yp, qp, sp, xq, xs, xbs, n, rb, re)
+        } elif (p.f == KqFmt.q4032) {
+            q4032q8_gemv_gen(yp, qp, sp, xq, xs, xbs, n, rb, re)
+        } else {
+            q5032q8_gemv_gen(yp, qp, sp, xq, xs, xbs, n, rb, re)
+        }
+    }
+}
+
+//! whether every plane of layer l's routed triple has a rows core the one-pass rail can call
+def private rare_onepass_serves(t : Model; l : int64) : bool {
+    for (f, off in [expert_fmt(t, t.we1_fmt, l), expert_fmt(t, t.we3_fmt, l), expert_fmt(t, t.we2_fmt, l)], [t.we1_offs[l], t.we3_offs[l], t.we2_offs[l]]) {
+        return false if (!rare_plane(t, f, 256l, off).on)
+    }
+    return !t.config.moe_exps_bias
+}
+
+//! whether layer l's routed triple is the tier's pinned device-layout stack, so a token's host picks read it through the rail
+//! (one copy of a streamed layer's experts): every plane device-served, the one-pass rail serving the layer
+def private rare_dev_layer(t : Model; l : int64) : bool {
+    return false if (!rare_arena_on() || !rare_onepass_serves(t, l))
+    for (f, off in [expert_fmt(t, t.we1_fmt, l), expert_fmt(t, t.we3_fmt, l), expert_fmt(t, t.we2_fmt, l)], [t.we1_offs[l], t.we3_offs[l], t.we2_offs[l]]) {
+        return false if (!rare_plane(t, f, 256l, off).p.dev)
+    }
+    return true
+}
+
+var g_rare_dec_rows = 0l   //! the (row, expert) pairs a token's or a window's host sum read off the device planes (the decode cells' witness)
+var g_rare_slot_copies = 0l   //! the hot pool slots filled off a streamed layer's pinned mirror (the pool's witness that no planar plane was read)
+
+//! a planar read of layer `l`'s experts on a trimmed vulkan lane is a panic by name: the lane carries no planar family
+[cold_path]
+def trim_planar_guard(t : Model; l : int64; what : string) {
+    if (t.planes_trimmed) {
+        panic("dasLLAMA: planes_trimmed vulkan lane - {what} would read routed layer {l}'s experts off the planar planes the lane does not carry (the stream mirror or the rare rail declined this run; the decline line above)")
+    }
+}
+
+//! the expert plane at `eoff` of the stack at `base` copied in the device layout off the tier's pinned mirror into `wq` / `ws`; false where the stack is not device-served, and the caller gathers off the planar planes
+def rare_expert_slot_copy(t : Model; f : KqFmt; n, rows, base, eoff : int64; var wq : array<uint8>; var ws : array<uint8>) : bool {
+    return false if (!rare_arena_on() || !rm_dev_serves(f) || !moe_gpu_stream_fetch(base, int(f), (eoff - base) / (t.config.dim * t.config.n_ff_exp)))
+    let p = rare_plane(t, f, n, base).p   //! after the fetch: the ring the view carries may be born by it
+    return false if (!p.dev)
+    let ptrs = rare_dev_ptrs(p, eoff)
+    let nblk = n * rows / p.belems
+    wq |> grow_resize(nblk * p.qsb)
+    ws |> grow_resize(nblk * p.ssb)
+    unsafe {
+        memcpy(addr<void?>(wq[0]), reinterpret<void const?>(ptrs.q), nblk * p.qsb)
+        memcpy(addr<void?>(ws[0]), reinterpret<void const?>(ptrs.s), nblk * p.ssb)
+    }
+    g_rare_slot_copies++
+    return true
+}
+
+//! one GEMV pass of the one-row rail: `nreg` regions of plane `p` - region j's weights at `woffs[j]`, its activation row the
+//! `xoffs[j]`th of the image (`xq`, `xs` a scale every `xs_per` elements, `xbs` a sum every 16) - each region's `d` rows split
+//! into `nch` chunks, one fork over the (region, chunk) pairs, region j's row into `y + j * d`
+def private rm_rail_pass(p : RarePlane; var y : float?; woffs, xoffs : int64 const?; nreg : int64; xq : int8 const?; xs : float const?; xbs : int const?; xs_per, n, d : int64) {
+    let lanes = get_dispatch_lanes()
+    let nch = clamp((2l * int64(lanes) + nreg - 1l) / nreg, 1l, d / 8l)   //! two work items a lane at least, eight rows a chunk at least
+    let rows = (d + nch - 1l) / nch
+    let rows8 = (rows + 7l) / 8l * 8l
+    let nchunks = (d + rows8 - 1l) / rows8
+    unsafe {
+        maybe_parallel_for_indexed(0, int(nreg * nchunks), lanes) $(_slot, jb, je) {
+            unsafe {
+                for (w in range(jb, je)) {
+                    let j = int64(w) / nchunks
+                    let rb = (int64(w) % nchunks) * rows8
+                    let re = min(d, rb + rows8)
+                    let xo = xoffs[j]
+                    rare_rows_core(p, y + j * d, woffs[j], xq + xo, xs + xo / xs_per, xbs != null ? xbs + xo / 16l : null, n, rb, re)
+                }
+            }
+        }
+    }
+}
+
+//! the first `k` picks of s.moe_idx / s.moe_w summed into s.moe_acc through the rail's row-major kernels; false where a plane of the triple is not device-served, and `moe_routed_sum_k` serves
+[arch(at="../ARCHITECTURE_GPU_VULKAN_STREAM.md#streamed-layer-arena")]
+def moe_routed_rail_k(t : Model; var s : Session; l, k : int64) : bool {
+    return false if (!rare_dev_layer(t, l))
+    let c = t.config
+    let dim = c.dim
+    let nfe = c.n_ff_exp
+    let ege = dim * nfe
+    for (i in range64(dim)) {
+        s.moe_acc[i] = 0.0
+    }
+    return true if (k == 0l)
+    let f1 = expert_fmt(t, t.we1_fmt, l)
+    let f3 = expert_fmt(t, t.we3_fmt, l)
+    let f2 = expert_fmt(t, t.we2_fmt, l)
+    moe_quant_feed(t, s, l, moe_layer_kq(t, l))
+    for (j in range64(k)) {   //! queued at once and read off the lane before the planes are captured: the ring may be born here
+        rare_request_expert(t, l, s.moe_idx[j])
+        expert_heat_add(t, l, s.moe_idx[j], 1l)
+    }
+    for (j in range64(k)) {
+        rare_fetch_expert(t, l, s.moe_idx[j])
+    }
+    let p1 = rare_plane(t, f1, dim, t.we1_offs[l]).p
+    let p3 = rare_plane(t, f3, dim, t.we3_offs[l]).p
+    let p2 = rare_plane(t, f2, nfe, t.we2_offs[l]).p
+    var woffs, xoffs : int64[RDEC_RAIL_PICKS]
+    assert(k <= int64(RDEC_RAIL_PICKS), "moe_routed_rail_k: more picks than the rail's region list holds")
+    let ts_gu = prof_ticks()
+    unsafe {
+        for (j in range64(k)) {
+            xoffs[j] = 0l   //! every pick reads the one row's image
+        }
+        let xq8 = addr<int8 const?>(s.moe_xq[0])
+        let xs8 = addr<float const?>(s.moe_xs[0])
+        let xqk = addr<int8 const?>(s.kxq[0])
+        let xsk = addr<float const?>(s.kxs[0])
+        let xbk = addr<int const?>(s.kxbs[0])
+        for (j in range64(k)) {
+            woffs[j] = t.we1_offs[l] + s.moe_idx[j] * ege
+        }
+        if (kq_sb(f1)) {
+            rm_rail_pass(p1, addr(s.moe_gu[0]), addr<int64 const?>(woffs[0]), addr<int64 const?>(xoffs[0]), k, xqk, xsk, xbk, 256l, dim, nfe)
+        } else {
+            rm_rail_pass(p1, addr(s.moe_gu[0]), addr<int64 const?>(woffs[0]), addr<int64 const?>(xoffs[0]), k, xq8, xs8, null, 32l, dim, nfe)
+        }
+        for (j in range64(k)) {
+            woffs[j] = t.we3_offs[l] + s.moe_idx[j] * ege
+        }
+        if (kq_sb(f3)) {
+            rm_rail_pass(p3, addr(s.moe_gu2[0]), addr<int64 const?>(woffs[0]), addr<int64 const?>(xoffs[0]), k, xqk, xsk, xbk, 256l, dim, nfe)
+        } else {
+            rm_rail_pass(p3, addr(s.moe_gu2[0]), addr<int64 const?>(woffs[0]), addr<int64 const?>(xoffs[0]), k, xq8, xs8, null, 32l, dim, nfe)
+        }
+    }
+    prof_add("mm_moe", ts_gu)
+    let ts_act = prof_ticks()
+    gate_batch(s.moe_gu, s.moe_gu2, c.ffn_act, nfe, k)
+    prof_add("act", ts_act)
+    requant_rows_f(f2, s.moe_gu, nfe, k, s.moe_dq, s.moe_ds, s.moe_dbs)
+    let ts_down = prof_ticks()
+    unsafe {
+        for (j in range64(k)) {
+            woffs[j] = t.we2_offs[l] + s.moe_idx[j] * ege
+            xoffs[j] = j * nfe   //! each down reads its own requantized row
+        }
+        let dsb = kq_sb(f2)
+        rm_rail_pass(p2, addr(s.moe_dn[0]), addr<int64 const?>(woffs[0]), addr<int64 const?>(xoffs[0]), k, addr<int8 const?>(s.moe_dq[0]),
+            addr<float const?>(s.moe_ds[0]), dsb ? addr<int const?>(s.moe_dbs[0]) : null, dsb ? 256l : 32l, nfe, dim)
+    }
+    prof_add("mm_moe_dn", ts_down)
+    moe_gpu_stream_ring_release()
+    moe_routed_reduce(s, k, dim)
+    moe_trace_row(s, l, k, dim)
+    g_rare_dec_rows += k
+    return true
+}
+
+let private RDEC_RAIL_PICKS = 128   //! the one-row rail's region list: the routed slots a decode step stages (RDEC_ROUTED_SLOTS), a row's picks at most
+
+let private RARE_EXPERTS = 32l   //! the meet's host claim: this many of the rarest experts at a time, or
+let private RARE_ROWS = 256l     //! ... this many rows - one batch of the rare rail, the ring checked between claims
+
+var g_moe_meet_gpu_experts = 0l   //! the meet's experts the device took, every layer and window (the probe's and the tests' witness)
+var g_moe_meet_cpu_experts = 0l   //! ... and the host
+var g_moe_meet_gpu_rows = 0l
+var g_moe_meet_cpu_rows = 0l
+var g_moe_meet_last_gpu_rows = 0l   //! the last meet's rows a side, for its caller's report line
+var g_moe_meet_last_cpu_rows = 0l
+var private g_moe_meet_host_first = -1l   //! `set_moe_meet_host_first`'s pin: -1 reads the environment (DASLLAMA_MOE_HOST_FIRST)
+
+//! a fixture's lever: the meet's host share starts with `experts` of the rarest experts whatever the device's pace, so a cell reaches the host rail on a carrier the device would take whole; 0 lifts it, -1 reads the environment
+def set_moe_meet_host_first(experts : int64) {
+    g_moe_meet_host_first = experts
+}
+
+def private moe_meet_host_first() : int64 => g_moe_meet_host_first >= 0l ? g_moe_meet_host_first : g_env_engine.moe_host_first
+
+//! returns the device's expert count, -1 where the knob is off or the chain declined to open; the host experts' rows sit in s.moe_eout under s.moe_w_cpu, and the caller joins s.moe_gpu_out and sums the two
+[arch(at="../ARCHITECTURE_GPU_VULKAN_STREAM.md#streamed-layer-split")]
+def moe_prefill_meet(t : Model; var s : Session; l, nrows, nreg : int64; f1, f3, f2 : int; dev_limit : int64 = -1l) : int64 {
+    let c = t.config
+    let dim = c.dim
+    let nk = nrows * c.n_expert_used
+    return -1l if (!gpu_want_moe_split() || !matmul_moe_gpu_ffn_combined_xf_open(s.moe_offs1, s.moe_offs3, s.moe_offs2, nreg, s.xb_b, s.moe_w_b, s.moe_inv,
+        dim, c.n_ff_exp, nk, nrows, f1, f3, f2, c.ffn_act == FfnAct.gelu))
+    for (r in range64(nreg)) {
+        rare_request_expert(t, l, int64(s.moe_ord[r].x))
+    }
+    expert_heat_add_regions(t, s, l, 0l, nreg - 1l)
+    moe_routed_rows_requant(t, s, l, nrows)
+    s.moe_exp_gpu |> grow_resize(c.n_expert)
+    for (e in range64(c.n_expert)) {
+        s.moe_exp_gpu[e] = int8(0)
+    }
+    var g = 0l
+    var h = nreg - 1l
+    var gpu_rows = 0l
+    var cpu_rows = 0l
+    var host_first = min(moe_meet_host_first(), nreg)
+    let dl = dev_limit < 0l ? nreg : dev_limit   //! the device claims no region past it: the pool window's host-only tail
+    let host_cap = nrows == 1l ? 1l : RARE_EXPERTS   //! one row an expert: the host takes one at a time, so the device keeps claiming between them
+    while (true) {
+        var a = min(rare_ready_prefix(t, s, l, g, h + 1l), dl)
+        while (g < a && host_first <= 0l) {
+            let g_hi = matmul_moe_gpu_ffn_combined_xf_bundle(g, a)
+            break if (!matmul_moe_gpu_ffn_combined_xf_push(g, g_hi, false))
+            for (r in range64(g, g_hi)) {
+                s.moe_exp_gpu[int64(s.moe_ord[r].x)] = int8(1)
+                gpu_rows += int64(s.moe_ord[r].y)
+            }
+            g = g_hi
+        }
+        break if (g > h)
+        if (a == g) {
+            if (g >= dl) {
+                a = h + 1l
+            } else {
+                rare_fetch_expert(t, l, int64(s.moe_ord[g].x))
+                continue
+            }
+        }
+        let top = a - 1l
+        var lo = top
+        var rows = int64(s.moe_ord[top].y)
+        while (lo > g && top - lo + 1l < host_cap && rows + int64(s.moe_ord[lo - 1l].y) <= RARE_ROWS) {
+            lo--
+            rows += int64(s.moe_ord[lo].y)
+        }
+        if (a <= h) {
+            moe_regions_rotate(s, lo, a, h)
+            lo = h - (top - lo)
+        }
+        host_first -= h - lo + 1l
+        let tb = ref_time_ticks()
+        rare_fetch_regions(t, s, l, lo, h)   //! the batch's experts landed before the lanes fork
+        moe_prefill_rare_rows(t, s, l, lo, h)
+        if (g_env_gpu.gpu_prof) {
+            to_log(LOG_INFO, "rdec_rare l{l}: {h - lo + 1l} experts {rows} rows {get_time_usec(tb)} us\n")   // nolint:PERF026,PERF028,LINT019 — gpu_prof-gated report leg
+        }
+        cpu_rows += rows
+        h = lo - 1l
+    }
+    matmul_moe_gpu_ffn_combined_xf_close()
+    s.moe_w_cpu |> grow_resize(nk)
+    for (j in range64(nk)) {
+        s.moe_w_cpu[j] = s.moe_exp_gpu[s.moe_idx_b[j]] != int8(0) ? 0.0 : s.moe_w_b[j]
+    }
+    g_moe_meet_gpu_experts += g
+    g_moe_meet_cpu_experts += nreg - g
+    g_moe_meet_gpu_rows += gpu_rows
+    g_moe_meet_cpu_rows += cpu_rows
+    g_moe_meet_last_gpu_rows = gpu_rows
+    g_moe_meet_last_cpu_rows = cpu_rows
+    return g
+}
+
+//! regions [lo, hi] of s.moe_ord as (expert, row) pairs, each row's chain parked into s.moe_eout at its slot; the three-pass region-list form serves the formats with no rows core, and the A/B arm
+def moe_prefill_rare_rows(t : Model; var s : Session; l, lo, hi : int64) {
+    if (g_env_engine.rare_onepass && rare_onepass_serves(t, l)) {
+        moe_prefill_rare_rows_onepass(t, s, l, lo, hi)
+    } else {
+        trim_planar_guard(t, l, "the meet's three-pass host share")
+        moe_prefill_rare_rows_passes(t, s, l, lo, hi)
+    }
+}
+
+//! the pairs of regions [lo, hi] of s.moe_ord: each row's expert, its bucket row and its position
+def private rare_pairs(s : Session; k, lo, hi : int64; var pe : array<int64>; var pb : array<int64>; var pp : array<int64>) : int64 {
+    var np = 0l
+    for (r in range64(lo, hi + 1l)) {
+        np += int64(s.moe_ord[r].y)
+    }
+    ensure_length(pe, np)
+    ensure_length(pb, np)
+    ensure_length(pp, np)
+    var j = 0l
+    for (r in range64(lo, hi + 1l)) {
+        let e = int64(s.moe_ord[r].x)
+        let b0 = e == 0l ? 0l : s.moe_cnt[e - 1l]
+        for (b in range64(int64(s.moe_ord[r].y))) {
+            pe[j] = e
+            pb[j] = b0 + b
+            pp[j] = s.moe_bkt[b0 + b] / k
+            j++
+        }
+    }
+    return np
+}
+
+var private @scratch g_rare_pe : array<int64>
+var private @scratch g_rare_pb : array<int64>
+var private @scratch g_rare_pp : array<int64>
+
+[arch(at="../ARCHITECTURE_GPU_VULKAN_STREAM.md#streamed-layer-split")]
+def private moe_prefill_rare_rows_onepass(t : Model; var s : Session; l, lo, hi : int64) {
+    let c = t.config
+    let dim = c.dim
+    let nfe = c.n_ff_exp
+    let k = c.n_expert_used
+    let ege = dim * nfe
+    let f1 = expert_fmt(t, t.we1_fmt, l)
+    let f2 = expert_fmt(t, t.we2_fmt, l)
+    let f3 = expert_fmt(t, t.we3_fmt, l)
+    let kform = moe_layer_kq(t, l) && moe_pair_kform(f1, f3)
+    let dn_sb = kq_sb(f2)
+    let np = rare_pairs(s, k, lo, hi, g_rare_pe, g_rare_pb, g_rare_pp)
+    return if (np == 0l)
+    ensure_length(s.moe_gu, np * nfe)
+    ensure_length(s.moe_gu2, np * nfe)
+    ensure_length(s.moe_dq, np * nfe)
+    ensure_length(s.moe_ds, np * nfe / 32l)
+    ensure_length(s.moe_dbs, np * nfe / 16l)
+    ensure_length(s.moe_dn, np * dim)
+    let ts = prof_ticks()
+    let is_gelu = c.ffn_act == FfnAct.gelu
+    let is_oai = c.ffn_act == FfnAct.swiglu_oai
+    let vec = g_act_vec
+    let we1 = t.we1_offs[l]
+    let we3 = t.we3_offs[l]
+    let we2 = t.we2_offs[l]
+    let p1 = rare_plane(t, f1, dim, we1).p
+    let p3 = rare_plane(t, f3, dim, we3).p
+    let p2 = rare_plane(t, f2, nfe, we2).p
+    let xs_stride = kform ? dim / 256l : dim / 32l
+    let xbs_stride = kform ? dim / 16l : 0l
+    let batched = g_env_engine.rare_batched
+    var lanes = rare_lanes_size(np, dim, xs_stride, xbs_stride, p1, p3, p2)
+    unsafe {
+        let xq0 = kform ? addr<int8 const?>(s.kxqb[0]) : addr<int8 const?>(s.xqb[0])
+        let xs0 = kform ? addr<float const?>(s.kxsb[0]) : addr<float const?>(s.xsb[0])
+        let xbs0 = kform ? addr<int const?>(s.kxbsb[0]) : null
+        let hs_stride = dn_sb ? nfe / 256l : nfe / 32l
+        let hbs_stride = nfe / 16l
+        var gu = addr(s.moe_gu[0])
+        var gu2 = addr(s.moe_gu2[0])
+        var dq = addr(s.moe_dq[0])
+        var ds = addr(s.moe_ds[0])
+        var dbs = addr(s.moe_dbs[0])
+        var dn = addr(s.moe_dn[0])
+        var eout = addr(s.moe_eout[0])
+        let pe = addr<int64 const?>(g_rare_pe[0])
+        let pb = addr<int64 const?>(g_rare_pb[0])
+        let pp = addr<int64 const?>(g_rare_pp[0])
+        let bkt = addr<int64 const?>(s.moe_bkt[0])
+        maybe_parallel_for_indexed(0, int(np), get_dispatch_lanes()) $(slot, jb, je) {
+            unsafe {
+                var ln & = lanes[slot]
+                var j = int64(jb)
+                while (j < int64(je)) {
+                    let e = pe[j]
+                    var run_end = j + 1l
+                    while (run_end < int64(je) && pe[run_end] == e) {
+                        run_end++
+                    }
+                    let ntok = run_end - j
+                    let t_run = ref_time_ticks()
+                    for (ti in range64(ntok)) {
+                        let p = pp[j + ti]
+                        memcpy(ln.xq + ti * dim, xq0 + p * dim, dim)
+                        memcpy(ln.xs + ti * xs_stride, xs0 + p * xs_stride, xs_stride * 4l)
+                        if (xbs0 != null) {
+                            memcpy(ln.xbs + ti * xbs_stride, xbs0 + p * xbs_stride, xbs_stride * 4l)
+                        }
+                    }
+                    let lxbs = xbs0 != null ? ln.xbs : null
+                    if (batched) {
+                        rare_batch_core(p1, gu + j * nfe, we1 + e * ege, ln.xq, ln.xs, lxbs, dim, nfe, ntok, ln)
+                        rare_batch_core(p3, gu2 + j * nfe, we3 + e * ege, ln.xq, ln.xs, lxbs, dim, nfe, ntok, ln)
+                    } else {
+                        for (ti in range64(ntok)) {
+                            let xq = ln.xq + ti * dim
+                            let xs = ln.xs + ti * xs_stride
+                            let xbs = lxbs != null ? lxbs + ti * xbs_stride : null
+                            rare_rows_core(p1, gu + (j + ti) * nfe, we1 + e * ege, xq, xs, xbs, dim, 0l, nfe)
+                            rare_rows_core(p3, gu2 + (j + ti) * nfe, we3 + e * ege, xq, xs, xbs, dim, 0l, nfe)
+                        }
+                    }
+                    for (ti in range64(ntok)) {
+                        var g = gu + (j + ti) * nfe
+                        let u = gu2 + (j + ti) * nfe
+                        if (vec) {
+                            if (is_gelu) {
+                                geglu4(g, u, nfe)
+                            } elif (is_oai) {
+                                swiglu_oai4(g, u, nfe)
+                            } else {
+                                swiglu4(g, u, nfe)
+                            }
+                        } elif (is_gelu) {
+                            geglu(g, u, nfe)
+                        } elif (is_oai) {
+                            swiglu_oai(g, u, nfe)
+                        } else {
+                            swiglu(g, u, nfe)
+                        }
+                        if (dn_sb) {
+                            quantize_q8_k_into_ptr(g, nfe, dq, ds, dbs, (j + ti) * nfe, (j + ti) * hs_stride, (j + ti) * hbs_stride)
+                        } else {
+                            quantize_q8_0_bs_into_ptr(g, nfe, dq, ds, dbs, (j + ti) * nfe, (j + ti) * hs_stride, (j + ti) * hbs_stride)
+                        }
+                    }
+                    if (batched) {
+                        rare_batch_core(p2, dn + j * dim, we2 + e * ege, dq + j * nfe, ds + j * hs_stride, dbs + j * hbs_stride, nfe, dim, ntok, ln)
+                    } else {
+                        for (ti in range64(ntok)) {
+                            rare_rows_core(p2, dn + (j + ti) * dim, we2 + e * ege, dq + (j + ti) * nfe, ds + (j + ti) * hs_stride, dbs + (j + ti) * hbs_stride, nfe, 0l, dim)
+                        }
+                    }
+                    for (ti in range64(ntok)) {
+                        copy_floats(eout + bkt[pb[j + ti]] * dim, dn + (j + ti) * dim, dim)
+                    }
+                    let hb = rare_hist_bin(ntok) * 2l
+                    ln.hist[hb] += 1l
+                    ln.hist[hb + 1l] += int64(get_time_usec(t_run))
+                    if (p1.dev) {
+                        ln.hist[RARE_HIST_N * 2l] += ntok
+                    }
+                    j = run_end
+                }
+            }
+        }
+    }
+    prof_add("rare_onepass", ts)
+    for (i in range64(long_length(g_rare_hist) / RARE_LANE_STATS)) {
+        g_rare_dev_rows += g_rare_hist[i * RARE_LANE_STATS + RARE_HIST_N * 2l]
+    }
+    if (g_env_gpu.gpu_prof) {
+        var line = "rare_hist l{l}:"
+        for (b in range64(RARE_HIST_N)) {
+            var runs = 0l
+            var us = 0l
+            for (i in range64(long_length(g_rare_hist) / RARE_LANE_STATS)) {
+                runs += g_rare_hist[i * RARE_LANE_STATS + b * 2l]
+                us += g_rare_hist[i * RARE_LANE_STATS + b * 2l + 1l]
+            }
+            line += " b{b} {runs} {us}"
+        }
+        var dev_us = 0l
+        for (i in range64(long_length(g_rare_hist) / RARE_LANE_STATS)) {
+            dev_us += g_rare_hist[i * RARE_LANE_STATS + RARE_HIST_N * 2l + 1l]
+        }
+        line += " dev_core_us {dev_us}"   // nolint:PERF026,PERF028,LINT019 — gpu_prof-gated report line
+        to_log(LOG_INFO, "{line}\n")   // nolint:PERF026,PERF028,LINT019 — gpu_prof-gated report line
+    }
+}
+
+//! the three-pass form: one region-list GEMV chain over the pairs - the decode's routed chain's shape, three fork/joins a batch
+def private moe_prefill_rare_rows_passes(t : Model; var s : Session; l, lo, hi : int64) {
+    let c = t.config
+    let dim = c.dim
+    let nfe = c.n_ff_exp
+    let ne = c.n_expert
+    let k = c.n_expert_used
+    let ege = dim * nfe
+    let f1 = fmt_at(t.we1_fmt, l)
+    let f2 = fmt_at(t.we2_fmt, l)
+    let f3 = fmt_at(t.we3_fmt, l)
+    var np = 0l
+    for (r in range64(lo, hi + 1l)) {
+        np += int64(s.moe_ord[r].y)
+    }
+    return if (np == 0l)
+    //! grow-only: the decode's routed chain shares these at its own k-row size, and a shorter window must not cut them
+    ensure_length(s.moe_offs, np * 2l)
+    ensure_length(s.moe_boffs, np)
+    ensure_length(s.moe_gu, np * nfe)
+    ensure_length(s.moe_gu2, np * nfe)
+    ensure_length(s.moe_dq, np * nfe)
+    ensure_length(s.moe_ds, np * nfe / 32l)
+    ensure_length(s.moe_dbs, np * nfe / 16l)
+    ensure_length(s.moe_dn, np * dim)
+    for (leg in range(3)) {
+        var j = 0l
+        for (r in range64(lo, hi + 1l)) {
+            let e = int64(s.moe_ord[r].x)
+            let b0 = e == 0l ? 0l : s.moe_cnt[e - 1l]
+            let eg = l * ne + e
+            for (b in range64(int64(s.moe_ord[r].y))) {
+                let p = s.moe_bkt[b0 + b] / k
+                if (leg == 0) {
+                    s.moe_offs[j * 2l] = t.we1_offs[l] + e * ege
+                    s.moe_offs[j * 2l + 1l] = p * dim
+                    s.moe_boffs[j] = t.web1_off + eg * nfe
+                } elif (leg == 1) {
+                    s.moe_offs[j * 2l] = t.we3_offs[l] + e * ege
+                    s.moe_offs[j * 2l + 1l] = p * dim
+                    s.moe_boffs[j] = t.web3_off + eg * nfe
+                } else {
+                    s.moe_offs[j * 2l] = t.we2_offs[l] + e * ege
+                    s.moe_offs[j * 2l + 1l] = j * nfe
+                    s.moe_boffs[j] = t.web2_off + eg * dim
+                }
+                j++
+            }
+        }
+        if (leg == 0) {
+            let ts_gu = prof_ticks()
+            mm_at_f_groupn(s.moe_gu, t, f1, s.moe_offs, s.moe_boffs, c.moe_exps_bias, np, s.xqb, s.xsb, s.kxqb, s.kxsb, s.kxbsb, dim, nfe)
+            prof_add("rare_gate", ts_gu)
+        } elif (leg == 1) {
+            let ts_up = prof_ticks()
+            mm_at_f_groupn(s.moe_gu2, t, f3, s.moe_offs, s.moe_boffs, c.moe_exps_bias, np, s.xqb, s.xsb, s.kxqb, s.kxsb, s.kxbsb, dim, nfe)
+            prof_add("rare_up", ts_up)
+            let ts_act = prof_ticks()
+            gate_batch(s.moe_gu, s.moe_gu2, c.ffn_act, nfe, np)
+            prof_add("rare_act", ts_act)
+            let ts_rq = prof_ticks()
+            requant_rows_f(f2, s.moe_gu, nfe, np, s.moe_dq, s.moe_ds, s.moe_dbs)
+            prof_add("rare_requant", ts_rq)
+        } else {
+            let ts_dn = prof_ticks()
+            mm_at_f_groupn(s.moe_dn, t, f2, s.moe_offs, s.moe_boffs, c.moe_exps_bias, np, s.moe_dq, s.moe_ds, s.moe_dq, s.moe_ds, s.moe_dbs, nfe, dim)
+            prof_add("rare_down", ts_dn)
+        }
+    }
+    let ts_park = prof_ticks()
+    var j = 0l
+    for (r in range64(lo, hi + 1l)) {
+        let e = int64(s.moe_ord[r].x)
+        let b0 = e == 0l ? 0l : s.moe_cnt[e - 1l]
+        for (b in range64(int64(s.moe_ord[r].y))) {
+            copy_floats(s.moe_dn, j * dim, s.moe_eout, s.moe_bkt[b0 + b] * dim, dim)
+            j++
+        }
+    }
+    prof_add("rare_park", ts_park)
+}
+
+//! one expert's chain over its bucket rows - the gather, gate and up, the act, the requant, down - parked into s.moe_eout at the rows' slots
+def moe_prefill_expert_chain(t : Model; var s : Session; l, e : int64; moe_kform : bool) {
     let c = t.config
     let dim = c.dim
     let ne = c.n_expert
@@ -1604,12 +2576,9 @@ def private moe_prefill_per_expert(t : Model; var s : Session; l : int64; moe_kf
     let f1 = fmt_at(t.we1_fmt, l)
     let f2 = fmt_at(t.we2_fmt, l)
     let f3 = fmt_at(t.we3_fmt, l)
-    for (e in range64(ne)) {
-        let b0 = e == 0l ? 0l : s.moe_cnt[e - 1l]
-        let cnt = s.moe_cnt[e] - b0
-        if (cnt == 0l || (skip_gpu_experts && s.moe_exp_gpu[e] != int8(0))) {
-            continue
-        }
+    let b0 = e == 0l ? 0l : s.moe_cnt[e - 1l]
+    let cnt = s.moe_cnt[e] - b0
+    {
         let ts_gather = prof_ticks()
         moe_gather_rows(s, b0, cnt, dim, k, moe_kform, moe_kform)
         prof_add("moe_gather", ts_gather)
@@ -1757,25 +2726,28 @@ def moe_routed_rows_select(t : Model; var s : Session; l, npos : int64) {
 
 //! ... and its second: the experts' chains and the rows' sums into s.xb2_b. Under `split` the experts marked in
 //! s.moe_exp_gpu are a driver's and s.moe_w_cpu carries the weights with their slots at zero: the sums are the rest's alone
+[arch(at="../ARCHITECTURE_GPU_VULKAN_STREAM.md#streamed-layer-arena")]
 def moe_routed_rows_sum(t : Model; var s : Session; l, npos : int64; skip_gpu_experts : bool) {
     let c = t.config
     let dim = c.dim
     let k = c.n_expert_used
     let nk = npos * k
-    let kq_layer = moe_layer_kq(t, l)
-    let f1 = fmt_at(t.we1_fmt, l)
-    let f3 = fmt_at(t.we3_fmt, l)
     let fused = moe_routed_rows_take_fused_regions(t, l)
-    let moe_kform = kq_layer && moe_pair_kform(f1, f3)
-    if (moe_kform) {
-        s.kxqb |> resize(npos * dim)
-        s.kxsb |> resize(npos * dim / 256l)
-        s.kxbsb |> resize(npos * dim / 16l)
-        requant_rows_q8k_bs(s.xb_b, dim, npos, s.kxqb, s.kxsb, s.kxbsb)
-    } else {
-        requant_rows_q8(s.xb_b, dim, npos, s.xqb, s.xsb)
-    }
-    if (fused) {
+    let moe_kform = moe_routed_rows_requant(t, s, l, npos)
+    if (rare_dev_layer(t, l)) {
+        trace_tag(TRACE_TAG_MOE)
+        let nreg = moe_prefill_regions_lpt(t, s, l, nk, 0l, skip_gpu_experts)
+        if (nreg > 0l) {
+            rare_fetch_regions(t, s, l, 0l, nreg - 1l)
+            expert_heat_add_regions(t, s, l, 0l, nreg - 1l)
+            moe_prefill_rare_rows(t, s, l, 0l, nreg - 1l)
+            moe_gpu_stream_ring_release()
+            for (oe in s.moe_ord) {
+                g_rare_dec_rows += int64(oe.y)
+            }
+        }
+    } elif (fused) {
+        trim_planar_guard(t, l, "the window's host sum")
         trace_tag(TRACE_TAG_MOE)
         let ts_gather = prof_ticks()
         moe_gather_rows(s, 0l, nk, dim, k, moe_kform, moe_kform)
@@ -1786,9 +2758,31 @@ def moe_routed_rows_sum(t : Model; var s : Session; l, npos : int64; skip_gpu_ex
             moe_prefill_park(s, nk, dim)
         }
     } else {
+        trim_planar_guard(t, l, "the window's host sum")
         trace_tag(TRACE_TAG_MOE)
         moe_prefill_per_expert(t, s, l, moe_kform, skip_gpu_experts)
     }
+    moe_routed_rows_reduce(s, npos, k, dim, skip_gpu_experts)
+}
+
+//! the window's routed rows requantized for the experts' GEMMs - Q8_K where the gate/up pair reads it, else Q8_0; answers which (`moe_kform`)
+def moe_routed_rows_requant(t : Model; var s : Session; l, npos : int64) : bool {
+    let dim = t.config.dim
+    let moe_kform = moe_layer_kq(t, l) && moe_pair_kform(fmt_at(t.we1_fmt, l), fmt_at(t.we3_fmt, l))
+    if (moe_kform) {
+        s.kxqb |> resize(npos * dim)
+        s.kxsb |> resize(npos * dim / 256l)
+        s.kxbsb |> resize(npos * dim / 16l)
+        requant_rows_q8k_bs(s.xb_b, dim, npos, s.kxqb, s.kxsb, s.kxbsb)
+    } else {
+        requant_rows_q8(s.xb_b, dim, npos, s.xqb, s.xsb)
+    }
+    return moe_kform
+}
+
+//! the rows' weighted sums of their parked slot rows into s.xb2_b, under s.moe_w_cpu with `skip_gpu_experts` (a driver's slots at zero, their stale rows skipped), else under s.moe_w_b
+def moe_routed_rows_reduce(var s : Session; npos, k, dim : int64; skip_gpu_experts : bool) {
+    let nk = npos * k
     trace_tag(TRACE_TAG_PARK)
     let ts_red = prof_ticks()
     unsafe {
@@ -1880,7 +2874,7 @@ def private moe_prefill_down_bias(t : Model; var s : Session; l, npos : int64) {
     }
 }
 
-[arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#streamed-layer-split"), arch(at="../ARCHITECTURE_RUNTIME_JOBQUE.md#moe-region-split")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_STREAM.md#streamed-layer-split"), arch(at="../ARCHITECTURE_RUNTIME_JOBQUE.md#moe-region-split")]
 def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos : int64) { // nolint:STYLE037,STYLE038 — the grouped MoE prefill is one bucketed pipeline over experts; each stage feeds the next through shared scratch
     let c = t.config
     let dim = c.dim
@@ -1912,6 +2906,7 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
     let gpu_comb = fused_gpu && gpu_combine_on()
     let gpu_xf = gpu_comb && routed_plain && moe_gpu_ffn_xf_ok(npos, dim, int(ef1), int(ef3), int(ef2))
     var split_gpu_regions = 0l
+    var split_meet = false   //! the meet ran this layer: the host's rows in s.moe_eout, the device's in s.moe_gpu_out
     let fused = (t.experts_mx4 && g_active_mx4_native_batch && g_moe_fused_expert_gemms) || fused_kq || fused_gpu
     moe_prefill_scratch(t, s, npos, fused ? nk : npos, kq_layer)
 
@@ -2055,8 +3050,26 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
         prof_add("moe_gather", ts_gather)
         let split_cap = !gpu_comb && !fused_gpu ? 32l : 0l
         let nreg = moe_prefill_regions_lpt(t, s, l, nk, split_cap)
-        if (gpu_xf && moe_gpu_layer_streamed(l) && gpu_want_moe_split() && sb_fusable
-                && kq_sb(f1) && kq_sb(f3) && kq_sb(f2) && nk <= moe_gpu_ffn_xf_async_rows(dim, nfe)) {
+        let split_ok = (gpu_xf && moe_gpu_layer_streamed(l) && gpu_want_moe_split() && sb_fusable
+            && moe_gpu_ffn_xf_ok(npos, dim, int(f1), int(f3), int(f2)) && nreg > 0l && int64(s.moe_ord[0].y) <= moe_gpu_ffn_xf_async_rows(dim, nfe))
+        if (split_ok && gpu_comb) {
+            s.moe_inv |> resize(nk)
+            for (j in range64(nk)) {
+                s.moe_inv[s.moe_bkt[j]] = uint(j)
+            }
+            let ts_meet = prof_ticks()
+            let g = moe_prefill_meet(t, s, l, npos, nreg, int(f1), int(f3), int(f2))
+            if (g >= 0l) {
+                split_meet = true
+                split_gpu_regions = g
+                prof_add("moe_meet", ts_meet)
+                let ts_join = prof_ticks()
+                s.moe_gpu_out |> grow_resize(npos * dim)
+                matmul_moe_gpu_ffn_combined_xf_join(s.moe_gpu_out)
+                prof_add("split_wait", ts_join)
+            }
+        }
+        if (split_ok && !split_meet) {
             let bytes_e = float(nfe * dim) * (kq_bytes_per_weight(f1) + kq_bytes_per_weight(f3) + kq_bytes_per_weight(f2))
             var rows_gpu = 0l
             var rows_cpu = nk
@@ -2076,7 +3089,8 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
             }
         }
         let ts_g1 = prof_ticks()
-        if (gpu_comb) {   // GPU tier: gate+up/act/requant/down AND the routed weighted-sum combine
+        if (split_meet) {
+        } elif (gpu_comb) {   // GPU tier: gate+up/act/requant/down AND the routed weighted-sum combine
             // gout comes back as npos combined rows; the 33MB-class bucket-row readback + park scatter disappear
             s.moe_inv |> resize(nk)
             for (j in range64(nk)) {
@@ -2198,8 +3212,9 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
     unsafe {
         var ap = addr(s.xb2_b[0])
         let ep = addr<float const?>(s.moe_eout[0])
-        let wp = split_gpu_regions > 0l ? addr<float const?>(s.moe_w_cpu[0]) : addr<float const?>(s.moe_w_b[0])
-        let split_gpu_rows = split_gpu_regions > 0l ? addr<float const?>(s.moe_gpu_out[0]) : null
+        let split_on = split_gpu_regions > 0l || split_meet
+        let wp = split_on ? addr<float const?>(s.moe_w_cpu[0]) : addr<float const?>(s.moe_w_b[0])
+        let split_gpu_rows = split_on ? addr<float const?>(s.moe_gpu_out[0]) : null
         let sp = nsh > 0l ? (sh_gpu ? addr<float const?>(s.moe_shout[0]) : addr<float const?>(s.moe_gout[0])) : null
         let gp = nsh > 0l && c.moe_shexp_gated ? addr<float const?>(s.moe_gl_b[0]) : null
         maybe_parallel_for(nk * dim >= g_act_par_threshold, 0, int(npos), get_dispatch_lanes()) $(rb, re) {

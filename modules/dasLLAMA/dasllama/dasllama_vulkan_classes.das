@@ -842,6 +842,23 @@ class MoeCombine : GkMoeCombine {
     }
 }
 
+//! the per-expert chain's combine on the same stamp: one workgroup a window row, its weighted down row added onto its
+//! position's accumulated row (the chain zeroes the accumulator at its first expert)
+[vk_dispatch(name = "combine_row_cls", grid = "rows", params = "rows : int64")]
+class MoeCombineRow : GkMoeCombine {
+    override GATHERED = false
+    override BYROW = true
+
+    [spirv_kernel(local_size_x = 256, name = "combine_row_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_STREAM.md#streamed-layer-split")]
+    def run {
+        var i = gl_LocalInvocationID.x
+        while (i < pa.n) {
+            comb_row_elem(gl_WorkGroupID.x, i)
+            i += 256u
+        }
+    }
+}
+
 struct DecCombineArgs {
     n : uint      //! row width
     k : uint      //! routed slots
@@ -1570,19 +1587,32 @@ struct GatherArgs {
 [ |> template_struct_instance]
 class template MoeGatherT {
     @template_constant F16 : bool = true
+    @template_constant BYROW : bool = false    //! a workgroup a bucket row of the window (the per-expert chain), not a grid entry
     @ssbo @binding = 0 x : array<float>        // the normed activation rows, one per position
-    @ssbo @binding = 1 slot_idx : array<uint>  // position -> its k slot rows (the combine's map)
+    @ssbo @binding = 1 @template_gate = "!BYROW" slot_idx : array<uint>  // position -> its k slot rows (the combine's map)
+    @ssbo @binding = 1 @template_gate = BYROW bkt_grid : array<uint>     // bucket row -> its grid entry (the map's inverse)
     @ssbo @binding = 2 xg : array<XG>          // the gathered rows, bucket order, window-relative
     @push_constant pa : GatherArgs
 
     def gather_body {
-        let r = gl_WorkGroupID.x
-        let b = slot_idx[r]
-        if (b < pa.r0 || b >= pa.r1) {
-            return
+        static_if (BYROW) {
+            let b = gl_WorkGroupID.x
+            let src = (bkt_grid[pa.r0 + b] / max(1u, pa.k)) * pa.n
+            let dst = b * pa.n
+            gather_row(src, dst)
+        } else {
+            let r = gl_WorkGroupID.x
+            let b = slot_idx[r]
+            if (b < pa.r0 || b >= pa.r1) {
+                return
+            }
+            let src = (r / pa.k) * pa.n
+            let dst = (b - pa.r0) * pa.n
+            gather_row(src, dst)
         }
-        let src = (r / pa.k) * pa.n
-        let dst = (b - pa.r0) * pa.n
+    }
+
+    def gather_row(src, dst : uint) {
         var i = gl_LocalInvocationID.x
         while (i < pa.n) {
             static_if (F16) {
@@ -1600,6 +1630,18 @@ class MoeGatherF16 : MoeGatherT {
     typedef XG = float16
 
     [spirv_kernel(local_size_x = 256, name = "moe_gather_f16_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-expert-chain")]
+    def run {
+        gather_body()
+    }
+}
+
+//! the per-expert chain's gather: one workgroup a window row, over the rows of one expert alone
+[vk_dispatch(name = "moe_gather_f16_row_cls", grid = "rows", params = "rows : int64")]
+class MoeGatherF16Row : MoeGatherT {
+    typedef XG = float16
+    override BYROW = true
+
+    [spirv_kernel(local_size_x = 256, name = "moe_gather_f16_row_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_STREAM.md#streamed-layer-split")]
     def run {
         gather_body()
     }

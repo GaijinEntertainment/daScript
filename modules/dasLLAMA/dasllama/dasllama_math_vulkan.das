@@ -17,6 +17,8 @@ require dasllama/dasllama_math
 require dasllama/dasllama_gpu_tier
 require dasllama/dasllama_config
 require dasllama/dasllama_kqformat
+require dasllama/dasllama_gemm_schema
+require daslib/f16_cvt
 
 // dasLLAMA Vulkan GPU tier — the backend ENTRY: capability probe + arm, the dry-bake arm, the
 // .dlim identity source, the FFN router, and the [init] that installs every hook. The backend
@@ -48,7 +50,7 @@ def private vk_dlim_wants_fill(var v : DlimVulkanConfig) {
     v.dense_shexp = gpu_want_dense_shexp()
     v.dense_ffn = gpu_want_dense_ffn()
     v.trim = vulkan_trim()
-    v.split = gpu_want_moe_split()
+    v.split = false
     v.dn_native = gpu_want_dn_native()
 }
 
@@ -79,6 +81,7 @@ def install_vk_moe_hooks {
     install_moe_gpu_tier(@@vk_moe_ffn, @@vk_moe_upload_stack, @@vk_moe_cls, @@vk_moe_dense, @@vk_moe_drop_stacks, @@vk_moe_dn, @@vk_moe_attn)
     set_moe_gpu_ffn_xf_hooks(@@vk_moe_ffn_xf, @@vk_moe_ffn_xf_ok)
     set_moe_gpu_ffn_xf_async_hooks(@@vk_moe_ffn_xf_begin, @@vk_moe_ffn_xf_join, @@vk_moe_ffn_xf_async_rows)
+    set_moe_gpu_ffn_xf_meet_hooks(@@vk_moe_ffn_xf_open, @@vk_moe_ffn_xf_push, @@vk_moe_ffn_xf_bundle_end, @@vk_moe_ffn_xf_close)
     set_moe_gpu_attn_dec_hooks(@@vk_moe_attn_dec, @@vk_moe_attn_dec_ok, @@vk_moe_attn_dec_claim, @@vk_moe_attn_dec_hydrate)
     set_moe_gpu_ffn_tail_hooks(@@vk_moe_ffn_tail, @@vk_moe_ffn_tail_pending)
     set_moe_gpu_span_dec_hook(@@vk_moe_span_dec)
@@ -96,14 +99,16 @@ def vk_drop_model {
     vk_drop_model_state()
 }
 
+//! the stream group a gate offset belongs to, or -1 for a resident region; the stream groups are asked first, since a slot's
+//! pseudo-stack rebased onto a group covers the group's offsets too and would read as a residency
 def private stream_group_of(offs1 : int64 const?; f1 : int) : int {
     let w0 = unsafe(offs1[0])
-    return -1 if (find_stack_idx(w0, f1) >= 0)
     let g = find_stream_group(w0, f1)
-    if (g < 0) {
+    return g if (g >= 0)
+    if (find_stack_idx(w0, f1) < 0) {
         panic("dasLLAMA vulkan tier: dispatch against a region that is neither resident nor streamed (fmt {f1} element offset {w0})")
     }
-    return g
+    return -1
 }
 
 //! MoeGpuFfnFn: routed experts' whole FFN chain (gate+up GEMMs, activation, requant, down GEMM)
@@ -136,19 +141,34 @@ def vk_moe_ffn_xf(var goutp : float?; offs1 : int64 const?; offs3 : int64 const?
     vk_moe_ffn_batch_xf(goutp, offs1, offs3, offs2, nregions, xp, wp, invp, n, nfe, nrows, npos, f1, f3, f2, is_gelu)
 }
 
-//! MoeGpuFfnXfBeginFn: the async cm2 chain - a streamed group binds its slot with ONLY the given
-//! regions' experts (the split's share), a resident layer dispatches directly; join collects.
+//! MoeGpuFfnXfBeginFn: a streamed group takes the per-expert chain over the given regions' experts, a resident layer dispatches directly; join collects
 def vk_moe_ffn_xf_begin(offs1 : int64 const?; offs3 : int64 const?; offs2 : int64 const?; nregions : int64; xp : float const?; wp : float const?; invp : uint const?; n, nfe, nrows, npos : int64; f1, f3, f2 : int; is_gelu : bool) {
     ensure_ffn_state()
-    let g = stream_group_of(offs1, f1)
+    let g = xf_pool_on() ? g_xf_pool_g : stream_group_of(offs1, f1)   //! a pool window's offsets name the pool's stacks: its group is the one it copies from
     if (g >= 0) {
-        stream_group_bind_partial(g, nrows, f3, f2, offs1, nregions, nfe * n)
+        vk_moe_ffn_xf_begin_experts(g, offs1, offs3, offs2, nregions, xp, wp, invp, n, nfe, nrows, npos, f1, f3, f2, is_gelu)
+        return
     }
     vk_moe_ffn_batch_xf_begin(offs1, offs3, offs2, nregions, xp, wp, invp, n, nfe, nrows, npos, f1, f3, f2, is_gelu)
 }
 
 def vk_moe_ffn_xf_join(var goutp : float?) {
     vk_moe_ffn_batch_xf_join(goutp)
+}
+
+//! MoeGpuFfnXfOpenFn: the meet form opens over a streamed group alone - a resident layer answers false and takes the whole chain
+def vk_moe_ffn_xf_open(offs1 : int64 const?; offs3 : int64 const?; offs2 : int64 const?; nregions : int64; xp : float const?; wp : float const?; invp : uint const?; n, nfe, nrows, npos : int64; f1, f3, f2 : int; is_gelu : bool) : bool {
+    ensure_ffn_state()
+    let g = xf_pool_on() ? g_xf_pool_g : stream_group_of(offs1, f1)
+    return false if (g < 0)
+    vk_moe_ffn_xf_open_experts(g, offs1, offs3, offs2, nregions, xp, wp, invp, n, nfe, nrows, npos, f1, f3, f2, is_gelu)
+    return true
+}
+
+def vk_moe_ffn_xf_push(r_lo, r_hi : int64; wait : bool) : bool => vk_moe_ffn_xf_push_experts(r_lo, r_hi, wait)
+
+def vk_moe_ffn_xf_close {
+    vk_moe_ffn_xf_close_experts()
 }
 
 // ===== registration =====
@@ -241,6 +261,9 @@ def private vk_resident_bytes : int64 => (g_gpu != null ? g_gpu.resident_bytes :
 // device here (rather than reporting 0 until something else arms it) is what lets the gate answer
 // "would this fit?" on a cold tier.
 def private vk_weight_budget : int64 => vk_moe_init() ? carved_budget() : 0l
+
+//! what the carve took off the cap: the streamed slot and the decode block's mirrors
+def private vk_weight_carve : int64 => vk_moe_init() ? g_gpu.weight_budget - carved_budget() : 0l
 
 // the largest legal single-SSBO binding range (maxStorageBufferRange) — the KV mirror's ceiling
 //! the range a KV mirror side may bind, less the slack each of its `regions` carries past its planes (at the f32 codec's
@@ -360,6 +383,222 @@ def private vk_bake_tag : string {
     return dlim_vulkan_tag(v)
 }
 
+//! a kq GEMV class of the tier's `fmt` space on the CPU - its blk_contrib IS the device's block decode, bit for bit; a grid
+//! format's staged codebook fills here, since no kernel head runs
+def private vk_host_kq_cls(fmt : int) : KqGemvBase? {
+    var k : KqGemvBase?
+    if (fmt == int(KqFmt.k4)) {
+        k = new KqGemvK4()
+    } elif (fmt == int(KqFmt.q40)) {
+        k = new KqGemvQ40()
+    } elif (fmt == int(KqFmt.k5)) {
+        k = new KqGemvK5()
+    } elif (fmt == int(KqFmt.iq4xs)) {
+        k = new KqGemvIq4xs()
+    } elif (fmt == int(KqFmt.iq3s4)) {
+        k = new KqGemvIq3s4()
+    } elif (fmt == int(KqFmt.k3)) {
+        k = new KqGemvK3()
+    } elif (fmt == int(KqFmt.iq3s)) {
+        var ki = new KqGemvIq3s()
+        for (i in range(512)) {
+            ki.gridw[i] = IQ3S_GRID[i]
+        }
+        k = ki
+    } elif (fmt == int(KqFmt.iq3xxs)) {
+        var kx = new KqGemvIq3xxs()
+        for (i in range(256)) {
+            kx.gridw[i] = IQ3XXS_GRID[i]
+        }
+        k = kx
+    } elif (fmt == int(KqFmt.iq4nl)) {
+        k = new KqGemvIq4nl()
+    } elif (fmt == int(KqFmt.k2)) {
+        k = new KqGemvK2()
+    } elif (fmt == int(KqFmt.iq2s)) {
+        var k2s = new KqGemvIq2s()
+        for (i in range(2048)) {
+            k2s.gridw[i] = IQ2S_GRID[i]
+        }
+        k = k2s
+    } elif (fmt == int(KqFmt.iq2xs)) {
+        var k2x = new KqGemvIq2xs()
+        for (i in range(1024)) {
+            k2x.gridw[i] = IQ2XS_GRID[i]
+        }
+        k = k2x
+    } elif (fmt == int(KqFmt.iq2xxs)) {
+        var k2xx = new KqGemvIq2xxs()
+        for (i in range(512)) {
+            k2xx.gridw[i] = IQ2XXS_GRID[i]
+        }
+        k = k2xx
+    } elif (fmt == int(KqFmt.k6)) {
+        k = new KqGemvK6()
+    }
+    return k
+}
+
+enum private VkTwinFamily {
+    superblock
+    block32
+    q8
+}
+
+//! a lane's host twin: the format's GEMV class - the superblock family through its base, a per-32 or mx4 format its own
+//! class, q8 none (its dot is spelled here) - and the device plane strides it reads at
+struct private VkHostTwin {
+    fam : VkTwinFamily
+    k : KqGemvBase?
+    q51 : Q51Gemv?
+    iq4nl32 : Iq4nl32Gemv?
+    q4032 : Q4032Gemv?
+    q5032 : Q5032Gemv?
+    mx4 : Mx4Gemv?
+    qsb : int64   //! device bytes a block (a superblock, or a 32-block)
+    ssb : int64
+}
+
+//! MoeGpuHostServesFn: the formats the host twin reads - every expert format the tier streams
+def vk_host_twin_serves(fmt : int) : bool {
+    let f = unsafe(reinterpret<KqFmt>(uint8(fmt)))
+    return kq_sb(f) || kq_dense_b32(f) || f == KqFmt.mx4 || f == KqFmt.q8
+}
+
+//! MoeGpuHostTwinFn: a per-lane host twin for `fmt` - null for a format the twin does not serve
+[arch(at="../ARCHITECTURE_GPU_VULKAN_STREAM.md#streamed-layer-arena")]
+def vk_host_twin(fmt : int) : void? {
+    return null if (!vk_host_twin_serves(fmt))
+    let f = unsafe(reinterpret<KqFmt>(uint8(fmt)))   //! the tier's stack-format space is int(KqFmt)
+    var tw = new VkHostTwin()
+    if (kq_sb(f)) {
+        tw.fam = VkTwinFamily.superblock
+        tw.k = vk_host_kq_cls(fmt)
+        tw.qsb = kq_qsb(f)
+        tw.ssb = kq_dev_ssb_i(fmt)
+    } elif (f == KqFmt.q8) {
+        tw.fam = VkTwinFamily.q8
+        tw.qsb = 32l
+        tw.ssb = 2l
+    } else {
+        tw.fam = VkTwinFamily.block32
+        tw.qsb = kq_qsb(f)
+        tw.ssb = kq_ssb(f)
+        if (f == KqFmt.q51) {
+            tw.q51 = new Q51Gemv()
+        } elif (f == KqFmt.iq4nl32) {
+            tw.iq4nl32 = new Iq4nl32Gemv()
+        } elif (f == KqFmt.q4032) {
+            tw.q4032 = new Q4032Gemv()
+        } elif (f == KqFmt.q5032) {
+            tw.q5032 = new Q5032Gemv()
+        } else {
+            tw.mx4 = new Mx4Gemv()
+        }
+    }
+    return unsafe(reinterpret<void?>(tw))
+}
+
+//! the per-32 and mx4 twin: the class's own block decode and dot (`blk_words`, `blk_xdot`), its planes and the Q8_0
+//! activation bound as borrowed views, the row's blocks summed in order
+def private vk_b32_rows(var k : auto(TK)?; var yp : float?; q : uint8 const?; s : uint8 const?; xq : int8 const?; xs : float const?; n, rb, re, qsb, ssb : int64) {
+    let nb = n / 32l
+    unsafe {
+        vk_bind_view(k.wq, reinterpret<void?>(q), re * nb * qsb / 4l)
+        vk_bind_view(k.wsu, reinterpret<void?>(s), (re * nb * ssb + 3l) / 4l)
+        vk_bind_view(k.xqw, reinterpret<void?>(xq), n / 4l)
+        vk_bind_view(k.axs, reinterpret<void?>(xs), nb)
+        for (r in range64(rb, re)) {
+            var acc = 0.0
+            let wb0 = uint(r * nb)
+            for (b in range64(nb)) {
+                var wl = uint4(0u)
+                var wh = uint4(0u)
+                let sc = k->blk_words(wb0 + uint(b), wl, wh)
+                acc += k->blk_xdot(wl, wh, sc, uint(b))
+            }
+            yp[r] = acc
+        }
+    }
+}
+
+//! the q8 twin: the device's int8 rows and f16 block scales, a block's dot in integers, (dot x d) x the activation scale
+//! - the `Q8Gemv` class's fold order
+def private vk_q8_rows(var yp : float?; q : uint8 const?; s : uint8 const?; xq : int8 const?; xs : float const?; n, rb, re : int64) {
+    let nb = n / 32l
+    unsafe {
+        let wq = reinterpret<int8 const?>(q)
+        let ws = reinterpret<uint16 const?>(s)
+        for (r in range64(rb, re)) {
+            var acc = 0.0
+            for (b in range64(nb)) {
+                var idot = 0
+                let wrow = wq + (r * nb + b) * 32l
+                let xb = xq + b * 32l
+                for (i in range64(32l)) {
+                    idot += int(wrow[i]) * int(xb[i])
+                }
+                acc += float(idot) * f16_to_f32(uint(ws[r * nb + b])) * xs[b]
+            }
+            yp[r] = acc
+        }
+    }
+}
+
+//! `a` as a borrowed view of `count` elements at `p` (the earlier view forgotten)
+def private vk_bind_view(var a : array<auto(TT)>; p : void?; count : int64) {
+    unsafe {
+        if (lock_count(a) != 0) {
+            _builtin_forget_temp_array(a)
+        }
+        _builtin_make_temp_array_i64(a, p, count)
+    }
+}
+
+//! MoeGpuHostRowsFn over the kq GEMV classes: the rows' superblocks folded a block at a time through the class's own decode
+def vk_host_rows(twin : void?; var yp : float?; q : uint8 const?; s : uint8 const?; xq : int8 const?; xs : float const?; n, rb, re : int64) {
+    var tw = unsafe(reinterpret<VkHostTwin?>(twin))
+    if (tw.fam == VkTwinFamily.q8) {
+        vk_q8_rows(yp, q, s, xq, xs, n, rb, re)
+        return
+    }
+    if (tw.fam == VkTwinFamily.block32) {
+        if (tw.q51 != null) {
+            vk_b32_rows(tw.q51, yp, q, s, xq, xs, n, rb, re, tw.qsb, tw.ssb)
+        } elif (tw.iq4nl32 != null) {
+            vk_b32_rows(tw.iq4nl32, yp, q, s, xq, xs, n, rb, re, tw.qsb, tw.ssb)
+        } elif (tw.q4032 != null) {
+            vk_b32_rows(tw.q4032, yp, q, s, xq, xs, n, rb, re, tw.qsb, tw.ssb)
+        } elif (tw.q5032 != null) {
+            vk_b32_rows(tw.q5032, yp, q, s, xq, xs, n, rb, re, tw.qsb, tw.ssb)
+        } else {
+            vk_b32_rows(tw.mx4, yp, q, s, xq, xs, n, rb, re, tw.qsb, tw.ssb)
+        }
+        return
+    }
+    var k = tw.k
+    let nsb = n / 256l
+    let qsb = tw.qsb
+    let ssb = tw.ssb
+    unsafe {
+        vk_bind_view(k.wq, reinterpret<void?>(q), re * nsb * qsb / 4l)
+        vk_bind_view(k.wq4, reinterpret<void?>(q), re * nsb * qsb / 16l)
+        vk_bind_view(k.wsu, reinterpret<void?>(s), re * nsb * ssb / 4l)
+        vk_bind_view(k.xq4, reinterpret<void?>(xq), n / 16l)
+        vk_bind_view(k.axs, reinterpret<void?>(xs), nsb)
+        for (r in range64(rb, re)) {
+            var acc = 0.0
+            let wsb0 = uint(r * nsb)
+            for (sb in range64(nsb)) {
+                for (blk in range(8)) {
+                    acc += k->blk_contrib(wsb0 + uint(sb), uint(blk), uint(sb))
+                }
+            }
+            yp[r] = acc
+        }
+    }
+}
+
 [init, arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
 def dasllama_math_vulkan_register() {
     register_kernel_backend(KernelBackend(name = "vulkan", mm = @@vulkan_no_gemv, batch = @@vulkan_no_batch,
@@ -371,9 +610,20 @@ def dasllama_math_vulkan_register() {
     set_moe_gpu_dry_bake_arm(@@vulkan_dry_bake_arm)
     set_moe_gpu_unmap_notify(@@vk_unmap_notify)
     set_moe_gpu_would_accept_fn(@@vk_moe_would_accept)
+    set_moe_gpu_stream_plane_fn(@@vk_stream_plane)
+    set_moe_gpu_stream_cache_fns(@@vk_stream_expert, @@vk_stream_fetch, @@vk_stream_cache_layer, @@vk_stream_cache_ring, @@vk_stream_ring_release)
+    set_moe_gpu_stream_view_fn(@@vk_stream_view)
+    set_moe_gpu_stream_request_fns(@@vk_stream_request, @@vk_stream_ready)
+    set_moe_gpu_stream_cache_stats_fn(@@vk_stream_cache_stats)
+    set_moe_gpu_stream_cache_order_fn(@@vk_stream_cache_order)
+    set_moe_gpu_host_bytes_fn(@@vk_host_bytes)
+    set_moe_gpu_mint_dry_fn(@@vk_mint_dry)
+    set_moe_gpu_xf_pool_window_fn(@@vk_xf_pool_window)
+    set_moe_gpu_host_twin_fns(@@vk_host_twin, @@vk_host_rows, @@vk_host_twin_serves)
     set_moe_gpu_vram_report(@@vk_resident_bytes)
     set_moe_gpu_device_report(@@vk_device_name)
     set_moe_gpu_budget_hooks(@@vk_weight_budget, @@vk_plane_bytes)
+    set_moe_gpu_carve_fn(@@vk_weight_carve)
     set_moe_gpu_binding_cap(@@vk_binding_cap)
     set_moe_gpu_mirror_slack(@@vk_mirror_slack)
     install_rdec_prefill_ids(@@vk_rdec_prefill_ids, @@vk_rdec_set_emb, @@vk_rdec_upload_emb_f32)
@@ -401,6 +651,7 @@ def dasllama_math_vulkan_register() {
     install_moe_gpu_resident_moe(@@vk_rdec_moe_ok, @@vk_rdec_prepare_moe, @@vk_rdec_set_moe_layer, @@vk_rdec_set_moe_experts)
     install_moe_gpu_resident_hc(@@vk_rdec_set_hc, @@vk_rdec_set_ngram, @@vk_rdec_set_host_experts, @@vk_rdec_token_split, @@vk_rdec_ngram_ring, @@vk_rdec_prefill_hc)
     install_moe_gpu_resident_hot(@@vk_rdec_hot_layer, @@vk_rdec_hot_upload, @@vk_rdec_hot_submit, @@vk_rdec_hot_submit_rows)
+    install_moe_gpu_resident_hot_dma(@@vk_rdec_hot_dma, @@vk_rdec_hot_dma_flush)
     set_moe_gpu_dn_state_hooks(@@vk_dn_step_flush, @@vk_dn_step_invalidate, @@vk_dn_step_release)
     set_moe_gpu_heat_hooks(@@vk_moe_heat_query, @@vk_moe_heat_advise, @@vk_moe_ffn_begin, @@vk_moe_ffn_join)
     set_moe_gpu_qkv_hook(@@vk_moe_qkv)

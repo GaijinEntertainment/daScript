@@ -61,9 +61,11 @@ def test_suite_split_matches_the_files(t : T?) {
         seen |> insert(file, null)
     }
     for (file in suite_files("stocked")) {
-        t |> success(!empty(file_text(file)), "stocked file exists and reads: {file}")
+        let text = file_text(file)
+        t |> success(!empty(text), "stocked file exists and reads: {file}")
         t |> success(reaches_fixture_root(file), "a stocked file reaches a fixture root - move it to `model-free`: {file}")
         t |> success(!key_exists(seen, file), "a file sits in one per-PR list only: {file}")
+        t |> success(find(text, "options persistent_heap") >= 0, "a stocked file declares `options persistent_heap`, so the carriers its cells delete are freed: {file}")
     }
 }
 

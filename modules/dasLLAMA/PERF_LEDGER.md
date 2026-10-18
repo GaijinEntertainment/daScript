@@ -1495,7 +1495,7 @@ what it costs today and what the fix would change.
     carrier and nothing elsewhere. The conv and state buffers were the session's before; the ring
     is the addition.
 - **MEASURED (2026-10-01) - a plain MoE the card does not hold whole, with its context asked whole
-  (`ARCHITECTURE_GPU_VULKAN_HC.md#hc-hot-pool`, `set_gpu_ctx_strict` / the server's `--ctx`): the first routed
+  (`ARCHITECTURE_GPU_VULKAN_POOL.md#hc-hot-pool`, `set_gpu_ctx_strict` / the server's `--ctx`): the first routed
   layers' experts on the host through the split token command and the cut window chain, the mirror whole
   - the form wins the long prompt by 5.7x and loses decode by a third to the per-op rails
   (direction-grade), so it arms only where the context was asked.** zen2 (Ryzen 16 threads, RTX 5060 Ti 16 GB on a PCIe 4.0 x8 link, the
@@ -1874,7 +1874,7 @@ what it costs today and what the fix would change.
   cell `test_vkd_ple_side`'s commit arm (the position off the token record, three rows committed to the ring).
 
 - **LANDED (2026-09-29) - the hot expert pool on the hyper-connection carrier
-  (`ARCHITECTURE_GPU_VULKAN_HC.md#hc-hot-pool`), the `iq3s4` device format under it, and the resident
+  (`ARCHITECTURE_GPU_VULKAN_POOL.md#hc-hot-pool`), the `iq3s4` device format under it, and the resident
   plan sizing the pool with the mirror.** zen2 (Ryzen 16 threads, RTX 5060 Ti 16 GB, 3.9-4.3 GB held
   by the desktop, NVIDIA driver 616.56), Qwen3.8-Flash-Next UD-IQ4_XS, `bin/Release/daslang.exe -jit
   benchmarks/lcpp_bench.das -- --ngl 0 -p 512 -n 128 -r 6 -t 16 --for-debug-purposes` under

@@ -1,0 +1,418 @@
+options gen2
+options persistent_heap
+options _function_length = 0   // one flat cell per format family: the planar stack, the device planes, the two dots, the compare
+options stack = 524288
+options _dasllama_internal = true
+
+// The host twin - the tier's own block decode run on the CPU over a streamed stack's device-layout planes - against the
+// planar kernels, every expert format the tier streams, model-free and device-free: a planar disk-order stack in a Model
+// shell, the engine's own gather into the device layout, the planar dispatcher's rows and the twin's rows within the
+// summation bar, the poisoned expectation the control. A build with no Vulkan module registers no twin and skips.
+
+require dastest/testing_boost public
+require math
+require dasllama/dasllama_common
+require dasllama/dasllama_layout
+require dasllama/dasllama_convert
+require dasllama/dasllama_kqformat
+require dasllama/dasllama_math_default
+require dasllama/dasllama_gpu_tier
+require dasllama/dasllama_math_gen
+require ?vulkan dasllama/dasllama_math_vulkan
+require _kq_fixtures
+require _compares
+
+let private ROWS = 8l
+let private N_SB = 768l    //! three superblocks
+let private N_B32 = 704l   //! 22 blocks, off the superblock lattice - the per-32 formats' reason
+
+def private x_row(n : int64) : array<float> {
+    var x : array<float>
+    x |> resize(n)
+    for (i in range64(n)) {
+        x[i] = 1.3 * sin(float(i) * 0.19) + 0.2 * cos(float(i) * 0.057)
+    }
+    return <- x
+}
+
+//! the per-32 formats' hand-built disk blocks, the fixture file's builders
+def private b32_block(f : KqFmt; blk : int) : array<uint8> {
+    if (f == KqFmt.q51) {
+        return <- build_q51_block(blk)
+    }
+    if (f == KqFmt.q5032) {
+        return <- build_q50_block(blk)
+    }
+    return <- build_iq4nl32_block(blk)   //! iq4nl32 and q4032 share the block form (a q4032 block is iq4nl32's read under q - 8)
+}
+
+//! `rows` x `n` of format `f` in disk order on the Model shell `m`'s planes
+def private put_planar(var m : Model; f : KqFmt; rows, n : int64) {
+    var kq, ks : array<uint8>
+    if (kq_sb(f)) {
+        synth_kq_region(kq_schema_id(f), kq, ks, rows, n, 0x1234u, 0x85EBCA6Bu)
+    } elif (f == KqFmt.mx4) {
+        let nb = n / 32l
+        kq |> resize(rows * nb * MX4_QB)
+        ks |> resize(rows * nb * MX4_SB)
+        var st = 0x9876u
+        for (c in kq) {
+            st = st * 1664525u + 1013904223u
+            c = uint8(st >> 16u)
+        }
+        for (i in range(length(ks))) {   //! E8M0 exponents around 1.0
+            ks[i] = uint8(125 + i % 6)
+        }
+    } elif (f == KqFmt.q8) {
+        var wq : array<int8>
+        var ws : array<float>
+        fill_q8_quants(wq, ws, rows, n, 7l, false)
+        m.qblob <- wq
+        m.qscales <- ws
+        return
+    } else {
+        let qb = kq_qsb(f)
+        let sb = kq_ssb(f)
+        let nb = n / 32l
+        kq |> resize(rows * nb * qb)
+        ks |> resize(rows * nb * sb)
+        for (r in range64(rows)) {
+            for (b in range64(nb)) {
+                var inscope blkb <- b32_block(f, int(r * 31l + b))
+                kq_transcode_superblock(f, blkb, 0l, kq, (r * nb + b) * qb, ks, (r * nb + b) * sb)
+            }
+        }
+    }
+    kq_plane_pair(m, f) $(var q : array<uint8>; var s : array<uint8>) {
+        q <- kq
+        s <- ks
+    }
+}
+
+//! the planar dispatcher's rows (`mm_f`; the mx4 scalar dot, which no planar dispatcher takes off a bare shell)
+def private planar_rows(m : Model; f : KqFmt; x : array<float>; n, rows : int64) : array<float> {
+    var y : array<float>
+    y |> resize(rows)
+    var xq : array<int8>
+    var xs : array<float>
+    var xbs : array<int>
+    if (f == KqFmt.mx4) {
+        let nb = n / 32l
+        xq |> resize(n)
+        xs |> resize(nb)
+        quantize_q8_0_into(x, n, xq, xs, 0l, 0l)
+        var lut = mx4_lut()
+        unsafe {
+            for (r in range64(rows)) {
+                y[r] = dot_mx4q8_scalar(addr<int8 const?>(lut[0]), addr<uint8 const?>(m.mxq[r * nb * MX4_QB]), addr<uint8 const?>(m.mxs[r * nb * MX4_SB]),
+                    addr<int8 const?>(xq[0]), addr<float const?>(xs[0]), n)
+            }
+        }
+        return <- y
+    }
+    xq |> resize(n)
+    xs |> resize(n / 32l)
+    xbs |> resize(n / 16l)
+    mm_f(y, m, f, 0l, x, xq, xs, xbs, n, rows)
+    return <- y
+}
+
+//! the twin's rows over the device planes the engine's gather made of the shell's stack
+def private twin_rows(m : Model; f : KqFmt; x : array<float>; n, rows : int64) : array<float> {
+    var wq, ws : array<uint8>
+    layout_gather_dispatch(m, f, 0l, n, rows, rows, 1l, 32l, 0l, wq, ws, true)
+    var xq : array<int8>
+    var xs : array<float>
+    var xbs : array<int>
+    xq |> resize(n)
+    if (kq_sb(f)) {   //! a superblock plane's twin reads the Q8_K form, a scale a superblock
+        xs |> resize(n / 256l)
+        xbs |> resize(n / 16l)
+        quantize_q8_k_into(x, n, xq, xs, xbs, 0l, 0l, 0l)
+    } else {
+        xs |> resize(n / 32l)
+        quantize_q8_0_into(x, n, xq, xs, 0l, 0l)
+    }
+    var y : array<float>
+    y |> resize(rows)
+    let twin = moe_gpu_host_twin(int(f))
+    unsafe {
+        moe_gpu_host_rows(twin, addr(y[0]), addr<uint8 const?>(wq[0]), addr<uint8 const?>(ws[0]), addr<int8 const?>(xq[0]), addr<float const?>(xs[0]), n, 0l, rows)
+    }
+    return <- y
+}
+
+def private twin_cell(t : T?; f : KqFmt) {
+    if (!moe_gpu_host_rows_on()) {
+        t |> skip("no host twin is registered - a build with no Vulkan module")
+        return
+    }
+    t |> success(moe_gpu_host_twin_serves(int(f)), "the host twin serves {f}")
+    let n = kq_sb(f) ? N_SB : N_B32
+    var m = Model()
+    m.quant = QuantMode.q8
+    put_planar(m, f, ROWS, n)
+    var inscope x <- x_row(n)
+    var inscope want <- planar_rows(m, f, x, n, ROWS)
+    var inscope got <- twin_rows(m, f, x, n, ROWS)
+    let bar = Bar(rel = 1e-4, abs_floor = 1e-5 * logits_maxabs(want), poison_rel = 1e-3)   //! the control moves a tenth of a percent, ten bars, whatever the row's magnitude
+    check(t, "the host twin over the {f} device planes against the planar kernels", got, want, bar, Shape(row_width = int(ROWS)))
+}
+
+[test]
+def test_host_twin_superblock(t : T?) {
+    for (f in [KqFmt.k2, KqFmt.k3, KqFmt.k4, KqFmt.k5, KqFmt.k6, KqFmt.q40, KqFmt.iq4xs, KqFmt.iq4nl, KqFmt.iq3s, KqFmt.iq3xxs, KqFmt.iq3s4, KqFmt.iq2s, KqFmt.iq2xs, KqFmt.iq2xxs]) {
+        t |> run("the host twin over a {f} expert stack") <| @(ct : T?) {
+            twin_cell(ct, f)
+        }
+    }
+}
+
+[test]
+def test_host_twin_block32(t : T?) {
+    for (f in [KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032, KqFmt.q5032, KqFmt.mx4, KqFmt.q8]) {
+        t |> run("the host twin over a {f} expert stack") <| @(ct : T?) {
+            twin_cell(ct, f)
+        }
+    }
+}
+
+//! the row-major q8 kernel over the device planes the engine's gather made, against the planar kernels: the one-copy rail's kernel, the twin above its reference decode
+[test]
+def test_host_rm_q8(t : T?) {
+    let f = KqFmt.q8
+    let n = N_B32
+    var m = Model()
+    m.quant = QuantMode.q8
+    put_planar(m, f, ROWS, n)
+    var inscope x <- x_row(n)
+    var inscope want <- planar_rows(m, f, x, n, ROWS)
+    var wq, ws : array<uint8>
+    layout_gather_dispatch(m, f, 0l, n, ROWS, ROWS, 1l, 32l, 0l, wq, ws, true)
+    var xq : array<int8>
+    var xs : array<float>
+    xq |> resize(n)
+    xs |> resize(n / 32l)
+    quantize_q8_0_into(x, n, xq, xs, 0l, 0l)
+    var got : array<float>
+    got |> resize(ROWS)
+    unsafe {
+        q8q8_rm_gemv_gen(addr(got[0]), addr<int8 const?>(wq[0]), addr<uint16 const?>(ws[0]), addr<int8 const?>(xq[0]), addr<float const?>(xs[0]), n, 0l, ROWS)
+    }
+    let bar = Bar(rel = 1e-4, abs_floor = 1e-5 * logits_maxabs(want), poison_rel = 1e-3)
+    check(t, "the row-major q8 kernel over the device planes against the planar kernels", got, want, bar, Shape(row_width = int(ROWS)))
+}
+
+//! the per-32 and MXFP4 row-major kernels over the device planes against the planar kernels
+def private rm_b32_rows(m : Model; f : KqFmt; x : array<float>; n, rows : int64) : array<float> {
+    var wq, ws : array<uint8>
+    layout_gather_dispatch(m, f, 0l, n, rows, rows, 1l, 32l, 0l, wq, ws, true)
+    var xq : array<int8>
+    var xs : array<float>
+    xq |> resize(n)
+    xs |> resize(n / 32l)
+    quantize_q8_0_into(x, n, xq, xs, 0l, 0l)
+    var got : array<float>
+    got |> resize(rows)
+    unsafe {
+        let q = addr<uint8 const?>(wq[0])
+        let s = addr<uint8 const?>(ws[0])
+        let xqp = addr<int8 const?>(xq[0])
+        let xsp = addr<float const?>(xs[0])
+        var yp = addr(got[0])
+        if (f == KqFmt.iq4nl32) {
+            iq4nl32q8_rm_gemv_gen(yp, q, s, xqp, xsp, null, n, 0l, rows)
+        } elif (f == KqFmt.q4032) {
+            q4032q8_rm_gemv_gen(yp, q, s, xqp, xsp, null, n, 0l, rows)
+        } elif (f == KqFmt.q51) {
+            q51q8_rm_gemv_gen(yp, q, s, xqp, xsp, null, n, 0l, rows)
+        } elif (f == KqFmt.q5032) {
+            q5032q8_rm_gemv_gen(yp, q, s, xqp, xsp, null, n, 0l, rows)
+        } else {
+            mx4q8_rm_gemv_gen(yp, q, s, xqp, xsp, null, n, 0l, rows)
+        }
+    }
+    return <- got
+}
+
+[test]
+def test_host_rm_block32(t : T?) {
+    for (f in [KqFmt.iq4nl32, KqFmt.q4032, KqFmt.q51, KqFmt.q5032, KqFmt.mx4]) {
+        t |> run("the row-major kernel over a {f} expert stack") <| @(ct : T?) {
+            let n = N_B32
+            var m = Model()
+            m.quant = QuantMode.q8
+            put_planar(m, f, ROWS, n)
+            var inscope x <- x_row(n)
+            var inscope want <- planar_rows(m, f, x, n, ROWS)
+            var inscope got <- rm_b32_rows(m, f, x, n, ROWS)
+            let bar = Bar(rel = 1e-4, abs_floor = 1e-5 * logits_maxabs(want), poison_rel = 1e-3)
+            check(ct, "the row-major kernel over the {f} device planes against the planar kernels", got, want, bar, Shape(row_width = int(ROWS)))
+        }
+    }
+}
+
+//! the K-quant row-major kernels over the device planes against the planar kernels, under the Q8_K activation
+def private rm_kq_rows(m : Model; f : KqFmt; x : array<float>; n, rows : int64) : array<float> {
+    var wq, ws : array<uint8>
+    layout_gather_dispatch(m, f, 0l, n, rows, rows, 1l, 32l, 0l, wq, ws, true)
+    var xq : array<int8>
+    var xs : array<float>
+    var xbs : array<int>
+    xq |> resize(n)
+    xs |> resize(n / 256l)
+    xbs |> resize(n / 16l)
+    quantize_q8_k_into(x, n, xq, xs, xbs, 0l, 0l, 0l)
+    var got : array<float>
+    got |> resize(rows)
+    unsafe {
+        let q = addr<uint8 const?>(wq[0])
+        let s = addr<uint8 const?>(ws[0])
+        let xqp = addr<int8 const?>(xq[0])
+        let xsp = addr<float const?>(xs[0])
+        let xbsp = addr<int const?>(xbs[0])
+        var yp = addr(got[0])
+        if (f == KqFmt.k4) {
+            k4q8_rm_gemv_gen(yp, q, s, xqp, xsp, xbsp, n, 0l, rows)
+        } elif (f == KqFmt.k5) {
+            k5q8_rm_gemv_gen(yp, q, s, xqp, xsp, xbsp, n, 0l, rows)
+        } elif (f == KqFmt.k6) {
+            k6q8_rm_gemv_gen(yp, q, s, xqp, xsp, xbsp, n, 0l, rows)
+        } elif (f == KqFmt.k3) {
+            k3q8_rm_gemv_gen(yp, q, s, xqp, xsp, xbsp, n, 0l, rows)
+        } elif (f == KqFmt.k2) {
+            k2q8_rm_gemv_gen(yp, q, s, xqp, xsp, xbsp, n, 0l, rows)
+        } elif (f == KqFmt.q40) {
+            q40q8_rm_gemv_gen(yp, q, s, xqp, xsp, xbsp, n, 0l, rows)
+        } elif (f == KqFmt.iq4nl) {
+            iq4nlq8_rm_gemv_gen(yp, q, s, xqp, xsp, xbsp, n, 0l, rows)
+        } elif (f == KqFmt.iq4xs) {
+            iq4xsq8_rm_gemv_gen(yp, q, s, xqp, xsp, xbsp, n, 0l, rows)
+        } elif (f == KqFmt.iq3s4) {
+            iq3s4q8_rm_gemv_gen(yp, q, s, xqp, xsp, xbsp, n, 0l, rows)
+        } elif (f == KqFmt.iq3s) {
+            iq3sq8_rm_gemv_gen(yp, q, s, xqp, xsp, xbsp, n, 0l, rows)
+        } elif (f == KqFmt.iq3xxs) {
+            iq3xxsq8_rm_gemv_gen(yp, q, s, xqp, xsp, xbsp, n, 0l, rows)
+        } elif (f == KqFmt.iq2s) {
+            iq2sq8_rm_gemv_gen(yp, q, s, xqp, xsp, xbsp, n, 0l, rows)
+        } elif (f == KqFmt.iq2xs) {
+            iq2xsq8_rm_gemv_gen(yp, q, s, xqp, xsp, xbsp, n, 0l, rows)
+        } else {
+            iq2xxsq8_rm_gemv_gen(yp, q, s, xqp, xsp, xbsp, n, 0l, rows)
+        }
+    }
+    return <- got
+}
+
+[test]
+def test_host_rm_superblock(t : T?) {
+    for (f in [KqFmt.k4, KqFmt.k5, KqFmt.k6, KqFmt.k3, KqFmt.k2, KqFmt.q40, KqFmt.iq4nl, KqFmt.iq4xs, KqFmt.iq3s4,
+               KqFmt.iq3s, KqFmt.iq3xxs, KqFmt.iq2s, KqFmt.iq2xs, KqFmt.iq2xxs]) {
+        t |> run("the row-major kernel over a {f} expert stack") <| @(ct : T?) {
+            let n = N_SB
+            var m = Model()
+            m.quant = QuantMode.q8
+            put_planar(m, f, ROWS, n)
+            var inscope x <- x_row(n)
+            var inscope want <- planar_rows(m, f, x, n, ROWS)
+            var inscope got <- rm_kq_rows(m, f, x, n, ROWS)
+            let bar = Bar(rel = 1e-4, abs_floor = 1e-5 * logits_maxabs(want), poison_rel = 1e-3)
+            check(ct, "the row-major kernel over the {f} device planes against the planar kernels", got, want, bar, Shape(row_width = int(ROWS)))
+        }
+    }
+}
+
+//! four activation rows through a format's row-major tile over the device planes, against the planar kernels a row
+def private rm_tile4_rows(m : Model; f : KqFmt; xs4 : array<float>; n, rows : int64) : array<float> {
+    var wq, ws : array<uint8>
+    layout_gather_dispatch(m, f, 0l, n, rows, rows, 1l, 32l, 0l, wq, ws, true)
+    let sb = kq_sb(f)
+    let nsc = sb ? n / 256l : n / 32l
+    var xq : array<int8>
+    var xs : array<float>
+    var xbs : array<int>
+    xq |> resize(4l * n)
+    xs |> resize(4l * nsc)
+    xbs |> resize(4l * (n / 16l))
+    for (t in range64(4l)) {
+        var inscope xr : array<float>
+        xr |> resize(n)
+        for (i in range64(n)) {
+            xr[i] = xs4[t * n + i]
+        }
+        if (sb) {
+            quantize_q8_k_into(xr, n, xq, xs, xbs, t * n, t * nsc, t * (n / 16l))
+        } else {
+            quantize_q8_0_into(xr, n, xq, xs, t * n, t * nsc)
+        }
+    }
+    var got : array<float>
+    got |> resize(4l * rows)
+    unsafe {
+        let q = addr<uint8 const?>(wq[0])
+        let s = addr<uint8 const?>(ws[0])
+        let xqp = addr<int8 const?>(xq[0])
+        let xsp = addr<float const?>(xs[0])
+        let xbsp = addr<int const?>(xbs[0])
+        var yp = addr(got[0])
+        if (f == KqFmt.q8) {
+            q8q8_rm_tile4_gen(yp, addr<int8 const?>(wq[0]), addr<uint16 const?>(ws[0]), xqp, xsp, n, rows)
+        } elif (f == KqFmt.iq4nl32) {
+            iq4nl32q8_rm_tile4_gen(yp, q, s, xqp, xsp, xbsp, n, rows)
+        } elif (f == KqFmt.q51) {
+            q51q8_rm_tile4_gen(yp, q, s, xqp, xsp, xbsp, n, rows)
+        } elif (f == KqFmt.mx4) {
+            mx4q8_rm_tile4_gen(yp, q, s, xqp, xsp, xbsp, n, rows)
+        } elif (f == KqFmt.k4) {
+            k4q8_rm_tile4_gen(yp, q, s, xqp, xsp, xbsp, n, rows)
+        } elif (f == KqFmt.k6) {
+            k6q8_rm_tile4_gen(yp, q, s, xqp, xsp, xbsp, n, rows)
+        } elif (f == KqFmt.k2) {
+            k2q8_rm_tile4_gen(yp, q, s, xqp, xsp, xbsp, n, rows)
+        } elif (f == KqFmt.iq3s) {
+            iq3sq8_rm_tile4_gen(yp, q, s, xqp, xsp, xbsp, n, rows)
+        } elif (f == KqFmt.iq3xxs) {
+            iq3xxsq8_rm_tile4_gen(yp, q, s, xqp, xsp, xbsp, n, rows)
+        } elif (f == KqFmt.iq2s) {
+            iq2sq8_rm_tile4_gen(yp, q, s, xqp, xsp, xbsp, n, rows)
+        } elif (f == KqFmt.iq2xs) {
+            iq2xsq8_rm_tile4_gen(yp, q, s, xqp, xsp, xbsp, n, rows)
+        } elif (f == KqFmt.iq2xxs) {
+            iq2xxsq8_rm_tile4_gen(yp, q, s, xqp, xsp, xbsp, n, rows)
+        } else {
+            iq4xsq8_rm_tile4_gen(yp, q, s, xqp, xsp, xbsp, n, rows)
+        }
+    }
+    return <- got
+}
+
+[test]
+def test_host_rm_tile4(t : T?) {
+    for (f in [KqFmt.q8, KqFmt.iq4nl32, KqFmt.q51, KqFmt.mx4, KqFmt.k4, KqFmt.k6, KqFmt.k2, KqFmt.iq4xs,
+               KqFmt.iq3s, KqFmt.iq3xxs, KqFmt.iq2s, KqFmt.iq2xs, KqFmt.iq2xxs]) {
+        t |> run("the row-major tile over a {f} expert stack") <| @(ct : T?) {
+            let n = kq_sb(f) ? N_SB : N_B32
+            var m = Model()
+            m.quant = QuantMode.q8
+            put_planar(m, f, ROWS, n)
+            var xs4, want : array<float>
+            xs4 |> resize(4l * n)
+            want |> resize(4l * ROWS)
+            for (tk in range64(4l)) {
+                var inscope x <- x_row(n)
+                for (i in range64(n)) {
+                    x[i] *= 1.0 + 0.25 * float(tk)
+                    xs4[tk * n + i] = x[i]
+                }
+                var inscope w <- planar_rows(m, f, x, n, ROWS)
+                for (r in range64(ROWS)) {
+                    want[tk * ROWS + r] = w[r]
+                }
+            }
+            var inscope got <- rm_tile4_rows(m, f, xs4, n, ROWS)
+            let bar = Bar(rel = 1e-4, abs_floor = 1e-5 * logits_maxabs(want), poison_rel = 1e-3)
+            check(ct, "the row-major tile over the {f} device planes against the planar kernels a row", got, want, bar, Shape(row_width = int(ROWS)))
+        }
+    }
+}

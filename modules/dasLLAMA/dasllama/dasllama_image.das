@@ -1298,7 +1298,13 @@ def private vk_mint_sink(p : void?; nbytes : uint64) {
         g_vk_mint_walk_writer.ok = false
     }
     w_append(*g_vk_mint_walk_writer, p, nbytes)
+    if (g_vk_mint_walk_writer.cur >> 32ul != g_vk_mint_census_gb4) {   //! a census every 4 GB of the twin written: what the mint holds while it streams
+        g_vk_mint_census_gb4 = g_vk_mint_walk_writer.cur >> 32ul
+        to_log(LOG_INFO, "dasLLAMA image:   mint census at {g_vk_mint_walk_writer.cur >> 20ul} MB written: das heap {int64(heap_bytes_allocated()) >> 20l} MB, host-visible buffers {moe_gpu_host_bytes() >> 20l} MB\n")
+    }
 }
+
+var private g_vk_mint_census_gb4 = 0ul
 
 def private same_run(a, b : array<int>) : bool
     => length(a) == length(b) && !empty(a) && a[0] == b[0] && a[length(a) - 1] == b[length(b) - 1]
@@ -1398,7 +1404,7 @@ def private vk_mint_trim_decline(var t : Model; jobs : array<FillJob>) : string 
     if (!empty(why)) {
         return why
     }
-    if (!(t.emb_q8 || cls_kq(t))) {
+    if (!(t.emb_q8 || emb_kq(t))) {
         return ""   // an fp32 token table rides fblob, kept: nothing to pack
     }
     let r = trim_emb_region(t)
@@ -1493,8 +1499,10 @@ def private stream_save_prologue(var t : Model; jobs : array<FillJob>; tag : str
     let vk_mint = vk_mint_arm_walk(tag)
     let vk_extra = vk_mint ? vk_mint_extra_bytes(t, jobs) : 0ul
     let planar_extra = vk_mint && t.planes_trimmed ? 0ul : stream_extra_bytes(t, jobs)   // a trimmed lane writes no streamed family
+    let ngram = ngram_stream_source().bytes   //! the n-gram table left on the mapping is sized here, the field being empty
     return StreamSave(devw_bytes = devw_bytes, vk_mint = vk_mint,
-        extra = planar_extra + uint64(devw_bytes) + (devw_bytes > 0l ? uint64(IMAGE_PAGE) : 0ul) + vk_extra)
+        extra = planar_extra + uint64(devw_bytes) + (devw_bytes > 0l ? uint64(IMAGE_PAGE) : 0ul) + vk_extra
+            + (ngram > 0l ? uint64(ngram) + uint64(IMAGE_PAGE) : 0ul))
 }
 
 //! One plane's turn in either streaming sink: the vulkan lane's planes, the dev-W panel plane and a streamed
@@ -1504,6 +1512,14 @@ def private stream_plane_turn(m : GGUFMeta; bytes : array<uint8> | #; var t : Mo
                               var sections : array<ImgSection>; jobs : array<FillJob>; regs : array<StreamReg>;
                               ss : StreamSave; what : string; say_devw : bool) : bool {
     if (ss.vk_mint && vk_mint_plane(m, bytes, t, name, w, sections, jobs, regs)) {
+        return true
+    }
+    if (name == "ngram_tab" && ngram_stream_source().bytes > 0l) {
+        let src = ngram_stream_source()
+        w_stream_section(w, sections, name, "n-gram table", "ngram_tab plane", "the gguf says", what, src.bytes) $ {
+            gguf_stream_tensor_raw(m, bytes, src.ti) $(p : void?; nb : uint64) { w_append(w, p, nb) }
+            return true
+        }
         return true
     }
     if (name == "devwf16" && ss.devw_bytes > 0l) {
@@ -1651,6 +1667,7 @@ def private parse_image(base : void?; msize : uint64; path : string; var t; tag 
         return false
     }
     var by_name <- {for (sec in sections); sec.name => sec}
+    g_parsed_vkblob = by_name?["vkblob"] ?? ImgSection()
     // duplicate names would overwrite table entries and borrow the wrong plane
     if (length(by_name) != length(sections)) {
         to_log(LOG_WARNING, "dasLLAMA image: '{path}' declined - {length(sections)} sections carry duplicate names\n")
@@ -1753,15 +1770,20 @@ def load_image(path : string; var t; tag : string = ""; quant : string = "q8") :
         }
     }
     if (parse_image(base, msize, path, t, tag, quant)) {
+        vk_image_source_set(path, int64(g_parsed_vkblob.off), int64(g_parsed_vkblob.bytes))
         return true
     }
     unsafe(fmap_close(base, msize))
     return false
 }
 
+//! the vkblob section the last parse found, for the file source a mapped load names (empty where the image carries none)
+var private g_parsed_vkblob : ImgSection
+
 // on a decline the chunk is freed; on success the carrier's finalizer releases it like a mapping
 def private adopt_image(base : void?; msize : uint64; src : string; var t; tag : string; quant : string) : bool {
     if (parse_image(base, msize, src, t, tag, quant)) {
+        vk_image_source_clear()   //! a chunk has no file to read from
         return true
     }
     image_chunk_free(base)
@@ -1784,11 +1806,15 @@ def private chunk_rail(var t; var out; save_to : string; extra : uint64; tag : s
         panic("dasLLAMA: the image build failed after it began consuming the model - see the error above")
     }
     to_log(LOG_INFO, "dasLLAMA image: built in memory in {get_time_usec(ts) / 1000} ms ({int64(w.cur) >> 20l} MB)\n")
-    if (save_to != "" && !write_chunk(w.chunk_base, w.cur, save_to)) {
+    let written = save_to != "" && write_chunk(w.chunk_base, w.cur, save_to)
+    if (save_to != "" && !written) {
         to_log(LOG_WARNING, "dasLLAMA image: could not write '{save_to}' - this run still serves the image it built\n")
     }
     if (!adopt_image(w.chunk_base, w.cur, save_to != "" ? save_to : "<in-memory image>", out, tag, quant)) {
         panic("dasLLAMA: the image this process just built would not parse back - see the decline above")
+    }
+    if (written && g_parsed_vkblob.bytes > 0ul) {   //! the lane just written lays out as the chunk does: the expert cache reads its misses off it at once
+        vk_image_source_set(save_to, int64(g_parsed_vkblob.off), int64(g_parsed_vkblob.bytes))
     }
     return true
 }

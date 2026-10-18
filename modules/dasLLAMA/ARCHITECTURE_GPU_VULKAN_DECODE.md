@@ -1,10 +1,11 @@
 # dasLLAMA Architecture - the Vulkan per-op tier's decode era
 
 Companion to `ARCHITECTURE_GPU_VULKAN.md`; a section is cited by its anchor. This
-document carries the decode attention block over per-layer K/V mirrors, the streamed expert
-layer's GPU/CPU split, the whole-token decode span, the deltanet decode step's per-session
-resident state, and the whole-model driver's hybrid token command. The prefill window chain
-and byte stores these build on are in `ARCHITECTURE_GPU_VULKAN.md`; the routed block an MoE
+document carries the decode attention block over per-layer K/V mirrors, the whole-token decode
+span, the deltanet decode step's per-session resident state, and the whole-model driver's hybrid
+token command. The prefill window chain and byte stores these build on are in
+`ARCHITECTURE_GPU_VULKAN.md`; a streamed expert layer's prefill - its GPU/CPU split and the
+per-expert chain - is in `ARCHITECTURE_GPU_VULKAN_STREAM.md`; the routed block an MoE
 layer takes in either era - the prefill window's and the token command's - is in
 `ARCHITECTURE_GPU_VULKAN_MOE.md`; the cm2 tiles, the MoE expert chain on them, the KHR arm's kq
 tile and the decode GEMV family's lane split are in `ARCHITECTURE_GPU_VULKAN_GEMM.md`; the
@@ -77,33 +78,6 @@ the residual row comes back with that attention's readback. The host arms the ta
 attention time with a forward look (`attn_dec_gpu_next_serves`): only when the next layer would
 serve with no remedy, so a hydrate or a claim is never pre-empted; a streamed layer's FFN (CPU)
 and the last layer keep the plain form, whose host reduce the combine kernel mirrors in order.
-
-### A streamed expert layer's prefill is split between the GPU and the CPU {#streamed-layer-split}
-
-**The GPU takes the head of the routed-expert list, the CPU the tail, concurrently.** A layer
-whose expert stacks live on the host (the streamed layers of a model past the weight budget) used
-to stream every expert's planes in whole and idle the CPU; the plain streamed rail still does that
-when `DASLLAMA_GPU_MOE_SPLIT` is off. On, the router's per-expert bucket counts are walked in
-LPT order (largest bucket first) and the GPU claims experts while its predicted time - the
-claimed experts' plane bytes over the bus rate plus its bucket rows times the cm2 chain's row
-cost - stays under the CPU's predicted time for the rows left (its kq groupn row cost). The
-three constants (`SPLIT_BUS_BPS`, `SPLIT_GPU_ROW_S`, `SPLIT_CPU_ROW_S` in `dasllama_blocks.das`)
-sit at 13.5 GB/s, 1.2 us and 10 us - the reference box's measurements (zen2 16 lanes, 5060 Ti on
-PCIe gen4 x8; `benchmarks/lcpp_bench.das -t 16` pp512 under `DASLLAMA_GPU_PROF=1`: the bus moves a
-streamed expert's bytes at ~11 GB/s, the cm2 chain costs ~1.6 us per bucket row, the CPU kq
-groupn chain ~10 us per bucket row), tuned to where the split balanced best. A head that would
-cover every expert falls back to the plain rail - streaming the whole layer beats splitting it
-against an idle CPU.
-
-**The GPU head streams only its experts' regions** (`copy_stream_group_partial` copies the
-claimed experts' plane ranges into the stream slot at their expert offsets), records the cm2
-chain asynchronously (`vk_moe_ffn_batch_xf_begin`) and joins after the CPU tail
-(`..._join`); the CPU requantizes, gathers, and runs the tail's gate/up/down for its experts
-alone, and the two partial outputs reduce into one combine. Where the split CAN engage - the knob
-on, a cm2 device - the tier keeps ONE stream slot instead of two (`stream_slot_count`): the
-partial copy is on demand per layer and never prefetches the next group, so the second slot
-would only hold VRAM the resident stacks want. A device the split cannot serve keeps both slots
-and the whole-group rail's overlap - compute on one while the transfer queue fills the other.
 
 ### The whole-token decode span {#whole-token-decode-span}
 

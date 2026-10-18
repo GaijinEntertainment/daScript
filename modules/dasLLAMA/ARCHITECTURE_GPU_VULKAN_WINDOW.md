@@ -16,7 +16,10 @@ cold constants (conv taps, out-norm weights, the `a` and `dt` rows), the beta an
 parity ring pair per region (`ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command`). A call enters on the image the region's
 parity word names (`pf_dn_begin`; a prompt from position zero resets the word and zero-fills the slot's state and that image,
 `pf_dn_zero_region`): its first window reads that image per-channel (`DnConvArgs.hist_mode` 1), the later windows and the tail
-use the other, which the word names after the call (`pf_dn_end`) - the parity the owner handoff hands the session. The weight planes stay in their file
+use the other, which the word names after the call (`pf_dn_end`) - the parity the owner handoff hands the session. A window is
+one deltanet chunk: `pf_window_len` cuts a recurrent model's window at `DN_WINDOW` rows, since the smalls' beta and g rows and the
+scan workspace hold that many and a longer window copied its rows past them into the next plane (`dn_window_parts_enc` asserts
+every part inside it); a prompt window asked past it runs as windows of that length. The weight planes stay in their file
 formats where the loader tags them natively (`ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command`
 carries the tagging condition), so a Q5_K/Q6_K file rides the k5/k6 tiles.
 

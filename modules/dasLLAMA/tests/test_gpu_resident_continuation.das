@@ -1,19 +1,19 @@
 options gen2
-options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
-options persistent_heap   // + explicit deletes below: the model and sessions free before exit
+options stack = 524288
+options persistent_heap
 options _dasllama_internal = true
 
 require dastest/testing_boost public
-require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration (qwen35, qwen4exp)
-require dasllama/dasllama   // create_session, moe_gpu_drop_model
+require dasllama/dasllama_transformer
+require dasllama/dasllama
 require daslib/jobque_boost
 require daslib/fio
-require dasllama/dasllama_math   // with_dasllama_jobque_ (the engine-standard jobque config)
-require dasllama/dasllama_gpu_tier   // moe_gpu_tier_installed: is the tier armed
-require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active, moe_gpu_resident_prefills: the whole-model driver's counters
-require dasllama/dasllama_env   // g_env_vulkan.vk_kv32: the f32 mirror passes the f16 sessions as codec
-require _model_tier   // models_dir() + model_available() presence/size-tier gate
-require _resident_feed   // resident_prompt, row_bar, row_within, control_past, served_every_call
+require dasllama/dasllama_math
+require dasllama/dasllama_gpu_tier
+require dasllama/dasllama_gpu_resident
+require dasllama/dasllama_env
+require _model_tier
+require _resident_feed
 
 // A prompt continued on the whole-model driver: its second half as a continuation window from the first half's position, and the
 // same second half from a checkpoint a fresh session adopts after the first session stepped past it (the recurrent state and, on a
@@ -21,10 +21,7 @@ require _resident_feed   // resident_prompt, row_bar, row_within, control_past, 
 // against the whole prompt through one window, the prompt one token short as the control. The hybrid carrier (deltanet and
 // attention, no routed experts) reads the window chain's continuation alone; the hyper-connection carrier adds the side input.
 
-//! the continuation's bar: the same device chain over the same rows, the window cut at a different place (the attention tiles and
-//! the deltanet chunks fall apart); the one-token-off control gives it teeth. A routed carrier reads every compare at the wide bar:
-//! the pool's fill and the meet's split change run to run, the two sums differ by rounding, and a near-tie expert flips on that
-//! alone (the same continuation run twice sits 20% from itself on Qwen3.8-Flash-Next, its CPU chain's continuation 20% from its whole)
+//! the continuation's bar: the same device chain cut at a different place, the one-token-off control its teeth; a routed carrier reads every compare at the wide bar - the pool's fill and the meet's split change run to run, and a near-tie expert flips on the rounding
 let private CONT_BAR_REL = 0.05
 let private ROUTED_WIDE_BAR_REL = 0.5
 let private HALF = 48l   //! past the hot pool's 32-row window floor on a routed carrier

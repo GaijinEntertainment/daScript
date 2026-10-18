@@ -108,9 +108,10 @@ must keep holding:
   `test_vkd_iq3s4_cm2_batch`, `test_vkd_mx4_gemv_gu`, `test_vkd_gemv_ncol`, `test_vkd_q8_gemv_gu_n`,
   `test_vkd_q8_gemv_pleact`, `test_vkd_act_family`, `test_vkd_moe_routing`, `test_vkd_dn_family`, `test_vkd_hc_seams`,
   `test_vkd_hc_rows`, `test_vkd_ple_side`, `test_vkd_f16_gemm_khr`, `test_vkd_fa_cm2`, `test_vkd_fa_khr`,
-  `test_vkd_fa_khr_h256_softcap`, `test_vkd_da_attn`, `test_vkd_da_attn_rqk` and `test_vkd_da_attn_bw` cells - the
-  census's evidence for the classes no zoo row dispatches - must hold each class against its CPU oracle at the bar the
-  cell sets, with the cell's poisoned-element control.
+  `test_vkd_fa_khr_h256_softcap`, `test_vkd_da_attn`, `test_vkd_da_attn_rqk`, `test_vkd_da_attn_bw`,
+  `test_vkd_moe_gather_row` and `test_vkd_combine_row` cells - the census's evidence for the classes no zoo row
+  dispatches - must hold each class against its CPU oracle at the bar the cell sets, with the cell's poisoned-element
+  control.
 - `test_vulkan_tower_kernels.das`'s `test_vkt_fa_bidir`, `test_vkt_tower_rows`, `test_vkt_tower_ln_rows`,
   `test_vkt_tower_f16_feeds`, `test_vkt_tower_vision_rows`, `test_vkt_tower_win_rows`, `test_vkt_tower_tail_rows`,
   `test_vkt_tower_front_movers`, `test_vkt_tower_front_mel`, `test_vkt_tower_cn_attn_rel_plane`,

@@ -6,11 +6,19 @@ cited by its anchor.
 ### The vulkan lane is minted off the gguf by its own walk {#image-vulkan-mint}
 
 A vulkan-armed cold load mints the vulkan lane and no other: the streaming save (`save_model_image_streaming`, its
-in-memory twin under `DASLLAMA_IMAGE_SAVE=0`) runs the GPU walk at the first plane's turn, live, and every entry the walk
-places is gathered off the gguf mapping, uploaded to the device and streamed to the writer as the plan records it
-(`vulkan_mint_begin`, the sink's `VK_ENTRY_ALIGN` import windows), so on the file sink the device twin never sits whole in
-RAM and no planar file precedes it; the in-memory sink holds the twin inside the chunk it serves from, as it holds every
-plane. An entry's source is the run of streamed jobs that together hold its elements - one job, or the adjacent jobs a MoE
+in-memory twin under `DASLLAMA_IMAGE_SAVE=0`) runs the GPU walk at the first plane's turn, dry, and every entry the walk
+places is gathered off the gguf mapping and streamed to the writer as the plan records it (`vulkan_mint_begin`, the
+sink's `VK_ENTRY_ALIGN` import windows), so on the file sink the device twin never sits whole in RAM and no planar file
+precedes it; the in-memory sink holds the twin inside the chunk it serves from, as it holds every plane. The walk under
+the mint collects alone: `vulkan_mint_begin` sets the live tier's `dry` flag for the walk's span (`moe_gpu_mint_dry`),
+so every device-side site - the pinned stream stacks, the device buffers, the uploads - skips as the offline bake's walk
+does, since the lane the walk mints is mapped and armed right after and a device armed off the build would only be
+dropped; the pinned stacks a live walk would build are the model's streamed experts whole, which is what a 64 GB box has
+no room for beside the lane. A model's PLE n-gram table (`ngram_tab`, the largest raw plane a model carries) rides the
+same rail: the streamed load leaves it on the mapping (`ngram_stream_source`) and its plane's turn writes it straight off
+the gguf (`gguf_stream_tensor_raw`), sized into the save's reserve, so the table never has a copy in RAM either.
+`utils/dasllama-convert --stream -f vulkan` is this rail under the dry bake arm, not a rail of its own
+(`REVIEW_MEMORY.md`). An entry's source is the run of streamed jobs that together hold its elements - one job, or the adjacent jobs a MoE
 stack takes when the loader records it one expert at a time (`stream_job_span`) - transcoded into a view of the model's
 planes whose offset 0 is the run's first `woff` (`stream_job_view`: the scale halves as the gathers read them, every job's
 repack regions applied, the frozen K-quant interleave copied), and the arena placement's own gather runs over that view
@@ -27,8 +35,8 @@ where the lane is trimmed, and a window for the plan; the file sink truncates th
 bound is the chunk rail's panic, never a truncated image - the sink stops the walk at the first entry past it. The plan
 lands in `t.vkplan` for its own turn, which follows `vkblob` in field order. An armed tier that places nothing writes no
 twin: the lane carries the planar families alone, as a CPU-mode load's lane does. A CPU-mode load of the same file mints
-the CPU lane on its own first load: each lane is its mode's (`#image-lane-name`). The mapped lane re-arms the device
-through the slice walk, since the mint's walk armed it off the streamed struct the map replaces.
+the CPU lane on its own first load: each lane is its mode's (`#image-lane-name`). The mapped lane arms the device
+through the slice walk; the mint's dry walk armed nothing off the streamed struct the map replaces.
 
 **The walk declines rather than fail the load.** A trimmed mint the walk cannot honour - the whole-model driver did not
 arm, a plan role outside the arena, an emb region no run of jobs holds or that would not pack - abandons the save with its
@@ -37,7 +45,7 @@ since the walk runs before any plane is consumed; nothing is written, and the ne
 state - the walk's pointers into the save and the driver-side mint arm - is reset by every bake entry point, so a panic
 mid-walk leaves nothing armed for the next load.
 
-**The trim lever** (`DASLLAMA_TRIM`, `set_vulkan_trim`, `restore_vulkan_trim` for a fixture) mints the TRIMMED lane, where
+**The trim lever** (`DASLLAMA_TRIM`, on by default; `set_vulkan_trim`, `restore_vulkan_trim` for a fixture) mints the TRIMMED lane, where
 `planes_trimmed` is answered by `resident_would_serve` before the walk (the meta serializes first): a dense q8 model with
 no per-layer embedding that passes the gate chain `resident_upload` declines by (`resident_decline_reason`: the seams, a
 prefill pinned or overridden away from the driver, the features, every layer's shape and plane forms), whose NextN head,
@@ -57,10 +65,17 @@ lane the driver would decline under this run's knobs is caught before its upload
 decline that is the run's (`resident_trim_decline_is_run_mode`) keeps the lane on disk and serves the streamed build
 planar from memory, while a decline of the model's shape deletes the lane and mints it again - or, where the caller named
 the `.dlim` itself and no gguf stands behind it,
-panics by name with the decline and the knobs the identity leaves out (`load_model_image`, `trim_lane_run_knobs`). A MoE lane never trims, so its planar expert
-planes are always written; a lane baked under one host-layers count and mapped under another leaves the baked plan at
+panics by name with the decline and the knobs the identity leaves out (`load_model_image`, `trim_lane_run_knobs`). A MoE lane trims
+like a dense one: every expert stack the device holds (`VkBakeRole.expert`) or streams (`VkBakeRole.expert_stream`) has its
+twin in `vkblob`, and the host reads a streamed stack off its pinned mirror - the decode picks, the window sums and the
+hot-pool fills (`ARCHITECTURE_GPU_VULKAN_STREAM.md#streamed-layer-arena`) - so the trim's admission (`trim_plan_decline`)
+takes a plan of arena and expert roles with every host layer's stream mirror made, and declines by name a model whose
+host still reads the planar planes: one with per-layer embeddings, biased expert stacks or the gemma-4 MoE form
+(`resident_trim_decline`), and, as this run's knobs, the stream arm or the rare rail's arena or one-pass form off
+(`TRIM_STREAM_DECLINE`, `TRIM_RAIL_DECLINE`: run-mode, so no lane is written). On the mapped trimmed lane a planar read of
+an expert stack - the rail or the mirror declined after all - is a panic by name (`trim_planar_guard`), as a live gather
+is. A lane baked under one host-layers count and mapped under another leaves the baked plan at
 the first routed layer the counts disagree on, and the walk regathers its expert entries live off those planes from
-there, the load warning (`vk_bake_slice_off`). A streamed MoE's expert planes stay planar
-(`VkBakeRole.expert_stream`: decode runs them on the CPU); the eager rail (a gguf that would not open for streaming, a
+there, the load warning (`vk_bake_slice_off`) - on an untrimmed lane; a trimmed one panics there. The eager rail (a gguf that would not open for streaming, a
 chunk that would not allocate) and a planar image already mapped bake the lane from RAM or the mapping with the families
 kept, the eager rail writing the CPU lane beside it and serving that.

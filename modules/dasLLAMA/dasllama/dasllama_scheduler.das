@@ -1239,7 +1239,7 @@ def private parked_best(sch : Scheduler; prompt : array<int64>) : tuple<at : int
 def private parked_adopt(var sch : Scheduler; var session : Session; at : int; n : int64) : int64 {
     return 0l if (at < 0)
     let adopted = gpu_device_kv_adopt(session, sch.parked[at].claim, n)
-    if (adopted && !empty(session.ple_prev)) {   //! the n-gram pre-step's window: the ids before `n`, which the region cannot hold
+    if (adopted && !empty(session.ple_prev)) {
         ple_window_seed(session.ple_prev, sch.parked[at].tokens, n)
     }
     drop_parked(sch, at)
@@ -1296,7 +1296,7 @@ def private pool_keep(m : Model; var sch : Scheduler; claim : int64; tokens : ar
         delete snap
         return
     }
-    if (recurrent && !empty(sch.pool_host.ple_prev)) {   //! a device checkpoint's snapshot carries no ids: the n-gram pre-step's window comes from the tokens
+    if (recurrent && !empty(sch.pool_host.ple_prev)) {
         snap.ple_prev |> resize(long_length(sch.pool_host.ple_prev))
         ple_window_seed(snap.ple_prev, tokens, n)
     }

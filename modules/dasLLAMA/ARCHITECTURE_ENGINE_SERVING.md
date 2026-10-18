@@ -146,7 +146,11 @@ A workload that keeps more openings alive than that (a shared system prompt per 
 a minute) loses them on the card and keeps them on the host, so the card's cache is the smaller one exactly when the card is
 the faster tier. The pool closes that: a paged scheduler in device mode keeps the same `PrefixCache` over its `KVPool` that
 its host-cached streams use, and a device-home stream's openings enter it as copies. Live streams stay device-home - nothing
-crosses the bus per token; the pool holds the parked and the evicted state.
+crosses the bus per token; the pool holds the parked and the evicted state. A hyper-connection model's streams are admitted
+like any other's: its n-gram conv ring rides the region's checkpoint rows and the snapshots peeked off them
+(`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`, the device-home checkpoints), and the pre-step's id window, which no device row holds,
+is seeded from the tokens the scheduler keeps (`ple_window_seed`) at adoption (`parked_adopt`) and when a snapshot is filed
+(`pool_keep`).
 
 - **Down.** A copy is made when the card is about to lose the state, not before: nothing crosses the bus before a stream's
   first token, and a conversation that goes on in its own region copies nothing. Each checkpoint stop the region keeps

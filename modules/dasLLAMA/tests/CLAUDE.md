@@ -502,7 +502,11 @@ cold load mints the vulkan lane and no planar lane; the trimmed lane, loaded col
 same `MINT_STEPS` greedy tokens as the untrimmed lane and reads the same CPU embed row bit for
 bit; mapped back warm, it generates the same tokens again. Each generation's token count is
 asserted, both streams are decoded in the log, and the whole-model driver is asserted on both
-trimmed loads. `test_vulkan_mint_kv_codecs` holds the lane to the K/V mirror's codecs: the trimmed
+trimmed loads. `test_vulkan_mint_moe_streamed` (family `qwen2moe`, large tier) is the MoE lane: Qwen1.5-MoE Q4_K_M with
+twenty routed layers asked onto the host and the prompt stream pinned on, the untrimmed lane's tokens against the trimmed
+lane's cold and warm, the trimmed lane without its planar families and the smaller file, both lanes' host picks read off
+the streamed layers' mirrors through the rare rail (`g_rare_dec_rows` up over each generation), the pins put back.
+`test_vulkan_mint_kv_codecs` holds the lane to the K/V mirror's codecs: the trimmed
 lane minted cold under a q8_0 mirror (`set_gpu_kv_dtype`, put back) maps under tq4 and under f16
 with no re-mint (the file's size and time as the mint left them - the lane's identity does not
 fold the codec), each load armed at the asked codec, and at each codec the lane's greedy tokens
@@ -722,7 +726,10 @@ omission a compile refusal (`test_lens_tgmem_gate` above).
 The split between the `model-free` and `stocked` suites: a file that reaches a machine-local
 fixture root (`models_dir()`, `model_available()`, `llama2c_dir()`, `whisper_dir()`) is `stocked`,
 every other suite-less file is `model-free`, and `test_run_suites.das` reads the files and fails a
-misfiled one (the pinned gate `REVIEW.md` names for the split). A `stocked` cell skips honestly
+misfiled one (the pinned gate `REVIEW.md` names for the split). A `stocked` file declares `options
+persistent_heap`, and the same gate fails one that does not: dastest compiles a test program on the
+linear heap unless the program says otherwise, and there a `delete` frees nothing until collection - a
+cell's deleted carrier stays, and three carriers in one process held a 256 GB box. A `stocked` cell skips honestly
 when its file is absent, so on a bare box (CI) the suite is a run of skips; on a stocked box a PR
 owes the stocked files of the areas its change reaches (`--changed`), never the whole suite for
 its own sake - `test_ple_modes` alone is ~10 min, the suite hours. The runner sets
@@ -1027,10 +1034,20 @@ GEMM feed (`DASLLAMA_COOPMAT=sdot4`) every front declines `device` by design whi
 serve, so each twin's front witness follows the route (`front_served` in `_tower_twin.das` over
 `vulkan_tower_front_route`): on the feed the front's counter rose by every dispatch, off it the
 counter stayed and the `device` decline was recorded.
+`test_vulkan_host_twin.das` - model-free, device-free (a build with no Vulkan module skips): the one-copy rare rail's
+kernels and their oracle on every expert format the tier streams, against the planar kernels over a planar disk-order
+stack on a Model shell gathered into the device layout by the engine's own gather (`layout_gather_dispatch` under `disk`),
+the poisoned expectation the control: the host twin (the tier's own block decode run on the CPU, `moe_gpu_host_twin` /
+`moe_gpu_host_rows`) on the fourteen superblock formats, the four per-32 ones, mx4 and q8; the row-major GEMVs
+(`<fmt>q8_rm_gemv_gen`: q8, the per-32 and MXFP4 planes, the fourteen superblock formats) and their four-token
+tiles (`<fmt>q8_rm_tile4_gen`, four activation rows against the planar rows a token). A new expert format lands its cells
+here (`HOW_TO_ADD_A_FORMAT.md`, the Vulkan section's one-copy step).
 `test_vulkan_moe_cm2.das` - model-free (a cm2 device, else skips): the cm2 expert chain over a
-device-side f16 gather, the streamed-group slot hand-off, the streamed split's async head, and
-the shared expert's call shape - one region over every position, the identity slot map at unit
-weight.
+device-side f16 gather, the streamed-group slot hand-off, the streamed split's head on the
+per-expert chain (one expert, and two experts through the ring - each its own copy and submit;
+the head's routing puts one slot a region, since the by-row combine adds a region's rows onto
+their positions at once), and the shared expert's call shape - one region over every position,
+the identity slot map at unit weight.
 `test_vulkan_kernels.das` - model-free (a Vulkan device, else skips; the two lens cells,
 `test_vkd_readonly_stamp` and `test_vkd_lens_readonly_gate`, and the flash ladders' refusal cell
 `test_vkd_fa_stamp_refusals` need only the dasVulkan module): the
@@ -1076,7 +1093,16 @@ grid, with the gate's move and a poisoned element as its controls;
 over slot rows 1 .. k - to the host's row plus the hit rows under their weights, at a width past one
 workgroup's threads: the rows of the zero-weight slots are NaN and every output is finite (a product
 would carry the NaN), a poisoned element reds the bar, and the same dispatch with the window at 0
-loses the host's row;
+loses the host's row; `test_vkd_moe_gather_row` holds the per-expert chain's by-row gather
+(`moe_gather_f16_row_cls`) over a nine-row window of 21 bucket rows at widths of 100, 256 and 300 (under
+one stride of the 256 threads, whole strides, a tail) to each window row's position row rounded to half,
+chunk-local, within 1e-3 of the largest magnitude with a poisoned element, the two slack rows past the
+window keeping their NaN-half sentinel and the oracle over the window at 0 missing; `test_vkd_combine_row`
+holds its by-row combine (`combine_row_cls`) over a six-row window - one row a position at alternating
+slots, a seventh position no row reaches - at a width of 300, the packed weights and the strided layout
+(`wstride` 2k, `woff` k, the pick slots poisoned), to the accumulated rows plus each row's weighted down
+row within 1e-5 of the largest magnitude with a poisoned element, position 0's row moved off its input,
+and the oracle over the window at 0 missing;
 `test_vkd_ext_roster` asserts, for every entry of the device-init roster (`vk_ext_roster`: every
 Vulkan capability the tier keys a route on, what rides on it), that the entry's presence reads the
 same as the arming field it decides, so the roster's log line and the tier's route cannot
@@ -2439,6 +2465,27 @@ against bars of 2.1-2.3, the f16 mirror's own reading), under tq4 the codec rig'
 (`moe_codec_distance` over `codec_distance_over`) - the device's summed distance from the f16
 chain within 1.15 of the CPU tq4 chain's own (reads 1.06, the control 5.0) and the two tq4 chains
 within 1.4 of that distance of each other (reads 1.11, the control 5.0).
+`test_gpu_resident_moe_host_rows.das` - stocked suite, `-jit` only, `DASLLAMA_GPU=1`, large tier; the host-layers form's K/V
+mirror on Qwen3-30B-A3B Q4_K_M at 32768 positions asked whole (the first routed layers' experts on the host, the window chain cut
+at them): layer 0's stored rows after a 40-token prompt and the fed steps against the CPU cache's through the codec rig's
+stored-rows cell - whether the cut window chain and the split token command write the mirror the decode reads.
+`test_gpu_resident_moe_formats.das` - stocked suite, `-jit` only, `DASLLAMA_GPU=1`; the host twin's model-level matrix on
+the smallest MoE: Qwen1.5-MoE-A2.7B-Chat's routed experts requantized to one format a file (`moe-formats/<file>-exps-<TYPE>.gguf`
+under the models dir, a junction to another drive on the reference box; the rest Q8_0; the down stacks' 1408-wide rows take the
+type's per-32 fallback where a superblock type is asked - Q4_K's down is Q5_0), four routed layers' experts pinned to the host
+under the streamed prompt (`set_gpu_want_pf_stream`), the rare rail reading them off the tier's pinned device-layout planes through
+the host twin (`set_rare_arena`): the host-pinned file's two cells a format - the split token command and the cut window chain
+against the CPU chain, one window and two, one `[test]` a format (dastest's `--test-names test_moe_formats_<TYPE>` runs one),
+the meet's host share forced through `set_moe_meet_host_first` and witnessed by its counter, since a small carrier's device
+ring would otherwise take every expert, and the fed steps' host picks witnessed off the device planes too (`g_rare_dec_rows`:
+the one-row rail); `test_moe_formats_hot_pool` puts twenty of the Q4_K file's layers on the host, so the plan's room arms the
+unasked pool, and holds the pool's slots filled off the layers' pinned mirrors (`g_rare_slot_copies`) with its uploads counted.
+Run under `DASLLAMA_IMAGE=0` - a dozen carriers would mint a dozen images beside them,
+and the planes in RAM reach the same twin. A file not minted skips; the mint recipe is `llama-quantize --allow-requantize
+--tensor-type ffn_gate_exps=<TYPE> --tensor-type ffn_up_exps=<TYPE> --tensor-type ffn_down_exps=<TYPE> <Q8_0> <out> Q8_0`. The
+IQ2 types and IQ3_XXS need an importance matrix: `llama-imatrix -m <Q8_0> -f <a text> -o <file>.imatrix -ngl 99 -c 512 --chunks 64`
+(a prebuilt llama.cpp release's, where the box's build lacks the tool; under a minute on the card), then the same recipe with
+`--imatrix <file>`.
 `test_gpu_resident_gptoss.das` - stocked suite, `-jit` only; the same rig on gpt-oss-20b (the pinned
 upstream `gpt-oss-20b-mxfp4.gguf`, large-tier): the native-MXFP4 routed stacks on the mx4 expert
 rail, the biased router's softmax over its four picks, the gate / up / down bias rows at the act and

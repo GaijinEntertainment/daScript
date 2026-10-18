@@ -30,7 +30,7 @@ asymmetries a stamp family ledgers - stays in `ARCHITECTURE_GPU.md#gpu-backends`
   staged KHR tile reads the file's f32 rows, rounds each weight to f16 on its stage, feeds f16 rows and accumulates in
   f16, because the f32 scalar tile is the only f32-exact form the Vulkan tier has and runs at a twenty-fifth of its rate; Metal
   serves the same planes on its f32-exact tile, and has no form to pick between.
-- **The hot expert pool is Vulkan-only** (`ARCHITECTURE_GPU_VULKAN_HC.md#hc-hot-pool`, the tier's four hot
+- **The hot expert pool is Vulkan-only** (`ARCHITECTURE_GPU_VULKAN_POOL.md#hc-hot-pool`, the tier's four hot
   seats, `DASLLAMA_GPU_HEAT`): where routed experts live on the host the Vulkan driver keeps the hottest in
   per-layer device slots; Metal has every expert resident, so nothing is hot or cold.
 - **A plain MoE's host-layer form is Vulkan-only** (`ARCHITECTURE_GPU_VULKAN_HC.md#hc-token-command`,
@@ -39,7 +39,7 @@ asymmetries a stamp family ledgers - stays in `ARCHITECTURE_GPU.md#gpu-backends`
   the token command and the window cut at those layers; Metal holds the model whole from unified memory and
   cuts nothing.
 - **The host-layers ask is read by the Vulkan plan alone** (`set_gpu_host_layers`,
-  `DASLLAMA_GPU_HOST_LAYERS`, `ARCHITECTURE_GPU_VULKAN_HC.md#hc-hot-pool`): it names how many routed
+  `DASLLAMA_GPU_HOST_LAYERS`, `ARCHITECTURE_GPU_VULKAN_POOL.md#hc-hot-pool`): it names how many routed
   layers' experts the Vulkan plan moves to the host whatever the card holds; Metal moves no expert off the
   device, so the ask has nothing to move.
 - **The strict context pin is read by the Vulkan plan alone** (`set_gpu_ctx_strict`,

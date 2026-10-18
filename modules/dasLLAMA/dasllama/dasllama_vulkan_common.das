@@ -22,6 +22,7 @@ require math
 require strings
 require daslib/strings_boost
 require daslib/fio
+require daslib/jobque_boost
 require daslib/enum_trait
 require daslib/algorithm
 
@@ -65,6 +66,9 @@ let BATCH_XQ_BYTES = 33_554_432l   // device-local gathered-activation scratch (
 let BATCH_XS_BYTES = 8_388_608l    // ... its scale plane
 let BATCH_Y_BYTES = 67_108_864l    // one output plane (two exist: gate/single + up)
 let BATCH_META_BYTES = 262_144l    // per-stack batch params + regions + workgroup map
+let XF_RING = 16                   //! the expert chain's ring depth: commands and meta entries in flight before a re-record waits
+let XF_BUNDLE = 32l                //! the experts one command of the chain takes at most (its rows under the chunk cap besides)
+let XF_AHEAD = 2l                  //! the meet's bundles the device holds unfinished before the host stops offering it more
 let BATCH_TILE = 32l               // kernel tile edge (rows and cols)
 
 //! The prefill GEMM's cooperative-matrix mode (GpuState.coopmat_mode): the sdot4 batch tile, the f16 or
@@ -386,6 +390,8 @@ struct VkStack {
     batch_xbit : uint
     batch_ybit : uint
     batch_map_off : int64
+    batch_meta_ring : int = 1   //! the meta staging's entries: one, or XF_RING on a stream slot's pseudo-stacks, whose fills run ahead of their copies
+    batch_meta_at : int         //! the entry the next fill writes and the next copy reads
     batch_cls_sets : VkDescriptorSet[10]   // q8 router variants 0..4, q40 f16 5, kq 6, cm2 s/m/l 7/8/9
     batch_cls_ready : uint
     // decode class-GEMV set over the stack's own planes/meta/scratch (lazy; role bits are
@@ -407,10 +413,18 @@ struct StreamStack {
     base : int64
     elems : int64
     fmt : int
-    wqbytes : int64
+    wqbytes : int64          //! the whole stack's plane bytes, every expert's
     wsbytes : int64
-    hwq : HostBuf            // pinned mirror, quant plane (transfer_src)
-    hws : HostBuf            // ... scale plane
+    hwq : HostBuf            //! the pinned planes (transfer_src): every expert's, or `slots` experts' of a partial stack
+    hws : HostBuf
+    nexp : int64             //! the experts the stack holds, `qlen` / `slen` plane bytes each
+    qlen : int64
+    slen : int64
+    slots : int64            //! a partial stack's resident slots (nexp where the stack is whole), `slot_of[e]` the expert's: a resident slot,
+    slot_of : array<int>     //! `STREAM_RING_BASE` + a ring slot, or -1 absent
+    expert_of : array<int>   //! the resident slots' experts
+    qoff : int64 = -1l       //! the stack's planes in the lane file (the slice walk's source, captured at the load: the walk's table is gone by the windows)
+    soff : int64 = -1l
 }
 
 // one streaming slot: 3 pseudo-stacks (entries in g_gpu.stacks whose plane buffers are the
@@ -694,14 +708,40 @@ struct GpuState {
     comb_y_dev : uint64      // accumulated npos x n output (the combine kernel's cross-chunk accumulator)
     comb_y : HostBuf         // host-cached readback staging
     comb_set : VkDescriptorSet
+    comb_bkt_dev : uint64    //! bucket row -> grid entry, the slot map's inverse (the per-expert chain's gather and combine)
+    comb_row_set : VkDescriptorSet   //! the by-row combine over the accumulator, the weights, the down rows and that map
     comb_ready : bool
     // cm2 expert-chain state (lazy — first f16-fed combined prefill dispatch creates it)
     batch_xf_dev : uint64    // the window's f32 activation rows, one per position (the gather's source)
     batch_gather_set : VkDescriptorSet   // gather: x rows + the combine's slot map -> the f16 bucket image
+    batch_gather_row_set : VkDescriptorSet   //! the by-row gather: x rows + the map's inverse -> the f16 bucket image of one expert's rows
     batch_actf16_set : VkDescriptorSet   // act straight to the f16 hidden plane (y1/y2 -> hq_dev as f16)
     xf_ready : bool
+    // the per-expert chain's rings (lazy - the first streamed split makes them): XF_RING compute commands and XF_RING
+    // transfer commands, each entry's last signalled timeline value beside it, so a re-record waits only its own entry
+    xf_cmds : array<VkCommandBuffer>
+    xf_vals : array<uint64>
+    xf_xcmds : array<VkCommandBuffer>
+    xf_xvals : array<uint64>
+    xf_last : uint64         //! the compute timeline value the chain in flight signals last (the join's wait)
+    xf_pipe_ready : bool
+    land_val : array<uint64> //! the ring form: a ring position's last reader, the compute value its bundle signalled (a copy into it waits that)
+    land_at : int64          //! ... and the next position handed out
     // streamed-prefill state (lazy — first streamed dispatch creates the slots)
     @do_not_delete stream_stacks : array<StreamStack>
+    //! the expert cache's transient ring: a slot a plane kind (0 gate, 1 up, 2 down) for an expert read off the lane on demand,
+    //! `ring_slots` a kind at the kind's widest expert stride, `ring_stack` / `ring_expert` the slot's holder (-1 free)
+    ring_hwq : array<HostBuf>
+    ring_hws : array<HostBuf>
+    ring_qlen : array<int64>
+    ring_slen : array<int64>
+    ring_slots : int64
+    ring_stack : array<int>
+    ring_expert : array<int>
+    ring_next : int64            //! the next slot to hand out, round robin
+    ring_reader : file           //! the lane file open for the inline on-demand reads (no reader threads), opened at the first fetch
+    ring_fetches : int64         //! experts read off the lane since the arm (the cells' witness)
+    ring_fetch_us : int64
     stream_slots : array<StreamSlot>
     stream_cmd : VkCommandBuffer  // reusable plane-copy cmd (safe: a fenced chain wait always
                                   // intervenes between two recordings — see copy_stream_group)
@@ -1676,10 +1716,28 @@ def make_imported_buf(ptr : void?; bytes : int64) : HostBuf {
     return HostBuf(buf = b._vk, mem = m._vk, mapped = ptr, bytes = bytes)
 }
 
-// stream arm: pinned host mirror the copy engine DMAs into a slot per prefill (no VRAM spent); P2: a flavor load IMPORTS the gather's mapped-blob window instead — zero pinned RAM, the page cache is the mirror
+//! `bytes` of `path` from byte `off` into `dst`; a short read is a corrupt image and panics by name
+[arch(at="../ARCHITECTURE_GPU_VULKAN_STREAM.md#streamed-layer-arena")]
+def private vk_read_plane(path : string; off : int64; dst : void?; bytes : int64) {
+    fopen(path, "rb") $(f) {
+        if (f == null) {
+            panic("dasLLAMA vulkan tier: cannot open '{path}' to read a streamed stack")
+        }
+        if (fseek(f, off, 0) != 0l) {
+            panic("dasLLAMA vulkan tier: cannot seek '{path}' to {off}")
+        }
+        let got = _builtin_read64(f, dst, bytes)
+        if (got != bytes) {
+            panic("dasLLAMA vulkan tier: '{path}' read {got} of {bytes} bytes at {off} - the lane is corrupt, delete it to re-mint")
+        }
+    }
+}
+
+//! the stream arm of vk_moe_upload_stack: a pinned mirror the copy engine DMAs from, or the mapped image's window imported where the driver takes it
+[arch(at="../ARCHITECTURE_GPU_VULKAN_STREAM.md#streamed-layer-arena")]
 def vk_moe_stream_stack(wq : uint8 const?; ws : uint8 const?; woff : int64; n, rows : int64; fmt : int) : bool {
     let pb = stack_plane_bytes(n, rows, fmt)
-    if (g_env_vulkan.vk_import && !g_vk_import_declined_said) {
+    if (g_env_vulkan.vk_import && !g_env_vulkan.vk_stream_file_read && !g_vk_import_declined_said) {
         let win = moe_gpu_slice_window(woff, fmt)
         if (win.wq != null && win.wqb == pb.wq && (pb.ws <= 0l || (win.ws != null && win.wsb == pb.ws))) {
             var iq = make_imported_buf(win.wq, pb.wq)
@@ -1700,27 +1758,545 @@ def vk_moe_stream_stack(wq : uint8 const?; ws : uint8 const?; woff : int64; n, r
             }
         }
     }
-    var ss = StreamStack(base = woff, elems = rows * n, fmt = fmt, wqbytes = pb.wq, wsbytes = pb.ws)
+    //! the expert cache's partial stack: `keep` of the layer's `nexp` experts get a resident slot, the first `keep` by id at the load
+    let nexp = max(g_cache_nexp, 1l)
+    let keep = g_cache_quota > 0l && g_cache_quota < nexp ? g_cache_quota : nexp
+    var ss = StreamStack(base = woff, elems = rows * n, fmt = fmt, wqbytes = pb.wq, wsbytes = pb.ws,
+                         nexp = nexp, qlen = pb.wq / nexp, slen = pb.ws / nexp, slots = keep)
+    let kq = keep * ss.qlen
+    let ks = keep * ss.slen
+    let chosen <- stream_resident_set(nexp, keep)
     if (!g_gpu.dry) {
-        ss.hwq = make_host_buf(pb.wq, false, [xfer_shared = true, soft = true])
+        ss.hwq = make_host_buf(kq, false, [cached = true, xfer_shared = true, soft = true])
         if (ss.hwq.buf == 0ul) {
             return false   // pinned-mirror stop: the walk rolls the partial triple back and breaks
         }
-        ss.hws = make_host_buf(ws_floored(pb.ws), false, [xfer_shared = true, soft = true])
+        ss.hws = make_host_buf(ws_floored(ks), false, [cached = true, xfer_shared = true, soft = true])
         if (ss.hws.buf == 0ul) {
             destroy_host_buf(ss.hwq)
             return false
         }
-        unsafe {
-            par_memcpy(ss.hwq.mapped, reinterpret<void?>(wq), pb.wq)
-            if (pb.ws > 0l) {
-                par_memcpy(ss.hws.mapped, reinterpret<void?>(ws), pb.ws)
+        let src = moe_gpu_stream_source(woff, fmt)
+        if (!empty(src.path)) {
+            if (src.qbytes != pb.wq || (pb.ws > 0l && src.sbytes != pb.ws)) {
+                panic("dasLLAMA vulkan tier: the image's streamed stack at {woff} (fmt {fmt}) holds {src.qbytes}+{src.sbytes} bytes, the tier wants {pb.wq}+{pb.ws} - the lane is corrupt, delete it to re-mint")
             }
+            ss.qoff = src.qoff
+            ss.soff = src.soff
+            stream_fill_slots(chosen, src.path, null, ss.hwq.mapped, src.qoff, ss.qlen)
+            stream_fill_slots(chosen, src.path, null, ss.hws.mapped, src.soff, ss.slen)
+            if (!g_vk_stream_read_said) {
+                g_vk_stream_read_said = true
+                to_log(LOG_INFO, "dasLLAMA vulkan tier: stream stacks READ off the image file into their pinned memory - the mapping's expert pages are never faulted\n")
+            }
+        } else {
+            if (wq == null) {
+                panic("dasLLAMA vulkan tier: the streamed stack at {woff} (fmt {fmt}) was handed no planes and names no file source")
+            }
+            stream_fill_slots(chosen, "", wq, ss.hwq.mapped, 0l, ss.qlen)
+            stream_fill_slots(chosen, "", ws, ss.hws.mapped, 0l, ss.slen)
         }
+    }
+    ss.slot_of |> reserve_resize(nexp)
+    ss.expert_of |> reserve_resize(keep)
+    for (e in range64(nexp)) {
+        ss.slot_of[e] = -1
+    }
+    for (s in range64(keep)) {
+        ss.expert_of[s] = chosen[s]
+        ss.slot_of[chosen[s]] = int(s)
+    }
+    if (keep < nexp && !g_vk_cache_said) {
+        g_vk_cache_said = true
+        to_log(LOG_INFO, "dasLLAMA vulkan tier: the expert cache holds {keep} of {nexp} experts a streamed stack resident - the rest read off the lane on demand into the transient ring\n")
     }
     stream_stack_push(ss)
     return true
 }
+
+var private g_cache_order : array<int>   //! the next stacks' experts by heat, the hottest first (`vk_stream_cache_order`); empty = the id order
+
+//! MoeGpuStreamCacheOrderFn: the experts of the next streamed layers by heat; a partial stack keeps its quota off its head
+def vk_stream_cache_order(order : array<int>) {
+    g_cache_order := order
+}
+
+//! the resident experts of a partial stack holding `keep` of `nexp`: the head of the heat order where one covers the stack,
+//! the first ids otherwise, ascending either way so the pinned stack keeps the lane's order and reads in runs
+def private stream_resident_set(nexp, keep : int64) : array<int> {
+    if (keep < nexp && long_length(g_cache_order) >= nexp) {
+        var chosen <- [for (s in range64(keep)); g_cache_order[s]]
+        sort(chosen)
+        return <- chosen
+    }
+    return <- [for (e in range64(keep)); int(e)]
+}
+
+//! the resident experts' planes read into the stack's slots, a run of consecutive ids one read (or one copy off `src`)
+def private stream_fill_slots(chosen : array<int>; path : string; src : uint8 const?; var dst : void?; off, len : int64) {
+    return if (len <= 0l)
+    var s = 0l
+    let keep = long_length(chosen)
+    while (s < keep) {
+        var m = 1l
+        while (s + m < keep && chosen[s + m] == chosen[s] + int(m)) {
+            m++
+        }
+        let a = int64(chosen[s])
+        unsafe {
+            var d = reinterpret<void?>(reinterpret<uint8?>(dst) + s * len)
+            if (!empty(path)) {
+                vk_read_plane(path, off + a * len, d, m * len)
+            } else {
+                par_memcpy(d, reinterpret<void?>(src + a * len), m * len)
+            }
+        }
+        s += m
+    }
+}
+
+var private g_cache_nexp = 0l        //! the experts a streamed stack holds (`vk_stream_cache_layer`, set by the driver before each layer's upload)
+var private g_cache_quota = 0l       //! ... and how many of them get a resident slot (0 = every one)
+var private g_cache_ring_slots = 0l  //! the transient ring's slots a plane kind (`vk_stream_cache_ring`)
+var private g_cache_path = ""        //! the lane file the on-demand reads come off
+var private g_vk_cache_said = false
+
+//! MoeGpuStreamCacheLayerFn: the next streamed layer's stacks hold `nexp` experts, `quota` of them resident (0 = every one)
+def vk_stream_cache_layer(nexp, quota : int64) {
+    g_cache_nexp = nexp
+    g_cache_quota = quota
+}
+
+//! MoeGpuStreamCacheRingFn: the transient ring takes `slots` experts a plane kind, read off `path`; made at the first fetch, each kind's slot at the widest expert stride of that kind
+def vk_stream_cache_ring(slots : int64; path : string) {
+    g_cache_ring_slots = slots
+    g_cache_path = path
+}
+
+//! the slot's quant and scale pointers and DMA sources of expert `e` of streamed stack `k`; present false with no slot
+def vk_stream_slot(k : int; e : int64) : MoeGpuStreamExpert {
+    unsafe {
+        let ss & = g_gpu.stream_stacks[k]
+        let s = ss.slot_of[e]
+        return default<MoeGpuStreamExpert> if (s < 0)
+        if (s >= STREAM_RING_BASE) {
+            let r = int64(s - STREAM_RING_BASE)
+            let kind = k % 3
+            let qo = r * g_gpu.ring_qlen[kind] + stream_page_span(ss.qoff, ss.qlen, e).skew
+            let so = r * g_gpu.ring_slen[kind] + stream_page_span(ss.soff, ss.slen, e).skew
+            return (q = reinterpret<uint8 const?>(g_gpu.ring_hwq[kind].mapped) + qo, s = reinterpret<uint8 const?>(g_gpu.ring_hws[kind].mapped) + so,
+                    qbuf = g_gpu.ring_hwq[kind].buf, qoff = qo, sbuf = g_gpu.ring_hws[kind].buf, soff = so, present = true)
+        }
+        let qo = int64(s) * ss.qlen
+        let so = int64(s) * ss.slen
+        return (q = reinterpret<uint8 const?>(ss.hwq.mapped) + qo, s = reinterpret<uint8 const?>(ss.hws.mapped) + so,
+                qbuf = ss.hwq.buf, qoff = qo, sbuf = ss.hws.buf, soff = so, present = true)
+    }
+}
+
+//! the streamed stack at (`woff`, `fmt`), -1 where none sits there
+def vk_stream_stack_at(woff : int64; fmt : int) : int {
+    for (i in range(length(g_gpu.stream_stacks))) {
+        if (g_gpu.stream_stacks[i].base == woff && g_gpu.stream_stacks[i].fmt == fmt) {
+            return i
+        }
+    }
+    return -1
+}
+
+//! MoeGpuStreamViewFn: the streamed stack at (`woff`, `fmt`) as the cache lays it out, for a reader that captures it in the main context and resolves experts on a lane
+def vk_stream_view(woff : int64; fmt : int) : MoeGpuStreamView {
+    return default<MoeGpuStreamView> if (g_gpu == null)
+    let k = vk_stream_stack_at(woff, fmt)
+    return default<MoeGpuStreamView> if (k < 0)
+    unsafe {
+        let ss & = g_gpu.stream_stacks[k]
+        let kind = k % 3
+        let ring = !empty(g_gpu.ring_hwq)
+        return (q = reinterpret<uint8 const?>(ss.hwq.mapped), s = reinterpret<uint8 const?>(ss.hws.mapped), slot_of = addr<int const?>(ss.slot_of[0]),
+                nexp = ss.nexp, qlen = ss.qlen, slen = ss.slen, qoff = ss.qoff, soff = ss.soff,
+                ring_q = ring ? reinterpret<uint8 const?>(g_gpu.ring_hwq[kind].mapped) : null, ring_s = ring ? reinterpret<uint8 const?>(g_gpu.ring_hws[kind].mapped) : null,
+                ring_qlen = ring ? g_gpu.ring_qlen[kind] : 0l, ring_slen = ring ? g_gpu.ring_slen[kind] : 0l)
+    }
+}
+
+//! MoeGpuStreamExpertFn: expert `e` of the streamed stack at (`woff`, `fmt`) as the host reads it and the DMA sources it
+def vk_stream_expert(woff : int64; fmt : int; e : int64) : MoeGpuStreamExpert {
+    return default<MoeGpuStreamExpert> if (g_gpu == null)
+    let k = vk_stream_stack_at(woff, fmt)
+    return k < 0 ? default<MoeGpuStreamExpert> : vk_stream_slot(k, e)
+}
+
+//! the ring's planes for every kind, at each kind's widest expert stride among the streamed stacks, and the lane's reader
+[cold_path]
+def private vk_stream_ring_make {
+    g_gpu.ring_hwq |> resize(3)
+    g_gpu.ring_hws |> resize(3)
+    g_gpu.ring_qlen |> resize(3)
+    g_gpu.ring_slen |> resize(3)
+    for (i in range(length(g_gpu.stream_stacks))) {
+        let kind = i % 3
+        g_gpu.ring_qlen[kind] = max(g_gpu.ring_qlen[kind], g_gpu.stream_stacks[i].qlen)
+        g_gpu.ring_slen[kind] = max(g_gpu.ring_slen[kind], g_gpu.stream_stacks[i].slen)
+    }
+    for (kind in range(3)) {   //! a slot holds its expert's page-widened span: the stride is the widest expert rounded up a page, plus one
+        g_gpu.ring_qlen[kind] = ((g_gpu.ring_qlen[kind] + STREAM_PAGE - 1l) & ~(STREAM_PAGE - 1l)) + STREAM_PAGE
+        g_gpu.ring_slen[kind] = ((g_gpu.ring_slen[kind] + STREAM_PAGE - 1l) & ~(STREAM_PAGE - 1l)) + STREAM_PAGE
+    }
+    for (kind in range(3)) {
+        g_gpu.ring_hwq[kind] = make_host_buf(g_cache_ring_slots * g_gpu.ring_qlen[kind], false, [cached = true, xfer_shared = true])
+        g_gpu.ring_hws[kind] = make_host_buf(ws_floored(g_cache_ring_slots * g_gpu.ring_slen[kind]), false, [cached = true, xfer_shared = true])
+    }
+    g_gpu.ring_slots = g_cache_ring_slots
+    g_gpu.ring_stack |> reserve_resize(g_cache_ring_slots * 3l)
+    g_gpu.ring_expert |> reserve_resize(g_cache_ring_slots * 3l)
+    for (i in range64(g_cache_ring_slots * 3l)) {
+        g_gpu.ring_stack[i] = -1
+        g_gpu.ring_expert[i] = -1
+    }
+    g_gpu.ring_reader = fopen(g_cache_path, "rb")
+    if (g_gpu.ring_reader == null) {
+        panic("dasLLAMA vulkan tier: the expert cache cannot open '{g_cache_path}' for its on-demand reads")
+    }
+    to_log(LOG_INFO, "dasLLAMA vulkan tier: the expert cache's transient ring: {g_cache_ring_slots} slots a plane kind ({(g_cache_ring_slots * (g_gpu.ring_qlen[0] + g_gpu.ring_slen[0] + g_gpu.ring_qlen[1] + g_gpu.ring_slen[1] + g_gpu.ring_qlen[2] + g_gpu.ring_slen[2])) >> 20l} MB), read off {g_cache_path}\n")
+}
+
+//! the lane span of expert `e`'s plane at `off` + e * `len`, widened to the page: a direct read lands it whole in one aligned call
+//! (an unaligned span goes through the handle's bounce band a piece at a time, three times the cost), and the expert's bytes
+//! start `skew` into the slot
+def private stream_page_span(off, len, e : int64) : tuple<aoff : int64; alen : int64; skew : int64> {
+    let o = off + e * len
+    let aoff = o & ~(STREAM_PAGE - 1l)
+    return (aoff = aoff, alen = ((o + len + STREAM_PAGE - 1l) & ~(STREAM_PAGE - 1l)) - aoff, skew = o - aoff)
+}
+
+//! `len` bytes at `off` of the lane read through the buffered handle `f` into `dst`; true where every byte came (0 bytes trivially).
+//! Buffered, not direct: the lane stays mapped for the planes the host reads, and the kernel serializes unbuffered reads of a
+//! mapped file behind its coherency flush (eight readers at one reader's rate) where buffered reads keep their parallelism
+def private stream_read_span(f : file; off : int64; dst : void?; len : int64) : bool {
+    return true if (len <= 0l)
+    fseek(f, off, seek_set)
+    return int64(_builtin_read(f, dst, int(len))) == len
+}
+
+//! one on-demand read a reader thread takes: expert `e` of stack `k` into ring slot `r` - the page-aligned lane spans of its two
+//! planes and the slot's pointers; `k` -1 is the quit order
+struct private FetchReq {
+    k : int
+    e : int
+    r : int
+    qoff : int64
+    soff : int64
+    qlen : int64
+    slen : int64
+    dq : void?
+    ds : void?
+}
+
+//! what a reader thread answers: the request's slot landed (`ok` false where a read came up short), or its quit acknowledged (`k` -1)
+struct private FetchDone {
+    k : int
+    e : int
+    r : int
+    ok : bool
+    t0 : int64   //! the reader's clock at the read's start and end: the window's busy sum against its wall says how many overlapped
+    t1 : int64
+}
+
+var private g_fetch_req : Channel?    //! the main context's requests to the readers
+var private g_fetch_done : Channel?   //! the readers' answers to the main context
+var private g_fetch_threads = 0       //! the reader threads alive
+var private g_fetch_span = 0l         //! the widest slot of any kind: a reader's bounce holds one
+var private g_fetch_bounce : array<void?>   //! the readers' bounce buffers, freed at the quit
+var private g_fetch_pending = 0l      //! requests queued and not yet answered
+var private g_ring_pending : array<bool>   //! a ring slot whose read is queued or in flight: the window may not read it yet
+var private g_cache_win_fetches = 0l   //! the counters at the last release: the prof line reports a window's own
+var private g_cache_win_us = 0l
+
+//! the reader threads: each on its own direct handle of the lane (opened here, in the main context - a handle is a C++ pointer
+//! a thread may own, where a path string across contexts is a dangling read), looping on the request channel
+[cold_path]
+def private vk_stream_readers_make {
+    let n = int(g_env_vulkan.expert_readers)
+    return if (n <= 0 || g_fetch_threads > 0)
+    g_fetch_req = unsafe(channel_create())
+    g_fetch_done = unsafe(channel_create())
+    g_fetch_req |> append(1)   //! a channel's timed pop waits only while a job is outstanding: one stands for the readers' lifetime
+    g_fetch_done |> append(1)
+    for (kind in range(3)) {
+        g_fetch_span = max(g_fetch_span, max(g_gpu.ring_qlen[kind], g_gpu.ring_slen[kind]))
+    }
+    g_fetch_bounce |> reserve(n)
+    for (_i in range(n)) {
+        let h = fopen(g_cache_path, "rb")
+        if (h == null) {
+            panic("dasLLAMA vulkan tier: the expert cache cannot open '{g_cache_path}' for a reader thread")
+        }
+        var req = g_fetch_req
+        var done = g_fetch_done
+        var b : void?
+        unsafe {
+            let raw = malloc(uint64(g_fetch_span + STREAM_PAGE))   //! the thread's own page-aligned ordinary memory: a direct read into the pinned slot itself runs at a tenth the rate
+            g_fetch_bounce |> push(raw)
+            b = reinterpret<void?>((reinterpret<uint64>(raw) + uint64(STREAM_PAGE) - 1ul) & ~(uint64(STREAM_PAGE) - 1ul))
+        }
+        new_thread_loop() @() : bool {
+            var cont = true
+            pop_with_timeout_clone(req, 50) $(rq : FetchReq#) {
+                if (rq.k < 0) {
+                    fclose(h)
+                    done |> push_clone(FetchDone(k = -1, e = -1, r = -1, ok = true))
+                    req |> release()   //! the loop's final step drops the captures' references
+                    done |> release()
+                    cont = false
+                } else {
+                    let t0 = ref_time_ticks()
+                    var ok = false
+                    unsafe {
+                        ok = stream_read_span(h, rq.qoff, b, rq.qlen)   //! the popped request is a temporary: its fields are passed on as they are
+                        if (ok) {
+                            memcpy(rq.dq, b, rq.qlen)
+                            ok = stream_read_span(h, rq.soff, b, rq.slen)
+                            if (ok && rq.slen > 0l) {
+                                memcpy(rq.ds, b, rq.slen)
+                            }
+                        }
+                    }
+                    done |> push_clone(FetchDone(k = rq.k, e = rq.e, r = rq.r, ok = ok, t0 = t0, t1 = ref_time_ticks()))
+                }
+            }
+            return cont
+        }
+        g_fetch_threads++
+    }
+    to_log(LOG_INFO, "dasLLAMA vulkan tier: the expert cache's {n} reader threads are up\n")
+}
+
+//! the readers quit in order - each takes a quit request and answers it, then the channels go
+[finalize]
+def vk_stream_readers_quit {
+    return if (g_fetch_threads == 0)
+    for (_i in range(g_fetch_threads)) {
+        g_fetch_req |> push_clone(FetchReq(k = -1, e = -1, r = -1, qoff = 0l, soff = 0l, qlen = 0l, slen = 0l, dq = null, ds = null))
+    }
+    var acked = 0
+    var rounds = 0
+    while (acked < g_fetch_threads && rounds < 20) {   //! a reader that never answers is left behind after ten seconds: a hung exit is worse
+        rounds++
+        pop_with_timeout_clone(g_fetch_done, 500) $(d : FetchDone#) {
+            if (d.k < 0) {
+                acked++
+            }
+        }
+    }
+    if (acked < g_fetch_threads) {
+        to_log(LOG_WARNING, "dasLLAMA vulkan tier: {g_fetch_threads - acked} of the expert cache's reader threads did not answer the quit order\n")
+    }
+    g_fetch_req |> notify()   //! the lifetime job done: a waiter left behind wakes and leaves
+    g_fetch_done |> notify()
+    unsafe {
+        channel_remove(g_fetch_req)
+        channel_remove(g_fetch_done)
+        for (b in g_fetch_bounce) {
+            free(b)
+        }
+    }
+    g_fetch_bounce |> clear()
+    g_fetch_threads = 0
+    g_fetch_pending = 0l
+}
+
+//! the readers' answers taken: a landed slot is readable, a short read a panic; `wait` waits for one answer where any is owed
+def private vk_stream_drain(wait : bool) {
+    return if (g_fetch_threads == 0)
+    var any = true
+    var waited = !wait
+    while (any) {
+        any = false
+        if (!waited && g_fetch_pending > 0l) {
+            waited = true
+            any = pop_with_timeout_clone(g_fetch_done, 2000) $(d : FetchDone#) {
+                vk_stream_landed(d)
+            }
+            continue
+        }
+        any = try_pop_clone(g_fetch_done) $(d : FetchDone#) {
+            vk_stream_landed(d)
+        }
+    }
+}
+
+def private vk_stream_landed(d : FetchDone const#) {
+    return if (d.k < 0)
+    if (!d.ok) {
+        panic("dasLLAMA vulkan tier: expert {d.e} of streamed stack {d.k}: a reader thread's read off the lane came up short")
+    }
+    g_ring_pending[(d.k % 3) * int(g_gpu.ring_slots) + d.r] = false
+    g_fetch_pending--
+    g_fetch_busy_us += int64(get_time_usec(d.t0)) - int64(get_time_usec(d.t1))
+    g_fetch_first = g_fetch_first == 0l ? d.t0 : min(g_fetch_first, d.t0)
+    g_fetch_last = max(g_fetch_last, d.t1)
+}
+
+var private g_fetch_busy_us = 0l   //! the window's reads summed, and the first start and last end among them
+var private g_fetch_first = 0l
+var private g_fetch_last = 0l
+
+//! MoeGpuStreamRequestFn: true where expert `e` has or will have a slot; a slot the window uses is never taken (the window's end frees them all), and with no reader threads the read runs here
+[arch(at="../ARCHITECTURE_GPU_VULKAN_STREAM.md#expert-cache")]
+def vk_stream_request(woff : int64; fmt : int; e : int64) : bool {
+    return false if (g_gpu == null)
+    let k = vk_stream_stack_at(woff, fmt)
+    return false if (k < 0)
+    unsafe {
+        var ss & = g_gpu.stream_stacks[k]
+        return true if (ss.slot_of[e] >= 0)
+        return false if (g_cache_ring_slots <= 0l)
+        if (empty(g_gpu.ring_hwq)) {
+            vk_stream_ring_make()
+            g_ring_pending |> reserve_resize(g_cache_ring_slots * 3l)
+            vk_stream_readers_make()
+        }
+        if (ss.qoff < 0l) {
+            panic("dasLLAMA vulkan tier: the expert cache has no lane file to read expert {e} of the stack at {woff} from (the stack was not read off a lane)")
+        }
+        let kind = k % 3
+        let r0 = kind * int(g_gpu.ring_slots)
+        var r = -1
+        for (_i in range64(g_gpu.ring_slots)) {
+            let cand = int(g_gpu.ring_next % g_gpu.ring_slots)
+            g_gpu.ring_next++
+            if (g_gpu.ring_stack[r0 + cand] < 0) {
+                r = cand
+                break
+            }
+        }
+        if (r < 0) {
+            panic("dasLLAMA vulkan tier: the expert cache's ring of {g_gpu.ring_slots} slots a kind is full inside one window - DASLLAMA_EXPERT_RING must hold a layer's misses")
+        }
+        g_gpu.ring_stack[r0 + r] = k
+        g_gpu.ring_expert[r0 + r] = int(e)
+        ss.slot_of[e] = STREAM_RING_BASE + r
+        let qs = stream_page_span(ss.qoff, ss.qlen, e)
+        let sp = stream_page_span(ss.soff, ss.slen, e)
+        let rq <- FetchReq(k = k, e = int(e), r = r, qoff = qs.aoff, soff = sp.aoff, qlen = qs.alen, slen = ss.slen > 0l ? sp.alen : 0l,
+                           dq = reinterpret<void?>(reinterpret<uint8?>(g_gpu.ring_hwq[kind].mapped) + int64(r) * g_gpu.ring_qlen[kind]),
+                           ds = reinterpret<void?>(reinterpret<uint8?>(g_gpu.ring_hws[kind].mapped) + int64(r) * g_gpu.ring_slen[kind]))
+        g_gpu.ring_fetches++
+        if (g_fetch_threads > 0) {
+            g_ring_pending[r0 + r] = true
+            g_fetch_req |> push_clone(rq)
+            g_fetch_pending++
+        } else {
+            let t0 = ref_time_ticks()
+            if (!stream_read_span(g_gpu.ring_reader, rq.qoff, rq.dq, rq.qlen) || !stream_read_span(g_gpu.ring_reader, rq.soff, rq.ds, rq.slen)) {
+                panic("dasLLAMA vulkan tier: expert {e} of the stack at {woff}: the read off the lane came up short")
+            }
+            g_gpu.ring_fetch_us += int64(get_time_usec(t0))
+        }
+        return true
+    }
+}
+
+
+//! MoeGpuStreamReadyFn: whether expert `e` of the streamed stack at (`woff`, `fmt`) sits in a slot the window may read now
+def vk_stream_ready(woff : int64; fmt : int; e : int64) : bool {
+    return false if (g_gpu == null)
+    let k = vk_stream_stack_at(woff, fmt)
+    return false if (k < 0)
+    let s = g_gpu.stream_stacks[k].slot_of[e]
+    return false if (s < 0)
+    return true if (s < STREAM_RING_BASE)
+    vk_stream_drain(false)
+    return !g_ring_pending[(k % 3) * int(g_gpu.ring_slots) + (s - STREAM_RING_BASE)]
+}
+
+//! MoeGpuStreamFetchFn: `vk_stream_request` and the wait for its read: true with a readable slot after
+def vk_stream_fetch(woff : int64; fmt : int; e : int64) : bool {
+    return false if (!vk_stream_request(woff, fmt, e))
+    let t0 = ref_time_ticks()
+    while (!vk_stream_ready(woff, fmt, e)) {
+        if (g_fetch_pending <= 0l) {
+            panic("dasLLAMA vulkan tier: expert {e} of the stack at {woff} is neither readable nor in flight")
+        }
+        vk_stream_drain(true)
+    }
+    g_gpu.ring_fetch_us += int64(get_time_usec(t0))
+    return true
+}
+
+//! MoeGpuStreamRingReleaseFn: every ring slot freed, a read still in flight landing first
+def vk_stream_ring_release {
+    return if (g_gpu == null || empty(g_gpu.ring_stack))
+    let t0 = ref_time_ticks()
+    var rounds = 0
+    while (g_fetch_pending > 0l) {
+        vk_stream_drain(true)
+        rounds++
+        if (rounds == 5 || rounds % 50 == 0) {
+            to_log(LOG_WARNING, "dasLLAMA vulkan tier: the expert cache's release has waited {get_time_usec(t0) / 1000} ms for {g_fetch_pending} queued reads\n")
+        }
+    }
+    if (g_env_gpu.gpu_prof) {
+        let tail_us = int64(get_time_usec(t0))
+        let wall_us = g_fetch_first == 0l ? 0l : int64(get_time_usec(g_fetch_first)) - int64(get_time_usec(g_fetch_last))
+        to_log(LOG_INFO, "expert_cache: {g_gpu.ring_fetches - g_cache_win_fetches} fetches this window, {g_gpu.ring_fetch_us - g_cache_win_us} us waited on them, {tail_us} us for the tail at the release; the readers {g_fetch_busy_us} us busy over {wall_us} us wall\n")
+        g_cache_win_fetches = g_gpu.ring_fetches
+        g_cache_win_us = g_gpu.ring_fetch_us
+        g_fetch_busy_us = 0l
+        g_fetch_first = 0l
+        g_fetch_last = 0l
+    }
+    for (i in range64(g_gpu.ring_slots * 3l)) {
+        let k = g_gpu.ring_stack[i]
+        if (k >= 0) {
+            g_gpu.stream_stacks[k].slot_of[g_gpu.ring_expert[i]] = -1
+            g_gpu.ring_stack[i] = -1
+            g_gpu.ring_expert[i] = -1
+        }
+    }
+}
+
+//! the ring's shells dropped with the model (its buffers go in the host sweep) and the lane's reader closed
+[cold_path]
+def private vk_stream_ring_drop {
+    g_gpu.ring_hwq |> clear()
+    g_gpu.ring_hws |> clear()
+    g_gpu.ring_qlen |> clear()
+    g_gpu.ring_slen |> clear()
+    g_gpu.ring_stack |> clear()
+    g_gpu.ring_expert |> clear()
+    g_gpu.ring_slots = 0l
+    g_gpu.ring_next = 0l
+    vk_stream_readers_quit()
+    g_ring_pending |> clear()
+    if (g_gpu.ring_reader != null) {
+        fclose(g_gpu.ring_reader)
+        g_gpu.ring_reader = null
+    }
+    g_cache_nexp = 0l
+    g_cache_quota = 0l
+    g_cache_ring_slots = 0l
+}
+
+//! MoeGpuHostBytesFn: the host-visible bytes the tier holds now
+def vk_host_bytes : int64 => g_gpu == null ? 0l : g_gpu.host_bytes
+
+var private g_vk_mint_dry_was = false   //! the live tier's dry flag as the mint found it
+
+//! MoeGpuMintDryFn: the live tier's walk dry for the mint's span (every device-side site skips its allocation and its upload); the flag goes back as it was
+def vk_mint_dry(on : bool) {
+    return if (g_gpu == null)
+    if (on) {
+        g_vk_mint_dry_was = g_gpu.dry
+        g_gpu.dry = true
+    } else {
+        g_gpu.dry = g_vk_mint_dry_was
+    }
+}
+
+def vk_stream_cache_stats : tuple<fetches : int64; us : int64> =>
+    g_gpu == null ? (fetches = 0l, us = 0l) : (fetches = g_gpu.ring_fetches, us = g_gpu.ring_fetch_us)
 
 //! a streamed stack registered in walk order (gate, up, down), the down's or the gate/up pair's plane maxima grown by its planes
 def private stream_stack_push(var ss : StreamStack) {
@@ -1746,6 +2322,19 @@ def vk_moe_resident_verdict(n, rows : int64; fmt : int) : int {
         return 1
     }
     return length(g_gpu.stacks) >= MAX_STACKS ? 2 : 0
+}
+
+//! MoeGpuStreamPlane: the pinned device-layout planes of the streamed stack at (`woff`, `fmt`) for the host's own reads; q null where none sits there
+def vk_stream_plane(woff : int64; fmt : int) : MoeGpuStreamPlane {
+    return default<MoeGpuStreamPlane> if (g_gpu == null)
+    for (ss in g_gpu.stream_stacks) {
+        if (ss.base == woff && ss.fmt == fmt && ss.hwq.mapped != null) {
+            unsafe {
+                return (q = reinterpret<uint8 const?>(ss.hwq.mapped), s = reinterpret<uint8 const?>(ss.hws.mapped), qbytes = ss.wqbytes, sbytes = ss.wsbytes)
+            }
+        }
+    }
+    return default<MoeGpuStreamPlane>
 }
 
 //! MoeGpuWouldAcceptFn: would the tier accept this stack right now? Pure arithmetic, no side
@@ -1997,6 +2586,7 @@ def vk_drop_model_state {
     g_gpu.stacks |> clear()
     delete g_gpu.stream_stacks
     delete g_gpu.stream_slots
+    vk_stream_ring_drop()
     arena_drop_shells()
     g_gpu.af_gate_sets |> clear()
     g_gpu.af_up_sets |> clear()
@@ -2036,6 +2626,12 @@ def vk_drop_model_state {
     g_gpu.tail_ready = false
     g_gpu.at_fa_ready = false
     g_gpu.xf_ready = false
+    g_gpu.xf_cmds |> clear()   //! the commands themselves went with model_cmds / model_xcmds above
+    g_gpu.xf_vals |> clear()
+    g_gpu.xf_xcmds |> clear()
+    g_gpu.xf_xvals |> clear()
+    g_gpu.xf_last = 0ul
+    g_gpu.xf_pipe_ready = false
     g_gpu.dn_ready = false
     g_gpu.dn_cls_ready = false
     g_gpu.dnd_ready = false
@@ -2485,6 +3081,7 @@ struct RdHotLayer {
     xnb1 : int64                        //! the gate and up feed's blocks a row: the rows chain's regions read their row's quantized feed
     st1, st3, st2 : int                 //! the planes' stacks
     s_gate, s_up, s_down : VkDescriptorSet
+    dma_value : uint64                  //! the transfer timeline at the last DMA fill into this layer's slots: the next hit chain waits it
     cmds : array<VkCommandBuffer>       //! the hit chain a region count, [nb x k + 1]: recorded on first use (a step's hits, or the verify rows' k-padded hits a row)
     recorded : array<bool>
 }
@@ -2543,7 +3140,7 @@ struct RDec {
     kst_dev, vst_dev : uint64     //! a block codec's staged rows: the token command's float K and V rows [nb x kv_dim], which the codec's store quantizes into the mirror
     stage_tok : HostBuf           //! ... and the token block the staging stores read: row r at position r of the staged planes
     ksh_dev, vsh_dev : uint64     //! a block codec's f16 shadow of one layer's rows [seq_cap x kv_dim], refilled before each layer's prefill attention
-    pf_kst, pf_vst : uint64       //! the prefill window's staged rows [PF_WINDOW x kv_dim]
+    pf_kst, pf_vst : uint64       //! the prefill window's staged rows [pf_np x kv_dim]
     pf_kv_store_sets, pf_kv_shadow_sets : array<VkDescriptorSet>   //! the window's quant store and its shadow pass, one set a slab (the store writes and the shadow reads the layer's slab)
     pf_unrot_set : VkDescriptorSet  //! tq4: the window's attention rows out of the rotated basis
     tq4_signs_dev : uint64          //! tq4: the rotation's sign row, `KV_TQ4_SIGNS` floats
@@ -2772,7 +3369,7 @@ struct RDec {
     moe_meta1_dev, moe_meta3_dev, moe_meta2_dev : uint64   //! the decode GEMVs' slot regions, written by the top-k
     moe_xq_dev, moe_xs_dev : uint64   //! the experts' own feed image when their form differs from the dense triple's
     egate_dev, eup_dev, edown_dev : uint64   //! the decode's k expert rows
-    pf_nk : int64                 //! the window's slot rows (PF_WINDOW x k)
+    pf_nk : int64                 //! the window's slot rows (pf_np x k)
     pf_mlog : uint64              //! [np x ner] logits
     pf_midx, pf_mw, pf_minv : uint64   //! [nk] picks, weights, slot -> bucket row
     pf_bex : uint64               //! [nk] bucket row -> its expert (the biased act's row map)
@@ -2853,6 +3450,11 @@ struct RDec {
     hot_ident1_dev : uint64       //! 1 .. k: the combine's slot rows, one past the row index so its window starts past 0 and the sum accumulates
     s_hot_rq, s_hot_act, s_hot_comb : VkDescriptorSet
     hot_submits, hot_hits : int64 //! the hit chains submitted and the picks they served
+    hot_dma_cmds : array<VkCommandBuffer>   //! the DMA fill's transfer commands, a ring; a layer's misses one batch
+    hot_dma_vals : array<uint64>            //! ... the transfer timeline each signalled, waited before its command re-records
+    hot_dma_at : int                        //! the ring entry the open batch records into
+    hot_dma_open : bool                     //! a batch is recording
+    hot_dma_fills : int64                   //! the experts the DMA fill placed
     //! the hyper-connection window chain (`vk_rdec_prefill_hc`): a window's wide rows and mixer panels, its segments cut at every
     //! routed layer's router, the host's routed sums of the rows between them
     pf_hc_ready : bool
@@ -2874,7 +3476,6 @@ struct RDec {
     pf_s_ple_rq, pf_s_ple_gate, pf_s_ple_conv : VkDescriptorSet
 }
 
-let PF_WINDOW = 512l   // prefill activation-buffer rows; longer prompts run as sequential windows
 let F16G_BK = 64u      //! the small f16 GEMM's k step (the MoE router and the deltanet beta/alpha rows on the cm2 tile)
 let F16G_SPLIT = 8l    //! its k chunks into the split-k scratch
 
@@ -3994,8 +4595,13 @@ def dev_upload(a : array<auto(TT)>) : uint64 {
 //! `bytes` of a device buffer from `off` set to the 32-bit `word` by a fill command (`0x3F800000u` is 1.0f), no host array
 def upload_fill(dev : uint64; off, bytes : int64; word : uint) {
     cmd_one_shot() $(raw : VkCommandBuffer; var _h : VkHaz) {
-        vkCmdFillBuffer(raw, unsafe(reinterpret<VkBuffer>(dev)), uint64(off), uint64(bytes), word)
+        cmd_fill(raw, dev, off, bytes, word)
     }
+}
+
+//! `bytes` of a device buffer from `off` filled with `word`, recorded into `raw`
+def cmd_fill(raw : VkCommandBuffer; dev : uint64; off, bytes : int64; word : uint) {
+    vkCmdFillBuffer(raw, unsafe(reinterpret<VkBuffer>(dev)), uint64(off), uint64(bytes), word)
 }
 
 //! `tab[key]`, built by `build` on its first ask: the drivers' int-keyed set caches
@@ -4144,6 +4750,33 @@ def xfer_wait(v : uint64; spin : bool) {
         }
         return
     }
+    var wi = VkSemaphoreWaitInfo()
+    var val = v
+    unsafe {
+        wi.semaphoreCount = 1u
+        wi.pSemaphores = addr(sem)
+        wi.pValues = addr(val)
+        vk_check(vkWaitSemaphores(dev_raw(), wi, 0xFFFFFFFFFFFFFFFFul), null)
+    }
+}
+
+//! has the compute timeline reached `v`? (one counter read, no wait: the per-expert chain's ring asks before it re-records)
+def cmp_reached(v : uint64) : bool {
+    var cur = 0ul
+    vk_check(vkGetSemaphoreCounterValue(dev_raw(), g_gpu.cmp_sem, cur), null)
+    return cur >= v
+}
+
+//! ... and the transfer timeline
+def xfer_reached(v : uint64) : bool {
+    var cur = 0ul
+    vk_check(vkGetSemaphoreCounterValue(dev_raw(), g_gpu.xfer_sem, cur), null)
+    return cur >= v
+}
+
+//! wait until the compute timeline reaches `v` (blocking: the waits here sit behind whole expert chains, not a step's landing)
+def cmp_wait(v : uint64) {
+    var sem = g_gpu.cmp_sem
     var wi = VkSemaphoreWaitInfo()
     var val = v
     unsafe {
@@ -4331,3 +4964,4 @@ def cmd_fill_zero(raw : VkCommandBuffer; dst : uint64; dst_off : int64; bytes : 
 
 var g_vk_import_said = false   // one import proof-line per process
 var g_vk_import_declined_said = false
+var g_vk_stream_read_said = false   // one file-read proof-line per process

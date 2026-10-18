@@ -19,6 +19,7 @@ require vulkan/vulkan_boost
 require dasllama/dasllama_math
 require dasllama/dasllama_gpu_math   // ACT_*, act_code: the act word the act classes read
 require dasllama/dasllama_gpu_tier
+require dasllama/dasllama_env
 require math
 require daslib/strings_boost
 require daslib/algorithm
@@ -1300,7 +1301,7 @@ def vk_rdec_set_hc(hc, lr, n_sites : int64; norm_rows : array<float>; inject_row
         r.hemb_host = make_host_buf(dim * 4l * nb, false, [cached = true])
     }
     r.hcinjw_bytes = long_length(inject_rows) * 4l
-    if (!vk_range_ok(r.hcinjw_bytes) || !vk_range_ok(r.hcn_bytes) || !vk_range_ok(PF_WINDOW * hcd * 4l)) {   //! the inject rows, the norm rows and a window's wide panels bind as one range each
+    if (!vk_range_ok(r.hcinjw_bytes) || !vk_range_ok(r.hcn_bytes) || !vk_range_ok(pf_window_rows() * hcd * 4l)) {   //! the inject rows, the norm rows and a window's wide panels bind as one range each
         to_log(LOG_WARNING, "dasLLAMA vulkan resident: the hyper-connection inject rows ({n_sites} sites x {hc} x {hcd}) pass the device's storage range {vk_max_storage_range()}\n")
         return false
     }
@@ -1518,8 +1519,11 @@ def private rd_hot_stack(base : int64; fmt : int; slots, blocks, elems : int64) 
     return rd_hot_stack(base, fmt, slots, elems, (wq = blocks * bb.wq, ws = blocks * bb.ws))
 }
 
-def private rd_hot_stack(base : int64; fmt : int; slots, elems : int64; pb : tuple<wq : int64; ws : int64>) : int
-    => make_stack_shell(base, slots * elems, fmt, slots * pb.wq, slots * pb.ws)
+def private rd_hot_stack(base : int64; fmt : int; slots, elems : int64; pb : tuple<wq : int64; ws : int64>) : int {
+    let si = make_stack_shell(base, slots * elems, fmt, slots * pb.wq, slots * pb.ws)
+    g_gpu.stacks[si].batch_meta_ring = XF_RING   //! the pool window runs the per-expert chain over these stacks: XF_RING metas ahead, as a stream slot's
+    return si
+}
 
 def private rd_hot_planes(si : int) : tuple<wq : uint64; ws : uint64; wqb : int64; wsb : int64>
     => (wq = g_gpu.stacks[si].wqbuf, ws = g_gpu.stacks[si].wsbuf, wqb = g_gpu.stacks[si].wqbytes, wsb = ws_range(si))
@@ -1555,7 +1559,7 @@ def private rd_hot_shared(slots : int64) {
 //! Routed layer `l`'s hot expert pool (`RdecHotLayerFn`): `slots` slots of the gate, up and down planes in their formats, the
 //! hit chain's sets over them; returns the gate stack's offset base, the up and down stacks a `stride` and two past it.
 //! `base` under 0 = no pool on this layer (a class rail, a form the chain does not take, the planes' range)
-[arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-hot-pool")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_POOL.md#hc-hot-pool")]
 def vk_rdec_hot_layer(l, slots : int64; f1, f3, f2 : int) : tuple<base : int64; stride : int64> {
     let none = (base = -1l, stride = 0l)
     let at = (base = HOT_BASE + l * 3l * HEAT_STRIDE, stride = HEAT_STRIDE)
@@ -1612,7 +1616,7 @@ def vk_rdec_hot_layer(l, slots : int64; f1, f3, f2 : int) : tuple<base : int64; 
 }
 
 //! One expert's planes into slot `slot` of layer `l`'s pool (`RdecHotUploadFn`), in the gather's device layout.
-[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-hot-pool")]
+[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_POOL.md#hc-hot-pool")]
 def vk_rdec_hot_upload(l, slot : int64; wq1 : array<uint8>; ws1 : array<uint8>; wq3 : array<uint8>; ws3 : array<uint8>; wq2 : array<uint8>; ws2 : array<uint8>) {
     return if (g_gpu != null && g_gpu.dry)
     let H & = unsafe(g_rd.hot_layers[l])
@@ -1637,7 +1641,7 @@ def vk_rdec_hot_upload(l, slot : int64; wq1 : array<uint8>; ws1 : array<uint8>; 
     }
 }
 
-[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-hot-pool")]
+[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_POOL.md#hc-hot-pool")]
 def private rd_record_hot(l, nhit : int64; nrows : int64 = 1l) {
     var H & = unsafe(g_rd.hot_layers[l])
     let dim = g_rd.dim
@@ -1652,7 +1656,7 @@ def private rd_record_hot(l, nhit : int64; nrows : int64 = 1l) {
 }
 
 //! The hits of layer `l`'s routed step (`RdecHotSubmitFn`): their region records and weights written, the hit chain submitted unwaited.
-[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-hot-pool")]
+[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_POOL.md#hc-hot-pool")]
 def vk_rdec_hot_submit(l, nhit : int64; slots : int64 const?; w : float const?) {
     let H & = unsafe(g_rd.hot_layers[l])
     assert(H.on && nhit <= g_rd.k, "vk_rdec_hot_submit: a layer with no pool, or more hits than routed slots")
@@ -1688,8 +1692,76 @@ def private rd_hot_go(l, nreg, nrows : int64) {
     if (!H.recorded[nreg]) {
         rd_record_hot(l, nreg, nrows)
     }
+    g_gpu.pend_wait = max(g_gpu.pend_wait, H.dma_value)   //! the slots a DMA fill is still landing in: this chain reads them after
     submit_nofence(H.cmds[nreg])
     g_rd.hot_submits++
+}
+
+let private HOT_DMA_RING = 4   //! DMA fill batches in flight: a layer's a batch, the ring's oldest waited before it re-records
+var private g_rd_hot_dma_said : table<string>   //! the DMA fill's declines, a reason once
+
+//! RdecHotDmaFn: false where no transfer queue serves, the tier is dry, or the stream stacks do not hold the expert - the host's fill then takes it
+[arch(at="../ARCHITECTURE_GPU_VULKAN_POOL.md#pool-dma-fill")]
+def vk_rdec_hot_dma(l, slot, e, woff1 : int64; f1 : int) : bool {
+    return false if (g_gpu == null || g_gpu.dry || g_gpu.xfer_fam < 0)
+    let g = vk_stream_stack_at(woff1, f1) / 3
+    if (g < 0) {
+        gpu_said_once(g_rd_hot_dma_said, LOG_WARNING, "vk_rdec_hot_dma: ", "layer {l}'s expert stack at {woff1} (fmt {f1}) is not a streamed stack - the host fill takes its misses")
+        return false
+    }
+    let H & = unsafe(g_rd.hot_layers[l])
+    assert(H.on && slot >= 0l && slot < g_rd.hot_slots, "vk_rdec_hot_dma: a slot outside the layer's pool")
+    if (!g_rd.hot_dma_open) {
+        if (empty(g_rd.hot_dma_cmds)) {
+            g_rd.hot_dma_cmds |> reserve(HOT_DMA_RING)
+            g_rd.hot_dma_vals |> reserve(HOT_DMA_RING)
+            for (_i in range(HOT_DMA_RING)) {
+                g_rd.hot_dma_cmds |> push(alloc_xfer_cmd())
+                g_rd.hot_dma_vals |> push(0ul)
+            }
+        }
+        let at = g_rd.hot_dma_at
+        if (g_rd.hot_dma_vals[at] > 0ul) {
+            xfer_wait(g_rd.hot_dma_vals[at], false)   //! the entry's earlier batch retired: its command is free to re-record
+        }
+        cmd_open(g_rd.hot_dma_cmds[at], true)
+        g_rd.hot_dma_open = true
+    }
+    var raw = g_rd.hot_dma_cmds[g_rd.hot_dma_at]
+    let sts = fixed_array(H.st1, H.st3, H.st2)
+    let blks = fixed_array(H.blk1, H.blk3, H.blk2)
+    let fmts = fixed_array(H.f1, H.f3, H.f2)
+    for (k in range(3)) {
+        let src = vk_stream_slot(g * 3 + k, e)
+        if (!src.present) {
+            gpu_said_once(g_rd_hot_dma_said, LOG_WARNING, "vk_rdec_hot_dma: ", "layer {l}'s streamed stack {g * 3 + k} does not hold expert {e} - the host fill takes it")
+            return false
+        }
+        let bb = arena_block_bytes(fmts[k])
+        let p = rd_hot_planes(sts[k])
+        let qlen = g_gpu.stream_stacks[g * 3 + k].qlen
+        let slen = g_gpu.stream_stacks[g * 3 + k].slen
+        assert(qlen == blks[k] * bb.wq, "vk_rdec_hot_dma: a pool slot and a streamed expert differ in quant bytes")
+        cmd_copy_range(raw, src.qbuf, src.qoff, p.wq, slot * blks[k] * bb.wq, qlen)
+        if (slen > 0l) {
+            cmd_copy_range(raw, src.sbuf, src.soff, p.ws, slot * blks[k] * bb.ws, min(slen, blks[k] * bb.ws))
+        }
+    }
+    g_rd.hot_dma_fills++
+    return true
+}
+
+//! RdecHotDmaFlushFn: layer `l`'s open DMA batch submitted on the transfer queue; the layer's next hit chain waits its landing
+def vk_rdec_hot_dma_flush(l : int64) {
+    return if (!g_rd.hot_dma_open)
+    let at = g_rd.hot_dma_at
+    var raw = g_rd.hot_dma_cmds[at]
+    cmd_close(raw)
+    let v = xfer_submit_after(raw, XFER_NO_WAIT)
+    g_rd.hot_dma_vals[at] = v
+    g_rd.hot_layers[l].dma_value = v
+    g_rd.hot_dma_at = (at + 1) % HOT_DMA_RING
+    g_rd.hot_dma_open = false
 }
 
 [hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-verify-rows")]
@@ -1716,7 +1788,7 @@ def vk_rdec_hot_submit_rows(l, nrows : int64; slots : int64 const?; w : float co
 def vk_rdec_hot_stats() : tuple<submits : int64; hits : int64>
     => g_rd != null ? (submits = g_rd.hot_submits, hits = g_rd.hot_hits) : (submits = 0l, hits = 0l)
 
-[arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-hot-pool")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_POOL.md#hc-hot-pool")]
 def private rd_encode_routed_sum(raw : VkCommandBuffer; var h : VkHaz; l : int64; nrows : int64 = 1l) {
     let hot = l < long_length(g_rd.hot_layers) && g_rd.hot_layers[l].on
     if (hot) {
@@ -1745,7 +1817,7 @@ def private rd_encode_host_cut(raw : VkCommandBuffer; var h : VkHaz; var L : RLa
     host_land(raw, h, g_rd.xb_dev, g_rd.hx_host, g_rd.moe_dlog_dev, g_rd.hlog_host, nrows)
 }
 
-[arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-hot-pool")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_POOL.md#hc-hot-pool")]
 def private rd_host_resume(var raw : VkCommandBuffer&; var next : VkCommandBuffer; var h : VkHaz; l, nrows : int64) {
     h = cmd_reopen(raw, next)
     raw = next
@@ -4283,7 +4355,7 @@ def private rd_snap_alloc {
         L.snap_off = off
         off += L.dn[0].slot_state_bytes + 2l * L.dn[0].ring_image_bytes
     }
-    if (g_rd.ngram) {   //! the n-gram conv ring at the checkpoint's position: a continuation adopted there reads it before its first rows
+    if (g_rd.ngram) {
         g_rd.snap_ring_off = off
         off += rd_ngram_ring_bytes()
     }
@@ -4327,7 +4399,7 @@ def vk_rdec_dn_snap_save(slot : int64) : bool {
 def private rd_ngram_ring_bytes() : int64 => g_rd.ngram_nrows * g_rd.hc_n * g_rd.dim * 4l
 
 //! checkpoint row `slot`'s n-gram conv ring (the live region's where `slot` < 0) read back into `host` (`RdecDnSnapRingFn`)
-[cold_path]
+[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#device-home-checkpoints")]
 def vk_rdec_dn_snap_ring(slot : int64; var host : float?) : bool {
     rd_chain_settle()
     return false if (g_rd == null || !g_rd.ready || !g_rd.ngram || slot >= int64(RDEC_DN_SNAPS) || (slot >= 0l && g_rd.snap_dev == 0ul))
@@ -5696,17 +5768,18 @@ def private heat_pool_make(l : int64; b1, b3, b2 : int64; f1, f3, f2 : int; n, n
     g_gpu.heat_pools[l] <- pool
 }
 
-// one plane slice, mirror -> pool slot (quants + scales; per-row bytes are uniform by layout)
+//! one plane slice, the expert's cache slot -> pool slot (quants + scales; per-row bytes are uniform by layout)
+[unused_argument(rowlen, ege)]
 def private heat_record_slice(raw : VkCommandBuffer; src_si, dst_si : int; e, slot, rowlen, ege : int64) {
-    let rpe = ege / rowlen
-    let rows_src = g_gpu.stream_stacks[src_si].elems / rowlen
-    let rbq = g_gpu.stream_stacks[src_si].wqbytes / rows_src
-    let rbs = g_gpu.stream_stacks[src_si].wsbytes / rows_src
-    cmd_copy_range(raw, g_gpu.stream_stacks[src_si].hwq.buf, e * rpe * rbq,
-        g_gpu.stacks[dst_si].wqbuf, slot * rpe * rbq, rpe * rbq)
-    if (rbs > 0l) {
-        cmd_copy_range(raw, g_gpu.stream_stacks[src_si].hws.buf, e * rpe * rbs,
-            g_gpu.stacks[dst_si].wsbuf, slot * rpe * rbs, rpe * rbs)
+    let src = vk_stream_slot(src_si, e)
+    if (!src.present) {
+        panic("dasLLAMA vulkan tier: the heat pool asked for expert {e} of streamed stack {src_si}, which the expert cache does not hold")
+    }
+    let qlen = g_gpu.stream_stacks[src_si].qlen
+    let slen = g_gpu.stream_stacks[src_si].slen
+    cmd_copy_range(raw, src.qbuf, src.qoff, g_gpu.stacks[dst_si].wqbuf, slot * qlen, qlen)
+    if (slen > 0l) {
+        cmd_copy_range(raw, src.sbuf, src.soff, g_gpu.stacks[dst_si].wsbuf, slot * slen, slen)
     }
 }
 

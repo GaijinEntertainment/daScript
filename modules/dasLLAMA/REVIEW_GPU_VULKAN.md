@@ -287,3 +287,9 @@ same sets, so a twin left marked recorded runs sets the new record replaced.
 command buffers are allocated, in `vk_rdec_prepare`, and nowhere else.** A path that writes
 availability outside `vk_rdec_prepare` can turn a form on after the recording pass ran, and
 `rd_form_at` then picks a form whose command buffer nothing recorded.
+
+**A diff that, inside one loop, writes a device buffer through its host mapping (`upload_region_at`,
+the ReBAR direct write) and reads the same buffer on the device is a defect - finish the writes
+before the first device read, or stage through a pinned buffer on the transfer queue.** The NVIDIA
+driver shadows a large mapped allocation and migrates it at the device's first touch, and a
+write-migrate-write cycle hangs the machine.

@@ -33,7 +33,7 @@ it once per walk, not for a prediction of the plan) where that sits under either
 pinned its context named the shape it serves (`resident_arm_floor`); a pin asked whole
 (`set_gpu_ctx_strict`, `DASLLAMA_GPU_CTX_STRICT`, the server's `--ctx`) is the floor whatever its size.
 Where the asked mirror leaves no room for every plane, a MoE moves routed layers' experts to the
-host (`resident_plan_host_layers`, `ARCHITECTURE_GPU_VULKAN_HC.md#hc-hot-pool`) and a dense model declines
+host (`resident_plan_host_layers`, `ARCHITECTURE_GPU_VULKAN_POOL.md#hc-hot-pool`) and a dense model declines
 naming the context it would fit at; a mirror under the asked context says why (`resident_ctx_shortened_say`). The eighth held back is for
 fragmentation: a mirror sized to the last byte fails on a heap the previous model fragmented
 (`resident_plan_pick`). The pin is what lets a
@@ -101,8 +101,7 @@ pin drops, and the claim it answers keeps naming the rows until another session 
 region; `gpu_device_kv_adopt` hands the first `npos` of them to a fresh session under a claim
 of its own, the next prefill rewriting whatever lay past. `gpu_device_sessions` answers how
 many a host may hold - the region count - and `gpu_device_prefill_continues` whether a
-session's prefill may start past zero: everywhere but a recurrent hyper-connection model, whose
-n-gram ring has no continuation hand-off to the window chain. A recurrent session's state parks
+session's prefill may start past zero: on every model the driver serves (a hyper-connection model's n-gram conv ring goes up from the host first where the host holds it, `rdec_prefill_hc_run`). A recurrent session's state parks
 beside its rows: the region's state slots keep the state at the parked position
 (`RdecRegion.dn_pos`), and an adopter takes exactly that many rows, binding the slots as they
 stand with nothing crossing the bus - or, past a shorter shared opening, the region's checkpoint row at it.
@@ -204,7 +203,8 @@ own (`RdecRegion.dn_pos`). An adopter of a parked claim takes the longest of tho
 (`parked_state_at`): the end state stands in the slots, a checkpoint row loads into them (`rdec_dn_snap_load`), and the rows
 the claim held past it are rewritten by the adopter's prefill. The checkpoints at or under the adopted position stay the new
 claim's - the same tokens put them there - so a third request on the same opening adopts them off the second's claim. Nothing
-crosses the bus: a save and a load are device copies.
+crosses the bus: a save and a load are device copies. On a hyper-connection model a row carries the region's n-gram conv ring past
+the state (`RDec.snap_ring_off`), saved, loaded and peeked with it (`vk_rdec_dn_snap_ring` into `DnSnapshot.ple_hist`), and the pre-step's id window (`Session.ple_prev`), which no row holds, the scheduler seeds from the tokens (`ple_window_seed`) at adoption and when it files a snapshot.
 
 ### The token rows gather on the device off the table's own plane {#vk-token-gather}
 

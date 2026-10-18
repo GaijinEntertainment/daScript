@@ -1974,7 +1974,7 @@ module) is independent and can land any time - it is pure structure.
     no profile roles. Done = the attention twins recorded per segment, the regions and rows forms as the
     serving shapes ask for them, and the window's `--prof` roles.
 123. **A window's pool hits ride the batch arm's chain, with a host round trip and one tile column.**
-    `ARCHITECTURE_GPU_VULKAN_HC.md#hc-hot-pool` runs a window's hits through `vk_moe_ffn_batch_xf_begin`:
+    `ARCHITECTURE_GPU_VULKAN_POOL.md#hc-hot-pool` runs a window's hits through `vk_moe_ffn_batch_xf_begin`:
     the window's rows go up (5 MB at 512 rows), the combined rows come back (5 MB) and the host adds
     them, and each plane's regions take one cm2 column (`batch_tile_edges`) where the resident block's
     own schedule takes the e and s columns per bucket (`ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block`).

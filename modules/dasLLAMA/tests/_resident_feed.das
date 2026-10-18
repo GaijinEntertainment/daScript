@@ -12,12 +12,14 @@ require dasllama/dasllama_lint public
 require dastest/testing_boost public
 require dasllama/dasllama_common   // Model, Session, forward_prefill, forward
 require dasllama/dasllama   // create_session, moe_gpu_drop_model
+require dasllama/dasllama_image
 require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active / moe_gpu_resident_prefills: the driver's witnesses
 require dasllama/dasllama_gpu_tier   // gpu_cpu_passes_: the calls the driver handed to the CPU rails, by reason
 require dasllama/dasllama_kv_dtype   // kv_row_bytes / kv_layer_kbase: the head's K row
 require ?vulkan dasllama/dasllama_vulkan_common   // the resolved coopmat mode, where the module exists
 require ?vulkan dasllama/dasllama_vulkan_decode   // the greedy chain's mode pin and its hits and misses
 require dasllama/dasllama_math   // with_dasllama_jobque_
+require dasllama/dasllama_env
 require _model_tier   // logits_maxdiff, mirror_kv_dtype, live_maxabs, SUPPRESSED_LOGIT
 require _format_census   // census_plane, SiteCensus: a plane's tag against the file's tensor type
 require dasllama/dasllama_gguf   // parse_gguf_meta
@@ -32,12 +34,12 @@ def tile_arm_tag() : string {
     }
 }
 
-let PF_WINDOW_ROWS = 512l   //! the engine's PF_WINDOW, asserted equal by the two-window cells: a prompt past it runs as sequential windows
+let PF_WINDOW_ROWS = 512l   //! the engine's default prompt window (`DASLLAMA_GPU_PF_ROWS` unset), asserted by the two-window cells: a prompt past it runs as sequential windows
 
 //! the engine's prefill window is `PF_WINDOW_ROWS`, where the vulkan module exists: a cell sizing its prompt past the window holds it
 def assert_pf_window(t : T?) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
-        t |> equal(PF_WINDOW, PF_WINDOW_ROWS, "the prompt is sized past the engine's own window")
+        t |> equal(pf_window_rows(), PF_WINDOW_ROWS, "the prompt is sized past the engine's own window")
     }
 }
 
@@ -225,7 +227,7 @@ def census(kernel : string) : int64 {
 //! pinned and asked whole at `strict_ctx` positions where it is past 0, else at the caller's own context pin, never strict -
 //! and `host_layers` routed layers' experts asked onto the host (0: the plan's own count, pinned so the environment's ask
 //! does not reach the load) whatever an earlier cell left; every lever put back after
-def load_resident(path : string; regions : int64 = 0l; strict_ctx : int64 = 0l; host_layers : int64 = 0l) : Model {
+def load_resident(path : string; regions : int64 = 0l; strict_ctx : int64 = 0l; host_layers : int64 = 0l; image : bool = false) : Model {
     let levers = resident_levers()
     if (regions > 0l) {
         set_gpu_resident_regions_(regions)
@@ -236,7 +238,12 @@ def load_resident(path : string; regions : int64 = 0l; strict_ctx : int64 = 0l; 
     set_gpu_ctx_strict(strict_ctx > 0l)
     set_gpu_host_layers(host_layers)
     set_gpu_resident_route(true)
-    var tr <- load_model_(path, QuantMode.q8)
+    var tr <- Model()
+    if (image) {
+        tr <- load_model_cached(path, QuantMode.q8)
+    } else {
+        tr <- load_model_(path, QuantMode.q8)
+    }
     restore_resident_levers(levers)
     return <- tr
 }

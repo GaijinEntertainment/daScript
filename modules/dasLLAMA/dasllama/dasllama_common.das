@@ -5856,8 +5856,7 @@ def private copy_floats_par(src : array<float>; var dst : array<float>; n : int6
     }
 }
 
-//! the n-gram window `win` (its length kept) as the ids before position `n` of `tokens`, oldest first, -1 where the prompt is
-//! shorter: a session adopted or restored at `n` reads them where its own history would stand
+//! `win` (its length kept) set to the ids before position `n` of `tokens`, oldest first, -1 where the prompt is shorter
 def ple_window_seed(var win : array<int64>; tokens : array<int64>; n : int64) {
     let w = long_length(win)
     for (i in range64(w)) {

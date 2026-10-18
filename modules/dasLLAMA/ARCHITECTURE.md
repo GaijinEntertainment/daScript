@@ -139,10 +139,12 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
   command whose routed experts run on the host between its segments, the hot expert pool, and
   the NextN head and its verify rows on the chain.
 - `ARCHITECTURE_GPU_VULKAN_DECODE.md` - the per-op tier's decode era - the decode attention block
-  over per-layer K/V mirrors, the streamed expert layer's GPU/CPU split, the whole-token decode
-  span, the deltanet decode step's per-session resident state, and the whole-model driver's
-  hybrid token command and prefill (recurrent layers, gated attention, partial rotary, the
-  prefill-to-decode state handoff).
+  over per-layer K/V mirrors, the whole-token decode span, the deltanet decode step's per-session
+  resident state, and the whole-model driver's hybrid token command and prefill (recurrent
+  layers, gated attention, partial rotary, the prefill-to-decode state handoff).
+- `ARCHITECTURE_GPU_VULKAN_STREAM.md` - the per-op tier's streamed expert layers: the prefill
+  GPU/CPU split of a layer whose stacks live on the host, and the per-expert chain its GPU head
+  runs - an expert a transfer submit and a compute submit waiting its own copy.
 - `ARCHITECTURE_GPU_VULKAN_PEROP.md` - the per-op tier's dense FFN rail: a dense layer's FFN triple on the dense rail
   and the decode row it runs on the device; the attention-quad chain's gemma decline
   (`ARCHITECTURE_GPU_VULKAN_PEROP.md#perop-attn-gemma`).

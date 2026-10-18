@@ -12,6 +12,7 @@ require dasllama/dasllama_image
 require dasllama/dasllama_math
 require dasllama/dasllama_gpu_tier
 require dasllama/dasllama_gpu_resident
+require dasllama/dasllama_blocks
 require daslib/jobque_boost
 require daslib/fio
 require _model_tier
@@ -141,6 +142,62 @@ def test_vulkan_mint_lanes(tst : T?) {
                 delete c
             }
         }
+    }
+}
+
+let private MOE_FILE = "Qwen1.5-MoE-A2.7B-Chat-Q4_K_M-local.gguf"
+let private MOE_HOST_LAYERS = 20l   //! routed layers asked onto the host: their stacks stream, the plan's room arms the unasked pool beside the mirror
+
+//! the MoE lane under the trim: twenty routed layers' expert stacks streamed to the host's pinned mirrors, so the lane drops every planar family and the host reads the mirrors through the rare rail
+[test]
+def test_vulkan_mint_moe_streamed(tst : T?) {
+    tst |> run("Qwen1.5-MoE Q4_K_M with twenty routed layers streamed: the trimmed lane drops the planar families and serves the untrimmed lane's tokens, cold and warm, off the mirrors") @(t : T?) {
+        return if (!family_on(t, "qwen2moe"))
+        let path = path_join(models_dir(), MOE_FILE)
+        return if (mint_skip(t, path))
+        let levers = pin_lane_levers()
+        let hl = gpu_host_layers_pin_()
+        set_gpu_host_layers_(MOE_HOST_LAYERS)
+        set_gpu_want_pf_stream(1)
+        with_cold_lane(t, path, "the MoE") $(var plain; img_v) {
+            t |> success(!plain.planes_trimmed && long_length(plain.vkplan) > 0l, "the served image is the vulkan lane, the planar families kept with the trim off")
+            t |> equal(gpu_resident_host_layers(), MOE_HOST_LAYERS, "the first {MOE_HOST_LAYERS} routed layers' experts serve on the host")
+            let plain_bytes = stat(img_v).size
+            let r0 = g_rare_dec_rows
+            var a <- witness_steps(t, plain, "the untrimmed lane")
+            t |> success(g_rare_dec_rows > r0, "the untrimmed lane's host picks read {g_rare_dec_rows - r0} pairs off the mirrors through the rail")
+            delete plain
+            moe_gpu_drop_model()
+            set_vulkan_trim(true)
+            remove(img_v)
+            var trimmed <- load_cached_q8(path)
+            t |> success(moe_gpu_resident_active(), "the trimmed lane is served by the whole-model driver")
+            t |> equal(gpu_resident_host_layers(), MOE_HOST_LAYERS, "... with the same routed layers on the host")
+            t |> success(trimmed.image_map != null && trimmed.planes_trimmed && long_length(trimmed.qblob) == 0l && long_length(trimmed.embq) > 0l,
+                "the trimmed lane serves without the planar families, the emb region packed")
+            t |> success(stat(img_v).size < plain_bytes, "the trimmed lane is the smaller file ({stat(img_v).size} against {plain_bytes} bytes)")
+            let r1 = g_rare_dec_rows
+            var b <- witness_steps(t, trimmed, "the trimmed lane")
+            t |> success(g_rare_dec_rows > r1, "the trimmed lane's host picks read {g_rare_dec_rows - r1} pairs off the mirrors through the rail")
+            log_gen_texts(trimmed, "untrimmed lane / trimmed lane", a.ids, b.ids)
+            t |> equal(mismatch_exact(a.ids, b.ids), 0, "the trimmed lane's greedy tokens are the untrimmed lane's, token for token (both streams decoded above)")
+            t |> equal(mismatch_exact(a.row, b.row), 0, "the CPU embed row off the packed emb region is the planar plane's, bit for bit")
+            delete trimmed
+            moe_gpu_drop_model()
+            var warm <- load_cached_q8(path)
+            t |> success(moe_gpu_resident_active() && warm.image_map != null && warm.planes_trimmed, "the trimmed lane maps back warm onto the driver")
+            var c <- witness_steps(t, warm, "the warm lane")
+            log_gen_texts(warm, "untrimmed lane / warm trimmed lane", a.ids, c.ids)
+            t |> equal(mismatch_exact(a.ids, c.ids), 0, "... and serves the same tokens (both streams decoded above)")
+            delete warm
+            moe_gpu_drop_model()
+            delete a
+            delete b
+            delete c
+        }
+        set_gpu_want_pf_stream(-1)
+        set_gpu_host_layers_(hl)
+        restore_lane_levers(levers)
     }
 }
 

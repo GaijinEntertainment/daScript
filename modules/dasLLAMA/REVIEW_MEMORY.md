@@ -57,6 +57,14 @@ on a `@scratch` buffer; weakening PERF032 is a defect.**
 The lint never compares the two counts, and a resize past the heap's limit on unreserved growth
 (`max_unreserved_size`) panics on the first model big enough.
 
+**A load, mint or convert arm that holds a whole model, a whole plane family or a whole image in
+RAM where the streaming rail (`load_gguf_streaming` + `save_model_image_streaming`, the vulkan mint
+off the gguf included) serves the same artifact is a defect, and so is a refusal that routes a
+flavor or a carrier around that rail to an eager arm.** A flavor or a carrier the rail does not
+cover gets the rail extended; `utils/dasllama-convert` takes the live load's rail, never one of
+its own. A plane whose byte count scales with the model and that the load reads whole off the
+gguf without a `FillJob` is the same defect.
+
 **A diff that adds a lasting allocation the path never made before, or adds a term to one's size,
 that grows with a scaling count states that size in bytes in a `PERF_LEDGER.md` row: at the largest shape the code path
 accepts, or, where the path accepts any value of the count, as a formula in the count with its
