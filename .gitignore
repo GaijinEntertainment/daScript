@@ -48,6 +48,8 @@ lib/
 !modules/dasTreeSitter/3rdparty/tree-sitter/lib/**
 modules/**/*.shared_module
 examples/**/*.shared_module
+# a pinned binary renamed aside so a relink can land while the MCP or LSP host keeps the old one mapped
+*.locked_*
 _aot_generated/
 _llvm_aot_generated/
 # the -ctx driver writes each fixture's daslang bindings beside the host that requires them
