@@ -5253,7 +5253,7 @@ def test_tallkq_pick(t : T?) {
 }
 
 //! device-free: the window's pre-step projection pick - the bf16 tile at a dim of whole 32-element chunks and layers x ple of
-//! whole 64-row tiles, the position-blocked GEMV off either grid
+//! whole 64-row tiles, the position-blocked GEMV off either grid, the f32 rows on their own form (`pf_ple_proj_form`)
 [test]
 def test_pf_bf16_tile_pick(t : T?) {
     static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -5261,6 +5261,19 @@ def test_pf_bf16_tile_pick(t : T?) {
         t |> success(!pf_bf16_tile_ok(1537l, 35l * 256l), "an odd dim rides the GEMV")
         t |> success(!pf_bf16_tile_ok(1552l, 35l * 256l), "... and an even one off the 32-element chunk")
         t |> success(!pf_bf16_tile_ok(1536l, 35l * 48l), "layers x ple off the 64-row tile rides the GEMV")
+        var m = Model()
+        m.config.n_layers = 35l
+        m.config.n_embd_per_layer = 256l
+        m.config.dim = 1536l
+        m.ple_model_bf16 = true
+        t |> equal(pf_ple_proj_form(m), PfPleProjForm.bf16_tile, "the window projects the E2B's bf16 rows on the tile")
+        m.config.dim = 1537l
+        t |> equal(pf_ple_proj_form(m), PfPleProjForm.bf16_gemv, "an odd dim's window projects on the bf16 GEMV")
+        m.config.dim = 1536l
+        m.config.n_embd_per_layer = 48l
+        t |> equal(pf_ple_proj_form(m), PfPleProjForm.bf16_gemv, "... and layers x ple off the tile's rows")
+        m.ple_model_bf16 = false
+        t |> equal(pf_ple_proj_form(m), PfPleProjForm.f32_rows, "the f32 rows ride their own form")
     } else {
         t |> skip("das_metal is not built on this platform; the tile predicate is not compiled")
     }

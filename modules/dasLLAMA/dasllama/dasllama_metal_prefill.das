@@ -7159,6 +7159,21 @@ def private pf_enc_narrow_ple(enc : MetalComputeEncoder?; t : Model; l : int64; 
 //! a projection off that grid rides the position-blocked bf16 GEMV
 def pf_bf16_tile_ok(kdim, nd : int64) : bool => kdim % 32l == 0l && nd % 64l == 0l
 
+//! the window's form for the E-series pre-step's projection
+enum PfPleProjForm {
+    bf16_tile   //! the file's bf16 rows on the tile GEMM (`pf_enc_bf16_mm`)
+    bf16_gemv   //! the bf16 rows off the tile's grid, on the position-blocked GEMV (`enc_ple_proj_bf16_rows`)
+    f32_rows    //! the file's f32 rows (`pf_enc_f32_rows`)
+}
+
+//! the form the window projects `t`'s embedded rows into its side rows on: the bf16 tile where the model dim and layers x ple sit
+//! on its grid (`pf_bf16_tile_ok`), else the bf16 GEMV; the f32 rows where the file holds the projection in f32
+def pf_ple_proj_form(t : Model) : PfPleProjForm {
+    return PfPleProjForm.f32_rows if (!t.ple_model_bf16)
+    let tile = pf_bf16_tile_ok(t.config.dim, t.config.n_layers * t.config.n_embd_per_layer)
+    return tile ? PfPleProjForm.bf16_tile : PfPleProjForm.bf16_gemv
+}
+
 //! true iff THIS window's metal prefill will engage AND the pre-step kernels cover the model
 [unused_argument(s, start_pos)]
 def private metal_ple_pre_gpu_gate(t : Model; s : Session; npos, start_pos : int64) : bool {
@@ -7973,10 +7988,11 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
             if (l == 0l && ple_gpu) {
                 //! the serial encoder orders the three PLE stages: gather -> model_proj GEMM -> rms+combine
                 enc_ple_pre(enc, t, bple_tok, 0ul, bple, bple_proj, u_ple_all, u_ple_sq, npos) $ {
-                    if (t.ple_model_bf16 && pf_bf16_tile_ok(dim, ple_all)) {
+                    let form = pf_ple_proj_form(t)
+                    if (form == PfPleProjForm.bf16_tile) {
                         let bwp = plane_of(g_dev, t, t.bf16blob, t.ple_model_off)
                         pf_enc_bf16_mm(enc, bwp.buf, bwp.boff, bx, bple_proj, u_dim, u_ple_all, mp, ple_all, pf_cvt_panel(enc, bx, mp, dim, g_pf_skip == "act_cvt"), dim)
-                    } elif (t.ple_model_bf16) {
+                    } elif (form == PfPleProjForm.bf16_gemv) {
                         let bwp = plane_of(g_dev, t, t.bf16blob, t.ple_model_off)
                         var ka = moe_router_args(ple_all, dim, npos)
                         ka.woff = uint(bwp.boff / 2ul)
