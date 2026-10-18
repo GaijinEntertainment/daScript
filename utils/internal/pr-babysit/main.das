@@ -2,7 +2,9 @@ options gen2
 
 // pr-babysit - the GitHub mechanics of the babysit loop (skills/internal/babysit.md keeps the policy).
 // Exit codes: 0 ready to merge, 1 request/api failure, 2 CI red, 3 review to triage,
-// 5 watch timeout. Thread resolution is GraphQL-only - REST has none. Bot reviewers never
+// 4 the tip conflicts with its base (rebase before anything else),
+// 5 watch timeout. Thread resolution is GraphQL-only - REST has none.
+// Bot reviewers never
 // appear in requested_reviewers or reviewRequests and Copilot converts a request into a
 // review within seconds, so the only trustworthy signal is the review arriving in
 // /pulls/N/reviews with commit_id == the requested tip.
@@ -26,7 +28,7 @@ struct Config {
     @clarg_doc = "Request a Copilot review of the current tip"
     request_review : bool
 
-    @clarg_doc = "Block until action is needed: CI red (2), review to triage (3), ready to merge (0), timeout (5)"
+    @clarg_doc = "Block until action is needed; the exit code names it (the header lists them)"
     watch : bool
 
     @clarg_doc = "List unresolved review threads, GraphQL id and path per line"
@@ -58,6 +60,20 @@ def private gh_line(args : array<string>) : string {
 
 def private head_sha(cfg : Config) : string =>
     gh_line(["api", "repos/{cfg.repo}/pulls/{cfg.pr}", "--jq", ".head.sha"])
+
+// the tip and GitHub's mergeable field in one read:
+// "<sha> true|false|null"; both empty on an api failure
+def private head_state(cfg : Config) : tuple<sha : string; mergeable : string> {
+    let line = gh_line(["api", "repos/{cfg.repo}/pulls/{cfg.pr}", "--jq",
+        ".head.sha + \" \" + (.mergeable|tostring)"])
+    let sp = find(line, " ")
+    var r : tuple<sha : string; mergeable : string>
+    if (sp > 0) {
+        r.sha = slice(line, 0, sp)
+        r.mergeable = slice(line, sp + 1)
+    }
+    return r
+}
 
 // non-empty output lines; ok=false on spawn/api failure so a caller never reads an error page as data
 def private gh_lines(args : array<string>; var ok : bool&) : array<string> {
@@ -158,7 +174,8 @@ def private watch(cfg : Config) : int {
         if (poll != 0) {
             sleep(uint(cfg.interval_sec * 1000))
         }
-        let head = head_sha(cfg)
+        let tip = head_state(cfg)
+        let head = tip.sha
         var checks_ok = false
         var reviews_ok = false
         var inscope checks <- check_lines(cfg, checks_ok)
@@ -170,14 +187,21 @@ def private watch(cfg : Config) : int {
         }
         let cls <- classify_checks(checks, cfg.ignore)
         let reviewed = reviews |> has_value(head)
+        let conflicted = conflicted_from(tip.mergeable)
         let ignored_note = empty(cls.ignored) ? "" : ", {length(cls.ignored)} ignored ({join(cls.ignored, ", ")})"
-        let state = "tip {slice(head, 0, 9)}: {length(cls.fails)} failed, {cls.pending} pending{ignored_note}, reviewed={reviewed}, unresolved={unresolved}"
+        let checks_note = "{length(cls.fails)} failed, {cls.pending} pending{ignored_note}"
+        let review_note = "reviewed={reviewed}, unresolved={unresolved}"
+        let tip_note = "tip {slice(head, 0, 9)}: mergeable={tip.mergeable}"
+        let state = "{tip_note}, {checks_note}, {review_note}"
         if (state != last_state) {
             to_log(LOG_INFO, "pr-babysit: {state}\n")
             last_state = state
         }
-        let verdict = watch_verdict(length(cls.fails), cls.pending, reviewed, unresolved)
-        if (verdict == WatchVerdict.ci_red) {
+        let verdict = watch_verdict(length(cls.fails), cls.pending, reviewed, unresolved,
+            conflicted)
+        if (verdict == WatchVerdict.conflict) {
+            to_log(LOG_ERROR, "pr-babysit: the tip conflicts with its base - rebase first\n")
+        } elif (verdict == WatchVerdict.ci_red) {
             to_log(LOG_ERROR, "pr-babysit: CI red - {join(cls.fails, ", ")}\n")
         }
         let ec = exit_for(verdict)

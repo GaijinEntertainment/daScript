@@ -7,7 +7,8 @@ PR creation is `skills/internal/make_pr.md`; comment verdicts are
 GitHub mechanics live in the tool:
 `daslang utils/internal/pr-babysit/main.das -- --pr <N> --watch`. Exit codes: `0` ready to
 merge, `1` request/API failure, `2` CI red (failing checks named), `3` a review targets the
-tip with unresolved threads, `5` nothing actionable within the timeout. Run it BARE in the
+tip with unresolved threads, `4` the tip conflicts with its base (GitHub's `mergeable` read
+false), `5` nothing actionable within the timeout. Run it BARE in the
 background, never piped - a pipeline reports the last command's exit code, and the exit code
 IS the verdict. A lane red on master, with its control posted on the PR (Section 2), is passed
 as `--ignore "<check name>"` (repeatable) so the watch keeps reporting the lanes that are the
@@ -69,6 +70,15 @@ drops a token they look for is red only there.
 CI runs the whole time - watch it, don't block on it. Red early is a free signal: fix, push,
 re-request. Red after Copilot is dry: fix, then back into the loop. Green early means nothing
 until Copilot is dry.
+
+**A conflict with the base (`--watch` exit `4`) comes before every other item**: master moved
+under the branch, and nothing merges until it rebases. `git fetch origin && git rebase
+origin/master`, resolve each file against master's version (a fix master already carries -
+the same `no_aot` line, the same wording - takes master's text outright), rerun the gates the
+touched files reach, `git push --force-with-lease`, then re-request: the rebased tip is a new
+tip. GitHub computes `mergeable` lazily after a push - the watch reads `null` for a minute and
+polls on; only a computed `false` is the verdict. A branch that sat for days rebases BEFORE
+the first round, not after Copilot has reviewed a tip that cannot merge.
 
 `build_windows_mingw` and `build_windows_clangcl` run **nightly**, not per-PR - a per-PR red
 is never one of those. A detached `workflow_dispatch` run has no PR association, so the tool

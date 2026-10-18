@@ -4,7 +4,20 @@ require watch_verdict
 
 [test]
 def test_watch_verdict(t : T?) {
-    t |> run("red CI outranks everything") @(t : T?) {
+    t |> run("a conflict with the base outranks everything, red CI included") @(t : T?) {
+        t |> equal(watch_verdict(0, 0, true, 0, true), WatchVerdict.conflict)
+        t |> equal(watch_verdict(2, 3, true, 2, true), WatchVerdict.conflict)
+        t |> equal(watch_verdict(0, 5, false, 0, true), WatchVerdict.conflict)
+        t |> equal(watch_verdict(0, 0, true, 0, false), WatchVerdict.ready_to_merge,
+            "the default reads as no conflict")
+    }
+    t |> run("GitHub's mergeable field: only a computed false is a conflict") @(t : T?) {
+        t |> success(conflicted_from("false"))
+        t |> success(!conflicted_from("true"))
+        t |> success(!conflicted_from("null"), "null is still computing after a push")
+        t |> success(!conflicted_from(""), "an unread field keeps polling")
+    }
+    t |> run("red CI outranks the review") @(t : T?) {
         t |> equal(watch_verdict(1, 0, false, 0), WatchVerdict.ci_red)
         t |> equal(watch_verdict(1, 3, true, 2), WatchVerdict.ci_red)
         t |> equal(watch_verdict(2, 0, true, 0), WatchVerdict.ci_red)
@@ -47,6 +60,7 @@ def test_watch_verdict(t : T?) {
     t |> run("verdicts map to the documented exits; keep_polling has none") @(t : T?) {
         t |> equal(exit_for(WatchVerdict.ci_red), 2)
         t |> equal(exit_for(WatchVerdict.review_to_triage), 3)
+        t |> equal(exit_for(WatchVerdict.conflict), 4)
         t |> equal(exit_for(WatchVerdict.ready_to_merge), 0)
         t |> equal(exit_for(WatchVerdict.keep_polling), -1)
     }
