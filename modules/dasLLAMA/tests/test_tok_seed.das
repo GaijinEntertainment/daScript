@@ -102,7 +102,7 @@ def test_mtp_ab_drafter_attach(t : T?) {
         var shell = Model()
         let trunk = scratch_path("gemma-4-26B-A4B-it-Q4_K_M.gguf")
         t |> success(!mtp_ab_drafter_attach(shell, trunk), "no sidecar beside the model: nothing attaches")
-        scratch_file("mtp-gemma-4-26B-A4B-it-Q8_0.gguf", "a head file no backend can read")
+        arch_gguf("mtp-gemma-4-26B-A4B-it-Q8_0.gguf", "gemma4-assistant")   //! a head file no backend can load
         t |> equal(mtp_drafter_sidecar_(trunk), scratch_path("mtp-gemma-4-26B-A4B-it-Q8_0.gguf"), "the facade resolves the planted sidecar")
         t |> success(!mtp_ab_drafter_attach(shell, trunk), "a sidecar no backend takes attaches nothing - the bench refuses the A/B")
         t |> success(!mtp_assistant_attached(shell), "and the drafter line stays off")

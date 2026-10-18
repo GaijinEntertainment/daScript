@@ -115,8 +115,9 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
   chunks, and the short window's peel through the token commands.
 - `ARCHITECTURE_GPU_VULKAN_GEMM.md` - the cooperative-matrix tiles the Vulkan tier's GEMMs run
   on - the cm2 decode lanes, the tile pick and the coopmat mode ladder, the class-pipeline build
-  seat, the MoE expert chain on those tiles, the KHR arm's hand-staged kq tile - and the decode
-  GEMV family's lane split by row length.
+  seat, the MoE expert chain on those tiles - and the decode GEMV family's lane split by row length.
+- `ARCHITECTURE_GPU_VULKAN_KHR.md` - the KHR arm's hand-staged tile, the window GEMMs over a file's
+  f32 rows that ride it on every coopmat card, and why a K-quant window plane stays on the cm2 tiles.
 - `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md` - what a model has to fit on the card before the driver
   runs - the residency plan, the checkpoints a device-home recurrent stream keeps on the device,
   the token rows' gather off the table's own plane, the GPU-slot marks swap that lets one slot

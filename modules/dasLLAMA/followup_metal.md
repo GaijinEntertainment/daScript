@@ -1025,39 +1025,3 @@ round apart from the decode step's at a near-tie; the scheduler keeps the step. 
 work: one dispatch a layer over every segment - a segment table the attention tiles and the scan read their row range,
 key extent and slices from, the batched decode's route-table shape lifted to tiles - so a segment costs its rows alone;
 then the rider is a one-row segment of a window that is no stall.
-
-## 54. The 31B's sandwich seams run the split chain, not the fused dispatch
-
-The fused residual seam (`GkAddRmsRows.PRE`, one dispatch: the branch's post norm, the add, the next norm) stages a row
-through a 4096-float threadgroup slab (`MetalAddRmsT.SLAB`), so a 5376-wide row - the gemma-4 31B's - takes the split chain
-at every seam of every decode step and window. The lever is a seam that serves a row wider than the slab (a two-pass norm
-over a strided stash, or a wider slab on a device that affords it), raced against the split chain at dim 5376 the way the
-other widths are (`ARCHITECTURE_GPU_SHARED_KERNELS.md#gpu-shared-kernels`, the seam bullet). Instrument: `bench_metal_gk_rows`'s
-seam race, which holds no fused arm past the slab today.
-
-## 55. The E-series pre-step runs on the CPU for the table shapes `metal_ple_pre_unserved` names
-
-Metal's pre-step (the gather and the projection of a row's per-layer side vector) serves a blob model whose PLE table
-is in a format the gather family reads, bound at whole superblocks, with a ple width the finish's threadgroup takes
-(a 32-lane multiple up to 1024) and a model dim the projection's word steps whole. Every other shape - a trimmed-planes
-load, a per-32 table bound off a superblock, a ple width past 1024, an odd dim on the bf16 rows - runs the CPU
-pre-step, and `metal_ple_dev_said` logs the reason once a load. The fix is kernels for those shapes: a finish that
-walks a ple width in more than one threadgroup pass, a gather bound at the per-32 pair's own alignment, a projection
-whose tail word handles an odd dim; each cell-proven on the device against the CPU row
-(`test_gpu_serving_declines.das`'s `test_ple_proj_dim_gates` names the shapes). The follow-up PR after the gemma leg.
-
-## 56. Five large-tier `test_metal_mtp_parity.das` cells and the Canary-Qwen oracle clip read red on master's own build
-
-On the M5 under `DASLLAMA_PARITY_FULL=1`, master's build (33e7910669) fails six large-tier cells of
-`test_metal_mtp_parity.das` and the gemma leg's tip fails five of them (the leg's `test_metal_verify_gemma26` passes):
-`test_metal_mtp_parity_35b` and `_35b_iq4xs` (the k8 dispatch count disagrees with `has_sb_rows_planes` in both
-directions - 6 past-eight dispatches on a carrier the predicate calls plain, none on one it calls superblock),
-`test_metal_mtp_parity_flashnext` (the same count), `test_metal_verify_qwen38_27b` (the drafter beside the carrier does
-not attach), and `test_metal_verify_gemma12` (the batch same-slab verify rows against the plain steps read 0.61 over 48
-rows on the leg, 0.52 over 60 and 1.06 over 108 on master, against bars of 0.5 and 1, no argmax flip). The Canary-Qwen
-greedy oracle cell (`test_whisper.das`, `test_canary_qwen_oracle`) diverges from the NeMo oracle on clip 05 at the same
-token on master and the leg. None of these runs under an arm filter, so the leg's arm chains skipped them; the whole
-file under the full parity gate is where they show. The Qwen cells belong to the Qwen leg's follow-up; the gemma-12B
-verify bar and the clip-05 divergence are the next Metal pass's first rows: decide per cell whether the kernel or the
-bar moved (`REVIEW_GPU_PARITY.md`'s bar-change rule, `tests/REVIEW_PINNED_GATES.md`'s loosening rule), then fix the
-code or ledger the bar.

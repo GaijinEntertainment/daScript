@@ -18,8 +18,9 @@ two-candidate figure rule below applies to every one of them, the knob itself st
 its engine's checklist. A data race between
 serving dispatches is not this list's subject. An arm's ranking is decided once a checked-in document or a committed box profile records
 the arm's figure or names the arm as the shipped form, and always where the race's winner is a
-crown - a verdict each box's tune sidecar records. A ranking input is a shape dimension or layer
-kind the ranking's selection reads. An A/B lab is a timing script that picks between spellings of
+crown - a verdict each box's tune sidecar records. A ranking input is any value the ranking's
+selection reads - a shape dimension, a layer kind, or a device or driver feature such as an
+extension, a subgroup size, or the decode path the driver runs. An A/B lab is a timing script that picks between spellings of
 one compute. A live arm is one that is undecided, dispatches the shipped kernel class's generated
 source, is a knockout whose stage-drop constant or knob sits in a shipped class or a lab, is a
 retained-reference arm (one ledgered as a retained reference in
@@ -75,8 +76,9 @@ in the document that records the figure, the production run whose served rows me
 same change.** A ranking holds only for the kernels its arms timed.
 
 **A diff that widens the gate admitting ranking inputs to a kernel whose ranking is decided times
-the ranked arms at a newly admitted input, at each end when the new admission spans a range, in
-the same change.** The widened gate otherwise applies the ranking at values it was never ranked
+the ranked arms at a newly admitted input in the same change - at both ends of a newly admitted
+range, and for a range with no upper bound at its lowest value and at the largest value any model
+`performance/model_specs.das` lists runs it at.** The widened gate otherwise applies the ranking at values it was never ranked
 at.
 
 **A diff that decides the ranking of a prefill tile's timing arm over a variable region, or adds
@@ -92,8 +94,9 @@ takes the tile's partial-tile store path.
 batch widths names those widths in it.**
 
 **A diff that decides the ranking of a race whose code the tree holds, or adds or changes an
-arm of a race whose ranking is decided, gives every dispatch an arm times its own output
-buffer, or ledgers the arm in
+arm of a race whose ranking is decided, gives every dispatch an arm times an output buffer the
+chain's previous dispatch does not write - two buffers alternated between consecutive dispatches
+qualify - or ledgers the arm in
 `ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md#kernel-race-fidelity` (Metal) or the Vulkan arm ledger
 (`ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md#vk-gemm-probe`,
 `ARCHITECTURE_MEASUREMENT.md#one-benchmark-rig`) as holding one output across its chain, naming

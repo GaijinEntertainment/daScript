@@ -10,6 +10,95 @@ and coverage; this ledger is the backlog for the perf pass that follows them. Ev
 what it costs today and what the fix would change.
 
 ## Entries
+- **MEASURED (2026-10-17) - the residual step's race past the slab, widened, M5 Max (128 GB).** `bench_metal_gk_rows`
+  (`dastest.das -- --bench --test`, debug-jit, the box profile `performance/m5.tune.json` at 39,101 B,
+  `DASLLAMA_ALLOW_UNTUNED=1 DASLLAMA_CPU_PREFILL=1 DASLLAMA_METAL_HAZARD_STRICT=1`) at b4b207a287 adds to the entry below the
+  widths 4608 and 5120, the window's plain step past the slab and the decode rows' f16-twin stamps (`enc_preaddrms_bhxw_c`,
+  `enc_add_rms_bhxw_c`); the figures stand in `ARCHITECTURE_GPU_SHARED_KERNELS.md`'s seam bullet. The one dispatch beats the
+  split chain at every width, row count and form timed: the seam at 4608 7.13 / 7.21 us at one / four decode rows against
+  9.26 / 9.52 and 49.10 against 101.4 on the 512-row window; the window's plain step 43.90 against 73.88 at 4608 and 114.9
+  against 136.8 at 8192; the seam with the twin at 5376 7.48 / 7.58 against 9.66 / 9.98. The 1024-lane decode builders beat
+  the 256-lane ones past the slab at every width and form, with the twin and without.
+- **MEASURED (2026-10-17) - the Metal residual step past its slab, M5 Max (128 GB).** The step stages a row's first 4096
+  columns in the threadgroup slab and re-reads the columns past it, so the gemma-4 31B's 5376-wide seams take one dispatch
+  where they took the split chain (the rms, the scaled add, the next norm), and the decode rows past the slab run 1024 lanes.
+  The kernel figures are `bench_metal_gk_rows` (`dastest.das -- --bench --test`, debug-jit, the box profile
+  `performance/m5.tune.json` at 39,101 B, `DASLLAMA_ALLOW_UNTUNED=1`) at 5677d5b4da, in
+  `ARCHITECTURE_GPU_SHARED_KERNELS.md`'s seam bullet: at 5376 the seam reads 7.48 / 7.58 us at one / four decode rows against
+  the split chain's 9.59 / 10.00, and 58.94 against 125.3 on the 512-row window. The same run's real 1024-lane stamp reads
+  5.66 / 5.72 us at dim 1152, 6.19 / 6.25 at 2560 and 6.66 / 6.73 at 3840 on the decode rows and 46.17, 54.62 and 63.44 on
+  the window, where the 256-lane builders read 3.24 / 3.35, 4.96 / 5.10, 6.75 / 6.91 and 9.26, 27.65, 40.82: the 2026-10-16
+  entry's "1024-lane bench stamp" readings (3.23 / 3.27 and the rest) were the 256-lane builders, which that race's 1024 arm
+  dispatched once the builders moved to 256 lanes, so 256 lanes wins the decode rows at 1152 and 2560 and ties at 3840, not
+  at every width, and loses past the slab (8.76 / 8.99 at 5376 against 1024's 7.48 / 7.59).
+  The 31B row, `benchmarks/lcpp_bench.das -m gemma-4-31B-it-Q4_K_M.gguf --ngl 99 -p 512 -n 128 -r 5 --for-debug-purposes`
+  under the manifest with `DASLLAMA_ALLOW_UNTUNED=1 DASLLAMA_METAL_HAZARD_STRICT=1`, the base 794cc1ac1a against
+  5677d5b4da, each tree's own copy of the binary, one model process on the box: pp512 829.4 (cv 0.1 %; the base's other
+  valid readings 825.7-831.7) against 832.6 (cv 0.15 %), +0.4 %, inside the base's own spread. tg128 holds no verdict: every
+  reading on both trees is VOID (cv 3.5-4.3 %), its first rep about 2 tok/s under the four after it on both (base 24.5 then
+  26.6-27.1, the change 24.7 then 25.7-27.1); readings taken back to back on the box fell by up to a third as it heated and
+  are dropped. The 31B's parity row - cell `gemma4_hetero_row` of `tests/test_metal_support_matrix.das`, tag `gemma4-31b/k4` -
+  is green at c824d8e8a3 (which carries 5677d5b4da) through `tests/run.das -- --suite matrix --arm fam-gemma4 --family
+  gemma4` under the same manifest and `DASLLAMA_PARITY_FULL=1`: the freeform rows within 8 of the CPU's (widest 4.25 at
+  row 20, the CPU's largest logit there 26.9), the counting and B=2 streams token for token.
+- **MEASURED (2026-10-17) - a driver-against-itself bar and an external-reference bar the M5's box profile moves, M5 Max
+  (128 GB).** Every reading below is a `tests/run.das` run at c824d8e8a3, one model process on the box, the box profile
+  `performance/m5.tune.json` (39,101 B), `DAS_TUNE_MANIFEST` at it with `DASLLAMA_ALLOW_UNTUNED=1
+  DASLLAMA_METAL_HAZARD_STRICT=1 DASLLAMA_PARITY_FULL=1`.
+  - The driver-against-itself bar: `tests/test_metal_mtp_parity.das`'s `vff_cell` holds the Metal batch rail's same-slab
+    verify against the Metal plain steps, every plain step counted a Metal decode. `MM_TOL` 1.0 now holds a K-quant
+    carrier's two-to-eight-row verify wherever a rows site's half-x forms serve on the box (`kq_rows_half_<fmt>` crowned, the
+    rail on - the M5 profile crowns thirteen formats'), over every verify row of twelve rounds; the f32-x forms keep the
+    carrier's own bar. Run `tests/run.das -- --suite mtp --arm mtp-vff`, maxd over the rows, the control (the same verify
+    with its GEMV stage knocked out, `set_metal_decode_skip("gemv")`) the widest row of its four rounds:
+    - gemma-4-12B-it Q4_K_M (`test_metal_verify_gemma12`, bar 0.5 before): arm `mtp-vff-g12` 0.61 over 48 rows, control
+      56.4; arm `mtp-vff5-g12` 0.40 over 60 rows, control 54.1; no argmax flip. The nine-row arm `mtp-vff9-g12`, at `MM_TOL`
+      before and after, reads 0.84 over 108.
+    - the Qwen MTP fixtures' arm `mtp-vff-<tag>` (`FF_TOL` 0.5 before), four rows over 48: Qwen3.5-9B-MTP UD-Q5_K_XL
+      (`9b`) 0.0061, control 27.2; Qwen3.6-27B-MTP Q4_K_M (`27b`) 0.0068, control 25.4; Qwen3.6-35B-A3B-MTP UD-Q4_K_M
+      (`35b`) 0.00083, control 20.6; Qwen3.6-35B-A3B-MTP IQ4_XS-pure (`35b-iq4xs`) 0.081, control 17.8; Qwen3.8-27B
+      Q4_K_M with its split Q8_0 head (`3.8-27b`) 0.0038, control 23.4. The Q8_0 fixtures (`0.8b`, `4b`) have no half-x
+      site and keep 0.5.
+    A probe, not evidence: the gemma-12B arms under `DASLLAMA_METAL_KQ_HALF=0` (dastest on the cell, the same tree) read
+    0.08 at four rows and 0.24 at five, the half-x forms' share of the readings above.
+  - The external-reference bar: `tests/test_whisper.das`'s `test_canary_qwen_oracle` holds the decoder's forced walk to the
+    frozen NeMo SALM ids (`harness/canary_qwen_expected.tsv`). `CN_TIE_BAR` 0.25 is the largest gap the walk may read
+    between our argmax logit and the oracle id's, on the f32 lane (f32 K/V), every step of the three clips. Run
+    `tests/run.das -- --area audio`: jfk (23 ids) and `09_1089-134686-0008` (19) read 0 on the CPU chain and on the
+    Metal tower - every oracle id our argmax; `05_1089-134686-0004` (14) reads 0.084 on the CPU chain and 0.102 on the
+    tower at step 9, a greedy near-tie between "." (13) and " Good" (7684) where NeMo picked ".". The control feeds the
+    oracle ids one step early: every step whose input moved lands outside the bar, the nearest 10.58 to 10.62 on jfk's 21
+    steps, 11.55 to 11.61 on clip 09's 17 and 11.40 to 11.41 on clip 05's 12. The same run's `test_vulkan_tower_kernels.das`
+    dies at start (exit 139): the Vulkan files do not run on the M5.
+- **MEASURED (2026-10-17) - the window's f32 per-layer-embedding GEMMs on the staged KHR tile, and the K-quant staged race,
+  the pod.** Box: the RunPod RTX PRO 4500 Blackwell 32 GB, driver 580.159.04 (no `VK_NV_cooperative_matrix_decode_vector`:
+  the cm2 tiles run the scalar decode arm), one GPU process at a time. Commands, verbatim, from the tree root under
+  `DASLLAMA_GPU=1 DASLLAMA_MODELS_DIR=/workspace/models DASLLAMA_ALLOW_UNTUNED=1`: the rows
+  `DASLLAMA_IMAGE_SAVE=0 ./bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m /workspace/models/<file> -p 512 -n 0 -r 3 --for-debug-purposes`,
+  the stages the same line under `DASLLAMA_GPU_PROF=1 DAS_LOG_LEVEL=info` (the `vk_rdpf` line, us a 512-row window); the races
+  `./bin/daslang -jit modules/dasLLAMA/harness/vk_gemm_probe.das -- plef32`, `-- kqst:<fmt>` (each figure an arm's best of four
+  interleaved rounds after one untimed round, `sweep_best_us`) and `-- narrow:<fmt>` (its second round). The gemma-4 E2B
+  Q4_K_M ships its `inp_gate` and `proj` planes F32, which the window ran on the scalar f32 tile (`DnBaGemm`) and runs on the
+  staged tile (`ARCHITECTURE_GPU_VULKAN_KHR.md#f32-rows-staged-tile`): at b06df183e8 pp512 12754 (cv 0.8 %), window 41056 us,
+  `ple_gate` 5932, `ple_proj` 4770, `ple_rq` 621; at ad39b47963 pp512 16359 (cv 0.2 %), window 31941, `ple_gate` 718 (split
+  six ways), `ple_proj` 555, `ple_rq` 837 (now the f16 convert of the stream rows); every other stage within 1 %. The E-series
+  files without f32 planes, b06df183e8 -> 5e46f3acb3: E2B Q4_0 15378 -> 15386, E2B Q8_0 16097 -> 16390, E4B Q8_0 9728 -> 9745
+  (cv 1.6 %); their `ple_proj` takes the f16 feed on the cm2 tiles (Q8_0 575 -> 569, Q4_0 646 -> 672). `plef32` at
+  ad39b47963: the scalar f32 tile 3.1 TFLOP/s at the E2B and E4B gate and projection shapes, the staged tile 75-85 at 512 rows
+  (E2B gate 127.6 -> 5.06 us, proj 127.9 -> 5.33, E4B gate 212.7 -> 7.87, proj 212.7 -> 8.25); one dispatch at a time the E2B
+  gate 164.6 us scalar, 53.8 staged whole, 33.1 / 25.2 / 17.0 split 2 / 3 / 6 with the reduce, the E4B gate 273.4, 86.7, 25.2
+  split 5; at 300 rows the E2B gate 105.8 -> 19.0 split six ways, the proj 82.5 -> 14.9. `kqst:<fmt>` at ad39b47963, us at
+  512 rows, cm2 l stamp / staged: k4 gate 75.9 / 81.9, down 72.7 / 83.0, q 27.0 / 29.0, 4B down 185.2 / 210.8; k5 gate 79.9 /
+  94.8, 4B down 200.4 / 246.6; k6 gate 82.1 / 95.6, down2x 158.2 / 194.7; iq4xs gate 78.1 / 85.4, down2x 150.9 / 181.8; at
+  500 rows the m stamp / staged: k4 89.4 / 82.7, k5 97.8 / 95.2, k6 97.6 / 95.7, iq4xs 97.7 / 86.8 (`followup_vulkan.md` row
+  149). Decision: the f32 rows take the staged tile on every coopmat device at subgroup 32 whose dim and ple sit on its k
+  step; the K-quant planes stay on the cm2 tiles. The tile pick's narrow rule (`narrow:<fmt>` at ad39b47963, every K-quant
+  format, K 1536) one dispatch at a time, us s / m / l at 512 rows: k4 at 256 and 512 wide 23.1 / 35.8-36.8 / 60.0, k6 25.2 /
+  39.5 / 64.1, iq4xs 27.2 / 39.5 / 62.0, k2 37.4 / 51.9 / 76.4, iq2xxs 45.7 / 55.9 / 81.6, iq2s at 256 wide 44.8 / 54.0; at
+  768 wide m wins (k4 37.3 / 43.6 s); overlapped sixteen deep the order turns (k4 at 256 wide 10.0 / 5.1 / 6.0). The E2B
+  Q4_K_M window (the stage command above) on 5e46f3acb3 against the same tree with the narrow rule off for the K-quant planes
+  (their k and v on the wave model's m): k 496 -> 632 us, v 477 -> 661, the window 31859 -> 32227. Decision: the narrow rule
+  stands for the K-quants; the overlapped reading that suggested otherwise is not the cost a window pays.
 - **MEASURED (2026-10-16) - the gemma leg's end re-measure, the M5 half.** Instrument `benchmarks/lcpp_bench.das`
   (`--ngl 99 -p 512 -n 128 -r 5 --for-debug-purposes`, debug-jit), the M5 Max (128 GB) alone on the box, one box profile
   minted at the leg tip (505 s, 39,101 B) and read by both trees: master's own build (33e7910669) against the leg tip
@@ -40,8 +129,8 @@ what it costs today and what the fix would change.
   Q8_0 4158 -> 4094 / 55.75 -> 55.85; 26B-A4B UD-IQ3_XXS 5422 -> 5353 / 143.3 -> 146.2; 26B-A4B Q4_K_M 6405 -> 6240 /
   135.0 -> 135.3; 31B Q4_K_M (the CPU rows, the card declines it) 1435 -> 1403 / 36.54 -> 36.47. Every prefill row but
   one holds within 3 % and every valid decode row holds parity or gains; the E2B Q4_K_M prefill loses 23 %, bisected to
-  the PLE merge and split to the window's gate and projection on the K-quant tile's scalar arm (`followup_vulkan.md` row
-  148). The assistant drafter on the 26B Q4_K_M (`--mtp-ab`, 64 tokens, three prompts): 131 -> 193 tok/s (x1.47) at 88 %
+  the PLE merge and split to the window's gate and projection planes, which that file stores in f32 and the window ran
+  on the scalar f32 tile; the staged KHR tile (the MEASURED (2026-10-17) entry above) returns the row to 16555. The assistant drafter on the 26B Q4_K_M (`--mtp-ab`, 64 tokens, three prompts): 131 -> 193 tok/s (x1.47) at 88 %
   acceptance on two prompts, x1.35 on the third. The ring at pp8192 on the 26B IQ3_XXS: 4824 tok/s and tg32 147.0 with the
   ring against 4830 and 147.0 without, host peak RSS 24.4 against 23.8 GB. The house quick probe (one server a model,
   alone: wall s / first token s / generation tok/s as the client sees), master -> leg: 12B Q8_0 7.21 / 6.87 / 12 ->

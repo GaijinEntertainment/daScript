@@ -121,7 +121,7 @@ def cm2_tile_env : int64 => g_env_vulkan.cm2_tile
 def cm2_splitk_env : int64 => g_cm2_splitk >= 0l ? g_cm2_splitk : g_env_vulkan.cm2_splitk
 
 
-[arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#khr-mm-kq-tile")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_KHR.md#khr-mm-kq-tile")]
 def khr_kq_tile_on : bool => g_gpu.has_coopmat && g_gpu.subgroup_size == 32l
 
 //! the cm2 flash tiles serve where the device was created in cm2 mode AND the mode still reads cm2 - a test that forces the mode in-process moves the pick with it
@@ -169,6 +169,17 @@ def cm2_chunk(n, nsplit : int64) : int64 {
     return ck * (nsplit - 1l) < n ? ck : 0l
 }
 
+//! the most k chunks, up to `want` and eight, `cm2_chunk` admits over K `n` whose partial planes of `plane_bytes` each fit
+//! `scratch_bytes` (1: whole)
+[arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
+def cm2_split_fit(n, want : int64; plane_bytes : int64 = 0l; scratch_bytes : int64 = 9_223_372_036_854_775_807l) : int64 {
+    var sk = min(want, 8l)
+    while (sk > 1l && (cm2_chunk(n, sk) == 0l || sk * plane_bytes > scratch_bytes)) {
+        sk--
+    }
+    return max(sk, 1l)
+}
+
 //! workgroups a (d, cnt) GEMM takes at the token column `tc`
 def cm2_tiles_at(d, cnt, tc : int64) : int64 {
     verify(tc >= 32l, "vk prefill: cm2_tiles_at got the e column's class key (CM2_TC_E), which is no column width")
@@ -190,10 +201,7 @@ def cm2_gemm_pick(d, cnt, n : int64; sib_tiles : int64 = 0l; scratch_bytes : int
     let khr = g_gpu.coopmat_mode == COOPMAT_MM
     let forced = cm2_splitk_env()
     if (forced > 0l) {
-        var sk = min(forced, 8l)
-        while (sk > 1l && cm2_chunk(n, sk) == 0l) {
-            sk--
-        }
+        let sk = cm2_split_fit(n, forced)
         return (tc = tc0, nsplit = sk, ksplit = sk > 1l ? cm2_chunk(n, sk) : 0l)
     }
     if (n < 2048l || d < 128l || cnt < tc0) {

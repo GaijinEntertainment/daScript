@@ -1,11 +1,8 @@
 # dasLLAMA Vulkan Tier Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `ARCHITECTURE_GPU_VULKAN.md`, `ARCHITECTURE_GPU_VULKAN_ATTN.md`,
-`ARCHITECTURE_GPU_VULKAN_DECODE.md`, `ARCHITECTURE_GPU_VULKAN_GEMM.md`,
-`ARCHITECTURE_GPU_VULKAN_MOE.md`, `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`,
-`ARCHITECTURE_GPU_VULKAN_NROW.md`, `ARCHITECTURE_GPU_VULKAN_MTP.md`,
-`ARCHITECTURE_GPU_VULKAN_HC.md`, `ARCHITECTURE_GPU.md`. Planned work: `followup_vulkan.md`.
+docs: `ARCHITECTURE_GPU_VULKAN.md` and every `ARCHITECTURE_GPU_VULKAN_<CONCERN>.md` companion beside
+it, and `ARCHITECTURE_GPU.md`. Planned work: `followup_vulkan.md`.
 
 **A diff that adds a Vulkan dispatch family - a `[vk_dispatch]` class and the `ensure_<family>` /
 `set_<family>` pair generated from it - or that caches a descriptor set or a host address (a

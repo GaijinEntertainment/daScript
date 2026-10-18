@@ -70,16 +70,29 @@ struct and the body; a stamp sets the template constants its home needs and maps
 | `GkMoeCombine` | `MetalMoeCombine`, `MetalMoeReduce` (`GATHERED`) | `MoeCombine` (`WINDOW`: the chunk window, the accumulate, the zero-weight skip) | `GATHERED`, `WINDOW`, `SLOT_X4` |
 | `GkDnGate` | `MetalDnGate` / `Sig` (`rsqrt`) | `DnScanP3` / `Sig` | `ZSIG`, `RSQRT` |
 | `GkQknRopeKv` | `MetalQknRope16` / `32` (one row), `MetalQknRopeB16` / `B32` (rows), `MetalPfQkn` / `HX` (the window, the q twin) | `QknRopeKv` / `F16` | `KT`, `CLAMP16`, `V_WG`, `LANES` / `EPT`, `HX` |
-| `GkRouterGemv` | one Metal shell (`MetalRouterGemvT`: the grid onto the rows under `ROW_WG`) under two formats - the f32 rows (`MetalMoeRouterT`: `MetalMoeRouter`, a workgroup a row, the decode column; `MetalMoeRouterB`, a subgroup a row, `COL_CLAMP`, 8 columns) and the E-series side rows' projection's bf16 words (`MetalPleProjBf16T`: `MetalPleProjBf16One`, `MetalPleProjBf16`, the same two shapes) | `RouterGemv` (a workgroup a row, `NORM`), `RouterGemvBf16` (the bf16 words under `YSCALE`) | `ROW_WG`, `VW`, `NC`, `COL_CLAMP`, `NORM`, `BIAS`, `BF16`, `YSCALE` |
+| `GkRouterGemv` | one Metal shell (`MetalRouterGemvT`: the grid onto the rows under `ROW_WG`) under two formats - the f32 rows (`MetalMoeRouterT`: `MetalMoeRouter`, a workgroup a row, the decode column; `MetalMoeRouterB`, a subgroup a row, `COL_CLAMP`, 8 columns) and the E-series side rows' projection's bf16 words (`MetalPleProjBf16T`: `MetalPleProjBf16One`, `MetalPleProjBf16`, the same two shapes; `MetalPleProjBf16HwT`: `MetalPleProjBf16HwOne`, `MetalPleProjBf16Hw`, a bf16 halfword a lane), and the f32 rows a lane an element (`MetalF32RowsT`: `MetalF32RowsOne`, `MetalF32RowsB`, the same two shapes) | `RouterGemv` (a workgroup a row, `NORM`), `RouterGemvBf16` (the bf16 words under `YSCALE`), `RouterGemvBf16Hw` (the same rows a bf16 halfword a lane) | `ROW_WG`, `VW`, `NC`, `COL_CLAMP`, `NORM`, `BIAS`, `BF16`, `YSCALE` |
 | `GkPkGemv` | `MetalPkGemv*` (f32 rows), `MetalPkGemvQ8*` | `TtsPkGemv*` (`QUAD`) | the epilogues, `QUAD`, `RSQRT` |
 | `GkMoeCombine` `SH` | `MetalMoeCombineSh`, `MetalMoeReduceSh` | the combine twins' `gated` arm | `SH`: the shared row under its gate logit, the router's row `ne` |
 | `GkCat2` | `MetalCat2` | `Cat2` | nothing; position- or stream-major, the a row repeated over the streams |
 | `GkDnConv` | `MetalDnConvN` / `N4` (`PB` 1 / 4, `RING` 8: a group of 16 rows or fewer) | `DnConv` (`PB` 32, `RING` 4) | `PB`, `RING` |
 | `GkMoeCombG4` | `MetalMoeCombG4` / `Hx` (the selection rows' slots, the next norm in f32, `Hx` its f16 twin), `MetalMoeCombG4Pf` (the bucket inverse's slots, no norm out; 1024 lanes, `rsqrt`) | `ClsArCombG4` / `F16B` / `Rq` (the slot map, the next norm in f32, f16 or Q8_0 blocks; 256 lanes, `1 / sqrt`) | `TG`, `RSQRT`, `GATHERED`, `OUT_F32` / `OUT_F16` / `OUT_Q8`, `HX`, `PRESUM_SWITCH`; the stash and, on Metal, the norm rows' layout |
 | `GkClsEpilogue` | `MetalClsEpilogue` | `ClsEpilogue` | nothing; every row in one dispatch |
-| `GkAddRmsRows` | `MetalAddRms` / `HX` (the plain step), `MetalPreAddRms` / `HX` (the sandwich seam in one dispatch: the branch normed under its post norm, the add, the next norm), `MetalPreAdd` (no norm out; 1024 lanes a decode row, 256 the window) | `ClsArAddRms` / `F16B`, `ClsArAddRmsRqB` and the `ArAddRmsRq*` stamps (Q8_0 out), the combines' `ArCombBase` (256 lanes) | `LANES`, `PRE`, `PRE_SWITCH`, `NORM_SWITCH`, `ARMS`, `X4`, `HX`, `OUT_*`; on Metal, the norm rows' layout |
+| `GkAddRmsRows` | `MetalAddRms` / `HX` (the plain step), `MetalPreAddRms` / `HX` (the sandwich seam in one dispatch: the branch normed under its post norm, the add, the next norm), `MetalPreAdd` (no norm out); 256 lanes the window and a decode row within the slab, 1024 a decode row past it | `ClsArAddRms` / `F16B`, `ClsArAddRmsRqB` and the `ArAddRmsRq*` stamps (Q8_0 out), the combines' `ArCombBase` (256 lanes) | `LANES`, `PRE`, `PRE_SWITCH`, `NORM_SWITCH`, `ARMS`, `X4`, `HX`, `OUT_*`; on Metal, the norm rows' layout |
 | `GkPleAct` | `MetalGegluSide` (in place over the gate rows, 64 lanes) | `PleActF32` (`OUT`: the f32 projection's x, 256 lanes) | `OUT`; the side row's index is `gk_strided_at`, `ActRqT.up_at`'s |
 | `GkPleFinish` | `MetalPleFinish` (`XSCALE`: the projection's 1 / sqrt(dim) in the finish, `rsqrt`) | `PleFinish` (the projection arrives scaled, `1 / sqrt`) | `XSCALE`, `RSQRT`; 256 lanes a slice on both |
+
+**The Metal E-series pre-step serves every table, ple width and model dim a blob model carries.** The gather reads the
+table on its own format's block grid - a K-quant table at whole superblocks, a per-32 table at whole 32-blocks, the
+per-32 pair bound on the 16-byte grid below it with the blocks past the bind in its arguments (`EmbedB32Args.b0`,
+`b32_bind_rem`), the q8 copy at any element. The finish's lanes stride a slice, so a ple width past 256 runs in as many
+passes as it takes and one off the 32-lane step leaves its last lanes idle. The projection's bf16 rows step word pairs where
+the dim and the base are even and one halfword a lane where a row would start mid-word (`MetalPleProjBf16HwT`, picked by
+`enc_ple_proj_bf16_rows`; Vulkan's `RouterGemvBf16Hw` the same; both homes pick through `gk_bf16_pairs`); the f32 rows step float4 words where the dim, the base and the column stride sit on that
+lattice and one element a lane elsewhere (`MetalF32RowsT`, picked by `enc_f32_rows_gemv`). The narrow walks are stamps of
+their own, so the word stamps' bodies and both homes' router words stay as they are. The window projects on the bf16 tile where the model dim is whole 32-element chunks and
+layers x ple whole 64-row tiles (`pf_bf16_tile_ok`), else on the position-blocked bf16 GEMV. `metal_ple_pre_unserved`
+names what is left: a planar load and a trimmed image, which serve no Metal step, and a table off its format's blocks or
+in a format no gather stamp reads, which no load produces.
 
 The gated FFN's activation is one function on both homes (`gk_act_mul`, `dasllama_gpu_math.das`): the Metal ew2 and
 w13 combines and every Vulkan act class call it, the gelu its clamped tanh form.
@@ -107,14 +120,35 @@ least 9), any other row the median. Vulkan: `./bin/daslang -jit modules/dasLLAMA
 - **The residual step's sandwich seam is one dispatch on both homes** (`GkAddRmsRows.PRE`: the branch normed under its post
   norm, the add and the next norm in one pass). The M5's 512-row window, `debug-jit`, at dim 2560 reads 27.51 us against the
   rms + add_rms pair's 36.56 (the no-norm seam 18.79 against 39.04), at dim 3840 40.69 against 55.80 (27.74 against 56.72).
-  The window's stamps and the decode builders run 256 lanes, the count that ties 1024 at every width and row count where
-  128 loses. At 512 rows on the f16 twin's pipeline the shipped window builder reads 27.10 us at dim 2560 and 40.33 at
-  3840; a 1024-lane stamp reads 27.10 and 40.30, a 128-lane one 34.50 and 54.31. At the decode
-  rows on the plain pipeline the shipped 256-lane builder reads, at one / four rows, 3.19 / 3.28 us at dim 1152, 4.87 / 5.04
-  at 2560 and 6.71 / 6.83 at 3840; a 1024-lane stamp reads 3.23 / 3.27, 4.88 / 5.07 and 6.71 / 6.85, a 128-lane one 4.24 /
-  4.35, 7.76 / 8.07 and 11.24 / 11.59. The fused seam stages a row through a
-  4096-float threadgroup slab (`MetalAddRmsT.SLAB`), so a row wider than that - the 31B's 5376 - takes the split
-  chain (the rms, then the add and the next norm) at every seam, and the race holds no fused arm at that width.
+  The Metal stamps stage a row's first 4096 columns through the threadgroup slab (`MetalAddRmsT.SLAB`) and re-read the
+  columns past it from the stream rows the step wrote and the partner rows, so every width takes the one dispatch; the
+  window's stamps run 256 lanes at every width, the decode builders 256 within the slab and 1024 past it (the `w` builders,
+  `enc_residual`'s pick). The figures from here to the bullet's end are one run of the bench at 5677d5b4da
+  (`DASLLAMA_ALLOW_UNTUNED=1 DASLLAMA_CPU_PREFILL=1 DASLLAMA_METAL_HAZARD_STRICT=1 DAS_LOG_LEVEL=info` beside the manifest).
+  The lane race (`seam_lane_race`, one / four rows of the plain pipeline, 512 rows of the f16 twin's; 256 / 1024 / 128
+  lanes, us): the decode rows at dim 1152 3.24 / 3.35, 5.66 / 5.72, 4.28 / 4.43; at 2560 4.96 /
+  5.10, 6.19 / 6.25, 7.87 / 8.14; at 3840 6.75 / 6.91, 6.66 / 6.73, 11.38 / 11.66; at 5376 8.76 / 8.99, 7.48 / 7.59, 15.31
+  / 15.68. The window at 1152 9.26, 46.17, 11.87; at 2560 27.65, 54.62, 35.23; at 3840 40.82, 63.44, 55.33; at 5376 57.22,
+  75.24, 80.41. Past the slab the one dispatch against the split chain (the rms, the scaled add, the next norm; us, one /
+  four decode rows, then the window): the seam at 5376 7.48 / 7.58 against 9.59 / 10.00, 58.94 against 125.3; at 8192 8.60 /
+  8.72 against 10.84 / 11.39, 125.3 against 227.6; the no-norm seam at 5376 4.48 / 4.54 against 5.31 / 5.61, 39.46 against
+  83.11, at 8192 5.20 / 5.28 against 5.96 / 6.39, 64.02 against 134.3; the plain step at 5376 4.30 / 4.39 against the add
+  and the norm's 5.31 / 5.62, at 8192 5.01 / 5.14 against 5.96 / 6.38. The decode rows' one dispatch on the 256-lane
+  builders past the slab reads 8.76 / 9.00 at 5376 and 12.62 / 12.94 at 8192 for the seam, slower than the split chain at
+  8192. A bench stamp whose slab holds the 31B's whole row (`BenchPreAddRmsWide`, 5376 floats) reads with the re-read
+  form at the 256-lane decode rows (8.76 / 8.98) and 55.35 against 58.94 on the window, under a tenth of a percent of a
+  window, so the stamps keep the one slab. A second run of the bench at b4b207a287 (the same knobs) times the low end of the
+  range past the slab, the window's plain step and the decode rows' f16-twin stamps (`enc_preaddrms_bhxw_c`,
+  `enc_add_rms_bhxw_c`, which a rows site carrying the twin dispatches), one dispatch against the split chain, us: the seam at
+  4608 7.13 / 7.21 against 9.26 / 9.52 and 49.10 against 101.4 on the window, at 5120 7.40 / 7.50 against 9.48 / 9.83 and
+  55.05 against 116.0 (the four-row 7.50 a repeat run's, the first VOID at cv 4 %); the no-norm seam at 4608 4.23 / 4.30 against 5.09 / 5.37 and 33.83 against 70.17, at 5120 4.39 / 4.49
+  against 5.26 / 5.54 and 37.62 against 78.30; the plain step at 4608 4.10 / 4.17 against 5.12 / 5.35, at 5120 4.27 / 4.33
+  against 5.27 / 5.51; the window's plain step 43.90, 49.19, 52.60 and 114.9 at 4608, 5120, 5376 and 8192 against 73.88,
+  83.07, 87.29 and 136.8. With the twin the seam reads 7.12 / 7.21 against 9.29 / 9.52 at 4608, 7.41 / 7.50 against 9.61 /
+  9.93 at 5120, 7.48 / 7.58 against 9.66 / 9.98 at 5376 and 8.56 / 8.71 against 10.83 / 11.33 at 8192, and the plain step
+  4.33 / 4.41 against 5.14 / 5.33, 4.54 / 4.60 against 5.31 / 5.53, 4.55 / 4.64 against 5.35 / 5.58 and 5.28 / 5.40 against
+  5.97 / 6.38 at the same widths; the 256-lane builders past the slab read slower than the 1024-lane ones at every width
+  and form, with the twin and without.
 - **The Vulkan MoE step stores its next norm four elements in flight a lane** (`GkMoeCombG4.OUT_X4`, the residual step's
   `GkQ8BlockStore.store_x4` form, which the residual step's `ArBase` stores through): the pod reads 10.37 us with it against
   12.29 with the stride loop (`ProbeArCombG4X1`), `debug-jit`.

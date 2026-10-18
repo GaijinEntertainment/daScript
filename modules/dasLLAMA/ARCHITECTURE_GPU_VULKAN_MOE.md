@@ -69,7 +69,7 @@ except where a probe arm is named.
   tile's column at the format's own k step, keyed `CM2_TC_E` in the class ladders
   (`ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default`) - and every piece dispatches one workgroup per
   column tile per 128-row weight tile of the plane. In mm mode both piece kinds run the KHR
-  128 x 128 tile (`ARCHITECTURE_GPU_VULKAN_GEMM.md#khr-mm-kq-tile`) over the same records and maps -
+  128 x 128 tile (`ARCHITECTURE_GPU_VULKAN_KHR.md#khr-mm-kq-tile`) over the same records and maps -
   a 32-row s piece is an edge tile there, and the workgroup counts agree because a column is one
   tile either way - so a KHR-mode card serves the resident MoE block (`vk_rdec_moe_ok`). The
   per-32 expert rails ride the same pieces through their own `<Fmt>Cm2T` stamps; the mx4 one

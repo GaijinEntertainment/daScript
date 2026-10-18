@@ -3,8 +3,8 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 doc: `../ARCHITECTURE.md`. Planned work: `../followup_general.md`.
 
-A cell is one `t |> run` subtest, or a `[test]` function that runs no subtest; a helper's
-asserts belong to every cell that calls it. A pinned test cell is a cell the pinned set lists,
+A cell is one `t |> run` subtest, or a `[test]` function that runs no subtest, and owns the asserts
+of every helper it calls. A pinned test cell is a cell the pinned set lists,
 or any cell of a file the pinned set lists whole - a file entry, one naming the file and no cell -
 and the pinned set is the only test of whether a cell is one; a named-cell entry names a `[test]`
 function and pins every cell that function runs. The pinned set, one entry a line, each with what it
@@ -28,21 +28,27 @@ must keep holding:
     under the global scale times the expert's down scale - the kernel's fold order;
   - under the global scale, the swapped fold order (down scale, then global scale) parting from
     the kernel's order on the fixture and missing the device's weights - a reference-side
-    control: the Metal compiler reorders the two multiplies, so a swap of them in the kernel's
-    source reads the same bits on the device and this cell cannot see it, while a wrong fold
-    value reds every weight;
+    control (the compiler reorders the kernel's two multiplies, so a kernel-side swap reads the
+    same bits);
   - the global scale on the softmax_weight picks;
   - `moe_comb_g4_gate` at the decode row and the 26B's row;
-  - `ple_proj_bf16_gate` on both stamps, exact, with its poisoned lead element;
+  - `ple_proj_bf16_gate` on the pair stamps and on the halfword stamps - an odd dim and an odd
+    base among its arms - exact, with its poisoned lead element;
+  - `f32_rows_gate` on the float4 router and on the element-walk stamps at a dim and a base off
+    the float4 lattice;
   - `geglu_side_gate` over the position-major side rows, the contiguous read its control;
   - `ple_finish_gate` on the position-major side rows (`ple_fin_args`), at the E2B's slices
-    (35 x 256) too, the finish without the prescale its control.
-  The PLE side-row gather and the gemma-4 down-scale fold left this cell: the gather is
-  `test_metal_misc_kernels`' embed gates (entry below), the fold the select's down-scale arms.
+    (35 x 256), at a ple width past 1024 and at one off the 32-lane step, the finish without
+    the prescale its control.
+- `test_metal_prefill_kernels.das`'s `test_pf_bf16_tile_pick` cell must hold the window
+  projection's tile pick: the bf16 tile only where layers x ple is a multiple of 64 and the dim a
+  multiple of 32.
 - `test_metal_misc_kernels.das`'s `test_metal_misc_kernels` cell must hold its token-table
   gathers bit for bit: `embed_q8_gate`, `embed_b32_gate` on q51, iq4nl32, q4032 and q5032 at 96
-  wide and at 2048 wide past a whole other table's blocks, `embed_kq_gate` on every K-quant
-  format it lists, and `embed_f32_gate` past a lead of foreign floats.
+  wide, at 2048 wide past a whole other table's blocks, and at a lead off a superblock boundary
+  (the bind's block skip), `embed_kq_gate` on every K-quant format it lists, and `embed_f32_gate`
+  past a lead of foreign floats; and the residual seam's `add_rms_gate` on every stamp at every
+  shipped width, 5376 and 8192 past the slab among them.
 - `test_metal_gemm_kernels.das`'s `test_metal_gemm_kernels` cell must hold every kernel gate it calls, at the bar
   each gate sets - the census's evidence among them: `kq_mulmm_gate`, `kq_devw_gate`, `kq_dbuf_gate`,
   `moe_mulmm_kq_gate`, `moe_mulmm_split_gate`, `attn_qk_mm_gate` and `attn_dev_pair_gate`.
@@ -84,6 +90,12 @@ must keep holding:
 - `test_vulkan_kernels.das`'s `test_vkd_router_gemv_bf16` cell must hold the bf16 router-form
   rows against the CPU dot at a row base and an output base, the two-base form and the
   norm-folded form.
+- `test_vulkan_kernels.das`'s `test_vkd_router_gemv_cols` cell must hold the router GEMV over x
+  rows as columns against the one-row dispatch bit for bit and the CPU dot, the bf16 rows'
+  halfword stamp at an odd dim among its arms.
+- `test_vulkan_kernels.das`'s `test_vkd_f32_khr_batch` cell must hold the staged KHR tile over
+  f32 rows against the CPU oracle with each weight rounded to f16, whole and in two k chunks
+  through the reduce.
 - `test_vulkan_kernels.das`'s `test_vkd_kq_gemv_k4_gu` cell must hold the fused gate + up + act
   + requant on Q4_K, IQ4_XS, iq3s4 and IQ2_S against the three-kernel path byte for byte and the
   CPU chain.
@@ -124,13 +136,19 @@ must keep holding:
   voices and speaking.
 - `test_tts_pocket.das`'s `test_pocket_quiet_floor` cell must hold the served lane's quiet floor
   against the f32 lane's.
+- `test_whisper.das`'s `test_canary_qwen_oracle` cell, an external-reference compare, must hold the forced walk over
+  `harness/canary_qwen_expected.tsv`'s ids within `CN_TIE_BAR` of our argmax at every step of its
+  three clips, on the CPU chain and on the Metal tower, its control the same walk fed each id one step early
+  with the oracle id outside the bar at every step that input moved, and the greedy ids equal to the
+  oracle's up to the first tie.
 
-**A diff that changes the contract a pinned test cell holds fixed - what its asserts hold, an
-axis gained or lost - updates that cell's entry in the pinned set in the same change; a diff
-adding a cell to a file with a file entry adds to that entry each axis the cell asserts that the
-entry does not name.**
+**A diff that changes the contract a pinned test cell holds fixed - what its entry says it must
+keep holding, an axis gained or lost - updates that cell's entry in the pinned set in the same
+change; a diff adding a cell to a file with a file entry adds to that entry each axis the cell
+asserts that the entry does not name.**
 An axis is one distinct behaviour the cell asserts - an output form, a refusal path, an argument's
-order; a new input row on an axis the cell already asserts is not an axis gained.
+order; a new input row is an axis gained only where it runs a kernel stamp, an output form or a
+branch of the kernel or its router that no earlier row of the cell ran.
 
 **A diff that widens a pinned test cell's tolerance, swaps its comparison for one more outputs
 pass, rewrites an expected value without updating that cell's pinned-set entry in the same change,
@@ -149,8 +167,11 @@ asserts the replacement's output to that bound.**
 
 **A diff that adds a cell or an assert whose expected value must be kept in step with something
 maintained outside the cell - a document, a checked-in table, a committed artifact's form, a
-roster, a knob list; not a value the cell's own claim defines - or that a checked-in table names
-as its evidence, adds the cell carrying it to the pinned set in the same change** - as a named
-cell, or, when the new cell leaves every cell of its file pinned, by replacing the file's named
-cells with one file entry naming what it pins. A new entry in an existing cell's expectation list
-is not a new assert.
+roster, a knob list; not a value the cell's own claim defines - or that a checked-in table - the
+model table in `../README.md`, or a list of kernel names whose coverage note names a test cell as
+the evidence for each - names as its evidence, adds the cell carrying it to the pinned set in the
+same change** - as a named cell, or, when the new cell
+leaves every cell of its file pinned, by replacing the file's named cells with one file entry
+naming what it pins. A new entry in an existing cell's expectation list is not a new assert, and
+an assert that compares against a `../dasllama/` constant by name, not against a literal copy of
+it, keeps nothing in step.

@@ -78,16 +78,29 @@ def test_gemma_drafter_refusals(t : T?) {
     t |> run("the resolver finds the upstream head beside an unsloth -UD- trunk, a K-quant and an i-quant one, through the facade too") @(t : T?) {
         let dir = scratch_path("ud")
         mkdir_rec(dir)
-        let head = scratch_file("ud/mtp-gemma-4-26B-A4B-it-Q8_0.gguf", "head")
+        let head = arch_gguf("ud/mtp-gemma-4-26B-A4B-it-Q8_0.gguf", "gemma4-assistant")
         for (trunk in ["gemma-4-26B-A4B-it-UD-Q4_K_M.gguf", "gemma-4-26B-A4B-it-UD-IQ3_XXS.gguf", "gemma-4-26B-A4B-it-Q4_K_M.gguf", "gemma-4-26B-A4B-it-IQ4_XS.gguf"]) {
             t |> equal(gemma_drafter_sidecar(path_join(dir, trunk)), head, "{trunk} finds mtp-gemma-4-26B-A4B-it-Q8_0.gguf")
             t |> equal(mtp_drafter_sidecar(path_join(dir, trunk)), head, "{trunk} finds it through the facade")
         }
-        let own = scratch_file("ud/mtp-gemma-4-26B-A4B-it-UD-Q8_0.gguf", "own head")
+        let own = arch_gguf("ud/mtp-gemma-4-26B-A4B-it-UD-Q8_0.gguf", "gemma4-assistant")
         t |> equal(gemma_drafter_sidecar(path_join(dir, "gemma-4-26B-A4B-it-UD-Q4_K_M.gguf")), own, "a head named with the trunk's -UD tag wins over the untagged one")
         t |> equal(gemma_drafter_sidecar(path_join(dir, "gemma-4-12B-it-UD-Q4_K_M.gguf")), "", "the control: another model's trunk finds no head")
     }
+    t |> run("a split NextN head under the drafter's name is no drafter; the same name carrying an assistant is") @(t : T?) {
+        let dir = scratch_path("nextn")
+        mkdir_rec(dir)
+        let trunk = path_join(dir, "Qwen3.8-27B-Q4_K_M.gguf")
+        arch_gguf("nextn/mtp-Qwen3.8-27B-Q8_0.gguf", "qwen35")
+        t |> equal(gemma_drafter_sidecar(trunk), "", "the qwen35 head beside the trunk is not an assistant drafter")
+        let exact = arch_gguf("nextn/mtp-Qwen3.8-27B-Q4_K_M.gguf", "qwen35")
+        t |> equal(gemma_drafter_sidecar(trunk), "", "nor is the exact-name qwen35 head")
+        let side = arch_gguf("nextn/mtp-Qwen3.8-27B-Q8_0.gguf", "gemma4-assistant")
+        t |> equal(gemma_drafter_sidecar(trunk), side, "the control: the same name carrying gemma4-assistant is found")
+        remove(exact)
+    }
 }
+
 
 [test]
 def test_gemma_drafter_attach_checks(t : T?) {

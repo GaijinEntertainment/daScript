@@ -16,6 +16,9 @@ require dasllama/dasllama_ple   // ple_cpu_pre_rows - the CPU pre-step's witness
 require dasllama/dasllama_common   // Model, embed_row, forward, forward_prefill
 require dasllama/dasllama   // create_session
 require ?vulkan dasllama/dasllama_vulkan_decode   // vk_rdec_ple_side_row, vk_rdec_token_gathered - the device pre-step's witnesses
+require ?vulkan dasllama/dasllama_vulkan_prefill   // ple_f32_tile_ok - whether the window's f32 GEMMs take the staged tile
+require ?vulkan dasllama/dasllama_env   // g_env_vulkan.vk_ple_f32_tile - the knob the pick reads
+require ?vulkan dasllama/dasllama_vulkan_common   // g_gpu, vk_kernel_coverage - the device the feed pick reads, the census table
 
 // gemma-4-E2B Q8_0 (the E-series carrier: per-layer embeddings, the upper layers sharing the K/V of the ones below, two
 // dense FFN widths, a sliding window the two-window cell engages): arm `g4e`. Skips off the JIT, without DASLLAMA_GPU=1
@@ -96,19 +99,20 @@ def test_gpu_resident_gemma4_e2b_ple_tables(t : T?) {
 }
 
 //! the per-layer gate and projection planes in their own formats on the device (arm `g4e-kq`): the E2B Q4_K_M file ships them
-//! F32 - the router GEMV, the f32 act and the f32 tile read the file's rows, the feed held against the file's f32 chain - the Q4_0 file
+//! F32 - the router GEMV, the f32 act and the window's f32 GEMMs read the file's rows (the staged KHR tile where the device has it, else the
+//! scalar f32 tile), the feed held against the file's f32 chain - the Q4_0 file
 //! Q4_0, and the ple-Q6_K / ple-Q5_0 mints of the Q8_0 file (`../performance/model_specs.das`) Q6_K and Q5_0, each on its format's decode
-//! GEMV (`gemv`: their census counts rise over the fed steps - on the mints no other plane carries the format) with the f32 classes
-//! undispatched (the control); the Q8_0 file (arm `g4e-kq-q8`), whose every plane is Q8_0, dispatches none of the three formats'
+//! GEMV (`gemv`: their census counts rise over the fed steps - on the mints no other plane carries the format) with the f32 classes and
+//! the staged tile undispatched (the control); the Q8_0 file (arm `g4e-kq-q8`), whose every plane is Q8_0, dispatches none of the three formats'
 //! GEMVs - their counters' control
 [test]
 def test_gpu_resident_gemma4_e2b_ple_planes(t : T?) {
     let gemvs = fixed_array("kq_gemv_q40", "kq_gemv_k6", "q5032_gemv")
-    for (spec in [(file = "gemma-4-E2B-it-Q4_K_M.gguf", f32 = true, arm = "g4e-kq", gemv = ""),
-                  (file = "gemma-4-E2B-it-Q4_0.gguf", f32 = false, arm = "g4e-kq-q40", gemv = "kq_gemv_q40"),
-                  (file = "gemma-4-E2B-it-ple-Q6_K-local.gguf", f32 = false, arm = "g4e-kq-ple-q6k", gemv = "kq_gemv_k6"),
-                  (file = "gemma-4-E2B-it-ple-Q5_0-local.gguf", f32 = false, arm = "g4e-kq-ple-q50", gemv = "q5032_gemv"),
-                  (file = "gemma-4-E2B-it-Q8_0.gguf", f32 = false, arm = "g4e-kq-q8", gemv = "")]) {
+    for (spec in [(file = "gemma-4-E2B-it-Q4_K_M.gguf", f32 = true, arm = "g4e-kq", gemv = "", tile = ""),
+                  (file = "gemma-4-E2B-it-Q4_0.gguf", f32 = false, arm = "g4e-kq-q40", gemv = "kq_gemv_q40", tile = ""),
+                  (file = "gemma-4-E2B-it-ple-Q6_K-local.gguf", f32 = false, arm = "g4e-kq-ple-q6k", gemv = "kq_gemv_k6", tile = "kq_batch_k6"),
+                  (file = "gemma-4-E2B-it-ple-Q5_0-local.gguf", f32 = false, arm = "g4e-kq-ple-q50", gemv = "q5032_gemv", tile = "q5032_batch"),
+                  (file = "gemma-4-E2B-it-Q8_0.gguf", f32 = false, arm = "g4e-kq-q8", gemv = "", tile = "")]) {
         let gf = GemmaFile(file = spec.file, arm = spec.arm)
         t |> run("{spec.file}: the per-layer gate and projection planes in their file format, the forced feed against the CPU chain") @(t : T?) {
             var armed = false   //! the rig armed the driver on the file (else every cell below skipped, saying why)
@@ -119,16 +123,30 @@ def test_gpu_resident_gemma4_e2b_ple_planes(t : T?) {
             }
             let act0 = census("ple_act_f32_cls_spv")
             let gemm0 = census("dn_ba_cls_spv")
+            let staged0 = census("f32_batch_khr_cls_spv")
+            let sdot0 = empty(spec.tile) ? 0l : census("{spec.tile}_cls_spv")
+            let f16t0 = empty(spec.tile) ? 0l : f16_tile_count(spec.tile)
             var inscope gv0 <- [for (g in gemvs); format_gemv_count(g)]
             gemma_forced_feed(t, 40l, gf, spec.f32)   //! the Q4_K_M file's CPU q8 chain sits off its f32 chain at one step: its `exact` form
             return if (!armed || act0 == NO_CENSUS)
             let act_n = census("ple_act_f32_cls_spv") - act0
             let gemm_n = census("dn_ba_cls_spv") - gemm0
+            let staged_n = census("f32_batch_khr_cls_spv") - staged0
             if (spec.f32) {
-                t |> success(act_n > 0l && gemm_n > 0l, "the token command's f32 act ({act_n}) and the window's f32 tile ({gemm_n}) served the f32 rows")
+                t |> success(act_n > 0l, "the token command's f32 act ({act_n}) served the f32 rows")
+                if (staged_window_tile()) {
+                    t |> success(staged_n > 0l && gemm_n == 0l, "the window's f32 GEMMs ran on the staged tile ({staged_n}), the scalar f32 tile undispatched ({gemm_n})")
+                } else {
+                    t |> success(gemm_n > 0l && staged_n == 0l, "the window's f32 GEMMs ran on the scalar f32 tile ({gemm_n}) on a device without the staged tile")
+                }
                 return
             }
-            t |> equal(act_n + gemm_n, 0l, "no f32 per-layer plane, no f32 act or tile dispatched")
+            t |> equal(act_n + gemm_n + staged_n, 0l, "no f32 per-layer plane, no f32 act, scalar tile or staged tile dispatched")
+            if (!empty(spec.tile) && f16_feed_device()) {   //! the mints' per-layer planes are their format's only planes: the window's gate and projection alone reach these stamps
+                let sdot_n = census("{spec.tile}_cls_spv") - sdot0
+                let f16t_n = f16_tile_count(spec.tile) - f16t0
+                t |> success(f16t_n > 0l && sdot_n == 0l, "the window's per-layer GEMMs ran on the f16 feed's tiles ({f16t_n}), the Q8-fed sdot4 tile undispatched ({sdot_n})")
+            }
             for (g, before in gemvs, gv0) {
                 let gv_n = format_gemv_count(g) - before
                 if (g == spec.gemv) {
@@ -138,6 +156,38 @@ def test_gpu_resident_gemma4_e2b_ple_planes(t : T?) {
                 }
             }
         }
+    }
+}
+
+//! the window's f32 per-layer GEMMs ride the staged KHR tile on this device and knob (`pf_ple_f32_staged`'s answer at the E2B's
+//! dim and ple)
+def private staged_window_tile() : bool {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        return ple_f32_tile_ok(1536l, 256l, g_env_vulkan.vk_ple_f32_tile)
+    } else {
+        return false
+    }
+}
+
+//! the dispatches of a format's f16-fed tiles (`<tile>` the stamp family's prefix): the cm2 l, m, s and e columns and the KHR tile
+def private f16_tile_count(tile : string) : int64 {
+    var n = 0l
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        var cov <- vk_kernel_coverage()
+        for (col in fixed_array("cm2l", "cm2m", "cm2s", "cm2e", "khr")) {
+            n += cov?["{tile}_{col}_cls_spv"] ?? 0l   //! a per-32 family has no l or m column
+        }
+        delete cov
+    }
+    return n
+}
+
+//! the device's prefill f16 feed admits a K-quant or per-32 plane: cm2 mode, or the KHR kq tile in mm mode
+def private f16_feed_device() : bool {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        return g_gpu != null && pf_f16_feed(int(KqFmt.k6))
+    } else {
+        return false
     }
 }
 

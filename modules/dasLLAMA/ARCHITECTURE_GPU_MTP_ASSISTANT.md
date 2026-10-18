@@ -35,7 +35,8 @@ pass's output rotates back after it.
 The resolver (`gemma_drafter_sidecar`, registered backend-free so every build finds it) takes the trunk's file stem before
 its trailing quant token (`-Q<digit>` or `-IQ<digit>`) and looks for `mtp-<stem>-Q8_0.gguf`, then the same with an unsloth
 `-UD` tag dropped from the stem - the upstream head is named after the plain trunk - then the exact-name `mtp-<file>`
-sibling. The head's quant is chosen apart from the trunk's, and the loader takes Q8_0 tensors alone: a sidecar in any
+sibling, each only where the file's architecture is an assistant's (`gguf_is_assistant`): a split NextN head shares the
+`mtp-` names, and the resolver passes it by. The head's quant is chosen apart from the trunk's, and the loader takes Q8_0 tensors alone: a sidecar in any
 other type refuses naming the tensor and its type, and the trunk serves plain. Every attach asks the trunk check
 (`gemma_drafter_target_why`): a per-layer-embedding trunk (the E-series) refuses first - its verify rows need the side
 input the draft ids index, and no sidecar exists for one - then the hidden width against the drafter's `tdim`, then each

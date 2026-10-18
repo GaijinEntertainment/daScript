@@ -196,6 +196,10 @@ def stamp_run(st : auto(ST); var pso : MetalComputePipeline?; blk : block<() : v
     invoke(st.seat, was)
 }
 
+//! `st` without its builder - the pipeline compile and the seat `keep_stamp` and `stamp_run` read - so stamps of builders with
+//! different signatures pick as one value, a pick routing the dispatch to whichever builder it seats
+def seat_of(st : auto(ST)) => (make = st.make, seat = st.seat)
+
 //! the pipeline asserted under `tag`; true when it compiled
 def pso_ok(t : T?; tag : string; pso : MetalComputePipeline?; err : string) : bool {
     t |> success(pso != null, "{tag}: pipeline: {err}")

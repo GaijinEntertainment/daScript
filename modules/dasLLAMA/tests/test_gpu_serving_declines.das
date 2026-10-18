@@ -10,7 +10,9 @@ require dasllama/dasllama_sampling
 require dasllama/dasllama_gpu_resident
 require dasllama/dasllama_gpu_tier   // install_moe_gpu_resident_bias - the bias seat a served qwen2 needs
 require ?vulkan dasllama/dasllama_vulkan_decode   // rd_routed_slots_fit - the N-row command's slot cap, where the module exists
-require ?vulkan dasllama/dasllama_vulkan_prefill  // ple_proj_bf16_why - the bf16 projection's dim gate, where the module exists
+require ?vulkan dasllama/dasllama_vulkan_prefill  // ple_proj_gemv_why - the window projection's tile gate, where the module exists
+require dasllama/dasllama_gpu_kernels_common  // gk_bf16_pairs - the bf16 projection's stamp pick on both homes
+require ?vulkan dasllama/dasllama_vulkan_classes   // ple_proj_bf16_hw - the resident projection's halfword pick, where the module exists
 require ?vulkan dasllama/dasllama_vulkan_common   // GpuState / g_gpu - the device shell ple_proj_gemv_why reads, where the module exists
 require dasllama/dasllama_metal_shapes   // moe_metal_ok - the Metal routed block's admission, portable
 require ?das_metal dasllama/dasllama_metal_common   // decline - the required-mode panic, where the module exists
@@ -1587,11 +1589,12 @@ def test_resident_host_layers_pin(t : T?) {
     }
 }
 
-//! the E-series pre-step's projection K gates: Metal's `metal_ple_dev_ok` serves a model dim the projection's word walk steps
-//! whole - pairs on the bf16 rows, float4s on the f32 router's - and Vulkan's `ple_proj_bf16_why` names an odd dim for the bf16 stamp
+//! the E-series pre-step's shape gates: Metal's `metal_ple_dev_ok` serves any model dim on either projection form, any ple width,
+//! and a table bound on its own format's blocks, naming a table off them; Vulkan's bf16 projection takes the word-pair stamp at an
+//! even dim and base and the halfword stamp off them (`gk_bf16_pairs`)
 [test]
 def test_ple_proj_dim_gates(t : T?) {
-    t |> run("the pre-step's projection declines a dim off its word, on each home") @(t : T?) {
+    t |> run("the pre-step's shapes on each home") @(t : T?) {
         var m = Model()
         m.config.n_layers = 2l
         m.config.n_embd_per_layer = 256l
@@ -1600,28 +1603,36 @@ def test_ple_proj_dim_gates(t : T?) {
         m.config.dim = 1536l
         t |> success(metal_ple_dev_ok(m), "the bf16 rows serve an even dim (the E2B's 1536)")
         m.config.dim = 1537l
-        t |> success(!metal_ple_dev_ok(m), "... and decline an odd one")
-        let odd = metal_ple_pre_unserved(m)
-        t |> success(find(odd, "PLE table") >= 0 && find(odd, "1537") >= 0 && find(odd, "bf16 pair") >= 0,
-            "... naming the site, the dim and the word: '{odd}'")
-        t |> success(!metal_ple_dev_said("decode", m), "the driver's verdict is the predicate's, its reason logged")
+        t |> success(metal_ple_dev_ok(m), "... and an odd one")
+        m.ple_model_bf16 = false
+        t |> success(metal_ple_dev_ok(m), "the f32 rows serve a dim off the float4 lattice")
         m.config.n_embd_per_layer = 2048l
-        t |> success(find(metal_ple_pre_unserved(m), "2048") >= 0, "a ple width past the finish's threadgroup is named")
+        t |> success(metal_ple_dev_ok(m), "a ple width past 1024 serves")
+        m.config.n_embd_per_layer = 48l
+        t |> success(metal_ple_dev_ok(m), "... and one off the 32-lane step")
         m.config.n_embd_per_layer = 0l
         t |> equal(metal_ple_pre_unserved(m), "", "a model with no PLE has nothing to decline")
         t |> success(!metal_ple_dev_ok(m), "... and no device pre-step")
-        m.config.n_embd_per_layer = 256l
-        m.config.dim = 1538l
-        t |> success(metal_ple_dev_ok(m), "the bf16 rows serve an even dim off the float4 lattice")
-        m.ple_model_bf16 = false
-        t |> success(!metal_ple_dev_ok(m), "... where the f32 router's float4 walk declines it")
-        m.config.dim = 1536l
-        t |> success(metal_ple_dev_ok(m), "the f32 router serves a dim on the float4 lattice")
-        static_if (typeinfo builtin_module_exists(vulkan)) {
-            t |> equal(ple_proj_bf16_why(1536l), "", "the Vulkan bf16 stamp serves an even dim")
-            let why = ple_proj_bf16_why(1537l)
-            t |> success(find(why, "even dim") >= 0 && find(why, "1537") >= 0, "... and names an odd one: '{why}'")
-        }
+        m.config.n_embd_per_layer = 48l
+        m.ple_emb_fmt = KqFmt.q51
+        m.ple_emb_off = 96l
+        t |> success(metal_ple_dev_ok(m), "a per-32 table off a superblock serves on its own blocks (96 elements a row at 96)")
+        m.ple_emb_off = 112l
+        let off = metal_ple_pre_unserved(m)
+        t |> success(find(off, "PLE table") >= 0 && find(off, "q51") >= 0 && find(off, "112") >= 0 && find(off, "32-element") >= 0,
+            "... a base off them is named by site, format, offset and block: '{off}'")
+        t |> success(!metal_ple_dev_said("decode", m), "the driver's verdict is the predicate's, its reason logged")
+        m.ple_emb_off = 0l
+        m.config.n_embd_per_layer = 40l
+        t |> success(find(metal_ple_pre_unserved(m), "80 elements a row") >= 0, "... and a row off them")
+        m.ple_emb_fmt = KqFmt.k4
+        m.config.n_embd_per_layer = 128l
+        t |> success(metal_ple_dev_ok(m), "a superblock table on its superblocks serves (256 elements a row)")
+        m.ple_emb_off = 32l
+        t |> success(find(metal_ple_pre_unserved(m), "256-element") >= 0, "... off them is named at the superblock")
+        t |> success(gk_bf16_pairs(1536l, 0l), "the bf16 rows step word pairs at an even dim (the E2B's 1536)")
+        t |> success(!gk_bf16_pairs(1537l, 0l), "... and halfwords at an odd one")
+        t |> success(!gk_bf16_pairs(1536l, 3l), "... or off an odd base")
     }
     t |> run("the window's projection names an f16 panel past the device's storage range") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -1638,6 +1649,34 @@ def test_ple_proj_dim_gates(t : T?) {
             g_gpu = live
         } else {
             t |> skip("no dasVulkan module on this build")
+        }
+    }
+}
+
+//! the window's f32 per-layer rows: the staged tile on its k step under the knob, the scalar tile off either; the gate's k chunks
+//! fit the split-k scratch; the resident projection's bf16 rows take the halfword stamp at an odd dim
+[test]
+def test_ple_f32_tile_gates(t : T?) {
+    t |> run("the window's f32 per-layer rows take the staged tile only on its k step") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            var shell = GpuState(coopmat_mode = COOPMAT_CM2, has_coopmat = true, subgroup_size = 32l)   //! a KHR-capable shell at subgroup 32
+            var live = g_gpu
+            g_gpu = unsafe(addr(shell))
+            t |> success(ple_f32_tile_ok(1536l, 256l, true), "the control: the E2B's dim and ple take the staged tile")
+            t |> success(!ple_f32_tile_ok(1536l, 256l, false), "... and the knob off (DASLLAMA_VK_PLE_F32_TILE=0) keeps the scalar f32 tile")
+            let roomy = 1l << 30l
+            t |> equal(pf_f32_split(1536l, 512l, 256l, roomy), 6l, "the E2B gate's K 1536 splits six ways, a chunk of 256 each")
+            t |> equal(pf_f32_split(2560l, 512l, 256l, roomy), 5l, "the E4B gate's K 2560 five ways, the most chunks of 512 cm2_chunk admits")
+            t |> equal(pf_f32_split(256l, 512l, 256l, roomy), 1l, "the projection's K 256 runs whole")
+            t |> equal(pf_f32_split(1536l, 512l, 256l, 3l * 512l * 256l * 4l), 3l, "a scratch of three 512-row partial planes cuts the E2B gate to three chunks")
+            t |> equal(pf_f32_split(1536l, 512l, 256l, 512l * 256l * 4l), 1l, "... one plane's room runs it whole - never a split past the scratch")
+            t |> success(!ple_f32_tile_ok(1544l, 256l, true), "a dim off the 32-deep k step keeps the scalar f32 tile (its last row read would pass the plane)")
+            t |> success(!ple_f32_tile_ok(1536l, 48l, true), "... and so does a ple width off it")
+            shell.subgroup_size = 64l
+            t |> success(!ple_f32_tile_ok(1536l, 256l, true), "... and a wave64 device, which has no KHR kq tile")
+            t |> success(!ple_proj_bf16_hw(1536l), "the resident projection's bf16 rows take the word-pair stamp at the E2B's even dim")
+            t |> success(ple_proj_bf16_hw(1537l), "... and the halfword stamp at an odd one")
+            g_gpu = live
         }
     }
 }

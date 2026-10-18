@@ -9,12 +9,17 @@ options _dasllama_internal = true
 // ATTRIBUTION SWEEP moe:|moesk: - the expert schedule's s and e stamps by schedule form.
 // ATTRIBUTION SWEEP cm2g:<fmt> - a format's dense role shapes at 512 rows, overlapped and one dispatch at a time.
 // ATTRIBUTION SWEEP g3|gemma|splitk - the gemma role shapes and the down's split-k ladder, whole against split.
+// ATTRIBUTION SWEEP plef32 - the per-layer-embedding gate and projection over f32 rows: the scalar f32 tile against the staged KHR tile.
+// ATTRIBUTION SWEEP narrow:<fmt> - the tile pick's narrow-GEMM s rule: a format's l, m and s stamps at the widths the rule decides.
+// ATTRIBUTION SWEEP kqst:<fmt> - the K-quant window's two forms: the cm2 l/m/s stamps on the device's decode arm against the staged KHR tile.
 // ATTRIBUTION SWEEP khrsk - the KHR arm's q8 race (DASLLAMA_COOPMAT=mm): the q8 mul_mm tile against the KHR kq tile whole and split, one process.
 // ATTRIBUTION SWEEP small|barform - the token command's one-workgroup row kernels alone, chained, and by barrier form.
 // ATTRIBUTION SWEEP wh - the whisper large-v3-turbo encoder's role shapes at the chunk's 1500 rows and at 1536 (whole l columns):
 // the cm2 l and m stamps as a race, and fc2's split-k ladder; the sdot4 mm tile skipped (it stalls at 1500 rows on fc1).
 // RefGemmArgs mirrors that blob's push block byte for byte - its constant fields are dead by design.
-// Every arm records once, then times over repeated submits; the serving kernels' oracle gate
+// Every arm records once, then times over repeated submits after two untimed warm-up submits a row
+// (`timed_chain`), or interleaved with its sweep's other arms after one untimed warm-up round
+// (`sweep_best_us`, the kqst and plef32 races); the serving kernels' oracle gate
 // is tests/test_vulkan_kernels.das.
 // Args: gate|down|q|kv|kvm|qkv|tl pin a shape (the long-window ngfx GPU Trace vehicle); g3 the gemma-3-1b
 // role shapes with the down's split-k ladder; small the token command's one-workgroup row kernels' floor;
@@ -25,7 +30,7 @@ options _dasllama_internal = true
 // skew; ts:<fmt> a timestamp or a barrier between two of its m stamps; cold:<fmt> its l, m and s
 // stamps warm and cold, the host schedule, the deep slab, the wide plan and the flush; cm2x|k6x|ref
 // the bisect and reference arms; khrx the KHR kq tile's weight-stage and structural bisect; mmqx the
-// integer tile prototypes; wh the whisper encoder's shapes at 1500 and 1536 rows.
+// integer tile prototypes; kqst:<fmt> the cm2 stamps against the staged tile on the gemma-4 E2B and 4B shapes; plef32 the f32 rows' two tiles; wh the whisper encoder's shapes at 1500 and 1536 rows.
 // Shapes default to Llama-3.2-3B Q8 geometry (dim 3072, hidden 8192, kv_dim 1024).
 
 require math
@@ -46,6 +51,7 @@ require ../tests/_vkd_oracles.das   // k4f16_gemm_oracle: the CPU reference the 
 require ../tests/_compares.das
 require _race_fixture
 require daslib/linq
+require daslib/math_bits   // float_bits_to_uint: the plef32 arm's f32 weight words
 
 let private MM_TILE = 128
 let private DISPATCHES = 16
@@ -598,6 +604,147 @@ def private run_cm2_fmt_shape(fmt : int; name : string; d, n, cnt : int; l_stamp
         let tf = flop / (us * 1000000.0lf)
         print("{name} {vnames[v]}: {us / 1000.0lf} ms/dispatch  {tf} TFLOP/s  timing-only{serial ? ", one dispatch at a time" : ""}\n")
     }
+}
+
+//! one dense role shape under the K-quant window's two forms: the cm2 l, m and s stamps on the decode arm the device runs, and the
+//! staged form - the KHR tile over the format's own bytes - each whole, through `race_arms` (sixteen dispatches over two
+//! alternating output planes) and `sweep_best_us` (the arms interleaved round by round, each arm's row its best round)
+[arch(at="../ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md#vk-gemm-probe")]
+def private run_kqst_shape(fmt : int; name : string; d, n, cnt : int) {
+    let dv = cm2_shape_upload(fmt, d, n, cnt)
+    let flop = 2.0lf * double(cnt) * double(d) * double(n)
+    let vnames = fixed_array("cm2l ", "cm2m ", "cm2s ", "staged")
+    var raws <- race_arms(4, n, d, cnt, fmt, dv.yd, dv.yd_b, $(v : int) : int {
+        let tc = kqst_arm_cols(v)
+        return cnt < tc ? 0 : ((cnt + tc - 1) / tc) * ((d + 127) / 128)
+    }, $(v : int; scd : uint64; sc_bytes : int64; y : uint64) : VkDescriptorSet {
+        let bufs = fixed_array(dv.wqd, dv.wsd, scd, dv.xfd, y)
+        let sizes = fixed_array(dv.wq_bytes, dv.ws_bytes, sc_bytes, dv.xf_bytes, dv.y_bytes)
+        let gbits = fixed_array(1u, 2u, 0u, 4u, 16u)
+        return v == 3 ? khr_cls_set(fmt, bufs, sizes, gbits) : cm2_cls_set(fmt, int64(kqst_arm_cols(v)), bufs, sizes, gbits)
+    }, @@kqst_arm_enc)
+    var best <- sweep_best_us(raws)
+    for (v in range(4)) {
+        continue if (raws[v] == null)
+        let tc = kqst_arm_cols(v)
+        print("{name} {vnames[v]}: {best[v]} us/dispatch  {flop / (best[v] * 1000000.0lf)} TFLOP/s  wgs={((cnt + tc - 1) / tc) * ((d + 127) / 128)}  best of {ROUNDS}  timing-only\n")
+    }
+    delete best
+}
+
+//! a kqst arm's token column: the l, m and s stamps' 256, 128 and 32, the staged tile's 128
+def private kqst_arm_cols(v : int) : int => v == 0 ? 256 : (v == 2 ? 32 : 128)
+
+def private kqst_arm_enc(v, fmt : int; raw : VkCommandBuffer; var hz : VkHaz; var s : VkDescriptorSet; var pc : BatchArgs; wgs : int64) {
+    if (v == 3) {
+        khr_cls_enc(fmt, raw, hz, s, pc, wgs)
+    } else {
+        cm2_cls_enc(fmt, int64(kqst_arm_cols(v)), raw, hz, s, pc, wgs)
+    }
+}
+
+var private g_ple_f32_rows = 0   //! the scalar f32 tile's row count for `ple_f32_arm_enc`: its push block carries the rows, the race's BatchArgs does not
+
+//! one per-layer-embedding GEMM over a file's f32 rows under the window's two forms: the scalar f32 tile (`DnBaGemm`, f32 rows in
+//! and out) and the staged KHR tile (`F32KhrBatch`, the f16 rows in), each over the same weight words, overlapped through
+//! `race_arms`; then one dispatch at a time over one output and one hazard rail - the scalar tile, the staged tile whole and over
+//! two to eight k chunks into the split-k reduce; every arm through `sweep_best_us`, its row its best round
+[arch(at="../ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md#vk-gemm-probe")]
+def private run_ple_f32_shape(name : string; d, n, cnt : int) {
+    let w_bytes = int64(d * n) * 4l
+    var inscope wh : array<uint>
+    wh |> resize(d * n)
+    for (i in range(d * n)) {
+        wh[i] = float_bits_to_uint(float(hash_word(uint(i) + 71u) % 4001u) * 0.0000317 - 0.0634)
+    }
+    let wd = make_device_buf(w_bytes)
+    let x32 = make_device_buf(int64(cnt * n) * 4l)
+    let x16 = make_device_buf(int64(cnt * n) * 2l)
+    let ya = make_device_buf(int64(cnt * d) * 4l)
+    let yb = make_device_buf(int64(cnt * d) * 4l)
+    upload_region_at(wd, 0l, unsafe(addr<uint8 const?>(wh[0])), w_bytes)
+    let flop = 2.0lf * double(cnt) * double(d) * double(n)
+    let wgs = ((cnt + 127) / 128) * ((d + 127) / 128)
+    g_ple_f32_rows = cnt
+    var raws <- race_arms(2, n, d, cnt, 0, ya, yb, $(v : int) : int {
+        return v == 0 ? int(dn_ba_wgs(int64(cnt), int64(d / 2))) : wgs
+    }, $(v : int; scd : uint64; sc_bytes : int64; y : uint64) : VkDescriptorSet {
+        if (v == 0) {
+            return set_dn_ba_cls(fixed_array(wd, x32, y), fixed_array(w_bytes, int64(cnt * n) * 4l, int64(cnt * d) * 4l), fixed_array(1u, 2u, 4u))
+        }
+        return set_f32_batch_khr_cls(fixed_array(wd, scd, x16, y), fixed_array(w_bytes, sc_bytes, int64(cnt * n) * 2l, int64(cnt * d) * 4l),
+            fixed_array(1u, 0u, 2u, 4u))
+    }, @@ple_f32_arm_enc)
+    var over <- sweep_best_us(raws)
+    print("{name} scalar f32: {over[0]} us/dispatch  {flop / (over[0] * 1000000.0lf)} TFLOP/s  best of {ROUNDS}  timing-only\n")
+    print("{name} staged: {over[1]} us/dispatch  {flop / (over[1] * 1000000.0lf)} TFLOP/s  best of {ROUNDS}  timing-only\n")
+    delete over
+    ple_f32_latency_rows(name, wd, w_bytes, x32, x16, ya, d, n, cnt)
+}
+
+def private ple_f32_arm_enc(v, _fmt : int; raw : VkCommandBuffer; var hz : VkHaz; var s : VkDescriptorSet; var pc : BatchArgs; wgs : int64) {
+    if (v == 0) {
+        var pd = DnBaArgs(npos = uint(g_ple_f32_rows), dim = pc.n, nvh = pc.d / 2u, woff = 0u, xstride = pc.n, obase_b = 0u, obase_g = pc.d / 2u, ostride = pc.d)
+        enc_dn_ba_cls(raw, hz, s, pd, wgs)
+    } else {
+        enc_f32_batch_khr_cls(raw, hz, s, pc, wgs)
+    }
+}
+
+//! `run_ple_f32_shape`'s one-dispatch-at-a-time rows: each arm a command of DISPATCHES dispatches under one hazard rail into one
+//! output, the arms interleaved through `sweep_best_us`
+def private ple_f32_latency_rows(name : string; wd : uint64; w_bytes : int64; x32, x16, ya : uint64; d, n, cnt : int) {
+    verify(ensure_splitk_reduce_cls(), "the split-k reduce's probe pipeline must engage")
+    let splits = fixed_array(2, 3, 4, 5, 6, 8)
+    let part_bytes = int64(8 * cnt * d) * 4l
+    let yp = make_device_buf(part_bytes)
+    let wgs = ((cnt + 127) / 128) * ((d + 127) / 128)
+    var raws : array<VkCommandBuffer>
+    var sd = set_dn_ba_cls(fixed_array(wd, x32, ya), fixed_array(w_bytes, int64(cnt * n) * 4l, int64(cnt * d) * 4l), fixed_array(1u, 2u, 4u))
+    var pd = DnBaArgs(npos = uint(cnt), dim = uint(n), nvh = uint(d / 2), woff = 0u, xstride = uint(n), obase_b = 0u, obase_g = uint(d / 2), ostride = uint(d))
+    raws |> push(chained_cmd() $(r; var hz) {
+        enc_dn_ba_cls(r, hz, sd, pd, dn_ba_wgs(int64(cnt), int64(d / 2)))
+    })
+    for (nsplit in fixed_array(1, 2, 3, 4, 5, 6, 8)) {
+        let ck = nsplit > 1 ? cm2_chunk(int64(n), int64(nsplit)) : 0l
+        if (nsplit > 1 && ck == 0l) {
+            var none : VkCommandBuffer
+            raws |> push(none)
+            continue
+        }
+        let swgs = wgs * nsplit
+        let ssc = one_region_sched(cnt, swgs)
+        let out = nsplit > 1 ? yp : ya
+        var ks = set_f32_batch_khr_cls(fixed_array(wd, ssc.buf, x16, out),
+            fixed_array(w_bytes, ssc.bytes, int64(cnt * n) * 2l, nsplit > 1 ? part_bytes : int64(cnt * d) * 4l), fixed_array(1u, 0u, 2u, 16u))
+        var rs = set_splitk_reduce_cls(fixed_array(yp, ya), fixed_array(part_bytes, int64(cnt * d) * 4l), fixed_array(16u, 4u))
+        var pks = BatchArgs(n = uint(n), d = uint(d), ksplit = uint(ck))
+        raws |> push(chained_cmd() $(r; var hz) {
+            enc_f32_batch_khr_cls(r, hz, ks, pks, int64(swgs))
+            if (nsplit > 1) {
+                splitk_reduce_enc(r, hz, rs, int64(cnt * d), int64(nsplit))
+            }
+        })
+    }
+    var best <- sweep_best_us(raws)
+    print("{name} one at a time: scalar f32 {best[0]} us  best of {ROUNDS}  timing-only\n")
+    print("{name} one at a time: staged whole {best[1]} us  best of {ROUNDS}  timing-only\n")
+    for (nsplit, si in splits, count()) {
+        continue if (raws[2 + si] == null)
+        print("{name} one at a time: staged split{nsplit} (chunk {cm2_chunk(int64(n), int64(nsplit))}) + reduce {best[2 + si]} us  best of {ROUNDS}  timing-only\n")
+    }
+    delete best
+}
+
+//! a command of DISPATCHES copies of `body` under one hazard rail: each dispatch waits on the one before, the window's chain
+def private chained_cmd(body : block<(r : VkCommandBuffer; var hz : VkHaz) : void>) : VkCommandBuffer {
+    var raw = alloc_cmd()
+    record_cmd(raw, false) $(r; var hz) {
+        for (_k in range(DISPATCHES)) {
+            invoke(body, r, hz)
+        }
+    }
+    return raw
 }
 
 // ===== the decode head's small kernels in isolation (arg "dec") =====
@@ -3368,7 +3515,7 @@ def private twin_rounds(body : block<(round, arm, arms : int; tag : string) : vo
 
 //! the per-format arm `a` names - its `<arm>:` prefix, the format name past it - or "" where it names none
 def private fmt_arm_of(a : string) : string {
-    for (pre in fixed_array("cm2:", "cm2d:", "cm2w:", "moe:", "cm2g:", "moesk:", "ts:", "cold:")) {
+    for (pre in fixed_array("cm2:", "cm2d:", "cm2w:", "moe:", "cm2g:", "moesk:", "ts:", "cold:", "kqst:", "narrow:")) {
         return pre if (a |> starts_with(pre))
     }
     return ""
@@ -3398,7 +3545,7 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
     var only = ""
     var cm2_fmt = -1
     for (a in get_command_line_arguments()) {
-        if (a == "gate" || a == "down" || a == "q" || a == "kv" || a == "kvm" || a == "qkv" || a == "cm2x" || a == "ref" || a == "tl" || a == "g3" || a == "gemma" || a == "wh" || a == "splitk" || a == "khrsk" || a == "small" || a == "lastwg" || a == "barform" || a == "k4" || a == "k6" || a == "k6x" || a == "khrx" || a == "khrprof" || a == "mmqx" || a == "dec") {
+        if (a == "plef32" || a == "gate" || a == "down" || a == "q" || a == "kv" || a == "kvm" || a == "qkv" || a == "cm2x" || a == "ref" || a == "tl" || a == "g3" || a == "gemma" || a == "wh" || a == "splitk" || a == "khrsk" || a == "small" || a == "lastwg" || a == "barform" || a == "k4" || a == "k6" || a == "k6x" || a == "khrx" || a == "khrprof" || a == "mmqx" || a == "dec") {
             only = a
         } elif (fmt_arm_of(a) != "") {
             only = fmt_arm_of(a)
@@ -3502,6 +3649,77 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
             run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} shexp", 512, 2048, 512)
             run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} shdown", 2048, 512, 512)
         }
+        return
+    }
+    if (only == "plef32") {
+        if (!khr_kq_tile_on() || !ensure_dn_ba_cls() || !ensure_f32_batch_khr_cls()) {
+            print("plef32 races the scalar f32 tile against the staged KHR tile: it needs KHR cooperative matrices at subgroup 32\n")
+            g_probe_exit = 1
+            return
+        }
+        print("ATTRIBUTION SWEEP plef32: the per-layer-embedding gate and projection over f32 rows, the scalar f32 tile against the staged tile, timing-only rows\n")
+        //! gemma-4 E2B (dim 1536) and E4B (dim 2560), ple 256, 512 rows: the gate [ple x dim] and the projection [dim x ple]
+        run_ple_f32_shape("E2B gate", 256, 1536, 512)
+        run_ple_f32_shape("E2B proj", 1536, 256, 512)
+        run_ple_f32_shape("E4B gate", 256, 2560, 512)
+        run_ple_f32_shape("E4B proj", 2560, 256, 512)
+        run_ple_f32_shape("E2B gate@300", 256, 1536, 300)   //! a window off the tile's 128-token column: the partial-tile store
+        run_ple_f32_shape("E2B proj@300", 1536, 256, 300)
+        return
+    }
+    if (only == "narrow:") {
+        if (!g_gpu.has_coopmat2 || g_gpu.coopmat_mode != COOPMAT_CM2) {
+            print("narrow:<fmt> reads the cm2 stamps; run on a coopmat2 device with DASLLAMA_COOPMAT=cm2\n")
+            g_probe_exit = 1
+            return
+        }
+        if (cm2_fmt < 0 || !kq_sb(cm2_fmt)) {
+            print("narrow:<fmt> needs a kq superblock format name ({cm2_fmt_names()})\n")
+            g_probe_exit = 1
+            return
+        }
+        verify(cm2_cls_ensure(cm2_fmt, 256l) && cm2_cls_ensure(cm2_fmt, 128l) && cm2_cls_ensure(cm2_fmt, 32l)
+            && (!probe_stwin_has(cm2_fmt) || probe_stwin_ensure(cm2_fmt)) && kq_batch_cls_ensure(cm2_fmt, false),
+            "narrow:<fmt> probe pipelines (the l, m and s stamps, the twin, the kq tile) must engage")
+        print("ATTRIBUTION SWEEP narrow:{cm2_fmt_names()}: the narrow-GEMM s rule's shapes ({g_gpu.sm_count} SMs, {g_gpu.decvec_on ? "four-wide" : "scalar"} decode), timing-only rows\n")
+        for (round in range(2)) {
+            //! the gemma-4 E2B k/v at K 1536 (256 and 512 wide), the widest plane the rule takes at 512 rows on 82 SMs (640) and the
+            //! first it leaves to the wave model (768); 512 rows and a 300-row window; overlapped, then one dispatch at a time
+            for (d in fixed_array(256, 512, 640, 768)) {
+                for (cnt in fixed_array(512, 300)) {
+                    run_cm2_fmt_shape(cm2_fmt, "r{round} d{d} K1536 rows{cnt}", d, 1536, cnt)
+                    run_cm2_fmt_shape(cm2_fmt, "r{round} d{d} K1536 rows{cnt}", d, 1536, cnt, false, true)
+                }
+            }
+        }
+        return
+    }
+    if (only == "kqst:") {
+        if (!g_gpu.has_coopmat2 || g_gpu.coopmat_mode != COOPMAT_CM2 || !khr_kq_tile_on()) {
+            print("kqst:<fmt> races the cm2 stamps against the staged KHR tile: run on a coopmat2 device at subgroup 32 with DASLLAMA_COOPMAT=cm2\n")
+            g_probe_exit = 1
+            return
+        }
+        if (cm2_fmt < 0 || !kq_sb(cm2_fmt)) {
+            print("kqst:<fmt> needs a kq superblock format name ({cm2_fmt_names()})\n")
+            g_probe_exit = 1
+            return
+        }
+        verify(cm2_cls_ensure(cm2_fmt, 256l) && cm2_cls_ensure(cm2_fmt, 128l) && cm2_cls_ensure(cm2_fmt, 32l) && khr_cls_ensure(cm2_fmt),
+            "kqst:<fmt> probe pipelines (the l, m and s stamps, the staged tile) must engage")
+        print("ATTRIBUTION SWEEP kqst:{cm2_fmt_names()}: the cm2 stamps ({g_gpu.decvec_on ? "four-wide decode" : "scalar decode"}) against the staged tile, timing-only rows\n")
+        //! gemma-4 E2B's role shapes at 512 rows (dim 1536, ffn 6144 and the doubled 12288, q 2048, kv 256, ple 256), then the 4B's
+        run_kqst_shape(cm2_fmt, "gate     ", 6144, 1536, 512)
+        run_kqst_shape(cm2_fmt, "gate@500 ", 6144, 1536, 500)   //! a token count off every column: the partial-tile store path
+        run_kqst_shape(cm2_fmt, "gate2x   ", 12288, 1536, 512)
+        run_kqst_shape(cm2_fmt, "down     ", 1536, 6144, 512)
+        run_kqst_shape(cm2_fmt, "down2x   ", 1536, 12288, 512)
+        run_kqst_shape(cm2_fmt, "q        ", 2048, 1536, 512)
+        run_kqst_shape(cm2_fmt, "wo       ", 1536, 2048, 512)
+        run_kqst_shape(cm2_fmt, "kv|pgate ", 256, 1536, 512)
+        run_kqst_shape(cm2_fmt, "ple_proj ", 1536, 256, 512)
+        run_kqst_shape(cm2_fmt, "4B gate  ", 9728, 2560, 512)
+        run_kqst_shape(cm2_fmt, "4B down  ", 2560, 9728, 512)
         return
     }
     if (only == "ts:" || only == "cold:") {
