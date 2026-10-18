@@ -4981,6 +4981,13 @@ def b32_bind_blocks(fmt : KqFmt) : int64 {
 //! off that grid binds there and its gather skips these
 def b32_bind_rem(off : int64; fmt : KqFmt) : int64 => (off / KQ_B32_ELEMS) % b32_bind_blocks(fmt)
 
+//! where the per-32 gather binds a table of format `fmt` at element `off`: the element on the 16-byte grid at or below it, and
+//! the blocks the table sits past it (`EmbedB32Args.b0`)
+def b32_table_bind(off : int64; fmt : KqFmt) : tuple<off : int64; b0 : int64> {
+    let rem = b32_bind_rem(off, fmt)
+    return (off = off - rem * KQ_B32_ELEMS, b0 = rem)
+}
+
 //! The rows of `nrows` token ids (btok at toff) off the table plane `fmt` at element `off`, `width` elements a row under `escale`, into
 //! bx at xoff: the token table's gather and the E-series per-layer table's (layers x ple under sqrt(ple)); the q8 copy's stamp
 //! reads the width and the scale off the uniforms `bwidth` / `bescale` (null = 1)
@@ -4990,9 +4997,9 @@ def enc_embed_table(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; off, wid
         let bemb = blob_of(g_dev, t, off)
         enc_embed(enc, bemb.buf, bemb.boff, btok, bx, bwidth, bescale, width, toff, xoff, nrows)
     } elif (kq_dense_b32(fmt)) {
-        let rem = b32_bind_rem(off, fmt)
-        let qp = b32_planes_of(g_dev, t, fmt, off - rem * KQ_B32_ELEMS)
-        var ka = EmbedB32Args(dim = uint(width), escale = escale, b0 = uint(rem))
+        let bind = b32_table_bind(off, fmt)
+        let qp = b32_planes_of(g_dev, t, fmt, bind.off)
+        var ka = EmbedB32Args(dim = uint(width), escale = escale, b0 = uint(bind.b0))
         let units = width / 16l
         let slot = int(fmt)
         kq_tile_stamp(slot, "!b32", "embed") <| $() {   //! the per-32 table gather (`MetalEmbedB32T`) stamps the per-32 formats alone
@@ -7243,11 +7250,10 @@ class MetalF32RowsB : MetalF32RowsT {
     }
 }
 
-//! the f32 rows' GEMV over `nst` columns: the float4 router words (`MetalMoeRouter` / `B`, the bias row `brb`) where the dim, the
-//! base and the column stride step whole float4s, else the element walk; `blocked` the position-blocked stamps
+//! the f32 rows' GEMV over `nst` columns `dim` apart: the float4 router words (`MetalMoeRouter` / `B`, the bias row `brb`) where the
+//! dim and the base step whole float4s, else the element walk; `blocked` the position-blocked stamps
 def enc_f32_rows_gemv(enc : MetalComputeEncoder?; bw, bx, by, brb : MetalBuffer?; var ka : GkRouterArgs; ne, nst : int64; blocked : bool) {
-    let xs = ka.xs == 0u ? ka.dim : ka.xs
-    if (ka.dim % 4u == 0u && ka.woff % 4u == 0u && xs % 4u == 0u) {
+    if (ka.dim % 4u == 0u && ka.woff % 4u == 0u) {
         if (blocked) {
             enc_moe_router_b(enc, bw, bx, by, brb, ka, ne, nst)
         } else {

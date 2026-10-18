@@ -241,8 +241,8 @@ def private embed_kq_gate(t : T?; var dev, queue; st : auto(ST); fmt, dim, vocab
 }
 
 //! the per-32 token-table gather (`MetalEmbedB32T`) of one format: three rows - a middle token, token 0 and the last - off a
-//! plane pair past `lead` blocks of other rows (an untied table sits past the classifier's), bound as `enc_embed_table` binds it
-//! (on the 16-byte grid below, the blocks past it in `b0`), the token list read past a lead id and the rows written past a lead
+//! plane pair past `lead` blocks of other rows (an untied table sits past the classifier's), bound where `enc_embed_table` binds it
+//! (`b32_table_bind`: on the 16-byte grid below, the blocks past it in `b0`), the token list read past a lead id and the rows written past a lead
 //! row, each row bit for bit the engine's own block dequant under the embed scale
 def private embed_b32_gate(t : T?; var dev, queue; f : KqFmt; dim, vocab, lead : int; want_b0 : int = 0) {
     let tag = "embed_b32 {f} dim={dim} vocab={vocab} lead={lead}"
@@ -294,11 +294,11 @@ def private embed_b32_gate(t : T?; var dev, queue; f : KqFmt; dim, vocab, lead :
         let bkq = mc |> in_plain(kq)
         let btok = mc |> in_plain([0x7FFFFFFFu, uint(toks[0]), uint(toks[1]), uint(toks[2])])
         let bxo = mc |> out_words(4 * dim, PAD_SENTINEL)
-        let rem = int(b32_bind_rem(int64(lead) * KQ_B32_ELEMS, f))
-        t |> equal(rem, want_b0, "{tag}: the table sits {want_b0} blocks past its bind")
-        var ka = EmbedB32Args(dim = uint(dim), escale = escale, b0 = uint(rem))
-        let soff = uint64((lead - rem) * sb)
-        let qoff = uint64((lead - rem) * qb)
+        let bind = b32_table_bind(int64(lead) * KQ_B32_ELEMS, f)   //! the engine's own bind (`enc_embed_table`'s)
+        t |> equal(int(bind.b0), want_b0, "{tag}: the table sits {want_b0} blocks past its bind")
+        var ka = EmbedB32Args(dim = uint(dim), escale = escale, b0 = uint(bind.b0))
+        let soff = uint64(bind.off / KQ_B32_ELEMS * int64(sb))
+        let qoff = uint64(bind.off / KQ_B32_ELEMS * int64(qb))
         t |> success(soff % 16ul == 0ul && qoff % 16ul == 0ul, "{tag}: the binds sit on the 16-byte grid (scale {soff}, quant {qoff})")
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
             if (f == KqFmt.q51) {
