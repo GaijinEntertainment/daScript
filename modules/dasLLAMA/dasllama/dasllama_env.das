@@ -457,7 +457,7 @@ struct public VulkanEnv {
     @clarg_doc = "The resident prefill window's per-layer-embedding gate and projection serve a file's f32 rows on the staged KHR tile (the rows' words rounded to f16 on the tile's stage ahead of the KHR multiply, at subgroup 32); 0 keeps them on the scalar f32 tile - the same-build A/B."
     vk_ple_f32_tile : bool = true
 
-    @clarg_doc = "Stream mirrors import the mapped .dlim (VK_EXT_external_memory_host) instead of pinned copies; =0 restores the copy path."
+    @clarg_doc = "Stream mirrors import the mapped .dlim (VK_EXT_external_memory_host) instead of pinned copies, on the copy arm alone (`DASLLAMA_VK_STREAM_FILE_READ=0`): the file-read arm, the default, reads into mirrors of its own and never imports; =0 restores the copy path."
     vk_import : bool = true
 
     @clarg_doc = "A streamed stack's planes are read off the .dlim file straight into its pinned memory, the mapping's expert pages never faulted; =0 copies them out of the mapping (the A/B arm)."
