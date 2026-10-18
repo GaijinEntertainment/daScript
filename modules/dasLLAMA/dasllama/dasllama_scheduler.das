@@ -708,9 +708,10 @@ def private reap_finished(m : Model; var sch : Scheduler) {
                 done_at = ref_time_ticks()))
             if (sch.streams[i].session.device_kv) {
                 let t_park = prof_ticks()
+                let t_park_wall = ref_time_ticks()
                 park_stream(m, sch, sch.streams[i])
                 prof_add("sched_park", t_park)
-                to_log(LOG_INFO, "[stream {sch.streams[i].id}] parked\n")
+                to_log(LOG_INFO, "[stream {sch.streams[i].id}] parked in {get_time_usec(t_park_wall) / 1000} ms (the close turn, the openings' snapshots to the pool, the claim)\n")
             } elif (sch.paged) {
                 if (sch.streams[i].finish != "media_lost") {
                     donate_stream(m, sch, sch.streams[i])
@@ -749,10 +750,12 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
         st.think_state = st.think_marks.opened ? 1 : 0
         if (sch.device_kv) {
             let t_attach = prof_ticks()
+            let t_attach_wall = ref_time_ticks()
             st.session <- create_device_session(m, gpu_device_session_dtype())
             let hit = device_attach(m, sch, st.session, st.prompt)   // a model whose prefill cannot continue parks and pools nothing, so nothing matches
             prof_add("sched_device_attach", t_attach)
             let matched = hit.n
+            to_log(LOG_INFO, "[stream {st.id}] attached in {get_time_usec(t_attach_wall) / 1000} ms (the session, the victims' tails to the pool, the prefix taken up or adopted)\n")
             device_checkpoints_plan(st, sch.queue[0], matched)
             st.n_prefilled = matched
             st.n_cached = matched

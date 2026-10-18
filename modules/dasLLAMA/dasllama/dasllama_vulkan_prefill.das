@@ -114,6 +114,9 @@ def private pf_fa128s : bool => !(cm2_fa_on() && vk_fa_on() && rd_pf_reads_f16()
 def private pf_window_len(npos, w0 : int64) : int64 {
     let taps = max(g_rd.dn_dconv - 1l, 0l)
     var wlen = min(g_rd.pf_np, npos - w0)
+    if (g_rd.hybrid) {   //! a recurrent window is one deltanet chunk: the smalls planes (beta, g) and the scan workspace hold DN_WINDOW rows, and a longer window ran past them into the next plane
+        wlen = min(wlen, DN_WINDOW)
+    }
     let rem = npos - w0 - wlen
     if (rem > 0l && rem < taps) {
         wlen -= taps - rem
@@ -364,6 +367,7 @@ def private dn_window_enc(raw : VkCommandBuffer; var h : VkHaz; var conv_set, sc
 def private dn_window_parts_enc(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; wlen, cd, kd, nvh, nkh, ds, di, dconv : int64; sig : bool; eps : float) {
     let taps = dconv - 1l
     for (ws in g_pf_wsegs) {
+        assert(ws.row0 + ws.npos <= DN_WINDOW, "dasLLAMA vulkan prefill: a recurrent window part past DN_WINDOW rows - the smalls planes and the scan workspace hold that many")
         let st & = unsafe(L.dn[ws.region])
         let img = int(st.ring_image_bytes / 4l)
         let cur = g_rd.pf_dn_cur[ws.region]

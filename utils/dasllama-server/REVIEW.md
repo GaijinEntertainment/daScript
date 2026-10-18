@@ -99,3 +99,8 @@ module.
 **A function signature in this folder never names a type from a module this folder requires
 conditionally - those types stay inside the guarded arm, and plain types cross the boundary.** A
 signature cannot sit inside a `static_if` arm, so no guard fixes it.
+
+**A diff that adds a reply body or a streamed delta carrying generated text passes that text through
+`utf8_sanitize` before it is written as JSON - a body holding a byte that completes no character is a
+defect.** A token piece can end mid-character and a byte-fallback piece carries one raw byte; a strict
+client aborts on the invalid byte (`README.md#utf8-replies`).

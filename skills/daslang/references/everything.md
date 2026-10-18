@@ -7914,6 +7914,7 @@ The UTF8_UTILS module provides Unicode UTF-8 string utilities including characte
 
 - `s_utf8d` - Byte-class and state-transition table for the UTF-8 DFA decoder.
 - `UTF8_ACCEPT` - DFA accept state indicating a valid UTF-8 sequence.
+- `UTF8_REJECT` - DFA reject state: the byte cannot continue or start a sequence from here.
 - `_UTF32_NON_WORD_RANGES`
 - `_UTF32_LATIN1_LOWER`
 
@@ -7937,6 +7938,7 @@ The UTF8_UTILS module provides Unicode UTF-8 string utilities including characte
 - `contains_utf8_bom` - Returns true if the byte array starts with a UTF-8 BOM (byte order mark).
 - `is_first_byte_of_utf8_char` - Returns true if the given byte is the first byte of a UTF-8 character.
 - `is_utf8_string_valid` - Returns true if the byte array contains a valid UTF-8 encoded string.
+- `utf8_sanitize` - Returns the string with every invalid or incomplete UTF-8 sequence replaced by U+FFFD (a byte that cannot start a sequence stands for one replacement; a sequence cut short stands for one), the string itself where it is valid.
 
 ### Unicode word/case primitives
 

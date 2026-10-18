@@ -2179,13 +2179,14 @@ def private utf8_hold_bytes(s : string) : int {
 
 // One chat.completion.chunk SSE event. role-only for the opening delta, content and/or
 // reasoning_content for each token, empty delta + finish_reason for the terminating chunk.
+[arch(at="README.md#utf8-replies")]
 def private send_chat_chunk(srv : FrontLink; writer : WriterRef;
                             id : string; created : int64; role, content, finish : string;
                             reasoning : string = "") {
     var chunk = OaiStreamChunk(id = id, _object = "chat.completion.chunk", created = created, model = cur_name())
     chunk.choices |> emplace(OaiStreamChoice(index = 0,
-                                             delta <- OaiDelta(role = role, content = content,
-                                                               reasoning_content = reasoning),
+                                             delta <- OaiDelta(role = role, content = utf8_sanitize(content),
+                                                               reasoning_content = utf8_sanitize(reasoning)),
                                              finish_reason = finish))
     sse_event(srv, writer, sprint_json(chunk, false), "")
     delete chunk
@@ -2378,10 +2379,11 @@ def parse_tool_calls_auto(full : string; declared_open, declared_close, id_base 
     return full
 }
 
+[arch(at="README.md#utf8-replies")]
 def private send_compl_chunk(srv : FrontLink; writer : WriterRef;
                              id : string; created : int64; text, finish : string) {
     var chunk = OaiComplStreamChunk(id = id, _object = "text_completion", created = created, model = cur_name())
-    chunk.choices |> push(OaiComplStreamChoice(index = 0, text = text, finish_reason = finish))
+    chunk.choices |> push(OaiComplStreamChoice(index = 0, text = utf8_sanitize(text), finish_reason = finish))
     sse_event(srv, writer, sprint_json(chunk, false), "")
     delete chunk
 }
@@ -3967,6 +3969,7 @@ def private parse_wire_tools(var w : StreamWire?; full, id_base : string;
 // Route drained SchedEvents to their writers: streaming wires emit SSE chunks, buffered wires
 // accumulate pieces and respond once at finish. "evicted" releases the writer with no bytes —
 // the client is gone (reap_disconnected produced it). Finished wires unregister.
+[arch(at="README.md#utf8-replies")]
 def private flush_events(srv : FrontLink) {   // nolint:STYLE037,STYLE038 — one arm per (event kind x wire flavor); the arms share the wire's UTF-8 hold and reply buffer
     for (e in g_events) {
         // interior pointer into g_wires — nothing inserts into the table between here and the erase
@@ -4098,8 +4101,8 @@ def private flush_events(srv : FrontLink) {   // nolint:STYLE037,STYLE038 — on
             }
             var out = OaiChatResponse(id = w.id, _object = "chat.completion", created = w.created, model = cur_name())
             out.choices |> emplace(OaiChoice(index = 0,
-                                             message <- OaiMessage(role = "assistant", content = content,
-                                                                   reasoning_content = rsn,
+                                             message <- OaiMessage(role = "assistant", content = utf8_sanitize(content),
+                                                                   reasoning_content = utf8_sanitize(rsn),
                                                                    tool_calls <- calls),
                                              finish_reason = finish))
             out.usage = usage_of(e)
@@ -4108,7 +4111,7 @@ def private flush_events(srv : FrontLink) {   // nolint:STYLE037,STYLE038 — on
             delete out
         } else {
             var out = OaiComplResponse(id = w.id, _object = "text_completion", created = w.created, model = cur_name())
-            out.choices |> push(OaiComplChoice(index = 0, text = join(w.reply_parts, ""), finish_reason = e.finish))
+            out.choices |> push(OaiComplChoice(index = 0, text = utf8_sanitize(join(w.reply_parts, "")), finish_reason = e.finish))
             out.usage = usage_of(e)
             set_writer_keepalive_timeout(srv, w.writer, DEFAULT_WRITER_KEEPALIVE_MS)
             respond(srv, w.writer, int(http_status.OK), "application/json", sprint_json(out, false))
