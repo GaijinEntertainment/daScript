@@ -92,6 +92,25 @@ def set_asr_kv(dt : KVDtype) {
 //! The KV-cache dtype `set_asr_kv` last selected - what the next ASR decoder session takes
 def get_asr_kv() : KVDtype => g_asr_kv
 
+//! the context an LLM-decoder ASR model's decoder serves: a transcription's prompt and reply sit far under it
+let private ASR_DEC_SEQ_CAP = 8192l
+
+//! The Canary pair as one ASR model: the decoder a Qwen3 whose context is capped, the encoder projecting to its width -
+//! `load_asr_model` hands it its baked pair, a caller building the pair in memory its own; `path` names the decoder in a refusal
+def canary_asr_model(var dec : Model; var enc : CanaryEncoder; path : string) : AsrModel {
+    if (dec.arch != "qwen3") {
+        panic("dasLLAMA asr: '{path}' is arch '{dec.arch}' - the Canary route expects a Qwen3-1.7B decoder")
+    }
+    dec.config.seq_len = min(dec.config.seq_len, ASR_DEC_SEQ_CAP)
+    if (enc.proj_dim != dec.config.dim) {
+        panic("dasLLAMA asr: canary encoder projects to {enc.proj_dim} but the decoder is {dec.config.dim}-wide - mismatched pair")
+    }
+    var m = AsrModel(kind = AsrKind.canary)
+    m.dec <- dec
+    m.cenc <- enc
+    return <- m
+}
+
 //! Force the fp32 (bit-exact-with-oracle) path for models loaded AFTER this call — the
 //! default load quantizes the encoder GEMMs to Q8_0 (~4x on CPU, tolerance-gated).
 def set_asr_fp32(on : bool) {
@@ -213,7 +232,7 @@ def load_asr_model(path : string; mmproj : string) : AsrModel {
         if (m.dec.arch != "gemma4") {
             panic("dasLLAMA asr: '{path}' is arch '{m.dec.arch}' - the gemma4a audio route expects a Gemma-4 decoder")
         }
-        m.dec.config.seq_len = min(m.dec.config.seq_len, 8192l)
+        m.dec.config.seq_len = min(m.dec.config.seq_len, ASR_DEC_SEQ_CAP)
         if (g_asr_force_fp32 || g_asr_tower_fp32) {
             set_gemma4a_q8(false)
             // a panicking load must not leave the pin standing
@@ -230,17 +249,9 @@ def load_asr_model(path : string; mmproj : string) : AsrModel {
         return <- m
     }
     if (emagic == CANARY_MAGIC) {
-        var m = AsrModel(kind = AsrKind.canary)
-        m.dec <- load_model_cached(path, QuantMode.q8)
-        if (m.dec.arch != "qwen3") {
-            panic("dasLLAMA asr: '{path}' is arch '{m.dec.arch}' - the Canary route expects a Qwen3-1.7B decoder")
-        }
-        m.dec.config.seq_len = min(m.dec.config.seq_len, 8192l)
-        m.cenc <- load_canary_encoder(mmproj, canary_q8)
-        if (m.cenc.proj_dim != m.dec.config.dim) {
-            panic("dasLLAMA asr: canary encoder projects to {m.cenc.proj_dim} but the decoder is {m.dec.config.dim}-wide - mismatched pair")
-        }
-        return <- m
+        var dec <- load_model_cached(path, QuantMode.q8)
+        var enc <- load_canary_encoder(mmproj, canary_q8)
+        return <- canary_asr_model(dec, enc, path)
     }
     var m = AsrModel(kind = AsrKind.qwen3a)
     m.dec <- load_model_cached(path, QuantMode.q8)
@@ -251,7 +262,7 @@ def load_asr_model(path : string; mmproj : string) : AsrModel {
     } elif (m.dec.arch != "qwen3vl" && m.dec.arch != "qwen3") {
         panic("dasLLAMA asr: '{path}' is arch '{m.dec.arch}' - the GGUF ASR route expects a Qwen3-ASR (qwen3/qwen3vl) or Qwen3-Omni (qwen3vlmoe) decoder")
     }
-    m.dec.config.seq_len = min(m.dec.config.seq_len, 8192l)
+    m.dec.config.seq_len = min(m.dec.config.seq_len, ASR_DEC_SEQ_CAP)
     if (g_asr_force_fp32 || g_asr_tower_fp32) {
         set_qwen3a_q8(false)
         // a panicking load must not leave the pin standing
