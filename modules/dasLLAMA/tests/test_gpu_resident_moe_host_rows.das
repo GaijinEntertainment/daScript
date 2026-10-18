@@ -15,7 +15,6 @@ require daslib/jobque_boost
 require dasllama/dasllama_math
 require dasllama/dasllama_gpu_tier
 require dasllama/dasllama_gpu_resident
-require dasllama/dasllama_kv_dtype
 require _model_tier
 require _resident_feed
 require _kv_codec_cells
