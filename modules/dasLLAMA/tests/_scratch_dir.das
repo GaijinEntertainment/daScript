@@ -9,7 +9,7 @@ module _scratch_dir shared public
 
 require daslib/fio
 require dastest/testing_boost
-require _gguf_fixture   // gguf_header, gguf_push_le, gguf_push_str: the header-only GGUF fixture's bytes
+require _gguf_writer   // gguf_header, gguf_push_le, gguf_push_str: the header-only GGUF fixture's bytes
 
 //! `name` in this run's scratch directory
 def scratch_path(name : string) : string => path_join(test_temp_dir(), name)

@@ -3,7 +3,7 @@
 
 options gen2
 
-module _gguf_fixture shared public
+module _gguf_writer shared public
 
 require strings   // peek_data: a string's bytes
 

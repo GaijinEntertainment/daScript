@@ -12,7 +12,7 @@ require daslib/fio
 require math
 require strings
 require daslib/enum_trait
-require _gguf_fixture   // gguf_header, gguf_push_le, gguf_push_str: the synthetic file's bytes
+require _gguf_writer   // gguf_header, gguf_push_le, gguf_push_str: the synthetic file's bytes
 
 // Byte-level GGUF quant-format gates on a synthetic in-memory file: the dequant arm must match an
 // independently hand-rolled reference, and the exact-transcode rails must be bit-exact against
