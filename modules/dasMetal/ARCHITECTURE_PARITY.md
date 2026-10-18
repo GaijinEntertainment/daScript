@@ -62,4 +62,3 @@ Cross-GPU parity of one source is secondary. Current entries:
   and writes no MSL text for it; the SPIR-V emitter's `precise` mark decorates each float result
   `NoContraction` (`modules/dasSpirv/ARCHITECTURE.md`, the `precise` section), so the mark has no
   Metal twin - a body ported between the emitters carries the property on its annotation.
-
