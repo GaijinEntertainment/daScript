@@ -76,28 +76,29 @@ what it costs today and what the fix would change.
   `DASLLAMA_GPU=1 DASLLAMA_MODELS_DIR=/workspace/models DASLLAMA_ALLOW_UNTUNED=1`: the rows
   `DASLLAMA_IMAGE_SAVE=0 ./bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m /workspace/models/<file> -p 512 -n 0 -r 3 --for-debug-purposes`,
   the stages the same line under `DASLLAMA_GPU_PROF=1 DAS_LOG_LEVEL=info` (the `vk_rdpf` line, us a 512-row window); the races
-  `./bin/daslang -jit modules/dasLLAMA/harness/vk_gemm_probe.das -- plef32`, `-- kqst:<fmt>` and `-- narrow:<fmt>`, each figure an
-  arm's best round. The gemma-4 E2B Q4_K_M ships its `inp_gate` and `proj` planes F32, which the window ran on the scalar f32
-  tile (`DnBaGemm`) and runs on the staged tile (`ARCHITECTURE_GPU_VULKAN_KHR.md#f32-rows-staged-tile`): at b06df183e8 pp512
-  12754 (cv 0.8 %), window 41056 us, `ple_gate` 5932, `ple_proj` 4770, `ple_rq` 621; at 0fea2d9f3a pp512 16352 (cv 0.2 %),
-  window 31923, `ple_gate` 720 (split six ways), `ple_proj` 543, `ple_rq` 846 (now the f16 convert of the stream rows); every
-  other stage within 1 %. The E-series files without f32 planes, b06df183e8 -> 5e46f3acb3: E2B Q4_0 15378 -> 15386, E2B Q8_0
-  16097 -> 16390, E4B Q8_0 9728 -> 9745 (cv 1.6 %); their `ple_proj` takes the f16 feed on the cm2 tiles (Q8_0 575 -> 569,
-  Q4_0 646 -> 672). `plef32` at 0fea2d9f3a: the scalar f32 tile 3.1 TFLOP/s at the E2B and E4B gate and projection shapes,
-  the staged tile 75-85 at 512 rows (E2B gate 127.5 -> 5.10 us, proj 128.3 -> 5.38, E4B gate 212.6 -> 7.89, proj 212.6
-  -> 8.26); one dispatch at a time the E2B gate 164.6 us scalar, 53.8 staged whole, 33.1 / 25.3 / 17.0 split 2 / 3 / 6
-  with the reduce, the E4B gate 274.3, 86.7, 25.2 split 5; at 300 rows the E2B gate 106.9 -> 19.0 split six ways, the proj
-  82.5 -> 14.9. `kqst:<fmt>` at 0fea2d9f3a, us at 512 rows, cm2 l stamp / staged: k4 gate 72.4 / 82.2, down 71.5 / 83.3, q
-  27.1 / 29.1, 4B down 185.0 / 212.1; k5 gate 76.9 / 95.7, 4B down 199.6 / 248.0; k6 gate 78.3 / 96.2, down2x 156.9 / 196.2;
-  iq4xs gate 74.9 / 86.1, down2x 149.2 / 182.9; at 500 rows the m stamp / staged: k4 90.0 / 83.0, k5 98.7 / 95.6, k6 98.6
-  / 96.2, iq4xs 98.4 / 87.1 (`followup_vulkan.md` row 149). Decision: the f32 rows take the staged tile on every coopmat
-  device at subgroup 32 whose dim and ple sit on its k step; the K-quant planes stay on the cm2 tiles. The tile pick's narrow
-  rule (`narrow:<fmt>` at cebb864d75, every K-quant format, K 1536) one dispatch at a time, us s / m / l at 512 rows: k4 256
-  and 512 wide 23.1 / 35.5 / 60.0, k6 25.2 / 39.5 / 64.1, iq4xs 27.2 / 39.5 / 61.8, k2 36.2 / 51.6 / 76.4, iq2xxs 45.7 /
-  55.0 / 81.6, iq2s at 256 wide 53.1 / 53.9; at 768 wide m wins (k4 35.8 / 43.6 s); overlapped sixteen deep the order turns
-  (k4 at 256 wide 9.8 / 5.1 / 6.0). The E2B Q4_K_M window (the stage command above) on 5e46f3acb3 against the same tree with the
-  narrow rule off for the K-quant planes (their k and v on the wave model's m): k 496 -> 632 us, v 477 -> 661, the window 31859 -> 32227. Decision: the narrow rule stands
-  for the K-quants; the overlapped reading that suggested otherwise is not the cost a window pays.
+  `./bin/daslang -jit modules/dasLLAMA/harness/vk_gemm_probe.das -- plef32`, `-- kqst:<fmt>` (each figure an arm's best of four
+  interleaved rounds after one untimed round, `sweep_best_us`) and `-- narrow:<fmt>` (its second round). The gemma-4 E2B
+  Q4_K_M ships its `inp_gate` and `proj` planes F32, which the window ran on the scalar f32 tile (`DnBaGemm`) and runs on the
+  staged tile (`ARCHITECTURE_GPU_VULKAN_KHR.md#f32-rows-staged-tile`): at b06df183e8 pp512 12754 (cv 0.8 %), window 41056 us,
+  `ple_gate` 5932, `ple_proj` 4770, `ple_rq` 621; at ad39b47963 pp512 16359 (cv 0.2 %), window 31941, `ple_gate` 718 (split
+  six ways), `ple_proj` 555, `ple_rq` 837 (now the f16 convert of the stream rows); every other stage within 1 %. The E-series
+  files without f32 planes, b06df183e8 -> 5e46f3acb3: E2B Q4_0 15378 -> 15386, E2B Q8_0 16097 -> 16390, E4B Q8_0 9728 -> 9745
+  (cv 1.6 %); their `ple_proj` takes the f16 feed on the cm2 tiles (Q8_0 575 -> 569, Q4_0 646 -> 672). `plef32` at
+  ad39b47963: the scalar f32 tile 3.1 TFLOP/s at the E2B and E4B gate and projection shapes, the staged tile 75-85 at 512 rows
+  (E2B gate 127.6 -> 5.06 us, proj 127.9 -> 5.33, E4B gate 212.7 -> 7.87, proj 212.7 -> 8.25); one dispatch at a time the E2B
+  gate 164.6 us scalar, 53.8 staged whole, 33.1 / 25.2 / 17.0 split 2 / 3 / 6 with the reduce, the E4B gate 273.4, 86.7, 25.2
+  split 5; at 300 rows the E2B gate 105.8 -> 19.0 split six ways, the proj 82.5 -> 14.9. `kqst:<fmt>` at ad39b47963, us at
+  512 rows, cm2 l stamp / staged: k4 gate 75.9 / 81.9, down 72.7 / 83.0, q 27.0 / 29.0, 4B down 185.2 / 210.8; k5 gate 79.9 /
+  94.8, 4B down 200.4 / 246.6; k6 gate 82.1 / 95.6, down2x 158.2 / 194.7; iq4xs gate 78.1 / 85.4, down2x 150.9 / 181.8; at
+  500 rows the m stamp / staged: k4 89.4 / 82.7, k5 97.8 / 95.2, k6 97.6 / 95.7, iq4xs 97.7 / 86.8 (`followup_vulkan.md` row
+  149). Decision: the f32 rows take the staged tile on every coopmat device at subgroup 32 whose dim and ple sit on its k
+  step; the K-quant planes stay on the cm2 tiles. The tile pick's narrow rule (`narrow:<fmt>` at ad39b47963, every K-quant
+  format, K 1536) one dispatch at a time, us s / m / l at 512 rows: k4 at 256 and 512 wide 23.1 / 35.8-36.8 / 60.0, k6 25.2 /
+  39.5 / 64.1, iq4xs 27.2 / 39.5 / 62.0, k2 37.4 / 51.9 / 76.4, iq2xxs 45.7 / 55.9 / 81.6, iq2s at 256 wide 44.8 / 54.0; at
+  768 wide m wins (k4 37.3 / 43.6 s); overlapped sixteen deep the order turns (k4 at 256 wide 10.0 / 5.1 / 6.0). The E2B
+  Q4_K_M window (the stage command above) on 5e46f3acb3 against the same tree with the narrow rule off for the K-quant planes
+  (their k and v on the wave model's m): k 496 -> 632 us, v 477 -> 661, the window 31859 -> 32227. Decision: the narrow rule
+  stands for the K-quants; the overlapped reading that suggested otherwise is not the cost a window pays.
 - **MEASURED (2026-10-16) - the gemma leg's end re-measure, the M5 half.** Instrument `benchmarks/lcpp_bench.das`
   (`--ngl 99 -p 512 -n 128 -r 5 --for-debug-purposes`, debug-jit), the M5 Max (128 GB) alone on the box, one box profile
   minted at the leg tip (505 s, 39,101 B) and read by both trees: master's own build (33e7910669) against the leg tip

@@ -94,11 +94,12 @@ clamped: q8 E2B down 268 -> 612 us) and through the edge path the dispatch waite
 **The narrow rule reads one dispatch's latency, the cost a window pays a GEMM of few workgroups.** On the
 scalar decode arm every K-quant format's s stamp takes less time than its m stamp one dispatch at a time
 at every width the rule takes (RTX PRO 4500, driver 580.159.04, `DASLLAMA_GPU=1 DASLLAMA_ALLOW_UNTUNED=1
-./bin/daslang -jit modules/dasLLAMA/harness/vk_gemm_probe.das -- narrow:<fmt>` at cebb864d75, K 1536, 512 rows, us s / m / l: k4 at 256 and 512 wide 23.1 /
-35.5 / 60.0, k5 25.2 / 39.5, k6 25.2 / 39.5, q40 25.3 / 39.5, iq4xs 27.2 / 39.5, k2 36.2 / 51.6, iq3xxs 43.6 /
-54.0, iq2s 43.6 / 54.0 at 512 wide and 53.1 / 53.9 at 256; at 640 wide the same; at a 300-row window the same), and the m stamp wins at 768,
-the first width the rule leaves to the wave model (k4 35.8 against 43.6). Overlapped sixteen deep the order
-turns - the l and m stamps read under s there (k4 at 256 wide: 6.0 / 5.1 / 9.8) - and the window follows the
+./bin/daslang -jit modules/dasLLAMA/harness/vk_gemm_probe.das -- narrow:<fmt>` at ad39b47963, its second round, K 1536, 512 rows,
+us s / m / l at 512 wide: k4 23.1 / 36.8 / 60.0, k5 25.3 / 39.5 / 63.6, k6 25.2 / 39.5 / 64.1, q40 25.3 / 39.5, iq4xs 27.2 /
+39.5 / 62.0, k2 37.4 / 51.9 / 76.4, iq3xxs 43.7 / 54.0, iq2s 43.6 / 54.0, iq2xxs 45.7 / 55.9 / 81.6; at 256 and 640 wide the
+same order; at a 300-row window the same), and the m stamp wins at 768, the first width the rule leaves to the wave model (k4
+37.3 against 43.6). Overlapped sixteen deep the order turns - the l and m stamps read under s there (k4 at 256 wide: 6.0 / 5.1 /
+10.0) - and the window follows the
 latency: the E2B Q4_K_M's k and v read 496 and 477 us a window on s against 632 and 661 with them off it
 (`DASLLAMA_GPU_PROF=1`, `PERF_LEDGER.md`'s staged-tile entry carries the command and the builds).
 
