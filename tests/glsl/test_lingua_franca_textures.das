@@ -18,6 +18,7 @@ options no_unused_function_arguments = false
 require dastest/testing_boost public
 require glsl/glsl_opengl
 require strings
+require daslib/strings_boost
 
 // Host-bind dummies (see header): each sampler uniform's generated bind function calls these by name.
 [unused_argument(unit, tex)] def bind_sampler_3d(unit : int; tex : uint) {}
@@ -72,10 +73,10 @@ def tx_shadow_fragment {
 def tx_grad_fragment {
     let dx = dFdx(tx_uv)
     let dy = dFdy(tx_uv)
-    tx_color = textureGrad(tx_tex, tx_uv, dx, dy)
+    tx_color = (textureGrad(tx_tex, tx_uv, dx, dy)
         + textureGrad(tx_volume, float3(tx_uv, 0.5), float3(dx, 0.0), float3(dy, 0.0))
         + textureGrad(tx_cube, float3(tx_uv, 1.0), float3(dx, 0.0), float3(dy, 0.0))
-        + textureGrad(tx_array, float3(tx_uv, 2.0), dx, dy)
+        + textureGrad(tx_array, float3(tx_uv, 2.0), dx, dy))
 }
 
 def private has(hay, needle : string) : bool => find(hay, needle) >= 0
@@ -83,8 +84,13 @@ def private has(hay, needle : string) : bool => find(hay, needle) >= 0
 [test]
 def test_lingua_franca_textures(t : T?) {
     t |> run("textureGrad preserves explicit gradients for every sampler dimensionality") <| @(t : T?) {
+        var assignment = ""
+        for (statement in split(tx_grad_fs_glsl, ";")) {
+            if (has(statement, "tx_color =")) { assignment = statement }
+        }
+        t |> success(assignment != "", "fragment shader assigns its output")
         for (sampler_name in fixed_array("tx_tex", "tx_volume", "tx_cube", "tx_array")) {
-            t |> success(has(tx_grad_fs_glsl, "textureGrad({sampler_name},"), "textureGrad call for {sampler_name}")
+            t |> success(has(assignment, "textureGrad({sampler_name},"), "output assignment includes textureGrad for {sampler_name}")
         }
     }
     t |> run("textureLod lowers name-identically on the GL rail") <| @(t : T?) {
