@@ -90,7 +90,7 @@ def test_baseline_class_replaces_the_box(t : T?) {
     let exe = path_join(work, "kernel")
 
     var lb : array<string>
-    let rc = spawn_child("{env_prefix(klass)}\"{bin}\" -exe -output \"{exe}\" \"{script}\"", lb)
+    let rc = spawn_child("{env_prefix(klass)}\"{bin}\" -exe -output \"{exe}.exe\" \"{script}\"", lb)
     t |> equal(0, rc, "the baseline exe must build: {join(lb, "\n")}")
     t |> success(lb |> has("{BASELINE_LINE}{klass}"), "the build announces the baseline class it targets")
     t |> success(!(lb |> has(HOST_CPU_LINE)), "a kernel-carrying exe under a baseline never targets the box")
@@ -125,12 +125,13 @@ def test_baseline_refuses_a_foreign_or_unknown_class(t : T?) {
     let exe = path_join(work, "kernel")
 
     var lf : array<string>
-    let rcf = spawn_child("{env_prefix(foreign_class())}\"{bin}\" -exe -output \"{exe}\" \"{script}\"", lf)
+    let exe_args = "-exe -output \"{exe}.exe\" \"{script}\""
+    let rcf = spawn_child("{env_prefix(foreign_class())}\"{bin}\" {exe_args}", lf)
     t |> success(rcf != 0, "a class of another architecture refuses the build")
     t |> success(lf |> has("never crosses architectures"), "the refusal names the architecture mismatch: {join(lf, "\n")}")
 
     var lu : array<string>
-    let rcu = spawn_child("{env_prefix("x86-zen9")}\"{bin}\" -exe -output \"{exe}\" \"{script}\"", lu)
+    let rcu = spawn_child("{env_prefix("x86-zen9")}\"{bin}\" {exe_args}", lu)
     t |> success(rcu != 0, "a name no class carries refuses the build")
     t |> success(lu |> has("names no CPU class") && lu |> has("x86-avx2"), "the refusal lists the classes: {join(lu, "\n")}")
     rmdir_rec(work)
@@ -150,14 +151,17 @@ def test_baseline_under_a_cross_target(t : T?) {
     return if (empty(work))
     let script = path_join(work, "kernel.das")
     let exe = path_join(work, "kernel")
+    let exe_args = "-exe -output \"{exe}.exe\" \"{script}\""
 
     var lo : array<string>
-    let rco = spawn_child("{env_prefix(klass)}\"{bin}\" -exe -output \"{exe}\" \"{script}\" -- --jit-target {own_arch_triple()} --jit-compile-only", lo)
+    let rco = spawn_child("{env_prefix(klass)}\"{bin}\" {exe_args} "
+        + "-- --jit-target {own_arch_triple()} --jit-compile-only", lo)
     t |> equal(0, rco, "a cross target of the class's own arch compiles under the baseline: {join(lo, "\n")}")
     t |> success(lo |> has("{BASELINE_LINE}{klass}"), "the cross build announces the class")
 
     var lx : array<string>
-    let rcx = spawn_child("{env_prefix(klass)}\"{bin}\" -exe -output \"{exe}\" \"{script}\" -- --jit-target {foreign_arch_triple()} --jit-compile-only", lx)
+    let rcx = spawn_child("{env_prefix(klass)}\"{bin}\" {exe_args} "
+        + "-- --jit-target {foreign_arch_triple()} --jit-compile-only", lx)
     t |> success(rcx != 0, "a cross target of the other arch refuses the class")
     t |> success(lx |> has("never crosses architectures"), "the refusal names the arch mismatch against the triple: {join(lx, "\n")}")
     rmdir_rec(work)

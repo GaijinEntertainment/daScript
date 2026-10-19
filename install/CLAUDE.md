@@ -11,7 +11,7 @@ Design principles, the three-tier execution model (interpreter / AOT / JIT), mac
 - **Run:** `bin/daslang path/to/script.das` (e.g. `bin/daslang examples/hello_world.das`)
 - **Compile-only check:** `bin/daslang -compile-only script.das` - no simulation or execution. `-dry-run` also simulates (but does not execute).
 - **AOT generation:** `bin/daslang -aot input.das output.cpp` - emit C++ stubs ahead-of-time; `-aot-macros` includes macros in the output.
-- **JIT:** `bin/daslang -jit script.das` - compile to native via LLVM JIT before running; only in builds with the JIT module. `bin/daslang -exe script.das -output out` JITs to a standalone executable (implies `-dry-run`); the platform's executable extension is appended automatically (`.exe` on Windows).
+- **JIT:** `bin/daslang -jit script.das` - compile to native via LLVM JIT before running; only in builds with the JIT module. `bin/daslang -exe script.das -output out` JITs to a standalone executable at exactly `out` (implies `-dry-run`); without `-output` it is named after the script, in the current directory (`.exe` added on Windows).
 - **AOT-linked execution:** `bin/daslang -use-aot script.das` - run with AOT stubs linked into the binary (host-side flag).
 - **Script arguments:** everything after `--` is forwarded - `bin/daslang script.das -- arg1 arg2`. Parse with `daslib/clargs` (`skills/daslang/references/cli-and-config.md`).
 

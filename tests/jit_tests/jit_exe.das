@@ -129,7 +129,7 @@ def compile_to_exe(t : T?; src : string; out : string) : bool {
             cop.jit_exe_mode = true
             cop.jit_dll_mode = false
             access |> add_extra_module("just_in_time", "{get_das_root()}/daslib/just_in_time.das")
-            cop.jit_output_path := out
+            cop.jit_output_path := exe_path
             compile_file(src, access, unsafe(addr(mg)), cop) $(ok, program, _errors) {
                 t |> equal(ok, true)
                 simulate(program) $(sok, _context, _serrors) {

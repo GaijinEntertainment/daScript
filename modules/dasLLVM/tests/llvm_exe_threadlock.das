@@ -27,7 +27,7 @@ def private build_and_run(t : T?; dir : string; tag : string) : string {
     let root = "modules/dasLLVM/tests/_exe_threadlock_root.das"
     let exe = path_join(dir, "{tag}.exe")
     var bout = ""
-    let argv <- [das_exe(), "-jit", "-exe", "-output", path_join(dir, tag), root]
+    let argv <- [das_exe(), "-jit", "-exe", "-output", exe, root]
     let brc = run_and_capture(argv, bout, 300.0)
     t |> equal(0, brc, "the -exe build ({tag}) succeeds: {tail(bout)}")
     if (brc != 0 || !stat(exe).is_valid) {

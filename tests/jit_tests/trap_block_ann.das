@@ -24,7 +24,6 @@ require _trap_block_ann_helper
 
 let OUTPUT_DIR = test_temp_dir()
 let EXE_SCRIPT = "{OUTPUT_DIR}/trap_block_ann_exe.das"
-let EXE_PATH = "{OUTPUT_DIR}/trap_block_ann_exe"
 let EXE_BINARY = "{OUTPUT_DIR}/trap_block_ann_exe.exe"
 
 def call_block(blk : block<(x : int) : int>) : int => invoke(blk, 20)
@@ -93,7 +92,7 @@ def compile_to_exe(t : T?) : bool {
             cop.jit_exe_mode = true
             cop.jit_dll_mode = false
             access |> add_extra_module("just_in_time", "{get_das_root()}/daslib/just_in_time.das")
-            cop.jit_output_path := EXE_PATH
+            cop.jit_output_path := EXE_BINARY
             compile_file(EXE_SCRIPT, access, unsafe(addr(mg)), cop) $(ok, program, _errors) {
                 t |> equal(ok, true)
                 simulate(program) $(sok, _context, _serrors) {

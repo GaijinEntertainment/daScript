@@ -36,9 +36,9 @@ def private smoke_build_and_run(t : T?; tag : string; jit_args : array<string>; 
         return
     }
     let dir = unsafe(dir_r.value)
-    let exe = path_join(dir, "smoke.exe")   //! daslang -exe appends `.exe` to -output itself
+    let exe = path_join(dir, "smoke.exe")
     var bout = ""
-    var argv <- [self_daslang(), "-jit", "-exe", "-output", path_join(dir, "smoke"),
+    var argv <- [self_daslang(), "-jit", "-exe", "-output", exe,
                  "modules/dasLLAMA/tests/_exe_smoke_root.das"]
     if (!empty(jit_args)) {
         argv |> push("--")

@@ -1878,7 +1878,7 @@ def test_cmd_release_pure_daslang(t : T?) {
         tt |> success(fexist(path_join(artifacts, "data.txt")), "asset shipped")
         let deployed_config = path_join(artifacts, "config.toml")
         tt |> equal("value = \"template\"\n", fread(deployed_config), "starter config shipped on first release")
-        tt |> success(!fexist(path_join(artifacts, "smoke.o")), ".o build artifact dropped")
+        tt |> success(!fexist(path_join(artifacts, "smoke.exe.o")), ".o build artifact dropped")
 
         fopen(deployed_config, "wb") $(f) {
             fwrite(f, "value = \"user-edited\"\n")
@@ -2029,7 +2029,8 @@ def test_cmd_release_program(t : T?) {
         let companion_rel = get_platform_name() == "darwin" ? "side-tool" : "side-tool.exe"
         tt |> success(fexist(bundle_exe_path(out_dir, "withtool")), "the main exe ships")
         tt |> success(fexist(path_join(artifacts, companion_rel)), "the companion exe sits beside it as {companion_rel}")
-        tt |> success(!fexist(path_join(artifacts, "side-tool.o")), "the companion's object file is dropped")
+        tt |> success(!fexist(path_join(artifacts, "side-tool.exe.o")),
+            "the companion's object file is dropped")
         for (stem in ["withtool", "side-tool"]) {
             for (suffix in [".map", ".lib", ".exp"]) {
                 tt |> success(!fexist(path_join(artifacts, "{stem}{suffix}")), "no linker residue {stem}{suffix} rides beside the exe: nothing at run time reads it")
@@ -2076,7 +2077,10 @@ def test_cmd_release_program_refusals(t : T?) {
         }
         tt |> equal(1, cmd_release(tmp_root, out_dir), "a companion that does not compile fails the release")
         let artifacts = bundle_artifacts_dir(out_dir, "withbroken")
-        tt |> success(!fexist(path_join(artifacts, "side-tool.exe")) && !fexist(path_join(artifacts, "side-tool")) && !fexist(path_join(artifacts, "side-tool.o")), "no half-built companion stays in the bundle")
+        let left_exe = (fexist(path_join(artifacts, "side-tool.exe"))
+            || fexist(path_join(artifacts, "side-tool")))
+        let left_obj = fexist(path_join(artifacts, "side-tool.exe.o"))
+        tt |> success(!left_exe && !left_obj, "no half-built companion stays in the bundle")
         var leftover = 0
         fio::dir(get_das_root()) $(name) {
             if (name |> starts_with("_daspkg_release_deps_")) {

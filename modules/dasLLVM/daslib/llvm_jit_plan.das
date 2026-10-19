@@ -1051,6 +1051,14 @@ def public make_jit_plan(prog : Program?; var ctx : Context?; announce : bool; c
         panic("LLVM JIT: the target triple `{plan.target_triple}` is not on the command line - pass --jit-target={plan.target_triple} after the `--` separator (the compile-time target folds read argv, so `options jit_target` alone folds the host's tiers into a cross artifact)")
     }
     plan.gen_wasm = plan.gen_exe && (plan.target_triple |> starts_with("wasm"))
+    if (plan.gen_exe && !plan.gen_lib && !plan.gen_wasm) {
+        if (empty(plan.config_out_path)) {
+            plan.output_path = default_exe_path(string(prog.getThisModule.fileName))
+        }
+        if (stat(plan.output_path).is_dir) {
+            plan.refusal = "the exe path {plan.output_path} is a directory - pass -output <file>"
+        }
+    }
     // Optional CLI override for the wasm runtime archive location. Falls
     // back to `options jit_runtime_lib = "..."` then write_wasm's
     // find_runtime_lib() auto-locate under web/output/lib/.

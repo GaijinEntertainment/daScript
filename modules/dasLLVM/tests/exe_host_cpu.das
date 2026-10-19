@@ -100,7 +100,8 @@ def test_exe_host_cpu(t : T?) {
     t |> success(write_probe_script(KERNEL_SCRIPT, true), "failed to write kernel probe script")
     t |> success(plan_targets_host(KERNEL_SCRIPT), "kernel-carrying exe build must target the host cpu")
     var lk : array<string>
-    spawn_child("{neutral_env()}\"{bin}\" -exe -output \"{KERNEL_EXE}\" \"{KERNEL_SCRIPT}\"", lk)
+    spawn_child("{neutral_env()}\"{bin}\" -exe -output \"{KERNEL_EXE}.exe\" "
+        + "\"{KERNEL_SCRIPT}\"", lk)
 
     t |> success(write_probe_script(PLAIN_SCRIPT, false), "failed to write plain probe script")
     t |> success(!plan_targets_host(PLAIN_SCRIPT), "kernel-free exe build must stay generic")
@@ -108,7 +109,8 @@ def test_exe_host_cpu(t : T?) {
     //! an intrinsic call alone must not promote the exe off the generic baseline - the gates decline to the fallback bodies, so the build emits nothing that machine cannot select
     t |> success(!plan_targets_host(BASELINE_SCRIPT), "an intrinsic call alone never promotes the exe to the host cpu")
     var lb : array<string>
-    let rcb = spawn_child("{neutral_env()}\"{bin}\" -exe -output \"{BASELINE_EXE}\" \"{BASELINE_SCRIPT}\"", lb)
+    let rcb = spawn_child("{neutral_env()}\"{bin}\" -exe -output \"{BASELINE_EXE}.exe\" "
+        + "\"{BASELINE_SCRIPT}\"", lb)
     t |> equal(0, rcb, "the intrinsic-calling kernel-free exe must build on the generic baseline: {join(lb, "\n")}")
 
     // run the built exes where the platform can load the shared lib (same gates as jit_exe.das:

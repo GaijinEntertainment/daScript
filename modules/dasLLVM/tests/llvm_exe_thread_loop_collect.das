@@ -17,7 +17,8 @@ def thread_loop_collects_after_steps_and_preserves_capture_ownership(t : T?) {
     t |> success(temporary is value)
     if (!(temporary is value)) { return }
     let dir = temporary as value
-    let built = run_and_capture([get_host_binary(), "-jit", "-exe", "-output", "{dir}/worker", fixture], output, 180.0)
+    let built = run_and_capture([get_host_binary(), "-jit", "-exe", "-output", "{dir}/worker.exe",
+        fixture], output, 180.0)
     t |> equal(built, 0, output)
     if (built == 0 && fexist("{dir}/worker.exe")) {
         let ran = run_standalone("{dir}/worker.exe", "", output, 60.0)
@@ -36,7 +37,8 @@ def thread_loop_requires_release_at_finish_and_keeps_nested_checks(t : T?) {
     let dir = temporary as value
     let fixture = "{get_das_root()}/tests/jobque/_fixture_thread_loop_release.das"
     var output : string
-    let built = run_and_capture([get_host_binary(), "-jit", "-exe", "-output", "{dir}/worker", fixture], output, 180.0)
+    let built = run_and_capture([get_host_binary(), "-jit", "-exe", "-output", "{dir}/worker.exe",
+        fixture], output, 180.0)
     t |> equal(built, 0, output)
     for (mode in ["final", "nested"]) {
         let result = run_and_capture([get_host_binary(), "-no-module-cache", fixture, "--", mode], output, 20.0)

@@ -1200,6 +1200,8 @@ def public write_artifact(mod : LLVMOpaqueModule?; out_path : string; kind : Jit
         if (!ok) {
             to_log(LOG_ERROR, "write_artifact: {kind == JitArtifact.static_lib ? "archive" : "link"} failed for {target}\n")
             emitted = false
+        } elif (kind == JitArtifact.exe && get_platform_name() == "linux") {
+            remove(file)
         }
     }
     return emitted

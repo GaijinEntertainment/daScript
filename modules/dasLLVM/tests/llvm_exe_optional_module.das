@@ -15,7 +15,9 @@ def register_all_executable_keeps_unrelated_missing_modules_optional(t : T?) {
         let source = path_join(get_das_root(), "modules/dasLLVM/tests/_exe_optional_module_root.das")
         let output = path_join(root, "driver")
         var log : string
-        let compiled = run_and_capture([get_executable_path(), "-no-module-cache", "-jit", "-jit-no-cache", "-exe", "-output", output, source, "--", "--jit-register-all-modules"], log, 180.0)
+        let compiled = run_and_capture([get_executable_path(), "-no-module-cache", "-jit",
+            "-jit-no-cache", "-exe", "-output", "{output}.exe", source, "--",
+            "--jit-register-all-modules"], log, 180.0)
         t |> equal(compiled, 0, log)
         if (compiled != 0) return
         t |> success(copy_dir_rec(path_join(get_das_root(), "daslib"), path_join(root, "daslib")))

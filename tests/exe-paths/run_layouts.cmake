@@ -39,11 +39,11 @@ endif()
 file(REMOVE_RECURSE "${WORKDIR}")
 file(MAKE_DIRECTORY "${WORKDIR}")
 
-# Step 1 — compile to standalone exe (daslang appends .exe)
+# Step 1 — compile to standalone exe
 set(EXE_BASE "${WORKDIR}/uses_sqlite")
 message(STATUS "compiling: ${DASLANG} -exe ${SRC_DAS} -output ${EXE_BASE}")
 execute_process(
-    COMMAND "${DASLANG}" -exe "${SRC_DAS}" -output "${EXE_BASE}"
+    COMMAND "${DASLANG}" -exe "${SRC_DAS}" -output "${EXE_BASE}.exe"
     WORKING_DIRECTORY "${WORKDIR}"
     RESULT_VARIABLE _rc OUTPUT_VARIABLE _out ERROR_VARIABLE _err)
 if(_rc)

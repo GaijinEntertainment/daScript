@@ -163,8 +163,15 @@ def test_llvm_tune_scope_policy(t : T?) {   // nolint:STYLE038 - flat numbered p
     t |> success(!(l7 |> has("untuned")))
 
     // 8. -exe gate: stamping runs (fallback, no sidecar) but the policy rail is dead
+    let exeRes = create_temp_file_result("llvm_tune_scope_exe_", ".exe")
+    if (exeRes is error) {
+        t |> failure("could not create a temp file: {exeRes as error}")
+        return
+    }
+    let exeOut = exeRes as value
     var l8 : array<string>
-    t |> equal(spawn_child("{tune_env("error")}\"{bin}\" -no-module-cache -jit -exe \"{client}\"", l8), 0)
+    let exe_build = "{tune_env("error")}\"{bin}\" -no-module-cache -jit -exe -output \"{exeOut}\""
+    t |> equal(spawn_child("{exe_build} \"{client}\"", l8), 0)
     t |> success(l8 |> has("scope_add <- k1 (fallback)"))
     t |> success(!(l8 |> has("untuned")))
 
@@ -260,7 +267,10 @@ def test_llvm_tune_scope_policy(t : T?) {   // nolint:STYLE038 - flat numbered p
     let verJson = "{get_this_module_dir()}/llvm_tune_scope_ver_deps.json"
     remove(verJson)
     var l14d : array<string>
-    t |> equal(spawn_child("{tune_env("error")}\"{bin}\" -no-module-cache -jit -exe --list-shared-modules \"{verJson}\" \"{verClient}\"", l14d), 0)
+    let deps_build = "{exe_build} --list-shared-modules \"{verJson}\" \"{verClient}\""
+    t |> equal(spawn_child(deps_build, l14d), 0)
+    remove(exeOut)
+    remove("{exeOut}.o")
     var derr = ""
     var ddoc = read_json(fread(verJson), derr)
     t |> success(ddoc != null, "release-deps json parses: {derr}")

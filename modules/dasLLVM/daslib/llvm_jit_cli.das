@@ -131,6 +131,12 @@ def public jit_cli_options_or_default() : JitCliOptions {
     return <- r |> unwrap_or_default
 }
 
+//! where an -exe without -output goes: the script's name in the
+//! current directory, `.exe` added on Windows
+def public default_exe_path(script : string) : string =>
+    "{stem(script)}{get_platform_name() == "windows" ? ".exe" : ""}"
+
+
 //! The `--jit-help` text.
 def public jit_cli_help() : string =>
     format_help(get_command_info(type<JitCliOptions>), "-jit|-exe|-lib <script>")
