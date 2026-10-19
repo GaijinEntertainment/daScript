@@ -1479,15 +1479,19 @@ def private mirror_ceiling_bytes : uint64 {
 
 var private g_mirror_refusal_said = false   //! the device-bound refusal is logged once a process
 
+[cold_path]   // the refusal leg alone: said once a process
+def private mirror_refusal_say(total, ceil_bytes : uint64) {
+    return if (g_mirror_refusal_said)
+    g_mirror_refusal_said = true
+    to_log(LOG_WARNING, "dasLLAMA metal decode: a step's K/V mirror demand of {total >> 20ul} MiB passes the device's largest buffer ({ceil_bytes >> 20ul} MiB) - the step takes the CPU rails\n")
+}
+
 //! a live demand of `total` bytes against the one bound the arena has - the device's largest buffer; false logs why once
 [arch(at="../ARCHITECTURE_GPU_PREFILL_WINDOW.md#kv-mirror-arena")]
 def private mirror_fits_device(total : uint64) : bool {
     let ceil_bytes = mirror_device_max_bytes()
     return true if (total <= ceil_bytes)
-    if (!g_mirror_refusal_said) {
-        g_mirror_refusal_said = true
-        to_log(LOG_WARNING, "dasLLAMA metal decode: a step's K/V mirror demand of {total >> 20ul} MiB passes the device's largest buffer ({ceil_bytes >> 20ul} MiB) - the step takes the CPU rails\n")
-    }
+    mirror_refusal_say(total, ceil_bytes)
     return false
 }
 

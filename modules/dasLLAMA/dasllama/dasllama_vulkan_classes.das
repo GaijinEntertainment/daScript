@@ -9823,6 +9823,24 @@ class KvQ8StoreB : KvQ8StoreT {
 class KvTq4WhtBase {
     @workgroup buf : float[512]                 //! the head: hs <= 512, a thread's second element at tid + 256
 
+    //! `v`, a lane's value of a 32-lane block, becomes the block's largest-magnitude value - the first on a tie, as the CPU's
+    //! strict compare keeps it: the lanes fold by xor shuffles, a lower lane winning an equal magnitude
+    def blk_signed_max(lane : uint; var v : float&) {
+        var amax = abs(v)
+        var midx = lane
+        for [unroll] (sh in range(5)) {
+            let mask = 16u >> uint(sh)
+            let oa = subgroupShuffleXor(amax, mask)
+            let ov = subgroupShuffleXor(v, mask)
+            let oi = subgroupShuffleXor(midx, mask)
+            if (oa > amax || (oa == amax && oi < midx)) {
+                amax = oa
+                v = ov
+                midx = oi
+            }
+        }
+    }
+
     //! the unscaled Walsh-Hadamard transform of `buf[0 .. hs)` in place, `hs` a power of two: the five passes inside a
     //! 32-lane group fold by xor shuffles (a lane's partner is its lane xor the pass's stride), the passes across groups
     //! through the buffer, barrier-ordered; a subgroup narrower than 32 lanes takes every pass through the buffer
@@ -9941,21 +9959,8 @@ class template KvTq4StoreT : KvTq4WhtBase {
                 let blk = e / KQ_B32_ELEMS_U
                 // the block's largest magnitude and its value, the first on a tie as the CPU's strict compare keeps it: the 32
                 // lanes of the block fold by xor shuffles, a lower index winning an equal magnitude
-                let v0 = buf[e] * pa.inv_sqrt_hs
-                var amax = abs(v0)
-                var mval = v0
-                var midx = e % KQ_B32_ELEMS_U
-                for [unroll] (sh in range(5)) {
-                    let mask = 16u >> uint(sh)
-                    let oa = subgroupShuffleXor(amax, mask)
-                    let ov = subgroupShuffleXor(mval, mask)
-                    let oi = subgroupShuffleXor(midx, mask)
-                    if (oa > amax || (oa == amax && oi < midx)) {
-                        amax = oa
-                        mval = ov
-                        midx = oi
-                    }
-                }
+                var mval = buf[e] * pa.inv_sqrt_hs
+                blk_signed_max(e % KQ_B32_ELEMS_U, mval)
                 let d = mval / -8.0
                 let id = d != 0.0 ? 1.0 / d : 0.0
                 let sc = (mir_blk + blk) * KV_TQ4_BLOCK_HALVES

@@ -1,5 +1,6 @@
 options gen2
 options _dasllama_internal = true
+options _function_length = 0   // the race's main is one flat ladder: the planes once, then a depth a row
 
 // THE FUSED DECODE ATTENTION BY K/V CODEC AT DEPTH - the shipped single-pass stamps (attn_d + the combine) timed on one
 // decode step's attention of a Qwen3-30B-A3B-shaped layer (32 query heads of 128 over 4 K/V heads, two rows) at depths
@@ -34,6 +35,13 @@ def private half_of(src : array<float>) : array<float16> {
         d = float16(s)
     }
     return <- xa
+}
+
+//! the rows' route table on the device: row r's K and V base at `r * stride` (elements under f16, bytes under a block codec),
+//! its capacity `cap` and its count `cnt`
+def private route_buf(dev : MetalDevice?; nrows, stride, cap, cnt : int) : MetalBuffer? {
+    var inscope rt <- [for (r in range(nrows)); uint4(uint(r * stride), uint(r * stride), uint(cap), uint(cnt))]
+    return race_buf(dev, uint64(nrows) * 16ul, unsafe(addr<void?>(rt[0])))
 }
 
 //! the slab quantized row by row through the shipped codec store: `blk` bytes a 32-block
@@ -95,18 +103,19 @@ def main {
         var k4 <- slab_blocks(kf, nrows * maxd, kv_dim, TQ4_BLOCK, true)
         var v4 <- slab_blocks(vf, nrows * maxd, kv_dim, TQ4_BLOCK, true)
         var qf <- race_fill(nrows * qstride, 1, 0.5, 0.0, 3u)
-        var bkh = race_buf(dev, uint64(length(kh) * 2), unsafe(addr<void?>(kh[0])))
-        var bvh = race_buf(dev, uint64(length(vh) * 2), unsafe(addr<void?>(vh[0])))
-        var bk8 = race_buf(dev, uint64(length(k8)), unsafe(addr<void?>(k8[0])))
-        var bv8 = race_buf(dev, uint64(length(v8)), unsafe(addr<void?>(v8[0])))
-        var bk4 = race_buf(dev, uint64(length(k4)), unsafe(addr<void?>(k4[0])))
-        var bv4 = race_buf(dev, uint64(length(v4)), unsafe(addr<void?>(v4[0])))
-        var bq = race_buf(dev, uint64(length(qf) * 4), unsafe(addr<void?>(qf[0])))
+        var bkh = race_buf(dev, uint64(long_length(kh)) * 2ul, unsafe(addr<void?>(kh[0])))
+        var bvh = race_buf(dev, uint64(long_length(vh)) * 2ul, unsafe(addr<void?>(vh[0])))
+        var bk8 = race_buf(dev, uint64(long_length(k8)), unsafe(addr<void?>(k8[0])))
+        var bv8 = race_buf(dev, uint64(long_length(v8)), unsafe(addr<void?>(v8[0])))
+        var bk4 = race_buf(dev, uint64(long_length(k4)), unsafe(addr<void?>(k4[0])))
+        var bv4 = race_buf(dev, uint64(long_length(v4)), unsafe(addr<void?>(v4[0])))
+        var bq = race_buf(dev, uint64(long_length(qf)) * 4ul, unsafe(addr<void?>(qf[0])))
         let nsg_max = int(attn_d_groups(int64(maxd)))
-        var bpart_a = race_buf(dev, uint64(nrows * heads * nsg_max * (hs + 4) * 4), null)
-        var bpart_b = race_buf(dev, uint64(nrows * heads * nsg_max * (hs + 4) * 4), null)
-        var by_a = race_buf(dev, uint64(nrows * qd * 4), null)
-        var by_b = race_buf(dev, uint64(nrows * qd * 4), null)
+        let part_bytes = uint64(nrows) * uint64(heads) * uint64(nsg_max) * uint64(hs + 4) * 4ul
+        var bpart_a = race_buf(dev, part_bytes, null)
+        var bpart_b = race_buf(dev, part_bytes, null)
+        var by_a = race_buf(dev, uint64(nrows) * uint64(qd) * 4ul, null)
+        var by_b = race_buf(dev, uint64(nrows) * uint64(qd) * 4ul, null)
         var ones <- [for (_ in range(heads)); 1.0]
         var bsink = race_buf(dev, uint64(heads * 4), unsafe(addr<void?>(ones[0])))   // the combine's sink plane, unread with hass 0
         let scale = 1.0 / sqrt(float(hs))
@@ -115,17 +124,9 @@ def main {
         for (depth in DEPTHS) {
             let nsgs = int(attn_d_groups(int64(depth)))
             // the route table: a row's K and V bases (elements under f16, bytes under a block codec), its capacity and its count
-            var rt16 : array<uint4>
-            var rt8 : array<uint4>
-            var rt4 : array<uint4>
-            for (r in range(nrows)) {
-                rt16 |> push(uint4(uint(r * maxd * kv_dim), uint(r * maxd * kv_dim), uint(maxd), uint(depth)))
-                rt8 |> push(uint4(uint(r * maxd * nblk * Q8_BLOCK), uint(r * maxd * nblk * Q8_BLOCK), uint(maxd), uint(depth)))
-                rt4 |> push(uint4(uint(r * maxd * nblk * TQ4_BLOCK), uint(r * maxd * nblk * TQ4_BLOCK), uint(maxd), uint(depth)))
-            }
-            var brt16 = race_buf(dev, uint64(nrows * 16), unsafe(addr<void?>(rt16[0])))
-            var brt8 = race_buf(dev, uint64(nrows * 16), unsafe(addr<void?>(rt8[0])))
-            var brt4 = race_buf(dev, uint64(nrows * 16), unsafe(addr<void?>(rt4[0])))
+            var brt16 = route_buf(dev, nrows, maxd * kv_dim, maxd, depth)
+            var brt8 = route_buf(dev, nrows, maxd * nblk * Q8_BLOCK, maxd, depth)
+            var brt4 = route_buf(dev, nrows, maxd * nblk * TQ4_BLOCK, maxd, depth)
             var ka16 = SqAttnDArgs(lay = 0u, layr = 0u, ring = 0u, kstride = uint(kv_dim), nheads = uint(heads), kv_mul = uint(kv_mul), hs = uint(hs),
                 scale = scale, qstride = uint(qstride), nsgs = uint(nsgs), window = 0u, softcap = 0.0, qhs = 0u, gated = 0u)
             var kaq = ka16

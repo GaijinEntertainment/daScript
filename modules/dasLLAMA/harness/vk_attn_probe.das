@@ -61,11 +61,9 @@ def private time_split(rows, cnt, hs, nheads, kv_mul, nsplit, slab : int; dt : K
         qh[i] = hash_unit(uint(i))
     }
     var kw, vw : array<uint>
-    var kb, vb : array<uint8>
-    if (blk > 0) {
-        kb <- cool_block_bytes(mir_units * rows, blk)
-        vb <- cool_block_bytes(mir_units * rows, blk)
-    } else {
+    var inscope kb <- blk > 0 ? cool_block_bytes(mir_units * rows, blk) : array<uint8>()
+    var inscope vb <- blk > 0 ? cool_block_bytes(mir_units * rows, blk) : array<uint8>()
+    if (blk == 0) {
         kw |> resize(mir_elems * rows / 2)
         vw |> resize(mir_elems * rows / 2)
         for (i in range(mir_elems * rows / 2)) {

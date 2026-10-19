@@ -10,6 +10,24 @@ and coverage; this ledger is the backlog for the perf pass that follows them. Ev
 what it costs today and what the fix would change.
 
 ## Entries
+- **MEASURED (2026-10-19) - the long-prompt pass: the block codecs' store and the serving rules, Apple M5 Max (thermally
+  capped: `powermetrics` read the GPU at 840-1030 of 1620 MHz under Heavy pressure through every row, so no figure here goes
+  beside a cool box's) and the RunPod RTX PRO 4500.** The detector (`lcpp_bench -p 512 | 2048 | 8192 -n 32 --npl 2
+  --npl-plen <p - 64> -r 3 --kv f16 | q8_0 | tq4`, debug-jit, every stocked text model, both homes) read the ratios inside
+  one row; the per-step trace (`benchmarks/decode_step_trace.das`) and `DASLLAMA_METAL_DECODE_SKIP=attn` put a block
+  codec's cost OUTSIDE attention at any context: the q8_0 store quantized a 32-block on one thread, on both homes. A
+  simdgroup a block (Metal) and a lane an element with a shuffle max (Vulkan) read, GPU us a decode step, Qwen3-30B-A3B
+  Q4_K_M q8_0 7661 -> 6613 at 512 (f16 6223), 12292 -> 11323 at 8192; Llama-3.2-1B 3334 -> 3092; Qwen3.6-35B 7556 ->
+  7306 (f16 7220); on the pod Qwen3-0.6B q8_0 decode 465 -> 489 tok/s (f16 519), its 512-row window's store 1931 -> 1313
+  us (pp512 39.9k -> 42.1k), tq4's window 2926 -> 2355 (the rotation's in-group passes by shuffles). The Vulkan attention
+  stamps with the packed integer dot read, a layer at 8192 keys on the 30B shape (`harness/vk_attn_probe.das`), f16 65.7
+  us, q8_0 61.5 (76.8 before), tq4 57.3 (65.6). The Metal fused attention over a block codec stays 1.5x the f16 stamp a
+  key (followup_general 214). tq4 on Qwen2.5-0.5B served wrong tokens on every home - its Q/K/V bias outliers (|b| to 316
+  against a median of 0.3) set every 4-bit block's scale - and now steps down to q8_0 by name; the Metal mirror arena's
+  4 GiB idle cap no longer refuses a live batched step (the 12B+ dense models' two-stream decode after 8k took the CPU
+  rails under f16). The pod's new-against-a28ffe7e83 pairs on twelve MoE files (pair order alternated, two reps an arm):
+  the resident ones pp512 0.97-1.00, decode 1.00, pp8192 +37-57 % (the 2048 window); the streamed 35B Q8_0 3-14x (the
+  control ran the per-op tier) - followup_vulkan 150's answer.
 - **MEASURED (2026-10-17) - the residual step's race past the slab, widened, M5 Max (128 GB).** `bench_metal_gk_rows`
   (`dastest.das -- --bench --test`, debug-jit, the box profile `performance/m5.tune.json` at 39,101 B,
   `DASLLAMA_ALLOW_UNTUNED=1 DASLLAMA_CPU_PREFILL=1 DASLLAMA_METAL_HAZARD_STRICT=1`) at b4b207a287 adds to the entry below the

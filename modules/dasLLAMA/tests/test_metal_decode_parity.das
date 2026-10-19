@@ -1105,9 +1105,7 @@ def test_metal_decode_parity(t : T?) {   // nolint:STYLE038 — flat arm list, o
             // take the batched GPU step, token for token with the CPU control (unified memory: what fits, serves)
             if (arm_on(t, "arm6b-capfit")) {
                 set_metal_decode_mirror_cap_mb(1)
-                var two : array<array<int64>>
-                two |> emplace(clone_to_move(prompt2))
-                two |> emplace(clone_to_move(prompt))
+                var two <- [clone_to_move(prompt2), clone_to_move(prompt)]
                 let cpu_two <- batch_greedy(tr, tr, two, 6, KVDtype.f16, false, -1, 0)
                 let bst0 = metal_batch_decode_stats()
                 let gpu_two <- batch_greedy(tr, trg, two, 6, KVDtype.f16, true, -1, 0)

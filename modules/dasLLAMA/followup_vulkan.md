@@ -2147,16 +2147,6 @@ module) is independent and can land any time - it is pure structure.
     the staged KHR tile reads 2-11% under it (the figures beside the pick rule in `ARCHITECTURE_GPU_VULKAN_GEMM.md`);
     that stays as measured - a tail shape, one stage, a shape-keyed switch between two tile families is not worth it.
 
-150. **A short prompt's rate under the streamed layers is unmeasured against the code before them.** Every rate the
-    prefill rotation arc reads is pp3000 and pp9000 (the rows under "From the prefill rotation arc" in `PERF_LEDGER.md`):
-    the expert cache, the ring slot, the pool prefix and the meet pay their fixed costs a window - the reader threads'
-    fetches, the per-expert chain's bundles, the host-first claim - and a 256- or 512-row prompt pays them against a
-    window that holds few rows, where the whole-layer slot and the host sums before the arc had none. Done = pp256 and
-    pp512 on Qwen3.6-35B UD-Q4_K_M and Qwen3.8-Flash-Next UD-IQ4_XS, the arc's tip against a28ffe7e83 (the commit before
-    it), the same box and the frozen fixture's gate, as ledger rows; where the old rate wins at a short prompt, a short-
-    prompt path - the whole-layer slot or the host sums for a window under a row count the race names - keyed on the
-    window's rows, raced in, and the knee it switches at in the row beside it.
-
 151. **The prompt window has never run wider than 2048 rows, so a 9k prompt is five calls.** `DASLLAMA_GPU_PF_ROWS`
     sizes the window; a recurrent model's window is cut at `DN_WINDOW` (2048, the rows the deltanet smalls planes and the
     scan workspace hold: `DN_WS_BYTES` is 64 MB at 2048 and grows with the window, 302 MB at 9216), the prefill panels,

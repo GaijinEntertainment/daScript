@@ -2084,21 +2084,18 @@
     SPIR-V text splits at its own grammar - then delete the `[line_length]` table and the file, so the
     repo limits bind the folder; the kernels and model-free suites on both homes hold the wrapped tree.
 
-214. **The board holds the two GPU homes' prefill throughput at pp512 alone, and the ledger's longest prefill rows stop
-    at 12288 tokens.** The pass also reads the Vulkan block-codec (q8_0 / tq4) K/V f16 shadow, rebuilt per layer per
-    window, against the f16 codec at every prompt length - a persistent per-layer shadow or an incremental dequant is
-    the lever if its cost grows with the position. A long prompt costs the global layers' attention in the
-    square of its length and every per-window stage in its position, so a stage that grows with
-    position hides behind pp512 (`debug-jit`, direction-grade: `lcpp_bench -p <n> -n 0 -r 2` on gemma-4-E2B Q8_0 -
-    the pod's RTX PRO 4500 under `DASLLAMA_GPU=1` reads 16,400 tok/s at pp512, 11,600 at 4096, 8,900 at 16384,
-    3,900 at 65536 and 2,600 at 120000; the M5 Max under `--ngl 1` with the box profile older than the binary
-    reads 9,488 / 10,888 / 5,292 / 2,570 at 512 / 4096 / 16384 / 65536, the score-slab attention's shape; the
-    long-context cells of `tests/test_gpu_resident_regions_gemma4_e2b_ctx128k.das` run their 360k device tokens
-    in about 170 s on the pod). The pass, after the gemma leg lands and before the dasCUDA arc: `lcpp_bench` at pp512
-    and pp32768 (and pp65536 where the model's context admits it) on every stocked model on both
-    homes, one profiling pass with the per-window stage split on; a model whose pp32768 falls under
-    the N-squared expectation set by its global-layer count is investigated to the stage, and the
-    stage is fixed in that pass. The rows land in `PERF_LEDGER.md` beside the pp512 rows.
+214. **The block-codec decode attention on Metal costs 1.5x the f16 stamp's time a key, and tq4 on Vulkan pays two
+    latency-bound dispatches a layer.** The long-prompt pass (512 / 2048 / 8192 at f16, q8_0 and tq4 on every stocked
+    model, both homes) left these: on Metal `MetalSqAttnDQuantT`'s per-key loop is instruction-bound beside the f16 twin
+    (`harness/attn_d_codec_race.das`, the 30B shape at 8192 keys: f16 0.113 ms a layer-call, q8_0 0.165, tq4 0.178),
+    and neither a 16-bit word view of the quants nor a lane-eight mapping with shuffle reductions beat it (both read
+    slower - the hardware reduction is the cheap part); on Vulkan the tq4 store (`KvTq4StoreT`, four barriers) and the
+    un-rotation after attention (`KvTq4Unrot`) are each a dispatch a layer a token, 8 us together on the RTX PRO 4500,
+    where q8_0's store is one. Done = a Metal block-codec stamp within 1.15x of f16 a key on the race at 2048 and 8192,
+    or the lever named that keeps it where it is; the tq4 rotation folded into the rope stamp and the un-rotation into
+    the output projection's prologue on Vulkan, raced on the token command's profile. The E-series' flat 2k window
+    (gemma-4-E2B pp2048 1.07x pp512 where every other carrier reads 1.2-1.8x) is its geometry - a 512-row window fills
+    the card for a 1536-wide model and the rows past it buy only the global layers' square term - and is not work.
 
 215. **Checklist grooming - the prefill rotation arc's round.** The rule-document round over the arc's diff (one
     review-md auditor a checklist, two dragon passes a changed document) left the structural findings it could not

@@ -109,7 +109,7 @@ that grows with the context and that the client reads as a slow second token.
 attention reads the f32 panels as it does for any codec; after each layer's rope its own rows - not
 the gathered ones, which the mirror already holds byte for byte - go from the panel into the mirror's
 slab at the window's first row, prepared there (`mirror_prepare_rows` at the window's position): a
-q8_0 slab through `MetalKvRowsQ8`, a thread a 32-block on the decode's q8 store shell
+q8_0 slab through `MetalKvRowsQ8`, a simdgroup a 32-block and a lane an element on the decode's q8 store shell
 (`quantize_q8kv_row`'s scale and rounding), a tq4 slab through `MetalKvRowsTq4`, a threadgroup a
 (head, row) rotating the head by the signed transform and quantizing it on the decode's tq4 shell, an
 f32 slab a row copy (`pf_enc_kv_feed`). The rows are the bytes the CPU codec store writes, so the host
