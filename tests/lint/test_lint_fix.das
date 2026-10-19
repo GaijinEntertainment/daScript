@@ -56,6 +56,16 @@ def test_lint_fix(t : T?) {
         let fixes <- collect_fixes(t, fixture("_fixture_lint_fix_after.das"), { "STYLE042", "STYLE043", "PERF033" })
         t |> equal(length(fixes), 0)
     }
+    t |> run("STYLE047 annotates structures, rewrites comparators, adds the require") @@(t : T?) {
+        let fixes <- collect_fixes(t, fixture("_fixture_lint_fix_cmp_before.das"), { "STYLE047" })
+        let fixed = apply_lint_fixes(fread(fixture("_fixture_lint_fix_cmp_before.das")), fixes)
+        t |> equal(fixed.applied, 3)
+        t |> equal(fixed.text, fread(fixture("_fixture_lint_fix_cmp_after.das")))
+    }
+    t |> run("the cmp after fixture carries no fix") @@(t : T?) {
+        let fixes <- collect_fixes(t, fixture("_fixture_lint_fix_cmp_after.das"), { "STYLE047" })
+        t |> equal(length(fixes), 0)
+    }
     t |> run("LINT003 / LINT014 edits turn var into let or drop it") @@(t : T?) {
         let fixes <- collect_fixes(t, fixture("_fixture_lint_fix_var_before.das"), { "LINT003", "LINT014" })
         let fixed = apply_lint_fixes(fread(fixture("_fixture_lint_fix_var_before.das")), fixes)

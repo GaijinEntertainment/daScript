@@ -51,6 +51,9 @@ module style_lint shared private
 //!   STYLE041 — bool flag initialized false, set true on terminal paths, then consumed by a single 'if (flag) return ...' — a return value in disguise; return directly at each set site (walk-abort callbacks, negative polarity, non-terminal sets, and init-true flags are exempt)
 //!   STYLE046 — a statement-form 'match' arm whose '$ { }' block
 //!     holds one expression - write 'pattern => EXPR'
+//!   STYLE047 — a comparator block or an 'operator <' comparing
+//!     two values key by key - write 'cmp_by(...)' or '[ordered]'
+//!     (daslib/cmp)
 //!   STYLE045 — a &&/||/! condition over one int variable that an
 //!     interval lattice collapses to a single comparison ('x != 1 &&
 //!     x > 0' is 'x >= 2')
@@ -59,8 +62,10 @@ require daslib/ast_boost
 require daslib/dupe_detect
 require daslib/is_local
 require daslib/lint_config
+require daslib/strings_boost
 require math
 require strings
+require daslib/cmp
 
 let STYLE042_MAX_LINE = 100
 
@@ -165,6 +170,177 @@ def private code_find(s, two : string) : int {
     return found
 }
 
+//! STYLE047 - one key of a hand-written ordering, spelled over
+//! ``_``, the compared element.
+struct private St047Key {
+    text : string
+    greater : bool
+}
+
+//! STYLE047 - spells a key: the compared elements become ``_`` and
+//! ``#``, let-bound locals their initializers; hidden arguments go.
+class private St047Speller : AstVisitor {
+    va : uint64
+    vb : uint64
+    flip : bool
+    @do_not_delete lets : table<uint64; Expression?>
+    def override visitExprVar(var expr : ExprVar?) : Expression? {
+        let v = intptr(expr.variable)
+        let name = (v == va) != flip ? "_" : "#"
+        if (v == va || v == vb) return new ExprVar(at = expr.at, name := name)
+        var init = unsafe(lets?[v]) ?? null
+        if (init == null) return expr
+        var spelled = clone_expression(init)
+        make_visitor(self) $(adapter) {
+            spelled = visit(spelled, adapter)
+        }
+        return spelled
+    }
+    def override visitExprCall(var expr : ExprCall?) : Expression? {
+        while (!empty(expr.arguments) && (back(expr.arguments) is ExprFakeContext
+                || back(expr.arguments) is ExprFakeLineInfo)) {
+            expr.arguments |> pop()
+        }
+        return expr
+    }
+}
+
+//! ``e`` spelled over one compared element (``flip`` picks which);
+//! "" when it reads none or both.
+def private st047_spell(var sp : St047Speller?; e : Expression?; flip : bool) : string {
+    var text = ""
+    ast_gc_guard() {
+        var spelled = clone_expression(e)
+        sp.flip = flip
+        make_visitor(*sp) $(adapter) {
+            spelled = visit(spelled, adapter)
+        }
+        let refs <- find_var_refs(spelled)
+        let reads_self = find_index_if(refs, $(v) => v.name == "_") >= 0
+        if (reads_self && find_index_if(refs, $(v) => v.name == "#") < 0) {
+            text = describe(spelled)
+            text = spelled is ExprOp2 ? slice(text, 1, -1) : text
+        }
+    }
+    return text
+}
+
+//! The key ``l`` and ``r`` order by: the same expression, each over
+//! one compared element; empty otherwise.
+def private st047_key(var sp : St047Speller?; l, r : Expression?; greater : bool) : St047Key {
+    for (flip in [false, true]) {
+        let text = st047_spell(sp, l, flip)
+        if (!empty(text) && text == st047_spell(sp, r, !flip)) {
+            return St047Key(text = text, greater = greater != flip)
+        }
+    }
+    return St047Key()
+}
+
+//! The key an ``op`` (``<``, ``>``, ``!=``, ``==``) of two keys
+//! compares; empty otherwise.
+def private st047_op(var sp : St047Speller?; e : Expression?; op : string) : St047Key {
+    if (!(e is ExprOp2) || (e as ExprOp2).op != op) return St047Key()
+    return st047_key(sp, (e as ExprOp2).left, (e as ExprOp2).right, op == ">")
+}
+
+//! ``cond ? t : f``: ``cond`` tests the one key a branch orders by,
+//! the other branch (none for a guard) orders by the rest.
+def private st047_branch(var sp : St047Speller?; cond, t, f : Expression?;
+                         var keys : array<St047Key>) : bool {
+    let ne = st047_op(sp, cond, "!=").text
+    let tested = empty(ne) ? st047_op(sp, cond, "==").text : ne
+    var one : array<St047Key>
+    if (empty(tested) || !st047_keys(sp, empty(ne) ? f : t, one)
+            || length(one) != 1 || one[0].text != tested) return false
+    keys |> push(one[0])
+    let rest = empty(ne) ? t : f
+    return rest == null || st047_keys(sp, rest, keys)
+}
+
+//! Appends the keys a block orders by: let-bound locals and guards
+//! ``if (k != k') return k < k'``, then a last statement that does.
+def private st047_block_keys(var sp : St047Speller?; blk : ExprBlock?;
+                             var keys : array<St047Key>) : bool {
+    for (s, i in blk.list, count()) {
+        if (i + 1 == length(blk.list)) return st047_keys(sp, s, keys)
+        if (s is ExprLet) {
+            for (v in (s as ExprLet).variables) {
+                return false if (v.init == null)
+                sp.lets[intptr(v)] = v.init
+            }
+        } elif (!(s is ExprIfThenElse)) {
+            return false
+        } else {
+            let ite = s as ExprIfThenElse
+            let guard = ite.if_false == null && st047_branch(sp, ite.cond, ite.if_true, null, keys)
+            return false if (!guard)
+        }
+    }
+    return false
+}
+
+//! Appends the keys ``e`` orders by - a block, an ``if``, ``?:``,
+//! ``k < k' || (k == k' && rest)``, or one comparison; false when it
+//! is not a key-by-key ordering.
+def private st047_keys(var sp : St047Speller?; e : Expression?; var keys : array<St047Key>) : bool {
+    if (e is ExprBlock) return st047_block_keys(sp, e as ExprBlock, keys)
+    if (e is ExprReturn) return st047_keys(sp, (e as ExprReturn).subexpr, keys)
+    if (e is ExprIfThenElse) {
+        let ite = e as ExprIfThenElse
+        return ite.if_false != null && st047_branch(sp, ite.cond, ite.if_true, ite.if_false, keys)
+    }
+    if (e is ExprOp3) {
+        let op3 = e as ExprOp3
+        return st047_branch(sp, op3.subexpr, op3.left, op3.right, keys)
+    }
+    if (e is ExprOp2 && (e as ExprOp2).op == "||") {
+        let rest = (e as ExprOp2).right
+        if (!(rest is ExprOp2) || (rest as ExprOp2).op != "&&") return false
+        let tie = rest as ExprOp2
+        return st047_branch(sp, tie.left, tie.right, (e as ExprOp2).left, keys)
+    }
+    var key = st047_op(sp, e, "<")
+    key = empty(key.text) ? st047_op(sp, e, ">") : key
+    keys |> push(key)
+    return !empty(key.text)
+}
+
+//! The keys a comparator body orders by its arguments ``va`` and
+//! ``vb``; empty when it is not a key-by-key ordering.
+def private st047_body_keys(body : Expression?; va, vb : Variable?) : array<St047Key> {
+    var keys : array<St047Key>
+    var sp = new St047Speller(va = intptr(va), vb = intptr(vb))
+    if (!st047_keys(sp, body, keys)) {
+        keys |> clear()
+    }
+    unsafe {
+        delete sp
+    }
+    return <- keys
+}
+
+//! The source text between two ``(line, column)`` points of the file
+//! of ``at``.
+def private st047_span_text(at : LineInfo; from, to : int2) : string {
+    return build_string() $(var w) {
+        for (ln in range(from.x, to.x + 1)) {
+            let src = lint_source_line(at, ln)
+            w |> write(slice(src, ln == from.x ? from.y : 0, ln == to.x ? to.y : length(src)))
+            w |> write(ln != to.x ? "\n" : "")
+        }
+    }
+}
+
+//! STYLE047 - a finding collected during the walk, reported once
+//! the walk is done.
+struct private St047Site {
+    @do_not_delete fn : Function?
+    @do_not_delete node : Expression?
+    message : string
+    edits : array<LintFix>
+}
+
 class StyleLintVisitor : AstVisitor {
     compile_time_errors : bool
     comment_hygiene : bool = false
@@ -190,6 +366,158 @@ class StyleLintVisitor : AstVisitor {
     used_modules : table<string>
     unresolved_call_names : table<string>
     @do_not_delete st041_candidates : table<Variable?; St041Candidate>
+    st047_sites : array<St047Site>
+
+    //! STYLE047 - a block literal comparing two elements key by key.
+    def st047_check_comparator(var expr : ExprCall?) : void {
+        if (expr.genFlags.generated || current_function == null
+                || root_generic(current_function)._module != this_module) return
+        var written = length(expr.arguments) - 1
+        while (written >= 0 && (expr.arguments[written] is ExprFakeContext
+                || expr.arguments[written] is ExprFakeLineInfo)) {
+            written--
+        }
+        if (written < 0 || !(expr.arguments[written] is ExprMakeBlock)) return
+        var mb = expr.arguments[written] as ExprMakeBlock
+        var blk = mb._block as ExprBlock
+        if (mb.at.fileInfo != current_function.at.fileInfo || length(blk.arguments) != 2
+                || blk.returnType.baseType != Type.tBool) return
+        let keys <- st047_body_keys(blk, blk.arguments[0], blk.arguments[1])
+        if (empty(keys)) return
+        let args <- [for (k in keys); !k.greater ? k.text
+            : starts_with(k.text, "-") || find(k.text, " ") >= 0 ? "-({k.text})" : "-{k.text}"]
+        let text = "cmp_by({join(args, ", ")})"
+        let identity = length(keys) == 1 && keys[0].text == "_" && !keys[0].greater
+        let message = (identity ? "STYLE047: this comparator is the default '<' - drop it"
+            : "STYLE047: this comparator compares keys one by one; "
+            + "write it as '{text}' (daslib/cmp)")
+        var site = St047Site(fn = current_function, node = mb, message = message)
+        let enc = expr.atEnclosure
+        let after = enc.fileInfo == mb.at.fileInfo && (mb.at.line > enc.last_line
+            || (mb.at.line == enc.last_line && mb.at.column >= enc.last_column))
+        let first = blk.arguments[0].at
+        let from = (after ? int2(int(enc.last_line), int(enc.last_column))
+            : int2(int(first.line), max(int(first.column) - 2, 0)))
+        let to = int2(int(mb.at.last_line), int(mb.at.last_column))
+        let span = st047_span_text(mb.at, from, to)
+        let head = strip_left(span)
+        let opens = starts_with(head, "$(") || (after && starts_with(head, "<|"))
+        let commented = code_find(span, "//") >= 0 || code_find(span, "/*") >= 0
+        if (opens && (after || !identity) && !commented) {
+            site.edits |> push(LintFix(line = from.x, column = from.y,
+                                       last_line = to.x, last_column = to.y,
+                                       replacement = identity ? "" : after ? " <| {text}" : text))
+        }
+        st047_sites |> emplace(site)
+    }
+
+    //! STYLE047 - an ``operator <`` over two values of a structure
+    //! that compares its fields key by key.
+    def st047_check_operator(var fn : FunctionPtr) : void {
+        if (fn.name != "<" || fn.flags.generated || fn.fromGeneric != null
+                || fn._module != this_module || length(fn.arguments) != 2) return
+        let st = fn.arguments[0]._type.structType
+        if (st == null || st.flags.isClass || fn.arguments[1]._type.structType != st
+                || fn.result.baseType != Type.tBool) return
+        let keys <- st047_body_keys(fn.body, fn.arguments[0], fn.arguments[1])
+        if (empty(keys)) return
+        var args : array<string>
+        var in_order = length(keys) == length(st.fields)
+        for (k, i in keys, count()) {
+            let name = slice(k.text, 2)
+            if (starts_with(k.text, "_.") && find_structure_field(st, name) != null) {
+                in_order &&= !k.greater && st.fields[i].name == name
+                args |> push(k.greater ? "{name} = greater" : name)
+            } elif (!k.greater && ends_with(k.text, "(_)")
+                    && find(k.text, "(") == length(k.text) - 3) {
+                in_order = false
+                args |> push("key = {slice(k.text, 0, -3)}")
+            } else {
+                return
+            }
+        }
+        let annotation = in_order ? "[ordered]" : "[ordered({join(args, ", ")})]"
+        let message = ("STYLE047: operator < on '{st.name}' compares its fields one by one; "
+            + "annotate the structure '{annotation}' instead (daslib/cmp)")
+        var site = St047Site(fn = fn, message = message)
+        let decl = fn.atDecl
+        let first = int(decl.line)
+        let last_at = int2(int(decl.last_line), int(decl.last_column))
+        let code = st047_span_text(fn.at, int2(first, 0), last_at)
+        let tail = slice(lint_source_line(fn.at, last_at.x), last_at.y)
+        let commented = code_find(code, "//") >= 0 || code_find(code, "/*") >= 0
+        if (st.at.fileInfo == fn.at.fileInfo && !commented && empty(strip(tail))) {
+            let st_line = int(st.at.line)
+            let src = lint_source_line(st.at, st_line)
+            let indent = slice(src, 0, length(src) - length(strip_left(src)))
+            var last = int(decl.last_line) + 1
+            let blank_before = empty(strip(lint_source_line(fn.at, first - 1)))
+            if (blank_before && empty(strip(lint_source_line(fn.at, last)))) {
+                last++
+            }
+            site.edits <- [
+                LintFix(line = st_line, last_line = st_line,
+                        replacement = "{indent}{annotation}\n"),
+                LintFix(line = first, last_line = last)
+            ]
+        }
+        st047_sites |> emplace(site)
+    }
+
+    //! STYLE047 - reports the findings; the first fix of a module that
+    //! does not see ``daslib/cmp`` also adds its ``require``.
+    def st047_report(prog : ProgramPtr) : void {
+        if (empty(st047_sites)) return
+        sort(st047_sites) <| cmp_by(int(_.node != null ? _.node.at.line : _.fn.at.line))
+        var need_require = this_module != null
+        program_for_each_module(prog) $(m) {
+            need_require &&= !(m.name == "cmp" && is_visible_directly(this_module, m))
+        }
+        var saved = current_function
+        for (site in st047_sites) {
+            current_function = site.fn
+            let at = site.node != null ? site.node.at : site.fn.at
+            var inscope edits := site.edits
+            if (!empty(edits) && need_require) {
+                var ln = 1
+                for (i in range(1, int(at.line))) {
+                    let text = lint_source_line(at, i)
+                    if (starts_with(text, "require ")) {
+                        ln = i
+                        break
+                    }
+                    if (starts_with(text, "options ") || starts_with(text, "module ")
+                            || starts_with(text, "expect ")) {
+                        ln = i + 1
+                    }
+                }
+                edits |> push(LintFix(line = ln, last_line = ln,
+                                      replacement = "require daslib/cmp\n"))
+                need_require = false
+            }
+            var fix = LintFix()
+            if (!empty(edits)) {
+                sort(edits) <| cmp_by(_.line, _.column)
+                let text = build_string() $(var w) {
+                    for (e, i in edits, count()) {
+                        if (i > 0) {
+                            let prev = edits[i - 1]
+                            let gap = st047_span_text(at, int2(prev.last_line, prev.last_column),
+                                                      int2(e.line, e.column))
+                            w |> write(gap)
+                        }
+                        w |> write(e.replacement)
+                    }
+                }
+                let last = edits |> back()
+                fix = LintFix(line = edits[0].line, column = edits[0].column,
+                              last_line = last.last_line, last_column = last.last_column,
+                              replacement = text)
+            }
+            style_warning(site.message, at, fix)
+        }
+        current_function = saved
+    }
 
     def report_key(at : LineInfo; code : string) : uint64 {
         //! fileInfo is part of the key, where line|column alone collides across files.
@@ -333,6 +661,7 @@ class StyleLintVisitor : AstVisitor {
         check_legacy_match_arms(fn)
         check_block_match_arms(fn)
         check_style042_expression_body(fn)
+        st047_check_operator(fn)
         if (analyze_requires && fn._module == this_module) {
             for (a in fn.annotations) {
                 if (a != null && a.annotation != null) st029_note_module(a.annotation._module)
@@ -633,6 +962,7 @@ class StyleLintVisitor : AstVisitor {
         check_block_pipe(expr.at, expr.arguments)
         check_style019_clamp(expr)
         check_style020_from_jv(expr)
+        st047_check_comparator(expr)
         if (lowered_unsafe_delete(expr)) {
             mark_unsafe_in_stack()
             return
@@ -1223,7 +1553,7 @@ class StyleLintVisitor : AstVisitor {
     def private ivl_normalize(var v : array<Ivl>) : array<Ivl> {
         var out : array<Ivl>
         if (empty(v)) return <- out
-        v |> sort() $(p, q) => p.lo < q.lo
+        v |> sort() <| cmp_by(_.lo)
         var cur = v[0]
         for (i in range(1, length(v))) {
             let nx = v[i]
@@ -3595,6 +3925,7 @@ def public style_lint(prog : ProgramPtr; compile_time_errors : bool; disabled_co
     }
     astVisitor->st029_check_requires(prog)
     astVisitor->st040_check_duplicates(prog)
+    astVisitor->st047_report(prog)
     if (!empty(astVisitor.unsafe_stack)) {
         panic("style_lint internal: unsafe_stack not balanced after walk (size={length(astVisitor.unsafe_stack)})")
     }
@@ -3635,6 +3966,7 @@ def public style_lint_collect(prog : ProgramPtr; var warnings : array<string>;
     }
     astVisitor->st029_check_requires(prog)
     astVisitor->st040_check_duplicates(prog)
+    astVisitor->st047_report(prog)
     if (!empty(astVisitor.unsafe_stack)) {
         panic("style_lint internal: unsafe_stack not balanced after walk (size={length(astVisitor.unsafe_stack)})")
     }
@@ -3668,6 +4000,7 @@ def public style_lint_collect_issues(prog : ProgramPtr; var issues : array<LintI
     }
     astVisitor->st029_check_requires(prog)
     astVisitor->st040_check_duplicates(prog)
+    astVisitor->st047_report(prog)
     if (!empty(astVisitor.unsafe_stack)) {
         panic("style_lint internal: unsafe_stack not balanced after walk (size={length(astVisitor.unsafe_stack)})")
     }

@@ -308,6 +308,7 @@ diagnostic in any tier.
 | `-const` `-&` `-[]` `-#` `==const` `==&` on a **concrete** cast target | drop the contract | STYLE036: substitution contracts act only while a generic binds - inert on concrete targets |
 | `if (x != 1 && x > 0)` / `if (x > 5 && x > 3)` (one `int` variable) | `if (x >= 2)` / `if (x >= 6)` | STYLE045: the `&&`/`\|\|`/`!` tree is evaluated on an interval lattice, so comparisons that *merge* - not merely subsume - collapse. Silent on two-sided ranges, disjoint unions, >1 variable, non-`int`, already-single comparisons |
 | `pattern => $ { f(x) }` - a statement-form `match` arm whose block holds one expression | `pattern => f(x)` | STYLE046 (`--fix` rewrites it) |
+| `sort(a) $(x, y) { if (x.k != y.k) return x.k < y.k; return x.n < y.n }`, or an `operator <` comparing fields one by one | `sort(a) <\| cmp_by(_.k, _.n)`; `[ordered(k, n)]` on the struct | STYLE047 (`--fix` rewrites it): `daslib/cmp` - `-key` sorts descending |
 | `slice(s, i, j)` / `chop(s, i, n)` in a loop over an outer string | `peek_data(s) $(d)` and slice the view | PERF031: each call re-strlens the whole source - O(n^2); every haystack op has a byte-view twin |
 
 For path/filename ops use `fio` helpers (`base_name`/`dir_name`/`path_join`/...) - see `skills/daslang/references/files-and-paths.md`. Never hand-roll `rfind("/")` + slice: misses Windows separators.
