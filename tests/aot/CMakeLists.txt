@@ -321,6 +321,7 @@ ENDIF()
 
 SET(AOT_DASLIB_FILES
     tests/daslib/clargs_test.das
+    tests/daslib/cmp_test.das
     tests/daslib/test_toml.das
     tests/daslib/test_logger.das
     tests/daslib/test_logger_checked.das

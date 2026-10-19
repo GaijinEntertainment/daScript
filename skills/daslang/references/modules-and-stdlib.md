@@ -272,6 +272,7 @@ module's public symbols with a one-line description - search it by intent (`uri`
 | `regex` / `regex_boost` | Regex engine; `regex_boost` compiles patterns at compile time via a reader macro. |
 | `linq` / `linq_boost` | Chainable queries: `where_` (trailing underscore - `where` is a keyword), `select`, `order_by`, `group_by`, `zip`, `to_array`. `linq_boost` adds the `\|>` rewrite fusing a chain into one pass. |
 | `algorithm` / `sort_boost` | `unique`, `sort_unique`, `reverse`, `combine`; `partial_sort`, `nth_element`, heap ops. |
+| `cmp` | `[ordered(field, field = greater, key = fn)]` generates a struct's `<` (every field when none listed); `sort(a) <\| cmp_by(-_.score, _.name)` writes a comparator over `_`, the element, `-` for descending. |
 | `functional` | Lazy `filter`/`map`/`reduce`/`scan`. Legacy - prefer comprehensions or `linq`. |
 | `match` | `match` / `static_match` over values, enums, variants, structs. |
 | `option` / `result` | Monadic `Option<T>` and `Result<T; E>`. |

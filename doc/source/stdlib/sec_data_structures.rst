@@ -10,6 +10,7 @@ Container extensions, sorting, hash tables, linked lists, and specialized arrays
 
    generated/array_boost.rst
    generated/sort_boost.rst
+   generated/cmp.rst
    generated/flat_hash_table.rst
    generated/cuckoo_hash_table.rst
    generated/soa.rst
