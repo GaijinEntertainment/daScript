@@ -906,7 +906,10 @@ def private resolve_split_options(var plan : JitPlan; cli_opts : JitCliOptions; 
     }
     // --jit-obj-cache (on by default under the DLL split; a pinned jit_output_path disables it, no GC runs there)
     let obj_cache_default = (prog._options |> find_arg("jit_obj_cache")) ?as tBool ?? true
-    plan.obj_cache = plan.jit_split && plan.use_dll && (string(prog.policies.jit_output_path) |> empty()) && (cli_opts.obj_cache |> unwrap_or(obj_cache_default ? 1 : 0)) != 0
+    let obj_cache_asked = (cli_opts.obj_cache |> unwrap_or(obj_cache_default ? 1 : 0)) != 0
+    let pinned_path = !(string(prog.policies.jit_output_path) |> empty())
+    plan.obj_cache = (plan.jit_split && plan.use_dll && !pinned_path && obj_cache_asked
+        && !plan.dump_ir)
     if (announce && (cli_opts.obj_cache |> is_some()) && !(plan.jit_split && plan.use_dll)) {
         to_log(LOG_WARNING, "LLVM JIT: --jit-obj-cache applies under --jit-split-modules dll mode only - ignored for this run\n")
     }
