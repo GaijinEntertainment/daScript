@@ -97,6 +97,22 @@
 
     #undef yyextra
     #define yyextra (*((das::DasParserState **)(scanner)))
+
+    #define DAS2_LOC_EMPTY(L) ((L).first_line == (L).last_line && (L).first_column == (L).last_column)
+    #define YYLLOC_DEFAULT(Current, Rhs, N) do {                                        \
+        int lo_ = 1, hi_ = int(N);                                                      \
+        while ( lo_ < hi_ && DAS2_LOC_EMPTY(YYRHSLOC(Rhs, lo_)) ) lo_++;                \
+        while ( hi_ > lo_ && DAS2_LOC_EMPTY(YYRHSLOC(Rhs, hi_)) ) hi_--;                \
+        if ( N ) {                                                                      \
+            (Current).first_line   = YYRHSLOC(Rhs, lo_).first_line;                     \
+            (Current).first_column = YYRHSLOC(Rhs, lo_).first_column;                   \
+            (Current).last_line    = YYRHSLOC(Rhs, hi_).last_line;                      \
+            (Current).last_column  = YYRHSLOC(Rhs, hi_).last_column;                    \
+        } else {                                                                        \
+            (Current).first_line   = (Current).last_line   = YYRHSLOC(Rhs, 0).last_line;    \
+            (Current).first_column = (Current).last_column = YYRHSLOC(Rhs, 0).last_column;  \
+        }                                                                               \
+    } while (0)
 %}
 
 %define api.pure full
