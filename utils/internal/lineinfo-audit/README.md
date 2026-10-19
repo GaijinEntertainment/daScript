@@ -14,7 +14,7 @@ non-generated user function, and checks each node against the source:
 
 | check | meaning |
 |---|---|
-| `anchor` | source text at `at` must equal the token the node names (var/call/field/operator/keyword/literal) |
+| `anchor` | source text at a leaf's `at` must equal the token it names (var/field/function/argument/`break`/`continue`/literal) |
 | `bounds` | range is ordered, non-empty, inside the file |
 | `colspill` | a range endpoint points past the end of its source line |
 | `envelope` | expression lies inside its function's `atDecl` span |
@@ -30,19 +30,14 @@ block carries no braces to check, and a `[[` / `[{` / `{{` make-literal anchors 
 
 ## Coordinate conventions (probed ground truth)
 
-Lines are 1-based, columns 0-based byte offsets, ranges end-exclusive. Most
-nodes carry a single-TOKEN anchor (`ExprOp2.at` spans just the operator,
-`ExprIfThenElse.at` just the `if`); full spans exist only on `ExprBlock`,
-`Function.atDecl` and `ExprLooksLikeCall.atEnclosure`. Tooling that needs a
-full expression span must compute the union of subtree anchors.
+Lines are 1-based, columns 0-based byte offsets, ranges end-exclusive. A
+parsed expression's `at` spans the source it was parsed from - its children
+lie inside it (`utils/ast-verify` checks that); leaves span their one token.
 
 ## Known-legit classes the tool accepts
 
 Macro rewrites and reification mangle names while `at` stays at the source
-spelling (segment match, incl. `aka`), literal ctors anchor at `[`/`{`,
-dot-sugar calls at `.`, arrow bodies synthesize `return` at `=>`, comprehension
-lowering plants `let`/`if`/`return` at `for`, variant `is`/`as` lowers to `==`,
-copy/move/clone promote into each other, const folding keeps the folded
+spelling (segment match, incl. `aka`), const folding keeps the folded
 expression's range, `def operator X` anchors at `operator`.
 
 ## Reading the report

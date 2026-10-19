@@ -1052,20 +1052,13 @@ class StyleLintVisitor : AstVisitor {
         }
         if (arg0 == null || !(arg0 is ExprField)) return
         let f = arg0 as ExprField
-        if (expr.at.fileInfo == null || expr.at.line == 0u) return
         var lineTxt = ""
-        get_file_source_line(expr.at.fileInfo, expr.at.line) $(s) {
+        get_file_source_line(f.atField.fileInfo, f.atField.line) $(s) {
             lineTxt := s
         }
-        let col = expr.at.column
-        let llen = length(lineTxt) |> uint
-        if (col + 1u >= llen) return
-        var is_arrow = false
-        peek_data(lineTxt) $(data) {
-            is_arrow = int(data[col]) == '-' && int(data[col + 1u]) == '>'
-        }
-        if (!is_arrow) return
-        let prefix = strip_right(slice(lineTxt, 0, col |> int))
+        let beforeName = strip_right(slice(lineTxt, 0, int(f.atField.column)))
+        if (!ends_with(beforeName, "->")) return
+        let prefix = strip_right(slice(beforeName, 0, length(beforeName) - 2))
         if (!ends_with(prefix, "self")) return
         let plen = length(prefix)
         if (plen > 4) {

@@ -222,12 +222,17 @@ namespace das {
     }
 
     ExprInvoke * makeInvokeMethod ( const LineInfo & at, const LineInfo & atField, Expression * a, const string & b, bool no_promo ) {
-        auto pInvoke = new ExprInvoke(at, "invoke");
+        return makeInvokeMethod(at, at, atField, a, b, no_promo);
+    }
+
+    ExprInvoke * makeInvokeMethod ( const LineInfo & invokeAt, const LineInfo & at, const LineInfo & atField, Expression * a, const string & b, bool no_promo ) {
+        auto pInvoke = new ExprInvoke(invokeAt, "invoke");
         auto pAt = new ExprField(at, atField, a, b, no_promo);
         pInvoke->arguments.push_back(pAt);
         pInvoke->isInvokeMethod = true;
         auto pTypeAuto = new ExprTypeDecl(at, new TypeDecl(Type::autoinfer, at));
         pTypeAuto->typeexpr->at = at;
+        pTypeAuto->generated = true;
         pInvoke->arguments.push_back(pTypeAuto);
         return pInvoke;
     }
