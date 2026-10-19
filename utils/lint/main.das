@@ -32,8 +32,17 @@ struct LintResult {
     skip_reason : string
     excluded : int      // findings dropped by the .lint_config [paths] exclude policy
     fixed : int
+    fixed_rows : array<string>
     cached : bool       // a clean result the cache vouched for: nothing was compiled
     promoted_modules : int   // counted under --shared-modules alone
+}
+
+struct LintTotals {
+    issues : int
+    errors : int
+    skipped : int
+    excluded : int
+    fixable : int
 }
 
 [CommandLineArgs]
@@ -104,21 +113,52 @@ def private format_issue(issue : LintIssue) : string {
     return "{kind}{issue.message} at {loc}"
 }
 
-def private source_line_at(file : string; lineno : int) : string {
+//! Lines ``first``..``last`` of ``file``, line breaks kept.
+def private source_lines(file : string; first, last : int) : string {
     if (!source_text_cache |> key_exists(file)) {
         source_text_cache[file] = fread(file)
     }
-    let text = source_text_cache[file]
+    return text_lines(source_text_cache[file], first, last)
+}
+
+def private text_lines(text : string; first, last : int) : string {
     return "" if (empty(text))
     var start = 0
-    for (_ in range(lineno - 1)) {
+    for (_ in range(first - 1)) {
         let nl = find(text, "\n", start)
         return "" if (nl < 0)
         start = nl + 1
     }
-    let fin = find(text, "\n", start)
-    let line = fin < 0 ? slice(text, start) : slice(text, start, fin)
-    return line |> strip
+    var fin = start
+    for (_ in range(last - first + 1)) {
+        let nl = find(text, "\n", fin)
+        fin = nl < 0 ? length(text) : nl + 1
+        break if (nl < 0)
+    }
+    return slice(text, start, fin)
+}
+
+def private source_line_at(file : string; lineno : int) : string =>
+    strip(source_lines(file, lineno, lineno))
+
+//! The non-blank lines of ``text``, ``indent`` columns dropped.
+def private dedented_lines(text : string; indent : int) : array<string> {
+    return <- [for (line in split(replace(text, "\r\n", "\n"), "\n"));
+        strip_right(slice(line, min(indent, length(line) - length(strip_left(line)))));
+        where !empty(strip(line))]
+}
+
+//! The lines ``fix`` replaces and the lines it leaves, as diff rows.
+def private fix_diff(text : string; fix : LintFix) : array<string> {
+    let span = text_lines(text, fix.line, fix.last_line)
+    var rebased = fix
+    rebased.line = 1
+    rebased.last_line = fix.last_line - fix.line + 1
+    let fixed = apply_lint_fixes(span, [rebased])
+    let indent = length(span) - length(strip_left(span))
+    var rows <- [for (line in dedented_lines(span, indent)); "- {line}"]
+    rows |> push_from([for (line in dedented_lines(fixed.text, indent)); "+ {line}"])
+    return <- rows
 }
 
 def write_deduped(var writer : StringBuilderWriter; issues : array<LintIssue>; prefix : string = "  "; show_source : bool = true) {
@@ -142,6 +182,15 @@ def write_deduped(var writer : StringBuilderWriter; issues : array<LintIssue>; p
             writer |> write("{prefix}{msg}\n")
         }
         continue if (!show_source || empty(issues[i].file) || issues[i].line <= 0)
+        if (issues[i].fix.line > 0) {
+            if (!source_text_cache |> key_exists(issues[i].file)) {
+                source_text_cache[issues[i].file] = fread(issues[i].file)
+            }
+            for (row in fix_diff(source_text_cache[issues[i].file], issues[i].fix)) {
+                writer |> write("{prefix}  {row}\n")
+            }
+            continue
+        }
         let src = source_line_at(issues[i].file, issues[i].line)
         if (!empty(src)) {
             writer |> write("{prefix}  > {src}\n")
@@ -923,23 +972,65 @@ def lint_file_fixing(file : string; run_paranoid, run_perf, run_style, comment_h
                      disabled_codes, enabled_codes : table<string>; fix : bool) : LintResult {
     var result <- lint_file(file, run_paranoid, run_perf, run_style, comment_hygiene, lint_fixtures, lint_excluded_paths, disabled_codes, enabled_codes)
     return <- result if (!fix || result.failed || !empty(result.skip_reason))
-    var fixes <- [for (issue in result.issues); issue.fix; where issue.fix.line > 0 && (empty(issue.file) || normalize(issue.file) == normalize(file))]
-    return <- result if (empty(fixes))
+    var fixed = 0
+    var rows : array<string>
+    let max_passes = 8
+    for (_ in range(max_passes)) {
+        var after <- lint_fix_pass(file, result, run_paranoid, run_perf, run_style,
+                                   comment_hygiene, lint_fixtures, lint_excluded_paths,
+                                   disabled_codes, enabled_codes)
+        let applied = after.fixed
+        rows |> push_from(after.fixed_rows)
+        delete result
+        result <- after
+        fixed += applied
+        break if (applied == 0)
+    }
+    result.fixed = fixed
+    result.fixed_rows <- rows
+    return <- result
+}
+
+//! One --fix pass over ``file``: applies the fixes ``result``
+//! carries, drops each that breaks the compile, and re-lints;
+//! ``fixed`` counts the edits applied.
+def private fixed_finding_rows(text : string; issue : LintIssue) : array<string> {
+    var rows <- [format_issue(issue)]
+    rows |> push_from([for (row in fix_diff(text, issue.fix)); "  {row}"])
+    return <- rows
+}
+
+def lint_fix_pass(file : string; result : LintResult; run_paranoid, run_perf, run_style,
+                  comment_hygiene, lint_fixtures, lint_excluded_paths : bool;
+                  disabled_codes, enabled_codes : table<string>) : LintResult {
+    var fixable <- [for (issue in result.issues); issue; where issue.fix.line > 0
+        && (empty(issue.file) || normalize(issue.file) == normalize(file))]
+    var fixes <- [for (issue in fixable); issue.fix]
+    if (empty(fixes)) {
+        var same := result
+        same.fixed = 0
+        same.fixed_rows |> clear()
+        return <- same
+    }
     let original = fread(file)
     var patched = apply_lint_fixes(original, fixes)
     fwrite(file, patched.text)
     var after <- lint_file(file, run_paranoid, run_perf, run_style, comment_hygiene, lint_fixtures, lint_excluded_paths, disabled_codes, enabled_codes)
+    var kept_idx <- [for (k in range(length(fixes))); k]
     if (after.failed) {
+        kept_idx |> clear()
         var kept : array<LintFix>
         kept |> reserve(length(fixes))
-        for (f in fixes) {
+        for (f, k in fixes, count()) {
             kept |> push(f)
+            kept_idx |> push(k)
             patched = apply_lint_fixes(original, kept)
             fwrite(file, patched.text)
             delete after
             after <- lint_file(file, run_paranoid, run_perf, run_style, comment_hygiene, lint_fixtures, lint_excluded_paths, disabled_codes, enabled_codes)
             if (after.failed) {
                 kept |> pop()
+                kept_idx |> pop()
             }
         }
         patched = apply_lint_fixes(original, kept)
@@ -948,6 +1039,10 @@ def lint_file_fixing(file : string; run_paranoid, run_perf, run_style, comment_h
         after <- lint_file(file, run_paranoid, run_perf, run_style, comment_hygiene, lint_fixtures, lint_excluded_paths, disabled_codes, enabled_codes)
     }
     after.fixed = patched.applied
+    let kept_fixes <- [for (k in kept_idx); fixes[k]]
+    for (sp in applied_lint_fix_spans(original, kept_fixes)) {
+        after.fixed_rows |> push_from(fixed_finding_rows(original, fixable[kept_idx[sp.z]]))
+    }
     return <- after
 }
 
@@ -979,6 +1074,11 @@ def private promoted_suffix(result : LintResult) : string =>
 def print_result(result : LintResult; quiet, silent : bool) {
     if (result.fixed > 0) {
         print("FIXED {result.file} ({result.fixed})\n")
+        if (!silent) {
+            for (row in result.fixed_rows) {
+                print("  {row}\n")
+            }
+        }
     }
     if (!empty(result.skip_reason)) {
         if (!quiet) {
@@ -1265,15 +1365,24 @@ def collect_input_files(var files : array<string>&; var dirs : array<string>&) :
     return -1
 }
 
-def tally_result(result : LintResult; var issues : int&; var errors : int&; var skipped : int&; var excluded : int&) : void {
-    excluded += result.excluded
+def tally_result(result : LintResult; var totals : LintTotals&) : void {
+    totals.excluded += result.excluded
     if (!empty(result.skip_reason)) {
-        skipped++
+        totals.skipped++
     } elif (result.failed) {
-        errors++
+        totals.errors++
     } elif (result.count > 0) {
-        issues += result.count
+        totals.issues += result.count
+        totals.fixable += count_fixable(result.issues)
     }
+}
+
+def count_fixable(issues : array<LintIssue>) : int {
+    var n = 0
+    for (issue in issues) {
+        n += issue.fix.line > 0 ? 1 : 0
+    }
+    return n
 }
 
 // Folder policy, not file policy: the three folder rules answer for the run's scan ROOTS rather
@@ -1304,16 +1413,22 @@ def run_folder_passes(docs_roots : array<string>; disabled_codes, enabled_codes 
 }
 
 // Prints the summary block; returns the process exit code (0 clean, 1 errors, 2 issues).
-def print_summary(files_count, total_issues, total_errors, total_skipped, total_excluded : int;
-                  quiet : bool) : int {
-    if (quiet && total_issues == 0 && total_errors == 0) return 0
+def print_summary(files_count : int; totals : LintTotals; quiet, fix : bool) : int {
+    if (quiet && totals.issues == 0 && totals.errors == 0) return 0
     print("\n--- Summary ---\n")
-    let skip_part = total_skipped > 0 ? ", {total_skipped} skipped" : ""
-    let excl_part = total_excluded > 0 ? ", {total_excluded} excluded by path policy" : ""
-    print("{files_count} files, {total_issues} issue(s), {total_errors} error(s){skip_part}{excl_part}\n")
-    if (total_errors > 0) {
+    let skip_part = totals.skipped > 0 ? ", {totals.skipped} skipped" : ""
+    let excl_part = totals.excluded > 0 ? ", {totals.excluded} excluded by path policy" : ""
+    print("{files_count} files, {totals.issues} issue(s), {totals.errors} " +
+        "error(s){skip_part}{excl_part}\n")
+    if (totals.fixable > 0 && fix) {
+        print("{totals.fixable} fix(es) left unapplied - each breaks the compile; " +
+            "apply them by hand\n")
+    } elif (totals.fixable > 0) {
+        print("{totals.fixable} issue(s) can be fixed inline - run lint with --fix to apply them\n")
+    }
+    if (totals.errors > 0) {
         return 1
-    } elif (total_issues > 0) {
+    } elif (totals.issues > 0) {
         return 2
     } else {
         return 0
@@ -1439,10 +1554,7 @@ def main() : int {
     let collect_rc = collect_input_files(files, docs_roots)
     if (collect_rc >= 0) return collect_rc
 
-    var total_issues = 0
-    var total_errors = 0
-    var total_skipped = 0
-    var total_excluded = 0
+    var totals : LintTotals
 
     if (parallel_workers::should_parallelize(length(files), cfg.workers)) {
         var results <- run_parallel_lint(files, cfg)
@@ -1450,7 +1562,7 @@ def main() : int {
         sort(results, cmp_by(_.file))
         for (result in results) {
             print_result(result, cfg.quiet, cfg.silent)
-            tally_result(result, total_issues, total_errors, total_skipped, total_excluded)
+            tally_result(result, totals)
         }
     } else {
         if (!cfg.quiet) {
@@ -1463,15 +1575,16 @@ def main() : int {
             if (!cfg.quiet) {
                 print("checking {file}...\n")
             }
-            let result = lint_file_fixing(file, run_paranoid, run_perf, run_style, cfg.comment_hygiene, cfg.lint_fixtures, cfg.lint_excluded_paths, disabled_codes, enabled_codes, cfg.fix)
+            let result = lint_file_fixing(file, run_paranoid, run_perf, run_style,
+                cfg.comment_hygiene, cfg.lint_fixtures, cfg.lint_excluded_paths, disabled_codes,
+                enabled_codes, cfg.fix)
             print_result(result, cfg.quiet, cfg.silent)
-            tally_result(result, total_issues, total_errors, total_skipped, total_excluded)
+            tally_result(result, totals)
             maybe_collect(since_collect)
         }
     }
 
-    total_issues += run_folder_passes(docs_roots, disabled_codes, enabled_codes)
+    totals.issues += run_folder_passes(docs_roots, disabled_codes, enabled_codes)
 
-    return print_summary(length(files), total_issues, total_errors, total_skipped, total_excluded,
-        cfg.quiet)
+    return print_summary(length(files), totals, cfg.quiet, cfg.fix)
 }

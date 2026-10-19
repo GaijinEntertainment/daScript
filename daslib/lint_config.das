@@ -559,7 +559,7 @@ struct public LintIssue {
     fix : LintFix           //!< the edit that resolves the finding; line 0 when the rule offers none
 }
 
-def public apply_lint_fixes(text : string; fixes : array<LintFix>) : tuple<text : string; applied : int> {
+def public applied_lint_fix_spans(text : string; fixes : array<LintFix>) : array<int3> {
     var line_start : array<int>
     line_start |> push(0)
     peek_data(text) $(d) {
@@ -574,24 +574,40 @@ def public apply_lint_fixes(text : string; fixes : array<LintFix>) : tuple<text 
         continue if (f.line <= 0 || f.line > length(line_start) || f.last_line < f.line || f.last_line > length(line_start))
         spans |> push(int3(line_start[f.line - 1] + f.column, line_start[f.last_line - 1] + f.last_column, k))
     }
-    sort(spans) <| cmp_by(_.x)
-    var applied = 0
+    sort(spans) <| cmp_by(_.x, _.y)
+    let tlen = length(text)
+    var used : array<int3>
+    used |> reserve(length(spans))
+    var pos = 0
+    var last_empty = false
+    for (sp in spans) {
+        continue if (sp.x < pos
+                     || (sp.x == pos && !empty(used) && (last_empty || sp.x == sp.y))
+            || sp.y < sp.x || sp.y > tlen)
+        used |> push(sp)
+        pos = sp.y
+        last_empty = sp.x == sp.y
+    }
+    return <- used
+}
+
+def public apply_lint_fixes(text : string;
+                            fixes : array<LintFix>) : tuple<text : string; applied : int> {
+    let used <- applied_lint_fix_spans(text, fixes)
     let crlf = find(text, "\r\n") >= 0
     let tlen = length(text)
     let result = build_string() $(var w) {
         peek_data(text) $(d) {
             var pos = 0
-            for (sp in spans) {
-                continue if (sp.x < pos || sp.y < sp.x || sp.y > tlen)
+            for (sp in used) {
                 if (sp.x > pos) write_string(w, d, pos, sp.x)
                 w |> write(crlf ? replace(fixes[sp.z].replacement, "\n", "\r\n") : fixes[sp.z].replacement)
                 pos = sp.y
-                applied++
             }
             if (tlen > pos) write_string(w, d, pos, tlen)
         }
     }
-    return (text = result, applied = applied)
+    return (text = result, applied = length(used))
 }
 
 def public lint_source_line(at : LineInfo; ln : int) : string {
