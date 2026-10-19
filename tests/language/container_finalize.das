@@ -1,6 +1,7 @@
 options gen2
 options force_inscope_pod   // the collect banner rides the inscope-pod policy, not container init
 options persistent_heap   // heap_bytes_allocated only tracks individual frees on the persistent heap
+options no_coverage
 require dastest/testing_boost public
 
 // The banner's contract under the isPodDelete gate: erase/clear/shrink/pop release exactly

@@ -1,6 +1,7 @@
 options gen2
 options persistent_heap = true
 options very_safe_context
+options no_coverage
 
 // scope: the table half of the scratch flag under very_safe_context
 // growth: insert-driven only - table reserve jumps to the final pow2 in one allocation

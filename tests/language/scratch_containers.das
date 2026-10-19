@@ -1,5 +1,6 @@
 options gen2
 options persistent_heap = true
+options no_coverage
 
 // The scratch one-shot family's capacity/length semantics, plus the inert-outside-very-safe
 // control: this file deliberately does NOT set very_safe_context, so the scratch bit must
