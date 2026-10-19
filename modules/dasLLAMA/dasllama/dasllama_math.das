@@ -18,6 +18,7 @@ require dasllama/dasllama_tune_scope  // nolint:STYLE030 — the dasllama [tune_
 require dasllama/dasllama_gemm_schema  // kq_qsb/kq_ssb — the fmt-id kq plane strides
 require dasllama/dasllama_gpu_tier public  // the device-cooperation seam (split out 2026-07-29) — re-exported for the 112 requirers
 require dasllama/dasllama_gpu_math  // silu_f32: the one SiLU form the CPU and the kernel homes share
+require daslib/cmp
 
 // dasLLAMA numeric primitives — naive fp32 baseline (curriculum step 1).
 // Correctness first; optimization (blocking, float4, threading) comes later.
@@ -617,7 +618,7 @@ def public matmul_chunks_gemv(rows : int; oversplit : int; work : int64) : int {
 //! per-region costs: sort (id, cost) biggest-cost first (ties: lowest id) so the self-serve chunk
 //! queue front-loads expensive regions and drains cheap ones last. Use whenever cost is known at build time.
 def public lpt_order(var ord : array<int2>) {
-    ord |> sort() $(a, b) => a.y != b.y ? a.y > b.y : a.x < b.x
+    ord |> sort() <| cmp_by(-_.y, _.x)
 }
 
 //! Chunk count for a fused-chain stage over `groups` 32-row quant groups: the GEMV shaper's count,

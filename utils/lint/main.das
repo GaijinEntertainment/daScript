@@ -6,6 +6,7 @@ require daslib/lint
 require daslib/perf_lint
 require daslib/style_lint
 require daslib/lint_config
+require daslib/cmp
 require daslib/ast_boost
 require daslib/fio
 require daslib/clargs
@@ -1347,7 +1348,7 @@ def main() : int {
     if (parallel_workers::should_parallelize(length(files), cfg.workers)) {
         var results <- run_parallel_lint(files, cfg)
         // Sort by file path so output is deterministic across worker counts.
-        sort(results, $(a, b : LintResult) => a.file < b.file)
+        sort(results, cmp_by(_.file))
         for (result in results) {
             print_result(result, cfg.quiet, cfg.silent)
             tally_result(result, total_issues, total_errors, total_skipped, total_excluded)

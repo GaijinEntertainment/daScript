@@ -1,5 +1,6 @@
 options gen2
 
+require daslib/cmp
 require dastest/testing_boost public
 
 require daslib/sql
@@ -62,12 +63,7 @@ def fixture_orders() : array<Order> {
 }
 
 def sort_by_pair(var rows : array<auto(R)>) {
-    rows |> sort() $(a, b) {
-        if (a.UserName != b.UserName) {
-            return a.UserName < b.UserName
-        }
-        return a.OrderTotal < b.OrderTotal
-    }
+    rows |> sort() <| cmp_by(_.UserName, _.OrderTotal)
 }
 
 [test]
@@ -107,12 +103,7 @@ def parity_inner_join_basic(t : T?) {
 }
 
 def sort_by_pair_with_active(var rows : array<auto(R)>) {
-    rows |> sort() $(a, b) {
-        if (a.UserName != b.UserName) {
-            return a.UserName < b.UserName
-        }
-        return a.OrderTotal < b.OrderTotal
-    }
+    rows |> sort() <| cmp_by(_.UserName, _.OrderTotal)
 }
 
 [test]
@@ -157,21 +148,11 @@ def parity_left_filter_join(t : T?) {
 }
 
 def sort_by_pair_with_orderid(var rows : array<auto(R)>) {
-    rows |> sort() $(a, b) {
-        if (a.UserName != b.UserName) {
-            return a.UserName < b.UserName
-        }
-        return a.OrderId < b.OrderId
-    }
+    rows |> sort() <| cmp_by(_.UserName, _.OrderId)
 }
 
 def sort_by_buyer_orderid(var rows : array<auto(R)>) {
-    rows |> sort() $(a, b) {
-        if (a.Buyer != b.Buyer) {
-            return a.Buyer < b.Buyer
-        }
-        return a.OrderId < b.OrderId
-    }
+    rows |> sort() <| cmp_by(_.Buyer, _.OrderId)
 }
 
 [test]

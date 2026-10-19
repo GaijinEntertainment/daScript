@@ -28,6 +28,7 @@ require dasllama/dasllama_moe   // moe_select + moe_routed_sum: the host's route
 require dasllama/dasllama_blocks   // moe_routed_sum_rows: the host's routed sums of a window's rows between the hyper-connection chain's segments
 require dasllama/dasllama_ple   // ple_plane, moe_down_scale_fold: the per-layer-embedding planes and the gemma-4 down-scale fold
 require math
+require daslib/cmp
 
 //! The upload-walk stage a baked gather belongs to — set by the walk, stamped per entry.
 enum VkBakeRole {
@@ -2537,7 +2538,7 @@ def private log_resident_image(planes : array<ResidentPlane>; plan : ResidentPla
     for (v in values(rows)) {
         sorted |> emplace(ImageRow(name = clone_string(v.name), plane_count = v.plane_count, file_bytes = v.file_bytes, device_bytes = v.device_bytes))
     }
-    sorted |> sort() $(a, b) => a.device_bytes - a.file_bytes > b.device_bytes - b.file_bytes
+    sorted |> sort() <| cmp_by(-(_.device_bytes - _.file_bytes))
     to_log(LOG_INFO, "dasLLAMA: resident image: {file_total >> 20l} MB in the file's blocks -> {device_total >> 20l} MB on device ({mb_delta(device_total, file_total)}) over {long_length(planes)} planes; KV mirror {plan.kv_bytes >> 20l} MB at ctx {seq_cap}, scratch {plan.scratch_bytes >> 20l} MB\n")
     for (r in sorted) {
         to_log(LOG_INFO, "dasLLAMA: resident image:   {r.name} x{r.plane_count}: {r.file_bytes >> 20l} MB -> {r.device_bytes >> 20l} MB ({mb_delta(r.device_bytes, r.file_bytes)})\n")
@@ -4224,7 +4225,7 @@ def private rdec_hot_fill_share(t : Model; l : int64; var H : HotLayer; idx : in
     }
     return if (empty(H.order))
     g_rdec_hot_share_seen += long_length(H.order)
-    H.order |> sort() $(a, b) => H.heat[a] > H.heat[b]
+    H.order |> sort() <| cmp_by(-H.heat[_])
     var want = int64(ceil(share * float(length(H.order))))
     let f1 = resident_expert_fmts(t, l).f1
     for (e in H.order) {
@@ -4376,7 +4377,7 @@ def private rdec_hot_window(t : Model; s : Session; l, nrows : int64) {
             H.order |> push(e)
         }
     }
-    H.order |> sort() $(a, b) => H.heat[a] > H.heat[b]
+    H.order |> sort() <| cmp_by(-H.heat[_])
     var swaps = RDEC_HOT_SWAPS_WINDOW
     rdec_hot_batch(true)
     for (e in H.order) {
@@ -4692,11 +4693,7 @@ def private expert_heat_order(t : Model; l : int64) : array<int> {
     return <- [for (e in range64(0l)); int(e)] if (empty(g_expert_heat_prior))
     var order <- [for (e in range64(ne)); int(e)]
     let base = l * ne
-    sort(order) $(a, b) {
-        let ha = g_expert_heat_prior[base + int64(a)]
-        let hb = g_expert_heat_prior[base + int64(b)]
-        return ha != hb ? ha > hb : a < b
-    }
+    sort(order) <| cmp_by(-(g_expert_heat_prior[(base + int64(_))]), _)
     return <- order
 }
 
@@ -6331,7 +6328,7 @@ def gpu_device_kv_claim_(s : Session) : int64 => rdec_owns(s, s.rdec_region) ? s
 //! in that order - and so lose; a region that holds no claim adds none
 def gpu_device_kv_victim_claims_(n : int) : array<int64> {
     var free <- [for (r in range64(long_length(g_rdec_regions))); r; where !g_rdec_regions[r].pinned]
-    sort(free) $(a, b) => g_rdec_regions[a].used < g_rdec_regions[b].used
+    sort(free) <| cmp_by(g_rdec_regions[_].used)
     var out <- [for (r, k in free, count()); g_rdec_regions[r].gen; where k < n && g_rdec_regions[r].gen != 0l]
     delete free
     return <- out

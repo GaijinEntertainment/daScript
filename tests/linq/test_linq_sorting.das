@@ -7,6 +7,7 @@ require daslib/linq_boost
 require daslib/sort_boost
 
 require _common
+require daslib/cmp
 
 [test]
 def test_reverse(t : T?) {
@@ -117,7 +118,7 @@ def test_order(t : T?) {
         ]
         var query_n = order(
             numbers.to_sequence(),
-            $(a, b) => a < b
+            cmp_by(_)
         )
         let sorted_n = [1, 3, 4, 5, 8]
         for (n, i in query_n, 0..4) {
@@ -168,7 +169,7 @@ def test_order(t : T?) {
         ]
         var query_n = order_to_array(
             numbers.to_sequence(),
-            $(a, b) => a < b
+            cmp_by(_)
         )
         let sorted_n = [1, 3, 4, 5, 8]
         for (n, i in query_n, 0..4) {
@@ -181,7 +182,7 @@ def test_order(t : T?) {
         ]
         order_inplace(
             numbers,
-            $(a, b) => a < b
+            cmp_by(_)
         )
         let sorted_n = [1, 3, 4, 5, 8]
         for (n, i in numbers, 0..4) {
@@ -325,9 +326,7 @@ def test_partial_sort(t : T?) {
     }
     t |> run("partial_sort with custom comparator (descending)") @(t : T?) {
         var a <- [5, 2, 8, 1, 9]
-        sort_boost::partial_sort(a, 3) $(x, y : int) : bool {
-            return x > y
-        }
+        sort_boost::partial_sort(a, 3) <| cmp_by(-_)
         t |> equal(a[0], 9)
         t |> equal(a[1], 8)
         t |> equal(a[2], 5)
@@ -355,9 +354,7 @@ def test_partial_sort(t : T?) {
             ComplexType(a = [8, 102]),
             ComplexType(a = [1, 103])
         ]
-        sort_boost::partial_sort(a, 2) $(x, y : ComplexType) : bool {
-            return x.a[0] < y.a[0]
-        }
+        sort_boost::partial_sort(a, 2) <| cmp_by(_.a[0])
         t |> equal(a[0].a[0], 1)
         t |> equal(a[0].a[1], 103)
         t |> equal(a[1].a[0], 2)
@@ -399,9 +396,7 @@ def test_nth_element(t : T?) {
             ComplexType(a = [1, 103]),
             ComplexType(a = [9, 104])
         ]
-        sort_boost::nth_element(a, 2) $(x, y : ComplexType) : bool {
-            return x.a[0] < y.a[0]
-        }
+        sort_boost::nth_element(a, 2) <| cmp_by(_.a[0])
         t |> equal(a[2].a[0], 5)
         t |> equal(a[2].a[1], 100)
     }
@@ -533,7 +528,7 @@ def test_top_n_by_descending(t : T?) {
         // hand-rolled reference: clone, sort descending, take first 4
         var refSorted : array<int>
         refSorted := src
-        sort(refSorted, $(a, b) => a > b)
+        sort(refSorted, cmp_by(-_))
         t |> equal(length(got), 4)
         for (i in 0..4) {
             t |> equal(got[i], refSorted[i])
@@ -634,7 +629,7 @@ def test_q_macros(t : T?) {
     //! routes to the right wrapper for ``array<T>`` sources.
     t |> run("qpartial_sort on array") @(t : T?) {
         var a <- [5, 2, 8, 1, 9, 3, 7, 4, 6, 0]
-        sort_boost::qpartial_sort(a, 3) $(x, y : int) : bool {
+        sort_boost::qpartial_sort(a, 3) $(x, y : int) : bool {  // nolint:STYLE047
             return x < y
         }
         t |> equal(a[0], 0)
@@ -643,35 +638,35 @@ def test_q_macros(t : T?) {
     }
     t |> run("qnth_element on array") @(t : T?) {
         var a <- [7, 3, 1, 9, 5, 8, 0, 4, 2]
-        sort_boost::qnth_element(a, 4) $(x, y : int) : bool {
+        sort_boost::qnth_element(a, 4) $(x, y : int) : bool {  // nolint:STYLE047
             return x < y
         }
         t |> equal(a[4], 4)
     }
     t |> run("qmake_heap on array") @(t : T?) {
         var a <- [5, 2, 8, 1, 9, 3, 7]
-        sort_boost::qmake_heap(a) $(x, y : int) : bool {
+        sort_boost::qmake_heap(a) $(x, y : int) : bool {  // nolint:STYLE047
             return x < y
         }
         t |> equal(a[0], 9)
     }
     t |> run("qpush_heap append-then-sift") @(t : T?) {
         var a <- [9, 5, 7, 1, 3, 6]
-        sort_boost::qmake_heap(a) $(x, y : int) : bool {
+        sort_boost::qmake_heap(a) $(x, y : int) : bool {  // nolint:STYLE047
             return x < y
         }
         a |> push(12)
-        sort_boost::qpush_heap(a) $(x, y : int) : bool {
+        sort_boost::qpush_heap(a) $(x, y : int) : bool {  // nolint:STYLE047
             return x < y
         }
         t |> equal(a[0], 12)
     }
     t |> run("qpop_heap moves max to end") @(t : T?) {
         var a <- [5, 2, 8, 1, 9, 3, 7]
-        sort_boost::qmake_heap(a) $(x, y : int) : bool {
+        sort_boost::qmake_heap(a) $(x, y : int) : bool {  // nolint:STYLE047
             return x < y
         }
-        sort_boost::qpop_heap(a) $(x, y : int) : bool {
+        sort_boost::qpop_heap(a) $(x, y : int) : bool {  // nolint:STYLE047
             return x < y
         }
         t |> equal(a[length(a) - 1], 9)

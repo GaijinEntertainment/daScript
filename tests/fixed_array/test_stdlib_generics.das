@@ -3,6 +3,7 @@
 // (each/sort/find_index/subarray/clone_dim/finalize_dim) via natural nesting.
 options gen2
 require dastest/testing_boost public
+require daslib/cmp
 
 typedef M4 = float[4][4]
 
@@ -42,9 +43,7 @@ def test_sort_rows(t : T?) {
         s[1][1] = 11
         s[2][0] = 20
         s[2][1] = 21
-        s |> sort() $(x, y : int[2]) {
-            return x[0] < y[0]
-        }
+        s |> sort() <| cmp_by(_[0])
         // rows move as units - the second column rides along
         t |> equal(s[0][0], 10)
         t |> equal(s[0][1], 11)

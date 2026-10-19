@@ -11,6 +11,7 @@ require daslib/templates_boost
 require daslib/rtti
 require strings
 require daslib/strings_boost   // split / strip — the grid & params micro-format tokenizers
+require daslib/cmp
 require daslib/ast_cursor   // name_column - the whole-identifier read of a params= name in the grid/tg/requires/@span specs
 require das_metal   // nolint:STYLE030 — MetalBuffer/MetalComputeEncoder are referenced only inside qmacro_type(type<...>), which STYLE030 can't see; the require is load-bearing for macro-time type resolution
 require dasllama_kernel_access   // the shared body-walk classifier (field mode) — @role's read/write axis is DERIVED
@@ -446,7 +447,7 @@ class MetalDispatch : AstStructureAnnotation {
             }
             bufs |> push(BufField(name = "{field.name}", binding = binding, role = role, ssbo = is_ssbo, kt = kt, off = off, rng = rangeStr, dref = dflt))
         }
-        sort(bufs) $(a, b) => a.binding < b.binding
+        sort(bufs) <| cmp_by(_.binding)
 
         // a stamp family's classes carry sibling kernels it does not dispatch, so the family matches by prefix
         if (empty(kern) && !empty(kprefix)) {

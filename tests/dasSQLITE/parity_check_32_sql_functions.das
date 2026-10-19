@@ -1,5 +1,6 @@
 options gen2
 
+require daslib/cmp
 require dastest/testing_boost public
 
 require daslib/sql
@@ -71,9 +72,7 @@ def enemies_eq(a : array<Enemy>; b : array<Enemy>) : bool {
 }
 
 def sort_by_id(var rows : array<Enemy>) {
-    rows |> sort() $(a, b) {
-        return a.Id < b.Id
-    }
+    rows |> sort() <| cmp_by(_.Id)
 }
 
 [test]

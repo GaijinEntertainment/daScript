@@ -1,5 +1,6 @@
 options gen2
 
+require daslib/cmp
 require dastest/testing_boost public
 
 require daslib/sql
@@ -69,9 +70,7 @@ def users_eq(a : array<User>; b : array<User>) : bool {
 }
 
 def sort_by_id(var rows : array<User>) {
-    rows |> sort() $(a, b) {
-        return a.Id < b.Id
-    }
+    rows |> sort() <| cmp_by(_.Id)
 }
 
 [test]

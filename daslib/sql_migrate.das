@@ -20,6 +20,7 @@ require daslib/templates_boost
 require daslib/sql public
 require daslib/sql_provider public
 require daslib/sql_boost public
+require daslib/cmp
 
 //! Provider-neutral schema migrations: the ``[sql_migration]`` annotation, the
 //! ``migrate_to_latest`` runner family, ``baseline`` adoption, and the
@@ -109,7 +110,7 @@ def private _registry_max_version(stream : string) : int {
 
 def private _registry_sorted(stream : string) : array<MigrationEntry> {
     var out <- [for (e in _registry); e; where e.stream == stream]
-    sort(out, $(a, b) => a.version < b.version)
+    sort(out, cmp_by(_.version))
     return <- out
 }
 

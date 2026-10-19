@@ -13,6 +13,7 @@ require uriparser public
 
 require daslib/strings_boost
 require daslib/sort_boost
+require daslib/cmp
 
 def uri_split_full_path(uri : Uri implicit) {
     //! Split the full path of a URI into its components.
@@ -47,13 +48,7 @@ def uri_compose_query(query : table<string; string>) {
 def uri_compose_query_in_order(query : table<string; string>) {
     //! Compose a query string from a table of key-value pairs, in the sorted order.
     var vq <- [for (key, value in keys(query), values(query)); (key = key, value = value)]
-    sort(vq) $(a, b) {
-        if (a.key == b.key) {
-            return a.value < b.value
-        } else {
-            return a.key < b.key
-        }
-    }
+    sort(vq) <| cmp_by(_.key, _.value)
     let res = build_string() $(var tw) {
         var first = true
         for (kv in vq) {

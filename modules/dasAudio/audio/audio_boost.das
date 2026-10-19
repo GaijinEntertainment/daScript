@@ -31,6 +31,7 @@ require daslib/array_boost
 require daslib/jobque_boost
 require daslib/apply_in_context
 require daslib/archive
+require daslib/cmp
 
 let public SPEED_OF_SOUND = 343.3f
 //! Speed of sound in m/s, used for Doppler calculations.
@@ -709,7 +710,7 @@ def update_hrtf(dt : float; nFrames : uint64) {
             g_hrtf_scratch |> push((dist2 = dot(delta, delta), idx = i))
         }
     }
-    g_hrtf_scratch |> sort() $(a, b) => a.dist2 < b.dist2
+    g_hrtf_scratch |> sort() <| cmp_by(_.dist2)
     let total3D = length(g_hrtf_scratch)
     let budget = g_hrtf_budget
     var hrtfCount = 0

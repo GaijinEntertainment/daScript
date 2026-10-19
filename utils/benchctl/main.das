@@ -384,9 +384,7 @@ def run_compare_cmd(db : SqlRunner; parsed : ParsedArgs) : string {
     var new_samples = make_sample_sets(to_run_stats(new_entries))
 
     var bench_order <- [for (k in keys(old_samples)); k]
-    sort(bench_order) $(x, y) {
-        return x < y
-    }
+    sort(bench_order)
 
     var old_total_values = {
         "ns" => array<double>(),

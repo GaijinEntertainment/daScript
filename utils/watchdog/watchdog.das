@@ -16,6 +16,7 @@ require dashv/dashv_boost
 require daslib/strings_convert
 require stddlg
 require stbimage
+require daslib/cmp
 
 //! Supervise a daslang program (`daslang -jit main.das`) or a standalone executable: restart it with
 //! bounded backoff, capture crashes into bundles, report startup stages, poll health. Exit 0 is an
@@ -851,9 +852,7 @@ def private prune_crash_bundles(root, name : string; keep : int) {
             bundles |> push((path = path, mtime = st.mtime))
         }
     }
-    bundles |> sort() $(a, b) {
-        return a.mtime > b.mtime
-    }
+    bundles |> sort() <| cmp_by(-_.mtime)
     for (i in range(keep, length(bundles))) {
         rmdir_rec(bundles[i].path)
     }

@@ -23,6 +23,7 @@ require daslib/algorithm
 require daslib/sort_boost
 require daslib/linq
 require math
+require daslib/cmp
 
 struct PricePoint {
     item_id : int
@@ -61,9 +62,7 @@ def binary_search_demo() {
 
     // Custom comparator — descending order
     let desc <- [9, 7, 5, 3, 1]
-    let idx = lower_bound(desc, 5) $(lhs, rhs : int const) {
-        return lhs > rhs
-    }
+    let idx = lower_bound(desc, 5) <| cmp_by(-_)
     print("lower_bound in descending [9,7,5,3,1] for 5 = {idx}\n") // 2
 }
 
@@ -79,9 +78,7 @@ def sort_demo() {
 
     // Custom comparator (descending) via block argument.
     var b <- [5, 2, 8, 1, 9]
-    sort(b) $(x, y : int) : bool {
-        return x > y
-    }
+    sort(b) <| cmp_by(-_)
     print("sort desc: {b}\n")  // [9, 8, 5, 2, 1]
 
     // stable_sort: like sort, but elements that compare equal keep their input
@@ -90,9 +87,7 @@ def sort_demo() {
     var items <- [PricePoint(item_id = 1, price = 50), PricePoint(item_id = 2, price = 20),
                   PricePoint(item_id = 3, price = 50), PricePoint(item_id = 4, price = 20),
                   PricePoint(item_id = 5, price = 50)]
-    stable_sort(items) $(x, y : PricePoint) : bool {
-        return x.price < y.price
-    }
+    stable_sort(items) <| cmp_by(_.price)
     print("stable_sort by price: ")
     for (it in items) {
         print("({it.item_id}@{it.price}) ")  // (2@20) (4@20) (1@50) (3@50) (5@50)
@@ -124,9 +119,7 @@ def partial_sort_demo() {
 
     // Custom comparator works for both (e.g. by struct field):
     var c <- [PricePoint(item_id=1, price=50), PricePoint(item_id=2, price=20), PricePoint(item_id=3, price=80), PricePoint(item_id=4, price=10), PricePoint(item_id=5, price=30)]
-    sort_boost::partial_sort(c, 2) $(x, y : PricePoint) : bool {
-        return x.price < y.price
-    }
+    sort_boost::partial_sort(c, 2) <| cmp_by(_.price)
     print("partial_sort by price (N=2): id={c[0].item_id}/price={c[0].price}, id={c[1].item_id}/price={c[1].price}\n")
 }
 
@@ -274,9 +267,7 @@ def query_demo() {
 
     // Custom comparator: find the element closest to zero
     let c <- [-10, 3, -7, 2]
-    let idx = min_element(c) $(lhs, rhs : int const) {
-        return lhs * lhs < rhs * rhs
-    }
+    let idx = min_element(c) <| cmp_by(_ * _)
     print("min by magnitude: index {idx}, value {c[idx]}\n")  // 3, value 2
 }
 

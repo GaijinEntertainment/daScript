@@ -8,6 +8,7 @@ require lr1/lr1
 require daslib/strings_boost
 require daslib/utf8_utils
 require math
+require daslib/cmp
 
 // A reader for grammars in GBNF, the BNF dialect llama.cpp's grammar files use: `name ::= alternatives`,
 // sequences of `"literals"`, `[character classes]`, rule names, `( groups )` and `.`, with the repetition
@@ -256,7 +257,7 @@ def private class_symbol(var r : Reader; var ranges : array<CpRange>; negated : 
         }
         return sym_bytes(bs)
     }
-    sort(ranges) $(a, b : CpRange) : bool { return a.lo < b.lo }
+    sort(ranges) <| cmp_by(_.lo)
     let rule = fresh_rule(r, "class")
     if (!negated) {
         for (rg in ranges) {

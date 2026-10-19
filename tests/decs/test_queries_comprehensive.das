@@ -6,6 +6,7 @@ options no_unused_block_arguments = false
 
 require daslib/decs_boost
 require dastest/testing_boost public
+require daslib/cmp
 
 // === Query across multiple archetypes ===
 
@@ -180,7 +181,7 @@ def test_query_default_value(t : T?) {
     query() $(x : int; y : int = -1) {
         results |> push(int2(x, y))
     }
-    sort(results) <| $(a, b : int2) => a.x < b.x
+    sort(results) <| cmp_by(_.x)
     t |> equal(length(results), 2)
     t |> equal(results[0], int2(10, 20))   // has y component
     t |> equal(results[1], int2(30, -1))   // gets default

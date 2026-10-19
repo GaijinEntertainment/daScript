@@ -12,6 +12,7 @@ require dasllama/dasllama_par
 require dasllama/dasllama_convert   // the q8_0/q8_k row quantizers the expert dispatch feeds
 require dasllama/dasllama_env       // the g_env_* knob globals ([EnvConfig] declarations; ENVIRONMENT.md is generated from them)
 require math
+require daslib/cmp
 
 // MoE expert routing and dispatch: the top-k router, the per-expert FFN accumulation, the shared
 // expert, and the two opt-in decode instruments (cross-token expert reuse, GPU heat pinning).
@@ -120,7 +121,7 @@ def private heat_advise_layer(t : Model; l : int64; h : HeatLayer) {
         return
     }
     var ids <- [for (i in range(length(h.cnt))); int64(i)]
-    ids |> sort() $(a, b) => h.cnt[a] > h.cnt[b]
+    ids |> sort() <| cmp_by(-h.cnt[_])
     var want = min(g_heat_want, long_length(ids))
     while (want > 0l && h.cnt[ids[want - 1l]] <= 0.0) {   // never pin never-picked experts
         want--
@@ -250,7 +251,7 @@ def expert_reuse_report(verbose : bool = true) {
         toks = max(toks, r.tokens)
         // static top-C coverage: sort a frequency copy descending, prefix-sum at each capacity
         var inscope f := r.freq
-        f |> sort() $(a, b) => a > b
+        f |> sort() <| cmp_by(-_)
         var cov : int64[4]
         var acc = 0l
         var fi = 0

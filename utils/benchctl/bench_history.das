@@ -6,6 +6,7 @@ module bench_history public
 require bench_runner
 require daslib/fio
 require daslib/json_boost
+require daslib/cmp
 
 enum RunStatus {
     ok
@@ -116,9 +117,7 @@ def load_runs(runs_dir : string; var errors : array<string>) : array<RunRecord> 
         rec.status = derive_status(rec)
         runs |> emplace(rec)
     }
-    sort(runs) $(a, b) {
-        return a.commit.date != b.commit.date ? a.commit.date < b.commit.date : a.started < b.started
-    }
+    sort(runs) <| cmp_by(_.commit.date, _.started)
     return <- runs
 }
 
@@ -168,9 +167,7 @@ def private build_series(runs : array<RunRecord>; var groups : table<string>) : 
             }
         }
     }
-    sort(out) $(a, b) {
-        return a.lane != b.lane ? a.lane < b.lane : a.id < b.id
-    }
+    sort(out) <| cmp_by(_.lane, _.id)
     return <- out
 }
 

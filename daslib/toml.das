@@ -1409,7 +1409,7 @@ def private sorted_keys(tab : table<string; JsonValue?>) : array<string> {
     for (k in keys(tab)) {
         ks |> push(k)
     }
-    ks |> sort() $(a, b) => a < b
+    ks |> sort()
     return <- ks
 }
 

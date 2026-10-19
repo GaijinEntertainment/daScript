@@ -5,6 +5,7 @@ require dastest/testing_boost public
 require daslib/linq_boost
 
 require _common
+require daslib/cmp
 
 // ============================================================================
 // Tests for BUG 1: unique_inplace / unique_by_inplace on empty arrays
@@ -762,7 +763,7 @@ def test_order_edge_cases(t : T?) {
     t |> run("order empty") @(t : T?) {
         var result = order(
             empty(type<int>),
-            $(a, b) => a < b
+            cmp_by(_)
         )
         var found = false
         for (_ in result) {
@@ -773,7 +774,7 @@ def test_order_edge_cases(t : T?) {
     t |> run("order single element") @(t : T?) {
         var result = order(
             [iterator for(x in 0..1); 42],
-            $(a, b) => a < b
+            cmp_by(_)
         )
         var count = 0
         for (r in result) {
@@ -786,7 +787,7 @@ def test_order_edge_cases(t : T?) {
         var arr = [1, 2, 3, 4, 5]
         var result = order(
             arr.to_sequence(),
-            $(a, b) => a < b
+            cmp_by(_)
         )
         for (r, e in result, 1..6) {
             t |> equal(r, e)
@@ -796,7 +797,7 @@ def test_order_edge_cases(t : T?) {
         var arr = [5, 4, 3, 2, 1]
         var result = order(
             arr.to_sequence(),
-            $(a, b) => a < b
+            cmp_by(_)
         )
         for (r, e in result, 1..6) {
             t |> equal(r, e)

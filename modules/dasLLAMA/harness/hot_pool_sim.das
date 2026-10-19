@@ -16,6 +16,7 @@ require daslib/fio
 require math
 require strings
 require dasllama/dasllama_gpu_resident   // MOET_MAGIC, RDEC_TRACE_PROMPT_MARK, RDEC_HOT_WINDOW_MIN: the trace's and the pool's constants, one home
+require daslib/cmp
 
 enum Policy {
     heat   //! the shipped one: decaying pick counts, a swap under hysteresis
@@ -231,7 +232,7 @@ def decode_step(var L : Layer; ids : array<int>; k : int) {
 def window_step(var L : Layer; ids : array<int>; n, rows : int) {
     note(L, ids, n, rows)
     var order <- [for (e in range(length(L.score))); e; where L.score[e] > 0.0 && L.slot_of[e] < 0]
-    order |> sort() $(a, b) => L.score[a] > L.score[b]
+    order |> sort() <| cmp_by(-L.score[_])
     var swaps = g_cfg.window_swaps
     for (e in order) {
         break if (L.nfree == 0 && swaps == 0)

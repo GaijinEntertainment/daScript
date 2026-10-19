@@ -2,6 +2,7 @@ options gen2
 options no_aot
 
 require dastest/testing_boost public
+require daslib/cmp
 
 // Self-contained smoke test for the sort technique used by
 // `sort_key_play_events` in modules/dasGlfw/dasglfw/glfw_live.das. We can't
@@ -21,9 +22,7 @@ struct TestKeyEventWire {
 }
 
 def sort_by_t_ms(var events : array<TestKeyEventWire>) {
-    events |> sort() $(a, b : TestKeyEventWire) {
-        return a.t_ms < b.t_ms
-    }
+    events |> sort() <| cmp_by(_.t_ms)
 }
 
 [test]

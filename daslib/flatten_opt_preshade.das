@@ -7,6 +7,7 @@ module flatten_opt_preshade shared private
 
 //! Preshader extraction + CSE + const-minus regroup + pure-alias elimination, and the optimize-pass completeness oracle.
 
+require daslib/cmp
 require daslib/ast
 require daslib/ast_boost
 require daslib/ast_match
@@ -771,14 +772,7 @@ def private log_cse_cache(func : FunctionPtr; var blk : ExprBlock?) {
         visit(blk, a)
     }
     var ks <- [for (k in keys(counts)); k]
-    sort(ks) $(a, b : string) : bool {
-        let ca = counts?[a] ?? 0
-        let cb = counts?[b] ?? 0
-        if (ca != cb) {
-            return ca > cb
-        }
-        return a < b
-    }
+    sort(ks) <| cmp_by(-(counts?[_] ?? 0), _)
     to_log(LOG_INFO, "flatten cse cache [{func.name}]: {length(ks)} pure subtrees\n")
     for (k in ks) {
         to_log(LOG_INFO, "    {counts?[k] ?? 0}x  {k}\n")

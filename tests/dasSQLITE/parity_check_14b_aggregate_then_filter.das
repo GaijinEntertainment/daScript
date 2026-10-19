@@ -1,5 +1,6 @@
 options gen2
 
+require daslib/cmp
 require dastest/testing_boost public
 
 require daslib/sql
@@ -58,9 +59,7 @@ def fixture_array() : array<User> {
 }
 
 def sort_by_city(var rows : array<auto(R)>) {
-    rows |> sort() $(a, b) {
-        return a.City < b.City
-    }
+    rows |> sort() <| cmp_by(_.City)
 }
 
 [test]

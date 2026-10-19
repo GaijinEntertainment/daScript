@@ -8,6 +8,7 @@ require daslib/linq_boost
 require daslib/linq_fold
 
 require _common
+require daslib/cmp
 
 [test]
 def test_join(t : T?) { // nolint:STYLE038 flat list of independent run arms
@@ -370,7 +371,7 @@ def test_groupjoin(t : T?) { // nolint:STYLE038 flat list of independent run arm
 // detail that shifted when small tables became packed. The pet-age groups are unordered,
 // so compare them sorted by key.
 def check_pet_age_groups(t : T?; var got : array<tuple<float; int; float; float>>) {
-    sort(got) $(a, b) => a._0 < b._0
+    sort(got) <| cmp_by(_._0)
     t |> equal(length(got), 3)
     if (length(got) == 3) {
         t |> equal(got[0]._0, 1.); t |> equal(got[0]._1, 1); t |> equal(got[0]._2, 1.5); t |> equal(got[0]._3, 1.5)

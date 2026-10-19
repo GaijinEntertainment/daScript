@@ -11,6 +11,7 @@ require daslib/fio
 require daslib/strings_boost
 require strings
 require ../../common/own_functions.das
+require daslib/cmp
 
 
 [CommandLineArgs]
@@ -623,7 +624,7 @@ def main() : int {
     to_log(LOG_INFO, "violations: {n_violations} in {length(counts)} group(s)\n\n")
 
     var groups <- [for (k in keys(counts)); (counts?[k] ?? 0, k)]
-    sort(groups) $(a, b) => a._0 > b._0
+    sort(groups) <| cmp_by(-_._0)
     for (g in groups) {
         to_log(LOG_INFO, "{g._1}: {g._0}\n")
         for (s in samples[g._1]) {

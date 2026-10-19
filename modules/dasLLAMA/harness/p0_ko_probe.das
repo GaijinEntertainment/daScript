@@ -14,6 +14,7 @@ require ?das_metal dasllama/dasllama_metal_common   // metal_kernel_coverage - t
 require ../performance/profile_common.das   // tune_gate + apply_box_profile_runtime — the standing pre-measure stack
 require daslib/jobque_boost
 require daslib/clargs
+require daslib/cmp   // nolint:STYLE030,LINT019 — cmp_by, used only inside the das_metal static_if half
 require daslib/fio
 require math   // nolint:STYLE030,LINT019 — used only inside the das_metal static_if half
 require strings   // nolint:STYLE030,LINT019 — used only inside the das_metal static_if half
@@ -84,7 +85,7 @@ def private census(tr : Model; npos : int64) {
         measure_one(tr, npos, 1)
         var inscope cov <- metal_kernel_coverage()
         var rows <- [for (k, n in keys(cov), values(cov)); (name = k, n = n); where n > 0l]
-        sort(rows) $(a, b) => a.n > b.n
+        sort(rows) <| cmp_by(-_.n)
         var total = 0l
         for (r in rows) {
             total += r.n
@@ -174,7 +175,7 @@ def private kprof(tr : Model; npos, depth : int64) {
             print("p0 kprof npos={npos} at={depth} last routed layer: {rows} rows over {length(cnts)} experts ({idle} idle, the busiest {most}); {tall} tiles of 128 hold {tall * 128} rows, {rem} tiles of 32 hold the other {rows - tall * 128} in {rem * 32} padded\n")
         }
         var rows <- [for (k, v in keys(ms), values(ms)); (name = k, ms = v)]
-        sort(rows) $(a, b) => a.ms > b.ms
+        sort(rows) <| cmp_by(-_.ms)
         var total = 0.0lf
         for (r in rows) {
             total += r.ms

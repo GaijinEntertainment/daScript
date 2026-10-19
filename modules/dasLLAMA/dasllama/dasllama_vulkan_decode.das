@@ -23,6 +23,7 @@ require dasllama/dasllama_env
 require math
 require daslib/strings_boost
 require daslib/algorithm
+require daslib/cmp
 
 // The Vulkan DECODE driver (dasllama_metal_decode's twin): the resident whole-stack token step
 // (prepare/set_layer/set_cls + the once-per-epoch recorded command + vk_rdec_token), the KV
@@ -3185,7 +3186,7 @@ def private rdq_sample(var led : RdqLedger; what, shape : string; st : RdqStamps
         }
         if (led.count == 0l) {
             var top <- [for (i in range(1, int(n))); (us = pfq_us(uint(i)), at = uint(i))]
-            top |> sort() $(a, b) => a.us > b.us
+            top |> sort() <| cmp_by(-_.us)
             let line = build_string() $(w) {
                 for (k in range(min(8, length(top)))) {
                     w |> write("#{top[k].at} {int(top[k].us)}us ")

@@ -11,6 +11,7 @@ require dasllama/dasllama_kv_codec  // quantize_tq4kv_row/cvt_tq4kv_to_f32 — t
 require dasllama/dasllama_tokenizer
 require dasllama/dasllama_env
 require _tq4_probe_fixture
+require daslib/cmp
 
 // Is one channel order enough, or is it MoE-shaped? Run SmolLM2 over 5 text domains, learn a
 // pair-granular hot/quiet partition per (layer, head, side) two ways — GLOBAL (pooled, normalized
@@ -70,7 +71,7 @@ def score_mixed(src : float const?; kvd, hs, h, npast : int64; order : array<int
 def pair_order_from(scores : array<double>; np : int64; var order : array<int>) {
     let n = int(np)
     var porder <- [for (p in range(n)); p]
-    porder |> sort() $(oa, ob) => scores[oa] > scores[ob]
+    porder |> sort() <| cmp_by(-scores[_])
     for (p in range(n)) {
         order[2 * p] = 2 * porder[p]
         order[2 * p + 1] = 2 * porder[p] + 1

@@ -13,6 +13,7 @@ require daslib/sort_boost   // the top-k selection heap
 require daslib/algorithm   // lower_bound: a candidate by id
 require daslib/math_bits
 require math
+require daslib/cmp
 
 // Token sampling and the generation drivers on top of forward()/eval_batch. The engine reaches
 // this file through one registry only - the accept walk's row sampler installed at [init]; the
@@ -217,7 +218,7 @@ def private landed_cands_(var s : Session; params : SamplingParams; r : int64; v
             s.cand |> push(SampleCand(id = int64(g_sel_landing.ids[r * g_sel_landing.cap + j]), v = v))
         }
     }
-    sort(s.cand) $(x, y : SampleCand) : bool { return x.id < y.id }
+    sort(s.cand) <| cmp_by(_.id)
     return true if (penalties_off(params))
     let inv = 1.0 / params.temp
     var every_landed = true
@@ -327,7 +328,7 @@ def private landed_cut_(var s : Session; params : SamplingParams; floor, mx, den
         }
         return false if (cut < 0.0)
         cut_cands_under_(s, cut)
-        sort(s.cand) $(x, y : SampleCand) : bool { return x.id < y.id }
+        sort(s.cand) <| cmp_by(_.id)
     }
     if (params.min_p > 0.0) {
         let thr = cand_min_p_thr_(s, params.min_p)
@@ -438,7 +439,7 @@ def private cut_candidates_(var s : Session; params : SamplingParams) {
             break if (mass >= target)
         }
         cut_cands_under_(s, cut)
-        sort(s.cand) $(x, y : SampleCand) : bool { return x.id < y.id }
+        sort(s.cand) <| cmp_by(_.id)
     }
     if (params.min_p > 0.0) {
         cut_cands_under_(s, cand_min_p_thr_(s, params.min_p))

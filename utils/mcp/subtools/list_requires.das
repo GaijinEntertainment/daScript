@@ -4,6 +4,7 @@ options indenting = 4
 
 require ../tools/common.das public
 require daslib/json_boost
+require daslib/cmp
 
 //! Subprocess form of list_requires. Argv (after daslang exe + script path):
 //!   <file> <project> <json>  (json = "true" or "false")
@@ -101,9 +102,7 @@ def run_list_requires(file : string; project : string = ""; json : bool = false)
             }
         }
         if (json) {
-            sort(transitive_entries) $(a, b : RequireEntry) {
-                return a.name < b.name
-            }
+            sort(transitive_entries) <| cmp_by(_.name)
             let result = RequiresResult(direct <- direct_entries, transitive <- transitive_entries)
             return sprint_json(result, false)
         }

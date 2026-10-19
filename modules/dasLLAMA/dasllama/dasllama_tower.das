@@ -11,6 +11,7 @@ require dasllama/dasllama_gpu_math
 require dasllama/dasllama_plane public   // PlaneF/PlaneU16 — plane forms of the blob helpers
 require dasllama/dasllama_par
 require dasllama/dasllama_gguf   // read_clamp reads sidecar scalar tensors
+require daslib/cmp
 
 // The family-neutral encoder-tower home: the row math, activations, GEMM wrappers, clamp
 // sidecars, patch geometry, blocked bidirectional attention, and the encode-stage prof rail
@@ -1124,7 +1125,7 @@ def asr_prof_report() {
         rows |> push((name = k, us = v))
         total += v
     }
-    rows |> sort() $(a, b) => a.us > b.us
+    rows |> sort() <| cmp_by(-_.us)
     for (r in rows) {
         let hits = g_asr_prof_hits?[r.name] ?? 0l
         let pct = total > 0l ? double(r.us) * 100.0lf / double(total) : 0.0lf

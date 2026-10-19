@@ -1,5 +1,6 @@
 options gen2
 
+require daslib/cmp
 require dastest/testing_boost public
 
 require daslib/sql
@@ -53,12 +54,7 @@ def sorted_strings(var a : array<string>) : array<string> {
 
 def sorted_int_pairs(cars : array<Car>) : array<tuple<int; int>> {
     var pairs <- [for (c in cars); (c.Id, c.Price)]
-    pairs |> sort() $(a, b) {
-        if (a._0 != b._0) {
-            return a._0 < b._0
-        }
-        return a._1 < b._1
-    }
+    pairs |> sort() <| cmp_by(_._0, _._1)
     return <- pairs
 }
 

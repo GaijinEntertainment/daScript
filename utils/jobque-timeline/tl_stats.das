@@ -5,6 +5,7 @@ module tl_stats shared
 
 require tl_model
 require math
+require daslib/cmp
 
 // Computed statistics for a time range of a TraceDoc — the chips the HTML artifact
 // hand-wrote. Cached per (range, generation); recomputed only when the key changes.
@@ -66,9 +67,7 @@ def public compute_range_stats(doc : TraceDoc; t0, t1 : double) : RangeStats {
                 pct = float(cat_busy[c] / max(st.busy_us, 1.0e-9lf)) * 100.0f))
         }
     }
-    st.cat |> sort() $(a, b : CatStat) {
-        return a.busy_us > b.busy_us
-    }
+    st.cat |> sort() <| cmp_by(-_.busy_us)
     delete cat_busy
     return <- st
 }

@@ -143,9 +143,7 @@ def private calc_sample_stats(var dst : SampleStats) : string {
 def filter_outliers(var values : array<double>) : array<double> {
     // The algorithm below requires values being sorted.
     // https://en.wikipedia.org/wiki/Outlier ctrl+f Tukey's fences
-    sort(values) $(x, y) {
-        return x < y
-    }
+    sort(values)
 
     let q1 = percentile(values, 0.25lf)
     let q3 = percentile(values, 0.75lf)

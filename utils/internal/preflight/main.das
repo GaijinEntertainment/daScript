@@ -31,6 +31,7 @@ require ../../common/text_lines.das
 require ../../../dastest/worker_policy.das
 require config
 require compile_db
+require daslib/cmp
 
 
 [CommandLineArgs]
@@ -1983,9 +1984,7 @@ def main() : int { // nolint:STYLE037,STYLE038 — the gate loop + CLI surface; 
     to_log(n_fail > 0 ? LOG_ERROR : LOG_INFO,
         "\npreflight: {n_pass} passed, {n_fail} failed, {n_skip} skipped in {total_s}s\n")
     var timed <- [for (r in results); (name = r.name, secs = r.seconds); where r.seconds > 0.05lf]
-    sort(timed) $(a, b) {
-        return a.secs > b.secs
-    }
+    sort(timed) <| cmp_by(-_.secs)
     if (length(timed) > 1 && total_d > 0.0lf) {
         to_log(LOG_INFO, "preflight: time by gate:\n")
         for (t in timed) {

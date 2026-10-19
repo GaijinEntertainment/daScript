@@ -20,6 +20,7 @@ require daslib/ast_boost
 require daslib/strings_boost
 require daslib/regex
 require daslib/regex_boost
+require daslib/cmp
 
 enum public DocumentBlock {
     Typedefs,
@@ -1692,7 +1693,7 @@ def document_structure_annotation(doc_file : file; mod : Module?; value) {
         fields |> emplace((name = name, typ = describe_type(xtype), offset = offset))
     }
 
-    fields |> sort($(a, b) => a.offset < b.offset)
+    fields |> sort(cmp_by(_.offset))
     tab |> reserve(length(fields))
     for (f in fields) {
         var inscope line : array<string>
@@ -2064,7 +2065,7 @@ def document_functions(doc_file : file; mods : array<Module?>; var groups : arra
                 if (grp.hidden) {
                     document_warning(doc_file, "This group of functions is hidden. It will not be in the final documentation.")
                 }
-                grp.func |> sort($(a, b) => rst_describe_function_short(a.fn) < rst_describe_function_short(b.fn))
+                grp.func |> sort(cmp_by(rst_describe_function_short(_.fn)))
                 for (func in grp.func) {
                     if (!key_exists(tab, func.fn)) {
                         let descr = rst_describe_function_short(func.fn)

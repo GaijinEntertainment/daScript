@@ -4,6 +4,7 @@ options persistent_heap
 require dastest/testing_boost
 require math
 require daslib/strings_boost
+require daslib/cmp
 
 let N = 100000
 let M = 50000
@@ -265,15 +266,11 @@ class Shape {
 }
 
 class Circle : Shape {
-    def override area(k : int) : int {
-        return k * 2
-    }
+    def override area(k : int) : int => k * 2
 }
 
 class Square : Shape {
-    def override area(k : int) : int {
-        return k * 3
-    }
+    def override area(k : int) : int => k * 3
 }
 
 struct private Bag {
@@ -365,7 +362,7 @@ def pipelines(b : B?) {
     let ka <- make_keys(K, "")
     b |> run("sort_block/{K}", K) {
         var a := src
-        a |> sort() $(x, y : int) => x > y
+        a |> sort() <| cmp_by(-_)
         g_sink += int64(a[0])
         delete a
     }

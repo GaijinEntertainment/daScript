@@ -8,6 +8,7 @@ require imgui/imgui_text_source_edit public
 require math
 require strings
 require daslib/strings_boost
+require daslib/cmp
 
 //! Completion carrier: ONE async interface every provider feeds. A request
 //! is (revision, caret, prefix) with a token; providers answer through
@@ -106,11 +107,7 @@ def private collect_document_words(ed : TextEditState const; prefix : string;
     for (word, count in keys(counts), values(counts)) {
         ranked |> push((word, count))
     }
-    ranked |> sort() $(a, b) {
-        return a._1 > b._1 if (a._1 != b._1)
-        return length(a._0) < length(b._0) if (length(a._0) != length(b._0))
-        return a._0 < b._0
-    }
+    ranked |> sort() <| cmp_by(-_._1, length(_._0), _._0)
     items |> reserve(length(items) + length(ranked))
     for (entry in ranked) {
         items |> push(entry._0)

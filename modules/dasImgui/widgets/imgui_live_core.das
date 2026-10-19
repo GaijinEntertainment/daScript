@@ -21,6 +21,7 @@ require live/live_commands
 require live_host
 require math
 require strings
+require daslib/cmp
 
 // ---------------------------------------------------------------------------
 // Mouse driver
@@ -128,9 +129,7 @@ struct MousePlayArgs {
 
 def public sort_mouse_play_events(var events : array<MouseEventWire>) {
     //! Sort wire-format mouse events ascending by ``t_ms`` in place — call before feeding ``imgui_mouse_play`` so the timeline drains in chronological order.
-    events |> sort() $(a, b : MouseEventWire) {
-        return a.t_ms < b.t_ms
-    }
+    events |> sort() <| cmp_by(_.t_ms)
 }
 
 [live_command(description="Play a scripted mouse timeline via ImGui bypass. Args: events array of (t_ms, kind, x, y, button, action)")]
@@ -503,9 +502,7 @@ struct KeyPlayArgs {
 
 def public sort_key_play_events(var events : array<KeyEventWire>) {
     //! Sort wire-format key events ascending by ``t_ms`` in place — call before feeding ``imgui_key_play`` so the timeline drains in chronological order.
-    events |> sort() $(a, b : KeyEventWire) {
-        return a.t_ms < b.t_ms
-    }
+    events |> sort() <| cmp_by(_.t_ms)
 }
 
 [live_command(description="Play a scripted key/char timeline via ImGui bypass. Args: events array of (t_ms, kind, key, codepoint); optional frame_paced (t_ms as frame index for repeat-proof discrete taps)")]

@@ -5,6 +5,7 @@ require gltf/gltf_processed
 require daslib/fio
 require daslib/clargs
 require strings
+require daslib/cmp
 
 def private convert_inputs(inputs : array<string>; root, output : string; binary, force : bool; profile : ProcessingProfile; var catalog : ProcessedCatalog) : int2 {
     var converted = 0; var skipped = 0
@@ -65,7 +66,7 @@ def main(){
     sscan_json(fread("{output}/asset-build.json"), catalog)
     prepare_processed_catalog(catalog, full_regeneration)
     let totals = convert_inputs(inputs, root, output, binary, force, profile, catalog)
-    sort(catalog.assets) $(a, b) => a.path < b.path
+    sort(catalog.assets) <| cmp_by(_.path)
     if (!fwrite("{output}/asset-build.json", sprint_json(catalog, false))){panic("Could not write asset build manifest")}
     delete catalog
     print("Done: {totals.x} converted, {totals.y} unchanged. Output: {output}\n")

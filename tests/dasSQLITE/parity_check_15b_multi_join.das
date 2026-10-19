@@ -1,5 +1,6 @@
 options gen2
 
+require daslib/cmp
 require dastest/testing_boost public
 
 require daslib/sql
@@ -87,15 +88,7 @@ def fixture_items() : array<Item> {
 }
 
 def sort_by_user_sku(var rows : array<auto(R)>) {
-    rows |> sort() $(a, b) {
-        if (a.UserName != b.UserName) {
-            return a.UserName < b.UserName
-        }
-        if (a.OrderTotal != b.OrderTotal) {
-            return a.OrderTotal < b.OrderTotal
-        }
-        return a.Sku < b.Sku
-    }
+    rows |> sort() <| cmp_by(_.UserName, _.OrderTotal, _.Sku)
 }
 
 [test]
