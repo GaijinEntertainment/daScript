@@ -12,6 +12,11 @@ require daslib/strings_boost
 require daslib/cmp
 require daslib/lint_config
 
+//! The message a funnel reports: ``text``, plus a ``--fix`` hint when
+//! ``fix`` holds an edit.
+def public lint_fix_message(text : string; fix : LintFix) : string =>
+    fix.line > 0 ? "{text} (fixable: run lint with --fix)" : text
+
 //! A fix replacing the source range ``at`` with ``replacement``.
 def public lint_fix(at : LineInfo; replacement : string) : LintFix =>
     LintFix(line = int(at.line), column = int(at.column), last_line = int(at.last_line),
@@ -150,6 +155,77 @@ def public lint_token_fix(at : LineInfo; ln, col : int; token, replacement : str
         || slice(lint_source_line(at, ln), col, col + length(token)) != token) return LintFix()
     return LintFix(line = ln, column = col, last_line = ln, last_column = col + length(token),
                    replacement = replacement)
+}
+
+class private LintNameVisitor : AstVisitor {
+    counts : table<string; int>
+    def bump(name : string) : void {
+        counts[name] = (counts?[name] ?? 0) + 1
+    }
+    def override preVisitExprVar(expr : ExprVar?) : void {
+        bump(string(expr.name))
+    }
+    def override preVisitExprCall(expr : ExprCall?) : void {
+        bump(string(expr.name))
+    }
+    def override preVisitExprLetVariable(expr : ExprLet?; arg : VariablePtr;
+                                         lastArg : bool) : void {
+        bump(string(arg.name))
+    }
+    def override preVisitExprForVariable(expr : ExprFor?; svar : VariablePtr; last : bool) : void {
+        bump(string(svar.name))
+    }
+    def override preVisitExprBlockArgument(blk : ExprBlock?; arg : VariablePtr;
+                                           lastArg : bool) : void {
+        bump(string(arg.name))
+    }
+}
+
+//! How often each name is read or declared under ``e`` - variable
+//! reads, calls, locals, loop and block variables.
+def public lint_name_counts(var e : Expression?) : table<string; int> {
+    var astVisitor = new LintNameVisitor()
+    if (e != null) {
+        make_visitor(*astVisitor) $(adapter) {
+            visit(e, adapter)
+        }
+    }
+    var counts <- astVisitor.counts
+    unsafe {
+        delete astVisitor
+    }
+    return <- counts
+}
+
+//! Every name ``fn`` declares or reads - arguments, the fields of its
+//! class, and every name ``lint_name_counts`` finds in its body.
+def public lint_function_names(var fn : Function?) : table<string> {
+    var names : table<string>
+    for (arg in fn.arguments) {
+        names |> insert(string(arg.name))
+    }
+    if (fn.classParent != null) {
+        for (fld in fn.classParent.fields) {
+            names |> insert(string(fld.name))
+        }
+    }
+    for (name in keys(lint_name_counts(fn.body))) {
+        names |> insert(name)
+    }
+    return <- names
+}
+
+//! Whether argument ``k`` of ``call`` is not written in the source:
+//! hidden, or a default the compiler filled in, which carries a range
+//! that starts outside the call's own text.
+def public lint_unwritten_arg(call : ExprCall?; k : int) : bool {
+    let arg = call.arguments[k]
+    if (arg.genFlags.generated) return true
+    if (call.func == null || k >= length(call.func.arguments)
+        || call.func.arguments[k].init == null) return false
+    let at = call.at
+    return (arg.at.fileInfo != at.fileInfo || arg.at.line < at.line || arg.at.line > at.last_line
+            || (arg.at.line == at.line && arg.at.column <= at.column))
 }
 
 //! Whether the module of ``fn`` sees module ``name`` - itself, a

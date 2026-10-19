@@ -1469,7 +1469,7 @@ def document_module_lint(_root : string) {
 def document_module_lint_fixups(_root : string) {
     var mod = find_module("lint_fixups")
     var groups <- array<DocGroup>(
-        group_by_regex("Fixes", mod, %regex~(lint_fix_message|lint_fix|lint_range|lint_span_text|lint_expr_text|lint_has_comment|lint_replace_fix|lint_merge_fixes|lint_is_operand|lint_operand_text|lint_indent_of|lint_fills_lines|lint_token_fix|lint_function_names|lint_module_visible)$%%)
+        group_by_regex("Fixes", mod, %regex~(lint_fix_message|lint_fix|lint_range|lint_span_text|lint_expr_text|lint_has_comment|lint_replace_fix|lint_span_fix|lint_call_fix|lint_fix_site_ok|lint_merge_fixes|lint_unwritten_arg|lint_is_operand|lint_operand_text|lint_indent_of|lint_fills_lines|lint_token_fix|lint_name_counts|lint_function_names|lint_module_visible)$%%)
     )
     document("Lint fix helpers", mod, "lint_fixups.rst", groups)
 }
