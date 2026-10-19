@@ -187,14 +187,20 @@ shared-KV layer - so serves a block codec with no stamp of its own, and no exist
 moves. The staged planes ride the
 window chain's V-staging hazard bit (`VHZ_VST`), idle in the token command.
 
-**The decode attention reads the blocks natively; the query stays f32.** `DaAttnT`'s `KVQ8` and
-`KVTQ4` constants replace the pass's row loads: a thread loads its block's scale once and the
-quants as words - a block starts 0 or 2 bytes off a word, and the load shifts by that skew
-(`kv_blk_scale`, `kv_skew_word`). `da_attn_stamp_ensure` / `_set` / `_enc` pick the stamp by the
-mirror's codec, the sinks and the slab. The CPU
-chain quantizes the query to Q8_0 for an integer dot, so the two chains agree to the query's
-quantization and not bit for bit: under q8_0 Qwen2.5-0.5B's logits read 0.4-0.7 apart at a 10-18
-max logit.
+**The decode attention reads the blocks natively and scores them with the packed integer dot.**
+`DaAttnT`'s `KVQ8` and `KVTQ4` constants replace the pass's row loads: a thread loads its block's
+scale once and the quants as words - a block starts 0 or 2 bytes off a word, and the load shifts by
+that skew (`kv_blk_scale`, `kv_skew_word`). A block-codec stamp (`KVBLK`) first quantizes the slab's
+query rows to q8_0 blocks in the workgroup, a thread a block (`qq`, the words; `qsc`, the scales),
+the CPU chain's own query quantization, and a K word then scores against a query word in one
+`sdot4` (`VK_KHR_shader_integer_dot_product`, the feature the Q8 batch tile already needs), the
+block's integer sum scaled by both scales at its end; a tq4 word's nibbles score as their two
+byte-expanded halves (the even elements' word and the odd's) against a query packed the same way,
+the nibble's -8 offset paid once a block as eight times the block's query sum (`qsum`). The two
+chains so agree to the query's quantization and not bit for bit: under q8_0 Qwen2.5-0.5B's logits
+read 0.4-0.7 apart at a 10-18 max logit. The V accumulate stays a float multiply of the probability
+and the dequantized quant: it carries no integer form. `da_attn_stamp_ensure` / `_set` / `_enc`
+pick the stamp by the mirror's codec, the sinks and the slab.
 
 **The prefill's attention reads an f16 shadow.** The flash tiles and the chunked pair load K and V
 through tensor layouts in f16 stamps, which a block's interleaved scale does not fit. Before a

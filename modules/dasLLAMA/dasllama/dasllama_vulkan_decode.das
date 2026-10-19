@@ -2424,7 +2424,7 @@ def rd_enc_kv_store(raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSe
                     ring : int64) {
     if (rd_kvq8() && nkh > 0l) {
         var pcs = KvQStoreArgs(kvd = uint(kvd), rows = uint(rows), layerbase = layerbase, pos0 = pos0, ring = uint(ring))
-        let wgs = (kv_row_units(KVDtype.q8_0, kvd) * rows + int64(WG_X) - 1l) / int64(WG_X)
+        let wgs = (kv_row_units(KVDtype.q8_0, kvd) * rows * 32l + int64(WG_X) - 1l) / int64(WG_X)   // a lane an element
         if (window) {
             enc_kv_q8_store_b_cls(raw, h, s, pcs, wgs)
         } else {
