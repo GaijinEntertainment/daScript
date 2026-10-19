@@ -28,6 +28,7 @@ struct public CommandArgumentInfo {
     is_count : bool
     mutex_group : string
     enum_values : array<string>
+    optional_value : bool
 }
 
 struct public CommandInfo {
@@ -276,7 +277,9 @@ def public find_flag_raw_value(args : array<string>; arg_info : CommandArgumentI
     for (i in range(length(args))) {
         let arg = args[i]
         if (arg == arg_info.flag_name || (has_short && arg == arg_info.short_flag_name)) {
-            if (i + 1 < length(args)) {
+            if (arg_info.optional_value) {
+                result = some("")
+            } elif (i + 1 < length(args)) {
                 result = some(args[i + 1])
             }
         } elif (starts_with(arg, long_prefix)) {
@@ -420,8 +423,9 @@ def private declared_flag_span(args : array<string>; i : int; info : CommandInfo
         let exact = arg == a.flag_name || (has_short && arg == a.short_flag_name)
         let prefixed = starts_with(arg, "{a.flag_name}=") || (has_short && starts_with(arg, "{a.short_flag_name}="))
         if (exact || prefixed) {
-            let is_bool_simple = (a.value_type == Type.tBool && !a.is_array)
-            return (exact && !is_bool_simple && !a.is_count && i + 1 < length(args)) ? 2 : 1
+            let takes_no_token = ((a.value_type == Type.tBool && !a.is_array)
+                || a.is_count || a.optional_value)
+            return (exact && !takes_no_token && i + 1 < length(args)) ? 2 : 1
         }
     }
     return 0
@@ -535,7 +539,7 @@ def value_placeholder(arg : CommandArgumentInfo) : string {
     if (arg.value_type == Type.tInt) return "=INT"
     if (arg.value_type == Type.tFloat) return "=FLOAT"
     if (arg.value_type == Type.tEnumeration) return "=ENUM"
-    return "=STRING"
+    return arg.optional_value ? "[=STRING]" : "=STRING"
 }
 
 def render_flag_spec(arg : CommandArgumentInfo) : string {
@@ -786,6 +790,15 @@ class ArgsMacro : AstStructureAnnotation {
         return "-{short_char}"
     }
 
+    def resolve_optional_value(fannotations : AnnotationArgumentList; var arg : CommandArgumentInfo;
+                               var errors : das_string&) {
+        arg.optional_value = find_bool_annotation(fannotations, "clarg_optional_value", false)
+        let string_flag = arg.is_optional_wrap && arg.value_type == Type.tString
+        if (arg.optional_value && (arg.is_positional || arg.is_array || !string_flag)) {
+            errors := "field '{arg.field_name}': @clarg_optional_value is for Option<string> flags"
+        }
+    }
+
     def validate_positional(var arg : CommandArgumentInfo; fannotations : AnnotationArgumentList;
                             var has_array_tail, saw_optional_positional : bool&; var errors : das_string&) {
         if (arg.value_type != Type.tString) {
@@ -877,6 +890,9 @@ class ArgsMacro : AstStructureAnnotation {
                     return <- result
                 }
             }
+
+            resolve_optional_value(field.annotation, arg, errors)
+            if (!empty(errors)) return <- result
 
             arg.doc_string = find_string_annotation(field.annotation, "clarg_doc", "")
             arg.env_name = resolve_env_name(field.annotation, "{field.name}", raw_name, env_prefix,
