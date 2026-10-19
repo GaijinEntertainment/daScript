@@ -14,6 +14,7 @@ require daslib/strings_boost
 require daslib/ast_boost
 require daslib/strings_boost
 require daslib/lint_config
+require daslib/lint_fixups
 require math
 
 [lint_macro]
@@ -152,6 +153,13 @@ def private lint022_is_skipped(fn : Function?; mod : Module?) : bool {
         || fn.fromGeneric != null || fn.isGeneric || fn.moreFlags.isTemplate
         || length(fn.annotations) > 0
         || fn.at.fileInfo == null || fn._module != mod)
+}
+
+//! a read of a LINT004 candidate and its rename, applied with its
+//! declaration's
+struct private Lint004Use {
+    @do_not_delete v : Variable const?
+    fix : LintFix
 }
 
 struct private Lint023Candidate {
@@ -557,10 +565,149 @@ def private lint_value_source(e : Expression const?) : Expression const? {
     return prop && length(call.arguments) > 0 ? call.arguments[0] : null
 }
 
+def private lint_start(at : LineInfo) : int2 => int2(int(at.line), int(at.column))
+
+//! The source text of each argument ``call`` spells, hidden and
+//! filled-in defaults skipped; empty when one has no text
+def private lint_written_args(call : ExprCall?) : array<string> {
+    var texts : array<string>
+    if (call.func == null) return <- texts
+    for (arg, k in call.arguments, count()) {
+        continue if (arg.genFlags.generated)
+        break if (lint_unwritten_arg(call, k))
+        let text = lint_expr_text(arg)
+        if (empty(text)) {
+            texts |> clear()
+            return <- texts
+        }
+        texts |> push(text)
+    }
+    return <- texts
+}
+
+//! Deletes the unreachable statement ``e`` when it fills whole lines
+//! and holds no comment
+def private lint001_fix(e : Expression?) : LintFix {
+    if (!lint_fills_lines(e, false) || lint_has_comment(lint_expr_text(e))) return LintFix()
+    return LintFix(line = int(e.at.line), column = 0, last_line = int(e.at.last_line) + 1,
+                   last_column = 0, replacement = "")
+}
+
+//! The shared branch of ``c ? x : x``, when evaluating ``c`` has no
+//! effect to keep
+def private lint008_fix(expr : ExprOp3?) : LintFix {
+    if (expr.subexpr == null || !expr.subexpr.flags.noSideEffects) return LintFix()
+    return lint_replace_fix(expr, lint_expr_text(expr.left))
+}
+
+//! The then-branch replacing an ``if (c) {A} else {A}`` statement on
+//! its own lines when ``c`` is pure - its statements dedented in
+//! place, or the bare block when one declares
+def private lint009_fix(expr : ExprIfThenElse?) : LintFix {
+    if (expr.cond == null || !expr.cond.flags.noSideEffects
+        || !(expr.if_true is ExprBlock)) return LintFix()
+    let blk = expr.if_true as ExprBlock
+    if (!lint_fills_lines(expr, false) || empty(blk.list)
+        || lint_has_comment(lint_expr_text(expr))) return LintFix()
+    var declares = false
+    for (s in blk.list) {
+        declares ||= s is ExprLet
+    }
+    let first_e = declares ? expr.if_true : blk.list[0]
+    let last_e = declares ? expr.if_true : blk.list |> back()
+    if (first_e.genFlags.generated || last_e.genFlags.generated) return LintFix()
+    var head = expr.at
+    head.last_line = first_e.at.line
+    head.last_column = first_e.at.column
+    var tail = expr.at
+    tail.line = last_e.at.last_line
+    tail.column = last_e.at.last_column
+    var edits <- [lint_fix(head, ""), lint_fix(tail, "")]
+    let indent = int(expr.at.column)
+    let body_indent = int(first_e.at.column)
+    if (!declares && first_e.at.line != expr.at.line) {
+        for (ln in range(int(first_e.at.line) + 1, int(last_e.at.last_line) + 1)) {
+            let line = lint_source_line(expr.at, ln)
+            continue if (empty(strip(line)))
+            return LintFix() if (lint_indent_of(line) < body_indent)
+            edits |> push(
+                          LintFix(line = ln, column = indent, last_line = ln,
+                                  last_column = body_indent, replacement = ""))
+        }
+    } elif (!declares && last_e.at.last_line != expr.at.line) {
+        return LintFix()
+    }
+    return lint_merge_fixes(expr.at, edits)
+}
+
+//! ``widen(arg)`` around the 64-bit operand of a narrowing cast, or
+//! the operand alone when ``widen`` is empty
+def private lint018_fix(narrow : ExprCall?; widen : string) : LintFix {
+    let inner = lint_expr_text(narrow.arguments[0])
+    return lint_replace_fix(narrow, empty(widen) || empty(inner) ? inner : "{widen}({inner})")
+}
+
+//! ``twin(a, b)`` for ``call(narrow(a), narrow(b))`` when every
+//! argument narrows a ``wide`` value
+def private lint020_fix(call : ExprCall?; twin, narrow : string; wide : Type) : LintFix {
+    var args : array<string>
+    for (a in call.arguments) {
+        return LintFix() if (!(a is ExprCall))
+        let c = a as ExprCall
+        return LintFix() if (c.name != narrow || length(c.arguments) != 1
+                             || c.arguments[0]._type == null
+            || c.arguments[0]._type.baseType != wide)
+        let text = lint_expr_text(c.arguments[0])
+        return LintFix() if (empty(text))
+        args |> push(text)
+    }
+    return lint_call_fix(call, twin, args)
+}
+
+//! The last line of a structure or enumeration declared at ``at`` -
+//! the ``}`` right below the last of its members, which end on
+//! ``member_lines``; 0 when that line is anything else
+def private lint022_struct_close(at : LineInfo; member_lines : array<int>) : int {
+    var last = 0
+    for (ln in member_lines) {
+        last = max(last, ln)
+    }
+    return last > 0 && strip(lint_source_line(at, last + 1)) == "\}" ? last + 1 : 0
+}
+
+//! Deletes the unused declaration from the ``keyword`` line at ``at``
+//! through line ``close`` with its ``//!`` lines and one surplus
+//! blank line; none under an annotation or plain comment
+def private lint022_fix(at : LineInfo; keyword : string; close : int) : LintFix {
+    let first = int(at.line)
+    let head = lint_source_line(at, first)
+    if (close < first || !starts_with(strip_left(head), "{keyword} ")
+        || lint_has_comment(head)) return LintFix()
+    var top = first
+    while (top > 1 && starts_with(strip(lint_source_line(at, top - 1)), "//!")) {
+        top--
+    }
+    let above = top > 1 ? strip(lint_source_line(at, top - 1)) : ""
+    if (starts_with(above, "//") || starts_with(above, "[")) return LintFix()
+    var next_exists = false
+    get_file_source_line(at.fileInfo, uint(close + 1)) $(_line) {
+        next_exists = true
+    }
+    let drop_blank = empty(above) && next_exists && empty(strip(lint_source_line(at, close + 1)))
+    return LintFix(line = top, column = 0, last_line = close + (drop_blank ? 2 : 1),
+                   last_column = 0, replacement = "")
+}
+
 class LintVisitor : AstVisitor {
     lint030_frames : array<Lint030Frame>
     @do_not_delete lint014_candidates : array<Variable const?>
     @do_not_delete lint003_deferred : array<Variable const?>
+    @do_not_delete lint004_deferred : array<Variable const?>
+    lint004_uses : array<Lint004Use>
+    @do_not_delete lint_fun : Function?
+    lint_fun_names : table<string>
+    lint_fun_names_ready : bool
+    @do_not_delete lint_expr_stack : array<Expression?>
     @do_not_delete lint_mut_result : TypeDecl const?
     lint023_candidates : array<Lint023Candidate>
     lint023_store_nodes : table<uint64>
@@ -607,15 +754,16 @@ class LintVisitor : AstVisitor {
     def lint_error(text : string; at : LineInfo; fix : LintFix = LintFix()) : void {
         if (noLint || is_suppressed(text, at)
                 || (at.fileInfo != null && !empty(funcFile) && at.fileInfo.name != funcFile)) return
+        let msg = lint_fix_message(text, fix)
         if (compile_time_errors) {
-            compiling_program() |> macro_error(at, text)
+            compiling_program() |> macro_error(at, msg)
         } elif (collect_errors) {
-            errors |> push("{text} at {describe(at)}")
+            errors |> push("{msg} at {describe(at)}")
             var issue = make_lint_issue(text, at)
             issue.fix = fix
             issues |> push(issue)
         } else {
-            error("{text} at {describe(at)}\n")
+            error("{msg} at {describe(at)}\n")
         }
     }
     def private is_temporary_string_source(expr : Expression?) : bool {
@@ -712,10 +860,12 @@ class LintVisitor : AstVisitor {
         lint031_writers |> clear()
     }
 
-    def override preVisitFunction(fun : FunctionPtr) : void {
+    def override preVisitFunction(var fun : FunctionPtr) : void {
         noLint = lint022_generic_sweep
         lint_mut_result = fun.result
         funcFile = fun.at.fileInfo != null ? "{fun.at.fileInfo.name}" : ""
+        lint_fun = fun
+        lint_fun_names_ready = false
         lint022_self_struct = null
         if (fun.flags.isClassMethod || fun.flags.generated) {
             if (fun.result != null && fun.result.structType != null) {
@@ -802,8 +952,14 @@ class LintVisitor : AstVisitor {
                 lint_error("LINT003: variable {v.name}: {describe(v._type)} can be made const (declare with 'let')", v.at, lint_var_keyword_fix(v.at, false))
             }
         }
+        for (v in lint004_deferred) {
+            lint_error("LINT004: variable '{v.name}' is used and should be named without " +
+                "underscore prefix", v.at, lint004_fix(v))
+        }
         lint014_candidates |> clear()
         lint003_deferred |> clear()
+        lint004_deferred |> clear()
+        lint004_uses |> clear()
         if (!noLint && genericDepth == 0) {
             for (c in lint023_candidates) {
                 if (!c.disqualified && c.stores > 0 && !flow_jumps) {
@@ -878,7 +1034,7 @@ class LintVisitor : AstVisitor {
     def override visitExprBlockExpression(_blk : ExprBlock?; var expr : ExpressionPtr) : ExpressionPtr {
         let lb = exprForTerminator |> back()
         if (lb != 0ul) {
-            lint_error("LINT001: unreachable code", expr.at)
+            lint_error("LINT001: unreachable code", expr.at, lint001_fix(expr))
         }
         if (!noLint && genericDepth == 0 && expr is ExprOp1 && !expr.genFlags.generated) {
             let op1 = expr as ExprOp1
@@ -934,25 +1090,34 @@ class LintVisitor : AstVisitor {
         if (name |> starts_with("_")) {
             if (name |> ends_with("_")) return
             if (v.access_flags.access_ref || v.access_flags.access_pass || v.access_flags.access_get || v.access_flags.access_fold) {
-                lint_error("LINT004: variable '{v.name}' is used and should be named without underscore prefix", v.at)
-                return
+                if (genericDepth == 0) {
+                    lint004_deferred |> push(v)
+                } else {
+                    lint_error("LINT004: variable '{v.name}' is used and should be named without " +
+                        "underscore prefix", v.at)
+                }
             }
             return
         }
+        let unused_fix = genericDepth == 0 ? underscore_fix(v) : LintFix()
         if (v.isAccessUnused) {
-            lint_error("LINT002: unused variable {v.name}: {describe(v._type)} (add an underscore prefix if you really need it)", v.at)
+            lint_error("LINT002: unused variable {v.name}: {describe(v._type)} (add an " +
+                "underscore prefix if you really need it)", v.at, unused_fix)
             return
         }
         if (!v.access_flags.access_ref && !v.access_flags.access_pass && v.init != null && v.init |> is_expr_const() && !v.access_flags.access_fold) {
-            lint_error("LINT002: unused variable {v.name}: {describe(v._type)} (add an underscore prefix if you really need it)", v.at)
+            lint_error("LINT002: unused variable {v.name}: {describe(v._type)} (add an " +
+                "underscore prefix if you really need it)", v.at, unused_fix)
             return
         }
         if (!v.access_flags.access_ref && !v.access_flags.access_pass && !v.access_flags.access_get && (v.init == null || v.init.flags.noSideEffects) && !v.access_flags.access_fold) {
-            lint_error("LINT002: unused variable {v.name}: {describe(v._type)} (add an underscore prefix if you really need it)", v.at)
+            lint_error("LINT002: unused variable {v.name}: {describe(v._type)} (add an " +
+                "underscore prefix if you really need it)", v.at, unused_fix)
             return
         }
         if (!v.access_flags.access_get && !v.access_flags.access_ref && (v.init == null)) {
-            lint_error("LINT002: variable {v.name}: {describe(v._type)} is never used", v.at)
+            lint_error("LINT002: variable {v.name}: {describe(v._type)} is never used", v.at,
+                       unused_fix)
             return
         }
         if (can_make_const && (v.flags.inScope || v.access_info.access_info_pass_mutable)) return
@@ -970,13 +1135,51 @@ class LintVisitor : AstVisitor {
         }
     }
 
-    def validate_argument(v : VariablePtr; code, kind : string) {
+    def validate_argument(v : VariablePtr; code, kind : string; renamable : bool) {
+        //! ``renamable``: no call site can name the argument from outside the
+        //! module, so the underscore prefix is a fix
         if (noLint || genericDepth > 0 || v.flags.generated || v.flags.marked_used) return
         let name = string(v.name)
         if (name |> starts_with("_") || find(name, "`") >= 0) return
         if (v.isAccessUnused) {
-            lint_error("{code}: unused {kind} {v.name}: {describe(v._type)} (add an underscore prefix or [unused_argument({v.name})] if intentional)", v.at)
+            lint_error("{code}: unused {kind} {v.name}: {describe(v._type)} (add an underscore " +
+                "prefix or [unused_argument({v.name})] if intentional)", v.at, renamable
+                    ? underscore_fix(v) : LintFix())
         }
+    }
+
+    //! whether the function being walked declares or reads ``name``
+    def fun_name_taken(name : string) : bool {
+        if (!lint_fun_names_ready && lint_fun != null) {
+            lint_fun_names <- lint_function_names(lint_fun)
+            lint_fun_names_ready = true
+        }
+        return key_exists(lint_fun_names, name)
+    }
+
+    //! prefixes the unused ``v`` with an underscore, unless the function
+    //! already names the prefixed spelling
+    def underscore_fix(v : Variable const?) : LintFix {
+        let name = string(v.name)
+        if (fun_name_taken("_{name}")) return LintFix()
+        return lint_token_fix(v.at, int(v.at.line), int(v.at.column), name, "_{name}")
+    }
+
+    //! renames a used ``_name`` local and every read of it, when each
+    //! read is spelled in source and the function names the bare spelling
+    //! nowhere
+    def lint004_fix(v : Variable const?) : LintFix {
+        let name = string(v.name)
+        let bare = slice(name, 1)
+        if (!is_alpha(first_character(bare)) || fun_name_taken(bare)) return LintFix()
+        var edits <- [lint_token_fix(v.at, int(v.at.line), int(v.at.column), name, bare)]
+        for (u in lint004_uses) {
+            edits |> push(u.fix) if (u.v == v)
+        }
+        for (e in edits) {
+            return LintFix() if (e.line == 0)
+        }
+        return lint_merge_fixes(v.at, edits)
     }
 
     def validate_unwritten_var_argument(fun : FunctionPtr; v : VariablePtr) {
@@ -1064,7 +1267,7 @@ class LintVisitor : AstVisitor {
         for (ann in fun.annotations) {
             if (ann.annotation.name == "extern") return
         }
-        validate_argument(arg, "LINT012", "function argument")
+        validate_argument(arg, "LINT012", "function argument", fun.flags.privateFunction)
         validate_unwritten_var_argument(fun, arg)
         lint023_collect_candidate(arg)
         lint029_collect_candidate(fun, arg)
@@ -1110,7 +1313,7 @@ class LintVisitor : AstVisitor {
     }
 
     def override preVisitExprBlockArgument(_blk : ExprBlock?; arg : VariablePtr; _lastArg : bool) : void {
-        validate_argument(arg, "LINT013", "block argument")
+        validate_argument(arg, "LINT013", "block argument", true)
     }
 
     def lint017_long_twin(fname : string; icall : ExprCall?) : string {
@@ -1125,6 +1328,18 @@ class LintVisitor : AstVisitor {
         return ""
     }
 
+    //! The 64-bit twin of the 32-bit count ``call`` - ``long_length(x)``
+    //! for ``length(x)`` - with its written arguments; "" when it has
+    //! none
+    def lint017_twin_call(call : ExprCall?) : string {
+        let name = string(call.func != null
+                          && call.func.fromGeneric != null ? call.func.fromGeneric.name : call.name)
+        let twin = lint017_long_twin(name, call)
+        if (empty(twin)) return ""
+        let args <- lint_written_args(call)
+        return empty(args) ? "" : "{twin}({join(args, ", ")})"
+    }
+
     def lint017_is_32bit_parse(fname : string; icall : ExprCall?) : bool {
         if (fname != "to_int" && fname != "to_uint") return false
         let nargs = length(icall.arguments)
@@ -1137,6 +1352,10 @@ class LintVisitor : AstVisitor {
     def lint017_parse_remedy(cast_name : string; iname : string; icall : ExprCall?) : string {
         let str_arg = describe(icall.arguments[0])
         let hex = length(icall.arguments) >= 2 ? describe(icall.arguments[1]) : "false"
+        return lint017_widened_parse(cast_name, iname, str_arg, hex)
+    }
+
+    def lint017_widened_parse(cast_name, iname, str_arg, hex : string) : string {
         let widened = "{iname}64({str_arg}, {hex})"
         let same_sign = cast_name == (iname == "to_int" ? "int64" : "uint64")
         return same_sign ? widened : "{cast_name}({widened})"
@@ -1154,11 +1373,24 @@ class LintVisitor : AstVisitor {
             : icall.name)
         let twin = lint017_long_twin(iname, icall)
         if (!empty(twin)) {
-            lint_error("LINT017: {expr.name}({iname}(...)) widens an already-32-bit result, so the 2^31 limit is still hit inside {iname} (as a wrap, or as the panic guard on array/table/string length) before the cast runs; call {twin}(...) instead", expr.at)
+            let call = lint017_twin_call(icall)
+            let fix = empty(call) ? LintFix() : lint_replace_fix(expr, expr.name == "int64"
+                    ? call : "{expr.name}({call})")
+            lint_error("LINT017: {expr.name}({iname}(...)) widens an already-32-bit result, so " +
+                "the 2^31 limit is still hit inside {iname} (as a wrap, or as the panic guard on " +
+                "array/table/string length) before the cast runs; call {twin}(...) instead",
+                expr.at, fix)
             return
         }
         if (lint017_is_32bit_parse(iname, icall)) {
-            lint_error("LINT017: {expr.name}({iname}(...)) widens a 32-bit string parse - {iname} answers 0 for any value that overflows 32 bits, so the cast asks for a range the parse cannot give; call {lint017_parse_remedy(string(expr.name), iname, icall)} instead", expr.at)
+            let args <- lint_written_args(icall)
+            let fix = empty(args) || length(args) > 2 ? LintFix() : lint_replace_fix(expr,
+                lint017_widened_parse(string(expr.name), iname, args[0],
+                                      length(args) == 2 ? args[1] : "false"))
+            lint_error("LINT017: {expr.name}({iname}(...)) widens a 32-bit string parse - " +
+                "{iname} answers 0 for any value that overflows 32 bits, so the cast asks for a " +
+                "range the parse cannot give; call " +
+                "{lint017_parse_remedy(string(expr.name), iname, icall)} instead", expr.at, fix)
         }
     }
 
@@ -1180,6 +1412,74 @@ class LintVisitor : AstVisitor {
         }
     }
 
+    //! The edits widening every leaf operand of the sum or product
+    //! ``expr``; a line-0 edit marks one with no text
+    def lint024_widen(expr : Expression?; wide : string) : array<LintFix> {
+        if (expr is ExprOp2) {
+            let op2 = expr as ExprOp2
+            if (op2.op == "*" || op2.op == "+" || op2.op == "-") {
+                var edits <- lint024_widen(op2.left, wide)
+                edits |> push_from(lint024_widen(op2.right, wide))
+                return <- edits
+            }
+        }
+        let text = lint_expr_text(expr)
+        let twin = expr is ExprCall ? lint017_twin_call(expr as ExprCall) : ""
+        var leaf = "{wide}({text})"
+        if (empty(text)) {
+            leaf = ""
+        } elif (expr is ExprConstInt && text == "{(expr as ExprConstInt).value}"
+                && (wide == "int64" || (expr as ExprConstInt).value >= 0)) {
+            leaf = wide == "int64" ? "{text}l" : "{text}ul"
+        } elif (expr is ExprConstUInt && wide == "uint64"
+                && text == "{(expr as ExprConstUInt).value}u") {
+            leaf = "{text}l"
+        } elif (!empty(twin)) {
+            leaf = wide == "int64" ? twin : "{wide}({twin})"
+        }
+        return <- [lint_replace_fix(expr, leaf)]
+    }
+
+    //! ``int64(a * b)`` rewritten to widen every operand of the 32-bit
+    //! sum or product - ``int64(a) * int64(b)`` - parenthesized unless
+    //! its parent takes it bare
+    def lint024_fix(expr : ExprCall?) : LintFix {
+        let wide = string(expr.name)
+        let inner = expr.arguments[0]
+        var edits <- lint024_widen(inner, wide)
+        for (e in edits) {
+            return LintFix() if (e.line == 0)
+        }
+        var head = expr.at
+        head.last_line = inner.at.line
+        head.last_column = inner.at.column
+        var tail = expr.at
+        tail.line = inner.at.last_line
+        tail.column = inner.at.last_column
+        if (strip(lint_span_text(head)) != "{wide}("
+            || strip(lint_span_text(tail)) != ")") return LintFix()
+        let n = length(lint_expr_stack)
+        let parent = n >= 2 ? lint_expr_stack[n - 2] : null
+        let top = string((inner as ExprOp2).op)
+        var bare = (parent == null || parent is ExprLet || parent is ExprReturn
+                || parent is ExprCopy || parent is ExprMove || parent is ExprClone)
+        if (!bare && parent is ExprCall) {
+            let call = parent as ExprCall
+            bare = empty(call.arguments) || call.arguments[0] != expr || !(
+                lint_start(call.at) == lint_start(expr.at))
+        } elif (!bare && parent is ExprOp2) {
+            let op2 = parent as ExprOp2
+            let op = string(op2.op)
+            bare = (ends_with(op, "=") || op == "<" || op == ">" || op == "&&" || op == "||"
+                    || op == "^^"
+                || ((op == "+" || op == "-") && (top == "*" || op2.left == expr))
+                || (op == "*" && top == "*" && op2.left == expr))
+        }
+        edits |> push(lint_fix(head, bare ? "" : "("))
+        edits |> push(lint_fix(tail, bare ? "" : ")"))
+        return lint_merge_fixes(expr.at, edits)
+    }
+
     def check_lint024_widened_product(expr : ExprCall?) : void {
         if (noLint || genericDepth > 0
             || (expr.name != "int64" && expr.name != "uint64")
@@ -1192,7 +1492,9 @@ class LintVisitor : AstVisitor {
         var has_call = false
         lint024_scan(inner, has_product, has_call)
         if (!has_product || !has_call) return
-        lint_error("LINT024: {expr.name}(...) widens a product that already wrapped - every factor is 32-bit, so the multiply overflows at 2^31 before the cast runs; widen a factor instead: {expr.name}(a) * b", expr.at)
+        lint_error("LINT024: {expr.name}(...) widens a product that already wrapped - every " +
+            "factor is 32-bit, so the multiply overflows at 2^31 before the cast runs; widen the " +
+            "factors instead: {expr.name}(a) * {expr.name}(b)", expr.at, lint024_fix(expr))
     }
 
     def lint018_check_arg(expr : ExprCall?; fname : string; idx : int; isMem : bool) : bool {
@@ -1205,11 +1507,15 @@ class LintVisitor : AstVisitor {
         let bt = src.baseType
         if (isMem) {
             if (bt != Type.tInt64 && bt != Type.tUInt64 && bt != Type.tUInt) return false
-            lint_error("LINT018: int(...) truncates the {fname} size above 2^31; {fname} has uint/int64/uint64 overloads, so drop the cast", expr.at)
+            lint_error("LINT018: int(...) truncates the {fname} size above 2^31; {fname} has " +
+                "uint/int64/uint64 overloads, so drop the cast", expr.at, lint018_fix(scall, ""))
         } elif (bt == Type.tInt64) {
-            lint_error("LINT018: int(...) truncates the {fname} argument above 2^31; {fname} has an int64 overload, so drop the cast", expr.at)
+            lint_error("LINT018: int(...) truncates the {fname} argument above 2^31; {fname} has " +
+                "an int64 overload, so drop the cast", expr.at, lint018_fix(scall, ""))
         } elif (bt == Type.tUInt64) {
-            lint_error("LINT018: int(...) truncates the {fname} argument above 2^31; {fname} has an int64 overload - widen with int64(...) instead of narrowing", expr.at)
+            lint_error("LINT018: int(...) truncates the {fname} argument above 2^31; {fname} has " +
+                "an int64 overload - widen with int64(...) instead of narrowing", expr.at,
+                lint018_fix(scall, "int64"))
         } else {
             return false
         }
@@ -1260,11 +1566,18 @@ class LintVisitor : AstVisitor {
             if ((scall.name != "int" && scall.name != "uint") || length(scall.arguments) != 1) { continue; }
             let src = scall.arguments[0]._type
             if (src == null || (src.baseType != Type.tInt64 && src.baseType != Type.tUInt64)) { continue; }
+            let wide = isURange ? Type.tUInt64 : Type.tInt64
+            let narrow = isURange ? "uint" : "int"
             if (isInterval) {
-                lint_error("LINT020: {scall.name}(...) truncates a 64-bit bound above 2^31; interval has an int64 form, so drop the cast", expr.at)
+                lint_error("LINT020: {scall.name}(...) truncates a 64-bit bound above 2^31; " +
+                    "interval has an int64 form, so drop the cast", expr.at, lint020_fix(expr,
+                    "interval", narrow, wide))
             } else {
                 let twin = isRange ? "range64" : "urange64"
-                lint_error("LINT020: {expr.name}({scall.name}(...)) truncates a 64-bit bound above 2^31; use {twin}(...) on the 64-bit values directly - arrays and pointers index with int64/uint64 as-is", expr.at)
+                lint_error("LINT020: {expr.name}({scall.name}(...)) truncates a 64-bit bound " +
+                    "above 2^31; use {twin}(...) on the 64-bit values directly - arrays and " +
+                    "pointers index with int64/uint64 as-is", expr.at, lint020_fix(expr, twin,
+                    narrow, wide))
             }
             return
         }
@@ -1395,7 +1708,8 @@ class LintVisitor : AstVisitor {
         return <- st
     }
 
-    def override preVisitExpression(expr : ExpressionPtr) : void {
+    def override preVisitExpression(var expr : ExpressionPtr) : void {
+        lint_expr_stack |> push(expr)
         lint022_refs |> note_type(expr._type, 0, lint022_self_struct)
         if (lint022_generic_sweep) {
             lint022_refs |> note_type_names(expr._type, 0)
@@ -1406,6 +1720,13 @@ class LintVisitor : AstVisitor {
                 lint022_refs.names |> insert(nm)
             }
         }
+    }
+
+    def override visitExpression(var expr : ExpressionPtr) : ExpressionPtr {
+        if (!empty(lint_expr_stack) && lint_expr_stack |> back() == expr) {
+            lint_expr_stack |> pop()
+        }
+        return expr
     }
 
     def override preVisitExprAddr(expr : ExprAddr?) : void {
@@ -1529,24 +1850,37 @@ class LintVisitor : AstVisitor {
         if (check_functions) {
             for_each_function(mod, "") $(fn) {
                 return if (!lint022_is_unreferenced(fn, mod) || (skip_block_functions && lint022_takes_block(fn)))
-                lint022_report_at_decl("LINT022: private function '{fn.name}' is never used; remove it, or make it public if another module needs it", fn.at)
+                let close = fn.body != null && empty(strip(slice(lint_source_line(fn.at,
+                    int(fn.body.at.last_line)),
+                    int(fn.body.at.last_column)))) ? int(fn.body.at.last_line) : 0
+                lint022_report_at_decl("LINT022: private function '{fn.name}' is never used; " +
+                    "remove it, or make it public if another module needs it", fn.at,
+                    lint022_fix(fn.at, "def", close))
             }
         }
         for_each_structure(mod) $(st) {
             return if (!lint022_struct_unreferenced(st, mod))
             let kind = st.flags.isClass ? "class" : "structure"
-            lint022_report_at_decl("LINT022: private {kind} '{st.name}' is never used; remove it, or make it public if another module needs it", st.at)
+            lint022_report_at_decl("LINT022: private {kind} '{st.name}' is never used; remove " +
+                "it, or make it public if another module needs it", st.at,
+                lint022_fix(st.at, kind == "class" ? "class" : "struct",
+                            lint022_struct_close(st.at,
+                                                 [for (f in st.fields); int(f.at.last_line);
+                                                  where !f.flags.parentType])))
         }
         for_each_enumeration(mod) $(en) {
             return if (!lint022_enum_unreferenced(en, mod))
-            lint022_report_at_decl("LINT022: private enumeration '{en.name}' is never used; remove it, or make it public if another module needs it", en.at)
+            lint022_report_at_decl("LINT022: private enumeration '{en.name}' is never used; " +
+                "remove it, or make it public if another module needs it", en.at,
+                lint022_fix(en.at, "enum",
+                            lint022_struct_close(en.at, [for (e in en.list); int(e.at.last_line)])))
         }
     }
 
-    def lint022_report_at_decl(msg : string; at : LineInfo) : void {
+    def lint022_report_at_decl(msg : string; at : LineInfo; fix : LintFix) : void {
         //! Reports at a declaration no function walk visited: retargets ``funcFile`` so ``lint_error``'s own-file gate admits a symbol from any file of the module.
         funcFile = at.fileInfo != null ? "{at.fileInfo.name}" : ""
-        lint_error(msg, at)
+        lint_error(msg, at, fix)
     }
 
     def override canVisitWithAliasSubexpression(_expr : ExprAssume?) : bool => false
@@ -1606,14 +1940,16 @@ class LintVisitor : AstVisitor {
         lint022_note(expr.func, "{expr.name}")
         if (noLint || genericDepth > 0) return
         if (expr_equal(expr.left, expr.right, false)) {
-            lint_error("LINT008: both branches of ternary '?:' are equivalent", expr.at)
+            lint_error("LINT008: both branches of ternary '?:' are equivalent", expr.at,
+                       lint008_fix(expr))
         }
     }
 
     def override preVisitExprIfThenElse(expr : ExprIfThenElse?) : void {
         if (noLint || genericDepth > 0) return
         if (expr.if_false != null && expr_equal(expr.if_true, expr.if_false, false)) {
-            lint_error("LINT009: 'then' branch is equivalent to 'else' branch", expr.at)
+            lint_error("LINT009: 'then' branch is equivalent to 'else' branch", expr.at,
+                       lint009_fix(expr))
         }
         branch_depth++
     }
@@ -1682,6 +2018,12 @@ class LintVisitor : AstVisitor {
     def override preVisitExprVar(expr : ExprVar?) : void {
         if (lint022_generic_sweep) {
             lint022_refs.names |> insert("{expr.name}")
+        }
+        if (lint004_deferred |> find_index(expr.variable) >= 0) {
+            let name = string(expr.name)
+            let fix = expr.genFlags.generated ? LintFix() : lint_token_fix(expr.at,
+                int(expr.at.line), int(expr.at.column), name, slice(name, 1))
+            lint004_uses |> push(Lint004Use(v = expr.variable, fix = fix))
         }
         if (!empty(lint030_frames)) {
             let top = length(lint030_frames) - 1
@@ -2024,6 +2366,7 @@ def private lint019_fix(line : string; line_no : int; stale : array<string>) : L
     let at = comment < 0 ? -1 : find(line, "nolint:", comment)
     return LintFix() if (at < 0)
     let list_end = at + 7 + length(split(slice(line, at + 7), " ")[0])
+    return LintFix() if (list_end == at + 7)
     let kept <- [for (code in split(slice(line, at + 7, list_end), ",")); code; where find_index(stale, code) < 0]
     return LintFix(line = line_no, column = at + 7, last_line = line_no, last_column = list_end, replacement = join(kept, ",")) if (!empty(kept))
     let code_end = length(strip_right(slice(line, 0, comment)))
@@ -2053,11 +2396,15 @@ def public stale_nolint_collect(prog : ProgramPtr; fname, source : string; disab
         }
         if (!self_suppressed) {
             issues |> reserve(length(issues) + length(stale_codes))
+            let fix = lint019_fix(line, line_no, stale_codes)
             for (code, k in stale_codes, count()) {
                 let msg = "LINT019: stale nolint - {code} suppresses nothing on this line; remove it, or add LINT019 to the list if the rule fires only in downstream compiles (generic bodies - instantiations elsewhere fire at the generic's line - macro-template lines, option-gated rules)"
-                issues |> push(LintIssue(code = "LINT019", message = msg, file = fname,
+                issues |> push(
+                               LintIssue(code = "LINT019",
+                                         message = msg,
+                    file = fname,
                     line = line_no, column = 0, last_line = line_no, last_column = 0,
-                    fix = k == 0 ? lint019_fix(line, line_no, stale_codes) : LintFix()))
+                    fix = k == 0 ? fix : LintFix()))
                 count++
             }
         }
