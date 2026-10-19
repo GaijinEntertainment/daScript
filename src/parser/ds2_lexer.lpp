@@ -28,14 +28,16 @@
 
     void das2_yyfatalerror ( DAS2_YYLTYPE * lloc, yyscan_t scanner, const string & error, CompilationError cerr = CompilationError::syntax_error );
     LineInfo tokAt ( yyscan_t scanner, const struct DAS2_YYLTYPE & li );
-    void das2_accept_sequence ( yyscan_t yyscanner, const char * seq, size_t seqLen, int lineNo, FileInfo * info );
+    void das2_accept_sequence ( yyscan_t yyscanner, const char * seq, size_t seqLen, int lineNo, FileInfo * info, const LineInfo & macroAt );
+    void das2_rewrite_location ( yyscan_t yyscanner, DAS2_YYLTYPE * lloc );
 
     #define YY_USER_ACTION \
         yylloc_param->first_line = yylloc_param->last_line = \
             (yytext[yyleng - 1] == '\n' || yytext[yyleng - 1] == '\r') ? yylineno - 1 : yylineno; \
         yylloc_param->first_column = yyextra->das_yycolumn; \
         yylloc_param->last_column = yyextra->das_yycolumn + yyleng; \
-        YYCOLUMN (yyextra->das_yycolumn += yyleng, "YY_USER_ACTION");
+        YYCOLUMN (yyextra->das_yycolumn += yyleng, "YY_USER_ACTION"); \
+        das2_rewrite_location(yyscanner, yylloc_param);
 
 // #define FLEX_DEBUG
 
@@ -823,7 +825,7 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
         das2_yyfatalerror(yylloc_param,yyscanner,"inline reader macro " + macroName + " must produce a rewrite (suffix)", CompilationError::invalid_macro);
         return LEXER_ERROR;
     }
-    das2_accept_sequence(yyscanner, seqt, strlen(seqt), thisLine, info);
+    das2_accept_sequence(yyscanner, seqt, strlen(seqt), thisLine, info, at);
     // no return: keep scanning, now from the pushed rewrite buffer
 }
 <normal>"\%\="                              return MODEQU;
@@ -931,6 +933,9 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
         YYCOLUMN(yyextra->das_yycolumn = 0,"EOF");
         return 0;
     } else {
+        if ( !yyextra->das_rewrite_at.empty() && yyextra->das_rewrite_at.back().first == yyextra->das_line_no.size() ) {
+            yyextra->das_rewrite_at.pop_back();
+        }
         yypop_buffer_state(yyscanner);
         yyextra->g_FileAccessStack.pop_back();
         yylineno = yyextra->das_line_no.back();
@@ -958,12 +963,26 @@ void das2_strfmt ( yyscan_t yyscanner ) {
     BEGIN(strfmt);
 }
 
-void das2_accept_sequence ( yyscan_t yyscanner, const char * seq, size_t seqLen, int lineNo, FileInfo * info ) {
+void das2_rewrite_location ( yyscan_t yyscanner, DAS2_YYLTYPE * lloc ) {
+    struct yyguts_t * yyg = (struct yyguts_t*)yyscanner;
+    if ( !yyextra->das_rewrite_at.empty() && yyextra->das_rewrite_at.back().first == yyextra->das_line_no.size() ) {
+        const LineInfo & at = yyextra->das_rewrite_at.back().second;
+        lloc->first_line = at.line;
+        lloc->first_column = at.column;
+        lloc->last_line = at.last_line;
+        lloc->last_column = at.last_column;
+    }
+}
+
+void das2_accept_sequence ( yyscan_t yyscanner, const char * seq, size_t seqLen, int lineNo, FileInfo * info, const LineInfo & macroAt ) {
     struct yyguts_t * yyg = (struct yyguts_t*)yyscanner;
     auto infoPtr = info ? info : yyextra->g_FileAccessStack.back();
     yyextra->g_FileAccessStack.push_back(infoPtr);
     yyextra->das_line_no.push_back(yylineno);
     yyextra->das_column_no.push_back(yyextra->das_yycolumn);
+    if ( !info ) {
+        yyextra->das_rewrite_at.emplace_back(yyextra->das_line_no.size(), macroAt);
+    }
     yypush_buffer_state(YY_CURRENT_BUFFER, yyscanner);
     yy_scan_bytes(seq, (int)seqLen, yyscanner);
     yylineno = lineNo;
@@ -1022,6 +1041,7 @@ void das2_yybegin(const char * str, uint32_t len, yyscan_t yyscanner ) {
 #endif
     yyextra->das_line_no.clear();
     yyextra->das_column_no.clear();
+    yyextra->das_rewrite_at.clear();
     YYCOLUMN(yyextra->das_yycolumn = 0,"YYBEGIN");
     yyextra->das_indent_char = DAS_EMIT_SEMICOLON;
     yyextra->das_emit_semi_before_curly = false;

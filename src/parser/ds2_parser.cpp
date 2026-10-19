@@ -100,7 +100,7 @@
 
     void das2_yybegin_reader ( yyscan_t yyscanner );
     void das2_yyend_reader ( yyscan_t yyscanner );
-    void das2_accept_sequence ( yyscan_t yyscanner, const char * seq, size_t seqLen, int lineNo, FileInfo * info );
+    void das2_accept_sequence ( yyscan_t yyscanner, const char * seq, size_t seqLen, int lineNo, FileInfo * info, const LineInfo & macroAt );
     void das2_strfmt ( yyscan_t yyscanner );
 
     namespace das { class Module; }
@@ -6579,7 +6579,7 @@ yyreduce:
         int thisLine = 0;
         FileInfo * info = nullptr;
         if ( auto seqt = yyextra->g_ReaderMacro->suffix(yyextra->g_Program.get(), yyextra->g_Program->thisModule.get(), yyextra->g_ReaderExpr, thisLine, info, tokAt(scanner,(yylsp[0]))) ) {
-            das2_accept_sequence(scanner,seqt,strlen(seqt),thisLine,info);
+            das2_accept_sequence(scanner,seqt,strlen(seqt),thisLine,info,yyextra->g_ReaderExpr->at);
             yylloc.first_column = (yylsp[0]).first_column;
             yylloc.first_line = (yylsp[0]).first_line;
             yylloc.last_column = (yylsp[0]).last_column;
