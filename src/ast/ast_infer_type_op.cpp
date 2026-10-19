@@ -1029,6 +1029,8 @@ namespace das {
                 cloneFn->arguments.push_back(expr->right->clone());
                 auto eCopy = new ExprCopy(expr->at, expr->left->clone(), cloneFn);
                 eCopy->no_promotion = expr->no_promotion;
+                eCopy->fromClone = true;
+                eCopy->generated = expr->generated;
                 return eCopy;
             } else if (cloneType->isPointer() && cloneType->smartPtr) {
                 if ( !cloneType->firstType || !cloneType->firstType->annotation ) {
@@ -1062,6 +1064,8 @@ namespace das {
                 auto eCopy = new ExprCopy(expr->at, expr->left->clone(), expr->right->clone());
                 eCopy->allowCopyTemp = true;
                 eCopy->no_promotion = expr->no_promotion;
+                eCopy->fromClone = true;
+                eCopy->generated = expr->generated;
                 return eCopy;
             } else if (cloneType->isGoodArrayType() || cloneType->isGoodTableType()) {
                 reportAstChanged();

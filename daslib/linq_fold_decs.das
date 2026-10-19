@@ -799,8 +799,8 @@ def compute_decs_chain_info(var calls : array<tuple<ExprCall?; LinqCall?>>;
                             bridge : DecsBridgeShape?;
                             at : LineInfo) : DecsChainInfo? {
     var info = new DecsChainInfo(
-        tupName := tupName,
-        finalBind := tupName,
+        tupName = tupName,
+        finalBind = tupName,
         finalType = clone_type(bridge.elementType),
         selectCount = 0
     )
