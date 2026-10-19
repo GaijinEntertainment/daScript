@@ -807,6 +807,9 @@ The FIO module implements file input/output and filesystem operations. It provid
 
 ### Direct IO and mapping advice
 
+- `dread_at` - Read `bytes` at file offset `off` into `dst` — any pointer, any offset, any size.
+- `dread_close` - Close the reader and free its band.
+- `dread_open` - Open `path` for cache-bypassing positional reads (`FILE_FLAG_NO_BUFFERING` on Windows, `O_DIRECT` on Linux, `F_NOCACHE` on macOS), so a cache of blocks read on demand into pinned memory is not doubled in the page cache.
 - `dwrite_append` - Append `bytes` from `data` at the writer's current end.
 - `dwrite_band` - Hand out the writer's own staging band so a producer can build bytes in place instead of building a buffer and appending a copy.
 - `dwrite_close` - Flush the writer's tail (sector-padded on cache-bypassing platforms), truncate the file to exactly what was appended, and free the handle.
@@ -7914,6 +7917,8 @@ The UTF8_UTILS module provides Unicode UTF-8 string utilities including characte
 
 - `s_utf8d` - Byte-class and state-transition table for the UTF-8 DFA decoder.
 - `UTF8_ACCEPT` - DFA accept state indicating a valid UTF-8 sequence.
+- `UTF8_REJECT` - DFA reject state: no byte continues or starts a sequence from here
+- `UTF8_REPLACEMENT` - what a sanitizer writes for an invalid or incomplete sequence
 - `_UTF32_NON_WORD_RANGES`
 - `_UTF32_LATIN1_LOWER`
 
@@ -7937,6 +7942,7 @@ The UTF8_UTILS module provides Unicode UTF-8 string utilities including characte
 - `contains_utf8_bom` - Returns true if the byte array starts with a UTF-8 BOM (byte order mark).
 - `is_first_byte_of_utf8_char` - Returns true if the given byte is the first byte of a UTF-8 character.
 - `is_utf8_string_valid` - Returns true if the byte array contains a valid UTF-8 encoded string.
+- `utf8_sanitize` - Returns the string with every invalid or incomplete UTF-8 sequence replaced by U+FFFD, one a maximal subpart (the byte that cut a sequence is read again on its own); valid input as is.
 
 ### Unicode word/case primitives
 

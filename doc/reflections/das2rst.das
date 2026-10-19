@@ -230,7 +230,7 @@ def document_module_fio(_root : string) {
     var mod = [get_module("fio_core"), find_module("fio")]
     var groups <- array<DocGroup>(
         hide_group(group_by_regex("Internal builtin functions", mod, %regex~builtin%%)),
-        group_by_regex("Direct IO and mapping advice", mod, %regex~(dwrite_open|dwrite_append|dwrite_band|dwrite_commit|dwrite_stat|dwrite_close|prefetch_map)$%%),
+        group_by_regex("Direct IO and mapping advice", mod, %regex~(dwrite_open|dwrite_append|dwrite_band|dwrite_commit|dwrite_stat|dwrite_close|dread_open|dread_at|dread_close|prefetch_map)$%%),
         group_by_regex("File manipulation", mod, %regex~(try_fflush|try_lock_file|f|long_f|stat$|getchar|remove|rename|copy_file|file_size|equivalent|is_symlink|is_reparse_point|set_mtime)%%),
         group_by_regex("Path manipulation", mod, %regex~(base_name|dir_name|get_full_file_name|extension|stem|replace_extension|path_join|normalize|to_generic_path|tilde_home|is_absolute|relative|relative_result|parent)$%%),
         group_by_regex("Directory manipulation", mod, %regex~(dir|dir_rec|mkdir|mkdir_rec|mkdir_result|rmdir|rmdir_rec|rmdir_rec_result|rmdir_result|chdir|getcwd)$%%),
@@ -1163,7 +1163,7 @@ def document_module_utf8_utils(_root : string) {
         group_by_regex("Encoding and decoding", mod, %regex~(utf8_encode|utf8_decode|utf16_to_utf32|utf32_to_utf16|decode_unicode_escape)$%%),
         group_by_regex("Iteration", mod, %regex~(each_utf32|each_word)$%%),
         group_by_regex("Length and measurement", mod, %regex~(utf8_length)$%%),
-        group_by_regex("Validation", mod, %regex~(is_first_byte_of_utf8_char|contains_utf8_bom|is_utf8_string_valid)$%%),
+        group_by_regex("Validation", mod, %regex~(is_first_byte_of_utf8_char|contains_utf8_bom|is_utf8_string_valid|utf8_sanitize)$%%),
         group_by_regex("Unicode word/case primitives", mod, %regex~(utf32_is_word_char|utf32_to_lower)$%%)
     )
     document("UTF-8 utilities", mod, "utf8_utils.rst", groups)

@@ -37,6 +37,7 @@ require dasllama/dasllama_arch_qwen35
 require ?vulkan dasllama/dasllama_moe   // moe_select_core: the host select the window's per-row top-k mirrors
 require daslib/strings_boost   // join: the spawned fixture's source
 require daslib/math_bits   // float_bits_to_uint / uint_bits_to_float: the NaN sentinel by bit pattern, the read-back planes as floats
+require daslib/f16_cvt   // nolint:STYLE030,LINT019 — the half conversions of the vulkan cells, unused in the darwin world
 
 //! The Vulkan tier's kernel classes against their CPU oracles, one cell a class family: the decode GEMVs, the tile families
 //! (the cm2 l, m, s and e stamps, the KHR staged tile over every format and over a file's f32 rows, the sdot4 tiles), the
@@ -46,6 +47,8 @@ require daslib/math_bits   // float_bits_to_uint / uint_bits_to_float: the NaN s
 //! mode; the KHR arms (the KHR tiles, the staged f32 tile) without KHR cooperative matrices at subgroup 32; the tile-pick
 //! cell where DASLLAMA_CM2_TILE or DASLLAMA_CM2_SPLITK forces the pick; a class rail a device declines.
 
+let private NAN_HALF = 0x7E00   //! the sentinel half no kernel writes: a NaN
+let private NAN_HALF_PAIR = 0x7E007E00u   //! ... in both lanes of a word
 let private TILE_SLACK_ROWS = int(TILE_READ_SLACK)   //! the cm2 fixtures' rows past the last region, the engine's count: a stamp that loads partial columns unclamped (`STILE`) reads the last region's column rounded up to its BN, so the slack holds while every such stamp keeps BN <= slack + 1
 let private TILE_CELL_K = 768   //! every per-format tile cell's K: three unrolled superblock passes on both depths (a K-quant width is a multiple of 256, so no K-quant stamp ever takes the k loop's tail; the q8 s and e cells' Q8_CELL_K takes the edge path)
 let private Q8_CELL_K = 544     //! the q8 cm2 s and e cells' K: 512 + 32, off the 64-deep stamp's k grid, so the tile takes its padded edge path (the l and m cells run K = 576, the fast path)
@@ -8392,6 +8395,208 @@ def test_vkd_hot_combine(t0 : T?) {
             delete y0
             delete want
             delete poison
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
+[test]
+def test_vkd_moe_gather_row(t0 : T?) {
+    t0 |> run("the per-expert chain's by-row gather (moe_gather_f16_row_cls): window row b takes its grid entry's position row as halves, chunk-local; the rows past the window keep their sentinel") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!ensure_moe_gather_f16_row_cls()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            let npos = 7
+            let k = 3
+            let nk = npos * k
+            let r0 = 5      //! the window [5, 14) of the 21 bucket rows
+            let rows = 9
+            let slack = 2   //! rows past the window the dispatch never writes
+            var entry_of_bucket_row : array<uint>   // a permutation of the 21 entries: 5 is coprime to 21
+            entry_of_bucket_row |> resize(nk)
+            for (b in range(nk)) {
+                entry_of_bucket_row[b] = uint((b * 5) % nk)
+            }
+            for (n in [100, 256, 300]) {   //! under one stride of the 256 threads, whole strides, a tail
+                var x <- hash_steps(npos * n, 91u)
+                var halves : array<uint16>
+                with_cell_planes() $(var cp : CellPlanes) {
+                    let px = cp |> in_(x)
+                    let pb = cp |> in_plain(entry_of_bucket_row)
+                    let pg = cp |> out_words(int64((rows + slack) * n) * 2l, NAN_HALF_PAIR)
+                    var sg = cp |> cls_set(fixed_array(px, pb, pg), @@set_moe_gather_f16_row_cls)
+                    var pc = GatherArgs(n = uint(n), k = uint(k), r0 = uint(r0), r1 = uint(r0 + rows))
+                    cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                        enc_moe_gather_f16_row_cls(raw, h, sg, pc, int64(rows))
+                    }
+                    delete halves
+                    halves <- cp |> plane_as(pg, type<uint16>, (rows + slack) * n)
+                }
+                var got : array<float>
+                got |> resize(rows * n)
+                for (i in range(rows * n)) {
+                    got[i] = f16_to_f32(uint(halves[i]))
+                }
+                //! the oracle: row b of the window reads its grid entry's position, rounded to half; the oracle with the
+                //! window at 0 reads other entries and must miss
+                var want, want0 : array<float>
+                want |> resize(rows * n)
+                want0 |> resize(rows * n)
+                for (b in range(rows)) {
+                    let p = int(entry_of_bucket_row[r0 + b]) / k
+                    let p0 = int(entry_of_bucket_row[b]) / k
+                    for (i in range(n)) {
+                        want[b * n + i] = f16r(x[p * n + i])
+                        want0[b * n + i] = f16r(x[p0 * n + i])
+                    }
+                }
+                //! within 1e-3 of the largest magnitude: a half's step at |x| < 1 is under 1e-3, the two conversions round at
+                //! most a step apart; the control moves one expected element by 0.05
+                let bar = Bar(kind = BarKind.rel_of_max, rel = 1e-3, poison_abs = 0.05, poison_at = 0)
+                check(t, "gather row n {n}: the window's rows", got, want, bar, Shape(row_width = n))
+                t |> success(check_count(got, want0, bar) > n, "gather row n {n}: control - the window at 0 reads other positions ({check_count(got, want0, bar)} of {rows * n} off)")
+                var strayed = 0
+                var first_stray = -1
+                for (i in range(rows * n, (rows + slack) * n)) {
+                    if (halves[i] != uint16(NAN_HALF)) {
+                        strayed++
+                        if (first_stray < 0) {
+                            first_stray = i
+                        }
+                    }
+                }
+                t |> equal(strayed, 0, "gather row n {n}: the rows past the window keep their sentinel ({strayed} of {slack * n} written, the first at {first_stray})")
+                delete x
+                delete halves
+                delete got
+                delete want
+                delete want0
+            }
+            delete entry_of_bucket_row
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
+[test]
+def test_vkd_combine_row(t0 : T?) {
+    t0 |> run("the per-expert chain's by-row combine (combine_row_cls): window row b adds its weighted down row onto its position's accumulated row at every stride regime, a position no row reaches untouched") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!ensure_combine_row_cls()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            let npos = 7   //! position 6 is reached by no window row and keeps its accumulated row
+            let k = 2
+            let nk = npos * k
+            let r0 = 4
+            let rows = 6   //! the window [4, 10): rows of one expert, one a position, at alternating slots
+            var entry_of_bucket_row : array<uint>   // the window's rows to positions 0..5 at alternating slots, the rest to the entries left
+            entry_of_bucket_row |> resize(nk)
+            var taken : array<bool>
+            taken |> resize(nk)
+            for (b in range(r0, r0 + rows)) {
+                let g = (b - r0) * k + (b % k)
+                entry_of_bucket_row[b] = uint(g)
+                taken[g] = true
+            }
+            var next = 0
+            for (b in range(nk)) {
+                continue if (b >= r0 && b < r0 + rows)
+                while (taken[next]) {
+                    next++
+                }
+                entry_of_bucket_row[b] = uint(next)
+                taken[next] = true
+            }
+            delete taken
+            var w_packed <- hash_steps(nk, 97u)   // a position's k weights in a row: the layout every dispatch ships
+            for (n in [100, 256, 300]) {   //! under one stride of the 256 threads, whole strides, a tail
+                var acc <- hash_steps(npos * n, 71u)
+                var down <- hash_steps(rows * n, 83u)
+                var y : array<float>
+                with_cell_planes() $(var cp : CellPlanes) {
+                    let pa = cp |> io_(acc)
+                    let pw = cp |> in_(w_packed)
+                    let pd = cp |> in_(down)
+                    let pb = cp |> in_plain(entry_of_bucket_row)
+                    var sp = cp |> cls_set(fixed_array(pa, pw, pd, pb), @@set_combine_row_cls)
+                    var pc = GkMoeCombArgs(n = uint(n), k = uint(k), r0 = uint(r0), r1 = uint(r0 + rows))
+                    cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                        enc_combine_row_cls(raw, h, sp, pc, int64(rows))
+                    }
+                    delete y
+                    y <- cp |> plane_run(pa)
+                }
+                //! the oracle: each window row's weighted down row onto its position; the oracle over the window at 0 (other
+                //! rows, other positions) must miss
+                var want := acc
+                var want0 := acc
+                for (b in range(rows)) {
+                    let g = int(entry_of_bucket_row[r0 + b])
+                    let g0 = int(entry_of_bucket_row[b])
+                    for (i in range(n)) {
+                        want[(g / k) * n + i] += w_packed[g] * down[b * n + i]
+                        want0[(g0 / k) * n + i] += w_packed[g0] * down[b * n + i]
+                    }
+                }
+                //! within 1e-5 of the largest magnitude: one multiply-add per element against the f32 oracle, fused or not,
+                //! rounds the product and the sum once each - under 1e-6 of the magnitude; the control moves one expected
+                //! element by 0.01
+                let bar = Bar(kind = BarKind.rel_of_max, rel = 1e-5, abs_floor = 1e-6, poison_abs = 0.01, poison_at = 2 * n + 3)
+                let tag = "combine row n {n}"
+                check(t, tag, y, want, bar, Shape(row_width = n))
+                t |> success(check_count(y, want0, bar) > n, "{tag}: control - the window at 0 adds other rows onto other positions ({check_count(y, want0, bar)} of {npos * n} off)")
+                var moved = 0
+                for (i in range(n)) {
+                    moved++ if (y[i] != acc[i])
+                }
+                t |> success(moved > n / 2, "{tag}: position 0's row moved off its accumulated input ({moved} of {n})")
+                delete y
+                delete want
+                delete want0
+                //! the region-base arm (`goff`): a bundle's second region starts at chunk row 2 of the dispatch's down rows and at
+                //! grid entry r0 + 2 of the list, so the dispatch over rows 2..5 reads `down_rows[(2 + b) * n]`; the oracle over
+                //! the same rows read from chunk row 0 must miss
+                let rb = 2
+                var yb : array<float>
+                with_cell_planes() $(var cp : CellPlanes) {
+                    let pa = cp |> io_(acc)
+                    let pw = cp |> in_(w_packed)
+                    let pd = cp |> in_(down)
+                    let pb = cp |> in_plain(entry_of_bucket_row)
+                    var sp = cp |> cls_set(fixed_array(pa, pw, pd, pb), @@set_combine_row_cls)
+                    var pc = GkMoeCombArgs(n = uint(n), k = uint(k), r0 = uint(r0 + rb), r1 = uint(r0 + rows), goff = uint(rb))
+                    cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                        enc_combine_row_cls(raw, h, sp, pc, int64(rows - rb))
+                    }
+                    delete yb
+                    yb <- cp |> plane_run(pa)
+                }
+                var wantb := acc
+                var wantb0 := acc
+                for (b in range(rb, rows)) {
+                    let g = int(entry_of_bucket_row[r0 + b])
+                    for (i in range(n)) {
+                        wantb[(g / k) * n + i] += w_packed[g] * down[b * n + i]
+                        wantb0[(g / k) * n + i] += w_packed[g] * down[(b - rb) * n + i]
+                    }
+                }
+                let barb = Bar(kind = BarKind.rel_of_max, rel = 1e-5, abs_floor = 1e-6, poison_abs = 0.01, poison_at = 3 * n + 5)
+                check(t, "{tag}, region base 2", yb, wantb, barb, Shape(row_width = n))
+                t |> success(check_count(yb, wantb0, barb) > n, "{tag}, region base 2: control - the rows read from chunk row 0 miss ({check_count(yb, wantb0, barb)} of {npos * n} off)")
+                delete yb
+                delete wantb
+                delete wantb0
+                delete acc
+                delete down
+            }
+            delete w_packed
+            delete entry_of_bucket_row
         } else {
             t |> skip("dasVulkan not present")
         }

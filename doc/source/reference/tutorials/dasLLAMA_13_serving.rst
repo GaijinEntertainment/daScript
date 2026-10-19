@@ -275,7 +275,7 @@ stream, and park answers a *claim* — a number that names the rows until
 another session takes the region. ``gpu_device_kv_adopt`` hands those rows to
 a fresh session, so the next turn of a conversation prefills only its new
 tokens. ``gpu_device_prefill_continues`` says whether this model may do that;
-a recurrent model prefills every prompt whole, from position zero:
+it is true for every model the driver serves, a recurrent model's state riding the rows:
 
 .. das-doc: given let turn1 <- [1l, 2l, 3l]
 .. das-doc: given let rest <- [4l, 5l]

@@ -3,7 +3,7 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 docs: `ARCHITECTURE_GPU_RACE_SHAPES.md`, `ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md`,
 `ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md`, `ARCHITECTURE_MEASUREMENT.md`. Planned work:
-`followup_metal.md` for Metal, `followup_vulkan.md` for Vulkan.
+`followup_metal.md`, `followup_vulkan.md`.
 
 This list reviews timing arms - code that dispatches a kernel to measure it rather than to serve
 a call: a race (two candidates for one computation, timed in one process), a knockout (a timing
@@ -14,8 +14,7 @@ environment override, both serving correct output - is not an arm; its knob answ
 checklist that owns the knob's engine (`REVIEW_GPU.md` for a Metal or Vulkan engine knob,
 `REVIEW_TOWER.md` for a tower's). A two-candidate figure is a recorded timing comparing two candidates
 for one computation - from a race, a same-build knob A/B, or one run on each of two builds; the
-two-candidate figure rule below applies to every one of them, the knob itself still answering to
-its engine's checklist. A data race between
+knob itself still answers to its engine's checklist. A data race between
 serving dispatches is not this list's subject. An arm's ranking is decided once a checked-in document or a committed box profile records
 the arm's figure or names the arm as the shipped form, and always where the race's winner is a
 crown - a verdict each box's tune sidecar records. A ranking input is any value the ranking's
@@ -25,8 +24,7 @@ one compute. A live arm is one that is undecided, dispatches the shipped kernel 
 source, is a knockout whose stage-drop constant or knob sits in a shipped class or a lab, is a
 retained-reference arm (one ledgered as a retained reference in
 `ARCHITECTURE_GPU_RACE_SHAPES.md#tensor-gemm-shapes-that-measured-out-m5` or the Vulkan arm
-ledger - `ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md#vk-gemm-probe`,
-`ARCHITECTURE_MEASUREMENT.md#one-benchmark-rig`), or is a kernel variant the shipped code picks
+ledger - `ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md#vk-gemm-probe`), or is a kernel variant the shipped code picks
 between at run time.
 
 **Weakening `check_race_bind_numbers` (`REVIEW.das`) - the gate that reads a `kn_buffer(enc, n)`
@@ -89,8 +87,7 @@ takes the tile's partial-tile store path.
 
 **A diff that adds or changes an
 `ARCHITECTURE_GPU_RACE_SHAPES.md#tensor-gemm-shapes-that-measured-out-m5` or Vulkan arm ledger
-(`ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md#vk-gemm-probe`,
-`ARCHITECTURE_MEASUREMENT.md#one-benchmark-rig`) entry for a kernel ranked only at power-of-two
+(`ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md#vk-gemm-probe`) entry for a kernel ranked only at power-of-two
 batch widths names those widths in it.**
 
 **A diff that decides the ranking of a race whose code the tree holds, or adds or changes an
@@ -98,8 +95,7 @@ arm of a race whose ranking is decided, gives every dispatch an arm times an out
 chain's previous dispatch does not write - two buffers alternated between consecutive dispatches
 qualify - or ledgers the arm in
 `ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md#kernel-race-fidelity` (Metal) or the Vulkan arm ledger
-(`ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md#vk-gemm-probe`,
-`ARCHITECTURE_MEASUREMENT.md#one-benchmark-rig`) as holding one output across its chain, naming
+(`ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md#vk-gemm-probe`) as holding one output across its chain, naming
 the chain it reads, in the same change.** One shared output serializes the chain on its
 write-after-write hazard, so where production overlaps those dispatches the race ranks a shape
 production never runs.
@@ -127,7 +123,7 @@ build it ran on.** A figure that cannot be re-run cannot be checked.
 
 **A diff that replaces or removes a race whose figure a document carries re-measures that figure
 with a race the tree holds, deletes the figure, or moves the old race under `harness/`, in the
-same change.** No reviewer can check what the fidelity rules ask of an arm that is gone.
+same change.** No reviewer can re-check a figure whose race is gone.
 
 **A diff that ports an A/B lab's winning variant into a kernel deletes, in the same change, that
 variant's class and any `*_variants.das` code that exists only for it and is not a live arm.** An

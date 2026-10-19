@@ -70,6 +70,22 @@ def kq_dev_ssb_i(fmt : int) : int64 {
     return KQ_DEV_SSB
 }
 
+//! the device layout's block strides of a format - the quant bytes and the scale bytes a block, and the block's elements: q8 a
+//! 32-wide block of int8 under one f16 scale, a per-32 or mx4 format its CPU planes verbatim, a superblock format its quants
+//! under the device's scale row
+def dev_block_bytes(f : KqFmt) : tuple<qsb : int64; ssb : int64; belems : int64> {
+    return (qsb = 32l, ssb = 2l, belems = 32l) if (f == KqFmt.q8)
+    return (qsb = kq_qsb(f), ssb = kq_dev_ssb(f), belems = 256l) if (kq_sb(f))
+    return (qsb = kq_qsb(f), ssb = kq_ssb(f), belems = 32l)
+}
+
+//! the device-layout bytes of `rows` rows of `n` elements of format `f`: the quant plane and the scale plane
+def dev_rows_bytes(f : KqFmt; n, rows : int64) : tuple<q : int64; s : int64> {
+    let b = dev_block_bytes(f)
+    let blocks = n / b.belems * rows
+    return (q = blocks * b.qsb, s = blocks * b.ssb)
+}
+
 //! q5_1 per-32-block plane strides: 16B nibbles + 4B qh quants, f16 d + f16 m scales.
 let Q51_QPB = 20l
 let Q51_SPB = 4l

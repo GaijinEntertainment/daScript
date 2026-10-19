@@ -19,9 +19,9 @@ from it, or edits any copy of a flag's text, leaves every copy of that flag stat
 behavior, default, and files and paths.** A flag's copies are its
 `@clarg_doc`, every `README.md` passage that names the flag, its row in
 `doc/source/reference/utils/dasllama_server.rst` or
-`doc/source/reference/utils/dasllama_cli.rst` (repo root), and every passage saying it means the
-same as the other file's flag of its name. A copy need not match another's reasons or measured
-numbers.
+`doc/source/reference/utils/dasllama_cli.rst` (repo root), and every passage saying the flag means
+the same as the same-named flag of the other program (`main.das` for the server, `cli_args.das`
+for the CLI). A copy need not match another's reasons or measured numbers.
 
 **Weakening `REVIEW.das` (beside this file) - dropping a check, narrowing what a check scans,
 adding a name to the names a check skips, or blunting a finding
@@ -63,7 +63,8 @@ config key the value depends on, or adds or removes a kind of value the key take
 but the engine text it quotes - uses only words a user understands without knowing how the
 engine is built, and names a part of the engine by what that part does for the user.**
 
-**A `served_note` a diff adds or changes that carries the engine's decline text leads with a
+**A `served_note` a diff adds or changes that carries the engine's decline text - the reason
+`gpu_resident_decline()` gives for not serving the model whole on the GPU - leads with a
 sentence of `openai_server.das`'s own that stands without the decline text.**
 
 **A diff that adds or changes how `control.html` prints a `gpu_cpu_passes` entry shows the
@@ -75,8 +76,8 @@ served now, and a value that says the whole model is on the GPU also says where 
 caches sit.**
 
 **A diff that adds or changes a `served_note` value in `openai_server.das` names what about the
-slot itself holds it back, and is empty when nothing about the slot does.** A slot waiting for
-the GPU says that in its `served` value.
+slot itself keeps the GPU from serving more of it, and is empty when nothing about the slot
+does.** A slot waiting for the GPU says that in its `served` value.
 
 **A diff in this folder that opens a device-home session - a session whose K/V cache lives only
 in a K/V region of the GPU driver, with no host cache - directly (`create_device_session`) or
@@ -96,6 +97,16 @@ arm, where M is that module or a module whose own `require` brings it in, is a d
 reference in that arm.** The unguarded reference fails the compile of every build that lacks that
 module.
 
-**A function signature in this folder never names a type from a module this folder requires
-conditionally - those types stay inside the guarded arm, and plain types cross the boundary.** A
+**A function signature in this folder names only types from modules this folder requires
+unconditionally; a type from a conditionally required module stays inside the guarded arm.** A
 signature cannot sit inside a `static_if` arm, so no guard fixes it.
+
+**A diff that adds or changes a JSON value `openai_server.das` writes that holds text the model
+produced, or text the server parsed out of that text, passes the text through `utf8_sanitize`
+before it is written.** A token piece can end mid-character and a byte-fallback piece carries one
+raw byte, and a strict client aborts on the invalid byte (`README.md#utf8-replies`).
+
+**A diff that adds or changes how `openai_server.das` streams a delta holds back, with
+`utf8_hold_bytes`, the bytes at the delta's end that start a character the delta does not finish,
+joins them to the next piece, and when the stream ends sends the bytes still held back as one
+last delta through `utf8_sanitize`.**

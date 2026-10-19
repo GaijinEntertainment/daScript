@@ -484,6 +484,26 @@ decoded scale row needs no upload work - only the id bridge and the kernels. The
    rails), or the fork shows one tier at a time as each side is aligned. A family cell whose
    `enc` ladder lacks the new arm dispatches the else format's pipeline over the new planes and
    reads byte-stable across fix rounds.
+7. The one-copy rare rail (`ARCHITECTURE_GPU_VULKAN_STREAM.md#streamed-layer-arena`): the CPU reads a streamed
+   layer's experts off the tier's pinned device-layout planes through the format's ROW-MAJOR kernel. In
+   `dasllama_gemm_gen.das` the format takes an arm of the family body its planes fit - `rm_kq_gen` for a
+   superblock format (its codes, sub-scales and the min or offset term; a codebook-grid block's weights come off
+   `rm_grid_block`), `rm_b32_gen` for a per-32 one - and a
+   `register_llvm_code_generator` row for its `<fmt>_rm_gemv` and `<fmt>_rm_tile4` keys; in
+   `dasllama_math_gen.das` the `[tune]` family `<fmt>q8_rm_gemv_gen` (the shared perms, the tile stub
+   `<fmt>q8_rm_tile4_gen` ahead of it as its companion, the reference `rm_kq_rows_ref` over the device-plane
+   decode `rm_kq_dev_row`, which takes the format's arm, or the per-32 family's disk-order dot); the stamp in
+   every `performance/defaults/*.tune-defaults.json`; the rail's dispatch (`rm_dev_serves`, `rare_rows_core`'s
+   device arm, `rm_dev_tile4` in `dasllama_blocks.das`). The host twin (`dasllama_math_vulkan.das`: the format's
+   own GEMV class run on the CPU - the kq family's `blk_contrib` through `KqGemvBase`, a per-32 or mx4 format's
+   `blk_words` + `blk_xdot` on its own class) is the device layout's test oracle: a superblock format joins
+   `vk_host_kq_cls` with the grid fill the oracle's `kq_cls_ref` arm makes, a per-32 format a pointer on
+   `VkHostTwin` and an arm of `vk_host_rows`, and `vk_host_twin_serves` admits it. The cells are
+   `tests/test_vulkan_host_twin.das`: the format joins its family's list in the twin cell, the row-major cell and
+   the tile cell, and the planar stack the shell takes - `synth_kq_region` for a superblock format, the fixture's
+   block builder through `kq_transcode_superblock` for a per-32 one - must land the same gather the engine
+   makes. `rm_dev_serves` admits the format to the rail's device arm; a format it does not name reads the planar
+   planes at the planar mirror's cost in RAM, so the format names itself there with its kernels.
 
 A per-32 format (q51's, mx4's and iq4nl32's shape: 32-weight blocks, Q8_0-form activations, off
 the kq lattice) takes none of the kq id bridge. It joins `kq_block32` (`dasllama_kqformat.das`, the

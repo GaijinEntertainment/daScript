@@ -710,7 +710,6 @@ def private reap_finished(m : Model; var sch : Scheduler) {
                 let t_park = prof_ticks()
                 park_stream(m, sch, sch.streams[i])
                 prof_add("sched_park", t_park)
-                to_log(LOG_INFO, "[stream {sch.streams[i].id}] parked\n")
             } elif (sch.paged) {
                 if (sch.streams[i].finish != "media_lost") {
                     donate_stream(m, sch, sch.streams[i])
@@ -750,7 +749,7 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
         if (sch.device_kv) {
             let t_attach = prof_ticks()
             st.session <- create_device_session(m, gpu_device_session_dtype())
-            let hit = device_attach(m, sch, st.session, st.prompt)   // a model whose prefill cannot continue parks and pools nothing, so nothing matches
+            let hit = device_attach(m, sch, st.session, st.prompt)
             prof_add("sched_device_attach", t_attach)
             let matched = hit.n
             device_checkpoints_plan(st, sch.queue[0], matched)
@@ -1236,16 +1235,19 @@ def private parked_best(sch : Scheduler; prompt : array<int64>) : tuple<at : int
 def private parked_adopt(var sch : Scheduler; var session : Session; at : int; n : int64) : int64 {
     return 0l if (at < 0)
     let adopted = gpu_device_kv_adopt(session, sch.parked[at].claim, n)
+    if (adopted && !empty(session.ple_prev)) {
+        ple_window_seed(session.ple_prev, sch.parked[at].tokens, n)
+    }
     drop_parked(sch, at)
     return adopted ? n : 0l
 }
 
 //! The host pool serves device mode: a paged scheduler, the pool's pages in the device's codec, a draft head only where the
-//! driver runs its whole round on the device (its rows ride the moves beside the trunk's), no n-gram side input (its ring may
-//! sit on the device), and a model whose device prefill continues past zero
+//! driver runs its whole round on the device (its rows ride the moves beside the trunk's), and a model whose device prefill
+//! continues past zero (a hyper-connection model's n-gram ring rides its checkpoints and snapshots)
 def private device_pool_on(m : Model; sch : Scheduler; session : Session) : bool
     => (gpu_device_kv_pool_armed() && sch.paged && (!sch.mtp || gpu_resident_mtp_device_home(m)) && sch.pool.kdt == gpu_device_session_dtype()
-        && empty(session.ple_conv_hist) && gpu_device_prefill_continues(m)
+        && gpu_device_prefill_continues(m)
         && (empty(session.dn_state_prefix) || sch.prefix.max_states > 0l))
 
 //! the scheduler's carrier session, made at its first move and pointed at the pool where the scheduler stands now (a moved
@@ -1290,8 +1292,12 @@ def private pool_keep(m : Model; var sch : Scheduler; claim : int64; tokens : ar
         delete snap
         return
     }
+    pool_carrier(m, sch)   //! made before the seed reads its id window: the first opening a fresh scheduler pools has no carrier yet
+    if (recurrent && !empty(sch.pool_host.ple_prev)) {
+        snap.ple_prev |> resize(long_length(sch.pool_host.ple_prev))
+        ple_window_seed(snap.ple_prev, tokens, n)
+    }
     let t0 = prof_ticks()
-    pool_carrier(m, sch)
     let held = prefix_share_pages(sch.prefix, sch.pool, sch.pool_host, tokens, n)
     let moved = gpu_device_kv_export(m, claim, sch.pool_host, held, n)
     if (moved && recurrent) {

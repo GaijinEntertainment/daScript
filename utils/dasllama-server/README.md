@@ -579,6 +579,20 @@ curl http://127.0.0.1:8080/v1/chat/completions -H 'Content-Type: application/jso
 }'
 ```
 
+### Valid UTF-8 replies {#utf8-replies}
+
+A token piece can end in the middle of a character: a multi-byte character can span tokens, and a
+byte-fallback piece carries one raw byte. Every text the model produced, or that the server parsed out
+of what it produced, goes out as valid UTF-8, because strict clients abort on an invalid byte. A
+streamed reply holds back an incomplete trailing sequence (`utf8_hold_bytes`) and joins it to the next
+piece, so a character split across tokens goes out whole in one delta; each delta then passes
+`utf8_sanitize` (`daslib/utf8_utils`), which turns a byte no later piece can complete into U+FFFD, and
+a stream that ends inside a character sends the held bytes as one last delta through the same
+sanitizer and the same reasoning / tool-call splitter, so they go out as U+FFFD on the channel the
+stream was in. A buffered reply - chat `content` and `reasoning_content`, completion `text`, a tool
+call's `name` and `arguments`, a transcription's `text` and each `verbose_json` segment's - passes
+`utf8_sanitize` over its text before it is written as JSON.
+
 ### Images
 
 A slot started with `--image-mmproj` accepts the OpenAI content-parts image form. The URL must be

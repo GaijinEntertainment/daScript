@@ -17,7 +17,7 @@ require daslib/fio
 require dasllama/dasllama_math   // with_dasllama_jobque_ (the engine-standard jobque config)
 require dasllama/dasllama_gpu_tier   // moe_gpu_tier_installed / gpu_want_auto: is the tier armed; gpu_cpu_passes_
 require dasllama/dasllama_gpu_resident   // set_gpu_resident_regions_, moe_gpu_resident_active
-require ?vulkan dasllama/dasllama_vulkan_common   // PF_WINDOW, where the module exists
+require ?vulkan dasllama/dasllama_vulkan_common   // the prompt window's rows, where the module exists
 require ?vulkan dasllama/dasllama_vulkan_decode   // vk_rdec_token_n_rows: the N-row command served the batched cells' rows
 require ?vulkan dasllama/dasllama_vulkan_classes   // GEMV_COL_TILE: the groups cell's column tiles
 require ?vulkan dasllama/dasllama_vulkan_classes
@@ -265,7 +265,7 @@ def private prose_ids(n, salt : int64) : array<int64> => <- resident_prompt(n, s
 
 //! the logits of `prompt`'s first `n - 1` tokens on a session of its own, gone before the caller makes the compared pair (two
 //! regions hold two live sessions): the one-token-short control a prefill compare holds its bar against
-def private short_control(tr : Model; prompt : array<int64>; n : int64) : array<float> {
+def short_control(tr : Model; prompt : array<int64>; n : int64) : array<float> {
     var short <- create_session(tr, mirror_kv_dtype())
     var less <- [for (i in range64(n - 1l)); prompt[i]]
     forward_prefill(tr, short, less, n - 1l, 0l)
@@ -276,7 +276,7 @@ def private short_control(tr : Model; prompt : array<int64>; n : int64) : array<
 }
 
 //! `prompt` prefilled in one call against the same prompt prefilled as [0, cut) then [cut, n), then four fed steps on both
-def private continue_at(t : T?; tr : Model; n, cut : int64; rel : float) {
+def continue_at(t : T?; tr : Model; n, cut : int64; rel : float) {
     var prompt <- prose_ids(n, 0l)
     var head <- [for (i in range64(cut)); prompt[i]]
     var tail <- [for (i in range64(n - cut)); prompt[cut + i]]
@@ -319,7 +319,7 @@ def cell_prefill_continues_on_the_device(t : T?; file : string) {
 def cell_prefill_continues_on_the_device(t : T?; file : string; rel : float) {
     t |> run("a prefill from a position past zero runs the window chain over the region's rows") @(t : T?) {
         with_regions_rig(t, file) $(tr) {
-            assert_pf_window(t)
+            return if (!assert_pf_window(t))
             continue_at(t, tr, 57l, 40l, rel)     // a short tail inside the first window
             continue_at(t, tr, PF_WINDOW_ROWS + 88l, PF_WINDOW_ROWS, rel)   // the cut on the window boundary
             continue_at(t, tr, PF_WINDOW_ROWS + 388l, 300l, rel)   // the tail runs a whole window from an unaligned start, then a remainder
@@ -744,7 +744,7 @@ def cell_long_prompt_against_cpu(t : T?; file : string; lc : LongCtx) {
 def cell_long_continuation(t : T?; file : string; lc : LongCtx) {
     t |> run("a {lc.split_n}-token prompt cut at {lc.split_cut}: the continued prefill and the steps over it against the one-call prefill") @(t : T?) {
         with_regions_rig(t, file, long_load(lc)) $(tr) {
-            assert_pf_window(t)
+            return if (!assert_pf_window(t))
             rings_armed(t, tr)
             continue_at(t, tr, lc.split_n, lc.split_cut, SPLIT_BAR_REL)
             served_every_call(t)

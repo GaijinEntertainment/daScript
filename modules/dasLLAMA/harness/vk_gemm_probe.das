@@ -6,7 +6,7 @@ options _dasllama_internal = true
 // ATTRIBUTION SWEEP cm2w: - the l stamp's rate by wave count, the workgroups the device fills.
 // ATTRIBUTION SWEEP ts:|cold: - the stamp overheads: a timestamp or a barrier between two m stamps, a cold cache.
 // ATTRIBUTION SWEEP dec - the decode head's small kernels (the f16 GEMV, the deltanet step) in isolation.
-// ATTRIBUTION SWEEP moe:|moesk: - the expert schedule's s and e stamps by schedule form.
+// ATTRIBUTION SWEEP moe:|moesk:|moefn: - the expert schedule's s and e stamps by schedule form.
 // ATTRIBUTION SWEEP cm2g:<fmt> - a format's dense role shapes at 512 rows, overlapped and one dispatch at a time.
 // ATTRIBUTION SWEEP g3|gemma|splitk - the gemma role shapes and the down's split-k ladder, whole against split.
 // ATTRIBUTION SWEEP plef32 - the per-layer-embedding gate and projection over f32 rows: the scalar f32 tile against the staged KHR tile.
@@ -27,7 +27,8 @@ options _dasllama_internal = true
 // and the kq batch tile, cm2d:<fmt> the same over the 4096-wide dense hybrid's shapes, cm2w:<fmt>
 // its l stamp's wave sweep; dec the decode head's small kernels; moe:<fmt> its s and e stamps over
 // the MoE expert schedule (whole, the two ladders, the twin), moesk:<fmt> the same on the 30B's
-// skew; ts:<fmt> a timestamp or a barrier between two of its m stamps; cold:<fmt> its l, m and s
+// skew, moefn:<fmt> the 512-expert carrier's shapes at a 3000-row prompt on its trace's skew (a per-32
+// format runs the whole-bucket form alone); ts:<fmt> a timestamp or a barrier between two of its m stamps; cold:<fmt> its l, m and s
 // stamps warm and cold, the host schedule, the deep slab, the wide plan and the flush; cm2x|k6x|ref
 // the bisect and reference arms; khrx the KHR kq tile's weight-stage and structural bisect; mmqx the
 // integer tile prototypes; kqst:<fmt> the cm2 stamps against the staged tile on the gemma-4 E2B and 4B shapes; plef32 the f32 rows' two tiles; wh the whisper encoder's shapes at 1500 and 1536 rows.
@@ -976,16 +977,43 @@ def private moe_bucket_counts(skew : bool) : array<int> {
     return <- cnt
 }
 
+//! a 512-expert carrier layer's bucket rows over `nk / k` rows: the routed-pick trace's skew (Qwen3.8-Flash-Next, a 3175-row prompt, the median layer: 479 of 512 experts touched, the decile row counts below), interpolated over the rank and scaled to sum to `nk`
+def private moefn_bucket_counts(ne, nk : int) : array<int> {
+    let deciles = fixed_array(643.0, 148.0, 102.0, 73.0, 50.0, 38.0, 24.0, 16.0, 9.0, 4.0, 1.0)
+    let touched = ne * 479 / 512
+    var raw : array<float>
+    raw |> resize(ne)
+    var sum = 0.0
+    for (e in range(ne)) {
+        if (e < touched) {
+            let r = float(e) * 10.0 / float(touched - 1)
+            let i = min(int(r), 9)
+            raw[e] = deciles[i] + (r - float(i)) * (deciles[i + 1] - deciles[i])
+            sum += raw[e]
+        }
+    }
+    var cnt : array<int>
+    cnt |> resize(ne)
+    var placed = 0
+    for (e in range(ne)) {
+        cnt[e] = e < touched ? max(int(raw[e] * float(nk) / sum), 1) : 0
+        placed += cnt[e]
+    }
+    cnt[0] += nk - placed
+    return <- cnt
+}
+
 //! the device schedule's words for one form: a record per bucket piece [block base, row base, rows,
 //! first wg], the per-wg map after the records, SCHED_NONE from the live workgroups to `bound`
 def private moe_sched_words(cnt : array<int>; plane_blk, wtiles, tc, bound : int; form : MoeSchedForm; var live : int&) : array<uint> {
-    let map_off = MOE_NE * 4
+    let ne = length(cnt)
+    let map_off = ne * 4
     var sched : array<uint>
     sched |> resize(map_off + bound)
     var ri = 0
     var wg = 0
     var row0 = 0
-    for (e in range(MOE_NE)) {
+    for (e in range(ne)) {
         let mrows = int(sched_ladder_m_rows(uint(cnt[e])))
         let rows = form == MoeSchedForm.whole ? cnt[e] : (form == MoeSchedForm.ladder_m ? mrows : cnt[e] - mrows)
         let r0 = row0 + (form == MoeSchedForm.ladder_s ? mrows : 0)
@@ -1011,13 +1039,19 @@ def private moe_sched_words(cnt : array<int>; plane_blk, wtiles, tc, bound : int
 }
 
 [arch(at="../ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md#vk-gemm-probe")]
-def private run_moe_fmt_shape(fmt : int; name : string; d, n : int; skew : bool) {   // nolint:STYLE038 — one linear measurement sweep
-    let unit = fmt == 0 ? 32 : 256
+//! `cnt`: the bucket rows an expert, every expert of the layer; `profile` names the row; a per-32 format (its one cm2 stamp
+//! the s column) runs the whole-bucket form alone
+def private run_moe_fmt_shape(fmt : int; name : string; d, n : int; cnt : array<int>; profile : string) {   // nolint:STYLE038 — one linear measurement sweep
+    let ne = length(cnt)
+    let unit = kq_sb(fmt) ? 256 : 32
     let plane_blk = d * (n / unit)   //! one expert's plane, in blocks
-    let totblk = MOE_NE * plane_blk
+    let totblk = ne * plane_blk
     let bb = arena_block_bytes(fmt)
     let wq_words = int(bb.wq / 4l)
-    let nk = MOE_NE * S_ROWS
+    var nk = 0
+    for (c in cnt) {
+        nk += c
+    }
     let xrows = nk + READ_SLACK
     var wqh, wsuh, xfh : array<uint>
     wqh |> reserve(totblk * wq_words)   //! the planes pass the unreserved-growth cap (128 expert planes)
@@ -1025,7 +1059,7 @@ def private run_moe_fmt_shape(fmt : int; name : string; d, n : int; skew : bool)
     for (i in range(totblk * wq_words)) {
         wqh[i] = hash_word(uint(i) + 29u)
     }
-    if (fmt == 0) {
+    if (bb.ws < 4l) {   //! one f16 scale a block (q8 and the per-32 formats): a word holds a block pair
         wsuh |> reserve(totblk / 2 + 1)
         wsuh |> resize(totblk / 2 + 1)
         for (i in range(totblk / 2 + 1)) {
@@ -1047,11 +1081,10 @@ def private run_moe_fmt_shape(fmt : int; name : string; d, n : int; skew : bool)
         xfh[i] = cool_f16_pair(uint(i) * 3u + 5u)
     }
     let wtiles = (d + 127) / 128
-    let map_off = MOE_NE * 4
-    var cnt <- moe_bucket_counts(skew)
-    let bound_whole = (nk / S_ROWS + MOE_NE) * wtiles   //! every bucket may straddle a column
-    let bound_ladder_m = (nk / M_ROWS + MOE_NE) * wtiles   //! every bucket may own a partial m column
-    let bound_ladder_s = MOE_NE * wtiles   //! at most one s tile per bucket
+    let map_off = ne * 4
+    let bound_whole = (nk / S_ROWS + ne) * wtiles   //! every bucket may straddle a column
+    let bound_ladder_m = (nk / M_ROWS + ne) * wtiles   //! every bucket may own a partial m column
+    let bound_ladder_s = ne * wtiles   //! at most one s tile per bucket
     var live_whole = 0
     var live_ladder_m = 0
     var live_ladder_s = 0
@@ -1076,7 +1109,6 @@ def private run_moe_fmt_shape(fmt : int; name : string; d, n : int; skew : bool)
     let yd_a = make_device_buf(y_bytes)
     let yd_b = make_device_buf(y_bytes)
     let flop = 2.0lf * double(nk) * double(d) * double(n)
-    let profile = skew ? "skewed " : "uniform"
     unsafe {
         upload_region_at(wqd, 0l, addr<uint8 const?>(wqh[0]), wq_bytes)
         upload_region_at(wsd, 0l, addr<uint8 const?>(wsuh[0]), ws_bytes)
@@ -1098,6 +1130,15 @@ def private run_moe_fmt_shape(fmt : int; name : string; d, n : int; skew : bool)
         }
         let tf = flop / (us * 1000000.0lf)
         print("{name} {profile} whole s-tile: d={d} K={n} wgs={bound_whole} ({live_whole} live)  {us / 1000.0lf} ms/dispatch  {tf} TFLOP/s  timing-only\n")
+        if (!kq_sb(fmt)) {
+            delete wqh
+            delete wsuh
+            delete xfh
+            delete words_whole
+            delete words_ladder_m
+            delete words_ladder_s
+            return
+        }
         var s_ladder_m_a = cm2_cls_set(fmt, CM2_TC_E, fixed_array(wqd, wsd, ladder_m_d, xfd, yd_a),
             fixed_array(wq_bytes, ws_bytes, ladder_m_bytes, xf_bytes, y_bytes), gbits)
         var s_ladder_m_b = cm2_cls_set(fmt, CM2_TC_E, fixed_array(wqd, wsd, ladder_m_d, xfd, yd_b),
@@ -1146,7 +1187,6 @@ def private run_moe_fmt_shape(fmt : int; name : string; d, n : int; skew : bool)
     delete wqh
     delete wsuh
     delete xfh
-    delete cnt
     delete words_whole
     delete words_ladder_m
     delete words_ladder_s
@@ -3515,7 +3555,7 @@ def private twin_rounds(body : block<(round, arm, arms : int; tag : string) : vo
 
 //! the per-format arm `a` names - its `<arm>:` prefix, the format name past it - or "" where it names none
 def private fmt_arm_of(a : string) : string {
-    for (pre in fixed_array("cm2:", "cm2d:", "cm2w:", "moe:", "cm2g:", "moesk:", "ts:", "cold:", "kqst:", "narrow:")) {
+    for (pre in fixed_array("cm2:", "cm2d:", "cm2w:", "moe:", "cm2g:", "moesk:", "moefn:", "ts:", "cold:", "kqst:", "narrow:")) {
         return pre if (a |> starts_with(pre))
     }
     return ""
@@ -3744,13 +3784,15 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
         }
         return
     }
-    if (only == "moe:" || only == "moesk:") {
+    if (only == "moe:" || only == "moesk:" || only == "moefn:") {
         if (!g_gpu.has_coopmat2) {
             print("no coopmat2 on this device\n")
             g_probe_exit = 1
             return
         }
-        if (cm2_fmt < 0 || !(cm2_fmt == int(KqFmt.q8) || kq_sb(cm2_fmt))) {
+        let fn = only == "moefn:"
+        let per32 = cm2_fmt >= 0 && cm2_fmt != int(KqFmt.q8) && !kq_sb(cm2_fmt)
+        if (cm2_fmt < 0 || (per32 && !fn)) {
             print("{only}<fmt> needs q8 or a kq superblock format name ({cm2_fmt_names()})\n")
             g_probe_exit = 1
             return
@@ -3760,12 +3802,20 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
             return
         }
         print("ATTRIBUTION SWEEP {only}{cm2_fmt_names()}: timing-only rows, no output compared\n")
-        let skew = only == "moesk:"
         twin_rounds() $(round, _arm, _arms; tag) {
-            verify(cm2_cls_ensure(cm2_fmt, 32l) && cm2_cls_ensure(cm2_fmt, 128l) && cm2_cls_ensure(cm2_fmt, CM2_TC_E)
-                && (!probe_stwin_has(cm2_fmt) || probe_stwin_ensure(cm2_fmt)), "moe:<fmt> probe pipelines must engage")
-            run_moe_fmt_shape(cm2_fmt, "r{round} {tag} gate/up", 768, 2048, skew)
-            run_moe_fmt_shape(cm2_fmt, "r{round} {tag} down   ", 2048, 768, skew)
+            verify(cm2_cls_ensure(cm2_fmt, 32l) && (per32 || (cm2_cls_ensure(cm2_fmt, 128l) && cm2_cls_ensure(cm2_fmt, CM2_TC_E)
+                && (!probe_stwin_has(cm2_fmt) || probe_stwin_ensure(cm2_fmt)))), "moe:<fmt> probe pipelines must engage")
+            if (fn) {
+                //! the 512-expert carrier at a 3000-row prompt, top-10: the gate/up shape and the down shape over the trace's skew
+                let cnt <- moefn_bucket_counts(512, 30000)
+                run_moe_fmt_shape(cm2_fmt, "r{round} {tag} fn gate/up", 640, 2560, cnt, "3k-skew")
+                run_moe_fmt_shape(cm2_fmt, "r{round} {tag} fn down   ", 2560, 640, cnt, "3k-skew")
+            } else {
+                let skew = only == "moesk:"
+                let cnt <- moe_bucket_counts(skew)
+                run_moe_fmt_shape(cm2_fmt, "r{round} {tag} gate/up", 768, 2048, cnt, skew ? "skewed " : "uniform")
+                run_moe_fmt_shape(cm2_fmt, "r{round} {tag} down   ", 2048, 768, cnt, skew ? "skewed " : "uniform")
+            }
         }
         return
     }

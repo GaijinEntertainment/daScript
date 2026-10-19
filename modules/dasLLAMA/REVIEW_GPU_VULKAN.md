@@ -1,7 +1,7 @@
 # dasLLAMA Vulkan Tier Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `ARCHITECTURE_GPU_VULKAN.md` and every `ARCHITECTURE_GPU_VULKAN_<CONCERN>.md` companion beside
+docs: `ARCHITECTURE_GPU_VULKAN.md`, every `ARCHITECTURE_GPU_VULKAN_<CONCERN>.md` companion beside
 it, and `ARCHITECTURE_GPU.md`. Planned work: `followup_vulkan.md`.
 
 **A diff that adds a Vulkan dispatch family - a `[vk_dispatch]` class and the `ensure_<family>` /
@@ -44,13 +44,13 @@ embed when that gate returns true, so a gate true where the prefill path decline
 next consumer an unfilled residual stream.
 
 **A Vulkan-tier serving gate that decides at load - a predicate or per-layer loop whose true
-branch dispatches through a `moe_gpu_*` or `vk_*` entry, wherever the diff puts it, and whose
+branch dispatches through a call into the tier (a `moe_gpu_*`, `vk_*` or `rdec_*` entry), wherever the diff puts it, and whose
 false branch or `continue` routes work off the path it armed, to the CPU path or to another
 path inside the tier - is a defect when it does not log, at load, how many layers or planes it
 routed off and why.** A silent decline is a fallback a user finds only by profiling.
 
 **A Vulkan-tier serving gate that decides per call - a predicate or loop whose true branch
-dispatches through a `moe_gpu_*` or `vk_*` entry, wherever the diff puts it, and whose false
+dispatches through a call into the tier (a `moe_gpu_*`, `vk_*` or `rdec_*` entry), wherever the diff puts it, and whose false
 branch or `continue` routes work off the path it armed, to the CPU path, to another path inside
 the tier, or to a slower form inside the same path (a host upload in place of a device-to-device
 copy) because of a model, session or device property, never because of the work's size - that does
@@ -138,7 +138,7 @@ the `DASLLAMA_VK_DECVEC=1` and the `=0` rows.**
 
 **A diff that changes a format's own cm2 tile - its `<Fmt>Cm2T`, a `@template_constant`
 `override`n on a stamp, a stamp's tile typedefs or instance set, or its decode body or four-wide
-twin (`decode_v4`) - puts that format's probe rows in the PR body, both the `=1` and the `=0`
+twin (`decode_v4`) - puts that format's probe rows in the PR body, both the `DASLLAMA_VK_DECVEC=1` and the `=0`
 rows.**
 
 **A diff that owes a cm2 stamp's probe rows takes them from that stamp's `harness/vk_gemm_probe.das`
@@ -287,3 +287,11 @@ same sets, so a twin left marked recorded runs sets the new record replaced.
 command buffers are allocated, in `vk_rdec_prepare`, and nowhere else.** A path that writes
 availability outside `vk_rdec_prepare` can turn a form on after the recording pass ran, and
 `rd_form_at` then picks a form whose command buffer nothing recorded.
+
+**A diff that writes a device buffer through its host mapping (`upload_region_at` - the direct
+write over the whole device heap a resizable BAR maps) after any device command has touched that
+buffer is a defect - finish every host write before the device's first touch, or stage through a
+pinned buffer on the transfer queue.** A per-call fill of a slot a device command read in an
+earlier call is the same cycle, spread across calls. The NVIDIA driver shadows a large mapped
+allocation and migrates it at the device's first touch, and a write-migrate-write cycle hangs the
+machine.

@@ -1167,10 +1167,12 @@ def private argmax_logit(s : Session; vocab : int64) : int64 {
 // ===== The parity pregate (--parity: the board's start-of-model gate) =====
 
 // greedy continuation over the same slice the test fixtures' parity_gen_ok (tests/_model_tier.das) compares
-def private parity_greedy(t : Model; prompt : array<int64>; n_gen : int64) : array<int64> {
+//! `n_gen` greedy tokens past `prompt` on a session of codec `kv`: f32 is the CPU rails' (the --parity pregate), the rows' codec
+//! the served stack's (the timed run's fixture gate - a trimmed lane panics on a call passed to the CPU rails)
+def private parity_greedy(t : Model; prompt : array<int64>; n_gen : int64; kv : KVDtype = KVDtype.f32) : array<int64> {
     var got : array<int64>
     got |> reserve(n_gen)
-    var s <- make_run_state(t.config)
+    var s <- create_session(t, kv)
     let pl = long_length(prompt)
     forward_prefill(t, s, prompt, pl, 0l)
     var pos = pl
@@ -1264,7 +1266,7 @@ def parity_check(model : string; spec : ModelSpec) : bool {
 // past the bar. The --parity pregate stays the strict token-for-token rail.
 let private FIXTURE_GATE_TOKENS = 8l
 
-def private bench_fixture_gate(var t : Model; spec : ModelSpec; fmt : OutFmt) : bool {
+def private bench_fixture_gate(var t : Model; spec : ModelSpec; fmt : OutFmt; kv : KVDtype) : bool {
     if (empty(spec.parity.gen)) {
         say(fmt, "sanity: no frozen fixture for {spec.file} in the model-set table - the finiteness gate alone stands\n")
         return true
@@ -1274,7 +1276,7 @@ def private bench_fixture_gate(var t : Model; spec : ModelSpec; fmt : OutFmt) : 
     let n_check = min(FIXTURE_GATE_TOKENS, long_length(spec.parity.gen))
     let full_seq = t.config.seq_len
     t.config.seq_len = long_length(prompt) + n_check + 8l   // the run's own KV cap may sit below the fixture; only these positions run
-    var got <- parity_greedy(t, prompt, n_check)
+    var got <- parity_greedy(t, prompt, n_check, kv)
     t.config.seq_len = full_seq
     var same = 0l
     while (same < long_length(got) && got[same] == spec.parity.gen[same]) {
@@ -1293,8 +1295,8 @@ def private bench_fixture_gate(var t : Model; spec : ModelSpec; fmt : OutFmt) : 
 
 //! The timed run's fixture gate on an already-loaded model - public so a test can drive it with
 //! the table's own spec and a deliberately wrong one.
-def fixture_gate_check(var t : Model; spec : ModelSpec) : bool =>
-    bench_fixture_gate(t, spec, OutFmt.txt)
+def fixture_gate_check(var t : Model; spec : ModelSpec; kv : KVDtype = KVDtype.f16) : bool =>
+    bench_fixture_gate(t, spec, OutFmt.txt, kv)
 
 // progress line — stdout in txt mode, stderr when stdout carries the md table / json records
 def private say(fmt : OutFmt; text : string) {
@@ -1667,7 +1669,7 @@ def main() : int {
             if (empty(spec.file)) {
                 spec.file = base_name(mpath)
             }
-            if (!bench_fixture_gate(t, spec, fmt)) {
+            if (!bench_fixture_gate(t, spec, fmt, cfg.kv)) {
                 panic("lcpp_bench: the frozen-fixture gate refused {base_name(mpath)} - see the REFUSED line")
             }
         }

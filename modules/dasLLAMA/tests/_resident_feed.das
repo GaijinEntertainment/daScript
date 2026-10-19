@@ -12,16 +12,21 @@ require dasllama/dasllama_lint public
 require dastest/testing_boost public
 require dasllama/dasllama_common   // Model, Session, forward_prefill, forward
 require dasllama/dasllama   // create_session, moe_gpu_drop_model
+require dasllama/dasllama_image
 require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active / moe_gpu_resident_prefills: the driver's witnesses
 require dasllama/dasllama_gpu_tier   // gpu_cpu_passes_: the calls the driver handed to the CPU rails, by reason
 require dasllama/dasllama_kv_dtype   // kv_row_bytes / kv_layer_kbase: the head's K row
 require ?vulkan dasllama/dasllama_vulkan_common   // the resolved coopmat mode, where the module exists
 require ?vulkan dasllama/dasllama_vulkan_decode   // the greedy chain's mode pin and its hits and misses
 require dasllama/dasllama_math   // with_dasllama_jobque_
+require dasllama/dasllama_env   // nolint:STYLE030,LINT019 — pf_window_rows / the pins: read under the vulkan static_if, unused in the darwin world
+require _compares   // argmax_of: the row's peak a red names
 require _model_tier   // logits_maxdiff, mirror_kv_dtype, live_maxabs, SUPPRESSED_LOGIT
 require _format_census   // census_plane, SiteCensus: a plane's tag against the file's tensor type
 require dasllama/dasllama_gguf   // parse_gguf_meta
 require daslib/fio   // fopen, fmap
+require daslib/f16_cvt   // f16_to_f32: the stored f16 rows' distance
+require math   // abs
 
 //! the served tile arm, so a red names which prefill tile it came from
 def tile_arm_tag() : string {
@@ -32,13 +37,17 @@ def tile_arm_tag() : string {
     }
 }
 
-let PF_WINDOW_ROWS = 512l   //! the engine's PF_WINDOW, asserted equal by the two-window cells: a prompt past it runs as sequential windows
+let PF_WINDOW_ROWS = 2048l   //! the engine's default prompt window (`DASLLAMA_GPU_PF_ROWS` unset), asserted by the two-window cells: a prompt past it runs as sequential windows
 
-//! the engine's prefill window is `PF_WINDOW_ROWS`, where the vulkan module exists: a cell sizing its prompt past the window holds it
-def assert_pf_window(t : T?) {
+//! the engine's prefill window is `rows` (the default `PF_WINDOW_ROWS`, or the window a file pins), where the vulkan module exists: a cell sizing its prompt past the window holds it
+def assert_pf_window(t : T?; rows : int64 = PF_WINDOW_ROWS) : bool {
     static_if (typeinfo builtin_module_exists(vulkan)) {
-        t |> equal(PF_WINDOW, PF_WINDOW_ROWS, "the prompt is sized past the engine's own window")
+        if (pf_window_rows() != rows) {   //! the knob or a pin moved the window: the cell's prompt is sized against `rows`, so it skips rather than reads another shape
+            t |> skip("the prompt window is {pf_window_rows()} rows (DASLLAMA_GPU_PF_ROWS / set_pf_window_rows_pin), not the {rows} this cell sizes its prompt past")
+            return false
+        }
     }
+    return true
 }
 
 //! `n` ramp ids `base + ((i + salt) * stride) % span`: a prompt or a fed run no tokenizer is needed for
@@ -222,21 +231,26 @@ def census(kernel : string) : int64 {
 }
 
 //! `path` loaded at q8 with the whole-model route pinned on - at `regions` mirror regions where it is past 0, the context
-//! pinned and asked whole at `strict_ctx` positions where it is past 0, else at the caller's own context pin, never strict -
-//! and `host_layers` routed layers' experts asked onto the host (0: the plan's own count, pinned so the environment's ask
-//! does not reach the load) whatever an earlier cell left; every lever put back after
-def load_resident(path : string; regions : int64 = 0l; strict_ctx : int64 = 0l; host_layers : int64 = 0l) : Model {
+//! pinned and asked whole at `strict_ctx` positions where it is past 0, else at the caller's own context pins (its strict
+//! ask included) - and `host_layers` routed layers' experts asked onto the host (0: the plan's own count, pinned so the
+//! environment's ask does not reach the load) whatever an earlier cell left; every lever put back after
+def load_resident(path : string; regions : int64 = 0l; strict_ctx : int64 = 0l; host_layers : int64 = 0l; image : bool = false) : Model {
     let levers = resident_levers()
     if (regions > 0l) {
         set_gpu_resident_regions_(regions)
     }
     if (strict_ctx > 0l) {
         set_gpu_ctx_max(strict_ctx)
+        set_gpu_ctx_strict(true)
     }
-    set_gpu_ctx_strict(strict_ctx > 0l)
     set_gpu_host_layers(host_layers)
     set_gpu_resident_route(true)
-    var tr <- load_model_(path, QuantMode.q8)
+    var tr <- Model()
+    if (image) {
+        tr <- load_model_cached(path, QuantMode.q8)
+    } else {
+        tr <- load_model_(path, QuantMode.q8)
+    }
     restore_resident_levers(levers)
     return <- tr
 }
@@ -386,10 +400,20 @@ def row_within(t : T?; what : string; got, want : array<float>; bar : float) : f
     return diff
 }
 
-//! the control that gives a row bar its teeth: `got` against `control`, a row one token or step off, past `bars` bars; the difference back
+//! `row_within` with each side's argmax and its decoded piece logged under `what` first, so a red names what the rows said
+def row_within_say(t : T?; tr : Model; what : string; got, want : array<float>; bar : float) : float {
+    let pg = argmax_of(got)
+    let pw = argmax_of(want)
+    to_log(LOG_INFO, "{what}: argmax {pg} '{piece(tr, pg)}' ({got[pg]}) against {pw} '{piece(tr, pw)}' ({want[pw]})\n")
+    return row_within(t, what, got, want, bar)
+}
+
+//! the control that gives a row bar its teeth: `got` against `control`, a row one token or step off, past `bars` bars and
+//! finite (a NaN difference reads past every bar and proves nothing); the difference back
 def control_past(t : T?; what : string; got, control : array<float>; bar : float; bars : float = 1.0) : float {
     let off = logits_maxdiff(got, control)
-    t |> success(off > bars * bar, "{what} control: the row one off misses by {bars} bars (maxdiff {off}, bar {bar})")
+    let finite = is_finite(off) && off < 1e30
+    t |> success(finite && off > bars * bar, "{what} control: the row one off misses by {bars} bars (maxdiff {off}, bar {bar})")
     return off
 }
 
@@ -620,6 +644,19 @@ def bytes_differing(a, b : array<uint8>; a_at, b_at, n : int64) : float {
     delete sa
     delete sb
     return float(differing) / float(n)
+}
+
+//! the summed distance of `n` bytes of f16 rows in `a` from byte `a_at` to `b`'s from byte `b_at`, of `b`'s summed magnitude
+def f16_rows_distance(a, b : array<uint8>; a_at, b_at, n : int64) : float {
+    var dist = 0.0
+    var mag = 0.0
+    for (i in range64(n / 2l)) {
+        let x = f16_to_f32(uint(a[a_at + 2l * i]) | (uint(a[a_at + 2l * i + 1l]) << 8u))
+        let y = f16_to_f32(uint(b[b_at + 2l * i]) | (uint(b[b_at + 2l * i + 1l]) << 8u))
+        dist += abs(x - y)
+        mag += abs(y)
+    }
+    return mag > 0.0 ? dist / mag : (dist > 0.0 ? INFINITE_DIFF : 0.0)
 }
 
 let private CHAIN_STEPS = 24l   //! the greedy chain cell's fed steps a walk

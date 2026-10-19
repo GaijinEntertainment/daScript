@@ -24,10 +24,15 @@ device-home session keeps its K/V only in a device K/V region and has no host ca
 sessions, and declines the call when they would not.** The driver panics on a device-home session
 that finds no region.
 
-**A diff that calls a `set_gpu_*` or `reset_gpu_*` function of `dasllama/dasllama_core.das` that
-forwards into `dasllama/dasllama_gpu_resident.das` calls it before the load it governs.** The load
-reads these values once, to decide what the whole-model GPU driver holds on the device; a value set
-after the load never reaches that decision.
+**A diff that calls a setter whose value the next load reads to plan what the device holds - a
+`set_gpu_*` or `reset_gpu_*` function of `dasllama/dasllama_core.das`, `set_pf_window_rows_pin`,
+`set_expert_cache_mb`, `set_gpu_want_pf_stream`; that list is the trigger - calls it before the
+load it governs.** The load reads these values once, to decide what the whole-model GPU driver
+holds on the device; a value set after the load never reaches that decision.
+
+**A diff that defines a setter whose value the next load reads to plan what the device holds
+names it in the call-order rule's setter list, in the same change.** The list is the trigger a
+reviewer reads; an unlisted setter reaches no call-order check.
 
 **A diff that adds or rewords an `RdecPass` value's sentence in `rdec_pass_words` writes it in
 plain words that name no part of the engine - no pass, region, mirror, resident driver, tier or

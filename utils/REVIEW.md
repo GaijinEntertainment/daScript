@@ -1,7 +1,6 @@
 # Utils Code Review Checklist
 
-**Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-doc: `CLAUDE.md` (repo root).
+**Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.**
 
 A tool is a directory holding a program and the files only that program uses. A directory is
 a tool when `CMakeLists.txt` (beside this file) or the repo root's `CMakeLists.txt` builds or
@@ -29,7 +28,7 @@ skip-path assertion.
 A CI row is a workflow step whose command runs the arm, directly or through a process it
 spawns. An assertion no CI row can run is one that needs something no pull-request lane's
 runner image provides - a GPU, a host tool the image does not carry, a network service, a
-credential - that list is closed; whether a row runs the arm today does not decide it. An arm
+credential - that list is closed; whether a row already runs the arm does not decide it. An arm
 that skips unless something the build can produce is present - a target, an exe, a generated
 file - has assertions a CI row can run. An arm that skips unless a host tool is present has
 assertions a CI row can run when a pull-request lane's runner image carries that tool. One arm
@@ -43,7 +42,7 @@ directory; a test that calls a `common/` module directly goes under `common/`, e
 runs a tool, one that tests a `common/` change by running a tool that requires it goes under that
 tool, and a test covering two tools goes under either one.**
 
-**A diff that changes how a tool builds a `.dlim` from a gguf, how one loads it, or what
+**A diff that changes how a tool builds a `.dlim` from a `.gguf` model file, how one loads it, or what
 identifies one - the fields that decide whether two `.dlim`s are the same image - answers to
 `modules/dasLLAMA/REVIEW.md` (repo root) too.**
 

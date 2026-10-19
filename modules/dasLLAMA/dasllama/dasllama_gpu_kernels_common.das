@@ -4368,7 +4368,7 @@ struct GkMoeCombArgs {
     wstride : uint   //! a row's stride in `slot_w` (0 reads as k; the Metal selection rows' 2k)
     woff : uint      //! the weights' base in a row (the Metal selection rows' k, past the picks)
     gstride : uint   //! the shared expert's gate logit: a row's stride in `gate` and its index there (`SH` stamps)
-    goff : uint
+    goff : uint      //! ... and under `BYROW` the dispatch's first chunk row of `down_rows` (a bundle's region base)
     eps : float      //! the gemma-4 step's (`GkMoeCombG4`): the norms' epsilon
     ascale : float   //! ... the layer's output scale over the updated residual
     presummed : uint //! ... the routed rows arrive summed under their weights, one row a position (the down GEMV folded them)
@@ -4389,10 +4389,12 @@ class template GkMoeCombine : GkQ8BlockStore {
     @ssbo @binding = 3 @role = "read" down_rows : array<float>                         //! the slots' down-GEMM rows
     @ssbo @binding = 4 @role = "read" @template_gate = SH sh_rows : array<float>        //! [rows x n] the shared expert's rows
     @ssbo @binding = 5 @role = "read" @template_gate = SH gate : array<float>           //! its raw gate logits
+    @ssbo @binding = 6 @role = "read" @template_gate = BYROW bkt_grid : array<uint>     //! bucket row -> its grid entry (the slot map's inverse)
     @kargs pa : GkMoeCombArgs
     @template_constant GATHERED : bool = true
     @template_constant SH : bool = false
     @template_constant WINDOW : bool = true   //!< the [r0, r1) window, the accumulate and the zero-weight skip (the Vulkan chunked chain); off, every slot sums from zero
+    @template_constant BYROW : bool = false   //!< a workgroup a bucket row of the window, adding its weighted down row onto its position's row (the per-expert chain)
     @template_constant SLOT_X4 : bool = true  //!< off the window, four slots' loads in flight a step (the sum's order the same)
 
     def slot_row(p, j : uint) : uint {
@@ -4454,6 +4456,17 @@ class template GkMoeCombine : GkQ8BlockStore {
             acc += sig_gate(sh_rows[p * n + i], gate[p * pa.gstride + pa.goff])
         }
         acc_rows[p * n + i] = acc
+    }
+
+    // the by-row form: dispatch row `b` adds chunk row `goff + b`'s weighted down row onto its position's row; a dispatch's rows are one expert's, so no two touch one position; the weights come packed, a position's k in a row
+    def comb_row_elem(b, i : uint) {
+        static_if (BYROW) {
+            let n = pa.n
+            let k = max(1u, pa.k)
+            let g = bkt_grid[pa.r0 + b]
+            let p = g / k
+            acc_rows[p * n + i] += slot_w[g] * down_rows[(pa.goff + b) * n + i]
+        }
     }
 }
 

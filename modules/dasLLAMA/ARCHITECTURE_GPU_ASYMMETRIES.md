@@ -30,7 +30,7 @@ asymmetries a stamp family ledgers - stays in `ARCHITECTURE_GPU.md#gpu-backends`
   staged KHR tile reads the file's f32 rows, rounds each weight to f16 on its stage, feeds f16 rows and accumulates in
   f16, because the f32 scalar tile is the only f32-exact form the Vulkan tier has and runs at a twenty-fifth of its rate; Metal
   serves the same planes on its f32-exact tile, and has no form to pick between.
-- **The hot expert pool is Vulkan-only** (`ARCHITECTURE_GPU_VULKAN_HC.md#hc-hot-pool`, the tier's four hot
+- **The hot expert pool is Vulkan-only** (`ARCHITECTURE_GPU_VULKAN_POOL.md#hc-hot-pool`, the tier's four hot
   seats, `DASLLAMA_GPU_HEAT`): where routed experts live on the host the Vulkan driver keeps the hottest in
   per-layer device slots; Metal has every expert resident, so nothing is hot or cold.
 - **A plain MoE's host-layer form is Vulkan-only** (`ARCHITECTURE_GPU_VULKAN_HC.md#hc-token-command`,
@@ -39,9 +39,19 @@ asymmetries a stamp family ledgers - stays in `ARCHITECTURE_GPU.md#gpu-backends`
   the token command and the window cut at those layers; Metal holds the model whole from unified memory and
   cuts nothing.
 - **The host-layers ask is read by the Vulkan plan alone** (`set_gpu_host_layers`,
-  `DASLLAMA_GPU_HOST_LAYERS`, `ARCHITECTURE_GPU_VULKAN_HC.md#hc-hot-pool`): it names how many routed
+  `DASLLAMA_GPU_HOST_LAYERS`, `ARCHITECTURE_GPU_VULKAN_POOL.md#hc-hot-pool`): it names how many routed
   layers' experts the Vulkan plan moves to the host whatever the card holds; Metal moves no expert off the
   device, so the ask has nothing to move.
+- **The streamed prompt and its levers are the Vulkan driver's alone** (`set_gpu_want_pf_stream`,
+  `DASLLAMA_GPU_PF_STREAM`, `DASLLAMA_GPU_PF_STREAM_LAYERS`, `set_pf_window_rows_pin`, `DASLLAMA_GPU_PF_ROWS`,
+  `set_expert_cache_mb`, `DASLLAMA_EXPERT_CACHE_MB`, `DASLLAMA_EXPERT_RING`, `DASLLAMA_EXPERT_READERS`,
+  `DASLLAMA_VK_XF_BUNDLE`, `DASLLAMA_GPU_HOT_DMA`, `DASLLAMA_GPU_DEC_MEET`,
+  `ARCHITECTURE_GPU_VULKAN_STREAM.md#streamed-layer-split`, `#expert-cache`,
+  `ARCHITECTURE_GPU_VULKAN_POOL.md#pool-dma-fill`): a routed layer whose experts serve on the host streams
+  its stack to the device for the prompt window, the window's rows cut at `DASLLAMA_GPU_PF_ROWS`, the
+  stacks held in pinned memory under the expert cache's budget and read off the lane by its readers, the
+  pool's misses filled by DMA and a decode token's picks met over the pool under the two experiment knobs;
+  Metal holds every expert in unified memory, streams nothing and reads none of these.
 - **The strict context pin is read by the Vulkan plan alone** (`set_gpu_ctx_strict`,
   `DASLLAMA_GPU_CTX_STRICT`, `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan`): Metal's mirror is the
   model's own context in unified memory, so no plan shortens it and the pin has nothing to hold.

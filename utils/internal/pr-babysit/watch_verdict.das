@@ -10,10 +10,16 @@ enum public WatchVerdict {
     ci_red
     review_to_triage
     ready_to_merge
+    conflict
 }
 
-def public watch_verdict(fail_count : int; pending_count : int; reviewed_tip : bool; unresolved : int) : WatchVerdict {
-    // a red check outranks everything - babysit fixes CI first, Copilot re-reviews the fix anyway
+def public watch_verdict(fail_count : int; pending_count : int; reviewed_tip : bool;
+                         unresolved : int; conflicted : bool = false) : WatchVerdict {
+    // a tip that conflicts with its base outranks a red check: nothing
+    // merges before the rebase, and the rebase re-runs CI
+    return WatchVerdict.conflict if (conflicted)
+    // a red check outranks the review - babysit fixes CI first, Copilot
+    // re-reviews the fix anyway
     return WatchVerdict.ci_red if (fail_count > 0)
     // triage does not wait for the matrix - the loop iterates against the review, not CI
     return WatchVerdict.review_to_triage if (reviewed_tip && unresolved > 0)
@@ -55,9 +61,15 @@ def public classify_checks(checks : array<string>) : tuple<fails : array<string>
 def public exit_for(verdict : WatchVerdict) : int {
     return 2 if (verdict == WatchVerdict.ci_red)
     return 3 if (verdict == WatchVerdict.review_to_triage)
+    return 4 if (verdict == WatchVerdict.conflict)
     return 0 if (verdict == WatchVerdict.ready_to_merge)
     return -1
 }
+
+// GitHub's `mergeable` as the REST field prints: "true", "false", or
+// "null" while it is still computing after a push - only a computed
+// "false" is a conflict; "null" keeps polling
+def public conflicted_from(mergeable : string) : bool => mergeable == "false"
 
 def public poll_budget(timeout_min : int; interval_sec : int) : int =>
     max(1, (timeout_min * 60) / max(1, interval_sec))

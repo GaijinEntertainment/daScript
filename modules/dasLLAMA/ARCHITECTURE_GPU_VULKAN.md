@@ -49,7 +49,7 @@ walk as reference measurements of another engine's kernels.
 
 ### The Vulkan resident prefill window chain {#vk-prefill-window-chain}
 
-**A prompt longer than `PF_WINDOW` rows runs as SEQUENTIAL windows over the same activation buffers.** Every
+**A prompt longer than the prompt window (`pf_window_rows`) runs as SEQUENTIAL windows over the same activation buffers.** Every
 window's rope and attention address the KV mirror at ABSOLUTE positions, so window w attends everything the
 earlier windows stored; only a window holding a segment's last row - a one-session call's last window - runs the
 final requant and the classifier at that row.

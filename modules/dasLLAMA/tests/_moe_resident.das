@@ -20,7 +20,7 @@ require dasllama/dasllama_math   // with_dasllama_jobque_ (the engine-standard j
 require dasllama/dasllama_gpu_tier   // moe_gpu_tier_installed / gpu_want_auto: is the tier armed
 require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active: did the whole-model driver take the MoE
 require dasllama/dasllama_moe   // heat_totals, heat_reset and the shared expert's row counters: the per-op heat cell's witnesses
-require ?vulkan dasllama/dasllama_vulkan_common   // PF_WINDOW, the resolved coopmat mode and the kernel census, where the module exists
+require ?vulkan dasllama/dasllama_vulkan_common   // the resolved coopmat mode and the kernel census, where the module exists
 require dasllama/dasllama_kqformat
 require daslib/enum_trait   // the KqFmt members as a loop
 require _model_tier public   // models_dir() + model_available() presence/size-tier gate
@@ -43,6 +43,7 @@ struct MoeFixture {
     expect_host_layers : bool = false   //! the card does not hold the experts whole: the driver arms with some routed layers' experts on the host
     strict_ctx : int64 = 0l      //! > 0: the load pins this context whole (`set_gpu_ctx_max` + `set_gpu_ctx_strict`), and the armed region holds it
     census : bool = false        //! every site the file carries read in its own format (`census_cell`): a file whose planes all sit on their formats' lattices
+    image : bool = false         //! the load goes through the prepared lane (minted beside the file on the first load): the cells that read off it
     host_layers_ask : int64 = 0l //! > 0: the load asks at least this many routed layers' experts onto the host (`set_gpu_host_layers`) whatever the card holds - the host-layers form on any card
 }
 
@@ -164,7 +165,7 @@ def moe_fixture_admitted(t : T?; tr : Model; fx : MoeFixture) : int64 {
 def moe_forced_feed(t : T?; n : int64; fx : MoeFixture) {
     let path = path_join(models_dir(), fx.file)
     if (!resident_ready(t, path)) return
-    var tr <- load_resident(path, 1l, fx.strict_ctx, fx.host_layers_ask)   //! one region: the context asked whole is the region's
+    var tr <- load_resident(path, 1l, fx.strict_ctx, fx.host_layers_ask, fx.image)   //! one region: the context asked whole is the region's
     let host_layers = moe_fixture_admitted(t, tr, fx)
     if (host_layers < 0l) {
         delete tr

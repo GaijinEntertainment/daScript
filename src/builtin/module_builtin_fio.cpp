@@ -65,6 +65,10 @@ void * das_dwrite_band ( void * h, uint64_t * avail );
 bool das_dwrite_commit ( void * h, uint64_t bytes );
 uint64_t das_dwrite_stat ( void * h, int which );
 bool das_dwrite_close ( void * h );
+// src/builtin/ARCHITECTURE_FIO.md#direct-reader
+void * das_dread_open ( const char * path, uint64_t band_bytes );
+int64_t das_dread_at ( void * h, uint64_t off, void * dst, uint64_t bytes );
+bool das_dread_close ( void * h );
 bool das_prefetch_map ( void * base, uint64_t bytes );
 
 namespace das {
@@ -209,6 +213,9 @@ namespace das {
     bool builtin_dwrite_commit ( void * h, uint64_t bytes, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     uint64_t builtin_dwrite_stat ( void * h, int32_t which, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     bool builtin_dwrite_close ( void * h, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
+    void * builtin_dread_open ( const char * name, uint64_t band_bytes, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
+    int64_t builtin_dread_at ( void * h, uint64_t off, void * dst, uint64_t bytes, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
+    bool builtin_dread_close ( void * h, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     bool builtin_prefetch_map ( void * base, uint64_t bytes, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     int64_t builtin_ftell ( const FILE * f, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     int64_t builtin_fseek ( const FILE * f, int64_t offset, int32_t mode, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
@@ -765,6 +772,22 @@ namespace das {
     bool builtin_dwrite_close ( void * h, Context * context, LineInfoArg * at ) {
         if ( !h ) context->throw_error_at(at, "dwrite_close: null writer");
         return das_dwrite_close(h);
+    }
+
+    void * builtin_dread_open ( const char * name, uint64_t band_bytes, Context * context, LineInfoArg * at ) {
+        if ( !name ) context->throw_error_at(at, "dread_open: null path");
+        return das_dread_open(name, band_bytes);
+    }
+
+    int64_t builtin_dread_at ( void * h, uint64_t off, void * dst, uint64_t bytes, Context * context, LineInfoArg * at ) {
+        if ( !h ) context->throw_error_at(at, "dread_at: null reader");
+        if ( !dst && bytes ) context->throw_error_at(at, "dread_at: null dst");
+        return das_dread_at(h, off, dst, bytes);
+    }
+
+    bool builtin_dread_close ( void * h, Context * context, LineInfoArg * at ) {
+        if ( !h ) context->throw_error_at(at, "dread_close: null reader");
+        return das_dread_close(h);
     }
 
     // advisory readahead over a mapped range (PrefetchVirtualMemory / madvise WILLNEED) — the
@@ -3261,6 +3284,15 @@ namespace das {
             addExtern<DAS_BIND_FUN(builtin_dwrite_close)>(*this, lib, "dwrite_close",
                 SideEffects::modifyExternal, "builtin_dwrite_close")
                     ->args({"writer","context","line"})->unsafeOperation = true;
+            addExtern<DAS_BIND_FUN(builtin_dread_open)>(*this, lib, "dread_open",
+                SideEffects::modifyExternal, "builtin_dread_open")
+                    ->args({"path","band_bytes","context","line"})->unsafeOperation = true;
+            addExtern<DAS_BIND_FUN(builtin_dread_at)>(*this, lib, "dread_at",
+                SideEffects::modifyExternal, "builtin_dread_at")
+                    ->args({"reader","off","dst","bytes","context","line"})->unsafeOperation = true;
+            addExtern<DAS_BIND_FUN(builtin_dread_close)>(*this, lib, "dread_close",
+                SideEffects::modifyExternal, "builtin_dread_close")
+                    ->args({"reader","context","line"})->unsafeOperation = true;
             addExtern<DAS_BIND_FUN(builtin_prefetch_map)>(*this, lib, "prefetch_map",
                 SideEffects::modifyExternal, "builtin_prefetch_map")
                     ->args({"base","bytes","context","line"})->unsafeOperation = true;
@@ -3677,6 +3709,19 @@ static inline uint64_t das_dwrite_now_ns () {
 
 #if _WIN32
 
+static const DWORD DAS_DIRECT_MIN_SECTOR = 4096;
+
+// src/builtin/ARCHITECTURE_FIO.md#direct-reader
+static DWORD das_direct_sector_size ( const wchar_t * wpath ) {
+    DWORD sector = DAS_DIRECT_MIN_SECTOR;
+    if ( wpath[0] && wpath[1] == L':' ) {
+        wchar_t root[4] = { wpath[0], L':', L'\\', 0 };
+        DWORD spc = 0, bps = 0, freec = 0, totalc = 0;
+        if ( GetDiskFreeSpaceW(root, &spc, &bps, &freec, &totalc) && bps > sector ) sector = bps;
+    }
+    return sector;
+}
+
 void * das_dwrite_open ( const char * path, uint64_t total_bytes, uint64_t band_bytes ) {
     if ( !path ) return nullptr;
     int wlen = MultiByteToWideChar(CP_UTF8, 0, path, -1, nullptr, 0);
@@ -3684,14 +3729,7 @@ void * das_dwrite_open ( const char * path, uint64_t total_bytes, uint64_t band_
     wchar_t * wpath = (wchar_t *) malloc(sizeof(wchar_t) * wlen);
     if ( !wpath ) return nullptr;
     MultiByteToWideChar(CP_UTF8, 0, path, -1, wpath, wlen);
-    // sector size decides the alignment NO_BUFFERING enforces; fall back to 4096 if the volume
-    // won't say (a path with no drive letter, a UNC share)
-    DWORD sector = 4096;
-    if ( wlen > 2 && wpath[1] == L':' ) {
-        wchar_t root[4] = { wpath[0], L':', L'\\', 0 };
-        DWORD spc = 0, bps = 0, freec = 0, totalc = 0;
-        if ( GetDiskFreeSpaceW(root, &spc, &bps, &freec, &totalc) && bps ) sector = bps;
-    }
+    DWORD sector = das_direct_sector_size(wpath);
     HANDLE h = CreateFileW(wpath, GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_ALWAYS,
         FILE_ATTRIBUTE_NORMAL | FILE_FLAG_NO_BUFFERING | FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
     if ( h == INVALID_HANDLE_VALUE ) {
@@ -4027,6 +4065,194 @@ bool das_dwrite_commit ( void * hh, uint64_t bytes ) {
     }
     return true;
 }
+
+#endif
+
+#if DAS_NO_FILEIO
+
+void * das_dread_open ( const char *, uint64_t ) { return nullptr; }
+int64_t das_dread_at ( void *, uint64_t, void *, uint64_t ) { return -1; }
+bool das_dread_close ( void * ) { return false; }
+
+#else
+
+// src/builtin/ARCHITECTURE_FIO.md#direct-reader
+struct DasDirectReader {
+    uint8_t *   band = nullptr;
+    uint64_t    band_bytes = 0;
+    uint64_t    align = 4096;
+#if _WIN32
+    HANDLE      h = INVALID_HANDLE_VALUE;
+#else
+    int         fd = -1;
+#endif
+};
+
+static const uint64_t DAS_DREAD_DEFAULT_BAND = 4u << 20;
+
+static inline bool das_dread_aligned ( const DasDirectReader * r, uint64_t v ) { return (v % r->align) == 0; }
+
+static int64_t das_dread_raw ( DasDirectReader * r, uint64_t off, uint8_t * dst, uint64_t bytes );
+
+int64_t das_dread_at ( void * hh, uint64_t off, void * dstp, uint64_t bytes ) {
+    DasDirectReader * r = (DasDirectReader *) hh;
+    if ( !r ) return -1;
+    if ( !bytes ) return 0;
+    uint8_t * dst = (uint8_t *) dstp;
+    uint64_t done = 0;
+    if ( !das_dread_aligned(r, off) ) {
+        uint64_t base = off - (off % r->align);
+        uint64_t skip = off - base;
+        int64_t got = das_dread_raw(r, base, r->band, r->align);
+        if ( got < 0 ) return -1;
+        uint64_t avail = (uint64_t) got > skip ? (uint64_t) got - skip : 0;
+        uint64_t take = avail < bytes ? avail : bytes;
+        memcpy(dst, r->band + skip, (size_t) take);
+        done += take;
+        bool file_ended_in_head = take < bytes && (uint64_t) got < r->align;
+        if ( file_ended_in_head ) return (int64_t) done;
+    }
+    while ( done < bytes ) {
+        uint64_t left = bytes - done;
+        uint64_t whole = left - (left % r->align);
+        if ( !whole ) break;
+        if ( das_dread_aligned(r, (uint64_t)(uintptr_t)(dst + done)) ) {
+            int64_t got = das_dread_raw(r, off + done, dst + done, whole);
+            if ( got < 0 ) return -1;
+            done += (uint64_t) got;
+            if ( (uint64_t) got < whole ) return (int64_t) done;
+        } else {
+            uint64_t piece = whole < r->band_bytes ? whole : r->band_bytes;
+            int64_t got = das_dread_raw(r, off + done, r->band, piece);
+            if ( got < 0 ) return -1;
+            memcpy(dst + done, r->band, (size_t) got);
+            done += (uint64_t) got;
+            if ( (uint64_t) got < piece ) return (int64_t) done;
+        }
+    }
+    if ( done < bytes ) {
+        int64_t got = das_dread_raw(r, off + done, r->band, r->align);
+        if ( got < 0 ) return -1;
+        uint64_t take = (uint64_t) got < bytes - done ? (uint64_t) got : bytes - done;
+        memcpy(dst + done, r->band, (size_t) take);
+        done += take;
+    }
+    return (int64_t) done;
+}
+
+#if _WIN32
+
+void * das_dread_open ( const char * path, uint64_t band_bytes ) {
+    if ( !path ) return nullptr;
+    std::wstring wpath = das::utf8_file_path_to_wide(path);
+    if ( wpath.empty() ) return nullptr;
+    DWORD sector = das_direct_sector_size(wpath.c_str());
+    HANDLE h = CreateFileW(wpath.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING,
+        FILE_ATTRIBUTE_NORMAL | FILE_FLAG_NO_BUFFERING, nullptr);
+    if ( h == INVALID_HANDLE_VALUE ) return nullptr;
+    DasDirectReader * r = new DasDirectReader();
+    r->align = sector;
+    r->h = h;
+    r->band_bytes = band_bytes ? band_bytes : DAS_DREAD_DEFAULT_BAND;
+    r->band_bytes = ((r->band_bytes + sector - 1) / sector) * sector;
+    r->band = (uint8_t *) VirtualAlloc(nullptr, (SIZE_T) r->band_bytes, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    if ( !r->band ) {
+        CloseHandle(h);
+        delete r;
+        return nullptr;
+    }
+    return r;
+}
+
+static int64_t das_dread_raw ( DasDirectReader * r, uint64_t off, uint8_t * dst, uint64_t bytes ) {
+    OVERLAPPED ov;
+    uint64_t at = 0;
+    while ( at < bytes ) {
+        uint64_t left = bytes - at;
+        DWORD chunk = (DWORD) (left < uint64_t(1u << 30) ? left : uint64_t(1u << 30));
+        DWORD got = 0;
+        memset(&ov, 0, sizeof(ov));
+        ov.Offset = (DWORD) ((off + at) & 0xffffffffu);
+        ov.OffsetHigh = (DWORD) ((off + at) >> 32);
+        if ( !ReadFile(r->h, dst + at, chunk, &got, &ov) ) {
+            if ( GetLastError() == ERROR_HANDLE_EOF ) break;
+            return -1;
+        }
+        at += got;
+        if ( got < chunk ) break;
+    }
+    return (int64_t) at;
+}
+
+bool das_dread_close ( void * hh ) {
+    DasDirectReader * r = (DasDirectReader *) hh;
+    if ( !r ) return false;
+    CloseHandle(r->h);
+    VirtualFree(r->band, 0, MEM_RELEASE);
+    delete r;
+    return true;
+}
+
+#else
+
+#include <fcntl.h>
+#include <unistd.h>
+#include <errno.h>
+#include <stdlib.h>
+
+void * das_dread_open ( const char * path, uint64_t band_bytes ) {
+    if ( !path ) return nullptr;
+#if defined(__linux__)
+    int fd = open(path, O_RDONLY | O_DIRECT);
+    if ( fd < 0 ) fd = open(path, O_RDONLY);
+#else
+    int fd = open(path, O_RDONLY);
+#endif
+    if ( fd < 0 ) return nullptr;
+#if defined(__APPLE__)
+    fcntl(fd, F_NOCACHE, 1);
+#endif
+    DasDirectReader * r = new DasDirectReader();
+    r->fd = fd;
+    r->band_bytes = band_bytes ? band_bytes : DAS_DREAD_DEFAULT_BAND;
+    r->band_bytes = ((r->band_bytes + r->align - 1) / r->align) * r->align;
+    void * band = nullptr;
+    if ( posix_memalign(&band, (size_t) r->align, (size_t) r->band_bytes) != 0 ) {
+        close(fd);
+        delete r;
+        return nullptr;
+    }
+    r->band = (uint8_t *) band;
+    return r;
+}
+
+static int64_t das_dread_raw ( DasDirectReader * r, uint64_t off, uint8_t * dst, uint64_t bytes ) {
+    uint64_t at = 0;
+    while ( at < bytes ) {
+        uint64_t left = bytes - at;
+        size_t chunk = (size_t)(left < (uint64_t)(1u << 30) ? left : (uint64_t)(1u << 30));
+        ssize_t got = pread(r->fd, dst + at, chunk, (off_t)(off + at));
+        if ( got < 0 ) {
+            if ( errno == EINTR ) continue;
+            return -1;
+        }
+        if ( got == 0 ) break;
+        at += (uint64_t) got;
+        if ( (size_t) got < chunk ) break;
+    }
+    return (int64_t) at;
+}
+
+bool das_dread_close ( void * hh ) {
+    DasDirectReader * r = (DasDirectReader *) hh;
+    if ( !r ) return false;
+    close(r->fd);
+    free(r->band);
+    delete r;
+    return true;
+}
+
+#endif
 
 #endif
 

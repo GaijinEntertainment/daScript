@@ -203,6 +203,51 @@ def public is_utf8_string_valid(utf8_string : string const) : bool {
     return state == UTF8_ACCEPT
 }
 
+let UTF8_REJECT = 12u //! DFA reject state: no byte continues or starts a sequence from here
+let UTF8_REPLACEMENT = 0xFFFDu //! what a sanitizer writes for an invalid or incomplete sequence
+
+def public utf8_sanitize(utf8_string : string const) : string {
+    //! Returns the string with every invalid or incomplete UTF-8
+    //! sequence replaced by U+FFFD, one a maximal subpart (the byte
+    //! that cut a sequence is read again on its own); valid input as is.
+    return utf8_string if (is_utf8_string_valid(utf8_string))
+    var out : array<uint8>
+    out |> reserve(length(utf8_string) + 3)
+    var pending_sequence : array<uint8>
+    var state = 0u
+    for (ch in utf8_string) {
+        let b = uint8(ch)
+        let byte = uint(b)
+        var next = s_utf8d[256u + state + s_utf8d[byte]]
+        if (next == UTF8_REJECT) {
+            utf8_encode(out, UTF8_REPLACEMENT)
+            pending_sequence |> clear()
+            if (state == UTF8_ACCEPT) {
+                continue
+            }
+            next = s_utf8d[256u + s_utf8d[byte]]
+            if (next == UTF8_REJECT) {
+                //! the byte that cut the sequence starts none: its own replacement
+                utf8_encode(out, UTF8_REPLACEMENT)
+                state = 0u
+                continue
+            }
+        }
+        if (next == UTF8_ACCEPT) {
+            out |> push_from(pending_sequence)
+            pending_sequence |> clear()
+            out |> push(b)
+        } else {
+            pending_sequence |> push(b)
+        }
+        state = next
+    }
+    if (state != UTF8_ACCEPT) {
+        utf8_encode(out, UTF8_REPLACEMENT)
+    }
+    return string(out)
+}
+
 
 def public utf8_decode(var dest_utf32_string : array<uint>&; source_utf8_string : array<uint8> const implicit; skip_bom : bool = true) {
     //! Converts UTF-8 to UTF-32 and appends codepoints. Set skip_bom=false to preserve a leading U+FEFF.

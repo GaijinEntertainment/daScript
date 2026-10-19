@@ -7,7 +7,8 @@ PR creation is `skills/internal/make_pr.md`; comment verdicts are
 GitHub mechanics live in the tool:
 `daslang utils/internal/pr-babysit/main.das -- --pr <N> --watch`. Exit codes: `0` ready to
 merge, `1` request/API failure, `2` CI red (failing checks named), `3` a review targets the
-tip with unresolved threads, `5` nothing actionable within the timeout. Run it BARE in the
+tip with unresolved threads, `4` the tip conflicts with its base (GitHub's `mergeable` read
+false), `5` nothing actionable within the timeout. Run it BARE in the
 background, never piped - a pipeline reports the last command's exit code, and the exit code
 IS the verdict. A lane red on master, with its control posted on the PR (Section 2), is passed
 as `--ignore "<check name>"` (repeatable) so the watch keeps reporting the lanes that are the
@@ -57,18 +58,29 @@ matrix between rounds.
 5. Pushed a new tip -> re-request now. No push -> the existing review already covers the tip.
 6. Repeat until Section 0 holds; **only then** wait for CI green and merge.
 
-**Every push that changes a `.das` file since the last push runs the pre-push lint gate
-first**: `daslang utils/internal/preflight/main.das -- --only lint,review-md`
-(rails and cost: `skills/internal/preflight.md`, the lint row). MCP `lint` on the file just
-edited is NOT this gate: this run lints every `.das` the branch changed against
-`origin/master`, exactly as CI does, so a clean single-file lint still pushes red. **A push
-that changes a `REVIEW*.md`, a `REVIEW.das`, or a file a gate reads runs `--only review-md`
-even with no `.das` in the diff** - the gates grep the checklists, and a re-worded rule that
-drops a token they look for is red only there.
+**A push in the loop lints what the round changed, not the branch**: MCP `lint` (or
+`daslang daslib/perf_lint.das -- <file>`) on each `.das` the round touched, plus the
+line-length check on those files. The whole-changed-set gate
+(`daslang utils/internal/preflight/main.das -- --only lint,review-md`, twenty minutes on a
+large branch) ran once before the PR opened and covers everything the round did not touch;
+rerunning it for a one-file fix is the waste the loop exists to avoid. It runs again only
+when a round changes a shared module other changed files require (a signature, a public
+name) or a `REVIEW*.md` / `REVIEW.das` / a file a gate reads - then `--only review-md`
+alone, since the gates grep the checklists and a re-worded rule that drops a token they look
+for is red only there.
 
 CI runs the whole time - watch it, don't block on it. Red early is a free signal: fix, push,
 re-request. Red after Copilot is dry: fix, then back into the loop. Green early means nothing
 until Copilot is dry.
+
+**A conflict with the base (`--watch` exit `4`) comes before every other item**: master moved
+under the branch, and nothing merges until it rebases. `git fetch origin && git rebase
+origin/master`, resolve each file against master's version (a fix master already carries -
+the same `no_aot` line, the same wording - takes master's text outright), rerun the gates the
+touched files reach, `git push --force-with-lease`, then re-request: the rebased tip is a new
+tip. GitHub computes `mergeable` lazily after a push - the watch reads `null` for a minute and
+polls on; only a computed `false` is the verdict. A branch that sat for days rebases BEFORE
+the first round, not after Copilot has reviewed a tip that cannot merge.
 
 `build_windows_mingw` and `build_windows_clangcl` run **nightly**, not per-PR - a per-PR red
 is never one of those. A detached `workflow_dispatch` run has no PR association, so the tool

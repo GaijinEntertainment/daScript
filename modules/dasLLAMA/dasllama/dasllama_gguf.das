@@ -999,6 +999,16 @@ def gguf_transcode_bf16(m : GGUFMeta; srcbytes : array<uint8> | #; name : string
     }
 }
 
+//! tensor `ti`'s bytes handed to `sink` straight off the mapping (the right shard's), never copied: a streamed save's raw plane
+def gguf_stream_tensor_raw(m : GGUFMeta; srcbytes : array<uint8> | #; ti : int; sink : block<(p : void?; nbytes : uint64) : void>) {
+    let nbytes = ggml_type_bytes(m.tensors[ti].ggml_type, m.tensors[ti].n_elem)
+    with_tensor_view(m, srcbytes, ti) $(bytes, base) {
+        unsafe {
+            invoke(sink, reinterpret<void?>(addr<uint8 const?>(bytes[base])), uint64(nbytes))
+        }
+    }
+}
+
 //! Copy tensor `name`'s bytes VERBATIM into dst (resized to the tensor's disk size) - the gather-only tables
 //! that stay in their block form (qwen4exp's n-gram hash table: rows too narrow for a superblock plane)
 def gguf_read_tensor_raw(m : GGUFMeta; srcbytes : array<uint8> | #; name : string; var dst : array<uint8>) : int64 {

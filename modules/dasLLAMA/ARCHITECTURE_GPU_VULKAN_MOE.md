@@ -103,7 +103,7 @@ except where a probe arm is named.
   reader's barrier covers both - the act writes the f16 hidden rows, and down runs the tiles
   again. The window planes carry 128 rows of read slack past the last bucket row (the s and m
   tiles load a partial column unclamped, `ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default`) and hold a
-  whole window of `PF_WINDOW x k` bucket rows, so the block never chunks.
+  whole window of `pf_window_rows() x k` bucket rows, so the block never chunks.
 - **The combine rides the residual step.** The add+rms that follows the block (`ClsArComb`,
   its f16 twin `ClsArCombF16B` where the next layer's head takes the f16 feed) adds the shared
   expert's down rows at the sigmoid of the gate logit - the dense tail ran the shared triple

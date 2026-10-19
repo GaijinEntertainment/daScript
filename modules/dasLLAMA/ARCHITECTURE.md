@@ -136,13 +136,20 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
   step's two forms it holds bit for bit.
 - `ARCHITECTURE_GPU_VULKAN_HC.md` - the whole-model driver's hyper-connection chain (qwen4exp):
   the wide residual's mixer seams on the device, the n-gram side input, the split token
-  command whose routed experts run on the host between its segments, the hot expert pool, and
-  the NextN head and its verify rows on the chain.
+  command whose routed experts run on the host between its segments, the streamed prompt window
+  the host and the device meet in, and the NextN head and its verify rows on the chain.
+- `ARCHITECTURE_GPU_VULKAN_POOL.md` - the whole-model driver's hot expert pool: the slots a routed
+  layer's hottest experts hold beside the mirror, the decode step's DMA fill of its misses, a
+  prompt window's pool prefix, and the decode meet's window over the pool.
 - `ARCHITECTURE_GPU_VULKAN_DECODE.md` - the per-op tier's decode era - the decode attention block
-  over per-layer K/V mirrors, the streamed expert layer's GPU/CPU split, the whole-token decode
-  span, the deltanet decode step's per-session resident state, and the whole-model driver's
-  hybrid token command and prefill (recurrent layers, gated attention, partial rotary, the
-  prefill-to-decode state handoff).
+  over per-layer K/V mirrors, the whole-token decode span, the deltanet decode step's per-session
+  resident state, and the whole-model driver's hybrid token command and prefill (recurrent
+  layers, gated attention, partial rotary, the prefill-to-decode state handoff).
+- `ARCHITECTURE_GPU_VULKAN_STREAM.md` - the streamed expert layers: the prefill GPU/CPU split of
+  a layer whose stacks live on the host, the per-expert chain its GPU head runs - an expert a
+  transfer submit and a compute submit waiting its own copy - the pinned stacks in the device
+  layout the host reads through row-major kernels, the streamed slot as a ring of experts, and
+  the expert cache whose misses read off the lane on demand.
 - `ARCHITECTURE_GPU_VULKAN_PEROP.md` - the per-op tier's dense FFN rail: a dense layer's FFN triple on the dense rail
   and the decode row it runs on the device; the attention-quad chain's gemma decline
   (`ARCHITECTURE_GPU_VULKAN_PEROP.md#perop-attn-gemma`).

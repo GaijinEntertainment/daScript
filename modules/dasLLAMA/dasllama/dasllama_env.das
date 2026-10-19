@@ -65,6 +65,18 @@ struct public EngineEnv {
     @clarg_doc = "Pin the matmul backend by name, bypassing the measured auto-selection."
     pin_backend : string = ""
 
+    @clarg_doc = "The streamed split's host share runs each (expert, row) pair's whole chain on one lane in one fork a batch - gate, up, act, requant, down, park; 0 = the three region-list GEMV passes with the act and requant between them (the A/B arm)."
+    rare_onepass : bool = true
+
+    @clarg_doc = "The one-pass rare rail runs an expert's rows through the batched expert cores (the plane read once a tile); 0 = the rows core a row (the A/B arm)."
+    rare_batched : bool = true
+
+    @clarg_doc = "The rare rail reads a streamed layer's experts off the tier's pinned device-layout planes through the format's row-major kernel - the prompt's host share and a token's host picks alike - one copy of the experts, no planar mirror of a streamed layer. =0 is the A/B arm: every format on the planar planes."
+    rare_arena : bool = true
+
+    @clarg_doc = "The meet hands the host this many of a streamed layer's rarest experts before the device claims any (0 = none: the two sides claim at their own pace) - a measurement lever, so a carrier the device would take whole still runs the host rail."
+    moe_host_first : int64 = 0l
+
     @clarg_doc = "How an IQ3_S weight is served: grid = the disk form (the 3.44-bit grid planes, decoded by a gather), lut = the iq3s4 form (a 4-bit codebook index a superblock, decoded by the LUT kernels - exact, 17% more bytes, the CPU decode several times faster), auto = lut on the CPU rails and the Vulkan tier, grid under the Metal tier (every home serves both forms at every site)."
     iq3s_serve : string = "auto"
 
@@ -137,6 +149,17 @@ struct public GpuTierEnv {
     @clarg_doc = "The context pin (DASLLAMA_GPU_CTX_MAX, set_gpu_ctx_max) is the context asked, not a cap: a K/V mirror the card cannot hold at it declines the resident driver instead of shortening, and the per-op rails serve the asked context; the load log names the room."
     gpu_ctx_strict : bool = false
 
+    @clarg_default_doc = "2048"
+    @clarg_doc = "The whole-model driver's prompt window in rows: the prefill panels' size, and the rows a hyper-connection model's host expert step and the hot pool's window chain take at once; a longer prompt runs as sequential windows, each paying every routed layer's expert pass again. Rounded down to a multiple of 128, never under 128; the plan charges the panels at this count, so a wider window shortens the K/V mirror or the pool."
+    gpu_pf_rows : int64 = 2048l
+
+    @clarg_doc = "Stream each routed layer's expert stack to the device for the prompt, where the routed experts serve on the host (a hyper-connection model): pinned device-layout mirrors of every routed layer at load, two device slots of a layer's stack, the next layer's copy on the transfer queue while this one computes, the host summing nothing. 0 keeps the host's sums and the hot pool's window chain."
+    gpu_pf_stream : bool = true
+
+    @clarg_default_doc = "0 (every host layer)"
+    @clarg_doc = "Under DASLLAMA_GPU_PF_STREAM, mirror only the first this many host layers' expert stacks; the rest keep the host's sums. A parity cell's lever: a few layers' mirrors beside a planar load, where every layer's would not fit the box."
+    gpu_pf_stream_layers : int64 = 0l
+
     @clarg_default_doc = "0 (the plan's own count)"
     @clarg_doc = "Serve at least this many routed layers' experts on the host - the first in layer order - on the whole-model driver of any MoE that routes no more picks a row than the split command serves, the gemma-4 MoE with its parallel dense expert included, whatever the card holds (set_gpu_host_layers in process): the host-layers form, with its split token command and cut window chain, reached on any card. A hyper-connection model serves every routed layer on the host regardless."
     gpu_host_layers : int64 = 0l
@@ -193,6 +216,12 @@ struct public GpuTierEnv {
     @clarg_doc = "Split each STREAMED expert layer's prefill between the GPU (the experts it can stream in the CPU's time) and the CPU (the rest, concurrently); 0 streams whole layers."
     gpu_moe_split : bool = true
 
+    @clarg_doc = "A decode token's picks on a streamed layer take the prefill's route: the meet claims them as the GPU's per-expert DMAs from the busy end and the CPU's rail from the rare end, in place of the one-row host step. The experiment knob; the window floors lift under it."
+    gpu_dec_meet : bool = false
+
+    @clarg_doc = "The hot expert pool fills by DMA: a token's miss is copied off its pinned stack into the pool's coldest unpicked slot on the transfer queue, every miss a step and no host time, so the next token finds it; and a prompt's streamed window serves the pool's hits off their slots first and lands its busiest misses in the pool's free and coldest slots, so the decode behind the prompt starts warm. 0 keeps the host's gather-and-upload fill under its step budget and the window off the pool. The A/B knob."
+    gpu_hot_dma : bool = true
+
     @clarg_doc = "Decode FFN tail: a resident expert layer's FFN carries the combine, the residual and the next layer's attention feed on the device, so the two submits share one fence wait; 0 collects every FFN on the host."
     gpu_dec_tail : bool = true
 
@@ -200,7 +229,7 @@ struct public GpuTierEnv {
     gpu_dec_span : bool = true
 
     @clarg_default_doc = "0"
-    @clarg_doc = "Hot expert slots a layer. On the per-op tier: hold the N hottest experts of a streamed layer resident (unset = none). On the whole-model driver with the routed experts on the host (a hyper-connection MoE): the slots of the hot expert pool - unset = 64 where the card has the room past the weights and the mirror, else up to 32 out of the mirror's context; a count asks that many; 0 keeps every routed expert on the host."
+    @clarg_doc = "Hot expert slots a layer. On the per-op tier: hold the N hottest experts of a streamed layer resident (unset = none). On the whole-model driver with the routed experts on the host (a hyper-connection MoE): the slots of the hot expert pool - unset = every slot that fits beside the weights and the mirror, else up to 32 out of the mirror's context; a count asks that many; 0 keeps every routed expert on the host."
     gpu_heat : Option<int64>
 
     @clarg_doc = "Report lifetime GPU queue submissions (real commands plus staging round-trips), and trace every routed row the host sums - the split token command's host segment and the CPU forward alike - as one moe_k line (the layer, the session, the first pick, the L1 of the feed row and of the routed sum)."
@@ -428,11 +457,26 @@ struct public VulkanEnv {
     @clarg_doc = "The resident prefill window's per-layer-embedding gate and projection serve a file's f32 rows on the staged KHR tile (the rows' words rounded to f16 on the tile's stage ahead of the KHR multiply, at subgroup 32); 0 keeps them on the scalar f32 tile - the same-build A/B."
     vk_ple_f32_tile : bool = true
 
-    @clarg_doc = "Stream mirrors import the mapped .dlim (VK_EXT_external_memory_host) instead of pinned copies; =0 restores the copy path."
+    @clarg_doc = "Stream mirrors import the mapped .dlim (VK_EXT_external_memory_host) instead of pinned copies, on the copy arm alone (`DASLLAMA_VK_STREAM_FILE_READ=0`): the file-read arm, the default, reads into mirrors of its own and never imports; =0 restores the copy path."
     vk_import : bool = true
 
-    @clarg_doc = "Mint the TRIMMED vulkan lane: the device twin plus the packed emb region the CPU embed reads, the planar weight families dropped. A model the whole-model driver would not take whole keeps its families, and the load says so; a call the driver passes to the CPU rails panics by name. Folded into the lane's identity, so a flip re-bakes the lane; `set_vulkan_trim` is the in-process lever."
-    trim : bool = false
+    @clarg_doc = "A streamed stack's planes are read off the .dlim file straight into its pinned memory, the mapping's expert pages never faulted; =0 copies them out of the mapping (the A/B arm)."
+    vk_stream_file_read : bool = true
+
+    @clarg_doc = "The expert cache's pinned budget in MiB for the streamed layers' expert stacks: the resident slots of every streamed layer and the transient ring together; 0 holds every streamed expert resident (the whole stacks in pinned memory, as a box with the RAM does). Under it each streamed layer keeps a quota of its experts resident and the rest are read off the lane file on demand into the ring, through the format's row-major kernels on the host and the DMA on the device alike; needs a mapped lane (a chunk-built image has no file to read from)."
+    expert_cache_mb : int64 = 0l
+
+    @clarg_doc = "The expert cache's transient ring in experts a plane kind (gate, up, down): the slots the on-demand reads land in, freed at a window's or a token's end. 0 sizes it to the largest streamed layer's non-resident count, so one window's misses always fit."
+    expert_ring : int64 = 0l
+
+    @clarg_doc = "The expert cache's reader threads: the on-demand reads off the lane in flight at once, each thread one read at a time on its own file handle. 0 reads on the calling thread, one at a time."
+    expert_readers : int64 = 8l
+
+    @clarg_doc = "The experts one bundle of the streamed expert chain takes at most (0 = a sixteenth of the layer's experts, 1 to 32). A bundle is the unit the device claims at the meet, at most two in flight, so the cap sets the device's pace against the host's share; the A/B lever."
+    vk_xf_bundle : int64 = 0l
+
+    @clarg_doc = "Mint the TRIMMED vulkan lane (the default; =0 mints the lane with its planar families): the device twin plus the packed emb region the CPU embed reads, the planar weight families dropped - a MoE's expert stacks too, the device holding them or the host reading its streamed layers' pinned mirrors through the rare rail (so the prompt stream and the rail's arena arm must be on where routed layers serve on the host). A model the whole-model driver would not take whole keeps its families, and the load says so, as does one with per-layer embeddings, biased expert stacks or the gemma-4 MoE form (the host reads their planar planes); a call the driver passes to the CPU rails panics by name. Folded into the lane's identity, so a flip re-bakes the lane; `set_vulkan_trim` is the in-process lever."
+    trim : bool = true
 
     @clarg_doc = "Tag every device allocation priority 1.0 (VK_EXT_memory_priority). Off by default: on the NVIDIA WDDM driver the tag makes the tagged weights the pageable set, and a resident model then decodes at PCIe speed once anything is demoted."
     vk_memprio : bool = false
@@ -903,6 +947,23 @@ let public g_env_prof = env_config(type<ProfilingEnv>)
 let public g_env_test = env_config(type<TestEnv>)
 let public g_env_exchange = env_config(type<ExchangeEnv>)
 let public g_env_core = env_config(type<CoreEnv>)
+
+let public PF_WINDOW_MIN = 128l   //! the prompt window's floor and its rounding unit: the chain's tiles step rows by 128
+
+var private g_pf_rows_pin = 0l   //! the prompt window a program pinned in process (0 = the knob's)
+
+//! the prompt window a program asks of the driver for the loads that follow, over DASLLAMA_GPU_PF_ROWS; 0 lifts the pin
+def public set_pf_window_rows_pin(rows : int64) {
+    g_pf_rows_pin = rows
+}
+
+//! the pin as it was written (0 = none): a fixture puts back what it found
+def public pf_window_rows_pin : int64 => g_pf_rows_pin
+
+def public pf_window_rows : int64 {
+    let units = (g_pf_rows_pin > 0l ? g_pf_rows_pin : g_env_gpu.gpu_pf_rows) / PF_WINDOW_MIN
+    return (units < 1l ? 1l : units) * PF_WINDOW_MIN   // nolint:PERF015 — the env module sees no math
+}
 
 //! The per-user dasLLAMA directory under `home`: the standalone programs' models, config, tune
 //! state and logs, so an install directory can stay read-only.

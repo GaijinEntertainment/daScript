@@ -11,8 +11,9 @@
   shared generic helpers the scan exempts is read from the scan itself.
 
 - **A diff that adds or changes a bind - any `addExtern*` call - under this folder states in the
-  PR description that the folder's gate ran on a binary built from the diff** - the scan reads
-  the binds compiled into the running binary, so a stale binary is a false green.
+  PR description that `REVIEW.das` ran on a binary built from the diff** - the bind-flavor scan in
+  `review_nttp.das` reads the binds compiled into the running binary, so a binary built before the
+  diff passes binds the diff broke.
 
 - **A diff that adds a module under this folder adds it to `review_nttp.das`'s `require` list in
   the same change - directly, or through the daslib wrapper that requires it - and a diff never

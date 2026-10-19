@@ -276,7 +276,8 @@ def section_gpu_slots(m : Model) {
 // rows until another session takes the region. gpu_device_kv_adopt hands those
 // rows to a fresh session, so the next turn of a conversation prefills only its
 // new tokens. gpu_device_prefill_continues says whether this model may do that
-// (a recurrent model prefills every prompt whole, from position zero).
+// (true for every model the driver serves; a recurrent model's state
+// rides the rows).
 //
 // gpu_cpu_passes is the honesty counter: every call the GPU path handed back to
 // the CPU, by reason. A slot served from the device keeps it empty.

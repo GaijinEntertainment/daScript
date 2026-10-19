@@ -75,7 +75,7 @@ struct public DlimVulkanConfig {
     dense_shexp : bool
     dense_ffn : bool   //!< the dense rail's FFN triples, on by default: the tag spells it only when on, so the images minted without it keep their identity
     trim : bool   //!< P3: big CPU weight families dropped from the image (GPU-resident consumers only)
-    split : bool   //!< the streamed-layer split want: one stream slot instead of two under cm2, so the carve - and the walk - differ
+    split : bool   //!< held false: the streamed-layer split want is a run-time slot count under the plan's two-slot carve, not an identity
     dn_native : bool   //!< the whole-model driver is attempted, so the walk bakes its arena placement in place of the per-op rails' (the two walks lay different images)
     subgroup_size : int
     max_storage_range : int64

@@ -10,8 +10,9 @@ and the pinned set is the only test of whether a cell is one; a named-cell entry
 function and pins every cell that function runs. The pinned set, one entry a line, each with what it
 must keep holding:
 
-- `test_run_suites.das` must hold the per-PR split, the folder census, the area tables and the
-  `--exclude` filter.
+- `test_run_suites.das` must hold the per-PR split, the folder census, the area tables, the
+  `--exclude` filter, and the `options persistent_heap` line in every test file `run.das`'s
+  `stocked` suite lists.
 - `test_program_roots.das` must hold the `ROOT_DIRS` sweep, `options stack = 524288` and the
   prefill intent.
 - `test_env_registry.das` must hold the `../ENVIRONMENT.md` knob contract.
@@ -108,9 +109,10 @@ must keep holding:
   `test_vkd_iq3s4_cm2_batch`, `test_vkd_mx4_gemv_gu`, `test_vkd_gemv_ncol`, `test_vkd_q8_gemv_gu_n`,
   `test_vkd_q8_gemv_pleact`, `test_vkd_act_family`, `test_vkd_moe_routing`, `test_vkd_dn_family`, `test_vkd_hc_seams`,
   `test_vkd_hc_rows`, `test_vkd_ple_side`, `test_vkd_f16_gemm_khr`, `test_vkd_fa_cm2`, `test_vkd_fa_khr`,
-  `test_vkd_fa_khr_h256_softcap`, `test_vkd_da_attn`, `test_vkd_da_attn_rqk` and `test_vkd_da_attn_bw` cells - the
-  census's evidence for the classes no zoo row dispatches - must hold each class against its CPU oracle at the bar the
-  cell sets, with the cell's poisoned-element control.
+  `test_vkd_fa_khr_h256_softcap`, `test_vkd_da_attn`, `test_vkd_da_attn_rqk`, `test_vkd_da_attn_bw`,
+  `test_vkd_moe_gather_row` and `test_vkd_combine_row` cells - the census's evidence for the classes no zoo row
+  dispatches - must hold each class against its CPU oracle at the bar the cell sets, with the cell's poisoned-element
+  control.
 - `test_vulkan_tower_kernels.das`'s `test_vkt_fa_bidir`, `test_vkt_tower_rows`, `test_vkt_tower_ln_rows`,
   `test_vkt_tower_f16_feeds`, `test_vkt_tower_vision_rows`, `test_vkt_tower_win_rows`, `test_vkt_tower_tail_rows`,
   `test_vkt_tower_front_movers`, `test_vkt_tower_front_mel`, `test_vkt_tower_cn_attn_rel_plane`,
@@ -137,7 +139,7 @@ must keep holding:
 - `test_tts_pocket.das`'s `test_pocket_quiet_floor` cell must hold the served lane's quiet floor
   against the f32 lane's.
 - `test_whisper.das`'s `test_canary_qwen_oracle` cell, an external-reference compare, must hold the forced walk over
-  `harness/canary_qwen_expected.tsv`'s ids within `CN_TIE_BAR` of our argmax at every step of its
+  `../harness/canary_qwen_expected.tsv`'s ids within `CN_TIE_BAR` of our argmax at every step of its
   three clips, on the CPU chain and on the Metal tower, its control the same walk fed each id one step early
   with the oracle id outside the bar at every step that input moved, and the greedy ids equal to the
   oracle's up to the first tie.

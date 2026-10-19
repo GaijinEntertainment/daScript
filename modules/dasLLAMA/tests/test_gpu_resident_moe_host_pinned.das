@@ -25,7 +25,7 @@ def private pinned_cells(t : T?; tag : string; fx : MoeFixture) {
     }
     t |> run("{tag} with four routed layers' experts pinned to the host: the same across two windows") @(ct : T?) {
         with_gpu_kv_dtype(ct, KVDtype.f16) {
-            assert_pf_window(ct)
+            return if (!assert_pf_window(ct))
             moe_forced_feed(ct, PF_WINDOW_ROWS + 88l, fx)
         }
     }

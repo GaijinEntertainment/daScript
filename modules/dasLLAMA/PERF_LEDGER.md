@@ -1495,7 +1495,7 @@ what it costs today and what the fix would change.
     carrier and nothing elsewhere. The conv and state buffers were the session's before; the ring
     is the addition.
 - **MEASURED (2026-10-01) - a plain MoE the card does not hold whole, with its context asked whole
-  (`ARCHITECTURE_GPU_VULKAN_HC.md#hc-hot-pool`, `set_gpu_ctx_strict` / the server's `--ctx`): the first routed
+  (`ARCHITECTURE_GPU_VULKAN_POOL.md#hc-hot-pool`, `set_gpu_ctx_strict` / the server's `--ctx`): the first routed
   layers' experts on the host through the split token command and the cut window chain, the mirror whole
   - the form wins the long prompt by 5.7x and loses decode by a third to the per-op rails
   (direction-grade), so it arms only where the context was asked.** zen2 (Ryzen 16 threads, RTX 5060 Ti 16 GB on a PCIe 4.0 x8 link, the
@@ -1874,7 +1874,7 @@ what it costs today and what the fix would change.
   cell `test_vkd_ple_side`'s commit arm (the position off the token record, three rows committed to the ring).
 
 - **LANDED (2026-09-29) - the hot expert pool on the hyper-connection carrier
-  (`ARCHITECTURE_GPU_VULKAN_HC.md#hc-hot-pool`), the `iq3s4` device format under it, and the resident
+  (`ARCHITECTURE_GPU_VULKAN_POOL.md#hc-hot-pool`), the `iq3s4` device format under it, and the resident
   plan sizing the pool with the mirror.** zen2 (Ryzen 16 threads, RTX 5060 Ti 16 GB, 3.9-4.3 GB held
   by the desktop, NVIDIA driver 616.56), Qwen3.8-Flash-Next UD-IQ4_XS, `bin/Release/daslang.exe -jit
   benchmarks/lcpp_bench.das -- --ngl 0 -p 512 -n 128 -r 6 -t 16 --for-debug-purposes` under
@@ -5842,3 +5842,52 @@ record store carries a Vulkan row), so the pod's figures are direction-grade thr
   (`DASLLAMA_VK_KV32=1`); the two openings as one window 0.07 / 0.12; the 300-row tails 0.13 / 0.26; the decline cell's two
   sessions, prefilled on the CPU rails after the pin and held to the device-prefilled references, 0.22 / 0.20 (Q8_0) and
   0.35 / 0.35 (Q4_K_M) against bars of 0.53 to 0.55; every control 2.5 to 8.7 bars out.
+
+### From the prefill rotation arc (2026-10-18, the reference box: Threadripper 3990X at 2666 MT/s, RTX 4080 16 GB, Windows, NVMe; `DAS_TUNE_POLICY` unset, the x86-avx2 class profile stamped)
+
+Every rate here is `debug-jit`, the `-jit` script form `DASLLAMA_GPU=1 DASLLAMA_GPU_PF_STREAM=1 DASLLAMA_MODELS_DIR=<models>
+bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m <gguf> --pp 3000 --tg 128 --for-debug-purposes` at the
+capped prompt window (`DASLLAMA_GPU_PF_ROWS=2048`, which a recurrent carrier cut at 1024 when these were taken - the
+window's cap, `DN_WINDOW`, is 2048 since, and the prompt window's default with it; the rates at the uncut 2048 window are
+`followup_vulkan.md` rows 150 and 151's), the frozen fixture's gate 8/8 on every run; no record store carries a Vulkan row,
+so every figure is direction-grade.
+
+- **The arc's headline rows.** Qwen3.6-35B-A3B UD-Q4_K_M, 28 of 40 routed layers streamed, `DASLLAMA_EXPERT_CACHE_MB`
+  unset: pp3000 1488, tg128 67.5 tok/s, the hot pool 76 slots a layer (the 64-slot cap gone: a slot for every expert
+  that fits beside the mirror); Qwen3.8-Flash-Next UD-IQ4_XS, every routed layer streamed: pp3000 440, tg128 30.2, the
+  pool 41 slots. The ring form of the streamed slot: 250 MB from a whole layer's 476 on the 35B, 445 MB from 1.7 GB on
+  Flash-Next (the `streamed prefill engaged` line of each load); on Flash-Next the plan counted the slot for the first
+  time, 41 slots a layer against 44 that sat 1.7 GB past the plan's room.
+- **The DMA fill of the pool's misses** (`DASLLAMA_GPU_HOT_DMA=1` against unset, the bench's tg128 at the same commit, one
+  run an arm): the 35B 19.8 ms a token against 23.6, the pool serving 97.5% of the picks against 78.7%; Flash-Next 56.5
+  against 62.3. A prompt window's fill stays the host's place: the DMA fill beside the window's own copies cost pp3000 a
+  fifth. The knob ships off.
+- **The prompt window's pool prefix** (`DASLLAMA_GPU_HOT_DMA=1`, the bench's tg128 behind its pp3000 against the knob
+  off, the 35B): the decode's pool hits 90.7% against 79.0%, its host experts 2.5 ms a token against 6.0; a 64-row window
+  on layer 12 serves 414 of 512 rows off 29 hits with nothing copied (`DASLLAMA_GPU_PROF=1`'s window line).
+- **The expert cache at half the experts** (`DASLLAMA_EXPERT_CACHE_MB` at half the streamed layers' expert bytes against
+  unset, the same bench): Flash-Next pp3000 577 and tg128 19.0 against 598 and 21.1; the 35B's on-demand reads halve
+  and its decode rate doubles once the heat profile seats the hottest experts (the second run of the same prompt).
+- **The lane read off the file** (`DASLLAMA_VK_STREAM_FILE_READ` on against `=0`, the 30B's warm load): 7.7 s against
+  8.5, the peak working set down by the streamed layers' twin, 8 GB. The readers' arm: `harness/kq_disk_rail_probe.das`
+  and the reader threads over a mapped lane read 0.77 GB/s unbuffered (the kernel serializes direct reads of a mapped
+  file), 1.97 GB/s unbuffered unmapped, 1.68 GB/s buffered mapped - the readers are buffered.
+- **The submit grain** (`harness/vk_submit_grain_probe.das`, one 64 MB copy against 512 pieces of 128 KB on the transfer
+  queue): about 4 us a submit, 512 pieces costing what one does within the noise.
+- **The lasting allocations the arc adds, a model**: the streamed slot as a ring - 250 MB (35B) / 445 MB (Flash-Next) in
+  place of 476 MB / 1.7 GB; the expert cache's transient ring - the non-resident count of experts a plane kind, 0 bytes
+  with the cache off; the readers' bounce buffers - eight pages-aligned slots, one a reader; the heat table - eight bytes
+  an (layer, expert); the pinned stream mirrors - the streamed layers' expert bytes under `DASLLAMA_GPU_PF_STREAM=1`,
+  the same bytes the host twin read before; the pool - every slot that fits beside the mirror (76 x 28 layers on the
+  35B, 41 x 48 on Flash-Next), where the cap of 64 left room idle. The engaged line prints the host-visible total and
+  the das heap beside the slot.
+- **The bars the arc's cells hold** (`tests/run.das -- --suite stocked` on this box; the readings the cells print under
+  `DAS_LOG_LEVEL=info`): `test_gpu_resident_continuation.das` holds Qwen3.5-0.8B-Q4_K_M's continued and adopted rows
+  within `CONT_BAR_REL` 0.05 of the whole prompt's row (readings 0.3-1.2% of the row's max, the one-token-short control
+  past 1 bar); Qwen3.8-Flash-Next UD-IQ4_XS at `ROUTED_WIDE_BAR_REL` 0.5 (the same device run twice reads up to 20%: a
+  near-tie expert flips on the pool's fill and the meet's split), its n-gram conv ring after a window row for row the CPU
+  chain's within 2%, a zeroed ring 15% off; `test_gpu_resident_long_window.das` holds the 0.8B's last row at a 2048-row
+  pin within `BAR_REL` 0.10 of the CPU chain's (reading 3%; an uncut 2048-row window read 30%, 1536 read 72%);
+  `test_gpu_resident_moe_formats.das` holds every moe-formats carrier at `MOE_LOGIT_BAR_REL` (the routed block's bar
+  `test_gpu_resident_moe.das` reads) through the one-copy rail, one window and two, and the expert-cache cell's
+  second feed reads fewer planes than its first.

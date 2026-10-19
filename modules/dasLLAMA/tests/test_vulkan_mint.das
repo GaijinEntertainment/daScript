@@ -12,11 +12,13 @@ require dasllama/dasllama_image
 require dasllama/dasllama_math
 require dasllama/dasllama_gpu_tier
 require dasllama/dasllama_gpu_resident
+require dasllama/dasllama_blocks
 require daslib/jobque_boost
 require daslib/fio
 require _model_tier
 require _compares
 require _resident_feed
+require _moe_resident   // MOE_LOGIT_BAR_REL: the routed block's bar the MoE lanes' rows hold
 require _vulkan_lane
 
 // The vulkan lane's streaming mint on a LIVE tier (the dry twin is test_model_image_vulkan.das): a cold vulkan-armed
@@ -57,6 +59,27 @@ def private witness_steps(t : T?; tr : Model; what : string) : MintRun {
     mint_witness(tr, w.ids, w.row)
     t |> equal(long_length(w.ids), int64(MINT_PROMPT + MINT_STEPS), "{what} generated the {MINT_STEPS} asked steps past the {MINT_PROMPT}-token prompt")
     return <- w
+}
+
+//! the forced-feed form a routed carrier's lanes are held to: the prompt's row and `MINT_STEPS` fed steps' rows on a session
+//! of `tr`, the same tokens fed on every lane, so two lanes compare row by row at the routed block's bar with the row one
+//! step off the control, where a greedy token can flip on a near-tie expert
+def private feed_rows(tr : Model) : array<array<float>> {
+    var out : array<array<float>>
+    with_dasllama_jobque_() {
+        var s <- create_session(tr, KVDtype.f16)
+        var prompt <- [for (i in range64(int64(MINT_PROMPT))); 1000l + i * 7l]
+        var toks <- [for (i in range64(int64(MINT_STEPS))); 2000l + i * 11l]
+        out <- feed_logits(tr, s, prompt, toks)
+        delete s
+        delete prompt
+        delete toks
+    }
+    return <- out
+}
+
+def private hold_feed_rows(t : T?; what : string; got, want : array<array<float>>) {
+    rows_within_control(t, what, got, want, MOE_LOGIT_BAR_REL, 1l, 1.0, $(r) => r == 0l ? "the prompt's row" : "step {r}")
 }
 
 //! the box facts every cell here skips on; "" = the cell runs
@@ -144,6 +167,68 @@ def test_vulkan_mint_lanes(tst : T?) {
     }
 }
 
+let private MOE_FILE = "Qwen1.5-MoE-A2.7B-Chat-Q4_K_M-local.gguf"
+let private MOE_HOST_LAYERS = 20l   //! routed layers asked onto the host: their stacks stream, the plan's room arms the unasked pool beside the mirror
+
+//! the MoE lane under the trim: twenty routed layers' expert stacks streamed to the host's pinned mirrors, so the lane drops every planar family and the host reads the mirrors through the rare rail
+[test]
+def test_vulkan_mint_moe_streamed(tst : T?) {
+    tst |> run("Qwen1.5-MoE Q4_K_M with twenty routed layers streamed: the trimmed lane drops the planar families and serves the untrimmed lane's tokens, cold and warm, off the mirrors") @(t : T?) {
+        return if (!family_on(t, "qwen2moe"))
+        let path = path_join(models_dir(), MOE_FILE)
+        return if (mint_skip(t, path))
+        let levers = pin_lane_levers()
+        let hl = gpu_host_layers_pin_()
+        set_gpu_host_layers_(MOE_HOST_LAYERS)
+        set_gpu_want_pf_stream(1)
+        with_cold_lane(t, path, "the MoE") $(var plain; img_v) {
+            t |> success(!plain.planes_trimmed && long_length(plain.vkplan) > 0l, "the served image is the vulkan lane, the planar families kept with the trim off")
+            t |> equal(gpu_resident_host_layers(), MOE_HOST_LAYERS, "the first {MOE_HOST_LAYERS} routed layers' experts serve on the host")
+            let plain_bytes = stat(img_v).size
+            let r0 = g_rare_dec_rows
+            var a <- witness_steps(t, plain, "the untrimmed lane")
+            var a_rows <- feed_rows(plain)
+            t |> success(g_rare_dec_rows > r0, "the untrimmed lane's host picks read {g_rare_dec_rows - r0} pairs off the mirrors through the rail")
+            delete plain
+            moe_gpu_drop_model()
+            set_vulkan_trim(true)
+            remove(img_v)
+            var trimmed <- load_cached_q8(path)
+            t |> success(moe_gpu_resident_active(), "the trimmed lane is served by the whole-model driver")
+            t |> equal(gpu_resident_host_layers(), MOE_HOST_LAYERS, "... with the same routed layers on the host")
+            t |> success(trimmed.image_map != null && trimmed.planes_trimmed && long_length(trimmed.qblob) == 0l && long_length(trimmed.embq) > 0l,
+                "the trimmed lane serves without the planar families, the emb region packed")
+            t |> success(stat(img_v).size < plain_bytes, "the trimmed lane is the smaller file ({stat(img_v).size} against {plain_bytes} bytes)")
+            let r1 = g_rare_dec_rows
+            var b <- witness_steps(t, trimmed, "the trimmed lane")
+            var b_rows <- feed_rows(trimmed)
+            t |> success(g_rare_dec_rows > r1, "the trimmed lane's host picks read {g_rare_dec_rows - r1} pairs off the mirrors through the rail")
+            log_gen_texts(trimmed, "untrimmed lane / trimmed lane", a.ids, b.ids)
+            hold_feed_rows(t, "the trimmed lane's rows against the untrimmed lane's", b_rows, a_rows)
+            t |> equal(mismatch_exact(a.row, b.row), 0, "the CPU embed row off the packed emb region is the planar plane's, bit for bit")
+            delete trimmed
+            moe_gpu_drop_model()
+            var warm <- load_cached_q8(path)
+            t |> success(moe_gpu_resident_active() && warm.image_map != null && warm.planes_trimmed, "the trimmed lane maps back warm onto the driver")
+            var c <- witness_steps(t, warm, "the warm lane")
+            var c_rows <- feed_rows(warm)
+            log_gen_texts(warm, "untrimmed lane / warm trimmed lane", a.ids, c.ids)
+            hold_feed_rows(t, "the warm trimmed lane's rows against the untrimmed lane's", c_rows, a_rows)
+            delete warm
+            moe_gpu_drop_model()
+            delete a
+            delete b
+            delete c
+            delete a_rows
+            delete b_rows
+            delete c_rows
+        }
+        set_gpu_want_pf_stream(-1)
+        set_gpu_host_layers_(hl)
+        restore_lane_levers(levers)
+    }
+}
+
 [test]
 def test_vulkan_mint_kquant(tst : T?) {
     tst |> run("Qwen3.5-0.8B-Q4_K_M: the K-quant twin's lane mints off its native planes and maps back warm to the same tokens") @(t : T?) {
@@ -177,7 +262,7 @@ def private pass_prefill(tr : Model; var s : Session; npos : int64; start_pos : 
 
 [test]
 def test_vulkan_mint_trim_follows_the_driver(tst : T?) {
-    tst |> run("Qwen3.5-0.8B-MTP: the trim admits what the whole-model driver serves - a foreign prefill override declines both with one text, the trimmed lane on disk stays for the next run and this run serves planar from memory, and a lane minted under the override is no lane at all") @(t : T?) {
+    tst |> run("Qwen3.5-0.8B-MTP: the trim admits what the whole-model driver serves - a foreign prefill override declines both with one text, the trimmed lane on disk stays for the next run and this run serves planar from memory, a cold trim ask under the override writes the untrimmed lane the next load under it serves, and the load after the override lifts mints the trimmed lane over it") @(t : T?) {
         with_mint_file(t, MINT_FILE) $(path) {
             with_cold_lane(t, path, "the model") $(var plain; img_v) {
                 t |> success(resident_would_serve(plain) && empty(resident_decline_reason(plain)), "the trim admits the model the driver serves")
@@ -210,14 +295,18 @@ def test_vulkan_mint_trim_follows_the_driver(tst : T?) {
                 moe_gpu_drop_model()
                 remove(img_v)
                 var minted <- load_cached_q8(path)
-                t |> success(!minted.planes_trimmed && long_length(minted.qblob) > 0l && !stat(img_v).is_valid,
-                    "a trim ask under the override writes no lane: the streamed build serves planar from memory and nothing lands under the trimmed identity")
+                t |> success(!minted.planes_trimmed && long_length(minted.qblob) > 0l && stat(img_v).is_valid,
+                    "a trim ask under the override with no trimmed lane on disk writes the untrimmed lane at the path: the streamed build serves planar from memory")
                 delete minted
+                moe_gpu_drop_model()
+                var fallback <- load_cached_q8(path)
+                t |> success(!fallback.planes_trimmed && long_length(fallback.qblob) > 0l && !moe_gpu_resident_active(), "the next load under the override serves the untrimmed lane")
+                delete fallback
                 moe_gpu_drop_model()
                 t |> success(!stat(image_path_for(path, "", "q8")).is_valid, "control: the held mint cached no planar image either - the next load stays on the streaming arm, the one that trims")
                 select_prefill_override(override_found)
                 var again <- load_cached_q8(path)
-                t |> success(again.planes_trimmed && moe_gpu_resident_active(), "with the override lifted the next load mints the trimmed lane and the driver serves it")
+                t |> success(again.planes_trimmed && moe_gpu_resident_active(), "with the override lifted the next load mints the trimmed lane over the untrimmed one and the driver serves it")
                 delete again
                 moe_gpu_drop_model()
             }

@@ -1300,9 +1300,15 @@ def private blob_pack_job(q : array<int8>; s : array<float>; nblk : int64;
 
 //! Arm plan recording: subsequent load_big calls append FillJobs instead of transcoding
 //! (smalls still load eagerly — fblob is small and every flavor keeps it).
+var private g_ngram_stream = (ti = -1, bytes = 0l)   //! the PLE n-gram table a streamed load left on the mapping for its plane's turn
+
+//! the n-gram table's tensor and bytes where the streamed load deferred it to the image's turn; `bytes` 0 where it read it whole
+def ngram_stream_source : tuple<ti : int; bytes : int64> => g_ngram_stream
+
 def fill_plan_begin {
     g_fill_plan_mode = true
     g_fill_plan |> clear()
+    g_ngram_stream = (ti = -1, bytes = 0l)
     // plane totals are THIS plan's sizing — a load that disarms must not save under the previous one's
     g_stream_plane_total |> clear()
 }
@@ -2901,9 +2907,14 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
                     panic("dasLLAMA: PLE head {h} rows [{t.ple_head_off[h]}, +{t.ple_head_vocab[h]}) exceed the table's {t.ngram_rows} rows")
                 }
             }
-            let ts_tab = ref_time_ticks()
-            let nbytes = gguf_read_tensor_raw(m, bytes, "per_layer_token_embd.weight", t.ngram_tab)
-            to_log(LOG_INFO, "dasLLAMA: PLE n-gram table {t.ngram_rows} rows x {hd}, {nbytes >> 20l} MB raw: {get_time_usec(ts_tab) / 1000} ms\n")
+            if (g_fill_plan_mode) {
+                g_ngram_stream = (ti = ti, bytes = ggml_type_bytes(t.ngram_type, m.tensors[ti].n_elem))
+                to_log(LOG_INFO, "dasLLAMA: PLE n-gram table {t.ngram_rows} rows x {hd}, {g_ngram_stream.bytes >> 20l} MB raw: streamed to the image\n")
+            } else {
+                let ts_tab = ref_time_ticks()
+                let nbytes = gguf_read_tensor_raw(m, bytes, "per_layer_token_embd.weight", t.ngram_tab)
+                to_log(LOG_INFO, "dasLLAMA: PLE n-gram table {t.ngram_rows} rows x {hd}, {nbytes >> 20l} MB raw: {get_time_usec(ts_tab) / 1000} ms\n")
+            }
         }
         if (t.config.indexer_n_head > 0l) {   // qwen4exp QSA indexer: f32 (BF16 on disk widens exactly)
             let hs = t.config.indexer_head_size

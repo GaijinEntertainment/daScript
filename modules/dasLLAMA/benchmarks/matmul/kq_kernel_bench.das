@@ -13,6 +13,8 @@ require dasllama/dasllama_kqformat
 require dasllama/dasllama_gemm_schema
 require llvm   // nolint:STYLE030 - the witness, unguarded on purpose: the `_variants()` registries this bench runs exist only with dasLLVM, so a host without it skips this program as missing its prerequisite
 require llvm/daslib/llvm_env
+require llvm/daslib/llvm_tune
+require llvm/daslib/llvm_cpu_class
 require math
 require strings
 require daslib/strings_boost
@@ -24,7 +26,9 @@ require daslib/strings_boost
 //! (one token), TILE the prefill batch. Every row of a kernel's `_variants()` registry is timed,
 //! the rows of one format interleaved round-robin so frequency drift cancels: under
 //! DAS_TUNE_MODE=tune that is the whole [tune_perm] grid, under normal mode the stamped winner
-//! alone. Timing only - a spelling's correctness is gen_tune_probe's TEST mode.
+//! alone. Timing only - a spelling's correctness is gen_tune_probe's TEST mode. A row drops its warm rounds:
+//! SOLO_BURN (3) solo, TEAM_BURN (6) under --team. Every row carries the tune profile the kernel version came
+//! from - the manifest DAS_TUNE_MANIFEST names, else the box class's tune-defaults profile.
 //! Run: DAS_TUNE_MODE=tune bin/daslang -jit modules/dasLLAMA/benchmarks/matmul/kq_kernel_bench.das -- --fmt iq3s
 //! The reference row at the same shape: GGML_BENCH_THREADS=1 test-backend-ops perf -o MUL_MAT -p "type_a=iq3_s"
 //! (its default MUL_MAT perf case is m=4096 rows, k=14336, n in {1, 512} tokens - this bench's defaults);
@@ -60,11 +64,16 @@ struct BenchArgs {
     each : bool
     @clarg_doc = "--team: gemv chunks per lane for the engine's splitter (0 = the engine default, 8; 1 = one equal chunk per lane)"
     chunks_per_lane : int = 0
+    @clarg_doc = "Add the row-major rows - the one-copy rail's kernels over the format's DEVICE planes (rm_gemv: rows [0, d) against one activation row; rm_tile: four tokens a call over every row)"
+    rm : bool
 }
 
 typedef GemvFn = function<(var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, rb, re : int64) : void>
 typedef TileFn = function<(var yp : float?; kqg : uint8 const?; ksg : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d, g, t0 : int64) : void>
 typedef LayoutFn = function<() : int>
+typedef RmTileFn = function<(var yp : float?; qp : uint8 const?; sp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d : int64) : void>
+typedef RmQ8GemvFn = function<(var yp : float?; wp : int8 const?; sp : uint16 const?; xqp : int8 const?; xsp : float const?; n, rb, re : int64) : void>
+typedef RmQ8TileFn = function<(var yp : float?; wp : int8 const?; sp : uint16 const?; xqp : int8 const?; xsp : float const?; n, d : int64) : void>
 
 let TILE_TOKENS = 4l   // tokens one kq / q51 / mx4 tile call covers (q8's tokstep companion says its own)
 let MX4_NAME = "mx4"   // mxfp4's KqFmt row carries no family of its own; it rides the q8q8 grid as a companion
@@ -112,23 +121,32 @@ struct PlaneShape {
     gemvW_row : int64   // the gemv's weight plane bytes per row
     tileW_row : int64   // the tile's weight plane bytes per row
     ws_row : int64   // scale plane bytes per row
+    rmQ_row : int64   // the device quant plane bytes per row (the row-major rows)
+    rmS_row : int64   // the device scale plane bytes per row
+}
+
+//! the DEVICE planes' bytes per row: q8 int8 rows + f16 scales, a superblock format its quant stride + the decoded scale row, a per-32 format and mx4 their disk block
+def rm_rows_bytes(f : KqFmt; n : int64) : tuple<int64; int64> {
+    let b = dev_rows_bytes(f, n, 1l)
+    return (b.q, b.s)
 }
 
 def plane_shape(f : KqFmt; mx4 : bool; n : int64) : PlaneShape {
+    let rm = rm_rows_bytes(mx4 ? KqFmt.mx4 : f, n)
     if (mx4) {
-        return PlaneShape(gemvW_row = n / 2l, tileW_row = n / 2l, ws_row = n / 32l)
+        return PlaneShape(gemvW_row = n / 2l, tileW_row = n / 2l, ws_row = n / 32l, rmQ_row = rm._0, rmS_row = rm._1)
     }
     if (f == KqFmt.q8) {
-        return PlaneShape(gemvW_row = n, tileW_row = n, ws_row = (n / 32l) * (g_s16 ? 2l : 4l))
+        return PlaneShape(gemvW_row = n, tileW_row = n, ws_row = (n / 32l) * (g_s16 ? 2l : 4l), rmQ_row = rm._0, rmS_row = rm._1)
     }
     if (f == KqFmt.q51) {
-        return PlaneShape(gemvW_row = (n / 32l) * 20l, tileW_row = (n / 32l) * 20l, ws_row = (n / 32l) * 4l)
+        return PlaneShape(gemvW_row = (n / 32l) * 20l, tileW_row = (n / 32l) * 20l, ws_row = (n / 32l) * 4l, rmQ_row = rm._0, rmS_row = rm._1)
     }
     if (f == KqFmt.iq4nl32) {
-        return PlaneShape(gemvW_row = (n / 32l) * IQ4NL32_QB, tileW_row = (n / 32l) * IQ4NL32_QB, ws_row = (n / 32l) * IQ4NL32_SB)
+        return PlaneShape(gemvW_row = (n / 32l) * IQ4NL32_QB, tileW_row = (n / 32l) * IQ4NL32_QB, ws_row = (n / 32l) * IQ4NL32_SB, rmQ_row = rm._0, rmS_row = rm._1)
     }
     let nsb = n / 256l
-    return PlaneShape(gemvW_row = nsb * kq_qsb(f), tileW_row = nsb * tile_kq_bytes_per_sb(f), ws_row = nsb * kq_ssb(f))
+    return PlaneShape(gemvW_row = nsb * kq_qsb(f), tileW_row = nsb * tile_kq_bytes_per_sb(f), ws_row = nsb * kq_ssb(f), rmQ_row = rm._0, rmS_row = rm._1)
 }
 
 var BASE_ALIGN = 64l   // the arena's start alignment - --base-align; the planes' phase against 4 KB pages follows it
@@ -147,6 +165,8 @@ struct Planes {
     xs : int64    // f32 activation scales
     xbs : int64   // int per-16 activation sums
     y : int64     // f32 outputs
+    rmQ : int64   // the device quant plane (the row-major rows)
+    rmS : int64   // the device scale plane
 }
 
 //! the next plane start: 64-byte aligned, `slot` staggers past the running end
@@ -173,6 +193,8 @@ def fill_planes(var p : Planes; sh : PlaneShape; n, d, ntok : int64) {
     p.xs = next_plane(end, ntok * n / 32l * 4l, 4)
     p.xbs = next_plane(end, ntok * n / 16l * 4l, 5)
     p.y = next_plane(end, ntok * d * 4l, 6)
+    p.rmQ = next_plane(end, d * sh.rmQ_row, 7)
+    p.rmS = next_plane(end, d * sh.rmS_row, 8)
     p.arena |> reserve(end + BASE_ALIGN + BASE_OFFSET)
     p.arena |> resize(end + BASE_ALIGN + BASE_OFFSET)
     let base = arena_base(p)
@@ -183,6 +205,8 @@ def fill_planes(var p : Planes; sh : PlaneShape; n, d, ntok : int64) {
     p.xs += base
     p.xbs += base
     p.y += base
+    p.rmQ += base
+    p.rmS += base
     var seed = 0x1234u
     for (i in range64(p.gemvKq, p.gemvKq + d * sh.gemvW_row)) {
         seed = seed * 1664525u + 1013904223u
@@ -193,6 +217,13 @@ def fill_planes(var p : Planes; sh : PlaneShape; n, d, ntok : int64) {
         p.arena[i] = uint8(seed >> 24u)
     }
     for (i in range64(p.ks, p.ks + d * sh.ws_row)) {
+        p.arena[i] = SCALE_BYTE
+    }
+    for (i in range64(p.rmQ, p.rmQ + d * sh.rmQ_row)) {
+        seed = seed * 1664525u + 1013904223u
+        p.arena[i] = uint8(seed >> 24u)
+    }
+    for (i in range64(p.rmS, p.rmS + d * sh.rmS_row)) {
         p.arena[i] = SCALE_BYTE
     }
     for (i in range64(p.xq, p.xq + ntok * n)) {
@@ -296,9 +327,12 @@ def emit_row(var rows : int&; name, tier : string; var st : RowStat; n, d, ntok,
     if (g_each_round) {
         each = "\t" + join(st.us, ",")
     }
-    print("{name}\t{tier}\t{perm}\t{n}\t{d}\t{ntok}\t{best}\t{med}\t{ns_per_sb}\t{gbs}\t{gflops}{lanes}{each}\n")
+    print("{name}\t{tier}\t{perm}\t{n}\t{d}\t{ntok}\t{best}\t{med}\t{ns_per_sb}\t{gbs}\t{gflops}{lanes}{each}\t{tune_profile_stamp()}\ttiming-only\n")
     rows++
 }
+
+//! the tune profile this run's kernel versions came from: the manifest DAS_TUNE_MANIFEST names, else the box class's defaults
+def tune_profile_stamp() : string => tune_manifest_explicit() ? tune_manifest_path() : "{jit_baseline_class()}.tune-defaults.json"
 
 def perm_wanted(spec, suffix : string) : bool {
     if (empty(spec)) {
@@ -549,6 +583,162 @@ def bench_q8_family(var rows : int&; cfg : BenchArgs; mx4 : bool; var p : Planes
     delete steps
 }
 
+//! the row-major GEMV rows of one format over the device planes, solo or the engine's team dispatch
+def time_rm_gemv(var stats : array<RowStat>; cfg : BenchArgs; fns : array<GemvFn>; var p : Planes; n, d : int64) {
+    unsafe {
+        let q = addr<uint8 const?>(p.arena[p.rmQ])
+        let sp = addr<uint8 const?>(p.arena[p.rmS])
+        let xqp = addr<int8 const?>(p.arena[p.xq])
+        let xsp = addr<float const?>(p.arena[p.xs])
+        let xbsp = addr<int const?>(p.arena[p.xbs])
+        var yp = addr<float?>(p.arena[p.y])
+        if (cfg.team) {
+            time_rows_team(stats, cfg.rounds) $(row : int; var laneP : int64?) {
+                team_gemv(fns[row], yp, q, sp, xqp, xsp, xbsp, n, d, laneP)
+            }
+        } else {
+            time_rows(stats, cfg.rounds) $(row : int) {
+                invoke(fns[row], yp, q, sp, xqp, xsp, xbsp, n, 0l, d)
+            }
+        }
+    }
+}
+
+//! the q8 row-major GEMV rows (int8 rows, f16 scales - the 8-argument contract)
+def time_rm_gemv(var stats : array<RowStat>; cfg : BenchArgs; fns : array<RmQ8GemvFn>; var p : Planes; n, d : int64) {
+    unsafe {
+        let w = addr<int8 const?>(p.arena[p.rmQ])
+        let sp = addr<uint16 const?>(p.arena[p.rmS])
+        let xqp = addr<int8 const?>(p.arena[p.xq])
+        let xsp = addr<float const?>(p.arena[p.xs])
+        var yp = addr<float?>(p.arena[p.y])
+        if (cfg.team) {
+            time_rows_team(stats, cfg.rounds) $(row : int; var laneP : int64?) {
+                team_gemv(fns[row], yp, w, sp, xqp, xsp, n, d, laneP)
+            }
+        } else {
+            time_rows(stats, cfg.rounds) $(row : int) {
+                invoke(fns[row], yp, w, sp, xqp, xsp, n, 0l, d)
+            }
+        }
+    }
+}
+
+//! the row-major tile rows: four tokens a call over every row, the batch in steps of four
+def time_rm_tile(var stats : array<RowStat>; cfg : BenchArgs; fns : array<RmTileFn>; var p : Planes; n, d, nsc : int64) {
+    let ntok = int64(cfg.ntok)
+    unsafe {
+        let q = addr<uint8 const?>(p.arena[p.rmQ])
+        let sp = addr<uint8 const?>(p.arena[p.rmS])
+        let xqp = addr<int8 const?>(p.arena[p.xq])
+        let xsp = addr<float const?>(p.arena[p.xs])
+        let xbsp = addr<int const?>(p.arena[p.xbs])
+        var yp = addr<float?>(p.arena[p.y])
+        time_rows(stats, cfg.rounds) $(row : int) {
+            var t0 = 0l
+            while (t0 + TILE_TOKENS <= ntok) {
+                invoke(fns[row], yp + t0 * d, q, sp, xqp + t0 * n, xsp + t0 * nsc, xbsp + t0 * (n / 16l), n, d)
+                t0 += TILE_TOKENS
+            }
+        }
+    }
+}
+
+def time_rm_tile(var stats : array<RowStat>; cfg : BenchArgs; fns : array<RmQ8TileFn>; var p : Planes; n, d, nsc : int64) {
+    let ntok = int64(cfg.ntok)
+    unsafe {
+        let w = addr<int8 const?>(p.arena[p.rmQ])
+        let sp = addr<uint16 const?>(p.arena[p.rmS])
+        let xqp = addr<int8 const?>(p.arena[p.xq])
+        let xsp = addr<float const?>(p.arena[p.xs])
+        var yp = addr<float?>(p.arena[p.y])
+        time_rows(stats, cfg.rounds) $(row : int) {
+            var t0 = 0l
+            while (t0 + TILE_TOKENS <= ntok) {
+                invoke(fns[row], yp + t0 * d, w, sp, xqp + t0 * n, xsp + t0 * nsc, n, d)
+                t0 += TILE_TOKENS
+            }
+        }
+    }
+}
+
+def bench_rm_rows(var rows : int&; cfg : BenchArgs; name : string; f : KqFmt; var p : Planes; nsb : int64; sh : PlaneShape;
+                  gvs : array<tuple<string; auto(GF)>>; tvs : array<tuple<string; auto(TF)>>) {
+    let n = int64(cfg.n)
+    let d = int64(cfg.d)
+    let plane_bytes = d * (sh.rmQ_row + sh.rmS_row)
+    let nsc = kq_sb(f) ? n / 256l : n / 32l
+    if (!cfg.no_gemv) {
+        var stats : array<RowStat>
+        var fns : array<GF>
+        select_rows(cfg, gvs, stats, fns)
+        time_rm_gemv(stats, cfg, fns, p, n, d)
+        delete fns
+        for (st in stats) {
+            emit_row(rows, name, "rm_gemv", st, n, d, 1l, nsb, plane_bytes)
+        }
+        delete stats
+    }
+    if (cfg.ntok >= int(TILE_TOKENS)) {
+        var stats : array<RowStat>
+        var fns : array<TF>
+        select_rows(cfg, tvs, stats, fns)
+        time_rm_tile(stats, cfg, fns, p, n, d, nsc)
+        delete fns
+        for (st in stats) {
+            emit_row(rows, name, "rm_tile", st, n, d, (int64(cfg.ntok) / TILE_TOKENS) * TILE_TOKENS, nsb, plane_bytes)
+        }
+        delete stats
+    }
+}
+
+//! the row-major families by format (q8s16 shares q8's: the device q8 plane IS int8 rows + f16 scales)
+def bench_rm(var rows : int&; cfg : BenchArgs; name : string; f : KqFmt; mx4 : bool; var p : Planes; nsb : int64; sh : PlaneShape) { // nolint:STYLE037 - one arm a family
+    if (mx4) {
+        bench_rm_rows(rows, cfg, name, KqFmt.mx4, p, nsb, sh, mx4q8_rm_gemv_gen_variants(), mx4q8_rm_tile4_gen_variants())
+    } elif (f == KqFmt.q8) {
+        bench_rm_rows(rows, cfg, name, f, p, nsb, sh, q8q8_rm_gemv_gen_variants(), q8q8_rm_tile4_gen_variants())
+    } elif (f == KqFmt.iq4nl32) {
+        bench_rm_rows(rows, cfg, name, f, p, nsb, sh, iq4nl32q8_rm_gemv_gen_variants(), iq4nl32q8_rm_tile4_gen_variants())
+    } elif (f == KqFmt.q4032) {
+        bench_rm_rows(rows, cfg, name, f, p, nsb, sh, q4032q8_rm_gemv_gen_variants(), q4032q8_rm_tile4_gen_variants())
+    } elif (f == KqFmt.q51) {
+        bench_rm_rows(rows, cfg, name, f, p, nsb, sh, q51q8_rm_gemv_gen_variants(), q51q8_rm_tile4_gen_variants())
+    } elif (f == KqFmt.q5032) {
+        bench_rm_rows(rows, cfg, name, f, p, nsb, sh, q5032q8_rm_gemv_gen_variants(), q5032q8_rm_tile4_gen_variants())
+    } elif (f == KqFmt.k4) {
+        bench_rm_rows(rows, cfg, name, f, p, nsb, sh, k4q8_rm_gemv_gen_variants(), k4q8_rm_tile4_gen_variants())
+    } elif (f == KqFmt.k5) {
+        bench_rm_rows(rows, cfg, name, f, p, nsb, sh, k5q8_rm_gemv_gen_variants(), k5q8_rm_tile4_gen_variants())
+    } elif (f == KqFmt.k6) {
+        bench_rm_rows(rows, cfg, name, f, p, nsb, sh, k6q8_rm_gemv_gen_variants(), k6q8_rm_tile4_gen_variants())
+    } elif (f == KqFmt.k3) {
+        bench_rm_rows(rows, cfg, name, f, p, nsb, sh, k3q8_rm_gemv_gen_variants(), k3q8_rm_tile4_gen_variants())
+    } elif (f == KqFmt.k2) {
+        bench_rm_rows(rows, cfg, name, f, p, nsb, sh, k2q8_rm_gemv_gen_variants(), k2q8_rm_tile4_gen_variants())
+    } elif (f == KqFmt.q40) {
+        bench_rm_rows(rows, cfg, name, f, p, nsb, sh, q40q8_rm_gemv_gen_variants(), q40q8_rm_tile4_gen_variants())
+    } elif (f == KqFmt.iq4nl) {
+        bench_rm_rows(rows, cfg, name, f, p, nsb, sh, iq4nlq8_rm_gemv_gen_variants(), iq4nlq8_rm_tile4_gen_variants())
+    } elif (f == KqFmt.iq4xs) {
+        bench_rm_rows(rows, cfg, name, f, p, nsb, sh, iq4xsq8_rm_gemv_gen_variants(), iq4xsq8_rm_tile4_gen_variants())
+    } elif (f == KqFmt.iq3s4) {
+        bench_rm_rows(rows, cfg, name, f, p, nsb, sh, iq3s4q8_rm_gemv_gen_variants(), iq3s4q8_rm_tile4_gen_variants())
+    } elif (f == KqFmt.iq3s) {
+        bench_rm_rows(rows, cfg, name, f, p, nsb, sh, iq3sq8_rm_gemv_gen_variants(), iq3sq8_rm_tile4_gen_variants())
+    } elif (f == KqFmt.iq3xxs) {
+        bench_rm_rows(rows, cfg, name, f, p, nsb, sh, iq3xxsq8_rm_gemv_gen_variants(), iq3xxsq8_rm_tile4_gen_variants())
+    } elif (f == KqFmt.iq2s) {
+        bench_rm_rows(rows, cfg, name, f, p, nsb, sh, iq2sq8_rm_gemv_gen_variants(), iq2sq8_rm_tile4_gen_variants())
+    } elif (f == KqFmt.iq2xs) {
+        bench_rm_rows(rows, cfg, name, f, p, nsb, sh, iq2xsq8_rm_gemv_gen_variants(), iq2xsq8_rm_tile4_gen_variants())
+    } elif (f == KqFmt.iq2xxs) {
+        bench_rm_rows(rows, cfg, name, f, p, nsb, sh, iq2xxsq8_rm_gemv_gen_variants(), iq2xxsq8_rm_tile4_gen_variants())
+    } else {
+        to_log(LOG_WARNING, "kq_kernel_bench: {name} has no row-major family - no rm rows\n")
+    }
+}
+
 //! one --fmt name as (name, KqFmt, is_mx4): mx4 and q8s16 are q8-family flavors bench_q8_family races
 def format_entry(name : string) : tuple<string; KqFmt; bool> {
     if (name == MX4_NAME) {
@@ -607,7 +797,7 @@ def main : int {
     var fs <- formats_of(cfg.fmt)
     if (!cfg.tsv) {
         print("kq_kernel_bench: n={cfg.n} d={cfg.d} ntok={cfg.ntok} rounds={cfg.rounds} team={cfg.team} tune_mode={g_env_tune.tune_mode}\n")
-        print("fmt\ttier\tperm\tn\td\tntok\tbest_us\tmedian_us\tns_per_sb\tGB/s\tGFLOP/s{cfg.team ? "\tlane_lo\tlane_hi" : ""}\n")
+        print("fmt\ttier\tperm\tn\td\tntok\tbest_us\tmedian_us\tns_per_sb\tGB/s\tGFLOP/s{cfg.team ? "\tlane_lo\tlane_hi" : ""}\tprofile\tcompare\n")
     }
     var rows = 0
     if (cfg.team) {
@@ -645,6 +835,9 @@ def run_formats(cfg : BenchArgs; fs : array<tuple<string; KqFmt; bool>>) : int {
             if (cfg.ntok > 0) {
                 bench_tile_kq(rows, cfg, fe._0, fe._1, p, nsb, sh)
             }
+        }
+        if (cfg.rm) {
+            bench_rm(rows, cfg, fe._0, fe._1, fe._2, p, nsb, sh)
         }
         delete p
     }

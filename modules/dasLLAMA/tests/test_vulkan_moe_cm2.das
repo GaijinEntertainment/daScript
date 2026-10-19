@@ -58,13 +58,18 @@ def private ref_chain(w1, w3, w2 : array<float>; x : array<float>; inv : array<u
     delete x16
 }
 
-//! one_region = the shared expert's call shape: one region over every row, the identity slot map at unit weight
-def private chain_cell(t : T?; tag : string; n, nfe, npos, k, cnt_a : int64; woff, stride : int64; stream : bool; head_only : bool = false; one_region : bool = false) {
+//! one_region = the shared expert's call shape (one region over every row, the identity map at unit weight); head_regions > 0 =
+//! the async begin over the first regions alone, the other rows at zero weight; by_slot = slot s of every position in region s
+//! (one slot a region, the per-expert chain's contract), else the permuted routing whose region A holds the first cnt_a rows
+def private chain_cell(t : T?; tag : string; n, nfe, npos, k, cnt_a : int64; woff, stride : int64; stream : bool; head_regions : int64 = 0l; one_region : bool = false; by_slot : bool = false) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let woff1 = woff
         let woff3 = woff + stride
         let woff2 = woff + 2l * stride
         var w1, w3, w2 : array<float>
+        if (stream) {
+            moe_gpu_stream_cache_layer(NE, 0l)   //! a streamed stack holds NE experts, every one resident with its slot
+        }
         if (!plane_up(1, NE * nfe, n, 21l + woff % 7l, woff1, w1, true, stream)) {
             t |> skip("{tag}: no Vulkan device (or probe/budget refused the upload)")
             return
@@ -87,8 +92,9 @@ def private chain_cell(t : T?; tag : string; n, nfe, npos, k, cnt_a : int64; wof
         inv |> resize(nk)
         w |> resize(nk)
         expert_of_row |> resize(nk)
+        assert(!by_slot || cnt_a == npos, "by_slot routing: region A is slot 0's rows, one a position")
         for (j in range64(nk)) {
-            let b = one_region ? j : (j * 7l) % nk
+            let b = one_region ? j : (by_slot ? (j % k) * npos + j / k : (j * 7l) % nk)
             inv[j] = uint(b)
             w[j] = one_region ? 1.0 : 0.25 + 0.5 * float((j * 7l) % 5l) / 4.0
             expert_of_row[b] = b < cnt_a ? 1 : 0
@@ -101,16 +107,16 @@ def private chain_cell(t : T?; tag : string; n, nfe, npos, k, cnt_a : int64; wof
         var offs2 <- [woff2 + ege2, 0l, cnt_a, woff2, cnt_a, nk - cnt_a]
         var x, gout, refv : array<float>
         gout |> resize(npos * n)
-        // head_only = the async arm over region A alone (the split's shape); region B's slots weigh 0
+        // the head: the async arm over the first head_regions regions (the split's shape); the other regions' slots weigh 0
         var wg : array<float>
         wg |> resize(nk)
         for (j in range64(nk)) {
-            wg[j] = int64(inv[j]) < cnt_a ? w[j] : 0.0
+            wg[j] = head_regions >= 2l || int64(inv[j]) < cnt_a ? w[j] : 0.0
         }
         for (win in range(2)) {
             fill_x(x, npos, n, win == 0 ? 1.0 : -1.0)
-            if (head_only) {
-                matmul_moe_gpu_ffn_combined_xf_begin(offs1, offs3, offs2, 1l, x, wg, inv, n, nfe, nk, npos, 1, 1, 3, false)
+            if (head_regions > 0l) {
+                matmul_moe_gpu_ffn_combined_xf_begin(offs1, offs3, offs2, head_regions, x, wg, inv, n, nfe, nk, npos, 1, 1, 3, false)
                 matmul_moe_gpu_ffn_combined_xf_join(gout)
                 ref_chain(w1, w3, w2, x, inv, wg, expert_of_row, n, nfe, npos, k, refv)
             } else {
@@ -164,9 +170,9 @@ def test_vulkan_moe_cm2_one_region(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             install_vk_moe_hooks()
             //! k = 1 and every row in region A (cnt_a == nk): the one-region form; 40 rows = one s-tile column plus a partial
-            chain_cell(t, "one-region", 512l, 512l, 40l, 1l, 40l, 71000000l, 1000000l, false, false, true)
+            chain_cell(t, "one-region", 512l, 512l, 40l, 1l, 40l, 71000000l, 1000000l, false, 0l, true)
             //! the same over a 2048-wide dim at 300 rows: the multi-row-tile region and the down GEMM's l-tile pick
-            chain_cell(t, "one-region-big", 2048l, 512l, 300l, 1l, 300l, 81000000l, 4000000l, false, false, true)
+            chain_cell(t, "one-region-big", 2048l, 512l, 300l, 1l, 300l, 81000000l, 4000000l, false, 0l, true)
         } else {
             t |> skip("dasVulkan not installed; the cm2 expert chain is untestable here")
         }
@@ -187,14 +193,18 @@ def test_vulkan_moe_cm2_streamed(t : T?) {
 
 [test]
 def test_vulkan_moe_cm2_split(t : T?) {
-    t |> run("cm2 expert chain async arm: a region head alone (the streamed-layer split's GPU share, partial slot copy) == the CPU reference") @(t : T?) {
+    t |> run("cm2 expert chain async arm: a region head (the streamed-layer split's GPU share, an expert a copy and a submit) == the CPU reference") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             install_vk_moe_hooks()
             t |> success(moe_gpu_ffn_xf_async_rows(512l, 512l) >= 128l, "the async arm serves a window of bucket rows")
             // resident: the async begin/join over region A only
-            chain_cell(t, "async", 512l, 512l, 20l, 2l, 20l, 51000000l, 1000000l, false, true)
-            // streamed: the slot takes expert 1's bytes alone (the partial copy) before the chain
-            chain_cell(t, "split (DASLLAMA_GPU_MOE_SPLIT={g_env_gpu.gpu_moe_split ? 1 : 0})", 512l, 512l, 40l, 2l, 48l, 61000000l, 1000000l, true, true)
+            chain_cell(t, "async", 512l, 512l, 20l, 2l, 20l, 51000000l, 1000000l, false, 1l)
+            // streamed: expert 1's bytes alone cross to the slot (one expert, the first and last command in one),
+            // its rows slot 0's - one a position, as a routed layer's are
+            chain_cell(t, "split (DASLLAMA_GPU_MOE_SPLIT={g_env_gpu.gpu_moe_split ? 1 : 0})", 512l, 512l, 40l, 2l, 40l, 61000000l, 1000000l, true, 1l, false, true)
+            // streamed, a head of two experts: two copies and two submits in the ring, the second waiting its own copy,
+            // the first command landing the window and zeroing the accumulator, the second copying it out
+            chain_cell(t, "split-2 (DASLLAMA_GPU_MOE_SPLIT={g_env_gpu.gpu_moe_split ? 1 : 0})", 512l, 512l, 40l, 2l, 40l, 91000000l, 1000000l, true, 2l, false, true)
         } else {
             t |> skip("dasVulkan not installed; the cm2 expert chain is untestable here")
         }

@@ -2179,13 +2179,14 @@ def private utf8_hold_bytes(s : string) : int {
 
 // One chat.completion.chunk SSE event. role-only for the opening delta, content and/or
 // reasoning_content for each token, empty delta + finish_reason for the terminating chunk.
+[arch(at="README.md#utf8-replies")]
 def private send_chat_chunk(srv : FrontLink; writer : WriterRef;
                             id : string; created : int64; role, content, finish : string;
                             reasoning : string = "") {
     var chunk = OaiStreamChunk(id = id, _object = "chat.completion.chunk", created = created, model = cur_name())
     chunk.choices |> emplace(OaiStreamChoice(index = 0,
-                                             delta <- OaiDelta(role = role, content = content,
-                                                               reasoning_content = reasoning),
+                                             delta <- OaiDelta(role = role, content = utf8_sanitize(content),
+                                                               reasoning_content = utf8_sanitize(reasoning)),
                                              finish_reason = finish))
     sse_event(srv, writer, sprint_json(chunk, false), "")
     delete chunk
@@ -2262,7 +2263,7 @@ def parse_tool_calls(full : string; open_mark, close_mark, id_base : string;
     calls |> reserve(length(calls) + length(tr.calls))
     for (c in tr.calls) {
         calls |> push(OaiToolCall(id = "{id_base}_{length(calls)}", _type = "function",
-                                  _function = OaiToolCallFn(name = c.name, arguments = c.args)))
+                                  _function = OaiToolCallFn(name = utf8_sanitize(c.name), arguments = utf8_sanitize(c.args))))
     }
     let content = tr.content
     delete tr
@@ -2305,7 +2306,7 @@ def private append_json_tool_body(body : JsonValue?; id_base : string;
         return false
     }
     calls |> push(OaiToolCall(id = "{id_base}_{length(calls)}", _type = "function",
-                              _function = OaiToolCallFn(name = cname, arguments = tool_args_text(body))))
+                              _function = OaiToolCallFn(name = utf8_sanitize(cname), arguments = utf8_sanitize(tool_args_text(body)))))
     return true
 }
 
@@ -2378,10 +2379,11 @@ def parse_tool_calls_auto(full : string; declared_open, declared_close, id_base 
     return full
 }
 
+[arch(at="README.md#utf8-replies")]
 def private send_compl_chunk(srv : FrontLink; writer : WriterRef;
                              id : string; created : int64; text, finish : string) {
     var chunk = OaiComplStreamChunk(id = id, _object = "text_completion", created = created, model = cur_name())
-    chunk.choices |> push(OaiComplStreamChoice(index = 0, text = text, finish_reason = finish))
+    chunk.choices |> push(OaiComplStreamChoice(index = 0, text = utf8_sanitize(text), finish_reason = finish))
     sse_event(srv, writer, sprint_json(chunk, false), "")
     delete chunk
 }
@@ -3919,7 +3921,7 @@ def private oai_calls_of(tcs : array<ToolCall>; id_base : string; var calls : ar
     for (tc in tcs) {
         let id = empty(tc.id) ? "{id_base}_{i}" : tc.id
         calls |> emplace(OaiToolCall(id = id, _type = "function",
-                                     _function = OaiToolCallFn(name = tc.name, arguments = tc.args)))
+                                     _function = OaiToolCallFn(name = utf8_sanitize(tc.name), arguments = utf8_sanitize(tc.args))))
         i ++
     }
 }
@@ -3967,6 +3969,7 @@ def private parse_wire_tools(var w : StreamWire?; full, id_base : string;
 // Route drained SchedEvents to their writers: streaming wires emit SSE chunks, buffered wires
 // accumulate pieces and respond once at finish. "evicted" releases the writer with no bytes —
 // the client is gone (reap_disconnected produced it). Finished wires unregister.
+[arch(at="README.md#utf8-replies")]
 def private flush_events(srv : FrontLink) {   // nolint:STYLE037,STYLE038 — one arm per (event kind x wire flavor); the arms share the wire's UTF-8 hold and reply buffer
     for (e in g_events) {
         // interior pointer into g_wires — nothing inserts into the table between here and the erase
@@ -4023,9 +4026,21 @@ def private flush_events(srv : FrontLink) {   // nolint:STYLE037,STYLE038 — on
         } elif (w.streaming) {
             set_writer_keepalive_timeout(srv, w.writer, DEFAULT_WRITER_KEEPALIVE_MS)
             if (!empty(w.utf8_tail)) {
-                // generation ended mid-character (max-tokens cut): the held bytes can never
-                // complete, and emitting them would put invalid UTF-8 on the wire — drop loudly
-                to_log(LOG_WARNING, "dasllama-server: stream {w.id} ended mid-UTF-8-sequence; dropped {length(w.utf8_tail)} byte(s)\n")
+                //! the generation ended inside a character (a max-tokens cut): the held bytes complete nothing, so they go out as U+FFFD
+                to_log(LOG_WARNING, "dasllama-server: stream {w.id} ended mid-UTF-8-sequence; {length(w.utf8_tail)} held byte(s) sent as U+FFFD\n")
+                let last = utf8_sanitize(w.utf8_tail)
+                if (w.is_chat) {
+                    //! the replacement rides the wire's splitter like any delta: inside a reasoning span it is reasoning, under a call envelope the call's
+                    var rsn = ""
+                    var cnt = ""
+                    think_feed(w.think, last, rsn, cnt)
+                    if (w.has_tools) {
+                        cnt = call_hold_pass(*w, cnt)
+                    }
+                    send_chat_halves(srv, *w, rsn, cnt)
+                } else {
+                    send_compl_chunk(srv, w.writer, w.id, w.created, last, "")
+                }
             }
             var finish = e.finish
             if (w.has_tools) {
@@ -4098,8 +4113,8 @@ def private flush_events(srv : FrontLink) {   // nolint:STYLE037,STYLE038 — on
             }
             var out = OaiChatResponse(id = w.id, _object = "chat.completion", created = w.created, model = cur_name())
             out.choices |> emplace(OaiChoice(index = 0,
-                                             message <- OaiMessage(role = "assistant", content = content,
-                                                                   reasoning_content = rsn,
+                                             message <- OaiMessage(role = "assistant", content = utf8_sanitize(content),
+                                                                   reasoning_content = utf8_sanitize(rsn),
                                                                    tool_calls <- calls),
                                              finish_reason = finish))
             out.usage = usage_of(e)
@@ -4108,7 +4123,7 @@ def private flush_events(srv : FrontLink) {   // nolint:STYLE037,STYLE038 — on
             delete out
         } else {
             var out = OaiComplResponse(id = w.id, _object = "text_completion", created = w.created, model = cur_name())
-            out.choices |> push(OaiComplChoice(index = 0, text = join(w.reply_parts, ""), finish_reason = e.finish))
+            out.choices |> push(OaiComplChoice(index = 0, text = utf8_sanitize(join(w.reply_parts, "")), finish_reason = e.finish))
             out.usage = usage_of(e)
             set_writer_keepalive_timeout(srv, w.writer, DEFAULT_WRITER_KEEPALIVE_MS)
             respond(srv, w.writer, int(http_status.OK), "application/json", sprint_json(out, false))
@@ -5047,8 +5062,8 @@ def private process_asr_job(
         transcribe(model, session, samples) $(seg) {
             vt.segments |> push(OaiVerboseSegment(
                 id = sid, start = float(seg.t0) / 100.0,
-                end = float(seg.t1) / 100.0, text = seg.text))
-            full |> push(seg.text)
+                end = float(seg.t1) / 100.0, text = utf8_sanitize(seg.text)))
+            full |> push(utf8_sanitize(seg.text))
             sid++
         }
         vt.text = join(full, "")
@@ -5061,7 +5076,7 @@ def private process_asr_job(
         delete vt
         return
     }
-    let text = transcribe(model, session, samples)
+    let text = utf8_sanitize(transcribe(model, session, samples))
     let content_type = job.response_format == "text" ? "text/plain; charset=utf-8" : "application/json"
     let body = job.response_format == "text" ? text : sprint_json(OaiTranscription(text = text), false)
     emit_asr_event(events, AsrEvent(
