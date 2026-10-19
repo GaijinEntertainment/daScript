@@ -108,7 +108,7 @@ def test_jit_lib_static_and_export_all(t : T?) {
     let bin = get_host_binary()
     var static_lines : array<string>
     let static_rc = build_lib(bin, "{FIXTURE_DIR}/_jit_lib_probe.das", "jit_lib_probe_s",
-        "-lib-export-all", "--jit-lib-static", static_lines) // nolint:LINT029 - lines carries the build transcript for the failure report
+        "-lib-export-all", "--jit-static", static_lines)
     report(static_lines, "static build")
     t |> success(static_rc == 0, "a static export-all build exits clean")
     t |> success(fexist(static_artifact("{OUTPUT_DIR}/jit_lib_probe_s")), "the archive is written")

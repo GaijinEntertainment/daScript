@@ -766,7 +766,7 @@ void print_help() {
         << "    -jit-stack  with -jit: retain every generated call in the logical daslang stack.\n"
         << "    -exe        JIT compile to standalone executable (implies -dry-run)\n"
         << "    -lib        JIT compile to a C-ABI native library: <output>.so/.dylib/.dll plus <output>.h\n"
-        << "                (add -- --jit-lib-static for a .a/.lib archive instead; implies -dry-run)\n"
+        << "                (add -- --jit-static for a .a/.lib archive instead; implies -dry-run)\n"
         << "    -lib-export-all with -lib: export every public entry-module function whose signature has a C\n"
         << "                representation, instead of only the [export_c] ones\n"
         << "    -output <path> set JIT output path\n"

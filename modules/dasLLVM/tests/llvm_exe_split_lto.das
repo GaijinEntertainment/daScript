@@ -8,6 +8,9 @@ require _exe_test_common
 // A standalone exe built split (`--jit-split-modules`: one partition a das module, the entry in a
 // partition of its own) and split-plus-LTO (`--jit-lto`: bitcode partitions, the link inlines across
 // them) runs the fixture the way the one-unit exe does, and leaves no partition object beside itself.
+// Off Windows the flags build also links the runtime archives in
+// (`--jit-static`), which the link announces as an executable rather
+// than a library.
 
 let ROOT = "modules/dasLLVM/tests/_exe_split_lto_root.das"
 
@@ -65,8 +68,14 @@ def test_exe_flags_outside_their_rail(t : T?) {
     }
     let dir = unsafe(dir_r.value)
     t |> run("--jit-lto and --jit-obj-cache without the split say they are ignored, and the one-unit exe still runs") @(t : T?) {
-        let out = build_and_run(t, dir, "flags", ROOT, ["--jit-lto", "--jit-obj-cache=1"],
-            ["--jit-lto applies to a split -exe", "--jit-obj-cache applies under --jit-split-modules"])
+        var jit_args <- ["--jit-lto", "--jit-obj-cache=1"]
+        var says <- ["--jit-lto applies to a split -exe",
+                     "--jit-obj-cache applies under --jit-split-modules"]
+        if (get_platform_name() != "windows") {
+            jit_args |> push("--jit-static")
+            says |> push("Executable {path_join(dir, "flags")}.exe linked - ok")
+        }
+        let out = build_and_run(t, dir, "flags", ROOT, jit_args, says)
         expect_lines(t, out, "flags outside their rail")
     }
     rmdir_rec_result(dir)

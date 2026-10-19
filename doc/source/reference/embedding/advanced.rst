@@ -297,7 +297,7 @@ Pipeline:
 
 1. ``daslang -lib script.das -output build/script``
 2. This writes ``build/script.so`` (``.dylib`` / ``.dll``) and
-   ``build/script.h``. Add ``-- --jit-lib-static`` for a ``.a`` / ``.lib``
+   ``build/script.h``. Add ``-- --jit-static`` for a ``.a`` / ``.lib``
    archive instead; the header records what a host then links.
 3. Include the header, link the library, call it.
 

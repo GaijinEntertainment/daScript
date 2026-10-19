@@ -90,7 +90,7 @@ program that only needs to *call* one script links no daslang API:
 ```
 
 writes `build/script.so` (`.dylib` / `.dll`) and `build/script.h`. Add
-`-- --jit-lib-static` for a `.a` / `.lib` archive instead; the generated header
+`-- --jit-static` for a `.a` / `.lib` archive instead; the generated header
 records what a host then links.
 
 Which functions cross the boundary, in three forms: `[export_c]` marks them one

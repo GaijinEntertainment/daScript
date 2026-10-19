@@ -353,7 +353,7 @@ generated C header instead:
 
 ```sh
 daslang -lib script.das -output build/script     # build/script.so (.dylib/.dll) + build/script.h
-daslang -lib script.das -output build/script -- --jit-lib-static   # build/script.a instead
+daslang -lib script.das -output build/script -- --jit-static   # build/script.a instead
 ```
 
 Three ways to pick what crosses: mark each function `[export_c]` (an `[export]` the library also

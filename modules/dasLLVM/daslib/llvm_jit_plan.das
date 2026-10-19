@@ -836,6 +836,7 @@ struct public JitPlan {
     gen_exe : bool
     gen_lib : bool
     lib_static : bool
+    refusal : string   //! why this run must not start codegen; empty when it may
     lib_export_marked : bool
     lib_bindings : string
     exe_main : string
@@ -924,7 +925,9 @@ def private resolve_split_options(var plan : JitPlan; cli_opts : JitCliOptions; 
 //! runtime, beside the instrumentation the run asked for; the sanitizer runtimes are the compiler's own, so the link runs
 //! through clang++ unless a linker is named. A static library is archived, not linked, and its host links the runtimes
 def private link_with_sanitizers(var plan : JitPlan; host_ubsan : bool) {
-    return if (!plan.gen_exe || plan.lib_static || plan.gen_wasm || !empty(plan.target_triple) || get_platform_name() == "windows")
+    let archived = plan.gen_lib && plan.lib_static
+    return if (!plan.gen_exe || archived || plan.gen_wasm || !empty(plan.target_triple)
+        || get_platform_name() == "windows")
     let wanted = fixed_array(plan.sanitize.address || JIT_HOST_ASAN, plan.sanitize.undefined || host_ubsan, host_has_symbol("__tsan_init"))
     let names <- [for (name, on in fixed_array("address", "undefined", "thread"), wanted); name; where on]
     return if (empty(names))
@@ -968,19 +971,39 @@ def private resolve_sanitize_option(var plan : JitPlan; cli_opts : JitCliOptions
     link_with_sanitizers(plan, host_ubsan)
 }
 
+//! --jit-static: an archive under -lib, the runtime linked into a
+//! host-target -exe; Windows refuses the exe form before codegen
+def private resolve_static_option(var plan : JitPlan; cli_opts : JitCliOptions; announce : bool) {
+    let requested = cli_opts.lib_static |> unwrap_or(false)
+    if (!plan.gen_exe) {
+        if (announce && requested) {
+            to_log(LOG_WARNING, "LLVM JIT: --jit-static applies to -lib and -exe only - ignored\n")
+        }
+        return
+    }
+    if (!plan.gen_lib && (plan.gen_wasm || !empty(plan.target_triple))) {
+        if (announce && requested) {
+            to_log(LOG_WARNING, "LLVM JIT: --jit-static applies to a host-target -exe - ignored\n")
+        }
+        return
+    }
+    plan.lib_static = requested
+    if (requested && !plan.gen_lib && get_platform_name() == "windows") {
+        plan.refusal = "--jit-static on -exe is not supported on Windows"
+    }
+}
+
 //! the plan for `prog`; `announce` prints the one-time lines (the baseline class, the exe host
 //! CPU) - the first computation in a run passes true, a recomputation false
-def public make_jit_plan(prog : Program?; var ctx : Context?; announce : bool) : JitPlan {
-    let r <- parse_args(type<JitCliOptions>)
-    return <- make_jit_plan(prog, ctx, announce, r |> unwrap_or_default)
-}
+def public make_jit_plan(prog : Program?; var ctx : Context?; announce : bool) : JitPlan =>
+    <- make_jit_plan(prog, ctx, announce, jit_cli_options_or_default())
 
 def public make_jit_plan(prog : Program?; var ctx : Context?; announce : bool; cli_opts : JitCliOptions) : JitPlan {   // nolint:STYLE038 - one flat resolution of every emission input; a split would hide which inputs key the cache
     var plan = JitPlan(aot_host = prog.policies.aot && prog.policies.jit_enabled,
         jit_all_functions = prog.policies.jit_jit_all_functions,
         debug_info = cli_opts.debug_info |> unwrap_or(prog.policies.jit_debug_info),
-        dump_ir = cli_opts.dump_ir |> unwrap_or(false),
-        dump_ir_path = cli_opts.dump_ir_path |> unwrap_or(""))
+        dump_ir = cli_opts.dump_ir |> is_some,
+        dump_ir_path = cli_opts.dump_ir |> unwrap_or(""))
     if (announce && prog.policies.jit_dll_mode && !das_is_dll_build()) {
         // a legitimate configuration (static daslang), but the cost is worth naming: no DLL
         // cache exists, so every -jit run pays full in-memory codegen
@@ -989,13 +1012,9 @@ def public make_jit_plan(prog : Program?; var ctx : Context?; announce : bool; c
     }
     plan.gen_lib = cli_opts.lib |> unwrap_or((prog._options |> find_arg("jit_lib")) ?as tBool ?? false)
     plan.gen_exe = prog.policies.jit_exe_mode || plan.gen_lib
-    plan.lib_static = cli_opts.lib_static |> unwrap_or(false)
     plan.lib_bindings = cli_opts.lib_bindings |> unwrap_or("")
     plan.lib_export_marked = cli_opts.lib_export_marked |> unwrap_or((prog._options |> find_arg("jit_lib_export_marked")) ?as tBool ?? false)
     if (announce && !plan.gen_lib) {
-        if (cli_opts.lib_static |> is_some()) {
-            to_log(LOG_WARNING, "LLVM JIT: --jit-lib-static applies to -lib only - ignored for this run\n")
-        }
         if (cli_opts.lib_bindings |> is_some()) {
             to_log(LOG_WARNING, "LLVM JIT: --jit-lib-bindings applies to -lib only - ignored for this run\n")
         }
@@ -1062,6 +1081,7 @@ def public make_jit_plan(prog : Program?; var ctx : Context?; announce : bool; c
     // a runtime built -ffast-math already relaxes the interpreter's own ops, so the JIT inherits
     // that unless the program says otherwise; `options fast_math` still wins either way
     g_jit_fast_math = (prog._options |> find_arg("fast_math") ?as tBool ?? (prog.policies.fast_math || HOST_FAST_MATH)) || (prog._options |> find_arg("_jit_fast_math") ?as tBool ?? false)
+    resolve_static_option(plan, cli_opts, announce)
     resolve_sanitize_option(plan, cli_opts, prog, announce)
 
     // nolint:STYLE014

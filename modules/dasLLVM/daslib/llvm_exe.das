@@ -25,7 +25,8 @@ require daslib/strings_boost
 require daslib/defer
 require daslib/lpipe
 require daslib/rtti
-require daslib/clargs
+require llvm/daslib/llvm_jit_cli
+require daslib/option
 require llvm/daslib/llvm_tune   // tune_scopes_status for the release-deps JSON
 require daslib/json_boost
 require jit
@@ -912,25 +913,10 @@ def private push_shared_unique(entry : SharedModuleEntry; var seen : table<strin
     deps.shared_modules |> push(entry)
 }
 
-// Declarative parse of daslang's release-deps flags; clargs derives --field-name, other argv flags ignored.
-[CommandLineArgs]
-struct private ReleaseDepsArgs {
-    @clarg_doc = "Path to write the JSON release-deps file"
-    list_shared_modules : string
-
-    @clarg_doc = "Force-include a shared module by daslang or package name (repeatable)"
-    force_shared_module : array<string>
-}
-
 def private write_release_deps(prog : Program?) {
-    let argv <- get_program_args()
-    var r <- parse_args(type<ReleaseDepsArgs>, argv)
-    if (r |> is_err) {
-        to_log(LOG_ERROR, "LLVM EXE: bad release-deps args: {r |> unwrap_err}\n")
-        return
-    }
-    let cfg <- r |> move_unwrap
-    if (empty(cfg.list_shared_modules)) return
+    let cfg <- jit_cli_options_or_default()
+    let dst_path = cfg.list_shared_modules |> unwrap_or("")
+    if (empty(dst_path)) return
     // Snapshot the dynamic-module registry: by daslang-side name + a parallel by-package-name lookup.
     var by_das, by_pkg : table<string; SharedModuleEntry>
     for_each_registered_dynamic_module() $(path, _mod_name, das_name) {
@@ -981,7 +967,6 @@ def private write_release_deps(prog : Program?) {
             fat_unprofiled = ts.fat_unprofiled))
     }
     delete tstat
-    let dst_path = cfg.list_shared_modules
     fopen(dst_path, "wb") $(f) {
         if (f == null) {
             to_log(LOG_ERROR, "LLVM EXE: cannot write release deps to {dst_path}\n")
@@ -1428,7 +1413,9 @@ def public emit_standalone_context_init(builder : LLVMBuilderRef; fusion_builder
 def public inject_main(program_context : Context?; ctx : LLVMContextRef; // nolint:STYLE037,STYLE038 — the standalone-exe entry emitter: one emission block per runtime feature, in startup order
                        prog : Program ?; entry_point : string; mod : LLVMOpaqueModule?;
                        var types : PrimitiveTypes?, var uids : UidNodes?; strict : bool;
-                       register_all_modules : bool = false) : tuple<fn : LLVMOpaqueValue?; link_whole_lib : bool> {
+                       register_all_modules : bool = false;
+                       static_runtime : bool = false
+                       ) : tuple<fn : LLVMOpaqueValue?; link_whole_lib : bool> {
     let builder = LLVMCreateBuilder()
     defer() {
         LLVMDisposeBuilder(builder)
@@ -1465,6 +1452,18 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef; // noli
     var dynamic_modules : table<string; bool>
     let ships_dynamic = emit_standalone_runtime_init(builder, prog, types, register_all_modules,
         force_dynamic_modules, used_modules, dynamic_modules)
+    if (ships_dynamic && static_runtime) {
+        var names : array<string>
+        prog |> for_each_module() $(m) {
+            if (dynamic_modules |> key_exists("{m.name}")) {
+                names |> push("{m.name}")
+            }
+        }
+        to_log(LOG_ERROR, "LLVM EXE: --jit-static links the runtime into the executable, and the "
+            + "program uses a shared module ({join(names, ", ")}), which loads only beside the "
+            + "shared runtime\n")
+        return (fn = null, link_whole_lib = false)
+    }
     let set_cmd_args_type = LLVMFunctionType(types.t_void,
         fixed_array<LLVMTypeRef>(
             types.t_int32,          // argc

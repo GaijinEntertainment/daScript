@@ -38,7 +38,7 @@ var LINK_WHOLE_LIB = false // when true, standalone exe links against the whole 
 
 // Read by tests-cpp/small/test_jit_emitter_pin.cpp: FNV-1a64 of the emitter sources
 // (normalized to LF; file list in the test)
-let LLVM_JIT_EMITTER_HASH : uint64 = 0x31447bd88984058aul
+let LLVM_JIT_EMITTER_HASH : uint64 = 0x7c4557f69da4137ul
 
 [arch(at = "../ARCHITECTURE_FAST_MATH.md#never-fast-math")]
 def private apply_fast_math_to_module(m : LLVMOpaqueModule?) {
@@ -314,6 +314,7 @@ struct private SplitTarget {
     exe_main : string
     exe_strict : bool
     register_all_modules : bool
+    lib_static : bool
     lto : bool
 }
 
@@ -454,7 +455,8 @@ def private run_split_codegen(prog : Program?; ctx : Context?; funcs : array<Fun
             let decl = LLVMAddGlobal(g_mod, g_prim_t.LLVMVoidPtrType(), glob)
             LLVMSetLinkage(decl, LLVMLinkage.LLVMExternalLinkage)
         }
-        let res = inject_main(ctx, g_ctx, prog, target.exe_main, g_mod, g_prim_t, uids, target.exe_strict, target.register_all_modules)
+        let res = inject_main(ctx, g_ctx, prog, target.exe_main, g_mod, g_prim_t, uids,
+            target.exe_strict, target.register_all_modules, target.lib_static)
         link_whole_lib = res.link_whole_lib
         main_ok = res.fn != null
         di_finalize()
@@ -583,10 +585,8 @@ struct public JitRun {
 //! candidates through the content gate, generate and optimize IR, and emit a .dll / .exe / .wasm
 //! per the program's jit policies. `llvm_jit_link` calls this on a DLL cache miss.
 [macro_function]
-def public run_jit(prog : Program?; var ctx : Context?) : JitRun {
-    let r <- parse_args(type<JitCliOptions>)
-    return run_jit(prog, ctx, r |> unwrap_or_default)
-}
+def public run_jit(prog : Program?; var ctx : Context?) : JitRun =>
+    run_jit(prog, ctx, jit_cli_options_or_default())
 
 [macro_function]
 def public run_jit(prog : Program?; var ctx : Context?; cli_opts : JitCliOptions) : JitRun {  // nolint:STYLE037,STYLE038 - the JIT backend driver: one linear codegen pipeline over the plan; the phases share the module/target state and do not survive a split
@@ -750,7 +750,9 @@ def public run_jit(prog : Program?; var ctx : Context?; cli_opts : JitCliOptions
         if (recompile_prog && jit_split) {
             let sres <- run_split_codegen(prog, ctx, funcs, uids, jit_flags, opt_level, size_level,
                 split_modules, use_host_cpu, debug_info, dump_ir, obj_cache, plan.dump_ir_path, target_triple, output_path, log_jit_time, plan.sanitize,
-                SplitTarget(gen_exe = gen_exe, exe_main = exe_main, exe_strict = exe_strict, register_all_modules = register_all_modules, lto = jit_lto))
+                SplitTarget(gen_exe = gen_exe, exe_main = exe_main, exe_strict = exe_strict,
+                    register_all_modules = register_all_modules, lib_static = lib_static,
+                    lto = jit_lto))
             let link_base = "{output_path}.{ref_time_ticks()}"
             t_irgen = sres.t_irgen
             // the pool interleaves passes and emission, so "optimize" carries the combined
@@ -770,7 +772,10 @@ def public run_jit(prog : Program?; var ctx : Context?; cli_opts : JitCliOptions
                     return run
                 }
                 LINK_WHOLE_LIB = sres.link_whole_lib
-                if (link_from_objects(sres.objs, output_path, JitArtifact.exe, path_to_shared_lib, path_to_linker, linker_string, LINK_WHOLE_LIB, debug_info, log_jit_time, jit_lto, 3u)) {   // under LTO the linker is the codegen, at the level every exe pins
+                // under LTO the linker is the codegen, at the level every exe pins
+                if (link_from_objects(sres.objs, output_path, JitArtifact.exe, path_to_shared_lib,
+                        path_to_linker, linker_string, LINK_WHOLE_LIB, debug_info, log_jit_time,
+                        jit_lto, 3u, lib_static)) {
                     remove_split_link_files(sres.objs, output_path)
                 } else {
                     remove_split_link_files(sres.objs, output_path)   // the partition set is the link's alone: a failed link leaves nothing beside the user's -output
@@ -810,7 +815,7 @@ def public run_jit(prog : Program?; var ctx : Context?; cli_opts : JitCliOptions
                 }
             } elif (gen_exe) {
                 let res = inject_main(ctx, g_ctx, prog, exe_main, g_mod, g_prim_t, uids, exe_strict,
-                    plan.register_all_modules)
+                    plan.register_all_modules, lib_static)
                 LINK_WHOLE_LIB = res.link_whole_lib
                 if (res.fn == null) {
                     // before finalize_jit, which disposes the engine that owns g_mod
@@ -886,7 +891,7 @@ def public run_jit(prog : Program?; var ctx : Context?; cli_opts : JitCliOptions
             } elif (gen_exe) {
                 mkdir_rec(dir_name(output_path))
                 emit_failed ||= !write_artifact(g_mod, output_path, JitArtifact.exe, path_to_shared_lib, path_to_linker,
-                    linker_string, LINK_WHOLE_LIB, exe_host_cpu, debug_info)
+                    linker_string, LINK_WHOLE_LIB, exe_host_cpu, debug_info, false, 3u, lib_static)
             } elif (use_dll) {
                 mkdir_rec(dir_name(output_path))
                 emit_failed ||= !write_artifact(g_mod, output_path, JitArtifact.jit_dll, path_to_shared_lib, path_to_linker,
