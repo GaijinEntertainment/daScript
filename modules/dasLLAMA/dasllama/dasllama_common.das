@@ -3085,6 +3085,26 @@ def kv_codec_geometry_why(c : Config; dt : KVDtype) : string {
     return ""
 }
 
+//! Why codec `dt` cannot serve `c`'s rows though their geometry may admit it: a tq4 K row of an attention with a Q/K/V bias
+//! (Qwen2) carries the bias's outliers - hundreds against a median under one - and the 4-bit block scale they set quantizes
+//! the rest of the block to zero, so the served tokens are wrong; "" where the codec serves (f16, f32 and q8_0 always do)
+def kv_codec_serving_why(c : Config; dt : KVDtype) : string {
+    let geo = kv_codec_geometry_why(c, dt)
+    return geo if (!empty(geo))
+    return "tq4 KV cache cannot serve an attention with a Q/K/V bias - its K bias outliers set every 4-bit block's scale" if (dt == KVDtype.tq4 && c.attn_qkv_bias)
+    return ""
+}
+
+//! The codec a request for `dt` is served at on `c`: `dt` where it serves, else q8_0 where that serves, else f16; `why` names
+//! the step down ("" = served as asked). The session, pool and device-session constructors and the GPU drivers' mirrors all
+//! resolve a codec through this, so a request and the mirror it meets agree
+def kv_codec_served(c : Config; dt : KVDtype; var why : string&) : KVDtype {
+    why = kv_codec_serving_why(c, dt)
+    return dt if (empty(why))
+    return KVDtype.q8_0 if (empty(kv_codec_geometry_why(c, KVDtype.q8_0)))
+    return KVDtype.f16
+}
+
 def private kv_validate_q8(c : Config; kdt, vdt : KVDtype) {
     for (dt in fixed_array(kdt, vdt)) {
         let why = kv_codec_geometry_why(c, dt)

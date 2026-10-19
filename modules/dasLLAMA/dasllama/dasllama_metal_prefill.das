@@ -206,7 +206,7 @@ def private pf_enc_kv_feed(enc : MetalComputeEncoder?; dt : KVDtype; bk, bv : Me
     if (dt == KVDtype.tq4) {
         enc_kv_rows_tq4(enc, bk, soff, bv, soff, g_arena, mkoff, g_arena, g_arena, mvoff, g_arena, signs_buffer(), ka, 2l * (kvd / hs), rows, hs)
     } else {
-        enc_kv_rows_q8(enc, bk, soff, bv, soff, g_arena, mkoff, g_arena, g_arena, mvoff, g_arena, ka, 2l * rows * (kvd / 32l))
+        enc_kv_rows_q8(enc, bk, soff, bv, soff, g_arena, mkoff, g_arena, g_arena, mvoff, g_arena, ka, 2l * rows * kvd)   // a lane an element
     }
 }
 

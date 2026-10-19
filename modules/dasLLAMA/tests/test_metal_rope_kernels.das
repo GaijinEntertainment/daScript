@@ -287,7 +287,7 @@ def private rpst_q8_gate(t : T?; var dev, queue; hs, nheads, kv_mul : int; neox,
         let half = rot > 0 ? rot / 2 : hs / 2   // the rope table row: rot/2 wide on a partial carrier
         let nblk = kvd / 32
         let npairs_q = qd / 2
-        let nthreads = npairs_q + 2 * nblk
+        let nthreads = (npairs_q + 31) / 32 * 32 + 2 * nblk * 32   // a thread a q pair, then a lane an element from the next simdgroup boundary
         var inscope qk, vsrc, bias, tcos, tsin : array<float>
         qk |> resize(qd + kvd)
         vsrc |> resize(kvd)
@@ -570,7 +570,7 @@ def private rpst_bq8_gate(t : T?; var dev, queue; hs, nheads, kv_mul, nb : int; 
         let nblk = kvd / 32
         let rowb = nblk * 34
         let npairs_q = qd / 2
-        let nthreads = npairs_q + 2 * nblk
+        let nthreads = (npairs_q + 31) / 32 * 32 + 2 * nblk * 32   // a thread a q pair, then a lane an element from the next simdgroup boundary
         let qstride = qd + 2 * kvd
         let lay = 1
         let laystride = 8192

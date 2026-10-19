@@ -1101,6 +1101,23 @@ def test_metal_decode_parity(t : T?) {   // nolint:STYLE038 — flat arm list, o
                 set_metal_decode_mirror_cap_mb(-1)
             }
 
+            // arm 6b: the idle cap bounds no live step - two streams whose mirrors pass a 1 MiB cap many times over still
+            // take the batched GPU step, token for token with the CPU control (unified memory: what fits, serves)
+            if (arm_on(t, "arm6b-capfit")) {
+                set_metal_decode_mirror_cap_mb(1)
+                var two : array<array<int64>>
+                two |> emplace(clone_to_move(prompt2))
+                two |> emplace(clone_to_move(prompt))
+                let cpu_two <- batch_greedy(tr, tr, two, 6, KVDtype.f16, false, -1, 0)
+                let bst0 = metal_batch_decode_stats()
+                let gpu_two <- batch_greedy(tr, trg, two, 6, KVDtype.f16, true, -1, 0)
+                let bst1 = metal_batch_decode_stats()
+                t |> success(bst1.steps - bst0.steps >= 6l, "the batched steps served on the GPU under a 1 MiB idle cap ({bst1.steps - bst0.steps} of 6)")
+                t |> equal(bst1.declines - bst0.declines, 0l, "and none declined")
+                t |> success(ids_equal(cpu_two[0], gpu_two[0]) && ids_equal(cpu_two[1], gpu_two[1]), "both streams match the CPU control")
+                set_metal_decode_mirror_cap_mb(-1)
+            }
+
             // arm 7: q8_0 KV mirror — the block-codec decode path (format-matrix W3): GPU
             // rope+quantize store + dual-view block-dequant attention; the CPU q8_0 decode
             // path is the oracle (both arms consume the same codec)

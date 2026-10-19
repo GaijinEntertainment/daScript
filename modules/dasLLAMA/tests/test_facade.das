@@ -146,6 +146,38 @@ def test_facade_eval_segments_empty(t : T?) {
     }
 }
 
+//! The constructors serve a codec the model cannot hold at the step-down codec: Qwen2's Q/K/V bias takes tq4 to q8_0 in a
+//! session and in a pool; a model without the bias keeps tq4; q8_0 asked stays q8_0.
+[test]
+def test_facade_kv_codec_step_down(t : T?) {
+    let path = path_join(models_dir(), "Qwen2.5-0.5B-Instruct-Q8_0.gguf")
+    if (!stat(path).is_valid) {
+        t |> skip("{path} not present")
+        return
+    }
+    var m <- load_model_(path, QuantMode.q8)
+    t |> success(m.config.attn_qkv_bias, "Qwen2.5 carries the Q/K/V bias the rule reads")
+    var s <- create_session(m, KVDtype.tq4)
+    t |> equal(s.kv_dtype_k, KVDtype.q8_0, "a tq4 session on Qwen2.5 serves at q8_0")
+    t |> equal(s.kv_dtype_v, KVDtype.q8_0, "both planes")
+    var s8 <- create_session(m, KVDtype.q8_0)
+    t |> equal(s8.kv_dtype_k, KVDtype.q8_0, "q8_0 asked stays q8_0")
+    var pool <- create_kv_pool(m, 64l, KVDtype.tq4)
+    t |> equal(pool.kdt, KVDtype.q8_0, "a tq4 pool on Qwen2.5 pages at q8_0")
+    delete pool
+    delete s8
+    delete s
+    delete m
+    let path3 = path_join(models_dir(), "Qwen3-0.6B-Q8_0.gguf")
+    if (stat(path3).is_valid) {
+        var m3 <- load_model_(path3, QuantMode.q8)
+        var s3 <- create_session(m3, KVDtype.tq4)
+        t |> equal(s3.kv_dtype_k, KVDtype.tq4, "control: Qwen3, no bias, keeps tq4")
+        delete s3
+        delete m3
+    }
+}
+
 def private room_of_a_megabyte(row_bytes : int64) : int64 => 1000000l / row_bytes
 
 //! The rows a device holds a session's K/V for: the installed room seam over the model's K/V bytes a row, both planes of every
@@ -168,13 +200,15 @@ def test_facade_device_kv_rows(t : T?) {
     m.config.seq_len = 1000l
     t |> success(device_kv_max_rows(m, KVDtype.f16, KVDtype.f16) <= 1000l, "the installed seam bounds a model by its own context at most")
     static_if (typeinfo builtin_module_exists(das_metal)) {
-        //! the Metal seam itself: the mirror ceiling over the row's bytes - 64 MiB holds 32768 rows of 2048 bytes, 128 MiB twice that
+        //! the Metal seam itself: the device's largest buffer over the row's bytes - the idle cap bounds no room, so 64 MiB and
+        //! 128 MiB read the same rows, past what 128 MiB of 2048-byte rows would hold
         let prev_cap = get_metal_decode_mirror_cap_mb()
         m.config.seq_len = 1000000l
         set_metal_decode_mirror_cap_mb(64)
-        t |> equal(device_kv_max_rows(m, KVDtype.f16, KVDtype.f16), 32768l, "a 64 MiB mirror ceiling holds 32768 rows of 2048 bytes")
+        let rows64 = device_kv_max_rows(m, KVDtype.f16, KVDtype.f16)
         set_metal_decode_mirror_cap_mb(128)
-        t |> equal(device_kv_max_rows(m, KVDtype.f16, KVDtype.f16), 65536l, "a 128 MiB ceiling twice as many")
+        t |> equal(device_kv_max_rows(m, KVDtype.f16, KVDtype.f16), rows64, "the idle cap bounds no room: 64 and 128 MiB read the same rows")
+        t |> success(rows64 > 65536l, "the room is the device's largest buffer over 2048-byte rows (unbounded before a device is up), past 65536 ({rows64})")
         set_metal_decode_mirror_cap_mb(prev_cap)
     }
     delete m

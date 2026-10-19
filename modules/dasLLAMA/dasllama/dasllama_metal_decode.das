@@ -900,7 +900,7 @@ def private rope_store_single(var e : SingleLayerEnc; t : Model; enc : MetalComp
             enc_rope_store_q8(enc, r.bqkv, uint64((qd + kv_dim) * 4l), g_arena, g_arena,
                 lkoff + uint64(mirror_row_at(t, r.kdt, l, pos)), lvoff + uint64(mirror_row_at(t, r.kdt, l, pos)),
                 bcos_l, bsin_l, bbias, qka,
-                kvsh ? qd / 2l : qd / 2l + 2l * (kv_dim / 32l), bq)
+                kvsh ? qd / 2l : q8_store_threads(qd, kv_dim), bq)
         } elif (r.kdt == KVDtype.tq4) {
             var tka = RopeStoreTq4Args(qd = k_qd_l, head_size = k_hs_l, nheads = r.k_nh,
                 kv_mul = k_kvm_l, neox = r.k_neox, has_bias = r.k_hasb, rot = rs_rot, qhs = qhs)
@@ -1931,7 +1931,7 @@ def private rope_store_verify(var e : VerifyLayerEnc; t : Model; enc : MetalComp
     } elif (r.kdt == KVDtype.q8_0) {
         var qka = RopeStoreBQ8Args(lay = 0u, nblk = uint(kv_dim / 32l), qd = uint(qd), head_size = uint(head_size), npairs_q = uint(qd / 2l),
             qstride = qkvd, neox = r.k_neox, has_bias = r.k_hasb, rot = uint(vrot), qhs = qhs, qrow = qrow, ring = uint(mirror_ring(t, l)))
-        enc_rope_store_b_q8(enc, r.bqkv, bcos_l, bsin_l, r.brt, bbias, qka, qd / 2l + 2l * (kv_dim / 32l), r.nrows, rtoff, bq)
+        enc_rope_store_b_q8(enc, r.bqkv, bcos_l, bsin_l, r.brt, bbias, qka, q8_store_threads(qd, kv_dim), r.nrows, rtoff, bq)
     } elif (qkn_fused(t.config, r.kdt)) {
         var nka = qkn_args(t, l, qd, kv_dim, head_size, vrot, r.k_neox != 0u, r.k_hasb != 0u, r.k_eps, int64(qkvd), vrot / 2l, 0l)
         nka.ring = uint(mirror_ring(t, l))
@@ -3645,7 +3645,7 @@ def private rope_store_batch(var e : BatchLayerEnc; t : Model; enc : MetalComput
             head_size = uint(head_size), npairs_q = uint(qd / 2l), qstride = qkvd,
             neox = r.k_neox, has_bias = r.k_hasb, rot = rot_l, qhs = qhs, qrow = qrow, layr = lays.y, ring = ring_l)
         enc_rope_store_b_q8(enc, r.bqkv, bcos_l, bsin_l, r.brt, bbias, qka,
-            kvsh ? qd / 2l : qd / 2l + 2l * (kv_dim / 32l), r.nrows, 0ul, bq)
+            kvsh ? qd / 2l : q8_store_threads(qd, kv_dim), r.nrows, 0ul, bq)
     } elif (qkn_fused(t.config, r.kdt)) {
         var nka = qkn_args(t, l, qd, kv_dim, head_size, int64(rot_l), r.k_neox != 0u, r.k_hasb != 0u, r.k_eps, int64(qkvd), int64(rot_l) / 2l, int64(lay_l))
         nka.layr = lays.y

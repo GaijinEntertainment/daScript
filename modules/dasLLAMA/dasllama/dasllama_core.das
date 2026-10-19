@@ -70,25 +70,43 @@ def load_model(path : string; mode : QuantMode = QuantMode.fp32) : Model {
     return <- load_model_cached(path, mode)
 }
 
+var private g_kv_codec_said : table<string; void>   //! the step-down reasons already logged, one line a reason
+
+//! the codec ``model`` serves a request for ``kv_dtype`` at (``kv_codec_served``), the step down logged once a reason
+def private kv_codec_for(model : Model; kv_dtype : KVDtype) : KVDtype {
+    var why = ""
+    let dt = kv_codec_served(model.config, kv_dtype, why)
+    if (!empty(why) && !key_exists(g_kv_codec_said, why)) {
+        g_kv_codec_said |> insert(why)
+        to_log(LOG_WARNING, "dasLLAMA: the K/V cache asked at {kv_dtype} serves at {dt} on this model: {why}\n")
+    }
+    return dt
+}
+
 def create_session(model : Model; kv_dtype : KVDtype = KVDtype.f16) : Session {
     //! Create a fresh session (KV cache + scratch) sized to ``model.config.seq_len`` — one model,
     //! many independent conversations. ``kv_dtype`` picks the KV-cache codec: ``f16`` (default,
-    //! near-lossless) halves bytes, ``q8_0`` halves again (needs head_size/kv_dim % 32 == 0).
-    return <- create_session_(model, kv_dtype, kv_dtype)
+    //! near-lossless) halves bytes, ``q8_0`` halves again (needs head_size/kv_dim % 32 == 0), ``tq4`` halves
+    //! once more (a power-of-two head). A codec the model cannot serve - a head tq4 cannot rotate, an attention
+    //! whose Q/K/V bias swamps tq4's block scale - steps down to ``q8_0`` (else ``f16``) with one logged line;
+    //! ``kv_codec_served`` says which codec a request lands at.
+    return <- create_session_(model, kv_codec_for(model, kv_dtype), kv_codec_for(model, kv_dtype))
 }
 
 def create_device_session(model : Model; kv_dtype : KVDtype = KVDtype.f16) : Session {
     //! Create a DEVICE-HOME session: its K/V cache lives only in the armed GPU driver's region - no host cache, nothing over the bus per token.
     //! Hold at most ``gpu_device_sessions()`` live ones, in the driver's codec (``gpu_device_session_dtype``).
-    //! A call the device cannot serve panics.
-    return <- create_device_session_(model, kv_dtype)
+    //! A codec the model cannot serve steps down as ``create_session``'s does. A call the device cannot serve panics.
+    return <- create_device_session_(model, kv_codec_for(model, kv_dtype))
 }
 
 def create_kv_pool(model : Model; page_rows : int64 = 64l; kv_dtype : KVDtype = KVDtype.f16) : KVPool {
     //! Create a caller-owned PAGED KV pool over ``model``'s cache geometry. Sessions created over it
     //! allocate cache pages of ``page_rows`` positions on demand instead of the full ``seq_len`` slab
     //! up front, so many sessions share one elastic pool. Keep the pool alive as long as sessions live.
-    return <- create_kv_pool_(model.config, page_rows, kv_dtype, kv_dtype)
+    //! A codec the model cannot serve steps down as ``create_session``'s does.
+    let dt = kv_codec_for(model, kv_dtype)
+    return <- create_kv_pool_(model.config, page_rows, dt, dt)
 }
 
 def create_session(model : Model; var pool : KVPool) : Session {

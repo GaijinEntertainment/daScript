@@ -144,6 +144,10 @@ struct Args {
     @clarg_doc = "A/B the attention GPU chain in-process: every row runs twice, attention routing OFF then ON. Needs DASLLAMA_GPU_ATTN=1 (uploads + marks); mutually exclusive with the other A/B levers"
     attn_ab : bool
 
+    @clarg_name = "ab-reverse"
+    @clarg_doc = "Run the A/B lever's arms ON then OFF instead of OFF then ON: a box whose clock drifts across a run reads a race in both orders and takes the pair"
+    ab_reverse : bool
+
     @clarg_doc = "A/B the GPU MoE prefill arm in-process: every row runs twice, device-side prefill OFF then ON. Needs resident expert layers (DASLLAMA_GPU_MOE_LAYERS); decode has no npos gate so tg reads as a wash. Mutually exclusive with the other A/B levers"
     prefill_ab : bool
 
@@ -1665,6 +1669,11 @@ def main() : int {
         activeB = active_params_b(t)
         execFmt = model_exec_fmt(t)
         {
+            let codec_why = kv_codec_serving_why(t.config, cfg.kv)   //! a codec the model cannot serve would step down under the row: the bench measures what was asked or nothing
+            if (!empty(codec_why)) {
+                say(fmt, "REFUSED every row - --kv {cfg.kv} cannot serve {base_name(mpath)}: {codec_why}\n")
+                panic("lcpp_bench: --kv {cfg.kv} cannot serve {base_name(mpath)} - see the REFUSED line")
+            }
             var inscope spec <- spec_by_file(base_name(mpath))
             if (empty(spec.file)) {
                 spec.file = base_name(mpath)
@@ -1682,14 +1691,15 @@ def main() : int {
         for (arm in range(ab ? 2 : 1)) {
             var dtag = ""
             if (ab) {
-                dtag = " {levers[0].tag}={arm == 0 ? "off" : "on"}"
-                invoke(levers[0].route, arm != 0)
+                let on = cfg.ab_reverse ? arm == 0 : arm != 0
+                dtag = " {levers[0].tag}={on ? "on" : "off"}"
+                invoke(levers[0].route, on)
             }
             if (real_row) {
                 // REAL greedy continuation: fresh session per prompt (no KV/recurrent bleed),
                 // prefill untimed as llama-bench excludes the prompt, the sample inside the timed loop
                 // (both arms pay it, so it cancels). NOT comparable to the synthetic tg row.
-                let mtp_on = cfg.mtp_ab && arm != 0
+                let mtp_on = cfg.mtp_ab && (cfg.ab_reverse ? arm == 0 : arm != 0)
                 var drafted = 0l
                 var accepted = 0l
                 var parked = 0l   // rounds whose sampled walk parked the next draw: the --mtp-temp lever's engagement witness

@@ -136,13 +136,14 @@ skips on the device too; `DASLLAMA_METAL_MIRROR_ADOPT=0` uploads them.
 ### The mirror arena and its reach {#kv-mirror-arena}
 
 Every session's KV mirror is a slice of one device buffer, the arena, which grows by a release-all
-rebuild. The cap (`DASLLAMA_METAL_KV_MIRROR_MB`, `set_metal_decode_mirror_cap_mb`, 64 MiB at least)
-bounds that growth for every session together and is the size idle mirrors evict down to; a live
-session's own slice past the cap still gets room, the arena grown to that slice with every other
-mirror evicted (`mirror_ceiling_for`). The device's largest buffer bounds both, since the arena is one
-buffer. A slice is the session's rows rounded up to a power of two, never past its context, so a
-session's context in unified memory is what sizes its mirror; a batch step's or a segmented window's
-reservation asks the cap, or its largest slice where that passes the cap. The rows-capacity sizes the flat
+rebuild. The arena has one bound, the device's largest buffer, since it is one buffer: a live step's
+demand - a session's slice, a batch step's or a segmented window's reservation - grows the arena to
+itself up to that bound (`mirror_fits_device`), and a demand past it takes the CPU rails with one
+logged line, because on unified memory what fits, serves. The cap (`DASLLAMA_METAL_KV_MIRROR_MB`,
+`set_metal_decode_mirror_cap_mb`) is the idle budget alone: the size the mirrors no step holds evict
+down to after a step is served (`mirror_evict_to_cap`), and the arena stays at the high-water mark it
+grew to. A slice is the session's rows rounded up to a power of two, never past its context, so a
+session's context in unified memory is what sizes its mirror. The rows-capacity sizes the flat
 layers alone: a sliding layer holds a ring of its window past them (`ARCHITECTURE_GPU_KV_RING.md#kv-sliding-ring`).
 
 **The forms that address the arena from its start reach 2^32 units.** A route table - the batch
