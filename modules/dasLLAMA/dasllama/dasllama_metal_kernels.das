@@ -1908,13 +1908,23 @@ class MetalRopeStoreQ8Base {
         let d = amax / 127.0
         let id = d != 0.0 ? 1.0 / d : 0.0
         if (lane == 0u) {
-            sh[shb + blk * 17u] = float16(d)
+            sh[shb + blk * 17u] = float16(min(d, 65504.0))   // the half's largest finite, as the CPU codec clamps
         }
         qb[qbb + blk * 34u + 2u + lane] = int8(round(v * id))
     }
 
     //! the first K/V lane: the q pairs' threads rounded up to a simdgroup boundary, so a block never straddles two simdgroups
     def q8_kv_lane0(npairs_q : uint) : uint => (npairs_q + 31u) & ~31u
+
+    //! the K/V lane `gid` past the q pairs: `inside` the store's lanes (whole simdgroups from the next boundary), the element `ge`
+    //! of the K row or, `isV`, of the V row
+    def q8_kv_lane(gid, npairs_q, kvd : uint; var inside : bool&; var isV : bool&; var ge : uint&) {
+        let kv0 = q8_kv_lane0(npairs_q)
+        inside = gid >= kv0 && gid < kv0 + 2u * kvd
+        let e = gid - kv0
+        isV = e >= kvd
+        ge = isV ? e - kvd : e
+    }
 }
 
 // q8_0-mirror rope + KV-row store: q pairs rope in place; K/V rows quantize per 32-block, a simdgroup a block (a lane an
@@ -1950,13 +1960,13 @@ class MetalRopeStoreQ8 : MetalRopeStoreQ8Base {
             return
         }
         let kvd = nblk * 32u
-        let kv0 = q8_kv_lane0(npairs_q)
-        if (gid < kv0 || gid >= kv0 + 2u * kvd) {   // whole simdgroups: a block's 32 lanes return together
+        var inside = false
+        var isV = false
+        var ge = 0u
+        q8_kv_lane(gid, npairs_q, kvd, inside, isV, ge)
+        if (!inside) {   // whole simdgroups: a block's 32 lanes return together
             return
         }
-        let e = gid - kv0
-        let isV = e >= kvd
-        let ge = isV ? e - kvd : e
         var v = 0.0
         q8_kv_elem(qk, vs, tcos, tsin, bias, qd, 0u, 0u, ge, head_size, half, qd, kvd, neox, has_bias, rot, isV, v)
         if (isV) {
@@ -1970,7 +1980,7 @@ class MetalRopeStoreQ8 : MetalRopeStoreQ8Base {
 // Shared tq4-mirror rope+store stages, spliced by the single and batched kernels below: the
 // buf-resident FWHT butterfly, the per-32-block signed-max quantize scalars, and the packed
 // nibble store. Base byte offsets parameterize the single (0) vs batched (arena row) layouts.
-class MetalRopeStoreTq4Base {
+class template MetalRopeStoreTq4Base : GkBlkSignedMax {
     @workgroup buf : float[512]     // <= max head_size (gemma4 global heads are 512)
 
     def tq4_rope_elem(qk, tc, ts, bs : array<float>; base, bbase, tb, lid, hs, neox, has_bias, rot : uint; var v : float&) {
@@ -2013,21 +2023,8 @@ class MetalRopeStoreTq4Base {
     }
 
     def tq4_quant(v : float; var d : float&; var qv : int&; var qother : int&; sl : uint) {
-        // per-32-block quantize — block == simdgroup; signed max keeps the FIRST max-abs element
-        var ma = abs(v)
         var mv = v
-        var ml = sl
-        var off = 16u
-        while (off > 0u) {
-            let oa = simd_shuffle_xor(ma, off)
-            let ov = simd_shuffle_xor(mv, off)
-            let ol = simd_shuffle_xor(ml, off)
-            let take = oa > ma || (oa == ma && ol < ml)
-            ma = take ? oa : ma
-            mv = take ? ov : mv
-            ml = take ? ol : ml
-            off /= 2u
-        }
+        blk_signed_max(sl, mv)   // per-32-block quantize: block == simdgroup, the FIRST max-abs element sets the scale
         d = mv / -8.0
         let id = d != 0.0 ? 1.0 / d : 0.0
         qv = min(15, int(v * id + 8.5))
@@ -3714,13 +3711,13 @@ class MetalRopeStoreBQ8 : MetalRopeStoreQ8Base {
         }
         let rowb = nblk * 34u
         let kvd = nblk * 32u
-        let kv0 = q8_kv_lane0(npairs_q)
-        if (gid < kv0 || gid >= kv0 + 2u * kvd) {   // whole simdgroups: a block's 32 lanes return together
+        var inside = false
+        var isV = false
+        var ge = 0u
+        q8_kv_lane(gid, npairs_q, kvd, inside, isV, ge)
+        if (!inside) {   // whole simdgroups: a block's 32 lanes return together
             return
         }
-        let e = gid - kv0
-        let isV = e >= kvd
-        let ge = isV ? e - kvd : e
         let kqoff = qbase + qd              // the fused row's k region (v = its third region)
         let vqoff = qbase + qd + kvd
         var v = 0.0
@@ -4865,7 +4862,7 @@ def enc_fwht_unsign(enc : MetalComputeEncoder?; byo, bhs, bqs : MetalBuffer?; nh
 }
 
 // q8_0-mirror rope+store: the K/V mirror rows bind TWICE each (half-scale + byte views at the
-// same row offset); grid covers the q pairs + one thread per K/V 32-block
+// same row offset); grid covers the q pairs, then a lane an element of the K and V rows (q8_store_threads)
 //! the q8_0 store's threads: a thread a q pair, then - from the next simdgroup boundary - a lane an element of the K and V rows
 def q8_store_threads(qd, kv_dim : int64) : int64 => (qd / 2l + 31l) / 32l * 32l + 2l * kv_dim
 
@@ -5576,7 +5573,7 @@ def enc_rope_store_b_tq4(enc : MetalComputeEncoder?; bqkv, bcos, bsin, brt, bbia
 }
 
 // q8_0-mirror batched rope+store: arena bound four ways (K/V x scale/byte views); grid covers
-// the q pairs + one thread per K/V 32-block, one grid row per batch row
+// the q pairs, then a lane an element of the K and V rows (q8_store_threads), one grid row per batch row
 def enc_rope_store_b_q8(enc : MetalComputeEncoder?; bqkv, bcos, bsin, brt, bbias : MetalBuffer?; var ka : RopeStoreBQ8Args; nthreads, nrows : int64; rtoff : uint64 = 0ul;
                         bq : MetalBuffer? = null) {
     enc_rpstb_q8_c(enc, bqkv, g_arena, g_arena, g_arena, g_arena, bcos, bsin, brt, rtoff, bbias, ka, bq != null ? bq : bqkv, nthreads, nrows)
@@ -13100,6 +13097,7 @@ let PK_ATTN_MAX_KEYS = int64(GK_PK_ATTN_MAX_KEYS)   //!< the scores the attentio
 def gk_subgroup_add(v : float) : float => simd_sum(v)
 def gk_subgroup_max(v : float) : float => simd_max(v)
 def gk_subgroup_xor(v : float; m : uint) : float => simd_shuffle_xor(v, m)
+def gk_subgroup_xor_u(v : uint; m : uint) : uint => simd_shuffle_xor(v, m)
 def gk_subgroup_min_u(v : uint) : uint {
     var m = v
     var b = 16u

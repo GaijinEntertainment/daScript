@@ -3105,6 +3105,18 @@ def kv_codec_served(c : Config; dt : KVDtype; var why : string&) : KVDtype {
     return KVDtype.f16
 }
 
+var private g_kv_codec_said : table<string>   //! the step-down reasons already logged, one line a reason
+
+//! the codec a model of config ``c`` serves a request for ``kv_dtype`` at (``kv_codec_served``), the step down logged once a reason
+def kv_codec_for(c : Config; kv_dtype : KVDtype) : KVDtype {
+    var why = ""
+    let dt = kv_codec_served(c, kv_dtype, why)
+    if (!empty(why)) {
+        gpu_said_once(g_kv_codec_said, LOG_WARNING, "dasLLAMA: the K/V cache asked at {kv_dtype} serves at {dt} on this model: ", why)
+    }
+    return dt
+}
+
 def private kv_validate_q8(c : Config; kdt, vdt : KVDtype) {
     for (dt in fixed_array(kdt, vdt)) {
         let why = kv_codec_geometry_why(c, dt)
@@ -3296,17 +3308,18 @@ def make_run_state(c : Config; kdt : KVDtype = KVDtype.f32; vdt : KVDtype = KVDt
     return <- s
 }
 
-//! Create a fresh session (KV cache + scratch) sized to `model`. A model serves many sessions,
-//! each with its own position and cache — so one model drives many independent conversations.
-//! `kdt`/`vdt` pick this session's KV-cache codec (per-session state, no globals).
+//! Create a fresh session (KV cache + scratch) sized to `model`: one model, many independent conversations. `kdt`/`vdt` pick
+//! the KV-cache codec (per-session state, no globals); a codec the model cannot serve steps down here (`kv_codec_for`), so
+//! every constructor over this one - the facade's, the chat's, the ASR's - serves what the model can.
 def create_session_(model : Model; kdt : KVDtype = KVDtype.f32; vdt : KVDtype = KVDtype.f32) : Session =>
-    <- make_run_state(model.config, kdt, vdt)
+    <- make_run_state(model.config, kv_codec_for(model.config, kdt), kv_codec_for(model.config, vdt))
 
 //! Create a DEVICE-HOME session: scratch and no host cache - its K/V lives only in the armed GPU driver's mirror
 //! region, so nothing crosses the bus per token and nothing is allocated per request. The caller holds as many live
 //! ones as the driver has regions; the driver panics where it would hand such a session to the CPU rails.
 def create_device_session_(model : Model; kdt : KVDtype) : Session {
-    var s <- make_run_state(model.config, kdt, kdt, false)
+    let kdt_served = kv_codec_for(model.config, kdt)   // the serving rule, as create_session_ applies it
+    var s <- make_run_state(model.config, kdt_served, kdt_served, false)
     s.device_kv = true
     return <- s
 }
@@ -3935,10 +3948,12 @@ def kv_layer_vbase(var s : Session; l, seq_len : int64) : uint8? {
 //! Create a paged KV pool for `c`'s cache geometry: sessions created over it (make_run_state_paged)
 //! allocate `page_rows`-position page groups on demand instead of the full seq_len slab, so cache
 //! memory tracks actual context and many sessions share one elastic pool.
-def create_kv_pool_(c : Config; page_rows : int64; kdt, vdt : KVDtype) : KVPool {
+def create_kv_pool_(c : Config; page_rows : int64; kdt_asked, vdt_asked : KVDtype) : KVPool {
     if (page_rows <= 0l) {
         panic("create_kv_pool: page_rows must be positive (got {page_rows})")
     }
+    let kdt = kv_codec_for(c, kdt_asked)   // the serving rule, as create_session_ applies it
+    let vdt = kv_codec_for(c, vdt_asked)
     kv_validate_q8(c, kdt, vdt)
     var p = KVPool(page_rows = page_rows, kdt = kdt, vdt = vdt)
     // + the MTP/NextN draft block's slab (index n_layers) — one attention layer's rows, so the

@@ -9,23 +9,24 @@ An instrument is a file whose result is a time or rate it clocked itself (own cl
 timestamps), printed or returned for printing; a serving path's profiler report beside its served
 output is not one. Its timed body is the statements between its clock reads, and what they call.
 
-A lever is a flag, an environment switch, a runtime setter or a profile key that picks what the
-run executes - never an input's size or content. A form is one compiled variant of a kernel. A
-GPU kernel emitter is code that generates a pipeline or a dispatch builder - a `[vk_dispatch]`
-class, a `[metal_kernel]` body, a `[metal_dispatch]` builder, or a `*_msl` source global. A race
-times two implementations of one computation in one process, each one either a form the engine
-serves or a candidate a file under this folder defines - a function, or a kernel a GPU kernel
-emitter generates (two values of one lever are not two implementations); an A/B is timed runs in
-one process differing only in one lever's value. An arm is every timed run of one implementation
-or one lever value; a round is one timed run of one arm, and a warmup round is a round the
-instrument's header comment says the row drops; a compared arm is one whose output, from any run
-of it, the run reads back and measures against another arm's output or a CPU reference over the
-compare region, the output elements the instrument's header comment names; the baseline arm is
-the one the header comment names as baseline. A run of an arm refuses when it produces no figure or
-output, or runs on a backend other than the backend name the row records. A board cell is a run
-whose reading lands as a row of `../performance/records/<box>.json` or a figure in
-`../PERF_LEDGER.md`. A mode is one selectable run of the file, chosen by its own flag or argument;
-a file with none is one mode.
+A lever is a flag, an environment switch, a runtime setter or a profile key that picks what the run
+executes - never an input's size or content. A switch that only reorders a mode's arms is not a
+lever and does not select another mode. A diff that makes an instrument refuse one value of an input
+changes that input. A form is one compiled variant of a kernel. A GPU kernel emitter is code that
+generates a pipeline or a dispatch builder - a `[vk_dispatch]` class, a `[metal_kernel]` body, a
+`[metal_dispatch]` builder, or a `*_msl` source global. A race times two implementations of one
+computation in one process, each one either a form the engine serves or a candidate a file under
+this folder defines - a function, or a kernel a GPU kernel emitter generates (two values of one
+lever are not two implementations); an A/B is timed runs in one process differing only in one
+lever's value, arm order aside. An arm is every timed run of one implementation or one lever value;
+a round is one timed run of one arm, and a warmup round is a round the instrument's header comment
+says the row drops; a compared arm is one whose output, from any run of it, the run reads back and
+measures against another arm's output or a CPU reference over the compare region, the output
+elements the instrument's header comment names; the baseline arm is the one the header comment names
+as baseline. A run of an arm refuses when it produces no figure or output, or runs on a backend
+other than the backend name the row records. A board cell is a run whose reading lands as a row of
+`../performance/records/<box>.json` or a figure in `../PERF_LEDGER.md`. A mode is one selectable run
+of the file, chosen by its own flag or argument; a file with none is one mode.
 
 **A diff that changes a board cell's input corpus or the pinned reference build
 (`DEFAULT_REF_SHA` in `setup_lcpp_ref.das`, or anything else deciding which reference binary or
@@ -118,9 +119,9 @@ reported success leaves a sidecar or a record untouched, and its caller cannot t
 
 **A diff that adds an A/B arm, adds or changes a lever an instrument's A/B arm reads - a lever in
 a file under this folder - or changes how such an arm reports or exits, makes that instrument exit
-non-zero when the lever does not change what the run executes - or, when the check runs before the
-arm, print a warning naming the inert lever.** A lever that silently no-ops prints a 1.00x row
-nobody can tell from a real tie.
+non-zero when the lever changes neither what the run executes nor the order its arms run in - or,
+when the check runs before the arm, print a warning naming the inert lever.** A lever that silently
+no-ops prints a 1.00x row nobody can tell from a real tie.
 
 **A diff that adds an A/B arm of an instrument over a prompt corpus, or changes the lever such an
 arm reads or how the arm reports, makes that arm report one row per prompt, never one aggregate

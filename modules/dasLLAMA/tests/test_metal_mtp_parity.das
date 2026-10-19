@@ -1008,8 +1008,8 @@ def private vff1_cells(t : T?; tr, trg : Model; tag : string; prompt : array<int
     }
 }
 
-//! the nine-row verify under a mirror ceiling ONE slice fits and nine do not: the rows share the
-//! session's slice, so the step's arena demand is that slice once, not once a row
+//! the nine-row verify under a 64 MB idle cap, the drivers shut down first so the arena comes back sized by the rows'
+//! own demand: the rows share the session's slice, so the step's arena demand is that slice once, not once a row
 def private vffc_cell(t : T?; tr, trg : Model; tag : string; prompt : array<int64>; tol : float) {   // nolint:LINT012,LINT019 — the body is the das_metal half
     static_if (typeinfo builtin_module_exists(das_metal)) {
         metal_decode_shutdown()

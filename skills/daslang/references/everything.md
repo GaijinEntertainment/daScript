@@ -3177,7 +3177,7 @@ CPU large-language-model inference in pure daslang: load a GGUF model, tokenize,
 - `attach_mtp_sidecar` - Attach the assistant drafter that sits beside the model at `model_path` (`mtp_drafter_sidecar`): the drafter's path where it attached, "" where none sits there or every driver refused it (each refusal logged).
 - `caps` - What `model` honestly supports at the chat layer (see LlmCaps) — e.g.
 - `create_batch_workspace` - Create the caller-owned scratch that `eval_batch` steps through — one per concurrent batch, reused across calls (buffers grow to the largest batch seen).
-- `create_kv_pool` - Create a caller-owned PAGED KV pool over `model`'s cache geometry.
+- `create_kv_pool` - Create a caller-owned PAGED KV pool over `model`'s cache geometry: sessions over it allocate pages of `page_rows` positions on demand instead of the full `seq_len` slab, so many sessions share one elastic pool; keep it alive as long as sessions live.
 - `create_session` - Create a fresh session (KV cache + scratch) sized to `model.config.seq_len` — one model, many independent conversations.
 - `detach_mtp_drafter` - Detach `model`'s assistant drafter, if one is attached; its rounds stop and plain decode serves.
 - `load_model` - Load a model AND its tokenizer from a GGUF file — architecture and tokenizer backend are auto-selected from metadata; `mode` picks the weight quantization.
@@ -3353,7 +3353,7 @@ CPU large-language-model inference in pure daslang: load a GGUF model, tokenize,
 - `set_gpu_ctx_max` - Cap the whole-model GPU driver's K/V context at `n` positions per region for the models loaded next (0 lifts it): a server's `ctx`.
 - `set_gpu_ctx_strict` - The `set_gpu_ctx_max` pin is the context asked, not a cap, for the models loaded next: a K/V mirror the card cannot hold at it declines the whole-model GPU driver instead of shortening the context, and the per-op rails serve the asked context (DASLLAMA_GPU_CTX_STRICT in the environment).
 - `set_gpu_host_layers` - Serve at least `n` routed layers' experts on the host - the first in layer order - on the whole-model GPU driver of a plain MoE loaded next, whatever the card holds (DASLLAMA_GPU_HOST_LAYERS in the environment): the host-layers form reached on any card.
-- `set_gpu_kv_dtype` - Ask the whole-model GPU driver to hold its K/V mirror in codec `dt` for the models loaded next - the codec of their sessions (`gpu_device_session_dtype` reads what armed).
+- `set_gpu_kv_dtype` - Ask the whole-model GPU driver to hold its K/V mirror in codec `dt` for the models loaded next - the codec of their sessions (`gpu_device_session_dtype` reads what armed; `q8_0` is about half the `f16` mirror's bytes, `tq4` a quarter; `f32` reads as `f16`).
 - `set_gpu_resident_regions` - Ask the whole-model GPU driver for `n` K/V regions on the models loaded next, so `n` sessions keep their K/V on the device at once - a server's stream count.
 
 ## dasllama_tts

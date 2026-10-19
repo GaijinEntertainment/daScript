@@ -32,7 +32,7 @@ def private hash_unit(i : uint) : float => float(hash_word(i) & 0xFFFFu) / 32768
 //! a block codec's synthetic mirror: every block a small finite scale then hashed quant bytes
 def private cool_block_bytes(nblocks, blk : int) : array<uint8> {
     var out : array<uint8>
-    out |> resize(nblocks * blk)
+    out |> resize(nblocks * blk + 4)   // the mirror's word of slack past the last block
     for (b in range(nblocks)) {
         out[b * blk] = 0x66u8        // the half 0x2E66 ~ 0.1
         out[b * blk + 1] = 0x2Eu8
@@ -48,10 +48,10 @@ def private time_split(rows, cnt, hs, nheads, kv_mul, nsplit, slab : int; dt : K
     let kvd = nheads / kv_mul * hs
     let qd = nheads * hs
     let q_bytes = int64(qd) * int64(rows) * 4l
-    let blk = dt == KVDtype.q8_0 ? int(KV_Q8_BLOCK_BYTES) : (dt == KVDtype.tq4 ? int(KV_TQ4_BLOCK_BYTES) : 0)
+    let blk = kv_block_codec(dt) ? int(kv_unit_bytes(dt)) : 0   //! a block codec's bytes a 32-block, 0 under f16
     let mir_elems = cnt * kvd   //! a row's region in elements
-    let mir_units = blk > 0 ? cnt * (kvd / 32) : mir_elems   //! ... and in the mirror's units: blocks under a block codec
-    let m_bytes = blk > 0 ? int64(mir_units * rows) * int64(blk) : int64(mir_elems * rows) * 2l
+    let mir_units = int(kv_row_units(dt, int64(mir_elems)))   //! ... and in the mirror's units: blocks under a block codec
+    let m_bytes = int64(mir_units * rows) * kv_unit_bytes(dt) + (blk > 0 ? 4l : 0l)   //! a word of slack past the last block: the skewed word load reads one word past a block's quants
     let cnt_off = nheads * nsplit * (hs + 2) * rows   //! the arrival counters past the pieces, a word a (row, kv head, slab) group
     let p_bytes = (int64(cnt_off) + da_attn_row_wgs(int64(nheads), int64(kv_mul), 1l) * int64(rows)) * 4l
     let s_bytes = int64(qd / 32 * rows) * 4l

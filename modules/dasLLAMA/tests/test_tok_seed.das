@@ -109,3 +109,14 @@ def test_mtp_ab_drafter_attach(t : T?) {
         delete shell
     }
 }
+
+//! `--ab-reverse` runs the A/B's arms the other way round: arm 0 on and arm 1 off; without it arm 0 is off and arm 1 on
+[test]
+def test_ab_arm_on(t : T?) {
+    t |> run("the A/B arm predicate under --ab-reverse") @(t : T?) {
+        t |> equal(ab_arm_on(false, 0), false, "arm 0 is off")
+        t |> equal(ab_arm_on(false, 1), true, "arm 1 is on")
+        t |> equal(ab_arm_on(true, 0), true, "reversed, arm 0 is on")
+        t |> equal(ab_arm_on(true, 1), false, "reversed, arm 1 is off")
+    }
+}

@@ -13,6 +13,10 @@ require dasllama/dasllama_kv_dtype
 // Skips off the JIT, without DASLLAMA_GPU=1 on a device the driver serves, without the file under models_dir(), or where
 // DASLLAMA_VK_KV32=1 arms an f32 mirror over the codec asked.
 let private REGIONS_FILE = "Qwen2.5-0.5B-Instruct-Q8_0.gguf"
+//! the tolerance cells' bar under q8_0: the window chain's attention reads the f32 query over the f16 shadow where the token
+//! command's reads its q8_0 blocks, so the one-call and the two-call forms part by the query's rounding - reads 0.82 of an
+//! 11.4 max logit at the 42-token prompt cut at 40, the prompt one token short the control past it
+let private Q8KV_SPLIT_BAR_REL = 0.10
 
 [init]
 def private q8kv_init() {
@@ -31,7 +35,7 @@ def test_regions_interleaved_single_steps(t : T?) {
 
 [test]
 def test_prefill_continues_on_the_device(t : T?) {
-    cell_prefill_continues_on_the_device(t, REGIONS_FILE)
+    cell_prefill_continues_on_the_device(t, REGIONS_FILE, Q8KV_SPLIT_BAR_REL)
 }
 
 [test]

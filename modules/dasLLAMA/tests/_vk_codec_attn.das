@@ -126,6 +126,9 @@ def private codec_attn_fixture(a : CodecAttn) : CodecAttnFixture {
     var f = CodecAttnFixture(signs <- tq4_sign_row(),
         q_model <- row_fill(a.nrows * qdim, 41, 3, 0.05, 1.8, 73), gate <- row_fill(a.nrows * qdim, 29, 11, 0.07, 2.1, 61),
         k_model <- row_fill(a.nrows * a.keys * kvd, 17, 5, 0.03, 1.4), v_model <- row_fill(a.nrows * a.keys * kvd, 53, 7, 0.04, 1.7, 89))
+    for (i in range(a.nrows * qdim)) {   //! an irregular factor an element: the rotated query of a regular ramp holds elements at exactly half its
+        f.q_model[i] *= 1.0 + 0.011 * float((i * 7919) % 97) / 97.0   //! block's max, where the query's q8_0 quant is a coin flip between two f32 orders
+    }
     for (r in range(1, a.nrows)) {   // each row its own content: a crossed region cannot pass
         let rs = 1.0 + 0.5 * float(r)
         for (i in range(qdim)) {
@@ -241,6 +244,32 @@ def private codec_control(a : CodecAttn; f : CodecAttnFixture) : array<float> {
 //! One decode-attention arm over a mirror of codec `a.kv`, dispatched as the driver dispatches it (a row a `rowwg` workgroups,
 //! its region in its token block), against the CPU attention over the rows the CPU codec reads back. The controls: the codec's
 //! own (`codec_control`), each mechanism dropped, and under a fold the control's row quantized.
+//! the query as the block-codec stamps and the CPU's q8_0 hot path (`dot_q8q8kv`) read it: 32-blocks of int8 quants under
+//! an f32 scale of amax over 127, dequantized back - the two chains agree to this quantization, not bit for bit to f32
+def private q8_query_roundtrip(q : array<float>) : array<float> {
+    var out := q
+    for (b in range(length(q) / 32)) {
+        var amax = 0.0
+        for (k in range(32)) {
+            amax = max(amax, abs(q[b * 32 + k]))
+        }
+        let d = amax / 127.0
+        let id = d != 0.0 ? 1.0 / d : 0.0
+        for (k in range(32)) {
+            out[b * 32 + k] = round(q[b * 32 + k] * id) * d
+        }
+    }
+    return <- out
+}
+
+//! the query the oracle scores: the block-codec stamps read its q8_0 blocks, as the CPU hot path does; the scalar mirrors read it f32
+def private oracle_query(a : CodecAttn; f : CodecAttnFixture) : array<float> {
+    if (a.kv == KVDtype.q8_0 || a.kv == KVDtype.tq4) {
+        return <- q8_query_roundtrip(f.q)
+    }
+    return <- clone_to_move(f.q)
+}
+
 def codec_attn_arm(t : T?; a : CodecAttn) {
     let kvd = a.nheads / a.kv_mul * a.hs
     let qdim = a.nheads * a.hs
@@ -257,7 +286,7 @@ def codec_attn_arm(t : T?; a : CodecAttn) {
     let rowwgs = da_attn_row_wgs(int64(a.nheads), int64(a.kv_mul), int64(a.nsplit))
     let rowgroups = int(da_attn_row_wgs(int64(a.nheads), int64(a.kv_mul), 1l))
     let cnt_off = a.nrows * a.nheads * a.nsplit * (a.hs + 2)
-    var want <- codec_attn_oracle(a, f, f.q, f.k.deq, f.v.deq)
+    var want <- codec_attn_oracle(a, f, oracle_query(a, f), f.k.deq, f.v.deq)
     var control <- codec_control(a, f)
     with_cell_planes() $(var cp : CellPlanes) {
         let qp = cp |> in_(f.q_plane)

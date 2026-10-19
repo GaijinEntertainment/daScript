@@ -3718,6 +3718,17 @@ class template DaAttnT {
     @ssbo @binding = 8 @role = "weight" @template_gate = SINK sinks : array<float>   //! the SINK stamps: the per-head sink logits, `pa.sinkoff` the layer's row
     @push_constant pa : DaAttnArgs
     @workgroup qrow : float[2048]  //! the slab's query rows, DA_G x 512 (hs <= 512); a dead head's row is zero
+
+    //! four of a query row's quants - the elements `base + k * stride`, k < 4 - packed low byte first into the word `w`, their
+    //! sum added to `qs` (the tq4 score's -8 offset reads it)
+    def q8_pack4(base, stride : uint; id : float; var w : uint&; var qs : float&) {
+        w = 0u
+        for [unroll] (k in range(4)) {
+            let qi = int(round(qrow[base + uint(k) * stride] * id))
+            qs += float(qi)
+            w = w | ((uint(qi) & 255u) << uint(k * 8))
+        }
+    }
     @workgroup @template_gate = KVBLK qq : uint[512]   //! the slab's query rows as packed int8 words, DA_G x (hs / 4); under tq4 the even elements' words then the odd's, DA_G x (hs / 8) each
     @workgroup @template_gate = KVBLK qsc : float[64]  //! ... and their q8_0 block scales, DA_G x (hs / 32)
     @workgroup @template_gate = KVTQ4 qsum : float[64] //! tq4: a block's sum of the query's quants, the nibble offset's term, DA_G x (hs / 32)
@@ -3907,10 +3918,9 @@ class template DaAttnT {
         static_if (KVBLK) {
             // the query rows as q8_0 blocks, a thread a block: the CPU chain's own query quantization, so the two chains agree
             // to it; the K score is then the packed integer dot of the block's words
-            let nqb = uint(G) * (hs / 32u)
-            if (tid < nqb) {
-                let hj = tid / (hs / 32u)
-                let b = tid % (hs / 32u)
+            let hj = tid / 16u   // a thread a (head, block) slot, the slots 16 apart - the 512 head's block count
+            let b = tid % 16u
+            if (hj < uint(G) && b < hs / 32u) {
                 let qo = hj * 512u + b * 32u
                 var amax = 0.0
                 for [unroll] (e in range(32)) {
@@ -3918,32 +3928,24 @@ class template DaAttnT {
                 }
                 let d = amax / 127.0
                 let id = d != 0.0 ? 1.0 / d : 0.0
-                qsc[tid] = d
+                qsc[hj * 16u + b] = d   // a head's blocks 16 apart, the 512 head's count: the shared arrays stride by their capacity
                 static_if (KVTQ4) {
                     var qs = 0.0
                     for [unroll] (wi in range(4)) {   // a tq4 byte's low nibble is element 2k, its high 2k + 1: the even elements' word and the odd's
                         var we = 0u
                         var wo = 0u
-                        for [unroll] (k in range(4)) {
-                            let e = uint(wi * 8 + k * 2)
-                            let qe = int(round(qrow[qo + e] * id))
-                            let qd1 = int(round(qrow[qo + e + 1u] * id))
-                            qs += float(qe + qd1)
-                            we = we | ((uint(qe) & 255u) << uint(k * 8))
-                            wo = wo | ((uint(qd1) & 255u) << uint(k * 8))
-                        }
-                        qq[hj * (hs / 8u) + b * 4u + uint(wi)] = we
-                        qq[uint(G) * (hs / 8u) + hj * (hs / 8u) + b * 4u + uint(wi)] = wo
+                        q8_pack4(qo + uint(wi * 8), 2u, id, we, qs)
+                        q8_pack4(qo + uint(wi * 8) + 1u, 2u, id, wo, qs)
+                        qq[hj * 64u + b * 4u + uint(wi)] = we
+                        qq[256u + hj * 64u + b * 4u + uint(wi)] = wo
                     }
-                    qsum[tid] = qs
+                    qsum[hj * 16u + b] = qs
                 } else {
+                    var qs = 0.0   // the q8_0 score reads no quant sum
                     for [unroll] (wi in range(8)) {
                         var wv = 0u
-                        for [unroll] (k in range(4)) {
-                            let qi = int(round(qrow[qo + uint(wi * 4 + k)] * id))
-                            wv = wv | ((uint(qi) & 255u) << uint(k * 8))
-                        }
-                        qq[hj * (hs / 4u) + b * 8u + uint(wi)] = wv
+                        q8_pack4(qo + uint(wi * 4), 1u, id, wv, qs)
+                        qq[hj * 128u + b * 8u + uint(wi)] = wv
                     }
                 }
             }
@@ -4023,18 +4025,18 @@ class template DaAttnT {
                             lo = hi
                             static_if (KVQ8) {
                                 for [unroll] (j in range(G)) {
-                                    bs[j] += sdot4(word, qq[uint(j) * (hs / 4u) + bi * 8u + uint(wi)])
+                                    bs[j] += sdot4(word, qq[uint(j) * 128u + bi * 8u + uint(wi)])
                                 }
                             } else {
                                 let lo4 = word & 0x0F0F0F0Fu           // the low nibbles: the even elements as bytes 0..15
                                 let hi4 = (word >> 4u) & 0x0F0F0F0Fu   // the high nibbles: the odd elements
                                 for [unroll] (j in range(G)) {
-                                    bs[j] += sdot4(lo4, qq[uint(j) * (hs / 8u) + bi * 4u + uint(wi)]) + sdot4(hi4, qq[uint(G) * (hs / 8u) + uint(j) * (hs / 8u) + bi * 4u + uint(wi)])
+                                    bs[j] += sdot4(lo4, qq[uint(j) * 64u + bi * 4u + uint(wi)]) + sdot4(hi4, qq[256u + uint(j) * 64u + bi * 4u + uint(wi)])
                                 }
                             }
                         }
                         for [unroll] (j in range(G)) {
-                            let qbi = uint(j) * (hs / KQ_B32_ELEMS_U) + bi
+                            let qbi = uint(j) * 16u + bi
                             static_if (KVTQ4) {
                                 pv[j] += (float(bs[j]) - 8.0 * qsum[qbi]) * kd * qsc[qbi]   // the nibbles are 0..15: the -8 offset times the block's query sum
                             } else {
@@ -9775,18 +9777,8 @@ class template KvQ8StoreT {
         let src = row * pa.kvd + blk * KQ_B32_ELEMS_U + e
         let kv0 = kst[src]
         let vv0 = vst[src]
-        var kmax = abs(kv0)
-        var vmax = abs(vv0)
-        kmax = max(kmax, subgroupShuffleXor(kmax, 16u))
-        vmax = max(vmax, subgroupShuffleXor(vmax, 16u))
-        kmax = max(kmax, subgroupShuffleXor(kmax, 8u))
-        vmax = max(vmax, subgroupShuffleXor(vmax, 8u))
-        kmax = max(kmax, subgroupShuffleXor(kmax, 4u))
-        vmax = max(vmax, subgroupShuffleXor(vmax, 4u))
-        kmax = max(kmax, subgroupShuffleXor(kmax, 2u))
-        vmax = max(vmax, subgroupShuffleXor(vmax, 2u))
-        kmax = max(kmax, subgroupShuffleXor(kmax, 1u))
-        vmax = max(vmax, subgroupShuffleXor(vmax, 1u))
+        let ks = q8_lane_scale(kv0)   // the block's scale and its inverse: the 32-lane group is the block
+        let vs = q8_lane_scale(vv0)
         var mir_blk = pa.layerbase + blk
         static_if (TOKROW) {
             mir_blk += tok[row].mirbase + kv_ring_row(tok[row].pos, pa.ring) * nblk
@@ -9794,17 +9786,13 @@ class template KvQ8StoreT {
             mir_blk += kv_ring_row(pa.pos0 + row, pa.ring) * nblk
         }
         let sc = mir_blk * KV_Q8_BLOCK_HALVES
-        let kd = kmax / 127.0
-        let vd = vmax / 127.0
-        let kid = kd != 0.0 ? 1.0 / kd : 0.0
-        let vid = vd != 0.0 ? 1.0 / vd : 0.0
         if (e == 0u) {
-            ksc[sc] = float16(min(kd, 65504.0))
-            vsc[sc] = float16(min(vd, 65504.0))
+            ksc[sc] = float16(min(ks.x, 65504.0))
+            vsc[sc] = float16(min(vs.x, 65504.0))
         }
         let qb = sc * 2u + 2u
-        kq[qb + e] = q8_quant1(kv0, kid)
-        vq[qb + e] = q8_quant1(vv0, vid)
+        kq[qb + e] = q8_quant1(kv0, ks.y)
+        vq[qb + e] = q8_quant1(vv0, vs.y)
     }
 }
 
@@ -9820,26 +9808,8 @@ class KvQ8StoreB : KvQ8StoreT {
 }
 
 //! the tq4 rotation's butterfly passes over a workgroup's head: a base shell the store and the un-rotation share
-class KvTq4WhtBase {
+class template KvTq4WhtBase : GkBlkSignedMax {
     @workgroup buf : float[512]                 //! the head: hs <= 512, a thread's second element at tid + 256
-
-    //! `v`, a lane's value of a 32-lane block, becomes the block's largest-magnitude value - the first on a tie, as the CPU's
-    //! strict compare keeps it: the lanes fold by xor shuffles, a lower lane winning an equal magnitude
-    def blk_signed_max(lane : uint; var v : float&) {
-        var amax = abs(v)
-        var midx = lane
-        for [unroll] (sh in range(5)) {
-            let mask = 16u >> uint(sh)
-            let oa = subgroupShuffleXor(amax, mask)
-            let ov = subgroupShuffleXor(v, mask)
-            let oi = subgroupShuffleXor(midx, mask)
-            if (oa > amax || (oa == amax && oi < midx)) {
-                amax = oa
-                v = ov
-                midx = oi
-            }
-        }
-    }
 
     //! the unscaled Walsh-Hadamard transform of `buf[0 .. hs)` in place, `hs` a power of two: the five passes inside a
     //! 32-lane group fold by xor shuffles (a lane's partner is its lane xor the pass's stride), the passes across groups
@@ -9954,25 +9924,27 @@ class template KvTq4StoreT : KvTq4WhtBase {
             } else {
                 mir_blk += kv_ring_row(pa.pos0 + row, pa.ring) * nblk
             }
-            var e = tid
-            while (e < hs) {
+            var e0 = 0u   // the whole workgroup walks the head's 256-element strides together: the shuffle fold below needs every
+            while (e0 < hs) {   // lane of a subgroup active, a lane past the head folding a zero
+                let e = e0 + tid
+                let inside = e < hs
                 let blk = e / KQ_B32_ELEMS_U
                 // the block's largest magnitude and its value, the first on a tie as the CPU's strict compare keeps it: the 32
                 // lanes of the block fold by xor shuffles, a lower index winning an equal magnitude
-                var mval = buf[e] * pa.inv_sqrt_hs
+                var mval = inside ? buf[e] * pa.inv_sqrt_hs : 0.0
                 blk_signed_max(e % KQ_B32_ELEMS_U, mval)
                 let d = mval / -8.0
                 let id = d != 0.0 ? 1.0 / d : 0.0
                 let sc = (mir_blk + blk) * KV_TQ4_BLOCK_HALVES
                 let lane = e % KQ_B32_ELEMS_U
-                if (lane == 0u) {
+                if (inside && lane == 0u) {
                     if (is_v) {
                         vsc[sc] = half_sat(d)
                     } else {
                         ksc[sc] = half_sat(d)
                     }
                 }
-                if ((lane & 1u) == 0u) {
+                if (inside && (lane & 1u) == 0u) {
                     let q0 = min(15, int(buf[e] * pa.inv_sqrt_hs * id + 8.5))
                     let q1 = min(15, int(buf[e + 1u] * pa.inv_sqrt_hs * id + 8.5))
                     let at = sc * 2u + 2u + lane / 2u
@@ -9982,7 +9954,7 @@ class template KvTq4StoreT : KvTq4WhtBase {
                         kq[at] = int8(q0 | (q1 << 4))
                     }
                 }
-                e += 256u
+                e0 += 256u
             }
         }
     }
@@ -13074,6 +13046,8 @@ def gk_subgroup_add(v : float) : float => subgroupAdd(v)
 def gk_subgroup_max(v : float) : float => subgroupMax(v)
 [spirv_inline]
 def gk_subgroup_xor(v : float; m : uint) : float => subgroupShuffleXor(v, m)
+[spirv_inline]
+def gk_subgroup_xor_u(v : uint; m : uint) : uint => subgroupShuffleXor(v, m)
 [spirv_inline]
 def gk_subgroup_min_u(v : uint) : uint => subgroupMin(v)
 

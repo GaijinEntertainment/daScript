@@ -10,24 +10,75 @@ and coverage; this ledger is the backlog for the perf pass that follows them. Ev
 what it costs today and what the fix would change.
 
 ## Entries
-- **MEASURED (2026-10-19) - the long-prompt pass: the block codecs' store and the serving rules, Apple M5 Max (thermally
-  capped: `powermetrics` read the GPU at 840-1030 of 1620 MHz under Heavy pressure through every row, so no figure here goes
-  beside a cool box's) and the RunPod RTX PRO 4500.** The detector (`lcpp_bench -p 512 | 2048 | 8192 -n 32 --npl 2
-  --npl-plen <p - 64> -r 3 --kv f16 | q8_0 | tq4`, debug-jit, every stocked text model, both homes) read the ratios inside
-  one row; the per-step trace (`benchmarks/decode_step_trace.das`) and `DASLLAMA_METAL_DECODE_SKIP=attn` put a block
-  codec's cost OUTSIDE attention at any context: the q8_0 store quantized a 32-block on one thread, on both homes. A
-  simdgroup a block (Metal) and a lane an element with a shuffle max (Vulkan) read, GPU us a decode step, Qwen3-30B-A3B
-  Q4_K_M q8_0 7661 -> 6613 at 512 (f16 6223), 12292 -> 11323 at 8192; Llama-3.2-1B 3334 -> 3092; Qwen3.6-35B 7556 ->
-  7306 (f16 7220); on the pod Qwen3-0.6B q8_0 decode 465 -> 489 tok/s (f16 519), its 512-row window's store 1931 -> 1313
-  us (pp512 39.9k -> 42.1k), tq4's window 2926 -> 2355 (the rotation's in-group passes by shuffles). The Vulkan attention
-  stamps with the packed integer dot read, a layer at 8192 keys on the 30B shape (`harness/vk_attn_probe.das`), f16 65.7
-  us, q8_0 61.5 (76.8 before), tq4 57.3 (65.6). The Metal fused attention over a block codec stays 1.5x the f16 stamp a
-  key (followup_general 214). tq4 on Qwen2.5-0.5B served wrong tokens on every home - its Q/K/V bias outliers (|b| to 316
-  against a median of 0.3) set every 4-bit block's scale - and now steps down to q8_0 by name; the Metal mirror arena's
-  4 GiB idle cap no longer refuses a live batched step (the 12B+ dense models' two-stream decode after 8k took the CPU
-  rails under f16). The pod's new-against-a28ffe7e83 pairs on twelve MoE files (pair order alternated, two reps an arm):
-  the resident ones pp512 0.97-1.00, decode 1.00, pp8192 +37-57 % (the 2048 window); the streamed 35B Q8_0 3-14x (the
-  control ran the per-op tier) - followup_vulkan 150's answer.
+- **MEASURED (2026-10-19) - the long-prompt pass: the block codecs' store and the serving rules, Apple M5 Max (128 GB,
+  thermally capped: `powermetrics` read the GPU at 840-1030 of 1620 MHz under Heavy pressure through every row, so no
+  figure here goes beside a cool box's) and the RunPod RTX PRO 4500 Blackwell (32 GB, driver 580.173.02).** Every figure is
+  debug-jit (`bin/daslang -jit`, the box profile `performance/m5.tune.json` re-minted at 4cf21c280a on the M5, one box
+  mint `/workspace/pod.tune.json` on the pod, one model process a box), and every before/after pair is direction-grade:
+  the same binary on both arms, the before arm master 4cf21c280a's `modules/dasLLAMA`, the after arm 737794e076 (the Metal
+  store and the serving rules) or 8a575d5869 (the Vulkan store and attention), each arm its own tree.
+  - The detector, `modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m <file> -p <512 | 2048 | 8192> -n 32 --npl 2 --npl-plen
+    <p - 64> -r 3 --kv <f16 | q8_0 | tq4> --ngl 1 --for-debug-purposes` (`DASLLAMA_BENCH_VERBOSE=1`, the rows read at the
+    best rep; on the pod `DASLLAMA_GPU=1`, no `--ngl`) over every stocked text model on both homes, read the
+    512 -> 2048 -> 8192 ratios inside one row and the codecs beside f16; the readings stand in the session's table, not
+    here - the pass fixed what the ratios pointed at and recorded no board.
+  - The Metal q8_0 store, a 32-block on one thread before and a lane an element after (`benchmarks/decode_step_trace.das`,
+    one trace a reading, GPU us a decode step at the trace's steady window, no spread): Qwen3-30B-A3B Q4_K_M q8_0
+    7661 -> 6613 at 512 keys (f16 6223), 12292 -> 11323 at 8192; Llama-3.2-1B Q8_0 3334 -> 3092; Qwen3.6-35B-A3B UD-Q4_K_M
+    7556 -> 7306 (f16 7220). `DASLLAMA_METAL_DECODE_SKIP=attn` put a block codec's cost outside attention at every
+    context, which is what pointed at the store.
+  - The Vulkan q8_0 store, the same change (`lcpp_bench -m Qwen3-0.6B-Q8_0.gguf -p 512 -n 128 -r 3 --kv q8_0`, tg128 at the
+    best rep, the per-kernel us from `DASLLAMA_GPU_PROF=1 DAS_LOG_LEVEL=info` `vk_rdpf` lines, one profiled run a reading):
+    decode 465 -> 489 tok/s (f16 519), the 512-row window's store 1931 -> 1313 us (pp512 39.9k -> 42.1k tok/s), tq4's
+    window store 2926 -> 2355 us (the rotation's in-group passes by shuffles).
+  - The Vulkan attention stamps with the packed integer dot (`harness/vk_attn_probe.das -- 2 8192 128 32 8 4 <f16 | q8_0 |
+    tq4>`, `DASLLAMA_GPU=1`, the best split of the ladder, us a layer): f16 65.7, q8_0 61.5 (76.8 before), tq4 57.3
+    (65.6 before). In a model at 8k the pair reads, Qwen3-0.6B Q8_0 on the pod, `lcpp_bench -p 8192 -n 32 --npl 2 --npl-plen
+    8128 -r 3 --kv <codec>`, master 4cf21c280a's `modules/dasLLAMA` against 87ce65175c's on the same binary (direction-grade,
+    two passes an arm, cv under 0.2 %): q8_0 tg32@2 462.5 -> 484.0 / 485.0 tok/s, pp8192 35.9k -> 37.0k; tq4 tg32@2 503.9 /
+    505.4 -> 517.6 / 517.8, pp8192 30.9k / 31.0k -> 32.6k / 32.7k. The cost is noise: both chains round the query, each its
+    own, so the q8_0 device-vs-CPU readings widen from 0.42-0.63 to 0.42-0.89 of the max logit on Qwen2.5-0.5B (the cells'
+    bars moved from 8 to 10 %, the one-step-off controls at 7.9-9.6).
+  - The Metal fused decode attention over a block codec stays about 1.5x the f16 stamp a key (`harness/attn_d_codec_race.das`,
+    the 30B shape, two rows, a ring of eight 16384-key slabs the rounds walk so a depth streams its rows past the cache; ms a layer-call, best of 5 rounds after a 150 ms burn, at 8192 keys f16 0.111, q8_0 0.177, tq4 0.184 - 303, 101 and 51 GB/s of K/V bytes - and at 16384 0.213, 0.352, 0.373; at 512 0.014, 0.019, 0.019; followup_metal 54). Neither a
+    16-bit word view of the quants nor a lane-eight mapping with shuffle reductions beat the per-key loop.
+  - tq4 on Vulkan pays two latency-bound dispatches a layer a token - the store (`KvTq4StoreT`, four barriers) and the
+    un-rotation after attention (`KvTq4Unrot`), 8 us together by the `vk_rdec` lines of one profiled Qwen3-0.6B tg128 run
+    (followup_vulkan 152), where q8_0's store is one.
+  - The arena bound's footprint pair (the Metal mirror arena bounded by the device's largest buffer in place of the 4 GiB
+    cap): gemma-4-12B-it-Q4_K_M, `lcpp_bench -p 8192 -n 32 --npl 2 --npl-plen 8128 -r 3 --kv f16 --ngl 1`, `/usr/bin/time
+    -l`, the M5 Max, the same binary, master 4cf21c280a's `modules/dasLLAMA` against 29df907702's (direction-grade): before,
+    peak 18.8 GB resident and 67 s wall to the batched row, which the arena refused (`batch decode declined: mirror`,
+    the run's exception under the required mode); after, peak 21.5 GB and 90 s wall with the row served - pp8192
+    2052 +- 67 against 1970 +- 97 tok/s (inside the box's thermal spread), tg32 55.9 +- 7.0 against 55.9 +- 7.3, tg32@2
+    91.0 +- 1.4 tok/s summed over the two streams where before there was no row. The extra 2.7 GB is the two streams'
+    8k mirror the arena now holds.
+  - tq4 on Qwen2.5-0.5B served wrong tokens on every home: its Q/K/V bias outliers (|b| to 316 against a median of 0.3)
+    set every 4-bit block's scale. The serving rule steps such a model down to q8_0 by name (`kv_codec_served`). The Metal
+    mirror arena's 4 GiB idle cap no longer refuses a live batched step: under f16 the 12B+ dense models' two-stream decode
+    after 8k took the CPU rails (`EXC ... batch decode declined: mirror` in the detector's rows), and now serves.
+  - The pod's Vulkan MoE pairs, the same binary, new = master's `modules/dasLLAMA` (4cf21c280a, the streamed-expert change
+    in) against ctl = a28ffe7e83's (the commit before it), two reps an arm with the arm order alternated, `lcpp_bench -m
+    <file> -p 512 -n 128 -r 2` and `-p 8192 -n 32 --npl 2 --npl-plen 8128 -r 2`, tok/s mean (min-max of the two reps);
+    the pp8192 gain is the 2048-row prompt window the change widened, the decode rows a tie:
+
+    | file | pp512 new / ctl | tg128 new / ctl | pp8192 new / ctl | tg32@2 new / ctl |
+    |---|---|---|---|---|
+    | Qwen3-30B-A3B-Instruct-2507-Q4_K_M | 6402 (6389-6416) / 6468 (6467-6468) | 172 (172-173) / 172 (172-172) | 7402 (7397-7406) / 5199 (5197-5200) | 191 (189-192) / 192 (192-192) |
+    | Qwen3-30B-A3B-Instruct-2507-UD-IQ2_XXS | 5441 (5388-5493) / 5480 (5447-5514) | 189 (188-189) / 188 (188-188) | 6638 (6630-6646) / 4501 (4488-4513) | 196 (196-196) / 196 (196-196) |
+    | Qwen3-Coder-30B-A3B-Instruct-Q4_K_M | 6084 (6069-6099) / 6097 (6089-6104) | 172 (172-172) / 172 (172-172) | 7357 (7351-7364) / 5002 (4996-5008) | 193 (193-193) / 193 (193-193) |
+    | Qwen3.5-35B-A3B-UD-IQ3_S | 4545 (4538-4553) / 4602 (4601-4603) | 154 (154-154) / 154 (153-154) | 6872 (6867-6878) / 4410 (4406-4414) | 238 (237-238) / 238 (238-238) |
+    | Qwen3.6-35B-A3B-MTP-IQ4_XS-pure | 5384 (5367-5401) / 5428 (5422-5435) | 167 (167-168) / 168 (168-168) | 7650 (7631-7669) / 5151 (5143-5159) | 220 (220-220) / 220 (220-220) |
+    | Qwen3.6-35B-A3B-MTP-UD-Q4_K_M | 5140 (5033-5247) / 5326 (5320-5333) | 142 (142-142) / 142 (142-142) | 7586 (7578-7594) / 5122 (5120-5124) | 220 (218-222) / 225 (225-226) |
+    | Qwen3.6-35B-A3B-UD-IQ2_XXS | 4477 (4476-4477) / 4486 (4420-4553) | 174 (174-174) / 175 (175-175) | 6747 (6742-6753) / 4310 (4305-4315) | 259 (259-259) / 259 (259-259) |
+    | gemma-4-26B-A4B-it-Q4_K_M | 6284 (6259-6308) / 6317 (6311-6323) | 135 (135-135) / 135 (135-135) | 7715 (7701-7729) / 5645 (5634-5656) | 206 (206-206) / 207 (207-207) |
+    | gemma-4-26B-A4B-it-UD-IQ3_XXS | 5327 (5304-5351) / 5346 (5320-5372) | 147 (147-147) / 146 (146-147) | 6847 (6839-6854) / 4843 (4833-4853) | 211 (211-211) / 211 (211-211) |
+    | gemma-4-26B-A4B-it-MXFP4_MOE (the local mint) | 5543 (5533-5552) / 5545 (5538-5553) | 138 (138-138) / 138 (138-138) | 6908 (6896-6919) / 4963 (4956-4969) | 210 (210-210) / 210 (210-210) |
+    | gpt-oss-20b-mxfp4 | 6210 (6203-6217) / 6264 (6260-6267) | 209 (209-209) / 209 (209-209) | 8552 (8551-8554) / 5988 (5986-5990) | 288 (288-288) / 289 (289-289) |
+    | Qwen3.6-35B-A3B-Q8_0 (streamed by design) | 1671 (1661-1681) / 514 (511-517) | 99 (99-100) / 34 (34-34) | 3712 (3678-3745) / 264 (264-264) | 83 (83-83) / 20 (20-20) |
+
+    The streamed 35B Q8_0's control ran the per-op tier (the change is what streams it), so its pair measures the tier
+    switch, not a kernel. The resident files: no deterioration - the A/B the streamed-expert change (PR 4321) owed.
 - **MEASURED (2026-10-17) - the residual step's race past the slab, widened, M5 Max (128 GB).** `bench_metal_gk_rows`
   (`dastest.das -- --bench --test`, debug-jit, the box profile `performance/m5.tune.json` at 39,101 B,
   `DASLLAMA_ALLOW_UNTUNED=1 DASLLAMA_CPU_PREFILL=1 DASLLAMA_METAL_HAZARD_STRICT=1`) at b4b207a287 adds to the entry below the

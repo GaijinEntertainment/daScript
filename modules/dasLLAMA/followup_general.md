@@ -2084,19 +2084,6 @@
     SPIR-V text splits at its own grammar - then delete the `[line_length]` table and the file, so the
     repo limits bind the folder; the kernels and model-free suites on both homes hold the wrapped tree.
 
-214. **The block-codec decode attention on Metal costs 1.5x the f16 stamp's time a key, and tq4 on Vulkan pays two
-    latency-bound dispatches a layer.** The long-prompt pass (512 / 2048 / 8192 at f16, q8_0 and tq4 on every stocked
-    model, both homes) left these: on Metal `MetalSqAttnDQuantT`'s per-key loop is instruction-bound beside the f16 twin
-    (`harness/attn_d_codec_race.das`, the 30B shape at 8192 keys: f16 0.113 ms a layer-call, q8_0 0.165, tq4 0.178),
-    and neither a 16-bit word view of the quants nor a lane-eight mapping with shuffle reductions beat it (both read
-    slower - the hardware reduction is the cheap part); on Vulkan the tq4 store (`KvTq4StoreT`, four barriers) and the
-    un-rotation after attention (`KvTq4Unrot`) are each a dispatch a layer a token, 8 us together on the RTX PRO 4500,
-    where q8_0's store is one. Done = a Metal block-codec stamp within 1.15x of f16 a key on the race at 2048 and 8192,
-    or the lever named that keeps it where it is; the tq4 rotation folded into the rope stamp and the un-rotation into
-    the output projection's prologue on Vulkan, raced on the token command's profile. The E-series' flat 2k window
-    (gemma-4-E2B pp2048 1.07x pp512 where every other carrier reads 1.2-1.8x) is its geometry - a 512-row window fills
-    the card for a 1536-wide model and the rows past it buy only the global layers' square term - and is not work.
-
 215. **Checklist grooming - the prefill rotation arc's round.** The rule-document round over the arc's diff (one
     review-md auditor a checklist, two dragon passes a changed document) left the structural findings it could not
     land as wording: in `REVIEW_GPU_VULKAN.md` the two serving-gate rules carry one definition twice (merge them under one
@@ -2123,3 +2110,25 @@
     and the two global-rooted-array rules merged; and the benchmarks and performance checklists' definition blocks as
     lists. Done = the rule-doc PR this ledger already owes carries them, each a rewrite under `skills/review_md.md`, two
     dragon passes a document, none a ruling.
+
+216. **Checklist grooming - the long-prompt pass's round.** The rule-document round over the pass's diff left these
+    for the rule-doc PR, each a rewrite under `skills/review_md.md`, two dragon passes a document, none a ruling: in
+    `benchmarks/REVIEW.md` the 330-word glossary as one short line a term with its mechanism prose in
+    `ARCHITECTURE_MEASUREMENT.md`, the GPU-race routing clause the folder walk can never fire, and the warmup and
+    refusal rules' shared trigger named once; in `tests/REVIEW.md` the exact-compare rule keyed on a fact a reviewer
+    can check (a cell's asserted top-two logit gap, or the prompt class it exempts) instead of "a prompt whose
+    continuation can tie", the engine-side duty that falsifies a `tests/CLAUDE.md` entry moved to the module checklist,
+    the arm census as a `REVIEW.das` gate over every `arm_on` literal, and `tests/REVIEW_KERNEL_CELLS.md`'s grid-formula
+    rule routed from the module checklist with "the same count for every input (the dispatcher's count function)" in
+    place of "that same expression", its opening block restored and its definitions one line a term; in
+    `modules/REVIEW_SHADER_EMITTERS.md` the shape-constant definition by the property (an index stride into a
+    fixed-extent array), the routing by kind (a kernel-declaring file, a file it requires, a dispatch or allocation that
+    binds such a kernel), the emitted-claim rule firing on any named property of the artifact, the two read-bounds rules
+    merged, and `modules/REVIEW.md`'s `bind_*.das` aside cut; in `REVIEW.md` here the race-figure rule's candidate list
+    as a property, the weight-format routing settled for a K/V codec literal, `REVIEW_GPU_KERNEL_BODY.md`'s "value" (a
+    lane's input or the branch outcome), `REVIEW_MEMORY.md`'s size-formula trigger in both directions, the announce rule
+    for a knob with no announce, the command-line-and-commit check made once across `REVIEW_GPU_RACE.md` and
+    `REVIEW_MEASUREMENT.md`, "race" settled for a codec comparison, the log-latch reading of `REVIEW_GPU.md`'s
+    model-swap rule, `REVIEW_GPU_VULKAN.md`'s "these three files", the two opening blocks off the prescribed form, and
+    the tower routing by reachability over file location. Done = the rule-doc PR carries them.
+

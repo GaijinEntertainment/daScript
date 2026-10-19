@@ -597,9 +597,9 @@ def arena_free_slice(off : uint64; size : uint64) {
     }
 }
 
-//! The KV-mirror cap in MiB: the arena's growth bound for every session together (64 at least, the device's largest buffer at
-//! most; a live session's own slice past it still gets room) AND the raw resident-bytes target idle mirrors evict down to (a
-//! tiny value is a legitimate evict-aggressively policy). Negative restores the env default (`DASLLAMA_METAL_KV_MIRROR_MB`).
+//! The KV-mirror cap in MiB: the raw resident-bytes target idle mirrors evict down to (a tiny value is a legitimate
+//! evict-aggressively policy); a live step's demand is bounded by the device's largest buffer alone, never by the cap.
+//! Negative restores the env default (`DASLLAMA_METAL_KV_MIRROR_MB`).
 def public set_metal_decode_mirror_cap_mb(v : int) {
     g_mirror_cap_mb = v
 }
@@ -1468,22 +1468,38 @@ def private mirror_slice_shape(t : Model; s : Session; needed : int64) : tuple<c
             vbytes = uint64(cap * kv_row_bytes(s.kv_dtype_v, m.flat_total) + kv_row_bytes(s.kv_dtype_v, m.ring_total)))
 }
 
-//! the device's largest buffer - the arena is one buffer, so neither a slice nor the arena grows past it
-def private mirror_device_max_bytes : uint64 => g_dev != null ? metal_max_buffer_length(g_dev) : 0xFFFFFFFFFFFFFFFFul
+var private g_mirror_device_max_probe = 0ul   //! a test's stand-in for the device's largest buffer; 0 = the device's
 
-[arch(at="../ARCHITECTURE_GPU_PREFILL_WINDOW.md#kv-mirror-arena")]
-def private mirror_ceiling_bytes : uint64 {
-    let ceil_mb = uint64(max(g_mirror_cap_mb >= 0 ? g_mirror_cap_mb : g_mirror_cap_env, 64))
-    return min(ceil_mb * 1024ul * 1024ul, mirror_device_max_bytes())
+//! the device's largest buffer - the arena is one buffer, so neither a slice nor the arena grows past it
+def private mirror_device_max_bytes : uint64 {
+    return g_mirror_device_max_probe if (g_mirror_device_max_probe != 0ul)
+    return g_dev != null ? metal_max_buffer_length(g_dev) : 0xFFFFFFFFFFFFFFFFul
 }
 
-var private g_mirror_refusal_said = false   //! the device-bound refusal is logged once a process
+//! a test's stand-in for the device's largest buffer (`bytes`; 0 reads the device's again): the refusal leg's seam
+def public set_metal_mirror_device_max_probe_(bytes : uint64) {
+    g_mirror_device_max_probe = bytes
+}
 
-[cold_path]   // the refusal leg alone: said once a process
+//! whether the device-bound refusal has been said since the mirrors' last reset
+def public metal_mirror_refusal_said : bool => g_mirror_refusal_said
+
+var private g_mirror_refusal_said = false   //! the device-bound refusal is logged once a model (the mirrors' reset clears it)
+
+[cold_path]   // the refusal leg alone
 def private mirror_refusal_say(total, ceil_bytes : uint64) {
-    return if (g_mirror_refusal_said)
     g_mirror_refusal_said = true
     to_log(LOG_WARNING, "dasLLAMA metal decode: a step's K/V mirror demand of {total >> 20ul} MiB passes the device's largest buffer ({ceil_bytes >> 20ul} MiB) - the step takes the CPU rails\n")
+}
+
+//! the one-row prepare's refusal with nothing left to evict: a batch step's pinned rows (the batch driver's `mirror_reserve`
+//! pre-grows for that case, silently), else a slice past the device's largest buffer or an arena already at it - the live
+//! mirrors and the slice pass the device bound, said once
+def private prepare_refused(kbytes, vbytes, ceil_bytes : uint64) : bool {
+    return true if (!empty(g_pin))
+    return false if (g_arena_bytes < ceil_bytes && kbytes + vbytes <= ceil_bytes)
+    mirror_fits_device(kbytes + vbytes > ceil_bytes ? kbytes + vbytes : g_mirror_bytes + kbytes + vbytes)
+    return true
 }
 
 //! a live demand of `total` bytes against the one bound the arena has - the device's largest buffer; false logs why once
@@ -1491,7 +1507,9 @@ def private mirror_refusal_say(total, ceil_bytes : uint64) {
 def private mirror_fits_device(total : uint64) : bool {
     let ceil_bytes = mirror_device_max_bytes()
     return true if (total <= ceil_bytes)
-    mirror_refusal_say(total, ceil_bytes)
+    if (!g_mirror_refusal_said) {
+        mirror_refusal_say(total, ceil_bytes)
+    }
     return false
 }
 
@@ -1515,6 +1533,7 @@ def private arena_rebuild(want : uint64; ceil_bytes : uint64) {
     }
     delete g_mirrors
     g_mirror_bytes = 0ul
+    g_mirror_refusal_said = false
     metal_release(g_arena)
     g_arena_bytes = min(want, ceil_bytes)
     g_arena = metal_new_buffer(g_dev, g_arena_bytes)
@@ -1759,9 +1778,7 @@ def mirror_prepare_rows(t : Model; var s : Session; pos, needed : int64) : tuple
         while (off < 0l) {   // arena full — evict LRU until the slice fits (or nothing evictable)
             let victim = lru_victim(g_mirrors, s.uid, true)
             if (victim == 0ul) {
-                // nothing left to evict — grow toward the ceiling, unless a batch step holds
-                // pinned rows (the batch driver's mirror_reserve pre-grows for that case)
-                if (!empty(g_pin) || g_arena_bytes >= ceil_bytes || kbytes + vbytes > ceil_bytes) {
+                if (prepare_refused(kbytes, vbytes, ceil_bytes)) {   // nothing left to evict: grow toward the ceiling, or refuse
                     return (ok = false, koff = 0ul, voff = 0ul, cap = 0l)
                 }
                 arena_rebuild(max(g_arena_bytes * 2ul, kbytes + vbytes), ceil_bytes)
@@ -1775,8 +1792,7 @@ def mirror_prepare_rows(t : Model; var s : Session; pos, needed : int64) : tuple
             koff = uint64(off), voff = uint64(off) + kbytes, bytes = kbytes + vbytes, layout = mirror_layout_key_of(t))
         g_mirror_bytes += mr.bytes
         g_mirrors[s.uid] = mr
-        // the evict target honors the RAW knob (a tiny cap is legitimate idle-eviction policy —
-        // the LRU churn tests rely on it); only the arena GROWTH ceiling carries the 64MB floor
+        // the evict target honors the RAW knob (a tiny cap is legitimate idle-eviction policy - the LRU churn tests rely on it)
         let cap_mb = uint64(g_mirror_cap_mb >= 0 ? g_mirror_cap_mb : g_mirror_cap_env)
         mirror_evict_to_cap(cap_mb * 1024ul * 1024ul, s.uid)
     }
@@ -3123,6 +3139,7 @@ def metal_common_release {
     g_dn_pool_slots = 0l
     g_dn_slot_bytes = 0ul
     g_mirror_bytes = 0ul
+    g_mirror_refusal_said = false
     if (g_arena != null) {
         metal_release(g_arena)
         g_arena = null

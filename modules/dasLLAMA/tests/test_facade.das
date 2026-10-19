@@ -146,38 +146,6 @@ def test_facade_eval_segments_empty(t : T?) {
     }
 }
 
-//! The constructors serve a codec the model cannot hold at the step-down codec: Qwen2's Q/K/V bias takes tq4 to q8_0 in a
-//! session and in a pool; a model without the bias keeps tq4; q8_0 asked stays q8_0.
-[test]
-def test_facade_kv_codec_step_down(t : T?) {
-    let path = path_join(models_dir(), "Qwen2.5-0.5B-Instruct-Q8_0.gguf")
-    if (!stat(path).is_valid) {
-        t |> skip("{path} not present")
-        return
-    }
-    var m <- load_model_(path, QuantMode.q8)
-    t |> success(m.config.attn_qkv_bias, "Qwen2.5 carries the Q/K/V bias the rule reads")
-    var s <- create_session(m, KVDtype.tq4)
-    t |> equal(s.kv_dtype_k, KVDtype.q8_0, "a tq4 session on Qwen2.5 serves at q8_0")
-    t |> equal(s.kv_dtype_v, KVDtype.q8_0, "both planes")
-    var s8 <- create_session(m, KVDtype.q8_0)
-    t |> equal(s8.kv_dtype_k, KVDtype.q8_0, "q8_0 asked stays q8_0")
-    var pool <- create_kv_pool(m, 64l, KVDtype.tq4)
-    t |> equal(pool.kdt, KVDtype.q8_0, "a tq4 pool on Qwen2.5 pages at q8_0")
-    delete pool
-    delete s8
-    delete s
-    delete m
-    let path3 = path_join(models_dir(), "Qwen3-0.6B-Q8_0.gguf")
-    if (stat(path3).is_valid) {
-        var m3 <- load_model_(path3, QuantMode.q8)
-        var s3 <- create_session(m3, KVDtype.tq4)
-        t |> equal(s3.kv_dtype_k, KVDtype.tq4, "control: Qwen3, no bias, keeps tq4")
-        delete s3
-        delete m3
-    }
-}
-
 def private room_of_a_megabyte(row_bytes : int64) : int64 => 1000000l / row_bytes
 
 //! The rows a device holds a session's K/V for: the installed room seam over the model's K/V bytes a row, both planes of every

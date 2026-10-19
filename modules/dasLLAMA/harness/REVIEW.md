@@ -4,8 +4,8 @@
 doc: `../ARCHITECTURE_MEASUREMENT.md`. Planned work: `../followup_general.md`,
 `../followup_metal.md`, `../followup_vulkan.md`.
 
-**A diff that runs a race or bench in `tune_kernels.das` that calls `pin_kernel_backend`,
-directly or through a helper, ahead of one that does not is a defect - run it last.** A race
+**In `tune_kernels.das`, every race or bench that calls `pin_kernel_backend`, directly or through a
+helper, runs after every race and bench that does not; a diff that runs one earlier is a defect.** A race
 times kernel variants against each other. The pin lasts for the rest of the process, so every
 timing after it measures the pinned backend.
 

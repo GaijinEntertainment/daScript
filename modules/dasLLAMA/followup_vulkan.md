@@ -2141,7 +2141,7 @@ module) is independent and can land any time - it is pure structure.
     modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m /workspace/models/<file> -p 512 -n 0 -r 3 --for-debug-purposes` at
     5e46f3acb3 on gemma-4-E2B-it-Q8_0, -Q4_0 and -Q4_K_M). The fix is a split-k arm in `cm2_gemm_pick` for a GEMM whose
     workgroups cannot fill the card, with the reduce the f32 path carries, raced per format one dispatch at a time; it
-    lands in the long-prompt pass (`followup_general.md` row 214), where every window stage is measured again. Done = the
+    lands with the next Vulkan window pass, where every window stage is measured again. Done = the
     pick raced per format at whole and partial windows on both decode arms, the winners in `cm2_gemm_pick`, the E2B
     Q8_0 and Q4_0 rows re-read. A window off the l column (the E2B gate at 500 rows) runs the m stamp's edge path, where
     the staged KHR tile reads 2-11% under it (the figures beside the pick rule in `ARCHITECTURE_GPU_VULKAN_GEMM.md`);
@@ -2157,3 +2157,8 @@ module) is independent and can land any time - it is pure structure.
     every run; the widest window the card holds at pp9000 named, and a 9k prompt in one window call where it does. Where
     a wider window wins, the default moves to it; where the scan workspace is what stops it, the scan over row chunks
     inside one window is the lever.
+
+152. **tq4 on Vulkan pays two latency-bound dispatches a layer a token.** The tq4 store (`KvTq4StoreT`, four barriers)
+    and the un-rotation after attention (`KvTq4Unrot`) are each a dispatch a layer a token, 8 us together on the RTX PRO
+    4500 (`PERF_LEDGER.md`, the 2026-10-19 long-prompt entry), where q8_0's store is one. Done = the tq4 rotation folded
+    into the rope stamp and the un-rotation into the output projection's prologue, raced on the token command's profile.
