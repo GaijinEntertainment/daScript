@@ -2158,13 +2158,3 @@
     under the server's sampler, the SSE path) naming where the margin goes, and the served decode at or above off on this
     file at depth 1.
 
-219. **The house replay's warm pass caches 100 % under `--mtp` and 91 % without it on the same host-cached slot.** The
-    M5 Metal server on the IQ4_XS-pure 35B (2026-10-20, the three-arm replay): every arm runs host-cached sessions (a Metal
-    slot never homes a stream on the device, `slot_wants_device_kv`), the same paged prefix cache and the same planned
-    stops, yet the plain arm re-prefills a median 347 tokens on 104 of 124 warm requests while the two `--mtp` arms
-    re-prefill none past 100 - and the checkpoint budget (`--prefix-state-mb`, a quarter of the box's RAM; a 35B
-    checkpoint about 160 MB) holds far fewer finished turns than the replay's requests, so one arm's rate is wrong, or
-    the arms leave different checkpoints (the speculating stream's finished-turn stop the suspect). Done = both arms
-    run at info level with `/v1/stats` read after each pass, the checkpoints each arm leaves and drops named per
-    request, the cause fixed, and both arms reading the same cache rate on the warm pass.
-

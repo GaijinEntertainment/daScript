@@ -10,6 +10,15 @@ and coverage; this ledger is the backlog for the perf pass that follows them. Ev
 what it costs today and what the fix would change.
 
 ## Entries
+- **MEASURED (2026-10-20, `out-of-process`, `direction-grade`) - the house replay's cache rate with and without the speculative
+  round, after the finished-turn fix.** M5 Max, the IQ4_XS-pure 35B, the house's flags, a cold and a warm pass an arm, one
+  process a pass (the numbers in that repository's ledger): before, the plain arm cached 91 % warm and the `--mtp` arm 100 %
+  on the same host-cached slot - the speculating arm refused the finished-turn checkpoint on 56 of 124 streams (a stop
+  accepted as a draft, its row evaled and the close evaled again: the token list one row short), and the plain arm, keeping
+  every finished turn, hit the flat 256-checkpoint cap with half the 32 GB byte budget free and evicted the message-end
+  stops the warm pass attaches. After (the walk ends on a stop draft, the close evals past the evaled stop row, the count
+  cap the budget over the model's recurrent state - 521 on this box): both arms cold 85 %, warm 100 %, 248 of 248 finished
+  turns kept on each.
 - **MEASURED (2026-10-20, `debug-jit`, `direction-grade`) - the speculative round on Metal through the common seats: the
   three carriers' five rows on the M5.** Apple M5 Max, `lcpp_bench --mtp-ab -p 32 -n 64 -r 2 --ngl 99` under
   `DAS_TUNE_MANIFEST=performance/m5.tune.json`, the sampled rows at temp 0.7 top-p 0.9, every file served whole; the 27B is
