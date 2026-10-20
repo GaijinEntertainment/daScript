@@ -15,6 +15,7 @@ require dasllama/dasllama_unicode
 require dasllama/dasllama_postag
 require dasllama/dasllama_textnorm
 require dasllama/dasllama_gpu_math   // sigmoid_f32
+require daslib/cmp
 
 //! Grapheme-to-phoneme conversion for the TTS front end, emitting the English inventory the
 //! StyleTTS2-lineage models were trained on - American by default, British under the
@@ -1598,11 +1599,7 @@ def private demote_weak_half(var toks : array<G2pToken>; a, b : int) {
     }
     return if (n < 2 || n_primary <= (n + 1) / 2)
     var inscope order <- [for (k in range(n)); k]
-    order |> sort() $(x, y) {
-        return prim[x] < prim[y] if (prim[x] != prim[y])
-        return weight[x] < weight[y] if (weight[x] != weight[y])
-        return idx[x] < idx[y]
-    }
+    order |> sort() <| cmp_by(prim[_], weight[_], idx[_])
     for (k in range(n / 2)) {
         let i = idx[order[k]]
         toks[i].phonemes = apply_stress(toks[i].phonemes, -0.5)

@@ -14,6 +14,7 @@ require daslib/ast_boost
 require daslib/rtti
 require strings
 require math
+require daslib/cmp
 
 // tags a payload arrival so it cannot collide with a child subtree hash, which folds in untagged
 let private TAG_PAYLOAD = 0x50415900ul
@@ -658,11 +659,7 @@ def private statements_by_hash(ix : DupeIndexer?) : array<int> {
     for (i in range(length(order))) {
         order[i] = i
     }
-    order |> sort() $(x, y) {
-        let hx = stmt_hash(ix, x)
-        let hy = stmt_hash(ix, y)
-        return hx != hy ? hx < hy : x < y
-    }
+    order |> sort() <| cmp_by(stmt_hash(ix, _), _)
     return <- order
 }
 
@@ -728,13 +725,7 @@ def private order_candidates(cands : array<Candidate>) : array<int> {
     for (i in range(length(cands))) {
         order[i] = i
     }
-    order |> sort() $(x, y) {
-        let cx = cands[x]
-        let cy = cands[y]
-        return cx.nodes > cy.nodes if (cx.nodes != cy.nodes)
-        return cx.a_lo < cy.a_lo if (cx.a_lo != cy.a_lo)
-        return cx.b_lo < cy.b_lo
-    }
+    order |> sort() <| cmp_by(-cands[_].nodes, cands[_].a_lo, cands[_].b_lo)
     return <- order
 }
 

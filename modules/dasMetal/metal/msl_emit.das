@@ -28,6 +28,7 @@ require daslib/rtti
 require daslib/strings_boost
 require strings
 require math
+require daslib/cmp
 
 struct public MslEmitConfig {
     kernel_name : string    // "" -> the method name (class-prefix stripped)
@@ -3719,9 +3720,7 @@ def private emit_user_fns(var ctx : MslCtx) : string {
         return ""
     }
     var order <- [for (i in range(length(ctx.ufns))); i; where !ctx.ufns[i].is_method]
-    order |> sort() $(a, b : int) : bool {
-        return ctx.ufns[a].msl_name < ctx.ufns[b].msl_name
-    }
+    order |> sort() <| cmp_by(ctx.ufns[_].msl_name)
     for (i in order) {
         emit_one_ufn(ctx, i)
     }
@@ -3845,11 +3844,7 @@ def public generate_msl(fn : FunctionPtr; var errors : array<string>; cfg : MslE
     var params : array<string>
     params |> reserve((ctx.members |> length) + (ctx.builtins_used |> length))
     var ordered <- [for (name, m in keys(ctx.members), values(ctx.members)); name; where !m.workgroup && !m.state]
-    ordered |> sort() $(a, b : string) : bool {
-        let ba = ctx.members?[a] ?. binding ?? 0
-        let bb = ctx.members?[b] ?. binding ?? 0
-        return ba < bb
-    }
+    ordered |> sort() <| cmp_by(ctx.members?[_]?.binding ?? 0)
     for (name in ordered) {
         let m = ctx.members[name]
         if (m.uniform) {

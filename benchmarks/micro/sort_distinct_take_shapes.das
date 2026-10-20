@@ -6,6 +6,7 @@ require daslib/linq        // spliced_push_heap / spliced_pop_heap (bounded-heap
 require dastest/testing_boost
 require strings
 require math               // min
+require daslib/cmp
 
 // Micro-bench: the emit shapes for a buffered/bucketed reducer XML chain whose whole row escapes but
 // only a FEW elements survive — `order_by(price) |> take(K)`, `distinct_by(dealer_id) |> order_by(price)
@@ -64,14 +65,14 @@ def sort_take_materialized(de : xml_node; k : int) : array<Car> {
     for (c in from_xml_node(de, type<Car>)) {
         if (length(heap) < k) {
             heap |> push_clone(c)
-            heap |> spliced_push_heap() <| $(a, b : Car) => a.price < b.price
+            heap |> spliced_push_heap() <| cmp_by(_.price)
         } elif (c.price < heap[0].price) {
-            heap |> spliced_pop_heap() <| $(a, b : Car) => a.price < b.price
+            heap |> spliced_pop_heap() <| cmp_by(_.price)
             heap[length(heap) - 1] := c
-            heap |> spliced_push_heap() <| $(a, b : Car) => a.price < b.price
+            heap |> spliced_push_heap() <| cmp_by(_.price)
         }
     }
-    sort(heap, $(a, b : Car) => a.price < b.price)
+    sort(heap, cmp_by(_.price))
     return <- heap
 }
 
@@ -88,15 +89,15 @@ def sort_take_deferred(de : xml_node; k : int) : array<Car> {
             let p = read_xml_field(cur, "price", xdef.price)
             if (length(heap) < k) {
                 heap |> push(Surr(price = p, node = cur))
-                heap |> spliced_push_heap() <| $(a, b : Surr) => a.price < b.price
+                heap |> spliced_push_heap() <| cmp_by(_.price)
             } elif (p < heap[0].price) {
-                heap |> spliced_pop_heap() <| $(a, b : Surr) => a.price < b.price
+                heap |> spliced_pop_heap() <| cmp_by(_.price)
                 heap[length(heap) - 1] = Surr(price = p, node = cur)
-                heap |> spliced_push_heap() <| $(a, b : Surr) => a.price < b.price
+                heap |> spliced_push_heap() <| cmp_by(_.price)
             }
         }
     }
-    sort(heap, $(a, b : Surr) => a.price < b.price)
+    sort(heap, cmp_by(_.price))
     var out : array<Car>
     out |> reserve(length(heap))
     for (s in heap) {
@@ -120,7 +121,7 @@ def distinct_order_take_materialized(de : xml_node; k : int) : array<Car> {
             buf |> push_clone(c)
         }
     }
-    sort(buf, $(a, b : Car) => a.price < b.price)
+    sort(buf, cmp_by(_.price))
     var out : array<Car>
     let lim = min(k, length(buf))
     out |> reserve(lim)
@@ -149,7 +150,7 @@ def distinct_order_take_deferred(de : xml_node; k : int) : array<Car> {
             }
         }
     }
-    sort(buf, $(a, b : Surr) => a.price < b.price)
+    sort(buf, cmp_by(_.price))
     var out : array<Car>
     let lim = min(k, length(buf))
     out |> reserve(lim)
@@ -261,14 +262,14 @@ def sort_take_array_clone(arr : array<Car>; k : int) : array<Car> {
     for (c in arr) {
         if (length(heap) < k) {
             heap |> push_clone(c)
-            heap |> spliced_push_heap() <| $(a, b : Car) => a.price < b.price
+            heap |> spliced_push_heap() <| cmp_by(_.price)
         } elif (c.price < heap[0].price) {
-            heap |> spliced_pop_heap() <| $(a, b : Car) => a.price < b.price
+            heap |> spliced_pop_heap() <| cmp_by(_.price)
             heap[length(heap) - 1] := c
-            heap |> spliced_push_heap() <| $(a, b : Car) => a.price < b.price
+            heap |> spliced_push_heap() <| cmp_by(_.price)
         }
     }
-    sort(heap, $(a, b : Car) => a.price < b.price)
+    sort(heap, cmp_by(_.price))
     return <- heap
 }
 
@@ -279,14 +280,14 @@ def sort_take_array_ptr(arr : array<Car>; k : int) : array<Car> {
         let p = unsafe(addr(c))
         if (length(heap) < k) {
             heap |> push(p)
-            heap |> spliced_push_heap() <| $(a, b : Car const?) => a.price < b.price
+            heap |> spliced_push_heap() <| cmp_by(_.price)
         } elif (c.price < heap[0].price) {
-            heap |> spliced_pop_heap() <| $(a, b : Car const?) => a.price < b.price
+            heap |> spliced_pop_heap() <| cmp_by(_.price)
             heap[length(heap) - 1] = p
-            heap |> spliced_push_heap() <| $(a, b : Car const?) => a.price < b.price
+            heap |> spliced_push_heap() <| cmp_by(_.price)
         }
     }
-    sort(heap, $(a, b : Car const?) => a.price < b.price)
+    sort(heap, cmp_by(_.price))
     var out : array<Car>
     out |> reserve(length(heap))
     for (p in heap) {
@@ -305,7 +306,7 @@ def distinct_order_take_array_clone(arr : array<Car>; k : int) : array<Car> {
             buf |> push_clone(c)
         }
     }
-    sort(buf, $(a, b : Car) => a.price < b.price)
+    sort(buf, cmp_by(_.price))
     var out : array<Car>
     let lim = min(k, length(buf))
     out |> reserve(lim)
@@ -325,7 +326,7 @@ def distinct_order_take_array_ptr(arr : array<Car>; k : int) : array<Car> {
             buf |> push(unsafe(addr(c)))
         }
     }
-    sort(buf, $(a, b : Car const?) => a.price < b.price)
+    sort(buf, cmp_by(_.price))
     var out : array<Car>
     let lim = min(k, length(buf))
     out |> reserve(lim)
@@ -396,14 +397,14 @@ def sort_take_array_ref(arr : array<Car>; k : int) : array<Car -const -&> {
     for (c in arr) {
         if (length(heap) < k) {
             heap |> push_clone(c)
-            heap |> spliced_push_heap() <| $(a, b) => a.price < b.price
+            heap |> spliced_push_heap() <| cmp_by(_.price)
         } elif (c.price < heap[0].price) {
-            heap |> spliced_pop_heap() <| $(a, b) => a.price < b.price
+            heap |> spliced_pop_heap() <| cmp_by(_.price)
             heap[length(heap) - 1] := c
-            heap |> spliced_push_heap() <| $(a, b) => a.price < b.price
+            heap |> spliced_push_heap() <| cmp_by(_.price)
         }
     }
-    sort(heap, $(a, b) => a.price < b.price)
+    sort(heap, cmp_by(_.price))
     return <- heap
 }
 
@@ -416,7 +417,7 @@ def distinct_order_take_array_ref(arr : array<Car>; k : int) : array<Car -const 
             buf |> push_clone(c)
         }
     }
-    sort(buf, $(a, b) => a.price < b.price)
+    sort(buf, cmp_by(_.price))
     var out : array<Car -const -&>
     let lim = min(k, length(buf))
     out |> reserve(lim)
@@ -574,10 +575,10 @@ def groupby_first_deferred(de : xml_node) : array<GBResult> {
     }
     var out : array<GBResult>
     out |> reserve(length(firstBrand))
-    for (i in range(length(firstBrand))) {
+    for (br, node in firstBrand, firstNode) {
         var it = default<Car>
-        build_xml_row(firstNode[i], it)
-        out |> push_clone(GBResult(brand = firstBrand[i], car = it))
+        build_xml_row(node, it)
+        out |> push_clone(GBResult(brand = br, car = it))
     }
     return <- out
 }
@@ -668,7 +669,7 @@ def reverse_distinct_by_deferred(de : xml_node) : array<Car> {
     for (v in values(tab)) {
         pairs |> push(v)
     }
-    sort(pairs, $(a, b) => a._0 > b._0)   // descending seq = reverse-discovery order
+    sort(pairs, cmp_by(-_._0))   // descending seq = reverse-discovery order
     var out : array<Car>
     out |> reserve(length(pairs))
     for (p in pairs) {

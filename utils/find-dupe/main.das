@@ -1,5 +1,6 @@
 options gen2
 
+require daslib/cmp
 require strings
 require daslib/clargs
 require daslib/fio
@@ -183,7 +184,7 @@ def sort_priority(j : JudgeJob; key : string) : int {
 
 
 def sort_jobs(var jobs : array<JudgeJob>; key : string) {
-    sort(jobs) <| $(a, b) => sort_priority(a, key) > sort_priority(b, key)
+    sort(jobs) <| cmp_by(-sort_priority(_, key))
 }
 
 

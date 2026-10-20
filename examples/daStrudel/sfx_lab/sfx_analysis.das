@@ -8,6 +8,7 @@ module sfx_analysis shared
 
 require minfft
 require math
+require daslib/cmp
 
 let private TWO_PI = 6.28318530717958647692
 let private FFT_N = 4096
@@ -399,7 +400,7 @@ def public analyze_seed(buf : array<float>; rate : int) : SeedFeatures {
         }
         sf.fundamental = fund
         sf.n_modes = clamp(length(peaks), 1, 8)
-        peaks |> sort() $(a, b) => a.hz < b.hz
+        peaks |> sort() <| cmp_by(_.hz)
         var logsum = 0.0
         var cnt = 0
         for (i in range(1, length(peaks))) {
@@ -438,7 +439,7 @@ def public top_peaks(buf : array<float>; rate, k : int) : array<SpecPeakHz> {
         SpecPeakHz(hz = float(i) * float(rate) / float(FFT_N), mag = mags[i]);
         where mags[i] > thresh && mags[i] > mags[i - 1] && mags[i] > mags[i + 1]]
     delete mags
-    cand |> sort() $(a, b) => a.mag > b.mag
+    cand |> sort() <| cmp_by(-_.mag)
     out <- [for (i in range(min(k, length(cand)))); cand[i]]
     delete cand
     return <- out

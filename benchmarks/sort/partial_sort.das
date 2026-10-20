@@ -3,6 +3,7 @@ options persistent_heap
 
 require _sort_common public
 require daslib/sort_boost
+require daslib/cmp
 
 // partial_sort(arr, N) — sort just the first N elements; remainder unspecified.
 // Compares against full sort over the same array. As N → length the two
@@ -31,9 +32,7 @@ def run_full_sort_then_take(b : B?; n : int; k : int) {
 def run_partial_sort_struct(b : B?; n : int; k : int) {
     b |> run("partial_sort_struct_N{k}/{n}", n) {
         var arr <- make_struct_array(n)
-        sort_boost::partial_sort(arr, k) $(x, y : KeyedItem) : bool {
-            return x.key < y.key
-        }
+        sort_boost::partial_sort(arr, k) <| cmp_by(_.key)
         if (arr[k - 1].key != expected_sorted_value_at(n, k - 1)) {
             b->failNow()
         }

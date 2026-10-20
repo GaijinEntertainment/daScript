@@ -13,6 +13,7 @@ require report
 require exchange
 require pipeline
 require ../common/parallel_workers.das
+require daslib/cmp
 
 
 // A file parses in a few milliseconds and a child process starts in a few hundred, so the
@@ -585,7 +586,7 @@ def main() { // nolint:STYLE037,STYLE038 — flat CLI validation ladder plus one
         for (k, v in keys(skip_counts), values(skip_counts)) {
             skip_pairs |> push((k, v))
         }
-        sort(skip_pairs) <| $(a, b) => a._0 < b._0
+        sort(skip_pairs) <| cmp_by(_._0)
         var parts : array<string>
         parts |> reserve(length(skip_pairs))
         for (kv in skip_pairs) {

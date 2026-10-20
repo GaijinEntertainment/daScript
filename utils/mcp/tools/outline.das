@@ -7,6 +7,7 @@ require grep_usage public
 require daslib/json
 require daslib/json_boost
 require daslib/strings_boost
+require daslib/cmp
 
 // Outline entry: kind + name + line + first-line text
 struct OutlineEntry {
@@ -281,9 +282,7 @@ def do_outline(file, glob_filter : string) : string {
     unsafe { delete parsed; }
     // sort entries within each file by line
     for (fp in file_order) {
-        sort(unsafe(by_file[fp])) $(a, b) {
-            return entries[a].line < entries[b].line
-        }
+        sort(unsafe(by_file[fp])) <| cmp_by(entries[_].line)
     }
     return make_tool_result(format_outline(entries, by_file, file_order))
 }

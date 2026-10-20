@@ -14,6 +14,7 @@ options _function_length = 0
 
 module llvm_jit shared private
 
+require daslib/cmp
 require llvm/daslib/llvm_boost
 require llvm/daslib/llvm_jit_intrin
 require llvm/daslib/llvm_jit_lower
@@ -587,7 +588,7 @@ class public LlvmJitVisitor : AstVisitor {
 
     def process_finally(expr : ExpressionPtr) {
         var blk <- collect_finally(expr, false, true)
-        sort(blk) <| $(a, b) => uid.get_block_name_ptr(a).publ() < uid.get_block_name_ptr(b).publ()
+        sort(blk) <| cmp_by(uid.get_block_name_ptr(_).publ())
         for (bl in blk) {
             finallyBlocks[bl] = append_basic_block("finally_block_at_{int(bl.at.line)}_")
         }
@@ -609,9 +610,7 @@ class public LlvmJitVisitor : AstVisitor {
         for (k, v in keys(labels), values(labels)) {
             sortedLabels |> push(SLabel(index = k, blk = v))
         }
-        sort(sortedLabels) $(a, b) {
-            return a.index < b.index
-        }
+        sort(sortedLabels) <| cmp_by(_.index)
     }
 
     // The impl-half ABI signature: args..., [capture], context, [cmres]. The ONE builder both the
@@ -6772,7 +6771,7 @@ class public LlvmJitVisitor : AstVisitor {
 
     def emit_block_value(blockExpr : ExpressionPtr; at : LineInfo) : LLVMOpaqueValue? {
         var captured <- capture_block(blockExpr)
-        sort(captured) <| $(a, b) => string(a.variable.name) < string(b.variable.name)
+        sort(captured) <| cmp_by(string(_.variable.name))
         // build block type
         var blk_fields <- build_block_type()
         blk_fields |> push(LLVMArrayType(types.LLVMFloat4Type(), 10u))

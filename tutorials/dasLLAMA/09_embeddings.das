@@ -5,6 +5,7 @@ require dasllama/dasllama
 require daslib/jobque_boost
 require daslib/fio
 require strings
+require daslib/cmp
 
 // Tutorial dasLLAMA-09: Embeddings
 //
@@ -123,7 +124,7 @@ def main() {   // nolint:STYLE038 - the tutorial is one linear read; the section
             var inscope cv <- embed(m, c)
             scored |> push((cosine(qv, cv), c))
         }
-        sort(scored) $(a, b) => a._0 > b._0
+        sort(scored) <| cmp_by(-_._0)
 
         print("ranked by similarity to \"{query}\":\n")
         for (s in scored) {

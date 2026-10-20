@@ -2,6 +2,7 @@ options gen2
 options persistent_heap
 
 require _sort_common public
+require daslib/cmp
 
 // Baseline: plain ``sort(arr, cmp)`` over int / user-struct arrays. Boris
 // flagged that sort itself had no dedicated benchmark; this fills the gap and
@@ -20,9 +21,7 @@ def run_sort_int(b : B?; n : int) {
 def run_sort_struct_by_key(b : B?; n : int) {
     b |> run("sort_struct_by_key/{n}", n) {
         var arr <- make_struct_array(n)
-        sort(arr) $(x, y : KeyedItem) : bool {
-            return x.key < y.key
-        }
+        sort(arr) <| cmp_by(_.key)
         if (arr[length(arr) - 1].key != 999) {
             b->failNow()
         }

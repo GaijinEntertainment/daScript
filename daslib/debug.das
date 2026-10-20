@@ -33,6 +33,7 @@ require daslib/jobque_boost
 require daslib/strings_boost
 require daslib/dap
 require daslib/debug_eval
+require daslib/cmp
 
 
 let private {
@@ -1450,11 +1451,7 @@ class private DAgent : DapiDebugAgent {
         if (idx >= 0) return false
         contexts |> emplace(DAContext(at = ctx_at(ctx), id = contextId, ctx = unsafe(addr(ctx))), 0)
         contextId++
-        contexts |> sort() $(a, b : DAContext) {
-            let aid = uint(a.ctx.category)
-            let bid = uint(b.ctx.category)
-            return aid > bid
-        }
+        contexts |> sort() <| cmp_by(-uint(_.ctx.category))
 
         if (server != null && server.threadsDone) {
             server->sendEvent("thread", JV(ThreadEvent(

@@ -1,5 +1,6 @@
 options gen2
 
+require daslib/cmp
 require dastest/testing_boost public
 
 require daslib/sql
@@ -69,9 +70,7 @@ def users_eq(a : array<User>; b : array<User>) : bool {
 }
 
 def sort_by_id(var users : array<User>) {
-    users |> sort() $(a, b) {
-        return a.Id < b.Id
-    }
+    users |> sort() <| cmp_by(_.Id)
 }
 
 [test]
@@ -134,15 +133,9 @@ def parity_json_select_named_tuple(t : T?) {
                      |> _select((Name = _.Name, Theme = _.Prefs.theme, Notify = _.Prefs.notify)))
         var m3 <- (arr |> _select((Name = _.Name, Theme = _.Prefs.theme, Notify = _.Prefs.notify)))
 
-        m1 |> sort() $(a, b) {
-            return a.Name < b.Name
-        }
-        m2 |> sort() $(a, b) {
-            return a.Name < b.Name
-        }
-        m3 |> sort() $(a, b) {
-            return a.Name < b.Name
-        }
+        m1 |> sort() <| cmp_by(_.Name)
+        m2 |> sort() <| cmp_by(_.Name)
+        m3 |> sort() <| cmp_by(_.Name)
 
         t |> equal(length(m1), 3, "json named-tuple: 3 rows")
         for (i in range(length(m1))) {
@@ -225,9 +218,7 @@ def fixture_accounts_array() : array<Account> {
 }
 
 def sort_accounts_by_id(var rows : array<Account>) {
-    rows |> sort() $(a, b) {
-        return a.Id < b.Id
-    }
+    rows |> sort() <| cmp_by(_.Id)
 }
 
 [test]

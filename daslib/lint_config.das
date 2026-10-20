@@ -44,6 +44,7 @@ require daslib/json
 require daslib/toml
 require daslib/ast_boost
 require daslib/strings_boost
+require daslib/cmp
 
 //! Path override env var. When ``DAS_LINT_CONFIG_PATH`` is set, the macro
 //! cascade reads that path instead of ``{get_das_root()}/.lint_config`` —
@@ -573,7 +574,7 @@ def public apply_lint_fixes(text : string; fixes : array<LintFix>) : tuple<text 
         continue if (f.line <= 0 || f.line > length(line_start) || f.last_line < f.line || f.last_line > length(line_start))
         spans |> push(int3(line_start[f.line - 1] + f.column, line_start[f.last_line - 1] + f.last_column, k))
     }
-    sort(spans) $(a, b) => a.x < b.x
+    sort(spans) <| cmp_by(_.x)
     var applied = 0
     let crlf = find(text, "\r\n") >= 0
     let tlen = length(text)

@@ -3,6 +3,7 @@ options no_unused_function_arguments = false
 options no_unused_block_arguments = false
 require daslib/algorithm
 require dastest/testing_boost public
+require daslib/cmp
 
 struct KeyedItem {
     key : int
@@ -27,9 +28,7 @@ def test_upper_bound(t : T?) {
     }
     t |> run("custom comparator") @(t : T?) {
         let a <- [9, 7, 5, 3, 1]
-        let idx = upper_bound(a, 5) $(lhs, rhs : int const) {
-            return lhs > rhs
-        }
+        let idx = upper_bound(a, 5) <| cmp_by(-_)
         t |> equal(idx, 3)
     }
     t |> run("empty array") @(t : T?) {
@@ -181,9 +180,7 @@ def test_is_sorted(t : T?) {
     }
     t |> run("custom comparator descending") @(t : T?) {
         let a <- [5, 4, 3, 2, 1]
-        let result = is_sorted(a) $(lhs, rhs : int const) {
-            return lhs > rhs
-        }
+        let result = is_sorted(a) <| cmp_by(-_)
         t |> equal(result, true)
     }
     t |> run("fixed-size array") @(t : T?) {
@@ -273,7 +270,7 @@ def test_min_element(t : T?) {
     }
     t |> run("custom comparator") @(t : T?) {
         let a <- [3, 1, 4, 1, 5]
-        let idx = min_element(a) $(lhs, rhs : int const) {
+        let idx = min_element(a) $(lhs, rhs : int const) {  // nolint:STYLE047
             return lhs > rhs  // find max via min_element with reversed comparator
         }
         t |> equal(idx, 4)
@@ -309,7 +306,7 @@ def test_max_element(t : T?) {
     }
     t |> run("custom comparator") @(t : T?) {
         let a <- [3, 1, 4, 1, 5]
-        let idx = max_element(a) $(lhs, rhs : int const) {
+        let idx = max_element(a) $(lhs, rhs : int const) {  // nolint:STYLE047
             return lhs > rhs  // find min via max_element with reversed comparator
         }
         t |> equal(idx, 1)

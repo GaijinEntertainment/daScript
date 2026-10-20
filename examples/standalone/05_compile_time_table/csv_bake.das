@@ -10,6 +10,7 @@ require daslib/fio
 require daslib/strings_boost
 require daslib/strings_convert
 require strings
+require daslib/cmp
 
 //! Compile-time CSV baking. `bake_curve("file.csv", N)` reads a two-column
 //! calibration file while the calling module COMPILES, resamples it onto N
@@ -48,7 +49,7 @@ def private read_points(path : string) : array<CalPoint> {
         }
     }
     // the file may arrive in any order; every read below walks it low to high
-    sort(points) $(a, b) => a.x < b.x
+    sort(points) <| cmp_by(_.x)
     return <- points
 }
 

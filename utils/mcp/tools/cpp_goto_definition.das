@@ -2,6 +2,7 @@ options gen2
 
 module cpp_goto_definition
 
+require daslib/cmp
 require cpp_common public
 require daslib/strings_boost public
 require daslib/fio public
@@ -80,15 +81,9 @@ def do_cpp_goto_definition(file, line_str, column_str : string) : string { // no
     // Rank: same file > same dir > shorter path
     let cursor_rel = make_relative_path(abs_path, server_root())
     let cursor_dir = dir_name(cursor_rel)
-    sort(candidates) $(a, b) {
-        let af = a.file == cursor_rel ? 0 : 1
-        let bf = b.file == cursor_rel ? 0 : 1
-        if (af != bf) return af < bf
-        let ad = dir_name(a.file) == cursor_dir ? 0 : 1
-        let bd = dir_name(b.file) == cursor_dir ? 0 : 1
-        if (ad != bd) return ad < bd
-        return length(a.file) < length(b.file)
-    }
+    sort(candidates) <| cmp_by(_.file == cursor_rel ? 0 : 1,
+                               dir_name(_.file) == cursor_dir ? 0 : 1,
+                               length(_.file))
     let max_show = min(CPP_MAX_GOTO_CANDIDATES, length(candidates))
     let output = build_string() $(var w) {
         if (length(candidates) > max_show) {

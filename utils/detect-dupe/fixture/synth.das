@@ -1,5 +1,5 @@
 options gen2
-options _nolint = "STYLE042"
+options _nolint = "STYLE042,STYLE047"
 
 def add_int(a, b : int) : int {
     return a + b

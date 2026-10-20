@@ -4,6 +4,7 @@ module unicode_text shared public
 require daslib/utf8_utils
 require daslib/unicode_text_data
 require strings
+require daslib/cmp
 
 let public UNICODE_TEXT_VERSION = "17.0.0" //! Bundled Unicode Character Database version.
 let public UNICODE_CASELESS_KEY_VERSION = "unicode-17.0.0-d145-1" //! Persisted comparison keys must record this version and be reindexed when it changes.
@@ -31,7 +32,7 @@ def private append_decomposition(codepoint : uint; var result : array<uint>) {
 
 def private order_marks(var result : array<uint>; start : int; var marks : array<UnicodeMark>) {
     if (length(marks) > 1) {
-        stable_sort(marks) $(a, b : UnicodeMark) : bool { return a.combining_class < b.combining_class }
+        stable_sort(marks) <| cmp_by(_.combining_class)
         for (mark, index in marks, count()) { result[start + index] = mark.codepoint }
     }
     clear(marks)

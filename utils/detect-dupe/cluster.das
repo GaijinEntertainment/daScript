@@ -2,6 +2,7 @@ options gen2
 
 require math
 require minhash
+require daslib/cmp
 
 
 struct public MemberRef {
@@ -193,11 +194,5 @@ def public sort_clusters(var clusters : array<Cluster>) {
 // Sort fuzzy pairs by similarity descending; tie-break on (a, b)
 // member locations so pair ordering is reproducible across runs.
 def public sort_pairs(var pairs : array<FuzzyPair>) {
-    sort(pairs) $(a, b) {
-        if (a.similarity != b.similarity) return a.similarity > b.similarity
-        let ka = member_key(a.a)
-        let kb = member_key(b.a)
-        if (ka != kb) return ka < kb
-        return member_key(a.b) < member_key(b.b)
-    }
+    sort(pairs) <| cmp_by(-_.similarity, member_key(_.a), member_key(_.b))
 }

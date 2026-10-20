@@ -7,8 +7,9 @@ require dasllama/dasllama
 require dasllama/dasllama_common   // apply_box_profile_runtime, set_metal_mode, the route knee setter
 require ?das_metal dasllama/dasllama_metal_prefill   // the driver's per-window stage report
 require ?das_metal dasllama/dasllama_metal_common    // the decode stage report, the per-kernel profile
-require ../performance/profile_common.das   // tune_gate - never time fallback kernels
+require ../performance/profile_common.das   // nolint:STYLE029,LINT019 - tune_gate, used only inside the das_metal static_if halves
 require daslib/clargs
+require daslib/cmp   // nolint:STYLE030,LINT019 - cmp_by, used only inside the das_metal static_if halves
 require daslib/strings_boost   // nolint:STYLE030,LINT019 - split, used only inside the das_metal static_if halves
 require strings   // nolint:STYLE030,LINT019 - to_int, used only inside the das_metal static_if halves
 require math   // nolint:STYLE030,LINT019 - min, used only inside the das_metal static_if halves
@@ -109,7 +110,7 @@ def private kernel_profile(m : Model; var s : Session; pool : array<int64>; var 
         for (r in rows) {
             total += r.ms
         }
-        sort(rows) $(x, y) => x.ms > y.ms
+        sort(rows) <| cmp_by(-_.ms)
         print("\n--- per-kernel profile, npos={n}: {length(rows)} distinct dispatch shapes, {total} ms summed (each node alone)\n")
         for (i in range(min(top, length(rows)))) {
             print("{rows[i].ms}  {rows[i].name}\n")

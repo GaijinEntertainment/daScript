@@ -16,6 +16,7 @@ require daslib/macro_boost
 require daslib/json_boost
 require daslib/defer
 require strings
+require daslib/cmp
 
 let LOG_REFACTOR = 100500
 
@@ -57,7 +58,7 @@ class ExtractMethodMacro : AstFunctionAnnotation {
             return false
         }
         var captured <- capture_block(call.arguments[1])
-        sort(captured) <| $(a, b) => string(a.variable.name) < string(b.variable.name)
+        sort(captured) <| cmp_by(string(_.variable.name))
         let call_name = string((call.arguments[0] as ExprConstString).value)
         let function_declaration = build_string() $(writer) {
             writer |> write("def ")

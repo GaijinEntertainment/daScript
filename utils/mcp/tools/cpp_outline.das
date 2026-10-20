@@ -5,6 +5,7 @@ module cpp_outline
 require cpp_common public
 require daslib/strings_boost public
 require strings public
+require daslib/cmp
 
 // Containment-tree node — `idx` indexes into the per-file `entries` array,
 // `children` indexes into the per-file `nodes` array.
@@ -78,12 +79,7 @@ def do_cpp_outline(file, glob_filter, mode : string) : string {
 def cpp_build_forest(entries : array<CppMatch>; idx_list : array<int>; var out_nodes : array<CppOutlineNode>; var out_roots : array<int>) {
     var sorted : array<int>
     sorted := idx_list
-    sort(sorted) $(a, b) {
-        let ea & = unsafe(entries[a])
-        let eb & = unsafe(entries[b])
-        if (ea.line != eb.line) return ea.line < eb.line
-        return ea.end_line > eb.end_line
-    }
+    sort(sorted) <| cmp_by(entries[_].line, -entries[_].end_line)
     out_nodes |> reserve(length(sorted))
     out_roots |> reserve(length(sorted))
     var stack : array<int>

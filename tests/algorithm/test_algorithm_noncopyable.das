@@ -3,10 +3,12 @@ options no_unused_function_arguments = false
 options no_unused_block_arguments = false
 require daslib/algorithm
 require dastest/testing_boost public
+require daslib/cmp
 
 // A non-copyable struct: the array<int> field prevents = (copy),
 // but clone (:=), move (<-), and swap all work.
 
+[ordered(id)]
 struct NoCopy {
     id   : int
     data : array<int>
@@ -15,8 +17,6 @@ struct NoCopy {
 def operator ==(a, b : NoCopy) : bool => a.id == b.id
 
 def operator !=(a, b : NoCopy) : bool => a.id != b.id
-
-def operator <(a, b : NoCopy) : bool => a.id < b.id
 
 // ---- erase_all with non-copyable type ----
 

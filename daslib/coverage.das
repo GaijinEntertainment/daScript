@@ -26,6 +26,7 @@ require strings
 require daslib/ast_boost
 require daslib/strings_boost
 require daslib/templates_boost
+require daslib/cmp
 
 
 let private builtin_files = fixed_array("fio.das", "ast.das", "builtin.das", "debugger.das", "network.das", "rtti.das")
@@ -657,9 +658,7 @@ def parse_lcov(lcov_path : string; exclude_prefixes : array<string>) : table<str
         }
     }
     for (file, starts in keys(funcStarts), values(funcStarts)) {
-        sort(starts) $(a, b) {
-            return a._0 < b._0
-        }
+        sort(starts) <| cmp_by(_._0)
         result |> get(file) $(var cov) {
             for (ln, hits in keys(cov.line_cov.lines), values(cov.line_cov.lines)) {
                 var bestFunc = ""

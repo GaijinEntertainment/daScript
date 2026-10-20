@@ -7,7 +7,7 @@ def test_sort(t : T?; var arr : auto(TT)) {
     for (i in range(1, len)) {
         t |> success(arr[i - 1] < arr[i])
     }
-    sort(arr, $(a, b) => b < a)
+    sort(arr, $(a, b) => b < a) // nolint:STYLE047
     for (i in range(1, len)) {
         t |> success(!(arr[i - 1] < arr[i]))
     }
@@ -24,7 +24,7 @@ def test_sort_dupes(t : T?; var arr : auto(TT); expected_sum : auto(SS)) {
     for (i in range(1, len)) {
         t |> success(!(arr[i] < arr[i - 1]))
     }
-    sort(arr, $(a, b) => a > b)
+    sort(arr, $(a, b) => a > b) // nolint:STYLE047
     var desc_sum = default<SS>
     for (v in arr) {
         desc_sum += SS(v)
@@ -37,7 +37,7 @@ def test_sort_dupes(t : T?; var arr : auto(TT); expected_sum : auto(SS)) {
 
 def test_sort_comp(t : T?; var arr : auto(TT)) {
     let len = length(arr)
-    sort(arr) $(a, b) {
+    sort(arr) $(a, b) { // nolint:STYLE047
         return a.x < b.x
     }
     for (i in range(1, len)) {
@@ -96,7 +96,7 @@ def test_stable(t : T?; var arr : array<Kv>) {
     for (i in range(len)) {
         arr[i].seq = i
     }
-    stable_sort(arr) $(a, b : Kv) : bool { return a.key < b.key; }
+    stable_sort(arr) $(a, b : Kv) : bool { return a.key < b.key; } // nolint:STYLE047
     for (i in range(1, len)) {
         t |> success(!(arr[i].key < arr[i - 1].key))                                  // sorted
         if (arr[i - 1].key == arr[i].key) {
@@ -121,7 +121,7 @@ def test_stable_sort_all(t : T?) {
         t |> success(!(ints[i] < ints[i - 1]))
     }
     var dim = fixed_array<int>(4, 1, 4, 2, 1, 3)
-    stable_sort(dim) $(a, b : int) : bool { return a < b; }
+    stable_sort(dim) $(a, b : int) : bool { return a < b; } // nolint:STYLE047
     for (i in range(1, length(dim))) {
         t |> success(!(dim[i] < dim[i - 1]))
     }

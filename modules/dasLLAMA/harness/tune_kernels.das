@@ -40,6 +40,7 @@ require daslib/strings_convert   // try_to_double - the serving-confirm tg parse
 require daslib/command_line      // get_das_exe - the serving-confirm child spawn
 require strings
 require dasllama/dasllama_env
+require daslib/cmp
 
 // The shipped-fallback registry: dasllama_tuned_fallbacks() maps every [tuned] kernel to the
 // perm it falls back to ON THIS BOX, so report() never restates one as a literal.
@@ -299,9 +300,7 @@ def private pick_finalists(names : array<string>; ok : array<bool>) {
             }
         }
     }
-    sort(cands) $(a, b) {
-        return a._0 < b._0
-    }
+    sort(cands) <| cmp_by(_._0)
     if (!empty(cands)) {
         let band = cands[0]._0 * (1.0lf + TUNE_WIN_MARGIN_PCT / 100.0lf)
         for (k in range(min(length(cands), MAX_FINALISTS))) {

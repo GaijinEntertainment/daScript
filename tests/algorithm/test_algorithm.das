@@ -3,6 +3,7 @@ options no_unused_function_arguments = false
 options no_unused_block_arguments = false
 require daslib/algorithm
 require dastest/testing_boost public
+require daslib/cmp
 
 // ---- unique ----
 
@@ -179,9 +180,7 @@ def test_lower_bound(t : T?) {
     t |> run("custom comparator") @(t : T?) {
         let a <- [9, 7, 5, 3, 1]
         // descending order: "less" means a > b
-        let idx = lower_bound(a, 5) $(lhs, rhs : int const) {
-            return lhs > rhs
-        }
+        let idx = lower_bound(a, 5) <| cmp_by(-_)
         t |> equal(idx, 2)
     }
     t |> run("empty array") @(t : T?) {
@@ -226,9 +225,7 @@ def test_binary_search(t : T?) {
     }
     t |> run("custom comparator") @(t : T?) {
         let a <- [9, 7, 5, 3, 1]
-        let found = binary_search(a, 5) $(lhs, rhs : int const) {
-            return lhs > rhs
-        }
+        let found = binary_search(a, 5) <| cmp_by(-_)
         t |> equal(found, true)
     }
     t |> run("empty array") @(t : T?) {

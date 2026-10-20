@@ -32,6 +32,7 @@ require strings
 require daslib/strings_boost   // join - the plane-size log line
 require daslib/enum_trait   // the plane table walks the KqFmt enum
 require math
+require daslib/cmp
 
 
 struct private LayoutSizes {
@@ -604,7 +605,7 @@ def conv_profile_report() {
         rows |> emplace(ConvRow(name = clone_string(k), nsec = v.nsec, elems = v.elems, calls = v.calls))
         total += v.nsec
     }
-    rows |> sort() $(a, b) => a.nsec > b.nsec
+    rows |> sort() <| cmp_by(-_.nsec)
     to_log(LOG_INFO, "dasLLAMA conv: {length(rows)} kinds, {double(total) / 1.0e6lf:.0f} ms accounted\n")
     for (r in rows) {
         let ms = double(r.nsec) / 1.0e6lf
@@ -698,7 +699,7 @@ def private log_conversion_report(t : Model; file_bytes : int64) {
         disk_total += v.disk
         served_total += s
     }
-    rows |> sort() $(a, b) => a.served_bytes - a.disk_bytes > b.served_bytes - b.disk_bytes
+    rows |> sort() <| cmp_by(-(_.served_bytes - _.disk_bytes))
     to_log(LOG_INFO, "dasLLAMA load: {file_bytes >> 20l} MB on disk; converted weights {disk_total >> 20l} MB -> {served_total >> 20l} MB served ({mb_delta(served_total, disk_total)}); {g_load_demotions} q8-rail demotion(s)\n")
     for (r in rows) {
         to_log(LOG_INFO, "dasLLAMA load:   {r.name}: {r.disk_bytes >> 20l} MB -> {r.served_bytes >> 20l} MB ({mb_delta(r.served_bytes, r.disk_bytes)}) over {r.tensors} tensor(s)\n")
@@ -1050,7 +1051,7 @@ def stream_job_span(t : Model; jobs : array<FillJob>; fmt : KqFmt; woff, n : int
             run |> push(i)
         }
     }
-    run |> sort() $(a, b : int) => jobs[a].woff < jobs[b].woff
+    run |> sort() <| cmp_by(jobs[_].woff)
     var end = empty(run) ? woff + 1l : jobs[run[0]].woff + jobs[run[0]].n
     var covered = !empty(run) && jobs[run[0]].woff <= woff
     for (k in range(1, length(run))) {
@@ -1144,7 +1145,7 @@ let DEVW_BAKE_PANEL_MAX = 48ul * 1024ul * 1024ul
 //! ascending woff — the ONE order both the table build and the plane fill walk
 def private devw_bake_jobs(t : Model; jobs : array<FillJob>) : array<FillJob> {
     var mine <- [for (j in jobs); j; where devw_bake_covers(t, j) && uint64(j.n * 2l) <= DEVW_BAKE_PANEL_MAX]
-    mine |> sort() $(a, b : FillJob) => a.woff < b.woff
+    mine |> sort() <| cmp_by(_.woff)
     return <- mine
 }
 

@@ -17,6 +17,7 @@ require daslib/debugger
 require daslib/fio
 require strings
 require daslib/ast
+require daslib/cmp
 
 struct PerfNode {
     //! Performance tree node with timing data.
@@ -294,7 +295,7 @@ class PerformanceProfilerAgent : ProfilerBaseAgent {
     def dump_top_heap_offenders(var flat : table<SimFunction?; FlatEntry>) {
         var entries <- [for (e in values(flat)); e; where e.own_heap > 0l]
         if (empty(entries)) return
-        entries |> sort() <| $(a, b) => a.own_heap > b.own_heap
+        entries |> sort() <| cmp_by(-_.own_heap)
         to_log(LOG_INFO, "\nTop heap offenders (own allocations):\n")
         var shown = 0
         for (e in entries) {
@@ -306,7 +307,7 @@ class PerformanceProfilerAgent : ProfilerBaseAgent {
     def dump_top_string_heap_offenders(var flat : table<SimFunction?; FlatEntry>) {
         var entries <- [for (e in values(flat)); e; where e.own_string_heap > 0l]
         if (empty(entries)) return
-        entries |> sort() <| $(a, b) => a.own_string_heap > b.own_string_heap
+        entries |> sort() <| cmp_by(-_.own_string_heap)
         to_log(LOG_INFO, "\nTop string-heap offenders (own allocations):\n")
         var shown = 0
         for (e in entries) {
@@ -493,7 +494,7 @@ class MemoryLeakProfilerAgent : ProfilerBaseAgent {
                 sorted |> push((v.size, k))
                 totalBytes += v.size
             }
-            sorted |> sort() <| $(a, b) => a._0 > b._0
+            sorted |> sort() <| cmp_by(-_._0)
             var ctxName = "<unnamed>"
             if (!empty(ctx.name)) {
                 ctxName = "{ctx.name}"

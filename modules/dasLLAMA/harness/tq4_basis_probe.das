@@ -11,6 +11,7 @@ require dasllama/dasllama_kv_codec  // the tq4 codec + FWHT rotation under probe
 require dasllama/dasllama_tokenizer
 require dasllama/dasllama_env
 require _tq4_probe_fixture
+require daslib/cmp
 
 // Basis A/B on REAL cache rows: run SmolLM2 over real text with an f32 KV cache, then re-quantize
 // every stored K (post-RoPE) and V head-row at 4 bits (production tq4 kernels) under four bases —
@@ -71,7 +72,7 @@ def measure_sorted(sL, sS : Session; c : Config; hs, npastL, npastS : int64; pai
                         for (p in range64(hs / 2l)) {
                             porder[p] = int(p)
                         }
-                        porder |> sort() $(oa, ob) => chrms[2 * oa] + chrms[2 * oa + 1] > chrms[2 * ob] + chrms[2 * ob + 1]
+                        porder |> sort() <| cmp_by(-(chrms[(_ * 2)] + chrms[((_ * 2) + 1)]))
                         for (p in range64(hs / 2l)) {
                             order[2l * p] = 2 * porder[p]
                             order[2l * p + 1l] = 2 * porder[p] + 1
@@ -80,7 +81,7 @@ def measure_sorted(sL, sS : Session; c : Config; hs, npastL, npastS : int64; pai
                         for (i in range64(hs)) {
                             order[i] = int(i)
                         }
-                        order |> sort() $(oa, ob) => chrms[oa] > chrms[ob]
+                        order |> sort() <| cmp_by(-chrms[_])
                     }
                     for (row in range64(npastS)) {
                         let off = row * kvd + h * hs
@@ -318,7 +319,7 @@ def main {   // nolint:STYLE037,STYLE038 — flat probe driver: every basis arm 
                     for (i in range64(hs)) {
                         order[i] = int(i)
                     }
-                    order |> sort() $(oa, ob) => chrms[oa] > chrms[ob]
+                    order |> sort() <| cmp_by(-chrms[_])
                     var aa & = acc_s[side]
                     for (row in range64(npast)) {
                         let off = row * kvd + h * hs
@@ -365,7 +366,7 @@ def main {   // nolint:STYLE037,STYLE038 — flat probe driver: every basis arm 
             var inscope vs : array<double>
             vs := a.vprof
             // top-8 coefficient variance share (sorted descending)
-            vs |> sort() $(x, yy) => x > yy
+            vs |> sort() <| cmp_by(-_)
             var t8 = 0.0lf
             for (i in range64(8l)) {
                 t8 += vs[i]

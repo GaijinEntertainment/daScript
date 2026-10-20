@@ -40,6 +40,7 @@ require daslib/fio
 require daslib/strings_boost
 require strings
 require math
+require daslib/cmp
 
 // LSP SymbolKind
 let SK_CLASS = 5
@@ -920,7 +921,7 @@ def private run_document_symbol(file, project : string) : DocSymbolsResult {
         res.message = "file does not compile — fix diagnostics first"
     }
     // declaration order, not walk order
-    res.symbols |> sort() $(a, b) => a._range.start.line < b._range.start.line
+    res.symbols |> sort() <| cmp_by(_._range.start.line)
     return <- res
 }
 

@@ -3,6 +3,7 @@ options indenting = 4
 
 module ladder_store public
 
+require daslib/cmp
 require dasllama/dasllama_exchange_schema public   // BoxIdentity/SidecarInfo are store API types
 require daslib/sql
 require sqlite/sqlite_migrate public
@@ -740,7 +741,7 @@ def list_versions(db : SqlRunner) : array<int> {
             out |> push(v)
         }
     }
-    sort(out) $(a, b) => a > b
+    sort(out) <| cmp_by(-_)
     return <- out
 }
 

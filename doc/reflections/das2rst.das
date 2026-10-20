@@ -65,6 +65,7 @@ require daslib/ast_used
 require daslib/constant_expression
 require daslib/uriparser_boost
 require daslib/sort_boost
+require daslib/cmp
 require daslib/enum_trait
 require daslib/cpp_bind
 require daslib/decs
@@ -1108,6 +1109,13 @@ def document_module_sort_boost(_root : string) {
     document("Boost package for the builtin sort", mod, "sort_boost.rst", groups)
 }
 
+def document_module_cmp(_root : string) {
+    var mod = find_module("cmp")
+    var groups <- array<DocGroup>(
+    )
+    document("Comparisons and orderings", mod, "cmp.rst", groups)
+}
+
 def document_module_enum_trait(_root : string) {
     var mod = find_module("enum_trait")
     var groups <- array<DocGroup>(
@@ -2149,6 +2157,7 @@ def main {  // nolint:STYLE038 — flat one-call-per-documented-module dispatch 
     document_module_safe_addr(root)
     document_module_soa(root)
     document_module_sort_boost(root)
+    document_module_cmp(root)
     document_module_static_let(root)
     document_module_stbimage_boost(root)
     document_module_stbimage_ttf(root)

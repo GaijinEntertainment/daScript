@@ -1,4 +1,5 @@
 options gen2
+options _nolint = "STYLE047"
 
 
 // ── Alpha-rename equivalence ──────────────────────────────────────────

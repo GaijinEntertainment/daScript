@@ -31,6 +31,7 @@ require live/live_gc public
 require live_host
 require math
 require strings
+require daslib/cmp
 
 var public live_window : GLFWwindow?
 
@@ -400,9 +401,7 @@ def public sort_play_events(var events : array<MouseEventWire>) {
     //! the queue forward, so out-of-order input would silently drop earlier
     //! events; sort first. Equal-``t_ms`` ordering is unspecified (the
     //! underlying ``sort()`` is qsort, not stable).
-    events |> sort() $(a, b : MouseEventWire) {
-        return a.t_ms < b.t_ms
-    }
+    events |> sort() <| cmp_by(_.t_ms)
 }
 
 [live_command(description="Play a scripted mouse timeline. Args: events array of (t_ms, kind, x, y, button, action)")]
@@ -843,9 +842,7 @@ def public sort_key_play_events(var events : array<KeyEventWire>) {
     //! Sort a key_play timeline by ``t_ms`` ascending. Same rationale as
     //! ``sort_play_events`` for mouse: the queue is walked forward, so
     //! out-of-order input would silently drop earlier events.
-    events |> sort() $(a, b : KeyEventWire) {
-        return a.t_ms < b.t_ms
-    }
+    events |> sort() <| cmp_by(_.t_ms)
 }
 
 [live_command(description="Play a scripted key/char timeline. Args: events array of (t_ms, kind, keycode, scancode, mods, codepoint)")]

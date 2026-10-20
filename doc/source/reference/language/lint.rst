@@ -3530,6 +3530,39 @@ declaration, control flow, ``delete``, ``unsafe``, an assignment or a move, a
 postfix ``if``, a comment on the arm, or a brace outside a string, and when the one-line
 arm would pass the 100-column limit.
 
+STYLE047 — a hand-written key-by-key ordering
+=============================================
+
+A comparator block or an ``operator <`` that compares two values one key at a time - a guard
+``if (a.k != b.k) return a.k < b.k`` per key, a ``k != k' ? k < k' : ...`` ternary, or a single
+``a.k < b.k`` - is the ordering ``daslib/cmp`` writes::
+
+    // Bad - STYLE047 on both
+    def operator <(a, b : Point) : bool {
+        if (a.x != b.x) return a.x < b.x
+        return a.y < b.y
+    }
+    sort(players) $(a, b) {
+        if (a.score != b.score) {
+            return a.score > b.score
+        }
+        return a.name < b.name
+    }
+
+    // Good
+    [ordered]
+    struct Point {
+        x : int
+        y : int
+    }
+    sort(players) <| cmp_by(-_.score, _.name)
+
+An ``operator <`` is reported when every key is a field of the structure or a function of it,
+which ``[ordered(field, field = greater, key = function)]`` can list. ``--fix`` annotates the
+structure and deletes the operator, rewrites a comparator to ``cmp_by``, and adds
+``require daslib/cmp`` when the module does not see it. Silent when the two sides of a key
+read differently, on ``<=`` and ``>=``, and on any statement besides lets, guards and returns.
+
 -----
 Tests
 -----

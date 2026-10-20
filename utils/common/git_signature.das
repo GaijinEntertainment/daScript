@@ -12,6 +12,7 @@ module git_signature
 require strings public
 require daslib/fio public
 require daslib/strings_boost public
+require daslib/cmp
 
 // Repo-relative path with `/`-separators; falls back to `path` on error
 // (mirrors `make_relative_path` from utils/mcp/tools/common.das, kept
@@ -78,7 +79,7 @@ def public compute_filesystem_signature(
         }
     }
     if (!any_dir) return ""
-    sort(collected) <| $(a, b) => a._0 < b._0
+    sort(collected) <| cmp_by(_._0)
     let combined = build_string() $(var w) {
         for (item in collected) {
             w |> write("{item._0}:{item._1}\n")
@@ -135,7 +136,7 @@ def public compute_signature(
     }
     // Sort so the tree-hash fold below produces an order-independent
     // signature regardless of how the caller ordered `search_dirs_abs`.
-    sort(dirs_rel) <| $(a, b) => a < b
+    sort(dirs_rel)
 
     var tree_parts : array<string>
     for (rel in dirs_rel) {

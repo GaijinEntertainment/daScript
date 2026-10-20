@@ -8,6 +8,7 @@ require tl_lod
 require strings
 require daslib/fio
 require daslib/json_boost
+require daslib/cmp
 
 // Rigid-format fast path over traceSave output (job_que.cpp): one event per line, fixed key
 // order, kind names unique by first letter. No JSON DOM for events — only the small
@@ -301,9 +302,7 @@ def public load_trace(path : string; var doc : TraceDoc) : bool { // nolint:STYL
             }
             e.meta = ev_meta(kind, ev_stage(e.meta), nstages, cat)
         }
-        lane.ev |> sort() $(a, b : Ev) {
-            return a.t0 < b.t0
-        }
+        lane.ev |> sort() <| cmp_by(_.t0)
         var mx = 0.0lf
         for (e in lane.ev) {
             if (double(e.dur) > mx) {

@@ -23,6 +23,7 @@ require daslib/contracts
 require math
 require strings
 require daslib/defer
+require daslib/cmp
 
 typedef ComponentHash = uint64  //! Hash value of the ECS component type
 typedef TypeHash = uint64       //! Hash value of the individual type
@@ -167,7 +168,7 @@ def public describe(info : CTypeInfo) {
 
 def public operator .(var cmp : ComponentMap; name : string) : ComponentValue& {
     //! Accesses a component value by name.
-    let idx = lower_bound(cmp, ComponentValue(name = name)) <| $(x, y) => x.name < y.name
+    let idx = lower_bound(cmp, ComponentValue(name = name)) <| cmp_by(_.name)
     if (!(idx < length(cmp) && cmp[idx].name == name)) {
         cmp |> push(ComponentValue(name = name), idx)
     }
@@ -358,7 +359,7 @@ def public serialize(var arch : Archive; var src : Component) {
 def public register_decs_stage_call(name : string; pcall : PassFunction) {
     //! Registration of a single pass callback. This is a low-level function, used by decs_boost macros.
     var dpass <- DecsPass(name = name)
-    let idx = lower_bound(decsPasses, dpass) <| $(x, y) => x.name < y.name
+    let idx = lower_bound(decsPasses, dpass) <| cmp_by(_.name)
     if (idx < length(decsPasses) && decsPasses[idx].name == name) {
         decsPasses[idx].calls |> push(pcall)
     } else {
@@ -371,7 +372,7 @@ def public decs_stage(name : string) {
     //! Invokes specific ECS pass.
     //! `commit` is called before and after the invocation.
     commit()
-    let idx = lower_bound(decsPasses, DecsPass(name = name)) <| $(x, y) => x.name < y.name
+    let idx = lower_bound(decsPasses, DecsPass(name = name)) <| cmp_by(_.name)
     if (idx < length(decsPasses) && decsPasses[idx].name == name) {
         for (cll in decsPasses[idx].calls) {
             invoke(cll)
@@ -594,7 +595,7 @@ def private req_hash(erq : EcsRequest) {
 
 def public has(arch : Archetype; name : string) {
     //! Returns true if object has specified subobjec.
-    return arch.components |> binary_search(Component(name = name)) <| $(x, y) => x.name < y.name
+    return arch.components |> binary_search(Component(name = name)) <| cmp_by(_.name)
 }
 
 def private can_process_request(var erq : EcsRequest; arch : Archetype) {
@@ -1186,7 +1187,7 @@ def public set(var cmp : ComponentMap; name : string; value : auto(TT)) {
     //! If value already exists, it is overwritten. If already existing value type is not the same - panic.
     concept_assert(typeinfo sizeof(value) <= typeinfo sizeof(cmp[0].data), "component type {typeinfo typename(value)} is too big for ComponentValue.data, which holds float4[4]")
     let cv = make_component(name, value)
-    let idx = lower_bound(cmp, ComponentValue(name = name)) <| $(x, y) => x.name < y.name
+    let idx = lower_bound(cmp, ComponentValue(name = name)) <| cmp_by(_.name)
     if (idx < length(cmp) && cmp[idx].name == name) {
         if (cmp[idx].info.hash != cv.info.hash) {
             panic("decs: set component {name} type mismatch, expecting {describe(cmp[idx].info)} vs vs {describe(cv.info)} MNH={cv.info.mangledName} hash={cv.info.hash} size={cv.info.size}")
@@ -1224,12 +1225,12 @@ def public set_direct(var arch : Archetype; name : string; eidx : int; value : a
 
 def public has(cmp : ComponentMap; name : string) {
     //! Returns true if component map has specified component.
-    return binary_search(cmp, ComponentValue(name = name)) <| $(x, y) => x.name < y.name
+    return binary_search(cmp, ComponentValue(name = name)) <| cmp_by(_.name)
 }
 
 def public remove(var cmp : ComponentMap; name : string) {
     //! Removes specified value from the component map.
-    let idx = lower_bound(cmp, ComponentValue(name = name)) <| $(x, y) => x.name < y.name
+    let idx = lower_bound(cmp, ComponentValue(name = name)) <| cmp_by(_.name)
     if (idx < length(cmp) && cmp[idx].name == name) {
         cmp |> erase(idx)
     }

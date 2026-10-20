@@ -1,5 +1,6 @@
 options gen2
 
+require daslib/cmp
 require dastest/testing_boost public
 
 require daslib/sql
@@ -65,15 +66,11 @@ def fixture_orders() : array<Order> {
 def sort_left(var rows : array<auto(R)>) {
     // Both Alice rows are content-identical ((Name=Alice, HasOrder=true)),
     // so ordering between them doesn't matter — sort by Name alone.
-    rows |> sort() $(a, b) {
-        return a.Name < b.Name
-    }
+    rows |> sort() <| cmp_by(_.Name)
 }
 
 def sort_right(var rows : array<auto(R)>) {
-    rows |> sort() $(a, b) {
-        return a.OrderId < b.OrderId
-    }
+    rows |> sort() <| cmp_by(_.OrderId)
 }
 
 def sort_full(var rows : array<auto(R)>) {
@@ -87,12 +84,7 @@ def sort_full(var rows : array<auto(R)>) {
 }
 
 def sort_cross(var rows : array<auto(R)>) {
-    rows |> sort() $(a, b) {
-        if (a.UserName != b.UserName) {
-            return a.UserName < b.UserName
-        }
-        return a.OrderId < b.OrderId
-    }
+    rows |> sort() <| cmp_by(_.UserName, _.OrderId)
 }
 
 [test]

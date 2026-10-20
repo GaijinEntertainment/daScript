@@ -8,6 +8,7 @@ module strudel_midi shared public
 
 require daslib/fio
 require math
+require daslib/cmp
 
 // ─── Data Structures ───
 
@@ -320,9 +321,6 @@ def merge_tracks(midi : MidiFile) : array<MidiEvent> {
             merged |> push(e)
         }
     }
-    sort(merged) $(a, b) {
-        if (a.tick != b.tick) return a.tick < b.tick
-        return a.seq < b.seq
-    }
+    sort(merged) <| cmp_by(_.tick, _.seq)
     return <- merged
 }

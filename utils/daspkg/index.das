@@ -14,6 +14,7 @@ require daslib/ansi_colors
 
 require utils
 require package_runner
+require daslib/cmp
 
 let INDEX_REPO = "github.com/borisbat/daspkg-index"
 let INDEX_SLUG = "borisbat/daspkg-index"   // owner/repo for gh commands
@@ -301,10 +302,7 @@ def cmd_search(root, query : string; json : bool = false) : int {
         }
     }
     // sort by score (lower = better)
-    sort(results) $(a, b : SearchResult) : bool {
-        if (a.score != b.score) return a.score < b.score
-        return a.name < b.name
-    }
+    sort(results) <| cmp_by(_.score, _.name)
     if (json) {
         var infos : array<PackageInfo>
         for (r in results) {
@@ -336,9 +334,7 @@ def cmd_search_all(root : string; json : bool = false) : int {
     }
     // collect and sort by name
     var names <- [for (name in keys(index)); name]
-    sort(names) $(a, b : string) : bool {
-        return a < b
-    }
+    sort(names)
     if (json) {
         var infos : array<PackageInfo>
         for (name in names) {
@@ -515,9 +511,7 @@ def serialize_index(index : table<string; IndexEntry>) : string {
         var jv <- entry_to_jv(name, entry)
         name_to_jv |> emplace(name => jv)
     }
-    sort(name_to_jv) $(a, b : tuple<string; JsonValue?>) : bool {
-        return a._0 < b._0
-    }
+    sort(name_to_jv) <| cmp_by(_._0)
     var arr : array<JsonValue?>
     arr |> reserve(length(name_to_jv))
     for (p in name_to_jv) {
@@ -551,9 +545,7 @@ def private sorted_index_pairs(index : table<string; IndexEntry>; var names : ar
     for (i in range(length(sorted_names))) {
         order |> push(i)
     }
-    sort(order) $(a, b : int) : bool {
-        return sorted_names[a] < sorted_names[b]
-    }
+    sort(order) <| cmp_by(sorted_names[_])
     names |> reserve(length(order))
     entries |> reserve(length(order))
     for (i in order) {
@@ -580,9 +572,7 @@ def private tag_index_lines(names : array<string>; entries : array<IndexEntry>) 
         }
     }
     var tag_names <- [for (t in keys(all_tags)); t]
-    sort(tag_names) $(a, b : string) : bool {
-        return a < b
-    }
+    sort(tag_names)
     for (t in tag_names) {
         if (all_tags |> key_exists(t)) {
             unsafe(lines |> push("{t}\t{join(all_tags[t], ", ")}"))

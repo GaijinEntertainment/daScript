@@ -31,6 +31,7 @@ options _dasllama_internal = true
 //         normal run stamps it (the round-trip; point DAS_TUNE_MANIFEST somewhere writable
 //         first).
 
+require daslib/cmp
 require dasllama/dasllama_math
 require dasllama/dasllama_par   // maybe_parallel_for_indexed - the gemv seat races at the engine's decode shape
 require daslib/jobque_boost
@@ -304,7 +305,7 @@ def kq_gemv_entry(fmt : int64) : string => replace(kq_tile_entry(fmt), "_tile_ge
 [arch(at = "../ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md#gemv-seat")]
 def private kq_gemv_seat(fmt : int64; winner : int; names : array<string>; vmr : array<int64>; tile, gemv : array<double>) : string {
     var cand <- [for (i in range(length(names))); i; where vmr[i] == vmr[winner] && tile[i] < 1.0e29lf]
-    cand |> sort() $(a, b) => tile[a] < tile[b]
+    cand |> sort() <| cmp_by(tile[_])
     if (length(cand) > 2) {
         cand |> resize(2)
     }

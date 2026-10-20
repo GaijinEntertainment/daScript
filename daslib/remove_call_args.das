@@ -14,6 +14,7 @@ require daslib/ast
 require daslib/rtti
 require daslib/ast_boost
 require daslib/templates_boost
+require daslib/cmp
 
 
 [macro_function]
@@ -29,7 +30,7 @@ def get_remove_indices(func) {
 def get_remove_indices(args : AnnotationArgumentList) {
     var indices <- [for (arg in args); arg.iValue; where arg.name == "arg"]
     if (!empty(indices)) {
-        indices |> sort() <| $(a, b) => a > b
+        indices |> sort() <| cmp_by(-_)
     }
     return <- indices
 }

@@ -20,6 +20,7 @@ require log
 require math
 require dastest_clargs
 require worker_policy
+require daslib/cmp
 
 options multiple_contexts
 options threadlock_context = true   // suite.das's sub_test_any_func / sub_test_any_lambda invoke back into this context from a test file's context
@@ -751,9 +752,7 @@ def main() : int {  // nolint:STYLE037,STYLE038 - CLI dispatch, one arm per mode
         while (bidx < totalFiles) {
             let hi = min(bidx + batchSize, totalFiles)
             let bn = hi - bidx
-            var bUris : array<string>
-            var bFiles : array<string>
-            var bSingles : array<string>
+            var bUris, bFiles, bSingles : array<string>
             bUris |> reserve(bn)
             bFiles |> reserve(bn)
             bSingles |> reserve(bn)
@@ -872,9 +871,7 @@ def private print_timing_outliers() {
     }
     let stddev = sqrt(variance / double(n))
     // sort descending by time
-    sort(fileTimings) $(a, b) {
-        return a.dt > b.dt
-    }
+    sort(fileTimings) <| cmp_by(-_.dt)
     let count = min(timingOutliers, n)
     let threshold = mean + 2.0lf * stddev
     // only print if there are actual outliers (top entry above threshold) or if few files

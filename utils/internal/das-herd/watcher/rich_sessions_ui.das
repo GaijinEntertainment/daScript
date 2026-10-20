@@ -5,6 +5,7 @@ options no_unused_function_arguments = false
 
 module rich_sessions_ui
 
+require daslib/cmp
 require imgui/imgui_harness
 require imgui/imgui_icons
 require imgui/imgui_drawlist_builtin
@@ -351,11 +352,7 @@ def draw_herd_cards() { // nolint:STYLE037,STYLE038 — flat draw list; the widg
     for (registry_index in range(length(g_client.herd_sessions))) {
         order |> push(registry_index)
     }
-    sort(order) $(a, b) {
-        let a_rank = g_client.herd_sessions[a].state == "running" ? 0 : 1
-        let b_rank = g_client.herd_sessions[b].state == "running" ? 0 : 1
-        return a_rank != b_rank ? a_rank < b_rank : a < b
-    }
+    sort(order) <| cmp_by(g_client.herd_sessions[_].state == "running" ? 0 : 1, _)
     for (index in order) {
         let record & = unsafe(g_client.herd_sessions[index])
         if ((record.state == "closed" && !record.archived)

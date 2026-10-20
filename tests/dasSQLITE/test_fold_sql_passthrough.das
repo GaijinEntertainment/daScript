@@ -1,5 +1,6 @@
 options gen2
 
+require daslib/cmp
 require dastest/testing_boost public
 
 require daslib/sql
@@ -82,8 +83,8 @@ def fold_group_by(t : T?) {
         var g_sql  <- _sql(db |> select_from(type<Car>)
                              |> _group_by(_.brand)
                              |> _select((Brand = _._0, N = _._1 |> length)))
-        g_fold |> sort() <| $(a, b) => a.Brand < b.Brand
-        g_sql  |> sort() <| $(a, b) => a.Brand < b.Brand
+        g_fold |> sort() <| cmp_by(_.Brand)
+        g_sql  |> sort() <| cmp_by(_.Brand)
         t |> equal(length(g_fold), length(g_sql), "group_by: _fold ≡ _sql group count")
         for (i in range(length(g_fold))) {
             t |> equal(g_fold[i].Brand, g_sql[i].Brand, "group[{i}].Brand: _fold ≡ _sql")
