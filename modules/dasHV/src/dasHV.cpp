@@ -1776,6 +1776,17 @@ char * das_httpreq_get_url_encoded ( HttpRequest * req, const char * key, Contex
     return context->allocateString(val, at);
 }
 
+template <typename T, typename StopFn>
+static void stop_live ( StopFn stopFn ) {
+    vector<shared_ptr<T>> live;
+    HandleRegistry<T>::instance().for_each_live([&]( Handle<T>, const shared_ptr<T> & p ) {
+        live.push_back(p);
+    });
+    for ( auto & p : live ) {
+        stopFn(*p);
+    }
+}
+
 class Module_HV : public Module {
 public:
     Module_HV() : Module("dashv") {
@@ -2172,6 +2183,8 @@ public:
 
     }
     ~Module_HV() {
+        stop_live<hv::WebSocketServer>([]( hv::WebSocketServer & server ) { server.stop(); });
+        stop_live<hv::WebSocketClient>([]( hv::WebSocketClient & client ) { client.stop(true); });
         hv::async::cleanup();
     }
     virtual ModuleAotType aotRequire ( TextWriter & tw ) const override {

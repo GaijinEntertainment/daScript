@@ -39,3 +39,15 @@ synchronous; queuing avoids recursive pumping.
 
 Finish restores callbacks and releases the current admission token before `End`.
 `End` can synchronously start the next request, which needs its own registration.
+
+## Module shutdown stops libhv threads
+
+The handle registries own every server and client adapter, and a registry is a
+static, destroyed after `main` returns. libhv destroys its default logger from an
+`atexit` handler registered on its first log line, after the registries exist, so
+it runs before them, while a loop thread may still log.
+`Module_HV`'s destructor runs inside `Module::Shutdown`, before `main` returns, so it
+stops every live server and client there: `stop()` joins the loop threads, and the
+adapters' own destructors find them stopped. The live adapters are collected first
+and stopped outside the registry lock, because loop-thread callbacks look handles up
+through that lock.
