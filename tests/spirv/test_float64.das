@@ -20,8 +20,8 @@ options indenting = 4
 // member fails closed rather than mis-laying-out against std140 sizes that are hardcoded 4-byte. The
 // double lives in registers, which is exactly what the terrain-noise closure needs of it.
 //
-// A 64-bit INT stays unsupported on every rail (arith_width_ok admits width 64 only for the float
-// class); tests/spirv/_fail_closed pins that.
+// 64-bit INTs have their own rail (scalars, constants, SSBO elements,
+// atomics): test_int64.das.
 
 require dastest/testing_boost public
 require _spirv_common               // validate_spirv

@@ -186,6 +186,23 @@ def public subpassLoad(i : subpassInput) : float4 => float4(0.0, 0.0, 0.0, 0.0)
 [unused_argument(value), sideeffects] def public atomicMin(mem : uint &; value : uint) : uint => mem
 [unused_argument(value), sideeffects] def public atomicMax(mem : int &; value : int) : int => mem
 [unused_argument(value), sideeffects] def public atomicMax(mem : uint &; value : uint) : uint => mem
+// 64-bit integer atomics (OpCapability Int64Atomics; device feature
+// shaderBufferInt64Atomics). The classic use is a visibility buffer:
+// atomicMax(pixel, depth << 32 | id) keeps the nearest triangle.
+[unused_argument(value), sideeffects]
+def public atomicMax(mem : uint64&; value : uint64) : uint64 => mem
+[unused_argument(value), sideeffects]
+def public atomicMax(mem : int64&; value : int64) : int64 => mem
+[unused_argument(value), sideeffects]
+def public atomicMin(mem : uint64&; value : uint64) : uint64 => mem
+[unused_argument(value), sideeffects]
+def public atomicMin(mem : int64&; value : int64) : int64 => mem
+[unused_argument(value), sideeffects]
+def public atomicAdd(mem : uint64&; value : uint64) : uint64 => mem
+[unused_argument(value), sideeffects]
+def public atomicOr(mem : uint64&; value : uint64) : uint64 => mem
+[unused_argument(value), sideeffects]
+def public atomicExchange(mem : uint64&; value : uint64) : uint64 => mem
 [unused_argument(value), sideeffects] def public atomicAnd(mem : int &; value : int) : int => mem
 [unused_argument(value), sideeffects] def public atomicAnd(mem : uint &; value : uint) : uint => mem
 [unused_argument(value), sideeffects] def public atomicOr(mem : int &; value : int) : int => mem

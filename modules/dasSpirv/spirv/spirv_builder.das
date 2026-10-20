@@ -706,6 +706,46 @@ def public const_double(var m : SpirvModule; v : double) : uint {
     return id
 }
 
+// 64-bit integer OpConstants: like const_double, the literal spans
+// TWO words, low-order first (SPIR-V 2.2.1). Signed and unsigned are
+// distinct types, so they key separately in the pool.
+def public const_int64(var m : SpirvModule; v : int64) : uint {
+    let bits = uint64(v)
+    let key = "ci64_{bits}"
+    let ex = m.const_pool?[key] ?? 0u
+    return ex if (ex != 0u)
+    let it = type_int(m, 64u, 1u)
+    let id = alloc_id(m)
+    let lo = uint(bits & 0xfffffffful)
+    let hi = uint(bits >> 32ul)
+    emit(m, SEC_TYPES, SpvOp.Constant, it, id, lo, hi)
+    m.const_pool |> insert(key, id)
+    return id
+}
+
+def public const_uint64(var m : SpirvModule; v : uint64) : uint {
+    let key = "cu64_{v}"
+    let ex = m.const_pool?[key] ?? 0u
+    return ex if (ex != 0u)
+    let ut = type_int(m, 64u, 0u)
+    let id = alloc_id(m)
+    let lo = uint(v & 0xfffffffful)
+    let hi = uint(v >> 32ul)
+    emit(m, SEC_TYPES, SpvOp.Constant, ut, id, lo, hi)
+    m.const_pool |> insert(key, id)
+    return id
+}
+
+// A 64-bit integer atomic (OpAtomic* on an OpTypeInt 64 pointer)
+// needs OpCapability Int64Atomics on top of Int64 (device features
+// shaderBufferInt64Atomics / shaderSharedInt64Atomics). Emitted once
+// per module.
+def public ensure_int64_atomics(var m : SpirvModule) {
+    return if ((m.type_pool?["cap_i64_atomics"] ?? 0u) != 0u)
+    emit(m, SEC_CAPS, SpvOp.Capability, uint(SpvCapability.Int64Atomics))
+    m.type_pool |> insert("cap_i64_atomics", 1u)
+}
+
 // Boolean OpConstant: OpConstantTrue / OpConstantFalse carry NO literal word (the opcode IS the
 // value), so this is type + result-id only. Keyed separately so it never collides with const_int 0/1.
 // f32 -> f16 bits, round-to-nearest-even — the das CPU reference semantics exactly (its
