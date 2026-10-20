@@ -5544,7 +5544,11 @@ def private vulkan_resident_prefill_segments(t : Model; var segs : array<Prefill
     let vocab = long_length(segs[0].s.logits)
     g_rdec_seg_logits |> reserve(n * vocab)
     g_rdec_seg_logits |> resize(n * vocab)
-    if (c.recr_mask != 0ul) {
+    var captures = false
+    for (sg in segs) {
+        captures = captures || !empty(sg.s.dn_captures)
+    }
+    if (captures) {
         for (sg, i in segs, count()) {
             rdec_caps_plan(*sg.s, int64(i), sg.start_pos, g_rdec_seg_regions[i])
         }
@@ -5559,7 +5563,9 @@ def private vulkan_resident_prefill_segments(t : Model; var segs : array<Prefill
         s.ple_gpu_pending = false
         rdec_select_region(g_rdec_seg_regions[i])
         rdec_prefill_landed(t, s, g_rdec_seg_regions[i], sg.npos, sg.start_pos, int64(i), false)   //! a segmented window warms no head row
-        rdec_caps_land(s, g_rdec_seg_regions[i])
+        if (!empty(s.dn_captures)) {
+            rdec_caps_land(s, g_rdec_seg_regions[i])
+        }
     }
     if (g_env_gpu.gpu_prof) {
         to_log(LOG_INFO, "dasLLAMA: resident segmented prefill host: {n} segments, {total} rows, the driver's run {get_time_usec(ts_run)} us\n")   // nolint:PERF026,PERF028 — the profile flag's report leg
@@ -5630,11 +5636,13 @@ def private vulkan_resident_prefill_go(t : Model; var s : Session; npos, start_p
     if (r < 0l) {
         return false
     }
-    let peel = rdec_peel_fits(t, npos) && empty(s.dn_captures)   //! the token commands keep no state at a row inside the tail: a capture takes the window chain
+    let peel = rdec_peel_fits(t, npos) && empty(s.dn_captures)
     if (c.recr_mask != 0ul) {
         rdec_dn_prefill_entry(s, c, start_pos, peel)
-        rdec_caps_plan(s, 0l, start_pos, r)
-        rdec_prefill_caps(g_rdec_caps)
+        if (!empty(s.dn_captures)) {
+            rdec_caps_plan(s, 0l, start_pos, r)
+            rdec_prefill_caps(g_rdec_caps)
+        }
     }
     if (peel) {
         let ts_peel = ref_time_ticks()
@@ -5675,16 +5683,15 @@ def private vulkan_resident_prefill_go(t : Model; var s : Session; npos, start_p
         to_log(LOG_INFO, "dasLLAMA: resident prefill host: {npos} rows, rope rows {us_rope} us, ple gather {us_gather} us, the driver's run {get_time_usec(ts_run) - us_gather} us\n")   // nolint:PERF026,PERF028 — the profile flag's report leg
     }
     rdec_prefill_landed(t, s, r, npos, start_pos, 0l)
-    rdec_caps_land(s, r)
+    if (!empty(s.dn_captures)) {
+        rdec_caps_land(s, r)
+    }
     return true
 }
 
 var private @scratch g_rdec_caps : array<RdecPfCap>   //! the next prefill call's captures, planned a segment at a time, landed after the call
 
-//! The checkpoint rows session `s`'s captures take in region `r`, as segment `seg` of the call from `start_pos`: an empty row
-//! first, else the one least recently touched; a row taken this call is marked pending (position -1) so no later capture takes
-//! it, and the window chain hears of every capture through `rdec_prefill_caps`
-[cold_path]   //! once per window with a stop inside it
+[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-dn-block")]   //! once per window with a stop inside it: the callers guard
 def private rdec_caps_plan(var s : Session; seg, start_pos, r : int64) {
     if (seg == 0l) {
         g_rdec_caps |> clear()
@@ -5702,10 +5709,7 @@ def private rdec_caps_plan(var s : Session; seg, start_pos, r : int64) {
     }
 }
 
-//! The captures of session `s` after the call that left them in region `r`'s checkpoint rows: a device-home session keeps each
-//! row at its stop's position (an adopter of that opening finds it, `gpu_device_kv_checkpoint` would have put it there); a
-//! host-cached session takes each row's state back into its snapshot and frees the row
-[cold_path]   //! once per window with a stop inside it
+[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-dn-block")]   //! once per window with a stop inside it: the callers guard
 def private rdec_caps_land(var s : Session; r : int64) {
     return if (empty(s.dn_captures))
     var next = 0l
@@ -5723,8 +5727,8 @@ def private rdec_caps_land(var s : Session; r : int64) {
             continue
         }
         rdec_select_region(r)
-        var window <- s.dn_captures[k].ple_prev   //! the peek clears the window; the stop's own, computed with the capture, goes back
-        var snap <- rdec_peek_snapshot(s, slot, s.dn_captures[k])   //! the capture's arrays move in and come back filled
+        var window <- s.dn_captures[k].ple_prev   //! the peek clears `ple_prev`; the stop's own window goes back after
+        var snap <- rdec_peek_snapshot(s, slot, s.dn_captures[k])
         if (snap.pos < 0l) {
             panic("dasLLAMA resident prefill: the checkpoint row of the capture at {at} could not be read back")
         }

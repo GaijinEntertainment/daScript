@@ -7007,9 +7007,6 @@ def private dn_tail_oracle(src, smalls : array<float>; cd, taps, row0, old_rows,
     return <- want
 }
 
-//! a checkpoint stop inside a window: the capture's conv history into its checkpoint row - the taps projected rows before the
-//! capture's row, and for a row under the taps the rows before the part off the entry image - the same composition the ring
-//! hand-off makes for a window of that many rows (`dn_tail_oracle`); two captures in one dispatch
 [test]
 def test_vkd_dn_cap_tail(t0 : T?) {
     t0 |> run("dn_cap_tail == the ring hand-off of a window cut at the capture's row, into the checkpoint row") <| @(t : T?) {
@@ -7201,8 +7198,6 @@ def test_vkd_dn_rows_base(t0 : T?) {
                     convh[base * cd + i] = (float((i * 19) % 79) * 0.025 - 0.9) * 0.15
                 }
                 var inscope sth <- row_fill(nvh * ds * ds, 13, 0, 0.02, 0.5, 53)
-                //! the row-0 run carries one capture after half its rows: its checkpoint row's state is the state a scan over
-                //! those rows alone leaves (the control run below), and the live state is the whole run's
                 var inscope capw <- [uint(npos / 2), 0u]
                 with_cell_planes() $(var cp : CellPlanes) {
                     let pconv = cp |> in_(convh)
@@ -7235,7 +7230,7 @@ def test_vkd_dn_rows_base(t0 : T?) {
                 }
             }
             check_exact(t, "dn_scan at row base {lead} against row 0 (the o rows, then the state)", scans[1], scans[0])
-            {   //! the capture's control: the scan over the first half of the rows alone, its state the captured one bit for bit
+            {
                 var inscope smv : array<float>
                 smv |> resize(dt_off + nvh)
                 for (i in range(npos * nvh)) {

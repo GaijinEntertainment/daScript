@@ -88,8 +88,6 @@ var private @scratch g_pf_caps : array<RdecPfCap>         //! the call's capture
 var private @scratch g_pf_wcaps : array<tuple<n : int64; rec : int64>>   //! each window part's captures: their count and first record word
 var private @scratch g_pf_cap_words : array<uint>
 
-//! The captures the next prefill call leaves: the checkpoint rows allocated where none stand yet, and the recurrent layers' sets
-//! rebound onto them once they do
 def vk_rdec_prefill_caps(caps : array<RdecPfCap>) {
     g_pf_caps := caps
     return if (empty(caps) || g_rd == null || !g_rd.hybrid)
@@ -105,8 +103,6 @@ def vk_rdec_prefill_caps(caps : array<RdecPfCap>) {
     }
 }
 
-//! the window's capture records off `g_pf_caps` for the parts in `g_pf_wsegs` (`g_pf_wcaps` a part), uploaded for the chain: a
-//! capture's row inside its part, and its checkpoint row's float base
 def private pf_window_caps(w0 : int64) {
     g_pf_wcaps |> clear()
     g_pf_wcaps |> reserve(length(g_pf_wsegs))
@@ -114,12 +110,12 @@ def private pf_window_caps(w0 : int64) {
     g_pf_cap_words |> reserve(PF_CAP_WORDS)
     for (ws in g_pf_wsegs) {
         let sg = g_pf_segs[ws.seg]
-        let lo = w0 + ws.row0 - sg.row0   //! the part's first row within its segment
+        let part_row0_in_seg = w0 + ws.row0 - sg.row0
         var n = 0l
         let rec = long_length(g_pf_cap_words)
         for (cap in g_pf_caps) {
-            continue if (cap.seg != ws.seg || cap.row <= lo || cap.row >= lo + ws.npos)
-            g_pf_cap_words |> push(uint(cap.row - lo))
+            continue if (cap.seg != ws.seg || cap.row <= part_row0_in_seg || cap.row >= part_row0_in_seg + ws.npos)
+            g_pf_cap_words |> push(uint(cap.row - part_row0_in_seg))
             g_pf_cap_words |> push(uint(((ws.region * int64(RDEC_DN_SNAPS) + cap.slot) * g_rd.snap_row_bytes) / 4l))
             n++
         }
@@ -133,7 +129,6 @@ def private pf_window_caps(w0 : int64) {
     }
 }
 
-//! the call's captures stand: each checkpoint row's ring parity is 0 (the capture's history is its image 0), and the list is spent
 def private pf_caps_done {
     for (cap in g_pf_caps) {
         let sg = g_pf_segs[cap.seg]
@@ -326,8 +321,6 @@ def private pf_dn_layer_sets(l, dim, cd, di : int64) {
         fixed_array(g_rd.pf_dnqkv, g_rd.pf_dnconv, smalls_dev),
         fixed_array(np * cd * 4l, np * cd * 4l, smalls_bytes),
         fixed_array(VHZ_DNP, VHZ_DNC, VHZ_DNSM))
-    //! the checkpoint rows bind where they stand (`rd_snap_alloc`, at the first capture or checkpoint); before that the smalls stand
-    //! in, unread: a window with no capture never touches the binding
     let snap_dev = g_rd.snap_dev != 0ul ? g_rd.snap_dev : smalls_dev
     let snap_bytes = g_rd.snap_dev != 0ul ? g_rd.snap_row_bytes * g_rd.regions * int64(RDEC_DN_SNAPS) : smalls_bytes
     L.pf_dn_scan_set = set_dn_scan_cls(
@@ -453,7 +446,7 @@ def private dn_window_parts_enc(raw : VkCommandBuffer; var h : VkHaz; var L : RL
             o_off = uint(DN_O_OFF), di = uint(di), region_state_base = uint(st.state_byte_off / 4l), row0 = uint(ws.row0),
             cap_n = uint(wc.n), cap_rec = uint(wc.rec), cap_state_off = uint(L.snap_off / 4l))
         enc_dn_scan_cls(raw, h, L.pf_dn_scan_set, pcs, dn_scan_wgs(nvh, ds))
-        if (wc.n > 0l) {   //! each capture's history into its checkpoint row's image 0, off the projected rows and the entry image
+        if (wc.n > 0l) {
             let img = int(st.ring_image_bytes / 4l)
             let cur = g_rd.pf_dn_cur[ws.region]
             let wg = (cd * taps + 255l) / 256l
@@ -2143,7 +2136,7 @@ def private pf_hc_side(raw : VkCommandBuffer; var h : VkHaz; wlen, pos0w : int64
     enc_ple_conv_cls(raw, h, g_rd.pf_s_ple_conv, pcc, (wlen * hcd + 255l) / 256l)
     let m = min(wlen, nrows)
     vhz_dep(raw, h, VHZ_DNSM, VHZ_DNSM, true)
-    if (!empty(g_pf_wcaps) && g_pf_wcaps[0].n > 0l) {   //! each capture's ring as it stands after its row, into its checkpoint row, ahead of the ring's own update
+    if (!empty(g_pf_wcaps) && g_pf_wcaps[0].n > 0l) {
         let wc = g_pf_wcaps[0]
         for (ci in range64(wc.n)) {
             let r = int64(g_pf_cap_words[wc.rec + ci * 2l])

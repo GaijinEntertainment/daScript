@@ -271,7 +271,7 @@ def private ple_step_prefill(t : Model; var s : Session; npos, start_pos : int64
         for (p in range64(npos)) {   // in order: the conv ring reads the rows this loop wrote
             ple_apply_row(t, s, s.hc_res_b, p * hcd, addr(s.ple_key_b[p * hcd]), addr < float const? >(s.ple_val_b[p * c.dim]), start_pos + p)
             let ci = dn_capture_at(s, start_pos + p + 1l)
-            if (ci >= 0l) {   //! the ring as it stands at the stop: the rows the next window's taps read
+            if (ci >= 0l) {
                 copy_floats(s.ple_conv_hist, 0l, s.dn_captures[ci].ple_hist, 0l, long_length(s.ple_conv_hist))
             }
         }

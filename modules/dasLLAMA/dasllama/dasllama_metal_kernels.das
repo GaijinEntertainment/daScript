@@ -12053,7 +12053,7 @@ class MetalDnConvHist {
             }
         }
         var ci = 0u
-        while (ci < grp[ge + 6u]) {         //! each capture's history: the taps rows before its row, the old history under them
+        while (ci < grp[ge + 6u]) {
             let cw = grp[ge + 7u] + ci * 3u
             let crow = grp[cw]
             let cb = grp[cw + 2u] + ka.cslice
@@ -12250,7 +12250,7 @@ class template MetalDnScanT {
                 }
             }
             var ci = 0u
-            while (ci < grp[ge + 6u]) {   //! a capture standing after this row: the state lands at its record's base
+            while (ci < grp[ge + 6u]) {
                 let cw = grp[ge + 7u] + ci * 3u
                 if (grp[cw] == p + 1u) {
                     let capbase = grp[cw + 1u] + ka.sslice + s0
@@ -12368,9 +12368,6 @@ struct DnStages {
     ba_rows : bool       //! `b` holds each row's [beta; alpha] and `g` is `b` (one GEMV wrote both)
 }
 
-//! one group's eight words in the table the recurrent stages read: its first row, its rows, then its live state, shadow
-//! state, live history and shadow history bases (floats into the bound mirror pool, from these byte offsets), its capture
-//! count and the word its capture records start at (`dn_grp_cap`: three words a capture, past every group's eight)
 var private @scratch g_dn_grp_w : array<uint>
 
 //! a fresh group table: the words `dn_grp_push` appends and `dn_grp_upload` hands to a buffer
@@ -12389,11 +12386,10 @@ def dn_grp_push(row0, npos : int64; soff, salt, coff, calt : uint64; ncap : int6
     g_dn_grp_w |> push(uint(capw))
 }
 
-let DN_GRP_WORDS = 8l   //! a group's words in the table
+let DN_GRP_WORDS = 8l
 let DN_CAP_WORDS = 3l   //! a capture's: the row the state stands after, its state base and its history base (floats into the capture arena)
 
-//! one capture record after the groups: the walk writes its state after `row` rows and the history kernel the taps rows
-//! before it at these float offsets of the arena the stages bind as `capb`
+[arch(at="../ARCHITECTURE_GPU_MTP.md#dn-group-stages")]
 def dn_grp_cap(row : int64; soff, hoff : uint64) {
     g_dn_grp_w |> push(uint(row))
     g_dn_grp_w |> push(uint(soff / 4ul))

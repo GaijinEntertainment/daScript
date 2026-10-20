@@ -941,8 +941,7 @@ def mtp_accept_walk(var s : Session; k, vocab : int64; pick : block<(row : int64
     return a
 }
 
-//! The accepted run cut after its first draft among the caller's stop ids (`Session.spec_stops`): the finishing token's row
-//! stands, the rows past it roll back as a reject's, and the walk's pre-drawn token is dropped (the caller samples no further)
+[arch(at="../ARCHITECTURE_GPU_MTP.md#mtp-round-one-join")]
 def mtp_accept_cut_at_stop(var s : Session; a : int64) : int64 {
     return a if (s.spec_stops == null || a <= 0l)
     for (j in range64(a)) {
@@ -2995,7 +2994,7 @@ struct Session {
     dn_captures : array<DnSnapshot>   //! the prefill's answer to `dn_stops`, one snapshot a stop in order (`pos` the stop), the window's own arrays - the caller files and clears them
     dn_captured : bool             //! the serving prefill filled `dn_captures`; a window that leaves them unfilled is refused after the call
     @scratch dn_cap_rows : array<int64>   //! a layer's walk: each capture's row inside the window
-    @scratch dn_cap_st : array<uint64>    //! ... and the address of its state slice for the layer (an address, so no delete reaches the capture's array)
+    @scratch dn_cap_state_addr : array<uint64>    //! ... for the layer (an address, so no delete reaches the capture's array)
     pick_asked : bool              //! the caller's sampler is a bare argmax: a device driver may land the row's pick alone and leave `logits` unwritten (the scheduler sets it a step)
     sel_row1 : int64               //! one past the landing row this session's step sampled through the device's selection ([[sel_landed]]); 0 = the rows landed
     mtp_depth_cap : int64          //! the deepest round this session's caller can take the drafts of (0 = the round's depth): a stream whose emitted tokens may queue a forced close takes depth 1
@@ -5366,11 +5365,11 @@ def dn_key_dim(c : Config) : int64 => c.ssm_n_group * c.ssm_d_state
 //! deltanet fused-projection / conv channel count: [q (key_dim) ; k (key_dim) ; v (d_inner)].
 def dn_conv_dim(c : Config) : int64 => 2l * dn_key_dim(c) + c.ssm_d_inner
 
-//! one recurrent layer's conv history floats (`cd` = `dn_conv_dim(c)`) and S state floats - the session's arrays, a checkpoint's snapshot
+//! one recurrent layer's conv history floats (`cd` = `dn_conv_dim(c)`) and S state floats
 def dn_layer_conv_floats(c : Config; cd : int64) : int64 => (c.ssm_d_conv - 1l) * cd
 def dn_layer_state_floats(c : Config) : int64 => c.ssm_dt_rank * c.ssm_d_state * c.ssm_d_state
 
-//! the last recurrent layer, -1 on a model with none: the layer whose prefill completes a window's captures
+//! the last recurrent layer, -1 on a model with none
 def dn_last_recurrent_layer(c : Config) : int64 {
     var last = -1l
     for (l in range64(c.n_layers)) {
@@ -5381,7 +5380,7 @@ def dn_last_recurrent_layer(c : Config) : int64 {
     return last
 }
 
-//! the floats a session's recurrent state holds over every recurrent layer - what a checkpoint's snapshot copies; 0 on a model with none
+//! the floats a session's recurrent state holds over every recurrent layer; 0 on a model with none
 def dn_state_floats(c : Config) : int64 {
     return 0l if (c.recr_mask == 0ul)
     let cd = dn_conv_dim(c)
@@ -6164,10 +6163,8 @@ def private ple_window_copy(src : array<int64>; var dst : array<int64>; grow : b
     }
 }
 
-//! The captures `s.dn_stops` asks of the window [start_pos, start_pos + npos): one snapshot a stop at the session's array
-//! sizes, its position the stop, unfilled until the serving prefill writes each layer's slice; a stop outside the window's
-//! interior, or out of order, is the caller's error. No stops: no captures.
-[cold_path]
+//! one unfilled snapshot a stop of `s.dn_stops`; each stop lies strictly inside [start_pos, start_pos + npos), ascending, or it panics
+[cold_path, arch(at="../ARCHITECTURE_ENGINE_SERVING.md#prefix-recurrent-checkpoints")]
 def dn_capture_begin(var s : Session; tokens : array<int64>; npos, start_pos : int64) {
     let n = long_length(s.dn_stops)
     s.dn_captured = false
@@ -6193,8 +6190,7 @@ def dn_capture_begin(var s : Session; tokens : array<int64>; npos, start_pos : i
     }
 }
 
-//! the n-gram window after the window's first `r` tokens, into `dst`: the slide `ngram_advance` makes, off the window the
-//! session entered on, without moving the session's own; empty on a model with no n-gram side input
+//! the n-gram window `ngram_advance` would leave after the window's first `r` tokens, into `dst`; the session's own stays
 def ngram_window_at(s : Session; tokens : array<int64>; r : int64; var dst : array<int64>) {
     let nprev = long_length(s.ple_prev)
     dst |> overwrite_resize(nprev)
@@ -6207,7 +6203,7 @@ def ngram_window_at(s : Session; tokens : array<int64>; r : int64; var dst : arr
     }
 }
 
-//! the capture whose stop is `pos`, -1 where none: a layer's walk asks after each row it advances past
+//! the capture whose stop is `pos`, -1 where none
 def dn_capture_at(s : Session; pos : int64) : int64 {
     for (cap, i in s.dn_captures, count()) {
         return int64(i) if (cap.pos == pos)
@@ -6215,8 +6211,6 @@ def dn_capture_at(s : Session; pos : int64) : int64 {
     return -1l
 }
 
-//! A window that was asked captures and left them unfilled is refused: a checkpoint of zeros would serve garbage to every
-//! prompt that attached it
 def dn_capture_check(s : Session) {
     if (!empty(s.dn_captures) && !s.dn_captured) {
         panic("dasLLAMA: the serving prefill left {long_length(s.dn_captures)} checkpoint stop(s) inside its window unfilled - the path that served it keeps no state at an interior row")

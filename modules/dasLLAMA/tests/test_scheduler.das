@@ -1228,7 +1228,7 @@ def private restore_spec_pins(pins : SpecPins) {
 }
 
 //! a fresh plain paged scheduler's greedy reply of `n` tokens to `prompt` (no cache: a new scheduler each call)
-def private plain_reply(m : Model; prompt : array<int64>; n : int64; id : int64) : array<int64> {
+def private uncached_greedy_reply(m : Model; prompt : array<int64>; n : int64; id : int64) : array<int64> {
     var sch <- create_scheduler(m, 1l, 4l, 8l, 16l, [idle_chunk_tokens = 0l])
     var events : array<SchedEvent>
     var none : array<int64>
@@ -1240,7 +1240,6 @@ def private plain_reply(m : Model; prompt : array<int64>; n : int64; id : int64)
     return <- got
 }
 
-//! the conversation's next turn: `prompt` + `reply` + `close` + a few prompt tokens again as the new user text
 def private next_turn_prompt(prompt, reply, close : array<int64>) : array<int64> {
     var p2 := prompt
     p2 |> reserve(length(prompt) + length(reply) + length(close) + 4)
@@ -1251,8 +1250,6 @@ def private next_turn_prompt(prompt, reply, close : array<int64>) : array<int64>
     return <- p2
 }
 
-//! turn 2 on `sch` after a finished turn of `reply` + `close`: it attaches the prompt, the reply and the close whole off the
-//! finished-turn checkpoint, and reads the plain scheduler's turn 2 token for token
 def private check_next_turn(t : T?; m : Model; var sch : Scheduler; id : int64; prompt, reply, close : array<int64>; tag : string) {
     var p2 <- next_turn_prompt(prompt, reply, close)
     var events : array<SchedEvent>
@@ -1262,7 +1259,7 @@ def private check_next_turn(t : T?; m : Model; var sch : Scheduler; id : int64; 
     let fin = finished_of(events, id)
     t |> equal(fin.n_cached, long_length(prompt) + long_length(reply) + long_length(close), "{tag}: turn 2 attaches the prompt, the reply and the close whole")
     var got <- toks_of(events, id)
-    var ref <- plain_reply(m, p2, 8l, id + 1000l)
+    var ref <- uncached_greedy_reply(m, p2, 8l, id + 1000l)
     to_log(LOG_INFO, "{tag}: turn 2 spec \"{text_of(pieces_of(events, id))}\" {got} | plain {ref}\n")
     t |> success(ids_equal(got, ref), "{tag}: turn 2 reads the plain scheduler's turn 2 off the attached rows")
     delete ref
@@ -1286,14 +1283,12 @@ def test_scheduler_mtp_stop_close(t : T?) {
             var m <- load_model_(MTP_MODEL_PATH, QuantMode.q8)
             m.config.seq_len = min(m.config.seq_len, 512l)
             var prompt <- encode(m, "Count from one to twenty: one, two, three,", true, false)
-            var ref <- plain_reply(m, prompt, 24l, 1l)
+            var ref <- uncached_greedy_reply(m, prompt, 24l, 1l)
             set_mtp_spec(true)
             var sch <- create_scheduler(m, 1l, 4l, 8l, 16l, 0l, KVDtype.f16, true, 0l)
             var id = 10l
             for (cut in [2l, 4l, 8l, 10l]) {
-                //! the reply's token at `cut` is the stop: the stream emits the tokens before it, and the template's close opens on the stop
-                //! itself. The counting reply alternates a number word and a comma, so the stop is a number word (a comma would end the
-                //! stream at its first comma), and a depth-2 tick emits two drafts then a sample, so an even cut under 12 lands on a draft
+                //! even cuts under 12 put the stop on a number word a depth-2 tick drafts (two drafts, then a sample); a comma stop ends at the first comma
                 let stop = ref[cut]
                 var stops <- [stop]
                 var close <- [stop, ref[0]]
@@ -1317,6 +1312,7 @@ def test_scheduler_mtp_stop_close(t : T?) {
                 delete stops
                 id += 2l
             }
+            t |> success(sch.mtp_drafted > sch.decode_steps, "the rounds drafted more than one a tick, depth 2's figure ({sch.mtp_drafted} drafts over {sch.decode_steps} ticks)")
             t |> success(sch.mtp_stop_rows > 0l, "a stop arrived as an accepted draft on some cut ({sch.mtp_stop_rows} of 4): its row stood in the session")
             delete sch
             delete ref
@@ -1343,7 +1339,7 @@ def test_scheduler_mtp_length_cap(t : T?) {
             var m <- load_model_(MTP_MODEL_PATH, QuantMode.q8)
             m.config.seq_len = min(m.config.seq_len, 512l)
             var prompt <- encode(m, "Count from one to twenty: one, two, three,", true, false)
-            var ref <- plain_reply(m, prompt, 7l, 1l)
+            var ref <- uncached_greedy_reply(m, prompt, 7l, 1l)
             set_mtp_spec(true)
             var sch <- create_scheduler(m, 1l, 4l, 8l, 16l, 0l, KVDtype.f16, true, 0l)
             var none : array<int64>
@@ -1355,7 +1351,7 @@ def test_scheduler_mtp_length_cap(t : T?) {
             t |> equal(fin.n_gen, 7l)
             var got <- toks_of(events, 10l)
             t |> success(ids_equal(got, ref), "the capped reply is the plain reply's ({got})")
-            t |> success(sch.mtp_drafted >= 3l, "the rounds drafted at depth 3 ({sch.mtp_drafted} drafts, {sch.mtp_accepted} accepted)")
+            t |> success(sch.mtp_drafted > 2l * sch.decode_steps, "the rounds drafted more than two a tick, depth 3's figure ({sch.mtp_drafted} drafts over {sch.decode_steps} ticks, {sch.mtp_accepted} accepted)")
             check_next_turn(t, m, sch, 11l, prompt, ref, none, "length cap")
             delete got
             delete events
@@ -1369,9 +1365,8 @@ def test_scheduler_mtp_length_cap(t : T?) {
     }
 }
 
-//! the reply a fresh paged scheduler gives `prompt` under the recurrent (per-token) prefill: the bit-exact oracle for a
-//! continuation off a captured checkpoint, since the per-token walk's state at a row never depends on the windowing
-def private fresh_reply(m : Model; prompt : array<int64>; n : int64; id : int64) : array<int64> {
+//! an uncached reply under the caller's recurrent (per-token) pin, a capture's bit-exact oracle: the per-token state at a row never depends on the windowing
+def private one_window_greedy_reply(m : Model; prompt : array<int64>; n : int64; id : int64) : array<int64> {
     var sch <- create_scheduler(m, 1l, 4l, 1024l, 16l, [idle_chunk_tokens = 0l])
     var events : array<SchedEvent>
     var none : array<int64>
@@ -1402,8 +1397,6 @@ def test_scheduler_capture_stops(t : T?) {
             var prompt <- encode(m, text, true, false)
             let np = long_length(prompt)
             t |> success(np > 220l, "the prompt holds every stop with room past the last ({np} tokens)")
-            //! the four stops the server plans, a page or more apart, all inside one 512-row window: the head, the system
-            //! opening, the stable history end and the message end
             let stops <- [48l, 96l, 160l, np - 1l]
             var sch <- create_scheduler(m, 1l, 4l, 1024l, 16l, [idle_chunk_tokens = 0l])
             var none : array<int64>
@@ -1419,12 +1412,11 @@ def test_scheduler_capture_stops(t : T?) {
             t |> equal(sch.prefill_evals - evals0, 1l, "the prompt prefilled in ONE window with every stop inside it")
             t |> equal(long_length(sch.prefix.states), 5l, "four stops captured and the finished turn kept ({length(sch.prefix.states)} checkpoints)")
             var first <- toks_of(events, 1l)
-            var want1 <- fresh_reply(m, prompt, 6l, 101l)
+            var want1 <- one_window_greedy_reply(m, prompt, 6l, 101l)
             t |> success(ids_equal(first, want1), "the window's own reply is the fresh prefill's ({first})")
             var id = 2l
             for (at in stops) {
                 continue if (at == np - 1l)
-                //! a prompt sharing the first `at` tokens attaches the capture there and continues on its own tail
                 var p2 <- [for (i in range64(at)); prompt[i]]
                 for (i in range64(12l)) {
                     p2 |> push(prompt[np - 12l + i])
@@ -1435,7 +1427,7 @@ def test_scheduler_capture_stops(t : T?) {
                 let fin = finished_of(events, id)
                 t |> equal(fin.n_cached, at, "stop {at}: the capture attaches the shared opening whole")
                 var got <- toks_of(events, id)
-                var want <- fresh_reply(m, p2, 6l, id + 100l)
+                var want <- one_window_greedy_reply(m, p2, 6l, id + 100l)
                 to_log(LOG_INFO, "stop {at}: attached {got} | fresh {want}\n")
                 t |> success(ids_equal(got, want), "stop {at}: the continuation off the capture is the fresh prefill's")
                 delete want

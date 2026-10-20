@@ -673,8 +673,7 @@ def private dn_conv_batch(t : Model; var s : Session; l : int64; npos : int64) {
     }
 }
 
-//! each capture's conv history for layer `l`: the taps input rows before its stop, off the window's input rows (`inp0`) and,
-//! under the taps, the history the window entered on (`hist0`, channel-major) - before the advance overwrites it
+//! each capture's conv history for layer `l` (the taps input rows before its stop, `hist0` under them) - before the advance overwrites `hist0`
 def private dn_conv_capture(var s : Session; l, npos, cd, taps : int64; inp0, hist0 : float const?) {
     let start_pos = s.dn_pos - npos
     for (cap in s.dn_captures) {
@@ -699,7 +698,7 @@ def private dn_chunked_head(conv : float const?; qoff, koff, voff, cd : int64; /
                             zp : float const?; var op : float?; o_stride : int64;
                             var stp : float?; var ws : float?; wnorm : float const?;
                             aa, dtb, eps : float; vec, zsig : bool; npos, ds : int64;
-                            cap_rows : array<int64>; cap_st : array<uint64>; hoff : int64) {
+                            cap_rows : array<int64>; cap_state_addr : array<uint64>; hoff : int64) {
     let CS = DN_CHUNK
     unsafe {
         var qc = ws                         // CS x ds: q rows, scaled to q ⊙ e^{gcum} after the KQ GEMM
@@ -718,7 +717,7 @@ def private dn_chunked_head(conv : float const?; qoff, koff, voff, cd : int64; /
         var c0 = 0l
         while (c0 < npos) {
             var cl = min(CS, npos - c0)
-            for (cr in cap_rows) {   //! a chunk ends at a capture's row: the state stands there once a chunk
+            for (cr in cap_rows) {
                 if (cr > c0 && cr - c0 < cl) {
                     cl = cr - c0
                 }
@@ -840,7 +839,7 @@ def private dn_chunked_head(conv : float const?; qoff, koff, voff, cd : int64; /
             c0 += cl
             for (cr, ci in cap_rows, count()) {
                 if (cr == c0) {
-                    copy_floats(reinterpret<float?>(cap_st[ci]) + hoff, reinterpret<float const?>(stp), ds * ds)
+                    copy_floats(reinterpret<float?>(cap_state_addr[ci]) + hoff, reinterpret<float const?>(stp), ds * ds)
                 }
             }
         }
@@ -879,8 +878,8 @@ def private deltanet_prefill_chunked(t : Model; var s : Session; l : int64; npos
     let vec = g_act_vec   // read on the caller, captured — fork workers must not read globals
     let zsig = c.dn_z_sigmoid
     dn_capture_rows(s, l, npos)
-    let cap_rows = unsafe(addr(s.dn_cap_rows))   // the lambda takes the two lists by pointer: the session itself is not captured
-    let cap_st = unsafe(addr(s.dn_cap_st))
+    let cap_rows = unsafe(addr(s.dn_cap_rows))   //! the lambda takes the two lists by pointer: the session itself is not captured
+    let cap_state_addr = unsafe(addr(s.dn_cap_state_addr))
     let ts_scan = prof_ticks()
     maybe_parallel_for(0, int(nvh), min(int(nvh), get_dispatch_lanes())) $(rb, re) {
         unsafe {
@@ -891,26 +890,24 @@ def private deltanet_prefill_chunked(t : Model; var s : Session; l : int64; npos
                     bp0 + h, gp0 + h, nvh, zp0 + h * ds, op0 + h * ds, di,
                     st0 + h * ds * ds, ws0 + h * wssz, wnorm0,
                     ab0[h], dtb0[h], c.norm_eps, vec, zsig, npos, ds,
-                    *cap_rows, *cap_st, h * ds * ds)
+                    *cap_rows, *cap_state_addr, h * ds * ds)
             }
         }
     }
     prof_add("dn_scan", ts_scan)
 }
 
-//! a layer's capture rows inside the window and each capture's state slice for the layer (`Session.dn_cap_rows` / `dn_cap_st`)
 def private dn_capture_rows(var s : Session; l, npos : int64) {
     let n = length(s.dn_captures)
     s.dn_cap_rows |> resize(n)
-    s.dn_cap_st |> resize(n)
+    s.dn_cap_state_addr |> resize(n)
     let start_pos = s.dn_pos - npos
     for (cap, i in s.dn_captures, count()) {
         s.dn_cap_rows[i] = cap.pos - start_pos
-        s.dn_cap_st[i] = intptr(unsafe(addr(cap.state[s.dn_state_prefix[l]])))
+        s.dn_cap_state_addr[i] = intptr(unsafe(addr(cap.state[s.dn_state_prefix[l]])))
     }
 }
 
-//! the layer's state and conv history for a capture whose stop the walk just reached (the per-token forms)
 def private dn_capture_token(var s : Session; c : Config; l, cd, ci : int64) {
     let so = s.dn_state_prefix[l]
     let co = s.dn_conv_prefix[l]

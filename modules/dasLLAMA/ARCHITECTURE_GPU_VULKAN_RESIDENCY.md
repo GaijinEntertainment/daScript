@@ -149,7 +149,7 @@ and the token command reads the row the host's pre-step embedded, in place (`EMB
 **A recurrent state exists at one position, so a region keeps copies of it at the positions a later request can share.** A
 region carries `RDEC_DN_SNAPS` (4) checkpoint rows beside its state slots, each in the rollback row's shape - every recurrent
 layer's slot state (`nvh x ds x ds` floats) and its ring pair (`2 x cd x (dconv - 1)` floats) - with the region's ring parity
-(`RDec.snap_dev`, made at the first save). The plan charges them (`rdec_dn_snap_bytes`): on the 35B (30 recurrent layers, 32
+(`RDec.snap_dev`, made at the first save or the first capture). The plan charges them (`rdec_dn_snap_bytes`): on the 35B (30 recurrent layers, 32
 value heads of 128, a 8192-channel conv of 3 taps) a row is 2.19 MiB a layer, 65.6 MiB in all, 262 MiB a region. The scheduler's
 device mode plans a recurrent stream's stops at the request's openings and its last message's start and end
 (`device_checkpoints_plan`, the markers the host prefix cache keeps checkpoints at): a stop inside a window the window chain

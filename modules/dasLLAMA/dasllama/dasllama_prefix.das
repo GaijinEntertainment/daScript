@@ -364,8 +364,7 @@ def prefix_share_pages_(var cache : PrefixCache; var pool : KVPool; var s : Sess
     return kept * pr
 }
 
-//! a checkpoint of the session where it stands: its first `n_past` tokens, their pages, the
-//! recurrent state. Answers "" when one stands there after the call, else why nothing is kept.
+//! a checkpoint of the session where it stands (its first `n_past` tokens, their pages, the recurrent state); answers "" when one stands there after the call, else why not
 def private prefix_insert_state(var cache : PrefixCache; var pool : KVPool; var s : Session; tokens : array<int64>; kind : PrefixStateKind) : string {
     let n = min(long_length(tokens), s.n_past)
     if (cache.max_states <= 0l) {
@@ -387,9 +386,7 @@ def private prefix_insert_state(var cache : PrefixCache; var pool : KVPool; var 
     return ""
 }
 
-//! A checkpoint of the first `n_past` of `tokens` out of the session `s`'s pages, its state `snap` taken elsewhere (moved in) - a
-//! device's slots, where the session holds the rows alone, or a window's capture at `snap.pos` with `tokens` reaching past it
-//! (`upto` = that position, 0 = the shorter of the tokens and `n_past`). Nothing is kept when the state does not stand there.
+//! a checkpoint of the first `n_past` (at most `upto`, 0 = all) of `tokens` out of `s`'s pages, its state `snap` moved in from a device's slots or a window's capture; nothing kept unless `snap.pos` stands there
 [arch(at="../ARCHITECTURE_ENGINE_SERVING.md#device-home-pool")]
 def prefix_insert_snapshot_(var cache : PrefixCache; var pool : KVPool; s : Session; tokens : array<int64>; var snap : DnSnapshot; opening : bool; upto : int64 = 0l) {
     var n = min(long_length(tokens), s.n_past)
@@ -606,9 +603,7 @@ def private prefix_evict_lru(var cache : PrefixCache; var pool : KVPool) {
     }
 }
 
-//! Donate a finished session's pages into the cache (tokens up to ``n_past``, pages past the budget LRU-drop),
-//! right before ``release_kv_pages``; ``preview`` labels the donation's chain on the dashboard surface. Answers ""
-//! where the cache holds the donation after the call, else why a recurrent model's checkpoint was not kept.
+//! donate a finished session's pages (tokens up to ``n_past``) right before ``release_kv_pages``, ``preview`` labelling the chain; answers "" when the cache holds them, else why a recurrent checkpoint was not kept
 [arch(at="../ARCHITECTURE_ENGINE_SERVING.md#prefix-tail-page")]
 def prefix_insert_(var cache : PrefixCache; var pool : KVPool; var s : Session; tokens : array<int64>; preview : string = ""; opening : bool = false) : string {
     if (s.kv_pool == null || s.kv_pool != unsafe(addr(pool))) {

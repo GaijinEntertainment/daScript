@@ -112,8 +112,6 @@ def test_typical_walk_cuts(t : T?) {
 
 [test]
 def test_walk_cuts_at_a_stop(t : T?) {
-    // every draft matches its row's pick; with the caller's stop ids pointed at the round, the run ends ON the stop draft (its
-    // row stands), the drafts past it are cut and no token is parked; with none pointed, the whole run is accepted (the control)
     let drafts <- [0l, 1l, 3l, 5l]
     var stops <- [3l]
     var s <- bare_session(VOCAB, DRAFTS)
@@ -128,8 +126,6 @@ def test_walk_cuts_at_a_stop(t : T?) {
     t |> success(!s.mtp_pre_drawn, "no token parked past a stop")
     s.spec_stops = null
     delete s
-    // the typical walk the same way: rows 0..2 accept their drafts outright (the draft is the lone survivor), and the stop among
-    // them cuts the run and drops the walk's parked draw
     var rows <- [[NO_MASS, 4.0, NO_MASS, NO_MASS, NO_MASS, NO_MASS, NO_MASS, NO_MASS],
                  [NO_MASS, NO_MASS, NO_MASS, 4.0, NO_MASS, NO_MASS, NO_MASS, NO_MASS],
                  [NO_MASS, NO_MASS, NO_MASS, NO_MASS, NO_MASS, 4.0, NO_MASS, NO_MASS],

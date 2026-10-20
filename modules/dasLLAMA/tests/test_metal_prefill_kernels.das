@@ -5619,8 +5619,7 @@ def private dn_groups_gate(t : T?; var dev, queue) {
         let ha = ssz
         let sb = ssz + hsz
         let hb = 2 * ssz + hsz
-        //! group B carries one capture after its second row: its state lands at the arena's state base and the taps rows before
-        //! that row at its history base (the record's three words past the two groups' sixteen)
+        //! group B carries one capture (its record at word 16): after row 2, its state at arena word 0 and its taps rows at ssz
         var inscope grp <- [0u, 2u, uint(sa), uint(sa), uint(ha), uint(ha), 0u, 0u,
                             2u, 3u, uint(sb), uint(sb), uint(hb), uint(hb), 1u, 16u,
                             2u, 0u, uint(ssz)]
@@ -5679,8 +5678,7 @@ def private dn_groups_gate(t : T?; var dev, queue) {
         check_buf(t, "dn groups conv rows", mc.buf[by], cvw, BAR_FP, Shape(row_width = cd, head_width = ds))
         check_buf(t, "dn groups out", mc.buf[bo], ow, BAR_FP, Shape(row_width = di, head_width = ds))
         check_buf(t, "dn groups pool: both states and histories", mc.buf[bpool], poolw, BAR_FP, Shape(row_width = ds))
-        {   //! the capture against group B's oracle run over its first two rows alone: the state after them, the history before the third;
-            //! the control is the state after all three rows, which the capture must miss
+        {
             var inscope hist0 <- [for (k in range(hsz)); pool[hb + k]]
             var inscope st0 <- [for (k in range(ssz)); pool[sb + k]]
             var inscope(cv2, hw2) <- dn_group_conv_oracle(xq, hist0, cw, 2, 2, cd, kd, nkh, ds, dconv, qscale)

@@ -7275,9 +7275,7 @@ def private pf_hc_head(enc : MetalComputeEncoder?; t : Model; h : PfHc; bxf : Me
     enc_hc_mix(enc, h.bxn, h.bgate, bxf, hc_mix_args(c, 1l), c.dim)
 }
 
-//! The n-gram side input over the window before layer ple_layer's attention mixer: the key/value GEMMs off the gathered heads,
-//! then the decode's gate and conv (`enc_ple_side_rows`), each capture's ring as it stands after its row (the conv input rows
-//! before it off `p.bcin`, older rows off the entry ring) into the arena, then the window's last rows into the ring itself
+//! the n-gram side input over the window before layer ple_layer's mixer: the key/value GEMMs, gate and conv, each capture's ring into the arena, then the window's last rows into the ring
 def private pf_ple_side(enc : MetalComputeEncoder?; t : Model; h : PfHc; p : PfPle; u_dim : MetalBuffer?; start_pos : int64; bring : MetalBuffer?; ring_base : uint64;
                         caps : array<DnSnapshot>; bcap : MetalBuffer?; cap_bytes, cap_ring_off : int64) {
     let c = t.config
@@ -7311,8 +7309,6 @@ def private pf_ple_side(enc : MetalComputeEncoder?; t : Model; h : PfHc; p : PfP
     }
 }
 
-//! each segment's captures off the arena the window's stages wrote, in table order: the state, the conv history and the
-//! n-gram ring, then the segment's captures stand filled
 def private dn_captures_from_arena(var segs : array<PfSeg>; bcap : MetalBuffer?; cap_bytes : int64) {
     var capi = 0l
     for (sg in segs) {
@@ -7493,8 +7489,6 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
     let dn = c.recr_mask != 0ul
     var dn_tab : tuple<buf : MetalBuffer?; bytes : uint64>
     var dn_npmax = 0l
-    //! the capture arena: a region's layout ([state][conv]) a capture, every segment's captures back to back; the group table's
-    //! records index it and the host copies each capture into its snapshot once the window completes
     var bcap : MetalBuffer? = null
     var bytes_cap = 0ul
     var cap_bytes = 0l

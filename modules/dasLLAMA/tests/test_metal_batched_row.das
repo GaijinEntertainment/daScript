@@ -1074,8 +1074,6 @@ def test_metal_prefix_checkpoint(t : T?) {
                 t |> success(ids_equal(xc.toks, rc.toks), "the attached stream's tokens are the whole prefill's")
                 t |> success(ids_equal(xb.toks, rb.toks), "the stream that left the checkpoint emits what it emits with no cache")
                 t |> success(!ids_equal(rb.toks, rc.toks), "the second and third replies differ, so a replayed session would show")
-                // a checkpoint inside a window rides it: the window stays the chunk and the state is captured at the stop's row;
-                // the idle quantum is off, so every tick takes the chunk
                 let chunk = cut * 3l / 4l
                 var near <- create_scheduler(tr, 1l, 4l, chunk, 64l, 0l, KVDtype.f16, true, 0l)
                 var events : array<SchedEvent>

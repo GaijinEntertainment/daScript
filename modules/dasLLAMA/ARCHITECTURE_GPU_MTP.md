@@ -57,7 +57,10 @@ seat and leaves the watermark at the round's full depth. The rows above the comm
 drafts' - garbage the next round rewrites - and `n_past` is what the next step reads. The walk ends on a draft among
 the caller's stop ids (`Session.spec_stops`, the scheduler's stream stop list, `mtp_accept_cut_at_stop`): the finishing
 token's row is the committed row `a`, the rows past it roll back as a reject's, and no pre-drawn token is parked - a
-stream emits nothing past its stop, so the round leaves no row the stream's history does not carry. The CPU depth-1 step
+stream emits nothing past its stop, so the round leaves no row the stream's history does not carry. The depth a
+scheduler stream's round takes is capped the same way (`Session.mtp_depth_cap`, `round_depth_cap`): depth 1 for a stream
+whose reasoning budget can still force a close, since a draft past the close would be evaled and not emitted, else the
+reply's remaining length, at least 1, since a draft accepted past the length cap would leave a row past the finish. The CPU depth-1 step
 (`mtp_spec_eval`) takes a rejected draft on a model with no recurrent layer without a re-forward:
 the verify's row 0 already holds the committed token's logits and post-norm hidden, so they stand
 and the draft head is re-seeded from them (a verify seat that landed the rows' picks alone under
@@ -233,7 +236,11 @@ history bases, its capture count and the word its capture records start at (`dn_
 three words a capture past every group's eight: the row the state stands after, its state and history bases in the capture
 arena the stages bind as `DnStages.capb`) - the prefill window's checkpoint stops inside it, which the scan writes its
 register state to as it passes the row and the history advance writes the taps rows before the row to, each copied into its
-snapshot once the window completes (`dn_captures_from_arena`); the conv grid spans the longest group's rows by the
+snapshot once the window completes (`dn_captures_from_arena`). The arena holds one slot a capture, every segment's captures
+back to back in table order, each laid out as the session's arrays - the state floats, the conv history floats, then the
+n-gram ring (`pf_ple_side` copies a capture's ring rows there: the conv input rows before its row off the window's panel,
+the older rows off the entry ring) - and the window takes it from the pool only when a segment carries a capture; the conv
+grid spans the longest group's rows by the
 group count, the history advance and the scan take the group count as their last axis, and each
 group's scan walks its own rows in order against its own state. The L2 and the gate read no state, so
 they run over every row as one window. `enc_dn_front` and `enc_dn_back`

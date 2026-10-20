@@ -591,8 +591,6 @@ def private advance_with(m : Model; var st : Stream; tok : int64; var events : a
 //! the stream's reasoning budget can still force a close: a token it emits may queue one, so its round drafts one token
 def private think_budget_armed(st : Stream) : bool => st.think_budget > 0l && !empty(st.think_marks.close) && st.think_state != 2
 
-//! the deepest round the stream can take the drafts of: one under an armed reasoning budget, and never past the reply's
-//! remaining length - a draft accepted past the length cap would be a row past the finish
 def private round_depth_cap(st : Stream) : int64 {
     let left = max(st.max_new - st.n_gen, 1l)
     return think_budget_armed(st) ? 1l : left
@@ -903,7 +901,7 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
                 if (sch.streams[i].state == StreamState.done) {
                     sch.streams[i].cur_tok = -1l   //! the accepted draft is evaled already: the close has nothing pending
                     if (sch.streams[i].finish == "stop") {
-                        sch.streams[i].stop_row_tok = sch.streams[i].session.mtp_vbatch[j]   //! the finishing token's row stands: the verify evaled it
+                        sch.streams[i].stop_row_tok = sch.streams[i].session.mtp_vbatch[j]
                         sch.mtp_stop_rows ++
                     }
                 }
@@ -975,12 +973,9 @@ def private any_prefilling_before_a_shared_checkpoint(sch : Scheduler) : bool {
 //! whether a media span's K/V is still to stand for the stream: its body, and the text around it, eval as one call of their own
 def private stream_has_span_ahead(st : Stream) : bool => next_span(st.spans) >= 0
 
-//! the rows a stream's next text chunk takes of `chunk`, never past `prompt_end`: a checkpoint stop inside the chunk rides it
-//! (`window_stops`), since the recurrent prefill leaves the state at every stop a window carries
 def private chunk_take(st : Stream; chunk, prompt_end : int64) : int64 => min(chunk, prompt_end - st.n_prefilled)
 
-//! the checkpoint stops strictly inside the next `take` rows of stream `st`, into its session's `dn_stops` (ascending): the
-//! window leaves a snapshot at each, which `file_captures` keeps after the call
+[arch(at="../ARCHITECTURE_ENGINE_SERVING.md#prefix-recurrent-checkpoints")]
 def private window_stops(var st : Stream; take : int64) {
     st.session.dn_stops |> clear()
     let lo = st.n_prefilled
@@ -993,8 +988,7 @@ def private window_stops(var st : Stream; take : int64) {
     sort(st.session.dn_stops)
 }
 
-//! the window's captures as checkpoints: each at its stop, kinded as the stop's end-of-chunk twin would be - a host-cached
-//! stream's into the prefix cache, a device-home stream's standing in its region's checkpoint rows and queued for the pool
+[arch(at="../ARCHITECTURE_ENGINE_SERVING.md#prefix-recurrent-checkpoints")]
 def private file_captures(m : Model; var sch : Scheduler; i : int64) {
     var st & = unsafe(sch.streams[i])
     for (k in range64(long_length(st.session.dn_captures))) {
@@ -1471,9 +1465,6 @@ def private drop_parked(var sch : Scheduler; at : int) {
 }
 
 //! Eval the turn's closing tokens and leave in `donate_toks` the token list the session's rows hold.
-//! The finished turn's close: the close tokens evaled past the ones already standing (a `length` finish's pending token goes
-//! first; a stop a verify row evaled stands as the close's first token, or, off the close, ends the evaled history - no close
-//! follows a row the next turn's prompt does not carry), then `donate_toks` = the evaled history the cache may keep
 def private close_turn(m : Model; var sch : Scheduler; var st : Stream) {
     let stop_closes = st.stop_row_tok >= 0l && !empty(st.close_toks) && st.close_toks[0] == st.stop_row_tok
     let close_from = st.stop_row_tok < 0l ? 0l : (stop_closes ? 1l : long_length(st.close_toks))

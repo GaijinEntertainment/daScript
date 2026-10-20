@@ -2269,7 +2269,7 @@ class DnScan {
                 orows[pa.o_off + (pa.row0 + t) * pa.di + h * ds + col] = o
             }
             var ci = 0u
-            while (ci < pa.cap_n) {   //! a capture standing after this row: the state into its checkpoint row, the live region's untouched
+            while (ci < pa.cap_n) {
                 let rec = pa.cap_rec + ci * 2u
                 if (caps[rec] == t + 1u && live) {
                     let cb = caps[rec + 1u] + pa.cap_state_off + h * ds * ds + col + lane * ds
@@ -2303,10 +2303,10 @@ struct DnCapTailArgs {
 //! the capture's row, the rows before the part off the image it entered on
 [vk_dispatch(name = "dn_cap_tail_cls", grid = "wgs", params = "wgs : int64")]
 class DnCapTail {
-    @ssbo @binding = 0 @readonly src : array<float>      // the projected rows (position-major)
-    @ssbo @binding = 1 @readonly smalls : array<float>   // the layer's smalls (the entry ring image at entry_off)
-    @ssbo @binding = 2 @readonly caps : array<uint>      // the window's capture records
-    @ssbo @binding = 3 dst : array<float>                // the checkpoint rows
+    @ssbo @binding = 0 @readonly src : array<float>      //! the projected rows (position-major)
+    @ssbo @binding = 1 @readonly smalls : array<float>   //! the layer's smalls (the entry ring image at entry_off)
+    @ssbo @binding = 2 @readonly caps : array<uint>      //! the window's capture records
+    @ssbo @binding = 3 dst : array<float>                //! the checkpoint rows
     @push_constant pa : DnCapTailArgs
 
     [spirv_kernel(local_size_x = 256, name = "dn_cap_tail_cls_spv")]

@@ -86,7 +86,9 @@ call marks 0 (`pf_caps_done`). The hyper-connection chain copies each capture's 
 own update (`pf_hc_side`). After the call the tier lands them (`rdec_caps_land`): a device-home session keeps each row at its
 stop's position, as `gpu_device_kv_checkpoint` would have saved it; a host-cached session peeks the row into its snapshot
 (`rdec_peek_snapshot`) and frees it. The token-command peel keeps no state at an interior row, so a call with a capture takes
-the window chain.
+the window chain. The checkpoint rows exist from the first save or the first capture (`rd_snap_alloc`); until then each
+recurrent layer's scan and cap-tail sets bind the smalls in their place, unread, since a window with no capture never reads
+that binding, and `vk_rdec_prefill_caps` rebinds the layers' sets onto the rows when it makes them.
 
 The conv history crosses windows position-major in the image the call did not enter on; the last window transposes the
 tail into the decode step's per-channel layout (`dn_tail_cls`; the handoff is stated in
