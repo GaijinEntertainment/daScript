@@ -123,14 +123,20 @@ jobs:
               libxi-dev \
               ccache
 
-            ./emsdk/emsdk install latest
-            ./emsdk/emsdk activate latest
+            # emsdk 6.0.12 is pinned: `latest` moved to 6.0.13 on 2026-10-19 and web's run_web_tests dies under it on
+            # every branch (`WASM error: TypeError: Cannot read properties of undefined (reading 'NODEFS')`). Bump the
+            # pin once dastest_wasm.js reads NODEFS the way Emscripten 6.0.13 exposes it.
+            ./emsdk/emsdk install 6.0.12
+            ./emsdk/emsdk activate 6.0.12
             source "/home/runner/work/daScript/daScript/emsdk/emsdk_env.sh"
             ;;
           windows*)
             choco install ccache -y --no-progress
-            ./emsdk/emsdk install latest
-            ./emsdk/emsdk activate latest
+            # emsdk 6.0.12 is pinned: `latest` moved to 6.0.13 on 2026-10-19 and web's run_web_tests dies under it on
+            # every branch (`WASM error: TypeError: Cannot read properties of undefined (reading 'NODEFS')`). Bump the
+            # pin once dastest_wasm.js reads NODEFS the way Emscripten 6.0.13 exposes it.
+            ./emsdk/emsdk install 6.0.12
+            ./emsdk/emsdk activate 6.0.12
             ./emsdk/emsdk_env.bat
             ;;
           *)
@@ -146,8 +152,11 @@ jobs:
               export PATH="/usr/local/opt/bison/bin:$PATH"
             fi
             brew install ccache
-            ./emsdk/emsdk install latest
-            ./emsdk/emsdk activate latest
+            # emsdk 6.0.12 is pinned: `latest` moved to 6.0.13 on 2026-10-19 and web's run_web_tests dies under it on
+            # every branch (`WASM error: TypeError: Cannot read properties of undefined (reading 'NODEFS')`). Bump the
+            # pin once dastest_wasm.js reads NODEFS the way Emscripten 6.0.13 exposes it.
+            ./emsdk/emsdk install 6.0.12
+            ./emsdk/emsdk activate 6.0.12
             source "/Users/runner/work/daScript/daScript/emsdk/emsdk_env.sh"
             ;;
         esac
