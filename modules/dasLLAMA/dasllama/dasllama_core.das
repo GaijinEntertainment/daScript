@@ -1007,10 +1007,11 @@ def prefix_share_pages(var cache : PrefixCache; var pool : KVPool; var session :
     return prefix_share_pages_(cache, pool, session, tokens, n)
 }
 
-def prefix_insert_snapshot(var cache : PrefixCache; var pool : KVPool; session : Session; tokens : array<int64>; var snap : DnSnapshot; opening : bool = false) {
+def prefix_insert_snapshot(var cache : PrefixCache; var pool : KVPool; session : Session; tokens : array<int64>; var snap : DnSnapshot; opening : bool = false; upto : int64 = 0l) {
     //! A recurrent checkpoint of the first ``n_past`` of ``tokens`` out of ``session``'s pages, its state ``snap``
-    //! (moved in) taken elsewhere - a device's slots. ``opening`` kinds it as shared, else as a conversation's tail.
-    prefix_insert_snapshot_(cache, pool, session, tokens, snap, opening)
+    //! (moved in) taken elsewhere - a device's slots, or a window's capture at ``upto`` (0 = the tokens' end).
+    //! ``opening`` kinds it as shared, else as a conversation's tail.
+    prefix_insert_snapshot_(cache, pool, session, tokens, snap, opening, upto)
 }
 
 def gpu_device_session_ctx() : int64 {

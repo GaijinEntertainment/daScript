@@ -12018,8 +12018,9 @@ class MetalDnConvHist {
     @ssbo @binding = 0 x : array<float>     //! [rows x cd] the fused qkv rows
     @ssbo @binding = 1 hist : array<float>  //! the mirror pool: each group's live history
     @ssbo @binding = 2 @role = "alias" histm : array<float> //! dual-store: the history one row short of the group's (verify shadow region)
-    @ssbo @binding = 3 grp : array<uint>    //! the group table, eight words a group (dn_grp_push)
+    @ssbo @binding = 3 grp : array<uint>    //! the group table, eight words a group (dn_grp_push), then its capture records
     @uniform @binding = 4 ka : DnArgs
+    @ssbo @binding = 5 @role = "alias" capb : array<float>   //! the capture arena: the taps rows before each capture's row land at the record's history base (the pool when no group captures)
 
     [metal_kernel(name="metal_dn_conv_hist_msl")]
     def metal_dn_conv_hist {
@@ -12050,6 +12051,19 @@ class MetalDnConvHist {
                 histm[hmb + ch * taps + k] = src >= 0 ? x[(row0 + uint(src)) * cd + ch] : hist[hb + ch * taps + uint(src + int(taps))]
                 k++
             }
+        }
+        var ci = 0u
+        while (ci < grp[ge + 6u]) {         //! each capture's history: the taps rows before its row, the old history under them
+            let cw = grp[ge + 7u] + ci * 3u
+            let crow = grp[cw]
+            let cb = grp[cw + 2u] + ka.cslice
+            k = 0u
+            while (k < taps) {
+                let src = int(crow + k) - int(taps)
+                capb[cb + ch * taps + k] = src >= 0 ? x[(row0 + uint(src)) * cd + ch] : hist[hb + ch * taps + uint(src + int(taps))]
+                k++
+            }
+            ci++
         }
         k = 0u
         while (k < taps) {
@@ -12156,8 +12170,9 @@ class template MetalDnScanT {
     @ssbo @binding = 5 @role = "weight" dtb : array<float>   // [nvh] dt_bias (fblob row)
     @ssbo @binding = 6 o : array<float>     //! [rows x di] delta-rule output rows
     @ssbo @binding = 7 @role = "alias" stm : array<float>  //! dual-store: the state one row short of the group's (verify shadow region)
-    @ssbo @binding = 8 grp : array<uint>    //! the group table, eight words a group (dn_grp_push)
+    @ssbo @binding = 8 grp : array<uint>    //! the group table, eight words a group (dn_grp_push), then its capture records
     @uniform @binding = 9 ka : DnArgs
+    @ssbo @binding = 10 @role = "alias" capb : array<float>   //! the capture arena: a group's state after a capture's row lands at the record's state base (the pool when no group captures)
 
     [metal_kernel, arch(at="../ARCHITECTURE_GPU_PREFILL_WINDOW.md#prefill-dn-scan")]
     def metal_dn_scan {   // nolint:STYLE038 — MSL kernel body; the walk's state is register-resident across the whole loop
@@ -12233,6 +12248,17 @@ class template MetalDnScanT {
                 for [unroll_full] (e in range(32)) {
                     stm[smb + s0 + uint(e) * ds] = ls[e]
                 }
+            }
+            var ci = 0u
+            while (ci < grp[ge + 6u]) {   //! a capture standing after this row: the state lands at its record's base
+                let cw = grp[ge + 7u] + ci * 3u
+                if (grp[cw] == p + 1u) {
+                    let capbase = grp[cw + 1u] + ka.sslice + s0
+                    for [unroll_full] (e in range(32)) {
+                        capb[capbase + uint(e) * ds] = ls[e]
+                    }
+                }
+                ci++
             }
             p++
         }
@@ -12333,6 +12359,7 @@ struct DnStages {
     o : MetalBuffer?
     z : MetalBuffer?     //! the gate rows; null = no gate (the replay)
     grp : MetalBuffer?
+    capb : MetalBuffer?  //! the capture arena the group table's records index; null = no group captures (the stages bind the pool)
     ng : int64
     npmax : int64        //! the most rows one group carries
     rows : int64
@@ -12342,7 +12369,8 @@ struct DnStages {
 }
 
 //! one group's eight words in the table the recurrent stages read: its first row, its rows, then its live state, shadow
-//! state, live history and shadow history bases (floats into the bound mirror pool, from these byte offsets), two pad words
+//! state, live history and shadow history bases (floats into the bound mirror pool, from these byte offsets), its capture
+//! count and the word its capture records start at (`dn_grp_cap`: three words a capture, past every group's eight)
 var private @scratch g_dn_grp_w : array<uint>
 
 //! a fresh group table: the words `dn_grp_push` appends and `dn_grp_upload` hands to a buffer
@@ -12350,15 +12378,26 @@ def dn_grp_clear {
     g_dn_grp_w |> clear()
 }
 
-def dn_grp_push(row0, npos : int64; soff, salt, coff, calt : uint64) {
+def dn_grp_push(row0, npos : int64; soff, salt, coff, calt : uint64; ncap : int64 = 0l; capw : int64 = 0l) {
     g_dn_grp_w |> push(uint(row0))
     g_dn_grp_w |> push(uint(npos))
     g_dn_grp_w |> push(uint(soff / 4ul))
     g_dn_grp_w |> push(uint(salt / 4ul))
     g_dn_grp_w |> push(uint(coff / 4ul))
     g_dn_grp_w |> push(uint(calt / 4ul))
-    g_dn_grp_w |> push(0u)
-    g_dn_grp_w |> push(0u)
+    g_dn_grp_w |> push(uint(ncap))
+    g_dn_grp_w |> push(uint(capw))
+}
+
+let DN_GRP_WORDS = 8l   //! a group's words in the table
+let DN_CAP_WORDS = 3l   //! a capture's: the row the state stands after, its state base and its history base (floats into the capture arena)
+
+//! one capture record after the groups: the walk writes its state after `row` rows and the history kernel the taps rows
+//! before it at these float offsets of the arena the stages bind as `capb`
+def dn_grp_cap(row : int64; soff, hoff : uint64) {
+    g_dn_grp_w |> push(uint(row))
+    g_dn_grp_w |> push(uint(soff / 4ul))
+    g_dn_grp_w |> push(uint(hoff / 4ul))
 }
 
 //! the table as a pooled buffer; the caller hands it back to `g_upool` at its byte size once the step completes
@@ -12387,7 +12426,7 @@ def private dn_stage_args(c : Config; d : DnStages; dnli : int64) : DnArgs {
 def enc_dn_hist(enc : MetalComputeEncoder?; c : Config; dnli : int64; d : DnStages) {
     var ka = dn_stage_args(c, d, dnli)
     let pool = dn_pool_buffer()
-    enc_dn_conv_hist(enc, d.qkv, pool, pool, d.grp, ka, dn_conv_dim(c), d.ng)
+    enc_dn_conv_hist(enc, d.qkv, pool, pool, d.grp, ka, d.capb != null ? d.capb : pool, dn_conv_dim(c), d.ng)
 }
 
 //! the most rows a group carries that the fused conv + L2 serves (`GkDnConv`, ARCHITECTURE_GPU_SHARED_KERNELS.md's reading); a window
@@ -12424,10 +12463,11 @@ def enc_dn_back(enc : MetalComputeEncoder?; t : Model; l, dnli : int64; d : DnSt
     unsafe {
         var baa = upload_region(addr < void? >(t.fblob[t.dn_a_off + l * nvh]), uint64(nvh * 4l))
         var bdt = upload_region(addr < void? >(t.fblob[t.dn_dt_off + l * nvh]), uint64(nvh * 4l))
+        let capb = d.capb != null ? d.capb : pool
         if (d.cvh != null) {
-            enc_dn_scan_h(enc, d.cvh, pool, d.b, d.g, baa, bdt, d.o, pool, d.grp, ka, c.ssm_d_state, nvh, d.ng)
+            enc_dn_scan_h(enc, d.cvh, pool, d.b, d.g, baa, bdt, d.o, pool, d.grp, ka, capb, c.ssm_d_state, nvh, d.ng)
         } else {
-            enc_dn_scan(enc, d.cv, pool, d.b, d.g, baa, bdt, d.o, pool, d.grp, ka, c.ssm_d_state, nvh, d.ng)
+            enc_dn_scan(enc, d.cv, pool, d.b, d.g, baa, bdt, d.o, pool, d.grp, ka, capb, c.ssm_d_state, nvh, d.ng)
         }
         if (d.z != null) {
             var bwn = upload_region(addr < void? >(t.fblob[t.dn_norm_off + l * c.ssm_d_state]), uint64(c.ssm_d_state * 4l))

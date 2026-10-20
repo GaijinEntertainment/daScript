@@ -1,4 +1,5 @@
 options gen2
+options stack = 524288   //! two Sessions stand on one cell's stack (`test_segments_served_by_override`)
 options _comment_hygiene = true
 options _dasllama_internal = true
 options persistent_heap   // a dastest root frees what it deletes only on this heap; the linear heap holds every carrier a cell deleted until the context ends

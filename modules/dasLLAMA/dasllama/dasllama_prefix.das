@@ -368,8 +368,11 @@ def prefix_share_pages_(var cache : PrefixCache; var pool : KVPool; var s : Sess
 //! recurrent state. Answers "" when one stands there after the call, else why nothing is kept.
 def private prefix_insert_state(var cache : PrefixCache; var pool : KVPool; var s : Session; tokens : array<int64>; kind : PrefixStateKind) : string {
     let n = min(long_length(tokens), s.n_past)
-    if (n <= 0l || cache.max_states <= 0l) {
-        return "no tokens stand ({long_length(tokens)} tokens, n_past {s.n_past}, {cache.max_states} checkpoints allowed)"
+    if (cache.max_states <= 0l) {
+        return "the cache keeps no checkpoints"
+    }
+    if (n <= 0l) {
+        return "no evaled tokens stand ({long_length(tokens)} tokens, n_past {s.n_past})"
     }
     if (prefix_state_touch_(cache, tokens, n, kind == PrefixStateKind.opening)) {
         return ""
@@ -385,11 +388,15 @@ def private prefix_insert_state(var cache : PrefixCache; var pool : KVPool; var 
 }
 
 //! A checkpoint of the first `n_past` of `tokens` out of the session `s`'s pages, its state `snap` taken elsewhere (moved in) - a
-//! device's slots, where the session holds the rows alone. Nothing is kept when the state does not stand at that position.
+//! device's slots, where the session holds the rows alone, or a window's capture at `snap.pos` with `tokens` reaching past it
+//! (`upto` = that position, 0 = the shorter of the tokens and `n_past`). Nothing is kept when the state does not stand there.
 [arch(at="../ARCHITECTURE_ENGINE_SERVING.md#device-home-pool")]
-def prefix_insert_snapshot_(var cache : PrefixCache; var pool : KVPool; s : Session; tokens : array<int64>; var snap : DnSnapshot; opening : bool) {
-    let n = min(long_length(tokens), s.n_past)
-    if (n <= 0l || cache.max_states <= 0l || snap.pos != n) {
+def prefix_insert_snapshot_(var cache : PrefixCache; var pool : KVPool; s : Session; tokens : array<int64>; var snap : DnSnapshot; opening : bool; upto : int64 = 0l) {
+    var n = min(long_length(tokens), s.n_past)
+    if (upto > 0l) {
+        n = min(n, upto)
+    }
+    if (n <= 0l || cache.max_states <= 0l || snap.pos != n || prefix_state_touch_(cache, tokens, n, opening)) {
         delete snap
         return
     }

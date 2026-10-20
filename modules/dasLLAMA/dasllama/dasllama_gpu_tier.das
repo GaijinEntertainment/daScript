@@ -661,6 +661,36 @@ struct public RdecPfSeg {
     npos : int64
     pos0 : int64
     region : int64
+    seg : int64 = 0l   //! the call's segment this is, or the part of it inside a window, belongs to: the captures name their segment by it
+}
+
+//! A checkpoint stop inside a resident prefill call: segment `seg`'s state after its first `row` rows lands in checkpoint row
+//! `slot` of the segment's region (the state, the conv history as the ring image the row's parity reads, the n-gram ring)
+struct public RdecPfCap {
+    seg : int64
+    row : int64
+    slot : int64
+}
+
+typedef RdecPrefillCapsFn = function<(caps : array<RdecPfCap>) : void>
+
+[unused_argument(caps)]
+def private rdec_unset_prefill_caps(caps : array<RdecPfCap>) {
+    panic("dasLLAMA: a resident prefill's checkpoint captures asked without an installed GPU driver")
+}
+
+var g_rdec_prefill_caps = @@rdec_unset_prefill_caps
+
+//! Install the driver's capture list seat: the stops the next prefill call leaves checkpoints at inside its windows
+[arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
+def public install_rdec_prefill_caps(caps_fn : RdecPrefillCapsFn) {
+    g_rdec_prefill_caps = caps_fn
+}
+
+//! the captures the next resident prefill call (one session's or segmented) leaves; an empty list asks none
+[arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
+def public rdec_prefill_caps(caps : array<RdecPfCap>) {
+    invoke(g_rdec_prefill_caps, caps)
 }
 
 //! The segmented resident prefill: every segment's embedded rows (or ids, where the driver gathers) and rope rows back to

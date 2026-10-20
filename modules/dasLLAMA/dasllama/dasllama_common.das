@@ -2991,6 +2991,11 @@ struct Session {
     mtp_pre_drawn : bool           //! the accept walk drew this session's next token already: the next sample_ returns mtp_pre_tok and clears this
     mtp_pre_tok : int64
     @do_not_delete spec_stops : array<int64>?   //! the caller's stop ids for a speculative round: the accept walk ends on a draft among them, so no row stands past a finishing token; null = none
+    dn_stops : array<int64>        //! the positions strictly inside the next prefill call's rows a recurrent model's prefill leaves the state at (ascending): the caller's checkpoint stops, so one window carries several
+    dn_captures : array<DnSnapshot>   //! the prefill's answer to `dn_stops`, one snapshot a stop in order (`pos` the stop), the window's own arrays - the caller files and clears them
+    dn_captured : bool             //! the serving prefill filled `dn_captures`; a window that leaves them unfilled is refused after the call
+    @scratch dn_cap_rows : array<int64>   //! a layer's walk: each capture's row inside the window
+    @scratch dn_cap_st : array<uint64>    //! ... and the address of its state slice for the layer (an address, so no delete reaches the capture's array)
     pick_asked : bool              //! the caller's sampler is a bare argmax: a device driver may land the row's pick alone and leave `logits` unwritten (the scheduler sets it a step)
     sel_row1 : int64               //! one past the landing row this session's step sampled through the device's selection ([[sel_landed]]); 0 = the rows landed
     mtp_depth_cap : int64          //! the deepest round this session's caller can take the drafts of (0 = the round's depth): a stream whose emitted tokens may queue a forced close takes depth 1
@@ -5365,6 +5370,17 @@ def dn_conv_dim(c : Config) : int64 => 2l * dn_key_dim(c) + c.ssm_d_inner
 def dn_layer_conv_floats(c : Config; cd : int64) : int64 => (c.ssm_d_conv - 1l) * cd
 def dn_layer_state_floats(c : Config) : int64 => c.ssm_dt_rank * c.ssm_d_state * c.ssm_d_state
 
+//! the last recurrent layer, -1 on a model with none: the layer whose prefill completes a window's captures
+def dn_last_recurrent_layer(c : Config) : int64 {
+    var last = -1l
+    for (l in range64(c.n_layers)) {
+        if (layer_is_recurrent(c, l)) {
+            last = l
+        }
+    }
+    return last
+}
+
 //! the floats a session's recurrent state holds over every recurrent layer - what a checkpoint's snapshot copies; 0 on a model with none
 def dn_state_floats(c : Config) : int64 {
     return 0l if (c.recr_mask == 0ul)
@@ -6145,6 +6161,65 @@ def private ple_window_copy(src : array<int64>; var dst : array<int64>; grow : b
     }
     for (i in range64(min(long_length(src), long_length(dst)))) {
         dst[i] = src[i]
+    }
+}
+
+//! The captures `s.dn_stops` asks of the window [start_pos, start_pos + npos): one snapshot a stop at the session's array
+//! sizes, its position the stop, unfilled until the serving prefill writes each layer's slice; a stop outside the window's
+//! interior, or out of order, is the caller's error. No stops: no captures.
+[cold_path]
+def dn_capture_begin(var s : Session; tokens : array<int64>; npos, start_pos : int64) {
+    let n = long_length(s.dn_stops)
+    s.dn_captured = false
+    if (n == 0l) {
+        s.dn_captures |> resize(0)
+        return
+    }
+    if (empty(s.dn_state_prefix)) {
+        panic("dasLLAMA: a checkpoint stop inside a window was asked of a model with no recurrent state")
+    }
+    s.dn_captures |> resize(n)
+    for (i in range64(n)) {
+        let at = s.dn_stops[i]
+        if (at <= start_pos || at >= start_pos + npos || (i > 0l && at <= s.dn_stops[i - 1l])) {
+            panic("dasLLAMA: checkpoint stop {at} is not inside the window [{start_pos}, {start_pos + npos}) in order")
+        }
+        s.dn_captures[i].conv |> overwrite_resize(long_length(s.dn_conv_state))
+        s.dn_captures[i].state |> overwrite_resize(long_length(s.dn_state))
+        s.dn_captures[i].ple_hist |> overwrite_resize(long_length(s.ple_conv_hist))
+        s.dn_captures[i].mtp_h |> clear()
+        s.dn_captures[i].pos = at
+        ngram_window_at(s, tokens, at - start_pos, s.dn_captures[i].ple_prev)
+    }
+}
+
+//! the n-gram window after the window's first `r` tokens, into `dst`: the slide `ngram_advance` makes, off the window the
+//! session entered on, without moving the session's own; empty on a model with no n-gram side input
+def ngram_window_at(s : Session; tokens : array<int64>; r : int64; var dst : array<int64>) {
+    let nprev = long_length(s.ple_prev)
+    dst |> overwrite_resize(nprev)
+    let keep = max(0l, nprev - r)
+    for (i in range64(keep)) {
+        dst[i] = s.ple_prev[i + r]
+    }
+    for (i in range64(keep, nprev)) {
+        dst[i] = tokens[r - (nprev - i)]
+    }
+}
+
+//! the capture whose stop is `pos`, -1 where none: a layer's walk asks after each row it advances past
+def dn_capture_at(s : Session; pos : int64) : int64 {
+    for (cap, i in s.dn_captures, count()) {
+        return int64(i) if (cap.pos == pos)
+    }
+    return -1l
+}
+
+//! A window that was asked captures and left them unfilled is refused: a checkpoint of zeros would serve garbage to every
+//! prompt that attached it
+def dn_capture_check(s : Session) {
+    if (!empty(s.dn_captures) && !s.dn_captured) {
+        panic("dasLLAMA: the serving prefill left {long_length(s.dn_captures)} checkpoint stop(s) inside its window unfilled - the path that served it keeps no state at an interior row")
     }
 }
 
@@ -7288,15 +7363,18 @@ def forward_prefill(t : Model; var s : Session; tokens : array<int64>; npos, sta
         return
     }
     sel_reset(s)
+    dn_capture_begin(s, tokens, npos, start_pos)
     forward_prefill_head(t, s, tokens, npos, start_pos)
     forward_prefill_body(t, s, npos, start_pos, skip_logits)
     forward_prefill_warm(t, s, tokens, npos, start_pos)
+    dn_capture_check(s)
 }
 
 [no_alloc, no_env, no_io, arch(at="../ARCHITECTURE_GPU_PREFILL_WINDOW.md#prefill-segments")]
 def forward_prefill_segments(t : Model; var segs : array<PrefillSeg>; toks : array<array<int64>>) {
     for (sg in segs) {
         kv_capacity_check(t, sg.npos, sg.start_pos)
+        dn_capture_begin(*sg.s, toks[sg.toki], sg.npos, sg.start_pos)
         forward_prefill_head(t, *sg.s, toks[sg.toki], sg.npos, sg.start_pos)
         prefill_rope_tables(t, *sg.s, sg.npos, sg.start_pos)
     }
@@ -7318,6 +7396,7 @@ def forward_prefill_segments(t : Model; var segs : array<PrefillSeg>; toks : arr
     }
     for (sg in segs) {
         forward_prefill_warm(t, *sg.s, toks[sg.toki], sg.npos, sg.start_pos)
+        dn_capture_check(*sg.s)
     }
 }
 

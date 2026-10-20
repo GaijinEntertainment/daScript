@@ -151,10 +151,11 @@ region carries `RDEC_DN_SNAPS` (4) checkpoint rows beside its state slots, each 
 layer's slot state (`nvh x ds x ds` floats) and its ring pair (`2 x cd x (dconv - 1)` floats) - with the region's ring parity
 (`RDec.snap_dev`, made at the first save). The plan charges them (`rdec_dn_snap_bytes`): on the 35B (30 recurrent layers, 32
 value heads of 128, a 8192-channel conv of 3 taps) a row is 2.19 MiB a layer, 65.6 MiB in all, 262 MiB a region. The scheduler's
-device mode stops a recurrent stream's prefill at the request's openings and its last message's start and end
-(`device_checkpoints_plan`, the markers the host prefix cache keeps checkpoints at) and saves the state there
-(`gpu_device_kv_checkpoint`: an empty row, else the least recently touched); the finished turn's state is the parked claim's
-own (`RdecRegion.dn_pos`). An adopter of a parked claim takes the longest of those positions its prompt contains
+device mode plans a recurrent stream's stops at the request's openings and its last message's start and end
+(`device_checkpoints_plan`, the markers the host prefix cache keeps checkpoints at): a stop inside a window the window chain
+captures into a row as it passes it (`ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-dn-block`), a stop at a window's end the
+driver saves off the slots (`gpu_device_kv_checkpoint`: an empty row, else the least recently touched); the finished turn's
+state is the parked claim's own (`RdecRegion.dn_pos`). An adopter of a parked claim takes the longest of those positions its prompt contains
 (`parked_state_at`): the end state stands in the slots, a checkpoint row loads into them (`rdec_dn_snap_load`), and the rows
 the claim held past it are rewritten by the adopter's prefill. The checkpoints at or under the adopted position stay the new
 claim's - the same tokens put them there - so a third request on the same opening adopts them off the second's claim. Nothing

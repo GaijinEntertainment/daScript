@@ -228,8 +228,12 @@ encode, so the round keeps the serial encoder and pays no hazard-tracker work pe
 rows.** A group is one session's rows against its mirror: the single row is one group of one row, the
 batch step a group a row (a row a session), the same-slab step and the verify seat's rows a
 group of its k+1 rows, the prefill window a group a segment. The rows sit back to back in the planes,
-and a small table names each group's first row, its row count and its live and shadow state and
-history bases (`dn_grp_push`, eight words a group); the conv grid spans the longest group's rows by the
+and a small table names each group's first row, its row count, its live and shadow state and
+history bases, its capture count and the word its capture records start at (`dn_grp_push`, eight words a group; `dn_grp_cap`,
+three words a capture past every group's eight: the row the state stands after, its state and history bases in the capture
+arena the stages bind as `DnStages.capb`) - the prefill window's checkpoint stops inside it, which the scan writes its
+register state to as it passes the row and the history advance writes the taps rows before the row to, each copied into its
+snapshot once the window completes (`dn_captures_from_arena`); the conv grid spans the longest group's rows by the
 group count, the history advance and the scan take the group count as their last axis, and each
 group's scan walks its own rows in order against its own state. The L2 and the gate read no state, so
 they run over every row as one window. `enc_dn_front` and `enc_dn_back`

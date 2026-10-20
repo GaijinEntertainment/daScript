@@ -975,11 +975,43 @@ def private any_prefilling_before_a_shared_checkpoint(sch : Scheduler) : bool {
 //! whether a media span's K/V is still to stand for the stream: its body, and the text around it, eval as one call of their own
 def private stream_has_span_ahead(st : Stream) : bool => next_span(st.spans) >= 0
 
-//! the rows a stream's next text chunk takes of `chunk`, never past `prompt_end`; a checkpoint within a chunk and a half
-//! ends the chunk there: stopping a chunk short of it would add a window, and a window's cost is mostly fixed
-def private chunk_take(st : Stream; chunk, prompt_end : int64) : int64 {
-    let to_ckpt = next_checkpoint(st) - st.n_prefilled
-    return min(to_ckpt > 0l && to_ckpt <= chunk + chunk / 2l ? to_ckpt : chunk, prompt_end - st.n_prefilled)
+//! the rows a stream's next text chunk takes of `chunk`, never past `prompt_end`: a checkpoint stop inside the chunk rides it
+//! (`window_stops`), since the recurrent prefill leaves the state at every stop a window carries
+def private chunk_take(st : Stream; chunk, prompt_end : int64) : int64 => min(chunk, prompt_end - st.n_prefilled)
+
+//! the checkpoint stops strictly inside the next `take` rows of stream `st`, into its session's `dn_stops` (ascending): the
+//! window leaves a snapshot at each, which `file_captures` keeps after the call
+def private window_stops(var st : Stream; take : int64) {
+    st.session.dn_stops |> clear()
+    let lo = st.n_prefilled
+    let hi = lo + take
+    for (at in fixed_array(st.ckpt_head_at, st.ckpt_sys_at, st.ckpt_at, st.ckpt_end_at)) {
+        if (at > lo && at < hi && find_index(st.session.dn_stops, at) < 0) {
+            st.session.dn_stops |> push(at)
+        }
+    }
+    sort(st.session.dn_stops)
+}
+
+//! the window's captures as checkpoints: each at its stop, kinded as the stop's end-of-chunk twin would be - a host-cached
+//! stream's into the prefix cache, a device-home stream's standing in its region's checkpoint rows and queued for the pool
+def private file_captures(m : Model; var sch : Scheduler; i : int64) {
+    var st & = unsafe(sch.streams[i])
+    for (k in range64(long_length(st.session.dn_captures))) {
+        let at = st.session.dn_captures[k].pos
+        let tail = (st.ckpt_at_tail && at == st.ckpt_at) || at == st.ckpt_end_at
+        if (st.session.device_kv) {
+            if (device_pool_on(m, sch, st.session)) {
+                st.pool_stops |> push((at = at, opening = at <= st.ckpt_shared_to))
+            }
+            to_log(LOG_INFO, "[stream {st.id}] device checkpoint at {at} tok inside the window: the region keeps the recurrent state here\n")
+        } else {
+            prefix_insert_snapshot(sch.prefix, sch.pool, st.session, st.prompt, st.session.dn_captures[k], !tail, at)
+            to_log(LOG_INFO, "[stream {st.id}] prefix checkpoint at {at} tok inside the window: {tail ? "this conversation's next turn" : "the next prompt on this opening"} attaches here ({length(sch.prefix.states)} checkpoints, {sch.prefix.state_bytes / 1048576l} MB)\n")
+        }
+    }
+    st.session.dn_captures |> resize(0)
+    st.session.dn_stops |> clear()
 }
 
 [arch(at="../ARCHITECTURE_ENGINE_SERVING.md#scheduler-step")]
@@ -1001,6 +1033,7 @@ def private prefill_tick(m : Model; var sch : Scheduler; var events : array<Sche
         continue if (st.state != StreamState.prefilling || stream_has_span_ahead(st))
         let take = chunk_take(st, min(budget, quantum), long_length(st.prompt))
         continue if (take <= 0l)
+        window_stops(st, take)
         let k = long_length(sch.seg_stream_idx)
         sch.seg_toks |> resize(k + 1l)
         sch.seg_toks[k] |> resize(take)
@@ -1025,6 +1058,9 @@ def private prefill_tick(m : Model; var sch : Scheduler; var events : array<Sche
 def private note_prefilled(m : Model; var sch : Scheduler; var events : array<SchedEvent>; i, take : int64) {
     sch.streams[i].n_prefilled += take
     sch.prefill_tokens += take
+    if (!empty(sch.streams[i].session.dn_captures)) {
+        file_captures(m, sch, i)
+    }
     if (at_checkpoint(sch.streams[i]) && sch.streams[i].session.device_kv) {
         let kept = gpu_device_kv_checkpoint(sch.streams[i].session)
         let at = sch.streams[i].n_prefilled
@@ -1079,6 +1115,7 @@ def private prefill_one_chunk(m : Model; var sch : Scheduler; var events : array
         } else {
             let head_end = si >= 0 ? sch.streams[i].spans[si].at : np   //! never past the next media span's start: a stop inside or past a span waits for the span's own eval
             let take = chunk_take(sch.streams[i], prefill_chunk(m, sch, head_end), head_end)
+            window_stops(sch.streams[i], take)
             sch.chunk |> resize(take)
             for (k in range64(take)) {
                 sch.chunk[k] = sch.streams[i].prompt[sch.streams[i].n_prefilled + k]

@@ -1074,7 +1074,8 @@ def test_metal_prefix_checkpoint(t : T?) {
                 t |> success(ids_equal(xc.toks, rc.toks), "the attached stream's tokens are the whole prefill's")
                 t |> success(ids_equal(xb.toks, rb.toks), "the stream that left the checkpoint emits what it emits with no cache")
                 t |> success(!ids_equal(rb.toks, rc.toks), "the second and third replies differ, so a replayed session would show")
-                // a checkpoint within a chunk and a half is taken in one window; the idle quantum is off, so every tick takes the chunk
+                // a checkpoint inside a window rides it: the window stays the chunk and the state is captured at the stop's row;
+                // the idle quantum is off, so every tick takes the chunk
                 let chunk = cut * 3l / 4l
                 var near <- create_scheduler(tr, 1l, 4l, chunk, 64l, 0l, KVDtype.f16, true, 0l)
                 var events : array<SchedEvent>
@@ -1083,8 +1084,12 @@ def test_metal_prefix_checkpoint(t : T?) {
                 req.stable_at = cut
                 t |> success(submit(tr, near, req), "the request marked at its opening queued")
                 scheduler_step(tr, near, events)
-                t |> equal(near.prefill_tokens, cut, "a checkpoint {cut} tokens out lands in the first window of a {chunk}-token chunk")
+                t |> equal(near.prefill_tokens, chunk, "the first window is the {chunk}-token chunk: a checkpoint {cut} tokens out no longer ends it")
+                t |> equal(near.prefix.n_state_inserts, 0l, "... and no checkpoint stands yet")
+                scheduler_step(tr, near, events)
+                t |> success(near.prefix.n_state_inserts >= 1l, "the second window carried the stop at {cut} inside it and left its checkpoint ({near.prefix.n_state_inserts} standing)")
                 drain(tr, near, events)
+                to_log(LOG_INFO, "near: {near.prefix.n_state_inserts} checkpoints inserted over the prompt and the finished turn\n")
                 t |> equal(near.prefix.n_state_inserts, 2l, "the opening's checkpoint stands, and the finished turn's after it")
                 delete events
                 delete near

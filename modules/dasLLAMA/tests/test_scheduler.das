@@ -1369,6 +1369,91 @@ def test_scheduler_mtp_length_cap(t : T?) {
     }
 }
 
+//! the reply a fresh paged scheduler gives `prompt` under the recurrent (per-token) prefill: the bit-exact oracle for a
+//! continuation off a captured checkpoint, since the per-token walk's state at a row never depends on the windowing
+def private fresh_reply(m : Model; prompt : array<int64>; n : int64; id : int64) : array<int64> {
+    var sch <- create_scheduler(m, 1l, 4l, 1024l, 16l, [idle_chunk_tokens = 0l])
+    var events : array<SchedEvent>
+    var none : array<int64>
+    submit(m, sch, make_req(id, prompt, SamplingParams(), n, none))
+    drain(m, sch, events)
+    var got <- toks_of(events, id)
+    delete events
+    delete sch
+    return <- got
+}
+
+[test]
+def test_scheduler_capture_stops(t : T?) {
+    t |> run("recurrent prefill: three checkpoint stops ride ONE window, each attaches and continues as a fresh prefill does (needs Qwen3.5-0.8B-MTP)") @(t : T?) {
+        return if (!jit_only(t))
+        if (!stat(MTP_MODEL_PATH).is_valid) {
+            t |> skip("{MTP_MODEL_PATH} not present")
+            return
+        }
+        let pins = pin_spec_kernels()
+        with_dasllama_jobque() {
+            var m <- load_model_(MTP_MODEL_PATH, QuantMode.q8)
+            m.config.seq_len = min(m.config.seq_len, 1024l)
+            var text = "The expedition left the harbour at dawn,"
+            for (i in range(30)) {
+                text += " and on day {i + 1} the crew counted {(i * 7) % 23} birds over the water, logged the wind, and rowed on;"
+            }
+            var prompt <- encode(m, text, true, false)
+            let np = long_length(prompt)
+            t |> success(np > 220l, "the prompt holds every stop with room past the last ({np} tokens)")
+            //! the four stops the server plans, a page or more apart, all inside one 512-row window: the head, the system
+            //! opening, the stable history end and the message end
+            let stops <- [48l, 96l, 160l, np - 1l]
+            var sch <- create_scheduler(m, 1l, 4l, 1024l, 16l, [idle_chunk_tokens = 0l])
+            var none : array<int64>
+            var req <- make_req(1l, prompt, SamplingParams(), 6l, none)
+            req.system_head_at = stops[0]
+            req.system_at = stops[1]
+            req.stable_at = stops[2]
+            req.messages_end_at = stops[3]
+            var events : array<SchedEvent>
+            submit(m, sch, req)
+            let evals0 = sch.prefill_evals
+            drain(m, sch, events)
+            t |> equal(sch.prefill_evals - evals0, 1l, "the prompt prefilled in ONE window with every stop inside it")
+            t |> equal(long_length(sch.prefix.states), 5l, "four stops captured and the finished turn kept ({length(sch.prefix.states)} checkpoints)")
+            var first <- toks_of(events, 1l)
+            var want1 <- fresh_reply(m, prompt, 6l, 101l)
+            t |> success(ids_equal(first, want1), "the window's own reply is the fresh prefill's ({first})")
+            var id = 2l
+            for (at in stops) {
+                continue if (at == np - 1l)
+                //! a prompt sharing the first `at` tokens attaches the capture there and continues on its own tail
+                var p2 <- [for (i in range64(at)); prompt[i]]
+                for (i in range64(12l)) {
+                    p2 |> push(prompt[np - 12l + i])
+                }
+                events |> clear()
+                submit(m, sch, make_req(id, p2, SamplingParams(), 6l, none))
+                drain(m, sch, events)
+                let fin = finished_of(events, id)
+                t |> equal(fin.n_cached, at, "stop {at}: the capture attaches the shared opening whole")
+                var got <- toks_of(events, id)
+                var want <- fresh_reply(m, p2, 6l, id + 100l)
+                to_log(LOG_INFO, "stop {at}: attached {got} | fresh {want}\n")
+                t |> success(ids_equal(got, want), "stop {at}: the continuation off the capture is the fresh prefill's")
+                delete want
+                delete got
+                delete p2
+                id++
+            }
+            delete want1
+            delete first
+            delete events
+            delete sch
+            delete prompt
+            delete m
+        }
+        restore_spec_pins(pins)
+    }
+}
+
 // ===== the speculative tick under the resident driver: a greedy stream asks a pick every tick and consumes it =====
 
 [test]

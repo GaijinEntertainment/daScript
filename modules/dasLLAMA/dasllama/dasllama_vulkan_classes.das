@@ -2156,6 +2156,9 @@ struct DnScanArgs {
     di : uint
     region_state_base : uint
     row0 : uint       //! the dispatch's first row in the conv rows, the beta / g rows and the o rows: a segmented window scans a segment's rows over its own region's state
+    cap_n : uint      //! the part's captures: records of two words (the row the state stands after, the checkpoint row's float base) at `cap_rec` of `caps`
+    cap_rec : uint
+    cap_state_off : uint   //! the layer's state floats into a checkpoint row (`RLayer.snap_off / 4`)
 }
 
 [vk_dispatch(name = "dn_scan_cls", grid = "wgs", params = "wgs : int64")]
@@ -2164,6 +2167,8 @@ class DnScan {
     @ssbo @binding = 1 state : array<float>              // the persistent per-head f32 state [nvh][ds][ds]
     @ssbo @binding = 2 @readonly smalls : array<float>   // raw beta/g rows, a/dt per head (push offsets)
     @ssbo @binding = 3 orows : array<float>              // the raw o rows at o_off
+    @ssbo @binding = 4 @readonly caps : array<uint>      //! the window's capture records
+    @ssbo @binding = 5 capst : array<float>              //! the checkpoint rows (`snap_dev`): a capture's state lands at its row's base plus the layer's
     @push_constant pa : DnScanArgs
     @workgroup egs : float[int(DN_WINDOW)]   //! the head's decay per token, exp(a * softplus(g + dt)), staged once per workgroup
     @workgroup bts : float[int(DN_WINDOW)]   //! the head's sigmoid(beta) per token, the same way
@@ -2183,7 +2188,7 @@ class DnScan {
     }
 
     [spirv_kernel(local_size_x = 128, name = "dn_scan_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-dn-block")]
-    def run {   // nolint:STYLE038 — the per-token recurrence over 16 register rows of one column
+    def run {   // nolint:STYLE037,STYLE038 — the per-token recurrence over 16 register rows of one column
         let ds = pa.ds
         let lanes_per_col = ds / 16u           // 16 state rows each; ds % 16 == 0 host-side
         let cols_per_block = 32u / lanes_per_col   //! the 128-thread workgroup's four 32-lane blocks, by the invocation id: a cluster's shuffles (masks under 8) stay inside a block on any subgroup width
@@ -2263,12 +2268,64 @@ class DnScan {
             if (live && lane == 0u) {
                 orows[pa.o_off + (pa.row0 + t) * pa.di + h * ds + col] = o
             }
+            var ci = 0u
+            while (ci < pa.cap_n) {   //! a capture standing after this row: the state into its checkpoint row, the live region's untouched
+                let rec = pa.cap_rec + ci * 2u
+                if (caps[rec] == t + 1u && live) {
+                    let cb = caps[rec + 1u] + pa.cap_state_off + h * ds * ds + col + lane * ds
+                    for [unroll_full] (i in range(16)) {
+                        capst[cb + uint(i) * row_stride] = s[i]
+                    }
+                }
+                ci++
+            }
             t++
         }
         if (live) {
             for [unroll_full] (i in range(16)) {
                 state[sb + uint(i) * row_stride] = s[i]
             }
+        }
+    }
+}
+
+struct DnCapTailArgs {
+    cd : uint
+    taps : uint
+    row0 : uint       //! the part's first row in the projected rows
+    entry_off : uint  //! the ring image the part entered on (float offset in smalls): the rows before the part, for a capture under the taps
+    cap_rec : uint    //! the part's records (two words a capture: the row the state stands after, the checkpoint row's float base)
+    cap_hist_off : uint   //! the layer's ring image 0 floats into a checkpoint row ((`RLayer.snap_off` + the slot's state bytes) / 4)
+    wg_per_cap : uint     //! the workgroups one capture's elements take: the dispatch is that many a capture, back to back
+}
+
+//! a capture's conv history into its checkpoint row's ring image 0 (the row's parity reads image 0): the taps projected rows before
+//! the capture's row, the rows before the part off the image it entered on
+[vk_dispatch(name = "dn_cap_tail_cls", grid = "wgs", params = "wgs : int64")]
+class DnCapTail {
+    @ssbo @binding = 0 @readonly src : array<float>      // the projected rows (position-major)
+    @ssbo @binding = 1 @readonly smalls : array<float>   // the layer's smalls (the entry ring image at entry_off)
+    @ssbo @binding = 2 @readonly caps : array<uint>      // the window's capture records
+    @ssbo @binding = 3 dst : array<float>                // the checkpoint rows
+    @push_constant pa : DnCapTailArgs
+
+    [spirv_kernel(local_size_x = 256, name = "dn_cap_tail_cls_spv")]
+    def run {
+        let cap = gl_WorkGroupID.x / pa.wg_per_cap
+        let idx = (gl_WorkGroupID.x % pa.wg_per_cap) * 256u + gl_LocalInvocationID.x
+        let rec = pa.cap_rec + cap * 2u
+        if (idx < pa.cd * pa.taps) {
+            let ch = idx / pa.taps
+            let k = idx % pa.taps
+            let crow = caps[rec]
+            let sp = int(crow + k) - int(pa.taps)
+            var v = 0.0
+            if (sp >= 0) {
+                v = src[(pa.row0 + uint(sp)) * pa.cd + ch]
+            } else {
+                v = smalls[pa.entry_off + ch * pa.taps + uint(sp + int(pa.taps))]
+            }
+            dst[caps[rec + 1u] + pa.cap_hist_off + ch * pa.taps + k] = v
         }
     }
 }

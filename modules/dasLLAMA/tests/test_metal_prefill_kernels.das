@@ -5458,7 +5458,7 @@ def private dn_scan_half_gate(t : T?; var dev, queue; nkh, nvh, npos : int) {
                 invoke(sprep.enc, enc, mc.buf[bbr], mc.buf[bgr], mc.buf[baa], mc.buf[bdt], ka, int64((npos * nvh + 63) / 64 * 64))
             }
             stamp_run(sscan, pso_scan) {
-                invoke(sscan.enc, enc, mc.buf[bcv], mc.buf[bst], mc.buf[bbr], mc.buf[bgr], mc.buf[baa], mc.buf[bdt], mc.buf[bo], mc.buf[bst], mc.buf[bgrp], ka, int64(ds), int64(nvh), 1l)
+                invoke(sscan.enc, enc, mc.buf[bcv], mc.buf[bst], mc.buf[bbr], mc.buf[bgr], mc.buf[baa], mc.buf[bdt], mc.buf[bo], mc.buf[bst], mc.buf[bgrp], ka, mc.buf[bst], int64(ds), int64(nvh), 1l)
             }
         }
         return if (!ran)
@@ -5482,7 +5482,7 @@ def private dn_scan_half_gate(t : T?; var dev, queue; nkh, nvh, npos : int) {
                     invoke(sprep.enc, enc, mc.buf[bbr], mc.buf[bgr], mc.buf[baa], mc.buf[bdt], kmid, prep_total)
                 }
                 stamp_run(sscan, pso_scan) {
-                    invoke(sscan.enc, enc, mc.buf[bcv], mc.buf[bst], mc.buf[bbr], mc.buf[bgr], mc.buf[baa], mc.buf[bdt], mc.buf[bo], mc.buf[bstm], mc.buf[bgrp], kmid, int64(ds), int64(nvh), 1l)
+                    invoke(sscan.enc, enc, mc.buf[bcv], mc.buf[bst], mc.buf[bbr], mc.buf[bgr], mc.buf[baa], mc.buf[bdt], mc.buf[bo], mc.buf[bstm], mc.buf[bgrp], kmid, mc.buf[bst], int64(ds), int64(nvh), 1l)
                 }
             }
             check_buf(t, "{tag} mid out", mc.buf[bo], owant, BAR_FP, Shape(row_width = di, head_width = ds))
@@ -5501,7 +5501,7 @@ def private dn_scan_half_gate(t : T?; var dev, queue; nkh, nvh, npos : int) {
                 invoke(sprep.enc, enc, mc.buf[bbr], mc.buf[bgr], mc.buf[baa], mc.buf[bdt], ksplit, prep_total)
             }
             stamp_run(sscan, pso_scan) {
-                invoke(sscan.enc, enc, mc.buf[bcv], mc.buf[bst], mc.buf[bbr], mc.buf[bgr], mc.buf[baa], mc.buf[bdt], mc.buf[bo], mc.buf[bstm], mc.buf[bgrp], ksplit, int64(ds), int64(nvh), 1l)
+                invoke(sscan.enc, enc, mc.buf[bcv], mc.buf[bst], mc.buf[bbr], mc.buf[bgr], mc.buf[baa], mc.buf[bdt], mc.buf[bo], mc.buf[bstm], mc.buf[bgrp], ksplit, mc.buf[bst], int64(ds), int64(nvh), 1l)
             }
         }
         check_buf(t, "{tag} split out", mc.buf[bo], owant, BAR_FP, Shape(row_width = di, head_width = ds))
@@ -5523,7 +5523,7 @@ def private dn_scan_half_gate(t : T?; var dev, queue; nkh, nvh, npos : int) {
                 invoke(sprep.enc, enc, mc.buf[bbr1], mc.buf[bgr1], mc.buf[baa], mc.buf[bdt], krow, prep_total)
             }
             stamp_run(sscan, pso_scan) {
-                invoke(sscan.enc, enc, mc.buf[bcv1], mc.buf[bst], mc.buf[bbr1], mc.buf[bgr1], mc.buf[baa], mc.buf[bdt], mc.buf[bo1], mc.buf[bst], mc.buf[bgrp1], krow, int64(ds), int64(nvh), 1l)
+                invoke(sscan.enc, enc, mc.buf[bcv1], mc.buf[bst], mc.buf[bbr1], mc.buf[bgr1], mc.buf[baa], mc.buf[bdt], mc.buf[bo1], mc.buf[bst], mc.buf[bgrp1], krow, mc.buf[bst], int64(ds), int64(nvh), 1l)
             }
         }
         check_buf(t, "{tag} row: beta, the row before the offset as it was", mc.buf[bbr1], bwant1, BAR_FP, Shape(row_width = nvh))
@@ -5543,7 +5543,7 @@ def private dn_scan_half_gate(t : T?; var dev, queue; nkh, nvh, npos : int) {
                 invoke(sprep.enc, enc, mc.buf[bbr], mc.buf[bgr], mc.buf[baa], mc.buf[bdt], ka, int64((npos * nvh + 63) / 64 * 64))
             }
             stamp_run(sscan, pso_scan) {
-                invoke(sscan.enc, enc, mc.buf[bcv], mc.buf[bst], mc.buf[bbr], mc.buf[bgr], mc.buf[baa], mc.buf[bdt], mc.buf[bo], mc.buf[bst], mc.buf[bgrp], ka, int64(ds), int64(nvh), 1l)
+                invoke(sscan.enc, enc, mc.buf[bcv], mc.buf[bst], mc.buf[bbr], mc.buf[bgr], mc.buf[baa], mc.buf[bdt], mc.buf[bo], mc.buf[bst], mc.buf[bgrp], ka, mc.buf[bst], int64(ds), int64(nvh), 1l)
             }
         }
         t |> success(mc |> rerun_mismatches(bo, owant, 1e-4, 0.0, "{tag} CONTROL(expected-red)") > 0, "{tag} control: gates prepared twice over a moved state must miss")
@@ -5619,8 +5619,11 @@ def private dn_groups_gate(t : T?; var dev, queue) {
         let ha = ssz
         let sb = ssz + hsz
         let hb = 2 * ssz + hsz
+        //! group B carries one capture after its second row: its state lands at the arena's state base and the taps rows before
+        //! that row at its history base (the record's three words past the two groups' sixteen)
         var inscope grp <- [0u, 2u, uint(sa), uint(sa), uint(ha), uint(ha), 0u, 0u,
-                            2u, 3u, uint(sb), uint(sb), uint(hb), uint(hb), 0u, 0u]
+                            2u, 3u, uint(sb), uint(sb), uint(hb), uint(hb), 1u, 16u,
+                            2u, 0u, uint(ssz)]
         var ka = DnArgs(cd = uint(cd), dconv = uint(dconv), npos = uint(rows), kd = uint(kd), ds = uint(ds), nvh = uint(nvh),
             nkh = uint(nkh), di = uint(di), eps = EPS, qscale = qscale, bstr = uint(2 * nvh), goff = uint(nvh))
         let bx = mc |> in_(xq)
@@ -5632,15 +5635,16 @@ def private dn_groups_gate(t : T?; var dev, queue) {
         let bdt = mc |> in_(dtb)
         let by = mc |> out_(rows * cd)
         let bo = mc |> out_(rows * di)
+        let bcap = mc |> out_(ssz + hsz)
         let ran = mc |> cell_record(t, "dn groups") $(enc : MetalComputeEncoder?) {
             stamp_run(sconv, pso_conv) {
                 invoke(sconv.enc, enc, mc.buf[bx], mc.buf[by], mc.buf[bpool], mc.buf[bw], mc.buf[bgrp], dn_conv_args(ka), dn_conv_n_wgs(int64(cd), 3l), 2l)
             }
             stamp_run(shist, pso_hist) {
-                invoke(shist.enc, enc, mc.buf[bx], mc.buf[bpool], mc.buf[bpool], mc.buf[bgrp], ka, int64(cd), 2l)
+                invoke(shist.enc, enc, mc.buf[bx], mc.buf[bpool], mc.buf[bpool], mc.buf[bgrp], ka, mc.buf[bcap], int64(cd), 2l)
             }
             stamp_run(sscan, pso_scan) {
-                invoke(sscan.enc, enc, mc.buf[by], mc.buf[bpool], mc.buf[bba], mc.buf[bba], mc.buf[baa], mc.buf[bdt], mc.buf[bo], mc.buf[bpool], mc.buf[bgrp], ka, int64(ds), int64(nvh), 2l)
+                invoke(sscan.enc, enc, mc.buf[by], mc.buf[bpool], mc.buf[bba], mc.buf[bba], mc.buf[baa], mc.buf[bdt], mc.buf[bo], mc.buf[bpool], mc.buf[bgrp], ka, mc.buf[bcap], int64(ds), int64(nvh), 2l)
             }
         }
         return if (!ran)
@@ -5675,6 +5679,24 @@ def private dn_groups_gate(t : T?; var dev, queue) {
         check_buf(t, "dn groups conv rows", mc.buf[by], cvw, BAR_FP, Shape(row_width = cd, head_width = ds))
         check_buf(t, "dn groups out", mc.buf[bo], ow, BAR_FP, Shape(row_width = di, head_width = ds))
         check_buf(t, "dn groups pool: both states and histories", mc.buf[bpool], poolw, BAR_FP, Shape(row_width = ds))
+        {   //! the capture against group B's oracle run over its first two rows alone: the state after them, the history before the third;
+            //! the control is the state after all three rows, which the capture must miss
+            var inscope hist0 <- [for (k in range(hsz)); pool[hb + k]]
+            var inscope st0 <- [for (k in range(ssz)); pool[sb + k]]
+            var inscope(cv2, hw2) <- dn_group_conv_oracle(xq, hist0, cw, 2, 2, cd, kd, nkh, ds, dconv, qscale)
+            var inscope braw2 <- [for (k in range(2 * nvh)); ba[(2 + k / nvh) * 2 * nvh + k % nvh]]
+            var inscope graw2 <- [for (k in range(2 * nvh)); ba[(2 + k / nvh) * 2 * nvh + nvh + k % nvh]]
+            var inscope(_, _, _, st2, _) <- dn_rule_oracle(cv2, braw2, graw2, aa, dtb, st0, nkh, nvh, 2, ds)
+            var inscope capw : array<float>
+            capw |> push_from(st2, hw2)
+            check_buf(t, "dn groups capture: group B's state and history after two of its three rows", mc.buf[bcap], capw, BAR_FP, Shape(row_width = ds))
+            var inscope capg <- mc |> plane_run(bcap)
+            var off3 = 0
+            for (k in range(ssz)) {
+                off3 += abs(capg[k] - poolw[sb + k]) > 1e-3 ? 1 : 0
+            }
+            t |> success(off3 > 0, "dn groups capture control: the captured state is not the state after all three rows ({off3} elements off)")
+        }
         var inscope og <- mc |> plane_run(bo)
         var off = 0
         for (k in range(3 * di)) {
@@ -5833,7 +5855,7 @@ def private dn_chain_gate(t : T?; var dev, queue; nkh, nvh, dconv, npos : int; c
         let bhm = npos >= 2 ? (mc |> out_words(cd * taps, -1000.0)) : bh
         mc |> cell_record(t, "dn hist npos={npos}") $(enc : MetalComputeEncoder?) {
             stamp_run(shist, pso_hist) {
-                invoke(shist.enc, enc, mc.buf[bx], mc.buf[bh], mc.buf[bhm], mc.buf[bgrp], ka, int64(cd), 1l)
+                invoke(shist.enc, enc, mc.buf[bx], mc.buf[bh], mc.buf[bhm], mc.buf[bgrp], ka, mc.buf[bh], int64(cd), 1l)
             }
         }
         check_buf(t, "dn hist npos={npos}", mc.buf[bh], hwant, BAR_FP, Shape(row_width = taps))
@@ -5851,7 +5873,7 @@ def private dn_chain_gate(t : T?; var dev, queue; nkh, nvh, dconv, npos : int; c
         let bstm = npos >= 2 ? (mc |> out_words(nvh * ds * ds, -1000.0)) : bst
         mc |> cell_record(t, "dn scan npos={npos} nkh={nkh} nvh={nvh}") $(enc : MetalComputeEncoder?) {
             stamp_run(sscan, pso_scan) {
-                invoke(sscan.enc, enc, mc.buf[by], mc.buf[bst], mc.buf[bbr], mc.buf[bgr], mc.buf[baa], mc.buf[bdt], mc.buf[bo], mc.buf[bstm], mc.buf[bgrp], ka, int64(ds), int64(nvh), 1l)
+                invoke(sscan.enc, enc, mc.buf[by], mc.buf[bst], mc.buf[bbr], mc.buf[bgr], mc.buf[baa], mc.buf[bdt], mc.buf[bo], mc.buf[bstm], mc.buf[bgrp], ka, mc.buf[bst], int64(ds), int64(nvh), 1l)
             }
         }
         check_buf(t, "dn scan npos={npos} out", mc.buf[bo], owant, BAR_FP, Shape(row_width = di, head_width = ds))
