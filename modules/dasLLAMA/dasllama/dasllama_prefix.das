@@ -365,14 +365,23 @@ def prefix_share_pages_(var cache : PrefixCache; var pool : KVPool; var s : Sess
 }
 
 //! a checkpoint of the session where it stands: its first `n_past` tokens, their pages, the
-//! recurrent state. Nothing is kept when the state does not stand at that position.
-def private prefix_insert_state(var cache : PrefixCache; var pool : KVPool; var s : Session; tokens : array<int64>; kind : PrefixStateKind) {
+//! recurrent state. Answers "" when one stands there after the call, else why nothing is kept.
+def private prefix_insert_state(var cache : PrefixCache; var pool : KVPool; var s : Session; tokens : array<int64>; kind : PrefixStateKind) : string {
     let n = min(long_length(tokens), s.n_past)
-    if (n <= 0l || cache.max_states <= 0l || prefix_state_touch_(cache, tokens, n, kind == PrefixStateKind.opening)) {
-        return
+    if (n <= 0l || cache.max_states <= 0l) {
+        return "no tokens stand ({long_length(tokens)} tokens, n_past {s.n_past}, {cache.max_states} checkpoints allowed)"
+    }
+    if (prefix_state_touch_(cache, tokens, n, kind == PrefixStateKind.opening)) {
+        return ""
     }
     var snap <- dn_snapshot_take(s)
+    if (snap.pos != n) {
+        let why = "the recurrent state stands at {snap.pos}, the tokens end at {n} ({long_length(tokens)} tokens, n_past {s.n_past})"
+        delete snap
+        return why
+    }
     prefix_insert_snapshot_(cache, pool, s, tokens, snap, kind == PrefixStateKind.opening)
+    return ""
 }
 
 //! A checkpoint of the first `n_past` of `tokens` out of the session `s`'s pages, its state `snap` taken elsewhere (moved in) - a
@@ -590,17 +599,16 @@ def private prefix_evict_lru(var cache : PrefixCache; var pool : KVPool) {
     }
 }
 
-//! Donate a finished session's pages into the cache, bumping pool refcnt so they survive release;
-//! only tokens up to ``n_past`` are eligible, and pages past the budget LRU-drop. Call right before
-//! ``release_kv_pages``. ``preview`` labels the donation's chain on the dashboard surface.
+//! Donate a finished session's pages into the cache (tokens up to ``n_past``, pages past the budget LRU-drop),
+//! right before ``release_kv_pages``; ``preview`` labels the donation's chain on the dashboard surface. Answers ""
+//! where the cache holds the donation after the call, else why a recurrent model's checkpoint was not kept.
 [arch(at="../ARCHITECTURE_ENGINE_SERVING.md#prefix-tail-page")]
-def prefix_insert_(var cache : PrefixCache; var pool : KVPool; var s : Session; tokens : array<int64>; preview : string = ""; opening : bool = false) {
+def prefix_insert_(var cache : PrefixCache; var pool : KVPool; var s : Session; tokens : array<int64>; preview : string = ""; opening : bool = false) : string {
     if (s.kv_pool == null || s.kv_pool != unsafe(addr(pool))) {
         panic("prefix_insert: the session is not paged out of this pool")
     }
     if (!empty(s.dn_state_prefix)) {
-        prefix_insert_state(cache, pool, s, tokens, opening ? PrefixStateKind.opening : PrefixStateKind.tail)
-        return
+        return prefix_insert_state(cache, pool, s, tokens, opening ? PrefixStateKind.opening : PrefixStateKind.tail)
     }
     let pr = pool.page_rows
     let covered = min(long_length(tokens), s.n_past)
@@ -644,6 +652,7 @@ def prefix_insert_(var cache : PrefixCache; var pool : KVPool; var s : Session; 
             prefix_evict_lru(cache, pool)
         }
     }
+    return ""
 }
 
 //! Release every cached page hold back to ``pool`` and clear the cache (pages still used by live

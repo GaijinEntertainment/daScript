@@ -2162,3 +2162,9 @@ module) is independent and can land any time - it is pure structure.
     (the segmented prefill's seam, `vulkan_resident_prefill_segments`, already runs several segments in one chain), the
     device checkpoint takes the state off the device buffer, and the K/V half is positional and in the mirror already.
     Done = the served 3k and 9k prefill within 5% of `lcpp_bench`'s window at the same chunk.
+155. **The shared selection template's Vulkan stamp has run on no device.** `ClsSelect` stamps `GkClsSelect`
+    (`dasllama_gpu_kernels_common.das`) and its cell `test_vkd_cls_select` builds `GkClsSelArgs`; both are compile-checked on
+    the Mac (the SPIR-V emission runs at compile time) and the stamp's subgroup-aggregated histogram, uniform vocab loops and
+    `gk_subgroup_bcast0_u` shim have not been dispatched. Done = on a Vulkan device `test_vkd_cls_select` green, the
+    `test_gpu_resident_hybrid_sampled_selection` cell green, and the SPIR-V dump diff (`harness/vk_spv_diff.das`) against
+    master naming the selection stamp as the only moved module.

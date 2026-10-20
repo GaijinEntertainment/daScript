@@ -105,6 +105,7 @@ struct Stream {
     max_new : int64
     n_gen : int64                           // tokens emitted so far
     cur_tok : int64 = -1l                   // sampled but not yet evaled — the next decode step's input
+    stop_row_tok : int64 = -1l              //! the stop token a speculative round's verify evaled before it finished the stream (its row stands); -1 = none
     think_budget : int64 = 0l               //! the request's reasoning budget (0 = none)
     think_marks : ThinkBudgetMarks = ThinkBudgetMarks()   //! the span's marks the budget acts on
     n_think : int64                         //! reasoning tokens emitted so far
@@ -243,6 +244,7 @@ struct Scheduler {
     mtp_drafted : int64                     // self-spec telemetry across streams (drafts attempted / accepted)
     mtp_accepted : int64
     mtp_joined_max : int64                  // the most streams one joint verify carried in a tick (0 = every tick stepped its streams alone)
+    mtp_stop_rows : int64                   //! streams a round finished on an accepted draft among their stop ids (the stop's row stands in the session)
 }
 
 //! Create a scheduler over `model`: `max_streams` concurrent sessions, `max_queue` waiting
@@ -589,6 +591,13 @@ def private advance_with(m : Model; var st : Stream; tok : int64; var events : a
 //! the stream's reasoning budget can still force a close: a token it emits may queue one, so its round drafts one token
 def private think_budget_armed(st : Stream) : bool => st.think_budget > 0l && !empty(st.think_marks.close) && st.think_state != 2
 
+//! the deepest round the stream can take the drafts of: one under an armed reasoning budget, and never past the reply's
+//! remaining length - a draft accepted past the length cap would be a row past the finish
+def private round_depth_cap(st : Stream) : int64 {
+    let left = max(st.max_new - st.n_gen, 1l)
+    return think_budget_armed(st) ? 1l : left
+}
+
 //! Where the emitted token stands against the reasoning budget: the span's open token enters it, every token inside it counts,
 //! the close token the model writes leaves it, and the budget reached inside it - or the length cap drawing closer than the
 //! forced close is long - queues the forced close for the steps that follow.
@@ -870,8 +879,9 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
             // self-spec tick: the stream trades its cross-stream batch row for the round's positions per
             // tick, every stream's round verified together below.
             sch.streams[i].session.spec_params = unsafe(addr(sch.streams[i].params))
+            sch.streams[i].session.spec_stops = unsafe(addr(sch.streams[i].stop_ids))
             sch.streams[i].session.pick_asked = sampler_is_argmax(sch.streams[i].params)
-            sch.streams[i].session.mtp_depth_cap = think_budget_armed(sch.streams[i]) ? 1l : 0l
+            sch.streams[i].session.mtp_depth_cap = round_depth_cap(sch.streams[i])
         }
         sch.batch_rows |> push(unsafe(addr(sch.streams[i].session)))
         sch.batch_toks |> push(sch.streams[i].cur_tok)
@@ -892,6 +902,10 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
                 }
                 if (sch.streams[i].state == StreamState.done) {
                     sch.streams[i].cur_tok = -1l   //! the accepted draft is evaled already: the close has nothing pending
+                    if (sch.streams[i].finish == "stop") {
+                        sch.streams[i].stop_row_tok = sch.streams[i].session.mtp_vbatch[j]   //! the finishing token's row stands: the verify evaled it
+                        sch.mtp_stop_rows ++
+                    }
                 }
             }
             if (sch.streams[i].state == StreamState.decoding) {
@@ -899,7 +913,8 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
                     sch.gen_tokens ++
                 }
             }
-            sch.streams[i].session.spec_params = null   // the pointer aims into `streams`, which admission and reaping move
+            sch.streams[i].session.spec_params = null   // the pointers aim into `streams`, which admission and reaping move
+            sch.streams[i].session.spec_stops = null
             sch.streams[i].session.pick_asked = false
         }
         let after = mtp_totals(sch)
@@ -1148,7 +1163,11 @@ def private adopt_spans(var st : Stream; matched : int64) {
 def private donate_stream(m : Model; var sch : Scheduler; var st : Stream) {
     close_turn(m, sch, st)
     moe_gpu_hydrate_session(m, st.session)   //! rows a GPU driver stepped live on its copy alone until they come down into the pages
-    prefix_insert(sch.prefix, sch.pool, st.session, sch.donate_toks, st.prompt_head)
+    let why = prefix_insert(sch.prefix, sch.pool, st.session, sch.donate_toks, st.prompt_head)
+    if (!empty(st.session.dn_state_prefix)) {
+        let kept = empty(why) ? "this conversation's next turn attaches here" : "not kept - " + why
+        to_log(LOG_INFO, "[stream {st.id}] finished turn checkpoint at {st.session.n_past} tok: {kept} ({length(sch.prefix.states)} checkpoints, {sch.prefix.state_bytes / 1048576l} MB)\n")
+    }
 }
 
 def private park_stream(m : Model; var sch : Scheduler; var st : Stream) {
@@ -1415,13 +1434,21 @@ def private drop_parked(var sch : Scheduler; at : int) {
 }
 
 //! Eval the turn's closing tokens and leave in `donate_toks` the token list the session's rows hold.
+//! The finished turn's close: the close tokens evaled past the ones already standing (a `length` finish's pending token goes
+//! first; a stop a verify row evaled stands as the close's first token, or, off the close, ends the evaled history - no close
+//! follows a row the next turn's prompt does not carry), then `donate_toks` = the evaled history the cache may keep
 def private close_turn(m : Model; var sch : Scheduler; var st : Stream) {
+    let stop_closes = st.stop_row_tok >= 0l && !empty(st.close_toks) && st.close_toks[0] == st.stop_row_tok
+    let close_from = st.stop_row_tok < 0l ? 0l : (stop_closes ? 1l : long_length(st.close_toks))
     if (st.finish != "evicted") {
         sch.donate_toks |> clear()
+        sch.donate_toks |> reserve(length(st.close_toks) + 1)
         if (st.finish == "length" && st.cur_tok >= 0l) {
             sch.donate_toks |> push(st.cur_tok)
         }
-        sch.donate_toks |> push_from(st.close_toks)
+        for (k in range64(close_from, long_length(st.close_toks))) {
+            sch.donate_toks |> push(st.close_toks[k])
+        }
         if (!empty(sch.donate_toks)
                 && st.session.n_past + long_length(sch.donate_toks) <= m.config.seq_len) {
             eval(m, st.session, sch.donate_toks)
@@ -1432,5 +1459,8 @@ def private close_turn(m : Model; var sch : Scheduler; var st : Stream) {
     for (k in range64(st.n_prefilled)) {
         sch.donate_toks |> push(st.prompt[k])
     }
-    sch.donate_toks |> push_from(st.session.recent, st.close_toks)
+    sch.donate_toks |> push_from(st.session.recent)
+    if (close_from < long_length(st.close_toks)) {
+        sch.donate_toks |> push_from(st.close_toks)
+    }
 }

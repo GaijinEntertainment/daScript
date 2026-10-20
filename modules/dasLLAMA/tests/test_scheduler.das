@@ -1203,6 +1203,172 @@ def test_scheduler_mtp(t : T?) {   // nolint:STYLE038 — one model load per tes
     }
 }
 
+//! the pins the speculative scheduler cells run under: the bit-exact kernels, so the spec arm's batch verify and the plain arm's
+//! per-token decode cannot part on a near-tie; put back through `restore_spec_pins`
+struct SpecPins {
+    attn : AttnPrefillMode
+    act : bool
+    dn : DnPrefillMode
+    spec : bool
+}
+
+def private pin_spec_kernels() : SpecPins {
+    let pins = SpecPins(attn = get_prefill_attn_mode(), act = get_act_vec(), dn = get_deltanet_prefill_mode(), spec = get_mtp_spec())
+    set_prefill_attn_mode(AttnPrefillMode.classic)
+    set_act_vec(false)
+    set_deltanet_prefill_mode(DnPrefillMode.recurrent)
+    return pins
+}
+
+def private restore_spec_pins(pins : SpecPins) {
+    set_prefill_attn_mode(pins.attn)
+    set_act_vec(pins.act)
+    set_deltanet_prefill_mode(pins.dn)
+    set_mtp_spec(pins.spec)
+}
+
+//! a fresh plain paged scheduler's greedy reply of `n` tokens to `prompt` (no cache: a new scheduler each call)
+def private plain_reply(m : Model; prompt : array<int64>; n : int64; id : int64) : array<int64> {
+    var sch <- create_scheduler(m, 1l, 4l, 8l, 16l, [idle_chunk_tokens = 0l])
+    var events : array<SchedEvent>
+    var none : array<int64>
+    submit(m, sch, make_req(id, prompt, SamplingParams(), n, none))
+    drain(m, sch, events)
+    var got <- toks_of(events, id)
+    delete events
+    delete sch
+    return <- got
+}
+
+//! the conversation's next turn: `prompt` + `reply` + `close` + a few prompt tokens again as the new user text
+def private next_turn_prompt(prompt, reply, close : array<int64>) : array<int64> {
+    var p2 := prompt
+    p2 |> reserve(length(prompt) + length(reply) + length(close) + 4)
+    p2 |> push_from(reply, close)
+    for (i in range64(4l)) {
+        p2 |> push(prompt[i])
+    }
+    return <- p2
+}
+
+//! turn 2 on `sch` after a finished turn of `reply` + `close`: it attaches the prompt, the reply and the close whole off the
+//! finished-turn checkpoint, and reads the plain scheduler's turn 2 token for token
+def private check_next_turn(t : T?; m : Model; var sch : Scheduler; id : int64; prompt, reply, close : array<int64>; tag : string) {
+    var p2 <- next_turn_prompt(prompt, reply, close)
+    var events : array<SchedEvent>
+    var none : array<int64>
+    submit(m, sch, make_req(id, p2, SamplingParams(), 8l, none))
+    drain(m, sch, events)
+    let fin = finished_of(events, id)
+    t |> equal(fin.n_cached, long_length(prompt) + long_length(reply) + long_length(close), "{tag}: turn 2 attaches the prompt, the reply and the close whole")
+    var got <- toks_of(events, id)
+    var ref <- plain_reply(m, p2, 8l, id + 1000l)
+    to_log(LOG_INFO, "{tag}: turn 2 spec \"{text_of(pieces_of(events, id))}\" {got} | plain {ref}\n")
+    t |> success(ids_equal(got, ref), "{tag}: turn 2 reads the plain scheduler's turn 2 off the attached rows")
+    delete ref
+    delete got
+    delete events
+    delete p2
+}
+
+[test]
+def test_scheduler_mtp_stop_close(t : T?) {
+    t |> run("scheduler mtp: a stream finished on a stop the verify evaled leaves the finished-turn checkpoint, the next turn attaches it whole (needs Qwen3.5-0.8B-MTP)") @(t : T?) {
+        return if (!jit_only(t))
+        if (!stat(MTP_MODEL_PATH).is_valid) {
+            t |> skip("{MTP_MODEL_PATH} not present")
+            return
+        }
+        let pins = pin_spec_kernels()
+        let depth = mtp_depth_pin()
+        set_mtp_depth(2l)
+        with_dasllama_jobque() {
+            var m <- load_model_(MTP_MODEL_PATH, QuantMode.q8)
+            m.config.seq_len = min(m.config.seq_len, 512l)
+            var prompt <- encode(m, "Count from one to twenty: one, two, three,", true, false)
+            var ref <- plain_reply(m, prompt, 24l, 1l)
+            set_mtp_spec(true)
+            var sch <- create_scheduler(m, 1l, 4l, 8l, 16l, 0l, KVDtype.f16, true, 0l)
+            var id = 10l
+            for (cut in [2l, 4l, 8l, 10l]) {
+                //! the reply's token at `cut` is the stop: the stream emits the tokens before it, and the template's close opens on the stop
+                //! itself. The counting reply alternates a number word and a comma, so the stop is a number word (a comma would end the
+                //! stream at its first comma), and a depth-2 tick emits two drafts then a sample, so an even cut under 12 lands on a draft
+                let stop = ref[cut]
+                var stops <- [stop]
+                var close <- [stop, ref[0]]
+                var req <- make_req(id, prompt, SamplingParams(), 24l, stops)
+                req.close_toks := close
+                var events : array<SchedEvent>
+                submit(m, sch, req)
+                drain(m, sch, events)
+                let fin = finished_of(events, id)
+                t |> equal(fin.finish, "stop", "cut {cut}: the stream finishes on the stop")
+                var got <- toks_of(events, id)
+                var want <- [for (i in range64(cut)); ref[i]]
+                t |> success(find_index(want, stop) < 0, "cut {cut}: the stop token is new to the reply")
+                t |> success(ids_equal(got, want), "cut {cut}: the tokens before the stop are the plain reply's ({got})")
+                to_log(LOG_INFO, "cut {cut}: {sch.mtp_drafted} drafted, {sch.mtp_accepted} accepted, {sch.mtp_stop_rows} stops on a draft so far\n")
+                check_next_turn(t, m, sch, id + 1l, prompt, got, close, "cut {cut}")
+                delete want
+                delete got
+                delete events
+                delete close
+                delete stops
+                id += 2l
+            }
+            t |> success(sch.mtp_stop_rows > 0l, "a stop arrived as an accepted draft on some cut ({sch.mtp_stop_rows} of 4): its row stood in the session")
+            delete sch
+            delete ref
+            delete prompt
+            delete m
+        }
+        restore_mtp_depth(depth)
+        restore_spec_pins(pins)
+    }
+}
+
+[test]
+def test_scheduler_mtp_length_cap(t : T?) {
+    t |> run("scheduler mtp: a deep round drafts no row past the reply's length cap, the finished turn attaches whole (needs Qwen3.5-0.8B-MTP)") @(t : T?) {
+        return if (!jit_only(t))
+        if (!stat(MTP_MODEL_PATH).is_valid) {
+            t |> skip("{MTP_MODEL_PATH} not present")
+            return
+        }
+        let pins = pin_spec_kernels()
+        let depth = mtp_depth_pin()
+        set_mtp_depth(3l)
+        with_dasllama_jobque() {
+            var m <- load_model_(MTP_MODEL_PATH, QuantMode.q8)
+            m.config.seq_len = min(m.config.seq_len, 512l)
+            var prompt <- encode(m, "Count from one to twenty: one, two, three,", true, false)
+            var ref <- plain_reply(m, prompt, 7l, 1l)
+            set_mtp_spec(true)
+            var sch <- create_scheduler(m, 1l, 4l, 8l, 16l, 0l, KVDtype.f16, true, 0l)
+            var none : array<int64>
+            var events : array<SchedEvent>
+            submit(m, sch, make_req(10l, prompt, SamplingParams(), 7l, none))
+            drain(m, sch, events)
+            let fin = finished_of(events, 10l)
+            t |> equal(fin.finish, "length")
+            t |> equal(fin.n_gen, 7l)
+            var got <- toks_of(events, 10l)
+            t |> success(ids_equal(got, ref), "the capped reply is the plain reply's ({got})")
+            t |> success(sch.mtp_drafted >= 3l, "the rounds drafted at depth 3 ({sch.mtp_drafted} drafts, {sch.mtp_accepted} accepted)")
+            check_next_turn(t, m, sch, 11l, prompt, ref, none, "length cap")
+            delete got
+            delete events
+            delete sch
+            delete ref
+            delete prompt
+            delete m
+        }
+        restore_mtp_depth(depth)
+        restore_spec_pins(pins)
+    }
+}
+
 // ===== the speculative tick under the resident driver: a greedy stream asks a pick every tick and consumes it =====
 
 [test]

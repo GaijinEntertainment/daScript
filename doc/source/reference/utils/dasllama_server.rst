@@ -310,8 +310,8 @@ Run under ``-jit`` --- the interpreter is refused, it is far too slow for infere
      - Prefix-cache retention cap in pages (auto: one full context per stream; ``-1`` = unbounded)
    * - ``--prefix-states``
      -
-     - ``256``
-     - Recurrent models (the Qwen3.5/3.6/3.8 hybrids) cache whole checkpoints instead of pages: the most a slot keeps (``0`` = none; config key ``prefix_states``); the byte budget binds first. Every request leaves one at its opening's shared head (the system text or the tool block, whichever its template writes first), one at its opening with the tools, one where its last message starts, one where it ends (ahead of the generation prompt), one at its finished turn; a conversation's own stops are dropped before shared openings
+     - *auto*
+     - Recurrent models (the Qwen3.5/3.6/3.8 hybrids) cache whole checkpoints instead of pages: the most a slot keeps (``0`` = none; config key ``prefix_states``). Unset, the count is the byte budget over the model's recurrent state, 256 at least and 1024 at most, so the budget binds first. Every request leaves one at its opening's shared head (the system text or the tool block, whichever its template writes first), one at its opening with the tools, one where its last message starts, one where it ends (ahead of the generation prompt), one at its finished turn; a conversation's own stops are dropped before shared openings
    * - ``--prefix-state-mb``
      -
      - *auto*

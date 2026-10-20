@@ -1756,7 +1756,18 @@ def private ram_gb_from_meminfo(text : string) : int {
     return 0
 }
 
-let SERVER_PREFIX_STATES = 256l   //! the server's checkpoint count cap under its byte budget - a library caller keeps `DEFAULT_PREFIX_STATES`
+let SERVER_PREFIX_STATES = 256l   //! the server's checkpoint count floor under its byte budget - a library caller keeps `DEFAULT_PREFIX_STATES`
+let SERVER_PREFIX_STATES_MAX = 1024l   //! the count the budget may raise it to: every attach scans each checkpoint's tokens against the prompt
+let PREFIX_STATES_AUTO = -1l   //! `--prefix-states` unset: each slot's count is its byte budget over its model's checkpoint (`slot_prefix_states`)
+
+//! A slot's checkpoint count under `budget_bytes`: the budget over one checkpoint's recurrent state (its arrays, and a token
+//! list's worth beside them), between the floor and the cap - a flat count under the budget evicts a conversation's
+//! message-end stops while bytes sit free; a budget of 0 (unbounded) takes the cap
+def slot_prefix_states(c : Config; budget_bytes : int64) : int64 {
+    return SERVER_PREFIX_STATES_MAX if (budget_bytes <= 0l)
+    let per = 4l * dn_state_floats(c) + 32768l
+    return clamp(budget_bytes / per, SERVER_PREFIX_STATES, SERVER_PREFIX_STATES_MAX)
+}
 
 //! The recurrent checkpoints' byte budget in MB: the one asked for, else a quarter of the box's RAM - what a 64 GB
 //! serving box gives a prompt cache - and 4 GB when the box's RAM is unknown. The count cap (`--prefix-states`) still
@@ -7108,8 +7119,12 @@ def private init_one_scheduler(var s : ModelSlot) {
             spec = false
         }
     }
+    let states = g_sched_defaults.prefix_states >= 0l ? g_sched_defaults.prefix_states : slot_prefix_states(s.model.config, g_sched_defaults.prefix_state_bytes)
+    if (s_pages > 0l && s.model.config.recr_mask != 0ul) {
+        to_log(LOG_INFO, "dasllama-server: {s.name}: a recurrent model's checkpoints: up to {states} within {g_sched_defaults.prefix_state_bytes / 1048576l} MB\n")
+    }
     s.sched <- create_scheduler(s.model, s_streams, g_sched_defaults.max_queue, s_chunk, s_pages, pfx, s_kv, spec, s_idle,
-                                g_sched_defaults.prefix_states, g_sched_defaults.prefix_state_bytes)
+                                states, g_sched_defaults.prefix_state_bytes)
     slot_default_chunk(s)
 }
 
@@ -7202,7 +7217,6 @@ def init_server(port : int; max_streams : int64 = 4l; max_queue : int64 = 32l; c
     }
     g_box_ram_gb = box_ram_gb()   // probed once: a probe spawns sysctl, wmic or powershell
     let state_mb = prefix_state_budget_mb(prefix_state_mb, int64(g_box_ram_gb))
-    to_log(LOG_INFO, "dasllama-server: a recurrent model's checkpoints: up to {prefix_states} within {state_mb} MB\n")
     init_slot_schedulers(max_streams, max_queue, chunk_tokens, idle_chunk_tokens, page_rows, prefix_groups,
                          prefix_states, state_mb * 1048576l, kv_dtype, mtp)
     g_active = g_default_slot

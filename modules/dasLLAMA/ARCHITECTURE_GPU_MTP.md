@@ -54,7 +54,10 @@ post-final-norm hidden becomes `s.mtp_h` (the next round's carry, and the assist
 input), `s.mtp_h_pos1` moves to `pos + a + 1`, and `n_past` advances by `a + 1`. The rollback seat cuts
 the mirror's watermark to `pos + a + 1` with the recurrent state; a dense model's reject reaches no rollback
 seat and leaves the watermark at the round's full depth. The rows above the committed one are the rejected
-drafts' - garbage the next round rewrites - and `n_past` is what the next step reads. The CPU depth-1 step
+drafts' - garbage the next round rewrites - and `n_past` is what the next step reads. The walk ends on a draft among
+the caller's stop ids (`Session.spec_stops`, the scheduler's stream stop list, `mtp_accept_cut_at_stop`): the finishing
+token's row is the committed row `a`, the rows past it roll back as a reject's, and no pre-drawn token is parked - a
+stream emits nothing past its stop, so the round leaves no row the stream's history does not carry. The CPU depth-1 step
 (`mtp_spec_eval`) takes a rejected draft on a model with no recurrent layer without a re-forward:
 the verify's row 0 already holds the committed token's logits and post-norm hidden, so they stand
 and the draft head is re-seeded from them (a verify seat that landed the rows' picks alone under

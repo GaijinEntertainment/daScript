@@ -1085,7 +1085,7 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
     let chunk_idle = g_cfg.chunk_idle > 0 ? int64(g_cfg.chunk_idle) : -1l
     let page_rows = g_cfg.flat ? 0l : (g_cfg.page_rows > 0 ? int64(g_cfg.page_rows) : 64l)
     let prefix = int64(g_cfg.prefix)   // 0 = auto (init_server sizes it), < 0 = unbounded
-    let prefix_states = cfg_sourced("prefix_states") ? int64(max(g_cfg.prefix_states, 0)) : SERVER_PREFIX_STATES   // 0 set by hand = no checkpoints
+    let prefix_states = cfg_sourced("prefix_states") ? int64(max(g_cfg.prefix_states, 0)) : PREFIX_STATES_AUTO   // 0 set by hand = no checkpoints; unset = each slot's count off the byte budget
     let prefix_state_mb = int64(max(g_cfg.prefix_state_mb, 0))
     let dispatch_mode = to_lower(g_cfg.team_dispatch)
     if (!empty(dispatch_mode) && dispatch_mode != "hybrid"
