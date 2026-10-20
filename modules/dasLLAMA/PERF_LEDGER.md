@@ -10,6 +10,18 @@ and coverage; this ledger is the backlog for the perf pass that follows them. Ev
 what it costs today and what the fix would change.
 
 ## Entries
+- **MEASURED (2026-10-20, `out-of-process`, `direction-grade`) - a recurrent model's checkpoint stops inside one prefill
+  window on Metal.** M5 Max, the IQ4_XS-pure 35B, the house's flags, a cold and a warm pass, the same run as the entry below
+  with the stops cut (`replay_fix_off`) against the stops captured (`replay_cap_off`; that repository's ledger): the cold
+  pass runs 516 Metal prefill windows over the 248 requests where the cut form ran 645 (a window a chunk: the four planned
+  stops no longer end it), its wall median 0.22 s against 0.27, first-token median 0.17 against 0.21, p90 0.59 against 0.62,
+  the same 85 % cached and 7 first rounds with nothing cached; the warm pass reads the same on both (0.12 / 0.06 against
+  0.11 / 0.06, 100 % cached). The served turn at one stream (`harness/served_bench.das --sizes 3000,9000 --reply 200 --reps
+  5`, `--ctx 16384 --streams 1`): the 9k cold first token 1800 ms against 1910 (prefill 4896 tok/s against 4611), whose
+  stops split the cut form's prompt; the 3k's three stops coincide at one row, so its cold first token is the idle chunk's
+  split either way (606 ms, cv 3.2 %, void, against 586) and its warm and decode rows read alike (59.8 / 68.5 ms warm,
+  182.5 / 171.7 tok/s). One of 22 overheard lines reads differently on the cold pass (20 silent against 21; the warm pass
+  21 on both): the CPU-side chunked scan ends a chunk at a stop's row now, a reassociation a near-tie flips on.
 - **MEASURED (2026-10-20, `out-of-process`, `direction-grade`) - the house replay's cache rate with and without the speculative
   round, after the finished-turn fix.** M5 Max, the IQ4_XS-pure 35B, the house's flags, a cold and a warm pass an arm, one
   process a pass (the numbers in that repository's ledger): before, the plain arm cached 91 % warm and the `--mtp` arm 100 %

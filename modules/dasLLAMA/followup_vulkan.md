@@ -2149,19 +2149,15 @@ module) is independent and can land any time - it is pure structure.
     share of the misses at the link's rate (an IQ4_XS expert about 1.3 MB, 0.09 ms over the link against the host's
     0.18) with no host work, the share bounded by the link as the DMA fill's admission is. Done = the real-text token step
     on Flash-Next with the host's share of the picks under a third, measured against the served rows of 2026-10-19.
-154. **A served prompt's prefill splits at the recurrent checkpoints it leaves, and every window past the split streams
-    its experts again.** The scheduler ends an eval at each planned checkpoint (`ckpt_at`, `note_prefilled`: the stable
-    opening, the assistant header) because a recurrent layer's state at the position exists only where the scan stops
-    there - `followup_metal.md` row 51, the same rule - so a 3k prompt on Flash-Next served as three window chains (2966,
-    22 and 7 rows on 2026-10-19), each streaming the experts its rows pick: 5.9 s where the bench's one window took 3.8,
-    and the 9k prompt 16.0 against 11.7; the served prefill at 494 / 554 tok/s against the bench's 793 / 753 with the
-    idle chunk already at the window (`idle_chunk_default`; the served entry of 2026-10-19 and the window-pick entry in
-    `PERF_LEDGER.md`). The warm turn's 0.6 s stands on those checkpoints, so they
-    stay. The work, shared with Metal's row: the chunk-ends-at-checkpoint rule becomes a capture-at-position list the
-    window chain reads, the deltanet scan runs segmented at those positions with its state copied out between the parts
-    (the segmented prefill's seam, `vulkan_resident_prefill_segments`, already runs several segments in one chain), the
-    device checkpoint takes the state off the device buffer, and the K/V half is positional and in the mirror already.
-    Done = the served 3k and 9k prefill within 5% of `lcpp_bench`'s window at the same chunk.
+154. **The window chain's checkpoint captures have run on no device.** A served prompt's prefill no longer splits at the
+    recurrent checkpoint stops: the window chain writes the state into the region's checkpoint rows as the scan passes a
+    stop's row and a cap-tail kernel writes the ring image (`ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-dn-block`), which on
+    Flash-Next ends the three window chains a 3k prompt took (2966, 22 and 7 rows on 2026-10-19: 5.9 s against the bench's
+    one window at 3.8, the 9k prompt 16.0 against 11.7). The kernels, the sets and the tier's planning and landing are
+    compile-checked on the Mac alone. Done = on the pod, `test_vulkan_kernels` (`test_vkd_dn_scan*` with the capture arm,
+    `test_vkd_dn_cap_tail`), `test_gpu_resident_regions_hybrid` and `_qwen35moe` (the checkpoint and pool cells over the
+    one-window form) green, and the served 3k and 9k prefill on Flash-Next and the 35B within 5% of `lcpp_bench`'s window at
+    the same chunk, against the 2026-10-19 rows.
 155. **The shared selection template's Vulkan stamp has run on no device.** `ClsSelect` stamps `GkClsSelect`
     (`dasllama_gpu_kernels_common.das`) and its cell `test_vkd_cls_select` builds `GkClsSelArgs`; both are compile-checked on
     the Mac (the SPIR-V emission runs at compile time) and the stamp's subgroup-aggregated histogram, uniform vocab loops and
