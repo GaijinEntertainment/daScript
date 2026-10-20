@@ -77,6 +77,10 @@ def sig_gate(x, g : float) : float => x / (1.0 + exp(-g))
 //! the inverse rms of a mean square `ms` (eps added): `rsqrt` where `rsq`, else the CPU rmsnorm's `1 / sqrt`
 def rms_inv(ms : float; rsq : bool) : float => rsq ? rsqrt(ms) : 1.0 / sqrt(ms)
 
+//! a logit as the classifier tail's lanes read it: NaN and anything under the lowest finite read as the lowest finite (-3.4e38, the
+//! literal because a kernel body reads no module constant) - the kernel's lane and the CPU oracle's one reading
+def sel_lane_val(v : float) : float => !(v == v) || v < -3.4e38 ? -3.4e38 : v   // nolint:LINT007 — the NaN test: a NaN is the one float that is not equal to itself
+
 //! the selected routing weights' sum as their renorm divides by it: clamped at f16's smallest normal, the CPU select's floor
 def moe_renorm_sum(ws : float) : float => max(ws, 6.103515625e-5)
 

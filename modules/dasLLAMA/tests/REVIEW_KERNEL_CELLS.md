@@ -37,9 +37,11 @@ rate, an error, or a count the run decides, within a nonzero tolerance or past a
 a guard that keeps a later index or compare well-defined (a length past the index it reads) is not
 one, a counter asserted to show a route ran is not one, and an assert a rule of this list requires
 to show a compare can fail - the in-place cell's output-differs-from-input assert among them - is
-not a bound assert, and is not the control a bound assert needs. A sibling stamp is another stamp derived from the same class; it
-stands in for a stamp only where the code a rule asks about is the class's own and neither stamp
-overrides it - overriding a template constant that code reads overrides it. A control is an extra assert
+not a bound assert, and is not the control a bound assert needs. A sibling stamp is another stamp
+derived from the same class; it stands in for a stamp only where the code a rule asks about is the
+class's own, neither stamp overrides it - overriding a template constant that code reads overrides
+it - both stamps are in the same home (Metal or Vulkan), and the sibling's cell compiles once the
+diff is applied. A control is an extra assert
 in the same cell proving a compare can fail - a poisoned input, or a poisoned expectation (the
 expected value with a known amount added), that must land outside the bar, a mechanism unhooked
 whose result must miss, or a second, independent computation the result must agree with; a cell's
@@ -68,9 +70,10 @@ kernel-unit cell that dispatches it at that workgroup size, or whose dispatch co
 expression computes, in the same change.**
 
 **A kernel-unit cell's compare of kernel output against its reference logs, whether it passes or
-fails, the largest difference it measured with that element's row and column; an exact compare - a
-scan asserting that a region still holds its sentinel is one - logs its mismatch count and first
-mismatching index instead.** A failure, or a pass that looks wrong, must say how far and where, not
+fails, the largest difference it measured with that element's row and column, or, for an output
+with one value per row (a max, a denominator), the largest difference and its row; an exact
+compare - a sentinel scan, a per-row flag - logs its mismatch count and first mismatching index
+(for a per-row output, its row) instead.** A failure, or a pass that looks wrong, must say how far and where, not
 only how many.
 
 **A kernel-unit cell with a kernel run whose output no CPU-oracle compare covers at that run's

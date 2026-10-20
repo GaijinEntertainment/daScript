@@ -21,6 +21,7 @@ require math
 require strings
 require daslib/strings_boost   // nolint:STYLE030,LINT019 — split, the crown list's parse in the das_metal half
 require _model_tier
+require _resident_feed   // sampled_stream, selection_agrees: the selection landing's stream and reading, both homes' one
 require ../performance/model_specs.das   // nolint:STYLE030,LINT019 — counting_prompt, read only inside the das_metal static_if halves
 require _metal_blob_twin   // metal_kernel_count - the census reader
 require _format_census   // nolint:STYLE030,LINT019 - census_cell, read only inside the das_metal static_if halves
@@ -30,7 +31,7 @@ def private allow_cpu_prefill_intent() {
     allow_cpu_prefill()   // the planar prefill stage runs on the CPU by design (the July engagement shape)
 }
 
-// End-to-end gates for the metal MTP/NextN self-speculative rail (`metal_mtp_spec_eval`: draft +
+// End-to-end gates for the metal MTP/NextN self-speculative rail (the common round on the Metal seats: draft +
 // same-slab B=2 verify + accept/reject), GPU-vs-GPU on the same binary. Two oracles, per the
 // tests/REVIEW.md contract: freeform text rides the FORCED-FEED logits-tolerance form (the plain
 // metal step and the verify's row 0 consume the identical token every round, so their logits
@@ -133,6 +134,7 @@ def private ff_pair(tr, trg : Model; prompt : array<int64>; nsteps : int64; veri
             var sa = make_run_state(c, KVDtype.f16, KVDtype.f16)
             var sb = make_run_state(c, KVDtype.f16, KVDtype.f16)
             gpu_prefill_pair(trg, sa, sb, prompt)   // metal prefill: stashes mtp_h + warms the draft slab, seconds at 27B
+            let override0 = active_decode_override()
             select_decode_override("metal")
             let before = metal_decode_stats().decodes
             var tok = argmax_of(sa.logits, vocab)
@@ -140,8 +142,10 @@ def private ff_pair(tr, trg : Model; prompt : array<int64>; nsteps : int64; veri
             eval_(trg, sa, one)   // the mirror-building step, both sessions (a spec round needs a live mirror)
             eval_(trg, sb, one)
             tok = argmax_of(sa.logits, vocab)
+            let reject0 = get_mtp_force_reject_every()
+            let depth0 = mtp_depth_pin()
             if (verify) {
-                set_metal_mtp_debug("reject")
+                set_mtp_force_reject_every(1l)
                 set_mtp_depth(depth)
             }
             var prev : array<float>
@@ -179,10 +183,10 @@ def private ff_pair(tr, trg : Model; prompt : array<int64>; nsteps : int64; veri
                 st.steps++
                 tok = argmax_of(sa.logits, vocab)
             }
-            set_metal_mtp_debug("")
-            set_mtp_depth(1l)
+            set_mtp_force_reject_every(reject0)
+            restore_mtp_depth(depth0)
             st.served = metal_decode_stats().decodes - before
-            select_decode_override("")
+            select_decode_override(override0)
             delete prev
             delete one
             delete sa
@@ -321,9 +325,8 @@ def private count_cell(t : T?; tr, trg : Model; tag : string; count : array<int6
             let chained = metal_mtp_chained_rounds() - chained0
             let wide = metal_kq_mvb_wide_count() - wide0
             if (depth == 1l) {
-                //! a depth-1 round chains on any table the device gathers; the n-gram side input's model and the assistant's CPU
-                //! oracle drafts are the controls that never do
-                let chains = emb_dev_gather_ok(trg) && !has_ple_ngram(trg.config) && !gemma_draft_on_cpu()
+                //! a greedy depth-1 round chains on any table the device gathers; sampled rounds, the n-gram model and the assistant's CPU oracle drafts are the controls that never chain
+                let chains = !sampled && emb_dev_gather_ok(trg) && !has_ple_ngram(trg.config) && !gemma_draft_on_cpu()
                 t |> equal(chained, chains ? drafted : 0l, "{tag} {kind} k1: every drafted round {chains ? "rode" : "kept off"} one command buffer (table {trg.emb_fmt}, {chained} chained of {drafted} rounds)")
             }
             if (depth == 8l) {
@@ -875,6 +878,45 @@ def private run_arms(t : T?; tr, trg : Model; tag : string; prose_a, prose_b, co
         if (arm_on(t, "mtp-sampled-{tag}")) {
             count_cell(t, tr, trg, tag, count, 1l, true)
             count_cell(t, tr, trg, tag, count, 2l, true)
+        }
+
+        if (arm_on(t, "mtp-select-{tag}")) {
+            select_cell(t, trg, tag, count)
+        }
+    }
+}
+
+//! one sampled speculative free run of `n` tokens on the served twin at depth 2, seeded: the ids, the round's tallies and the
+//! the Metal home's opening of a sampled stream: the prompt through the Metal prefill and one eval - the mirror-building step a
+//! round needs live
+def private metal_sampled_open(trg : Model; var s : Session; prompt : array<int64>) {
+    gpu_prefill(trg, s, prompt)
+    var one <- [argmax_of(s.logits, trg.config.vocab_size)]
+    eval_(trg, s, one)
+    delete one
+}
+
+//! stream token for token, every served step's selection landed and none reaching past it
+def private select_cell(t : T?; trg : Model; tag : string; prompt : array<int64>) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        with_dasllama_jobque() {
+            var sp = SamplingParams(temp = 0.7, top_p = 0.9)
+            let sel0 = get_select_landing()
+            let prev = active_decode_override()
+            select_decode_override("metal")
+            let served0 = metal_decode_stats().decodes
+            set_select_landing(false)
+            var rows <- sampled_stream(trg, 40l, sp, 4242, KVDtype.f16) $(var s : Session) { metal_sampled_open(trg, s, prompt) }
+            let served_rows = metal_decode_stats().decodes - served0
+            set_select_landing(true)
+            var sel <- sampled_stream(trg, 40l, sp, 4242, KVDtype.f16) $(var s : Session) { metal_sampled_open(trg, s, prompt) }
+            let served_sel = metal_decode_stats().decodes - served0 - served_rows
+            set_select_landing(sel0)
+            select_decode_override(prev)
+            t |> success(served_rows > 0l && served_sel > 0l, "{tag} select: both streams were device-served ({served_rows} and {served_sel} steps)")
+            selection_agrees(t, trg, tag, rows, sel)
+            delete rows
+            delete sel
         }
     }
 }

@@ -881,7 +881,7 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
         let ts_step = prof_ticks()
         let before = mtp_totals(sch)
         let joined = mtp_spec_eval_batch(m, sch.batch_rows, sch.batch_toks, sch.mtp_acc)
-        note_batch_step(joined == long_length(sch.batch_rows))   //! the census: one device step when every stream's rows rode the joint verify
+        note_batch_step(joined == long_length(sch.batch_rows))
         sch.mtp_joined_max = max(sch.mtp_joined_max, joined)
         prof_add("sched_eval_batch", ts_step)
         for (i, acc in sch.batch_idx, sch.mtp_acc) {

@@ -12,6 +12,8 @@ require dasllama/dasllama_tower     // layernorm + the shipped gelu flavors + th
 require dasllama/dasllama_rope      // build_rope_tabs_rows — the rope2d gate's tables
 require dasllama/dasllama_qwen3v   // q3v_reorder_src - the stem assemble gate's merge walk
 require _kernel_oracles   // pos_add_2d_ref
+require _sel_oracle   // select_rows_oracle, sel_words: the selection landing's CPU reading, the Vulkan cell's own
+require dasllama/dasllama_gpu_tier   // the SEL_* landing layout the selection gate reads its planes by
 require ?das_metal dasllama/dasllama_metal_kernels  // the decode elementwise/misc kernel set (Apple builds)
 require ?das_metal dasllama/dasllama_metal_common   // the pipeline globals the generated builders read
 require dasllama/dasllama_common   // bump_weights_epoch: the region and ring-slack drops; the layout shell's Model
@@ -98,6 +100,50 @@ def private argmax_gate(t : T?; var dev, queue; n, hi1, hi2 : int) {
         return if (!ran)
         check_buf_exact(t, tag, mc.buf[btok], [uint(min(hi1, hi2))])
     }
+}
+
+//! the selection kernel over `rows` rows of `y` under `words`: every row's landing unpacked as the host reads it
+def private cls_select_run(t : T?; var dev, queue; y : array<float>; words : array<uint>; vocab, rows : int; tag : string) : array<SelRow> {
+    var out : array<SelRow>
+    let cap = int(SEL_CAP)
+    let hdrw = int(SEL_HDR)
+    let recw = int(SEL_RECENT)
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let st = stamp_of(@@enc_cls_select)
+        var pso = mc |> keep_stamp(st, err)
+        return if (!pso_ok(t, tag, pso, err))
+        let py = mc |> in_(y)
+        let ps = mc |> in_plain(words)
+        let ph = mc |> out_words(hdrw * rows, 0xFFFFFFFFu)
+        let pi = mc |> out_words(cap * rows, 0xFFFFFFFFu)
+        let pv = mc |> out_(cap * rows)
+        let pr = mc |> out_(recw * rows)
+        var ka = GkClsSelArgs(vocab = uint(vocab))
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            stamp_run(st, pso) {
+                invoke(st.enc, enc, mc.buf[py], mc.buf[ps], mc.buf[ph], mc.buf[pi], mc.buf[pv], mc.buf[pr], ka, int64(rows))
+            }
+        }
+        return if (!ran)
+        var inscope hdr <- mc |> plane_as(ph, type<uint>, hdrw * rows)
+        var inscope ids <- mc |> plane_as(pi, type<uint>, cap * rows)
+        var inscope vals <- mc |> plane_as(pv, type<float>, cap * rows)
+        var inscope rec <- mc |> plane_as(pr, type<float>, recw * rows)
+        out <- sel_unpack(hdr, ids, vals, rec, words, int64(rows))
+    }
+    return <- out
+}
+
+//! the selection gate: the shared six-row fixture at `vocab` (`sel_fixture`) through the Metal stamp against the CPU oracle, every
+//! landing compared by the shared gate (`sel_gate_compare`, the Vulkan cell's reading)
+def private cls_select_gate(t : T?; var dev, queue; vocab : int) {
+    let tag = "cls_select vocab={vocab}"
+    var inscope f <- sel_fixture(int64(vocab))
+    var inscope got <- cls_select_run(t, dev, queue, f.y, f.words, vocab, int(f.rows), tag)
+    return if (long_length(got) != f.rows)
+    var inscope want <- select_rows_oracle(f.y, f.temps, f.recent, int64(vocab), f.rows, SEL_K, SEL_CAP)
+    sel_gate_compare(t, tag, got, want, int64(vocab))
 }
 
 def private argmax_rows_gate(t : T?; var dev, queue; nrows, n : int) {
@@ -2115,6 +2161,9 @@ def test_metal_misc_kernels(t : T?) {
                 argmax_gate(t, dev, queue, 700, 0, 699)         // winner at index 0
                 argmax_rows_gate(t, dev, queue, 5, 5000)        // the same-slab verify's per-row accept walk
                 argmax_rows_gate(t, dev, queue, 9, 700)         // MTP_MAX_ROWS rows, n below one threadgroup
+                cls_select_gate(t, dev, queue, 262144)
+                cls_select_gate(t, dev, queue, 1000)
+                cls_select_gate(t, dev, queue, 248320)   //! the served vocab: a tail stride under a whole subgroup's worth
                 embed_q8_gate(t, dev, queue, 512, 3, 2)
                 for (f in [KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032, KqFmt.q5032]) {
                     embed_b32_gate(t, dev, queue, f, 96, 5, 0)

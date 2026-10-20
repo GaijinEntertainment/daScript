@@ -99,18 +99,23 @@ row's trip and the host's passes over it. So a step whose stream wants the selec
 ask, and a penalty that only lowers logits - a repetition penalty at or above one, presence and
 frequency penalties at or above zero, since a raised unlanded logit could outrank the survivors -
 over a window the ask can list) asks the driver before
-its command (`rdec_sel_before` -> `vk_rdec_sel_ask`), poking a row's sampler words - the
+its command (`sel_before` in the common round, around every seat's and the plain step's command on either home -> `vk_rdec_sel_ask`), poking a row's sampler words - the
 temperature's bits and the recent window's unique ids with the round's drafts - into a
-host-visible block (`RDec.sel_words`, `SEL_WORDS` a row, as `TokMeta` is poked). The submit then
+host-visible block (`RDec.sel_words`, `SEL_WORDS` a row, as `TokMeta` is poked). An ask no
+driver can serve - no home installed the seats, or the home has no selection pipeline
+(`metal_sel_ask` answers false) - is declined, and the command lands its rows as it would
+unasked: the landing read after it reports no rows. The submit then
 runs the selection command behind the step's on the compute queue (`rd_sel_cmd`: a full barrier,
-then `ClsSelect` a workgroup of 1024 threads a row over the logits plane - a radix select over the
-float's order-preserving key in three histogram passes to the exact 1024th largest logit, the
+then `ClsSelect`, the Vulkan stamp of the template both homes stamp (`GkClsSelect`, `ARCHITECTURE_GPU_SHARED_KERNELS.md#gpu-kernel-pairs`), a workgroup of 1024 threads a row over the logits plane - a radix select over the
+float's order-preserving key in three histogram passes to the exact 1024th largest logit (each
+pass's bin counts are subgroup-aggregated: a row's logits cluster into a few bins, and a thread an
+atomic serializes the workgroup on them), the
 compaction of every logit at or above it with the ties, capped at 2048 with the overflow flagged,
 the row's max and the softmax denominator at the row's temperature, and the logits of the listed
 recent ids) and the transfer queue's landing twin (`RdXlog.sel`) copies the picks, the carry and
 the selection's four planes into the packed host landing (`RDec.sel_host`) - the logits plane
 never leaves the device. A guard step drops the ask, since the over-commit check reads a row. The
-glue hands the engine pointers into that landing (`rdec_sel_after` -> `g_sel_landing`, the session's
+common glue hands the engine pointers into that landing (`sel_after` -> `g_sel_landing`, the session's
 row in `Session.sel_row1`), and every sampler entry - the row draw, the typical and rejection
 judges, the rejection drafter, the chain cut's probability - serves off it where the stream's cuts
 confine the draw's support to the survivors (`landed_row_`: a top-k within the cap whose k-th

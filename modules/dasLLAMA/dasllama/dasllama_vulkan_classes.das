@@ -830,7 +830,6 @@ class ClsArgmaxFin : ClsArgmaxBase {
 //! the selection kernel's twins of the host's `SEL_*` landing layout (`dasllama_gpu_tier.das`): the SPIR-V emitter reads a
 //! `uint` literal `let` alone, so the kernel spells them again and the driver's arm verifies the two sets agree (`vk_rdec_prepare`)
 let CLS_SELECT_K = 1024u        //! SEL_K: the survivors a row lands - every logit at or above the K-th largest, ties kept, the host sampler's candidate cap
-let CLS_SELECT_CAP = 2048u      //! the landing's slots a row: the K survivors and the ties at the K-th; a row whose ties overflow lands its count and the host takes the row
 let CLS_SELECT_RECENT = 128u    //! SEL_RECENT: the recent-window ids a row's sampler words carry, whose logits land beside the survivors for the penalties
 let CLS_SEL_WORDS = 132u        //! SEL_WORDS: one row's sampler words
 let CLS_SEL_HDR = 4u            //! SEL_HDR: one row's landed header words
@@ -842,8 +841,6 @@ let CLS_SEL_HDR_OVERFLOW = 1u   //! SEL_HDR_OVERFLOW
 let CLS_SEL_HDR_MAX = 2u        //! SEL_HDR_MAX
 let CLS_SEL_HDR_DEN = 3u        //! SEL_HDR_DEN
 let CLS_SELECT_WG = 1024u       //! the selection's threads a row: a 262144-wide row is 256 strided loads a thread, and 32 warps hide their latency
-let CLS_SELECT_BINS = 2048u     //! the radix histogram's bins: 11 bits a pass (the last pass reads 10)
-let CLS_SELECT_BINS_LAST = 1024u
 
 //! whether the kernel's twins and the host's `SEL_*` layout agree - the driver's arm verifies it before the first ask
 def cls_sel_layout_agrees : bool {
@@ -858,7 +855,7 @@ def cls_sel_layout_agrees : bool {
 def cls_sel_plane_bytes(k, nb : int64) : int64 {
     if (k == 0l) return SEL_HDR * 4l * nb
     if (k == 3l) return SEL_RECENT * 4l * nb
-    return int64(CLS_SELECT_CAP) * 4l * nb
+    return SEL_CAP * 4l * nb
 }
 
 def cls_sel_plane_off(k, nb : int64) : int64 {
@@ -869,186 +866,22 @@ def cls_sel_plane_off(k, nb : int64) : int64 {
     return off
 }
 
-//! the float's order-preserving key over its bits `b`: a larger float is a larger key (a negative flips every bit, a positive its sign)
-def cls_key_of_bits(b : uint) : uint => b ^ ((0u - (b >> 31u)) | 0x80000000u)
-
-//! the workgroup exclusive scan over `WG` threads for the row kernels that count (`scan` one slot a thread), on the shared reduce base
+//! the Vulkan row kernels' value form of the common scan (`GkWgScan`): the exclusive prefix over the `WG` threads' v
 [ |> template_struct_instance]
-class template WgScanT : WgReduceBase {
-    @template_constant WG : uint = 256u   //!< the workgroup's threads
-    @workgroup scan : uint[int(WG)]
-
-    //! the exclusive prefix over the `WG` threads' v; scan[WG - 1] holds the total after the call
+class template WgScanT : GkWgScan {
     def excl_scan(v : uint) : uint {
-        let tid = gl_LocalInvocationID.x
-        barrier()   //! the previous scan's readers are done with scan
-        scan[tid] = v
-        barrier()
-        var off = 1u
-        while (off < WG) {
-            var add = 0u
-            if (tid >= off) {
-                add = scan[tid - off]
-            }
-            barrier()
-            scan[tid] += add
-            barrier()
-            off = off * 2u
-        }
-        return scan[tid] - v
+        var cum = 0u
+        excl_scan_into(v, cum)
+        return cum
     }
 }
 
-//! the classifier tail's selection, a workgroup a row: the row's largest CLS_SELECT_K logits with the ties at the K-th (a radix select
-//! over the float's order-preserving key in three histogram passes - the top 11 bits, the next 11, the last 10 - to the exact K-th
-//! value, then a compaction), the row's max and softmax denominator at the row's temperature, and the recent-window logits - what a
-//! sampled stream's host sampler needs instead of the row; its scan is `WgScanT`'s, its max and sum `WgReduceBase`'s over the shared
-//! `GkWgReduce` (`dasllama_gpu_kernels_common.das`)
+//! the classifier tail's selection on the template both homes stamp (`GkClsSelect`), a workgroup of 1024 threads a row
 [vk_dispatch(name = "cls_select", grid = "rows", params = "rows : int64")]
-class ClsSelect : WgScanT {
-    override WG = 1024u   //! CLS_SELECT_WG: the template constant takes a literal
-    @ssbo @binding = 0 y : array<float>         // the logits rows
-    @ssbo @binding = 1 sel : array<uint>        //! the rows' sampler words (CLS_SEL_WORDS a row, host-poked a step)
-    @ssbo @binding = 2 hdr : array<uint>        //! the rows' landed headers (CLS_SEL_HDR a row)
-    @ssbo @binding = 3 sel_id : array<uint>     //! the survivors' ids (CLS_SELECT_CAP a row)
-    @ssbo @binding = 4 sel_val : array<float>   //! ... and their logits
-    @ssbo @binding = 5 rec_val : array<float>   //! the recent-window logits (CLS_SELECT_RECENT a row)
-    @push_constant pa : ArgmaxArgs
-    @workgroup hist : uint[2048]
-    @workgroup cross_bin : uint[1]     //! a pass's crossing bin, the one crossing thread's write
-    @workgroup cross_above : uint[1]   //! ... and the count above it
-    @workgroup slots_used : uint[1]    //! the compaction's slot counter
-
-    //! the float's order-preserving key: a larger logit is a larger key, NaN and -inf the lowest finite's
-    def key_of(v : float) : uint => cls_key_of_bits(float_bits_to_uint(sel_lane_val(v)))
-
-    def hist_clear {
-        var b = gl_LocalInvocationID.x
-        while (b < CLS_SELECT_BINS) {
-            hist[b] = 0u
-            b += CLS_SELECT_WG
-        }
-    }
-
-    //! the bin, counted from the top of `per * CLS_SELECT_WG` bins, at which the elements above reach `need`: every thread owns `per`
-    //! bins (thread 0 the top block), the counts above its block scanned in, the one thread whose block holds the crossing writing `found`
-    def find_bin(need, per : uint) {
-        let tid = gl_LocalInvocationID.x
-        let j = CLS_SELECT_WG - 1u - tid
-        var c = 0u
-        var b = 0u
-        while (b < per) {
-            c += hist[j * per + b]
-            b++
-        }
-        var cum = excl_scan(c)
-        b = per
-        while (b > 0u) {
-            b--
-            let h = hist[j * per + b]
-            if (cum < need && cum + h >= need) {
-                cross_bin[0] = j * per + b
-                cross_above[0] = cum
-            }
-            cum += h
-        }
-        barrier()
-    }
-
+class ClsSelect : GkClsSelect {
     [spirv_kernel(local_size_x = 1024, name = "cls_select_spv")]
     def run {
-        let row = gl_WorkGroupID.x
-        let tid = gl_LocalInvocationID.x
-        let base = row * pa.vocab
-        let temp = uint_bits_to_float(sel[row * CLS_SEL_WORDS + CLS_SEL_ASK_TEMP])
-        let inv = temp > 0.0 ? 1.0 / temp : 1.0
-        let need = min(CLS_SELECT_K, pa.vocab)
-        hist_clear()
-        barrier()
-        var m = SEL_LANE_LOWEST
-        var i = tid
-        while (i < pa.vocab) {
-            let v = sel_lane_val(y[base + i])
-            m = max(m, v)
-            let _c = atomicAdd(hist[key_of(v) >> 21u], 1u)
-            i += CLS_SELECT_WG
-        }
-        var rmax = wg_max(m, 0u)
-        if (rmax <= GK_WG_MAX_SEED) {   //! a row with nothing above the lowest finite reads the lowest finite, as the host does
-            rmax = SEL_LANE_LOWEST
-        }
-        find_bin(need, 2u)
-        let b1 = cross_bin[0]
-        let above1 = cross_above[0]
-        barrier()
-        hist_clear()
-        barrier()
-        var ssum = 0.0
-        i = tid
-        while (i < pa.vocab) {
-            let v = sel_lane_val(y[base + i])
-            ssum += exp(max((v - rmax) * inv, -80.0))
-            let k = key_of(v)
-            if ((k >> 21u) == b1) {
-                let _c = atomicAdd(hist[(k >> 10u) & (CLS_SELECT_BINS - 1u)], 1u)
-            }
-            i += CLS_SELECT_WG
-        }
-        let rden = wg_sum(ssum, 1u)
-        find_bin(need - above1, 2u)
-        let hi22 = (b1 << 11u) | cross_bin[0]
-        let above2 = cross_above[0]
-        barrier()
-        hist_clear()
-        barrier()
-        i = tid
-        while (i < pa.vocab) {
-            let k = key_of(y[base + i])
-            if ((k >> 10u) == hi22) {
-                let _c = atomicAdd(hist[k & (CLS_SELECT_BINS_LAST - 1u)], 1u)
-            }
-            i += CLS_SELECT_WG
-        }
-        barrier()
-        find_bin(need - above1 - above2, 1u)
-        land((hi22 << 10u) | cross_bin[0], rmax, rden)
-    }
-
-    //! the landing: every logit whose key reaches `thr` compacted with its id, the recent window's logits, then the row's header
-    def land(thr : uint; rmax, rden : float) {
-        let row = gl_WorkGroupID.x
-        let tid = gl_LocalInvocationID.x
-        let base = row * pa.vocab
-        if (tid == 0u) {
-            slots_used[0] = 0u
-        }
-        barrier()
-        var i = tid
-        while (i < pa.vocab) {
-            break if (slots_used[0] > CLS_SELECT_CAP)   //! an overflowing row (every id tied) stops counting past the cap, instead of serializing a quarter million adds on one counter
-            let v = sel_lane_val(y[base + i])
-            if (key_of(v) >= thr) {
-                let slot = atomicAdd(slots_used[0], 1u)
-                if (slot < CLS_SELECT_CAP) {
-                    sel_id[row * CLS_SELECT_CAP + slot] = i
-                    sel_val[row * CLS_SELECT_CAP + slot] = v
-                }
-            }
-            i += CLS_SELECT_WG
-        }
-        let nrec = min(sel[row * CLS_SEL_WORDS + CLS_SEL_ASK_COUNT], CLS_SELECT_RECENT)
-        if (tid < nrec) {
-            let id = sel[row * CLS_SEL_WORDS + CLS_SEL_ASK_IDS + tid]
-            rec_val[row * CLS_SELECT_RECENT + tid] = id < pa.vocab ? sel_lane_val(y[base + id]) : SEL_LANE_LOWEST
-        }
-        barrier()
-        if (tid == 0u) {
-            let n = slots_used[0]
-            hdr[row * CLS_SEL_HDR + CLS_SEL_HDR_COUNT] = min(n, CLS_SELECT_CAP)
-            hdr[row * CLS_SEL_HDR + CLS_SEL_HDR_OVERFLOW] = n > CLS_SELECT_CAP ? 1u : 0u
-            hdr[row * CLS_SEL_HDR + CLS_SEL_HDR_MAX] = float_bits_to_uint(rmax)
-            hdr[row * CLS_SEL_HDR + CLS_SEL_HDR_DEN] = float_bits_to_uint(rden)
-        }
+        select_row()
     }
 }
 
@@ -13252,6 +13085,8 @@ def gk_subgroup_max(v : float) : float => subgroupMax(v)
 def gk_subgroup_xor(v : float; m : uint) : float => subgroupShuffleXor(v, m)
 [spirv_inline]
 def gk_subgroup_xor_u(v : uint; m : uint) : uint => subgroupShuffleXor(v, m)
+[spirv_inline]
+def gk_subgroup_bcast0_u(v : uint) : uint => subgroupShuffle(v, 0u)
 [spirv_inline]
 def gk_subgroup_min_u(v : uint) : uint => subgroupMin(v)
 

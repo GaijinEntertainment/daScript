@@ -1,22 +1,30 @@
 # dasLLAMA Architecture - the Metal speculative round
 
 Companion to `ARCHITECTURE_GPU.md`; a section is cited by its anchor. This document
-carries the speculative round on Metal, the box knob that sets the depth a round drafts, the
-draft chains and the verify that commits them, and the recurrent layer's stages over groups of rows
+carries the Metal seats of the common speculative round, the box knob that sets the depth a round drafts, the
+draft chain and the verify that commits it, and the recurrent layer's stages over groups of rows
 with the mirror pool they read; the assistant drafter on both homes is `ARCHITECTURE_GPU_MTP_ASSISTANT.md`,
 and a sampled stream's three acceptances, the drafter distribution a rejection-sampling round records
 and the chain cut are `ARCHITECTURE_GPU_MTP_ACCEPT.md`.
 `ARCHITECTURE_GPU_MTP_DECODE.md` beside it carries the decode driver's layer encoder, the kernel forms and row-buffer pad a
-multi-row verify dispatches under, the single-row driver's greedy chain, the argument-alignment
-contract a kernel declares on its `[metal_dispatch]`, and the rotated prefix a rope-store kernel
-takes. The GPU backend role table these
+multi-row verify dispatches under, the argument-alignment contract a kernel declares on its `[metal_dispatch]`, and the rotated
+prefix a rope-store kernel takes; the single-row driver's greedy chain and the Metal selection landing are
+`ARCHITECTURE_GPU_MTP_DECODE_PICK.md`. The GPU backend role table these
 sections build on, the assistant-drafter driver's role row included, stays in
 `ARCHITECTURE_GPU.md#gpu-backends`.
 
 ### The speculative round on Metal {#mtp-round-one-join}
 
-**The speculative round on Metal is one queue, one join.** A round drafts k tokens and verifies them
-as k+1 same-slab rows of the batch driver. The gemma assistant drafter's round is one command buffer
+**The speculative round is the common one on every home (`mtp_spec_round_k`), and the Metal decode driver fills its
+seats.** The round drafts its k tokens through the draft seat (`metal_mtp_draft_seat`: the single-row draft forward,
+`metal_mtp_draft_forward`, the mirror held at the round's base), verifies them as k+1 same-slab rows through the verify
+seat (`metal_mtp_verify_seat`: one group over the session's slab, `encode_verify_step`), walks and commits on the host as
+every home does, and rejects through the rollback seat (`metal_mtp_rollback_seat`, `#mtp-dn-shadow-replay`). The cold seat
+(`metal_mtp_cold_why`) names why a round steps plain before any seat is reached - the verify's shape gate, the recurrent
+mirror's position, the slab's rows and reach - since a blob model has no CPU rails for a declined seat to fall to. The
+verify seat lands every row's pick (`mtp_picks`, the device argmax), post-norm hidden (`mtp_hrows`) and logits - none under
+the round's pick ask - the last row's as the session's, leaves the mirror's watermark at the round's full depth and parks its step for the rollback seat; the plain
+step, the next seat and the reload prep release a parked step. The gemma assistant drafter's round is one command buffer
 at every depth: the verify encodes every speculating stream's k steps itself, as a serial pass at the
 head of its first command buffer (`set_batch_same_slab_chain`, the two passes ordered by the
 buffers' tracked hazards; `metal_mtp_chained_rounds` counts the steps). A stream's draft i embeds token
@@ -43,9 +51,10 @@ draft (`mtp_seam_declines` counts them).
 takes `a` = the length of the leading run where a row's argmax equals the draft it verifies. The
 round commits rows 0..a: row a's logits become `s.logits` (the token sampled next), row a's
 post-final-norm hidden becomes `s.mtp_h` (the next round's carry, and the assistant drafter's h
-input), `s.mtp_h_pos1` and the mirror watermark move to `pos + a + 1`, and `n_past` advances by
-`a + 1`. The rows above the new watermark are the rejected drafts' - garbage the next round
-rewrites - and only the watermark keeps them from being read. The CPU depth-1 step
+input), `s.mtp_h_pos1` moves to `pos + a + 1`, and `n_past` advances by `a + 1`. The rollback seat cuts
+the mirror's watermark to `pos + a + 1` with the recurrent state; a dense model's reject reaches no rollback
+seat and leaves the watermark at the round's full depth. The rows above the committed one are the rejected
+drafts' - garbage the next round rewrites - and `n_past` is what the next step reads. The CPU depth-1 step
 (`mtp_spec_eval`) takes a rejected draft on a model with no recurrent layer without a re-forward:
 the verify's row 0 already holds the committed token's logits and post-norm hidden, so they stand
 and the draft head is re-seeded from them (a verify seat that landed the rows' picks alone under
@@ -61,13 +70,13 @@ after draft i, at head row pos - 1 + i, cut where a draft's probability under th
 `set_mtp_chain_min_p`), one verify over the k + 1 rows through the verify seat (the CPU prefill with
 the batched classifier where none serves), the walk above, and the commit at row `a` - a reject
 through the rollback seat with row `a`'s landed hidden as the carry, else the snapshot restored and
-rows 0..a re-run - so a driver that seats the draft and the verify but registers no round of its own
-(Vulkan) rounds at the knob's depth, capped at the rows its verify seat prepared. The depth is a
+rows 0..a re-run - so both drivers round at the knob's depth through their seats, capped at the rows the verify seat
+serves (`register_mtp_verify_rows_override`). The depth is a
 measured choice per carrier (`#mtp-depth-knob`): the 0.8B on the Vulkan tier reads x1.25 / 1.26 /
 1.28 / 1.15 at depths 1 to 4 (`debug-jit`; the absolute rates are the 0.8B depth entry in `PERF_LEDGER.md`).
 
 **A sampled stream's walk draws instead of comparing argmaxes, and the same walk serves every
-round - the two Metal rounds and the CPU depth-1 step.** The caller points `s.spec_params` at its
+round - the common round at every depth and the assistant drafter's.** The caller points `s.spec_params` at its
 own sampler before the round; at a temperature above zero the walk draws row i through that
 sampler (`mtp_walk_sampled`, the row sampler installed by `dasllama_sampling`), with the
 recent-token window advanced per accepted draft so penalties see the tokens the stream will have
@@ -110,33 +119,23 @@ base.** The chain fills the verify batch: `vbatch[0]` is the committed token, `v
 `d_i` decoded from `(d_{i-1}, the draft head's own h)`, and `d_1` alone comes from `(tok, the
 trunk's stashed h)` - which the round saves in `s.mtp_xb_save` before the first draft, because the
 chain overwrites `s.mtp_h`. Each step runs `metal_mtp_draft_forward` at `pos + i` against the trunk
-mirror, and it is gated on the round's BASE position (`wm_pos`), not on `pos + i`: the trunk
+mirror (the draft seat passes the round's base, `s.n_past`, as `wm_pos`), and it is gated on that base, not on `pos + i`: the trunk
 watermark only has to cover the base, since a draft at `pos + i` reads exactly the slab rows its own
 chain wrote above it, while the slab capacity must still cover the row being written. Gating on the
 drafted position refuses every round past the first draft.
 
-**A depth-1 round on any table the device gathers is one command buffer.** The rows step's draft is
-parked (`g_chain_rd`) and encoded ahead of the verify on the verify's own serial encoder, with
-`enc_argmax_rows` landing every row's winner in the step's `btok`; the verify then embeds each
-group's row 1 from that slot on the device (`enc_embed`, into its rows and the head's cat image)
-and the host reads the winners into `mtp_vbatch` only after the verify's join - one commit, one
-join, no readback between the draft and the verify (`metal_mtp_chained_rounds` counts the rounds, the assistant's with them).
-The gather reads group gi's winner at its offset in that slot: the q8 copy's and the K-quant planes'
-stamps take any offset, the fp32 table's (an F32/F16/BF16 table) reads the slot's head, so a round of
-one group chains on every table and a round of several on the first two. The draft body reads the groups in the draft
-layout (one row a group at the seam), so the encoder sets that layout around it and restores the
-verify layout, in which a group's row count is its own `nr`, not the step's total
-(`set_groups_layout` writes both). The landing after the join still writes the seam row's draft
-K/V back to the host cache, as the host chain's landing did, so a mirror rebuilt from host rows
-carries the draft's row and not the previous verify's warm. The host prep embeds a valid
-placeholder into row 1 (the committed token), since on a fresh session the slot holds nothing
-yet; a model with a PLE n-gram layer gathers its rows from the host's tokens before the join, so
-it keeps the host chain. A parked draft whose arena moved under the verify's acquire holds stale
-offsets and refuses the round. A verify whose command buffer failed lands nothing from the parked
-draft - its winners and its slab row are undefined - so the parked step is dropped whole and the
-plain fallback runs. Depth 2 and up keep the host chain: each draft joins before the
-next. The reject debug knob rejects the chained draft at the walk, the row 1 the verify embedded
-notwithstanding.
+**A depth-1 greedy round on any table the device gathers is one command buffer.** The draft seat parks the
+draft step (`g_v_chain`: opened and poked, uncommitted) and answers the committed token as the draft's placeholder,
+which the host prep embeds into row 1; the verify seat encodes the parked draft's body ahead of its rows on its own
+serial encoder, lands the winner in the step's `btok` (`enc_argmax`), embeds that slot over row 1 of its rows and of the
+head's cat image on the device (`enc_embed_dev`), and after the join writes the winner into `s.mtp_vbatch[1]` - the
+depth-1 step reads the draft back from there - and lands the draft row's K/V to the host cache as the slow draft's
+landing does; one commit, one join, no readback between the draft and the verify (`metal_mtp_chained_rounds` counts the
+rounds, the assistant's with them). The seat parks only where the round asks the pick alone (greedy, no chain cut) at
+depth 1, the table gathers on the device and no n-gram side input reads the host's tokens before the join; a parked
+draft whose arena moved under the verify's acquire, or whose verify takes other than two rows, runs the slow draft
+first. A verify that refuses or whose command buffer failed drops the parked draft unrun. On the 0.8B the two-command
+round reads 0.93 of the one-command round at depth 1 (`debug-jit`), the host join between them the whole gap.
 
 ### The verify step re-warms the draft slab from committed history {#mtp-verify-draft-warm}
 
@@ -169,14 +168,21 @@ replay instead of a re-forward.** When `r.dn_split` is set, every deltanet store
 conv-history store and the scan's final state - lands in the DnMirror's alias (shadow) region
 (`dn_state_alt` / `dn_conv_alt`, the kernels' `split = 1`), and the live region keeps the pre-verify
 state. The same pass tapes each recurrent layer's scan inputs into `btape` as `[cv rows | qkv rows |
-beta rows | alpha rows]`, `tape_slot` bytes per taped layer. After the accept walk the shadow holds
-the state as of row k; when the walk accepted a < k, `encode_dn_replay` re-runs the history and scan
-kernels over rows 0..a of the tape, reading the LIVE pre-verify state and writing the shadow again -
-the same kernels over the same inputs, so the boundary state is bit for bit what the verify produced
-for that prefix - and `dn_mirror_flip` then makes the shadow live at `pos + a + 1`. A verify whose
-dispatch failed mid-scan leaves the mirror neither live nor re-derivable, so the round drops it.
+beta rows | alpha rows]`, `tape_slot` bytes per taped layer. The verify seat flips the shadow live at
+`pos + k + 1` as it lands (`dn_mirror_flip`) and parks the step; when the walk accepted a < k, the rollback seat's
+`encode_dn_replay` re-runs the history and scan kernels over rows 0..a of the tape, reading the pre-verify state
+in the region the flip left behind and writing the live region again - the same kernels over the same inputs, so the
+boundary state is bit for bit what the verify produced for that prefix - and moves the live position to
+`pos + a + 1` (`dn_mirror_set_pos`). An n-gram model's conv ring is copied whole before the verify's rows commit into
+it and put back whole by the rollback seat, which commits rows 0..a again and re-advances the host window
+(`mtp_ple_window_restore`, `mtp_ple_window_commit`). A verify whose dispatch failed mid-scan leaves the mirror
+neither live nor re-derivable, so the seat drops the mirror and declines the round.
 
 ### The batch driver's same-slab mode {#batch-same-slab}
+
+A multi-stream speculative tick on Metal runs each stream's round alone - every plane read once a
+stream, no layer kind batched across streams - and the scheduler's census counts such a tick as
+no batched step (the server arms speculation single-stream).
 
 **In same-slab mode the batch rows are groups of ONE session's consecutive positions, so each
 group's mirror is prepared once and each group lands on its session.** `verify_batch_groups` fills
@@ -191,50 +197,11 @@ position plus one. The landing side follows: the zero-copy per-session logits sc
 and `land_sameslab_rows` copies each group's logits into its session's `s.mtp_logits_b` (its row 0
 also into `s.mtp_logits`, which only a NextN-headed session has sized) and its post-final-norm
 hidden rows into `s.mtp_hrows`, and every row's GPU argmax into `g_sameslab_arg`.
-
-### Every stream's round verifies in one pass {#mtp-joint-verify}
-
-**A scheduler tick verifies every speculative stream's rows together.** `metal_mtp_spec_rounds`
-takes the tick's streams: each drafts its k tokens on its own chain (a cold stream, or one whose
-draft declines, plain-steps and leaves), then the warm streams' k+1 rows go through ONE verify -
-`g_v_groups` names each stream's rows (`row0`, its slab's `koff`/`voff`/`cap`, its recurrent
-mirror's live and shadow bases, its tape slots), the route table carries every row's own slab and
-position, `recurrent_verify` scans each group's rows against that stream's mirror through the
-kargs row index with the shadow-and-tape discipline of `ARCHITECTURE_GPU_MTP.md#mtp-dn-shadow-replay` per group, and the draft head's
-inputs assemble per group (a group's saved pre-draft hidden parks at cat row `nr + its index`).
-The landing scatters each group's K/V rows and logits into its own stream - a paged stream's block
-table grows to the round's k+1 rows before its drafts, since a round at a page's last row lands
-the next page's first; the accept walk, the
-replay (one command buffer per replaying group), the flip and the commit run per stream exactly as
-the one-stream round's. The one-stream round is the rounds over one session. `mtp_spec_eval_batch`
-is the engine seat the scheduler ticks through (`register_mtp_spec_batch_override`); without a
-driver seat each stream steps alone through `mtp_spec_round_k` at the knob's depth, and the tick reports how many
-streams' rows the joint verify carried so the batched bench row can refuse a per-stream tick.
 A plain batched step on a NextN-headed model lands GPU logits like any other model's, and its
 landing copies each row's post-norm hidden into that stream's `mtp_h` with the watermark moved
 (`land_row_carry`), so a stream that decoded plain - the bench row's plain arm, a server slot
 with speculation off - reaches its next speculative round warm instead of cold-forwarding; the
 same-slab verify lands its rows into `mtp_hrows` instead and the walk sets the carry per group.
-The drafts are rows steps too: draft i of every warm stream is one rows step (`mtp_draft_rows`)
-whose row is that stream's previous draft at its own trunk position - the same route-table fill
-as the verify (`group_routes`), the draft head's rows form (`encode_draft_rows_body`: the
-enorm/hnorm rows into the cat, one eh_proj pass, the draft layer through the rows-form layer
-encoder at every row's own slab, the head norm and ONE classifier pass) - and the landing writes
-each row's draft-slab K/V row into its stream (the host chain's landing its carry hidden too) and
-takes the row's argmax as its next draft, so a k-deep round reads the draft layer and the
-classifier plane k times for the tick, never once per stream. The rows step carries at least two
-rows (`nrows = max(ng, 2)`, the row past a solo stream cloning row 0's inputs and route): a
-one-row rows-form step drafts other tokens than the two-row form on a share of the rounds
-(`followup_metal.md` 44; the measured share is in `PERF_LEDGER.md`), while the two- and three-row
-forms drafted the same tokens on every traced round, so a solo stream's drafts round as they do
-beside others - the joint invariance cell's claim - at the two-row tile's cost. A stream whose
-mirror cannot take the row (its watermark or capacity short) declines the whole rows step and
-every warm stream plain-steps.
-
-The verify serves every mirror codec the decode does: its rows rope and store into the session's codec and its
-attention reads it, the codec's batch stamps over the per-layer route table (`rtoff`; a block codec's bases in bytes),
-and a tq4 verify's attention output un-rotates before wo as a step's does. The NextN round and the assistant round
-share one accept walk and one commit (`mtp_accept_walk`, `mtp_round_commit`).
 
 The batch driver's weight sites dispatch a tensor at a time by its own tag, so a layer mixing q8 and
 K-quant planes serves. The planes a batched step reads more than once: past eight rows, a K-quant
@@ -256,7 +223,7 @@ encode, so the round keeps the serial encoder and pays no hazard-tracker work pe
 
 **A recurrent layer's conv, history advance, q/k L2, scan and gate are one dispatch each, whatever the
 rows.** A group is one session's rows against its mirror: the single row is one group of one row, the
-batch step a group a row (a row a session), the same-slab step and each stream of a joint verify a
+batch step a group a row (a row a session), the same-slab step and the verify seat's rows a
 group of its k+1 rows, the prefill window a group a segment. The rows sit back to back in the planes,
 and a small table names each group's first row, its row count and its live and shadow state and
 history bases (`dn_grp_push`, eight words a group); the conv grid spans the longest group's rows by the

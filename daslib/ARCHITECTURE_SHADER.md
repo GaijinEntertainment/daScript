@@ -70,3 +70,8 @@ Companion to `ARCHITECTURE.md` in this folder; section numbers are unique across
   arm.** `unpack8` carries `int16 -> byte2` and `uint16 -> ubyte2` beside the 32-bit pair; every
   overload is the same `reinterpret` on the host and the same single `OpBitcast` on the SPIR-V
   rail, so the emitter matches the name and reads the width off the operand type.
+- **`atomicAdd` (int and uint) returns the OLD value on every rail**: the CPU body adds and
+  returns what the element held, the SPIR-V rail lowers it to `OpAtomicIAdd` and the MSL rail
+  to a relaxed `atomic_fetch_add_explicit` - both return the old value; a kernel that reads the
+  return (a compaction slot) computes the same on a CPU run, and `tests/metal/test_metal_atomics.das`
+  holds the returned values on both halves.

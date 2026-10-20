@@ -398,26 +398,17 @@ def test_gpu_resident_hybrid_sampled_selection(t : T?) {
             let np = long_length(prompt)
             forward_prefill(tr, p, prompt, np, 0l)
             p.spec_params = unsafe(addr(sp))
-            let sel_plain0 = moe_gpu_resident_selections()
+            let sel_plain0 = sel_selections()
             for (i in range64(6l)) {
                 forward(tr, p, sample_(p, sp), np + i)
             }
-            t |> equal(moe_gpu_resident_selections() - sel_plain0, 6l, "the plain sampled stream landed a selection a step with the round off")
+            t |> equal(sel_selections() - sel_plain0, 6l, "the plain sampled stream landed a selection a step with the round off")
             p.spec_params = null
             delete p
             set_mtp_spec(spec0)
             var sel <- sampled_stream(tr, prompt, 40l, sp, 4242)
             set_select_landing(sel0)
-            log_gen_texts(tr, "the sampled stream: rows landed, the selection landed", rows.ids, sel.ids)
-            t |> equal(rows.selections, 0l, "the rows-landed stream asked no selection")
-            t |> success(sel.selections > 0l, "the selection served the stream's steps ({sel.selections} selections over {sel.drafted} drafts)")
-            t |> equal(sel.late_landings, 0l, "no step's sampler reached past the landing ({sel.late_landings} late landings)")
-            // the two streams share the device's logits and the seed; they part only through the sampler's input, and the landed
-            // sampler draws the row sampler's draw over the same survivors - test_sampling_landed.das holds that equivalence
-            // seed by seed, so an exact token compare is the right form here
-            t |> success(ids_equal(rows.ids, sel.ids), "the two streams agree token for token ({length(sel.ids)} tokens; {sel.accepted} of {sel.drafted} drafts accepted under the selection, {rows.accepted} of {rows.drafted} with the rows)")
-            // a stale carry under the selection drafts garbage the walk rejects: the tokens stay alike and the acceptance drops
-            t |> success(sel.accepted == rows.accepted && sel.drafted == rows.drafted, "the walk accepts the same drafts under the selection ({sel.accepted} of {sel.drafted} against {rows.accepted} of {rows.drafted})")
+            selection_agrees(t, tr, "0.8b", rows, sel)
             delete rows
             delete sel
             delete prompt

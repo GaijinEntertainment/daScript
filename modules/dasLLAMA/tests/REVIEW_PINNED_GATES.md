@@ -44,12 +44,15 @@ must keep holding:
 - `test_metal_prefill_kernels.das`'s `test_pf_bf16_tile_pick` cell must hold the window
   projection's tile pick: the bf16 tile only where layers x ple is a multiple of 64 and the dim a
   multiple of 32.
-- `test_metal_misc_kernels.das`'s `test_metal_misc_kernels` cell must hold its token-table
-  gathers bit for bit: `embed_q8_gate`, `embed_b32_gate` on q51, iq4nl32, q4032 and q5032 at 96
+- `test_metal_misc_kernels.das`'s `test_metal_misc_kernels` cell must hold every kernel gate it
+  calls, at the bar each gate sets; and by name: its token-table gathers bit for bit: `embed_q8_gate`, `embed_b32_gate` on q51, iq4nl32, q4032 and q5032 at 96
   wide, at 2048 wide past a whole other table's blocks, and at a lead off a superblock boundary
   (the bind's block skip), `embed_kq_gate` on every K-quant format it lists, and `embed_f32_gate`
-  past a lead of foreign floats; and the residual seam's `add_rms_gate` on every stamp at every
-  shipped width, 5376 and 8192 past the slab among them.
+  past a lead of foreign floats; the residual seam's `add_rms_gate` on every stamp at every
+  shipped width, 5376 and 8192 past the slab among them; and `cls_select_gate` at a wide, a
+  narrow and the served vocab: the ids at or above the row's K-th largest logit and their logits
+  exact against the host oracle, the row's max logit, the overflow flag and the recent ids'
+  logits, the denominator within 2e-5, a poisoned id and a poisoned denominator its controls.
 - `test_metal_gemm_kernels.das`'s `test_metal_gemm_kernels` cell must hold every kernel gate it calls, at the bar
   each gate sets - the census's evidence among them: `kq_mulmm_gate`, `kq_devw_gate`, `kq_dbuf_gate`,
   `moe_mulmm_kq_gate`, `moe_mulmm_split_gate`, `attn_qk_mm_gate` and `attn_dev_pair_gate`.
@@ -157,10 +160,10 @@ An axis is one distinct behaviour the cell asserts - an output form, a refusal p
 order; a new input row is an axis gained only where it runs a kernel stamp, an output form or a
 branch of the kernel or its router that no earlier row of the cell ran.
 
-**A diff that widens a pinned test cell's tolerance, swaps its comparison for one more outputs
-pass, rewrites an expected value without updating that cell's pinned-set entry in the same change,
-drops its input, or drops a `run.das` suite listing that reaches it is a defect - fix the code
-that fails the cell instead.**
+**A diff that widens a pinned test cell's tolerance, swaps its comparison for a looser one,
+rewrites an expected value its entry ties to an outside source (a document, a checked-in table, a
+knob list) to a value that source does not state, drops its input, or drops a `run.das` suite
+listing that reaches it is a defect - fix the code that fails the cell instead.**
 
 **A diff that removes a pinned test cell's assert while the code it checks stays adds to the same
 cell, in the same change, an assert that holds the same values to an equal or tighter bound, with

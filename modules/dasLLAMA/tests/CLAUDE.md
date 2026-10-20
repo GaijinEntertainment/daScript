@@ -167,7 +167,9 @@ accepted; every arm fails, never skips, on a carrier the box holds that the Meta
 `mtp-sampled-<tag>` = the sampled accept walk - speculative free-run == plain SAMPLED free-run,
 seeded, at depth 1 and 2, temp 0.7 / top-k 1 / penalty 1.1 so every draw is the penalized argmax
 and the stream stays deterministic; on a verify tag it rides the assistant round inside the
-`mtp-count-<tag>` attach). The same
+`mtp-count-<tag>` attach); `mtp-select-<tag>` = the selection landing - a sampled stream (temp 0.7, top-p 0.9, seeded) at
+depth 2 through the device's selection decodes the rows-landed stream token for token with the same drafts accepted,
+every served step's selection landed (`sel_selections`) and none reaching past it (`sel_fallbacks`)). The same
 file carries the BATCH RAIL's parity arms per verify-fixture tag `l1b g12 q30 q38
 g26` (Llama-3.2-1B, gemma-4-12B, Qwen3-30B-A3B, Qwen3.8-27B head-less - one recurrent session's
 rows the rail serves as one group over its mirror, gemma-4-26B-A4B): `mtp-dff-<tag>` = distinct sessions, GPU batch step vs GPU single step
@@ -611,7 +613,8 @@ columns a simdgroup and the decode column's threadgroup a row at 1536 wide, and 
 against the dot in double, the poisoned lead element the control; `f32_rows_gate`: the f32 rows through `enc_f32_rows_gemv` -
 the float4 router stamps on the lattice, with and without the bias row, the element-walk stamps off it (dim 66, base 2, dim 515 on an odd base, the one-column
 walk past whole strides) - NaN past both row ends, exact against the dot in double, the poisoned lead element the control; `geglu_side_gate`, `ple_finish_gate` - the finish's `XSCALE` stamp (`GkPleFinish`), the finish without the
-prescale its control); the side rows' gather rides the token-table family, the misc file's embed gates. The prefill file's `qk_rope_gate`
+prescale its control); the side rows' gather rides the token-table family, the misc file's embed gates. The misc file's `cls_select_gate` runs the selection kernel on the template both homes stamp (`GkClsSelect`) over the Vulkan cell's
+six rows at a 262144 and a 1000 vocab against `_sel_oracle.das`'s reading. The prefill file's `qk_rope_gate`
 carries the window's V arms (V off the pre-norm k rows, the v-norm in place, the V panel bit for bit untouched with neither), and
 the misc file's `add_rms_gate` every residual stamp (`GkAddRmsRows`: the plain step, the sandwich seam, the seam with no norm
 stored, the f16 twins) through its one-row, rows and window builders and the decode rows' 1024-lane builders, at widths within the
@@ -1617,8 +1620,8 @@ both block codecs at f16. `test_mtp_seat_owner` holds the
 speculative round's seat ownership on a Model shell under two fake decode overrides: with the
 owner refusing the model, and with seats registered under no owner, `mtp_spec_eval` and
 `mtp_spec_round` open the CPU round (its opening refuses the session's parked token, the witness)
-and `mtp_spec_eval_batch` steps each stream alone; with the owner claiming it, all three reach
-the seats. `test_land_pick` holds the pick a round or a driver lands in a logits row's place
+and neither reaches a seat; with the owner claiming it, the round reads the verify-rows cap and
+the cold seat's reason (the probe seats the cell registers) before it opens. `test_land_pick` holds the pick a round or a driver lands in a logits row's place
 (`land_pick`): the next `sample_` returns it once and reads the logits row again after, a second
 landing before that `sample_` refuses and leaves the first standing, and the CPU round's opening
 refuses a session whose landed pick nobody sampled. `test_mtp_round_panics` holds the round's
@@ -2054,17 +2057,18 @@ single-row step's shared-expert GEMV over its `bh12s` panel
 (`../ARCHITECTURE_GPU_MTP_DECODE.md#metal-layer-enc`); the MTP carrier also runs the depth-2 cell
 (`test_metal_batched_row_mtp_depth2`): a greedy walk (`generate_mtp_greedy`) at depth 1 and at
 depth 2 over up to 24 reply tokens, the same tokens, the depth-2 walk drafting more than the
-depth-1 walk (at depth 2 each draft joins on the host before the next is made) and accepting some;
-the MTP carrier also runs the joint-verify invariance cell
+depth-1 walk (at depth 2 each draft joins on the host before the next is made) and accepting some; the pick cell
+(`test_metal_pick_ask`): a greedy scheduler stream's steps land their device pick in the logits' place
+(`metal_picks_landed` up, at most one a token) and emit token for token what `generate()` emits off the host's
+argmax, and a stream whose sampler is not a bare argmax lands none (the control);
+the MTP carrier also runs the three-stream invariance cell
 (`test_metal_batched_row_mtp_joint_invariance`): three speculative streams admitted together emit,
-token for token, what each emits alone on a one-stream speculative scheduler (the verify's
-rows forms are per row, so the joint pass and the solo pass round alike), the joint ticks' draft
-and accept counts equal the three solo streams' sums, the solo rounds accept more than half their
-drafts; and its staggered twin (`test_metal_batched_row_mtp_joint_staggered`):
-the same three streams with the LAST one on a prompt past 200 tokens, so the joint round's groups
-sit at different depths across three 64-row chunk boundaries - the round's chunk count, its
-attention form and every group's layer bases must follow that group's own depth and mirror cap,
-not group 0's, and the paged cell (`test_metal_paged_mtp`): one speculative stream of 150 reply
+token for token, what each emits alone on a one-stream speculative scheduler, every tick stepping each
+stream through its own round (`mtp_joined_max` 0), the ticks' draft and accept counts equal the three
+solo streams' sums, the solo rounds accept more than half their drafts; and its staggered twin
+(`test_metal_batched_row_mtp_joint_staggered`): the same three streams with the LAST one on a prompt past
+200 tokens across three 64-row chunk boundaries, each round's chunk count and attention form its own
+stream's, and the paged cell (`test_metal_paged_mtp`): one speculative stream of 150 reply
 tokens on a scheduler of 64-row pages - the server's session kind - emits token for token what a
 flat session emits, drafts accepted on both sides, the stream's rows asserted to span three pages
 so rounds cross page boundaries, and a Metal-served model's `chunk_defaults` read as

@@ -532,7 +532,8 @@ let private MSL_LADDER_OWNED : table<string> <- {
     "tmm2d_tg_begin_deva", "tmm2d_tg_step_deva", "tmm2d_tile_tg", "tmm2d_tg_rowscale",
     "tmm2d_tg_begin_nt", "tmm2d_tg_step_nt", "tmm2d_tg_begin_devant", "tmm2d_tg_step_devant",
     "tmm2d_tg_begin_devab", "tmm2d_tg_step_devab", "tmm2d_tg_begin_devabnt", "tmm2d_tg_step_devabnt",
-    "uint_bits_to_float", "int_bits_to_float", "float_bits_to_uint", "float_bits_to_int"
+    "uint_bits_to_float", "int_bits_to_float", "float_bits_to_uint", "float_bits_to_int",
+    "atomicAdd"
 }
 
 // A call the builtin ladder does NOT own: everything emit_call_value handles is either a
@@ -799,6 +800,9 @@ def private scan_body(var ctx : MslCtx; e : Expression?) {
         }
         if (scn == "tmm2d_q8u_f32" && length(ecs.arguments) == 14) {
             mark_write_target(ctx, ecs.arguments[8])
+        }
+        if (scn == "atomicAdd" && length(ecs.arguments) == 2) {
+            mark_write_target(ctx, ecs.arguments[0])
         }
         if ((scn == "tmm2d_tg_store" || scn == "tmm2d_tg_store_half") && length(ecs.arguments) == 5) {
             mark_write_target(ctx, ecs.arguments[1])
@@ -1464,6 +1468,32 @@ def private emit_call_value(var ctx : MslCtx; ec : ExprCall?) : string {
         let l = emit_value(ctx, ec.arguments[1])
         note(ctx, "call.{cname}.{census_class(ec._type)}")
         return "{cname}({v}, {l})"
+    } elif (cname == "atomicAdd") {
+        if (na != 2) {
+            err(ctx, ec.at, "atomicAdd takes exactly two arguments (the lvalue, the addend)")
+            return "/*call {cname}*/"
+        }
+        //! u32 or i32: the two overloads the shared builtins declare
+        let acls = census_class(ec._type)
+        let a0 = ec.arguments[0]
+        let tgt : Expression? = a0 is ExprRef2Value ? (a0 as ExprRef2Value).subexpr : a0
+        let mem = tgt is ExprAt ? member_lookup(ctx, (tgt as ExprAt).subexpr) : ""
+        if (empty(mem) || (ctx.members?[mem]?.state ?? false)) {
+            err(ctx, ec.at, "atomicAdd's target must be an element of an @ssbo"
+                + " or @workgroup member")
+            return "/*call {cname}*/"
+        }
+        if (acls != "i32" && acls != "u32") {
+            err(ctx, ec.at, "atomicAdd lowers an int or uint element only, not {acls}")
+            return "/*call {cname}*/"
+        }
+        let wg = ctx.members?[mem]?.workgroup ?? false
+        let space = wg ? "threadgroup" : "device"
+        let aty = acls == "i32" ? "atomic_int" : "atomic_uint"
+        let tv = emit_value(ctx, tgt)
+        let v = emit_value(ctx, ec.arguments[1])
+        note(ctx, "call.atomic_add.{wg ? "tg" : "dev"}.{acls}")
+        return "atomic_fetch_add_explicit(({space} {aty}*)&({tv}), {v}, memory_order_relaxed)"
     } elif (cname == "make_filled_simdgroup_float8x8" || cname == "make_filled_simdgroup_half8x8") {
         if (na != 1) {
             err(ctx, ec.at, "{cname} takes exactly one fill value")

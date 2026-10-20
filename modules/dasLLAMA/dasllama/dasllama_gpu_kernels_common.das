@@ -3991,6 +3991,233 @@ class template GkClsEpilogue {
     }
 }
 
+struct GkClsSelArgs {
+    vocab : uint
+}
+
+//! the workgroup exclusive scan over `WG` threads (`scan` one slot a thread) on the shared reduce base: the Vulkan row kernels
+//! that count and the selection's crossing-bin scan
+[ |> template_struct_instance]
+class template GkWgScan : GkWgReduce {
+    @template_constant WG : uint = 256u   //!< the workgroup's threads
+    @workgroup scan : uint[int(WG)]
+
+    //! the exclusive prefix over the `WG` threads' v into `cum`; scan[WG - 1] holds the total after the call
+    def excl_scan_into(v : uint; var cum : uint&) {
+        let tid = gl_LocalInvocationID.x
+        barrier()   //! the previous scan's readers are done with scan
+        scan[tid] = v
+        barrier()
+        var off = 1u
+        while (off < WG) {
+            var add = 0u
+            if (tid >= off) {
+                add = scan[tid - off]
+            }
+            barrier()
+            scan[tid] += add
+            barrier()
+            off = off * 2u
+        }
+        cum = scan[tid] - v
+    }
+}
+
+//! The classifier tail's selection on the template both homes stamp, a workgroup of `WG` threads a row: the row's largest `K`
+//! logits with the ties at the K-th, its max and softmax denominator at the row's temperature, and the recent-window logits the
+//! ask lists, in the `SEL_*` layout of `dasllama_gpu_tier.das` (`ARCHITECTURE_GPU_VULKAN_LANDING.md#logits-selection-landing`)
+[ |> template_struct_instance]
+class template GkClsSelect : GkWgScan {
+    override WG = 1024u                        //!< the threads a row: a 262144-wide row is 256 strided loads a thread, 32 warps hide their latency
+    @template_constant K : uint = 1024u        //!< SEL_K: the survivors a row lands, the host sampler's candidate cap
+    @template_constant CAP : uint = 2048u      //!< the landing's slots a row: the K survivors and the ties at the K-th
+    @template_constant RECENT : uint = 128u    //!< SEL_RECENT: the recent-window ids a row's ask lists
+    @template_constant WORDS : uint = 132u     //!< SEL_WORDS: one row's ask words - the temperature's bits, the id count, two pads, the ids
+    @template_constant HDR : uint = 4u         //!< SEL_HDR: one row's landed header - the count, the overflow flag, the max's bits, the denominator's bits
+    @ssbo @binding = 0 @role = "read" y : array<float>          //! the logits rows
+    @ssbo @binding = 1 @role = "read" sel : array<uint>         //! the rows' ask words (`WORDS` a row, host-poked a step)
+    @ssbo @binding = 2 @role = "write" hdr : array<uint>        //! the rows' landed headers (`HDR` a row)
+    @ssbo @binding = 3 @role = "write" sel_id : array<uint>     //! the survivors' ids (`CAP` a row)
+    @ssbo @binding = 4 @role = "write" sel_val : array<float>   //! ... and their logits
+    @ssbo @binding = 5 @role = "write" rec_val : array<float>   //! the recent-window logits (`RECENT` a row)
+    @kargs pa : GkClsSelArgs
+    @workgroup hist : uint[2048]       //! the radix histogram: 11 bits a pass, the literal the two passes' bin count
+    @workgroup cross_bin : uint[1]     //! a pass's crossing bin, the one crossing thread's write
+    @workgroup cross_above : uint[1]   //! ... and the count above it
+    @workgroup slots_used : uint[1]    //! the compaction's slot counter
+
+    //! the float's order-preserving key over its bits: a larger logit is a larger key (a negative flips every bit, a positive its sign)
+    def key_of_into(v : float; var k : uint&) {
+        let b = float_bits_to_uint(sel_lane_val(v))
+        k = b ^ ((0u - (b >> 31u)) | 0x80000000u)
+    }
+
+    def hist_clear {
+        var b = gl_LocalInvocationID.x
+        while (b < 2048u) {
+            hist[b] = 0u
+            b += WG
+        }
+    }
+
+    //! called uniformly - the pass's bin test is `on`, never a branch around the call - since lane 0 adds for every lane sharing its bin
+    def hist_add(b : uint; on : bool) {
+        let b0 = gk_subgroup_bcast0_u(b)
+        let same = on && b == b0
+        let cnt = gk_subgroup_add(same ? 1.0 : 0.0)
+        if (gl_SubgroupInvocationID == 0u) {
+            if (cnt > 0.0) {
+                let _c = atomicAdd(hist[b0], uint(cnt))
+            }
+        } elif (on && !same) {
+            let _c = atomicAdd(hist[b], 1u)
+        }
+    }
+
+
+    //! the bin, counted from the top of `per * WG` bins, at which the elements above reach `need`: every thread owns `per` bins
+    //! (thread 0 the top block), the counts above its block scanned in, the one thread whose block holds the crossing writing it
+    def find_top_crossing_bin(need, per : uint) {
+        let tid = gl_LocalInvocationID.x
+        let j = WG - 1u - tid
+        var c = 0u
+        var b = 0u
+        while (b < per) {
+            c += hist[j * per + b]
+            b++
+        }
+        var cum = 0u
+        excl_scan_into(c, cum)
+        b = per
+        while (b > 0u) {
+            b--
+            let h = hist[j * per + b]
+            if (cum < need && cum + h >= need) {
+                cross_bin[0] = j * per + b
+                cross_above[0] = cum
+            }
+            cum += h
+        }
+        barrier()
+    }
+
+    def select_row {
+        let row = gl_WorkGroupID.x
+        let tid = gl_LocalInvocationID.x
+        let base = row * pa.vocab
+        let temp = uint_bits_to_float(sel[row * WORDS])
+        let inv = temp > 0.0 ? 1.0 / temp : 1.0
+        let need = min(K, pa.vocab)
+        hist_clear()
+        barrier()
+        let nit = (pa.vocab + (WG - 1u)) / WG   //! the strides a thread walks, every lane alike, so the subgroup ops inside stay uniform (the divisor is the template's literal)
+        var m = -3.4e38
+        var it = 0u
+        var k = 0u
+        while (it < nit) {
+            let i = tid + it * WG
+            let on = i < pa.vocab
+            let yv = y[base + (on ? i : 0u)]
+            let v = sel_lane_val(yv)
+            if (on) {
+                m = max(m, v)
+            }
+            key_of_into(v, k)
+            hist_add(k >> 21u, on)
+            it++
+        }
+        var rmax = 0.0
+        wg_max_into(m, 0u, rmax)
+        if (rmax <= -3.0e38) {   //! a row with nothing above the lowest finite reads the lowest finite, as the host does (the reduce's seed spelled out)
+            rmax = -3.4e38
+        }
+        find_top_crossing_bin(need, 2u)
+        let b1 = cross_bin[0]
+        let above1 = cross_above[0]
+        barrier()
+        hist_clear()
+        barrier()
+        var ssum = 0.0
+        it = 0u
+        while (it < nit) {
+            let i = tid + it * WG
+            let on = i < pa.vocab
+            let yv = y[base + (on ? i : 0u)]
+            let v = sel_lane_val(yv)
+            if (on) {
+                ssum += exp(max((v - rmax) * inv, -80.0))
+            }
+            key_of_into(v, k)
+            hist_add((k >> 10u) & 2047u, on && (k >> 21u) == b1)
+            it++
+        }
+        var rden = 0.0
+        wg_sum_into(ssum, 1u, rden)
+        find_top_crossing_bin(need - above1, 2u)
+        let hi22 = (b1 << 11u) | cross_bin[0]
+        let above2 = cross_above[0]
+        barrier()
+        hist_clear()
+        barrier()
+        it = 0u
+        while (it < nit) {
+            let i = tid + it * WG
+            let on = i < pa.vocab
+            let yv = y[base + (on ? i : 0u)]
+            key_of_into(yv, k)
+            hist_add(k & 1023u, on && (k >> 10u) == hi22)
+            it++
+        }
+        barrier()
+        find_top_crossing_bin(need - above1 - above2, 1u)
+        land((hi22 << 10u) | cross_bin[0], rmax, rden)
+    }
+
+    def land(thr : uint; rmax, rden : float) {
+        let row = gl_WorkGroupID.x
+        let tid = gl_LocalInvocationID.x
+        let base = row * pa.vocab
+        if (tid == 0u) {
+            slots_used[0] = 0u
+        }
+        barrier()
+        var i = tid
+        var k = 0u
+        while (i < pa.vocab) {
+            break if (slots_used[0] > CAP)   //! an overflowing row (every id tied) stops counting past the cap, instead of serializing a quarter million adds on one counter
+            let yv = y[base + i]
+            let v = sel_lane_val(yv)
+            key_of_into(v, k)
+            if (k >= thr) {
+                let slot = atomicAdd(slots_used[0], 1u)
+                if (slot < CAP) {
+                    sel_id[row * CAP + slot] = i
+                    sel_val[row * CAP + slot] = v
+                }
+            }
+            i += WG
+        }
+        let nrec = min(sel[row * WORDS + 1u], RECENT)
+        if (tid < nrec) {
+            let id = sel[row * WORDS + 4u + tid]
+            var rv = -3.4e38
+            if (id < pa.vocab) {
+                let yr = y[base + id]
+                rv = sel_lane_val(yr)
+            }
+            rec_val[row * RECENT + tid] = rv
+        }
+        barrier()
+        if (tid == 0u) {
+            let n = slots_used[0]
+            hdr[row * HDR] = min(n, CAP)
+            hdr[row * HDR + 1u] = n > CAP ? 1u : 0u
+            hdr[row * HDR + 2u] = float_bits_to_uint(rmax)
+            hdr[row * HDR + 3u] = float_bits_to_uint(rden)
+        }
+    }
+}
+
 let GK_NO_DSCALE = 0xFFFFFFFFu   //! `GkTopKArgs.dsoff`'s "no per-expert down scale" sentinel
 
 struct GkTopKArgs {

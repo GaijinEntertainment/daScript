@@ -206,6 +206,7 @@ var g_pso_wdec_attn_part : MetalComputePipeline?  // the chunked online-softmax 
 var g_pso_wdec_attn_comb : MetalComputePipeline?  // the log-sum-exp chunk merge
 var g_pso_bias_add_res : MetalComputePipeline?   // whisper decode: bias + residual add
 var g_pso_cls_epi : MetalComputePipeline?   //! the classifier epilogue (`MetalClsEpilogue`): the final softcap, the suppressed ids
+var g_pso_cls_select : MetalComputePipeline?   //! the classifier tail's selection (`MetalClsSelect`): a sampled stream's survivors, max, denominator and recent logits
 var g_one : MetalBuffer?                    // persistent 1.0f — the rms oscale default bind
 var g_zero : MetalBuffer?                   // persistent 0u — the sink/hass identity bind
 var g_pso_attn16 : MetalComputePipeline?
@@ -2192,6 +2193,13 @@ def dn_mirror_advance(uid : uint64; pos : int64) {
     if (key_exists(g_dn_mirrors, uid)) {
         let p0 = g_dn_mirrors[uid].pos
         g_dn_mirrors[uid].pos = max(p0, pos + 1l)
+    }
+}
+
+//! the live region's position moved with no flip: a reject's replay rewrote the live region in place for a shorter accept
+def dn_mirror_set_pos(uid : uint64; pos : int64) {
+    if (key_exists(g_dn_mirrors, uid)) {
+        g_dn_mirrors[uid].pos = pos
     }
 }
 

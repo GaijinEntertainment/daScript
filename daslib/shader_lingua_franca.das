@@ -216,6 +216,22 @@ def public imageSize(img : image3D) : int3 => int3(0, 0, 0)
 [sideeffects]
 def public barrier() : void {}
 
+//! the atomic add on a @workgroup or @ssbo lvalue (on Metal, an
+//! element of such a member); returns the OLD value
+[sideeffects]
+def public atomicAdd(var mem : int&; value : int) : int {
+    let old = mem
+    mem += value
+    return old
+}
+
+[sideeffects]
+def public atomicAdd(var mem : uint&; value : uint) : uint {
+    let old = mem
+    mem += value
+    return old
+}
+
 [sideeffects]
 def public memoryBarrierShared() : void {}
 

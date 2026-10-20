@@ -553,38 +553,13 @@ def register_decode_override(name : string; fn : DecodeOverrideFn) {
     g_decode_overrides[name] = fn
 }
 
-//! The MTP spec-step seat: a backend's whole mtp_spec_eval twin, cold gates included, keyed by the decode override's name and consulted where it owns the model (`mtp_seats_own`)
-typedef MtpSpecOverrideFn = function<(t : Model; var s : Session; tok : int64; var accepted : int64&) : bool>
-var private g_mtp_spec_overrides : table<string; MtpSpecOverrideFn>
-
-def register_mtp_spec_override(name : string; fn : MtpSpecOverrideFn) {
-    g_mtp_spec_overrides[name] = fn
-}
-
-//! the depth-1 speculative step over every stream at once - a driver that verifies every stream's
-//! rows in one weight pass registers here; `accepted[i]` is stream i's accepted draft or -1, and the
-//! call returns how many streams' rows the joint verify carried (0 = each stream stepped alone)
-typedef MtpSpecBatchOverrideFn = function<(t : Model; var sessions : array<Session?>; toks : array<int64>; var accepted : array<int64>) : int64>
-var private g_mtp_spec_batch_overrides : table<string; MtpSpecBatchOverrideFn>
-
-def register_mtp_spec_batch_override(name : string; fn : MtpSpecBatchOverrideFn) {
-    g_mtp_spec_batch_overrides[name] = fn
-}
-
 //! The MTP seam-row seat (forward_mtp(..., false)'s GPU twin): the head's row pos-1 before a continuation window's trunk body overwrites mtp_h; a declined seam on a model with CPU planes falls to the CPU seam
 typedef MtpSeamOverrideFn = function<(t : Model; var s : Session; token, pos : int64) : bool>
 var private g_mtp_seam_overrides : table<string; MtpSeamOverrideFn>
 
-typedef MtpRoundOverrideFn = function<(t : Model; var s : Session; tok : int64; k : int64) : int64>
-var private g_mtp_round_overrides : table<string; MtpRoundOverrideFn>
-
-def register_mtp_round_override(name : string; fn : MtpRoundOverrideFn) {
-    g_mtp_round_overrides[name] = fn
-}
-
-//! The MTP draft seat (`forward_mtp`'s GPU twin, the drafting form): the head's row `pos` from (embed(token), s.mtp_h) - the draft's
-//! token id answered (the device's argmax), `s.mtp_h` the head's own hidden at `mtp_h_pos1` 0, the head's row `pos` written where the seat
-//! keeps it, `s.logits` the draft's unless `pick_only` (the logits stay on the device); -1 declines to the CPU draft. Consulted under `mtp_seats_own`
+//! The MTP draft seat (`forward_mtp`'s GPU twin): the head's row `pos` from (embed(token), s.mtp_h) - the draft's id answered, `s.mtp_h`
+//! the head's own hidden at `mtp_h_pos1` 0, `s.logits` the draft's unless `pick_only`; -1 declines to the CPU draft; a seat that drafts inside
+//! its verify's command answers the committed token and writes the draft into `s.mtp_vbatch[1]` at the join. Consulted under `mtp_seats_own`
 typedef MtpDraftOverrideFn = function<(t : Model; var s : Session; token, pos : int64; pick_only : bool) : int64>
 var private g_mtp_draft_overrides : table<string; MtpDraftOverrideFn>
 
@@ -638,6 +613,21 @@ var private g_mtp_verify_rows_overrides : table<string; MtpVerifyRowsFn>
 
 def register_mtp_verify_rows_override(name : string; fn : MtpVerifyRowsFn) {
     g_mtp_verify_rows_overrides[name] = fn
+}
+
+//! why the active override's seats cannot take this round ("" where they can): a home's own gates beside the engine's
+//! (`mtp_round_cold_why`); a cold round steps plain, never reaching a seat that would decline into CPU rails the model has none of
+typedef MtpColdFn = function<(t : Model; s : Session; pos, k : int64) : string>
+var private g_mtp_cold_overrides : table<string; MtpColdFn>
+
+def register_mtp_cold_override(name : string; fn : MtpColdFn) {
+    g_mtp_cold_overrides[name] = fn
+}
+
+//! the active override's own cold reason for `s`'s round at `pos` over `k` drafts, "" where it has none
+def mtp_round_cold_seat(t : Model; s : Session; pos, k : int64) : string {
+    return "" if (!mtp_seated(t, g_mtp_cold_overrides))
+    return invoke(g_mtp_cold_overrides[g_decode_override_name], t, s, pos, k)   // nolint:PERF026 — mtp_seated holds key_exists, so the index cannot insert
 }
 
 //! the rows the active override's verify seat serves at most for `t` (0 = no cap)
@@ -792,6 +782,44 @@ def sel_ask_words(s : Session; nrows : int64; extra : array<int64>; nextra : int
 
 var private g_sel_fallbacks = 0l
 var private g_sel_served = 0l
+var private g_sel_selections = 0l
+var private @scratch g_sel_words : array<uint>
+var private g_sel_no_extra : array<int64>
+
+//! How many device commands landed a sampled stream's selection in place of their rows in this process (a cell's served witness)
+def sel_selections() : int64 => g_sel_selections
+
+//! the active decode override's step under the selection ask: a sampled stream's step lands its survivors where the driver serves them
+def private sel_decode_override_step(t : Model; var s : Session; token, pos : int64) : bool {
+    sel_before(s, 1l, g_sel_no_extra, 0l)
+    let done = invoke(g_decode_override, t, s, token, pos)
+    if (done) {
+        sel_after(s, "token", pos)
+    }
+    return done
+}
+
+[arch(at="../ARCHITECTURE_GPU_VULKAN_LANDING.md#logits-selection-landing")]
+def sel_before(s : Session; nrows : int64; extra : array<int64>; nextra : int64) {
+    return if (!sel_wanted(s))
+    sel_ask_words(s, nrows, extra, nextra, g_sel_words)
+    rdec_sel_ask(nrows, g_sel_words)
+}
+
+[arch(at="../ARCHITECTURE_GPU_VULKAN_LANDING.md#logits-selection-landing")]
+def sel_after(var s : Session; what : string; row : int64) {
+    g_sel_landing = rdec_sel_landing()
+    s.sel_row1 = g_sel_landing.rows > 0l ? 1l : 0l
+    if (g_sel_landing.rows > 0l) {
+        g_sel_selections++
+    }
+    for (i in range64(g_sel_landing.rows)) {
+        let den = uint_bits_to_float(unsafe(g_sel_landing.hdr[i * SEL_HDR + SEL_HDR_DEN]))
+        if (!(den > 0.0) || !is_finite(den)) {
+            panic("dasLLAMA {what}: the device landed a selection whose denominator reads {den} at row {row + i} - a poisoned head or trunk row reached the classifier")
+        }
+    }
+}
 
 //! How many landed selections a sampler could not serve from and took the rows late in this process ([[sel_land_rows]])
 def sel_fallbacks() : int64 => g_sel_fallbacks
@@ -851,6 +879,7 @@ def mtp_round_begin(var s : Session) {
         panic("dasLLAMA: a device-landed pick was never consumed before a speculative round - the caller samples through sample_ after every step")
     }
     s.mtp_qn |> clear()   //! the q records are a round's: a round that records none walks typical off an empty record, never an earlier round's
+    sel_reset(s)   //! a round seat that does not run forward() (Metal) would otherwise read a plain step's landing
 }
 
 //! The sampled accept walk over the verify's k+1 rows in s.mtp_logits_b under `accept`; returns a. The recent-token
@@ -1085,8 +1114,8 @@ def mtp_capable_(t : Model) : bool
     => t.config.n_layer_nextn > 0l || mtp_assistant_attached(t)
 
 //! One speculative round at the configured depth (get_mtp_depth): commits `tok`, returns the
-//! accepted draft count a with the accepted drafts in s.mtp_vbatch[1..a]. The active decode
-//! override's round seat serves any depth where it owns `t` (`mtp_seats_own`); else the k-deep CPU round (`mtp_spec_round_k`).
+//! accepted draft count a with the accepted drafts in s.mtp_vbatch[1..a]: the k-deep round (`mtp_spec_round_k`) on the active decode
+//! override's seats where it owns `t` (`mtp_seats_own`), else on the CPU's.
 [hot_path]   // the per-round entry a greedy walk re-enters once per committed token
 def mtp_spec_round(t : Model; var s : Session; tok : int64) : int64 {
     if (mtp_assistant_attached(t)) {
@@ -1097,9 +1126,6 @@ def mtp_spec_round(t : Model; var s : Session; tok : int64) : int64 {
         mtp_assistant_rounds(t, g_round1_s, g_round1_tok, get_mtp_depth(), g_round1_acc)
         g_round1_s[0] = null   // borrowed
         return g_round1_acc[0]
-    }
-    if (mtp_seated(t, g_mtp_round_overrides)) {
-        return invoke(g_mtp_round_overrides[g_decode_override_name], t, s, tok, get_mtp_depth())   // nolint:PERF026 — mtp_seated holds key_exists, so the index cannot insert
     }
     return mtp_spec_round_k(t, s, tok, get_mtp_depth())
 }
@@ -1395,13 +1421,12 @@ def unregister_decode_override(name : string) {
     g_batch_decode_overrides |> erase(name)
     g_embed_dev_decode_gates |> erase(name)
     g_embed_dev_batch_gates |> erase(name)
-    g_mtp_spec_overrides |> erase(name)
-    g_mtp_spec_batch_overrides |> erase(name)
     g_mtp_seam_overrides |> erase(name)
-    g_mtp_round_overrides |> erase(name)
     g_mtp_draft_overrides |> erase(name)
     g_mtp_verify_overrides |> erase(name)
+    g_mtp_verify_rows_overrides |> erase(name)
     g_mtp_rollback_overrides |> erase(name)
+    g_mtp_cold_overrides |> erase(name)
     g_mtp_seat_owners |> erase(name)
 }
 
@@ -5709,7 +5734,7 @@ def forward(t : Model; var s : Session; token, pos : int64) {   // nolint:STYLE0
     var stack_done = false
     g_decode_logits_done = false
     if (!empty(g_decode_override_name)) {
-        stack_done = invoke(g_decode_override, t, s, token, pos)
+        stack_done = sel_decode_override_step(t, s, token, pos)
     }
     if (!stack_done) {
         if (embed_dev) {
@@ -5959,8 +5984,12 @@ def forward_mtp(t : Model; var s : Session; token, pos : int64; want_logits : bo
 def private mtp_draft(t : Model; var s : Session; token, pos : int64; pick_only : bool) : int64 {
     kv_ensure(s, pos + 1l)
     sel_reset(s)
+    sel_before(s, 1l, g_sel_no_extra, 0l)
     let picked = mtp_draft_seat(t, s, token, pos, pick_only)
-    return picked if (picked >= 0l)
+    if (picked >= 0l) {
+        sel_after(s, "draft", pos)
+        return picked
+    }
     forward_mtp_cpu(t, s, token, pos, true)
     return parallel_argmax(s.logits, t.config.vocab_size)
 }
@@ -6321,8 +6350,8 @@ var private @scratch g_round1_s : array<Session?>   //! one stream's round throu
 var private @scratch g_round1_tok : array<int64>
 var private @scratch g_round1_acc : array<int64>
 
-//! every stream's speculative step: the attached drafter's rounds, else the NextN batch override, else each stream alone;
-//! `accepted[i]` counts stream i's accepted drafts (in its `mtp_vbatch[1..]`); returns the streams a joint verify carried
+//! every stream's speculative step: the attached drafter's rounds, else each stream through its own round;
+//! `accepted[i]` counts stream i's accepted drafts (in its `mtp_vbatch[1..]`); returns the streams the drafter's joint verify carried
 [hot_path, arch(at="../ARCHITECTURE_GPU_MTP_ASSISTANT.md#assistant-drafter-rounds")]   // the per-step entry the scheduler re-enters once per tick
 def mtp_spec_eval_batch(t : Model; var sessions : array<Session?>; toks : array<int64>; var accepted : array<int64>) : int64 {
     let n = long_length(sessions)
@@ -6331,9 +6360,6 @@ def mtp_spec_eval_batch(t : Model; var sessions : array<Session?>; toks : array<
     }
     if (mtp_assistant_attached(t)) {
         return mtp_assistant_rounds(t, sessions, toks, get_mtp_depth(), accepted)
-    }
-    if (mtp_seated(t, g_mtp_spec_batch_overrides)) {
-        return invoke(g_mtp_spec_batch_overrides[g_decode_override_name], t, sessions, toks, accepted)   // nolint:PERF026 — mtp_seated holds key_exists, so the index cannot insert
     }
     accepted |> resize(n)   // nolint:PERF026 — the caller's reused per-stream row: it grows to the stream count once and keeps its capacity
     let k = get_mtp_depth()
@@ -6357,15 +6383,12 @@ def private mtp_pick_ask_sampled_panic {
 [hot_path]   // the per-round entry: the draft, the verify, the walk and the reject all run under it
 def mtp_spec_eval(t : Model; var s : Session; tok : int64; var accepted : int64&) : bool {
     let c = t.config
-    if (mtp_seated(t, g_mtp_spec_overrides)) {
-        return invoke(g_mtp_spec_overrides[g_decode_override_name], t, s, tok, accepted)   // nolint:PERF026 — mtp_seated holds key_exists, so the index cannot insert
-    }
     let pos = s.n_past
     mtp_round_begin(s)
     // pos < 1: nothing evaled yet — the zero-init mtp_h_pos1 sentinel COLLIDES with pos == 0
     // (0 != 0 would pass the cold check and draft at row -1), so gate it explicitly
     if (c.n_layer_nextn <= 0l || pos < 1l || s.mtp_h_pos1 != pos
-            || pos + 2l > c.seq_len) {
+            || pos + 2l > c.seq_len || !empty(mtp_round_cold_seat(t, s, pos, 1l))) {
         forward(t, s, tok, pos)   // plain step (forward re-stashes the handoff for the next tick)
         s.n_past = pos + 1l
         return false
@@ -6378,7 +6401,7 @@ def mtp_spec_eval(t : Model; var s : Session; tok : int64; var accepted : int64&
     let seated = mtp_verify_seated_save_carry(t, s)
     // draft x_{pos+1} from (h_{pos-1}, tok) at row pos-1 (rewrites that row's draft KV in place)
     let ts_draft = prof_ticks()
-    let d = mtp_draft(t, s, tok, pos - 1l, !sampled)
+    var d = mtp_draft(t, s, tok, pos - 1l, !sampled)
     s.mtp_drafted++
     prof_add("mtp.draft", ts_draft)
     // batched verify: trunk over [tok@pos, d@pos+1] — weights stream once for both rows; the
@@ -6387,6 +6410,7 @@ def mtp_spec_eval(t : Model; var s : Session; tok : int64; var accepted : int64&
     s.mtp_vbatch[0] = tok
     s.mtp_vbatch[1] = d
     let served = mtp_verify_rows(t, s, seated, 2l, pos, asked)
+    d = s.mtp_vbatch[1]   //! a verify seat that drafts on the device inside its own command (Metal's one-command-buffer round) writes the draft here at its join
     let landed_picks_only = served && asked
     let ts_walk = prof_ticks()
     var hit = false
@@ -6400,6 +6424,7 @@ def mtp_spec_eval(t : Model; var s : Session; tok : int64; var accepted : int64&
         hit = truth == d && !mtp_reject_forced(s)
     }
     prof_add("mtp.walk", ts_walk)
+    mtp_pos_note(1l, hit ? 1l : 0l)
     if (hit) {
         s.mtp_accepted++
         accepted = d
@@ -6485,9 +6510,13 @@ def private mtp_verify_rows(t : Model; var s : Session; seated : bool; n, pos : 
     }
     if (seated) {
         let ts_seat = prof_ticks()
+        sel_before(s, n, s.mtp_vbatch, n)
         let served = mtp_verify_served(t, s, s.mtp_vbatch, n, pos, pick_only)
         prof_add("mtp.verify", ts_seat)
-        return true if (served)
+        if (served) {
+            sel_after(s, "verify", pos)
+            return true
+        }
         if (recurrent && !snapped) {
             mtp_snapshot_timed(s)
         }
@@ -6574,7 +6603,7 @@ def mtp_spec_round_k(t : Model; var s : Session; tok : int64; k_req : int64) : i
     }
     let pos = s.n_past
     mtp_round_begin(s)
-    if (c.n_layer_nextn <= 0l || mtp_round_cold_host(t, s, pos, k, mtp_h_dim(c))) {
+    if (c.n_layer_nextn <= 0l || mtp_round_cold_host(t, s, pos, k, mtp_h_dim(c)) || !empty(mtp_round_cold_seat(t, s, pos, k))) {
         forward(t, s, tok, pos)
         s.n_past = pos + 1l
         return 0l

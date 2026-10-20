@@ -173,13 +173,14 @@ def public subpassLoad(i : subpassInput) : float4 => float4(0.0, 0.0, 0.0, 0.0)
 // pointer; int and uint overloads cover signed/unsigned ops (atomicMin/Max pick SMin/UMin /
 // SMax/UMax by the operand's signedness). Lowered to OpAtomicIAdd/SMin/.../Exchange/CompareExchange
 // at Workgroup scope (shared) or Device scope (buffer). The stub bodies never run -- only the call
-// AST is read. Use as `let old = atomicAdd(counter, 1)`.
+// AST is read. Use as `let old = atomicAdd(counter, 1)`. The int and
+// uint atomicAdd both emitters lower are declared in
+// `daslib/shader_lingua_franca.das`, with the CPU body a kernel's CPU
+// run computes.
 // atomicAdd also takes a float (OpAtomicFAddEXT, GLSL's GL_EXT_shader_atomic_float), which pulls in
 // OpCapability AtomicFloat32AddEXT + OpExtension "SPV_EXT_shader_atomic_float_add". It is the only
 // float-capable family here: the float min/max opcodes sit behind a different capability, so a float
 // target on any other atomic is a compile error rather than a blob only the driver would reject.
-[unused_argument(value), sideeffects] def public atomicAdd(mem : int &; value : int) : int => mem
-[unused_argument(value), sideeffects] def public atomicAdd(mem : uint &; value : uint) : uint => mem
 [unused_argument(value), sideeffects] def public atomicAdd(mem : float &; value : float) : float =>
     mem
 [unused_argument(value), sideeffects] def public atomicMin(mem : int &; value : int) : int => mem

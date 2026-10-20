@@ -748,7 +748,7 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             bytes = 22663387424l, sha256 = "0b21525e972670ed59e1812e170b27c26355381f0656ecc4e25617ece7dac58b",
             serve_name = "qwen3.6-35b-a3b", serve_display = "Qwen 3.6 35B-A3B",
             serve_note = "the Qwen MoE - 3B active weights, MTP-ready",
-            serve_ctx = 262144, serve_vram_gb = 24.0, serve_mtp = "vulkan",
+            serve_ctx = 262144, serve_vram_gb = 24.0, serve_mtp = "metal, vulkan",
             // plain evidence only (verified per-file 40/40, 2026-08-18): the qwen35moe arm
             // coverage (chunked deltanet + reference MoE prefill) lives on the plain-stem twin
             parity <- ev_qwen_count()),

@@ -1415,7 +1415,7 @@ def test_vkd_cls_argmax(t0 : T?) {
 def private cls_select_run(y : array<float>; sel : array<uint>; vocab, rows : int64; tag : string) : array<SelRow> {
     var out : array<SelRow>
     static_if (typeinfo builtin_module_exists(vulkan)) {
-        let cap = int64(CLS_SELECT_CAP)
+        let cap = SEL_CAP
         let hdrw = int64(CLS_SEL_HDR)
         let recw = int64(CLS_SELECT_RECENT)
         with_cell_planes() $(var cp : CellPlanes) {
@@ -1426,7 +1426,7 @@ def private cls_select_run(y : array<float>; sel : array<uint>; vocab, rows : in
             let pv = cp |> out_(int(cap * rows))
             let pr = cp |> out_(int(recw * rows))
             var st = cp |> cls_set(fixed_array(py, ps, ph, pi, pv, pr), @@set_cls_select)
-            var pc = ArgmaxArgs(vocab = uint(vocab))
+            var pc = GkClsSelArgs(vocab = uint(vocab))
             cp |> cell_record_timed(tag, "cls_select: {rows} rows x {vocab}") $(raw : VkCommandBuffer; var h : VkHaz) {
                 enc_cls_select(raw, h, st, pc, rows)
             }
@@ -1434,20 +1434,7 @@ def private cls_select_run(y : array<float>; sel : array<uint>; vocab, rows : in
             var inscope ids <- cp |> plane_as(pi, type<uint>, int(cap * rows))
             var inscope vals <- cp |> plane_as(pv, type<float>, int(cap * rows))
             var inscope rec <- cp |> plane_as(pr, type<float>, int(recw * rows))
-            out |> resize(rows)
-            for (r in range64(rows)) {
-                let n = int64(hdr[r * hdrw + SEL_HDR_COUNT])
-                var order <- [for (j in range64(n)); j]
-                sort(order) $(a, b : int64) : bool { return ids[r * cap + a] < ids[r * cap + b] }
-                out[r].ids <- [for (j in order); int64(ids[r * cap + j])]
-                out[r].vals <- [for (j in order); vals[r * cap + j]]
-                out[r].rmax = uint_bits_to_float(hdr[r * hdrw + SEL_HDR_MAX])
-                out[r].den = uint_bits_to_float(hdr[r * hdrw + SEL_HDR_DEN])
-                out[r].overflow = hdr[r * hdrw + SEL_HDR_OVERFLOW] != 0u
-                let nrec = min(int64(sel[r * int64(CLS_SEL_WORDS) + SEL_ASK_COUNT]), recw)
-                out[r].recent <- [for (j in range64(nrec)); rec[r * recw + j]]
-                delete order
-            }
+            out <- sel_unpack(hdr, ids, vals, rec, sel, rows)
         }
     }
     return <- out
@@ -1461,76 +1448,11 @@ def test_vkd_cls_select(t0 : T?) {
                 t |> skip("no Vulkan device")
                 return
             }
-            let nan = unsafe(reinterpret<float>(0x7FC00000u))
-            let ninf = unsafe(reinterpret<float>(0xFF800000u))
-            let rows = 6l
-            for (vocab in fixed_array(262144l, 1000l)) {
-                var inscope y : array<float>
-                y |> resize(vocab * rows)
-                for (i in range64(vocab * rows)) {
-                    y[i] = hash_unit(uint(i) * 7u + 3u) * 20.0
-                }
-                let hi = 50.0   // past the plane's range (hash_unit spans [-2, 2), scaled by 20)
-                for (j in range64(min(3000l, vocab))) {   // row 1: 3000 ties at the top - past the landing's cap at the wide vocab, every id at the narrow
-                    y[vocab + (j * 37l) % vocab] = hi
-                }
-                for (j in range64(10l)) {   // row 2: ten above and 1020 ties AT the K-th, so 1030 land at the wide vocab
-                    y[2l * vocab + j * 11l] = hi
-                }
-                for (j in range64(min(1020l, vocab - 10l))) {
-                    y[2l * vocab + 200l + j] = 40.0
-                }
-                for (i in range64(vocab)) {   // row 3 pinned whole: every id ties, the landing overflows at the wide vocab
-                    y[3l * vocab + i] = -1.0e30
-                }
-                y[4l * vocab + 5l] = nan   // row 4: NaN lanes and a -inf lane read as the lowest finite, the max at 123
-                y[4l * vocab + 123l] = hi
-                y[4l * vocab + 700l] = nan
-                y[4l * vocab + 701l] = ninf
-                for (i in range64(vocab)) {   // row 5: every lane NaN
-                    y[5l * vocab + i] = nan
-                }
-                var inscope temps <- [0.7, 1.0, 0.5, 0.0, 1.0, 1.0]
-                var inscope recent <- [[5l, 77l, vocab - 1l, vocab + 5l], [0l], [200l, 1l], [1l], [5l, 123l, 701l], [9l]]
-                var inscope words <- sel_words(temps, recent)
-                var inscope got <- cls_select_run(y, words, vocab, rows, "cls_select vocab {vocab}")
-                var inscope want <- select_rows_oracle(y, temps, recent, vocab, rows, int64(CLS_SELECT_K), int64(CLS_SELECT_CAP))
-                var worst = 0.0
-                var worst_row = -1l
-                for (r in range64(rows)) {
-                    let rd = abs(got[r].den - want[r].den) / max(want[r].den, 1.0e-30)
-                    if (!(rd <= worst)) {   // a NaN difference is the worst there is: `max` would drop it
-                        worst = rd
-                        worst_row = r
-                    }
-                    if (want[r].overflow) {   // an overflowing row lands the cap's worth of its ties, whichever came first: the count is the claim
-                        t |> equal(long_length(got[r].ids), int64(CLS_SELECT_CAP), "vocab {vocab} row {r}: an overflowing row lands the cap ({length(want[r].ids)} survivors)")
-                    } else {
-                        t |> equal(mismatch_exact(got[r].ids, want[r].ids), 0, "vocab {vocab} row {r}: the landed ids are the host's survivors ({length(got[r].ids)} of {length(want[r].ids)}; first mismatch at {first_mismatch(got[r].ids, want[r].ids)})")
-                        t |> equal(mismatch_exact(got[r].vals, want[r].vals), 0, "vocab {vocab} row {r}: every landed logit is its id's (first mismatch at {first_mismatch(got[r].vals, want[r].vals)})")
-                    }
-                    t |> equal(got[r].rmax, want[r].rmax, "vocab {vocab} row {r}: the max")
-                    t |> equal(got[r].overflow, want[r].overflow, "vocab {vocab} row {r}: the overflow flag ({length(want[r].ids)} survivors against the cap {CLS_SELECT_CAP})")
-                    t |> equal(mismatch_exact(got[r].recent, want[r].recent), 0, "vocab {vocab} row {r}: the recent window's logits ({got[r].recent} against {want[r].recent}; first mismatch at {first_mismatch(got[r].recent, want[r].recent)})")
-                }
-                to_log(LOG_INFO, "cls_select vocab {vocab}: the denominator's worst relative difference {worst} at row {worst_row}; row 2 lands {length(got[2].ids)} ids\n")
-                // the denominator sums 262144 float exps on the device against the host's double sum; a float tree sum over n terms is
-                // within about log2(n) ulps, 18 x 6e-8, so the 1e-5 bar holds it with room
-                t |> success(worst <= 1.0e-5, "the denominators agree within 1e-5 (worst {worst} at row {worst_row})")
-                let poisoned = abs(got[0].den * 1.001 - want[0].den) / want[0].den
-                t |> success(is_finite(poisoned) && poisoned > 1.0e-5, "a denominator a tenth of a percent off reds the bar ({poisoned})")
-                if (vocab > 3000l) {
-                    t |> equal(long_length(got[2].ids), 1030l, "row 2 lands its ten leaders and the 1020 ties at the K-th")
-                    t |> success(got[1].overflow && got[3].overflow && got[5].overflow, "rows 1, 3 and 5 overflow the landing")
-                    t |> success(long_length(got[0].ids) >= 1024l && long_length(got[0].ids) == long_length(want[0].ids), "row 0 lands K and the ties at the K-th ({length(got[0].ids)}: the fixture's 4096 distinct values tie often)")
-                } else {
-                    t |> equal(long_length(got[0].ids), vocab, "a vocab under K lands whole")
-                }
-                t |> equal(got[0].recent[3], SEL_LANE_FLOOR, "an id past the vocab lands the lowest finite")
-                t |> equal(got[4].recent[2], SEL_LANE_FLOOR, "a -inf lane lands the lowest finite")
-                t |> equal(got[4].rmax, hi, "row 4's max is its widest finite lane")
-                want[2].ids[0] = want[2].ids[0] + 1l
-                t |> equal(mismatch_exact(got[2].ids, want[2].ids), 1, "vocab {vocab}: the id compare reds one poisoned id (first mismatch at {first_mismatch(got[2].ids, want[2].ids)})")
+            for (vocab in fixed_array(262144l, 1000l)) {   //! the shared six-row fixture and the shared gate: the Metal cell's reading
+                var inscope f <- sel_fixture(vocab)
+                var inscope got <- cls_select_run(f.y, f.words, vocab, f.rows, "cls_select vocab {vocab}")
+                var inscope want <- select_rows_oracle(f.y, f.temps, f.recent, vocab, f.rows, int64(CLS_SELECT_K), SEL_CAP)
+                sel_gate_compare(t, "cls_select vocab {vocab}", got, want, vocab)
             }
             // the served shape's time: three plain rows (a depth-2 verify) at Qwen3.6-35B's vocabulary, no row overflowing
             let served_vocab = 248320l
@@ -1543,7 +1465,7 @@ def test_vkd_cls_select(t0 : T?) {
             var inscope rp <- [[1l], [2l], [3l]]
             var inscope wp <- sel_words(tp, rp)
             var inscope gp <- cls_select_run(yp, wp, served_vocab, 3l, "cls_select served shape")
-            var inscope wantp <- select_rows_oracle(yp, tp, rp, served_vocab, 3l, int64(CLS_SELECT_K), int64(CLS_SELECT_CAP))
+            var inscope wantp <- select_rows_oracle(yp, tp, rp, served_vocab, 3l, int64(CLS_SELECT_K), SEL_CAP)
             t |> equal(mismatch_exact(gp[1].ids, wantp[1].ids), 0, "the served shape's middle row lands the host's survivors ({length(gp[1].ids)}; first mismatch at {first_mismatch(gp[1].ids, wantp[1].ids)})")
         } else {
             t |> skip("no vulkan module")

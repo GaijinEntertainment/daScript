@@ -403,7 +403,7 @@ def test_slot_mtp_device_home_moe(t : T?) {
 def test_mtp_catalog_platforms(t : T?) {
     t |> run("the catalog's serve_mtp is read off the model file's base name; a file with no row lists none") @(t : T?) {
         t |> equal(catalog_mtp_platforms("/models/Qwen3.8-27B-UD-Q4_K_M.gguf"), "metal, vulkan", "the Qwen3.8-27B row lists both platforms: whole on either, the round measured a win on both")
-        t |> equal(catalog_mtp_platforms("Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf"), "vulkan", "the Qwen3.6-35B MTP row lists vulkan")
+        t |> equal(catalog_mtp_platforms("Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf"), "metal, vulkan", "the Qwen3.6-35B MTP row lists both platforms")
         t |> equal(catalog_mtp_platforms("Qwen3.6-35B-A3B-UD-Q4_K_M.gguf"), "", "the head-less Qwen3.6-35B file has nothing to draft with")
         t |> equal(catalog_mtp_platforms("/models/no-such-model.gguf"), "", "no row, no platform")
         t |> success(mtp_platform_listed("metal, vulkan", "vulkan") && !mtp_platform_listed("metal", "vulkan") && !mtp_platform_listed("", "metal"), "the comma list reads its members and nothing else")
@@ -416,7 +416,7 @@ def test_config_mtp_catalog(t : T?) {
         let listed = "/models/Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf"
         let one = ServerArgs(model = listed, streams = 1)
         t |> success(config_mtp_resolved(one, "vulkan"), "one stream on the device the row lists")
-        t |> success(!config_mtp_resolved(one, "metal"), "the row lists vulkan alone")
+        t |> success(config_mtp_resolved(one, "metal"), "one stream on the other device the row lists")
         let no_row = ServerArgs(model = "/models/no-such-model.gguf", streams = 1)
         t |> success(!config_mtp_resolved(no_row, "vulkan"), "no catalog row: plain")
         let wide = ServerArgs(model = listed)
@@ -434,7 +434,7 @@ def test_slot_mtp_platforms(t : T?) {
     t |> run("a [[models]] entry's boot options") @(t : T?) {
         let opts = boot_slot_opts(ModelEntry(path = listed))
         t |> equal(opts.mtp, -1, "the entry leaves mtp unset")
-        t |> equal(opts.mtp_platforms, "vulkan", "the catalog row's platforms")
+        t |> equal(opts.mtp_platforms, "metal, vulkan", "the catalog row's platforms")
         t |> success(slot_mtp_arms(opts, -1, 1l, false, "gpu:resident"),
             "one resident stream on the listed device arms")
         let plain = boot_slot_opts(ModelEntry(path = no_row))
@@ -445,7 +445,7 @@ def test_slot_mtp_platforms(t : T?) {
         let opts = runtime_slot_opts(listed, false)
         t |> equal(opts.backend, "auto")
         t |> equal(opts.mtp, -1, "the load leaves mtp unset")
-        t |> equal(opts.mtp_platforms, "vulkan", "the catalog row's platforms")
+        t |> equal(opts.mtp_platforms, "metal, vulkan", "the catalog row's platforms")
         t |> success(slot_mtp_arms(opts, -1, 1l, false, "gpu:resident"),
             "one resident stream on the listed device arms")
         t |> equal(runtime_slot_opts(listed, true).backend, "cpu")

@@ -414,7 +414,7 @@ buffer already queued, the blocking `waitUntilCompleted` returning about a step 
 that locks per process and that the M5 never enters; the bench process pays it on every
 unchained step too (IQ2_XXS 235.7 against 256.5 t/s). A spin on the command buffer's GPU end
 time removes it (5.66 ms per token, three runs alike; the M5 unchanged), shipped on by default
-as `DASLLAMA_METAL_WAIT_SPIN` (`ARCHITECTURE_GPU_MTP_DECODE.md` 2.38): decode 0.94 -> 1.03 (0.5B),
+as `DASLLAMA_METAL_WAIT_SPIN` (`ARCHITECTURE_GPU_MTP_DECODE_PICK.md#greedy-chain`): decode 0.94 -> 1.03 (0.5B),
 0.96 -> 1.03 (1.5B), 0.95 -> 1.00 (Llama Q8), 0.93 -> 1.00 (Llama Q4_K_M).
 
 The fourth: **the 128-row tall stamps lose on this GPU** (Llama-1B 5%, the 30B 1%, the 9B
@@ -671,7 +671,7 @@ sampler's argmax over four 262144-wide rows 0.19, the driver's setup + sched + h
 wake 0.4. The pipelined submission (`DASLLAMA_METAL_BATCH_PIPE=1`, a bench-only rail: it serves the
 PREVIOUS step's logits) hides all of it - 12.01 against 13.34 ms in the probe - which bounds the
 lever: the next step committed BEFORE the current one lands, on the GPU's own argmax (the rows twin
-of the single-row greedy chain, `ARCHITECTURE_GPU_MTP_DECODE.md#greedy-chain`: argmax rows -> per-row embed gather -> the PLE gather +
+of the single-row greedy chain, `ARCHITECTURE_GPU_MTP_DECODE_PICK.md#greedy-chain`: argmax rows -> per-row embed gather -> the PLE gather +
 model_proj chain of row 13 on device -> the layer stack), verified against the caller's tokens at
 the landing, a miss re-running the step; only rows whose sampler is a bare argmax may chain. The
 elementwise chain's dispatch count (~40 us a layer at four rows) is the second, smaller lever. The
@@ -913,18 +913,6 @@ window was dropped never returns: eight bytes a transcription, for as long as th
 pending mark on the state itself (a flag beside `DecoderState.gpu_uid`, the driver's one pending id beside
 it), so nothing outlives the state; both drivers in one change, the Vulkan one on a Vulkan box.
 
-## 44. A one-row rows-form step drafts differently from the two-row form
-
-The NextN draft rows step keeps two rows for a solo stream (`nrows = max(ng, 2)`,
-`ARCHITECTURE_GPU_MTP.md#mtp-joint-verify`) because a one-row rows-form step drafts other tokens than the
-two-row form on a share of the rounds, while the two- and three-row forms agree
-(`PERF_LEDGER.md`'s 2026-10-05 depth-1 NextN entry). The cause is not found: the shared layer encoder's single-row-driver
-branches keyed on the row count (`ple_side_step`, the `attn_d` gate at one row) do not fire on the model
-measured, and forcing the rows forms on for a one-row draft widened the gap. What a one-row step does
-differently: `mp = 1` buffers under a two-row tile, no `verify` row-total uniforms, the zero-copy logits
-(`acquire_step`). The work: find which of those the rows form reads wrong at one row, key every single-row
-branch on `SINGLE`, then race the one-row draft against the two-row form.
-
 ## 47. A gathered expert form that reads a plane once for an expert's few rows
 
 The gathered route (`ARCHITECTURE_GPU_PREFILL_MOE.md#prefill-moe-gemv-route`) reads an expert's weights once per
@@ -1032,31 +1020,3 @@ then the rider is a one-row segment of a window that is no stall.
 shape; the figures in `PERF_LEDGER.md`'s 2026-10-19 long-prompt entry), and neither a 16-bit word view of the quants nor a
 lane-eight mapping with shuffle reductions beat it - both read slower, the hardware reduction being the cheap part. Done =
 a block-codec stamp within 1.15x of f16 a key on the race at 2048 and 8192, or the lever named that keeps it where it is.
-
-## 55. The speculative round's acceptances, q records, chain cut and selection landing on Metal, and the three models' tables
-
-The Vulkan MTP arc (`ARCHITECTURE_GPU_MTP_ACCEPT.md`, `ARCHITECTURE_GPU_VULKAN_LANDING.md#logits-selection-landing`)
-left the walks shared and the seats Vulkan's. What Metal has by construction: the three acceptances `MtpAccept
-{exact, typical, rejection}` and the k-deep walk, since both Metal rounds judge their rows through `mtp_accept_walk`
-(`metal_mtp_spec_round`, `gemma_mtp_spec_rounds`), the depth knobs, the `lcpp_bench --mtp-accept/--mtp-top-k/--mtp-top-p/
---mtp-min-p` flags, and rejection as the sampled default. What it lacks, in the order the rulings need:
-- **The q records.** Rejection judges a draft against the distribution its draw recorded (`s.mtp_q`, `mtp_draft_sample`),
-  and the CPU round draws its drafts through the sampler for that. Both Metal rounds draft on the device by argmax
-  (`chain_draft_land`, the gemma chain's two-pass pick) and record nothing, so under the rejection knob `mtp_walk_by_accept`
-  walks typical for them - correct, and silent. Done = either the draft rows' distributions landed off the device
-  chain (the selection landing's shape, below) so rejection is rejection on Metal too, or the ruling that typical is
-  Metal's sampled acceptance and the server says so.
-- **The chain cut.** `set_mtp_chain_min_p` stops drafting at the first draft the head holds under a probability floor;
-  the Vulkan draft command lands that probability, the Metal chain lands the pick alone. Done = the draft's p beside
-  its pick, and the 35B's depth-3-at-0.5 row (`PERF_LEDGER.md`, lifted to depth 2's level) read on the M5.
-- **The selection landing.** A sampled stream's verify rows pay the host sampler's whole-row pass a row on Metal, which
-  is what the 35B's sampled rows cost before `ClsSelect` landed on Vulkan (exact 63 -> 67, rejection 56 -> 71 tok/s at
-  depth 2: `debug-jit`, the selection entry in `PERF_LEDGER.md`). Done = a Metal twin of `cls_select` (the radix select to the 1024th logit, max and denominator at T, the
-  recent logits) under the `SelLanding` seams of `install_rdec_select`, `test_sampling_landed`'s contract.
-- **The tables.** The zen2 tables of 2026-10-19 (`PERF_LEDGER.md`: Qwen3.6-35B-A3B-MTP at the strict 32k, gemma-4-26B-A4B
-  with the drafter, Qwen3.8-27B whole) carry five rows each - greedy depth 1/2/3, sampled depth 2 under rejection and
-  under typical at temp 0.7 top-p 0.9, `lcpp_bench --mtp-ab -n 64 -r 2` - and Metal has only the exact-era rows above.
-  Done = the same five rows on the M5 for the three files Metal serves whole (35B UD-Q4_K_M, 26B Q4_K_M + the Q8_0
-  drafter, 27B Q4_K_M) at the served context, and the depth tuner's assistant race re-run under the new acceptances.
-- **The catalog.** `serve_mtp` lists metal for the 26B and the 27B and vulkan beside it now; the Metal column rests on
-  the exact-acceptance rows, so the rows above re-validate it under rejection as the default.
