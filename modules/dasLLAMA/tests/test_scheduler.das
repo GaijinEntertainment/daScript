@@ -516,6 +516,16 @@ def test_scheduler_think_budget(t : T?) {   // nolint:STYLE038 — one cell: the
     }
 }
 
+[test]
+def test_idle_chunk_follows_the_window(t : T?) {
+    t |> run("the idle chunk on a GPU is the wider of the 2048 floor and the driver's prompt window; the CPU's is one window") @(t : T?) {
+        t |> equal(idle_chunk_default(true, 4096l), 4096l, "the wide window picks the chunk: a 3k prompt sweeps the expert stacks once")
+        t |> equal(idle_chunk_default(true, 2048l), GPU_IDLE_CHUNK_TOKENS, "the narrow window is the floor")
+        t |> equal(idle_chunk_default(true, 512l), GPU_IDLE_CHUNK_TOKENS, "a window under the floor never lowers it")
+        t |> equal(idle_chunk_default(false, 4096l), DEFAULT_CHUNK_TOKENS, "the CPU's idle chunk is one window whatever a device would say")
+    }
+}
+
 // ===== chunked prefill: {1,3,17,64} produce the identical stream under classic prefill =====
 
 [test]

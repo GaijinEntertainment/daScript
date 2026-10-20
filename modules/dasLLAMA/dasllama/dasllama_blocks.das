@@ -1710,14 +1710,17 @@ def private rare_fetch_regions(t : Model; s : Session; l, lo, hi : int64) {
     }
 }
 
-var g_expert_heat : array<int64>   //! the picks a (layer, expert) took since the load - a window's rows, a token's one: the expert cache's profile
+var @exact_size g_expert_heat : array<int64>   //! the picks a (layer, expert) took since the load - a window's rows, a token's one: the expert cache's profile
 var g_expert_heat_layers = 0l      //! the profile's shape
 var g_expert_heat_experts = 0l
+
+//! the layers the profile covers: the trunk's and the NextN head's, whose experts route and stream like a trunk layer's
+def expert_heat_layer_count(t : Model) : int64 => t.config.n_layers + t.config.n_layer_nextn
 
 //! the profile sized to the model, zero, at the first pick after a load
 [cold_path]
 def private expert_heat_make(t : Model) {
-    g_expert_heat_layers = t.config.n_layers
+    g_expert_heat_layers = expert_heat_layer_count(t)
     g_expert_heat_experts = t.config.n_expert
     g_expert_heat |> reserve_resize(g_expert_heat_layers * g_expert_heat_experts)
 }

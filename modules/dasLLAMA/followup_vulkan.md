@@ -354,7 +354,7 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
    it cannot satisfy.
 
 17. **The residency plan off Windows still guesses.** On Windows the plan sizes against the OS
-   video memory budget (`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan`, the `os_video_memory`
+   video memory budget (`ARCHITECTURE_GPU_VULKAN_ROOM.md#vk-plan-room`, the `os_video_memory`
    boost helper); elsewhere the 27% headroom share stands, measured on the tagged arm and never
    re-measured. Two tails: (a) Linux NVIDIA fails an allocation past the card with
    `OUT_OF_DEVICE_MEMORY`, which `vk_check` turns into a process death - the arena reserve and
@@ -374,9 +374,12 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
    uploads, unmapped device-local) restored 6584 immediately, same session. The morning
    half of the session served the mapped heap at full speed, so the hazard ARMS with some
    driver/desktop state (ngfx profiling sessions and the Parsec virtual display both ran
-   that day). Design consequence to rule on: long-lived weight planes out of the mapped
-   heap by default (ReBAR kept for transient staging), with this item's runtime priority
-   as the second layer and a Metal-style residency heartbeat in reserve.
+   that day). Long-lived weight planes stay out of the mapped heap by default -
+   `DASLLAMA_VK_REBAR` ships off, the mapped type is the opt-in
+   (`ARCHITECTURE_GPU_VULKAN_ROOM.md#vk-plan-room`); the hazard arms on gemma-4
+   26B-A4B's host-experts plan too (8.1 tok/s mapped against 32.7 staged, same session, same
+   room: `debug-jit`, the ReBAR entry in `PERF_LEDGER.md`). What stays open is the runtime
+   layer: the residency heartbeat in reserve, and the two non-Windows tails above.
 
 18. **`rsqrt` vs `1.0/sqrt` - the RMS-norm parity spelling (ledgered 2026-08-07, found by
    the cross-backend similarity audit).** The three rails spell the same inverse norm two
@@ -2030,12 +2033,6 @@ module) is independent and can land any time - it is pure structure.
     over a co-occurrence table, or the next token's picks prefetched during this token's segments -
     placing fewer experts for the same hits. Done = each policy tried in the sim against the trace
     before its live run, the winner's hits and token wall on the ledger.
-129. **The rows' side panel commits at depth 1 alone.** `PleCommit` lands every verify row's normed gated
-    row in the ring's slot of its position after the conv read them, and a rejected row's slot is
-    rewritten by the next token before any conv reads it - true at depth 1, where one row past the
-    accepted prefix is at stake, so `rd_ensure_hc_v_rail` declines every other row count and the CPU
-    verify serves a deeper draft. Done = a depth past 1 commits the accepted rows alone, or the rollback
-    restores the slots it rewrote, and the rail admits the depth.
 130. **The device draft accepts 14 points under the CPU draft.** The device's draft and the verify rows
     route their near-ties apart (65.8% against the CPU rail's 79.9% on the same eight prompts,
     `PERF_LEDGER.md`'s NextN entry, the `--mtp-ab` rows), and every
@@ -2147,18 +2144,58 @@ module) is independent and can land any time - it is pure structure.
     the staged KHR tile reads 2-11% under it (the figures beside the pick rule in `ARCHITECTURE_GPU_VULKAN_GEMM.md`);
     that stays as measured - a tail shape, one stage, a shape-keyed switch between two tile families is not worth it.
 
-151. **The prompt window has never run wider than 2048 rows, so a 9k prompt is five calls.** `DASLLAMA_GPU_PF_ROWS`
-    sizes the window; a recurrent model's window is cut at `DN_WINDOW` (2048, the rows the deltanet smalls planes and the
-    scan workspace hold: `DN_WS_BYTES` is 64 MB at 2048 and grows with the window, 302 MB at 9216), the prefill panels,
-    the x rows, the expert chain's bundle lists and the staged activation rows are sized off the window too, and nothing
-    has measured where the rate stops climbing or the room runs out. Done = pp9000 on Qwen3.6-35B UD-Q4_K_M and
-    Qwen3.8-Flash-Next UD-IQ4_XS at windows of 2048, 4096 and 9216 rows (`DN_WINDOW` raised beside the knob, since a
-    recurrent carrier cuts at it), the plan's room and the rate at each as ledger rows, the frozen fixture's gate 8/8 on
-    every run; the widest window the card holds at pp9000 named, and a 9k prompt in one window call where it does. Where
-    a wider window wins, the default moves to it; where the scan workspace is what stops it, the scan over row chunks
-    inside one window is the lever.
+155. **A short prompt's rate under the streamed layers is unmeasured against the code before them.** Every rate the
+    prefill rotation arc reads is pp3000 and pp9000 (the rows under "From the prefill rotation arc" in `PERF_LEDGER.md`):
+    the expert cache, the ring slot, the pool prefix and the meet pay their fixed costs a window - the reader threads'
+    fetches, the per-expert chain's bundles, the host-first claim - and a 256- or 512-row prompt pays them against a
+    window that holds few rows, where the whole-layer slot and the host sums before the arc had none. Done = pp256 and
+    pp512 on Qwen3.6-35B UD-Q4_K_M and Qwen3.8-Flash-Next UD-IQ4_XS, the arc's tip against a28ffe7e83 (the commit before
+    it), the same box and the frozen fixture's gate, as ledger rows; where the old rate wins at a short prompt, a short-
+    prompt path - the whole-layer slot or the host sums for a window under a row count the race names - keyed on the
+    window's rows, raced in, and the knee it switches at in the row beside it.
 
+156. **A prompt window past 4096 rows: the scan kernel's staging and the window's panels.** The window runs at 4096
+    rows where the plan fits with it (`resident_window_pick`; on the reference card Qwen3.8-Flash-Next pp3000 793 against
+    368 at 2048, pp9000 753 against 663, scratch 3962 MB against 2417, the pool 27 slots against 32 - `debug-jit`, the
+    window-pick entry in `PERF_LEDGER.md`), and 8192 is held by
+    two things. The scan kernel (`DnScan`) stages two `@workgroup` arrays of `DN_WINDOW` floats a head - the per-token
+    decay and the sigmoid of beta - 32 KB at 4096 and 64 KB at 8192 against the 48 KB `maxComputeSharedMemorySize` of
+    every NVIDIA driver, so the staging has to go in 2048-row parts inside the kernel before the cap moves. And the
+    window's scratch (`rdec_scratch_bytes`) is about 650 KB a row on a hyper-connection model - the four-stream panels of
+    `rdec_hc_row_bytes` the widest - so 8192 rows ask about 7 GB beside 4.5 GB of weights, the streamed slot and the
+    mirror: no pool and no room on a 16 GB card, where the per-layer transient panels (q, k, v, o, the FFN hidden rows)
+    could run in row parts and only the residual streams need the whole window. Done = the scan staged in parts, the
+    transient panels sized to a part, and pp9000 at 8192 beside the 4096 row above on the same card; the one-sweep-a-prompt
+    form on a card the window cannot grow on is a layer-major walk (bind a layer's stack once, every window's segment of that
+    layer against it, each window's residual streams kept between layers - about 100 MB a window), a restructure of the window
+    chain's recording, not a knob.
 152. **tq4 on Vulkan pays two latency-bound dispatches a layer a token.** The tq4 store (`KvTq4StoreT`, four barriers)
     and the un-rotation after attention (`KvTq4Unrot`) are each a dispatch a layer a token, 8 us together on the RTX PRO
     4500 (`PERF_LEDGER.md`, the 2026-10-19 long-prompt entry), where q8_0's store is one. Done = the tq4 rotation folded
     into the rope stamp and the un-rotation into the output projection's prologue, raced on the token command's profile.
+153. **Less of the host-form step on the CPU: the pool's slots ranked across layers, and a miss read by the device straight
+    out of pinned RAM.** On the reference card the host's expert sums are the Flash-Next step (43.5 of a 65.7 ms token on
+    real text, `PERF_LEDGER.md`), 16 threads draw the DRAM bandwidth already (64 threads read 14% slower) and a served
+    decode sits at half of a CUDA engine's on the same shards whose device cache holds 3754 experts against the pool's
+    1568 and whose CPU share is a third of the picks. Two levers, the cache arc's: (a) the pool's slot budget allocated
+    across the routed layers by one global heat ranking - a hot layer's concentrated picks earn it more slots, a flat
+    layer fewer - seeded from a base profile shipped per model so a fresh lane never starts cold (the lane's `.heat`
+    orders experts within a layer today and every layer takes the same count, `resident_hot_slots`), the runtime's own
+    counts moving it on; (b) a miss summed on the device out of the pinned mirror: the hit chain reaches a slot's planes
+    by buffer device address, so a second slot region whose planes sit in a host-visible system-memory arena serves a
+    share of the misses at the link's rate (an IQ4_XS expert about 1.3 MB, 0.09 ms over the link against the host's
+    0.18) with no host work, the share bounded by the link as the DMA fill's admission is. Done = the real-text token step
+    on Flash-Next with the host's share of the picks under a third, measured against the served rows of 2026-10-19.
+154. **A served prompt's prefill splits at the recurrent checkpoints it leaves, and every window past the split streams
+    its experts again.** The scheduler ends an eval at each planned checkpoint (`ckpt_at`, `note_prefilled`: the stable
+    opening, the assistant header) because a recurrent layer's state at the position exists only where the scan stops
+    there - `followup_metal.md` row 51, the same rule - so a 3k prompt on Flash-Next served as three window chains (2966,
+    22 and 7 rows on 2026-10-19), each streaming the experts its rows pick: 5.9 s where the bench's one window took 3.8,
+    and the 9k prompt 16.0 against 11.7; the served prefill at 494 / 554 tok/s against the bench's 793 / 753 with the
+    idle chunk already at the window (`idle_chunk_default`; the served entry of 2026-10-19 and the window-pick entry in
+    `PERF_LEDGER.md`). The warm turn's 0.6 s stands on those checkpoints, so they
+    stay. The work, shared with Metal's row: the chunk-ends-at-checkpoint rule becomes a capture-at-position list the
+    window chain reads, the deltanet scan runs segmented at those positions with its state copied out between the parts
+    (the segmented prefill's seam, `vulkan_resident_prefill_segments`, already runs several segments in one chain), the
+    device checkpoint takes the state off the device buffer, and the K/V half is positional and in the mirror already.
+    Done = the served 3k and 9k prefill within 5% of `lcpp_bench`'s window at the same chunk.

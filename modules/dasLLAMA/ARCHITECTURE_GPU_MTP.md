@@ -3,7 +3,9 @@
 Companion to `ARCHITECTURE_GPU.md`; a section is cited by its anchor. This document
 carries the speculative round on Metal, the box knob that sets the depth a round drafts, the
 draft chains and the verify that commits them, and the recurrent layer's stages over groups of rows
-with the mirror pool they read; the assistant drafter on both homes is `ARCHITECTURE_GPU_MTP_ASSISTANT.md`.
+with the mirror pool they read; the assistant drafter on both homes is `ARCHITECTURE_GPU_MTP_ASSISTANT.md`,
+and a sampled stream's three acceptances, the drafter distribution a rejection-sampling round records
+and the chain cut are `ARCHITECTURE_GPU_MTP_ACCEPT.md`.
 `ARCHITECTURE_GPU_MTP_DECODE.md` beside it carries the decode driver's layer encoder, the kernel forms and row-buffer pad a
 multi-row verify dispatches under, the single-row driver's greedy chain, the argument-alignment
 contract a kernel declares on its `[metal_dispatch]`, and the rotated prefix a rope-store kernel
@@ -53,7 +55,16 @@ re-forwards the committed token, unless the verify seat that served the round re
 rollback seat, which puts the state back on the device and leaves row 0 standing the same way
 (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-rollback`). `set_mtp_force_reject_every(n)` rejects every n-th draft of that
 step's greedy walk whatever the verify said - the seam a test reaches the reject arm through on a
-fixture that accepts every draft.
+fixture that accepts every draft. Past depth 1 the common round (`mtp_spec_round_k`) takes this
+section's shape on the CPU round's seats: the draft chain (draft i + 1 from the head's own hidden
+after draft i, at head row pos - 1 + i, cut where a draft's probability under the head falls under
+`set_mtp_chain_min_p`), one verify over the k + 1 rows through the verify seat (the CPU prefill with
+the batched classifier where none serves), the walk above, and the commit at row `a` - a reject
+through the rollback seat with row `a`'s landed hidden as the carry, else the snapshot restored and
+rows 0..a re-run - so a driver that seats the draft and the verify but registers no round of its own
+(Vulkan) rounds at the knob's depth, capped at the rows its verify seat prepared. The depth is a
+measured choice per carrier (`#mtp-depth-knob`): the 0.8B on the Vulkan tier reads x1.25 / 1.26 /
+1.28 / 1.15 at depths 1 to 4 (`debug-jit`; the absolute rates are the 0.8B depth entry in `PERF_LEDGER.md`).
 
 **A sampled stream's walk draws instead of comparing argmaxes, and the same walk serves every
 round - the two Metal rounds and the CPU depth-1 step.** The caller points `s.spec_params` at its
@@ -197,7 +208,7 @@ the next page's first; the accept walk, the
 replay (one command buffer per replaying group), the flip and the commit run per stream exactly as
 the one-stream round's. The one-stream round is the rounds over one session. `mtp_spec_eval_batch`
 is the engine seat the scheduler ticks through (`register_mtp_spec_batch_override`); without a
-driver seat each stream steps alone through `mtp_spec_eval`, and the tick reports how many
+driver seat each stream steps alone through `mtp_spec_round_k` at the knob's depth, and the tick reports how many
 streams' rows the joint verify carried so the batched bench row can refuse a per-stream tick.
 A plain batched step on a NextN-headed model lands GPU logits like any other model's, and its
 landing copies each row's post-norm hidden into that stream's `mtp_h` with the watermark moved

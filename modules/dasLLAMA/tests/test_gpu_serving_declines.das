@@ -905,6 +905,7 @@ def test_trim_decline_kind(t : T?) {
         t |> success(resident_trim_decline_is_run_mode("the residency plan does not fit the card"), "the card's room is the run's")
         t |> success(resident_trim_decline_is_run_mode("the tier installed no resident-driver seams"), "the tier's seams are the run's")
         t |> success(resident_trim_decline_is_run_mode("routed experts (64) - the tier installed no MoE seats; the per-op tier's expert rails serve"), "the MoE seats are the run's")
+        t |> success(resident_trim_decline_is_run_mode("{TRIM_SPLIT_DECLINE} (18 routed layers' experts on the host in the lane, 20 in this run's plan)"), "a lane minted under another host-layer split is this run's decline: the mint holds")
         t |> success(!resident_trim_decline_is_run_mode("the trim serves dense models without a hyper-connection residual or per-layer embeddings"), "the model's shape is the model's")
         t |> success(!resident_trim_decline_is_run_mode("no arm for: sinks"), "a feature is the model's")
         t |> success(!resident_trim_decline_is_run_mode(""), "an empty decline is no decline")
@@ -1021,6 +1022,7 @@ def test_resident_hot_slots(t : T?) {
         t |> equal(40l, resident_hot_slots(-1l, 5000l * mib, 12000l * mib, column, 512l), "unasked, 40 fit beside the mirror: past 32, the mirror yields nothing")
         t |> equal(32l, resident_hot_slots(-1l, 681l * mib, 5600l * mib, column, 512l), "unasked, five fit beside the mirror: the mirror's context yields the room of 32")
         t |> equal(20l, resident_hot_slots(-1l, 681l * mib, 2500l * mib, column, 512l), "... and no more than the floor's room holds")
+        t |> equal(31l, resident_hot_slots(-1l, 31l * column, -500l * mib, column, 512l), "unasked, 31 fit beside the mirror and the floor's room is past the plan: the yield never takes the slots beside the mirror away")
         t |> equal(44l, resident_hot_slots(48l, 681l * mib, 5600l * mib, column, 512l), "a count asked is served from the floor's room")
         t |> equal(16l, resident_hot_slots(16l, 9000l * mib, 12000l * mib, column, 512l), "a count asked under the room stands")
         t |> equal(0l, resident_hot_slots(0l, 9000l * mib, 12000l * mib, column, 512l), "0 asks no pool")
@@ -1274,8 +1276,8 @@ def private round_draft(t : Model; var s : Session; token, pos : int64; pick_onl
     return g_round_pick
 }
 
-//! the fake verify: serves, every row's pick landed (row 0's `g_round_truth`), row 0's hidden a constant row, the carry's
-//! watermark past its rows as the real seat leaves it
+//! the fake verify: serves, every row's pick landed (row 0's `g_round_truth`), every row's hidden a constant row in `mtp_hrows`
+//! (row 0's copied to `mtp_h0` as the real seat does), the carry's watermark past its rows as the real seat leaves it
 [unused_argument(toks, pick_only)]
 def private round_verify(t : Model; var s : Session; toks : array<int64>; n, pos : int64; pick_only : bool) : bool {
     g_round_verify_calls++
@@ -1285,10 +1287,14 @@ def private round_verify(t : Model; var s : Session; toks : array<int64>; n, pos
     for (i in range64(1l, n)) {
         s.mtp_picks[i] = 9l + i
     }
-    s.mtp_h0 |> resize(t.config.dim)
-    for (i in range64(t.config.dim)) {
-        s.mtp_h0[i] = 0.25
+    let dim = t.config.dim
+    s.mtp_hrows |> reserve(n * dim)
+    s.mtp_hrows |> resize(n * dim)
+    for (i in range64(n * dim)) {
+        s.mtp_hrows[i] = 0.25
     }
+    s.mtp_h0 |> resize(dim)
+    copy_floats(s.mtp_hrows, 0l, s.mtp_h0, 0l, dim)
     return true
 }
 
@@ -1744,5 +1750,23 @@ def test_kv_codec_serving_rule(t : T?) {
         t |> equal(kv_codec_served(m.config, KVDtype.tq4, why), KVDtype.f16, "a 48-wide head holds no block codec: tq4 lands at f16")
         t |> equal(kv_codec_served(m.config, KVDtype.q8_0, why), KVDtype.f16, "and so does q8_0")
         delete m
+    }
+}
+
+[test]
+def test_baked_host_layers(t : T?) {
+    t |> run("a lane's host-layer split read off its plan's marker entry: the host_split entry's woff, -1 where the lane carries none") @(t : T?) {
+        let arena = int(VkBakeRole.arena)
+        let iq4xs = int(KqFmt.iq4xs)
+        var plan <- [VkPlanEntry(fmt = iq4xs, role = arena, woff = 3000l, n = 2048l, rows = 131072l),
+                     VkPlanEntry(fmt = -1, role = int(VkBakeRole.host_split), woff = 18l, n = 0l, rows = 0l),
+                     VkPlanEntry(fmt = iq4xs, role = arena, woff = 4000l, n = 2048l, rows = 131072l)]
+        t |> equal(vk_baked_host_layers(plan), 18l, "the marker's woff is the split")
+        var old <- [VkPlanEntry(fmt = iq4xs, role = arena, woff = 3000l, n = 2048l, rows = 131072l)]
+        t |> equal(vk_baked_host_layers(old), -1l, "a lane minted before the marker answers -1")
+        let none : array<VkPlanEntry>
+        t |> equal(vk_baked_host_layers(none), -1l, "an empty plan answers -1")
+        delete plan
+        delete old
     }
 }

@@ -2,7 +2,7 @@
 
 Companion to `ARCHITECTURE_GPU_VULKAN.md`; a section is cited by its anchor. This document carries the
 token command's logits landing on the transfer queue - the compute-timeline signal the copy waits on and
-the carry row every resident command lands beside - and the greedy chain that submits the next one-row step behind it. What a model has to fit on the card before the driver
+the carry row every resident command lands beside - the selection a sampled stream's step lands in place of its rows, and the greedy chain that submits the next one-row step behind it. What a model has to fit on the card before the driver
 runs is in `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`; the N-row token command a batched step's rows go
 through is in `ARCHITECTURE_GPU_VULKAN_NROW.md`; the NextN draft head and its rollback are in
 `ARCHITECTURE_GPU_VULKAN_MTP.md`.
@@ -27,7 +27,10 @@ command's next write of the plane never races its read - or, on the greedy chain
 copy on the transfer timeline (`#vk-greedy-chain`). `DASLLAMA_VK_XFERQ=0` leaves the device
 without a transfer family; there the command carries the copy and the fence as before
 (`rd_submit_land` / `rd_wait_land` choose) - the one in-process switch that puts the copy back
-inside the command. Pod, Llama-3.2-1B Q8_0 with the profiler on: the four-row step 3761 -> 3371
+inside the command. The compute timeline (`cmp_sem`) stands under either setting: every chained
+submit signals it (`submit_signal`, the streamed expert bundles and the hit chains wait on it), so
+the timelines are created wherever the device has them, and only the transfer family and its
+queue follow the knob. Pod, Llama-3.2-1B Q8_0 with the profiler on: the four-row step 3761 -> 3371
 us, tg128@4 1019 -> 1136 summed, tg128 426 -> 451.
 
 **A row whose sampler is a bare argmax lands its pick alone.** After the epilogue the command runs
@@ -42,7 +45,7 @@ widest finite lane and an all-NaN row id 0; only an empty slice lands `0xFFFFFFF
 landing refuses as an engine bug, and a landed pick that reads non-finite panics naming the row -
 `rdec_landed_finite`), into
 `RDec.pick_dev`. The ask decides only what lands: the transfer command copies the picks behind the
-logits, and a step whose every row asks for its pick takes the picks-only twin (`RDec.xlog_pick_cmd`),
+logits, and a step whose every row asks for its pick takes the picks-only twin (`RdXlog.picks`, the landing kind `rd_xlog` records by),
 so the logits plane never leaves the device and the host copies nothing (a device without the
 transfer family copies both inside the command and skips the host copy alone); the one-row command's
 guard steps (`rd_guard_step`: the first four tokens and every 256th) land the logits too, so the
@@ -85,6 +88,43 @@ session takes no carry: the CPU round has no host rows to draft or verify it aga
 carry costs `dim x 4` bytes a row over the bus (4 KB a token on Qwen3.5-0.8B) and the last
 layer's fused down epilogue, which writes Q8_0 blocks and no float row, so that layer's residual
 step runs as its own dispatch; a model without a head records the command it always did.
+
+### A sampled stream's step lands its rows' selection in place of the rows {#logits-selection-landing}
+
+**A row whose sampler draws lands its survivors, not its logits.** A sampled stream's sampler
+reads a 248k-float row to draw one token, and every row of a speculative round's verify, every
+draft a rejection-sampling round samples, and every plain step of a sampled stream paid that
+row's trip and the host's passes over it. So a step whose stream wants the selection
+(`sel_wanted`: a sampler pointed at that draws at a temperature above zero, no constraint, no pick
+ask, and a penalty that only lowers logits - a repetition penalty at or above one, presence and
+frequency penalties at or above zero, since a raised unlanded logit could outrank the survivors -
+over a window the ask can list) asks the driver before
+its command (`rdec_sel_before` -> `vk_rdec_sel_ask`), poking a row's sampler words - the
+temperature's bits and the recent window's unique ids with the round's drafts - into a
+host-visible block (`RDec.sel_words`, `SEL_WORDS` a row, as `TokMeta` is poked). The submit then
+runs the selection command behind the step's on the compute queue (`rd_sel_cmd`: a full barrier,
+then `ClsSelect` a workgroup of 1024 threads a row over the logits plane - a radix select over the
+float's order-preserving key in three histogram passes to the exact 1024th largest logit, the
+compaction of every logit at or above it with the ties, capped at 2048 with the overflow flagged,
+the row's max and the softmax denominator at the row's temperature, and the logits of the listed
+recent ids) and the transfer queue's landing twin (`RdXlog.sel`) copies the picks, the carry and
+the selection's four planes into the packed host landing (`RDec.sel_host`) - the logits plane
+never leaves the device. A guard step drops the ask, since the over-commit check reads a row. The
+glue hands the engine pointers into that landing (`rdec_sel_after` -> `g_sel_landing`, the session's
+row in `Session.sel_row1`), and every sampler entry - the row draw, the typical and rejection
+judges, the rejection drafter, the chain cut's probability - serves off it where the stream's cuts
+confine the draw's support to the survivors (`landed_row_`: a top-k within the cap whose k-th
+penalized logit stays at or above the landing's floor, or a nucleus reached inside the landing
+and a min-p whose floor sits above the lowest survivor's probability), the committed token the
+row path's token for token since the survivors hold the row's whole post-cut support and the
+denominator is the row's within a float sum's rounding. A sampler the landing cannot serve - no
+cut at all, a flat row whose nucleus reaches past the survivors, a top-k past the cap, an
+overflowing row - lands the rows late (`sel_land_rows` -> `vk_rdec_sel_land_rows`: the transfer
+queue copies the intact logits plane down) and takes the row path. Every step opens with the
+landing cleared (`sel_reset`), so no session reads another step's. On the RTX 5060 Ti the
+selection over three 248320-wide rows runs in about 170 us behind the submit's fixed cost against
+1.8 ms a row for the host's passes (`debug-jit`, the selection entry in `PERF_LEDGER.md`); `set_select_landing` is the knob, on by default, and
+`benchmarks/lcpp_bench.das --mtp-select=false` lands the rows for the A/B.
 
 ### The greedy chain submits the next one-row step behind the running one {#vk-greedy-chain}
 

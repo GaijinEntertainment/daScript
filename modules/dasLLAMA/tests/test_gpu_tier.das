@@ -795,8 +795,22 @@ def test_pf_window_rows_rounding(t : T?) {
     set_pf_window_rows_pin(1024l)
     t |> equal(pf_window_rows(), 1024l, "a multiple stays")
     set_pf_window_rows_pin(0l)
-    let knob_units = g_env_gpu.gpu_pf_rows / PF_WINDOW_MIN
-    t |> equal(pf_window_rows(), max(knob_units, 1l) * PF_WINDOW_MIN, "no pin reads the knob, rounded the same way")
+    if (g_env_gpu.gpu_pf_rows > 0l) {
+        let knob_units = g_env_gpu.gpu_pf_rows / PF_WINDOW_MIN
+        t |> equal(pf_window_rows(), max(knob_units, 1l) * PF_WINDOW_MIN, "no pin reads the knob, rounded the same way")
+        t |> success(!pf_window_rows_unasked(), "a set knob is an ask")
+    } else {
+        t |> success(pf_window_rows_unasked(), "no pin and the knob at 0: the window is the driver's to pick")
+        set_pf_window_rows_auto(0l)
+        t |> equal(pf_window_rows(), PF_ROWS_DEFAULT, "nothing picked yet reads the narrow default")
+        set_pf_window_rows_auto(PF_ROWS_WIDE)
+        t |> equal(pf_window_rows(), PF_ROWS_WIDE, "the driver's pick serves under no pin and no knob")
+        set_pf_window_rows_pin(512l)
+        t |> equal(pf_window_rows(), 512l, "a pin outranks the pick")
+        t |> success(!pf_window_rows_unasked(), "a pin is an ask")
+        set_pf_window_rows_pin(0l)
+        set_pf_window_rows_auto(0l)
+    }
     set_pf_window_rows_pin(was)
 }
 

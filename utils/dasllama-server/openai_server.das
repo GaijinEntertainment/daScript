@@ -238,7 +238,8 @@ struct ModelSlot {
     opts : SlotOpts = SlotOpts()
     backend_effective : string = "cpu"   // arm outcome: cpu | gpu:rails | gpu:resident
     gpu_regions : int64             //! K/V regions the whole-model driver armed for this slot, one per device-home stream; 0 = not that driver
-    gpu_ask_streams : int64         //! the K/V regions and the context this slot's load asked the whole-model driver for:
+    experts_host : bool             //! the driver sums some routed layers' experts on the host for this slot (read while its marks are installed: the live predicate reads false once they are parked)
+    gpu_ask_streams : int64        //! the K/V regions and the context this slot's load asked the whole-model driver for:
     gpu_ask_ctx : int64             //! the engine keeps one process-wide ask, so a rearm restores the slot's own first
     gpu_ask_kv : KVDtype = KVDtype.f16   //! the K/V codec this slot's load asked the device mirror in
     resident_decline : string               //! why the whole-model GPU driver does not serve this slot (its decline, with the remedy where one exists); "" when it does, or no GPU was asked for
@@ -409,6 +410,7 @@ def add_model(var m : Model; name : string; opts : SlotOpts = SlotOpts(); path :
     // capture it, so two models' offset-keyed marks never mix. Whichever slot is stepped gets
     // its set re-installed (install_slot_marks); an armed capture makes this slot the GPU owner.
     slot.gpu_regions = gpu_device_sessions()
+    slot.experts_host = gpu_resident_experts_host()
     slot.backend_effective = gpu_slot_capture(slot.gpu_marks)
     slot.resident_decline = slot.backend_effective == "gpu:resident" ? "" : gpu_resident_decline()
     let was_gpu = slot.backend_effective != "cpu"
@@ -530,6 +532,7 @@ def private bind_gpu_slot(si : int) {
     slot_clamp_ctx_to_region(g_slots[si])
     g_slots[si].resident_decline = g_slots[si].backend_effective == "gpu:resident" ? "" : gpu_resident_decline()
     g_slots[si].gpu_regions = gpu_device_sessions()
+    g_slots[si].experts_host = gpu_resident_experts_host()
     g_gpu_owner = si
     let us = int64(get_time_usec(t0))
     g_slots[si].sw_count ++
@@ -7001,9 +7004,9 @@ struct private SchedDefaults {
 
 var private g_sched_defaults = SchedDefaults()
 
-//! Whether an unset `mtp` arms a slot: one stream whose decode runs on a GPU - the Metal flavor, or the whole model resident on a Vulkan device (`backend_effective` "gpu:resident"). On the CPU, on a slot the device serves in part, and where the resident driver sums the routed experts on the host (`experts_host`: a hyper-connection MoE, a plain MoE the card does not hold whole, or one whose host-layers ask moved them - `PERF_LEDGER.md`'s NextN entry), the verify round costs more than the accepted drafts return. Non-private: test_openai_server_mtp.das gates it.
-def mtp_auto_arms(streams : int64; on_metal : bool; backend_effective : string; experts_host : bool = false; platforms : string = "") : bool
-    => streams == 1l && decodes_on_gpu(on_metal, backend_effective, experts_host) && mtp_platform_listed(platforms, on_metal ? "metal" : "vulkan")
+//! Whether an unset `mtp` arms a slot: one stream whose decode runs on a GPU - the Metal flavor, or the whole-model driver on a Vulkan device (`backend_effective` "gpu:resident"), its routed experts on the card or summed on the host alike (the round wins at the NextN depth on both) - and whose catalog row lists the platform. On the CPU and on a slot the device serves in part, the verify round costs more than the accepted drafts return. Non-private: test_openai_server_mtp.das gates it.
+def mtp_auto_arms(streams : int64; on_metal : bool; backend_effective : string; platforms : string = "") : bool
+    => streams == 1l && decodes_on_gpu(on_metal, backend_effective) && mtp_platform_listed(platforms, on_metal ? "metal" : "vulkan")
 
 //! The model file's catalog `serve_mtp`, read off its base name; ""
 //! for a file with no catalog row. Non-private: a test gates it.
@@ -7026,11 +7029,9 @@ def slot_mtp_want(opts : SlotOpts; server_mtp : int) : int
 //! Whether a slot speculates: asked on, or unset where
 //! `mtp_auto_arms` arms it over the slot's catalog platforms.
 //! Non-private: a test gates it.
-def slot_mtp_arms(opts : SlotOpts; server_mtp : int; streams : int64; on_metal : bool;
-                  backend_effective : string; experts_host : bool) : bool {
+def slot_mtp_arms(opts : SlotOpts; server_mtp : int; streams : int64; on_metal : bool; backend_effective : string) : bool {
     let want = slot_mtp_want(opts, server_mtp)
-    return want > 0 || (want < 0 && mtp_auto_arms(streams, on_metal, backend_effective,
-                                                  experts_host, opts.mtp_platforms))
+    return want > 0 || (want < 0 && mtp_auto_arms(streams, on_metal, backend_effective, opts.mtp_platforms))
 }
 
 //! Whether `platforms`, a catalog `serve_mtp` comma list, names `platform`; "" names none. Non-private: test_server_flags.das gates it.
@@ -7054,10 +7055,9 @@ def speech_team_dispatch(team_dispatch : bool; asr_team, llm_slots, gpu_slots : 
     => (asr = team_dispatch && (asr_team > 0 || (asr_team < 0 && asr_auto_team(llm_slots, gpu_slots))), tts = team_dispatch && asr_team > 0)
 
 def private gpu_decoding_slots : int {
-    let experts_host = gpu_resident_experts_host()
     var n = 0
     for (s in g_slots) {
-        if (decodes_on_gpu(slot_flavor(s) == "metal", s.backend_effective, experts_host)) {
+        if (decodes_on_gpu(slot_flavor(s) == "metal", s.backend_effective, s.experts_host)) {
             n++
         }
     }
@@ -7095,8 +7095,7 @@ def private init_one_scheduler(var s : ModelSlot) {
     }
     let s_kv = slot_kv_dtype(s.opts)
     let want = slot_mtp_want(s.opts, g_sched_defaults.mtp)
-    var spec = slot_mtp_arms(s.opts, g_sched_defaults.mtp, s_streams, slot_flavor(s) == "metal",
-                             s.backend_effective, gpu_resident_experts_host())
+    var spec = slot_mtp_arms(s.opts, g_sched_defaults.mtp, s_streams, slot_flavor(s) == "metal", s.backend_effective)
     if (spec && s.model.config.n_layer_nextn <= 0l) {
         let side = attach_mtp_sidecar(s.model, s.path)
         if (!empty(side)) {
@@ -7118,12 +7117,26 @@ def private init_one_scheduler(var s : ModelSlot) {
 def prefills_on_gpu(on_metal : bool; backend_effective : string) : bool
     => on_metal || backend_effective != "cpu"
 
-//! A slot's unset chunk follows the backend that prefills THIS slot now. The scheduler's own default reads the
+//! The prefill quantum's two sizes for a slot the backend `backend_effective` (and the Metal flavor) prefills: `chunk` while a
+//! stream decodes, `idle` while none does - the resident driver's own prompt window widens the idle chunk, any other backend
+//! takes the floor. Non-private: test_server_flags.das gates it.
+def slot_chunk_defaults(on_metal : bool; backend_effective : string) : tuple<chunk : int64; idle : int64> {
+    let on_gpu = prefills_on_gpu(on_metal, backend_effective)
+    let window = backend_effective == "gpu:resident" ? gpu_device_prefill_window() : 0l
+    return (chunk = chunk_default(on_gpu), idle = idle_chunk_default(on_gpu, window))
+}
+
+//! A slot's unset chunk and idle chunk follow the backend that prefills THIS slot now. The scheduler's own default reads the
 //! tier's one process-wide status, which beside another slot's armed model is that model's answer.
 def private slot_default_chunk(var s : ModelSlot) {
+    let dflt = slot_chunk_defaults(slot_flavor(s) == "metal", s.backend_effective)
     let set_chunk = s.opts.chunk >= 0l ? s.opts.chunk : g_sched_defaults.chunk_tokens
     if (set_chunk <= 0l) {
-        s.sched.chunk_tokens = chunk_default(prefills_on_gpu(slot_flavor(s) == "metal", s.backend_effective))
+        s.sched.chunk_tokens = dflt.chunk
+    }
+    let set_idle = s.opts.chunk_idle != -2l ? s.opts.chunk_idle : g_sched_defaults.idle_chunk_tokens
+    if (set_idle < 0l) {
+        s.sched.idle_chunk_tokens = dflt.idle
     }
 }
 

@@ -23,6 +23,8 @@ require daslib/fio
 require dasllama/dasllama_blocks
 
 let private HOST_FIRST = 8l   //! the rarest experts the meet hands the host before the device claims: the twin's rows on every carrier
+let private QWEN15_MOE_EXPERTS = 60l   //! the carrier's routed experts a layer (Qwen1.5-MoE-A2.7B): a pool at or past it never fills
+let private SHARE_CELL_SLOTS = 16l     //! the share cell's pool: a quarter of the experts, so a step's misses outrun the free slots
 
 //! the levers a cell pins, as a cell found them
 struct private RecipePins {
@@ -30,6 +32,7 @@ struct private RecipePins {
     arena : int
     host_first : int64
     hot_dma : int
+    hot_share : float
     dec_meet : int
     onepass : int
     batched : int
@@ -40,7 +43,7 @@ struct private RecipePins {
 //! come back, for `unpin_recipe`
 def private pin_recipe() : RecipePins {
     let was = RecipePins(pf_stream = gpu_want_pf_stream_pin(), arena = rare_arena_pin(), host_first = moe_host_first_pin(),
-        hot_dma = gpu_hot_dma_pin(), dec_meet = gpu_dec_meet_pin(), onepass = rare_onepass_pin(), batched = rare_batched_pin())
+        hot_dma = gpu_hot_dma_pin(), hot_share = gpu_hot_share_pin(), dec_meet = gpu_dec_meet_pin(), onepass = rare_onepass_pin(), batched = rare_batched_pin())
     set_gpu_want_pf_stream(1)
     set_rare_arena(1)
     set_moe_host_first(HOST_FIRST)
@@ -52,6 +55,7 @@ def private unpin_recipe(was : RecipePins) {
     set_rare_arena(was.arena)
     set_moe_host_first(was.host_first)
     set_gpu_hot_dma(was.hot_dma)
+    set_gpu_hot_share(was.hot_share)
     set_gpu_dec_meet(was.dec_meet)
     set_rare_onepass(was.onepass)
     set_rare_batched(was.batched)
@@ -125,6 +129,35 @@ def private format_cells(t : T?; tag : string) {
 //! the fed steps' picks against the CPU chain at the matrix's bar, each knob's own counter the witness that it ran
 def private knob_cells(t : T?; tag : string) {
     let fx = MoeFixture(file = "moe-formats/Qwen1.5-MoE-A2.7B-Chat-exps-{tag}.gguf", shexp = true, bar_rel = MOE_LOGIT_BAR_REL, host_layers_ask = 20l)
+    // the share's cell goes first: the pool outlives a cell on the same carrier, and it is armed at the slot ask this cell pins -
+    // fewer slots than the carrier's experts, so the pool fills and the heat gate has misses to leave the share
+    t |> run("{tag} experts on twenty host layers, the fill's share of a step's misses past the heat gate: the token command vs the CPU chain") @(ct : T?) {
+        return if (!pool_asked(ct))
+        let pins = pin_recipe()
+        let heat0 = g_gpu_want.heat
+        g_gpu_want.heat = SHARE_CELL_SLOTS
+        set_gpu_hot_dma(1)
+        set_gpu_hot_share(1.0)
+        with_gpu_kv_dtype(ct, KVDtype.f16) {
+            let p0 = moe_gpu_resident_prefills()
+            let s0 = gpu_resident_hot_stats()
+            witnessed(ct, false, true) {
+                moe_forced_feed(ct, 40l, fx)
+            }
+            if (moe_gpu_resident_prefills() != p0 && pool_armed(ct)) {
+                let s1 = gpu_resident_hot_stats()
+                ct |> success(s1.dma > s0.dma, "the fill landed {s1.dma - s0.dma} experts by DMA over the cell")
+                if (gpu_resident_hot_slots() >= QWEN15_MOE_EXPERTS) {
+                    ct |> skip("the pool holds every expert of the carrier ({gpu_resident_hot_slots()} slots): it never fills, and the heat gate leaves the share nothing - the pool was armed before this cell's slot pin")
+                } else {
+                    ct |> success(s1.share_seen > s0.share_seen, "the heat gate left the share misses to admit ({s1.share_seen - s0.share_seen}) with {gpu_resident_hot_slots()} slots over {QWEN15_MOE_EXPERTS} experts")
+                    ct |> equal(s1.share_fills - s0.share_fills, s1.share_seen - s0.share_seen, "at share 1 every miss the heat gate left ({s1.share_seen - s0.share_seen}) was admitted - every expert of the carrier is a copy the tier can make")
+                }
+            }
+        }
+        g_gpu_want.heat = heat0
+        unpin_recipe(pins)
+    }
     t |> run("{tag} experts on twenty host layers, the pool's misses filled by DMA: the token command vs the CPU chain") @(ct : T?) {
         return if (!pool_asked(ct))
         let pins = pin_recipe()
@@ -140,12 +173,30 @@ def private knob_cells(t : T?; tag : string) {
         }
         unpin_recipe(pins)
     }
+    t |> run("{tag} experts on twenty host layers, the DMA fill off and the meet off: no expert lands by DMA, the token steps' misses take the host's upload beside the window's placements") @(ct : T?) {
+        return if (!pool_asked(ct))
+        let pins = pin_recipe()
+        set_gpu_hot_dma(0)   // the DMA cell's no-route leg (the meet off too: its claims ride DMA whatever the knob says)
+        set_gpu_dec_meet(0)
+        with_gpu_kv_dtype(ct, KVDtype.f16) {
+            let p0 = moe_gpu_resident_prefills()
+            witnessed(ct, false, true) {
+                moe_forced_feed(ct, 40l, fx)
+            }
+            if (moe_gpu_resident_prefills() != p0 && pool_armed(ct)) {
+                // the pool's counters are the armed driver's, zeroed at its arm inside the feed's load: absolute reads
+                ct |> equal(gpu_resident_hot_stats().dma, 0l, "control: with the fill off no expert landed by DMA over the cell")
+                ct |> success(gpu_resident_hot_stats().uploads > 0l, "the window's placements and the steps' misses took the host's upload ({gpu_resident_hot_stats().uploads})")
+            }
+        }
+        unpin_recipe(pins)
+    }
     t |> run("{tag} experts on twenty host layers, a token's picks through the decode meet: the token command vs the CPU chain") @(ct : T?) {
         let pins = pin_recipe()
         set_gpu_dec_meet(1)
         with_gpu_kv_dtype(ct, KVDtype.f16) {
             let p0 = moe_gpu_resident_prefills()
-            witnessed(ct, false, true) {   //! the meet replaces the one-row rail
+            witnessed(ct, false, true) {   // the meet replaces the one-row rail
                 moe_forced_feed(ct, 40l, fx)
             }
             if (moe_gpu_resident_prefills() != p0) {

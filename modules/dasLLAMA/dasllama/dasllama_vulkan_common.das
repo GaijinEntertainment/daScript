@@ -296,7 +296,7 @@ let DN_MAX_HEADS = 64l
 let DN_MAX_CD = 16_384l
 let DN_MAX_QK = 8_192l   //! the conv row's q + k region (2 kd): the channels the conv's per-head norm covers
 let DN_MAX_DCONV = 4l
-let DN_WINDOW = 2_048l
+let DN_WINDOW = 4_096l
 //! the scan workspace holds the raw o rows alone: position-major, di wide, rewritten in place by the out-norm
 let DN_O_OFF = 0l
 let DN_WS_BYTES = DN_WINDOW * DN_MAX_HEADS * DN_MAX_DS * 4l
@@ -1138,7 +1138,7 @@ let private DEMOTION_PERIOD_US = 1_000_000   // the counter query costs millisec
 //! Log once when the adapter's shared usage has grown past the desktop's baseline and our own
 //! host-visible buffers - the manager has then demoted our planes to system memory, and every
 //! weight read runs at PCIe speed with no error.
-[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan")]
+[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_ROOM.md#vk-plan-room")]
 def vk_demotion_check(site : string) {
     if (g_demotion_said || (g_demotion_ticks != 0l && get_time_usec(g_demotion_ticks) < DEMOTION_PERIOD_US)) {
         return
@@ -1266,7 +1266,9 @@ def public vk_ext_roster(phys : VkPhysicalDevice) : array<VkExtEntry> {
             rides = "the SM count the dense tile pick, split-k and the decode attention's partials plane read ({sm} here) - past four pieces the token command records a wide twin at eight; without it the l tile serves every dense GEMM, nothing splits k and the attention stays at four pieces"),
         VkExtEntry(name = "timelineSemaphore (Vulkan 1.2)", present = timeline_semaphore_supported(phys),
             knob = "DASLLAMA_VK_XFERQ", off = !g_env_vulkan.vk_xferq,
-            rides = "the transfer queue that overlaps streamed weight copies with compute and lands the resident commands' rows behind a compute-timeline wait - the token command's logits and picks, the NextN draft's and the same-slab verify's, and the carry row every one of them lands beside; the per-expert chain's copies into the ring and the hot pool's DMA fill of a decode step's misses (DASLLAMA_GPU_HOT_DMA) ride it too; without it the copies ride the compute queue, each command copies its own landing under its fence, and the pool's misses take the host fill"),
+            rides = "the transfer queue that overlaps streamed weight copies with compute and lands the resident commands' rows behind a compute-timeline wait - the token command's logits and picks (or, for a sampled stream, the selection's four planes), the NextN draft's and the same-slab verify's, and the carry row every one of them lands beside; the per-expert chain's copies into the ring and the hot pool's DMA fill of a decode step's misses (DASLLAMA_GPU_HOT_DMA) ride it too; without it the compute timeline stands alone, the copies ride the compute queue, each command copies its own landing under its fence, and the pool's misses take the host fill"),
+        VkExtEntry(name = "maxComputeWorkGroupInvocations of 1024 or more", present = props.limits.maxComputeWorkGroupInvocations >= 1024u,
+            rides = "the classifier tail's selection kernel, a 1024-thread workgroup a row ({int(props.limits.maxComputeWorkGroupInvocations)} here): a sampled stream's step lands its rows' survivors instead of the rows; without it every step lands its rows"),
         VkExtEntry(name = "computeFullSubgroups (subgroupSizeControl, Vulkan 1.3)", present = compute_full_subgroups_supported(phys),
             knob = "DASLLAMA_VK_FULLSG", off = !g_env_vulkan.vk_fullsg,
             rides = "full subgroups on the one-dimensional workgroups, an A/B arm off by default"),
@@ -1367,9 +1369,9 @@ def vk_moe_init : bool {
     g_gpu.decvec_on = g_gpu.has_coopmat2 && g_gpu.coopmat_mode == COOPMAT_CM2 && g_env_vulkan.vk_decvec && cooperative_matrix2_decode_vector_supported(g_gpu.phys)
     g_gpu.sm_count = query_sm_count(g_gpu.phys)
     // dedicated transfer family: streamed copies overlap compute (DASLLAMA_VK_XFERQ=0 = bisect hatch)
+    let timelines = g_gpu.has_coopmat && timeline_semaphore_supported(g_gpu.phys)
     var xfam = -1
-    if (g_gpu.has_coopmat && g_env_vulkan.vk_xferq
-            && timeline_semaphore_supported(g_gpu.phys)) {
+    if (timelines && g_env_vulkan.vk_xferq) {
         xfam = select_transfer_queue_family(g_gpu.phys)
     }
     let t_pick = get_time_usec(t0)
@@ -1390,6 +1392,15 @@ def vk_moe_init : bool {
     volkLoadDevice(dev_raw())
     let t_dev = get_time_usec(t0)
     g_gpu.queue = get_device_queue(g_gpu.device, g_gpu.fam, 0u)
+    if (timelines) {
+        var tci = VkSemaphoreTypeCreateInfo()
+        tci.semaphoreType = VkSemaphoreType.TIMELINE
+        tci.initialValue = 0ul
+        var sci = VkSemaphoreCreateInfo()
+        sci.pNext = unsafe(addr<void?>(tci))
+        vk_check(vkCreateSemaphore(dev_raw(), sci, null, g_gpu.xfer_sem), null)
+        vk_check(vkCreateSemaphore(dev_raw(), sci, null, g_gpu.cmp_sem), null)
+    }
     if (xfam >= 0) {
         g_gpu.xfer_fam = xfam
         g_gpu.xfer_queue = get_device_queue(g_gpu.device, uint(xfam), 0u)
@@ -1398,13 +1409,6 @@ def vk_moe_init : bool {
         xpci.flags.reset_command_buffer = true
         g_gpu.xfer_pool <- create_command_pool(g_gpu.device, xpci)
         g_gpu.xfer_cmd = alloc_cmd_in(g_gpu.xfer_pool)
-        var tci = VkSemaphoreTypeCreateInfo()
-        tci.semaphoreType = VkSemaphoreType.TIMELINE
-        tci.initialValue = 0ul
-        var sci = VkSemaphoreCreateInfo()
-        sci.pNext = unsafe(addr<void?>(tci))
-        vk_check(vkCreateSemaphore(dev_raw(), sci, null, g_gpu.xfer_sem), null)
-        vk_check(vkCreateSemaphore(dev_raw(), sci, null, g_gpu.cmp_sem), null)
         to_log(LOG_INFO, "dasLLAMA vulkan tier: transfer queue armed (family {xfam})\n")
     }
     g_gpu.has_memprio = (g_gpu.has_coopmat && memory_priority_supported(g_gpu.phys)
@@ -1446,7 +1450,7 @@ def vk_moe_init : bool {
     if (g_env_vulkan.vk_rebar) {
         g_gpu.rebar_type = rebar_memory_type(g_gpu.phys)
         if (g_gpu.rebar_type >= 0) {
-            to_log(LOG_INFO, "dasLLAMA vulkan tier: ReBAR active - uploads write direct to VRAM (DASLLAMA_VK_REBAR=0 restores staging)\n")
+            to_log(LOG_INFO, "dasLLAMA vulkan tier: ReBAR active (DASLLAMA_VK_REBAR) - the planes sit in the mapped type and uploads write into it; the manager may park a mapped plane in system memory under pressure, which the staged default never meets\n")
         }
     }
     var pci : CommandPoolCreateInfo
@@ -1490,10 +1494,11 @@ def vk_moe_init : bool {
 
 // ===== upload (loader hook — moe_gpu_upload_resident gathers, we just stage) =====
 
+//! `bytes` the staging buffer holds from its start into `dst` at `dst_off`, one submit: a region list of one through the batch's flush
 def staged_upload(dst : uint64; dst_off : int64; bytes : int64) {
-    run_cmd_sync(g_gpu.device, g_gpu.pool, g_gpu.queue) $(cmd) {
-        cmd_copy_range(boost_value_to_vk(cmd), g_gpu.staging.buf, 0l, dst, dst_off, bytes)
-    }
+    assert(empty(g_upload_batch), "dasLLAMA vulkan tier: a staged upload while the batch holds regions - the batch's own staging bytes would be overwritten")
+    g_upload_batch |> push((dst = dst, src_off = 0l, dst_off = dst_off, bytes = bytes))   // nolint:PERF026,LINT019 — the region list keeps its capacity across flushes
+    upload_batch_flush()
 }
 
 // Stage `total` bytes into `dst` starting at `dst_off`. The arena packs many tensors into one
@@ -1505,7 +1510,17 @@ def upload_region_at(dst : uint64; dst_off : int64; src : uint8 const?; total : 
         unsafe {
             par_memcpy(reinterpret<void?>(g_gpu.dev_mapped[dst] + uint64(dst_off)), reinterpret<void?>(src), total)
         }
+    } elif (g_upload_batch_open && total <= STAGING_BYTES) {
+        if (g_upload_batch_fill + total > STAGING_BYTES) {
+            upload_batch_flush()
+        }
+        unsafe {
+            par_memcpy(reinterpret<void?>(reinterpret<uint8?>(g_gpu.staging.mapped) + g_upload_batch_fill), reinterpret<void?>(src), total)
+        }
+        g_upload_batch |> push((dst = dst, src_off = g_upload_batch_fill, dst_off = dst_off, bytes = total))   // nolint:PERF026,LINT019 — the region list keeps its capacity across flushes (cleared, never deleted); the rule fires in the decode module's compile
+        g_upload_batch_fill += total
     } else {
+        upload_batch_flush()   //! a region past the staging buffer's size takes the whole buffer: what the batch holds lands first
         var off = 0l
         while (off < total) {
             let chunk = min(total - off, STAGING_BYTES)
@@ -1523,6 +1538,39 @@ def upload_region_at(dst : uint64; dst_off : int64; src : uint8 const?; total : 
 def upload_region(dst : uint64; src : uint8 const?; total : int64) {
     upload_region_at(dst, 0l, src, total)
 }
+
+var private g_upload_batch_open = false
+var private g_upload_batch_fill = 0l   //! the staging bytes the open batch holds
+var private g_upload_batch : array<tuple<dst : uint64; src_off : int64; dst_off : int64; bytes : int64>>
+
+//! open the staging batch: staged uploads until `upload_batch_close` copy in one submit under one fence
+def upload_batch_open {
+    assert(!g_upload_batch_open, "dasLLAMA vulkan tier: an upload batch is already open")
+    g_upload_batch_open = true
+    g_upload_batch_fill = 0l
+}
+
+//! copy what the batch holds to its destinations, one submit; the staging buffer is free again after
+[cold_path]
+def upload_batch_flush {
+    return if (empty(g_upload_batch))
+    run_cmd_sync(g_gpu.device, g_gpu.pool, g_gpu.queue) $(cmd) {
+        for (r in g_upload_batch) {
+            cmd_copy_range(boost_value_to_vk(cmd), g_gpu.staging.buf, r.src_off, r.dst, r.dst_off, r.bytes)
+        }
+    }
+    g_upload_batch |> clear()
+    g_upload_batch_fill = 0l
+}
+
+def upload_batch_close {
+    if (!empty(g_upload_batch)) {   //! the cold flush is reached once a window or a step, mostly with nothing to land
+        upload_batch_flush()
+    }
+    g_upload_batch_open = false
+}
+
+def upload_batch_is_open : bool => g_upload_batch_open
 
 // report the accumulated upload cost (the counters above); `direct` = the caller's mapped-vs-staged tag
 def vk_upload_report(direct : bool) {
@@ -2052,9 +2100,10 @@ def private vk_stream_readers_make {
             pop_with_timeout_clone(req, 50) $(rq : FetchReq#) {
                 if (rq.stack == FETCH_QUIT) {
                     fclose(h)
-                    done |> push_clone(FetchDone(stack = FETCH_QUIT, expert = -1, slot = -1, ok = true))
-                    req |> release()   //! the loop's final step drops the captures' references
+                    var ack_to = done   //! `release` nulls the handle it releases: the answer goes through a copy of the pointer
+                    req |> release()
                     done |> release()
+                    ack_to |> push_clone(FetchDone(stack = FETCH_QUIT, expert = -1, slot = -1, ok = true))
                     cont = false
                 } else {
                     let t0 = ref_time_ticks()
@@ -2097,20 +2146,24 @@ def vk_stream_readers_quit {
             }
         }
     }
-    g_fetch_req |> notify()   //! the lifetime job done: a waiter left behind wakes and leaves
-    g_fetch_done |> notify()
-    g_fetch_req |> release()   //! the main context's references go; the last reader's release frees the channels, so a reader still answering never reads a freed one
-    g_fetch_done |> release()
-    g_fetch_req = null
-    g_fetch_done = null
     if (acked < g_fetch_threads) {
-        //! a reader left behind still owns its bounce buffer and its channel references: they stay with it
-        to_log(LOG_WARNING, "dasLLAMA vulkan tier: {g_fetch_threads - acked} of the expert cache's reader threads did not answer the quit order - their bounce buffers are left to them\n")
+        //! the readers left behind keep their bounce buffers and the channels: removing a channel a thread still reads is the worse exit
+        g_fetch_req |> notify()   //! the lifetime job done: a waiter left behind wakes and leaves
+        g_fetch_done |> notify()
+        g_fetch_req |> release()
+        g_fetch_done |> release()
+        to_log(LOG_WARNING, "dasLLAMA vulkan tier: {g_fetch_threads - acked} of the expert cache's reader threads did not answer the quit order - their bounce buffers and the request channels are left to them\n")
     } else {
+        unsafe {
+            channel_remove(g_fetch_req)
+            channel_remove(g_fetch_done)
+        }
         for (b in g_fetch_bounce) {
             unsafe(free(b))
         }
     }
+    g_fetch_req = null
+    g_fetch_done = null
     g_fetch_bounce |> clear()
     g_fetch_threads = 0
     g_fetch_pending = 0l
@@ -3167,12 +3220,17 @@ struct RDec {
     logits_dev : uint64
     x_host, logits_host : HostBuf
     log_xfer : bool               //! the logits leave the device on the transfer queue (a device with the transfer family armed); off, the token command copies them itself
-    xlog_cmd : array<VkCommandBuffer>   //! ... the copy commands by row count (index 0 unused; the one-row command lands at 1), recorded on first use
-    xlog_recorded : array<bool>
-    xlog_pick_cmd : array<VkCommandBuffer>   //! ... the picks-only twins, for a step whose every row wants its argmax alone
-    xlog_pick_recorded : array<bool>
+    xlog_cmd : array<VkCommandBuffer>[3]   //! ... the copy commands by landing kind (`RdXlog`) and row count (index 0 unused; the one-row command lands at 1), recorded on first use
+    xlog_recorded : array<bool>[3]
     pick_dev : uint64             //! the rows' argmax ids (`ClsArgmaxPart` then `ClsArgmaxFin`, after the epilogue), and their host landing
     pick_host : HostBuf
+    sel_on : bool                 //! the selection kernel built: a sampled stream's ask lands the rows' survivors instead of the rows (`vk_rdec_sel_ask`)
+    sel_words : HostBuf           //! the rows' sampler words the ask pokes a step (CLS_SEL_WORDS a row)
+    sel_hdr_dev, sel_id_dev, sel_val_dev, sel_rec_dev : uint64   //! the selection's landing planes: a row's header, survivor ids and logits, recent-window logits
+    sel_host : HostBuf            //! ... and their host landing, the four planes packed in that order (`cls_sel_plane_off`)
+    s_select : VkDescriptorSet
+    sel_cmd : array<VkCommandBuffer>   //! the selection command by row count - a full barrier behind the token command, the dispatch, the copy where no transfer family lands it - recorded on first use
+    sel_recorded : array<bool>
     ch_meta : array<HostBuf>      //! the chained step's staged TokMeta row and rope row, two slots the chained steps alternate
     ch_cos : array<HostBuf>
     ch_logits : array<HostBuf>    //! ... its landing a slot: the logits row and the pick
@@ -3217,6 +3275,7 @@ struct RDec {
     roll_dev : uint64             //! the verify's rollback scratch: a row per verify row the round can reject past (`roll_rows` = `verify_rows` - 1), each row every recurrent layer's slot state and ring pair in layer order (`RLayer.roll_off`); 0 = none
     roll_rows : int64
     roll_row_bytes : int64
+    ring_roll_dev : uint64        //! the n-gram conv ring as the verify's rows form found it, saved before the rows' commit (`rd_encode_hc_side`), for the rollback to put back; 0 = no ring or no rollback
     snap_dev : uint64             //! the regions' recurrent checkpoints: `RDEC_DN_SNAPS` rows a region, a row every recurrent layer's slot state and ring pair (`RLayer.snap_off`); 0 until the first save
     snap_row_bytes : int64
     snap_ring_off : int64         //! ... and, on a hyper-connection model with the n-gram side input, the row's copy of the region's conv ring past the recurrent state
@@ -3406,8 +3465,8 @@ struct RDec {
     head_s_emb_ar : VkDescriptorSet     //! the verify's embed rows normed under `mtp_enorm`: `hemb_dev` in, `xb2_dev` out
     plepanel_dev : uint64               //! the verify rows' normed gated rows [nb x hc x dim]: the conv reads the rows inside the window off it, the ring past them
     s_ple_commit : VkDescriptorSet      //! the panel's rows into the ring's slots after the rows
-    @exact_size hc_v_seg : array<VkCommandBuffer>   //! the hc verify's segments per region (`nseg` a region), recorded at the verify's row count
-    @exact_size hc_v_recorded : array<bool>
+    @exact_size v_seg : array<VkCommandBuffer>   //! the split command's verify segments per (region, row count), `nseg` each, recorded at the first verify of that count
+    @exact_size v_seg_recorded : array<bool>
     s_hc_init, s_hc_norm, s_hc_inj, s_hc_xnrq, s_hc_lorq, s_hc_mix : VkDescriptorSet
     s_hc_comb_a, s_hc_comb_f : VkDescriptorSet   //! the scatter after the attention head (the wo row) and after the FFN (the shared row plus the host's routed sum)
     //! the n-gram side input before layer `ngram_layer`'s attention mixer (`vk_rdec_set_ngram`)
@@ -3655,6 +3714,7 @@ struct RdqLedger {
     idle_us : double                     //! the device's idle between the command sampled before it (any form's) and this form's, summed
     wall_us : double                     //! the host wall of the same commands, and its pieces:
     memcpy_us : double                   //! the memcpys and meta
+    segments_us : double                 //! the split command's segments before the last - their submits and waits, the host sums between them excluded
     submit_us : double                   //! the submit
     wait_us : double                     //! the wait
     land_us : double                     //! the landing copy

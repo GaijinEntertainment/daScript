@@ -15,6 +15,7 @@ require daslib/math_bits   // uint_bits_to_float: the NaN sentinel as a float
 require dastest/testing_boost   // T?: check asserts through the cell's handle
 require daslib/rtti   // LineInfo: the probe handle's log hook
 require dasllama/dasllama_math   // parallel_argmax
+require dasllama/dasllama_common   // Session: logits_of copies its row
 require daslib/fio
 require daslib/command_line
 
@@ -165,6 +166,9 @@ def logits_maxabs(a : array<float>) : float {
 
 //! Element-for-element equality of two id lists - the token oracles' compare, named for the sites that read it.
 def ids_equal(a, b : array<int64>) : bool => sequence_equal(a, b)
+
+//! the session's first `vocab` logits, copied
+def logits_of(s : Session; vocab : int64) : array<float> => <- [for (i in range64(vocab)); s.logits[i]]
 
 //! The kernel cells' relative bar - the device's reassociation and its transcendentals against the CPU oracle: an f16 store
 //! rounds at 2^-11 = 4.9e-4 relative, f32 sums of up to 4096 terms drift n x 6e-8 <= 2.5e-4, the device transcendentals ~1e-6;
@@ -442,6 +446,14 @@ def first_mismatch(got, want : array<auto(TT)>; gbase, wbase, n : int) : int {
         return i if (got[gbase + i] != want[wbase + i])
     }
     return -1
+}
+
+//! the first index where `got` and `want` differ over the whole shorter one - the shorter one's length where the two differ
+//! only in length, -1 where they are the same
+def first_mismatch(got, want : array<auto(TT)>) : int {
+    let n = min(length(got), length(want))
+    let at = first_mismatch(got, want, 0, 0, n)
+    return at >= 0 ? at : (length(got) != length(want) ? n : -1)
 }
 
 //! The Q8_0 planes' differences, scale for scale then byte for byte: a scale off by more than `scale_bar` relative (floored at

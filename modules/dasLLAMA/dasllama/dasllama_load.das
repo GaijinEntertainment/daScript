@@ -2097,8 +2097,8 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
             t.config.ple_image_token = gguf_has(m, "{arch}.ple.image_token_id") ? gguf_int(m, bytes, "{arch}.ple.image_token_id") : 0l
             t.config.ple_head_dim = gguf_int(m, bytes, "{arch}.embedding_length_per_layer_input")
             if (t.config.ple_ngram_size < 2l || t.config.ple_ngram_size > 8l || t.config.ple_heads_per_ngram <= 0l
-                    || t.config.ple_conv_kernel <= 0l || t.config.ple_head_dim <= 0l || t.config.ple_head_dim % 32l != 0l
-                    || ple_in_dim(t.config) % 32l != 0l) {
+                    || t.config.ple_conv_kernel <= 0l || t.config.ple_head_dim <= 0l
+                    || ple_in_dim(t.config) % 32l != 0l) {   //! the gathered row feeds a q8 requant: whole blocks; a head's own width is the table's row decoder's concern
                 panic("dasLLAMA: unsupported PLE n-gram geometry (ngram {t.config.ple_ngram_size}, heads/ngram {t.config.ple_heads_per_ngram}, head dim {t.config.ple_head_dim}, conv {t.config.ple_conv_kernel})")
             }
             let nheads = ple_n_heads(t.config)
@@ -2899,6 +2899,9 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
             if (t.ngram_type != GGML_TYPE_IQ4_NL && t.ngram_type != GGML_TYPE_Q8_0 && t.ngram_type != GGML_TYPE_F16
                     && t.ngram_type != GGML_TYPE_BF16 && t.ngram_type != GGML_TYPE_F32) {
                 panic("dasLLAMA: per_layer_token_embd.weight type {t.ngram_type} has no row decoder (IQ4_NL / Q8_0 / F16 / BF16 / F32)")
+            }
+            if ((t.ngram_type == GGML_TYPE_IQ4_NL || t.ngram_type == GGML_TYPE_Q8_0) && hd % 32l != 0l) {   //! a block-typed row decodes in whole blocks of 32
+                panic("dasLLAMA: per_layer_token_embd.weight rows of {hd} are not whole blocks of 32 for type {t.ngram_type}")
             }
             t.ngram_rows = m.tensors[ti].dims[1]
             t.ngram_row_bytes = ggml_type_bytes(t.ngram_type, hd)

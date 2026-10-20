@@ -272,9 +272,10 @@ verify's own ledger (`g_rdq_verify_ledger`), so the round's alternating draft an
 restart the token ledger's averages, and every 32 verifies the driver prints `vk_rdec gpu
 avg/verify over N: ...` in the token line's shape (`vk_rdec dn avg/verify` beside it on a hybrid,
 the idle since the command sampled before - the draft's - at its end) and `vk_rdec host
-wall/verify over N of n rows: ...` - the memcpys and meta, the submit, the wait (the
-transfer-queue landing of the picks and hidden rows, and of the n logits rows where they land, is
-inside it) and the landing copy. The round's profiler sections (`mtp.verify`, `mtp.rollback`)
+wall/verify over N of n rows: ...` - the memcpys and meta, on a model with host layers the split
+command's earlier segments (their submits and waits; the host's routed sums between them are the
+host experts piece), the submit, the wait (the transfer-queue landing of the picks and hidden rows,
+and of the n logits rows where they land, is inside it) and the landing copy. The round's profiler sections (`mtp.verify`, `mtp.rollback`)
 price the seat's whole wall from the engine's side, the draft's `mtp.draft`.
 
 ### The residual step's two forms spell the sandwich add as one fma {#residual-step-fma}

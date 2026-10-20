@@ -920,7 +920,7 @@ def test_metal_paged_mtp(t : T?) {
                 var none : array<int64>
                 let greedy = SamplingParams()
                 var toks : array<array<int64>>
-                t |> equal(chunk_defaults(tr).idle, METAL_IDLE_CHUNK_TOKENS, "a Metal-served model's idle prefill quantum is the wide one")
+                t |> equal(chunk_defaults(tr).idle, GPU_IDLE_CHUNK_TOKENS, "a Metal-served model's idle prefill quantum is the wide one")
                 t |> equal(chunk_defaults(tr).chunk, DEFAULT_CHUNK_TOKENS, "and its chunk beside a decoding stream is one window")
                 for (page_rows in [0l, 64l]) {
                     let kind = page_rows == 0l ? "flat" : "paged"

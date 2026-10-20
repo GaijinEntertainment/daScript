@@ -12,6 +12,7 @@ require dasllama/dasllama_math
 require _compares
 require _kernel_oracles   // rope_tab_ref: the rope and KV-writer cells' oracle
 require _attn_oracle   // attn_row_oracle: the batched decode attention cells' oracle
+require _sel_oracle   // select_rows_oracle, sel_words, SelRow: the selection cell's oracle and its result shape (vulkan-free)
 require _vk_kq_fixtures
 require _kq_fixtures
 require ?vulkan _vkd_toy
@@ -1404,6 +1405,146 @@ def test_vkd_cls_argmax(t0 : T?) {
                 delete want
                 delete y
             }
+        } else {
+            t |> skip("no vulkan module")
+        }
+    }
+}
+
+//! the device selection of every row of a [rows x vocab] plane under the sampler words `sel`, each row's landing sorted by id
+def private cls_select_run(y : array<float>; sel : array<uint>; vocab, rows : int64; tag : string) : array<SelRow> {
+    var out : array<SelRow>
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        let cap = int64(CLS_SELECT_CAP)
+        let hdrw = int64(CLS_SEL_HDR)
+        let recw = int64(CLS_SELECT_RECENT)
+        with_cell_planes() $(var cp : CellPlanes) {
+            let py = cp |> in_(y)
+            let ps = cp |> in_plain(sel)
+            let ph = cp |> out_words(hdrw * rows * 4l, 0xFFFFFFFFu)
+            let pi = cp |> out_words(cap * rows * 4l, 0xFFFFFFFFu)
+            let pv = cp |> out_(int(cap * rows))
+            let pr = cp |> out_(int(recw * rows))
+            var st = cp |> cls_set(fixed_array(py, ps, ph, pi, pv, pr), @@set_cls_select)
+            var pc = ArgmaxArgs(vocab = uint(vocab))
+            cp |> cell_record_timed(tag, "cls_select: {rows} rows x {vocab}") $(raw : VkCommandBuffer; var h : VkHaz) {
+                enc_cls_select(raw, h, st, pc, rows)
+            }
+            var inscope hdr <- cp |> plane_as(ph, type<uint>, int(hdrw * rows))
+            var inscope ids <- cp |> plane_as(pi, type<uint>, int(cap * rows))
+            var inscope vals <- cp |> plane_as(pv, type<float>, int(cap * rows))
+            var inscope rec <- cp |> plane_as(pr, type<float>, int(recw * rows))
+            out |> resize(rows)
+            for (r in range64(rows)) {
+                let n = int64(hdr[r * hdrw + SEL_HDR_COUNT])
+                var order <- [for (j in range64(n)); j]
+                sort(order) $(a, b : int64) : bool { return ids[r * cap + a] < ids[r * cap + b] }
+                out[r].ids <- [for (j in order); int64(ids[r * cap + j])]
+                out[r].vals <- [for (j in order); vals[r * cap + j]]
+                out[r].rmax = uint_bits_to_float(hdr[r * hdrw + SEL_HDR_MAX])
+                out[r].den = uint_bits_to_float(hdr[r * hdrw + SEL_HDR_DEN])
+                out[r].overflow = hdr[r * hdrw + SEL_HDR_OVERFLOW] != 0u
+                let nrec = min(int64(sel[r * int64(CLS_SEL_WORDS) + SEL_ASK_COUNT]), recw)
+                out[r].recent <- [for (j in range64(nrec)); rec[r * recw + j]]
+                delete order
+            }
+        }
+    }
+    return <- out
+}
+
+[test]
+def test_vkd_cls_select(t0 : T?) {
+    t0 |> run("cls_select: every row lands the ids at or above its 1024th largest logit with their logits, its max and its denominator at its temperature, at a 262144 and a 1000 vocab - ties at the K-th kept, a row whose ties overflow the landing flagged, NaN and -inf lanes, an all-equal and an all-NaN row, the recent window's logits beside") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!ensure_cls_select()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            let nan = unsafe(reinterpret<float>(0x7FC00000u))
+            let ninf = unsafe(reinterpret<float>(0xFF800000u))
+            let rows = 6l
+            for (vocab in fixed_array(262144l, 1000l)) {
+                var inscope y : array<float>
+                y |> resize(vocab * rows)
+                for (i in range64(vocab * rows)) {
+                    y[i] = hash_unit(uint(i) * 7u + 3u) * 20.0
+                }
+                let hi = 50.0   // past the plane's range (hash_unit spans [-2, 2), scaled by 20)
+                for (j in range64(min(3000l, vocab))) {   // row 1: 3000 ties at the top - past the landing's cap at the wide vocab, every id at the narrow
+                    y[vocab + (j * 37l) % vocab] = hi
+                }
+                for (j in range64(10l)) {   // row 2: ten above and 1020 ties AT the K-th, so 1030 land at the wide vocab
+                    y[2l * vocab + j * 11l] = hi
+                }
+                for (j in range64(min(1020l, vocab - 10l))) {
+                    y[2l * vocab + 200l + j] = 40.0
+                }
+                for (i in range64(vocab)) {   // row 3 pinned whole: every id ties, the landing overflows at the wide vocab
+                    y[3l * vocab + i] = -1.0e30
+                }
+                y[4l * vocab + 5l] = nan   // row 4: NaN lanes and a -inf lane read as the lowest finite, the max at 123
+                y[4l * vocab + 123l] = hi
+                y[4l * vocab + 700l] = nan
+                y[4l * vocab + 701l] = ninf
+                for (i in range64(vocab)) {   // row 5: every lane NaN
+                    y[5l * vocab + i] = nan
+                }
+                var inscope temps <- [0.7, 1.0, 0.5, 0.0, 1.0, 1.0]
+                var inscope recent <- [[5l, 77l, vocab - 1l, vocab + 5l], [0l], [200l, 1l], [1l], [5l, 123l, 701l], [9l]]
+                var inscope words <- sel_words(temps, recent)
+                var inscope got <- cls_select_run(y, words, vocab, rows, "cls_select vocab {vocab}")
+                var inscope want <- select_rows_oracle(y, temps, recent, vocab, rows, int64(CLS_SELECT_K), int64(CLS_SELECT_CAP))
+                var worst = 0.0
+                var worst_row = -1l
+                for (r in range64(rows)) {
+                    let rd = abs(got[r].den - want[r].den) / max(want[r].den, 1.0e-30)
+                    if (!(rd <= worst)) {   // a NaN difference is the worst there is: `max` would drop it
+                        worst = rd
+                        worst_row = r
+                    }
+                    if (want[r].overflow) {   // an overflowing row lands the cap's worth of its ties, whichever came first: the count is the claim
+                        t |> equal(long_length(got[r].ids), int64(CLS_SELECT_CAP), "vocab {vocab} row {r}: an overflowing row lands the cap ({length(want[r].ids)} survivors)")
+                    } else {
+                        t |> equal(mismatch_exact(got[r].ids, want[r].ids), 0, "vocab {vocab} row {r}: the landed ids are the host's survivors ({length(got[r].ids)} of {length(want[r].ids)}; first mismatch at {first_mismatch(got[r].ids, want[r].ids)})")
+                        t |> equal(mismatch_exact(got[r].vals, want[r].vals), 0, "vocab {vocab} row {r}: every landed logit is its id's (first mismatch at {first_mismatch(got[r].vals, want[r].vals)})")
+                    }
+                    t |> equal(got[r].rmax, want[r].rmax, "vocab {vocab} row {r}: the max")
+                    t |> equal(got[r].overflow, want[r].overflow, "vocab {vocab} row {r}: the overflow flag ({length(want[r].ids)} survivors against the cap {CLS_SELECT_CAP})")
+                    t |> equal(mismatch_exact(got[r].recent, want[r].recent), 0, "vocab {vocab} row {r}: the recent window's logits ({got[r].recent} against {want[r].recent}; first mismatch at {first_mismatch(got[r].recent, want[r].recent)})")
+                }
+                to_log(LOG_INFO, "cls_select vocab {vocab}: the denominator's worst relative difference {worst} at row {worst_row}; row 2 lands {length(got[2].ids)} ids\n")
+                // the denominator sums 262144 float exps on the device against the host's double sum; a float tree sum over n terms is
+                // within about log2(n) ulps, 18 x 6e-8, so the 1e-5 bar holds it with room
+                t |> success(worst <= 1.0e-5, "the denominators agree within 1e-5 (worst {worst} at row {worst_row})")
+                let poisoned = abs(got[0].den * 1.001 - want[0].den) / want[0].den
+                t |> success(is_finite(poisoned) && poisoned > 1.0e-5, "a denominator a tenth of a percent off reds the bar ({poisoned})")
+                if (vocab > 3000l) {
+                    t |> equal(long_length(got[2].ids), 1030l, "row 2 lands its ten leaders and the 1020 ties at the K-th")
+                    t |> success(got[1].overflow && got[3].overflow && got[5].overflow, "rows 1, 3 and 5 overflow the landing")
+                    t |> success(long_length(got[0].ids) >= 1024l && long_length(got[0].ids) == long_length(want[0].ids), "row 0 lands K and the ties at the K-th ({length(got[0].ids)}: the fixture's 4096 distinct values tie often)")
+                } else {
+                    t |> equal(long_length(got[0].ids), vocab, "a vocab under K lands whole")
+                }
+                t |> equal(got[0].recent[3], SEL_LANE_FLOOR, "an id past the vocab lands the lowest finite")
+                t |> equal(got[4].recent[2], SEL_LANE_FLOOR, "a -inf lane lands the lowest finite")
+                t |> equal(got[4].rmax, hi, "row 4's max is its widest finite lane")
+                want[2].ids[0] = want[2].ids[0] + 1l
+                t |> equal(mismatch_exact(got[2].ids, want[2].ids), 1, "vocab {vocab}: the id compare reds one poisoned id (first mismatch at {first_mismatch(got[2].ids, want[2].ids)})")
+            }
+            // the served shape's time: three plain rows (a depth-2 verify) at Qwen3.6-35B's vocabulary, no row overflowing
+            let served_vocab = 248320l
+            var inscope yp : array<float>
+            yp |> resize(served_vocab * 3l)
+            for (i in range64(served_vocab * 3l)) {
+                yp[i] = hash_unit(uint(i) * 13u + 1u) * 20.0 + hash_unit(uint(i) * 3u + 7u) * 0.01
+            }
+            var inscope tp <- [0.7, 0.7, 0.7]
+            var inscope rp <- [[1l], [2l], [3l]]
+            var inscope wp <- sel_words(tp, rp)
+            var inscope gp <- cls_select_run(yp, wp, served_vocab, 3l, "cls_select served shape")
+            var inscope wantp <- select_rows_oracle(yp, tp, rp, served_vocab, 3l, int64(CLS_SELECT_K), int64(CLS_SELECT_CAP))
+            t |> equal(mismatch_exact(gp[1].ids, wantp[1].ids), 0, "the served shape's middle row lands the host's survivors ({length(gp[1].ids)}; first mismatch at {first_mismatch(gp[1].ids, wantp[1].ids)})")
         } else {
             t |> skip("no vulkan module")
         }
@@ -9896,6 +10037,116 @@ def test_vkd_gu_publish_slots(t0 : T?) {
                 }
                 t |> success(flat_misses > 0, "sgs {int(sgs)} lpr {int(lpr)}: the row's own index read as a slot holds another row (the control)")
             }
+        }
+    }
+}
+
+[test]
+def test_vkd_upload_batch(t0 : T?) {
+    t0 |> run("the staging batch: uploads opened as one batch land in one submit at their offsets, byte for byte, and the batch is closed after") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!vk_moe_init()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            let total = 4096l
+            let dev = make_device_buf(total)
+            var zero : array<uint8>
+            zero |> resize(int(total))
+            upload_region_at(dev, 0l, unsafe(addr<uint8 const?>(zero[0])), total)
+            var want : array<uint8>
+            want |> resize(int(total))
+            let pieces = fixed_array((off = 0l, n = 96l, seed = 3), (off = 100l, n = 1l, seed = 5), (off = 777l, n = 1001l, seed = 7), (off = 2048l, n = 2048l, seed = 11), (off = 1800l, n = 200l, seed = 13))
+            t |> success(!upload_batch_is_open(), "no batch is open before the cell")
+            upload_batch_open()
+            for (p in pieces) {
+                var inscope piece : array<uint8>
+                piece |> resize(int(p.n))
+                for (i in range64(p.n)) {
+                    piece[i] = uint8((i * 31l + int64(p.seed) * 7l) % 256l)
+                    want[p.off + i] = piece[i]
+                }
+                upload_region_at(dev, p.off, unsafe(addr<uint8 const?>(piece[0])), p.n)
+            }
+            t |> success(upload_batch_is_open(), "the batch stays open across the uploads")
+            upload_batch_close()
+            t |> success(!upload_batch_is_open(), "the close leaves no batch open")
+            var back <- make_host_buf(total, false)
+            run_cmd_sync(g_gpu.device, g_gpu.pool, g_gpu.queue) $(cmd) {
+                cmd_copy_range(boost_value_to_vk(cmd), dev, 0l, back.buf, 0l, total)
+            }
+            var wrong = 0l
+            unsafe {
+                let got = reinterpret<uint8?>(back.mapped)
+                for (i in range64(total)) {
+                    if (got[i] != want[i]) {
+                        wrong++
+                    }
+                }
+            }
+            t |> equal(wrong, 0l, "every byte of every piece landed at its offset, the later piece over the earlier where they overlap")
+            destroy_host_buf(back)
+            destroy_device_buf(dev)
+        } else {
+            t |> skip("no vulkan module")
+        }
+    }
+    t0 |> run("the staging batch past its buffer: regions whose sum exceeds the staging bytes flush mid-bracket, a single region past them lands through the chunked path, and every byte of each lands") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!vk_moe_init()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            let piece_bytes = STAGING_BYTES * 5l / 8l   // three such regions: the second and third each overflow the buffer and flush what sits before them
+            let big_bytes = STAGING_BYTES + STAGING_BYTES / 16l   // one region past the buffer: the chunked path, the batch flushed before it
+            let total = 3l * piece_bytes
+            let dev = make_device_buf(total)
+            var want : array<uint8>
+            want |> reserve(total)
+            want |> resize(total)
+            var piece : array<uint8>
+            piece |> reserve(big_bytes)
+            piece |> resize(big_bytes)
+            t |> success(!upload_batch_is_open(), "no batch is open before the cell")
+            upload_batch_open()
+            for (p in range64(3l)) {
+                for (i in range64(piece_bytes)) {
+                    piece[i] = uint8((i * 31l + p * 7l + 3l) % 256l)
+                    want[p * piece_bytes + i] = piece[i]
+                }
+                upload_region_at(dev, p * piece_bytes, unsafe(addr<uint8 const?>(piece[0])), piece_bytes)
+            }
+            let big_off = piece_bytes / 2l
+            for (i in range64(big_bytes)) {
+                piece[i] = uint8((i * 17l + 11l) % 256l)
+                want[big_off + i] = piece[i]
+            }
+            upload_region_at(dev, big_off, unsafe(addr<uint8 const?>(piece[0])), big_bytes)
+            t |> success(upload_batch_is_open(), "the batch stays open across the flushes")
+            upload_batch_close()
+            t |> success(!upload_batch_is_open(), "the close leaves no batch open")
+            var back <- make_host_buf(total, false)
+            run_cmd_sync(g_gpu.device, g_gpu.pool, g_gpu.queue) $(cmd) {
+                cmd_copy_range(boost_value_to_vk(cmd), dev, 0l, back.buf, 0l, total)
+            }
+            var wrong = 0l
+            var first_wrong = -1l
+            unsafe {
+                let got = reinterpret<uint8?>(back.mapped)
+                for (i in range64(total)) {
+                    if (got[i] != want[i]) {
+                        first_wrong = wrong == 0l ? i : first_wrong
+                        wrong++
+                    }
+                }
+            }
+            t |> equal(wrong, 0l, "every byte of the three regions and of the oversize region landed at its offset ({wrong} wrong, the first at {first_wrong})")
+            destroy_host_buf(back)
+            destroy_device_buf(dev)
+            delete piece
+            delete want
+        } else {
+            t |> skip("no vulkan module")
         }
     }
 }

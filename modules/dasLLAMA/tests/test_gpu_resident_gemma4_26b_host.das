@@ -50,13 +50,14 @@ def test_gpu_resident_gemma4_26b_host_experts(t : T?) {
         return if (!arm_on(t, GEMMA4_26B_HOST_FILE.arm) || cap_not_in_force(t))
         ppl_compare(t, 150l, 150l, GEMMA4_26B_HOST_FILE, GEMMA4_26B_HITS_SLACK, GEMMA_MOE_PPL_RATIO)
     }
-    t |> run("gemma-4-26B-A4B IQ3_XXS under the same plan room: the load log says the host experts get no hot pool, and why") @(t : T?) {
+    t |> run("gemma-4-26B-A4B IQ3_XXS under the same plan room: the load log sizes the host experts' pool by the room alone - the gemma-4 form is no longer a reason against one") @(t : T?) {
         return if (!arm_on(t, GEMMA4_26B_HOST_FILE.arm) || cap_not_in_force(t))
         let log = resident_load_log(t, GEMMA4_26B_HOST_FILE, GEMMA_RIG_CTX, [(name = "DASLLAMA_GPU_VRAM_MB", value = "{HOST_CAP_MB}"),
             (name = "DAS_LOG_LEVEL", value = "info")])
         return if (empty(log))
         t |> success(find(log, "RESIDENT_LOAD active=true host_layers=0") < 0, "the child's plan moved routed layers to the host:\n{log}")
-        t |> success(find(log, "dasLLAMA: resident driver - no hot expert pool") >= 0
-            && find(log, "a gemma-4 MoE: the pool's device sums carry no per-expert down scale") >= 0, "the pool's decline names the gemma-4 MoE:\n{log}")
+        t |> success(find(log, "a gemma-4 MoE") < 0, "the pool's line never names the gemma-4 form as its reason:\n{log}")
+        t |> success((find(log, "dasLLAMA: resident driver - hot expert pool") >= 0 && find(log, "slots on") >= 0)
+            || find(log, "MB left past the plan") >= 0, "the pool armed, or declined by the room alone:\n{log}")
     }
 }

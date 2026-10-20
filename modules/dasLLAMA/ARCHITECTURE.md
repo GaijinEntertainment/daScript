@@ -118,11 +118,15 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
   seat, the MoE expert chain on those tiles - and the decode GEMV family's lane split by row length.
 - `ARCHITECTURE_GPU_VULKAN_KHR.md` - the KHR arm's hand-staged tile, the window GEMMs over a file's
   f32 rows that ride it on every coopmat card, and why a K-quant window plane stays on the cm2 tiles.
+- `ARCHITECTURE_GPU_VULKAN_ROOM.md` - the room the residency plan may fill on a card shared with a
+  desktop: the OS's answer and the headroom where none comes, the over-commit guards, and the two
+  allocation shapes the Windows memory manager pages out (the priority tag, the mapped ReBAR type).
 - `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md` - what a model has to fit on the card before the driver
   runs - the residency plan, the checkpoints a device-home recurrent stream keeps on the device,
   the token rows' gather off the table's own plane, the GPU-slot marks swap that lets one slot
   serve many models, and the hydrate a call passing to the CPU rails takes first.
-- `ARCHITECTURE_GPU_VULKAN_LANDING.md` - the token command's logits landing on the transfer queue.
+- `ARCHITECTURE_GPU_VULKAN_LANDING.md` - the token command's logits landing on the transfer queue, and
+  the selection landing a sampled stream's step takes in place of its rows.
 - `ARCHITECTURE_GPU_VULKAN_MTP.md` - the NextN draft head the resident driver homes beside the
   trunk: the draft command that steps it, the prompt warm the window chain gives its slab, the
   rollback a rejected device verify takes from the verify command's own copies, the verify
@@ -160,6 +164,9 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
   eras take.
 - `ARCHITECTURE_GPU_MTP.md` - the Metal speculative round over the batch driver's same-slab
   verify, and the box knob that sets the depth a round drafts.
+- `ARCHITECTURE_GPU_MTP_ACCEPT.md` - what a sampled stream's round does with its drafts on both homes:
+  the three acceptances, the sampler's seams, the drafter distribution a rejection round records,
+  and the chain cut.
 - `ARCHITECTURE_GPU_KV_RING.md` - both homes' sliding-layer K/V ring: a sliding layer's mirror rows as a ring of its
   window and one command's rows (`ARCHITECTURE_GPU_KV_RING.md#kv-sliding-ring`).
 - `ARCHITECTURE_GPU_MTP_ASSISTANT.md` - the gemma-4 assistant drafter on both GPU homes: one

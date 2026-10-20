@@ -41,7 +41,10 @@ arming is `MoePickTape.record`, the replay `MoePickTape.replay`, `MoePickTape.of
 tape is row-major a layer (row 0's select, row 1's, ...), and a one-row chain replays one of its rows
 as a lane (`moe_pick_tape_lane`: the replay starts at select `first` and advances `stride` selects a
 select), so the verify's device rows compare against the split command's own one-row steps on the
-picks the rows made. A 512-expert top-10 router over
+picks the rows made. A tape crosses processes as a list of picks: `moe_pick_tape_picks` copies a
+recording out and `moe_pick_tape_replay_from` arms a replay on one, which is how the parity dump
+(`harness/_parity_dump.das`) pins a CPU reference run in its own process on the routing a device
+run recorded in another. A 512-expert top-10 router over
 mixed residual streams flips a near-tie on kernel-order noise alone, and one flipped expert of ten
 moves the whole row past any logits bar: on Qwen3.8-Flash-Next the CPU chain on its reference
 kernel bodies parts from the tuned chain by 3-7 logits with argmax flips on three rows of seven,

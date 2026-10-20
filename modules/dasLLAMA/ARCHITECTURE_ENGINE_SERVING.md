@@ -41,8 +41,10 @@ anchor.
   call, `prefill_one_chunk`) - the quantum `chunk_tokens` while
   a stream decodes, since the call is the stall every decoding stream waits out, and at least `idle_chunk_tokens`
   while none does, since a prefill window's cost is mostly fixed and nothing waits on it; `chunk_defaults` names
-  both sizes per serving backend (the chunk 512 where a GPU prefills and 64 on the CPU, whose chunk costs its token count, so the stall follows it down; idle 512,
-  2048 on Metal, where four windows in one call run within a few percent of the whole prompt's rate); paged serving donates finished streams'
+  both sizes per serving backend (the chunk 512 where a GPU prefills and 64 on the CPU, whose chunk costs its token count, so the stall follows it down; idle 512
+  on the CPU and on a GPU the wider of 2048 and the driver's prompt window, `idle_chunk_default` - on Metal four windows in one call run within a few
+  percent of the whole prompt's rate, and on Vulkan a window streams the routed layers' expert stacks through the device once, so a chunk
+  under the window streams them again per chunk: a 3k prompt in two 2048 chunks sweeps twice where the 4096 window sweeps once); paged serving donates finished streams'
   KV pages to the prefix cache, device mode parks their regions. The paged pool's blobs hold reserved address
   room for every stream's context plus the cache's retention, up to `KV_POOL_RESERVE_BYTES` (`kv_pool_reserve`):
   inside it a doubling moves and fills nothing, where a moved blob is a copy of every cached page inside one

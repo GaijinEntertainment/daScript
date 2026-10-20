@@ -202,7 +202,8 @@ that a question answered for one backend has an obvious address in the other. Th
   without it serves one region), its N-row batch seat `install_moe_gpu_resident_batch` (the N-row token command beside
   the resident driver: `rows` answers how many rows it steps at once on the armed model, 0 = none; `rdec_token_n` steps
   them), all behind the route lever `set_gpu_resident_route` / `gpu_want_resident`, the streamed layers' seats
-  the Vulkan family alone fills - the pool's DMA fill `install_moe_gpu_resident_hot_dma`, the meet's device/host claim
+  the Vulkan family alone fills - the pool's DMA fill `install_moe_gpu_resident_hot_dma`, the pool's placement batch
+  `install_moe_gpu_resident_hot_batch`, the classifier tail's selection landing `install_rdec_select`, the meet's device/host claim
   `set_moe_gpu_ffn_xf_meet_hooks`, the lane's stream sources `set_moe_gpu_stream_source_fn`, the host twin
   `set_moe_gpu_host_twin_fns`, the checkpoint row's ring `install_rdec_dn_snap_ring`, the slot's carve `set_moe_gpu_carve_fn`,
   the expert cache's view, order, stats, slot and request seats `set_moe_gpu_stream_view_fn` / `_cache_order_fn` /

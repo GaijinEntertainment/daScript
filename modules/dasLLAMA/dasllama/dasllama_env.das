@@ -149,9 +149,9 @@ struct public GpuTierEnv {
     @clarg_doc = "The context pin (DASLLAMA_GPU_CTX_MAX, set_gpu_ctx_max) is the context asked, not a cap: a K/V mirror the card cannot hold at it declines the resident driver instead of shortening, and the per-op rails serve the asked context; the load log names the room."
     gpu_ctx_strict : bool = false
 
-    @clarg_default_doc = "2048"
-    @clarg_doc = "The whole-model driver's prompt window in rows: the prefill panels' size, and the rows a hyper-connection model's host expert step and the hot pool's window chain take at once; a longer prompt runs as sequential windows, each paying every routed layer's expert pass again. Rounded down to a multiple of 128, never under 128; the plan charges the panels at this count, so a wider window shortens the K/V mirror or the pool."
-    gpu_pf_rows : int64 = 2048l
+    @clarg_default_doc = "0"
+    @clarg_doc = "The whole-model driver's prompt window in rows: the prefill panels' size, and the rows a hyper-connection model's host expert step and the hot pool's window chain take at once; a longer prompt runs as sequential windows, each paying every routed layer's expert pass again. 0 (the default) lets the driver pick: 4096 where its plan fits with the wider window's scratch, else 2048. Rounded down to a multiple of 128, never under 128; the plan charges the panels at this count, so a wider window shortens the K/V mirror or the pool."
+    gpu_pf_rows : int64 = 0l
 
     @clarg_doc = "Stream each routed layer's expert stack to the device for the prompt, where the routed experts serve on the host (a hyper-connection model): pinned device-layout mirrors of every routed layer at load, two device slots of a layer's stack, the next layer's copy on the transfer queue while this one computes, the host summing nothing. 0 keeps the host's sums and the hot pool's window chain."
     gpu_pf_stream : bool = true
@@ -221,6 +221,10 @@ struct public GpuTierEnv {
 
     @clarg_doc = "The hot expert pool fills by DMA: a token's miss is copied off its pinned stack into the pool's coldest unpicked slot on the transfer queue, every miss a step and no host time, so the next token finds it; and a prompt's streamed window serves the pool's hits off their slots first and lands its busiest misses in the pool's free and coldest slots, so the decode behind the prompt starts warm. 0 keeps the host's gather-and-upload fill under its step budget and the window off the pool. The A/B knob."
     gpu_hot_dma : bool = true
+
+    @clarg_default_doc = "0"
+    @clarg_doc = "The share of a decode step's pool misses the DMA fill admits past the heat gate - the warmest first, each into the coldest unpicked slot, landing for the next step while this step's host sums them - so the pool's working set follows the stream instead of the gate's hot few. 0 keeps the heat gate alone; 1 admits every miss the tier can copy. Needs DASLLAMA_GPU_HOT_DMA."
+    gpu_hot_share : float = 0.0
 
     @clarg_doc = "Decode FFN tail: a resident expert layer's FFN carries the combine, the residual and the next layer's attention feed on the device, so the two submits share one fence wait; 0 collects every FFN on the host."
     gpu_dec_tail : bool = true
@@ -505,8 +509,8 @@ struct public VulkanEnv {
     @clarg_doc = "Pin REQUIRE_FULL_SUBGROUPS on every class pipeline (instrument; measured slower than plain pipelines on the mm_a gate shape, so those are the default)."
     vk_fullsg : bool = false
 
-    @clarg_doc = "Use a ReBAR device-local host-visible heap when one larger than 1GB is present."
-    vk_rebar : bool = true
+    @clarg_doc = "Place the planes in the ReBAR device-local host-visible memory type (one larger than 1 GB present) and write uploads straight into them. Off by default: on the NVIDIA WDDM driver a mapped plane is a host-side shadow the manager parks in system memory under pressure, and a host-experts plan then decodes at PCIe speed (gemma-4 26B Q8_0 8.1 tok/s mapped against 32.7 staged, the 35B-A3B 38 against 71: debug-jit readings, the ReBAR entry in modules/dasLLAMA/PERF_LEDGER.md) - the default stages every upload into unmapped device-local planes."
+    vk_rebar : bool = false
 
     @clarg_doc = "Arm the resident driver with f32 KV mirrors instead of the f16 default (A/B instrument; only sessions of the armed codec are served)."
     vk_kv32 : int64 = 0l
@@ -949,8 +953,11 @@ let public g_env_exchange = env_config(type<ExchangeEnv>)
 let public g_env_core = env_config(type<CoreEnv>)
 
 let public PF_WINDOW_MIN = 128l   //! the prompt window's floor and its rounding unit: the chain's tiles step rows by 128
+let public PF_ROWS_DEFAULT = 2_048l   //! the prompt window where neither a pin, the knob nor the driver's pick names one
+let public PF_ROWS_WIDE = 4_096l      //! the window the driver tries first: one expert sweep for a 3k prompt
 
-var private g_pf_rows_pin = 0l   //! the prompt window a program pinned in process (0 = the knob's)
+var private g_pf_rows_pin = 0l    //! the prompt window a program pinned in process (0 = the knob's)
+var private g_pf_rows_auto = 0l   //! the window the driver's plan picked where no pin and no knob named one (0 = none yet)
 
 //! the prompt window a program asks of the driver for the loads that follow, over DASLLAMA_GPU_PF_ROWS; 0 lifts the pin
 def public set_pf_window_rows_pin(rows : int64) {
@@ -960,8 +967,17 @@ def public set_pf_window_rows_pin(rows : int64) {
 //! the pin as it was written (0 = none): a fixture puts back what it found
 def public pf_window_rows_pin : int64 => g_pf_rows_pin
 
+//! the driver's own pick, under a pin and the knob: the widest window its plan fits with (0 = none picked)
+def public set_pf_window_rows_auto(rows : int64) {
+    g_pf_rows_auto = rows
+}
+
+//! true where neither a pin nor the knob names the window: the driver picks it at the plan
+def public pf_window_rows_unasked : bool => g_pf_rows_pin <= 0l && g_env_gpu.gpu_pf_rows <= 0l
+
 def public pf_window_rows : int64 {
-    let units = (g_pf_rows_pin > 0l ? g_pf_rows_pin : g_env_gpu.gpu_pf_rows) / PF_WINDOW_MIN
+    let asked = g_pf_rows_pin > 0l ? g_pf_rows_pin : (g_env_gpu.gpu_pf_rows > 0l ? g_env_gpu.gpu_pf_rows : (g_pf_rows_auto > 0l ? g_pf_rows_auto : PF_ROWS_DEFAULT))
+    let units = asked / PF_WINDOW_MIN
     return (units < 1l ? 1l : units) * PF_WINDOW_MIN   // nolint:PERF015 — the env module sees no math
 }
 

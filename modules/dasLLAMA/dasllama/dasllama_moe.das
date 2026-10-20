@@ -1023,6 +1023,16 @@ def moe_pick_tape_lane(first, stride, k : int64) {
 //! the replay's selects so far, and the own picks the tape did not carry
 def moe_pick_tape_stats() : tuple<seen : int64; miss : int64> => (seen = g_moe_tape_seen, miss = g_moe_tape_miss)
 
+//! the tape as recorded so far, copied out - a dump carries it to another process's replay ([[moe_pick_tape_replay_from]])
+def moe_pick_tape_picks() : array<int64> => <- clone_to_move(g_moe_tape)
+
+[arch(at="../ARCHITECTURE_ENGINE_MECHANISMS.md#moe-pick-tape")]
+def moe_pick_tape_replay_from(picks : array<int64>) {
+    g_moe_tape |> clear()
+    g_moe_tape |> push_from(picks)
+    moe_pick_tape(MoePickTape.replay)
+}
+
 //! the tape's mode, and a lane replay's stride (1 outside a lane)
 def moe_pick_tape_mode() : tuple<mode : MoePickTape; stride : int64> => (mode = g_moe_tape_mode, stride = g_moe_tape_stride)
 

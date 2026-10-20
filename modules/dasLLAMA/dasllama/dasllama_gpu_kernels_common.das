@@ -643,6 +643,8 @@ class template GkBlkSignedMax {
 }
 
 //! the workgroup reductions every row kernel of either home shares: one barrier a reduce, every thread summing the subgroup
+let GK_WG_MAX_SEED = -3.0e38   //! the workgroup max's seed (`wg_max_into` spells the literal: the MSL emitter reads no module constant in a kernel): a reduce over nothing above it reads this, under every finite lane value
+
 //! partials in the same order, so every thread holds the same sum or max; the lane primitives are each home's
 //! `gk_subgroup_add` / `gk_subgroup_max`, and the result lands by reference, the statement form the MSL emitter splices
 [ |> template_struct_instance]
@@ -681,7 +683,7 @@ class template GkWgReduce {
             part[slot * 64u + gl_SubgroupID] = sm
         }
         barrier()
-        m = -3.0e38
+        m = -3.0e38   // GK_WG_MAX_SEED spelled out: the MSL emitter reads no module constant inside a kernel body
         var sgi = 0u
         while (sgi < gl_NumSubgroups) {
             m = max(m, part[slot * 64u + sgi])

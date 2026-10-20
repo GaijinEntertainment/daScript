@@ -526,6 +526,7 @@ def test_image_mechanics(t : T?) {
         t |> equal(image_lane_name("a b|c/d"), "a-b-c-d", "a lane keeps letters, digits, _ and - alone")
         t |> equal(image_lane_name("", "fp32"), "{image_lane_name()}-fp32", "an off-q8 quant suffixes the lane")
         t |> equal(image_lane_name(METAL_IMAGE_TAG, "q8", true), "metal-mtp", "a split head riding the load suffixes the lane")
+        t |> equal(image_lane_name("vulkan", "q8", true, "D:/models/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf"), "vulkan-mtp-Qwen3-8-Flash-Next-shared-Q8_0", "... with the head file's stem folded in, its mtp- prefix dropped and its dots sanitized, so two heads take two lanes")
         let prev_serve = get_iq3s_serve_pin()
         let prev_devw = metal_devw_panels()
         set_iq3s_serve_pin("auto")
