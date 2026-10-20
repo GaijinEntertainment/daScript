@@ -475,6 +475,11 @@ def private ssbo_element_layout(var m : SpirvModule; sname : string; et : TypeDe
         return (ok = true, elem_type = emit_type(m, et),
             stride = round_up(block_scalar_size(bt), block_scalar_align(bt, BlockLayoutRules.std430)))
     }
+    // a 64-bit int element (array<uint64> / array<int64>): stride 8,
+    // e.g. a visibility buffer that 64-bit atomics pack depth + id into
+    if (bt == Type.tInt64 || bt == Type.tUInt64) {
+        return (ok = true, elem_type = emit_type(m, et), stride = 8)
+    }
     errors |> push("ssbo '{sname}' element type {bt} is not supported (an int/uint/float scalar of any lattice width, a 2/3/4-lane vector of those, or a struct of those)")
     return (ok = false, elem_type = 0u, stride = 0)
 }
@@ -699,12 +704,22 @@ def private is_emittable_value_type(t : TypeDecl?) : bool {
     if (matrix_info(t).ok) return true
     let bt = value_base_type(t)
     if (bt == Type.tFixedArray && t.firstType != null) return is_emittable_value_type(t.firstType)
-    // The 16/32-bit numerics and the 64-bit float carry a value; arith_width_ok is the one place that
-    // line is drawn, so the value rail and the arithmetic rail never disagree. A 64-bit INT lowers as
-    // an interface-block MEMBER only (no arithmetic, no local): admitting it here would give it an
-    // OpVariable no opcode can consume.
+    // The 8/16/32-bit numerics and the 64-bit float and ints carry a
+    // value; arith_width_ok is the one place that line is drawn, so
+    // the value rail and the arithmetic rail never disagree.
     let ni = numeric_info(bt)
     return (ni.ok && arith_width_ok(ni.cls, ni.width)) || bt == Type.tBool
+}
+
+// A 64-bit int carries a value in registers, SSBO elements and
+// atomics, but NOT across a stage interface: a 64-bit varying takes
+// two locations and Flat-only interpolation, which nothing here lays
+// out. Varyings stay 8..32-bit (and double); int64 ones fail closed.
+def private is_int64_value(t : TypeDecl?) : bool {
+    if (t == null) return false
+    let bt = value_base_type(t)
+    if (bt == Type.tFixedArray && t.firstType != null) return is_int64_value(t.firstType)
+    return bt == Type.tInt64 || bt == Type.tUInt64
 }
 
 // gl_MeshVerticesEXT / gl_PrimitiveTriangleIndicesEXT — the mesh per-vertex / per-primitive Output
@@ -1071,7 +1086,7 @@ def private classify_global(var m : SpirvModule; var ctx : EmitCtx; v : Variable
             // Fail-closed: the element must be an emittable varying type (scalar / vector / matrix), or
             // emit_type would panic on it (e.g. array<double> / array<SomeStruct>) -- mirror the
             // @workgroup guard so an unsupported element type is a clean compile error, not a crash.
-            if (!is_emittable_value_type(v._type.firstType)) {
+            if (!is_emittable_value_type(v._type.firstType) || is_int64_value(v._type.firstType)) {
                 errors |> push("mesh output '{vname}': array element type is not a supported varying type (scalar / vector / matrix)")
                 return
             }
@@ -1105,7 +1120,7 @@ def private classify_global(var m : SpirvModule; var ctx : EmitCtx; v : Variable
         // varying type validation (emit_type would panic on e.g. a double varying); 16-bit
         // varyings pull StorageInputOutput16; 8-bit varyings do not exist in Vulkan
         // (SPV_KHR_8bit_storage has no Input/Output storage class)
-        if (!is_emittable_value_type(v._type)) {
+        if (!is_emittable_value_type(v._type) || is_int64_value(v._type)) {
             errors |> push("stage variable '{vname}': type {v._type.baseType} is not a supported varying type")
             return
         }
@@ -2233,6 +2248,8 @@ def private scalar_type_name_class(name : string) : tuple<cls : int; width : int
     if (name == "int8") return (cls = 0, width = 8)
     if (name == "uint8") return (cls = 1, width = 8)
     if (name == "double") return (cls = 2, width = 64)
+    if (name == "int64") return (cls = 0, width = 64)
+    if (name == "uint64") return (cls = 1, width = 64)
     return (cls = -1, width = 0)
 }
 
@@ -2765,6 +2782,10 @@ def private emit_const_node(var m : SpirvModule; e : ExpressionPtr; var errors :
     if (cf != null) return (ok = true, id = const_float(m, cf.value))
     let cd = e ?as ExprConstDouble
     if (cd != null) return (ok = true, id = const_double(m, cd.value))
+    let ci64 = e ?as ExprConstInt64
+    if (ci64 != null) return (ok = true, id = const_int64(m, ci64.value))
+    let cu64 = e ?as ExprConstUInt64
+    if (cu64 != null) return (ok = true, id = const_uint64(m, cu64.value))
     let cb = e ?as ExprConstBool
     if (cb != null) return (ok = true, id = const_bool(m, cb.value))
     // 16/8-bit scalar constants (lattice VECTOR constants don't exist as nodes — they arrive
@@ -3743,6 +3764,18 @@ class SpirvEmit : AstVisitor {
     def override visitExprConstDouble(var expr : ExprConstDouble?) : ExpressionPtr {
         var bm & = unsafe(*m)
         e2id[intptr(expr)] = const_double(bm, expr.value)
+        return expr
+    }
+    // 64-bit integer literals (`32ul`, `0x8000000000000000ul`): a
+    // two-word OpConstant on %ulong / %long.
+    def override visitExprConstInt64(var expr : ExprConstInt64?) : ExpressionPtr {
+        var bm & = unsafe(*m)
+        e2id[intptr(expr)] = const_int64(bm, expr.value)
+        return expr
+    }
+    def override visitExprConstUInt64(var expr : ExprConstUInt64?) : ExpressionPtr {
+        var bm & = unsafe(*m)
+        e2id[intptr(expr)] = const_uint64(bm, expr.value)
         return expr
     }
     def override visitExprConstBool(var expr : ExprConstBool?) : ExpressionPtr {
@@ -5846,7 +5879,12 @@ class SpirvEmit : AstVisitor {
         // and ptr_of recovers its pointer (peel a defensive ExprRef2Value in case daslang loaded it).
         // Scope = Workgroup for shared memory, Device for buffer memory; Relaxed semantics (glslang's
         // default for GLSL atomics). 6-operand shape -> emit_n; CompSwap adds a comparator + neq-sem.
-        let acls = empty(expr.arguments) ? -1 : scalar_class(expr.arguments[0]._type.baseType)
+        // a 64-bit int target (int64 / uint64) classifies here, since
+        // scalar_class covers the 8..32-bit lattice only
+        let abt = empty(expr.arguments) ? Type.none : value_base_type(expr.arguments[0]._type)
+        let a64 = abt == Type.tInt64 || abt == Type.tUInt64
+        let acls = (empty(expr.arguments) ? -1
+            : (a64 ? (abt == Type.tInt64 ? 0 : 1) : scalar_class(abt)))
         let ainfo = atomic_info(name, acls)
         if (ainfo.ok) {
             let nargs = ainfo.compswap ? 3 : 2
@@ -5881,6 +5919,9 @@ class SpirvEmit : AstVisitor {
             }
             if (acls == 2) {
                 ensure_atomic_float_add(bm, *ctx)
+            }
+            if (a64) {
+                ensure_int64_atomics(bm)
             }
             let scope = rgi.storage == SpvStorageClass.Workgroup ? SpvScope.Workgroup : SpvScope.Device
             let sc_id = const_uint(bm, uint(scope))

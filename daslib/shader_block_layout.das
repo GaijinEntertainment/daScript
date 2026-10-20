@@ -91,7 +91,11 @@ enum public BlockLayoutRules {
     std430
 }
 
-def public arith_width_ok(cls, width : int) : bool => width <= 32 || (width == 64 && cls == 2)
+//! Widths that carry a value through arithmetic: each 8..32-bit class
+//! plus 64-bit float and ints (Int64 needs the shaderInt64 feature).
+//! `cls` stays in the signature; no class is width-restricted now.
+[unused_argument(cls)]
+def public arith_width_ok(cls, width : int) : bool => width <= 32 || width == 64
 
 def public arith_class(bt : Type) : int {
     let ni = numeric_info(bt)
