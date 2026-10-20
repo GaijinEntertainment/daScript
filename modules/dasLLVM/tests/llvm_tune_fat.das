@@ -115,7 +115,8 @@ def test_llvm_tune_fat(t : T?) { // nolint:STYLE038 - one flat spawn-and-assert 
     // 1. the fat build: one clone per class with a profile, the baseline's from its own profile;
     //    the IR dump shows each clone a noinline function lowered for its own class
     var lb : array<string>
-    let build_rc = spawn_child("{tune_env_prefix("fat", low, "")}\"{bin}\" -no-module-cache -exe -output \"{exe}\" \"{client}\" -- --jit-dump", lb)
+    let build_rc = spawn_child("{tune_env_prefix("fat", low, "")}\"{bin}\" -no-module-cache -exe "
+        + "-output \"{exe}.exe\" \"{client}\" -- --jit-dump", lb)
     t |> equal(build_rc, 0, "case 1: the fat exe builds\n{join(lb, "\n")}")
     t |> success(lb |> has("fat clones {top}=k2/profile, {low}=k0/profile"), "case 1: the build names every class clone and its source")
     t |> success(lb |> has("DAS_JIT_BASELINE={low}"), "case 1: the build targets the baseline class")
@@ -173,7 +174,9 @@ def test_llvm_tune_fat(t : T?) { // nolint:STYLE038 - one flat spawn-and-assert 
 
     // 6. fat needs the baseline class
     var ln : array<string>
-    t |> success(spawn_child("{tune_env_prefix("fat", "", "")}\"{bin}\" -no-module-cache -exe -output \"{exe}\" \"{client}\"", ln) != 0, "case 6: fat without a baseline refuses")
+    let fat_rc = spawn_child("{tune_env_prefix("fat", "", "")}\"{bin}\" -no-module-cache -exe "
+        + "-output \"{exe}.exe\" \"{client}\"", ln)
+    t |> success(fat_rc != 0, "case 6: fat without a baseline refuses")
     t |> success(ln |> has("needs DAS_JIT_BASELINE"), "case 6: the refusal names the knob\n{join(ln, "\n")}")
 
     delete ladder

@@ -1684,7 +1684,9 @@ def private release_manifest_env(manifest : string) : string {
 def private release_build_program(daslang, main_path, bundle_dir, name, deps_file, fat, manifest, force_args : string; main_scopes : array<string>; is_mac_app : bool; var shipped : array<string>) : int {
     let exe_path = path_join(bundle_dir, name)
     let module_args = release_module_args(get_command_line_arguments())
-    let cmd = "{release_fat_env(fat)}{release_manifest_env(manifest)}\"{daslang}\" -exe -output \"{exe_path}\" --list-shared-modules \"{deps_file}\"{force_args}{module_args} \"{main_path}\""
+    let cmd = ("{release_fat_env(fat)}{release_manifest_env(manifest)}\"{daslang}\" -exe "
+        + "-output \"{exe_path}.exe\" --list-shared-modules \"{deps_file}\"{force_args}"
+        + "{module_args} \"{main_path}\"")
     let mode_note = empty(fat) ? "" : " ({fat} class, fat)"
     log("  build: companion {name} from {base_name(main_path)}{mode_note}\n")
     let t0 = ref_time_ticks()
@@ -1740,7 +1742,7 @@ def private release_build_program(daslang, main_path, bundle_dir, name, deps_fil
 //! import library links a consumer against the exe's exports, which nothing does - and left in
 //! place they ride into the archive.
 def private release_drop_link_residue(exe_path : string) {
-    for (suffix in [".o", ".map", ".lib", ".exp"]) {
+    for (suffix in [".exe.o", ".map", ".lib", ".exp"]) {
         let p = "{exe_path}{suffix}"
         if (fexist(p)) {
             remove(p)
@@ -1796,7 +1798,6 @@ def private release_tuner_cmd(daslang : string; ts : TuneScopeDep; paranoid : bo
 def private release_elapsed(t0 : int64) : string =>
     fmt(":.1f", float(double(get_time_usec(t0)) / 1000000.0lf))
 
-// Bundle path for the standalone exe (daslang -exe appends `.exe` itself).
 def private bundle_exe_path(bundle_dir, bundle_name : string) : string =>
     path_join(bundle_dir, bundle_name)
 
@@ -2679,7 +2680,8 @@ def private release_in_workspace(root, out_dir, workspace : string; paranoid, qu
         return 1
     }
     let module_args = release_module_args(get_command_line_arguments())
-    let cmd = "{release_fat_env(fat)}\"{daslang}\" -exe -output \"{exe_path}\" --list-shared-modules \"{deps_file}\"{force_args}{module_args} \"{main_path}\""
+    let cmd = ("{release_fat_env(fat)}\"{daslang}\" -exe -output \"{exe_path}.exe\" "
+        + "--list-shared-modules \"{deps_file}\"{force_args}{module_args} \"{main_path}\"")
     if (!empty(fat)) {
         log("  build: fat exe for the {fat} class (DAS_JIT_BASELINE={fat}, DAS_TUNE_MODE=fat)\n")
     }

@@ -69,16 +69,11 @@ def tune_mode() : string {
 //! The jit codegen tier this process resolved: `--jit-opt-level` CLI over `policies.jit_opt_level`.
 //! Compile-time — lets policy defaults key off the tier (winners are raced under O3 codegen,
 //! so an O0 run cannot represent them and must not block on the tuner to mint them).
-def jit_cli_opt_level() : int {
-    let r <- parse_args(type<JitCliOptions>)
-    let cli = r |> unwrap_or_default
-    return cli.opt_level |> unwrap_or(compiling_program().policies.jit_opt_level)
-}
+def jit_cli_opt_level() : int =>
+    jit_cli_options_or_default().opt_level |> unwrap_or(compiling_program().policies.jit_opt_level)
 
-def jit_cli_compile_only() : bool {
-    let r <- parse_args(type<JitCliOptions>)
-    return jit_compile_only(r |> unwrap_or_default, get_ptr(compiling_program()))
-}
+def jit_cli_compile_only() : bool =>
+    jit_compile_only(jit_cli_options_or_default(), get_ptr(compiling_program()))
 
 var private g_cross_dump_noted = false
 

@@ -775,7 +775,10 @@ def private walk_and_convert_variant(data : uint8 const?; info : TypeDeclPtr; at
         let vindex = *reinterpret<int?>(data)
         let offset = get_variant_field_offset(info, vindex)
         var mkVariant = new ExprMakeVariant(at = at, makeType = clone_type(info))
-        var elem = walk_and_convert(data + offset, info.argTypes[vindex], at)
+        var elem : Expression?
+        if (!is_bare_variant_case(info, string(info.argNames[vindex]))) {
+            elem = walk_and_convert(data + offset, info.argTypes[vindex], at)
+        }
         var mkS = new MakeFieldDecl(at = at, name := info.argNames[vindex], value = elem)
         if (!info.argTypes[vindex].canCopy) {
             mkS.flags = MakeFieldDeclFlags.moveSemantics

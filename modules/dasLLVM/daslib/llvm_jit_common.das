@@ -1118,7 +1118,11 @@ def public lto_linker_args(opt_level : uint) : string {
 // verbatim extra-args slot. Under `lto` the objects are bitcode and the link gets the LTO arguments.
 // Returns false on any failure - the CALLER resets the jit globals and panics (this module cannot
 // reach reset_jit_globals_after_failure).
-def public link_from_objects(objs : array<string>; out_path : string; kind : JitArtifact; path_to_dascript_lib, path_to_linker, linker_string : string; link_whole_lib : bool; debug_info : bool; log_time : bool; lto : bool = false; opt_level : uint = 3u) : bool {
+def public link_from_objects(objs : array<string>; out_path : string; kind : JitArtifact;
+                             path_to_dascript_lib, path_to_linker, linker_string : string;
+                             link_whole_lib : bool; debug_info : bool; log_time : bool;
+                             lto : bool = false; opt_level : uint = 3u;
+                             static_runtime : bool = false) : bool {
     assert(!empty(objs))
     // every partition object must exist - create_shared_library checks only its first argument
     for (obj in objs) {
@@ -1142,7 +1146,9 @@ def public link_from_objects(objs : array<string>; out_path : string; kind : Jit
     }
     let phase_tm = ref_time_ticks()
     let extra = lto ? "\"@{rsp}\" {lto_linker_args(opt_level)} {linker_string}" : "\"@{rsp}\" {linker_string}"
-    let ok = create_shared_library(objs[0], artifact_path(out_path, kind), "{path_to_dascript_lib}", "{path_to_linker}", extra, kind != JitArtifact.exe, link_whole_lib, debug_info)
+    let ok = create_shared_library(objs[0], artifact_path(out_path, kind), "{path_to_dascript_lib}",
+        "{path_to_linker}", extra, kind != JitArtifact.exe, link_whole_lib, debug_info,
+        static_runtime)
     if (log_time) {
         to_log(LOG_INFO, "LLVM JIT time: link {jit_sec(get_time_usec(phase_tm))} ({length(objs)} {lto ? "bitcode partitions, LTO" : "objects"})\n")
     }
@@ -1165,7 +1171,8 @@ let public MIN_CONST_DATA_ELEMS = 4   //! below it a store per element is cheape
 def public write_artifact(mod : LLVMOpaqueModule?; out_path : string; kind : JitArtifact;
                           path_to_dascript_lib, path_to_linker, linker_string : string;
                           link_whole_lib : bool; use_host_cpu : bool; debug_info : bool = false;
-                          log_time : bool = false; codegen_opt_level : uint = 3u) : bool {
+                          log_time : bool = false; codegen_opt_level : uint = 3u;
+                          static_runtime : bool = false) : bool {
     var emitted = true
     with_default_target_machine(codegen_opt_level, kind == JitArtifact.jit_dll ? true : use_host_cpu) $(targetMachine : LLVMTargetMachineRef) {
         let error : string?
@@ -1184,7 +1191,8 @@ def public write_artifact(mod : LLVMOpaqueModule?; out_path : string; kind : Jit
             ok = create_static_library(file, target, "{path_to_linker}")
         } else {
             ok = create_shared_library(file, target, "{path_to_dascript_lib}", "{path_to_linker}",
-                "{linker_string}", kind != JitArtifact.exe, link_whole_lib, debug_info)
+                "{linker_string}", kind != JitArtifact.exe, link_whole_lib, debug_info,
+                static_runtime)
         }
         if (log_time) {
             to_log(LOG_INFO, "LLVM JIT time: emit-obj {jit_sec(t_emit)} link {jit_sec(get_time_usec(phase_tm))}\n")
@@ -1192,6 +1200,8 @@ def public write_artifact(mod : LLVMOpaqueModule?; out_path : string; kind : Jit
         if (!ok) {
             to_log(LOG_ERROR, "write_artifact: {kind == JitArtifact.static_lib ? "archive" : "link"} failed for {target}\n")
             emitted = false
+        } elif (kind == JitArtifact.exe && get_platform_name() == "linux") {
+            remove(file)
         }
     }
     return emitted

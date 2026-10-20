@@ -1,15 +1,20 @@
 options gen2
 options no_aot
+options rtti
 
 require dastest/testing_boost public
 require daslib/ast
 require daslib/ast_boost
 require daslib/ast_print
+require daslib/option
 require strings
 
 //! ast_print spells a make-variant of a case with no value as the
 //! bare case name, and a valued case as `name = value`, so a printed
-//! tree reads back as the source it came from.
+//! tree reads back as the source it came from. A value `$v` bakes
+//! (convert_to_expression) takes the same shape.
+
+typedef ValueTags = variant<amount : int; nada>
 
 def private fixture_path() : string => "{get_das_root()}/tests/ast/_variant_bare_case_fixture.das"
 
@@ -65,5 +70,17 @@ def test_missing_arm_report_spells_bare_case(t : T?) {
                 t |> success(reported, "unexpected report: {issues}")
             }
         }
+    }
+}
+
+[test]
+def test_baked_variant_bare_case(t : T?) {
+    ast_gc_guard() {
+        let bare = ValueTags(nada)
+        t |> equal(printed(convert_to_expression(bare, LineInfo())), "(nada)")
+        let valued = ValueTags(amount = 7)
+        t |> equal(printed(convert_to_expression(valued, LineInfo())), "(amount = 7)")
+        let nothing = none(type<string>)
+        t |> equal(printed(convert_to_expression(nothing, LineInfo())), "(none)")
     }
 }

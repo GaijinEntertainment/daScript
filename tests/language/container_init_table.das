@@ -1,5 +1,6 @@
 options gen2
 options persistent_heap   // heap_bytes_allocated only tracks individual frees on the persistent heap
+options no_coverage
 require dastest/testing_boost public
 
 struct Foo {

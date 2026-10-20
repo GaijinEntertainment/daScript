@@ -25,7 +25,7 @@ struct JitToolArgs {
 
     @clarg_short = "o"
     @clarg_name = "output"
-    @clarg_doc = "Output path. Empty keeps the default content-hashed .cache/daslang/<ns>/ naming (dll mode) or appends .exe (exe mode)."
+    @clarg_doc = "Output path, as given; empty: the hashed cache (dll), the script name (exe)"
     output : string
 
     @clarg_name = "lib-output-dir"
@@ -346,8 +346,11 @@ def jit_compile_one(input : string; tool : JitToolArgs; jit : JitCliOptions) : b
                     if (!empty(out_path)) {
                         let plat = get_platform_name()
                         let shared_ext = plat == "windows" ? ".dll" : (plat == "darwin" ? ".dylib" : ".so")
-                        let suffix = tool.aot_object ? ".o" : (tool.exe ? ".exe" : shared_ext)
+                        let suffix = tool.aot_object ? ".o" : (tool.exe ? "" : shared_ext)
                         to_log(LOG_INFO, "jit: wrote {target} for {input} -> {out_path}{suffix}\n")
+                    } elif (tool.exe) {
+                        let exe = default_exe_path(input)
+                        to_log(LOG_INFO, "jit: wrote {target} for {input} -> {exe}\n")
                     } else {
                         to_log(LOG_INFO, "jit: wrote {target} for {input} under .cache/daslang/{ns}/\n")
                     }

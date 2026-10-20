@@ -28,9 +28,10 @@ def private run_capture(cmd : string; var out : string&) : int {
 //! builds the fixture root with the given extra script args and runs the artifact; returns the run's stdout
 def private build_and_run(t : T?; dir : string; tag : string; extra_args : array<string>) : string {
     let root = "modules/dasLLVM/tests/_exe_native_paths_root.das"
-    let exe = path_join(dir, "{tag}.exe")   //! daslang -exe appends `.exe` to -output itself
+    let exe = path_join(dir, "{tag}.exe")
     var bout = ""
-    var argv <- [das_exe(), "-jit", "-exe", "-output", path_join(dir, tag), root]   //! argv, no shell: a path with spaces needs no quoting
+    //! argv, no shell: a path with spaces needs no quoting
+    var argv <- [das_exe(), "-jit", "-exe", "-output", exe, root]
     argv |> push_from(extra_args)
     let brc = run_and_capture(argv, bout, 300.0)
     t |> equal(0, brc, "the -exe build ({tag}) succeeds: {tail(bout)}")

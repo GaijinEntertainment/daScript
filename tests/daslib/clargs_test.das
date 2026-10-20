@@ -101,6 +101,18 @@ struct PositionalConfig {
 }
 
 [CommandLineArgs]
+struct OptionalValueConfig {
+    @clarg_positional
+    @clarg_doc = "input file"
+    input : string
+
+    @clarg_short = "d"
+    @clarg_optional_value
+    @clarg_doc = "dump target"
+    dump : Option<string>
+}
+
+[CommandLineArgs]
 struct PositionalArrayTailConfig {
     @clarg_positional
     @clarg_doc = "first arg"
@@ -1249,4 +1261,43 @@ def test_get_host_binary_relative_start(t : T?) {
     t |> equal(rc, 0, "the host starts by '{argv0}': {output}")
     let child = strip(output)
     t |> success(is_absolute(child) && fexist(child), "a host started by '{argv0}' finds itself by an absolute path, not '{child}'")
+}
+
+
+// --- @clarg_optional_value -----------------------------------------
+
+[test]
+def test_optional_value_flag(t : T?) {
+    t |> run("the bare flag gives an empty value and leaves the next token positional") @(t : T?) {
+        var r <- parse_args(type<OptionalValueConfig>, ["--dump", "main.das"])
+        t |> success(r |> is_ok, "parse succeeds")
+        let cfg <- r |> move_unwrap
+        t |> equal(cfg.dump |> unwrap_or("absent"), "")
+        t |> equal(cfg.input, "main.das")
+    }
+    t |> run("--flag=value gives the value") @(t : T?) {
+        var r <- parse_args(type<OptionalValueConfig>, ["main.das", "--dump=out.ll"])
+        let cfg <- r |> move_unwrap
+        t |> equal(cfg.dump |> unwrap_or(""), "out.ll")
+    }
+    t |> run("the short bare flag gives an empty value") @(t : T?) {
+        var r <- parse_args(type<OptionalValueConfig>, ["-d", "main.das"])
+        let cfg <- r |> move_unwrap
+        t |> equal(cfg.dump |> unwrap_or("absent"), "")
+        t |> equal(cfg.input, "main.das")
+    }
+    t |> run("short -d=value gives the value") @(t : T?) {
+        var r <- parse_args(type<OptionalValueConfig>, ["main.das", "-d=x.ll"])
+        let cfg <- r |> move_unwrap
+        t |> equal(cfg.dump |> unwrap_or(""), "x.ll")
+    }
+    t |> run("absent flag stays none") @(t : T?) {
+        var r <- parse_args(type<OptionalValueConfig>, ["main.das"])
+        let cfg <- r |> move_unwrap
+        t |> success(cfg.dump |> is_none, "dump is none")
+    }
+    t |> run("help renders the optional value") @(t : T?) {
+        let help = format_help(get_command_info(type<OptionalValueConfig>), "demo")
+        t |> success(find(help, "-d, --dump[=STRING]") != -1, "optional-value placeholder")
+    }
 }

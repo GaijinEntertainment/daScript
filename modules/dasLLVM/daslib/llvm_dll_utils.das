@@ -5,6 +5,7 @@ require jit
 
 require daslib/rtti
 require daslib/strings_boost
+require daslib/match
 require daslib/ast
 require daslib/templates_boost
 
@@ -287,19 +288,17 @@ enum public JitArtifact {
 }
 
 
+//! an exe is written to `path` as given; others append their suffix
 def public artifact_path(path : string; kind : JitArtifact) : string {
     let plat = get_platform_name()
-    var suffix = "o"
-    if (kind == JitArtifact.jit_dll) {
-        suffix = "dll"
-    } elif (kind == JitArtifact.exe) {
-        suffix = "exe"
-    } elif (kind == JitArtifact.static_lib) {
-        suffix = plat == "windows" ? "lib" : "a"
-    } elif (kind == JitArtifact.shared_lib) {
-        suffix = plat == "windows" ? "dll" : (plat == "darwin" ? "dylib" : "so")
+    return match (kind) {
+        JitArtifact.exe => path
+        JitArtifact.object => "{path}.o"
+        JitArtifact.jit_dll => "{path}.dll"
+        JitArtifact.static_lib => plat == "windows" ? "{path}.lib" : "{path}.a"
+        JitArtifact.shared_lib => (plat == "windows" ? "{path}.dll"
+            : (plat == "darwin" ? "{path}.dylib" : "{path}.so"))
     }
-    return "{path}.{suffix}"
 }
 
 

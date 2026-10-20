@@ -789,7 +789,7 @@ endif()
             FILE(APPEND ${_script}
 "message(STATUS \"Compiling to \${EXEDIR}/${_out_path}\")
 execute_process(
-    COMMAND \"\${DASLANG}\" -exe \"${_das}\" -output \"\${EXEDIR}/${_out_path}\"${_exe_jit_args}
+    COMMAND \"\${DASLANG}\" -exe \"${_das}\" -output \"\${EXEDIR}/${_out_path}.exe\"${_exe_jit_args}
     WORKING_DIRECTORY \"\${WORKDIR}\"
     RESULT_VARIABLE _rc OUTPUT_VARIABLE _out ERROR_VARIABLE _err)
 if(_rc)

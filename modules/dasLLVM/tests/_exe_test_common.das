@@ -16,9 +16,7 @@ def das_exe() : string {
     return find(to_generic_path(argv[0]), "/") < 0 ? argv[0] : get_full_file_name(normalize(argv[0]))
 }
 
-def tail(s : string) : string {
-    return slice(s, max(0, length(s) - 400))
-}
+def tail(s : string) : string => slice(s, max(0, length(s) - 400))
 
 def run_capture(cmd : string; var out : string&; timeout = 300.0) : int {
     return unsafe(popen_timeout(cmd, timeout, $(f) {
@@ -84,7 +82,7 @@ def lto_driver_missing() : string {
 def build_and_run(t : T?; dir : string; tag : string; root : string; jit_args : array<string>; build_says : array<string>) : string {
     let exe = path_join(dir, "{tag}.exe")
     var bout = ""
-    var argv <- [das_exe(), "-jit", "-exe", "-output", path_join(dir, tag), root]
+    var argv <- [das_exe(), "-jit", "-exe", "-output", exe, root]
     if (!empty(jit_args)) {
         argv |> push("--")
         argv |> push_from(jit_args)

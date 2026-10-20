@@ -286,7 +286,7 @@ foreach(util_path ${DAS_UTILS})
     # --jit-register-all-modules: the exe compiles daslang at run time, so a require of math/fio/ast_core/... resolves
     add_custom_command(
         OUTPUT  ${UTIL_BIN_DIR}/${util}.exe
-        COMMAND daslang -exe -output ${UTIL_BIN_DIR}/${util} ${UTIL_MAIN}
+        COMMAND daslang -exe -output ${UTIL_BIN_DIR}/${util}.exe ${UTIL_MAIN}
                 -- --jit-register-all-modules
                 ${DAS_JIT_LINKER_STRING}
         DEPENDS ${UTIL_MAIN} daslang ${DASLIB_SOURCES} ${DASLLVM_DASLIB_SOURCES}
@@ -357,8 +357,8 @@ add_dependencies(run_utils_tests das_shipped_exes)
 
 # -exe codegen check: the exes sit in bin/ for the runtime library, never under a shipped tool's name
 add_das_target(check_standalone_exes
-    COMMAND $<TARGET_FILE:daslang> -exe -output ${PROJECT_SOURCE_DIR}/bin/das-fmt-standalone ./utils/das-fmt/dasfmt.das
-    COMMAND $<TARGET_FILE:daslang> -exe -output ${PROJECT_SOURCE_DIR}/bin/das-lint ./utils/lint/main.das
+    COMMAND $<TARGET_FILE:daslang> -exe -output ${PROJECT_SOURCE_DIR}/bin/das-fmt-standalone.exe ./utils/das-fmt/dasfmt.das
+    COMMAND $<TARGET_FILE:daslang> -exe -output ${PROJECT_SOURCE_DIR}/bin/das-lint.exe ./utils/lint/main.das
     DEPENDS daslang
     WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     COMMENT "Building the standalone das-fmt and das-lint executables"

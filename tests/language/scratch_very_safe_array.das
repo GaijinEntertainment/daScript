@@ -1,6 +1,7 @@
 options gen2
 options persistent_heap = true
 options very_safe_context
+options no_coverage
 
 // scope: the array half of the scratch flag under very_safe_context
 // heap: persistent, 16-byte accounting, no pow2 bucketing - array asserts are exact

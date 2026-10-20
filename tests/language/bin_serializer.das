@@ -1,5 +1,6 @@
 options gen2
 options persistent_heap
+options no_coverage
 require dastest/testing_boost public
 
 [safe_when_uninitialized]

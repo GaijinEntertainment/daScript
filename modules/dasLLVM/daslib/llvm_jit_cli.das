@@ -5,6 +5,7 @@ module llvm_jit_cli shared private
 
 require daslib/clargs
 require daslib/ast_boost
+require daslib/fio
 
 //! Shared JIT command-line option schema.
 //!
@@ -44,8 +45,9 @@ struct public JitCliOptions {
 
     @clarg_short = "d"
     @clarg_name = "jit-dump"
-    @clarg_doc = "JIT: dump generated LLVM IR"
-    dump_ir : Option<bool>
+    @clarg_optional_value
+    @clarg_doc = "JIT: print the generated LLVM IR, or with =PATH write it to that file"
+    dump_ir : Option<string>
 
     @clarg_name = "jit-target"
     @clarg_doc = "JIT: cross-compile target triple (use with -exe; e.g. wasm32-unknown-emscripten)"
@@ -54,10 +56,6 @@ struct public JitCliOptions {
     @clarg_name = "jit-compile-only"
     @clarg_doc = "JIT: build + verify + optimize the module (print it with --jit-dump), then stop — no artifact written, no DLL loaded, no jitted function installed; the program runs interpreted. The cross-emission smoke rail (e.g. --jit-target=x86_64-unknown-linux-gnu with DAS_JIT_X64_FORCE_FEATURES)."
     compile_only : Option<bool>
-
-    @clarg_name = "jit-dump-to"
-    @clarg_doc = "JIT: write the --jit-dump IR to this file instead of the log"
-    dump_ir_path : Option<string>
 
     @clarg_name = "jit-runtime-lib"
     @clarg_doc = "JIT: explicit path to libDaScript_runtime.a (wasm cross-compile); overrides auto-locate under web/output/lib/"
@@ -95,8 +93,8 @@ struct public JitCliOptions {
     @clarg_doc = "JIT (-lib): export every function the program already marks [export], not only the [export_c] ones. Selection only - unlike -lib-export-all it marks nothing itself, so a non-representable signature is still a hard error. Script-level pin: options jit_lib_export_marked = true"
     lib_export_marked : Option<bool>
 
-    @clarg_name = "jit-lib-static"
-    @clarg_doc = "JIT (-lib): produce a static archive (.a / .lib) instead of a shared library; the host then links libDaScript_runtime itself (the generated header records what). Under this flag --jit-path-to-linker names the ARCHIVER (llvm-ar / ar / lib), not a linker"
+    @clarg_name = "jit-static"
+    @clarg_doc = "JIT (-lib, -exe): -lib writes an archive, -exe links the runtime in"
     lib_static : Option<bool>
 
     @clarg_name = "jit-lib-bindings"
@@ -106,6 +104,57 @@ struct public JitCliOptions {
     @clarg_name = "jit-register-all-modules"
     @clarg_doc = "JIT (-exe only): register all builtin native modules (math, fio, dasbind, ...) at exe startup, so a standalone compiler-driver exe can recompile arbitrary daslang at runtime"
     register_all_modules : Option<bool>
+
+    @clarg_name = "list-shared-modules"
+    @clarg_doc = "JIT (-exe): write a JSON of the shared modules it needs to this path"
+    list_shared_modules : Option<string>
+
+    @clarg_name = "force-shared-module"
+    @clarg_doc = "JIT (-exe): add a shared module to that JSON, by daslang or package name"
+    force_shared_module : array<string>
+
+    @clarg_name = "jit-help"
+    @clarg_doc = "JIT: print this list of JIT flags and exit"
+    jit_help : bool
+}
+
+//! The JIT flags of this run, read from the whole command line: the
+//! release flags come ahead of the script, the `--jit-*` flags after
+//! `--`, and no driver flag shares a name with one.
+def public jit_cli_options() : Result<JitCliOptions; string> =>
+    <- parse_args(type<JitCliOptions>, get_program_args())
+
+//! `jit_cli_options`, or the defaults when a flag fails to parse; the
+//! JIT entry reports that error
+def public jit_cli_options_or_default() : JitCliOptions {
+    let r <- jit_cli_options()
+    return <- r |> unwrap_or_default
+}
+
+//! where an -exe without -output goes: the script's name in the
+//! current directory, `.exe` added on Windows
+def public default_exe_path(script : string) : string =>
+    "{stem(script)}{get_platform_name() == "windows" ? ".exe" : ""}"
+
+
+//! The `--jit-help` text.
+def public jit_cli_help() : string =>
+    format_help(get_command_info(type<JitCliOptions>), "-jit|-exe|-lib <script>")
+
+//! The JIT entry's gate on its own flags: `--jit-help` prints them
+//! and ends the process, a flag that fails to parse is logged and
+//! fails the run - every later read takes the defaults.
+def public jit_cli_gate() : bool {
+    let r <- jit_cli_options()
+    if (r |> is_err) {
+        to_log(LOG_ERROR, "LLVM JIT: {r |> unwrap_err}\n")
+        return false
+    }
+    if ((r |> unwrap).jit_help) {
+        print(jit_cli_help())
+        unsafe(exit(0))
+    }
+    return true
 }
 
 //! `--jit-compile-only` over `options jit_compile_only`

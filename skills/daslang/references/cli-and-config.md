@@ -48,6 +48,7 @@ a repeatable flag. The long name is the field name with underscores as hyphens; 
 | `@clarg_env = "NAME"` | Environment twin. |
 | `@clarg_positional` | Consumed in declaration order. `string`, `Option<string>`, `array<string>` only; an array positional must be last; a required positional cannot follow an optional one; not combinable with `@clarg_short` or `@clarg_count`. |
 | `@clarg_count` | Plain `int`; sums occurrences, so `-v -v -v` gives `3`. **Short-flag bundling is not implemented** - `-vvv` parses as nothing and leaves the field `0`. |
+| `@clarg_optional_value` | An `Option<string>` flag whose value is optional: absent gives `none`, the bare flag `some("")`, `--flag=x` `some("x")`; the next token is never taken as the value. Help shows `--flag[=STRING]`. |
 | `@clarg_mutex_group = "name"` | Mutually exclusive group. |
 | `@clarg_skip` | Excludes the field from the CLI schema. |
 | `Option<T>` field type | Distinguishes "not supplied" from the zero value (`require daslib/option`). |

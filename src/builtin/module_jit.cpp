@@ -290,7 +290,50 @@ namespace das {
         return true;
     }
 
-    bool create_shared_library ( const char * objFilePath, const char * libraryName, [[maybe_unused]] const char * dasLib, const char * customLinker, const char * extraLinkerArgs, bool isShared, bool linkWholeLib, [[maybe_unused]] bool debugInfo, Context *context ) {
+#if !defined(_WIN32) && !defined(_WIN64)
+    static string static_runtime_lib_dir ( const char * dasLib ) {
+        return (dasLib && dasLib[0]) ? get_prefix(dasLib) + "/" : getDasRoot() + "/lib/";
+    }
+
+    static std::string static_runtime_link_cmd ( const string & linker, const char * objFilePath, const char * libraryName, const string & lib, bool linkWholeLib, const char * extra ) {
+        const auto compilerLibrary = linkWholeLib ? "\"" + lib + "liblibDaScript.a\" " : string();
+    #if defined(__APPLE__)
+        return fmt::format(FMT_STRING("\"{}\" -o \"{}\" \"{}\" {} {}\"{}liblibDaScript_runtime.a\" \"{}liblibUriParser.a\" -lpthread -lm 2>&1"),
+                           linker.c_str(), libraryName, objFilePath, extra, compilerLibrary.c_str(), lib.c_str(), lib.c_str());
+    #else
+        return fmt::format(FMT_STRING("\"{}\" -o \"{}\" \"{}\" {} -Wl,--start-group {}\"{}liblibDaScript_runtime.a\" \"{}liblibUriParser.a\" -Wl,--end-group -lpthread -ldl -lm 2>&1"),
+                           linker.c_str(), libraryName, objFilePath, extra, compilerLibrary.c_str(), lib.c_str(), lib.c_str());
+    #endif
+    }
+#endif
+
+    bool create_shared_library ( const char * objFilePath, const char * libraryName, [[maybe_unused]] const char * dasLib, const char * customLinker, const char * extraLinkerArgs, bool isShared, bool linkWholeLib, [[maybe_unused]] bool debugInfo, bool staticRuntime, Context *context ) {
+        if ( staticRuntime ) {
+        #if defined(_WIN32) || defined(_WIN64)
+            LOG(LogLevel::error) << "A static-runtime executable is not supported on Windows\n";
+            return false;
+        #else
+            if ( isShared ) {
+                LOG(LogLevel::error) << "A static runtime links only into an executable\n";
+                return false;
+            }
+            if ( !check_file_present(objFilePath) ) {
+                LOG(LogLevel::error) << "File '" << objFilePath << "' , containing compiled definitions, does not exist\n";
+                return false;
+            }
+            const auto lib = static_runtime_lib_dir(dasLib);
+            for ( const char * archive : { "liblibDaScript_runtime.a", "liblibUriParser.a", linkWholeLib ? "liblibDaScript.a" : nullptr } ) {
+                if ( archive && !check_file_present((lib + archive).c_str()) ) {
+                    LOG(LogLevel::error) << "File '" << lib << archive << "' , containing the static daslang runtime, does not exist\n";
+                    return false;
+                }
+            }
+            const string linker = (customLinker && customLinker[0]) ? customLinker : "c++";
+            const char * extra = (extraLinkerArgs && extraLinkerArgs[0]) ? extraLinkerArgs : "";
+            const auto cmd = static_runtime_link_cmd(linker, objFilePath, libraryName, lib, linkWholeLib, extra);
+            return run_link_cmd(cmd.c_str(), libraryName, "Executable", context);
+        #endif
+        }
         // cmd is built via fmt::format (heap-allocated std::string) rather
         // than a fixed stack buffer — long paths (deep build roots, spaces,
         // long extraLinkerArgs) can easily exceed a few hundred bytes, and
@@ -411,7 +454,7 @@ namespace das {
         return run_link_cmd(cmd.c_str(), libraryName, "Archive", context);
     }
 #else
-    bool create_shared_library ( const char * objFilePath, const char * libraryName, [[maybe_unused]] const char * dasLib, const char * customLinker, const char * extraLinkerArgs, bool isShared, bool linkWholeLib, bool debugInfo, Context *context ) { return true; }
+    bool create_shared_library ( const char * objFilePath, const char * libraryName, [[maybe_unused]] const char * dasLib, const char * customLinker, const char * extraLinkerArgs, bool isShared, bool linkWholeLib, bool debugInfo, bool staticRuntime, Context *context ) { return true; }
     bool create_static_library ( const char * objFilePath, const char * libraryName, const char * customTool, Context * context ) { return true; }
 #endif
 
@@ -777,7 +820,7 @@ namespace das {
                     ->args({"library"});
             addExternInline<DAS_BIND_FUN(create_shared_library)>(*this, lib,  "create_shared_library",
                 SideEffects::worstDefault, "create_shared_library")
-                    ->args({"objFilePath","libraryName","dasLib","customLinker","extraLinkerArgs","isShared","linkWholeLib","debugInfo","context"});
+                    ->args({"objFilePath","libraryName","dasLib","customLinker","extraLinkerArgs","isShared","linkWholeLib","debugInfo","staticRuntime","context"});
             addExternInline<DAS_BIND_FUN(create_static_library)>(*this, lib,  "create_static_library",
                 SideEffects::worstDefault, "create_static_library")
                     ->args({"objFilePath","libraryName","customTool","context"});

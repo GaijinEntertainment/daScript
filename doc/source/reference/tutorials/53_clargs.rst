@@ -228,6 +228,10 @@ Field annotations fine-tune the flag a field becomes:
 ``@clarg_count``
     Sums every occurrence of the flag into a plain ``int`` field.
 
+``@clarg_optional_value``
+    Makes the value of an ``Option<string>`` flag optional: the bare flag
+    gives ``""``, ``--flag=x`` gives ``"x"``, and the next token is never taken.
+
 ``@clarg_mutex_group = "name"``
     Puts the flag in a group whose members exclude each other.
 

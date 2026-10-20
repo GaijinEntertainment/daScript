@@ -13,6 +13,7 @@ module llvm_jit_link shared private
 //! there, so a warm run never loads the emitter's contexts.
 
 require llvm/daslib/llvm_jit_plan
+require llvm/daslib/llvm_jit_cli
 require daslib/ast_boost
 require daslib/cross_context
 require jit
@@ -60,12 +61,17 @@ def public run_jit_linked(prog : Program?; var ctx : Context?) : bool {
     if (prog.policies.aot && !prog.policies.jit_emit_object && !prog.policies.jit_enabled) {
         return true
     }
+    return false if (!jit_cli_gate())
     let totalTime = ref_time_ticks()
     var phase_tm = ref_time_ticks()
     var plan <- make_jit_plan(prog, ctx, true)
+    if (!empty(plan.refusal)) {
+        to_log(LOG_ERROR, "LLVM JIT: {plan.refusal}\n")
+        return false
+    }
     return false if (report_collect_errors(plan))
     let t_hash = get_time_usec(phase_tm)
-    if (!plan.use_dll) {
+    if (!plan.use_dll || plan.dump_ir) {
         return run_jit_in_emitter(prog, ctx, plan.log_jit_time, t_hash, 0)
     }
     if (empty(plan.candidates) && !plan.gen_lib) {
