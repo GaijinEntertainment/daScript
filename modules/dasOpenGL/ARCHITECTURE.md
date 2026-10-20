@@ -48,3 +48,13 @@ cross-compile target is `emscripten` - and compiles out there. On that target `t
 answers false without reading the context, and each entry point only DSA serves - the
 `glTextureParameteri` and array `glNamedBufferData` / `glNamedBufferStorage` overloads, the
 named `bind_vertex_buffer` - panics, so code shared with desktop still compiles.
+
+## Explicit loose-uniform uploads
+
+A `@uniform` global marked `@opengl_manual_binding` remains declared and usable in
+the generated GLSL, but `<shader>_bind_uniform` omits its host upload. The caller
+owns binding it with `glUniformBound` whenever the active shader path reads it.
+`@opengl_manual_binding = false` retains automatic binding. This is useful for
+large optional palettes: skip both cache comparison and upload for dormant paths,
+then use the ordinary cache/invalidation rules when the path becomes active.
+Unsupported interface-type validation still runs before the opt-out.

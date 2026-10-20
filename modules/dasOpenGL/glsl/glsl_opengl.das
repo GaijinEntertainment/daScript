@@ -296,6 +296,8 @@ def private generate_bind_uniform(fnMain : FunctionPtr; var fn : FunctionPtr; pa
                         "uniform '{vv.name}': 16/8-bit lattice types are not supported in shader interfaces (in/out/uniform/ssbo) yet")
                     continue
                 }
+                // Keep the GLSL declaration; the renderer owns uploads for this uniform.
+                if (vv.annotation |> find_arg("opengl_manual_binding") ?as tBool ?? false) { continue }
                 if (is_glsl_structure(vv, "sampler2D")) {
                     emit_combined_sampler_bind(blk, vv, "texture2D", "bind_sampler_2d")
                 } elif (is_glsl_structure(vv, "sampler3D")) {

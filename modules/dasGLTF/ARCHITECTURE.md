@@ -82,3 +82,12 @@ The opaque program has no material inputs, binds no textures and leaves the call
 texture bindings untouched. The masked program adds UV0, vertex colour, base-colour factor and texture, alpha mode, cutoff and the
 unlit flag, preserving alpha coverage. An opaque material's alpha cuts no hole. Blended
 surfaces cast no shadow. The renderer releases both programs in `finalize`.
+
+## Conditional joint-palette binding
+
+The OpenGL renderer binds current joint uniforms explicitly only for skinned nodes.
+Rigid draws neither upload nor compare the 64-matrix palette. Motion draws bind
+the previous palette only for a skinned node with valid previous-pose motion.
+The same helper covers opaque/masked depth, surface/motion, silhouette and colour
+passes. Palette uniforms remain in the shaders; skinned draws use ordinary
+`glUniformBound` ownership epochs, including transitions after rigid draws.

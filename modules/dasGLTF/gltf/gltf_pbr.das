@@ -40,7 +40,7 @@ var @in @location = 7 a_weights0 : float4   // per-joint blend weights (sum to 1
 var @uniform u_model : float4x4
 var @uniform u_viewProj : float4x4
 var @uniform u_skinned  : float                    // 1 = blend the joint palette, 0 = rigid (use u_model)
-var @uniform u_joints   : float4x4[GLTF_MAX_JOINTS] // world-space skinning palette (joint.world * inverseBind)
+var @uniform @opengl_manual_binding u_joints   : float4x4[GLTF_MAX_JOINTS] // world-space skinning palette (joint.world * inverseBind)
 var @uniform u_normal_matrix : float3x3            // inverse-transpose of u_model's 3x3 (rigid-path normals)
 
 var @inout v_world_pos : float3
@@ -51,7 +51,7 @@ var @inout v_uv0 : float2
 var @inout v_color0 : float4
 var @uniform u_previous_model : float4x4
 var @uniform u_previous_vp : float4x4
-var @uniform u_previous_joints : float4x4[GLTF_MAX_JOINTS]
+var @uniform @opengl_manual_binding u_previous_joints : float4x4[GLTF_MAX_JOINTS]
 var @uniform u_motion_jitter : float2
 var @uniform u_motion_kind : int
 var @inout v_motion_current : float4
@@ -516,7 +516,7 @@ def gltf_pbr_render_depth(var r : GltfPbrRenderer; model : GltfGlModel; scene : 
                 }
                 gl_use_program_filtered(r.depthMaskProgram)
                 bind_alpha_material(model, mat)
-                gltf_mask_depth_vs_bind_uniform(r.depthMaskProgram)
+                bind_joint_uniforms(r.depthMaskProgram); gltf_mask_depth_vs_bind_uniform(r.depthMaskProgram)
                 gltf_pbr_depth_fs_bind_uniform(r.depthMaskProgram)
             } else {
                 if (r.depthProgram == 0u) {
@@ -524,12 +524,19 @@ def gltf_pbr_render_depth(var r : GltfPbrRenderer; model : GltfGlModel; scene : 
                         @@gltf_opaque_depth_vs, @@gltf_opaque_depth_fs)
                 }
                 gl_use_program_filtered(r.depthProgram)
-                gltf_opaque_depth_vs_bind_uniform(r.depthProgram)
+                bind_joint_uniforms(r.depthProgram); gltf_opaque_depth_vs_bind_uniform(r.depthProgram)
             }
             gltf_gl_draw_primitive(glp)
         }
     }
     gl_release_program()
+}
+
+// Rigid shader paths do not read either palette. Avoid comparing/uploading them.
+def private bind_joint_uniforms(program : uint; motion : bool = false) {
+    if (u_skinned <= .5) { return }
+    glUniformBound(program, "u_joints", u_joints)
+    if (motion && u_motion_kind == 1) { glUniformBound(program, "u_previous_joints", u_previous_joints) }
 }
 
 def private bind_previous_pose(scene : GltfScene; node : GltfNode; node_index : int; previous : GltfMotionPose){
@@ -576,6 +583,7 @@ def gltf_pbr_render_normals(var r : GltfPbrRenderer; model : GltfGlModel; scene 
                 if (mat.alphaMode == GltfAlphaMode.blend){continue}
                 bind_material(model, mat)
             }else{bind_material(model, GltfMaterial())}
+            bind_joint_uniforms(program, motion_buffer)
             if (motion_buffer){gltf_pbr_motion_vs_bind_uniform(program); gltf_pbr_surface_motion_fs_bind_uniform(program)}else{gltf_pbr_vs_bind_uniform(program); if (surface_buffer){gltf_pbr_surface_fs_bind_uniform(program)}elif (material_buffer){gltf_pbr_material_fs_bind_uniform(program)}else{gltf_pbr_normal_fs_bind_uniform(program)}}
             gltf_gl_draw_primitive(glp)
         }
@@ -600,7 +608,7 @@ def gltf_pbr_render_silhouette(var r : GltfPbrRenderer; model : GltfGlModel; sce
                 if (mat.alphaMode == GltfAlphaMode.blend){continue}
                 bind_material(model, mat)
             }else{bind_material(model, GltfMaterial())}
-            gltf_pbr_vs_bind_uniform(r.silhouetteProgram); gltf_pbr_silhouette_fs_bind_uniform(r.silhouetteProgram)
+            bind_joint_uniforms(r.silhouetteProgram); gltf_pbr_vs_bind_uniform(r.silhouetteProgram); gltf_pbr_silhouette_fs_bind_uniform(r.silhouetteProgram)
             gltf_gl_draw_primitive(glp)
         }
     }
@@ -664,6 +672,7 @@ def gltf_pbr_render(var r : GltfPbrRenderer; model : GltfGlModel; scene : GltfSc
             } else {
                 bind_material(model, GltfMaterial(), opacity)
             }
+            bind_joint_uniforms(r.program)
             gltf_pbr_vs_bind_uniform(r.program)
             gltf_pbr_fs_bind_uniform(r.program)
             gltf_gl_draw_primitive(glp)
