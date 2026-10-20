@@ -40,7 +40,7 @@ require dasllama/dasllama_gemm_schema   // the q8 block geometry the mint's zero
 // WhisperModel.enc) contribute their planes under dotted names ("enc.fblob"); string-array
 // fields ride the meta blob via serialize_strings — raw string pointers can't be planes.
 
-let IMAGE_VERSION = 52   // a streamed mint's plan is the live load's: the ring and the carve are decided off the formats, not the dry tier
+let IMAGE_VERSION = 53   // a trimmed Vulkan lane's plan carries its host-layer split as a `VkBakeRole.host_split` marker entry
 
 //! The metal (blob-only) flavor's identity tag: q8 planes ride the 34B block_q8_0 blob and the
 //! kq scale planes their GPU forms (convert_model_to_metal_blob) — flavors are per-config and
@@ -98,9 +98,15 @@ def private lane_sanitize(s : string) : string {
     }
 }
 
+//! the head's fold into a lane: its file's stem with the `mtp-` prefix dropped, sanitized - two heads on one trunk take two lanes
+def private head_lane_fold(head : string) : string {
+    let st = stem(base_name(head))
+    return lane_sanitize((st |> starts_with("mtp-")) ? slice(st, 4, length(st)) : st)
+}
+
 //! `with_head`: a split NextN head rides the load, so the trunk-alone and the headed image never share a path
 [arch(at = "../ARCHITECTURE_IMAGE.md#image-lane-name")]
-def image_lane_name(tag : string = ""; quant : string = "q8"; with_head : bool = false) : string {
+def image_lane_name(tag : string = ""; quant : string = "q8"; with_head : bool = false; head : string = "") : string {
     var lane = ""
     let serve = iq3s_serve_mode()
     let serve_fold = serve == "lut" || serve == "grid" ? "-{serve}" : ""
@@ -122,7 +128,7 @@ def image_lane_name(tag : string = ""; quant : string = "q8"; with_head : bool =
         lane = "{lane}-{quant}"
     }
     if (with_head) {
-        lane = "{lane}-mtp"
+        lane = empty(head) ? "{lane}-mtp" : "{lane}-mtp-{head_lane_fold(head)}"
     }
     return lane_sanitize(lane)
 }
@@ -136,7 +142,8 @@ def private legacy_image_path(gguf_path : string; tag : string; quant : string) 
 
 [arch(at = "../ARCHITECTURE_IMAGE.md#image-lane-name"), arch(at = "../ARCHITECTURE_IMAGE.md#image-identity-head-fold")]
 def image_path_for(gguf_path : string; tag : string = ""; quant : string = "q8") : string {
-    let lane = image_lane_name(tag, quant, !empty(mtp_head_sidecar(gguf_path)))
+    let side = mtp_head_sidecar(gguf_path)
+    let lane = image_lane_name(tag, quant, !empty(side), side)
     let path = "{gguf_path}.{lane}.dlim"
     if (!stat(path).is_valid) {
         let old = legacy_image_path(gguf_path, tag, quant)
@@ -2188,7 +2195,10 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32;
                 if (want_metal && !mt.metal_blob) {
                     return false
                 }
-                if (vk_tag != "" && vulkan_trim()) {
+                if (!empty(kept_why) && kept_why |> starts_with(TRIM_SPLIT_DECLINE)) {
+                    mint_held = true
+                    to_log(LOG_WARNING, "dasLLAMA: the trimmed vulkan lane on disk was minted under another host-layer split ({kept_why}) - it stays, this run serves planar from memory and writes no lane\n")
+                } elif (vk_tag != "" && vulkan_trim()) {
                     let trim_why = resident_trim_decline(mt)
                     mt.planes_trimmed = empty(trim_why)
                     if (!mt.planes_trimmed) {

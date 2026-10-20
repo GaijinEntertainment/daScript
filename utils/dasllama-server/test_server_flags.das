@@ -60,6 +60,13 @@ def test_cli_has_flag(t : T?) {
 }
 
 [test]
+def test_mtp_accept_default(t : T?) {
+    t |> run("the acceptance a process starts with is rejection sampling - the lossless walk over the head's whole distribution; this file never sets it") @(t : T?) {
+        t |> equal(int(get_mtp_accept()), int(MtpAccept.rejection), "the default acceptance ({get_mtp_accept()})")
+    }
+}
+
+[test]
 def test_mtp_setting_tri_state(t : T?) {
     t |> run("a key the TOML or --mtp set pins 0 / 1; unset is -1 and each slot decides") @(t : T?) {
         t |> equal(mtp_setting(true, true), 1, "mtp = true")
@@ -93,13 +100,31 @@ def test_mtp_setting_tri_state(t : T?) {
         t |> success(prefills_on_gpu(false, "gpu:rails"), "a model the device serves in part still prefills there")
         t |> success(!prefills_on_gpu(false, "cpu"), "a CPU slot beside another slot's armed model")
     }
+}
+
+[test]
+def test_slot_chunk_defaults(t : T?) {
+    t |> run("a slot's chunk defaults read its own arm outcome: the CPU's short chunk and one-window idle chunk, a GPU's one-window chunk and the idle floor, the resident driver's idle chunk at its prompt window or wider") @(t : T?) {
+        let cpu = slot_chunk_defaults(false, "cpu")
+        t |> equal(cpu.chunk, 64l, "a CPU slot's chunk is the short one")
+        t |> equal(cpu.idle, DEFAULT_CHUNK_TOKENS, "a CPU slot's idle chunk is one window")
+        let metal = slot_chunk_defaults(true, "cpu")
+        t |> equal(metal.chunk, DEFAULT_CHUNK_TOKENS, "the Metal flavor's chunk is one window")
+        t |> equal(metal.idle, GPU_IDLE_CHUNK_TOKENS, "the Metal flavor's idle chunk is the GPU floor")
+        let resident = slot_chunk_defaults(false, "gpu:resident")
+        t |> equal(resident.chunk, DEFAULT_CHUNK_TOKENS, "the resident driver's chunk is one window")
+        t |> success(resident.idle >= GPU_IDLE_CHUNK_TOKENS, "the resident driver's idle chunk is the floor or the driver's wider prompt window ({resident.idle})")
+    }
+}
+
+[test]
+def test_slot_arm_rules(t : T?) {
     t |> run("a slot arms on one stream whose decode runs on a GPU the model's row lists") @(t : T?) {
-        t |> success(mtp_auto_arms(1l, true, "cpu", false, "metal"), "the Metal flavor - its tier word reads cpu")
-        t |> success(mtp_auto_arms(1l, false, "gpu:resident", false, "vulkan"), "the whole model resident on a Vulkan device")
-        t |> success(!mtp_auto_arms(1l, true, "cpu") && !mtp_auto_arms(1l, false, "gpu:resident", false, "metal"), "a row listing no platform, or Metal alone on a Vulkan device: plain")
-        t |> success(!mtp_auto_arms(1l, false, "gpu:resident", true, "vulkan"), "... but not where its routed experts sum on the host (the round loses there)")
-        t |> success(!mtp_auto_arms(1l, false, "gpu:rails", false, "vulkan") && !mtp_auto_arms(1l, false, "cpu", false, "metal, vulkan"), "a model the device serves in part; the CPU")
-        t |> success(!mtp_auto_arms(4l, true, "cpu", false, "metal") && !mtp_auto_arms(4l, false, "gpu:resident", false, "vulkan"), "four streams on Metal or on a Vulkan device")
+        t |> success(mtp_auto_arms(1l, true, "cpu", "metal"), "the Metal flavor - its tier word reads cpu")
+        t |> success(mtp_auto_arms(1l, false, "gpu:resident", "vulkan"), "the whole-model driver on a Vulkan device - the experts on the card or summed on the host alike, the round wins at the NextN depth on both")
+        t |> success(!mtp_auto_arms(1l, true, "cpu") && !mtp_auto_arms(1l, false, "gpu:resident", "metal"), "a row listing no platform, or Metal alone on a Vulkan device: plain")
+        t |> success(!mtp_auto_arms(1l, false, "gpu:rails", "vulkan") && !mtp_auto_arms(1l, false, "cpu", "metal, vulkan"), "a model the device serves in part; the CPU")
+        t |> success(!mtp_auto_arms(4l, true, "cpu", "metal") && !mtp_auto_arms(4l, false, "gpu:resident", "vulkan"), "four streams on Metal or on a Vulkan device")
     }
     t |> run("an unset ASR dispatch joins the team when every LLM slot decodes on a GPU") @(t : T?) {
         t |> success(decodes_on_gpu(true, "cpu"), "the Metal flavor - its tier word reads cpu")
@@ -312,14 +337,21 @@ def private slot_mtp_device_home(t : T?; file : string) {
         s.model <- load_model_(path, QuantMode.q8)
         s.model.config.seq_len = min(s.model.config.seq_len, 512l)
         t |> success(moe_gpu_resident_active(), "the whole-model driver armed on the NextN-headed model (the load log names any decline)")
-        if (moe_gpu_resident_active() && gpu_resident_experts_host()) {
-            t |> skip("the driver sums the routed experts on the host on this card: the auto-arm leaves the round off there")
+        s.experts_host = gpu_resident_experts_host()
+        if (s.experts_host) {
+            s.backend_effective = gpu_slot_capture(s.gpu_marks)
+            t |> equal(s.backend_effective, "gpu:resident", "the capture names the resident driver")
+            t |> success(!gpu_resident_experts_host(), "with the slot's marks parked the live predicate reads false - the trap the slot's field exists for")
+            t |> success(mtp_auto_arms(1l, false, s.backend_effective, "vulkan"), "the auto-arm arms the round where the routed experts sum on the host: the NextN depth wins there")
+            t |> success(!decodes_on_gpu(false, s.backend_effective, s.experts_host), "the worker team stays with a slot whose experts sum on the host")
+            moe_gpu_model_marks_restore(s.gpu_marks)
+            t |> success(gpu_resident_experts_host(), "the marks restored, the live predicate reads the host experts again")
             delete s.model
             return
         }
         s.backend_effective = "gpu:resident"
         s.gpu_regions = gpu_device_sessions()
-        let spec = mtp_auto_arms(1l, false, s.backend_effective, gpu_resident_experts_host(), "vulkan")
+        let spec = mtp_auto_arms(1l, false, s.backend_effective, "vulkan")
         t |> success(spec, "the unset mtp arms one stream whose decode the whole-model driver serves, on a catalog row listing vulkan")
         s.sched <- create_scheduler(s.model, 1l, 4l, 64l, SLOT_PAGE_ROWS, (s.model.config.seq_len + SLOT_PAGE_ROWS - 1l) / SLOT_PAGE_ROWS,
                                     KVDtype.f16, spec)
@@ -370,7 +402,7 @@ def test_slot_mtp_device_home_moe(t : T?) {
 [test]
 def test_mtp_catalog_platforms(t : T?) {
     t |> run("the catalog's serve_mtp is read off the model file's base name; a file with no row lists none") @(t : T?) {
-        t |> equal(catalog_mtp_platforms("/models/Qwen3.8-27B-UD-Q4_K_M.gguf"), "metal", "the Qwen3.8-27B row lists metal")
+        t |> equal(catalog_mtp_platforms("/models/Qwen3.8-27B-UD-Q4_K_M.gguf"), "metal, vulkan", "the Qwen3.8-27B row lists both platforms: whole on either, the round measured a win on both")
         t |> equal(catalog_mtp_platforms("Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf"), "vulkan", "the Qwen3.6-35B MTP row lists vulkan")
         t |> equal(catalog_mtp_platforms("Qwen3.6-35B-A3B-UD-Q4_K_M.gguf"), "", "the head-less Qwen3.6-35B file has nothing to draft with")
         t |> equal(catalog_mtp_platforms("/models/no-such-model.gguf"), "", "no row, no platform")
@@ -403,10 +435,10 @@ def test_slot_mtp_platforms(t : T?) {
         let opts = boot_slot_opts(ModelEntry(path = listed))
         t |> equal(opts.mtp, -1, "the entry leaves mtp unset")
         t |> equal(opts.mtp_platforms, "vulkan", "the catalog row's platforms")
-        t |> success(slot_mtp_arms(opts, -1, 1l, false, "gpu:resident", false),
+        t |> success(slot_mtp_arms(opts, -1, 1l, false, "gpu:resident"),
             "one resident stream on the listed device arms")
         let plain = boot_slot_opts(ModelEntry(path = no_row))
-        t |> success(!slot_mtp_arms(plain, -1, 1l, false, "gpu:resident", false),
+        t |> success(!slot_mtp_arms(plain, -1, 1l, false, "gpu:resident"),
             "no catalog row: plain")
     }
     t |> run("a runtime POST load's options") @(t : T?) {
@@ -414,22 +446,22 @@ def test_slot_mtp_platforms(t : T?) {
         t |> equal(opts.backend, "auto")
         t |> equal(opts.mtp, -1, "the load leaves mtp unset")
         t |> equal(opts.mtp_platforms, "vulkan", "the catalog row's platforms")
-        t |> success(slot_mtp_arms(opts, -1, 1l, false, "gpu:resident", false),
+        t |> success(slot_mtp_arms(opts, -1, 1l, false, "gpu:resident"),
             "one resident stream on the listed device arms")
         t |> equal(runtime_slot_opts(listed, true).backend, "cpu")
         let plain = runtime_slot_opts(no_row, false)
-        t |> success(!slot_mtp_arms(plain, -1, 1l, false, "gpu:resident", false),
+        t |> success(!slot_mtp_arms(plain, -1, 1l, false, "gpu:resident"),
             "no catalog row: plain")
     }
     t |> run("the slot's own mtp, then the server's, outranks the catalog") @(t : T?) {
         var opts = runtime_slot_opts(listed, false)
-        t |> success(!slot_mtp_arms(opts, 0, 1l, false, "gpu:resident", false),
+        t |> success(!slot_mtp_arms(opts, 0, 1l, false, "gpu:resident"),
             "the server's mtp = false")
         opts.mtp = 0
-        t |> success(!slot_mtp_arms(opts, 1, 1l, false, "gpu:resident", false),
+        t |> success(!slot_mtp_arms(opts, 1, 1l, false, "gpu:resident"),
             "the slot's mtp = false over the server's true")
         let on = runtime_slot_opts(no_row, false)
-        t |> success(slot_mtp_arms(on, 1, 4l, false, "cpu", false), "an ask on arms anywhere")
+        t |> success(slot_mtp_arms(on, 1, 4l, false, "cpu"), "an ask on arms anywhere")
     }
 }
 

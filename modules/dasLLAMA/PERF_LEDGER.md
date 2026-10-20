@@ -10,6 +10,479 @@ and coverage; this ledger is the backlog for the perf pass that follows them. Ev
 what it costs today and what the fix would change.
 
 ## Entries
+- **MEASURED (2026-10-19, `served`, `out-of-process`, `direction-grade`) - Flash-Next served without the round, ours against
+  Strata on the same shards, every expert pinned on both.** zen2, `harness/served_bench.das --sizes 512,3000,9000 --reply 200
+  --reps 2`; ours `dasllama-server --gpu vulkan --ctx 32768 --streams 1 --kv-dtype q8_0` at the engine's defaults (no expert
+  cache budget, the idle chunk the 4096 window), Strata v0.1.45 at `--spec 2 --suffix-draft 0` (the native pack's floor,
+  the MTP head and the suffix drafter off; the recipe `ARCHITECTURE_MEASUREMENT_SERVED.md#served-third-party`). Every
+  decode row on both sides reads a cv over 3% (two reps a row; the tier the resident driver, `DAS_TUNE_POLICY` unset,
+  the CPU backend the box's AVX2 class, coopmat cm2).
+
+    | row | ours IQ4_XS | ours Q2_K_XL | Strata IQ4_XS |
+    | :--- | ---: | ---: | ---: |
+    | cold prefill 512 / 3000 / 9000, tok/s | 218 / 494 / 554 | 184 / 469 / 534 | 379 / 637 / 1268 |
+    | decode at 512 / 3000 / 9000, tok/s | 22.2 / 22.6 / 21.0 | 24.4 / 23.6 / 20.8 | 39.7 / 41.1 / 40.4 |
+    | warm TTFT 3000 / 9000, server-side, s | 0.64 / 0.63 | 0.80 / 0.79 | 0.67 / 0.65 |
+    | cold TTFT 3000 / 9000, s | 6.1 / 16.0 | 7.4 / 16.7 | 4.7 / 7.1 |
+
+  Decode at half of Strata's on the same shards: their device cache holds 3754 experts (8.4 GiB, per-layer slot sizes - `external`, their own log line,
+  allocated across layers by a shipped routing profile, adapted at run time) against the pool's 1568 at 23 to 32 a layer,
+  so their CPU share is about a third of the picks where ours is half or more, and their step is one captured graph with
+  the host's sums landing through mapped words where ours submits and waits a segment a layer (`followup_vulkan.md` row
+  153). Prefill: the served prompt splits at its recurrent checkpoints into three window chains where the bench runs
+  one (row 154; the bench's 793 / 753 at the same window), and Strata's 8192-token chunk streams every expert once a
+  chunk. The 2-bit trunk's 35% bench advantage is 10% served at best: the checkpoint windows and the turn machinery
+  around the step do not shrink with the experts. Their warm turn and ours are at parity.
+- **MEASURED (2026-10-19, `debug-jit`, `direction-grade`) - the host's expert sums on 64 threads against 16, Flash-Next
+  UD-IQ4_XS off its head lane, every expert pinned (no cache budget), the pool 23 slots on both.** zen2 (3990X, 64 cores),
+  `lcpp_bench --mtp-ab -n 64 -r 2 -t <N> --mtp-depth 1` under `DAS_JOBQUE_THREADS=<N>`, the off arm the reading: 16 threads
+  21.56 +/- 0.70 (the control, taken after the 64 row; the first 16 row, at a 22-slot pool, 19.80 +/- 0.89), 64 threads
+  18.50 +/- 0.06 - 14% under the matched control. The sums are DRAM-bound and 16 lanes already draw the bandwidth; the
+  extra lanes pay in the per-layer joins between the token command's segments. The bench's 16-thread rule stands.
+- **MEASURED (2026-10-19, `debug-jit`, `direction-grade`) - the speculative round on a fully resident Qwen3.8-27B at the
+  served shape on the 16 GB card: an IQ2_XXS mixture with the NextN layer in the file, the context asked whole at 32768.**
+  zen2, `lcpp_bench --mtp-ab -n 64 -r 2 -t 16` under `DASLLAMA_GPU=1 DASLLAMA_IMAGE=0 DASLLAMA_GPU_CTX_STRICT=1
+  DASLLAMA_GPU_CTX_MAX=32768`, the sampled rows at temp 0.7 top-p 0.9. The file is `Qwen3.8-27B-IQ2_XXS-mix.gguf` (8.9 GB):
+  `llama-quantize --allow-requantize --imatrix <unsloth's> --tensor-type 'blk\.64\.=Q8_0' <UD-Q2_K_XL> <out> IQ2_XXS` - unsloth's
+  own 2-bit files (UD-IQ2_XXS 7.3 GB, UD-Q2_K_XL 9.8 GB) carry IQ1_S and IQ1_M tensors (122 and 21) the reader has no arm
+  for, and unsloth's imatrix has no entries for the NextN layer, so the recipe pins the head's tensors to their Q8_0. The
+  dense mirror costs about 67 KB a position (the UD-Q3_K_XL at the unasked context asked 30.4 GB of 13.0: declined to the
+  per-op rails, where `--mtp-ab` ran the host verify at 4.7 tok/s against 15.6 plain). The head in the arena (441 MB, a
+  128 MB K/V slot a region), the draft and the verify on the device:
+
+    | row | off tok/s | on tok/s | on / off | drafts accepted | per position |
+    | :--- | ---: | ---: | ---: | ---: | :--- |
+    | greedy depth 1 | 38.8 | 52.6 +/- 0.0 | 1.36 | 74.3% | 74.3 |
+    | greedy depth 2 | 38.8 | 53.9 +/- 0.1 | 1.39 | 62.6% | 75.3 / 49.8 |
+    | greedy depth 3 | 38.8 | 48.2 +/- 0.0 | 1.24 | 48.4% | 73.7 / 45.5 / 25.8 |
+    | sampled depth 2, rejection (the default) | 37.8 | 49.3 +/- 0.1 | 1.30 | 58.4% | 71.1 / 45.6 |
+    | sampled depth 2, typical | 38.0 | 66.0 +/- 0.2 | 1.74 | 92.8% | 97.2 / 88.4 |
+
+  A 2-bit trunk's rate and acceptance stand for the mechanics alone: the whole-card round at a 32k context on this card,
+  every seat on the device, with no host sums in the step.
+
+  The served quantization on a card that holds it (RunPod RTX PRO 4500 Blackwell 32 GB, the same flags and commit):
+  `Qwen3.8-27B-Q4_K_M.gguf` (16.5 GB) with the split head `mtp-Qwen3.8-27B-Q8_0.gguf` (`DASLLAMA_MTP_HEAD`), whole in the
+  arena, the head's 441 MB and a 128 MB K/V slot a region beside it:
+
+    | row | off tok/s | on tok/s | on / off | drafts accepted | per position |
+    | :--- | ---: | ---: | ---: | ---: | :--- |
+    | greedy depth 1 | 39.0 | 60.3 +/- 0.0 | 1.55 | 76.1% | 76.1 |
+    | greedy depth 2 | 39.0 | 67.1 +/- 0.1 | 1.72 | 60.8% | 75.0 / 46.6 |
+    | greedy depth 3 | 38.9 | 67.1 +/- 0.0 | 1.73 | 49.4% | 74.2 / 45.0 / 29.2 |
+    | sampled depth 2, rejection (the default) | 38.1 | 66.2 +/- 0.0 | 1.74 | 66.2% | 79.3 / 53.2 |
+    | sampled depth 2, typical | 38.1 | 80.8 +/- 0.0 | 2.12 | 89.6% | 95.2 / 84.0 |
+
+  The dense trunk's round pays as the mixture's does not: every verify row rides the whole 16.5 GB weight stream once
+  (the off arm sits at the card's bandwidth, 39 tok/s), so a second and third row cost a fraction of a step and the
+  acceptance is the whole of the win - 1.7x at depth 2 against the 35B MoE's 1.2x on the same card, where a row's routed
+  experts stream per row. Depth 2 is the point; depth 3 ties it.
+- **Long-lived memory the MTP arc adds, bytes.** `Session.mtp_q` / `mtp_qn`: `MTP_Q_CAP (1024) x 16 B` a draft row, grown
+  to the round's depth - 16 KB a row, 112 KB a session at the seven-row cap. The selection landing's planes on the Vulkan
+  driver: a row's header 16 B, 2048 survivor ids and logits 16 KB, 128 recent logits 512 B - 16.5 KB a row, 66 KB at the
+  four-row driver and 115 KB at seven, the device planes and the packed host landing each. The expert heat profile and
+  the stream-layer table take the NextN head's layer beside the trunk's: `(n_layers + n_layer_nextn) x n_expert x 8 B` -
+  50 KB on the 35B (49 x 128), 200 KB on Flash-Next (49 x 512). The pool fit's floor change moves no bytes of its own:
+  the slot count the fit yields changes, and the pool's peak footprint stays its slots' planes (the gemma-4 host-form
+  entry below: 31 slots at 174 MB a slot).
+- **MEASURED (2026-10-19, `debug-jit`, `direction-grade`) - gemma-4-26B-A4B's assistant drafter on the Vulkan resident
+  driver on the 16 GB card: the UD-IQ3_XXS trunk whole at a 2048 context with a 512-row prompt window.** zen2, `lcpp_bench
+  --mtp-ab -n 64 -r 2 -t 16` under `DASLLAMA_GPU=1 DASLLAMA_IMAGE=0 DASLLAMA_GPU_CTX_STRICT=1 DASLLAMA_GPU_CTX_MAX=2048
+  DASLLAMA_GPU_PF_ROWS=512`, the drafter `mtp-gemma-4-26B-A4B-it-Q8_0.gguf` (the published head file) beside the trunk, the sampled rows at
+  temp 0.7 top-p 0.9. The drafter attaches only to a trunk the driver serves whole with the N-row command admitted: at the
+  bench's whole-context ask every routed layer goes to the host, at 4096 and at 2048 with the wide window four of 30 still
+  do (the 11.4 GB file against about 13 GB usable), and the 512-row window's scratch (275 MB against 1325) is what brings it
+  whole - a 16 GB card's serving shape for this file is a short context. The pod's 32 GB row (the 2026-10-16 entry: the
+  Q4_K_M trunk, 131 -> 193, 1.47x at 88%) is the whole-card reference.
+
+    | row | off tok/s | on tok/s | on / off | drafts accepted | per position | draft / verify+commit a round |
+    | :--- | ---: | ---: | ---: | ---: | :--- | :--- |
+    | greedy depth 1 | 98.5 | 133.6 +/- 0.1 | 1.36 | 85.3% | 85.3 | 1.6 / 12.3 ms |
+    | greedy depth 2 | 98.6 | 147.1 +/- 0.2 | 1.49 | 75.4% | 79.7 / 71.0 | 2.9 / 14.2 |
+    | greedy depth 3 | 98.6 | 151.0 +/- 0.2 | 1.53 | 69.0% | 79.3 / 69.8 / 58.0 | 4.2 / 16.2 |
+    | sampled depth 2, typical | 93.5 | 125.1 +/- 0.4 | 1.34 | 86.6% | 89.5 / 83.8 | 2.9 / 18.9 |
+    | sampled depth 2, rejection (the default) | 92.5 | 124.3 +/- 0.0 | 1.34 | 86.6% | 89.5 / 83.8 | 2.9 / 19.0 |
+
+  Depth 3 still pays on this drafter (58% at the third position against the 35B head's 34%): the drafter's four Q-only
+  layers draft a row in about a millisecond, so the round is the verify. Where the drafter attaches on this card is the
+  file's size: the 9.9 GB UD-IQ2_XXS trunk sits whole with the wide window and the drafter at 8192 and 16384 (depth 2:
+  109.9 -> 166.3 and 109.7 -> 166.4, 1.51x at 80.8%), and at 32768 the plan moves 3 of 30 routed layers to the host and
+  the drafter refuses - a 2-bit trunk's rate and acceptance say nothing about a served model, so the boundary is the
+  reading: no gemma MoE file serves the drafter at 32k on a 16 GB card. The rejection row's first run died with an index
+  past `mtp_qn`: the drafter's device picks record no q, and the rejection walk read a record the session never grew -
+  `mtp_walk_by_accept` walks typical for a round with no q records now (`ARCHITECTURE_GPU_MTP_ACCEPT.md#mtp-accept-modes`).
+
+  The served quantization on a card that holds it with the drafter at the served context (RunPod RTX PRO 4500 Blackwell 32 GB,
+  `gemma-4-26B-A4B-it-Q4_K_M.gguf` 17 GB whole, the drafter beside it, the context asked whole at 32768, the same flags and
+  commit; the drafter's rounds draft on the device by argmax, so the rejection row walks typical and reads as it):
+
+    | row | off tok/s | on tok/s | on / off | drafts accepted | per position |
+    | :--- | ---: | ---: | ---: | ---: | :--- |
+    | greedy depth 1 | 147.3 +/- 0.1 | 212.4 +/- 0.1 | 1.44 | 82.9% | 82.9 |
+    | greedy depth 2 | 147.2 | 247.5 +/- 0.2 | 1.68 | 76.5% | 81.6 / 71.4 |
+    | greedy depth 3 | 147.2 | 272.5 +/- 0.3 | 1.85 | 72.2% | 79.9 / 72.6 / 64.0 |
+    | sampled depth 2, rejection (the default) | 135.4 +/- 0.2 | 183.5 +/- 0.1 | 1.36 | 84.1% | 86.7 / 81.5 |
+    | sampled depth 2, typical | 134.8 | 183.1 +/- 0.2 | 1.36 | 84.1% | 86.7 / 81.5 |
+
+  The UD-IQ3_XXS trunk whole on the same card at the same context (the 16 GB card's quant above, there at 2048): off
+  162.6 / 162.6 / 162.3 and on 223.4 / 249.4 / 260.4 at depths 1 to 3 (1.37 / 1.53 / 1.60x, 84.6 / 74.8 / 69.8% accepted),
+  the sampled rows 148.4 -> 185.6 under rejection and 148.3 -> 184.3 under typical (1.25x, 82.0%, the same walk).
+
+  The drafter's acceptance holds with depth (64% at the third position), so depth 3 is this carrier's point where the NextN
+  heads' is 2: an assistant drafter trained for the task against a head that shares the trunk's hidden. The 26B's 4B active
+  parameters decode at 147 whole against the 35B's 193 on the same card - the sliding and global attention layers' K/V
+  rows and the 262k vocabulary's classifier are the difference, not the experts.
+- **MEASURED (2026-10-19, `debug-jit`, `direction-grade`) - the speculative round on Qwen3.6-35B-A3B-MTP IQ4_XS-pure at the
+  served shape: the context asked whole at 32768.** zen2, `lcpp_bench --mtp-ab -n 64 -r 2 -t 16` under `DASLLAMA_GPU=1
+  DASLLAMA_IMAGE=0 DASLLAMA_GPU_CTX_STRICT=1 DASLLAMA_GPU_CTX_MAX=32768`, the planar load (the file's lane was baked under the
+  unasked plan and its baked gathers diverge at this one - the lane's identity folds no context pin, said in the decline),
+  the sampled rows at temp 0.7 top-p 0.9. The plan moves the first 18 of 41 routed layers' experts to the host (the unasked
+  plan's 34, with its shrunken mirror); the NextN head stays in the arena (438 MB of planes, a 64 MB K/V slot a region), so
+  the draft runs on the device and the verify's rows run the split command's segments:
+
+    | row | off tok/s | on tok/s | on / off | drafts accepted | per position |
+    | :--- | ---: | ---: | ---: | ---: | :--- |
+    | greedy depth 1 | 74.0 | 90.0 +/- 0.1 | 1.22 | 77.6% | 77.6 |
+    | greedy depth 2 | 74.1 | 88.3 +/- 1.0 | 1.19 | 64.1% | 75.3 / 53.0 |
+    | greedy depth 3 | 75.0 | 85.0 +/- 1.9 | 1.13 | 52.6% | 71.9 / 51.3 / 34.5 |
+    | sampled depth 2, rejection (the default) | 69.6 | 79.4 +/- 2.4 | 1.14 | 61.9% | 76.8 / 47.0 |
+    | sampled depth 2, typical | 70.6 | 97.8 +/- 0.9 | 1.38 | 86.1% | 94.2 / 78.0 |
+
+  The off arm sits 12 tok/s over the unasked plan's (74 against 62): fewer layers on the host. Depth 1 is this plan's
+  point where the unasked plan's was depth 2 - the second row's host sums cost more here than the weight stream it rides
+  saves, with 23 layers' experts already on the device.
+
+  The same table on a card that holds the file whole (RunPod RTX PRO 4500 Blackwell 32 GB, 62 GB RAM, the same flags and
+  the same commit; every routed layer resident, no host sums, the pool unneeded):
+
+    | row | off tok/s | on tok/s | on / off | drafts accepted | per position |
+    | :--- | ---: | ---: | ---: | ---: | :--- |
+    | greedy depth 1 | 192.3 +/- 3.3 | 236.7 +/- 0.6 | 1.23 | 75.5% | 75.5 |
+    | greedy depth 2 | 194.6 | 237.4 +/- 0.2 | 1.22 | 63.3% | 73.4 / 53.3 |
+    | greedy depth 3 | 194.5 | 221.2 +/- 0.1 | 1.14 | 52.8% | 75.5 / 50.5 / 32.4 |
+    | sampled depth 2, rejection (the default) | 174.0 +/- 2.0 | 190.9 +/- 0.4 | 1.10 | 61.7% | 75.7 / 47.8 |
+    | sampled depth 2, typical | 174.8 +/- 1.0 | 243.8 +/- 0.3 | 1.39 | 86.1% | 94.2 / 77.9 |
+
+  Whole on the card the round's shape is the 16 GB card's: depths 1 and 2 tie, depth 3 loses, and the sampled rows read
+  the same acceptances to the point - the win is the verify rows' weight stream shared across rows, which the host form
+  pays for in host sums and the whole form in nothing. Rejection at 1.10 against typical's 1.39 is the price of the
+  lossless walk: a quarter of the drafts the sampler would admit fail the p/q test.
+- **MEASURED (2026-10-19, `debug-jit`, `direction-grade`) - gemma-4-26B-A4B on the whole-model driver's host form: the pool
+  the plan refused, and the resident q8 expert layers' wait.** zen2, `lcpp_bench -p 64 -n 32..64 -r 2 -t 16` under
+  `DASLLAMA_GPU=1 DASLLAMA_IMAGE=0 DASLLAMA_GPU_CTX_STRICT=1 DASLLAMA_GPU_CTX_MAX=32768` (the server's shape: the context
+  asked whole), the frozen fixture 8/8 on every run:
+
+    | file | host layers | pool | tg | token step (host wall, ms) |
+    | :--- | ---: | ---: | ---: | :--- |
+    | Q8_0, the plan's pick | 22 of 30 | none (439 MB left, 132 MB a slot) | 8.1 | 122 = wait 95 + host experts 19 + segments 8 |
+    | Q8_0, `DASLLAMA_GPU_HOST_LAYERS=29`, before the fix | 29 | none (5839 MB left, 174 a slot) | 28.0 | 35 = host experts 24 + segments 8 + wait 2.5 |
+    | Q8_0, 29 host layers, after the fix | 29 | 31 slots, 81% hits | 51.7 | 19 = segments 10 + host experts 6.6 + wait 2.5 |
+    | Q8_0, every routed layer on the host | 30 | pool, 64-84% hits | 52.0 | 19 |
+    | UD-Q4_K_M, the plan's pick | 16 of 30 | none | 49.1 | 20 = host experts 9 + wait 6.4 + segments 4.5 |
+    | UD-IQ4_XS, the plan's pick | 13 of 30 | none | 27.2 | 36 = wait 26 + host experts 6.2 + segments 3.7 |
+
+  Two things. **The pool fit refused a pool with 5.8 GB of room** (the 29-host-layer row): the K/V floor it measured the
+  yield against was the widest layer's row over every position and region - 8 GB on gemma-4, whose sliding layers keep
+  rings, where the mirror at that context is 1.6 GB - so the room beside the floor read negative, and the auto arm, with
+  31 slots fitting beside the whole mirror but under the 32 the yield aims for, took the yield's zero over the 31. The
+  floor is the mirror's own bytes at the floor context now and the yield only adds slots (`resident_hot_slots`,
+  `resident_plan`'s floor); the gemma-4 pool gate (`!moe_dense_shexp`) is gone too, since the fold precedes the pool's
+  split and the resumed segment accumulates the hits onto the host's sum before the gemma-4 combine. **The 95 ms `wait` was
+  the ReBAR-typed planes parked in system memory** (`ARCHITECTURE_GPU_VULKAN_ROOM.md#vk-plan-room`): the demotion tell
+  read 4262 MB of this process's planes in system memory on every Q8_0 plan-pick row and 4058 on the IQ4_XS row, none on
+  the UD-Q4_K_M row or at a 12 GB room, and the wait followed the demoted bytes, not the resident layer count. Not the
+  transfer queue (`DASLLAMA_VK_XFERQ=0` the same 95), not the priority tag (`DASLLAMA_VK_MEMPRIO` was off), not the
+  profiler (off, 8.10). `DASLLAMA_VK_REBAR=0` at the plan's own room: tg 32.7, the wait 5 ms, pp64 243 against 141; the
+  same on Qwen-AgentWorld-35B-A3B UD-IQ3_XXS at the strict 32768 (12 host layers, 4077 MB demoted): 38.4 -> 71.1, pp64
+  150 -> 473. The staged, unmapped device-local plane is the default now; the load's "direct" upload figure (9.0 GB in
+  0.9 s against 1.3 s staged) was the shadow's fill rate. Where nothing demoted the arms read the same: Qwen3.6-35B-A3B-MTP
+  UD-Q4_K_M under its lane at the default context (39 host layers, pool 34) tg 53.4 mapped against 54.1 staged, pp64 264
+  against 283, the token step 18.6 against 18.1 ms. The one thing the staged rail pays is the pool's host placements at a
+  window's end (`vk_rdec_hot_upload`, a staging round trip an expert): 2340 experts 231 ms
+  mapped, 995 staged - 0.4 ms an expert; on Flash-Next's window, hundreds of experts a layer, that was the prompt: pp512
+  415 mapped against 117 staged on the same 25-slot plan (tg128 29.6 against 29.8). The placement loops bracket their
+  uploads in one staging batch now (`rdec_hot_batch`: one submit, one fence a layer): Flash-Next pp512 419 staged and
+  batched (tg128 30.1), the Qwen3.6-35B placements' upload 117 ms for 2350 experts against the mapped rail's 231 and
+  the unbatched staged 995, pp64 302; the DMA fill that lands a step's misses never touched the mapped type.
+- **MEASURED (2026-10-19, `debug-jit`, `direction-grade`) - the prompt window at 4096 rows on Qwen3.8-Flash-Next, every
+  expert resident.** zen2, `lcpp_bench -p <N> -n 8 -r 3 -t 16` under `DASLLAMA_GPU=1 DASLLAMA_GPU_PF_ROWS=<rows>
+  DASLLAMA_ALLOW_UNTUNED=1`, `DN_WINDOW` at 4096 beside the knob (a recurrent window is one deltanet chunk), the pool and
+  the split at their defaults, the frozen fixture's gate 8/8 on every run:
+
+    | window | pp3000 | pp9000 | scratch | pool | K/V positions | tg8 |
+    | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+    | 2048 | 368 +/- 152 | 663 +/- 5 | 2417 MB | 32 slots | 67669 | 22.3 |
+    | 4096 | 793 +/- 2 | 753 +/- 5 | 3962 MB | 27 slots | 33670 | 21.8 |
+
+  A window streams the routed layers' whole expert stacks over the link once (64 GB, about 4.6 s at 14 GB/s), so the
+  sweep count is the prompt's rate: a 3k prompt in one window instead of two doubles and loses its noise, a 9k prompt in
+  three instead of five gains 14%; the decode step does not move. The default becomes the wide window where the plan fits
+  with it (`resident_window_pick`), the narrow one otherwise; 8192 is held by the scan kernel's 48 KB staging and 7 GB of
+  window scratch on this card (`followup_vulkan.md` row 151). The 2048 row's noise is the pool's window prefix under the DMA
+  knob on a 3k prompt's short second window: pp3000 at 2048 with the pool off and whole layers 264 +/- 0.4, the pool off
+  476 +/- 1.6, the DMA fill off 657 +/- 2.2 (the 10/17 record's arm), the split off 261 +/- 3; at 4096 the fill costs the
+  prompt nothing (787 / 760 off against 793 / 753 on) and keeps its decode win (tg8 19.7-19.9 off against 21.3-21.8 on).
+  A 512-token prompt is one window at either size: at the pick, every expert resident, pp512 411 +/- 42 with the fill and
+  425 +/- 3 without over five reps - the fill's prefix is the short window's noise, not its mean (`followup_vulkan.md` row 150
+  keeps the short prompt's question); the same row read 158-189 +/- 100 earlier the same day with the shards' pages cold. Strata v0.1.45 on the same shards and card reads 629 and 1181
+  at two 8192 chunks (the served rows below). The served path on Vulkan ran its prompts in 512-token chunks until this day
+  (`chunk_defaults`: the idle chunk 2048 on Metal alone) - a 3k prompt six sweeps - and the idle chunk on a GPU is now the wider of 2048 and the resident driver's prompt window (4096 where the plan fits it).
+- **MEASURED (2026-10-19, `debug-jit`, `direction-grade`) - the speculative round on Qwen3.8-Flash-Next through the lane
+  under the expert cache, the draft and the verify on the device, with the Q8_0 head and with a 2-bit head.** zen2 (Ryzen
+  3990X 16 threads, RTX 5060 Ti 16 GB), the same `lcpp_bench --mtp-ab -n 64 -r 2 -t 16` rows as the 35B's below, under
+  `DASLLAMA_GPU=1 DASLLAMA_MTP_HEAD=<head> DASLLAMA_EXPERT_CACHE_MB=32768 DAS_JOBQUE_THREADS=16 DASLLAMA_ALLOW_UNTUNED=1`:
+  the trunk UD-IQ4_XS off its `-mtp-<head>` lane (71 GB of planes, minted in 329 s for the Q8_0 head and 560 s for the
+  2-bit one), the 49 routed layers' experts on the host behind a 32-slot pool, 240 of 512 experts a layer resident in the
+  32 GB cache by the lane's heat profile (a fresh lane's cold profile - the first ids - serves both arms at 8.6 tok/s;
+  a seeded one 14.4-15.5), the NextN head's experts a streamed stack like the trunk's and the draft wholly on the device.
+  The sampled rows at temp 0.7, top-p 0.9; the on arm's rows through the hyper-connection verify rail.
+  - the Q8_0 head (`mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf`):
+
+    | row | off tok/s | on tok/s | on / off | drafts accepted | per position |
+    | :--- | ---: | ---: | ---: | ---: | :--- |
+    | depth 1 greedy | 14.93 +/- 0.38 | 16.55 +/- 0.94 | 1.11 | 69.2% | 69 |
+    | depth 2 greedy | 15.39 +/- 0.20 | 15.22 +/- 0.09 | 0.99 | 50.4% | 63.7 / 37.1 |
+    | depth 3 greedy | 15.34 +/- 0.43 | 13.27 +/- 0.58 | 0.87 | 37.7% | 61.2 / 32.8 / 19.0 |
+    | depth 2 exact | 14.49 +/- 0.03 | 14.31 +/- 0.37 | 0.99 | 49.0% | 62.0 / 35.9 |
+    | depth 2 typical | 15.46 +/- 0.44 | 16.88 +/- 0.24 | 1.09 | 60.3% | 72.1 / 48.4 |
+    | depth 2 rejection | 15.50 +/- 0.78 | 14.58 +/- 0.46 | 0.94 | 49.2% | 61.7 / 36.8 |
+
+  - the 2-bit head (`mtp-Qwen3.8-Flash-Next-shared-Q8_0-exps-2bit.gguf`: the head's expert gate and up planes Q2_K, the
+    down IQ4_NL since its 640 columns are not a 256-multiple, no imatrix - the IQ2 formats refuse without one), 1.1 GB
+    against the Q8_0 head's 2.6 GB:
+
+    | row | off tok/s | on tok/s | on / off | drafts accepted | per position |
+    | :--- | ---: | ---: | ---: | ---: | :--- |
+    | depth 1 greedy | 14.53 +/- 1.66 | 13.52 +/- 0.68 | 0.93 | 41.2% | 41 |
+    | depth 2 greedy | 14.35 +/- 0.07 | 10.45 +/- 0.16 | 0.73 | 24.4% | 38.4 / 10.4 |
+    | depth 3 greedy | 14.57 +/- 0.51 | 9.47 +/- 0.47 | 0.65 | 17.3% | 40.3 / 9.7 / 1.9 |
+    | depth 2 exact | 15.02 +/- 1.04 | 11.06 +/- 0.20 | 0.74 | 22.7% | 36.3 / 9.2 |
+    | depth 2 typical | 15.16 +/- 0.80 | 11.64 +/- 0.63 | 0.77 | 30.8% | 48.0 / 13.6 |
+    | depth 2 rejection | 15.29 +/- 0.95 | 11.17 +/- 0.27 | 0.73 | 25.9% | 41.7 / 10.2 |
+
+  The shape, under `DASLLAMA_GPU_PROF=1` at depth 1 with the Q8_0 head (host wall a step, microseconds): the token step
+  65,700 = segments 20,700 + host experts 43,500 + wait 1,400; the draft 4,200, all of it the submit and the wait of a
+  device command; the two-row verify 93,000 = segments 22,900 + host experts 68,500 + wait 1,600. The host's expert sums
+  are the step on this box - the trunk's 10 picks a layer over 48 layers read about 1.25 GB a token off DRAM - and two
+  positions share few experts, so the verify's second row costs 0.6 of a token where the 35B's rode the stream the first
+  row paid for; with 69% of first drafts accepted the round yields 1.69 tokens for 1.48 token-steps, the 1.11 measured.
+  Depth 2 and 3 pay a third and fourth row's host sums for 37% and 19% acceptance and lose; typical acceptance keeps
+  depth 2 at 1.09 by accepting more. The 2-bit head drafts too poorly to pay even its 4 ms: 41% first-position acceptance
+  against 69%, 10% at the second, and every row loses - the draft was never the cost here, so a lighter head cannot win
+  on this shape; it would pay where the head's experts were summed on the host, which the streamed stack ended. Not
+  publishable rows: the box's sidecar is stale (`DASLLAMA_ALLOW_UNTUNED=1`).
+
+  The off arm here is the tg-real row - real prompts behind a 512-token context, the sample inside the timed loop - and
+  it is not the tg128 bench row the Flash-Next rows above were taken on. The same commit's tg128 (`--tg 128`,
+  five reps, synthetic ids from position 0, no logit read): 30.92 +/- 0.43 with no head and no cache, 30.70 +/- 0.50 with
+  the head attached, 27.20 +/- 0.83 under the 32 GB cache - the record's 30.2 stands and the head costs the token step
+  nothing. The gap is the host's expert sums: 9.6 ms a token on the synthetic row against 43.5 on real text, at pool hit
+  rates alike (24-60% a layer on both), since the synthetic ids route each step to the same few experts and their rows
+  stay in the 3990X's 256 MB L3 where real text's spread reads DRAM. The 35B's two rows sat 8% apart; on Flash-Next the
+  synthetic row says twice what the served shape delivers, and the tg-real row is the one to read.
+
+  The pool's two fills against the host's sums, on the real row (the off arm under the profiler, host wall a token step):
+  the DMA fill (`DASLLAMA_GPU_HOT_DMA`, on by default) 67.8 ms a token with the pool serving 50.4% of the picks and the
+  host experts 45.0, against 69.7 / 46.0% / 46.6 under `=0` - a win of 2 ms a token, since a 32-slot pool over 512
+  experts follows real routing no better whatever fills it. The decode meet (`DASLLAMA_GPU_DEC_MEET=1`, a token's picks
+  as a one-row window over the pool, the device taking the hits and half the misses by DMA, the host the other half)
+  loses on real text as it did on the synthetic row: 8.14 +/- 0.57 tok/s against 13.42 +/- 0.30, the token step 116 ms
+  against 69.6, since a layer's meet costs 2.5-4.3 ms of window machinery (`rdec_meet l48: device 6 experts, host 4, 3500
+  us to the meeting`) where the host sums the whole layer's picks in about 1 ms. The split itself is sound on this box:
+  the host's sum is 0.18 ms an expert (46.6 ms over about 260 misses a token), the transfer queue's fill 0.19 ms an
+  expert (2.6 MB at 14 GB/s), so a token step whose misses were filled by DMA inside the recorded command's segments
+  and summed by the pool's kernel in the SAME step, half of them, would cut the host's piece near 24 ms and the token
+  step near 47 - a 1.5x at IQ4_XS - with no window chain in the loop. **LEDGERED lever: the same-step DMA share of a
+  decode token's misses at a host/device ratio set by the two rates** (the DMA fill lands the copies today and the next
+  token reads them; the step that filled them still sums them on the host).
+
+  **MEASURED (2026-10-19) - the lever above, built and refuted on the same row.** The same-step sum was already the
+  pool's shape: a miss the DMA fill admits reads as a hit before the step's split, and the chain waited the batch. What
+  held it to six experts a token was the heat gate on admission, so the lever became `DASLLAMA_GPU_HOT_SHARE` - a share of
+  the gate's leftovers admitted ungated, the warmest first into the coldest unpicked slots - and lost at every setting,
+  under either landing (the profiled off arm, one profiled run a row and no spread, host wall a token step):
+
+    | landing | share | device picks | token step | segments | host experts |
+    | :--- | ---: | ---: | ---: | ---: | ---: |
+    | same step (chain waits the batch) | gate alone | 50% | 67.8 | 21.4 | 45.0 |
+    | same step | 0.3 | 80-84% | 77.1 | 32.8 | 42.4 |
+    | same step | 0.5 | 85-89% | 78.9 | 37.4 | 39.4 |
+    | same step | 0.7 | 88-93% | 86.0 | 44.2 | 39.5 |
+    | next step (the chain waits nothing) | gate alone | 42% | 68.2 | 21.1 | 45.6 |
+    | next step | 0.5 | 50% | 91.3 | 28.4 | 61.2 |
+    | next step | 1.0 | 58% | 91.5 | 32.8 | 56.7 |
+
+  The share is the pool's working-set policy: the picks of a layer the slots serve without a fill rose from 49% under the
+  gate alone to 61-63% at shares 0.5-1.0 on the next-step landing (the same runs).
+
+  Three things the rate arithmetic missed. The host's step carries a per-layer floor - the feed requant, the team dispatch,
+  the reduce - that fewer misses do not lower: at 11% of the picks left to it the host piece was still 39 ms. The copies
+  sat on the chain's critical path under the same-step landing, and under the deferred one the next segment's wait and the
+  host's own sums met on the same DRAM: a fill reads the expert's 2.6 MB off the pinned mirror exactly as a sum reads it,
+  so a fill pays only where the expert is hit again more than once before it leaves, and at 130-140 fills a token the
+  marginal fill bought 0.57 hits (hits 42% to 58% of picks for 6 to 143 fills a token). The gate's churn rose with the
+  share's too - the coldest slot's heat falls as cold experts enter, more misses pass the gate, and the ones the tier
+  cannot copy take the host's gather and upload at 1.5 ms each, 20 ms a token at share 0.5. The admission policy is the
+  working-set lever (the frequency-filtered gate, a TinyLFU shape, against the share's insert-on-miss with LFU-aging
+  eviction, and an LRU neither of them is), and `harness/hot_pool_sim.das` on a `DASLLAMA_MOE_TRACE` of real text ranks
+  them by hit rate without the box; the live row says a DRAM-bound host wants the selective one. The knob ships at 0; the
+  deferred landing stays (the gate alone at 68.2 against 67.8, and no command reads a slot a DMA still writes).
+
+  - the UD-Q2_K_XL trunk (unsloth's, 78.9 GB in three shards at `C:/models/Qwen3.8-Flash-Next-GGUF/UD-Q2_K_XL`, 16%
+    under the IQ4_XS file: its experts 49.5 GB against 64.4, so the 32 GB cache keeps 329 of 512 a layer resident
+    against 240; the lane 52.6 GB, minted on the C: NVMe in 99 s), the same Q8_0 head, the same rows:
+
+    | row | off tok/s | on tok/s | on / off | drafts accepted | per position |
+    | :--- | ---: | ---: | ---: | ---: | :--- |
+    | depth 1 greedy | 19.52 +/- 0.49 | 20.87 +/- 0.32 | 1.07 | 70.2% | 70 |
+    | depth 2 greedy | 20.43 +/- 0.41 | 19.96 +/- 0.51 | 0.98 | 54.4% | 66.0 / 42.9 |
+    | depth 3 greedy | 18.19 +/- 1.91 | 16.96 +/- 0.63 | 0.93 | 40.3% | 63.3 / 37.1 / 20.5 |
+    | depth 2 typical | 20.04 +/- 1.04 | 22.44 +/- 1.11 | 1.12 | 66.4% | 76.4 / 56.5 |
+    | depth 2 rejection | 18.84 +/- 0.75 | 17.92 +/- 0.81 | 0.95 | 55.2% | 69.2 / 41.2 |
+    | depth 1 rejection | 19.32 +/- 0.05 | 19.74 +/- 1.04 | 1.02 | 65.2% | 65.2 |
+
+    The IQ4_XS trunk's depth 1 rejection row, taken with a lint compile beside it (the off arm 11.46 +/- 1.56 against its
+    usual 15): 12.75 +/- 0.34 on, 1.11, 66.7% accepted. The sampled round at the NextN depth is neutral to a small win on
+    the host form, as the greedy one is, so the server's auto-arm (`mtp_auto_arms`) arms a one-stream slot whose routed
+    experts the resident driver sums on the host like any other whole-model slot; the box's NextN depth stays 1, where every
+    host-form row measured best (the 35B at 18 host layers 1.22x, these two trunks 1.07-1.11x).
+
+    The off arm 35% over IQ4_XS: the token step 47.6 ms = segments 19.3 + host experts 27.2 + wait 1.1 (against 65.7 =
+    20.7 + 43.5 + 1.4), the misses fewer and each a smaller read; the draft 3.0 ms, the two-row verify 70.4 = 20.2 + 48.9
+    + 1.2. The round's shape holds: the second row costs 0.5 of a token on the host, and the depths' standings are the
+    IQ4_XS ones. The repo carries unsloth's imatrix (580 MB), the one an IQ2 head needed.
+- **MEASURED (2026-10-19, `debug-jit`, `out-of-process`, `direction-grade`, parity record) - the hyper-connection chain's token step on Qwen3.8-Flash-Next
+  against the CPU chain, through files.** zen2, `harness/parity_dump.das` (a dump compare between two processes: a parity
+  reading in the sense of `ARCHITECTURE_GPU_PARITY.md` comes from `harness/parity.das`, `lcpp_bench --parity` or a
+  `tests/run.das` cell; this record is the carrier's only form, since no box holds both arms in one process): the device arm (the resident driver, every
+  routed layer's experts on the host, the hot pool at 32 slots, ctx 61810) dumps a 94-token prompt's row and six fed
+  steps' rows with the 48 routed layers' picks a position (48,000 picks) under `DASLLAMA_GPU=1`; the CPU arm loads the
+  three shards planar in 59 s (meta 10, weights 24, repack 8) in its own process, replays the tape (4,800 selects, 152 of
+  48,000 picks its own top-k would have taken differently) and dumps; the compare at the regions files' 0.20 bar:
+
+    | row | maxdiff | bar | one-step-off control | argmax |
+    | :--- | ---: | ---: | ---: | :--- |
+    | prefill (94 tokens) | 0.42 | 4.54 | 13.0 | 17 / 17 |
+    | step 0 (fed 17) | 1.28 | 4.84 | 13.4 | 20 / 20 |
+    | step 1 (fed 20) | 0.33 | 4.80 | 17.4 | 11 / 11 |
+    | step 2 (fed 11) | 0.41 | 4.62 | 19.3 | 220 / 220 |
+    | step 3 (fed 220) | 0.23 | 4.85 | 12.0 | 17 / 17 |
+    | step 4 (fed 17) | 0.53 | 4.91 | 15.2 | 21 / 21 |
+    | step 5 (fed 21) | 0.42 | 4.85 | 19.8 | 11 / 11 |
+
+  Every row inside the tight bar, under the in-process hc cells' wide bar of 0.35 by a factor of 3 to 20. The same run
+  on Qwen3.6-35B-A3B (IQ4_XS-pure, `DASLLAMA_GPU_HOST_LAYERS=40` so the tape covers the 40 routed layers): prefill 4.0
+  against 5.3, steps 0.44-0.92 against bars near 5, controls 13-21, 136 of 32,000 picks pinned. Each arm alone fits the
+  box - the device arm about 137 GB with the lane mapped, the CPU arm under 190 GB with the shards' page cache evictable -
+  where both arms in one process did not; the dumps are kept beside the model
+  (`Qwen3.8-Flash-Next-GGUF/UD-IQ4_XS/parity/token_step_p94_f6.{device,cpu}.pd`, 7.3 MB each), the CPU one the reference
+  every device run compares against from here.
+- **MEASURED (2026-10-18, `debug-jit`, `direction-grade`) - the k-deep speculative round on the Vulkan seats, and the
+  plain chain's verify rows through the split command's segments on a MoE the card does not hold whole.** zen2 (Ryzen
+  3990X 16 threads, RTX 5060 Ti 16 GB on PCIe 4.0 x8, 1.3-2.4 GB held by the desktop), `bin/Release/daslang.exe -jit
+  modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m <file> --mtp-ab -n 64 -r 2 -t 16 --mtp-depth <k>
+  --for-debug-purposes` under `DASLLAMA_GPU=1 DASLLAMA_ALLOW_UNTUNED=1` (the box's sidecar is stale: the kernels run
+  the class profile's stamps), eight real-text prompts, two reps, one process a row, the off and on arms in one process.
+  Where every round on the Vulkan driver was depth 1 (the CPU round seated the draft and the verify and drafted one
+  token), `mtp_spec_round_k` drafts k through the head's own hidden and verifies k + 1 rows on the seat
+  (`ARCHITECTURE_GPU_MTP.md#mtp-round-one-join`).
+  - Qwen3.5-0.8B-MTP Q8_0 (whole on the card), tg-real64 off 310-329 tok/s across the rows:
+
+    | depth | on tok/s | on / off | drafts accepted | per position |
+    | ---: | ---: | ---: | ---: | :--- |
+    | 1 | 387.1 +/- 0.7 | 1.25 | 82.3% | 82 |
+    | 2 | 414.8 +/- 3.7 | 1.26 | 70.6% | 76.4 / 64.8 |
+    | 3 | 411.0 +/- 0.4 | 1.28 | 64.8% | 77.0 / 64.6 / 52.8 |
+    | 4 | 371.1 +/- 0.3 | 1.15 | 55.1% | 74.1 / 59.6 / 47.6 / 39.2 |
+
+  - Qwen3.6-35B-A3B-MTP-IQ4_XS-pure (19 GB; the context unasked, so the plan puts the first 34 of 41 routed layers'
+    experts on the host with a 32-34 slot pool, the rest and the routed NextN head on the device; the verify's rows run
+    the split command's segments with the host summing each row's picks between them,
+    `ARCHITECTURE_GPU_VULKAN_HC.md#hc-verify-rows`), tg-real64 off 61.2-62.8 tok/s:
+
+    | depth | on tok/s | on / off | drafts accepted | per position |
+    | ---: | ---: | ---: | ---: | :--- |
+    | 1 | 73.8 +/- 1.5 | 1.21 | 72.8% | 73 |
+    | 2 | 82.7 +/- 1.0 | 1.32 | 67.2% | 76.9 / 57.5 |
+    | 3 | 74.7 +/- 0.5 | 1.21 | 51.8% | 73.6 / 49.1 / 32.8 |
+
+  Depth 2 is the 35B's point on this box: the second row rides the weight stream the first row paid for, the third
+  row's 33% acceptance does not pay its host sums. The chain cut (`--mtp-min-p`, `set_mtp_chain_min_p`: a further draft
+  only while the last draft's probability under the head reaches p) lifts depth 3 to depth 2's level and moves depth 2
+  nowhere - the rows it drops are the ones that would have been rejected:
+
+    | depth | cut | on tok/s | on / off | drafts accepted | per position |
+    | ---: | ---: | ---: | ---: | ---: | :--- |
+    | 3 | 0.5 | 80.1 +/- 2.8 | 1.30 | 65.0% | 72.3 / 61.2 / 54.5 |
+    | 3 | 0.3 | 80.8 +/- 0.9 | 1.28 | 62.1% | 75.3 / 58.7 / 46.9 |
+    | 2 | 0.5 | 81.6 +/- 1.2 | 1.29 | 72.4% | 74.3 / 69.5 |
+
+  A sampled stream at depth 2 (`--mtp-temp 0.7 --mtp-top-p 0.9`, both arms sampled, the off arm 55.2-55.9 tok/s - the
+  nucleus sampler's softmax and passes over the 248k-token row cost the token about 1.8 ms against the greedy pick): the
+  exact walk (sample-and-match) 63.0 +/- 0.4 tok/s, 1.13x, 53.5% of the drafts accepted (66.2 / 40.8 per position); typical
+  acceptance (`--mtp-accept typical`, `set_mtp_accept`: a draft the sampler's cuts admit on its row is accepted whatever
+  the row's draw) 80.1 +/- 2.7 tok/s, 1.45x, 84.9% accepted (91.9 / 77.9). With no cut at all a typical walk admits every
+  draft (100% accepted, three tokens a round, 100.1 tok/s) - the mode means something under a nucleus, a top-k or a min-p
+  alone. Speculative rejection sampling (`--mtp-accept rejection`: the head draws its draft through the sampler and records
+  q, the row accepts with min(1, p/q), else the residual) at the same depth and sampler, and the three acceptances again
+  under the chat-preset shape (`--mtp-top-k 20`, the candidate-list sampler path):
+
+    | sampler | acceptance | off tok/s | on tok/s | on / off | drafts accepted | per position |
+    | :--- | :--- | ---: | ---: | ---: | ---: | :--- |
+    | top-p 0.9 | exact | 55.9 | 63.0 +/- 0.4 | 1.13 | 53.5% | 66.2 / 40.8 |
+    | top-p 0.9 | typical | 55.2 | 80.1 +/- 2.7 | 1.45 | 84.9% | 91.9 / 77.9 |
+    | top-p 0.9 | rejection | 55.5 | 56.4 +/- 1.3 | 1.02 | 61.9% | 75.9 / 47.8 |
+    | top-k 20 + top-p 0.9 | exact | 60.0 | 64.7 +/- 3.4 | 1.08 | 51.0% | 62.7 / 39.3 |
+    | top-k 20 + top-p 0.9 | typical | 59.1 | 83.2 +/- 0.1 | 1.41 | 83.6% | 92.2 / 74.9 |
+    | top-k 20 + top-p 0.9 | rejection | 57.2 | 66.8 +/- 0.7 | 1.17 | 62.0% | 76.4 / 47.6 |
+
+  The same three rows with the device's selection landing in place of the rows (`cls_select`, on by default,
+  `--mtp-select=false` for the rows; `ARCHITECTURE_GPU_VULKAN_LANDING.md#logits-selection-landing`): every sampled step -
+  the off arm's plain steps, the round's drafts and its verify rows - lands the rows' 1024 largest logits with the max and
+  the denominator at the temperature, about 17 KB a row for the host's candidate chain instead of the 1 MB row and the
+  passes over it. The off arm itself moves from 55-56 to 61-62 tok/s:
+
+    | sampler | acceptance | reps | off tok/s | on tok/s | on / off | drafts accepted | per position |
+    | :--- | :--- | ---: | ---: | ---: | ---: | ---: | :--- |
+    | top-p 0.9 | exact | 4 | 61.8 | 66.7 +/- 2.9 | 1.08 | 50.2% | 62.8 / 37.7 |
+    | top-p 0.9 | typical | 2 | 60.8 | 90.9 +/- 1.7 | 1.49 | 83.2% | 90.2 / 76.2 |
+    | top-p 0.9 | rejection | 4 | 60.0 | 71.2 +/- 2.5 | 1.19 | 62.6% | 77.6 / 47.7 |
+
+  Rejection sampling is the sampled walk's default from here: the same round cost as the exact walk - the
+  `DASLLAMA_GPU_PROF=1` ledgers read the draft at 1.36 against 1.37 ms and the three-row verify at 26.0 against 26.6 ms,
+  12.6 against 13.2 of it the host expert sums - with ten to twelve points more accepted, and lossless where typical is
+  not. Two-rep rows cannot rank the two: the host expert sums wander run to run (the off arm itself reads 58 to 62), and
+  single pairs read exact ahead by 6 and rejection ahead by 5 on the same afternoon; four reps each settle it at about
+  seven percent for rejection. No step's sampler took the rows late on these prompts (a nucleus of 0.9 at temperature 0.7
+  is reached well inside 1024 survivors). Found by these rows: the selection's transfer twin is recorded once per row count, and the carry flip's
+  re-record (`rd_carry_sync`) had to clear its records too - a twin recorded under the off arm's spec-off stream landed no
+  carry, so every draft of the on arm read a stale hidden and the second draft was garbage (position 2 accepted 19.6%
+  under exact, 34.6% under typical); the 0.8B cell pins it by recording the twin under a spec-off stream first and asserting
+  the accepted counts, not only the tokens, since a garbage draft is rejected and the tokens stay alike.
+  Rejection sampling accepts between the exact and typical walks, as it must (it keeps the sampler's distribution where
+  typical leans toward the head), and what it cost with the rows landed was the host sampler, not the mode: under top-p alone every draft
+  lands the head's 248k-float row on the host and pays a softmax, the nucleus select and a 1024-wide selection to record
+  q, and every verify row's judge adds a residual walk over the whole row - five landed rows and about five full-row
+  passes a round against the exact walk's three - so the 62% acceptance buys nothing; under a top-k of 20 the same work
+  runs over 20 candidates and the same acceptance pays 1.17x. Every acceptance's sampler is host arithmetic over landed
+  rows (the greedy walk alone lands picks): a device-side selection landing the survivors instead of the row is the
+  lever for all three. Found by these rows and fixed with them: the vocab-wide sampler's nucleus cut sorted the whole row a token (the
+  path every request with a top-p and no top-k takes - the OpenAI API carries no top-k), 26.6 tok/s on the 35B against
+  55.9 with the cut read off a selected set (`nucleus_cut_`), bit-identical to the sorted prefix.
+  The GPU profile of the depth-2 round (`DASLLAMA_GPU_PROF=1`, one rep): the three-row verify 26.9 ms of GPU time with
+  the host experts' 13.9 ms inside its wall, the recurrent rollback copies 0.62 ms of it (2.3%), so the copies stay; the
+  draft 1.0 ms, of which the classifier over the 248k vocabulary is 0.75 - the draft head over a vocabulary subset is
+  the lever on the draft, not its layer. The per-position curve is the one every carrier has read
+  (`ARCHITECTURE_GPU_MTP.md#mtp-depth-knob`). The segments form's compare is the census file's verify-rows cell
+  (`tests/test_gpu_resident_format_census.das`), a driver-against-itself compare - the verify rows against the same
+  driver's one-row steps, a rounding control and not parity evidence: one round's two rows within 0.58 and 0.64 of their 2.0 and 2.4 bars
+  against the split command's one-row steps (controls 8.96), the carry rows within 1.0 of 8.0, and four rounds'
+  committed stream within 0.86 of 2.28 against the same tokens stepped (control 8.74). The served baseline on the same
+  file with the round off (`served`, `out-of-process`: `harness/served_bench.das --sizes 3000,9000 --reply 200 --reps 5` against
+  `utils/dasllama-server/main.das --gpu vulkan --ctx 16384 --streams 1`, so 16 host layers and no pool under the strict
+  context): cold TTFT 2069 ms (cv 4.6%, VOID) / 5245 ms, prefill 1446 / 1680 tok/s, warm TTFT 304 / 476 ms (both VOID
+  on cv), decode 72.4 / 68.5 tok/s at 3k / 9k; the on arm through the server waits on the same segments form reaching
+  the slot's auto-arm, which still leaves the round off where the experts sum on the host.
 - **MEASURED (2026-10-19) - the long-prompt pass: the block codecs' store and the serving rules, Apple M5 Max (128 GB,
   thermally capped: `powermetrics` read the GPU at 840-1030 of 1620 MHz under Heavy pressure through every row, so no
   figure here goes beside a cool box's) and the RunPod RTX PRO 4500 Blackwell (32 GB, driver 580.173.02).** Every figure is

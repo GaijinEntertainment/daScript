@@ -37,6 +37,7 @@ require ?llvm dasllama/dasllama_exchange   // nolint:STYLE030,LINT019 — OPTION
 require [tune_framework]   // nolint:STYLE030,LINT019 — OPTIONAL: tune_app_script, the exe-vs-script discriminator behind --for-debug-purposes
 require daslib/jobque_boost
 require daslib/clargs
+require daslib/enum_trait   // to_enum: --mtp-accept by the MtpAccept member's name
 require daslib/fio
 require daslib/md_boost
 require math
@@ -161,6 +162,14 @@ struct Args {
     @clarg_doc = "Speculative depth for the --mtp-ab ON arm: drafts per round (the verify runs depth+1 rows). 0 = the box profile's default for the round kind (runtime.mtp_depth_nextn / mtp_depth_assistant, 1 when unminted)"
     mtp_depth : int = 0
 
+    @clarg_name = "mtp-min-p"
+    @clarg_doc = "The --mtp-ab ON arm's chain cut: a round drafts past a draft only while that draft's probability under the head reaches this (0 = off, the depth alone decides); the head's logits land on the host for the read"
+    mtp_min_p : float = 0.0
+
+    @clarg_name = "mtp-accept"
+    @clarg_doc = "The --mtp-ab ON arm's acceptance under --mtp-temp: rejection (the default: the head samples its draft and records q; accept with min(1, p/q), else the residual), exact (a draft accepted where the row's draw equals it), typical (where the sampler's cuts admit it, whatever the draw) - set_mtp_accept"
+    mtp_accept : string = "rejection"
+
     @clarg_name = "mtp-ab"
     @clarg_doc = "A/B MTP/NextN self-speculation in-process, OFF then ON (needs a NextN head in the GGUF). Runs the tg-real row, NOT the llama-bench tg row — acceptance is meaningless on synthetic ids. Reports the draft accept rate; mutually exclusive with the other A/B levers"
     mtp_ab : bool
@@ -168,6 +177,18 @@ struct Args {
     @clarg_name = "mtp-temp"
     @clarg_doc = "Sampling temperature for BOTH --mtp-ab arms (default 0 = greedy): the off arm samples every token, the on arm's accept walk draws each verify row with the same sampler (sample-and-match), both seeded alike - the sampled speed and acceptance"
     mtp_temp : float = 0.0
+
+    @clarg_name = "mtp-top-p"
+    @clarg_doc = "The nucleus of the --mtp-temp sampler on BOTH arms (default 1 = no cut): what typical acceptance admits, since a sampler with no cut admits every token"
+    mtp_top_p : float = 1.0
+
+    @clarg_name = "mtp-select"
+    @clarg_doc = "A sampled stream's device steps land the rows' survivors, max and denominator instead of the rows (default on; --mtp-select=false lands the rows) - set_select_landing"
+    mtp_select : bool = true
+
+    @clarg_name = "mtp-top-k"
+    @clarg_doc = "The top-k of the --mtp-temp sampler on BOTH arms (default 0 = off): within the candidate-list cap the sampler's cuts, draws and the rejection drafter's q run over k survivors instead of the whole row"
+    mtp_top_k : int = 0
 
     @clarg_doc = "A/B the resident ladder's per-token re-encode in-process: every row runs twice, recorded-once then re-encoded every token. Prices the carrier class twins' push-borne pos/cnt (vulkan resident decode only); mutually exclusive with the other A/B levers"
     rerecord_ab : bool
@@ -1465,6 +1486,23 @@ def main() : int {
     if (cfg.ab_reverse && !ab) {
         print("warning: --ab-reverse is inert without an A/B lever (--<lever>-ab)\n")
     }
+    if (cfg.mtp_min_p > 0.0 && !cfg.mtp_ab) {
+        print("warning: --mtp-min-p is inert without --mtp-ab (the chain cut acts on the speculative arm alone)\n")
+    }
+    if (cfg.mtp_temp <= 0.0) {   // a greedy sampler takes no cut, no acceptance mode and no selection landing
+        if (cfg.mtp_top_p != 1.0) {
+            print("warning: --mtp-top-p is inert at --mtp-temp 0 (the greedy sampler takes no nucleus)\n")
+        }
+        if (cfg.mtp_top_k != 0) {
+            print("warning: --mtp-top-k is inert at --mtp-temp 0 (the greedy sampler takes no top-k)\n")
+        }
+        if (cfg.mtp_accept != "rejection") {
+            print("warning: --mtp-accept is inert at --mtp-temp 0 (the greedy walk accepts on the argmax alone)\n")
+        }
+        if (!cfg.mtp_select) {
+            print("warning: --mtp-select is inert at --mtp-temp 0 (a greedy step lands its pick, never a selection)\n")
+        }
+    }
     let real_row = ab && levers[0].real
     var fmt = cfg.output
     if (cfg.tok) {
@@ -1635,6 +1673,12 @@ def main() : int {
             }
         }
         set_gpu_kv_dtype(cfg.kv)   // the mirror arms at the rows' codec, or the rows pass to the CPU rails as a codec mismatch
+        if (cfg.mtp_depth > 0) {
+            set_mtp_depth(int64(cfg.mtp_depth))   //! before the load: the whole-model driver prepares its verify rows at the knob then
+        }
+        set_mtp_chain_min_p(cfg.mtp_min_p)
+        set_select_landing(cfg.mtp_select)
+        set_mtp_accept(to_enum(type<MtpAccept>, cfg.mtp_accept))   // an unknown name panics naming the enum's members
         var t <- load_model_cached(mpath, cfg.quant)
         if (gpu_device_sessions() > 0l && gpu_device_session_dtype() != cfg.kv) {
             refuse_every_row(fmt, "--kv {cfg.kv} asked and the whole-model driver's mirror armed {gpu_device_session_dtype()} (the load log says why): the rows' sessions would run on the CPU rails under the device's stamp")
@@ -1669,9 +1713,6 @@ def main() : int {
             if (!mtp_ab_drafter_attach(t, mpath)) {
                 panic("lcpp_bench: --mtp-ab needs a NextN draft head or an assistant drafter sidecar, and {mpath} has neither")
             }
-        }
-        if (cfg.mtp_depth > 0) {
-            set_mtp_depth(int64(cfg.mtp_depth))
         }
         // the exec REQUEST (exe-native / -jit / interpreted) + the armed GPU tier are stamped;
         // a jit run that produced nothing logs its own LLVM JIT error beside this
@@ -1727,7 +1768,7 @@ def main() : int {
                 pp_gen |> resize(length(toks))
                 pp_dr |> resize(length(toks))
                 pp_ac |> resize(length(toks))
-                var sp = SamplingParams(temp = cfg.mtp_temp)
+                var sp = SamplingParams(temp = cfg.mtp_temp, top_p = cfg.mtp_top_p, top_k = int64(cfg.mtp_top_k))
                 let ask = sampler_is_argmax(sp)
                 var refused = ""   // one rep with no figure, or one served off the row's backend stamp, drops the whole row
                 let vk_stamp = !gpu && moe_gpu_tier_installed()   // the row records the armed Vulkan tier as its backend: a call the driver passed to the CPU rails ran off it
@@ -1816,8 +1857,9 @@ def main() : int {
                 }
                 if (mtp_on) {
                     let rate = drafted > 0l ? double(accepted) * 100.0lf / double(drafted) : 0.0lf
-                    let walk = sp.temp > 0.0 ? " (sampled walk, temp {sp.temp})" : ""
-                    say(fmt, "  mtp: {accepted}/{drafted} drafts accepted ({rate:.1f}%) at depth {get_mtp_depth()}{walk}; {mtp_pos_report()}\n")
+                    let walk = sp.temp > 0.0 ? " ({get_mtp_accept()} acceptance, temp {sp.temp})" : ""
+                    let cut = get_mtp_chain_min_p() > 0.0 ? " (chain cut at p {get_mtp_chain_min_p()})" : ""
+                    say(fmt, "  mtp: {accepted}/{drafted} drafts accepted ({rate:.1f}%) at depth {get_mtp_depth()}{cut}{walk}; {mtp_pos_report()}\n")
                     mtp_pos_reset()
                     if (mtp_assistant_attached(t)) {
                         say(fmt, mtp_ab_drafter_line(mtp_drafter_stats_(t)))

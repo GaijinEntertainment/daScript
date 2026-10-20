@@ -85,7 +85,7 @@ def test_vulkan_dry_bake(tst : T?) {
             t |> success(vulkan_bake_take(m), "the dry walk collected a bake")
             t |> success(long_length(m.vkplan) > 0l, "plan has entries ({long_length(m.vkplan)})")
             t |> success(long_length(m.vkblob) > 0l, "blob has bytes ({long_length(m.vkblob)})")
-            // every entry is role-stamped and points inside the blob
+            // every entry is role-stamped (the host-layer split marker carries its own role) and points inside the blob
             var roles_ok = true
             var bounds_ok = true
             for (e in m.vkplan) {

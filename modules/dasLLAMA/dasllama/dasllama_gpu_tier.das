@@ -429,6 +429,8 @@ typedef RdecHotUploadFn = function<(l : int64; slot : int64; wq1 : array<uint8>;
 //! The hits of layer `l`'s routed step: `nhit` pool slots and their routing weights. The device runs their chain while the host
 //! sums the misses, and the next segment adds the hit rows to the host's sum.
 typedef RdecHotSubmitFn = function<(l : int64; nhit : int64; slots : int64 const?; w : float const?) : void>
+//! `open` brackets a run of pool uploads the tier may land in one submit; `false` lands what the bracket holds.
+typedef RdecHotBatchFn = function<(open : bool) : void>
 //! the verify rows' hits of layer `l`: k slot and weight entries a row, a row's hits first, its misses padded at weight 0
 typedef RdecHotSubmitRowsFn = function<(l : int64; nrows : int64; slots : int64 const?; w : float const?) : void>
 
@@ -464,6 +466,20 @@ def public install_moe_gpu_resident_hot(hot_layer : RdecHotLayerFn; hot_upload :
 }
 
 def public rdec_hot_installed() : bool => g_rdec_hot_installed
+
+[unused_argument(open)]
+def private rdec_unset_hot_batch(open : bool) {}   //! a tier without a batch lands every upload as it comes
+
+var g_rdec_hot_batch = @@rdec_unset_hot_batch
+
+//! Install the tier's upload batch for the pool's placement runs - separately, so a tier without one still serves the pool.
+def public install_moe_gpu_resident_hot_batch(hot_batch : RdecHotBatchFn) {
+    g_rdec_hot_batch = hot_batch
+}
+
+def public rdec_hot_batch(open : bool) {
+    invoke(g_rdec_hot_batch, open)
+}
 def public rdec_hot_layer(l, slots : int64; f1, f3, f2 : int) : tuple<base : int64; stride : int64> => invoke(g_rdec_hot_layer, l, slots, f1, f3, f2)
 def public rdec_hot_upload(l, slot : int64; wq1 : array<uint8>; ws1 : array<uint8>; wq3 : array<uint8>; ws3 : array<uint8>; wq2 : array<uint8>; ws2 : array<uint8>) {
     invoke(g_rdec_hot_upload, l, slot, wq1, ws1, wq3, ws3, wq2, ws2)
@@ -764,6 +780,79 @@ def public install_rdec_verify(verify : RdecVerifyFn; rows : function<() : int64
 }
 
 def public rdec_verify_installed() : bool => g_rdec_verify_installed
+
+//! The selection landing a device driver leaves a sampled stream's step in place of the rows' logits: each row's survivors (the ids
+//! at or above the row's SEL_K-th largest logit, ties kept), its max and softmax denominator at the stream's temperature, and the
+//! logits of the recent-window ids the ask listed - pointers into the driver's mapped landing, good until the driver's next command
+struct SelLanding {
+    rows : int64             //! 0 = nothing landed
+    cap : int64              //! survivor slots a row
+    recent_cap : int64       //! recent-window slots a row
+    hdr : uint const?        //! SEL_HDR words a row: the survivors' count, the overflow flag, the max's bits, the denominator's bits
+    ids : uint const?
+    vals : float const?
+    rec : float const?
+}
+
+let SEL_LANE_LOWEST = -3.4e38   //! the lowest finite lane value: what a NaN or -inf logit reads as on the device and on the CPU alike
+
+//! a logit as the classifier tail's kernels read it: NaN and anything under the lowest finite read as the lowest finite (the kernel's lane, the CPU oracle's too)
+def sel_lane_val(v : float) : float => !(v == v) || v < SEL_LANE_LOWEST ? SEL_LANE_LOWEST : v   // nolint:LINT007 — the NaN test: a NaN is the one float that is not equal to itself, on the device and on the CPU alike
+
+let SEL_K = 1024l                 //! the survivors a row lands - the candidate-list sampler's cap (the Vulkan kernel's CLS_SELECT_K)
+let SEL_RECENT = 128l             //! the recent-window ids an ask lists a row (CLS_SELECT_RECENT)
+let SEL_WORDS = SEL_RECENT + 4l   //! one row's ask words (CLS_SEL_WORDS): the `SEL_ASK_*` words, then the recent ids
+let SEL_HDR = 4l                  //! one row's landed header words (CLS_SEL_HDR): the `SEL_HDR_*` words
+let SEL_ASK_TEMP = 0l             //! the ask row's temperature, as float bits
+let SEL_ASK_COUNT = 1l            //! the recent ids the ask row lists
+let SEL_ASK_IDS = 4l              //! the first recent id (two pad words before it)
+let SEL_HDR_COUNT = 0l            //! the survivors the row landed
+let SEL_HDR_OVERFLOW = 1l         //! 1 where the row's ties overflowed its slots
+let SEL_HDR_MAX = 2l              //! the row's max, as float bits
+let SEL_HDR_DEN = 3l              //! the row's softmax denominator at its temperature, as float bits
+
+//! the selection ask for the driver's next command of `nrows` rows, `words` SEL_WORDS a row; false where the device has no selection
+typedef RdecSelAskFn = function<(nrows : int64; words : array<uint>) : bool>
+//! the last command's selection landing (rows = 0 where none was asked)
+typedef RdecSelLandingFn = function<() : SelLanding>
+//! the late landing of the last command's rows `row0 .. row0 + nrows` into `dst`, for a sampler the selection cannot serve
+typedef RdecSelLandRowsFn = function<(row0 : int64; nrows : int64; var dst : array<float>) : void>
+[unused_argument(nrows, words)]
+def private rdec_unset_sel_ask(nrows : int64; words : array<uint>) : bool => false
+def private rdec_unset_sel_landing : SelLanding => SelLanding()
+[unused_argument(row0, nrows, dst)]
+def private rdec_unset_sel_land_rows(row0, nrows : int64; var dst : array<float>) {
+    panic("dasLLAMA: a late landing of the selection's rows with no driver installed - a selection lands only from a driver that asked for one (the program must require dasllama/dasllama_math_vulkan, which installs the Vulkan driver's seats); engine bug")
+}
+var g_rdec_sel_ask = @@rdec_unset_sel_ask
+var g_rdec_sel_landing = @@rdec_unset_sel_landing
+var g_rdec_sel_land_rows = @@rdec_unset_sel_land_rows
+
+//! Install the selection landing beside the token, draft and verify seats
+def public install_rdec_select(ask : RdecSelAskFn; landing : RdecSelLandingFn; land_rows : RdecSelLandRowsFn) {
+    g_rdec_sel_ask = ask
+    g_rdec_sel_landing = landing
+    g_rdec_sel_land_rows = land_rows
+}
+
+//! the three selection seats as installed: a fixture that installs its own puts these back through [[restore_rdec_select]]
+struct RdecSelectPin {
+    ask : RdecSelAskFn
+    landing : RdecSelLandingFn
+    land_rows : RdecSelLandRowsFn
+}
+
+def public rdec_select_pin() : RdecSelectPin => RdecSelectPin(ask = g_rdec_sel_ask, landing = g_rdec_sel_landing, land_rows = g_rdec_sel_land_rows)
+
+def public restore_rdec_select(pin : RdecSelectPin) {
+    install_rdec_select(pin.ask, pin.landing, pin.land_rows)
+}
+
+def public rdec_sel_ask(nrows : int64; words : array<uint>) : bool => invoke(g_rdec_sel_ask, nrows, words)
+def public rdec_sel_landing() : SelLanding => invoke(g_rdec_sel_landing)
+def public rdec_sel_land_rows(row0, nrows : int64; var dst : array<float>) {
+    invoke(g_rdec_sel_land_rows, row0, nrows, dst)
+}
 def public rdec_verify_rows() : int64 => invoke(g_rdec_verify_rows)
 def public rdec_verify_landed_logits() : bool => invoke(g_rdec_verify_landed_logits)
 //! `side` the rows' n-gram side rows and `experts` the host's routed sums of the rows between a hyper-connection chain's segments; empty and unreached elsewhere
@@ -1836,6 +1925,20 @@ def public set_gpu_want_pf_stream(pin : int) {
 
 //! the pin as it was written (-1 = none): a fixture puts back what it found
 def public gpu_want_pf_stream_pin : int => g_pf_stream_pin
+
+var private g_hot_share_pin = -1.0   //! `set_gpu_hot_share`'s pin: negative reads the environment
+
+//! the DMA fill's ungated share of a decode step's misses (`DASLLAMA_GPU_HOT_SHARE`); the pin is a fixture's in-process twin
+def public gpu_hot_share : float => g_hot_share_pin >= 0.0 ? g_hot_share_pin : g_env_gpu.gpu_hot_share
+
+def public set_gpu_hot_share(pin : float) {
+    g_hot_share_pin = pin
+    if (pin >= 0.0) {
+        to_log(LOG_INFO, "dasLLAMA GPU tier: set_gpu_hot_share({pin}) - the DMA fill admits that share of a decode step's pool misses past the heat gate{gpu_hot_dma() ? "" : " (ignored: the DMA fill is off, DASLLAMA_GPU_HOT_DMA / set_gpu_hot_dma)"}\n")
+    }
+}
+
+def public gpu_hot_share_pin : float => g_hot_share_pin
 
 var private g_hot_dma_pin = -1    //! `set_gpu_hot_dma`'s pin: -1 reads the environment
 var private g_dec_meet_pin = -1   //! `set_gpu_dec_meet`'s pin: -1 reads the environment

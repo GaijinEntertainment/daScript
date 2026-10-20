@@ -1033,3 +1033,30 @@ shape; the figures in `PERF_LEDGER.md`'s 2026-10-19 long-prompt entry), and neit
 lane-eight mapping with shuffle reductions beat it - both read slower, the hardware reduction being the cheap part. Done =
 a block-codec stamp within 1.15x of f16 a key on the race at 2048 and 8192, or the lever named that keeps it where it is.
 
+## 55. The speculative round's acceptances, q records, chain cut and selection landing on Metal, and the three models' tables
+
+The Vulkan MTP arc (`ARCHITECTURE_GPU_MTP_ACCEPT.md`, `ARCHITECTURE_GPU_VULKAN_LANDING.md#logits-selection-landing`)
+left the walks shared and the seats Vulkan's. What Metal has by construction: the three acceptances `MtpAccept
+{exact, typical, rejection}` and the k-deep walk, since both Metal rounds judge their rows through `mtp_accept_walk`
+(`metal_mtp_spec_round`, `gemma_mtp_spec_rounds`), the depth knobs, the `lcpp_bench --mtp-accept/--mtp-top-k/--mtp-top-p/
+--mtp-min-p` flags, and rejection as the sampled default. What it lacks, in the order the rulings need:
+- **The q records.** Rejection judges a draft against the distribution its draw recorded (`s.mtp_q`, `mtp_draft_sample`),
+  and the CPU round draws its drafts through the sampler for that. Both Metal rounds draft on the device by argmax
+  (`chain_draft_land`, the gemma chain's two-pass pick) and record nothing, so under the rejection knob `mtp_walk_by_accept`
+  walks typical for them - correct, and silent. Done = either the draft rows' distributions landed off the device
+  chain (the selection landing's shape, below) so rejection is rejection on Metal too, or the ruling that typical is
+  Metal's sampled acceptance and the server says so.
+- **The chain cut.** `set_mtp_chain_min_p` stops drafting at the first draft the head holds under a probability floor;
+  the Vulkan draft command lands that probability, the Metal chain lands the pick alone. Done = the draft's p beside
+  its pick, and the 35B's depth-3-at-0.5 row (`PERF_LEDGER.md`, lifted to depth 2's level) read on the M5.
+- **The selection landing.** A sampled stream's verify rows pay the host sampler's whole-row pass a row on Metal, which
+  is what the 35B's sampled rows cost before `ClsSelect` landed on Vulkan (exact 63 -> 67, rejection 56 -> 71 tok/s at
+  depth 2: `debug-jit`, the selection entry in `PERF_LEDGER.md`). Done = a Metal twin of `cls_select` (the radix select to the 1024th logit, max and denominator at T, the
+  recent logits) under the `SelLanding` seams of `install_rdec_select`, `test_sampling_landed`'s contract.
+- **The tables.** The zen2 tables of 2026-10-19 (`PERF_LEDGER.md`: Qwen3.6-35B-A3B-MTP at the strict 32k, gemma-4-26B-A4B
+  with the drafter, Qwen3.8-27B whole) carry five rows each - greedy depth 1/2/3, sampled depth 2 under rejection and
+  under typical at temp 0.7 top-p 0.9, `lcpp_bench --mtp-ab -n 64 -r 2` - and Metal has only the exact-era rows above.
+  Done = the same five rows on the M5 for the three files Metal serves whole (35B UD-Q4_K_M, 26B Q4_K_M + the Q8_0
+  drafter, 27B Q4_K_M) at the served context, and the depth tuner's assistant race re-run under the new acceptances.
+- **The catalog.** `serve_mtp` lists metal for the 26B and the 27B and vulkan beside it now; the Metal column rests on
+  the exact-acceptance rows, so the rows above re-validate it under rejection as the default.

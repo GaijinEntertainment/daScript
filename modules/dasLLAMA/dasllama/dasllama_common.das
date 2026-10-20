@@ -32,6 +32,7 @@ require dasllama/dasllama_tune  // box_profile_path: the runtime half of the app
 require daslib/json_boost  // read_json / read_json_field for the box profile's "runtime" section
 require math
 require daslib/random  // int4 RNG state + random_float for token sampling
+require daslib/math_bits
 require daslib/strings_boost  // join() for the arch-registry diagnostic
 require daslib/enum_trait   // the plane table walks the KqFmt enum
 require daslib/apply  // the Model finalizer + the image save/load walk both iterate Model fields
@@ -630,6 +631,21 @@ def mtp_seats_own(t : Model) : bool {
 def private mtp_seated(t : Model; seats : table<string; auto(FnT)>) : bool
     => mtp_seats_own(t) && key_exists(seats, g_decode_override_name)
 
+//! the verify rows the active override's seat serves at most (0 = no cap: the CPU verify takes any count); a round deeper than
+//! that caps its depth instead of passing its rows to the CPU verify, which a planes-trimmed image cannot run
+typedef MtpVerifyRowsFn = function<(t : Model) : int64>
+var private g_mtp_verify_rows_overrides : table<string; MtpVerifyRowsFn>
+
+def register_mtp_verify_rows_override(name : string; fn : MtpVerifyRowsFn) {
+    g_mtp_verify_rows_overrides[name] = fn
+}
+
+//! the rows the active override's verify seat serves at most for `t` (0 = no cap)
+def mtp_verify_rows_cap(t : Model) : int64 {
+    return 0l if (!mtp_seated(t, g_mtp_verify_rows_overrides))
+    return invoke(g_mtp_verify_rows_overrides[g_decode_override_name], t)   // nolint:PERF026 — mtp_seated holds key_exists, so the index cannot insert
+}
+
 //! the active decode override's draft seat's token for `forward_mtp`'s draft of `token` at row `pos`; -1 where no seat served
 def private mtp_draft_seat(t : Model; var s : Session; token, pos : int64; pick_only : bool) : int64 {
     return -1l if (!mtp_seated(t, g_mtp_draft_overrides))
@@ -644,15 +660,154 @@ def private mtp_verify_served(t : Model; var s : Session; toks : array<int64>; n
 def private mtp_rollback_served(t : Model; var s : Session; pos, a : int64) : bool
     => invoke(g_mtp_rollback_overrides[g_decode_override_name], t, s, pos, a)
 
-//! The accept walk's sampler seam (the decode-override shape: the engine never requires the sampler):
-//! draws one token from row `off` of `rows` through the session's spec_params, consuming the row.
-typedef MtpSampleRowFn = function<(var s : Session; var rows : array<float>; off, vocab : int64) : int64>
-var private g_mtp_sample_row : MtpSampleRowFn
-var private g_mtp_sample_row_set = false
+//! How a sampled stream's walk judges a draft against its verify row: `exact` accepts where the row's draw equals the draft,
+//! `typical` where the sampler's cuts admit it, `rejection` with probability min(1, p[d] / q[d]) off the head's recorded q,
+//! else a residual draw ([[set_mtp_accept]])
+enum MtpAccept {
+    exact
+    typical
+    rejection
+}
 
-def register_mtp_sample_row(fn : MtpSampleRowFn) {
-    g_mtp_sample_row = fn
-    g_mtp_sample_row_set = true
+var private g_mtp_accept = MtpAccept.rejection   //! the lossless walk that uses the head's whole distribution; `exact` is the seeded decode's twin for the parity cells
+
+[arch(at="../ARCHITECTURE_GPU_MTP_ACCEPT.md#mtp-accept-modes")]
+def set_mtp_accept(mode : MtpAccept) {
+    g_mtp_accept = mode
+    to_log(LOG_INFO, "dasLLAMA: set_mtp_accept({mode}) - a sampled stream's round judges its drafts {mode == MtpAccept.exact ? "where the row's draw equals the draft" : (mode == MtpAccept.typical ? "where the sampler's cuts admit them" : "by min(1, p / q) off the head's recorded q")}; a greedy stream is unchanged\n")
+}
+
+def get_mtp_accept() : MtpAccept => g_mtp_accept
+
+//! the widest drafter distribution a round records a draft row: the head's survivors past it are dropped and the rest renormalized
+let MTP_Q_CAP = 1024l
+
+//! The rejection-sampling drafter's draw seam: `logits` is the head's row for draft row `qi`; the sampler's chain over it is the
+//! drafter's distribution q, recorded as `s.mtp_q[qi * MTP_Q_CAP ..]` (`s.mtp_qn[qi]` entries, id ascending, summing to one),
+//! and the draft is one draw from q
+typedef MtpDraftDrawFn = function<(var s : Session; var logits : array<float>; vocab, qi : int64) : int64>
+var private g_mtp_draft_draw : MtpDraftDrawFn
+var private g_mtp_draft_draw_set = false
+
+def register_mtp_draft_draw(fn : MtpDraftDrawFn) {
+    g_mtp_draft_draw = fn
+    g_mtp_draft_draw_set = true
+}
+
+//! The accept walk's judge seam (the decode-override shape: the engine never requires the sampler): the token row `off` of
+//! `rows` stands for against `draft` (drawn from the q recorded at draft row `qi`) under `accept`, the row consumed
+//! (`ARCHITECTURE_GPU_MTP_ACCEPT.md#mtp-accept-modes`); the last row (`draft` under 0) draws as the sampler does
+typedef MtpJudgeFn = function<(var s : Session; var rows : array<float>; off, vocab, draft, qi : int64; accept : MtpAccept) : int64>
+var private g_mtp_judge : MtpJudgeFn
+var private g_mtp_judge_set = false
+
+def register_mtp_judge(fn : MtpJudgeFn) {
+    g_mtp_judge = fn
+    g_mtp_judge_set = true
+}
+
+//! whether a sampled stream's round draws its drafts from the head's distribution ([[MtpAccept]] `rejection`, a sampler installed)
+def mtp_drafts_sampled(s : Session) : bool => g_mtp_accept == MtpAccept.rejection && mtp_walk_samples(s) && g_mtp_draft_draw_set
+
+//! the sampled draft for draft row `qi` off the head's `logits` (the seam's draw, q recorded)
+def mtp_draft_sample(var s : Session; var logits : array<float>; vocab, qi : int64) : int64 {
+    if (!g_mtp_draft_draw_set) {
+        panic("dasLLAMA: a sampled stream reached the rejection-sampling drafter with no draw installed - the program must require dasllama/dasllama_sampling")
+    }
+    return invoke(g_mtp_draft_draw, s, logits, vocab, qi)
+}
+
+//! the selection a device driver landed for the last step ([[SelLanding]]): rows = 0 where the step landed its rows instead
+var g_sel_landing : SelLanding
+var private g_sel_on = true
+
+//! Whether a sampled stream's device step asks for the selection in place of its rows ([[sel_wanted]]); on by default
+def set_select_landing(on : bool) {
+    g_sel_on = on
+    to_log(LOG_INFO, "dasLLAMA: set_select_landing({on}) - a sampled stream's device step {on ? "asks for the selection in place of its rows where the sampler can read it (a greedy stream, a constrained one and a wide penalty window land the rows regardless)" : "lands its rows"}\n")
+}
+
+def get_select_landing() : bool => g_sel_on
+
+//! the selection landed row `row` of `s`'s step (landing row `s.sel_row1 - 1 + row`)
+def sel_landed(s : Session; row : int64) : bool => g_sel_landing.rows > 0l && s.sel_row1 > 0l && s.sel_row1 - 1l + row < g_sel_landing.rows
+
+//! the landing row of row `row` of `s`'s step ([[sel_landed]] first)
+def sel_row_of(s : Session; row : int64) : int64 => s.sel_row1 - 1l + row
+
+//! every step opens with no selection landed: a device seat that serves the step lands one and names the session's row
+def sel_reset(var s : Session) {
+    g_sel_landing.rows = 0l
+    s.sel_row1 = 0l
+}
+
+//! the drafts a round commits between its verify rows, listed in the ask beside the recent window: the walk's later rows penalize them
+let SEL_ASK_EXTRA = MTP_MAX_ROWS
+
+[arch(at="../ARCHITECTURE_GPU_VULKAN_LANDING.md#logits-selection-landing")]
+def sel_wanted(s : Session) : bool {
+    return false if (!g_sel_on || s.spec_params == null || s.constrain != null || s.pick_asked)
+    let p = deref(s.spec_params)
+    return false if (p.temp <= 0.0)   //! a penalized argmax reads the penalized row whole
+    if (!penalties_off(p)) {
+        //! a penalty that raises a logit (a repetition penalty under one, a negative presence or frequency penalty) can lift an
+        //! unlanded token past the survivors: the rows land
+        return false if ((p.penalty > 0.0 && p.penalty < 1.0) || p.presence_penalty < 0.0 || p.frequency_penalty < 0.0
+                || p.penalty_last_n + SEL_ASK_EXTRA > SEL_RECENT)
+    }
+    return true
+}
+
+//! the ids the last ask listed, in the order their logits land in the recent-window plane ([[sel_ask_words]])
+var @scratch g_sel_ask_ids : array<int64>
+
+//! the ask words for `nrows` rows of `s`'s step: the temperature and, under a penalty, the recent window's unique ids with `extra[0 .. nextra)`, the same list every row; `words` grown to fit
+def sel_ask_words(s : Session; nrows : int64; extra : array<int64>; nextra : int64; var words : array<uint>) {
+    let p = deref(s.spec_params)
+    words |> grow_resize(SEL_WORDS * nrows)
+    g_sel_ask_ids |> clear()
+    if (!penalties_off(p)) {
+        let n = long_length(s.recent)
+        let start = max(0l, n - p.penalty_last_n)
+        for (k in range64(start, n)) {
+            let id = s.recent[k]
+            g_sel_ask_ids |> push(id) if (find_index(g_sel_ask_ids, id) < 0)
+        }
+        for (k in range64(nextra)) {
+            g_sel_ask_ids |> push(extra[k]) if (find_index(g_sel_ask_ids, extra[k]) < 0)
+        }
+    }
+    verify(long_length(g_sel_ask_ids) <= SEL_RECENT, "dasLLAMA: the selection ask lists more recent ids than a row holds - sel_wanted gates the window; engine bug")
+    for (r in range64(nrows)) {
+        let base = r * SEL_WORDS
+        words[base] = float_bits_to_uint(p.temp)
+        words[base + 1l] = uint(length(g_sel_ask_ids))
+        words[base + 2l] = 0u
+        words[base + 3l] = 0u
+        for (id, j in g_sel_ask_ids, count()) {
+            words[base + 4l + int64(j)] = uint(id)
+        }
+    }
+}
+
+var private g_sel_fallbacks = 0l
+var private g_sel_served = 0l
+
+//! How many landed selections a sampler could not serve from and took the rows late in this process ([[sel_land_rows]])
+def sel_fallbacks() : int64 => g_sel_fallbacks
+
+//! How many rows a sampler drew or judged off a landed selection in this process (a cell's served witness)
+def sel_served() : int64 => g_sel_served
+
+def sel_served_note() {
+    g_sel_served++
+}
+
+//! the late landing of `nrows` rows from landing row `row0` into `dst`, the landing cleared: the step's remaining rows take the row path
+def sel_land_rows(row0, nrows : int64; var dst : array<float>) {
+    rdec_sel_land_rows(row0, nrows, dst)
+    g_sel_landing.rows = 0l
+    g_sel_fallbacks++
 }
 
 //! No penalty of any kind is armed: a repetition penalty at or below zero counts as off (zero would
@@ -673,8 +828,8 @@ def mtp_walk_samples(s : Session) : bool {
     if (s.spec_params == null || sampler_is_argmax(deref(s.spec_params))) {
         return false
     }
-    if (!g_mtp_sample_row_set) {
-        panic("dasLLAMA: a sampled stream reached the speculative round with no row sampler installed - the program must require dasllama/dasllama_sampling")
+    if (!g_mtp_judge_set) {
+        panic("dasLLAMA: a sampled stream reached the speculative round with no row judge installed - the program must require dasllama/dasllama_sampling")
     }
     return true
 }
@@ -688,33 +843,53 @@ def land_pick(var s : Session; pick : int64) {
 
 //! Every speculative round opens here: a token the previous round parked, or a pick a device driver landed, must have
 //! been consumed by the caller's sample_ - a caller that read s.logits instead would emit a stale token later.
-def mtp_round_begin(s : Session) {
+def mtp_round_begin(var s : Session) {
     if (s.mtp_pre_drawn) {
         panic("dasLLAMA: the speculative round's parked token was never consumed - the caller samples through sample_ after every round")
     }
     if (s.pick_ready) {
         panic("dasLLAMA: a device-landed pick was never consumed before a speculative round - the caller samples through sample_ after every step")
     }
+    s.mtp_qn |> clear()   //! the q records are a round's: a round that records none walks typical off an empty record, never an earlier round's
 }
 
-//! The sampled accept walk over the verify's k+1 rows in s.mtp_logits_b; returns a. The recent-token
+//! The sampled accept walk over the verify's k+1 rows in s.mtp_logits_b under `accept`; returns a. The recent-token
 //! window is put back because the caller commits the accepted drafts itself.
-[arch(at="../ARCHITECTURE_GPU_MTP.md#mtp-round-one-join")]
-def mtp_walk_sampled(var s : Session; k, vocab : int64) : int64 {
+[arch(at="../ARCHITECTURE_GPU_MTP.md#mtp-round-one-join"), arch(at="../ARCHITECTURE_GPU_MTP_ACCEPT.md#mtp-accept-modes")]
+def mtp_walk_judged(var s : Session; k, vocab : int64; accept : MtpAccept) : int64 {
+    if (!g_mtp_judge_set) {
+        panic("dasLLAMA: a sampled stream reached the accept walk with no row judge installed - the program must require dasllama/dasllama_sampling")
+    }
     let n0 = length(s.recent)
     var a = 0l
     while (true) {
-        let drawn = invoke(g_mtp_sample_row, s, s.mtp_logits_b, a * vocab, vocab)
-        if (a >= k || drawn != s.mtp_vbatch[a + 1l]) {
-            s.mtp_pre_tok = drawn
+        let judged = invoke(g_mtp_judge, s, s.mtp_logits_b, a * vocab, vocab, a < k ? s.mtp_vbatch[a + 1l] : -1l, a, accept)
+        if (a >= k || judged != s.mtp_vbatch[a + 1l]) {
+            s.mtp_pre_tok = judged
             s.mtp_pre_drawn = true
             break
         }
-        s.recent |> push(drawn)   // nolint:PERF026,LINT019 — fires from the [hot_path] rounds' compiles; the caller pushes these same tokens a step later, the window grows by the round's k at most
+        s.recent |> push(judged)   // nolint:PERF026,LINT019 — fires from the [hot_path] rounds' compiles; the caller pushes these same tokens a step later, the window grows by the round's k at most
         a++
     }
     s.recent |> resize(n0)   // nolint:PERF026,LINT019 — fires from the [hot_path] rounds' compiles; shrinks back to the caller's window, the capacity stays
     return a
+}
+
+def mtp_walk_sampled(var s : Session; k, vocab : int64) : int64 => mtp_walk_judged(s, k, vocab, MtpAccept.exact)
+
+def mtp_walk_typical(var s : Session; k, vocab : int64) : int64 => mtp_walk_judged(s, k, vocab, MtpAccept.typical)
+
+def mtp_walk_rejection(var s : Session; k, vocab : int64) : int64 => mtp_walk_judged(s, k, vocab, MtpAccept.rejection)
+
+//! the walk the process-wide acceptance picks: rejection walks typical where the round recorded no q (the assistant drafter's device picks)
+[arch(at="../ARCHITECTURE_GPU_MTP_ACCEPT.md#mtp-accept-modes")]
+def mtp_walk_by_accept(var s : Session; k, vocab : int64) : int64 {
+    if (g_mtp_accept == MtpAccept.typical) return mtp_walk_typical(s, k, vocab)
+    if (g_mtp_accept == MtpAccept.rejection && g_mtp_draft_draw_set) {
+        return long_length(s.mtp_qn) >= k ? mtp_walk_rejection(s, k, vocab) : mtp_walk_typical(s, k, vocab)
+    }
+    return mtp_walk_sampled(s, k, vocab)
 }
 
 //! The round's accept walk over `k` drafts: the leading run of verify rows whose pick (`pick`) equals the draft the row
@@ -724,7 +899,7 @@ def mtp_walk_sampled(var s : Session; k, vocab : int64) : int64 {
 def mtp_accept_walk(var s : Session; k, vocab : int64; pick : block<(row : int64) : int64>; picks_only : bool = false) : int64 {
     var a = 0l
     if (mtp_walk_samples(s)) {
-        a = mtp_walk_sampled(s, k, vocab)
+        a = mtp_walk_by_accept(s, k, vocab)
     } else {
         while (a < k && invoke(pick, a) == s.mtp_vbatch[a + 1l]) {
             a++
@@ -911,7 +1086,7 @@ def mtp_capable_(t : Model) : bool
 
 //! One speculative round at the configured depth (get_mtp_depth): commits `tok`, returns the
 //! accepted draft count a with the accepted drafts in s.mtp_vbatch[1..a]. The active decode
-//! override's round seat serves any depth where it owns `t` (`mtp_seats_own`); else the rail is the depth-1 mtp_spec_eval.
+//! override's round seat serves any depth where it owns `t` (`mtp_seats_own`); else the k-deep CPU round (`mtp_spec_round_k`).
 [hot_path]   // the per-round entry a greedy walk re-enters once per committed token
 def mtp_spec_round(t : Model; var s : Session; tok : int64) : int64 {
     if (mtp_assistant_attached(t)) {
@@ -926,12 +1101,7 @@ def mtp_spec_round(t : Model; var s : Session; tok : int64) : int64 {
     if (mtp_seated(t, g_mtp_round_overrides)) {
         return invoke(g_mtp_round_overrides[g_decode_override_name], t, s, tok, get_mtp_depth())   // nolint:PERF026 — mtp_seated holds key_exists, so the index cannot insert
     }
-    var acc = 0l
-    if (mtp_spec_eval(t, s, tok, acc)) {
-        s.mtp_vbatch[1] = acc
-        return 1l
-    }
-    return 0l
+    return mtp_spec_round_k(t, s, tok, get_mtp_depth())
 }
 
 def register_mtp_seam_override(name : string; fn : MtpSeamOverrideFn) {
@@ -2780,6 +2950,7 @@ struct Session {
     mtp_pre_drawn : bool           //! the accept walk drew this session's next token already: the next sample_ returns mtp_pre_tok and clears this
     mtp_pre_tok : int64
     pick_asked : bool              //! the caller's sampler is a bare argmax: a device driver may land the row's pick alone and leave `logits` unwritten (the scheduler sets it a step)
+    sel_row1 : int64               //! one past the landing row this session's step sampled through the device's selection ([[sel_landed]]); 0 = the rows landed
     mtp_depth_cap : int64          //! the deepest round this session's caller can take the drafts of (0 = the round's depth): a stream whose emitted tokens may queue a forced close takes depth 1
     pick_ready : bool              //! the driver landed the pick: the next sample_ returns pick_tok and clears this
     pick_tok : int64
@@ -3062,6 +3233,8 @@ struct Session {
     @scratch @exact_size mtp_logits_b : array<float>   // verify-batch logits (rows x vocab), grown once to the round's width
     @scratch @exact_size mtp_hrows : array<float>      // verify-batch post-final-norm hidden rows (rows x dim) — the drafter's next input / the carry
     @scratch mtp_picks : array<int64>      //! the last served verify seat's per-row picks, each its row's argmax: the greedy walk's truth, and the token a pick-asking round commits
+    @scratch mtp_q : array<SampleCand>     //! the rejection-sampling round's drafter distributions, `MTP_Q_CAP` entries a draft row, id ascending, summing to one
+    @scratch mtp_qn : array<int64>         //! ... and the entries each row holds
     mtp_drafted : int64            // session-lifetime telemetry: drafts attempted / accepted
     mtp_accepted : int64
     mtp_snap : DnSnapshot   //! the rollback for a rejected verify batch, sized on the first snapshot (a 27B hybrid's state is 151 MB) and overwritten after
@@ -5488,6 +5661,7 @@ def private embed_token_row(t : Model; var s : Session; token : int64) {
 def forward(t : Model; var s : Session; token, pos : int64) {   // nolint:STYLE038 — one decode step; the phases share s and must stay in order
     let c = t.config
     let dim = c.dim
+    sel_reset(s)
     dispatch_phase_decode()
     kv_ring_floor_check(s, pos)
     kv_ensure(s, pos + 1l)   // paged sessions: grow the block table BEFORE any cache-pointer hoist
@@ -5784,6 +5958,7 @@ def forward_mtp(t : Model; var s : Session; token, pos : int64; want_logits : bo
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-draft-head")]
 def private mtp_draft(t : Model; var s : Session; token, pos : int64; pick_only : bool) : int64 {
     kv_ensure(s, pos + 1l)
+    sel_reset(s)
     let picked = mtp_draft_seat(t, s, token, pos, pick_only)
     return picked if (picked >= 0l)
     forward_mtp_cpu(t, s, token, pos, true)
@@ -6051,17 +6226,17 @@ def private mtp_verify_logits(t : Model; var s : Session; npos : int64) {
     }
     mtp_h0_from_row(t, s, s.mtp_norm_b, 0l)   // = h_pos; a reject re-seeds the draft head from it
     mm_b_f(s, s.mtp_logits_b, t, cls_fmt, t.wcls_off, s.mtp_norm_b, dim, vocab, npos)
-    copy_floats(s.mtp_logits_b, 0l, s.mtp_logits, 0l, vocab)
-    copy_floats(s.mtp_logits_b, (npos - 1l) * vocab, s.logits, 0l, vocab)
-    // mirror the plain classifier tail exactly — `truth` must match plain decode BY CONSTRUCTION
+    // mirror the plain classifier tail exactly on EVERY row — the walk judges each row of the batch, and `truth` must match plain decode BY CONSTRUCTION
     if (c.final_logit_softcap > 0.0) {
-        softcap4(s.mtp_logits, vocab, c.final_logit_softcap)
-        softcap4(s.logits, vocab, c.final_logit_softcap)
+        softcap4(s.mtp_logits_b, npos * vocab, c.final_logit_softcap)
     }
     for (id in t.suppress) {
-        s.mtp_logits[id] = -1.0e30
-        s.logits[id] = -1.0e30
+        for (p in range64(npos)) {
+            s.mtp_logits_b[p * vocab + id] = -1.0e30
+        }
     }
+    copy_floats(s.mtp_logits_b, 0l, s.mtp_logits, 0l, vocab)
+    copy_floats(s.mtp_logits_b, (npos - 1l) * vocab, s.logits, 0l, vocab)
 }
 
 // Write the draft head's IN-CHUNK KV rows for a just-prefilled [start_pos, start_pos+npos) window.
@@ -6137,71 +6312,9 @@ var private g_mtp_verify_window_uid : uint64   //! the session whose CPU verify'
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-window")]
 def mtp_verify_window_active(s : Session) : bool => g_mtp_verify_window_uid != 0ul && s.uid == g_mtp_verify_window_uid
 
-//! true where the verify seat served the round's two rows; false where the CPU two-row verify ran
-[arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-rollback"), arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-window")]
-def private mtp_verify_two(t : Model; var s : Session; seated : bool; pos : int64; pick_only : bool) : bool {
-    var restore_covered = t.config.recr_mask == 0ul
-    if (seated) {
-        if (!restore_covered && !mtp_seated(t, g_mtp_rollback_overrides)) {
-            mtp_snapshot_timed(s)
-            restore_covered = true
-        }
-        let ts_seat = prof_ticks()
-        let served = mtp_verify_served(t, s, s.mtp_vbatch, 2l, pos, pick_only)
-        prof_add("mtp.verify", ts_seat)
-        return true if (served)
-    }
-    if (!restore_covered) {
-        mtp_snapshot_timed(s)
-    }
-    let ts_verify = prof_ticks()
-    let batch_cls = mtp_cls_batch_ok(t)
-    g_mtp_verify_window_uid = s.uid
-    forward_prefill(t, s, s.mtp_vbatch, 2l, pos, batch_cls)
-    g_mtp_verify_window_uid = 0ul
-    if (g_prefill_logits_done) {
-        mtp_verify_served_panic()
-    }
-    if (batch_cls) {
-        mtp_verify_logits(t, s, 2l)   // both rows from one classifier stream
-    } else {
-        mtp_verify_row0(t, s)
-    }
-    prof_add("mtp.verify", ts_verify)
-    return false
-}
-
 [cold_path]   //! the round's fail-closed exit: the verify seat served, and the rollback seat behind it declined
 def private mtp_rollback_declined_panic {
     panic("dasLLAMA: the `{g_decode_override_name}` rollback seat declined a reject after its verify seat served the round - no snapshot holds the recurrent state; engine bug")
-}
-
-[arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-rollback")]
-def private mtp_reject(t : Model; var s : Session; tok, pos : int64; served, landed_picks_only : bool) {
-    let c = t.config
-    var rolled = c.recr_mask == 0ul
-    if (!rolled && served && mtp_seated(t, g_mtp_rollback_overrides)) {
-        let ts_roll = prof_ticks()
-        rolled = mtp_rollback_served(t, s, pos, 0l)
-        prof_add("mtp.rollback", ts_roll)
-        if (!rolled) {
-            mtp_rollback_declined_panic()
-        }
-    }
-    if (rolled) {
-        if (landed_picks_only) {
-            land_pick(s, s.mtp_picks[0])
-        } else {
-            copy_floats(s.mtp_logits, 0l, s.logits, 0l, c.vocab_size)
-        }
-        copy_floats(s.mtp_h0, 0l, s.mtp_h, 0l, mtp_h_dim(c))   // the carry re-seeds from row 0's hidden: the verify's tail stashed the last row's, which fed the rejected draft
-        s.mtp_h_pos1 = pos + 1l
-        return
-    }
-    let ts_replay = prof_ticks()
-    mtp_state_restore(s)
-    forward(t, s, tok, pos)
-    prof_add("mtp.replay", ts_replay)
 }
 
 var private @scratch g_round1_s : array<Session?>   //! one stream's round through the assistant seams' rounds
@@ -6213,6 +6326,9 @@ var private @scratch g_round1_acc : array<int64>
 [hot_path, arch(at="../ARCHITECTURE_GPU_MTP_ASSISTANT.md#assistant-drafter-rounds")]   // the per-step entry the scheduler re-enters once per tick
 def mtp_spec_eval_batch(t : Model; var sessions : array<Session?>; toks : array<int64>; var accepted : array<int64>) : int64 {
     let n = long_length(sessions)
+    for (i in range64(n)) {
+        sel_reset(*sessions[i])
+    }
     if (mtp_assistant_attached(t)) {
         return mtp_assistant_rounds(t, sessions, toks, get_mtp_depth(), accepted)
     }
@@ -6220,13 +6336,9 @@ def mtp_spec_eval_batch(t : Model; var sessions : array<Session?>; toks : array<
         return invoke(g_mtp_spec_batch_overrides[g_decode_override_name], t, sessions, toks, accepted)   // nolint:PERF026 — mtp_seated holds key_exists, so the index cannot insert
     }
     accepted |> resize(n)   // nolint:PERF026 — the caller's reused per-stream row: it grows to the stream count once and keeps its capacity
+    let k = get_mtp_depth()
     for (i in range64(n)) {
-        var d = 0l
-        let hit = mtp_spec_eval(t, *sessions[i], toks[i], d)
-        if (hit) {
-            sessions[i].mtp_vbatch[1] = d
-        }
-        accepted[i] = hit ? 1l : 0l
+        accepted[i] = mtp_spec_round_k(t, *sessions[i], toks[i], k)
     }
     return 0l
 }
@@ -6274,7 +6386,7 @@ def mtp_spec_eval(t : Model; var s : Session; tok : int64; var accepted : int64&
     // accept-path backfill (a reject leaves it stale; the next draft at that row rewrites it)
     s.mtp_vbatch[0] = tok
     s.mtp_vbatch[1] = d
-    let served = mtp_verify_two(t, s, seated, pos, asked)
+    let served = mtp_verify_rows(t, s, seated, 2l, pos, asked)
     let landed_picks_only = served && asked
     let ts_walk = prof_ticks()
     var hit = false
@@ -6282,7 +6394,7 @@ def mtp_spec_eval(t : Model; var s : Session; tok : int64; var accepted : int64&
         s.mtp_logits_b |> overwrite_resize(2l * c.vocab_size)
         copy_floats(s.mtp_logits, 0l, s.mtp_logits_b, 0l, c.vocab_size)
         copy_floats(s.logits, 0l, s.mtp_logits_b, c.vocab_size, c.vocab_size)
-        hit = mtp_walk_sampled(s, 1l, c.vocab_size) == 1l
+        hit = mtp_walk_by_accept(s, 1l, c.vocab_size) == 1l
     } else {
         let truth = served ? s.mtp_picks[0] : parallel_argmax(s.mtp_logits, c.vocab_size)
         hit = truth == d && !mtp_reject_forced(s)
@@ -6297,9 +6409,220 @@ def mtp_spec_eval(t : Model; var s : Session; tok : int64; var accepted : int64&
         }
         return true
     }
-    mtp_reject(t, s, tok, pos, served, landed_picks_only)
+    if (landed_picks_only) {   //! the depth-1 walk lands nothing itself: row 0's pick, else its logits, is the step's
+        land_pick(s, s.mtp_picks[0])
+    } else {
+        copy_floats(s.mtp_logits, 0l, s.logits, 0l, c.vocab_size)
+    }
+    mtp_round_reject(t, s, tok, pos, 0l, served)
+    s.mtp_h_pos1 = pos + 1l
     s.n_past = pos + 1l
     return false
+}
+
+var private g_mtp_chain_min_p = 0.0
+
+//! 0 = off: the depth alone decides
+[arch(at="../ARCHITECTURE_GPU_MTP_ACCEPT.md#mtp-accept-modes")]
+def set_mtp_chain_min_p(p : float) {
+    g_mtp_chain_min_p = clamp(p, 0.0, 1.0)
+    if (p != g_mtp_chain_min_p) {
+        to_log(LOG_WARNING, "dasLLAMA: set_mtp_chain_min_p({p}) clamped to {g_mtp_chain_min_p} - a probability floor sits in [0, 1]\n")
+    }
+    to_log(LOG_INFO, "dasLLAMA: set_mtp_chain_min_p({g_mtp_chain_min_p}) - {g_mtp_chain_min_p > 0.0 ? "the k-deep round stops drafting at the first draft the head holds under the floor" : "the depth alone decides the round's drafts"}\n")
+}
+
+def get_mtp_chain_min_p() : float => g_mtp_chain_min_p
+
+//! `id`'s probability under the selection landed for row `row` of `s`'s step, at the stream's temperature; 0 where `id` is not a survivor
+def sel_token_prob(s : Session; row, id : int64) : float {
+    let r = sel_row_of(s, row)
+    let temp = deref(s.spec_params).temp
+    let inv = temp > 0.0 ? 1.0 / temp : 1.0
+    unsafe {
+        let mx = uint_bits_to_float(g_sel_landing.hdr[r * SEL_HDR + SEL_HDR_MAX])
+        let den = uint_bits_to_float(g_sel_landing.hdr[r * SEL_HDR + SEL_HDR_DEN])
+        for (j in range64(int64(g_sel_landing.hdr[r * SEL_HDR + SEL_HDR_COUNT]))) {
+            return exp(max((g_sel_landing.vals[r * g_sel_landing.cap + j] - mx) * inv, -80.0)) / den if (int64(g_sel_landing.ids[r * g_sel_landing.cap + j]) == id)
+        }
+    }
+    return 0.0
+}
+
+//! q[id] off draft row `qi`'s record ([[MtpDraftDrawFn]]), 0 where the row does not hold `id`
+def mtp_q_of(s : Session; qi, id : int64) : float {
+    let base = qi * MTP_Q_CAP
+    for (j in range64(s.mtp_qn[qi])) {
+        return s.mtp_q[base + j].v if (s.mtp_q[base + j].id == id)
+    }
+    return 0.0
+}
+
+//! the draft head's probability of draft `d` of draft row `qi` for the chain cut: a sampled draft's q (the draw consumed the head's row), else the
+//! landed selection's probability where the draft command landed one, else the head's own softmax
+def private mtp_draft_prob(s : Session; d, qi : int64; sampled : bool) : float {
+    return mtp_q_of(s, qi, d) if (sampled)
+    return sel_landed(s, 0l) ? sel_token_prob(s, 0l, d) : token_prob(s.logits, d)
+}
+
+//! the greedy truth for verify row `row`: the seat's landed pick, else the argmax of the row's landed logits
+def private mtp_row_truth(s : Session; served : bool; row, vocab : int64) : int64 {
+    return s.mtp_picks[row] if (served)
+    unsafe {
+        return parallel_argmax(addr(s.mtp_logits_b[row * vocab]), vocab)
+    }
+}
+
+//! the round's verify over its `n` rows at `pos`: the seat where it serves (true), else the CPU prefill with the batched
+//! classifier landing every row's logits (false); the recurrent state snapshotted wherever no rollback seat covers the reject
+def private mtp_verify_rows(t : Model; var s : Session; seated : bool; n, pos : int64; pick_only : bool) : bool {
+    sel_reset(s)
+    let recurrent = t.config.recr_mask != 0ul
+    var snapped = false
+    if (recurrent && !(seated && mtp_seated(t, g_mtp_rollback_overrides))) {
+        mtp_snapshot_timed(s)
+        snapped = true
+    }
+    if (seated) {
+        let ts_seat = prof_ticks()
+        let served = mtp_verify_served(t, s, s.mtp_vbatch, n, pos, pick_only)
+        prof_add("mtp.verify", ts_seat)
+        return true if (served)
+        if (recurrent && !snapped) {
+            mtp_snapshot_timed(s)
+        }
+    }
+    let ts_verify = prof_ticks()
+    let batch_cls = mtp_cls_batch_ok(t)   //! the per-row classifier serves the two-row round alone (`mtp_spec_round_k` caps the depth at 1 without the batch)
+    g_mtp_verify_window_uid = s.uid
+    forward_prefill(t, s, s.mtp_vbatch, n, pos, batch_cls)
+    g_mtp_verify_window_uid = 0ul
+    if (g_prefill_logits_done) {
+        mtp_verify_served_panic()
+    }
+    if (batch_cls) {
+        mtp_verify_logits(t, s, n)
+    } else {
+        verify(n == 2l, "dasLLAMA: a k-deep verify reached the per-row classifier - engine bug")
+        mtp_verify_row0(t, s)
+    }
+    prof_add("mtp.verify", ts_verify)
+    return false
+}
+
+//! the committed row's carry after a CPU verify whose rows stand (no recurrent state to put back): row `a`'s wide residual
+//! under hyper-connections, else its normed hidden
+def private mtp_cpu_row_carry(t : Model; var s : Session; a : int64) {
+    let c = t.config
+    if (c.hyper_conn) {
+        copy_floats(s.hc_res_b, a * hc_dim(c), s.mtp_h, 0l, hc_dim(c))
+    } else {
+        copy_floats(s.mtp_norm_b, a * c.dim, s.mtp_h, 0l, c.dim)
+    }
+}
+
+//! the reject at row `a` of a round whose verify `served` on the seat: the rollback seat puts the recurrent state back and
+//! the carry is row a's landed hidden; with no seat the snapshot restores and rows 0..a re-run on the CPU
+def private mtp_round_reject(t : Model; var s : Session; tok, pos, a : int64; served : bool) {
+    let c = t.config
+    var rolled = c.recr_mask == 0ul
+    if (!rolled && served && mtp_seated(t, g_mtp_rollback_overrides)) {
+        let ts_roll = prof_ticks()
+        rolled = mtp_rollback_served(t, s, pos, a)
+        prof_add("mtp.rollback", ts_roll)
+        if (!rolled) {
+            mtp_rollback_declined_panic()
+        }
+    }
+    if (rolled) {
+        if (served) {
+            copy_floats(s.mtp_hrows, a * mtp_h_dim(c), s.mtp_h, 0l, mtp_h_dim(c))
+        } else {
+            mtp_cpu_row_carry(t, s, a)
+        }
+        return
+    }
+    let ts_replay = prof_ticks()
+    mtp_state_restore(s)
+    if (a == 0l) {
+        forward(t, s, tok, pos)
+    } else {
+        forward_prefill(t, s, s.mtp_vbatch, a + 1l, pos)
+    }
+    prof_add("mtp.replay", ts_replay)
+}
+
+[arch(at="../ARCHITECTURE_GPU_MTP.md#mtp-round-one-join")]
+def mtp_spec_round_k(t : Model; var s : Session; tok : int64; k_req : int64) : int64 {
+    let c = t.config
+    let seated = mtp_seated(t, g_mtp_verify_overrides)
+    var k = mtp_depth_for(s, clamp(k_req, 1l, MTP_MAX_ROWS - 1l))
+    if (!seated && !mtp_cls_batch_ok(t)) {
+        k = 1l   //! the per-row CPU classifier lands row 0 and the last row alone
+    }
+    if (seated) {
+        let cap = mtp_verify_rows_cap(t)
+        if (cap > 1l) {
+            k = min(k, cap - 1l)
+        }
+    }
+    k = min(k, c.seq_len - s.n_past - 1l)
+    let drafts_sampled = mtp_drafts_sampled(s) && (seated || mtp_cls_batch_ok(t))
+    if (k <= 1l && !(k == 1l && drafts_sampled)) {
+        var d = 0l
+        return mtp_spec_eval(t, s, tok, d) ? 1l : 0l
+    }
+    let pos = s.n_past
+    mtp_round_begin(s)
+    if (c.n_layer_nextn <= 0l || mtp_round_cold_host(t, s, pos, k, mtp_h_dim(c))) {
+        forward(t, s, tok, pos)
+        s.n_past = pos + 1l
+        return 0l
+    }
+    let sampled = mtp_walk_samples(s)
+    let asked = s.pick_asked
+    if (asked && sampled) {
+        mtp_pick_ask_sampled_panic()
+    }
+    mtp_verify_seated_save_carry(t, s)
+    let vocab = c.vocab_size
+    let ts_draft = prof_ticks()
+    if (long_length(s.mtp_vbatch) < MTP_MAX_ROWS) {
+        s.mtp_vbatch |> reserve_resize(MTP_MAX_ROWS)   // nolint:PERF026,LINT019 — fires from the [hot_path] round's compile; once per session
+    }
+    s.mtp_vbatch[0] = tok
+    let chain_min_p = g_mtp_chain_min_p
+    var drafted = 0l
+    var prev = tok
+    let n0 = length(s.recent)
+    while (drafted < k) {
+        var d = mtp_draft(t, s, prev, pos - 1l + drafted, !sampled && chain_min_p <= 0.0)
+        if (drafts_sampled) {   //! the head's own draw, its earlier drafts in the penalty window as the walk will see them
+            d = mtp_draft_sample(s, s.logits, vocab, drafted)
+            s.recent |> push(d)   // nolint:PERF026,LINT019 — fires from the [hot_path] round's compile; the window grows by the round's k at most and shrinks back below
+        }
+        drafted++
+        s.mtp_vbatch[drafted] = d
+        prev = d
+        break if (drafted < k && chain_min_p > 0.0 && mtp_draft_prob(s, d, drafted - 1l, drafts_sampled) < chain_min_p)
+    }
+    s.recent |> resize(n0)   // nolint:PERF026,LINT019 — fires from the [hot_path] round's compile; back to the caller's window
+    s.mtp_drafted += drafted
+    prof_add("mtp.draft", ts_draft)
+    let served = mtp_verify_rows(t, s, seated, drafted + 1l, pos, asked)
+    let landed_picks_only = served && asked
+    let ts_walk = prof_ticks()
+    let walk_k = mtp_reject_forced(s) ? 0l : drafted
+    let a = mtp_accept_walk(s, walk_k, vocab, $(row : int64) : int64 => mtp_row_truth(s, served, row, vocab), landed_picks_only)
+    prof_add("mtp.walk", ts_walk)
+    if (landed_picks_only) {
+        land_pick(s, s.mtp_picks[a])
+    }
+    if (a < drafted) {
+        mtp_round_reject(t, s, tok, pos, a, served)
+    }
+    mtp_round_commit_host(s, pos, drafted, a)
+    return a
 }
 
 //! Greedy decode with MTP/NextN self-speculation at the configured depth (set_mtp_depth). Mirrors
@@ -6901,6 +7224,7 @@ def forward_prefill(t : Model; var s : Session; tokens : array<int64>; npos, sta
     if (npos <= 0l) {
         return
     }
+    sel_reset(s)
     forward_prefill_head(t, s, tokens, npos, start_pos)
     forward_prefill_body(t, s, npos, start_pos, skip_logits)
     forward_prefill_warm(t, s, tokens, npos, start_pos)
@@ -7002,6 +7326,7 @@ def private forward_prefill_head(t : Model; var s : Session; tokens : array<int6
 [no_alloc, no_env, no_io]
 def forward_batch(t : Model; var s : Session; tokens : array<int64>; npos, start_pos : int64) {
     kv_capacity_check(t, npos, start_pos)
+    sel_reset(s)
     if (npos == 1l) {
         forward(t, s, tokens[0], start_pos)
     } else {

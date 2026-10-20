@@ -60,10 +60,17 @@ identity folds the lever on every tier, the dry tier's included, so a flip re-ba
 context pin, the mirror codec, the resident route, the sliding layers' ring pin or the host-layers ask
 (`DASLLAMA_GPU_CTX_MAX`, `DASLLAMA_GPU_KV` / `set_gpu_kv_dtype`, `DASLLAMA_VK_KV32`, `DASLLAMA_GPU_RESIDENT`,
 `DASLLAMA_GPU_KV_RING` / `set_gpu_kv_ring`, `DASLLAMA_GPU_HOST_LAYERS` / `set_gpu_host_layers`): each moves what the
-plan charges the card and none the image's bytes, since the K/V mirror is the device's and never the lane's. So a trimmed
-lane the driver would decline under this run's knobs is caught before its upload: the map asks the plan again, and a
-decline that is the run's (`resident_trim_decline_is_run_mode`) keeps the lane on disk and serves the streamed build
-planar from memory, while a decline of the model's shape deletes the lane and mints it again - or, where the caller named
+plan charges the card, since the K/V mirror is the device's and never the lane's - and on a plain MoE the plan's
+host-layer split moves the lane's bytes too: a routed layer the plan keeps on the device bakes its expert stacks whole
+into the arena, a layer it moves to the host bakes them an expert at a time for the stream, so a lane minted under one
+split serves no other. The bake records the split as a marker entry of the plan (`VkBakeRole.host_split`, its `woff` the
+count, no bytes; the slice walks past it), and `vk_baked_host_layers` reads it back (-1 off a plan with no marker, which
+a lane of the current `IMAGE_VERSION` never carries: the marker's arrival bumped it, so an older lane is version-stale
+and re-minted). So a trimmed lane the driver would decline under this run's knobs, or whose baked split is not
+this run's plan's, is caught before its upload: the map asks the plan again, and a decline that is the run's
+(`resident_trim_decline_is_run_mode`, the split's included) keeps the lane on disk and serves the streamed build
+planar from memory - the split's decline also holds the mint, so a run under another split never writes its lane over
+the one on disk - while a decline of the model's shape deletes the lane and mints it again - or, where the caller named
 the `.dlim` itself and no gguf stands behind it,
 panics by name with the decline and the knobs the identity leaves out (`load_model_image`, `trim_lane_run_knobs`). A MoE lane trims
 like a dense one: every expert stack the device holds (`VkBakeRole.expert`) or streams (`VkBakeRole.expert_stream`) has its

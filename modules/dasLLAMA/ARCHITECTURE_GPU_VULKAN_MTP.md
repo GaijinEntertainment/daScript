@@ -139,7 +139,12 @@ engine's `register_mtp_rollback_override("vulkan", ...)`) copies scratch row `a`
 live slots in a one-shot submission after the verify's landing - the verify completed at its
 wait, so no rail runs between the two, and the next command orders behind the submission as
 every state upload does - and flips the region's ring parity back to row `a`'s (the verify
-flipped it once a row); the resident seat (`vulkan_resident_rollback`) cuts the region's rows and
+flipped it once a row). On a hyper-connection model with an n-gram side input the same submission
+puts the conv ring back whole from the copy the rows form took before its commit
+(`RDec.ring_roll_dev`) and commits rows `0 .. a` again off the panel the verify left, so the slots
+of the rejected rows hold what they held before the round and the committed rows' slots their
+rows - the ring's slots wrap at its row count, so a rejected row's slot is one a later conv reads.
+The resident seat (`vulkan_resident_rollback`) cuts the region's rows and
 the session's `dn_pos` to `pos + a + 1`, and its head rows to `pos + a` - row `pos + a` holds the
 rejected draft's input. The slots stay the session's, valid
 and dirty, so no state crosses the bus; the CPU restore (`mtp_state_restore`) is what releases
@@ -157,16 +162,18 @@ draft's. On a model with no recurrent layer the round skips the rollback seat (`
 or its head rows, and the same watermark rule covers them: the next draft at row `pos + a`
 rewrites its row, and the rows above it are dead. The snapshot's place in the round
 follows the seat's decision: a declined seat leaves the session untouched, so the CPU verify
-snapshots right before its own prefill (`mtp_verify_two`), and a served verify snapshots only
+snapshots right before its own prefill (`mtp_verify_rows`), and a served verify snapshots only
 where the owner registered no rollback seat; a rollback seat that declines after its verify seat
 served is an engine bug the round panics on by name, since no snapshot holds the state. Every
 decline of the verify seat sits above `rdec_dn_own_all`, the call that moves the session's
 recurrent state to the device: a decline below it would hand the CPU verify a session whose
 state the device holds. `REVIEW.das`'s `check_verify_decline_before_state_move` walks
 `vulkan_resident_verify_gated` and `vulkan_resident_verify_go` and fails a `return false` after
-that call; it licenses no names. The CPU
-depth-1 round asks two rows, so one scratch row serves it; a round of depth k would reject to any
-`a < k` through the same copies. `test_gpu_resident_hybrid_mtp_verify_reject` holds the
+that call; it licenses no names. A round of depth k asks k + 1 rows and rejects to any
+`a < k` through the same copies, scratch row `a` the state after the accepted prefix; the round caps its depth at
+the rows the driver prepared at the load (`register_mtp_verify_rows_override`, `rdec_verify_rows`), so a depth
+knob set after the load lowers the round instead of passing a deeper verify to the CPU, which a
+planes-trimmed image cannot run. `test_gpu_resident_hybrid_mtp_verify_reject` holds the
 rolled-back slots and the next step bit for bit to a one-row session's, `test_mtp.das`'s
 forced-reject round holds the stream to plain decode on both rails, and the profiler's
 `mtp.rollback` section prices the reject where `mtp.snapshot` and `mtp.replay` did.
@@ -175,8 +182,8 @@ forced-reject round holds the stream to plain decode on both rails, and the prof
 
 **A speculative round whose verify seat declines runs the CPU verify's two-row `forward_prefill`
 inside a verify window the session carries, and the resident prefill declines that window by name
-as the first rung of its ladder.** The CPU verify (`mtp_verify_two`) names the session in
-`mtp_verify_window_active` around its two-row prefill; the resident prefill override reads it
+as the first rung of its ladder.** The CPU verify (`mtp_verify_rows`) names the session in
+`mtp_verify_window_active` around its k+1-row prefill; the resident prefill override reads it
 before it binds a region, takes or claims a mirror or touches a recurrent slot, and passes the call
 as `RdecPass.verify_window` through the hydrate every pass takes (`rdec_pass_hydrated`,
 `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-pass-hydrate`): the region's device-only trunk K/V

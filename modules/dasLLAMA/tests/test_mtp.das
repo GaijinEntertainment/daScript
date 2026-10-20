@@ -12,6 +12,7 @@ def private allow_cpu_prefill_intent() {
 }
 require dasllama/dasllama_math   // parallel_argmax (engine-level, not re-exported by the facade)
 require dasllama/dasllama_gpu_resident
+require dasllama/dasllama_gpu_tier   // moe_gpu_tier_installed: the depth cell is the CPU rails' claim
 require dasllama/dasllama_gguf   // set_mtp_head_path - the split-head fixture names its head explicitly
 require dasllama/dasllama_kv_dtype   // kv_row_bytes / kv_layer_kbase: the head's K row the seam writes
 require daslib/jobque_boost
@@ -182,6 +183,50 @@ def test_mtp_output_invariance(t : T?) {
             let prose <- encode(tr, "Once upon a time, there was a", true, false)
             t |> invariance_ok(tr, prose, 40, "prose")
         }
+        delete tr
+    }
+}
+
+[test]
+def test_mtp_depth(t : T?) {
+    t |> run("the k-deep round on the CPU rails: depths 2 and 4 decode token-for-token the plain stream, depth 4 drafts and accepts more than depth 1 over the same tokens, and the forced reject at depth 3 rolls back to the accepted prefix") @(t : T?) {
+        let path = path_join(models_dir(), "Qwen3.5-0.8B-MTP-Q8_0.gguf")
+        return if (!jit_model_available(t, path))
+        if (moe_gpu_tier_installed()) {   // the CPU rails' claim: a GPU tier takes the classifier, and the CPU round then caps its depth at one
+            t |> skip("a GPU tier is armed (DASLLAMA_GPU): the k-deep CPU round needs the batched CPU classifier")
+            return
+        }
+        var tr <- load_model_(path, QuantMode.q8)
+        tr.config.seq_len = 2048l
+        let pin = mtp_depth_pin()
+        with_pinned_kernels() {
+            var prose <- encode(tr, "Once upon a time, there was a", true, false)
+            set_mtp_depth(1l)
+            var nd1 = 0l
+            var na1 = 0l
+            let ids1 <- gen_spec(tr, MTP_PROMPT, length(MTP_PROMPT) + 48, nd1, na1)
+            // the control for the accepts-more bound: the same depth again accepts the same count, which lands outside `>`
+            var nd1b = 0l
+            var na1b = 0l
+            let ids1b <- gen_spec(tr, MTP_PROMPT, length(MTP_PROMPT) + 48, nd1b, na1b)
+            set_mtp_depth(2l)
+            let ref2 <- t |> invariance_ok(tr, MTP_PROMPT, 48, "depth 2 counting")
+            t |> invariance_ok(tr, prose, 40, "depth 2 prose")
+            set_mtp_depth(4l)
+            var nd4 = 0l
+            var na4 = 0l
+            let ids4 <- gen_spec(tr, MTP_PROMPT, length(MTP_PROMPT) + 48, nd4, na4)
+            log_gen_texts(tr, "depth 1 counting: plain, speculative", ref2, ids1)
+            log_gen_texts(tr, "depth 4 counting: plain, speculative", ref2, ids4)
+            t |> success(ids_equal(ids4, ref2) && ids_equal(ids1, ref2), "depth 4 and depth 1 counting: token-for-token vs plain")
+            t |> success(nd4 > nd1 && na4 > na1, "depth 4 drafts and accepts more than depth 1 over the same 48 tokens ({nd4} drafts, {na4} accepted vs {nd1}, {na1})")
+            t |> success(ids_equal(ids1b, ids1) && na1b == na1 && !(na1b > na1), "control: depth 1 run again accepts the same count ({na1b} vs {na1}) - the accepts-more bound can fail")
+            t |> invariance_ok(tr, prose, 40, "depth 4 prose")
+            set_mtp_depth(3l)
+            forced_invariance_ok(t, tr, MTP_PROMPT, 48, ref2, "depth 3 counting")
+            delete prose
+        }
+        restore_mtp_depth(pin)
         delete tr
     }
 }

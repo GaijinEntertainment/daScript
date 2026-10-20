@@ -18,6 +18,7 @@ require daslib/jobque_boost
 require daslib/fio
 require daslib/strings_boost
 require dasllama/dasllama_math   // with_dasllama_jobque_ (the engine-standard jobque config)
+require dasllama/dasllama_sampling
 require dasllama/dasllama_gpu_tier   // moe_gpu_tier_installed / gpu_want_auto: is the tier armed
 require dasllama/dasllama_env   // set_pf_window_rows_pin: the file's 512-row window
 require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active: did the whole-model driver take the hybrid
@@ -330,6 +331,7 @@ struct private DeepWalk {
 
 def private deep_walk(t : T?; prep, reply : int64) : DeepWalk {
     var r : DeepWalk
+    let depth_pin = mtp_depth_pin()
     set_mtp_depth(prep)
     var tr <- load_mtp_carrier(t, 1l)
     r.prepared_rows = rdec_verify_rows()
@@ -350,7 +352,7 @@ def private deep_walk(t : T?; prep, reply : int64) : DeepWalk {
         log_gen_texts(tr, "the walk on a driver prepared for depth {prep}: plain, speculative", r.plain, r.ids)
         delete prompt
     }
-    clear_mtp_depth()
+    restore_mtp_depth(depth_pin)
     delete tr
     return <- r
 }
@@ -366,11 +368,61 @@ def test_gpu_resident_hybrid_mtp_depth8(t : T?) {
         t |> equal(deep.prepared_rows, 9l, "the driver was prepared for the depth-8 verify's nine rows")
         t |> success(ids_equal(deep.ids, deep.plain), "the walk emits the plain greedy decode token for token")
         t |> success(deep.drafted > 0l && deep.verifies > 0l, "the walk drafted ({deep.drafted}) and verified on the device ({deep.verifies} verifies)")
+        t |> success(deep.drafted > deep.verifies, "a round drafts more than one token at depth 8 ({deep.drafted} drafts over {deep.verifies} verifies)")
+        to_log(LOG_INFO, "depth 8 walk: {deep.drafted} drafts over {deep.verifies} device verifies for {length(deep.ids)} ids\n")
         t |> equal(deep.verify_rows_passes, 0l, "no verify passed to the CPU as verify_rows")
         var ctrl <- deep_walk(t, 1l, 4l)
         t |> equal(ctrl.prepared_rows, 2l, "control: the driver prepared for depth 1 holds two verify rows")
+        t |> equal(ctrl.drafted, ctrl.verifies, "control: at depth 1 a round drafts one token a verify, so the drafts-over-verifies bound lands outside at depth 1 ({ctrl.drafted} drafts over {ctrl.verifies} verifies)")
         delete ctrl
         delete deep
+    }
+}
+
+[test]
+def test_gpu_resident_hybrid_sampled_selection(t : T?) {
+    t |> run("Qwen3.5-0.8B-MTP at depth 2: a sampled stream (temp 0.7, top-p 0.9) through the device's selection decodes the rows-landed stream token for token, every step's selection served") @(t : T?) {
+        let depth_pin = mtp_depth_pin()
+        set_mtp_depth(2l)   // three verify rows a round: the driver prepares them at the knob at load
+        with_mtp_carrier(t, 1l) $(var tr) {
+            var prompt <- encode(tr, "Count from one to twenty: one, two, three,", true, false)
+            var sp = SamplingParams(temp = 0.7, top_p = 0.9)
+            let sel0 = get_select_landing()
+            set_select_landing(false)
+            var rows <- sampled_stream(tr, prompt, 40l, sp, 4242)
+            set_select_landing(true)
+            // a plain sampled stream first, the round off: the one-row selection twin records with the carry off and re-records on the carry flip, so the round's drafts still land their hidden
+            let spec0 = get_mtp_spec()
+            set_mtp_spec(false)
+            var p <- create_session(tr, mirror_kv_dtype())
+            let np = long_length(prompt)
+            forward_prefill(tr, p, prompt, np, 0l)
+            p.spec_params = unsafe(addr(sp))
+            let sel_plain0 = moe_gpu_resident_selections()
+            for (i in range64(6l)) {
+                forward(tr, p, sample_(p, sp), np + i)
+            }
+            t |> equal(moe_gpu_resident_selections() - sel_plain0, 6l, "the plain sampled stream landed a selection a step with the round off")
+            p.spec_params = null
+            delete p
+            set_mtp_spec(spec0)
+            var sel <- sampled_stream(tr, prompt, 40l, sp, 4242)
+            set_select_landing(sel0)
+            log_gen_texts(tr, "the sampled stream: rows landed, the selection landed", rows.ids, sel.ids)
+            t |> equal(rows.selections, 0l, "the rows-landed stream asked no selection")
+            t |> success(sel.selections > 0l, "the selection served the stream's steps ({sel.selections} selections over {sel.drafted} drafts)")
+            t |> equal(sel.late_landings, 0l, "no step's sampler reached past the landing ({sel.late_landings} late landings)")
+            // the two streams share the device's logits and the seed; they part only through the sampler's input, and the landed
+            // sampler draws the row sampler's draw over the same survivors - test_sampling_landed.das holds that equivalence
+            // seed by seed, so an exact token compare is the right form here
+            t |> success(ids_equal(rows.ids, sel.ids), "the two streams agree token for token ({length(sel.ids)} tokens; {sel.accepted} of {sel.drafted} drafts accepted under the selection, {rows.accepted} of {rows.drafted} with the rows)")
+            // a stale carry under the selection drafts garbage the walk rejects: the tokens stay alike and the acceptance drops
+            t |> success(sel.accepted == rows.accepted && sel.drafted == rows.drafted, "the walk accepts the same drafts under the selection ({sel.accepted} of {sel.drafted} against {rows.accepted} of {rows.drafted})")
+            delete rows
+            delete sel
+            delete prompt
+        }
+        restore_mtp_depth(depth_pin)
     }
 }
 

@@ -2317,6 +2317,12 @@ def hmax(x : float const?; n : int64) : float {
     }
 }
 
+//! the softmax probability of `id` over the raw row `logits`: exp(x[id] - max) / Σ exp(x - max), the sum in double ([[hlse]])
+def token_prob(logits : array<float>; id : int64) : float {
+    let mx = hmax(unsafe(addr<float const?>(logits[0])), long_length(logits))
+    return float(exp(double(logits[id]) - double(mx) - log(hlse(logits, mx))))
+}
+
 //! Σ exp(x[i] − mx) — exp4-vectorized, groups of 4 accumulated in double (the mel dot's
 //! rounding pattern). With the greedy pick's max ([[parallel_argmax]]) this is its logsumexp half:
 //! logprob = x[best] − (log(hlse) + mx).

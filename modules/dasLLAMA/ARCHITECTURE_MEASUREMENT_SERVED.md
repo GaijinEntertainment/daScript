@@ -1,9 +1,10 @@
 # dasLLAMA Architecture - the served-turn instrument
 
 Companion to `ARCHITECTURE_MEASUREMENT.md`; a section is cited by its anchor. This document
-carries one section, `ARCHITECTURE_MEASUREMENT_SERVED.md#served-turn-instrument`: the client
-clock around a live chat server's turns, and what its figures are. The benchmark rig, the tune
-gate and the instrumentation rails stay in `ARCHITECTURE_MEASUREMENT.md`.
+carries the client clock around a live chat server's turns and what its figures are
+(`#served-turn-instrument`), and the third-party servers it reads under the same clock
+(`#served-third-party`). The benchmark rig, the tune gate and the instrumentation rails stay in
+`ARCHITECTURE_MEASUREMENT.md`.
 
 ### The served-turn instrument {#served-turn-instrument}
 
@@ -99,3 +100,15 @@ Its figures are ledger figures - `PERF_LEDGER.md`, tagged `served` - and nothing
 store, board or ladder takes them, and none of them compares against an `lcpp_bench` row: the
 rig's `pp` and `tg` time the kernels from an empty cache with no scheduler, no HTTP path and no
 prefix cache inside the clock, and those three are what this instrument times.
+
+### Third-party servers under the same clock {#served-third-party}
+
+A third-party row is the same client against another process's endpoint, and its ledger entry
+carries the recipe the way ours carries the server line. Strata (the native-pack MoE server) is
+launched on the same shards as ours, `strata serve <pack> --port <port> --spec 2 --suffix-draft 0`:
+`--spec 2` is the pack's floor and keeps the MTP head out of the round, `--suffix-draft 0` turns
+the suffix drafter off, so the row is the plain decode against our round-off row; its expert
+cache sizes itself (the entry quotes its log's slot count, tagged `external`, since no clock of
+ours reads it). The client is `served_bench.das -- --url <server> --sizes 512,3000,9000 --reply 200
+--reps 2`, the same corpus and the same reply length on both sides, and the entry names both
+servers' flags beside the figures.

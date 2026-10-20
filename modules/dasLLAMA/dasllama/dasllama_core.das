@@ -862,7 +862,7 @@ def gpu_resident_decline() : string {
 def gpu_resident_experts_host() : bool {
     //! Whether the whole-model driver serving the model loaded last sums some routed layers' experts on the host (a
     //! hyper-connection MoE, a plain MoE the card does not hold whole, or one whose host-layers ask - ``set_gpu_host_layers``,
-    //! ``DASLLAMA_GPU_HOST_LAYERS`` - moved them) - the form whose speculative round does not pay, so a server slot leaves it off.
+    //! ``DASLLAMA_GPU_HOST_LAYERS`` - moved them): the form whose speculative round pays at the NextN depth alone (`mtp_auto_arms`).
     return gpu_resident_experts_host_()
 }
 

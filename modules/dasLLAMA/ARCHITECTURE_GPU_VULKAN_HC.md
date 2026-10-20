@@ -68,7 +68,8 @@ model with host layers (`rd_record_segments` records the hyper-connection chain 
 `vk_rdec_token` serves none), the host callback is the hyper-connection chain's (`rdec_host_experts_step`,
 the hot pool's split inside it), the segments' commands are built at the first token
 (`rd_host_segments_setup`). The split form of the attention is the one recorded (no unsplit or wide twin),
-the N-row command and the rows verify decline a host layer (the one-row split command serves), and the
+the N-row command declines a host layer (the one-row split command serves), the speculative verify runs its
+rows through the split command's segments (`#hc-verify-rows`), and the
 prefill window cuts the same way (`#hc-window-chain`). Regions are per segment, so a server's streams each
 keep their mirror region through the split. The plain form takes a routed model that is not a
 hyper-connection model (that model's own chain serves it) - the gemma-4 block among them, with its combine over the host's
@@ -130,7 +131,11 @@ the layer's whole expert stack, streamed into a device slot, and the host sums n
 sum reads every expert of every layer once per window, so its cost is the window's rows times the
 stacks' bytes and a prompt's rate stays flat in its length; the stream carries each layer's stack over
 the link once per window instead, so a wider window (`DASLLAMA_GPU_PF_ROWS`) amortizes the same bytes
-over more rows. At load (`resident_stream_arm`) every routed layer's gate, up and down planes gather
+over more rows: the sweep count is the prompt's rate (Qwen3.8-Flash-Next on the reference card, every
+expert resident: pp3000 368 at a 2048 window against 793 at 4096, one sweep instead of two; pp9000 663
+against 753, three sweeps instead of five), and the knob unset the driver takes the wide window where
+the plan fits with it and the narrow one otherwise (`resident_window_pick`, `PF_ROWS_WIDE` / `PF_ROWS_DEFAULT`),
+since the scratch the window sizes is the plan's third term. At load (`resident_stream_arm`) every routed layer's gate, up and down planes gather
 into pinned mirrors in device layout - the per-op tier's stream stacks (`gather_upload_group` with
 `stream` on, `vk_moe_stream_stack`), registered from the last routed layer down so the tier's prefetch
 of the group below a bound one is the next layer's copy; a mirror the pinned budget refuses stops the
@@ -199,8 +204,9 @@ window of k slot rows (`r0 = 1`, `r1 = nrows x k + 1`) onto its accumulator row;
 pooled experts and `s.moe_w_cpu` zeroes their weights, so `moe_routed_rows_sum` sums the misses alone.
 The side input's rows form takes the panel (`PleGate` and `PleConv` at `rows > 0` with `pos0 =
 PLE_POS_TOK`, the window's first position read off the token record so the recorded command serves every
-position) and `PleCommit` lands the rows' normed gated rows in the ring's slots after the conv read them;
-at depth 1 a rejected row's slot is rewritten by the next token before any conv reads it. After the rows'
+position) and `PleCommit` lands the rows' normed gated rows in the ring's slots after the conv read them,
+the ring copied whole into `RDec.ring_roll_dev` just before, so a reject can put it back
+(`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-rollback`). After the rows'
 classifier the head warms over them (`rd_encode_hc_verify_warm`): row i pairs its embed row (`hemb_dev`)
 with the carry of the row before it - the parked carry for row 0, the rows' wide residual for the rest
 (`hcsrc_dev`) - normed per stream, the pairs as hc cat rows a head row, eh_proj with `hc x nrows` columns
@@ -210,12 +216,30 @@ rows' K/V. The seat (`vulkan_resident_verify_go`)
 widens its rows to the carry's width, gathers the rows' side rows through the arch's pre-step (which
 advances the n-gram window; `mtp_ple_window_snapshot` - the CPU round's own - and the rollback's re-advance
 over the accepted rows put it back on a reject) and hands the rows step as `RdecVerifyFn`'s `experts`. The
-rail (`rd_ensure_hc_v_rail`) serves depth 1 alone - two rows, the count the driver was prepared for; any
-other declines with its reason and the CPU verify serves - and builds the N-row command's stamps first (its
-GEMV leaves, the rows requant, the per-row top-k) and the hc leaves past them. The parity cell is `tests/test_gpu_resident_hc.das`'s verify
+rail (`rd_ensure_hc_v_rail`) serves every row count from two up to the rows the driver was prepared for -
+each count recorded once per region on its first use, as the plain chain's - declines where the model has
+an n-gram ring and no rollback copy of it, and builds the N-row command's stamps first (its GEMV leaves, the
+rows requant, the per-row top-k) and the hc leaves past them.
+
+**The plain chain's verify takes the same segments.** A plain MoE with host layers records its verify as the
+one-row recorder's rows form over the segments (`rd_record_verify` from a segment base: `rd_encode_token` under the verify
+flag with the segment base, the host cut at the rows' count, the resumed segment's combine over the host's rows
+at one slot a row under the identity map, the deltanet steps a row at a time with the roll copies between),
+once per (region, row count) in the verify segments both chains share (`RDec.v_seg`, `rd_v_seg_first`), so a
+round of any depth the driver prepared for records its own; its rail (`rd_ensure_v_rail`) builds the N-row
+rail's leaves alone and never asks the N-row command, which declines a host layer. The verify entry runs the
+segments with the host rows step between them and lands the last as the N-row verify does
+(`vk_rdec_verify`). The parity cell is `tests/test_gpu_resident_format_census.das`'s verify-rows cell on the
+35B: one round's two rows and carry rows against the split command's one-row steps, and four rounds'
+committed stream against the same tokens stepped, within the routed bar - and that cell compares two
+sessions' rounds only while their drafts agree, since a routed near-tie flips on the device's bucket order
+and the host sums' rounding run to run. On a box that holds one arm at a time the token step's parity runs
+through files (`harness/parity_dump.das`: the device arm's rows and routing tape dumped, the CPU arm run on
+them in its own process, the two files compared; `PERF_LEDGER.md`, the 2026-10-19 record).
+The parity cell is `tests/test_gpu_resident_hc.das`'s verify
 cell: one round on the device against the split command's own one-row steps on the same picks
 (`moe_pick_tape_lane`, a lane replay of a rows-form tape) at the split bar, and against the CPU's one-row
 steps at the wide bar - the CPU compare is the parity evidence, the device-vs-device compare a rounding
-control. Measured on the zen2 (`PERF_LEDGER.md`), the round does not pay while the pool's
-hits sit near 40% on real text - the verify rows' host sums cost more than a plain token - so a server slot
-leaves the round off on this form (`gpu_resident_experts_host`).
+control. Measured on the zen2 (`debug-jit`, the Flash-Next round entries in `PERF_LEDGER.md`), the round pays at depth 1 alone on this form - 1.07-1.11x
+(21.6 off to 22.0-24.0 on, tok/s) with the Q8_0 head under the expert cache, every deeper row's host sums costing more than its acceptance
+returns - so a server slot arms it at the NextN depth, 1, like any other whole-model slot (`mtp_auto_arms`).

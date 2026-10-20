@@ -12,7 +12,8 @@ the coopmat mode ladder, the class-pipeline build seat and the MoE expert chain 
 are in `ARCHITECTURE_GPU_VULKAN_GEMM.md`, the KHR arm's hand-staged tile and the f32 rows it serves
 in `ARCHITECTURE_GPU_VULKAN_KHR.md`, and the decode GEMV
 family's lane split by row length is `ARCHITECTURE_GPU_VULKAN_GEMM.md#kq-gemv-lanes`. What a
-model has to fit on the card before any of this runs is in `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`, the NextN
+model has to fit on the card before any of this runs is in `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md` (the room
+it may fill on a shared card, `ARCHITECTURE_GPU_VULKAN_ROOM.md`), the NextN
 draft head the driver homes is `ARCHITECTURE_GPU_VULKAN_MTP.md#resident-draft-head`, and the
 N-row token command a batched step's rows go through is in `ARCHITECTURE_GPU_VULKAN_NROW.md`, and
 the hyper-connection chain with its host-served routed experts is `ARCHITECTURE_GPU_VULKAN_HC.md#hc-token-command`.

@@ -475,14 +475,14 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             bytes = 16947541728l, sha256 = "f2c28b3dc4776931ac6f879e11f203dec637ea0f14267a86ec8f6165f63f293f",
             serve_name = "gemma-4-26b-a4b", serve_display = "Gemma 4 26B-A4B",
             serve_note = "the MoE - 26B quality at 4B active weights per token",
-            serve_ctx = 131072, serve_vram_gb = 19.0, serve_mtp = "metal",
+            serve_ctx = 131072, serve_vram_gb = 19.0, serve_mtp = "metal, vulkan",
             serve_drafter = "mtp-gemma-4-26B-A4B-it-Q8_0.gguf"),
         ModelSpec(file = "Qwen3.8-27B-UD-Q4_K_M.gguf",
             url = "{HF}/unsloth/Qwen3.8-27B-GGUF/resolve/27af057ecb382ddfea5d12837360a8980560e3ed/Qwen3.8-27B-UD-Q4_K_M.gguf",
             bytes = 16464440224l, sha256 = "322e194ff79741c7baa497c240f677f54b201b0efab44ca8e50f122b39123482",
             serve_name = "qwen3.8-27b", serve_display = "Qwen 3.8 27B",
             serve_note = "the newest dense Qwen - thinking model, strong at code",
-            serve_ctx = 262144, serve_vram_gb = 18.5, serve_mtp = "metal",
+            serve_ctx = 262144, serve_vram_gb = 18.5, serve_mtp = "metal, vulkan",
             parity <- ev_qwen_count([dn_chunked = true])),
         ModelSpec(file = "gemma-3-4b-it-Q8_0.gguf", display = "gemma-3-4B",
             // the vision mmproj rides as a companion: the gemma3v tower tests and the image chat
@@ -777,13 +777,27 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
         // qwen4exp row), while the Vulkan driver sums its routed experts on the host by construction
         // (ARCHITECTURE_GPU_VULKAN_HC.md), so the two homes measure different forms
         ModelSpec(file = "Qwen3.8-Flash-Next-GGUF/UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf",
-            display = "Qwen3.8-Flash-Next-iq4xs", quant_label = "iq4_xs",
+            display = "Qwen3.8-Flash-Next-iq4xs", quant_label = "iq4_xs", serve_mtp = "vulkan",
             // the split NextN head (`shared`: its own Q8_0 routed experts inside) rides as a companion: the hc cells pin it as the trunk's head
             companions <- [
                 ProvEntry(name = "Qwen3.8-Flash-Next-GGUF/MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf", root = "llm",
                     url = "{HF}/unsloth/Qwen3.8-Flash-Next-GGUF/resolve/main/MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf",
                     bytes = 2786568256l, sha256 = "5ff54097406a905cf3a724c709124ceb0e3e10235ee862298969e91c96fa96e6")],
             parity <- ev_qwen_count([dn_chunked = true, moe_reference = true])),
+        // the hyper-connection chain's micro carrier (Lynxpda's random-weight qwen4exp: hc 4, the PLE 3-gram side input,
+        // 8 experts top-2, a NextN head) tests/test_gpu_resident_hc_micro.das holds whole; the published head rides as a
+        // companion, and the `-hcmixer` twin the cells load - the head mixer copied off the shard's own output_hc_* -
+        // is minted off it by the recipe. No board row: random weights say nothing about text
+        ModelSpec(file = "micro-qwen4exp/micro-qwen4exp-realqsa.gguf",
+            url = "{HF}/Lynxpda/micro-qwen4exp/resolve/main/micro-qwen4exp-realqsa.gguf",
+            bytes = 416452160l, sha256 = "b5ea5c6df7b079095bd1d375d477f476a1913df9c87412ed7e9800a8cc3909d7",
+            companions <- [
+                ProvEntry(name = "micro-qwen4exp/micro-qwen4exp-realqsa-mtp.gguf", root = "llm",
+                    url = "{HF}/Lynxpda/micro-qwen4exp/resolve/main/micro-qwen4exp-realqsa-mtp.gguf",
+                    bytes = 148810048l, sha256 = "4b4373fb211fce86a6c4bd0ea02a6e46762512cd4470177f497b4e32baaed924"),
+                ProvEntry(name = "micro-qwen4exp/micro-qwen4exp-realqsa-mtp-hcmixer.gguf", root = "llm",
+                    recipe = "python modules/dasLLAMA/harness/micro_qwen4exp_hcmixer.py micro-qwen4exp-realqsa-mtp.gguf micro-qwen4exp-realqsa-mtp-hcmixer.gguf",
+                    bytes = 150002176l, sha256 = "4fd26c949319887f45e4a7a11ae92831ff2515f5b73909f30150d2986b678ade")]),
         // the Metal sweep's Qwen quant matrix - Qwen text files the M5 box stocks beyond the rows
         // above, not every one; no board row, no provenance, the counting fixture as the
         // correctness gate

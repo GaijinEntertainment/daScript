@@ -165,15 +165,21 @@ def private prefill_chunk(m : Model; sch : Scheduler; head_end : int64) : int64 
 
 let DEFAULT_CHUNK_TOKENS = 512l   //! one prefill window: a window's cost is mostly fixed, so a smaller chunk runs a prompt at a fraction of the window's rate
 let CPU_CHUNK_TOKENS = 64l        //! the CPU's chunk while a stream decodes: a CPU chunk's time is its token count, so the stall follows it down - under 32 tokens a batch leaves the batched kernels
-let METAL_IDLE_CHUNK_TOKENS = 2048l   //! four windows in one call: within a few percent of the whole prompt's rate at a tick a quarter the length
+let GPU_IDLE_CHUNK_TOKENS = 2048l   //! the idle chunk's floor on a GPU: four windows in one call on Metal, within a few percent of the whole prompt's rate; on Vulkan the chunk follows the driver's prompt window (`idle_chunk_default`), since a window streams the routed layers' expert stacks through the device once and a chunk under it streams them again per chunk
 
 //! The chunk while a stream decodes on a backend: one window where a GPU prefills, `CPU_CHUNK_TOKENS` on the CPU.
 def chunk_default(on_gpu : bool) : int64
     => on_gpu ? DEFAULT_CHUNK_TOKENS : CPU_CHUNK_TOKENS
 
+//! The idle chunk where the device prefills `window` positions a call: the wider of the floor and the window
+def idle_chunk_default(on_gpu : bool; window : int64) : int64
+    => on_gpu ? max(GPU_IDLE_CHUNK_TOKENS, window) : DEFAULT_CHUNK_TOKENS
+
 //! The prefill quantum's two sizes on the backend `m` is served by: `chunk` while a stream decodes, `idle` while none does.
-def chunk_defaults(m : Model) : tuple<chunk : int64; idle : int64>
-    => (chunk = chunk_default(m.metal_blob || gpu_tier_status().supported), idle = m.metal_blob ? METAL_IDLE_CHUNK_TOKENS : DEFAULT_CHUNK_TOKENS)
+def chunk_defaults(m : Model) : tuple<chunk : int64; idle : int64> {
+    let on_gpu = m.metal_blob || gpu_tier_status().supported
+    return (chunk = chunk_default(on_gpu), idle = idle_chunk_default(on_gpu, gpu_device_prefill_window()))
+}
 
 //! A finished device-home stream's K/V rows - and a recurrent model's state at their end - kept on the device for the next request that opens with the same tokens.
 struct ParkedKv {

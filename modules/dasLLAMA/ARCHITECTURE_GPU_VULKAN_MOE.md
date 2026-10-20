@@ -276,4 +276,7 @@ triple, writes the routed feed into xb and runs the router GEMV off its own rms 
 segment lands the feed and the logits (`ARCHITECTURE_GPU_VULKAN_HC.md#hc-token-command`; the window chain the same over its rows).
 The host selects, folds the down scale into the weights (`moe_down_scale_fold`, the CPU `gemma4_moe_ffn`'s own fold) and sums the
 experts; the next segment's combine reads that sum as one routed row of weight one (`ArArgs.slots` 1 over the ramp map and the
-ones row) under the same three norms. The hot expert pool stays off a gemma-4 model: its device sums carry no down scale.
+ones row) under the same three norms. The hot expert pool serves such a layer like any host layer's
+(`ARCHITECTURE_GPU_VULKAN_POOL.md#hc-hot-pool`): the fold precedes the pool's split, so a hit's weight carries the down scale as a
+miss's does, the hit chain requantizes `xb`, which holds the routed feed, and the resumed segment accumulates the hit rows onto
+the host's sum before the gemma-4 combine reads it as the one routed row.

@@ -19,8 +19,9 @@ require dasllama/dasllama_kv_dtype   // kv_row_bytes / kv_layer_kbase: the head'
 require ?vulkan dasllama/dasllama_vulkan_common   // the resolved coopmat mode, where the module exists
 require ?vulkan dasllama/dasllama_vulkan_decode   // the greedy chain's mode pin and its hits and misses
 require dasllama/dasllama_math   // with_dasllama_jobque_
+require dasllama/dasllama_sampling   // sample_, set_seed_: the sampled speculative stream
 require dasllama/dasllama_env   // nolint:STYLE030,LINT019 — pf_window_rows / the pins: read under the vulkan static_if, unused in the darwin world
-require _compares   // argmax_of: the row's peak a red names
+require _compares   // argmax_of: the row's peak a red names; logits_of: the session's row copied
 require _model_tier   // logits_maxdiff, mirror_kv_dtype, live_maxabs, SUPPRESSED_LOGIT
 require _format_census   // census_plane, SiteCensus: a plane's tag against the file's tensor type
 require dasllama/dasllama_gguf   // parse_gguf_meta
@@ -37,7 +38,7 @@ def tile_arm_tag() : string {
     }
 }
 
-let PF_WINDOW_ROWS = 2048l   //! the engine's default prompt window (`DASLLAMA_GPU_PF_ROWS` unset), asserted by the two-window cells: a prompt past it runs as sequential windows
+let PF_WINDOW_ROWS = 2048l   //! the prompt window the cells size their prompts against: `load_resident` pins it where no file pinned one, since the engine's own pick (the wide window where the plan fits) would run a two-window prompt as one
 
 //! the engine's prefill window is `rows` (the default `PF_WINDOW_ROWS`, or the window a file pins), where the vulkan module exists: a cell sizing its prompt past the window holds it
 def assert_pf_window(t : T?; rows : int64 = PF_WINDOW_ROWS) : bool {
@@ -114,20 +115,21 @@ def resident_ready(t : T?; path : string) : bool {
 
 //! the levers a resident load pins, as the cell found them: the whole-model route's lever (never `gpu_want_resident`, which
 //! folds the environment's knob in and would pin the lever off under DASLLAMA_GPU_RESIDENT=0), the mirror regions asked
-//! for, the context pins, the host-layers pin, and the Vulkan fuse pin where the module exists
+//! for, the context pins, the host-layers pin, the prompt-window pin, and the Vulkan fuse pin where the module exists
 struct ResidentLevers {
     route : bool
     regions : int64
     ctx_max : int64
     ctx_strict : bool
     host_layers : int64
+    pf_rows : int64
     fuse : int
 }
 
 def resident_levers() : ResidentLevers {
     let pins = gpu_ctx_pins()
     var l = ResidentLevers(route = gpu_resident_route_lever(), regions = gpu_resident_regions_want(), ctx_max = pins.ctx_max, ctx_strict = pins.strict,
-                           host_layers = gpu_host_layers_pin(), fuse = -1)
+                           host_layers = gpu_host_layers_pin(), pf_rows = pf_window_rows_pin(), fuse = -1)
     static_if (typeinfo builtin_module_exists(vulkan)) {
         l.fuse = g_vk_fuse
     }
@@ -140,6 +142,7 @@ def restore_resident_levers(l : ResidentLevers) {
     set_gpu_ctx_max(l.ctx_max)
     set_gpu_ctx_strict(l.ctx_strict)
     set_gpu_host_layers(l.host_layers)
+    set_pf_window_rows_pin(l.pf_rows)
     static_if (typeinfo builtin_module_exists(vulkan)) {
         g_vk_fuse = l.fuse
     }
@@ -236,6 +239,9 @@ def census(kernel : string) : int64 {
 //! environment's ask does not reach the load) whatever an earlier cell left; every lever put back after
 def load_resident(path : string; regions : int64 = 0l; strict_ctx : int64 = 0l; host_layers : int64 = 0l; image : bool = false) : Model {
     let levers = resident_levers()
+    if (pf_window_rows_pin() <= 0l) {
+        set_pf_window_rows_pin(PF_WINDOW_ROWS)
+    }
     if (regions > 0l) {
         set_gpu_resident_regions_(regions)
     }
@@ -371,6 +377,57 @@ def batched_logits_rows(t : T?; tr : Model; prompts, feeds : array<array<int64>>
     return <- rows
 }
 
+//! speculative rounds on `s` while `more(round, committed)` holds: each round's token is `next(round)`, pushed onto `ids` with
+//! the drafts the round accepted after it
+def spec_rounds_into(tr : Model; var s : Session; var ids : array<int64>; more : block<(round, committed : int64) : bool>; next : block<(round : int64) : int64>) {
+    var r = 0l
+    while (invoke(more, r, long_length(ids))) {
+        let tok = invoke(next, r)
+        ids |> push(tok)
+        let a = mtp_spec_round(tr, s, tok)
+        for (i in range64(a)) {
+            ids |> push(s.mtp_vbatch[i + 1l])   // nolint:PERF006 — the caller reserves `ids` for its rounds' worth of rows
+        }
+        r++
+    }
+}
+
+//! a sampled speculative stream: the tokens the rounds committed, the drafts the walk drafted and accepted, the device's
+//! selections it asked and the sampler's late landings it took
+struct SampledStream {
+    ids : array<int64>
+    drafted : int64
+    accepted : int64
+    selections : int64
+    late_landings : int64
+}
+
+//! a sampled speculative stream of `reply` tokens over `prompt` on `tr`, seeded: the first token and every round's next drawn
+//! with `sp` off the session, the speculative gate on for the stream and put back after
+def sampled_stream(tr : Model; prompt : array<int64>; reply : int64; var sp : SamplingParams; seed : int) : SampledStream {
+    var r : SampledStream
+    r.ids |> reserve(reply + MTP_MAX_ROWS)
+    var s <- create_session(tr, mirror_kv_dtype())
+    let np = long_length(prompt)
+    let spec0 = get_mtp_spec()
+    set_mtp_spec(true)
+    forward_prefill(tr, s, prompt, np, 0l)
+    s.n_past = np
+    set_seed_(s, seed)
+    s.spec_params = unsafe(addr(sp))
+    let sel0 = moe_gpu_resident_selections()
+    let fb0 = sel_fallbacks()
+    spec_rounds_into(tr, s, r.ids, $(_round, committed) => committed < reply, $(_round) => sample_(s, sp))
+    r.selections = moe_gpu_resident_selections() - sel0
+    r.late_landings = sel_fallbacks() - fb0
+    r.drafted = s.mtp_drafted
+    r.accepted = s.mtp_accepted
+    s.spec_params = null
+    set_mtp_spec(spec0)
+    delete s
+    return <- r
+}
+
 //! one speculative round of `tok` on `s` with its draft forced to reject, the reject cadence put back after; true where it accepted
 def forced_reject_round(tr : Model; var s : Session; tok : int64) : bool {
     let reject0 = get_mtp_force_reject_every()
@@ -488,9 +545,6 @@ def feed_logits(tr : Model; var s : Session; prompt : array<int64>; toks : array
     }
     return <- out
 }
-
-//! the session's first `vocab` logits, copied
-def logits_of(s : Session; vocab : int64) : array<float> => <- [for (i in range64(vocab)); s.logits[i]]
 
 //! the prefill's logits, then each fed step's, through `s`
 def feed_logits(tr : Model; var s : Session; prompt : array<int64>; toks : array<int64>) : array<array<float>> => <- feed_logits(tr, s, prompt, toks) $ {}

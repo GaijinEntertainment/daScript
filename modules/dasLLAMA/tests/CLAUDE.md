@@ -1112,7 +1112,12 @@ and the oracle over the window at 0 missing;
 Vulkan capability the tier keys a route on, what rides on it), that the entry's presence reads the
 same as the arming field it decides, so the roster's log line and the tier's route cannot
 disagree; a probe the tier reads and the roster omits is caught by `check_vk_extension_roster`
-in `../REVIEW.das`. `test_vkd_direct_decode`
+in `../REVIEW.das`. `test_vkd_upload_batch` opens the staging batch, uploads five pieces at odd
+offsets (two overlapping) into one device buffer, closes it and reads the buffer back byte for byte -
+the one-submit landing the pool's placement loops bracket (`ARCHITECTURE_GPU_VULKAN_POOL.md#pool-window-prefix`); its
+second arm brackets three regions of five eighths of the staging buffer (the second and third each flush what sits before
+them mid-bracket) and one region past the buffer (the batch flushed, then the chunked path), every byte read back at its offset.
+`test_vkd_direct_decode`
 proves a `[spirv_decode]` method called from a kernel body on the plane element (the KHR arm's
 staging form: the index travels, the callee chains through the plane) is an ordinary call on
 the device, against the same method run on the CPU. `test_vkd_moe_routing` holds the resident MoE
@@ -1218,7 +1223,13 @@ six rows at two vocab widths against the host's `parallel_argmax`, a tie landing
 an all-equal row landing id 0, a row with NaN and -inf lanes landing its widest finite lane, an
 all-NaN row landing id 0 and never the empty-slice sentinel, a poisoned row reddening the compare; the served witness is the
 regions files' device-mode scheduler cell, which counts the picks the driver landed alone against
-the rows it stepped, the sampled fourth request's rows landing logits beside them),
+the rows it stepped, the sampled fourth request's rows landing logits beside them), `test_vkd_cls_select` (the
+classifier tail's selection over six rows at a 262144 and a 1000 vocab against the CPU oracle `select_rows_oracle` of
+`_sel_oracle.das` - every id at or above the row's 1024th largest logit with its logit, the ties at the K-th kept, a row whose
+ties overflow the landing flagged and landing the cap's worth, NaN and -inf lanes read as the lowest finite, an all-equal and
+an all-NaN row, the recent window's logits beside, the denominators within 1e-5 with a NaN read as the worst, a denominator a
+tenth of a percent off and an id moved reddening the compares with the first mismatching index logged; the ask words made by
+the engine's `sel_ask_words`; its served shape timed at Qwen3.6-35B's vocabulary),
 `test_vkd_q8_gemv_ar` (the q8 GEMV whose last workgroup runs the residual step's requant, with
 the biased add partner beside the plain step), `test_vkd_q8_gemv_ar_row_twin` (that epilogue
 against the row kernel `cls_ar_rq_b` fed the GEMV's own y row, the updated row, the scales and
@@ -1328,7 +1339,10 @@ poisoned-verify rollback over the CPU restore and beside it a forced-reject roun
 engine's seam (both sides decoded in the log; the device rollback counter moves exactly when the
 device verify counter did - once where the resident driver served the verify, not at all where an
 f32 session under an f16 mirror passed both as codec; on the CPU rail the restore and the replayed
-step), `test_mtp_prefill_seam` - the continuation prefill's seam row on the 0.8B under a fake seam
+step), `test_mtp_depth` - the k-deep round on the CPU rails (`set_mtp_depth`, the pin put back): depths 2 and 4 decode the
+counting and prose fixtures token for token the plain stream, depth 4 drafts and accepts more than depth 1 over the same 48
+tokens (depth 1 run twice accepting the same count is the control), and the forced reject at depth 3 rolls back to the
+accepted prefix, `test_mtp_prefill_seam` - the continuation prefill's seam row on the 0.8B under a fake seam
 seat: the head's K row before the window poisoned, a seat that serves leaves it (the seat asked
 once for the window's first token at its start), a declined seat on the planar model lets the CPU
 seam rewrite it (the control), and a declined seat on the model flagged a blob, a fake prefill
@@ -1353,10 +1367,25 @@ snapshot buffers on a bare session carrying a 27B-class recurrent state (151 MB,
 row a rejected draft wrote among it; and why a round stays cold (`mtp_round_cold_why` on a Session shell): each of its four
 reasons alone, a round ending on the context's last position drafting.
 `test_mtp_sampled_walk.das` - model-free: the speculative round's sampled accept walk
-(sample-and-match) over a bare 8-token session against plain sampled decode of the same rows -
+(sample-and-match) over a bare 8-token session (`bare_session` of `_mtp_walk_fixture.das`, which the accept-walk and
+landed-sampler files share with `same_rng`) against plain sampled decode of the same rows -
 every draft accepted plus the parked bonus draw, the first miss, RNG state equality (one draw
 per emitted token), the restored recent window, and the repetition penalty seeing the accepted
 drafts (a walk that forgot the window would accept the repeated draft).
+`test_mtp_accept_walks.das` - model-free: the speculative round's two other acceptances
+(`set_mtp_accept`, `MtpAccept`) over the same bare session; under the rejection knob a session whose
+draft rows recorded no q (the assistant drafter's device picks) walks typical instead of reading past
+`mtp_qn`. Typical: a draft accepted where the
+sampler's cuts admit it on its row whatever the seed draws (a runner-up inside the nucleus), the first
+cut draft replaced by one draw over that row's survivors and never the draft itself, one random draw
+a round, each cut rejecting on its own (top-k, min-p, the nucleus over equal leaders), a penalized
+greedy sampler judging as the exact walk does with no draw, and the knob routing a sampled stream's
+walk (`mtp_walk_by_accept`) through the judge and back (the knob off, the exact walk accepts fewer than the
+typical judge's three on some seed of twenty). Rejection sampling: the drafter's draw records q
+(the sampler's chain over the head's row, renormalized, id ascending, a point mass for a greedy
+sampler; `mtp_q_of` reads it, a q a thousandth off reds the bar), a draft the row gives at least q's mass is always accepted, one the row gives none is always
+rejected with the residual draw never landing on it, a draft at half q's mass is accepted on about half
+of 400 seeds (at p = q every seed accepts: the control), and the residual over a row that holds q whole falls back to the row's own draw.
 `test_constraint.das` - stocked suite, `-jit` only, skips without tinyllama Q8 (its session sizes the logits
 row; the cell writes the logits): the sampler under a `TokenConstraint` - a sampled draw with no cut probing
 once and refiltering only on a refusal (the admit-all constraint's probe count), the best admitted token when the
@@ -1365,6 +1394,17 @@ candidate list asserted at the vocabulary's size), -1 and `constrain_dead` on bo
 path when it admits nothing, only admitted survivors under a temperature, one commit per emitted token, the
 argmax again with the constraint off; then a scheduler stream under a constraint that admits nothing finishes
 `constraint` with no piece emitted.
+`test_sampling_landed.das` - model-free: the landed sampler (a device step's selection -
+survivors, max, denominator, recent-window logits - in place of the row, `SelLanding`) against
+the row sampler with the same seed, the landing built off the cell's own 4096-wide rows by the
+selection's oracle (`select_rows_oracle` of `_sel_oracle.das`, the kernel cell's own) behind the cell's own seams
+(`install_rdec_select`, the seats and the landing knob put back through `rdec_select_pin` / `get_select_landing`), every
+draw logged a side: the nucleus alone, a
+top-k within the cap with a nucleus, a min-p alone, penalties over a window spanning landed and
+unlanded ids (the denominator corrected), the late landing of the rows where no cut is armed or a
+flat row's nucleus reaches past the survivors (the draw then the row's), the three walks'
+judges and the rejection drafter's q over landed verify rows, and the chain cut's probability
+at the stream's temperature (a probability a percent off reds its bar).
 `test_sampling.das` - stocked suite; the greedy oracle and the seeded-determinism cell on
 gemma-2-2b (skip without it, `-jit` only), and model-free: the sampler units (cutoffs, penalties,
 seeded draws on a bare session) plus the candidate-list fast path against the vocab-wide
@@ -1435,7 +1475,8 @@ Qwen3.5/3.6 `xml_function` codec - a replayed call's block, a reply's parse (con
 an unterminated block, a nameless block, a malformed opener, a key written twice), and the values typed by the
 declared parameters (`tool_param_types`: a declared string stays text, a declared number or boolean goes bare).
 `test_scheduler.das` - stocked suite; the continuous-batching scheduler (dasllama_scheduler) against
-`generate()` references; skips honestly without SmolLM2-135M / the MTP fixture, `-jit` only. The two deltanet streams on
+`generate()` references; skips honestly without SmolLM2-135M / the MTP fixture, `-jit` only. Model-free: the idle chunk
+on a GPU is the wider of the 2048 floor and the driver's prompt window (`idle_chunk_default`), the CPU's one window. The two deltanet streams on
 the GPU tier (Qwen3.5-0.8B Q8_0, `DASLLAMA_GPU=1`, the whole-model driver at its one region or the per-op deltanet
 rail) match their solo references with the device's fused deltanet step recorded for every recurrent layer and no call
 passed to the CPU rails - two host-cached streams over one region, each taking it from the other, the loser's
@@ -1504,7 +1545,9 @@ host embed only where the ids seat would gather; both device-gather lines; the M
 pins, the fuse line once a state, the knob's at context init; the assistant drafter's sidecar lookup, no resolver registered in
 the root, finding none and naming the module to require).
 `test_gpu_serving_declines.das` - model-free: the whole-model driver's decline reasons decided
-from a Config or a synthetic Model shell (`resident_unserved_features`,
+from a Config or a synthetic Model shell, and a trimmed lane's host-layer split read off synthetic
+plan entries (`vk_baked_host_layers`: the role-none marker entry's woff, -1 off a lane minted before
+the marker; `resident_unserved_features`,
 `attn_chain_unserved_features`, `resident_layer_decline`) - every unserved feature and layer
 shape is named in the text a user reads, a served one yields "" (the per-op attention chain naming every gemma generation's
 attention); the MoE names among them (the
@@ -1541,8 +1584,9 @@ both. `test_perop_dense_ffn_mixed_forms` holds the per-op FFN rail's admission (
 a q51 gate beside a k4 up and one form both ride it, an mx4 up is named by its site and `KqFmt` member. `test_metal_fmt_decline_names_site` holds the Metal plane-format declines' line on shells: a dense plane in a format no Metal kernel reads named by layer, site and member (`kq_load_gpu_unserved`, the token table and the classifier too) while `decode_shape_decline` still answers `kquant_native`, a routed stack's under `graph` (`moe_fmts_unserved`), the line `metal_fmt_decline_line` logs for each, a served shell and a decline no format decided naming nothing; `test_metal_graph_decline_names_site` the same for a sigmoid-gated shared expert's and a deltanet plane's `graph` declines (`shexp_fmts_unserved`, `dn_fmts_unserved`, the window's beta/alpha form `dn_ba_window_fmts_unserved`); and `test_metal_decline_panic_names_site`, on a das_metal build, the required-mode panic of `decline` carrying the same words, a `shape` decline panicking with its reason alone the control. `test_plan_room` is the GPU plan's room arithmetic - the tier cap less headroom, capped by
 the OS's room where the OS answers. `test_resident_hot_slots` is the hot expert pool's slot rule
 (`resident_hot_slots`): 64 slots where they fit beside the whole mirror, up to 32 out of the mirror's
-context where they do not, never past the room a mirror at its floor leaves, a count asked served from
-that room, no pool under four slots or on a plan past its room; its second subtest holds the pool's
+context where they do not, the mirror's yield never past the room a mirror at its floor leaves and never taking away the
+slots that fit beside the mirror (31 fit beside it with the floor's room past the plan: 31), a count asked served from
+that room, no pool under four slots or on a plan whose whole mirror is already past its room; its second subtest holds the pool's
 share of the plan (`resident_hot_fit`): the chain's scratch is taken off the room before the slots are
 counted and charged only with a pool, a first plan's cap holds the count. `test_resident_arm_floor` is the
 arming floor (`resident_arm_floor`): the built-in 4096, the env floor, a pin under either as the floor, and a
@@ -1754,7 +1798,13 @@ decline brought down, the prompt's logits as the control. `test_gpu_resident_hyb
 twin under the depth-8 knob (`set_mtp_depth`, cleared after): the driver prepares nine verify rows
 (`rdec_verify_rows`), past the N-column leaves' eight, and the greedy walk on it (`generate_mtp_greedy`,
 32 reply tokens on the counting prompt) emits the plain decode token for token, its drafts and verifies on
-the device and none passed as `verify_rows`; loaded at depth 1 the driver prepares two (the control).
+the device and none passed as `verify_rows`; loaded at depth 1 the driver prepares two and drafts one token a verify (the
+control for the drafts-over-verifies bound). `test_gpu_resident_hybrid_sampled_selection` runs a sampled stream (temp 0.7,
+top-p 0.9, seeded) at depth 2 twice over the counting prompt, the rows landed and the selection landed (`sampled_stream` of
+`_resident_feed.das`, `set_select_landing` put back): the rows-landed stream asks no selection, the selection serves every
+step of the other with no late landing, and the two agree token for token with the same drafts accepted - the streams share
+the device's logits and the seed, and `test_sampling_landed.das` holds the landed draw's equivalence to the row draw, so the
+exact compare is the right form; a plain sampled stream with the round off first lands a selection a step.
 `test_gpu_resident_hybrid_greedy_chain` runs the greedy chain (`../ARCHITECTURE_GPU_VULKAN_LANDING.md#vk-greedy-chain`,
 `greedy_chain_cell` in `_resident_feed.das`; the llama file runs it on Llama-3.2-1B Q8_0): 24 steps fed the argmax and 24 fed a
 token off it every third step, each with the chain off and pinned on (`vk_rdec_chain_mode_set`, put back) - the chained walk's
@@ -1845,13 +1895,43 @@ holds its n-gram conv ring after a continuation window row for row against the C
 device's), a zeroed ring the control, and its logits at the wide 50% bar, since the pool's fill and the meet's split flip a
 near-tie expert run to run. Skips without the file, without the armed tier, and under `DASLLAMA_VK_KV32=1`.
 
-`test_gpu_resident_long_window.das` - stocked suite, `-jit` only, `DASLLAMA_GPU=1`; Qwen3.5-0.8B-Q4_K_M: a 3000-token prompt
+`test_gpu_resident_long_window.das` - stocked suite, `-jit` only, `DASLLAMA_GPU=1`; Qwen3.5-0.8B-Q4_K_M: a 5000-token prompt
 against the CPU chain's last row at the 10% bar, the prompt one token short the control, the window chain's prefill count
 holding that the device served the prompt, at two prompt windows pinned in process (`set_pf_window_rows_pin`, the pin read
-back as the witness): the default 2048 rows, which is DN_WINDOW itself and runs uncut, and 3072 rows, which the recurrent
-window's cut at DN_WINDOW bounds - a window past the planes read 30-72% off the chain. Skips without the file and without
+back as the witness): the wide window the driver picks first (`PF_ROWS_WIDE`, 4096), which is DN_WINDOW itself and runs
+uncut, and 5120 rows, which the recurrent window's cut at DN_WINDOW bounds - a window past the planes read 30-72% off the
+chain. Every other resident cell sizes its prompts against `PF_WINDOW_ROWS` (2048), which `load_resident` pins where no file
+pinned a window, since the driver's own pick would run a two-window prompt as one. Skips without the file and without
 the armed tier.
 
+`test_parity_dump.das` - stocked suite, `-jit` only, `DASLLAMA_GPU=1`; the parity dump's round trip
+(`harness/_parity_dump.das`, the tool `harness/parity_dump.das`) on Qwen3.5-0.8B-MTP: the device arm's
+forced-feed run written to a file (the prompt, the feed, the routing tape, every row), read back bit for
+bit, the CPU arm run on that file's prompt, feed and tape after the device drop and written, and the two
+files compared under the regions files' bar with the one-step-off control - the in-process parity through
+the files a model past the box has to use (every row's argmax decoded a side in the log); a logit three bars off reds its row alone, a reference with
+another feed is refused. The file is the magic and version words, then the record's byte count and the binary serializer's bytes;
+`test_parity_dump_refuses_foreign_files` (model-free) writes a file with another magic word, one with another version word and
+one with this build's and reads each refusal by name (`parity_dump_refusal`), a missing file refused as unreadable.
+`test_gpu_resident_hc_micro.das` - stocked suite, `-jit` only, `DASLLAMA_GPU=1`; the hyper-connection
+chain's k-deep speculative round on a carrier the box holds whole: Lynxpda's micro-qwen4exp (random
+weights, hc 4, the PLE 3-gram side input, 8 experts top-2, a NextN head; the trunk and the published head are the
+`performance/model_specs.das` row's file and companion, and the `-hcmixer` head twin - the head mixer the loader asks of a
+hyper-connection head, copied off the shard's own `output_hc_*` - is minted by `harness/micro_qwen4exp_hcmixer.py`).
+Random weights say nothing about text, so the cells read counters and the n-gram conv
+ring: at depth 3 (`set_mtp_depth`, the head path and the depth put back through their pins) the hc verify rail serves four
+rows on the device with no verify passed to the CPU, the plan picks the wide prompt window with no pin (`PF_ROWS_WIDE`) and
+`chunk_defaults` reads its idle chunk as the wider of the GPU floor and that window,
+and a round forced to reject at row 0 rolls the ring back - the three rejected rows' slots hold their
+pre-round bytes bit for bit (2.27 off without the restore), the committed row's slot its row (a plain step after it moves
+neither the verify nor the rollback counter: the no-route control); and a
+sampled stream through the selection on the hc chain decodes the rows-landed stream token for token, both streams' ids logged
+(a random row's flat nucleus reaches past the survivors, so every landing takes the rows late - asserted, late landings
+equal to selections: the plumbing's witness, not the selection's); the chain cut (`set_mtp_chain_min_p`, put back through
+`get_mtp_chain_min_p`): at depth 3 four greedy rounds draft three rows each with the cut at 0 and one each at 0.99, since
+random weights hold every draft's probability under the floor; and a child under `DASLLAMA_VK_XFERQ=0` (`_resident_load_root.das step`)
+loads, prefills and steps the host-experts form on the compute timeline alone - the timelines stand without a
+transfer family (`ARCHITECTURE_GPU_VULKAN_LANDING.md#logits-transfer-queue`).
 `test_gpu_resident_hc.das` - stocked suite, `-jit` only; the whole-model resident driver on the hyper-connection
 carrier Qwen3.8-Flash-Next UD-IQ4_XS (three shards, the large tier, `DASLLAMA_GPU=1`): the wide residual's mixer
 seams, the n-gram side input and the deltanet sigmoid out-gate on the device, the routed experts summed on the host
@@ -1988,7 +2068,7 @@ not group 0's, and the paged cell (`test_metal_paged_mtp`): one speculative stre
 tokens on a scheduler of 64-row pages - the server's session kind - emits token for token what a
 flat session emits, drafts accepted on both sides, the stream's rows asserted to span three pages
 so rounds cross page boundaries, and a Metal-served model's `chunk_defaults` read as
-`METAL_IDLE_CHUNK_TOKENS` idle and `DEFAULT_CHUNK_TOKENS` chunk; the Llama carrier also
+`GPU_IDLE_CHUNK_TOKENS` idle and `DEFAULT_CHUNK_TOKENS` chunk; the Llama carrier also
 runs the pre-encode cell: four greedy streams through the scheduler with the batched driver's
 pre-encoded step off (the reference, its taken count pinned at zero) and on (the taken count at
 sixteen or more; the shipped default reads off), token for token per stream, then the rail's
@@ -2037,12 +2117,19 @@ CPU chain at the routed bar with the IQ4_XS tile and GEMV counts rising (the per
 expert on the per-op rail in the file's own format - `perop_shexp_native` - with `shexp_gpu_prefill_layers` up by every layer
 and the span or the per-layer chain serving every fed step's, no layer on the shared expert's three dense GEMMs - one
 activation form a layer), the untied IQ4_XS table gathered by the window
-(`kq_emb_iq4xs_cls_spv`) and by every step (`vk_rdec_token_gathered` up by the steps); the NextN cell - the routed head
+(`kq_emb_iq4xs_cls_spv`) and by every step where the table's plane sits on the device (`gpu_resident_embed_gathers`:
+`vk_rdec_token_gathered` up by the steps; where the plane stayed on the host, no step row gathered) - `load_census` loads
+whole where the card holds the experts and again at `HOST_CTX` with the first routed layers' experts on the host after a
+memory decline; the verify-rows cell - one round's two verify rows through the split command's segments within the routed
+bar of the one-row steps (the other row the control; the two plain steps move no verify counter: the no-route control),
+then four rounds' committed stream against the same tokens stepped (`spec_rounds_into` of `_resident_feed.das`); the NextN cell - the routed head
 armed (`rdec_verify_rows` at two or more, `gpu_resident_mtp_device_home_`), its prompt rows warmed by the window chain,
 one device draft against the CPU head's (`unset_rdec_draft`) within the routed bar with another token's CPU draft as the
 control and the pick tie-aware, six rounds drafted and verified on the device (`moe_gpu_resident_drafts` /
-`_verifies`), then a device-home session's six rounds draft, accept and stand as the host-cached session's round for
-round; the per-op cell (the route off, every deltanet layer on the per-op rail's IQ4_XS stacks); the F32 beta/alpha cell
+`_verifies`), then a device-home session's six rounds against the host-cached session's: the forced-feed form - each
+round's verify row 0 within the routed bar of the host's with the host's previous round as the control, through the round
+whose drafts part - and the rounds accepting and standing alike while the drafts (the head's picks, which can part on a
+near-tie) agree; the per-op cell (the route off, every deltanet layer on the per-op rail's IQ4_XS stacks); the F32 beta/alpha cell
 on Qwen3.6-35B-A3B UD-IQ2_XXS. Arm `vk-gather` (families `qwen3`, `llama`): Qwen3-4B-Instruct-2507 Q4_K_M and
 Llama-3.2-3B-Instruct Q4_K_M, the tied K-quant table gathered by the window (its `kq_emb_<fmt>_cls_spv` count) and by
 every fed step off the classifier's plane, the forced feed against the CPU chain at the split bar (Qwen3-4B's K-quant chain at
@@ -2385,7 +2472,7 @@ asked whole: the plan moves the first routed layers' experts to the host (`gpu_r
 every layer), the device keeping the dense branch, the norms, the router and the routed feed
 (`../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-gemma4-moe-block`), and the 150 + 150 perplexity cell holds the CPU chain at the same
 ratio and slack with every call served (`served_every_call`), and a child load under the same room (`resident_load_log`) logs
-no hot expert pool, naming the gemma-4 MoE's down scale the pool's sums do not carry; the cap binds the device's weight budget at the tier's first
+the pool sized by the room alone - armed, or declined with the MB left past the plan, never with the gemma-4 form as the reason (its hits carry the down scale folded into their weights, as the host's misses do); the cap binds the device's weight budget at the tier's first
 init, so the cell has its own file, and it skips before the load where the cap does not decide the plan -
 `DASLLAMA_GPU_VRAM_MB` set to another room, or a device room under 8000 MB. `test_gpu_resident_gemma4_26b_mx4.das` (large
 tier) holds the MXFP4_MOE mint of the Q4_K_M file (`../performance/model_specs.das`): the format cell and the 150 + 150
@@ -2418,7 +2505,8 @@ perplexity form under tq4 (reads 1.032 against 1.032, 148 of 150 hits each).
 eight fed steps on a ringed load and on a flat one (`set_gpu_kv_ring`, put back) - the logits bit for bit at the prompt and every
 step, the ringed load arming rings and charging less mirror, the row a step off the control - on the f16 and q8_0 mirrors, and
 tq4 too on the E2B. The E2B's ring test also reads the driver's load log (`ring_load_announces`: two loads in a child,
-`_resident_load_root.das`, which `resident_load_log` spawns through `_child_run.das`) - the ringed load naming its rings, the flat
+`_resident_load_root.das`, which `resident_load_log` spawns through `_child_run.das`; `-- <path> <ctx> [step]`, where `step` also
+prefills a short prompt and decodes one token through the armed driver) - the ringed load naming its rings, the flat
 one under `DASLLAMA_GPU_KV_RING=0` its every-row mirror, the host embed under `DASLLAMA_VK_GPU_EMBED=0` saying so and the
 gathering load not. Arm `g4e-ple`
 (`test_gpu_resident_gemma4_e2b_ple_tables`): the E2B Q8_0 file and its emb-Q5_0 / emb-Q5_1 / emb-Q4_0 / emb-Q6_K / emb-IQ4_XS
@@ -2512,10 +2600,16 @@ unasked pool, and holds the pool's slots filled off the layers' pinned mirrors (
 so about half of each layer's experts stay resident, holds the token command against the CPU chain with the misses read off the
 lane, and runs the same feed twice to hold that the heat profile the drop writes beside the lane (`<lane>.heat`) makes the
 second feed read fewer planes; it needs the lane file, so it skips under `DASLLAMA_IMAGE=0`.
-`test_moe_formats_knobs_<TYPE>` (Q8_0, Q4_K, IQ4_XS) pins the pool's two knobs in process over twenty host layers: the DMA
-fill (`set_gpu_hot_dma`, the misses copied into the pool on the transfer queue, `gpu_resident_hot_stats().dma` the witness) and
-the decode meet (`set_gpu_dec_meet`, a token's picks through the prefill's meet, `meet_steps` the witness - the one-row rail's
-counter stays, since the meet replaces it); both pool cells skip under `DASLLAMA_GPU_HEAT=0`, which asks no pool.
+`test_moe_formats_knobs_<TYPE>` (Q8_0, Q4_K, IQ4_XS) pins the pool's knobs in process over twenty host layers, four cells a
+type: the fill's share first (`set_gpu_hot_share(1.0)` over a pool pinned to `SHARE_CELL_SLOTS` of the carrier's 60 experts
+through `g_gpu_want.heat`, so the pool fills and the heat gate has misses to leave; `share_seen` up and `share_fills ==
+share_seen` the witness, since every expert of the carrier is a copy the tier can make, the bar the proof; a pool armed at
+the full count skips, since it never fills), the DMA fill (`set_gpu_hot_dma`, the misses copied into the pool on the transfer
+queue, `gpu_resident_hot_stats().dma` the witness), the fill's no-route leg (the DMA fill and the meet pinned off: `dma` stays
+0 over the cell, the host's `uploads` rises - the meet's claims ride DMA whatever the knob says, so it is off too) and the
+decode meet (`set_gpu_dec_meet`, a token's picks through the prefill's meet, `meet_steps` the witness - the one-row rail's
+counter stays, since the meet replaces it); the pool's counters are the armed driver's, zeroed at its arm inside the feed's
+load, so the cells read them absolute; the three pool cells skip under `DASLLAMA_GPU_HEAT=0`, which asks no pool.
 `test_moe_formats_rail_arms` runs the Q4_K file with each rail lever off in turn (`set_rare_onepass(0)`, `set_rare_batched(0)`,
 `set_rare_arena(0)`) against the same bar, so the A/B arms stay honest.
 Run the format cells under `DASLLAMA_IMAGE=0` - a dozen carriers would mint a dozen images beside them,

@@ -88,6 +88,11 @@ must keep holding:
 - `test_vulkan_kernels.das`'s `test_vkd_ple_bf16_cvt` cell must hold the bf16 rows as f16 bit
   for bit the widened value's half, saturated past the half range, the elements past the count
   kept.
+- `test_vulkan_kernels.das`'s `test_vkd_cls_select` cell must hold the selection kernel's landing
+  against the host oracle on every row: the ids at or above the K-th largest logit with their
+  logits, the max, the denominator at the row's temperature, the overflow flag past the slots and
+  the recent ids' logits, at a wide and a narrow vocabulary, a poisoned denominator reddening the
+  bar.
 - `test_vulkan_kernels.das`'s `test_vkd_router_gemv_bf16` cell must hold the bf16 router-form
   rows against the CPU dot at a row base and an output base, the two-base form and the
   norm-folded form.

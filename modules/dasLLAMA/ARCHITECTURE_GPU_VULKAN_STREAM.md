@@ -210,6 +210,10 @@ standby (`harness/kq_disk_rail_probe.das` reads the kernels, the rates are the p
 rows of `PERF_LEDGER.md`). A channel's timed pop waits only while a job is outstanding, so each channel carries one
 for the readers' lifetime; the readers quit at the ring's drop and at the context's shutdown
 (`vk_stream_readers_quit`, a `[finalize]`), since the job queue's teardown waits on every thread.
+A reader's answer to the quit order is its last touch of either channel - it releases its two
+references first - so once every reader answered the main context's reference is the last and
+`channel_remove` frees the channels (a release alone never frees one: the exit-time dump would list
+them at zero references). A reader that never answers keeps its references, and the channels stay with it.
 Every slot frees at the window's join, the window sum's end and the decode step's end
 (`vk_stream_ring_release`), a read still in flight landing first.
 
@@ -222,7 +226,8 @@ time (`rare_ready_prefix`, `moe_regions_rotate`); the decode step queues its pic
 **The profile is the picks a (layer, expert) took.** Every window's regions by their rows, every
 token's picks by one (`expert_heat_add`, `dasllama_blocks.das`) are summed into `<lane>.heat` at the
 model's drop and at the context's shutdown ("HEAT", the layer and expert counts, then int64 counts;
-an earlier file's counts added), and the next arm reads it and seats each layer's hottest experts
+an earlier file's counts added; the layers are the trunk's and the NextN head's, `expert_heat_layer_count`,
+since the head's experts route and stream like a trunk layer's), and the next arm reads it and seats each layer's hottest experts
 (`expert_heat_load`, `expert_heat_order` -> `moe_gpu_stream_cache_order`). On Qwen3.6-35B at half
 its experts resident the profile halves the on-demand reads and doubles the decode rate; on
 Flash-Next at half, pp3000 577 and tg128 19.0 against 598 and 21.1 with every expert resident

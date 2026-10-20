@@ -39,10 +39,14 @@ floor, and a plan that fills the card to its cap beside a desktop pages (the car
 2.9 tok/s so, 30 with the pool and a mirror of 88 thousand positions). `DASLLAMA_GPU_HEAT` asks a
 count, served from the same floor's room, and 0 asks none. A context asked whole (`set_gpu_ctx_strict`,
 the server's `--ctx`) is the floor itself: the pool counts its slots out of what the asked mirror leaves
-(`resident_hot_floor_ctx`, scaled by eight sevenths for the re-plan's seven eighths), down to none, and
+(`resident_hot_floor_ctx`, scaled by eight sevenths for the re-plan's seven eighths; the floor's K/V term is the
+mirror's own bytes at the floor's context, `resident_mirror_bytes`: a sliding layer charges its ring, not a row for
+every position), down to none, and
 the driver declines only where the dense planes and the asked mirror alone pass the card. The pick shortens the mirror's context to
 what the pool leaves and holds the pool at the count the first plan settled on, so the slack of the
-shortened context stays slack. Under four slots no pool arms. The chain a window's hits ride
+shortened context stays slack. Under four slots no pool arms. A gemma-4 layer pools like any routed layer: a
+slot's hits carry the layer's down scale folded into their weights, as the host's misses do, so a host-layer split on
+any routed model whose picks fit the hit chain (`RDEC_HOT_PICKS`) sizes a pool. The chain a window's hits ride
 (`RDEC_HOT_CHAIN_BYTES`, 320 MB of scratch) is taken off the room before the slots are counted and
 charged to the plan only with a pool (`resident_hot_fit`): a plan with no pool - none asked, or none
 that fits - keeps the mirror's context and the room a model needs to fit. The tier's own carve - the
@@ -123,6 +127,24 @@ reads 19.8 ms a token against 23.6, the pool serving 97.5% of the picks against 
 56.5 against 62.3 (`lcpp_bench` tg128 under `DASLLAMA_GPU_HOT_DMA=1` against unset, the prefill
 rotation rows of `PERF_LEDGER.md`). The knob is on by default; `=0` keeps the host fill, the before-and-after on real prompts.
 
+**A miss the fill admits lands for the next step; the step that admitted it sums it on the host.**
+The fill runs before the step's split (`rdec_hot_step`, `rdec_hot_rows_step`) and seats the expert
+in the tables at once, with the slot marked landing (`HotLayer.landing`), so the split reads it as a
+miss (`rdec_hot_hit_slot`) and the hit chain never waits a copy; after the chain's submit the step
+clears the marks and flushes the batch (`rdec_hot_land`), whose value the next compute submit waits
+(`vk_rdec_hot_dma_flush` folds it into the pending transfer wait, and in-order submits after it
+inherit the ordering), so no command reads a slot a DMA still writes. A same-step landing - the
+chain waiting the batch and summing the fills - lost on the reference box at every share (the token
+step 67.8 ms with the gate alone, 77 / 79 / 86 at shares 0.3 / 0.5 / 0.7; `debug-jit`, the same entry): a decode step's host
+sums carry a per-layer floor the fewer misses do not lower, and the copies sat on the chain's
+critical path. The heat gate keeps the fill to a few experts a token - a miss colder than the
+coldest unpicked slot stays the host's - and `DASLLAMA_GPU_HOT_SHARE` lifts the gate for a share
+of the misses the gate left (`rdec_hot_fill_share`): the warmest first, each into the coldest
+unpicked slot (`rdec_hot_victim`), by DMA alone, since a miss the tier cannot copy costs the host
+more to gather and upload than to sum. The share is the pool's working-set policy - the picks of
+a layer that the slots serve without a fill rose from 49% to 61-63% of them under it on the
+reference box (`debug-jit`, the `DASLLAMA_GPU_HOT_SHARE` entry in `PERF_LEDGER.md`) - and the pool's summary line counts the share's experts among the DMA's.
+
 ### A prompt's window serves the pool's hits and leaves it warm {#pool-window-prefix}
 
 **A streamed window reorders its regions to a pool prefix - the layer's hits, then the busiest misses
@@ -149,6 +171,16 @@ pool holding its hottest experts, so the decode behind it hits at the warm rate 
 `PERF_LEDGER.md`); a 64-row window on layer 12 serves 414 of 512 rows off 29 hits with
 nothing copied. On a long prompt every expert of a layer is picked, so no slot the window reads is a
 victim and the prefix promotes into free slots alone; the decode step's DMA fill moves the pool from there.
+
+**A layer's placements at a window's end land in one submit.** The host gathers each expert the heat
+order admits and uploads its six planes (`vk_rdec_hot_upload`); on the staged rail - the default, the
+planes unmapped (`ARCHITECTURE_GPU_VULKAN_ROOM.md#vk-plan-room`) - a staged upload is a staging memcpy and
+a submit under a fence, and a Flash-Next window places hundreds of experts a layer. The placement loops
+bracket themselves (`rdec_hot_batch`, `upload_batch_open` / `upload_batch_close`): inside the bracket an
+upload that fits lands beside the others in the staging buffer and the close copies every region in one
+command under one fence, a flush mid-bracket where the buffer fills. Unbracketed, the fence round trips
+cost the prompt 3.5x (pp512 415 mapped against 117 staged, same plan; `debug-jit`, the upload-batch entry in `PERF_LEDGER.md`); bracketed, the staged rail reads
+419, and a window's placements upload in half the mapped rail's time (2350 experts, 117 ms against 231).
 
 ### Under the decode meet a window claims over the pool {#pool-meet-window}
 

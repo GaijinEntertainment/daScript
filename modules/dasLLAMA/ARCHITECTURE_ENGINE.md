@@ -116,9 +116,10 @@ the module declares every such buffer `@exact_size` and sizes it through a reser
   survive), and the temperature, softmax, nucleus and min-p cuts and the one draw run over those
   survivors in `Session.cand`, so a sampled decode costs what a greedy one does at a 250K vocab;
   top-k off or past the cap takes the vocab-wide reference path, which is also the fast path's
-  parity oracle in `tests/test_sampling.das`. It registers the accept walk's row sampler
-  (`register_mtp_sample_row`) at init, and that registration is the only way the engine reaches
-  this file. A `Session` may carry a `TokenConstraint` (`dasllama_common`'s abstract class: `admits`
+  parity oracle in `tests/test_sampling.das`. It registers the accept walk's row judge
+  (`register_mtp_judge`) and the rejection-sampling drafter's draw (`register_mtp_draft_draw`) at
+  init, and those two registrations are the only way the engine reaches this file
+  (`ARCHITECTURE_GPU_MTP_ACCEPT.md#mtp-accept-modes`). A `Session` may carry a `TokenConstraint` (`dasllama_common`'s abstract class: `admits`
   asks whether a token may come next, `commit` advances past the one emitted); the sampler never
   emits a token it refuses - the greedy pick probes the argmax, then the `CONSTRAINED_PROBE_K`
   largest, then the whole row in logit order, and the sampled path draws over its candidate list
