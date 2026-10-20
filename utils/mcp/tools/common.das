@@ -186,6 +186,7 @@ def compile_and_simulate_ctx(file : string; project : string = ""; blk : block<(
             cop.threadlock_context = true
             cop.ignore_shared_modules = true
             cop.auto_inline_functions = false   // introspection describes the SOURCE - splices rewrite bodies/references
+            cop.keep_symbol_tables = true       // blk reads is_used / function_index
             compile_file(file, access, unsafe(addr(mg)), cop) $(ok; program; issues) {
                 if (!ok) {
                     result = "Compilation failed:\n{issues}"

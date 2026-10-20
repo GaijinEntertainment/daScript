@@ -3267,7 +3267,7 @@ namespace das {
         X(report_private_functions) X(log_compile_time) X(log_total_compile_time) \
         X(log_module_compile_time) X(log_optimization) X(log_optimization_passes) X(force_escape_free) \
         X(force_allocate_on_stack) X(force_partial_escape_free) X(log_escape_analysis) X(log_gc_time) \
-        X(debug_infer_flag) X(temp_table_lint_warning) X(module_cache)
+        X(debug_infer_flag) X(temp_table_lint_warning) X(module_cache) X(keep_symbol_tables)
 
     static bool cachedPoliciesMatch ( const CodeOfPolicies & a, const CodeOfPolicies & b ) {
     #define DAS_POLICY_FIELD_SAME(f) if ( !(a.f == b.f) ) return false;
