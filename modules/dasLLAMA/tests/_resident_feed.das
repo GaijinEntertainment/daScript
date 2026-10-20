@@ -392,40 +392,68 @@ def spec_rounds_into(tr : Model; var s : Session; var ids : array<int64>; more :
     }
 }
 
-//! a sampled speculative stream: the tokens the rounds committed, the drafts the walk drafted and accepted, the device's
-//! selections it asked and the sampler's late landings it took
+//! a sampled speculative stream: the tokens the rounds committed, the rounds run, the drafts the walk drafted and accepted, the
+//! device's selections it asked and the sampler's late landings it took
 struct SampledStream {
     ids : array<int64>
+    rounds : int64
     drafted : int64
     accepted : int64
     selections : int64
     late_landings : int64
 }
 
-//! a sampled speculative stream of `reply` tokens over `prompt` on `tr`, seeded: the first token and every round's next drawn
-//! with `sp` off the session, the speculative gate on for the stream and put back after
-def sampled_stream(tr : Model; prompt : array<int64>; reply : int64; var sp : SamplingParams; seed : int) : SampledStream {
+//! a sampled speculative stream of `reply` tokens on `tr` at depth 2, seeded: `open` prefills the prompt onto the session it is
+//! handed (each home's own prefill), then the first token and every round's next drawn with `sp` off the session; the
+//! speculative gate and the depth put back after
+def sampled_stream(tr : Model; reply : int64; var sp : SamplingParams; seed : int; kdt : KVDtype; open : block<(var s : Session) : void>) : SampledStream {
     var r : SampledStream
     r.ids |> reserve(reply + MTP_MAX_ROWS)
-    var s <- create_session(tr, mirror_kv_dtype())
-    let np = long_length(prompt)
+    var s <- create_session(tr, kdt)
     let spec0 = get_mtp_spec()
+    let depth0 = mtp_depth_pin()
     set_mtp_spec(true)
-    forward_prefill(tr, s, prompt, np, 0l)
-    s.n_past = np
+    set_mtp_depth(2l)
+    invoke(open, s)
     set_seed_(s, seed)
     s.spec_params = unsafe(addr(sp))
-    let sel0 = moe_gpu_resident_selections()
+    let sel0 = sel_selections()
     let fb0 = sel_fallbacks()
-    spec_rounds_into(tr, s, r.ids, $(_round, committed) => committed < reply, $(_round) => sample_(s, sp))
-    r.selections = moe_gpu_resident_selections() - sel0
+    spec_rounds_into(tr, s, r.ids, $(round, committed) : bool { r.rounds = round; return committed < reply }, $(_round) => sample_(s, sp))
+    r.ids |> resize(reply)
+    r.selections = sel_selections() - sel0
     r.late_landings = sel_fallbacks() - fb0
     r.drafted = s.mtp_drafted
     r.accepted = s.mtp_accepted
     s.spec_params = null
+    restore_mtp_depth(depth0)
     set_mtp_spec(spec0)
     delete s
     return <- r
+}
+
+//! the resident driver's sampled stream: the prompt prefilled through the engine's prefill on the mirror's codec
+def sampled_stream(tr : Model; prompt : array<int64>; reply : int64; var sp : SamplingParams; seed : int) : SampledStream {
+    return <- sampled_stream(tr, reply, sp, seed, mirror_kv_dtype()) $(var s : Session) {
+        let np = long_length(prompt)
+        forward_prefill(tr, s, prompt, np, 0l)
+        s.n_past = np
+    }
+}
+
+//! the selection landing's agreement, both homes' one reading: the rows-landed stream asked no selection, the selection served
+//! the other's steps with no late landing, the two agree token for token (they share the device's logits and the seed and
+//! part only through the sampler's input; `test_sampling_landed.das` holds the landed draw's equivalence to the row draw) and
+//! the walk accepts the same drafts (a stale carry under the selection drafts garbage the walk rejects: the tokens stay alike
+//! and the acceptance drops)
+def selection_agrees(t : T?; tr : Model; tag : string; rows, sel : SampledStream) {
+    log_gen_texts(tr, "{tag} the sampled stream: rows landed, the selection landed", rows.ids, sel.ids)
+    t |> equal(rows.selections, 0l, "{tag} select: the rows-landed stream asked no selection")
+    t |> success(sel.drafted > sel.rounds, "{tag} select: the rounds drafted past depth 1 ({sel.drafted} drafts over {sel.rounds} rounds)")
+    t |> success(sel.selections > 0l, "{tag} select: the selection served the stream's steps ({sel.selections} selections over {sel.drafted} drafts)")
+    t |> equal(sel.late_landings, 0l, "{tag} select: no step's sampler reached past the landing ({sel.late_landings} late landings)")
+    t |> success(ids_equal(rows.ids, sel.ids), "{tag} select: the two streams agree token for token ({length(sel.ids)} tokens; {sel.accepted} of {sel.drafted} drafts accepted under the selection, {rows.accepted} of {rows.drafted} without)")
+    t |> success(sel.accepted == rows.accepted && sel.drafted == rows.drafted, "{tag} select: the walk accepts the same drafts under the selection ({sel.accepted} of {sel.drafted} against {rows.accepted} of {rows.drafted})")
 }
 
 //! one speculative round of `tok` on `s` with its draft forced to reject, the reject cadence put back after; true where it accepted

@@ -100,7 +100,7 @@ struct Args {
     @clarg_doc = "Timed repetitions of the batched row, both engines (default: -r)"
     npl_reps : int = 0
     @clarg_name = "npl-mtp"
-    @clarg_doc = "The batched tg row's streams tick through the self-speculative round (a NextN model), every stream's verify rows in one joint pass; the reference row stays plain decode"
+    @clarg_doc = "The batched tg row's streams tick through the self-speculative round (a NextN model), each stream its own round a tick; the reference row stays plain decode"
     npl_mtp : bool
 
     @clarg_doc = "Arm the accelerate (+AMX/SME) float-batch tier for the das run — the 'cpu + AMX' board row (records flavor 'accel'; CPU only, fails where das_accelerate is not built)"
@@ -1958,7 +1958,7 @@ def main() : int {
                 tps |> reserve(breps)
                 var refused = ""
                 let prev_spec = get_mtp_spec()
-                if (cfg.npl_mtp) {   //! the streams draft and verify together; a model with no NextN head refuses the row below
+                if (cfg.npl_mtp) {   //! each stream its own round a tick; a model with no NextN head refuses the row below
                     set_mtp_spec(true)
                     if (t.config.n_layer_nextn <= 0l) {
                         refused = "--npl-mtp asks the speculative round of a model with no NextN head"

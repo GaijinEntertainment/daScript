@@ -11,6 +11,7 @@ require dasllama/dasllama_config   // DlimVulkanConfig — the dry-bake seam's c
 require daslib/fio                 // describe_pending_dynamic_modules — the absent-backend diagnostic
 require daslib/algorithm
 require math
+require dasllama/dasllama_gpu_math public   // sel_lane_val: the lane floor the landing's readers share with the kernels
 
 // The device-COOPERATION seam (SPI): hook types, install/unset slots, route/mark/want/status
 // state, and the engine-facing forwarders for GPU tiers that COOPERATE with the CPU forward —
@@ -796,11 +797,10 @@ struct SelLanding {
 
 let SEL_LANE_LOWEST = -3.4e38   //! the lowest finite lane value: what a NaN or -inf logit reads as on the device and on the CPU alike
 
-//! a logit as the classifier tail's kernels read it: NaN and anything under the lowest finite read as the lowest finite (the kernel's lane, the CPU oracle's too)
-def sel_lane_val(v : float) : float => !(v == v) || v < SEL_LANE_LOWEST ? SEL_LANE_LOWEST : v   // nolint:LINT007 — the NaN test: a NaN is the one float that is not equal to itself, on the device and on the CPU alike
 
 let SEL_K = 1024l                 //! the survivors a row lands - the candidate-list sampler's cap (the Vulkan kernel's CLS_SELECT_K)
 let SEL_RECENT = 128l             //! the recent-window ids an ask lists a row (CLS_SELECT_RECENT)
+let SEL_CAP = 2048l               //! the landing's slots a row - the compaction's cap, the overflow flagged past it (the template's CAP)
 let SEL_WORDS = SEL_RECENT + 4l   //! one row's ask words (CLS_SEL_WORDS): the `SEL_ASK_*` words, then the recent ids
 let SEL_HDR = 4l                  //! one row's landed header words (CLS_SEL_HDR): the `SEL_HDR_*` words
 let SEL_ASK_TEMP = 0l             //! the ask row's temperature, as float bits

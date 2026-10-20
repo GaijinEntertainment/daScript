@@ -700,7 +700,7 @@ let private ONEPASS_OFF = "dasLLAMA: resident driver - the rare rail runs its th
 let private BATCHED_OFF = "dasLLAMA: resident driver - the one-pass lane runs the rows core a row (set_rare_batched, DASLLAMA_RARE_BATCHED=0; =1 runs the batched expert cores)"
 let private ARENA_OFF = "dasLLAMA: resident driver - the rare rail reads the planar planes (set_rare_arena, DASLLAMA_RARE_ARENA=0; =1 reads the pinned device-layout planes)"
 let private HOST_FIRST_8 = "dasLLAMA: resident driver - the meet hands the host its 8 rarest experts before the device claims (set_moe_host_first, DASLLAMA_MOE_HOST_FIRST=8; 0 lets the sides claim at their own pace)"
-let private PF_ROWS_300 = "dasLLAMA: resident driver - the prompt window is 256 rows (set_pf_window_rows_pin, DASLLAMA_GPU_PF_ROWS=300: rounded down to a multiple of 128, never under it; a recurrent model's window is cut at its deltanet chunk; 2048 is the default)"
+let private PF_ROWS_300 = "dasLLAMA: resident driver - the prompt window is 256 rows (set_pf_window_rows_pin, DASLLAMA_GPU_PF_ROWS=300: rounded down to a multiple of 128, never under it; a recurrent model's window is cut at its deltanet chunk; unasked, the plan picks 4096 where it fits with its scratch, else 2048)"
 let private GATHER_TAIL = " for the prefill window, the one-row step, the N-row command and the NextN draft and verify (set_gpu_resident_embed, DASLLAMA_VK_GPU_EMBED=0 keeps the host embed)"
 let private GATHER_OFF = "dasLLAMA metal batch decode: the batched rows take the rows the host embeds, not the device gather off their ids, as asked (set_metal_batch_gather)"
 let private G4_UNFUSED = "dasLLAMA metal decode: the gemma-4 MoE tail runs its unfused chain, not the one-step form, as asked (set_metal_moe_g4_unfused)"

@@ -3310,7 +3310,7 @@ def private rd_sel_cmd(nrows : int64) : VkCommandBuffer {
         let nb = g_rd.nb
         record_cmd(cmd, false) $(raw : VkCommandBuffer; var h : VkHaz) {
             cmd_full_barrier(raw)
-            var pc = ArgmaxArgs(vocab = uint(g_rd.vocab))
+            var pc = GkClsSelArgs(vocab = uint(g_rd.vocab))
             enc_cls_select(raw, h, g_rd.s_select, pc, nrows)
             if (!g_rd.log_xfer) {
                 vhz_dep(raw, h, VHZ_LOG, 0u, true)
@@ -3351,7 +3351,7 @@ def vk_rdec_sel_landing() : SelLanding {
     unsafe {
         let base = reinterpret<uint8?>(g_rd.sel_host.mapped)
         l.rows = g_rd_sel_landed
-        l.cap = int64(CLS_SELECT_CAP)
+        l.cap = SEL_CAP
         l.recent_cap = SEL_RECENT
         l.hdr = reinterpret<uint const?>(base + cls_sel_plane_off(0l, nb))
         l.ids = reinterpret<uint const?>(base + cls_sel_plane_off(1l, nb))

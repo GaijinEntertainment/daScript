@@ -1894,43 +1894,6 @@ module) is independent and can land any time - it is pure structure.
     ping-pong, the concat when the width differs, the head-block loop - is identical and could run
     once over an encoder interface, about 450 lines.
 
-116. **The NextN speculative round has no Vulkan round seat.** The round's four backend seats
-    (`register_mtp_spec_override`, `_spec_batch_`, `_round_`, `_seam_` in `dasllama_common.das`)
-    are filled by the Metal decode driver alone; the gemma assistant drafter's rounds ride their own seams on both
-    homes (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-assistant-drafter`). The resident driver
-    homes the NextN draft head and serves the round's draft through its own seat
-    (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-draft-head`), under the Vulkan owner
-    (`register_mtp_seat_owner`, "the resident driver is armed on t"), serves the round's
-    two-row verify as same-slab rows of the N-row command with the head's re-warm in the same
-    command - the k-head store alone, no q GEMV - landing the rows' picks and hidden and, under a
-    bare-argmax caller's pick ask, no logits, the committed row's pick published for `sample_`
-    as a plain step's is (`ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command`), the draft's pick
-    answered from the device and the round's head rows staying on the device until a pass
-    hydrates them (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-draft-head`), and warms the head's
-    slab over a prompt it serves as the window chain's extra layer, the prompt's rows read back
-    to the host (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-head-prompt-warm`; the CPU warm stands
-    down behind a driver that landed the logits, so it never reads the host `x_b` rows such a
-    driver leaves unwritten); the resident overrides land the
-    post-norm hidden carry (`ARCHITECTURE_GPU_VULKAN_LANDING.md#logits-transfer-queue`), so with
-    `set_mtp_spec` or the server's `--mtp` the round's cold gate passes and the CPU round runs
-    around the device draft and verify, and a reject of a verify the seat served rolls the region
-    back on the device from the copies the verify command took - no snapshot, no replayed step
-    (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-rollback`, the rollback seat). A verify the
-    seat declines runs the CPU two-row prefill over the snapshot the round then takes, inside the
-    verify window the resident prefill declines by name
-    (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-window`): a hybrid's passes to the CPU rails,
-    and a routed-head carrier (GLM-4.5-Air's shape - no recurrent layer, a head the driver
-    declines) is served by the CPU verify under the window with its trunk resident.
-    `test_mtp.das`'s sessions carry f32 K/V, so they reach the driver only under
-    `DASLLAMA_VK_KV32=1`. What is still owed, in Metal's shape (`ARCHITECTURE_GPU_MTP.md`) on the
-    resident driver: the Vulkan round seat (`register_mtp_round_override("vulkan", ...)`) - a
-    round at depth k > 1 (the verify's per-row planes and the rollback scratch already hold the
-    box knob's depth plus one, sixteen rows at most, and the scratch's rows serve a reject to any
-    `a < k`) and the joint verify across streams. Carriers: Qwen3.5-0.8B-MTP first,
-    Qwen3.8-27B with its split Q8_0 head for the rate (Metal reads 1.23x at depth 1, 1.31x at
-    depth 3 on the M5 Max); the invariance cells of `tests/test_mtp.das` and the scheduler arm hold the speculating run to
-    the plain one (the driver against itself, not a parity), `lcpp_bench --mtp-ab` on the pod the rate, a CUDA reference
-    row per carrier beside it.
 118. **Two vulkan-lane arms still bake from RAM with the planar families kept.** The streaming mint
     (`ARCHITECTURE_IMAGE_VULKAN.md#image-vulkan-mint`) serves the cold load; a planar image already
     mapped (a CPU-mode load's lane found under an armed tier) and the eager rail (a gguf that would

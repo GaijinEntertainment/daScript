@@ -8,14 +8,15 @@ docs: `ARCHITECTURE_GPU_MTP.md`, `ARCHITECTURE_GPU_VULKAN_NROW.md`. Planned work
 the CPU path - the shape it cannot serve on the device declines by name instead.** A call that
 runs on the CPU gives the user who selected the GPU a fraction of its speed.
 
-**A diff that lands a model family, a backend arm or a session shape whose batched decode step
-reads a weight plane once per row rather than once for all the step's rows, for any model it
-serves, ships that plane's batched read - one read serving every row of the step - in the same
-change, or the arm declines that model with a decline naming the layer kind or model feature it
-does not serve, and then that backend's architecture doc -
-`ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command` for Vulkan,
-`ARCHITECTURE_GPU_MTP.md#mtp-joint-verify` for Metal - names that layer kind.** The weight stream
-is what the batch amortizes.
+**A diff that lands or changes a model family, a backend arm or a session shape so that, for any
+model it serves, its batched decode step reads a weight plane once per row instead of once for all
+the step's rows, ships that plane's batched read - one read serving every row of the step - in the
+same change, or the arm declines that model with a decline naming the layer kind or model feature
+it does not serve.** The weight stream is what the batch amortizes.
+
+**A diff that adds such a per-row decline names the declined layer kind in the backend's
+architecture doc in the same change - `ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command` for
+Vulkan, `ARCHITECTURE_GPU_MTP.md#batch-same-slab` for Metal.**
 
 **A diff in `dasllama/` that calls `create_device_session`, or turns a scheduler's device mode
 on (`set_device_kv`), guards the call in code with a check that the live device-home sessions - a

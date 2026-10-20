@@ -176,30 +176,33 @@ global - or the `[EnvConfig]` env registry.
 **A `corpus_case` call in `test_tokenizer.das` that does not assert BOTH the exact reference ids
 and a lossless round-trip is a defect.**
 
-**A test that compares generated tokens, ids, or logits without logging both sides in the most
-readable form its fixture carries is a defect: with a tokenizer, each side's decoded text for a
-token or id compare, one log record a side with its newlines escaped (`log_gen_texts` in
-`_model_tier.das` writes that form), and each side's argmax decoded piece plus the measured max
-difference for a logits compare; with a raw-id fixture and no tokenizer, the ids, one log record
-a side.** A failure, or a pass that looks wrong, must be readable in the log, not only as an id or
+**A test that compares tokens, ids or logits a model produced - a generation, a forced feed or a
+forward pass - without logging both sides in the most readable form its fixture carries is a
+defect: with a tokenizer, each side's decoded text for a token or id compare, one log record a
+side with its newlines escaped (`log_gen_texts` in `_model_tier.das` writes that form), and each
+side's argmax decoded piece plus the measured max difference for a logits compare; with a raw-id
+fixture and no tokenizer, the ids, one log record a side.** A failure, or a pass that looks wrong, must be readable in the log, not only as an id or
 float difference.
 
-**A size, depth, or row count that a cell's name, a comment inside the cell, on the `[test]`
-function that runs it or in a helper it calls, or an assert's text claims about what the cell
-exercises, and that the cell does not pass as a literal argument to the kernel or function under
-test that it itself dispatches or calls, is asserted in that cell by an assert on the count.** A
-cap, a resize, or a counter asserted to show a route ran is not evidence the number was reached;
-a device's geometry (subgroup width, SM count) is no coverage claim.
+**A size, depth or row count that a cell's name, a comment on or inside the cell or a helper it
+calls, or an assert's text claims, and that the cell does not pass as a literal argument straight
+to the kernel or function under test, is asserted in that cell by an assert on a count only that
+number can produce.** A value set through a knob setter or a config field (`set_mtp_depth`, any
+`set_*` call) is not a literal argument, since the path the cell takes can clamp or ignore it. A
+cap, a resize, or a counter showing a route ran is no such count, and a device's geometry
+(subgroup width, SM count) is no coverage claim.
 
-**An exact token or id compare over a prompt whose continuation can tie, whose two sides run
-different lanes, backends, batch shapes or kernel forms, is a defect - it takes the forced-feed
+**An exact token or id compare whose two sides run different lanes, backends, batch shapes or
+kernel forms, over a prompt whose continuation can tie, is a defect - it takes the forced-feed
 logits-tolerance form: the same fixed tokens fed to both sides, the logits compared within a
-bar.**
+bar.** A continuation can tie unless every next token is dictated by the prompt's own sequence (a
+count, an arithmetic series, a fixed enumeration); prose always can.
 
 **An exact token or id compare over a prompt whose continuation can tie, whose two sides run one
 code path or the same kernels over another storage layout (a flat K/V cache against a paged
 one), states in the cell what makes them compute bit-identical logits - the shared entry point,
-an assert pinning the lane, or a lane pin plus the layout that alone differs.**
+an assert pinning the lane, or a lane pin plus the layout that alone differs.** A continuation can
+tie unless every next token is dictated by the prompt's own sequence; prose always can.
 
 **A test in this folder that loads a stocked artifact whose producer none of the following names
 is a defect.** Any one of these names the producer: a row in `../performance/model_specs.das`; a

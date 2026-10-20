@@ -1122,40 +1122,36 @@ var private g_probe_seat_calls = 0l
 [unused_argument(t)]
 def private probe_owner(t : Model) : bool => g_probe_owns
 
-[unused_argument(t, s, tok, accepted)]
-def private probe_spec(t : Model; var s : Session; tok : int64; var accepted : int64&) : bool {
+[unused_argument(t)]
+def private probe_rows(t : Model) : int64 {
     g_probe_seat_calls++
-    return false
+    return 5l
 }
 
-[unused_argument(t, s, tok, k)]
-def private probe_round(t : Model; var s : Session; tok : int64; k : int64) : int64 {
+[unused_argument(t, s, pos, k)]
+def private probe_cold(t : Model; s : Session; pos, k : int64) : string {
     g_probe_seat_calls++
-    return 0l
+    return "the probe's own cold reason"
 }
 
-[unused_argument(t, sessions, toks, accepted)]
-def private probe_batch(t : Model; var sessions : array<Session?>; toks : array<int64>; var accepted : array<int64>) : int64 {
-    g_probe_seat_calls++
-    return 7l
-}
-
-//! how many of `mtp_spec_eval`, `mtp_spec_round` and `mtp_spec_eval_batch` reached a seat, how many opened the CPU round, and the batch tick's answer
+//! how many seat reads reached the probe's seats, how many round entries opened the CPU round, the batch tick's answer, and the
+//! two seat answers the engine read back (the verify-rows cap and the cold reason)
 struct private SeatDispatch {
     seat : int64
     cpu : int64
     batch : int64
+    rows : int64
+    cold : string
 }
 
-//! the three seat-taking entries once each under the fake override `name` (its owner answering `owns`) on a Model shell;
+//! the round entries and the seat reads once each under the fake override `name` (its owner answering `owns`) on a Model shell;
 //! the session carries a parked token, so the CPU round's opening refuses it before any forward and counts as a CPU call
 [cold_path]
 def private seat_dispatch(name : string; owns : bool) : SeatDispatch {
     for (nm in [PROBE_OWNED, PROBE_UNOWNED]) {
         register_decode_override(nm, @@decode_declines)
-        register_mtp_spec_override(nm, @@probe_spec)
-        register_mtp_round_override(nm, @@probe_round)
-        register_mtp_spec_batch_override(nm, @@probe_batch)
+        register_mtp_verify_rows_override(nm, @@probe_rows)
+        register_mtp_cold_override(nm, @@probe_cold)
     }
     register_mtp_seat_owner(PROBE_OWNED, @@probe_owner)
     g_probe_owns = owns
@@ -1181,7 +1177,12 @@ def private seat_dispatch(name : string; owns : bool) : SeatDispatch {
     let toks : array<int64>
     var accepted : array<int64>
     out.batch = mtp_spec_eval_batch(m, sessions, toks, accepted)
+    out.rows = mtp_verify_rows_cap(m)
+    out.cold = mtp_round_cold_seat(m, s, 1l, 1l)
     select_decode_override(prev)
+    for (nm in [PROBE_OWNED, PROBE_UNOWNED]) {
+        unregister_decode_override(nm)
+    }
     out.seat = g_probe_seat_calls
     delete s
     delete m
@@ -1191,18 +1192,23 @@ def private seat_dispatch(name : string; owns : bool) : SeatDispatch {
 
 [test]
 def test_mtp_seat_owner(t : T?) {
-    t |> run("the speculative seats serve only a model the active decode override's owner claims; otherwise the CPU round runs") @(t : T?) {
+    t |> run("the speculative seats serve only a model the active decode override's owner claims; the round itself is the common one on every home") @(t : T?) {
         let refused = seat_dispatch(PROBE_OWNED, false)
         t |> equal(refused.seat, 0l, "an owner refusing the model reaches no seat")
-        t |> equal(refused.cpu, 2l, "mtp_spec_eval and mtp_spec_round open the CPU round")
+        t |> equal(refused.cpu, 2l, "mtp_spec_eval and mtp_spec_round open the common round")
         t |> equal(refused.batch, 0l, "the batch tick steps each stream alone")
+        t |> equal(refused.rows, 0l, "the verify-rows cap reads no cap")
+        t |> equal(refused.cold, "", "the cold seat answers no reason")
         let unowned = seat_dispatch(PROBE_UNOWNED, true)
-        t |> equal(unowned.seat, 0l, "seats registered with no owner never take a round")
-        t |> equal(unowned.cpu, 2l, "... and the CPU round runs")
+        t |> equal(unowned.seat, 0l, "seats registered with no owner are never read")
+        t |> equal(unowned.cpu, 2l, "... and the common round runs")
+        t |> equal(unowned.rows, 0l, "... reading no cap")
         let owned = seat_dispatch(PROBE_OWNED, true)
-        t |> equal(owned.seat, 3l, "an owner claiming the model hands every entry to its seat")
-        t |> equal(owned.cpu, 0l, "no entry opened the CPU round")
-        t |> equal(owned.batch, 7l, "the batch tick answers the seat's count")
+        t |> equal(owned.seat, 2l, "an owner claiming the model hands every seat read to its seat")
+        t |> equal(owned.cpu, 2l, "the round entries still open the common round - no home registers a round of its own")
+        t |> equal(owned.batch, 0l, "the batch tick steps each stream through the common round")
+        t |> equal(owned.rows, 5l, "the verify-rows cap is the seat's answer")
+        t |> equal(owned.cold, "the probe's own cold reason", "the cold reason is the seat's answer")
     }
 }
 

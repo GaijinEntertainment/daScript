@@ -27,7 +27,7 @@ require _resident_feed   // batched_logits_rows: the batched gather cell's sessi
 // dispatch - the llama carrier, the E-series (PLE rows form), the shared-expert MoE (rows site),
 // the deltanet hybrid (recurrent rows against per-session mirrors) and the NextN carrier (GPU
 // logits, the carry landed per row) each serve at a rate; the self-speculative streams tick through
-// one joint verify, token-exact against each stream alone. Skips off the JIT, without dasMetal,
+// their own rounds, token-exact against each stream alone. Skips off the JIT, without dasMetal,
 // without the carrier under models_dir(), and on the large-tier shexp carrier unless
 // DASLLAMA_PARITY_FULL=1; the refusal contract lives in test_batch_decode.das.
 
@@ -320,7 +320,7 @@ def test_metal_batched_row_nextn_plain(t : T?) {
 
 [test]
 def test_metal_batched_row_mtp(t : T?) {
-    t |> run("the batched row serves self-speculative streams through one joint verify a tick (Qwen3.5-0.8B-MTP Q8)") <| @(t : T?) {
+    t |> run("the batched row refuses self-speculative streams: each stream runs its own round a tick, no batched step (Qwen3.5-0.8B-MTP Q8)") <| @(t : T?) {
         if (!family_on(t, "qwen35")) return
         static_if (typeinfo builtin_module_exists(das_metal)) {
             let path = path_join(models_dir(), "Qwen3.5-0.8B-MTP-Q8_0.gguf")
@@ -334,10 +334,10 @@ def test_metal_batched_row_mtp(t : T?) {
                 let census0 = batch_step_census()
                 let served = bench_tg_batched_rep(tr, 4l, 32l, 8l, 1l, true)
                 set_mtp_spec(prev_spec)
-                t |> equal(served.why, "", "the row is served: {served.why}")
-                t |> success(served.tps > 0.0lf, "... at a rate ({served.tps:.1f} tok/s summed over 4 streams)")
+                t |> success(find(served.why, "one at a time") >= 0, "the row refuses by name - a speculative tick runs each stream's round alone: {served.why}")
+                t |> equal(served.tps, 0.0lf, "... and reads no rate")
                 let census1 = batch_step_census()
-                t |> success(census1.device - census0.device >= 8l, "the timed ticks each rode one joint verify ({census1.device - census0.device} device steps)")
+                t |> equal(census1.device - census0.device, 0l, "no tick counted as a batched device step ({census1.device - census0.device})")
                 t |> equal(census1.cpu_stack, census0.cpu_stack, "no tick reached the CPU batched stack")
             }
             set_metal_mode(prior_mode)
@@ -392,8 +392,64 @@ def test_metal_batched_row_mtp_depth2(t : T?) {
 }
 
 [test]
+def test_metal_pick_ask(t : T?) {
+    t |> run("a greedy stream's steps land their pick in the logits' place and emit what generate() emits; a sampling stream lands none (Qwen3.5-0.8B-MTP Q8)") <| @(t : T?) {
+        if (!family_on(t, "qwen35")) return
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            let path = path_join(models_dir(), "Qwen3.5-0.8B-MTP-Q8_0.gguf")
+            return if (!jit_model_available(t, path))
+            let prior_mode = get_metal_mode()
+            set_metal_mode(MetalMode.when_available)
+            var tr <- blob_twin(t, path, 512l)
+            with_dasllama_jobque_() {
+                let prev_spec = get_mtp_spec()
+                set_mtp_spec(false)   //! the plain step's pick alone: a round's picks are the verify seat's
+                var prompt <- encode(tr, "Count from one to twenty: one, two, three,", true, false)
+                var none : array<int64>
+                let greedy = SamplingParams()
+                var ref : array<int64>
+                var rs <- create_session(tr)
+                generate(tr, rs, prompt, greedy, 20l) $(id, _pc) {
+                    ref |> push(id)
+                    return true
+                }
+                delete rs
+                let picks0 = metal_picks_landed()
+                var sch <- create_scheduler(tr, 1l, 4l, 64l, 0l, 0l, KVDtype.f16, false)
+                var events : array<SchedEvent>
+                t |> success(submit(tr, sch, make_req(1l, prompt, greedy, 20l, none)), "greedy stream queued")
+                drain(tr, sch, events)
+                let landed = metal_picks_landed() - picks0
+                var got <- toks_of(events, 1l)
+                log_gen_texts(tr, "pick ask (generate, scheduler)", ref, got)
+                t |> success(ids_equal(got, ref), "the greedy stream's tokens == generate()'s, which reads its rows on the host")
+                t |> success(landed > 0l && landed <= long_length(got), "the stream's steps landed their picks ({landed} picks over {length(got)} tokens)")
+                delete sch
+                delete events
+                delete got
+                let picks1 = metal_picks_landed()
+                var sch2 <- create_scheduler(tr, 1l, 4l, 64l, 0l, 0l, KVDtype.f16, false)
+                var events2 : array<SchedEvent>
+                t |> success(submit(tr, sch2, make_req(2l, prompt, SamplingParams(temp = 0.7, top_k = 1l, penalty = 1.1), 20l, none)), "sampling stream queued")
+                drain(tr, sch2, events2)
+                t |> equal(metal_picks_landed() - picks1, 0l, "a stream whose sampler is not a bare argmax lands no pick (the control)")
+                set_mtp_spec(prev_spec)
+                delete sch2
+                delete events2
+                delete ref
+                delete prompt
+            }
+            set_metal_mode(prior_mode)
+            delete tr
+        } else {
+            t |> skip("dasMetal not built")
+        }
+    }
+}
+
+[test]
 def test_metal_batched_row_mtp_joint_invariance(t : T?) {
-    t |> run("three self-speculative streams verified together emit what each emits alone (Qwen3.5-0.8B-MTP Q8)") <| @(t : T?) {
+    t |> run("three self-speculative streams through one scheduler emit what each emits alone (Qwen3.5-0.8B-MTP Q8)") <| @(t : T?) {
         if (!family_on(t, "qwen35")) return
         static_if (typeinfo builtin_module_exists(das_metal)) {
             let path = path_join(models_dir(), "Qwen3.5-0.8B-MTP-Q8_0.gguf")
@@ -424,9 +480,7 @@ def test_metal_batched_row_mtp_joint_invariance(t : T?) {
                     delete sch0
                     delete events0
                 }
-                //! the solo rounds draft on the two-row tile, the joint ones on a wider tile: the same drafts, so the same accepts
                 t |> success(solo_accepted * 2l > solo_drafted, "the solo rounds accept more than half their drafts ({solo_accepted} of {solo_drafted})")
-                // together: one joint verify a tick over every stream's rows
                 var sch <- create_scheduler(tr, 3l, 4l, 64l, 0l, 0l, KVDtype.f16, true)
                 var events : array<SchedEvent>
                 for (pi in range64(3l)) {
@@ -436,7 +490,7 @@ def test_metal_batched_row_mtp_joint_invariance(t : T?) {
                 drain(tr, sch, events)
                 let census1 = batch_step_census()
                 set_mtp_spec(prev_spec)
-                t |> equal(sch.mtp_joined_max, 3l, "one joint verify carried all three streams (the widest tick carried {sch.mtp_joined_max})")
+                t |> equal(sch.mtp_joined_max, 0l, "every tick steps its streams through their own rounds (the widest tick carried {sch.mtp_joined_max})")
                 for (pi in range64(3l)) {
                     var got <- toks_of(events, 10l + pi)
                     log_gen_texts(tr, "joint stream {pi} (solo, joint)", refs[pi], got)
@@ -446,7 +500,7 @@ def test_metal_batched_row_mtp_joint_invariance(t : T?) {
                 t |> success(sch.mtp_drafted > 0l, "the joint ticks drafted ({sch.mtp_drafted} drafts)")
                 t |> equal(sch.mtp_drafted, solo_drafted, "the joint ticks drafted what the three solo streams drafted together ({sch.mtp_drafted} against {solo_drafted})")
                 t |> equal(sch.mtp_accepted, solo_accepted, "... and accepted the same drafts ({sch.mtp_accepted} against {solo_accepted})")
-                t |> success(census1.device - census0.device > 0l, "ticks with every stream decoding rode one joint verify ({census1.device - census0.device} device steps)")
+                t |> equal(census1.device - census0.device, 0l, "a tick of three speculating streams is no batched step: each stream runs its own round ({census1.device - census0.device} device steps)")
                 delete sch
                 delete events
                 delete refs
@@ -462,7 +516,7 @@ def test_metal_batched_row_mtp_joint_invariance(t : T?) {
 
 [test]
 def test_metal_batched_row_mtp_joint_staggered(t : T?) {
-    t |> run("a joint verify whose streams sit at different depths across a 64-row chunk boundary emits what each stream emits alone (Qwen3.5-0.8B-MTP Q8)") <| @(t : T?) {
+    t |> run("three speculating streams at different depths across a 64-row chunk boundary emit what each emits alone (Qwen3.5-0.8B-MTP Q8)") <| @(t : T?) {
         if (!family_on(t, "qwen35")) return
         static_if (typeinfo builtin_module_exists(das_metal)) {
             let path = path_join(models_dir(), "Qwen3.5-0.8B-MTP-Q8_0.gguf")
@@ -502,7 +556,7 @@ def test_metal_batched_row_mtp_joint_staggered(t : T?) {
                 }
                 drain(tr, sch, events)
                 set_mtp_spec(prev_spec)
-                t |> equal(sch.mtp_joined_max, 3l, "one joint verify carried all three streams (the widest tick carried {sch.mtp_joined_max})")
+                t |> equal(sch.mtp_joined_max, 0l, "every tick steps its streams through their own rounds (the widest tick carried {sch.mtp_joined_max})")
                 for (pi in range64(3l)) {
                     var got <- toks_of(events, 10l + pi)
                     log_gen_texts(tr, "staggered stream {pi} (solo, joint)", refs[pi], got)
@@ -841,7 +895,7 @@ def private fed_steps(tr : Model; var s : Session; pos, n, miss_every : int64; v
 }
 
 //! The single row's greedy chain on a recurrent hybrid: the chained step reads the recurrent region the step in flight writes and
-//! writes the other, so a step the chain mispredicted leaves the live state whole (`ARCHITECTURE_GPU_MTP_DECODE.md#greedy-chain`)
+//! writes the other, so a step the chain mispredicted leaves the live state whole (`ARCHITECTURE_GPU_MTP_DECODE_PICK.md#greedy-chain`)
 [test]
 def test_metal_deltanet_greedy_chain(t : T?) {
     t |> run("the greedy chain serves a deltanet hybrid: chained steps token for token the plain steps, and a mispredicted step's rerun reads the state the chain did not touch (Qwen3.5-0.8B Q8)") <| @(t : T?) {

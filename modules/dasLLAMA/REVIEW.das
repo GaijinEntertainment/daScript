@@ -256,7 +256,10 @@ var private FASTMATH_OFF_EXEMPT <- {
     "metal_kq_gemv_q4032_ks_msl" => "b32_mvb_gate",
     "metal_kq_gemv_q5032_msl" => "b32_mvb_gate",
     "metal_kq_gemv_q5032_ks_msl" => "b32_mvb_gate",
-    "metal_b32_mvb" => "b32_mvb_gate"
+    "metal_b32_mvb" => "b32_mvb_gate",
+    //! the classifier tail's selection: under fast math a NaN lane passes the ordered compare that floors it, and
+    //! `cls_select_gate` in tests/test_metal_misc_kernels.das reds the recent window's landed NaN against the floor
+    "metal_cls_select_msl" => "cls_select_gate"
 }
 
 //! The `name="..."` a [metal_kernel] line declares, or "" where the line carries none.

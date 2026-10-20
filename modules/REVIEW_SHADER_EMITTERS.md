@@ -25,12 +25,13 @@ the CPU, and their CPU bodies compute nothing.
 
 **A diff that adds or changes an emitter builtin whose operands are all ordinary CPU values - a
 declaration in `daslib/shader_lingua_franca.das`, `dasSpirv/spirv/spirv_builtins.das` or
-`dasMetal/metal/metal_builtins.das` - ships a CPU body that returns what the emitted form
-returns, argument for argument.**
+`dasMetal/metal/metal_builtins.das` - ships a CPU body that computes what the emitted form
+computes - its return value and every write through a reference argument.**
 
 **A diff that changes what an emitter lowers - `dasSpirv`'s or `dasMetal`'s emit code - never
-lets a construct the emitter cannot lower produce a kernel or a crash - the emitter reports a
-compile error that names the construct instead.**
+lets a construct the emitter cannot lower, or would lower to text or words that do not compute
+it, produce a kernel or a crash - the emitter reports a compile error that names the construct
+instead.**
 
 **Never pass a shape constant to a kernel as a runtime argument where a call-site constant can
 carry it - pass it as a call-site constant.** A shape constant is a value the emitter requires as

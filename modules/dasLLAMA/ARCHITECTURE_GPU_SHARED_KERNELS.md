@@ -34,8 +34,9 @@ key it has on that home.
   to a program-scope constant table only when every element is a scalar integer or float literal; a
   vector literal does not hoist, so a `float4` table is spelled as four scalars a word.
 - **A home's lane primitive is reached by one name.** A template method resolves in the module that
-  stamps it, so a shared reduction calls `gk_subgroup_add` / `gk_subgroup_max`, and each kernel home
-  defines the pair over its own primitive (`subgroupAdd` on Vulkan, `simd_sum` on Metal). A free function
+  stamps it, so a shared reduction calls `gk_subgroup_add` / `gk_subgroup_max` (a histogram's
+  subgroup aggregation `gk_subgroup_bcast0_u`), and each kernel home defines the set over its own
+  primitive (`subgroupAdd` / `subgroupShuffle` on Vulkan, `simd_sum` / `simd_shuffle` on Metal). A free function
   in the common module resolves in the common module and sees neither home, so a body that needs a
   home's primitive keeps it in a method.
 - **A binding a stamp does not use is gated, and a stamp names its element types.** `@template_gate`
@@ -77,6 +78,8 @@ struct and the body; a stamp sets the template constants its home needs and maps
 | `GkDnConv` | `MetalDnConvN` / `N4` (`PB` 1 / 4, `RING` 8: a group of 16 rows or fewer) | `DnConv` (`PB` 32, `RING` 4) | `PB`, `RING` |
 | `GkMoeCombG4` | `MetalMoeCombG4` / `Hx` (the selection rows' slots, the next norm in f32, `Hx` its f16 twin), `MetalMoeCombG4Pf` (the bucket inverse's slots, no norm out; 1024 lanes, `rsqrt`) | `ClsArCombG4` / `F16B` / `Rq` (the slot map, the next norm in f32, f16 or Q8_0 blocks; 256 lanes, `1 / sqrt`) | `TG`, `RSQRT`, `GATHERED`, `OUT_F32` / `OUT_F16` / `OUT_Q8`, `HX`, `PRESUM_SWITCH`; the stash and, on Metal, the norm rows' layout |
 | `GkClsEpilogue` | `MetalClsEpilogue` | `ClsEpilogue` | nothing; every row in one dispatch |
+| `GkWgScan` | (the selection's base) | `WgScanT` (`MoeSched` at 256 lanes, `MoeSched2` at 512: the value-form `excl_scan` over the statement form) | `WG`, the `scan` slot a thread sized by it |
+| `GkClsSelect` | `MetalClsSelect` (1024 lanes, no fast math) | `ClsSelect` (1024 lanes) | `WG` at 1024 over `GkWgScan`; the `SEL_*` layout as the template's constants, the max and sum `GkWgReduce`'s, the lane floor `sel_lane_val` of `dasllama_gpu_math`, the atomics the shader lingua franca's `atomicAdd` |
 | `GkAddRmsRows` | `MetalAddRms` / `HX` (the plain step), `MetalPreAddRms` / `HX` (the sandwich seam in one dispatch: the branch normed under its post norm, the add, the next norm), `MetalPreAdd` (no norm out); 256 lanes the window and a decode row within the slab, 1024 a decode row past it | `ClsArAddRms` / `F16B`, `ClsArAddRmsRqB` and the `ArAddRmsRq*` stamps (Q8_0 out), the combines' `ArCombBase` (256 lanes) | `LANES`, `PRE`, `PRE_SWITCH`, `NORM_SWITCH`, `ARMS`, `X4`, `HX`, `OUT_*`; on Metal, the norm rows' layout |
 | `GkPleAct` | `MetalGegluSide` (in place over the gate rows, 64 lanes) | `PleActF32` (`OUT`: the f32 projection's x, 256 lanes) | `OUT`; the side row's index is `gk_strided_at`, `ActRqT.up_at`'s |
 | `GkPleFinish` | `MetalPleFinish` (`XSCALE`: the projection's 1 / sqrt(dim) in the finish, `rsqrt`) | `PleFinish` (the projection arrives scaled, `1 / sqrt`) | `XSCALE`, `RSQRT`; 256 lanes a slice on both |

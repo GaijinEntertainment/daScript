@@ -63,6 +63,9 @@ require dasllama/dasllama_env   // nolint:STYLE030,LINT019 — the read sites si
 // against the report's NEVER DISPATCHED warnings — a name here that the report shows dispatched
 // is stale, and a warning with no entry here is a coverage gap to close with a row.
 let private CENSUS_NEVER_DISPATCHED <- [
+    // the classifier tail's selection (compiled on every Metal arm, dispatched only for a sampled stream's step; the zoo's rows
+    // step greedy); its coverage is cls_select_gate in test_metal_misc_kernels.das
+    "MetalClsSelect",
     // the MoE expert mul_mm tall M-tile pair (128-row floor + remainder) in q5_K: the zoo
     // stocks no Q5_K MoE carrier, where every other format's pair rides a census row's
     // window. Its coverage is the tall-pair kernel-unit gate in test_metal_gemm_kernels.das

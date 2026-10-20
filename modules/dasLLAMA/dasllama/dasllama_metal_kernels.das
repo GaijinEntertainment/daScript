@@ -1136,7 +1136,7 @@ class template MetalArgmaxT {
     @workgroup redi : uint[32]
     @template_constant PER_ROW : bool = false
 
-    [arch(at="../ARCHITECTURE_GPU_MTP_DECODE.md#greedy-chain")]
+    [arch(at="../ARCHITECTURE_GPU_MTP_DECODE_PICK.md#greedy-chain")]
     def argmax_row {
         let lid = gl_LocalInvocationID.x
         let nt = gl_WorkGroupSize.x
@@ -3973,6 +3973,7 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_wdec_attn_comb = compile_stamp(metal_wdec_attn_comb_msl, ok)
     g_pso_bias_add_res = compile_stamp(metal_bias_add_res_msl, ok)
     g_pso_cls_epi = compile_stamp(metal_cls_epi_msl, ok)
+    g_pso_cls_select = compile_stamp(metal_cls_select_msl, ok)
     g_pso_attn16 = compile_stamp(MetalSqAttnF16_metal_sq_attn_msl, ok)
     g_pso_attn32 = compile_stamp(MetalSqAttnF32_metal_sq_attn_msl, ok)
     g_pso_attnp16 = compile_stamp(MetalSqAttnPartF16_metal_sq_attn_part_msl, ok)
@@ -5614,7 +5615,7 @@ def metal_kernels_release {
     release_handles(g_pso_ln, g_pso_bias_act, g_pso_act_rows, g_pso_posadd, g_pso_q3v_stem, g_pso_clamp, g_pso_clamp_copy)
     release_handles(g_pso_rope2d, g_pso_head_pad, g_pso_head_unpad, g_pso_geglu_quick, g_pso_wdec_kv, g_pso_wdec_kv_h)
     release_handles(g_pso_im2col2d, g_pso_wdec_attn_part, g_pso_wdec_attn_comb, g_pso_bias_add_res)
-    release_handles(g_pso_f32mm, g_pso_cls_epi, g_pso_swiglu, g_pso_swiglu_hx, g_pso_swiglu_hxb)
+    release_handles(g_pso_f32mm, g_pso_cls_epi, g_pso_cls_select, g_pso_swiglu, g_pso_swiglu_hx, g_pso_swiglu_hxb)
     release_handles(g_pso_swiglu_b, g_pso_geglu_hxb, g_pso_geglu_b, g_pso_attn16, g_pso_attn32, g_pso_attnp16)
     release_handles(g_pso_attnp32, g_pso_attn_q8, g_pso_attnp_q8, g_pso_rpst_q8, g_pso_attn_tq4, g_pso_attnp_tq4)
     release_handles(g_pso_rpst_tq4, g_pso_unsign, g_pso_qknorm, g_pso_attncomb, g_pso_rpst16, g_pso_qkn16)
@@ -11946,6 +11947,16 @@ class MetalSigmul : MetalEw2T {
     override ACT = 3
 }
 
+//! the classifier tail's selection on the template both homes stamp (`GkClsSelect`), a threadgroup of 1024 threads a row; no
+//! fast math: the lane floor reads NaN lanes through the ordered compare the host's `sel_lane_val` makes
+[metal_dispatch(name = "enc_cls_select", pso = "g_pso_cls_select", tgmem = "metal_cls_select_msl_tgmem", tg = 1024, grid = "rows", params = "rows : int64")]
+class MetalClsSelect : GkClsSelect {
+    [metal_kernel(name="metal_cls_select_msl", fastmath=false)]
+    def metal_cls_select {
+        select_row()
+    }
+}
+
 //! the classifier tail's epilogue on the template both homes stamp (`GkClsEpilogue`), a thread a logit over every row
 [metal_dispatch(name = "enc_cls_epi", pso = "g_pso_cls_epi", tg = 256, grid = "total/256", params = "total : int64")]
 class MetalClsEpilogue : GkClsEpilogue {
@@ -13098,6 +13109,7 @@ def gk_subgroup_add(v : float) : float => simd_sum(v)
 def gk_subgroup_max(v : float) : float => simd_max(v)
 def gk_subgroup_xor(v : float; m : uint) : float => simd_shuffle_xor(v, m)
 def gk_subgroup_xor_u(v : uint; m : uint) : uint => simd_shuffle_xor(v, m)
+def gk_subgroup_bcast0_u(v : uint) : uint => simd_shuffle(v, 0u)
 def gk_subgroup_min_u(v : uint) : uint {
     var m = v
     var b = 16u

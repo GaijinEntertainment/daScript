@@ -10,6 +10,79 @@ and coverage; this ledger is the backlog for the perf pass that follows them. Ev
 what it costs today and what the fix would change.
 
 ## Entries
+- **MEASURED (2026-10-20, `debug-jit`, `direction-grade`) - the speculative round on Metal through the common seats: the
+  three carriers' five rows on the M5.** Apple M5 Max, `lcpp_bench --mtp-ab -p 32 -n 64 -r 2 --ngl 99` under
+  `DAS_TUNE_MANIFEST=performance/m5.tune.json`, the sampled rows at temp 0.7 top-p 0.9, every file served whole; the 27B is
+  the trunk with the split head attached (`DASLLAMA_MTP_HEAD=mtp-Qwen3.8-27B-Q8_0.gguf`), the 26B the assistant drafter
+  (`mtp-gemma-4-26B-A4B-it-Q8_0.gguf`, no q: its walk under the rejection knob is the typical walk, the same drafts
+  accepted); `DAS_TUNE_POLICY` and `DASLLAMA_PIN_BACKEND` unset, the box profile crowned, no rig leg runs the round
+  (`lcpp_bench --mtp-ab` is the instrument). The off column of a model drifts down across its five rows (the 27B 28.8 ->
+  25.1) - the box warms under a long GPU stretch - so a row's on / off is the comparison, not a column. This entry
+  replaces the 2026-09-03 depth ladder's M5 figures (its 27B depth 3 at 1.31 and gemma's depth 2 as the best row: here
+  the 27B's depth 3 reads 1.20 and gemma's depth 3 is the best row at 1.43, the round now the common one on the seats):
+
+    Qwen3.6-35B-A3B-MTP UD-Q4_K_M:
+
+    | row | off tok/s | on tok/s | on / off | drafts accepted | per position |
+    | :--- | ---: | ---: | ---: | ---: | :--- |
+    | greedy depth 1 | 138.0 +/- 0.5 | 157.9 +/- 0.3 | 1.14 | 75.4% | 75.4 |
+    | greedy depth 2 | 138.4 +/- 0.1 | 141.6 +/- 2.6 | 1.02 | 58.8% | 72.5 / 45.1 |
+    | greedy depth 3 | 138.2 +/- 0.3 | 127.5 +/- 8.3 (cv 6.5%, void) | 0.92 | 47.0% | 74.2 / 42.1 / 24.9 |
+    | sampled depth 2, rejection (the default) | 128.6 +/- 0.1 | 134.0 +/- 0.4 | 1.04 | 58.4% | 72.0 / 44.8 |
+    | sampled depth 2, typical | 129.2 +/- 0.0 | 174.6 +/- 0.2 | 1.35 | 86.0% | 92.1 / 79.9 |
+
+    gemma-4-26B-A4B-it Q4_K_M with the Q8_0 drafter:
+
+    | row | off tok/s | on tok/s | on / off | drafts accepted | per position |
+    | :--- | ---: | ---: | ---: | ---: | :--- |
+    | greedy depth 1 | 121.8 +/- 0.0 | 153.4 +/- 0.2 | 1.26 | 84.7% | 84.7 |
+    | greedy depth 2 | 121.4 +/- 0.1 | 158.2 +/- 4.5 | 1.30 | 76.5% | 80.3 / 72.7 |
+    | greedy depth 3 | 121.0 +/- 0.3 | 173.0 +/- 1.6 | 1.43 | 72.4% | 80.3 / 71.3 / 65.6 |
+    | sampled depth 2, rejection (the default) | 111.6 +/- 1.0 | 150.0 +/- 2.0 | 1.34 | 89.2% | 92.2 / 86.1 |
+    | sampled depth 2, typical | 108.2 +/- 2.8 | 138.1 +/- 0.1 | 1.28 | 89.2% | 92.2 / 86.1 |
+
+    Qwen3.8-27B Q4_K_M with the split Q8_0 head:
+
+    | row | off tok/s | on tok/s | on / off | drafts accepted | per position |
+    | :--- | ---: | ---: | ---: | ---: | :--- |
+    | greedy depth 1 | 28.8 +/- 0.1 | 38.3 +/- 0.2 | 1.33 | 76.0% | 76.0 |
+    | greedy depth 2 | 28.0 +/- 0.4 | 29.2 +/- 0.4 | 1.04 | 57.0% | 70.9 / 43.0 |
+    | greedy depth 3 | 25.7 +/- 0.4 | 30.8 +/- 0.1 | 1.20 | 47.1% | 70.5 / 43.8 / 27.1 |
+    | sampled depth 2, rejection (the default) | 25.4 +/- 0.4 | 28.7 +/- 0.1 | 1.13 | 58.0% | 70.0 / 46.0 |
+    | sampled depth 2, typical | 25.1 +/- 0.5 | 36.2 +/- 0.1 | 1.45 | 87.0% | 91.9 / 82.2 |
+
+  The Qwen heads' second position accepts under half, so depth 2 carries three verify rows for little on both Qwen
+  carriers (the 35B's depth 3 is under plain); the gemma drafter's positions hold, and its depth 3 is the best row on the
+  box. Rejection on the 35B is 1.04 against typical's 1.35 at the same prompts: the head's q cuts the accepted count from
+  86% to 58%, the price of the exact distribution. The catalog's `serve_mtp` lists metal on all three
+  (`performance/model_specs.das`). The house replay's three servers on this tip (`out-of-process`,
+  `direction-grade`; its walls and rates in that repository's ledger) - no `--mtp`, `--mtp` under the
+  rejection default, `--mtp --mtp-accept typical` - read a wash on its short replies (the same alone
+  wall, TTFT and steady rate, the pair phase's spread past the arms' order) and no scored quality drop
+  (silent 21 of 22 on all three, the same tool-call split); typical's replies run about a sixth longer. The served
+  turn at one stream on the same file (`harness/served_bench.das --sizes 3000,9000 --reply 200 --reps 5`, `--ctx 16384
+  --streams 1`, the arms run cooled and reversed, `out-of-process`, `direction-grade`): prefill 5113-5136 tok/s at 3k and
+  4611-4768 at 9k on every arm, decode off 182.9 / 171.7, rejection 176.6 / 161.0 (cv 4 %, void), typical 174.7 / 163.2
+  (cv 3.4-3.8 %, void) - the round under off on the served turn at the box knob's depth 1, where the bench reads a win;
+  followup_general 218 carries the gap.
+- **MEASURED (2026-10-20, `debug-jit`, `direction-grade`) - the selection landing on Metal: the shared `GkClsSelect`
+  stamp against the host sampler's pass over a 248k row, on unified memory.** The same 35B sampled rows with the landing
+  off (`--mtp-select=false`, the same command and box, a run its own process): typical 160.3 +/- 0.5 over plain 125.0 +/-
+  0.1 (1.28) against the landed 174.6 (1.35); rejection 109.1 +/- 6.2 (cv 5.7%, void) over 125.2 +/- 0.2 (0.87) against
+  the landed 134.0 (1.04). The first stamp, a commit earlier, lost on both rows - typical 131.3 +/- 0.7 over 121.9 +/- 12.0
+  (void), rejection 110.2 +/- 0.0 over 129.5 +/- 0.7 - with a histogram that adds one atomic a lane: a row's logits cluster, the key's top bits put
+  most of a row into a few bins, and a threadgroup of 1024 serializes on them; the subgroup-aggregated add (the lanes of a
+  subgroup sharing lane 0's bin add once through lane 0, called uniformly so lane 0 is active whenever its subgroup is)
+  recovers the win. Unified memory saves no transfer here, only the host's sampler passes over the row.
+- **MEASURED (2026-10-20, `debug-jit`, `direction-grade`) - the depth-1 greedy round on Metal through the common seats
+  keeps its one command buffer.** Apple M5 Max, Qwen3.5-0.8B-MTP Q8_0, `lcpp_bench --mtp-ab --mtp-depth 1 -p 32 -n 64
+  -r 2 --ngl 99` under the box profile, three commits each its own process, 684/837 drafts accepted on every form: the
+  retired Metal round 443.0 +/- 0.7 on over 443.1 +/- 0.1 off (1.00); the seats with the draft and the verify as two
+  command buffers 422.9 +/- 1.8 (0.95 of the same run's off); the seats with the draft parked and encoded ahead of the
+  verify's rows in the verify's command buffer 452.7 +/- 0.6 over 443.0 off (1.02, three reps) - the single-row draft
+  beats the retired round's two-row rows-form draft. The losing forms ship under no flag: the readings are cross-commit.
+  The parked verify's n-gram ring save (`g_v_ring_save`, pooled, held from the verify seat to the rollback or the next
+  verify) is `ple_hist_rows x hc_dim x 4` bytes, an n-gram model's alone (Flash-Next; no box here holds it whole).
 - **MEASURED (2026-10-19, `served`, `out-of-process`, `direction-grade`) - Flash-Next served without the round, ours against
   Strata on the same shards, every expert pinned on both.** zen2, `harness/served_bench.das --sizes 512,3000,9000 --reply 200
   --reps 2`; ours `dasllama-server --gpu vulkan --ctx 32768 --streams 1 --kv-dtype q8_0` at the engine's defaults (no expert

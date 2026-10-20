@@ -25,8 +25,8 @@ var private g_batch_steps_per_row = 0l
 def public batch_step_census() : tuple<device : int64; cpu_stack : int64; per_row : int64> =>
     (device = g_batch_steps_device, cpu_stack = g_batch_steps_cpu_stack, per_row = g_batch_steps_per_row)
 
-//! a batched step served outside `eval_batch_` joins the census: the scheduler's joint speculative
-//! verify counts as a device step when every stream's rows rode it, as per-row otherwise
+//! a batched step served outside `eval_batch_` joins the census: the scheduler's speculative tick counts as a device
+//! step when the drafter's joint verify carried every stream or each stream's round ran on a device driver's seats, as per-row otherwise
 def public note_batch_step(device : bool) {
     if (device) {
         g_batch_steps_device++

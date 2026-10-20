@@ -55,10 +55,10 @@ construct's exit path and unbalances it.
 
 **A diff that adds or changes something a second site must agree with - a daslib fact (code or a
 `//!` contract), or what a C++ name `aot_cpp.das` writes into generated code does or returns -
-records the pair in an `ARCHITECTURE*.md` of this folder, naming both sides, whenever nothing
-fails on a mismatch: no lint, no compile error, no default-suite test (what `dastest` runs over
-`tests/` (repo root) with no flags).** The second site can sit anywhere, inside or outside this
-repository. The section a pair lands in is the one holding its daslib file (for a C++ name, the
+records the pair in an `ARCHITECTURE*.md` of this folder, naming both sides by symbol name,
+whenever nothing fails on a mismatch: no lint, no compile error, no default-suite test (what
+`dastest` runs over `tests/` (repo root) with no flags).** A statement about a family of symbols
+records no pair. The second site can sit anywhere, inside or outside this repository. The section a pair lands in is the one holding its daslib file (for a C++ name, the
 emitter file that writes it), or a new one in `ARCHITECTURE.md` or a companion when none does; a
 pair whose two sides are one syntax's spellings lands in `ARCHITECTURE_SYNTAX.md` with the other
 pairs of that syntax.

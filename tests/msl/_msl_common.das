@@ -398,8 +398,7 @@ class SgMatTile {
 
     [metal_kernel(name="sgmat_msl"), marker(no_coverage)]
     def sgmat_tile {
-        var ma : simdgroup_float8x8
-        var mb : simdgroup_float8x8
+        var ma, mb : simdgroup_float8x8
         simdgroup_load(ma, fa, base, 8u)
         simdgroup_load(mb, fb, base, 8u)
         var mm = make_filled_simdgroup_float8x8(0.0)
@@ -408,8 +407,7 @@ class SgMatTile {
         var acc = make_filled_simdgroup_float8x8(1.0)
         simdgroup_multiply_accumulate(acc, ma, mb, acc)
         simdgroup_store(acc, fd, base, 8u)
-        var hx : simdgroup_half8x8
-        var hy : simdgroup_half8x8
+        var hx, hy : simdgroup_half8x8
         simdgroup_load(hx, ha, 0u, 8u)
         simdgroup_load(hy, hb, 0u, 8u)
         var hm = make_filled_simdgroup_half8x8(0.5h)
@@ -442,8 +440,7 @@ class SgMatTiled {
             tb[lid] = wb[(kk * 8u) + lid]
             tb[lid + 32u] = wb[(kk * 8u) + (lid + 32u)]
             barrier()
-            var ma : simdgroup_half8x8
-            var mb : simdgroup_half8x8
+            var ma, mb : simdgroup_half8x8
             simdgroup_load(ma, ta, 0u, 8u)
             simdgroup_load(mb, tb, 0u, 8u)
             simdgroup_multiply_accumulate(acc, ma, mb, acc)
@@ -881,34 +878,34 @@ class TmmTensor {
 
     [metal_kernel(name="tmmhw_msl", float_a_ok=true), marker(no_coverage)]
     def tmm_hw {
-        var ap = unsafe(addr(xa[0]))
-        var wp = unsafe(addr(wh[0]))
+        let ap = unsafe(addr(xa[0]))
+        let wp = unsafe(addr(wh[0]))
         var cp = unsafe(addr(oc[0]))
         tmm2d_f16w_f32(8u, 16u, 2u, ap, 64u, wp, 64u, cp, 16u, 64u)
     }
 
     [metal_kernel(name="tmmhwh_msl"), marker(no_coverage)]
     def tmm_hwh {
-        var ap = unsafe(addr(xah[0]))
-        var wp = unsafe(addr(wh[0]))
+        let ap = unsafe(addr(xah[0]))
+        let wp = unsafe(addr(wh[0]))
         var cp = unsafe(addr(oc[0]))
         tmm2d_f16w_f32(8u, 16u, 2u, ap, 64u, wp, 64u, cp, 16u, 64u)
     }
 
     [metal_kernel(name="tmmq8u_msl", float_a_ok=true), marker(no_coverage)]
     def tmm_q8u {
-        var sp = unsafe(addr(bsh[0]))
-        var wp = unsafe(addr(bqb[2]))
-        var ap = unsafe(addr(xa[0]))
+        let sp = unsafe(addr(bsh[0]))
+        let wp = unsafe(addr(bqb[2]))
+        let ap = unsafe(addr(xa[0]))
         var cp = unsafe(addr(oc[0]))
         tmm2d_q8u_f32(8u, 16u, 2u, tqu, sp, wp, ap, 64u, cp, 16u, 64u, 2u, gl_LocalInvocationIndex)
     }
 
     [metal_kernel(name="tmmq8uh_msl"), marker(no_coverage)]
     def tmm_q8uh {
-        var sp = unsafe(addr(bsh[0]))
-        var wp = unsafe(addr(bqb[2]))
-        var ap = unsafe(addr(xah[0]))
+        let sp = unsafe(addr(bsh[0]))
+        let wp = unsafe(addr(bqb[2]))
+        let ap = unsafe(addr(xah[0]))
         var cp = unsafe(addr(oc[0]))
         tmm2d_q8u_f32(8u, 16u, 2u, tqu, sp, wp, ap, 64u, cp, 16u, 64u, 2u, gl_LocalInvocationIndex)
     }
@@ -916,9 +913,9 @@ class TmmTensor {
     // the bk = 64 twin: same kind/m/n/sgs, a distinct `_k64` helper over an n*64 staging tile
     [metal_kernel(name="tmmq8uh64_msl"), marker(no_coverage)]
     def tmm_q8uh64 {
-        var sp = unsafe(addr(bsh[0]))
-        var wp = unsafe(addr(bqb[2]))
-        var ap = unsafe(addr(xah[0]))
+        let sp = unsafe(addr(bsh[0]))
+        let wp = unsafe(addr(bqb[2]))
+        let ap = unsafe(addr(xah[0]))
         var cp = unsafe(addr(oc[0]))
         tmm2d_q8u_f32(8u, 16u, 2u, tq64, sp, wp, ap, 64u, cp, 16u, 64u, 2u, gl_LocalInvocationIndex, 64u)
     }
@@ -927,9 +924,9 @@ class TmmTensor {
     // n*144-half staging tile, so a `_k128` helper over tq128
     [metal_kernel(name="tmmq8uh128_msl"), marker(no_coverage)]
     def tmm_q8uh128 {
-        var sp = unsafe(addr(bsh[0]))
-        var wp = unsafe(addr(bqb[2]))
-        var ap = unsafe(addr(xah[0]))
+        let sp = unsafe(addr(bsh[0]))
+        let wp = unsafe(addr(bqb[2]))
+        let ap = unsafe(addr(xah[0]))
         var cp = unsafe(addr(oc[0]))
         tmm2d_q8u_f32(8u, 16u, 2u, tq128, sp, wp, ap, 64u, cp, 16u, 64u, 2u, gl_LocalInvocationIndex, 128u)
     }
@@ -967,7 +964,7 @@ class TmmTensor {
     def tmm_devaf {
         var acc : float[128]
         var cp = unsafe(addr(oc[0]))
-        var bp = unsafe(addr(bs[0]))
+        let bp = unsafe(addr(bs[0]))
         tmm2d_tg_begin_deva(acc, unsafe(addr(xa[0])), 8u, 16u, 2u, 32u)
         var kb = 0u
         while (kb < 2u) {
@@ -992,7 +989,7 @@ class TmmTensor {
     def tmm_nt {
         var acc : float[128]
         var cp = unsafe(addr(oc[0]))
-        var bp = unsafe(addr(bs[0]))
+        let bp = unsafe(addr(bs[0]))
         var i = gl_LocalInvocationID.x
         while (i < 256u) {
             tga[i] = xah[i]
@@ -1070,8 +1067,7 @@ class TmmTensor {
     // narrows through the public thread_elements() view first
     [metal_kernel(name="sgmathalf_msl"), marker(no_coverage)]
     def sgmat_half {
-        var ma : simdgroup_half8x8
-        var mb : simdgroup_half8x8
+        var ma, mb : simdgroup_half8x8
         simdgroup_load(ma, xah, 0u, 8u)
         simdgroup_load(mb, wh, 0u, 8u)
         var acc : simdgroup_float8x8
@@ -1111,6 +1107,11 @@ def public declared_msl_census : table<string> {   // nolint:STYLE038 — one fl
         "param.shmem",
         "call.barrier",
         "call.memory_barrier_shared",
+        // atomics
+        "call.atomic_add.dev.i32",
+        "call.atomic_add.dev.u32",
+        "call.atomic_add.tg.i32",
+        "call.atomic_add.tg.u32",
         // simdgroup intrinsics
         "call.simd_sum.f32",
         "call.simd_sum.i32",
@@ -1407,9 +1408,39 @@ def public declared_msl_census : table<string> {   // nolint:STYLE038 — one fl
     }
 }
 
+//! the atomic add on a @workgroup histogram (uint and int) and on an
+//! @ssbo counter (int and uint): the four lowerings
+class AtomicHist {
+    @ssbo @binding = 0 keys : array<uint>
+    @ssbo @binding = 1 bins : array<uint>
+    @ssbo @binding = 2 total : array<int>
+    @ssbo @binding = 3 ibins : array<int>
+    @ssbo @binding = 4 utotal : array<uint>
+    @ssbo @binding = 5 olds : array<int>
+    @workgroup hist : uint[64]
+    @workgroup ihist : int[64]
+
+    [metal_kernel(name="atomic_hist_msl"), marker(no_coverage)]
+    def atomic_hist {
+        let i = gl_GlobalInvocationID.x
+        let lid = gl_LocalInvocationID.x
+        hist[lid] = 0u
+        ihist[lid] = 0
+        barrier()
+        let _o = atomicAdd(hist[keys[i] & 63u], 1u)
+        let _p = atomicAdd(ihist[keys[i] & 63u], 1)
+        barrier()
+        bins[i] = hist[lid]
+        ibins[i] = ihist[lid]
+        olds[i] = atomicAdd(total[0], 1)
+        let _u = atomicAdd(utotal[0], 1u)
+    }
+}
+
 //! Every fixture kernel's census companion, for the census meta-test's union.
 def public all_msl_censuses : array<string> {
-    return <- [mul_ab_msl_census, uarith_msl_census, iarith_msl_census, farith_msl_census,
+    return <- [mul_ab_msl_census, atomic_hist_msl_census, uarith_msl_census, iarith_msl_census,
+        farith_msl_census,
         vecarith_msl_census, control_msl_census, loops_msl_census, reduce_msl_census, simd_msl_census,
         halfarith_msl_census, latconv_msl_census, packed3_msl_census, sgmat_msl_census,
         sgmat_tiled_msl_census, sgmat_rolled_msl_census, mathcalls_msl_census, userfns_msl_census,

@@ -9,8 +9,8 @@ carry - and the gemma-4 assistant drafter the driver runs beside a head-less tru
 trunk's - is `ARCHITECTURE_GPU_VULKAN_HC.md#hc-draft-head`, its verify `#hc-verify-rows`. The model's residency
 the head rides is in `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`, the logits landing in
 `ARCHITECTURE_GPU_VULKAN_LANDING.md`; the same-slab verify that re-warms the head's rows a
-round at a time is in `ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command`; the Metal round
-these levers take their shape from is `ARCHITECTURE_GPU_MTP.md`. The GPU backend role table
+round at a time is in `ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command`; the Metal seats of
+the same round are `ARCHITECTURE_GPU_MTP.md`. The GPU backend role table
 these sections build on stays in `ARCHITECTURE_GPU.md#gpu-backends`.
 
 ### The NextN draft head is one more layer the driver homes {#resident-draft-head}

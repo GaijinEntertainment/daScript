@@ -121,15 +121,11 @@ asymmetries a stamp family ledgers - stays in `ARCHITECTURE_GPU.md#gpu-backends`
   flips one form between two steps and drops the pre-encoded step; the Vulkan driver builds its token commands' sets at
   the load and resubmits them, so its counterparts are load-time pins over every command - `set_gpu_resident_embed(0)` for the host-embedded
   rows, the `g_vk_fuse` pin of `DASLLAMA_VK_FUSE` for the split MoE tail - and no per-step setter.
-- **The NextN speculative round is Metal-only.** `register_mtp_round_override("metal", ...)` has one registrant, `metal_mtp_spec_round`;
-  Vulkan serves the CPU round around its draft and verify seats (`ARCHITECTURE_GPU_MTP.md`). The assistant drafter's rounds ride
-  `MtpAssistantSeams` on both homes (`ARCHITECTURE_GPU_MTP_ASSISTANT.md#assistant-drafter-step`, `ARCHITECTURE_GPU_VULKAN_MTP.md#resident-assistant-drafter`).
-- **The same-slab verify seat is Vulkan-only.** `register_mtp_verify_override("vulkan", ...)` has one registrant, the resident driver's same-slab verify (`ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command`), which the CPU round takes in place of its two-row prefill; a verify the seat declines runs the CPU two-row prefill inside a window the resident prefill declines by name (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-window`). Metal's same-slab verify runs inside its round seat.
-- **The device rollback seat is Vulkan-only.** `register_mtp_rollback_override("vulkan", ...)` has one registrant, the reject of a verify the resident seat served - the region's recurrent slots back from the copies the verify command took, no snapshot and no replayed step (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-rollback`; the tier seat is `install_rdec_rollback`). Metal's reject replays on its shadow region inside its round seat.
-- **The verify-rows cap is Vulkan-only.** `register_mtp_verify_rows_override("vulkan", ...)` has one registrant, the resident driver's answer to how many verify rows its seat prepared (`rdec_verify_rows`), which caps the k-deep CPU round's depth on that driver (`ARCHITECTURE_GPU_MTP.md#mtp-round-one-join`). Metal's round seat owns its depth whole, so it registers no cap.
-- **The joint NextN speculative tick is Metal-only.** `register_mtp_spec_batch_override("metal", ...)`
-  has one registrant, `metal_mtp_spec_eval_batch`: the scheduler's tick hands every speculative
-  stream to it and one same-slab verify carries all their rows (`ARCHITECTURE_GPU_MTP.md#mtp-joint-verify`); on Vulkan and the CPU the tick steps each NextN stream through its own round. An assistant drafter's tick verifies every stream's rows together on both homes.
+- **The round's cold seat is Metal-only.** `register_mtp_cold_override("metal", ...)` has one registrant, `metal_mtp_cold_why`
+  (`ARCHITECTURE_GPU_MTP.md#mtp-round-one-join`): a blob model has no CPU rails, so a round the Metal seats cannot take steps
+  plain before any seat is reached; the Vulkan seats decline per call into the CPU verify window instead
+  (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-window`). The draft, verify, verify-rows and rollback seats have a registrant
+  on both homes, and the round is the common one (`mtp_spec_round_k`) everywhere.
 - **The assistant drafter's drafts reach its verify on the device on Metal alone.** Metal's verify gathers the draft rows' embeds off
   the chain's token buffer, so drafts and verify run behind one another with no join between
   (`ARCHITECTURE_GPU_MTP.md#mtp-round-one-join`). The Vulkan N-row command takes host-staged ids and rope rows - each row's id
@@ -216,8 +212,6 @@ asymmetries a stamp family ledgers - stays in `ARCHITECTURE_GPU.md#gpu-backends`
   handoff), so a tier without the seats declines a recurrent layer by name
   (`resident_layer_decline`) and the per-op rails serve it. Metal has no seat to install: its
   whole-forward driver carries the recurrent branch inside its layer encoder.
-- **The device argmax pick is Vulkan-only** (`ARCHITECTURE_GPU_VULKAN_LANDING.md#logits-transfer-queue`): a
-  bare-argmax stream's token id lands in place of its logits row, its speculative round's rows too; Metal lands every row's logits.
 - **The short window's gathered expert route and its knee are Metal-only** (`set_metal_moe_gemv_max`, the
   sidecar's `metal_moe_gemv_max`, `ARCHITECTURE_GPU_PREFILL_MOE.md#prefill-moe-gemv-route`): the Metal prefill
   serves a routed block of few tokens through the decode step's gathered GEMVs instead of its bucketed tiles; the

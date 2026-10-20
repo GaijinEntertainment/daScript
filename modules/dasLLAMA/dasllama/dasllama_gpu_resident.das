@@ -3533,36 +3533,6 @@ def private rdec_landed_finite(logits : array<float>; off, pick : int64; what : 
     }
 }
 
-var private @scratch g_rdec_sel_words : array<uint>
-var private g_rdec_no_extra : array<int64>
-
-[arch(at="../ARCHITECTURE_GPU_VULKAN_LANDING.md#logits-selection-landing")]
-def private rdec_sel_before(s : Session; nrows : int64; extra : array<int64>; nextra : int64) {
-    return if (!sel_wanted(s))
-    sel_ask_words(s, nrows, extra, nextra, g_rdec_sel_words)
-    rdec_sel_ask(nrows, g_rdec_sel_words)
-}
-
-var private g_rdec_selections = 0l
-
-//! How many device commands landed a sampled stream's selection in place of their rows in this process (a cell's served witness)
-def moe_gpu_resident_selections() : int64 => g_rdec_selections
-
-//! the landing after the seat's command: the selection where the ask was served, the session's row its row 0; a landed row whose
-//! denominator is not a positive finite number panics as a landed row with a non-finite logit does
-def private rdec_sel_after(var s : Session; what : string; row : int64) {
-    g_sel_landing = rdec_sel_landing()
-    s.sel_row1 = g_sel_landing.rows > 0l ? 1l : 0l
-    if (g_sel_landing.rows > 0l) {
-        g_rdec_selections++
-    }
-    for (i in range64(g_sel_landing.rows)) {
-        let den = uint_bits_to_float(unsafe(g_sel_landing.hdr[i * SEL_HDR + 3l]))
-        if (!(den > 0.0) || !is_finite(den)) {
-            rdec_nonfinite_panic(what, row + i, 0l, den)
-        }
-    }
-}
 
 [hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-draft-head")]   //! per speculative round
 def private vulkan_resident_draft(t : Model; var s : Session; token, row : int64; pick_only : bool) : int64 {
@@ -3638,12 +3608,12 @@ def private vulkan_resident_draft_go(t : Model; var s : Session; token, row : in
         vp = kv_layer_vbase(s, l, c.seq_len)
     }
     var pick = -1l
-    rdec_sel_before(s, 1l, g_rdec_no_extra, 0l)
     with_host_experts(t, s) {
         pick = rdec_draft(g_rdec_x, g_rdec_emb_gpu ? token : -1l, s.mtp_h, g_rdec_cossin, row, hyd0, kp, vp, pick_only, s.logits, @@rdec_host_experts_step)
     }
     return -1l if (pick < 0l)
-    rdec_sel_after(s, "draft", row)
+    g_sel_landing = rdec_sel_landing()   //! the landing the round reads after the seat: its finite checks below read the row flag
+    s.sel_row1 = g_sel_landing.rows > 0l ? 1l : 0l
     if (!pick_only && s.sel_row1 == 0l) {
         rdec_landed_finite(s.logits, 0l, pick, "draft", row)
     }
@@ -3786,7 +3756,6 @@ def private vulkan_resident_verify_go(t : Model; var s : Session; toks : array<i
     verify(long_length(s.mtp_xb_save) >= carry_dim, "dasLLAMA resident verify: the round saved no pre-draft carry in mtp_xb_save - engine bug")
     verify(g_rdec_regions[r].head_cnt >= pos - 1l, "dasLLAMA resident verify: the device holds no head rows below the re-warm's first row - the round's draft leaves them there; engine bug")
     var ok = false
-    rdec_sel_before(s, n, toks, n)
     with_host_experts(t, s) {
         g_rdec_verify_rows_in_flight = true
         ok = rdec_verify(g_rdec_x_n, g_rdec_cos_n, g_rdec_verify_head_embeds, g_rdec_verify_head_rope, s.mtp_xb_save, s.ple_emb_b, g_rdec_row_ids, pos, n, pick_only,
@@ -3794,7 +3763,8 @@ def private vulkan_resident_verify_go(t : Model; var s : Session; toks : array<i
         g_rdec_verify_rows_in_flight = false
     }
     verify(ok, "dasLLAMA resident verify: the driver declined rows it answered it steps - engine bug")
-    rdec_sel_after(s, "verify", pos)
+    g_sel_landing = rdec_sel_landing()
+    s.sel_row1 = g_sel_landing.rows > 0l ? 1l : 0l
     g_rdec_verify_picks |> resize(n)
     for (i in range64(n)) {
         g_rdec_verify_picks[i] = s.mtp_picks[i]
@@ -3899,7 +3869,6 @@ def private vulkan_resident_decode_go(t : Model; var s : Session; token, pos : i
     g_rdec_cossin |> grow_resize(g_rdec_cos_elems)
     rdec_rope_rows(t, pos + s.rope_pos_delta, g_rdec_cossin, 0l)   // rope at the delta'd position; KV stays at pos
     let cnt = pos + 1l
-    rdec_sel_before(s, 1l, g_rdec_no_extra, 0l)
     if (g_rdec_experts_host) {   // the split command: on a hyper-connection model forward() ran the side row's n-gram gather before this override; the routed sums run here between the segments
         if (c.hyper_conn && has_ple_ngram(c) && !s.ple_ring_device) {   //! the ring the CPU prefill (or a pass) wrote goes up once; the device advances it from there
             rdec_ngram_ring(unsafe(addr(s.ple_conv_hist[0])), true)
@@ -3928,7 +3897,6 @@ def private vulkan_resident_decode_go(t : Model; var s : Session; token, pos : i
         }
         rdec_land_pick(s, rdec_token(g_rdec_x, g_rdec_cossin, s.ple_inp, gathered ? token : -1l, pos, cnt, s.pick_asked, s.logits))   //! forward() ran the PLE pre-step into s.ple_inp before the override; empty elsewhere
     }
-    rdec_sel_after(s, "token", pos)
     rdec_stash_carry(c, s, 0l, pos + 1l)
     rdec_rows_hold(s, r, pos + 1l)
     rdec_host_mark(s, false)   // the mirror advanced past any earlier hydration

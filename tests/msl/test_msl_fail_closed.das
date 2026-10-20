@@ -64,6 +64,11 @@ def test_fail_closed_rejections(t : T?) {
         check_rejects(t, "_fc_math_binary_class", "pow lowers for numeric classes only")
         check_rejects(t, "_fc_uniform_array", "array members are @ssbo buffers")
         check_rejects(t, "_fc_array_init_nonconst", "must be an integer or float scalar literal")
+        let atomic_target = "atomicAdd's target must be an element of an @ssbo or @workgroup member"
+        check_rejects(t, "_fc_atomic_local", atomic_target)
+        check_rejects(t, "_fc_atomic_state", atomic_target)
+        check_rejects(t, "_fc_atomic_float",
+            "atomicAdd lowers an int or uint element only, not f32")
         check_rejects(t, "_fc_return_value", "kernels return void")
         check_rejects(t, "_fc_recursion", "is recursive - MSL forbids recursion")
         check_rejects(t, "_fc_ufn_param", "type has no MSL form")

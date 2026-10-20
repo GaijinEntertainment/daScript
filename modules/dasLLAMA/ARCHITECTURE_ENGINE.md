@@ -50,8 +50,8 @@ the module declares every such buffer `@exact_size` and sizes it through a reser
   `SamplingParams` (the struct a `Session` points at, so a speculative round draws with its
   caller's sampler), `TokenConstraint` (the abstract token admission a `Session` borrows a pointer
   to) and `TokenConstraintBox` (its owner, freed with the request or stream that holds it), and the
-  MTP per-position accept telemetry (`mtp_pos_*`) the round-override
-  registry's rounds feed. The standard attention's Config-keyed arms live beside it - the gated
+  MTP per-position accept telemetry (`mtp_pos_*`) the speculative
+  round feeds. The standard attention's Config-keyed arms live beside it - the gated
   projection (`q_gated`: a 2x-wide q whose second half sigmoid-gates the output) among them - one
   kernel every arch shares, its arms chosen by the model's flags. **Not** the load walk (`ARCHITECTURE_ENGINE_FORMATS.md#the-load-and-image-rail`) and **not** GPU residency
   (`ARCHITECTURE_GPU.md#gpu-backends`) - both left; the seam each left is a registered hook, so neither comes back.
@@ -69,7 +69,9 @@ the module declares every such buffer `@exact_size` and sizes it through a reser
   (`metal_st2_src_{low,cumsum,sines}_{torch,onnx}_msl`, gated by `st2_source_gate`), and the per-32
   GEMV with its small-batch form (`metal_kq_gemv_<fmt>_msl` for q51, iq4nl32, q4032 and q5032, their
   `_ks_msl` K-split stamps, `metal_b32_mvb` by its method - gated by `b32_mvb_gate`, whose
-  bit-for-bit compare fast math breaks); an entrant ships its failing-under-fastmath test too.
+  bit-for-bit compare fast math breaks), and the classifier tail's selection (`metal_cls_select_msl`,
+  gated by `cls_select_gate`: fast math lets a NaN lane through the ordered compare that floors it); an
+  entrant ships its failing-under-fastmath test too.
 - **`dasllama_transformer.das`** - the block-composition seam, and the require umbrella: the
   `[init]`-only side-effect requires (arch registrations, GPU tiers, and any module that
   requires the engine back, which the umbrella therefore hosts to break the cycle).
