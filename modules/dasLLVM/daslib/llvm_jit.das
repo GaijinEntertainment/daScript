@@ -80,11 +80,6 @@ struct SLabel {
     blk : LLVMOpaqueBasicBlock?
 }
 
-def public set_private_linkage(value : LLVMOpaqueValue?) {
-    LLVMSetLinkage(value, LLVMLinkage.LLVMPrivateLinkage)
-    LLVMSetUnnamedAddress(value, LLVMUnnamedAddr.LLVMGlobalUnnamedAddr);
-}
-
 // Use internal linkage without unnamed address so symbol names are preserved in the
 // object file's .symtab, making backtraces and debuggers (lldb/gdb) readable.
 def set_debug_linkage(value : LLVMOpaqueValue?) {
