@@ -287,7 +287,7 @@ def private rpst_q8_gate(t : T?; var dev, queue; hs, nheads, kv_mul : int; neox,
         let half = rot > 0 ? rot / 2 : hs / 2   // the rope table row: rot/2 wide on a partial carrier
         let nblk = kvd / 32
         let npairs_q = qd / 2
-        let nthreads = npairs_q + 2 * nblk
+        let nthreads = int(q8_store_threads(int64(qd), int64(kvd)))   // the dispatcher's own count: a thread a q pair, then a lane an element from the next simdgroup boundary
         var inscope qk, vsrc, bias, tcos, tsin : array<float>
         qk |> resize(qd + kvd)
         vsrc |> resize(kvd)
@@ -356,6 +356,46 @@ def private rpst_q8_gate(t : T?; var dev, queue; hs, nheads, kv_mul : int; neox,
         } else {
             check_buf(t, "{tag} q", mc.buf[bqk], want_qk, BAR_FP, Shape(row_width = hs))
         }
+        check_buf_exact(t, "{tag} kbytes", mc.buf[bkrow], kwant)
+        check_buf_exact(t, "{tag} vbytes", mc.buf[bvrow], vwant)
+    }
+}
+
+// ===== the prefill window's K/V rows into the q8_0 mirror (MetalKvRowsQ8): a lane an element, quantize_q8kv_row's bytes =====
+
+def private kvrows_q8_gate(t : T?; var dev, queue; rows, kvd : int) {
+    let tag = "kvrows_q8 rows={rows} kvd={kvd}"
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let st = stamp_of(@@enc_kv_rows_q8)
+        var pso = mc |> keep_stamp(st, err)
+        return if (!pso_ok(t, tag, pso, err))
+        let nblk = kvd / 32
+        var inscope ks, vs : array<float>
+        ks |> resize(rows * kvd)
+        vs |> resize(rows * kvd)
+        for (k in range(rows * kvd)) {
+            ks[k] = 0.17 * float(k % 43) - 2.7
+            vs[k] = 0.11 * float(k % 27) - 1.5
+        }
+        var inscope kwant, vwant : array<uint8>
+        kwant |> resize(rows * nblk * 34)
+        vwant |> resize(rows * nblk * 34)
+        unsafe {   // the rows are contiguous: one call quantizes every block
+            quantize_q8kv_row(addr(kwant[0]), addr<float const?>(ks[0]), int64(rows * kvd))
+            quantize_q8kv_row(addr(vwant[0]), addr<float const?>(vs[0]), int64(rows * kvd))
+        }
+        let bks = mc |> in_(ks)
+        let bvs = mc |> in_(vs)
+        let bkrow = mc |> out_words(rows * nblk * 34, uint8(0xA5))
+        let bvrow = mc |> out_words(rows * nblk * 34, uint8(0xA5))
+        var ka = KvRowsArgs(rows = uint(rows), nblk = uint(nblk), hs = 64u)
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            stamp_run(st, pso) {
+                invoke(st.enc, enc, mc.buf[bks], 0ul, mc.buf[bvs], 0ul, mc.buf[bkrow], 0ul, mc.buf[bkrow], mc.buf[bvrow], 0ul, mc.buf[bvrow], ka, 2l * int64(rows) * int64(kvd))   // the window's own count: a lane an element
+            }
+        }
+        return if (!ran)
         check_buf_exact(t, "{tag} kbytes", mc.buf[bkrow], kwant)
         check_buf_exact(t, "{tag} vbytes", mc.buf[bvrow], vwant)
     }
@@ -570,7 +610,7 @@ def private rpst_bq8_gate(t : T?; var dev, queue; hs, nheads, kv_mul, nb : int; 
         let nblk = kvd / 32
         let rowb = nblk * 34
         let npairs_q = qd / 2
-        let nthreads = npairs_q + 2 * nblk
+        let nthreads = int(q8_store_threads(int64(qd), int64(kvd)))   // the dispatcher's own count: a thread a q pair, then a lane an element from the next simdgroup boundary
         let qstride = qd + 2 * kvd
         let lay = 1
         let laystride = 8192
@@ -843,6 +883,12 @@ def test_metal_rope_store_kernels(t : T?) {
                 // quantized mirrors: byte-exact vs quantize_q8kv_row / quantize_tq4kv_row
                 rpst_q8_gate(t, dev, queue, 64, 4, 2, true, true)
                 rpst_q8_gate(t, dev, queue, 64, 4, 2, false, false)
+                //! a q span off the 32-pair lattice (three heads of 96: 144 pairs): the K/V lanes start at the next simdgroup boundary past it
+                rpst_q8_gate(t, dev, queue, 96, 3, 3, true, false)
+                rpst_bq8_gate(t, dev, queue, 96, 3, 3, 2, false, true)
+                // the window rows' store: a lane an element over the rows, the dispatcher's count
+                kvrows_q8_gate(t, dev, queue, 3, 128)
+                kvrows_q8_gate(t, dev, queue, 5, 96)
                 rpst_tq4_gate(t, dev, queue, 64, 4, 2, true, true)
                 rpst_tq4_gate(t, dev, queue, 64, 4, 2, false, false)
                 // the partial carrier (qwen35: rope 64 of head 256) on both block codecs, the neox flag either way

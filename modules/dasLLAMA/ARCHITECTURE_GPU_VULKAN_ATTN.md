@@ -158,12 +158,14 @@ device row is the cache's row: f16 or f32 elements, q8_0's 34-byte blocks of 32 
 scale, 32 int8 quants) or tq4's 18-byte blocks (an f16 scale, 32 four-bit quants;
 `dasllama_kv_codec.das` is the truth for both). `resident_mirror_dtype` reads the codec asked -
 `set_gpu_kv_dtype` (`reset_gpu_kv_dtype` lifts it), the server's `--kv-dtype`, `DASLLAMA_GPU_KV`,
-f16 with none - and `resident_mirror_dtype_of` arms f16 on a model the codec cannot hold: a head
-or a K/V row that is not whole 32-element blocks, and under tq4 a head that is not a power of two -
-the NextN head's among them. That test is `kv_codec_geometry_why`, the one the CPU cache panics on
-at a session's creation, so no session of such a model carries the codec. The load announces every
-ask that became f16: an f32 ask (the mirror arms f32 under `DASLLAMA_VK_KV32=1` alone), a
-`DASLLAMA_GPU_KV` value that names no codec, a model's heads. A q8_0 mirror is
+f16 with none - and `resident_mirror_dtype_of` arms the codec the model serves (`kv_codec_served`):
+tq4 steps down to q8_0 on a head that is not a power of two - the NextN head's among them - or on
+an attention with a Q/K/V bias, whose K bias outliers would set every 4-bit block's scale; either
+block codec steps down to f16 on a head or a K/V row that is not whole 32-element blocks
+(`kv_codec_geometry_why`). A session's creation applies the same rule, so no session of such a
+model carries a codec it cannot serve. The load announces every ask that stepped down: an f32 ask
+(the mirror arms f32 under `DASLLAMA_VK_KV32=1` alone), a `DASLLAMA_GPU_KV` value that names no
+codec, a model's heads or bias. A q8_0 mirror is
 17/32 of the f16 mirror's bytes and tq4 9/32, which is what the codecs are for: the mirror's bytes
 are what a card's context and its resident experts compete for. A block-codec mirror is addressed
 in blocks. `RLayer.mir_base`, a token's `mirbase` and the region stride count units - an element
@@ -187,14 +189,23 @@ shared-KV layer - so serves a block codec with no stamp of its own, and no exist
 moves. The staged planes ride the
 window chain's V-staging hazard bit (`VHZ_VST`), idle in the token command.
 
-**The decode attention reads the blocks natively; the query stays f32.** `DaAttnT`'s `KVQ8` and
-`KVTQ4` constants replace the pass's row loads: a thread loads its block's scale once and the
-quants as words - a block starts 0 or 2 bytes off a word, and the load shifts by that skew
-(`kv_blk_scale`, `kv_skew_word`). `da_attn_stamp_ensure` / `_set` / `_enc` pick the stamp by the
-mirror's codec, the sinks and the slab. The CPU
-chain quantizes the query to Q8_0 for an integer dot, so the two chains agree to the query's
-quantization and not bit for bit: under q8_0 Qwen2.5-0.5B's logits read 0.4-0.7 apart at a 10-18
-max logit.
+**The decode attention reads the blocks natively and scores them with the packed integer dot.**
+`DaAttnT`'s `KVQ8` and `KVTQ4` constants replace the pass's row loads: a thread loads its block's
+scale once and the quants as words - a block starts 0 or 2 bytes off a word, and the load shifts by
+that skew (`kv_blk_scale`, `kv_skew_word`). A block-codec stamp (`KVBLK`) first quantizes the slab's
+query rows to q8_0 blocks in the workgroup, a thread a block (`qq`, the words; `qsc`, the scales),
+the CPU chain's own query quantization, and a K word then scores against a query word in one
+`sdot4` (`VK_KHR_shader_integer_dot_product`, the feature the Q8 batch tile already needs), the
+block's integer sum scaled by both scales at its end; a tq4 word's nibbles score as their two
+byte-expanded halves (the even elements' word and the odd's) against a query packed the same way,
+the nibble's -8 offset paid once a block as eight times the block's query sum (`qsum`). The two
+chains quantize the query the same way (`quantize_q8_0_into`'s amax over 127 and its rounding) but
+from two nearby f32 queries, so their roundings part by a quant step on a share of the elements:
+the q8_0 cells' bars carry that noise over the f16 reading (`tests/test_gpu_resident_qwen2.das`,
+`tests/test_gpu_resident_regions_q8kv.das`), which the packed dot buys back at depth - a two-stream
+8k decode on Qwen3-0.6B reads about 5 % faster under q8_0 (`PERF_LEDGER.md`). The V accumulate stays a float multiply of the probability
+and the dequantized quant: it carries no integer form. `da_attn_stamp_ensure` / `_set` / `_enc`
+pick the stamp by the mirror's codec, the sinks and the slab.
 
 **The prefill's attention reads an f16 shadow.** The flash tiles and the chunked pair load K and V
 through tensor layouts in f16 stamps, which a block's interleaved scale does not fit. Before a

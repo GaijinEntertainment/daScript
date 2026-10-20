@@ -1872,77 +1872,64 @@ class MetalRopeStoreQ8Base {
         dst[qkb + i2] = v0 * fci + v1 * fcr
     }
 
-    def q8_fill_kv_vals(src : array<float>; vsrc : array<float>; tc, ts, bs : array<float>; var vals : float[32];
-                        kbase, vbase, tb, base, head_size, half, qd, kvd, neox, has_bias, rot : uint; isV : bool) {
-        let part = rot != 0u && rot != head_size
-        let halfr = part ? rot / 2u : half
+    //! one K/V element of the new row as the mirror stores it: a K element roped against its pair partner (the adjacent
+    //! element, or the one `halfr` away on a NEOX or partial rope; past the rotated prefix the element itself), a V element raw
+    def q8_kv_elem(src : array<float>; vsrc : array<float>; tc, ts, bs : array<float>;
+                   kbase, vbase, tb, ge, head_size, half, qd, kvd, neox, has_bias, rot : uint; isV : bool; var v : float&) {
         if (isV) {
-            var e = 0u
-            while (e < 32u) {
-                vals[e] = vsrc[vbase + base + e] + (has_bias != 0u ? bs[qd + kvd + base + e] : 0.0)
-                e++
-            }
-        } elif (neox != 0u || part) {
-            // NEOX pairs straddle 32-blocks (partner at ±half) — rope per ELEMENT; partner
-            // reads come from the q/k region, which no K/V thread writes, so cross-block reads are safe
-            var e = 0u
-            while (e < 32u) {
-                let ge = base + e
-                let hp = ge % head_size
-                let mine = src[kbase + ge] + (has_bias != 0u ? bs[qd + ge] : 0.0)
-                if (part && hp >= rot) {
-                    vals[e] = mine
-                } else {
-                    let isHi = hp >= halfr
-                    let j = isHi ? hp - halfr : hp
-                    let fcr = tc[tb + j]
-                    let fci = ts[tb + j]
-                    let oi = isHi ? ge - halfr : ge + halfr
-                    let other = src[kbase + oi] + (has_bias != 0u ? bs[qd + oi] : 0.0)
-                    vals[e] = isHi ? other * fci + mine * fcr : mine * fcr - other * fci
-                }
-                e++
-            }
+            v = vsrc[vbase + ge] + (has_bias != 0u ? bs[qd + kvd + ge] : 0.0)
         } else {
-            var p = 0u
-            while (p < 16u) {
-                let ge = base + 2u * p
-                let j = (ge % head_size) / 2u
-                let fcr = tc[tb + j]
-                let fci = ts[tb + j]
-                let v0 = src[kbase + ge] + (has_bias != 0u ? bs[qd + ge] : 0.0)
-                let v1 = src[kbase + ge + 1u] + (has_bias != 0u ? bs[qd + ge + 1u] : 0.0)
-                vals[2u * p] = v0 * fcr - v1 * fci
-                vals[2u * p + 1u] = v0 * fci + v1 * fcr
-                p++
+            let part = rot != 0u && rot != head_size
+            let halfr = part ? rot / 2u : half
+            let hp = ge % head_size
+            let mine = src[kbase + ge] + (has_bias != 0u ? bs[qd + ge] : 0.0)
+            if (part && hp >= rot) {
+                v = mine
+            } elif (neox != 0u || part) {
+                let isHi = hp >= halfr
+                let j = isHi ? hp - halfr : hp
+                let oi = isHi ? ge - halfr : ge + halfr
+                let other = src[kbase + oi] + (has_bias != 0u ? bs[qd + oi] : 0.0)
+                v = isHi ? other * ts[tb + j] + mine * tc[tb + j] : mine * tc[tb + j] - other * ts[tb + j]
+            } else {
+                let j = hp / 2u
+                let odd = (ge & 1u) != 0u
+                let oi = odd ? ge - 1u : ge + 1u
+                let other = src[kbase + oi] + (has_bias != 0u ? bs[qd + oi] : 0.0)
+                v = odd ? other * ts[tb + j] + mine * tc[tb + j] : mine * tc[tb + j] - other * ts[tb + j]
             }
         }
     }
 
-    def q8_scale(vals : float[32]; var d : float&; var id : float&) {
-        var amax = 0.0
-        var k = 0u
-        while (k < 32u) {
-            amax = max(amax, abs(vals[k]))
-            k++
+    //! a simdgroup is one 32-block: its lanes hold the block's elements, the block max is a simd reduction, lane 0 writes the
+    //! scale and every lane its quant - quantize_q8kv_row's exact semantics, so CPU fallback steps read the same codec
+    def q8_store_lane(var sh : array<float16>; var qb : array<int8>; v : float; shb, qbb, blk, lane : uint) {
+        let amax = simd_max(abs(v))
+        let d = amax / 127.0
+        let id = d != 0.0 ? 1.0 / d : 0.0
+        if (lane == 0u) {
+            sh[shb + blk * 17u] = float16(min(d, 65504.0))   // the half's largest finite, as the CPU codec clamps
         }
-        d = amax / 127.0
-        id = d != 0.0 ? 1.0 / d : 0.0
+        qb[qbb + blk * 34u + 2u + lane] = int8(round(v * id))
     }
 
-    def q8_store(var sh : array<float16>; var qb : array<int8>; vals : float[32]; d, id : float; shb, qbb, blk : uint) {
-        sh[shb + blk * 17u] = float16(d)
-        var k = 0u
-        while (k < 32u) {
-            qb[qbb + blk * 34u + 2u + k] = int8(round(vals[k] * id))
-            k++
-        }
+    //! the first K/V lane: the q pairs' threads rounded up to a simdgroup boundary, so a block never straddles two simdgroups
+    def q8_kv_lane0(npairs_q : uint) : uint => (npairs_q + 31u) & ~31u
+
+    //! the K/V lane `gid` past the q pairs: `inside` the store's lanes (whole simdgroups from the next boundary), the element `ge`
+    //! of the K row or, `isV`, of the V row
+    def q8_kv_lane(gid, npairs_q, kvd : uint; var inside : bool&; var isV : bool&; var ge : uint&) {
+        let kv0 = q8_kv_lane0(npairs_q)
+        inside = gid >= kv0 && gid < kv0 + 2u * kvd
+        let e = gid - kv0
+        isV = e >= kvd
+        ge = isV ? e - kvd : e
     }
 }
 
-// q8_0-mirror rope + KV-row store: q pairs rope in place; K/V rows quantize per 32-block (one
-// thread per block) matching quantize_q8kv_row's exact semantics, so CPU fallback steps read the
-// same codec. K blocks rope their 16 pairs first; V blocks copy raw.
+// q8_0-mirror rope + KV-row store: q pairs rope in place; K/V rows quantize per 32-block, a simdgroup a block (a lane an
+// element, the block max a simd reduction) matching quantize_q8kv_row's exact semantics, so CPU fallback steps read the
+// same codec. K lanes rope against their pair partner first; V lanes copy raw.
 [metal_dispatch(name = "enc_rpst_q8_c", pso = "g_pso_rpst_q8", tg = 64, grid = "nthreads/64", params = "nthreads : int64")]
 class MetalRopeStoreQ8 : MetalRopeStoreQ8Base {
     @ssbo @binding = 0 @role = "read" qk : array<float>    //! k at [qd, qd + kvd) of the projection row (q ropes in `qr`)
@@ -1967,28 +1954,25 @@ class MetalRopeStoreQ8 : MetalRopeStoreQ8Base {
         let has_bias = ka.has_bias
         let rot = ka.rot
         let gid = gl_GlobalInvocationID.x
-        if (gid >= npairs_q + 2u * nblk) {
-            return
-        }
         let half = head_size / 2u
         if (gid < npairs_q) {
             q8_rope_q(qr, tcos, tsin, bias, gid, half, head_size, sq_qhs(ka.qhs, head_size), neox, has_bias, rot, 0u, 0u)
             return
         }
         let kvd = nblk * 32u
-        let bi = gid - npairs_q
-        let isV = bi >= nblk
-        let blk = isV ? bi - nblk : bi
-        let base = blk * 32u                // element base within the K/V row
-        var vals : float[32]
-        q8_fill_kv_vals(qk, vs, tcos, tsin, bias, vals, qd, 0u, 0u, base, head_size, half, qd, kvd, neox, has_bias, rot, isV)
-        var d = 0.0
-        var id = 0.0
-        q8_scale(vals, d, id)
+        var inside = false
+        var isV = false
+        var ge = 0u
+        q8_kv_lane(gid, npairs_q, kvd, inside, isV, ge)
+        if (!inside) {   // whole simdgroups: a block's 32 lanes return together
+            return
+        }
+        var v = 0.0
+        q8_kv_elem(qk, vs, tcos, tsin, bias, qd, 0u, 0u, ge, head_size, half, qd, kvd, neox, has_bias, rot, isV, v)
         if (isV) {
-            q8_store(vsh, vqb, vals, d, id, 0u, 0u, blk)
+            q8_store_lane(vsh, vqb, v, 0u, 0u, ge / 32u, ge % 32u)
         } else {
-            q8_store(ksh, kqb, vals, d, id, 0u, 0u, blk)
+            q8_store_lane(ksh, kqb, v, 0u, 0u, ge / 32u, ge % 32u)
         }
     }
 }
@@ -1996,7 +1980,7 @@ class MetalRopeStoreQ8 : MetalRopeStoreQ8Base {
 // Shared tq4-mirror rope+store stages, spliced by the single and batched kernels below: the
 // buf-resident FWHT butterfly, the per-32-block signed-max quantize scalars, and the packed
 // nibble store. Base byte offsets parameterize the single (0) vs batched (arena row) layouts.
-class MetalRopeStoreTq4Base {
+class template MetalRopeStoreTq4Base : GkBlkSignedMax {
     @workgroup buf : float[512]     // <= max head_size (gemma4 global heads are 512)
 
     def tq4_rope_elem(qk, tc, ts, bs : array<float>; base, bbase, tb, lid, hs, neox, has_bias, rot : uint; var v : float&) {
@@ -2039,21 +2023,8 @@ class MetalRopeStoreTq4Base {
     }
 
     def tq4_quant(v : float; var d : float&; var qv : int&; var qother : int&; sl : uint) {
-        // per-32-block quantize — block == simdgroup; signed max keeps the FIRST max-abs element
-        var ma = abs(v)
         var mv = v
-        var ml = sl
-        var off = 16u
-        while (off > 0u) {
-            let oa = simd_shuffle_xor(ma, off)
-            let ov = simd_shuffle_xor(mv, off)
-            let ol = simd_shuffle_xor(ml, off)
-            let take = oa > ma || (oa == ma && ol < ml)
-            ma = take ? oa : ma
-            mv = take ? ov : mv
-            ml = take ? ol : ml
-            off /= 2u
-        }
+        blk_signed_max(sl, mv)   // per-32-block quantize: block == simdgroup, the FIRST max-abs element sets the scale
         d = mv / -8.0
         let id = d != 0.0 ? 1.0 / d : 0.0
         qv = min(15, int(v * id + 8.5))
@@ -3701,7 +3672,7 @@ class MetalSqAttnDXTq4 : MetalSqAttnDQuantT {
     override PARTS = 4u
 }
 
-// q8_0-mirror batched rope + KV-row store: the RopeStoreQ8 shape with the byte-offset row table
+// q8_0-mirror batched rope + KV-row store: the RopeStoreQ8 shape (a simdgroup a block) with the byte-offset row table
 // (grid y = batch row; the new KV row lands at cnt-1). Same quantize_q8kv_row semantics.
 [metal_dispatch(name = "enc_rpstb_q8_c", pso = "g_pso_rpstb_q8", tg = 64, grid = "nthreads/64, nrows", params = "nthreads : int64, nrows : int64")]
 class MetalRopeStoreBQ8 : MetalRopeStoreQ8Base {
@@ -3729,9 +3700,6 @@ class MetalRopeStoreBQ8 : MetalRopeStoreQ8Base {
         let has_bias = ka.has_bias
         let rot = ka.rot
         let gid = gl_GlobalInvocationID.x
-        if (gid >= npairs_q + 2u * nblk) {
-            return
-        }
         let bb = gl_WorkGroupID.y
         let rrow = rt[bb]
         let qbase = bb * qstride
@@ -3743,25 +3711,23 @@ class MetalRopeStoreBQ8 : MetalRopeStoreQ8Base {
         }
         let rowb = nblk * 34u
         let kvd = nblk * 32u
-        let bi = gid - npairs_q
-        let isV = bi >= nblk
-        let blk = isV ? bi - nblk : bi
-        let base = blk * 32u                // element base within the K/V row
+        var inside = false
+        var isV = false
+        var ge = 0u
+        q8_kv_lane(gid, npairs_q, kvd, inside, isV, ge)
+        if (!inside) {   // whole simdgroups: a block's 32 lanes return together
+            return
+        }
         let kqoff = qbase + qd              // the fused row's k region (v = its third region)
         let vqoff = qbase + qd + kvd
-        var vals : float[32]
-        q8_fill_kv_vals(qk, qk, tcos, tsin, bias, vals, kqoff, vqoff, tcb, base, head_size, half, qd, kvd, neox, has_bias, rot, isV)
-        var d = 0.0
-        var id = 0.0
-        q8_scale(vals, d, id)
+        var v = 0.0
+        q8_kv_elem(qk, qk, tcos, tsin, bias, kqoff, vqoff, tcb, ge, head_size, half, qd, kvd, neox, has_bias, rot, isV, v)
         if (isV) {
             let vb0b = rrow.y + lay * rrow.z + ka.layr + kv_ring_row(rrow.w - 1u, ka.ring) * rowb   // lay = the flat row-byte prefix, layr the rings'
-            let vb0h = vb0b / 2u
-            q8_store(vsh, vqb, vals, d, id, vb0h, vb0b, blk)
+            q8_store_lane(vsh, vqb, v, vb0b / 2u, vb0b, ge / 32u, ge % 32u)
         } else {
             let kb0b = rrow.x + lay * rrow.z + ka.layr + kv_ring_row(rrow.w - 1u, ka.ring) * rowb
-            let kb0h = kb0b / 2u
-            q8_store(ksh, kqb, vals, d, id, kb0h, kb0b, blk)
+            q8_store_lane(ksh, kqb, v, kb0b / 2u, kb0b, ge / 32u, ge % 32u)
         }
     }
 }
@@ -3846,8 +3812,8 @@ struct KvRowsArgs {
     hs : uint      //!< a head's elements (the tq4 rotation's span)
 }
 
-//! A prefill window's roped K and V panel rows into a q8_0 mirror slab, a thread a 32-block: `quantize_q8kv_row`'s scale and
-//! rounding through the store shell the rope-store stamps share, the rope already done
+//! A prefill window's roped K and V panel rows into a q8_0 mirror slab, a simdgroup a 32-block and a lane an element:
+//! `quantize_q8kv_row`'s scale and rounding through the store shell the rope-store stamps share, the rope already done
 [metal_dispatch(name = "enc_kv_rows_q8", pso = "g_pso_kv_rows_q8", tg = 64, grid = "nthreads/64", params = "nthreads : int64")]
 class MetalKvRowsQ8 : MetalRopeStoreQ8Base {
     @ssbo @binding = 0 @role = "read" @off = "koff" ks : array<float>
@@ -3861,29 +3827,21 @@ class MetalKvRowsQ8 : MetalRopeStoreQ8Base {
     [metal_kernel(name = "metal_kv_rows_q8_msl"), arch(at = "../ARCHITECTURE_GPU_PREFILL_WINDOW.md#prefill-kv-mirror")]
     def metal_kv_rows_q8 {
         let nblk = ka.nblk
-        let total = ka.rows * nblk
+        let total = ka.rows * nblk * 32u   // the K elements; the V elements follow
         let gid = gl_GlobalInvocationID.x
-        if (gid >= 2u * total) {
+        if (gid >= 2u * total) {   // whole simdgroups: a block's 32 lanes return together
             return
         }
         let isV = gid >= total
-        let bi = isV ? gid - total : gid
+        let e = isV ? gid - total : gid
+        let bi = e / 32u
         let row = bi / nblk
         let blk = bi % nblk
-        let base = bi * 32u
-        var vals : float[32]
-        var e = 0u
-        while (e < 32u) {
-            vals[e] = isV ? vs[base + e] : ks[base + e]
-            e++
-        }
-        var d = 0.0
-        var id = 0.0
-        q8_scale(vals, d, id)
+        let v = isV ? vs[e] : ks[e]
         if (isV) {
-            q8_store(vsh, vqb, vals, d, id, row * nblk * 17u, row * nblk * 34u, blk)
+            q8_store_lane(vsh, vqb, v, row * nblk * 17u, row * nblk * 34u, blk, e % 32u)
         } else {
-            q8_store(ksh, kqb, vals, d, id, row * nblk * 17u, row * nblk * 34u, blk)
+            q8_store_lane(ksh, kqb, v, row * nblk * 17u, row * nblk * 34u, blk, e % 32u)
         }
     }
 }
@@ -4904,7 +4862,10 @@ def enc_fwht_unsign(enc : MetalComputeEncoder?; byo, bhs, bqs : MetalBuffer?; nh
 }
 
 // q8_0-mirror rope+store: the K/V mirror rows bind TWICE each (half-scale + byte views at the
-// same row offset); grid covers the q pairs + one thread per K/V 32-block
+// same row offset); grid covers the q pairs, then a lane an element of the K and V rows (q8_store_threads)
+//! the q8_0 store's threads: a thread a q pair, then - from the next simdgroup boundary - a lane an element of the K and V rows
+def q8_store_threads(qd, kv_dim : int64) : int64 => (qd / 2l + 31l) / 32l * 32l + 2l * kv_dim
+
 def enc_rope_store_q8(enc : MetalComputeEncoder?; bqkv : MetalBuffer?; vsoff : uint64;
                       kmb, vmb : MetalBuffer?; koff, voff : uint64;
                       bcos, bsin, bbias : MetalBuffer?; var ka : RopeStoreQ8Args; nthreads : int64; bq : MetalBuffer? = null) {
@@ -5612,7 +5573,7 @@ def enc_rope_store_b_tq4(enc : MetalComputeEncoder?; bqkv, bcos, bsin, brt, bbia
 }
 
 // q8_0-mirror batched rope+store: arena bound four ways (K/V x scale/byte views); grid covers
-// the q pairs + one thread per K/V 32-block, one grid row per batch row
+// the q pairs, then a lane an element of the K and V rows (q8_store_threads), one grid row per batch row
 def enc_rope_store_b_q8(enc : MetalComputeEncoder?; bqkv, bcos, bsin, brt, bbias : MetalBuffer?; var ka : RopeStoreBQ8Args; nthreads, nrows : int64; rtoff : uint64 = 0ul;
                         bq : MetalBuffer? = null) {
     enc_rpstb_q8_c(enc, bqkv, g_arena, g_arena, g_arena, g_arena, bcos, bsin, brt, rtoff, bbias, ka, bq != null ? bq : bqkv, nthreads, nrows)
@@ -13136,6 +13097,7 @@ let PK_ATTN_MAX_KEYS = int64(GK_PK_ATTN_MAX_KEYS)   //!< the scores the attentio
 def gk_subgroup_add(v : float) : float => simd_sum(v)
 def gk_subgroup_max(v : float) : float => simd_max(v)
 def gk_subgroup_xor(v : float; m : uint) : float => simd_shuffle_xor(v, m)
+def gk_subgroup_xor_u(v : uint; m : uint) : uint => simd_shuffle_xor(v, m)
 def gk_subgroup_min_u(v : uint) : uint {
     var m = v
     var b = 16u

@@ -1352,18 +1352,19 @@ def private resident_mirror_ask() : tuple<dt : KVDtype; knob : string; fold_why 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan"), arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-kv-block-codecs")]
 def resident_mirror_dtype() : KVDtype => resident_mirror_ask().dt
 
-//! `announce` prints why an asked codec became f16: the ask itself, or the model's heads
+//! `announce` prints why an asked codec became another: the ask itself, or the model (`kv_codec_served`)
 [arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan"), arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-kv-block-codecs")]
 def resident_mirror_dtype_of(t : Model; announce : bool = false) : KVDtype {
     let ask = resident_mirror_ask()
-    let geometry_why = kv_codec_geometry_why(t.config, ask.dt)
+    var served_why = ""
+    let served = kv_codec_served(t.config, ask.dt, served_why)   //! the codec a session asked at `ask.dt` lands at, so the mirror and the sessions agree
     if (announce && !empty(ask.fold_why)) {
         to_log(LOG_WARNING, "dasLLAMA: resident driver - the K/V mirror arms f16: {ask.fold_why}\n")
     }
-    if (announce && !empty(geometry_why)) {
-        to_log(LOG_WARNING, "dasLLAMA: resident driver - the K/V mirror arms f16, not the {ask.dt} asked ({ask.knob}): {geometry_why}\n")
+    if (announce && !empty(served_why)) {
+        to_log(LOG_WARNING, "dasLLAMA: resident driver - the K/V mirror arms {served}, not the {ask.dt} asked ({ask.knob}): {served_why}\n")
     }
-    return empty(geometry_why) ? ask.dt : KVDtype.f16
+    return served
 }
 
 //! a block-codec mirror's scratch: both sides' f16 shadow of one layer's rows at the context, and the window's staged float rows

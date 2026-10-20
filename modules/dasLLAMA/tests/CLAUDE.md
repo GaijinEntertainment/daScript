@@ -84,9 +84,13 @@ failed assert still FAILS the test (dastest: `failed` beats `skipped`), so filte
 never mask a red.
 
 Arm names - decode parity: `arm1-basic arm2-hybrid arm3-step arm4-paged arm5-rewind
-arm6-churn arm7-q8kv arm7b-tq4kv arm8-s16 arm9-reload arm10-kq arm11-depth arm12-dim
+arm6-churn arm6b-capfit arm6c-capfit-refuse arm7-q8kv arm7b-tq4kv arm8-s16 arm9-reload arm10-kq arm11-depth arm12-dim
 arm13-conc arm14-poison arm15-spec-hint` (arm14 = the shared-region collision gate: a foreign GPU
-prefill must not degrade a later forced-feed decode - Qwen2.5-0.5B, its own `[test]` block; arm15 =
+prefill must not degrade a later forced-feed decode - Qwen2.5-0.5B, its own `[test]` block; arm6b = two streams whose K/V passes a 1 MiB idle mirror cap many times
+over still take the batched GPU step, token for token with the CPU control, the cap put back as found, and with the device up the room `device_kv_max_rows`
+answers is the model's own context; arm6c = the device's largest buffer stood in for at 1 MiB by the probe seam
+(`set_metal_mirror_device_max_probe_`): the batched step declines by name, the refusal said once and cleared by the
+mirrors' reset, the streams still the CPU control's off the declined step; arm15 =
 the single-row driver's greedy chain stands down for a decode sampled at temp > 0 and rides for a
 greedy one; arm11 = the 2030-token depth cell, which also holds the single row's attention form by
 the kernel census - the fused single-pass stamp once a layer a step on the f16 mirror and its q8_0
@@ -172,8 +176,8 @@ the support matrix's batch cell only proves ENGAGE); `mtp-vff-<tag>` takes both 
 `mtp-vff1-<tag>` = one row through the batch driver (the encoder alone, no row mixing);
 `mtp-vff5-<tag>` = five rows through the batch driver; `mtp-vff9-<tag>` = nine rows, the deepest
 verify the round can ask for (MTP_MAX_ROWS); `mtp-vffc-<tag>` = the nine rows again under a 64 MB
-mirror ceiling that holds the session's slice once and not nine times (the drivers shut down first,
-so the arena comes back at the ceiling) - the rows share one slice, and the step must serve;
+idle mirror cap, the drivers shut down first so the arena comes back sized by the rows' own demand -
+the rows share one slice, and the step must serve;
 `mtp-dff8-<tag>` = distinct sessions at B=5 and B=8. `mtp-count-<tag>` on a verify tag attaches the `mtp-*` assistant sidecar beside a
 gemma-4 target first (skips when none) and runs the counting free-run at depth 1, 2, 4; the
 diagnostic arms `mtp-count-cpu` (drafts through the CPU oracle), `mtp-count-trace` (drafts vs
@@ -1557,11 +1561,15 @@ over the mirror alone under a scalar codec, 0 where the weights pass the room; i
 room, the rest of the mirror over the context (the rings charged a position at the asked context hold fewer, the control). `test_resident_mirror_codec_ask` is
 the mirror codec the plan arms, on shells: a block codec's geometry (`kv_codec_geometry_why`: a
 96-wide head holds q8_0 and tq4 names it, a 48-wide head q8_0 names, a scalar codec holds any),
-the ask folded to f16 where the model cannot hold it and for an f32 ask
+the ask served at the codec the model holds - a tq4 ask on a 96-wide head or a Q/K/V-biased attention at q8_0, a
+48-wide head at f16 - and f16 for an f32 ask
 (`resident_mirror_dtype_of`, under a pin the cell puts back; skips where `DASLLAMA_VK_KV32=1`
 arms f32 over it), the reset lifting the ask, a codec's spelling in any case with an unknown one
 reading f16 (`kv_dtype_named`), and its ordinal across the tier's seam with a bad one panicking by
-name (`kv_dtype_of`). `test_mtp_seat_owner` holds the
+name (`kv_dtype_of`). `test_kv_codec_serving_rule` holds the serving rule itself on shells (`kv_codec_served` /
+`kv_codec_serving_why`): a 32-wide head without a bias serves tq4 as asked, a Q/K/V bias steps tq4 down to q8_0 naming
+the bias while q8_0 and f16 serve it, a 96-wide head steps tq4 down to q8_0 naming the rotation, a 48-wide head lands
+both block codecs at f16. `test_mtp_seat_owner` holds the
 speculative round's seat ownership on a Model shell under two fake decode overrides: with the
 owner refusing the model, and with seats registered under no owner, `mtp_spec_eval` and
 `mtp_spec_round` open the CPU round (its opening refuses the session's parked token, the witness)
@@ -1796,9 +1804,10 @@ through the rig of `_kv_codec_cells.das`, whose loader (`with_codec_model`) pins
 `set_gpu_kv_dtype` for the load, puts back the pin it found (or lifts it where nobody had asked),
 asserts the mirror armed at the codec asked, and skips where `DASLLAMA_VK_KV32=1` armed an f32
 mirror. `test_gpu_resident_qwen2_q8kv` is the forced-feed form (`cell_codec_forced_feed`) on q8_0
-sessions at an 8% bar (the CPU chain quantizes each query, the device keeps it f32), one window
-and two; `test_gpu_resident_qwen2_tq4kv` is the distance form (`cell_codec_distance`), since no
-logit bar holds a 4-bit mirror on a 0.5B - three chains over one prompt and eight fed tokens (the
+sessions at a 10% bar (both chains quantize each query, each its own, so two roundings part), one window
+and two; `test_gpu_resident_qwen2_tq4_steps_down` holds the serving rule on the carrier - a tq4 ask arms the q8_0 mirror
+and the forced feed holds the q8_0 bar; `test_gpu_resident_qwen2_tq4kv` is the distance form (`cell_codec_distance`) on
+Qwen3-0.6B Q8_0 (`CARRIER_TQ4`: the biased carrier serves no tq4), since no logit bar holds a 4-bit mirror on a 0.5B - three chains over one prompt and eight fed tokens (the
 device at tq4, the CPU at tq4, the CPU at f16), every row asserted finite, the sums of the rows'
 largest differences held as ratios: the device no further from the f16 chain than 1.15 of the CPU
 codec chain's own distance (reads 0.95-1.01), with the f16 rows one step off past that same bound
@@ -2215,7 +2224,8 @@ batched-step cells, the device-home cells, the scheduler's device mode, the hand
 tolerance cells, the guards, the driver's reports and the two passes - the staged stores and the codec's store pass at one
 row and at N rows, the decode attention's codec stamps, the prefill's attention over the f16 shadow, the rows a pass
 brings down as the CPU cache's own bytes.
-`test_gpu_resident_regions_tq4kv.das` - the same cells with the mirror asked in tq4 (the interleaved single steps,
+`test_gpu_resident_regions_tq4kv.das` - the same cells on Qwen3-0.6B Q8_0 (the qwen3 file's carrier: Qwen2.5's Q/K/V
+bias serves a tq4 ask at q8_0) with the mirror asked in tq4 (the interleaved single steps,
 the two batched-step cells, the device-home cells, the scheduler's device mode, the handoff cell, the prefill-chunks cell,
 the tolerance cells, the guards, the driver's reports and the two passes), tq4's un-rotation among what they reach.
 Under a tq4 mirror no share of the peak holds a tolerance cell - two window splits of one prompt, and the split q/k
@@ -2861,8 +2871,9 @@ model-gated twin a prompt sharing five rows of the first page alone, bit for bit
 the installed room seam (`set_gpu_kv_room_hook`, put back) over the model's K/V bytes a row, both
 planes of every layer that keeps rows of its own (a `kv_src` layer owns none), f32 halving the f16
 count, never past the model's context, and no seam bounding nothing but the context; on a Metal
-box the installed seam itself - the mirror ceiling (`set_metal_decode_mirror_cap_mb`, put back)
-over the row's bytes, 64 MiB holding 32768 rows of 2048 bytes and 128 MiB twice that.
+box the installed seam itself - the device's largest buffer over the row's bytes: the idle mirror cap
+(`set_metal_decode_mirror_cap_mb`, put back) bounds no room, so 64 and 128 MiB read the same rows, past the 65536
+that 128 MiB of 2048-byte rows would hold.
 `test_metal_role_infer.das` - model-free: the `@role` derivation over the `_role_fixtures/` kernels,
 each compiled at run time - the grid micro-grammar, a buffer passed whole taking the callee
 parameter's direction (a contradicting `@role` refused), a pointer into a tracked buffer taking the
@@ -2896,7 +2907,9 @@ ggml block bytes of the type, ids round-trip, `kq_fmt_of_id` refuses an id no fo
 `kq_bytes_per_weight` as the stride table's arithmetic on every superblock format, the
 `kq_fmt_stamp` call macro binding every member's tag so a tag-overload family resolves at compile
 time, the key-radix and lattice-predicate cells, and the load report's row name (`conv_row_name`: the site off the GGUF tensor role, the disk type, a kq plane by its `KqFmt` member and a converted copy by its conversion).
-`test_kv_codec.das` - stocked suite; its model-free cell `test_kv_codec_side_stamp` holds the
+`test_kv_codec.das` - stocked suite; `test_kv_codec_step_down` serves a tq4 ask on Qwen2.5-0.5B (a Q/K/V-biased
+attention) at q8_0 in a session and in a pool, q8_0 asked staying q8_0, and Qwen3-0.6B keeping tq4 (both carriers through
+`model_available`); its model-free cell `test_kv_codec_side_stamp` holds the
 `kv_codec_side` macro (`dasllama/dasllama_kv_dtype`): each codec's arm sees its own cache-pointer
 type and, nested once per side, the sixteen K x V pairs each carry the same address.
 `test_kquant.das` - model-free: the K-quant and grid plane dequants and dots against in-test

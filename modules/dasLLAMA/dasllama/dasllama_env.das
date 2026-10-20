@@ -359,7 +359,7 @@ struct public MetalEnv {
     @clarg_doc = "Single-pass B8 twin for K-quant small-batch mv at B=5..8; 0 is the A/B rail."
     kq_b8 : bool = true
 
-    @clarg_doc = "The device-side KV mirror's cap in MiB (64 at least, the device's largest buffer at most): the arena's growth bound for every session together and the bytes idle mirrors evict down to; a live session's own slice past it still gets room."
+    @clarg_doc = "The device-side KV mirror's idle budget in MiB: the bytes idle mirrors evict down to once a step is served. A live step's demand is bounded by the device's largest buffer alone (unified memory: what fits, serves), and a step past that takes the CPU rails with one logged line."
     kv_mirror_mb : int = 4096
 
     @clarg_doc = "A released paged session's KV mirror goes to the next session whose leading pages are the same pool groups, its rows not uploaded again; 0 uploads every attached row - the A/B rail."

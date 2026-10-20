@@ -8,6 +8,7 @@ require dasllama/dasllama_transformer   // umbrella fires each arch [init] regis
 require _model_tier
 require dasllama/dasllama_math   // with_dasllama_jobque_ + target_chunk_work + fused knob
 require dasllama/dasllama_kv_codec   // the codec kernel families under unit test
+require dasllama/dasllama_core   // load_model_ / create_session / create_kv_pool: the codec a carrier's session and pool serve
 require dasllama/dasllama_convert    // cvt_f32_to_f16/cvt_f16_to_f32 — the generic f16 rows
 require daslib/f16_cvt
 require daslib/jobque_boost
@@ -985,4 +986,35 @@ def test_kv_codec_side_stamp(t : T?) {
         }
         delete bytes
     }
+}
+
+//! The constructors serve a codec the model cannot hold at the step-down codec: Qwen2's Q/K/V bias takes tq4 to q8_0 in a
+//! session and in a pool; a model without the bias keeps tq4; q8_0 asked stays q8_0.
+[test]
+def test_kv_codec_step_down(t : T?) {
+    let path = path_join(models_dir(), "Qwen2.5-0.5B-Instruct-Q8_0.gguf")
+    return if (!model_available(t, path))
+    var m <- load_model_(path, QuantMode.q8)
+    t |> success(m.config.attn_qkv_bias, "Qwen2.5 carries the Q/K/V bias the rule reads")
+    var s <- create_session(m, KVDtype.tq4)
+    t |> equal(s.kv_dtype_k, KVDtype.q8_0, "a tq4 session on Qwen2.5 serves at q8_0")
+    t |> equal(s.kv_dtype_v, KVDtype.q8_0, "both planes")
+    var s8 <- create_session(m, KVDtype.q8_0)
+    t |> equal(s8.kv_dtype_k, KVDtype.q8_0, "q8_0 asked stays q8_0")
+    var pool <- create_kv_pool(m, 64l, KVDtype.tq4)
+    t |> equal(pool.kdt, KVDtype.q8_0, "a tq4 pool on Qwen2.5 pages at q8_0")
+    delete pool
+    var chat <- create_chat(m, "", 8l, KVDtype.tq4)
+    t |> equal(chat.session.kv_dtype_k, KVDtype.q8_0, "a tq4 chat on Qwen2.5 serves at q8_0: the rule sits in the shared constructor every path takes")
+    delete chat
+    delete s8
+    delete s
+    delete m
+    let path3 = path_join(models_dir(), "Qwen3-0.6B-Q8_0.gguf")
+    return if (!model_available(t, path3))
+    var m3 <- load_model_(path3, QuantMode.q8)
+    var s3 <- create_session(m3, KVDtype.tq4)
+    t |> equal(s3.kv_dtype_k, KVDtype.tq4, "control: Qwen3, no bias, keeps tq4")
+    delete s3
+    delete m3
 }

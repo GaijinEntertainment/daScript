@@ -47,6 +47,8 @@ require dasllama/dasllama_env
 //   pp: one batched forward_prefill of -p tokens from an empty cache per rep
 //   tg: -n single-token forwards at pos 0.. per rep, feeding synthetic ids with NO logit read
 //       (llama-bench never samples — sampling cost is excluded by design)
+//   tg-real<n> (--mtp-ab, --tok) drops no warmup round: every rep is timed; tg<n>@<npl> drops none either - each rep's
+//       batched command opens with one untimed warm step inside the rep
 //   ours:   bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m <model.gguf>
 //   theirs: --ref <llama-bench> runs it on the same GGUF with the same -t/-p/-n/-r/--ngl
 // `-o json` emits public bench records (schema: METHODOLOGY.md "The record") on stdout — progress goes to
@@ -143,6 +145,10 @@ struct Args {
 
     @clarg_doc = "A/B the attention GPU chain in-process: every row runs twice, attention routing OFF then ON. Needs DASLLAMA_GPU_ATTN=1 (uploads + marks); mutually exclusive with the other A/B levers"
     attn_ab : bool
+
+    @clarg_name = "ab-reverse"
+    @clarg_doc = "Run the A/B lever's arms ON then OFF instead of OFF then ON: a box whose clock drifts across a run reads a race in both orders and takes the pair"
+    ab_reverse : bool
 
     @clarg_doc = "A/B the GPU MoE prefill arm in-process: every row runs twice, device-side prefill OFF then ON. Needs resident expert layers (DASLLAMA_GPU_MOE_LAYERS); decode has no npos gate so tg reads as a wash. Mutually exclusive with the other A/B levers"
     prefill_ab : bool
@@ -1299,6 +1305,15 @@ def fixture_gate_check(var t : Model; spec : ModelSpec; kv : KVDtype = KVDtype.f
     bench_fixture_gate(t, spec, OutFmt.txt, kv)
 
 // progress line — stdout in txt mode, stderr when stdout carries the md table / json records
+//! the lever value arm `arm` of an A/B runs at: off then on, or - `reverse`, `--ab-reverse` - on then off
+def ab_arm_on(reverse : bool; arm : int) : bool => reverse ? arm == 0 : arm != 0
+
+//! every row refused up front: the REFUSED line says why, the panic names it
+def private refuse_every_row(fmt : OutFmt; why : string) {
+    say(fmt, "REFUSED every row - {why}\n")
+    panic("lcpp_bench: refused every row - see the REFUSED line")
+}
+
 def private say(fmt : OutFmt; text : string) {
     if (fmt == OutFmt.txt) {
         print(text)
@@ -1447,6 +1462,9 @@ def main() : int {
         levers |> resize(1)
     }
     let ab = !empty(levers)
+    if (cfg.ab_reverse && !ab) {
+        print("warning: --ab-reverse is inert without an A/B lever (--<lever>-ab)\n")
+    }
     let real_row = ab && levers[0].real
     var fmt = cfg.output
     if (cfg.tok) {
@@ -1619,8 +1637,7 @@ def main() : int {
         set_gpu_kv_dtype(cfg.kv)   // the mirror arms at the rows' codec, or the rows pass to the CPU rails as a codec mismatch
         var t <- load_model_cached(mpath, cfg.quant)
         if (gpu_device_sessions() > 0l && gpu_device_session_dtype() != cfg.kv) {
-            say(fmt, "REFUSED every row - --kv {cfg.kv} asked and the whole-model driver's mirror armed {gpu_device_session_dtype()} (the load log says why): the rows' sessions would run on the CPU rails under the device's stamp\n")
-            panic("lcpp_bench: the K/V codec --kv asked did not arm - see the REFUSED line")
+            refuse_every_row(fmt, "--kv {cfg.kv} asked and the whole-model driver's mirror armed {gpu_device_session_dtype()} (the load log says why): the rows' sessions would run on the CPU rails under the device's stamp")
         }
         set_gpu_ctx_max(0l)   //! the pin served this load; the next model's row sets its own
         var sched_ctx = 0l   //! the batched row's context: the flat rows' session narrows `seq_len` to its own rows, the scheduler's streams need theirs back
@@ -1665,6 +1682,10 @@ def main() : int {
         activeB = active_params_b(t)
         execFmt = model_exec_fmt(t)
         {
+            let codec_why = kv_codec_serving_why(t.config, cfg.kv)   //! a codec the model cannot serve would step down under the row: the bench measures what was asked or nothing
+            if (!empty(codec_why)) {
+                refuse_every_row(fmt, "--kv {cfg.kv} cannot serve {base_name(mpath)}: {codec_why}")
+            }
             var inscope spec <- spec_by_file(base_name(mpath))
             if (empty(spec.file)) {
                 spec.file = base_name(mpath)
@@ -1677,19 +1698,25 @@ def main() : int {
             dispatch_census(t, fmt)
         }
         var s <- bench_session(t, flat_row_plen(plen, ngen, t.config.seq_len, real_row), ngen, cfg.kv, cfg.kv)   // the cap above already bounds t.config at the rows' size; nothing serves this model afterwards, so nothing restores it
-        var inscope pp_off : array<double>
+        var inscope pp_off, pp_on : array<double>   // per prompt: each arm's rate, the on arm's drafts and accepts - one row a prompt once both arms ran
+        var inscope pp_on_dr, pp_on_ac : array<int64>
         pp_off |> resize(length(toks))
+        pp_on |> resize(length(toks))
+        pp_on_dr |> resize(length(toks))
+        pp_on_ac |> resize(length(toks))
+        var ab_refused = false
         for (arm in range(ab ? 2 : 1)) {
             var dtag = ""
+            let lever_on = ab_arm_on(cfg.ab_reverse, arm)
             if (ab) {
-                dtag = " {levers[0].tag}={arm == 0 ? "off" : "on"}"
-                invoke(levers[0].route, arm != 0)
+                dtag = " {levers[0].tag}={lever_on ? "on" : "off"}"
+                invoke(levers[0].route, lever_on)
             }
             if (real_row) {
                 // REAL greedy continuation: fresh session per prompt (no KV/recurrent bleed),
                 // prefill untimed as llama-bench excludes the prompt, the sample inside the timed loop
                 // (both arms pay it, so it cancels). NOT comparable to the synthetic tg row.
-                let mtp_on = cfg.mtp_ab && arm != 0
+                let mtp_on = cfg.mtp_ab && lever_on
                 var drafted = 0l
                 var accepted = 0l
                 var parked = 0l   // rounds whose sampled walk parked the next draw: the --mtp-temp lever's engagement witness
@@ -1764,6 +1791,7 @@ def main() : int {
                 if (!empty(refused)) {
                     say(fmt, "REFUSED tg-real{ngen}{dtag} - {refused}\n")
                     g_refused_rows++
+                    ab_refused = true
                     delete tps
                     delete pp_us
                     delete pp_gen
@@ -1776,9 +1804,14 @@ def main() : int {
                 }
                 let st = bench_row("tg-real{ngen}{dtag}", tps)
                 say(fmt, "{st.test}: {st.mean:.2f} ± {st.sd:.2f} tok/s ({reps} reps, {length(toks)} prompts)\n")
-                if (!mtp_on) {
-                    for (pi in range(length(toks))) {
-                        pp_off[pi] = pp_us[pi] > 0l ? double(pp_gen[pi]) * 1.0e6lf / double(pp_us[pi]) : 0.0lf
+                for (pi in range(length(toks))) {
+                    let tps_pi = pp_us[pi] > 0l ? double(pp_gen[pi]) * 1.0e6lf / double(pp_us[pi]) : 0.0lf
+                    if (mtp_on) {
+                        pp_on[pi] = tps_pi
+                        pp_on_dr[pi] = pp_dr[pi]
+                        pp_on_ac[pi] = pp_ac[pi]
+                    } else {
+                        pp_off[pi] = tps_pi
                     }
                 }
                 if (mtp_on) {
@@ -1786,16 +1819,15 @@ def main() : int {
                     let walk = sp.temp > 0.0 ? " (sampled walk, temp {sp.temp})" : ""
                     say(fmt, "  mtp: {accepted}/{drafted} drafts accepted ({rate:.1f}%) at depth {get_mtp_depth()}{walk}; {mtp_pos_report()}\n")
                     mtp_pos_reset()
-                    if (length(toks) > 1) {
-                        for (pi in range(length(toks))) {
-                            let on_tps = pp_us[pi] > 0l ? double(pp_gen[pi]) * 1.0e6lf / double(pp_us[pi]) : 0.0lf
-                            let ratio = pp_off[pi] > 0.0lf ? on_tps / pp_off[pi] : 0.0lf
-                            let prate = pp_dr[pi] > 0l ? double(pp_ac[pi]) * 100.0lf / double(pp_dr[pi]) : 0.0lf
-                            say(fmt, "    prompt {pi}: off {pp_off[pi]:.1f} -> on {on_tps:.1f} tok/s (x{ratio:.2f}), accept {pp_ac[pi]}/{pp_dr[pi]} ({prate:.1f}%)\n")
-                        }
-                    }
                     if (mtp_assistant_attached(t)) {
                         say(fmt, mtp_ab_drafter_line(mtp_drafter_stats_(t)))
+                    }
+                }
+                if (cfg.mtp_ab && arm == 1 && !ab_refused && length(toks) > 1) {   //! one row a prompt once both arms' rates are in, whichever arm ran last
+                    for (pi in range(length(toks))) {
+                        let ratio = pp_off[pi] > 0.0lf ? pp_on[pi] / pp_off[pi] : 0.0lf
+                        let prate = pp_on_dr[pi] > 0l ? double(pp_on_ac[pi]) * 100.0lf / double(pp_on_dr[pi]) : 0.0lf
+                        say(fmt, "    prompt {pi}: off {pp_off[pi]:.1f} -> on {pp_on[pi]:.1f} tok/s (x{ratio:.2f}), accept {pp_on_ac[pi]}/{pp_on_dr[pi]} ({prate:.1f}%)\n")
                     }
                 }
                 results |> push(st)

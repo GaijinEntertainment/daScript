@@ -81,15 +81,6 @@ def private ref_report(qf, kf, vf : array<float>; scale : float; bufs : array<tu
     }
 }
 
-def private half_of(src : array<float>; scale : float) : array<float16> {
-    var xa : array<float16>
-    xa |> resize(length(src))
-    for (d, s in xa, src) {
-        d = float16(s * scale)
-    }
-    return <- xa
-}
-
 [export]
 def main {   // nolint:STYLE038 — one-shot race harness; buffers + PSOs stay live to the release tail
     static_if (typeinfo builtin_module_exists(das_metal)) {

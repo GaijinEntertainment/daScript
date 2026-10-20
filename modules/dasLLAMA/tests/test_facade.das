@@ -168,13 +168,15 @@ def test_facade_device_kv_rows(t : T?) {
     m.config.seq_len = 1000l
     t |> success(device_kv_max_rows(m, KVDtype.f16, KVDtype.f16) <= 1000l, "the installed seam bounds a model by its own context at most")
     static_if (typeinfo builtin_module_exists(das_metal)) {
-        //! the Metal seam itself: the mirror ceiling over the row's bytes - 64 MiB holds 32768 rows of 2048 bytes, 128 MiB twice that
+        //! the Metal seam itself: the device's largest buffer over the row's bytes - the idle cap bounds no room, so 64 MiB and
+        //! 128 MiB read the same rows, past what 128 MiB of 2048-byte rows would hold
         let prev_cap = get_metal_decode_mirror_cap_mb()
         m.config.seq_len = 1000000l
         set_metal_decode_mirror_cap_mb(64)
-        t |> equal(device_kv_max_rows(m, KVDtype.f16, KVDtype.f16), 32768l, "a 64 MiB mirror ceiling holds 32768 rows of 2048 bytes")
+        let rows64 = device_kv_max_rows(m, KVDtype.f16, KVDtype.f16)
         set_metal_decode_mirror_cap_mb(128)
-        t |> equal(device_kv_max_rows(m, KVDtype.f16, KVDtype.f16), 65536l, "a 128 MiB ceiling twice as many")
+        t |> equal(device_kv_max_rows(m, KVDtype.f16, KVDtype.f16), rows64, "the idle cap bounds no room: 64 and 128 MiB read the same rows")
+        t |> success(rows64 > 65536l, "the room is the device's largest buffer over 2048-byte rows (unbounded before a device is up), past 65536 ({rows64})")
         set_metal_decode_mirror_cap_mb(prev_cap)
     }
     delete m

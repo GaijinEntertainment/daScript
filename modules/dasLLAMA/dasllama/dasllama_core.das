@@ -71,23 +71,23 @@ def load_model(path : string; mode : QuantMode = QuantMode.fp32) : Model {
 }
 
 def create_session(model : Model; kv_dtype : KVDtype = KVDtype.f16) : Session {
-    //! Create a fresh session (KV cache + scratch) sized to ``model.config.seq_len`` — one model,
-    //! many independent conversations. ``kv_dtype`` picks the KV-cache codec: ``f16`` (default,
-    //! near-lossless) halves bytes, ``q8_0`` halves again (needs head_size/kv_dim % 32 == 0).
+    //! Create a fresh session (KV cache + scratch) sized to ``model.config.seq_len`` — one model, many independent conversations.
+    //! ``kv_dtype`` picks the KV-cache codec: ``f16`` (default), ``q8_0`` (whole 32-blocks a head), ``tq4`` (a power-of-two head).
+    //! A codec the model cannot serve steps down to ``q8_0``, else ``f16``, with one logged line - ``kv_codec_served`` says which.
     return <- create_session_(model, kv_dtype, kv_dtype)
 }
 
 def create_device_session(model : Model; kv_dtype : KVDtype = KVDtype.f16) : Session {
     //! Create a DEVICE-HOME session: its K/V cache lives only in the armed GPU driver's region - no host cache, nothing over the bus per token.
     //! Hold at most ``gpu_device_sessions()`` live ones, in the driver's codec (``gpu_device_session_dtype``).
-    //! A call the device cannot serve panics.
+    //! A codec the model cannot serve steps down as ``create_session``'s does. A call the device cannot serve panics.
     return <- create_device_session_(model, kv_dtype)
 }
 
 def create_kv_pool(model : Model; page_rows : int64 = 64l; kv_dtype : KVDtype = KVDtype.f16) : KVPool {
-    //! Create a caller-owned PAGED KV pool over ``model``'s cache geometry. Sessions created over it
-    //! allocate cache pages of ``page_rows`` positions on demand instead of the full ``seq_len`` slab
-    //! up front, so many sessions share one elastic pool. Keep the pool alive as long as sessions live.
+    //! Create a caller-owned PAGED KV pool over ``model``'s cache geometry: sessions over it allocate pages of ``page_rows``
+    //! positions on demand instead of the full ``seq_len`` slab, so many sessions share one elastic pool; keep it alive as
+    //! long as sessions live. A codec the model cannot serve steps down as ``create_session``'s does.
     return <- create_kv_pool_(model.config, page_rows, kv_dtype, kv_dtype)
 }
 
@@ -825,8 +825,8 @@ def gpu_host_layers_pin() : int64 {
 
 def set_gpu_kv_dtype(dt : KVDtype) {
     //! Ask the whole-model GPU driver to hold its K/V mirror in codec ``dt`` for the models loaded next - the codec of
-    //! their sessions (``gpu_device_session_dtype`` reads what armed). ``q8_0`` is about half the default ``f16`` mirror's
-    //! bytes, ``tq4`` about a quarter; ``f32`` reads as ``f16``, and so does a model whose heads the codec cannot hold.
+    //! their sessions (``gpu_device_session_dtype`` reads what armed; ``q8_0`` is about half the ``f16`` mirror's bytes,
+    //! ``tq4`` a quarter; ``f32`` reads as ``f16``). A model that cannot serve it serves what it can (``kv_codec_served``).
     set_gpu_kv_dtype_(dt)
 }
 

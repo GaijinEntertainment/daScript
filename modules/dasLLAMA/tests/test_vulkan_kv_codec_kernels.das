@@ -87,7 +87,7 @@ def private ks_staged() : tuple<k : array<float>; v : array<float>> {
 def private q8_store_arm(t : T?; window : bool) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         var st <- ks_staged()
-        let wgs = int64((KS_ROW_BLOCKS * KS_ROWS + 255) / 256)
+        let wgs = int64((KS_ROW_BLOCKS * KS_ROWS * 32 + 255) / 256)   // a lane an element, the driver's own count
         let pos0 = 4
         var toks : array<TokMeta>
         toks |> resize(KS_ROWS)

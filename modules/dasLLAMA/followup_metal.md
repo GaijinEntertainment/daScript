@@ -1025,3 +1025,11 @@ round apart from the decode step's at a near-tie; the scheduler keeps the step. 
 work: one dispatch a layer over every segment - a segment table the attention tiles and the scan read their row range,
 key extent and slices from, the batched decode's route-table shape lifted to tiles - so a segment costs its rows alone;
 then the rider is a one-row segment of a window that is no stall.
+
+## 54. The block-codec decode attention costs 1.5x the f16 stamp's time a key
+
+`MetalSqAttnDQuantT`'s per-key loop is instruction-bound beside the f16 twin (`harness/attn_d_codec_race.das`, the 30B
+shape; the figures in `PERF_LEDGER.md`'s 2026-10-19 long-prompt entry), and neither a 16-bit word view of the quants nor a
+lane-eight mapping with shuffle reductions beat it - both read slower, the hardware reduction being the cheap part. Done =
+a block-codec stamp within 1.15x of f16 a key on the race at 2048 and 8192, or the lever named that keeps it where it is.
+

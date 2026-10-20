@@ -1101,6 +1101,55 @@ def test_metal_decode_parity(t : T?) {   // nolint:STYLE038 — flat arm list, o
                 set_metal_decode_mirror_cap_mb(-1)
             }
 
+            // arm 6b: the idle cap bounds no live step - two streams whose mirrors pass a 1 MiB cap many times over still
+            // take the batched GPU step, token for token with the CPU control (unified memory: what fits, serves)
+            if (arm_on(t, "arm6b-capfit")) {
+                let prev_cap = get_metal_decode_mirror_cap_mb()
+                set_metal_decode_mirror_cap_mb(1)
+                var two <- [clone_to_move(prompt2), clone_to_move(prompt)]
+                var row_bytes = 0l   // the streams' K/V a row: both planes of every layer that keeps rows of its own
+                for (l in range64(tr.config.n_layers)) {
+                    if (layer_kv_source(tr.config, l) == l) {
+                        row_bytes += 2l * kv_row_bytes(KVDtype.f16, layer_kv_dim(tr.config, l))
+                    }
+                }
+                let demand = row_bytes * (long_length(two[0]) + long_length(two[1]) + 12l)
+                t |> success(demand > 8l * 1048576l, "the two streams' K/V ({demand} bytes) passes the 1 MiB cap many times over")
+                let bst0 = metal_batch_decode_stats()
+                let cpu_two <- batch_greedy(tr, tr, two, 6, KVDtype.f16, false, -1, 0)
+                t |> equal(metal_batch_decode_stats().steps, bst0.steps, "the CPU control moves no batched GPU step (the counter's control)")
+                let gpu_two <- batch_greedy(tr, trg, two, 6, KVDtype.f16, true, -1, 0)
+                let bst1 = metal_batch_decode_stats()
+                t |> success(bst1.steps - bst0.steps >= 6l, "the batched steps served on the GPU under a 1 MiB idle cap ({bst1.steps - bst0.steps} of 6)")
+                t |> equal(bst1.declines - bst0.declines, 0l, "and none declined")
+                log_gen_texts(tr, "arm6b row 0", cpu_two[0], gpu_two[0])
+                log_gen_texts(tr, "arm6b row 1", cpu_two[1], gpu_two[1])
+                t |> success(ids_equal(cpu_two[0], gpu_two[0]) && ids_equal(cpu_two[1], gpu_two[1]), "both streams match the CPU control")
+                t |> equal(device_kv_max_rows(tr, KVDtype.f16, KVDtype.f16), tr.config.seq_len, "with the device up the room is the model's own context: the device's largest buffer holds far more rows")
+                set_metal_decode_mirror_cap_mb(prev_cap)
+            }
+
+            // arm 6c: a step whose mirror demand passes the device's largest buffer declines by name - the bound stood in for
+            // by the probe seam at 1 MiB - the refusal said once, and said again after the mirrors' reset
+            if (arm_on(t, "arm6c-capfit-refuse")) {
+                var two <- [clone_to_move(prompt2), clone_to_move(prompt)]
+                let cpu_two <- batch_greedy(tr, tr, two, 6, KVDtype.f16, false, -1, 0)
+                set_metal_mirror_device_max_probe_(1ul << 20ul)
+                t |> success(!metal_mirror_refusal_said(), "nothing refused yet")
+                let bst0 = metal_batch_decode_stats()
+                let gpu_two <- batch_greedy(tr, trg, two, 6, KVDtype.f16, true, -1, 0)
+                let bst1 = metal_batch_decode_stats()
+                t |> success(metal_mirror_refusal_said(), "the device-bound refusal was said")
+                t |> success(bst1.declines - bst0.declines >= 1l, "the batched step declined under a 1 MiB device bound ({bst1.declines - bst0.declines} declines)")
+                log_gen_texts(tr, "arm6c row 0", cpu_two[0], gpu_two[0])
+                t |> success(ids_equal(cpu_two[0], gpu_two[0]) && ids_equal(cpu_two[1], gpu_two[1]), "the streams still match the CPU control off the declined step")
+                metal_decode_shutdown()
+                t |> success(!metal_mirror_refusal_said(), "the mirrors' reset clears the refusal, so the next model says its own")
+                set_metal_mirror_device_max_probe_(0ul)
+                let gpu_again <- batch_greedy(tr, trg, two, 6, KVDtype.f16, true, -1, 0)
+                t |> success(!metal_mirror_refusal_said() && ids_equal(cpu_two[0], gpu_again[0]), "with the device's own bound back the step serves and nothing is refused")
+            }
+
             // arm 7: q8_0 KV mirror — the block-codec decode path (format-matrix W3): GPU
             // rope+quantize store + dual-view block-dequant attention; the CPU q8_0 decode
             // path is the oracle (both arms consume the same codec)

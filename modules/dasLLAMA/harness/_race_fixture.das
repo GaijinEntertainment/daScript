@@ -56,9 +56,7 @@ def time_rounds(narms, rounds, warmup : int; before : block<(i : int) : void>; a
     return <- times
 }
 
-def time_rounds(narms, rounds, warmup : int; arm : block<(i : int) : void>) : array<array<int>> {
-    return <- time_rounds(narms, rounds, warmup, $(_i : int) {}, arm)
-}
+def time_rounds(narms, rounds, warmup : int; arm : block<(i : int) : void>) : array<array<int>> => <- time_rounds(narms, rounds, warmup, $(_i : int) {}, arm)
 
 //! the largest difference of `got` from `want`, and the bound it answers to
 def held(got : array<float>; want : array<float>; rel : float) : Held {
@@ -103,4 +101,15 @@ def race_exit(t : RaceTally; tool : string) : int {
         return 1
     }
     return 0
+}
+
+//! the operand rows as the f16 mirror holds them, scaled
+def half_of(src : array<float>; scale : float = 1.0) : array<float16> {
+    var xa : array<float16>
+    xa |> reserve(length(src))
+    xa |> resize(length(src))
+    for (d, s in xa, src) {
+        d = float16(s * scale)
+    }
+    return <- xa
 }

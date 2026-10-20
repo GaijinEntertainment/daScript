@@ -934,7 +934,7 @@ def test_resident_mirror_codec_ask(t : T?) {
         t |> success(empty(kv_codec_geometry_why(m.config, KVDtype.f16)), "a scalar codec holds any head")
         delete m
     }
-    t |> run("the mirror codec the plan arms: the ask where the model holds it, f16 where it does not, f16 for an f32 ask") @(t : T?) {
+    t |> run("the mirror codec the plan arms: the ask where the model holds it, the served codec where it does not, f16 for an f32 ask") @(t : T?) {
         let pin0 = gpu_kv_dtype_pin_()
         set_gpu_kv_dtype_(KVDtype.tq4)
         if (resident_mirror_dtype() != KVDtype.tq4) {
@@ -943,7 +943,14 @@ def test_resident_mirror_codec_ask(t : T?) {
             var m <- shell(2l, 0ul)
             t |> equal(resident_mirror_dtype_of(m), KVDtype.tq4, "tq4 asked of a 32-wide head arms tq4")
             m.config.head_size = 96l
-            t |> equal(resident_mirror_dtype_of(m), KVDtype.f16, "tq4 asked of a 96-wide head arms f16")
+            t |> equal(resident_mirror_dtype_of(m), KVDtype.q8_0, "tq4 asked of a 96-wide head arms q8_0, the codec the sessions step down to")
+            m.config.head_size = 32l
+            m.config.attn_qkv_bias = true
+            t |> equal(resident_mirror_dtype_of(m), KVDtype.q8_0, "tq4 asked of a Q/K/V-biased attention arms q8_0")
+            m.config.attn_qkv_bias = false
+            m.config.head_size = 48l
+            t |> equal(resident_mirror_dtype_of(m), KVDtype.f16, "tq4 asked of a 48-wide head arms f16: no block codec holds it")
+            m.config.head_size = 96l
             set_gpu_kv_dtype_(KVDtype.q8_0)
             t |> equal(resident_mirror_dtype_of(m), KVDtype.q8_0, "control: q8_0 holds the same head")
             set_gpu_kv_dtype_(KVDtype.f32)
@@ -1715,4 +1722,27 @@ def test_expert_heat_profile(t : T?) {
     t |> success(expert_heat_write_to(path, 3l, 4l, short_heat), "a short profile wrote")
     t |> equal(long_length(expert_heat_read(path, 3l, 4l)), 0l, "a short profile reads empty")
     remove(path)
+}
+
+[test]
+def test_kv_codec_serving_rule(t : T?) {
+    t |> run("the serving rule: tq4 steps down to q8_0 on a Q/K/V-biased attention and on a head it cannot rotate, to f16 where q8_0 holds no block either") @(t : T?) {
+        var m <- shell(2l, 0ul)
+        var why = ""
+        t |> equal(kv_codec_served(m.config, KVDtype.tq4, why), KVDtype.tq4, "a 32-wide head without a bias serves tq4 as asked")
+        t |> success(empty(why), "and names no step down")
+        m.config.attn_qkv_bias = true
+        t |> equal(kv_codec_served(m.config, KVDtype.tq4, why), KVDtype.q8_0, "a Q/K/V bias steps tq4 down to q8_0")
+        t |> success(find(why, "Q/K/V bias") >= 0, "and names the bias ({why})")
+        t |> equal(kv_codec_served(m.config, KVDtype.q8_0, why), KVDtype.q8_0, "q8_0 serves a biased attention")
+        t |> success(empty(why) && empty(kv_codec_serving_why(m.config, KVDtype.f16)), "as does f16, neither naming a step")
+        m.config.attn_qkv_bias = false
+        m.config.head_size = 96l
+        t |> equal(kv_codec_served(m.config, KVDtype.tq4, why), KVDtype.q8_0, "a 96-wide head steps tq4 down to q8_0")
+        t |> success(find(why, "power-of-two") >= 0, "naming the rotation ({why})")
+        m.config.head_size = 48l
+        t |> equal(kv_codec_served(m.config, KVDtype.tq4, why), KVDtype.f16, "a 48-wide head holds no block codec: tq4 lands at f16")
+        t |> equal(kv_codec_served(m.config, KVDtype.q8_0, why), KVDtype.f16, "and so does q8_0")
+        delete m
+    }
 }

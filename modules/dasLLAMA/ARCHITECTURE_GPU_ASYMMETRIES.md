@@ -93,6 +93,11 @@ asymmetries a stamp family ledgers - stays in `ARCHITECTURE_GPU.md#gpu-backends`
   reload story stays the unmap notify (`set_moe_gpu_unmap_notify`) - a different seam for a different ownership model.
 - **`vulkan_tts_stats` / `vulkan_tts_declines` have no Metal twin**: the Vulkan TTS driver counts its encodes
   and its declines by reason in its own pair, where Metal's TTS seats report through `metal_tower_stats` beside `styletts2_gpu_stats`.
+- **The Vulkan block-codec decode attention quantizes the query to q8_0 blocks; Metal's keeps it f32**
+  (`DaAttnT`'s `KVBLK` stamps, `ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-kv-block-codecs`, against `MetalSqAttnDQuantT`):
+  Vulkan scores a K word against a query word in one packed integer dot, the CPU chain's own query quantization, so
+  the two agree to it; Metal's per-key loop dequantizes the block into float multiplies against the f32 query. The
+  codec cells of each home hold their own chain to the CPU's.
 - **The batched pre-encoded step is Metal-only**: the batch driver encodes the next step under the
   current one's GPU run (`ARCHITECTURE_GPU_MTP_DECODE.md#batch-pre-encode`, `DASLLAMA_METAL_BATCH_PRE`);
   Vulkan's N-row token command records once and resubmits, so it has no encode to move.

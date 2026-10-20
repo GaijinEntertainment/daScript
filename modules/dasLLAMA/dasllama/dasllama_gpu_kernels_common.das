@@ -619,6 +619,29 @@ def gk_strided_at(e, base, stride, len : uint) : uint => base + (e / max(len, 1u
 [spirv_inline]
 def gk_up_at(e, base, stride, len : uint) : uint => stride != 0u ? gk_strided_at(e, base, stride, len) : base + e
 
+//! the 32-lane block's largest-magnitude value, the first on a tie, as the CPU's strict compare keeps it (`quantize_tq4kv_row`):
+//! the lanes fold by xor shuffles, a lower lane winning an equal magnitude; the lane primitives are each home's
+//! `gk_subgroup_xor` / `gk_subgroup_xor_u`, and the result lands by reference, the statement form the MSL emitter splices
+[ |> template_struct_instance]
+class template GkBlkSignedMax {
+    def blk_signed_max(lane : uint; var v : float&) {
+        var amax = abs(v)
+        var midx = lane
+        var mask = 16u
+        while (mask > 0u) {
+            let oa = gk_subgroup_xor(amax, mask)
+            let ov = gk_subgroup_xor(v, mask)
+            let oi = gk_subgroup_xor_u(midx, mask)
+            if (oa > amax || (oa == amax && oi < midx)) {
+                amax = oa
+                v = ov
+                midx = oi
+            }
+            mask /= 2u
+        }
+    }
+}
+
 //! the workgroup reductions every row kernel of either home shares: one barrier a reduce, every thread summing the subgroup
 //! partials in the same order, so every thread holds the same sum or max; the lane primitives are each home's
 //! `gk_subgroup_add` / `gk_subgroup_max`, and the result lands by reference, the statement form the MSL emitter splices
