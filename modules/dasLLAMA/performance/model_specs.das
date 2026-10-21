@@ -655,11 +655,7 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             companions <- [
                 ProvEntry(name = "mmproj-gemma-4-12B-it-BF16.gguf", root = "llm",
                     url = "{HF}/ggml-org/gemma-4-12B-it-GGUF/resolve/main/mmproj-gemma-4-12B-it-BF16.gguf",
-                    bytes = 175115616l, sha256 = "9b1edfa05b634728ca4bfd60b4e6b278e95166c078fa54ae4fa83e680112fd1d"),
-                // path-style S3 spelling: the images.cocodataset.org website endpoint is http-only
-                ProvEntry(name = "coco-val2017-000000039769.jpg", root = "llm",
-                    url = "https://s3.amazonaws.com/images.cocodataset.org/val2017/000000039769.jpg",
-                    bytes = 173131l, sha256 = "dea9e7ef97386345f7cff32f9055da4982da5471c48d575146c796ab4563b04e")]),
+                    bytes = 175115616l, sha256 = "9b1edfa05b634728ca4bfd60b4e6b278e95166c078fa54ae4fa83e680112fd1d")]),
         ModelSpec(file = "gemma-4-E4B-it-Q8_0.gguf", display = "gemma-4-E4B", official = true,
             mlx_repo = "mlx-community/gemma-4-e4b-it-8bit", mlx_fmt = "8bit",
             url = "{HF}/ggml-org/gemma-4-E4B-it-GGUF/resolve/main/gemma-4-E4B-it-Q8_0.gguf",
@@ -667,7 +663,11 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             companions <- [
                 ProvEntry(name = "mmproj-gemma-4-E4B-it-BF16.gguf", root = "llm",
                     url = "{HF}/ggml-org/gemma-4-E4B-it-GGUF/resolve/b8093469224f83f5c38f691eb906c380e9e63114/mmproj-gemma-4-E4B-it-BF16.gguf",
-                    bytes = 991552256l, sha256 = "f77995e4b6a569ab8f0d1bfdb7e8da4a0fa5b9e6f309b9bf3bdb76164d75e29f")],
+                    bytes = 991552256l, sha256 = "f77995e4b6a569ab8f0d1bfdb7e8da4a0fa5b9e6f309b9bf3bdb76164d75e29f"),
+                // path-style S3 spelling: the images.cocodataset.org website endpoint is http-only
+                ProvEntry(name = "coco-val2017-000000039769.jpg", root = "llm",
+                    url = "https://s3.amazonaws.com/images.cocodataset.org/val2017/000000039769.jpg",
+                    bytes = 173131l, sha256 = "dea9e7ef97386345f7cff32f9055da4982da5471c48d575146c796ab4563b04e")],
             // PLE (per-layer embeddings) + cross-layer KV sharing over the last 18 layers;
             // dense, so the full 40 hold (verified 40/40 vs simple_ids on the window-engaged
             // 1..320 counting prompt)

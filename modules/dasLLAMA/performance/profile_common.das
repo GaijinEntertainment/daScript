@@ -1355,6 +1355,45 @@ def models_provenance() : array<ProvEntry> {
     return <- out
 }
 
+//! The provenance a board box needs: the official rows and their companions, every ASR catalog
+//! carrier and companion, and the model rows an ASR or TTS catalog entry loads - those with only
+//! the companions a registry serves (the parity oracles minted on-box are a test fixture, not a
+//! board input).
+def board_provenance() : array<ProvEntry> {
+    var media : table<string>
+    for (t in tts_catalog()) {
+        media |> insert(t.file)
+    }
+    for (a in asr_catalog()) {
+        media |> insert(a.das_model)
+        if (!empty(a.das_mmproj)) {
+            media |> insert(a.das_mmproj)
+        }
+    }
+    var out : array<ProvEntry>
+    for (s in model_specs()) {
+        let is_media = key_exists(media, s.file)
+        continue if (!s.official && !is_media)
+        if (!empty(s.url) || !empty(s.recipe)) {
+            out |> emplace(ProvEntry(name = s.file, root = "llm", url = s.url,
+                bytes = s.bytes, sha256 = s.sha256, recipe = s.recipe))
+        }
+        for (c in s.companions) {
+            if (s.official || !empty(c.url)) {
+                out |> push(c)
+            }
+        }
+    }
+    for (a in asr_catalog()) {
+        if (!empty(a.prov.name)) {
+            out |> push(a.prov)
+        }
+        out |> push_from(a.companions)
+    }
+    delete media
+    return <- out
+}
+
 // ===== ASR: reference tools (paths, parsers, runners, versions) =====
 
 //! "audio-chat" for a chat model that also hears audio (`AsrModelSpec.chat`), else "asr" - the

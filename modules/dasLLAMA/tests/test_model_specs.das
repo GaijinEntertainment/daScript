@@ -183,3 +183,29 @@ def test_models_provenance_invariants(t : T?) {
         delete names
     }
 }
+
+[test]
+def test_board_provenance(t : T?) {
+    t |> run("a board box's fetch holds every file the board sweeps read, and no test-only carrier") @(t : T?) {
+        var names : table<string>
+        for (e in board_provenance()) {
+            names |> insert(e.name)
+        }
+        for (s in official_catalog()) {
+            t |> success(key_exists(names, s.file), "official row {s.file}")
+        }
+        t |> success(key_exists(names, bench_image_fixture()), "the image fixture")
+        for (a in asr_catalog()) {
+            t |> success(key_exists(names, a.das_model), "ASR carrier {a.das_model}")
+            t |> success(empty(a.das_mmproj) || key_exists(names, a.das_mmproj), "ASR mmproj {a.das_mmproj}")
+        }
+        for (s in tts_catalog()) {
+            t |> success(key_exists(names, s.file), "TTS model {s.file}")
+        }
+        t |> success(!key_exists(names, "Mistral-7B-Instruct-v0.3-Q8_0.gguf"), "a row off the board stays out")
+        for (n in keys(names)) {
+            t |> success(!(n |> starts_with("tts_oracle")), "the on-box parity oracles stay out: {n}")
+        }
+        delete names
+    }
+}

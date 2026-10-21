@@ -35,6 +35,9 @@ struct FetchArgs {
     convert : bool
 
     @clarg_short = "o"
+    @clarg_doc = "Only the files the board sweeps read (official rows, the ASR and TTS catalogs) - a board box's fetch"
+    board : bool
+
     @clarg_doc = "Only entries whose local name contains this substring"
     only : string
 
@@ -135,7 +138,8 @@ def main() : int {
     var pending = 0
     var failed = 0
     var canary_done = false
-    for (e in models_provenance()) {
+    var entries <- cfg.board ? board_provenance() : models_provenance()
+    for (e in entries) {
         if (!empty(cfg.only) && find(e.name, cfg.only) < 0) {
             continue
         }
