@@ -4,9 +4,8 @@ require dastest/testing_boost public
 
 [never_inline]
 def private call_with_block_argument(value : int;
-                                     blk : block<(arg : int) : int2>) : int2 {
-    return invoke(blk, value)
-}
+                                     blk : block<(arg : int) : int2>
+                                     ) : int2 => invoke(blk, value)
 [never_inline]
 def private throw_with_block_argument(blk : block<(arg : int) : void>) {
     invoke(blk, 91)
