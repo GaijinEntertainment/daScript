@@ -6968,6 +6968,7 @@ def private dn_delta_ref(convh, sth, smh : array<float>; npos, nkh, nvh, ds, bet
     let di = nvh * ds
     let cd = 2 * kd + di
     var ref : array<float>
+    ref |> reserve(npos * di + nvh * ds * ds)   //! the whole-window arm's rows pass the unreserved-growth guard
     ref |> resize(npos * di + nvh * ds * ds)
     var st_h, dvn : array<float>
     st_h |> resize(ds * ds)
@@ -7965,6 +7966,7 @@ def private dn_scan_cell(t : T?; tag : string; ds, nkh, nvh, npos : int) {
             let sm_n = dt_off + nvh
             let o_off = 64   // the o rows sit past a header the kernel must leave alone
             var convh : array<float>
+            convh |> reserve(npos * cd)   //! the whole-window arm's conv plane passes the unreserved-growth guard
             convh |> resize(npos * cd)
             for (i in range(npos * cd)) {   // unit-scale q/k rows keep the 512-step recurrence bounded
                 convh[i] = (float((i * 19) % 79) * 0.025 - 0.9) * 0.15

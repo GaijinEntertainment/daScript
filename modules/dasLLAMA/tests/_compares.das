@@ -35,6 +35,7 @@ def row_fill(n : int; mul, add : int; scale, off : float; modulus : int = 97) : 
 //! `n` slots of `v`
 def plane_of(n : int; v : float) : array<float> {
     var a : array<float>
+    a |> reserve(n)   //! a plane of a whole prompt window passes the unreserved-growth guard
     a |> resize(n)
     a |> fill(v)
     return <- a
