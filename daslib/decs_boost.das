@@ -473,7 +473,7 @@ class DecsEcsMacro : AstFunctionAnnotation {
         func.flags.privateFunction = true
         blk.list |> push(qmacro($c("_::{func.name}")()))
         var fblk = new ExprBlock(at = func.body.at)
-        var cqq = make_call(func.at, "query")
+        var cqq = make_call(func.body.at, "query")
         var cquery = cqq as ExprCallMacro
         var qblk = new ExprBlock(at = func.body.at)
         qblk.blockFlags.isClosure = true
@@ -522,7 +522,7 @@ class DecsEcsMacro : AstFunctionAnnotation {
             )
         }
         func.arguments |> clear
-        cquery.arguments |> emplace_new <| new ExprMakeBlock(_block <- qblk, at = func.at)
+        cquery.arguments |> emplace_new <| new ExprMakeBlock(_block <- qblk, at = func.body.at)
         fblk.list |> emplace(cqq)
         func.body = fblk
         return true

@@ -38,10 +38,11 @@ primitives. **Unknown keys are silently ignored** - validate required fields you
 
 `JV` / `from_JV` read the same annotations.
 
-**Field initializers apply only to the top-level struct you construct.** Elements `sscan_json`
-allocates inside a nested `array<Struct>` are **zero-filled**, so
-`rotation : float4 = float4(0,0,0,1)` comes back all-zero, silently, for any element whose JSON
-omits the key. `read_json` + `from_JV(js, type<T>)` honors element defaults.
+**Values `sscan_json` creates get their field initializers.** A new array element, table value,
+pointee or variant alternative runs its struct's initializer before the scan, so a key the JSON
+omits keeps the declared default. A variant that already holds the scanned alternative is updated
+in place. `sscan_json_at` gets its type only at run time, so it runs an initializer only when the
+program keeps it for another reason (some code calls `T()`); otherwise the value is zero-filled.
 
 ## JV / from_JV and JsonValue?
 

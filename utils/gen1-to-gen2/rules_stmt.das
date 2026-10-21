@@ -462,14 +462,14 @@ def public rule_piped_make(src : Source; lex : Lexical; call : ExprCall?; var se
     if (call.genFlags.generated || empty(call.arguments)) return
     let mk = span_begin(src, call.arguments[0].at)
     if (text_of(src, mk, mk + 1) != "\{") return
-    let name = span_begin(src, call.at)
-    let nameEnd = span_end(src, call.at)
+    let name = span_begin(src, call.atEnclosure)
+    let nameEnd = name + length(call.name)
     if (name <= mk) return
     let close = brace_close(src, lex, mk)
     if (close < 0 || close >= name || text_of(src, close + 1, name) |> strip != "|>") return
     let lp = find_token(src, lex, nameEnd, "(")
     if (lp < 0 || !is_blank(src, nameEnd, lp)) return
-    set |> insert(mk, "{text_of(src, name, nameEnd)}(", "piped-make-name")
+    set |> insert(mk, "{call.name}(", "piped-make-name")
     set |> replace(close + 1, lp + 1, length(call.arguments) > 1 ? ", " : "", "piped-make-pipe")
 }
 

@@ -406,12 +406,12 @@ def emit_zip(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
     var zipShape = ZipShape(
         srcAExpr = srcAExpr,
         srcBExpr = srcBExpr,
-        srcAName := srcAName,
-        srcBName := srcBName,
+        srcAName = srcAName,
+        srcBName = srcBName,
         srcAParamType = srcAParamType,
         srcBParamType = srcBParamType,
-        itAName := itAName,
-        itBName := itBName
+        itAName = itAName,
+        itBName = itBName
     )
     var adapter = new ZipAdapter(shape = zipShape)
     if (lane == LinqLane.ACCUMULATOR && !isCounter) {

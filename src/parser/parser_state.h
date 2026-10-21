@@ -39,6 +39,7 @@ namespace das {
         LineInfo last_token_end; // Sometimes we need to know previous matched token end location
         vector<int> das_line_no;
         vector<int> das_column_no; // saved/restored alongside das_line_no across pushed lexer buffers (include / reader-macro rewrite)
+        vector<pair<size_t,LineInfo>> das_rewrite_at;
         vector<Nesteds> das_nesteds;
         das_hash_set<string> das_already_include;
         das_hash_map<string,string>   das_module_alias;

@@ -244,6 +244,7 @@ namespace das
         string describe() const { return name; }
         string getMangledName() const;
         bool hasAnyInitializers() const;
+        Function * findInitializer() const;
         bool hasUserConstructor() const;
         bool hasUserDefaultConstructor() const;
         bool hasUserFinalizer() const;

@@ -382,6 +382,10 @@ namespace das
             : fileInfo(fi)
             , column(uint32_t(c)), line(uint32_t(l))
             , last_column(uint32_t(lc)), last_line(uint32_t(ll)) {}
+        LineInfo(const LineInfo & from, const LineInfo & to)
+            : fileInfo(from.fileInfo)
+            , column(from.column), line(from.line)
+            , last_column(to.last_column), last_line(to.last_line) {}
         bool operator < ( const LineInfo & info ) const;
         bool operator == ( const LineInfo & info ) const;
         bool operator != ( const LineInfo & info ) const;

@@ -111,12 +111,12 @@ def scan_das_files(path : string; var files : array<string>; var cache : table<s
 //
 // Ground-truth conventions (probed against the gen2 lexer/parser):
 //   lines are 1-based, columns 0-based BYTE offsets, ranges end-EXCLUSIVE.
-//   Most nodes carry a single-token anchor (ExprOp2.at spans just the
-//   operator, ExprIfThenElse.at just the `if`); full spans live only on
-//   ExprBlock, Function.atDecl and ExprLooksLikeCall.atEnclosure.
+//   A parsed expression's at spans the source it was parsed
+//   from; leaves (variables, fields, names, literals) span their
+//   one token.
 //
 // Checks:
-//   anchor    — source text at `at` must equal the token the node names
+//   anchor    — source text at a leaf's `at` equals its token
 //   bounds    — range is ordered and inside the file
 //   colspill  — a range endpoint points past the end of its source line
 //   envelope  — expression lies inside its function's atDecl span
@@ -253,16 +253,6 @@ class AuditVisitor : AstVisitor {
 
     def override preVisitExprCall(expr : ExprCall?) {
         if (expr.genFlags.generated || !same_file(expr.at)) return
-        let nm = string(expr.name)
-        let actual = text_at(expr.at)
-        // malformed ranges belong to the bounds check; `[`/`{` are
-        if (actual |> starts_with("<col-oob") || actual |> starts_with("<line-oob")
-                || actual == "[" || actual == "\{" || actual == "." || actual == ".."
-                || actual == "array" || actual == "table"
-                || actual == "[[" || actual == "[\{" || actual == "\{\{") return
-        if (!name_segment_matches(nm, actual)) {
-            report("anchor", "ExprCall", nm, actual, expr.at)
-        }
         // full-span sanity: enclosure must end at the closing paren
         let el = int(expr.atEnclosure.last_line)
         let elc = int(expr.atEnclosure.last_column)
@@ -308,11 +298,6 @@ class AuditVisitor : AstVisitor {
 
     def override preVisitExprLet(expr : ExprLet?) {
         if (expr.genFlags.generated || !same_file(expr.at)) return
-        let actual = text_at(expr.at)
-        // comprehension/generator desugar plants non-generated lets at `for`
-        if (actual != "let" && actual != "var" && actual != "for") {
-            report("anchor", "ExprLet", "let|var", actual, expr.at)
-        }
         for (v in expr.variables) {
             if (same_file(v.at) && !(v.name |> starts_with("__"))) {
                 let vnm = string(v.name)
@@ -333,61 +318,7 @@ class AuditVisitor : AstVisitor {
         }
     }
 
-// operator anchors
-    def override preVisitExprOp1(expr : ExprOp1?) {
-        if (expr.genFlags.generated || !same_file(expr.at)) return
-        var op = string(expr.op)
-        if (op == "+++") {
-            op = "++"
-        } elif (op == "---") {
-            op = "--"
-        }
-        check_anchor("ExprOp1", expr.at, op)
-    }
-
-    def override preVisitExprOp2(expr : ExprOp2?) {
-        if (expr.genFlags.generated || !same_file(expr.at)) return
-        let actual = text_at(expr.at)
-        // variant `is`/`as` tests lower to == on the index, anchor intact
-        if (expr.op != actual && actual != "is" && actual != "as") {
-            report("anchor", "ExprOp2", string(expr.op), actual, expr.at)
-        }
-    }
-
-    def override preVisitExprCopy(expr : ExprCopy?) {
-        if (expr.genFlags.generated || !same_file(expr.at)) return
-        let actual = text_at(expr.at)
-        // property/clone sugar can lower `:=`/`<-` to a copy, anchor intact
-        if (actual != "=" && actual != ":=" && actual != "<-") {
-            report("anchor", "ExprCopy", "=", actual, expr.at)
-        }
-    }
-
-    def override preVisitExprMove(expr : ExprMove?) {
-        if (expr.genFlags.generated || !same_file(expr.at)) return
-        let actual = text_at(expr.at)
-        // infer promotes `=` on non-copyable types to a move, anchor intact
-        if (actual != "<-" && actual != "=") {
-            report("anchor", "ExprMove", "<-", actual, expr.at)
-        }
-    }
-
-    def override preVisitExprClone(expr : ExprClone?) {
-        if (expr.genFlags.generated || !same_file(expr.at)) return
-        check_anchor("ExprClone", expr.at, ":=")
-    }
-
 // keyword anchors
-    def override preVisitExprReturn(expr : ExprReturn?) {
-        if (expr.genFlags.generated || !same_file(expr.at)) return
-        let actual = text_at(expr.at)
-        // `=>` arrow bodies synthesize the return at the arrow;
-        // comprehension desugar plants one at `for`
-        if (actual != "return" && actual != "=>" && actual != "for" && actual != "<-") {
-            report("anchor", "ExprReturn", "return", actual, expr.at)
-        }
-    }
-
     def override preVisitExprBreak(expr : ExprBreak?) {
         if (expr.genFlags.generated || !same_file(expr.at)) return
         check_anchor("ExprBreak", expr.at, "break")
@@ -396,25 +327,6 @@ class AuditVisitor : AstVisitor {
     def override preVisitExprContinue(expr : ExprContinue?) {
         if (expr.genFlags.generated || !same_file(expr.at)) return
         check_anchor("ExprContinue", expr.at, "continue")
-    }
-
-    def override preVisitExprIfThenElse(expr : ExprIfThenElse?) {
-        if (expr.genFlags.generated || !same_file(expr.at)) return
-        let actual = text_at(expr.at)
-        // `for` — comprehension where-filter desugar
-        if (actual != "if" && actual != "elif" && actual != "static_if" && actual != "static_elif" && actual != "for") {
-            report("anchor", "ExprIfThenElse", "if|elif|static_if|static_elif", actual, expr.at)
-        }
-    }
-
-    def override preVisitExprWhile(expr : ExprWhile?) {
-        if (expr.genFlags.generated || !same_file(expr.at)) return
-        check_anchor("ExprWhile", expr.at, "while")
-    }
-
-    def override preVisitExprFor(expr : ExprFor?) {
-        if (expr.genFlags.generated || !same_file(expr.at)) return
-        check_anchor("ExprFor", expr.at, "for")
     }
 
 // block braces
