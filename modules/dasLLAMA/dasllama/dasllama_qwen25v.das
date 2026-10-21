@@ -194,7 +194,7 @@ let private QWEN25V_TAG = "qwen25v"
 
 [init]
 def private register_qwen25v_image_tags {
-    register_image_family_tag(QWEN25V_TAG)
+    register_image_family_tag(QWEN25V_TAG, true)   // config-free: the exact lane's planes are the file's own, no box property shapes them
 }
 
 // the block GEMM tensors in QWEN25V_GEMM_* order; every per-GEMM list follows it

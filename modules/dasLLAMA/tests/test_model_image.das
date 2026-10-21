@@ -298,6 +298,41 @@ def test_image_table_slot_names(t : T?) {
 }
 
 [test]
+def test_tower_exact_lanes_are_config_free(t : T?) {
+    t |> run("a tower's exact lane keys one identity whatever CPU backend the process runs; its q8 lane follows the backend") @(t : T?) {
+        if (!arm_on(t, "mechanics")) {
+            return
+        }
+        var whole <- [for (n in kernel_backend_names()); n; where !kernel_backend_batch_only(n) && kernel_backend_available_(n)]
+        if (length(whole) < 2) {
+            t |> skip("this build registers one whole CPU backend - nothing to switch between")
+            return
+        }
+        let seat = kernel_backend_seat()
+        let exact <- ["whisper-f32", "parakeet-f32", "canary-f32", "gemma4a-f32", "gemma4v", "gemma3v", "gemma4uv"]
+        var first : table<string; string>
+        for (n in whole) {
+            pin_kernel_backend(n)
+            for (tag in exact) {
+                let id = image_identity(tag)
+                if (!key_exists(first, tag)) {
+                    first |> insert(tag, id)
+                } else {
+                    t |> equal(id, first?[tag] ?? "", "{tag}: the identity under '{n}' is the one under '{whole[0]}'")
+                }
+            }
+        }
+        pin_kernel_backend(whole[0])
+        let q8_first = image_identity("parakeet-q8")
+        pin_kernel_backend(whole[1])
+        t |> success(image_identity("parakeet-q8") != q8_first, "the control: the q8 lane's identity names the backend that repacks it ('{whole[0]}' against '{whole[1]}')")
+        restore_kernel_backend(seat)
+        delete first
+        delete whole
+    }
+}
+
+[test]
 def test_image_tmp_does_not_outlive_a_save(t : T?) {
     t |> run("a failed write removes the save's temp file; a temp file a killed writer left goes at the next save, a fresh one stays") @(t : T?) {
         if (!arm_on(t, "mechanics")) {

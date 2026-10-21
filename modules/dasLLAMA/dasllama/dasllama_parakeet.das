@@ -217,7 +217,7 @@ def private image_post_load(var t : ParakeetModel) {
 [init]
 def private register_parakeet_image_tags {
     register_image_family_tag("parakeet-q8")
-    register_image_family_tag("parakeet-f32")
+    register_image_family_tag("parakeet-f32", true)   // config-free: the exact lane's planes are the file's own, no box property shapes them
 }
 
 def pk_layer_offsets(m : ParakeetModel; l : int64) : PkLayerOffs {
