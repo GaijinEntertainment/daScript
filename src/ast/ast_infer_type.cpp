@@ -6706,7 +6706,7 @@ namespace das {
             }
             bool anyMacrosDidWork = false;
             auto modMacro = [&](Module *mod) -> bool {
-                if (program->thisModule->isVisibleDirectly(mod) && mod != program->thisModule.get()) {
+                if ((program->thisModule->isVisibleDirectly(mod) || mod->fromExtraDependency) && mod != program->thisModule.get()) {
                     for (const auto &pm : mod->inferMacros) {
                         if ( pm->apply(program, program->thisModule.get()) ) {
                             anyMacrosDidWork = true;
