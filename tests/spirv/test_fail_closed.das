@@ -154,6 +154,11 @@ def test_fail_closed_rejections(t : T?) {   // nolint:STYLE038 — flat one-chec
         check_rejects(t, "_fc_wgsize_stage", "builtin 'gl_WorkGroupSize' is not available in the fragment stage")
         // cooperative matrices are subgroup-scoped -> compute-only; a coopmat op in a fragment shader is rejected
         check_rejects(t, "_fc_coopmat_stage", "coopmatLoad is only valid in a compute shader")
+        // @workgroup memory and barrier(): compute / mesh / task only
+        check_rejects(t, "_fc_wg_stage",
+            "@workgroup is only valid in a compute, mesh or task shader")
+        check_rejects(t, "_fc_barrier_stage",
+            "barrier() is only valid in a compute, mesh or task shader")
         // a storage image's access qualifier is binding: no read of a @writeonly, no write to a @readonly
         check_rejects(t, "_fc_image_writeonly_load", "is @writeonly (NonReadable)")
         check_rejects(t, "_fc_image_readonly_store", "is @readonly (NonWritable)")
