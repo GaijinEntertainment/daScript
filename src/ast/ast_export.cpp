@@ -251,6 +251,22 @@ namespace das {
                 useFunction(addr->func);
             }
         }
+        void markInitializers ( TypeDecl * type, das_set<Structure *> & seen ) {
+            if ( !type ) return;
+            if ( type->baseType==Type::tStructure && type->structType && seen.insert(type->structType).second ) {
+                if ( auto init = type->structType->findInitializer() ) {
+                    useFunction(init);
+                }
+                for ( auto & fd : type->structType->fields ) {
+                    markInitializers(fd.type, seen);
+                }
+            }
+            markInitializers(type->firstType, seen);
+            markInitializers(type->secondType, seen);
+            for ( auto & argT : type->argTypes ) {
+                markInitializers(argT, seen);
+            }
+        }
         // function call
         virtual void preVisit(ExprCall * call) override {
             Visitor::preVisit(call);
@@ -260,6 +276,10 @@ namespace das {
             }
             if (builtInDependencies || !call->func->builtIn) {
                 useFunction(call->func);
+            }
+            if ( call->func->builtIn && call->func->name=="sscan_json" && call->arguments.size()==2 ) {
+                das_set<Structure *> seen;
+                markInitializers(call->arguments[1]->type, seen);
             }
         }
         // new
