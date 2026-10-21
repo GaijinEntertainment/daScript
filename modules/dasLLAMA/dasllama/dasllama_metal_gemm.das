@@ -428,5 +428,5 @@ def dasllama_metal_gemm_register() {
     // name — select_batch_backend("metal") — with the device probe as the availability witness
     register_kernel_backend(KernelBackend(name = "metal", mm = @@metal_no_gemv, batch = @@metal_q8q8_batch,
         group3 = @@metal_no_group3, repack = @@repack_q8q8_identity,
-        needs_repack = false, priority = -1, available = @@metal_backend_available))
+        needs_repack = false, batch_only = true, priority = -1, available = @@metal_backend_available))
 }

@@ -244,6 +244,7 @@ def private q8q8_wrapper_gate(t : T?; n : int64; d : int64 = 64l; ntok_override 
     ref_image(wq0.q, wq0.scales, xq, xs, ntok, d, n, ref, bar)
     let seat = kernel_backend_seat()
     for (name in kernel_backend_names()) {
+        continue if (kernel_backend_batch_only(name))   // a batch-slot donor, never the whole backend
         pin_kernel_backend(name)
         var inscope q : array<int8>
         var inscope s : array<float>
@@ -429,6 +430,7 @@ def private s16_wrapper_gate(t : T?; n : int64; ntok_override : int64 = 0l) {
     var offs <- [0l, 0l, dreg * n, n]
     let seat = kernel_backend_seat()
     for (name in kernel_backend_names()) {
+        continue if (kernel_backend_batch_only(name))   // a batch-slot donor, never the whole backend
         pin_kernel_backend(name)
         if (!kernel_backend_has_wscale16()) {
             continue
@@ -568,6 +570,7 @@ def private group3_gate(t : T?; n : int64) {
     ref_image(wq0.q, ws32m, xq, xs, 1l, dt, n, ref, bar)
     let seat = kernel_backend_seat()
     for (name in kernel_backend_names()) {
+        continue if (kernel_backend_batch_only(name))   // a batch-slot donor, never the whole backend
         pin_kernel_backend(name)
         var inscope q := wq0.q
         var inscope s := ws32m

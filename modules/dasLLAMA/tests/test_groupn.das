@@ -82,6 +82,7 @@ def test_q8q8_groupn(t : T?) {
         ref_plane(refy, refbar, 0l, NREG, D, N / 32l, REF_ULP_PER_BLOCK) $(r, row) => ref_dot_q8_f64(wq0.q, wq0.scales, r * D * N + row * N, xq.q, xq.scales, offs[r * 2l + 1l], N)
         let seat = kernel_backend_seat()
         for (name in kernel_backend_names()) {
+            continue if (kernel_backend_batch_only(name))   // a batch-slot donor, never the whole backend
             pin_kernel_backend(name)
             // per-backend weight copy: repack backends read their interleaved layout
             var inscope wq : array<int8>
@@ -143,6 +144,7 @@ def test_groupn_bias_fold(t : T?) {
         var offs <- build_offs()
         let seat = kernel_backend_seat()
         for (name in kernel_backend_names()) {
+            continue if (kernel_backend_batch_only(name))   // a batch-slot donor, never the whole backend
             pin_kernel_backend(name)
             var inscope wq : array<int8>
             var inscope ws : array<float>
@@ -197,6 +199,7 @@ def test_mx4q8_groupn(t : T?) {
         var offs <- build_offs()
         let seat = kernel_backend_seat()
         for (name in kernel_backend_names()) {
+            continue if (kernel_backend_batch_only(name))   // a batch-slot donor, never the whole backend
             pin_kernel_backend(name)
             var inscope wn, we : array<uint8>
             wn := wn0

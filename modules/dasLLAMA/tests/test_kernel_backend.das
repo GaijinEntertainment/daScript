@@ -7,6 +7,7 @@ require dasllama/dasllama_math
 require dasllama/dasllama_math_default        // registers the "portable" backend at [init]
 require dasllama/dasllama_math_aarch64_neon   // registers "arm64-sdot" on arm64+jit
 require ?llvm dasllama/dasllama_math_gen
+require ?das_metal dasllama/dasllama_metal_gemm   // registers the batch-only "metal" donor on Apple builds
 require dasllama/dasllama_kqformat            // KqFmt + kq_fmt_stamp: the registry cell walks every format
 require daslib/enum_trait                     // for (f in type<KqFmt>)
 
@@ -88,7 +89,7 @@ def test_seat_restores_the_pin(t : T?) {
 //! An available registered backend other than `not`, "" when the build registers none.
 def private other_available(not : string) : string {
     for (n in kernel_backend_names()) {
-        return n if (n != not && kernel_backend_available_(n))
+        return n if (n != not && !kernel_backend_batch_only(n) && kernel_backend_available_(n))
     }
     return ""
 }
@@ -291,6 +292,29 @@ def test_batch_backend_pin(t : T?) {
         t |> equal(active_batch_backend(), "portable", "cleared pin restores whole-backend slots")
         if (saved != "") {
             select_kernel_backend(saved)
+        }
+    }
+}
+
+[test]
+def test_batch_only_backends_refuse_the_whole_seat(t : T?) {
+    t |> run("a batch-only backend is never pinned or selected as the whole backend") @(t : T?) {
+        t |> success(!kernel_backend_batch_only("portable"), "the portable backend serves every slot")
+        let seat = kernel_backend_seat()
+        var checked = 0
+        for (n in kernel_backend_names()) {
+            continue if (!kernel_backend_batch_only(n))
+            let before = active_kernel_backend()
+            pin_kernel_backend(n)
+            t |> equal(active_kernel_backend(), before, "pin_kernel_backend('{n}') keeps the active backend")
+            t |> equal(kernel_backend_pin(), seat.pin, "... and sets no pin")
+            select_kernel_backend(n)
+            t |> equal(active_kernel_backend(), before, "select_kernel_backend('{n}') keeps it too")
+            checked++
+        }
+        restore_kernel_backend(seat)
+        if (checked == 0) {
+            t |> skip("this build registers no batch-only backend (no das_metal, no dasVulkan)")
         }
     }
 }

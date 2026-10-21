@@ -1178,6 +1178,9 @@ struct KernelBackend {
     kq_batch_groupn : MatmulKqBatchGroupNFn = @@kq_unset_batch_groupn
     repack_kq : RepackKqFn = @@repack_kq_identity
     needs_repack : bool
+    //! true for a GPU donor of the batch slots alone (its single-row GEMV panics): reachable through
+    //! select_batch_backend only, never activated or pinned as the whole backend
+    batch_only : bool = false
     // mx4_expand_interleaved: true when repack_mx4/repack Q8 layouts satisfy the byte-for-byte
     // interleave map (expand_mx4_region_q8's direct branch) — nibble byte `off` of group bg maps
     // positionally onto Q8 bytes. False on a row-major mx4 backend: prefill expands + repacks via `repack`.
@@ -1663,6 +1666,10 @@ def select_kernel_backend(name : string) {
     if (!key_exists(g_kernel_backends, name)) {
         return
     }
+    if (g_kernel_backends[name].batch_only) {
+        to_log(LOG_WARNING, "dasLLAMA: select_kernel_backend('{name}') - a batch-only backend (select_batch_backend); keeping '{g_active_backend}'\n")
+        return
+    }
     if (!invoke(g_kernel_backends[name].available)) {
         to_log(LOG_WARNING, "dasLLAMA: select_kernel_backend('{name}') - backend reports itself unavailable in this configuration; keeping '{g_active_backend}'\n")
         return
@@ -1678,6 +1685,10 @@ def pin_kernel_backend(name : string) {
     // silently degrading to whatever is currently active. Keep the current backend and warn instead.
     if (!key_exists(g_kernel_backends, name)) {
         to_log(LOG_WARNING, "dasLLAMA: pin_kernel_backend('{name}') - no such backend registered; keeping '{g_active_backend}'\n")
+        return
+    }
+    if (g_kernel_backends[name].batch_only) {
+        to_log(LOG_WARNING, "dasLLAMA: pin_kernel_backend('{name}') - a batch-only backend (select_batch_backend); keeping '{g_active_backend}'\n")
         return
     }
     if (!invoke(g_kernel_backends[name].available)) {
@@ -1934,6 +1945,15 @@ def repack_mx4_weight(var mxq : array<uint8>; var mxs : array<uint8>; woff, n, d
     unsafe {
         invoke(g_repack_mx4, addr(mxq[woff / 2l]), addr(mxs[woff / 32l]), n, d)
     }
+}
+
+//! True for a registered backend that serves the batch slots alone - never the whole backend.
+def kernel_backend_batch_only(name : string) : bool {
+    var r = false
+    g_kernel_backends |> get(name) $(be) {
+        r = be.batch_only
+    }
+    return r
 }
 
 //! Does backend `name` read an interleaved (repacked) weight layout? false for unknown names.
