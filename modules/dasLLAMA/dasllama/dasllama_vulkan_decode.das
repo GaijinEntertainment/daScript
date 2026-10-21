@@ -4576,7 +4576,7 @@ def vk_rdec_rollback(a : int64) : bool {
 }
 
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#device-home-checkpoints")]
-def private rd_snap_alloc {
+def rd_snap_alloc {
     var off = 0l
     for (l in range64(long_length(g_rd.layers))) {
         var L & = unsafe(g_rd.layers[l])

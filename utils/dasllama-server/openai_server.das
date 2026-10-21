@@ -413,6 +413,7 @@ def add_model(var m : Model; name : string; opts : SlotOpts = SlotOpts(); path :
     slot.experts_host = gpu_resident_experts_host()
     slot.backend_effective = gpu_slot_capture(slot.gpu_marks)
     slot.resident_decline = slot.backend_effective == "gpu:resident" ? "" : gpu_resident_decline()
+    refuse_recurrent_in_part(slot)
     let was_gpu = slot.backend_effective != "cpu"
     var probe <- create_chat_renderer(slot.model, "", 1l)
     // reporting the raw template default would show the page a checked box for a family whose
@@ -531,6 +532,7 @@ def private bind_gpu_slot(si : int) {
     slot_default_chunk(g_slots[si])
     slot_clamp_ctx_to_region(g_slots[si])
     g_slots[si].resident_decline = g_slots[si].backend_effective == "gpu:resident" ? "" : gpu_resident_decline()
+    refuse_recurrent_in_part(g_slots[si])
     g_slots[si].gpu_regions = gpu_device_sessions()
     g_slots[si].experts_host = gpu_resident_experts_host()
     g_gpu_owner = si
@@ -538,6 +540,14 @@ def private bind_gpu_slot(si : int) {
     g_slots[si].sw_count ++
     g_slots[si].sw_us += us
     to_log(LOG_INFO, "dasllama-server: GPU tier -> {g_slots[si].name} ({prev_note}{us / 1000l}ms, {g_slots[si].backend_effective})\n")
+}
+
+//! a recurrent model's prompt leaves its checkpoints inside the window on the whole-model driver and on Metal alone: a slot the
+//! GPU serves in part would run its prompts on the per-op rail, which keeps no state at an interior row, so the load is refused
+def private refuse_recurrent_in_part(s : ModelSlot) {
+    if (s.model.config.recr_mask != 0ul && s.backend_effective == "gpu:rails") {
+        panic("dasllama-server: {s.name}: a recurrent model the GPU serves in part - its prompts would run on the per-op rail, which keeps no checkpoint inside a window; the whole-model driver's decline: {s.resident_decline}")
+    }
 }
 
 //! Read with the slot's marks installed, so the facade answers for THIS model.
@@ -1756,11 +1766,21 @@ def private ram_gb_from_meminfo(text : string) : int {
     return 0
 }
 
-let SERVER_PREFIX_STATES = 256l   //! the server's checkpoint count cap under its byte budget - a library caller keeps `DEFAULT_PREFIX_STATES`
+let SERVER_PREFIX_STATES_MIN = 256l   //! under its byte budget - a library caller keeps `DEFAULT_PREFIX_STATES`
+let SERVER_PREFIX_STATES_MAX = 1024l   //! the count the budget may raise it to: every attach scans each checkpoint's tokens against the prompt
+let PREFIX_STATES_AUTO = -1l   //! `--prefix-states` unset: each slot's count is its byte budget over its model's checkpoint (`slot_prefix_states`)
+let CHECKPOINT_TOKEN_LIST_BYTES = 32768l   //! a checkpoint's token list, charged beside its recurrent state
+
+//! a budget of 0 (unbounded) takes the cap
+def slot_prefix_states(c : Config; budget_bytes : int64) : int64 {
+    return SERVER_PREFIX_STATES_MAX if (budget_bytes <= 0l)
+    let checkpoint_bytes = 4l * dn_state_floats(c) + CHECKPOINT_TOKEN_LIST_BYTES
+    return clamp(budget_bytes / checkpoint_bytes, SERVER_PREFIX_STATES_MIN, SERVER_PREFIX_STATES_MAX)
+}
 
 //! The recurrent checkpoints' byte budget in MB: the one asked for, else a quarter of the box's RAM - what a 64 GB
-//! serving box gives a prompt cache - and 4 GB when the box's RAM is unknown. The count cap (`--prefix-states`) still
-//! binds first when it is the smaller.
+//! serving box gives a prompt cache - and 4 GB when the box's RAM is unknown. A count set by hand (`--prefix-states`)
+//! binds first when it is the smaller; unset, the count follows this budget (`slot_prefix_states`).
 def prefix_state_budget_mb(requested_mb, ram_gb : int64) : int64 {
     return requested_mb if (requested_mb > 0l)
     return ram_gb > 0l ? ram_gb * 1024l / 4l : 4096l
@@ -7108,8 +7128,12 @@ def private init_one_scheduler(var s : ModelSlot) {
             spec = false
         }
     }
+    let states = g_sched_defaults.prefix_states >= 0l ? g_sched_defaults.prefix_states : slot_prefix_states(s.model.config, g_sched_defaults.prefix_state_bytes)
+    if (s_pages > 0l && s.model.config.recr_mask != 0ul) {
+        to_log(LOG_INFO, "dasllama-server: {s.name}: a recurrent model's checkpoints: up to {states} within {g_sched_defaults.prefix_state_bytes / 1048576l} MB\n")
+    }
     s.sched <- create_scheduler(s.model, s_streams, g_sched_defaults.max_queue, s_chunk, s_pages, pfx, s_kv, spec, s_idle,
-                                g_sched_defaults.prefix_states, g_sched_defaults.prefix_state_bytes)
+                                states, g_sched_defaults.prefix_state_bytes)
     slot_default_chunk(s)
 }
 
@@ -7163,7 +7187,7 @@ def init_server(port : int; max_streams : int64 = 4l; max_queue : int64 = 32l; c
                 page_rows : int64 = 64l; prefix_groups : int64 = 0l; kv_dtype : KVDtype = KVDtype.f16;
                 team_dispatch : bool = true; asr_team : int = -1; mtp : int = -1;
                 idle_chunk_tokens : int64 = -1l; host : string = DEFAULT_BIND_HOST;
-                prefix_states : int64 = SERVER_PREFIX_STATES; prefix_state_mb : int64 = 0l) : bool {
+                prefix_states : int64 = PREFIX_STATES_AUTO; prefix_state_mb : int64 = 0l) : bool {
     if (g_front_up || g_jobque_owned) {
         to_log(LOG_ERROR, "dasllama-server: init_server called while already initialized\n")
         return false
@@ -7202,7 +7226,6 @@ def init_server(port : int; max_streams : int64 = 4l; max_queue : int64 = 32l; c
     }
     g_box_ram_gb = box_ram_gb()   // probed once: a probe spawns sysctl, wmic or powershell
     let state_mb = prefix_state_budget_mb(prefix_state_mb, int64(g_box_ram_gb))
-    to_log(LOG_INFO, "dasllama-server: a recurrent model's checkpoints: up to {prefix_states} within {state_mb} MB\n")
     init_slot_schedulers(max_streams, max_queue, chunk_tokens, idle_chunk_tokens, page_rows, prefix_groups,
                          prefix_states, state_mb * 1048576l, kv_dtype, mtp)
     g_active = g_default_slot
@@ -7475,7 +7498,7 @@ def run_server(port : int; max_streams : int64 = 4l; max_queue : int64 = 32l; ch
                page_rows : int64 = 64l; prefix_groups : int64 = 0l; kv_dtype : KVDtype = KVDtype.f16;
                team_dispatch : bool = true; asr_team : int = -1; mtp : int = -1;
                idle_chunk_tokens : int64 = -1l; host : string = DEFAULT_BIND_HOST;
-               prefix_states : int64 = SERVER_PREFIX_STATES; prefix_state_mb : int64 = 0l) {
+               prefix_states : int64 = PREFIX_STATES_AUTO; prefix_state_mb : int64 = 0l) {
     if (init_server(port, max_streams, max_queue, chunk_tokens, page_rows, prefix_groups, kv_dtype,
             team_dispatch, asr_team, mtp, idle_chunk_tokens, host, prefix_states, prefix_state_mb)) {
         while (update_server()) {

@@ -6968,6 +6968,7 @@ def private dn_delta_ref(convh, sth, smh : array<float>; npos, nkh, nvh, ds, bet
     let di = nvh * ds
     let cd = 2 * kd + di
     var ref : array<float>
+    ref |> reserve(npos * di + nvh * ds * ds)   //! the whole-window arm's rows pass the unreserved-growth guard
     ref |> resize(npos * di + nvh * ds * ds)
     var st_h, dvn : array<float>
     st_h |> resize(ds * ds)
@@ -7005,6 +7006,66 @@ def private dn_tail_oracle(src, smalls : array<float>; cd, taps, row0, old_rows,
         }
     }
     return <- want
+}
+
+[test]
+def test_vkd_dn_cap_tail(t0 : T?) {
+    t0 |> run("dn_cap_tail == the ring hand-off of a window cut at the capture's row, into the checkpoint row") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!vk_moe_init()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            verify(ensure_dn_cap_tail_cls(), "the dn_cap_tail class rail must engage on a live device")
+            let cd = 200
+            let taps = 3
+            let img = cd * taps
+            let old_off = 16
+            let wlen = 5
+            let rows <- [4, 2]   //! a capture past the taps, and one under them (its first row off the entry image)
+            var src <- hash_fill(wlen * cd, 523u, 1000u, 500.0, 1.0)
+            var smalls <- hash_fill(old_off + 2 * img + 8, 911u, 1000u, 250.0, 2.0)   //! the oracle writes the cut ring's image past the entry image
+            var inscope capw <- [uint(rows[0]), 0u, uint(rows[1]), uint(img + 4)]   //! the second row's base four floats past the first's image
+            with_cell_planes() $(var cp : CellPlanes) {
+                let ps = cp |> in_plain(src)
+                let pm = cp |> in_plain(smalls)
+                let pc = cp |> in_plain(capw)
+                let pd = cp |> out_(2 * img + 4)
+                var sc = cp |> cls_set(fixed_array(ps, pm, pc, pd), @@set_dn_cap_tail_cls)
+                let wg = (img + 255) / 256
+                var pa = DnCapTailArgs(cd = uint(cd), taps = uint(taps), row0 = 0u, entry_off = uint(old_off), cap_rec = 0u, cap_hist_off = 0u, wg_per_cap = uint(wg))
+                cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                    enc_dn_cap_tail_cls(raw, h, sc, pa, int64(wg * 2))
+                }
+                var got <- cp |> plane_run(pd)
+                for (ci in range(2)) {
+                    let r = rows[ci]
+                    var want_all <- dn_tail_oracle(src, smalls, cd, taps, max(r - taps, 0), max(taps - r, 0), old_off, old_off + img + 4)
+                    var want <- [for (i in range(img)); want_all[old_off + img + 4 + i]]
+                    var mine <- [for (i in range(img)); got[ci * (img + 4) + i]]
+                    check_exact(t, "dn_cap_tail capture after {r} rows", mine, want)
+                    delete mine
+                    delete want
+                    delete want_all
+                }
+                var lost = 0
+                var first_lost = -1
+                for (i in range(4)) {
+                    if (float_bits_to_uint(got[img + i]) != NAN_SENTINEL_BITS) {
+                        first_lost = first_lost < 0 ? img + i : first_lost
+                        lost++
+                    }
+                }
+                to_log(LOG_INFO, "dn_cap_tail gap: {lost} of 4 words lost their sentinel, first at word {first_lost}\n")
+                t |> equal(lost, 0, "dn_cap_tail: the words between the two rows' images keep their sentinel ({lost} lost, first at word {first_lost})")
+                delete got
+            }
+            delete smalls
+            delete src
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
 }
 
 //! the window chain's conv-history hand-off: the call's last window's rows into the per-channel ring image, and a window shorter
@@ -7125,6 +7186,7 @@ def test_vkd_dn_rows_base(t0 : T?) {
             let dt_off = a_off + nvh
             var inscope bg <- row_fill((lead + npos) * nvh, 17, 0, 0.03, 0.6, 43)
             var inscope scans : array<array<float>>
+            var inscope cap_got, st_half, cap_ref : array<float>
             for (base in fixed_array(0, lead)) {
                 var inscope smv : array<float>
                 smv |> resize(dt_off + nvh)
@@ -7142,15 +7204,18 @@ def test_vkd_dn_rows_base(t0 : T?) {
                     convh[base * cd + i] = (float((i * 19) % 79) * 0.025 - 0.9) * 0.15
                 }
                 var inscope sth <- row_fill(nvh * ds * ds, 13, 0, 0.02, 0.5, 53)
+                var inscope capw <- [uint(npos / 2), 0u]
                 with_cell_planes() $(var cp : CellPlanes) {
                     let pconv = cp |> in_(convh)
                     let pst = cp |> io_(sth)
                     let psm = cp |> in_(smv)
                     let po = cp |> out_((base + npos) * di)
-                    var sc = cp |> cls_set(fixed_array(pconv, pst, psm, po), @@set_dn_scan_cls)
+                    let pcaps = cp |> in_plain(capw)
+                    let pcap = cp |> out_(nvh * ds * ds)
+                    var sc = cp |> cls_set(fixed_array(pconv, pst, psm, po, pcaps, pcap), @@set_dn_scan_cls)
                     var pcs = DnScanArgs(npos = uint(npos), cd = uint(cd), kd = uint(kd), nvh = uint(nvh), nkh = uint(nkh), ds = uint(ds),
                         beta_off = uint(beta_off), g_off = uint(g_off), a_off = uint(a_off), dt_off = uint(dt_off), o_off = 0u,
-                        di = uint(di), row0 = uint(base))
+                        di = uint(di), row0 = uint(base), cap_n = base == 0 ? 1u : 0u, cap_rec = 0u, cap_state_off = 0u)
                     cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
                         enc_dn_scan_cls(raw, h, sc, pcs, dn_scan_wgs(int64(nvh), int64(ds)))
                     }
@@ -7164,9 +7229,45 @@ def test_vkd_dn_rows_base(t0 : T?) {
                     var got <- [for (i in range(npos * di)); o[base * di + i]]
                     got |> push_from(st_got)
                     scans |> emplace(got)
+                    if (base == 0) {
+                        delete cap_got
+                        cap_got <- cp |> plane_run(pcap)
+                    }
+                }
+                if (base == 0) {   //! the capture's references over the same fixture: the scan over the first half alone, and the CPU oracle
+                    var inscope nocap <- [0u, 0u]
+                    with_cell_planes() $(var cp : CellPlanes) {
+                        let pconv = cp |> in_(convh)
+                        let pst = cp |> io_(sth)
+                        let psm = cp |> in_(smv)
+                        let po = cp |> out_(npos * di)
+                        let pcaps = cp |> in_plain(nocap)
+                        let pcap = cp |> out_(nvh * ds * ds)
+                        var sc = cp |> cls_set(fixed_array(pconv, pst, psm, po, pcaps, pcap), @@set_dn_scan_cls)
+                        var pcs = DnScanArgs(npos = uint(npos / 2), cd = uint(cd), kd = uint(kd), nvh = uint(nvh), nkh = uint(nkh), ds = uint(ds),
+                            beta_off = uint(beta_off), g_off = uint(g_off), a_off = uint(a_off), dt_off = uint(dt_off), o_off = 0u,
+                            di = uint(di), row0 = 0u, cap_n = 0u, cap_rec = 0u, cap_state_off = 0u)
+                        cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                            enc_dn_scan_cls(raw, h, sc, pcs, dn_scan_wgs(int64(nvh), int64(ds)))
+                        }
+                        delete st_half
+                        st_half <- cp |> plane_run(pst)
+                    }
+                    t |> success(moved_off(st_half, sth, 0, BAR_EXACT), "dn_scan half run: the in-place state moved off its input at element 0 ({st_half[0]} from {sth[0]})")
+                    var inscope ref <- dn_delta_ref(convh, sth, smv, npos / 2, nkh, nvh, ds, beta_off, g_off, a_off, dt_off)
+                    delete cap_ref
+                    cap_ref <- [for (i in range(nvh * ds * ds)); ref[(npos / 2) * di + i]]
                 }
             }
             check_exact(t, "dn_scan at row base {lead} against row 0 (the o rows, then the state)", scans[1], scans[0])
+            check_exact(t, "dn_scan capture after {npos / 2} rows against the scan over those rows alone (the state)", cap_got, st_half)
+            //! the chunked WY form equals the sequential rule in exact arithmetic: the drift is reassociation, which the peak-floored bar absorbs
+            let cap_floor = 1e-2 * logits_maxabs(cap_ref)
+            check_rows(t, "dn_scan capture after {npos / 2} rows against the sequential CPU oracle (the state)", cap_got, cap_ref,
+                Bar(rel = 1e-2, abs_floor = cap_floor, poison_of_max = true, poison_abs = 0.5), ds)
+            var inscope st_whole <- [for (i in range(nvh * ds * ds)); scans[0][npos * di + i]]
+            t |> success(all_finite(cap_got) && all_finite(st_whole), "dn_scan capture control: every value it reads is finite")
+            t |> success(mismatch_exact(cap_got, st_whole) > 0, "dn_scan capture control: the captured state is not the whole run's")
         } else {
             t |> skip("dasVulkan not present")
         }
@@ -7411,7 +7512,10 @@ def test_vkd_dn_family(t0 : T?) {
                     let pst = cp |> io_(sth)
                     let psm = cp |> in_(smh)
                     let pslab = cp |> out_(npos * di, o_off)   //! the o rows past the scan's workspace under the sentinel: a row the scan or the out-norm skips reds
-                    var sc1 = cp |> cls_set(fixed_array(pconv, pst, psm, pslab), @@set_dn_scan_cls)
+                    var inscope nocap <- [0u, 0u]
+                    let pcaps = cp |> in_plain(nocap)
+                    let pcap = cp |> out_(16)
+                    var sc1 = cp |> cls_set(fixed_array(pconv, pst, psm, pslab, pcaps, pcap), @@set_dn_scan_cls)
                     for (sig in fixed_array(false, true)) {
                         if (sig) {
                             verify(ensure_dn_scan_p3_sig_cls(), "the sigmoid out-norm stamp must compile on a device that compiled the silu one")
@@ -7862,6 +7966,7 @@ def private dn_scan_cell(t : T?; tag : string; ds, nkh, nvh, npos : int) {
             let sm_n = dt_off + nvh
             let o_off = 64   // the o rows sit past a header the kernel must leave alone
             var convh : array<float>
+            convh |> reserve(npos * cd)   //! the whole-window arm's conv plane passes the unreserved-growth guard
             convh |> resize(npos * cd)
             for (i in range(npos * cd)) {   // unit-scale q/k rows keep the 512-step recurrence bounded
                 convh[i] = (float((i * 19) % 79) * 0.025 - 0.9) * 0.15
@@ -7879,7 +7984,10 @@ def private dn_scan_cell(t : T?; tag : string; ds, nkh, nvh, npos : int) {
                 let pst = cp |> io_(sth)
                 let psm = cp |> in_(smh)
                 let po = cp |> out_(npos * di, o_off)
-                var sc = cp |> cls_set(fixed_array(pconv, pst, psm, po), @@set_dn_scan_cls)
+                var inscope nocap <- [0u, 0u]
+                let pcaps = cp |> in_plain(nocap)
+                let pcap = cp |> out_(16)
+                var sc = cp |> cls_set(fixed_array(pconv, pst, psm, po, pcaps, pcap), @@set_dn_scan_cls)
                 var pcs = DnScanArgs(npos = uint(npos), cd = uint(cd), kd = uint(kd),
                     nvh = uint(nvh), nkh = uint(nkh), ds = uint(ds),
                     beta_off = uint(beta_off), g_off = uint(g_off), a_off = uint(a_off),

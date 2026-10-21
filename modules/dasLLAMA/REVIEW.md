@@ -35,11 +35,10 @@ A serving path is the end-to-end route a run takes from prompt to tokens; its co
 
 **A diff that does any of these, wherever it puts it, applies `REVIEW_HOT_PATH.md` (beside this
 file) together with this list: adds a kernel, loop or call path the runtime re-enters once per
-serving step; adds, moves, renames or removes a `[hot_path]`, `[cold_path]`, `[no_alloc]`,
-`[no_env]` or `[no_io]` annotation; adds or changes a test, harness, benchmark or performance-rig
-function that reaches a function carrying `[hot_path]`, `[no_alloc]`, `[no_env]` or `[no_io]`.** A serving
-step is a token, a prefill quantum (one batch of prompt tokens prefilled in one pass), one encoded
-image, video frame or audio chunk, or one synthesized speech chunk or frame.
+generated token, prefill batch, image, video frame, audio chunk, or speech chunk or frame; adds,
+moves, renames or removes a `[hot_path]`, `[cold_path]`, `[no_alloc]`, `[no_env]` or `[no_io]`
+annotation; adds or changes a test, harness, benchmark or performance-rig function that reaches a
+function carrying `[hot_path]`, `[no_alloc]`, `[no_env]` or `[no_io]`.**
 
 **A diff that adds an allocation, changes an allocation's size formula, or adds, changes or
 drops a `resize` or an `@exact_size` on a buffer; that adds or changes a module global (an
@@ -97,14 +96,16 @@ change, or a change to a `kv_*` function that a GPU driver file (`dasllama_metal
 `dasllama_vulkan*.das`, `dasllama_gpu*.das`) calls, wherever the diff puts it, applies
 `REVIEW_GPU.md`.**
 
-**A call that creates, enables or tears down device-home serving (`create_device_session`, `set_device_kv`,
-`moe_gpu_drop_model`), or a call or definition of a `set_*` / `reset_*` function in `dasllama/dasllama_core.das`,
-`dasllama_env.das` or a `dasllama_{gpu,vulkan,metal}*.das` file, wherever the diff puts it, applies `REVIEW_GPU.md`.**
+**A call that creates, enables or tears down device-home serving (`create_device_session`,
+`set_device_kv`, `moe_gpu_drop_model`), or a call or definition of a `set_*` / `reset_*` function
+in `dasllama/dasllama_core.das`, `dasllama_env.das` or a `dasllama_{gpu,vulkan,metal}*.das` file,
+wherever the diff puts it, applies `REVIEW_GPU.md`.**
 
-**A GPU kernel timing race (two kernels timed against each other to pick one - not a data race), a knockout (an
-arm that skips a stage to measure that stage's cost), a hand-binding arm (one that writes buffer or kernel-argument
-(kargs) binding numbers as literals), a cell or probe that fills or binds a `TokMeta` block, a branch whose true arm
-calls a `moe_gpu_*`, `vk_*` or `rdec_*` entry, or a call of `vk_moe_init`, wherever the diff puts it, applies `REVIEW_GPU.md`.**
+**A GPU kernel timing race (two kernels timed against each other to pick one - not a data race), a
+knockout (an arm that skips a stage to measure that stage's cost), a hand-binding arm (one that
+writes buffer or kernel-argument (kargs) binding numbers as literals), a cell or probe that fills
+or binds a `TokMeta` block, a branch whose true arm calls a `moe_gpu_*`, `vk_*` or `rdec_*` entry,
+or a call of `vk_moe_init`, wherever the diff puts it, applies `REVIEW_GPU.md`.**
 
 **A kernel body or a function a kernel calls - a `[metal_kernel]` def, a class a
 `[metal_dispatch]` / `[vk_dispatch]` declares, or a fixture the Metal or SPIR-V emitter
@@ -116,9 +117,8 @@ backend-and-layout variant an image is baked for, one part of its identity), or 
 image (its tag, lane or flavor) a load requests or mints, applies `REVIEW_IMAGE.md`.**
 
 **A change to what `resident_would_serve` answers, or to an environment variable or setter it or
-any function it calls reads, applies `REVIEW_IMAGE.md`.** The mint of a trimmed image - one
-written without the weight planes the GPU driver holds - reads that answer to decide whether to
-trim.
+any function it calls reads, applies `REVIEW_IMAGE.md`.** A trimmed image's mint - one written
+without the weight planes the GPU driver holds - reads that answer.
 
 **A change to `dasllama/dasllama_audio.das`, `dasllama_audio_io.das`,
 `dasllama_audio_embedder.das`, `dasllama_asr.das`, `dasllama_asr_types.das` or `dasllama_vad.das`
@@ -152,8 +152,7 @@ weight lane (`set_tts_q8` / `set_styletts2_q8` / `set_pocket_q8`), wherever the 
 applies `REVIEW_TTS.md`.**
 
 **A diff that adds a file under `dasllama/`, or adds or moves a top-level declaration (a `require`
-among them) in a file under `dasllama/`, applies `REVIEW_PLACEMENT.md`** - the
-what-lands-where rules.
+among them) in a file under `dasllama/`, applies `REVIEW_PLACEMENT.md`.**
 
 **A diff that adds or changes a def in a file `REVIEW.das`'s `FACADE_FILES` lists, or adds `public`
 to a require, new or existing, in `dasllama/dasllama.das` or in a file it reaches through `public`
@@ -213,8 +212,9 @@ for another reason is ledgered on its file's charter line (the line, in the comp
 `ARCHITECTURE.md#file-charters` routes to, that says what the file holds); a comment at the call
 site does not discharge this.
 
-**A caller never re-checks a guard its callee checks - drop the caller's copy, or, where the
-caller's check also gates its own work, compute the decision once and pass it to the callee.**
+**A caller and its callee never both check one guard: the caller keeps the check and the callee
+drops it when the callee is `[cold_path]`; where the caller's check also gates its own work, the
+caller computes the decision once and passes it to the callee; otherwise the caller's copy goes.**
 An edit to either copy leaves the caller testing a condition the callee no longer applies.
 
 **Logic or a named constant that two files in one folder both use, and that neither the language

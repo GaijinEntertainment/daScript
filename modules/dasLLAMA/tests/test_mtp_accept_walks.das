@@ -111,6 +111,46 @@ def test_typical_walk_cuts(t : T?) {
 }
 
 [test]
+def test_walk_cuts_at_a_stop(t : T?) {
+    let drafts <- [0l, 1l, 3l, 5l]
+    var stops <- [3l]
+    var s <- bare_session(VOCAB, DRAFTS)
+    for (i in range64(DRAFTS + 1l)) {
+        s.mtp_vbatch[i] = drafts[i]
+    }
+    let a_free = mtp_accept_walk(s, DRAFTS, VOCAB, $(row : int64) : int64 => drafts[row + 1l])
+    t |> equal(a_free, DRAFTS, "no stop ids: every matching draft is accepted")
+    s.spec_stops = unsafe(addr(stops))
+    let a_cut = mtp_accept_walk(s, DRAFTS, VOCAB, $(row : int64) : int64 => drafts[row + 1l])
+    t |> equal(a_cut, 2l, "the stop draft (row 1's) ends the run: two accepted, the stop the last")
+    t |> success(!s.mtp_pre_drawn, "no token parked past a stop")
+    s.spec_stops = null
+    delete s
+    var rows <- [[NO_MASS, 4.0, NO_MASS, NO_MASS, NO_MASS, NO_MASS, NO_MASS, NO_MASS],
+                 [NO_MASS, NO_MASS, NO_MASS, 4.0, NO_MASS, NO_MASS, NO_MASS, NO_MASS],
+                 [NO_MASS, NO_MASS, NO_MASS, NO_MASS, NO_MASS, 4.0, NO_MASS, NO_MASS],
+                 [0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0]]
+    var sp = SamplingParams(temp = 1.0, top_p = 0.9)
+    var s2 <- bare_session(VOCAB, DRAFTS)
+    set_rows(s2, rows, drafts)
+    s2.rng = random_seed(5)
+    s2.spec_params = unsafe(addr(sp))
+    let a2_free = mtp_accept_walk(s2, DRAFTS, VOCAB, $(row : int64) : int64 => drafts[row + 1l])
+    t |> equal(a2_free, DRAFTS, "typical, no stop ids: every draft accepted")
+    t |> success(s2.mtp_pre_drawn, "... and the row past the last draft drawn and parked")
+    s2.mtp_pre_drawn = false
+    s2.spec_stops = unsafe(addr(stops))
+    let a2_cut = mtp_accept_walk(s2, DRAFTS, VOCAB, $(row : int64) : int64 => drafts[row + 1l])
+    t |> equal(a2_cut, 2l, "typical, stop ids: the run ends on the stop draft")
+    t |> success(!s2.mtp_pre_drawn, "... and the parked draw is dropped")
+    s2.spec_stops = null
+    s2.spec_params = null
+    delete s2
+    delete rows
+    delete stops
+}
+
+[test]
 def test_typical_walk_greedy_and_knob(t : T?) {
     // a penalized greedy sampler judges as the exact walk does (the penalized argmax, no draw); the knob routes a sampled walk through the typical judge and is put back
     var s <- bare_session(VOCAB, DRAFTS)

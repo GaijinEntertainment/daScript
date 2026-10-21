@@ -407,6 +407,7 @@ def test_vulkan_moe_heat_cache(t : T?) {
             var want = GpuTierWant()
             want.heat = 2l   // two slots: the eviction/reuse choreography below assumes C = 2
             set_gpu_tier_want_(want)
+            vk_stream_cache_layer(NE, 0l)   //! the driver's declaration ahead of a layer's upload: the stacks' slot maps hold NE experts, every one resident
             var wq1 : array<int8>
             var ws1 : array<float>
             var wq3 : array<int8>
@@ -467,6 +468,7 @@ def test_vulkan_moe_heat_cache(t : T?) {
             gout |> resize(int(N))
             matmul_moe_gpu_ffn_join(gout)
             held_nontrivial(t, "post-eviction hit dispatch", gout, refv, REL_TOL, N)
+            vk_stream_cache_layer(0l, 0l)   //! the declaration put back: the file's other stacks are one-expert wholes
             delete ids
             delete ids2
             delete idx

@@ -655,17 +655,26 @@ def private dn_conv_batch(t : Model; var s : Session; l : int64; npos : int64) {
             }
         }
     }
-    unsafe {   // advance the conv history to the last taps input rows (channel-major)
-        var st = addr(s.dn_conv_state[s.dn_conv_prefix[l]])
-        for (k in range64(taps)) {
-            let sp = npos - taps + k
+    let start_pos = s.dn_pos - npos
+    for (cap in s.dn_captures) {   //! before the advance overwrites `hist0`
+        dn_conv_hist_at(unsafe(addr(cap.conv[s.dn_conv_prefix[l]])), inp0, hist0, cap.pos - start_pos, cd, taps)
+    }
+    dn_conv_hist_at(unsafe(addr(s.dn_conv_state[s.dn_conv_prefix[l]])), inp0, hist0, npos, cd, taps)
+}
+
+//! the conv history (channel-major) after the window's first `r` input rows into `dst`: the taps rows before row `r`, `hist0`
+//! under the ones before the window; `dst` may be `hist0` itself, since ascending `k` reads a tap at or past the one it writes
+def private dn_conv_hist_at(var dst : float?; inp0, hist0 : float const?; r, cd, taps : int64) {
+    for (k in range64(taps)) {
+        let sp = r - taps + k
+        unsafe {
             if (sp >= 0l) {
                 for (ch in range64(cd)) {
-                    st[ch * taps + k] = inp0[sp * cd + ch]
+                    dst[ch * taps + k] = inp0[sp * cd + ch]
                 }
-            } else {   // npos < taps: shift surviving old taps left (ascending k reads ahead of writes)
+            } else {
                 for (ch in range64(cd)) {
-                    st[ch * taps + k] = st[ch * taps + k + npos]
+                    dst[ch * taps + k] = hist0[ch * taps + r + k]
                 }
             }
         }
@@ -679,7 +688,8 @@ def private dn_chunked_head(conv : float const?; qoff, koff, voff, cd : int64; /
                             bp, gp : float const?; bg_stride : int64;
                             zp : float const?; var op : float?; o_stride : int64;
                             var stp : float?; var ws : float?; wnorm : float const?;
-                            aa, dtb, eps : float; vec, zsig : bool; npos, ds : int64) {
+                            aa, dtb, eps : float; vec, zsig : bool; npos, ds : int64;
+                            cap_rows : array<int64>; cap_state_addr : array<uint64>; hoff : int64) {
     let CS = DN_CHUNK
     unsafe {
         var qc = ws                         // CS x ds: q rows, scaled to q ⊙ e^{gcum} after the KQ GEMM
@@ -697,7 +707,13 @@ def private dn_chunked_head(conv : float const?; qoff, koff, voff, cd : int64; /
         var kgc = gcum + 2l * CS            // CS: e^{g_last - gcum}
         var c0 = 0l
         while (c0 < npos) {
-            let cl = min(CS, npos - c0)
+            var cl = min(CS, npos - c0)
+            for (ci in range64(long_length(cap_rows))) {   // nolint:PERF018 - indexed, never for-in: every worker walks this shared list, and for-in locks it
+                let cr = cap_rows[ci]
+                if (cr > c0 && cr - c0 < cl) {
+                    cl = cr - c0
+                }
+            }
             // gather + per-token transforms (beta/g raw -> beta = sigmoid, g = a·softplus(raw+dt))
             var gacc = 0.0
             for (i in range64(cl)) {
@@ -813,6 +829,12 @@ def private dn_chunked_head(conv : float const?; qoff, koff, voff, cd : int64; /
             }
             gemm_f32(stp, kgT, vnew, ds, cl, ds)
             c0 += cl
+            for (ci in range64(long_length(cap_rows))) {   // nolint:PERF029 - indexed, never for-in: the workers share both lists, and for-in locks them
+                let cr = cap_rows[ci]
+                if (cr == c0) {
+                    copy_floats(reinterpret<float?>(cap_state_addr[ci]) + hoff, reinterpret<float const?>(stp), ds * ds)
+                }
+            }
         }
     }
 }
@@ -848,6 +870,9 @@ def private deltanet_prefill_chunked(t : Model; var s : Session; l : int64; npos
     let wssz = dn_cws_head_size(c)
     let vec = g_act_vec   // read on the caller, captured — fork workers must not read globals
     let zsig = c.dn_z_sigmoid
+    dn_capture_rows(s, l, npos)
+    let cap_rows = unsafe(addr(s.dn_cap_rows))   //! the lambda takes the two lists by pointer: the session itself is not captured
+    let cap_state_addr = unsafe(addr(s.dn_cap_state_addr))
     let ts_scan = prof_ticks()
     maybe_parallel_for(0, int(nvh), min(int(nvh), get_dispatch_lanes())) $(rb, re) {
         unsafe {
@@ -857,11 +882,32 @@ def private deltanet_prefill_chunked(t : Model; var s : Session; l : int64; npos
                 dn_chunked_head(conv0, kh * ds, kd + kh * ds, 2l * kd + h * ds, cd,
                     bp0 + h, gp0 + h, nvh, zp0 + h * ds, op0 + h * ds, di,
                     st0 + h * ds * ds, ws0 + h * wssz, wnorm0,
-                    ab0[h], dtb0[h], c.norm_eps, vec, zsig, npos, ds)
+                    ab0[h], dtb0[h], c.norm_eps, vec, zsig, npos, ds,
+                    *cap_rows, *cap_state_addr, h * ds * ds)
             }
         }
     }
     prof_add("dn_scan", ts_scan)
+}
+
+def private dn_capture_rows(var s : Session; l, npos : int64) {
+    let n = length(s.dn_captures)
+    s.dn_cap_rows |> resize(n)
+    s.dn_cap_state_addr |> resize(n)
+    let start_pos = s.dn_pos - npos
+    for (cap, i in s.dn_captures, count()) {
+        s.dn_cap_rows[i] = cap.pos - start_pos
+        s.dn_cap_state_addr[i] = intptr(unsafe(addr(cap.state[s.dn_state_prefix[l]])))
+    }
+}
+
+def private dn_capture_token(var s : Session; c : Config; l, cd, ci : int64) {
+    let so = s.dn_state_prefix[l]
+    let co = s.dn_conv_prefix[l]
+    unsafe {
+        copy_floats(addr(s.dn_captures[ci].state[so]), addr < float const? >(s.dn_state[so]), dn_layer_state_floats(c))
+        copy_floats(addr(s.dn_captures[ci].conv[co]), addr < float const? >(s.dn_conv_state[co]), dn_layer_conv_floats(c, cd))
+    }
 }
 
 // The GPU arm: the whole block (qkv/z GEMMs, conv, chunked scan, gated out-norm, out-proj) as one
@@ -904,6 +950,9 @@ def private deltanet_prefill_gpu(t : Model; var s : Session; l : int64; npos : i
         }
     }
     prof_add("dn_mm_in", ts_in)
+    if (!empty(s.dn_captures)) {
+        panic("dasLLAMA: the per-op deltanet arm keeps no state at a row inside its window - serve a checkpoint stop inside a window through the whole-model GPU driver (the load log names why it declined), the Metal prefill or the CPU chain (no --gpu)")
+    }
     let ts_gpu = prof_ticks()
     s.dn_tail |> resize(taps * cd)
     unsafe {
@@ -958,11 +1007,19 @@ def private deltanet_prefill(t : Model; var s : Session; l : int64; npos : int64
             var bp = addr(s.dn_beta_b[0])
             var gp = addr(s.dn_g_b[0])
             var op = addr(s.dn_o_b[0])
+            let start_pos = s.dn_pos - npos
             for (p in range64(npos)) {
                 dn_token_core(t, s, l, qkvp + p * cd, zp + p * di, bp + p * nvh, gp + p * nvh, op + p * di)
+                let ci = dn_capture_at(s, start_pos + p + 1l)
+                if (ci >= 0l) {
+                    dn_capture_token(s, c, l, cd, ci)
+                }
             }
         }
         prof_add("dn_core", ts_core)
+    }
+    if (l == dn_last_recurrent_layer(t.config)) {
+        s.dn_captured = !empty(s.dn_captures)
     }
     dn_out_proj(t, s, l, npos, "dn_mm_out", "dn_resid")
 }

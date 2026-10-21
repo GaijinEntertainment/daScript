@@ -13,15 +13,19 @@ number, applies `modules/dasLLAMA/REVIEW.md` (repo root) too.**
 **A `[test]` file in this folder that carries a `require dasllama/...` line of its own answers
 to `modules/dasLLAMA/tests/REVIEW.md` (repo root) as well.**
 
-**A diff that adds a `main.das` or `cli_args.das` flag, or changes a flag's default, a file or
-path it reads or writes, what it makes the program do, or the value `serving_knobs.das` derives
-from it, or edits any copy of a flag's text, leaves every copy of that flag stating the same
-behavior, default, and files and paths.** A flag's copies are its
+**A diff that changes what a `main.das` or `cli_args.das` flag does or says - a flag added, its
+default, a file or path it reads or writes, what it makes the program do, the value
+`serving_knobs.das` derives from it, or any copy of its text - leaves every copy of that flag
+stating the same behavior, default, and files and paths.** A flag's copies are its
 `@clarg_doc`, every `README.md` passage that names the flag, its row in
 `doc/source/reference/utils/dasllama_server.rst` or
-`doc/source/reference/utils/dasllama_cli.rst` (repo root), and every passage saying the flag means
-the same as the same-named flag of the other program (`main.das` for the server, `cli_args.das`
-for the CLI). A copy need not match another's reasons or measured numbers.
+`doc/source/reference/utils/dasllama_cli.rst` (repo root), its synopsis entry, and every passage
+saying the flag means the same as the same-named flag of the other file. A copy need not match
+another's reasons or measured numbers.
+
+**A diff that adds or edits a flag's entry in a synopsis code block - the `[--flag VALUE]` command
+line in `README.md` or either reference page - writes the flag's default as the value, or a
+placeholder where the default is not a literal value.**
 
 **Weakening `REVIEW.das` (beside this file) - dropping a check, narrowing what a check scans,
 adding a name to the names a check skips, or blunting a finding
@@ -40,9 +44,10 @@ before - a new route requires all of its fields - adds that field to every `cont
 request to that route, in the same change.**
 
 **A diff that changes the response a fixture's recorded request gets - a key, an item in a list
-it answers, or a value the code sets itself (not one the traffic since boot, the configuration,
-the loaded model or the machine decides) - re-captures every fixture under `tests/fixtures/` that
-records that route, in the same change.**
+it answers, or a value the code sets itself (a default it fills in for a key the request and the
+configuration leave unset is one), not one the traffic since boot, the configuration, the loaded
+model or the machine decides - re-captures every fixture under `tests/fixtures/` that records that
+route, in the same change.**
 The fixtures are the recorded response shape.
 
 **A diff that adds a read of a response key in `control.html` or in a Playwright `.spec.js`,

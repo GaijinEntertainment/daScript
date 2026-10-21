@@ -129,14 +129,7 @@ def ngram_gather(t : Model; s : Session; tokens : array<int64>; p : int64; var d
 
 //! Slide the window over the batch's last rows (a batch shorter than the window keeps its older slots)
 def private ngram_advance(var s : Session; tokens : array<int64>; npos : int64) {
-    let nprev = long_length(s.ple_prev)
-    let keep = max(0l, nprev - npos)
-    for (i in range64(keep)) {
-        s.ple_prev[i] = s.ple_prev[i + npos]
-    }
-    for (i in range64(keep, nprev)) {
-        s.ple_prev[i] = tokens[npos - (nprev - i)]
-    }
+    ngram_window_at(s.ple_prev, tokens, npos, s.ple_prev)
 }
 
 def private ple_reset(var s : Session) {
@@ -270,6 +263,10 @@ def private ple_step_prefill(t : Model; var s : Session; npos, start_pos : int64
     unsafe {
         for (p in range64(npos)) {   // in order: the conv ring reads the rows this loop wrote
             ple_apply_row(t, s, s.hc_res_b, p * hcd, addr(s.ple_key_b[p * hcd]), addr < float const? >(s.ple_val_b[p * c.dim]), start_pos + p)
+            let ci = dn_capture_at(s, start_pos + p + 1l)
+            if (ci >= 0l) {
+                copy_floats(s.ple_conv_hist, 0l, s.dn_captures[ci].ple_hist, 0l, long_length(s.ple_conv_hist))
+            }
         }
     }
 }

@@ -10,6 +10,49 @@ and coverage; this ledger is the backlog for the perf pass that follows them. Ev
 what it costs today and what the fix would change.
 
 ## Entries
+- **MEASURED (2026-10-21, `served`, `out-of-process`, `debug-jit`, `direction-grade`) - a recurrent model's checkpoint stops
+  inside one Vulkan prefill window.** RunPod RTX PRO 4500 Blackwell 32 GB, the IQ4_XS-pure 35B whole on the card, every kernel
+  on the x86-avx2 class profile (`DASLLAMA_ALLOW_UNTUNED=1`: the pod has no box profile). The server at `--gpu vulkan --ctx
+  16384 --streams 1 --mtp=false` under `harness/served_bench.das --sizes 3000,9000 --reply 200 --reps 8 --settle 2`; the
+  window under `lcpp_bench -p <N> -n 8 -r 3 -t 16 --for-debug-purposes` with `DASLLAMA_GPU=1`, the same commit:
+
+    | row | served cold TTFT | bench window | gap |
+    | :--- | ---: | ---: | ---: |
+    | 9k (8812 tokens) | 1385 ms (cv 1.3%) | 1241 ms (pp9000 7104 +/- 10 tok/s) | 144 ms |
+    | 3k (2990 tokens) | 540 ms (cv 6.2%, void) | 410 ms (pp3000 7291 +/- 20 tok/s) | 130 ms |
+
+  The gap does not grow with the prompt, so the served prompt is the bench's one window plus the turn's own cost (the warm
+  turn's server-side floor reads 82 / 84 ms). The warm turns attach 2966 of 2990 and 8788 of 8812 prompt tokens off the
+  checkpoint; decode reads 182.3 / 170.6 tok/s at 3k / 9k. No reading before the capture exists on this card: the split's
+  readings are Flash-Next's on zen2 (2026-10-19), which `followup_vulkan.md` row 157 owes.
+- **MEASURED (2026-10-20, `out-of-process`, `direction-grade`) - a recurrent model's checkpoint stops inside one prefill
+  window on Metal.** M5 Max, the IQ4_XS-pure 35B, the server at `--ctx 32768 --streams 4` on the plain arm (`--mtp=false`) under the
+  box profile (`DAS_TUNE_MANIFEST=performance/m5.tune.json`), a cold and a warm pass, the same run as the entry below
+  with the stops cut (`replay_fix_off`) against the stops captured (`replay_cap_off`; that repository's ledger): the cold
+  pass runs 516 Metal prefill windows over the 248 requests where the cut form ran 645 (a window a chunk: the four planned
+  stops no longer end it), its wall median 0.22 s against 0.27, first-token median 0.17 against 0.21, p90 0.59 against 0.62,
+  the same 85 % cached and 7 first rounds with nothing cached; the warm pass reads the same on both (0.12 / 0.06 against
+  0.11 / 0.06, 100 % cached). The served turn at one stream (`harness/served_bench.das --sizes 3000,9000 --reply 200 --reps
+  5`, `--ctx 16384 --streams 1`; the row medians of the five reps, whose spread the run did not keep): the 9k cold first
+  token 1800 ms against 1910 (prefill 4896 tok/s against 4611), whose
+  stops split the cut form's prompt; the 3k's three stops coincide at one row, so its cold first token is the idle chunk's
+  split either way (606 ms, cv 3.2 %, void, against 586) and its warm and decode rows read alike (59.8 / 68.5 ms warm,
+  182.5 / 171.7 tok/s). One of 22 overheard lines reads differently on the cold pass (20 silent against 21; the warm pass
+  21 on both): the CPU-side chunked scan ends a chunk at a stop's row now, a reassociation a near-tie flips on. The bytes a capture
+  costs: one checkpoint - the recurrent state and the conv history, four bytes a float over `dn_state_floats`, 65.5 MB on
+  the 35B - held on the host from the window's end until the cache files it under its byte budget (a device-home stream
+  holds none: its region's row is the checkpoint); the Vulkan checkpoint rows (`rd_snap_alloc`) are `RDEC_DN_SNAPS` (4)
+  a region from the first capture or save, 262 MiB a region on the 35B.
+- **MEASURED (2026-10-20, `out-of-process`, `direction-grade`) - the house replay's cache rate with and without the speculative
+  round, after the finished-turn fix.** M5 Max, the IQ4_XS-pure 35B, the server at `--ctx 32768 --streams 4`, the arms
+  `--mtp=false` and `--mtp` under the box profile, a cold and a warm pass an arm, one
+  process a pass (the numbers in that repository's ledger): before, the plain arm cached 91 % warm and the `--mtp` arm 100 %
+  on the same host-cached slot - the speculating arm refused the finished-turn checkpoint on 56 of 124 streams (a stop
+  accepted as a draft, its row evaled and the close evaled again: the token list one row short), and the plain arm, keeping
+  every finished turn, hit the flat 256-checkpoint cap with half the 32 GB byte budget free and evicted the message-end
+  stops the warm pass attaches. After (the walk ends on a stop draft, the close evals past the evaled stop row, the count
+  cap the budget over the model's recurrent state - 521 on this box): both arms cold 85 %, warm 100 %, 248 of 248 finished
+  turns kept on each.
 - **MEASURED (2026-10-20, `debug-jit`, `direction-grade`) - the speculative round on Metal through the common seats: the
   three carriers' five rows on the M5.** Apple M5 Max, `lcpp_bench --mtp-ab -p 32 -n 64 -r 2 --ngl 99` under
   `DAS_TUNE_MANIFEST=performance/m5.tune.json`, the sampled rows at temp 0.7 top-p 0.9, every file served whole; the 27B is
@@ -1181,7 +1224,7 @@ what it costs today and what the fix would change.
   rows pays the whole op. The house replay on the IQ4_XS-pure 35B (the format the house serves; its twins compile behind
   the probe on every box) on the M1, the warm pass (`external`, `out-of-process`, the same harness): wall 0.85 s, first
   token 0.71, the windows' GPU sum 648 ms, 130 ms of it (31%) the windows past each request's largest - the checkpoint
-  split (`followup_metal.md` 51); no pre-ADAPT replay of this file exists, the window probe's 554 -> 487 ms is its A/B.
+  split (closed by the 2026-10-20 one-window entry); no pre-ADAPT replay of this file exists, the window probe's 554 -> 487 ms is its A/B.
 
 - **MEASURED (2026-10-09, `direction-grade`, `external`, `out-of-process`) - where a short house reply's first token goes on
   the server, M1 Max, the 35B Q4_K-pure.** The house replay's server log (`DAS_LOG_LEVEL=info`, the server's own per-window
@@ -1197,7 +1240,7 @@ what it costs today and what the fix would change.
   the short requests' window time (a 51-token window 178-191 ms, a 7-token one 40, a 16-token one 66, against the
   300-token one at 1.4-1.5 ms a token). Sixteen tokens and fewer ride the gathered route (40-66 ms); seventeen to a few
   hundred ride the tiles, where every populated expert pays a tile whatever its rows - the adaptive op above cuts that
-  tile; the split itself is `followup_metal.md` 51.
+  tile; the split itself is closed by the 2026-10-20 one-window entry.
 
 - **MEASURED (2026-10-09, `direction-grade`; the mlx-lm columns `external`) - mlx-lm 0.32.0 on the house window, beside
   ours, on the M1 Max and the M5 Max.** `mlx-community/Qwen3.6-35B-A3B-4bit` (affine 4-bit, group 64) under mlx 0.32.3, the

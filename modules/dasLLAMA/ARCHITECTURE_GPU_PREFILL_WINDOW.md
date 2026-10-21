@@ -36,6 +36,9 @@ lane shuffles. Three things follow.
   every state column, where one row makes that free.
 - **Two simdgroups a threadgroup.** The walk shares nothing across simdgroups; four a threadgroup
   read slower than two or one.
+- **A capture is one more store.** After each row the walk compares the row against its group's capture records
+  (`ARCHITECTURE_GPU_MTP.md#dn-group-stages`; none on most groups) and, at a match, writes its registers to the
+  arena at the record's base - the window's checkpoint stops cost the compare, not a second walk.
 
 ### The device attention pair {#prefill-attn-device}
 

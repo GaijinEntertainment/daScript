@@ -288,10 +288,10 @@ command buffers are allocated, in `vk_rdec_prepare`, and nowhere else.** A path 
 availability outside `vk_rdec_prepare` can turn a form on after the recording pass ran, and
 `rd_form_at` then picks a form whose command buffer nothing recorded.
 
-**A diff that writes a device buffer through its host mapping (`upload_region_at` - the direct
-write over the whole device heap a resizable BAR maps) after any device command has touched that
-buffer is a defect - finish every host write before the device's first touch, or stage through a
-pinned buffer on the transfer queue.** A per-call fill of a slot a device command read in an
-earlier call is the same cycle, spread across calls. The NVIDIA driver shadows a large mapped
+**A diff that writes through the host mapping of a device buffer in `g_gpu.dev_mapped`
+(`dasllama/dasllama_vulkan_common.das`; `upload_region_at` on such a buffer is one such write)
+after any device command has touched that buffer is a defect - finish every host write before the
+device's first touch, or stage through a pinned buffer on the transfer queue.** A per-call fill of
+a slot a device command read in an earlier call is the same cycle, spread across calls. The NVIDIA driver shadows a large mapped
 allocation and migrates it at the device's first touch, and a write-migrate-write cycle hangs the
 machine.

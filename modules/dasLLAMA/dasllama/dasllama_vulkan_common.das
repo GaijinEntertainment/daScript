@@ -3069,6 +3069,7 @@ struct RLayer {
     pf_dn_scan_set : VkDescriptorSet       // pf_dnconv + this layer's state + smalls -> the o rows (the sequential scan)
     pf_dn_scan_p3_set : VkDescriptorSet    // pf_dnz + dn_ws + this layer's smalls (the gated out-norm)
     pf_dn_tail_set : VkDescriptorSet       // pf_dnqkv last taps rows -> this layer's smalls ring image
+    pf_dn_captail_set : VkDescriptorSet    //! pf_dnqkv rows before a capture's row (the entry image under the taps) -> the checkpoint row's ring image 0
     pf_dn_ba_set : VkDescriptorSet         //! f32 arm: dn_ba_dev + pf_xb -> this layer's smalls (the f32 tile GEMM)
     pf_dn_cvt_set : VkDescriptorSet        // the cm2 route: pf_xb -> pf_xf, the qkv / z GEMMs' f16 feed
     pf_f16g_router_set, pf_f16g_router_red_set, pf_router_cvt_set : VkDescriptorSet   //! the MoE block's router on the cm2 route: pf_xb -> pf_xf, router16 x pf_xf into the split-k planes, the reduce into the logits
@@ -3278,7 +3279,8 @@ struct RDec {
     ring_roll_dev : uint64        //! the n-gram conv ring as the verify's rows form found it, saved before the rows' commit (`rd_encode_hc_side`), for the rollback to put back; 0 = no ring or no rollback
     snap_dev : uint64             //! the regions' recurrent checkpoints: `RDEC_DN_SNAPS` rows a region, a row every recurrent layer's slot state and ring pair (`RLayer.snap_off`); 0 until the first save
     snap_row_bytes : int64
-    snap_ring_off : int64         //! ... and, on a hyper-connection model with the n-gram side input, the row's copy of the region's conv ring past the recurrent state
+    pf_snap_bound : uint64        //! the checkpoint rows the window chain's scan and cap-tail sets bind (0 = the smalls placeholder): a save that allocated the rows after the sets leaves them stale
+    snap_ring_off : int64        //! ... and, on a hyper-connection model with the n-gram side input, the row's copy of the region's conv ring past the recurrent state
     snap_par : array<int>         //! a checkpoint row's ring parity, the region's when it was saved
     roll_region : int64 = -1l     //! ... the region whose slots the last verify copied (-1 = none to roll back), and that verify's rows
     roll_vrows : int64
@@ -3382,6 +3384,7 @@ struct RDec {
     s_tok_ple : VkDescriptorSet        //! the one-row command's gather of the step's side row off the table, the host's staged row for a step without an id
     ple_tok_on : bool                  //! ... built: the table placed, the projection held and the step's id on the device
     pf_ids : uint64                    // [MAX_NPOS] token ids for the device-side embed gather
+    pf_cap_dev : uint64                //! the window's capture records (`PF_CAP_WORDS`): two words a capture, the row its state stands after and its checkpoint row's float base
     pf_emb_set : VkDescriptorSet
     pf_arq_sets : array<VkDescriptorSet>   // fused ar+rq|f16 per layer: [l*2] = the ffn site, [l*2+1] = addr_next
     // the hybrid arm: the recurrent layers' window planes (the scan rides the tier's dn_ws_dev,

@@ -30,6 +30,7 @@ One section per module: what the module is for, then its public symbols grouped 
 - [builtin](#builtin) - The BUILTIN module contains core runtime functions available in all daslang programs without explicit `require`.
 - [class_boost](#class_boost) - The CLASS_BOOST module provides macros for extending class functionality, including the `[serialize_as_class]` annotation for automatic serialization and common class patterns like abstract method enforcement.
 - [clipboard_core](#clipboard_core) - The clipboard module provides synchronous access to the operating system's text clipboard.
+- [cmp](#cmp) - The CMP module holds comparisons: it writes lexicographic orderings from a list of keys.
 - [command_line](#command_line) - Command-line utilities for daslang scripts and standalone executables.
 - [constant_expression](#constant_expression) - The CONSTANT_EXPRESSION module provides the `[constant_expression]` function annotation.
 - [consume](#consume) - The CONSUME module implements the `consume` pattern, which moves ownership of containers and other moveable values while leaving the source in a default-constructed state.
@@ -3197,7 +3198,7 @@ CPU large-language-model inference in pure daslang: load a GGUF model, tokenize,
 - `prefix_checkpoint_at` - Where a recurrent `session`'s prefill of `prompt` should stop for a `prefix_insert`, after `prefix_attach` matched `matched` tokens: `stable_at` (`render_turn_marked`'s opening) when the caller knows it, else the longest opening an earlier checkpoint shares.
 - `prefix_held_groups` - Pages the cache currently holds (== pool groups retained for reuse).
 - `prefix_insert` - Donate a session's KV pages to the cache: `tokens` is its EVALED history (the first `n_past` rows exist), every full page not already cached survives `release_kv_pages`, `preview` labels the chain.
-- `prefix_insert_snapshot` - A recurrent checkpoint of the first `n_past` of `tokens` out of `session`'s pages, its state `snap` (moved in) taken elsewhere - a device's slots.
+- `prefix_insert_snapshot` - A recurrent checkpoint of the first `n_past` of `tokens` out of `session`'s pages, its state `snap` (moved in) taken elsewhere - a device's slots, or a window's capture at `upto` (0 = the tokens' end).
 - `prefix_match_len` - How many leading positions of `prompt` a `prefix_attach` would attach right now, attaching nothing: a probe for a caller deciding what a request must bring (a media span's rows).
 - `prefix_release` - Release every cached page back to `pool` and clear the cache (pages still used by live sessions stay alive until those sessions release them).
 - `prefix_share_pages` - Share the whole pages of the first `n` of `tokens` `cache` already holds into the fresh paged `session`; answers the positions they cover, where the rows still to write start.
@@ -5070,6 +5071,7 @@ The AST_BOOST module provides high-level utilities for working with the AST. It 
 - `find_argument_index` - Searches the `argNames` of a `TypeDeclPtr` (tuple or variant) for the given name and returns its zero-based index, or `-1` if not found.
 - `find_unique_function` - Searches the compiling program for exactly one non-generic function with the given name; returns it or `null` if zero or multiple matches exist.
 - `find_unique_generic` - Searches the compiling program for exactly one generic function with the given name; returns it or `null` if zero or multiple matches exist.
+- `find_var_refs` - Returns every `ExprVar` under `expr`; when `name` is given, only those reading a variable of that name.
 - `getVectorElementCount` - Returns the number of scalar elements in a vector `Type` (e.g., 2 for `float2`/`range`, 3 for `float3`, 4 for `float4`), or 0 for non-vector types.
 - `getVectorElementSize` - Returns the byte size of a single scalar element in a vector `Type` — 8 for `range64`/`urange64`, 4 for all other vector types.
 - `getVectorElementType` - Returns the scalar `Type` of each element in a vector type (e.g., `tFloat` for `float2`, `tInt` for `int3` and `range`, `tInt64` for `range64`).
@@ -7443,6 +7445,27 @@ The SORT_BOOST module provides the `qsort` macro that uniformly sorts built-in a
 - `make_heap`
 - `pop_heap`
 - `push_heap`
+
+## cmp
+
+The CMP module holds comparisons: it writes lexicographic orderings from a list of keys. The `[ordered]` structure annotation generates the structure's `operator <`, so `sort` and everything else that compares with `<` orders it by default; the `cmp_by` call macro writes a comparator block for one call, with each key an expression over `_`, the element, and a leading `-` for descending order.
+
+
+### Call macros
+
+- `cmp_by`
+
+### Structure macros
+
+- `ordered`
+
+### Classes
+
+- `OrderedMacro`
+- `OrderedMacro.apply`
+- `CmpByMacro`
+- `CmpByMacro.visit`
+- `CmpByMacro.canVisitArgument`
 
 ## static_let
 

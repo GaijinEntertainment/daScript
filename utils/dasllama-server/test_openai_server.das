@@ -108,7 +108,7 @@ def private with_llama_server(model_path : string; port : int; mode : MetalMode 
                 run_server(port)
             } else {
                 run_server(port, 4l, 32l, 0l, page_rows, 0l, KVDtype.f16, true, -1, -1, -1l, DEFAULT_BIND_HOST,
-                           prefix_states < 0l ? SERVER_PREFIX_STATES : prefix_states, prefix_state_mb)
+                           prefix_states < 0l ? PREFIX_STATES_AUTO : prefix_states, prefix_state_mb)
             }
             finished |> notify_and_release
         }

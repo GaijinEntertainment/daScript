@@ -2132,29 +2132,13 @@
     model-swap rule, `REVIEW_GPU_VULKAN.md`'s "these three files", the two opening blocks off the prescribed form, and
     the tower routing by reachability over file location. Done = the rule-doc PR carries them.
 
-217. **A recurrent model's prefill pauses at every checkpoint stop: the stops ride inside one window instead.** The
-    scheduler plans up to four stops a prompt - the system head, the system opening, the request's stable history end,
-    the message end (`prefix_checkpoint_at`, `dasllama_scheduler.das`) - and a recurrent model's checkpoint is its state at
-    one position, so each stop ends the window (`chunk_take`) and the next starts after it. Measured on the M5 (Metal, the
-    IQ4_XS-pure 35B, the house replay at info level, 2026-10-20): a cold 4.8k request runs four windows - 2045 rows 370 ms,
-    2293 rows 445 ms, 349 rows 120 ms, 80 rows 60 ms - where the long windows read 5.2k tok/s and the short remainders
-    2.9k; every warm turn pays the message window alone past the stable stop, 16 to 80 rows at 25 to 60 ms (a window's
-    fixed cost is about 20 ms). On the served bench's one-stop prompt the stops cost nothing (the three coincide) and the
-    scheduler's idle chunk splits the prompt instead (2048 + 945 rows: 583 ms against 537 in one window). On Vulkan the
-    window's fixed cost is far larger (Flash-Next's chain, the pool fill a window) and the split dominates the cold turn.
-    Done = a prefill call carries its stop rows and the window chain copies the recurrent state (the deltanet scan's
-    state at the stop row - the chunk split at it - the conv history rows before it, an n-gram model's ring) at each
-    stop inside the window on BOTH homes, the scheduler filing the checkpoints after the one window; the stops stay,
-    the cold turn runs one window a chunk, and the warm turn's message rows join the stable stop's window; the house
-    replay's cold and warm TTFT and the served bench's 3k and 9k cold TTFT before and after, Metal and Vulkan.
-
 218. **The speculative round loses on the served turn on Metal where `lcpp_bench` wins.** Served at one stream (the
     IQ4_XS-pure 35B, reply 200, 5 reps, the box knob's depth 1, 2026-10-20, M5): decode off 182.9 / 171.7 tok/s at 3k /
     9k, `--mtp` 176.6 / 161.0 (cv 4 %), `--mtp --mtp-accept typical` 174.7 / 163.2 (cv 3.4-3.8 %) - three to six percent
     under off, while `lcpp_bench --mtp-ab` reads greedy depth 1 at 1.14 on the UD-Q4_K_M twin and the 2026-10-13 served
     rows carried the same loss before the seats (157/148 on against 178/168 off). The round is the same code on both
     instruments; the difference is the server's tick around it. Done = a step trace of a served speculative stream against
-    the bench's loop (the scheduler's per-round work, the device-home pool's per-tick cost, the pick and selection landings
+    the bench's loop (the scheduler's per-round work, the paged session's per-tick cost, the pick and selection landings
     under the server's sampler, the SSE path) naming where the margin goes, and the served decode at or above off on this
     file at depth 1.
 

@@ -13,7 +13,7 @@ prefix a rope-store kernel takes; the single-row driver's greedy chain and the M
 sections build on, the assistant-drafter driver's role row included, stays in
 `ARCHITECTURE_GPU.md#gpu-backends`.
 
-### The speculative round on Metal {#mtp-round-one-join}
+### The speculative round, one join on every home {#mtp-round-one-join}
 
 **The speculative round is the common one on every home (`mtp_spec_round_k`), and the Metal decode driver fills its
 seats.** The round drafts its k tokens through the draft seat (`metal_mtp_draft_seat`: the single-row draft forward,
@@ -54,7 +54,13 @@ post-final-norm hidden becomes `s.mtp_h` (the next round's carry, and the assist
 input), `s.mtp_h_pos1` moves to `pos + a + 1`, and `n_past` advances by `a + 1`. The rollback seat cuts
 the mirror's watermark to `pos + a + 1` with the recurrent state; a dense model's reject reaches no rollback
 seat and leaves the watermark at the round's full depth. The rows above the committed one are the rejected
-drafts' - garbage the next round rewrites - and `n_past` is what the next step reads. The CPU depth-1 step
+drafts' - garbage the next round rewrites - and `n_past` is what the next step reads. The walk ends on a draft among
+the caller's stop ids (`Session.spec_stops`, the scheduler's stream stop list, `mtp_accept_cut_at_stop`): the finishing
+token's row is the committed row `a`, the rows past it roll back as a reject's, and no pre-drawn token is parked - a
+stream emits nothing past its stop, so the round leaves no row the stream's history does not carry. The depth a
+scheduler stream's round takes is capped the same way (`Session.mtp_depth_cap`, `round_depth_cap`): depth 1 for a stream
+whose reasoning budget can still force a close, since a draft past the close would be evaled and not emitted, else the
+reply's remaining length, at least 1, since a draft accepted past the length cap would leave a row past the finish. The CPU depth-1 step
 (`mtp_spec_eval`) takes a rejected draft on a model with no recurrent layer without a re-forward:
 the verify's row 0 already holds the committed token's logits and post-norm hidden, so they stand
 and the draft head is re-seeded from them (a verify seat that landed the rows' picks alone under
@@ -225,8 +231,16 @@ encode, so the round keeps the serial encoder and pays no hazard-tracker work pe
 rows.** A group is one session's rows against its mirror: the single row is one group of one row, the
 batch step a group a row (a row a session), the same-slab step and the verify seat's rows a
 group of its k+1 rows, the prefill window a group a segment. The rows sit back to back in the planes,
-and a small table names each group's first row, its row count and its live and shadow state and
-history bases (`dn_grp_push`, eight words a group); the conv grid spans the longest group's rows by the
+and a small table names each group's first row, its row count, its live and shadow state and
+history bases, its capture count and the word its capture records start at (`dn_grp_push`, eight words a group; `dn_grp_cap`,
+three words a capture past every group's eight: the row the state stands after, its state and history bases in the capture
+arena the stages bind as `DnStages.capb`) - the prefill window's checkpoint stops inside it, which the scan writes its
+register state to as it passes the row and the history advance writes the taps rows before the row to, each copied into its
+snapshot once the window completes (`dn_captures_from_arena`). The arena holds one slot a capture, every segment's captures
+back to back in table order, each laid out as the session's arrays - the state floats, the conv history floats, then the
+n-gram ring (`pf_ple_side` copies a capture's ring rows there: the conv input rows before its row off the window's panel,
+the older rows off the entry ring) - and the window takes it from the pool only when a segment carries a capture; the conv
+grid spans the longest group's rows by the
 group count, the history advance and the scan take the group count as their last axis, and each
 group's scan walks its own rows in order against its own state. The L2 and the gate read no state, so
 they run over every row as one window. `enc_dn_front` and `enc_dn_back`

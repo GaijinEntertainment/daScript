@@ -75,6 +75,22 @@ loads behind the previous token's o store (the two buffers may alias), and the s
 two-column form it replaced 8854). The raw o rows land in the per-op tier's workspace, for the
 gated out-norm's one workgroup per position.
 
+A checkpoint stop inside a window is a capture. The tier plans one checkpoint row a stop in the segment's region
+(`rdec_caps_plan`: an empty row, else the least recently touched, marked pending) and hands the call its captures
+(`rdec_prefill_caps`, `RdecPfCap`: the segment, the row the state stands after, the row). Each window uploads the records of its
+parts (`pf_window_caps` into `pf_cap_dev`: two words a capture, the row inside the part and the checkpoint row's float base), and
+the scan's pushes name a part's records (`DnScanArgs.cap_n`, `cap_rec`, `cap_state_off`): the walk writes its register state after
+that row into the checkpoint row (`snap_dev`, the layer's `snap_off`) and walks on over the live slot untouched; `dn_cap_tail_cls`
+writes the taps projected rows before the row - the entry image under the taps - into the row's ring image 0, whose parity the
+call marks 0 (`pf_caps_done`). The hyper-connection chain copies each capture's n-gram ring rows into the row ahead of the ring's
+own update (`pf_hc_side`). After the call the tier lands them (`rdec_caps_land`, each segment its own records of the call's
+list, in order): a device-home session keeps each row at its
+stop's position, as `gpu_device_kv_checkpoint` would have saved it; a host-cached session peeks the row into its snapshot
+(`rdec_peek_snapshot`) and frees it. The token-command peel keeps no state at an interior row, so a call with a capture takes
+the window chain. The checkpoint rows exist from the first save or the first capture (`rd_snap_alloc`); until then each
+recurrent layer's scan and cap-tail sets bind the smalls in their place, unread, since a window with no capture never reads
+that binding, and `vk_rdec_prefill_caps` rebinds the layers' sets onto the rows when it makes them.
+
 The conv history crosses windows position-major in the image the call did not enter on; the last window transposes the
 tail into the decode step's per-channel layout (`dn_tail_cls`; the handoff is stated in
 `ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command`). Every window past the first carries at least as

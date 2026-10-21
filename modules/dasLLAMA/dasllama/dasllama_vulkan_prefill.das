@@ -9,6 +9,7 @@ options _function_length = 0   // same
 require dasllama/dasllama_lint public
 require dasllama/dasllama_vulkan_common   // g_gpu/g_rd state, plumbing, hazard rail, fill metas
 require dasllama/dasllama_vulkan_classes   // the class-kernel rail (generated set_/enc_ + gemv_cls_*)
+require dasllama/dasllama_common   // cap_ring_rows - the capture's n-gram ring rows, the Metal window's walk too
 require dasllama/dasllama_vulkan_decode   // vk_moe_dn_step — the dn chain's npos==1 arm routes through the decode step
 require dasllama/dasllama_kqformat   // KqFmt — the arena fmt slots are its ordinals
 require dasllama/dasllama_gemm_schema   // Q8_BLOCK_ELEMS - the window chain's hyper-connection scale planes
@@ -74,12 +75,79 @@ var private @scratch g_pf_wsegs : array<RdecPfSeg>   //! the parts of them insid
 //! the segment parts a window `[w0, w0 + wlen)` holds, into `g_pf_wsegs`; a part's `pos0` is the segment's position at the window's first row of it
 def private pf_window_segs(w0, wlen : int64) {
     g_pf_wsegs |> clear()
-    for (sg in g_pf_segs) {
+    for (sg, i in g_pf_segs, count()) {
         let lo = max(sg.row0, w0)
         let hi = min(sg.row0 + sg.npos, w0 + wlen)
         continue if (hi <= lo)
-        g_pf_wsegs |> push(RdecPfSeg(row0 = lo - w0, npos = hi - lo, pos0 = sg.pos0 + (lo - sg.row0), region = sg.region))
+        g_pf_wsegs |> push(RdecPfSeg(row0 = lo - w0, npos = hi - lo, pos0 = sg.pos0 + (lo - sg.row0), region = sg.region, seg = int64(i)))
     }
+}
+
+let PF_CAP_WORDS = 256l   //! the capture records a window holds (two words a capture)
+
+var private @scratch g_pf_caps : array<RdecPfCap>         //! the call's captures (`vk_rdec_prefill_caps`), segment-relative rows
+var private @scratch g_pf_wcaps : array<tuple<n : int64; rec : int64>>   //! each window part's captures: their count and first record word
+var private @scratch g_pf_cap_words : array<uint>
+
+def vk_rdec_prefill_caps(caps : array<RdecPfCap>) {
+    g_pf_caps := caps
+    return if (empty(caps) || g_rd == null || !g_rd.hybrid)
+    if (g_rd.snap_dev == 0ul) {
+        rd_snap_alloc()
+    }
+    if (g_rd.pf_ready && g_rd.pf_snap_bound != g_rd.snap_dev) {   //! a checkpoint save may have made the rows after the sets were built
+        for (l in range64(g_rd.n_layers)) {
+            if (g_rd.layers[l].recurrent) {
+                pf_dn_layer_sets(l, g_rd.dim, g_rd.dn_cd, g_rd.dn_di)
+            }
+        }
+    }
+}
+
+def private pf_window_caps(w0 : int64) {
+    g_pf_wcaps |> clear()
+    g_pf_wcaps |> reserve(length(g_pf_wsegs))
+    g_pf_cap_words |> clear()
+    g_pf_cap_words |> reserve(PF_CAP_WORDS)
+    for (ws in g_pf_wsegs) {
+        let sg = g_pf_segs[ws.seg]
+        let part_row0_in_seg = w0 + ws.row0 - sg.row0
+        var n = 0l
+        let rec = long_length(g_pf_cap_words)
+        for (cap in g_pf_caps) {
+            continue if (cap.seg != ws.seg || cap.row <= part_row0_in_seg || cap.row >= part_row0_in_seg + ws.npos)
+            g_pf_cap_words |> push(uint(cap.row - part_row0_in_seg))
+            g_pf_cap_words |> push(uint(((ws.region * int64(RDEC_DN_SNAPS) + cap.slot) * g_rd.snap_row_bytes) / 4l))
+            n++
+        }
+        g_pf_wcaps |> push((n = n, rec = rec))
+    }
+    if (long_length(g_pf_cap_words) > PF_CAP_WORDS) {
+        panic("vk prefill: {long_length(g_pf_cap_words) / 2l} checkpoint captures in one window, past the {PF_CAP_WORDS / 2l} the records hold")
+    }
+    if (!empty(g_pf_cap_words)) {
+        upload_region_at(g_rd.pf_cap_dev, 0l, unsafe(addr<uint8 const?>(g_pf_cap_words[0])), long_length(g_pf_cap_words) * 4l)
+    }
+}
+
+def private pf_caps_done {
+    for (cap in g_pf_caps) {
+        let sg = g_pf_segs[cap.seg]
+        g_rd.snap_par[sg.region * int64(RDEC_DN_SNAPS) + cap.slot] = 0
+    }
+    g_pf_caps |> clear()
+}
+
+//! the captures name the dropped driver's regions and checkpoint rows: the next model's first call hands its own
+def private pf_caps_forget {
+    g_pf_caps |> clear()
+    g_pf_wcaps |> clear()
+    g_pf_cap_words |> clear()
+}
+
+[init]
+def private pf_register_drop_hooks {
+    register_vk_drop_hook(@@pf_caps_forget)
 }
 
 //! the slot of the segment whose last row is window row `row` of the window at `w0`, else -1
@@ -266,10 +334,20 @@ def private pf_dn_layer_sets(l, dim, cd, di : int64) {
         fixed_array(g_rd.pf_dnqkv, g_rd.pf_dnconv, smalls_dev),
         fixed_array(np * cd * 4l, np * cd * 4l, smalls_bytes),
         fixed_array(VHZ_DNP, VHZ_DNC, VHZ_DNSM))
+    let snap_dev = g_rd.snap_dev != 0ul ? g_rd.snap_dev : smalls_dev
+    g_rd.pf_snap_bound = g_rd.snap_dev
+    let snap_bytes = g_rd.snap_dev != 0ul ? g_rd.snap_row_bytes * g_rd.regions * int64(RDEC_DN_SNAPS) : smalls_bytes
+    if (!vk_range_ok(snap_bytes)) {   //! the scan and the cap tail bind the checkpoint rows whole
+        panic("dasLLAMA vulkan prefill: the checkpoint rows ({snap_bytes} bytes: {g_rd.regions} regions x {RDEC_DN_SNAPS} rows of {g_rd.snap_row_bytes}) pass the device's storage range {vk_max_storage_range()}")
+    }
     L.pf_dn_scan_set = set_dn_scan_cls(
-        fixed_array(g_rd.pf_dnconv, dn0.state_dev, smalls_dev, g_gpu.dn_ws_dev),
-        fixed_array(np * cd * 4l, dn0.slot_state_bytes * long_length(L.dn), smalls_bytes, DN_WS_BYTES),
-        fixed_array(VHZ_DNC, VHZ_DNST, VHZ_DNSM, VHZ_DNWS))
+        fixed_array(g_rd.pf_dnconv, dn0.state_dev, smalls_dev, g_gpu.dn_ws_dev, g_rd.pf_cap_dev, snap_dev),
+        fixed_array(np * cd * 4l, dn0.slot_state_bytes * long_length(L.dn), smalls_bytes, DN_WS_BYTES, PF_CAP_WORDS * 4l, snap_bytes),
+        fixed_array(VHZ_DNC, VHZ_DNST, VHZ_DNSM, VHZ_DNWS, 0u, VHZ_DNSM))
+    L.pf_dn_captail_set = set_dn_cap_tail_cls(
+        fixed_array(g_rd.pf_dnqkv, smalls_dev, g_rd.pf_cap_dev, snap_dev),
+        fixed_array(np * cd * 4l, smalls_bytes, PF_CAP_WORDS * 4l, snap_bytes),
+        fixed_array(VHZ_DNP, VHZ_DNSM, 0u, VHZ_DNSM))
     let p3_bufs = fixed_array(g_rd.pf_dnz, g_gpu.dn_ws_dev, smalls_dev)
     let p3_bytes = fixed_array(np * di * 4l, DN_WS_BYTES, smalls_bytes)
     let p3_bits = fixed_array(VHZ_DNZ, VHZ_DNWS, VHZ_DNSM)
@@ -377,12 +455,22 @@ def private dn_window_parts_enc(raw : VkCommandBuffer; var h : VkHaz; var L : RL
         enc_dn_conv_cls(raw, h, L.pf_dn_conv_set, pcc, dn_conv_wgs(cd, ws.npos))
     }
     pfq_ts(raw)
-    for (ws in g_pf_wsegs) {
+    for (ws, wi in g_pf_wsegs, count()) {
         let st & = unsafe(L.dn[ws.region])
+        let wc = g_pf_wcaps[wi]
         var pcs = DnScanArgs(npos = uint(ws.npos), cd = uint(cd), kd = uint(kd), nvh = uint(nvh), nkh = uint(nkh), ds = uint(ds),
             beta_off = uint(DN_SM_BETA), g_off = uint(DN_SM_G), a_off = uint(DN_SM_A), dt_off = uint(DN_SM_DT),
-            o_off = uint(DN_O_OFF), di = uint(di), region_state_base = uint(st.state_byte_off / 4l), row0 = uint(ws.row0))
+            o_off = uint(DN_O_OFF), di = uint(di), region_state_base = uint(st.state_byte_off / 4l), row0 = uint(ws.row0),
+            cap_n = uint(wc.n), cap_rec = uint(wc.rec), cap_state_off = uint(L.snap_off / 4l))
         enc_dn_scan_cls(raw, h, L.pf_dn_scan_set, pcs, dn_scan_wgs(nvh, ds))
+        if (wc.n > 0l) {
+            let img = int(st.ring_image_bytes / 4l)
+            let cur = g_rd.pf_dn_cur[ws.region]
+            let wg = max(1l, (cd * taps + 255l) / 256l)
+            var pcx = DnCapTailArgs(cd = uint(cd), taps = uint(taps), row0 = uint(ws.row0), entry_off = uint(int(st.hist_off) + cur * img),
+                cap_rec = uint(wc.rec), cap_hist_off = uint((L.snap_off + st.slot_state_bytes) / 4l), wg_per_cap = uint(wg))
+            enc_dn_cap_tail_cls(raw, h, L.pf_dn_captail_set, pcx, wg * wc.n)
+        }
     }
     pfq_ts(raw)
     var pc3 = GkDnGateArgs(nvh = uint(nvh), di = uint(di), ds = uint(ds), o_off = uint(DN_O_OFF),
@@ -1095,6 +1183,7 @@ def private pf_setup {
             g_rd.pf_cmd_ring |> push(alloc_cmd())
         }
     }
+    g_rd.pf_cap_dev = make_device_buf(PF_CAP_WORDS * 4l)
     if (rd_emb_on()) {   //! the window's rows gather off their ids; no window row is the host's, so `xh` binds the one-row command's staging unread
         g_rd.pf_ids = make_device_buf(np * 4l)
         if (g_rd.emb_blk >= 0l) {
@@ -1243,7 +1332,7 @@ def private pf_setup {
     if (g_rd.hybrid) {
         ensure_dn_state()   // dn_ws_dev (the scan workspace) + the staging buffers the reset/handoff ride
         verify(ensure_dn_conv_cls() && ensure_dn_scan_cls() && (g_rd.dn_zsig ? ensure_dn_scan_p3_sig_cls() : ensure_dn_scan_p3_cls())
-            && ensure_dn_tail_cls() && (!g_rd.dn_ba_f32 || ensure_dn_ba_cls()),
+            && ensure_dn_tail_cls() && ensure_dn_cap_tail_cls() && (!g_rd.dn_ba_f32 || ensure_dn_ba_cls()),
             "vk prefill: the deltanet class rails must engage on a live device")
         let cd = g_rd.dn_cd
         let di = g_rd.dn_di
@@ -2064,6 +2153,21 @@ def private pf_hc_side(raw : VkCommandBuffer; var h : VkHaz; wlen, pos0w : int64
     enc_ple_conv_cls(raw, h, g_rd.pf_s_ple_conv, pcc, (wlen * hcd + 255l) / 256l)
     let m = min(wlen, nrows)
     vhz_dep(raw, h, VHZ_DNSM, VHZ_DNSM, true)
+    if (!empty(g_pf_wcaps) && g_pf_wcaps[0].n > 0l) {
+        let wc = g_pf_wcaps[0]
+        for (ci in range64(wc.n)) {
+            let r = int64(g_pf_cap_words[wc.rec + ci * 2l])
+            let dst = int64(g_pf_cap_words[wc.rec + ci * 2l + 1l]) * 4l + g_rd.snap_ring_off
+            cap_ring_rows(r, nrows, pos0w) $(rr, slot : int64; from_window : bool) {
+                let at = slot * hcd * 4l
+                if (from_window) {
+                    cmd_copy_range(raw, g_rd.pf_hpanel, rr * hcd * 4l, g_rd.snap_dev, dst + at, hcd * 4l)
+                } else {
+                    cmd_copy_range(raw, g_rd.plehist_dev, g_rd.region * nrows * hcd * 4l + at, g_rd.snap_dev, dst + at, hcd * 4l)
+                }
+            }
+        }
+    }
     for (r in range64(wlen - m, wlen)) {
         let slot = (pos0w + r) % nrows
         cmd_copy_range(raw, g_rd.pf_hpanel, r * hcd * 4l, g_rd.plehist_dev, (g_rd.region * nrows + slot) * hcd * 4l, hcd * 4l)
@@ -2100,6 +2204,7 @@ def private pf_run_hc(x_batch : array<float>; cos_batch : array<float>; side : a
             let last = w0 + wlen >= npos
             let pos0w = pos0 + w0
             pf_window_segs(w0, wlen)
+            pf_window_caps(w0)
             rd_tok_row(pos0w, wlen)
             upload_region_at(g_rd.pf_x, 0l, addr<uint8 const?>(x_batch[int(w0 * dim)]), wlen * dim * 4l)
             upload_region_at(g_rd.pf_cos, 0l, addr<uint8 const?>(cos_batch[int(w0 * cos_elems)]), wlen * cos_elems * 4l)
@@ -2171,6 +2276,7 @@ def private pf_run_hc(x_batch : array<float>; cos_batch : array<float>; side : a
         }
         if (g_rd.hybrid) {
             pf_dn_end()
+            pf_caps_done()
         }
         host_buf_read(g_rd.pf_logits_host, addr<void?>(logits[0]), g_rd.vocab * 4l)
     }
@@ -2385,6 +2491,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
             let wlen = pf_window_len(npos, w0)
             let last = w0 + wlen >= npos
             pf_window_segs(w0, wlen)
+            pf_window_caps(w0)
             let nwseg = long_length(g_pf_wsegs)
             if (nwseg > 1l) {
                 g_rd.pf_seg_windows++
@@ -2589,6 +2696,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
         }
         if (g_rd.hybrid) {
             pf_dn_end()
+            pf_caps_done()
         }
         host_buf_read(g_rd.pf_logits_host, addr<void?>(logits[0]), nseg * g_rd.vocab * 4l)
         // per-role GPU aggregation, LAST window, only when every stamp landed; overlapped levels (q|k|v, gate|up) bill the level on the last member's delta
@@ -3349,10 +3457,10 @@ def private ensure_dn_cls_sets {
         fixed_array(g_gpu.batch_y1_dev, g_gpu.hq_dev, g_gpu.dn_smalls_dev),
         fixed_array(BATCH_Y_BYTES, BATCH_HQ_BYTES, DN_SMALLS_BYTES),
         fixed_array(VHB_Y1, VHB_HQ, VHB_SM))
-    g_gpu.dn_scan_set = set_dn_scan_cls(
-        fixed_array(g_gpu.hq_dev, g_gpu.dn_state_dev, g_gpu.dn_smalls_dev, g_gpu.dn_ws_dev),
-        fixed_array(BATCH_HQ_BYTES, DN_STATE_BYTES, DN_SMALLS_BYTES, DN_WS_BYTES),
-        fixed_array(VHB_HQ, VHB_ST, VHB_SM, VHB_WS))
+    g_gpu.dn_scan_set = set_dn_scan_cls(   //! the per-op chain captures nothing: the smalls stand in for the records and the checkpoint rows, unread
+        fixed_array(g_gpu.hq_dev, g_gpu.dn_state_dev, g_gpu.dn_smalls_dev, g_gpu.dn_ws_dev, g_gpu.dn_smalls_dev, g_gpu.dn_smalls_dev),
+        fixed_array(BATCH_HQ_BYTES, DN_STATE_BYTES, DN_SMALLS_BYTES, DN_WS_BYTES, DN_SMALLS_BYTES, DN_SMALLS_BYTES),
+        fixed_array(VHB_HQ, VHB_ST, VHB_SM, VHB_WS, 0u, VHB_SM))
     g_gpu.dn_scan_p3_set = set_dn_scan_p3_cls(
         fixed_array(g_gpu.batch_y2_dev, g_gpu.dn_ws_dev, g_gpu.dn_smalls_dev),
         fixed_array(BATCH_Y_BYTES, DN_WS_BYTES, DN_SMALLS_BYTES),

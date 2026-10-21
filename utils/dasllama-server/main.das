@@ -152,7 +152,7 @@ struct ServerArgs {
     @clarg_doc = "Prefix-cache retention cap in pages (default: one full context per stream; -1 = unbounded)"
     prefix : int
 
-    @clarg_doc = "Recurrent models (Qwen3.5/3.6/3.8 hybrids) cache whole checkpoints instead of pages: the most a slot keeps (default 256; 0 = none) - the byte budget binds first. Every request leaves one at its opening's shared head (the system text or the tool block, whichever its template writes first), one at its opening with the tools, one where its last message starts, one where it ends (ahead of the generation prompt), one at its finished turn; a conversation's own stops are dropped before shared openings"
+    @clarg_doc = "Recurrent models (Qwen3.5/3.6/3.8 hybrids) cache whole checkpoints instead of pages: the most a slot keeps (0 = none; -1, or unset, = the byte budget's count, 256 to 1024). Every request leaves one at its opening's shared head (the system text or the tool block, whichever its template writes first), one at its opening with the tools, one where its last message starts, one where it ends (ahead of the generation prompt), one at its finished turn; a conversation's own stops are dropped before shared openings"
     prefix_states : int
 
     @clarg_doc = "The checkpoints' byte budget in MB, snapshots and held pages (default 0 = a quarter of the box's RAM - in a container, of its memory limit where that is lower)"
@@ -916,7 +916,7 @@ def private build_config_surface(cfg : ServerArgs; save_path : string) : string 
         chunk_idle = max(cfg.chunk_idle, 0),
         page_rows = cfg.page_rows > 0 ? cfg.page_rows : 64,
         prefix = cfg.prefix,
-        prefix_states = cfg_sourced("prefix_states") ? cfg.prefix_states : int(SERVER_PREFIX_STATES),
+        prefix_states = cfg_sourced("prefix_states") && cfg.prefix_states >= 0 ? cfg.prefix_states : int(PREFIX_STATES_AUTO),
         prefix_state_mb = cfg.prefix_state_mb,   // 0 = a quarter of the box's RAM, resolved at init
         flat = cfg.flat,
         mtp = config_mtp_resolved(cfg, gpu),
@@ -1085,7 +1085,7 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
     let chunk_idle = g_cfg.chunk_idle > 0 ? int64(g_cfg.chunk_idle) : -1l
     let page_rows = g_cfg.flat ? 0l : (g_cfg.page_rows > 0 ? int64(g_cfg.page_rows) : 64l)
     let prefix = int64(g_cfg.prefix)   // 0 = auto (init_server sizes it), < 0 = unbounded
-    let prefix_states = cfg_sourced("prefix_states") ? int64(max(g_cfg.prefix_states, 0)) : SERVER_PREFIX_STATES   // 0 set by hand = no checkpoints
+    let prefix_states = cfg_sourced("prefix_states") && g_cfg.prefix_states >= 0 ? int64(g_cfg.prefix_states) : PREFIX_STATES_AUTO   //! 0 set by hand = no checkpoints; -1, a saved /config answer, = the budget's count
     let prefix_state_mb = int64(max(g_cfg.prefix_state_mb, 0))
     let dispatch_mode = to_lower(g_cfg.team_dispatch)
     if (!empty(dispatch_mode) && dispatch_mode != "hybrid"

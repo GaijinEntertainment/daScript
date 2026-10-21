@@ -107,6 +107,7 @@ def cmd_copy_planes(raw; var h; devs; host; sizes; bits : uint) {
 [unused_argument(elem)]
 def staged(mapped : void?; byte_off : int64; n : int; elem : auto(TT)) : array<TT -const> {
     var a : array<TT -const>
+    a |> reserve(n)   //! a whole-window o plane passes the unreserved-growth guard
     a |> resize(n)
     unsafe {
         memcpy(addr<void?>(a[0]), reinterpret<void?>(intptr(mapped) + uint64(byte_off)), int64(n) * int64(typeinfo sizeof(type<TT>)))

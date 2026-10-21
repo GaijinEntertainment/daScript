@@ -907,6 +907,87 @@ def test_prefix_spare_snapshots(t : T?) {
     }
 }
 
+[test]
+def test_prefix_insert_reasons(t : T?) {
+    t |> run("a donation answers \"\" where its state was kept and names the cause where it was refused") @(t : T?) {
+        let c = mk_config(2l, 4l, 2l, 16l, 32l)
+        var pool <- create_kv_pool_(c, 4l, KVDtype.f32, KVDtype.f32)
+        var cache <- create_prefix_cache_()
+        var toks <- [for (i in range64(9l)); 100l + i]
+        var s <- mk_recurrent(c, pool, 6l)
+        t |> equal(prefix_insert_(cache, pool, s, toks), "", "a checkpoint at the session's position is kept")
+        t |> equal(1, length(cache.states))
+        t |> equal(prefix_insert_(cache, pool, s, toks), "", "the same stop again stands as kept: it is touched")
+        t |> equal(1, length(cache.states))
+        var short <- [for (i in range64(5l)); 100l + i]   // the token list one row short of the session's six
+        let why_short = prefix_insert_(cache, pool, s, short)
+        t |> success(find(why_short, "recurrent state stands at 6") >= 0 && find(why_short, "tokens end at 5") >= 0,
+            "a token list short of the session's position names both positions: {why_short}")
+        t |> equal(1, length(cache.states), "and keeps nothing")
+        var fresh <- mk_recurrent(c, pool, 0l)
+        let why_none = prefix_insert_(cache, pool, fresh, toks)
+        t |> success(find(why_none, "no evaled tokens stand") >= 0 && find(why_none, "n_past 0") >= 0, "a session with no evaled row says so: {why_none}")
+        var none <- create_prefix_cache_(0l, 0l)
+        let why_cap = prefix_insert_(none, pool, s, toks)
+        t |> success(find(why_cap, "keeps no checkpoints") >= 0, "a cache that keeps no checkpoint says so: {why_cap}")
+        t |> equal(0, length(none.states))
+        var plain <- make_run_state_paged(c, pool)
+        kv_ensure(plain, 6l)
+        plain.n_past = 6l
+        t |> equal(prefix_insert_(cache, pool, plain, toks), "", "a model with no recurrent state donates its pages and answers \"\"")
+        release_kv_pages_(plain)
+        release_kv_pages_(fresh)
+        release_kv_pages_(s)
+        prefix_release_(cache, pool)
+        t |> equal(long_length(pool.free_groups), pool.capacity_groups, "every page back")
+        delete plain
+        delete none
+        delete fresh
+        delete short
+        delete s
+        delete toks
+        delete cache
+        delete pool
+    }
+}
+
+[test]
+def test_prefix_snapshot_stop_touched(t : T?) {
+    t |> run("a snapshot filed at a stop the cache keeps touches that checkpoint: no second one, used now, an opening where asked") @(t : T?) {
+        let c = mk_config(2l, 4l, 2l, 16l, 32l)
+        var pool <- create_kv_pool_(c, 4l, KVDtype.f32, KVDtype.f32)
+        var cache <- create_prefix_cache_(0l, 8l)
+        var toks <- [for (i in range64(9l)); 100l + i]
+        var s <- mk_recurrent(c, pool, 6l)
+        var snap <- dn_snapshot_take(s)
+        prefix_insert_snapshot_(cache, pool, s, toks, snap, false)
+        t |> equal(1, length(cache.states))
+        t |> equal(PrefixStateKind.tail, cache.states[0].kind, "filed as a tail")
+        let inserts = cache.n_state_inserts
+        let bytes = cache.state_bytes
+        let used = cache.states[0].last_use
+        let g0 = s.block_table[0]
+        let refs = pool.refcnt[g0]
+        var again <- dn_snapshot_take(s)
+        prefix_insert_snapshot_(cache, pool, s, toks, again, true)
+        t |> equal(1, length(cache.states), "the same stop filed again leaves no second checkpoint")
+        t |> equal(inserts, cache.n_state_inserts, "and counts no insert")
+        t |> equal(bytes, cache.state_bytes, "nor charges its bytes again")
+        t |> equal(refs, pool.refcnt[g0], "nor takes its pages again")
+        t |> success(cache.states[0].last_use > used, "the kept checkpoint is used now ({cache.states[0].last_use} over {used})")
+        t |> equal(PrefixStateKind.opening, cache.states[0].kind, "and an opening filed at it makes it one")
+        release_kv_pages_(s)
+        prefix_release_(cache, pool)
+        t |> equal(long_length(pool.free_groups), pool.capacity_groups, "every page back")
+        delete again
+        delete snap
+        delete s
+        delete toks
+        delete cache
+        delete pool
+    }
+}
+
 def private restore_panics(var s : Session; snap : DnSnapshot) : bool {
     var tripped = false
     try {

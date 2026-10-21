@@ -91,6 +91,10 @@ must keep holding:
 - `test_vulkan_kernels.das`'s `test_vkd_ple_bf16_cvt` cell must hold the bf16 rows as f16 bit
   for bit the widened value's half, saturated past the half range, the elements past the count
   kept.
+- `test_vulkan_kernels.das`'s `test_vkd_dn_cap_tail` cell must hold the checkpoint capture's history
+  write (`dn_cap_tail_cls`) bit for bit to the ring hand-off's CPU form for a window cut at the
+  capture's row - two captures in one dispatch, one past the taps and one under them reading its
+  first row off the entry image - the words between the two rows' images keeping their sentinel.
 - `test_vulkan_kernels.das`'s `test_vkd_cls_select` cell must hold the selection kernel's landing
   against the host oracle on every row: the ids at or above the K-th largest logit with their
   logits, the max, the denominator at the row's temperature, the overflow flag past the slots and

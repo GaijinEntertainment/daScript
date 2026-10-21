@@ -978,21 +978,6 @@ No stocked tower trips a guard; a family added at another geometry would run on 
 the ragged stamps - a row tail on the tile GEMMs and the attention restride, a head-width parameter on the window
 attention - so the guards narrow to what the kernels cannot read.
 
-## 51. A short request's prefill splits at the prefix checkpoints, and the window past the split costs a third of its GPU time
-
-The Metal prefill stops at every planned checkpoint (`prefix_checkpoint_at_`: the stable opening, the system text)
-and runs the remainder as its own window, because a recurrent layer's state at the checkpoint position exists only
-where the scan stops there. On the M1 Max the house replay's short answers (375 uncached tokens, two windows each)
-spend a median 130-167 ms of their 650-680 ms of window time in the windows past the largest: a 51-token window
-costs ~180 ms and a 7-token one ~40, where the 300-token window runs at 1.4 ms a token. The K/V half of a checkpoint
-is positional and already in the mirror; the recurrent half is one scan dispatch over the window (`enc_dn_scan_h`),
-which can run as two - the rows before and after the position, the state buffer copied out between them, the conv
-history at the position the three input rows before it - with everything else in the window, the expert GEMMs above
-all, one pass. The work: the scheduler's chunk-ends-at-checkpoint rule becomes a capture-at-position list for the
-Metal prefill (the CPU prefill keeps stopping), the recurrent layer's scan is segmented at those positions with its
-state copied out, the checkpoint store takes a state snapshot from a device buffer, and the replay's split cost
-leaves the short requests' window time. The figures are `PERF_LEDGER.md`'s 2026-10-09 server-timeline entry.
-
 ## 52. The decode step's time sits outside the expert GEMVs
 
 On the M1 Max a Qwen3.6-35B-A3B decode step is 10.6 ms of GPU time, and the routed expert GEMVs are 1.9 ms of it

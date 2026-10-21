@@ -7275,10 +7275,9 @@ def private pf_hc_head(enc : MetalComputeEncoder?; t : Model; h : PfHc; bxf : Me
     enc_hc_mix(enc, h.bxn, h.bgate, bxf, hc_mix_args(c, 1l), c.dim)
 }
 
-//! The n-gram side input over the window before layer ple_layer's attention mixer: the key/value GEMMs off the gathered heads,
-//! then the decode's gate and conv (`enc_ple_side_rows`, the GEMMs a shape split against the step's GEMVs), then the window's
-//! last rows into the ring (one slot each) for the rows after it
-def private pf_ple_side(enc : MetalComputeEncoder?; t : Model; h : PfHc; p : PfPle; u_dim : MetalBuffer?; start_pos : int64; bring : MetalBuffer?; ring_base : uint64) {
+//! the n-gram side input over the window before layer ple_layer's mixer: the key/value GEMMs, gate and conv, each capture's ring into the arena, then the window's last rows into the ring
+def private pf_ple_side(enc : MetalComputeEncoder?; t : Model; h : PfHc; p : PfPle; u_dim : MetalBuffer?; start_pos : int64; bring : MetalBuffer?; ring_base : uint64;
+                        caps : array<DnSnapshot>; bcap : MetalBuffer?; cap_bytes, cap_ring_off : int64) {
     let c = t.config
     let hcd = hc_dim(c)
     let ind = ple_in_dim(c)
@@ -7292,9 +7291,38 @@ def private pf_ple_side(enc : MetalComputeEncoder?; t : Model; h : PfHc; p : PfP
     }
     if (g_pf_skip != "ew" && g_pf_skip != "nongemm") {
         enc_ple_side_rows(enc, t, h.bhc, 0ul, p.bkey, 0ul, p.bval, 0ul, p.bgated, 0ul, p.bcin, 0ul, bring, ring_base, start_pos, h.npos, true)
+        for (cap, ci in caps, count()) {
+            let r = cap.pos - start_pos
+            let cbase = uint64(int64(ci) * cap_bytes + cap_ring_off)
+            cap_ring_rows(r, rows, start_pos) $(rr, slot : int64; from_window : bool) {
+                let soff = uint64(slot * hcd * 4l)
+                if (from_window) {
+                    enc_copy_row(enc, p.bcin, uint64(rr * hcd * 4l), bcap, cbase + soff, h.u_hcd, hcd)
+                } else {
+                    enc_copy_row(enc, bring, ring_base + soff, bcap, cbase + soff, h.u_hcd, hcd)
+                }
+            }
+        }
         for (r in range64(max(0l, h.npos - rows), h.npos)) {
             enc_copy_row(enc, p.bcin, uint64(r * hcd * 4l), bring, ring_base + uint64(((start_pos + r) % rows) * hcd * 4l), h.u_hcd, hcd)
         }
+    }
+}
+
+def private dn_captures_from_arena(var segs : array<PfSeg>; bcap : MetalBuffer?; cap_bytes : int64) {
+    var capi = 0l
+    for (sg in segs) {
+        var ss & = unsafe(*sg.s)
+        let sb = uint64(long_length(ss.dn_state) * 4l)
+        let cb = uint64(long_length(ss.dn_conv_state) * 4l)
+        for (cap in ss.dn_captures) {
+            unsafe {
+                var base = reinterpret<uint8?>(contents_at(bcap, uint64(capi * cap_bytes)))
+                dn_spans_copy(cap.state, cap.conv, cap.ple_hist, base, base + sb, base + sb + cb, true)
+            }
+            capi++
+        }
+        ss.dn_captured = !empty(ss.dn_captures)
     }
 }
 
@@ -7456,18 +7484,41 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
     let dn = c.recr_mask != 0ul
     var dn_tab : tuple<buf : MetalBuffer?; bytes : uint64>
     var dn_npmax = 0l
+    var bcap : MetalBuffer? = null
+    var bytes_cap = 0ul
+    var cap_bytes = 0l
     if (dn) {
         dn_mirror_room(nseg)
         dn_grp_clear()
+        var ncap = 0l
+        for (sg in segs) {
+            ncap += long_length(sg.s.dn_captures)
+        }
+        cap_bytes = (long_length(segs[0].s.dn_state) + long_length(segs[0].s.dn_conv_state) + long_length(segs[0].s.ple_conv_hist)) * 4l
+        if (ncap > 0l) {
+            bytes_cap = uint64(ncap * cap_bytes)
+            bcap = pool_acquire_untracked(g_upool, g_dev, bytes_cap)
+        }
+        var capi = 0l
         for (sg in segs) {
             var dm = dn_mirror_prepare(*sg.s, sg.start_pos)
             if (!dm.ok) {
                 decline(MetalPrefillDecline.dn_state)
                 return false
             }
-            dn_grp_push(sg.row0, sg.npos, dm.state_off, dm.state_off, dm.conv_off, dm.conv_off)
+            let nc = long_length(sg.s.dn_captures)
+            dn_grp_push(sg.row0, sg.npos, dm.state_off, dm.state_off, dm.conv_off, dm.conv_off, nc, DN_GRP_WORDS * nseg + DN_CAP_WORDS * capi)
+            capi += nc
             dn_npmax = max(dn_npmax, sg.npos)
             sg.ple_ring_base = dm.ple_off
+        }
+        capi = 0l
+        for (sg in segs) {
+            for (cap in sg.s.dn_captures) {
+                let base = uint64(capi * cap_bytes)
+                dn_grp_cap(cap.pos - sg.start_pos, base, base + uint64(long_length(sg.s.dn_state) * 4l))
+                capi++
+            }
         }
         dn_tab = dn_grp_upload()
     }
@@ -8058,7 +8109,8 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                 var bxh_x : MetalBuffer?
                 if (hcs.on) {   //! the side input at its layer, then the attention site's mixer opens the layer into bxb
                     if (pls.on && l == c.ple_layer) {
-                        pf_ple_side(enc, t, hcs, pls, u_dim, segs[0].start_pos, dn_pool_buffer(), segs[0].ple_ring_base)
+                        pf_ple_side(enc, t, hcs, pls, u_dim, segs[0].start_pos, dn_pool_buffer(), segs[0].ple_ring_base,
+                            segs[0].s.dn_captures, bcap, cap_bytes, (long_length(segs[0].s.dn_state) + long_length(segs[0].s.dn_conv_state)) * 4l)
                     }
                     pf_hc_mix_site(enc, t, hcs, l, false, bxb, hcs.binj_a)
                 } elif (g_pf_skip != "ew" && g_pf_skip != "nongemm") {
@@ -8087,7 +8139,7 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                     }
                     if (g_pf_skip != "attn" && g_pf_skip != "dn" && g_pf_skip != "nongemm") {
                         let d = DnStages(qkv = bdnqkv, cv = bdncv, cvh = bdncvh, b = bdnb, g = bdng, o = bdno, z = bdnz,
-                            grp = dn_tab.buf, ng = nseg, npmax = dn_npmax, rows = npos)
+                            grp = dn_tab.buf, capb = bcap, ng = nseg, npmax = dn_npmax, rows = npos)
                         enc_dn_front(enc, t, l, dnli, d)
                         if (bdncvh != null) {
                             //! the walk reads halves: the conv rows convert once, the gates prepare once
@@ -8778,6 +8830,9 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
             for (sg in segs) {
                 dn_mirror_advance(sg.s.uid, sg.start_pos + sg.npos - 1l)
             }
+            if (bcap != null) {
+                dn_captures_from_arena(segs, bcap, cap_bytes)
+            }
         }
         let ts_rb = ref_time_ticks()
         for (sg, i in segs, count()) {
@@ -8875,6 +8930,9 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
         pool_release(g_pf_upool, u_dn_di, 4ul)
         pool_release(g_pf_upool, u_dn_nvh, 4ul)
         pool_release(g_upool, dn_tab.buf, dn_tab.bytes)
+        if (bcap != null) {
+            pool_release(g_upool, bcap, bytes_cap)
+        }
     }
     if (c.q_gated) {
         pool_release(g_pf_pool, bdnqg, bytes_dn_qg)

@@ -2048,25 +2048,33 @@ def dn_mirror_evict_now(uid : uint64) {
     }
 }
 
+def private dn_span_copy(var host : array<float>; var dev : uint8?; to_host : bool) {
+    return if (empty(host))
+    unsafe {
+        if (to_host) {
+            memcpy(addr<void?>(host[0]), reinterpret<void?>(dev), long_length(host) * 4l)
+        } else {
+            memcpy(reinterpret<void?>(dev), addr<void?>(host[0]), long_length(host) * 4l)
+        }
+    }
+}
+
+//! The recurrent state, conv history and n-gram ring host arrays against their device copies at `state_dev`, `conv_dev`
+//! and `ring_dev`: device to host under `to_host`, host to device otherwise; an empty array copies nothing.
+def dn_spans_copy(var state, conv, ring : array<float>; var state_dev, conv_dev, ring_dev : uint8?; to_host : bool) {
+    dn_span_copy(state, state_dev, to_host)
+    dn_span_copy(conv, conv_dev, to_host)
+    dn_span_copy(ring, ring_dev, to_host)
+}
+
 //! The session's host state and conv arrays against the mirror's region `region`, and the n-gram ring against
 //! its one copy past the regions: mirror to host under `to_host`, host to mirror otherwise.
 def private dn_mirror_copy(var s : Session; mr : DnMirror; region : int64; to_host : bool) {
+    var dev = dn_slot_dev(mr)
     let base = uint64(region) * mr.region_bytes
     unsafe {
-        var dev = dn_slot_dev(mr)
-        var spans = fixed_array(
-            (host = addr<void?>(s.dn_state[0]), dev = reinterpret<void?>(dev + base), bytes = long_length(s.dn_state) * 4l),
-            (host = addr<void?>(s.dn_conv_state[0]), dev = reinterpret<void?>(dev + base + mr.conv_off), bytes = long_length(s.dn_conv_state) * 4l),
-            (host = empty(s.ple_conv_hist) ? null : addr<void?>(s.ple_conv_hist[0]),
-                dev = reinterpret<void?>(dev + mr.region_bytes * uint64(mr.regions)), bytes = long_length(s.ple_conv_hist) * 4l))
-        for (sp in spans) {
-            continue if (sp.bytes == 0l)
-            if (to_host) {
-                memcpy(sp.host, sp.dev, sp.bytes)
-            } else {
-                memcpy(sp.dev, sp.host, sp.bytes)
-            }
-        }
+        dn_spans_copy(s.dn_state, s.dn_conv_state, s.ple_conv_hist, dev + base, dev + base + mr.conv_off,
+            dev + mr.region_bytes * uint64(mr.regions), to_host)
     }
 }
 

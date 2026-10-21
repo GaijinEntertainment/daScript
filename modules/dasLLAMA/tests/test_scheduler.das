@@ -20,6 +20,10 @@ require math
 require strings
 require _model_tier
 require _resident_feed   // census, pass_total: the deltanet-on-GPU cell's device witnesses
+require dasllama/dasllama_image   // nolint:STYLE030,LINT019 - load_model_cached: the n-gram capture cell's served image, inside the das_metal half
+require dasllama/dasllama_gguf   // nolint:STYLE030,LINT019 - set_mtp_head_path: that image's split head, inside the das_metal half
+require ?das_metal dasllama/dasllama_metal_decode   // metal_decode_shutdown
+require ?das_metal dasllama/dasllama_metal_prefill   // metal_prefill_shutdown
 
 // Unit gates for the continuous-batching scheduler — all through the SchedEvent seam, zero HTTP:
 // scheduler ≡ generate bit-exact (1 stream), chunk-size invariance under classic prefill, staggered
@@ -1088,6 +1092,9 @@ def test_scheduler_evict_and_context_length(t : T?) {
 // ===== scheduler mtp: greedy self-spec ticks are output-invariant vs the plain scheduler =====
 
 let MTP_MODEL_PATH = path_join(models_dir(), "Qwen3.5-0.8B-MTP-Q8_0.gguf")
+//! the n-gram side-input carrier the capture cell's Metal arm runs, served as its image with the split head beside it
+let FLASH_NEXT_FILE = "Qwen3.8-Flash-Next-GGUF/UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf"
+let FLASH_NEXT_HEAD = "Qwen3.8-Flash-Next-GGUF/MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf"
 
 [test]
 def test_scheduler_mtp(t : T?) {   // nolint:STYLE038 — one model load per test: the greedy and the sampled leg run against that model inside the same jobque scope
@@ -1100,12 +1107,8 @@ def test_scheduler_mtp(t : T?) {   // nolint:STYLE038 — one model load per tes
         // pin the bit-exact kernels (same reasoning as test_mtp): the spec arm's verify rides the
         // BATCH kernels while the plain arm decodes per-token — near-tie flips are not bugs, so the
         // token-exact gate must not ride them. Both arms run paged/f16 so only spec mechanics differ.
-        let prev_attn = get_prefill_attn_mode()
-        set_prefill_attn_mode(AttnPrefillMode.classic)
-        let prev_act = get_act_vec()
-        set_act_vec(false)
-        let prev_dn = get_deltanet_prefill_mode()
-        set_deltanet_prefill_mode(DnPrefillMode.recurrent)
+        let pins = pin_spec_kernels()
+        let prev_spec = pins.spec
         with_dasllama_jobque() {
             var m <- load_model_(MTP_MODEL_PATH, QuantMode.q8)
             m.config.seq_len = min(m.config.seq_len, 512l)
@@ -1113,15 +1116,9 @@ def test_scheduler_mtp(t : T?) {   // nolint:STYLE038 — one model load per tes
             var none : array<int64>
             let greedy = SamplingParams()
             // reference: the PLAIN scheduler (mtp off), paged, 8-token prefill quanta
-            var sch0 <- create_scheduler(m, 1l, 4l, 8l, 16l, [idle_chunk_tokens = 0l])
-            var events0 : array<SchedEvent>
-            t |> success(submit(m, sch0, make_req(1l, prompt, greedy, 24l, none)), "plain stream queued")
-            drain(m, sch0, events0)
-            var ref_toks <- toks_of(events0, 1l)
-            delete sch0
+            var ref_toks <- plain_reply(m, prompt, 24l, 1l)
             // spec: mtp on — the chunked prefill crosses the warm's seam rows, and the paged
             // sessions ride the pool's draft-block slab (the server default rail)
-            let prev_spec = get_mtp_spec()
             set_mtp_spec(true)
             var sch <- create_scheduler(m, 1l, 4l, 8l, 16l, 0l, KVDtype.f16, true, 0l)
             var events : array<SchedEvent>
@@ -1134,19 +1131,14 @@ def test_scheduler_mtp(t : T?) {   // nolint:STYLE038 — one model load per tes
             t |> success(census1.per_row - census0.per_row > 0l, "a speculative tick no joint verify carried counts as per-row ({census1.per_row - census0.per_row} per-row ticks)")
             t |> equal(census1.device, census0.device, "... and never as a device step")
             var got <- toks_of(events, 2l)
-            to_log(LOG_INFO, "spec: \"{text_of(pieces_of(events, 2l))}\" {got} | plain: \"{text_of(pieces_of(events0, 1l))}\" {ref_toks}\n")
+            log_gen_texts(m, "greedy (CPU = plain, GPU = spec)", ref_toks, got)
             t |> success(ids_equal(got, ref_toks), "spec stream tokens == plain scheduler")
             t |> success(sch.mtp_drafted > 0l, "the spec tick actually drafted ({sch.mtp_drafted} drafts)")
             t |> success(sch.mtp_accepted > 0l, "some drafts accepted ({sch.mtp_accepted} of {sch.mtp_drafted})")
             t |> equal(finished_of(events, 2l).n_gen, 24l)
             //! top-k 1 makes every draw the penalized argmax, so the seeded sampled stream is deterministic and must equal the plain scheduler's
             let sp = SamplingParams(temp = 0.7, top_k = 1l, penalty = 1.1)
-            var sch1 <- create_scheduler(m, 1l, 4l, 8l, 16l, [idle_chunk_tokens = 0l])
-            var events1 : array<SchedEvent>
-            t |> success(submit(m, sch1, make_req(3l, prompt, sp, 24l, none, 4242)), "plain sampled stream queued")
-            drain(m, sch1, events1)
-            var ref_s <- toks_of(events1, 3l)
-            delete sch1
+            var ref_s <- plain_reply(m, prompt, 24l, 3l, 8l, sp, 4242)
             set_mtp_spec(true)
             var sch2 <- create_scheduler(m, 1l, 4l, 8l, 16l, 0l, KVDtype.f16, true, 0l)
             var events2 : array<SchedEvent>
@@ -1154,7 +1146,7 @@ def test_scheduler_mtp(t : T?) {   // nolint:STYLE038 — one model load per tes
             drain(m, sch2, events2)
             set_mtp_spec(prev_spec)
             var got_s <- toks_of(events2, 4l)
-            log_streams("sampled plain", events1, 3l, "sampled spec", events2, 4l)
+            log_gen_texts(m, "sampled (CPU = plain, GPU = spec)", ref_s, got_s)
             t |> success(ids_equal(got_s, ref_s), "sampled spec stream tokens == plain scheduler (temp 0.7, top-k 1, penalty 1.1)")
             t |> success(sch2.mtp_drafted > 0l, "the sampled tick drafted ({sch2.mtp_drafted} drafts)")
             t |> success(sch2.mtp_accepted > 0l, "the sampled walk accepted drafts ({sch2.mtp_accepted} of {sch2.mtp_drafted})")
@@ -1163,12 +1155,7 @@ def test_scheduler_mtp(t : T?) {   // nolint:STYLE038 — one model load per tes
             // spec tick must draw its verify rows through the sampler too - a raw-argmax walk would
             // accept drafts the penalty rejects
             let gp = SamplingParams(penalty = 1.3)
-            var sch3 <- create_scheduler(m, 1l, 4l, 8l, 16l, [idle_chunk_tokens = 0l])
-            var events3 : array<SchedEvent>
-            t |> success(submit(m, sch3, make_req(5l, prompt, gp, 24l, none)), "plain penalized-greedy stream queued")
-            drain(m, sch3, events3)
-            var ref_p <- toks_of(events3, 5l)
-            delete sch3
+            var ref_p <- plain_reply(m, prompt, 24l, 5l, 8l, gp)
             set_mtp_spec(true)
             var sch4 <- create_scheduler(m, 1l, 4l, 8l, 16l, 0l, KVDtype.f16, true, 0l)
             var events4 : array<SchedEvent>
@@ -1176,30 +1163,516 @@ def test_scheduler_mtp(t : T?) {   // nolint:STYLE038 — one model load per tes
             drain(m, sch4, events4)
             set_mtp_spec(prev_spec)
             var got_p <- toks_of(events4, 6l)
-            log_streams("penalized-greedy plain", events3, 5l, "penalized-greedy spec", events4, 6l)
+            log_gen_texts(m, "penalized greedy (CPU = plain, GPU = spec)", ref_p, got_p)
             t |> success(ids_equal(got_p, ref_p), "penalized-greedy spec stream tokens == plain scheduler (penalty 1.3, temp 0)")
             t |> success(sch4.mtp_drafted > 0l, "the penalized-greedy tick drafted ({sch4.mtp_drafted} drafts)")
             delete got_p
             delete ref_p
             delete events4
-            delete events3
             delete sch4
             delete got_s
             delete ref_s
             delete events2
-            delete events1
             delete sch2
             delete got
             delete events
             delete sch
             delete ref_toks
-            delete events0
             delete prompt
             delete m
         }
-        set_prefill_attn_mode(prev_attn)
-        set_act_vec(prev_act)
-        set_deltanet_prefill_mode(prev_dn)
+        restore_spec_pins(pins)
+    }
+}
+
+//! the pins the speculative scheduler cells run under: the bit-exact kernels, so the spec arm's batch verify and the plain arm's
+//! per-token decode cannot part on a near-tie; put back through `restore_spec_pins`
+struct SpecPins {
+    attn : AttnPrefillMode
+    act : bool
+    dn : DnPrefillMode
+    spec : bool
+}
+
+def private pin_spec_kernels() : SpecPins {
+    let pins = SpecPins(attn = get_prefill_attn_mode(), act = get_act_vec(), dn = get_deltanet_prefill_mode(), spec = get_mtp_spec())
+    set_prefill_attn_mode(AttnPrefillMode.classic)
+    set_act_vec(false)
+    set_deltanet_prefill_mode(DnPrefillMode.recurrent)
+    return pins
+}
+
+def private restore_spec_pins(pins : SpecPins) {
+    set_prefill_attn_mode(pins.attn)
+    set_act_vec(pins.act)
+    set_deltanet_prefill_mode(pins.dn)
+    set_mtp_spec(pins.spec)
+}
+
+//! a fresh plain paged scheduler's reply of `n` tokens to `prompt` under `params` (no cache: a new scheduler each call), its
+//! prefill in windows of `chunk` tokens - under the recurrent (per-token) pin a row's state never depends on the windowing
+def private plain_reply(m : Model; prompt : array<int64>; n : int64; id : int64; chunk : int64 = 8l; params : SamplingParams = SamplingParams(); seed : int = 0) : array<int64> {
+    var sch <- create_scheduler(m, 1l, 4l, chunk, 16l, [idle_chunk_tokens = 0l])
+    var events : array<SchedEvent>
+    var none : array<int64>
+    submit(m, sch, make_req(id, prompt, params, n, none, seed))
+    drain(m, sch, events)
+    var got <- toks_of(events, id)
+    delete events
+    delete sch
+    return <- got
+}
+
+//! the speculative cells' carrier on the CPU rails: the model's device state dropped, so under `DASLLAMA_GPU=1` and on Metal the
+//! cells measure the CPU forms `pin_spec_kernels` pins
+def private load_spec_carrier(cap : int64) : Model {
+    var m <- load_model_(MTP_MODEL_PATH, QuantMode.q8)
+    m.config.seq_len = min(m.config.seq_len, cap)
+    moe_gpu_drop_model()
+    return <- m
+}
+
+//! `sch` stepped until idle, stream `id`'s rounds counted: the drafts its rounds owe - every speculative tick's round drafts
+//! `depth` rows under the reply's remaining length (`round_depth_cap`), a tick with no round none
+def private drain_owed_drafts(m : Model; var sch : Scheduler; var events : array<SchedEvent>; id, depth, max_new : int64) : int64 {
+    var owed = 0l
+    var steps = 0
+    while (true) {
+        var n_gen = 0l
+        for (e in events) {
+            n_gen += e.stream == id && e.kind == SchedEventKind.piece ? 1l : 0l
+        }
+        let ticks0 = sch.decode_steps
+        let more = scheduler_step(m, sch, events)
+        if (sch.decode_steps > ticks0) {
+            owed += clamp(max_new - n_gen, 1l, depth)
+        }
+        break if (!more)
+        steps++
+        if (steps > 4096) {
+            panic("test_scheduler: the scheduler did not go idle in 4096 steps")
+        }
+    }
+    return owed
+}
+
+//! a speculating stream's run: its tokens, the drafts its rounds made, the ticks they took and the rounds that finished on a stop
+//! draft
+struct SpecRun {
+    toks : array<int64>
+    drafted : int64
+    ticks : int64
+    stop_rows : int64
+}
+
+//! one request through a fresh speculating scheduler at depth `depth` (the knob pinned for the run, put back), every round's
+//! draft count asserted to be the depth's under the length cap
+def private spec_run(t : T?; m : Model; var req : PendingReq; depth : int64; tag : string) : SpecRun {
+    let pin = mtp_depth_pin()
+    set_mtp_depth(depth)
+    var sch <- create_scheduler(m, 1l, 4l, 8l, 16l, 0l, KVDtype.f16, true, 0l)
+    var events : array<SchedEvent>
+    let id = req.id
+    let max_new = req.max_new
+    submit(m, sch, req)
+    let owed = drain_owed_drafts(m, sch, events, id, depth, max_new)
+    t |> equal(sch.mtp_drafted, owed, "{tag}: every round drafted depth {depth} under the length cap ({sch.mtp_drafted} drafts over {sch.decode_steps} ticks)")
+    var run <- SpecRun(toks <- toks_of(events, id), drafted = sch.mtp_drafted, ticks = sch.decode_steps, stop_rows = sch.mtp_stop_rows)
+    delete events
+    delete sch
+    restore_mtp_depth(pin)
+    return <- run
+}
+
+def private next_turn_prompt(prompt, reply, close : array<int64>) : array<int64> {
+    var p2 := prompt
+    p2 |> reserve(length(prompt) + length(reply) + length(close) + 4)
+    p2 |> push_from(reply, close)
+    for (i in range64(4l)) {
+        p2 |> push(prompt[i])
+    }
+    return <- p2
+}
+
+//! The exact compare across window shapes (a 4-row tail off the attached rows against 8-row windows from position 0, a verify's
+//! rows against one-row steps) holds on the CPU forms `pin_spec_kernels` pins: the recurrent state steps a row at a time whatever
+//! the window, the classic attention and the q8 GEMM compute each row's dots in one order at every row count under the 32-row
+//! bf16 tile, which no window here reaches - so the two sides compute bit-identical logits and a near-tie lands alike.
+//! `want_cached` is the rows turn 2 attaches, -1 for the prompt, the reply and the close whole.
+def private check_next_turn(t : T?; m : Model; var sch : Scheduler; id : int64; prompt, reply, close : array<int64>; tag : string; want_cached : int64 = -1l) {
+    var p2 <- next_turn_prompt(prompt, reply, close)
+    var events : array<SchedEvent>
+    var none : array<int64>
+    submit(m, sch, make_req(id, p2, SamplingParams(), 8l, none))
+    drain(m, sch, events)
+    let fin = finished_of(events, id)
+    let whole = long_length(prompt) + long_length(reply) + long_length(close)
+    let want = want_cached < 0l ? whole : want_cached
+    t |> equal(fin.n_cached, want, "{tag}: turn 2 attaches {want} rows (the prompt, the reply and the close are {whole})")
+    var got <- toks_of(events, id)
+    var ref <- plain_reply(m, p2, 8l, id + 1000l)
+    log_gen_texts(m, "{tag}: turn 2 (CPU = plain, GPU = spec)", ref, got)
+    t |> success(ids_equal(got, ref), "{tag}: turn 2 reads the plain scheduler's turn 2 off the attached rows")
+    delete ref
+    delete got
+    delete events
+    delete p2
+}
+
+//! A stop the model writes mid-reply that is not the template's close (`<|im_end|>` and a newline as `close_toks`): where the
+//! verify evaled the stop as an accepted draft its row stands, so the close is not evaled and the finished turn leaves no
+//! checkpoint - turn 2 on the prompt, the reply and the close attaches nothing; where the stop was sampled the close evals
+//! whole and turn 2 attaches it. Either way turn 2 reads the plain scheduler's. A fresh scheduler a cut: the cuts' turn-2
+//! prompts share openings, and an earlier cut's checkpoint would stand under a later cut's turn 2.
+def private non_close_stop_cuts(t : T?; m : Model; prompt, ref : array<int64>) {
+    var close <- [special_id(m, "<|im_end|>")]
+    var nl <- encode(m, "\n", false, false)
+    close |> push_from(nl)
+    t |> success(close[0] >= 0l && length(close) == 2, "the template's close is two tokens ({close})")
+    var drafted_stops = 0l
+    var id = 200l
+    for (cut in [2l, 4l, 8l, 10l]) {
+        var sch <- create_scheduler(m, 1l, 4l, 8l, 16l, 0l, KVDtype.f16, true, 0l)
+        let stop = ref[cut]
+        var stops <- [stop]
+        var req <- make_req(id, prompt, SamplingParams(), 24l, stops)
+        req.close_toks := close
+        var events : array<SchedEvent>
+        let rows0 = sch.mtp_stop_rows
+        submit(m, sch, req)
+        drain(m, sch, events)
+        t |> equal(finished_of(events, id).finish, "stop", "non-close cut {cut}: the stream finishes on the stop")
+        var got <- toks_of(events, id)
+        var want <- [for (i in range64(cut)); ref[i]]
+        t |> success(ids_equal(got, want), "non-close cut {cut}: the tokens before the stop are the plain reply's")
+        let stood = sch.mtp_stop_rows > rows0
+        drafted_stops += stood ? 1l : 0l
+        let tag = "non-close cut {cut} ({stood ? "the stop's row stands" : "the stop sampled"})"
+        check_next_turn(t, m, sch, id + 1l, prompt, got, close, tag, stood ? 0l : -1l)
+        delete want
+        delete got
+        delete events
+        delete stops
+        delete sch
+        id += 2l
+    }
+    t |> success(drafted_stops > 0l, "a non-close stop arrived as an accepted draft on some cut ({drafted_stops} of 4)")
+    delete nl
+    delete close
+}
+
+[test]
+def test_scheduler_mtp_stop_close(t : T?) {
+    t |> run("scheduler mtp: a stream finished on a stop the verify evaled leaves the finished-turn checkpoint, the next turn attaches it whole (needs Qwen3.5-0.8B-MTP)") @(t : T?) {
+        return if (!jit_model_available(t, MTP_MODEL_PATH))
+        let pins = pin_spec_kernels()
+        let depth = mtp_depth_pin()
+        set_mtp_depth(2l)
+        with_dasllama_jobque() {
+            var m <- load_spec_carrier(512l)
+            var prompt <- encode(m, "Count from one to twenty: one, two, three,", true, false)
+            var ref <- plain_reply(m, prompt, 24l, 1l)
+            set_mtp_spec(true)
+            var sch <- create_scheduler(m, 1l, 4l, 8l, 16l, 0l, KVDtype.f16, true, 0l)
+            var id = 10l
+            for (cut in [2l, 4l, 8l, 10l]) {
+                //! even cuts under 12 put the stop on a number word a depth-2 tick drafts (two drafts, then a sample); a comma stop ends at the first comma
+                let stop = ref[cut]
+                var stops <- [stop]
+                var close <- [stop, ref[0]]
+                var req <- make_req(id, prompt, SamplingParams(), 24l, stops)
+                req.close_toks := close
+                var events : array<SchedEvent>
+                submit(m, sch, req)
+                let drafted0 = sch.mtp_drafted
+                let owed = drain_owed_drafts(m, sch, events, id, 2l, 24l)
+                let fin = finished_of(events, id)
+                t |> equal(fin.finish, "stop", "cut {cut}: the stream finishes on the stop")
+                t |> equal(sch.mtp_drafted - drafted0, owed, "cut {cut}: every round drafted depth 2's two rows ({sch.mtp_drafted - drafted0} drafts)")
+                var got <- toks_of(events, id)
+                var want <- [for (i in range64(cut)); ref[i]]
+                t |> success(find_index(want, stop) < 0, "cut {cut}: the stop token is new to the reply")
+                log_gen_texts(m, "cut {cut} (CPU = plain, GPU = spec)", want, got)
+                t |> success(ids_equal(got, want), "cut {cut}: the tokens before the stop are the plain reply's")
+                to_log(LOG_INFO, "cut {cut}: {sch.mtp_drafted} drafted, {sch.mtp_accepted} accepted, {sch.mtp_stop_rows} stops on a draft so far\n")
+                check_next_turn(t, m, sch, id + 1l, prompt, got, close, "cut {cut}")
+                delete want
+                delete got
+                delete events
+                delete close
+                delete stops
+                id += 2l
+            }
+            t |> success(sch.mtp_stop_rows > 0l, "a stop arrived as an accepted draft on some cut ({sch.mtp_stop_rows} of 4): its row stood in the session")
+            non_close_stop_cuts(t, m, prompt, ref)
+            //! the stop counter's control: the same stream with no stop ids finishes on its length, no round on a stop draft
+            var none : array<int64>
+            var nostop <- spec_run(t, m, make_req(100l, prompt, SamplingParams(), 12l, none), 2l, "no stop ids")
+            t |> equal(nostop.stop_rows, 0l, "control: with no stop ids no round finishes on a stop draft")
+            //! the draft-rate floor's control: depth 1 drafts one row a tick, depth 2 more
+            var stops10 <- [ref[10]]
+            var d1 <- spec_run(t, m, make_req(101l, prompt, SamplingParams(), 24l, stops10), 1l, "depth 1 control")
+            t |> equal(d1.drafted, d1.ticks, "depth 1 control: one draft a tick ({d1.drafted} over {d1.ticks})")
+            var d2 <- spec_run(t, m, make_req(102l, prompt, SamplingParams(), 24l, stops10), 2l, "depth 2")
+            t |> success(d2.drafted * d1.ticks > d1.drafted * d2.ticks, "depth 2 drafts more a tick than depth 1 ({d2.drafted}/{d2.ticks} against {d1.drafted}/{d1.ticks})")
+            delete d2
+            delete d1
+            delete stops10
+            delete nostop
+            delete sch
+            delete ref
+            delete prompt
+            delete m
+        }
+        restore_mtp_depth(depth)
+        restore_spec_pins(pins)
+    }
+}
+
+//! one depth-3 speculating stream capped at `max_new` tokens on a fresh scheduler: it finishes on its length reading the
+//! plain reply, every round drafting the depth under the reply's remaining length (`drain_owed_drafts`), and turn 2 attaches
+//! the prompt and the reply whole off the finished-turn checkpoint
+def private length_cap_leg(t : T?; m : Model; prompt, ref : array<int64>; max_new, id : int64) : SpecRun {
+    var sch <- create_scheduler(m, 1l, 4l, 8l, 16l, 0l, KVDtype.f16, true, 0l)
+    var none : array<int64>
+    var events : array<SchedEvent>
+    submit(m, sch, make_req(id, prompt, SamplingParams(), max_new, none))
+    let owed = drain_owed_drafts(m, sch, events, id, 3l, max_new)
+    let fin = finished_of(events, id)
+    t |> equal(fin.finish, "length", "cap {max_new}: the stream finishes on its length")
+    t |> equal(fin.n_gen, max_new, "cap {max_new}: {max_new} tokens")
+    var got <- toks_of(events, id)
+    var want <- [for (i in range64(max_new)); ref[i]]
+    log_gen_texts(m, "length cap {max_new} (CPU = plain, GPU = spec)", want, got)
+    t |> success(ids_equal(got, want), "cap {max_new}: the capped reply is the plain reply's")
+    t |> equal(sch.mtp_drafted, owed, "cap {max_new}: every round drafted depth 3's rows under the length cap, none past it ({sch.mtp_drafted} drafts over {sch.decode_steps} ticks, {sch.mtp_accepted} accepted)")
+    check_next_turn(t, m, sch, id + 1l, prompt, want, none, "length cap {max_new}")
+    var run <- SpecRun(toks <- got, drafted = sch.mtp_drafted, ticks = sch.decode_steps, stop_rows = sch.mtp_stop_rows)
+    delete want
+    delete events
+    delete sch
+    return <- run
+}
+
+[test]
+def test_scheduler_mtp_length_cap(t : T?) {
+    t |> run("scheduler mtp: a deep round drafts no row past the reply's length cap, the finished turn attaches whole (needs Qwen3.5-0.8B-MTP)") @(t : T?) {
+        return if (!jit_model_available(t, MTP_MODEL_PATH))
+        let pins = pin_spec_kernels()
+        let depth = mtp_depth_pin()
+        set_mtp_depth(3l)
+        with_dasllama_jobque() {
+            var m <- load_spec_carrier(512l)
+            var prompt <- encode(m, "Count from one to twenty: one, two, three,", true, false)
+            var ref <- plain_reply(m, prompt, 7l, 1l)
+            set_mtp_spec(true)
+            //! two tokens: the first round's one row left past the prefill's token is all it drafts - an uncapped depth-3 round
+            //! accepts rows past the reply's end and the finished turn leaves no checkpoint
+            var short <- length_cap_leg(t, m, prompt, ref, 2l, 10l)
+            delete short
+            var capped <- length_cap_leg(t, m, prompt, ref, 7l, 12l)
+            //! the draft-rate floor's control: depth 1 drafts one row a tick, depth 3 more
+            var none : array<int64>
+            var d1 <- spec_run(t, m, make_req(100l, prompt, SamplingParams(), 7l, none), 1l, "depth 1 control")
+            t |> equal(d1.drafted, d1.ticks, "depth 1 control: one draft a tick ({d1.drafted} over {d1.ticks})")
+            t |> success(capped.drafted * d1.ticks > d1.drafted * capped.ticks, "depth 3 drafts more a tick than depth 1 ({capped.drafted}/{capped.ticks} against {d1.drafted}/{d1.ticks})")
+            delete d1
+            delete capped
+            delete ref
+            delete prompt
+            delete m
+        }
+        restore_mtp_depth(depth)
+        restore_spec_pins(pins)
+    }
+}
+
+//! the four stops' prompt: a count, so every next token is the prompt's own sequence - the exact compares put a capture plus a
+//! 12-row tail against one fresh window of the whole prompt, and a bf16 tile box rounds a window of 32 rows or more apart from
+//! a shorter one, so only a continuation no near-tie reaches holds them token for token on every box
+def private counting_prompt(m : Model; numbers : int) : array<int64> {
+    let text = build_string() $(var w) {
+        w |> write("Count from 1 to 200:")
+        for (i in range(1, numbers + 1)) {
+            w |> write(" {i},")
+        }
+    }
+    return <- encode(m, text, true, false)
+}
+
+//! the kind each checkpoint stands as after the window, by its token count: the head and the system opening are shared
+//! openings; the stable stop (the request's own opening, `ckpt_at_tail`), the message end and the finished turn are tails
+def private check_capture_kinds(t : T?; sch : Scheduler; stops : array<int64>; tag : string) {
+    var seen = 0
+    for (ps in sch.prefix.states) {
+        let n = long_length(ps.tokens)
+        let at = find_index(stops, n)
+        let want = at == 0 || at == 1 ? PrefixStateKind.opening : PrefixStateKind.tail
+        let what = at < 0 ? "the finished turn" : "stop {n}"
+        t |> success(ps.kind == want, "{tag}: {what} stands as {want == PrefixStateKind.opening ? "an opening" : "a tail"} (reads {ps.kind == PrefixStateKind.opening ? "opening" : "tail"})")
+        seen += at >= 0 ? 1 : 0
+    }
+    t |> equal(seen, length(stops), "{tag}: every stop stands as a checkpoint")
+}
+
+//! the recurrent state, conv history and n-gram side input a leg's checkpoint at stop `at` holds, copied out of the prefix cache
+struct StopState {
+    state : array<float>
+    conv : array<float>
+    ple_hist : array<float>
+    ple_prev : array<int64>
+}
+
+def private stop_state(sch : Scheduler; at : int64) : StopState {
+    for (ps in sch.prefix.states) {
+        if (long_length(ps.tokens) == at) {
+            return <- StopState(state := ps.snap.state, conv := ps.snap.conv, ple_hist := ps.snap.ple_hist, ple_prev := ps.snap.ple_prev)
+        }
+    }
+    return <- StopState()
+}
+
+//! The server's four stops on one request prefilled in windows of `chunk` rows: with `chunk` past the prompt every stop rides
+//! the one window; with `chunk` at a stop's row the window ends ON that stop - the window's end files it, not a capture - and
+//! the other stops ride their windows. Four checkpoints and the finished turn's stand, each of its kind, the window's reply is
+//! an uncached scheduler's, and a prompt sharing each interior stop's opening attaches that checkpoint whole and continues as an
+//! uncached one-window prefill does. Answers the states the first two stops' checkpoints hold.
+def private capture_stops_leg(t : T?; m : Model; prompt, stops : array<int64>; chunk : int64; tag : string) : array<StopState> {
+    let np = long_length(prompt)
+    var sch <- create_scheduler(m, 1l, 4l, chunk, 16l, [idle_chunk_tokens = 0l])
+    var none : array<int64>
+    var req <- make_req(1l, prompt, SamplingParams(), 6l, none)
+    req.system_head_at = stops[0]
+    req.system_at = stops[1]
+    req.stable_at = stops[2]
+    req.messages_end_at = stops[3]
+    var events : array<SchedEvent>
+    submit(m, sch, req)
+    let evals0 = sch.prefill_evals
+    drain(m, sch, events)
+    let windows = (np + chunk - 1l) / chunk
+    t |> equal(sch.prefill_evals - evals0, windows, "{tag}: the prompt prefilled in {windows} window(s) of {chunk} rows")
+    t |> equal(long_length(sch.prefix.states), 5l, "{tag}: four stops captured and the finished turn kept ({length(sch.prefix.states)} checkpoints)")
+    check_capture_kinds(t, sch, stops, tag)
+    var held <- [stop_state(sch, stops[0]), stop_state(sch, stops[1])]
+    var first <- toks_of(events, 1l)
+    var want1 <- plain_reply(m, prompt, 6l, 101l, 1024l)
+    log_gen_texts(m, "{tag}: the window's own reply (CPU = fresh, GPU = captured)", want1, first)
+    t |> success(ids_equal(first, want1), "{tag}: the window's own reply is the fresh prefill's")
+    var id = 2l
+    for (at in stops) {
+        continue if (at == np - 1l)
+        var p2 <- [for (i in range64(at + 12l)); i < at ? prompt[i] : prompt[np - 12l + i - at]]
+        events |> clear()
+        submit(m, sch, make_req(id, p2, SamplingParams(), 6l, none))
+        drain(m, sch, events)
+        let fin = finished_of(events, id)
+        t |> equal(fin.n_cached, at, "{tag}: stop {at}: the checkpoint attaches the shared opening whole")
+        var got <- toks_of(events, id)
+        var want <- plain_reply(m, p2, 6l, id + 100l, 1024l)
+        log_gen_texts(m, "{tag}: stop {at} (CPU = fresh, GPU = attached)", want, got)
+        t |> success(ids_equal(got, want), "{tag}: stop {at}: the continuation off the checkpoint is the fresh prefill's")
+        delete want
+        delete got
+        delete p2
+        id++
+    }
+    delete want1
+    delete first
+    delete events
+    delete sch
+    return <- held
+}
+
+[test]
+def test_scheduler_capture_stops(t : T?) {
+    t |> run("recurrent prefill: three checkpoint stops ride ONE window, each attaches and continues as a fresh prefill does (needs Qwen3.5-0.8B-MTP)") @(t : T?) {
+        return if (!jit_model_available(t, MTP_MODEL_PATH))
+        let pins = pin_spec_kernels()
+        with_dasllama_jobque() {
+            var m <- load_spec_carrier(1024l)
+            var prompt <- counting_prompt(m, 120)
+            let np = long_length(prompt)
+            t |> success(np > 220l, "the prompt holds every stop with room past the last ({np} tokens)")
+            let stops <- [48l, 96l, 160l, np - 1l]
+            //! the per-token scan steps every row alone; the chunked scan ends a scan chunk at each capture's row and copies the
+            //! taps' history there (`dn_capture_rows`)
+            for (mode in [DnPrefillMode.recurrent, DnPrefillMode.chunked]) {
+                set_deltanet_prefill_mode(mode)
+                let form = mode == DnPrefillMode.recurrent ? "recurrent" : "chunked"
+                var cap <- capture_stops_leg(t, m, prompt, stops, 1024l, "{form}, one window")
+                var live <- capture_stops_leg(t, m, prompt, stops, stops[1], "{form}, a window ending on stop {stops[1]}")
+                //! the capture at the second stop against the live state a window ending there leaves: both scans cut their
+                //! chunks at the first stop and at the second alike, so the two compute the same rows and the copy must be bit
+                //! for bit the live state - a lost or stale copy reads apart. The control: the first stop's state is another.
+                let at = stops[1]
+                t |> success(!empty(live[1].state) && !empty(live[1].conv), "{form}: stop {at} stands as a checkpoint")
+                t |> equal(mismatch_exact(cap[1].state, live[1].state), 0, "{form}: the state captured at stop {at} inside the window is the state a window ending there leaves")
+                t |> equal(mismatch_exact(cap[1].conv, live[1].conv), 0, "{form}: the conv history captured at stop {at} is the one a window ending there leaves")
+                t |> success(mismatch_exact(cap[0].state, live[1].state) > 0, "{form}: control - stop {stops[0]}'s state is not stop {at}'s")
+                t |> success(mismatch_exact(cap[0].conv, live[1].conv) > 0, "{form}: control - stop {stops[0]}'s conv history is not stop {at}'s")
+                delete live
+                delete cap
+            }
+            delete prompt
+            delete m
+        }
+        restore_spec_pins(pins)
+    }
+}
+
+[test]
+def test_scheduler_capture_stops_ngram(t : T?) {
+    t |> run("Metal prefill: the four stops ride ONE window on the n-gram side-input carrier, each attaches and continues as a fresh prefill does (needs Qwen3.8-Flash-Next, DASLLAMA_PARITY_FULL=1)") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            let path = path_join(models_dir(), FLASH_NEXT_FILE)
+            let hpath = path_join(models_dir(), FLASH_NEXT_HEAD)
+            return if (!jit_only(t) || !family_on(t, "qwen4exp") || !arm_on(t, "fam-qwen4exp") || !model_available(t, path) || !model_available(t, hpath))
+            let spec0 = get_mtp_spec()
+            set_mtp_spec(false)
+            let mode0 = get_metal_mode()
+            set_metal_mode(MetalMode.required)
+            set_mtp_head_path(hpath)
+            var m <- load_model_cached(path, QuantMode.q8)
+            clear_mtp_head_path()
+            set_metal_mode(mode0)
+            m.config.seq_len = min(m.config.seq_len, 1024l)
+            t |> success(m.metal_blob && m.config.hyper_conn && has_ple_ngram(m.config), "the served image is the metal-blob hyper-connection carrier with the n-gram side input")
+            with_dasllama_jobque() {
+                t |> success(select_prefill_override("metal"), "the Metal prefill override registered")
+                t |> success(select_decode_override("metal"), "the Metal decode override registered")
+                var prompt <- counting_prompt(m, 60)
+                let np = long_length(prompt)
+                t |> success(np > 220l, "the prompt holds every stop with room past the last ({np} tokens)")
+                let stops <- [48l, 96l, 160l, np - 1l]
+                var cap <- capture_stops_leg(t, m, prompt, stops, 1024l, "ngram, one window")
+                var live <- capture_stops_leg(t, m, prompt, stops, stops[1], "ngram, a window ending on stop {stops[1]}")
+                //! the n-gram side input at the second stop - the last tokens and the conv history the pre-step reads - captured
+                //! inside the window against what a window ending there leaves: the tokens bit for bit; the history rows go through
+                //! the window's projection GEMM, whose tiles round a 240-row window apart from a 96-row one, so within a
+                //! thousandth of its largest magnitude (reads 3e-4), the first stop's history outside that bar the control. The
+                //! recurrent state is logged: the Metal scan's groups round apart at the two window shapes (the CPU legs of
+                //! `test_scheduler_capture_stops` hold it bit for bit).
+                let at = stops[1]
+                t |> success(!empty(live[1].ple_prev) && !empty(live[1].ple_hist), "ngram: stop {at} carries the side input")
+                t |> equal(mismatch_exact(cap[1].ple_prev, live[1].ple_prev), 0, "ngram: the last tokens captured at stop {at} are the ones a window ending there leaves ({cap[1].ple_prev} against {live[1].ple_prev})")
+                let bar = 1e-3 * logits_maxabs(live[1].ple_hist)
+                let hd = logits_maxdiff(cap[1].ple_hist, live[1].ple_hist)
+                let hc = logits_maxdiff(cap[0].ple_hist, live[1].ple_hist)
+                t |> success(hd <= bar, "ngram: the side input's conv history captured at stop {at} is the one a window ending there leaves ({hd} against a bar of {bar})")
+                t |> success(hc > bar, "ngram: control - stop {stops[0]}'s side-input history lands outside the bar ({hc})")
+                to_log(LOG_INFO, "ngram: stop {at}'s state, captured against a window's end: {logits_maxdiff(cap[1].state, live[1].state)} (stop {stops[0]}'s: {logits_maxdiff(cap[0].state, live[1].state)})\n")
+                delete live
+                delete cap
+                delete prompt
+                select_decode_override("")
+                select_prefill_override("")
+            }
+            metal_decode_shutdown()
+            metal_prefill_shutdown()
+            delete m
+            set_mtp_spec(spec0)
+        }
     }
 }
 

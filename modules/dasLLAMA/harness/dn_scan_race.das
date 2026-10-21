@@ -24,6 +24,25 @@ let DI = NVH * DS
 let CD = 2 * KD + DI
 let LAYERS = 30
 
+//! the scan over every layer of one stamp, the state pool bound again as the capture arena (a group table carrying no capture reads nothing from it)
+def enc_layers(enc : MetalComputeEncoder?; pso : MetalComputePipeline?; cv, st, gates, aa, o, stm, grp : MetalBuffer?; var ka : DnArgs; grid, tg : uint3) {
+    for (_l in range(LAYERS)) {
+        kn_pipeline(enc, pso)
+        kn_buffer(enc, cv, 0ul, 0)
+        kn_buffer(enc, st, 0ul, 1)
+        kn_buffer(enc, gates, 0ul, 2)
+        kn_buffer(enc, gates, 0ul, 3)
+        kn_buffer(enc, aa, 0ul, 4)
+        kn_buffer(enc, aa, 0ul, 5)
+        kn_buffer(enc, o, 0ul, 6)
+        kn_buffer(enc, stm, 0ul, 7)
+        kn_buffer(enc, grp, 0ul, 8)
+        kn_kargs(enc, ka, 9)
+        kn_buffer(enc, st, 0ul, 10)
+        kn_dispatch(enc, grid, tg)
+    }
+}
+
 [export]
 def main {
     static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -58,35 +77,9 @@ def main {
             let grid = uint3(uint(DS / 8 / sgs), uint(NVH), 1u)
             let tg = uint3(uint(32 * sgs), 1u, 1u)
             race_pair_ms(queue, 3, t_f, t_h, $(enc) {
-                for (_l in range(LAYERS)) {
-                    kn_pipeline(enc, p_f)
-                    kn_buffer(enc, bcv, 0ul, 0)
-                    kn_buffer(enc, bst, 0ul, 1)
-                    kn_buffer(enc, braw, 0ul, 2)
-                    kn_buffer(enc, braw, 0ul, 3)
-                    kn_buffer(enc, baa, 0ul, 4)
-                    kn_buffer(enc, baa, 0ul, 5)
-                    kn_buffer(enc, bo, 0ul, 6)
-                    kn_buffer(enc, bstm, 0ul, 7)
-                    kn_buffer(enc, bgrp, 0ul, 8)
-                    kn_kargs(enc, ka, 9)
-                    kn_dispatch(enc, grid, tg)
-                }
+                enc_layers(enc, p_f, bcv, bst, braw, baa, bo, bstm, bgrp, ka, grid, tg)
             }, $(enc) {
-                for (_l in range(LAYERS)) {
-                    kn_pipeline(enc, p_h)
-                    kn_buffer(enc, bcvh, 0ul, 0)
-                    kn_buffer(enc, bst, 0ul, 1)
-                    kn_buffer(enc, bprep, 0ul, 2)
-                    kn_buffer(enc, bprep, 0ul, 3)
-                    kn_buffer(enc, baa, 0ul, 4)
-                    kn_buffer(enc, baa, 0ul, 5)
-                    kn_buffer(enc, bo, 0ul, 6)
-                    kn_buffer(enc, bstm, 0ul, 7)
-                    kn_buffer(enc, bgrp, 0ul, 8)
-                    kn_kargs(enc, ka, 9)
-                    kn_dispatch(enc, grid, tg)
-                }
+                enc_layers(enc, p_h, bcvh, bst, bprep, baa, bo, bstm, bgrp, ka, grid, tg)
             })
             print("scan {NPOS} tokens, {sgs} simdgroups a threadgroup: f32 rows + gates in the walk {t_f / double(LAYERS)} ms a layer, half rows + prepared gates {t_h / double(LAYERS)} ms\n")
         }

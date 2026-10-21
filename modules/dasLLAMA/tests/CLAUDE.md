@@ -621,7 +621,9 @@ stored, the f16 twins) through its one-row, rows and window builders and the dec
 4096-float slab and past it (5376, 8192: the columns past the slab re-read), the sandwich rows held off the plain step's as the
 control. The gemm file's `router_f32_gate` holds the prefill router's tile (`MetalF32ExactMm`) at the 35B-A3B shape and at
 64 experts against the dot in double on operands off the f16 lattice, the half-staged stamp over the same rows missing
-the bar as its control. The
+the bar as its control. The prefill file's `dn_groups_gate` carries one checkpoint capture on its second group after that
+group's second row: the capture arena holds the state and the history the oracle reaches over those two rows alone, and the
+state after all three rows missing the captured state is the control. The
 cells that need no kernel: the misc file's `test_metal_served` (a driver's forward answer through `metal_served`: a
 decline passes through and leaves the pool's spin window, a served one opens it, a later decline
 keeps it), `test_metal_moe_kq_twin_pick` (the K-quant MoE twins' pick: a crowned family at every
@@ -1160,13 +1162,18 @@ out and projection planes, the lead rows untouched (the out plane's NaN sentinel
 the oracle's; the three rope-store gates (`rope_kv_arm`, the Metal `rpst_flat_gate` and `rope_store_pocket_gate`)
 assert the roped q differs from its input at a rotated index, so the in-place compare has teeth;
 `test_vkd_dn_rows_base` holds the deltanet conv and scan at a row base past zero (a segmented window's part: `DnConvArgs.row0`,
-`DnScanArgs.row0`) bit for bit the same rows at row 0, the rows ahead of the base keeping their sentinel;
+`DnScanArgs.row0`) bit for bit the same rows at row 0, the rows ahead of the base keeping their sentinel; the row-0 run
+carries one capture after half its rows (`DnScanArgs.cap_n`), its checkpoint state bit for bit a scan over that half alone,
+and the whole run's live state missing it (the control);
 `test_vkd_qkn_rope_window` holds `qkn_rope_cls`'s window form (three rows past two lead rows, the [k | v] projection rows at
 their stride, positions 7 to 9) bit for bit its token rows' form over the same rows, the q rows and both mirrors, the lead q rows
 untouched; `test_vkd_dn_tail` holds the window chain's ring hand-off (`DnTail`) bit for bit to the per-channel CPU form at 5, 3, 2 and 1
 window rows over 200 channels (the last workgroup partial): the window's last taps rows, and under the taps the leading rows off
 the entry image, the words between the two images untouched, the zero-history ring a position-zero call would write as the
-control a continuation's ring must differ from; `test_vkd_dn_family` holds the deltanet conv, the
+control a continuation's ring must differ from; `test_vkd_dn_cap_tail` holds the checkpoint capture's history write
+(`dn_cap_tail_cls`) bit for bit to the ring hand-off's CPU form (`dn_tail_oracle`) for a window cut at the capture's row - two
+captures in one dispatch, one past the taps and one under them reading its first row off the entry image - the words between
+the two rows' images keeping their sentinel; `test_vkd_dn_family` holds the deltanet conv, the
 fused step and the two-phase scan to CPU oracles at head sizes 64 and 128 (the step's one-part
 and two-part state columns, the scan's four- and eight-lane clusters), and the sigmoid out-gate stamps
 (`dn_step_sig_cls`, `dn_scan_p3_sig_cls`, the qwen4exp form) against the same oracles under sigmoid(z) with
@@ -1368,7 +1375,11 @@ to the CPU rails as `codec`.
 snapshot buffers on a bare session carrying a 27B-class recurrent state (151 MB, past the
 `max_unreserved_size` guard) and restores the state from them, the n-gram window and the ring
 row a rejected draft wrote among it; and why a round stays cold (`mtp_round_cold_why` on a Session shell): each of its four
-reasons alone, a round ending on the context's last position drafting.
+reasons alone, a round ending on the context's last position drafting; and the checkpoint capture's contract
+(`test_dn_capture_contract`, `dn_capture_begin` / `dn_capture_check` on a bare Session): stops inside the window in order open one
+unfilled snapshot each at its stop (the control), a stop asked of a session with no recurrent state panics naming it, a stop at
+either window edge, before it or out of order panics naming the window, and the check panics naming the unfilled count until
+`dn_captured` is set.
 `test_mtp_sampled_walk.das` - model-free: the speculative round's sampled accept walk
 (sample-and-match) over a bare 8-token session (`bare_session` of `_mtp_walk_fixture.das`, which the accept-walk and
 landed-sampler files share with `same_rng`) against plain sampled decode of the same rows -
@@ -1389,6 +1400,9 @@ typical judge's three on some seed of twenty). Rejection sampling: the drafter's
 sampler; `mtp_q_of` reads it, a q a thousandth off reds the bar), a draft the row gives at least q's mass is always accepted, one the row gives none is always
 rejected with the residual draw never landing on it, a draft at half q's mass is accepted on about half
 of 400 seeds (at p = q every seed accepts: the control), and the residual over a row that holds q whole falls back to the row's own draw.
+`test_walk_cuts_at_a_stop`: with the caller's stop ids set (`Session.spec_stops`), a run of matching drafts ends on the stop
+draft - its row the last accepted, the drafts past it cut, no token parked - on the exact walk and on the typical walk, whose
+parked draw is dropped; the same runs with no stop ids accept every draft (the control).
 `test_constraint.das` - stocked suite, `-jit` only, skips without tinyllama Q8 (its session sizes the logits
 row; the cell writes the logits): the sampler under a `TokenConstraint` - a sampled draw with no cut probing
 once and refiltering only on a refusal (the admit-all constraint's probe count), the best admitted token when the
@@ -1530,6 +1544,38 @@ by the drafted rounds; a pick left unconsumed would refuse the next round's open
 the driver's region alone, `gpu_resident_mtp_device_home` asserted first): token for token the host-cached speculating
 stream, the device's draft counter (`moe_gpu_resident_drafts`) and verify counter each up by the drafted rounds, no call
 passed to the CPU rails; same skips.
+`test_scheduler_mtp_stop_close` (Qwen3.5-0.8B-MTP at depth 2, the bit-exact kernels pinned - `pin_spec_kernels`, put back): a
+speculating stream finishes on a stop token at cuts 2, 4, 8 and 10 of the counting reply, its tokens before the stop the plain
+reply's, its draft count exactly the figure `drain_owed_drafts` owes (each tick's round the depth under the reply's remaining
+length), and a stop lands as an accepted draft at least once (`mtp_stop_rows`); turn 2 attaches the prompt, the reply and the
+close whole off the finished-turn checkpoint (`n_cached`) and reads the plain scheduler's turn 2 token for token. Its
+controls: the same stream with no stop ids finishes on its length with no round on a stop draft, depth 1 drafts exactly one
+row a tick, and depth 2 more a tick than depth 1. The non-close cuts (`non_close_stop_cuts`, a fresh scheduler a cut, since
+the cuts' turn-2 prompts share openings): the stop is the reply's own token and `close_toks` the template's `<|im_end|>` and
+newline; where the stop's row stands (an accepted draft) the close is not evaled, the finished turn leaves no checkpoint and
+turn 2 on the prompt, the reply and the close attaches 0 rows; where the stop was sampled it attaches them whole; turn 2
+reads the plain scheduler's either way, and a stop's row stands on some cut. `test_scheduler_mtp_length_cap`: depth-3 streams
+capped at two tokens - the one round past the prefill's token drafts one row, so an uncapped round accepts rows past the
+reply's end - and at seven, each finishing on its length with the plain reply, its draft count exactly the capped figure,
+turn 2 attaching the prompt and the reply whole; the depth-1 control drafts one row a tick and the seven-token stream more.
+`test_scheduler_capture_stops` (the same carrier, `pin_spec_kernels`): a counting prompt of 120 numbers (502 tokens; a count,
+so every next token is the prompt's own and a fresh window and a capture plus a tail agree token for token) carries the
+server's four stops - the head at 48, the system opening at 96, the stable history end at 160 and the message end at the
+prompt's last token - and runs four legs: the per-token (`recurrent`) and the chunked scan, each with one window holding
+every stop and with 96-row windows, so a window ends ON the system opening (the window's end files it, never a capture: no
+panic, `prefill_evals` the window count). Every leg leaves the four checkpoints and the finished turn's, each of its kind -
+the head and the system opening openings, the stable stop (the request's own, `ckpt_at_tail`), the message end and the
+finished turn tails; the window's reply is an uncached scheduler's; and a prompt sharing each interior stop's opening
+attaches that checkpoint whole and continues as an uncached one-window prefill does. Per scan, the state and conv history
+captured at 96 inside the one window are bit for bit what the window ending there leaves (both scans cut their chunks at 48
+and 96 alike), the stop at 48's state and history differing as the control - the token compares alone are blind to a lost
+state on a counting tail. `test_scheduler_capture_stops_ngram` (family `qwen4exp`, arm `fam-qwen4exp`, large tier, a
+das_metal build): the served Qwen3.8-Flash-Next UD-IQ4_XS image with its split head (`load_model_cached` under
+`set_mtp_head_path`, `MetalMode.required` for the load, speculation off, the Metal prefill and decode overrides selected) runs
+the same one-window and window-ending-on-96 legs on 60 numbers (240 tokens); the n-gram side input captured at 96 holds the
+last tokens bit for bit and the conv history within a thousandth of its largest magnitude (reads 3e-4: the projection GEMM
+rounds the two window shapes apart) of the window ending there, the stop at 48's history outside the bar the control; the
+recurrent state's distance is logged (0.24 against the control's 2.0).
 `test_gpu_tier.das` - model-free: the segments form's media guard (`test_segments_served_by_override`: under a
 probe override registered with a segments form and neither the per-row-table nor the deepstack arm, two plain sessions
 take the form, a session with `mrope_pos` rows or `ds_active` declines it, both take it again cleared, and no active
@@ -2008,7 +2054,12 @@ counted and each served alone, and an owner whose region holds fewer rows than i
 fallback's one `gap` pass. The recurrent cells (`recurrent_segments_cells`) run the segments cell, a 2-row tail under the conv
 taps beside a 31-row one, and the two 300-row tails on Qwen3.5-0.8B Q8_0, its NextN-headed twin (the carry a row a segment) and,
 large tier, Qwen3.6-35B-A3B-MTP IQ4_XS (the routed block over every row of the window), each asserting the driver's segmented
-window takes the model. The E-series cell (`test_gpu_resident_segments_gemma4_e2b`, family `gemma4e`: gemma-4-E2B Q8_0 at the
+window takes the model. Their captures cell (`captures_cell`): two device-home sessions' tails with checkpoint stops inside them as one segmented
+call, session A's region already keeping a checkpoint row at its opening (`gpu_device_kv_checkpoint`), so the two segments'
+captures plan different rows of their regions; both parked, each region's rows read back (`gpu_device_kv_checkpoints`), and
+every stop's row adopted by a fresh session (`gpu_device_kv_adopt` at the stop, the later stop of a region first) that
+continues the tail and takes the fed steps within the split bar of the solo form - a landing that matched the call's
+records to a segment by a free row alone took another segment's record here. The E-series cell (`test_gpu_resident_segments_gemma4_e2b`, family `gemma4e`: gemma-4-E2B Q8_0 at the
 gemma rig's bar) runs the segments cell and the two 300-row tails, then the host-embedded decline (`host_embedded_cell`): with the
 tier's token-table gate unseated (`unregister_embed_gpu_gate`, put back as found) the host embeds every row, the side rows have no
 ids to gather off, and two openings ride no segmented window - each its own window, its last row within the bar of the same
@@ -2094,11 +2145,13 @@ decoded in the log (a recurrent layer owns no K/V rows, so its pool blob is empt
 mirror's walk reads no base for it); the MTP carrier also runs the prefix checkpoint cells
 (`ARCHITECTURE_ENGINE_SERVING.md#prefix-recurrent-checkpoints`): `test_metal_prefix_checkpoint` - three
 prompts on one shared opening (asserted past two 64-row pages and off a page boundary) through one speculative scheduler: the first two attach nothing,
-the second's prefill stops at the opening and leaves the checkpoint, the third attaches it, and the
+the second's prefill leaves the checkpoint at the opening inside its window, the third attaches it, and the
 second and third reply token for token as on a scheduler with no cache whose chunk is the opening
 (the cached run's own cuts), the two replies differing, then a marked request on a scheduler whose
 chunk is three quarters of the opening with the idle quantum off: the first tick prefills the whole
-opening, a checkpoint within a chunk and a half landing in one window; `test_metal_prefix_checkpoint_hinted` - a
+opening: the first tick's window is the chunk alone and leaves no checkpoint, the second carries the opening's stop inside
+it and leaves the checkpoint captured at the stop's row, the run ending on two (the opening's and the finished turn's);
+`test_metal_prefix_checkpoint_hinted` - a
 request marked with its stable opening (`PendingReq.stable_at`) leaves the checkpoint at once, the
 second prompt attaches it; a marked first request leaves two checkpoints (its opening and its
 finished turn), an unmarked one its prompt's end and its finished turn, and the attached reply is token for
@@ -2108,6 +2161,13 @@ page boundary lands the donor's logits bit for bit after the same tail (the carr
 restored, the partial page its own copy), a checkpoint with its recurrent state zeroed lands
 logits 5% of the largest or more away, every page back in the pool - the reply to a strongly
 prompted tail survives a lost state, which is why this cell holds the logits;
+`test_metal_prefix_checkpoint_capture_logits` - a checkpoint captured inside one window: a request marked at a stop past two
+pages and off a page boundary, its whole prompt one prefill call (`prefill_evals` 1, one checkpoint standing after that
+window), then a fresh session attached at the capture and fed the tail lands within 0.2% of the largest logit of an uncached
+session prefilled over the opening and then the tail (the capture stands inside a window of the whole prompt, the reference's
+state at the end of a window of the opening alone, so the scans and GEMM tiles round apart: reads 0.055%, the prompt as one
+window 0.049% off the reference), the capture with its recurrent state zeroed landing finite logits 5% of the largest or more
+away (reads 17.5%);
 `test_metal_prefix_checkpoint_next_turn` - a finished turn's checkpoint: the prompt plus its 40
 counted tokens attach for the next turn, which continues the count token for token against an
 uncached 80-token stream. Stocked
@@ -2936,7 +2996,11 @@ prefill stops (`prefix_checkpoint_at_`: the caller's stable opening, else the op
 checkpoint shares, a token short of a prompt an earlier one holds whole, nowhere under a page past
 the hit or on a model with no recurrent state), and the side state (the n-gram input's last tokens
 and conv history ride the checkpoint; a snapshot of another state size is refused and leaves the
-session as it stood), and the device pool's verbs (`test_prefix_pool_carrier`: a carrier session takes the
+session as it stood), the donation's answer (`test_prefix_insert_reasons`: "" for a kept checkpoint, a touched one and a dense
+model's pages; the refusal naming its cause - a token list short of the session's position both positions, a session with no
+evaled row, a cache that keeps no checkpoint), a snapshot filed at a stop the cache keeps (`test_prefix_snapshot_stop_touched`:
+no second checkpoint, insert, byte charge or page reference, the kept one used now and promoted to an opening), and the device
+pool's verbs (`test_prefix_pool_carrier`: a carrier session takes the
 whole pages the cache already holds under the longest opening a checkpoint shares - none from an empty cache, the
 opening's partial page never - and the rows past them are its own; a state taken off another session enters as a
 checkpoint, an opening or a tail as asked, the shared page counted once in the bytes, a state off the carrier's
@@ -3791,7 +3855,9 @@ Every `[test]` file requiring a `dasllama/*` module outside this folder, each wi
   that asked for none, its own for one that asked; its speculating-slot cell (`test_slot_mtp_device_home`, Qwen3.5-0.8B-MTP
   under `DASLLAMA_GPU=1` and the JIT, skips without them) builds a slot over the loaded model, holds that
   `slot_wants_device_kv` homes its stream on the device and the model card says so, then steps a greedy stream and holds the
-  device's draft and verify counters up by the slot's drafted rounds.
+  device's draft and verify counters up by the slot's drafted rounds; its budget cell holds `slot_prefix_states` over a synthetic
+  one-recurrent-layer Config (704 state floats, a 35584-byte checkpoint): 1024 for a budget of 0 or under, 256 under 256
+  checkpoints' bytes, the whole checkpoints between, 1024 past 1024.
 - `utils/dasllama-server/test_exchange_client.das` - requires `dasllama/dasllama_exchange` by
   registered name (nothing pins it to that directory); it stays beside the server suites
   because its fixed test port is coordinated with theirs (see its `TEST_PORT` note).

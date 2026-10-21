@@ -1074,7 +1074,6 @@ def test_metal_prefix_checkpoint(t : T?) {
                 t |> success(ids_equal(xc.toks, rc.toks), "the attached stream's tokens are the whole prefill's")
                 t |> success(ids_equal(xb.toks, rb.toks), "the stream that left the checkpoint emits what it emits with no cache")
                 t |> success(!ids_equal(rb.toks, rc.toks), "the second and third replies differ, so a replayed session would show")
-                // a checkpoint within a chunk and a half is taken in one window; the idle quantum is off, so every tick takes the chunk
                 let chunk = cut * 3l / 4l
                 var near <- create_scheduler(tr, 1l, 4l, chunk, 64l, 0l, KVDtype.f16, true, 0l)
                 var events : array<SchedEvent>
@@ -1083,8 +1082,12 @@ def test_metal_prefix_checkpoint(t : T?) {
                 req.stable_at = cut
                 t |> success(submit(tr, near, req), "the request marked at its opening queued")
                 scheduler_step(tr, near, events)
-                t |> equal(near.prefill_tokens, cut, "a checkpoint {cut} tokens out lands in the first window of a {chunk}-token chunk")
+                t |> equal(near.prefill_tokens, chunk, "the first window is the {chunk}-token chunk: a checkpoint {cut} tokens out no longer ends it")
+                t |> equal(near.prefix.n_state_inserts, 0l, "... and no checkpoint stands yet")
+                scheduler_step(tr, near, events)
+                t |> success(near.prefix.n_state_inserts >= 1l, "the second window carried the stop at {cut} inside it and left its checkpoint ({near.prefix.n_state_inserts} standing)")
                 drain(tr, near, events)
+                to_log(LOG_INFO, "near: {near.prefix.n_state_inserts} checkpoints inserted over the prompt and the finished turn\n")
                 t |> equal(near.prefix.n_state_inserts, 2l, "the opening's checkpoint stands, and the finished turn's after it")
                 delete events
                 delete near
@@ -1222,6 +1225,110 @@ def test_metal_prefix_checkpoint_logits(t : T?) {
                 delete blank
                 delete cache
                 delete pool
+                delete head
+                delete tail
+                delete prompt
+                set_mtp_spec(prev_spec)
+            }
+            set_metal_mode(prior_mode)
+            delete tr
+        } else {
+            t |> skip("dasMetal not built")
+        }
+    }
+}
+
+//! one request marked at `cut` through `sch`, its whole prompt one prefill window: the checkpoint at `cut` is the window's
+//! capture
+def private serve_marked_one_window(t : T?; tr : Model; var sch : Scheduler; prompt : array<int64>; cut : int64) {
+    let np = long_length(prompt)
+    t |> success(chunk_defaults(tr).idle >= np, "the idle quantum ({chunk_defaults(tr).idle}) takes the whole {np}-token prompt as one window")
+    var events : array<SchedEvent>
+    var none : array<int64>
+    var req <- make_req(1l, prompt, SamplingParams(), CKPT_NEW, none)
+    req.stable_at = cut
+    t |> success(submit(tr, sch, req), "the request marked at {cut} queued")
+    scheduler_step(tr, sch, events)
+    t |> equal(sch.prefill_evals, 1l, "the prompt took one prefill call")
+    t |> equal(sch.prefill_tokens, np, "... over the whole prompt, the stop at {cut} inside it")
+    t |> equal(sch.prefix.n_state_inserts, 1l, "the window left the checkpoint at its stop: a capture")
+    drain(tr, sch, events)
+    var at_cut = 0
+    for (st in sch.prefix.states) {
+        if (long_length(st.tokens) == cut) {
+            at_cut++
+        }
+    }
+    t |> equal(at_cut, 1, "one checkpoint stands at the stop ({length(sch.prefix.states)} standing)")
+    delete events
+}
+
+//! the capture cell's bar, of the largest logit: the capture stands inside a window of the whole prompt and the reference's
+//! state at the end of a window of the opening alone, so the two scans and the GEMM tiles round apart - 0.055 % on the M5
+//! Max, the prompt as one window 0.049 % off the reference, the capture with its state zeroed 17.5 %
+let CAPTURE_BAR_REL = 0.002
+
+//! A checkpoint a stop inside one prefill window leaves is the arena's capture, not the window's end state, so its contents
+//! are held on the logits.
+[test]
+def test_metal_prefix_checkpoint_capture_logits(t : T?) {
+    t |> run("a session attached at a checkpoint captured inside one prefill window lands an uncached prefill's logits, and the capture with its recurrent state zeroed does not (Qwen3.5-0.8B-MTP Q8)") <| @(t : T?) {
+        if (!family_on(t, "qwen35")) return
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            let path = path_join(models_dir(), "Qwen3.5-0.8B-MTP-Q8_0.gguf")
+            return if (!jit_model_available(t, path))
+            let prior_mode = get_metal_mode()
+            set_metal_mode(MetalMode.when_available)
+            var tr <- blob_twin(t, path, 512l)
+            with_dasllama_jobque_() {
+                let prev_spec = get_mtp_spec()
+                set_mtp_spec(true)
+                let opening = repeat("You are a careful assistant. Answer briefly and precisely. ", 12)
+                var prompt <- encode(tr, "{opening}Gamma: list the days of the week: Monday,", true, false)
+                let np = long_length(prompt)
+                let cut = np - 11l
+                t |> success(cut > 128l && cut % 64l != 0l, "the stop sits past two 64-row pages and off a page boundary ({cut} of {np} tokens)")
+                var head <- [for (i in range64(cut)); prompt[i]]
+                var tail <- [for (i in range64(cut, np)); prompt[i]]
+                var sch <- create_scheduler(tr, 1l, 4l, 64l, 64l, 0l, KVDtype.f16, true)
+                serve_marked_one_window(t, tr, sch, prompt, cut)
+                var cold <- create_session(tr, sch.pool)
+                eval(tr, cold, head)
+                eval(tr, cold, tail)
+                var warm <- create_session(tr, sch.pool)
+                t |> equal(prefix_attach(sch.prefix, sch.pool, warm, prompt), cut, "the capture attaches at the stop ({cut} of {np} tokens)")
+                eval(tr, warm, tail)
+                to_log(LOG_INFO, "next token after the tail - uncached: '{eyeball_text(tr, [argmax_of(cold.logits)])}' attached: '{eyeball_text(tr, [argmax_of(warm.logits)])}'\n")
+                var whole <- create_session(tr, sch.pool)
+                eval(tr, whole, prompt)
+                let top = logits_maxabs(cold.logits)
+                let bar = CAPTURE_BAR_REL * top
+                let near = logits_maxdiff(warm.logits, cold.logits)
+                to_log(LOG_INFO, "attached at the capture: logits off the uncached prefill's by {near} of a largest {top} (bar {bar}); the prompt as one window sits {logits_maxdiff(whole.logits, cold.logits)} off it\n")
+                t |> success(near <= bar, "the logits attached at the capture sit within {bar} of the uncached prefill's ({near})")
+                release_kv_pages(whole)
+                delete whole
+                for (st in sch.prefix.states) {
+                    if (long_length(st.tokens) == cut) {
+                        for (v in st.snap.state) {
+                            v = 0.0
+                        }
+                    }
+                }
+                var blank <- create_session(tr, sch.pool)
+                t |> equal(prefix_attach(sch.prefix, sch.pool, blank, prompt), cut, "the zeroed capture attaches too")
+                eval(tr, blank, tail)
+                t |> success(all_finite(blank.logits), "the zeroed capture's logits are finite")
+                let off = logits_maxdiff(blank.logits, cold.logits)
+                to_log(LOG_INFO, "zeroed captured state: logits off by {off} of a largest {top}, next token '{eyeball_text(tr, [argmax_of(blank.logits)])}'\n")
+                t |> success(off > 0.05 * top, "a capture with its recurrent state zeroed lands logits past the bar ({off} of {top})")
+                release_kv_pages(cold)
+                release_kv_pages(warm)
+                release_kv_pages(blank)
+                delete cold
+                delete warm
+                delete blank
+                delete sch
                 delete head
                 delete tail
                 delete prompt

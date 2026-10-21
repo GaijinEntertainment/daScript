@@ -473,6 +473,16 @@ def test_prefix_state_budget(t : T?) {
         t |> equal(4096l, prefix_state_budget_mb(0l, 0l), "RAM unknown")
         t |> equal(512l, prefix_state_budget_mb(512l, 64l), "an explicit budget stands")
     }
+    t |> run("the checkpoint count follows the byte budget over one checkpoint, 256 to 1024, the cap where nothing bounds it") @(t : T?) {
+        let c = Config(n_layers = 2l, recr_mask = 1ul, ssm_n_group = 1l, ssm_d_state = 16l, ssm_d_inner = 32l, ssm_d_conv = 4l, ssm_dt_rank = 2l)
+        t |> equal(dn_state_floats(c), 704l, "one recurrent layer: 3 x 64 conv floats and 2 x 16 x 16 state floats")
+        let one = 35584l   // 4 x 704 bytes of state and the 32768-byte token list
+        t |> equal(slot_prefix_states(c, 0l), 1024l, "an unbounded budget takes the cap")
+        t |> equal(slot_prefix_states(c, -1l), 1024l, "as does a budget under zero")
+        t |> equal(slot_prefix_states(c, 1000000l), 256l, "a budget under 256 checkpoints keeps the floor")
+        t |> equal(slot_prefix_states(c, 500l * one + one - 1l), 500l, "between them, the whole checkpoints the budget holds")
+        t |> equal(slot_prefix_states(c, 2000l * one), 1024l, "a budget past 1024 checkpoints keeps the cap")
+    }
     t |> run("a cgroup limit file's byte count, no limit read as none") @(t : T?) {
         t |> equal(58, ram_gb_from_cgroup("61999996928\n"), "a 62 GB container limit (v2)")
         t |> equal(1, ram_gb_from_cgroup("268435456\n"), "256 MiB reads as one GiB, not no limit")
