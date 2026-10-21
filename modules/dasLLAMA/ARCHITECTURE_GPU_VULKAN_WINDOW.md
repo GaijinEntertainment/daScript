@@ -83,7 +83,8 @@ the scan's pushes name a part's records (`DnScanArgs.cap_n`, `cap_rec`, `cap_sta
 that row into the checkpoint row (`snap_dev`, the layer's `snap_off`) and walks on over the live slot untouched; `dn_cap_tail_cls`
 writes the taps projected rows before the row - the entry image under the taps - into the row's ring image 0, whose parity the
 call marks 0 (`pf_caps_done`). The hyper-connection chain copies each capture's n-gram ring rows into the row ahead of the ring's
-own update (`pf_hc_side`). After the call the tier lands them (`rdec_caps_land`): a device-home session keeps each row at its
+own update (`pf_hc_side`). After the call the tier lands them (`rdec_caps_land`, each segment its own records of the call's
+list, in order): a device-home session keeps each row at its
 stop's position, as `gpu_device_kv_checkpoint` would have saved it; a host-cached session peeks the row into its snapshot
 (`rdec_peek_snapshot`) and frees it. The token-command peel keeps no state at an interior row, so a call with a capture takes
 the window chain. The checkpoint rows exist from the first save or the first capture (`rd_snap_alloc`); until then each

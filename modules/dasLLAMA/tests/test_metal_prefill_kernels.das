@@ -5689,6 +5689,9 @@ def private dn_groups_gate(t : T?; var dev, queue) {
             capw |> push_from(st2, hw2)
             check_buf(t, "dn groups capture: group B's state and history after two of its three rows", mc.buf[bcap], capw, BAR_FP, Shape(row_width = ds))
             var inscope capg <- mc |> plane_run(bcap)
+            var inscope cap_state <- [for (k in range(ssz)); capg[k]]
+            var inscope state3 <- [for (k in range(ssz)); poolw[sb + k]]
+            t |> success(all_finite(cap_state) && all_finite(state3), "dn groups capture control: every value it reads is finite")
             var off3 = 0
             for (k in range(ssz)) {
                 off3 += abs(capg[k] - poolw[sb + k]) > 1e-3 ? 1 : 0

@@ -5544,16 +5544,13 @@ def private vulkan_resident_prefill_segments(t : Model; var segs : array<Prefill
     let vocab = long_length(segs[0].s.logits)
     g_rdec_seg_logits |> reserve(n * vocab)
     g_rdec_seg_logits |> resize(n * vocab)
-    var captures = false
-    for (sg in segs) {
-        captures = captures || !empty(sg.s.dn_captures)
-    }
-    if (captures) {
-        for (sg, i in segs, count()) {
+    g_rdec_caps |> clear()
+    for (sg, i in segs, count()) {
+        if (!empty(sg.s.dn_captures)) {
             rdec_caps_plan(*sg.s, int64(i), sg.start_pos, g_rdec_seg_regions[i])
         }
-        rdec_prefill_caps(g_rdec_caps)
     }
+    rdec_prefill_caps(g_rdec_caps)
     let ts_run = ref_time_ticks()
     rdec_prefill_segs(g_rdec_seg_x, g_rdec_seg_ids, ids, c.embed_scale, g_rdec_seg_cos, g_rdec_segs, g_rdec_seg_logits, @@rdec_host_experts_rows)
     for (sg, i in segs, count()) {
@@ -5564,7 +5561,7 @@ def private vulkan_resident_prefill_segments(t : Model; var segs : array<Prefill
         rdec_select_region(g_rdec_seg_regions[i])
         rdec_prefill_landed(t, s, g_rdec_seg_regions[i], sg.npos, sg.start_pos, int64(i), false)   //! a segmented window warms no head row
         if (!empty(s.dn_captures)) {
-            rdec_caps_land(s, g_rdec_seg_regions[i])
+            rdec_caps_land(s, int64(i), g_rdec_seg_regions[i])
         }
     }
     if (g_env_gpu.gpu_prof) {
@@ -5636,14 +5633,19 @@ def private vulkan_resident_prefill_go(t : Model; var s : Session; npos, start_p
     if (r < 0l) {
         return false
     }
-    let peel = rdec_peel_fits(t, npos) && empty(s.dn_captures)
+    var peel = rdec_peel_fits(t, npos)
+    if (peel && !empty(s.dn_captures)) {
+        rdec_peel_declined("a checkpoint stop inside the window (the token commands leave no state at an interior row)")
+        peel = false
+    }
+    g_rdec_caps |> clear()
     if (c.recr_mask != 0ul) {
         rdec_dn_prefill_entry(s, c, start_pos, peel)
         if (!empty(s.dn_captures)) {
             rdec_caps_plan(s, 0l, start_pos, r)
-            rdec_prefill_caps(g_rdec_caps)
         }
     }
+    rdec_prefill_caps(g_rdec_caps)
     if (peel) {
         let ts_peel = ref_time_ticks()
         rdec_prefill_peel(t, s, r, npos, start_pos)
@@ -5684,7 +5686,7 @@ def private vulkan_resident_prefill_go(t : Model; var s : Session; npos, start_p
     }
     rdec_prefill_landed(t, s, r, npos, start_pos, 0l)
     if (!empty(s.dn_captures)) {
-        rdec_caps_land(s, r)
+        rdec_caps_land(s, 0l, r)
     }
     return true
 }
@@ -5693,10 +5695,7 @@ var private @scratch g_rdec_caps : array<RdecPfCap>   //! the next prefill call'
 
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-dn-block")]   //! once per window with a stop inside it: the callers guard
 def private rdec_caps_plan(var s : Session; seg, start_pos, r : int64) {
-    if (seg == 0l) {
-        g_rdec_caps |> clear()
-    }
-    return if (empty(s.dn_captures) || r < 0l)
+    verify(r >= 0l, "dasLLAMA resident prefill: checkpoint rows planned for a call with no region")
     if (!rdec_dn_snaps_installed()) {
         panic("dasLLAMA resident prefill: a checkpoint stop inside the window asked of a driver with no checkpoint rows")
     }
@@ -5710,11 +5709,10 @@ def private rdec_caps_plan(var s : Session; seg, start_pos, r : int64) {
 }
 
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-dn-block")]   //! once per window with a stop inside it: the callers guard
-def private rdec_caps_land(var s : Session; r : int64) {
-    return if (empty(s.dn_captures))
+def private rdec_caps_land(var s : Session; seg, r : int64) {
     var next = 0l
     for (k in range64(long_length(s.dn_captures))) {
-        while (next < long_length(g_rdec_caps) && g_rdec_regions[r].snap_pos[g_rdec_caps[next].slot] != -1l) {
+        while (next < long_length(g_rdec_caps) && g_rdec_caps[next].seg != seg) {   //! the segments' records share the list: a segment lands its own, in order
             next++
         }
         verify(next < long_length(g_rdec_caps), "dasLLAMA resident prefill: a capture with no checkpoint row planned for it")
@@ -5740,9 +5738,6 @@ def private rdec_caps_land(var s : Session; r : int64) {
         g_rdec_regions[r].snap_pos[slot] = 0l
     }
     s.dn_captured = true
-    if (next >= long_length(g_rdec_caps)) {
-        g_rdec_caps |> clear()
-    }
 }
 
 def private rdec_prefill_landed(t : Model; var s : Session; r, npos, start_pos, carry_row : int64; warmed : bool = true) {

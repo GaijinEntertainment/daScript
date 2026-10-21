@@ -13,7 +13,7 @@ prefix a rope-store kernel takes; the single-row driver's greedy chain and the M
 sections build on, the assistant-drafter driver's role row included, stays in
 `ARCHITECTURE_GPU.md#gpu-backends`.
 
-### The speculative round on Metal {#mtp-round-one-join}
+### The speculative round, one join on every home {#mtp-round-one-join}
 
 **The speculative round is the common one on every home (`mtp_spec_round_k`), and the Metal decode driver fills its
 seats.** The round drafts its k tokens through the draft seat (`metal_mtp_draft_seat`: the single-row draft forward,

@@ -422,22 +422,17 @@ def submit(model : Model; var sch : Scheduler; var req : PendingReq) : bool {
     return true
 }
 
-//! the nearest checkpoint stop past the rows prefilled so far, 0 when none is left: the system text, the system opening, the request's own
-def private next_checkpoint(st : Stream) : int64 {
-    for (at in fixed_array(st.ckpt_head_at, st.ckpt_sys_at, st.ckpt_at, st.ckpt_end_at)) {
-        if (at > st.n_prefilled) {
-            return at
-        }
-    }
-    return 0l
-}
+//! the stream's checkpoint stops in row order, 0 for one not planned: the opening's head, the system opening, the request's own, the turn's end
+def private ckpt_stops(st : Stream) => fixed_array(st.ckpt_head_at, st.ckpt_sys_at, st.ckpt_at, st.ckpt_end_at)
 
-def private at_checkpoint(st : Stream) : bool =>
-    st.n_prefilled == st.ckpt_head_at || st.n_prefilled == st.ckpt_sys_at || st.n_prefilled == st.ckpt_at || st.n_prefilled == st.ckpt_end_at
+def private at_checkpoint(st : Stream) : bool => find_index(ckpt_stops(st), st.n_prefilled) >= 0
+
+//! a stop at row `at` this conversation's next turn attaches at, not an opening other requests share
+def private checkpoint_is_tail(st : Stream; at : int64) : bool => (st.ckpt_at_tail && at == st.ckpt_at) || at == st.ckpt_end_at
 
 //! a checkpoint stop inside the rows [lo, hi]: the span's one-call prefill cannot take them, since the stop needs the eval to end there
 def private checkpoint_within(st : Stream; lo, hi : int64) : bool {
-    for (at in fixed_array(st.ckpt_head_at, st.ckpt_sys_at, st.ckpt_at, st.ckpt_end_at)) {
+    for (at in ckpt_stops(st)) {
         if (at > lo && at <= hi) {
             return true
         }
@@ -591,10 +586,7 @@ def private advance_with(m : Model; var st : Stream; tok : int64; var events : a
 //! the stream's reasoning budget can still force a close: a token it emits may queue one, so its round drafts one token
 def private think_budget_armed(st : Stream) : bool => st.think_budget > 0l && !empty(st.think_marks.close) && st.think_state != 2
 
-def private round_depth_cap(st : Stream) : int64 {
-    let left = max(st.max_new - st.n_gen, 1l)
-    return think_budget_armed(st) ? 1l : left
-}
+def private round_depth_cap(st : Stream) : int64 => think_budget_armed(st) ? 1l : max(st.max_new - st.n_gen, 1l)
 
 //! Where the emitted token stands against the reasoning budget: the span's open token enters it, every token inside it counts,
 //! the close token the model writes leaves it, and the budget reached inside it - or the length cap drawing closer than the
@@ -980,7 +972,7 @@ def private window_stops(var st : Stream; take : int64) {
     st.session.dn_stops |> clear()
     let lo = st.n_prefilled
     let hi = lo + take
-    for (at in fixed_array(st.ckpt_head_at, st.ckpt_sys_at, st.ckpt_at, st.ckpt_end_at)) {
+    for (at in ckpt_stops(st)) {
         if (at > lo && at < hi && find_index(st.session.dn_stops, at) < 0) {
             st.session.dn_stops |> push(at)
         }
@@ -990,22 +982,36 @@ def private window_stops(var st : Stream; take : int64) {
 
 [arch(at="../ARCHITECTURE_ENGINE_SERVING.md#prefix-recurrent-checkpoints")]
 def private file_captures(m : Model; var sch : Scheduler; i : int64) {
-    var st & = unsafe(sch.streams[i])
-    for (k in range64(long_length(st.session.dn_captures))) {
-        let at = st.session.dn_captures[k].pos
-        let tail = (st.ckpt_at_tail && at == st.ckpt_at) || at == st.ckpt_end_at
-        if (st.session.device_kv) {
-            if (device_pool_on(m, sch, st.session)) {
-                st.pool_stops |> push((at = at, opening = at <= st.ckpt_shared_to))
-            }
-            to_log(LOG_INFO, "[stream {st.id}] device checkpoint at {at} tok inside the window: the region keeps the recurrent state here\n")
-        } else {
-            prefix_insert_snapshot(sch.prefix, sch.pool, st.session, st.prompt, st.session.dn_captures[k], !tail, at)
-            to_log(LOG_INFO, "[stream {st.id}] prefix checkpoint at {at} tok inside the window: {tail ? "this conversation's next turn" : "the next prompt on this opening"} attaches here ({length(sch.prefix.states)} checkpoints, {sch.prefix.state_bytes / 1048576l} MB)\n")
-        }
+    for (k in range64(long_length(sch.streams[i].session.dn_captures))) {
+        file_checkpoint(m, sch, i, sch.streams[i].session.dn_captures[k].pos, k)
     }
-    st.session.dn_captures |> resize(0)
-    st.session.dn_stops |> clear()
+    sch.streams[i].session.dn_captures |> resize(0)
+    sch.streams[i].session.dn_stops |> clear()
+}
+
+//! Stream `i`'s checkpoint at row `at` is filed: a device-home stream notes a stop its region kept for the park's host
+//! pool copy, a host-cached one inserts the state into the prefix pool - capture `cap` of the window's `dn_captures`,
+//! or the session's own state at the window's end when `cap` is -1.
+[arch(at="../ARCHITECTURE_ENGINE_SERVING.md#prefix-recurrent-checkpoints")]
+def private file_checkpoint(m : Model; var sch : Scheduler; i, at, cap : int64) {
+    var st & = unsafe(sch.streams[i])
+    let site = cap >= 0l ? "inside the window" : "at the window's end"
+    if (st.session.device_kv) {
+        let kept = cap >= 0l || gpu_device_kv_checkpoint(st.session)
+        if (kept && device_pool_on(m, sch, st.session)) {   //! the host pool's copy waits for the park: nothing crosses the bus before the first token
+            st.pool_stops |> push((at = at, opening = at <= st.ckpt_shared_to))
+        }
+        to_log(LOG_INFO, "[stream {st.id}] device checkpoint at {at} tok {site}: {kept ? "the region keeps the recurrent state here" : "not kept"}\n")
+        return
+    }
+    let tail = checkpoint_is_tail(st, at)
+    if (cap >= 0l) {
+        prefix_insert_snapshot(sch.prefix, sch.pool, st.session, st.prompt, st.session.dn_captures[cap], !tail, at)
+    } else {
+        moe_gpu_hydrate_session(m, st.session)   //! the pages the checkpoint holds come down from a GPU driver's copy first
+        prefix_insert(sch.prefix, sch.pool, st.session, st.prompt, "", !tail)
+    }
+    to_log(LOG_INFO, "[stream {st.id}] prefix checkpoint at {at} tok {site}: {tail ? "this conversation's next turn" : "the next prompt on this opening"} attaches here ({length(sch.prefix.states)} checkpoints, {sch.prefix.state_bytes / 1048576l} MB)\n")
 }
 
 [arch(at="../ARCHITECTURE_ENGINE_SERVING.md#scheduler-step")]
@@ -1055,18 +1061,8 @@ def private note_prefilled(m : Model; var sch : Scheduler; var events : array<Sc
     if (!empty(sch.streams[i].session.dn_captures)) {
         file_captures(m, sch, i)
     }
-    if (at_checkpoint(sch.streams[i]) && sch.streams[i].session.device_kv) {
-        let kept = gpu_device_kv_checkpoint(sch.streams[i].session)
-        let at = sch.streams[i].n_prefilled
-        if (kept && device_pool_on(m, sch, sch.streams[i].session)) {   //! the host pool's copy waits for the park: nothing crosses the bus before the first token
-            sch.streams[i].pool_stops |> push((at = at, opening = at <= sch.streams[i].ckpt_shared_to))
-        }
-        to_log(LOG_INFO, "[stream {sch.streams[i].id}] device checkpoint at {at} tok: {kept ? "the region keeps the recurrent state here" : "not kept"}\n")
-    } elif (at_checkpoint(sch.streams[i])) {
-        let tail = (sch.streams[i].ckpt_at_tail && sch.streams[i].n_prefilled == sch.streams[i].ckpt_at) || sch.streams[i].n_prefilled == sch.streams[i].ckpt_end_at
-        moe_gpu_hydrate_session(m, sch.streams[i].session)   //! the pages the checkpoint holds come down from a GPU driver's copy first
-        prefix_insert(sch.prefix, sch.pool, sch.streams[i].session, sch.streams[i].prompt, "", !tail)
-        to_log(LOG_INFO, "[stream {sch.streams[i].id}] prefix checkpoint at {sch.streams[i].n_prefilled} tok: {tail ? "this conversation's next turn" : "the next prompt on this opening"} attaches here ({length(sch.prefix.states)} checkpoints, {sch.prefix.state_bytes / 1048576l} MB)\n")
+    if (at_checkpoint(sch.streams[i])) {
+        file_checkpoint(m, sch, i, sch.streams[i].n_prefilled, -1l)
     }
     begin_decoding_if_prefilled(m, sch, events, i)
 }

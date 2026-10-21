@@ -129,14 +129,7 @@ def ngram_gather(t : Model; s : Session; tokens : array<int64>; p : int64; var d
 
 //! Slide the window over the batch's last rows (a batch shorter than the window keeps its older slots)
 def private ngram_advance(var s : Session; tokens : array<int64>; npos : int64) {
-    let nprev = long_length(s.ple_prev)
-    let keep = max(0l, nprev - npos)
-    for (i in range64(keep)) {
-        s.ple_prev[i] = s.ple_prev[i + npos]
-    }
-    for (i in range64(keep, nprev)) {
-        s.ple_prev[i] = tokens[npos - (nprev - i)]
-    }
+    ngram_window_at(s.ple_prev, tokens, npos, s.ple_prev)
 }
 
 def private ple_reset(var s : Session) {

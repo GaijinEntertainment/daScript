@@ -1,9 +1,8 @@
 # dasLLAMA tests - Kernel Cells Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `../ARCHITECTURE_GPU.md` for a `[vk_dispatch]` or `[metal_dispatch]` kernel,
-`../ARCHITECTURE_CPU_KERNELS.md` for a CPU kernel in `../dasllama/dasllama_math*.das`. Planned
-work: `../followup_general.md`, `../followup_vulkan.md`, `../followup_metal.md`.
+docs: `../ARCHITECTURE_GPU.md`, `../ARCHITECTURE_CPU_KERNELS.md`. Planned work:
+`../followup_general.md`, `../followup_vulkan.md`, `../followup_metal.md`.
 
 A cell is one `t |> run` subtest, or a `[test]` function that runs no subtest; a helper's asserts
 belong to every cell that calls it. A CPU kernel is a function that writes an output buffer from
@@ -77,8 +76,9 @@ compare - a sentinel scan, a per-row flag - logs its mismatch count and first mi
 only how many.
 
 **A kernel-unit cell with a kernel run whose output no CPU-oracle compare covers at that run's
-shapes is a defect: the compare sits in that cell, or - where the cell compares two kernel forms
-against each other - in a cell of the same file that dispatches one of those two forms at the same
+shapes - every size its dispatch grid or a loop bound reads, the row count included - is a
+defect: the compare sits in that cell, or - where the cell compares two kernel forms against each
+other - in a cell of the same file that dispatches one of those two forms at the same
 shapes.** Two forms can be bit-equal and both wrong.
 
 **A diff that changes an existing `[vk_dispatch]` or `[metal_dispatch]` class's branch
@@ -93,8 +93,9 @@ whether the change is right or wrong.
 an existing field means, so that a stamp reads or writes different elements, ships for each such
 stamp a kernel-unit cell that dispatches it, or a sibling stamp, with the field at a value a serving
 call in `../dasllama/` can pass and at which the elements read or written differ from the ones
-before the change.** At the value where nothing moved, a cell passes whether the new indexing is
-right or wrong.
+before the change - for an added field, never 0 and never the value a serving call that does not
+use the field passes.** At the value where nothing moved, a cell passes whether the new indexing
+is right or wrong.
 
 **A diff that adds a `[vk_dispatch]` or `[metal_dispatch]` class ships a kernel-unit cell that
 dispatches it on every path its body has.** A path no cell reaches is one a merge can drop and
@@ -113,10 +114,11 @@ sides, or the operands exact by construction, the oracle's result is the kernel'
 construction; an exact compare of indices or schedule words against a CPU oracle is not a
 bit-identity assert.
 
-**A kernel-unit cell whose output buffer is its input buffer asserts, at a known index, that the
-output differs from the input or that its reference - its CPU oracle, or the second kernel form
-it compares against - differs from that input by more than the compare's bar.** An in-place kernel
-that never ran leaves the input, which can wrongly satisfy a tolerant compare.
+**A kernel-unit cell whose output buffer is its input buffer, and whose compare passes within a
+nonzero tolerance, asserts, at a known index, that the output differs from the input or that its
+reference - its CPU oracle, or the second kernel form it compares against - differs from that
+input by more than that tolerance.** An in-place kernel that never ran leaves the input, which
+can wrongly satisfy a tolerant compare.
 
 **A diff that adds or loosens, in a kernel-unit cell, a bound assert ships a control for each such
 assert, in the same change.**

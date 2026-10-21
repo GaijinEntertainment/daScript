@@ -880,6 +880,10 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // ... and the deltanet out-gate's sigmoid stamps the same carrier's recurrent layers take; their coverage is the sigmoid
     // arms of test_vkd_dn_family
     "dn_step_sig_cls_spv", "dn_scan_p3_sig_cls_spv",
+    // the checkpoint capture's history write (compiled for every hybrid, dispatched only when a Vulkan prefill window carries a
+    // checkpoint stop - a scheduler's stable opening; the census rows prefill with no stop); its coverage is test_vkd_dn_cap_tail
+    // in test_vulkan_kernels.das
+    "dn_cap_tail_cls_spv",
     // the per-32 expert rails' KHR arms (the expert schedule on a KHR-mode card: the 26B-A4B Q4_K_M's q51 down stacks, gpt-oss's
     // mx4 stacks, Flash-Next's iq4nl32 stacks - carriers above the zoo's tier); their coverage is the KHR arm of
     // test_vkd_q51_cm2_batch, test_vkd_mx4_cm2_batch and test_vkd_iq4nl32_cm2_batch

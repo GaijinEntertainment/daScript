@@ -413,6 +413,7 @@ def add_model(var m : Model; name : string; opts : SlotOpts = SlotOpts(); path :
     slot.experts_host = gpu_resident_experts_host()
     slot.backend_effective = gpu_slot_capture(slot.gpu_marks)
     slot.resident_decline = slot.backend_effective == "gpu:resident" ? "" : gpu_resident_decline()
+    refuse_recurrent_in_part(slot)
     let was_gpu = slot.backend_effective != "cpu"
     var probe <- create_chat_renderer(slot.model, "", 1l)
     // reporting the raw template default would show the page a checked box for a family whose
@@ -531,6 +532,7 @@ def private bind_gpu_slot(si : int) {
     slot_default_chunk(g_slots[si])
     slot_clamp_ctx_to_region(g_slots[si])
     g_slots[si].resident_decline = g_slots[si].backend_effective == "gpu:resident" ? "" : gpu_resident_decline()
+    refuse_recurrent_in_part(g_slots[si])
     g_slots[si].gpu_regions = gpu_device_sessions()
     g_slots[si].experts_host = gpu_resident_experts_host()
     g_gpu_owner = si
@@ -538,6 +540,14 @@ def private bind_gpu_slot(si : int) {
     g_slots[si].sw_count ++
     g_slots[si].sw_us += us
     to_log(LOG_INFO, "dasllama-server: GPU tier -> {g_slots[si].name} ({prev_note}{us / 1000l}ms, {g_slots[si].backend_effective})\n")
+}
+
+//! a recurrent model's prompt leaves its checkpoints inside the window on the whole-model driver and on Metal alone: a slot the
+//! GPU serves in part would run its prompts on the per-op rail, which keeps no state at an interior row, so the load is refused
+def private refuse_recurrent_in_part(s : ModelSlot) {
+    if (s.model.config.recr_mask != 0ul && s.backend_effective == "gpu:rails") {
+        panic("dasllama-server: {s.name}: a recurrent model the GPU serves in part - its prompts would run on the per-op rail, which keeps no checkpoint inside a window; the whole-model driver's decline: {s.resident_decline}")
+    }
 }
 
 //! Read with the slot's marks installed, so the facade answers for THIS model.

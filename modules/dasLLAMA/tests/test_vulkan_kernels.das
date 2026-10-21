@@ -7023,7 +7023,7 @@ def test_vkd_dn_cap_tail(t0 : T?) {
             let wlen = 5
             let rows <- [4, 2]   //! a capture past the taps, and one under them (its first row off the entry image)
             var src <- hash_fill(wlen * cd, 523u, 1000u, 500.0, 1.0)
-            var smalls <- hash_fill(old_off + img + 8, 911u, 1000u, 250.0, 2.0)
+            var smalls <- hash_fill(old_off + 2 * img + 8, 911u, 1000u, 250.0, 2.0)   //! the oracle writes the cut ring's image past the entry image
             var inscope capw <- [uint(rows[0]), 0u, uint(rows[1]), uint(img + 4)]   //! the second row's base four floats past the first's image
             with_cell_planes() $(var cp : CellPlanes) {
                 let ps = cp |> in_plain(src)
@@ -7047,11 +7047,16 @@ def test_vkd_dn_cap_tail(t0 : T?) {
                     delete want
                     delete want_all
                 }
-                var gap = 0
+                var lost = 0
+                var first_lost = -1
                 for (i in range(4)) {
-                    gap += float_bits_to_uint(got[img + i]) == NAN_SENTINEL_BITS ? 1 : 0
+                    if (float_bits_to_uint(got[img + i]) != NAN_SENTINEL_BITS) {
+                        first_lost = first_lost < 0 ? img + i : first_lost
+                        lost++
+                    }
                 }
-                t |> equal(gap, 4, "dn_cap_tail: the words between the two rows' images keep their sentinel")
+                to_log(LOG_INFO, "dn_cap_tail gap: {lost} of 4 words lost their sentinel, first at word {first_lost}\n")
+                t |> equal(lost, 0, "dn_cap_tail: the words between the two rows' images keep their sentinel ({lost} lost, first at word {first_lost})")
                 delete got
             }
             delete smalls
@@ -7180,7 +7185,7 @@ def test_vkd_dn_rows_base(t0 : T?) {
             let dt_off = a_off + nvh
             var inscope bg <- row_fill((lead + npos) * nvh, 17, 0, 0.03, 0.6, 43)
             var inscope scans : array<array<float>>
-            var inscope cap_got : array<float>
+            var inscope cap_got, st_half, cap_ref : array<float>
             for (base in fixed_array(0, lead)) {
                 var inscope smv : array<float>
                 smv |> resize(dt_off + nvh)
@@ -7228,46 +7233,40 @@ def test_vkd_dn_rows_base(t0 : T?) {
                         cap_got <- cp |> plane_run(pcap)
                     }
                 }
+                if (base == 0) {   //! the capture's references over the same fixture: the scan over the first half alone, and the CPU oracle
+                    var inscope nocap <- [0u, 0u]
+                    with_cell_planes() $(var cp : CellPlanes) {
+                        let pconv = cp |> in_(convh)
+                        let pst = cp |> io_(sth)
+                        let psm = cp |> in_(smv)
+                        let po = cp |> out_(npos * di)
+                        let pcaps = cp |> in_plain(nocap)
+                        let pcap = cp |> out_(nvh * ds * ds)
+                        var sc = cp |> cls_set(fixed_array(pconv, pst, psm, po, pcaps, pcap), @@set_dn_scan_cls)
+                        var pcs = DnScanArgs(npos = uint(npos / 2), cd = uint(cd), kd = uint(kd), nvh = uint(nvh), nkh = uint(nkh), ds = uint(ds),
+                            beta_off = uint(beta_off), g_off = uint(g_off), a_off = uint(a_off), dt_off = uint(dt_off), o_off = 0u,
+                            di = uint(di), row0 = 0u, cap_n = 0u, cap_rec = 0u, cap_state_off = 0u)
+                        cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                            enc_dn_scan_cls(raw, h, sc, pcs, dn_scan_wgs(int64(nvh), int64(ds)))
+                        }
+                        delete st_half
+                        st_half <- cp |> plane_run(pst)
+                    }
+                    t |> success(moved_off(st_half, sth, 0, BAR_EXACT), "dn_scan half run: the in-place state moved off its input at element 0 ({st_half[0]} from {sth[0]})")
+                    var inscope ref <- dn_delta_ref(convh, sth, smv, npos / 2, nkh, nvh, ds, beta_off, g_off, a_off, dt_off)
+                    delete cap_ref
+                    cap_ref <- [for (i in range(nvh * ds * ds)); ref[(npos / 2) * di + i]]
+                }
             }
             check_exact(t, "dn_scan at row base {lead} against row 0 (the o rows, then the state)", scans[1], scans[0])
-            {
-                var inscope smv : array<float>
-                smv |> resize(dt_off + nvh)
-                for (i in range(npos * nvh)) {
-                    smv[beta_off + i] = bg[lead * nvh + i]
-                    smv[g_off + i] = bg[i]
-                }
-                for (i in range(nvh)) {
-                    smv[a_off + i] = -0.4 - float(i) * 0.1
-                    smv[dt_off + i] = 0.05 * float(i)
-                }
-                var inscope convh : array<float>
-                convh |> resize(npos * cd)
-                for (i in range(npos * cd)) {
-                    convh[i] = (float((i * 19) % 79) * 0.025 - 0.9) * 0.15
-                }
-                var inscope sth <- row_fill(nvh * ds * ds, 13, 0, 0.02, 0.5, 53)
-                var inscope nocap <- [0u, 0u]
-                with_cell_planes() $(var cp : CellPlanes) {
-                    let pconv = cp |> in_(convh)
-                    let pst = cp |> io_(sth)
-                    let psm = cp |> in_(smv)
-                    let po = cp |> out_(npos * di)
-                    let pcaps = cp |> in_plain(nocap)
-                    let pcap = cp |> out_(nvh * ds * ds)
-                    var sc = cp |> cls_set(fixed_array(pconv, pst, psm, po, pcaps, pcap), @@set_dn_scan_cls)
-                    var pcs = DnScanArgs(npos = uint(npos / 2), cd = uint(cd), kd = uint(kd), nvh = uint(nvh), nkh = uint(nkh), ds = uint(ds),
-                        beta_off = uint(beta_off), g_off = uint(g_off), a_off = uint(a_off), dt_off = uint(dt_off), o_off = 0u,
-                        di = uint(di), row0 = 0u, cap_n = 0u, cap_rec = 0u, cap_state_off = 0u)
-                    cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
-                        enc_dn_scan_cls(raw, h, sc, pcs, dn_scan_wgs(int64(nvh), int64(ds)))
-                    }
-                    var inscope st_half <- cp |> plane_run(pst)
-                    check_exact(t, "dn_scan capture after {npos / 2} rows against the scan over those rows alone (the state)", cap_got, st_half)
-                    var inscope st_whole <- [for (i in range(nvh * ds * ds)); scans[0][npos * di + i]]
-                    t |> success(mismatch_exact(cap_got, st_whole) > 0, "dn_scan capture control: the captured state is not the whole run's")
-                }
-            }
+            check_exact(t, "dn_scan capture after {npos / 2} rows against the scan over those rows alone (the state)", cap_got, st_half)
+            //! the chunked WY form equals the sequential rule in exact arithmetic: the drift is reassociation, which the peak-floored bar absorbs
+            let cap_floor = 1e-2 * logits_maxabs(cap_ref)
+            check_rows(t, "dn_scan capture after {npos / 2} rows against the sequential CPU oracle (the state)", cap_got, cap_ref,
+                Bar(rel = 1e-2, abs_floor = cap_floor, poison_of_max = true, poison_abs = 0.5), ds)
+            var inscope st_whole <- [for (i in range(nvh * ds * ds)); scans[0][npos * di + i]]
+            t |> success(all_finite(cap_got) && all_finite(st_whole), "dn_scan capture control: every value it reads is finite")
+            t |> success(mismatch_exact(cap_got, st_whole) > 0, "dn_scan capture control: the captured state is not the whole run's")
         } else {
             t |> skip("dasVulkan not present")
         }

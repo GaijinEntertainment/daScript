@@ -655,35 +655,26 @@ def private dn_conv_batch(t : Model; var s : Session; l : int64; npos : int64) {
             }
         }
     }
-    dn_conv_capture(s, l, npos, cd, taps, inp0, hist0)
-    unsafe {   // advance the conv history to the last taps input rows (channel-major)
-        var st = addr(s.dn_conv_state[s.dn_conv_prefix[l]])
-        for (k in range64(taps)) {
-            let sp = npos - taps + k
-            if (sp >= 0l) {
-                for (ch in range64(cd)) {
-                    st[ch * taps + k] = inp0[sp * cd + ch]
-                }
-            } else {   // npos < taps: shift surviving old taps left (ascending k reads ahead of writes)
-                for (ch in range64(cd)) {
-                    st[ch * taps + k] = st[ch * taps + k + npos]
-                }
-            }
-        }
+    let start_pos = s.dn_pos - npos
+    for (cap in s.dn_captures) {   //! before the advance overwrites `hist0`
+        dn_conv_hist_at(unsafe(addr(cap.conv[s.dn_conv_prefix[l]])), inp0, hist0, cap.pos - start_pos, cd, taps)
     }
+    dn_conv_hist_at(unsafe(addr(s.dn_conv_state[s.dn_conv_prefix[l]])), inp0, hist0, npos, cd, taps)
 }
 
-//! each capture's conv history for layer `l` (the taps input rows before its stop, `hist0` under them) - before the advance overwrites `hist0`
-def private dn_conv_capture(var s : Session; l, npos, cd, taps : int64; inp0, hist0 : float const?) {
-    let start_pos = s.dn_pos - npos
-    for (cap in s.dn_captures) {
-        let r = cap.pos - start_pos
+//! the conv history (channel-major) after the window's first `r` input rows into `dst`: the taps rows before row `r`, `hist0`
+//! under the ones before the window; `dst` may be `hist0` itself, since ascending `k` reads a tap at or past the one it writes
+def private dn_conv_hist_at(var dst : float?; inp0, hist0 : float const?; r, cd, taps : int64) {
+    for (k in range64(taps)) {
+        let sp = r - taps + k
         unsafe {
-            var dst = addr(cap.conv[s.dn_conv_prefix[l]])
-            for (k in range64(taps)) {
-                let sp = r - taps + k
+            if (sp >= 0l) {
                 for (ch in range64(cd)) {
-                    dst[ch * taps + k] = sp >= 0l ? inp0[sp * cd + ch] : hist0[ch * taps + r + k]
+                    dst[ch * taps + k] = inp0[sp * cd + ch]
+                }
+            } else {
+                for (ch in range64(cd)) {
+                    dst[ch * taps + k] = hist0[ch * taps + r + k]
                 }
             }
         }
@@ -717,7 +708,8 @@ def private dn_chunked_head(conv : float const?; qoff, koff, voff, cd : int64; /
         var c0 = 0l
         while (c0 < npos) {
             var cl = min(CS, npos - c0)
-            for (cr in cap_rows) {
+            for (ci in range64(long_length(cap_rows))) {   // nolint:PERF018 - indexed, never for-in: every worker walks this shared list, and for-in locks it
+                let cr = cap_rows[ci]
                 if (cr > c0 && cr - c0 < cl) {
                     cl = cr - c0
                 }
@@ -837,7 +829,8 @@ def private dn_chunked_head(conv : float const?; qoff, koff, voff, cd : int64; /
             }
             gemm_f32(stp, kgT, vnew, ds, cl, ds)
             c0 += cl
-            for (cr, ci in cap_rows, count()) {
+            for (ci in range64(long_length(cap_rows))) {   // nolint:PERF029 - indexed, never for-in: the workers share both lists, and for-in locks them
+                let cr = cap_rows[ci]
                 if (cr == c0) {
                     copy_floats(reinterpret<float?>(cap_state_addr[ci]) + hoff, reinterpret<float const?>(stp), ds * ds)
                 }
@@ -958,7 +951,7 @@ def private deltanet_prefill_gpu(t : Model; var s : Session; l : int64; npos : i
     }
     prof_add("dn_mm_in", ts_in)
     if (!empty(s.dn_captures)) {
-        panic("dasLLAMA: the per-op deltanet arm keeps no state at a row inside its window - a checkpoint stop inside the window needs the whole-model driver, the Metal prefill or the CPU chain")
+        panic("dasLLAMA: the per-op deltanet arm keeps no state at a row inside its window - serve a checkpoint stop inside a window through the whole-model GPU driver (the load log names why it declined), the Metal prefill or the CPU chain (no --gpu)")
     }
     let ts_gpu = prof_ticks()
     s.dn_tail |> resize(taps * cd)

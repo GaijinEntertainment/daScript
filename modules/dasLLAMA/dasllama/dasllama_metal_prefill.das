@@ -7294,12 +7294,12 @@ def private pf_ple_side(enc : MetalComputeEncoder?; t : Model; h : PfHc; p : PfP
         for (cap, ci in caps, count()) {
             let r = cap.pos - start_pos
             let cbase = uint64(int64(ci) * cap_bytes + cap_ring_off)
-            for (rr in range64(r - rows, r)) {
-                let slot = uint64(((start_pos + rr) % rows) * hcd * 4l)
-                if (rr >= 0l) {
-                    enc_copy_row(enc, p.bcin, uint64(rr * hcd * 4l), bcap, cbase + slot, h.u_hcd, hcd)
-                } elif (start_pos + rr >= 0l) {
-                    enc_copy_row(enc, bring, ring_base + slot, bcap, cbase + slot, h.u_hcd, hcd)
+            cap_ring_rows(r, rows, start_pos) $(rr, slot : int64; from_window : bool) {
+                let soff = uint64(slot * hcd * 4l)
+                if (from_window) {
+                    enc_copy_row(enc, p.bcin, uint64(rr * hcd * 4l), bcap, cbase + soff, h.u_hcd, hcd)
+                } else {
+                    enc_copy_row(enc, bring, ring_base + soff, bcap, cbase + soff, h.u_hcd, hcd)
                 }
             }
         }
@@ -7313,17 +7313,12 @@ def private dn_captures_from_arena(var segs : array<PfSeg>; bcap : MetalBuffer?;
     var capi = 0l
     for (sg in segs) {
         var ss & = unsafe(*sg.s)
-        let sb = long_length(ss.dn_state) * 4l
-        let cb = long_length(ss.dn_conv_state) * 4l
-        let pb = long_length(ss.ple_conv_hist) * 4l
-        for (k in range64(long_length(ss.dn_captures))) {
+        let sb = uint64(long_length(ss.dn_state) * 4l)
+        let cb = uint64(long_length(ss.dn_conv_state) * 4l)
+        for (cap in ss.dn_captures) {
             unsafe {
-                let base = reinterpret<uint8?>(contents_at(bcap, uint64(capi * cap_bytes)))
-                memcpy(addr<void?>(ss.dn_captures[k].state[0]), reinterpret<void?>(base), sb)
-                memcpy(addr<void?>(ss.dn_captures[k].conv[0]), reinterpret<void?>(base + uint64(sb)), cb)
-                if (pb > 0l) {
-                    memcpy(addr<void?>(ss.dn_captures[k].ple_hist[0]), reinterpret<void?>(base + uint64(sb + cb)), pb)
-                }
+                var base = reinterpret<uint8?>(contents_at(bcap, uint64(capi * cap_bytes)))
+                dn_spans_copy(cap.state, cap.conv, cap.ple_hist, base, base + sb, base + sb + cb, true)
             }
             capi++
         }

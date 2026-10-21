@@ -192,17 +192,14 @@ number can produce.** A value set through a knob setter or a config field (`set_
 cap, a resize, or a counter showing a route ran is no such count, and a device's geometry
 (subgroup width, SM count) is no coverage claim.
 
-**An exact token or id compare whose two sides run different lanes, backends, batch shapes or
-kernel forms, over a prompt whose continuation can tie, is a defect - it takes the forced-feed
-logits-tolerance form: the same fixed tokens fed to both sides, the logits compared within a
-bar.** A continuation can tie unless every next token is dictated by the prompt's own sequence (a
-count, an arithmetic series, a fixed enumeration); prose always can.
-
-**An exact token or id compare over a prompt whose continuation can tie, whose two sides run one
-code path or the same kernels over another storage layout (a flat K/V cache against a paged
-one), states in the cell what makes them compute bit-identical logits - the shared entry point,
-an assert pinning the lane, or a lane pin plus the layout that alone differs.** A continuation can
-tie unless every next token is dictated by the prompt's own sequence; prose always can.
+**An exact token or id compare over a prompt whose continuation can tie states in the cell what
+makes its two sides compute bit-identical logits - one shared entry point, an assert pinning the
+lane, or a lane pin plus why the one storage layout (a flat K/V cache against a paged one) or
+batch shape that alone differs leaves the logits bit-identical; a compare no such statement
+covers - different lanes, backends or kernel forms among them - is a defect, and takes the
+forced-feed logits-tolerance form: the same fixed tokens fed to both sides, the logits compared
+within a bar.** A continuation can tie unless every next token is dictated by the prompt's own
+sequence (a count, an arithmetic series, a fixed enumeration); prose always can.
 
 **A test in this folder that loads a stocked artifact whose producer none of the following names
 is a defect.** Any one of these names the producer: a row in `../performance/model_specs.das`; a

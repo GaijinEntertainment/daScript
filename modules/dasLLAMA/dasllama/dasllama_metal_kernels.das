@@ -12040,15 +12040,14 @@ class MetalDnConvHist {
         var nh : float[8]                   // dconv <= 8 by the serve gate
         var k = 0u
         while (k < taps) {
-            let src = int(npos + k) - int(taps)
-            nh[k] = src >= 0 ? x[(row0 + uint(src)) * cd + ch] : hist[hb + ch * taps + uint(src + int(taps))]
+            nh[k] = tap(row0, hb, ch, npos, k)
             k++
         }
         if (mid != 0u) {                    // every hist read precedes the in-place write below
+            let short_row = npos - 1u
             k = 0u
             while (k < taps) {
-                let src = int(npos - 1u + k) - int(taps)
-                histm[hmb + ch * taps + k] = src >= 0 ? x[(row0 + uint(src)) * cd + ch] : hist[hb + ch * taps + uint(src + int(taps))]
+                histm[hmb + ch * taps + k] = tap(row0, hb, ch, short_row, k)
                 k++
             }
         }
@@ -12059,8 +12058,7 @@ class MetalDnConvHist {
             let cb = grp[cw + 2u] + ka.cslice
             k = 0u
             while (k < taps) {
-                let src = int(crow + k) - int(taps)
-                capb[cb + ch * taps + k] = src >= 0 ? x[(row0 + uint(src)) * cd + ch] : hist[hb + ch * taps + uint(src + int(taps))]
+                capb[cb + ch * taps + k] = tap(row0, hb, ch, crow, k)
                 k++
             }
             ci++
@@ -12075,6 +12073,11 @@ class MetalDnConvHist {
             k++
         }
     }
+
+    //! channel `ch`'s tap `k` of the history standing after the group's window row `row`: an input row, or the old history before the window
+    def tap(row0, hb, ch, row, k : uint) : float => (int(row + k) >= int(ka.dconv - 1u)
+        ? x[(row0 + row + k - (ka.dconv - 1u)) * ka.cd + ch]
+        : hist[hb + ch * (ka.dconv - 1u) + row + k])
 }
 
 // Per-head L2 norm over the conv-out q/k regions in place, q pre-scale folded (l2_norm_rows +
@@ -12375,6 +12378,7 @@ def dn_grp_clear {
     g_dn_grp_w |> clear()
 }
 
+[arch(at="../ARCHITECTURE_GPU_MTP.md#dn-group-stages")]
 def dn_grp_push(row0, npos : int64; soff, salt, coff, calt : uint64; ncap : int64 = 0l; capw : int64 = 0l) {
     g_dn_grp_w |> push(uint(row0))
     g_dn_grp_w |> push(uint(npos))

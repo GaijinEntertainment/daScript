@@ -1880,26 +1880,45 @@ struct DnTailArgs {
     old_off : uint    //! the entry image's float offset in smalls (per-channel, the decode step's layout); never the image at `hist_off`
 }
 
+//! the conv ring write both tails stamp (`DnTail` the window's, `DnCapTail` a capture's): thread `idx` of `cd * taps` takes
+//! channel `idx / taps`'s ring row `k = idx % taps` - projected row `row0 + k - old_rows` where `k >= old_rows`, else the entry
+//! image's row `k + taps - old_rows` at `old_off` - into the destination image at `dst0`
+[ |> template_struct_instance]
+class template DnTailT {
+    def abstract src_at(i : uint) : float     //! projected-rows float `i`
+    def abstract entry_at(i : uint) : float   //! smalls float `i`
+    def abstract put(i : uint; v : float) : void
+
+    def tail_tap(idx, cd, taps, row0, old_rows, old_off, dst0 : uint) {
+        if (taps != 0u && idx < cd * taps) {
+            let ch = idx / taps
+            let k = idx % taps
+            var v = 0.0
+            if (k >= old_rows) {
+                v = src_at((row0 + k - old_rows) * cd + ch)
+            } else {
+                v = entry_at(old_off + ch * taps + k + taps - old_rows)
+            }
+            put(dst0 + ch * taps + k, v)
+        }
+    }
+}
+
 [vk_dispatch(name = "dn_tail_cls", grid = "wgs", params = "wgs : int64")]
-class DnTail {
+class DnTail : DnTailT {
     @ssbo @binding = 0 src : array<float>      // the projected rows (position-major)
     @ssbo @binding = 1 smalls : array<float>   // the layer's smalls (the ring image at hist_off)
     @push_constant pa : DnTailArgs
 
+    def override src_at(i : uint) : float => src[i]
+    def override entry_at(i : uint) : float => smalls[i]
+    def override put(i : uint; v : float) : void {
+        smalls[i] = v
+    }
+
     [spirv_kernel(local_size_x = 256, name = "dn_tail_cls_spv")]
     def run {
-        let idx = gl_GlobalInvocationID.x
-        if (idx < pa.cd * pa.taps) {
-            let ch = idx / pa.taps
-            let k = idx % pa.taps
-            var v = 0.0
-            if (k >= pa.old_rows) {
-                v = src[(pa.row0 + k - pa.old_rows) * pa.cd + ch]
-            } else {
-                v = smalls[pa.old_off + ch * pa.taps + k + pa.taps - pa.old_rows]
-            }
-            smalls[pa.hist_off + ch * pa.taps + k] = v
-        }
+        tail_tap(gl_GlobalInvocationID.x, pa.cd, pa.taps, pa.row0, pa.old_rows, pa.old_off, pa.hist_off)
     }
 }
 
@@ -2302,31 +2321,29 @@ struct DnCapTailArgs {
 //! a capture's conv history into its checkpoint row's ring image 0 (the row's parity reads image 0): the taps projected rows before
 //! the capture's row, the rows before the part off the image it entered on
 [vk_dispatch(name = "dn_cap_tail_cls", grid = "wgs", params = "wgs : int64")]
-class DnCapTail {
+class DnCapTail : DnTailT {
     @ssbo @binding = 0 @readonly src : array<float>      //! the projected rows (position-major)
     @ssbo @binding = 1 @readonly smalls : array<float>   //! the layer's smalls (the entry ring image at entry_off)
     @ssbo @binding = 2 @readonly caps : array<uint>      //! the window's capture records
     @ssbo @binding = 3 dst : array<float>                //! the checkpoint rows
     @push_constant pa : DnCapTailArgs
 
+    def override src_at(i : uint) : float => src[i]
+    def override entry_at(i : uint) : float => smalls[i]
+    def override put(i : uint; v : float) : void {
+        dst[i] = v
+    }
+
+    //! a capture at part row `crow` is a window tail ending there: the rows under `crow` come off the entry image
     [spirv_kernel(local_size_x = 256, name = "dn_cap_tail_cls_spv")]
     def run {
-        let cap = gl_WorkGroupID.x / pa.wg_per_cap
-        let idx = (gl_WorkGroupID.x % pa.wg_per_cap) * 256u + gl_LocalInvocationID.x
+        let wpc = max(1u, pa.wg_per_cap)
+        let cap = gl_WorkGroupID.x / wpc
         let rec = pa.cap_rec + cap * 2u
-        if (idx < pa.cd * pa.taps) {
-            let ch = idx / pa.taps
-            let k = idx % pa.taps
-            let crow = caps[rec]
-            let sp = int(crow + k) - int(pa.taps)
-            var v = 0.0
-            if (sp >= 0) {
-                v = src[(pa.row0 + uint(sp)) * pa.cd + ch]
-            } else {
-                v = smalls[pa.entry_off + ch * pa.taps + uint(sp + int(pa.taps))]
-            }
-            dst[caps[rec + 1u] + pa.cap_hist_off + ch * pa.taps + k] = v
-        }
+        let crow = caps[rec]
+        let lead = min(crow, pa.taps)
+        tail_tap((gl_WorkGroupID.x % wpc) * 256u + gl_LocalInvocationID.x, pa.cd, pa.taps, pa.row0 + crow - lead, pa.taps - lead,
+            pa.entry_off, caps[rec + 1u] + pa.cap_hist_off)
     }
 }
 

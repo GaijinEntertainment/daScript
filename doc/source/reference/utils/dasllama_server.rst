@@ -169,7 +169,7 @@ Run under ``-jit`` --- the interpreter is refused, it is far too slow for infere
        [--asr <asr.bin>] [--asr-workers 2] [--mmproj <mmproj.gguf>] [--image-mmproj <mmproj.gguf>] \
        [--audio-mmproj <mmproj.gguf>] \
        [--ctx 4096] [--streams 4] [--chunk 512] [--chunk-idle 2048] [--page-rows 64] [--prefix N] \
-       [--prefix-states 256] [--prefix-state-mb 0] [--tune]
+       [--prefix-states N] [--prefix-state-mb 0] [--tune]
 
 .. list-table::
    :header-rows: 1
@@ -311,7 +311,7 @@ Run under ``-jit`` --- the interpreter is refused, it is far too slow for infere
    * - ``--prefix-states``
      -
      - *auto*
-     - Recurrent models (the Qwen3.5/3.6/3.8 hybrids) cache whole checkpoints instead of pages: the most a slot keeps (``0`` = none; config key ``prefix_states``). Unset, the count is the byte budget over the model's recurrent state, 256 at least and 1024 at most, so the budget binds first. Every request leaves one at its opening's shared head (the system text or the tool block, whichever its template writes first), one at its opening with the tools, one where its last message starts, one where it ends (ahead of the generation prompt), one at its finished turn; a conversation's own stops are dropped before shared openings
+     - Recurrent models (the Qwen3.5/3.6/3.8 hybrids) cache whole checkpoints instead of pages: the most a slot keeps (``0`` = none; ``-1``, or unset, = the byte budget's count; config key ``prefix_states``). Unset, the count is the byte budget over the model's recurrent state, 256 at least and 1024 at most: the budget binds under the cap, the cap once the budget would hold more. Every request leaves one at its opening's shared head (the system text or the tool block, whichever its template writes first), one at its opening with the tools, one where its last message starts, one where it ends (ahead of the generation prompt), one at its finished turn; a conversation's own stops are dropped before shared openings
    * - ``--prefix-state-mb``
      -
      - *auto*

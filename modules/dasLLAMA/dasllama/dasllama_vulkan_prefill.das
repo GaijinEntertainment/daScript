@@ -9,6 +9,7 @@ options _function_length = 0   // same
 require dasllama/dasllama_lint public
 require dasllama/dasllama_vulkan_common   // g_gpu/g_rd state, plumbing, hazard rail, fill metas
 require dasllama/dasllama_vulkan_classes   // the class-kernel rail (generated set_/enc_ + gemv_cls_*)
+require dasllama/dasllama_common   // cap_ring_rows - the capture's n-gram ring rows, the Metal window's walk too
 require dasllama/dasllama_vulkan_decode   // vk_moe_dn_step — the dn chain's npos==1 arm routes through the decode step
 require dasllama/dasllama_kqformat   // KqFmt — the arena fmt slots are its ordinals
 require dasllama/dasllama_gemm_schema   // Q8_BLOCK_ELEMS - the window chain's hyper-connection scale planes
@@ -135,6 +136,18 @@ def private pf_caps_done {
         g_rd.snap_par[sg.region * int64(RDEC_DN_SNAPS) + cap.slot] = 0
     }
     g_pf_caps |> clear()
+}
+
+//! the captures name the dropped driver's regions and checkpoint rows: the next model's first call hands its own
+def private pf_caps_forget {
+    g_pf_caps |> clear()
+    g_pf_wcaps |> clear()
+    g_pf_cap_words |> clear()
+}
+
+[init]
+def private pf_register_drop_hooks {
+    register_vk_drop_hook(@@pf_caps_forget)
 }
 
 //! the slot of the segment whose last row is window row `row` of the window at `w0`, else -1
@@ -323,6 +336,9 @@ def private pf_dn_layer_sets(l, dim, cd, di : int64) {
         fixed_array(VHZ_DNP, VHZ_DNC, VHZ_DNSM))
     let snap_dev = g_rd.snap_dev != 0ul ? g_rd.snap_dev : smalls_dev
     let snap_bytes = g_rd.snap_dev != 0ul ? g_rd.snap_row_bytes * g_rd.regions * int64(RDEC_DN_SNAPS) : smalls_bytes
+    if (!vk_range_ok(snap_bytes)) {   //! the scan and the cap tail bind the checkpoint rows whole
+        panic("dasLLAMA vulkan prefill: the checkpoint rows ({snap_bytes} bytes: {g_rd.regions} regions x {RDEC_DN_SNAPS} rows of {g_rd.snap_row_bytes}) pass the device's storage range {vk_max_storage_range()}")
+    }
     L.pf_dn_scan_set = set_dn_scan_cls(
         fixed_array(g_rd.pf_dnconv, dn0.state_dev, smalls_dev, g_gpu.dn_ws_dev, g_rd.pf_cap_dev, snap_dev),
         fixed_array(np * cd * 4l, dn0.slot_state_bytes * long_length(L.dn), smalls_bytes, DN_WS_BYTES, PF_CAP_WORDS * 4l, snap_bytes),
@@ -449,7 +465,7 @@ def private dn_window_parts_enc(raw : VkCommandBuffer; var h : VkHaz; var L : RL
         if (wc.n > 0l) {
             let img = int(st.ring_image_bytes / 4l)
             let cur = g_rd.pf_dn_cur[ws.region]
-            let wg = (cd * taps + 255l) / 256l
+            let wg = max(1l, (cd * taps + 255l) / 256l)
             var pcx = DnCapTailArgs(cd = uint(cd), taps = uint(taps), row0 = uint(ws.row0), entry_off = uint(int(st.hist_off) + cur * img),
                 cap_rec = uint(wc.rec), cap_hist_off = uint((L.snap_off + st.slot_state_bytes) / 4l), wg_per_cap = uint(wg))
             enc_dn_cap_tail_cls(raw, h, L.pf_dn_captail_set, pcx, wg * wc.n)
@@ -2141,12 +2157,12 @@ def private pf_hc_side(raw : VkCommandBuffer; var h : VkHaz; wlen, pos0w : int64
         for (ci in range64(wc.n)) {
             let r = int64(g_pf_cap_words[wc.rec + ci * 2l])
             let dst = int64(g_pf_cap_words[wc.rec + ci * 2l + 1l]) * 4l + g_rd.snap_ring_off
-            for (rr in range64(r - nrows, r)) {
-                let slot = ((pos0w + rr) % nrows) * hcd * 4l
-                if (rr >= 0l) {
-                    cmd_copy_range(raw, g_rd.pf_hpanel, rr * hcd * 4l, g_rd.snap_dev, dst + slot, hcd * 4l)
-                } elif (pos0w + rr >= 0l) {
-                    cmd_copy_range(raw, g_rd.plehist_dev, g_rd.region * nrows * hcd * 4l + slot, g_rd.snap_dev, dst + slot, hcd * 4l)
+            cap_ring_rows(r, nrows, pos0w) $(rr, slot : int64; from_window : bool) {
+                let at = slot * hcd * 4l
+                if (from_window) {
+                    cmd_copy_range(raw, g_rd.pf_hpanel, rr * hcd * 4l, g_rd.snap_dev, dst + at, hcd * 4l)
+                } else {
+                    cmd_copy_range(raw, g_rd.plehist_dev, g_rd.region * nrows * hcd * 4l + at, g_rd.snap_dev, dst + at, hcd * 4l)
                 }
             }
         }

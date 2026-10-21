@@ -945,11 +945,9 @@ def mtp_accept_walk(var s : Session; k, vocab : int64; pick : block<(row : int64
 def mtp_accept_cut_at_stop(var s : Session; a : int64) : int64 {
     return a if (s.spec_stops == null || a <= 0l)
     for (j in range64(a)) {
-        for (sid in *s.spec_stops) {
-            if (s.mtp_vbatch[j + 1l] == sid) {
-                s.mtp_pre_drawn = false
-                return j + 1l
-            }
+        if (find_index(*s.spec_stops, s.mtp_vbatch[j + 1l]) >= 0) {
+            s.mtp_pre_drawn = false
+            return j + 1l
         }
     }
     return a
@@ -5381,17 +5379,7 @@ def dn_last_recurrent_layer(c : Config) : int64 {
 }
 
 //! the floats a session's recurrent state holds over every recurrent layer; 0 on a model with none
-def dn_state_floats(c : Config) : int64 {
-    return 0l if (c.recr_mask == 0ul)
-    let cd = dn_conv_dim(c)
-    var floats = 0l
-    for (l in range64(c.n_layers)) {
-        if (layer_is_recurrent(c, l)) {
-            floats += dn_layer_conv_floats(c, cd) + dn_layer_state_floats(c)
-        }
-    }
-    return floats
-}
+def dn_state_floats(c : Config) : int64 => recurrent_layer_count(c) * (dn_layer_conv_floats(c, dn_conv_dim(c)) + dn_layer_state_floats(c))
 
 //! the hyper-connection residual's width: hc_count streams of dim (0 on every other arch)
 def hc_dim(c : Config) : int64 => c.hyper_conn ? c.hc_count * c.dim : 0l
@@ -6163,15 +6151,12 @@ def private ple_window_copy(src : array<int64>; var dst : array<int64>; grow : b
     }
 }
 
-//! one unfilled snapshot a stop of `s.dn_stops`; each stop lies strictly inside [start_pos, start_pos + npos), ascending, or it panics
+//! one unfilled snapshot a stop of `s.dn_stops`; each stop lies strictly inside [start_pos, start_pos + npos), ascending, or it panics.
+//! A device-home session's snapshot carries its position and window only: the region's checkpoint row keeps the state
 [cold_path, arch(at="../ARCHITECTURE_ENGINE_SERVING.md#prefix-recurrent-checkpoints")]
 def dn_capture_begin(var s : Session; tokens : array<int64>; npos, start_pos : int64) {
     let n = long_length(s.dn_stops)
     s.dn_captured = false
-    if (n == 0l) {
-        s.dn_captures |> resize(0)
-        return
-    }
     if (empty(s.dn_state_prefix)) {
         panic("dasLLAMA: a checkpoint stop inside a window was asked of a model with no recurrent state")
     }
@@ -6181,38 +6166,48 @@ def dn_capture_begin(var s : Session; tokens : array<int64>; npos, start_pos : i
         if (at <= start_pos || at >= start_pos + npos || (i > 0l && at <= s.dn_stops[i - 1l])) {
             panic("dasLLAMA: checkpoint stop {at} is not inside the window [{start_pos}, {start_pos + npos}) in order")
         }
-        s.dn_captures[i].conv |> overwrite_resize(long_length(s.dn_conv_state))
-        s.dn_captures[i].state |> overwrite_resize(long_length(s.dn_state))
-        s.dn_captures[i].ple_hist |> overwrite_resize(long_length(s.ple_conv_hist))
+        if (!s.device_kv) {
+            s.dn_captures[i].conv |> overwrite_resize(long_length(s.dn_conv_state))
+            s.dn_captures[i].state |> overwrite_resize(long_length(s.dn_state))
+            s.dn_captures[i].ple_hist |> overwrite_resize(long_length(s.ple_conv_hist))
+        }
         s.dn_captures[i].mtp_h |> clear()
         s.dn_captures[i].pos = at
-        ngram_window_at(s, tokens, at - start_pos, s.dn_captures[i].ple_prev)
+        ngram_window_at(s.ple_prev, tokens, at - start_pos, s.dn_captures[i].ple_prev)
     }
 }
 
-//! the n-gram window `ngram_advance` would leave after the window's first `r` tokens, into `dst`; the session's own stays
-def ngram_window_at(s : Session; tokens : array<int64>; r : int64; var dst : array<int64>) {
-    let nprev = long_length(s.ple_prev)
+//! the n-gram window `src` slid over the window's first `r` tokens, into `dst` (sized to `src`); `dst` may be `src` itself,
+//! since each slot reads a slot at or past the one it writes
+def ngram_window_at(src : array<int64>; tokens : array<int64>; r : int64; var dst : array<int64>) {
+    let nprev = long_length(src)
     dst |> overwrite_resize(nprev)
     let keep = max(0l, nprev - r)
     for (i in range64(keep)) {
-        dst[i] = s.ple_prev[i + r]
+        dst[i] = src[i + r]
     }
     for (i in range64(keep, nprev)) {
         dst[i] = tokens[r - (nprev - i)]
     }
 }
 
-//! the capture whose stop is `pos`, -1 where none
-def dn_capture_at(s : Session; pos : int64) : int64 {
-    for (cap, i in s.dn_captures, count()) {
-        return int64(i) if (cap.pos == pos)
+//! the n-gram ring rows a capture at window row `r` carries: the `rows` rows ending at `r`, each window row `rr` into ring slot
+//! `(pos0 + rr) % rows` - a row before the window (`rr < 0`) is the entry ring's where a position stands there, none before position 0
+def cap_ring_rows(r, rows, pos0 : int64; blk : block<(rr, slot : int64; from_window : bool) : void>) {
+    for (rr in range64(r - rows, r)) {
+        if (rr >= 0l) {
+            invoke(blk, rr, (pos0 + rr) % rows, true)
+        } elif (pos0 + rr >= 0l) {
+            invoke(blk, rr, (pos0 + rr) % rows, false)
+        }
     }
-    return -1l
 }
 
+//! the capture whose stop is `pos`, -1 where none
+def dn_capture_at(s : Session; pos : int64) : int64 => int64(find_index_if(s.dn_captures, $(cap) => cap.pos == pos))
+
 def dn_capture_check(s : Session) {
-    if (!empty(s.dn_captures) && !s.dn_captured) {
+    if (!s.dn_captured) {
         panic("dasLLAMA: the serving prefill left {long_length(s.dn_captures)} checkpoint stop(s) inside its window unfilled - the path that served it keeps no state at an interior row")
     }
 }
@@ -7357,18 +7352,24 @@ def forward_prefill(t : Model; var s : Session; tokens : array<int64>; npos, sta
         return
     }
     sel_reset(s)
-    dn_capture_begin(s, tokens, npos, start_pos)
+    if (!empty(s.dn_stops)) {
+        dn_capture_begin(s, tokens, npos, start_pos)
+    }
     forward_prefill_head(t, s, tokens, npos, start_pos)
     forward_prefill_body(t, s, npos, start_pos, skip_logits)
     forward_prefill_warm(t, s, tokens, npos, start_pos)
-    dn_capture_check(s)
+    if (!empty(s.dn_captures)) {
+        dn_capture_check(s)
+    }
 }
 
 [no_alloc, no_env, no_io, arch(at="../ARCHITECTURE_GPU_PREFILL_WINDOW.md#prefill-segments")]
 def forward_prefill_segments(t : Model; var segs : array<PrefillSeg>; toks : array<array<int64>>) {
     for (sg in segs) {
         kv_capacity_check(t, sg.npos, sg.start_pos)
-        dn_capture_begin(*sg.s, toks[sg.toki], sg.npos, sg.start_pos)
+        if (!empty(sg.s.dn_stops)) {
+            dn_capture_begin(*sg.s, toks[sg.toki], sg.npos, sg.start_pos)
+        }
         forward_prefill_head(t, *sg.s, toks[sg.toki], sg.npos, sg.start_pos)
         prefill_rope_tables(t, *sg.s, sg.npos, sg.start_pos)
     }
@@ -7390,7 +7391,9 @@ def forward_prefill_segments(t : Model; var segs : array<PrefillSeg>; toks : arr
     }
     for (sg in segs) {
         forward_prefill_warm(t, *sg.s, toks[sg.toki], sg.npos, sg.start_pos)
-        dn_capture_check(*sg.s)
+        if (!empty(sg.s.dn_captures)) {
+            dn_capture_check(*sg.s)
+        }
     }
 }
 
