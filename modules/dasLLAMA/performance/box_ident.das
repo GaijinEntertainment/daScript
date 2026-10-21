@@ -36,6 +36,12 @@ def private box_from_cpu(cpu : string) : string {
     if (cpu |> find("6975P") >= 0) {
         return "gnr"
     }
+    if (cpu |> find("EPYC 9R14") >= 0) {   // AWS c7a / m7a (Zen4)
+        return "epyc9r14"
+    }
+    if (cpu |> find("Neoverse-V2") >= 0) {   // AWS c8g / m8g (Graviton4)
+        return "graviton4"
+    }
     return ""
 }
 
