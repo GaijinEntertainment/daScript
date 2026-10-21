@@ -2559,7 +2559,7 @@ namespace das
             SideEffects::modifyExternal, "builtin_json_sprint")
                 ->args({"value","humanReadable"})->setTempStringResult();
         addInterop<builtin_json_sscan,bool,char *,vec4f>(*this, lib, "sscan_json",
-            SideEffects::modifyArgumentAndExternal, "builtin_json_sscan")
+            SideEffects::modifyArgumentAndExternal|SideEffects::invoke, "builtin_json_sscan")
                 ->args({"json","value"});
         addExternInline<DAS_BIND_FUN(builtin_terminate)>(*this, lib, "terminate",
             SideEffects::modifyExternal, "terminate")
