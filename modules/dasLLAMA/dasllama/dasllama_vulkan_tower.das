@@ -568,7 +568,7 @@ def private vt_scratch_max_bytes(cap, d, ff, dp, taps : int64; fused, f16w : boo
 }
 
 //! the q8 chains' GEMM feed: on a coopmat device the cm2 (or KHR) f16 tiles the prefill serves dense q8 GEMMs with, else the mul_mm tiles
-def vt_cm2_feed : bool => g_gpu.coopmat_mode >= COOPMAT_MM
+def vt_cm2_feed : bool => g_gpu != null && g_gpu.coopmat_mode >= COOPMAT_MM   // no device = no feed: the scratch sizing asks before the arm
 
 //! the front scratch released on its own; the block chain's scratch rebuild drops it too, and it regrows on demand
 [cold_path]

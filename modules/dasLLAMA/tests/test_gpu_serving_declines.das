@@ -15,6 +15,7 @@ require ?vulkan dasllama/dasllama_vulkan_prefill  // ple_proj_gemv_why - the win
 require dasllama/dasllama_gpu_kernels_common  // gk_bf16_pairs - the bf16 projection's stamp pick on both homes
 require ?vulkan dasllama/dasllama_vulkan_classes   // ple_proj_bf16_hw - the resident projection's halfword pick, where the module exists
 require ?vulkan dasllama/dasllama_vulkan_common   // GpuState / g_gpu - the device shell ple_proj_gemv_why reads, where the module exists
+require ?vulkan dasllama/dasllama_vulkan_tower   // vulkan_tower_front_route - the fronts' route asked before any device is up, where the module exists
 require dasllama/dasllama_metal_shapes   // moe_metal_ok - the Metal routed block's admission, portable
 require ?das_metal dasllama/dasllama_metal_common   // decline - the required-mode panic, where the module exists
 require ?das_metal dasllama/dasllama_metal_decode   // the metal decode override `set_metal_mode` selects
@@ -1774,5 +1775,20 @@ def test_baked_host_layers(t : T?) {
         t |> equal(vk_baked_host_layers(none), -1l, "an empty plan answers -1")
         delete plan
         delete old
+    }
+}
+
+[test]
+def test_vulkan_tower_route_before_a_device(t : T?) {
+    t |> run("the audio fronts' route answers off before a device is up - the scratch sizing asks it ahead of the arm") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (g_gpu != null) {
+                t |> skip("a device is up in this process - the no-device answer is not reachable here")
+                return
+            }
+            t |> success(!vulkan_tower_front_route(), "no device - no f16 GEMM feed, and no null dereference")
+        } else {
+            t |> skip("a build without dasVulkan has no Vulkan tower")
+        }
     }
 }
