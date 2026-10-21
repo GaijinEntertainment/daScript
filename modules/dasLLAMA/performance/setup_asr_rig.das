@@ -267,6 +267,11 @@ def private setup_libri() : bool {
 
 // ===== refs + venvs =====
 
+//! True when the mtmd checkout carries the timing patch - the `MTMD_TIMING` line the record parser
+//! reads; an unpatched build runs and prints no timing, so every reference cell of it fails late.
+def private mtmd_tree_patched(root : string) : bool =>
+    find(fread(normalize("{root}/tools/mtmd/mtmd-cli.cpp")), "MTMD_TIMING") >= 0
+
 //! True when the checkout's HEAD is the pinned commit - a re-pin rebuilds a reference whose
 //! binaries an older pin left behind, since the version capture records HEAD, not the build.
 def private at_commit(root, pin : string) : bool {
@@ -320,7 +325,11 @@ def private setup_refs(cfg : Args) : bool {
         // -f drops the previous pin's applied patch, so the patch lands on a clean tree
         run_capture("git -C \"{lroot}\" fetch -q origin && git -C \"{lroot}\" checkout -q -f {LLAMA_CPP_COMMIT}", false)
         let patch = get_full_file_name("{asr_dir()}/patches/mtmd-timing.patch")
-        run_capture("git -C \"{lroot}\" apply \"{patch}\"", false)
+        run_capture("git -C \"{lroot}\" apply -3 \"{patch}\"", false)
+        if (!mtmd_tree_patched(lroot)) {
+            to_log(LOG_ERROR, "setup_asr_rig: mtmd-timing.patch did not apply at {LLAMA_CPP_COMMIT} - port the patch to the pin (benchmarks/asr/patches/README.md)\n")
+            return false
+        }
         to_log(LOG_INFO, "setup_asr_rig: building llama-mtmd-cli (CPU-only: Metal OFF)\n")
         run_capture("cmake -S \"{lroot}\" -B \"{lroot}/build-cpu\" -DCMAKE_BUILD_TYPE=Release -DGGML_METAL=OFF && cmake --build \"{lroot}/build-cpu\" --config Release -j 8 --target llama-mtmd-cli", false)
         to_log(LOG_INFO, "setup_asr_rig: set MTMD_BIN={lroot}/build-cpu/bin/llama-mtmd-cli\n")
@@ -495,6 +504,10 @@ def private check_all() : bool {
     }
     let mt = stat(mtmd_bin()).is_valid
     to_log(mt ? LOG_INFO : LOG_WARNING, "setup_asr_rig: llama-mtmd-cli - {mt ? mtmd_versions() : "MISSING (audio-chat refs will skip)"}\n")
+    if (mt && !mtmd_tree_patched(dir_name(dir_name(dir_name(mtmd_bin()))))) {
+        to_log(LOG_ERROR, "setup_asr_rig: llama-mtmd-cli's checkout carries no MTMD_TIMING - the timing patch is not applied; run --refs\n")
+        ok = false
+    }
     for (spec in reference_venvs()) {
         continue if (spec.apple_only && !is_apple_silicon())
         let good = stat(spec.py).is_valid
