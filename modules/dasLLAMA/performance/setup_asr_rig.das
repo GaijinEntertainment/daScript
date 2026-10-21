@@ -316,7 +316,7 @@ def private setup_refs(cfg : Args) : bool {
     }
     // patched CPU-only mtmd
     let lroot = normalize("{cfg.refs_root}/llama.cpp-mtmd-ref")
-    let lmoved = stat(normalize("{lroot}/CMakeLists.txt")).is_valid && !at_commit(lroot, LLAMA_CPP_COMMIT)
+    let lmoved = stat(normalize("{lroot}/CMakeLists.txt")).is_valid && (!at_commit(lroot, LLAMA_CPP_COMMIT) || !mtmd_tree_patched(lroot))
     if (lmoved || !stat(mtmd_bin()).is_valid) {
         if (!stat(normalize("{lroot}/CMakeLists.txt")).is_valid) {
             to_log(LOG_INFO, "setup_asr_rig: cloning llama.cpp @ {LLAMA_CPP_COMMIT} for the mtmd reference\n")
