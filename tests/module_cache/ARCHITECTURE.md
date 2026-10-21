@@ -151,8 +151,11 @@ this document states what the folder is and why its tests take the shape they do
 
 The host installs the cache before `compileDaScript` and finishes it after `simulate`; the
 default path, the quiet flag and the verdict are host decisions (`utils/daslang/main.cpp`). A test compiling
-in-process sees none of them. Each case therefore spawns the daslang binary dastest itself runs
-under (`argv[0]`): the default-path case on scripts it writes to a temp directory, asserting on
+in-process sees none of them. Each case therefore spawns an interpreter.
+The shared-type-name case uses the running executable's absolute path, or
+the sibling interpreter when dastest consumes AOT; other cases use
+`argv[0]`. The default-path case runs scripts it writes to a temp
+directory, asserting on
 the child's stdout and on the files under `.cache/daslang/module_cache/` in the cwd; the
 explicit-cache cases on a driver under `_fixtures/` with `-module-cache` pointed into a temp
 directory, asserting on the child's stdout; the manifest case on a project root under a temp
