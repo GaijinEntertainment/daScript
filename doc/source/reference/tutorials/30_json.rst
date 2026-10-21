@@ -236,6 +236,13 @@ simple values too::
   sprint_json("hello", false)     // "hello"
   sprint_json([10, 20, 30], false) // [10,20,30]
 
+``sprint_json`` writes non-finite real values as ``NaN``, ``Infinity``,
+and ``-Infinity``. ``sscan_json`` accepts these spellings for ``float``,
+``double``, ``float16``, and real vector components, including values in
+nested containers and unknown fields it skips. These are Python-compatible
+extensions to JSON; strict JSON does not allow these tokens. Use finite
+values when exchanging data with a strict JSON reader.
+
 Field annotations
 =================
 

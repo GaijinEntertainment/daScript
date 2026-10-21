@@ -1,6 +1,7 @@
 #include "daScript/misc/platform.h"
 
 #include "daScript/simulate/debug_print.h"
+#include "daScript/simulate/aot_builtin_math.h"
 #include "daScript/misc/fpe.h"
 #include "daScript/misc/debug_break.h"
 
@@ -215,13 +216,29 @@ namespace das {
                 ss << "\"" << escapeString(value ? value : "",false) << "\"";
             }
         }
+        template <typename TT>
+        void printReal ( TT value ) {
+            if ( disnan(double(value)) ) ss << "NaN";
+            else if ( !disfinite(double(value)) )
+                ss << (value > 0 ? "Infinity" : "-Infinity");
+            else ss << value;
+        }
+        void printFVec ( const float * value, int count ) {
+            ss << (inTableKey ? "[" : "{");
+            for ( int i = 0; i != count; ++i ) {
+                if ( i ) ss << ",";
+                if ( !inTableKey ) ss << "\"" << "xyzw"[i] << "\":";
+                printReal(value[i]);
+            }
+            ss << (inTableKey ? "]" : "}");
+        }
         virtual void Double ( double & value ) override {
             if ( !ignoreNextFields.empty() && ignoreNextFields.back() ) return;
-            ss << value;
+            printReal(value);
         }
         virtual void Float ( float & value ) override {
             if ( !ignoreNextFields.empty() && ignoreNextFields.back() ) return;
-            ss << value;
+            printReal(value);
         }
         virtual void Int ( int32_t & value ) override {
             if ( !ignoreNextFields.empty() && ignoreNextFields.back() ) return;
@@ -268,16 +285,13 @@ namespace das {
             else ss << "{\"x\":" << int64_t(value.x) << ",\"y\":" << int64_t(value.y) << ",\"z\":" << int64_t(value.z) << ",\"w\":" << int64_t(value.w) << "}";
         }
         virtual void Float2 ( float2 & value ) override {
-            if ( inTableKey ) ss << "[" << value.x << "," << value.y << "]";
-            else ss << "{\"x\":" << value.x << ",\"y\":" << value.y << "}";
+            printFVec(&value.x, 2);
         }
         virtual void Float3 ( float3 & value ) override {
-            if ( inTableKey ) ss << "[" << value.x << "," << value.y << "," << value.z << "]";
-            else ss << "{\"x\":" << value.x << ",\"y\":" << value.y << ",\"z\":" << value.z << "}";
+            printFVec(&value.x, 3);
         }
         virtual void Float4 ( float4 & value ) override {
-            if ( inTableKey ) ss << "[" << value.x << "," << value.y << "," << value.z << "," << value.w << "]";
-            else ss << "{\"x\":" << value.x << ",\"y\":" << value.y << ",\"z\":" << value.z << ",\"w\":" << value.w << "}";
+            printFVec(&value.x, 4);
         }
         // 16/8-bit lattice: arity <=4 mirrors the xyzw object/array form of Float2..4;
         // 8/16-lane forms are always JSON arrays (no field names past w)
@@ -307,25 +321,26 @@ namespace das {
         }
         static __forceinline float f16v ( const float16_t & h ) { return h.toFloat(); }
         virtual void Float16 ( float16_t & value ) override {
-            ss << value.toFloat();
+            printReal(value.toFloat());
         }
         virtual void Half2 ( half2 & value ) override {
-            if ( inTableKey ) ss << "[" << f16v(value.x) << "," << f16v(value.y) << "]";
-            else ss << "{\"x\":" << f16v(value.x) << ",\"y\":" << f16v(value.y) << "}";
+            float v[] = { f16v(value.x), f16v(value.y) };
+            printFVec(v, 2);
         }
         virtual void Half3 ( half3 & value ) override {
-            if ( inTableKey ) ss << "[" << f16v(value.x) << "," << f16v(value.y) << "," << f16v(value.z) << "]";
-            else ss << "{\"x\":" << f16v(value.x) << ",\"y\":" << f16v(value.y) << ",\"z\":" << f16v(value.z) << "}";
+            float v[] = { f16v(value.x), f16v(value.y), f16v(value.z) };
+            printFVec(v, 3);
         }
         virtual void Half4 ( half4 & value ) override {
-            if ( inTableKey ) ss << "[" << f16v(value.x) << "," << f16v(value.y) << "," << f16v(value.z) << "," << f16v(value.w) << "]";
-            else ss << "{\"x\":" << f16v(value.x) << ",\"y\":" << f16v(value.y) << ",\"z\":" << f16v(value.z) << ",\"w\":" << f16v(value.w) << "}";
+            float v[] = { f16v(value.x), f16v(value.y), f16v(value.z),
+                f16v(value.w) };
+            printFVec(v, 4);
         }
         virtual void Half8 ( half8 & value ) override {
             ss << "[";
             for ( int i = 0; i != 8; ++i ) {
                 if ( i ) ss << ",";
-                ss << value.s[i].toFloat();
+                printReal(value.s[i].toFloat());
             }
             ss << "]";
         }
