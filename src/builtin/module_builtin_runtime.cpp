@@ -642,6 +642,10 @@ namespace das
     struct JsonScanFunctionAnnotation : MarkFunctionAnnotation {
         JsonScanFunctionAnnotation()
             : MarkFunctionAnnotation("sscan_json_destination") {}
+        virtual bool apply(const FunctionPtr &, ModuleGroup &,
+                AnnotationArgumentList &, string &) override {
+            return true;
+        }
         virtual ExpressionPtr transformCall ( ExprCallFunc * call,
                 string & err ) override {
             const auto & type = call->arguments[1]->type;
