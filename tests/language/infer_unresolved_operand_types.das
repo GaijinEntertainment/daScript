@@ -243,6 +243,11 @@ struct WithUnresolvedDim {
 }
 
 [test]
+def test_offsetof_after_unresolved_dim(t : T?) {
+    t |> equal(typeinfo offsetof < x > (type<WithUnresolvedDim>), 12)
+}
+
+[test]
 def test_pointer_stride_over_unresolved_dim(t : T?) {
     var arr : WithUnresolvedDim[4]
     unsafe {

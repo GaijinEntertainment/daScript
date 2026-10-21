@@ -3070,7 +3070,7 @@ namespace das
     // type chain is fully resolved, and not aliased \ auto
     bool TypeDecl::isFullySealed(das_set<const Structure *> & all ) const {
         if (baseType==Type::autoinfer || baseType==Type::alias) return false;
-        if ( baseType==Type::tFixedArray && fixedDim==TypeDecl::dimAuto ) {
+        if ( baseType==Type::tFixedArray && (fixedDim==TypeDecl::dimAuto || fixedDim==TypeDecl::dimConst) ) {
             return false;
         }
         if ( baseType==Type::tStructure ) {
