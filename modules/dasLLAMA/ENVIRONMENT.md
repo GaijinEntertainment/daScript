@@ -274,6 +274,7 @@ Apple Accelerate / AMX float lane. `DASLLAMA_ACCEL` arms the whole group.
 | `LLAMA_BENCH` | path | unset | Path to the llama-bench binary used to establish reference baselines. |
 | `LLAMA_BENCH_CLEAN` | path | unset | Path to a clean-build llama-bench for the reference column. |
 | `LLAMA_BENCH_STOCK` | path | unset | Path to a stock-build llama-bench for the reference column; its sibling llama-mtmd-cli serves as the metal/amx image-chat reference. |
+| `LLAMA_BENCH_VULKAN` | path | unset | Path to a Vulkan-build llama-bench (setup_lcpp_ref's vulkan flavor) for the vulkan leg's reference column. |
 | `WHISPER_CPP` | path | ../whisper.cpp | whisper.cpp checkout used for ASR reference baselines. |
 | `WHISPER_CPP_MODELS` | path | unset | Directory of whisper.cpp models for ASR reference baselines. |
 | `MTMD_BIN` | path | unset | llama-mtmd-cli binary for multimodal reference baselines. |

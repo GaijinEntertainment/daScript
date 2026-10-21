@@ -440,3 +440,35 @@ def test_board_refs_guard(t : T?) {
         t |> equal(board_refs_refusal(true, false, true, true, "", ""), "", "an asr/tts-only run reads no llama-bench")
     }
 }
+
+[test]
+def test_vulkan_leg_guards(t : T?) {
+    t |> run("the vulkan leg runs alone, off Apple, under the GPU ask, on a dasVulkan build") @(t : T?) {
+        t |> equal(vulkan_leg_refusal(false, true, true, false), "", "no vulkan leg - nothing to refuse")
+        t |> success(find(vulkan_leg_refusal(true, false, true, true), "Apple") >= 0, "refused on Apple")
+        var built = false
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            built = true
+        }
+        if (built) {
+            t |> success(find(vulkan_leg_refusal(true, false, false, false), "DASLLAMA_GPU") >= 0, "refused without the GPU ask")
+            t |> success(find(vulkan_leg_refusal(true, true, false, true), "alone") >= 0, "refused beside another leg")
+            t |> equal(vulkan_leg_refusal(true, false, false, true), "", "admitted alone under the ask")
+        } else {
+            t |> success(find(vulkan_leg_refusal(true, false, false, true), "dasVulkan") >= 0, "refused on a build without dasVulkan")
+        }
+        t |> success(find(board_refs_refusal(true, true, false, false, "", "", true, ""), "--ref-vulkan") >= 0, "a board mint pairs every vulkan cell")
+        t |> equal(board_refs_refusal(true, true, false, false, "", "", true, "/b/vk"), "", "with the vulkan ref the mint starts")
+    }
+    t |> run("a vulkan cell holds only when every das row served on the device") @(t : T?) {
+        var served <- [BenchModel(gguf = "m.gguf", runs <- [BenchRun(engine = "das", backend = "vulkan")])]
+        var fell <- [BenchModel(gguf = "m.gguf", runs <- [BenchRun(engine = "das", backend = "cpu")])]
+        var empty_cell : array<BenchModel>
+        t |> success(cell_served_on(served, "vulkan"), "a vulkan-stamped das row holds")
+        t |> success(!cell_served_on(fell, "vulkan"), "a cpu-stamped das row on the vulkan leg fails")
+        t |> success(!cell_served_on(empty_cell, "vulkan"), "a cell with no das row fails")
+        t |> success(cell_served_on(fell, "cpu"), "the cpu legs stamp themselves")
+        delete served
+        delete fell
+    }
+}

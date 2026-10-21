@@ -13,6 +13,8 @@ require daslib/strings_boost
 //              kernels don't use it)
 //   stock:     release defaults — llama.cpp as people actually run it (Accelerate + Metal on
 //              macOS); one build serves CPU rows (-ngl 0) and Metal rows (-ngl 99)
+//   vulkan:    release defaults plus -DGGML_VULKAN=ON — the vulkan leg's reference (-ngl 99); its
+//              glslc comes from a Vulkan SDK of 1.4.357 or later (BRINGUP.md, reference engines)
 // Usage: bin/daslang modules/dasLLAMA/benchmarks/setup_lcpp_ref.das -- --src ~/Work/llama.cpp
 // Point lcpp_bench --ref (or LLAMA_BENCH) at the reported binaries.
 
@@ -28,7 +30,7 @@ struct Args {
     @clarg_doc = "llama.cpp commit to pin (default: the standing reference sha)"
     sha : string
 
-    @clarg_doc = "Build flavor, repeatable: clean-cpu | stock (default: both)"
+    @clarg_doc = "Build flavor, repeatable: clean-cpu | stock | vulkan (default: clean-cpu and stock)"
     flavor : array<string>
 
     @clarg_short = "j"
@@ -67,6 +69,9 @@ def private shell_unsafe(s : string) : bool {
 def private flavor_flags(flavor : string) : string {
     if (flavor == "clean-cpu") {
         return " -DGGML_ACCELERATE=OFF -DGGML_BLAS=OFF -DGGML_METAL=OFF"
+    }
+    if (flavor == "vulkan") {
+        return " -DGGML_VULKAN=ON"
     }
     return ""   // stock: release defaults
 }
@@ -121,8 +126,8 @@ def main : int {
         flavors <- ["clean-cpu", "stock"]   // nolint:PERF030 — the enclosing empty(flavors) guard proves the target holds nothing
     }
     for (f in flavors) {
-        if (f != "clean-cpu" && f != "stock") {
-            print("error: unknown flavor `{f}` - expected clean-cpu | stock\n")
+        if (f != "clean-cpu" && f != "stock" && f != "vulkan") {
+            print("error: unknown flavor `{f}` - expected clean-cpu | stock | vulkan\n")
             return 1
         }
     }

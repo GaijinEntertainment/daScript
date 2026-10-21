@@ -201,7 +201,8 @@ merge against the commit the patch was cut at, and a shallow clone holds no blob
 the apply stops at `repository lacks the necessary blob to perform 3-way merge`. Deepen it first
 (`git -C <llama.cpp> fetch --unshallow origin`).
 
-A Vulkan reference (`-DGGML_VULKAN=ON`) is built with a glslc that knows
+A Vulkan reference is the `vulkan` flavor (`--flavor vulkan`, `-DGGML_VULKAN=ON`; the vulkan leg's
+`--ref-vulkan` / `LLAMA_BENCH_VULKAN`), built with a glslc that knows
 `GL_NV_cooperative_matrix_decode_vector` - Vulkan SDK 1.4.357 or later - and its device banner
 reads `NV_coopmat2v` on a driver that lists the extension. Built with an older SDK the exe keeps
 its 64-deep expert-tile k step over a scalar decode and under-reads llama.cpp by about a quarter

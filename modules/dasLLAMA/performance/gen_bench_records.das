@@ -60,7 +60,7 @@ struct Args {
     @clarg_doc = "Backends to measure: cpu | metal | all (default: all — metal on Apple boxes only)"
     backend : string = "all"
 
-    @clarg_doc = "Comma list of pair legs to run: neon | amx | metal (default: every leg --backend implies; cpu = neon,amx)"
+    @clarg_doc = "Comma list of pair legs to run: neon | amx | metal | vulkan (default: every leg --backend implies; cpu = neon,amx; vulkan is asked by name and runs alone, under DASLLAMA_GPU=1 on a dasVulkan build)"
     legs : string
 
     @clarg_doc = "Seconds to idle between passes (default: 12) — a dead child's 10-20GB map reclaims ASYNC after exit, and short cells bench right into that churn (12B pp ±33 at 0s settle, ±3 at 12s)"
@@ -77,6 +77,10 @@ struct Args {
     @clarg_name = "ref-stock"
     @clarg_doc = "stock llama-bench binary (default: env LLAMA_BENCH_STOCK); its sibling llama-mtmd-cli serves as the metal/amx image-chat reference"
     ref_stock : string
+
+    @clarg_name = "ref-vulkan"
+    @clarg_doc = "Vulkan-build llama-bench binary for the vulkan leg (default: env LLAMA_BENCH_VULKAN)"
+    ref_vulkan : string
 
     @clarg_doc = "Streams of every leg's batched tg row, tg128@<npl> - das through the scheduler, the reference through the llama-batched-bench beside the leg's llama-bench, under its -ngl, op-offload and affinity arms; 0 = no batched row (default: 4)"
     npl : int = 4
@@ -229,11 +233,38 @@ def catalog_known(catalog : string) : bool => catalog == "official" || catalog =
 def store_is_board(store : string) : bool =>
     empty(store) || (base_name(dir_name(store)) == "records" && base_name(dir_name(dir_name(store))) == "performance")
 
+//! The vulkan leg's preconditions: a dasVulkan build off Apple with the GPU tier asked
+//! (DASLLAMA_GPU=1, which every das child inherits), and no other leg in the run - a cpu child
+//! under that environment would serve on the device. Returns the refusal text, or "".
+def vulkan_leg_refusal(vulkan, other_legs, apple, gpu_asked : bool) : string {
+    return "" if (!vulkan)
+    if (apple) {
+        return "the vulkan leg runs off Apple - Metal is this box's GPU leg"
+    }
+    var built = false
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        built = true
+    }
+    if (!built) {
+        return "the vulkan leg needs a dasVulkan build"
+    }
+    if (!gpu_asked) {
+        return "the vulkan leg needs DASLLAMA_GPU=1 in the environment - the das children arm the GPU tier off it"
+    }
+    if (other_legs) {
+        return "the vulkan leg runs alone - under DASLLAMA_GPU=1 a cpu leg's child would serve on the device"
+    }
+    return ""
+}
+
 //! The guard on a board mint's references: every das LLM cell on `records/<box>.json` publishes
 //! as a ratio, so a leg whose llama-bench is unset refuses the run rather than minting das-only
 //! rows. Returns the refusal text, or "" when the run may start.
-def board_refs_refusal(board, llm, neon, stock_legs : bool; ref_clean, ref_stock : string) : string {
+def board_refs_refusal(board, llm, neon, stock_legs : bool; ref_clean, ref_stock : string; vulkan : bool = false; ref_vulkan : string = "") : string {
     return "" if (!board || !llm)
+    if (vulkan && empty(ref_vulkan)) {
+        return "a board mint pairs every vulkan cell - pass --ref-vulkan (LLAMA_BENCH_VULKAN), or measure into --store <path>"
+    }
     if (neon && empty(ref_clean)) {
         return "a board mint pairs every cpu cell - pass --ref-clean (LLAMA_BENCH_CLEAN), or measure into --store <path>"
     }
@@ -500,7 +531,7 @@ def private run_das_child(file, path, be, tag, exe : string; accel, frozen : boo
     }
     if (cfg.npl > 1) {   //! the batched row rides every leg's own child: on Metal and the CPU stack --npl reshapes nothing, so the flat rows stay the board's
         args |> push_from(["--npl", "{cfg.npl}"])
-        if (be != "metal") {   //! the cpu legs' own shape; the metal child takes the flat rows' -p / -r on its own, and its receipt carries no cpu-only flag
+        if (be == "cpu") {   //! the cpu legs' own shape; a GPU child takes the flat rows' -p / -r on its own, and its receipt carries no cpu-only flag
             let shape = npl_leg_shape(cfg, true)
             args |> push_from(["--npl-plen", "{shape.plen}", "--npl-reps", "{shape.reps}"])
         }
@@ -556,6 +587,21 @@ def private run_das_child(file, path, be, tag, exe : string; accel, frozen : boo
     return true
 }
 
+//! True when every das row of the cell carries the backend its GPU leg asked for; the cpu legs
+//! stamp themselves (a Vulkan build's cpu arm reads "vulkan" when the tier served) and pass.
+def cell_served_on(cell : array<BenchModel>; be : string) : bool {
+    return true if (be != "vulkan")
+    var any = false
+    for (m in cell) {
+        for (r in m.runs) {
+            continue if (r.engine != "das")
+            return false if (r.backend != be)
+            any = true
+        }
+    }
+    return any
+}
+
 def private das_cell(file, path, be, exe : string; accel : bool; cfg : Args; threads : int; cellPath, note, store : string;
                      var models : array<BenchModel>; var failed : array<string>) {
     let t0 = ref_time_ticks()
@@ -569,6 +615,12 @@ def private das_cell(file, path, be, exe : string; accel : bool; cfg : Args; thr
         return
     }
     mint_check(models_dir(), "{file} das {tag}")
+    if (!cell_served_on(cell, be)) {
+        to_log(LOG_ERROR, "gen_bench_records: FAILED {file} das {tag} - a das row came back off the {be} backend (the GPU tier declined the model?) - a {be} row that measured another backend\n")
+        failed |> push("{file} das {tag}")
+        remove(cellPath)
+        return
+    }
     absorb_cell(models, cell, store, note, failed, "ok")
     remove(cellPath)
     g_cells_measured++
@@ -979,10 +1031,10 @@ def private ref_pass(file, path, bin, flavor : string; ngl : int; nopo : bool; c
                      hw : HardwareInfo; box, date, note, store : string;
                      var models : array<BenchModel>; var failed : array<string>; var refSkipped : array<string>) {
     if (empty(bin)) {
-        refSkipped |> push("{file} ref {flavor} {ngl != 0 ? "metal" : "cpu"}")
+        refSkipped |> push("{file} ref {flavor} {ngl != 0 ? (get_platform_name() == "darwin" ? "metal" : "vulkan") : "cpu"}")
         return
     }
-    let backend = ngl != 0 ? "metal" : "cpu"
+    let backend = ngl != 0 ? (get_platform_name() == "darwin" ? "metal" : "vulkan") : "cpu"
     let t0 = ref_time_ticks()
     var refPin : array<string>   //! the CPU reference's affinity - the flat exe's and the batched exe's alike
     if (ngl == 0 && !cfg.ref_no_affinity) {
@@ -1635,6 +1687,7 @@ def main : int {
     var legNeon = false
     var legAmx = false
     var legMetal = false
+    var legVulkan = false
     if (!empty(cfg.legs)) {
         for (l in split(cfg.legs, ",")) {
             let tok = trim(l)
@@ -1647,8 +1700,10 @@ def main : int {
                 legAmx = true
             } elif (tok == "metal") {
                 legMetal = true
+            } elif (tok == "vulkan") {
+                legVulkan = true
             } elif (!empty(tok)) {
-                to_log(LOG_ERROR, "gen_bench_records: unknown leg `{tok}` (expected cpu | neon | amx | metal)\n")
+                to_log(LOG_ERROR, "gen_bench_records: unknown leg `{tok}` (expected cpu | neon | amx | metal | vulkan)\n")
                 return 1
             }
         }
@@ -1661,7 +1716,12 @@ def main : int {
         to_log(LOG_ERROR, "gen_bench_records: legs metal/amx need an Apple box\n")
         return 1
     }
-    if (!(legNeon || legAmx || legMetal)) {
+    let vulkanRefusal = vulkan_leg_refusal(legVulkan, legNeon || legAmx || legMetal, apple, is_some(g_env_gpu.gpu) && unwrap(g_env_gpu.gpu))
+    if (!empty(vulkanRefusal)) {
+        to_log(LOG_ERROR, "gen_bench_records: {vulkanRefusal}\n")
+        return 1
+    }
+    if (!(legNeon || legAmx || legMetal || legVulkan)) {
         to_log(LOG_ERROR, "gen_bench_records: no legs selected (--backend {cfg.backend} --legs {cfg.legs})\n")
         return 1
     }
@@ -1704,6 +1764,11 @@ def main : int {
     }
     var refClean = empty(cfg.ref_clean) ? g_env_prof.llama_bench_clean : cfg.ref_clean
     var refStock = empty(cfg.ref_stock) ? g_env_prof.llama_bench_stock : cfg.ref_stock
+    var refVulkan = empty(cfg.ref_vulkan) ? g_env_prof.llama_bench_vulkan : cfg.ref_vulkan
+    if (!empty(refVulkan) && !stat(refVulkan).is_valid) {
+        to_log(LOG_WARNING, "gen_bench_records: vulkan ref `{refVulkan}` not found - vulkan cells run das-only\n")
+        refVulkan = ""
+    }
     if (!empty(refClean) && !stat(refClean).is_valid) {
         to_log(LOG_WARNING, "gen_bench_records: clean-cpu ref `{refClean}` not found - neon cells run das-only\n")
         refClean = ""
@@ -1720,7 +1785,7 @@ def main : int {
     if (doLlm && empty(refStock)) {
         to_log(LOG_WARNING, "gen_bench_records: stock ref UNSET (--ref-stock / LLAMA_BENCH_STOCK) - no stock rows, metal/amx cells mint das-only\n")
     }
-    let refsRefusal = board_refs_refusal(store_is_board(cfg.store), doLlm, legNeon, legMetal || legAmx, refClean, refStock)
+    let refsRefusal = board_refs_refusal(store_is_board(cfg.store), doLlm, legNeon, legMetal || legAmx, refClean, refStock, legVulkan, refVulkan)
     if (!empty(refsRefusal)) {
         to_log(LOG_ERROR, "gen_bench_records: {refsRefusal}\n")
         return 1
@@ -1793,6 +1858,12 @@ def main : int {
         // das-cpu heat soak while the metal ref ran minutes later on a different chip
         // state (27B: das 110.7 soaked vs 138.1 quiet — a phantom 0.91 board red). Refs still
         // run independently of das-cell failures.
+        if (doLlm && legVulkan) {
+            settle(cfg.das_settle)
+            das_cell(file, path, "vulkan", exe, false, cfg, threads, cellPath, ent.note, store, models, failed)
+            settle(cfg.das_settle)
+            ref_pass(file, path, refVulkan, "stock", 99, false, cfg, threads, hw, box, date, ent.note, store, models, failed, refSkipped)
+        }
         if (doLlm && legMetal) {
             settle(cfg.das_settle)
             das_cell(file, path, "metal", exe, false, cfg, threads, cellPath, ent.note, store, models, failed)

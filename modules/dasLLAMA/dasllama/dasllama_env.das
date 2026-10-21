@@ -775,6 +775,11 @@ struct public ProfilingEnv {
     @clarg_doc = "Path to a stock-build llama-bench for the reference column; its sibling llama-mtmd-cli serves as the metal/amx image-chat reference."
     llama_bench_stock : string = ""
 
+    @clarg_env = "LLAMA_BENCH_VULKAN"
+    @clarg_path
+    @clarg_doc = "Path to a Vulkan-build llama-bench (setup_lcpp_ref's vulkan flavor) for the vulkan leg's reference column."
+    llama_bench_vulkan : string = ""
+
     @clarg_env = "WHISPER_CPP"
     @clarg_path
     @clarg_doc = "whisper.cpp checkout used for ASR reference baselines."
