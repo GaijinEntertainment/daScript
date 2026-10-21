@@ -639,6 +639,21 @@ namespace das
         }
     };
 
+    struct JsonScanFunctionAnnotation : ArgumentTemplateAnnotation {
+        JsonScanFunctionAnnotation()
+            : ArgumentTemplateAnnotation("sscan_json_destination") {}
+        virtual bool isCompatible ( const FunctionPtr &,
+                const vector<TypeDeclPtr> & types,
+                const AnnotationDeclaration &, string & err ) const override {
+            if ( types.size()>1 &&
+                    (!types[1]->isRef() || types[1]->constant) ) {
+                err = "sscan_json destination must be a mutable reference";
+                return false;
+            }
+            return true;
+        }
+    };
+
     // totally dummy annotation, needed for comments
     struct CommentAnnotation : StructureAnnotation {
         CommentAnnotation() : StructureAnnotation("comment") {}
@@ -1780,12 +1795,7 @@ namespace das
         auto json = cast<char *>::to(args[0]);
         if ( !json ) return cast<bool>::from(false);
         auto typeInfo = call->types[1];
-        char * dst;
-        if ( typeInfo->flags & TypeInfo::flag_refType ) {
-            dst = cast<char *>::to(args[1]);
-        } else {
-            dst = (char *)&args[1];
-        }
+        char * dst = cast<char *>::to(args[1]);
         uint32_t jsonLen = uint32_t(strlen(json));
         bool ok = debug_json_scan(context, dst, typeInfo, json, jsonLen, &call->debugInfo);
         return cast<bool>::from(ok);
@@ -2558,9 +2568,13 @@ namespace das
         addInterop<builtin_json_sprint,char *,vec4f,bool>(*this, lib, "sprint_json",
             SideEffects::modifyExternal, "builtin_json_sprint")
                 ->args({"value","humanReadable"})->setTempStringResult();
-        addInterop<builtin_json_sscan,bool,char *,vec4f>(*this, lib, "sscan_json",
+        auto scanJson = addInterop<builtin_json_sscan,bool,char *,vec4f &>(
+            *this, lib, "sscan_json",
             SideEffects::modifyArgumentAndExternal|SideEffects::invoke, "builtin_json_sscan")
                 ->args({"json","value"});
+        AnnotationDeclarationPtr scanJsonDecl = new AnnotationDeclaration();
+        scanJsonDecl->annotation = new JsonScanFunctionAnnotation();
+        scanJson->annotations.push_back(scanJsonDecl);
         addExternInline<DAS_BIND_FUN(builtin_terminate)>(*this, lib, "terminate",
             SideEffects::modifyExternal, "terminate")
                 ->args({"context","at"});
