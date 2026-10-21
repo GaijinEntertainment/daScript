@@ -80,6 +80,41 @@ def test_asr_round_trip(t : T?) {
 }
 
 [test]
+def test_tts_round_trip(t : T?) {
+    t |> run("a TTS cell's das and reference rows survive write/read under one test key") @(t : T?) {
+        let key = tts_test_key(20, "af_heart")
+        var das = BenchRun(engine = "das", backend = "metal", flavor = "tuned", workload = "tts", box = "testbox",
+            threads = 8, date = "2026-10-21", cmd = "lcpp_bench --tts", dasllama_version = DASLLAMA_RELEASE)
+        das.tests |> insert(key, BenchTest(ms = 2471.5lf, audio_s = 187.5lf))
+        das.files |> emplace(InputFile(role = "corpus", name = "g2p_corpus.json", bytes = 1000l))
+        var ref = BenchRun(engine = "mlx-audio", backend = "metal", flavor = "stock", workload = "tts", box = "testbox",
+            threads = 8, date = "2026-10-21", cmd = "tts_ref_bench.py", versions = "mlx 0.32.4 (requirements-mlx.txt)")
+        ref.tests |> insert(key, BenchTest(ms = 3875.2lf, audio_s = 187.0lf))
+        var models : array<BenchModel>
+        models |> emplace(BenchModel(gguf = "kokoro-82m.gguf", arch = "Kokoro-82M", runs <- [ <- das, <- ref]))
+        t |> success(write_bench_records(TMP, models), "the store writes")
+        var back : array<BenchModel>
+        t |> success(read_bench_records(TMP, back), "store re-reads")
+        t |> equal(length(back[0].runs), 2)
+        t |> equal(back[0].runs[0].workload, "tts")
+        t |> equal(back[0].runs[0].tests?[key]?.ms ?? 0.0lf, 2471.5lf)
+        t |> equal(back[0].runs[0].tests?[key]?.audio_s ?? 0.0lf, 187.5lf)
+        t |> equal(back[0].runs[1].tests?[key]?.ms ?? 0.0lf, 3875.2lf)
+        t |> equal(back[0].runs[0].files[0].role, "corpus")
+        t |> equal(back[0].runs[1].engine, "mlx-audio")
+        remove(TMP)
+    }
+    t |> run("a TTS row and an LLM row of one model and leg are two rows") @(t : T?) {
+        var m = BenchModel(gguf = "kokoro-82m.gguf")
+        var llm = BenchRun(engine = "das", backend = "cpu", flavor = "tuned", box = "m1", cmd = "llm")
+        var tts = BenchRun(engine = "das", backend = "cpu", flavor = "tuned", workload = "tts", box = "m1", cmd = "tts")
+        upsert_bench_run(m.runs, llm)
+        upsert_bench_run(m.runs, tts)
+        t |> equal(length(m.runs), 2)
+    }
+}
+
+[test]
 def test_upsert_workload_key(t : T?) {
     t |> run("workload joins the upsert identity") @(t : T?) {
         var m = BenchModel(gguf = "gemma-4-E4B-it-Q8_0.gguf")
@@ -176,7 +211,7 @@ def test_asr_catalog_invariants(t : T?) {
         var libriCount = 0
         // the Metal-rail roster: metal_served decides which rows get GPU board cells and
         // which reference legs pair GPU-vs-GPU, so a silent flip re-lanes the public board
-        let metal_families <- {"Whisper tiny", "Whisper large-v3-turbo", "Canary-Qwen 2.5B",
+        let metal_families <- {"Parakeet-TDT v2", "Parakeet-TDT v3", "Whisper tiny", "Whisper large-v3-turbo", "Canary-Qwen 2.5B",
                                "Qwen3-ASR-0.6B", "Gemma-4 E2B audio", "Qwen3-Omni-30B audio"}
         for (spec in cat) {
             if (!empty(spec.libri_short)) {
@@ -186,7 +221,9 @@ def test_asr_catalog_invariants(t : T?) {
                 t |> success(wav != "gemma4a_test2.wav", "no untraceable clips in the catalog")
             }
             let wl = asr_workload(spec)
-            t |> success(wl == "asr" || wl == "audio-chat", "workload classifies")
+            let chats <- {"Gemma-4 E2B audio", "Qwen3-Omni-30B audio"}
+            t |> equal(wl, key_exists(chats, spec.display) ? "audio-chat" : "asr",
+                       "{spec.display}: the chat models are audio-chat, every speech-to-text model asr")
             t |> equal(spec.metal_served, key_exists(metal_families, spec.display),
                        "{spec.display}: metal_served matches the Metal-rail roster")
         }
@@ -300,21 +337,20 @@ def test_das_run_unstamped(t : T?) {
 
 [test]
 def test_workload_scope(t : T?) {
-    t |> run("the -w scope table: llm/asr/image cells per workload, unknown rejected") @(t : T?) {
-        var llm = false
-        var asr = false
-        var image = false
-        t |> success(workload_scope("all", llm, asr, image), "all is known")
-        t |> success(llm && asr && image, "all selects every cell set")
-        t |> success(workload_scope("llm", llm, asr, image), "llm is known")
-        t |> success(llm && !asr && image, "llm selects text + image (image rides the llm sweep)")
-        t |> success(workload_scope("asr", llm, asr, image), "asr is known")
-        t |> success(!llm && asr && !image, "asr selects only the audio cells")
-        t |> success(workload_scope("image", llm, asr, image), "image is known")
-        t |> success(!llm && !asr && image, "image narrows to the image cells alone")
-        t |> success(!workload_scope("bogus", llm, asr, image), "an unknown workload is rejected")
-        t |> success(!llm && !asr && !image, "a rejection selects nothing")
-        t |> success(!workload_scope("", llm, asr, image), "the empty workload is rejected")
+    t |> run("the -w scope table: llm/asr/image/tts cells per workload, unknown rejected") @(t : T?) {
+        let all = workload_scope("all")
+        t |> success(all.known && all.llm && all.asr && all.image && all.tts, "all selects every cell set")
+        let llm = workload_scope("llm")
+        t |> success(llm.known && llm.llm && !llm.asr && llm.image && !llm.tts, "llm selects text + image (image rides the llm sweep)")
+        let asr = workload_scope("asr")
+        t |> success(asr.known && !asr.llm && asr.asr && !asr.image && !asr.tts, "asr selects only the audio cells")
+        let image = workload_scope("image")
+        t |> success(image.known && !image.llm && !image.asr && image.image && !image.tts, "image narrows to the image cells alone")
+        let tts = workload_scope("tts")
+        t |> success(tts.known && !tts.llm && !tts.asr && !tts.image && tts.tts, "tts selects only the synthesis cells")
+        let bogus = workload_scope("bogus")
+        t |> success(!bogus.known && !bogus.llm && !bogus.asr && !bogus.image && !bogus.tts, "an unknown workload is rejected and selects nothing")
+        t |> success(!workload_scope("").known, "the empty workload is rejected")
     }
 }
 

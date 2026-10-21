@@ -198,6 +198,15 @@ def private handle_versions(var req : HttpRequest?; var resp : HttpResponse?) : 
 }
 
 def private run_to_jv(r : Run) : JsonValue? {
+    // the store keeps the audio cells as their JSON text; "" reads as no cells
+    var jerr = ""
+    var audio : JsonValue?
+    if (!empty(r.Audio)) {
+        audio = read_json(r.Audio, jerr)
+    }
+    if (audio == null) {
+        audio = JV(array<JsonValue?>())
+    }
     return JV((
         id = r.Id, submission_id = r.SubmissionId, model_idx = r.ModelIdx, run_idx = r.RunIdx,
         gguf = r.Gguf, model_arch = r.ModelArch, quant = r.Quant,
@@ -207,7 +216,7 @@ def private run_to_jv(r : Run) : JsonValue? {
         version = r.Version, dasllama_version = r.DasllamaVersion,
         engine_sha = r.EngineSha, tune_sha = r.TuneSha,
         source = r.Source, verified = r.Verified != 0,
-        pp512 = r.Pp512, tg128 = r.Tg128, tg128b4 = r.Tg128b4, cpu = r.Cpu))
+        pp512 = r.Pp512, tg128 = r.Tg128, tg128b4 = r.Tg128b4, cpu = r.Cpu, audio = audio))
 }
 
 def private handle_runs(var req : HttpRequest?; var resp : HttpResponse?) : http_status {

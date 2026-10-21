@@ -2977,8 +2977,10 @@ need an explicit `--store`, each with its store-given control and the board-mint
 das child's argv spelling on both arms (released exe vs the `--jit` bench source with
 `--for-debug-purposes`), and the cold/warm retry verdict - `cell_rates` folding a cell's das rows
 onto the pp and tg axes separately and `keep_cold` keeping the cold cell when the warm re-run is
-slower on either, each bar with its control - the branches that decide what lands on the public
-board, which no model suite reaches.
+slower on either, each bar with its control - and the TTS cell's seams: the reference argv on the
+torch and mlx arms, its `BENCH` and `VERSIONS` lines read back, the das child's argv, the catalog
+lookup, the corpus head and the GPU seats' verdict (`none` / `all` / `partial`) - the branches that
+decide what lands on the public board, which no model suite reaches.
 `test_sizing_helpers.das` - model-free: the sizing helpers (`reserve_resize` exact capacity,
 `grow_resize` geometric reuse and its re-added tail reading zero, `ensure_length` grow-only with
 the grown tail zeroed, `overwrite_resize` grow-only no-init) fed directly, including grows past

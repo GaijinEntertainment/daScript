@@ -82,19 +82,26 @@
     { backend: 'vulkan', das: 'tuned', ref: 'stock',     label: 'gpu' }
   ];
 
+  // an mlx-lm row (Apple boxes, backend metal) is a row of its own on the LLM ladder, paired
+  // with the llama.cpp stock run of its backend like a das gpu row
+  function laneOf(fr) {
+    if (fr.engine === 'mlx-lm') return { backend: fr.backend, ref: 'stock', label: fr.backend === 'cpu' ? 'cpu' : 'gpu' };
+    for (var i = 0; i < LANES.length; i++) {
+      if (LANES[i].backend === fr.backend && LANES[i].das === fr.flavor) return LANES[i];
+    }
+    return null;
+  }
+
   function buildRows(runs) {
     var out = [];
     runs.forEach(function (fr) {
-      if (fr.engine !== 'das' || fr.workload) return;   // the ladder is LLM rows; audio is a follow-up
-      var lane = null;
-      for (var i = 0; i < LANES.length; i++) {
-        if (LANES[i].backend === fr.backend && LANES[i].das === fr.flavor) { lane = LANES[i]; break; }
-      }
+      if ((fr.engine !== 'das' && fr.engine !== 'mlx-lm') || fr.workload) return;   // LLM rows; audio has its own ladders
+      var lane = laneOf(fr);
       var ref = null;
       if (lane) {
         runs.forEach(function (r) {
           if (r.submission_id !== fr.submission_id || r.model_idx !== fr.model_idx) return;
-          if (r.engine === 'das' || r.box !== fr.box) return;
+          if (r.engine !== 'llama.cpp' || r.box !== fr.box) return;
           if (r.backend !== lane.backend || r.flavor !== lane.ref) return;
           if ((r.workload || '') !== (fr.workload || '')) return;
           if (!ref || String(r.date || '').localeCompare(String(ref.date || '')) > 0) ref = r;
@@ -104,11 +111,11 @@
         (fr.backend === 'cpu' ? 'cpu' : (fr.backend === 'metal' || fr.backend === 'vulkan') ? 'gpu' : fr.backend);
       out.push({
         model: String(fr.gguf).replace(/\.gguf$/, ''), arch: fr.model_arch || '', quant: fr.quant || '',
-        size: fr.size_bytes || 0, box: fr.box,
+        size: fr.size_bytes || 0, box: fr.box, engine: fr.engine,
         boxName: boxLabel(fr.cpu, fr.box),
         lane: laneLabel, threads: fr.threads || 0,
         source: fr.source || '', verified: !!fr.verified,
-        version: fr.dasllama_version || 0, date: fr.date || '',
+        version: riderVersion(runs, fr, ''), date: fr.date || '',
         submissionId: fr.submission_id,
         pp_das: fr.pp512 || 0, pp_ref: ref ? ref.pp512 || 0 : 0,
         tg_das: fr.tg128 || 0, tg_ref: ref ? ref.tg128 || 0 : 0,
@@ -147,6 +154,12 @@
     if (r.comment) lines.push('        <span class="dl-receipt-note"><b>note</b>  ' + esc(r.comment) + '</span>');
   }
 
+  // a receipt side's tag: the engine name, padded to the 'reference' column, escaped
+  function sideTag(engine) {
+    var s = String(engine || '');
+    return esc(s.length < 9 ? (s + '         ').slice(0, 9) : s);
+  }
+
   // the BenchRun a flat row points at inside its submission document; the flat row itself
   // when the document does not hold that slot
   function docRun(doc, fr) {
@@ -158,7 +171,7 @@
   function rowReceipt(r) {
     return loadDoc(r.submissionId).then(function (doc) {
       var lines = [];
-      sideLines('das      ', docRun(doc, r.das), lines);
+      sideLines(sideTag(r.engine), docRun(doc, r.das), lines);
       lines.push('');
       if (r.ref) sideLines('reference', docRun(doc, r.ref), lines);
       else lines.push('<b>reference</b>  none rode along — the absolute numbers stand alone, no parity claimed.');
@@ -203,6 +216,8 @@
 
     var sort = { key: spec.sort.key, desc: !!spec.sort.desc };
     var filter = {};
+    // a required filter has no "all" option: reset returns it to its initial value
+    function resetValue(f) { return f.required ? String(f.initial || '') : ''; }
     spec.filterDefs.forEach(function (f) { filter[f.field] = f.initial || ''; });
 
     function colOf(key) {
@@ -252,7 +267,7 @@
       } else {
         bodyHTML = rows.map(function (r, i) {
           var tds = spec.cols.map(function (c) {
-            var out = c.cell(r);
+            var out = c.cell(r, i);
             if (out.charAt(0) === '<') return out;
             var cls = [];
             if (c.num) cls.push('dl-num');
@@ -308,7 +323,7 @@
         }
         return '<label>' + esc(f.title || f.field) +
           ' <select class="js-filter" data-field="' + f.field + '">' +
-          '<option value="">' + esc(f.all) + '</option>' +
+          (f.required ? '' : '<option value="">' + esc(f.all) + '</option>') +
           opts.map(function (o) {
             var sel = String(o.v) === String(f.initial || '') ? ' selected' : '';
             return '<option value="' + esc(o.v) + '"' + sel + '>' + esc(o.label) + '</option>';
@@ -321,8 +336,8 @@
         sel.addEventListener('change', function () { filter[sel.dataset.field] = sel.value; render(); });
       });
       filterBox.querySelector('.js-reset').addEventListener('click', function () {
-        spec.filterDefs.forEach(function (f) { filter[f.field] = ''; });
-        filterBox.querySelectorAll('.js-filter').forEach(function (s) { s.value = ''; });
+        spec.filterDefs.forEach(function (f) { filter[f.field] = resetValue(f); });
+        filterBox.querySelectorAll('.js-filter').forEach(function (s) { s.value = filter[s.dataset.field]; });
         sort = { key: spec.sort.key, desc: !!spec.sort.desc };
         render();
       });
@@ -407,6 +422,8 @@
           }, cls: 'dl-td-model' },
         { key: 'box', label: 'machine', get: function (r) { return r.boxName; },
           cell: function (r) { return esc(r.boxName); }, cls: 'dl-dim2 dl-td-machine' },
+        { key: 'engine', label: 'engine', get: function (r) { return r.engine; },
+          cell: function (r) { return esc(r.engine); }, cls: 'dl-dim2' },
         { key: 'lane', label: 'category', get: function (r) { return r.lane; },
           cell: function (r) { return esc(r.lane); }, cls: 'dl-dim2 dl-td-lane' },
         { key: 'threads', label: 'threads', num: true, dim: true,
@@ -445,6 +462,7 @@
           initial: init > 0 ? String(init) : '' },
         { field: 'model', title: 'model', all: 'all models', get: function (r) { return r.model; } },
         { field: 'box', title: 'machine', all: 'all machines', get: function (r) { return r.box; }, label: function (r) { return r.boxName; } },
+        { field: 'engine', title: 'engine', all: 'all engines', get: function (r) { return r.engine; } },
         { field: 'lane', title: 'category', all: 'all categories', get: function (r) { return r.lane; } },
         { field: 'source', title: 'source', all: 'all sources',
           get: function (r) { return r.source; } }
@@ -460,19 +478,6 @@
       }
     });
 
-    // stats aside: rows · boxes · last submission date
-    var aside = document.getElementById('dio-ladder-stats');
-    if (aside) {
-      var boxes = {}, last = '';
-      rows.forEach(function (r) {
-        boxes[r.box] = true;
-        if (r.date > last) last = r.date;
-      });
-      aside.innerHTML = '<b>' + rows.length + '</b> rows · <b>' + Object.keys(boxes).length + '</b> boxes<br/>' +
-        'last measurement <b>' + esc(last || '—') + '</b><br/>' +
-        '<a href="https://daslang.io/doc/reference/dasllama_methodology.html" style="color:var(--amber-dim);border-bottom:1px solid var(--rule)">methodology ↗</a>';
-    }
-
     // bars view: paired rows only, current filters applied, ranked by the active metric
     var viewSeg = document.getElementById('view'), metricSeg = document.getElementById('metric');
     var barsBox = document.getElementById('bars'), tableWrap = document.getElementById('table-wrap');
@@ -487,7 +492,7 @@
       // unplotted on the tg128 view and must still be counted (was: only both-null rows)
       var solo = vis.length - paired.length;
       renderPairBars(barsBox, paired.map(function (r) {
-        return { label: r.model, sub: r.boxName + ' · ' + r.lane,
+        return { label: r.model, sub: r.boxName + ' · ' + r.lane + (r.engine === 'das' ? '' : ' · ' + r.engine),
                  das: r[m + '_das'], ref: r[m + '_ref'], ratio: r[m + '_ratio'], r: r };
       }), rowReceipt,
       solo ? 'das-only rows are not plotted — bars are pairs. ' + solo + ' row' + (solo > 1 ? 's' : '') + ' in this filter ' + (solo > 1 ? 'have' : 'has') + ' no reference run; the table shows ' + (solo > 1 ? 'them' : 'it') + '.' : '');
@@ -520,6 +525,213 @@
     }
   }
 
+  // stats aside: rows · boxes · last measurement, over every section of the ladder
+  function fillLadderStats(rows) {
+    var aside = document.getElementById('dio-ladder-stats');
+    if (!aside) return;
+    var boxes = {}, last = '';
+    rows.forEach(function (r) {
+      boxes[r.box] = true;
+      if (r.date > last) last = r.date;
+    });
+    aside.innerHTML = '<b>' + rows.length + '</b> rows · <b>' + Object.keys(boxes).length + '</b> boxes<br/>' +
+      'last measurement <b>' + esc(last || '—') + '</b><br/>' +
+      '<a href="https://daslang.io/doc/reference/dasllama_methodology.html" style="color:var(--amber-dim);border-bottom:1px solid var(--rule)">methodology ↗</a>';
+  }
+
+  /* ── audio ladders (asr, tts): every engine is a row, ranked within one test ──
+     A row is one (run, test) cell from the run's `audio` array: wall ms and the audio
+     seconds it covers. The rank metric is × realtime = audio_s / wall s, higher is better.
+     ASR clips are fixed files, so a run that did not record a clip's length borrows it from
+     any run that did; TTS audio length is the engine's own output, so it is never borrowed
+     and a row without one ranks last. */
+  var AUDIO = {
+    asr: { borrow: true, pooled: false, prefer: ['gb1.wav'], unit: 'clip',
+           empty: 'No speech-to-text runs on the ladder yet.' },
+    tts: { borrow: false, pooled: true, prefer: ['all'], unit: 'sentence',
+           empty: 'No text-to-speech runs on the ladder yet — the first measured run lands here.' },
+    'audio-chat': { borrow: true, pooled: false, prefer: ['jfk.wav'], unit: 'clip',
+           empty: 'No audio-chat runs on the ladder yet.' }
+  };
+  var POOLED = 'all';
+
+  // a reference engine carries no dasllama_version: its row takes the das version of the
+  // submission it rode along in (same box, same model and workload first), so the version
+  // filter keeps the race together
+  function riderVersion(runs, fr, workload) {
+    if (fr.dasllama_version || fr.engine === 'das') return fr.dasllama_version || 0;
+    var best = 0, any = 0;
+    runs.forEach(function (r) {
+      if (r.submission_id !== fr.submission_id || r.engine !== 'das' || r.box !== fr.box) return;
+      var v = r.dasllama_version || 0;
+      if (v > any) any = v;
+      if (r.workload === workload && r.model_idx === fr.model_idx && v > best) best = v;
+    });
+    return best || any;
+  }
+
+  function audioLane(fr) {
+    var hw = fr.backend === 'cpu' ? 'cpu' : 'gpu';
+    return fr.flavor && fr.flavor !== 'stock' ? hw + ' · ' + fr.flavor : hw;
+  }
+
+  function buildAudioRows(runs, workload) {
+    var cfg = AUDIO[workload];
+    var dur = {};
+    if (cfg.borrow) {
+      runs.forEach(function (fr) {
+        if (fr.workload !== workload) return;
+        (fr.audio || []).forEach(function (c) {
+          // the smallest recorded length: a run that rounds (199 for 198.73) never wins
+          var a = Number(c.audio_s) || 0;
+          if (a > 0 && !(dur[c.test] <= a)) dur[c.test] = a;
+        });
+      });
+    }
+    var out = [];
+    runs.forEach(function (fr) {
+      if (fr.workload !== workload) return;
+      var base = {
+        model: String(fr.gguf).replace(/\.(gguf|bin)$/, ''), arch: fr.model_arch || '', quant: fr.quant || '',
+        box: fr.box, boxName: boxLabel(fr.cpu, fr.box), engine: fr.engine || '', lane: audioLane(fr),
+        threads: fr.threads || 0, source: fr.source || '', verified: !!fr.verified,
+        version: riderVersion(runs, fr, workload), date: fr.date || '',
+        submissionId: fr.submission_id, das: fr
+      };
+      var poolMs = 0, poolAudio = 0, poolN = 0;
+      (fr.audio || []).forEach(function (c) {
+        var ms = Number(c.ms) || 0;
+        var audio = Number(c.audio_s) || (cfg.borrow ? dur[c.test] || 0 : 0);
+        if (audio > 0) { poolMs += ms; poolAudio += audio; poolN++; }
+        out.push(Object.assign({ bucket: String(c.test), test: String(c.test), ms: ms, audio: audio,
+          n: 1, rtf: (ms > 0 && audio > 0) ? audio / (ms / 1000) : null }, base));
+      });
+      if (cfg.pooled && poolN > 0) {
+        out.push(Object.assign({ bucket: POOLED, test: '', ms: poolMs, audio: poolAudio, n: poolN,
+          rtf: poolAudio / (poolMs / 1000) }, base));
+      }
+    });
+    return out;
+  }
+
+  function bucketOptions(cfg) {
+    return function (rows) {
+      var seen = {};
+      rows.forEach(function (r) {
+        var b = seen[r.bucket] || (seen[r.bucket] = { n: 0, audio: 0 });
+        b.n++;
+        if (r.n === 1 && r.audio > b.audio) b.audio = r.audio;
+      });
+      return Object.keys(seen).sort(function (a, b) {
+        if (a === POOLED) return -1;
+        if (b === POOLED) return 1;
+        return (seen[a].audio - seen[b].audio) || a.localeCompare(b);
+      }).map(function (k) {
+        var s = seen[k];
+        var label = k === POOLED ? 'all ' + cfg.unit + 's (Σ)' : k + (cfg.borrow && s.audio ? ' · ' + fmt(s.audio, 0) + ' s' : '');
+        return { v: k, label: label + ' · ' + s.n + ' row' + (s.n > 1 ? 's' : '') };
+      });
+    };
+  }
+
+  function defaultBucket(rows, cfg) {
+    var count = {};
+    rows.forEach(function (r) { count[r.bucket] = (count[r.bucket] || 0) + 1; });
+    for (var i = 0; i < cfg.prefer.length; i++) if (count[cfg.prefer[i]]) return cfg.prefer[i];
+    var best = '';
+    Object.keys(count).forEach(function (k) { if (!best || count[k] > count[best]) best = k; });
+    return best;
+  }
+
+  function rtfCell(r, top) {
+    if (r.rtf === null) return '<td class="dl-num dl-dim" title="the run recorded no audio length">—</td>';
+    var w = top > 0 ? Math.max(2, Math.min(100, r.rtf / top * 100)) : 0;
+    return '<td class="dl-num dio-rtf"><span class="dio-rtf__bar" style="width:' + w.toFixed(1) + '%"></span>' +
+      '<span class="dio-rtf__val">' + fmt(r.rtf, r.rtf >= 100 ? 0 : 1) + '×</span></td>';
+  }
+
+  function audioReceipt(workload) {
+    return function (r) {
+      return loadDoc(r.submissionId).then(function (doc) {
+        var lines = [];
+        var run = docRun(doc, r.das);
+        sideLines(sideTag(r.engine), run, lines);
+        var t = r.test && run.tests && run.tests[workload + ':' + r.test];
+        if (t && t.text) {
+          var text = String(t.text);
+          lines.push('        transcript: ' + esc(text.length > 240 ? text.slice(0, 240) + '…' : text));
+        }
+        if (!r.test) lines.push('        Σ over ' + Number(r.n) + ' ' + AUDIO[workload].unit + 's with a recorded audio length');
+        lines.push('');
+        var subId = Number(r.submissionId) || 0;
+        lines.push('<a href="/api/submission/' + subId + '">verbatim submission #' + subId + ' ↗</a>');
+        return lines.join('\n');
+      });
+    };
+  }
+
+  function mountAudioLadder(workload, rows) {
+    var cfg = AUDIO[workload];
+    var init = latestVersion(rows);
+    // a bar's length is relative to the fastest row of its own test, whatever the filters show
+    var topOf = {};
+    rows.forEach(function (r) { if (r.rtf > (topOf[r.bucket] || 0)) topOf[r.bucket] = r.rtf; });
+    makeTable({
+      table: '#' + workload + '-table', filters: '#' + workload + '-filters', caption: '#' + workload + '-caption',
+      rows: rows, sort: { key: 'rtf', desc: true }, emptyText: cfg.empty,
+      tiebreak: function (a, b) { return (a.ms - b.ms) || a.model.localeCompare(b.model); },
+      cols: [
+        { key: 'rank', label: '#', num: true, dim: true, get: function (r) { return r.rtf; },
+          cell: function (r, i) { return String(i + 1); } },
+        { key: 'model', label: 'model', get: function (r) { return r.model; },
+          cell: function (r) {
+            var sub = [r.arch, r.quant].filter(Boolean).join(' · ');
+            return esc(r.model) + (sub ? ' <span class="dl-model-sub">' + esc(sub) + '</span>' : '');
+          }, cls: 'dl-td-model' },
+        { key: 'engine', label: 'engine', get: function (r) { return r.engine; },
+          cell: function (r) { return esc(r.engine); } },
+        // the rank metric sits beside the identity, so a phone sees it without scrolling the table
+        { key: 'rtf', label: '× realtime', num: true, grp: true, grpStart: true, get: function (r) { return r.rtf; },
+          cell: function (r) { return rtfCell(r, topOf[r.bucket] || 0); } },
+        { key: 'ms', label: 'wall ms', num: true, grp: true, get: function (r) { return r.ms; },
+          cell: function (r) { return r.ms > 0 ? fmt(r.ms, r.ms >= 100 ? 0 : 1) : '-'; } },
+        { key: 'audio', label: 'audio s', num: true, dim: true, get: function (r) { return r.audio; },
+          cell: function (r) { return r.audio > 0 ? fmt(r.audio, 1) : '-'; } },
+        { key: 'box', label: 'machine', grpStart: true, get: function (r) { return r.boxName; },
+          cell: function (r) { return esc(r.boxName); }, cls: 'dl-dim2 dl-td-machine' },
+        { key: 'lane', label: 'backend', get: function (r) { return r.lane; },
+          cell: function (r) { return esc(r.lane); }, cls: 'dl-dim2 dl-td-lane' },
+        { key: 'threads', label: 'threads', num: true, dim: true, get: function (r) { return r.threads; },
+          cell: function (r) { return r.threads ? String(r.threads) : '-'; } },
+        { key: 'source', label: 'source', grpStart: true,
+          get: function (r) { return r.source + (r.verified ? '' : ' unverified'); }, cell: sourceCell },
+        { key: 'date', label: 'date', num: true, dim: true,
+          get: function (r) { return r.date; }, cell: function (r) { return esc(r.date); } }
+      ],
+      filterDefs: [
+        { field: 'bucket', title: cfg.unit, required: true, get: function (r) { return r.bucket; },
+          options: bucketOptions(cfg), initial: defaultBucket(rows, cfg) },
+        { field: 'version', title: 'version', all: 'all versions',
+          get: function (r) { return r.version; }, options: versionOptions,
+          initial: init > 0 ? String(init) : '' },
+        { field: 'model', title: 'model', all: 'all models', get: function (r) { return r.model; } },
+        { field: 'box', title: 'machine', all: 'all machines', get: function (r) { return r.box; }, label: function (r) { return r.boxName; } },
+        { field: 'engine', title: 'engine', all: 'all engines', get: function (r) { return r.engine; } },
+        { field: 'source', title: 'source', all: 'all sources', get: function (r) { return r.source; } }
+      ],
+      receipt: audioReceipt(workload),
+      summary: function (shown) {
+        var dates = {};
+        shown.forEach(function (r) { if (r.date) dates[r.date] = 1; });
+        var ds = Object.keys(dates).sort();
+        var when = ds.length ? 'measured ' + (ds[0] === ds[ds.length - 1] ? ds[0] : ds[0] + ' → ' + ds[ds.length - 1]) + ' &nbsp;·&nbsp; ' : '';
+        return when + 'showing ' + shown.length + ' row' + (shown.length === 1 ? '' : 's') +
+          ' &nbsp;·&nbsp; ranked by × realtime = audio seconds ÷ wall seconds, higher is faster' +
+          ' &nbsp;·&nbsp; click any row for its receipt';
+      }
+    });
+  }
+
   /* ── home page ────────────────────────────────────────────────── */
   function mountHome(rows) {
     function put(id, text) {
@@ -530,7 +742,7 @@
 
     var barsBox = document.getElementById('dio-teaser-bars');
     if (!barsBox) return;
-    var paired = rows.filter(function (r) { return r.pp_ratio !== null; })
+    var paired = rows.filter(function (r) { return r.engine === 'das' && r.pp_ratio !== null; })
       .sort(function (a, b) { return b.date.localeCompare(a.date); }).slice(0, 3);
     if (!paired.length) {
       // the teaser plots PAIRED rows; say so, and don't contradict the "N measurements" tile
@@ -809,11 +1021,26 @@
 
   if (document.getElementById('ladder-table')) {
     loadBoard().then(function (runs) {
-      mountLadder(buildRows(runs));
+      var llm = buildRows(runs);
+      mountLadder(llm);
+      var all = llm.slice();
+      Object.keys(AUDIO).forEach(function (w) {
+        if (!document.getElementById(w + '-table')) return;
+        var rows = buildAudioRows(runs, w);
+        mountAudioLadder(w, rows);
+        // the stats count runs, not (run, test) rows
+        var seen = {};
+        rows.forEach(function (r) {
+          if (!seen[r.das.id]) { seen[r.das.id] = 1; all.push(r); }
+        });
+      });
+      fillLadderStats(all);
     }).catch(function () {
-      unreachable(document.getElementById('table-wrap'));
-      var f = document.getElementById('ladder-filters');
-      if (f) f.hidden = true;
+      ['table-wrap', 'asr-wrap', 'tts-wrap', 'audio-chat-wrap'].forEach(function (id) { unreachable(document.getElementById(id)); });
+      ['ladder-filters', 'asr-filters', 'tts-filters', 'audio-chat-filters'].forEach(function (id) {
+        var f = document.getElementById(id);
+        if (f) f.hidden = true;
+      });
     });
   }
 

@@ -70,6 +70,23 @@ struct Run {
     Tg128 : double = 0.0lf      // tests.tg128.tok_s; 0 = the run did not measure it
     Cpu : string = ""           // hardware.cpu, the board's machine label
     Tg128b4 : double = 0.0lf    // tests.tg128@4.tok_s, the four-stream batched row; 0 = the run did not measure it
+    Audio : string = ""         // an asr/tts run's `audio_cells_text`; "" for every other workload
+}
+
+//! The workloads whose runs carry audio cells; a cell is a test keyed "<prefix><name>" with the
+//! prefix `audio_test_prefix` names.
+let AUDIO_WORKLOADS <- ["asr", "tts", "audio-chat"]
+
+//! An audio workload's test-key prefix: an audio-chat run times the speech-to-text clips under
+//! their "asr:" keys, every other workload its own name.
+def audio_test_prefix(workload : string) : string => workload == "audio-chat" ? "asr:" : "{workload}:"
+
+//! One timed audio test of an asr/tts run: `test` is the key past "<workload>:" (a clip for asr,
+//! a sentence or set for tts); `audio_s` is 0 when the run did not record the audio length.
+struct AudioCell {
+    test : string
+    ms : double
+    audio_s : double
 }
 
 //! One tune sidecar, content-addressed by its own sha256; the identity columns are
@@ -162,13 +179,32 @@ def ladder_migration_002(db : SqlRunner) {
     db |> exec("ALTER TABLE runs ADD COLUMN Pp512 REAL NOT NULL DEFAULT 0")
     db |> exec("ALTER TABLE runs ADD COLUMN Tg128 REAL NOT NULL DEFAULT 0")
     db |> exec("ALTER TABLE runs ADD COLUMN Cpu TEXT NOT NULL DEFAULT ''")
-    backfill_run_cells(db, false)
+    backfill_run_cells(db, CellSet.flat)
 }
 
 [sql_migration(version = 3, description = "runs carry the tg128@4 cell, the four-stream batched row; backfilled from the documents")]
 def ladder_migration_003(db : SqlRunner) {
     db |> exec("ALTER TABLE runs ADD COLUMN Tg128b4 REAL NOT NULL DEFAULT 0")
-    backfill_run_cells(db, true)
+    backfill_run_cells(db, CellSet.batched)
+}
+
+[sql_migration(version = 4, description = "runs carry the audio cells of asr/tts runs; backfilled from the documents")]
+def ladder_migration_004(db : SqlRunner) {
+    db |> exec("ALTER TABLE runs ADD COLUMN Audio TEXT NOT NULL DEFAULT ''")
+    backfill_run_cells(db, CellSet.audio)
+}
+
+[sql_migration(version = 5, description = "audio-chat runs carry their asr-keyed clips as audio cells; backfilled from the documents")]
+def ladder_migration_005(db : SqlRunner) {
+    backfill_run_cells(db, CellSet.audio)
+}
+
+//! The cell columns one backfill writes: migration 2's flat cells and cpu label, migration 3's
+//! batched cell, migration 4's audio cells.
+enum CellSet {
+    flat
+    batched
+    audio
 }
 
 //! Every run of a record document in order, with its model and the (ModelIdx, RunIdx) the
@@ -194,19 +230,43 @@ def private each_record_run(doc_text : string; blk : block<(m : JsonValue?; r : 
     delete_json(doc)
 }
 
-//! The cells of one run node of a record document — what `Run.Pp512`/`Tg128`/`Tg128b4`/`Cpu` hold.
-def private run_cells(r : JsonValue?) : tuple<pp512 : double; tg128 : double; tg128b4 : double; cpu : string> {
+//! The audio cells of one run node as `Run.Audio` stores them: a JSON array of
+//! `{test, ms, audio_s}` sorted by test, one per "<workload>:" test with a positive `ms`; ""
+//! when the workload is not in `AUDIO_WORKLOADS` or no test qualifies.
+def private audio_cells_text(r : JsonValue?) : string {
+    let workload : string = r?["workload"] ?? ""
+    let tests = r?["tests"]
+    return "" if (!has_value(AUDIO_WORKLOADS, workload) || tests == null || !(tests is _object))
+    let prefix = audio_test_prefix(workload)
+    var cells : array<AudioCell>
+    for (k, row in keys(tests as _object), values(tests as _object)) {
+        let ms = row?["ms"] ?? 0.0lf
+        if ((k |> starts_with(prefix)) && length(k) > length(prefix) && ms > 0.0lf) {
+            cells |> push(AudioCell(test = slice(k, length(prefix)), ms = ms, audio_s = row?["audio_s"] ?? 0.0lf))
+        }
+    }
+    return "" if (empty(cells))
+    sort(cells) <| cmp_by(_.test)
+    var arr = JV([for (c in cells); JV((test = c.test, ms = c.ms, audio_s = c.audio_s))])
+    let text = write_json(arr)
+    delete_json(arr)
+    return text
+}
+
+//! The cells of one run node of a record document — what `Run.Pp512`/`Tg128`/`Tg128b4`/`Cpu`/`Audio` hold.
+def private run_cells(r : JsonValue?) : tuple<pp512 : double; tg128 : double; tg128b4 : double; cpu : string; audio : string> {
     return (
         pp512 = r?["tests"]?["pp512"]?["tok_s"] ?? 0.0lf,
         tg128 = r?["tests"]?["tg128"]?["tok_s"] ?? 0.0lf,
         tg128b4 = r?["tests"]?["tg128@4"]?["tok_s"] ?? 0.0lf,
-        cpu = r?["hardware"]?["cpu"] ?? "")
+        cpu = r?["hardware"]?["cpu"] ?? "",
+        audio = audio_cells_text(r))
 }
 
 //! Every run row of every record submission re-reads its cells from the document it came
 //! from — the one-time fill behind a migration that added cell columns, for rows inserted
-//! before they existed: migration 2's flat cells and the cpu label, or migration 3's batched cell
-def private backfill_run_cells(db : SqlRunner; batched : bool) {
+//! before they existed; `which` names the columns that migration added
+def private backfill_run_cells(db : SqlRunner; which : CellSet) {
     let subs <- _sql(db |> select_from(type<Submission>)
         |> _where(_.Kind == "records" || _.Kind == "official"))
     var filled = 0
@@ -216,7 +276,10 @@ def private backfill_run_cells(db : SqlRunner; batched : bool) {
         each_record_run(s.Doc) $(_m, r, mi, ri) {
             let cells = run_cells(r)
             var n = 0
-            if (batched) {
+            if (which == CellSet.audio) {
+                n = db |> _sql_update(type<Run>, _.SubmissionId == sid && _.ModelIdx == mi && _.RunIdx == ri,
+                    (Audio = cells.audio))
+            } elif (which == CellSet.batched) {
                 n = db |> _sql_update(type<Run>, _.SubmissionId == sid && _.ModelIdx == mi && _.RunIdx == ri,
                     (Tg128b4 = cells.tg128b4))
             } else {
@@ -417,7 +480,8 @@ def private insert_runs(db : SqlRunner; doc_text : string; submission_id : int; 
                 Pp512 = cells.pp512,
                 Tg128 = cells.tg128,
                 Tg128b4 = cells.tg128b4,
-                Cpu = cells.cpu))
+                Cpu = cells.cpu,
+                Audio = cells.audio))
     }
     if (!empty(rows)) {
         db |> insert(rows)

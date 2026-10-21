@@ -125,6 +125,7 @@ def test_family_encode_buckets(t : T?) {
         t |> equal(whisper_encode_bucket(), "wh.encode_total")
         t |> equal(canary_encode_bucket(), "cn.encode")
         t |> equal(gemma4a_encode_bucket(), "g4a.encode")
+        t |> equal(parakeet_encode_bucket(), "pk.encode_total")
         t |> equal(qwen3a_encode_bucket(false), "q3a.encode")
         t |> equal(qwen3a_encode_bucket(true), "q3o.encode")
     }

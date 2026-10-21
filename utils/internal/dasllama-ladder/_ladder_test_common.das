@@ -58,6 +58,90 @@ def records_doc : string {
     return write_json(doc)
 }
 
+// an official asr + tts board: a das row, a reference row with no audio_s, and an mlx row per
+// model; "encode" and "img:enc" are not audio cells, and the zero-ms clip is dropped
+def audio_doc : string {
+    var doc = %json~
+    [ {
+        "gguf" : "ggml-parakeet-tdt-0.6b-v3-f32.bin",
+        "arch" : "Parakeet-TDT v3",
+        "runs" : [
+            {
+                "engine" : "das", "backend" : "cpu", "flavor" : "tuned", "workload" : "asr",
+                "box" : "m5", "threads" : 6, "date" : "2026-09-23",
+                "cmd" : "dasllama-bench --asr", "sha" : "ea5747c91", "version" : "0.6.4", "dasllama_version" : 16,
+                "hardware" : { "cpu" : "Apple M5 Max" },
+                "tests" : {
+                    "asr:jfk.wav" : { "ms" : 158.0, "audio_s" : 11, "text" : "And so, my fellow Americans" },
+                    "asr:gb1.wav" : { "ms" : 4311.0, "audio_s" : 198.734375 },
+                    "asr:void.wav" : { "ms" : 0.0, "audio_s" : 3 },
+                    "encode" : { "ms" : 12.0 },
+                    "img:enc" : { "ms" : 5.0 }
+                }
+            },
+            {
+                "engine" : "parakeet-cli", "backend" : "cpu", "flavor" : "stock", "workload" : "asr",
+                "box" : "m5", "threads" : 6, "date" : "2026-09-23",
+                "cmd" : "parakeet-cli -m m.bin", "hardware" : { "cpu" : "Apple M5 Max" },
+                "tests" : { "asr:jfk.wav" : { "ms" : 159.5 } }
+            },
+            {
+                "engine" : "mlx-audio", "backend" : "metal", "flavor" : "stock", "workload" : "asr",
+                "box" : "m5", "threads" : 6, "date" : "2026-10-21",
+                "cmd" : "python -m mlx_audio.stt.generate", "versions" : "mlx-audio 0.2.5",
+                "hardware" : { "cpu" : "Apple M5 Max" },
+                "tests" : { "asr:jfk.wav" : { "ms" : 90.0, "audio_s" : 11 } }
+            }
+        ]
+    }, {
+        "gguf" : "kokoro-82m.gguf",
+        "arch" : "Kokoro 82M",
+        "runs" : [
+            {
+                "engine" : "das", "backend" : "cpu", "flavor" : "tuned", "workload" : "tts",
+                "box" : "m5", "threads" : 6, "date" : "2026-10-21",
+                "cmd" : "lcpp_bench --tts", "sha" : "ea5747c91", "version" : "0.6.5", "dasllama_version" : 17,
+                "hardware" : { "cpu" : "Apple M5 Max" },
+                "tests" : { "tts:s01" : { "ms" : 120.0, "audio_s" : 2.5 }, "tts:s02" : { "ms" : 200.0, "audio_s" : 4.0 } }
+            },
+            {
+                "engine" : "mlx-audio", "backend" : "metal", "flavor" : "stock", "workload" : "tts",
+                "box" : "m5", "threads" : 6, "date" : "2026-10-21",
+                "cmd" : "python -m mlx_audio.tts.generate", "hardware" : { "cpu" : "Apple M5 Max" },
+                "tests" : { "tts:s01" : { "ms" : 80.0, "audio_s" : 2.4 } }
+            }
+        ]
+    } ]
+    %%
+    return write_json(doc)
+}
+
+//! an audio-chat model's transcription runs: its clips ride the asr: keys, and a tts: key beside them is no cell
+def audio_chat_doc : string {
+    var doc = %json~
+    [ {
+        "gguf" : "gemma-4-E2B-it-Q8_0.gguf",
+        "arch" : "Gemma-4 E2B audio",
+        "runs" : [
+            {
+                "engine" : "das", "backend" : "metal", "flavor" : "tuned", "workload" : "audio-chat",
+                "box" : "m5", "threads" : 6, "date" : "2026-10-21",
+                "cmd" : "lcpp_bench --asr", "sha" : "ea5747c91", "version" : "0.6.5", "dasllama_version" : 17,
+                "hardware" : { "cpu" : "Apple M5 Max" },
+                "tests" : { "asr:jfk.wav" : { "ms" : 600.0, "audio_s" : 11 }, "tts:s01" : { "ms" : 5.0 } }
+            },
+            {
+                "engine" : "llama-mtmd-cli", "backend" : "metal", "flavor" : "stock", "workload" : "audio-chat",
+                "box" : "m5", "threads" : 6, "date" : "2026-10-21",
+                "cmd" : "llama-mtmd-cli", "hardware" : { "cpu" : "Apple M5 Max" },
+                "tests" : { "asr:jfk.wav" : { "ms" : 900.0 } }
+            }
+        ]
+    } ]
+    %%
+    return write_json(doc)
+}
+
 // official history predates the release counter: shape-valid, no stamps
 def official_doc : string {
     var doc = %json~

@@ -805,6 +805,16 @@ struct public ProfilingEnv {
     @clarg_doc = "Python interpreter of the ONNX oracle venv, for parakeet baselines."
     onnx_py : string = ""
 
+    @clarg_env = "MLX_PY"
+    @clarg_path
+    @clarg_doc = "Python interpreter of the MLX reference venv (mlx-audio, mlx-lm), for the Apple-GPU baselines."
+    mlx_py : string = ""
+
+    @clarg_env = "TTS_PY"
+    @clarg_path
+    @clarg_doc = "Python interpreter of the TTS reference venv (kokoro, kittentts, onnxruntime, pocket-tts), for the text-to-speech baselines."
+    tts_py : string = ""
+
     @clarg_env = "OS"
     @clarg_default_doc = "set by Windows"
     @clarg_doc = "Read to detect Windows (Windows_NT); set by the OS, not by dasLLAMA."

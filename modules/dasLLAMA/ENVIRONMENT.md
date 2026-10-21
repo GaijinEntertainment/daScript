@@ -280,6 +280,8 @@ Apple Accelerate / AMX float lane. `DASLLAMA_ACCEL` arms the whole group.
 | `DASLLAMA_BASE_PYTHON` | path | unset | Base CPython 3.10-3.12 for creating the ASR oracle venvs, when neither PATH names nor uv resolve one in range. |
 | `NEMO_PY` | path | unset | Python interpreter of the NeMo oracle venv, for canary/parakeet baselines. |
 | `ONNX_PY` | path | unset | Python interpreter of the ONNX oracle venv, for parakeet baselines. |
+| `MLX_PY` | path | unset | Python interpreter of the MLX reference venv (mlx-audio, mlx-lm), for the Apple-GPU baselines. |
+| `TTS_PY` | path | unset | Python interpreter of the TTS reference venv (kokoro, kittentts, onnxruntime, pocket-tts), for the text-to-speech baselines. |
 | `OS` | text | set by Windows | Read to detect Windows (Windows_NT); set by the OS, not by dasLLAMA. |
 | `PROCESSOR_ARCHITECTURE` | text | set by Windows | Read for the CPU architecture on Windows; set by the OS, not by dasLLAMA. |
 | `NUMBER_OF_PROCESSORS` | number | set by Windows | Read for the core count on Windows; set by the OS, not by dasLLAMA. |

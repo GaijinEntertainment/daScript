@@ -22,7 +22,11 @@ project "daslang.io Forge") on the daslang.io Forge system.
   `_stories/template.html` (`{{root}}` = `../`, so the shared chrome's links work one level
   down); the deploy copies the directory whole; plain "we", llama.cpp named as the yardstick
 - `ladder.html` - ALL measurements (official + community); daslang.io/dasllama.html stays
-  official-only
+  official-only. Three sections: LLM (das and `mlx-lm` rows, each paired with the llama.cpp
+  run of its lane), and the ASR and TTS ladders - one row per engine run and test from the
+  run's `audio` cells, ranked by × realtime (audio seconds / wall seconds); an ASR clip's length
+  is borrowed from any run that recorded it, a TTS length never is, and a reference row takes
+  the das version of the submission it rode in for the version filter
 - `sidecars.html` - the sidecar exchange: finder, kernel-win viewer, downloads. The exchange is
   closed: the page is unlinked from every tab bar and footer and carries `noindex`; it stays so
   the service can reopen without a rebuild

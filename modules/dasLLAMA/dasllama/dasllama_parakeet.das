@@ -1996,6 +1996,9 @@ def parakeet_check_lang(m : ParakeetModel; lang : string) {
     }
 }
 
+//! The family's encode-total ``asr_prof`` bucket: the whole FastConformer encode, on whichever home serves it.
+def parakeet_encode_bucket : string => "pk.encode_total"
+
 //! The facade's transcribe arm: full-clip FastConformer encode + TDT greedy, one segment.
 def parakeet_transcribe(m : ParakeetModel; var st : ParakeetState; samples : array<float> | #;
                         blk : block<(seg : TranscribeSegment)>; var detected_lang : string&) : int {
@@ -2004,7 +2007,7 @@ def parakeet_transcribe(m : ParakeetModel; var st : ParakeetState; samples : arr
     asr_prof_add("pk.mel", tp)
     tp = ref_time_ticks()
     let tt = parakeet_encode(m, st)
-    asr_prof_add("pk.encode_total", tp)
+    asr_prof_add(parakeet_encode_bucket(), tp)
     tp = ref_time_ticks()
     parakeet_tdt_decode(m, st, tt)
     asr_prof_add("pk.decode_total", tp)

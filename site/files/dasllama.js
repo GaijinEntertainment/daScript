@@ -539,7 +539,9 @@
      § 02 reference is a dedicated one; § 03 (workload "audio-chat") is llama.cpp's mtmd. */
   var ENGINE_LABEL = {
     'whisper-cli': 'whisper.cpp', 'parakeet-cli': 'parakeet-cli',
-    'onnx': 'ONNX Runtime', 'nemo': 'NeMo', 'llama-mtmd-cli': 'llama-mtmd-cli'
+    'onnx': 'ONNX Runtime', 'nemo': 'NeMo', 'llama-mtmd-cli': 'llama-mtmd-cli',
+    'kokoro': 'kokoro (PyTorch)', 'kittentts': 'KittenTTS (ONNX Runtime)', 'pocket-tts': 'pocket-tts',
+    'mlx-audio': 'mlx-audio'
   };
 
   // Audio lanes mirror the LLM LANES: each names the das backend and the reference backend it
@@ -549,10 +551,13 @@
   var AUDIO_LANES = [
     { backend: 'cpu',   das: 'tuned', ref: 'cpu',   label: 'cpu' },
     { backend: 'cpu',   das: 'accel', ref: 'cpu',   label: 'cpu + accel' },
-    { backend: 'metal', das: 'tuned', ref: 'metal', label: 'gpu' }
+    { backend: 'metal', das: 'tuned', ref: 'metal', label: 'gpu' },
+    { backend: 'vulkan', das: 'tuned', ref: 'cuda', label: 'gpu' }
   ];
 
-  function buildAudioRows(recs, workload) {
+  // prefix: the test keys a workload records under ('asr:<clip>', 'tts:<set>@<voice>')
+  function buildAudioRows(recs, workload, prefix) {
+    prefix = prefix || 'asr:';
     var out = [];
     recs.forEach(function (m) {
       var runs = (m.runs || []).filter(function (r) { return r.workload === workload; });
@@ -570,18 +575,18 @@
           return r.box === bx && r.engine !== 'das' && (r.backend || 'cpu') === L.ref;
         }).forEach(function (ref) {
           Object.keys(das.tests || {}).forEach(function (k) {
-            if (k.indexOf('asr:') !== 0 || !ref.tests || !ref.tests[k]) return;
+            if (k.indexOf(prefix) !== 0 || !ref.tests || !ref.tests[k]) return;
             var dm = das.tests[k].ms, rm = ref.tests[k].ms;
             if (!(dm > 0) || !(rm > 0)) return;        // no reference → no row
             out.push({
               gguf: m.gguf, model: m.arch || m.gguf, box: bx, lane: L.label,
               boxName: boxLabel(das.hardware && das.hardware.cpu, bx),
               tool: ENGINE_LABEL[ref.engine] || ref.engine,
-              wav: k.slice(4), audio_s: das.tests[k].audio_s || 0,
+              wav: k.slice(prefix.length), audio_s: das.tests[k].audio_s || 0,
               das_ms: dm, ref_ms: rm,
               speed: ratio(rm, dm),                    // >1 = das faster (times, so inverted)
               voided: ((das.void_clips || '') + ',' + (ref.void_clips || '')).split(',')
-                .map(function (s) { return s.trim(); }).indexOf(k.slice(4)) >= 0,
+                .map(function (s) { return s.trim(); }).indexOf(k.slice(prefix.length)) >= 0,
               xrt: dm > 0 ? ((das.tests[k].audio_s || 0) * 1000) / dm : 0,
               modelNote: m.note || '',
               noted: !!(m.note || das.comment || ref.comment),
@@ -598,9 +603,10 @@
   function mountAudio(recs) {
     [
       { workload: 'asr', sec: 'asr', what: 'paired transcriptions' },
-      { workload: 'audio-chat', sec: 'audiochat', what: 'paired runs' }
+      { workload: 'audio-chat', sec: 'audiochat', what: 'paired runs' },
+      { workload: 'tts', sec: 'tts', what: 'paired syntheses', prefix: 'tts:', unit: 'text @ voice' }
     ].forEach(function (cfg) {
-      var rows = buildAudioRows(recs, cfg.workload);
+      var rows = buildAudioRows(recs, cfg.workload, cfg.prefix);
       if (!rows.length) return;
       document.getElementById(cfg.sec).hidden = false;
       makeTable({
@@ -620,7 +626,7 @@
           { key: 'threads', label: 'threads', num: true, dim: true,
             get: function (r) { return (r.das && r.das.threads) || 0; },
             cell: function (r) { return r.das && r.das.threads ? String(r.das.threads) : '-'; } },
-          { key: 'wav', label: 'clip', get: function (r) { return r.wav; },
+          { key: 'wav', label: cfg.unit || 'clip', get: function (r) { return r.wav; },
             cell: function (r) { return esc(r.wav); }, cls: 'dl-dim2' },
           { key: 'audio_s', label: 'audio s', num: true, dim: true,
             get: function (r) { return r.audio_s; }, cell: function (r) { return r.audio_s > 0 ? fmt(r.audio_s) : '-'; } },
@@ -655,7 +661,7 @@
     });
   }
 
-  /* ── § 04 images in: pair rows from the same records ────────────
+  /* ── § 05 images in: pair rows from the same records ────────────
      One image turn per (model, box, lane): the das image-chat row against llama.cpp's
      llama-mtmd-cli row. Same LANES as § 01 — the ref flavors match (stock / clean-cpu).
      Both engines price prefill and decode as own-positions over own-time; encode is wall ms. */

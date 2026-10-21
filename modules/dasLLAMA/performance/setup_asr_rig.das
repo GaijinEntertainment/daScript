@@ -19,14 +19,14 @@ require math
 //             SLR12) — fetched, converted to 16 kHz mono wav. Parakeet-v3 scope only.
 //   --refs    reference engines: whisper.cpp (whisper-cli + parakeet-cli) at the pinned commit,
 //             the mtmd reference at the pinned commit + patches/mtmd-timing.patch, CPU-only build.
-//   --venvs   the onnx / nemo python environments from requirements-{onnx,nemo}.txt.
+//   --venvs   the reference python environments from requirements-<name>.txt (reference_venvs).
 //   --check   verify every input and tool, print the env lines a sweep needs.
 //   bin/daslang modules/dasLLAMA/performance/setup_asr_rig.das -- --corpus --check
 
 // The pinned reference commits — the identity the version capture expects (B4). Bumping either
 // is a deliberate re-baseline: re-run the sweeps after.
-let WHISPER_CPP_COMMIT = "6fc7c33b4"
-let LLAMA_CPP_COMMIT = "ebd048fc5"
+let WHISPER_CPP_COMMIT = "231638a07"
+let LLAMA_CPP_COMMIT = "9febe63d5"
 let LIBRI_URL = "https://www.openslr.org/resources/12/test-clean.tar.gz"
 let HP0_URL = "https://upload.wikimedia.org/wikipedia/en/d/d4/En.henryfphillips.ogg"
 let GB1_URL = "https://upload.wikimedia.org/wikipedia/commons/1/1f/George_W_Bush_Columbia_FINAL.ogg"
@@ -42,7 +42,7 @@ struct Args {
     @clarg_doc = "Clone + build the reference engines (whisper.cpp, patched mtmd)"
     refs : bool
 
-    @clarg_doc = "Create the onnx/nemo python venvs from the committed requirements"
+    @clarg_doc = "Create the reference python venvs (onnx, nemo, mlx on Apple) from the committed requirements"
     venvs : bool
 
     @clarg_doc = "Verify every rig input and print the env lines a sweep needs"
@@ -267,6 +267,13 @@ def private setup_libri() : bool {
 
 // ===== refs + venvs =====
 
+//! True when the checkout's HEAD is the pinned commit - a re-pin rebuilds a reference whose
+//! binaries an older pin left behind, since the version capture records HEAD, not the build.
+def private at_commit(root, pin : string) : bool {
+    let head = strip(run_capture("git -C \"{root}\" rev-parse HEAD 2>&1", true))
+    return !empty(pin) && head |> starts_with(pin)
+}
+
 def private setup_refs(cfg : Args) : bool {
     var ok = true
     // whisper.cpp (carries whisper-cli AND parakeet-cli upstream)
@@ -275,8 +282,9 @@ def private setup_refs(cfg : Args) : bool {
         to_log(LOG_INFO, "setup_asr_rig: cloning whisper.cpp @ {WHISPER_CPP_COMMIT}\n")
         run_capture("git clone https://github.com/ggml-org/whisper.cpp.git \"{wroot}\"", false)
     }
+    let wmoved = !at_commit(wroot, WHISPER_CPP_COMMIT)
     run_capture("git -C \"{wroot}\" fetch -q origin && git -C \"{wroot}\" checkout -q {WHISPER_CPP_COMMIT}", false)
-    if (!stat(whisper_cpp_bin("whisper-cli")).is_valid) {
+    if (wmoved || !stat(whisper_cpp_bin("whisper-cli")).is_valid) {
         to_log(LOG_INFO, "setup_asr_rig: building whisper.cpp (whisper-cli + parakeet-cli)\n")
         run_capture("cmake -S \"{wroot}\" -B \"{wroot}/build\" -DCMAKE_BUILD_TYPE=Release && cmake --build \"{wroot}/build\" --config Release -j 8", false)
     }
@@ -303,12 +311,14 @@ def private setup_refs(cfg : Args) : bool {
     }
     // patched CPU-only mtmd
     let lroot = normalize("{cfg.refs_root}/llama.cpp-mtmd-ref")
-    if (!stat(mtmd_bin()).is_valid) {
+    let lmoved = stat(normalize("{lroot}/CMakeLists.txt")).is_valid && !at_commit(lroot, LLAMA_CPP_COMMIT)
+    if (lmoved || !stat(mtmd_bin()).is_valid) {
         if (!stat(normalize("{lroot}/CMakeLists.txt")).is_valid) {
             to_log(LOG_INFO, "setup_asr_rig: cloning llama.cpp @ {LLAMA_CPP_COMMIT} for the mtmd reference\n")
             run_capture("git clone https://github.com/ggml-org/llama.cpp.git \"{lroot}\"", false)
         }
-        run_capture("git -C \"{lroot}\" fetch -q origin && git -C \"{lroot}\" checkout -q {LLAMA_CPP_COMMIT}", false)
+        // -f drops the previous pin's applied patch, so the patch lands on a clean tree
+        run_capture("git -C \"{lroot}\" fetch -q origin && git -C \"{lroot}\" checkout -q -f {LLAMA_CPP_COMMIT}", false)
         let patch = get_full_file_name("{asr_dir()}/patches/mtmd-timing.patch")
         run_capture("git -C \"{lroot}\" apply \"{patch}\"", false)
         to_log(LOG_INFO, "setup_asr_rig: building llama-mtmd-cli (CPU-only: Metal OFF)\n")
@@ -316,7 +326,7 @@ def private setup_refs(cfg : Args) : bool {
         to_log(LOG_INFO, "setup_asr_rig: set MTMD_BIN={lroot}/build-cpu/bin/llama-mtmd-cli\n")
     }
     // the Metal twin (Apple boxes): the same patched checkout, Metal ON
-    if (is_apple_box() && !stat(mtmd_bin_metal()).is_valid && stat(normalize("{lroot}/CMakeLists.txt")).is_valid) {
+    if (is_apple_box() && (lmoved || !stat(mtmd_bin_metal()).is_valid) && stat(normalize("{lroot}/CMakeLists.txt")).is_valid) {
         to_log(LOG_INFO, "setup_asr_rig: building llama-mtmd-cli (build-metal: Metal ON)\n")
         run_capture("cmake -S \"{lroot}\" -B \"{lroot}/build-metal\" -DCMAKE_BUILD_TYPE=Release && cmake --build \"{lroot}/build-metal\" --config Release -j 8 --target llama-mtmd-cli", false)
         if (empty(mtmd_bin_metal())) {
@@ -370,10 +380,14 @@ def private setup_venvs() : bool {
         return false
     }
     var ok = true
-    for (spec in [(name = "onnx", py = onnx_py()), (name = "nemo", py = nemo_py())]) {
+    for (spec in reference_venvs()) {
+        if (spec.apple_only && !is_apple_silicon()) {
+            to_log(LOG_INFO, "setup_asr_rig: {spec.name} venv - Apple-only, skipped\n")
+            continue
+        }
         // present = the interpreter exists AND the pinned packages import — a half-made venv
         // (pip died mid-install) leaves the interpreter behind and must be rebuilt, not skipped
-        if (stat(spec.py).is_valid && venv_ready(spec.name, spec.py)) {
+        if (stat(spec.py).is_valid && venv_ready(spec.py, spec.probe)) {
             to_log(LOG_INFO, "setup_asr_rig: {spec.name} venv - present\n")
             continue
         }
@@ -389,8 +403,8 @@ def private setup_venvs() : bool {
         run_capture("{py} -m pip -q install -r {req}", false)
         // gate on the PACKAGES importing, not the interpreter existing — pip dying after
         // `python -m venv` succeeded leaves a stat-able python.exe over an empty site-packages
-        if (stat(py).is_valid && venv_ready(spec.name, py)) {
-            to_log(LOG_INFO, "setup_asr_rig: set {spec.name == "onnx" ? "ONNX_PY" : "NEMO_PY"}={py}\n")
+        if (stat(py).is_valid && venv_ready(py, spec.probe)) {
+            to_log(LOG_INFO, "setup_asr_rig: set {spec.env}={py}\n")
         } else {
             to_log(LOG_ERROR, "setup_asr_rig: {spec.name} venv creation failed\n")
             ok = false
@@ -399,13 +413,69 @@ def private setup_venvs() : bool {
     return ok
 }
 
-def private venv_ready(name, py : string) : bool {
+struct private ReferenceVenv {
+    name : string        // requirements-<name>.txt builds .venv-<name> under the asr dir
+    py : string          // the interpreter the records rig resolves for it
+    probe : string       // the package whose import proves the venv whole
+    env : string         // the override variable naming another interpreter
+    apple_only : bool    // MLX runs on Apple silicon alone
+}
+
+def private reference_venvs() : array<ReferenceVenv> {
+    return <- [
+        ReferenceVenv(name = "onnx", py = onnx_py(), probe = "onnx_asr", env = "ONNX_PY"),
+        ReferenceVenv(name = "nemo", py = nemo_py(), probe = "nemo", env = "NEMO_PY"),
+        ReferenceVenv(name = "mlx", py = mlx_py(), probe = "mlx_audio, mlx_lm", env = "MLX_PY", apple_only = true),
+        ReferenceVenv(name = "tts", py = tts_py(), probe = "kokoro, kittentts, onnxruntime, pocket_tts", env = "TTS_PY")
+    ]
+}
+
+def private is_apple_silicon() : bool => get_platform_name() == "darwin" && get_architecture_name() == "arm64"
+
+def private venv_ready(py, probe : string) : bool {
     let devnull = is_windows_box() ? "2>nul" : "2>/dev/null"
-    let probe = run_capture("{py} -c \"import {name == "onnx" ? "onnx_asr" : "nemo"}; print(1)\" {devnull}", true)
-    return to_int(strip(probe)) == 1
+    let out = run_capture("{py} -c \"import {probe}; print(1)\" {devnull}", true)
+    return to_int(strip(out)) == 1
 }
 
 // ===== check =====
+
+//! One warm clip per python reference variant the catalog names: the first-ever run of a variant
+//! downloads its weights, which would eat a sweep leg's budget.
+def private prewarm_python_refs() : bool {
+    var ok = true
+    if (is_apple_silicon() && stat(mlx_py()).is_valid) {
+        for (spec in asr_catalog()) {
+            for (rf in spec.refs) {
+                continue if (rf.tool != "mlx")
+                let t0 = ref_time_ticks()
+                let out = run_capture_argv([mlx_py(), "{asr_dir()}/mlx_asr_bench.py", "--variant", rf.handle,
+                                            "--reps", "1", "--wav", "{asr_corpus_dir()}jfk.wav"])
+                let rows = find(out, "BENCH") >= 0
+                to_log(rows ? LOG_INFO : LOG_WARNING,
+                    "setup_asr_rig: mlx {rf.handle} pre-warm - {rows ? "ok" : "NO ROWS"} ({get_time_usec(t0) / 1000} ms)\n")
+                ok = ok && rows
+            }
+        }
+    }
+    // pre-warm the onnx reference models: the first-ever run of a variant downloads its
+    // weights, and that download eats the sweep's whole ref-leg budget (~90 s on zen2 —
+    // the leg fails "nothing measured" while HF streams). One warm clip per catalog
+    // variant here = every sweep leg starts hot.
+    if (stat(onnx_py()).is_valid) {
+        for (vkey in ["v2-int8", "int8", "whisper-tiny-int8", "whisper-turbo-int8"]) {
+            let t0 = ref_time_ticks()
+            let out = run_capture_argv([onnx_py(), "{asr_dir()}/onnx_bench.py", "--variant", vkey,
+                                        "--reps", "1", "--wav", "{asr_corpus_dir()}jfk.wav",
+                                        "--out", asr_pybench_out_path()])
+            let rows = find(out, "BENCH") >= 0 || find(fread(asr_pybench_out_path()), "BENCH") >= 0
+            to_log(rows ? LOG_INFO : LOG_WARNING,
+                "setup_asr_rig: onnx {vkey} pre-warm - {rows ? "ok" : "NO ROWS"} ({get_time_usec(t0) / 1000} ms)\n")
+            ok = ok && rows
+        }
+    }
+    return ok
+}
 
 def private check_all() : bool {
     var ok = verify_manifest()
@@ -425,30 +495,18 @@ def private check_all() : bool {
     }
     let mt = stat(mtmd_bin()).is_valid
     to_log(mt ? LOG_INFO : LOG_WARNING, "setup_asr_rig: llama-mtmd-cli - {mt ? mtmd_versions() : "MISSING (audio-chat refs will skip)"}\n")
-    for (spec in [(name = "ONNX_PY", py = onnx_py()), (name = "NEMO_PY", py = nemo_py())]) {
+    for (spec in reference_venvs()) {
+        continue if (spec.apple_only && !is_apple_silicon())
         let good = stat(spec.py).is_valid
-        to_log(good ? LOG_INFO : LOG_WARNING, "setup_asr_rig: {spec.name} - {good ? "ok" : "missing (those refs will skip)"} ({spec.py})\n")
+        to_log(good ? LOG_INFO : LOG_WARNING, "setup_asr_rig: {spec.env} - {good ? "ok" : "missing (those refs will skip)"} ({spec.py})\n")
     }
-    // pre-warm the onnx reference models: the first-ever run of a variant downloads its
-    // weights, and that download eats the sweep's whole ref-leg budget (~90 s on zen2 —
-    // the leg fails "nothing measured" while HF streams). One warm clip per catalog
-    // variant here = every sweep leg starts hot.
-    if (stat(onnx_py()).is_valid) {
-        for (vkey in ["v2-int8", "int8", "whisper-tiny-int8", "whisper-turbo-int8"]) {
-            let t0 = ref_time_ticks()
-            let out = run_capture_argv([onnx_py(), "{asr_dir()}/onnx_bench.py", "--variant", vkey,
-                                        "--reps", "1", "--wav", "{asr_corpus_dir()}jfk.wav",
-                                        "--out", asr_pybench_out_path()])
-            let rows = find(out, "BENCH") >= 0 || find(fread(asr_pybench_out_path()), "BENCH") >= 0
-            to_log(rows ? LOG_INFO : LOG_WARNING,
-                "setup_asr_rig: onnx {vkey} pre-warm - {rows ? "ok" : "NO ROWS"} ({get_time_usec(t0) / 1000} ms)\n")
-            ok = ok && rows
-        }
-    }
+    ok = prewarm_python_refs() && ok
     to_log(LOG_INFO, "setup_asr_rig: export WHISPER_CPP={whisper_cpp_root()}\n")
     to_log(LOG_INFO, "setup_asr_rig: export MTMD_BIN={mtmd_bin()}\n")
-    to_log(LOG_INFO, "setup_asr_rig: export ONNX_PY={onnx_py()}\n")
-    to_log(LOG_INFO, "setup_asr_rig: export NEMO_PY={nemo_py()}\n")
+    for (spec in reference_venvs()) {
+        continue if (spec.apple_only && !is_apple_silicon())
+        to_log(LOG_INFO, "setup_asr_rig: export {spec.env}={spec.py}\n")
+    }
     return ok
 }
 

@@ -16,6 +16,8 @@ under review cannot reach is a defect - re-stamp to the commit the exe that prod
 artifact was built at when the branch can reach it, re-mint when it cannot.** A commit stamp is any field in a checked-in JSON under this
 folder that names a daslang commit - a `das` row's `sha`, a sidecar's `provenance.engine_sha`, a
 ruler record's `meta.das_sha`. A stamp that resolves to no commit at all counts as unreachable.
+`REVIEW.das` checks the `sha` of every current-release `das` row and the `engine_sha` of the
+sidecar archive it names; weakening that check is a defect.
 
 **A diff that hand-edits a commit stamp under this folder names, in the PR body, each edited
 field, its old stamp, and its new value.**
@@ -51,12 +53,13 @@ build - names both exes in its `cmd`.**
 in that row's provenance, the checkout that built the binary it timed; a python leg names
 `../benchmarks/asr/requirements-*.txt` instead.**
 
-**A diff that writes a `das` `records/<box>.json` row, a sidecar archive, or a `defaults/`
-profile under this folder whose version pin is missing, or differs from `DASLLAMA_RELEASE`
-(`../dasllama/dasllama_version.das`), is a defect - re-mint.** The pin is the row's
-`dasllama_version`, and `provenance.dasllama_version` in a sidecar archive or a `defaults/`
-profile. For a sidecar with an `engine_sha`, read the value at that commit; a `defaults/`
-profile compares against the branch under review.
+**A diff that writes a `das` row to the `records/<box>.json` of a box `REVIEW.das` lists in
+`RETIRED_BOXES`, or a sidecar archive no current-release row names, whose version pin is missing,
+or differs from `DASLLAMA_RELEASE` (`../dasllama/dasllama_version.das`), is a defect -
+re-mint.** The pin is the row's `dasllama_version`, and `provenance.dasllama_version` in a
+sidecar archive; for a sidecar with an `engine_sha`, read the value at that commit.
+`REVIEW.das` checks the pin of every other `das` row, of the archive each current-release row
+names, and of every `defaults/` profile; weakening that check is a defect.
 
 **A diff that writes a row to `records/<box>.json` mints that row from a run
 `gen_bench_records.das` spawns, or from the `../benchmarks/lcpp_bench.das` command a

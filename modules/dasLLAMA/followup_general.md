@@ -459,16 +459,6 @@
     per-clip `cmd` (schema addition) or a receipt template with the `-f` slot marked; the das
     rows are unaffected (one process serves the whole ladder).
 
-
-- **`check_committed_records` gate in `performance/REVIEW.das`** (fused-image-span review round):
-    machine-check the two records-provenance rules - every `runs[]` row's
-    `hardware.remote_desktop == "off"`, every row `sha` and sidecar `provenance.engine_sha`
-    an ancestor of HEAD, and `provenance.dasllama_version` equal to `DASLLAMA_RELEASE` at that
-    commit. When it lands, the two prose rules in `performance/REVIEW.md` collapse to the
-    "weakening that gate is a defect" residue form. Also owed: a re-mint of the gemma-3-4b cpu
-    image row (hand-minted in the gemma3v arc; still stamps `parsec` + a pre-branch sha, and
-    the image sweep's catalog does not reach it).
-
 41. **`add_user_audio` (samples in) serves the whisper-class `AudioTower` families only - the
     qwen3a conformer (Qwen3-Omni) has no chat splice, and gemma4a hears only through the
     pre-encoded rows seam (`add_user_audio_rows` off an `AudioEmbedder`).** Surfaced by the omni showcase test (the
@@ -1286,8 +1276,8 @@
    file dastest runs is in a `run.das` suite or its header names `DASLLAMA_CPU_PREFILL`; every
    test file has a `CMakeLists.txt` row. (c) `performance/REVIEW.das`: a `url =` / `bytes =` /
    `sha256 =` literal in any `.das` under the folder other than `model_specs.das` and
-   `profile_common.das`; every `records/<box>.json` row's `tune_sha` names an archive that exists;
-   a `defaults/` profile's `provenance.dasllama_version` equals `DASLLAMA_RELEASE`. (d)
+   `profile_common.das`; every retired-box `records/<box>.json` row's `tune_sha` names an archive
+   that exists (current-release rows are checked). (d)
    `harness/REVIEW.das` (new): `tune_kernels.das`'s `benches` list ends in `dot_q8q8_laneq4x4`.
    (e) `benchmarks/REVIEW.das` (new): nothing under `benchmarks/` or `performance/` but the two
    reference cells writes under `performance/records/`. (f) `daslib`: a `daslib/*.das` emitting a
@@ -1762,13 +1752,6 @@
    constructs the starvation it asserts (a synthesis slowed under the test's control, or a
    restart placed by the witness lines rather than a frame count), and the tts area runs green
    through `tests/run.das -- --area tts`.
-
-166. **A `--tts` path in `benchmarks/lcpp_bench.das`.** The bench has no TTS cell, so every TTS
-   turn wall in `PERF_LEDGER.md` comes from `harness/tts_synth.das` under
-   `REVIEW_MEASUREMENT.md`'s harness carve-out and no board row records what a synthesis costs.
-   Done = `lcpp_bench --tts -m <gguf>` serves the g2p corpus's first N sentences at a named
-   voice and prints the per-sentence wall and the real-time factor as its other modalities do,
-   `gen_bench_records` carries a `tts` workload, and the StyleTTS2 ledger entry cites the row.
 
 167. **A sampler arm on `benchmarks/lcpp_bench.das`'s tg row.** The bench's only sampler knob
     is `--mtp-temp`, a temperature alone, so no board row holds a sampled decode rate and the

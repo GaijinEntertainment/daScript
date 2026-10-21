@@ -227,6 +227,56 @@ def test_records_routes(t : T?) {
     }
 }
 
+def private run_jv(js : JsonValue?; engine, workload : string) : JsonValue const? {
+    for (r in js?["runs"] as _array) {
+        return r if ((r?["engine"] ?? "") == engine && (r?["workload"] ?? "") == workload)
+    }
+    return null
+}
+
+[test]
+def test_audio_routes(t : T?) {
+    with_ladder_server(LadderPolicy()) $(base_url) {
+        t |> run("asr and tts rows ride /api/runs with their audio cells") @(tt : T?) {
+            POST("{base_url}/admin/import-official", audio_doc()) $(resp) {
+                tt |> equal(int(resp.status_code), 200)
+                tt |> equal(json_of(resp)?["runs_added"] ?? 0, 5)
+            }
+            POST("{base_url}/admin/import-official", official_doc()) $(resp) {
+                tt |> equal(int(resp.status_code), 200)
+            }
+            GET("{base_url}/api/runs") $(resp) {
+                var js = json_of(resp)
+                tt |> equal(length(js?["runs"] as _array), 7)
+                let das_asr = run_jv(js, "das", "asr")
+                tt |> success(das_asr != null, "the das asr row is on the board")
+                let cells = das_asr?["audio"]
+                tt |> success(cells != null && cells is _array, "audio is an array")
+                tt |> equal(length(cells as _array), 2)
+                tt |> equal(cells?[1]?["test"] ?? "", "jfk.wav")
+                tt |> equal(cells?[1]?["ms"] ?? 0.0lf, 158.0lf)
+                tt |> equal(cells?[1]?["audio_s"] ?? 0.0lf, 11.0lf)
+                tt |> equal(das_asr?["pp512"] ?? -1.0lf, 0.0lf, "an audio row has no LLM cells")
+                let mlx_tts = run_jv(js, "mlx-audio", "tts")
+                tt |> success(mlx_tts != null, "the mlx engine row is on the board")
+                tt |> equal(mlx_tts?["backend"] ?? "", "metal")
+                tt |> equal(mlx_tts?["audio"]?[0]?["test"] ?? "", "s01")
+                tt |> equal(mlx_tts?["audio"]?[0]?["audio_s"] ?? 0.0lf, 2.4lf)
+                let ref_asr = run_jv(js, "parakeet-cli", "asr")
+                tt |> equal(ref_asr?["audio"]?[0]?["audio_s"] ?? -1.0lf, 0.0lf, "an unrecorded audio length reads 0")
+                let llm = run_jv(js, "das", "")
+                let llm_cells = llm?["audio"]
+                tt |> success(llm_cells != null && llm_cells is _array && empty(llm_cells as _array), "an LLM row's audio is an empty array")
+            }
+            GET("{base_url}/api/runs?version=17") $(resp) {
+                var js = json_of(resp)
+                tt |> equal(length(js?["runs"] as _array), 1, "the version filter scopes audio rows too")
+                tt |> equal(js?["runs"]?[0]?["workload"] ?? "", "tts")
+            }
+        }
+    }
+}
+
 [test]
 def test_policy_status_mapping(t : T?) {
     with_ladder_server(LadderPolicy(max_sidecar_bytes = 64, max_submissions_per_ip_hour = 1, submit_open = true)) $(base_url) {

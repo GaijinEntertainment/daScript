@@ -20,6 +20,8 @@ require dasllama/dasllama_tokenizer   // the tg-real row needs REAL tokens (see 
 require dasllama/dasllama_asr   // --asr: load_asr_model/create_session/transcribe
 require dasllama/dasllama_audio   // --asr: AUDIO_SAMPLE_RATE, the 16 kHz mono contract
 require dasllama/dasllama_tower   // the encode-stage prof rail (set_asr_prof/asr_prof_ms)
+require dasllama/dasllama_styletts2   // --tts: the StyleTTS2 seats' engage counters
+require dasllama/dasllama_pocket   // --tts: the Pocket seats' engage counters
 require ?das_metal dasllama/dasllama_metal_tower   // --asr --ngl: the tower engage counters (anti-sandbag)
 require ?das_metal dasllama/dasllama_metal_asr_dec   // --asr CPU rows pin the wdec driver off (CPU means CPU)
 require ?das_metal dasllama/dasllama_metal_prefill   // --asr --ngl: the chat-decoder prefill engage witness
@@ -207,6 +209,17 @@ struct Args {
     @clarg_doc = "ASR cell: comma list of corpus clips timed in place of the catalog row's buckets (a lever loop's one clip, or the long clips a row's list stops before)"
     asr_clips : string = ""
 
+    @clarg_doc = "TTS cell mode: -m is a TTS GGUF; synthesizes the g2p corpus's first --tts-sentences sentences at --tts-voice, best-of -r per sentence, and emits one tts:g2p<N>@<voice> test (generation ms and audio seconds, summed)"
+    tts : bool
+
+    @clarg_name = "tts-voice"
+    @clarg_doc = "TTS cell: the voice (default: the TTS catalog's voice for -m's file)"
+    tts_voice : string = ""
+
+    @clarg_name = "tts-sentences"
+    @clarg_doc = "TTS cell: sentences from the head of the g2p corpus (default: 20)"
+    tts_sentences : int = TTS_BENCH_SENTENCES
+
     @clarg_doc = "Parity pregate mode: run -m's frozen pinned-greedy fixture from the model-set table (model_specs.das) and exit — 0 only on token-for-token, with both decoded texts printed; no timings. The board driver runs this before a model's first cell"
     parity : bool
 
@@ -244,6 +257,42 @@ struct Args {
     @clarg_short = "?"
     @clarg_doc = "Show this help and exit"
     help : bool
+}
+
+//! The media cells' --accel arm: refused beside --ngl and on a build without das_accelerate,
+//! else the +AMX float-batch tier armed at the shipped defaults, as the LLM leg arms it.
+def private arm_accel_tier(accel, gpu : bool) : bool {
+    return true if (!accel)
+    if (gpu) {
+        print("--accel is a CPU-tier lever - drop it or run with -ngl 0\n")
+        return false
+    }
+    static_if (typeinfo builtin_module_exists(das_accelerate)) {
+        dasllama_accelerate_enable(32l)
+        print("DASLLAMA_ACCEL armed (float-batch tier, min ntok 32) - this row measures the accelerate lane\n")
+        return true
+    } else {
+        print("--accel requested but das_accelerate is not built on this platform - no accel row to measure\n")
+        return false
+    }
+}
+
+//! A media cell's records: written to `json_path` when one is named, and printed.
+def private emit_cell_records(models : array<BenchModel>; json_path : string) {
+    let text = sprint_json(models, true)
+    if (!empty(json_path)) {
+        var wrote = false
+        fopen(json_path, "wb") $(f) {
+            if (f != null) {
+                fwrite(f, text)
+                wrote = true
+            }
+        }
+        if (!wrote) {
+            print("warning: could not open {json_path} for writing - no records file\n")
+        }
+    }
+    print("{text}\n")
 }
 
 // ===== ASR cell mode (--asr) =====
@@ -466,18 +515,7 @@ def private asr_measure_spec(spec : AsrModelSpec; reps, threads : int; var jsonM
 //! prefill engagement, exits the leg non-zero.
 def private asr_cell_main(model, json_path : string; reps, threads : int; gpu, accel : bool; clip_override : string) : bool {
     allow_cpu_prefill()   //! Conformer/planar decoder paths still CPU-prefill by protocol
-    if (accel && gpu) {
-        print("--accel is a CPU-tier lever - drop it or run with -ngl 0\n")
-        return false
-    }
-    if (accel) {
-        static_if (typeinfo builtin_module_exists(das_accelerate)) {
-            dasllama_accelerate_enable(32l)   // the shipped +AMX defaults, same as the LLM leg
-        } else {
-            print("--accel requested but das_accelerate is not built on this platform - no accel row to measure\n")
-            return false
-        }
-    }
+    return false if (!arm_accel_tier(accel, gpu))
     if (gpu) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
             set_metal_mode(MetalMode.when_available)   //! before the loads: the audio-chat decoders mint the blob flavor and ride the Metal rail
@@ -533,20 +571,7 @@ def private asr_cell_main(model, json_path : string; reps, threads : int; gpu, a
         print("lcpp_bench --asr: no catalog model matches '{model}'\n")
         return false
     }
-    let text = sprint_json(jsonModels, true)
-    if (!empty(json_path)) {
-        var wrote = false
-        fopen(json_path, "wb") $(f) {
-            if (f != null) {
-                fwrite(f, text)
-                wrote = true
-            }
-        }
-        if (!wrote) {
-            print("warning: could not open {json_path} for writing - no records file\n")
-        }
-    }
-    print("{text}\n")
+    emit_cell_records(jsonModels, json_path)
     return true
 }
 
@@ -607,19 +632,7 @@ def private image_cell_main(model, mmproj, image, prompt, json_path : string; re
     } else {
         allow_cpu_prefill()   // the CPU arm is CPU by intent — disarm the Metal-build tripwire
     }
-    if (accel && gpu) {
-        print("--accel is a CPU-tier lever - drop it or run with -ngl 0\n")
-        return false
-    }
-    if (accel) {   // the +AMX tier — the tower's bf16 GEMMs are exactly the float-batch shapes it serves
-        static_if (typeinfo builtin_module_exists(das_accelerate)) {
-            dasllama_accelerate_enable(32l)   // the shipped +AMX defaults, same as the LLM leg
-            print("DASLLAMA_ACCEL armed (float-batch tier, min ntok 32) - this row measures the accelerate lane\n")
-        } else {
-            print("--accel requested but das_accelerate is not built on this platform - no accel row to measure\n")
-            return false
-        }
-    }
+    return false if (!arm_accel_tier(accel, gpu))   // the +AMX tier — the tower's bf16 GEMMs are exactly the float-batch shapes it serves
     static_if (typeinfo builtin_module_exists(das_metal)) {
         if (!gpu) {   // a CPU/accel row means CPU: the default-on tower driver would silently GPU-serve the encode
             set_metal_tower(false)
@@ -702,20 +715,123 @@ def private image_cell_main(model, mmproj, image, prompt, json_path : string; re
     if (empty(jsonModels)) {
         return false
     }
-    let text = sprint_json(jsonModels, true)
-    if (!empty(json_path)) {
-        var wrote = false
-        fopen(json_path, "wb") $(f) {
-            if (f != null) {
-                fwrite(f, text)
-                wrote = true
-            }
-        }
-        if (!wrote) {
-            print("warning: could not open {json_path} for writing - no records file\n")
+    emit_cell_records(jsonModels, json_path)
+    return true
+}
+
+// ===== TTS cell mode (--tts) =====
+// The synthesis sibling of the ASR cell: one process, one tune-key demand, one image-identity
+// stamp. The reference packages run in gen_bench_records beside it, as for the other modalities.
+
+//! Calls and serves of every seat of the family's GPU hook record, since the process started.
+def private tts_seat_counts(kind : TtsKind) : tuple<calls : array<int>; served : array<int>> {
+    var inscope seats <- kind == TtsKind.pocket ? pocket_gpu_seats() : styletts2_gpu_seats()
+    var out : tuple<calls : array<int>; served : array<int>>
+    out.calls |> reserve(length(seats))
+    out.served |> reserve(length(seats))
+    for (s in seats) {
+        let st = kind == TtsKind.pocket ? pocket_gpu_stats(s) : styletts2_gpu_stats(s)
+        out.calls |> push(st.calls)
+        out.served |> push(st.served)
+    }
+    return <- out
+}
+
+//! Best-of-`reps` generation wall of one sentence in ms - the wall around the synthesis less its
+//! front end, so the das side times what the reference times - and the audio seconds it spoke.
+def private measure_tts(var m : TtsModel; text, voice : string; reps : int) : tuple<ms : double; audio_s : double> {
+    var best = 1.0e30lf
+    var audio_s = 0.0lf
+    for (_rep in range(reps)) {
+        let t0 = ref_time_ticks()
+        var inscope a <- synthesize(m, text, voice)
+        let ms = double(get_time_usec(t0)) / 1000.0lf - double(a.timings.front_end_us) / 1000.0lf
+        best = min(best, ms)
+        audio_s = double(length(a.pcm)) / double(a.sample_rate)
+    }
+    return (ms = best, audio_s = audio_s)
+}
+
+//! The --tts entry: the corpus head through one model at one voice, one `tts:g2p<N>@<voice>` test
+//! summing each sentence's best-of-`reps` generation ms and its audio seconds. --ngl serves every
+//! chunk on the Metal tower and fails the cell where a seat fell back; a CPU row pins the tower off
+//! on Metal, and on a Vulkan build stamps `vulkan` where the TTS seats served every chunk.
+[arch(at = "../ARCHITECTURE_MEASUREMENT.md#the-tts-reference-instrument")]
+def private tts_cell_main(model, voice_arg, json_path : string; sentences, reps, threads : int; gpu, accel : bool) : bool {
+    return false if (!arm_accel_tier(accel, gpu))
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        set_metal_tower(gpu)   // a CPU/accel row means CPU: the default-on tower would serve the seats
+    } else {
+        if (gpu) {
+            print("lcpp_bench --tts: --ngl needs a Metal build (no das_metal on this platform)\n")
+            return false
         }
     }
-    print("{text}\n")
+    let voice = empty(voice_arg) ? tts_spec_of(model).voice : voice_arg
+    if (empty(voice)) {
+        print("lcpp_bench --tts: {base_name(model)} has no TTS catalog row - name the voice with --tts-voice\n")
+        return false
+    }
+    if (!stat(model).is_valid) {
+        print("lcpp_bench --tts: missing model '{model}'\n")
+        return false
+    }
+    var inscope corpus <- tts_corpus_head(fread(tts_corpus_path()), sentences)
+    if (empty(corpus) || length(corpus) < sentences) {
+        print("lcpp_bench --tts: {tts_corpus_path()} holds {length(corpus)} of the {sentences} sentences asked\n")
+        return false
+    }
+    apply_box_profile_runtime()
+    return false if (!tune_gate())   // never measure on fallback winners
+    var jsonModels : array<BenchModel>
+    var ok = true
+    with_dasllama_jobque_() {
+        print("live: {get_dispatch_lanes()} dispatch lanes ({get_total_hw_jobs()} workers)\n")
+        var inscope m <- load_tts_model(model)
+        var inscope seats0 <- tts_seat_counts(m.kind)
+        measure_tts(m, corpus[0].text, voice, 1)   // warm: JIT + first touch + the seats' slabs
+        var total_ms = 0.0lf
+        var total_audio = 0.0lf
+        for (s in corpus) {
+            let r = measure_tts(m, s.text, voice, reps)
+            total_ms += r.ms
+            total_audio += r.audio_s
+            print("lcpp_bench --tts: {s.id} {r.audio_s} s audio in {r.ms} ms (rtf {r.ms / 1000.0lf / max(r.audio_s, 1e-9lf)})\n")
+        }
+        var inscope seats1 <- tts_seat_counts(m.kind)
+        var inscope dcalls <- [for (a, b in seats0.calls, seats1.calls); b - a]
+        var inscope dserved <- [for (a, b in seats0.served, seats1.served); b - a]
+        let verdict = tts_seat_verdict(dcalls, dserved)
+        print("lcpp_bench --tts: GPU seats {verdict} - calls {dcalls}, served {dserved}\n")
+        var backend = gpu ? "metal" : "cpu"
+        if (gpu && verdict != "all") {
+            print("lcpp_bench --tts: LOUD FAIL - gpu row {base_name(model)} served {verdict} of its seats' calls - a \"metal\" row that measured the CPU\n")
+            ok = false
+        } elif (!gpu && verdict == "partial") {
+            print("lcpp_bench --tts: LOUD FAIL - {base_name(model)}: the GPU seats served some chunks but not all, so the row is neither a CPU row nor a GPU one - no number\n")
+            ok = false
+        } elif (!gpu && verdict == "all") {
+            backend = "vulkan"   // only a Vulkan build reaches here: on Metal the CPU arm pinned the tower off
+        }
+        print("lcpp_bench --tts: {base_name(model)} {voice} {length(corpus)} sentences, {total_audio} s of audio in {total_ms} ms (rtf {total_ms / 1000.0lf / max(total_audio, 1e-9lf)})\n")
+        var run = BenchRun(engine = "das", backend = backend, flavor = flavor_stamp(accel ? "accel" : "tuned"),
+            exec_fmt = "{m.kind} {tts_serves_q8() ? "q8" : "f32"} lane",
+            workload = "tts", box = box_name(), threads = threads,
+            date = format_time(get_clock(), "%Y-%m-%d"), cmd = bench_cmd_line(), env = bench_env_line(),
+            sha = run_capture("git rev-parse --short=9 HEAD", true), version = das_version(),
+            dasllama_version = DASLLAMA_RELEASE,
+            tune = tune_summary(), tune_sha = tune_manifest_sha(), noise = tune_manifest_noise(),
+            hardware = gather_hardware(),
+            files <- [file_identity(model, "weights"), file_identity(tts_corpus_path(), "corpus")])
+        run.tests |> insert(tts_test_key(sentences, voice), BenchTest(ms = total_ms, audio_s = total_audio))
+        let spec = tts_spec_of(model)
+        var cell = BenchModel(gguf = base_name(model), arch = empty(spec.display) ? "{m.kind}" : spec.display,
+                              size_bytes = int64(stat(model).size))
+        cell.runs |> emplace(run)
+        jsonModels |> emplace(cell)
+    }
+    return false if (!ok)
+    emit_cell_records(jsonModels, json_path)
     return true
 }
 
@@ -1585,6 +1701,9 @@ def main() : int {
     say(fmt, "regime: {threads} lanes ({max(threads - 1, 1)} pool workers + main), affinity {pinned ? pin_desc : (is_some(g_env_core.jobque_affinity) ? "env override" : "off (platform default)")}\n")
     if (cfg.asr) {   // the audio cell shares every lane decision above, then runs its own protocol
         return asr_cell_main(cfg.model, cfg.json_path, reps, threads, gpu, cfg.accel, cfg.asr_clips) ? 0 : 1
+    }
+    if (cfg.tts) {   // the synthesis cell, same deal
+        return tts_cell_main(cfg.model, cfg.tts_voice, cfg.json_path, max(cfg.tts_sentences, 1), reps, threads, gpu, cfg.accel) ? 0 : 1
     }
     if (!empty(cfg.image)) {   // the vision cell, same deal
         if (empty(cfg.image_mmproj)) {

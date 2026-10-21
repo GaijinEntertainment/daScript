@@ -192,6 +192,8 @@ The das Metal ASR leg is OPT-IN per catalog row: `AsrModelSpec.metal_served`
 end - tower and decoder both. An unflagged family keeps the CPU by design, and asking for its
 GPU leg reds the row: the `--ngl` arms assert that the tower engage counters moved, so a family
 whose tower silently falls back fails instead of publishing a CPU wall under a GPU heading.
+The MLX reference (`asr_gpu_only_tool`) runs on the Apple GPU alone: its one row is the `metal`
+leg, measured on every catalog row that carries it whatever `metal_served` says.
 
 On a Vulkan box the CPU arm's row stamps `backend = "vulkan"` when the Vulkan drivers served
 every clip (the tower every encode with no decline; on whisper the ASR-decoder driver every window
@@ -225,26 +227,23 @@ because `-ngl` on a Metal-OFF build is inert; `mtmd_bin_metal()` returns "" when
 
 ### The TTS reference instrument {#the-tts-reference-instrument}
 
-Every das TTS wall in `PERF_LEDGER.md` is held against a reference row of the family's own
-package, one recipe per family. StyleTTS2 (kokoro, kitten): `harness/tts_ref_bench.py` feeds the
-g2p corpus's `ps_espeak` phoneme strings to the packages' own models, times generation only - the
-front end is out of the compare on both sides - and prints the mean wall a sentence and the
-real-time factor, each sentence timed `--passes` times with the best kept, after one untimed
-warm-up call. Kokoro runs `hexgrad/Kokoro-82M` through `kokoro`'s `KModel` on the torch device
-`--device` names (`cuda` on the pod, `mps` on a Mac, `cpu` for the CPU row). Kitten runs the
-KittenTTS ONNX files through `onnxruntime` with the package's tokenizer, style rows and per-voice
-speed prior; `--device cuda` asks for the CUDA execution provider (`onnxruntime-gpu`) ahead of the
-CPU one, any other device the CPU provider alone, and the run prints the providers the session
-took, so a row names the one that ran. The script runs under the g2p experiment's venv
-(`~/Work/tts-ab/g2p/.venv-g2p`, `HF_HOME` at that experiment's hub cache - the pinned snapshots
-`harness/kitten_graph.py` names) and prints the torch, kokoro, kittentts and onnxruntime versions
-it ran with, so a ledger entry names them beside the command. Its kitten audio runs shorter than
-das's for the same phonemes (the package's speed prior and its 5000-sample trim), so a das row is
-compared on the wall a sentence, never on the real-time factor. Pocket: `harness/pocket_synth.py`
-runs the corpus through Kyutai's `pocket-tts` package on the CPU (the package pins torch to one
-thread) and writes the timings in `harness/tts_synth.das`'s shape. No board cell covers a synthesis
-(`followup_general.md` 166 plans the bench's `--tts` path), so the das side of every compare is
-`harness/tts_synth.das` under `REVIEW_MEASUREMENT.md`'s harness rule.
+A TTS board cell is `lcpp_bench --tts -m <gguf>` against `harness/tts_ref_bench.py`, both over the
+g2p corpus's first `--tts-sentences` sentences (20) at one voice (`tts_catalog()`), every sentence
+timed best of `-r` / `--passes` (3) after one untimed warm-up, generation only: das times the
+synthesis less its front end, the phoneme references take the fixture's `ps_espeak` strings, and
+Pocket reads the text on both sides. Each side records one `tts:g2p<N>@<voice>` test, its `ms` the
+best walls summed and `audio_s` the seconds spoken. The das cell's `--ngl` serves every chunk on the
+Metal tower and reds where a seat fell back (`tts_seat_verdict`); its CPU row pins the tower off
+on Metal and stamps `vulkan` on a Vulkan build whose TTS seats served every chunk. The references:
+kokoro's `KModel` on the torch device (`cpu`, `mps`, `cuda` beside a `vulkan` row), KittenTTS's
+ONNX files on the onnxruntime CPU provider with the package's tokenizer, style rows and speed prior,
+Kyutai's `pocket-tts` on the CPU (one torch thread, the package's pin), all pinned to the
+`model_specs.das` recipes' revisions from the in-repo `tts` venv; and on the metal leg mlx-audio's
+ports of all three from the `mlx` venv (`--engine mlx`). Both venvs build from committed
+`benchmarks/asr/requirements-*.txt` (`setup_asr_rig --venvs`), and the run prints a `VERSIONS` line
+the row carries. Kitten's package speaks shorter audio than das for the same phonemes (its speed
+prior and 5000-sample trim), so a kitten pair compares on the wall, never on the real-time factor.
+`harness/tts_synth.das` and `harness/pocket_synth.py` stay the scoring rig's synthesis arms.
 
 ### A `[tuned]` kernel's perm is decided at its own compile {#tuned-perm-precedence}
 
