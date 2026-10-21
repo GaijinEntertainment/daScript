@@ -871,7 +871,7 @@ def private midi_thread_main(sid : uint64; var cmd_stream : Stream?; var done_st
                 assume tc = cmd as add_track
                 // payload pointers are uint64 (intptr-encoded); keep them opaque until use
                 pending_adds |> emplace(MidiTrackCmd(
-                    name := tc.name,
+                    name = tc.name,
                     file = tc.file,
                     bank = tc.bank,
                     sf2 = tc.sf2,

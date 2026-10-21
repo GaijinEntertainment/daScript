@@ -5394,7 +5394,7 @@ def extract_decs_bridge(var top : Expression?) : DecsBridgeShape? {
     var info = new DecsBridgeShape(
         reqHashExpr = clone_expression(feaCall.arguments[0]),
         erqExpr = clone_expression(feaCall.arguments[1]),
-        archName := archName,
+        archName = archName,
         forExpr = clone_expression(forExpr),
         iterNames <- iterNames,
         userNames <- userNames,

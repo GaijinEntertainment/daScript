@@ -168,7 +168,7 @@ def public compute_block_layout(sname : string; st : Structure?; var fields : ar
         let mi = matrix_info(fld._type)
         if (mi.ok) {
             off = round_up(off, 16)
-            fields |> emplace(BlockField(name := string(fld.name), offset = off, size = 16 * mi.cols,
+            fields |> emplace(BlockField(name = string(fld.name), offset = off, size = 16 * mi.cols,
                 is_matrix = true, matrix_width = mi.width, matrix_cols = mi.cols))
             off += 16 * mi.cols
             max_align = max(max_align, 16)
@@ -185,7 +185,7 @@ def public compute_block_layout(sname : string; st : Structure?; var fields : ar
             let struct_align = rules == BlockLayoutRules.std140 ? round_up(inner_layout.align, 16) : inner_layout.align
             off = round_up(off, struct_align)
             let struct_size = round_up(inner_layout.size, struct_align)
-            fields |> emplace(BlockField(name := string(fld.name), offset = off, size = struct_size,
+            fields |> emplace(BlockField(name = string(fld.name), offset = off, size = struct_size,
                 is_matrix = false, matrix_width = 0, matrix_cols = 0,
                 is_array = false, array_count = 0, array_stride = 0,
                 is_struct = true, is_composite = true))
@@ -212,7 +212,7 @@ def public compute_block_layout(sname : string; st : Structure?; var fields : ar
                 let abase = rules == BlockLayoutRules.std140 ? 16 : block_scalar_align(ebt, rules)
                 off = round_up(off, abase)
                 let total = stride * nelem
-                fields |> emplace(BlockField(name := string(fld.name), offset = off, size = total,
+                fields |> emplace(BlockField(name = string(fld.name), offset = off, size = total,
                     is_matrix = false, matrix_width = 0, matrix_cols = 0,
                     is_array = true, array_count = nelem, array_stride = stride,
                     is_struct = false, is_composite = true))
@@ -232,7 +232,7 @@ def public compute_block_layout(sname : string; st : Structure?; var fields : ar
                 let stride = round_up(inner_layout.size, struct_align)
                 off = round_up(off, struct_align)
                 let total = stride * nelem
-                fields |> emplace(BlockField(name := string(fld.name), offset = off, size = total,
+                fields |> emplace(BlockField(name = string(fld.name), offset = off, size = total,
                     is_matrix = false, matrix_width = 0, matrix_cols = 0,
                     is_array = true, array_count = nelem, array_stride = stride,
                     is_struct = true, is_composite = true))
@@ -253,7 +253,8 @@ def public compute_block_layout(sname : string; st : Structure?; var fields : ar
         }
         let falign = block_scalar_align(fbt, rules)
         off = round_up(off, falign)
-        fields |> emplace(BlockField(name := string(fld.name), offset = off, size = block_scalar_size(fbt),
+        fields |> emplace(BlockField(name = string(fld.name), offset = off,
+                                     size = block_scalar_size(fbt),
             is_matrix = false, matrix_width = 0, matrix_cols = 0))
         off += block_scalar_size(fbt)
         max_align = max(max_align, falign)

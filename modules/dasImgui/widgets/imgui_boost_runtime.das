@@ -1057,7 +1057,7 @@ def public register_widget_str(module_name : string;
         kind = kind,
         ti = ti,
         addr_getter_str = addr_getter,
-        k_str := k,
+        k_str = k,
         has_str_key = true,
         last_seen_frame = -1
     )

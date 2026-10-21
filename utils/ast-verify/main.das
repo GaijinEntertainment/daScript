@@ -1,5 +1,8 @@
 options gen2
 
+require daslib/ast
+require daslib/ast_boost
+require daslib/ast_verify
 require daslib/clargs
 require daslib/fio
 require daslib/strings_boost
@@ -45,9 +48,35 @@ def private is_unverifiable(file : string; changed_mode : bool) : bool {
             || (changed_mode && find(file, "ast-fuzz/selftest/") >= 0))
 }
 
+//! Gen2 only - gen1 does not stamp ranges; one ModuleGroup for the
+//! batch compiles each require once.
+def private verify_ranges(files : array<string>; changed_mode : bool) : bool {
+    var ok = true
+    var inscope access <- make_file_access("")
+    using() $(var mg : ModuleGroup) {
+        using() $(var cop : CodeOfPolicies) {
+            for (file in files) {
+                continue if (is_unverifiable(file, changed_mode))
+                parse_file(file, access, unsafe(addr(mg)), cop) $(parsed; program; _issues) {
+                    let gen2 = program._options |> find_arg("gen2") ?as tBool ?? false
+                    return if (!parsed || !gen2)
+                    if (verify_parsed_module(program, get_this_module(program)) != 0) {
+                        to_log(LOG_ERROR, "ast-verify: source ranges reported on {file}\n")
+                        ok = false
+                    }
+                }
+            }
+        }
+    }
+    return ok
+}
+
 def private verify_one(daslang, file : string; changed_mode : bool) : bool {
     if (is_unverifiable(file, changed_mode)) {
         return true
+    }
+    if (!verify_ranges([file], changed_mode)) {
+        return false
     }
     let timeout = changed_mode ? CHANGED_TIMEOUT : FILE_TIMEOUT
     let argv <- (changed_mode
@@ -81,6 +110,9 @@ def private verify_one(daslang, file : string; changed_mode : bool) : bool {
 }
 
 def private verify_batch(daslang; files : array<string>) : bool {
+    if (!verify_ranges(files, false)) {
+        return false
+    }
     var argv <- [daslang, "--ast-verify-batch", "-compile-only"]
     argv |> push_from([for (f in files); f; where !is_unverifiable(f, false)])
     if (length(argv) == 3) {

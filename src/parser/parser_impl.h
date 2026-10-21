@@ -95,7 +95,7 @@ namespace das {
     TypeDecl * attachDimChain ( TypeDecl * chain, TypeDecl * element );
     TypeDecl * appendAutoDim ( TypeDecl * typeDecl, const LineInfo & at );
     void implAddGenericFunction ( yyscan_t scanner, Function * func );
-    Expression * ast_arrayComprehension (yyscan_t scanner, const LineInfo & loc, vector<VariableNameAndPosition> * iters,
+    Expression * ast_arrayComprehension (yyscan_t scanner, const LineInfo & at, const LineInfo & loc, vector<VariableNameAndPosition> * iters,
         Expression * srcs, Expression * subexpr, Expression * where, const LineInfo & forend, bool genSyntax, bool tableSyntax );
     Structure * ast_structureName ( yyscan_t scanner, bool sealed, string * name, const LineInfo & atName,
         string * parent, const LineInfo & atParent );
@@ -115,7 +115,7 @@ namespace das {
             const LineInfo & fromBlock, const LineInfo & annLAt );
     Expression * ast_NameName ( yyscan_t scanner, string * ena, string * eni, const LineInfo & enaAt, const LineInfo & eniAt );
     Expression * ast_makeBlock ( yyscan_t scanner, int bal, AnnotationList * annL, vector<CaptureEntry> * clist,
-        vector<VariableDeclaration*> * list, TypeDecl * result, Expression * block, const LineInfo & blockAt, const LineInfo & annLAt, const LineInfo & clistAt );
+        vector<VariableDeclaration*> * list, TypeDecl * result, Expression * block, const LineInfo & at, const LineInfo & blockAt, const LineInfo & annLAt, const LineInfo & clistAt );
     Expression * ast_Let ( yyscan_t scanner, bool kwd_let, bool inScope, VariableDeclaration * decl, const LineInfo & kwd_letAt, const LineInfo & declAt );
     Expression * ast_LetList ( yyscan_t scanner, bool kwd_let, bool inScope, vector<VariableDeclaration *> & decl, const LineInfo & kwd_letAt, const LineInfo & declAt );
     Function * ast_functionDeclarationHeader ( yyscan_t scanner, string * name, vector<VariableDeclaration*> * list,
