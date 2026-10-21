@@ -2149,16 +2149,13 @@ module) is independent and can land any time - it is pure structure.
     share of the misses at the link's rate (an IQ4_XS expert about 1.3 MB, 0.09 ms over the link against the host's
     0.18) with no host work, the share bounded by the link as the DMA fill's admission is. Done = the real-text token step
     on Flash-Next with the host's share of the picks under a third, measured against the served rows of 2026-10-19.
-157. **The window chain's checkpoint captures have run on no device.** A served prompt's prefill no longer splits at the
-    recurrent checkpoint stops: the window chain writes the state into the region's checkpoint rows as the scan passes a
-    stop's row and a cap-tail kernel writes the ring image (`ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-dn-block`), which on
-    Flash-Next ends the three window chains a 3k prompt took (2966, 22 and 7 rows on 2026-10-19: 5.9 s against the bench's
-    one window at 3.8, the 9k prompt 16.0 against 11.7; the served entry of 2026-10-19 in `PERF_LEDGER.md`, and the Metal
-    arm's one-window entry of 2026-10-20). The kernels, the sets and the tier's planning and landing are
-    compile-checked on the Mac alone. Done = on the pod, `test_vulkan_kernels` (`test_vkd_dn_scan*` with the capture arm,
-    `test_vkd_dn_cap_tail`), `test_gpu_resident_regions_hybrid` and `_qwen35moe` (the checkpoint and pool cells over the
-    one-window form) green, and the served 3k and 9k prefill on Flash-Next and the 35B within 5% of `lcpp_bench`'s window at
-    the same chunk, against the 2026-10-19 rows.
+157. **Flash-Next's served prompt has not been read with the checkpoint captures.** The window chain writes the state into
+    the region's checkpoint rows as the scan passes a stop's row (`ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-dn-block`),
+    which on Flash-Next ends the three window chains a 3k prompt took (2966, 22 and 7 rows on 2026-10-19: 5.9 s against the
+    bench's one window at 3.8, the 9k prompt 16.0 against 11.7; the served entry of 2026-10-19 in `PERF_LEDGER.md`). The
+    capture cells and the 35B's served reading ran on the pod (the entry of 2026-10-21); Flash-Next's three shards do not fit
+    the pod's card, so its served rows stay owed on zen2. Done = the served 3k and 9k cold prefill on Flash-Next within the
+    35B's fixed turn cost of `lcpp_bench`'s window at the same chunk, against the 2026-10-19 rows.
 158. **The shared selection template's Vulkan stamp has run on no device.** `ClsSelect` stamps `GkClsSelect`
     (`dasllama_gpu_kernels_common.das`) and its cell `test_vkd_cls_select` builds `GkClsSelArgs`; both are compile-checked on
     the Mac (the SPIR-V emission runs at compile time) and the stamp's subgroup-aggregated histogram, uniform vocab loops and

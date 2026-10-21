@@ -10,6 +10,21 @@ and coverage; this ledger is the backlog for the perf pass that follows them. Ev
 what it costs today and what the fix would change.
 
 ## Entries
+- **MEASURED (2026-10-21, `served`, `out-of-process`, `debug-jit`, `direction-grade`) - a recurrent model's checkpoint stops
+  inside one Vulkan prefill window.** RunPod RTX PRO 4500 Blackwell 32 GB, the IQ4_XS-pure 35B whole on the card, every kernel
+  on the x86-avx2 class profile (`DASLLAMA_ALLOW_UNTUNED=1`: the pod has no box profile). The server at `--gpu vulkan --ctx
+  16384 --streams 1 --mtp=false` under `harness/served_bench.das --sizes 3000,9000 --reply 200 --reps 8 --settle 2`; the
+  window under `lcpp_bench -p <N> -n 8 -r 3 -t 16 --for-debug-purposes` with `DASLLAMA_GPU=1`, the same commit:
+
+    | row | served cold TTFT | bench window | gap |
+    | :--- | ---: | ---: | ---: |
+    | 9k (8812 tokens) | 1385 ms (cv 1.3%) | 1241 ms (pp9000 7104 +/- 10 tok/s) | 144 ms |
+    | 3k (2990 tokens) | 540 ms (cv 6.2%, void) | 410 ms (pp3000 7291 +/- 20 tok/s) | 130 ms |
+
+  The gap does not grow with the prompt, so the served prompt is the bench's one window plus the turn's own cost (the warm
+  turn's server-side floor reads 82 / 84 ms). The warm turns attach 2966 of 2990 and 8788 of 8812 prompt tokens off the
+  checkpoint; decode reads 182.3 / 170.6 tok/s at 3k / 9k. No reading before the capture exists on this card: the split's
+  readings are Flash-Next's on zen2 (2026-10-19), which `followup_vulkan.md` row 157 owes.
 - **MEASURED (2026-10-20, `out-of-process`, `direction-grade`) - a recurrent model's checkpoint stops inside one prefill
   window on Metal.** M5 Max, the IQ4_XS-pure 35B, the server at `--ctx 32768 --streams 4` on the plain arm (`--mtp=false`) under the
   box profile (`DAS_TUNE_MANIFEST=performance/m5.tune.json`), a cold and a warm pass, the same run as the entry below
