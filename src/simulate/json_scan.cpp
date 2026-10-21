@@ -532,13 +532,16 @@ namespace das {
 
         bool scanFixedArray(char * dst, TypeInfo * ti) {
             if (!expect('[')) return false;
-            int elemSize = getTypeBaseSize(ti);
+            TypeInfo elemTi = *ti;
+            elemTi.dimSize--;
+            elemTi.dim = ti->dim + 1;
+            int elemSize = getTypeSize(&elemTi);
             uint32_t maxCount = ti->dim[0];
             uint32_t idx = 0;
             if (peek() == ']') { cur++; return true; }
             while (true) {
                 if (idx < maxCount) {
-                    if (!scanValue(dst + idx * elemSize, ti)) return false;
+                    if (!scanValue(dst + idx * elemSize, &elemTi)) return false;
                 } else {
                     if (!skipValue()) return false;
                 }
