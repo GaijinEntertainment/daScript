@@ -3279,7 +3279,8 @@ struct RDec {
     ring_roll_dev : uint64        //! the n-gram conv ring as the verify's rows form found it, saved before the rows' commit (`rd_encode_hc_side`), for the rollback to put back; 0 = no ring or no rollback
     snap_dev : uint64             //! the regions' recurrent checkpoints: `RDEC_DN_SNAPS` rows a region, a row every recurrent layer's slot state and ring pair (`RLayer.snap_off`); 0 until the first save
     snap_row_bytes : int64
-    snap_ring_off : int64         //! ... and, on a hyper-connection model with the n-gram side input, the row's copy of the region's conv ring past the recurrent state
+    pf_snap_bound : uint64        //! the checkpoint rows the window chain's scan and cap-tail sets bind (0 = the smalls placeholder): a save that allocated the rows after the sets leaves them stale
+    snap_ring_off : int64        //! ... and, on a hyper-connection model with the n-gram side input, the row's copy of the region's conv ring past the recurrent state
     snap_par : array<int>         //! a checkpoint row's ring parity, the region's when it was saved
     roll_region : int64 = -1l     //! ... the region whose slots the last verify copied (-1 = none to roll back), and that verify's rows
     roll_vrows : int64

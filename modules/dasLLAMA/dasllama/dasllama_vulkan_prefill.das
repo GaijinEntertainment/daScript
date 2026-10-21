@@ -94,11 +94,11 @@ def vk_rdec_prefill_caps(caps : array<RdecPfCap>) {
     return if (empty(caps) || g_rd == null || !g_rd.hybrid)
     if (g_rd.snap_dev == 0ul) {
         rd_snap_alloc()
-        if (g_rd.pf_ready) {
-            for (l in range64(g_rd.n_layers)) {
-                if (g_rd.layers[l].recurrent) {
-                    pf_dn_layer_sets(l, g_rd.dim, g_rd.dn_cd, g_rd.dn_di)
-                }
+    }
+    if (g_rd.pf_ready && g_rd.pf_snap_bound != g_rd.snap_dev) {   //! a checkpoint save may have made the rows after the sets were built
+        for (l in range64(g_rd.n_layers)) {
+            if (g_rd.layers[l].recurrent) {
+                pf_dn_layer_sets(l, g_rd.dim, g_rd.dn_cd, g_rd.dn_di)
             }
         }
     }
@@ -335,6 +335,7 @@ def private pf_dn_layer_sets(l, dim, cd, di : int64) {
         fixed_array(np * cd * 4l, np * cd * 4l, smalls_bytes),
         fixed_array(VHZ_DNP, VHZ_DNC, VHZ_DNSM))
     let snap_dev = g_rd.snap_dev != 0ul ? g_rd.snap_dev : smalls_dev
+    g_rd.pf_snap_bound = g_rd.snap_dev
     let snap_bytes = g_rd.snap_dev != 0ul ? g_rd.snap_row_bytes * g_rd.regions * int64(RDEC_DN_SNAPS) : smalls_bytes
     if (!vk_range_ok(snap_bytes)) {   //! the scan and the cap tail bind the checkpoint rows whole
         panic("dasLLAMA vulkan prefill: the checkpoint rows ({snap_bytes} bytes: {g_rd.regions} regions x {RDEC_DN_SNAPS} rows of {g_rd.snap_row_bytes}) pass the device's storage range {vk_max_storage_range()}")
