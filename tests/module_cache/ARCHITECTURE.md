@@ -47,6 +47,8 @@ this document states what the folder is and why its tests take the shape they do
   copy, and the second script's `JV` call - a main-module type equal to one in that record -
   still serves and runs; the stream's type table restarts at each module's record, so no
   back-reference reaches the copy.
+- `test_shared_typename.das` - compound type-name folding across cold
+  compilation and warm module-cache reads.
 - `test_descriptor_manifest.das` - the manifest the module scan keeps beside each `.das_module`
   descriptor, replaying its registrations instead of compiling the descriptor, on a project root
   the test writes, three modules in it: one whose descriptor registers

@@ -669,11 +669,10 @@ namespace das
                 stream << "(" << alias << ")";
             }
         } else if ( baseType==Type::option ) {
-            for ( auto & argT : argTypes ) {
-                stream << argT->describe(extra, contracts, dmodule, aliasDefs);
-                if ( argT != argTypes.back() ) {
-                    stream << "|";
-                }
+            for ( size_t ai=0, ais=argTypes.size(); ai!=ais; ++ ai ) {
+                if ( ai!=0 ) stream << "|";
+                stream << argTypes[ai]->describe(
+                    extra, contracts, dmodule, aliasDefs);
             }
         } else if ( baseType==Type::typeDecl ) {
             if ( typeMacroExpr.size()==1 ) {
@@ -804,7 +803,7 @@ namespace das
                         if ( !argName.empty() ) stream << argName << ":";
                     }
                     stream << arg->describe(extra, contracts, dmodule, aliasDefs);
-                    if ( arg != argTypes.back() ) {
+                    if ( ai+1 != int(argTypes.size()) ) {
                         stream << ";";
                     }
                     ai ++;
@@ -821,7 +820,7 @@ namespace das
                         if ( !argName.empty() ) stream << argName << (arg->isVoid() ? "" : ":");
                     }
                     if ( !arg->isVoid() ) stream << arg->describe(extra, contracts, dmodule, aliasDefs);
-                    if ( arg != argTypes.back() ) {
+                    if ( ai+1 != int(argTypes.size()) ) {
                         stream << ";";
                     }
                     ai ++;
