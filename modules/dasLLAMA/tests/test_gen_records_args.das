@@ -428,3 +428,15 @@ def test_mlx_lm_reference(t : T?) {
         t |> equal(rows[1].stddev, 0.5lf, "second stddev")
     }
 }
+
+[test]
+def test_board_refs_guard(t : T?) {
+    t |> run("a board mint refuses a leg whose llama-bench is unset") @(t : T?) {
+        t |> success(find(board_refs_refusal(true, true, true, true, "", "/b/stock"), "--ref-clean") >= 0, "the cpu leg without its clean ref")
+        t |> success(find(board_refs_refusal(true, true, false, true, "", ""), "--ref-stock") >= 0, "the metal leg without its stock ref")
+        t |> equal(board_refs_refusal(true, true, true, true, "/b/clean", "/b/stock"), "", "both refs set - the board mint starts")
+        t |> equal(board_refs_refusal(true, true, false, true, "", "/b/stock"), "", "a metal-only run needs no clean ref")
+        t |> equal(board_refs_refusal(false, true, true, true, "", ""), "", "a scratch store may run das-only")
+        t |> equal(board_refs_refusal(true, false, true, true, "", ""), "", "an asr/tts-only run reads no llama-bench")
+    }
+}

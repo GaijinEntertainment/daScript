@@ -229,6 +229,20 @@ def catalog_known(catalog : string) : bool => catalog == "official" || catalog =
 def store_is_board(store : string) : bool =>
     empty(store) || (base_name(dir_name(store)) == "records" && base_name(dir_name(dir_name(store))) == "performance")
 
+//! The guard on a board mint's references: every das LLM cell on `records/<box>.json` publishes
+//! as a ratio, so a leg whose llama-bench is unset refuses the run rather than minting das-only
+//! rows. Returns the refusal text, or "" when the run may start.
+def board_refs_refusal(board, llm, neon, stock_legs : bool; ref_clean, ref_stock : string) : string {
+    return "" if (!board || !llm)
+    if (neon && empty(ref_clean)) {
+        return "a board mint pairs every cpu cell - pass --ref-clean (LLAMA_BENCH_CLEAN), or measure into --store <path>"
+    }
+    if (stock_legs && empty(ref_stock)) {
+        return "a board mint pairs every metal/accel cell - pass --ref-stock (LLAMA_BENCH_STOCK), or measure into --store <path>"
+    }
+    return ""
+}
+
 //! The guard on `records/<box>.json`, the store the site merge publishes: a debug-jit run stamps
 //! rows no board may carry, and a `--catalog all` sweep mints rows for models the board does not
 //! show, so each needs an explicit `--store` outside `records/`. Returns the refusal text, or ""
@@ -1705,6 +1719,11 @@ def main : int {
     }
     if (doLlm && empty(refStock)) {
         to_log(LOG_WARNING, "gen_bench_records: stock ref UNSET (--ref-stock / LLAMA_BENCH_STOCK) - no stock rows, metal/amx cells mint das-only\n")
+    }
+    let refsRefusal = board_refs_refusal(store_is_board(cfg.store), doLlm, legNeon, legMetal || legAmx, refClean, refStock)
+    if (!empty(refsRefusal)) {
+        to_log(LOG_ERROR, "gen_bench_records: {refsRefusal}\n")
+        return 1
     }
     // the image refs resolve off the SAME knobs — announce by env spelling where they change
     // what this sweep mints (the sibling rule for stock; MTMD_BIN or its layout for the cpu arm)

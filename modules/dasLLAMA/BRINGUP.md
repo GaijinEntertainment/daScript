@@ -286,7 +286,9 @@ from EVERY subsequent `--workload asr` sweep, which then maps all seven models i
 # the tune generation already exists (the release minted it); Parsec/remote-desktop OFF stays
 # good hygiene, but the noise gates now DETECT a loud box - a mint that succeeded is a mint
 # that measured, and the sidecar's provenance says under what conditions
-bin/daslang modules/dasLLAMA/performance/gen_bench_records.das -- --workload all
+bin/daslang modules/dasLLAMA/performance/gen_bench_records.das -- --workload all \
+    --ref-clean <ref>/build-clean-cpu/bin/llama-bench --ref-stock <ref>/build-stock/bin/llama-bench
+# a board mint refuses to start without the reference its legs pair against
 ```
 
 - Thread policy is automatic: `min(16, physical performance cores)`, both engines, pinned on
