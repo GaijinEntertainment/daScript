@@ -149,6 +149,29 @@ namespace das
         return false;
     }
 
+    bool TypeDecl::isUnresolvedAnywhere() const {
+        das_set<Structure*> dep;
+        return isUnresolvedAnywhere(dep);
+    }
+
+    bool TypeDecl::isUnresolvedAnywhere(das_set<Structure*> & dep) const {
+        if ( isUnresolved() ) return true;
+        if ( baseType==Type::tStructure ) {
+            if ( !structType || dep.find(structType)!=dep.end() ) return false;
+            dep.insert(structType);
+            for ( auto & fd : structType->fields ) {
+                if ( fd.type && fd.type->isUnresolvedAnywhere(dep) ) return true;
+            }
+            return false;
+        }
+        if ( firstType && firstType->isUnresolvedAnywhere(dep) ) return true;
+        if ( secondType && secondType->isUnresolvedAnywhere(dep) ) return true;
+        for ( auto & arg : argTypes ) {
+            if ( arg->isUnresolvedAnywhere(dep) ) return true;
+        }
+        return false;
+    }
+
     bool TypeDecl::isExprType() const {
         if ( baseType==Type::tFixedArray && fixedDim==TypeDecl::dimConst ) {
             return true;
@@ -2662,6 +2685,51 @@ namespace das
         default:
             return false;
         }
+    }
+
+    bool TypeDecl::isUnresolved() const {
+        return isUnresolved(true);
+    }
+
+    bool TypeDecl::isUnresolved(bool autoReachable) const {
+        bool firstAuto = false, secondAuto = false, argAuto = false;
+        switch ( baseType ) {
+            case Type::typeMacro:
+            case Type::typeDecl:
+            case Type::autoinfer:
+            case Type::option:
+            case Type::alias:
+                if ( autoReachable ) return true;
+                break;
+            case Type::tFixedArray:
+                if ( fixedDim==TypeDecl::dimConst ) return true;
+                if ( autoReachable && fixedDim==TypeDecl::dimAuto ) return true;
+                firstAuto = autoReachable;
+                break;
+            case Type::tPointer:
+            case Type::tIterator:
+            case Type::tArray:
+                firstAuto = autoReachable;
+                break;
+            case Type::tTable:
+                firstAuto = secondAuto = autoReachable;
+                break;
+            case Type::tBlock:
+            case Type::tFunction:
+            case Type::tLambda:
+            case Type::tTuple:
+            case Type::tVariant:
+                firstAuto = argAuto = autoReachable;
+                break;
+            default:
+                break;
+        }
+        if ( firstType && firstType->isUnresolved(firstAuto) ) return true;
+        if ( secondType && secondType->isUnresolved(secondAuto) ) return true;
+        for ( auto & arg : argTypes ) {
+            if ( arg->isUnresolved(argAuto) ) return true;
+        }
+        return false;
     }
 
     bool TypeDecl::isFoldable() const {

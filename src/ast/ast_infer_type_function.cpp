@@ -1821,8 +1821,10 @@ namespace das {
             if (funcC->firstArgReturnType) {
                 TypeDecl::clone(expr->type, expr->arguments[0]->type);
                 expr->type->ref = false;
-            } else {
+            } else if (!funcC->result->isAutoOrAlias()) {
                 TypeDecl::clone(expr->type, funcC->result);
+            } else {
+                reportPendingType(expr->name, expr->at);
             }
             // infer FORWARD types
             for (size_t iF = 0, iFs = expr->arguments.size(); iF != iFs; ++iF) {

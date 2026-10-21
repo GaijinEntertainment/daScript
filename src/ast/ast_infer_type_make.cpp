@@ -339,7 +339,7 @@ namespace das {
         expr->type = block->makeBlockType();
         if (expr->isLambda) {
             expr->type->baseType = Type::tLambda;
-            if (!expr->type->isAutoOrAlias()) {
+            if (!expr->type->isUnresolved()) {
                 if (auto unInferred = isFullyInferredBlock(block)) {
                     // only report block inference error if there is no error inside the block, to avoid reporting multiple errors caused by the same issue
                     if ( ((ExprBlock *)expr->block)->insideErrorCount==0 ) {
@@ -1170,6 +1170,10 @@ namespace das {
             } else {
                 resT = new TypeDecl(*mkBaseT);
             }
+        }
+        if (resT->isAutoOrAlias() && expr->makeType->baseType != Type::tArray && expr->makeType->baseType != Type::tTable) {
+            reportPendingType(describeType(expr->makeType), expr->at);
+            return Visitor::visit(expr);
         }
         expr->type = resT;
         // no fields to initialize on a non-composite make-type - E(a=1) on an enum, or V(x=1)
