@@ -47,8 +47,9 @@ this document states what the folder is and why its tests take the shape they do
   copy, and the second script's `JV` call - a main-module type equal to one in that record -
   still serves and runs; the stream's type table restarts at each module's record, so no
   back-reference reaches the copy.
-- `test_shared_typename.das` - compound type-name folding across cold
-  compilation and warm module-cache reads.
+- `test_shared_typename.das` - compound type-name folding across cold,
+  warm and obsolete-version cache reads, retaining the invoking host's
+  static or dynamic kind outside AOT-consuming runs.
 - `test_descriptor_manifest.das` - the manifest the module scan keeps beside each `.das_module`
   descriptor, replaying its registrations instead of compiling the descriptor, on a project root
   the test writes, three modules in it: one whose descriptor registers
@@ -146,7 +147,7 @@ this document states what the folder is and why its tests take the shape they do
   output before the child wrote it on some tiers and after on others. A test whose child needs
   a different spawn shape - an argv spawn, an environment variable - keeps that one helper local.
 
-## 2. Why every case is a spawned process
+## Why every case is a spawned process {#process-startup}
 
 The host installs the cache before `compileDaScript` and finishes it after `simulate`; the
 default path, the quiet flag and the verdict are host decisions (`utils/daslang/main.cpp`). A test compiling
