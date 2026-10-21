@@ -639,18 +639,16 @@ namespace das
         }
     };
 
-    struct JsonScanFunctionAnnotation : ArgumentTemplateAnnotation {
+    struct JsonScanFunctionAnnotation : MarkFunctionAnnotation {
         JsonScanFunctionAnnotation()
-            : ArgumentTemplateAnnotation("sscan_json_destination") {}
-        virtual bool isCompatible ( const FunctionPtr &,
-                const vector<TypeDeclPtr> & types,
-                const AnnotationDeclaration &, string & err ) const override {
-            if ( types.size()>1 &&
-                    (!types[1]->isRef() || types[1]->constant) ) {
+            : MarkFunctionAnnotation("sscan_json_destination") {}
+        virtual ExpressionPtr transformCall ( ExprCallFunc * call,
+                string & err ) override {
+            const auto & type = call->arguments[1]->type;
+            if ( !type->isRef() || type->constant ) {
                 err = "sscan_json destination must be a mutable reference";
-                return false;
             }
-            return true;
+            return nullptr;
         }
     };
 

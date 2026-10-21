@@ -1,6 +1,6 @@
 options gen2
 options rtti
-expect 30341
+expect 31200
 
 struct ScanDestination {
     value : int

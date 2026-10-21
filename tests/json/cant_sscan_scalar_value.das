@@ -1,5 +1,5 @@
 options gen2
-expect 30341
+expect 31200
 
 def value(input : float) : float {
     return input
