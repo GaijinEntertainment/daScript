@@ -805,6 +805,157 @@ class private AstVerifyVisitor : AstVisitor {
     }
 }
 
+struct private LocationFrame {
+    @do_not_delete node : Expression?
+    @do_not_delete file : FileInfo?
+    first : int2
+    last : int2
+    sibling_end : int2
+}
+
+def private before(a, b : int2) : bool => a.x < b.x || (a.x == b.x && a.y < b.y)
+
+def private at_first(e : Expression?) : int2 => int2(int(e.at.line), int(e.at.column))
+
+def private at_last(e : Expression?) : int2 => int2(int(e.at.last_line), int(e.at.last_column))
+
+class private ParserVerifyVisitor : AstVisitor {
+    prog : ProgramPtr
+    error_count : int = 0
+    locations : array<LocationFrame>
+    roots : table<Expression?>
+
+    def override canVisitFunction(fun : Function?) : bool => !fun.flags.generated
+
+    def report(at : LineInfo; msg : string) : void {
+        error_count++
+        let loc = describe(at)
+        to_log(LOG_ERROR, empty(loc) ? "AST verify: {msg}\n" : "AST verify: {msg} at {loc}\n")
+        if (prog != null) {
+            prog |> macro_sticky_error(at, "AST verify: {msg}")
+        }
+    }
+
+    def override preVisitExpression(var expr : ExpressionPtr) : void {
+        let first = at_first(expr)
+        let last = at_last(expr)
+        if (expr.at.fileInfo == null) {
+            report(expr.at, "{expr.__rtti} has no source location")
+        } elif (before(last, first)) {
+            report(expr.at, "{expr.__rtti} location ends before it starts")
+        }
+        let top = length(locations) - 1
+        if (top >= 0 && !key_exists(roots, expr)) {
+            let parent = locations[top].node
+            let generated = expr.genFlags.generated || parent.genFlags.generated
+            if (!generated && locations[top].file == expr.at.fileInfo) {
+                assume here = "{expr.__rtti} at {describe(expr.at, true)}"
+                if (before(first, locations[top].first) || before(locations[top].last, last)) {
+                    assume outer = "{parent.__rtti} at {describe(parent.at, true)}"
+                    report(expr.at, "{here} is not inside its parent {outer}")
+                } elif (first != locations[top].first || last != locations[top].last) {
+                    // reader-macro rewrite: spans parent, no order
+                    if (before(first, locations[top].sibling_end)) {
+                        let prev = locations[top].sibling_end
+                        assume outer = "{parent.__rtti} ends at {prev.x}:{prev.y}"
+                        report(expr.at, "{here} starts before the previous child of {outer}")
+                    }
+                    locations[top].sibling_end = last
+                }
+            }
+        }
+        locations |> push(LocationFrame(node = expr, file = expr.at.fileInfo,
+            first = first, last = last, sibling_end = first))
+    }
+
+    def override visitExpression(var expr : ExpressionPtr) : ExpressionPtr {
+        locations |> pop()
+        return expr
+    }
+
+    // a block covers its body; argument defaults are written
+    // before it, so they get no parent
+    def override preVisitExprBlockArgumentInit(_blk : ExprBlock?; _arg : VariablePtr;
+                                               init : ExpressionPtr) : void {
+        roots |> insert(init)
+    }
+
+    // a named type is its declaration's TypeDecl, so its
+    // expressions sit where that declaration is
+    def override preVisitTypeDecl(var typ : TypeDeclPtr) : void {
+        if (typ.fixedDimExpr != null) {
+            roots |> insert(typ.fixedDimExpr)
+        }
+        for (e in typ.typeMacroExpr) {
+            roots |> insert(e)
+        }
+    }
+
+    def restart_siblings() : void {
+        let top = length(locations) - 1
+        locations[top].sibling_end = locations[top].first
+    }
+
+    // `let a, b : T` gives each name its own copy of `T`, written once
+    def override preVisitExprLetVariable(expr : ExprLet?; _arg : VariablePtr; _last : bool) : void {
+        restart_siblings()
+    }
+
+    // "{x:d}" lowers to fmt(":d", x): the spec comes first,
+    // written after the value
+    def override preVisitExprCallArgument(expr : ExprCall?; _arg : ExpressionPtr;
+                                          _last : bool) : void {
+        if (expr.name == "_::fmt") {
+            restart_siblings()
+        }
+    }
+
+    // a piped block is stored with the positional arguments,
+    // written after the named ones
+    def override preVisitExprNamedCallArgument(expr : ExprNamedCall?; arg : MakeFieldDeclPtr;
+                                               _last : bool) : void {
+        if (arg == (*expr.arguments)[0]) {
+            restart_siblings()
+        }
+    }
+
+    // `return x if (c)` writes the branch before its condition
+    def override preVisitExprIfThenElseIfBlock(expr : ExprIfThenElse?;
+                                               _ifBlock : ExpressionPtr) : void {
+        restart_siblings()
+    }
+}
+
+def public verify_parsed_expression(var expr : ExpressionPtr) : int {
+    //! [[verify_parsed_module]] for one parsed expression subtree,
+    //! such as a ``quote``.
+    var v = new ParserVerifyVisitor()
+    make_visitor(*v) $(adapter) {
+        visit(expr, adapter)
+    }
+    let n = v.error_count
+    unsafe {
+        delete v
+    }
+    return n
+}
+
+def public verify_parsed_module(prog : ProgramPtr; mod : Module?) : int {
+    //! Counts children outside their parent's range or before
+    //! their previous sibling. For a parsed, uninferred module:
+    //! inference and optimization make no promise about locations.
+    var v = new ParserVerifyVisitor()
+    v.prog := prog
+    make_visitor(*v) $(adapter) {
+        visit_module(prog, adapter, mod)
+    }
+    let n = v.error_count
+    unsafe {
+        delete v
+    }
+    return n
+}
+
 def public verify_module(prog : ProgramPtr; mod : Module?) : int {
     //! Verifies one module in place, emitting a sticky compile error per violation and
     //! returning the count. Call it from a macro's ``apply()`` right after building

@@ -305,6 +305,32 @@ namespace das {
             return nullptr;
         }
 
+        SimFunction * initOf(TypeInfo * ti) {
+            return ti->type == Type::tStructure && ti->structType ? ctx.fnByMangledName(ti->structType->init_mnh) : nullptr;
+        }
+
+        bool needsConstruct(TypeInfo * ti) {
+            if (initOf(ti)) return true;
+            if (ti->type == Type::tVariant) return needsConstruct(ti->argTypes[0]);
+            if (ti->type == Type::tTuple) {
+                for (uint32_t i = 0; i < ti->argCount; i++) {
+                    if (needsConstruct(ti->argTypes[i])) return true;
+                }
+            }
+            return false;
+        }
+
+        void construct(char * dst, TypeInfo * ti, SimFunction * init) {
+            if (!init && ti->type != Type::tVariant && ti->type != Type::tTuple) return;
+            int size = getTypeSize(ti);
+            int stride = getTypeBaseSize(ti);
+            for (int ofs = 0; ofs < size; ofs += stride) {
+                if (init) ctx.callWithCopyOnReturn(init, nullptr, dst + ofs, at);
+                else if (ti->type == Type::tVariant) construct(dst + ofs + getVariantFieldOffset(ti, 0), ti->argTypes[0], initOf(ti->argTypes[0]));
+                else for (uint32_t i = 0; i < ti->argCount; i++) construct(dst + ofs + getTupleFieldOffset(ti, i), ti->argTypes[i], initOf(ti->argTypes[i]));
+            }
+        }
+
         // ---- main: scan JSON value guided by TypeInfo ----
 
         bool scanValue(char * dst, TypeInfo * ti) {
@@ -491,6 +517,7 @@ namespace das {
                 char * ptr = ctx.allocate(si->size, at);
                 if (!ptr) return false;
                 memset(ptr, 0, si->size);
+                construct(ptr, ti->firstType, initOf(ti->firstType));
                 if (!scanStruct(ptr, si)) return false;
                 *(char**)dst = ptr;
                 return true;
@@ -510,10 +537,13 @@ namespace das {
                 array_resize(ctx, *arr, 0, stride, false, at);
             }
             if (peek() == ']') { cur++; return true; }
+            SimFunction * init = initOf(elemTi);
+            bool needsInit = needsConstruct(elemTi);
             while (true) {
                 // grow array by one, zero-initialized
                 uint64_t idx = uint64_t(builtin_array_push_back_zero(*arr, stride, &ctx, (LineInfoArg*)at));
                 char * elem = arr->data + idx * stride;
+                if (needsInit) construct(elem, elemTi, init);
                 if (!scanValue(elem, elemTi)) return false;
                 skipWS();
                 if (cur >= end) return false;
@@ -527,13 +557,16 @@ namespace das {
 
         bool scanFixedArray(char * dst, TypeInfo * ti) {
             if (!expect('[')) return false;
-            int elemSize = getTypeBaseSize(ti);
+            TypeInfo elemTi = *ti;
+            elemTi.dimSize--;
+            elemTi.dim = ti->dim + 1;
+            int elemSize = getTypeSize(&elemTi);
             uint32_t maxCount = ti->dim[0];
             uint32_t idx = 0;
             if (peek() == ']') { cur++; return true; }
             while (true) {
                 if (idx < maxCount) {
-                    if (!scanValue(dst + idx * elemSize, ti)) return false;
+                    if (!scanValue(dst + idx * elemSize, &elemTi)) return false;
                 } else {
                     if (!skipValue()) return false;
                 }
@@ -622,9 +655,12 @@ namespace das {
                 }
             }
             if (fidx >= 0) {
-                // set variant index
-                *(int32_t*)dst = fidx;
                 int offset = getVariantFieldOffset(ti, fidx);
+                if (*(int32_t*)dst != fidx) {
+                    memset(dst, 0, getTypeSize(ti));
+                    *(int32_t*)dst = fidx;
+                    construct(dst + offset, ti->argTypes[fidx], initOf(ti->argTypes[fidx]));
+                }
                 if (!scanValue(dst + offset, ti->argTypes[fidx])) return false;
             } else {
                 if (!skipValue()) return false;
@@ -692,6 +728,8 @@ namespace das {
                 table_clear(ctx, *tab, at);
             }
             if (peek() == '}') { cur++; return true; }
+            SimFunction * init = initOf(ti->secondType);
+            bool needsInit = needsConstruct(ti->secondType);
             while (true) {
                 // read key as string (JSON keys are always strings)
                 string keyStr;
@@ -827,6 +865,7 @@ namespace das {
                 } else if (index >= 0) {
                     char * val = tab->data + index * valueTypeSize;
                     memset(val, 0, valueTypeSize);
+                    if (needsInit) construct(val, ti->secondType, init);
                     if (!scanValue(val, ti->secondType)) return false;
                 } else {
                     if (!skipValue()) return false;

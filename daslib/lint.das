@@ -618,28 +618,6 @@ class LintVisitor : AstVisitor {
             error("{text} at {describe(at)}\n")
         }
     }
-    def private source_operator_is_clone(at : LineInfo) : bool {
-        //! Inference lowers a string ExprClone to ExprCopy in ordinary mode, but preserves the clone operator's LineInfo. Check that source token so a regular '=' copy stays silent.
-        if (at.fileInfo == null || at.line == 0u || at.line != at.last_line) return false
-        var found = false
-        get_file_source_line(at.fileInfo, at.line) $(line) {
-            var start = int(at.column) - 1
-            if (start < 0) {
-                start = 0
-            }
-            var finish = int(at.last_column) + 1
-            if (finish < start + 3) {
-                finish = start + 3
-            }
-            if (finish > length(line)) {
-                finish = length(line)
-            }
-            if (finish > start) {
-                found = find(slice(line, start, finish), ":=") >= 0
-            }
-        }
-        return found
-    }
     def private is_temporary_string_source(expr : Expression?) : bool {
         if (expr == null) return false
         if (expr._type != null && expr._type.flags.temporary) return true
@@ -709,7 +687,7 @@ class LintVisitor : AstVisitor {
                 || expr.right._type.baseType != Type.tString
                 || is_temporary_string_source(expr.right)
                 || is_inferred_temp_string_clone(expr.right, expr.at)
-                || !source_operator_is_clone(expr.at)) return
+                || !expr.copy_flags.fromClone) return
         lint_error("LINT016: ':=' does not clone a string without 'options multiple_contexts'; use '=' for same-context storage, or did you mean 'clone_string(value)' for a cross-context copy", expr.at)
     }
     def private check_string_push_clone(expr : ExprCall?) : void {

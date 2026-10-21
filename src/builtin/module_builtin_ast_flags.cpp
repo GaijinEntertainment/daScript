@@ -257,7 +257,7 @@ namespace das {
     TypeDeclPtr makeExprCopyFlags() {
         auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
         ft->alias = "CopyFlags";
-        ft->argNames = { "allowCopyTemp", "takeOverRightStack", "allowConstantLValue", "no_promotion" };
+        ft->argNames = { "allowCopyTemp", "takeOverRightStack", "allowConstantLValue", "no_promotion", "fromClone" };
         return ft;
     }
 

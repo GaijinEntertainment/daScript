@@ -237,6 +237,16 @@ namespace das {
         return false;
     }
 
+    Function * Structure::findInitializer() const {
+        if ( !module ) return nullptr;
+        if ( auto kv = module->functionsByName.find(hash64z(name.c_str())) ) {
+            for ( auto * fn : kv->second ) {
+                if ( fn->arguments.empty() && fn->result && fn->result->structType == this ) return fn;
+            }
+        }
+        return nullptr;
+    }
+
     // True if this structure has any non-generated ctor method (Klass`Klass).
     // Ctor methods always live in the same module as the class (parser registers
     // them together), so we look up by name hash via functionsByName / genericsByName.
