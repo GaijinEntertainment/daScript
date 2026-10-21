@@ -1341,7 +1341,7 @@ class private AstQNamedClassMacro : AstCallMacro {
             macro_error(prog, call.at, "expecting 3 arguments, {macro_call}(name,class,expression)")
             return null
         }
-        if (!(call.arguments[0]._type.isString)) {
+        if (call.arguments[0]._type == null || !(call.arguments[0]._type.isString)) {
             macro_error(prog, call.at, "expecting function name, {macro_call}(NAME,class,expression)")
             return null
         }
@@ -1546,7 +1546,7 @@ class private AstQNamedTemplateClassMacro : AstCallMacro {
             macro_error(prog, call.at, "expecting {macro_call}(NAME,type<TemplateClassOrStructType>)")
             return null
         }
-        if (!(call.arguments[0]._type.isString)) {
+        if (call.arguments[0]._type == null || !(call.arguments[0]._type.isString)) {
             macro_error(prog, call.at, "expecting function name, {macro_call}(NAME,type<TemplateClassOrStructType>)")
             return null
         }

@@ -589,6 +589,8 @@ namespace das {
         // ExprLet
 
         bool isPodDelete(TypeDecl *typ);
+        bool cloneResolvedType(ExprVar *expr, const TypeDeclPtr &type);
+        void reportPendingType(const string &name, const LineInfo &at);
 
         bool isPodDelete(TypeDecl *typ, das_set<Structure *> &dep, bool &hasHeap);
 

@@ -2,7 +2,7 @@
 // verifies compiler rejects invalid auto inferences: missing initializers,
 // dimension mismatches, pointer-level mismatches, block type mismatches
 options gen2
-expect 30123, 30175, 30200:6, 30254, 30312, 30341:2, 30343:2, 30407, 31019
+expect 30123, 30200:5, 30254, 30312, 30341:2, 30343, 30407, 31019
 
 let {
     a : auto                    // 31101, can't infer, need initializer
