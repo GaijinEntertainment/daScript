@@ -2152,3 +2152,44 @@
     mixed-speed lanes (more chunks than lanes, claimed dynamically, or the slow lanes weighted down), a cell holding a
     split's wall against its fastest lane's chunk time with one lane slowed artificially (the static split the control),
     and Whisper tiny CPU on the M5 back at the release-16 1580 ms with the GEMV tail kept.
+
+222. **The Vulkan board measures the LLM workload alone.** `gen_bench_records` runs its Vulkan leg on `doLlm` only: the
+    ASR, TTS and image-chat passes carry Metal and CPU legs and no Vulkan one, and no GPU reference is paired for them off
+    Apple (the Metal legs pair whisper-cli's and mtmd's Metal builds, NeMo on MPS and mlx-audio). The engine serves those
+    workloads on Vulkan - the whisper, parakeet, canary and gemma4a towers, the ASR decoder and the TTS driver each hold
+    their parity cells - so the release-17 pod board (RTX PRO 4500) carries six LLM pairs and no audio or image row.
+    Done = a Vulkan leg on the asr, tts and image passes, each das cell paired with the reference's own GPU build (a
+    whisper.cpp and an mtmd Vulkan build at `-ngl 99`, NeMo and the TTS packages on CUDA) through `asr_gpu_pair_tool` and
+    the TTS seats' roster, `vulkan_leg_refusal` admitting them, `test_gen_records_args.das` holding the pairing, and the
+    pod board re-measured with those rows.
+
+223. **NeMo's Canary-Qwen `generate` on MPS answers a 3-token stub, and why is unknown.** The Metal reference row of
+    Canary-Qwen 2.5B (`benchmarks/asr/canary_qwen_bench.py --device mps`, nemo 3.1.0 / torch 2.12.1, the same HF snapshot
+    either way) sometimes returns 3 ids where the transcript is 23: run to run on the M5 Max, one process transcribes jfk
+    every call, another answers the stub on its first call and the transcript after it, a third answers the stub on every
+    call of the process (16 attempts in one run). The CPU arm never stubs. The bench discards a stub (`rep_is_degenerate`),
+    runs an untimed warm-up first and re-runs a stubbed rep up to `--retries` times, so a one-off stub costs nothing - but
+    a process stuck on stubs lands no row, and the board keeps the last good one. Done = the cause named (an MPS kernel,
+    the SALM prompt path, the audio locator's embedding on the device - a dumped stub's logits against a transcript's say
+    which), the bench either fixing it or refusing the arm by name, and the reference row landing on every sweep.
+
+224. **Two llama-mtmd-cli image cells contradict the reference's own numbers, and the board withholds them.** Its
+    Qwen image turn's prefill (`img:pp`) reads an order under its own text prefill on the same model - Qwen3-VL-4B Q8_0
+    on the M5 CPU: 30 tok/s against llama-bench's pp512 of 222 - and on Metal 441 tok/s against 2108 for gemma-4-E4B's
+    image turn on the same GPU; Qwen2.5-Omni-3B the same on every box. Its gemma-4 E2B/E4B vision encode (`img:enc`) on
+    the ARM CPUs reads 10.8-13.6 s (the M5 Max, Graviton4) where the same model and picture encode in 0.43-0.73 s on
+    the x86 boards. `records/annotations.json` voids those cells (`void_clips`), so neither site prints the cell or a
+    ratio off it. Done = each named - mtmd's M-RoPE image chunk evaluated as something other than one prefill batch,
+    and an op of gemma-4's vision tower with no ARM CPU path, or our pairing timing the wrong span - and the cells
+    either re-measured on a corrected reference invocation with the voids dropped, or kept voided with the cause
+    written in the note.
+
+225. **The Granite Rapids board's prefill trails llama.cpp's further than every other board's.** On AWS m8i
+    (Xeon 6975P-C, 8 cores with SMT, the x86-amx class) the release-17 pp512 ratios read Qwen3.6-35B-A3B UD-Q4_K_M
+    0.91x (119.7 tok/s), gpt-oss-20b 1.95x, gemma-4-E4B 1.21x, Qwen3-VL-4B 1.60x, where the Zen4 board (EPYC 9R14,
+    16 cores) reads 2.34x (424.8), 2.55x, 1.82x, 2.45x and Graviton4 2.26x, 2.16x, 1.76x, 1.84x; decode sits with
+    the other boards. Against its own release-16 rows the board moved up 1-12 %, so this is the AMX prefill path's
+    standing, not a regression; the routed 35B, far under half the Zen4 rate, says the expert GEMMs lose most -
+    an AMX tile load off a 64-byte boundary (an expert slice, a panel's row stride, the bf16 activation plane) is a
+    candidate. Done = a `forward_profile` of the 35B and E4B prefill on a c8i/m8i box naming the losing kernels, the
+    tile loads' alignment checked on the served planes, and the pp512 ratios at the Zen4 board's standing.
