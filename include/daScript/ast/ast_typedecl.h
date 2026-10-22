@@ -74,6 +74,8 @@ namespace das {
         bool isExprType() const;
         bool isExprTypeAnywhere() const;
         bool isExprTypeAnywhere(das_set<Structure*> & dep) const;
+        bool isUnresolvedAnywhere() const;
+        bool isUnresolvedAnywhere(das_set<Structure*> & dep) const;
         __forceinline bool isSimpleType () const;
         __forceinline bool isSimpleType ( Type typ ) const;
         __forceinline bool isArray() const;
@@ -183,6 +185,8 @@ namespace das {
         bool isAutoArrayResolved() const;
         bool isAuto() const;
         bool isAutoOrAlias() const;
+        bool isUnresolved() const;
+        bool isUnresolved(bool autoReachable) const;
         bool isAutoWithoutOptions(bool & appendHasOptions) const;
         bool isAotAlias () const;
         bool isAliasOrA2A(bool a2a) const;

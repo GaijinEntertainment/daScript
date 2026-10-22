@@ -1904,6 +1904,17 @@ namespace das {
             const string & argn = variantType->argNames[argi];
             auto cb = new ExprBlock();
             cb->at = at;
+            if ( !variantType->argTypes[argi]->isVoid() && !variantType->argTypes[argi]->canCopy() ) {
+                auto dv = new ExprVar(at, "dest");
+                auto disv = new ExprIsVariant(at, dv, argn);
+                disv->no_promotion = true;
+                auto mz = new ExprMemZero(at, "memzero");
+                mz->arguments.push_back(new ExprVar(at, "dest"));
+                auto mzb = new ExprBlock();
+                mzb->at = at;
+                mzb->list.push_back(mz);
+                cb->list.push_back(new ExprIfThenElse(at, new ExprOp1(at, "!", disv), mzb, nullptr));
+            }
             auto vd = new ExprVar(at, "dest");
             auto vi = new ExprConstInt(at, int32_t(argi));
             auto svi = new ExprCall(at, "set_variant_index");

@@ -76,7 +76,7 @@ def for_each_gc_expression(mod : Module?; blk : block<(var value : ExpressionPtr
 
 [generic]
 def describe(decl : TypeDecl?; extra, contracts, modules : bool = true) =>
-    describe_typedecl(decl, extra, contracts, modules)
+    decl != null ? describe_typedecl(decl, extra, contracts, modules) : "untyped"
 
 [generic]
 def describe_cpp(decl : TypeDecl?; substitureRef, skipRef, skipConst : bool = false; redundantConst : bool = true; chooseSmartPtr : bool = true) =>
