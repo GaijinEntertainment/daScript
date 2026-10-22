@@ -2142,3 +2142,13 @@
     `forward_profile` split of the batched step against the single-stream step on both routed carriers (the expert GEMMs
     at four rows, the lane split, the router and combine per row) naming where the batch loses its sharing, and the
     routed carriers' batched row at or above llama.cpp's on both boxes.
+
+221. **A CPU cell on the M5 Max reads the scheduler's core-tier placement, not only the kernels.** The M5 Max's two tiers
+    ("Super" 6, "Performance" 12) are both compute tiers to macOS QoS, and macOS has no core pin, so the hard affinity
+    mode (`USER_INTERACTIVE`) cannot keep the lanes on the Super tier; a static team split waits for its slowest lane. A
+    lighter decode chunk (c4a2939e26's GEMV tail, faster per kernel) let macOS park 3 of 6 Whisper tiny lanes on the
+    Performance tier, every parallel phase after the first decode ~1.35x slower there: +75 ms on gb1+hp0, reproducible
+    build to build. So a code change can move an M5 CPU row 5-10 % with no kernel change. Done = team splits that absorb
+    mixed-speed lanes (more chunks than lanes, claimed dynamically, or the slow lanes weighted down), a cell holding a
+    split's wall against its fastest lane's chunk time with one lane slowed artificially (the static split the control),
+    and Whisper tiny CPU on the M5 back at the release-16 1580 ms with the GEMV tail kept.
