@@ -40,7 +40,9 @@ each worker, over the chunk it holds. The result cache's entries hash the same m
 way. `--no-shared-modules` compiles every file's modules in its own group, as the runner did before.
 A file whose code keys on `builtin_module_exists` of a `shared` module - a `static_if` over the
 guard - compiles differently once the run promoted that module, as it does under dastest, so a
-`nolint` that one mode needs lists `LINT019` for the other.
+`nolint` that one mode needs lists `LINT019` for the other. A promoted module's post-compile
+macros run on every later program of the process (the walk is over the global module list), so
+such a macro guards on the program's own library, as `daslib/ast_verify` does.
 CI's chunked `check_lint_tree` leaves `modules/dasLLAMA` out, whose every file compiles the engine's
 whole graph, and `check_lint_dasllama` lints that module as one process.
 

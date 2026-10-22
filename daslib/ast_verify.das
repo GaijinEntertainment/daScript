@@ -1702,10 +1702,23 @@ class AstInferPassVerifyMacro : AstPassMacro {
     }
 }
 
+//! the post-compile pass of a promoted copy reaches every later program of the process - the
+//! walk is over the global module list - so only a program that holds this module in its own
+//! library (a `require`, or `--ast-verify`'s extra dependency) is verified
+def private program_asked_for_verify(prog : ProgramPtr) : bool {
+    var asked = false
+    program_for_each_module(prog) $(m) {
+        if (m.name == "ast_verify") {
+            asked = true
+        }
+    }
+    return asked
+}
+
 [post_compile_macro]
 class AstPostCompileVerifyMacro : AstPassMacro {
     def override apply(var prog : ProgramPtr; mod : Module?) : bool {
-        if (mod != null && !mod.moduleFlags.builtIn) {
+        if (mod != null && !mod.moduleFlags.builtIn && program_asked_for_verify(prog)) {
             verify_module(prog, mod)
             if (batch_mode()) {
                 verify_module_after_infer(prog, mod)
