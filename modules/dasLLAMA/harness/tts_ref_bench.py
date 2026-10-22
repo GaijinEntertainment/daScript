@@ -119,7 +119,9 @@ def mlx_synth(name, voice):
 
         def run(row):
             ps = row["ps_espeak"]
-            return int(model(ps, pack[len(ps) - 1], 1.0).shape[-1])
+            audio = model(ps, pack[len(ps) - 1], 1.0)
+            mx.eval(audio)   # mlx is lazy: the timed span ends with the waveform computed, not with its graph built
+            return int(audio.shape[-1])
 
         return run
     if name.startswith("kitten"):
@@ -131,17 +133,25 @@ def mlx_synth(name, voice):
             ps = row["ps_espeak"]
             ref_id = min(len(ps), model.voices[vkey].shape[0] - 1)
             ids = mx.array([kitten_tokens(ps, model._text_cleaner, basic_english_tokenize)], dtype=mx.int32)
-            return int(model(ids, mx.array(model.voices[vkey][ref_id:ref_id + 1]), speed).shape[-1])
+            audio = model(ids, mx.array(model.voices[vkey][ref_id:ref_id + 1]), speed)
+            mx.eval(audio)
+            return int(audio.shape[-1])
 
         return run
-    state = model.get_state_for_audio_prompt(voice)
+    held = {}
+
+    def prep():
+        # the port's generate loop advances the voice state it is handed, so each call takes a fresh one, built off the clock
+        held["state"] = model.get_state_for_audio_prompt(voice)
+        mx.eval(held["state"])
 
     def run(row):
         mx.random.seed(0)
-        audio = model.generate_audio(state, row["text"])
+        audio = model.generate_audio(held["state"], row["text"])
         mx.eval(audio)
         return int(audio.shape[-1])
 
+    run.prep = prep
     return run
 
 
@@ -191,11 +201,14 @@ def main():
     for spec in a.models:
         name, voice = spec.split(":")
         run = make_synth(name, voice, a)
+        prep = getattr(run, "prep", lambda: None)
+        prep()
         run(rows[0])   # the first call pays the session's warm-up
         gen_s, audio_s = 0.0, 0.0
         for r in rows:
             best, n = None, 0
             for _ in range(a.passes):
+                prep()
                 t0 = time.perf_counter()
                 n = run(r)
                 dt = time.perf_counter() - t0

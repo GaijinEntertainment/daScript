@@ -2125,3 +2125,20 @@
     under the server's sampler, the SSE path) naming where the margin goes, and the served decode at or above off on this
     file at depth 1.
 
+
+219. **Kitten speaks the TTS board's corpus half again as long as the reference package.** On the g2p corpus head (20
+    sentences, voice Bella) the das Kitten rows produce 242.6 s of audio on nano and 206.5 s on mini, where the
+    `kittentts` package and mlx-audio's port produce 159.9 / 159.8 s and 145.0 / 144.8 s; Kokoro agrees on every
+    engine (145.7 against 146.6 / 146.7). The parity rail (`test_tts_kitten.das`) feeds the oracle's own tokens, so a
+    front end that lengthens the token stream - our g2p, then `kitten_phonemes_from_misaki`, where the references read
+    the fixture's espeak string - passes it. The board's Kitten rows stay off the published board until this lands.
+    Done = the das Kitten audio on the corpus head within a few percent of the package's, a cell holding the facade's
+    front end against the package's on corpus sentences (the token stream and the duration, a lengthened stream the
+    control), and the Kitten TTS rows re-measured.
+
+220. **The CPU batched decode row (`tg128@4`) has never been profiled on a routed model.** On the release-17 board
+    gpt-oss-20b mxfp4 reads 0.72 of llama.cpp's batched decode on Zen4 (AWS m7a, 46.9 against 64.7 tok/s) and 0.92 on
+    the M5 Max; Qwen3.6-35B-A3B UD-Q4_K_M reads 0.88 on the M5; the dense carriers sit at 0.98-1.0. Done = a
+    `forward_profile` split of the batched step against the single-stream step on both routed carriers (the expert GEMMs
+    at four rows, the lane split, the router and combine per row) naming where the batch loses its sharing, and the
+    routed carriers' batched row at or above llama.cpp's on both boxes.
