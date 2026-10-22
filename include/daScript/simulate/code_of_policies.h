@@ -7,7 +7,7 @@ namespace das {
 
     // bump when CodeOfPolicies changes layout or meaning without changing size — a field
     // reorder/repurpose, or an insert that lands in a padding pocket (sizeof can't see those)
-    #define DAS_POLICIES_VERSION    3
+    #define DAS_POLICIES_VERSION    4
 
     // per-binary linkage for the ABI-stamp functions: at -O0 gcc/clang emit them as weak
     // default-visibility symbols, and the dynamic linker would bind every binary to the FIRST
@@ -174,6 +174,7 @@ namespace das {
         bool module_cache = false;               // a script's compile_file runs under the default module cache
         /*option*/ uint32_t max_fast_call_depth = 0;  // interpreter only; 0 = unchecked.
         bool keep_symbol_tables = false;         // keep usedFunctions and the function/variable indices past the main simulate
+        bool promote_shared_unoptimized = false; // src/ast/ARCHITECTURE_SHARED.md#shared-promotion
 
         // the abi_stamp truth (a member so the NSDMI above can call it - complete-class context).
         // Low byte 0 keeps a pre-stamp libDaScript reading this word seeing aot == false -

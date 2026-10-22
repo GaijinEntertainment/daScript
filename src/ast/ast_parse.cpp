@@ -2356,7 +2356,7 @@ namespace das {
                 }
             }
             // src/ast/ARCHITECTURE_SHARED.md#shared-promotion
-            if ( auto failed = parseRequiredModules(walk.req, access, logs, libGroup, policies, !policies.no_optimizations) ) {
+            if ( auto failed = parseRequiredModules(walk.req, access, logs, libGroup, policies, !policies.no_optimizations || policies.promote_shared_unoptimized) ) {
                 return failed;
             }
             auto & serializer_read = daScriptEnvironment::getBound()->serializer_read;

@@ -16,6 +16,9 @@ require math
 require strings
 require daslib/strings_boost
 require daslib/rtti
+require daslib/algorithm   // topological_sort: the --shared-modules file order
+require daslib/module_group   // module_group_module_name: a require path's module
+require dastest/review_gate   // das_requires: a file's require paths
 require ../common/parallel_workers.das
 require ../common/arch_citations.das
 
@@ -31,6 +34,7 @@ struct LintResult {
     excluded : int      // findings dropped by the .lint_config [paths] exclude policy
     fixed : int
     cached : bool       // a clean result the cache vouched for: nothing was compiled
+    promoted_modules : int   // counted under --shared-modules alone
 }
 
 [CommandLineArgs]
@@ -64,6 +68,10 @@ struct Config {
     fix : bool
     @clarg_doc = "Skip the result cache: compile and lint every file, record nothing"
     no_cache : bool
+    @clarg_doc = "Compile each file's modules in its own group; the default shares them"
+    no_shared_modules : bool
+    @clarg_doc = "Leave every file and folder under this path out of the run. Repeatable"
+    exclude : array<string>
     @clarg_doc = "Where the result cache lives (one entry per clean file: the content hash of every input its compile read)"
     cache_dir : string = LINT_CACHE_DEFAULT_DIR
 
@@ -152,6 +160,13 @@ def is_skip_dir(name : string) : bool => name |> starts_with(".") || name == "no
 def is_build_tree(path : string) : bool =>
     stat("{path}/CMakeCache.txt").is_valid || stat("{path}/.git").is_valid
 
+var lint_exclude_roots : array<string>   //! --exclude's roots, absolute generic paths
+
+def is_excluded_path(path : string) : bool =>
+    owning_root(to_generic_path(path), lint_exclude_roots) != "."
+
+def is_skip_tree(path : string) : bool => is_build_tree(path) || is_excluded_path(path)
+
 def scan_das_files(path : string; var files : array<string>; var cache : table<string; void?>; var skipped : int&) {
     let st = stat(path)
     return if (!st.is_valid)
@@ -176,7 +191,7 @@ def scan_das_files(path : string; var files : array<string>; var cache : table<s
         let fst = stat(full)
         return if (!fst.is_valid)
         if (fst.is_dir) {
-            return if (is_build_tree(full))
+            return if (is_skip_tree(full))
             scan_das_files(full, files, cache, skipped)
         } elif (fst.is_reg && name |> ends_with(".das") && !cache |> key_exists(full)) {
             if (is_skip_file(name)) {
@@ -223,7 +238,7 @@ def scan_docs_folders(path : string; want_rule_docs, want_doc_lines : bool;
         return if (name == "." || name == ".." || name |> starts_with("_") || is_skip_dir(name))
         let full = "{path}/{name}"
         let fst = stat(full)
-        if (fst.is_valid && fst.is_dir && !is_build_tree(full)) {
+        if (fst.is_valid && fst.is_dir && !is_skip_tree(full)) {
             scan_docs_folders(full, want_rule_docs, want_doc_lines, folders, line_folders, seen)
         }
     }
@@ -360,7 +375,7 @@ def collect_basenames(path : string; var out : table<string; void?>) {
         let fst = stat(full)
         return if (!fst.is_valid)
         if (fst.is_dir) {
-            return if (is_build_tree(full))
+            return if (is_skip_tree(full))
             collect_basenames(full, out)
         } else {
             out |> insert(name, null)
@@ -404,7 +419,7 @@ def collect_test_cells(path : string; var out : table<string; void?>) {
     fio::dir(path) $(name) {
         return if (name == "." || name == ".." || is_skip_dir(name))
         let full = "{path}/{name}"
-        return if (is_build_tree(full))
+        return if (is_skip_tree(full))
         collect_test_cells(full, out)
     }
 }
@@ -556,7 +571,7 @@ def private scan_arch_folder(path : string; var mds, dases : array<string>; var 
         let fst = stat(full)
         return if (!fst.is_valid)
         if (fst.is_dir) {
-            return if (is_build_tree(full))
+            return if (is_skip_tree(full))
             scan_arch_folder(full, mds, dases, seen)
         } elif (fst.is_reg && name |> ends_with(".md")) {
             mds |> push(full)
@@ -723,7 +738,8 @@ def private file_nolint_codes(prog : ProgramPtr; base : table<string>) : table<s
 }
 
 def private lint_policies(var cop : CodeOfPolicies) {
-    cop.ignore_shared_modules = true
+    cop.ignore_shared_modules = !lint_shared_modules
+    cop.promote_shared_unoptimized = lint_shared_modules
     cop.export_all = true
     cop.lint_check = true
     cop.no_optimizations = true
@@ -732,6 +748,7 @@ def private lint_policies(var cop : CodeOfPolicies) {
 }
 
 var lint_cache_dir = ""
+var lint_shared_modules = false   //! the run's compiles promote and reuse the shared modules
 var lint_cache_header = ""
 var content_hashes : table<string; string>
 
@@ -821,6 +838,27 @@ def lint_cache_store(entry : string; inputs : array<string>) {
     })
 }
 
+//! an environment failure - a missing prerequisite (error[20605])
+//! or an [extern] dlopen miss - skips the file, read off the first
+//! diagnostic's block alone, since such a failure aborts the compile
+//! before any other error and the dlopen miss puts "can't load
+//! library" on the message's second line; anything else fails it
+def private note_compile_failure(issue_str : string; var result : LintResult) {
+    var first_diag = ""
+    let err_start = find(issue_str, "error[")
+    if (err_start >= 0) {
+        first_diag = slice(issue_str, err_start, min(err_start + 240, length(issue_str)))
+    }
+    result.compile_errors = issue_str
+    if (find(first_diag, "error[20605]") >= 0) {
+        result.skip_reason = "(missing prerequisite — install daspkg deps to lint)"
+    } elif (find(first_diag, "can't load library") >= 0) {
+        result.skip_reason = "(native library unavailable — install it to lint this file)"
+    } else {
+        result.failed = true
+    }
+}
+
 def lint_file(file : string; run_paranoid, run_perf, run_style, comment_hygiene, lint_fixtures, lint_excluded_paths : bool;
               disabled_codes, enabled_codes : table<string>) : LintResult {
     var result = LintResult(file = file)
@@ -839,37 +877,17 @@ def lint_file(file : string; run_paranoid, run_perf, run_style, comment_hygiene,
             lint_policies(cop)
             compile_file(file, access, unsafe(addr(mg)), cop) $(ok; program; issues) {
                 if (!ok) {
-                    let issue_str = string(issues)
-                    // Environment classes downgrade to SKIP only off the FIRST diagnostic's header
-                    // line: a genuine environment failure aborts the compile before any other error,
-                    // while a whole-string substring match would let one env line mask real errors
-                    // (or match the literal echoed from an erroring source line).
-                    var first_diag = ""
-                    let err_start = find(issue_str, "error[")
-                    if (err_start >= 0) {
-                        // the first diagnostic's BLOCK, not just its header: the [extern] dlopen
-                        // miss puts "can't load library" on the message's second line
-                        first_diag = slice(issue_str, err_start, min(err_start + 240, length(issue_str)))
-                    }
-                    // error[20605] = missing prerequisite (e.g. daspkg-installed `anthropic/anthropic`) —
-                    // out-of-tree as far as a stock daslang build can tell.
-                    if (find(first_diag, "error[20605]") >= 0) {
-                        result.skip_reason = "(missing prerequisite — install daspkg deps to lint)"
-                        result.compile_errors = issue_str
-                        return
-                    }
-                    // A [extern] dlopen miss (e.g. dasSMT without libz3) is the environment, not the
-                    // code — skip with a visible reason so nightly coverage counting still sees it.
-                    if (find(first_diag, "can't load library") >= 0) {
-                        result.skip_reason = "(native library unavailable — install it to lint this file)"
-                        result.compile_errors = issue_str
-                        return
-                    }
-                    result.failed = true
-                    result.compile_errors = issue_str
+                    note_compile_failure(string(issues), result)
                     return
                 }
                 inputs |> push_from(lint_cache_inputs(program, file)) if (!empty(entry))
+                if (lint_shared_modules) {
+                    program_for_each_module(program) $(mod) {
+                        return if (!mod.moduleFlags.promoted || empty(mod.fileName))
+                        // builtin promotes under every policy
+                        result.promoted_modules++ if (mod.name != "builtin")
+                    }
+                }
                 let file_disabled <- file_nolint_codes(program, disabled_codes)
                 if (run_paranoid) {
                     var paranoid_issues : array<LintIssue>
@@ -953,6 +971,9 @@ def apply_path_excludes(var result : LintResult) {
     }
 }
 
+def private promoted_suffix(result : LintResult) : string =>
+    lint_shared_modules ? " (promoted {result.promoted_modules})" : ""
+
 // Print a single LintResult in the user-facing format. Shared by serial and
 // parallel paths; per-file output matches, though serial mode appends its
 // LINT019 findings as a trailing block while parallel reports them inline.
@@ -972,12 +993,14 @@ def print_result(result : LintResult; quiet, silent : bool) {
             print("  {result.compile_errors}\n")
         }
     } elif (result.count > 0) {
-        print("WARN {result.file} ({result.count})\n")
+        print("WARN {result.file} ({result.count}){promoted_suffix(result)}\n")
         print(build_string() $(var w) {
             write_deduped(w, result.issues, "  ", !silent)
         })
     } elif (!quiet) {
-        print(result.cached ? "CACHED {result.file}\n" : "PASS {result.file}\n")
+        let line = (result.cached ? "CACHED {result.file}"
+            : "PASS {result.file}{promoted_suffix(result)}")
+        print("{line}\n")
     }
 }
 
@@ -1017,8 +1040,10 @@ def maybe_collect(var since_collect : int&) {
 def run_worker(paths : array<string>; run_paranoid, run_perf, run_style, comment_hygiene, lint_fixtures, lint_excluded_paths : bool;
                disabled_codes, enabled_codes : table<string>; fix : bool) {
     var since_collect = 0
-    for (f in paths) {
-        let result = lint_file_fixing(f, run_paranoid, run_perf, run_style, comment_hygiene, lint_fixtures, lint_excluded_paths, disabled_codes, enabled_codes, fix)
+    var inscope order <- lint_order(paths)
+    for (idx in order) {
+        let result = lint_file_fixing(paths[idx], run_paranoid, run_perf, run_style,
+            comment_hygiene, lint_fixtures, lint_excluded_paths, disabled_codes, enabled_codes, fix)
         print("{JSON_PREFIX}{write_json(JV(result))}\n{JSON_PREFIX}")
         maybe_collect(since_collect)
     }
@@ -1034,6 +1059,9 @@ def build_worker_argv(spawn_prefix : array<string>; chunk_path : string; cfg : C
     argv |> push(chunk_path)
     if (cfg.quiet) {
         argv |> push("--quiet")
+    }
+    if (cfg.no_shared_modules) {
+        argv |> push("--no-shared-modules")
     }
     if (cfg.comment_hygiene) {
         argv |> push("--comment-hygiene")
@@ -1212,6 +1240,7 @@ def collect_input_files(var files : array<string>&; var dirs : array<string>&) :
         // absolute, tripping error 20605 "several modules with the same name" (e.g. dasPEG)
         let full = get_full_file_name(p)
         let target = empty(full) ? p : replace(full, "\\", "/")
+        continue if (is_excluded_path(target))
         let st = stat(target)
         if (st.is_valid && st.is_dir) {
             dirs |> push(target)
@@ -1303,6 +1332,45 @@ def print_lint_help(rc : int) : int {
     return rc
 }
 
+struct private RequireNode {
+    id : int
+    before : table<int>
+}
+
+//! the files' indices in require order - a module ahead of every
+//! file that requires it. A file's compile promotes the shared
+//! modules it requires, and a module promoted before its own compile
+//! would collide with it, so each file lints before anything that
+//! requires it. A require names a file by the file's name (the module
+//! it declares is that name wherever the compiler resolves it), the
+//! first file keeps a repeated name, and a name no file of the set
+//! carries is left to the compiler
+def private require_order(files : array<string>) : array<int> {
+    var name_of : table<string; int>
+    for (file, i in files, count()) {
+        let name = module_group_module_name(file)
+        if (!key_exists(name_of, name)) {
+            name_of[name] = i
+        }
+    }
+    var nodes : array<RequireNode>
+    nodes |> reserve(length(files))
+    for (file, i in files, count()) {
+        var node <- RequireNode(id = i)
+        for (path in das_requires(file)) {
+            let j = name_of?[module_group_module_name(path)] ?? -1
+            node.before |> insert(j) if (j >= 0 && j != i)
+        }
+        nodes |> emplace(node)
+    }
+    return <- [for (node in topological_sort(nodes)); node.id]
+}
+
+//! the order a run lints `files` in: the require order under sharing,
+//! the given one without
+def private lint_order(files : array<string>) : array<int> =>
+    <- lint_shared_modules ? require_order(files) : [for (i in range(length(files))); i]
+
 [export, unsafe_heap_collect, lint_tool_entry]
 def main() : int {
     var r <- parse_args(type<Config>)
@@ -1322,6 +1390,12 @@ def main() : int {
     var disabled_codes, enabled_codes : table<string>
     if (!resolve_rule_filters(cfg, disabled_codes, enabled_codes)) return 1
     lint_cache_dir = cfg.no_cache || is_standalone_exe() || jit_enabled() ? "" : cfg.cache_dir
+    lint_shared_modules = !cfg.no_shared_modules
+    lint_exclude_roots |> reserve(length(cfg.exclude))
+    for (x in cfg.exclude) {
+        let full = get_full_file_name(x)
+        lint_exclude_roots |> push(to_generic_path(empty(full) ? x : full))
+    }
 
     // Worker mode: lint a pre-resolved list from a paths-from file and emit
     // JSON-wrapped results. No banner, no summary, no exit-code derivation.
@@ -1358,7 +1432,9 @@ def main() : int {
             print("Linting {length(files)} file(s)...\n\n")
         }
         var since_collect = 0
-        for (file in files) {
+        var inscope order <- lint_order(files)
+        for (idx in order) {
+            let file = files[idx]
             if (!cfg.quiet) {
                 print("checking {file}...\n")
             }

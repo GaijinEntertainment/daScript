@@ -30,6 +30,20 @@ build of the runner never compiles, cannot check that version, and runs without 
 those alone re-lints nothing until `--no-cache`. CI keeps the folder between runs, one per platform
 (`actions/cache` in `.github/workflows/extended_checks.yml`).
 
+The compiles of one run share their modules: each promotes the shared modules it requires into the
+process (`promote_shared_unoptimized`, `src/ast/ARCHITECTURE_SHARED.md#shared-promotion`), so every
+module compiles once and each later file reuses it, and a status line carries the count the compile
+took promoted (`PASS file (promoted 77)`). The files lint in require order, a module ahead of every
+file that requires it, read off the sources' `require` lines (a require names a file by the file's
+name): a module promoted before its own compile would collide with it. A parallel run shares inside
+each worker, over the chunk it holds. The result cache's entries hash the same module sources either
+way. `--no-shared-modules` compiles every file's modules in its own group, as the runner did before.
+CI's chunked `check_lint_tree` leaves `modules/dasLLAMA` out, whose every file compiles the engine's
+whole graph, and `check_lint_dasllama` lints that module as one process.
+
+`--exclude <path>` (repeatable) leaves every file and folder under the path out of a run: the
+directory walk, the runner's folder rules and a positional root under it alike.
+
 Five rules are the runner's own, because they are about folders rather than code. Each runs
 once per invocation, over a walk of the directory roots the run was given. A directory whose
 `.lint_config` carries `[docs] rule_docs_only = true` may hold only rule documents

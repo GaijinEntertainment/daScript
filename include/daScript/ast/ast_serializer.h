@@ -365,7 +365,7 @@ namespace das {
         AstSerializer & serializeModule ( Module & module, bool already_exists );
 
         static constexpr uint32_t getVersion () {
-            return 232;   // 232: an expression whose source type is unresolved stays untyped until the type resolves
+            return 233;   // 233: CodeOfPolicies carries promote_shared_unoptimized
         }
 
         void serializeProgram ( ProgramPtr program, ModuleGroup & libGroup ) noexcept;
