@@ -1,7 +1,7 @@
 annotated-types==0.7.0
 anyio==4.14.1
 blinker==1.9.0
-certifi==2026.6.17
+certifi==2026.10.19
 charset-normalizer==3.4.8
 click==8.4.2
 distro==1.9.0
