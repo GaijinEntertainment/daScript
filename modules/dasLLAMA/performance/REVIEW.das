@@ -5,6 +5,7 @@ require daslib/fio
 require daslib/defer
 require daslib/json_boost
 require dastest/review_gate
+require dasllama/dasllama_exchange_schema   // RETIRED_BOXES - the one list the site projection reads too
 
 // The mechanical half of modules/dasLLAMA/performance/REVIEW.md (contract: REVIEW_COMMON.md
 // at the repo root). Run from the repo root: bin/daslang modules/dasLLAMA/performance/REVIEW.das
@@ -111,11 +112,6 @@ let private RECORDS_DIR = "modules/dasLLAMA/performance/records"
 let private DEFAULTS_DIR = "modules/dasLLAMA/performance/defaults"
 let private VERSION_FILE = "modules/dasLLAMA/dasllama/dasllama_version.das"
 let private RELEASE_DECL = "let DASLLAMA_RELEASE = "
-
-// a retired box's board is history: its rows below the release stay readable under the
-// site's "all versions" view and bind nothing. Every other box is a current board, and a
-// das row of it below the release is a row nobody re-minted.
-let private RETIRED_BOXES <- { "m1", "m3air", "m4", "zen2", "zen4" }
 
 def private release_in(text : string) : int {
     let at = find(text, RELEASE_DECL)

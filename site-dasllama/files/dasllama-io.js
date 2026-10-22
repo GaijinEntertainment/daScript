@@ -360,11 +360,13 @@
       var dasW = (it.das / mx) * 100, refW = (it.ref / mx) * 100;
       var rcls = it.ratio > 1.005 ? 'dl-win' : (it.ratio < 0.995 ? 'dl-loss' : '');
       var rec = !!(receiptFn && it.r);
+      // bars are RATES on both sides (tok/s on the LLM ladder, ×RT on the audio ladders), so
+      // longer amber always means faster; a section names its own unit through dasText/refText
       return '<div class="dl-bar-row' + (rec ? ' js-bar-expand" data-bar="' + i : '') + '">' +
         '<div class="dl-bar-label">' + esc(it.label) + '<span class="dl-dim2">' + esc(it.sub) + '</span></div>' +
         '<div class="dl-bar-pair">' +
-        '<div class="dl-bar-line"><div class="dl-bar-das" style="width:' + dasW.toFixed(2) + '%"></div><span class="dl-bar-val dl-bar-val--das">' + tps(it.das) + '</span></div>' +
-        '<div class="dl-bar-line"><div class="dl-bar-ref" style="width:' + refW.toFixed(2) + '%"></div><span class="dl-bar-val">' + tps(it.ref) + '</span></div>' +
+        '<div class="dl-bar-line"><div class="dl-bar-das" style="width:' + dasW.toFixed(2) + '%"></div><span class="dl-bar-val dl-bar-val--das">' + (it.dasText || tps(it.das)) + '</span></div>' +
+        '<div class="dl-bar-line"><div class="dl-bar-ref" style="width:' + refW.toFixed(2) + '%"></div><span class="dl-bar-val">' + (it.refText || tps(it.ref)) + '</span></div>' +
         '</div>' +
         '<div class="dl-bar-ratio ' + rcls + '">' + fmt(it.ratio, 2) + '×</div>' +
         '</div>' +
@@ -380,6 +382,53 @@
         fillReceipt(n.querySelector('.dl-bench-receipt'), items[Number(el.dataset.bar)].r, receiptFn);
       });
     });
+  }
+
+  /* ── the bars/table toggle every ladder section shares ───────────
+     ids: { view, metric (optional), bars, wrap, filters }; drawBars(barsBox, metric) paints the
+     bars from the section's rows under its current filters. The table stays the default view;
+     the bars redraw on every filter change and reset while they are the visible view. */
+  function wireViews(ids, drawBars) {
+    var viewSeg = document.getElementById(ids.view);
+    var metricSeg = ids.metric ? document.getElementById(ids.metric) : null;
+    var barsBox = document.getElementById(ids.bars), tableWrap = document.getElementById(ids.wrap);
+    if (!viewSeg || !barsBox || !tableWrap) return;
+    function metric() {
+      var b = metricSeg && metricSeg.querySelector('.is-on');
+      return b ? b.dataset.metric : '';
+    }
+    function draw() { drawBars(barsBox, metric()); }
+    function setSeg(seg, btn) {
+      seg.querySelectorAll('button').forEach(function (b) { b.classList.toggle('is-on', b === btn); });
+    }
+    viewSeg.querySelectorAll('button').forEach(function (b) {
+      b.addEventListener('click', function () {
+        setSeg(viewSeg, b);
+        var bars = b.dataset.view === 'bars';
+        barsBox.hidden = !bars;
+        tableWrap.hidden = bars;
+        if (metricSeg) metricSeg.style.visibility = bars ? 'visible' : 'hidden';
+        if (bars) draw();
+      });
+    });
+    if (metricSeg) {
+      metricSeg.querySelectorAll('button').forEach(function (b) {
+        b.addEventListener('click', function () { setSeg(metricSeg, b); draw(); });
+      });
+    }
+    var fbox = document.getElementById(ids.filters);
+    if (fbox) {
+      fbox.addEventListener('change', function () { if (!barsBox.hidden) draw(); });
+      var reset = fbox.querySelector('.js-reset');
+      if (reset) reset.addEventListener('click', function () { if (!barsBox.hidden) draw(); });
+    }
+  }
+
+  // the bars' foot line for the visible rows a section could not plot: bars are pairs
+  function unpairedNote(solo, what) {
+    if (!solo) return '';
+    return what + ' rows are not plotted — bars are pairs. ' + solo + ' row' + (solo > 1 ? 's' : '') +
+      ' in this filter ' + (solo > 1 ? 'have' : 'has') + ' no reference run; the table shows ' + (solo > 1 ? 'them' : 'it') + '.';
   }
 
   /* ── ladder page ──────────────────────────────────────────────── */
@@ -479,50 +528,18 @@
     });
 
     // bars view: paired rows only, current filters applied, ranked by the active metric
-    var viewSeg = document.getElementById('view'), metricSeg = document.getElementById('metric');
-    var barsBox = document.getElementById('bars'), tableWrap = document.getElementById('table-wrap');
-    function drawBars() {
-      var m = 'pp';
-      var mb = metricSeg && metricSeg.querySelector('.is-on');
-      if (mb) m = mb.dataset.metric;
+    wireViews({ view: 'view', metric: 'metric', bars: 'bars', wrap: 'table-wrap', filters: 'ladder-filters' }, function (barsBox, m) {
+      m = m || 'pp';
       var vis = t ? t.visible() : rows;
       var paired = vis.filter(function (r) { return r[m + '_ratio'] !== null; })
         .sort(function (a, b) { return b[m + '_ratio'] - a[m + '_ratio']; });
       // every visible row NOT plotted for this metric — a row that raced pp512 but not tg128 is
       // unplotted on the tg128 view and must still be counted (was: only both-null rows)
-      var solo = vis.length - paired.length;
       renderPairBars(barsBox, paired.map(function (r) {
         return { label: r.model, sub: r.boxName + ' · ' + r.lane + (r.engine === 'das' ? '' : ' · ' + r.engine),
                  das: r[m + '_das'], ref: r[m + '_ref'], ratio: r[m + '_ratio'], r: r };
-      }), rowReceipt,
-      solo ? 'das-only rows are not plotted — bars are pairs. ' + solo + ' row' + (solo > 1 ? 's' : '') + ' in this filter ' + (solo > 1 ? 'have' : 'has') + ' no reference run; the table shows ' + (solo > 1 ? 'them' : 'it') + '.' : '');
-    }
-    function setSeg(seg, btn) {
-      seg.querySelectorAll('button').forEach(function (b) { b.classList.toggle('is-on', b === btn); });
-    }
-    if (viewSeg) {
-      viewSeg.querySelectorAll('button').forEach(function (b) {
-        b.addEventListener('click', function () {
-          setSeg(viewSeg, b);
-          var bars = b.dataset.view === 'bars';
-          barsBox.hidden = !bars;
-          tableWrap.hidden = bars;
-          if (metricSeg) metricSeg.style.visibility = bars ? 'visible' : 'hidden';
-          if (bars) drawBars();
-        });
-      });
-    }
-    if (metricSeg) {
-      metricSeg.querySelectorAll('button').forEach(function (b) {
-        b.addEventListener('click', function () { setSeg(metricSeg, b); drawBars(); });
-      });
-    }
-    var fbox = document.getElementById('ladder-filters');
-    if (fbox) fbox.addEventListener('change', function () { if (!barsBox.hidden) drawBars(); });
-    if (fbox) {
-      var reset = fbox.querySelector('.js-reset');
-      if (reset) reset.addEventListener('click', function () { if (!barsBox.hidden) drawBars(); });
-    }
+      }), rowReceipt, unpairedNote(vis.length - paired.length, 'das-only'));
+    });
   }
 
   // stats aside: rows · boxes · last measurement, over every section of the ladder
@@ -539,12 +556,17 @@
       '<a href="https://daslang.io/doc/reference/dasllama_methodology.html" style="color:var(--amber-dim);border-bottom:1px solid var(--rule)">methodology ↗</a>';
   }
 
-  /* ── audio ladders (asr, tts): every engine is a row, ranked within one test ──
+  /* ── audio ladders (asr, tts, audio-chat): every engine is a row, ranked within one test ──
      A row is one (run, test) cell from the run's `audio` array: wall ms and the audio
      seconds it covers. The rank metric is × realtime = audio_s / wall s, higher is better.
      ASR clips are fixed files, so a run that did not record a clip's length borrows it from
      any run that did; TTS audio length is the engine's own output, so it is never borrowed
-     and a row without one ranks last. */
+     and a row without one ranks last. A cell the store voided (the outlier rule, or the run's
+     own void_clips) keeps its wall time, ranks last and fronts no ratio.
+     Pairing follows the LLM ladder's rule - within one submission only, and on the same lane:
+     a das row's reference is the fastest non-das run of its submission, model, box and hardware
+     class (cpu against cpu, any GPU against any GPU) that timed the same test, and the ratio is
+     the reference's wall over das's. A das row with no such run keeps an empty ratio. */
   var AUDIO = {
     asr: { borrow: true, pooled: false, prefer: ['gb1.wav'], unit: 'clip',
            empty: 'No speech-to-text runs on the ladder yet.' },
@@ -570,9 +592,36 @@
     return best || any;
   }
 
+  function hwClass(backend) { return backend === 'cpu' ? 'cpu' : 'gpu'; }
+
   function audioLane(fr) {
-    var hw = fr.backend === 'cpu' ? 'cpu' : 'gpu';
+    var hw = hwClass(fr.backend);
     return fr.flavor && fr.flavor !== 'stock' ? hw + ' · ' + fr.flavor : hw;
+  }
+
+  // the key a das row and its reference share: one submission, one model, one box, one hardware
+  // class, one test (or the pooled set)
+  function pairKey(r) {
+    return [r.submissionId, r.das.model_idx, r.box, hwClass(r.das.backend), r.bucket].join('|');
+  }
+
+  // every das row takes the fastest reference row under its key; a voided side pairs nothing
+  function pairAudioRows(rows) {
+    var best = {};
+    rows.forEach(function (r) {
+      if (r.engine === 'das' || r.voided || !(r.ms > 0)) return;
+      var k = pairKey(r);
+      if (!best[k] || r.ms < best[k].ms) best[k] = r;
+    });
+    rows.forEach(function (r) {
+      r.ref = null; r.ref_ms = 0; r.ref_rtf = null; r.ref_engine = ''; r.ratio = null;
+      if (r.engine !== 'das') return;
+      var ref = best[pairKey(r)];
+      if (!ref || r.voided || ref.n !== r.n) return;
+      r.ref = ref.das; r.ref_ms = ref.ms; r.ref_rtf = ref.rtf; r.ref_engine = ref.engine;
+      r.ratio = ratio(ref.ms, r.ms);   // times, so inverted: >1 = das faster
+    });
+    return rows;
   }
 
   function buildAudioRows(runs, workload) {
@@ -602,16 +651,17 @@
       (fr.audio || []).forEach(function (c) {
         var ms = Number(c.ms) || 0;
         var audio = Number(c.audio_s) || (cfg.borrow ? dur[c.test] || 0 : 0);
-        if (audio > 0) { poolMs += ms; poolAudio += audio; poolN++; }
-        out.push(Object.assign({ bucket: String(c.test), test: String(c.test), ms: ms, audio: audio,
-          n: 1, rtf: (ms > 0 && audio > 0) ? audio / (ms / 1000) : null }, base));
+        var voided = !!c.voided;
+        if (audio > 0 && !voided) { poolMs += ms; poolAudio += audio; poolN++; }
+        out.push(Object.assign({ bucket: String(c.test), test: String(c.test), ms: ms, audio: audio, voided: voided,
+          n: 1, rtf: (ms > 0 && audio > 0 && !voided) ? audio / (ms / 1000) : null }, base));
       });
       if (cfg.pooled && poolN > 0) {
-        out.push(Object.assign({ bucket: POOLED, test: '', ms: poolMs, audio: poolAudio, n: poolN,
+        out.push(Object.assign({ bucket: POOLED, test: '', ms: poolMs, audio: poolAudio, voided: false, n: poolN,
           rtf: poolAudio / (poolMs / 1000) }, base));
       }
     });
-    return out;
+    return pairAudioRows(out);
   }
 
   function bucketOptions(cfg) {
@@ -643,11 +693,20 @@
     return best;
   }
 
+  function rtfText(v) { return fmt(v, v >= 100 ? 0 : 1) + '×'; }
+
   function rtfCell(r, top) {
+    if (r.voided) return '<td class="dl-num dl-dim" title="voided: this clip ran far past the run\'s own rate on its other clips - a cold start or a runaway, not a speed">—✱</td>';
     if (r.rtf === null) return '<td class="dl-num dl-dim" title="the run recorded no audio length">—</td>';
     var w = top > 0 ? Math.max(2, Math.min(100, r.rtf / top * 100)) : 0;
     return '<td class="dl-num dio-rtf"><span class="dio-rtf__bar" style="width:' + w.toFixed(1) + '%"></span>' +
-      '<span class="dio-rtf__val">' + fmt(r.rtf, r.rtf >= 100 ? 0 : 1) + '×</span></td>';
+      '<span class="dio-rtf__val">' + rtfText(r.rtf) + '</span></td>';
+  }
+
+  // a reference engine's own row carries no ratio: it is the yardstick, not a racer
+  function audioRatioCell(r) {
+    if (r.engine !== 'das') return '<td class="dl-num dl-dim" title="a reference engine\'s row - the yardstick, not a racer">—</td>';
+    return ratioCell(r.ratio);
   }
 
   function audioReceipt(workload) {
@@ -676,7 +735,7 @@
     // a bar's length is relative to the fastest row of its own test, whatever the filters show
     var topOf = {};
     rows.forEach(function (r) { if (r.rtf > (topOf[r.bucket] || 0)) topOf[r.bucket] = r.rtf; });
-    makeTable({
+    var t = makeTable({
       table: '#' + workload + '-table', filters: '#' + workload + '-filters', caption: '#' + workload + '-caption',
       rows: rows, sort: { key: 'rtf', desc: true }, emptyText: cfg.empty,
       tiebreak: function (a, b) { return (a.ms - b.ms) || a.model.localeCompare(b.model); },
@@ -697,6 +756,14 @@
           cell: function (r) { return r.ms > 0 ? fmt(r.ms, r.ms >= 100 ? 0 : 1) : '-'; } },
         { key: 'audio', label: 'audio s', num: true, dim: true, get: function (r) { return r.audio; },
           cell: function (r) { return r.audio > 0 ? fmt(r.audio, 1) : '-'; } },
+        // the comparison columns, the LLM ladder's shape: the reference's wall on the same test
+        // and the ratio, against the fastest reference raced on the row's lane in its submission
+        { key: 'ref_engine', label: 'reference', grpStart: true, get: function (r) { return r.ref_engine; },
+          cell: function (r) { return r.ref_engine ? esc(r.ref_engine) : '-'; }, cls: 'dl-dim2' },
+        { key: 'ref_ms', label: 'ref ms', num: true, dim: true, get: function (r) { return r.ref_ms; },
+          cell: function (r) { return r.ref_ms > 0 ? fmt(r.ref_ms, r.ref_ms >= 100 ? 0 : 1) : '-'; } },
+        { key: 'ratio', label: 'ratio', num: true, grp: true, get: function (r) { return r.ratio; },
+          cell: audioRatioCell },
         { key: 'box', label: 'machine', grpStart: true, get: function (r) { return r.boxName; },
           cell: function (r) { return esc(r.boxName); }, cls: 'dl-dim2 dl-td-machine' },
         { key: 'lane', label: 'backend', get: function (r) { return r.lane; },
@@ -725,10 +792,27 @@
         shown.forEach(function (r) { if (r.date) dates[r.date] = 1; });
         var ds = Object.keys(dates).sort();
         var when = ds.length ? 'measured ' + (ds[0] === ds[ds.length - 1] ? ds[0] : ds[0] + ' → ' + ds[ds.length - 1]) + ' &nbsp;·&nbsp; ' : '';
+        var voided = shown.filter(function (r) { return r.voided; }).length;
         return when + 'showing ' + shown.length + ' row' + (shown.length === 1 ? '' : 's') +
+          (voided ? ' (' + voided + ' voided ✱)' : '') +
           ' &nbsp;·&nbsp; ranked by × realtime = audio seconds ÷ wall seconds, higher is faster' +
+          ' &nbsp;·&nbsp; ratio = the reference\'s wall ÷ das\'s on the same ' + cfg.unit + ', the fastest reference raced on the lane in the same submission' +
+          ' &nbsp;·&nbsp; an empty ratio means <b style="color:var(--fg);font-weight:400">not raced</b>, never implied parity' +
           ' &nbsp;·&nbsp; click any row for its receipt';
       }
+    });
+
+    // bars view: the paired das rows under the current filters, × realtime on both sides,
+    // ranked by ratio - the LLM ladder's bars with the audio unit
+    wireViews({ view: workload + '-view', bars: workload + '-bars', wrap: workload + '-wrap', filters: workload + '-filters' }, function (barsBox) {
+      var vis = t ? t.visible() : rows;
+      var paired = vis.filter(function (r) { return r.ratio !== null && r.rtf !== null && r.ref_rtf !== null; })
+        .sort(function (a, b) { return b.ratio - a.ratio; });
+      renderPairBars(barsBox, paired.map(function (r) {
+        return { label: r.model, sub: r.boxName + ' · ' + r.lane + ' · ' + r.ref_engine + ' · ' + (r.test || 'all ' + cfg.unit + 's'),
+                 das: r.rtf, ref: r.ref_rtf, dasText: rtfText(r.rtf) + 'RT', refText: rtfText(r.ref_rtf) + 'RT',
+                 ratio: r.ratio, r: r };
+      }), audioReceipt(workload), unpairedNote(vis.length - paired.length, 'unpaired'));
     });
   }
 

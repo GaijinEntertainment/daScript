@@ -274,6 +274,28 @@ def test_audio_routes(t : T?) {
                 tt |> equal(js?["runs"]?[0]?["workload"] ?? "", "tts")
             }
         }
+        t |> run("a cell's outlier verdict rides /api/runs as its voided flag") @(tt : T?) {
+            POST("{base_url}/admin/import-official", audio_outlier_doc()) $(resp) {
+                tt |> equal(int(resp.status_code), 200)
+            }
+            GET("{base_url}/api/runs") $(resp) {
+                var js = json_of(resp)
+                var cold, own : JsonValue?
+                for (r in js?["runs"] as _array) {
+                    continue if ("{r?["workload"] ?? ""}" != "audio-chat")
+                    if ("{r?["engine"] ?? ""}" == "das") {
+                        own = r
+                    } elif ("{r?["backend"] ?? ""}" == "metal") {
+                        cold = r
+                    }
+                }
+                tt |> success(cold != null && own != null, "both audio-chat rows are on the board")
+                tt |> equal(cold?["audio"]?[1]?["test"] ?? "", "jfk.wav")
+                tt |> success(cold?["audio"]?[1]?["voided"] ?? false, "the reference's cold-start clip rides voided")
+                tt |> success(!(cold?["audio"]?[0]?["voided"] ?? true), "its even clip rides unvoided")
+                tt |> success(!(own?["audio"]?[1]?["voided"] ?? true), "the das row's clip rides unvoided")
+            }
+        }
     }
 }
 

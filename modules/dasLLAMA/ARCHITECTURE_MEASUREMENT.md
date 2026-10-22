@@ -245,6 +245,23 @@ the row carries. Kitten's package speaks shorter audio than das for the same pho
 prior and 5000-sample trim), so a kitten pair compares on the wall, never on the real-time factor.
 `harness/tts_synth.das` and `harness/pocket_synth.py` stay the scoring rig's synthesis arms.
 
+### The audio outlier rule {#audio-outlier-rule}
+
+An audio run's clips are rated in milliseconds per audio second, and a clip past
+`AUDIO_OUTLIER_RATE_MULT` (4) times the run's median rate is an outlier of that run, not a speed
+of its engine: a cold start, or a reference decoding at length on one clip. The rule is one
+function, `audio_outlier_clips` (`dasllama/dasllama_exchange_schema.das`, engine-free), and three
+readers apply it to the same stored shape. The recorder (`gen_bench_records.das`) applies it as a
+run lands: a flagged clip is re-measured once, and one still flagged lands in the run's
+`void_clips` with a warning. The site projection (`gen_site_records.das`) applies it to every
+stored audio run as `bench_cells.json` is written, so a row recorded before the rule is voided
+without a re-measure, and the pages read only the field - a voided clip fronts no speedup, no bar
+and never the hero. The ladder store applies it to the audio cells it keeps per run, and a cell
+rides to the page with its `voided` verdict. A reference row records no audio length, so every
+reader borrows a clip's length from any run of the same model that recorded it. Under three rated
+clips nothing is voided, and a run's own `void_clips` - the annotations' spelling - unions with the
+rule's.
+
 ### A `[tuned]` kernel's perm is decided at its own compile {#tuned-perm-precedence}
 
 `dasllama_tune.das` picks one perm per `[tuned]` kernel, first match wins: the `reference` tune

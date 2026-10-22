@@ -142,6 +142,48 @@ def audio_chat_doc : string {
     return write_json(doc)
 }
 
+//! an audio-chat model whose reference read one clip at a cold start: the das run carries every
+//! clip's length, the reference none, and jfk.wav runs ninety times the reference's median rate
+//! while the das run and the reference's second row are even; the third row names a clip in its
+//! own `void_clips` beside the rule's
+def audio_outlier_doc : string {
+    var doc = %json~
+    [ {
+        "gguf" : "Qwen3-Omni-30B-A3B-Instruct-Q8_0.gguf",
+        "arch" : "Qwen3-Omni 30B",
+        "runs" : [
+            {
+                "engine" : "das", "backend" : "metal", "flavor" : "tuned", "workload" : "audio-chat",
+                "box" : "m5", "threads" : 8, "date" : "2026-10-21",
+                "cmd" : "lcpp_bench --asr", "sha" : "ea5747c91", "version" : "0.6.5", "dasllama_version" : 17,
+                "hardware" : { "cpu" : "Apple M5 Max" },
+                "tests" : { "asr:jfk.wav" : { "ms" : 357.6, "audio_s" : 11 }, "asr:jfk3.wav" : { "ms" : 464.8, "audio_s" : 33 }, "asr:gb1.wav" : { "ms" : 4729.2, "audio_s" : 198.734375 } }
+            },
+            {
+                "engine" : "llama-mtmd-cli", "backend" : "metal", "flavor" : "stock", "workload" : "audio-chat",
+                "box" : "m5", "threads" : 8, "date" : "2026-10-21",
+                "cmd" : "llama-mtmd-cli", "hardware" : { "cpu" : "Apple M5 Max" },
+                "tests" : { "asr:jfk.wav" : { "ms" : 34960.4 }, "asr:jfk3.wav" : { "ms" : 553.2 }, "asr:gb1.wav" : { "ms" : 7075.4 } }
+            },
+            {
+                "engine" : "llama-mtmd-cli", "backend" : "cpu", "flavor" : "stock", "workload" : "audio-chat",
+                "box" : "m5", "threads" : 8, "date" : "2026-10-21",
+                "cmd" : "llama-mtmd-cli", "hardware" : { "cpu" : "Apple M5 Max" },
+                "tests" : { "asr:jfk.wav" : { "ms" : 9365.4 }, "asr:jfk3.wav" : { "ms" : 25961.6 }, "asr:gb1.wav" : { "ms" : 158455.9 } }
+            },
+            {
+                "engine" : "llama-mtmd-cli", "backend" : "vulkan", "flavor" : "stock", "workload" : "audio-chat",
+                "box" : "m5", "threads" : 8, "date" : "2026-10-21",
+                "cmd" : "llama-mtmd-cli", "hardware" : { "cpu" : "Apple M5 Max" },
+                "void_clips" : "gb1.wav",
+                "tests" : { "asr:jfk.wav" : { "ms" : 9365.4 }, "asr:jfk3.wav" : { "ms" : 25961.6 }, "asr:gb1.wav" : { "ms" : 158455.9 } }
+            }
+        ]
+    } ]
+    %%
+    return write_json(doc)
+}
+
 // official history predates the release counter: shape-valid, no stamps
 def official_doc : string {
     var doc = %json~

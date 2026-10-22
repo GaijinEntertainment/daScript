@@ -64,10 +64,16 @@
 </div>
 </section>
 
-<!-- the audio ladders rank every engine within one test: × realtime = audio seconds ÷ wall seconds -->
+<!-- the audio ladders rank every engine within one test: × realtime = audio seconds ÷ wall seconds;
+     each section carries the LLM section's bars/table toggle, its bars the das rows paired with the
+     reference raced on the same lane in the same submission -->
 <section class="dio-ladder-sec" id="asr">
-<h2 class="dio-ladder-sec__h">ASR <span>speech-to-text · one row per engine run, ranked within a clip</span></h2>
+<h2 class="dio-ladder-sec__h">ASR <span>speech-to-text · one row per engine run, ranked within a clip · das rows paired with the reference on their lane</span></h2>
 <div class="dl-filters" id="asr-filters"></div>
+<div class="dl-viewbar">
+<div class="dl-seg" id="asr-view"><button data-view="bars">bars</button><button class="is-on" data-view="table">table</button></div>
+</div>
+<div class="dl-bars" id="asr-bars" hidden></div>
 <div class="dl-table-wrap" id="asr-wrap"><table class="dl-table dl-table--bench" id="asr-table">
 <tbody><tr><td class="dl-empty">loading the ladder…</td></tr></tbody>
 </table></div>
@@ -75,8 +81,12 @@
 </section>
 
 <section class="dio-ladder-sec" id="tts">
-<h2 class="dio-ladder-sec__h">TTS <span>text-to-speech · one row per engine run, ranked within a sentence or the whole set</span></h2>
+<h2 class="dio-ladder-sec__h">TTS <span>text-to-speech · one row per engine run, ranked within a sentence or the whole set · das rows paired with the reference on their lane</span></h2>
 <div class="dl-filters" id="tts-filters"></div>
+<div class="dl-viewbar">
+<div class="dl-seg" id="tts-view"><button data-view="bars">bars</button><button class="is-on" data-view="table">table</button></div>
+</div>
+<div class="dl-bars" id="tts-bars" hidden></div>
 <div class="dl-table-wrap" id="tts-wrap"><table class="dl-table dl-table--bench" id="tts-table">
 <tbody><tr><td class="dl-empty">loading the ladder…</td></tr></tbody>
 </table></div>
@@ -84,8 +94,12 @@
 </section>
 
 <section class="dio-ladder-sec" id="audio-chat">
-<h2 class="dio-ladder-sec__h">Audio in <span>chat models transcribing the speech-to-text clips · one row per engine run, ranked within a clip</span></h2>
+<h2 class="dio-ladder-sec__h">Audio in <span>chat models transcribing the speech-to-text clips · one row per engine run, ranked within a clip · das rows paired with the reference on their lane</span></h2>
 <div class="dl-filters" id="audio-chat-filters"></div>
+<div class="dl-viewbar">
+<div class="dl-seg" id="audio-chat-view"><button data-view="bars">bars</button><button class="is-on" data-view="table">table</button></div>
+</div>
+<div class="dl-bars" id="audio-chat-bars" hidden></div>
 <div class="dl-table-wrap" id="audio-chat-wrap"><table class="dl-table dl-table--bench" id="audio-chat-table">
 <tbody><tr><td class="dl-empty">loading the ladder…</td></tr></tbody>
 </table></div>

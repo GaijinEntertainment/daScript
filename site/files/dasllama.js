@@ -462,12 +462,13 @@
     function xrt(audio_s, msv) { return msv > 0 ? (audio_s * 1000) / msv : 0; }
     function xrtText(v) { return fmt(v, v < 10 ? 1 : 0) + '×RT'; }
     wireBars(sec, rows, function (all, filters) {
+      // a voided clip has no ratio to bar: it is the table's "—✱", never a pair
       return all.filter(function (r) {
         return (!filters.model || r.model === filters.model) &&
                (!filters.box || r.box === filters.box) &&
                (!filters.lane || r.lane === filters.lane) &&
                (!filters.tool || r.tool === filters.tool) &&
-               r.audio_s > 0;
+               r.audio_s > 0 && !r.voided;
       }).sort(function (a, b) { return b.speed - a.speed; })
         .map(function (r) {
           var d = xrt(r.audio_s, r.das_ms), f = xrt(r.audio_s, r.ref_ms);
@@ -634,11 +635,11 @@
             get: function (r) { return r.das_ms; }, cell: function (r) { return ms(r.das_ms); } },
           { key: 'ref_ms', label: 'ref ms', num: true, dim: true,
             get: function (r) { return r.ref_ms; }, cell: function (r) { return ms(r.ref_ms); } },
-          // a run annotated void for this clip (ref behavior difference, e.g. a decode runaway)
-          // never headlines a ratio — the receipt still shows both raw times and the note
+          // a clip voided on either run (the outlier rule at projection time, or an annotation's
+          // ref behavior difference) never headlines a ratio — the receipt still shows both raw times
           { key: 'speed', label: 'speedup', num: true, grp: true,
             get: function (r) { return r.voided ? 0 : r.speed; },
-            cell: function (r) { return r.voided ? '<td class="dl-num dl-dim">—✱</td>' : ratioCell(r.speed); } },
+            cell: function (r) { return r.voided ? '<td class="dl-num dl-dim" title="voided: this clip ran far past the run\'s own rate on its other clips - a cold start or a runaway, not a speed">—✱</td>' : ratioCell(r.speed); } },
           // a slower-than-realtime clip lands near 1×, so keep a decimal below 10 — rounding
           // 1.5×RT to "2" would read as comfortably realtime when it is barely so
           { key: 'xrt', label: '×RT', num: true, dim: true, grpStart: true,
@@ -781,7 +782,7 @@
     if (el) {
       var best = 0;
       buildAudioRows(recs, 'audio-chat').forEach(function (r) {
-        if (r.noted) return;   // caveated rows never front the page (same rule as the mock)
+        if (r.noted || r.voided) return;   // caveated rows and voided clips never front the page
         if (r.speed > best) best = r.speed;
       });
       if (best > 1) el.textContent = best >= 3 ? String(Math.floor(best)) : best.toFixed(1);

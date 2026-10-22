@@ -1302,19 +1302,30 @@ def media_leg_args(leg : string) : array<string> {
 
 //! One media cell's das child, absorbed via the same cell protocol: the backend its das row
 //! stamped back, "" where the child failed or wrote no records.
-def private media_das_cell(display, log_leg : string; args : array<string>; cellPath, store : string;
-                           var models : array<BenchModel>; var failed : array<string>) : string {
+//! One das child run to its cell file, the cell read back: false - the failure logged and
+//! named in `failed` - when the child exited non-zero or wrote no records.
+def private run_cell_child(display, log_leg : string; args : array<string>; cellPath : string;
+                           var cell : array<BenchModel>; var failed : array<string>) : bool {
     let t0 = ref_time_ticks()
     to_log(LOG_INFO, "gen_bench_records: START {display} das {log_leg}\n")
     logger_info("bench.records", "cell start", JV({"model" => JV(display), "engine" => JV("das"), "leg" => JV(log_leg)}))
     var out = ""
     let rc = run_and_stream(args, out)
-    var cell : array<BenchModel>
     if (rc != 0 || !read_bench_records(cellPath, cell)) {
         let tail = slice(out, max(0, length(out) - 400))
         to_log(LOG_ERROR, "gen_bench_records: FAILED {display} das {log_leg} rc={rc} ({elapsed_ms(t0)} ms) - tail: {tail}\n")
         logger_error("bench.records", "cell FAILED", JV({"model" => JV(display), "engine" => JV("das"), "leg" => JV(log_leg), "rc" => JV(rc)}))
         failed |> push("{display} das {log_leg}")
+        return false
+    }
+    return true
+}
+
+def private media_das_cell(display, log_leg : string; args : array<string>; cellPath, store : string;
+                           var models : array<BenchModel>; var failed : array<string>) : string {
+    let t0 = ref_time_ticks()
+    var cell : array<BenchModel>
+    if (!run_cell_child(display, log_leg, args, cellPath, cell, failed)) {
         return ""
     }
     var backend = ""
@@ -1331,12 +1342,60 @@ def private media_das_cell(display, log_leg : string; args : array<string>; cell
     return backend
 }
 
-def private asr_das_cell(spec : AsrModelSpec; cfg : Args; threads : int; cellPath, store, exe : string;
-                         var models : array<BenchModel>; var failed : array<string>; leg : string = "") {
+//! The das ASR child's argv: the catalog row, the rig's reps and threads, the leg's flag, and -
+//! a re-measure - the one clip timed in place of the row's buckets.
+def private asr_das_args(spec : AsrModelSpec; cfg : Args; threads : int; cellPath, exe, leg : string;
+                         clip : string = "") : array<string> {
     var args <- das_args(exe, ["--asr", "-m", spec.das_model, "-r", "{cfg.asr_reps}", "-t", "{threads}",
                                "--json-path", cellPath])
+    if (!empty(clip)) {
+        args |> push_from(["--asr-clips", clip])
+    }
     args |> push_from(media_leg_args(leg))
-    media_das_cell(spec.display, empty(leg) ? "asr" : "asr {leg}", args, cellPath, store, models, failed)
+    return <- args
+}
+
+def private asr_das_cell(spec : AsrModelSpec; cfg : Args; threads : int; cellPath, store, exe : string;
+                         var models : array<BenchModel>; var failed : array<string>; leg : string = "") {
+    var inscope args <- asr_das_args(spec, cfg, threads, cellPath, exe, leg)
+    let log_leg = empty(leg) ? "asr" : "asr {leg}"
+    let backend = media_das_cell(spec.display, log_leg, args, cellPath, store, models, failed)
+    return if (empty(backend))
+    asr_das_outlier_pass(spec, cfg, threads, cellPath, store, exe, leg, log_leg, backend, models, failed)
+}
+
+//! The outlier pass over the das row the cell just stored (`void_outlier_clips`): a flagged clip
+//! re-runs the child on that clip alone (`--asr-clips`), and the row's `void_clips` carries what
+//! stays flagged. The row is the stored one of the child's backend stamp and the leg's flavor.
+def private asr_das_outlier_pass(spec : AsrModelSpec; cfg : Args; threads : int; cellPath, store, exe, leg, log_leg, backend : string;
+                                 var models : array<BenchModel>; var failed : array<string>) {
+    let flavor = leg == "accel" ? "accel" : "tuned"
+    let workload = asr_workload(spec)
+    let lengths <- clip_lengths(models, spec.das_model, workload)
+    for (m in models) {
+        continue if (m.gguf != spec.das_model)
+        for (r in m.runs) {
+            continue if (r.engine != "das" || r.backend != backend || !(r.flavor |> starts_with(flavor)) || r.workload != workload)
+            var inscope voided <- void_outlier_clips(r, lengths, "{spec.display} das {log_leg}") $(clip) {
+                var inscope cargs <- asr_das_args(spec, cfg, threads, cellPath, exe, leg, clip)
+                var inscope cell : array<BenchModel>
+                var fresh = BenchTest()
+                if (run_cell_child(spec.display, "{log_leg} re-measure {clip}", cargs, cellPath, cell, failed)) {
+                    for (c in cell) {
+                        for (cr in c.runs) {
+                            if (cr.engine == "das" && key_exists(cr.tests, "asr:{clip}")) {
+                                fresh = cr.tests["asr:{clip}"]
+                            }
+                        }
+                    }
+                }
+                remove(cellPath)
+                return fresh
+            }
+            write_bench_records(store, models)
+            return
+        }
+    }
 }
 
 // True when the reference tool's binary/interpreter exists on this box (skip-with-warning gate)
@@ -1357,6 +1416,31 @@ def private asr_ref_available(tool : string) : bool {
         return stat(mlx_py()).is_valid
     }
     return false
+}
+
+//! One reference clip through the tool's own process - the timing test and, in `cmd`, the
+//! command line it ran: the media-chat exe keeps its encode split and transcript, a cli tool
+//! times alone, and a python tool runs one process over the one clip, its `audio_s` read back.
+//! Audio seconds otherwise live on the das cell's matching test key; cli tools don't report it.
+//! `ms` is 0 when no timing parsed.
+def private asr_ref_clip(spec : AsrModelSpec; ref : AsrRef; wav, model_path : string; threads, reps : int;
+                         gpu : bool; var cmd : string&) : BenchTest {
+    let wav_path = "{asr_corpus_dir()}{wav}"
+    to_log(LOG_INFO, "gen_bench_records:   {ref.tool} {wav} ({reps} rep(s))...\n")
+    if (ref.tool == "mtmd") {
+        var enc_ms = 0.0lf
+        var rtext = ""
+        let ms = run_asr_mtmd(model_path, "{spec.root}{ref.handle}", wav_path, threads, reps, cmd, enc_ms, rtext, gpu)
+        return BenchTest(ms = max(ms, 0.0lf), encode_ms = enc_ms, text = rtext)
+    }
+    if (ref.tool == "parakeet-cli" || ref.tool == "whisper-cli") {
+        return BenchTest(ms = max(run_asr_cli(ref.tool, model_path, wav_path, threads, reps, cmd, gpu), 0.0lf))
+    }
+    let pyargs <- asr_pybench_args(ref.tool, ref.handle, [wav], threads, reps, gpu ? "mps" : "")
+    cmd = argv_line(pyargs)
+    var audio_s = -1.0lf
+    let ms = parse_bench_best(run_capture_argv(pyargs), wav, audio_s)
+    return BenchTest(ms = max(ms, 0.0lf), audio_s = max(audio_s, 0.0lf))
 }
 
 // reference side: one tool over the model's clips, one BenchRun with per-clip tests keys.
@@ -1470,21 +1554,13 @@ def private asr_ref_pass(spec : AsrModelSpec; ref : AsrRef; versions : string; c
             rr.files |> emplace(file_identity("{spec.root}{ref.handle}", "mmproj"))
         }
         for (wav in rbuckets) {
-            let wav_path = "{asr_corpus_dir()}{wav}"
-            to_log(LOG_INFO, "gen_bench_records:   {ref.tool} {wav} ({cfg.asr_reps} rep(s))...\n")
             var cmd = ""
-            var enc_ms = 0.0lf
-            var rtext = ""
-            let ms = (ref.tool == "mtmd"
-                ? run_asr_mtmd(model_path, "{spec.root}{ref.handle}", wav_path, threads, cfg.asr_reps, cmd, enc_ms, rtext, gpu)
-                : run_asr_cli(ref.tool, model_path, wav_path, threads, cfg.asr_reps, cmd, gpu))
+            let t = asr_ref_clip(spec, ref, wav, model_path, threads, cfg.asr_reps, gpu, cmd)
             rr.cmd = cmd   // last clip's line; they differ only in -f
-            if (ms > 0.0lf) {
-                to_log(LOG_INFO, "gen_bench_records:   {ref.tool} {wav} = {ms:.0f} ms\n")
-                // audio seconds live on the das cell's matching test key; cli tools don't report it
-                // (mtmd is the one ref that stores its transcript — parity must be readable, not hoped)
-                rr.tests |> insert("asr:{wav}", BenchTest(ms = ms, encode_ms = enc_ms, text = rtext))
-                rr.files |> emplace(file_identity(wav_path, "clip"))
+            if (t.ms > 0.0lf) {
+                to_log(LOG_INFO, "gen_bench_records:   {ref.tool} {wav} = {t.ms:.0f} ms\n")
+                rr.tests |> insert("asr:{wav}", t)
+                rr.files |> emplace(file_identity("{asr_corpus_dir()}{wav}", "clip"))
                 measured++
             } else {
                 to_log(LOG_WARNING, "gen_bench_records: {spec.display} ref {ref.tool} {wav} - no timing parsed\n")
@@ -1517,6 +1593,13 @@ def private asr_ref_pass(spec : AsrModelSpec; ref : AsrRef; versions : string; c
             }
             delete lib
         }
+    }
+    // the outlier pass: a clip past the rule's multiple of the run's median rate re-measures
+    // once through the tool's own process, and what stays past it is voided on the row
+    let lengths <- clip_lengths(models, spec.das_model, rr.workload)
+    var inscope voided <- void_outlier_clips(rr, lengths, "{spec.display} ref {ref.tool}") $(clip) {
+        var cmd = ""
+        return asr_ref_clip(spec, ref, clip, model_path, threads, cfg.asr_reps, gpu, cmd)
     }
     if (measured == 0) {
         to_log(LOG_ERROR, "gen_bench_records: FAILED {spec.display} ref {ref.tool} - nothing measured ({elapsed_ms(t0)} ms)\n")

@@ -73,20 +73,15 @@ struct Run {
     Audio : string = ""         // an asr/tts run's `audio_cells_text`; "" for every other workload
 }
 
-//! The workloads whose runs carry audio cells; a cell is a test keyed "<prefix><name>" with the
-//! prefix `audio_test_prefix` names.
-let AUDIO_WORKLOADS <- ["asr", "tts", "audio-chat"]
-
-//! An audio workload's test-key prefix: an audio-chat run times the speech-to-text clips under
-//! their "asr:" keys, every other workload its own name.
-def audio_test_prefix(workload : string) : string => workload == "audio-chat" ? "asr:" : "{workload}:"
-
 //! One timed audio test of an asr/tts run: `test` is the key past "<workload>:" (a clip for asr,
-//! a sentence or set for tts); `audio_s` is 0 when the run did not record the audio length.
+//! a sentence or set for tts); `audio_s` is 0 when the run did not record the audio length;
+//! `voided` is the outlier rule's verdict on the cell (`audio_outlier_clips`), or the run's own
+//! `void_clips` naming it - a voided cell fronts no ratio and no rank.
 struct AudioCell {
     test : string
     ms : double
     audio_s : double
+    voided : bool
 }
 
 //! One tune sidecar, content-addressed by its own sha256; the identity columns are
@@ -199,8 +194,13 @@ def ladder_migration_005(db : SqlRunner) {
     backfill_run_cells(db, CellSet.audio)
 }
 
+[sql_migration(version = 6, description = "audio cells carry the outlier rule's voided verdict; backfilled from the documents")]
+def ladder_migration_006(db : SqlRunner) {
+    backfill_run_cells(db, CellSet.audio)
+}
+
 //! The cell columns one backfill writes: migration 2's flat cells and cpu label, migration 3's
-//! batched cell, migration 4's audio cells.
+//! batched cell, migrations 4 to 6's audio cells.
 enum CellSet {
     flat
     batched
@@ -230,10 +230,37 @@ def private each_record_run(doc_text : string; blk : block<(m : JsonValue?; r : 
     delete_json(doc)
 }
 
+//! The audio length of every test the model node's runs of one workload recorded, keyed by the
+//! test past its prefix - the smallest positive `audio_s` any run wrote. A reference run records
+//! no length, so its cells are rated with the length the das run of the same clip recorded.
+def private model_clip_lengths(m : JsonValue?; workload : string) : table<string; double> {
+    var out : table<string; double>
+    let prefix = audio_test_prefix(workload)
+    let runs = m?["runs"]
+    return <- out if (runs == null || !(runs is _array))
+    for (r in runs as _array) {
+        continue if ("{r?["workload"] ?? ""}" != workload)
+        let tests = r?["tests"]
+        continue if (tests == null || !(tests is _object))
+        for (k, row in keys(tests as _object), values(tests as _object)) {
+            let audio = row?["audio_s"] ?? 0.0lf
+            continue if (!(k |> starts_with(prefix)) || audio <= 0.0lf)
+            let clip = slice(k, length(prefix))
+            let known = out?[clip] ?? 0.0lf
+            if (known <= 0.0lf || audio < known) {
+                out[clip] = audio
+            }
+        }
+    }
+    return <- out
+}
+
 //! The audio cells of one run node as `Run.Audio` stores them: a JSON array of
-//! `{test, ms, audio_s}` sorted by test, one per "<workload>:" test with a positive `ms`; ""
-//! when the workload is not in `AUDIO_WORKLOADS` or no test qualifies.
-def private audio_cells_text(r : JsonValue?) : string {
+//! `{test, ms, audio_s, voided}` sorted by test, one per "<workload>:" test with a positive
+//! `ms`; "" when the workload is not in `AUDIO_WORKLOADS` or no test qualifies. `m` is the run's
+//! model node: the outlier rule rates each cell over its own length or the model's borrowed one,
+//! and a cell the rule voids, or the run's `void_clips` names, carries `voided`.
+def private audio_cells_text(m, r : JsonValue?) : string {
     let workload : string = r?["workload"] ?? ""
     let tests = r?["tests"]
     return "" if (!has_value(AUDIO_WORKLOADS, workload) || tests == null || !(tests is _object))
@@ -246,21 +273,36 @@ def private audio_cells_text(r : JsonValue?) : string {
         }
     }
     return "" if (empty(cells))
+    let lengths <- model_clip_lengths(m, workload)
+    var rates : table<string; double>
+    for (c in cells) {
+        let audio = c.audio_s > 0.0lf ? c.audio_s : (lengths?[c.test] ?? 0.0lf)
+        if (audio > 0.0lf) {
+            rates[c.test] = c.ms / audio
+        }
+    }
+    var voided <- audio_outlier_clips(rates)
+    var named <- void_clips_of("{r?["void_clips"] ?? ""}")
+    voided |> push_from(named)
+    for (c in cells) {
+        c.voided = has_value(voided, c.test)
+    }
     sort(cells) <| cmp_by(_.test)
-    var arr = JV([for (c in cells); JV((test = c.test, ms = c.ms, audio_s = c.audio_s))])
+    var arr = JV([for (c in cells); JV((test = c.test, ms = c.ms, audio_s = c.audio_s, voided = c.voided))])
     let text = write_json(arr)
     delete_json(arr)
     return text
 }
 
-//! The cells of one run node of a record document — what `Run.Pp512`/`Tg128`/`Tg128b4`/`Cpu`/`Audio` hold.
-def private run_cells(r : JsonValue?) : tuple<pp512 : double; tg128 : double; tg128b4 : double; cpu : string; audio : string> {
+//! The cells of one run node `r` of model node `m` of a record document — what
+//! `Run.Pp512`/`Tg128`/`Tg128b4`/`Cpu`/`Audio` hold.
+def private run_cells(m, r : JsonValue?) : tuple<pp512 : double; tg128 : double; tg128b4 : double; cpu : string; audio : string> {
     return (
         pp512 = r?["tests"]?["pp512"]?["tok_s"] ?? 0.0lf,
         tg128 = r?["tests"]?["tg128"]?["tok_s"] ?? 0.0lf,
         tg128b4 = r?["tests"]?["tg128@4"]?["tok_s"] ?? 0.0lf,
         cpu = r?["hardware"]?["cpu"] ?? "",
-        audio = audio_cells_text(r))
+        audio = audio_cells_text(m, r))
 }
 
 //! Every run row of every record submission re-reads its cells from the document it came
@@ -273,8 +315,8 @@ def private backfill_run_cells(db : SqlRunner; which : CellSet) {
     var odd = 0
     for (s in subs) {
         let sid = s.Id
-        each_record_run(s.Doc) $(_m, r, mi, ri) {
-            let cells = run_cells(r)
+        each_record_run(s.Doc) $(m, r, mi, ri) {
+            let cells = run_cells(m, r)
             var n = 0
             if (which == CellSet.audio) {
                 n = db |> _sql_update(type<Run>, _.SubmissionId == sid && _.ModelIdx == mi && _.RunIdx == ri,
@@ -449,7 +491,7 @@ def private insert_runs(db : SqlRunner; doc_text : string; submission_id : int; 
                         verified : int; now : int64) : int {
     var rows : array<Run>
     each_record_run(doc_text) $(m, r, mi, ri) {
-        let cells = run_cells(r)
+        let cells = run_cells(m, r)
         rows |> emplace(Run(
                 SubmissionId = submission_id,
                 ModelIdx = mi,

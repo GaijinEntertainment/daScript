@@ -350,6 +350,7 @@ def private validate_run(run : JsonValue const?; submission : bool; path : strin
     let source = chk_str(run, "source", false, MAX_SHORT, path, errors)
     chk_str(run, "comment", false, MAX_CMD, path, errors)
     chk_str(run, "void_clips", false, MAX_PROV_VALUE, path, errors)
+    chk_str(run, "held", false, MAX_PROV_VALUE, path, errors)
     chk_num(run, "dasllama_version", false, 0.0lf, 1000000.0lf, path, errors)
     validate_hardware(run, path, errors)
     validate_tests(run, path, errors)
@@ -809,3 +810,46 @@ def parse_sidecar_info(text : string; var info : SidecarInfo) : bool {
     info.identity.cpu = "{ident.cpu}"
     return info.kernel_count > 0
 }
+
+// ===== Board policy: the record-reading rules the site projection, the recorder and the ladder share =====
+
+//! The boxes whose boards are history: their rows stay in the records and on the ladder's
+//! "all versions" view, and nothing of theirs projects onto the daslang.io cards.
+let RETIRED_BOXES <- { "m1", "m3air", "m4", "zen2", "zen4" }
+
+//! The workloads whose runs carry audio cells; a cell is a test keyed "<prefix><name>" with the
+//! prefix `audio_test_prefix` names.
+let AUDIO_WORKLOADS <- ["asr", "tts", "audio-chat"]
+
+//! An audio workload's test-key prefix: an audio-chat run times the speech-to-text clips under
+//! their "asr:" keys, every other workload its own name.
+def audio_test_prefix(workload : string) : string => workload == "audio-chat" ? "asr:" : "{workload}:"
+
+//! A clip whose milliseconds per audio second run past this multiple of its run's median rate is
+//! not a speed of that engine - a cold start, a decode runaway - and never fronts a ratio. Four:
+//! one engine's rate across the clips of one run spreads under twofold (the long clips cost less
+//! a second than the short ones), while the shapes this catches read ten to ninety times the
+//! median.
+let AUDIO_OUTLIER_RATE_MULT = 4.0lf
+
+//! The clips of one run the outlier rule voids: `rates` maps a clip to its milliseconds per audio
+//! second, and a clip past `AUDIO_OUTLIER_RATE_MULT` times the median of them all is voided. Under
+//! three clips nothing is - a median of two is their mean, which neither can pass fourfold.
+[arch(at="../ARCHITECTURE_MEASUREMENT.md#audio-outlier-rule")]
+def audio_outlier_clips(rates : table<string; double>) : array<string> {
+    var sorted <- [for (r in values(rates)); r; where r > 0.0lf]
+    let n = length(sorted)
+    if (n < 3) {
+        return <- array<string>()
+    }
+    sort(sorted)
+    let median = (n % 2 == 1) ? sorted[n / 2] : (sorted[n / 2 - 1] + sorted[n / 2]) * 0.5lf
+    var out <- [for (clip, r in keys(rates), values(rates)); clip; where r > AUDIO_OUTLIER_RATE_MULT * median]
+    sort(out)
+    return <- out
+}
+
+//! The clips a run's `void_clips` field names - the comma list the annotations and the recorder
+//! write - with the spaces around each name dropped.
+def void_clips_of(field : string) : array<string> =>
+    <- [for (c in split(field, ",")); strip(c); where !empty(strip(c))]

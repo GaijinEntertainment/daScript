@@ -4,6 +4,7 @@ options persistent_heap   // a dastest root frees what it deletes only on this h
 require dastest/testing_boost public
 require ../performance/profile_common.das
 require dasllama/dasllama_version
+require dasllama/dasllama_exchange_schema   // the outlier rule the recorder's pass applies
 
 // The record store is the site's single source of truth; this is the net under its schema:
 // ASR-shaped runs (workload, ms/audio_s tests, files) must round-trip the JSON store, the
@@ -604,5 +605,117 @@ def test_sibling_mtmd(t : T?) {
     t |> run("the stock llama-mtmd-cli resolves as llama-bench's sibling, or not at all") @(t : T?) {
         t |> equal(sibling_mtmd(""), "", "no stock ref = no sibling")
         t |> equal(sibling_mtmd("/nonexistent/bin/llama-bench"), "", "a missing sibling refuses instead of naming a dead path")
+    }
+}
+
+[test]
+def test_held_annotation_lands(t : T?) {
+    t |> run("an annotation's held reaches only the selected run, and rides the store") @(t : T?) {
+        var models : array<BenchModel>
+        models |> emplace(make_model())
+        var annos : array<BenchAnnotation>
+        annos |> emplace(BenchAnnotation(gguf = "ggml-tiny.bin", engine = "das",
+            comment = "held off the board", held = "followup_general.md 219"))
+        apply_annotations(models, annos)
+        t |> equal(models[0].runs[0].held, "followup_general.md 219", "selected run held")
+        t |> equal(models[0].runs[1].held, "", "reference run untouched")
+        t |> success(write_bench_records(TMP, models), "the store writes")
+        var back : array<BenchModel>
+        t |> success(read_bench_records(TMP, back), "store re-reads")
+        t |> equal(back[0].runs[0].held, "followup_general.md 219", "held round-trips")
+        remove(TMP)
+        delete back
+        delete annos
+        delete models
+    }
+}
+
+// the audio-chat shape the rule was written on: a short clip read at a cold start against two
+// even ones, and the das row that carries every clip's length
+def private omni_rates(jfk_ms : double) : table<string; double> {
+    return <- { "jfk.wav" => jfk_ms / 11.0lf, "jfk3.wav" => 553.2lf / 33.0lf, "gb1.wav" => 7075.4lf / 198.734375lf }
+}
+
+[test]
+def test_audio_outlier_rule(t : T?) {
+    t |> run("a clip past the multiple of the run's median rate is the outlier; an even run has none") @(t : T?) {
+        t |> equal(audio_outlier_clips(omni_rates(34960.4lf)), [ "jfk.wav" ], "3178 ms a second against a median of 36")
+        t |> equal(length(audio_outlier_clips(omni_rates(357.6lf))), 0, "33 ms a second sits inside the run")
+        t |> equal(length(audio_outlier_clips({ "jfk.wav" => 3178.0lf, "jfk3.wav" => 16.8lf })), 0, "two clips rate nothing")
+        t |> equal(length(audio_outlier_clips({ "a" => 100.0lf, "b" => 100.0lf, "c" => 100.0lf, "d" => 401.0lf })), 1, "an even count's median is the middle pair's mean")
+        t |> equal(void_clips_of(" jfk.wav , gb1.wav,"), [ "jfk.wav", "gb1.wav" ], "the comma list reads trimmed, no empty name")
+    }
+    t |> run("the stored run is rated over the das row's clip lengths where it recorded none") @(t : T?) {
+        var models : array<BenchModel>
+        models |> emplace(make_model())
+        let lengths <- clip_lengths(models, "ggml-tiny.bin", "asr")
+        t |> equal(lengths?["jfk.wav"] ?? 0.0lf, 11.0lf)
+        t |> equal(lengths?["gb1.wav"] ?? 0.0lf, 198.7lf)
+        t |> equal(length(lengths), 2)
+        var ref = BenchRun(engine = "llama-mtmd-cli", backend = "metal", flavor = "stock", workload = "audio-chat",
+            box = "testbox", threads = 8, date = "2026-10-21", cmd = "test")
+        ref.tests |> insert("asr:jfk.wav", BenchTest(ms = 34960.4lf))
+        ref.tests |> insert("asr:jfk3.wav", BenchTest(ms = 553.2lf))
+        ref.tests |> insert("asr:gb1.wav", BenchTest(ms = 7075.4lf))
+        let borrowed <- { "jfk.wav" => 11.0lf, "jfk3.wav" => 33.0lf, "gb1.wav" => 198.734375lf }
+        t |> equal(run_outlier_clips(ref, borrowed), [ "jfk.wav" ], "rated over the borrowed lengths")
+        let unknown : table<string; double>
+        t |> equal(length(run_outlier_clips(ref, unknown)), 0, "a clip with no length is not rated")
+        delete models
+    }
+}
+
+[test]
+def test_void_outlier_pass(t : T?) {
+    t |> run("the recorder re-measures the flagged clip once and voids what stays off") @(t : T?) {
+        let lengths <- { "jfk.wav" => 11.0lf, "jfk3.wav" => 33.0lf, "gb1.wav" => 198.734375lf }
+        var ref = BenchRun(engine = "llama-mtmd-cli", backend = "metal", flavor = "stock", workload = "audio-chat",
+            box = "testbox", threads = 8, date = "2026-10-21", cmd = "test")
+        ref.tests |> insert("asr:jfk.wav", BenchTest(ms = 34960.4lf))
+        ref.tests |> insert("asr:jfk3.wav", BenchTest(ms = 553.2lf))
+        ref.tests |> insert("asr:gb1.wav", BenchTest(ms = 7075.4lf))
+        var asked : array<string>
+        var voided <- void_outlier_clips(ref, lengths, "test ref") $(clip) {
+            asked |> push(clip)
+            return BenchTest(ms = 34000.0lf)   // the re-measure reads the same
+        }
+        t |> equal(asked, [ "jfk.wav" ], "the flagged clip alone is re-measured, once")
+        t |> equal(voided, [ "jfk.wav" ])
+        t |> equal(ref.void_clips, "jfk.wav", "the row carries the verdict")
+        t |> equal(ref.tests?["asr:jfk.wav"]?.ms ?? 0.0lf, 34000.0lf, "the re-measure replaced the test")
+        delete voided
+        delete asked
+    }
+    t |> run("a re-measure that lands inside the run clears the clip") @(t : T?) {
+        let lengths <- { "jfk.wav" => 11.0lf, "jfk3.wav" => 33.0lf, "gb1.wav" => 198.734375lf }
+        var ref = BenchRun(engine = "llama-mtmd-cli", backend = "metal", flavor = "stock", workload = "audio-chat",
+            box = "testbox", threads = 8, date = "2026-10-21", cmd = "test")
+        ref.tests |> insert("asr:jfk.wav", BenchTest(ms = 34960.4lf))
+        ref.tests |> insert("asr:jfk3.wav", BenchTest(ms = 553.2lf))
+        ref.tests |> insert("asr:gb1.wav", BenchTest(ms = 7075.4lf))
+        var voided <- void_outlier_clips(ref, lengths, "test ref") $(_clip) {
+            return BenchTest(ms = 400.0lf)   // the cold start gone
+        }
+        t |> equal(length(voided), 0, "nothing voided")
+        t |> equal(ref.void_clips, "")
+        t |> equal(ref.tests?["asr:jfk.wav"]?.ms ?? 0.0lf, 400.0lf, "the fresh timing stands")
+        delete voided
+    }
+    t |> run("an even run re-measures nothing") @(t : T?) {
+        let lengths <- { "jfk.wav" => 11.0lf, "jfk3.wav" => 33.0lf, "gb1.wav" => 198.734375lf }
+        var ref = BenchRun(engine = "llama-mtmd-cli", backend = "cpu", flavor = "stock", workload = "audio-chat",
+            box = "testbox", threads = 8, date = "2026-10-21", cmd = "test")
+        ref.tests |> insert("asr:jfk.wav", BenchTest(ms = 9365.4lf))
+        ref.tests |> insert("asr:jfk3.wav", BenchTest(ms = 25961.6lf))
+        ref.tests |> insert("asr:gb1.wav", BenchTest(ms = 158455.9lf))
+        var asked = 0
+        var voided <- void_outlier_clips(ref, lengths, "test ref") $(_clip) {
+            asked++
+            return BenchTest(ms = 1.0lf)
+        }
+        t |> equal(asked, 0, "the even run is never re-measured")
+        t |> equal(length(voided), 0)
+        t |> equal(ref.tests?["asr:jfk.wav"]?.ms ?? 0.0lf, 9365.4lf, "every timing stands")
+        delete voided
     }
 }

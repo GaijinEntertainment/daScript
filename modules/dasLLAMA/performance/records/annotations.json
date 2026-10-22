@@ -35,5 +35,19 @@
   "workload": "audio-chat",
   "comment": "Same jfk.wav decode runaway as on the M4 and zen2 boxes (the reference generates at length on that clip despite --temp 0 --reasoning off; 266 s vs 8 s on jfk3.wav) - a behavior difference, not a speed measurement.",
   "void_clips": "jfk.wav"
+ },
+ {
+  "gguf": "kitten-nano.gguf",
+  "engine": "das",
+  "workload": "tts",
+  "comment": "Held off the board: das speaks the corpus head about half again as long as the KittenTTS package does for the same sentences (242 s against 160 s), so the wall is not the same work - followup_general.md row 219.",
+  "held": "followup_general.md 219"
+ },
+ {
+  "gguf": "kitten-mini.gguf",
+  "engine": "das",
+  "workload": "tts",
+  "comment": "Held off the board: das speaks the corpus head about half again as long as the KittenTTS package does for the same sentences (207 s against 145 s), so the wall is not the same work - followup_general.md row 219.",
+  "held": "followup_general.md 219"
  }
 ]

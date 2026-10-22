@@ -100,6 +100,33 @@ class SiteMetadataTest(unittest.TestCase):
         self.assertNotIn("https://dasllama.io/index.html", feed)
         self.assertIn("https://dasllama.io/#n-", feed)
 
+    def test_ladder_sections_carry_the_view_mounts(self):
+        """Every ladder section - the LLM one and the three audio ones - mounts the same bars/table
+        toggle the renderer wires (`wireViews` in files/dasllama-io.js): a view segment with the two
+        buttons, a bars box, a table wrap and the filters; the renderer reads them by these ids."""
+        page = (ROOT / "ladder.html").read_text(encoding="utf-8")
+        script = (ROOT / "files" / "dasllama-io.js").read_text(encoding="utf-8")
+        sections = {
+            "llm": {"view": "view", "bars": "bars", "wrap": "table-wrap", "filters": "ladder-filters"},
+        }
+        for w in ("asr", "tts", "audio-chat"):
+            sections[w] = {"view": f"{w}-view", "bars": f"{w}-bars", "wrap": f"{w}-wrap", "filters": f"{w}-filters"}
+            self.assertIn(f'id="{w}-table"', page, f"{w}: the ranked table mounts")
+            self.assertIn(f'id="{w}-caption"', page, f"{w}: the caption mounts")
+        for name, ids in sections.items():
+            with self.subTest(section=name):
+                for role, elem in ids.items():
+                    self.assertIn(f'id="{elem}"', page, f"{name}: the {role} mount {elem!r} is on the page")
+                start = page.index(f'id="{ids["view"]}"')
+                end = page.index("</div>", start)
+                seg = page[start:end]
+                self.assertIn('data-view="bars"', seg, f"{name}: a bars button")
+                self.assertIn('data-view="table"', seg, f"{name}: a table button")
+                self.assertIn('class="is-on" data-view="table"', seg, f"{name}: the table is the default view")
+        # the audio sections' ids are derived from the workload in the renderer, the LLM ones are literal
+        self.assertIn("view: workload + '-view', bars: workload + '-bars', wrap: workload + '-wrap', filters: workload + '-filters'", script)
+        self.assertIn("view: 'view', metric: 'metric', bars: 'bars', wrap: 'table-wrap', filters: 'ladder-filters'", script)
+
     def test_caddy_redirects_explicit_index(self):
         snippet = (
             REPO_ROOT / "utils" / "internal" / "dasllama-ladder" / "caddy.snippet"

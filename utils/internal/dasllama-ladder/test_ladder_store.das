@@ -24,7 +24,7 @@ def private audio_cells(text : string) : array<AudioCell> {
     var js = read_json(text, jerr)
     var out : array<AudioCell>
     if (js != null && js is _array) {
-        out <- [for (c in js as _array); AudioCell(test = c?["test"] ?? "", ms = c?["ms"] ?? 0.0lf, audio_s = c?["audio_s"] ?? -1.0lf)]
+        out <- [for (c in js as _array); AudioCell(test = c?["test"] ?? "", ms = c?["ms"] ?? 0.0lf, audio_s = c?["audio_s"] ?? -1.0lf, voided = c?["voided"] ?? false)]
     }
     delete_json(js)
     return <- out
@@ -34,10 +34,10 @@ def private audio_cells(text : string) : array<AudioCell> {
 def test_migration(t : T?) {
     t |> run("fresh db migrates to latest") @(t : T?) {
         with_latest_sqlite(":memory:") $(db) {
-            t |> equal(current_schema_version(db), 5)
+            t |> equal(current_schema_version(db), 6)
         }
     }
-    t |> run("migrations 2 to 5 backfill the cells of rows inserted before the columns existed") @(tt : T?) {
+    t |> run("migrations 2 to 6 backfill the cells of rows inserted before the columns existed") @(tt : T?) {
         with_sqlite(":memory:") $(db) {
             // a v1 store: the shipped first migration, stamped applied, with a submission and its
             // two run rows inserted in the v1 shape (no cell columns to fill)
@@ -60,18 +60,33 @@ def test_migration(t : T?) {
                     "VALUES (9, ?, ?, 'a.bin', 'das', 'cpu', 'tuned', 'm5', 6, '2026-09-23', 'official', 1000)",
                     slot._0, slot._1)
             }
-            tt |> equal(migrate_to_latest(db), 4, "four pending migrations applied")
-            tt |> equal(current_schema_version(db), 5)
+            // an official audio-chat import with a cold-start clip on its reference, in the v1 row shape
+            db |> exec("INSERT INTO submissions (Id, Kind, DocSha, Doc, CreatedAt, ClientIp) VALUES (10, 'official', 'sha10', ?, 1000, 'importer')", audio_outlier_doc())
+            for (ri in range(4)) {
+                db |> exec("INSERT INTO runs (SubmissionId, ModelIdx, RunIdx, Gguf, Engine, Backend, Flavor, Box, Threads, RunDate, Source, CreatedAt) " +
+                    "VALUES (10, 0, ?, 'o.gguf', 'das', 'cpu', 'tuned', 'm5', 8, '2026-10-21', 'official', 1000)", ri)
+            }
+            tt |> equal(migrate_to_latest(db), 5, "five pending migrations applied")
+            tt |> equal(current_schema_version(db), 6)
             let rows <- _sql(db |> select_from(type<Run>) |> _order_by(_.Id))
-            tt |> equal(length(rows), 9)
+            tt |> equal(length(rows), 13)
             tt |> equal(rows[0].Audio, "", "an LLM run carries no audio cells")
             let asr <- audio_cells(rows[4].Audio)
             tt |> equal(length(asr), 2, "migration 4 fills the asr cells from the document")
             tt |> equal(asr[0].test, "gb1.wav")
             tt |> equal(asr[1].ms, 158.0lf)
+            tt |> success(!asr[0].voided && !asr[1].voided, "two rated clips void nothing")
             let tts <- audio_cells(rows[7].Audio)
             tt |> equal(length(tts), 2, "... and the tts cells")
             tt |> equal(tts[1].audio_s, 4.0lf)
+            let cold <- audio_cells(rows[10].Audio)
+            tt |> equal(length(cold), 3, "migration 6 fills the reference's cells with the verdict")
+            tt |> equal(cold[0].test, "gb1.wav")
+            tt |> equal(cold[2].test, "jfk3.wav")
+            tt |> success(!cold[0].voided && !cold[2].voided, "the even clips stand")
+            tt |> equal(cold[1].test, "jfk.wav")
+            tt |> success(cold[1].voided, "the cold-start clip is voided off the das run's lengths")
+            tt |> success(!audio_cells(rows[9].Audio)[1].voided, "the das run's own jfk.wav is even")
             tt |> equal(rows[4].Pp512, 0.0lf, "migration 2 leaves an audio run's LLM cells at 0")
             tt |> equal(rows[0].Pp512, 100.0lf)
             tt |> equal(rows[0].Tg128, 25.0lf)
@@ -458,6 +473,41 @@ def test_audio_cells(t : T?) {
             let row = run_of(list_runs(db, 17), "das", "asr")
             tt |> equal(row.Source, "community")
             tt |> equal(audio_cells(row.Audio)[0].ms, 200.0lf, "the community row carries its cells")
+        }
+    }
+}
+
+// the audio cells of the outlier fixture's one run of an engine and backend
+def private omni_cells(rows : array<Run>; engine, backend : string) : array<AudioCell> {
+    for (r in rows) {
+        if (r.Gguf == "Qwen3-Omni-30B-A3B-Instruct-Q8_0.gguf" && r.Engine == engine && r.Backend == backend) {
+            return <- audio_cells(r.Audio)
+        }
+    }
+    return <- array<AudioCell>()
+}
+
+[test]
+def test_audio_cells_voided(t : T?) {
+    with_latest_sqlite(":memory:") $(db) {
+        t |> run("a cell past the outlier rule, or named by the run's void_clips, rides voided") @(tt : T?) {
+            let res = import_official_store(db, audio_outlier_doc(), 1002l)
+            tt |> success(res.ok, "imported ({res.error})")
+            let rows <- list_runs(db, 0)
+            let cold <- omni_cells(rows, "llama-mtmd-cli", "metal")
+            tt |> equal(length(cold), 3)
+            tt |> success(cold[1].test == "jfk.wav" && cold[1].voided, "3178 ms a second against a median of 36, rated over the das run's lengths")
+            tt |> success(!cold[0].voided && !cold[2].voided, "the reference's even clips stand")
+            tt |> equal(cold[1].audio_s, 0.0lf, "the borrowed length rates the cell and is not written onto it")
+            for (c in omni_cells(rows, "llama-mtmd-cli", "cpu")) {
+                tt |> success(!c.voided, "an even run voids nothing ({c.test})")
+            }
+            for (c in omni_cells(rows, "das", "metal")) {
+                tt |> success(!c.voided, "the das run is even ({c.test})")
+            }
+            let named <- omni_cells(rows, "llama-mtmd-cli", "vulkan")
+            tt |> success(named[0].test == "gb1.wav" && named[0].voided, "a clip the run's own void_clips names rides voided")
+            tt |> success(!named[1].voided && !named[2].voided, "... and its other clips stand")
         }
     }
 }

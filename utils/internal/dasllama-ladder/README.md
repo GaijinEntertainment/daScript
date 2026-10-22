@@ -25,7 +25,7 @@ The anatomy mirrors `utils/internal/dasweb-playground`.
 
 Public (proxied by `caddy.snippet`): `GET /api/versions`, `GET /api/runs[?version=N]` (the
 board: every run's filter columns plus its `pp512`/`tg128`/`tg128b4` cells, `cpu` label and
-`audio` array - `[{test, ms, audio_s}]` for an `asr`/`tts` run, `[]` otherwise - so a page
+`audio` array - `[{test, ms, audio_s, voided}]` for an `asr`/`tts`/`audio-chat` run, `[]` otherwise - so a page
 paints and pairs from this one response), `GET /api/submission/:id` (the verbatim receipt,
 fetched only for a receipt a visitor opens), `GET /api/sidecars[?version=N]` (the
 browse listing; absent/0 version = all), `GET /api/sidecars?version=N&box=<encoded>` (the
@@ -52,10 +52,14 @@ Three tables, one migration stream (`ladder_migration_*`):
 - `runs` - one row per BenchRun: flat columns for filtering plus the `Pp512`/`Tg128`/`Tg128b4`
   cells (`Tg128b4` is the `tg128@4` test, the four-stream batched row) and the `Cpu` label the
   board paints from, and `Audio`: for a run whose workload is in `AUDIO_WORKLOADS` (`asr`, `tts`, `audio-chat` - whose clips ride the `asr:` keys),
-  the JSON text of one `{test, ms, audio_s}` cell per `<workload>:<test>` test with a positive
-  `ms`, sorted by test (`audio_s` 0 = not recorded); the truth stays in the submission `Doc` at
-  (`ModelIdx`, `RunIdx`); the cell columns hold `run_cells` of that node, and migrations 2, 3 and 4
-  fill them for rows older than the columns. The engine column is free text: reference engines
+  the JSON text of one `{test, ms, audio_s, voided}` cell per `<workload>:<test>` test with a positive
+  `ms`, sorted by test (`audio_s` 0 = not recorded; `voided` = the outlier rule's verdict,
+  `audio_outlier_clips` of the exchange schema over the cell's rate - its ms over its own audio
+  length, else the length a sibling run of the same model recorded for that test - or the run's
+  own `void_clips` naming it; `modules/dasLLAMA/ARCHITECTURE_MEASUREMENT.md#audio-outlier-rule`);
+  the truth stays in the submission `Doc` at
+  (`ModelIdx`, `RunIdx`); the cell columns hold `run_cells` of that model and run node, and
+  migrations 2 to 6 fill them for rows older than the columns. The engine column is free text: reference engines
   (`llama.cpp`, `whisper-cli`, `mlx-lm`, `mlx-audio`, ...) land like `das`. Community record
   submissions of any workload pass the same `validate_record_submission` (at least one stamped
   das run), so an asr/tts submission lands its audio cells under the same rule as an LLM one. Identity per `modules/dasLLAMA/METHODOLOGY.md`

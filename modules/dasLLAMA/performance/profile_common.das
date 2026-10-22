@@ -20,6 +20,7 @@ require daslib/logger public              // structured, ISO-8601-timestamped nd
 require daslib/json public                // JV(...) for logger field payloads
 require daslib/json_boost                 // ?[] / ?? navigation — the sidecar provenance reader
 require dasllama/dasllama_common public   // QuantMode
+require dasllama/dasllama_exchange_schema // the board policy the recorder, the site projection and the ladder share
 require dasllama/dasllama_math            // active_kernel_backend — the exec_fmt layout receipt
 require dasllama/dasllama_bench           // bench_row — the batched reference row's fold over its runs
 require daslib/strings_convert            // try_to_float — the batched reference exe's table cells
@@ -2078,8 +2079,11 @@ struct BenchRun {
     @optional files : array<InputFile> // every input the run read (weights, mmproj, clips)
     @optional comment : string  // merged from records/annotations.json by gen_site_records —
                                 // never written by sweep tools, so re-sweeps cannot wipe it
-    @optional void_clips : string // merged from annotations like `comment`: clips whose
-                                  // cross-engine ratio is declared meaningless (no-win render)
+    @optional void_clips : string // merged from annotations like `comment`, and written by the
+                                  // recorder's outlier pass: clips whose cross-engine ratio is
+                                  // meaningless (no-win render)
+    @optional held : string       // merged from annotations like `comment`: the ledger row that
+                                  // keeps this row off the board; the row stays in the records
 }
 
 // Every env var the dasLLAMA engine + the tune rail consult. Capturing the WHOLE set (not a curated
@@ -2191,6 +2195,8 @@ struct BenchAnnotation {
     @optional void_clips : string  // comma-separated clip names whose cross-engine ratio this
                                    // note declares meaningless (ref behavior difference) — the
                                    // site renders no win for them
+    @optional held : string        // the ledger row that keeps the selected runs off the board
+                                   // (a broken test is ledgered, not shown); the rows stay recorded
 }
 
 def annotations_path() : string => "modules/dasLLAMA/performance/records/annotations.json"
@@ -2230,11 +2236,83 @@ def apply_annotations(var models : array<BenchModel>; annos : array<BenchAnnotat
                         if (!empty(a.void_clips)) {
                             r.void_clips = a.void_clips
                         }
+                        if (!empty(a.held)) {
+                            r.held = a.held
+                        }
                     }
                 }
             }
         }
     }
+}
+
+//! The audio length of every clip a model's runs of one workload recorded, keyed by the test name
+//! past its workload prefix - the smallest positive `audio_s` any run wrote, since a run that
+//! rounds (199 for 198.73) must never win. A reference row records no length, so it reads its
+//! clips' lengths here.
+def clip_lengths(models : array<BenchModel>; gguf, workload : string) : table<string; double> {
+    var out : table<string; double>
+    let prefix = audio_test_prefix(workload)
+    for (m in models) {
+        continue if (m.gguf != gguf)
+        for (r in m.runs) {
+            continue if (r.workload != workload)
+            for (k, t in keys(r.tests), values(r.tests)) {
+                continue if (!(k |> starts_with(prefix)) || t.audio_s <= 0.0lf)
+                let clip = slice(k, length(prefix))
+                let known = out?[clip] ?? 0.0lf
+                if (known <= 0.0lf || t.audio_s < known) {
+                    out[clip] = t.audio_s
+                }
+            }
+        }
+    }
+    return <- out
+}
+
+//! The clips of one audio run the outlier rule voids (`audio_outlier_clips`): each clip's rate is
+//! its best wall over its audio seconds - the run's own `audio_s`, else the length `lengths`
+//! borrowed from the model's other runs - and a clip with no length is not rated.
+def run_outlier_clips(r : BenchRun; lengths : table<string; double>) : array<string> {
+    let prefix = audio_test_prefix(r.workload)
+    var rates : table<string; double>
+    for (k, t in keys(r.tests), values(r.tests)) {
+        continue if (!(k |> starts_with(prefix)) || t.ms <= 0.0lf)
+        let clip = slice(k, length(prefix))
+        let audio = t.audio_s > 0.0lf ? t.audio_s : (lengths?[clip] ?? 0.0lf)
+        if (audio > 0.0lf) {
+            rates[clip] = t.ms / audio
+        }
+    }
+    return <- audio_outlier_clips(rates)
+}
+
+//! The recorder's outlier pass over one audio run as it lands: every clip the rule flags is
+//! re-measured once through `again` (its fresh test, `ms` 0 when the re-measure produced none),
+//! and the clips still flagged after that land in the run's `void_clips`, each with a warning
+//! that names the rate against the run's median. Returns the voided clips.
+def void_outlier_clips(var r : BenchRun; lengths : table<string; double>; what : string;
+                       again : block<(clip : string) : BenchTest>) : array<string> {
+    let prefix = audio_test_prefix(r.workload)
+    var flagged <- run_outlier_clips(r, lengths)
+    for (clip in flagged) {
+        let was = r.tests?["{prefix}{clip}"]?.ms ?? 0.0lf
+        to_log(LOG_WARNING, "gen_bench_records: {what} {clip} = {was:.0f} ms runs past {AUDIO_OUTLIER_RATE_MULT:.0f}x the run's median rate - re-measuring once\n")
+        let fresh = invoke(again, clip)
+        if (fresh.ms > 0.0lf) {
+            r.tests |> insert("{prefix}{clip}", fresh)
+        }
+    }
+    delete flagged
+    var voided <- run_outlier_clips(r, lengths)
+    if (!empty(voided)) {
+        r.void_clips = join(voided, ",")
+        for (clip in voided) {
+            let ms = r.tests?["{prefix}{clip}"]?.ms ?? 0.0lf
+            to_log(LOG_WARNING, "gen_bench_records: VOID {what} {clip} = {ms:.0f} ms after the re-measure - still past {AUDIO_OUTLIER_RATE_MULT:.0f}x the run's median rate; the clip's ratio is withheld on the board (void_clips)\n")
+        }
+    }
+    return <- voided
 }
 
 //! True on a macOS box — the gate for Metal cells in the record driver.
