@@ -67,7 +67,11 @@ def public probe_cpu_brand : string {
         let i = find(ln, "REG_SZ")
         return i >= 0 ? strip(slice(ln, i + length("REG_SZ"))) : ""
     }
-    let ln = capture_line("grep -m1 \"model name\" /proc/cpuinfo")
+    // arm64 /proc/cpuinfo carries no "model name" line - lscpu names the core from its part id
+    var ln = capture_line("grep -m1 \"model name\" /proc/cpuinfo")
+    if (empty(ln)) {
+        ln = capture_line("lscpu | grep -m1 \"Model name\"")
+    }
     let i = find(ln, ":")
     return i >= 0 ? strip(slice(ln, i + 1)) : ""
 }

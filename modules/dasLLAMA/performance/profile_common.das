@@ -422,32 +422,10 @@ def das_version() : string {
 // True on a Windows box (cmd sets OS=Windows_NT). macOS/Linux leave it empty.
 def private is_windows() : bool => g_env_prof.win_os == "Windows_NT"
 
-// Windows CPU marketing name from the registry — non-interactive (no `date`-style prompt/hang).
-def private win_cpu_name() : string {
-    let raw = run_capture("reg query \"HKLM\\HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0\" /v ProcessorNameString", false)
-    for (ln in split(raw, "\n")) {
-        let i = find(ln, "REG_SZ")
-        if (i >= 0 && find(ln, "ProcessorNameString") >= 0) {
-            return strip(slice(ln, i + length("REG_SZ")))
-        }
-    }
-    return ""
-}
-
-// The CPU brand string: env override (DASLLAMA_CPU) → OS-native probe.
+// The CPU brand string: env override (DASLLAMA_CPU) → the box tag's own probe.
 def private platform_cpu() : string {
     let ov = g_env_prof.cpu
-    if (!empty(ov)) {
-        return ov
-    }
-    if (is_windows()) {
-        return win_cpu_name()
-    }
-    if (is_macos()) {
-        return run_capture("sysctl -n machdep.cpu.brand_string", true)
-    }
-    // linux: after-colon tail of `model name : AMD Ryzen 7 PRO 8700GE ...`
-    return strip(line_value(run_capture("grep -m1 \"model name\" /proc/cpuinfo", true), "model name"))
+    return empty(ov) ? probe_cpu_brand() : ov
 }
 
 // The OS string: env override (DASLLAMA_OS) → OS-native probe (`ver` / sw_vers / os-release+kernel).
@@ -806,9 +784,23 @@ def private platform_gpu() : string {
         }
         return empty(cores) ? chip : "{chip} ({cores}-core)"
     }
-    let ln = run_capture("lspci | grep -iE \"vga|3d\"", true)
-    let i = find(ln, ": ")
-    return i >= 0 ? strip(slice(ln, i + 2)) : ""
+    // nvidia-smi names the card a container's lspci cannot see; lspci matches on its class column,
+    // since a bare "vga" also hits "Non-VGA unclassified device" (a chipset bridge)
+    let nv = run_capture("nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null", true)
+    if (!empty(nv)) {
+        return nv
+    }
+    var inscope names : array<string>
+    let raw = run_capture("lspci 2>/dev/null", false)
+    for (ln in split(raw, "\n")) {
+        for (cls in fixed_array("VGA compatible controller: ", "3D controller: ", "Display controller: ")) {
+            let i = find(ln, cls)
+            if (i >= 0) {
+                names |> push(strip(slice(ln, i + length(cls))))
+            }
+        }
+    }
+    return pick_gpu_name(names)
 }
 
 def private platform_cores() : tuple<perf : int; total : int> {
