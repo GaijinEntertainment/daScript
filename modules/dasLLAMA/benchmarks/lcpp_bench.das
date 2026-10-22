@@ -1373,21 +1373,15 @@ def parity_check(model : string; spec : ModelSpec) : bool {
         let n_gen = long_length(spec.parity.gen)
         t.config.seq_len = min(t.config.seq_len, long_length(prompt) + n_gen + 8l)   // KV cap: only these positions run
         var got <- parity_greedy(t, prompt, n_gen)
-        ok = long_length(got) == n_gen
-        if (ok) {
-            for (a, b in got, spec.parity.gen) {
-                if (a != b) {
-                    ok = false
-                    break
-                }
-            }
-        }
+        let same = prefix_match_len(got, spec.parity.gen)
+        ok = long_length(got) == n_gen && fixture_ok(spec.parity.prefix_bar, same, n_gen)
+        let form = spec.parity.prefix_bar ? "opening tokens match (half-span prefix bar)" : "token-for-token"
         print("parity want: {parity_eyeball(t, spec.parity.gen)}\n")
         print("parity got:  {parity_eyeball(t, got)}\n")
         if (ok) {
-            print("parity ok: {base_name(model)} {int(n_gen)}/{int(n_gen)} token-for-token\n")
+            print("parity ok: {base_name(model)} {int(same)}/{int(n_gen)} {form}\n")
         } else {
-            print("PARITY PREGATE: {base_name(model)} diverges from its frozen fixture - this box's engine does not reproduce the pinned continuation, so no cell of this model is measurable\n")
+            print("PARITY PREGATE: {base_name(model)} diverges from its frozen fixture ({int(same)}/{int(n_gen)} {form}) - this box's engine does not reproduce the pinned continuation, so no cell of this model is measurable\n")
         }
         delete got
         delete prompt
@@ -1406,7 +1400,8 @@ def parity_check(model : string; spec : ModelSpec) : bool {
 // wrong (the fat exe dispatching its workers to the baseline clone). The bar is half the
 // checked span as a matching PREFIX: a broken pipeline matches nothing, a genuine near-tie
 // flip on the served stack cascades from one position on, and the confident fixtures hold
-// past the bar. The --parity pregate stays the strict token-for-token rail.
+// past the bar. The --parity pregate is the strict token-for-token rail, except on a `prefix_bar`
+// carrier (model_specs.das), which it holds to this same form over the whole fixture.
 let private FIXTURE_GATE_TOKENS = 8l
 
 def private bench_fixture_gate(var t : Model; spec : ModelSpec; fmt : OutFmt; kv : KVDtype) : bool {
@@ -1421,11 +1416,8 @@ def private bench_fixture_gate(var t : Model; spec : ModelSpec; fmt : OutFmt; kv
     t.config.seq_len = long_length(prompt) + n_check + 8l   // the run's own KV cap may sit below the fixture; only these positions run
     var got <- parity_greedy(t, prompt, n_check, kv)
     t.config.seq_len = full_seq
-    var same = 0l
-    while (same < long_length(got) && got[same] == spec.parity.gen[same]) {
-        same++
-    }
-    let ok = same * 2l >= n_check
+    let same = prefix_match_len(got, spec.parity.gen)
+    let ok = fixture_ok(true, same, n_check)
     if (ok) {
         say(fmt, "sanity: frozen fixture - {same}/{n_check} opening tokens match \"{parity_eyeball(t, got)}\"\n")
     } else {

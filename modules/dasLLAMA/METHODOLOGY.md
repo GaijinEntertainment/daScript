@@ -154,7 +154,11 @@ engine-free validator of the same record shape plus the tune-sidecar form;
 - **`parity`** (`ok`) rides das text-LLM rows: before a model's first cell, the sweep runs the
   model's frozen pinned-greedy parity fixture (`performance/model_specs.das` evidence - the
   same one the test suite gates) and refuses every cell on a mismatch, so a board number can
-  never come from an engine that decodes garbage on that box. The pregate prints both decoded
+  never come from an engine that decodes garbage on that box. A carrier whose evidence is
+  flagged `prefix_bar` (the gemma-4-26B MoE: its routing amplifies an ulp of rounding into whole
+  logits, and the reference engine's own continuation moves as much between thread counts or
+  micro-batch sizes) holds as a matching prefix of half the span - the timed run's fixture-gate
+  form - instead of token for token. The pregate prints both decoded
   texts into the sweep log; only the verdict is stored. ASR rows carry their transcript
   (`text`) instead - the eyeball is the row itself.
 - **`hardware`** is auto-probed on the box, never typed in - it is the block a reader has to be

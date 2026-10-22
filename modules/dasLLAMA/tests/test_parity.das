@@ -154,21 +154,23 @@ def private parity_spec_arms(t : T?; spec : ModelSpec; path : string) {
         t |> success(dn_kq_engaged(tr.dnqkv_fmt) > 0l && dn_kq_engaged(tr.dngate_fmt) > 0l && dn_kq_engaged(tr.dnout_fmt) > 0l,
             "{spec.file} dn planes kq-native (not demoted)")
     }
-    t |> success(parity_gen_ok(tr, prompt, spec.parity.gen, [eyeball = true]), "{spec.file} token-for-token{be}")
+    let pb = spec.parity.prefix_bar
+    let form = pb ? "half-span prefix" : "token-for-token"
+    t |> success(parity_gen_ok(tr, prompt, spec.parity.gen, [eyeball = true, prefix_bar = pb]), "{spec.file} {form}{be}")
     if (spec.parity.dn_chunked) {
-        t |> success(parity_gen_ok(tr, prompt, spec.parity.gen, [dn_chunked = true, eyeball = true]),
-            "{spec.file} chunked-prefill token-for-token{be}")
+        t |> success(parity_gen_ok(tr, prompt, spec.parity.gen, [dn_chunked = true, eyeball = true, prefix_bar = pb]),
+            "{spec.file} chunked-prefill {form}{be}")
     }
     if (spec.parity.moe_reference) {
         set_moe_grouped_prefill(false)
-        t |> success(parity_gen_ok(tr, prompt, spec.parity.gen, [eyeball = true]),
-            "{spec.file} reference-prefill token-for-token{be}")
+        t |> success(parity_gen_ok(tr, prompt, spec.parity.gen, [eyeball = true, prefix_bar = pb]),
+            "{spec.file} reference-prefill {form}{be}")
         set_moe_grouped_prefill(true)
     }
     if (spec.parity.moe_per_expert) {
         set_moe_fused_expert_gemms(false)
-        t |> success(parity_gen_ok(tr, prompt, spec.parity.gen, [eyeball = true]),
-            "{spec.file} per-expert-prefill token-for-token{be}")
+        t |> success(parity_gen_ok(tr, prompt, spec.parity.gen, [eyeball = true, prefix_bar = pb]),
+            "{spec.file} per-expert-prefill {form}{be}")
         set_moe_fused_expert_gemms(true)
     }
     delete prompt

@@ -18,7 +18,8 @@ require _model_tier                    // models_dir + model_available (presence
 
 // The board parity pregate (lcpp_bench --parity), fed a controlled spec: the real fixture
 // passes, a deliberately wrong fixture fails, an evidence-less spec is refused, the text-form
-// prompt encodes through the tokenizer, and the kq-native load arm engages. Small carriers
+// prompt encodes through the tokenizer, the kq-native load arm engages, and a `prefix_bar`
+// fixture holds as a half-span prefix. Small carriers
 // only; every arm skips honestly when its model is absent. Requires the bench by relative
 // path (like test_tok_seed), so it pays the bench's full engine compile.
 
@@ -63,6 +64,36 @@ def test_fixture_gate(t : T?) {
             t |> success(fixture_gate_check(m, bare), "a row with no evidence stands aside")
         }
         delete m
+    }
+}
+
+// The half-span prefix bar of a `prefix_bar` carrier (the gemma-4-26B MoE's form, driven here on a
+// small stand-in): a fixture whose tail half is flipped holds, a flip inside the first half reds it,
+// and the strict form reds the same flipped tail - the flag is what admits it.
+[test]
+def test_parity_pregate_prefix_bar(t : T?) {
+    t |> run("a prefix_bar fixture holds on a flipped tail half, reds on a flip inside the first half and under the strict form") @(t : T?) {
+        return if (!jit_only(t))
+        var inscope spec <- spec_by_file("Llama-3.2-1B-Instruct-Q4_K_M.gguf")
+        let path = path_join(models_dir(), spec.file)
+        if (!model_available(t, path)) return
+        let n = length(spec.parity.gen)
+        t |> success(!spec.parity.prefix_bar && n >= 4, "the stand-in's own fixture is the strict form over {n} ids")
+        var inscope tail <- spec_by_file(spec.file)
+        tail.parity.prefix_bar = true
+        for (i in range(n / 2, n)) {
+            tail.parity.gen[i] = tail.parity.gen[i] + 1l
+        }
+        t |> success(parity_check(path, tail), "a flipped tail half holds under the half-span bar")
+        var inscope head <- spec_by_file(spec.file)
+        head.parity.prefix_bar = true
+        head.parity.gen[n / 2 - 1] = head.parity.gen[n / 2 - 1] + 1l
+        t |> success(!parity_check(path, head), "a flip inside the first half reds the half-span bar")
+        var inscope strict <- spec_by_file(spec.file)
+        for (i in range(n / 2, n)) {
+            strict.parity.gen[i] = strict.parity.gen[i] + 1l
+        }
+        t |> success(!parity_check(path, strict), "the strict form reds the same flipped tail")
     }
 }
 

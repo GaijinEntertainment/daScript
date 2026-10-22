@@ -2853,7 +2853,10 @@ The served arms run on either GPU home - Metal, or Vulkan under `DASLLAMA_GPU=1`
 `mtp-gdraft-vdecl` runs on Metal alone, since the Vulkan round binds no stream off the mirror's codec.
 `test_model_specs.das` - model-free: the model-set table's shape invariants
 (`../performance/model_specs.das`: unique file/display keys, official => provenance pinned,
-parity-evidence shape), the derived provenance view's invariants (unique names, sha-or-recipe,
+parity-evidence shape - a `prefix_bar` carrier holds at least two ids, so its half-span bar is a
+token or more), the fixture compare the gates read (`prefix_match_len` / `fixture_ok` on hand rows:
+the strict form reds a flipped last id where the half-span form holds it, a flip inside the first
+half reds both, the bar sits exactly at half the span), the derived provenance view's invariants (unique names, sha-or-recipe,
 https urls), the mmproj pairing lookup (`mmproj_companion` - the companion found by name, not
 by position; >= 2 official vision rows), and the pinned image fixture's provenance
 (`bench_image_fixture` rides some spec's companion list).
@@ -2870,7 +2873,9 @@ registered skips the cell naming it, never a silent run on the default backend.
 (`lcpp_bench --parity`, via `parity_check` fed a controlled spec) on small carriers - the real
 fixture passes, a flipped id fails, an evidence-less spec is refused, the text-form prompt
 encodes through the tokenizer (E2B), the kq-native arm engages and restores the mode
-(Qwen3-4B Q4_K_M); plus the timed run's fixture gate (`fixture_gate_check` - the opening
+(Qwen3-4B Q4_K_M), and the half-span prefix bar of a `prefix_bar` carrier on Llama-3.2-1B Q4_K_M
+as the stand-in (a fixture whose tail half is flipped holds, a flip inside the first half reds it,
+and the strict form reds the same flipped tail - the flag is what admits it); plus the timed run's fixture gate (`fixture_gate_check` - the opening
 tokens of the same evidence on the served model, once per model before the rows): the table's
 fixture passes, an opening that matches nothing refuses, a row with no evidence stands aside;
 plus the last layer's FFN slice on the resident Vulkan driver (Llama-3.2-1B Q8_0): a 512-token
