@@ -43,7 +43,7 @@ struct ParityEvidence {
     moe_reference : bool   // + a per-position reference MoE-prefill arm
     moe_per_expert : bool  // + a per-expert-chain (fused expert GEMMs off) prefill arm
     require_dn_kq : bool   // assert deltanet planes engaged kq-native, not silently demoted
-    prefix_bar : bool      // the gates hold the fixture as a matching prefix of half the span, never token for token: the carrier's routing amplifies an ulp of rounding into whole logits, so a later token is a coin flip on any engine
+    prefix_bar : bool      // the gates hold the fixture as a matching prefix of half the span, never token for token
 }
 
 //! how many of `got`'s leading ids equal `want`'s - the one compare every fixture gate reads
@@ -57,6 +57,7 @@ def prefix_match_len(got, want : array<int64>) : int64 {
 
 //! whether `same` matching opening tokens of `n_check` pass the fixture's bar: half the span as a prefix under
 //! `prefix_bar` (the timed run's fixture gate asks that form of every carrier), else every token
+[arch(at="../ARCHITECTURE_MEASUREMENT.md#fixture-prefix-bar")]
 def fixture_ok(prefix_bar : bool; same, n_check : int64) : bool => prefix_bar ? same * 2l >= n_check : same == n_check
 
 //! One model of the set — the union row behind every view. A facet left empty means the model
@@ -292,12 +293,6 @@ def private ev_gemma4_dense() : ParityEvidence {
                 236743l, 236800l, 236778l, 236832l, 236764l, 236743l, 236800l, 236778l, 236828l, 236764l])
 }
 
-// the gemma4 MoE continuations hold as a half-span prefix (`prefix_bar`): the 26B routes a DISCRETE
-// top-8-of-128 per layer and its forward amplifies an ulp of rounding about tenfold a layer, so the
-// logits of any float engine move by whole points under a change of accumulation order alone - the
-// reference engine's own between thread counts or micro-batch sizes, ours between JIT routes - and
-// a token past the opening is a coin flip, not a forward bug; the oracle's top-1 margin at a step is
-// itself a function of that order
 def private ev_gemma4_26b() : ParityEvidence {
     return <- ParityEvidence(prompt_text = gemma4_counting_prompt(),
         gen <- [236743l, 236800l, 236778l, 236770l, 236764l, 236743l, 236800l, 236778l, 236778l, 236764l, 236743l],

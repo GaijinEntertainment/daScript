@@ -59,7 +59,7 @@ def private check_shape(t : T?; n, d, ntok, tb : int64) {
     set_target_chunk_work(1l)   // admit every lane — the small d is then chunk-starved for real
     let seat = kernel_backend_seat()
     for (name in kernel_backend_names()) {
-        continue if (kernel_backend_batch_only(name))   // a batch-slot donor, never the whole backend
+        continue if (kernel_backend_batch_only(name))
         pin_kernel_backend(name)
         var inscope wq : array<int8>
         var inscope ws : array<float>

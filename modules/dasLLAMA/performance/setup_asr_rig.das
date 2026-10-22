@@ -449,8 +449,8 @@ def private venv_ready(py, probe : string) : bool {
 
 // ===== check =====
 
-//! One warm clip per python reference variant the catalog names: the first-ever run of a variant
-//! downloads its weights, which would eat a sweep leg's budget.
+//! One warm clip per python reference variant - the catalog's mlx refs and the onnx variants the
+//! sweep runs: the first-ever run of a variant downloads its weights, which would eat a sweep leg's budget.
 def private prewarm_python_refs() : bool {
     var ok = true
     if (is_apple_silicon() && stat(mlx_py()).is_valid) {
@@ -467,10 +467,6 @@ def private prewarm_python_refs() : bool {
             }
         }
     }
-    // pre-warm the onnx reference models: the first-ever run of a variant downloads its
-    // weights, and that download eats the sweep's whole ref-leg budget (~90 s on zen2 —
-    // the leg fails "nothing measured" while HF streams). One warm clip per catalog
-    // variant here = every sweep leg starts hot.
     if (stat(onnx_py()).is_valid) {
         for (vkey in ["v2-int8", "int8", "whisper-tiny-int8", "whisper-turbo-int8"]) {
             let t0 = ref_time_ticks()

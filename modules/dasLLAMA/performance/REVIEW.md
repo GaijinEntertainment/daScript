@@ -43,8 +43,8 @@ every cell of it by a binary of that build - re-mint otherwise.**
 
 **A reference-engine row (a run row whose `engine` is not `das`) carrying a `sha` carries the
 standing ref pin (`DEFAULT_REF_SHA`, `../benchmarks/setup_lcpp_ref.das`), and every cell of it is
-timed by a binary built from that pinned checkout, in either flavor `../benchmarks/setup_lcpp_ref.das` builds
-(`clean-cpu`, `stock`) - re-mint otherwise.**
+timed by a binary built from that pinned checkout, in a flavor `../benchmarks/setup_lcpp_ref.das` builds
+(`clean-cpu`, `stock`, `vulkan`) - re-mint otherwise.**
 
 **A row whose cells two exes timed - a flat cell and a batched cell from two binaries of one
 build - names both exes in its `cmd`.**
@@ -53,8 +53,8 @@ build - names both exes in its `cmd`.**
 in that row's provenance, the checkout that built the binary it timed; a python leg names
 `../benchmarks/asr/requirements-*.txt` instead.**
 
-**A diff that writes a `das` row to the `records/<box>.json` of a box `REVIEW.das` lists in
-`RETIRED_BOXES`, or a sidecar archive no current-release row names, whose version pin is missing,
+**A diff that writes a `das` row to the `records/<box>.json` of a box `RETIRED_BOXES` lists
+(`../dasllama/dasllama_exchange_schema.das`), or a sidecar archive no current-release row names, whose version pin is missing,
 or differs from `DASLLAMA_RELEASE` (`../dasllama/dasllama_version.das`), is a defect -
 re-mint.** The pin is the row's `dasllama_version`, and `provenance.dasllama_version` in a
 sidecar archive; for a sidecar with an `engine_sha`, read the value at that commit.

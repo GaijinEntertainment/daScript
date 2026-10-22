@@ -1296,8 +1296,6 @@ def media_leg_args(leg : string) : array<string> {
     return <- array<string>()
 }
 
-//! One media cell's das child, absorbed via the same cell protocol: the backend its das row
-//! stamped back, "" where the child failed or wrote no records.
 //! One das child run to its cell file, the cell read back: false - the failure logged and
 //! named in `failed` - when the child exited non-zero or wrote no records.
 def private run_cell_child(display, log_leg : string; args : array<string>; cellPath : string;
@@ -1317,6 +1315,8 @@ def private run_cell_child(display, log_leg : string; args : array<string>; cell
     return true
 }
 
+//! One media cell's das child, absorbed via the same cell protocol: the backend its das row
+//! stamped back, "" where the child failed or wrote no records.
 def private media_das_cell(display, log_leg : string; args : array<string>; cellPath, store : string;
                            var models : array<BenchModel>; var failed : array<string>) : string {
     let t0 = ref_time_ticks()
@@ -1674,7 +1674,7 @@ def private tts_ref_pass(spec : TtsModelSpec; mlx : bool; device, backend : stri
 //! leg against torch mps (a family whose package serves the GPU) and mlx-audio, the cpu leg against
 //! the package on the cpu - and torch cuda where the das row came back stamped `vulkan` - and the
 //! accel leg's das row pairing the same cpu reference.
-[arch(at="../ARCHITECTURE_MEASUREMENT.md#the-tts-reference-instrument")]
+[arch(at="../ARCHITECTURE_MEASUREMENT_AUDIO.md#the-tts-reference-instrument")]
 def private tts_sweep(cfg : Args; legNeon, legAmx, legMetal : bool; threads : int; hw : HardwareInfo;
                       box, date, cellPath, store, exe : string; var models : array<BenchModel>; var failed : array<string>) {
     var inscope cat <- tts_catalog()
@@ -1719,7 +1719,7 @@ def private tts_sweep(cfg : Args; legNeon, legAmx, legMetal : bool; threads : in
 // The orchestrator never measures: it spawns the released exe per cell and reads its JSON, so its
 // own kernels are irrelevant and tuning them would put minutes of hidden work in front of a
 // measurement run — the trap this rig exists to avoid.
-[export, tune_policy(missing = "fallback"), arch(at="../ARCHITECTURE_MEASUREMENT.md#asr-gpu-pairs")]
+[export, tune_policy(missing = "fallback"), arch(at="../ARCHITECTURE_MEASUREMENT_AUDIO.md#asr-gpu-pairs")]
 def main : int {
     var r <- parse_args(type<Args>)
     if (r |> is_err) {

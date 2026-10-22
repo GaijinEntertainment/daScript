@@ -121,8 +121,7 @@ def private board_run(engine, box : string; version : int; workload : string = "
     return <- r
 }
 
-// one projected row per (box, engine, workload) of a model, keyed for the asserts below
-def private projected(board : array<BenchModel>; gguf : string) : table<string; bool> {
+def private projected_run_keys(board : array<BenchModel>; gguf : string) : table<string; bool> {
     var out : table<string; bool>
     for (m in board) {
         continue if (m.gguf != gguf)
@@ -173,7 +172,7 @@ def test_board_projection(t : T?) {
 
         var inscope board <- board_models(models)
         tt |> equal(length(board), 1, "a model with no current row is off the board")
-        let rows <- projected(board, "x.gguf")
+        let rows <- projected_run_keys(board, "x.gguf")
         tt |> equal(length(rows), 2, "the current das row and its reference alone project")
         tt |> success(key_exists(rows, "m5/das/"), "the current-release row on a current board projects")
         tt |> success(key_exists(rows, "m5/llama.cpp/"), "its reference projects beside it")

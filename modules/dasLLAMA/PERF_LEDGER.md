@@ -2844,7 +2844,7 @@ what it costs today and what the fix would change.
   the first 785, min 36, the steady sentences about 62, against the torch CUDA reference row of
   52 ms a sentence (`external`: `harness/tts_ref_bench.py --device cuda --models
   kokoro-82m:af_heart --limit 20` on the pod under
-  `ARCHITECTURE_MEASUREMENT.md#the-tts-reference-instrument`'s recipe; the package versions that
+  `ARCHITECTURE_MEASUREMENT_AUDIO.md#the-tts-reference-instrument`'s recipe; the package versions that
   run printed are not in this branch's record). kitten-nano (`kitten-nano.gguf`): 54 ms against
   its onnxruntime CUDA EP reference row of 132 (`external`: the same script with `--device cuda
   --models kitten-nano`, onnxruntime-gpu with the cu12 pip libraries, providers CUDA then CPU);
@@ -2995,7 +2995,7 @@ what it costs today and what the fix would change.
   pays the slab build and the pipeline warm-up), the mean generation wall a sentence with its min
   and max over the 20, and the real-time factor of the run; the CPU arm is a second process under
   `DASLLAMA_METAL_TOWER=0` (`direction-grade`). The reference column is `harness/tts_ref_bench.py`
-  (`ARCHITECTURE_MEASUREMENT.md#the-tts-reference-instrument`;
+  (`ARCHITECTURE_MEASUREMENT_AUDIO.md#the-tts-reference-instrument`;
   `~/Work/tts-ab/g2p/.venv-g2p/bin/python harness/tts_ref_bench.py --device mps --threads 8
   --limit 20`, and `--device cpu --models kokoro-82m:af_heart` for the torch CPU row; torch
   2.13.0, kokoro 0.9.4, kittentts 0.8.1, onnxruntime 1.29.0, `HF_HOME=~/Work/tts-ab/g2p/.hf`):
@@ -5847,7 +5847,7 @@ WHISPER_CPP_MODELS=/workspace/models`, `DASLLAMA_COOPMAT` unset (cm2) and `DAS_T
 (the untuned tier's fallback bodies); the `vk` arm `DASLLAMA_GPU=1` (the block loops on the Vulkan
 tower driver, the cell's engage line reading encodes +N over 3 transcriptions, declines +0, and
 the row stamped `vulkan` - the bench stamps `vulkan` only when the drivers served every clip,
-`ARCHITECTURE_MEASUREMENT.md#asr-gpu-pairs`), the `cpu` arm `DASLLAMA_GPU=0` (the driver declining `device` on every
+`ARCHITECTURE_MEASUREMENT_AUDIO.md#asr-gpu-pairs`), the `cpu` arm `DASLLAMA_GPU=0` (the driver declining `device` on every
 encode, the CPU q8 chain, the decoder on the CPU too - so only the encode column is a tower-vs-tower
 reading; on the `vk` arm the decoder of the LLM-backed families rides the resident driver, which is
 most of the wall's drop on E2B and canary) [direction-grade - two processes]. A wall is the clip's

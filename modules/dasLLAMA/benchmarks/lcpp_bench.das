@@ -354,7 +354,7 @@ def private measure_das(var m : AsrModel; samples : array<float>; reps : int; la
 //! one catalog model's timed buckets -> a BenchModel cell appended to `jsonModels`; on Metal the gpu arm (--ngl) rides the
 //! f32 tower rail and a row that never dispatches the tower FAILS the leg; on Vulkan the row stamps `vulkan` when the drivers
 //! served every clip (the tower, and the decoder on whisper) and FAILS when they served some but not all
-[arch(at = "../ARCHITECTURE_MEASUREMENT.md#asr-gpu-pairs")]
+[arch(at = "../ARCHITECTURE_MEASUREMENT_AUDIO.md#asr-gpu-pairs")]
 def private asr_measure_spec(spec : AsrModelSpec; reps, threads : int; var jsonModels : array<BenchModel>; gpu, accel : bool) : bool {
     let model_path = asr_model_path(spec)
     var m <- (empty(spec.das_mmproj)
@@ -752,11 +752,7 @@ def private measure_tts(var m : TtsModel; text, voice : string; reps : int) : tu
     return (ms = best, audio_s = audio_s)
 }
 
-//! The --tts entry: the corpus head through one model at one voice, one `tts:g2p<N>@<voice>` test
-//! summing each sentence's best-of-`reps` generation ms and its audio seconds. --ngl serves every
-//! chunk on the Metal tower and fails the cell where a seat fell back; a CPU row pins the tower off
-//! on Metal, and on a Vulkan build stamps `vulkan` where the TTS seats served every chunk.
-[arch(at = "../ARCHITECTURE_MEASUREMENT.md#the-tts-reference-instrument")]
+[arch(at = "../ARCHITECTURE_MEASUREMENT_AUDIO.md#the-tts-reference-instrument")]
 def private tts_cell_main(model, voice_arg, json_path : string; sentences, reps, threads : int; gpu, accel : bool) : bool {
     return false if (!arm_accel_tier(accel, gpu))
     static_if (typeinfo builtin_module_exists(das_metal)) {

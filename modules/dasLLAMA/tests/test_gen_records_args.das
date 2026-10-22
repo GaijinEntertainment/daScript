@@ -463,7 +463,7 @@ def test_vulkan_leg_guards(t : T?) {
     t |> run("a vulkan cell holds only when every das row served on the device") @(t : T?) {
         var served <- [BenchModel(gguf = "m.gguf", runs <- [BenchRun(engine = "das", backend = "vulkan")])]
         var fell <- [BenchModel(gguf = "m.gguf", runs <- [BenchRun(engine = "das", backend = "cpu")])]
-        var empty_cell : array<BenchModel>
+        let empty_cell : array<BenchModel>
         t |> success(cell_served_on(served, "vulkan"), "a vulkan-stamped das row holds")
         t |> success(!cell_served_on(fell, "vulkan"), "a cpu-stamped das row on the vulkan leg fails")
         t |> success(!cell_served_on(empty_cell, "vulkan"), "a cell with no das row fails")

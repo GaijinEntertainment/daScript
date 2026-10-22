@@ -1438,7 +1438,7 @@ def mlx_py() : string =>
 
 //! The Metal twin of mtmd_bin() — the same patched checkout built with Metal ON
 //! (setup_asr_rig's build-metal, Apple boxes); "" when absent, and the gpu ref leg skips loudly.
-[arch(at="../ARCHITECTURE_MEASUREMENT.md#asr-gpu-pairs")]
+[arch(at="../ARCHITECTURE_MEASUREMENT_AUDIO.md#asr-gpu-pairs")]
 def mtmd_bin_metal() : string {
     let c = normalize("../llama.cpp-mtmd-ref/build-metal/bin/llama-mtmd-cli")
     return stat(c).is_valid ? c : ""
@@ -1750,13 +1750,13 @@ def asr_pybench_args(tool, handle : string; clips : array<string>; threads, reps
 
 def asr_pybench_out_path() : string => "{asr_dir()}/_pybench_rows.txt"
 
-[arch(at="../ARCHITECTURE_MEASUREMENT.md#asr-gpu-pairs")]
+[arch(at="../ARCHITECTURE_MEASUREMENT_AUDIO.md#asr-gpu-pairs")]
 def asr_gpu_pair_tool(tool : string) : bool =>
     tool == "whisper-cli" || tool == "mtmd" || tool == "nemo"
 
 //! A reference that runs on the Apple GPU alone - its one row is the GPU leg, paired with
 //! whatever das legs the family serves, and a box without Metal has no row for it.
-[arch(at="../ARCHITECTURE_MEASUREMENT.md#asr-gpu-pairs")]
+[arch(at="../ARCHITECTURE_MEASUREMENT_AUDIO.md#asr-gpu-pairs")]
 def asr_gpu_only_tool(tool : string) : bool => tool == "mlx"
 
 //! The mlx-lm reference's argv: the MLX venv over `benchmarks/mlx/mlx_lm_bench.py` in llama-bench's

@@ -160,7 +160,7 @@ def main : int {
     return rc
 }
 
-[arch(at="../ARCHITECTURE_MEASUREMENT.md#asr-gpu-pairs")]
+[arch(at="../ARCHITECTURE_MEASUREMENT_AUDIO.md#asr-gpu-pairs")]
 def private build_flavor(dest, f, short_sha : string; jobs : int) : int {
     let build_dir = path_join(dest, "build-{f}")
     print("=== {f} -> {build_dir} (minutes-class: configure + build llama-bench)\n")
