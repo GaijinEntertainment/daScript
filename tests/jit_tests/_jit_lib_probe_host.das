@@ -28,6 +28,11 @@ def main() : int {
         print("mapped answered {mapped}\n")
         bad++
     }
+    let keys = jit_lib_probe_count_keys(ctx, 100)
+    if (keys != 7) {
+        print("count_keys answered {keys}\n")
+        bad++
+    }
     jit_lib_probe_destroy(ctx)
     return bad
 }

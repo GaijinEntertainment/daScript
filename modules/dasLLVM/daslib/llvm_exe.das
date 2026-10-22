@@ -1377,6 +1377,7 @@ def public emit_standalone_context_init(builder : LLVMBuilderRef; fusion_builder
         let init_script_fn_type = LLVMFunctionType(types.t_void,
             fixed_array<LLVMTypeRef>(types.LLVMVoidPtrType()))  // Context *
         let init_script_fn = LLVMAddFunctionWithType(g_mod, "__das_clone_init_script", init_script_fn_type)
+        set_private_linkage(init_script_fn)
         let isb = LLVMCreateBuilder()
         let isentry = LLVMAppendBasicBlockInContext(ctx, init_script_fn, "entry")
         LLVMPositionBuilderAtEnd(isb, isentry)
