@@ -531,6 +531,14 @@ inline size_t das_aligned_memsize(void * ptr){
 }
 #endif
 
+#if defined(__APPLE__)
+#define das_setjmp(buf) _setjmp(buf)
+#define das_longjmp(buf,val) _longjmp(buf,val)
+#else
+#define das_setjmp(buf) setjmp(buf)
+#define das_longjmp(buf,val) longjmp(buf,val)
+#endif
+
 // when enabled, Context heap memory can track where the allocation came from
 // via mark_location and mark_comment. This is now a compile-time kill switch —
 // the actual tracking is controlled at runtime via CodeOfPolicies::track_allocations
