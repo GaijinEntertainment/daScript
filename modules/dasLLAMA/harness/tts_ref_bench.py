@@ -92,6 +92,9 @@ def kitten_synth(name, voice, threads, device):
 
 
 def pocket_synth(name, voice, device):
+    if device != "cpu":
+        # the package places its model itself, on the CPU: a row timed there must not read as the device's
+        sys.exit(f"tts_ref_bench: pocket-tts runs on the CPU alone - --device {device} refused")
     import torch
     from pocket_tts import TTSModel
     model = TTSModel.load_model(language=POCKET_LANGUAGES[name])
