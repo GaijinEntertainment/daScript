@@ -68,17 +68,16 @@ same-origin` and `Cross-Origin-Embedder-Policy require-corp` - never `credential
 Safari does not implement.**
 
 **A file in this directory requires no dasLLAMA, dasLLVM, or model machinery other than the
-engine-free `dasllama/dasllama_exchange_schema`, and only `ladder_store.das` requires that**
-(`README.md`, "Engine-free rule").
+engine-free `dasllama/dasllama_exchange_schema`, and only `ladder_store.das` requires that.**
 
 **A write path that stores a document without validating it first is a defect: every sidecar -
 community or planted - passes `validate_sidecar_submission`, every community record store
 passes `validate_record_submission`, and every official record store passes
 `validate_record_store` (shape only - official records predate the `dasllama_version` stamp).**
 
-**A write path that stores fields it reads off a document, never the document itself -
-`import_annotations` - refuses, before it writes, a document whose shape it cannot read: for the
-annotations, anything but a JSON array.**
+**A write path that stores fields picked out of a document, not the document whole, rejects the
+whole document before writing anything when its top-level shape is not the one the path reads**
+(`import_annotations` reads a JSON array).
 
 **Never write `Source` or `Verified` outside `ladder_store.das`, and never let a value from a
 public (proxied) request reach either column - the loopback operator surface sets `Verified`

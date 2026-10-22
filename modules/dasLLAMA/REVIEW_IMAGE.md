@@ -40,8 +40,9 @@ either refuses it or streams it the way a decoder mint does.** A refusal names t
 staged form holds source and image at once, and this rule caps that doubled peak.
 
 **A path that reinterprets a mismatched image, or widens an identity so that an image matches a
-load whose plane bytes would differ from the image's, is a defect.** Anything that changes what an image contains - the box profile, the knobs, the
-flavor, a head that rides the load - goes into `image_identity`, the string the header bakes,
+load whose plane bytes would differ from the image's, is a defect.** Anything that changes what
+an image contains - the box profile, the knobs, the flavor, a head that rides the load - goes into
+`image_identity`, the string the header bakes,
 not only into the image path; a mismatch declines loudly.
 
 **An image save deletes its own lane's images whose identity no longer matches, and any image

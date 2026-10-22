@@ -21,7 +21,7 @@ must keep holding:
   sits in a subfolder), the fixture compare (`prefix_match_len` / `fixture_ok`: a flipped last id
   red under the strict form and held under the half-span one, a flip inside the first half red
   under both), and the board fetch (`board_provenance`) holding every file the board sweeps read
-  and no test-only carrier.
+  and no off-board row and no on-box parity oracle (`tts_oracle*`).
 - `test_metal_prefill_kernels.das`'s `test_metal_prefill_kernels` cell must hold every kernel gate
   it calls, at the bar each gate sets, with its `attn_trio_gate` calls whose `AttnKeys` sets
   `softcap`, `hass`, `uend` or `ulo`; and by name:

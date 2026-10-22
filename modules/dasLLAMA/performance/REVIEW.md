@@ -11,9 +11,11 @@ sidecar, a `defaults/` profile, or `last_known_good_sidecar.json` was measured u
 noise, a remote-desktop session, the release it was minted at - by hand-editing that artifact
 is a defect: re-mint it on a quiet, session-free box instead.**
 
-**A diff that writes a commit stamp under this folder naming a commit the branch cannot reach is
-a defect - re-stamp to the commit the stamped artifact's exe was built at, or re-mint when the
-branch cannot reach that commit.** A commit stamp is a checked-in JSON field naming a daslang
+**A diff that writes a commit stamp `REVIEW.das` does not check - a `sha` on a row of a box
+`RETIRED_BOXES` lists, the `engine_sha` of an archive no current-release row names, a ruler
+record's `meta.das_sha` - naming a commit the branch cannot reach is a defect - re-stamp to the
+commit the stamped artifact's exe was built at, or re-mint when the branch cannot reach that
+commit.** A commit stamp is a checked-in JSON field naming a daslang
 commit: a `das` row's `sha`, a sidecar's `provenance.engine_sha`, a ruler record's
 `meta.das_sha`; one naming no commit is unreachable. Weakening `REVIEW.das`'s stamp checks
 (`../ARCHITECTURE_MEASUREMENT.md#committed-records-gate`) is a defect.
@@ -42,8 +44,8 @@ every cell of it by a binary of that build - re-mint otherwise.**
 
 **A reference-engine row (a run row whose `engine` is not `das`) carrying a `sha` carries the
 standing ref pin (`DEFAULT_REF_SHA`, `../benchmarks/setup_lcpp_ref.das`), and every cell of it is
-timed by a binary built from that pinned checkout, in a flavor `../benchmarks/setup_lcpp_ref.das` builds
-(`clean-cpu`, `stock`, `vulkan`) - re-mint otherwise.**
+timed by a binary built from that pinned checkout, in a flavor `../benchmarks/setup_lcpp_ref.das`
+builds - re-mint otherwise.**
 
 **A row whose cells two exes timed - a flat cell and a batched cell from two binaries of one
 build - names both exes in its `cmd`.**
@@ -53,7 +55,8 @@ in that row's provenance, the checkout that built the binary it timed; a python 
 `../benchmarks/asr/requirements-*.txt` instead.**
 
 **A diff that writes a `das` row to the `records/<box>.json` of a box `RETIRED_BOXES` lists
-(`../dasllama/dasllama_exchange_schema.das`), or a sidecar archive no current-release row names, whose version pin is missing,
+(`../dasllama/dasllama_exchange_schema.das`), or a sidecar archive no row whose `dasllama_version`
+equals `DASLLAMA_RELEASE` names by its `tune_sha`, whose version pin is missing,
 or differs from `DASLLAMA_RELEASE` (`../dasllama/dasllama_version.das`), is a defect -
 re-mint.** The pin is the row's `dasllama_version`, and `provenance.dasllama_version` in a
 sidecar archive; for a sidecar with an `engine_sha`, read the value at that commit.
@@ -159,8 +162,8 @@ fetch through that url into a scratch dir, or the size and content sha the url's
 for that file, pasted with the command that asked, matching the row's `bytes` and `sha256`** -
 `fetch_models` checks a file already on disk by size and hash, never through its url.
 
-**A diff that changes a `model_specs.das` row's `parity` - gives a row one, or changes any of its
-fields (`prompt`, `prompt_text`, `gen` and `prefix_bar` among them), in place or through a shared
+**A diff that changes a `model_specs.das` row's `parity` - gives a row one, or changes any field
+of its `parity` (`prompt`, `prompt_text`, `gen` and `prefix_bar` among them), in place or through a shared
 `ids_*`/`ev_*` helper - records,
 in the PR description, for each row whose `parity` changed, the `simple_ids` output for that
 row's model file and dasLLAMA's matched count over the `gen` length (`../harness/parity.sh`

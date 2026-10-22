@@ -30,10 +30,9 @@ def private with_parity_backend(t : T?; blk : block<() : void>) {
         t |> skip("DASLLAMA_PIN_BACKEND='{name}' cannot be pinned on this box: {why}")
         return
     }
-    let prev = active_kernel_backend()
+    let seat = kernel_backend_seat()
     defer() {
-        clear_kernel_backend_pin()
-        select_kernel_backend(prev)   // "" is a no-op: nothing had activated on entry
+        restore_kernel_backend(seat)
     }
     pin_kernel_backend(name)
     invoke(blk)
@@ -149,15 +148,21 @@ def private prefix_bar_cell(t : T?; tr : Model; prompt, want : array<int64>; wha
 
 // One spec's arms off ONE model load. load_model_ (not load_gguf) so the tokenizer rides along:
 // text-form prompts encode here, and every compare logs its decoded-text eyeball lines.
+[cold_path]
 def private parity_spec_arms(t : T?; spec : ModelSpec; path : string) {
     let prev_kq = get_kquant_native()
-    if (spec.parity.kq_native) {
-        set_kquant_native(true)
+    let prev_grouped = get_moe_grouped_prefill()
+    let prev_fused = get_moe_fused_expert_gemms()
+    defer() {
+        set_moe_grouped_prefill(prev_grouped)
+        set_moe_fused_expert_gemms(prev_fused)
     }
+    // the main arm runs on the levers' defaults, whatever an earlier cell left
+    set_moe_grouped_prefill(true)
+    set_moe_fused_expert_gemms(true)
+    set_kquant_native(spec.parity.kq_native)
     var tr <- load_model_(path, spec.parity.quant)
-    if (spec.parity.kq_native) {
-        set_kquant_native(prev_kq)
-    }
+    set_kquant_native(prev_kq)
     // Cap the KV context: only ~(prompt + gen) positions are used, and the KV stride doesn't
     // change the computed tokens — Llama-3's native 131072 would just burn ~8GB of KV RAM.
     if (tr.config.seq_len > 2048l) {
@@ -182,18 +187,16 @@ def private parity_spec_arms(t : T?; spec : ModelSpec; path : string) {
             "{spec.file} chunked-prefill {form}{be}")
     }
     if (spec.parity.moe_reference) {
-        let prev_grouped = get_moe_grouped_prefill()
         set_moe_grouped_prefill(false)
         t |> success(parity_gen_ok(tr, prompt, spec.parity.gen, [eyeball = true, prefix_bar = pb]),
             "{spec.file} reference-prefill {form}{be}")
-        set_moe_grouped_prefill(prev_grouped)
+        set_moe_grouped_prefill(true)
     }
     if (spec.parity.moe_per_expert) {
-        let prev_fused = get_moe_fused_expert_gemms()
         set_moe_fused_expert_gemms(false)
         t |> success(parity_gen_ok(tr, prompt, spec.parity.gen, [eyeball = true, prefix_bar = pb]),
             "{spec.file} per-expert-prefill {form}{be}")
-        set_moe_fused_expert_gemms(prev_fused)
+        set_moe_fused_expert_gemms(true)
     }
     delete prompt
     delete tr

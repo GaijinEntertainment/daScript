@@ -304,7 +304,7 @@ def asr_encode_bucket(m : AsrModel) : string {
     if (m.kind == AsrKind.qwen3a || m.kind == AsrKind.qwen3omni) {
         return qwen3a_encode_bucket(m.kind == AsrKind.qwen3omni)
     }
-    if (m.kind == AsrKind.parakeet) return parakeet_encode_bucket()
+    if (m.kind == AsrKind.parakeet) return PARAKEET_ENCODE_BUCKET
     return ""
 }
 

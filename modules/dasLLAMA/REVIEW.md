@@ -53,10 +53,10 @@ row or a provenance declaration pins, answers to `performance/REVIEW.md`.** A mo
 `.gguf`, a `.dlim`, an mmproj (a multimodal projector weight file), or a picture or audio fixture
 file. A test or tool merely opening by name a model file the catalog already stocks does not route.
 
-**A change to the sidecar-exchange client (`dasllama/dasllama_exchange.das`) - the code that
-downloads tune winners to a box and submits its winners back - to a validator it calls (`validate_sidecar`,
-`validate_sidecar_submission`, `validate_record_submission`), or to a tune-boot path (a startup
-path that loads a tune sidecar) that reaches it, applies `performance/REVIEW.md` and `REVIEW_EXCHANGE.md`.**
+**A change to the sidecar-exchange client (`dasllama/dasllama_exchange.das`, which downloads tune
+winners to a box and submits that box's winners back), to a validator it calls (`validate_sidecar`,
+`validate_sidecar_submission`, `validate_record_submission`), or to a tune-boot path (a startup path
+that loads a tune sidecar) reaching it, applies `performance/REVIEW.md` and `REVIEW_EXCHANGE.md`.**
 
 **A diff that adds a module under `dasllama/` whose code only some of `tests/run.das`'s areas
 (`audio`, `vision`, `tts`, `llm`, `infra`) run in their tests gives it a `MODULE_AREAS` row

@@ -50,7 +50,7 @@ struct private SentenceTiming {
     rtf : float
 }
 
-[export]
+[export, cold_path]
 def main() : int {
     var args = SynthArgs()
     let rc = parse_args_with_help(args, "modules/dasLLAMA/harness/tts_synth.das")

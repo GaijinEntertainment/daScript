@@ -49,8 +49,9 @@ fetches from borisbat/dasProfile at deploy time.**
 count, its spread, which clock timed each engine - that the record the page renders (checked in,
 or served beside the page) does not itself carry is a defect - render the claim from the record,
 state only what the architecture document of the folder that writes the record carries and link
-that document once on the page - its deployed page where one exists (`doc/reference/dasllama_methodology.html` for
-the dasLLAMA records), its GitHub blob URL otherwise - or drop the claim.**
+that document a single time from the page, however many claims rest on it - to its deployed HTML
+where one exists (`doc/reference/dasllama_methodology.html` for the dasLLAMA records), to its
+GitHub blob URL otherwise - or drop the claim.**
 
 **A second record file for data a dasProfile record already holds is a defect - read the
 dasProfile record.** Provenance - the `das_capture` and `ext_capture` stamps - travels in the

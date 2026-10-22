@@ -63,8 +63,8 @@ or kargs field carries) or the size a buffer the kernel reads is allocated at, w
 puts it, applies `modules/REVIEW_SHADER_EMITTERS.md` (repo root) too.** A kernel read's range
 depends on both, and a host-only change reaches no kernel file.
 
-**A diff that names GPU-vs-CPU parity evidence or driver-against-itself evidence - a run, a log,
-a claim - or changes the text of a Vulkan serving log line a parity rule reads - the resident
+**A diff that names GPU-vs-CPU parity evidence, driver-against-itself evidence, or external-reference
+evidence whose run is GPU-served - a run, a log, a claim - or changes the text of a Vulkan serving log line a parity rule reads - the resident
 driver's `resident driver armed (...)` line, the per-op tier's `GPU MoE tier:` report, the
 `resident override passed a call` line - applies `REVIEW_GPU_PARITY.md` too.**
 
@@ -72,7 +72,7 @@ driver's `resident driver armed (...)` line, the per-op tier's `GPU MoE tier:` r
 family, backend arm or session shape with a batched decode step; calls `create_device_session`,
 `set_device_kv` or `moe_gpu_drop_model`; calls or defines a `set_*` or `reset_*` function in
 `dasllama/dasllama_core.das`, `dasllama/dasllama_env.das` or a GPU driver file
-(`dasllama/dasllama_metal*.das`, `dasllama/dasllama_vulkan*.das`, `dasllama/dasllama_gpu*.das`); adds an
+(`dasllama/dasllama_metal*.das`, `dasllama/dasllama_*vulkan*.das`, `dasllama/dasllama_gpu*.das`); adds an
 `RdecPass` value; changes `trim_model_planes`; stores into, gathers from or releases a device buffer
 holding K or V rows; adds or changes a resident override (a decode/prefill hook the resident driver
 registers) or a byte copy of mirror rows (the device copy of the K/V cache); or adds or changes a

@@ -478,7 +478,7 @@ jobs:
         # deploy regenerates anyway so a forgotten local run cannot ship stale news.
         python3 site-dasllama/build_news.py --root site-dasllama
         python3 site-dasllama/test_metadata.py
-        python3 -I site-dasllama/test_stamp_assets.py
+        python3 site-dasllama/test_stamp_assets.py
 
         cp site-dasllama/index.html _site_dasllama/
         cp site-dasllama/examples.html _site_dasllama/

@@ -26,8 +26,8 @@ elements the instrument's header comment names; the baseline arm is the one the 
 as baseline. A run of an arm refuses when it produces no figure or output, or runs on a backend
 other than the backend name the row records. A board cell is a run whose reading lands as a row of
 `../performance/records/<box>.json` or a figure in `../PERF_LEDGER.md`. A mode is one selectable run
-of the file, chosen by its own flag or argument; a file with none is one mode. A row is one report
-line carrying an arm's figure; it covers the arm's warmup rounds, the rounds it is computed over and
+of the file, chosen by its own flag or argument; a file with none is one mode. A report row is one
+report line carrying an arm's figure; it covers the arm's warmup rounds, the rounds it is computed over and
 the run whose output the compare reads - and a line an instrument prints for one round covers that
 round alone.
 
@@ -88,8 +88,7 @@ never made.
 whole request, a prefill-plus-decode run, or a transcription or synthesis end to end - is a defect:
 add a run `../performance/gen_bench_records.das` spawns, or a `lcpp_bench.das` command a
 `../PROFILE.md` section documents, instead; where `lcpp_bench.das` has no flag for the modality,
-the instrument lives under `../harness/`.** A reference wrapper the rig spawns times a
-third-party turn, not such a turn. A second instrument's numbers cannot be compared to any row
+the instrument lives under `../harness/`.** A second instrument's numbers cannot be compared to any row
 the board already carries.
 
 **An out-of-process observer - a script watching a benchmark process from outside - never
@@ -137,7 +136,8 @@ picking a round's backend, codec or session shape, or how the row is computed, s
 instrument's header comment how many warmup rounds a row drops, zero included, and computes
 every number the row reports over the rounds after them.**
 
-**A diff that adds a row measured over rounds, or changes the instrument's timed body, an input
-picking a round's backend, codec or session shape, or how the row is computed or reported, prints
-no number on the row when any run the row covers refuses - only the refusal and its reason.** A partial row reads like a
+**A diff that adds a report row measured over rounds, or changes the instrument's timed body, an
+input picking a round's backend, codec or session shape, or how the report row is computed or
+reported, prints no number on the report row when any run the report row covers refuses - only the
+refusal and its reason.** A partial report row reads like a
 measured one and is a different quantity.
