@@ -16,6 +16,7 @@ require daslib/fio
 //   daslang admin.das -- --db ... --op unverify-submission --id <id>
 //   daslang admin.das -- --db ... --op delete-submission --id <id>
 //   daslang admin.das -- --db ... --op import-official --file records/m1.json
+//   daslang admin.das -- --db ... --op import-annotations --file records/annotations.json
 //   daslang admin.das -- --db ... --op plant-sidecar --file box.tune.json
 
 [CommandLineArgs]
@@ -23,7 +24,7 @@ struct AdminArgs {
     @clarg_doc = "SQLite database path"
     db : string = "/srv/dasllama-ladder/ladder.db"
 
-    @clarg_doc = "verify-sidecar | unverify-sidecar | delete-sidecar | verify-submission | unverify-submission | delete-submission | import-official | plant-sidecar"
+    @clarg_doc = "verify-sidecar | unverify-sidecar | delete-sidecar | verify-submission | unverify-submission | delete-submission | import-official | import-annotations | plant-sidecar"
     op : string = ""
 
     @clarg_doc = "Sidecar content sha (the *-sidecar ops)"
@@ -32,7 +33,7 @@ struct AdminArgs {
     @clarg_doc = "Submission id (the *-submission ops)"
     id : int = 0
 
-    @clarg_doc = "Document path (import-official record store; plant-sidecar sidecar)"
+    @clarg_doc = "Document path (import-official record store; import-annotations annotations.json; plant-sidecar sidecar)"
     file : string = ""
 
     @clarg_short = "?"
@@ -40,8 +41,41 @@ struct AdminArgs {
     help : bool = false
 }
 
+def private run_file_op(db : SqlRunner; op, file : string) : int {
+    let text = fread(file)
+    if (empty(text)) {
+        print("error: cannot read {file}\n")
+        return 1
+    }
+    var why = ""
+    if (op == "import-official") {
+        let res = import_official_store(db, text, int64(get_clock()))
+        if (res.ok) {
+            print("{res.runs_added} run(s) imported, {res.runs_replaced} replaced\n")
+            return 0
+        }
+        why = res.error
+    } elif (op == "import-annotations") {
+        let res = import_annotations(db, text)
+        if (res.ok) {
+            print("{res.holds} hold(s), {res.voids} void(s) imported\n")
+            return 0
+        }
+        why = res.error
+    } else {
+        let res = plant_sidecar(db, text, LadderPolicy(), int64(get_clock()))
+        if (res.status == PutStatus.ok) {
+            print(res.created ? "planted {res.sha}\n" : "already stored, promoted {res.sha}\n")
+            return 0
+        }
+        why = !empty(res.error) ? res.error : "{res.status}"
+    }
+    print("error: {why}\n")
+    return 1
+}
+
 [export]
-def main : int {   // nolint:STYLE037 (flat operator-verb dispatch — one arm per op is the shape)
+def main : int {
     var r <- parse_args(type<AdminArgs>)
     if (r |> is_err) {
         print("error: {r |> unwrap_err}\n\n")
@@ -84,34 +118,8 @@ def main : int {   // nolint:STYLE037 (flat operator-verb dispatch — one arm p
         print("{n} row(s) removed\n")
         return n > 0 ? 0 : 1
     }
-    if (cfg.op == "import-official") {
-        let text = fread(cfg.file)
-        if (empty(text)) {
-            print("error: cannot read {cfg.file}\n")
-            return 1
-        }
-        let res = import_official_store(db, text, int64(get_clock()))
-        if (!res.ok) {
-            print("error: {res.error}\n")
-            return 1
-        }
-        print("{res.runs_added} run(s) imported, {res.runs_replaced} replaced\n")
-        return 0
-    }
-    if (cfg.op == "plant-sidecar") {
-        let text = fread(cfg.file)
-        if (empty(text)) {
-            print("error: cannot read {cfg.file}\n")
-            return 1
-        }
-        let res = plant_sidecar(db, text, LadderPolicy(), int64(get_clock()))
-        if (res.status != PutStatus.ok) {
-            let why = !empty(res.error) ? res.error : "{res.status}"
-            print("error: {why}\n")
-            return 1
-        }
-        print(res.created ? "planted {res.sha}\n" : "already stored, promoted {res.sha}\n")
-        return 0
+    if (cfg.op == "import-official" || cfg.op == "import-annotations" || cfg.op == "plant-sidecar") {
+        return run_file_op(db, cfg.op, cfg.file)
     }
     print("error: unknown op '{cfg.op}'\n")
     return 1

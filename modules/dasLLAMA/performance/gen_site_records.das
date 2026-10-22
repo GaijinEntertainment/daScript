@@ -42,6 +42,7 @@ struct SiteFile {
 
 struct SiteHardware {
     cpu : string
+    @optional gpu : string
 }
 
 struct SiteRun {

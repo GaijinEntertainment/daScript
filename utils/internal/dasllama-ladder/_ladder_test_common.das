@@ -58,8 +58,7 @@ def records_doc : string {
     return write_json(doc)
 }
 
-// an official asr + tts board: a das row, a reference row with no audio_s, and an mlx row per
-// model; "encode" and "img:enc" are not audio cells, and the zero-ms clip is dropped
+//! an official asr + tts board (das, a reference with no audio_s, mlx per model); "encode" and "img:enc" are no audio cells, the zero-ms clip drops
 def audio_doc : string {
     var doc = %json~
     [ {
@@ -184,6 +183,32 @@ def audio_outlier_doc : string {
     return write_json(doc)
 }
 
+//! an official image-chat store: one das run with the three image cells, its llama.cpp reference
+def image_doc : string {
+    var doc = %json~
+    [ {
+        "gguf" : "Qwen3VL-4B-Instruct-Q8_0.gguf",
+        "runs" : [
+            {
+                "engine" : "das", "backend" : "metal", "flavor" : "tuned", "workload" : "image-chat",
+                "box" : "m5", "threads" : 6, "date" : "2026-10-21",
+                "cmd" : "lcpp_bench --image", "sha" : "ea5747c91", "version" : "0.6.5", "dasllama_version" : 17,
+                "hardware" : { "cpu" : "Apple M5 Max", "gpu" : "Apple M5 Max (40-core)" },
+                "tests" : { "img:enc" : { "ms" : 58.0 }, "img:pp" : { "tok_s" : 4211.5 }, "img:tg" : { "tok_s" : 113.9 } }
+            },
+            {
+                "engine" : "llama.cpp", "backend" : "metal", "flavor" : "stock", "workload" : "image-chat",
+                "box" : "m5", "threads" : 6, "date" : "2026-10-21",
+                "cmd" : "llama-mtmd-cli", "sha" : "9febe63d5",
+                "hardware" : { "cpu" : "Apple M5 Max" },
+                "tests" : { "img:enc" : { "ms" : 48.0 }, "img:pp" : { "tok_s" : 2108.5 } }
+            }
+        ]
+    } ]
+    %%
+    return write_json(doc)
+}
+
 // official history predates the release counter: shape-valid, no stamps
 def official_doc : string {
     var doc = %json~
@@ -195,7 +220,7 @@ def official_doc : string {
                 "box" : "m1", "threads" : 8, "date" : "2026-08-01",
                 "cmd" : "daslang -jit bench.das", "sha" : "8a538d795", "version" : "0.6.4",
                 "source" : "official",
-                "hardware" : { "cpu" : "Apple M1 Max" },
+                "hardware" : { "cpu" : "Apple M1 Max", "gpu" : "Apple M1 Max (32-core)" },
                 "tests" : { "pp512" : { "tok_s" : 259.6 } }
             },
             {

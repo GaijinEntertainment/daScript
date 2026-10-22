@@ -22,8 +22,10 @@ project "daslang.io Forge") on the daslang.io Forge system.
   `_stories/template.html` (`{{root}}` = `../`, so the shared chrome's links work one level
   down); the deploy copies the directory whole; plain "we", llama.cpp named as the yardstick
 - `ladder.html` - ALL measurements (official + community); daslang.io/dasllama.html stays
-  official-only. Three sections: LLM (das and `mlx-lm` rows, each paired with the llama.cpp
-  run of its lane), and the ASR and TTS ladders - one row per engine run and test from the
+  official-only. Five sections: LLM (das and `mlx-lm` rows, each paired with the llama.cpp
+  run of its lane), image in (one picture: the vision tower's encode in wall ms, then the turn's
+  prefill and decode rates, each against `llama-mtmd-cli` on the same lane in the same
+  submission), and the ASR, TTS and audio-in ladders - one row per engine run and test from the
   run's `audio` cells, ranked by × realtime (audio seconds / wall seconds); an ASR clip's length
   is borrowed from any run that recorded it, a TTS length never is, and a reference row takes
   the das version of the submission it rode in for the version filter
@@ -34,6 +36,8 @@ project "daslang.io Forge") on the daslang.io Forge system.
 - `files/dasllama-io.js` - the one renderer for all three pages (page detected by mount
   points); community text is escaped before it reaches markup
 - `files/dasllama-favicon.svg` - from the dasllama-mark brand set (amber)
+- `stamp_assets.py` - the deploy's cache-busting pass: stamps each staged page's own
+  `files/*.js|css` references with `?v=<content hash>`; `serve.py` does the same locally with mtimes
 - `_news/` - news entries as dated markdown, same pipeline shape as `site/_news`; a news
   item is a few lines, the detail is a story it links to
 - `_stories/` - the stories as dated markdown (front matter: date, tag, title, lede; fenced

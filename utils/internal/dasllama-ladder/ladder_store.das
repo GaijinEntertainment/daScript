@@ -70,10 +70,14 @@ struct Run {
     Tg128 : double = 0.0lf      // tests.tg128.tok_s; 0 = the run did not measure it
     Cpu : string = ""           // hardware.cpu, the board's machine label
     Tg128b4 : double = 0.0lf    // tests.tg128@4.tok_s, the four-stream batched row; 0 = the run did not measure it
-    Audio : string = ""         // an asr/tts run's `audio_cells_text`; "" for every other workload
+    Audio : string = ""         // an asr/tts/audio-chat run's `audio_cells_text`; "" for every other workload
+    Gpu : string = ""           // hardware.gpu, the label a discrete-GPU run's machine leads with
+    ImgEnc : double = 0.0lf     // an image-chat run's tests.img:enc.ms, the vision tower's encode; 0 = not measured
+    ImgPp : double = 0.0lf      // tests.img:pp.tok_s, the image turn's prefill
+    ImgTg : double = 0.0lf      // tests.img:tg.tok_s, the caption's decode
 }
 
-//! One timed audio test of an asr/tts run: `test` is the key past "<workload>:" (a clip for asr,
+//! One timed audio test of an asr/tts/audio-chat run: `test` is the key past "<workload>:" (a clip for asr,
 //! a sentence or set for tts); `audio_s` is 0 when the run did not record the audio length;
 //! `voided` is the outlier rule's verdict on the cell (`audio_outlier_clips`), or the run's own
 //! `void_clips` naming it - a voided cell fronts no ratio and no rank.
@@ -199,12 +203,60 @@ def ladder_migration_006(db : SqlRunner) {
     backfill_run_cells(db, CellSet.audio)
 }
 
+//! An `annotations.json` entry the board acts on, its selectors "" for any. One carrying `held` (the ledger row that
+//! keeps a model off) withholds every run of the model on its workload and box, whatever the engine - a reference
+//! whose das row is withheld pairs with nothing. One carrying `void_clips` blanks the named tests of the runs every
+//! selector matches: an audio run's clips read voided, an image-chat run's `img:<cell>` reads unmeasured.
+[sql_table(name = "annotations")]
+struct BoardNote {
+    @sql_primary_key Id : int
+    Gguf : string
+    Box : string = ""
+    Engine : string = ""
+    Backend : string = ""
+    Flavor : string = ""
+    Workload : string = ""
+    Held : string = ""
+    VoidClips : string = ""
+}
+
+[sql_migration(version = 7, description = "runs carry the gpu label; backfilled from the documents")]
+def ladder_migration_007(db : SqlRunner) {
+    db |> exec("ALTER TABLE runs ADD COLUMN Gpu TEXT NOT NULL DEFAULT ''")
+    backfill_run_cells(db, CellSet.gpu)
+}
+
+[sql_migration(version = 8, description = "the board's annotations (holds and voids), from records/annotations.json")]
+def ladder_migration_008(db : SqlRunner) {
+    db |> exec(
+        "CREATE TABLE annotations (" +
+        "Id INTEGER PRIMARY KEY," +
+        "Gguf TEXT NOT NULL," +
+        "Box TEXT NOT NULL DEFAULT ''," +
+        "Engine TEXT NOT NULL DEFAULT ''," +
+        "Backend TEXT NOT NULL DEFAULT ''," +
+        "Flavor TEXT NOT NULL DEFAULT ''," +
+        "Workload TEXT NOT NULL DEFAULT ''," +
+        "Held TEXT NOT NULL DEFAULT ''," +
+        "VoidClips TEXT NOT NULL DEFAULT '')")
+}
+
+[sql_migration(version = 9, description = "image-chat runs carry the encode, prefill and decode cells; backfilled from the documents")]
+def ladder_migration_009(db : SqlRunner) {
+    db |> exec("ALTER TABLE runs ADD COLUMN ImgEnc REAL NOT NULL DEFAULT 0")
+    db |> exec("ALTER TABLE runs ADD COLUMN ImgPp REAL NOT NULL DEFAULT 0")
+    db |> exec("ALTER TABLE runs ADD COLUMN ImgTg REAL NOT NULL DEFAULT 0")
+    backfill_run_cells(db, CellSet.image)
+}
+
 //! The cell columns one backfill writes: migration 2's flat cells and cpu label, migration 3's
-//! batched cell, migrations 4 to 6's audio cells.
+//! batched cell, migrations 4 to 6's audio cells, migration 7's gpu label, migration 9's image-chat cells.
 enum CellSet {
     flat
     batched
     audio
+    gpu
+    image
 }
 
 //! Every run of a record document in order, with its model and the (ModelIdx, RunIdx) the
@@ -255,11 +307,7 @@ def private model_clip_lengths(m : JsonValue?; workload : string) : table<string
     return <- out
 }
 
-//! The audio cells of one run node as `Run.Audio` stores them: a JSON array of
-//! `{test, ms, audio_s, voided}` sorted by test, one per "<workload>:" test with a positive
-//! `ms`; "" when the workload is not in `AUDIO_WORKLOADS` or no test qualifies. `m` is the run's
-//! model node: the outlier rule rates each cell over its own length or the model's borrowed one,
-//! and a cell the rule voids, or the run's `void_clips` names, carries `voided`.
+//! The run node's audio cells as `Run.Audio` stores them ("" for none); `m` is its model node, whose runs lend a clip its audio length.
 def private audio_cells_text(m, r : JsonValue?) : string {
     let workload : string = r?["workload"] ?? ""
     let tests = r?["tests"]
@@ -295,14 +343,30 @@ def private audio_cells_text(m, r : JsonValue?) : string {
 }
 
 //! The cells of one run node `r` of model node `m` of a record document — what
-//! `Run.Pp512`/`Tg128`/`Tg128b4`/`Cpu`/`Audio` hold.
-def private run_cells(m, r : JsonValue?) : tuple<pp512 : double; tg128 : double; tg128b4 : double; cpu : string; audio : string> {
-    return (
+//! `Run.Pp512`/`Tg128`/`Tg128b4`/`Cpu`/`Gpu`/`Audio`/`ImgEnc`/`ImgPp`/`ImgTg` hold.
+struct private RunCells {
+    pp512 : double
+    tg128 : double
+    tg128b4 : double
+    cpu : string
+    gpu : string
+    audio : string
+    img_enc : double
+    img_pp : double
+    img_tg : double
+}
+
+def private run_cells(m, r : JsonValue?) : RunCells {
+    return RunCells(
         pp512 = r?["tests"]?["pp512"]?["tok_s"] ?? 0.0lf,
         tg128 = r?["tests"]?["tg128"]?["tok_s"] ?? 0.0lf,
         tg128b4 = r?["tests"]?["tg128@4"]?["tok_s"] ?? 0.0lf,
         cpu = r?["hardware"]?["cpu"] ?? "",
-        audio = audio_cells_text(m, r))
+        gpu = r?["hardware"]?["gpu"] ?? "",
+        audio = audio_cells_text(m, r),
+        img_enc = r?["tests"]?["img:enc"]?["ms"] ?? 0.0lf,
+        img_pp = r?["tests"]?["img:pp"]?["tok_s"] ?? 0.0lf,
+        img_tg = r?["tests"]?["img:tg"]?["tok_s"] ?? 0.0lf)
 }
 
 //! Every run row of every record submission re-reads its cells from the document it came
@@ -321,6 +385,12 @@ def private backfill_run_cells(db : SqlRunner; which : CellSet) {
             if (which == CellSet.audio) {
                 n = db |> _sql_update(type<Run>, _.SubmissionId == sid && _.ModelIdx == mi && _.RunIdx == ri,
                     (Audio = cells.audio))
+            } elif (which == CellSet.image) {
+                n = db |> _sql_update(type<Run>, _.SubmissionId == sid && _.ModelIdx == mi && _.RunIdx == ri,
+                    (ImgEnc = cells.img_enc, ImgPp = cells.img_pp, ImgTg = cells.img_tg))
+            } elif (which == CellSet.gpu) {
+                n = db |> _sql_update(type<Run>, _.SubmissionId == sid && _.ModelIdx == mi && _.RunIdx == ri,
+                    (Gpu = cells.gpu))
             } elif (which == CellSet.batched) {
                 n = db |> _sql_update(type<Run>, _.SubmissionId == sid && _.ModelIdx == mi && _.RunIdx == ri,
                     (Tg128b4 = cells.tg128b4))
@@ -383,6 +453,13 @@ struct ImportResult {
     ok : bool
     runs_added : int
     runs_replaced : int
+    error : string
+}
+
+struct AnnotationsResult {
+    ok : bool
+    holds : int
+    voids : int
     error : string
 }
 
@@ -523,7 +600,11 @@ def private insert_runs(db : SqlRunner; doc_text : string; submission_id : int; 
                 Tg128 = cells.tg128,
                 Tg128b4 = cells.tg128b4,
                 Cpu = cells.cpu,
-                Audio = cells.audio))
+                Gpu = cells.gpu,
+                Audio = cells.audio,
+                ImgEnc = cells.img_enc,
+                ImgPp = cells.img_pp,
+                ImgTg = cells.img_tg))
     }
     if (!empty(rows)) {
         db |> insert(rows)
@@ -851,15 +932,94 @@ def list_versions(db : SqlRunner) : array<int> {
     return <- out
 }
 
-//! The ladder rows for one version (0 = all versions), newest submissions first.
-def list_runs(db : SqlRunner; version : int) : array<Run> {
-    if (version == 0) {
-        return <- _sql(db |> select_from(type<Run>)
-            |> _order_by_descending(_.CreatedAt))
+def private run_held(notes : array<BoardNote>; r : Run) : bool {
+    for (a in notes) {
+        if (!empty(a.Held) && a.Gguf == r.Gguf && (empty(a.Box) || a.Box == r.Box)
+                && (empty(a.Workload) || a.Workload == r.Workload)) {
+            return true
+        }
     }
-    return <- _sql(db |> select_from(type<Run>)
-        |> _where(_.DasllamaVersion == version)
-        |> _order_by_descending(_.CreatedAt))
+    return false
+}
+
+def private note_selects(a : BoardNote; r : Run) : bool {
+    return (a.Gguf == r.Gguf && (empty(a.Box) || a.Box == r.Box) && (empty(a.Engine) || a.Engine == r.Engine)
+        && (empty(a.Backend) || a.Backend == r.Backend) && (empty(a.Flavor) || a.Flavor == r.Flavor)
+        && (empty(a.Workload) || a.Workload == r.Workload))
+}
+
+//! `text` (a run's `Audio` cells) with every clip of `clips` read voided.
+def private void_audio_cells(text : string; clips : array<string>) : string {
+    var jerr = ""
+    var js = read_json(text, jerr)
+    if (js == null || !(js is _array)) {
+        delete_json(js)
+        return text
+    }
+    var arr = JV([for (c in js as _array);
+        JV((test = c?["test"] ?? "", ms = c?["ms"] ?? 0.0lf, audio_s = c?["audio_s"] ?? 0.0lf,
+            voided = (c?["voided"] ?? false) || has_value(clips, c?["test"] ?? "")))])
+    let out = write_json(arr)
+    delete_json(arr)
+    delete_json(js)
+    return out
+}
+
+def private apply_voids(notes : array<BoardNote>; var r : Run) {
+    for (a in notes) {
+        continue if (empty(a.VoidClips) || !note_selects(a, r))
+        var inscope clips <- void_clips_of(a.VoidClips)
+        r.ImgEnc = has_value(clips, "img:enc") ? 0.0lf : r.ImgEnc
+        r.ImgPp = has_value(clips, "img:pp") ? 0.0lf : r.ImgPp
+        r.ImgTg = has_value(clips, "img:tg") ? 0.0lf : r.ImgTg
+        if (!empty(r.Audio)) {
+            r.Audio = void_audio_cells(r.Audio, clips)
+        }
+    }
+}
+
+//! The board's runs, newest first: a held run left out, a voided cell blanked; `version` 0 is every version.
+def list_runs(db : SqlRunner; version : int) : array<Run> {
+    let notes <- _sql(db |> select_from(type<BoardNote>))
+    var rows <- (version == 0
+        ? _sql(db |> select_from(type<Run>) |> _order_by_descending(_.CreatedAt))
+        : _sql(db |> select_from(type<Run>) |> _where(_.DasllamaVersion == version) |> _order_by_descending(_.CreatedAt)))
+    var out : array<Run>
+    for (r in rows) {
+        continue if (run_held(notes, r))
+        apply_voids(notes, r)
+        out |> push(r)
+    }
+    return <- out
+}
+
+//! Replace the board's annotations with the entries of an annotations document (`records/annotations.json`)
+//! that carry `held` or `void_clips`; the rest are notes the board does not read.
+def import_annotations(db : SqlRunner; doc : string) : AnnotationsResult {
+    var jerr = ""
+    var js = read_json(doc, jerr)
+    if (js == null || !(js is _array)) {
+        delete_json(js)
+        return AnnotationsResult(error = "annotations: not a JSON array")
+    }
+    var notes : array<BoardNote>
+    for (a in js as _array) {
+        let held : string = a?["held"] ?? ""
+        let void_clips : string = a?["void_clips"] ?? ""
+        if (!empty(held) || !empty(void_clips)) {
+            notes |> push(BoardNote(Gguf = a?["gguf"] ?? "", Box = a?["box"] ?? "", Engine = a?["engine"] ?? "",
+                Backend = a?["backend"] ?? "", Flavor = a?["flavor"] ?? "", Workload = a?["workload"] ?? "",
+                Held = held, VoidClips = void_clips))
+        }
+    }
+    delete_json(js)
+    db |> exec("DELETE FROM annotations")
+    if (!empty(notes)) {
+        db |> insert(notes)
+    }
+    let holds = length([for (n in notes); n; where !empty(n.Held)])
+    logger_info("ladder.store", "import annotations", JV((holds = holds, voids = length(notes) - holds)))
+    return AnnotationsResult(ok = true, holds = holds, voids = length(notes) - holds)
 }
 
 //! The verbatim submission document a run came from ("" when the id is unknown) —

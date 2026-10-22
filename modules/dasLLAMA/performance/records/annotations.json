@@ -49,5 +49,55 @@
   "workload": "tts",
   "comment": "Held off the board: das speaks the corpus head about half again as long as the KittenTTS package does for the same sentences (207 s against 145 s), so the wall is not the same work - followup_general.md row 219.",
   "held": "followup_general.md 219"
+ },
+ {
+  "gguf": "Qwen3VL-4B-Instruct-Q8_0.gguf",
+  "engine": "llama.cpp",
+  "workload": "image-chat",
+  "comment": "llama-mtmd-cli reports this image turn's prefill an order under its own text prefill on the same model (Qwen3-VL-4B CPU: 30 tok/s against llama-bench pp512 222 on the M5) and under its gemma-4 image prefill on the same GPU, so the cell measures something other than the turn - the ratio is withheld, followup_general.md row 224.",
+  "void_clips": "img:pp"
+ },
+ {
+  "gguf": "Qwen2.5-Omni-3B-Q8_0.gguf",
+  "engine": "llama.cpp",
+  "workload": "image-chat",
+  "comment": "llama-mtmd-cli reports this image turn's prefill an order under its own text prefill on the same model (Qwen3-VL-4B CPU: 30 tok/s against llama-bench pp512 222 on the M5) and under its gemma-4 image prefill on the same GPU, so the cell measures something other than the turn - the ratio is withheld, followup_general.md row 224.",
+  "void_clips": "img:pp"
+ },
+ {
+  "gguf": "gemma-4-E2B-it-Q8_0.gguf",
+  "box": "m5",
+  "engine": "llama.cpp",
+  "backend": "cpu",
+  "workload": "image-chat",
+  "comment": "llama-mtmd-cli's gemma-4 vision encode on this ARM CPU reads 10-14 s, where the same model and picture encode in 0.4-0.7 s on the x86 boards - the ratio is withheld, followup_general.md row 224.",
+  "void_clips": "img:enc"
+ },
+ {
+  "gguf": "gemma-4-E2B-it-Q8_0.gguf",
+  "box": "graviton4",
+  "engine": "llama.cpp",
+  "backend": "cpu",
+  "workload": "image-chat",
+  "comment": "llama-mtmd-cli's gemma-4 vision encode on this ARM CPU reads 10-14 s, where the same model and picture encode in 0.4-0.7 s on the x86 boards - the ratio is withheld, followup_general.md row 224.",
+  "void_clips": "img:enc"
+ },
+ {
+  "gguf": "gemma-4-E4B-it-Q8_0.gguf",
+  "box": "m5",
+  "engine": "llama.cpp",
+  "backend": "cpu",
+  "workload": "image-chat",
+  "comment": "llama-mtmd-cli's gemma-4 vision encode on this ARM CPU reads 10-14 s, where the same model and picture encode in 0.4-0.7 s on the x86 boards - the ratio is withheld, followup_general.md row 224.",
+  "void_clips": "img:enc"
+ },
+ {
+  "gguf": "gemma-4-E4B-it-Q8_0.gguf",
+  "box": "graviton4",
+  "engine": "llama.cpp",
+  "backend": "cpu",
+  "workload": "image-chat",
+  "comment": "llama-mtmd-cli's gemma-4 vision encode on this ARM CPU reads 10-14 s, where the same model and picture encode in 0.4-0.7 s on the x86 boards - the ratio is withheld, followup_general.md row 224.",
+  "void_clips": "img:enc"
  }
 ]

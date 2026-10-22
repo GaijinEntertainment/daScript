@@ -28,7 +28,13 @@
 
   // A short machine label. hardware.cpu is auto-probed, so trim the x86 marketing suffix.
   function boxLabel(cpu, fallback) {
-    return cpu ? String(cpu).replace('64-Core Processor', '').trim() : fallback;
+    return cpu ? String(cpu).replace(/\s*\d+-Core Processor$/, '').trim() : fallback;
+  }
+
+  // a discrete GPU's run leads with the card: the CPU only feeds it
+  function machineLabel(cpu, gpu, backend, fallback) {
+    var box = boxLabel(cpu, fallback);
+    return backend === 'vulkan' && gpu ? String(gpu).replace(/^NVIDIA\s+/, '') + ' · ' + box : box;
   }
 
   function ratioCell(r) {
@@ -332,7 +338,7 @@
           if (!das || !ref) return;                    // no reference → no row
           out.push({
             gguf: m.gguf, model: m.gguf.replace(/\.gguf$/, ''), arch: m.arch || '',
-            size: m.size_bytes || 0, box: bx, boxName: boxLabel(das.hardware && das.hardware.cpu, bx),
+            size: m.size_bytes || 0, box: bx, boxName: machineLabel(das.hardware && das.hardware.cpu, das.hardware && das.hardware.gpu, das.backend, bx),
             lane: L.label, modelNote: m.note || '',
             noted: !!(m.note || das.comment || ref.comment),
             pp_das: tok(das, 'pp512'), pp_ref: tok(ref, 'pp512'),
@@ -462,7 +468,6 @@
     function xrt(audio_s, msv) { return msv > 0 ? (audio_s * 1000) / msv : 0; }
     function xrtText(v) { return fmt(v, v < 10 ? 1 : 0) + '×RT'; }
     wireBars(sec, rows, function (all, filters) {
-      // a voided clip has no ratio to bar: it is the table's "—✱", never a pair
       return all.filter(function (r) {
         return (!filters.model || r.model === filters.model) &&
                (!filters.box || r.box === filters.box) &&
@@ -581,7 +586,7 @@
             if (!(dm > 0) || !(rm > 0)) return;        // no reference → no row
             out.push({
               gguf: m.gguf, model: m.arch || m.gguf, box: bx, lane: L.label,
-              boxName: boxLabel(das.hardware && das.hardware.cpu, bx),
+              boxName: machineLabel(das.hardware && das.hardware.cpu, das.hardware && das.hardware.gpu, das.backend, bx),
               tool: ENGINE_LABEL[ref.engine] || ref.engine,
               wav: k.slice(prefix.length), audio_s: das.tests[k].audio_s || 0,
               das_ms: dm, ref_ms: rm,
@@ -635,8 +640,6 @@
             get: function (r) { return r.das_ms; }, cell: function (r) { return ms(r.das_ms); } },
           { key: 'ref_ms', label: 'ref ms', num: true, dim: true,
             get: function (r) { return r.ref_ms; }, cell: function (r) { return ms(r.ref_ms); } },
-          // a clip voided on either run (the outlier rule at projection time, or an annotation's
-          // ref behavior difference) never headlines a ratio — the receipt still shows both raw times
           { key: 'speed', label: 'speedup', num: true, grp: true,
             get: function (r) { return r.voided ? 0 : r.speed; },
             cell: function (r) { return r.voided ? '<td class="dl-num dl-dim" title="voided: this clip ran far past the run\'s own rate on its other clips - a cold start or a runaway, not a speed">—✱</td>' : ratioCell(r.speed); } },
@@ -683,18 +686,23 @@
           }
           var das = pick('das', L.das), ref = pick('llama.cpp', L.ref);
           if (!das || !ref) return;                    // no reference → no row
-          function msOf(r, k) { return (r.tests && r.tests[k]) ? r.tests[k].ms : 0; }
+          // a cell the run's void_clips names (an annotation's verdict on the reference) reads as unmeasured
+          function voided(r, k) {
+            return (r.void_clips || '').split(',').map(function (s) { return s.trim(); }).indexOf(k) >= 0;
+          }
+          function msOf(r, k) { return (r.tests && r.tests[k] && !voided(r, k)) ? r.tests[k].ms : 0; }
+          function rate(r, k) { return voided(r, k) ? 0 : tok(r, k); }
           out.push({
             gguf: m.gguf, model: m.gguf.replace(/\.gguf$/, ''), arch: m.arch || '',
-            size: m.size_bytes || 0, box: bx, boxName: boxLabel(das.hardware && das.hardware.cpu, bx),
+            size: m.size_bytes || 0, box: bx, boxName: machineLabel(das.hardware && das.hardware.cpu, das.hardware && das.hardware.gpu, das.backend, bx),
             lane: L.label, modelNote: m.note || '',
             noted: !!(m.note || das.comment || ref.comment),
             enc_das: msOf(das, 'img:enc'), enc_ref: msOf(ref, 'img:enc'),
-            pp_das: tok(das, 'img:pp'), pp_ref: tok(ref, 'img:pp'),
-            tg_das: tok(das, 'img:tg'), tg_ref: tok(ref, 'img:tg'),
+            pp_das: rate(das, 'img:pp'), pp_ref: rate(ref, 'img:pp'),
+            tg_das: rate(das, 'img:tg'), tg_ref: rate(ref, 'img:tg'),
             enc_ratio: ratio(msOf(ref, 'img:enc'), msOf(das, 'img:enc')),  // times, so inverted: >1 = das faster
-            pp_ratio: ratio(tok(das, 'img:pp'), tok(ref, 'img:pp')),
-            tg_ratio: ratio(tok(das, 'img:tg'), tok(ref, 'img:tg')),
+            pp_ratio: ratio(rate(das, 'img:pp'), rate(ref, 'img:pp')),
+            tg_ratio: ratio(rate(das, 'img:tg'), rate(ref, 'img:tg')),
             das: das, ref: ref
           });
         });
@@ -763,7 +771,7 @@
         return (!filters.model || r.model === filters.model) &&
                (!filters.box || r.box === filters.box) &&
                (!filters.lane || r.lane === filters.lane) &&
-               r[m + '_ratio'] !== null;
+               r.pp_ratio !== null && r.tg_ratio !== null;   // both views list the same turns
       }).sort(function (a, b) { return b[m + '_ratio'] - a[m + '_ratio']; })
         .map(function (r) {
           return { label: r.model, sub: r.boxName + ' · ' + r.lane,

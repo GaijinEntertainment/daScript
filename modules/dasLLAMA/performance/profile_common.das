@@ -2184,9 +2184,10 @@ struct BenchAnnotation {
     @optional flavor : string
     @optional workload : string
     comment : string
-    @optional void_clips : string  // comma-separated clip names whose cross-engine ratio this
-                                   // note declares meaningless (ref behavior difference) — the
-                                   // site renders no win for them
+    @optional void_clips : string  // comma-separated test names whose cross-engine ratio this
+                                   // note declares meaningless (ref behavior difference) - an audio
+                                   // run's clips, an image-chat run's `img:<cell>`; the site renders
+                                   // no win for them
     @optional held : string        // the ledger row that keeps the selected runs off the board
                                    // (a broken test is ledgered, not shown); the rows stay recorded
 }

@@ -227,6 +227,54 @@ def test_records_routes(t : T?) {
     }
 }
 
+[test]
+def test_image_routes(t : T?) {
+    with_ladder_server(LadderPolicy()) $(base_url) {
+        t |> run("image-chat rows ride /api/runs with their encode, prefill and decode cells") @(tt : T?) {
+            POST("{base_url}/admin/import-official", image_doc()) $(resp) {
+                tt |> equal(int(resp.status_code), 200)
+            }
+            GET("{base_url}/api/runs") $(resp) {
+                var js = json_of(resp)
+                let das = run_jv(js, "das", "image-chat")
+                tt |> success(das != null, "the das image row is on the board")
+                tt |> equal(das?["img_enc"] ?? 0.0lf, 58.0lf)
+                tt |> equal(das?["img_pp"] ?? 0.0lf, 4211.5lf)
+                tt |> equal(das?["img_tg"] ?? 0.0lf, 113.9lf)
+                tt |> equal(das?["gpu"] ?? "", "Apple M5 Max (40-core)", "the gpu label rides along")
+            }
+        }
+    }
+}
+
+[test]
+def test_holds_routes(t : T?) {
+    with_ladder_server(LadderPolicy()) $(base_url) {
+        POST("{base_url}/admin/import-official", official_doc()) $(resp) {
+            t |> equal(int(resp.status_code), 200)
+        }
+        t |> run("annotations over loopback admin hold a model off /api/runs") @(tt : T?) {
+            let held = "[\{\"gguf\":\"gemma-3-1b-it-Q8_0.gguf\",\"engine\":\"das\",\"held\":\"followup_general.md 219\"\}]"
+            POST("{base_url}/admin/import-annotations", held) $(resp) {
+                tt |> equal(int(resp.status_code), 200)
+                tt |> equal(json_of(resp)?["holds"] ?? 0, 1)
+            }
+            GET("{base_url}/api/runs") $(resp) {
+                tt |> equal(length(json_of(resp)?["runs"] as _array), 0, "the held model's two official rows left the board")
+            }
+            POST("{base_url}/admin/import-annotations", "not json") $(resp) {
+                tt |> equal(int(resp.status_code), 400, "a malformed document is refused")
+            }
+            POST("{base_url}/admin/import-annotations", "[]") $(resp) {
+                tt |> equal(int(resp.status_code), 200)
+            }
+            GET("{base_url}/api/runs") $(resp) {
+                tt |> equal(length(json_of(resp)?["runs"] as _array), 2, "clearing the holds brings them back")
+            }
+        }
+    }
+}
+
 def private run_jv(js : JsonValue?; engine, workload : string) : JsonValue const? {
     for (r in js?["runs"] as _array) {
         return r if ((r?["engine"] ?? "") == engine && (r?["workload"] ?? "") == workload)
@@ -433,7 +481,7 @@ def test_admin_origin_gate_and_page(t : T?) {
             // (import-official, shutdown) - a cross-origin shutdown must be REFUSED, so the
             // server survives the arm
             for (path in ["/admin/sidecar/verify", "/admin/sidecar/delete", "/admin/import-sidecar",
-                          "/admin/submit", "/admin/import-official", "/shutdown"]) {
+                          "/admin/submit", "/admin/import-official", "/admin/import-annotations", "/shutdown"]) {
                 with_http_request() $(var req) {
                     req.method = http_method.POST
                     req.url := "{base_url}{path}"

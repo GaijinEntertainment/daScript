@@ -145,6 +145,9 @@ class LadderServer : HvWebServer {
         POST("/admin/import-official") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             return handle_import_official(req, resp)
         }
+        POST("/admin/import-annotations") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+            return handle_import_annotations(req, resp)
+        }
         POST("/admin/import-sidecar") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             return handle_import_sidecar(req, resp)
         }
@@ -198,7 +201,6 @@ def private handle_versions(var req : HttpRequest?; var resp : HttpResponse?) : 
 }
 
 def private run_to_jv(r : Run) : JsonValue? {
-    // the store keeps the audio cells as their JSON text; "" reads as no cells
     var jerr = ""
     var audio : JsonValue?
     if (!empty(r.Audio)) {
@@ -216,7 +218,8 @@ def private run_to_jv(r : Run) : JsonValue? {
         version = r.Version, dasllama_version = r.DasllamaVersion,
         engine_sha = r.EngineSha, tune_sha = r.TuneSha,
         source = r.Source, verified = r.Verified != 0,
-        pp512 = r.Pp512, tg128 = r.Tg128, tg128b4 = r.Tg128b4, cpu = r.Cpu, audio = audio))
+        pp512 = r.Pp512, tg128 = r.Tg128, tg128b4 = r.Tg128b4, cpu = r.Cpu, gpu = r.Gpu, audio = audio,
+        img_enc = r.ImgEnc, img_pp = r.ImgPp, img_tg = r.ImgTg))
 }
 
 def private handle_runs(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
@@ -627,9 +630,29 @@ def private handle_import_official(var req : HttpRequest?; var resp : HttpRespon
     return resp |> JSON(body, status)
 }
 
+def private handle_import_annotations(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+    let t0 = ref_time_ticks()
+    let ip = client_ip_of(req)
+    if (!is_operator_caller(req)) {
+        log_request("POST", "/admin/import-annotations", 403, ip, 0, 0, t0)
+        return resp |> JSON(write_json(JV((error = "forbidden"))), http_status.FORBIDDEN)
+    }
+    var early = http_status.OK
+    let doc = submit_body_of(req, "/admin/import-annotations", resp, early, t0)
+    if (empty(doc)) {
+        return early
+    }
+    let r = import_annotations(g_db, doc)
+    let status = r.ok ? http_status.OK : http_status.BAD_REQUEST
+    let body = r.ok ? write_json(JV((holds = r.holds, voids = r.voids))) : write_json(JV((error = r.error)))
+    log_request("POST", "/admin/import-annotations", int(status), ip, length(doc), length(body), t0)
+    return resp |> JSON(body, status)
+}
+
 def import_official_dir(db : SqlRunner; dir_path : string; now : int64) : int {
     //! Startup import: every `records/<box>.json` store in the dir (single-dot
-    //! names only — tune sidecars, annotations, and `_` scratch are not stores).
+    //! names only — tune sidecars, annotations, and `_` scratch are not stores),
+    //! then the holds of the dir's `annotations.json`.
     //! Returns imported-store count; each file logs its own result.
     var imported = 0
     dir(dir_path) $(name) {
@@ -646,6 +669,13 @@ def import_official_dir(db : SqlRunner; dir_path : string; now : int64) : int {
             } else {
                 logger_error("ladder", "official import FAILED {name}: {r.error}")
             }
+        }
+    }
+    let annotations = fread(path_join(dir_path, "annotations.json"))
+    if (!empty(annotations)) {
+        let h = import_annotations(db, annotations)
+        if (!h.ok) {
+            logger_error("ladder", "annotations import FAILED: {h.error}")
         }
     }
     return imported

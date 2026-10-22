@@ -24,6 +24,7 @@ web/output64/examples/devlog.jsonl itself, one JSON line per page event — star
 """
 import http.server
 import os
+import re
 import socketserver
 import threading
 import urllib.error
@@ -110,7 +111,39 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if self.path.startswith("/examples/") and self.path.split("?", 1)[0].endswith(".html") \
                 and ("devlog=1" in self.path or os.path.exists(DEVLOG_ON)):
             return self.serve_with_devlog()
+        if self.path.split("?", 1)[0] in ("/", "") or self.path.split("?", 1)[0].endswith(".html"):
+            return self.serve_page()
         return super().do_GET()
+
+    def serve_page(self):
+        # a page's own scripts and styles carry their mtime as a query, so an edited file is a new
+        # URL to the browser - Safari reuses a cached script on a plain reload otherwise
+        path = self.translate_path(self.path.split("?", 1)[0])
+        if os.path.isdir(path):
+            path = os.path.join(path, "index.html")
+        try:
+            with open(path, "rb") as f:
+                html = f.read()
+        except OSError:
+            self.send_response(404)
+            self.end_headers()
+            return
+
+        def stamp(m):
+            local = self.translate_path("/" + m.group(2).decode())
+            try:
+                v = str(int(os.path.getmtime(local))).encode()
+            except OSError:
+                return m.group(0)
+            return m.group(1) + m.group(2) + b"?v=" + v + m.group(3)
+
+        html = re.sub(rb'((?:src|href)=")(files/[^"?]+\.(?:js|css))(")', stamp, html)
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Length", str(len(html)))
+        self.end_headers()
+        self.wfile.write(html)
 
     def do_POST(self):
         # a page's console lines and errors land in DEVLOG, one JSON line each, so a phone's run reads on the box that serves it
@@ -152,6 +185,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if self.path.startswith("/examples/"):
             self.send_header("Cross-Origin-Opener-Policy", "same-origin")
             self.send_header("Cross-Origin-Embedder-Policy", "require-corp")
+        # a dev server: every static file revalidates, so an edited script never runs under a
+        # newer page from the browser's heuristic cache
+        if not self.path.startswith("/api/") and self.path.split("?")[0].endswith((".js", ".css", ".json")):
+            self.send_header("Cache-Control", "no-cache")
         super().end_headers()
 
     def proxy_api(self):

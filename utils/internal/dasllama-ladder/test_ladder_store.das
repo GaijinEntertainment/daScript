@@ -30,46 +30,56 @@ def private audio_cells(text : string) : array<AudioCell> {
     return <- out
 }
 
+//! a v1 store (migration 1 stamped applied, every run in the v1 row shape) - the input the later migrations' backfills read
+def private seed_v1_store(db : SqlRunner) {
+    ladder_migration_001(db)
+    baseline(db, 1)
+    db |> exec("INSERT INTO submissions (Id, Kind, DocSha, Doc, CreatedAt, ClientIp) VALUES (7, 'records', 'sha7', ?, 1000, '10.0.0.1')", records_doc())
+    db |> exec("INSERT INTO submissions (Id, Kind, DocSha, Doc, CreatedAt, ClientIp) VALUES (8, 'official', 'sha8', ?, 1000, 'importer')", official_doc())
+    for (sid in [7, 8]) {
+        for (ri in range(2)) {
+            db |> exec("INSERT INTO runs (SubmissionId, ModelIdx, RunIdx, Gguf, Engine, Backend, Flavor, Box, Threads, RunDate, Source, CreatedAt) " +
+                "VALUES (?, 0, ?, 'x.gguf', ?, 'cpu', 'tuned', 'testbox', 8, '2026-08-10', 'community', 1000)",
+                sid, ri, ri == 0 ? "das" : "llama.cpp")
+        }
+    }
+    db |> exec("INSERT INTO submissions (Id, Kind, DocSha, Doc, CreatedAt, ClientIp) VALUES (9, 'official', 'sha9', ?, 1000, 'importer')", audio_doc())
+    for (slot in [(0, 0), (0, 1), (0, 2), (1, 0), (1, 1)]) {
+        db |> exec("INSERT INTO runs (SubmissionId, ModelIdx, RunIdx, Gguf, Engine, Backend, Flavor, Box, Threads, RunDate, Source, CreatedAt) " +
+            "VALUES (9, ?, ?, 'a.bin', 'das', 'cpu', 'tuned', 'm5', 6, '2026-09-23', 'official', 1000)",
+            slot._0, slot._1)
+    }
+    db |> exec("INSERT INTO submissions (Id, Kind, DocSha, Doc, CreatedAt, ClientIp) VALUES (10, 'official', 'sha10', ?, 1000, 'importer')", audio_outlier_doc())
+    for (ri in range(4)) {
+        db |> exec("INSERT INTO runs (SubmissionId, ModelIdx, RunIdx, Gguf, Engine, Backend, Flavor, Box, Threads, RunDate, Source, CreatedAt) " +
+            "VALUES (10, 0, ?, 'o.gguf', 'das', 'cpu', 'tuned', 'm5', 8, '2026-10-21', 'official', 1000)", ri)
+    }
+    db |> exec("INSERT INTO submissions (Id, Kind, DocSha, Doc, CreatedAt, ClientIp) VALUES (11, 'official', 'sha11', ?, 1000, 'importer')", image_doc())
+    for (ri in range(2)) {
+        db |> exec("INSERT INTO runs (SubmissionId, ModelIdx, RunIdx, Gguf, Engine, Backend, Flavor, Box, Threads, RunDate, Source, CreatedAt) " +
+            "VALUES (11, 0, ?, 'v.gguf', 'das', 'metal', 'tuned', 'm5', 6, '2026-10-21', 'official', 1000)", ri)
+    }
+}
+
 [test]
 def test_migration(t : T?) {
     t |> run("fresh db migrates to latest") @(t : T?) {
         with_latest_sqlite(":memory:") $(db) {
-            t |> equal(current_schema_version(db), 6)
+            t |> equal(current_schema_version(db), 9)
         }
     }
-    t |> run("migrations 2 to 6 backfill the cells of rows inserted before the columns existed") @(tt : T?) {
+    t |> run("migrations 2 to 9 backfill the cells of rows inserted before the columns existed") @(tt : T?) {
         with_sqlite(":memory:") $(db) {
-            // a v1 store: the shipped first migration, stamped applied, with a submission and its
-            // two run rows inserted in the v1 shape (no cell columns to fill)
-            ladder_migration_001(db)
-            baseline(db, 1)
-            // one community submission and one official import, both in the v1 row shape
-            db |> exec("INSERT INTO submissions (Id, Kind, DocSha, Doc, CreatedAt, ClientIp) VALUES (7, 'records', 'sha7', ?, 1000, '10.0.0.1')", records_doc())
-            db |> exec("INSERT INTO submissions (Id, Kind, DocSha, Doc, CreatedAt, ClientIp) VALUES (8, 'official', 'sha8', ?, 1000, 'importer')", official_doc())
-            for (sid in [7, 8]) {
-                for (ri in range(2)) {
-                    db |> exec("INSERT INTO runs (SubmissionId, ModelIdx, RunIdx, Gguf, Engine, Backend, Flavor, Box, Threads, RunDate, Source, CreatedAt) " +
-                        "VALUES (?, 0, ?, 'x.gguf', ?, 'cpu', 'tuned', 'testbox', 8, '2026-08-10', 'community', 1000)",
-                        sid, ri, ri == 0 ? "das" : "llama.cpp")
-                }
-            }
-            // an official asr/tts import in the v1 row shape: two models, three and two runs
-            db |> exec("INSERT INTO submissions (Id, Kind, DocSha, Doc, CreatedAt, ClientIp) VALUES (9, 'official', 'sha9', ?, 1000, 'importer')", audio_doc())
-            for (slot in [(0, 0), (0, 1), (0, 2), (1, 0), (1, 1)]) {
-                db |> exec("INSERT INTO runs (SubmissionId, ModelIdx, RunIdx, Gguf, Engine, Backend, Flavor, Box, Threads, RunDate, Source, CreatedAt) " +
-                    "VALUES (9, ?, ?, 'a.bin', 'das', 'cpu', 'tuned', 'm5', 6, '2026-09-23', 'official', 1000)",
-                    slot._0, slot._1)
-            }
-            // an official audio-chat import with a cold-start clip on its reference, in the v1 row shape
-            db |> exec("INSERT INTO submissions (Id, Kind, DocSha, Doc, CreatedAt, ClientIp) VALUES (10, 'official', 'sha10', ?, 1000, 'importer')", audio_outlier_doc())
-            for (ri in range(4)) {
-                db |> exec("INSERT INTO runs (SubmissionId, ModelIdx, RunIdx, Gguf, Engine, Backend, Flavor, Box, Threads, RunDate, Source, CreatedAt) " +
-                    "VALUES (10, 0, ?, 'o.gguf', 'das', 'cpu', 'tuned', 'm5', 8, '2026-10-21', 'official', 1000)", ri)
-            }
-            tt |> equal(migrate_to_latest(db), 5, "five pending migrations applied")
-            tt |> equal(current_schema_version(db), 6)
+            seed_v1_store(db)
+            tt |> equal(migrate_to_latest(db), 8, "eight pending migrations applied")
+            tt |> equal(current_schema_version(db), 9)
             let rows <- _sql(db |> select_from(type<Run>) |> _order_by(_.Id))
-            tt |> equal(length(rows), 13)
+            tt |> equal(length(rows), 15)
+            tt |> equal(rows[13].ImgEnc, 58.0lf, "migration 9 fills the image cells")
+            tt |> equal(rows[13].ImgPp, 4211.5lf)
+            tt |> equal(rows[13].ImgTg, 113.9lf)
+            tt |> equal(rows[14].ImgTg, 0.0lf, "a cell the reference did not measure stays 0")
+            tt |> equal(rows[0].ImgEnc, 0.0lf, "an LLM run carries no image cells")
             tt |> equal(rows[0].Audio, "", "an LLM run carries no audio cells")
             let asr <- audio_cells(rows[4].Audio)
             tt |> equal(length(asr), 2, "migration 4 fills the asr cells from the document")
@@ -98,6 +108,8 @@ def test_migration(t : T?) {
             tt |> equal(rows[2].Pp512, 259.6lf, "the official submission's rows are filled too")
             tt |> equal(rows[3].Pp512, 145.0lf)
             tt |> equal(rows[2].Cpu, "Apple M1 Max")
+            tt |> equal(rows[2].Gpu, "Apple M1 Max (32-core)", "migration 7 fills the gpu label")
+            tt |> equal(rows[3].Gpu, "", "a run whose hardware names no gpu stays empty")
         }
     }
 }
@@ -413,6 +425,85 @@ def private run_of(rows : array<Run>; engine, workload : string) : Run {
 }
 
 [test]
+def test_image_cells(t : T?) {
+    with_latest_sqlite(":memory:") $(db) {
+        t |> run("an image-chat import lands the encode, prefill and decode cells") @(tt : T?) {
+            let res = import_official_store(db, image_doc(), 1000l)
+            tt |> success(res.ok, "imported ({res.error})")
+            let das = run_of(list_runs(db, 0), "das", "image-chat")
+            tt |> equal(das.ImgEnc, 58.0lf)
+            tt |> equal(das.ImgPp, 4211.5lf)
+            tt |> equal(das.ImgTg, 113.9lf)
+            tt |> equal(das.Pp512, 0.0lf, "the image cells are not the LLM cells")
+            let lcpp = run_of(list_runs(db, 0), "llama.cpp", "image-chat")
+            tt |> equal(lcpp.ImgEnc, 48.0lf)
+            tt |> equal(lcpp.ImgTg, 0.0lf, "a cell the run did not measure stays 0")
+        }
+    }
+}
+
+[test]
+def test_voids(t : T?) {
+    with_latest_sqlite(":memory:") $(db) {
+        t |> run("a void blanks the named cells of the runs it selects, the rest stand") @(tt : T?) {
+            tt |> success(import_official_store(db, image_doc(), 1000l).ok, "image imported")
+            tt |> success(import_official_store(db, audio_doc(), 1001l).ok, "audio imported")
+            let notes = ("[\{\"gguf\":\"Qwen3VL-4B-Instruct-Q8_0.gguf\",\"engine\":\"llama.cpp\",\"workload\":\"image-chat\"," +
+                "\"comment\":\"x\",\"void_clips\":\"img:pp\"\}," +
+                "\{\"gguf\":\"ggml-parakeet-tdt-0.6b-v3-f32.bin\",\"engine\":\"das\",\"comment\":\"x\",\"void_clips\":\"jfk.wav\"\}]")
+            let r = import_annotations(db, notes)
+            tt |> success(r.ok, "imported ({r.error})")
+            tt |> equal(r.voids, 2)
+            tt |> equal(r.holds, 0)
+            let rows <- list_runs(db, 0)
+            tt |> equal(length(rows), 7, "a void withholds no run")
+            let lcpp = run_of(rows, "llama.cpp", "image-chat")
+            tt |> equal(lcpp.ImgPp, 0.0lf, "the voided reference cell reads unmeasured")
+            tt |> equal(lcpp.ImgEnc, 48.0lf, "the cells the void does not name stand")
+            tt |> equal(run_of(rows, "das", "image-chat").ImgPp, 4211.5lf, "the das run the void does not select stands")
+            let asr <- audio_cells(run_of(rows, "das", "asr").Audio)
+            tt |> success(asr[1].test == "jfk.wav" && asr[1].voided, "the named clip reads voided")
+            tt |> success(!asr[0].voided, "the other clip stands")
+            tt |> success(!audio_cells(run_of(rows, "parakeet-cli", "asr").Audio)[0].voided, "a run of another engine stands")
+        }
+    }
+}
+
+[test]
+def test_holds(t : T?) {
+    with_latest_sqlite(":memory:") $(db) {
+        t |> run("a hold withholds every run of its model on its workload, references included") @(tt : T?) {
+            tt |> success(import_official_store(db, audio_doc(), 1000l).ok, "imported")
+            tt |> equal(length(list_runs(db, 0)), 5, "no hold: the board holds every run (the control)")
+            tt |> equal(length(list_runs(db, 17)), 1, "the kokoro das run is the fixture's one release-17 run")
+            let annotations = ("[" +
+                "\{\"gguf\":\"kokoro-82m.gguf\",\"engine\":\"das\",\"workload\":\"tts\",\"held\":\"followup_general.md 219\"\}," +
+                "\{\"gguf\":\"ggml-parakeet-tdt-0.6b-v3-f32.bin\",\"comment\":\"a note, not a hold\"\}]")
+            let h = import_annotations(db, annotations)
+            tt |> success(h.ok, "holds imported ({h.error})")
+            tt |> equal(h.holds, 1, "an entry with no held field holds nothing")
+            let rows <- list_runs(db, 0)
+            tt |> equal(length(rows), 3, "both kokoro runs leave, the mlx-audio reference too")
+            for (r in rows) {
+                tt |> success(r.Gguf != "kokoro-82m.gguf", "no held model on the board ({r.Engine})")
+            }
+            tt |> equal(length(list_runs(db, 17)), 0, "the version filter composes with the hold")
+        }
+        t |> run("an import replaces the holds whole; a malformed one changes nothing") @(tt : T?) {
+            tt |> success(!import_annotations(db, "not json").ok, "refused")
+            tt |> equal(length(list_runs(db, 0)), 3, "the refusal left the hold standing")
+            tt |> success(import_annotations(db, "[]").ok, "an empty document clears the holds")
+            tt |> equal(length(list_runs(db, 0)), 5, "the held runs are back")
+        }
+        t |> run("a hold on another workload or box leaves the run") @(tt : T?) {
+            tt |> success(import_annotations(db, "[\{\"gguf\":\"kokoro-82m.gguf\",\"workload\":\"asr\",\"held\":\"x\"\}," +
+                "\{\"gguf\":\"kokoro-82m.gguf\",\"box\":\"zen4\",\"held\":\"x\"\}]").ok, "imported")
+            tt |> equal(length(list_runs(db, 0)), 5, "neither hold selects the m5 tts runs")
+        }
+    }
+}
+
+[test]
 def test_audio_cells(t : T?) {
     with_latest_sqlite(":memory:") $(db) {
         t |> run("an official asr/tts import fills the audio cells") @(tt : T?) {
@@ -477,8 +568,7 @@ def test_audio_cells(t : T?) {
     }
 }
 
-// the audio cells of the outlier fixture's one run of an engine and backend
-def private omni_cells(rows : array<Run>; engine, backend : string) : array<AudioCell> {
+def private outlier_run_cells(rows : array<Run>; engine, backend : string) : array<AudioCell> {
     for (r in rows) {
         if (r.Gguf == "Qwen3-Omni-30B-A3B-Instruct-Q8_0.gguf" && r.Engine == engine && r.Backend == backend) {
             return <- audio_cells(r.Audio)
@@ -494,18 +584,18 @@ def test_audio_cells_voided(t : T?) {
             let res = import_official_store(db, audio_outlier_doc(), 1002l)
             tt |> success(res.ok, "imported ({res.error})")
             let rows <- list_runs(db, 0)
-            let cold <- omni_cells(rows, "llama-mtmd-cli", "metal")
+            let cold <- outlier_run_cells(rows, "llama-mtmd-cli", "metal")
             tt |> equal(length(cold), 3)
             tt |> success(cold[1].test == "jfk.wav" && cold[1].voided, "3178 ms a second against a median of 36, rated over the das run's lengths")
             tt |> success(!cold[0].voided && !cold[2].voided, "the reference's even clips stand")
             tt |> equal(cold[1].audio_s, 0.0lf, "the borrowed length rates the cell and is not written onto it")
-            for (c in omni_cells(rows, "llama-mtmd-cli", "cpu")) {
+            for (c in outlier_run_cells(rows, "llama-mtmd-cli", "cpu")) {
                 tt |> success(!c.voided, "an even run voids nothing ({c.test})")
             }
-            for (c in omni_cells(rows, "das", "metal")) {
+            for (c in outlier_run_cells(rows, "das", "metal")) {
                 tt |> success(!c.voided, "the das run is even ({c.test})")
             }
-            let named <- omni_cells(rows, "llama-mtmd-cli", "vulkan")
+            let named <- outlier_run_cells(rows, "llama-mtmd-cli", "vulkan")
             tt |> success(named[0].test == "gb1.wav" && named[0].voided, "a clip the run's own void_clips names rides voided")
             tt |> success(!named[1].voided && !named[2].voided, "... and its other clips stand")
         }
