@@ -93,12 +93,12 @@ on the family's smallest GGUF under `LARGE_TIER_BYTES` (`tests/_model_tier.das`)
 **A GPU kernel, driver, dispatch class (a class a `[metal_dispatch]` or `[vk_dispatch]`
 declares), or K/V-mirror (the device copy of the K/V cache a GPU decode reads and writes)
 change, or a change to a `kv_*` function that a GPU driver file (`dasllama_metal*.das`,
-`dasllama_vulkan*.das`, `dasllama_gpu*.das`) calls, wherever the diff puts it, applies
+`dasllama_*vulkan*.das`, `dasllama_gpu*.das`) calls, wherever the diff puts it, applies
 `REVIEW_GPU.md`.**
 
 **A call that creates, enables or tears down device-home serving (`create_device_session`,
 `set_device_kv`, `moe_gpu_drop_model`), or a call or definition of a `set_*` / `reset_*` function
-in `dasllama/dasllama_core.das`, `dasllama_env.das` or a `dasllama_{gpu,vulkan,metal}*.das` file,
+in `dasllama/dasllama_core.das`, `dasllama_env.das` or a `dasllama_{gpu,metal}*.das` or `dasllama_*vulkan*.das` file,
 wherever the diff puts it, applies `REVIEW_GPU.md`.**
 
 **A GPU kernel timing race (two kernels timed against each other to pick one - not a data race), a

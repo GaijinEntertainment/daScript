@@ -54,11 +54,11 @@ build - names both exes in its `cmd`.**
 in that row's provenance, the checkout that built the binary it timed; a python leg names
 `../benchmarks/asr/requirements-*.txt` instead.**
 
-**A diff that writes a `das` row to the `records/<box>.json` of a box `RETIRED_BOXES` lists
-(`../dasllama/dasllama_exchange_schema.das`), or a sidecar archive no row whose `dasllama_version`
-equals `DASLLAMA_RELEASE` names by its `tune_sha`, whose version pin is missing,
-or differs from `DASLLAMA_RELEASE` (`../dasllama/dasllama_version.das`), is a defect -
-re-mint.** The pin is the row's `dasllama_version`, and `provenance.dasllama_version` in a
+**A diff that adds a `das` row to the `records/<box>.json` of a box `RETIRED_BOXES` lists
+(`../dasllama/dasllama_exchange_schema.das`), adds a sidecar archive that no row whose
+`dasllama_version` equals `DASLLAMA_RELEASE` names by its `tune_sha`, or changes the version pin
+of either, writes `DASLLAMA_RELEASE` (`../dasllama/dasllama_version.das`) as that pin - re-mint
+otherwise.** The pin is the row's `dasllama_version`, and `provenance.dasllama_version` in a
 sidecar archive; for a sidecar with an `engine_sha`, read the value at that commit.
 `REVIEW.das` checks the pin of every other `das` row, of the archive each current-release row
 names, and of every `defaults/` profile; weakening that check is a defect.

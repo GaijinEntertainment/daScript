@@ -64,7 +64,8 @@ puts it, applies `modules/REVIEW_SHADER_EMITTERS.md` (repo root) too.** A kernel
 depends on both, and a host-only change reaches no kernel file.
 
 **A diff that names GPU-vs-CPU parity evidence, driver-against-itself evidence, or external-reference
-evidence whose run is GPU-served - a run, a log, a claim - or changes the text of a Vulkan serving log line a parity rule reads - the resident
+evidence (a run's output held to values another implementation recorded) whose run is GPU-served -
+a run, a log, a claim - or changes the text of a Vulkan serving log line a parity rule reads - the resident
 driver's `resident driver armed (...)` line, the per-op tier's `GPU MoE tier:` report, the
 `resident override passed a call` line - applies `REVIEW_GPU_PARITY.md` too.**
 
