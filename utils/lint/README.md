@@ -38,6 +38,9 @@ file that requires it, read off the sources' `require` lines (a require names a 
 name): a module promoted before its own compile would collide with it. A parallel run shares inside
 each worker, over the chunk it holds. The result cache's entries hash the same module sources either
 way. `--no-shared-modules` compiles every file's modules in its own group, as the runner did before.
+A file whose code keys on `builtin_module_exists` of a `shared` module - a `static_if` over the
+guard - compiles differently once the run promoted that module, as it does under dastest, so a
+`nolint` that one mode needs lists `LINT019` for the other.
 CI's chunked `check_lint_tree` leaves `modules/dasLLAMA` out, whose every file compiles the engine's
 whole graph, and `check_lint_dasllama` lints that module as one process.
 

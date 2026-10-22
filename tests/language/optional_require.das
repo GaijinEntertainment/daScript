@@ -18,7 +18,7 @@ require ?daslib/fio optional_require_fixture_pathguard        // path guard reso
 require ?daslib/no_such_file_xyz optional_require_fixture_skipme  // path guard unresolvable -> SKIPPED even though the target file resolves
 // %/-rooted guards: grammar-legal require_module_name forms the pre-parse require scanner must
 // scan identically to ast_requireModule (it once stopped at '%', mangling guard AND target)
-require ?%/tests/language/optional_require_fixture.das optional_require_fixture_pctguard  // nolint:STYLE030 — %/ guard resolves -> target loaded; referenced only under static_if
+require ?%/tests/language/optional_require_fixture.das optional_require_fixture_pctguard  // nolint:STYLE030,LINT019 — %/ guard resolves -> target loaded; referenced only under static_if, whose builtin_module_exists guard is true once a lint run promoted the shared fixture
 require ?%/tests/language/no_such_file_xyz.das optional_require_fixture_pctskip  // %/ guard unresolvable -> SKIPPED, target file resolves
 require optional_require_fixture_private   // requires optional_require_fixture_hidden PRIVATELY: the module_exists visibility pin below
 
