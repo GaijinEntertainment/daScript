@@ -4,7 +4,8 @@
 `README.md`.
 
 **Never put a `[test]` file for this folder under the repo-root `tests/` tree, and never
-register one in any `CMakeLists.txt` - a `[test]` file lives in this directory and requires its
+register one in a `CMakeLists.txt` other than in the `run_tests_dasllama_ladder` lane of
+`utils/CMakeLists.txt` (repo root) - a `[test]` file lives in this directory and requires its
 siblings by bare name.**
 
 **A test reaches the service only through the local `with_ladder_server` harness
@@ -68,12 +69,16 @@ Safari does not implement.**
 
 **A file in this directory requires no dasLLAMA, dasLLVM, or model machinery other than the
 engine-free `dasllama/dasllama_exchange_schema`, and only `ladder_store.das` requires that**
-(`README.md` sec.3).
+(`README.md`, "Engine-free rule").
 
 **A write path that stores a document without validating it first is a defect: every sidecar -
 community or planted - passes `validate_sidecar_submission`, every community record store
 passes `validate_record_submission`, and every official record store passes
 `validate_record_store` (shape only - official records predate the `dasllama_version` stamp).**
+
+**A write path that stores fields it reads off a document, never the document itself -
+`import_annotations` - refuses, before it writes, a document whose shape it cannot read: for the
+annotations, anything but a JSON array.**
 
 **Never write `Source` or `Verified` outside `ladder_store.das`, and never let a value from a
 public (proxied) request reach either column - the loopback operator surface sets `Verified`
@@ -153,5 +158,6 @@ its line here, with its tests, in the same change.**
 - `_ladder_test_common.das` - shared test fixtures, required by bare name from the store and
   server suites (the leading `_` keeps dastest's walker away).
 - `test_ladder_store.das` - the store suite: `ladder_store` calls against `:memory:`, no server.
-- `test_ladder_server.das` - the HTTP suite: routes through `with_ladder_server` on port 19015.
+- `test_ladder_server.das` - the HTTP suite: routes through `with_ladder_server` on port 19015, the
+  startup import of an official dir with its `annotations.json`, and the `admin.das` CLI as a child.
 - `test_ladder_config.das` - the config suite: the defaults/toml/CLI merge and its provenance.

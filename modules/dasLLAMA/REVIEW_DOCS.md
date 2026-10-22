@@ -29,7 +29,8 @@ lives (the architecture doc or the code) or drops it.**
 
 **A diff that rewrites the problem a `followup_*.md` row states deletes the row, repoints every
 checked-in citation that names it to the new row's number or drops it, and adds the new problem
-under a new number; deleting a resolved item is not a rewrite.** A row rewritten under its number
+under a new number; deleting a resolved item, or narrowing one to its unresolved part, is not a
+rewrite.** A row rewritten under its number
 turns every citation of that number into a citation of something else.
 
 **A diff files planned work in the ledger that owns it: `followup_metal.md` for work that would

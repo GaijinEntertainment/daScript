@@ -10,6 +10,45 @@ and coverage; this ledger is the backlog for the perf pass that follows them. Ev
 what it costs today and what the fix would change.
 
 ## Entries
+- **MEASURED (2026-10-22, `direction-grade`) - the release-17 boards' figures the ledger rows cite.** Every figure is a
+  committed board row of `performance/records/<box>.json`, named below by box, model, `(engine, backend, flavor)`,
+  date and `sha`; a das row is a `gen_bench_records.das` spawned cell of the released `lcpp_bench` exe, a reference
+  row a spawned cell of the reference build at 9febe63d5 (its row's `cmd` the command line, its `versions` the
+  packages) - the CPU rows on `ARCHITECTURE_MEASUREMENT.md#one-benchmark-rig`'s `--ref` recipe, the Vulkan rows on
+  `ARCHITECTURE_MEASUREMENT.md#vulkan-reference-rows`, the TTS rows on
+  `ARCHITECTURE_MEASUREMENT_AUDIO.md#the-tts-reference-instrument`, the MLX ASR rows on
+  `ARCHITECTURE_MEASUREMENT_AUDIO.md#mlx-asr-reference`. A ratio is the das row over the reference row of the same
+  box, two processes. The CPU reference flavor is `clean-cpu` throughout.
+
+  The TTS corpus head (`tts:g2p20@<voice>`, `audio_s`), `m5.json`: kitten-nano Bella - das `cpu/tuned` (2026-10-22,
+  d71b1aacc) 242.60 s, das `metal/tuned` (2026-10-21, 57af9f1a9) 242.43, `kittentts` `cpu/stock` (2026-10-22, torch
+  2.14.0 / kittentts 0.8.1 / onnxruntime 1.29.0) 159.95, `mlx-audio` `metal/stock` (2026-10-21, mlx 0.32.4 /
+  mlx-audio 0.6.1) 159.85; kitten-mini Bella - 206.50, 206.58, 144.98, 144.83; kokoro-82m af_heart - das
+  `metal/tuned` 145.68, `kokoro` `metal/stock` (torch MPS, 2026-10-21) 146.63, `mlx-audio` 146.65.
+
+  The batched decode (`tg128@4`, tok/s, das `cpu/tuned` against `llama.cpp` `cpu/clean-cpu`). `epyc9r14.json` (AWS
+  m7a, das 2026-10-21 792defade): gpt-oss-20b mxfp4 46.9 against 64.7 (0.72), Qwen3.6-35B-A3B UD-Q4_K_M 44.0 / 40.4
+  (1.09), Qwen3-VL-4B Q8_0 58.6 / 60.0 (0.98), Qwen2.5-Omni-3B Q8_0 76.6 / 77.7 (0.99), gemma-4-E4B Q8_0 50.1 / 50.7
+  (0.99). `m5.json` (das 2026-10-22 d71b1aacc): gpt-oss-20b 82.3 / 87.8 (0.94), Qwen3.6-35B-A3B 85.2 / 90.4 (0.94).
+
+  The image turns (`image-chat`, the reference `llama-mtmd-cli` at 9febe63d5 + mtmd-timing.patch@557dd85a).
+  `m5.json`: Qwen3-VL-4B `cpu/clean-cpu` (2026-10-22) `img:pp` 30.2 tok/s against that flavor's llama-bench pp512 of
+  221.8; `metal/stock` (2026-10-21) `img:pp` 441.3 against gemma-4-E4B's `metal/stock` `img:pp` 2108.8. Qwen2.5-Omni-3B
+  `cpu/clean-cpu` `img:pp` against pp512: `m5.json` 46.8 / 303.3, `epyc9r14.json` 42.4 / 293.1, `gnr.json` 60.5 /
+  454.0, `graviton4.json` 33.5 / 249.7. gemma-4-E4B `cpu/clean-cpu` `img:enc`: `m5.json` 13545 ms (`cpu/stock`
+  13556), `graviton4.json` 10824, `epyc9r14.json` 430, `gnr.json` 730.
+
+  The prefill (pp512, tok/s, das `cpu/tuned` against `cpu/clean-cpu`). `gnr.json` (AWS m8i, das 2026-10-22
+  fbf750ffd): Qwen3.6-35B-A3B 119.7 / 131.8 (0.91), gpt-oss-20b 200.5 / 102.8 (1.95), gemma-4-E4B 325.7 / 268.7
+  (1.21), Qwen3-VL-4B 489.2 / 305.4 (1.60). `epyc9r14.json` (792defade): 424.8 / 181.2 (2.34), 406.0 / 159.3
+  (2.55), 368.5 / 202.5 (1.82), 531.7 / 217.4 (2.45). `graviton4.json` (AWS m8g, fbf750ffd): 309.3 / 136.9 (2.26),
+  240.6 / 111.2 (2.16), 230.9 / 130.9 (1.76), 290.5 / 158.0 (1.84). The `gnr.json` das rows the release-17 rows
+  replaced (2026-09-30, 60beeec07): 117.1, 198.5, 293.1, 438.1 - the release-17 rows 1.0 % to 11.7 % above them,
+  Qwen2.5-Omni-3B (657.0 -> 719.5), gemma-4-26B-A4B Q4_K_M (279.5 -> 288.2) and Qwen3.8-27B Q4_K_M (46.2 -> 51.0)
+  inside that span.
+
+  The Whisper tiny CPU row, `m5.json` `ggml-tiny.bin` das `cpu/tuned`, gb1 + hp0: 728.6 + 959.4 = 1688.0 ms (2026-10-22,
+  d71b1aacc) against the release-16 row it replaced, 719.2 + 912.2 = 1631.4 ms (2026-09-23, ea5747c91).
 - **MEASURED (2026-10-21, `served`, `out-of-process`, `debug-jit`, `direction-grade`) - a recurrent model's checkpoint stops
   inside one Vulkan prefill window.** RunPod RTX PRO 4500 Blackwell 32 GB, the IQ4_XS-pure 35B whole on the card, every kernel
   on the x86-avx2 class profile (`DASLLAMA_ALLOW_UNTUNED=1`: the pod has no box profile). The server at `--gpu vulkan --ctx
@@ -2844,7 +2883,7 @@ what it costs today and what the fix would change.
   the first 785, min 36, the steady sentences about 62, against the torch CUDA reference row of
   52 ms a sentence (`external`: `harness/tts_ref_bench.py --device cuda --models
   kokoro-82m:af_heart --limit 20` on the pod under
-  `ARCHITECTURE_MEASUREMENT_AUDIO.md#the-tts-reference-instrument`'s recipe; the package versions that
+  `ARCHITECTURE_MEASUREMENT_AUDIO.md#tts-ref-g2p-venv`'s recipe; the package versions that
   run printed are not in this branch's record). kitten-nano (`kitten-nano.gguf`): 54 ms against
   its onnxruntime CUDA EP reference row of 132 (`external`: the same script with `--device cuda
   --models kitten-nano`, onnxruntime-gpu with the cu12 pip libraries, providers CUDA then CPU);
@@ -2995,7 +3034,7 @@ what it costs today and what the fix would change.
   pays the slab build and the pipeline warm-up), the mean generation wall a sentence with its min
   and max over the 20, and the real-time factor of the run; the CPU arm is a second process under
   `DASLLAMA_METAL_TOWER=0` (`direction-grade`). The reference column is `harness/tts_ref_bench.py`
-  (`ARCHITECTURE_MEASUREMENT_AUDIO.md#the-tts-reference-instrument`;
+  (`ARCHITECTURE_MEASUREMENT_AUDIO.md#tts-ref-g2p-venv`;
   `~/Work/tts-ab/g2p/.venv-g2p/bin/python harness/tts_ref_bench.py --device mps --threads 8
   --limit 20`, and `--device cpu --models kokoro-82m:af_heart` for the torch CPU row; torch
   2.13.0, kokoro 0.9.4, kittentts 0.8.1, onnxruntime 1.29.0, `HF_HOME=~/Work/tts-ab/g2p/.hf`):
@@ -3045,7 +3084,7 @@ what it costs today and what the fix would change.
   from a scratch timer around `parakeet_encode`, `direction-grade`. Served cells, `debug-jit`,
   `benchmarks/lcpp_bench.das --asr -m <model> -r 2 -t 6 --ngl 99 --for-debug-purposes` with
   `DASLLAMA_ALLOW_UNTUNED=1`, one value per clip (the bench prints the best of its reps),
-  `direction-grade` against the board's 2026-09-23 rows: parakeet v3 jfk 61 ms, jfk3 161 ms,
+  `direction-grade` against the board's 2026-09-23 rows (das sha ea5747c91): parakeet v3 jfk 61 ms, jfk3 161 ms,
   gb1 0.96 s, hp0 1.37 s, hp0x2 3.33 s, librispeech25 1.36 s - the board's das q8 CPU rows
   158 ms / 4.35 s / 25.7 s on jfk / gb1 / hp0x2 (`performance/records/m5.json`, `-t 6`);
   canary jfk 275 ms, jfk3 763 ms, gb1 3.22 s - the board's Metal row 322 ms / 6.50 s on the
@@ -5983,7 +6022,7 @@ other overrides alike.
   **771 / 248**, **981 / 371**, **1941 / 719**, the loop 1 / 2 / 8 / 12 / 23 windows a clip. The
   reference is whisper-cli with its timestamps on (`external`: whisper.cpp d09f61a, version
   1.9.4-dev, the pod's Vulkan build; `whisper-cli -m ggml-large-v3-turbo-q8_0.bin -f <clip> -t 16
-  -bs 1 -bo 1 -nf`, the recipe `ARCHITECTURE_MEASUREMENT.md` 2.20 carries: each clip behind jfk in
+  -bs 1 -bo 1 -nf`, the recipe `ARCHITECTURE_MEASUREMENT_AUDIO.md#asr-gpu-pairs` carries: each clip behind jfk in
   one process, the jfk-only process subtracted, two reps and the min - the reps' pairs sit in the
   run logs, not here): encode 36 / 70 / 342 / 444 / 886, total 101 / 252 / 1302 / 1646 / 3409, over
   1 / 2 / 10 / 13 / 26 encoder runs - so the encoder reads 1.12x to 1.38x ahead a clip (31.2 ms a

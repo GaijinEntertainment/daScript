@@ -102,8 +102,9 @@ a run of skips is not the coverage the suite owes.
 
 **A diff that adds a test file here adds its `CLAUDE.md` entry in the same change.**
 
-**A diff that adds a cell or a gate function to a file whose `CLAUDE.md` entry lists that file's
-cells or gates by name adds the new name to each such list in the same change.**
+**A diff that adds a cell or a gate function to a file whose `CLAUDE.md` entry names every cell,
+or every gate function, of that file adds the new name to that entry in the same change; an entry
+that names only some of them is not such a list.**
 
 **A diff that removes, moves or renames a cell or a gate function, or changes a cell's suite, its
 skip condition, or any fact a `CLAUDE.md` entry states about it - the class it dispatches, the

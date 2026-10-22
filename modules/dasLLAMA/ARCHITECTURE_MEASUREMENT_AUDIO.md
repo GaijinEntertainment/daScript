@@ -42,6 +42,21 @@ marker already being in the tree, three-way - still applies after the reference 
 boxes `performance/setup_asr_rig.das` builds a second, Metal-ON copy of the same patched checkout,
 because `-ngl` on a Metal-OFF build is inert; `mtmd_bin_metal()` returns "" when it is absent and the GPU reference leg skips loudly.
 
+### The MLX ASR reference {#mlx-asr-reference}
+
+An MLX ASR row (`engine` `mlx-audio`, `backend` `metal`) is one `gen_bench_records` spawn of
+`benchmarks/asr/.venv-mlx/bin/python benchmarks/asr/mlx_asr_bench.py --variant <handle> --threads
+<n> --reps <r> --wav <clip>...` over the catalog row's clips, with no environment setting beyond the
+command line (`--threads` is accepted and unused: MLX runs on the GPU). The venv builds from
+`benchmarks/asr/requirements-mlx.txt` (mlx and mlx-metal 0.32.4, mlx-audio 0.6.1, mlx-lm 0.32.2;
+`setup_asr_rig --venvs`, Apple boxes only), and the script prints a `VERSIONS` line the row's
+`versions` carries. A variant names one `mlx-community` Hugging Face repo, fetched on first use:
+`parakeet-v2` / `parakeet-v3` (`parakeet-tdt-0.6b-v2` / `-v3`), `whisper-turbo-fp16` / `-8bit`
+(`whisper-large-v3-turbo-asr-fp16` / `-8bit`), `qwen3-asr-0.6b-8bit` / `qwen3-asr-1.7b-8bit`
+(`Qwen3-ASR-0.6B-8bit` / `-1.7B-8bit`). The model load is off the clock and one untimed
+transcription runs first; a timed rep is one `generate` on the clip's path, its audio decode
+inside, and the row keeps each clip's best rep.
+
 ### The TTS reference instrument {#the-tts-reference-instrument}
 
 A TTS board cell is `lcpp_bench --tts -m <gguf>` against `harness/tts_ref_bench.py`, both over the
@@ -61,3 +76,14 @@ ports of all three from the `mlx` venv (`--engine mlx`). Both venvs build from c
 the row carries. Kitten's package speaks shorter audio than das for the same phonemes (its speed
 prior and 5000-sample trim), so a kitten pair compares on the wall, never on the real-time factor.
 `harness/tts_synth.das` and `harness/pocket_synth.py` stay the scoring rig's synthesis arms.
+
+### The TTS reference's CUDA provider and its g2p-venv runs {#tts-ref-g2p-venv}
+
+`harness/tts_ref_bench.py --device cuda` opens a Kitten session on onnxruntime's CUDA execution
+provider (`onnxruntime-gpu`) ahead of the CPU one; any other device opens the CPU provider alone,
+and the run prints the providers the session took, so a row names the one that ran. Outside the
+board the script also runs under the g2p experiment's venv (`~/Work/tts-ab/g2p/.venv-g2p`) with
+`HF_HOME` at that experiment's hub cache (`~/Work/tts-ab/g2p/.hf`, holding the pinned snapshots
+`harness/kitten_graph.py` names, and that script's default when `HF_HOME` is unset); a ledger row
+timed there names the torch, kokoro, kittentts and onnxruntime versions the run printed beside its
+command.

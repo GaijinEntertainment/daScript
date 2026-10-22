@@ -9,8 +9,11 @@ bench's fixture - and the timing-race vocabulary
 it keeps its sidecar are `ARCHITECTURE_MEASUREMENT_FAT_START.md#fat-first-start`; the client clock
 around a live server's turns is `ARCHITECTURE_MEASUREMENT_SERVED.md#served-turn-instrument`; the
 reference build's forced feed beside the gemma feed cells is
-`ARCHITECTURE_MEASUREMENT_FORCED_FEED.md#reference-forced-feed`; the ASR board's GPU row pairs and
-the TTS reference instrument are `ARCHITECTURE_MEASUREMENT_AUDIO.md`.
+`ARCHITECTURE_MEASUREMENT_FORCED_FEED.md#reference-forced-feed`; the ASR board's GPU row pairs
+(`ARCHITECTURE_MEASUREMENT_AUDIO.md#asr-gpu-pairs`), the MLX ASR reference
+(`ARCHITECTURE_MEASUREMENT_AUDIO.md#mlx-asr-reference`), the TTS reference instrument
+(`ARCHITECTURE_MEASUREMENT_AUDIO.md#the-tts-reference-instrument`) and its CUDA provider and
+g2p-venv runs (`ARCHITECTURE_MEASUREMENT_AUDIO.md#tts-ref-g2p-venv`) are the audio companion's.
 
 ### There is ONE benchmark rig, and the records are the baseline {#one-benchmark-rig}
 
@@ -164,6 +167,36 @@ the device, the shape the resident driver's split token command serves. The row 
 driver version beside the figures, and `-ngl 99` alone is not the reference - it streams the
 experts across the link every batch and measures the link.
 
+### The Vulkan board's reference rows {#vulkan-reference-rows}
+
+A Vulkan board's reference row (`engine` `llama.cpp`, `backend` `vulkan`) times the `vulkan` flavor
+`benchmarks/setup_lcpp_ref.das --flavor vulkan` builds at `DEFAULT_REF_SHA` (the row's `sha`): the
+Release configure with `-DLLAMA_CURL=OFF -DGGML_VULKAN=ON`, its glslc from a Vulkan SDK of 1.4.357
+or later (`BRINGUP.md`). `gen_bench_records --ref-vulkan <build-vulkan/bin/llama-bench>` (or
+`LLAMA_BENCH_VULKAN`) runs, per model, `llama-bench -m <gguf> -ngl 99 -t <threads> -p 512 -n 128 -r
+5 -o json` for the flat rows and the sibling `llama-batched-bench -m <gguf> -ngl 99 -t <threads> -c
+4096 -b 2048 -ub 512 -npp 512 -ntg 128 -npl 4 -fa on` for `tg128@4`, with no environment setting
+beyond the command line; the row's `cmd` carries both.
+
+### The committed records gate {#committed-records-gate}
+
+`gen_bench_records.das` writes `performance/records/<box>.json`, and `RETIRED_BOXES`
+(`dasllama/dasllama_exchange_schema.das`) is the one list of boxes whose boards are history - the
+records and the ladder keep their rows, the site projection reads the list to keep them off the
+cards. `performance/REVIEW.das` checks the records' tree-decidable provenance:
+- `check_records_corpus` - every store parses, every run's `hardware.remote_desktop` is `off` or
+  absent, every archived sidecar's `provenance.noise` is `ok` or absent. Licenses no names.
+- `check_das_row` - a `das` row is not past `DASLLAMA_RELEASE`, and below it only on a box
+  `RETIRED_BOXES` lists - the licensed set, boxes no release re-mints; a current-release row
+  carries `hardware.remote_desktop` and a `sha` HEAD reaches whose `dasllama_version.das` reads
+  the same release.
+- `check_row_archive` - a current-release row's `tune_sha` names an archive that exists, pins
+  the current release, and stamps an `engine_sha` HEAD reaches. Licenses no names.
+- `check_defaults_profiles` - a `defaults/` profile is a quiet mint at the current release with
+  a `kernels` section and no `engine_sha`. Licenses no names.
+- `check_ruler_records` - a `records/mtp/` file names no home directory. Licenses no names.
+- `main` - `dasllama_version.das` declares a readable `DASLLAMA_RELEASE`. Licenses no names.
+
 ### Sanctioned instrumentation rails {#sanctioned-instrumentation-rails}
 
 Engine timing goes through the rails that aggregate and tag it: the `jobque_profile` markers
@@ -205,7 +238,7 @@ rule's.
 
 ### A routed MoE's parity fixture holds as a half-span prefix {#fixture-prefix-bar}
 
-The timed run's fixture gate holds every carrier as a matching prefix of half the checked span; the `--parity` pregate holds token for token, except on a carrier whose evidence sets `prefix_bar` (`ParityEvidence`, `performance/model_specs.das`) - the gemma-4-26B MoE, Q8_0 and Q4_K_M - which it holds to the same half-span prefix over the whole fixture. The 26B routes a discrete top-8 of 128 experts a layer and its forward amplifies one ulp of rounding about tenfold a layer, so any float engine's logits move by whole points when only the accumulation order changes - the reference engine's between thread counts or micro-batch sizes, ours between JIT routes - and a token past the opening is a coin flip, not a forward bug. `fixture_ok` is the one bar both gates read.
+The timed run's fixture gate holds every carrier as a matching prefix of half the checked span; the `--parity` pregate holds token for token, except on a carrier whose evidence sets `prefix_bar` (`ParityEvidence`, `performance/model_specs.das`) - the gemma-4-26B MoE, Q8_0 and Q4_K_M - which it holds to the same half-span prefix over the whole fixture. The 26B routes a discrete top-8 of 128 experts a layer and its forward amplifies one ulp of rounding layer over layer, so any float engine's logits move by whole points when only the accumulation order changes - the reference engine's between thread counts or micro-batch sizes, ours between JIT routes - and a token past the opening is a coin flip, not a forward bug. `fixture_ok` is the one bar both gates read.
 
 ### A `[tuned]` kernel's perm is decided at its own compile {#tuned-perm-precedence}
 

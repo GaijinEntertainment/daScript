@@ -214,8 +214,9 @@ number with no alternate beside it cannot be compared to anything.
 **A diff that records a third-party row lands that row's recipe - the program, its version, the
 model, the command line, and any environment settings the command line does not show - in the same
 change, in the `ARCHITECTURE_MEASUREMENT*.md` section that describes the instrument the row is
-compared with; where no section describes that instrument, the diff adds one.** The next entry
-re-runs the reference from the section, not from the earlier entry's prose.
+compared with; where no section describes that instrument, the diff adds one.** A board row's own
+`cmd` and `versions` fields count as its command line and version; the section states the rest.
+The next entry re-runs the reference from the section, not from the earlier entry's prose.
 
 **A figure a cell, script or exe of this repository produced that is not a served-turn leg, whose
 value depends on the box it ran on, names the harness, the flags, the environment overrides, the
@@ -246,5 +247,6 @@ engine the run could adopt, and picks the winner.
 the pinned backend's layout, so a pin set after the load never reaches them.
 
 **A diff that adds or changes a CPU kernel-backend pin path makes the run refuse or skip when
-the pin names a backend the box has not registered - never fall through to the default.** A
+the pin cannot take - a backend the box has not registered, a batch-only backend, or one the box
+cannot run (`kernel_backend_pin_refusal`) - never fall through to the default.** A
 misspelled pin that falls through measures the default backend under the pinned one's name.

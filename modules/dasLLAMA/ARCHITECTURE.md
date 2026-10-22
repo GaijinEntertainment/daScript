@@ -183,10 +183,12 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
   lane, the plain-Model ASR decoders, and the parakeet decode step.
 - `ARCHITECTURE_MEASUREMENT.md` - the benchmark rig, the tune gate, the sanctioned
   instrumentation rails, the `[tuned]` perm precedence, the mint wall in the sidecar's provenance,
-  the audio outlier rule, the parity fixture's prefix bar, and the speculative round's ruler record.
+  the audio outlier rule, the parity fixture's prefix bar, the Vulkan board's reference rows, the
+  committed records gate, and the speculative round's ruler record.
 - `ARCHITECTURE_MEASUREMENT_AUDIO.md` - the audio board's instruments: the ASR board's GPU row pairs
-  (`ARCHITECTURE_MEASUREMENT_AUDIO.md#asr-gpu-pairs`) and the TTS reference instrument
-  (`ARCHITECTURE_MEASUREMENT_AUDIO.md#the-tts-reference-instrument`).
+  (`ARCHITECTURE_MEASUREMENT_AUDIO.md#asr-gpu-pairs`), the MLX ASR reference, the TTS reference
+  instrument (`ARCHITECTURE_MEASUREMENT_AUDIO.md#the-tts-reference-instrument`), and its CUDA
+  provider and g2p-venv runs.
 - `ARCHITECTURE_MEASUREMENT_FAT_START.md` - a fat exe's first-start race and its per-user
   sidecar (`ARCHITECTURE_MEASUREMENT_FAT_START.md#fat-first-start`), and the per-box runtime
   file a run with no sidecar of its own races into
