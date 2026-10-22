@@ -139,7 +139,291 @@
             "role":"image",
             "name":"coco-val2017-000000039769.jpg"
           }
+        ],
+        "comment":"llama-mtmd-cli reports this image turn's prefill an order under its own text prefill on the same model (Qwen3-VL-4B CPU: 30 tok/s against llama-bench pp512 222 on the M5) and under its gemma-4 image prefill on the same GPU, so the cell measures something other than the turn - the ratio is withheld, followup_general.md row 224.",
+        "void_clips":"img:pp"
+      },
+      {
+        "engine":"das",
+        "backend":"cpu",
+        "flavor":"tuned",
+        "box":"gnr",
+        "threads":8,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Intel(R) Xeon(R) 6975P-C"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":489.18055579847123
+          },
+          "tg128":{
+            "tok_s":21.683979674028443
+          },
+          "tg128@4":{
+            "tok_s":72.179774806188234
+          }
+        },
+        "source":"official",
+        "sha":"fbf750ffd",
+        "version":"0.6.5",
+        "files":[
+          {
+            "role":"weights",
+            "name":"Qwen3VL-4B-Instruct-Q8_0.gguf"
+          }
         ]
+      },
+      {
+        "engine":"llama.cpp",
+        "backend":"cpu",
+        "flavor":"clean-cpu",
+        "box":"gnr",
+        "threads":8,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Intel(R) Xeon(R) 6975P-C"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":305.44074499999999
+          },
+          "tg128":{
+            "tok_s":21.702544
+          },
+          "tg128@4":{
+            "tok_s":57.883332570393883
+          }
+        },
+        "source":"official",
+        "sha":"9febe63d5",
+        "files":[
+          {
+            "role":"weights",
+            "name":"Qwen3VL-4B-Instruct-Q8_0.gguf"
+          }
+        ]
+      },
+      {
+        "engine":"das",
+        "backend":"cpu",
+        "flavor":"tuned",
+        "box":"gnr",
+        "threads":8,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Intel(R) Xeon(R) 6975P-C"
+        },
+        "tests":{
+          "img:enc":{
+            "ms":1310.9059999999999
+          },
+          "img:pp":{
+            "tok_s":504.34585870774333
+          },
+          "img:tg":{
+            "tok_s":20.807208726820768
+          }
+        },
+        "workload":"image-chat",
+        "source":"official",
+        "sha":"fbf750ffd",
+        "version":"0.6.5",
+        "files":[
+          {
+            "role":"weights",
+            "name":"Qwen3VL-4B-Instruct-Q8_0.gguf"
+          },
+          {
+            "role":"mmproj",
+            "name":"mmproj-Qwen3VL-4B-Instruct-F16.gguf"
+          },
+          {
+            "role":"image",
+            "name":"coco-val2017-000000039769.jpg"
+          }
+        ]
+      },
+      {
+        "engine":"llama.cpp",
+        "backend":"cpu",
+        "flavor":"clean-cpu",
+        "box":"gnr",
+        "threads":8,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Intel(R) Xeon(R) 6975P-C"
+        },
+        "tests":{
+          "img:enc":{
+            "ms":1397
+          },
+          "img:pp":{
+            "tok_s":33.828382838283829
+          },
+          "img:tg":{
+            "tok_s":20.86007702182285
+          }
+        },
+        "workload":"image-chat",
+        "source":"official",
+        "files":[
+          {
+            "role":"weights",
+            "name":"Qwen3VL-4B-Instruct-Q8_0.gguf"
+          },
+          {
+            "role":"mmproj",
+            "name":"mmproj-Qwen3VL-4B-Instruct-F16.gguf"
+          },
+          {
+            "role":"image",
+            "name":"coco-val2017-000000039769.jpg"
+          }
+        ],
+        "comment":"llama-mtmd-cli reports this image turn's prefill an order under its own text prefill on the same model (Qwen3-VL-4B CPU: 30 tok/s against llama-bench pp512 222 on the M5) and under its gemma-4 image prefill on the same GPU, so the cell measures something other than the turn - the ratio is withheld, followup_general.md row 224.",
+        "void_clips":"img:pp"
+      },
+      {
+        "engine":"das",
+        "backend":"cpu",
+        "flavor":"tuned",
+        "box":"graviton4",
+        "threads":16,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Neoverse-V2"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":290.53599783674451
+          },
+          "tg128":{
+            "tok_s":59.874191283864249
+          },
+          "tg128@4":{
+            "tok_s":148.12674170887988
+          }
+        },
+        "source":"official",
+        "sha":"fbf750ffd",
+        "version":"0.6.5",
+        "files":[
+          {
+            "role":"weights",
+            "name":"Qwen3VL-4B-Instruct-Q8_0.gguf"
+          }
+        ]
+      },
+      {
+        "engine":"llama.cpp",
+        "backend":"cpu",
+        "flavor":"clean-cpu",
+        "box":"graviton4",
+        "threads":16,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Neoverse-V2"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":157.958991
+          },
+          "tg128":{
+            "tok_s":55.824703
+          },
+          "tg128@4":{
+            "tok_s":160.61666361490884
+          }
+        },
+        "source":"official",
+        "sha":"9febe63d5",
+        "files":[
+          {
+            "role":"weights",
+            "name":"Qwen3VL-4B-Instruct-Q8_0.gguf"
+          }
+        ]
+      },
+      {
+        "engine":"das",
+        "backend":"cpu",
+        "flavor":"tuned",
+        "box":"graviton4",
+        "threads":16,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Neoverse-V2"
+        },
+        "tests":{
+          "img:enc":{
+            "ms":1001.41
+          },
+          "img:pp":{
+            "tok_s":282.82586209023293
+          },
+          "img:tg":{
+            "tok_s":56.127641741004609
+          }
+        },
+        "workload":"image-chat",
+        "source":"official",
+        "sha":"fbf750ffd",
+        "version":"0.6.5",
+        "files":[
+          {
+            "role":"weights",
+            "name":"Qwen3VL-4B-Instruct-Q8_0.gguf"
+          },
+          {
+            "role":"mmproj",
+            "name":"mmproj-Qwen3VL-4B-Instruct-F16.gguf"
+          },
+          {
+            "role":"image",
+            "name":"coco-val2017-000000039769.jpg"
+          }
+        ]
+      },
+      {
+        "engine":"llama.cpp",
+        "backend":"cpu",
+        "flavor":"clean-cpu",
+        "box":"graviton4",
+        "threads":16,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Neoverse-V2"
+        },
+        "tests":{
+          "img:enc":{
+            "ms":4105
+          },
+          "img:pp":{
+            "tok_s":20.025398065839607
+          },
+          "img:tg":{
+            "tok_s":51.403716884143932
+          }
+        },
+        "workload":"image-chat",
+        "source":"official",
+        "files":[
+          {
+            "role":"weights",
+            "name":"Qwen3VL-4B-Instruct-Q8_0.gguf"
+          },
+          {
+            "role":"mmproj",
+            "name":"mmproj-Qwen3VL-4B-Instruct-F16.gguf"
+          },
+          {
+            "role":"image",
+            "name":"coco-val2017-000000039769.jpg"
+          }
+        ],
+        "comment":"llama-mtmd-cli reports this image turn's prefill an order under its own text prefill on the same model (Qwen3-VL-4B CPU: 30 tok/s against llama-bench pp512 222 on the M5) and under its gemma-4 image prefill on the same GPU, so the cell measures something other than the turn - the ratio is withheld, followup_general.md row 224.",
+        "void_clips":"img:pp"
       },
       {
         "engine":"das",
@@ -149,7 +433,8 @@
         "threads":6,
         "date":"2026-10-21",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "img:enc":{
@@ -164,7 +449,7 @@
         },
         "workload":"image-chat",
         "source":"official",
-        "sha":"402fc19d6",
+        "sha":"57af9f1a9",
         "version":"0.6.5",
         "files":[
           {
@@ -189,7 +474,8 @@
         "threads":6,
         "date":"2026-10-21",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "img:enc":{
@@ -217,7 +503,9 @@
             "role":"image",
             "name":"coco-val2017-000000039769.jpg"
           }
-        ]
+        ],
+        "comment":"llama-mtmd-cli reports this image turn's prefill an order under its own text prefill on the same model (Qwen3-VL-4B CPU: 30 tok/s against llama-bench pp512 222 on the M5) and under its gemma-4 image prefill on the same GPU, so the cell measures something other than the turn - the ratio is withheld, followup_general.md row 224.",
+        "void_clips":"img:pp"
       },
       {
         "engine":"das",
@@ -225,24 +513,25 @@
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "img:enc":{
-            "ms":1103.1110000000001
+            "ms":1108.8109999999999
           },
           "img:pp":{
-            "tok_s":247.25458826719208
+            "tok_s":246.22757871611878
           },
           "img:tg":{
-            "tok_s":55.469064902503874
+            "tok_s":57.282736128985448
           }
         },
         "workload":"image-chat",
         "source":"official",
-        "sha":"402fc19d6",
+        "sha":"d71b1aacc",
         "version":"0.6.5",
         "files":[
           {
@@ -265,19 +554,20 @@
         "flavor":"clean-cpu",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "img:enc":{
-            "ms":1031
+            "ms":997
           },
           "img:pp":{
-            "tok_s":30.102790014684288
+            "tok_s":30.231529272968594
           },
           "img:tg":{
-            "tok_s":47.49725977347461
+            "tok_s":47.776552737963982
           }
         },
         "workload":"image-chat",
@@ -295,7 +585,9 @@
             "role":"image",
             "name":"coco-val2017-000000039769.jpg"
           }
-        ]
+        ],
+        "comment":"llama-mtmd-cli reports this image turn's prefill an order under its own text prefill on the same model (Qwen3-VL-4B CPU: 30 tok/s against llama-bench pp512 222 on the M5) and under its gemma-4 image prefill on the same GPU, so the cell measures something other than the turn - the ratio is withheld, followup_general.md row 224.",
+        "void_clips":"img:pp"
       },
       {
         "engine":"das",
@@ -303,24 +595,25 @@
         "flavor":"accel",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "img:enc":{
-            "ms":860.70100000000002
+            "ms":872.53999999999996
           },
           "img:pp":{
-            "tok_s":247.78881291404275
+            "tok_s":246.0401712316955
           },
           "img:tg":{
-            "tok_s":55.795683645913151
+            "tok_s":57.368177489492062
           }
         },
         "workload":"image-chat",
         "source":"official",
-        "sha":"402fc19d6",
+        "sha":"d71b1aacc",
         "version":"0.6.5",
         "files":[
           {
@@ -343,19 +636,20 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "img:enc":{
-            "ms":1966
+            "ms":1941
           },
           "img:pp":{
-            "tok_s":28.120713305898491
+            "tok_s":28.67935086737549
           },
           "img:tg":{
-            "tok_s":47.10144927536232
+            "tok_s":47.204066811909954
           }
         },
         "workload":"image-chat",
@@ -373,7 +667,9 @@
             "role":"image",
             "name":"coco-val2017-000000039769.jpg"
           }
-        ]
+        ],
+        "comment":"llama-mtmd-cli reports this image turn's prefill an order under its own text prefill on the same model (Qwen3-VL-4B CPU: 30 tok/s against llama-bench pp512 222 on the M5) and under its gemma-4 image prefill on the same GPU, so the cell measures something other than the turn - the ratio is withheld, followup_general.md row 224.",
+        "void_clips":"img:pp"
       },
       {
         "engine":"das",
@@ -383,7 +679,8 @@
         "threads":6,
         "date":"2026-10-21",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "pp512":{
@@ -397,7 +694,7 @@
           }
         },
         "source":"official",
-        "sha":"402fc19d6",
+        "sha":"57af9f1a9",
         "version":"0.6.5",
         "files":[
           {
@@ -414,7 +711,8 @@
         "threads":6,
         "date":"2026-10-21",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "pp512":{
@@ -442,23 +740,24 @@
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "pp512":{
-            "tok_s":246.65545202818174
+            "tok_s":247.41411109162033
           },
           "tg128":{
-            "tok_s":62.480545610623679
+            "tok_s":63.632305353450235
           },
           "tg128@4":{
-            "tok_s":142.09099486530314
+            "tok_s":146.24344080639801
           }
         },
         "source":"official",
-        "sha":"c769c27eb",
+        "sha":"d71b1aacc",
         "version":"0.6.5",
         "files":[
           {
@@ -473,19 +772,20 @@
         "flavor":"clean-cpu",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "pp512":{
-            "tok_s":215.13343399999999
+            "tok_s":221.76922099999999
           },
           "tg128":{
-            "tok_s":52.827021999999999
+            "tok_s":52.995857999999998
           },
           "tg128@4":{
-            "tok_s":122.67333475748698
+            "tok_s":121.67666625976562
           }
         },
         "source":"official",
@@ -503,23 +803,24 @@
         "flavor":"accel",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "pp512":{
-            "tok_s":248.25428659995077
+            "tok_s":249.78551394350825
           },
           "tg128":{
-            "tok_s":62.694801080473425
+            "tok_s":63.469280521629422
           },
           "tg128@4":{
-            "tok_s":146.49152919517493
+            "tok_s":149.5690832410061
           }
         },
         "source":"official",
-        "sha":"896bd646d",
+        "sha":"d71b1aacc",
         "version":"0.6.5",
         "files":[
           {
@@ -534,19 +835,20 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "pp512":{
-            "tok_s":224.668937
+            "tok_s":225.45236
           },
           "tg128":{
-            "tok_s":52.849043999999999
+            "tok_s":52.561585999999998
           },
           "tg128@4":{
-            "tok_s":121.87999979654948
+            "tok_s":121.28666687011719
           }
         },
         "source":"official",
@@ -566,7 +868,8 @@
         "threads":16,
         "date":"2026-10-21",
         "hardware":{
-          "cpu":"AMD EPYC 7543P 32-Core Processor"
+          "cpu":"AMD EPYC 7543P 32-Core Processor",
+          "gpu":"NVIDIA RTX PRO 4500 Blackwell"
         },
         "tests":{
           "pp512":{
@@ -597,7 +900,8 @@
         "threads":16,
         "date":"2026-10-21",
         "hardware":{
-          "cpu":"AMD EPYC 7543P 32-Core Processor"
+          "cpu":"AMD EPYC 7543P 32-Core Processor",
+          "gpu":"NVIDIA RTX PRO 4500 Blackwell"
         },
         "tests":{
           "pp512":{
@@ -763,7 +1067,291 @@
             "role":"image",
             "name":"coco-val2017-000000039769.jpg"
           }
+        ],
+        "comment":"llama-mtmd-cli reports this image turn's prefill an order under its own text prefill on the same model (Qwen3-VL-4B CPU: 30 tok/s against llama-bench pp512 222 on the M5) and under its gemma-4 image prefill on the same GPU, so the cell measures something other than the turn - the ratio is withheld, followup_general.md row 224.",
+        "void_clips":"img:pp"
+      },
+      {
+        "engine":"das",
+        "backend":"cpu",
+        "flavor":"tuned",
+        "box":"gnr",
+        "threads":8,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Intel(R) Xeon(R) 6975P-C"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":719.46481607298324
+          },
+          "tg128":{
+            "tok_s":28.411534744771739
+          },
+          "tg128@4":{
+            "tok_s":99.967205841493126
+          }
+        },
+        "source":"official",
+        "sha":"fbf750ffd",
+        "version":"0.6.5",
+        "files":[
+          {
+            "role":"weights",
+            "name":"Qwen2.5-Omni-3B-Q8_0.gguf"
+          }
         ]
+      },
+      {
+        "engine":"llama.cpp",
+        "backend":"cpu",
+        "flavor":"clean-cpu",
+        "box":"gnr",
+        "threads":8,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Intel(R) Xeon(R) 6975P-C"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":454.02839
+          },
+          "tg128":{
+            "tok_s":30.781855
+          },
+          "tg128@4":{
+            "tok_s":76.933334350585938
+          }
+        },
+        "source":"official",
+        "sha":"9febe63d5",
+        "files":[
+          {
+            "role":"weights",
+            "name":"Qwen2.5-Omni-3B-Q8_0.gguf"
+          }
+        ]
+      },
+      {
+        "engine":"das",
+        "backend":"cpu",
+        "flavor":"tuned",
+        "box":"gnr",
+        "threads":8,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Intel(R) Xeon(R) 6975P-C"
+        },
+        "tests":{
+          "img:enc":{
+            "ms":19554.555
+          },
+          "img:pp":{
+            "tok_s":645.24198862665662
+          },
+          "img:tg":{
+            "tok_s":27.116658576863525
+          }
+        },
+        "workload":"image-chat",
+        "source":"official",
+        "sha":"fbf750ffd",
+        "version":"0.6.5",
+        "files":[
+          {
+            "role":"weights",
+            "name":"Qwen2.5-Omni-3B-Q8_0.gguf"
+          },
+          {
+            "role":"mmproj",
+            "name":"mmproj-Qwen2.5-Omni-3B-f16.gguf"
+          },
+          {
+            "role":"image",
+            "name":"coco-val2017-000000039769.jpg"
+          }
+        ]
+      },
+      {
+        "engine":"llama.cpp",
+        "backend":"cpu",
+        "flavor":"clean-cpu",
+        "box":"gnr",
+        "threads":8,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Intel(R) Xeon(R) 6975P-C"
+        },
+        "tests":{
+          "img:enc":{
+            "ms":2822
+          },
+          "img:pp":{
+            "tok_s":60.532687651331706
+          },
+          "img:tg":{
+            "tok_s":27.689873417721518
+          }
+        },
+        "workload":"image-chat",
+        "source":"official",
+        "files":[
+          {
+            "role":"weights",
+            "name":"Qwen2.5-Omni-3B-Q8_0.gguf"
+          },
+          {
+            "role":"mmproj",
+            "name":"mmproj-Qwen2.5-Omni-3B-f16.gguf"
+          },
+          {
+            "role":"image",
+            "name":"coco-val2017-000000039769.jpg"
+          }
+        ],
+        "comment":"llama-mtmd-cli reports this image turn's prefill an order under its own text prefill on the same model (Qwen3-VL-4B CPU: 30 tok/s against llama-bench pp512 222 on the M5) and under its gemma-4 image prefill on the same GPU, so the cell measures something other than the turn - the ratio is withheld, followup_general.md row 224.",
+        "void_clips":"img:pp"
+      },
+      {
+        "engine":"das",
+        "backend":"cpu",
+        "flavor":"tuned",
+        "box":"graviton4",
+        "threads":16,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Neoverse-V2"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":382.6444031291802
+          },
+          "tg128":{
+            "tok_s":76.28584587654008
+          },
+          "tg128@4":{
+            "tok_s":189.04416416101935
+          }
+        },
+        "source":"official",
+        "sha":"fbf750ffd",
+        "version":"0.6.5",
+        "files":[
+          {
+            "role":"weights",
+            "name":"Qwen2.5-Omni-3B-Q8_0.gguf"
+          }
+        ]
+      },
+      {
+        "engine":"llama.cpp",
+        "backend":"cpu",
+        "flavor":"clean-cpu",
+        "box":"graviton4",
+        "threads":16,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Neoverse-V2"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":249.70125400000001
+          },
+          "tg128":{
+            "tok_s":68.571967999999998
+          },
+          "tg128@4":{
+            "tok_s":207.71333312988281
+          }
+        },
+        "source":"official",
+        "sha":"9febe63d5",
+        "files":[
+          {
+            "role":"weights",
+            "name":"Qwen2.5-Omni-3B-Q8_0.gguf"
+          }
+        ]
+      },
+      {
+        "engine":"das",
+        "backend":"cpu",
+        "flavor":"tuned",
+        "box":"graviton4",
+        "threads":16,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Neoverse-V2"
+        },
+        "tests":{
+          "img:enc":{
+            "ms":11650.242
+          },
+          "img:pp":{
+            "tok_s":366.9766158683118
+          },
+          "img:tg":{
+            "tok_s":72.916059032841389
+          }
+        },
+        "workload":"image-chat",
+        "source":"official",
+        "sha":"fbf750ffd",
+        "version":"0.6.5",
+        "files":[
+          {
+            "role":"weights",
+            "name":"Qwen2.5-Omni-3B-Q8_0.gguf"
+          },
+          {
+            "role":"mmproj",
+            "name":"mmproj-Qwen2.5-Omni-3B-f16.gguf"
+          },
+          {
+            "role":"image",
+            "name":"coco-val2017-000000039769.jpg"
+          }
+        ]
+      },
+      {
+        "engine":"llama.cpp",
+        "backend":"cpu",
+        "flavor":"clean-cpu",
+        "box":"graviton4",
+        "threads":16,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Neoverse-V2"
+        },
+        "tests":{
+          "img:enc":{
+            "ms":5823
+          },
+          "img:pp":{
+            "tok_s":33.477544293366293
+          },
+          "img:tg":{
+            "tok_s":67.243035542747364
+          }
+        },
+        "workload":"image-chat",
+        "source":"official",
+        "files":[
+          {
+            "role":"weights",
+            "name":"Qwen2.5-Omni-3B-Q8_0.gguf"
+          },
+          {
+            "role":"mmproj",
+            "name":"mmproj-Qwen2.5-Omni-3B-f16.gguf"
+          },
+          {
+            "role":"image",
+            "name":"coco-val2017-000000039769.jpg"
+          }
+        ],
+        "comment":"llama-mtmd-cli reports this image turn's prefill an order under its own text prefill on the same model (Qwen3-VL-4B CPU: 30 tok/s against llama-bench pp512 222 on the M5) and under its gemma-4 image prefill on the same GPU, so the cell measures something other than the turn - the ratio is withheld, followup_general.md row 224.",
+        "void_clips":"img:pp"
       },
       {
         "engine":"das",
@@ -773,7 +1361,8 @@
         "threads":6,
         "date":"2026-10-21",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "img:enc":{
@@ -788,7 +1377,7 @@
         },
         "workload":"image-chat",
         "source":"official",
-        "sha":"402fc19d6",
+        "sha":"57af9f1a9",
         "version":"0.6.5",
         "files":[
           {
@@ -813,7 +1402,8 @@
         "threads":6,
         "date":"2026-10-21",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "img:enc":{
@@ -841,7 +1431,9 @@
             "role":"image",
             "name":"coco-val2017-000000039769.jpg"
           }
-        ]
+        ],
+        "comment":"llama-mtmd-cli reports this image turn's prefill an order under its own text prefill on the same model (Qwen3-VL-4B CPU: 30 tok/s against llama-bench pp512 222 on the M5) and under its gemma-4 image prefill on the same GPU, so the cell measures something other than the turn - the ratio is withheld, followup_general.md row 224.",
+        "void_clips":"img:pp"
       },
       {
         "engine":"das",
@@ -849,24 +1441,25 @@
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "img:enc":{
-            "ms":9238.4470000000001
+            "ms":9246.1499999999996
           },
           "img:pp":{
-            "tok_s":296.61147683064678
+            "tok_s":294.94802151237911
           },
           "img:tg":{
-            "tok_s":72.240764018320263
+            "tok_s":73.719130114264658
           }
         },
         "workload":"image-chat",
         "source":"official",
-        "sha":"402fc19d6",
+        "sha":"d71b1aacc",
         "version":"0.6.5",
         "files":[
           {
@@ -889,19 +1482,20 @@
         "flavor":"clean-cpu",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "img:enc":{
-            "ms":2580
+            "ms":2581
           },
           "img:pp":{
-            "tok_s":47.365736355024403
+            "tok_s":46.806365665730546
           },
           "img:tg":{
-            "tok_s":64.161319890009167
+            "tok_s":63.063063063063062
           }
         },
         "workload":"image-chat",
@@ -919,7 +1513,9 @@
             "role":"image",
             "name":"coco-val2017-000000039769.jpg"
           }
-        ]
+        ],
+        "comment":"llama-mtmd-cli reports this image turn's prefill an order under its own text prefill on the same model (Qwen3-VL-4B CPU: 30 tok/s against llama-bench pp512 222 on the M5) and under its gemma-4 image prefill on the same GPU, so the cell measures something other than the turn - the ratio is withheld, followup_general.md row 224.",
+        "void_clips":"img:pp"
       },
       {
         "engine":"das",
@@ -927,24 +1523,25 @@
         "flavor":"accel",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "img:enc":{
-            "ms":1534.46
+            "ms":1524.53
           },
           "img:pp":{
-            "tok_s":295.33187133584261
+            "tok_s":296.8277325518975
           },
           "img:tg":{
-            "tok_s":73.177514013493933
+            "tok_s":74.077366401469689
           }
         },
         "workload":"image-chat",
         "source":"official",
-        "sha":"402fc19d6",
+        "sha":"d71b1aacc",
         "version":"0.6.5",
         "files":[
           {
@@ -967,19 +1564,20 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "img:enc":{
-            "ms":4334
+            "ms":4328
           },
           "img:pp":{
-            "tok_s":43.498628120190048
+            "tok_s":43.414373497194767
           },
           "img:tg":{
-            "tok_s":64.397424103035874
+            "tok_s":64.456721915285456
           }
         },
         "workload":"image-chat",
@@ -997,7 +1595,9 @@
             "role":"image",
             "name":"coco-val2017-000000039769.jpg"
           }
-        ]
+        ],
+        "comment":"llama-mtmd-cli reports this image turn's prefill an order under its own text prefill on the same model (Qwen3-VL-4B CPU: 30 tok/s against llama-bench pp512 222 on the M5) and under its gemma-4 image prefill on the same GPU, so the cell measures something other than the turn - the ratio is withheld, followup_general.md row 224.",
+        "void_clips":"img:pp"
       },
       {
         "engine":"das",
@@ -1007,7 +1607,8 @@
         "threads":6,
         "date":"2026-10-21",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "pp512":{
@@ -1038,7 +1639,8 @@
         "threads":6,
         "date":"2026-10-21",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "pp512":{
@@ -1066,23 +1668,24 @@
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "pp512":{
-            "tok_s":337.20029211018038
+            "tok_s":336.52271940771897
           },
           "tg128":{
-            "tok_s":80.833351061917227
+            "tok_s":82.117668931133935
           },
           "tg128@4":{
-            "tok_s":193.5677803628173
+            "tok_s":199.03629452068421
           }
         },
         "source":"official",
-        "sha":"896bd646d",
+        "sha":"d71b1aacc",
         "version":"0.6.5",
         "files":[
           {
@@ -1097,19 +1700,20 @@
         "flavor":"clean-cpu",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "pp512":{
-            "tok_s":304.06098900000001
+            "tok_s":303.25214299999999
           },
           "tg128":{
-            "tok_s":68.390077000000005
+            "tok_s":67.951356000000004
           },
           "tg128@4":{
-            "tok_s":164.80333455403647
+            "tok_s":163.79999796549478
           }
         },
         "source":"official",
@@ -1127,23 +1731,24 @@
         "flavor":"accel",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "pp512":{
-            "tok_s":332.73153888424798
+            "tok_s":332.54544835553378
           },
           "tg128":{
-            "tok_s":80.945155087704663
+            "tok_s":80.83451639507976
           },
           "tg128@4":{
-            "tok_s":201.41658669166364
+            "tok_s":201.17815659393167
           }
         },
         "source":"official",
-        "sha":"896bd646d",
+        "sha":"d71b1aacc",
         "version":"0.6.5",
         "files":[
           {
@@ -1158,19 +1763,20 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "pp512":{
-            "tok_s":307.03846099999998
+            "tok_s":306.353634
           },
           "tg128":{
-            "tok_s":68.115612999999996
+            "tok_s":68.155263000000005
           },
           "tg128@4":{
-            "tok_s":165.32666524251303
+            "tok_s":164.89999898274741
           }
         },
         "source":"official",
@@ -1190,7 +1796,8 @@
         "threads":16,
         "date":"2026-10-21",
         "hardware":{
-          "cpu":"AMD EPYC 7543P 32-Core Processor"
+          "cpu":"AMD EPYC 7543P 32-Core Processor",
+          "gpu":"NVIDIA RTX PRO 4500 Blackwell"
         },
         "tests":{
           "pp512":{
@@ -1221,7 +1828,8 @@
         "threads":16,
         "date":"2026-10-21",
         "hardware":{
-          "cpu":"AMD EPYC 7543P 32-Core Processor"
+          "cpu":"AMD EPYC 7543P 32-Core Processor",
+          "gpu":"NVIDIA RTX PRO 4500 Blackwell"
         },
         "tests":{
           "pp512":{
@@ -1391,13 +1999,294 @@
       },
       {
         "engine":"das",
+        "backend":"cpu",
+        "flavor":"tuned",
+        "box":"gnr",
+        "threads":8,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Intel(R) Xeon(R) 6975P-C"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":325.68867210636074
+          },
+          "tg128":{
+            "tok_s":18.09792340970062
+          },
+          "tg128@4":{
+            "tok_s":61.68264790075046
+          }
+        },
+        "source":"official",
+        "sha":"fbf750ffd",
+        "version":"0.6.5",
+        "files":[
+          {
+            "role":"weights",
+            "name":"gemma-4-E4B-it-Q8_0.gguf"
+          }
+        ]
+      },
+      {
+        "engine":"llama.cpp",
+        "backend":"cpu",
+        "flavor":"clean-cpu",
+        "box":"gnr",
+        "threads":8,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Intel(R) Xeon(R) 6975P-C"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":268.74193000000002
+          },
+          "tg128":{
+            "tok_s":17.378598
+          },
+          "tg128@4":{
+            "tok_s":48.83000055948893
+          }
+        },
+        "source":"official",
+        "sha":"9febe63d5",
+        "files":[
+          {
+            "role":"weights",
+            "name":"gemma-4-E4B-it-Q8_0.gguf"
+          }
+        ]
+      },
+      {
+        "engine":"das",
+        "backend":"cpu",
+        "flavor":"tuned",
+        "box":"gnr",
+        "threads":8,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Intel(R) Xeon(R) 6975P-C"
+        },
+        "tests":{
+          "img:enc":{
+            "ms":362.68400000000003
+          },
+          "img:pp":{
+            "tok_s":308.20452614567938
+          },
+          "img:tg":{
+            "tok_s":18.235031318666291
+          }
+        },
+        "workload":"image-chat",
+        "source":"official",
+        "sha":"fbf750ffd",
+        "version":"0.6.5",
+        "files":[
+          {
+            "role":"weights",
+            "name":"gemma-4-E4B-it-Q8_0.gguf"
+          },
+          {
+            "role":"mmproj",
+            "name":"mmproj-gemma-4-E4B-it-BF16.gguf"
+          },
+          {
+            "role":"image",
+            "name":"coco-val2017-000000039769.jpg"
+          }
+        ]
+      },
+      {
+        "engine":"llama.cpp",
+        "backend":"cpu",
+        "flavor":"clean-cpu",
+        "box":"gnr",
+        "threads":8,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Intel(R) Xeon(R) 6975P-C"
+        },
+        "tests":{
+          "img:enc":{
+            "ms":730
+          },
+          "img:pp":{
+            "tok_s":194.28152492668619
+          },
+          "img:tg":{
+            "tok_s":16.735526384603318
+          }
+        },
+        "workload":"image-chat",
+        "source":"official",
+        "files":[
+          {
+            "role":"weights",
+            "name":"gemma-4-E4B-it-Q8_0.gguf"
+          },
+          {
+            "role":"mmproj",
+            "name":"mmproj-gemma-4-E4B-it-BF16.gguf"
+          },
+          {
+            "role":"image",
+            "name":"coco-val2017-000000039769.jpg"
+          }
+        ]
+      },
+      {
+        "engine":"das",
+        "backend":"cpu",
+        "flavor":"tuned",
+        "box":"graviton4",
+        "threads":16,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Neoverse-V2"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":230.88829644940785
+          },
+          "tg128":{
+            "tok_s":48.768946816546318
+          },
+          "tg128@4":{
+            "tok_s":119.42236721725824
+          }
+        },
+        "source":"official",
+        "sha":"fbf750ffd",
+        "version":"0.6.5",
+        "files":[
+          {
+            "role":"weights",
+            "name":"gemma-4-E4B-it-Q8_0.gguf"
+          }
+        ]
+      },
+      {
+        "engine":"llama.cpp",
+        "backend":"cpu",
+        "flavor":"clean-cpu",
+        "box":"graviton4",
+        "threads":16,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Neoverse-V2"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":130.87916999999999
+          },
+          "tg128":{
+            "tok_s":38.532561999999999
+          },
+          "tg128@4":{
+            "tok_s":107.50999959309895
+          }
+        },
+        "source":"official",
+        "sha":"9febe63d5",
+        "files":[
+          {
+            "role":"weights",
+            "name":"gemma-4-E4B-it-Q8_0.gguf"
+          }
+        ]
+      },
+      {
+        "engine":"das",
+        "backend":"cpu",
+        "flavor":"tuned",
+        "box":"graviton4",
+        "threads":16,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Neoverse-V2"
+        },
+        "tests":{
+          "img:enc":{
+            "ms":356.71699999999998
+          },
+          "img:pp":{
+            "tok_s":234.93734746460871
+          },
+          "img:tg":{
+            "tok_s":47.370166269283608
+          }
+        },
+        "workload":"image-chat",
+        "source":"official",
+        "sha":"fbf750ffd",
+        "version":"0.6.5",
+        "files":[
+          {
+            "role":"weights",
+            "name":"gemma-4-E4B-it-Q8_0.gguf"
+          },
+          {
+            "role":"mmproj",
+            "name":"mmproj-gemma-4-E4B-it-BF16.gguf"
+          },
+          {
+            "role":"image",
+            "name":"coco-val2017-000000039769.jpg"
+          }
+        ]
+      },
+      {
+        "engine":"llama.cpp",
+        "backend":"cpu",
+        "flavor":"clean-cpu",
+        "box":"graviton4",
+        "threads":16,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Neoverse-V2"
+        },
+        "tests":{
+          "img:enc":{
+            "ms":10824
+          },
+          "img:pp":{
+            "tok_s":108.73281816316766
+          },
+          "img:tg":{
+            "tok_s":36.768930253935423
+          }
+        },
+        "workload":"image-chat",
+        "source":"official",
+        "files":[
+          {
+            "role":"weights",
+            "name":"gemma-4-E4B-it-Q8_0.gguf"
+          },
+          {
+            "role":"mmproj",
+            "name":"mmproj-gemma-4-E4B-it-BF16.gguf"
+          },
+          {
+            "role":"image",
+            "name":"coco-val2017-000000039769.jpg"
+          }
+        ],
+        "comment":"llama-mtmd-cli's gemma-4 vision encode on this ARM CPU reads 10-14 s, where the same model and picture encode in 0.4-0.7 s on the x86 boards - the ratio is withheld, followup_general.md row 224.",
+        "void_clips":"img:enc"
+      },
+      {
+        "engine":"das",
         "backend":"metal",
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
         "date":"2026-10-21",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "pp512":{
@@ -1428,7 +2317,8 @@
         "threads":6,
         "date":"2026-10-21",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "pp512":{
@@ -1456,23 +2346,24 @@
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "pp512":{
-            "tok_s":200.68058316154469
+            "tok_s":202.39226504341923
           },
           "tg128":{
-            "tok_s":52.354175680642342
+            "tok_s":52.536859147535907
           },
           "tg128@4":{
-            "tok_s":124.65804984212821
+            "tok_s":125.36846065745645
           }
         },
         "source":"official",
-        "sha":"896bd646d",
+        "sha":"d71b1aacc",
         "version":"0.6.5",
         "files":[
           {
@@ -1487,19 +2378,20 @@
         "flavor":"clean-cpu",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "pp512":{
-            "tok_s":140.72244599999999
+            "tok_s":140.644687
           },
           "tg128":{
-            "tok_s":39.361128000000001
+            "tok_s":39.052804000000002
           },
           "tg128@4":{
-            "tok_s":85.403335571289062
+            "tok_s":85.279998779296875
           }
         },
         "source":"official",
@@ -1517,23 +2409,24 @@
         "flavor":"accel",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "pp512":{
-            "tok_s":212.73111547562172
+            "tok_s":206.60848604523116
           },
           "tg128":{
-            "tok_s":52.116291719427863
+            "tok_s":53.497710991101393
           },
           "tg128@4":{
-            "tok_s":124.61955379252055
+            "tok_s":125.79693845735001
           }
         },
         "source":"official",
-        "sha":"896bd646d",
+        "sha":"d71b1aacc",
         "version":"0.6.5",
         "files":[
           {
@@ -1548,19 +2441,20 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "pp512":{
-            "tok_s":205.031035
+            "tok_s":204.60157599999999
           },
           "tg128":{
-            "tok_s":39.060701999999999
+            "tok_s":39.011614000000002
           },
           "tg128@4":{
-            "tok_s":85.163332621256515
+            "tok_s":84.920000712076828
           }
         },
         "source":"official",
@@ -1580,7 +2474,8 @@
         "threads":6,
         "date":"2026-10-21",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "img:enc":{
@@ -1616,24 +2511,25 @@
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "img:enc":{
-            "ms":428.14600000000002
+            "ms":375.00999999999999
           },
           "img:pp":{
-            "tok_s":211.52211032269645
+            "tok_s":220.61950537687471
           },
           "img:tg":{
-            "tok_s":51.33316507462559
+            "tok_s":52.56126672652811
           }
         },
         "workload":"image-chat",
         "source":"official",
-        "sha":"402fc19d6",
+        "sha":"d71b1aacc",
         "version":"0.6.5",
         "files":[
           {
@@ -1656,19 +2552,20 @@
         "flavor":"clean-cpu",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "img:enc":{
-            "ms":13524
+            "ms":13545
           },
           "img:pp":{
-            "tok_s":186.24809652102596
+            "tok_s":190.99099099099098
           },
           "img:tg":{
-            "tok_s":39.067268953729702
+            "tok_s":39.287906691221608
           }
         },
         "workload":"image-chat",
@@ -1686,7 +2583,9 @@
             "role":"image",
             "name":"coco-val2017-000000039769.jpg"
           }
-        ]
+        ],
+        "comment":"llama-mtmd-cli's gemma-4 vision encode on this ARM CPU reads 10-14 s, where the same model and picture encode in 0.4-0.7 s on the x86 boards - the ratio is withheld, followup_general.md row 224.",
+        "void_clips":"img:enc"
       },
       {
         "engine":"das",
@@ -1694,24 +2593,25 @@
         "flavor":"accel",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "img:enc":{
-            "ms":527.85000000000002
+            "ms":442.58300000000003
           },
           "img:pp":{
-            "tok_s":215.57776258647931
+            "tok_s":217.61196636749793
           },
           "img:tg":{
-            "tok_s":50.811286880525728
+            "tok_s":52.1755009935085
           }
         },
         "workload":"image-chat",
         "source":"official",
-        "sha":"402fc19d6",
+        "sha":"d71b1aacc",
         "version":"0.6.5",
         "files":[
           {
@@ -1734,19 +2634,20 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "img:enc":{
-            "ms":13535
+            "ms":13556
           },
           "img:pp":{
-            "tok_s":179.74225638706753
+            "tok_s":181.11402209818894
           },
           "img:tg":{
-            "tok_s":39.210881019482905
+            "tok_s":39.186872397746754
           }
         },
         "workload":"image-chat",
@@ -1764,7 +2665,9 @@
             "role":"image",
             "name":"coco-val2017-000000039769.jpg"
           }
-        ]
+        ],
+        "comment":"llama-mtmd-cli's gemma-4 vision encode on this ARM CPU reads 10-14 s, where the same model and picture encode in 0.4-0.7 s on the x86 boards - the ratio is withheld, followup_general.md row 224.",
+        "void_clips":"img:enc"
       },
       {
         "engine":"das",
@@ -1774,7 +2677,8 @@
         "threads":6,
         "date":"2026-10-21",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "img:enc":{
@@ -1789,7 +2693,7 @@
         },
         "workload":"image-chat",
         "source":"official",
-        "sha":"402fc19d6",
+        "sha":"57af9f1a9",
         "version":"0.6.5",
         "files":[
           {
@@ -1814,7 +2718,8 @@
         "threads":16,
         "date":"2026-10-21",
         "hardware":{
-          "cpu":"AMD EPYC 7543P 32-Core Processor"
+          "cpu":"AMD EPYC 7543P 32-Core Processor",
+          "gpu":"NVIDIA RTX PRO 4500 Blackwell"
         },
         "tests":{
           "pp512":{
@@ -1845,7 +2750,8 @@
         "threads":16,
         "date":"2026-10-21",
         "hardware":{
-          "cpu":"AMD EPYC 7543P 32-Core Processor"
+          "cpu":"AMD EPYC 7543P 32-Core Processor",
+          "gpu":"NVIDIA RTX PRO 4500 Blackwell"
         },
         "tests":{
           "pp512":{
@@ -1937,13 +2843,136 @@
       },
       {
         "engine":"das",
+        "backend":"cpu",
+        "flavor":"tuned",
+        "box":"gnr",
+        "threads":8,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Intel(R) Xeon(R) 6975P-C"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":200.49818465263252
+          },
+          "tg128":{
+            "tok_s":26.46744544898943
+          },
+          "tg128@4":{
+            "tok_s":36.332488579849716
+          }
+        },
+        "source":"official",
+        "sha":"fbf750ffd",
+        "version":"0.6.5",
+        "files":[
+          {
+            "role":"weights",
+            "name":"gpt-oss-20b-mxfp4.gguf"
+          }
+        ]
+      },
+      {
+        "engine":"llama.cpp",
+        "backend":"cpu",
+        "flavor":"clean-cpu",
+        "box":"gnr",
+        "threads":8,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Intel(R) Xeon(R) 6975P-C"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":102.83703
+          },
+          "tg128":{
+            "tok_s":17.980065
+          },
+          "tg128@4":{
+            "tok_s":39.966665903727211
+          }
+        },
+        "source":"official",
+        "sha":"9febe63d5",
+        "files":[
+          {
+            "role":"weights",
+            "name":"gpt-oss-20b-mxfp4.gguf"
+          }
+        ]
+      },
+      {
+        "engine":"das",
+        "backend":"cpu",
+        "flavor":"tuned",
+        "box":"graviton4",
+        "threads":16,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Neoverse-V2"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":240.57409167483985
+          },
+          "tg128":{
+            "tok_s":77.307920307928953
+          },
+          "tg128@4":{
+            "tok_s":102.3184767874598
+          }
+        },
+        "source":"official",
+        "sha":"fbf750ffd",
+        "version":"0.6.5",
+        "files":[
+          {
+            "role":"weights",
+            "name":"gpt-oss-20b-mxfp4.gguf"
+          }
+        ]
+      },
+      {
+        "engine":"llama.cpp",
+        "backend":"cpu",
+        "flavor":"clean-cpu",
+        "box":"graviton4",
+        "threads":16,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Neoverse-V2"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":111.246561
+          },
+          "tg128":{
+            "tok_s":64.727738000000002
+          },
+          "tg128@4":{
+            "tok_s":96.943333943684891
+          }
+        },
+        "source":"official",
+        "sha":"9febe63d5",
+        "files":[
+          {
+            "role":"weights",
+            "name":"gpt-oss-20b-mxfp4.gguf"
+          }
+        ]
+      },
+      {
+        "engine":"das",
         "backend":"metal",
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
         "date":"2026-10-21",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "pp512":{
@@ -1974,7 +3003,8 @@
         "threads":6,
         "date":"2026-10-21",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "pp512":{
@@ -2002,23 +3032,24 @@
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "pp512":{
-            "tok_s":195.14616937371585
+            "tok_s":195.04304604591385
           },
           "tg128":{
-            "tok_s":66.550616486998337
+            "tok_s":67.707438075959246
           },
           "tg128@4":{
-            "tok_s":81.568890287268502
+            "tok_s":82.289854127899829
           }
         },
         "source":"official",
-        "sha":"896bd646d",
+        "sha":"d71b1aacc",
         "version":"0.6.5",
         "files":[
           {
@@ -2033,19 +3064,20 @@
         "flavor":"clean-cpu",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "pp512":{
-            "tok_s":120.897232
+            "tok_s":120.752197
           },
           "tg128":{
-            "tok_s":62.033313
+            "tok_s":62.214015000000003
           },
           "tg128@4":{
-            "tok_s":88.310000101725265
+            "tok_s":87.776667277018234
           }
         },
         "source":"official",
@@ -2063,23 +3095,24 @@
         "flavor":"accel",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "pp512":{
-            "tok_s":209.4230250006637
+            "tok_s":209.18538050231922
           },
           "tg128":{
-            "tok_s":66.957543531945049
+            "tok_s":66.932784215374966
           },
           "tg128@4":{
-            "tok_s":84.364229165911397
+            "tok_s":84.950145860360237
           }
         },
         "source":"official",
-        "sha":"896bd646d",
+        "sha":"d71b1aacc",
         "version":"0.6.5",
         "files":[
           {
@@ -2094,19 +3127,20 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "pp512":{
-            "tok_s":120.31483799999999
+            "tok_s":120.404535
           },
           "tg128":{
-            "tok_s":61.918869999999998
+            "tok_s":61.959823999999998
           },
           "tg128@4":{
-            "tok_s":87.433334350585938
+            "tok_s":87.429997762044266
           }
         },
         "source":"official",
@@ -2126,7 +3160,8 @@
         "threads":16,
         "date":"2026-10-21",
         "hardware":{
-          "cpu":"AMD EPYC 7543P 32-Core Processor"
+          "cpu":"AMD EPYC 7543P 32-Core Processor",
+          "gpu":"NVIDIA RTX PRO 4500 Blackwell"
         },
         "tests":{
           "pp512":{
@@ -2157,7 +3192,8 @@
         "threads":16,
         "date":"2026-10-21",
         "hardware":{
-          "cpu":"AMD EPYC 7543P 32-Core Processor"
+          "cpu":"AMD EPYC 7543P 32-Core Processor",
+          "gpu":"NVIDIA RTX PRO 4500 Blackwell"
         },
         "tests":{
           "pp512":{
@@ -2249,13 +3285,136 @@
       },
       {
         "engine":"das",
+        "backend":"cpu",
+        "flavor":"tuned",
+        "box":"gnr",
+        "threads":8,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Intel(R) Xeon(R) 6975P-C"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":288.19592737399887
+          },
+          "tg128":{
+            "tok_s":24.544955944850489
+          },
+          "tg128@4":{
+            "tok_s":53.204606704274482
+          }
+        },
+        "source":"official",
+        "sha":"fbf750ffd",
+        "version":"0.6.5",
+        "files":[
+          {
+            "role":"weights",
+            "name":"gemma-4-26B-A4B-it-Q4_K_M.gguf"
+          }
+        ]
+      },
+      {
+        "engine":"llama.cpp",
+        "backend":"cpu",
+        "flavor":"clean-cpu",
+        "box":"gnr",
+        "threads":8,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Intel(R) Xeon(R) 6975P-C"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":113.021934
+          },
+          "tg128":{
+            "tok_s":19.547910999999999
+          },
+          "tg128@4":{
+            "tok_s":40.983333587646484
+          }
+        },
+        "source":"official",
+        "sha":"9febe63d5",
+        "files":[
+          {
+            "role":"weights",
+            "name":"gemma-4-26B-A4B-it-Q4_K_M.gguf"
+          }
+        ]
+      },
+      {
+        "engine":"das",
+        "backend":"cpu",
+        "flavor":"tuned",
+        "box":"graviton4",
+        "threads":16,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Neoverse-V2"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":256.16638852432141
+          },
+          "tg128":{
+            "tok_s":59.075086790675506
+          },
+          "tg128@4":{
+            "tok_s":100.2393572749957
+          }
+        },
+        "source":"official",
+        "sha":"fbf750ffd",
+        "version":"0.6.5",
+        "files":[
+          {
+            "role":"weights",
+            "name":"gemma-4-26B-A4B-it-Q4_K_M.gguf"
+          }
+        ]
+      },
+      {
+        "engine":"llama.cpp",
+        "backend":"cpu",
+        "flavor":"clean-cpu",
+        "box":"graviton4",
+        "threads":16,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Neoverse-V2"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":90.921885000000003
+          },
+          "tg128":{
+            "tok_s":42.524717000000003
+          },
+          "tg128@4":{
+            "tok_s":84.556666056315109
+          }
+        },
+        "source":"official",
+        "sha":"9febe63d5",
+        "files":[
+          {
+            "role":"weights",
+            "name":"gemma-4-26B-A4B-it-Q4_K_M.gguf"
+          }
+        ]
+      },
+      {
+        "engine":"das",
         "backend":"metal",
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
         "date":"2026-10-21",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "pp512":{
@@ -2286,7 +3445,8 @@
         "threads":6,
         "date":"2026-10-21",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "pp512":{
@@ -2314,23 +3474,24 @@
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "pp512":{
-            "tok_s":188.62748565138682
+            "tok_s":196.06437652932689
           },
           "tg128":{
-            "tok_s":53.83870246835729
+            "tok_s":56.039545671072347
           },
           "tg128@4":{
-            "tok_s":91.314835603527698
+            "tok_s":96.245632713718194
           }
         },
         "source":"official",
-        "sha":"ea4860e6f",
+        "sha":"d71b1aacc",
         "version":"0.6.5",
         "files":[
           {
@@ -2345,19 +3506,20 @@
         "flavor":"clean-cpu",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "pp512":{
-            "tok_s":125.331891
+            "tok_s":125.210669
           },
           "tg128":{
-            "tok_s":47.183750000000003
+            "tok_s":46.780092000000003
           },
           "tg128@4":{
-            "tok_s":77.769999186197921
+            "tok_s":77.723332722981766
           }
         },
         "source":"official",
@@ -2375,23 +3537,24 @@
         "flavor":"accel",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "pp512":{
-            "tok_s":211.36816459401922
+            "tok_s":208.91627778106391
           },
           "tg128":{
-            "tok_s":53.914875638574571
+            "tok_s":55.661096042134361
           },
           "tg128@4":{
-            "tok_s":96.287998905161487
+            "tok_s":98.305033120012993
           }
         },
         "source":"official",
-        "sha":"ea4860e6f",
+        "sha":"d71b1aacc",
         "version":"0.6.5",
         "files":[
           {
@@ -2406,19 +3569,20 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "pp512":{
-            "tok_s":120.00032899999999
+            "tok_s":120.74107600000001
           },
           "tg128":{
-            "tok_s":45.770837999999998
+            "tok_s":46.215173
           },
           "tg128@4":{
-            "tok_s":75.860000610351562
+            "tok_s":75.286666870117188
           }
         },
         "source":"official",
@@ -2500,13 +3664,136 @@
       },
       {
         "engine":"das",
+        "backend":"cpu",
+        "flavor":"tuned",
+        "box":"gnr",
+        "threads":8,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Intel(R) Xeon(R) 6975P-C"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":50.97616273937053
+          },
+          "tg128":{
+            "tok_s":4.7916188587906667
+          },
+          "tg128@4":{
+            "tok_s":14.084771405079564
+          }
+        },
+        "source":"official",
+        "sha":"fbf750ffd",
+        "version":"0.6.5",
+        "files":[
+          {
+            "role":"weights",
+            "name":"Qwen3.8-27B-Q4_K_M.gguf"
+          }
+        ]
+      },
+      {
+        "engine":"llama.cpp",
+        "backend":"cpu",
+        "flavor":"clean-cpu",
+        "box":"gnr",
+        "threads":8,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Intel(R) Xeon(R) 6975P-C"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":36.756121999999998
+          },
+          "tg128":{
+            "tok_s":4.0172639999999999
+          },
+          "tg128@4":{
+            "tok_s":9.9133332570393886
+          }
+        },
+        "source":"official",
+        "sha":"9febe63d5",
+        "files":[
+          {
+            "role":"weights",
+            "name":"Qwen3.8-27B-Q4_K_M.gguf"
+          }
+        ]
+      },
+      {
+        "engine":"das",
+        "backend":"cpu",
+        "flavor":"tuned",
+        "box":"graviton4",
+        "threads":16,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Neoverse-V2"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":41.317197899763286
+          },
+          "tg128":{
+            "tok_s":11.632555296280255
+          },
+          "tg128@4":{
+            "tok_s":24.677861880082123
+          }
+        },
+        "source":"official",
+        "sha":"fbf750ffd",
+        "version":"0.6.5",
+        "files":[
+          {
+            "role":"weights",
+            "name":"Qwen3.8-27B-Q4_K_M.gguf"
+          }
+        ]
+      },
+      {
+        "engine":"llama.cpp",
+        "backend":"cpu",
+        "flavor":"clean-cpu",
+        "box":"graviton4",
+        "threads":16,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Neoverse-V2"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":31.016399
+          },
+          "tg128":{
+            "tok_s":9.3046799999999994
+          },
+          "tg128@4":{
+            "tok_s":20.060000101725262
+          }
+        },
+        "source":"official",
+        "sha":"9febe63d5",
+        "files":[
+          {
+            "role":"weights",
+            "name":"Qwen3.8-27B-Q4_K_M.gguf"
+          }
+        ]
+      },
+      {
+        "engine":"das",
         "backend":"metal",
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
         "date":"2026-10-21",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "pp512":{
@@ -2537,7 +3824,8 @@
         "threads":6,
         "date":"2026-10-21",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "pp512":{
@@ -2565,23 +3853,24 @@
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "pp512":{
-            "tok_s":31.384796648045921
+            "tok_s":31.388211718637315
           },
           "tg128":{
-            "tok_s":11.628055195184317
+            "tok_s":11.674541494678849
           },
           "tg128@4":{
-            "tok_s":20.920221061912546
+            "tok_s":21.00727838008666
           }
         },
         "source":"official",
-        "sha":"ea4860e6f",
+        "sha":"d71b1aacc",
         "version":"0.6.5",
         "files":[
           {
@@ -2596,19 +3885,20 @@
         "flavor":"clean-cpu",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "pp512":{
-            "tok_s":28.152270000000001
+            "tok_s":28.284752000000001
           },
           "tg128":{
-            "tok_s":9.5917890000000003
+            "tok_s":9.5793750000000006
           },
           "tg128@4":{
-            "tok_s":19.489999771118164
+            "tok_s":19.513333638509113
           }
         },
         "source":"official",
@@ -2626,23 +3916,24 @@
         "flavor":"accel",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "pp512":{
-            "tok_s":31.587134027407181
+            "tok_s":31.735055774519527
           },
           "tg128":{
-            "tok_s":11.562100377575808
+            "tok_s":11.602772318063309
           },
           "tg128@4":{
-            "tok_s":20.957307889221816
+            "tok_s":21.102979752781579
           }
         },
         "source":"official",
-        "sha":"ea4860e6f",
+        "sha":"d71b1aacc",
         "version":"0.6.5",
         "files":[
           {
@@ -2657,19 +3948,20 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "pp512":{
-            "tok_s":28.225249000000002
+            "tok_s":28.371998000000001
           },
           "tg128":{
-            "tok_s":9.5904819999999997
+            "tok_s":9.5960760000000001
           },
           "tg128@4":{
-            "tok_s":19.509999593098957
+            "tok_s":19.546666463216145
           }
         },
         "source":"official",
@@ -2689,7 +3981,8 @@
         "threads":16,
         "date":"2026-10-21",
         "hardware":{
-          "cpu":"AMD EPYC 7543P 32-Core Processor"
+          "cpu":"AMD EPYC 7543P 32-Core Processor",
+          "gpu":"NVIDIA RTX PRO 4500 Blackwell"
         },
         "tests":{
           "pp512":{
@@ -2720,7 +4013,8 @@
         "threads":16,
         "date":"2026-10-21",
         "hardware":{
-          "cpu":"AMD EPYC 7543P 32-Core Processor"
+          "cpu":"AMD EPYC 7543P 32-Core Processor",
+          "gpu":"NVIDIA RTX PRO 4500 Blackwell"
         },
         "tests":{
           "pp512":{
@@ -2812,13 +4106,136 @@
       },
       {
         "engine":"das",
+        "backend":"cpu",
+        "flavor":"tuned",
+        "box":"gnr",
+        "threads":8,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Intel(R) Xeon(R) 6975P-C"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":119.70809702883635
+          },
+          "tg128":{
+            "tok_s":24.270594928826061
+          },
+          "tg128@4":{
+            "tok_s":44.281752373421021
+          }
+        },
+        "source":"official",
+        "sha":"fbf750ffd",
+        "version":"0.6.5",
+        "files":[
+          {
+            "role":"weights",
+            "name":"Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf"
+          }
+        ]
+      },
+      {
+        "engine":"llama.cpp",
+        "backend":"cpu",
+        "flavor":"clean-cpu",
+        "box":"gnr",
+        "threads":8,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Intel(R) Xeon(R) 6975P-C"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":131.75797600000001
+          },
+          "tg128":{
+            "tok_s":19.085919000000001
+          },
+          "tg128@4":{
+            "tok_s":37.163333892822266
+          }
+        },
+        "source":"official",
+        "sha":"9febe63d5",
+        "files":[
+          {
+            "role":"weights",
+            "name":"Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf"
+          }
+        ]
+      },
+      {
+        "engine":"das",
+        "backend":"cpu",
+        "flavor":"tuned",
+        "box":"graviton4",
+        "threads":16,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Neoverse-V2"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":309.26501646999628
+          },
+          "tg128":{
+            "tok_s":53.349163111369577
+          },
+          "tg128@4":{
+            "tok_s":82.021136132180388
+          }
+        },
+        "source":"official",
+        "sha":"fbf750ffd",
+        "version":"0.6.5",
+        "files":[
+          {
+            "role":"weights",
+            "name":"Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf"
+          }
+        ]
+      },
+      {
+        "engine":"llama.cpp",
+        "backend":"cpu",
+        "flavor":"clean-cpu",
+        "box":"graviton4",
+        "threads":16,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Neoverse-V2"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":136.894263
+          },
+          "tg128":{
+            "tok_s":42.537255999999999
+          },
+          "tg128@4":{
+            "tok_s":83.96999867757161
+          }
+        },
+        "source":"official",
+        "sha":"9febe63d5",
+        "files":[
+          {
+            "role":"weights",
+            "name":"Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf"
+          }
+        ]
+      },
+      {
+        "engine":"das",
         "backend":"metal",
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
         "date":"2026-10-21",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "pp512":{
@@ -2849,7 +4266,8 @@
         "threads":6,
         "date":"2026-10-21",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "pp512":{
@@ -2877,23 +4295,24 @@
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "pp512":{
-            "tok_s":232.1737749645466
+            "tok_s":240.83169894165258
           },
           "tg128":{
-            "tok_s":57.028386512731835
+            "tok_s":59.186036270538033
           },
           "tg128@4":{
-            "tok_s":79.566732585866987
+            "tok_s":85.151462009174395
           }
         },
         "source":"official",
-        "sha":"ea4860e6f",
+        "sha":"d71b1aacc",
         "version":"0.6.5",
         "files":[
           {
@@ -2908,19 +4327,20 @@
         "flavor":"clean-cpu",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "pp512":{
-            "tok_s":156.088438
+            "tok_s":156.91747799999999
           },
           "tg128":{
-            "tok_s":49.928615999999998
+            "tok_s":49.615332000000002
           },
           "tg128@4":{
-            "tok_s":90.626665751139328
+            "tok_s":90.400001525878906
           }
         },
         "source":"official",
@@ -2938,23 +4358,24 @@
         "flavor":"accel",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "pp512":{
-            "tok_s":261.2407348333785
+            "tok_s":264.69650162024982
           },
           "tg128":{
-            "tok_s":57.9066487529836
+            "tok_s":60.459429582408916
           },
           "tg128@4":{
-            "tok_s":82.459232674485051
+            "tok_s":87.068689890210564
           }
         },
         "source":"official",
-        "sha":"ea4860e6f",
+        "sha":"d71b1aacc",
         "version":"0.6.5",
         "files":[
           {
@@ -2969,19 +4390,20 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "pp512":{
-            "tok_s":152.57177200000001
+            "tok_s":157.834441
           },
           "tg128":{
-            "tok_s":48.903047000000001
+            "tok_s":49.307999000000002
           },
           "tg128@4":{
-            "tok_s":88.759997049967453
+            "tok_s":89.163332621256515
           }
         },
         "source":"official",
@@ -3001,7 +4423,8 @@
         "threads":16,
         "date":"2026-10-21",
         "hardware":{
-          "cpu":"AMD EPYC 7543P 32-Core Processor"
+          "cpu":"AMD EPYC 7543P 32-Core Processor",
+          "gpu":"NVIDIA RTX PRO 4500 Blackwell"
         },
         "tests":{
           "pp512":{
@@ -3032,7 +4455,8 @@
         "threads":16,
         "date":"2026-10-21",
         "hardware":{
-          "cpu":"AMD EPYC 7543P 32-Core Processor"
+          "cpu":"AMD EPYC 7543P 32-Core Processor",
+          "gpu":"NVIDIA RTX PRO 4500 Blackwell"
         },
         "tests":{
           "pp512":{
@@ -3233,41 +4657,378 @@
         "engine":"das",
         "backend":"cpu",
         "flavor":"tuned",
-        "box":"m5",
-        "threads":6,
-        "date":"2026-10-21",
+        "box":"gnr",
+        "threads":8,
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Intel(R) Xeon(R) 6975P-C"
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":138.09899999999999,
+            "ms":165.90000000000001,
             "audio_s":11
           },
           "asr:jfk3.wav":{
-            "ms":433.78800000000001,
+            "ms":395.23599999999999,
             "audio_s":33
           },
           "asr:gb1.wav":{
-            "ms":4383.2780000000002,
+            "ms":5163.3140000000003,
             "audio_s":198.734375
           },
           "asr:hp0.wav":{
-            "ms":7433.9889999999996,
+            "ms":8957.7090000000007,
             "audio_s":273.28724999999997
           },
           "asr:hp0x2.wav":{
-            "ms":26158.393,
+            "ms":38938.076000000001,
+            "audio_s":546.57449999999994
+          }
+        },
+        "workload":"asr",
+        "source":"official",
+        "sha":"fbf750ffd",
+        "version":"0.6.5",
+        "files":[
+          {
+            "role":"weights",
+            "name":"ggml-parakeet-tdt-0.6b-v3-f32.bin"
+          },
+          {
+            "role":"clip",
+            "name":"jfk.wav"
+          },
+          {
+            "role":"clip",
+            "name":"jfk3.wav"
+          },
+          {
+            "role":"clip",
+            "name":"gb1.wav"
+          },
+          {
+            "role":"clip",
+            "name":"hp0.wav"
+          },
+          {
+            "role":"clip",
+            "name":"hp0x2.wav"
+          }
+        ]
+      },
+      {
+        "engine":"parakeet-cli",
+        "backend":"cpu",
+        "flavor":"stock",
+        "box":"gnr",
+        "threads":8,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Intel(R) Xeon(R) 6975P-C"
+        },
+        "tests":{
+          "asr:jfk.wav":{
+            "ms":229.31
+          },
+          "asr:jfk3.wav":{
+            "ms":755.18000000000006
+          },
+          "asr:gb1.wav":{
+            "ms":9917.4200000000001
+          },
+          "asr:hp0.wav":{
+            "ms":16827.650000000001
+          },
+          "asr:hp0x2.wav":{
+            "ms":61971.919999999998
+          }
+        },
+        "workload":"asr",
+        "source":"official",
+        "files":[
+          {
+            "role":"weights",
+            "name":"ggml-parakeet-tdt-0.6b-v3-q8_0.bin"
+          },
+          {
+            "role":"clip",
+            "name":"jfk.wav"
+          },
+          {
+            "role":"clip",
+            "name":"jfk3.wav"
+          },
+          {
+            "role":"clip",
+            "name":"gb1.wav"
+          },
+          {
+            "role":"clip",
+            "name":"hp0.wav"
+          },
+          {
+            "role":"clip",
+            "name":"hp0x2.wav"
+          }
+        ]
+      },
+      {
+        "engine":"onnx",
+        "backend":"cpu",
+        "flavor":"stock",
+        "box":"gnr",
+        "threads":8,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Intel(R) Xeon(R) 6975P-C"
+        },
+        "tests":{
+          "asr:jfk.wav":{
+            "ms":447.91199999999998,
+            "audio_s":11
+          },
+          "asr:jfk3.wav":{
+            "ms":1218.748,
+            "audio_s":33
+          },
+          "asr:gb1.wav":{
+            "ms":13546.444,
+            "audio_s":198.73400000000001
+          },
+          "asr:hp0.wav":{
+            "ms":22551.073,
+            "audio_s":273.28699999999998
+          }
+        },
+        "workload":"asr",
+        "source":"official",
+        "files":[
+          {
+            "role":"clip",
+            "name":"jfk.wav"
+          },
+          {
+            "role":"clip",
+            "name":"jfk3.wav"
+          },
+          {
+            "role":"clip",
+            "name":"gb1.wav"
+          },
+          {
+            "role":"clip",
+            "name":"hp0.wav"
+          }
+        ]
+      },
+      {
+        "engine":"das",
+        "backend":"cpu",
+        "flavor":"tuned",
+        "box":"graviton4",
+        "threads":16,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Neoverse-V2"
+        },
+        "tests":{
+          "asr:jfk.wav":{
+            "ms":168.87700000000001,
+            "audio_s":11
+          },
+          "asr:jfk3.wav":{
+            "ms":450.22300000000001,
+            "audio_s":33
+          },
+          "asr:gb1.wav":{
+            "ms":4552.4049999999997,
+            "audio_s":198.734375
+          },
+          "asr:hp0.wav":{
+            "ms":7494.9250000000002,
+            "audio_s":273.28724999999997
+          },
+          "asr:hp0x2.wav":{
+            "ms":22860.498,
+            "audio_s":546.57449999999994
+          }
+        },
+        "workload":"asr",
+        "source":"official",
+        "sha":"fbf750ffd",
+        "version":"0.6.5",
+        "files":[
+          {
+            "role":"weights",
+            "name":"ggml-parakeet-tdt-0.6b-v3-f32.bin"
+          },
+          {
+            "role":"clip",
+            "name":"jfk.wav"
+          },
+          {
+            "role":"clip",
+            "name":"jfk3.wav"
+          },
+          {
+            "role":"clip",
+            "name":"gb1.wav"
+          },
+          {
+            "role":"clip",
+            "name":"hp0.wav"
+          },
+          {
+            "role":"clip",
+            "name":"hp0x2.wav"
+          }
+        ]
+      },
+      {
+        "engine":"parakeet-cli",
+        "backend":"cpu",
+        "flavor":"stock",
+        "box":"graviton4",
+        "threads":16,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Neoverse-V2"
+        },
+        "tests":{
+          "asr:jfk.wav":{
+            "ms":186.00999999999999
+          },
+          "asr:jfk3.wav":{
+            "ms":642.20000000000005
+          },
+          "asr:gb1.wav":{
+            "ms":9274.7099999999991
+          },
+          "asr:hp0.wav":{
+            "ms":16253.899999999998
+          },
+          "asr:hp0x2.wav":{
+            "ms":59290.759999999995
+          }
+        },
+        "workload":"asr",
+        "source":"official",
+        "files":[
+          {
+            "role":"weights",
+            "name":"ggml-parakeet-tdt-0.6b-v3-q8_0.bin"
+          },
+          {
+            "role":"clip",
+            "name":"jfk.wav"
+          },
+          {
+            "role":"clip",
+            "name":"jfk3.wav"
+          },
+          {
+            "role":"clip",
+            "name":"gb1.wav"
+          },
+          {
+            "role":"clip",
+            "name":"hp0.wav"
+          },
+          {
+            "role":"clip",
+            "name":"hp0x2.wav"
+          }
+        ]
+      },
+      {
+        "engine":"onnx",
+        "backend":"cpu",
+        "flavor":"stock",
+        "box":"graviton4",
+        "threads":16,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Neoverse-V2"
+        },
+        "tests":{
+          "asr:jfk.wav":{
+            "ms":333.529,
+            "audio_s":11
+          },
+          "asr:jfk3.wav":{
+            "ms":910.37199999999996,
+            "audio_s":33
+          },
+          "asr:gb1.wav":{
+            "ms":8152.085,
+            "audio_s":198.73400000000001
+          },
+          "asr:hp0.wav":{
+            "ms":12813.146000000001,
+            "audio_s":273.28699999999998
+          }
+        },
+        "workload":"asr",
+        "source":"official",
+        "files":[
+          {
+            "role":"clip",
+            "name":"jfk.wav"
+          },
+          {
+            "role":"clip",
+            "name":"jfk3.wav"
+          },
+          {
+            "role":"clip",
+            "name":"gb1.wav"
+          },
+          {
+            "role":"clip",
+            "name":"hp0.wav"
+          }
+        ]
+      },
+      {
+        "engine":"das",
+        "backend":"cpu",
+        "flavor":"tuned",
+        "box":"m5",
+        "threads":6,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
+        },
+        "tests":{
+          "asr:jfk.wav":{
+            "ms":136.91200000000001,
+            "audio_s":11
+          },
+          "asr:jfk3.wav":{
+            "ms":426.10700000000003,
+            "audio_s":33
+          },
+          "asr:gb1.wav":{
+            "ms":4324.415,
+            "audio_s":198.734375
+          },
+          "asr:hp0.wav":{
+            "ms":7279.5609999999997,
+            "audio_s":273.28724999999997
+          },
+          "asr:hp0x2.wav":{
+            "ms":25590.355,
             "audio_s":546.57449999999994
           },
           "asr:librispeech25":{
-            "ms":2949.3120000000004,
+            "ms":2891.3330000000001,
             "audio_s":215.91506250000006
           }
         },
         "workload":"asr",
         "source":"official",
-        "sha":"ea4860e6f",
+        "sha":"d71b1aacc",
         "version":"0.6.5",
         "files":[
           {
@@ -3402,39 +5163,40 @@
         "flavor":"accel",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":137.21100000000001,
+            "ms":136.66499999999999,
             "audio_s":11
           },
           "asr:jfk3.wav":{
-            "ms":426.36500000000001,
+            "ms":424.80700000000002,
             "audio_s":33
           },
           "asr:gb1.wav":{
-            "ms":4247.3990000000003,
+            "ms":4209.1599999999999,
             "audio_s":198.734375
           },
           "asr:hp0.wav":{
-            "ms":7232.2179999999998,
+            "ms":7191.4399999999996,
             "audio_s":273.28724999999997
           },
           "asr:hp0x2.wav":{
-            "ms":25852.327000000001,
+            "ms":25592.609,
             "audio_s":546.57449999999994
           },
           "asr:librispeech25":{
-            "ms":2890.9010000000003,
+            "ms":2864.8250000000007,
             "audio_s":215.91506250000006
           }
         },
         "workload":"asr",
         "source":"official",
-        "sha":"ea4860e6f",
+        "sha":"d71b1aacc",
         "version":"0.6.5",
         "files":[
           {
@@ -3569,28 +5331,29 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":163.81000000000006
+            "ms":162.59000000000003
           },
           "asr:jfk3.wav":{
-            "ms":483.5
+            "ms":484.08000000000004
           },
           "asr:gb1.wav":{
-            "ms":5337.3199999999997
+            "ms":5278.1100000000006
           },
           "asr:hp0.wav":{
-            "ms":8983.9500000000007
+            "ms":9002.1900000000005
           },
           "asr:hp0x2.wav":{
-            "ms":29677.040000000001
+            "ms":29405.59
           },
           "asr:librispeech25":{
-            "ms":3638.8299999999999
+            "ms":3623.79
           }
         },
         "workload":"asr",
@@ -3728,29 +5491,30 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":347.512,
+            "ms":361.91899999999998,
             "audio_s":11
           },
           "asr:jfk3.wav":{
-            "ms":743.01800000000003,
+            "ms":740.48299999999995,
             "audio_s":33
           },
           "asr:gb1.wav":{
-            "ms":5046.3230000000003,
+            "ms":5028.0789999999997,
             "audio_s":198.73400000000001
           },
           "asr:hp0.wav":{
-            "ms":7723.3959999999997,
+            "ms":7680.6729999999998,
             "audio_s":273.28699999999998
           },
           "asr:librispeech25":{
-            "ms":6953.6160000000009,
+            "ms":7057.3239999999996,
             "audio_s":215.91500000000005
           }
         },
@@ -3881,39 +5645,40 @@
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":25.312000000000001,
+            "ms":25.059000000000001,
             "audio_s":11
           },
           "asr:jfk3.wav":{
-            "ms":45.067,
+            "ms":44.536000000000001,
             "audio_s":33
           },
           "asr:gb1.wav":{
-            "ms":363.14600000000002,
+            "ms":362.35899999999998,
             "audio_s":198.734375
           },
           "asr:hp0.wav":{
-            "ms":552.178,
+            "ms":550.40999999999997,
             "audio_s":273.28724999999997
           },
           "asr:hp0x2.wav":{
-            "ms":2466.4290000000001,
+            "ms":2477.3910000000001,
             "audio_s":546.57449999999994
           },
           "asr:librispeech25":{
-            "ms":529.88200000000006,
+            "ms":519.91200000000003,
             "audio_s":215.91506250000006
           }
         },
         "workload":"asr",
         "source":"official",
-        "sha":"ea4860e6f",
+        "sha":"d71b1aacc",
         "version":"0.6.5",
         "files":[
           {
@@ -4048,29 +5813,30 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":32.253999999999998,
+            "ms":32.834000000000003,
             "audio_s":11
           },
           "asr:jfk3.wav":{
-            "ms":77.448999999999998,
+            "ms":77.015000000000001,
             "audio_s":33
           },
           "asr:gb1.wav":{
-            "ms":569.75300000000004,
+            "ms":564.26999999999998,
             "audio_s":198.73400000000001
           },
           "asr:hp0.wav":{
-            "ms":893.49699999999996,
+            "ms":879.47500000000002,
             "audio_s":273.28699999999998
           },
           "asr:hp0x2.wav":{
-            "ms":2558.0210000000002,
+            "ms":2563.3609999999999,
             "audio_s":546.57399999999996
           }
         },
@@ -4254,37 +6020,326 @@
         "engine":"das",
         "backend":"cpu",
         "flavor":"tuned",
-        "box":"m5",
-        "threads":6,
-        "date":"2026-10-21",
+        "box":"gnr",
+        "threads":8,
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Intel(R) Xeon(R) 6975P-C"
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":69.064999999999998,
+            "ms":95.287999999999997,
             "audio_s":11
           },
           "asr:jfk3.wav":{
-            "ms":160.029,
+            "ms":206.89400000000001,
             "audio_s":33
           },
           "asr:gb1.wav":{
-            "ms":769.63800000000003,
+            "ms":1019.568,
             "audio_s":198.734375
           },
           "asr:hp0.wav":{
-            "ms":982.73199999999997,
+            "ms":1290.0930000000001,
             "audio_s":273.28724999999997
           },
           "asr:hp0x2.wav":{
-            "ms":1955.7840000000001,
+            "ms":2676.0650000000001,
             "audio_s":546.57449999999994
           }
         },
         "workload":"asr",
         "source":"official",
-        "sha":"ea4860e6f",
+        "sha":"fbf750ffd",
+        "version":"0.6.5",
+        "files":[
+          {
+            "role":"weights",
+            "name":"ggml-tiny.bin"
+          },
+          {
+            "role":"clip",
+            "name":"jfk.wav"
+          },
+          {
+            "role":"clip",
+            "name":"jfk3.wav"
+          },
+          {
+            "role":"clip",
+            "name":"gb1.wav"
+          },
+          {
+            "role":"clip",
+            "name":"hp0.wav"
+          },
+          {
+            "role":"clip",
+            "name":"hp0x2.wav"
+          }
+        ]
+      },
+      {
+        "engine":"whisper-cli",
+        "backend":"cpu",
+        "flavor":"stock",
+        "box":"gnr",
+        "threads":8,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Intel(R) Xeon(R) 6975P-C"
+        },
+        "tests":{
+          "asr:jfk.wav":{
+            "ms":127.46000000000001
+          },
+          "asr:jfk3.wav":{
+            "ms":313.35000000000002
+          },
+          "asr:gb1.wav":{
+            "ms":1731.8800000000001
+          },
+          "asr:hp0.wav":{
+            "ms":2220.1700000000001
+          },
+          "asr:hp0x2.wav":{
+            "ms":4379.3999999999996
+          }
+        },
+        "workload":"asr",
+        "source":"official",
+        "files":[
+          {
+            "role":"weights",
+            "name":"ggml-tiny-q8_0.bin"
+          },
+          {
+            "role":"clip",
+            "name":"jfk.wav"
+          },
+          {
+            "role":"clip",
+            "name":"jfk3.wav"
+          },
+          {
+            "role":"clip",
+            "name":"gb1.wav"
+          },
+          {
+            "role":"clip",
+            "name":"hp0.wav"
+          },
+          {
+            "role":"clip",
+            "name":"hp0x2.wav"
+          }
+        ]
+      },
+      {
+        "engine":"onnx",
+        "backend":"cpu",
+        "flavor":"stock",
+        "box":"gnr",
+        "threads":8,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Intel(R) Xeon(R) 6975P-C"
+        },
+        "tests":{
+          "asr:jfk.wav":{
+            "ms":406.95499999999998,
+            "audio_s":11
+          }
+        },
+        "workload":"asr",
+        "source":"official",
+        "files":[
+          {
+            "role":"clip",
+            "name":"jfk.wav"
+          }
+        ]
+      },
+      {
+        "engine":"das",
+        "backend":"cpu",
+        "flavor":"tuned",
+        "box":"graviton4",
+        "threads":16,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Neoverse-V2"
+        },
+        "tests":{
+          "asr:jfk.wav":{
+            "ms":80.228999999999999,
+            "audio_s":11
+          },
+          "asr:jfk3.wav":{
+            "ms":183.94900000000001,
+            "audio_s":33
+          },
+          "asr:gb1.wav":{
+            "ms":916.04300000000001,
+            "audio_s":198.734375
+          },
+          "asr:hp0.wav":{
+            "ms":1150.4110000000001,
+            "audio_s":273.28724999999997
+          },
+          "asr:hp0x2.wav":{
+            "ms":2316.2240000000002,
+            "audio_s":546.57449999999994
+          }
+        },
+        "workload":"asr",
+        "source":"official",
+        "sha":"fbf750ffd",
+        "version":"0.6.5",
+        "files":[
+          {
+            "role":"weights",
+            "name":"ggml-tiny.bin"
+          },
+          {
+            "role":"clip",
+            "name":"jfk.wav"
+          },
+          {
+            "role":"clip",
+            "name":"jfk3.wav"
+          },
+          {
+            "role":"clip",
+            "name":"gb1.wav"
+          },
+          {
+            "role":"clip",
+            "name":"hp0.wav"
+          },
+          {
+            "role":"clip",
+            "name":"hp0x2.wav"
+          }
+        ]
+      },
+      {
+        "engine":"whisper-cli",
+        "backend":"cpu",
+        "flavor":"stock",
+        "box":"graviton4",
+        "threads":16,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Neoverse-V2"
+        },
+        "tests":{
+          "asr:jfk.wav":{
+            "ms":391.25
+          },
+          "asr:jfk3.wav":{
+            "ms":776.45000000000005
+          },
+          "asr:gb1.wav":{
+            "ms":4063.8999999999996
+          },
+          "asr:hp0.wav":{
+            "ms":6232.5699999999997
+          },
+          "asr:hp0x2.wav":{
+            "ms":12113.280000000001
+          }
+        },
+        "workload":"asr",
+        "source":"official",
+        "files":[
+          {
+            "role":"weights",
+            "name":"ggml-tiny-q8_0.bin"
+          },
+          {
+            "role":"clip",
+            "name":"jfk.wav"
+          },
+          {
+            "role":"clip",
+            "name":"jfk3.wav"
+          },
+          {
+            "role":"clip",
+            "name":"gb1.wav"
+          },
+          {
+            "role":"clip",
+            "name":"hp0.wav"
+          },
+          {
+            "role":"clip",
+            "name":"hp0x2.wav"
+          }
+        ]
+      },
+      {
+        "engine":"onnx",
+        "backend":"cpu",
+        "flavor":"stock",
+        "box":"graviton4",
+        "threads":16,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Neoverse-V2"
+        },
+        "tests":{
+          "asr:jfk.wav":{
+            "ms":268.55599999999998,
+            "audio_s":11
+          }
+        },
+        "workload":"asr",
+        "source":"official",
+        "files":[
+          {
+            "role":"clip",
+            "name":"jfk.wav"
+          }
+        ]
+      },
+      {
+        "engine":"das",
+        "backend":"cpu",
+        "flavor":"tuned",
+        "box":"m5",
+        "threads":6,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
+        },
+        "tests":{
+          "asr:jfk.wav":{
+            "ms":68.206000000000003,
+            "audio_s":11
+          },
+          "asr:jfk3.wav":{
+            "ms":155.369,
+            "audio_s":33
+          },
+          "asr:gb1.wav":{
+            "ms":728.56600000000003,
+            "audio_s":198.734375
+          },
+          "asr:hp0.wav":{
+            "ms":959.41999999999996,
+            "audio_s":273.28724999999997
+          },
+          "asr:hp0x2.wav":{
+            "ms":1887.1420000000001,
+            "audio_s":546.57449999999994
+          }
+        },
+        "workload":"asr",
+        "source":"official",
+        "sha":"d71b1aacc",
         "version":"0.6.5",
         "files":[
           {
@@ -4319,35 +6374,36 @@
         "flavor":"accel",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":69.036000000000001,
+            "ms":67.763000000000005,
             "audio_s":11
           },
           "asr:jfk3.wav":{
-            "ms":155.715,
+            "ms":154.26499999999999,
             "audio_s":33
           },
           "asr:gb1.wav":{
-            "ms":751.69299999999998,
+            "ms":736.69000000000005,
             "audio_s":198.734375
           },
           "asr:hp0.wav":{
-            "ms":965.02200000000005,
+            "ms":954.96199999999999,
             "audio_s":273.28724999999997
           },
           "asr:hp0x2.wav":{
-            "ms":1965.0699999999999,
+            "ms":1929.873,
             "audio_s":546.57449999999994
           }
         },
         "workload":"asr",
         "source":"official",
-        "sha":"ea4860e6f",
+        "sha":"d71b1aacc",
         "version":"0.6.5",
         "files":[
           {
@@ -4382,25 +6438,26 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":72.950000000000003
+            "ms":72.829999999999998
           },
           "asr:jfk3.wav":{
-            "ms":168.38
+            "ms":167.74000000000001
           },
           "asr:gb1.wav":{
-            "ms":890.25999999999999
+            "ms":887.86000000000001
           },
           "asr:hp0.wav":{
-            "ms":1235.9000000000001
+            "ms":1228.01
           },
           "asr:hp0x2.wav":{
-            "ms":2439.1799999999998
+            "ms":2432.29
           }
         },
         "workload":"asr",
@@ -4438,25 +6495,26 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":42.919999999999995
+            "ms":43.640000000000001
           },
           "asr:jfk3.wav":{
-            "ms":93.049999999999997
+            "ms":91.209999999999994
           },
           "asr:gb1.wav":{
-            "ms":528.68999999999994
+            "ms":523.56999999999994
           },
           "asr:hp0.wav":{
-            "ms":601.96000000000004
+            "ms":605.38
           },
           "asr:hp0x2.wav":{
-            "ms":1199.3899999999999
+            "ms":1197.3799999999999
           }
         },
         "workload":"asr",
@@ -4494,13 +6552,14 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":302.95499999999998,
+            "ms":274.10599999999999,
             "audio_s":11
           }
         },
@@ -4519,35 +6578,36 @@
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":25.643000000000001,
+            "ms":22.965,
             "audio_s":11
           },
           "asr:jfk3.wav":{
-            "ms":65.340999999999994,
+            "ms":63.603999999999999,
             "audio_s":33
           },
           "asr:gb1.wav":{
-            "ms":388.81400000000002,
+            "ms":336.435,
             "audio_s":198.734375
           },
           "asr:hp0.wav":{
-            "ms":427.83600000000001,
+            "ms":400.94999999999999,
             "audio_s":273.28724999999997
           },
           "asr:hp0x2.wav":{
-            "ms":901.00199999999995,
+            "ms":776.56100000000004,
             "audio_s":546.57449999999994
           }
         },
         "workload":"asr",
         "source":"official",
-        "sha":"ea4860e6f",
+        "sha":"d71b1aacc",
         "version":"0.6.5",
         "files":[
           {
@@ -4731,37 +6791,326 @@
         "engine":"das",
         "backend":"cpu",
         "flavor":"tuned",
-        "box":"m5",
-        "threads":6,
-        "date":"2026-10-21",
+        "box":"gnr",
+        "threads":8,
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Intel(R) Xeon(R) 6975P-C"
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":2027.634,
+            "ms":1707.425,
             "audio_s":11
           },
           "asr:jfk3.wav":{
-            "ms":4150.6469999999999,
+            "ms":3528.54,
             "audio_s":33
           },
           "asr:gb1.wav":{
-            "ms":17330.780999999999,
+            "ms":14687.264999999999,
             "audio_s":198.734375
           },
           "asr:hp0.wav":{
-            "ms":25731.557000000001,
+            "ms":21536.029999999999,
             "audio_s":273.28724999999997
           },
           "asr:hp0x2.wav":{
-            "ms":49202.781999999999,
+            "ms":41256.699999999997,
             "audio_s":546.57449999999994
           }
         },
         "workload":"asr",
         "source":"official",
-        "sha":"ea4860e6f",
+        "sha":"fbf750ffd",
+        "version":"0.6.5",
+        "files":[
+          {
+            "role":"weights",
+            "name":"ggml-large-v3-turbo.bin"
+          },
+          {
+            "role":"clip",
+            "name":"jfk.wav"
+          },
+          {
+            "role":"clip",
+            "name":"jfk3.wav"
+          },
+          {
+            "role":"clip",
+            "name":"gb1.wav"
+          },
+          {
+            "role":"clip",
+            "name":"hp0.wav"
+          },
+          {
+            "role":"clip",
+            "name":"hp0x2.wav"
+          }
+        ]
+      },
+      {
+        "engine":"whisper-cli",
+        "backend":"cpu",
+        "flavor":"stock",
+        "box":"gnr",
+        "threads":8,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Intel(R) Xeon(R) 6975P-C"
+        },
+        "tests":{
+          "asr:jfk.wav":{
+            "ms":1847.5100000000002
+          },
+          "asr:jfk3.wav":{
+            "ms":3905.8799999999997
+          },
+          "asr:gb1.wav":{
+            "ms":22248.23
+          },
+          "asr:hp0.wav":{
+            "ms":26481.889999999999
+          },
+          "asr:hp0x2.wav":{
+            "ms":55807.690000000002
+          }
+        },
+        "workload":"asr",
+        "source":"official",
+        "files":[
+          {
+            "role":"weights",
+            "name":"ggml-large-v3-turbo-q8_0.bin"
+          },
+          {
+            "role":"clip",
+            "name":"jfk.wav"
+          },
+          {
+            "role":"clip",
+            "name":"jfk3.wav"
+          },
+          {
+            "role":"clip",
+            "name":"gb1.wav"
+          },
+          {
+            "role":"clip",
+            "name":"hp0.wav"
+          },
+          {
+            "role":"clip",
+            "name":"hp0x2.wav"
+          }
+        ]
+      },
+      {
+        "engine":"onnx",
+        "backend":"cpu",
+        "flavor":"stock",
+        "box":"gnr",
+        "threads":8,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Intel(R) Xeon(R) 6975P-C"
+        },
+        "tests":{
+          "asr:jfk.wav":{
+            "ms":1957.597,
+            "audio_s":11
+          }
+        },
+        "workload":"asr",
+        "source":"official",
+        "files":[
+          {
+            "role":"clip",
+            "name":"jfk.wav"
+          }
+        ]
+      },
+      {
+        "engine":"das",
+        "backend":"cpu",
+        "flavor":"tuned",
+        "box":"graviton4",
+        "threads":16,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Neoverse-V2"
+        },
+        "tests":{
+          "asr:jfk.wav":{
+            "ms":1753.3820000000001,
+            "audio_s":11
+          },
+          "asr:jfk3.wav":{
+            "ms":3561.5569999999998,
+            "audio_s":33
+          },
+          "asr:gb1.wav":{
+            "ms":14642.768,
+            "audio_s":198.734375
+          },
+          "asr:hp0.wav":{
+            "ms":21570.883000000002,
+            "audio_s":273.28724999999997
+          },
+          "asr:hp0x2.wav":{
+            "ms":41385.527999999998,
+            "audio_s":546.57449999999994
+          }
+        },
+        "workload":"asr",
+        "source":"official",
+        "sha":"fbf750ffd",
+        "version":"0.6.5",
+        "files":[
+          {
+            "role":"weights",
+            "name":"ggml-large-v3-turbo.bin"
+          },
+          {
+            "role":"clip",
+            "name":"jfk.wav"
+          },
+          {
+            "role":"clip",
+            "name":"jfk3.wav"
+          },
+          {
+            "role":"clip",
+            "name":"gb1.wav"
+          },
+          {
+            "role":"clip",
+            "name":"hp0.wav"
+          },
+          {
+            "role":"clip",
+            "name":"hp0x2.wav"
+          }
+        ]
+      },
+      {
+        "engine":"whisper-cli",
+        "backend":"cpu",
+        "flavor":"stock",
+        "box":"graviton4",
+        "threads":16,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Neoverse-V2"
+        },
+        "tests":{
+          "asr:jfk.wav":{
+            "ms":7960.9100000000008
+          },
+          "asr:jfk3.wav":{
+            "ms":15985.65
+          },
+          "asr:gb1.wav":{
+            "ms":89922.469999999987
+          },
+          "asr:hp0.wav":{
+            "ms":114982.14999999999
+          },
+          "asr:hp0x2.wav":{
+            "ms":255368.10000000001
+          }
+        },
+        "workload":"asr",
+        "source":"official",
+        "files":[
+          {
+            "role":"weights",
+            "name":"ggml-large-v3-turbo-q8_0.bin"
+          },
+          {
+            "role":"clip",
+            "name":"jfk.wav"
+          },
+          {
+            "role":"clip",
+            "name":"jfk3.wav"
+          },
+          {
+            "role":"clip",
+            "name":"gb1.wav"
+          },
+          {
+            "role":"clip",
+            "name":"hp0.wav"
+          },
+          {
+            "role":"clip",
+            "name":"hp0x2.wav"
+          }
+        ]
+      },
+      {
+        "engine":"onnx",
+        "backend":"cpu",
+        "flavor":"stock",
+        "box":"graviton4",
+        "threads":16,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Neoverse-V2"
+        },
+        "tests":{
+          "asr:jfk.wav":{
+            "ms":2101.614,
+            "audio_s":11
+          }
+        },
+        "workload":"asr",
+        "source":"official",
+        "files":[
+          {
+            "role":"clip",
+            "name":"jfk.wav"
+          }
+        ]
+      },
+      {
+        "engine":"das",
+        "backend":"cpu",
+        "flavor":"tuned",
+        "box":"m5",
+        "threads":6,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
+        },
+        "tests":{
+          "asr:jfk.wav":{
+            "ms":1999.404,
+            "audio_s":11
+          },
+          "asr:jfk3.wav":{
+            "ms":4207.6750000000002,
+            "audio_s":33
+          },
+          "asr:gb1.wav":{
+            "ms":17314.633999999998,
+            "audio_s":198.734375
+          },
+          "asr:hp0.wav":{
+            "ms":25731.969000000001,
+            "audio_s":273.28724999999997
+          },
+          "asr:hp0x2.wav":{
+            "ms":49087.682000000001,
+            "audio_s":546.57449999999994
+          }
+        },
+        "workload":"asr",
+        "source":"official",
+        "sha":"d71b1aacc",
         "version":"0.6.5",
         "files":[
           {
@@ -4796,35 +7145,36 @@
         "flavor":"accel",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":2010.8330000000001,
+            "ms":1993.748,
             "audio_s":11
           },
           "asr:jfk3.wav":{
-            "ms":4132.9709999999995,
+            "ms":3973.7829999999999,
             "audio_s":33
           },
           "asr:gb1.wav":{
-            "ms":17144.440999999999,
+            "ms":17037.235000000001,
             "audio_s":198.734375
           },
           "asr:hp0.wav":{
-            "ms":25789.699000000001,
+            "ms":25566.003000000001,
             "audio_s":273.28724999999997
           },
           "asr:hp0x2.wav":{
-            "ms":48706.315000000002,
+            "ms":48904.906000000003,
             "audio_s":546.57449999999994
           }
         },
         "workload":"asr",
         "source":"official",
-        "sha":"ea4860e6f",
+        "sha":"d71b1aacc",
         "version":"0.6.5",
         "files":[
           {
@@ -4859,25 +7209,26 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":2056.4200000000001
+            "ms":2024.1500000000001
           },
           "asr:jfk3.wav":{
-            "ms":4269.9200000000001
+            "ms":4197.2800000000007
           },
           "asr:gb1.wav":{
-            "ms":21959.799999999999
+            "ms":21702.539999999997
           },
           "asr:hp0.wav":{
-            "ms":27973.060000000001
+            "ms":27583.439999999999
           },
           "asr:hp0x2.wav":{
-            "ms":60239.220000000001
+            "ms":59486.380000000005
           }
         },
         "workload":"asr",
@@ -4915,25 +7266,26 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":141.12
+            "ms":140.66000000000003
           },
           "asr:jfk3.wav":{
-            "ms":301.70000000000005
+            "ms":302.38
           },
           "asr:gb1.wav":{
-            "ms":1712.1700000000001
+            "ms":1709.0699999999999
           },
           "asr:hp0.wav":{
-            "ms":2540.8099999999999
+            "ms":2533.98
           },
           "asr:hp0x2.wav":{
-            "ms":4673.9099999999999
+            "ms":4671.5799999999999
           }
         },
         "workload":"asr",
@@ -4971,13 +7323,14 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":1858.6020000000001,
+            "ms":1768.5029999999999,
             "audio_s":11
           }
         },
@@ -4996,35 +7349,36 @@
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":121.482,
+            "ms":121.376,
             "audio_s":11
           },
           "asr:jfk3.wav":{
-            "ms":272.892,
+            "ms":274.404,
             "audio_s":33
           },
           "asr:gb1.wav":{
-            "ms":1310.364,
+            "ms":1313.5740000000001,
             "audio_s":198.734375
           },
           "asr:hp0.wav":{
-            "ms":1766.425,
+            "ms":1769.3420000000001,
             "audio_s":273.28724999999997
           },
           "asr:hp0x2.wav":{
-            "ms":3430.4639999999999,
+            "ms":3431.2739999999999,
             "audio_s":546.57449999999994
           }
         },
         "workload":"asr",
         "source":"official",
-        "sha":"ea4860e6f",
+        "sha":"d71b1aacc",
         "version":"0.6.5",
         "files":[
           {
@@ -5059,29 +7413,30 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":187.24000000000001,
+            "ms":186.52099999999999,
             "audio_s":11
           },
           "asr:jfk3.wav":{
-            "ms":1076.6759999999999,
+            "ms":1084.644,
             "audio_s":33
           },
           "asr:gb1.wav":{
-            "ms":2835.056,
+            "ms":1802.136,
             "audio_s":198.73400000000001
           },
           "asr:hp0.wav":{
-            "ms":3220.5839999999998,
+            "ms":2859.9059999999999,
             "audio_s":273.28699999999998
           },
           "asr:hp0x2.wav":{
-            "ms":7447.107,
+            "ms":7714.5950000000003,
             "audio_s":546.57399999999996
           }
         },
@@ -5210,26 +7565,211 @@
         ]
       },
       {
+        "engine":"das",
+        "backend":"cpu",
+        "flavor":"tuned",
+        "box":"gnr",
+        "threads":8,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Intel(R) Xeon(R) 6975P-C"
+        },
+        "tests":{
+          "asr:jfk.wav":{
+            "ms":977.33600000000001,
+            "audio_s":11
+          },
+          "asr:jfk3.wav":{
+            "ms":2953.4960000000001,
+            "audio_s":33
+          },
+          "asr:gb1.wav":{
+            "ms":16196.752,
+            "audio_s":198.734375
+          }
+        },
+        "workload":"asr",
+        "source":"official",
+        "sha":"fbf750ffd",
+        "version":"0.6.5",
+        "files":[
+          {
+            "role":"weights",
+            "name":"canary-qwen-2.5b-decoder-q8_0.gguf"
+          },
+          {
+            "role":"mmproj",
+            "name":"canary-qwen-2.5b-encoder-f32.bin"
+          },
+          {
+            "role":"clip",
+            "name":"jfk.wav"
+          },
+          {
+            "role":"clip",
+            "name":"jfk3.wav"
+          },
+          {
+            "role":"clip",
+            "name":"gb1.wav"
+          }
+        ]
+      },
+      {
+        "engine":"nemo",
+        "backend":"cpu",
+        "flavor":"stock",
+        "box":"gnr",
+        "threads":8,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Intel(R) Xeon(R) 6975P-C"
+        },
+        "tests":{
+          "asr:jfk.wav":{
+            "ms":2592.4940000000001,
+            "audio_s":11
+          },
+          "asr:jfk3.wav":{
+            "ms":7924.4049999999997,
+            "audio_s":33
+          },
+          "asr:gb1.wav":{
+            "ms":29628.170999999998,
+            "audio_s":199
+          }
+        },
+        "workload":"asr",
+        "source":"official",
+        "files":[
+          {
+            "role":"clip",
+            "name":"jfk.wav"
+          },
+          {
+            "role":"clip",
+            "name":"jfk3.wav"
+          },
+          {
+            "role":"clip",
+            "name":"gb1.wav"
+          }
+        ]
+      },
+      {
+        "engine":"das",
+        "backend":"cpu",
+        "flavor":"tuned",
+        "box":"graviton4",
+        "threads":16,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Neoverse-V2"
+        },
+        "tests":{
+          "asr:jfk.wav":{
+            "ms":795.84000000000003,
+            "audio_s":11
+          },
+          "asr:jfk3.wav":{
+            "ms":2396.6109999999999,
+            "audio_s":33
+          },
+          "asr:gb1.wav":{
+            "ms":15008.215,
+            "audio_s":198.734375
+          }
+        },
+        "workload":"asr",
+        "source":"official",
+        "sha":"fbf750ffd",
+        "version":"0.6.5",
+        "files":[
+          {
+            "role":"weights",
+            "name":"canary-qwen-2.5b-decoder-q8_0.gguf"
+          },
+          {
+            "role":"mmproj",
+            "name":"canary-qwen-2.5b-encoder-f32.bin"
+          },
+          {
+            "role":"clip",
+            "name":"jfk.wav"
+          },
+          {
+            "role":"clip",
+            "name":"jfk3.wav"
+          },
+          {
+            "role":"clip",
+            "name":"gb1.wav"
+          }
+        ]
+      },
+      {
+        "engine":"nemo",
+        "backend":"cpu",
+        "flavor":"stock",
+        "box":"graviton4",
+        "threads":16,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Neoverse-V2"
+        },
+        "tests":{
+          "asr:jfk.wav":{
+            "ms":2062.7399999999998,
+            "audio_s":11
+          },
+          "asr:jfk3.wav":{
+            "ms":6196.817,
+            "audio_s":33
+          },
+          "asr:gb1.wav":{
+            "ms":24670.402999999998,
+            "audio_s":199
+          }
+        },
+        "workload":"asr",
+        "source":"official",
+        "files":[
+          {
+            "role":"clip",
+            "name":"jfk.wav"
+          },
+          {
+            "role":"clip",
+            "name":"jfk3.wav"
+          },
+          {
+            "role":"clip",
+            "name":"gb1.wav"
+          }
+        ]
+      },
+      {
         "engine":"nemo",
         "backend":"cpu",
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":2512.6799999999998,
+            "ms":2499.8209999999999,
             "audio_s":11
           },
           "asr:jfk3.wav":{
-            "ms":6168.1589999999997,
+            "ms":6115.6040000000003,
             "audio_s":33
           },
           "asr:gb1.wav":{
-            "ms":19357.486000000001,
+            "ms":18075.449000000001,
             "audio_s":199
           }
         },
@@ -5258,7 +7798,8 @@
         "threads":6,
         "date":"2026-10-21",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "asr:jfk.wav":{
@@ -5297,27 +7838,28 @@
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":709.03899999999999,
+            "ms":685.01300000000003,
             "audio_s":11
           },
           "asr:jfk3.wav":{
-            "ms":2205.3719999999998,
+            "ms":2167.9119999999998,
             "audio_s":33
           },
           "asr:gb1.wav":{
-            "ms":14599.136,
+            "ms":14312.237999999999,
             "audio_s":198.734375
           }
         },
         "workload":"asr",
         "source":"official",
-        "sha":"ea4860e6f",
+        "sha":"d71b1aacc",
         "version":"0.6.5",
         "files":[
           {
@@ -5348,27 +7890,28 @@
         "flavor":"accel",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":707.81899999999996,
+            "ms":700.86800000000005,
             "audio_s":11
           },
           "asr:jfk3.wav":{
-            "ms":2193.7440000000001,
+            "ms":2160.098,
             "audio_s":33
           },
           "asr:gb1.wav":{
-            "ms":14106.004999999999,
+            "ms":13956.669,
             "audio_s":198.734375
           }
         },
         "workload":"asr",
         "source":"official",
-        "sha":"ea4860e6f",
+        "sha":"d71b1aacc",
         "version":"0.6.5",
         "files":[
           {
@@ -5399,27 +7942,28 @@
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":131.36600000000001,
+            "ms":133.10499999999999,
             "audio_s":11
           },
           "asr:jfk3.wav":{
-            "ms":386.565,
+            "ms":388.86500000000001,
             "audio_s":33
           },
           "asr:gb1.wav":{
-            "ms":978.827,
+            "ms":983.697,
             "audio_s":198.734375
           }
         },
         "workload":"asr",
         "source":"official",
-        "sha":"ea4860e6f",
+        "sha":"d71b1aacc",
         "version":"0.6.5",
         "files":[
           {
@@ -5568,37 +8112,264 @@
         "engine":"das",
         "backend":"cpu",
         "flavor":"tuned",
-        "box":"m5",
-        "threads":6,
-        "date":"2026-10-21",
+        "box":"gnr",
+        "threads":8,
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Intel(R) Xeon(R) 6975P-C"
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":589.64700000000005,
+            "ms":1145.4659999999999,
             "audio_s":11
           },
           "asr:jfk3.wav":{
-            "ms":1756.538,
+            "ms":3384.7449999999999,
             "audio_s":33
           },
           "asr:gb1.wav":{
-            "ms":13418.173000000001,
+            "ms":26609.373,
             "audio_s":198.734375
           },
           "asr:hp0.wav":{
-            "ms":20454.994999999999,
+            "ms":38625.966,
             "audio_s":273.28724999999997
           },
           "asr:hp0x2.wav":{
-            "ms":53248.620999999999,
+            "ms":106753.10799999999,
             "audio_s":546.57449999999994
           }
         },
         "workload":"asr",
         "source":"official",
-        "sha":"402fc19d6",
+        "sha":"fbf750ffd",
+        "version":"0.6.5",
+        "files":[
+          {
+            "role":"weights",
+            "name":"Qwen3-ASR-0.6B-Q8_0.gguf"
+          },
+          {
+            "role":"mmproj",
+            "name":"mmproj-Qwen3-ASR-0.6B-bf16.gguf"
+          },
+          {
+            "role":"clip",
+            "name":"jfk.wav"
+          },
+          {
+            "role":"clip",
+            "name":"jfk3.wav"
+          },
+          {
+            "role":"clip",
+            "name":"gb1.wav"
+          },
+          {
+            "role":"clip",
+            "name":"hp0.wav"
+          },
+          {
+            "role":"clip",
+            "name":"hp0x2.wav"
+          }
+        ]
+      },
+      {
+        "engine":"llama-mtmd-cli",
+        "backend":"cpu",
+        "flavor":"stock",
+        "box":"gnr",
+        "threads":8,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Intel(R) Xeon(R) 6975P-C"
+        },
+        "tests":{
+          "asr:jfk.wav":{
+            "ms":619.20000000000005
+          },
+          "asr:jfk3.wav":{
+            "ms":1700.0999999999999
+          },
+          "asr:gb1.wav":{
+            "ms":15555.200000000001
+          }
+        },
+        "workload":"asr",
+        "source":"official",
+        "files":[
+          {
+            "role":"weights",
+            "name":"Qwen3-ASR-0.6B-Q8_0.gguf"
+          },
+          {
+            "role":"mmproj",
+            "name":"mmproj-Qwen3-ASR-0.6B-bf16.gguf"
+          },
+          {
+            "role":"clip",
+            "name":"jfk.wav"
+          },
+          {
+            "role":"clip",
+            "name":"jfk3.wav"
+          },
+          {
+            "role":"clip",
+            "name":"gb1.wav"
+          }
+        ]
+      },
+      {
+        "engine":"das",
+        "backend":"cpu",
+        "flavor":"tuned",
+        "box":"graviton4",
+        "threads":16,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Neoverse-V2"
+        },
+        "tests":{
+          "asr:jfk.wav":{
+            "ms":844.94500000000005,
+            "audio_s":11
+          },
+          "asr:jfk3.wav":{
+            "ms":2395,
+            "audio_s":33
+          },
+          "asr:gb1.wav":{
+            "ms":16446.434000000001,
+            "audio_s":198.734375
+          },
+          "asr:hp0.wav":{
+            "ms":23312.514999999999,
+            "audio_s":273.28724999999997
+          },
+          "asr:hp0x2.wav":{
+            "ms":56833.071000000004,
+            "audio_s":546.57449999999994
+          }
+        },
+        "workload":"asr",
+        "source":"official",
+        "sha":"fbf750ffd",
+        "version":"0.6.5",
+        "files":[
+          {
+            "role":"weights",
+            "name":"Qwen3-ASR-0.6B-Q8_0.gguf"
+          },
+          {
+            "role":"mmproj",
+            "name":"mmproj-Qwen3-ASR-0.6B-bf16.gguf"
+          },
+          {
+            "role":"clip",
+            "name":"jfk.wav"
+          },
+          {
+            "role":"clip",
+            "name":"jfk3.wav"
+          },
+          {
+            "role":"clip",
+            "name":"gb1.wav"
+          },
+          {
+            "role":"clip",
+            "name":"hp0.wav"
+          },
+          {
+            "role":"clip",
+            "name":"hp0x2.wav"
+          }
+        ]
+      },
+      {
+        "engine":"llama-mtmd-cli",
+        "backend":"cpu",
+        "flavor":"stock",
+        "box":"graviton4",
+        "threads":16,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Neoverse-V2"
+        },
+        "tests":{
+          "asr:jfk.wav":{
+            "ms":2262.0999999999999
+          },
+          "asr:jfk3.wav":{
+            "ms":6825.8999999999996
+          },
+          "asr:gb1.wav":{
+            "ms":67613.399999999994
+          }
+        },
+        "workload":"asr",
+        "source":"official",
+        "files":[
+          {
+            "role":"weights",
+            "name":"Qwen3-ASR-0.6B-Q8_0.gguf"
+          },
+          {
+            "role":"mmproj",
+            "name":"mmproj-Qwen3-ASR-0.6B-bf16.gguf"
+          },
+          {
+            "role":"clip",
+            "name":"jfk.wav"
+          },
+          {
+            "role":"clip",
+            "name":"jfk3.wav"
+          },
+          {
+            "role":"clip",
+            "name":"gb1.wav"
+          }
+        ]
+      },
+      {
+        "engine":"das",
+        "backend":"cpu",
+        "flavor":"tuned",
+        "box":"m5",
+        "threads":6,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
+        },
+        "tests":{
+          "asr:jfk.wav":{
+            "ms":597.10199999999998,
+            "audio_s":11
+          },
+          "asr:jfk3.wav":{
+            "ms":1722.6690000000001,
+            "audio_s":33
+          },
+          "asr:gb1.wav":{
+            "ms":13091.949000000001,
+            "audio_s":198.734375
+          },
+          "asr:hp0.wav":{
+            "ms":20137.451000000001,
+            "audio_s":273.28724999999997
+          },
+          "asr:hp0x2.wav":{
+            "ms":52438.940000000002,
+            "audio_s":546.57449999999994
+          }
+        },
+        "workload":"asr",
+        "source":"official",
+        "sha":"d71b1aacc",
         "version":"0.6.5",
         "files":[
           {
@@ -5637,35 +8408,36 @@
         "flavor":"accel",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":452.07100000000003,
+            "ms":460.43799999999999,
             "audio_s":11
           },
           "asr:jfk3.wav":{
-            "ms":1325.9760000000001,
+            "ms":1290.635,
             "audio_s":33
           },
           "asr:gb1.wav":{
-            "ms":10824.715,
+            "ms":10545.787,
             "audio_s":198.734375
           },
           "asr:hp0.wav":{
-            "ms":16793.413,
+            "ms":16347.924999999999,
             "audio_s":273.28724999999997
           },
           "asr:hp0x2.wav":{
-            "ms":46885.411,
+            "ms":46580.985000000001,
             "audio_s":546.57449999999994
           }
         },
         "workload":"asr",
         "source":"official",
-        "sha":"402fc19d6",
+        "sha":"d71b1aacc",
         "version":"0.6.5",
         "files":[
           {
@@ -5704,35 +8476,36 @@
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":92.581000000000003,
+            "ms":92.661000000000001,
             "audio_s":11
           },
           "asr:jfk3.wav":{
-            "ms":248.613,
+            "ms":248.06200000000001,
             "audio_s":33
           },
           "asr:gb1.wav":{
-            "ms":1600.0630000000001,
+            "ms":1597.4269999999999,
             "audio_s":198.734375
           },
           "asr:hp0.wav":{
-            "ms":2147.4259999999999,
+            "ms":2143.962,
             "audio_s":273.28724999999997
           },
           "asr:hp0x2.wav":{
-            "ms":5202.8450000000003,
+            "ms":5190.4399999999996,
             "audio_s":546.57449999999994
           }
         },
         "workload":"asr",
         "source":"official",
-        "sha":"402fc19d6",
+        "sha":"d71b1aacc",
         "version":"0.6.5",
         "files":[
           {
@@ -5771,29 +8544,30 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":108.485,
+            "ms":108.89700000000001,
             "audio_s":11
           },
           "asr:jfk3.wav":{
-            "ms":260.5,
+            "ms":260.53699999999998,
             "audio_s":33
           },
           "asr:gb1.wav":{
-            "ms":1682.0309999999999,
+            "ms":1675.932,
             "audio_s":198.73400000000001
           },
           "asr:hp0.wav":{
-            "ms":2205.431,
+            "ms":2207.6179999999999,
             "audio_s":273.28699999999998
           },
           "asr:hp0x2.wav":{
-            "ms":38080.084999999999,
+            "ms":40633.843999999997,
             "audio_s":546.57399999999996
           }
         },
@@ -5829,19 +8603,20 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":2525.0999999999999
+            "ms":2515.6999999999998
           },
           "asr:jfk3.wav":{
-            "ms":7226.3999999999996
+            "ms":7188.8999999999996
           },
           "asr:gb1.wav":{
-            "ms":46461.800000000003
+            "ms":46393.900000000001
           }
         },
         "workload":"asr",
@@ -5875,19 +8650,20 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":128.30000000000001
+            "ms":130.5
           },
           "asr:jfk3.wav":{
-            "ms":318.19999999999999
+            "ms":315.39999999999998
           },
           "asr:gb1.wav":{
-            "ms":1930.2
+            "ms":1924
           }
         },
         "workload":"asr",
@@ -6028,24 +8804,235 @@
         ]
       },
       {
+        "engine":"das",
+        "backend":"cpu",
+        "flavor":"tuned",
+        "box":"gnr",
+        "threads":8,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Intel(R) Xeon(R) 6975P-C"
+        },
+        "tests":{
+          "asr:jfk.wav":{
+            "ms":1349.6489999999999,
+            "audio_s":11
+          },
+          "asr:jfk3.wav":{
+            "ms":4323.9340000000002,
+            "audio_s":33
+          },
+          "asr:gb1.wav":{
+            "ms":32424.189999999999,
+            "audio_s":198.734375
+          },
+          "asr:hp0.wav":{
+            "ms":44292.817999999999,
+            "audio_s":273.28724999999997
+          }
+        },
+        "workload":"audio-chat",
+        "source":"official",
+        "sha":"fbf750ffd",
+        "version":"0.6.5",
+        "files":[
+          {
+            "role":"weights",
+            "name":"gemma-4-E2B-it-Q8_0.gguf"
+          },
+          {
+            "role":"mmproj",
+            "name":"mmproj-gemma-4-E2B-it-bf16.gguf"
+          },
+          {
+            "role":"clip",
+            "name":"jfk.wav"
+          },
+          {
+            "role":"clip",
+            "name":"jfk3.wav"
+          },
+          {
+            "role":"clip",
+            "name":"gb1.wav"
+          },
+          {
+            "role":"clip",
+            "name":"hp0.wav"
+          }
+        ]
+      },
+      {
+        "engine":"llama-mtmd-cli",
+        "backend":"cpu",
+        "flavor":"stock",
+        "box":"gnr",
+        "threads":8,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Intel(R) Xeon(R) 6975P-C"
+        },
+        "tests":{
+          "asr:jfk.wav":{
+            "ms":1668.9000000000001
+          },
+          "asr:jfk3.wav":{
+            "ms":4899.1000000000004
+          },
+          "asr:gb1.wav":{
+            "ms":33717.699999999997
+          }
+        },
+        "workload":"audio-chat",
+        "source":"official",
+        "files":[
+          {
+            "role":"weights",
+            "name":"gemma-4-E2B-it-Q8_0.gguf"
+          },
+          {
+            "role":"mmproj",
+            "name":"mmproj-gemma-4-E2B-it-bf16.gguf"
+          },
+          {
+            "role":"clip",
+            "name":"jfk.wav"
+          },
+          {
+            "role":"clip",
+            "name":"jfk3.wav"
+          },
+          {
+            "role":"clip",
+            "name":"gb1.wav"
+          }
+        ]
+      },
+      {
+        "engine":"das",
+        "backend":"cpu",
+        "flavor":"tuned",
+        "box":"graviton4",
+        "threads":16,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Neoverse-V2"
+        },
+        "tests":{
+          "asr:jfk.wav":{
+            "ms":1242.971,
+            "audio_s":11
+          },
+          "asr:jfk3.wav":{
+            "ms":3940.5430000000001,
+            "audio_s":33
+          },
+          "asr:gb1.wav":{
+            "ms":30593.402999999998,
+            "audio_s":198.734375
+          },
+          "asr:hp0.wav":{
+            "ms":43800.495000000003,
+            "audio_s":273.28724999999997
+          }
+        },
+        "workload":"audio-chat",
+        "source":"official",
+        "sha":"fbf750ffd",
+        "version":"0.6.5",
+        "files":[
+          {
+            "role":"weights",
+            "name":"gemma-4-E2B-it-Q8_0.gguf"
+          },
+          {
+            "role":"mmproj",
+            "name":"mmproj-gemma-4-E2B-it-bf16.gguf"
+          },
+          {
+            "role":"clip",
+            "name":"jfk.wav"
+          },
+          {
+            "role":"clip",
+            "name":"jfk3.wav"
+          },
+          {
+            "role":"clip",
+            "name":"gb1.wav"
+          },
+          {
+            "role":"clip",
+            "name":"hp0.wav"
+          }
+        ]
+      },
+      {
+        "engine":"llama-mtmd-cli",
+        "backend":"cpu",
+        "flavor":"stock",
+        "box":"graviton4",
+        "threads":16,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Neoverse-V2"
+        },
+        "tests":{
+          "asr:jfk.wav":{
+            "ms":6363.6999999999998
+          },
+          "asr:jfk3.wav":{
+            "ms":23255.099999999999
+          },
+          "asr:gb1.wav":{
+            "ms":169524.89999999999
+          }
+        },
+        "workload":"audio-chat",
+        "source":"official",
+        "files":[
+          {
+            "role":"weights",
+            "name":"gemma-4-E2B-it-Q8_0.gguf"
+          },
+          {
+            "role":"mmproj",
+            "name":"mmproj-gemma-4-E2B-it-bf16.gguf"
+          },
+          {
+            "role":"clip",
+            "name":"jfk.wav"
+          },
+          {
+            "role":"clip",
+            "name":"jfk3.wav"
+          },
+          {
+            "role":"clip",
+            "name":"gb1.wav"
+          }
+        ]
+      },
+      {
         "engine":"llama-mtmd-cli",
         "backend":"cpu",
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":7576.3000000000002
+            "ms":7552
           },
           "asr:jfk3.wav":{
-            "ms":22759.400000000001
+            "ms":22752.599999999999
           },
           "asr:gb1.wav":{
-            "ms":141342
+            "ms":141433.5
           }
         },
         "workload":"audio-chat",
@@ -6079,19 +9066,20 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":276.10000000000002
+            "ms":276.30000000000001
           },
           "asr:jfk3.wav":{
-            "ms":718.89999999999998
+            "ms":718.70000000000005
           },
           "asr:gb1.wav":{
-            "ms":4301.1999999999998
+            "ms":4288.6000000000004
           }
         },
         "workload":"audio-chat",
@@ -6125,31 +9113,32 @@
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":1145.2629999999999,
+            "ms":1150.1659999999999,
             "audio_s":11
           },
           "asr:jfk3.wav":{
-            "ms":3606.0529999999999,
+            "ms":3545.7779999999998,
             "audio_s":33
           },
           "asr:gb1.wav":{
-            "ms":28527.077000000001,
+            "ms":28325.490000000002,
             "audio_s":198.734375
           },
           "asr:hp0.wav":{
-            "ms":40525.362000000001,
+            "ms":40278.654000000002,
             "audio_s":273.28724999999997
           }
         },
         "workload":"audio-chat",
         "source":"official",
-        "sha":"402fc19d6",
+        "sha":"d71b1aacc",
         "version":"0.6.5",
         "files":[
           {
@@ -6184,31 +9173,32 @@
         "flavor":"accel",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":1150.837,
+            "ms":1110.1279999999999,
             "audio_s":11
           },
           "asr:jfk3.wav":{
-            "ms":3524.3739999999998,
+            "ms":3475.5250000000001,
             "audio_s":33
           },
           "asr:gb1.wav":{
-            "ms":27551.679,
+            "ms":27192.993999999999,
             "audio_s":198.734375
           },
           "asr:hp0.wav":{
-            "ms":39782.040999999997,
+            "ms":39548.928999999996,
             "audio_s":273.28724999999997
           }
         },
         "workload":"audio-chat",
         "source":"official",
-        "sha":"402fc19d6",
+        "sha":"d71b1aacc",
         "version":"0.6.5",
         "files":[
           {
@@ -6243,31 +9233,32 @@
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":204.47200000000001,
+            "ms":204.29300000000001,
             "audio_s":11
           },
           "asr:jfk3.wav":{
-            "ms":569.32399999999996,
+            "ms":568.98000000000002,
             "audio_s":33
           },
           "asr:gb1.wav":{
-            "ms":3552.9259999999999,
+            "ms":3551.3829999999998,
             "audio_s":198.734375
           },
           "asr:hp0.wav":{
-            "ms":4233.5950000000003,
+            "ms":4228.5029999999997,
             "audio_s":273.28724999999997
           }
         },
         "workload":"audio-chat",
         "source":"official",
-        "sha":"402fc19d6",
+        "sha":"d71b1aacc",
         "version":"0.6.5",
         "files":[
           {
@@ -6418,24 +9409,253 @@
         "void_clips":"jfk.wav"
       },
       {
+        "engine":"das",
+        "backend":"cpu",
+        "flavor":"tuned",
+        "box":"gnr",
+        "threads":8,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Intel(R) Xeon(R) 6975P-C"
+        },
+        "tests":{
+          "asr:jfk.wav":{
+            "ms":2869.4079999999999,
+            "audio_s":11
+          },
+          "asr:jfk3.wav":{
+            "ms":5740.9669999999996,
+            "audio_s":33
+          },
+          "asr:gb1.wav":{
+            "ms":54846.214999999997,
+            "audio_s":198.734375
+          },
+          "asr:hp0.wav":{
+            "ms":76755.357999999993,
+            "audio_s":273.28724999999997
+          },
+          "asr:hp0x2.wav":{
+            "ms":219355.467,
+            "audio_s":546.57449999999994
+          }
+        },
+        "workload":"audio-chat",
+        "source":"official",
+        "sha":"fbf750ffd",
+        "version":"0.6.5",
+        "files":[
+          {
+            "role":"weights",
+            "name":"Qwen3-Omni-30B-A3B-Instruct-Q8_0.gguf"
+          },
+          {
+            "role":"mmproj",
+            "name":"mmproj-Qwen3-Omni-30B-A3B-Instruct-bf16.gguf"
+          },
+          {
+            "role":"clip",
+            "name":"jfk.wav"
+          },
+          {
+            "role":"clip",
+            "name":"jfk3.wav"
+          },
+          {
+            "role":"clip",
+            "name":"gb1.wav"
+          },
+          {
+            "role":"clip",
+            "name":"hp0.wav"
+          },
+          {
+            "role":"clip",
+            "name":"hp0x2.wav"
+          }
+        ]
+      },
+      {
+        "engine":"llama-mtmd-cli",
+        "backend":"cpu",
+        "flavor":"stock",
+        "box":"gnr",
+        "threads":8,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Intel(R) Xeon(R) 6975P-C"
+        },
+        "tests":{
+          "asr:jfk.wav":{
+            "ms":285076.40000000002
+          },
+          "asr:jfk3.wav":{
+            "ms":7929.5
+          },
+          "asr:gb1.wav":{
+            "ms":78777.399999999994
+          }
+        },
+        "workload":"audio-chat",
+        "source":"official",
+        "files":[
+          {
+            "role":"weights",
+            "name":"Qwen3-Omni-30B-A3B-Instruct-Q8_0.gguf"
+          },
+          {
+            "role":"mmproj",
+            "name":"mmproj-Qwen3-Omni-30B-A3B-Instruct-bf16.gguf"
+          },
+          {
+            "role":"clip",
+            "name":"jfk.wav"
+          },
+          {
+            "role":"clip",
+            "name":"jfk3.wav"
+          },
+          {
+            "role":"clip",
+            "name":"gb1.wav"
+          }
+        ],
+        "void_clips":"jfk.wav"
+      },
+      {
+        "engine":"das",
+        "backend":"cpu",
+        "flavor":"tuned",
+        "box":"graviton4",
+        "threads":16,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Neoverse-V2"
+        },
+        "tests":{
+          "asr:jfk.wav":{
+            "ms":1892.479,
+            "audio_s":11
+          },
+          "asr:jfk3.wav":{
+            "ms":4257.0659999999998,
+            "audio_s":33
+          },
+          "asr:gb1.wav":{
+            "ms":35456.419999999998,
+            "audio_s":198.734375
+          },
+          "asr:hp0.wav":{
+            "ms":51919.254000000001,
+            "audio_s":273.28724999999997
+          },
+          "asr:hp0x2.wav":{
+            "ms":137099.465,
+            "audio_s":546.57449999999994
+          }
+        },
+        "workload":"audio-chat",
+        "source":"official",
+        "sha":"fbf750ffd",
+        "version":"0.6.5",
+        "files":[
+          {
+            "role":"weights",
+            "name":"Qwen3-Omni-30B-A3B-Instruct-Q8_0.gguf"
+          },
+          {
+            "role":"mmproj",
+            "name":"mmproj-Qwen3-Omni-30B-A3B-Instruct-bf16.gguf"
+          },
+          {
+            "role":"clip",
+            "name":"jfk.wav"
+          },
+          {
+            "role":"clip",
+            "name":"jfk3.wav"
+          },
+          {
+            "role":"clip",
+            "name":"gb1.wav"
+          },
+          {
+            "role":"clip",
+            "name":"hp0.wav"
+          },
+          {
+            "role":"clip",
+            "name":"hp0x2.wav"
+          }
+        ]
+      },
+      {
+        "engine":"llama-mtmd-cli",
+        "backend":"cpu",
+        "flavor":"stock",
+        "box":"graviton4",
+        "threads":16,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Neoverse-V2"
+        },
+        "tests":{
+          "asr:jfk.wav":{
+            "ms":97198.199999999997
+          },
+          "asr:jfk3.wav":{
+            "ms":20917.400000000001
+          },
+          "asr:gb1.wav":{
+            "ms":169429.10000000001
+          }
+        },
+        "workload":"audio-chat",
+        "source":"official",
+        "files":[
+          {
+            "role":"weights",
+            "name":"Qwen3-Omni-30B-A3B-Instruct-Q8_0.gguf"
+          },
+          {
+            "role":"mmproj",
+            "name":"mmproj-Qwen3-Omni-30B-A3B-Instruct-bf16.gguf"
+          },
+          {
+            "role":"clip",
+            "name":"jfk.wav"
+          },
+          {
+            "role":"clip",
+            "name":"jfk3.wav"
+          },
+          {
+            "role":"clip",
+            "name":"gb1.wav"
+          }
+        ],
+        "void_clips":"jfk.wav"
+      },
+      {
         "engine":"llama-mtmd-cli",
         "backend":"cpu",
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":9365.3999999999996
+            "ms":9345.2000000000007
           },
           "asr:jfk3.wav":{
-            "ms":25961.599999999999
+            "ms":25999.299999999999
           },
           "asr:gb1.wav":{
-            "ms":158455.89999999999
+            "ms":158371.79999999999
           }
         },
         "workload":"audio-chat",
@@ -6469,19 +9689,20 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":34960.400000000001
+            "ms":43886.300000000003
           },
           "asr:jfk3.wav":{
-            "ms":553.20000000000005
+            "ms":547.79999999999995
           },
           "asr:gb1.wav":{
-            "ms":7075.3999999999996
+            "ms":7289.8999999999996
           }
         },
         "workload":"audio-chat",
@@ -6516,35 +9737,36 @@
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":1637.9929999999999,
+            "ms":1539.6700000000001,
             "audio_s":11
           },
           "asr:jfk3.wav":{
-            "ms":3750.6219999999998,
+            "ms":3671.4470000000001,
             "audio_s":33
           },
           "asr:gb1.wav":{
-            "ms":40746.544000000002,
+            "ms":38554.097000000002,
             "audio_s":198.734375
           },
           "asr:hp0.wav":{
-            "ms":57617.052000000003,
+            "ms":56952.387000000002,
             "audio_s":273.28724999999997
           },
           "asr:hp0x2.wav":{
-            "ms":156178.50599999999,
+            "ms":155665.67800000001,
             "audio_s":546.57449999999994
           }
         },
         "workload":"audio-chat",
         "source":"official",
-        "sha":"402fc19d6",
+        "sha":"d71b1aacc",
         "version":"0.6.5",
         "files":[
           {
@@ -6583,35 +9805,36 @@
         "flavor":"accel",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":1517.1769999999999,
+            "ms":1451.5519999999999,
             "audio_s":11
           },
           "asr:jfk3.wav":{
-            "ms":3196.8879999999999,
+            "ms":3144.4209999999998,
             "audio_s":33
           },
           "asr:gb1.wav":{
-            "ms":34144.796999999999,
+            "ms":33840.233,
             "audio_s":198.734375
           },
           "asr:hp0.wav":{
-            "ms":53401.542000000001,
+            "ms":52508.410000000003,
             "audio_s":273.28724999999997
           },
           "asr:hp0x2.wav":{
-            "ms":147866.53200000001,
+            "ms":146224.18799999999,
             "audio_s":546.57449999999994
           }
         },
         "workload":"audio-chat",
         "source":"official",
-        "sha":"402fc19d6",
+        "sha":"d71b1aacc",
         "version":"0.6.5",
         "files":[
           {
@@ -6650,35 +9873,36 @@
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":357.64800000000002,
+            "ms":354.57299999999998,
             "audio_s":11
           },
           "asr:jfk3.wav":{
-            "ms":464.83300000000003,
+            "ms":461.32900000000001,
             "audio_s":33
           },
           "asr:gb1.wav":{
-            "ms":4729.21,
+            "ms":4720.1170000000002,
             "audio_s":198.734375
           },
           "asr:hp0.wav":{
-            "ms":6313.2309999999998,
+            "ms":6312.4499999999998,
             "audio_s":273.28724999999997
           },
           "asr:hp0x2.wav":{
-            "ms":14752.768,
+            "ms":14820.049999999999,
             "audio_s":546.57449999999994
           }
         },
         "workload":"audio-chat",
         "source":"official",
-        "sha":"402fc19d6",
+        "sha":"d71b1aacc",
         "version":"0.6.5",
         "files":[
           {
@@ -6776,13 +10000,126 @@
       },
       {
         "engine":"das",
+        "backend":"cpu",
+        "flavor":"tuned",
+        "box":"gnr",
+        "threads":8,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Intel(R) Xeon(R) 6975P-C"
+        },
+        "tests":{
+          "tts:g2p20@af_heart":{
+            "ms":12052.087,
+            "audio_s":145.49999999999997
+          }
+        },
+        "workload":"tts",
+        "source":"official",
+        "sha":"fbf750ffd",
+        "version":"0.6.5",
+        "files":[
+          {
+            "role":"weights",
+            "name":"kokoro-82m.gguf"
+          },
+          {
+            "role":"corpus",
+            "name":"g2p_corpus.json"
+          }
+        ]
+      },
+      {
+        "engine":"kokoro",
+        "backend":"cpu",
+        "flavor":"stock",
+        "box":"gnr",
+        "threads":8,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Intel(R) Xeon(R) 6975P-C"
+        },
+        "tests":{
+          "tts:g2p20@af_heart":{
+            "ms":12045.110000000001,
+            "audio_s":146.625
+          }
+        },
+        "workload":"tts",
+        "source":"official",
+        "files":[
+          {
+            "role":"corpus",
+            "name":"g2p_corpus.json"
+          }
+        ]
+      },
+      {
+        "engine":"das",
+        "backend":"cpu",
+        "flavor":"tuned",
+        "box":"graviton4",
+        "threads":16,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Neoverse-V2"
+        },
+        "tests":{
+          "tts:g2p20@af_heart":{
+            "ms":9807.6180000000004,
+            "audio_s":145.62500000000003
+          }
+        },
+        "workload":"tts",
+        "source":"official",
+        "sha":"fbf750ffd",
+        "version":"0.6.5",
+        "files":[
+          {
+            "role":"weights",
+            "name":"kokoro-82m.gguf"
+          },
+          {
+            "role":"corpus",
+            "name":"g2p_corpus.json"
+          }
+        ]
+      },
+      {
+        "engine":"kokoro",
+        "backend":"cpu",
+        "flavor":"stock",
+        "box":"graviton4",
+        "threads":16,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Neoverse-V2"
+        },
+        "tests":{
+          "tts:g2p20@af_heart":{
+            "ms":17944.84,
+            "audio_s":146.625
+          }
+        },
+        "workload":"tts",
+        "source":"official",
+        "files":[
+          {
+            "role":"corpus",
+            "name":"g2p_corpus.json"
+          }
+        ]
+      },
+      {
+        "engine":"das",
         "backend":"metal",
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
         "date":"2026-10-21",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "tts:g2p20@af_heart":{
@@ -6792,7 +10129,7 @@
         },
         "workload":"tts",
         "source":"official",
-        "sha":"402fc19d6",
+        "sha":"57af9f1a9",
         "version":"0.6.5",
         "files":[
           {
@@ -6813,7 +10150,8 @@
         "threads":6,
         "date":"2026-10-21",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "tts:g2p20@af_heart":{
@@ -6838,7 +10176,8 @@
         "threads":6,
         "date":"2026-10-21",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "tts:g2p20@af_heart":{
@@ -6861,19 +10200,20 @@
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "tts:g2p20@af_heart":{
-            "ms":7608.7440000000015,
+            "ms":7576.2610000000004,
             "audio_s":145.72499999999999
           }
         },
         "workload":"tts",
         "source":"official",
-        "sha":"402fc19d6",
+        "sha":"d71b1aacc",
         "version":"0.6.5",
         "files":[
           {
@@ -6892,13 +10232,14 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "tts:g2p20@af_heart":{
-            "ms":11006.610000000001,
+            "ms":11001.780000000001,
             "audio_s":146.625
           }
         },
@@ -6917,19 +10258,20 @@
         "flavor":"accel",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "tts:g2p20@af_heart":{
-            "ms":7605.8869999999997,
+            "ms":7532.4310000000005,
             "audio_s":145.72499999999999
           }
         },
         "workload":"tts",
         "source":"official",
-        "sha":"402fc19d6",
+        "sha":"d71b1aacc",
         "version":"0.6.5",
         "files":[
           {
@@ -7007,13 +10349,126 @@
       },
       {
         "engine":"das",
+        "backend":"cpu",
+        "flavor":"tuned",
+        "box":"gnr",
+        "threads":8,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Intel(R) Xeon(R) 6975P-C"
+        },
+        "tests":{
+          "tts:g2p20@alba":{
+            "ms":7840.7329999999974,
+            "audio_s":119.68000000000001
+          }
+        },
+        "workload":"tts",
+        "source":"official",
+        "sha":"fbf750ffd",
+        "version":"0.6.5",
+        "files":[
+          {
+            "role":"weights",
+            "name":"pocket-tts-en-q8.gguf"
+          },
+          {
+            "role":"corpus",
+            "name":"g2p_corpus.json"
+          }
+        ]
+      },
+      {
+        "engine":"pocket-tts",
+        "backend":"cpu",
+        "flavor":"stock",
+        "box":"gnr",
+        "threads":8,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Intel(R) Xeon(R) 6975P-C"
+        },
+        "tests":{
+          "tts:g2p20@alba":{
+            "ms":41553.370000000003,
+            "audio_s":121.52
+          }
+        },
+        "workload":"tts",
+        "source":"official",
+        "files":[
+          {
+            "role":"corpus",
+            "name":"g2p_corpus.json"
+          }
+        ]
+      },
+      {
+        "engine":"das",
+        "backend":"cpu",
+        "flavor":"tuned",
+        "box":"graviton4",
+        "threads":16,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Neoverse-V2"
+        },
+        "tests":{
+          "tts:g2p20@alba":{
+            "ms":6624.6169999999993,
+            "audio_s":119.68000000000001
+          }
+        },
+        "workload":"tts",
+        "source":"official",
+        "sha":"fbf750ffd",
+        "version":"0.6.5",
+        "files":[
+          {
+            "role":"weights",
+            "name":"pocket-tts-en-q8.gguf"
+          },
+          {
+            "role":"corpus",
+            "name":"g2p_corpus.json"
+          }
+        ]
+      },
+      {
+        "engine":"pocket-tts",
+        "backend":"cpu",
+        "flavor":"stock",
+        "box":"graviton4",
+        "threads":16,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Neoverse-V2"
+        },
+        "tests":{
+          "tts:g2p20@alba":{
+            "ms":30156.700000000001,
+            "audio_s":121.52
+          }
+        },
+        "workload":"tts",
+        "source":"official",
+        "files":[
+          {
+            "role":"corpus",
+            "name":"g2p_corpus.json"
+          }
+        ]
+      },
+      {
+        "engine":"das",
         "backend":"metal",
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
         "date":"2026-10-21",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "tts:g2p20@alba":{
@@ -7023,7 +10478,7 @@
         },
         "workload":"tts",
         "source":"official",
-        "sha":"402fc19d6",
+        "sha":"57af9f1a9",
         "version":"0.6.5",
         "files":[
           {
@@ -7044,7 +10499,8 @@
         "threads":6,
         "date":"2026-10-21",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "tts:g2p20@alba":{
@@ -7067,19 +10523,20 @@
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "tts:g2p20@alba":{
-            "ms":4141.9919999999993,
+            "ms":4099.6730000000016,
             "audio_s":119.04000000000002
           }
         },
         "workload":"tts",
         "source":"official",
-        "sha":"402fc19d6",
+        "sha":"d71b1aacc",
         "version":"0.6.5",
         "files":[
           {
@@ -7098,13 +10555,14 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "tts:g2p20@alba":{
-            "ms":8554.7900000000009,
+            "ms":8659.7700000000004,
             "audio_s":121.52
           }
         },
@@ -7123,19 +10581,20 @@
         "flavor":"accel",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "tts:g2p20@alba":{
-            "ms":4011.5819999999999,
+            "ms":4147.9160000000002,
             "audio_s":119.04000000000002
           }
         },
         "workload":"tts",
         "source":"official",
-        "sha":"402fc19d6",
+        "sha":"d71b1aacc",
         "version":"0.6.5",
         "files":[
           {
@@ -7213,13 +10672,126 @@
       },
       {
         "engine":"das",
+        "backend":"cpu",
+        "flavor":"tuned",
+        "box":"gnr",
+        "threads":8,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Intel(R) Xeon(R) 6975P-C"
+        },
+        "tests":{
+          "tts:g2p20@alba":{
+            "ms":7176.7060000000001,
+            "audio_s":123.91999999999999
+          }
+        },
+        "workload":"tts",
+        "source":"official",
+        "sha":"fbf750ffd",
+        "version":"0.6.5",
+        "files":[
+          {
+            "role":"weights",
+            "name":"pocket-tts-en-kq.gguf"
+          },
+          {
+            "role":"corpus",
+            "name":"g2p_corpus.json"
+          }
+        ]
+      },
+      {
+        "engine":"pocket-tts",
+        "backend":"cpu",
+        "flavor":"stock",
+        "box":"gnr",
+        "threads":8,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Intel(R) Xeon(R) 6975P-C"
+        },
+        "tests":{
+          "tts:g2p20@alba":{
+            "ms":41533.82,
+            "audio_s":121.52
+          }
+        },
+        "workload":"tts",
+        "source":"official",
+        "files":[
+          {
+            "role":"corpus",
+            "name":"g2p_corpus.json"
+          }
+        ]
+      },
+      {
+        "engine":"das",
+        "backend":"cpu",
+        "flavor":"tuned",
+        "box":"graviton4",
+        "threads":16,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Neoverse-V2"
+        },
+        "tests":{
+          "tts:g2p20@alba":{
+            "ms":6411.6739999999991,
+            "audio_s":121.92
+          }
+        },
+        "workload":"tts",
+        "source":"official",
+        "sha":"fbf750ffd",
+        "version":"0.6.5",
+        "files":[
+          {
+            "role":"weights",
+            "name":"pocket-tts-en-kq.gguf"
+          },
+          {
+            "role":"corpus",
+            "name":"g2p_corpus.json"
+          }
+        ]
+      },
+      {
+        "engine":"pocket-tts",
+        "backend":"cpu",
+        "flavor":"stock",
+        "box":"graviton4",
+        "threads":16,
+        "date":"2026-10-22",
+        "hardware":{
+          "cpu":"Neoverse-V2"
+        },
+        "tests":{
+          "tts:g2p20@alba":{
+            "ms":29894.98,
+            "audio_s":121.52
+          }
+        },
+        "workload":"tts",
+        "source":"official",
+        "files":[
+          {
+            "role":"corpus",
+            "name":"g2p_corpus.json"
+          }
+        ]
+      },
+      {
+        "engine":"das",
         "backend":"metal",
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
         "date":"2026-10-21",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "tts:g2p20@alba":{
@@ -7229,7 +10801,7 @@
         },
         "workload":"tts",
         "source":"official",
-        "sha":"402fc19d6",
+        "sha":"57af9f1a9",
         "version":"0.6.5",
         "files":[
           {
@@ -7250,7 +10822,8 @@
         "threads":6,
         "date":"2026-10-21",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "tts:g2p20@alba":{
@@ -7273,19 +10846,20 @@
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "tts:g2p20@alba":{
-            "ms":3912.7450000000003,
+            "ms":3790.8190000000004,
             "audio_s":123.27999999999999
           }
         },
         "workload":"tts",
         "source":"official",
-        "sha":"402fc19d6",
+        "sha":"d71b1aacc",
         "version":"0.6.5",
         "files":[
           {
@@ -7304,13 +10878,14 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "tts:g2p20@alba":{
-            "ms":8589.1599999999999,
+            "ms":8574.4699999999993,
             "audio_s":121.52
           }
         },
@@ -7329,19 +10904,20 @@
         "flavor":"accel",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "tts:g2p20@alba":{
-            "ms":3931.7179999999998,
+            "ms":3742.4509999999996,
             "audio_s":123.27999999999999
           }
         },
         "workload":"tts",
         "source":"official",
-        "sha":"402fc19d6",
+        "sha":"d71b1aacc",
         "version":"0.6.5",
         "files":[
           {
@@ -7367,35 +10943,36 @@
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":136.13300000000001,
+            "ms":132.31399999999999,
             "audio_s":11
           },
           "asr:jfk3.wav":{
-            "ms":417.89600000000002,
+            "ms":416.05599999999998,
             "audio_s":33
           },
           "asr:gb1.wav":{
-            "ms":4290.9970000000003,
+            "ms":4256.567,
             "audio_s":198.734375
           },
           "asr:hp0.wav":{
-            "ms":7320.1049999999996,
+            "ms":7193.6660000000002,
             "audio_s":273.28724999999997
           },
           "asr:hp0x2.wav":{
-            "ms":26039.588,
+            "ms":25515.208999999999,
             "audio_s":546.57449999999994
           }
         },
         "workload":"asr",
         "source":"official",
-        "sha":"ea4860e6f",
+        "sha":"d71b1aacc",
         "version":"0.6.5",
         "files":[
           {
@@ -7430,35 +11007,36 @@
         "flavor":"accel",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":135.173,
+            "ms":132.25999999999999,
             "audio_s":11
           },
           "asr:jfk3.wav":{
-            "ms":418.56999999999999,
+            "ms":416.47500000000002,
             "audio_s":33
           },
           "asr:gb1.wav":{
-            "ms":4222.1620000000003,
+            "ms":4196.3360000000002,
             "audio_s":198.734375
           },
           "asr:hp0.wav":{
-            "ms":7175.8410000000003,
+            "ms":7117.1289999999999,
             "audio_s":273.28724999999997
           },
           "asr:hp0x2.wav":{
-            "ms":25706.720000000001,
+            "ms":25360.300999999999,
             "audio_s":546.57449999999994
           }
         },
         "workload":"asr",
         "source":"official",
-        "sha":"ea4860e6f",
+        "sha":"d71b1aacc",
         "version":"0.6.5",
         "files":[
           {
@@ -7493,25 +11071,26 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":161.44
+            "ms":159.11999999999995
           },
           "asr:jfk3.wav":{
-            "ms":492.50999999999999
+            "ms":473.64000000000004
           },
           "asr:gb1.wav":{
-            "ms":5396.7799999999997
+            "ms":5370.0200000000004
           },
           "asr:hp0.wav":{
-            "ms":8996.5799999999999
+            "ms":8880.3500000000004
           },
           "asr:hp0x2.wav":{
-            "ms":30040.130000000001
+            "ms":29303.150000000001
           }
         },
         "workload":"asr",
@@ -7549,25 +11128,26 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":362.94099999999997,
+            "ms":349.95800000000003,
             "audio_s":11
           },
           "asr:jfk3.wav":{
-            "ms":713.91300000000001,
+            "ms":733.89200000000005,
             "audio_s":33
           },
           "asr:gb1.wav":{
-            "ms":5031.0950000000003,
+            "ms":4999.5990000000002,
             "audio_s":198.73400000000001
           },
           "asr:hp0.wav":{
-            "ms":7750.9989999999998,
+            "ms":7689.4570000000003,
             "audio_s":273.28699999999998
           }
         },
@@ -7598,35 +11178,36 @@
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":20.190000000000001,
+            "ms":17.664000000000001,
             "audio_s":11
           },
           "asr:jfk3.wav":{
-            "ms":36.707000000000001,
+            "ms":36.823,
             "audio_s":33
           },
           "asr:gb1.wav":{
-            "ms":333.08100000000002,
+            "ms":321.80599999999998,
             "audio_s":198.734375
           },
           "asr:hp0.wav":{
-            "ms":503.73500000000001,
+            "ms":505.05000000000001,
             "audio_s":273.28724999999997
           },
           "asr:hp0x2.wav":{
-            "ms":2359.1080000000002,
+            "ms":2343.556,
             "audio_s":546.57449999999994
           }
         },
         "workload":"asr",
         "source":"official",
-        "sha":"ea4860e6f",
+        "sha":"d71b1aacc",
         "version":"0.6.5",
         "files":[
           {
@@ -7661,29 +11242,30 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-10-21",
+        "date":"2026-10-22",
         "hardware":{
-          "cpu":"Apple M5 Max"
+          "cpu":"Apple M5 Max",
+          "gpu":"Apple M5 Max (40-core)"
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":29.658999999999999,
+            "ms":29.481999999999999,
             "audio_s":11
           },
           "asr:jfk3.wav":{
-            "ms":70.572999999999993,
+            "ms":69.926000000000002,
             "audio_s":33
           },
           "asr:gb1.wav":{
-            "ms":558.35400000000004,
+            "ms":540.63099999999997,
             "audio_s":198.73400000000001
           },
           "asr:hp0.wav":{
-            "ms":845.55799999999999,
+            "ms":839.75900000000001,
             "audio_s":273.28699999999998
           },
           "asr:hp0x2.wav":{
-            "ms":2482.4059999999999,
+            "ms":2488.9319999999998,
             "audio_s":546.57399999999996
           }
         },
