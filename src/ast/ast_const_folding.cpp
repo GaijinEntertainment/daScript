@@ -5,6 +5,7 @@
 #include "daScript/ast/ast_generate.h"
 #include "daScript/ast/ast_simulate.h"
 #include "daScript/simulate/debug_print.h"
+#include "ast_effects.h"
 
 namespace das {
 
@@ -50,6 +51,7 @@ namespace das {
             Visitor::preVisitExpression(expr);
             expr->noSideEffects = false;
             expr->noNativeSideEffects = false;
+            expr->mayRaise = false;
         }
     };
 
@@ -58,6 +60,21 @@ namespace das {
         explicit NoSideEffectVisitor ( Program * prog ) : program(prog) {}
     protected:
         Program * program = nullptr;
+        vector<bool> raises;
+        void markCallRaise ( Function * fn ) {
+            if ( callRaises(fn) ) raises.back() = true;
+        }
+        virtual void preVisitExpression ( Expression * expr ) override {
+            Visitor::preVisitExpression(expr);
+            raises.push_back(nodeRaises(expr));
+        }
+        virtual ExpressionPtr visitExpression ( Expression * expr ) override {
+            bool raised = raises.back() && !expr->rtti_isMakeBlock();
+            raises.pop_back();
+            expr->mayRaise = raised;
+            if ( raised && !raises.empty() ) raises.back() = true;
+            return Visitor::visitExpression(expr);
+        }
         // report an internal compiler error. a resolved ExprCall / ExprOpN
         // must have a non-null func by this stage; reaching here means the
         // call was produced after type inference and infer was never re-run
@@ -200,7 +217,8 @@ namespace das {
     // op1
         virtual ExpressionPtr visit ( ExprOp1 * expr ) override {
             if ( !expr->func ) { reportNullFunc(expr, "op1"); return Visitor::visit(expr); }
-            expr->noSideEffects = expr->subexpr->noSideEffects && (expr->func->sideEffectFlags==0);
+            markCallRaise(expr->func);
+            expr->noSideEffects = expr->subexpr->noSideEffects && !expr->func->hasObservableEffects();
             expr->noNativeSideEffects = expr->subexpr->noNativeSideEffects
                 && ((expr->func->sideEffectFlags & uint32_t(SideEffects::inferredSideEffects))==0);
             return Visitor::visit(expr);
@@ -208,13 +226,15 @@ namespace das {
     // op2
         virtual ExpressionPtr visit ( ExprOp2 * expr ) override {
             if ( !expr->func ) { reportNullFunc(expr, "op2"); return Visitor::visit(expr); }
-            expr->noSideEffects = expr->left->noSideEffects && expr->right->noSideEffects && (expr->func->sideEffectFlags==0);
+            markCallRaise(expr->func);
+            expr->noSideEffects = expr->left->noSideEffects && expr->right->noSideEffects && !expr->func->hasObservableEffects();
             expr->noNativeSideEffects = expr->left->noNativeSideEffects && expr->right->noNativeSideEffects
                 && ((expr->func->sideEffectFlags & uint32_t(SideEffects::inferredSideEffects))==0);
             return Visitor::visit(expr);
         }
     // op3
         virtual ExpressionPtr visit ( ExprOp3 * expr ) override {
+            markCallRaise(expr->func);
             expr->noSideEffects = expr->subexpr->noSideEffects && expr->left->noSideEffects && expr->right->noSideEffects;
             expr->noNativeSideEffects = expr->subexpr->noNativeSideEffects
                 && expr->left->noNativeSideEffects && expr->right->noNativeSideEffects;
@@ -223,7 +243,8 @@ namespace das {
     // call
         virtual ExpressionPtr visit ( ExprCall * expr ) override {
             if ( !expr->func ) { reportNullFunc(expr, "call"); return Visitor::visit(expr); }
-            uint32_t sef = expr->func->sideEffectFlags;
+            markCallRaise(expr->func);
+            uint32_t sef = expr->func->observableEffects();
             expr->noSideEffects = (sef==0);
             // A call whose ONLY effect is modifyArgument, and whose every argument is a freshly-built
             // make-local rvalue, is side-effect-free at this site: the writes land on temporaries the
@@ -512,7 +533,7 @@ namespace das {
     }
 
     bool isConstExprFunc ( Function * fun ) {
-        return fun->sideEffectFlags==0 && fun->builtIn && fun->result && fun->result->isFoldable();
+        return !fun->hasObservableEffects() && fun->builtIn && fun->result && fun->result->isFoldable();
     }
 
     // The value of a const is wanted HERE, and its own initializer never folded (lint
@@ -851,7 +872,7 @@ namespace das {
             program->library.foreach([&](Module * mod) -> bool {
                 if ( auto kv = mod->functionsByName.find(hName) ) {
                     for ( auto fn : kv->second ) {
-                        if ( !fn->builtIn || fn->sideEffectFlags || fn->isTemplate ) continue;
+                        if ( !fn->builtIn || fn->hasObservableEffects() || fn->isTemplate ) continue;
                         if ( fn->arguments.size()!=nArgs ) continue;
                         if ( !fn->arguments[0]->type->isSameType(*t0, RefMatters::no, ConstMatters::no, TemporaryMatters::no) ) continue;
                         if ( t1 && !fn->arguments[1]->type->isSameType(*t1, RefMatters::no, ConstMatters::no, TemporaryMatters::no) ) continue;
@@ -947,7 +968,7 @@ namespace das {
         // das bodies on purpose and the call itself is the payload
         bool isNop ( const FunctionPtr & func ) {
             if ( func->builtIn ) return false;
-            if ( func->sideEffectFlags ) return false;
+            if ( func->hasObservableEffects() ) return false;
             if ( func->body->rtti_isBlock() ) {
                 auto block = static_cast<ExprBlock*>(func->body);
                 if ( block->list.size()==0 && block->finalList.size()==0 ) {
@@ -1020,7 +1041,7 @@ namespace das {
 
     // op1
         virtual ExpressionPtr visit ( ExprOp1 * expr ) override {
-            if (expr->func->sideEffectFlags) {
+            if ( expr->func->hasObservableEffects() ) {
                 return Visitor::visit(expr);
             }
             if ( expr->subexpr->constexpression && expr->func->builtIn ) {
@@ -1035,7 +1056,7 @@ namespace das {
                     const bool involutive = inner->subexpr->type &&
                         ( (expr->op=="!" && inner->subexpr->type->isSimpleType(Type::tBool))
                        || (expr->op=="-" && inner->subexpr->type->isNumeric()) );
-                    if ( inner->op==expr->op && inner->func && inner->func->builtIn && !inner->func->sideEffectFlags
+                    if ( inner->op==expr->op && inner->func && inner->func->builtIn && !inner->func->hasObservableEffects()
                         && involutive ) {
                         reportFolding();
                         return inner->subexpr;
@@ -1044,7 +1065,7 @@ namespace das {
                 // !(a<b) → a>=b etc. FP compares change NaN behavior → fast_math
                 if ( expr->op=="!" && expr->subexpr->rtti_isOp2() ) {
                     auto cmp = static_cast<ExprOp2 *>(expr->subexpr);
-                    if ( cmp->func && cmp->func->builtIn && !cmp->func->sideEffectFlags && cmp->type && cmp->type->isSimpleType(Type::tBool) ) {
+                    if ( cmp->func && cmp->func->builtIn && !cmp->func->hasObservableEffects() && cmp->type && cmp->type->isSimpleType(Type::tBool) ) {
                         const char * flip = nullptr;
                         if ( cmp->op=="==" ) flip = "!=";
                         else if ( cmp->op=="!=" ) flip = "==";
@@ -1071,7 +1092,7 @@ namespace das {
         }
     // op2
         virtual ExpressionPtr visit ( ExprOp2 * expr ) override {
-            if (expr->func->sideEffectFlags) {
+            if ( expr->func->hasObservableEffects() ) {
                 return Visitor::visit(expr);
             }
             if ( expr->left->constexpression && expr->right->constexpression && expr->func->builtIn ) {
@@ -1136,7 +1157,7 @@ namespace das {
                     if ( constEquals(L,-1) && rbt==bt && isSignedNumericFamily(bt) ) {
                         if ( auto neg = makeNegate(expr, R) ) { reportFolding(); return neg; }
                     }
-                    if ( ( (constEquals(R,0) && L->noSideEffects) || (constEquals(L,0) && R->noSideEffects) ) && valueChangeOk(bt) ) {
+                    if ( ( (constEquals(R,0) && droppable(L)) || (constEquals(L,0) && droppable(R)) ) && valueChangeOk(bt) ) {
                         if ( auto z = makeZeroConst(expr) ) { reportFolding(); return z; }
                     }
                 } else if ( expr->op=="+" && isNumericFamily(bt) ) {
@@ -1151,7 +1172,7 @@ namespace das {
                         if ( auto neg = makeNegate(expr, R) ) { reportFolding(); return neg; }
                     }
                     // x - x → 0: changes inf/NaN results → fast_math for FP
-                    if ( samePureValue(L, R) && valueChangeOk(bt) ) {
+                    if ( samePureValue(L, R) && droppable(L) && valueChangeOk(bt) ) {
                         if ( auto z = makeZeroConst(expr) ) { reportFolding(); return z; }
                     }
                 } else if ( expr->op=="/" && isNumericFamily(bt) ) {
@@ -1172,7 +1193,7 @@ namespace das {
                     const bool zr = constEquals(R,0);
                     const bool zl = constEquals(L,0);
                     if ( expr->op=="&" ) {
-                        if ( (zr && L->noSideEffects) || (zl && R->noSideEffects) ) {
+                        if ( (zr && droppable(L)) || (zl && droppable(R)) ) {
                             if ( auto z = makeZeroConst(expr) ) { reportFolding(); return z; }
                         }
                         if ( samePureValue(L,R) ) { reportFolding(); return L; }
@@ -1183,14 +1204,14 @@ namespace das {
                     } else {
                         if ( zr && lbt==bt ) { reportFolding(); return L; }
                         if ( zl && rbt==bt ) { reportFolding(); return R; }
-                        if ( samePureValue(L,R) ) {
+                        if ( samePureValue(L,R) && droppable(L) ) {
                             if ( auto z = makeZeroConst(expr) ) { reportFolding(); return z; }
                         }
                     }
                 } else if ( ( expr->op=="<<" || expr->op==">>" || expr->op=="<<<" || expr->op==">>>" ) && isIntegerFamily(bt) ) {
                     if ( constEquals(R,0) && lbt==bt ) { reportFolding(); return L; }
                 } else if ( expr->op=="%" && isIntegerFamily(bt) ) {
-                    if ( constEquals(R,1) && L->noSideEffects ) {
+                    if ( constEquals(R,1) && droppable(L) ) {
                         if ( auto z = makeZeroConst(expr) ) { reportFolding(); return z; }
                     }
                 } else if ( expr->op=="&&" && bt==Type::tBool ) {
@@ -1199,12 +1220,12 @@ namespace das {
                     if ( isConstBoolValue(L,true) ) { reportFolding(); return R; }
                     if ( isConstBoolValue(L,false) ) { reportFolding(); return L; }
                     if ( isConstBoolValue(R,true) ) { reportFolding(); return L; }
-                    if ( isConstBoolValue(R,false) && L->noSideEffects ) { reportFolding(); return R; }
+                    if ( isConstBoolValue(R,false) && droppable(L) ) { reportFolding(); return R; }
                 } else if ( expr->op=="||" && bt==Type::tBool ) {
                     if ( isConstBoolValue(L,false) ) { reportFolding(); return R; }
                     if ( isConstBoolValue(L,true) ) { reportFolding(); return L; }
                     if ( isConstBoolValue(R,false) ) { reportFolding(); return L; }
-                    if ( isConstBoolValue(R,true) && L->noSideEffects ) { reportFolding(); return R; }
+                    if ( isConstBoolValue(R,true) && droppable(L) ) { reportFolding(); return R; }
                 }
                 // v * floatN(s) → v * s ; v / floatN(s) → v / s (splat collapse, per-lane bit-identical).
                 // The OTHER operand must itself be a floatN — in `floatN(s) * t` (t scalar) the collapse
@@ -1213,7 +1234,7 @@ namespace das {
                     auto trySplat = [&]( Expression * e ) -> Expression * {
                         if ( !e || !e->rtti_isCall() ) return nullptr;
                         auto call = static_cast<ExprCall *>(e);
-                        if ( !call->func || !call->func->builtIn || call->func->sideEffectFlags ) return nullptr;
+                        if ( !call->func || !call->func->builtIn || call->func->hasObservableEffects() ) return nullptr;
                         if ( call->arguments.size()!=1 ) return nullptr;
                         auto & a0 = call->arguments[0];
                         if ( !a0->type || a0->type->baseType!=Type::tFloat || a0->type->ref ) return nullptr;
@@ -1257,7 +1278,7 @@ namespace das {
                     } else if ( expr->left->rtti_isConstant() && expr->right->rtti_isOp2() ) {
                         inner = static_cast<ExprOp2 *>(expr->right); c2 = expr->left;
                     }
-                    if ( inner && inner->op==expr->op && inner->func && inner->func->builtIn && !inner->func->sideEffectFlags
+                    if ( inner && inner->op==expr->op && inner->func && inner->func->builtIn && !inner->func->hasObservableEffects()
                         && inner->type && inner->type->baseType==bt && c2->type && c2->type->baseType==bt
                         && inner->left->type && inner->left->type->baseType==bt
                         && inner->right->type && inner->right->type->baseType==bt ) {
@@ -1294,7 +1315,7 @@ namespace das {
             if ( expr->type->isFoldable() && expr->subexpr->constexpression && expr->left->constexpression && expr->right->constexpression &&
                 (expr->func && expr->func->builtIn) ) {
                 return evalAndFold(expr);
-            } else if ( expr->type->isFoldable() && expr->subexpr->noSideEffects && expr->left->constexpression && expr->right->constexpression ) {
+            } else if ( expr->type->isFoldable() && droppable(expr->subexpr) && expr->left->constexpression && expr->right->constexpression ) {
                 bool failed;
                 vec4f left = eval(expr->left, failed);
                 if ( failed ) return Visitor::visit(expr);
@@ -1330,7 +1351,7 @@ namespace das {
             }
             // c ? a : a → a for same-shape arms. Arm purity is NOT required — exactly one
             // arm evaluates before and after the fold; only the dropped condition must be pure
-            if ( expr->subexpr->noSideEffects && expr->left->sameAs(expr->right) ) {
+            if ( droppable(expr->subexpr) && expr->left->sameAs(expr->right) ) {
                 reportFolding();
                 return expr->left;
             }
@@ -1359,7 +1380,7 @@ namespace das {
                 if ( expr->if_true->rtti_isBlock() ) {
                     auto ifb = static_cast<ExprBlock*>(expr->if_true);
                     if ( !ifb->list.size() && !ifb->finalList.size() ) {
-                        if ( expr->cond->noSideEffects ) {
+                        if ( droppable(expr->cond) ) {
                             reportFolding();
                             return nullptr;
                         } else {
@@ -1377,7 +1398,7 @@ namespace das {
                 reportFolding();
                 return nullptr;
             }
-            if ( expr->noSideEffects ) {    // top level expressions like a + 5;
+            if ( droppable(expr) ) {    // top level expressions like a + 5;
                 reportFolding();
                 return nullptr;
             }
@@ -1501,7 +1522,7 @@ namespace das {
                     return sc;
                 }
             }
-            if ( expr->func->result->isFoldable() && (expr->func->sideEffectFlags==0) ) {
+            if ( expr->func->result->isFoldable() && !expr->func->hasObservableEffects() ) {
                 auto allConst = true;
                 bool canFold = true;
                 for ( auto & arg : expr->arguments ) {
@@ -1607,7 +1628,7 @@ namespace das {
         virtual void preVisit ( ExprCall * expr ) override {
             Visitor::preVisit(expr);
             if ( expr->func && expr->func->hasToRunAtCompileTime ) {
-                if ( expr->func->sideEffectFlags ) {
+                if ( expr->func->hasObservableEffects() ) {
                     program->error("function did not run at compilation time because it has side-effects","","",
                                    expr->at, CompilationError::runtime_function);
                 } else {
@@ -1637,7 +1658,7 @@ namespace das {
         }
         // ExprCall
         virtual ExpressionPtr visit ( ExprCall * expr ) override {
-            if ( expr->func->result->isFoldable() && (expr->func->sideEffectFlags==0) && !expr->func->builtIn ) {
+            if ( expr->func->result->isFoldable() && !expr->func->hasObservableEffects() && !expr->func->builtIn ) {
                 auto allConst = true;
                 for ( auto & arg : expr->arguments ) {
                     if ( arg->type->baseType!=Type::fakeContext && arg->type->baseType!=Type::fakeLineInfo ) {

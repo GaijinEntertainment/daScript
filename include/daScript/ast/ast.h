@@ -626,6 +626,7 @@ namespace das
         virtual bool rtti_isStringBuilder() const { return false; }
         virtual bool rtti_isCall() const { return false; }
         virtual bool rtti_isInvoke() const { return false; }
+        virtual bool rtti_isAssert() const { return false; }
         virtual bool rtti_isCallLikeExpr() const { return false; }
         virtual bool rtti_isCallFunc() const { return false; }
         virtual bool rtti_isNamedCall() const { return false; }
@@ -697,6 +698,7 @@ namespace das
                 bool    noNativeSideEffects : 1;
                 bool    isForLoopSource : 1;
                 bool    isCallArgument : 1;
+                bool    mayRaise : 1;
             };
             uint32_t    flags = 0;
         };
@@ -775,6 +777,7 @@ namespace das
     ,   accessGlobal =      (1<<4)
     ,   invoke =            (1<<5)
     ,   captureString =     (1<<6)
+    ,   mayRaise =          (1<<7)
     ,   modifyArgumentAndExternal   = modifyArgument | modifyExternal
     ,   modifyArgumentAndAccessExternal = modifyArgument | accessExternal
 
@@ -820,6 +823,10 @@ namespace das
         string describe(DescribeModule moduleName = DescribeModule::no, DescribeExtra extra = DescribeExtra::no) const;
         virtual FunctionPtr visit(Visitor & vis);
         FunctionPtr setSideEffects ( SideEffects seFlags );
+        uint32_t observableEffects() const;
+        bool hasObservableEffects() const;
+        bool mayRaise() const;
+        FunctionPtr setMayRaise();
         bool isGeneric() const;
         FunctionPtr clone() const;
         string getLocationExtra() const;
