@@ -222,7 +222,7 @@ def test_asr_catalog_invariants(t : T?) {
                 t |> success(wav != "gemma4a_test2.wav", "no untraceable clips in the catalog")
             }
             let wl = asr_workload(spec)
-            let chats <- {"Gemma-4 E2B audio", "Qwen3-Omni-30B audio"}
+            var inscope chats <- {"Gemma-4 E2B audio", "Qwen3-Omni-30B audio"}
             t |> equal(wl, key_exists(chats, spec.display) ? "audio-chat" : "asr",
                        "{spec.display}: the chat models are audio-chat, every speech-to-text model asr")
             t |> equal(spec.metal_served, key_exists(metal_families, spec.display),
@@ -421,11 +421,11 @@ def test_batched_rows_carry_the_leg_shape(t : T?) {
                     }
                     rows++
                     let at = "{base_name(path)} {m.gguf} {r.engine} {r.backend}/{r.flavor}"
-                    if (r.backend == "metal") {
+                    if (r.backend != "cpu") {
                         t |> success(find(r.cmd, "--npl-plen") < 0 && find(r.cmd, "--no-op-offload") < 0,
-                            "{at}: the metal leg's batched row rides the flat rows' shape and carries no cpu-only flag")
+                            "{at}: a GPU leg's batched row rides the flat rows' shape and carries no cpu-only flag")
                         t |> success(!ref_batched || find(r.cmd, "-npp 512 ") >= 0,
-                            "{at}: the metal reference's streams start from the flat rows' 512-token prompt")
+                            "{at}: a GPU reference's streams start from the flat rows' 512-token prompt")
                     } else {
                         t |> success(!das_batched || find(r.cmd, "--npl-plen 128 --npl-reps 3") >= 0,
                             "{at}: the cpu leg's das child takes the 128 x 3 shape")

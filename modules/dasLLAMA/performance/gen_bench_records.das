@@ -241,11 +241,7 @@ def vulkan_leg_refusal(vulkan, other_legs, apple, gpu_asked : bool) : string {
     if (apple) {
         return "the vulkan leg runs off Apple - Metal is this box's GPU leg"
     }
-    var built = false
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        built = true
-    }
-    if (!built) {
+    static_if (!typeinfo builtin_module_exists(vulkan)) {
         return "the vulkan leg needs a dasVulkan build"
     }
     if (!gpu_asked) {
