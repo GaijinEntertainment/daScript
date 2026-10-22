@@ -820,6 +820,8 @@ namespace das
         string describe(DescribeModule moduleName = DescribeModule::no, DescribeExtra extra = DescribeExtra::no) const;
         virtual FunctionPtr visit(Visitor & vis);
         FunctionPtr setSideEffects ( SideEffects seFlags );
+        uint32_t observableEffects() const;
+        bool hasObservableEffects() const;
         bool isGeneric() const;
         FunctionPtr clone() const;
         string getLocationExtra() const;

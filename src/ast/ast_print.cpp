@@ -318,7 +318,7 @@ namespace das {
                 ss << "/*unsafe*/ ";
             }
             if ( fn->knownSideEffects ) {
-                if ( !fn->sideEffectFlags ) {
+                if ( !fn->hasObservableEffects() ) {
                 ss << "[nosideeffects]\n";
                 } else {
                     ss << "// ";

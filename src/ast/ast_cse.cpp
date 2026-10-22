@@ -54,16 +54,14 @@ namespace das {
 
     namespace {
 
-        // call-side effects that may write memory invisibly at the call site.
-        // modifyArgument is visible (argument chains are write-stamped at the call by
-        // propagateModifiedArguments); unsafe alone writes nothing; captureString
-        // retains string data but writes no tracked memory. accessExternal shares the
-        // modifyExternal bit, so pointer READS pay the conservative price
-        constexpr uint32_t CSE_OPAQUE_CALL_EFFECTS =
-              uint32_t(SideEffects::modifyExternal)
-            | uint32_t(SideEffects::accessGlobal)
-            | uint32_t(SideEffects::invoke)
-            | uint32_t(SideEffects::userScenario);
+        // observable call-side effects that still do not write memory invisibly at the call
+        // site: modifyArgument is visible (argument chains are write-stamped at the call by
+        // propagateModifiedArguments); captureString retains string data but writes no
+        // tracked memory. accessExternal shares the modifyExternal bit, so pointer READS pay
+        // the conservative price
+        constexpr uint32_t CSE_TRANSPARENT_CALL_EFFECTS =
+              uint32_t(SideEffects::modifyArgument)
+            | uint32_t(SideEffects::captureString);
 
         bool cseIsMove ( const Expression * e ) {
             return e->__rtti && strcmp(e->__rtti,"ExprMove")==0;
@@ -451,7 +449,7 @@ namespace das {
                 if ( expr->rtti_isCopy() || expr->rtti_isClone() || cseIsMove(expr) ) return;  // classified above
                 if ( expr->rtti_isCallFunc() ) {
                     auto func = static_cast<ExprCallFunc *>(expr)->func;
-                    if ( func && !(func->sideEffectFlags & CSE_OPAQUE_CALL_EFFECTS) ) return;
+                    if ( func && !(func->observableEffects() & ~CSE_TRANSPARENT_CALL_EFFECTS) ) return;
                 }
                 opaque = true;  // invoke, unresolved, or a callee that may write unseen memory
             }

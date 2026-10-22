@@ -119,7 +119,7 @@ namespace das {
     static bool isArgEscapeNeutral ( Function * fn, size_t argIndex ) {
         if ( !fn || fn->unsafeOperation ) return false;
         if ( fn->builtIn ) {
-            if ( fn->sideEffectFlags != 0 ) return false;
+            if ( fn->hasObservableEffects() ) return false;
             auto res = fn->result;
             return res && !res->ref && (res->isVoid() || res->isWorkhorseType());
         }
