@@ -230,7 +230,8 @@ def test_records_routes(t : T?) {
 [test]
 def test_image_routes(t : T?) {
     with_ladder_server(LadderPolicy()) $(base_url) {
-        t |> run("image-chat rows ride /api/runs with their encode, prefill and decode cells") @(tt : T?) {
+        let what = "image-chat rows ride /api/runs with their encode, prefill and decode cells"
+        t |> run(what) @(tt : T?) {
             POST("{base_url}/admin/import-official", image_doc()) $(resp) {
                 tt |> equal(int(resp.status_code), 200)
             }
@@ -241,7 +242,8 @@ def test_image_routes(t : T?) {
                 tt |> equal(das?["img_enc"] ?? 0.0lf, 58.0lf)
                 tt |> equal(das?["img_pp"] ?? 0.0lf, 4211.5lf)
                 tt |> equal(das?["img_tg"] ?? 0.0lf, 113.9lf)
-                tt |> equal(das?["gpu"] ?? "", "Apple M5 Max (40-core)", "the gpu label rides along")
+                tt |> equal(das?["gpu"] ?? "", "Apple M5 Max (40-core)",
+                    "the gpu label rides along")
             }
         }
     }
@@ -253,14 +255,17 @@ def test_holds_routes(t : T?) {
         POST("{base_url}/admin/import-official", official_doc()) $(resp) {
             t |> equal(int(resp.status_code), 200)
         }
-        t |> run("annotations over loopback admin hold a model off /api/runs") @(tt : T?) {
-            let held = "[\{\"gguf\":\"gemma-3-1b-it-Q8_0.gguf\",\"engine\":\"das\",\"held\":\"followup_general.md 219\"\}]"
+        let what = "annotations over loopback admin hold a model off /api/runs"
+        t |> run(what) @(tt : T?) {
+            let held = ("[\{\"gguf\":\"gemma-3-1b-it-Q8_0.gguf\",\"engine\":\"das\"," +
+                "\"held\":\"followup_general.md 219\"\}]")
             POST("{base_url}/admin/import-annotations", held) $(resp) {
                 tt |> equal(int(resp.status_code), 200)
                 tt |> equal(json_of(resp)?["holds"] ?? 0, 1)
             }
             GET("{base_url}/api/runs") $(resp) {
-                tt |> equal(length(json_of(resp)?["runs"] as _array), 0, "the held model's two official rows left the board")
+                tt |> equal(length(json_of(resp)?["runs"] as _array), 0,
+                    "the held model's two official rows left the board")
             }
             POST("{base_url}/admin/import-annotations", "not json") $(resp) {
                 tt |> equal(int(resp.status_code), 400, "a malformed document is refused")
@@ -269,7 +274,8 @@ def test_holds_routes(t : T?) {
                 tt |> equal(int(resp.status_code), 200)
             }
             GET("{base_url}/api/runs") $(resp) {
-                tt |> equal(length(json_of(resp)?["runs"] as _array), 2, "clearing the holds brings them back")
+                tt |> equal(length(json_of(resp)?["runs"] as _array), 2,
+                    "clearing the holds brings them back")
             }
         }
     }
@@ -311,14 +317,18 @@ def test_audio_routes(t : T?) {
                 tt |> equal(mlx_tts?["audio"]?[0]?["test"] ?? "", "s01")
                 tt |> equal(mlx_tts?["audio"]?[0]?["audio_s"] ?? 0.0lf, 2.4lf)
                 let ref_asr = run_jv(js, "parakeet-cli", "asr")
-                tt |> equal(ref_asr?["audio"]?[0]?["audio_s"] ?? -1.0lf, 0.0lf, "an unrecorded audio length reads 0")
+                tt |> equal(ref_asr?["audio"]?[0]?["audio_s"] ?? -1.0lf, 0.0lf,
+                    "an unrecorded audio length reads 0")
                 let llm = run_jv(js, "das", "")
                 let llm_cells = llm?["audio"]
-                tt |> success(llm_cells != null && llm_cells is _array && empty(llm_cells as _array), "an LLM row's audio is an empty array")
+                tt |> success(
+                    llm_cells != null && llm_cells is _array && empty(llm_cells as _array),
+                    "an LLM row's audio is an empty array")
             }
             GET("{base_url}/api/runs?version=17") $(resp) {
                 var js = json_of(resp)
-                tt |> equal(length(js?["runs"] as _array), 1, "the version filter scopes audio rows too")
+                tt |> equal(length(js?["runs"] as _array), 1,
+                    "the version filter scopes audio rows too")
                 tt |> equal(js?["runs"]?[0]?["workload"] ?? "", "tts")
             }
         }
@@ -339,9 +349,12 @@ def test_audio_routes(t : T?) {
                 }
                 tt |> success(cold != null && own != null, "both audio-chat rows are on the board")
                 tt |> equal(cold?["audio"]?[1]?["test"] ?? "", "jfk.wav")
-                tt |> success(cold?["audio"]?[1]?["voided"] ?? false, "the reference's cold-start clip rides voided")
-                tt |> success(!(cold?["audio"]?[0]?["voided"] ?? true), "its even clip rides unvoided")
-                tt |> success(!(own?["audio"]?[1]?["voided"] ?? true), "the das row's clip rides unvoided")
+                tt |> success(cold?["audio"]?[1]?["voided"] ?? false,
+                    "the reference's cold-start clip rides voided")
+                tt |> success(!(cold?["audio"]?[0]?["voided"] ?? true),
+                    "its even clip rides unvoided")
+                tt |> success(!(own?["audio"]?[1]?["voided"] ?? true),
+                    "the das row's clip rides unvoided")
             }
         }
     }
@@ -471,6 +484,11 @@ def test_admin_transport_rejections(t : T?) {
     }
 }
 
+let private ADMIN_POSTS <- [
+    "/admin/sidecar/verify", "/admin/sidecar/delete", "/admin/import-sidecar", "/admin/submit",
+    "/admin/import-official", "/admin/import-annotations", "/shutdown"
+]
+
 [test]
 def test_admin_origin_gate_and_page(t : T?) {
     with_ladder_server(LadderPolicy()) $(base_url) {
@@ -480,8 +498,7 @@ def test_admin_origin_gate_and_page(t : T?) {
             // every operator POST, including the two my rename moved off the peer-only gate
             // (import-official, shutdown) - a cross-origin shutdown must be REFUSED, so the
             // server survives the arm
-            for (path in ["/admin/sidecar/verify", "/admin/sidecar/delete", "/admin/import-sidecar",
-                          "/admin/submit", "/admin/import-official", "/admin/import-annotations", "/shutdown"]) {
+            for (path in ADMIN_POSTS) {
                 with_http_request() $(var req) {
                     req.method = http_method.POST
                     req.url := "{base_url}{path}"
@@ -657,11 +674,13 @@ def private write_text(path, text : string) {
     }
 }
 
-let private HELD_DOC = "[\{\"gguf\":\"gemma-3-1b-it-Q8_0.gguf\",\"engine\":\"das\",\"held\":\"followup_general.md 219\"\}]"
+let private HELD_DOC = ("[\{\"gguf\":\"gemma-3-1b-it-Q8_0.gguf\",\"engine\":\"das\"," +
+    "\"held\":\"followup_general.md 219\"\}]")
 
 [test]
 def test_official_dir_imports_its_annotations(t : T?) {
-    t |> run("the startup import reads the dir's annotations.json after its stores") @(tt : T?) {
+    let what = "the startup import reads the dir's annotations.json after its stores"
+    t |> run(what) @(tt : T?) {
         let plain = path_join(test_temp_dir(), "plain")
         let annotated = path_join(test_temp_dir(), "annotated")
         mkdir_rec(plain)
@@ -671,20 +690,25 @@ def test_official_dir_imports_its_annotations(t : T?) {
         write_text(path_join(annotated, "annotations.json"), HELD_DOC)
         with_latest_sqlite(":memory:") $(db) {
             tt |> equal(import_official_dir(db, plain, 1000l), 1, "the store is imported")
-            tt |> equal(length(list_runs(db, 0)), 2, "with no annotations.json both rows stand (the control)")
+            tt |> equal(length(list_runs(db, 0)), 2,
+                "with no annotations.json both rows stand (the control)")
         }
         with_latest_sqlite(":memory:") $(db) {
-            tt |> equal(import_official_dir(db, annotated, 1000l), 1, "annotations.json is no store")
-            tt |> equal(length(list_runs(db, 0)), 0, "the held model's rows are off the board after the import")
+            tt |> equal(import_official_dir(db, annotated, 1000l), 1,
+                "annotations.json is no store")
+            tt |> equal(length(list_runs(db, 0)), 0,
+                "the held model's rows are off the board after the import")
         }
     }
 }
 
-//! the operator CLI's contract is its exit code and the line it prints, so the op runs in a child
+//! the operator CLI's contract is its exit code and the line it
+//! prints, so the op runs in a child
 def private run_admin(args : string; var output : string&) : int {
     let argv <- get_command_line_arguments()
     let root = get_das_root()
-    let cmd = "\"{argv[0]}\" -dasroot \"{root}\" \"{root}/utils/internal/dasllama-ladder/admin.das\" -- {args} 2>&1"
+    let cmd = ("\"{argv[0]}\" -dasroot \"{root}\" " +
+        "\"{root}/utils/internal/dasllama-ladder/admin.das\" -- {args} 2>&1")
     return unsafe(popen_timeout(cmd, 300.0) $(f) {
         if (f != null) {
             output = fread(f)
@@ -694,7 +718,9 @@ def private run_admin(args : string; var output : string&) : int {
 
 [test]
 def test_admin_import_annotations(t : T?) {
-    t |> run("admin.das --op import-annotations holds a model off the board, and refuses a missing file") @(tt : T?) {
+    let what = ("admin.das --op import-annotations holds a model off the board, " +
+        "and refuses a missing file")
+    t |> run(what) @(tt : T?) {
         let db_path = path_join(test_temp_dir(), "admin.db")
         let ann = path_join(test_temp_dir(), "annotations.json")
         write_text(ann, HELD_DOC)
@@ -705,12 +731,16 @@ def test_admin_import_annotations(t : T?) {
         var out = ""
         let rc = run_admin("--db \"{db_path}\" --op import-annotations --file \"{ann}\"", out)
         tt |> equal(rc, 0, "the import exits 0: {out}")
-        tt |> success(find(out, "1 hold(s), 0 void(s) imported") >= 0, "it reports the hold: {out}")
+        tt |> success(find(out, "1 hold(s), 0 void(s) imported") >= 0,
+            "it reports the hold: {out}")
         with_latest_sqlite(db_path) $(db) {
-            tt |> equal(length(list_runs(db, 0)), 0, "the held model's rows are off the board")
+            tt |> equal(length(list_runs(db, 0)), 0,
+                "the held model's rows are off the board")
         }
         var missing = ""
-        let rc_missing = run_admin("--db \"{db_path}\" --op import-annotations --file \"{path_join(test_temp_dir(), "absent.json")}\"", missing)
+        let absent = path_join(test_temp_dir(), "absent.json")
+        let rc_missing = run_admin(
+            "--db \"{db_path}\" --op import-annotations --file \"{absent}\"", missing)
         tt |> equal(rc_missing, 1, "a missing file exits 1: {missing}")
         tt |> success(find(missing, "cannot read") >= 0, "it names the unread file: {missing}")
         remove(db_path)

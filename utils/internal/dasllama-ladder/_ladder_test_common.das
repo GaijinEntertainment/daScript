@@ -58,7 +58,9 @@ def records_doc : string {
     return write_json(doc)
 }
 
-//! an official asr + tts board (das, a reference with no audio_s, mlx per model); "encode" and "img:enc" are no audio cells, the zero-ms clip drops
+//! an official asr + tts board (das, a reference with no
+//! audio_s, mlx per model); "encode" and "img:enc" are no audio
+//! cells, the zero-ms clip drops
 def audio_doc : string {
     var doc = %json~
     [ {
@@ -68,10 +70,13 @@ def audio_doc : string {
             {
                 "engine" : "das", "backend" : "cpu", "flavor" : "tuned", "workload" : "asr",
                 "box" : "m5", "threads" : 6, "date" : "2026-09-23",
-                "cmd" : "dasllama-bench --asr", "sha" : "ea5747c91", "version" : "0.6.4", "dasllama_version" : 16,
+                "cmd" : "dasllama-bench --asr", "sha" : "ea5747c91", "version" : "0.6.4",
+                "dasllama_version" : 16,
                 "hardware" : { "cpu" : "Apple M5 Max" },
                 "tests" : {
-                    "asr:jfk.wav" : { "ms" : 158.0, "audio_s" : 11, "text" : "And so, my fellow Americans" },
+                    "asr:jfk.wav" : {
+                        "ms" : 158.0, "audio_s" : 11, "text" : "And so, my fellow Americans"
+                    },
                     "asr:gb1.wav" : { "ms" : 4311.0, "audio_s" : 198.734375 },
                     "asr:void.wav" : { "ms" : 0.0, "audio_s" : 3 },
                     "encode" : { "ms" : 12.0 },
@@ -79,7 +84,8 @@ def audio_doc : string {
                 }
             },
             {
-                "engine" : "parakeet-cli", "backend" : "cpu", "flavor" : "stock", "workload" : "asr",
+                "engine" : "parakeet-cli", "backend" : "cpu", "flavor" : "stock",
+                "workload" : "asr",
                 "box" : "m5", "threads" : 6, "date" : "2026-09-23",
                 "cmd" : "parakeet-cli -m m.bin", "hardware" : { "cpu" : "Apple M5 Max" },
                 "tests" : { "asr:jfk.wav" : { "ms" : 159.5 } }
@@ -99,9 +105,13 @@ def audio_doc : string {
             {
                 "engine" : "das", "backend" : "cpu", "flavor" : "tuned", "workload" : "tts",
                 "box" : "m5", "threads" : 6, "date" : "2026-10-21",
-                "cmd" : "lcpp_bench --tts", "sha" : "ea5747c91", "version" : "0.6.5", "dasllama_version" : 17,
+                "cmd" : "lcpp_bench --tts", "sha" : "ea5747c91", "version" : "0.6.5",
+                "dasllama_version" : 17,
                 "hardware" : { "cpu" : "Apple M5 Max" },
-                "tests" : { "tts:s01" : { "ms" : 120.0, "audio_s" : 2.5 }, "tts:s02" : { "ms" : 200.0, "audio_s" : 4.0 } }
+                "tests" : {
+                    "tts:s01" : { "ms" : 120.0, "audio_s" : 2.5 },
+                    "tts:s02" : { "ms" : 200.0, "audio_s" : 4.0 }
+                }
             },
             {
                 "engine" : "mlx-audio", "backend" : "metal", "flavor" : "stock", "workload" : "tts",
@@ -115,7 +125,8 @@ def audio_doc : string {
     return write_json(doc)
 }
 
-//! an audio-chat model's transcription runs: its clips ride the asr: keys, and a tts: key beside them is no cell
+//! an audio-chat model's transcription runs: its clips ride the
+//! asr: keys, and a tts: key beside them is no cell
 def audio_chat_doc : string {
     var doc = %json~
     [ {
@@ -123,14 +134,20 @@ def audio_chat_doc : string {
         "arch" : "Gemma-4 E2B audio",
         "runs" : [
             {
-                "engine" : "das", "backend" : "metal", "flavor" : "tuned", "workload" : "audio-chat",
+                "engine" : "das", "backend" : "metal", "flavor" : "tuned",
+                "workload" : "audio-chat",
                 "box" : "m5", "threads" : 6, "date" : "2026-10-21",
-                "cmd" : "lcpp_bench --asr", "sha" : "ea5747c91", "version" : "0.6.5", "dasllama_version" : 17,
+                "cmd" : "lcpp_bench --asr", "sha" : "ea5747c91", "version" : "0.6.5",
+                "dasllama_version" : 17,
                 "hardware" : { "cpu" : "Apple M5 Max" },
-                "tests" : { "asr:jfk.wav" : { "ms" : 600.0, "audio_s" : 11 }, "tts:s01" : { "ms" : 5.0 } }
+                "tests" : {
+                    "asr:jfk.wav" : { "ms" : 600.0, "audio_s" : 11 },
+                    "tts:s01" : { "ms" : 5.0 }
+                }
             },
             {
-                "engine" : "llama-mtmd-cli", "backend" : "metal", "flavor" : "stock", "workload" : "audio-chat",
+                "engine" : "llama-mtmd-cli", "backend" : "metal", "flavor" : "stock",
+                "workload" : "audio-chat",
                 "box" : "m5", "threads" : 6, "date" : "2026-10-21",
                 "cmd" : "llama-mtmd-cli", "hardware" : { "cpu" : "Apple M5 Max" },
                 "tests" : { "asr:jfk.wav" : { "ms" : 900.0 } }
@@ -141,10 +158,11 @@ def audio_chat_doc : string {
     return write_json(doc)
 }
 
-//! an audio-chat model whose reference read one clip at a cold start: the das run carries every
-//! clip's length, the reference none, and jfk.wav runs ninety times the reference's median rate
-//! while the das run and the reference's second row are even; the third row names a clip in its
-//! own `void_clips` beside the rule's
+//! an audio-chat model whose reference read one clip at a cold
+//! start: the das run carries every clip's length, the reference
+//! none, and jfk.wav runs ninety times the reference's median rate
+//! while the das run and the reference's second row are even; the
+//! third row names a clip in its own `void_clips` beside the rule's
 def audio_outlier_doc : string {
     var doc = %json~
     [ {
@@ -152,30 +170,51 @@ def audio_outlier_doc : string {
         "arch" : "Qwen3-Omni 30B",
         "runs" : [
             {
-                "engine" : "das", "backend" : "metal", "flavor" : "tuned", "workload" : "audio-chat",
+                "engine" : "das", "backend" : "metal", "flavor" : "tuned",
+                "workload" : "audio-chat",
                 "box" : "m5", "threads" : 8, "date" : "2026-10-21",
-                "cmd" : "lcpp_bench --asr", "sha" : "ea5747c91", "version" : "0.6.5", "dasllama_version" : 17,
+                "cmd" : "lcpp_bench --asr", "sha" : "ea5747c91", "version" : "0.6.5",
+                "dasllama_version" : 17,
                 "hardware" : { "cpu" : "Apple M5 Max" },
-                "tests" : { "asr:jfk.wav" : { "ms" : 357.6, "audio_s" : 11 }, "asr:jfk3.wav" : { "ms" : 464.8, "audio_s" : 33 }, "asr:gb1.wav" : { "ms" : 4729.2, "audio_s" : 198.734375 } }
+                "tests" : {
+                    "asr:jfk.wav" : { "ms" : 357.6, "audio_s" : 11 },
+                    "asr:jfk3.wav" : { "ms" : 464.8, "audio_s" : 33 },
+                    "asr:gb1.wav" : { "ms" : 4729.2, "audio_s" : 198.734375 }
+                }
             },
             {
-                "engine" : "llama-mtmd-cli", "backend" : "metal", "flavor" : "stock", "workload" : "audio-chat",
+                "engine" : "llama-mtmd-cli", "backend" : "metal", "flavor" : "stock",
+                "workload" : "audio-chat",
                 "box" : "m5", "threads" : 8, "date" : "2026-10-21",
                 "cmd" : "llama-mtmd-cli", "hardware" : { "cpu" : "Apple M5 Max" },
-                "tests" : { "asr:jfk.wav" : { "ms" : 34960.4 }, "asr:jfk3.wav" : { "ms" : 553.2 }, "asr:gb1.wav" : { "ms" : 7075.4 } }
+                "tests" : {
+                    "asr:jfk.wav" : { "ms" : 34960.4 },
+                    "asr:jfk3.wav" : { "ms" : 553.2 },
+                    "asr:gb1.wav" : { "ms" : 7075.4 }
+                }
             },
             {
-                "engine" : "llama-mtmd-cli", "backend" : "cpu", "flavor" : "stock", "workload" : "audio-chat",
+                "engine" : "llama-mtmd-cli", "backend" : "cpu", "flavor" : "stock",
+                "workload" : "audio-chat",
                 "box" : "m5", "threads" : 8, "date" : "2026-10-21",
                 "cmd" : "llama-mtmd-cli", "hardware" : { "cpu" : "Apple M5 Max" },
-                "tests" : { "asr:jfk.wav" : { "ms" : 9365.4 }, "asr:jfk3.wav" : { "ms" : 25961.6 }, "asr:gb1.wav" : { "ms" : 158455.9 } }
+                "tests" : {
+                    "asr:jfk.wav" : { "ms" : 9365.4 },
+                    "asr:jfk3.wav" : { "ms" : 25961.6 },
+                    "asr:gb1.wav" : { "ms" : 158455.9 }
+                }
             },
             {
-                "engine" : "llama-mtmd-cli", "backend" : "vulkan", "flavor" : "stock", "workload" : "audio-chat",
+                "engine" : "llama-mtmd-cli", "backend" : "vulkan", "flavor" : "stock",
+                "workload" : "audio-chat",
                 "box" : "m5", "threads" : 8, "date" : "2026-10-21",
                 "cmd" : "llama-mtmd-cli", "hardware" : { "cpu" : "Apple M5 Max" },
                 "void_clips" : "gb1.wav",
-                "tests" : { "asr:jfk.wav" : { "ms" : 9365.4 }, "asr:jfk3.wav" : { "ms" : 25961.6 }, "asr:gb1.wav" : { "ms" : 158455.9 } }
+                "tests" : {
+                    "asr:jfk.wav" : { "ms" : 9365.4 },
+                    "asr:jfk3.wav" : { "ms" : 25961.6 },
+                    "asr:gb1.wav" : { "ms" : 158455.9 }
+                }
             }
         ]
     } ]
@@ -183,21 +222,28 @@ def audio_outlier_doc : string {
     return write_json(doc)
 }
 
-//! an official image-chat store: one das run with the three image cells, its llama.cpp reference
+//! an official image-chat store: one das run with the three image
+//! cells, its llama.cpp reference
 def image_doc : string {
     var doc = %json~
     [ {
         "gguf" : "Qwen3VL-4B-Instruct-Q8_0.gguf",
         "runs" : [
             {
-                "engine" : "das", "backend" : "metal", "flavor" : "tuned", "workload" : "image-chat",
+                "engine" : "das", "backend" : "metal", "flavor" : "tuned",
+                "workload" : "image-chat",
                 "box" : "m5", "threads" : 6, "date" : "2026-10-21",
-                "cmd" : "lcpp_bench --image", "sha" : "ea5747c91", "version" : "0.6.5", "dasllama_version" : 17,
+                "cmd" : "lcpp_bench --image", "sha" : "ea5747c91", "version" : "0.6.5",
+                "dasllama_version" : 17,
                 "hardware" : { "cpu" : "Apple M5 Max", "gpu" : "Apple M5 Max (40-core)" },
-                "tests" : { "img:enc" : { "ms" : 58.0 }, "img:pp" : { "tok_s" : 4211.5 }, "img:tg" : { "tok_s" : 113.9 } }
+                "tests" : {
+                    "img:enc" : { "ms" : 58.0 }, "img:pp" : { "tok_s" : 4211.5 },
+                    "img:tg" : { "tok_s" : 113.9 }
+                }
             },
             {
-                "engine" : "llama.cpp", "backend" : "metal", "flavor" : "stock", "workload" : "image-chat",
+                "engine" : "llama.cpp", "backend" : "metal", "flavor" : "stock",
+                "workload" : "image-chat",
                 "box" : "m5", "threads" : 6, "date" : "2026-10-21",
                 "cmd" : "llama-mtmd-cli", "sha" : "9febe63d5",
                 "hardware" : { "cpu" : "Apple M5 Max" },

@@ -16,7 +16,8 @@ require daslib/fio
 //   daslang admin.das -- --db ... --op unverify-submission --id <id>
 //   daslang admin.das -- --db ... --op delete-submission --id <id>
 //   daslang admin.das -- --db ... --op import-official --file records/m1.json
-//   daslang admin.das -- --db ... --op import-annotations --file records/annotations.json
+//   daslang admin.das -- --db ... --op import-annotations \
+//       --file records/annotations.json
 //   daslang admin.das -- --db ... --op plant-sidecar --file box.tune.json
 
 [CommandLineArgs]
@@ -24,7 +25,7 @@ struct AdminArgs {
     @clarg_doc = "SQLite database path"
     db : string = "/srv/dasllama-ladder/ladder.db"
 
-    @clarg_doc = "verify-sidecar | unverify-sidecar | delete-sidecar | verify-submission | unverify-submission | delete-submission | import-official | import-annotations | plant-sidecar"
+    @clarg_doc = "The operation - one of the ops the usage lines above list"
     op : string = ""
 
     @clarg_doc = "Sidecar content sha (the *-sidecar ops)"
@@ -33,7 +34,7 @@ struct AdminArgs {
     @clarg_doc = "Submission id (the *-submission ops)"
     id : int = 0
 
-    @clarg_doc = "Document path (import-official record store; import-annotations annotations.json; plant-sidecar sidecar)"
+    @clarg_doc = "Document path (the import-* and plant-sidecar ops)"
     file : string = ""
 
     @clarg_short = "?"
@@ -118,7 +119,9 @@ def main : int {
         print("{n} row(s) removed\n")
         return n > 0 ? 0 : 1
     }
-    if (cfg.op == "import-official" || cfg.op == "import-annotations" || cfg.op == "plant-sidecar") {
+    let file_op = (cfg.op == "import-official" || cfg.op == "import-annotations" ||
+        cfg.op == "plant-sidecar")
+    if (file_op) {
         return run_file_op(db, cfg.op, cfg.file)
     }
     print("error: unknown op '{cfg.op}'\n")
