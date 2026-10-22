@@ -1677,22 +1677,36 @@ def select_kernel_backend(name : string) {
     activate(g_kernel_backends[name])
 }
 
-//! Pin the active backend to `name` (forces it; suppresses auto-select on later registrations). For A/B
-//! benchmarking on one binary — e.g. pin "arm64-sdot" to measure the row-major baseline against the gen tier.
-def pin_kernel_backend(name : string) {
-    // Reject an unknown name rather than sticking an invalid pin: a bad pin would suppress
-    // auto-activation AND keep select_matmul_backend_for_load_ from picking the best (repack) backend,
-    // silently degrading to whatever is currently active. Keep the current backend and warn instead.
+//! Why `name` cannot be pinned as the whole backend, "" when the pin takes: an unregistered name, a batch-only
+//! backend (`select_batch_backend`), or one that reports itself unavailable in this configuration.
+def kernel_backend_pin_refusal(name : string) : string {
     if (!key_exists(g_kernel_backends, name)) {
-        to_log(LOG_WARNING, "dasLLAMA: pin_kernel_backend('{name}') - no such backend registered; keeping '{g_active_backend}'\n")
-        return
+        return "no such backend registered"
     }
     if (g_kernel_backends[name].batch_only) {
-        to_log(LOG_WARNING, "dasLLAMA: pin_kernel_backend('{name}') - a batch-only backend (select_batch_backend); keeping '{g_active_backend}'\n")
-        return
+        return "a batch-only backend (select_batch_backend)"
     }
     if (!invoke(g_kernel_backends[name].available)) {
-        to_log(LOG_WARNING, "dasLLAMA: pin_kernel_backend('{name}') - backend reports itself unavailable in this configuration (stamped layout mismatch?); keeping '{g_active_backend}'\n")
+        return "backend reports itself unavailable in this configuration (stamped layout mismatch?)"
+    }
+    return ""
+}
+
+//! Pin the active backend to `name` (forces it; suppresses auto-select on later registrations) - the A/B rail.
+//! A pin that cannot take keeps the active backend and warns, but `DASLLAMA_PIN_BACKEND`'s own pin panics:
+//! a run under it would measure the active backend under the pinned name.
+def pin_kernel_backend(name : string) {
+    pin_kernel_backend_(name, g_env_engine.pin_backend)
+}
+
+//! `pin_kernel_backend` with the environment's pin read as `env_pin` - the seam the refusal cell drives
+def pin_kernel_backend_(name, env_pin : string) {
+    let why = kernel_backend_pin_refusal(name)
+    if (!empty(why)) {
+        if (!empty(env_pin) && name == env_pin) {
+            panic("dasLLAMA: DASLLAMA_PIN_BACKEND='{name}' cannot take - {why}; a run under it would measure '{g_active_backend}'")
+        }
+        to_log(LOG_WARNING, "dasLLAMA: pin_kernel_backend('{name}') - {why}; keeping '{g_active_backend}'\n")
         return
     }
     g_backend_pin = name
@@ -1923,9 +1937,16 @@ def kernel_backend_names() : array<string> => <- [for (k in keys(g_kernel_backen
 //! fallback rail — the metal backend delegates to "portable" through this). The panic stub
 //! when unknown.
 def kernel_backend_batch_fn(name : string) : MatmulQ8Q8BatchFn {
-    var r = @@q8q8_unset_batch
+    return kernel_backend_read(name, @@q8q8_unset_batch) $(be : KernelBackend) : MatmulQ8Q8BatchFn {
+        return be.batch
+    }
+}
+
+//! `field` of registered backend `name`, `miss` when no backend carries the name
+def private kernel_backend_read(name : string; miss : auto(TT); field : block<(be : KernelBackend) : TT>) : TT {
+    var r = miss
     g_kernel_backends |> get(name) $(be) {
-        r = be.batch
+        r = invoke(field, be)
     }
     return r
 }
@@ -1949,22 +1970,18 @@ def repack_mx4_weight(var mxq : array<uint8>; var mxs : array<uint8>; woff, n, d
 
 //! True for a registered backend that serves the batch slots alone - never the whole backend.
 def kernel_backend_batch_only(name : string) : bool {
-    var r = false
-    g_kernel_backends |> get(name) $(be) {
-        r = be.batch_only
+    return kernel_backend_read(name, false) $(be : KernelBackend) : bool {
+        return be.batch_only
     }
-    return r
 }
 
 //! Does backend `name` read an interleaved (repacked) weight layout? false for unknown names.
 //! Lets tests / direct callers skip layout-mismatched A/Bs (a repack backend cannot run on
 //! row-major buffers).
 def kernel_backend_needs_repack(name : string) : bool {
-    var r = false
-    g_kernel_backends |> get(name) $(be) {
-        r = be.needs_repack
+    return kernel_backend_read(name, false) $(be : KernelBackend) : bool {
+        return be.needs_repack
     }
-    return r
 }
 
 //! Q8·Q8 matmul: y = W·x with W as int8 quants `wq` [d x n] + scales `ws` [d x n/32] and the

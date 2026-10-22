@@ -16,9 +16,12 @@ must keep holding:
 - `test_program_roots.das` must hold the `ROOT_DIRS` sweep, `options stack = 524288` and the
   prefill intent.
 - `test_env_registry.das` must hold the `../ENVIRONMENT.md` knob contract.
-- `test_model_specs.das` must hold `../performance/model_specs.das`'s model-set table, and
+- `test_model_specs.das` must hold `../performance/model_specs.das`'s model-set table,
   `spec_by_file` answering by the models-dir path and by the gguf's base name (a split-shard row
-  sits in a subfolder).
+  sits in a subfolder), the fixture compare (`prefix_match_len` / `fixture_ok`: a flipped last id
+  red under the strict form and held under the half-span one, a flip inside the first half red
+  under both), and the board fetch (`board_provenance`) holding every file the board sweeps read
+  and no test-only carrier.
 - `test_metal_prefill_kernels.das`'s `test_metal_prefill_kernels` cell must hold every kernel gate
   it calls, at the bar each gate sets, with its `attn_trio_gate` calls whose `AttnKeys` sets
   `softcap`, `hass`, `uend` or `ulo`; and by name:
@@ -63,15 +66,19 @@ must keep holding:
   and of `site/files/dasllama/bench_cells.json` (repo root) - the smaller copy the site page loads
   first - against a fresh `merge_site_records` run, and `bench_cells.json` keeping every field
   that page renders at load while dropping the fields it reads from `bench_records.json` only on
-  demand.
+  demand; and `test_board_projection`'s filters - an older release's row, a retired board's row,
+  a held row and an unpaired reference kept off the board, and the stored audio outlier voided on
+  the projected row.
 - `test_exchange_schema.das` must hold the exchange validator's corpus sweeps and the
   `[tune_scope]` wire-key pin read out of `../dasllama/dasllama_tune_scope.das`.
 - `test_bench_records_schema.das` must hold the `write_bench_records` output, corpus sweeps
   included; the llama-batched-bench table parse - which cell at which `npl`, 0 on every refusal;
   the batched reference row's command line - the engine's extra flags follow `-npl N -fa on`, and
-  a run that prints no row names why and reads 0; and the committed stores' batched receipts - the
-  cpu legs' das child at `--npl-plen 128 --npl-reps 3` and reference at `-npp 128`,
-  `--no-op-offload` on the stock cpu arm alone, the metal leg at `-npp 512` with neither.
+  a run that prints no row names why and reads 0; the audio outlier rule and the recorder's void
+  pass (`audio_outlier_clips`, `void_outlier_clips`); the `void_clips` and `held` annotations
+  reaching only the run they select; and the committed stores' batched receipts - the cpu legs'
+  das child at `--npl-plen 128 --npl-reps 3` and reference at `-npp 128`, `--no-op-offload` on
+  the stock cpu arm alone, every GPU leg's reference at `-npp 512` with neither cpu-only flag.
 - `test_scheduler.das`'s `test_scheduler_media_splice` cell must hold a media span's text and rows
   as one prefill call, and a body cut at the chunk taking the rest a chunk a call; on a paged
   scheduler, the prefix cache matching across a span by its rows' content - the text ahead of a new

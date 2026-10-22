@@ -214,18 +214,24 @@ def with_pinned_kernels(body : block) {
 //! and the engine chain runs on the native stack.
 def parity_gen_ok(tr : Model; prompt, want : array<int64>; dn_chunked : bool = false; eyeball : bool = false; prefix_bar : bool = false) : bool {
     let n_gen = length(want)
-    var ok = false
+    let got <- parity_gen_ids(tr, prompt, n_gen, dn_chunked)
+    if (eyeball) {
+        to_log(LOG_INFO, "eyeball want: {eyeball_text(tr, want)}\n")
+        to_log(LOG_INFO, "eyeball got:  {eyeball_text(tr, got)}\n")
+    }
+    return length(got) == n_gen && fixture_ok(prefix_bar, prefix_match_len(got, want), int64(n_gen))
+}
+
+//! `prompt` greedily continued for `n_gen` ids on a fresh session under the pinned kernels - the continuation alone, past
+//! generate's echo (shorter than `n_gen` where the stream stopped early)
+def parity_gen_ids(tr : Model; prompt : array<int64>; n_gen : int; dn_chunked : bool = false) : array<int64> {
+    var got : array<int64>
     with_pinned_kernels(dn_chunked) {
         let ids <- greedy_gen(tr, prompt, n_gen)
         let echo = length(prompt) - 1
-        let got <- [for (i in range(n_gen)); ids[echo + i]; where echo + i < length(ids)]
-        ok = length(got) == n_gen && fixture_ok(prefix_bar, prefix_match_len(got, want), int64(n_gen))
-        if (eyeball) {
-            to_log(LOG_INFO, "eyeball want: {eyeball_text(tr, want)}\n")
-            to_log(LOG_INFO, "eyeball got:  {eyeball_text(tr, got)}\n")
-        }
+        got <- [for (i in range(n_gen)); ids[echo + i]; where echo + i < length(ids)]
     }
-    return ok
+    return <- got
 }
 
 //! `steps` greedy decode steps through `s` from BOS at position 0: each step's pick into `ids`, the last step's logits into `logits`

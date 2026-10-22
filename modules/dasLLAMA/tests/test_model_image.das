@@ -309,7 +309,7 @@ def test_tower_exact_lanes_are_config_free(t : T?) {
             return
         }
         let seat = kernel_backend_seat()
-        let exact <- ["whisper-f32", "parakeet-f32", "canary-f32", "gemma4a-f32", "gemma4v", "gemma3v", "gemma4uv"]
+        let exact <- ["whisper-f32", "parakeet-f32", "canary-f32", "gemma4a-f32", "qwen3a-f32", "tower-f32", "gemma4v", "gemma3v", "gemma4uv", "qwen3v", "qwen25v"]
         var first : table<string; string>
         for (n in whole) {
             pin_kernel_backend(n)

@@ -409,7 +409,9 @@ the file name's lane segment read back, a hash-named legacy image adopted into i
 reaping only its own lane's legacy other while another lane's OTHER survives, a version-stale
 image going in any lane, and the rope-scaling override as a lane suffix and an identity element
 that leaves the tag parsing intact, the IQ3_S serve pin's `-lut` / `-grid` on the planar and blob lanes and the dev-W
-panel lever's `-devw` on the blob lane alone; the per-format
+panel lever's `-devw` on the blob lane alone; a tower's exact lane - the whisper, parakeet, canary,
+gemma4a, qwen3a and whisper-class tower f32 lanes, the gemma4v, gemma3v, gemma4uv, qwen3v and qwen25v
+towers - keying one identity under every whole CPU backend, while the q8 lane names the backend; the per-format
 plane table's slot claim - a `kq_sb` slot's planes ride the image under the slot's section names
 while a non-sb slot rides no section, its planes being the top-level pair; the split-scale
 plane's two arms against hand-built superblocks - k6 and k3 strip-first at `strip_at` 0 / `tail_at` 16,
@@ -1296,10 +1298,16 @@ its refusal arms; the batched reference parser `llama_batched_bench_tg` - the `S
 the row at `npl` alone, 0 on a missing row, a missing table or a cell that is not a number -
 and `llama_batched_bench_sibling` reading "" beside a missing reference; the batched
 reference row `llama_batched_ref_row` - the leg's arms follow the row's shape on its argv, and
-a dead exe names why and reads 0); plus the committed-records sweeps: every batched row's receipt
-carries its leg's shape (the cpu legs' das child at `--npl-plen 128 --npl-reps 3`, its reference at
-`-npp 128`, `--no-op-offload` on the stock cpu arm alone; the metal leg at `-npp 512` with
-neither), image-chat receipts match their
+a dead exe names why and reads 0); the annotations' `void_clips` and `held` each reaching only the
+run they select, `held` round-tripping the store; the audio outlier rule (`audio_outlier_clips`: a
+clip past the multiple of the run's median rate, none on an even run or on two clips; a stored run
+rated over the das row's clip lengths, `run_outlier_clips`) and the recorder's void pass
+(`void_outlier_clips`: the flagged clip alone re-measured once, voided where it stays off, cleared
+where the re-measure lands inside the run, an even run re-measuring nothing); plus the
+committed-records sweeps: every batched row's receipt carries its leg's shape (the cpu legs' das
+child at `--npl-plen 128 --npl-reps 3`, its reference at `-npp 128`, `--no-op-offload` on the stock
+cpu arm alone; every GPU leg - metal and vulkan - its das child on the flat rows' shape and its
+reference at `-npp 512`, with neither cpu-only flag), image-chat receipts match their
 `backend`/`flavor` stamps and pin the fixture and mmproj, and every das row's `tune_sha`
 resolves to its committed generation archive; and the remote-desktop probe's process read: over
 an injected listing (`executable_in`) an executable counts by its file name, as a path or bare,
@@ -1308,7 +1316,9 @@ line that only mentions the name does not; live (`process_listed`) a name only t
 command line spells is not listed and the running executable is - that last assert skips where
 the executable's name is longer than the 15 characters a Linux process list keeps.
 `test_exchange_schema.das` - model-free: the exchange validator, sweeping the ENTIRE in-tree
-records/sidecar corpus, so a writer-schema change reds here first.
+records/sidecar corpus, so a writer-schema change reds here first; and hostile documents refused
+by named path - among them a `held` annotation that is a number or past its length bound, a
+ledger-row hold the control.
 `test_fat_start.das` - model-free: the runtime section's writer and a fat exe's first-start race
 (`dasllama_fat_start`) - the snapshot's crowns and knobs, the race writing the redirected sidecar's
 runtime section and the checked apply reading it back (the Metal twins race on a Metal box, ~15 s),
@@ -1617,7 +1627,10 @@ the ring bytes, the ringed mirror past seven times under the flat one, and the 2
 MB) less the flat mirror plus the ringed one under a 32 GB card's plan room (28527 MB), `test_trim_lane_ring_pin` the ring pin outside a trimmed vulkan lane's identity (the identity
 the same under either pin, the plan's mirror not, and a trimmed shell's `.dlim` mapped by name under the route off declining by
 name with the ring pin among the knobs the identity leaves out - a planar shell mapping with no decline the control), and `test_kv_ring_floor_check` the session's ring floor (`kv_ring_floor_check`: a call at or
-past it continues, one under it panics, a start at 0 clears it and the same call then continues). The Metal serving gates ride the
+past it continues, one under it panics, a start at 0 clears it and the same call then continues).
+`test_vulkan_tower_route_before_a_device` holds the audio fronts' route (`vulkan_tower_front_route`)
+answering off before a device is up, where the scratch sizing asks it ahead of the arm (skips with
+a device up in the process, and without dasVulkan). The Metal serving gates ride the
 same synthetic shells: `test_kq_fmt_one_row_gemv` holds the Metal prefill's one-row GEMV predicate (q8 at any width, a served superblock format - the lut-form IQ3_S among them - at whole superblocks and not at a partial one, a per-32 format at whole 32-blocks and not at a partial one, an mx4 plane at none; Q4_0 repacks to superblocks and has it); `test_peel_shape_arms` holds the token command's peel off the NextN-headed, hyper-connection and recurrent shapes one at a time on dense shells, a per-layer-embedding shell fitting it (`rdec_peel_shape_why`), and the device-home tick's segmented-window predicate (`gpu_device_prefill_segments_`) false with no driver armed; `test_moe_metal_expert_formats` sweeps `moe_metal_ok` over the seventeen
 expert plane formats the routed block serves and the one tag it declines (mx4), one
 mixed-format model (an mx4-tagged down plane declining it, a lut-form IQ3_S one served), the native-MXFP4 stacks under the plain routed gate (served; the repacked planes
@@ -2839,7 +2852,8 @@ mels across calls); its ungated cells are the model-free half.
 `test_dasllama_lib.das` - model-free: the library example's stream and memory calls refuse
 cleanly with no model open.
 `test_asr_verbs.das` - model-free: the family-owned ASR facade verbs (`asr_exec_fmt` /
-`asr_encode_bucket`) over constructed structs, the audio families' lane knobs (qwen3a /
+`asr_encode_bucket`) over constructed structs - `asr_encode_bucket` over an `AsrModel` of every
+kind answering that family's own bucket - the audio families' lane knobs (qwen3a /
 gemma4a / canary / parakeet: the un-pinned default against the predicate the policy itself consults, both
 pins, and reset from the EXACT pin), the ASR decoder's K/V dtype knob (`get_asr_kv`: f16 by default, each `set_asr_kv`
 value read back, put back as found), and parakeet's SPM detokenizer over a toy vocab.
@@ -2858,17 +2872,24 @@ token or more), the fixture compare the gates read (`prefix_match_len` / `fixtur
 the strict form reds a flipped last id where the half-span form holds it, a flip inside the first
 half reds both, the bar sits exactly at half the span), the derived provenance view's invariants (unique names, sha-or-recipe,
 https urls), the mmproj pairing lookup (`mmproj_companion` - the companion found by name, not
-by position; >= 2 official vision rows), and the pinned image fixture's provenance
-(`bench_image_fixture` rides some spec's companion list).
-`test_parity.das` - stocked suite; model-gated: the frozen token-for-token parity gates. ONE
+by position; >= 2 official vision rows), the pinned image fixture's provenance
+(`bench_image_fixture` rides some spec's companion list), and the board fetch (`board_provenance`:
+every official row, the image fixture, every ASR carrier and mmproj and every TTS model, no
+off-board row and no on-box parity oracle).
+`test_parity.das` - stocked suite; model-gated: the frozen parity gates - token for token, or on a
+`prefix_bar` carrier (the gemma-4-26B MoE, `../ARCHITECTURE_MEASUREMENT.md#fixture-prefix-bar`) the
+half-span prefix on every arm, the main arm carrying the loosened bar's control on the same live
+stream (the fixture with an id inside its first half flipped reds it). ONE
 generic loop drives every evidence-carrying spec of the model-set table through its declared
 pinned arms (evidence is DATA on `ModelSpec.parity` - ids + arms, regenerated via
 `../harness/parity.sh`); hand-written arms remain only for the tied-cls bit-match and the gpt-oss
 shared-load double fixture. Every compare logs both decoded streams. Large carriers gate
 on `DASLLAMA_PARITY_FULL=1` via `model_available`. `DASLLAMA_PIN_BACKEND` points the compares
 at one kernel backend: the generic loop and the gpt-oss arm pin it before their load, restore
-it on every exit, and name the served backend in every assert label; a name the box has not
-registered skips the cell naming it, never a silent run on the default backend.
+it on every exit, and name the served backend in every assert label; a name the box cannot pin
+(`kernel_backend_pin_refusal`: unregistered, batch-only or unavailable) skips the cell naming why,
+never a silent run on the default backend. The MoE reference and per-expert arms put their levers
+back through the getters (`get_moe_grouped_prefill`, `get_moe_fused_expert_gemms`).
 `test_parity_pregate.das` - stocked suite; model-gated: the board parity pregate
 (`lcpp_bench --parity`, via `parity_check` fed a controlled spec) on small carriers - the real
 fixture passes, a flipped id fails, an evidence-less spec is refused, the text-form prompt
@@ -2931,7 +2952,12 @@ off the flags.
 against the committed `site/files/dasllama/bench_records.json` and its first-paint projection
 `bench_cells.json` (what daslang.io/dasllama.html renders); red means a records commit skipped
 `gen_site_records`. Plus the projection contract: the render fields survive, the receipt-only
-fields are absent from the text.
+fields are absent from the text; and the board's filters (`test_board_projection`): an older
+release's das row, a retired board's row and its reference, and a reference with no das row to
+pair stay off the board, the current row and its reference the control; a held row stays in the
+merge and off the board with its reference, its unheld sibling the control; and the stored audio
+outlier is voided on the projected row off the das row's clip lengths, unioned with an
+annotation's clips, the merge itself untouched.
 `test_tok_seed.das` - model-free: `lcpp_bench.das`'s `tok_read_seed` corpus-header walk and its
 `flat_row_plen` seam (the flat session's prompt rows beside a tg-real row: the real row's cap
 read back, a longer flat prompt kept, the llama-bench sizing with no real row) and its
@@ -3066,7 +3092,15 @@ seat back, refuses an unknown backend without running the block, and leaves an e
 standing after a block on another backend (`test_with_kernel_backend`), an unavailable backend
 skipped by for-load select and refused by pin (`test_backend_availability_predicate`), and the
 batch pin overriding the batch slots, surviving re-select and refusing a repack donor on a
-row-major active backend (`test_batch_backend_pin`). `test_kq_registries` walks every `KqFmt`
+row-major active backend (`test_batch_backend_pin`), a batch-only backend neither pinned nor
+selected as the whole backend, the active backend and the pin as found, with every donor the build
+carries - `metal` on a das_metal build, `vulkan` where dasVulkan builds - registered batch-only and
+walked (`test_batch_only_backends_refuse_the_whole_seat`), and the pin refusal
+(`test_env_pin_refuses_what_cannot_take`): `kernel_backend_pin_refusal` names why an unregistered
+or a batch-only name cannot pin and reads "" for the portable backend, and the pin
+`DASLLAMA_PIN_BACKEND` names panics where it cannot take (driven through the `pin_kernel_backend_`
+seam) while the same pin made in process, or a name the environment did not name, warns and keeps
+the active backend (the controls). `test_kq_registries` walks every `KqFmt`
 through `kq_registries`: a format carries all eight registries or none, each family's tile, gemv
 and panel registries open on the reference row, q8 carries none, and no format's tile, tile4,
 gemv or panel row is another format's; it skips on a build without dasLLVM, where
