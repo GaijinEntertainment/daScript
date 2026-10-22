@@ -60,6 +60,16 @@ def prefix_match_len(got, want : array<int64>) : int64 {
 [arch(at="../ARCHITECTURE_MEASUREMENT.md#fixture-prefix-bar")]
 def fixture_ok(prefix_bar : bool; same, n_check : int64) : bool => prefix_bar ? same * 2l >= n_check : same == n_check
 
+//! A TTS model's cell on the board: the voice both engines speak in and how the reference names
+//! the model. An empty `voice` = the model has no TTS cell.
+struct TtsBoard {
+    display : string   // the board's model label
+    voice : string     // the das voice; the reference takes the same name (a kitten alias maps to the pack's voice there too)
+    ref : string       // the model's name in harness/tts_ref_bench.py
+    package : string   // the torch-engine reference row's `engine`: the family's own package
+    torch_gpu : bool   // the package serves a torch GPU device (mps, cuda); kitten's runs the onnxruntime CPU provider, pocket's pins the CPU
+}
+
 //! One model of the set — the union row behind every view. A facet left empty means the model
 //! does not participate in that view: `display` (the profiled catalog, [[llm_catalog]]),
 //! `official` (the public board, [[official_catalog]]), `url`/`recipe` (the provenance
@@ -94,6 +104,7 @@ struct ModelSpec {
     serve_mtp : string              //! the platforms ("metal", "vulkan", comma list) where the model's self-speculation measured a win at one stream (PERF_LEDGER.md); "" = the server's unset `mtp` decodes plain
     mlx_repo : string               //! the MLX checkpoint (HF repo) of the same model the board's mlx-lm reference leg runs on Apple boxes; "" = no MLX leg
     mlx_fmt : string                //! that checkpoint's precision, stamped as the MLX row's exec_fmt
+    tts : TtsBoard                  //! the TTS board cell ([[tts_catalog]], profile_common); an empty `tts.voice` = none
 }
 
 // ===== Parity fixture ids (simple_ids, harness/parity.sh) =====
@@ -916,6 +927,7 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
         // row 77); the front-end packs every TTS model loads ride the kitten-nano row, the
         // per-model oracle dumps ride their own rows
         ModelSpec(file = "kitten-nano.gguf", recipe = TTS_KITTEN_RECIPE, serve_tts = true,
+            tts = TtsBoard(display = "KittenTTS nano", voice = "Bella", ref = "kitten-nano", package = "kittentts"),
             url = "{TTS_HF}/kitten-nano.gguf", bytes = 59331456l,
             sha256 = "4556948c36a29e4be5ad521e597a20ae817059c404fea3c5d935afa73506d9da",
             companions <- [
@@ -930,11 +942,13 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
                     sha256 = "38c2e85f7fef3e57d561d2aa0af25fccda4276376ba1993c3dbc2ae0ebfa57b4"),
                 ProvEntry(name = "tts_oracle/kitten_nano", root = "llm", recipe = TTS_ORACLE_RECIPE)]),
         ModelSpec(file = "kitten-mini.gguf", recipe = TTS_KITTEN_RECIPE, serve_tts = true,
+            tts = TtsBoard(display = "KittenTTS mini", voice = "Bella", ref = "kitten-mini", package = "kittentts"),
             url = "{TTS_HF}/kitten-mini.gguf", bytes = 295975008l,
             sha256 = "e127a95c6ffa390eccc5956e7156ff055e9f30078cf16361cbcd0eea6c21fdb5",
             companions <- [
                 ProvEntry(name = "tts_oracle/kitten_mini", root = "llm", recipe = TTS_ORACLE_RECIPE)]),
         ModelSpec(file = "kokoro-82m.gguf", recipe = TTS_KOKORO_RECIPE, serve_tts = true,
+            tts = TtsBoard(display = "Kokoro-82M", voice = "af_heart", ref = "kokoro-82m", package = "kokoro", torch_gpu = true),
             url = "{TTS_HF}/kokoro-82m.gguf", bytes = 352965024l,
             sha256 = "e0d6584b5b650730bd62e7b105a2e9502384bbe3fbebf3030113560355e6232f",
             companions <- [
@@ -942,6 +956,7 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
         // the Pocket TTS family reads text, so it needs no pack; the published form is the Q8_0 file,
         // the f16 twin (pocket-tts-en.gguf, the parity rail's reference) stays local
         ModelSpec(file = "pocket-tts-en-q8.gguf", recipe = TTS_POCKET_RECIPE, serve_tts = true,
+            tts = TtsBoard(display = "Pocket TTS en q8", voice = "alba", ref = "pocket-en", package = "pocket-tts"),
             url = "{TTS_HF}/pocket-tts-en-q8.gguf", bytes = 136819008l,
             sha256 = "5bebd1b8ae89029257e2fcba08435c578c5cec9cada70b55c3ba176a21bc043c",
             companions <- [
@@ -975,6 +990,7 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
         // the small English forms behind the browser examples: the parrot page fetches the cloning one,
         // the storywish page the one-voice one (tests/test_tts_pocket.das's kq cells hold both against the q8 file)
         ModelSpec(file = "pocket-tts-en-kq.gguf", recipe = TTS_POCKET_KQ_RECIPE, serve_tts = true,
+            tts = TtsBoard(display = "Pocket TTS en kq", voice = "alba", ref = "pocket-en", package = "pocket-tts"),
             url = "{TTS_HF}/pocket-tts-en-kq.gguf", bytes = 77765536l,
             sha256 = "2bd5ef27bfbc88769c5339ff5e8b74349fb015b77a0015a03514a21e4a95ac64"),
         ModelSpec(file = "pocket-tts-en-stuart-kq.gguf", recipe = TTS_POCKET_STUART_RECIPE, serve_tts = true,

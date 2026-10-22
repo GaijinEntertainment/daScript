@@ -3,6 +3,8 @@ options _dasllama_internal = true
 options persistent_heap   // a dastest root frees what it deletes only on this heap; the linear heap holds every carrier a cell deleted until the context ends
 require dastest/testing_boost public
 require ../performance/profile_common.das
+require ../performance/fetch_models.das   // FetchArgs - the settling command's flags
+require daslib/clargs
 
 // The shape invariants of the model-set table (../performance/model_specs.das, re-exported by
 // profile_common — the one source of truth behind llm_catalog / official_catalog /
@@ -232,5 +234,38 @@ def test_board_provenance(t : T?) {
             t |> success(!(n |> starts_with("tts_oracle")), "the on-box parity oracles stay out: {n}")
         }
         delete names
+    }
+}
+
+[test]
+def test_fetch_models_flags(t : T?) {
+    t |> run("-o names one row by substring; --board asks the board set") @(t : T?) {
+        let one <- parse_args(default<FetchArgs>, ["-o", "kokoro-82m"])
+        t |> success(one |> is_ok, "-o parses")
+        let a = one |> unwrap
+        t |> equal(a.only, "kokoro-82m", "-o is the one-row scope")
+        t |> success(!a.board, "-o asks no board set")
+        let board <- parse_args(default<FetchArgs>, ["--board"])
+        t |> success(board |> is_ok, "--board parses")
+        let b = board |> unwrap
+        t |> success(b.board && empty(b.only), "--board is the board set, no row scope")
+    }
+}
+
+[test]
+def test_tts_catalog_is_a_view(t : T?) {
+    t |> run("the TTS board is exactly the model rows carrying a TTS cell") @(t : T?) {
+        var inscope specs <- model_specs()
+        var inscope cat <- tts_catalog()
+        var n = 0
+        for (s in specs) {
+            if (!empty(s.tts.voice)) {
+                n++
+                t |> equal(tts_spec_of(s.file).voice, s.tts.voice, "{s.file} found by file")
+            }
+        }
+        t |> equal(length(cat), n, "one catalog row a TTS cell")
+        t |> success(n >= 5, "the board's five TTS models")
+        t |> success(empty(tts_spec_of("pocket-tts-de-q8.gguf").file), "a served TTS model off the board has no cell")
     }
 }

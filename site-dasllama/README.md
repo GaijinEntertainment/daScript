@@ -37,7 +37,10 @@ project "daslang.io Forge") on the daslang.io Forge system.
   points); community text is escaped before it reaches markup
 - `files/dasllama-favicon.svg` - from the dasllama-mark brand set (amber)
 - `stamp_assets.py` - the deploy's cache-busting pass: stamps each staged page's own
-  `files/*.js|css` references with `?v=<content hash>`; `serve.py` does the same locally with mtimes
+  `files/*.js|css` references with `?v=<content hash>`; `serve.py` imports its `stamp_html` and
+  stamps with mtimes as it serves
+- `test_metadata.py` - the page census and head metadata, and the ladder sections' view mounts
+  (bars the default view on every section); the deploy runs it while staging
 - `_news/` - news entries as dated markdown, same pipeline shape as `site/_news`; a news
   item is a few lines, the detail is a story it links to
 - `_stories/` - the stories as dated markdown (front matter: date, tag, title, lede; fenced
@@ -62,7 +65,7 @@ ledgered follow-up.
 
 ## Preview
 
-    py -3 serve.py     # http://127.0.0.1:8932/ - stages shared css like the deploy does
+    py -3 serve.py     # http://127.0.0.1:8932/ - stages shared css like the deploy does; serve.py <port> picks another
 
 `serve.py` maps `/examples/<id>/` onto `../web/output64/examples/<id>/` and sends the two
 cross-origin-isolation headers the Caddy vhost sends under `/examples/` (`utils/internal/dasllama-ladder/caddy.snippet`),
@@ -93,7 +96,8 @@ with the service down.
 
 Strictly factual, numbers-not-adjectives, no performance promo on the home page - the
 promo scoreboard is daslang.io/dasllama.html. An empty ratio cell means "not raced",
-never implied parity.
+never implied parity; a cell a board annotation withholds (the run's `voided_tests` on
+`/api/runs`) reads `✱`, and so does its ratio.
 
 How a claim is checked: a claim about what a shipped
 tool does is checked against that tool's current code; a claim about what a page here renders

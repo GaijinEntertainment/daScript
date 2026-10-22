@@ -10,6 +10,7 @@
 # Venv: benchmarks/asr/.venv-mlx from requirements-mlx.txt (setup_asr_rig --venvs, Apple only).
 # Models download from HF on first use.
 import argparse
+import sys
 import time
 import wave
 
@@ -62,6 +63,7 @@ def main():
     transcribe(model, args.wav[0])
 
     name = f"mlx-{args.variant}"
+    rows = 0
     for wav in args.wav:
         dur = audio_seconds(wav)
         base = wav.rsplit("/", 1)[-1]
@@ -75,8 +77,13 @@ def main():
                 break
             ms = (time.perf_counter() - t0) * 1000.0
             emit(f"BENCH\t{name}\t{base}\t{dur:.3f}\t{rep}\t{ms:.3f}\t{dur * 1000.0 / ms:.3f}")
+            rows += 1
         if args.text:
             emit(f"TEXT\t{base}\t{text}")
+    if rows == 0:
+        # a run with zero BENCH rows is never a green harness - every clip was skipped
+        emit("ERROR\tzero BENCH rows - every clip skipped")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

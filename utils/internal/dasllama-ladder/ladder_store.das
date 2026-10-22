@@ -12,6 +12,7 @@ require daslib/sha_256 public
 require daslib/logger
 require daslib/json_boost
 require strings
+require daslib/strings_boost   // join - the voided tests' comma list
 
 //! The ladder store: schema, migrations, and every policy decision (size caps, rate
 //! ceiling, source stamping, the sidecar lookup ladder). Zero HTTP — the server module
@@ -75,6 +76,7 @@ struct Run {
     ImgEnc : double = 0.0lf     // an image-chat run's tests.img:enc.ms, the vision tower's encode; 0 = not measured
     ImgPp : double = 0.0lf      // tests.img:pp.tok_s, the image turn's prefill
     ImgTg : double = 0.0lf      // tests.img:tg.tok_s, the caption's decode
+    VoidedTests : string = ""   // the tests a board void blanked on this run, comma list; filled by `list_runs`, never stored
 }
 
 //! One timed audio test of an asr/tts/audio-chat run: `test` is the key past "<workload>:" (a clip for asr,
@@ -249,6 +251,11 @@ def ladder_migration_009(db : SqlRunner) {
     backfill_run_cells(db, CellSet.image)
 }
 
+[sql_migration(version = 10, description = "runs carry the tests a board void blanked; list_runs fills it, the column stays ''")]
+def ladder_migration_010(db : SqlRunner) {
+    db |> exec("ALTER TABLE runs ADD COLUMN VoidedTests TEXT NOT NULL DEFAULT ''")
+}
+
 //! The cell columns one backfill writes: migration 2's flat cells and cpu label, migration 3's
 //! batched cell, migrations 4 to 6's audio cells, migration 7's gpu label, migration 9's image-chat cells.
 enum CellSet {
@@ -295,13 +302,7 @@ def private model_clip_lengths(m : JsonValue?; workload : string) : table<string
         let tests = r?["tests"]
         continue if (tests == null || !(tests is _object))
         for (k, row in keys(tests as _object), values(tests as _object)) {
-            let audio = row?["audio_s"] ?? 0.0lf
-            continue if (!(k |> starts_with(prefix)) || audio <= 0.0lf)
-            let clip = slice(k, length(prefix))
-            let known = out?[clip] ?? 0.0lf
-            if (known <= 0.0lf || audio < known) {
-                out[clip] = audio
-            }
+            borrow_clip_length(out, prefix, k, row?["audio_s"] ?? 0.0lf)
         }
     }
     return <- out
@@ -321,17 +322,12 @@ def private audio_cells_text(m, r : JsonValue?) : string {
         }
     }
     return "" if (empty(cells))
-    let lengths <- model_clip_lengths(m, workload)
-    var rates : table<string; double>
+    var inscope lengths <- model_clip_lengths(m, workload)
+    var inscope rates : table<string; double>
     for (c in cells) {
-        let audio = c.audio_s > 0.0lf ? c.audio_s : (lengths?[c.test] ?? 0.0lf)
-        if (audio > 0.0lf) {
-            rates[c.test] = c.ms / audio
-        }
+        rate_clip(rates, lengths, c.test, c.ms, c.audio_s)
     }
-    var voided <- audio_outlier_clips(rates)
-    var named <- void_clips_of("{r?["void_clips"] ?? ""}")
-    voided |> push_from(named)
+    var inscope voided <- voided_clips(rates, "{r?["void_clips"] ?? ""}")
     for (c in cells) {
         c.voided = has_value(voided, c.test)
     }
@@ -942,11 +938,9 @@ def private run_held(notes : array<BoardNote>; r : Run) : bool {
     return false
 }
 
-def private note_selects(a : BoardNote; r : Run) : bool {
-    return (a.Gguf == r.Gguf && (empty(a.Box) || a.Box == r.Box) && (empty(a.Engine) || a.Engine == r.Engine)
-        && (empty(a.Backend) || a.Backend == r.Backend) && (empty(a.Flavor) || a.Flavor == r.Flavor)
-        && (empty(a.Workload) || a.Workload == r.Workload))
-}
+def private note_selects(a : BoardNote; r : Run) : bool =>
+    a.Gguf == r.Gguf && key_selects(RunKey(box = a.Box, engine = a.Engine, backend = a.Backend, flavor = a.Flavor, workload = a.Workload),
+                                    RunKey(box = r.Box, engine = r.Engine, backend = r.Backend, flavor = r.Flavor, workload = r.Workload))
 
 //! `text` (a run's `Audio` cells) with every clip of `clips` read voided.
 def private void_audio_cells(text : string; clips : array<string>) : string {
@@ -965,17 +959,47 @@ def private void_audio_cells(text : string; clips : array<string>) : string {
     return out
 }
 
+//! The tests of `text` (a run's `Audio` cells) that `clips` names.
+def private audio_tests_named(text : string; clips : array<string>) : array<string> {
+    var out : array<string>
+    var jerr = ""
+    var js = read_json(text, jerr)
+    if (js != null && js is _array) {
+        for (c in js as _array) {
+            let test : string = c?["test"] ?? ""
+            if (has_value(clips, test)) {
+                out |> push(test)
+            }
+        }
+    }
+    delete_json(js)
+    return <- out
+}
+
+//! Blanks the cells every void selecting `r` names, and lists in `r.VoidedTests` (comma, sorted, each once) the
+//! measured tests it blanked - the board tells a voided cell from one the run never measured.
 def private apply_voids(notes : array<BoardNote>; var r : Run) {
+    var inscope blanked : array<string>
     for (a in notes) {
         continue if (empty(a.VoidClips) || !note_selects(a, r))
         var inscope clips <- void_clips_of(a.VoidClips)
+        for (key, cell in ["img:enc", "img:pp", "img:tg"], [r.ImgEnc, r.ImgPp, r.ImgTg]) {
+            if (cell > 0.0lf && has_value(clips, key)) {
+                blanked |> push(key)
+            }
+        }
         r.ImgEnc = has_value(clips, "img:enc") ? 0.0lf : r.ImgEnc
         r.ImgPp = has_value(clips, "img:pp") ? 0.0lf : r.ImgPp
         r.ImgTg = has_value(clips, "img:tg") ? 0.0lf : r.ImgTg
         if (!empty(r.Audio)) {
+            var inscope named <- audio_tests_named(r.Audio, clips)
+            blanked |> push_from(named)
             r.Audio = void_audio_cells(r.Audio, clips)
         }
     }
+    sort(blanked)
+    var inscope once <- [for (t, i in blanked, count()); t; where i == 0 || blanked[i - 1] != t]
+    r.VoidedTests = join(once, ",")
 }
 
 //! The board's runs, newest first: a held run left out, a voided cell blanked; `version` 0 is every version.

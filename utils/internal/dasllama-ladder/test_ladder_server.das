@@ -648,3 +648,72 @@ def test_submit_gate(t : T?) {
         }
     }
 }
+
+def private write_text(path, text : string) {
+    fopen(path, "wb") $(f) {
+        if (f != null) {
+            fwrite(f, text)
+        }
+    }
+}
+
+let private HELD_DOC = "[\{\"gguf\":\"gemma-3-1b-it-Q8_0.gguf\",\"engine\":\"das\",\"held\":\"followup_general.md 219\"\}]"
+
+[test]
+def test_official_dir_imports_its_annotations(t : T?) {
+    t |> run("the startup import reads the dir's annotations.json after its stores") @(tt : T?) {
+        let plain = path_join(test_temp_dir(), "plain")
+        let annotated = path_join(test_temp_dir(), "annotated")
+        mkdir_rec(plain)
+        mkdir_rec(annotated)
+        write_text(path_join(plain, "m1.json"), official_doc())
+        write_text(path_join(annotated, "m1.json"), official_doc())
+        write_text(path_join(annotated, "annotations.json"), HELD_DOC)
+        with_latest_sqlite(":memory:") $(db) {
+            tt |> equal(import_official_dir(db, plain, 1000l), 1, "the store is imported")
+            tt |> equal(length(list_runs(db, 0)), 2, "with no annotations.json both rows stand (the control)")
+        }
+        with_latest_sqlite(":memory:") $(db) {
+            tt |> equal(import_official_dir(db, annotated, 1000l), 1, "annotations.json is no store")
+            tt |> equal(length(list_runs(db, 0)), 0, "the held model's rows are off the board after the import")
+        }
+    }
+}
+
+//! the operator CLI's contract is its exit code and the line it prints, so the op runs in a child
+def private run_admin(args : string; var output : string&) : int {
+    let argv <- get_command_line_arguments()
+    let root = get_das_root()
+    let cmd = "\"{argv[0]}\" -dasroot \"{root}\" \"{root}/utils/internal/dasllama-ladder/admin.das\" -- {args} 2>&1"
+    return unsafe(popen_timeout(cmd, 300.0) $(f) {
+        if (f != null) {
+            output = fread(f)
+        }
+    })
+}
+
+[test]
+def test_admin_import_annotations(t : T?) {
+    t |> run("admin.das --op import-annotations holds a model off the board, and refuses a missing file") @(tt : T?) {
+        let db_path = path_join(test_temp_dir(), "admin.db")
+        let ann = path_join(test_temp_dir(), "annotations.json")
+        write_text(ann, HELD_DOC)
+        with_latest_sqlite(db_path) $(db) {
+            let r = import_official_store(db, official_doc(), 1000l)
+            tt |> success(r.ok, "the official store lands ({r.error})")
+        }
+        var out = ""
+        let rc = run_admin("--db \"{db_path}\" --op import-annotations --file \"{ann}\"", out)
+        tt |> equal(rc, 0, "the import exits 0: {out}")
+        tt |> success(find(out, "1 hold(s), 0 void(s) imported") >= 0, "it reports the hold: {out}")
+        with_latest_sqlite(db_path) $(db) {
+            tt |> equal(length(list_runs(db, 0)), 0, "the held model's rows are off the board")
+        }
+        var missing = ""
+        let rc_missing = run_admin("--db \"{db_path}\" --op import-annotations --file \"{path_join(test_temp_dir(), "absent.json")}\"", missing)
+        tt |> equal(rc_missing, 1, "a missing file exits 1: {missing}")
+        tt |> success(find(missing, "cannot read") >= 0, "it names the unread file: {missing}")
+        remove(db_path)
+        remove(ann)
+    }
+}

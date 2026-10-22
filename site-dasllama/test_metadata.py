@@ -1,3 +1,4 @@
+import re
 import unittest
 import xml.etree.ElementTree as ET
 from html.parser import HTMLParser
@@ -101,31 +102,41 @@ class SiteMetadataTest(unittest.TestCase):
         self.assertIn("https://dasllama.io/#n-", feed)
 
     def test_ladder_sections_carry_the_view_mounts(self):
-        """Every ladder section - the LLM one and the three audio ones - mounts the same bars/table
-        toggle the renderer wires (`wireViews` in files/dasllama-io.js): a view segment with the two
-        buttons, a bars box, a table wrap and the filters; the renderer reads them by these ids."""
+        """Every ladder section - the paired ones (LLM, image chat) and the three audio ones - mounts
+        the same bars/table toggle the renderer wires (`wireViews` in files/dasllama-io.js): a view
+        segment with the two buttons, a bars box, a table wrap, the table, the caption and the
+        filters; the renderer reads them by these ids. The bars are the default view everywhere."""
         page = (ROOT / "ladder.html").read_text(encoding="utf-8")
         script = (ROOT / "files" / "dasllama-io.js").read_text(encoding="utf-8")
-        sections = {
-            "llm": {"view": "view", "bars": "bars", "wrap": "table-wrap", "filters": "ladder-filters"},
-        }
+        # the paired sections name their ids in PAIR_SECTIONS, and mountPairs wires the toggle from it
+        pair = re.compile(r"(\w+): \{ table: '([^']+)', filters: '([^']+)', caption: '([^']+)', view: '([^']+)',\s*"
+                          r"metric: '([^']+)', bars: '([^']+)', wrap: '([^']+)'")
+        sections = {}
+        for m in pair.finditer(script):
+            name, table, filters, caption, view, metric, bars, wrap = m.groups()
+            sections[name] = {"table": table, "filters": filters, "caption": caption, "view": view,
+                              "metric": metric, "bars": bars, "wrap": wrap}
+        self.assertEqual(sorted(sections), ["image", "llm"], "PAIR_SECTIONS names the LLM and image-chat sections")
+        self.assertIn("mountPairs(PAIR_SECTIONS.llm, llm)", script)
+        self.assertIn("mountPairs(PAIR_SECTIONS.image, image)", script)
+        self.assertIn("wireViews({ view: sec.view, metric: sec.metric, bars: sec.bars, wrap: sec.wrap, filters: sec.filters }", script)
+        # the audio sections' ids are derived from the workload in the renderer
+        self.assertIn("wireViews({ view: workload + '-view', bars: workload + '-bars', wrap: workload + '-wrap', filters: workload + '-filters' }", script)
         for w in ("asr", "tts", "audio-chat"):
-            sections[w] = {"view": f"{w}-view", "bars": f"{w}-bars", "wrap": f"{w}-wrap", "filters": f"{w}-filters"}
-            self.assertIn(f'id="{w}-table"', page, f"{w}: the ranked table mounts")
-            self.assertIn(f'id="{w}-caption"', page, f"{w}: the caption mounts")
+            sections[w] = {"table": f"{w}-table", "caption": f"{w}-caption", "view": f"{w}-view",
+                           "bars": f"{w}-bars", "wrap": f"{w}-wrap", "filters": f"{w}-filters"}
         for name, ids in sections.items():
             with self.subTest(section=name):
                 for role, elem in ids.items():
                     self.assertIn(f'id="{elem}"', page, f"{name}: the {role} mount {elem!r} is on the page")
                 start = page.index(f'id="{ids["view"]}"')
-                end = page.index("</div>", start)
-                seg = page[start:end]
-                self.assertIn('data-view="bars"', seg, f"{name}: a bars button")
-                self.assertIn('data-view="table"', seg, f"{name}: a table button")
-                self.assertIn('class="is-on" data-view="table"', seg, f"{name}: the table is the default view")
-        # the audio sections' ids are derived from the workload in the renderer, the LLM ones are literal
-        self.assertIn("view: workload + '-view', bars: workload + '-bars', wrap: workload + '-wrap', filters: workload + '-filters'", script)
-        self.assertIn("view: 'view', metric: 'metric', bars: 'bars', wrap: 'table-wrap', filters: 'ladder-filters'", script)
+                seg = page[start:page.index("</div>", start)]
+                self.assertIn('class="is-on" data-view="bars"', seg, f"{name}: the bars are the default view")
+                self.assertIn('<button data-view="table">', seg, f"{name}: a table button, off")
+                self.assertRegex(page, rf'<div class="dl-bars" id="{re.escape(ids["bars"])}">',
+                                 f"{name}: the bars box is shown")
+                self.assertRegex(page, rf'<div class="dl-table-wrap" id="{re.escape(ids["wrap"])}" hidden>',
+                                 f"{name}: the table wrap starts hidden")
 
     def test_caddy_redirects_explicit_index(self):
         snippet = (

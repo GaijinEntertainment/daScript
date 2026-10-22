@@ -143,6 +143,7 @@ def private release_at(sha : string) : int {
 
 // the sidecar a current-release row was timed under: archived, of the same release, and
 // minted by an engine HEAD reaches
+[arch(at="../ARCHITECTURE_MEASUREMENT.md#committed-records-gate")]
 def private check_row_archive(full : string; box : string; tune_sha : string) {
     let archive = "{RECORDS_DIR}/{box}.tune.{slice(tune_sha, 0, 12)}.json"
     return if (key_exists(g_archive_checked, archive))
@@ -175,6 +176,7 @@ def private check_row_archive(full : string; box : string; tune_sha : string) {
 
 // a das row's version pin: past the release is a defect anywhere; below it is history on a
 // retired box and an un-re-minted row on a current one; at it, the stamps must hold
+[arch(at="../ARCHITECTURE_MEASUREMENT.md#committed-records-gate")]
 def private check_das_row(full : string; box : string; what : string; r : JsonValue?) {
     let v = r?["dasllama_version"] ?? 0
     if (v > RELEASE) {
@@ -207,6 +209,7 @@ def private check_das_row(full : string; box : string; what : string; r : JsonVa
 // the shipped defaults profiles: a quiet mint, a version pin, and NO commit stamp (a
 // profile's validity is its pin + feature class; an engine_sha would be an orphan after
 // every rebase and says nothing a reader can act on)
+[arch(at="../ARCHITECTURE_MEASUREMENT.md#committed-records-gate")]
 def private check_defaults_profiles {
     dir(DEFAULTS_DIR) $(name) {
         return if (!(name |> ends_with(".tune-defaults.json")))
@@ -246,6 +249,7 @@ def private check_defaults_profiles {
 }
 
 // the ruler records live one level down, where the corpus walk above does not reach
+[arch(at="../ARCHITECTURE_MEASUREMENT.md#committed-records-gate")]
 def private check_ruler_records {
     let mtp_dir = "{RECORDS_DIR}/mtp"
     dir(mtp_dir) $(name) {
@@ -254,6 +258,7 @@ def private check_ruler_records {
     }
 }
 
+[arch(at="../ARCHITECTURE_MEASUREMENT.md#committed-records-gate")]
 def private check_records_corpus {
     dir(RECORDS_DIR) $(name) {
         return if (!(name |> ends_with(".json")) || name == "annotations.json")

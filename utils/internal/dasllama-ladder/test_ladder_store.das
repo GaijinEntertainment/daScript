@@ -65,20 +65,21 @@ def private seed_v1_store(db : SqlRunner) {
 def test_migration(t : T?) {
     t |> run("fresh db migrates to latest") @(t : T?) {
         with_latest_sqlite(":memory:") $(db) {
-            t |> equal(current_schema_version(db), 9)
+            t |> equal(current_schema_version(db), 10)
         }
     }
     t |> run("migrations 2 to 9 backfill the cells of rows inserted before the columns existed") @(tt : T?) {
         with_sqlite(":memory:") $(db) {
             seed_v1_store(db)
-            tt |> equal(migrate_to_latest(db), 8, "eight pending migrations applied")
-            tt |> equal(current_schema_version(db), 9)
+            tt |> equal(migrate_to_latest(db), 9, "nine pending migrations applied")
+            tt |> equal(current_schema_version(db), 10)
             let rows <- _sql(db |> select_from(type<Run>) |> _order_by(_.Id))
             tt |> equal(length(rows), 15)
             tt |> equal(rows[13].ImgEnc, 58.0lf, "migration 9 fills the image cells")
             tt |> equal(rows[13].ImgPp, 4211.5lf)
             tt |> equal(rows[13].ImgTg, 113.9lf)
             tt |> equal(rows[14].ImgTg, 0.0lf, "a cell the reference did not measure stays 0")
+            tt |> equal(rows[13].VoidedTests, "", "migration 10's column is never stored - list_runs fills it")
             tt |> equal(rows[0].ImgEnc, 0.0lf, "an LLM run carries no image cells")
             tt |> equal(rows[0].Audio, "", "an LLM run carries no audio cells")
             let asr <- audio_cells(rows[4].Audio)
@@ -449,7 +450,7 @@ def test_voids(t : T?) {
             tt |> success(import_official_store(db, image_doc(), 1000l).ok, "image imported")
             tt |> success(import_official_store(db, audio_doc(), 1001l).ok, "audio imported")
             let notes = ("[\{\"gguf\":\"Qwen3VL-4B-Instruct-Q8_0.gguf\",\"engine\":\"llama.cpp\",\"workload\":\"image-chat\"," +
-                "\"comment\":\"x\",\"void_clips\":\"img:pp\"\}," +
+                "\"comment\":\"x\",\"void_clips\":\"img:pp,img:tg\"\}," +
                 "\{\"gguf\":\"ggml-parakeet-tdt-0.6b-v3-f32.bin\",\"engine\":\"das\",\"comment\":\"x\",\"void_clips\":\"jfk.wav\"\}]")
             let r = import_annotations(db, notes)
             tt |> success(r.ok, "imported ({r.error})")
@@ -465,6 +466,11 @@ def test_voids(t : T?) {
             tt |> success(asr[1].test == "jfk.wav" && asr[1].voided, "the named clip reads voided")
             tt |> success(!asr[0].voided, "the other clip stands")
             tt |> success(!audio_cells(run_of(rows, "parakeet-cli", "asr").Audio)[0].voided, "a run of another engine stands")
+            tt |> equal(lcpp.ImgTg, 0.0lf, "a void naming a cell the run never measured leaves it unmeasured")
+            tt |> equal(lcpp.VoidedTests, "img:pp", "the served row names the cell the void blanked, never the unmeasured one")
+            tt |> equal(run_of(rows, "das", "asr").VoidedTests, "jfk.wav", "an audio clip the void named")
+            tt |> equal(run_of(rows, "das", "image-chat").VoidedTests, "", "a run no void selects names none")
+            tt |> equal(run_of(rows, "parakeet-cli", "asr").VoidedTests, "", "nor does another engine's run")
         }
     }
 }

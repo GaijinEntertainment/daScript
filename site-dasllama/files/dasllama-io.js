@@ -108,10 +108,21 @@
     { key: 'tgb', field: 'tg128b4', label: 'tg128@4' }
   ];
   var IMAGE_CELLS = [
-    { key: 'enc', field: 'img_enc', label: 'encode ms', time: true },
-    { key: 'pp', field: 'img_pp', label: 'prefill' },
-    { key: 'tg', field: 'img_tg', label: 'decode' }
+    { key: 'enc', field: 'img_enc', label: 'encode ms', time: true, test: 'img:enc' },
+    { key: 'pp', field: 'img_pp', label: 'prefill', test: 'img:pp' },
+    { key: 'tg', field: 'img_tg', label: 'decode', test: 'img:tg' }
   ];
+
+  // the tests a board annotation voided on a run (`voided_tests`, a comma list): the store
+  // serves such a cell as 0, so only this list tells a withheld cell from an unmeasured one
+  function voidedTest(fr, test) {
+    if (!fr || !test) return false;
+    return String(fr.voided_tests || '').split(',').some(function (s) { return s.trim() === test; });
+  }
+
+  function withheldCell() {
+    return '<td class="dl-num dl-dim" title="withheld: the run measured this cell, but a board annotation withholds it - the annotation\'s note (records/annotations.json) gives the reason">✱</td>';
+  }
 
   function buildRows(runs, workload, cells) {
     workload = workload || '';
@@ -147,6 +158,8 @@
         row[c.key + '_das'] = d;
         row[c.key + '_ref'] = rv;
         row[c.key + '_ratio'] = ref ? (c.time ? ratio(rv, d) : ratio(d, rv)) : null;   // >1 = das faster
+        row[c.key + '_das_withheld'] = voidedTest(fr, c.test);
+        row[c.key + '_ref_withheld'] = voidedTest(ref, c.test);
       });
       out.push(row);
     });
@@ -500,17 +513,26 @@
              empty: 'No image-chat runs on the ladder yet.' }
   };
 
+  // a withheld side reads ✱ in its own cell and in the ratio, never the "not raced" of a row
+  // whose reference did not run
+  function withheld(r, key) { return r[key + '_das_withheld'] || r[key + '_ref_withheld']; }
+
   function pairCols(cells) {
     var cols = [];
     cells.forEach(function (c) {
       var show = c.time ? ms : tps;
+      function side(s) {
+        var k = c.key + '_' + s;
+        return function (r) { return r[k + '_withheld'] ? withheldCell() : show(r[k]); };
+      }
       cols.push(
         { key: c.key + '_das', label: c.label, num: true, grp: true, grpStart: true,
-          get: function (r) { return r[c.key + '_das']; }, cell: function (r) { return show(r[c.key + '_das']); } },
+          get: function (r) { return r[c.key + '_das']; }, cell: side('das') },
         { key: c.key + '_ref', label: 'lcpp', num: true, dim: true,
-          get: function (r) { return r[c.key + '_ref']; }, cell: function (r) { return show(r[c.key + '_ref']); } },
+          get: function (r) { return r[c.key + '_ref']; }, cell: side('ref') },
         { key: c.key + '_ratio', label: 'ratio', num: true, grp: true,
-          get: function (r) { return r[c.key + '_ratio']; }, cell: function (r) { return ratioCell(r[c.key + '_ratio']); } });
+          get: function (r) { return r[c.key + '_ratio']; },
+          cell: function (r) { return withheld(r, c.key) ? withheldCell() : ratioCell(r[c.key + '_ratio']); } });
     });
     return cols;
   }
@@ -559,12 +581,15 @@
       ],
       receipt: rowReceipt,
       summary: function (shown, total) {
-        var solo = shown.filter(function (r) { return r.pp_ratio === null && r.tg_ratio === null; }).length;
+        function anyWithheld(r) { return sec.cells.some(function (c) { return withheld(r, c.key); }); }
+        var solo = shown.filter(function (r) { return r.pp_ratio === null && r.tg_ratio === null && !anyWithheld(r); }).length;
+        var held = shown.filter(anyWithheld).length;
         return esc(measuredLine(shown)) +
           ' &nbsp;·&nbsp; showing ' + shown.length + ' of ' + total + ' rows' +
           (solo ? ' (' + solo + ' das-only)' : '') +
           ' &nbsp;·&nbsp; click any row for its receipt' +
-          ' &nbsp;·&nbsp; an empty ratio means <b style="color:var(--fg);font-weight:400">not raced</b>, never implied parity';
+          ' &nbsp;·&nbsp; an empty ratio means <b style="color:var(--fg);font-weight:400">not raced</b>, never implied parity' +
+          (held ? ' &nbsp;·&nbsp; ✱ = withheld: the cell was measured, and a board annotation withholds it (' + held + ' row' + (held > 1 ? 's' : '') + ')' : '');
       }
     });
 
@@ -824,10 +849,8 @@
       ],
       receipt: audioReceipt(workload),
       summary: function (shown) {
-        var dates = {};
-        shown.forEach(function (r) { if (r.date) dates[r.date] = 1; });
-        var ds = Object.keys(dates).sort();
-        var when = ds.length ? 'measured ' + (ds[0] === ds[ds.length - 1] ? ds[0] : ds[0] + ' → ' + ds[ds.length - 1]) + ' &nbsp;·&nbsp; ' : '';
+        var line = measuredLine(shown);
+        var when = line ? esc(line) + ' &nbsp;·&nbsp; ' : '';
         var voided = shown.filter(function (r) { return r.voided; }).length;
         return when + 'showing ' + shown.length + ' row' + (shown.length === 1 ? '' : 's') +
           (voided ? ' (' + voided + ' voided ✱)' : '') +

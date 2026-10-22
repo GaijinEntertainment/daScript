@@ -84,17 +84,11 @@ def private has_current_das(m : BenchModel; r : BenchRun) : bool {
 }
 
 //! The clips an audio run's `void_clips` carries on the board: the outlier rule's verdict over
-//! the stored rates (`run_outlier_clips`) unioned with what the annotations named, sorted.
+//! the stored rates (`run_clip_rates`) unioned with what the annotations named (`voided_clips`).
 def private board_void_clips(models : array<BenchModel>; gguf : string; r : BenchRun) : string {
-    let lengths <- clip_lengths(models, gguf, r.workload)
-    var clips <- run_outlier_clips(r, lengths)
-    var named <- void_clips_of(r.void_clips)
-    for (c in named) {
-        if (!has_value(clips, c)) {
-            clips |> push(c)
-        }
-    }
-    sort(clips)
+    var inscope lengths <- clip_lengths(models, gguf, r.workload)
+    var inscope rates <- run_clip_rates(r, lengths)
+    var inscope clips <- voided_clips(rates, r.void_clips)
     return join(clips, ",")
 }
 

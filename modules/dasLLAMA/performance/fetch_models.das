@@ -34,10 +34,10 @@ struct FetchArgs {
     @clarg_doc = "Run the on-box conversion recipes for absent converted entries (canary) — needs the setup_asr_rig nemo venv + refs; POSIX boxes only"
     convert : bool
 
-    @clarg_short = "o"
     @clarg_doc = "Only the files the board sweeps read (official rows, the ASR and TTS catalogs) - a board box's fetch"
     board : bool
 
+    @clarg_short = "o"
     @clarg_doc = "Only entries whose local name contains this substring"
     only : string
 

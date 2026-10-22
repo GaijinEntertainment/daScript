@@ -719,3 +719,46 @@ def test_void_outlier_pass(t : T?) {
         delete voided
     }
 }
+
+[test]
+def test_board_policy_helpers(t : T?) {
+    t |> run("a clip's length is the smallest positive one any run wrote, under its prefix alone") @(t : T?) {
+        var lengths : table<string; double>
+        borrow_clip_length(lengths, "asr:", "asr:jfk.wav", 11.0lf)
+        borrow_clip_length(lengths, "asr:", "asr:jfk.wav", 12.0lf)
+        borrow_clip_length(lengths, "asr:", "asr:jfk.wav", 0.0lf)
+        borrow_clip_length(lengths, "asr:", "tts:g2p20@alba", 9.0lf)
+        t |> equal(lengths?["jfk.wav"] ?? 0.0lf, 11.0lf, "the smaller length wins, a zero borrows nothing")
+        borrow_clip_length(lengths, "asr:", "asr:jfk.wav", 10.5lf)
+        t |> equal(lengths?["jfk.wav"] ?? 0.0lf, 10.5lf, "a smaller one later replaces it")
+        t |> equal(length(lengths), 1, "a key under another prefix borrows nothing")
+    }
+    t |> run("a clip rates over its own length, else the borrowed one, else not at all") @(t : T?) {
+        let lengths <- { "jfk.wav" => 11.0lf }
+        var rates : table<string; double>
+        rate_clip(rates, lengths, "gb1.wav", 990.0lf, 9.9lf)
+        rate_clip(rates, lengths, "jfk.wav", 110.0lf, 0.0lf)
+        rate_clip(rates, lengths, "hp0.wav", 500.0lf, 0.0lf)
+        rate_clip(rates, lengths, "jfk3.wav", 0.0lf, 33.0lf)
+        t |> equal(rates?["gb1.wav"] ?? 0.0lf, 100.0lf, "its own length")
+        t |> equal(rates?["jfk.wav"] ?? 0.0lf, 10.0lf, "the borrowed length")
+        t |> equal(length(rates), 2, "no length, or no wall, rates nothing")
+    }
+    t |> run("the voided clips are the rule's verdict and the named ones, sorted, each once") @(t : T?) {
+        let rates <- { "a" => 100.0lf, "b" => 100.0lf, "c" => 100.0lf, "d" => 401.0lf }
+        t |> equal(voided_clips(rates, "c, d"), [ "c", "d" ], "a named outlier counts once")
+        t |> equal(voided_clips(rates, ""), [ "d" ], "the rule alone")
+        let even <- { "a" => 100.0lf, "b" => 100.0lf, "c" => 100.0lf }
+        t |> equal(length(voided_clips(even, "")), 0, "an even run with no names voids nothing")
+    }
+    t |> run("a selector takes a run where each of its fields is empty or equal") @(t : T?) {
+        let run = RunKey(box = "m5max", engine = "das", backend = "metal", flavor = "tuned", workload = "asr")
+        t |> success(key_selects(RunKey(), run), "an empty selector takes every run")
+        t |> success(key_selects(RunKey(box = "m5max", workload = "asr"), run), "the fields it names match")
+        t |> success(!key_selects(RunKey(engine = "llama.cpp"), run), "another engine")
+        t |> success(!key_selects(RunKey(flavor = "accel"), run), "another flavor")
+        t |> success(!key_selects(RunKey(backend = "cpu"), run), "another backend")
+        t |> success(!key_selects(RunKey(box = "gnr"), run), "another box")
+        t |> success(!key_selects(RunKey(workload = "tts"), run), "another workload")
+    }
+}

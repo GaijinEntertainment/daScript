@@ -354,6 +354,9 @@ def test_tts_catalog_seams(t : T?) {
         t |> success(!has(cpu, "--ngl") && !has(cpu, "--accel"), "the neon leg carries no leg flag")
         let accel <- media_leg_args("accel")
         t |> success(length(accel) == 1 && accel[0] == "--accel", "the amx leg's flag")
+        t |> equal(media_leg_args("metal"), [ "--ngl", "1" ], "a media cell's metal leg")
+        t |> equal(media_leg_args("metal", 99), [ "--ngl", "99" ], "the image cell's metal leg")
+        t |> equal(length(media_leg_args("", 99)), 0, "the neon leg carries no flag")
     }
 }
 
@@ -369,8 +372,12 @@ def test_tts_reference_output(t : T?) {
         t |> success(parse_bench_best(out, tts_bench_label(5), none_s) < 0.0lf, "another sentence count reads no row")
     }
     t |> run("the VERSIONS line names the packages, and reads empty when the instrument printed none") @(t : T?) {
-        t |> equal(tts_ref_versions(out), "torch 2.14.0 / kokoro 0.9.4 (tts_ref_bench.py --device cpu, requirements-tts.txt)")
-        t |> equal(tts_ref_versions("BENCH\tx\tg2p20\t1\t0\t1\t1\n"), "")
+        t |> equal(ref_versions_line(out), "torch 2.14.0 / kokoro 0.9.4 (tts_ref_bench.py --device cpu, requirements-tts.txt)")
+        t |> equal(ref_versions_line("BENCH\tx\tg2p20\t1\t0\t1\t1\n"), "")
+    }
+    t |> run("a probe's warning line ahead of VERSIONS stays out of the field") @(t : T?) {
+        let probe = "[0;93m2026-10-20 W:onnxruntime: device discovery failed[m\nVERSIONS\tonnx-asr 0.7.0 / onnxruntime 1.22.0 (requirements-onnx.txt)\n"
+        t |> equal(ref_versions_line(probe), "onnx-asr 0.7.0 / onnxruntime 1.22.0 (requirements-onnx.txt)")
     }
 }
 
@@ -470,5 +477,15 @@ def test_vulkan_leg_guards(t : T?) {
         t |> success(cell_served_on(fell, "cpu"), "the cpu legs stamp themselves")
         delete served
         delete fell
+    }
+}
+
+[test]
+def test_ref_py(t : T?) {
+    t |> run("a reference venv's interpreter: the env override when set, else the venv beside the asr benches") @(t : T?) {
+        t |> equal(ref_py("/opt/py/bin/python3", "onnx"), normalize("/opt/py/bin/python3"), "the override wins")
+        let dflt = ref_py("", "tts")
+        t |> success(find(dflt, ".venv-tts") >= 0, "the default names the venv: {dflt}")
+        t |> success(find(ref_py("", "mlx"), ".venv-mlx") >= 0, "each name its own venv")
     }
 }

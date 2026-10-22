@@ -52,6 +52,8 @@ require dasllama/dasllama_env
 //       (llama-bench never samples — sampling cost is excluded by design)
 //   tg-real<n> (--mtp-ab, --tok) drops no warmup round: every rep is timed; tg<n>@<npl> drops none either - each rep's
 //       batched command opens with one untimed warm step inside the rep
+//   tts:g2p<N>@<voice> (--tts) drops one warmup round: one untimed synthesis of the corpus's first
+//       sentence; the row sums each sentence's best of -r timed reps
 //   ours:   bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m <model.gguf>
 //   theirs: --ref <llama-bench> runs it on the same GGUF with the same -t/-p/-n/-r/--ngl
 // `-o json` emits public bench records (schema: METHODOLOGY.md "The record") on stdout — progress goes to
@@ -281,16 +283,7 @@ def private arm_accel_tier(accel, gpu : bool) : bool {
 def private emit_cell_records(models : array<BenchModel>; json_path : string) {
     let text = sprint_json(models, true)
     if (!empty(json_path)) {
-        var wrote = false
-        fopen(json_path, "wb") $(f) {
-            if (f != null) {
-                fwrite(f, text)
-                wrote = true
-            }
-        }
-        if (!wrote) {
-            print("warning: could not open {json_path} for writing - no records file\n")
-        }
+        write_records_text(json_path, text)
     }
     print("{text}\n")
 }
@@ -781,13 +774,13 @@ def private tts_cell_main(model, voice_arg, json_path : string; sentences, reps,
     return false if (!tune_gate())   // never measure on fallback winners
     var jsonModels : array<BenchModel>
     var ok = true
+    var total_ms = 0.0lf
+    var total_audio = 0.0lf
     with_dasllama_jobque_() {
         print("live: {get_dispatch_lanes()} dispatch lanes ({get_total_hw_jobs()} workers)\n")
         var inscope m <- load_tts_model(model)
         var inscope seats0 <- tts_seat_counts(m.kind)
         measure_tts(m, corpus[0].text, voice, 1)   // warm: JIT + first touch + the seats' slabs
-        var total_ms = 0.0lf
-        var total_audio = 0.0lf
         for (s in corpus) {
             let r = measure_tts(m, s.text, voice, reps)
             total_ms += r.ms
@@ -809,7 +802,6 @@ def private tts_cell_main(model, voice_arg, json_path : string; sentences, reps,
         } elif (!gpu && verdict == "all") {
             backend = "vulkan"   // only a Vulkan build reaches here: on Metal the CPU arm pinned the tower off
         }
-        print("lcpp_bench --tts: {base_name(model)} {voice} {length(corpus)} sentences, {total_audio} s of audio in {total_ms} ms (rtf {total_ms / 1000.0lf / max(total_audio, 1e-9lf)})\n")
         var run = BenchRun(engine = "das", backend = backend, flavor = flavor_stamp(accel ? "accel" : "tuned"),
             exec_fmt = "{m.kind} {tts_serves_q8() ? "q8" : "f32"} lane",
             workload = "tts", box = box_name(), threads = threads,
@@ -827,6 +819,7 @@ def private tts_cell_main(model, voice_arg, json_path : string; sentences, reps,
         jsonModels |> emplace(cell)
     }
     return false if (!ok)
+    print("lcpp_bench --tts: {base_name(model)} {voice} {length(corpus)} sentences, {total_audio} s of audio in {total_ms} ms (rtf {total_ms / 1000.0lf / max(total_audio, 1e-9lf)})\n")
     emit_cell_records(jsonModels, json_path)
     return true
 }
@@ -2255,19 +2248,8 @@ def main() : int {
         return g_refused_rows > 0 ? 1 : 0
     }
     let text = sprint_json(jsonModels, true)
-    if (!empty(cfg.json_path)) {
-        var wrote = false
-        fopen(cfg.json_path, "wb") $(f) {
-            if (f != null) {
-                fwrite(f, text)
-                wrote = true
-            }
-        }
-        if (wrote) {
-            say(fmt, "records written to {cfg.json_path}\n")
-        } else {
-            say(fmt, "warning: could not open {cfg.json_path} for writing - no records file\n")
-        }
+    if (!empty(cfg.json_path) && write_records_text(cfg.json_path, text)) {
+        say(fmt, "records written to {cfg.json_path}\n")
     }
     print("{text}\n")
     if (cfg.submit) {

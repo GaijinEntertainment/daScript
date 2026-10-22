@@ -26,6 +26,7 @@ require dasllama/dasllama_bench           // bench_row — the batched reference
 require daslib/strings_convert            // try_to_float — the batched reference exe's table cells
 require [tune_framework]                  // nolint:STYLE030,LINT019 — tune_status, the stamp provenance; empty without the framework
 require model_specs public                // the model-set table + its llm/official views
+require ../harness/tts_corpus.das public   // tts_corpus_path / tts_corpus_head - the TTS cells' sentences
 require ../harness/_corpus.das public     // load_corpus - the prompt corpus reader the served instrument shares
 require box_ident                         // derive_box_name — the hardware-keyed box tag
 
@@ -1322,69 +1323,54 @@ def asr_catalog() : array<AsrModelSpec> {   // nolint:STYLE038 — flat catalog 
     ]
 }
 
-//! The provenance-manifest view over [[model_specs]] + [[asr_catalog]] (BRINGUP.md §2): one
-//! row per provenance-carrying file — every spec's own pin, with its companions adjacent.
-//! fetch_models.das is the fetch/verify driver over this view.
-def models_provenance() : array<ProvEntry> {
-    var specs <- model_specs()
-    var aspecs <- asr_catalog()
+//! Every provenance-carrying file of [[model_specs]] + [[asr_catalog]] the two filters admit: a spec's own pin where
+//! `spec_on` takes the row, the companions `companion_on` takes beside it, then every ASR carrier and companion.
+def private provenance_walk(spec_on : block<(s : ModelSpec) : bool>; companion_on : block<(s : ModelSpec; c : ProvEntry) : bool>) : array<ProvEntry> {
+    var inscope specs <- model_specs()
+    var inscope aspecs <- asr_catalog()
     var out : array<ProvEntry>
     out |> reserve(length(specs) + length(aspecs) + 16)   // + a few companions per pinned spec
     for (s in specs) {
+        continue if (!invoke(spec_on, s))
         if (!empty(s.url) || !empty(s.recipe)) {
-            out |> emplace(ProvEntry(name = s.file, root = "llm", url = s.url,
+            out |> push(ProvEntry(name = s.file, root = "llm", url = s.url,
                 bytes = s.bytes, sha256 = s.sha256, recipe = s.recipe))
         }
-        out |> emplace_from(s.companions)
+        for (c in s.companions) {
+            if (invoke(companion_on, s, c)) {
+                out |> push(c)
+            }
+        }
     }
-    delete specs
     for (a in aspecs) {
         if (!empty(a.prov.name)) {
-            out |> emplace(a.prov)
+            out |> push(a.prov)
         }
-        out |> emplace_from(a.companions)
+        out |> push_from(a.companions)
     }
-    delete aspecs
     return <- out
 }
+
+//! The provenance-manifest view over [[model_specs]] + [[asr_catalog]] (BRINGUP.md §2): one
+//! row per provenance-carrying file — every spec's own pin, with its companions adjacent.
+//! fetch_models.das is the fetch/verify driver over this view.
+def models_provenance() : array<ProvEntry> =>
+    <- provenance_walk($(_s : ModelSpec) => true, $(_s : ModelSpec; _c : ProvEntry) => true)
 
 //! The provenance a board box needs: the official rows and their companions, every ASR catalog
 //! carrier and companion, and the model rows an ASR or TTS catalog entry loads - those with only
 //! the companions a registry serves (the parity oracles minted on-box are a test fixture, not a
 //! board input).
 def board_provenance() : array<ProvEntry> {
-    var media : table<string>
-    for (t in tts_catalog()) {
-        media |> insert(t.file)
-    }
+    var inscope asr_media : table<string>
     for (a in asr_catalog()) {
-        media |> insert(a.das_model)
+        asr_media |> insert(a.das_model)
         if (!empty(a.das_mmproj)) {
-            media |> insert(a.das_mmproj)
+            asr_media |> insert(a.das_mmproj)
         }
     }
-    var out : array<ProvEntry>
-    for (s in model_specs()) {
-        let is_media = key_exists(media, s.file)
-        continue if (!s.official && !is_media)
-        if (!empty(s.url) || !empty(s.recipe)) {
-            out |> emplace(ProvEntry(name = s.file, root = "llm", url = s.url,
-                bytes = s.bytes, sha256 = s.sha256, recipe = s.recipe))
-        }
-        for (c in s.companions) {
-            if (s.official || !empty(c.url)) {
-                out |> push(c)
-            }
-        }
-    }
-    for (a in asr_catalog()) {
-        if (!empty(a.prov.name)) {
-            out |> push(a.prov)
-        }
-        out |> push_from(a.companions)
-    }
-    delete media
-    return <- out
+    return <- provenance_walk($(s : ModelSpec) => s.official || !empty(s.tts.voice) || key_exists(asr_media, s.file),
+                              $(s : ModelSpec; c : ProvEntry) => s.official || !empty(c.url))
 }
 
 // ===== ASR: reference tools (paths, parsers, runners, versions) =====
@@ -1427,14 +1413,15 @@ def venv_python(venv : string) : string {
     return normalize(stat(posix).is_valid ? posix : "{venv}/Scripts/python.exe")
 }
 
-def onnx_py() : string =>
-    normalize(empty(g_env_prof.onnx_py) ? venv_python("modules/dasLLAMA/benchmarks/asr/.venv-onnx") : g_env_prof.onnx_py)
+//! A reference venv's interpreter: the env override when set, else `.venv-<name>` beside the asr benches.
+def ref_py(env_py, name : string) : string =>
+    normalize(empty(env_py) ? venv_python("modules/dasLLAMA/benchmarks/asr/.venv-{name}") : env_py)
 
-def nemo_py() : string =>
-    normalize(empty(g_env_prof.nemo_py) ? venv_python("modules/dasLLAMA/benchmarks/asr/.venv-nemo") : g_env_prof.nemo_py)
+def onnx_py() : string => ref_py(g_env_prof.onnx_py, "onnx")
 
-def mlx_py() : string =>
-    normalize(empty(g_env_prof.mlx_py) ? venv_python("modules/dasLLAMA/benchmarks/asr/.venv-mlx") : g_env_prof.mlx_py)
+def nemo_py() : string => ref_py(g_env_prof.nemo_py, "nemo")
+
+def mlx_py() : string => ref_py(g_env_prof.mlx_py, "mlx")
 
 //! The Metal twin of mtmd_bin() — the same patched checkout built with Metal ON
 //! (setup_asr_rig's build-metal, Apple boxes); "" when absent, and the gpu ref leg skips loudly.
@@ -1729,6 +1716,7 @@ def private mtmd_log_line(s : string) : bool {
 //! wreck the child's stdout pipe on Windows (~1 byte then EOF while the run continues), so
 //! the caller re-reads the file whenever the captured stream carries no rows - onnx only.
 //! `device` reaches the nemo script alone (its torch-MPS arm); onnx stays CPU.
+[arch(at="../ARCHITECTURE_MEASUREMENT_AUDIO.md#mlx-asr-reference")]
 def asr_pybench_args(tool, handle : string; clips : array<string>; threads, reps : int; device : string = "") : array<string> {
     var args : array<string>
     if (tool == "onnx") {
@@ -1846,14 +1834,21 @@ def mtmd_versions(bin : string = "") : string {
     return empty(commit) ? "llama.cpp + {ptag}" : "llama.cpp @ {commit} + {ptag}"
 }
 
+//! The `VERSIONS` line of a venv probe's stdout - the probe's stderr (a package's import-time
+//! warning) never reaches the field.
+def private py_versions(py, imports, fields : string) : string =>
+    ref_versions_line(run_capture("{py} -c \"{imports}; print('VERSIONS' + chr(9) + {fields})\"", false))
+
 def onnx_versions() : string =>
-    run_capture("{onnx_py()} -c \"import onnx_asr, onnxruntime; print('onnx-asr', getattr(onnx_asr, '__version__', '?'), '/ onnxruntime', onnxruntime.__version__, '(requirements-onnx.txt)')\" 2>&1", true)
+    py_versions(onnx_py(), "import onnx_asr, onnxruntime",
+        "'onnx-asr', getattr(onnx_asr, '__version__', '?'), '/ onnxruntime', onnxruntime.__version__, '(requirements-onnx.txt)'")
 
 def nemo_versions() : string =>
-    run_capture("{nemo_py()} -c \"import nemo, torch; print('nemo', nemo.__version__, '/ torch', torch.__version__, '(requirements-nemo.txt)')\" 2>&1", true)
+    py_versions(nemo_py(), "import nemo, torch", "'nemo', nemo.__version__, '/ torch', torch.__version__, '(requirements-nemo.txt)'")
 
 def mlx_versions() : string =>
-    run_capture("{mlx_py()} -c \"from importlib.metadata import version as v; print('mlx-audio', v('mlx-audio'), '/ mlx-lm', v('mlx-lm'), '/ mlx', v('mlx'), '(requirements-mlx.txt)')\" 2>&1", true)
+    py_versions(mlx_py(), "from importlib.metadata import version as v",
+        "'mlx-audio', v('mlx-audio'), '/ mlx-lm', v('mlx-lm'), '/ mlx', v('mlx'), '(requirements-mlx.txt)'")
 
 //! The version line for one reference tool — dispatch by catalog tool name.
 def asr_tool_versions(tool : string) : string {
@@ -1907,27 +1902,21 @@ let TTS_BENCH_SENTENCES = 20
 //! Best-of passes per sentence, both engines - the reference instrument's own default.
 let TTS_BENCH_REPS = 3
 
-//! The corpus every TTS cell reads: `id`, `text` and `ps_espeak` per sentence.
-def tts_corpus_path() : string => "modules/dasLLAMA/tests/_tts_fixtures/g2p_corpus.json"
-
-//! One TTS model of the board: its GGUF, the voice both engines speak in, and how the reference names it.
+//! One TTS model of the board: its GGUF and its `model_specs()` row's TTS cell.
 struct TtsModelSpec {
     display : string   // the board's model label
     file : string      // the GGUF under models_dir()
-    voice : string     // the das voice; the reference takes the same name (a kitten alias maps to the pack's voice there too)
+    voice : string     // the das voice; the reference takes the same name
     ref : string       // the model's name in harness/tts_ref_bench.py
-    package : string   // the torch-engine reference row's `engine`: the family's own package
-    torch_gpu : bool   // the package serves a torch GPU device (mps, cuda); kitten's runs the onnxruntime CPU provider, pocket's pins the CPU
+    package : string   // the torch-engine reference row's `engine`
+    torch_gpu : bool   // the package serves a torch GPU device
 }
 
+//! The TTS board: a view over the `model_specs()` rows whose `tts.voice` is set.
 def tts_catalog() : array<TtsModelSpec> {
-    return <- [
-        TtsModelSpec(display = "Kokoro-82M", file = "kokoro-82m.gguf", voice = "af_heart", ref = "kokoro-82m", package = "kokoro", torch_gpu = true),
-        TtsModelSpec(display = "KittenTTS nano", file = "kitten-nano.gguf", voice = "Bella", ref = "kitten-nano", package = "kittentts"),
-        TtsModelSpec(display = "KittenTTS mini", file = "kitten-mini.gguf", voice = "Bella", ref = "kitten-mini", package = "kittentts"),
-        TtsModelSpec(display = "Pocket TTS en q8", file = "pocket-tts-en-q8.gguf", voice = "alba", ref = "pocket-en", package = "pocket-tts"),
-        TtsModelSpec(display = "Pocket TTS en kq", file = "pocket-tts-en-kq.gguf", voice = "alba", ref = "pocket-en", package = "pocket-tts")
-    ]
+    var inscope specs <- model_specs()
+    return <- [for (s in specs); TtsModelSpec(display = s.tts.display, file = s.file, voice = s.tts.voice, ref = s.tts.ref,
+                                               package = s.tts.package, torch_gpu = s.tts.torch_gpu); where !empty(s.tts.voice)]
 }
 
 //! The catalog row whose GGUF is `path`'s file; an empty `file` back = no row.
@@ -1938,29 +1927,6 @@ def tts_spec_of(path : string) : TtsModelSpec {
         return s if (s.file == name)
     }
     return TtsModelSpec()
-}
-
-//! One sentence of the corpus head a TTS cell speaks.
-struct TtsSentence {
-    id : string
-    text : string
-}
-
-//! The corpus head: the first `n` sentences that carry an id and a text, in corpus order; fewer
-//! where the corpus runs short, none where it does not parse.
-def tts_corpus_head(json_text : string; n : int) : array<TtsSentence> {
-    var out : array<TtsSentence>
-    var err = ""
-    let rows = read_json(json_text, err)
-    return <- out if (rows == null || !(rows.value is _array))
-    for (r in rows.value as _array) {
-        break if (length(out) >= n)
-        let id = r?["id"] ?? ""
-        let text = r?["text"] ?? ""
-        continue if (empty(id) || empty(text))
-        out |> push(TtsSentence(id = id, text = text))
-    }
-    return <- out
 }
 
 //! The GPU seats' engage verdict over a TTS cell, from each seat's call and serve deltas: `none`
@@ -1982,8 +1948,7 @@ def tts_test_key(sentences : int; voice : string) : string => "tts:g2p{sentences
 //! The test key's sentence-set label as the reference prints it in its BENCH row.
 def tts_bench_label(sentences : int) : string => "g2p{sentences}"
 
-def tts_py() : string =>
-    normalize(empty(g_env_prof.tts_py) ? venv_python("modules/dasLLAMA/benchmarks/asr/.venv-tts") : g_env_prof.tts_py)
+def tts_py() : string => ref_py(g_env_prof.tts_py, "tts")
 
 //! The reference row's `engine`: mlx-audio for the MLX ports, the family's package otherwise.
 def tts_ref_engine(spec : TtsModelSpec; mlx : bool) : string => mlx ? "mlx-audio" : spec.package
@@ -1998,8 +1963,8 @@ def tts_ref_args(spec : TtsModelSpec; mlx : bool; device : string; sentences, pa
     return <- args
 }
 
-//! The `VERSIONS` line the reference prints - the packages the run took; "" when absent.
-def tts_ref_versions(out : string) : string {
+//! The `VERSIONS` line a reference prints - the packages the run took; "" when absent.
+def ref_versions_line(out : string) : string {
     for (line in split(out, "\n")) {
         return strip(slice(line, 9)) if (starts_with(line, "VERSIONS\t"))
     }
@@ -2205,11 +2170,9 @@ def read_annotations(var out : array<BenchAnnotation>) : bool {
 def private anno_is_model_level(a : BenchAnnotation) : bool =>
     empty(a.box) && empty(a.engine) && empty(a.backend) && empty(a.flavor) && empty(a.workload)
 
-def private anno_matches_run(a : BenchAnnotation; r : BenchRun) : bool {
-    return ((empty(a.box) || a.box == r.box) && (empty(a.engine) || a.engine == r.engine)
-        && (empty(a.backend) || a.backend == r.backend) && (empty(a.flavor) || a.flavor == r.flavor)
-        && (empty(a.workload) || a.workload == r.workload))
-}
+def private anno_matches_run(a : BenchAnnotation; r : BenchRun) : bool =>
+    key_selects(RunKey(box = a.box, engine = a.engine, backend = a.backend, flavor = a.flavor, workload = a.workload),
+                RunKey(box = r.box, engine = r.engine, backend = r.backend, flavor = r.flavor, workload = r.workload))
 
 //! Merge annotations onto the models they describe: model-level entries set `note`, run-level
 //! entries set `comment` on every matching run. In-order application — a later, more specific
@@ -2251,32 +2214,30 @@ def clip_lengths(models : array<BenchModel>; gguf, workload : string) : table<st
         for (r in m.runs) {
             continue if (r.workload != workload)
             for (k, t in keys(r.tests), values(r.tests)) {
-                continue if (!(k |> starts_with(prefix)) || t.audio_s <= 0.0lf)
-                let clip = slice(k, length(prefix))
-                let known = out?[clip] ?? 0.0lf
-                if (known <= 0.0lf || t.audio_s < known) {
-                    out[clip] = t.audio_s
-                }
+                borrow_clip_length(out, prefix, k, t.audio_s)
             }
         }
     }
     return <- out
 }
 
-//! The clips of one audio run the outlier rule voids (`audio_outlier_clips`): each clip's rate is
-//! its best wall over its audio seconds - the run's own `audio_s`, else the length `lengths`
-//! borrowed from the model's other runs - and a clip with no length is not rated.
-def run_outlier_clips(r : BenchRun; lengths : table<string; double>) : array<string> {
+//! One audio run's clip rates: each clip's best wall over its audio seconds - the run's own
+//! `audio_s`, else the length `lengths` borrowed from the model's other runs (`rate_clip`).
+def run_clip_rates(r : BenchRun; lengths : table<string; double>) : table<string; double> {
     let prefix = audio_test_prefix(r.workload)
     var rates : table<string; double>
     for (k, t in keys(r.tests), values(r.tests)) {
-        continue if (!(k |> starts_with(prefix)) || t.ms <= 0.0lf)
-        let clip = slice(k, length(prefix))
-        let audio = t.audio_s > 0.0lf ? t.audio_s : (lengths?[clip] ?? 0.0lf)
-        if (audio > 0.0lf) {
-            rates[clip] = t.ms / audio
+        if (k |> starts_with(prefix)) {
+            rate_clip(rates, lengths, slice(k, length(prefix)), t.ms, t.audio_s)
         }
     }
+    return <- rates
+}
+
+//! The clips of one audio run the outlier rule voids (`audio_outlier_clips`) over its clip rates
+//! (`run_clip_rates`); a clip with no length is not rated.
+def run_outlier_clips(r : BenchRun; lengths : table<string; double>) : array<string> {
+    var inscope rates <- run_clip_rates(r, lengths)
     return <- audio_outlier_clips(rates)
 }
 

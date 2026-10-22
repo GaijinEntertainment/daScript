@@ -5,6 +5,7 @@ Every `src`/`href` naming a `files/...js|css` path (relative, `../` prefixes inc
 changed script under a new URL and keeps an unchanged one cached - a plain reload never runs a
 cached script under a newer page. A reference that already carries a query, or that resolves to
 no staged file, is left as it is. The Sphinx tree (`doc/`) versions its own assets and is skipped.
+`stamp_html` is the one stamping pass: serve.py, the local preview, runs it with mtimes.
 """
 import hashlib
 import os
@@ -12,6 +13,21 @@ import re
 import sys
 
 REF = re.compile(rb'((?:src|href)=")((?:\.\./)*files/[^"?#]+\.(?:js|css))(")')
+
+
+def stamp_html(html, resolve, version_of):
+    """`html` with every REF gaining `?v=<version_of(path)>`, where `resolve(ref)` names the file a
+    reference loads (None: left as it is) and `version_of` its version bytes; returns (html, count)."""
+    stamped = [0]
+
+    def stamp(m):
+        target = resolve(m.group(2).decode())
+        if not target or not os.path.isfile(target):
+            return m.group(0)
+        stamped[0] += 1
+        return m.group(1) + m.group(2) + b"?v=" + version_of(target) + m.group(3)
+
+    return REF.sub(stamp, html), stamped[0]
 
 
 def content_hash(path, memo):
@@ -25,20 +41,12 @@ def stamp_page(page, memo):
     with open(page, "rb") as f:
         html = f.read()
     here = os.path.dirname(page)
-    stamped = [0]
-
-    def stamp(m):
-        target = os.path.normpath(os.path.join(here, m.group(2).decode()))
-        if not os.path.isfile(target):
-            return m.group(0)
-        stamped[0] += 1
-        return m.group(1) + m.group(2) + b"?v=" + content_hash(target, memo) + m.group(3)
-
-    out = REF.sub(stamp, html)
+    out, stamped = stamp_html(html, lambda ref: os.path.normpath(os.path.join(here, ref)),
+                              lambda path: content_hash(path, memo))
     if out != html:
         with open(page, "wb") as f:
             f.write(out)
-    return stamped[0]
+    return stamped
 
 
 def stamp_tree(root):

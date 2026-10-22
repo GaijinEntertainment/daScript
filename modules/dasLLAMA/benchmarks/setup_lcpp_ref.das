@@ -66,6 +66,7 @@ def private shell_unsafe(s : string) : bool {
         find(s, "%") >= 0 || find(s, "\n") >= 0 || find(s, "\r") >= 0)
 }
 
+[arch(at="../ARCHITECTURE_MEASUREMENT.md#vulkan-reference-rows")]
 def private flavor_flags(flavor : string) : string {
     if (flavor == "clean-cpu") {
         return " -DGGML_ACCELERATE=OFF -DGGML_BLAS=OFF -DGGML_METAL=OFF"

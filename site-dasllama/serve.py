@@ -20,17 +20,25 @@ web/output64/examples/devlog.jsonl itself, one JSON line per page event — star
 
     bin/Release/daslang.exe utils/internal/dasllama-ladder/main.das -- --db ladder.db \
         --official-dir modules/dasLLAMA/performance/records
-    py -3 serve.py            # http://127.0.0.1:8932/
+    py -3 serve.py            # http://127.0.0.1:8932/  (serve.py <port> picks another)
+
+A served page's own scripts and styles carry their mtime as `?v=` - stamp_assets.py's pass, the
+deploy's content hash swapped for the mtime.
 """
 import http.server
 import os
-import re
+import posixpath
 import socketserver
+import sys
 import threading
 import urllib.error
 import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+import stamp_assets  # noqa: E402 - the deploy's stamping pass, found beside this file
+
+
 SITE_FILES = os.path.normpath(os.path.join(HERE, "..", "site", "files"))
 EXAMPLES_OUT = os.path.realpath(os.path.join(HERE, "..", "web", "output64", "examples"))
 SHARED = {"forge.css", "nav-dropdown.css", "dasllama-table.css", "github-star.js"}
@@ -129,15 +137,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.end_headers()
             return
 
-        def stamp(m):
-            local = self.translate_path("/" + m.group(2).decode())
-            try:
-                v = str(int(os.path.getmtime(local))).encode()
-            except OSError:
-                return m.group(0)
-            return m.group(1) + m.group(2) + b"?v=" + v + m.group(3)
-
-        html = re.sub(rb'((?:src|href)=")(files/[^"?]+\.(?:js|css))(")', stamp, html)
+        page_dir = posixpath.dirname(self.path.split("?", 1)[0].split("#", 1)[0])
+        html, _ = stamp_assets.stamp_html(
+            html, lambda ref: self.translate_path(posixpath.normpath(posixpath.join(page_dir, ref))),
+            lambda local: str(int(os.path.getmtime(local))).encode())
         self.send_response(200)
         self.send_header("Content-Type", "text/html")
         self.send_header("Cache-Control", "no-store")
@@ -237,6 +240,7 @@ class Server(socketserver.ThreadingTCPServer):
 
 
 if __name__ == "__main__":
-    with Server(("127.0.0.1", PORT), Handler) as httpd:
-        print(f"dasllama.io preview: http://127.0.0.1:{PORT}/  (api -> {LADDER})")
+    port = int(sys.argv[1]) if len(sys.argv) > 1 else PORT
+    with Server(("127.0.0.1", port), Handler) as httpd:
+        print(f"dasllama.io preview: http://127.0.0.1:{port}/  (api -> {LADDER})")
         httpd.serve_forever()

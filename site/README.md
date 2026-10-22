@@ -291,7 +291,9 @@ with, and no row an annotation holds; older releases and retired boards stay in
 `bench_records.json` and on dasllama.io's ladder under "all versions". Every audio row's
 `void_clips` carries the outlier rule's verdict
 (`modules/dasLLAMA/ARCHITECTURE_MEASUREMENT.md#audio-outlier-rule`), and the page shows a
-voided clip's raw times with no speedup, no bar and no place in the hero. Both files come from
+voided clip's raw times with no speedup, no bar and no place in the hero. An image-chat run's
+`void_clips` names the `img:<cell>` cells an annotation withholds: such a cell and its ratio read
+`✱`, never the `-` of a cell nobody measured, and the row leaves the bars. Both files come from
 the per-box record stores in one run and are COMMITTED (no CI fetch); `test_site_records.das`
 fails when either drifts:
 

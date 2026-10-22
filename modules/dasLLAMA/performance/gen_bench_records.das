@@ -405,6 +405,37 @@ def private daslang_bin() : string => g_env_prof.daslang_bin
 
 def private elapsed_ms(t0 : int64) : int => get_time_usec(t0) / 1000
 
+//! A cell's START line and its structured twin; `what` is the line's text past the model.
+def private cell_start(model, what, engine, leg : string) {
+    to_log(LOG_INFO, "gen_bench_records: START {model} {what}\n")
+    logger_info("bench.records", "cell start", JV({"model" => JV(model), "engine" => JV(engine), "leg" => JV(leg)}))
+}
+
+//! A cell's FAILED line (`text` past the FAILED) and its structured twin, carrying the child's `rc`
+//! and the cell's wall `ms` where the caller passes them.
+def private cell_failed(text, model, engine, leg : string; rc : int = INT_MIN; ms : int = -1) {
+    to_log(LOG_ERROR, "gen_bench_records: FAILED {text}\n")
+    var fields <- {"model" => JV(model), "engine" => JV(engine), "leg" => JV(leg)}
+    if (rc != INT_MIN) {
+        fields |> insert("rc", JV(rc))
+    }
+    if (ms >= 0) {
+        fields |> insert("elapsed_ms", JV(ms))
+    }
+    logger_error("bench.records", "cell FAILED", JV(fields))
+}
+
+//! A cell's DONE line (`text` past the DONE) and its structured twin with the cell's wall `ms`, and
+//! the clips an ASR reference measured where the caller passes them.
+def private cell_done(text, model, engine, leg : string; ms : int; clips : int = -1) {
+    to_log(LOG_INFO, "gen_bench_records: DONE {text}\n")
+    var fields <- {"model" => JV(model), "engine" => JV(engine), "leg" => JV(leg), "elapsed_ms" => JV(ms)}
+    if (clips >= 0) {
+        fields |> insert("clips", JV(clips))
+    }
+    logger_info("bench.records", "cell done", JV(fields))
+}
+
 // Stamp source + the catalog note and upsert every run of `cell` into the store, then persist.
 // the records directory carries each sidecar generation ONCE, by shasum: a row's tune_sha
 // resolves to the FULL doc (winners + race tables + provenance) sitting beside the store
@@ -546,8 +577,7 @@ def private run_das_child(file, path, be, tag, exe : string; accel, frozen : boo
         cell |> clear()
         if (rc != 0 || !read_bench_records(cellPath, cell)) {
             let tail = slice(out, max(0, length(out) - 400))
-            to_log(LOG_ERROR, "gen_bench_records: FAILED {file} das {tag} rc={rc} ({elapsed_ms(t0)} ms) - tail: {tail}\n")
-            logger_error("bench.records", "cell FAILED", JV({"model" => JV(file), "engine" => JV("das"), "leg" => JV(tag), "rc" => JV(rc), "elapsed_ms" => JV(elapsed_ms(t0))}))
+            cell_failed("{file} das {tag} rc={rc} ({elapsed_ms(t0)} ms) - tail: {tail}", file, "das", tag, rc, elapsed_ms(t0))
             return false
         }
         // variance tripwire, self-healing: the FIRST das process on a cold/churned .dlim map
@@ -602,8 +632,7 @@ def private das_cell(file, path, be, exe : string; accel : bool; cfg : Args; thr
                      var models : array<BenchModel>; var failed : array<string>) {
     let t0 = ref_time_ticks()
     let tag = accel ? "{be} accel" : be
-    to_log(LOG_INFO, "gen_bench_records: START {file} das {tag}\n")
-    logger_info("bench.records", "cell start", JV({"model" => JV(file), "engine" => JV("das"), "leg" => JV(tag)}))
+    cell_start(file, "das {tag}", "das", tag)
     var cell : array<BenchModel>
     mint_snapshot(models_dir())
     if (!run_das_child(file, path, be, tag, exe, accel, false, cfg, threads, cellPath, cell)) {
@@ -620,8 +649,7 @@ def private das_cell(file, path, be, exe : string; accel : bool; cfg : Args; thr
     absorb_cell(models, cell, store, note, failed, "ok")
     remove(cellPath)
     g_cells_measured++
-    to_log(LOG_INFO, "gen_bench_records: DONE {file} das {tag} ({elapsed_ms(t0)} ms)\n")
-    logger_info("bench.records", "cell done", JV({"model" => JV(file), "engine" => JV("das"), "leg" => JV(tag), "elapsed_ms" => JV(elapsed_ms(t0))}))
+    cell_done("{file} das {tag} ({elapsed_ms(t0)} ms)", file, "das", tag, elapsed_ms(t0))
 }
 
 // ===== Oracle mode (--oracle: the store rows ARE the oracle) =====
@@ -1044,8 +1072,7 @@ def private ref_pass(file, path, bin, flavor : string; ngl : int; nopo : bool; c
     }
     args |> push_from(["-t", "{threads}"], refPin, ["-p", "{cfg.plen}", "-n", "{cfg.ngen}", "-r", "{cfg.reps}", "-o", "json"])
     let cmd = argv_line(args)
-    to_log(LOG_INFO, "gen_bench_records: START {file} ref {flavor} {backend}\n")
-    logger_info("bench.records", "cell start", JV({"model" => JV(file), "engine" => JV("llama.cpp"), "leg" => JV("{flavor} {backend}")}))
+    cell_start(file, "ref {flavor} {backend}", "llama.cpp", "{flavor} {backend}")
     var rows : array<LlamaBenchRow>
     var raw = ""
     if (!run_llama_bench(args, rows, raw) || empty(rows)) {
@@ -1056,8 +1083,8 @@ def private ref_pass(file, path, bin, flavor : string; ngl : int; nopo : bool; c
         let why = (empty(strip(raw)) ? "child printed NOTHING (spawn or early death)"
             : (find(raw, "\n[") < 0 && !(strip(raw) |> starts_with("[")) ? "output carries NO json result array (only diagnostics?)"
                 : "a result array was found but did not parse"))
-        to_log(LOG_ERROR, "gen_bench_records: FAILED {file} ref {flavor} {backend} ({elapsed_ms(t0)} ms) - {why}\n  cmd: {cmd}\n  tail: {tail}\n")
-        logger_error("bench.records", "cell FAILED", JV({"model" => JV(file), "engine" => JV("llama.cpp"), "leg" => JV("{flavor} {backend}"), "elapsed_ms" => JV(elapsed_ms(t0))}))
+        cell_failed("{file} ref {flavor} {backend} ({elapsed_ms(t0)} ms) - {why}\n  cmd: {cmd}\n  tail: {tail}", file, "llama.cpp", "{flavor} {backend}",
+                    ms = elapsed_ms(t0))
         failed |> push("{file} ref {flavor} {backend}")
         return
     }
@@ -1105,8 +1132,7 @@ def private ref_pass(file, path, bin, flavor : string; ngl : int; nopo : bool; c
     stamp_note(models, file, note)
     write_bench_records(store, models)
     g_cells_measured++
-    to_log(LOG_INFO, "gen_bench_records: DONE {file} ref {flavor} {backend} ({elapsed_ms(t0)} ms)\n")
-    logger_info("bench.records", "cell done", JV({"model" => JV(file), "engine" => JV("llama.cpp"), "leg" => JV("{flavor} {backend}"), "elapsed_ms" => JV(elapsed_ms(t0))}))
+    cell_done("{file} ref {flavor} {backend} ({elapsed_ms(t0)} ms)", file, "llama.cpp", "{flavor} {backend}", elapsed_ms(t0))
 }
 
 // ===== Image legs (the image-chat cells of vision decoders; the ref is patched llama-mtmd-cli) =====
@@ -1128,15 +1154,13 @@ def private mlx_lm_ref_pass(spec : ModelSpec; cfg : Args; hw : HardwareInfo; box
         return
     }
     let t0 = ref_time_ticks()
-    to_log(LOG_INFO, "gen_bench_records: START {spec.file} ref mlx-lm metal ({spec.mlx_repo})\n")
-    logger_info("bench.records", "cell start", JV({"model" => JV(spec.file), "engine" => JV("mlx-lm"), "leg" => JV("metal")}))
+    cell_start(spec.file, "ref mlx-lm metal ({spec.mlx_repo})", "mlx-lm", "metal")
     let args <- mlx_lm_bench_args(spec.mlx_repo, cfg.plen, cfg.ngen, cfg.reps, cfg.npl)
     let out = run_capture_argv(args)
     var rows <- mlx_lm_rows(out)
     if (empty(rows)) {
         let tail = slice(out, max(0, length(out) - 400))
-        to_log(LOG_ERROR, "gen_bench_records: FAILED {spec.file} ref mlx-lm metal ({elapsed_ms(t0)} ms) - no ROW line\n  tail: {tail}\n")
-        logger_error("bench.records", "cell FAILED", JV({"model" => JV(spec.file), "engine" => JV("mlx-lm"), "leg" => JV("metal")}))
+        cell_failed("{spec.file} ref mlx-lm metal ({elapsed_ms(t0)} ms) - no ROW line\n  tail: {tail}", spec.file, "mlx-lm", "metal")
         failed |> push("{spec.file} ref mlx-lm metal")
         return
     }
@@ -1150,15 +1174,13 @@ def private mlx_lm_ref_pass(spec : ModelSpec; cfg : Args; hw : HardwareInfo; box
     upsert_bench_model(models, bm)
     write_bench_records(store, models)
     g_cells_measured++
-    to_log(LOG_INFO, "gen_bench_records: DONE {spec.file} ref mlx-lm metal ({length(rows)} row(s), {elapsed_ms(t0)} ms)\n")
-    logger_info("bench.records", "cell done", JV({"model" => JV(spec.file), "engine" => JV("mlx-lm"), "leg" => JV("metal"), "elapsed_ms" => JV(elapsed_ms(t0))}))
+    cell_done("{spec.file} ref mlx-lm metal ({length(rows)} row(s), {elapsed_ms(t0)} ms)", spec.file, "mlx-lm", "metal", elapsed_ms(t0))
 }
 
 // One lcpp_bench --image child per (vision model, leg), absorbed via the same cell protocol.
 // leg: "" = cpu (neon) | "accel" (amx) | "metal"
 def private image_das_cell(file, path, mm, pic : string; cfg : Args; threads : int; cellPath, note, store, exe : string;
                            var models : array<BenchModel>; var failed : array<string>; leg : string = "") {
-    let t0 = ref_time_ticks()
     let log_leg = empty(leg) ? "image" : "image {leg}"
     for (p in [mm, pic]) {
         if (!stat(p).is_valid) {
@@ -1166,32 +1188,10 @@ def private image_das_cell(file, path, mm, pic : string; cfg : Args; threads : i
             return
         }
     }
-    to_log(LOG_INFO, "gen_bench_records: START {file} das {log_leg}\n")
-    logger_info("bench.records", "cell start", JV({"model" => JV(file), "engine" => JV("das"), "leg" => JV(log_leg)}))
-    var args <- das_args(exe, ["-m", path, "--image-mmproj", mm, "--image", pic,
-                               "-r", "{cfg.image_reps}", "-t", "{threads}", "-o", "json", "--json-path", cellPath])
-    if (leg == "accel") {
-        args |> push("--accel")
-    } elif (leg == "metal") {
-        args |> push_from(["--ngl", "99"])
-    }
-    mint_snapshot(models_dir())
-    var out = ""
-    let rc = run_and_stream(args, out)
-    var cell : array<BenchModel>
-    if (rc != 0 || !read_bench_records(cellPath, cell)) {
-        let tail = slice(out, max(0, length(out) - 400))
-        to_log(LOG_ERROR, "gen_bench_records: FAILED {file} das {log_leg} rc={rc} ({elapsed_ms(t0)} ms) - tail: {tail}\n")
-        logger_error("bench.records", "cell FAILED", JV({"model" => JV(file), "engine" => JV("das"), "leg" => JV(log_leg), "rc" => JV(rc)}))
-        failed |> push("{file} das {log_leg}")
-        return
-    }
-    mint_check(models_dir(), "{file} das {log_leg}")
-    absorb_cell(models, cell, store, note, failed, "ok")
-    remove(cellPath)
-    g_cells_measured++
-    to_log(LOG_INFO, "gen_bench_records: DONE {file} das {log_leg} ({elapsed_ms(t0)} ms)\n")
-    logger_info("bench.records", "cell done", JV({"model" => JV(file), "engine" => JV("das"), "leg" => JV(log_leg), "elapsed_ms" => JV(elapsed_ms(t0))}))
+    var inscope args <- das_args(exe, ["-m", path, "--image-mmproj", mm, "--image", pic,
+                                       "-r", "{cfg.image_reps}", "-t", "{threads}", "-o", "json", "--json-path", cellPath])
+    args |> push_from(media_leg_args(leg, 99))
+    media_das_cell(file, log_leg, args, cellPath, store, models, failed, note, "ok", true)
 }
 
 // The image-chat reference cell: patched llama-mtmd-cli (MTMD_TIMING carries the split and the
@@ -1229,8 +1229,7 @@ def private image_ref_pass(file, path, mm, pic, bin, flavor : string; ngl : int;
         args |> push("--no-op-offload")
     }
     let cmd = argv_line(args)
-    to_log(LOG_INFO, "gen_bench_records: START {file} ref image {flavor} {backend}\n")
-    logger_info("bench.records", "cell start", JV({"model" => JV(file), "engine" => JV("llama.cpp"), "leg" => JV("image {flavor} {backend}")}))
+    cell_start(file, "ref image {flavor} {backend}", "llama.cpp", "image {flavor} {backend}")
     var best_enc = -1.0lf
     var best_pp = -1.0lf
     var best_tg = -1.0lf
@@ -1249,8 +1248,7 @@ def private image_ref_pass(file, path, mm, pic, bin, flavor : string; ngl : int;
         best_tg = max(best_tg, double(r.n_decode) * 1000.0lf / r.decode_ms)
     }
     if (best_enc < 0.0lf) {
-        to_log(LOG_ERROR, "gen_bench_records: FAILED {file} ref image {flavor} {backend} - no rep parsed ({elapsed_ms(t0)} ms)\n")
-        logger_error("bench.records", "cell FAILED", JV({"model" => JV(file), "engine" => JV("llama.cpp"), "leg" => JV("image {flavor} {backend}")}))
+        cell_failed("{file} ref image {flavor} {backend} - no rep parsed ({elapsed_ms(t0)} ms)", file, "llama.cpp", "image {flavor} {backend}")
         failed |> push("{file} ref image {flavor} {backend}")
         return
     }
@@ -1277,8 +1275,8 @@ def private image_ref_pass(file, path, mm, pic, bin, flavor : string; ngl : int;
     stamp_note(models, file, note)
     write_bench_records(store, models)
     g_cells_measured++
-    to_log(LOG_INFO, "gen_bench_records: DONE {file} ref image {flavor} {backend} - enc {best_enc:.1f} ms | pp {best_pp:.1f} | tg {best_tg:.1f} tok/s ({elapsed_ms(t0)} ms)\n")
-    logger_info("bench.records", "cell done", JV({"model" => JV(file), "engine" => JV("llama.cpp"), "leg" => JV("image {flavor} {backend}"), "elapsed_ms" => JV(elapsed_ms(t0))}))
+    cell_done("{file} ref image {flavor} {backend} - enc {best_enc:.1f} ms | pp {best_pp:.1f} | tg {best_tg:.1f} tok/s ({elapsed_ms(t0)} ms)",
+              file, "llama.cpp", "image {flavor} {backend}", elapsed_ms(t0))
 }
 
 // ===== ASR legs (the audio workloads, same adjacency discipline as the LLM legs) =====
@@ -1286,12 +1284,12 @@ def private image_ref_pass(file, path, mm, pic, bin, flavor : string; ngl : int;
 // das side: one lcpp_bench --asr child per catalog model, absorbed via the same cell protocol
 def private is_metal_served_family(spec : AsrModelSpec) : bool => spec.metal_served
 
-//! The leg's flag on a media cell's das child: `--accel` for amx, `--ngl 1` for metal, none for neon.
-def media_leg_args(leg : string) : array<string> {
+//! The leg's flag on a media cell's das child: `--accel` for amx, `--ngl <ngl>` for metal, none for neon.
+def media_leg_args(leg : string; ngl : int = 1) : array<string> {
     if (leg == "accel") {
         return <- ["--accel"]
     } elif (leg == "metal") {
-        return <- ["--ngl", "1"]
+        return <- ["--ngl", "{ngl}"]
     }
     return <- array<string>()
 }
@@ -1301,28 +1299,34 @@ def media_leg_args(leg : string) : array<string> {
 def private run_cell_child(display, log_leg : string; args : array<string>; cellPath : string;
                            var cell : array<BenchModel>; var failed : array<string>) : bool {
     let t0 = ref_time_ticks()
-    to_log(LOG_INFO, "gen_bench_records: START {display} das {log_leg}\n")
-    logger_info("bench.records", "cell start", JV({"model" => JV(display), "engine" => JV("das"), "leg" => JV(log_leg)}))
+    cell_start(display, "das {log_leg}", "das", log_leg)
     var out = ""
     let rc = run_and_stream(args, out)
     if (rc != 0 || !read_bench_records(cellPath, cell)) {
         let tail = slice(out, max(0, length(out) - 400))
-        to_log(LOG_ERROR, "gen_bench_records: FAILED {display} das {log_leg} rc={rc} ({elapsed_ms(t0)} ms) - tail: {tail}\n")
-        logger_error("bench.records", "cell FAILED", JV({"model" => JV(display), "engine" => JV("das"), "leg" => JV(log_leg), "rc" => JV(rc)}))
+        cell_failed("{display} das {log_leg} rc={rc} ({elapsed_ms(t0)} ms) - tail: {tail}", display, "das", log_leg, rc)
         failed |> push("{display} das {log_leg}")
         return false
     }
     return true
 }
 
-//! One media cell's das child, absorbed via the same cell protocol: the backend its das row
-//! stamped back, "" where the child failed or wrote no records.
+//! One media cell's das child, absorbed via the same cell protocol with the row's `note` and
+//! `parity` stamp: the backend its das row stamped back, "" where the child failed or wrote no
+//! records. `mint` brackets the child with the image-mint snapshot and check.
 def private media_das_cell(display, log_leg : string; args : array<string>; cellPath, store : string;
-                           var models : array<BenchModel>; var failed : array<string>) : string {
+                           var models : array<BenchModel>; var failed : array<string>;
+                           note : string = ""; parity : string = ""; mint : bool = false) : string {
     let t0 = ref_time_ticks()
+    if (mint) {
+        mint_snapshot(models_dir())
+    }
     var cell : array<BenchModel>
     if (!run_cell_child(display, log_leg, args, cellPath, cell, failed)) {
         return ""
+    }
+    if (mint) {
+        mint_check(models_dir(), "{display} das {log_leg}")
     }
     var backend = ""
     for (c in cell) {
@@ -1330,11 +1334,10 @@ def private media_das_cell(display, log_leg : string; args : array<string>; cell
             backend = r.engine == "das" ? r.backend : backend
         }
     }
-    absorb_cell(models, cell, store, "", failed)
+    absorb_cell(models, cell, store, note, failed, parity)
     remove(cellPath)
     g_cells_measured++
-    to_log(LOG_INFO, "gen_bench_records: DONE {display} das {log_leg} ({elapsed_ms(t0)} ms)\n")
-    logger_info("bench.records", "cell done", JV({"model" => JV(display), "engine" => JV("das"), "leg" => JV(log_leg), "elapsed_ms" => JV(elapsed_ms(t0))}))
+    cell_done("{display} das {log_leg} ({elapsed_ms(t0)} ms)", display, "das", log_leg, elapsed_ms(t0))
     return backend
 }
 
@@ -1453,8 +1456,7 @@ def private asr_ref_pass(spec : AsrModelSpec; ref : AsrRef; versions : string; c
         return
     }
     let t0 = ref_time_ticks()
-    to_log(LOG_INFO, "gen_bench_records: START {spec.display} ref {ref.tool}\n")
-    logger_info("bench.records", "cell start", JV({"model" => JV(spec.display), "engine" => JV(asr_engine_name(ref.tool)), "leg" => JV("asr")}))
+    cell_start(spec.display, "ref {ref.tool}", asr_engine_name(ref.tool), "asr")
     // cli tools time the ref's own carrier when the catalog names one (the q8_0 siblings);
     // mtmd's handle stays its mmproj, onnx/nemo weights are venv-managed
     let cli_tool = ref.tool == "parakeet-cli" || ref.tool == "whisper-cli"
@@ -1598,8 +1600,7 @@ def private asr_ref_pass(spec : AsrModelSpec; ref : AsrRef; versions : string; c
         return asr_ref_clip(spec, ref, clip, model_path, threads, cfg.asr_reps, gpu, cmd)
     }
     if (measured == 0) {
-        to_log(LOG_ERROR, "gen_bench_records: FAILED {spec.display} ref {ref.tool} - nothing measured ({elapsed_ms(t0)} ms)\n")
-        logger_error("bench.records", "cell FAILED", JV({"model" => JV(spec.display), "engine" => JV(asr_engine_name(ref.tool)), "leg" => JV("asr")}))
+        cell_failed("{spec.display} ref {ref.tool} - nothing measured ({elapsed_ms(t0)} ms)", spec.display, asr_engine_name(ref.tool), "asr")
         failed |> push("{spec.display} ref {ref.tool}")
         return
     }
@@ -1609,8 +1610,8 @@ def private asr_ref_pass(spec : AsrModelSpec; ref : AsrRef; versions : string; c
     upsert_bench_model(models, bm)
     write_bench_records(store, models)
     g_cells_measured++
-    to_log(LOG_INFO, "gen_bench_records: DONE {spec.display} ref {ref.tool} ({measured} clip(s), {elapsed_ms(t0)} ms)\n")
-    logger_info("bench.records", "cell done", JV({"model" => JV(spec.display), "engine" => JV(asr_engine_name(ref.tool)), "leg" => JV("asr"), "clips" => JV(measured), "elapsed_ms" => JV(elapsed_ms(t0))}))
+    cell_done("{spec.display} ref {ref.tool} ({measured} clip(s), {elapsed_ms(t0)} ms)", spec.display, asr_engine_name(ref.tool), "asr",
+              elapsed_ms(t0), measured)
 }
 
 // ===== TTS legs (the synthesis cells; the references are the families' own packages) =====
@@ -1644,21 +1645,19 @@ def private tts_ref_pass(spec : TtsModelSpec; mlx : bool; device, backend : stri
         return
     }
     let t0 = ref_time_ticks()
-    to_log(LOG_INFO, "gen_bench_records: START {spec.display} ref {engine} {leg}\n")
-    logger_info("bench.records", "cell start", JV({"model" => JV(spec.display), "engine" => JV(engine), "leg" => JV(leg)}))
+    cell_start(spec.display, "ref {engine} {leg}", engine, leg)
     var inscope args <- tts_ref_args(spec, mlx, device, cfg.tts_sentences, cfg.tts_reps, threads)
     let out = run_capture_argv(args)
     var audio_s = -1.0lf
     let ms = parse_bench_best(out, tts_bench_label(cfg.tts_sentences), audio_s)
     if (ms <= 0.0lf) {
         let tail = slice(out, max(0, length(out) - 400))
-        to_log(LOG_ERROR, "gen_bench_records: FAILED {spec.display} ref {engine} {leg} - no BENCH row ({elapsed_ms(t0)} ms) - tail: {tail}\n")
-        logger_error("bench.records", "cell FAILED", JV({"model" => JV(spec.display), "engine" => JV(engine), "leg" => JV(leg)}))
+        cell_failed("{spec.display} ref {engine} {leg} - no BENCH row ({elapsed_ms(t0)} ms) - tail: {tail}", spec.display, engine, leg)
         failed |> push("{spec.display} ref {engine} {leg}")
         return
     }
     var rr = BenchRun(engine = engine, backend = backend, flavor = "stock", workload = "tts", box = box,
-        threads = threads, date = date, source = "official", versions = tts_ref_versions(out),
+        threads = threads, date = date, source = "official", versions = ref_versions_line(out),
         cmd = argv_line(args), hardware = hw, files <- [file_identity(tts_corpus_path(), "corpus")])
     rr.tests |> insert(tts_test_key(cfg.tts_sentences, spec.voice), BenchTest(ms = ms, audio_s = audio_s))
     var bm = BenchModel(gguf = spec.file, arch = spec.display, size_bytes = int64(stat("{models_dir()}{spec.file}").size))
@@ -1666,8 +1665,7 @@ def private tts_ref_pass(spec : TtsModelSpec; mlx : bool; device, backend : stri
     upsert_bench_model(models, bm)
     write_bench_records(store, models)
     g_cells_measured++
-    to_log(LOG_INFO, "gen_bench_records: DONE {spec.display} ref {engine} {leg} - {ms:.0f} ms over {audio_s:.1f} s of audio ({elapsed_ms(t0)} ms)\n")
-    logger_info("bench.records", "cell done", JV({"model" => JV(spec.display), "engine" => JV(engine), "leg" => JV(leg), "elapsed_ms" => JV(elapsed_ms(t0))}))
+    cell_done("{spec.display} ref {engine} {leg} - {ms:.0f} ms over {audio_s:.1f} s of audio ({elapsed_ms(t0)} ms)", spec.display, engine, leg, elapsed_ms(t0))
 }
 
 //! Every TTS catalog model the box stocks, each leg's das cell beside its references: the metal

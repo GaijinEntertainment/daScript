@@ -686,12 +686,17 @@
           }
           var das = pick('das', L.das), ref = pick('llama.cpp', L.ref);
           if (!das || !ref) return;                    // no reference → no row
-          // a cell the run's void_clips names (an annotation's verdict on the reference) reads as unmeasured
+          // a cell the run's void_clips names (an annotation's verdict) carries no number and reads withheld
           function voided(r, k) {
             return (r.void_clips || '').split(',').map(function (s) { return s.trim(); }).indexOf(k) >= 0;
           }
           function msOf(r, k) { return (r.tests && r.tests[k] && !voided(r, k)) ? r.tests[k].ms : 0; }
           function rate(r, k) { return voided(r, k) ? 0 : tok(r, k); }
+          var held = {};
+          ['enc', 'pp', 'tg'].forEach(function (c) {
+            held[c + '_das'] = voided(das, 'img:' + c);
+            held[c + '_ref'] = voided(ref, 'img:' + c);
+          });
           out.push({
             gguf: m.gguf, model: m.gguf.replace(/\.gguf$/, ''), arch: m.arch || '',
             size: m.size_bytes || 0, box: bx, boxName: machineLabel(das.hardware && das.hardware.cpu, das.hardware && das.hardware.gpu, das.backend, bx),
@@ -703,12 +708,34 @@
             enc_ratio: ratio(msOf(ref, 'img:enc'), msOf(das, 'img:enc')),  // times, so inverted: >1 = das faster
             pp_ratio: ratio(rate(das, 'img:pp'), rate(ref, 'img:pp')),
             tg_ratio: ratio(rate(das, 'img:tg'), rate(ref, 'img:tg')),
+            held: held,
             das: das, ref: ref
           });
         });
       });
     });
     return out;
+  }
+
+  function withheldCell() {
+    return '<td class="dl-num dl-dim" title="withheld: the run measured this cell, but an annotation withholds it - the receipt\'s note gives the reason">✱</td>';
+  }
+
+  // one image cell's das / lcpp / ratio columns; a withheld side reads ✱ in its own cell and in
+  // the ratio, never the "-" of a cell nobody measured
+  function imageCellCols(c, label, show) {
+    function side(s) {
+      return function (r) { return r.held[c + '_' + s] ? withheldCell() : show(r[c + '_' + s]); };
+    }
+    return [
+      { key: c + '_das', label: label, num: true, grp: true, grpStart: true,
+        get: function (r) { return r[c + '_das']; }, cell: side('das') },
+      { key: c + '_ref', label: 'lcpp', num: true, dim: true,
+        get: function (r) { return r[c + '_ref']; }, cell: side('ref') },
+      { key: c + '_ratio', label: 'ratio', num: true, grp: true,
+        get: function (r) { return r[c + '_ratio']; },
+        cell: function (r) { return (r.held[c + '_das'] || r.held[c + '_ref']) ? withheldCell() : ratioCell(r[c + '_ratio']); } }
+    ];
   }
 
   function mountImage(rows) {
@@ -730,26 +757,8 @@
           get: function (r) { return (r.das && r.das.threads) || 0; },
           cell: function (r) { return r.das && r.das.threads ? String(r.das.threads) : '-'; } },
         { key: 'size', label: 'GB', num: true, dim: true, get: function (r) { return r.size; },
-          cell: function (r) { return r.size ? fmt(r.size / 1073741824, 1) : '-'; } },
-        { key: 'enc_das', label: 'encode das', num: true, grp: true, grpStart: true,
-          get: function (r) { return r.enc_das; }, cell: function (r) { return ms(r.enc_das); } },
-        { key: 'enc_ref', label: 'lcpp', num: true, dim: true,
-          get: function (r) { return r.enc_ref; }, cell: function (r) { return ms(r.enc_ref); } },
-        { key: 'enc_ratio', label: 'ratio', num: true, grp: true,
-          get: function (r) { return r.enc_ratio; }, cell: function (r) { return ratioCell(r.enc_ratio); } },
-        { key: 'pp_das', label: 'prefill das', num: true, grp: true, grpStart: true,
-          get: function (r) { return r.pp_das; }, cell: function (r) { return tps(r.pp_das); } },
-        { key: 'pp_ref', label: 'lcpp', num: true, dim: true,
-          get: function (r) { return r.pp_ref; }, cell: function (r) { return tps(r.pp_ref); } },
-        { key: 'pp_ratio', label: 'ratio', num: true, grp: true,
-          get: function (r) { return r.pp_ratio; }, cell: function (r) { return ratioCell(r.pp_ratio); } },
-        { key: 'tg_das', label: 'decode das', num: true, grp: true, grpStart: true,
-          get: function (r) { return r.tg_das; }, cell: function (r) { return tps(r.tg_das); } },
-        { key: 'tg_ref', label: 'lcpp', num: true, dim: true,
-          get: function (r) { return r.tg_ref; }, cell: function (r) { return tps(r.tg_ref); } },
-        { key: 'tg_ratio', label: 'ratio', num: true, grp: true,
-          get: function (r) { return r.tg_ratio; }, cell: function (r) { return ratioCell(r.tg_ratio); } }
-      ],
+          cell: function (r) { return r.size ? fmt(r.size / 1073741824, 1) : '-'; } }
+      ].concat(imageCellCols('enc', 'encode das', ms), imageCellCols('pp', 'prefill das', tps), imageCellCols('tg', 'decode das', tps)),
       filterDefs: [
         { field: 'model', title: 'model', all: 'all models', get: function (r) { return r.model; } },
         { field: 'box', title: 'machine', all: 'all machines', get: function (r) { return r.box; }, label: function (r) { return r.boxName; } },
@@ -759,7 +768,9 @@
       summary: function (shown, total) {
         return esc(measuredLine(shown)) +
           ' &nbsp;·&nbsp; showing ' + shown.length + ' of ' + total + ' paired turns' +
-          ' &nbsp;·&nbsp; one 640×480 picture; encode = the vision tower alone, wall ms';
+          ' &nbsp;·&nbsp; one 640×480 picture; encode = the vision tower alone, wall ms' +
+          (shown.some(function (r) { return Object.keys(r.held).some(function (k) { return r.held[k]; }); })
+            ? ' &nbsp;·&nbsp; ✱ = withheld: measured, but an annotation withholds the cell - the receipt\'s note says why' : '');
       }
     });
   }
