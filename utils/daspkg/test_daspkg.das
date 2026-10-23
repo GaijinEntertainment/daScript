@@ -13,6 +13,7 @@ require daslib/json
 require daslib/json_boost
 
 require daslib/ansi_colors
+require llvm/daslib/llvm_tune
 
 require lockfile
 require utils
@@ -2267,7 +2268,12 @@ def private write_fat_fixture(tmp_root : string; with_profile : bool) {
 def test_cmd_release_fat(t : T?) {
     let arch = get_architecture_name()
     let low = arch == "x86_64" ? "x86-avx2" : "arm-neon"
+    let can_run = tune_fat_box_in_class(low)
     t |> run("--fat ships the class profile's clones, mints nothing, and ships no sidecar") @(tt : T?) {
+        if (!can_run) {
+            tt |> skip("host does not carry the {low} CPU class")
+            return
+        }
         let tmp_root = "{test_temp_dir()}/release_fat"
         let out_dir = "{test_temp_dir()}/release_fat_out"
         force_rmdir(tmp_root)
@@ -2283,6 +2289,10 @@ def test_cmd_release_fat(t : T?) {
         force_rmdir(out_dir)
     }
     t |> run("--fat refuses a kernel the baseline class has no profile entry for") @(tt : T?) {
+        if (!can_run) {
+            tt |> skip("host does not carry the {low} CPU class")
+            return
+        }
         let tmp_root = "{test_temp_dir()}/release_fat_none"
         let out_dir = "{test_temp_dir()}/release_fat_none_out"
         force_rmdir(tmp_root)

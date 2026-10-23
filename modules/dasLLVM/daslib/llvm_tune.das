@@ -998,7 +998,6 @@ def tune_fat_box_in_class(klass : string) : bool {
 //! ladder this box is in - or the one `DAS_TUNE_FAT_CLASS` pins, when the box is in it.
 [arch(at = "../ARCHITECTURE_TARGET_FEATURES.md#fat-mode")]
 def tune_fat_init(baseline : string) {
-    return if (!is_standalone_exe())
     let brow = jit_cpu_class_row(baseline)
     if (!tune_fat_box_in_class(baseline)) {
         panic("this program was built for the {baseline} CPU class ({brow.features}) and this {get_architecture_name()} box does not carry all of it")
