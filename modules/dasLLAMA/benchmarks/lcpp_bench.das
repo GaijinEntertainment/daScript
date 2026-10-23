@@ -1332,6 +1332,7 @@ def private parity_cell_main(model : string) : bool {
 
 //! The pregate's verdict for `model` under `spec`'s evidence — public so a test can drive the
 //! compare with a deliberately wrong fixture; the arm's own path binds `spec` off the table.
+[arch(at="../ARCHITECTURE_MEASUREMENT.md#fixture-prefix-bar")]
 def parity_check(model : string; spec : ModelSpec) : bool {
     if (empty(spec.parity.gen)) {
         print("PARITY PREGATE: no evidence for {base_name(model)} in the model-set table (model_specs.das) - freeze a fixture (harness/parity.sh) before boarding this model\n")

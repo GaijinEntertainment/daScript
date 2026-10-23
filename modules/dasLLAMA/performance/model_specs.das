@@ -57,7 +57,6 @@ def prefix_match_len(got, want : array<int64>) : int64 {
 
 //! whether `same` matching opening tokens of `n_check` pass the fixture's bar: half the span as a prefix under
 //! `prefix_bar` (the timed run's fixture gate asks that form of every carrier), else every token
-[arch(at="../ARCHITECTURE_MEASUREMENT.md#fixture-prefix-bar")]
 def fixture_ok(prefix_bar : bool; same, n_check : int64) : bool => prefix_bar ? same * 2l >= n_check : same == n_check
 
 //! A TTS model's cell on the board: the voice both engines speak in and how the reference names
