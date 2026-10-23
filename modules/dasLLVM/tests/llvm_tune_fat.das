@@ -108,6 +108,7 @@ def test_llvm_tune_fat(t : T?) { // nolint:STYLE038 - one flat spawn-and-assert 
     t |> success(length(ladder) >= 2, "this arch has a class ladder to be fat over")
     let top = ladder[0]
     let low = ladder[length(ladder) - 1] == "x86-base" ? "x86-avx2" : ladder[length(ladder) - 1]
+    let boxInLow = tune_fat_box_in_class(low)
     let boxInTop = tune_fat_box_in_class(top)
     write_profile(defdir, low, "k0")
     write_profile(defdir, top, "k2")
@@ -130,7 +131,14 @@ def test_llvm_tune_fat(t : T?) { // nolint:STYLE038 - one flat spawn-and-assert 
     t |> success(lb |> has("@das.tune.fat_mask = internal unnamed_addr global i32 0"), "case 1: the dispatch mask is an LLVM-side word, not a das global")
 
     let can_run = get_platform_name() != "windows" && das_is_dll_build()
-    if (can_run && fexist("{exe}.exe")) {
+    if (can_run && !boxInLow && fexist("{exe}.exe")) {
+        var lr : array<string>
+        t |> success(spawn_child("{tune_env_prefix("", "", "")}\"{exe}.exe\"", lr) != 0, "case 2: an unsupported baseline refuses startup")
+        t |> success(lr |> has("this program was built for the {low} CPU class"), "case 2: the refusal names the baseline\n{join(lr, "\n")}")
+        t |> success(!(lr |> has("RESULT")), "case 2: main never runs below the baseline")
+        delete lr
+    }
+    if (can_run && boxInLow && fexist("{exe}.exe")) {
         // 2. the exe dispatches from cpuid: the top clone when this box is in the class, else the baseline's
         var lr : array<string>
         let run_rc = spawn_child("{tune_env_prefix("", "", "")}\"{exe}.exe\"", lr)

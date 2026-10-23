@@ -166,7 +166,9 @@ load-bearing: x86's inliner refuses a callee whose features exceed the caller's,
 admits one whose body carries no target intrinsic, and the inlined copy would then lower for
 the baseline and the clone would be dead code.
 
-The exe's status `[init]` (`emit_status_init`) first calls `tune_fat_init(baseline)`: it refuses
+The interpreter simulates `[init]` while building the exe; that simulation leaves runtime
+admission and mask initialization to the emitted executable's startup. The exe's status
+`[init]` (`emit_status_init`) first calls `tune_fat_init(baseline)`: it refuses
 a box that lacks any feature of the baseline class by name, then sets the mask to every class
 of the ladder the box is in - membership is cpuid only (`tune_fat_box_in_class`), never the
 build's baseline or a force env - or to the one class `DAS_TUNE_FAT_CLASS` pins, refusing a pin
