@@ -278,13 +278,13 @@ def test_required(t : T?) {
 
 [test]
 def test_required_yields_to_help(t : T?) {
-    // `--help` (or its short) answers on a command whose required flag is absent
+    // `--help` answers with the required flag absent
     for (asked in [["--help"], ["-h"], ["--help", "--file=x.txt"]]) {
         let r <- parse_args(type<RequiredWithHelp>, asked)
         t |> success(r |> is_ok, "help parses with no required flag: {asked}")
         t |> success((r |> unwrap).help, "the help flag reads set: {asked}")
     }
-    // the control: without the help flag, the missing required flag is still the error
+    // the control: no help flag, the required flag's error
     let r <- parse_args(type<RequiredWithHelp>, [])
     t |> equal(r |> unwrap_err, "--file: missing required flag")
 }

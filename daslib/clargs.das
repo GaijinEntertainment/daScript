@@ -351,13 +351,16 @@ def public flag_present(args : array<string>; arg_info : CommandArgumentInfo) : 
     return is_some(env_raw_value(arg_info))
 }
 
-//! The error for the first required flag (positionals too under `with_positional`) `args` leaves out - "" when none is, or when `args` sets the bool `help` flag.
-def public missing_required_flag(args : array<string>; command_info : CommandInfo; with_positional : bool) : string {
+//! The first required flag `args` omits; "" when `help` is set.
+def public missing_required_flag(args : array<string>; command_info : CommandInfo;
+                                 with_positional : bool) : string {
     for (arg in command_info.args) {
-        return "" if (arg.field_name == "help" && arg.value_type == Type.tBool && present_in_argv(args, arg))
+        let is_help = arg.field_name == "help" && arg.value_type == Type.tBool
+        return "" if (is_help && present_in_argv(args, arg))
     }
     for (arg in command_info.args) {
-        if (arg.is_required && (with_positional || !arg.is_positional) && !arg.is_count && !flag_present(args, arg)) {
+        let counted = arg.is_required && (with_positional || !arg.is_positional) && !arg.is_count
+        if (counted && !flag_present(args, arg)) {
             return "{arg.flag_name}: missing required flag"
         }
     }
