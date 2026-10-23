@@ -351,9 +351,7 @@ def public flag_present(args : array<string>; arg_info : CommandArgumentInfo) : 
     return is_some(env_raw_value(arg_info))
 }
 
-//! The parse error for the first required flag `args` leaves out - "" when none is missing, or when
-//! `args` asks for the command's help (its bool `help` flag), so `--help` answers on a command with a
-//! required flag. `with_positional` counts a required positional among the required flags.
+//! The error for the first required flag (positionals too under `with_positional`) `args` leaves out - "" when none is, or when `args` sets the bool `help` flag.
 def public missing_required_flag(args : array<string>; command_info : CommandInfo; with_positional : bool) : string {
     for (arg in command_info.args) {
         return "" if (arg.field_name == "help" && arg.value_type == Type.tBool && present_in_argv(args, arg))
