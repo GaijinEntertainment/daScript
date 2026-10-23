@@ -102,6 +102,31 @@ options a = "text\n", b = -1, c = 2.5, d = -2.5, e = 3l, f = -922337203685477580
       value: (identifier))))
 
 ================================================================================
+Unsigned option values
+================================================================================
+
+options a = 0xD0, b = 7u, c = 0xFFu8, d = (0x10, 1u, 2u8)
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (options_declaration
+    (annotation_argument
+      name: (identifier)
+      value: (constant_unsigned_integer))
+    (annotation_argument
+      name: (identifier)
+      value: (constant_unsigned_integer))
+    (annotation_argument
+      name: (identifier)
+      value: (constant_unsigned_integer8))
+    (annotation_argument
+      name: (identifier)
+      value: (constant_unsigned_integer)
+      value: (constant_unsigned_integer)
+      value: (constant_unsigned_integer8))))
+
+================================================================================
 Require declarations
 ================================================================================
 

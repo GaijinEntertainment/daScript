@@ -367,6 +367,41 @@ def test_apply_struct_annotations(t : T?) {
     }
 }
 
+struct WideAnn {
+    @wide = 4102444800l @huge = 18446744073709551615ul @offset = 0xD0 a : int
+}
+
+[test]
+def test_apply_wide_annotations(t : T?) {
+    // 64-bit and unsigned values keep their type and value
+    let foo = WideAnn()
+    var seen = 0
+    apply(foo) $(name : string; field; annotations) {
+        for (ann in annotations) {
+            if (ann.name == "wide") {
+                t |> success(ann.data is tInt64)
+                t |> equal(ann.data as tInt64, 4102444800l)
+            } elif (ann.name == "huge") {
+                t |> success(ann.data is tUInt64)
+                t |> equal(ann.data as tUInt64, 18446744073709551615ul)
+            } elif (ann.name == "offset") {
+                t |> success(ann.data is tUInt64)
+                t |> equal(ann.data as tUInt64, 0xD0ul)
+            }
+            seen++
+        }
+    }
+    apply_imm(foo) $(name; field; annotations) {
+        for (ann in annotations) {
+            if (ann.name == "offset") {
+                t |> equal(ann.data as tUInt64, 0xD0ul)
+                seen++
+            }
+        }
+    }
+    t |> equal(seen, 4)
+}
+
 // ===== rvalue self is evaluated exactly once (single-bind, not per-field) =====
 
 var g_apply_make_count = 0

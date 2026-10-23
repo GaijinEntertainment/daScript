@@ -35,7 +35,8 @@ Some annotations accept arguments:
 Decimal integer arguments may use the ``l`` suffix for signed 64-bit values or ``ul``
 for unsigned 64-bit values. The same forms work in field metadata, for example
 ``@limit=4102444800l``. Reflection and macro argument access preserve both the
-integer type and all 64 bits.
+integer type and all 64 bits. Other unsigned literals - hexadecimal (``@offset=0xD0``),
+``u`` or ``u8`` suffix - are stored as unsigned 64-bit values too.
 
 .. das-doc: alt
 .. code-block:: das

@@ -747,6 +747,24 @@
           "type": "ALIAS",
           "content": {
             "type": "SYMBOL",
+            "name": "_unsigned_integer"
+          },
+          "named": true,
+          "value": "constant_unsigned_integer"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_unsigned_int8"
+          },
+          "named": true,
+          "value": "constant_unsigned_integer8"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
             "name": "_float"
           },
           "named": true,

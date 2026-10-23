@@ -500,7 +500,15 @@
             "named": true
           },
           {
+            "type": "constant_unsigned_integer",
+            "named": true
+          },
+          {
             "type": "constant_unsigned_integer64",
+            "named": true
+          },
+          {
+            "type": "constant_unsigned_integer8",
             "named": true
           },
           {
