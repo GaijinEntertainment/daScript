@@ -315,6 +315,9 @@ sscan_json
 directly into a struct using RTTI, without going through ``JsonValue?``.
 It supports all the same types: structs, pointers, arrays, tables, tuples,
 variants, enums, bitfields, vector types, and all scalar types.
+The destination must be mutable. Constants and temporary values are
+compile errors. A helper forwarding a scalar destination takes
+``var value : T&`` so the scan updates its caller's value.
 It also respects ``@rename`` field annotations::
 
   struct Config {
