@@ -138,6 +138,12 @@ namespace das {
             const TBlock<void,bool,smart_ptr<Program>,const string> & block, Context * context, LineInfoArg * at );
     DAS_API void rtti_builtin_compile_file(char * modName, smart_ptr<FileAccess> access, ModuleGroup* module_group, const CodeOfPolicies & cop,
         const TBlock<void, bool, smart_ptr<Program>, const string> & block, Context * context, LineInfoArg * lineinfo);
+    DAS_API char * rtti_builtin_compile_file_cached(
+        char * modName, smart_ptr<FileAccess> access,
+        ModuleGroup* module_group, const CodeOfPolicies & cop,
+        char * moduleCache,
+        const TBlock<void, bool, smart_ptr<Program>, const string> & block,
+        Context * context, LineInfoArg * lineinfo);
     DAS_API void rtti_builtin_require_module_now ( char * name, smart_ptr<FileAccess> access, const CodeOfPolicies & cop,
             const TBlock<void,Module *,const string> & block, Context * context, LineInfoArg * at );
     DAS_API void rtti_builtin_make_program ( const CodeOfPolicies & cop, const TBlock<void> & block, Context * context, LineInfoArg * at );

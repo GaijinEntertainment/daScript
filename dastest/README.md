@@ -32,6 +32,8 @@ Running only **some** selected benchmarks (uses `vector_alloc` as a filtering pr
 - `--test-only <path>`: Restrict the collected set to this test path (repeatable)
 - `--exclude <substring>`: Skip test files whose base name contains this substring (repeatable)
 - `--test-project <path.das_project>`: Project file. Will be used to compile given tests
+- `--module-cache-dir <dir>`: Keep one AST module cache per test file,
+  including isolated workers. `--verbose` prints each cache verdict.
 - `--uri-paths`: Print uri paths instead of file paths (vscode friendly)
 - `--color`: Print colored output
 - `--headless`: Passed to every test run, including each `--run` worker, so a harness that reads it opens no window
@@ -72,6 +74,9 @@ Note that benchmarks will be executed only if all module tests have already pass
 
 - `--run`: Script file(s) to run in a single subprocess (repeatable). Used by isolated/semi-isolated mode to dispatch a batch to one worker; each file streams its own JSON report so the parent can attribute results and recover from a mid-batch crash
 - `--worker-index <n>`: Stable worker index the parent dastest passes to each worker in isolated mode; tests read it from `get_user_args()` to derive per-worker ports and paths. Default `0`
+- `--worker-module-cache-dir <base64>`: Internal encoding of
+  `--module-cache-dir` for workers, preserving literal path bytes through
+  the process shell.
 
 ### Benchmark measurement {#benchmark-measurement}
 

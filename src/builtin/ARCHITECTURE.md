@@ -69,10 +69,14 @@ instead of rewriting one. `ScriptModuleCache` is the guard around that compile: 
 environment's serializer slots before installing - the enclosing compile's stream (a
 `compile_file` from an `[init]` runs under the host's armed cache) never feeds the nested one, a
 cold nested read included - finishes the cache and puts the slots back on every exit, an
-exception's included, and the finish happens before the block runs, so a require the block
-issues is not this cache's. The writeback's temporary file carries the process id and a per-process
-sequence number, since two subtools compiling one file at once key the same record, as do two
-threads of one process.
+exception's included. An explicit-path overload uses the same guard, returns
+`none`, `clean`, `partial`, `fallback` or `unavailable`, and transfers
+deserialized source files without a module owner to the caller's
+`ModuleGroup`. An empty explicit path disables caching while still hiding
+the enclosing streams. The finish happens before the block runs, so a require
+the block issues is not this cache's. The writeback's temporary file carries
+the process id and a per-process sequence number, since two subtools compiling
+one file at once key the same record, as do two threads of one process.
 
 Every variant is its own record and an engine root's record is 200 MB, so the default directory
 is capped: after a writeback `ModuleFileCache::finish` lists the directory's `.dascache` files
