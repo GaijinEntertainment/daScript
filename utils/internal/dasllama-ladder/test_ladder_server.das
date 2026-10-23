@@ -704,16 +704,13 @@ def test_official_dir_imports_its_annotations(t : T?) {
 
 //! the operator CLI's contract is its exit code and the line it
 //! prints, so the op runs in a child
-def private run_admin(args : string; var output : string&) : int {
-    let argv <- get_command_line_arguments()
+def private run_admin(args : array<string>; var output : string&) : int {
     let root = get_das_root()
-    let cmd = ("\"{argv[0]}\" -dasroot \"{root}\" " +
-        "\"{root}/utils/internal/dasllama-ladder/admin.das\" -- {args} 2>&1")
-    return unsafe(popen_timeout(cmd, 300.0) $(f) {
-        if (f != null) {
-            output = fread(f)
-        }
-    })
+    var inscope argv <- [get_executable_path(), "-no-module-cache",
+        "-dasroot", root,
+        path_join(root, "utils/internal/dasllama-ladder/admin.das"), "--"]
+    argv |> push_from(args)
+    return run_and_capture(argv, output, 300.0)
 }
 
 [test]
@@ -721,15 +718,16 @@ def test_admin_import_annotations(t : T?) {
     let what = ("admin.das --op import-annotations holds a model off the board, " +
         "and refuses a missing file")
     t |> run(what) @(tt : T?) {
-        let db_path = path_join(test_temp_dir(), "admin.db")
-        let ann = path_join(test_temp_dir(), "annotations.json")
+        let db_path = path_join(test_temp_dir(), "admin board.db")
+        let ann = path_join(test_temp_dir(), "import annotations.json")
         write_text(ann, HELD_DOC)
         with_latest_sqlite(db_path) $(db) {
             let r = import_official_store(db, official_doc(), 1000l)
             tt |> success(r.ok, "the official store lands ({r.error})")
         }
         var out = ""
-        let rc = run_admin("--db \"{db_path}\" --op import-annotations --file \"{ann}\"", out)
+        let rc = run_admin(["--db", db_path, "--op", "import-annotations",
+            "--file", ann], out)
         tt |> equal(rc, 0, "the import exits 0: {out}")
         tt |> success(find(out, "1 hold(s), 0 void(s) imported") >= 0,
             "it reports the hold: {out}")
@@ -738,9 +736,9 @@ def test_admin_import_annotations(t : T?) {
                 "the held model's rows are off the board")
         }
         var missing = ""
-        let absent = path_join(test_temp_dir(), "absent.json")
-        let rc_missing = run_admin(
-            "--db \"{db_path}\" --op import-annotations --file \"{absent}\"", missing)
+        let absent = path_join(test_temp_dir(), "absent annotations.json")
+        let rc_missing = run_admin(["--db", db_path, "--op",
+            "import-annotations", "--file", absent], missing)
         tt |> equal(rc_missing, 1, "a missing file exits 1: {missing}")
         tt |> success(find(missing, "cannot read") >= 0, "it names the unread file: {missing}")
         remove(db_path)
