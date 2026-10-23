@@ -447,6 +447,23 @@ def private declared_flag_span(args : array<string>; i : int; info : CommandInfo
     return 0
 }
 
+def public collect_flag_args(args : array<string>;
+                             info : CommandInfo) : array<string> {
+    //! Consumed values cannot activate another field's flag.
+    var result : array<string>
+    var i = 0
+    while (i < length(args)) {
+        let span = declared_flag_span(args, i, info)
+        if (span == 2) {
+            result |> push("{args[i]}={args[i + 1]}")
+        } elif (span == 1) {
+            result |> push(args[i])
+        }
+        i += span == 0 ? 1 : span
+    }
+    return <- result
+}
+
 //! The first `--help` / `-h` among `args` that no declared flag claims - not a declared flag, not a flag's value, and before a bare `--`; "" when there is none.
 def public unclaimed_help_flag(args : array<string>; info : CommandInfo) : string {
     var i = 0
@@ -965,7 +982,9 @@ class ArgsMacro : AstStructureAnnotation {
     def make_simple_init_expr(var st : StructurePtr; i : int; arg : CommandArgumentInfo; field_index : int) : ExpressionPtr {
         return qmacro_block() {
             {
-                var r <- parse_argument(args, command_info.args[$v(i)], type<$t(st.fields[field_index]._type)>)
+                var r <- parse_argument(flag_args,
+                    command_info.args[$v(i)],
+                    type<$t(st.fields[field_index]._type)>)
                 if (r |> is_err) {
                     return err("{$v(arg.flag_name)}: {r |> unwrap_err}", type<$t(st)>)
                 }
@@ -984,7 +1003,8 @@ class ArgsMacro : AstStructureAnnotation {
     def make_optional_init_expr(var st : StructurePtr; i : int; arg : CommandArgumentInfo; field_index : int; inner_t : TypeDeclPtr) : ExpressionPtr {
         return qmacro_block() {
             {
-                var r <- parse_argument(args, command_info.args[$v(i)], type<$t(inner_t)>)
+                var r <- parse_argument(flag_args,
+                    command_info.args[$v(i)], type<$t(inner_t)>)
                 if (r |> is_err) {
                     return err("{$v(arg.flag_name)}: {r |> unwrap_err}", type<$t(st)>)
                 }
@@ -996,14 +1016,15 @@ class ArgsMacro : AstStructureAnnotation {
     def make_enum_init_expr(var st : StructurePtr; i : int; arg : CommandArgumentInfo; field_index : int) : ExpressionPtr {
         return qmacro_block() {
             {
-                let opt = find_flag_raw_value(args, command_info.args[$v(i)])
+                let opt = find_flag_raw_value(flag_args,
+                    command_info.args[$v(i)])
                 if (is_some(opt)) {
                     let raw_value = unwrap(opt)
                     if (find_index(command_info.args[$v(i)].enum_values, raw_value) == -1) {
                         return err("{$v(arg.flag_name)}: invalid enum value '{raw_value}'", type<$t(st)>)
                     }
                     dst.$f(arg.field_name) = to_enum(type<$t(st.fields[field_index]._type)>, raw_value)
-                } elif (flag_present(args, command_info.args[$v(i)])) {
+                } elif (flag_present(flag_args, command_info.args[$v(i)])) {
                     return err("{$v(arg.flag_name)}: missing value", type<$t(st)>)
                 }
             }
@@ -1051,11 +1072,13 @@ class ArgsMacro : AstStructureAnnotation {
     def make_count_init_expr(var st : StructurePtr; arg : CommandArgumentInfo; i : int) : ExpressionPtr {
         return qmacro_block() {
             {
-                let count_viol = count_flag_value_violation(args, command_info.args[$v(i)])
+                let count_viol = count_flag_value_violation(flag_args,
+                    command_info.args[$v(i)])
                 if (!empty(count_viol)) {
                     return err(count_viol, type<$t(st)>)
                 }
-                dst.$f(arg.field_name) = count_flag(args, command_info.args[$v(i)])
+                dst.$f(arg.field_name) = count_flag(flag_args,
+                    command_info.args[$v(i)])
             }
         }
     }
@@ -1125,13 +1148,15 @@ class ArgsMacro : AstStructureAnnotation {
             var fn = qmacro_function("parse_args") $(typ : $t(st); args : array<string>) : Result<$t(st), string> {
                 var dst = default<$t(st)>
                 let command_info <- get_command_info(type<$t(st)>)
+                let flag_args <- collect_flag_args(args, command_info)
                 let positionals <- collect_positional_args(args, command_info)
                 $b(init_exprs)
-                let mutex_err = find_mutex_violation(args, command_info)
+                let mutex_err = find_mutex_violation(flag_args, command_info)
                 if (!empty(mutex_err)) {
                     return err(mutex_err, type<$t(st)>)
                 }
-                let missing = missing_required_flag(args, command_info, false)
+                let missing = missing_required_flag(flag_args,
+                    command_info, false)
                 if (!empty(missing)) {
                     return err(missing, type<$t(st)>)
                 }
@@ -1145,9 +1170,11 @@ class ArgsMacro : AstStructureAnnotation {
             var fn = qmacro_function("parse_args") $(typ : $t(st); args : array<string>) : Result<$t(st), string> {
                 var dst = default<$t(st)>
                 let command_info <- get_command_info(type<$t(st)>)
+                let flag_args <- collect_flag_args(args, command_info)
                 let positionals <- collect_positional_args(args, command_info)
                 $b(init_exprs)
-                let missing = missing_required_flag(args, command_info, false)
+                let missing = missing_required_flag(flag_args,
+                    command_info, false)
                 if (!empty(missing)) {
                     return err(missing, type<$t(st)>)
                 }
@@ -1161,12 +1188,14 @@ class ArgsMacro : AstStructureAnnotation {
             var fn = qmacro_function("parse_args") $(typ : $t(st); args : array<string>) : Result<$t(st), string> {
                 var dst = default<$t(st)>
                 let command_info <- get_command_info(type<$t(st)>)
+                let flag_args <- collect_flag_args(args, command_info)
                 $b(init_exprs)
-                let mutex_err = find_mutex_violation(args, command_info)
+                let mutex_err = find_mutex_violation(flag_args, command_info)
                 if (!empty(mutex_err)) {
                     return err(mutex_err, type<$t(st)>)
                 }
-                let missing = missing_required_flag(args, command_info, true)
+                let missing = missing_required_flag(flag_args,
+                    command_info, true)
                 if (!empty(missing)) {
                     return err(missing, type<$t(st)>)
                 }
@@ -1179,8 +1208,9 @@ class ArgsMacro : AstStructureAnnotation {
         var fn = qmacro_function("parse_args") $(typ : $t(st); args : array<string>) : Result<$t(st), string> {
             var dst = default<$t(st)>
             let command_info <- get_command_info(type<$t(st)>)
+            let flag_args <- collect_flag_args(args, command_info)
             $b(init_exprs)
-            let missing = missing_required_flag(args, command_info, true)
+            let missing = missing_required_flag(flag_args, command_info, true)
             if (!empty(missing)) {
                 return err(missing, type<$t(st)>)
             }

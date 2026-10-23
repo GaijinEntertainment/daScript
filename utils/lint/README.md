@@ -15,6 +15,11 @@ Exit 2 on any warning - CI's whole-tree sweep (`check_lint_tree`, in the extende
 `lint <files>` is the same run through the SDK's `bin/lint.exe`. The directory it runs in is the
 project root, so the modules a project installs resolve.
 
+`--project <file.das_project>` uses that module map for every compile,
+including workers and fix recovery. Mapped runs bypass the lint cache and
+keep each compile's modules isolated: a resolver can choose another file
+between compiles.
+
 Clean results are cached in `.cache/daslang/lint_cache/` (`--cache-dir` moves it, `--no-cache` skips
 it). A file has one entry per flag and rule-filter set, named by their hash and rewritten in place,
 so the folder never outgrows the tree. The entry opens with the `DAS_LINT_CONFIG_PATH` in force,
@@ -30,7 +35,8 @@ build of the runner never compiles, cannot check that version, and runs without 
 those alone re-lints nothing until `--no-cache`. CI keeps the folder between runs, one per platform
 (`actions/cache` in `.github/workflows/extended_checks.yml`).
 
-The compiles of one run share their modules: each promotes the shared modules it requires into the
+Without `--project`, one run's compiles share their modules: each promotes
+the shared modules it requires into the
 process (`promote_shared_unoptimized`, `src/ast/ARCHITECTURE_SHARED.md#shared-promotion`), so every
 module compiles once and each later file reuses it, and a status line carries the count the compile
 took promoted (`PASS file (promoted 77)`). The files lint in require order, a module ahead of every

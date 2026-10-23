@@ -72,8 +72,11 @@ if (r |> is_err) {
 let cfg <- r |> move_unwrap
 ```
 
-`parse_args` returns `Result<Config, string>`; `parse_args(type<Config>, args)` takes an explicit
-`array<string>`. Unknown flag-shaped tokens are ignored, not errors - with one exception: a
+`parse_args` returns `Result<Config, string>`;
+`parse_args(type<Config>, args)` takes an explicit `array<string>`.
+A token consumed as a flag's value cannot also set another field.
+
+Unknown flag-shaped tokens are ignored, not errors - with one exception: a
 `--help` or `-h` in the parsed arguments, before any `--` among them, that is neither a declared
 flag nor a declared flag's value sets a bool field named `help` whose flag the struct renamed
 (`--show-help` below), so the tool sees the help request instead of losing it. `format_help`

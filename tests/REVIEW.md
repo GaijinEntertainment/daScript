@@ -27,8 +27,9 @@ module cache folder (`.cache/daslang/module_cache/`), wherever under this folder
 it, answers to `module_cache/REVIEW.md`.**
 
 **A diff that adds, moves, or changes a test that asserts on `require` path lookup, module
-compile order, or files under the AST module cache folder (`.cache/daslang/module_cache/`) leaves
-it under `module_cache/`.**
+compile order, or files under the AST module cache folder
+(`.cache/daslang/module_cache/`) keeps it in `tests/module_cache/` (repo root),
+or in a `module_cache/` directory within the tool it tests.**
 
 **A diff that adds or changes a test that writes a file or directory - itself, through any
 function it calls (daslang or C++-bound), or through a program or server it starts, including
