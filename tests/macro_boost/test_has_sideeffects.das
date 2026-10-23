@@ -112,6 +112,12 @@ def test_string_builder_safe(t : T?) {
     t |> equal(_test_has_sideeffects("hello {_x}"), false)
 }
 
+[test]
+def test_generic_length_resolved(t : T?) {
+    var _arr = [1, 2, 3]
+    t |> equal(_test_has_sideeffects(length(_arr)), false)
+}
+
 // ── UNSAFE cases — has_sideeffects must return true ──────────────────────
 
 [test]
@@ -204,17 +210,11 @@ def test_user_op_overload_unsafe(t : T?) {
 
 // ── Conservative-unsafe cases — daslang-generic helpers fall through ─────
 //
-// `length`, `key_exists`, etc. are defined as daslang generics in builtin.das
-// (`def length(a : auto | #) ...`). The compile-time func resolution doesn't
+// `key_exists` and similar are daslang generics in builtin.das
+// (`def key_exists(...)`). The compile-time func resolution doesn't
 // always reach a `flags.builtIn=true` C++ overload before the call_macro runs,
 // so the conservative classifier rejects them. A future Function-level
 // `[no_side_effects]` annotation could let user-defined helpers opt in.
-
-[test]
-def test_generic_length_unresolved(t : T?) {
-    var _arr = [1, 2, 3]
-    t |> equal(_test_has_sideeffects(length(_arr)), true)
-}
 
 [test]
 def test_key_exists_unresolved(t : T?) {

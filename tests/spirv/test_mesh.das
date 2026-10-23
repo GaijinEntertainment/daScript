@@ -382,3 +382,26 @@ def test_mesh_ubo_interface(t : T?) {
         delete words
     }
 }
+
+// a workgroup-dispatched stage using shared memory: one Workgroup
+// variable, an OpControlBarrier, the expected execution model, valid
+def private check_shared(t : T?; words : array<uint>; lbl : string; model : SpvExecutionModel) {
+    t |> success(op_has_operand_at(words, SpvOp.Variable, 2, uint(SpvStorageClass.Workgroup)),
+        "{lbl}: Workgroup OpVariable")
+    t |> success(has_op(words, SpvOp.ControlBarrier), "{lbl}: OpControlBarrier")
+    t |> success(op_has_operand_at(words, SpvOp.EntryPoint, 0, uint(model)),
+        "{lbl}: OpEntryPoint {model}")
+    validate(t, words, lbl)
+}
+
+[test]
+def test_mesh_task_shared(t : T?) {
+    t |> run("[mesh_shader] / [task_shader] @workgroup memory + barrier()") <| @(t : T?) {
+        var mwords <- mesh_shared_words()
+        check_shared(t, mwords, "mesh_shared", SpvExecutionModel.MeshEXT)
+        delete mwords
+        var twords <- task_shared_words()
+        check_shared(t, twords, "task_shared", SpvExecutionModel.TaskEXT)
+        delete twords
+    }
+}
