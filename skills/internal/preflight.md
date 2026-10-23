@@ -63,7 +63,7 @@ working-tree copy.
 | `nightly.yml` | `schedule` cron (daily 02:00 UTC), `workflow_dispatch`, and a `pull_request` whose body says `#nightly` or that carries `run-nightly` / `nightly-failure` | `build` matrix (`build_matrix.yml`, lane `build_nightly`: the per-PR Release cells running `run_build_nightly` - the full AOT sweep and the three backend sweeps - plus the sanitizer cells - each three jobs, `tests`, `slow`, `backend`, sharing one sccache slot - the fast-math cell and windows 64 Debug), `build_windows_relwithdebinfo_nightly`, `build_windows_release_llvm_nightly`, `build_windows_mingw`, `build_windows_clangcl`, and calls to `extended_checks.yml` (lane `extended_nightly`), `nightly_daspkg_index.yml`, `nightly_imgui.yml`, `nightly_playground.yml` and `nightly_vulkan.yml` - the only cron. Breaks surface within ~24 h, not at PR time |
 | `build_matrix.yml` | `workflow_call` from `build.yml` and `nightly.yml`, with the lane | the build matrix job - section below |
 | `nightly_imgui.yml` | `workflow_call` from `nightly.yml` + `workflow_dispatch` | dasImgui playwright suite on ubuntu + macos - section below |
-| `extended_checks.yml` (per-PR) | every PR | two darwin15-arm64 jobs, `core` and `modules` (`ci/ci_matrix.py extended`), ALL release modules ON - section below |
+| `extended_checks.yml` (per-PR) | every PR | two darwin15-arm64 jobs, `core` and `modules` (`ci/ci_matrix.py extended`), ALL release modules ON, plus `commit_messages` (ubuntu, no build) - section below |
 | `extended_checks.yml` (nightly) | `workflow_call` from `nightly.yml` | one job each on linux, darwin15 and windows running every step (role `all`), including the ones too slow for a PR: tutorial dry-runs, the run form of examples, coverage, the nano cross-compile, the AST verify tree sweep, doc-verify |
 | `wasm_build.yml` | every PR | emscripten build of `web/` on 3 OSes, the vecmath backend battery and `tests/language` under node, + `wasm_cross` |
 | `build_eastl.yml` | every PR | EASTL shadow-config build + no-fileio build (linux clang) |
@@ -244,6 +244,31 @@ test rather than a check that silently stopped running.
 | dasGlfw touch layer | `cmake --build build --config Release --target run_tests_glfw_touch` | the `modules` role; the EM_JS bodies run under node against fake GLFW/Browser fixtures, no browser and no window |
 | dasImgui build | nothing to install - dasImgui is in-tree (`modules/dasImgui`), built like any default-ON module | external ABI canaries (dasImguiImplot, dasImguiNodeEditor + the rest of the daspkg-index) run in `nightly_daspkg_index.yml`; `skills/internal/abi_break_sweep.md` |
 | Coverage - **nightly** (linux) | `cmake --build build --config Release --target run_coverage` | |
+
+## extended_checks.yml - commit_messages
+
+One ubuntu job beside the matrix, on a direct `pull_request` run only (not the nightly call), no build: `wagoid/commitlint-github-action` lints every
+non-merge commit of the PR against `ci/commitlint.json` - a subject of at most 72
+characters, a blank line before any body, body lines at most 80 wide, a body of at most 1500
+characters. The limits live in that file.
+
+| CI step | Local mirror | Notes |
+|---|---|---|
+| `commit_messages` (job) | the `git log` + `awk` check below (no node needed; `npx @commitlint/cli@19 -g ci/commitlint.json --from origin/master --to HEAD` is the exact one) | silent = clean; reword with `git commit --amend` or a rebase |
+
+```bash
+git log --no-merges --format='@commit %h%n%B' origin/master..HEAD | awk '
+function done_() { if (body > 1500) print sha ": body over 1500 characters" }
+/^@commit / { done_(); sha = $2; n = 0; body = 0; next }
+{ n++ }
+n == 1 && length > 72 { print sha ": subject over 72 characters" }
+n == 2 && length { print sha ": line 2 not blank" }
+n > 2 && length > 80 { print sha ": body line " n " over 80 characters" }
+n > 2 { body += length + 1 }
+END { done_() }'
+```
+
+The numbers repeat `ci/commitlint.json`'s; a limit changes in both.
 
 ## doc.yml - the gates
 
