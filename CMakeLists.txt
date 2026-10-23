@@ -2537,7 +2537,7 @@ if(TARGET daslang)
         COMMAND ${CMAKE_COMMAND} -E copy ${_identity} ${DAS_TEST_CACHE_DIR})
     add_dependencies(dastest_cache_guard ${_das_test_binaries})
 endif()
-foreach(_t check_lint_tree check_vulkan run_tests_vulkan run_tests_imgui_integration
+foreach(_t check_lint_tree check_lint_dasllama check_vulkan run_tests_vulkan run_tests_imgui_integration
         build_site_wasm check_playground_samples run_imgui2rst run_vulkan2rst)
     if(TARGET ${_t} AND _das_shared_modules)
         add_dependencies(${_t} ${_das_shared_modules})

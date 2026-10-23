@@ -1050,8 +1050,12 @@ def compile_file_rc(cfg : Config; path : string; var output : string&) : int {
     //! -dasroot names the tree whose modules the page's requires resolve from: the audited
     //! root, not the binary's own tree, so a worktree session checks its own sources
     let args <- [normalize(cfg.daslang), "-dasroot", normalize(cfg.root), "-compile-only", normalize(path)]
-    return run_and_capture(args, output, 120.0)
+    return run_and_capture(args, output, PROBE_TIMEOUT_SEC)
 }
+
+//! a companion probe compiles an engine's whole module graph cold:
+//! the dasLLAMA facade takes a minute on a fast box, more on a runner
+let PROBE_TIMEOUT_SEC = 300.0
 
 def spawn_failure(cfg : Config) : string =>
     "cannot spawn '{cfg.daslang}' - pass --daslang <path to the daslang binary>"
@@ -1179,7 +1183,10 @@ def run_probes(require_lines : table<string; bool>; file_mods : table<string>; c
         var out : string
         let prc = compile_file_rc(cfg, pfile, out)
         if (prc != 0) {
-            let why = prc == -1 ? " ({spawn_failure(cfg)})" : ""
+            var why = prc == -1 ? " ({spawn_failure(cfg)})" : ""
+            if (prc == popen_timed_out) {
+                why = " (timed out after {int(PROBE_TIMEOUT_SEC)} s: a slow box, no module missing)"
+            }
             failures |> push((origins[idx] ? "[companion] " : "[page] ") + trim(fread(pfile)) + why)
         }
     }

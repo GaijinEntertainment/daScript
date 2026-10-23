@@ -1,4 +1,5 @@
 options gen2
+options _nolint = "STYLE030"   // every guarded require here IS the test, used or not
 require dastest/testing_boost public
 
 // Optional require: `require ?guard target` loads *target* when *guard* is available. A
@@ -9,7 +10,7 @@ require dastest/testing_boost public
 // guard-present-but-target-missing case still errors with 20605 (verified by hand;
 // module-resolution failures fire before the `expect` line parses, so that case is not
 // expressible as a cant_ test).
-require ?math math                                  // nolint:STYLE030 — the guarded-load mechanics ARE the test: guard present (math is a core builtin) -> target loaded
+require ?math math                                  // guard present (a builtin) -> target loaded
 require ?no_such_guard_xyz no_such_target_also_xyz  // guard absent, target unresolvable -> skipped
 require ?no_such_guard_pkg optional_require_fixture // guard absent -> SKIPPED even though the target resolves (strict plain guards); the non-load IS the test
 // PATH guard (contains '/'): availability = the guard's OWN file resolves; the rail for
@@ -18,7 +19,9 @@ require ?daslib/fio optional_require_fixture_pathguard        // path guard reso
 require ?daslib/no_such_file_xyz optional_require_fixture_skipme  // path guard unresolvable -> SKIPPED even though the target file resolves
 // %/-rooted guards: grammar-legal require_module_name forms the pre-parse require scanner must
 // scan identically to ast_requireModule (it once stopped at '%', mangling guard AND target)
-require ?%/tests/language/optional_require_fixture.das optional_require_fixture_pctguard  // nolint:STYLE030 — %/ guard resolves -> target loaded; referenced only under static_if
+// %/ guard resolves -> loaded; referenced under static_if alone,
+// whose builtin_module_exists is true once a run promoted the fixture
+require ?%/tests/language/optional_require_fixture.das optional_require_fixture_pctguard
 require ?%/tests/language/no_such_file_xyz.das optional_require_fixture_pctskip  // %/ guard unresolvable -> SKIPPED, target file resolves
 require optional_require_fixture_private   // requires optional_require_fixture_hidden PRIVATELY: the module_exists visibility pin below
 

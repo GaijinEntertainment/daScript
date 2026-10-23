@@ -20,5 +20,11 @@ program requires a daslib module first is the filesystem's choice: a lint test t
 fixture with optimizations off runs before `tests/linq` on APFS and after it on ext4 and NTFS.
 A compile with optimizations off still reuses a module promoted earlier, and `requireModuleNow`
 (`ARCHITECTURE.md#require-after-walk`) promotes its target whatever the policy, since a late
-require asks for a process module by name. The lint runner, the MCP server and the LSP set
-`ignore_shared_modules` beside `no_optimizations`, so they neither promote nor reuse.
+require asks for a process module by name. The MCP server, the LSP and the lint runner outside its
+shared-modules mode set `ignore_shared_modules` beside `no_optimizations`, so they neither promote
+nor reuse. `promote_shared_unoptimized` is the override: a compile under `no_optimizations` that sets it
+promotes its shared dependencies as an optimizing compile would, for a process that compiles many
+programs under one policy set and never serializes them - the lint's shared-modules mode, where
+the unoptimized body serves every later file and the AOT-stub mismatch has nothing to reach. A
+program the process compiles AFTER such a promotion reuses that unoptimized body, so the override
+belongs to a process that runs nothing.
