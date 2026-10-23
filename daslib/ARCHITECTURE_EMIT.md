@@ -37,6 +37,13 @@ Companion to `ARCHITECTURE.md` in this folder; section numbers are unique across
   [&]() { return L; }, [&]() { return R; })`. The function lives in
   `include/daScript/simulate/aot.h` and moves with the emitter's `__lr_left`/`__lr_right`
   spellings.
+- **Raw pointer coalescing keeps selected storage**:
+  `CppAot::preVisitExprNullCoalescing` emits a template type without
+  `&` when an aggregate fallback has an implicit reference. The raw pointer
+  overloads of `das_null_coalescing::get` select reference or value
+  results from the fallback's C++ value category. A copy for an lvalue
+  loses writes into the selected storage. Only full `test_aot` checks
+  this emitter/helper pair.
 - **Stack-frame `new`/ascend**: per-block storage declared once, the USE site
   re-initializes per evaluation (memset for `new`, whole-value overwrite for ascend) -
   dropping the reinit reuses the previous iteration's value. At scope exit the escape pass
