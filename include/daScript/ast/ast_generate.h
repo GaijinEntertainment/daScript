@@ -135,6 +135,7 @@ namespace das {
     struct ExprInvoke;
     ExprInvoke * makeInvokeMethod ( const LineInfo & at, Expression * a, const string & b, bool no_promo = false );
     ExprInvoke * makeInvokeMethod ( const LineInfo & at, const LineInfo & atField, Expression * a, const string & b, bool no_promo = false );
+    ExprInvoke * makeInvokeMethod ( const LineInfo & invokeAt, const LineInfo & at, const LineInfo & atField, Expression * a, const string & b, bool no_promo = false );
 
     /*
         this is short for invoke(type<callStruct>.b, a, args)

@@ -484,6 +484,13 @@ def private ssbo_element_layout(var m : SpirvModule; sname : string; et : TypeDe
     return (ok = false, elem_type = 0u, stride = 0)
 }
 
+// Stages dispatched as workgroups (LocalSize): only these may
+// use @workgroup memory and barrier().
+let private WORKGROUP_STAGES = "a compute, mesh or task shader"
+
+def private is_workgroup_stage(stage : ShaderStage) : bool =>
+    stage == ShaderStage.Compute || stage == ShaderStage.Mesh || stage == ShaderStage.Task
+
 // The single SpirvStageFlags bit for one shader stage. A shader module is one stage, so every
 // binding/range it reflects carries this single bit; the host ORs across stages when merging.
 def private stage_flag(stage : ShaderStage) : SpirvStageFlags {
@@ -1702,12 +1709,14 @@ def private classify_global(var m : SpirvModule; var ctx : EmitCtx; v : Variable
     }
     // workgroup shared memory: @workgroup global -> Workgroup storage (GLSL `shared`). Not a
     // descriptor and not in the entry interface (Workgroup is not Input/Output, SPIR-V <= 1.3), so no
-    // set/binding and nothing reflected. Compute-only. Read/written via OpLoad/OpStore; a fixed-array
+    // set/binding and nothing reflected. Read/written via
+    // OpLoad/OpStore; a fixed-array
     // shared global is indexed by visitExprAt's Workgroup branch. (`shared` is a reserved keyword, so
     // the annotation is spelled @workgroup, matching the SPIR-V storage class.)
     if (v.annotation |> find_arg("workgroup") is tBool) {
-        if (stage != ShaderStage.Compute) {
-            errors |> push("shared variable '{vname}': @workgroup memory is only valid in a compute shader")
+        if (!is_workgroup_stage(stage)) {
+            let wg_msg = "@workgroup is only valid in {WORKGROUP_STAGES}"
+            errors |> push("shared variable '{vname}': {wg_msg}")
             return
         }
         if (!is_emittable_value_type(v._type)) {
@@ -5849,10 +5858,11 @@ class SpirvEmit : AstVisitor {
         // variant (OpMemoryBarrier, same scope/semantics). memoryBarrierBuffer(): the SSBO variant
         // (OpMemoryBarrier at Device scope, UniformMemory|AcquireRelease — glslang's lowering) for
         // cross-invocation buffer handoffs, where barrier()'s WorkgroupMemory semantics do not
-        // reach; pair as `memoryBarrierBuffer(); barrier();`. All compute-only; not terminators.
+        // reach; pair as `memoryBarrierBuffer(); barrier();`.
+        // Not terminators.
         if (name == "barrier" || name == "memoryBarrierShared" || name == "memoryBarrierBuffer") {
-            if (ctx.stage != ShaderStage.Compute) {
-                errs |> push("{name}() is only valid in a compute shader")
+            if (!is_workgroup_stage(ctx.stage)) {
+                errs |> push("{name}() is only valid in {WORKGROUP_STAGES}")
                 return expr
             }
             if (!empty(expr.arguments)) {

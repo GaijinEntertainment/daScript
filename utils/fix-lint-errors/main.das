@@ -1390,7 +1390,8 @@ def collect_edits(file : string; var records : array<EditRecord>) : bool {
             compile_file(file, access, unsafe(addr(mg)), cop) $(ok; program; _issues) {
                 ok_out = ok
                 return if (!ok)
-                var astVisitor = new FixerVisitor(has_math_require = math_required, target_filename := file)
+                var astVisitor = new FixerVisitor(has_math_require = math_required,
+                    target_filename = file)
                 make_visitor(*astVisitor) $(adapter) {
                     visit_with_generics(program, adapter)
                 }

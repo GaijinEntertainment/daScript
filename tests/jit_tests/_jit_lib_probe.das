@@ -17,9 +17,7 @@ def widen(p : Pair) : Pair {
 }
 
 [export_c(name = "tally")]
-def count_seen() : int {
-    return g_seen
-}
+def count_seen() : int => g_seen
 
 [export_c]
 def mapped(n : int) : int {
@@ -27,6 +25,13 @@ def mapped(n : int) : int {
     return invoke(fx, n)
 }
 
-def helper_public(x : int) : int {
-    return x + 1
+[export_c]
+def count_keys(n : int) : int {
+    var tab : table<int; int>
+    for (i in range(n)) {
+        tab[i % 7] += i
+    }
+    return length(tab)
 }
+
+def helper_public(x : int) : int => x + 1

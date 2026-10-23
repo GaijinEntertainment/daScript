@@ -216,6 +216,11 @@ enum public JIT_SEQUENCE {
 }
 
 
+def public set_private_linkage(value : LLVMOpaqueValue?) {
+    LLVMSetLinkage(value, LLVMLinkage.LLVMPrivateLinkage)
+    LLVMSetUnnamedAddress(value, LLVMUnnamedAddr.LLVMGlobalUnnamedAddr);
+}
+
 // nolint:STYLE014
 // Address-carrying globals whose NAME is shared across split partitions (interp-call / interop
 // fn-ptr globs keyed by mangled name, the jit table-method globs keyed by key type): under
@@ -258,6 +263,9 @@ def private get_or_create_table_fn(llvm_module : LLVMOpaqueModule?; types : Prim
         if (g_emit_aot_object_globals) {
             // Per-object internal + null; the globinit ctor re-resolves it at load.
             LLVMSetLinkage(tab_fun, LLVMLinkage.LLVMInternalLinkage)
+            LLVMSetInitializer(tab_fun, LLVMConstPointerNull(LLVMPointerType(at_ptr_type, 0u)))
+        } elif (g_jit_exe_mode && !g_jit_split_exe) {
+            set_private_linkage(tab_fun)
             LLVMSetInitializer(tab_fun, LLVMConstPointerNull(LLVMPointerType(at_ptr_type, 0u)))
         } else {
             set_shared_export_linkage(tab_fun, fn_name.glob())
@@ -602,6 +610,10 @@ var g_jit_clopts_parsed = false
 // internal + null and re-resolved by the emit_aot_object_globinit load ctor,
 // instead of a baked codegen-process address. run_jit sets/clears it around codegen.
 var public g_emit_aot_object_globals = false
+
+//! a shipped artifact (-exe or -lib) is being emitted:
+//! $::is_standalone_exe folds to true, no accessor slot is exported
+var public g_jit_exe_mode = false
 
 // --jit-split-modules is active: per-das-module partitions, one .o each, one linked DLL. Flips
 // function impls to external-hidden (cross-partition calls) and shared-name globs to linkonce_odr.

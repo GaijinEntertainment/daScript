@@ -1260,6 +1260,9 @@ namespace das {
                 error("can't take address of a template function " + describeFunction(expr->func), "", "",
                       expr->at, CompilationError::cant_address_template_function);
                 expr->type = nullptr;
+            } else if (expr->type->isUnresolved()) {
+                reportPendingType(expr->target, expr->at);
+                expr->type = nullptr;
             } else {
                 verifyType(expr->type);
             }
@@ -1825,6 +1828,9 @@ namespace das {
                                     break;
                                 }
                             }
+                        }
+                        if (!allOtherInferred && program->library.hasFunctionOrGenericNamed(methodName)) {
+                            return Visitor::visit(expr);
                         }
                         if (allOtherInferred) {
                             // we build _::{field.name} ( field, arg1, arg2, ... )
@@ -4381,6 +4387,9 @@ namespace das {
                 error("undefined field type '" + describeType(expr->fieldRef->type) + "'",
                       reportInferAliasErrors(expr->fieldRef->type), "", expr->at, CompilationError::lookup_field_type);
                 return Visitor::visit(expr);
+            } else if (expr->fieldRef->type->isAuto()) {
+                reportPendingType(expr->name, expr->at);
+                return Visitor::visit(expr);
             }
             TypeDecl::clone(expr->type, expr->fieldRef->type);
             expr->type->ref = true;
@@ -4482,6 +4491,9 @@ namespace das {
                 error("undefined safe field type '" + describeType(expr->fieldRef->type) + "'",
                       reportInferAliasErrors(expr->fieldRef->type), "", expr->at, CompilationError::lookup_safe_field_type);
                 return Visitor::visit(expr);
+            } else if (expr->fieldRef->type->isAuto()) {
+                reportPendingType(expr->name, expr->at);
+                return Visitor::visit(expr);
             }
             TypeDecl::clone(expr->type, expr->fieldRef->type);
         } else if (valT->firstType->isHandle()) {
@@ -4538,6 +4550,17 @@ namespace das {
         expr->argument = false;
         expr->argumentIndex = -1;
     }
+    void InferTypes::reportPendingType(const string &name, const LineInfo &at) {
+        error("type of '" + name + "' is not inferred yet", "", "", at, CompilationError::not_resolved_yet_type);
+    }
+    bool InferTypes::cloneResolvedType(ExprVar *expr, const TypeDeclPtr &type) {
+        if (type->isUnresolved()) {
+            reportPendingType(expr->name, expr->at);
+            return false;
+        }
+        TypeDecl::clone(expr->type, type);
+        return true;
+    }
     ExpressionPtr InferTypes::visit(ExprVar *expr) {
         if (expr->variantCase) {
             expr->type = new TypeDecl(Type::tVoid, expr->at);
@@ -4559,8 +4582,9 @@ namespace das {
             if (var->name == expr->name || var->aka == expr->name) {
                 expr->variable = var;
                 expr->local = true;
-                TypeDecl::clone(expr->type, var->type);
-                expr->type->ref = true;
+                if (cloneResolvedType(expr, var->type)) {
+                    expr->type->ref = true;
+                }
                 var->used_in_finally = inFinally.empty() ? false : inFinally.back();
                 if (consumeDepth) {
                     var->consumed = true;
@@ -4580,10 +4604,11 @@ namespace das {
                     if (blocks.rbegin() == it) {
                         expr->thisBlock = true;
                     }
-                    TypeDecl::clone(expr->type, arg->type);
-                    if (!expr->type->isRefType())
-                        expr->type->ref = true;
-                    expr->type->sanitize();
+                    if (cloneResolvedType(expr, arg->type)) {
+                        if (!expr->type->isRefType())
+                            expr->type->ref = true;
+                        expr->type->sanitize();
+                    }
                     expr->pBlock = static_cast<ExprBlock *>(block);
                     return Visitor::visit(expr);
                 }
@@ -4598,10 +4623,11 @@ namespace das {
                     expr->variable = arg;
                     expr->argumentIndex = argumentIndex;
                     expr->argument = true;
-                    TypeDecl::clone(expr->type, arg->type);
-                    if (!expr->type->isRefType())
-                        expr->type->ref = true;
-                    expr->type->sanitize();
+                    if (cloneResolvedType(expr, arg->type)) {
+                        if (!expr->type->isRefType())
+                            expr->type->ref = true;
+                        expr->type->sanitize();
+                    }
                     return Visitor::visit(expr);
                 }
                 argumentIndex++;
@@ -4637,11 +4663,9 @@ namespace das {
                 return Visitor::visit(expr);
             }
             expr->variable = var;
-            if (var->type->isExprType()) {
-                return Visitor::visit(expr);
+            if (cloneResolvedType(expr, var->type)) {
+                expr->type->ref = true;
             }
-            TypeDecl::clone(expr->type, var->type);
-            expr->type->ref = true;
             return Visitor::visit(expr);
         } else if (vars.size() == 0) {
             if (expr->variantCaseNamed) {
@@ -6682,7 +6706,7 @@ namespace das {
             }
             bool anyMacrosDidWork = false;
             auto modMacro = [&](Module *mod) -> bool {
-                if (program->thisModule->isVisibleDirectly(mod) && mod != program->thisModule.get()) {
+                if ((program->thisModule->isVisibleDirectly(mod) || mod->fromExtraDependency) && mod != program->thisModule.get()) {
                     for (const auto &pm : mod->inferMacros) {
                         if ( pm->apply(program, program->thisModule.get()) ) {
                             anyMacrosDidWork = true;

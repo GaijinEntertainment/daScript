@@ -236,16 +236,35 @@ namespace das {
                 }
             }
         }
+        void useFunction ( Function * fn ) {
+            if (func) {
+                func->useFunctions.insert(fn);
+            } else if (gVar) {
+                gVar->useFunctions.insert(fn);
+            }
+        }
         // function address
         virtual void preVisit(ExprAddr * addr) override {
             Visitor::preVisit(addr);
             if ( !addr->func ) return;
             if (builtInDependencies || !addr->func->builtIn) {
-                if (func) {
-                    func->useFunctions.insert(addr->func);
-                } else if (gVar) {
-                    gVar->useFunctions.insert(addr->func);
+                useFunction(addr->func);
+            }
+        }
+        void markInitializers ( TypeDecl * type, das_set<Structure *> & seen ) {
+            if ( !type ) return;
+            if ( type->baseType==Type::tStructure && type->structType && seen.insert(type->structType).second ) {
+                if ( auto init = type->structType->findInitializer() ) {
+                    useFunction(init);
                 }
+                for ( auto & fd : type->structType->fields ) {
+                    markInitializers(fd.type, seen);
+                }
+            }
+            markInitializers(type->firstType, seen);
+            markInitializers(type->secondType, seen);
+            for ( auto & argT : type->argTypes ) {
+                markInitializers(argT, seen);
             }
         }
         // function call
@@ -256,11 +275,11 @@ namespace das {
                 func->callCaptureString = true;
             }
             if (builtInDependencies || !call->func->builtIn) {
-                if (func) {
-                    func->useFunctions.insert(call->func);
-                } else if (gVar) {
-                    gVar->useFunctions.insert(call->func);
-                }
+                useFunction(call->func);
+            }
+            if ( call->func->builtIn && call->func->name=="sscan_json" && call->arguments.size()==2 ) {
+                das_set<Structure *> seen;
+                markInitializers(call->arguments[1]->type, seen);
             }
         }
         // new
@@ -268,22 +287,14 @@ namespace das {
             Visitor::preVisit(call);
             if ( call->func && call->initializer ) {
                 if (builtInDependencies || !call->func->builtIn) {
-                    if (func) {
-                        func->useFunctions.insert(call->func);
-                    } else if (gVar) {
-                        gVar->useFunctions.insert(call->func);
-                    }
+                    useFunction(call->func);
                 }
             }
         }
         virtual void preVisit(ExprMakeStruct * call) override {
             Visitor::preVisit(call);
             if ( call->constructor ) {
-                if (func) {
-                    func->useFunctions.insert(call->constructor);
-                } else if (gVar) {
-                    gVar->useFunctions.insert(call->constructor);
-                }
+                useFunction(call->constructor);
             }
         }
         // Op1
@@ -291,11 +302,7 @@ namespace das {
             Visitor::preVisit(expr);
             if ( !expr->func ) return;
             if (builtInDependencies || !expr->func->builtIn) {
-                if (func) {
-                    func->useFunctions.insert(expr->func);
-                } else if (gVar) {
-                    gVar->useFunctions.insert(expr->func);
-                }
+                useFunction(expr->func);
             }
         }
         // Op2
@@ -303,11 +310,7 @@ namespace das {
             Visitor::preVisit(expr);
             if ( !expr->func ) return;
             if (builtInDependencies || !expr->func->builtIn) {
-                if (func) {
-                    func->useFunctions.insert(expr->func);
-                } else if (gVar) {
-                    gVar->useFunctions.insert(expr->func);
-                }
+                useFunction(expr->func);
             }
         }
         // Op3
@@ -315,11 +318,7 @@ namespace das {
             Visitor::preVisit(expr);
             if ( !expr->func ) return;
             if (builtInDependencies || !expr->func->builtIn) {
-                if (func) {
-                    func->useFunctions.insert(expr->func);
-                } else if (gVar) {
-                    gVar->useFunctions.insert(expr->func);
-                }
+                useFunction(expr->func);
             }
         }
     };

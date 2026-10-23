@@ -365,7 +365,7 @@ namespace das {
         AstSerializer & serializeModule ( Module & module, bool already_exists );
 
         static constexpr uint32_t getVersion () {
-            return 229;   // 229: the policy stream carries keep_symbol_tables
+            return 232;   // 232: an expression whose source type is unresolved stays untyped until the type resolves
         }
 
         void serializeProgram ( ProgramPtr program, ModuleGroup & libGroup ) noexcept;

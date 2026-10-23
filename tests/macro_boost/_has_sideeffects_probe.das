@@ -23,6 +23,10 @@ class private TestHasSideeffects : AstCallMacro {
             macro_error(prog, call.at, "expecting _test_has_sideeffects(expression)")
             return null
         }
+        if (call.arguments[0]._type == null) {
+            macro_error(prog, call.at, "_test_has_sideeffects: the argument is not inferred yet")
+            return null
+        }
         let b = has_sideeffects(call.arguments[0])
         var res : Expression? = new ExprConstBool(at = call.at, value = b)
         res.force_at(call.at)

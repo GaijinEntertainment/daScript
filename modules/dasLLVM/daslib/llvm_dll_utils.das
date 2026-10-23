@@ -269,7 +269,7 @@ class public DLLHandle {
             let sym_name = get_function_address(DllName("fileinfo_at_{fi_ptr}_name"))
             let name = unsafe(reinterpret<string>(sym_name))
 
-            let src_fi = unsafe(reinterpret<FileInfo?>(sym))
+            var src_fi = unsafe(reinterpret<FileInfo?>(sym))
             recreate_fileinfo_name(src_fi, name)
             return src_fi
         } else {

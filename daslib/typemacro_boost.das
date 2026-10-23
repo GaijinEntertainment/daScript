@@ -647,7 +647,9 @@ def private tsi_bind_constants(var st : StructurePtr; var rules : Template; var 
         if (f.init is ExprConstBool) {
             consts[string(f.name)] = (f.init as ExprConstBool).value
         }
-        rules |> replaceVariable(string(f.name)) <| clone_expression(f.init)
+        var value = clone_expression(f.init)
+        force_generated(value, true)
+        rules |> replaceVariable(string(f.name)) <| value
         constIdx |> push(i)
     }
     for (i in range(length(constIdx))) {

@@ -15,7 +15,6 @@ require llvm/daslib/llvm_aot
 require llvm/daslib/llvm_jit
 require llvm/daslib/llvm_jit_common
 require llvm/daslib/llvm_jit_di
-require llvm/daslib/llvm_jit_intrin
 require llvm/daslib/llvm_env
 
 require daslib/ast_boost
@@ -38,7 +37,7 @@ var LINK_WHOLE_LIB = false // when true, standalone exe links against the whole 
 
 // Read by tests-cpp/small/test_jit_emitter_pin.cpp: FNV-1a64 of the emitter sources
 // (normalized to LF; file list in the test)
-let LLVM_JIT_EMITTER_HASH : uint64 = 0x6e4a6f6cf293341bul
+let LLVM_JIT_EMITTER_HASH : uint64 = 0x13377c04d41fc7acul
 
 [arch(at = "../ARCHITECTURE_FAST_MATH.md#never-fast-math")]
 def private apply_fast_math_to_module(m : LLVMOpaqueModule?) {
@@ -639,10 +638,8 @@ def public run_jit(prog : Program?; var ctx : Context?; cli_opts : JitCliOptions
     assume log_jit_time = plan.log_jit_time
     assume dll_hash_basename = plan.dll_hash_basename
     assume disabled = plan.disabled
-    // Drives the $::is_standalone_exe JIT intrinsic in llvm_jit_intrin so daslang
-    // code can constant-fold to true when this codegen run produces a standalone exe.
-    llvm_jit_intrin::g_jit_exe_mode = gen_exe
-    defer() { llvm_jit_intrin::g_jit_exe_mode = false; }
+    g_jit_exe_mode = gen_exe
+    defer() { g_jit_exe_mode = false; }
     // Emit builtin-accessor globals internal + null in object mode (re-resolved by
     // the emit_aot_object_globinit ctor); reset after this run.
     g_emit_aot_object_globals = emit_aot_object

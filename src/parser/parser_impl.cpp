@@ -262,7 +262,7 @@ namespace das {
         }
     }
 
-    Expression * ast_arrayComprehension ( yyscan_t scanner, const LineInfo & loc, vector<VariableNameAndPosition> * iters,
+    Expression * ast_arrayComprehension ( yyscan_t scanner, const LineInfo & at, const LineInfo & loc, vector<VariableNameAndPosition> * iters,
         Expression * srcs, Expression * subexpr, Expression * where, const LineInfo & forend, bool genSyntax, bool tableSyntax ) {
         auto pFor = new ExprFor(loc);
         pFor->visibility = forend;
@@ -279,7 +279,7 @@ namespace das {
         }
         delete iters;
         pFor->sources = sequenceToList(srcs);
-        auto pAC = new ExprArrayComprehension(loc);
+        auto pAC = new ExprArrayComprehension(at);
         pAC->generatorSyntax = genSyntax;
         pAC->tableSyntax = tableSyntax;
         pAC->exprFor = pFor;
@@ -973,8 +973,9 @@ namespace das {
 
 
     Expression * ast_makeBlock ( yyscan_t scanner, int bal, AnnotationList * annL, vector<CaptureEntry> * clist,
-        vector<VariableDeclaration*> * list, TypeDecl * result, Expression * block, const LineInfo & blockAt, const LineInfo & annLAt, const LineInfo & clistAt ) {
-        auto mkb = new ExprMakeBlock(blockAt,block, bal==1, bal==2);
+        vector<VariableDeclaration*> * list, TypeDecl * result, Expression * block, const LineInfo & at, const LineInfo & blockAt, const LineInfo & annLAt, const LineInfo & clistAt ) {
+        auto mkb = new ExprMakeBlock(at,block, bal==1, bal==2);
+        block->at = blockAt;
         mkb->captureAt = clistAt;
         ExprBlock * closure = (ExprBlock *) block;
         closure->returnType = result;
@@ -1060,7 +1061,6 @@ namespace das {
 
     Expression * ast_Let ( yyscan_t scanner, bool kwd_let, bool inScope, VariableDeclaration * decl, const LineInfo & kwd_letAt, const LineInfo & declAt ) {
         auto pLet = new ExprLet();
-        pLet->at = kwd_letAt;
         pLet->atInit = declAt;
         if ( decl->atEnd.line ) {
             // declAt includes the terminating SEMICOLON, which for newline-terminated
@@ -1069,6 +1069,7 @@ namespace das {
             pLet->atInit.last_line = decl->atEnd.last_line;
             pLet->atInit.last_column = decl->atEnd.last_column;
         }
+        pLet->at = LineInfo(kwd_letAt, pLet->atInit);
         pLet->inScope = inScope;
         pLet->isTupleExpansion = decl->isTupleExpansion;
         if ( decl->pTypeDecl ) {
@@ -1118,7 +1119,7 @@ namespace das {
             }
         }
         if ( auto pTagExpr = decl->pNameList->front().tag ) {
-            auto pTag = new ExprTag(declAt, pTagExpr, pLet, "i");
+            auto pTag = new ExprTag(pLet->at, pTagExpr, pLet, "i");
             delete decl;
             return pTag;
         } else {
@@ -1129,13 +1130,13 @@ namespace das {
 
     Expression * ast_LetList ( yyscan_t scanner, bool kwd_let, bool inScope, vector<VariableDeclaration *> & decl, const LineInfo & kwd_letAt, const LineInfo & declAt ) {
         auto pLet = new ExprLet();
-        pLet->at = kwd_letAt;
         pLet->atInit = declAt;
         if ( !decl.empty() && decl.back()->atEnd.line ) {
             // same phantom-SEMICOLON clamp as ast_Let, using the last declaration's end
             pLet->atInit.last_line = decl.back()->atEnd.last_line;
             pLet->atInit.last_column = decl.back()->atEnd.last_column;
         }
+        pLet->at = LineInfo(kwd_letAt, pLet->atInit);
         pLet->inScope = inScope;
         for ( auto pDecl : decl ) {
             if ( pDecl->pTypeDecl ) {
@@ -1353,6 +1354,7 @@ namespace das {
             if ( markPiped && arg->rtti_isMakeBlock() ) {
                 pCall->pipedCallArgument = true;
             }
+            fncall->at = LineInfo(fncall->at, arg->at);
             return fncall;
         } else if ( pipeCall->rtti_isVar() ) {
             // a += b <| c
@@ -1364,8 +1366,10 @@ namespace das {
             }
             if ( !fncall->swap_tail(pVar,pCall) ) {
                 // gc_node — don't delete Expression
+                pCall->at = LineInfo(pCall->at, arg->at);
                 return pCall;
             } else {
+                fncall->at = LineInfo(fncall->at, arg->at);
                 return fncall;
             }
         } else if ( pipeCall->rtti_isMakeStruct() ) {
@@ -1392,6 +1396,7 @@ namespace das {
                     delete arg;
                 } else {
                     pMS->block = arg;
+                    fncall->at = LineInfo(fncall->at, arg->at);
                 }
             }
             return fncall;
@@ -1413,24 +1418,29 @@ namespace das {
         } else if ( fncall->rtti_isCallLikeExpr() ) {
             auto pCall = (ExprLooksLikeCall *) fncall;
             pCall->arguments.insert(pCall->arguments.begin(),arg);
+            pCall->at = LineInfo(arg->at, pCall->at);
             return fncall;
         } else if ( fncall->rtti_isVar() ) {
             auto pVar = (ExprVar *) fncall;
             auto pCall = yyextra->g_Program->makeCall(pVar->at,pVar->name);
             // GC-managed: no manual delete needed
             pCall->arguments.insert(pCall->arguments.begin(),arg);
+            pCall->at = LineInfo(arg->at, pCall->at);
             return pCall;
         } else if (fncall->rtti_isNamedCall()) {
             auto pCall = (ExprNamedCall*)fncall;
             pCall->nonNamedArguments.insert(pCall->nonNamedArguments.begin(), arg);
+            pCall->at = LineInfo(arg->at, pCall->at);
             return fncall;
         } else if (fncall->rtti_isField() ) {
             auto pField = (ExprField*)fncall;
             pField->value = ast_rpipe(scanner, arg, pField->value, locAt);
+            pField->at = LineInfo(pField->value->at, pField->at);
             return fncall;
         } else if (fncall->rtti_isSafeField() ) {
             auto pField = (ExprSafeField*)fncall;
             pField->value = ast_rpipe(scanner, arg, pField->value, locAt);
+            pField->at = LineInfo(pField->value->at, pField->at);
             return fncall;
         } else {
             das_yyerror(scanner,"can only rpipe into a function call",locAt,CompilationError::cant_expression);

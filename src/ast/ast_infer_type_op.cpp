@@ -168,7 +168,7 @@ namespace das {
                     pop = "i_das_ptr_dec";
                 }
                 if (!pop.empty()) {
-                    if ( expr->subexpr->type->firstType->isAuto() ) {
+                    if ( expr->subexpr->type->firstType->isUnresolvedAnywhere() ) {
                         error("type is not fully inferred, fixed array dimension is unknown", "", "",
                           expr->at, CompilationError::not_resolved_yet_array_type);
                         return Visitor::visit(expr);
@@ -419,6 +419,11 @@ namespace das {
                     pop = "i_das_ptr_set_sub";
                 }
                 if (!pop.empty()) {
+                    if ( expr->left->type->firstType->isUnresolvedAnywhere() ) {
+                        error("type is not fully inferred, fixed array dimension is unknown", "", "",
+                          expr->at, CompilationError::not_resolved_yet_array_type);
+                        return Visitor::visit(expr);
+                    }
                     reportAstChanged();
                     auto popc = new ExprCall(expr->at, pop);
                     popc->alwaysSafe = expr->alwaysSafe;
@@ -447,6 +452,9 @@ namespace das {
                               describeType(expr->left->type),
                           "", "",
                           expr->at, CompilationError::cant_type);
+                } else if (expr->left->type->firstType->isUnresolvedAnywhere()) {
+                    error("type is not fully inferred, fixed array dimension is unknown", "", "",
+                          expr->at, CompilationError::not_resolved_yet_array_type);
                 } else {
                     reportAstChanged();
                     auto popc = new ExprCall(expr->at, "i_das_ptr_diff");
@@ -712,6 +720,7 @@ namespace das {
         } else if (
             forceInscopePod && !expr->podDelete && func && (func->module->allowPodInscope && (!func->fromGeneric || func->fromGeneric->module->allowPodInscope)) // both modules allow pod inscope
             && !func->hasUnsafe && isPodDelete(expr->left->type)                                                                                           // its a pod type
+            && !expr->left->type->isUnresolvedAnywhere()
         ) {
             reportAstChanged();
             if (logs && logInscopePod) {
@@ -1029,6 +1038,8 @@ namespace das {
                 cloneFn->arguments.push_back(expr->right->clone());
                 auto eCopy = new ExprCopy(expr->at, expr->left->clone(), cloneFn);
                 eCopy->no_promotion = expr->no_promotion;
+                eCopy->fromClone = true;
+                eCopy->generated = expr->generated;
                 return eCopy;
             } else if (cloneType->isPointer() && cloneType->smartPtr) {
                 if ( !cloneType->firstType || !cloneType->firstType->annotation ) {
@@ -1062,6 +1073,8 @@ namespace das {
                 auto eCopy = new ExprCopy(expr->at, expr->left->clone(), expr->right->clone());
                 eCopy->allowCopyTemp = true;
                 eCopy->no_promotion = expr->no_promotion;
+                eCopy->fromClone = true;
+                eCopy->generated = expr->generated;
                 return eCopy;
             } else if (cloneType->isGoodArrayType() || cloneType->isGoodTableType()) {
                 reportAstChanged();

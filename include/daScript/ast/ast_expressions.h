@@ -491,6 +491,7 @@ namespace das
                 bool takeOverRightStack : 1;
                 bool allowConstantLValue : 1;
                 bool no_promotion : 1;
+                bool fromClone : 1;
             };
             uint32_t copyFlags = 0;
         };

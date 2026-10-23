@@ -1892,6 +1892,40 @@ def public task_payload_words : array<uint> => clone_to_move(task_payload_spv)
 
 def public mesh_payload_words : array<uint> => clone_to_move(mesh_payload_spv)
 
+// ===== mesh / task stages with @workgroup memory + barrier() =====
+// Mesh and task workgroups are dispatched like compute (LocalSize),
+// so shared memory and the workgroup barrier are legal there.
+// mesh_shared: each invocation computes one vertex value once, the
+// barrier publishes it, then every invocation reads a neighbour's.
+// task_shared: invocations publish their index, the barrier syncs,
+// and the last slot drives the mesh dispatch.
+var @workgroup msh_val : float[4]
+[mesh_shader(local_size_x=4, max_vertices=4, max_primitives=2, name="mesh_shared_spv"),
+    marker(no_coverage)]
+def mesh_shared {
+    SetMeshOutputsEXT(4u, 2u)
+    let t = int(gl_LocalInvocationIndex)
+    msh_val[t] = float(t) * 0.25
+    barrier()
+    gl_MeshVerticesEXT[t].gl_Position = float4(msh_val[(t + 1) % 4], msh_val[t], 0.0, 1.0)
+    if (t < 2) {
+        gl_PrimitiveTriangleIndicesEXT[t] = uint3(uint(t), uint(t + 1), uint(t + 2))
+    }
+}
+
+var @workgroup tsh_val : uint[4]
+[task_shader(local_size_x=4, name="task_shared_spv"), marker(no_coverage)]
+def task_shared {
+    let t = gl_LocalInvocationIndex
+    tsh_val[t] = t
+    barrier()
+    EmitMeshTasksEXT(tsh_val[3], 1u, 1u)
+}
+
+def public mesh_shared_words : array<uint> => clone_to_move(mesh_shared_spv)
+
+def public task_shared_words : array<uint> => clone_to_move(task_shared_spv)
+
 // PR-D mesh + task scaffolding adds two opcodes: OpSetMeshOutputsEXT (the mesh prologue) and
 // OpEmitMeshTasksEXT (the task terminator). The MeshShadingEXT capability + the SPV_EXT_mesh_shader
 // extension ride on the already-declared OpCapability / OpExtension; OutputVertices /

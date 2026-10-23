@@ -553,6 +553,8 @@ JIT compilation and code-generation tests. None have `expect` directives. The sl
 | test_json_edge.das | JSON edge cases - parsing scalars, arrays, nested, whitespace, error recovery | |
 | test_sprint_json.das | sprint_json - basic types, structs, arrays, tables, variants, annotations, RTTI | |
 | test_sscan_json.das | sscan_json - scalars, structs, pointers, arrays, tables, tuples, variants, vectors, ranges, bitfields, enums, @rename, round-trip | |
+| test_sscan_json_fixed_array.das | sscan_json - fixed-array fields (1-D, 2-D, strings, structs) round-trip from sprint_json; a short 1-D list keeps the tail, a long 1-D or 2-D one drops the extra | |
+| test_sscan_json_init.das | sscan_json - created array elements, table values, pointees and variant alternatives run the struct initializer; an existing variant alternative is updated in place | |
 | types.das | JV/from_JV JSON serialization for all basic/vector/struct types | |
 
 ## language/
