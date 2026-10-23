@@ -15,6 +15,10 @@ equal type, the slot is pointed at that type, and the node it held stays on the 
 the finalize sweeps. Otherwise the type is collected and joins the table. A type the walk reaches
 through a plain `TypeDecl::gc_collect` joins the table too, but its holder keeps its own node.
 
+A module read from the module cache comes back already shared
+(`src/builtin/ARCHITECTURE.md#module-cache-record-bytes`) and its decode leaves no garbage, so its
+finalize skips the collect and only clears the lookup caches.
+
 Two types are equal when every field matches - base type, flags, fixed dim, structure,
 enumeration, annotation, module, alias and argument names - the child types are the same
 pointers, and all five fields of `at` match. Children are remapped before their parent, so equal

@@ -1293,6 +1293,8 @@ namespace das {
                 if ( macroSimT ) logs << " -- macro simulate " << (macroSimT / 1000000.);
                 logs << "\n";
             }
+            // src/ast/ARCHITECTURE_GC.md#type-remap
+            scope.gcFinalize.prog = nullptr;
             return program;
         } else {
             // Serialization failed and the program changed, so set it for proper GC collection on exit.
