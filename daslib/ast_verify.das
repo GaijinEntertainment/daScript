@@ -1702,9 +1702,9 @@ class AstInferPassVerifyMacro : AstPassMacro {
     }
 }
 
-//! the post-compile pass of a promoted copy reaches every later program of the process - the
-//! walk is over the global module list - so only a program that holds this module in its own
-//! library (a `require`, or `--ast-verify`'s extra dependency) is verified
+//! a promoted copy's post-compile pass reaches every later program of
+//! the process (the walk is over the global module list), so only a
+//! program holding this module in its own library is verified
 def private program_asked_for_verify(prog : ProgramPtr) : bool {
     var asked = false
     program_for_each_module(prog) $(m) {

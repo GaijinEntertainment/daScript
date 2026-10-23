@@ -16,7 +16,6 @@ require math
 require strings
 require daslib/strings_boost
 require daslib/rtti
-require daslib/algorithm   // topological_sort: the --shared-modules file order
 require daslib/module_group   // module_group_module_name: a require path's module
 require dastest/review_gate   // das_requires: a file's require paths
 require ../common/parallel_workers.das
@@ -1363,7 +1362,31 @@ def private require_order(files : array<string>) : array<int> {
         }
         nodes |> emplace(node)
     }
-    return <- [for (node in topological_sort(nodes)); node.id]
+    return <- release_order(nodes)
+}
+
+//! Kahn's walk over `nodes`, a node free once nothing it waits on is
+//! left; a cycle (a require the sources spell and the compiler never
+//! takes; a true one compiles nowhere) releases the lowest index left
+def private release_order(var nodes : array<RequireNode>) : array<int> {
+    var order : array<int>
+    order |> reserve(length(nodes))
+    while (!empty(nodes)) {
+        var pick = 0
+        for (node, k in nodes, count()) {
+            if (empty(node.before)) {
+                pick = k
+                break
+            }
+        }
+        let id = nodes[pick].id
+        nodes |> erase(pick)
+        for (other in nodes) {
+            other.before |> erase(id)
+        }
+        order |> push(id)
+    }
+    return <- order
 }
 
 //! the order a run lints `files` in: the require order under sharing,

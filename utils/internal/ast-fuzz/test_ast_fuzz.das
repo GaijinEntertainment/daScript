@@ -107,14 +107,17 @@ def test_ast_verify_guesses_a_location_for_an_unset_at(t : T?) {
         "the search walked into an assume alias it should not see\n{out}")
 }
 
-// A promoted verify module's post-compile pass reaches every later program of the process; a
-// program that never required it is left alone. The lint runner shares its compiles' modules, so
-// linting a fixture that requires the verify ahead of one that breaks its own tree is the shape.
+// A promoted verify's post-compile pass reaches every later program
+// of the process; one that never required it is left alone. The lint
+// runner shares modules, so the verify fixture ahead of the breaking
+// one in one run is the shape.
 [test]
 def test_ast_verify_leaves_a_program_that_did_not_ask(t : T?) {
     var out : string
     let d = "utils/internal/ast-fuzz/selftest"
-    let ec = run([BIN, "utils/lint/main.das", "--", "{d}/verify_breaker.das", "{d}/at_unset.das", "--no-cache"], out, 300.0)
+    let argv <- [BIN, "utils/lint/main.das", "--",
+        "{d}/verify_breaker.das", "{d}/at_unset.das", "--no-cache"]
+    let ec = run(argv, out, 300.0)
     t |> success(!died(ec, out), "the lint crashed (exit {ec})\n{out}")
     t |> success(find(out, "{d}/at_unset.das") >= 0 && find(out, "FAIL") < 0,
         "the promoted verify reached a program that did not require it\n{out}")
