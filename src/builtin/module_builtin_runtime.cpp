@@ -646,12 +646,24 @@ namespace das
                 AnnotationArgumentList &, string &) override {
             return true;
         }
+        static bool isMutableDestination ( const ExpressionPtr & value ) {
+            if ( value->type->constant ) return false;
+            if ( value->rtti_isCast() ) {
+                return isMutableDestination(
+                    static_cast<ExprCast *>(value)->subexpr);
+            } else if ( value->rtti_isOp3() ) {
+                auto select = static_cast<ExprOp3 *>(value);
+                return isMutableDestination(select->left) &&
+                    isMutableDestination(select->right);
+            } else if ( value->rtti_isNullCoalescing() ) {
+                return isMutableDestination(
+                    static_cast<ExprNullCoalescing *>(value)->defaultValue);
+            }
+            return value->type->ref || value->rtti_isVar();
+        }
         virtual ExpressionPtr transformCall ( ExprCallFunc * call,
                 string & err ) override {
-            const auto & destination = call->arguments[1];
-            const auto & type = destination->type;
-            if ( type->constant ||
-                    (!type->ref && !destination->rtti_isVar()) ) {
+            if ( !isMutableDestination(call->arguments[1]) ) {
                 err = "sscan_json destination must be a mutable reference";
             }
             return nullptr;
