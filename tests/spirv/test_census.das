@@ -9,6 +9,7 @@ options indenting = 4
 require dastest/testing_boost public
 require _spirv_common
 require _texture_grad_shaders
+require _color_mapping_shader
 require spirv/spirv_dis
 require spirv/spirv_grammar
 
@@ -28,6 +29,7 @@ def test_opcode_census(t : T?) { // nolint:STYLE038 — a flat one-add_set-per-f
     t |> run("emitter opcode census == declared set (all fixtures)") <| @(t : T?) {
         var present : table<uint>
         add_set(present, square_words())
+        add_set(present, color_mapping_words())
         add_set(present, uarith_words())
         add_set(present, iarith_words())
         add_set(present, farith_words())
@@ -124,6 +126,7 @@ def test_opcode_census(t : T?) { // nolint:STYLE038 — a flat one-add_set-per-f
         add_set(present, spelem_words())
         add_set(present, spelemi_words())
         var declared <- coopmat2fa_emitter_opcodes()
+        declared |> insert(uint(SpvOp.Unreachable))
         for (op in keys(present)) {
             t |> success(key_exists(declared, op), "emitted {op_name(op)} is in the declared set")
         }

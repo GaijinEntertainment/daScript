@@ -1,6 +1,7 @@
 options gen2
 options gc
 options persistent_heap
+require daslib/color_mapping
 require glfw/glfw_boost
 require daslib/strings_convert
 require opengl/opengl_boost
@@ -488,22 +489,12 @@ def up_fs {
     post_color = float4(tent, 1.0)
 }
 
-// ACES filmic fit (Narkowicz 2015): maps the unbounded HDR range into [0, 1].
-def aces_fit(x : float3) : float3 {
-    let a = float3(2.51, 2.51, 2.51)
-    let b = float3(0.03, 0.03, 0.03)
-    let c = float3(2.43, 2.43, 2.43)
-    let d = float3(0.59, 0.59, 0.59)
-    let e = float3(0.14, 0.14, 0.14)
-    return clamp((x * (a * x + b)) / (x * (c * x + d) + e), float3(0.0, 0.0, 0.0), float3(1.0, 1.0, 1.0))
-}
-
 [fragment_program]
 def composite_fs {
     let hdr = texture(src0, v_uv).xyz
     let bloom = texture(src_bloom, v_uv).xyz
     let merged = hdr + bloom * u_bloom_intensity
-    let mapped = aces_fit(merged)
+    let mapped = tone_aces_fit(merged)
     // the default GL / WebGL2 framebuffer does no sRGB encode, so gamma-encode here
     let g = 1.0 / 2.2
     let encoded = pow(mapped, float3(g, g, g))

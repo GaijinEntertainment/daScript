@@ -40,6 +40,7 @@ options indenting = 4
 
 module hdr_tut_shaders public
 
+require daslib/color_mapping
 require vulkan/vulkan_boost public  // Device + DeviceMemory used by the generated bind_uniform helper
 require vulkan/spirv_vulkan_shader public
 require spirv/spirv_builtins public
@@ -218,24 +219,12 @@ var @uniform @set = 1 @binding = 1 src_bloom : sampler2D
 
 var @out @location = 0 frag_ldr : float4
 
-//! ACES fitted approximation (Krzysztof Narkowicz 2015). Full ACES is a 4-matrix tone mapper; this fit
-//! hits the same shoulder/toe shape with one rational polynomial -- cheap, and it keeps the filmic look
-//! the bloom targets. daslang shaders need explicit float3 broadcasts (no implicit scalar broadcast).
-def aces_fit(x : float3) : float3 {
-    let a = float3(2.51, 2.51, 2.51)
-    let b = float3(0.03, 0.03, 0.03)
-    let c = float3(2.43, 2.43, 2.43)
-    let d = float3(0.59, 0.59, 0.59)
-    let e = float3(0.14, 0.14, 0.14)
-    return clamp((x * (a * x + b)) / (x * (c * x + d) + e), float3(0.0, 0.0, 0.0), float3(1.0, 1.0, 1.0))
-}
-
 [vulkan_fragment_shader(name="hdr_composite_frag_spv")]
 def hdr_composite_fs {
     let hdr   = textureLod(src0,      f_uv, 0.0).xyz
     let bloom = textureLod(src_bloom, f_uv, 0.0).xyz
     let merged = hdr + bloom * pc.bloom_intensity
-    let mapped = aces_fit(merged)
+    let mapped = tone_aces_fit(merged)
     // Output LINEAR post-tonemap values in [0,1] -- the LDR target is R16G16B16A16_SFLOAT. Gamma comes
     // at the *blit*, where the destination is sRGB: the swap target for the window (asserted in
     // show_hdr.das), an R8G8B8A8_SRGB readback for the test. Free in hardware, ~12-bit dark, no banding.

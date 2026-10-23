@@ -235,3 +235,25 @@ Callers must enable this only for textures authored with that mask convention.
 `reflectionAmount` adds reflection-only environment lighting, independent of the
 existing image-based diffuse/ambient amount. It defaults to zero and uses the
 caller-owned environment texture set through `gltf_pbr_set_environment`.
+
+### Linear HDR output and shared color operators
+
+`GltfPbrRenderer.linearOutput` defaults to false, retaining the existing approximate
+2.2-gamma output. Set it true when rendering into a floating-point color target:
+the forward shader outputs scene-linear radiance, including emission above one.
+Atmosphere colors retain their existing display-authored convention and are decoded
+for the linear output path. Background tint remains a channel multiplier in the
+selected output space, so opting into linear output changes its displayed effect.
+The caller owns exposure, tone mapping and presentation.
+
+`daslib/color_mapping` provides shader-compatible Rec.709 `tone_reinhard`,
+`tone_aces_fit` (Narkowicz approximation, not full ACES), `tone_pbr_neutral`, and
+piecewise `color_srgb_encode` / `color_srgb_decode`. Operators take nonnegative
+scene-linear RGB and return display-linear RGB. Apply exposure first; apply display
+encoding once afterwards, either in a shader or through an sRGB output attachment.
+OpenGL and Vulkan HDR/SDF tutorials consume the same operator functions.
+
+CPU checks: `tests/math/test_color_mapping.das` and `tests/math/test_srgb_transfer.das`.
+`modules/dasGLTF/tests/test_render_targets.das` reads back legacy and above-white
+linear output, fog and tint from a floating-point target. Its GL case requires a
+context and reports a skip when no display is available.

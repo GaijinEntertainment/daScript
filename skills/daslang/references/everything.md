@@ -31,6 +31,7 @@ One section per module: what the module is for, then its public symbols grouped 
 - [class_boost](#class_boost) - The CLASS_BOOST module provides macros for extending class functionality, including the `[serialize_as_class]` annotation for automatic serialization and common class patterns like abstract method enforcement.
 - [clipboard_core](#clipboard_core) - The clipboard module provides synchronous access to the operating system's text clipboard.
 - [cmp](#cmp) - The CMP module holds comparisons: it writes lexicographic orderings from a list of keys.
+- [color_mapping](#color_mapping) - Module color_mapping
 - [command_line](#command_line) - Command-line utilities for daslang scripts and standalone executables.
 - [constant_expression](#constant_expression) - The CONSTANT_EXPRESSION module provides the `[constant_expression]` function annotation.
 - [consume](#consume) - The CONSUME module implements the `consume` pattern, which moves ownership of containers and other moveable values while leaving the source in a default-constructed state.
@@ -6964,6 +6965,24 @@ The MATH_BOOST module adds geometric types (`AABB`, `AABR`, `Ray`), intersection
 ### Integer rounding
 
 - `round_up` - `n` rounded up to a multiple of `m` (`m` > 0), in `m`'s integer type
+
+## color_mapping
+
+Module color_mapping
+
+
+### Tone mapping
+
+- `tone_aces_fit` - Apply the Narkowicz ACES approximation, clamping negative input to zero.
+- `tone_pbr_neutral` - Apply Khronos PBR Neutral to nonnegative RGB, compressing and desaturating highlights together.
+- `tone_reinhard` - Compress RGB channels independently with the Reinhard curve; negative input is clamped to zero.
+
+### sRGB transfer functions
+
+- `color_srgb_decode` - Decode nonnegative sRGB channels independently to linear RGB; values above one remain above one.
+- `color_srgb_decode_channel` - Decode one sRGB channel to linear light, clamping negative input to zero.
+- `color_srgb_encode` - Encode nonnegative linear RGB with the sRGB transfer function; values above one remain above one.
+- `color_srgb_encode_channel` - Encode one linear channel with the sRGB transfer function, clamping negative input to zero.
 
 ## option
 
