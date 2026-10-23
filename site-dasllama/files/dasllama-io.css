@@ -147,6 +147,18 @@
 .dio-note{font-family:var(--font-mono);font-size:11px;color:var(--fg-faint);margin-top:14px;line-height:1.6}
 .dio-note a{color:var(--amber-dim);border-bottom:1px solid var(--rule)}
 
+/* ── ladder sections (llm / image in / asr / tts / audio in) ── */
+.dio-ladder-jump{display:flex;flex-wrap:wrap;gap:6px 18px;font-family:var(--font-mono);font-size:11.5px;letter-spacing:.04em}
+.dio-ladder-jump a{color:var(--fg-dim);border-bottom:1px solid var(--rule)}
+.dio-ladder-jump a:hover{color:var(--amber)}
+.dio-ladder-sec{padding-top:30px;scroll-margin-top:64px}
+.dio-ladder-sec + .dio-ladder-sec{margin-top:34px;border-top:1px solid var(--rule)}
+.dio-ladder-sec__h{font-family:var(--font-sans);font-size:22px;font-weight:600;letter-spacing:-.02em;margin:0 0 4px}
+.dio-ladder-sec__h span{display:block;margin-top:4px;font-family:var(--font-mono);font-size:11px;font-weight:400;letter-spacing:.04em;color:var(--fg-faint)}
+.dio-rtf{position:relative;min-width:92px}
+.dio-rtf__bar{position:absolute;right:10px;top:50%;height:14px;max-width:calc(100% - 20px);transform:translateY(-50%);background:rgba(232,161,58,.16);border-radius:2px}
+.dio-rtf__val{position:relative;color:var(--amber)}
+
 /* ── sidecars ────────────────────────────────────────────────── */
 .dio-finder{margin-top:22px;display:grid;grid-template-columns:236px 1fr;border:1px solid var(--rule);border-radius:8px;overflow:hidden;background:var(--bg-2)}
 .dio-tree{border-right:1px solid var(--rule);padding:10px 8px;background:var(--bg)}

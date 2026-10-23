@@ -222,7 +222,7 @@ def private image_post_load(var st : CanaryStaging) {}
 [init]
 def private register_canary_image_tags {
     register_image_family_tag("canary-q8")
-    register_image_family_tag("canary-f32")
+    register_image_family_tag("canary-f32", true)   // config-free: the exact lane's planes are the file's own, no box property shapes them
 }
 
 //! Every hot-path buffer of the canary encode, so a transcribe allocates nothing per call.

@@ -17,16 +17,17 @@ input into embeddings or fills a cache the next stage reads - onto a GPU hook le
 in place and changes no value that code after the stage reads.** The CPU form serves every
 machine with no GPU driver.
 
-**A diff that adds an override without the announce is a defect.** An announce is the line the run
-prints where the override changes the outcome.
-
 An override is an environment knob, a non-private setter in a `dasllama/` file whose value no
 `dasllama/` code chooses (a test, harness, tool or host - a program embedding the engine - sets
 it), or an on-disk state file - one a run writes or a user places, never data a build ships -
 that moves a gate, policy, or threshold off its default and so changes what the run executes,
 writes, reads, mints (writes as a prepared image), or computes. A measured time, the run's own
 duration, or a different moment at which the same work happens is not such a change; a CLI flag
-is never an override.
+is never an override, nor is an environment knob naming a program the run spawns whose path the
+run's record carries in its `cmd`.
+
+**A diff that adds an override without the announce is a defect.** An announce is the line the run
+prints where the override changes the outcome.
 
 **A diff that makes an override clamp or ignore its value at a site, or widens what it reaches,
 makes that override's announce say so in the same change.**

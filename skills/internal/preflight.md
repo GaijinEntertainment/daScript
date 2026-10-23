@@ -442,3 +442,18 @@ which is why that folder is a trigger path.
 | Install Python build deps + Stage _site (no WASM) | from the repo root, `pip install markdown`, then the "Stage _site (no WASM)" step's script (unix shell) |
 | Serve _site and run tests | from the repo root, `python -m http.server 8765 --directory _site`; then in `site/tests/playground`, `npm ci`, `npx playwright install chromium`, `npx playwright test --grep-invert '@wasm'` (the config's base URL is port 8765). `performance-page`, `examples-phone` and `nightly-page` also run against `--directory site` with no staging |
 | Upload Playwright report on failure | none - runner-side plumbing; locally the `list` reporter prints to the console, and `CI=1` also writes the html report to `site/tests/playground/playwright-report/` (and turns on CI's 2 retries and 2 workers) |
+
+## pages.yml
+
+`build-and-deploy` (ubuntu-latest), on a `master` push and `workflow_dispatch`: builds and
+stages daslang.io into `_site` and dasllama.io into `_site_dasllama`; "Version the pages'
+scripts and styles" appends to each local script and stylesheet reference on every page a `?v=`
+of the file's content hash; "Deploy to daslang.io origin (VPS)" (master only) rsyncs both trees, then
+POSTs every record store to the ladder service's `/admin/import-official` and
+`modules/dasLLAMA/performance/records/annotations.json` to its `/admin/import-annotations`.
+
+| CI step | Local mirror |
+|---|---|
+| Stage dasllama.io for deployment: the metadata and asset-stamp tests | `python3 site-dasllama/test_metadata.py`, `python3 site-dasllama/test_stamp_assets.py` |
+| Version the pages' scripts and styles | `python3 -I site-dasllama/stamp_assets.py <dir>` on a scratch copy of `site/` or `site-dasllama/` - it rewrites the pages in place; `python3 site-dasllama/serve.py` stamps the same references by mtime as it serves |
+| Deploy: the annotations import | `DAS_TUNE_MANIFEST=modules/dasLLAMA/performance/gen_site_records.tune.json bin/daslang -jit dastest/dastest.das -- --test utils/internal/dasllama-ladder/test_ladder_server.das` (covers the `/admin/import-annotations` route); the rest of the deploy is runner-side plumbing |

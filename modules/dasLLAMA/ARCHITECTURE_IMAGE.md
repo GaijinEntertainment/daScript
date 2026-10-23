@@ -145,7 +145,8 @@ after which every instance the process asks for answers `ERROR_INCOMPATIBLE_DRIV
 the box profile first because that pin can change the backend, and the parse
 runs the same load select the gguf loader runs, before any kernel touches planes packed for that
 backend. A family whose plane bytes no box property shapes (the TTS f32 carrier: layouts minted
-from the model's own geometry) registers its tag config-free, and `image_config_for` keys its
+from the model's own geometry; every vision and audio tower's exact lane: the file's planes widened
+to f32 and the twin of its own halfwords, `#image-tower-twin-plane`) registers its tag config-free, and `image_config_for` keys its
 identity by the default configuration instead: one identity on every box, not one per tune
 state - two processes
 on one box with different tune manifests would otherwise bake different identities in the same

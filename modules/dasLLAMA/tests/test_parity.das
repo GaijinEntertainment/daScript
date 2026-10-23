@@ -6,7 +6,7 @@ options _dasllama_internal = true
 require dastest/testing_boost public
 require dasllama/dasllama   // the public facade — public-path tests exercise the API through it (engine + arch registrations + chat)
 require daslib/f16_cvt   // f16_to_f32 — the tied-cls arm reads the live scale plane
-require dasllama/dasllama_math   // pin_kernel_backend / kernel_backend_names / active_kernel_backend — the facade wraps none of them
+require dasllama/dasllama_math   // pin_kernel_backend / kernel_backend_pin_refusal / active_kernel_backend — the facade wraps none of them
 require dasllama/dasllama_env    // g_env_engine.pin_backend
 require daslib/defer   // the backend pin is restored on every path out of a pinned cell
 require daslib/jobque_boost
@@ -14,7 +14,7 @@ require daslib/fio
 require _model_tier   // models_dir() + model_available() presence/size-tier gate (see the file's header)
 require ../performance/model_specs.das   // the model-set table — parity evidence lives there as DATA
 
-// Frozen token-for-token parity gates for the arches stories15M (test_forward.das) doesn't cover.
+// Frozen parity gates (token for token; a `prefix_bar` carrier as a half-span prefix) for the arches stories15M (test_forward.das) doesn't cover.
 // Evidence is DATA in model_specs.das — pinned ids (or a text prompt encoded here) + the arms it was
 //   frozen under; regenerate with harness/parity.sh. The board's --parity pregate reads the same rows.
 // Models are gitignored multi-GB files: absent = clean skip (a real local regression, a no-op in CI).
@@ -25,17 +25,14 @@ def private with_parity_backend(t : T?; blk : block<() : void>) {
         invoke(blk)
         return
     }
-    var names <- kernel_backend_names()
-    let known = find_index(names, name) >= 0
-    delete names
-    if (!known) {
-        t |> skip("DASLLAMA_PIN_BACKEND='{name}' is not a registered kernel backend on this box")
+    let why = kernel_backend_pin_refusal(name)
+    if (!empty(why)) {
+        t |> skip("DASLLAMA_PIN_BACKEND='{name}' cannot be pinned on this box: {why}")
         return
     }
-    let prev = active_kernel_backend()
+    let seat = kernel_backend_seat()
     defer() {
-        clear_kernel_backend_pin()
-        select_kernel_backend(prev)   // "" is a no-op: nothing had activated on entry
+        restore_kernel_backend(seat)
     }
     pin_kernel_backend(name)
     invoke(blk)
@@ -131,17 +128,41 @@ def private dn_kq_engaged(fmts : array<KqFmt>) : int64 {
     return n
 }
 
+// The half-span prefix bar on one live stream, with the loosened check's control on the same stream: the fixture
+// with an id flipped inside its first half must red the bar.
+def private prefix_bar_cell(t : T?; tr : Model; prompt, want : array<int64>; what : string) {
+    let n = length(want)
+    var got <- parity_gen_ids(tr, prompt, n)
+    to_log(LOG_INFO, "eyeball want: {eyeball_text(tr, want)}\n")
+    to_log(LOG_INFO, "eyeball got:  {eyeball_text(tr, got)}\n")
+    let same = prefix_match_len(got, want)
+    t |> success(length(got) == n && fixture_ok(true, same, int64(n)), "{what} ({same} of {n} ids match)")
+    var flipped := want
+    let k = n / 4
+    flipped[k] ^= 1l
+    t |> success(!fixture_ok(true, prefix_match_len(got, flipped), int64(n)),
+        "{what}: control - the fixture with id {k} of {n} flipped reds the bar")
+    delete flipped
+    delete got
+}
+
 // One spec's arms off ONE model load. load_model_ (not load_gguf) so the tokenizer rides along:
 // text-form prompts encode here, and every compare logs its decoded-text eyeball lines.
+[cold_path]
 def private parity_spec_arms(t : T?; spec : ModelSpec; path : string) {
     let prev_kq = get_kquant_native()
-    if (spec.parity.kq_native) {
-        set_kquant_native(true)
+    let prev_grouped = get_moe_grouped_prefill()
+    let prev_fused = get_moe_fused_expert_gemms()
+    defer() {
+        set_moe_grouped_prefill(prev_grouped)
+        set_moe_fused_expert_gemms(prev_fused)
     }
+    // the main arm runs on the levers' defaults, whatever an earlier cell left
+    set_moe_grouped_prefill(true)
+    set_moe_fused_expert_gemms(true)
+    set_kquant_native(spec.parity.kq_native)
     var tr <- load_model_(path, spec.parity.quant)
-    if (spec.parity.kq_native) {
-        set_kquant_native(prev_kq)
-    }
+    set_kquant_native(prev_kq)
     // Cap the KV context: only ~(prompt + gen) positions are used, and the KV stride doesn't
     // change the computed tokens — Llama-3's native 131072 would just burn ~8GB of KV RAM.
     if (tr.config.seq_len > 2048l) {
@@ -154,21 +175,27 @@ def private parity_spec_arms(t : T?; spec : ModelSpec; path : string) {
         t |> success(dn_kq_engaged(tr.dnqkv_fmt) > 0l && dn_kq_engaged(tr.dngate_fmt) > 0l && dn_kq_engaged(tr.dnout_fmt) > 0l,
             "{spec.file} dn planes kq-native (not demoted)")
     }
-    t |> success(parity_gen_ok(tr, prompt, spec.parity.gen, [eyeball = true]), "{spec.file} token-for-token{be}")
+    let pb = spec.parity.prefix_bar
+    let form = pb ? "half-span prefix" : "token-for-token"
+    if (pb) {
+        prefix_bar_cell(t, tr, prompt, spec.parity.gen, "{spec.file} {form}{be}")
+    } else {
+        t |> success(parity_gen_ok(tr, prompt, spec.parity.gen, [eyeball = true]), "{spec.file} {form}{be}")
+    }
     if (spec.parity.dn_chunked) {
-        t |> success(parity_gen_ok(tr, prompt, spec.parity.gen, [dn_chunked = true, eyeball = true]),
-            "{spec.file} chunked-prefill token-for-token{be}")
+        t |> success(parity_gen_ok(tr, prompt, spec.parity.gen, [dn_chunked = true, eyeball = true, prefix_bar = pb]),
+            "{spec.file} chunked-prefill {form}{be}")
     }
     if (spec.parity.moe_reference) {
         set_moe_grouped_prefill(false)
-        t |> success(parity_gen_ok(tr, prompt, spec.parity.gen, [eyeball = true]),
-            "{spec.file} reference-prefill token-for-token{be}")
+        t |> success(parity_gen_ok(tr, prompt, spec.parity.gen, [eyeball = true, prefix_bar = pb]),
+            "{spec.file} reference-prefill {form}{be}")
         set_moe_grouped_prefill(true)
     }
     if (spec.parity.moe_per_expert) {
         set_moe_fused_expert_gemms(false)
-        t |> success(parity_gen_ok(tr, prompt, spec.parity.gen, [eyeball = true]),
-            "{spec.file} per-expert-prefill token-for-token{be}")
+        t |> success(parity_gen_ok(tr, prompt, spec.parity.gen, [eyeball = true, prefix_bar = pb]),
+            "{spec.file} per-expert-prefill {form}{be}")
         set_moe_fused_expert_gemms(true)
     }
     delete prompt

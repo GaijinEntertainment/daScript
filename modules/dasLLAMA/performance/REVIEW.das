@@ -5,6 +5,7 @@ require daslib/fio
 require daslib/defer
 require daslib/json_boost
 require dastest/review_gate
+require dasllama/dasllama_exchange_schema   // RETIRED_BOXES - the one list the site projection reads too
 
 // The mechanical half of modules/dasLLAMA/performance/REVIEW.md (contract: REVIEW_COMMON.md
 // at the repo root). Run from the repo root: bin/daslang modules/dasLLAMA/performance/REVIEW.das
@@ -105,15 +106,110 @@ def private check_last_known_good {
 
 // the corpus half of REVIEW.md's write-time provenance rules that are decidable from tree
 // state alone: every stored run measured with no remote-desktop session, every archived
-// sidecar minted on a quiet box. (Ref-pin equality and stamp reachability bind the DIFF -
-// historical rows legitimately carry older pins and shas - so they stay out of this sweep;
-// reachability runs in make-pr's chain, where the orphan hazard appears.)
+// sidecar minted on a quiet box, and every das row of the current release pinned to it,
+// stamped with a commit HEAD reaches, and timed under a sidecar of that release.
 let private RECORDS_DIR = "modules/dasLLAMA/performance/records"
 let private DEFAULTS_DIR = "modules/dasLLAMA/performance/defaults"
+let private VERSION_FILE = "modules/dasLLAMA/dasllama/dasllama_version.das"
+let private RELEASE_DECL = "let DASLLAMA_RELEASE = "
+
+def private release_in(text : string) : int {
+    let at = find(text, RELEASE_DECL)
+    return at < 0 ? -1 : to_int(slice(text, at + length(RELEASE_DECL)))
+}
+
+let private RELEASE = release_in(fread(VERSION_FILE))
+
+var private g_reachable : table<string; bool>
+var private g_release_at : table<string; int>
+var private g_archive_checked : table<string; bool>
+
+def private reachable(sha : string) : bool {
+    if (!key_exists(g_reachable, sha)) {
+        var out = ""
+        g_reachable |> insert(sha, run_and_capture(["git", "merge-base", "--is-ancestor", sha, "HEAD"], out) == 0)
+    }
+    return g_reachable?[sha] ?? false
+}
+
+def private release_at(sha : string) : int {
+    if (!key_exists(g_release_at, sha)) {
+        var out = ""
+        let rc = run_and_capture(["git", "show", "{sha}:{VERSION_FILE}"], out)
+        g_release_at |> insert(sha, rc == 0 ? release_in(out) : -1)
+    }
+    return g_release_at?[sha] ?? -1
+}
+
+// the sidecar a current-release row was timed under: archived, of the same release, and
+// minted by an engine HEAD reaches
+[arch(at="../ARCHITECTURE_MEASUREMENT.md#committed-records-gate")]
+def private check_row_archive(full : string; box : string; tune_sha : string) {
+    let archive = "{RECORDS_DIR}/{box}.tune.{slice(tune_sha, 0, 12)}.json"
+    return if (key_exists(g_archive_checked, archive))
+    g_archive_checked |> insert(archive, true)
+    let text = fread(archive)
+    if (empty(text)) {
+        gate_finding(full, "tune_sha {slice(tune_sha, 0, 12)} names no archive - {archive} is missing")
+        return
+    }
+    var jerr = ""
+    var doc = read_json(text, jerr)
+    defer() {
+        unsafe {
+            delete doc
+        }
+    }
+    if (doc == null) {
+        gate_finding(archive, "does not parse as JSON: {jerr}")
+        return
+    }
+    let pin = "{doc?["provenance"]?["dasllama_version"] ?? ""}"
+    if (pin != "{RELEASE}") {
+        gate_finding(archive, "provenance.dasllama_version is '{pin}' but a current-release row was timed under it (DASLLAMA_RELEASE {RELEASE}) - re-mint the sidecar and the rows")
+    }
+    let engine_sha = "{doc?["provenance"]?["engine_sha"] ?? ""}"
+    if (!empty(engine_sha) && !reachable(engine_sha)) {
+        gate_finding(archive, "provenance.engine_sha {engine_sha} is not an ancestor of HEAD - re-stamp or re-mint")
+    }
+}
+
+// a das row's version pin: past the release is a defect anywhere; below it is history on a
+// retired box and an un-re-minted row on a current one; at it, the stamps must hold
+[arch(at="../ARCHITECTURE_MEASUREMENT.md#committed-records-gate")]
+def private check_das_row(full : string; box : string; what : string; r : JsonValue?) {
+    let v = r?["dasllama_version"] ?? 0
+    if (v > RELEASE) {
+        gate_finding(full, "{what}: dasllama_version {v} is past DASLLAMA_RELEASE {RELEASE} - re-mint")
+        return
+    }
+    if (v < RELEASE) {
+        if (!key_exists(RETIRED_BOXES, box)) {
+            gate_finding(full, "{what}: dasllama_version {v} (0 = unpinned) on a current board, DASLLAMA_RELEASE is {RELEASE} - re-mint the row, or retire the box in RETIRED_BOXES")
+        }
+        return
+    }
+    if (empty("{r?["hardware"]?["remote_desktop"] ?? ""}")) {
+        gate_finding(full, "{what}: a current-release row with no hardware.remote_desktop - re-mint")
+    }
+    let sha = "{r?["sha"] ?? ""}"
+    if (empty(sha)) {
+        gate_finding(full, "{what}: a current-release row with no sha - re-mint")
+    } elif (!reachable(sha)) {
+        gate_finding(full, "{what}: sha {sha} is not an ancestor of HEAD - re-stamp to the commit the exe was built at, or re-mint")
+    } elif (release_at(sha) != RELEASE) {
+        gate_finding(full, "{what}: DASLLAMA_RELEASE at sha {sha} is {release_at(sha)}, the row stamps {v} - the exe was built at another release; re-mint")
+    }
+    let tune_sha = "{r?["tune_sha"] ?? ""}"
+    if (!empty(tune_sha)) {
+        check_row_archive(full, box, tune_sha)
+    }
+}
 
 // the shipped defaults profiles: a quiet mint, a version pin, and NO commit stamp (a
 // profile's validity is its pin + feature class; an engine_sha would be an orphan after
 // every rebase and says nothing a reader can act on)
+[arch(at="../ARCHITECTURE_MEASUREMENT.md#committed-records-gate")]
 def private check_defaults_profiles {
     dir(DEFAULTS_DIR) $(name) {
         return if (!(name |> ends_with(".tune-defaults.json")))
@@ -138,8 +234,9 @@ def private check_defaults_profiles {
         if (noise != "ok") {
             gate_finding(full, "provenance.noise is '{noise}' - a shipped profile carries a quiet mint (noise ok)")
         }
-        if (empty("{doc?["provenance"]?["dasllama_version"] ?? ""}")) {
-            gate_finding(full, "no provenance.dasllama_version - a profile with no version pin adopts on every build")
+        let pin = "{doc?["provenance"]?["dasllama_version"] ?? ""}"
+        if (pin != "{RELEASE}") {
+            gate_finding(full, "provenance.dasllama_version is '{pin}', DASLLAMA_RELEASE is {RELEASE} - a shipped profile is minted at the current release; re-mint it, or delete it")
         }
         if (!empty("{doc?["provenance"]?["engine_sha"] ?? ""}")) {
             gate_finding(full, "carries provenance.engine_sha - a profile ships no commit stamp (tune_profile_export strips it)")
@@ -152,6 +249,7 @@ def private check_defaults_profiles {
 }
 
 // the ruler records live one level down, where the corpus walk above does not reach
+[arch(at="../ARCHITECTURE_MEASUREMENT.md#committed-records-gate")]
 def private check_ruler_records {
     let mtp_dir = "{RECORDS_DIR}/mtp"
     dir(mtp_dir) $(name) {
@@ -160,6 +258,7 @@ def private check_ruler_records {
     }
 }
 
+[arch(at="../ARCHITECTURE_MEASUREMENT.md#committed-records-gate")]
 def private check_records_corpus {
     dir(RECORDS_DIR) $(name) {
         return if (!(name |> ends_with(".json")) || name == "annotations.json")
@@ -189,15 +288,18 @@ def private check_records_corpus {
         }
         gate_home_paths(full)
         return if (!(doc.value is _array))
+        let box = name |> slice(0, length(name) - length(".json"))
         for (model in doc.value as _array) {
             let runs = model?["runs"]
             continue if (runs == null || !(runs.value is _array))
+            let gguf = "{model?["gguf"] ?? "?"}"
             for (r in runs.value as _array) {
                 let rd = "{r?["hardware"]?["remote_desktop"] ?? ""}"
-                continue if (empty(rd))   // rows minted before the field existed
-                if (rd != "off") {
-                    let gguf = "{model?["gguf"] ?? "?"}"
+                if (!empty(rd) && rd != "off") {   // empty = minted before the field existed
                     gate_finding(full, "{gguf}: hardware.remote_desktop is '{rd}' - a stored run is measured with no remote-desktop session; re-mint")
+                }
+                if ("{r?["engine"] ?? ""}" == "das") {
+                    check_das_row(full, box, "{gguf} [{r?["backend"] ?? "?"}/{r?["flavor"] ?? "?"}/{r?["workload"] ?? "-"}]", r)
                 }
             }
         }
@@ -209,6 +311,9 @@ def main() : int {
     if (!fexist(SNAPSHOT)) {
         to_log(LOG_ERROR, "modules/dasLLAMA/performance/REVIEW.das: run from the repo root\n")
         return 2
+    }
+    if (RELEASE <= 0) {
+        gate_finding(VERSION_FILE, "no readable '{RELEASE_DECL}<n>' - the release gates cannot run")
     }
     check_last_known_good()
     check_defaults_profiles()

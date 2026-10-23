@@ -32,7 +32,8 @@ load it governs.** The load reads these values once, to decide what the whole-mo
 holds on the device; a value set after the load never reaches that decision.
 
 **A diff that defines a setter whose value the next load reads to plan what the device holds
-names it in the call-order rule's setter list, in the same change.** The list is the trigger a
+adds its name to the setter list that opens "a `set_gpu_*` or `reset_gpu_*` function of
+`dasllama/dasllama_core.das`", in the same change.** The list is the trigger a
 reviewer reads; an unlisted setter reaches no call-order check.
 
 **A diff that adds or rewords an `RdecPass` value's sentence in `rdec_pass_words` writes it in
@@ -67,8 +68,8 @@ registries - makes it check that the session's K/V rows use the codec the mirror
 row encoding - f16, q8_0, tq4 or f32 - the mirror was built in) before it touches the mirror (the
 device copy of the K/V cache a GPU decode reads and writes).**
 
-**A resident override that byte-copies mirror rows across codecs - the mirror and the codec as the
-rule above defines them - is a defect: bytes move only between same-codec session rows and mirror
+**A resident override that byte-copies mirror rows across codecs - the mirror being the device
+copy of the K/V cache a GPU decode reads, the codec its rows' encoding - is a defect: bytes move only between same-codec session rows and mirror
 rows.** A cross-codec copy corrupts the host's
 authoritative cache.
 

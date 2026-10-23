@@ -2162,3 +2162,20 @@ module) is independent and can land any time - it is pure structure.
     `gk_subgroup_bcast0_u` shim have not been dispatched. Done = on a Vulkan device `test_vkd_cls_select` green, the
     `test_gpu_resident_hybrid_sampled_selection` cell green, and the SPIR-V dump diff (`harness/vk_spv_diff.das`) against
     master naming the selection stamp as the only moved module.
+
+159. **The whole-model driver seats the NextN head with speculation off.** `resident_head_on`
+    (`dasllama_gpu_resident.das`) reads only the file's head and the decline list, never the speculation knob
+    (`ARCHITECTURE_GPU_VULKAN_MTP.md` rules it "never the plan"): on an MTP file served with speculation off the arena
+    takes the head's eh_proj, attention and shared-expert planes and, past the host-layer split, its whole routed
+    expert stacks (always counted resident, never the layer the fit moves off), a head K/V slab in every region and
+    the verify rows' rollback scratch - room the trunk's streamed layers and the hot pool would otherwise take, for a
+    head that never runs. Speculation is opt-in and off by default, so its cost is opt-in too. Done = the plan seats
+    the head only when speculation is asked at the load (a load-time opt-in a tool-driven session can set before it
+    loads, with turning the round on and off mid-session left to that opted-in plan); with it off the arena, the
+    regions and the scratch carry no head, the trunk and the pool take the room, and the load log says the head stayed
+    off and why; the `.dlim` keeps the head's planes either way, so the opt-in needs no re-mint; the architecture
+    section restated. Cells: a plan cell on a NextN shell - speculation off seats no head planes, slab or verify scratch
+    and charges none of them, speculation on seats all three (the control); a served cell on Qwen3.5-0.8B-MTP - with
+    speculation off a plain stream reads token for token a plan without the head and asks no draft seat, and the same
+    image with speculation on drafts and verifies on the device without a re-mint; the existing
+    `test_gpu_resident_hybrid_mtp_*` cells run under the opt-in.

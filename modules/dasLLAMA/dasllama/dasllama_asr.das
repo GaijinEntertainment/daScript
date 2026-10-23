@@ -304,7 +304,8 @@ def asr_encode_bucket(m : AsrModel) : string {
     if (m.kind == AsrKind.qwen3a || m.kind == AsrKind.qwen3omni) {
         return qwen3a_encode_bucket(m.kind == AsrKind.qwen3omni)
     }
-    return ""   // parakeet: fine-grained probes only
+    if (m.kind == AsrKind.parakeet) return PARAKEET_ENCODE_BUCKET
+    return ""
 }
 
 def caps(m : AsrModel) : AsrCaps {

@@ -663,7 +663,7 @@ def private image_post_load(var st : AudioTowerStaging) {}
 [init]
 def private register_tower_image_tags {
     register_image_family_tag("tower-q8")
-    register_image_family_tag("tower-f32")
+    register_image_family_tag("tower-f32", true)   // config-free: the exact lane's planes are the file's own, no box property shapes them
 }
 
 let public ULTRAVOX_NORM_EPS = 1e-6   //! the ultravox projector norms' own eps, not the tower's

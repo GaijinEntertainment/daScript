@@ -5,6 +5,8 @@
 # picks the torch device (cpu default, mps = the Apple-GPU reference arm); the
 # timed region is model.generate() only (model + audio load excluded), mirroring
 # asr_bench.das's per-transcribe BENCH line. Same greedy config as canary_qwen_oracle.py.
+# One untimed warm-up generate runs first; a rep that degenerates to a stub is discarded and
+# re-run, up to --retries extra attempts, so a row keeps its rep count (followup_general.md 223).
 #
 # Venv: the committed oracle venv (~/Work/canary-nemo-oracle/.venv).
 #
@@ -21,6 +23,17 @@ def rep_is_degenerate(n_ids):
     return n_ids < 8
 
 
+def timed_rep(attempt, retries):
+    # one rep's timing, re-running a degenerate attempt: `attempt()` returns (ms, n_ids); the
+    # result is the first non-degenerate (ms, n_ids), or None when every attempt degenerated
+    for _ in range(retries + 1):
+        ms, n_ids = attempt()
+        if not rep_is_degenerate(n_ids):
+            return ms, n_ids
+        print(f"DEGENERATE\t{n_ids} ids - attempt discarded", flush=True)
+    return None
+
+
 def build_prompts(prompt, tag, wav):
     # rebuilt PER REP: model.generate mutates the chat list in place, and a reused list
     # degenerates the next rep to a few tokens (fast on MPS, where it silently won best-of;
@@ -32,6 +45,10 @@ def self_test():
     # torch/nemo never imported here - the pure seams check on any stock python3
     assert rep_is_degenerate(0) and rep_is_degenerate(7)
     assert not rep_is_degenerate(8) and not rep_is_degenerate(256)
+    tries = iter([(5.0, 3), (5.0, 2), (40.0, 30)])
+    assert timed_rep(lambda: next(tries), 3) == (40.0, 30), "a stub is re-run until a real transcript"
+    assert timed_rep(lambda: (5.0, 3), 2) is None, "every attempt a stub: no timing"
+    assert timed_rep(lambda: (40.0, 30), 0) == (40.0, 30), "no retry needed, none spent"
     p1 = build_prompts("T: ", "<a>", "x.wav")
     p1[0].append({"role": "assistant", "content": "mutated"})  # what generate() does in place
     p2 = build_prompts("T: ", "<a>", "x.wav")
@@ -50,6 +67,7 @@ def main():
     ap.add_argument("--prompt", default="Transcribe the following: ")
     ap.add_argument("--threads", type=int, default=0)
     ap.add_argument("--device", default="cpu")
+    ap.add_argument("--retries", type=int, default=3, help="extra attempts for a rep that degenerates to a stub")
     ap.add_argument("--self-test", action="store_true")
     args = ap.parse_args()
 
@@ -85,22 +103,28 @@ def main():
     )
     tag = model.audio_locator_tag
 
+    def generate_once(wav):
+        prompts = build_prompts(args.prompt, tag, wav)
+        t0 = time.perf_counter()
+        with torch.inference_mode():
+            out = model.generate(prompts=prompts, generation_config=gen_cfg,
+                                 max_new_tokens=args.max_new_tokens)
+        ms = (time.perf_counter() - t0) * 1000.0
+        return ms, (len(out[0]) if out is not None and len(out) else 0)
+
+    _, warm_ids = generate_once(args.wav[0])   # the device's first call pays its warm-up off the clock
+    print(f"WARMUP\t{args.model}\t{warm_ids} ids", flush=True)
     rows = 0
     for wav in args.wav:
         info = sf.info(wav)
         audio_s = info.frames / info.samplerate
         base = wav.rsplit("/", 1)[-1]
         for rep in range(args.reps):
-            prompts = build_prompts(args.prompt, tag, wav)
-            t0 = time.perf_counter()
-            with torch.inference_mode():
-                out = model.generate(prompts=prompts, generation_config=gen_cfg,
-                                     max_new_tokens=args.max_new_tokens)
-            ms = (time.perf_counter() - t0) * 1000.0
-            n_ids = len(out[0]) if out is not None and len(out) else 0
-            if rep_is_degenerate(n_ids):
-                print(f"DEGENERATE\t{args.model}\t{base}\t{rep}\t{n_ids} ids - rep discarded", flush=True)
+            got = timed_rep(lambda: generate_once(wav), args.retries)
+            if got is None:
+                print(f"DEGENERATE\t{args.model}\t{base}\t{rep}\tevery attempt a stub - rep discarded", flush=True)
                 continue
+            ms, _ = got
             speed = audio_s / (ms / 1000.0)
             print(f"BENCH\t{args.model}\t{base}\t{audio_s:.0f}\t{rep}\t{ms:.3f}\t{speed:.4f}", flush=True)
             rows += 1

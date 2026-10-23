@@ -129,7 +129,7 @@ let private GEMMA4UV_TAG = "gemma4uv"
 
 [init]
 def private register_gemma4uv_image_tags {
-    register_image_family_tag(GEMMA4UV_TAG)
+    register_image_family_tag(GEMMA4UV_TAG, true)   // config-free: the exact lane's planes are the file's own, no box property shapes them
 }
 
 def finalize(var s : Gemma4uvState) {

@@ -213,7 +213,7 @@ def private image_post_load(var st : Gemma4aStaging) {}
 
 [init]
 def private register_gemma4a_image_tags {
-    register_image_family_tag("gemma4a-f32")
+    register_image_family_tag("gemma4a-f32", true)   // config-free: the exact lane's planes are the file's own, no box property shapes them
     register_image_family_tag("gemma4a-q8")
 }
 

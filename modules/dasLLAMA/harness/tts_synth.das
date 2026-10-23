@@ -11,6 +11,7 @@ require daslib/clargs
 require daslib/defer          // defer() { reset_tts_q8() } — the weight-lane pin never outlives the run
 require daslib/fio
 require math
+require tts_corpus   // tts_corpus_path / tts_corpus_head - the rig's sentences
 
 // The rig's synthesis half: every sentence of the 200-sentence fixture through one TTS model
 // and voice, one WAV per sentence, one JSON of timings beside them. harness/tts_rig.py drives
@@ -49,7 +50,7 @@ struct private SentenceTiming {
     rtf : float
 }
 
-[export]
+[export, cold_path]
 def main() : int {
     var args = SynthArgs()
     let rc = parse_args_with_help(args, "modules/dasLLAMA/harness/tts_synth.das")
@@ -58,11 +59,10 @@ def main() : int {
         to_log(LOG_ERROR, "tts synth: --q8 and --f32 pin the rows GEMMs to opposite lanes - pass one, not both\n")
         return 2
     }
-    let fixture = empty(args.fixture) ? path_join(get_das_root(), "modules/dasLLAMA/tests/_tts_fixtures/g2p_corpus.json") : args.fixture
-    var err = ""
-    let rows = read_json(fread(fixture), err)
-    if (rows == null || !(rows.value is _array)) {
-        to_log(LOG_ERROR, "tts synth: {fixture} does not parse: {err}\n")
+    let fixture = empty(args.fixture) ? tts_corpus_path() : args.fixture
+    var inscope rows <- tts_corpus_head(fread(fixture), args.limit > 0 ? args.limit : INT_MAX)
+    if (empty(rows)) {
+        to_log(LOG_ERROR, "tts synth: {fixture} does not parse, or holds no sentence\n")
         return 2
     }
     mkdir(args.out)
@@ -80,20 +80,17 @@ def main() : int {
         set_asr_prof(args.prof)
         var inscope m <- load_tts_model(args.model)
         var n = 0
-        for (r in rows.value as _array) {
-            break if ((args.limit > 0 && n >= args.limit) || !empty(failed))
-            let id = r?["id"] ?? ""
-            let text = r?["text"] ?? ""
-            continue if (empty(id) || empty(text))
-            var inscope a <- synthesize(m, text, args.voice, args.speed)
-            let wav = path_join(args.out, "{id}.wav")
+        for (r in rows) {
+            break if (!empty(failed))
+            var inscope a <- synthesize(m, r.text, args.voice, args.speed)
+            let wav = path_join(args.out, "{r.id}.wav")
             if (!write_wav_pcm16(wav, a.pcm, a.sample_rate)) {
                 failed = "cannot write {wav}"
                 continue
             }
             let audio_s = float(length(a.pcm)) / float(a.sample_rate)
             let gen_ms = float(a.timings.total_us) / 1000.0
-            timings |> push(SentenceTiming(id = id, audio_s = audio_s, gen_ms = gen_ms, rtf = gen_ms / 1000.0 / audio_s))
+            timings |> push(SentenceTiming(id = r.id, audio_s = audio_s, gen_ms = gen_ms, rtf = gen_ms / 1000.0 / audio_s))
             audio_total += double(audio_s)
             gen_total += double(gen_ms) / 1000.0lf
             n++

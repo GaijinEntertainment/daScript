@@ -207,7 +207,7 @@ them, not of its class.
 
 The class names follow the features `requires=` can gate: `x86-amx` (AMX-INT8 +
 AMX-TILE over the 512-bit VNNI gate) / `x86-vnni512` / `x86-vnni256` / `x86-avx2` /
-`x86-base`, `arm-i8mm` / `arm-neon`; any other
+`x86-base`, `arm-sve` / `arm-i8mm` / `arm-neon`; any other
 architecture gets `<platform>-<arch>`, a key no shipped profile matches, so
 such a box always races (`tune_cpu_class()` computes this box's,
 `tune_class_chain()` its adoption ladder). The profile is read at **compile
@@ -407,8 +407,8 @@ DAS_JIT_BASELINE=x86-avx2 DAS_TUNE_MODE=fat daslang -exe -output myapp myapp.das
 ```
 
 `DAS_JIT_BASELINE` names the class the exe's plain code targets - `x86-base`,
-`x86-avx2`, `x86-vnni256`, `x86-vnni512`, `x86-amx`, `arm-neon` (M1) or
-`arm-i8mm` (M2 and later); a class is a feature set, never a box model, and
+`x86-avx2`, `x86-vnni256`, `x86-vnni512`, `x86-amx`, `arm-neon` (M1),
+`arm-i8mm` (M2 and later) or `arm-sve` (Graviton3+); a class is a feature set, never a box model, and
 every profile is keyed by one. Under `fat`, every `[tune]` function gets one
 clone per class of its arch's ladder that a `[tune_scope(defaults=)]` ships a
 profile for, at or above the baseline, plus the baseline itself - adding a

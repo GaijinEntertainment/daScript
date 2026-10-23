@@ -587,7 +587,7 @@ def vk_host_rows(twin : void?; var yp : float?; q : uint8 const?; s : uint8 cons
 def dasllama_math_vulkan_register() {
     register_kernel_backend(KernelBackend(name = "vulkan", mm = @@vulkan_no_gemv, batch = @@vulkan_no_batch,
         group3 = @@vulkan_no_group3, repack = @@vulkan_repack_noop,
-        needs_repack = false, priority = -1, available = @@vulkan_backend_available))
+        needs_repack = false, batch_only = true, priority = -1, available = @@vulkan_backend_available))
     set_moe_gpu_arm("vulkan", @@vulkan_moe_gpu_arm)
     set_moe_gpu_bake_tag(@@vk_bake_tag)
     set_dlim_vulkan_source(@@vk_dlim_source)

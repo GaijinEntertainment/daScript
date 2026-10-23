@@ -23,7 +23,9 @@ a program (`.das_module`, `src/dasLLVM.cpp`) - is reviewed with `skills/internal
 - **A diff that adds or changes a branch keyed on what `get_platform_name()`,
   `get_architecture_name()`, `cpu_supports()`, or `host_llvm_feature()` returns, directly or
   through a value built from it, runs the module-owned suite on a machine that takes the new
-  branch.**
+  branch.** A child run under a forced CPU feature (`DAS_JIT_ARM64_FORCE_FEATURES`,
+  `DAS_JIT_X64_FORCE_FEATURES`) that reaches the branch's code counts as that machine. A test's
+  own check that skips the test on other platforms is not a new branch.
 
 - **A test under `tests/` (beside this file) never creates, overwrites, or deletes a
   git-tracked path.**

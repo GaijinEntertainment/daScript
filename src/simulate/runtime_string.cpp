@@ -29,7 +29,7 @@ namespace das
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Walign-mismatch"  // mingw jmp_buf alignment
 #endif
-            longjmp(**g_throwBuf,1);
+            das_longjmp(**g_throwBuf,1);
 #if defined(__clang__)
 #pragma clang diagnostic pop
 #endif
@@ -54,7 +54,7 @@ namespace das
         jmp_buf * prevBuf = *g_throwBuf;
         jmp_buf ev;
         *g_throwBuf = &ev;
-        if ( !setjmp(ev) ) {
+        if ( !das_setjmp(ev) ) {
             tryBody();
             *g_throwBuf = prevBuf;
         } else {

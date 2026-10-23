@@ -24,7 +24,8 @@ The anatomy mirrors `utils/internal/dasweb-playground`.
 ### 1.1 Routes
 
 Public (proxied by `caddy.snippet`): `GET /api/versions`, `GET /api/runs[?version=N]` (the
-board: every run's filter columns plus its `pp512`/`tg128`/`tg128b4` cells and `cpu` label, so a page
+board: every run's filter columns plus its `pp512`/`tg128`/`tg128b4` cells, `cpu` label and
+`audio` array - `[{test, ms, audio_s, voided}]` for an `asr`/`tts`/`audio-chat` run, `[]` otherwise - so a page
 paints and pairs from this one response), `GET /api/submission/:id` (the verbatim receipt,
 fetched only for a receipt a visitor opens), `GET /api/sidecars[?version=N]` (the
 browse listing; absent/0 version = all), `GET /api/sidecars?version=N&box=<encoded>` (the
@@ -33,6 +34,7 @@ lookup ladder - a `box` switches modes and then version is required), `GET /api/
 `GET /admin/` (the operator page) + `GET /admin/sidecars` (its listing, gate state included),
 `POST /admin/sidecar/verify` / `POST /admin/sidecar/delete`, `POST /admin/import-sidecar`
 (plant official - stored verified; re-plant promotes), `POST /admin/import-official`,
+`POST /admin/import-annotations` (the holds and voids),
 `POST /admin/submit` (the gate flip), `POST /shutdown`, plus `GET /healthz` for the watchdog.
 Operator callers pass a three-layer gate: a loopback peer, a loopback `Host` authority, and
 same-origin-or-header-less. The `Host` and `Origin` layers together are the CSRF guard for
@@ -50,11 +52,26 @@ Three tables, one migration stream (`ladder_migration_*`):
   `sidecar`, `official`.
 - `runs` - one row per BenchRun: flat columns for filtering plus the `Pp512`/`Tg128`/`Tg128b4`
   cells (`Tg128b4` is the `tg128@4` test, the four-stream batched row) and the `Cpu` label the
-  board paints from; the truth stays in the submission `Doc` at (`ModelIdx`, `RunIdx`); the cell
-  columns hold `run_cells` of that node, and migrations 2 and 3 fill them for rows older than the
-  columns. Identity per `modules/dasLLAMA/METHODOLOGY.md`
+  board paints from, and `Audio`: for a run whose workload is in `AUDIO_WORKLOADS` (`asr`, `tts`, `audio-chat` - whose clips ride the `asr:` keys),
+  the JSON text of one `{test, ms, audio_s, voided}` cell per `<workload>:<test>` test with a positive
+  `ms`, sorted by test (`audio_s` 0 = not recorded; `voided` = the outlier rule's verdict,
+  `audio_outlier_clips` of the exchange schema over the cell's rate - its ms over its own audio
+  length, else the length a sibling run of the same model recorded for that test - or the run's
+  own `void_clips` naming it; `modules/dasLLAMA/ARCHITECTURE_MEASUREMENT.md#audio-outlier-rule`);
+  the truth stays in the submission `Doc` at
+  (`ModelIdx`, `RunIdx`); the cell columns hold `run_cells` of that model and run node, and
+  migrations 2 to 7 and 9 fill them for rows older than the columns (the `Gpu` label and the
+  image-chat `ImgEnc`/`ImgPp`/`ImgTg` cells among them, served as `gpu` and `img_*`). The engine column is free text: reference engines
+  (`llama.cpp`, `whisper-cli`, `mlx-lm`, `mlx-audio`, ...) land like `das`. Community record
+  submissions of any workload pass the same `validate_record_submission` (at least one stamped
+  das run), so an asr/tts submission lands its audio cells under the same rule as an LLM one. Identity per `modules/dasLLAMA/METHODOLOGY.md`
   is (`Gguf`, `Box`, `Engine`, `Backend`, `Flavor`, `Workload`); official imports replace on
   it, community rows append.
+- `annotations` - the `annotations.json` entries carrying `held` (the ledger row that keeps a model
+  off the board) or `void_clips`, replaced whole by every annotations import. `list_runs` - what
+  `/api/runs` serves - leaves out every run of a held model on the hold's workload and box, whatever
+  its engine (a reference whose das row is withheld pairs with nothing), and blanks a void's named
+  tests on the runs its selectors match: an audio clip reads voided, an image-chat `img:<cell>` 0.
 - `sidecars` - content-addressed by the document's own sha256; identity columns come from
   `dasllama_exchange_schema`'s `parse_sidecar_info` and drive the lookup ladder: exact box -> same
   platform/arch/cpu -> same platform/arch, verified first within a tier, newest first.
@@ -146,8 +163,10 @@ promote-by-sha are both available.
 
 The official boards are the record stores under `modules/dasLLAMA/performance/records/`
 (not in the release). The site deploy (`.github/workflows/pages.yml`, after the dasllama.io
-flip) POSTs every `records/<box>.json` to `/admin/import-official` over loopback, so a merged
-store refresh publishes itself - the same commit-is-publish contract the news has. Manual
+flip) POSTs every `records/<box>.json` to `/admin/import-official` and then `records/annotations.json`
+to `/admin/import-annotations` over loopback, so a merged store refresh or hold publishes itself - the same commit-is-publish contract the news has. Manual
 paths for a box without a deploy: the deployed toml's `official_dir` (imported at every
 start), or on the box
-`daslang admin.das -- --db /srv/dasllama-ladder/ladder.db --op import-official --file records/<box>.json`.
+`daslang admin.das -- --db /srv/dasllama-ladder/ladder.db --op import-official --file records/<box>.json`
+(`--op import-annotations --file records/annotations.json` for the holds and voids; the `official_dir`
+import reads the dir's `annotations.json` after its stores).

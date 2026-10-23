@@ -85,7 +85,7 @@ wrong sign there - an operand a caller can bound to 7 bits is a different op, no
 A CPU class is a feature set, never a box model: the set every box of the class carries, spelled
 in LLVM's target-feature names. The classes are the rows of `JIT_CPU_CLASSES`
 (`daslib/llvm_cpu_class.das`): `x86-base`, `x86-avx2`, `x86-vnni256`, `x86-vnni512`, `x86-amx`,
-`arm-neon`, `arm-i8mm`. Each row carries the LLVM cpu its target machine schedules for and its
+`arm-neon`, `arm-i8mm`, `arm-sve`. Each row carries the LLVM cpu its target machine schedules for and its
 feature set, and the cpu is the arch's bare baseline (`x86-64`, `generic`) on every row: an LLVM
 cpu level such as `x86-64-v3` implies features the row does not name (bmi2, lzcnt, movbe; `v4`
 adds avx512cd/dq), the backend would emit them, and the membership test below would admit a box
@@ -97,7 +97,10 @@ defaults profiles), so a profile and the class it is keyed by state the same sil
 in a class when it carries every feature of the set; `tune_cpu_class()` names the highest class
 this box is in, and `jit_cpu_class_ladder` is the one adoption ladder both the compile-time
 profile walk and the runtime pick descend. M1 is `arm-neon` (it has no i8mm); M2 and later are
-`arm-i8mm`. A vnni512 part without vbmi - the pre-Ice-Lake Xeons - is not in `x86-vnni512` and
+`arm-i8mm`; Neoverse V1/V2 (Graviton3+) are `arm-sve`. `arm-sve` gates no seat of its own - it
+splits off because the same seats crown different winners there: SMMLA issues at several per
+cycle on Neoverse and on one NEON pipe on Apple, so one profile cannot serve both, and Apple
+reports no SVE (its SME is the streaming mode only). A vnni512 part without vbmi - the pre-Ice-Lake Xeons - is not in `x86-vnni512` and
 runs as `x86-avx2`, because the set is the contract and a subset of it is not.
 
 `DAS_JIT_BASELINE=<class>` builds for a class instead of the running box. It is one truth on

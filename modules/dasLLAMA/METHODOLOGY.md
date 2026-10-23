@@ -64,6 +64,15 @@ A box without an accelerated tier simply shows fewer categories.
   `total - load` is the set's engine time, best of reps); ONNX Runtime times its recognize
   calls per clip in one amortized process and the per-clip bests sum. Load is excluded on
   every side, as everywhere.
+- **Text-to-speech** (`tts:g2p20@<voice>`): generation time to speak the first 20 sentences of
+  the g2p corpus at one voice, each sentence best of 3 timed repetitions after one untimed
+  warm-up, the bests summed (`ms`) beside the seconds of audio spoken (`audio_s`); seconds of
+  audio per second of compute is `audio_s * 1000 / ms`. **Generation only on every side**: das
+  times its synthesis less the text front end, the phoneme models' references (kokoro's torch
+  model, KittenTTS's ONNX files) take the corpus's own phoneme strings, and Pocket reads the text
+  on both sides. The references are each family's own package on the CPU and, on Apple boxes,
+  kokoro on torch `mps` and mlx-audio's ports in the gpu category. KittenTTS's package speaks
+  shorter audio for the same phonemes, so a kitten pair compares on time, not on audio rate.
 
 Model load is excluded everywhere. Sweeps run on images the batch bakes itself (the lifecycle
 wipe/bake/delete in `PROFILE.md`) so first-load conversion cost cannot leak into a timed cell; a >3% coefficient of variation on a das cell
@@ -145,14 +154,19 @@ engine-free validator of the same record shape plus the tune-sidecar form;
 - **`parity`** (`ok`) rides das text-LLM rows: before a model's first cell, the sweep runs the
   model's frozen pinned-greedy parity fixture (`performance/model_specs.das` evidence - the
   same one the test suite gates) and refuses every cell on a mismatch, so a board number can
-  never come from an engine that decodes garbage on that box. The pregate prints both decoded
+  never come from an engine that decodes garbage on that box. A carrier whose evidence is
+  flagged `prefix_bar` (the gemma-4-26B MoE: its routing amplifies an ulp of rounding into whole
+  logits, and the reference engine's own continuation moves as much between thread counts or
+  micro-batch sizes) holds as a matching prefix of half the span - the timed run's fixture-gate
+  form - instead of token for token. The pregate prints both decoded
   texts into the sweep log; only the verdict is stored. ASR rows carry their transcript
   (`text`) instead - the eyeball is the row itself.
 - **`hardware`** is auto-probed on the box, never typed in - it is the block a reader has to be
   able to trust.
 - **`dasllama_version`** rides das rows only: dasLLAMA's own release counter
-  (`dasllama/dasllama_version.das`), bumped by any kernel work, decoupled from the daslang
-  version in `version`. Sidecar provenance carries the same counter, which is what lets a
+  (`dasllama/dasllama_version.das`), bumped only when the maintainer rules that rows measured
+  before the bump can no longer be compared with rows after it (`REVIEW.md`), decoupled from
+  the daslang version in `version`. Sidecar provenance carries the same counter, which is what lets a
   sidecar's validity be judged as (version, box) without opening it.
 - **`source`** is `official` or `community`.
 - The identity is **`(gguf, box, engine, backend, flavor, workload)`**. A re-measure replaces

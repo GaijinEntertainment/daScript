@@ -20,16 +20,25 @@ web/output64/examples/devlog.jsonl itself, one JSON line per page event — star
 
     bin/Release/daslang.exe utils/internal/dasllama-ladder/main.das -- --db ladder.db \
         --official-dir modules/dasLLAMA/performance/records
-    py -3 serve.py            # http://127.0.0.1:8932/
+    py -3 serve.py            # http://127.0.0.1:8932/  (serve.py <port> picks another)
+
+A served page's own scripts and styles carry their mtime as `?v=` - stamp_assets.py's pass, the
+deploy's content hash swapped for the mtime.
 """
 import http.server
 import os
+import posixpath
 import socketserver
+import sys
 import threading
 import urllib.error
 import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+import stamp_assets  # noqa: E402 - the deploy's stamping pass, found beside this file
+
+
 SITE_FILES = os.path.normpath(os.path.join(HERE, "..", "site", "files"))
 EXAMPLES_OUT = os.path.realpath(os.path.join(HERE, "..", "web", "output64", "examples"))
 SHARED = {"forge.css", "nav-dropdown.css", "dasllama-table.css", "github-star.js"}
@@ -110,7 +119,34 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if self.path.startswith("/examples/") and self.path.split("?", 1)[0].endswith(".html") \
                 and ("devlog=1" in self.path or os.path.exists(DEVLOG_ON)):
             return self.serve_with_devlog()
+        if self.path.split("?", 1)[0] in ("/", "") or self.path.split("?", 1)[0].endswith(".html"):
+            return self.serve_page()
         return super().do_GET()
+
+    def serve_page(self):
+        # a page's own scripts and styles carry their mtime as a query, so an edited file is a new
+        # URL to the browser - Safari reuses a cached script on a plain reload otherwise
+        path = self.translate_path(self.path.split("?", 1)[0])
+        if os.path.isdir(path):
+            path = os.path.join(path, "index.html")
+        try:
+            with open(path, "rb") as f:
+                html = f.read()
+        except OSError:
+            self.send_response(404)
+            self.end_headers()
+            return
+
+        page_dir = posixpath.dirname(self.path.split("?", 1)[0].split("#", 1)[0])
+        html, _ = stamp_assets.stamp_html(
+            html, lambda ref: self.translate_path(posixpath.normpath(posixpath.join(page_dir, ref))),
+            lambda local: str(int(os.path.getmtime(local))).encode())
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Length", str(len(html)))
+        self.end_headers()
+        self.wfile.write(html)
 
     def do_POST(self):
         # a page's console lines and errors land in DEVLOG, one JSON line each, so a phone's run reads on the box that serves it
@@ -152,6 +188,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if self.path.startswith("/examples/"):
             self.send_header("Cross-Origin-Opener-Policy", "same-origin")
             self.send_header("Cross-Origin-Embedder-Policy", "require-corp")
+        # a dev server: every static file revalidates, so an edited script never runs under a
+        # newer page from the browser's heuristic cache
+        if not self.path.startswith("/api/") and self.path.split("?")[0].endswith((".js", ".css", ".json")):
+            self.send_header("Cache-Control", "no-cache")
         super().end_headers()
 
     def proxy_api(self):
@@ -200,6 +240,7 @@ class Server(socketserver.ThreadingTCPServer):
 
 
 if __name__ == "__main__":
-    with Server(("127.0.0.1", PORT), Handler) as httpd:
-        print(f"dasllama.io preview: http://127.0.0.1:{PORT}/  (api -> {LADDER})")
+    port = int(sys.argv[1]) if len(sys.argv) > 1 else PORT
+    with Server(("127.0.0.1", port), Handler) as httpd:
+        print(f"dasllama.io preview: http://127.0.0.1:{port}/  (api -> {LADDER})")
         httpd.serve_forever()
