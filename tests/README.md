@@ -902,6 +902,7 @@ Coverage of per-iteration `finally` semantics across every loop form. Each cell 
 | math_misc.das | Misc math - min, lerp, reflect, dot, length, cross, noise, ceili, saturate | |
 | math_pack_unpack.das | pack_float_to_byte / unpack_byte_to_float with fuzzing | |
 | math_quaternions.das | Quaternion operations with fuzzing | |
+| test_srgb_transfer.das | Scalar/RGB sRGB encoding across the linear segment and power curve, preserving RGBA alpha | |
 
 ## msl/
 
