@@ -365,7 +365,7 @@ namespace das {
         AstSerializer & serializeModule ( Module & module, bool already_exists );
 
         static constexpr uint32_t getVersion () {
-            return 233;   // 233: CodeOfPolicies carries promote_shared_unoptimized
+            return 234;   // 234: inlining requires visible dependencies
         }
 
         void serializeProgram ( ProgramPtr program, ModuleGroup & libGroup ) noexcept;
