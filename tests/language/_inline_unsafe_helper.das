@@ -5,10 +5,15 @@ options gen2
 
 module _inline_unsafe_helper public
 
+require daslib/fio
+
+var auto_inline_visibility_value = 42
+var private auto_inline_visibility_private_value = 43
+
 def sum_via_ptr(src : array<int>; blk : block<(v : int) : int>) : int {
     // multi-statement block-form unsafe body
     var total = 0
-    unsafe {
+    unsafe { // nolint:STYLE025 tests scope restoration
         var p = addr(total)
         for (v in src) {
             *p += invoke(blk, v)
@@ -21,7 +26,7 @@ def first_via_ptr(src : array<int>; blk : block<(v : int) : int>) : int {
     // the invoke inside the unsafe region devirtualizes on a later round: its arg
     // temp (deref/addr) must anchor INSIDE the spliced wrapper block
     var r : int
-    unsafe {
+    unsafe { // nolint:STYLE025 tests scope restoration
         r = invoke(blk, *addr(src[0]))
     }
     return r
@@ -40,7 +45,7 @@ def expr_unsafe_sum(src : array<int>; blk : block<(v : int) : int>) : int {
 [unsafe_deref]
 def deref_first(src : array<int>; blk : block<(v : int) : int>) : int {
     var r : int
-    unsafe {
+    unsafe { // nolint:STYLE025 block-form rejection control
         r = invoke(blk, *addr(src[0]))
     }
     return r
@@ -51,8 +56,17 @@ def scaled_bits(x : int; k : int) : int {
     // [inline] MUST callee with a block-form unsafe body: spliced wrapper-less, this
     // re-errored `cast requires unsafe` at the call site before the generated wrapper
     var r : int
-    unsafe {
+    unsafe { // nolint:STYLE025 tests scope restoration
         r = int(reinterpret<uint>(x)) * k
     }
     return r
+}
+
+def auto_inline_visibility_root() : string {
+    var error : string
+    let root = temp_directory(error)
+    if (!empty(error)) {
+        panic("cannot create temporary directory: {error}")
+    }
+    return root
 }
