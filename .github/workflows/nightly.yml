@@ -71,6 +71,7 @@ jobs:
     permissions:
       contents: read
       actions: write
+      pull-requests: read
     uses: ./.github/workflows/extended_checks.yml
     with:
       lane: extended_nightly
