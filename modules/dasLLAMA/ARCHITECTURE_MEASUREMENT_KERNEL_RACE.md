@@ -80,7 +80,7 @@ inside the pod's L2, the bf16 words inside the SLC - so its f32-against-bf16 row
 ring of eight weight copies (`PLE_RING`: 440 MB and 220 MB), dispatch i reading copy i mod 8, in
 both the bench and `harness/vk_gk_rows_probe.das`. One buffer hides the bf16 words' lead the ring
 shows: the pod reads 34.13 against 34.79 us at one column on one buffer, 45.59 against 69.61 over
-the ring (`debug-jit`; the provenance and the rows: `ARCHITECTURE_GPU_SHARED_KERNELS.md#gpu-kernel-pairs`).
+the ring (`debug-jit`; the provenance and the rows: `ARCHITECTURE_GPU_SHARED_READINGS.md#gpu-shared-readings`).
 The step and combine races' down rows (46 MB at the gemma-4 window, 33.5 MB at the 512-row reduce) are an activation the down GEMM writes just
 before the step reads it, so production reads them as warm as the race does, and they take no ring;
 every other race streams activations of a few MB.

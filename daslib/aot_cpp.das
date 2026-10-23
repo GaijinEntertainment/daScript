@@ -1986,6 +1986,8 @@ class public CppAot : AstVisitor {
     def isOpPolicy2(that : ExprOp2?) {
         if (is_alpha(first_character(that.op))
                 || that.op == "/" || that.op == "%"
+                || (that.op == "%=" && (that.left._type.baseType == Type.tFloat
+                    || that.left._type.baseType == Type.tDouble))
                 || that.op == "<<<" || that.op == ">>>" || that.op == "<<<=" || that.op == ">>>="
                 || that.op == "<<" || that.op == ">>" || that.op == "<<=" || that.op == ">>=") return true;
         return that._type.isPolicyType || that.left._type.isPolicyType || that.right._type.isPolicyType;

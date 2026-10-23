@@ -7,6 +7,10 @@ require daslib/f16_cvt
 require dasllama/dasllama_convert
 require dasllama/dasllama_gpu_tier
 require dasllama/dasllama_kqformat   // KQ_B32_ELEMS: the q8_0 block the stacks' scales step by
+require dasllama/dasllama_gemm_schema
+require _compares
+require daslib/enum_trait
+require daslib/shader_lingua_franca
 
 // Synthetic K-quant expert stacks in the vulkan tier's DEVICE layout, shared by the tier suite
 // (test_vulkan_tier) and the cm2 expert-chain suite (test_vulkan_moe_cm2): the pow2 scale sets
@@ -192,8 +196,7 @@ def dequant_q8_rows(wq : array<int8>; ws : array<float>; rows, n : int64; var w 
 
 //! a q8_0 stack packed onto the wire and uploaded at `woff`; false = the upload was refused
 def q8_upload(wq : array<int8>; ws : array<float>; woff, n, rows : int64; stream : bool = false) : bool {
-    var wqb : array<uint8>
-    var wsb : array<uint8>
+    var wqb, wsb : array<uint8>
     pack_q8_wire(wq, ws, wqb, wsb)
     let ok = moe_gpu_upload_stack(wqb, wsb, woff, n, rows, 0, stream)
     delete wqb
@@ -214,8 +217,7 @@ def fill_q8_stack(rows, n : int64; seed : int64; var wqb : array<uint8>; var wsb
 
 //! one plane in format `fmt` (0 = q8 under `fill_q8_stack`) uploaded at `woff` and dequantized into `w`; false = the upload was refused
 def plane_up(fmt : int; rows, n, seed, woff : int64; var w : array<float>; tiny_d : bool = true; stream : bool = false) : bool {
-    var wqb : array<uint8>
-    var wsb : array<uint8>
+    var wqb, wsb : array<uint8>
     if (fmt == 0) {
         fill_q8_stack(rows, n, seed, wqb, wsb, w)
     } else {
@@ -237,17 +239,84 @@ def hash_word(i : uint) : uint {
 }
 
 //! `n` hashed words `hash_word(i * mul + add)`: a synthetic quant plane
-def hashed_words(n : int; mul, add : uint) : array<uint> {
-    return <- [for (i in range(n)); hash_word(uint(i) * mul + add)]
-}
+def hashed_words(n : int; mul, add : uint) : array<uint> =>
+    <- [for (i in range(n)); hash_word(uint(i) * mul + add)]
 
 //! `n` hashed floats `float(hash_word(i + salt) % modulus) / div - off`: a cell's unit-range input fill
-def hash_fill(n : int; salt, modulus : uint; div, off : float) : array<float> {
-    return <- [for (i in range(n)); float(hash_word(uint(i) + salt) % modulus) / div - off]
-}
+def hash_fill(n : int; salt, modulus : uint; div, off : float) : array<float> =>
+    <- [for (i in range(n)); float(hash_word(uint(i) + salt) % modulus) / div - off]
 
 //! `n` hashed floats `float(hash_word(i + salt) % 2001) * 0.001 - 1`: the combine cells' rows, in steps of 1e-3 over [-1, 1]
-def hash_steps(n : int; salt : uint) : array<float> {
-    return <- [for (i in range(n)); float(hash_word(uint(i) + salt) % 2001u) * 0.001 - 1.0]
+def hash_steps(n : int; salt : uint) : array<float> =>
+    <- [for (i in range(n)); float(hash_word(uint(i) + salt) % 2001u) * 0.001 - 1.0]
+
+//! a finite half from a small table, so a synthetic scale word never carries a NaN
+def safe_half(i : uint) : uint {
+    let tab = fixed_array(0x3C00u, 0xB800u, 0x3400u, 0x4200u, 0x2E00u, 0xBC00u, 0x3E00u, 0xB000u)
+    return tab[i % 8u]
 }
+
+def ws_word(i : uint) : uint => safe_half(i * 7u + 3u) | (safe_half(i * 3u + 1u) << 16u)
+
+//! `n` scale words `ws_word(i * mul + add)`: two finite halves a word
+def ws_plane(n : int; mul, add : uint) : array<uint> =>
+    <- [for (i in range(n)); ws_word(uint(i) * mul + add)]
+
+//! `nblk` f16 block scales two a word, the small positive ramp `0.002 x (1 + b % 7)`: the CUDA q8 GEMV cells' scale plane
+def ramp_ws_plane(nblk : int) : array<uint> =>
+    <- [for (i in range((nblk + 1) / 2)); packHalf2x16(float2(0.002 * float(1 + (2 * i) % 7), 0.002 * float(1 + (2 * i + 1) % 7)))]
+
+//! one q8 fmt-0 host plane of `totblk` blocks: the s8 quant words hashed at `i * wq_mul + wq_add`, the f16 scale pairs at `i * ws_mul + ws_add`
+def q8_plane(totblk : int; wq_mul, wq_add, ws_mul, ws_add : uint; var wqh, wsh : array<uint>) {
+    let qwords = totblk * int(Q8_BLOCK_ELEMS / 4l)   // a byte an element: q8 has no `kq_desc` stride row (`kq_qsb` panics on it by design)
+    let swords = (totblk * 2 + 3) / 4   // an f16 scale a block
+    delete wqh
+    delete wsh
+    wqh <- hashed_words(qwords, wq_mul, wq_add)
+    wsh <- ws_plane(swords, ws_mul, ws_add)
+}
+
+//! rows [0, cnt0) off weight block 0 and [cnt0, cnt0 + cnt1) off `wblk1`, `extra` zero words past the map; `wgs` the map's length
+def two_region_sched(cnt0, cnt1, wblk1, ttile, wtiles, extra : int) : tuple<words : array<uint>; wgs : int> {
+    let wgs0 = ((cnt0 + ttile - 1) / ttile) * wtiles
+    let wgs = wgs0 + ((cnt1 + ttile - 1) / ttile) * wtiles
+    var words : array<uint>
+    words |> resize(2 * 4 + wgs + extra)
+    words[2] = uint(cnt0)
+    words[4] = uint(wblk1)
+    words[5] = uint(cnt0)
+    words[6] = uint(cnt1)
+    words[7] = uint(wgs0)
+    for (w in range(wgs)) {
+        words[8 + w] = w < wgs0 ? 0u : 1u
+    }
+    return <- (words = words, wgs = wgs)
+}
+
+//! a decode GEMV cell's host planes: the weight quants and scales, the region records, one activation row's quants and scales
+struct GemvFix {
+    wqh, wsh, xqh : array<uint>
+    xsh : array<float>
+    regs : array<uint>
+}
+
+//! region r's weights at r x d x `units` units; the activation scales `xs0 + (i % xs_mod) * xs_step`
+def gemv_fix(nreg, d, units, wq_words : int; wq_seed : uint; var wsh : array<uint>; xunits, xq_words : int; xq_mul, xq_add : uint;
+             xs0, xs_step : float; xs_mod : int) : GemvFix {
+    var f <- GemvFix(wqh <- hashed_words(nreg * d * units * wq_words, 1u, wq_seed), wsh <- wsh,
+        xqh <- hashed_words(xunits * xq_words, xq_mul, xq_add), xsh <- row_fill(xunits, 1, 0, xs_step, -xs0, xs_mod))
+    f.regs |> resize(nreg * 2)
+    for (r in range(nreg)) {
+        f.regs[r * 2] = uint(r * d * units)
+    }
+    return <- f
+}
+
+//! the superblock decode GEMV family's kq members: the fourteen leaves past q8, in enum order
+def kq_leaf_fmts() : array<int> => <- [for (f in type<KqFmt>); int(f); where kq_sb(f)]
+
+let TILE_CELL_K = 768       //! every per-format tile cell's K: three unrolled superblock passes on both depths (a K-quant width is a multiple of 256, so no K-quant stamp ever takes the k loop's tail)
+let TILE_CELL_D = 160       //! every tile cell's weight rows a plane: one full 128-tile and a 32-row remainder - the KHR arm's edge tile, the cm2 arms' clamped second tile over rows 32..160
+let TILE_CELL_ROWS0 = 300   //! the tile cells' two regions: on every arm's rows a workgroup, whole tiles and an edge
+let TILE_CELL_ROWS1 = 260
 

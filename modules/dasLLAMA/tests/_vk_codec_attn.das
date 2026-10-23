@@ -16,11 +16,11 @@ require dasllama/dasllama_vulkan_classes
 require dasllama/dasllama_common   // kv_store_row / kv_load_row and the tq4 batch rotations: the CPU cache's own codec
 require dasllama/dasllama_kv_dtype
 require _vkd_oracles
+require _kv_codec_oracles public
 require _compares
 require _attn_oracle
 require math
 
-let SIGN_ROW = 512l   //! tq4's sign row: the driver's `KV_TQ4_SIGNS`, asserted equal by every tq4 arm
 let private I8_SENTINEL_BITS = 0x80808080u   //! a Q8 quant plane's fill: -128 in every byte, a value no requant writes
 
 let private QA_BASE_BLOCKS = 3      //! the layer's base in the mirror: odd, so a block codec's blocks start two bytes off a word
@@ -35,20 +35,6 @@ enum Fold {
     q8_k
 }
 
-//! tq4's sign row, as the CPU chain fills it
-def tq4_sign_row() : array<float> {
-    var signs : array<float>
-    tq4_fill_signs(signs, SIGN_ROW)
-    return <- signs
-}
-
-//! `n` rows of `stride` floats rotated head by head into tq4's basis, as the CPU chain rotates them
-def tq4_rotated(rows_f : array<float>; n, stride, hs : int; signs : array<float>) : array<float> {
-    var r := rows_f
-    tq4_rotate_batch(r, int64(n), int64(stride), int64(hs), unsafe(addr<float const?>(signs[0])))
-    return <- r
-}
-
 //! the rows as codec `kv` stores them: tq4's rotated first
 def private stored_basis(kv : KVDtype; rows_f : array<float>; n, kvd, hs : int; signs : array<float>) : array<float> {
     if (kv == KVDtype.tq4) return <- tq4_rotated(rows_f, n, kvd, hs, signs)
@@ -58,24 +44,7 @@ def private stored_basis(kv : KVDtype; rows_f : array<float>; n, kvd, hs : int; 
 //! a mirror offset of `blocks` 32-element blocks in codec `kv`'s units: blocks under a block codec, elements under a scalar one
 def private qa_units(kv : KVDtype; blocks : int) : int => int(kv_row_units(kv, int64(blocks * 32)))
 
-//! `n` float rows `kvd` wide as the mirror of codec `kv` holds them from unit `base_units` on - the CPU cache's bytes, padded
-//! to a word past the last unit's reach - and the rows the CPU dequant reads back: what the device attends over
-def codec_mirror_of_stored(kv : KVDtype; stored : array<float>; n, kvd, base_units : int) : tuple<bytes : array<uint8>; deq : array<float>> {
-    let unit_bytes = int(kv_unit_bytes(kv))
-    let row_bytes = int(kv_row_bytes(kv, int64(kvd)))
-    var bytes : array<uint8>
-    bytes |> resize(((base_units * unit_bytes + n * row_bytes + 4 + 3) / 4) * 4)
-    var deq : array<float>
-    deq |> resize(n * kvd)
-    var at = unsafe(addr<uint8?>(bytes[base_units * unit_bytes]))
-    for (r in range(n)) {
-        kv_store_row(at, kv, int64(kvd), int64(r), 0l, int64(kvd), unsafe(addr<float const?>(stored[r * kvd])))
-        kv_load_row(at, kv, int64(kvd), int64(r), 0l, int64(kvd), unsafe(addr<float?>(deq[r * kvd])))
-    }
-    return <- (bytes = bytes, deq = deq)
-}
-
-//! ... from rows in the model's basis
+//! the mirror of codec `kv` from rows in the model's basis
 def private codec_mirror(kv : KVDtype; rows_f : array<float>; n, kvd, hs, base_units : int; signs : array<float>) : tuple<bytes : array<uint8>; deq : array<float>> {
     var stored <- stored_basis(kv, rows_f, n, kvd, hs, signs)
     var mirror <- codec_mirror_of_stored(kv, stored, n, kvd, base_units)
@@ -241,27 +210,6 @@ def private codec_control(a : CodecAttn; f : CodecAttnFixture) : array<float> {
     return <- array<float>()
 }
 
-//! One decode-attention arm over a mirror of codec `a.kv`, dispatched as the driver dispatches it (a row a `rowwg` workgroups,
-//! its region in its token block), against the CPU attention over the rows the CPU codec reads back. The controls: the codec's
-//! own (`codec_control`), each mechanism dropped, and under a fold the control's row quantized.
-//! the query as the block-codec stamps and the CPU's q8_0 hot path (`dot_q8q8kv`) read it: 32-blocks of int8 quants under
-//! an f32 scale of amax over 127, dequantized back - the two chains agree to this quantization, not bit for bit to f32
-def private q8_query_roundtrip(q : array<float>) : array<float> {
-    var out := q
-    for (b in range(length(q) / 32)) {
-        var amax = 0.0
-        for (k in range(32)) {
-            amax = max(amax, abs(q[b * 32 + k]))
-        }
-        let d = amax / 127.0
-        let id = d != 0.0 ? 1.0 / d : 0.0
-        for (k in range(32)) {
-            out[b * 32 + k] = round(q[b * 32 + k] * id) * d
-        }
-    }
-    return <- out
-}
-
 //! the query the oracle scores: the block-codec stamps read its q8_0 blocks, as the CPU hot path does; the scalar mirrors read it f32
 def private oracle_query(a : CodecAttn; f : CodecAttnFixture) : array<float> {
     if (a.kv == KVDtype.q8_0 || a.kv == KVDtype.tq4) {
@@ -270,6 +218,7 @@ def private oracle_query(a : CodecAttn; f : CodecAttnFixture) : array<float> {
     return <- clone_to_move(f.q)
 }
 
+//! the controls: the codec's own (`codec_control`), each mechanism dropped, and under a fold the control's row quantized
 def codec_attn_arm(t : T?; a : CodecAttn) {
     let kvd = a.nheads / a.kv_mul * a.hs
     let qdim = a.nheads * a.hs
@@ -278,9 +227,6 @@ def codec_attn_arm(t : T?; a : CodecAttn) {
     let tag = codec_attn_tag(a, slab)
     let blk = a.fold == Fold.q8_k ? 256 : 32
     let rqk = a.fold == Fold.none ? DA_RQ_NONE : (a.fold == Fold.q8_k ? DA_RQ_Q8K : DA_RQ_Q8)
-    if (a.kv == KVDtype.tq4) {
-        t |> equal(KV_TQ4_SIGNS, SIGN_ROW, "the fixtures' sign row is the driver's")
-    }
     var f <- codec_attn_fixture(a)
     var toks <- [for (r in range(a.nrows)); TokMeta(cnt = uint(a.keys), mirbase = uint(qa_units(a.kv, QA_REGION_BLOCKS) + r * a.keys * int(kv_row_units(a.kv, int64(kvd)))))]
     let rowwgs = da_attn_row_wgs(int64(a.nheads), int64(a.kv_mul), int64(a.nsplit))

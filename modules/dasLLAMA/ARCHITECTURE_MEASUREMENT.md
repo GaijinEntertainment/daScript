@@ -178,6 +178,13 @@ or later (`BRINGUP.md`). `gen_bench_records --ref-vulkan <build-vulkan/bin/llama
 4096 -b 2048 -ub 512 -npp 512 -ntg 128 -npl 4 -fa on` for `tg128@4`, with no environment setting
 beyond the command line; the row's `cmd` carries both.
 
+### The CUDA reference rows {#cuda-reference-rows}
+
+A llama.cpp row read against `benchmarks/lcpp_bench.das` under `DASLLAMA_CUDA=1` times a Release source build of tag
+b10660 (`6c84c7d5d`) configured `-DGGML_CUDA=ON`: on the Windows reference box under Visual Studio 2022 against the CUDA
+13.4 toolkit (`-T cuda=13.4`, `CMAKE_CUDA_ARCHITECTURES` 120), on the Linux pod the same tag's `build-cuda`. It runs, per
+model, `llama-bench -m <gguf> -ngl 99 -fa 1 -p 512 -n 128 -r 3`, with no environment setting beyond the command line.
+
 ### The committed records gate {#committed-records-gate}
 
 `gen_bench_records.das` writes `performance/records/<box>.json`, and `RETIRED_BOXES`

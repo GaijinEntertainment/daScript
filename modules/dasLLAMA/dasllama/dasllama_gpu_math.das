@@ -35,6 +35,82 @@ def gemv_lane_row_slot(j, grp, lpr, sgs, nsg : uint) : uint {
     return (q / per_sg) * sgs + (q % per_sg) * lpr
 }
 
+def gemv_wgs_of(rows : int64; lanes_per_row : uint; subgroup_size, rows_per_wg : int64) : int64 {
+    //! `lanes_per_row` 0 is a whole subgroup a row; a workgroup's `rows_per_wg` subgroups each take `subgroup_size / lanes_per_row` rows
+    let l = lanes_per_row == 0u ? subgroup_size : int64(lanes_per_row)
+    let rpw = rows_per_wg * (subgroup_size / l)
+    return (rows + rpw - 1l) / rpw
+}
+
+//! the residual epilogue's workgroups over `rows` rows: four rows a subgroup
+def ar_epilogue_wgs(rows, rows_per_wg : int64) : int64 => (rows + 4l * rows_per_wg - 1l) / (4l * rows_per_wg)
+
+//! `blk` once a tile of `total` columns, `tile` wide, with `pc.col0` / `pc.ncols` naming the tile; `pc` holds all `total` after
+[arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-col-tiles")]
+def each_col_tile(var pc : auto(PC)&; total, tile : uint; blk : block<() : void>) {
+    var c0 = 0u
+    while (c0 < total) {
+        pc.col0 = c0
+        pc.ncols = min(total - c0, tile)
+        invoke(blk)
+        c0 += tile
+    }
+    pc.col0 = 0u
+    pc.ncols = total
+}
+
+let DA_NSPLIT_MAX = 16l   //! the decode attention's key splits a head, at most (the partials plane sizes to it)
+
+def da_nsplit(wgs, sm_count : int64) : int64 {
+    //! enough key splits a head to cover the SMs twice, at most DA_NSPLIT_MAX; one where the SM count is unknown or `wgs` covers it
+    if (sm_count <= 0l || wgs <= 0l || wgs >= 2l * sm_count) return 1l
+    return min((2l * sm_count + wgs - 1l) / wgs, DA_NSPLIT_MAX)
+}
+
+//! the shadow starts on a 64-key step under the window from `pos0`; 0 on a flat layer or a window not yet past its span
+def kv_shadow_pos0(window, pos0 : int64) : int64 => window != 0l && pos0 > window ? ((pos0 - window) / 64l) * 64l : 0l
+
+//! the 256-aligned chunk `nsplit` pieces cut K into; 0 when the last piece would start past K
+def cm2_chunk(n, nsplit : int64) : int64 {
+    let ck = (((n + nsplit - 1l) / nsplit + 255l) / 256l) * 256l
+    return ck * (nsplit - 1l) < n ? ck : 0l
+}
+
+//! the most k chunks, up to `want` and eight, `cm2_chunk` admits over K `n` whose partial planes of `plane_bytes` each fit
+//! `scratch_bytes` (1: whole)
+[arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
+def cm2_split_fit(n, want : int64; plane_bytes : int64 = 0l; scratch_bytes : int64 = 9_223_372_036_854_775_807l) : int64 {
+    var sk = min(want, 8l)
+    while (sk > 1l && (cm2_chunk(n, sk) == 0l || sk * plane_bytes > scratch_bytes)) {
+        sk--
+    }
+    return max(sk, 1l)
+}
+
+//! workgroups a (d, cnt) GEMM takes at the token column `tc`
+def cm2_tiles_at(d, cnt, tc : int64) : int64 {
+    verify(tc >= 32l, "cm2_tiles_at got the e column's class key (CM2_TC_E), which is no column width")
+    return ((d + 127l) / 128l) * ((cnt + tc - 1l) / tc)
+}
+
+//! the units a grid of `wgs` workgroups costs over `slots` wave slots at the column's step weight (l 16, m 10, s 5) a `steps`-deep k walk
+[arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
+def cm2_wave_units(wgs, steps, slots, tc : int64) : int64 => ((wgs + slots - 1l) / slots) * steps * (tc == 256l ? 16l : (tc == 128l ? 10l : 5l))
+
+//! the cm2 tile column for `cnt` activation rows against a `d`-row plane on a card of `cores` SMs and `slots` wave slots (the
+//! blocks an SM the home runs): the s column (32) under 64 rows and where the m tiles would leave three quarters of the SMs
+//! idle, the m column (128) under 128 rows, else whichever of the l and m columns costs fewer whole waves of the slots (a tie
+//! to l); 256 where the SM count is unknown
+[arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
+def cm2_wave_col(d, cnt, cores, slots : int64) : int64 {
+    if (cnt <= 64l) return 32l
+    if (cnt <= 128l) return 128l
+    if (cores == 0l) return 256l
+    let tiles_m = cm2_tiles_at(d, cnt, 128l)
+    if (tiles_m * 4l <= cores) return 32l
+    return cm2_wave_units(tiles_m, 1l, slots, 128l) < cm2_wave_units(cm2_tiles_at(d, cnt, 256l), 1l, slots, 256l) ? 128l : 256l
+}
+
 //! a K/V mirror position's row in its layer's slab: the position itself, or its slot of a sliding layer's ring of `ring` rows; the
 //! modulo never divides by zero, since a shader compiler may take a division as proof its divisor is not zero and drop the flat arm
 [arch(at="../ARCHITECTURE_GPU_KV_RING.md#kv-sliding-ring")]
@@ -43,6 +119,8 @@ def kv_ring_row(pos, ring : uint) : uint => ring == 0u ? pos : pos % max(ring, 1
 //! ... the host's form, for the row movers and the plan
 [arch(at="../ARCHITECTURE_GPU_KV_RING.md#kv-sliding-ring")]
 def kv_ring_row(pos, ring : int64) : int64 => ring == 0l ? pos : pos % ring
+
+let RD_UNSPLIT_POS = 512l   //! a whole-model driver's token step runs its attention's unsplit form under this position (`ARCHITECTURE_GPU_SHARED_ATTN.md#vk-decode-attn-split`)
 
 //! positions [lo, hi) of a layer whose mirror rows ring at `ring` (0 = flat) as runs back to back in its slab, `blk(p0, n, slot)` a
 //! run of n positions from p0 at row `slot`: the span whole on a flat layer; on a ring its last `ring` positions, cut where the slots wrap

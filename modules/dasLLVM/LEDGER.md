@@ -63,3 +63,16 @@ leaves when it lands or is refuted.
   emission; `tests/llvm_class_target_gates.das` holds the thirteen gates it names today. The
   change: a `REVIEW.das` check that every global the function assigns before its `invoke` is
   assigned again after it, so a new gate cannot be added half way.
+- **A dasbind late extern's call cost under the JIT, measured against a C++ `addExtern`.**
+  dasCUDA binds the whole CUDA driver API and NVRTC as `[extern(cdecl, late, ...)]`
+  declarations (`modules/dasCUDA/cuda/cuda_driver.das`), so every launch, copy and sync of a
+  served model crosses that path. Today the JIT lowers a late extern to a load of the resolved
+  pointer from a mangled-name global, a null check that branches to the resolver on the first
+  call (`resolve_late_bind`, `daslib/llvm_jit.das`), and an indirect call; the interpreter
+  reaches it through `SimNode_DasBindCall`'s wrapper, which marshals every argument a call, and
+  the AOT path through the same node. Nothing has measured either against the direct call an
+  `addExtern` binding compiles to. The change, if the measurement warrants it: resolve every
+  late extern of a module at its JIT init so the per-call null check goes and the global
+  becomes an invariant load, and an AOT stub that calls the resolved pointer directly. The
+  ruler is a tight loop of `cuEventRecord` or `cuCtxGetCurrent` through both bindings on the
+  same box, interpreter, JIT and AOT.

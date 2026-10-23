@@ -13,6 +13,7 @@ require dasllama/dasllama_math
 require dasllama/dasllama_gpu_tier
 require dasllama/dasllama_gpu_resident
 require ?vulkan dasllama/dasllama_vulkan_prefill   // nolint:STYLE030,LINT019 - vk_rdec_prefill_segment_windows, read in the vulkan half
+require dasllama/dasllama_cuda_decode
 require dasllama/dasllama_env
 require _model_tier
 require _resident_feed
@@ -29,7 +30,8 @@ require _resident_feed
 // row still within the bar of the device-prefilled references. Never more live host-cached sessions than regions: a
 // later prefill would take a live session's region, which the engine leaves to the scheduler's pin.
 // Every cell skips off the JIT, without DASLLAMA_GPU=1 on a device the driver serves, without its file under
-// models_dir(), or on a card whose room the plan does not fit at two regions.
+// models_dir(), or on a card whose room the plan does not fit at two regions; the recurrent and E-series cells also skip
+// under DASLLAMA_CUDA=1 (that home serves the dense slice alone).
 
 [init]
 def private allow_cpu_prefill_intent() {
@@ -52,14 +54,19 @@ let private STEPS = 8l
 //! 9-12 max logit, 0.09 at its widest, the one-step-off control far past)
 var private g_seg_bar_rel = SPLIT_BAR_REL
 
-//! the segmented windows the Vulkan driver counted so far; 0 with no vulkan module (the cells then skip on the tier)
+//! the segmented windows the armed driver counted so far - the CUDA home's under DASLLAMA_CUDA=1, else the Vulkan driver's; 0 with
+//! no vulkan module (the cells then skip on the tier)
 def private segment_windows : int64 {
+    if (gpu_want_cuda()) return cud_rdec_prefill_segment_windows()
     static_if (typeinfo builtin_module_exists(vulkan)) {
         return vk_rdec_prefill_segment_windows()
     } else {
         return 0l
     }
 }
+
+//! which driver's counter `segment_windows` reads, named in every assert on it
+def private seg_counter : string => gpu_want_cuda() ? " [the CUDA home's counter, DASLLAMA_CUDA=1]" : " [the Vulkan driver's counter, DASLLAMA_CUDA unset]"
 
 def private open_session(tr : Model; var s : Session; opening : array<int64>) {
     eval_(tr, s, opening)
@@ -79,8 +86,10 @@ def private hold_rows(t : T?; what : string; got, want : array<array<float>>) {
     rows_within_control(t, what, got, want, g_seg_bar_rel, 1l, 1.0, $(r) => r == 0l ? "the prefill's row" : "step {r}")
 }
 
-//! the windows of a segmented call that hold both segments - the one the boundary between A and B falls in; 0 with no vulkan module
+//! the windows of a segmented call that hold both segments - the one the boundary between A and B falls in; 0 with no vulkan
+//! module and the CUDA home not asked for
 def private shared_windows(ta : int64) : int64 {
+    if (gpu_want_cuda()) return ta % pf_window_rows() != 0l ? 1l : 0l
     static_if (typeinfo builtin_module_exists(vulkan)) {
         return ta % pf_window_rows() != 0l ? 1l : 0l
     } else {
@@ -112,7 +121,7 @@ def private tails_as_segments(t : T?; tr : Model; ta, tb : int64; what : string)
     chunks |> push_clone(tail_b)
     eval_segments_(tr, sess, chunks)
     sess |> clear()
-    t |> equal(segment_windows() - sw0, shared_windows(ta), "{what}: the two tails rode one segmented call, {shared_windows(ta)} window holding both segments at the {pf_window_rows()}-row window")
+    t |> equal(segment_windows() - sw0, shared_windows(ta), "{what}: the two tails rode one segmented call, {shared_windows(ta)} window holding both segments at the {pf_window_rows()}-row window{seg_counter()}")
     t |> equal(moe_gpu_resident_prefills() - pf0, 2l, "{what}: the driver counted a prefill a segment")
     t |> equal(sa.n_past, OPEN_ROWS + ta, "{what}: session A's position moved by its tail")
     t |> equal(sb.n_past, OPEN_ROWS + tb, "{what}: session B's position moved by its tail")
@@ -142,7 +151,7 @@ def private segments_cell(t : T?; tr : Model) {
     let sw1 = segment_windows()
     eval_segments_(tr, sess0, opens)
     sess0 |> clear()
-    t |> equal(segment_windows() - sw1, 1l, "the two openings rode one segmented window from position zero")
+    t |> equal(segment_windows() - sw1, 1l, "the two openings rode one segmented window from position zero{seg_counter()}")
     let g0 <- [ <- logits_of(ca, tr.config.vocab_size), <- logits_of(cb, tr.config.vocab_size)]
     delete ca   //! the two regions go free before the references take them: a live host-cached session's region is never taken
     delete cb
@@ -182,7 +191,7 @@ def private owner_first_cell(t : T?; tr : Model) {
     let pf0 = moe_gpu_resident_prefills()
     eval_segments_(tr, sess, chunks)
     sess |> clear()
-    t |> equal(segment_windows() - sw0, 1l, "an owner's continuation beside a session with no region: one segmented window (the owner bound first, the free region the newcomer's)")
+    t |> equal(segment_windows() - sw0, 1l, "an owner's continuation beside a session with no region: one segmented window (the owner bound first, the free region the newcomer's){seg_counter()}")
     t |> equal(moe_gpu_resident_prefills() - pf0, 2l, "... a prefill a segment")
     let got_a <- steps_after(tr, sa, toks)
     hold_rows(t, "the owner's tail beside a newcomer's opening", got_a, want_a)
@@ -219,7 +228,7 @@ def private outnumber_cell(t : T?; tr : Model) {
     eval_segments_(tr, sess, chunks)
     sess |> clear()
     let passes1 <- gpu_cpu_passes_()
-    t |> equal(segment_windows() - sw0, 0l, "three segments over two regions, one of them owned: no segmented window")
+    t |> equal(segment_windows() - sw0, 0l, "three segments over two regions, one of them owned: no segmented window{seg_counter()}")
     t |> equal(moe_gpu_resident_prefills() - pf0, 3l, "... the fallback served each segment alone on the driver")
     t |> equal(length(passes1), length(passes0), "... and the declined call counted no pass ({passes1})")
     unsafe {
@@ -253,7 +262,7 @@ def private gap_cell(t : T?; tr : Model) {
     let gap0 = pass_count("gap")
     eval_segments_(tr, sess, chunks)
     sess |> clear()
-    t |> equal(segment_windows() - sw0, 0l, "an owner short of its start: no segmented window")
+    t |> equal(segment_windows() - sw0, 0l, "an owner short of its start: no segmented window{seg_counter()}")
     t |> equal(pass_count("gap") - gap0, 1l, "... the fallback passed that session's call as the gap, once")
     unsafe {
         delete sess
@@ -294,7 +303,7 @@ def private decline_cell(t : T?; tr : Model) {
     eval_segments_(tr, sess, opens)
     set_resident_prefill_allowed(allowed)
     sess |> clear()
-    t |> equal(segment_windows() - sw0, 0l, "under the prefill pin the sessions rode no segmented window")
+    t |> equal(segment_windows() - sw0, 0l, "under the prefill pin the sessions rode no segmented window{seg_counter()}")
     t |> equal(moe_gpu_resident_prefills() - pf0, 0l, "... and the driver counted no prefill (the served cells' counter's control)")
     t |> equal(pass_count("pinned_off") - pinned, 2l, "the engine ran each session alone, each passed to the CPU rails as pinned off")
     //! the steps on both sessions before any reference session takes a region: two live host-cached sessions a region each
@@ -335,7 +344,7 @@ def private decline_arms_cell(t : T?; tr : Model) {
         let codec0 = pass_count("codec")
         eval_segments_(tr, sess, opens)
         sess |> clear()
-        t |> equal(segment_windows() - sw0, 0l, "a segment on another K/V codec: no segmented window")
+        t |> equal(segment_windows() - sw0, 0l, "a segment on another K/V codec: no segmented window{seg_counter()}")
         t |> equal(pass_count("codec") - codec0, 1l, "... the fallback passed that session to the CPU rails as codec")
         unsafe {
             delete sess
@@ -355,7 +364,7 @@ def private decline_arms_cell(t : T?; tr : Model) {
         let busy0 = pass_count("busy")
         eval_segments_(tr, sess, opens)
         sess |> clear()
-        t |> equal(segment_windows() - sw0, 0l, "both regions held by device-home sessions: no segmented window")
+        t |> equal(segment_windows() - sw0, 0l, "both regions held by device-home sessions: no segmented window{seg_counter()}")
         t |> equal(pass_count("busy") - busy0, 2l, "... the fallback passed each host-cached session as busy")
         unsafe {
             delete sess
@@ -377,7 +386,7 @@ def private decline_arms_cell(t : T?; tr : Model) {
         let passes0 = pass_total()
         eval_segments_(tr, sess, opens)
         sess |> clear()
-        t |> equal(segment_windows() - sw0, 0l, "a session adding deepstack slices: no segmented window on an override with no slice-add arm")
+        t |> equal(segment_windows() - sw0, 0l, "a session adding deepstack slices: no segmented window on an override with no slice-add arm{seg_counter()}")
         t |> equal(moe_gpu_resident_prefills() - pf0, 1l, "... the other session's segment ran alone on the driver")
         t |> equal(pass_total() - passes0, 0l, "... and the deepstack session took the CPU prefill loop with no pass counted")
         sb.ds_active = false
@@ -423,6 +432,16 @@ def test_gpu_resident_segments_llama_1b_k(t : T?) {
 
 //! the segmented window on a recurrent model: each segment's recurrent rows conv and scan over its own region's slot, a tail
 //! shorter than the conv taps among them; a NextN carrier's carry lands a row a segment, a routed model routes every row
+//! the CUDA home serves the dense slice alone: under its ask a recurrent or an E-series carrier skips, since the whole-model
+//! driver these cells assert armed is that home
+def private dense_home_only(t : T?) : bool {
+    if (gpu_want_cuda()) {
+        t |> skip("the CUDA home serves the dense slice alone - this carrier's segmented window is the Vulkan home's")
+        return true
+    }
+    return false
+}
+
 //! a fresh device-home session adopts `claim` at `at` - a checkpoint row's position - continues the tail past it and takes `STEPS`
 //! fed steps, held to the solo form; its own parked claim comes back for the next adoption
 def private adopt_at_row(t : T?; tr : Model; claim, at : int64; opening, tail, toks : array<int64>; want : array<array<float>>; what : string) : int64 {
@@ -503,7 +522,7 @@ def private captures_cell(t : T?; tr : Model) {
 
 def private recurrent_segments_cells(t : T?; file : string) {
     let path = path_join(models_dir(), file)
-    return if (!resident_ready(t, path))
+    return if (dense_home_only(t) || !resident_ready(t, path))
     var tr <- load_resident(path, 2l)
     return if (!resident_admitted(t, "the whole-model driver armed on {file} (the load log names any decline)", ""))
     t |> success(tr.config.recr_mask != 0ul, "the file is a recurrent hybrid")
@@ -546,7 +565,7 @@ def test_gpu_resident_segments_hybrid_moe(t : T?) {
 def test_gpu_resident_segments_gemma4_e2b(t : T?) {
     let file = "gemma-4-E2B-it-Q8_0.gguf"
     let path = path_join(models_dir(), file)
-    return if (!family_on(t, "gemma4e") || !resident_ready(t, path))
+    return if (!family_on(t, "gemma4e") || dense_home_only(t) || !resident_ready(t, path))
     with_gpu_resident_embed(1) {   //! the segmented window reads the side rows' ids: the load gathers the token table on the device
         var tr <- load_resident(path, 2l)
         if (resident_admitted(t, "the whole-model driver armed on {file} (the load log names any decline)", "")) {
@@ -591,7 +610,7 @@ def private host_embedded_cell(t : T?; tr : Model) {
     }
     sess |> clear()
     t |> success(had_gate, "the tier seats the token-table gate the cell unseats")
-    t |> equal(segment_windows() - sw0, 0l, "host-embedded rows on a per-layer-embedding model: no segmented window")
+    t |> equal(segment_windows() - sw0, 0l, "host-embedded rows on a per-layer-embedding model: no segmented window{seg_counter()}")
     t |> equal(sa.n_past, OPEN_ROWS, "session A prefilled its opening alone")
     t |> equal(sb.n_past, OPEN_ROWS, "session B prefilled its opening alone")
     let got <- [ <- logits_of(sa, tr.config.vocab_size), <- logits_of(sb, tr.config.vocab_size)]

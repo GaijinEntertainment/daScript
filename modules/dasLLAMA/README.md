@@ -111,8 +111,10 @@ modules/dasLLAMA/
   ARCHITECTURE_GPU_RACE_SHAPES.md # companion: the refuted kernel shapes and the sanctioned float-A stamps
   ARCHITECTURE_GPU_PREFILL.md # companion: the Metal prefill driver - attention slab, chunked submission, twin dual-store
   ARCHITECTURE_GPU_PREFILL_GEMM.md # companion: the Metal prefill driver's GEMM ladder, dev-W knees, tail peel, KQ tensor scaffold
-  ARCHITECTURE_GPU_VULKAN.md  # companion: the Vulkan resident driver - window chain, Q8 requant store, GEMV grid codebooks
-  ARCHITECTURE_GPU_VULKAN_GEMM.md # companion: the Vulkan GEMM tiles - cm2 decode lanes, tile pick, class pipelines, expert chain, the KHR kq tile
+  ARCHITECTURE_GPU_SHARED_GEMM.md # companion: the GEMM tiles and GEMVs Vulkan and CUDA both stamp - cm2 decode lanes, tile body, the KHR kq tile, GEMV lane split
+  ARCHITECTURE_GPU_SHARED_ROWS.md # companion: the row kernels more than one home stamps - the Q8 requant store, residual step, routed combine
+  ARCHITECTURE_GPU_VULKAN.md  # companion: the Vulkan resident driver - window chain, GEMV grid codebooks
+  ARCHITECTURE_GPU_VULKAN_GEMM.md # companion: the Vulkan GEMM tile pick, class pipelines, expert chain
   ARCHITECTURE_GPU_VULKAN_RESIDENCY.md # companion: the Vulkan residency plan and the GPU-slot marks swap
   ARCHITECTURE_MEDIA.md       # companion: the encoder-tower, audio, ASR and vision charters
   ARCHITECTURE_IMAGE.md       # companion: the prepared-image (.dlim) rail

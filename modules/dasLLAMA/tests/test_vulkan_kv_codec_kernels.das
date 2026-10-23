@@ -11,77 +11,17 @@ require ?vulkan dasllama/dasllama_vulkan_common
 require ?vulkan dasllama/dasllama_vulkan_classes
 require ?vulkan _vkd_oracles
 require ?vulkan _vk_codec_attn
+require _kv_codec_oracles   // nolint:STYLE030,LINT019 — the codec oracles, read under the vulkan static_if, unused in the darwin world
 require _compares
 require dasllama/dasllama_common
 require daslib/f16_cvt   // nolint:STYLE030,LINT019 — used only inside the vulkan static_if arms; the no-vulkan lane sees it unused
-require daslib/algorithm
+require daslib/algorithm   // nolint:STYLE030,LINT019 — the row sorts, read under the vulkan static_if, unused in the darwin world
 require math   // nolint:STYLE030,LINT019 - used only inside the vulkan static_if arms (a build without the module drops them)
 
 //! The Vulkan K/V mirror's quant codecs against the CPU cache's own codec (a Vulkan device, else the cells skip): the stores'
 //! bytes against `kv_store_row`, every byte outside the stored rows left at its fill; the decode attention's codec stamps
 //! against the CPU attention over the rows `kv_load_row` reads back, on every path the pass has; the f16 shadow pass against
 //! those rows rounded to half, bit for bit; tq4's un-rotation against `tq4_unrotate_batch`.
-
-let private MIRROR_FILL = 0xA5A5A5A5u
-let private MIRROR_FILL_BYTE = 0xA5u8
-let private ODD_LAYERBASE = 7     //! blocks before a layer's rows: odd, so its blocks start two bytes off a word
-let private SLACK_BLOCKS = 1
-let private HALF_MAX = uint16(0x7BFF)   //! 65504, the largest finite half: where an f16 store clamps
-let private HALF_NAN = uint16(0x7E00)
-let private HALF_NAN_PAIR = 0x7E007E00u
-let private PAST_HALF_RANGE = 4.0e7   //! times a fixture's values: a block scale past 65504, which the device clamps
-let private PAST_HALF_VALUES = 3.0e4  //! times a fixture's values: dequantized values to 1e5 under a block scale inside the half range
-
-def private block_bytes(kv : KVDtype) : int => int(kv_unit_bytes(kv))
-
-//! the mirror plane the CPU codec leaves: `MIRROR_FILL`, then row `r` of `staged` (in the stored basis) at block `blocks[r]`
-def private codec_want(kv : KVDtype; staged : array<float>; blocks : array<int>; mir_bytes, kvd : int) : array<uint8> {
-    var want : array<uint8>
-    want |> resize(mir_bytes)
-    want |> fill(MIRROR_FILL_BYTE)
-    for (r in range(length(blocks))) {
-        kv_store_row(unsafe(addr<uint8?>(want[blocks[r] * block_bytes(kv)])), kv, int64(kvd), 0l, 0l, int64(kvd), unsafe(addr<float const?>(staged[r * kvd])))
-    }
-    return <- want
-}
-
-//! Every block scale of `bytes` the CPU stored as an infinite half, set to the half the device clamps it to; the count set.
-def private clamp_inf_scales(var bytes : array<uint8>; kv : KVDtype) : int {
-    var clamped = 0
-    for (b in range(length(bytes) / block_bytes(kv))) {
-        let at = b * block_bytes(kv)
-        let hi = uint(bytes[at + 1])
-        if ((hi & 0x7Fu) == 0x7Cu && bytes[at] == 0u8) {
-            bytes[at] = 0xFFu8
-            bytes[at + 1] = uint8((hi & 0x80u) | 0x7Bu)
-            clamped++
-        }
-    }
-    return clamped
-}
-
-let private KS_KVD = 96
-let private KS_ROWS = 3
-let private KS_POS_PER_REGION = 12
-let private KS_ROW_BLOCKS = KS_KVD / 32
-let private KS_REGION_BLOCKS = KS_POS_PER_REGION * KS_ROW_BLOCKS
-
-//! a mirror plane of `blocks` blocks past the odd layer base and a slack block, to a whole word
-def private mirror_bytes(kv : KVDtype; blocks : int) : int => ((ODD_LAYERBASE + blocks + SLACK_BLOCKS) * block_bytes(kv) + 3) / 4 * 4
-
-//! the staged K and V rows: every block's largest magnitude on a different element, V's middle block of row 1 all zero, K's
-//! last block of row 2 and V's first block of row 2 past the half range
-def private ks_staged() : tuple<k : array<float>; v : array<float>> {
-    var k <- row_fill(KS_ROWS * KS_KVD, 37, 11, 0.071, 3.3)
-    var v <- row_fill(KS_ROWS * KS_KVD, 29, 5, 0.043, 2.0, 89)
-    for (i in range(32)) {
-        v[KS_KVD + 32 + i] = 0.0
-        k[2 * KS_KVD + 64 + i] *= PAST_HALF_RANGE
-        v[2 * KS_KVD + i] *= PAST_HALF_RANGE
-    }
-    k[5] = -9.25   // a negative block maximum: the quant reads -127
-    return <- (k = k, v = v)
-}
 
 //! one q8_0 store arm: the token stamp (rows at their token blocks' positions, two regions) or the window stamp (rows from `pos0`)
 def private q8_store_arm(t : T?; window : bool) {
@@ -162,7 +102,6 @@ def private tq_store_arm(t : T?; hs, nqh, nkh : int; window : bool = false) {
         let nblk = kvd / 32
         let pos0 = 3
         let tag = "kv_tq4_store{window ? "_b" : ""} hs {hs}, {nqh} q heads, {nkh} k/v heads"
-        t |> equal(KV_TQ4_SIGNS, SIGN_ROW, "the fixtures' sign row is the driver's")
         var signs <- tq4_sign_row()
         var q <- row_fill(TQ_ROWS * qd, 41, 3, 0.05, 1.8, 73)
         var kf <- row_fill(TQ_ROWS * kvd, 37, 11, 0.071, 3.3)
@@ -286,10 +225,6 @@ def test_vkc_tq4_da_attn(t0 : T?) {
         }
     }
 }
-
-let private SH_MIRROR_POS = 21
-let private SH_POS0 = 5
-let private SH_ROWS = 13
 
 //! One shadow arm: `SH_MIRROR_POS` positions of `kvd` in the mirror from block `ODD_LAYERBASE`, the pass over positions
 //! [SH_POS0, SH_POS0 + SH_ROWS). K's first block of the first position read dequantizes past the half range.

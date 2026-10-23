@@ -110,14 +110,58 @@ def gst_kernel {
     }
 }
 
+//! the int8 workgroup tiles under coopmatScaleAcc: two 32-deep k
+//! windows, each window's s32 product folded into the f32 accumulator
+//! by that window's row and column scales off the shared arrays
+class Cm2ScaleAcc {
+    @ssbo @binding = 0 a8 : array<int8>     //! A 64x64 row-major s8
+    @ssbo @binding = 1 b8 : array<int8>     //! B transposed: (n, k) at n * 64 + k
+    @ssbo @binding = 2 row_scales : array<float>    //! two windows x 64
+    @ssbo @binding = 3 col_scales : array<float>    //! 16 pad entries, then two windows x 64
+    @ssbo @binding = 4 c : array<float>             //! C 64x64 row-major
+    @workgroup wg_row_scales : float[128]
+    @workgroup wg_col_scales : float[144]
+
+    [spirv_kernel(local_size_x = 128, name = "csa_spv")]
+    def run {
+        let tid = gl_LocalInvocationID.x
+        wg_row_scales[tid] = row_scales[tid]
+        wg_col_scales[tid] = col_scales[tid]
+        if (tid < 16u) {
+            wg_col_scales[128u + tid] = col_scales[128u + tid]
+        }
+        barrier()
+        var tl : tensorLayout2D
+        tensorLayoutCreate(tl)
+        tensorLayoutSetDimension(tl, 64u, 64u)
+        tensorLayoutSetStride(tl, 64u, 1u)
+        var tv : tensorView2Dt
+        tensorViewCreate(tv)
+        var facc : coopmatWgAcc_f32_64x64
+        var k = 0u
+        while (k < 64u) {
+            var at : coopmatWgA_s8_64x32
+            var bt : coopmatWgB_s8_32x64
+            var sacc : coopmatWgAcc_s32_64x64
+            coopmatLoadTensor(at, a8, 0u, tl, 0u, 64u, k, 32u)
+            coopmatLoadTensor(bt, b8, 0u, tl, 0u, 64u, k, 32u, tv)
+            sacc = coopmatMulAdd(at, bt, sacc)
+            coopmatScaleAcc(facc, sacc, wg_row_scales, (k / 32u) * 64u,
+                wg_col_scales, 16u + (k / 32u) * 64u)
+            k += 32u
+        }
+        coopmatStoreTensor(facc, c, 0u, tl, 0u, 64u, 0u, 64u)
+    }
+}
+
 // ===== a multi-SSBO compute runner =====
 
-// One host-visible coherent STORAGE buffer per binding, uploaded from / read back into `bufs`
-// (bufs[i] -> binding i). `spec` empty = plain pipeline; `storage_8_16`/`int_dot`/`coopmat` pick the
-// matching feature-enabled device — gate on probe_support(), else device creation fails.
+// One coherent STORAGE buffer per binding, bufs[i] -> binding i, read
+// back into `bufs`; `spec` empty = plain pipeline. The feature flags
+// pick the device - gate on probe_support(), else creation fails.
 def run_multi(var words : array<uint>; var bufs : array<array<uint8>>; groups : uint;   // nolint:STYLE038 - flat command-record run
               spec : array<SpecConstantValue>; storage_8_16 : bool; int_dot : bool = false;
-              coopmat : bool = false) {
+              coopmat : bool = false; coopmat2 : bool = false) {
     if (volkInitialize() != 0) {
         panic("no Vulkan loader")
     }
@@ -126,9 +170,11 @@ def run_multi(var words : array<uint>; var bufs : array<array<uint8>>; groups : 
     volkLoadInstance(boost_value_to_vk(instance))
     let phys = select_physical_device(instance)
     let gfx = select_graphics_queue_family(phys)
-    var inscope device <- (coopmat ? create_device_storage_8_16_int_dot_coopmat(phys, gfx)
-                                   : (int_dot ? create_device_storage_8_16_int_dot(phys, gfx)
-                                              : (storage_8_16 ? create_device_storage_8_16(phys, gfx) : create_device(phys, gfx))))
+    var inscope device <- (coopmat2 ? create_device_storage_8_16_int_dot_coopmat2(phys, gfx)
+        : (coopmat ? create_device_storage_8_16_int_dot_coopmat(phys, gfx)
+        : (int_dot ? create_device_storage_8_16_int_dot(phys, gfx)
+        : (storage_8_16 ? create_device_storage_8_16(phys, gfx)
+        : create_device(phys, gfx)))))
     volkLoadDevice(boost_value_to_vk(device))
     let dev = boost_value_to_vk(device)
     let queue = get_device_queue(device, gfx, 0u)
@@ -230,15 +276,24 @@ def run_multi(var words : array<uint>; var bufs : array<array<uint8>>; groups : 
 }
 
 // device-support probe with a throwaway instance (tests soft-skip on false)
-def probe_support() : tuple<subgroups : bool; storage : bool; int_dot : bool; coopmat : bool> {
+def probe_support() {
     if (volkInitialize() != 0) {
-        return (subgroups = false, storage = false, int_dot = false, coopmat = false)
+        return (subgroups = false, storage = false, int_dot = false,
+            coopmat = false, coopmat2 = false)
     }
     var inscope instance <- create_instance("dasVulkan probe", make_api_version(1u, 3u, 0u))
     volkLoadInstance(boost_value_to_vk(instance))
     let phys = select_physical_device(instance)
     return (subgroups = subgroup_compute_ops_supported(phys), storage = storage_8_16_supported(phys),
-        int_dot = integer_dot_product_supported(phys), coopmat = cooperative_matrix_supported(phys))
+        int_dot = integer_dot_product_supported(phys), coopmat = cooperative_matrix_supported(phys),
+        coopmat2 = cooperative_matrix2_supported(phys))
+}
+
+def put_f32(var buf : array<uint8>; elem : int; v : float) {
+    let bits = unsafe(reinterpret<uint>(v))
+    for (b in range(4)) {
+        buf[elem * 4 + b] = uint8((bits >> uint(b * 8)) & 0xFFu)
+    }
 }
 
 def u32_of(buf : array<uint8>; i : int) : uint {
@@ -511,6 +566,71 @@ def test_coopmat_gpu(t : T?) {
         }
     }
     t |> success(bad == 0, "16x16 f16 coopmat MMA == CPU f32 reference on every element ({bad} of 256 wrong)")
+    delete words
+    delete bufs
+    delete expected
+}
+
+def csa_a(i : int) : int => (i * 5 + 3) % 7 - 3
+def csa_b(i : int) : int => (i * 3 + 1) % 7 - 3
+def csa_row_scale(i : int) : float => 0.5 + 0.125 * float(i)
+def csa_col_scale(i : int) : float => 1.0 + 0.0625 * float(i)
+
+//! per-index scales and the column pad make a swapped index or offset
+//! move the sum; every value is exact in f32, so == holds
+[test]
+def test_coopmat2_scale_acc_gpu(t : T?) {
+    let sup = probe_support()
+    if (!sup.storage || !sup.int_dot || !sup.coopmat || !sup.coopmat2) {
+        feint("device lacks NV_cooperative_matrix2 (+cooperative matrix, "
+            + "8/16-bit storage, int-dot); skipping\n")
+        return
+    }
+    var a_bytes, b_bytes : array<uint8>
+    a_bytes |> resize(64 * 64)
+    b_bytes |> resize(64 * 64)
+    for (i in range(64 * 64)) {
+        a_bytes[i] = uint8(csa_a(i) & 0xFF)
+        b_bytes[i] = uint8(csa_b(i) & 0xFF)
+    }
+    var rs_bytes, cs_bytes : array<uint8>
+    rs_bytes |> resize(128 * 4)
+    cs_bytes |> resize(144 * 4)
+    for (i in range(128)) {
+        put_f32(rs_bytes, i, csa_row_scale(i))
+    }
+    for (i in range(144)) {
+        put_f32(cs_bytes, i, csa_col_scale(i))
+    }
+    var expected : array<float>
+    expected |> resize(64 * 64)
+    for (r in range(64)) {
+        for (n in range(64)) {
+            var want = 0.0
+            for (w in range(2)) {
+                var s = 0
+                for (k in range(32)) {
+                    s += csa_a(r * 64 + w * 32 + k) * csa_b(n * 64 + w * 32 + k)
+                }
+                want += float(s) * csa_row_scale(w * 64 + r) * csa_col_scale(16 + w * 64 + n)
+            }
+            expected[r * 64 + n] = want
+        }
+    }
+    var cb : array<uint8>
+    cb |> resize(64 * 64 * 4)
+    var bufs <- [ <- a_bytes, <- b_bytes, <- rs_bytes, <- cs_bytes, <- cb]
+    var words <- clone_to_move(csa_spv)
+    let no_spec : array<SpecConstantValue>
+    run_multi(words, bufs, 1u, no_spec, true, true, true, true)
+    var bad = 0
+    for (i in range(64 * 64)) {
+        if (unsafe(reinterpret<float>(u32_of(bufs[4], i))) != expected[i]) {
+            bad++
+        }
+    }
+    t |> success(bad == 0, "64x64x64 int8 cm2 GEMM, each 32-deep window scaled by "
+        + "coopmatScaleAcc == CPU reference ({bad} of 4096 wrong)")
     delete words
     delete bufs
     delete expected

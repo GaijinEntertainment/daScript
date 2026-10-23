@@ -348,6 +348,14 @@ def check_count(got : array<float>; want : array<auto(WT)>; bar : Bar; env : arr
     return bad
 }
 
+//! A control's verdict under `tag`: every element of `got` and `want` finite, and `check_count` of them at `bar` above 0 - a NaN
+//! counts as off there, so it would pass a control that read it unchecked
+def check_exceeds(t : T?; tag : string; got : array<float>; want : array<auto(WT)>; bar : Bar) {
+    let finite = all_finite(got) && all(want, $(w) => !is_nan(w) && abs(w) < WT(INFINITE_DIFF))
+    t |> success(finite, "{tag}: every element the control reads is finite")
+    t |> success(finite && check_count(got, want, bar) > 0, "{tag}: lands outside the bar")
+}
+
 //! `check` on an `envelope` or `per_element` bar: `env` holds each element's envelope or its own bar
 def check(t : T?; tag : string; got : array<float>; want : array<auto(WT)>; bar : Bar; shape : Shape; env : array<auto(ET)>) : int {
     let exact = bar_kind(bar) == BarKind.exact

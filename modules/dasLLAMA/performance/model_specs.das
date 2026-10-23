@@ -891,6 +891,8 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
         // the dense q51 carrier: every dense plane on the per-32 Q5_1 planes
         ModelSpec(file = "Llama-3.2-1B-Instruct-Q5_1-local.gguf",
             recipe = "llama-quantize --allow-requantize Llama-3.2-1B-Instruct-Q8_0.gguf Llama-3.2-1B-Instruct-Q5_1-local.gguf Q5_1"),
+        ModelSpec(file = "Llama-3.2-1B-Instruct-Q5_0-local.gguf",
+            recipe = "llama-quantize --allow-requantize Llama-3.2-1B-Instruct-Q8_0.gguf Llama-3.2-1B-Instruct-Q5_0-local.gguf Q5_0"),
         ModelSpec(file = "Llama-3.2-1B-Instruct-IQ3_M.gguf", display = "Llama-3.2-1B-iq3m", quant_label = "iq3_m",
             parity <- ev_llama_count([kq_native = true])),
         ModelSpec(file = "Llama-3.2-1B-Instruct-IQ4_XS.gguf", display = "Llama-3.2-1B-iq4xs", quant_label = "iq4_xs",

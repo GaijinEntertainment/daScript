@@ -1,0 +1,7 @@
+# The CUDA emitter's suite carries kernel fixtures and emitted-text expectations at the engine's
+# width, as dasLLAMA's cells do: a fixture's width is the kernel's, never the gate's. Both
+# measures are unchecked here until the sweep followup_general.md row 213 names wraps the tree;
+# then this file goes and the repo limits bind.
+[line_length]
+code = 0
+comment = 0

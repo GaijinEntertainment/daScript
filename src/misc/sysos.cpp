@@ -160,17 +160,15 @@
             return n > 0 ? string(utf8, n) : string();
         }
         void * loadDynamicLibrary ( const char * fileName ) {
-            // Bare names (e.g. "msvcrt") need to flow through unchanged so
-            // LOAD_LIBRARY_SEARCH_DEFAULT_DIRS resolves them via system32.
-            // GetFullPathNameA on a bare name produces <CWD>/<name>, an absolute
-            // non-existent path that LoadLibraryEx then refuses to load.
+            // src/misc/ARCHITECTURE.md#bare-library-name
             const char * loadPath = fileName;
             char fullPath[MAX_PATH];
             const bool hasPath = fileName && (strchr(fileName, '/') || strchr(fileName, '\\'));
-            if ( hasPath ) {
-                DWORD got = GetFullPathNameA(fileName, MAX_PATH, fullPath, nullptr);
-                if ( got > 0 && got < MAX_PATH ) loadPath = fullPath;
+            if ( !hasPath ) {
+                return LoadLibraryA(fileName);
             }
+            DWORD got = GetFullPathNameA(fileName, MAX_PATH, fullPath, nullptr);
+            if ( got > 0 && got < MAX_PATH ) loadPath = fullPath;
             // LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR  — also search the loaded DLL's own dir
             //                                     for its imports (lets bundles ship a
             //                                     module's native deps colocated under

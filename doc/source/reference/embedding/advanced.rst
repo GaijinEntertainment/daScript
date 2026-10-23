@@ -340,6 +340,14 @@ structure that crosses, and the host ``require``\ s that file. The externs
 bind ``late``, so the bindings compile before the library exists and a
 build system can generate them as an ordinary output.
 
+An ``[extern]``'s ``library`` (or its ``windows_library`` / ``linux_library`` /
+``macos_library`` twin, which wins on its platform) is one name or a
+``;``-separated candidate list, and the binding goes through the first name
+that loads: a library installed under a per-version name
+(``nvrtc64_130_0;nvrtc64_120_0``, ``libnvrtc.so.13;libnvrtc.so.12``) binds
+with one declaration. Each name is looked up as written, then with the
+platform's shared-library extension appended.
+
 Several such libraries coexist in one process, and so does a library inside a
 host that registered the daslang modules itself: whoever gets there first
 registers the runtime, and the rest bind to it. Several instances of one

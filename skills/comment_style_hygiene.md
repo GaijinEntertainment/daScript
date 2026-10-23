@@ -76,7 +76,10 @@ entry is its home - so it is a kept comment. Above a
 top-level `def` or a global it attaches to nothing and is the SITE CONTRACT spelling: one line
 (a private one caps at three under STYLE015) stating a constraint the site needs and the code
 cannot say - a bar's derivation, a guard's reason, a layout a caller relies on - which the
-comment harvest keeps and the deletion test passes as a kept-set line.** A top-level `//!`
+comment harvest keeps and the deletion test passes as a kept-set line.** A public contract
+longer than one line goes into the body as its first-line `//!`. STYLE015 is on by default
+only under a `daslib/` folder (elsewhere opt-in, `options _comment_hygiene = true`), so outside
+one the reviewer holds the three-line private cap. A top-level `//!`
 that narrates goes like any `//`, its spelling no reason to keep it; a reviewer who reads one
 asks whether the line states a constraint, never whether it attaches. On an `options` /
 `require` line a `//!` documents nothing; above a method inside a class body it lands on the

@@ -220,6 +220,10 @@ struct CallbackFn {
     ret_type : uint         // the tile component type (f16 / f32)
     per_element : bool      // false = reduce combine
     valid   : bool
+    // coopmatScaleAcc's own per-element function, no das body:
+    // v + t * rs[rbase + r] * cs[cbase + c]
+    synth_scale : bool
+    rs_var, cs_var : uint   // the two @workgroup float arrays the synthesized function reads
 }
 
 // break -> branch to `merge`, continue -> branch to `cont`. Pushed per active loop.
@@ -3675,6 +3679,20 @@ class SpirvEmit : AstVisitor {
         let lv = r2v != null ? r2v.subexpr : arg
         return value_of(lv)
     }
+    // a @workgroup float array argument's variable id; 0 with the
+    // error pushed
+    def shared_float_array(arg : ExpressionPtr; who : string) : uint {
+        var bm & = unsafe(*m)
+        let g = global_var_of(ctx, arg)
+        let gi = g != null ? (ctx.globals?[intptr(g)] ?? GlobalInfo()) : GlobalInfo()
+        if (g == null || gi.storage != SpvStorageClass.Workgroup || g._type == null
+                || g._type.firstType == null
+                || emit_type(bm, g._type.firstType) != type_float(bm, 32u)) {
+            errs |> push("{who} must be a @workgroup float array")
+            return 0u
+        }
+        return gi.var_id
+    }
     // A `@@fn` callback argument (coopmatReduce / coopmatPerElement): peel a defensive
     // ExprRef2Value, then take the referenced function (null = not a function reference).
     def callback_fn_arg(arg : ExpressionPtr) : Function const? {
@@ -5660,6 +5678,50 @@ class SpirvEmit : AstVisitor {
             var rops <- [dst.pty, res, vs, mk.value, fid]
             emit_n(bm, SEC_FUNCS, SpvOp.CooperativeMatrixReduceNV, rops)
             delete rops
+            emit(bm, SEC_FUNCS, SpvOp.Store, dst.id, res)
+            return expr
+        }
+        if (origin_name == "coopmatScaleAcc") {
+            if (ctx.stage != ShaderStage.Compute) {
+                errs |> push("coopmatScaleAcc is only valid in a compute shader")
+                return expr
+            }
+            if (length(expr.arguments) != 6) {
+                errs |> push("coopmatScaleAcc expects (facc, sacc, rs, rbase, cs, cbase)")
+                return expr
+            }
+            let di = coopmat_info(expr.arguments[0]._type)
+            let si = coopmat_info(expr.arguments[1]._type)
+            if (!di.ok || !si.ok || !di.is_float || di.comp_width != 32u || si.is_float
+                    || si.comp_width != 32u || di.rows != si.rows || di.cols != si.cols
+                    || di.use != si.use || di.scope != si.scope
+                    || di.scope != uint(SpvScope.Workgroup)) {
+                errs |> push("coopmatScaleAcc: an f32 workgroup accumulator and the s32 " +
+                    "accumulator of its shape")
+                return expr
+            }
+            let rsv = shared_float_array(expr.arguments[2], "coopmatScaleAcc: rs")
+            let csv = shared_float_array(expr.arguments[4], "coopmatScaleAcc: cs")
+            if (rsv == 0u || csv == 0u) return expr
+            let rb = value_of(expr.arguments[3])
+            let cb = value_of(expr.arguments[5])
+            if (rb == 0u || cb == 0u) return expr
+            let dst = coop_local_ptr(expr.arguments[0])
+            let dv = coop_local_val(expr.arguments[0])
+            let sv = coop_local_val(expr.arguments[1])
+            if (dst.id == 0u || dst.pty == 0u || dv == 0u || sv == 0u) {
+                errs |> push("coopmatScaleAcc: facc and sacc must be coopmat locals")
+                return expr
+            }
+            let ft = coopmat_type_of(bm, expr.arguments[0]._type)
+            let cv = alloc_id(bm)
+            emit(bm, SEC_FUNCS, SpvOp.ConvertSToF, ft, cv, sv)
+            let fid = register_scale_callback(bm, *ctx, rsv, csv)
+            ensure_coopmat_per_element(bm)
+            let res = alloc_id(bm)
+            var pops <- [dst.pty, res, dv, fid, cv, rb, cb]
+            emit_n(bm, SEC_FUNCS, SpvOp.CooperativeMatrixPerElementOpNV, pops)
+            delete pops
             emit(bm, SEC_FUNCS, SpvOp.Store, dst.id, res)
             return expr
         }
@@ -7849,9 +7911,71 @@ def private register_callback_func(var m : SpirvModule; var ctx : EmitCtx; f : F
     return cf.valid ? cf.fn_id : 0u
 }
 
+//! the high bit keeps a synthesized callback's key out of the
+//! function-pointer keys
+let private SYNTH_CALLBACK_KEY_BIT = 0x8000000000000000ul
+
+//! coopmatScaleAcc's per-element function over the shared arrays
+//! `rs` and `cs` (their variable ids), registered once a pair
+def private register_scale_callback(var m : SpirvModule; var ctx : EmitCtx; rs, cs : uint) : uint {
+    let key = SYNTH_CALLBACK_KEY_BIT | (uint64(rs) << 32ul) | uint64(cs)
+    if (key_exists(ctx.callback_funcs, key)) {
+        return ctx.callback_funcs[key].fn_id
+    }
+    let ut = type_uint(m)
+    let ft = type_float(m, 32u)
+    var cf = CallbackFn(per_element = true, valid = true, synth_scale = true,
+        rs_var = rs, cs_var = cs, ret_type = ft, fn_id = alloc_id(m))
+    var ps <- [ut, ut, ft, ft, ut, ut]
+    cf.type_id = type_function(m, ft, ps)
+    delete ps
+    ctx.callback_funcs |> insert(key, cf)
+    ctx.callback_order |> push(key)
+    return cf.fn_id
+}
+
+//! (r, c : uint; v, t : float; rbase, cbase : uint)
+//! -> v + t * rs[rbase + r] * cs[cbase + c]
+def private emit_scale_callback(var m : SpirvModule; cf : CallbackFn) {
+    let ut = type_uint(m)
+    let ft = type_float(m, 32u)
+    emit(m, SEC_FUNCS, SpvOp.Function, cf.ret_type, cf.fn_id, 0u, cf.type_id)
+    var p : uint[6]
+    for (i in range(6)) {
+        p[i] = alloc_id(m)
+        emit(m, SEC_FUNCS, SpvOp.FunctionParameter, (i == 2 || i == 3) ? ft : ut, p[i])
+    }
+    emit(m, SEC_FUNCS, SpvOp.Label, alloc_id(m))
+    let ir = alloc_id(m)
+    emit(m, SEC_FUNCS, SpvOp.IAdd, ut, ir, p[4], p[0])
+    let ic = alloc_id(m)
+    emit(m, SEC_FUNCS, SpvOp.IAdd, ut, ic, p[5], p[1])
+    let fpt = type_pointer(m, SpvStorageClass.Workgroup, ft)
+    let rp = alloc_id(m)
+    emit(m, SEC_FUNCS, SpvOp.AccessChain, fpt, rp, cf.rs_var, ir)
+    let rv = alloc_id(m)
+    emit(m, SEC_FUNCS, SpvOp.Load, ft, rv, rp)
+    let cp = alloc_id(m)
+    emit(m, SEC_FUNCS, SpvOp.AccessChain, fpt, cp, cf.cs_var, ic)
+    let cv = alloc_id(m)
+    emit(m, SEC_FUNCS, SpvOp.Load, ft, cv, cp)
+    let m1 = alloc_id(m)
+    emit(m, SEC_FUNCS, SpvOp.FMul, ft, m1, p[3], rv)
+    let m2 = alloc_id(m)
+    emit(m, SEC_FUNCS, SpvOp.FMul, ft, m2, m1, cv)
+    let s = alloc_id(m)
+    emit(m, SEC_FUNCS, SpvOp.FAdd, ft, s, p[2], m2)
+    emit(m, SEC_FUNCS, SpvOp.ReturnValue, s)
+    emit(m, SEC_FUNCS, SpvOp.FunctionEnd)
+}
+
 // Emit one registered callback: every parameter is a by-value OpFunctionParameter bound straight
 // into ctx.locals as an SSA value (the bodies only read them), then the das body via the normal walk.
 def private emit_callback_function(var m : SpirvModule; var ctx : EmitCtx; cf : CallbackFn; var errors : array<string>) {
+    if (cf.synth_scale) {
+        emit_scale_callback(m, cf)
+        return
+    }
     let f = unsafe(reinterpret<FunctionPtr>(cf.fn))   // read-only emission; strip pointee const
     emit(m, SEC_FUNCS, SpvOp.Function, cf.ret_type, cf.fn_id, 0u, cf.type_id)
     for (i in range(length(f.arguments))) {
@@ -8297,10 +8421,18 @@ def private collect_inline_locals(var m : SpirvModule; var ctx : EmitCtx; f : Fu
     for (k in found) {
         continue if (key_exists(seen, k))
         seen |> insert(k)
-        let cf = unsafe(reinterpret<FunctionPtr>((ctx.user_funcs?[k] ?? UserFunc()).fn))
+        let uf = ctx.user_funcs?[k] ?? UserFunc()
+        let cf = unsafe(reinterpret<FunctionPtr>(uf.fn))
+        // the prepass classifies the body's member accesses under the
+        // body's OWN self, as the visit does
+        let prev_self = ctx.self_arg
+        if (uf.is_method && !empty(cf.arguments)) {
+            ctx.self_arg = intptr(cf.arguments[0])
+        }
         collect_locals(m, ctx, cf.body, errors)
         alloc_call_temps(m, ctx, cf, errors)
         collect_inline_locals(m, ctx, cf, seen, errors)
+        ctx.self_arg = prev_self
     }
     delete found
 }

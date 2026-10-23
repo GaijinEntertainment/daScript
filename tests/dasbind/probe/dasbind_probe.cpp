@@ -52,3 +52,8 @@ DASBIND_PROBE_API double dasbind_probe_stack_dbl_result ( double a0, int64_t a1,
                                                       int64_t a5, int64_t a6, int64_t a7, int64_t a8, int32_t a9 ) {
     return a0 + double(a1 + a2 + a3 + a4 + a5 + a6 + a7 + a8) + double(a9)*2;
 }
+
+DASBIND_PROBE_API int32_t dasbind_probe_ref_write ( int64_t * out, int64_t v ) {
+    *out = v * 3;
+    return 1;
+}

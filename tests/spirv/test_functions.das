@@ -130,6 +130,21 @@ def test_userfn_inline_method(t : T?) {
 }
 
 [test]
+def test_userfn_inline_lazy(t : T?) {
+    t |> run("[spirv_inline] self-method: a ternary arm indexing a member array " +
+            "branches under the method's own self") <| @(t : T?) {
+        var words <- userfn_inline_lazy_words()
+        t |> equal(words[1], SPV_VERSION_1_3, "userfn_inline_lazy: SPIR-V 1.3")
+        t |> equal(count_op(words, SpvOp.SelectionMerge), 1,
+            "userfn_inline_lazy: the guarded load is a branch")
+        t |> equal(count_op(words, SpvOp.Select), 0,
+            "userfn_inline_lazy: no eager OpSelect over the member load")
+        validate(t, words, "userfn_inline_lazy")
+        delete words
+    }
+}
+
+[test]
 def test_userfn_global(t : T?) {
     t |> run("user functions: a helper that reads a module global") <| @(t : T?) {
         var words <- userfn_global_words()

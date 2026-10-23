@@ -7,8 +7,9 @@ token command. The prefill window chain and byte stores these build on are in
 `ARCHITECTURE_GPU_VULKAN.md`; a streamed expert layer's prefill - its GPU/CPU split and the
 per-expert chain - is in `ARCHITECTURE_GPU_VULKAN_STREAM.md#streamed-layer-split`; the routed block an MoE
 layer takes in either era - the prefill window's and the token command's - is in
-`ARCHITECTURE_GPU_VULKAN_MOE.md`; the cm2 tiles, the MoE expert chain on them, the KHR arm's kq
-tile and the decode GEMV family's lane split are in `ARCHITECTURE_GPU_VULKAN_GEMM.md`; the
+`ARCHITECTURE_GPU_VULKAN_MOE.md`; the cm2 tile pick and the MoE expert chain on the tiles are in
+`ARCHITECTURE_GPU_VULKAN_GEMM.md`, the KHR arm's kq tile is `ARCHITECTURE_GPU_SHARED_GEMM.md#khr-mm-kq-tile` and the
+decode GEMV family's lane split is `ARCHITECTURE_GPU_SHARED_GEMM.md#kq-gemv-lanes`; the
 model's residency on the card is in `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`, the token command's
 logits landing on the transfer queue in `ARCHITECTURE_GPU_VULKAN_LANDING.md`, the NextN draft head is
 `ARCHITECTURE_GPU_VULKAN_MTP.md#resident-draft-head`, and the N-row token command is

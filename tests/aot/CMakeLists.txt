@@ -41,6 +41,11 @@ SET(AOT_SPIRV_MODULE_FILES ${DASSPIRV_AOT_FILES}
     tests/spirv/_color_mapping_shader.das
 )
 SET(AOT_MSL_MODULE_FILES ${DASMETAL_AOT_FILES} tests/msl/_msl_common.das)
+SET(DAS_AOT_DASCUDA_MODULE_DEPENDS ${DASCUDA_AOT_DEPENDS})
+SET(AOT_CUDA_MODULE_FILES ${DASCUDA_AOT_FILES} tests/cuda/_cuda_common.das)
+FILE(GLOB AOT_CUDA_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/cuda/*.das")
+# Exclude the shared fixture module (no [test] of its own; compiled via DAS_AOT_LIB through AOT_CUDA_MODULE_FILES above)
+list(FILTER AOT_CUDA_FILES EXCLUDE REGEX "/_")
 
 FILE(GLOB AOT_TESTS_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/aot/*.das")
 list(APPEND AOT_TESTS_FILES tests/REVIEW.das)
@@ -489,6 +494,8 @@ set(DAS_AOT_IRREGULAR
     "msl|mod|-|DAS_AOT_DASMETAL_MODULE_DEPENDS|1"
     "metal|reg|-|DAS_AOT_DASMETAL_MODULE_DEPENDS|1"
     "metal|mod|-|DAS_AOT_DASMETAL_MODULE_DEPENDS|1"
+    "cuda|reg|-|DAS_AOT_DASCUDA_MODULE_DEPENDS|1"
+    "cuda|mod|-|DAS_AOT_DASCUDA_MODULE_DEPENDS|1"
     "live_host|reg|NOT DAS_HV_DISABLED|-|1"
     "live_host|mod|-|-|1"
     "strudel|reg|NOT DAS_AUDIO_DISABLED|-|1"

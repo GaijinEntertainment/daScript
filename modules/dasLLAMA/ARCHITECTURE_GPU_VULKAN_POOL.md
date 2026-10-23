@@ -93,9 +93,9 @@ combines under the device's weights and lands the rows on the host, all in one s
 not wait for. The host sums the rest (`moe_routed_rows_sum` under `split`: the pool's experts take
 no chain, a zero weight's parked row is unread), joins the chain and adds its rows
 (`rdec_hot_rows_join`). A window under 32 rows, a window past the chain's one chunk, and a layer
-whose formats the chain's f16 feed does not admit stay the host's whole. A per-32 expert plane
-(q51, mx4, iq4nl32) takes the chain's s column alone (`batch_tile_edges`): its one cm2 stamp is the
-32-row tile.
+whose formats the chain's f16 feed does not admit stay the host's whole. An mx4 expert plane takes
+the chain's s column alone (`batch_tile_edges` under `cm2_s_only`): its one cm2 stamp is the 32-row
+tile; a per-32 plane (q51, iq4nl32) takes the column the shape picks, as a superblock plane does.
 
 **The pool's policy is picked offline, on a trace of the routed picks.** Under
 `DASLLAMA_MOE_TRACE=<file>` every host expert step records its picks (`rdec_trace_picks`): a record

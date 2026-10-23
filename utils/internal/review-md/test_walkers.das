@@ -138,22 +138,45 @@ def private vk_ladder(prefix, tail : string; stamped : bool; skip : string = "")
     return "def {prefix}ensure(fmt : int) : bool \{\n    var r = false\n    kq_tile_stamp({arg}) <| $() \{\n        r = tile_ensure_{tail}()\n    \}\n    return r\n\}\n\ndef {prefix}set(fmt : int) : int \{\n    var r = 0\n    kq_tile_stamp({arg}) <| $() \{\n        r = tile_set_{tail}()\n    \}\n    return r\n\}\n\ndef {prefix}enc(fmt : int) \{\n    kq_tile_stamp({arg}) <| $() \{\n        tile_enc_{tail}()\n    \}\n\}\n\n"
 }
 
-//! the class surface: one class-shaped input for every class check the gate runs (the roster and slab inputs are VK_COMMON_GREEN;
-//! the e-column alias roster is the kqformat fixture). Green: the abstract KHR stage, the k4 and q8 templates with their khr / m / s
-//! stamps (both formats alias the m stamp, so no e stamp), one GEMV leaf template, both ladder trios stamped. Red: a bodied KHR
-//! stage; a K5 template with no stamp; a K4 e stamp the aliasing ladder never picks, its A tile and unroll contradicting its BK 32;
-//! a K6 whose s stamp steps 32 while the roster aliases it; a K3 on the roster with no m stamp; a K2 stepping 64 on both columns
-//! off the roster; the khr ladders hand-written, the engine's ladder skipping k5's e tile
-def private vk_classes_text(red : bool) : string {
+//! the discrete file's templates (the shared bodies both discrete
+//! homes stamp): ArBase's row slab, the cm2 base with its template
+//! constants and the KHR stage, the k4 and q8 cm2 templates, one GEMV
+//! leaf template. Green: the KHR stage abstract. Red: the KHR stage
+//! bodied; the K5 / K6 / K3 / K2 cm2 templates
+//! `vk_classes_text(true)` stamps (or leaves unstamped)
+def private discrete_kernels_text(red : bool) : string {
     var parts <- [
-        "options gen2\n\nlet SCHED_S_ROWS = 32u\nlet SCHED_M_ROWS = 128u\n\nclass template ArBase : ResidualT \{\n    @workgroup row : float[8192]\n\}\n\n",
+        ("options gen2\n\nrequire spirv/spirv_markers\n\nclass template ArBase : ResidualT \{\n" +
+            "    @workgroup row : float[8192]\n\}\n\n"),
         "class template KqCm2BatchT : MoeCmBase \{\n    @template_constant BN : uint = 256u\n    @template_constant BK : uint = 64u\n    @template_constant UNR : uint = 4u\n",
         red ? "    def khr_stage16(blk, e0, sbase : uint) : void \{\n    \}\n\}\n\n" : "    def abstract khr_stage16(blk, e0, sbase : uint) : void\n\}\n\n",
         "class template K4Cm2T : KqCm2BatchT \{\n\}\n\nclass template Q8Cm2T : KqCm2BatchT \{\n\}\n\nclass template K4GemvT : KqGemvLeafT \{\n\}\n\n"]
-    parts |> reserve(24)
     if (red) {
         parts |> push("class template K5Cm2T : KqCm2BatchT \{\n\}\n\nclass template K6Cm2T : KqCm2BatchT \{\n\}\n\nclass template K3Cm2T : KqCm2BatchT \{\n\}\n\nclass template K2Cm2T : KqCm2BatchT \{\n\}\n\n")
     }
+    return join(parts, "")
+}
+
+//! the CUDA home's stamps of every green discrete template, so the
+//! shared-template homes check sees both discrete homes stamp each
+let CUDA_CLASSES_TEXT = ("options gen2\n\nrequire spirv/spirv_markers\n\n" +
+    "class CuArRows : ArBase \{\n\}\n\nclass CuK4Khr : K4Cm2T \{\n\}\n\n" +
+    "class CuQ8Khr : Q8Cm2T \{\n\}\n\nclass CuK4Gemv : K4GemvT \{\n\}\n")
+
+//! the Vulkan home's class surface over `discrete_kernels_text`'s
+//! templates (the schedule widths, the e-column alias roster is the
+//! kqformat fixture). Green: the row-slab and GEMV stamps, the k4 and
+//! q8 khr / m / s stamps (both formats alias the m stamp, so no e
+//! stamp), both ladder trios stamped. Red: no stamp of K5; a K4 e
+//! stamp the aliasing ladder never picks, its A tile and unroll
+//! contradicting its BK 32; a K6 whose s stamp steps 32 while the
+//! roster aliases it; no m stamp of K3, which sits on the roster; a
+//! K2 stepping 64 on both columns off the roster; the khr ladders
+//! hand-written, the engine's ladder skipping k5's e tile
+def private vk_classes_text(red : bool) : string {
+    var parts <- [("options gen2\n\nlet SCHED_S_ROWS = 32u\nlet SCHED_M_ROWS = 128u\n\n" +
+        "class VkArRows : ArBase \{\n\}\n\nclass VkK4Gemv : K4GemvT \{\n\}\n\n")]
+    parts |> reserve(24)
     for (fmt in fixed_array((stem = "kq_batch_k4", pfx = "K4"), (stem = "q8_batch", pfx = "Q8"))) {
         parts |> push(vk_stamp("{fmt.stem}_khr_cls", "{fmt.pfx}KhrBatch", "{fmt.pfx}Cm2T", 128, 64))
         parts |> push(vk_stamp("{fmt.stem}_cm2m_cls", "{fmt.pfx}Cm2MBatch", "{fmt.pfx}Cm2T", 128, 64))
@@ -174,20 +197,39 @@ def private vk_classes_text(red : bool) : string {
 //! the kqformat fixture: the e-column alias roster the gate reads (`aliases` its words)
 def private kqformat_text(aliases : string) : string => "options gen2\n\nlet KQ_CM2E_ALIASES_M = \"{aliases}\"\n"
 
-let DASLLAMA_MODULE_LIST = "\"dasllama\", \"dasllama_audio_embedder\", \"dasllama_vision_embedder\", \"dasllama_toyfam\", \"dasllama_toyvis\", \"dasllama_image\", \"dasllama_meta\", \"dasllama_vulkan_common\", \"dasllama_vulkan_classes\", \"dasllama_vulkan_prefill\", \"dasllama_kqformat\", \"dasllama_blocks\"\n"
+//! the tier constant of the add+rms slab triple (`dim` its value)
+def private gpu_tier_text(dim : string) : string
+    => "options gen2\n\nlet public RDEC_AR_MAX_DIM = {dim}\n"
+
+let DASLLAMA_MODULE_LIST = ("\"dasllama\", \"dasllama_audio_embedder\", " +
+    "\"dasllama_vision_embedder\", \"dasllama_toyfam\", \"dasllama_toyvis\", " +
+    "\"dasllama_image\", \"dasllama_meta\", \"dasllama_vulkan_common\", " +
+    "\"dasllama_vulkan_classes\", \"dasllama_vulkan_prefill\", \"dasllama_kqformat\", " +
+    "\"dasllama_blocks\", \"dasllama_gpu_kernels_discrete\", " +
+    "\"dasllama_gpu_kernels_common\", \"dasllama_cuda_classes\", \"dasllama_gpu_tier\"\n")
 
 //! the one vulkan_boost probe the fixture's tier calls
 let VK_BOOST_TEXT = "options gen2\n\ndef public cooperative_matrix_supported(phys : int) : bool \{\n    return true\n\}\n"
 //! the green common slab: its roster names the probe the tier calls
-let VK_COMMON_GREEN = "options gen2\n\nlet AR_MAX_DIM = 8_192l\n\ndef public vk_ext_roster(phys : int) : array<int> \{\n    let has_cm = cooperative_matrix_supported(phys)\n    return <- [has_cm ? 1 : 0]\n\}\n"
+let VK_COMMON_GREEN = ("options gen2\n\ndef public vk_ext_roster(phys : int) : array<int> \{\n" +
+    "    let has_cm = cooperative_matrix_supported(phys)\n    return <- [has_cm ? 1 : 0]\n\}\n")
 
-//! the slab constant off its slab, and a probe call plus an extension read outside the roster, which names neither
-let VK_COMMON_RED = "options gen2\n\nlet AR_MAX_DIM = 4_096l\nlet CM = cooperative_matrix_supported(0)\nlet MB = device_extension_available(0, \"VK_EXT_memory_budget\")\n\ndef public vk_ext_roster(phys : int) : array<int> \{\n    return <- [1]\n\}\n"
+//! a probe call plus an extension read outside the roster, which
+//! names neither
+let VK_COMMON_RED = ("options gen2\n\nlet CM = cooperative_matrix_supported(0)\n" +
+    "let MB = device_extension_available(0, \"VK_EXT_memory_budget\")\n\n" +
+    "def public vk_ext_roster(phys : int) : array<int> \{\n    return <- [1]\n\}\n")
 
 def make_dasllama_fixture(t : T?; tree, root : string) {
     write_at(t, root, "modules/dasVulkan/daslib/vulkan_boost.das", VK_BOOST_TEXT)
     write_at(t, root, "modules/dasLLAMA/dasllama/dasllama_vulkan_common.das", VK_COMMON_GREEN)
     write_at(t, root, "modules/dasLLAMA/dasllama/dasllama_vulkan_classes.das", vk_classes_text(false))
+    write_at(t, root, "modules/dasLLAMA/dasllama/dasllama_gpu_kernels_discrete.das",
+        discrete_kernels_text(false))
+    write_at(t, root, "modules/dasLLAMA/dasllama/dasllama_gpu_kernels_common.das",
+        "options gen2\n\nrequire spirv/spirv_markers\n")
+    write_at(t, root, "modules/dasLLAMA/dasllama/dasllama_cuda_classes.das", CUDA_CLASSES_TEXT)
+    write_at(t, root, "modules/dasLLAMA/dasllama/dasllama_gpu_tier.das", gpu_tier_text("8_192l"))
     write_at(t, root, "modules/dasLLAMA/dasllama/dasllama_vulkan_prefill.das", "options gen2\n")
     write_at(t, root, "modules/dasLLAMA/dasllama/dasllama_kqformat.das", kqformat_text("q8 k4"))
     write_at(t, root, "modules/dasLLAMA/dasllama/dasllama_blocks.das", "options gen2\n\ndef private attn_dec_shape_ok(c : Config) : bool \{\n    return !(c.dim > 8192l)\n\}\n")
@@ -270,11 +312,20 @@ def test_dasllama_gate_fixtures(t : T?) {
     write_at(t, fixture, "tutorials/dasLLAMA/03_vis.das", "var tw : ToyvisTower\n")
     write_at(t, fixture, "modules/dasLLAMA/dasllama/dasllama_unlisted.das", "options gen2\n")
     write_at(t, fixture, "modules/dasLLAMA/.das_module",
-        "\"dasllama\", \"dasllama_audio_embedder\", \"dasllama_vision_embedder\", \"dasllama_toyfam\", \"dasllama_gone\", \"dasllama_image\", \"dasllama_meta\", \"dasllama_vulkan_common\", \"dasllama_vulkan_classes\", \"dasllama_vulkan_prefill\", \"dasllama_kqformat\", \"dasllama_blocks\"\n// \"dasllama_toyvis\" commented out must not count\n")
+        ("\"dasllama\", \"dasllama_audio_embedder\", \"dasllama_vision_embedder\", " +
+            "\"dasllama_toyfam\", \"dasllama_gone\", \"dasllama_image\", \"dasllama_meta\", " +
+            "\"dasllama_vulkan_common\", \"dasllama_vulkan_classes\", " +
+            "\"dasllama_vulkan_prefill\", \"dasllama_kqformat\", \"dasllama_blocks\", " +
+            "\"dasllama_gpu_kernels_discrete\", \"dasllama_gpu_kernels_common\", " +
+            "\"dasllama_cuda_classes\", \"dasllama_gpu_tier\"\n" +
+            "// \"dasllama_toyvis\" commented out must not count\n"))
     // a moved layout constant and a changed layout helper, with the stamp left where it was
     write_at(t, fixture, "modules/dasLLAMA/dasllama/dasllama_image.das", dasllama_image_text("128l", "cur + 1ul", "2"))
     write_at(t, fixture, "modules/dasLLAMA/dasllama/dasllama_meta.das", DASLLAMA_META_RED)
     write_at(t, fixture, "modules/dasLLAMA/dasllama/dasllama_vulkan_classes.das", vk_classes_text(true))
+    write_at(t, fixture, "modules/dasLLAMA/dasllama/dasllama_gpu_kernels_discrete.das",
+        discrete_kernels_text(true))
+    write_at(t, fixture, "modules/dasLLAMA/dasllama/dasllama_gpu_tier.das", gpu_tier_text("4_096l"))
     write_at(t, fixture, "modules/dasLLAMA/dasllama/dasllama_kqformat.das", kqformat_text("q8 k4 k6 k3"))
     write_at(t, fixture, "modules/dasLLAMA/dasllama/dasllama_vulkan_common.das", VK_COMMON_RED)
     write_at(t, fixture, "modules/dasLLAMA/harness/hand_probe.das", "options gen2\n\nlet p = vkCreateComputePipelines(dev, null, 1u, addr(cp), null, addr(h))\n")
@@ -307,8 +358,9 @@ let DASLLAMA_RED_NEEDLE_CENSUS <- [
     "format k9 stamps kq_mm twins and races none",
     "format k9 stamps dense twins and has no dev-W dequant pass",
     "dasllama_image.das: the image layout closure changed",
-    "dasllama_vulkan_classes.das: khr_stage16 on KqCm2BatchT has a body",
-    "the add+rms row slab triple disagrees: AR_MAX_DIM 4096 (dasllama_vulkan_common.das), ArBase.row[8192], attn_dec_shape_ok's c.dim cap 8192",
+    "dasllama_gpu_kernels_discrete.das: khr_stage16 on KqCm2BatchT has a body",
+    ("the add+rms row slab triple disagrees: RDEC_AR_MAX_DIM 4096 (dasllama_gpu_tier.das), " +
+        "ArBase.row[8192], attn_dec_shape_ok's c.dim cap 8192"),
     "K5Cm2T has no `class K5KhrBatch : K5Cm2T`",
     "K5Cm2T has no `[vk_dispatch(name = \"kq_batch_k5_khr_cls\"` stamp",
     "khr_cls_ensure is not stamped by `kq_tile_stamp` over `tile_ensure_khr_cls(`",
@@ -323,8 +375,10 @@ let DASLLAMA_RED_NEEDLE_CENSUS <- [
     "K4Cm2T keeps a `class K4Cm2EBatch` its ladder never picks - k4 aliases the m stamp (KQ_CM2E_ALIASES_M)",
     "kq_batch_k4_cm2e_cls: `typedef AT = coopmatWgA_f16_128x64` at BK 32 BN 128",
     "kq_batch_k4_cm2e_cls: UNR 4 at BK 32 - a stamp's unrolled block is one superblock (256 elements",
-    "dasllama_vulkan_common.das:4: the tier calls cooperative_matrix_supported here, and vk_ext_roster (dasllama_vulkan_common.das) does not",
-    "dasllama_vulkan_common.das:5: the tier reads VK_EXT_memory_budget here, and vk_ext_roster (dasllama_vulkan_common.das) does not name it",
+    ("dasllama_vulkan_common.das:3: the tier calls cooperative_matrix_supported here, and " +
+        "vk_ext_roster (dasllama_vulkan_common.das) does not"),
+    ("dasllama_vulkan_common.das:4: the tier reads VK_EXT_memory_budget here, and " +
+        "vk_ext_roster (dasllama_vulkan_common.das) does not name it"),
     "hand_probe.das:3: hand-built Vulkan pipeline",
     "dasllama_meta.das:8: hand-listed Archive serializer with 2 field writes",
     "facade def hidden_fn appears in no tutorials/dasLLAMA/*.das",

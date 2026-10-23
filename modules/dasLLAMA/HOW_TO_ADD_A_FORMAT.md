@@ -72,7 +72,7 @@ the last two from the tree:
      the tiles, and a format template on `MetalEmbedKqT` for the gather (`MetalEmbedIq4T`). The
      block term holds only what the format changes; the lane map, the site hooks and the guard
      arithmetic stay in the family template.
-   - **A new family template** - a new child of `KqGemvBase` beside `KqGemvLeafT`, or a template
+   - **A new family template** - a new child of `KqGemvShellT` beside `KqGemvLeafT`, or a template
      beside `MetalGemvSiteT` - only when the format's index or guard arithmetic differs from every
      family's; it lands with a kernel cell per stamp and a race row.
 
@@ -468,7 +468,7 @@ decoded scale row needs no upload work - only the id bridge and the kernels. The
    side of that rule the format sits on - grid or k-lattice - is decided by the
    `harness/vk_gemv_probe.das <n> <d>` sweep, its three lane splits per format (0 = the whole
    subgroup, 16, 8) over the row lengths the families serve; the rule itself is
-   `ARCHITECTURE_GPU_VULKAN_GEMM.md#kq-gemv-lanes` (`kq-gemv-lanes`).
+   `ARCHITECTURE_GPU_SHARED_GEMM.md#kq-gemv-lanes` (`kq-gemv-lanes`).
 6. Tests: `tests/_vkd_oracles.das` `kq_cls_ref` arm (the class-on-CPU oracle - the replay never
    runs the kernel head, so any workgroup state the kernel stages, a grid table among them, is
    filled there or the device compares against zeros), the family cells in
@@ -514,18 +514,22 @@ the half by the block's parity), and stamps the per-32 templates rather than a `
 
 - the tiles: a `KqCm2BatchT` format template at `BLKW` 32 (`Q51Cm2T` with a word scale plane,
   `Mx4Cm2T` decoding the doubled e2m1 magnitudes under the halved E8M0 scale, `Iq4nl32Cm2T` on the
-  `IQLUT` axis), with the s and e stamps the expert schedule dispatches and the `khr_stage16`
-  method behind the `<Fmt>KhrBatch` stamp the mm-mode schedule takes; `cm2_cls_ensure` refuses it
-  a dense column, and the plan declines a dense plane of it;
+  `IQLUT` axis), with the s stamp the expert schedule's 32-row pieces dispatch, the l and m stamps
+  the window chain's pick takes over a dense plane (`ARCHITECTURE_GPU_VULKAN.md#vk-b32-window-gemm`;
+  the m stamp is the e column too - the format joins `KQ_CM2E_ALIASES_M`; an expert-only format such
+  as mx4 stamps neither dense column and ships its own e stamp instead - it joins `cm2_s_only`,
+  `cm2_cls_ensure` refuses it a dense column, and the plan declines a dense plane of it) and the
+  `khr_stage16` method behind the `<Fmt>KhrBatch` stamp the mm-mode schedule takes;
 - the decode GEMV: `Blk32GemvRunT` stamps (`Q51Gemv`, `Iq4nl32Gemv`, `Mx4Gemv`), one lane a block,
   `gemv_lanes_per_row` 0; a format whose gate and up stacks share a slab may add the fused
   gate+up+act+requant twin in `KqGemvK4Gu`'s shape (`Mx4GemvGu`).
 
 A census row with no carrier in the stocked set lands in `VK_CENSUS_NEVER_DISPATCHED`. Its stamps
 spell `<fmt>_batch_<tail>` the way q8's do, so the format joins `kq_tile_stem`'s per-32 list
-(`dasllama_kqformat.das`) and, since its dense column is refused, the `CM2_TILE_NONE` pairs of the
-`cm2_cls_*` ladders (its l and m columns) and the s-column route of `cm2_tile_tail`
-(`cm2_b32_routed`, `dasllama_vulkan_classes.das`). The module gate (`REVIEW.das`) reads it twice:
+(`dasllama_kqformat.das`) and the kq batch rail's per-32 predicate (`blk32_rail`,
+`dasllama_vulkan_common.das`); an expert-only format whose dense column is refused also joins the
+`CM2_TILE_NONE` pairs of the `cm2_cls_*` ladders (its l and m columns) and the s-column route of
+`cm2_tile_tail` (`cm2_s_only`). The module gate (`REVIEW.das`) reads it twice:
 every format on the cm2 template ships the KHR trio, and `cm2_dispatch_name` learns that the format
 spells its expert stamp `<fmt>_batch_cm2e_cls` the way q8 does.
 
@@ -544,7 +548,7 @@ On an NV_coopmat2 device the f16 feed serves every kq format through ONE tile te
 DEVICE forms (quants as the gather lays them out - k4/k5 re-paired k/k+16, q40/iq4xs/k3 verbatim;
 scales the `kq_dev_ssb(fmt)` row - 20 B decoded, or the codebook formats' two words) in PAIR form -
 every shared read derived from `e & ~1u`, both elements computed, the element selected last
-(`ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes`; iq2xxs's `decode` is the model) - plus
+(`ARCHITECTURE_GPU_SHARED_GEMM.md#cm2-decode-16bit-lanes`; iq2xxs's `decode` is the model) - plus
 its width stamps (the l, m and s columns, and on a 32-step decode the expert schedule's e column -
 the m column at the format's k step; each names its `BN`, `STILE`, the k step `BK` where it is not
 the template's 64 with the unroll `UNR` that keeps the unrolled block at one superblock (`override
@@ -563,7 +567,7 @@ vector per element inside a decode callback. A format whose sub-block scale take
 element raises the `SCACHE` axis and reads its sub-block's premultiplied pair from `sc_cache` in the
 decode, as k4 and k5 (the five-word K-quant scale row) and iq4xs (`SCIQ4`, its two-word row) do; a
 third scale-row shape adds its fill arm to `sc_fill`
-(`ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes`), and a scale-caching stamp keeps `BLKW`
+(`ARCHITECTURE_GPU_SHARED_GEMM.md#cm2-decode-16bit-lanes`), and a scale-caching stamp keeps `BLKW`
 at `BK x UNR` so the cache refills once per unrolled block - the module gate holds it on the
 engine's stamps and on the probe's twins in `harness/vk_gemm_probe.das` alike. A kq format authors
 its own four-wide decode twin: a second `[spirv_decode] def decode_v4` returning `half4` under
@@ -576,7 +580,7 @@ process); a format whose four-wide row loses to its scalar row ships a twin that
 axes off. Gate: a device-form CPU oracle (`<fmt>f16_gemm_oracle`) and an l/m/s/e cell in
 `tests/test_vulkan_kernels.das`.
 
-The KHR instantiation adds one method (`ARCHITECTURE_GPU_VULKAN_KHR.md#khr-mm-kq-tile`, its first
+The KHR instantiation adds one method (`ARCHITECTURE_GPU_SHARED_GEMM.md#khr-mm-kq-tile`, its first
 paragraph): on the format template a `def override khr_stage16(blk, e0, sbase : uint) : void`
 under `static_if (KHR)` that writes the weight row's 16 values `e0 .. e0 + 16` of block `blk`
 into `khr_ao[sbase .. sbase + 8)` as f16 pairs, reading the plane as words - `wq4[...]` (`uint4`,

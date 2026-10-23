@@ -6,19 +6,19 @@ doc: `../ARCHITECTURE_MEASUREMENT.md`. Planned work: `../followup_general.md`.
 **Never add a second validator for exchange submissions (record stores and tune sidecars) -
 validate through `../dasllama/dasllama_exchange_schema.das` instead.**
 
-**A diff that answers a `REVIEW.das` red on the conditions a `records/` row, an archived
+**A diff that clears a `REVIEW.das` finding about the conditions a `records/` row, an archived
 sidecar, a `defaults/` profile, or `last_known_good_sidecar.json` was measured under - box
 noise, a remote-desktop session, the release it was minted at - by hand-editing that artifact
-is a defect: re-mint it on a quiet, session-free box instead.**
+is a defect: re-mint it on a quiet box with no remote-desktop session instead.**
 
-**A diff that writes a commit stamp `REVIEW.das` does not check - a `sha` on a row of a box
-`RETIRED_BOXES` lists, the `engine_sha` of an archive no current-release row names, a ruler
-record's `meta.das_sha` - naming a commit the branch cannot reach is a defect - re-stamp to the
-commit the stamped artifact's exe was built at, or re-mint when the branch cannot reach that
-commit.** A commit stamp is a checked-in JSON field naming a daslang
-commit: a `das` row's `sha`, a sidecar's `provenance.engine_sha`, a ruler record's
-`meta.das_sha`; one naming no commit is unreachable. Weakening `REVIEW.das`'s stamp checks
-(`../ARCHITECTURE_MEASUREMENT.md#committed-records-gate`) is a defect.
+**A diff that writes a `sha` on a `das` row (a run row whose `engine` is `das`) whose
+`dasllama_version` is below `DASLLAMA_RELEASE`, the `engine_sha` of a sidecar archive no
+current-release row names, or a ruler record's `meta.das_sha` makes it name a commit the branch
+reaches: re-stamp to the commit the stamped artifact's exe was built at, or re-mint when the
+branch cannot reach that commit.** An empty field names no commit, so it breaks this rule too.
+
+**Weakening `REVIEW.das`'s commit-stamp checks
+(`../ARCHITECTURE_MEASUREMENT.md#committed-records-gate`) is a defect.**
 
 **A diff that hand-edits a commit stamp under this folder names, in the PR body, each edited
 field, its old stamp, and its new value.**
@@ -38,21 +38,27 @@ each box it writes, the commit the timing exe was built at and when it was built
 stamps the HEAD checked out when it runs, not the exe's build, so the diff alone cannot show which
 build timed the row.
 
-**A `das` row (a run row whose `engine` is `das`) carrying a `sha` is timed by the released
-`lcpp_bench` exe (`../benchmarks/lcpp_bench.das` built by `daspkg release`) built at that `sha`,
-every cell of it by a binary of that build - re-mint otherwise.**
+**A diff that writes a `das` row (a run row whose `engine` is `das`) carrying a `sha` mints every
+cell of it from the released `lcpp_bench` exe (`../benchmarks/lcpp_bench.das` built by
+`daspkg release`) built at that `sha` - re-mint otherwise.**
 
-**A reference-engine row (a run row whose `engine` is not `das`) carrying a `sha` carries the
-standing ref pin (`DEFAULT_REF_SHA`, `../benchmarks/setup_lcpp_ref.das`), and every cell of it is
-timed by a binary built from that pinned checkout, in a flavor `../benchmarks/setup_lcpp_ref.das`
-builds - re-mint otherwise.**
+**A diff that writes a `das` row to `records/<box>.json` from a run under `DASLLAMA_CUDA=1` is
+a defect until the bench row carries a `cuda` backend value (`../followup_general.md` names the
+work)** - the bench stamps every device-tier row `vulkan`, so a CUDA rate lands in the Vulkan leg
+and reads as the Vulkan home's.
 
-**A row whose cells two exes timed - a flat cell and a batched cell from two binaries of one
-build - names both exes in its `cmd`.**
+**A diff that writes a reference-engine row (a run row whose `engine` is not `das`) carrying a
+`sha` stamps it with the standing ref pin (`DEFAULT_REF_SHA`, `../benchmarks/setup_lcpp_ref.das`)
+and mints every cell of it from a binary built from that pinned checkout, in a flavor
+`../benchmarks/setup_lcpp_ref.das` builds - re-mint otherwise.**
+
+**A diff that writes a row whose cells two exes timed - a flat cell and a batched cell from two
+binaries of one build - names both exes in the row's `cmd`.**
 
 **A diff that writes a reference-engine row carrying no `sha` to `records/<box>.json` names,
-in that row's provenance, the checkout that built the binary it timed; a python leg names
-`../benchmarks/asr/requirements-*.txt` instead.**
+in that row's provenance, the checkout that built the binary it timed; a reference row timed
+through a Python package names, instead, the `../benchmarks/asr/requirements-<name>.txt` file
+it installed from.**
 
 **A diff that adds a `das` row to the `records/<box>.json` of a box `RETIRED_BOXES` lists
 (`../dasllama/dasllama_exchange_schema.das`), adds a sidecar archive that no row whose
@@ -60,8 +66,8 @@ in that row's provenance, the checkout that built the binary it timed; a python 
 of either, writes `DASLLAMA_RELEASE` (`../dasllama/dasllama_version.das`) as that pin - re-mint
 otherwise.** The pin is the row's `dasllama_version`, and `provenance.dasllama_version` in a
 sidecar archive; for a sidecar with an `engine_sha`, read the value at that commit.
-`REVIEW.das` checks the pin of every other `das` row, of the archive each current-release row
-names, and of every `defaults/` profile; weakening that check is a defect.
+
+**Weakening `REVIEW.das`'s version-pin checks is a defect.**
 
 **A diff that writes a row to `records/<box>.json` mints that row from a run
 `gen_bench_records.das` spawns, or from the `../benchmarks/lcpp_bench.das` command a
@@ -72,9 +78,9 @@ workload, a program this repository does not build - write a reference-engine ro
 `records/<box>.json`.**
 
 **A file under `records/mtp/` is written only by `../harness/mtp_ruler.das`, never by hand; a
-diff that adds one names the ruler command line in the PR body.** The ruler record is the
-speculative round's cell (`../ARCHITECTURE_MEASUREMENT.md#ruler-records`); its shape is the ruler's,
-and the board walkers (`list_record_stores`) do not read it.
+diff that adds one names the ruler command line in the PR body.** Its shape is the ruler's
+(`../ARCHITECTURE_MEASUREMENT.md#ruler-records`), and the board walkers (`list_record_stores`)
+do not read it.
 
 **A diff that adds or changes a `records/mtp/` file names its engines in `meta.das_sha`, and in
 `meta.lcpp_version` when a reference arm ran (`-` when none did).**
@@ -91,13 +97,13 @@ rows, architecture or profile docs.**
 exe it timed - one unit, split, or split with LTO.** An exe builds in any of the three, and a rate
 that does not name its form cannot be compared with one that was built another way.
 
-**A field added to what `write_bench_records` (`profile_common.das`) writes is added to
-`../dasllama/dasllama_exchange_schema.das`'s run validation in the same change** - the
+**A diff that adds a field to what `write_bench_records` (`profile_common.das`) writes adds it
+to `../dasllama/dasllama_exchange_schema.das`'s run validation in the same change** - the
 validator ignores run keys it does not know, so an unvalidated field ships silently.
 
-**A fallback that recovers reference rows from a file on disk names the tool that writes
-that file, and reads it for no other tool** - a row recovered across tools lands in the
-second tool's record carrying the wrong engine, and looks real.
+**A diff that adds or changes a fallback that recovers reference rows from a file on disk makes
+it name the tool that writes that file and read the file for no other tool** - a row recovered
+across tools lands in the second tool's record carrying the wrong engine, and looks real.
 
 **Outside `model_specs()` (text, in `model_specs.das`) and `asr_catalog()` (audio, in
 `profile_common.das`), a `.das` function under this folder that lists model files, quants,
@@ -113,12 +119,11 @@ names, name prefixes, recipe constants - is a defect.** A literal list is a seco
 drifts from the first.
 
 **A diff that makes a records row, a sidecar archive or a `defaults/` profile under this
-folder pin a model file keeps that file's provenance on its own row.** The row is a row of
-`model_specs()` (`model_specs.das`) or of `asr_catalog()` (`profile_common.das`). The row
-carries the `url` + `bytes` + `sha256` itself, or a `recipe` a reader can run. One named
-accessor call may stand in for the row: a function in `model_specs.das` whose own body carries
-those three fields. A second hop does not count - an accessor forwarding to another accessor,
-or an unnamed table lookup.
+folder pin a model file pins it through that file's row in `model_specs()` (`model_specs.das`)
+or `asr_catalog()` (`profile_common.das`), and that row carries the file's `url`, `bytes` and
+`sha256`, or a `recipe` a reader can run.** One function in `model_specs.das` whose own body
+carries those three fields may stand in for the row; an accessor forwarding to another
+accessor, or an unnamed table lookup, does not.
 
 **A diff that adds a companion artifact - a file fetched or verified with a model and consumed
 beside it: a projector, a draft head, an assistant sidecar, an image fixture - puts it in the
@@ -132,9 +137,9 @@ the cell runs instead of skipping.
 
 **A diff that changes what any `serve_*` function in `model_specs.das` returns - a `serve_*`
 field on a row, the function's body, or a `companions` entry with a `url` on a row a `serve_*`
-view reads - lands `utils/dasllama-server/test_model_catalog.das` (repo root) green in the same
-change** - the serving catalog is a view over these rows, so its gates red on a row this folder
-ships.
+view reads - runs `utils/dasllama-server/test_model_catalog.das` (repo root), and it passes on
+the changed tree** - the serving catalog is a view over these rows, so a row this folder ships
+can fail that test.
 
 **A convert, a bench, or a tune-state write reached from `fetch_models.das --fetch` is a
 defect - `--fetch` downloads only.** Each has its own home: a conversion recipe runs
@@ -156,19 +161,18 @@ on presence alone, so its run cannot tell a re-mint from the stale file the old 
 **A diff that changes `fetch_models.das` beyond its comments records its settling evidence in
 the PR description: one unscoped `fetch_models.das --` run ending `0 failed`.**
 
-**A `url` a diff adds or re-points on a `model_specs.das` or `profile_common.das` row, or on
-one of that row's `companions` entries, records its settling evidence in the PR description: a
-fetch through that url into a scratch dir, or the size and content sha the url's host reports
-for that file, pasted with the command that asked, matching the row's `bytes` and `sha256`** -
-`fetch_models` checks a file already on disk by size and hash, never through its url.
+**A diff that adds or re-points a `url` on a `model_specs.das` or `profile_common.das` row, or
+on one of that row's `companions` entries, records in the PR description a fetch through that
+url into a scratch dir, or the size and content sha the url's host reports for that file,
+pasted with the command that asked, matching the row's `bytes` and `sha256`** - `fetch_models`
+checks a file already on disk by size and hash, never through its url.
 
 **A diff that changes a `model_specs.das` row's `parity` - gives a row one, or changes any field
-of its `parity` (`prompt`, `prompt_text`, `gen` and `prefix_bar` among them), in place or through a shared
-`ids_*`/`ev_*` helper - records,
-in the PR description, for each row whose `parity` changed, the `simple_ids` output for that
-row's model file and dasLLAMA's matched count over the `gen` length (`../harness/parity.sh`
-prints both).** `simple_ids` is the reference-engine oracle `../harness/oracle/simple_ids.cpp`
-builds; the ids claim two engines agree on that file, and the diff shows neither run.
+of it, in place or through a shared `ids_*`/`ev_*` helper - records in the PR description, for
+each row whose `parity` changed, the `simple_ids` output for that row's model file and
+dasLLAMA's matched count over the `gen` length (`../harness/parity.sh` prints both).**
+`simple_ids` is the reference-engine oracle `../harness/oracle/simple_ids.cpp` builds; the ids
+claim two engines agree on that file, and the diff shows neither run.
 
 **A diff that refreshes `last_known_good_sidecar.json` replaces it with one complete mint from
 the box its provenance names, at the current `DASLLAMA_RELEASE` - never a hand-edited copy.**

@@ -42,9 +42,12 @@ any sibling companion that sends a reader to it.
   only `dim` field (`ARCHITECTURE_ENGINE_FORMATS.md#model-plane-table-dim`).
 - `ARCHITECTURE_GPU.md` - the GPU backend role table (`ARCHITECTURE_GPU.md#gpu-backends`).
 - `ARCHITECTURE_GPU_ASYMMETRIES.md` - the closed list of the allowed asymmetries between the
-  two GPU backends (`ARCHITECTURE_GPU_ASYMMETRIES.md#gpu-asymmetries`).
-- `ARCHITECTURE_GPU_SHARED_KERNELS.md` - the kernel pairs of the two GPU homes: the shared templates' stamps, their
-  readings, and the pairs that stay per home (`ARCHITECTURE_GPU_SHARED_KERNELS.md#gpu-kernel-pairs`).
+  GPU backends - Metal, Vulkan and CUDA (`ARCHITECTURE_GPU_ASYMMETRIES.md#gpu-asymmetries`).
+- `ARCHITECTURE_GPU_SHARED_KERNELS.md` - the kernels more than one GPU home stamps: the shared templates' mechanism
+  (`ARCHITECTURE_GPU_SHARED_KERNELS.md#gpu-shared-kernels`) and the kernel pairs, their stamps and the pairs that stay
+  per home (`ARCHITECTURE_GPU_SHARED_KERNELS.md#gpu-kernel-pairs`).
+- `ARCHITECTURE_GPU_SHARED_READINGS.md` - what the shared row templates' stamps read on each home against the per-home
+  bodies before them, and the instruments the readings come from (`ARCHITECTURE_GPU_SHARED_READINGS.md#gpu-shared-readings`).
 - `ARCHITECTURE_MEDIA.md` - the encoder-tower, audio, ASR and vision charters.
 - `ARCHITECTURE_TTS.md` - the text-to-speech charters - the front end, the block home, the
   shared assembly, the families and the facade.
@@ -101,23 +104,32 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
   (`ARCHITECTURE_GPU_PREFILL_WINDOW.md#prefill-kv-mirror`), the segmented window over several
   sessions' chunks (`ARCHITECTURE_GPU_PREFILL_WINDOW.md#prefill-segments`), the recurrent scan over
   half rows, and how a kernel's hot loads are addressed.
-- `ARCHITECTURE_GPU_VULKAN.md` - the Vulkan resident driver's prefill chain and byte stores - the
-  prefill window chain, the Q8 requant byte store, the decode GEMV family's grid codebook buffer,
+- `ARCHITECTURE_GPU_SHARED_ATTN.md` - the attention bodies both discrete homes (Vulkan and CUDA) stamp: the token
+  command's attention key split, the prefill's flash-attention tile, the K/V mirror's block codecs (q8_0, tq4) with
+  tq4's rotated basis, and the batched rope store's strided k and v reads.
+- `ARCHITECTURE_GPU_SHARED_GEMM.md` - the GEMM tiles and GEMVs both discrete homes stamp: the cm2 decode callbacks'
+  16-bit lanes, the mx4 decode, the device scale row, the cm2 tile body's k step, fast path and loop bounds, the KHR
+  arm's hand-staged kq tile, the decode GEMV family's lane split by row length and region walk, and the routed gate-up
+  fusion.
+- `ARCHITECTURE_GPU_SHARED_ROWS.md` - the row kernels of the token step and the routed block more than one home
+  stamps: the Q8 requant byte store, the residual step's two forms, the batched step's rows through the token block,
+  the token-table gather, the routed combine and its gemma-4 form, the select's depth, the routed weights' scales and
+  the f16 activation's row base.
+- `ARCHITECTURE_GPU_VULKAN.md` - the Vulkan resident driver's prefill chain - the
+  prefill window chain, a per-32 plane's window GEMM, the decode GEMV family's grid codebook buffer,
   the tile probe's shared descriptor set layout, the
   device-init roster of the Vulkan capabilities the tier keys its routes on, and the
   `[vk_dispatch]` lens's readonly derivation.
-- `ARCHITECTURE_GPU_VULKAN_ATTN.md` - the token command's attention key split, the
-  attention-side planes the resident driver uploads beside its norms - the q/k/v projection
-  bias, gpt-oss's sink logits with the flash tiles' sink stamps, and its output bias - the
-  K/V mirror's block codecs (q8_0, tq4) with tq4's rotated basis.
+- `ARCHITECTURE_GPU_VULKAN_ATTN.md` - the attention-side planes the resident driver uploads beside its norms - the
+  q/k/v projection bias, gpt-oss's sink logits with the flash tiles' sink stamps, and its output bias.
 - `ARCHITECTURE_GPU_VULKAN_WINDOW.md` - what the prefill window does a session at a time: the
   recurrent block over its region's state and ring, the segmented window holding several sessions'
   chunks, and the short window's peel through the token commands.
-- `ARCHITECTURE_GPU_VULKAN_GEMM.md` - the cooperative-matrix tiles the Vulkan tier's GEMMs run
-  on - the cm2 decode lanes, the tile pick and the coopmat mode ladder, the class-pipeline build
-  seat, the MoE expert chain on those tiles - and the decode GEMV family's lane split by row length.
-- `ARCHITECTURE_GPU_VULKAN_KHR.md` - the KHR arm's hand-staged tile, the window GEMMs over a file's
-  f32 rows that ride it on every coopmat card, and why a K-quant window plane stays on the cm2 tiles.
+- `ARCHITECTURE_GPU_VULKAN_GEMM.md` - how the Vulkan driver runs its GEMMs on the cooperative-matrix
+  tiles - the tile pick and the coopmat mode ladder, the class-pipeline build seat, and the MoE expert
+  chain on those tiles.
+- `ARCHITECTURE_GPU_VULKAN_KHR.md` - the window GEMMs over a file's f32 rows that ride the KHR arm's
+  staged tile on every coopmat card, and why a K-quant window plane stays on the cm2 tiles.
 - `ARCHITECTURE_GPU_VULKAN_ROOM.md` - the room the residency plan may fill on a card shared with a
   desktop: the OS's answer and the headroom where none comes, the over-commit guards, and the two
   allocation shapes the Windows memory manager pages out (the priority tag, the mapped ReBAR type).
@@ -184,7 +196,7 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
 - `ARCHITECTURE_MEASUREMENT.md` - the benchmark rig, the tune gate, the sanctioned
   instrumentation rails, the `[tuned]` perm precedence, the mint wall in the sidecar's provenance,
   the audio outlier rule, the parity fixture's prefix bar, the Vulkan board's reference rows, the
-  committed records gate, and the speculative round's ruler record.
+  llama.cpp CUDA build's rows (`ARCHITECTURE_MEASUREMENT.md#cuda-reference-rows`), the committed records gate, and the speculative round's ruler record.
 - `ARCHITECTURE_MEASUREMENT_AUDIO.md` - the audio board's instruments: the ASR board's GPU row pairs
   (`ARCHITECTURE_MEASUREMENT_AUDIO.md#asr-gpu-pairs`), the MLX ASR reference, the TTS reference
   instrument (`ARCHITECTURE_MEASUREMENT_AUDIO.md#the-tts-reference-instrument`), and its CUDA

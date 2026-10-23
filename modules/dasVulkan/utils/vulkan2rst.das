@@ -80,7 +80,9 @@ def document_module_vulkan_boost() {
         group_by_regex("Command recording", mod, %regex~^(cmd_bind_pipeline|cmd_bind_vertex_buffer|cmd_draw|cmd_push_constants|copy_image_to_buffer|blit_full_image|transition_image|transition_depth_image|transition_image_aspect|transition_image2|transition_depth_image2|transition_image_aspect2)$%%),
         group_by_regex("Conveniences",     mod, %regex~^(full_area|clear_color|clear_depth)$%%),
         group_by_regex("Compute tier & device capabilities", mod, %regex~^(storage_8_16_supported|compute_full_subgroups_supported|subgroup_properties|subgroup_compute_ops_supported|integer_dot_product_supported|cooperative_matrix_supported|cooperative_matrix2_supported|cooperative_matrix2_fa_supported|cooperative_matrix2_decode_vector_supported|cooperative_matrix2_properties|cooperative_vector_supported|memory_priority_supported|timeline_semaphore_supported|external_memory_host_supported|external_memory_host_min_alignment|select_transfer_queue_family|create_device_(storage_8_16.*|cooperative_matrix|coopmat_full_subgroups))$%%),
-        group_by_regex("Pipeline introspection", mod, %regex~^(pipeline_exec_props_supported|dump_pipeline_executables)$%%),
+        group_by_regex("Pipeline introspection", mod,
+            regex_compile("^(pipeline_exec_props_supported|dump_pipeline_executables|" +
+                "set_pipeline_capture|pipeline_capture)$")),
         group_by_regex("Video memory budget", mod, %regex~^os_video_memory$%%),
         hide_group(group_by_regex("Finalizers", mod, %regex~^finalize$%%))
     )

@@ -1,16 +1,18 @@
 # dasLLVM Code Review Checklist
 
-**Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture docs:
-every `ARCHITECTURE*.md` beside this file. Planned work: `LEDGER.md`.
+**Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
+docs: `ARCHITECTURE.md`, `ARCHITECTURE_CODEGEN_IDENTITY.md`, `ARCHITECTURE_DEBUG_INFO.md`,
+`ARCHITECTURE_EXE.md`, `ARCHITECTURE_JIT_ENTRY.md`, `ARCHITECTURE_LIB.md`,
+`ARCHITECTURE_TARGET_FEATURES.md`, `ARCHITECTURE_VECTOR_MATH.md`. Planned work: `LEDGER.md`.
 
 **A `[test]` file under this module that carries a `require dasllama/...` line of its own answers
-to `modules/dasLLAMA/REVIEW.md` (repo root) as well** - its out-of-folder ledger row lives there.
+to `modules/dasLLAMA/REVIEW.md` (repo root) as well.**
 
 **A diff that changes how the compile handles a function because it carries `[tune]`,
 `[tune_perm]`, `[tune_companion]`, `[tune_scope]`, `[tune_policy]` or `[llvm_code]` - the body
 it emits for it, which permutation it picks for it - or what a read or a save of `<app>.tune.json`
 takes from a saved sidecar that is stale (its mtime is older than the running binary) or that
-another machine minted, is reviewed with `skills/tune.md`.**
+another machine wrote, is reviewed with `skills/tune.md`.**
 
 **A change to the tune framework - `daslib/llvm_tune.das`, a test under `tests/` here that requires
 `llvm/daslib/llvm_tune` or spawns a child that does, or the descriptor and C++ rows that join it to
@@ -53,14 +55,13 @@ a program (`.das_module`, `src/dasLLVM.cpp`) - is reviewed with `skills/internal
   run of that code on a box of the target, or the statement that no such box ran it.** A
   compile-only run shows the code emits, never that it runs.
 
-- **A diff that adds work to, or moves work within, what `run_jit`
-  (`daslib/llvm_jit_run.das`) or `run_jit_linked` (`daslib/llvm_jit_link.das`) executes - its
-  own body or any callee - also prints an `LLVM JIT time:` number for that work on every path
-  that executes it: its own line, or the number of a phase that includes it, while that phase's
-  line still prints; a number a second, independent computation of the same work prints (the
-  emitter's plan after the link module's) does not cover the first**
-  (`ARCHITECTURE.md#jit-timing-contract`). Only work on the path that reaches the report is
-  timed: option resolution before the first timer, log lines, and failure-path teardown are not.
+- **A diff that adds work to, or moves work within, what `run_jit` (`daslib/llvm_jit_run.das`)
+  or `run_jit_linked` (`daslib/llvm_jit_link.das`) runs between its first timer and the
+  `LLVM JIT time:` report - in its own body or in any function it calls - prints a number that
+  covers that work on every path that runs it: a line of its own, or the line of a phase that
+  contains it, while that line still prints.** When one compile does the same work twice (a link
+  that falls back to the emitter computes the plan a second time), each run prints its own number
+  (`ARCHITECTURE.md#jit-timing-contract`).
 
 - **A change that alters the machine code the JIT emits for a function the JIT cache serves -
   from the DLL cache or the split-obj cache - without changing any input the JIT cache keys fold,
@@ -72,7 +73,7 @@ a program (`.das_module`, `src/dasLLVM.cpp`) - is reviewed with `skills/internal
 - **A diff that adds or changes an extern slot name - one a `UidNodes` getter
   (`daslib/llvm_dll_utils.das`) or an `FN_JIT_*` name function (`daslib/llvm_jit_plan.das`)
   builds - names the callee or type the slot binds by its mangled name, its mangled-name hash, or
-  the table key's `Type`, never by interpolating an AST node**
+  the key `Type` of the table a table helper serves, never by interpolating an AST node**
   (`ARCHITECTURE_CODEGEN_IDENTITY.md#extern-slot-names-key`). Every slot name folds into the cache
   key, and a node's text changes every run.
 
@@ -114,10 +115,12 @@ a program (`.das_module`, `src/dasLLVM.cpp`) - is reviewed with `skills/internal
   (`ARCHITECTURE.md#tune-sidecar-cache-pin`). An unpinned compile-time file read serves stale
   macro output from the module cache until an unrelated source file changes - silently.
 
-- **A diff that adds a `-lib` entry point, or work to one, keeps the C boundary's three promises:
-  a raise reaches the caller as a return value and never an unwind, `<P>_create` answers null
-  rather than aborting, and `<P>_destroy` runs what the runtime's own shutdown cannot find**
-  (`ARCHITECTURE_LIB.md#lib-runtime-scope`). A library is called by code that cannot catch anything.
+- **A diff that adds a `-lib` entry point, or work to one, keeps three behaviors (`<P>` is
+  the library's export prefix): a raise reaches the caller as a return value, never as an unwind;
+  `<P>_create` returns null instead of aborting; and `<P>_destroy` calls the program's
+  `[finalize]` and `[shutdown]` functions itself** (`ARCHITECTURE_LIB.md#lib-runtime-scope`). A
+  library is called by code that cannot catch anything, and the runtime's own shutdown finds no
+  jitted `[shutdown]` function.
 
 - **A `-lib` build path a diff adds or changes that writes no artifact and exits 0 is a defect -
   exit non-zero instead.** A build rule reads the exit code, and a silent success lets
@@ -133,8 +136,8 @@ a program (`.das_module`, `src/dasLLVM.cpp`) - is reviewed with `skills/internal
 - **A diff that adds a top-level section to the tune sidecar (`<app>.tune.json`, written by
   `daslib/llvm_tune.das`) updates `modules/dasLLAMA/dasllama/dasllama_exchange_schema.das` in
   the same change and keeps `modules/dasLLAMA/tests/test_exchange_schema.das` green** - the
-  validator allow-lists sections, so a section it does not know fails every newly minted
-  sidecar at submission, and the checked-in corpus the test sweeps cannot show it.
+  validator allow-lists sections, so a section it does not know fails every sidecar written
+  after the diff at submission, and the checked-in corpus the test sweeps cannot show it.
 
 - **A diff that adds an override knob, or gives one a new effect, adds the knob or the effect
   to the inventory in `ARCHITECTURE.md#override-knobs` in the same change.** An override knob is
@@ -153,18 +156,18 @@ a program (`.das_module`, `src/dasLLVM.cpp`) - is reviewed with `skills/internal
 - **A host path a diff writes into the tune sidecar (`<app>.tune.json`, written by
   `daslib/llvm_tune.das`) goes through `tilde_home` (`daslib/fio.das`, repo root); a host path
   it passes to a filesystem call stays raw.** No filesystem call resolves `~`, and a recorded
-  path is read by other people, so it must not name the user who minted it.
+  path is read by other people, so it must not name the user whose run wrote it.
 
 - **Weakening `tests/llvm_tune_manifest.das` (beside this file) is a defect** - deleting a
   `[test]`, or dropping or loosening an assertion weakens it.
 
 - **A diff that emits an instruction into the entry block of a function whose body das
-  statements emit - the impl half of a generated function pair (the body the wrapper half calls),
-  or a block body - gives it no debug location, and
-  one it emits into a loop's latch (the block that jumps back to the loop head) gives it the
-  loop's own line** (`daslib/llvm_jit.das`). Those are the two places the emitter fills out of
-  das statement order, and an instruction that keeps whatever location was current when it was
-  emitted moves a `break file:line` stop onto a statement that has not run
+  statements emit - the impl half of a generated function pair (the body the wrapper half
+  calls), or a block body - gives it no debug location, and one it emits into a loop's latch
+  (the block that jumps back to the loop head) gives it the loop's own line**
+  (`daslib/llvm_jit.das`). Those are the two places the emitter fills out of das statement
+  order, and an instruction that keeps whatever location was current when it was emitted moves a
+  `break file:line` stop onto a statement that has not run
   (`ARCHITECTURE_DEBUG_INFO.md#di-variable-locations`).
 
 - **A diff that adds a teardown step to `reset_jit_globals_after_failure`
@@ -199,12 +202,14 @@ a program (`.das_module`, `src/dasLLVM.cpp`) - is reviewed with `skills/internal
 - **A diff that changes the machine code a twinned emitter produces - its body, which of its
   arms a call selects, or the feature set its output is lowered under - leaves it covered by a
   cell comparing the emitted result with the interpreted result over the operand range that
-  emitter serves (every vector width for a vector emitter, the full int8 lattice for a dot),
-  adding the cell in the same change when none covers that range.** A twinned emitter is one the
-  interpreter also computes, through a das body or a builtin: every `build_vector_*` in
+  emitter serves (every vector width for a vector emitter, every pair of int8 operands for a
+  dot), adding the cell in the same change when none covers that range.** A twinned emitter is
+  one the interpreter also computes, through a das body or a builtin: every `build_vector_*` in
   `daslib/llvm_jit_intrin.das` and every `[llvm_code]` generator under this module.
 
-- **An IR-shape test asserts the instruction by name, never a numeric value.**
+- **A test that searches the text of the LLVM IR the JIT emits matches an instruction by its
+  opcode and flags (`fmul reassoc`), never by a numbered register (`%12`).** The numbering shifts
+  with any unrelated change to the emitted function.
 
 - **A cell comparing a float emitter's emitted and interpreted results also asserts both answer
   NaN in the same lanes.** A clamp or a conversion written with ordered compares turns a NaN lane
@@ -223,6 +228,5 @@ a program (`.das_module`, `src/dasLLVM.cpp`) - is reviewed with `skills/internal
 
 - **A diff that builds a feature string for a machine that has a force knob - a
   `*_forced_plus_features` function in `daslib/llvm_jit_common.das` - appends the forced names
-  AFTER the detected host features.** LLVM's `SubtargetFeatures` takes
-  the last occurrence of a name, so a forced feature placed first is silently overridden by
-  detection.
+  AFTER the detected host features.** LLVM's `SubtargetFeatures` takes the last occurrence of a
+  name, so a forced feature placed first is silently overridden by detection.

@@ -1385,6 +1385,23 @@ class UfInlKern {
 
 def public userfn_inline_method_words : array<uint> => <- clone_to_move(userfn_inline_method_spv)
 
+class UfInlLazyKern {
+    @ssbo @binding = 0 xs : array<float>
+    @ssbo @binding = 1 ys : array<float>
+    @push_constant pa : UfInlArgs
+
+    [spirv_inline]
+    def guarded(i : uint) : float => i < pa.n ? xs[i] : 0.0
+
+    [spirv_kernel(local_size_x=64, name="userfn_inline_lazy_spv"), marker(no_coverage)]
+    def run {
+        let i = gl_GlobalInvocationID.x
+        ys[i] = guarded(i)
+    }
+}
+
+def public userfn_inline_lazy_words : array<uint> => <- clone_to_move(userfn_inline_lazy_spv)
+
 def public userfn_words : array<uint> => clone_to_move(userfn_spv)
 
 def public userfn_inline_words : array<uint> => <- clone_to_move(userfn_inline_spv)
@@ -2608,6 +2625,43 @@ def coopmat2s64_kernel {
 }
 
 def public coopmat2s64_words : array<uint> => clone_to_move(coopmat2s64_spv)
+
+var @ssbo @binding = 0 i8_a : array<int8>
+var @ssbo @binding = 1 i8_b : array<int8>
+var @ssbo @binding = 2 i8_rs : array<float>
+var @ssbo @binding = 3 i8_cs : array<float>
+var @ssbo @binding = 4 i8_c : array<float>
+var @workgroup i8_srs : float[128]
+var @workgroup i8_scs : float[128]
+
+[compute_shader(local_size_x=128, name="coopmat2i8_spv"), marker(no_coverage)]
+def coopmat2i8_kernel {
+    let tid = gl_LocalInvocationID.x
+    i8_srs[tid] = i8_rs[tid]
+    i8_scs[tid] = i8_cs[tid]
+    barrier()
+    var tl : tensorLayout2D
+    tensorLayoutCreate(tl)
+    tensorLayoutSetDimension(tl, 64u, 64u)
+    tensorLayoutSetStride(tl, 64u, 1u)
+    var tv : tensorView2Dt
+    tensorViewCreate(tv)
+    var facc : coopmatWgAcc_f32_64x64
+    var k = 0u
+    while (k < 64u) {
+        var at : coopmatWgA_s8_64x32
+        var bt : coopmatWgB_s8_32x64
+        var sacc : coopmatWgAcc_s32_64x64
+        coopmatLoadTensor(at, i8_a, 0u, tl, 0u, 64u, k, 32u)
+        coopmatLoadTensor(bt, i8_b, 0u, tl, 0u, 64u, k, 32u, tv)
+        sacc = coopmatMulAdd(at, bt, sacc)
+        coopmatScaleAcc(facc, sacc, i8_srs, (k / 32u) * 64u, i8_scs, (k / 32u) * 64u)
+        k += 32u
+    }
+    coopmatStoreTensor(facc, i8_c, 0u, tl, 0u, 64u, 0u, 64u)
+}
+
+def public coopmat2i8_words : array<uint> => clone_to_move(coopmat2i8_spv)
 
 //! the e stamp at the 32-deep k step: the shapes dasLLAMA's Cm2EBatch classes declare for the grid-codebook formats; every other format's e stamp runs the m stamp's 64-deep shapes
 [compute_shader(local_size_x=128, name="coopmat2e_spv"), marker(no_coverage)]

@@ -3,10 +3,12 @@
 Companion to `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`; a section is cited by its anchor. This
 document carries the N-row token command a batched step's rows go through, the N-column leaf every
 format has, the column tiles a dispatch past eight columns runs in, the command's same-slab form the
-speculative verify steps one stream's rows through, and the residual step's two forms it holds bit
-for bit. The model's residency the command runs under is in `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`,
+speculative verify steps one stream's rows through. The residual step's two forms it holds bit
+for bit are `ARCHITECTURE_GPU_SHARED_ROWS.md#residual-step-fma`, and how its row kernels and one-column leaves
+address the rows are `ARCHITECTURE_GPU_SHARED_ROWS.md#nrow-kernel-rows` and `ARCHITECTURE_GPU_SHARED_GEMM.md#gemv-region-walk`.
+The model's residency the command runs under is in `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`,
 the logits landing in `ARCHITECTURE_GPU_VULKAN_LANDING.md`; the decode
-attention's forms are `ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-decode-attn-split`; the per-op tier's
+attention's forms are `ARCHITECTURE_GPU_SHARED_ATTN.md#vk-decode-attn-split`; the per-op tier's
 decode era, whose routed block the command's rows form mirrors, is `ARCHITECTURE_GPU_VULKAN_DECODE.md`.
 
 ### The N-row token command: a batched step's rows through one weight pass {#nrow-token-command}
@@ -49,7 +51,7 @@ the first reading past its binding. Every GEMV goes out as an N-column dispatch
 two-output-rows-a-subgroup twin past `g_q8_n2_min_n` on an even row count, off by default
 because the pod's down GEMV read 750 us a step under the pair against 587 a row a subgroup.
 Where the one-row command fuses the dense FFN's gate and up GEMVs with the activation and its
-requant (`RLayer.gu_on`), the rows' do too (`Q8GemvGuNT`, stamped at two, four and eight
+requant (`RLayer.gate_up_fused`), the rows' do too (`Q8GemvGuNT`, stamped at two, four and eight
 columns like the plain q8 leaf: a workgroup owns 32 output rows for every column, each column's
 half-block one 16-byte load beside the weight word, a column past the live ones re-dotting the
 last live column's row with its block never stored, and a subgroup a column quantizes the
@@ -60,13 +62,10 @@ over the rows, because an epilogue run by the last workgroup would serialize the
 where the separate dispatch runs them in parallel workgroups. The rows' fused add-rms-and-requant
 stamp (`rq_b`) writes Q8_0 blocks alone, so the command's prologue fuses only where layer 0's head
 takes a Q8_0 feed and reads no float row; every other head takes the split add-rms and requant
-pair, as the site before a routed block does. The row-parallel kernels take the
-rows' planes whole; the rope, the mirror store and the attention run at each row's own position,
-cached count and mirror region, which ride the shared `TokMeta` block a row (`mirbase` an
-offset in mirror units; `DaAttnArgs.rowwg` and `qrow` carry the row stride into the attention, `rowwg`
-0 naming a one-row dispatch). The attention's key split is the span's, the ladder the one-row
+pair, as the site before a routed block does. How the row-parallel kernels address the rows is
+`ARCHITECTURE_GPU_SHARED_ROWS.md#nrow-kernel-rows`. The attention's key split is the span's, the ladder the one-row
 command takes below its wide form (`rd_split_pieces` and the layer's window cap,
-`ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-decode-attn-split`, the wave cap over the command's own rows: the rows sum as
+`ARCHITECTURE_GPU_SHARED_ATTN.md#vk-decode-attn-split`, the wave cap over the command's own rows: the rows sum as
 each row does alone while the rows' workgroups over the pieces fit one wave of the SMs, `vk_rdec_rows_split_alike`)
 while every row sits in one band - a group's furthest row picks the group's form, the unsplit twin under
 `RD_UNSPLIT_POS` and the split form at every span past it (the ruler reads eight pieces slower
@@ -110,11 +109,8 @@ model whose `nb * k` slots pass `MAX_ROUTED_SLOTS`, the slot planes' extent. The
 expert weights - every slot reads its expert whole, as the reference's decode does below its
 grouped-GEMM threshold (`mul_mat_vec_max_cols` on its Vulkan backend, `MMVQ_MAX_BATCH_SIZE` on
 CUDA) - so the batched step's gain on a MoE carrier is the attention, the router, the shared
-expert and the submit, not the experts' bytes. The one-column leaves walk their regions
-interleaved a row at a time (`r = rg % nreg`, the y row at `r * d + row`), so an expert two
-slots share leaves DRAM once and the second slot reads it from cache - the reference's MoE
-GEMV puts every token's dot of one row index in one block for the same reason - where a
-region-major walk put the two reads a whole expert stack apart. The rows' combine quantizes the next head's feed
+expert and the submit, not the experts' bytes. How the one-column leaves walk their regions is
+`ARCHITECTURE_GPU_SHARED_GEMM.md#gemv-region-walk`. The rows' combine quantizes the next head's feed
 under a decision both commands share (`RLayer.comb_rq`, made once with the combine sets by
 whichever command records first, `rd_ensure_comb_sets`): the two commands record in any order,
 and a set either record binds always exists. One recorder encodes both commands
@@ -145,7 +141,9 @@ pairs and no k-head groups, and the attention reads the donor layer's rows from 
 **The rows' logits come home a row a job-queue lane, straight off the cached mapping.**
 `rdec_nrow_steps` counts the N-row commands served - one a group of a batched step, one a peeled
 window - so a cell holds that its batched steps went through the command and not the
-row-at-a-time loop the two silent declines (no region, two rows one region) fall to. `rd_land_logits_n` hands each row's copy to a lane where a queue serves (`maybe_parallel_for`,
+row-at-a-time loop the two silent declines (no region, two rows one region) fall to;
+`rdec_nrow_rows` counts the rows those commands carried, so the two counters' differences give a
+command's row count. `rd_land_logits_n` hands each row's copy to a lane where a queue serves (`maybe_parallel_for`,
 the lanes idle while the device owns the step) and copies in order without one: a lane copies
 about 14 GB/s, and the earlier form - the whole plane into a scratch row on one lane, then a row
 a copy out of it - passed four rows of a 152k vocab twice over one lane (322 us a step on the
@@ -277,24 +275,3 @@ command's earlier segments (their submits and waits; the host's routed sums betw
 host experts piece), the submit, the wait (the transfer-queue landing of the picks and hidden rows,
 and of the n logits rows where they land, is inside it) and the landing copy. The round's profiler sections (`mtp.verify`, `mtp.rollback`)
 price the seat's whole wall from the engine's side, the draft's `mtp.draft`.
-
-### The residual step's two forms spell the sandwich add as one fma {#residual-step-fma}
-
-The residual step has two forms on the decode rail: the row kernel (`ArBase`, a stamp of
-`GkAddRmsRows`, a row a workgroup, the N-row command's every site) and the q8 GEMV's epilogue
-(`Q8GemvAr.epilogue`, the one-row command's post-attention and post-FFN sites), and the
-regions cells hold the two commands bit for bit. The forms are ONE text - `GkResidualRow.accum_row_into`
-and `GkResidualRow.quant32`, the shell both classes stamp (`dasllama_gpu_kernels_common.das`, the
-Metal residual stamps' shell too), its reads and writes behind accessor overrides (the row kernel's
-stash slab against the GEMV's re-read of its row) - so the
-reduce, the four-column round and the requant cannot drift apart; a driver still decides per kernel whether a multiply
-feeding an add contracts into one fma: contracting one kernel's sandwich column (`x + wn * (a *
-ainv)`, a gemma's post norm over the add partner) and not the other's rounds the two one ulp
-apart on a few percent of the row, and the batched rows drift from the session alone. Both forms
-spell that add as `mad` - the GLSL `Fma` instruction, fused by definition - so the driver has no
-contraction to choose; the plain column carries no multiply before its add. The row kernel walks
-its row four columns a round - `accum_row_into` issues a round's four loads before its adds,
-`GkQ8BlockStore.store_x4` its four loads before its stores - because a one-workgroup row kernel's time
-is its load rounds.
-`test_vkd_q8_gemv_ar_row_twin` holds the epilogue to the row kernel bit for bit on both columns,
-fed the GEMV's own y row.

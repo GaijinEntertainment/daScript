@@ -14,7 +14,7 @@ require dasllama/dasllama_repack
 require dasllama/dasllama_math_default   // dequant_kq_row_grp — the independent grp reader
 require dasllama/dasllama_gguf           // dequant_*_plane_superblock — the independent disk reader
 require dasllama/dasllama_gemm_schema    // kq_qsb/kq_ssb — the fmt-id plane strides
-require _kq_fixtures                    // put_f16: a plausible f16 halfword (LE), so dequant never sees NaN/Inf
+require _vk_kq_fixtures
 
 // deterministic byte source (LCG) — no Math.random in tests
 struct private Rng {

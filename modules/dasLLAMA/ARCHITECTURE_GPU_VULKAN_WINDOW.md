@@ -68,7 +68,7 @@ chain (a sixth of the scan's time there). The conv, the scan and the requant fam
 fold map their 32-lane blocks and clusters from the invocation id, never from the subgroup id:
 every shuffle in them carries an xor mask under 32, which stays inside such a block on any
 subgroup width the tier admits (32 or more), so the kernels hold on a 64-lane device as on a
-32-lane one; only the KHR tile keys on the width itself (`ARCHITECTURE_GPU_VULKAN_KHR.md#khr-mm-kq-tile`). The conv and smalls bindings are NonWritable, as every
+32-lane one; only the KHR tile keys on the width itself (`ARCHITECTURE_GPU_SHARED_GEMM.md#khr-mm-kq-tile`). The conv and smalls bindings are NonWritable, as every
 binding no kernel of a class writes is (`ARCHITECTURE_GPU_VULKAN.md#vk-readonly-lens`). The decoration is load-bearing: without it the driver orders each token's k and q
 loads behind the previous token's o store (the two buffers may alias), and the same kernel ran
 2.35x slower (19004 against 8084 us over the 0.8B's 18 layers on the Linux RTX 5080; the staged
@@ -133,7 +133,11 @@ whatever segment it holds; a NextN carry lands a row a segment (its slot's row o
 warms no head row - each session's head rows past its start are cut, a draft acceptance's loss alone. It declines a
 per-layer-embedding model, a hyper-connection chain, routed experts on the host and a block-codec mirror: their side rows,
 wide residual, host sums and staged rows are per call on this driver. A declined
-call falls to the engine, which prefills the segments one at a time through the one-session override. The
+call falls to the engine, which prefills the segments one at a time through the one-session override. The CUDA
+home takes the same form (`cud_rdec_prefill_segs`): the window's segment parts and the ending-segment lookup
+are the tier's (`rdec_window_segs`, `rdec_seg_ending_at` beside `RdecPfSeg`), its per-segment rope-and-store
+and attention ride the shared kernels' `row0`, each ending segment's logits land at its slot of the out
+block, and its witness is `cud_rdec_prefill_segment_windows`. The
 scheduler's prefill tick hands a device-home scheduler its segments like a host-cached one, but for a model
 whose device prefill cannot continue past zero, which takes each stream's whole head alone. The witness is
 `vk_rdec_prefill_segment_windows`; the driver counts a prefill a segment.

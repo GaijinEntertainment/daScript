@@ -1,7 +1,7 @@
 # dasLLAMA Architecture - the allowed asymmetries between the GPU backends
 
 Companion to `ARCHITECTURE_GPU.md`; a section is cited by its anchor. This document carries
-the closed list of the ways the Metal and the Vulkan backend are allowed to differ. The GPU
+the closed list of the ways the GPU backends - Metal, Vulkan and CUDA - are allowed to differ. The GPU
 backend role table the list reads against - the role files, the tier's seats, the kernel-binding
 asymmetries a stamp family ledgers - stays in `ARCHITECTURE_GPU.md#gpu-backends`.
 
@@ -56,7 +56,7 @@ asymmetries a stamp family ledgers - stays in `ARCHITECTURE_GPU.md#gpu-backends`
   `DASLLAMA_GPU_CTX_STRICT`, `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan`): Metal's mirror is the
   model's own context in unified memory, so no plan shortens it and the pin has nothing to hold.
 - **The K/V mirror codec pin is read by the Vulkan plan alone** (`set_gpu_kv_dtype`, `DASLLAMA_GPU_KV`,
-  `ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-kv-block-codecs`): the Vulkan driver arms one mirror for every
+  `ARCHITECTURE_GPU_SHARED_ATTN.md#vk-kv-block-codecs`): the Vulkan driver arms one mirror for every
   session at load, so its codec is asked before the load; Metal mirrors each session in that session's
   own codec, and the pin has nothing to pick.
 - **The NextN head on the hyper-connection chain is Vulkan-only** (`ARCHITECTURE_GPU_VULKAN_HC.md#hc-draft-head`,
@@ -94,7 +94,7 @@ asymmetries a stamp family ledgers - stays in `ARCHITECTURE_GPU.md#gpu-backends`
 - **`vulkan_tts_stats` / `vulkan_tts_declines` have no Metal twin**: the Vulkan TTS driver counts its encodes
   and its declines by reason in its own pair, where Metal's TTS seats report through `metal_tower_stats` beside `styletts2_gpu_stats`.
 - **The Vulkan block-codec decode attention quantizes the query to q8_0 blocks; Metal's keeps it f32**
-  (`DaAttnT`'s `KVBLK` stamps, `ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-kv-block-codecs`, against `MetalSqAttnDQuantT`):
+  (`DaAttnT`'s `KVBLK` stamps, `ARCHITECTURE_GPU_SHARED_ATTN.md#vk-kv-block-codecs`, against `MetalSqAttnDQuantT`):
   Vulkan scores a K word against a query word in one packed integer dot, the CPU chain's own query quantization, so
   the two agree to it; Metal's per-key loop dequantizes the block into float multiplies against the f32 query. The
   codec cells of each home hold their own chain to the CPU's.
@@ -201,7 +201,7 @@ asymmetries a stamp family ledgers - stays in `ARCHITECTURE_GPU.md#gpu-backends`
   the window's rows, the decode step's row and a batched step's rows on the device off the table's q8
   or K-quant plane by its format - Vulkan off the tied
   classifier's plane or an untied table's own plane in the arena (`EmbGather`, the `KqEmb<Fmt>`
-  leaves, `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#vk-token-gather`), Metal off the blob planes
+  leaves, `ARCHITECTURE_GPU_SHARED_ROWS.md#token-table-gather`), Metal off the blob planes
   (`MetalEmbedKqT`, one stamp a format; `emb_dev_gather_ok`) - and the step reads a 4-byte token id
   in place of the row (Vulkan's recorded command off a host-visible word, Metal's poke). An
   F32/F16/BF16 table both gather off its exact f32 rows - Metal reading the blob in place in unified
@@ -217,5 +217,12 @@ asymmetries a stamp family ledgers - stays in `ARCHITECTURE_GPU.md#gpu-backends`
   serves a routed block of few tokens through the decode step's gathered GEMVs instead of its bucketed tiles; the
   Vulkan window chain's routed block rides its expert tiles over a device-side gather at every window size - the
   cm2 expert chain (`ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-expert-chain`), the KHR tile
-  (`ARCHITECTURE_GPU_VULKAN_KHR.md#khr-mm-kq-tile`) or, on a device with neither, the Q8-fed chain's batch tiles
+  (`ARCHITECTURE_GPU_SHARED_GEMM.md#khr-mm-kq-tile`) or, on a device with neither, the Q8-fed chain's batch tiles
   (`ARCHITECTURE_GPU_VULKAN_MOE.md#vk-moe-q8-chain`) - and has no tile-per-expert form to route away from.
+- **The int8 MMQ prefill is the CUDA home's alone** (`DASLLAMA_CUDA_MMQ`, on by default; `crd_mmq_fits`): where every
+  window plane and the classifier are Q8_0, every GEMM's output width is a multiple of 128, its reduction of 256 and
+  its plane's first block of 8, and the window's rows are a multiple of 128, the CUDA window chain requantizes the activations to Q8_0 blocks
+  between the GEMMs and runs them on the int8 MMQ kernel, as the token step's feeds are; `=0`, or a model that misses
+  any of these, takes the f16-fed cm2 tiles, so the knob changes the prefill's rounding and its logits. The window log
+  line names the form. The Vulkan window's form follows the device's coopmat mode
+  (`ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default`), and the knob reaches nothing there or on Metal.

@@ -101,6 +101,11 @@ class Iq2xxsCm2S64Probe : Iq2xxsCm2T {
     typedef BT = coopmatWgB_f16_64x32
     typedef ACC = coopmatWgAcc_f16_128x32
     typedef ACCW = coopmatWgAcc_f32_128x32
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        cm2_body()
+    }
 }
 
 [vk_dispatch(name = "probe_iq3s_cm2s64_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -111,6 +116,11 @@ class Iq3sCm2S64Probe : Iq3sCm2T {
     typedef BT = coopmatWgB_f16_64x32
     typedef ACC = coopmatWgAcc_f16_128x32
     typedef ACCW = coopmatWgAcc_f32_128x32
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        cm2_body()
+    }
 }
 
 [vk_dispatch(name = "probe_iq3xxs_cm2s64_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -121,6 +131,11 @@ class Iq3xxsCm2S64Probe : Iq3xxsCm2T {
     typedef BT = coopmatWgB_f16_64x32
     typedef ACC = coopmatWgAcc_f16_128x32
     typedef ACCW = coopmatWgAcc_f32_128x32
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        cm2_body()
+    }
 }
 
 [vk_dispatch(name = "probe_k4_cm2s32_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -133,6 +148,11 @@ class K4Cm2S32Probe : K4Cm2T {
     typedef BT = coopmatWgB_f16_32x32
     typedef ACC = coopmatWgAcc_f16_128x32
     typedef ACCW = coopmatWgAcc_f32_128x32
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        cm2_body()
+    }
 }
 
 //! the twin's k step for a format - 0 where the format has no twin

@@ -5,7 +5,8 @@ document carries the routed block of the Metal prefill driver: the atomics-free
 bucket rail, the tensor-twin scaffold the gathered expert sites ride, the split-format
 expert twins, the K-quant twins' own crowns and the knee that picks them on an uncrowned box, the gemma-4
 MoE tail as one step (`#metal-g4-moe-step`),
-the short window's gathered expert route, and the routed weights' global scale every row shape applies. The GEMM form ladder those sites pick from (`ARCHITECTURE_GPU_PREFILL_GEMM.md#prefill-gemm-ladder`), the dev-W panel knee map
+and the short window's gathered expert route; the routed weights' global scale every row shape applies is
+`ARCHITECTURE_GPU_SHARED_ROWS.md#moe-wscale`. The GEMM form ladder those sites pick from (`ARCHITECTURE_GPU_PREFILL_GEMM.md#prefill-gemm-ladder`), the dev-W panel knee map
 (`ARCHITECTURE_GPU_PREFILL_GEMM.md#devw-panel-knees`) and the dense-KQ tensor mul_mm scaffold the split-format twins derive from (`ARCHITECTURE_GPU_PREFILL_GEMM.md#prefill-kq-tensor-scaffold`)
 live in `ARCHITECTURE_GPU_PREFILL_GEMM.md`.
 
@@ -176,18 +177,6 @@ The gathered q8 form carries its scale and quant pointers across k-blocks; the s
 form measures slower (`benchmarks/matmul/bench_metal_moe_lab.das`, gmm8 section). The gathered
 Q6_K is the opposite: a superblock-scalar cache measures slower per mm than reloading per
 k-block (same lab, gmm6 section), so its stage is stateless.
-
-### The routed weights' scales {#moe-wscale}
-
-**A model's `expert_weights_scale` (0 and 1 mean none) and, on gemma-4, the layer's per-expert down scale multiply every
-picked weight inside the select, in the CPU `moe_select_core`'s order: the renorm, the global scale, then the down scale.**
-`GkTopKRow.scale_weight` carries both on both homes: the global scale off `GkTopKArgs.wscale`, the down scale under the
-`DSCALE` template arm off the row `dsoff` names (`GK_NO_DSCALE` none). `enc_moe_select_rows` is the Metal decode's,
-the batch and verify rows' and the prefill window's one select; a down-scale row selects the `DSCALE` stamps
-(`MetalMoeSelectDs`, `MetalMoeSelect512Ds`), because the arm costs the plain stamps 0.27 us a dispatch on the M5 even
-with no row named (2.88 against 3.16 us at 256 experts, 3.75 against 4.03 at 512), while the down-scale stamp replaces the
-select and its separate scale pass (3.30 against 3.89 us at 128 experts). The Vulkan top-k (`TopKRecords`) is one stamp
-with the arm on: its row is named or `GK_NO_DSCALE`.
 
 ### The gemma-4 MoE tail as one step {#metal-g4-moe-step}
 
