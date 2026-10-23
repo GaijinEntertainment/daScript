@@ -3252,7 +3252,7 @@ namespace das {
         X(no_global_variables) X(no_global_variables_at_all) X(no_global_heap) X(only_fast_aot) \
         X(aot_order_side_effects) X(no_unused_function_arguments) X(no_unused_block_arguments) \
         X(allow_block_variable_shadowing) X(allow_local_variable_shadowing) X(allow_shared_lambda) \
-        X(ignore_shared_modules) X(default_module_public) X(no_deprecated) X(no_aliasing) \
+        X(ignore_shared_modules) X(promote_shared_unoptimized) X(default_module_public) X(no_deprecated) X(no_aliasing) \
         X(strict_smart_pointers) X(no_init) X(strict_unsafe_delete) X(no_members_functions_in_struct) \
         X(no_local_class_members) X(no_unsafe_uninitialized_structures) X(default_init_containers) \
         X(strict_properties) X(no_writing_to_nameless) X(no_optimizations) X(no_fold_unsafe) X(fast_math) X(disable_dse) \

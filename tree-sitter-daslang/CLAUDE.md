@@ -18,7 +18,8 @@ on those copies.
 - Two releases of the compiler are in use: daslang `master` (0.6.5) and the copy in `prog/1stPartyLibs/daScript/` of
   the Dagor engine (0.6.4). The grammar accepts the input of both. Only 0.6.5 accepts these forms:
   - `-9223372036854775808l`, the minimum of `int64`, as a number constant and an annotation argument.
-  - An `int64`, a negative `int64`, a `uint64`, and a negative `int` or `float` constant as an annotation argument.
+  - An `int64`, a negative `int64`, a `uint64`, a `uint`, a `uint8`, and a negative `int` or `float` constant as an
+    annotation argument.
   - `=>` at the end of a line: the line end after it returns no semicolon.
 - An input that the compiler accepts parses without ERROR or MISSING nodes, and `has_error` of the root node is false.
   An input that the compiler rejects for its syntax produces ERROR wherever the grammar can see the defect.

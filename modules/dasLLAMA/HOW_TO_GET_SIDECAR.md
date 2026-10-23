@@ -23,7 +23,8 @@ CPU classes and the AWS instance that carries each (`us-west-2`; the CLI on the 
 | `x86-avx2` | avx2, no VNNI | `c5a.4xlarge` (EPYC zen2), or any zen2/zen3 box |
 | `x86-vnni512` | avx512vnni + avx512bw | `c7a.4xlarge` (EPYC zen4) |
 | `x86-amx` | amx-int8 + amx-bf16 + amx-tile (+ avx512vnni, avx512bf16) | `c7i.4xlarge` (Sapphire Rapids), `c8i` (Granite Rapids) |
-| `arm-neon` / `arm-i8mm` | dotprod / i8mm | M1 / M2+, `c8g.2xlarge` (Graviton4) |
+| `arm-neon` / `arm-i8mm` | dotprod / i8mm, no SVE | M1 / M2+ (Apple) |
+| `arm-sve` | i8mm + sve | `c8g.4xlarge` (Graviton4) |
 
 Launch (Ubuntu 24.04, 16 vCPU, 60 GB gp3; the key pair `dasbox` and the group `dasbench-ssh` exist in
 the account - the group admits the dev box's IP on port 22, `aws ec2 describe-security-groups

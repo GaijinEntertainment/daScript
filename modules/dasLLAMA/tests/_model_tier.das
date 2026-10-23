@@ -24,6 +24,7 @@ require dasllama/dasllama_tokenizer   // TokKind — a model loaded without its 
 require dasllama/dasllama_env
 require dasllama/dasllama_math
 require dasllama/dasllama_gpu_resident   // resident_mirror_dtype — the mirror codec the box arms
+require ../performance/model_specs.das   // prefix_match_len / fixture_ok — the fixture compare the board gates read too
 require _compares public
 
 // Models larger than this are large-tier. 6 GiB cleanly splits the ~5GB-and-under carriers
@@ -211,20 +212,26 @@ def with_pinned_kernels(body : block) {
 //! `prompt` greedily continued on a fresh session under the pinned kernels, the continuation against `want` token for token (the
 //! first generated id sits at `length(prompt) - 1`, past generate's echo); `eyeball` logs both decoded. Free of T?, so it JITs
 //! and the engine chain runs on the native stack.
-def parity_gen_ok(tr : Model; prompt, want : array<int64>; dn_chunked : bool = false; eyeball : bool = false) : bool {
+def parity_gen_ok(tr : Model; prompt, want : array<int64>; dn_chunked : bool = false; eyeball : bool = false; prefix_bar : bool = false) : bool {
     let n_gen = length(want)
-    var ok = false
+    let got <- parity_gen_ids(tr, prompt, n_gen, dn_chunked)
+    if (eyeball) {
+        to_log(LOG_INFO, "eyeball want: {eyeball_text(tr, want)}\n")
+        to_log(LOG_INFO, "eyeball got:  {eyeball_text(tr, got)}\n")
+    }
+    return length(got) == n_gen && fixture_ok(prefix_bar, prefix_match_len(got, want), int64(n_gen))
+}
+
+//! `prompt` greedily continued for `n_gen` ids on a fresh session under the pinned kernels - the continuation alone, past
+//! generate's echo (shorter than `n_gen` where the stream stopped early)
+def parity_gen_ids(tr : Model; prompt : array<int64>; n_gen : int; dn_chunked : bool = false) : array<int64> {
+    var got : array<int64>
     with_pinned_kernels(dn_chunked) {
         let ids <- greedy_gen(tr, prompt, n_gen)
         let echo = length(prompt) - 1
-        let got <- [for (i in range(n_gen)); ids[echo + i]; where echo + i < length(ids)]
-        ok = ids_equal(got, want)
-        if (eyeball) {
-            to_log(LOG_INFO, "eyeball want: {eyeball_text(tr, want)}\n")
-            to_log(LOG_INFO, "eyeball got:  {eyeball_text(tr, got)}\n")
-        }
+        got <- [for (i in range(n_gen)); ids[echo + i]; where echo + i < length(ids)]
     }
-    return ok
+    return <- got
 }
 
 //! `steps` greedy decode steps through `s` from BOS at position 0: each step's pick into `ids`, the last step's logits into `logits`

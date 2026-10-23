@@ -478,6 +478,7 @@ jobs:
         # deploy regenerates anyway so a forgotten local run cannot ship stale news.
         python3 site-dasllama/build_news.py --root site-dasllama
         python3 site-dasllama/test_metadata.py
+        python3 site-dasllama/test_stamp_assets.py
 
         cp site-dasllama/index.html _site_dasllama/
         cp site-dasllama/examples.html _site_dasllama/
@@ -548,6 +549,12 @@ jobs:
         for f in forge.css nav-dropdown.css dasllama-table.css github-star.js; do
             cp "site/files/$f" "_site_dasllama/files/$f"
         done
+
+    - name: "Version the pages' scripts and styles"
+      run: |
+        # a changed script reaches a browser under a new URL, so a reload never runs a cached
+        # script under a newer page; an unchanged one keeps its URL and its cache
+        python3 -I site-dasllama/stamp_assets.py _site _site_dasllama
 
     - name: "Deploy to daslang.io origin (VPS)"
       # master-only, in the workflow itself. This guard used to sit on the Pages step
@@ -634,4 +641,9 @@ jobs:
                 < "$store" && echo "imported $name" \
                 || echo "ladder import of $name failed (service down?)"
         done
+        # the holds ride annotations.json: a held model leaves the live board with the commit that holds it
+        $RSH deploy@89.167.63.131 \
+            "curl -sf -m 60 -X POST -H 'Content-Type: application/json' --data-binary @- http://127.0.0.1:8201/admin/import-annotations" \
+            < modules/dasLLAMA/performance/records/annotations.json && echo "imported annotations.json" \
+            || echo "ladder import of annotations.json failed (service down?)"
         echo "deployed $REL"

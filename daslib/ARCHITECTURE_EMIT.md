@@ -16,12 +16,13 @@ Companion to `ARCHITECTURE.md` in this folder; section numbers are unique across
   nothing when its destructor fires during an unwind
   (`include/daScript/simulate/ARCHITECTURE.md#aot-finally-unwind`). The pair moves together;
   only `test_aot` on a `DAS_ENABLE_EXCEPTIONS` build fails on a mismatch.
-- **A `try`/`recover` restores what the interpreter's handler restores**: the emitter writes
-  the pair as `das_try_recover(__context__, [&](){...}, [&](){...})`, whose catch path puts
-  back `fastCallDepth` before the recover body runs, then `abiArg`, `abiCMRES` and the stack
-  watermark after it - the same state `SimNode_TryCatch` and `jit_try_recover` restore
-  (`include/daScript/simulate/ARCHITECTURE.md#fastcall-depth-guard`). The three move together;
-  only `test_aot` over a capped program whose recursion stays interpreted fails on a mismatch.
+- **A `try`/`recover` restores the caller's fastcall depth**: the emitter
+  writes the pair as `das_try_recover(__context__, [&](){...}, [&](){...})`,
+  whose catch path puts back `fastCallDepth` before the recover body runs,
+  then `abiArg`, `abiCMRES` and the stack watermark after it
+  (`include/daScript/simulate/ARCHITECTURE.md#fastcall-depth-guard`). An AOT
+  run over a capped program whose recursion stays interpreted exercises
+  this restoration.
 - **C++ identifier mangling**: `aotSuffixNameEx` prepends `_S`/`_E`/`_V`/`_f_` when a das
   name is a C++ keyword, holds a non-alnum char, or is `DELETE` (winnt.h). Structs and
   enums share ONE C++ namespace while daslang keeps separate tables, so `struct X` +

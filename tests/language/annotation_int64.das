@@ -35,6 +35,32 @@ def annotation_int64_runtime_reflection_retains_full_values(t : T?) {
     }
     t |> equal(seen, 6)
 }
+[comment(hex=0xD0, hex_max=0xFFFFFFFF, unsigned=7u, byte=0xFFu8, values=(0xD0, 7u, 0xFFu8))]
+struct HexAnnotation {
+    @offset = 0x2A
+    value : uint16
+}
+[test]
+def annotation_unsigned_literals_are_uint64(t : T?) {
+    let hex = typeinfo struct_get_annotation_argument<comment; hex>(type<HexAnnotation>)
+    let hex_max = typeinfo struct_get_annotation_argument<comment; hex_max>(type<HexAnnotation>)
+    let unsigned = typeinfo struct_get_annotation_argument<comment; unsigned>(type<HexAnnotation>)
+    let byte = typeinfo struct_get_annotation_argument<comment; byte>(type<HexAnnotation>)
+    t |> equal(hex, 0xD0ul)
+    t |> equal(hex_max, 0xFFFFFFFFul)
+    t |> equal(unsigned, 7ul)
+    t |> equal(byte, 0xFFul)
+    let value = HexAnnotation()
+    let info = (typeinfo rtti_typeinfo(value)).structType
+    var seen = 0
+    for (field in *info) {
+        for (arg in each_annotation_argument(field)) {
+            t |> equal(get_annotation_argument_value(arg) as tUInt64, 0x2Aul)
+            seen++
+        }
+    }
+    t |> equal(seen, 1)
+}
 [test]
 def int64_minimum_literal_in_expressions(t : T?) {
     let minimum = -9223372036854775808l

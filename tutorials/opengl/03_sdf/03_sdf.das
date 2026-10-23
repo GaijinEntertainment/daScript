@@ -1,6 +1,7 @@
 options gen2
 options gc
 options persistent_heap
+require daslib/color_mapping
 require glfw/glfw_boost
 require daslib/strings_convert
 require opengl/opengl_boost
@@ -176,12 +177,6 @@ def private blob_color(p : float3; t : float) : float3 {
     return float3(r, g, b) * lift
 }
 
-// Reinhard tone map. Compresses HDR overshoot (rim glow + sun disc) into [0,1].
-def private tonemap(c : float3) : float3 {
-    let one = float3(1.0, 1.0, 1.0)
-    return c / (one + c)
-}
-
 [vertex_program]
 def vs_main {
     f_uv = v_position
@@ -235,7 +230,7 @@ def fs_main {
         col = lerp(lit, sky_color(rd, sun_dir), float3(f, f, f))
     }
 
-    col = tonemap(col)
+    col = tone_reinhard(col)
     f_FragColor = float4(col, 1.0)
 }
 

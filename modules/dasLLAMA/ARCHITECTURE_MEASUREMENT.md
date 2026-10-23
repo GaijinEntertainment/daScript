@@ -9,7 +9,11 @@ bench's fixture - and the timing-race vocabulary
 it keeps its sidecar are `ARCHITECTURE_MEASUREMENT_FAT_START.md#fat-first-start`; the client clock
 around a live server's turns is `ARCHITECTURE_MEASUREMENT_SERVED.md#served-turn-instrument`; the
 reference build's forced feed beside the gemma feed cells is
-`ARCHITECTURE_MEASUREMENT_FORCED_FEED.md#reference-forced-feed`.
+`ARCHITECTURE_MEASUREMENT_FORCED_FEED.md#reference-forced-feed`; the ASR board's GPU row pairs
+(`ARCHITECTURE_MEASUREMENT_AUDIO.md#asr-gpu-pairs`), the MLX ASR reference
+(`ARCHITECTURE_MEASUREMENT_AUDIO.md#mlx-asr-reference`), the TTS reference instrument
+(`ARCHITECTURE_MEASUREMENT_AUDIO.md#the-tts-reference-instrument`) and its CUDA provider and
+g2p-venv runs (`ARCHITECTURE_MEASUREMENT_AUDIO.md#tts-ref-g2p-venv`) are the audio companion's.
 
 ### There is ONE benchmark rig, and the records are the baseline {#one-benchmark-rig}
 
@@ -163,6 +167,36 @@ the device, the shape the resident driver's split token command serves. The row 
 driver version beside the figures, and `-ngl 99` alone is not the reference - it streams the
 experts across the link every batch and measures the link.
 
+### The Vulkan board's reference rows {#vulkan-reference-rows}
+
+A Vulkan board's reference row (`engine` `llama.cpp`, `backend` `vulkan`) times the `vulkan` flavor
+`benchmarks/setup_lcpp_ref.das --flavor vulkan` builds at `DEFAULT_REF_SHA` (the row's `sha`): the
+Release configure with `-DLLAMA_CURL=OFF -DGGML_VULKAN=ON`, its glslc from a Vulkan SDK of 1.4.357
+or later (`BRINGUP.md`). `gen_bench_records --ref-vulkan <build-vulkan/bin/llama-bench>` (or
+`LLAMA_BENCH_VULKAN`) runs, per model, `llama-bench -m <gguf> -ngl 99 -t <threads> -p 512 -n 128 -r
+5 -o json` for the flat rows and the sibling `llama-batched-bench -m <gguf> -ngl 99 -t <threads> -c
+4096 -b 2048 -ub 512 -npp 512 -ntg 128 -npl 4 -fa on` for `tg128@4`, with no environment setting
+beyond the command line; the row's `cmd` carries both.
+
+### The committed records gate {#committed-records-gate}
+
+`gen_bench_records.das` writes `performance/records/<box>.json`, and `RETIRED_BOXES`
+(`dasllama/dasllama_exchange_schema.das`) is the one list of boxes whose boards are history - the
+records and the ladder keep their rows, the site projection reads the list to keep them off the
+cards. `performance/REVIEW.das` checks the records' tree-decidable provenance:
+- `check_records_corpus` - every store parses, every run's `hardware.remote_desktop` is `off` or
+  absent, every archived sidecar's `provenance.noise` is `ok` or absent. Licenses no names.
+- `check_das_row` - a `das` row is not past `DASLLAMA_RELEASE`, and below it only on a box
+  `RETIRED_BOXES` lists - the licensed set, boxes no release re-mints; a current-release row
+  carries `hardware.remote_desktop` and a `sha` HEAD reaches whose `dasllama_version.das` reads
+  the same release.
+- `check_row_archive` - a current-release row's `tune_sha` names an archive that exists, pins
+  the current release, and stamps an `engine_sha` HEAD reaches. Licenses no names.
+- `check_defaults_profiles` - a `defaults/` profile is a quiet mint at the current release with
+  a `kernels` section and no `engine_sha`. Licenses no names.
+- `check_ruler_records` - a `records/mtp/` file names no home directory. Licenses no names.
+- `main` - `dasllama_version.das` declares a readable `DASLLAMA_RELEASE`. Licenses no names.
+
 ### Sanctioned instrumentation rails {#sanctioned-instrumentation-rails}
 
 Engine timing goes through the rails that aggregate and tag it: the `jobque_profile` markers
@@ -185,66 +219,26 @@ same math differ in float terms - while one that changes only WHEN work happens 
 a CLI flag is never an override (it is the run's own command line, visible where the run is
 launched).
 
-### The ASR board's GPU row pairs {#asr-gpu-pairs}
+### The audio outlier rule {#audio-outlier-rule}
 
-The das Metal ASR leg is OPT-IN per catalog row: `AsrModelSpec.metal_served`
-(`performance/profile_common.das`) declares that the Metal driver serves that family end to
-end - tower and decoder both. An unflagged family keeps the CPU by design, and asking for its
-GPU leg reds the row: the `--ngl` arms assert that the tower engage counters moved, so a family
-whose tower silently falls back fails instead of publishing a CPU wall under a GPU heading.
+An audio run's clips are rated in milliseconds per audio second, and a clip past
+`AUDIO_OUTLIER_RATE_MULT` (4) times the run's median rate is an outlier of that run, not a speed
+of its engine: a cold start, or a reference decoding at length on one clip. The rule is one
+function, `audio_outlier_clips` (`dasllama/dasllama_exchange_schema.das`, engine-free), and three
+readers apply it to the same stored shape. The recorder (`gen_bench_records.das`) applies it as a
+run lands: a flagged clip is re-measured once, and one still flagged lands in the run's
+`void_clips` with a warning. The site projection (`gen_site_records.das`) applies it to every
+stored audio run as `bench_cells.json` is written, so a row recorded before the rule is voided
+without a re-measure, and the pages read only the field - a voided clip fronts no speedup, no bar
+and never the hero. The ladder store applies it to the audio cells it keeps per run, and a cell
+rides to the page with its `voided` verdict. A reference row records no audio length, so every
+reader borrows a clip's length from any run of the same model that recorded it. Under three rated
+clips nothing is voided, and a run's own `void_clips` - the annotations' spelling - unions with the
+rule's.
 
-On a Vulkan box the CPU arm's row stamps `backend = "vulkan"` when the Vulkan drivers served
-every clip (the tower every encode with no decline; on whisper the ASR-decoder driver every window
-too), keeps `backend = "cpu"` when they served none, and fails loudly with no number when they
-served some clips but not all. The cell prints, per clip, the tower's encode and decline deltas
-and, on whisper, the decoder's window and decode-batch deltas, plus one closing line counting
-the fully served clips - the engage witness behind the stamp. The Vulkan readings live in
-`PERF_LEDGER.md`, not in the records, against these references, each run on the pod: whisper.cpp's
-own Vulkan build (the pod's checkout, commit d09f61a, version 1.9.4-dev, GCC 13.3), `whisper-cli -m
-ggml-<model>-q8_0.bin -f <clip> -t 16 -bs 1 -bo 1 -nf`, timestamps on (under `-nt` it advances a whole
-30 s a window: fewer encoder runs than the das loop's timestamp-seeking windows), each clip behind jfk in one
-process with the jfk-only process subtracted (the first clip carries the pipeline builds; `-ng` for its CPU arm;
-`GGML_VK_PERF_LOGGER=1` for the per-op table); llama-mtmd-cli b10660 (Vulkan), `llama-mtmd-cli -m <model Q8_0>
---mmproj <mmproj bf16> --audio <clip> -p "Transcribe the audio." --temp 0 --jinja -ngl 99 -t 16` (E2B with `-n 256`), its encode the sum of the clip's
-`encoding done in N ms` lines; NeMo's `generate()` through `benchmarks/asr/canary_qwen_bench.py --device cuda`.
+### A routed MoE's parity fixture holds as a half-span prefix {#fixture-prefix-bar}
 
-Three reference tools carry a GPU arm the board pairs against a das Metal row, each with its own
-spelling: the whisper reference exe takes `-ngl`, the media-chat reference exe `-ngl 99`, and the
-NeMo bench script `--device mps`. The remaining two reference legs have no pair - the rig runs the
-parakeet exe with `-ng`, though its Metal arm is the faster one (`PERF_LEDGER.md`), and the ONNX
-export is CPU-only - so their das rows stand alone in the CPU category.
-
-The media-chat reference exe is built as the bench exe's sibling in one reference worktree:
-`benchmarks/setup_lcpp_ref.das` builds both targets, since a bench-only build leaves the image and
-audio-chat cells with no binary and the board quietly mints das-only rows. The sibling needs the
-timing patch beside it (`benchmarks/asr/patches/`): the record parser reads its per-rep timing
-lines, an unpatched sibling mints "no rep parsed" failures, and the apply - guarded on the patched
-marker already being in the tree, three-way - still applies after the reference pin moves. On Apple
-boxes `performance/setup_asr_rig.das` builds a second, Metal-ON copy of the same patched checkout,
-because `-ngl` on a Metal-OFF build is inert; `mtmd_bin_metal()` returns "" when it is absent and the GPU reference leg skips loudly.
-
-### The TTS reference instrument {#the-tts-reference-instrument}
-
-Every das TTS wall in `PERF_LEDGER.md` is held against a reference row of the family's own
-package, one recipe per family. StyleTTS2 (kokoro, kitten): `harness/tts_ref_bench.py` feeds the
-g2p corpus's `ps_espeak` phoneme strings to the packages' own models, times generation only - the
-front end is out of the compare on both sides - and prints the mean wall a sentence and the
-real-time factor, each sentence timed `--passes` times with the best kept, after one untimed
-warm-up call. Kokoro runs `hexgrad/Kokoro-82M` through `kokoro`'s `KModel` on the torch device
-`--device` names (`cuda` on the pod, `mps` on a Mac, `cpu` for the CPU row). Kitten runs the
-KittenTTS ONNX files through `onnxruntime` with the package's tokenizer, style rows and per-voice
-speed prior; `--device cuda` asks for the CUDA execution provider (`onnxruntime-gpu`) ahead of the
-CPU one, any other device the CPU provider alone, and the run prints the providers the session
-took, so a row names the one that ran. The script runs under the g2p experiment's venv
-(`~/Work/tts-ab/g2p/.venv-g2p`, `HF_HOME` at that experiment's hub cache - the pinned snapshots
-`harness/kitten_graph.py` names) and prints the torch, kokoro, kittentts and onnxruntime versions
-it ran with, so a ledger entry names them beside the command. Its kitten audio runs shorter than
-das's for the same phonemes (the package's speed prior and its 5000-sample trim), so a das row is
-compared on the wall a sentence, never on the real-time factor. Pocket: `harness/pocket_synth.py`
-runs the corpus through Kyutai's `pocket-tts` package on the CPU (the package pins torch to one
-thread) and writes the timings in `harness/tts_synth.das`'s shape. No board cell covers a synthesis
-(`followup_general.md` 166 plans the bench's `--tts` path), so the das side of every compare is
-`harness/tts_synth.das` under `REVIEW_MEASUREMENT.md`'s harness rule.
+The timed run's fixture gate holds every carrier as a matching prefix of half the checked span; the `--parity` pregate holds token for token, except on a carrier whose evidence sets `prefix_bar` (`ParityEvidence`, `performance/model_specs.das`) - the gemma-4-26B MoE, Q8_0 and Q4_K_M - which it holds to the same half-span prefix over the whole fixture. The 26B routes a discrete top-8 of 128 experts a layer and its forward amplifies one ulp of rounding layer over layer, so any float engine's logits move by whole points when only the accumulation order changes - the reference engine's between thread counts or micro-batch sizes, ours between JIT routes - and a token past the opening is a coin flip, not a forward bug. `fixture_ok` is the one bar both gates read.
 
 ### A `[tuned]` kernel's perm is decided at its own compile {#tuned-perm-precedence}
 

@@ -36,6 +36,12 @@ def private box_from_cpu(cpu : string) : string {
     if (cpu |> find("6975P") >= 0) {
         return "gnr"
     }
+    if (cpu |> find("EPYC 9R14") >= 0) {   // AWS c7a / m7a (Zen4)
+        return "epyc9r14"
+    }
+    if (cpu |> find("Neoverse-V2") >= 0) {   // AWS c8g / m8g (Graviton4)
+        return "graviton4"
+    }
     return ""
 }
 
@@ -61,7 +67,11 @@ def public probe_cpu_brand : string {
         let i = find(ln, "REG_SZ")
         return i >= 0 ? strip(slice(ln, i + length("REG_SZ"))) : ""
     }
-    let ln = capture_line("grep -m1 \"model name\" /proc/cpuinfo")
+    // arm64 /proc/cpuinfo carries no "model name" line - lscpu names the core from its part id
+    var ln = capture_line("grep -m1 \"model name\" /proc/cpuinfo")
+    if (empty(ln)) {
+        ln = capture_line("lscpu | grep -m1 \"Model name\"")
+    }
     let i = find(ln, ":")
     return i >= 0 ? strip(slice(ln, i + 1)) : ""
 }

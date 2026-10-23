@@ -190,6 +190,13 @@ correctness required it, and the alternative that was rejected.
   Rejected alternatives: a save guarded on `maxFastCallDepth != 0` is a branch on the same
   path for the same load; an RAII guard runs no destructor under longjmp.
 
+- **`das_setjmp` / `das_longjmp`** (`misc/platform.h`) - every panic handler arms and fires
+  through them. On Darwin they are `_setjmp` / `_longjmp`: the plain `setjmp` saves the signal
+  mask through a syscall (~200 ns against ~2 ns), and every jobque team chunk runs under
+  `runWithCatch`, so a sub-microsecond decode chunk paid it per chunk. No signal handler
+  longjmps into a panic handler, so the mask never needs restoring. Elsewhere they are the
+  plain calls - glibc's `setjmp` saves no mask, and the MS CRT has no `_longjmp`.
+
 - **`das_ordered2`** (`aot.h`) - a function the AOT emitter wraps around any binary op whose
   operands are not both side-effect-free. It takes the op and one thunk per operand, and runs
   the thunks in two declarations, which C++ sequences left-to-right; a plain call argument

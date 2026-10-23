@@ -202,6 +202,8 @@ web/build_pt/_deps/freetype_src-build/include/freetype/config/ftoption.h
 modules/dasLLAMA/benchmarks/modules/.daspkg.log
 # asr pybench recovery file (raw reference rows, re-minted every sweep)
 modules/dasLLAMA/benchmarks/asr/_pybench_rows.txt
+# the TTS cell's corpus identity sidecar (file_identity's hash cache)
+modules/dasLLAMA/tests/_tts_fixtures/*.sha
 
 # python bytecode, anywhere
 __pycache__/

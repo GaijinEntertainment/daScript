@@ -1994,6 +1994,7 @@ install(FILES ${PROJECT_SOURCE_DIR}/include/vecmath/LICENSE DESTINATION ${DAS_IN
 install(FILES ${PROJECT_SOURCE_DIR}/3rdparty/fmt/LICENSE DESTINATION ${DAS_INSTALL_DOCDIR} RENAME FMT.LICENSE)
 install(FILES ${PROJECT_SOURCE_DIR}/include/fast_float/LICENSE DESTINATION ${DAS_INSTALL_DOCDIR} RENAME FAST_FLOAT.LICENSE)
 install(FILES ${PROJECT_SOURCE_DIR}/src/misc/LUAU.LICENSE DESTINATION ${DAS_INSTALL_DOCDIR} RENAME LUAU.LICENSE)
+install(FILES ${PROJECT_SOURCE_DIR}/daslib/color_mapping.LICENSE DESTINATION ${DAS_INSTALL_DOCDIR} RENAME COLOR_MAPPING.LICENSE)
 install(FILES ${PROJECT_SOURCE_DIR}/3rdparty/unicode/LICENSE.txt DESTINATION ${DAS_INSTALL_DOCDIR} RENAME UNICODE.LICENSE COMPONENT UnicodeData)
 install(DIRECTORY ${PROJECT_SOURCE_DIR}/3rdparty/unicode/
     DESTINATION 3rdparty/unicode
@@ -2537,7 +2538,7 @@ if(TARGET daslang)
         COMMAND ${CMAKE_COMMAND} -E copy ${_identity} ${DAS_TEST_CACHE_DIR})
     add_dependencies(dastest_cache_guard ${_das_test_binaries})
 endif()
-foreach(_t check_lint_tree check_vulkan run_tests_vulkan run_tests_imgui_integration
+foreach(_t check_lint_tree check_lint_dasllama check_vulkan run_tests_vulkan run_tests_imgui_integration
         build_site_wasm check_playground_samples run_imgui2rst run_vulkan2rst)
     if(TARGET ${_t} AND _das_shared_modules)
         add_dependencies(${_t} ${_das_shared_modules})

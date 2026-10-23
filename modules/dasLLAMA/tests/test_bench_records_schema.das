@@ -4,6 +4,7 @@ options persistent_heap   // a dastest root frees what it deletes only on this h
 require dastest/testing_boost public
 require ../performance/profile_common.das
 require dasllama/dasllama_version
+require dasllama/dasllama_exchange_schema   // the outlier rule the recorder's pass applies
 
 // The record store is the site's single source of truth; this is the net under its schema:
 // ASR-shaped runs (workload, ms/audio_s tests, files) must round-trip the JSON store, the
@@ -76,6 +77,41 @@ def test_asr_round_trip(t : T?) {
         t |> success(back[0].runs[0].dasllama_version >= 1, "the counter starts at 1 - 0 means unstamped")
         t |> equal(back[0].runs[1].dasllama_version, 0)
         remove(TMP)
+    }
+}
+
+[test]
+def test_tts_round_trip(t : T?) {
+    t |> run("a TTS cell's das and reference rows survive write/read under one test key") @(t : T?) {
+        let key = tts_test_key(20, "af_heart")
+        var das = BenchRun(engine = "das", backend = "metal", flavor = "tuned", workload = "tts", box = "testbox",
+            threads = 8, date = "2026-10-21", cmd = "lcpp_bench --tts", dasllama_version = DASLLAMA_RELEASE)
+        das.tests |> insert(key, BenchTest(ms = 2471.5lf, audio_s = 187.5lf))
+        das.files |> emplace(InputFile(role = "corpus", name = "g2p_corpus.json", bytes = 1000l))
+        var ref = BenchRun(engine = "mlx-audio", backend = "metal", flavor = "stock", workload = "tts", box = "testbox",
+            threads = 8, date = "2026-10-21", cmd = "tts_ref_bench.py", versions = "mlx 0.32.4 (requirements-mlx.txt)")
+        ref.tests |> insert(key, BenchTest(ms = 3875.2lf, audio_s = 187.0lf))
+        var models : array<BenchModel>
+        models |> emplace(BenchModel(gguf = "kokoro-82m.gguf", arch = "Kokoro-82M", runs <- [ <- das, <- ref]))
+        t |> success(write_bench_records(TMP, models), "the store writes")
+        var back : array<BenchModel>
+        t |> success(read_bench_records(TMP, back), "store re-reads")
+        t |> equal(length(back[0].runs), 2)
+        t |> equal(back[0].runs[0].workload, "tts")
+        t |> equal(back[0].runs[0].tests?[key]?.ms ?? 0.0lf, 2471.5lf)
+        t |> equal(back[0].runs[0].tests?[key]?.audio_s ?? 0.0lf, 187.5lf)
+        t |> equal(back[0].runs[1].tests?[key]?.ms ?? 0.0lf, 3875.2lf)
+        t |> equal(back[0].runs[0].files[0].role, "corpus")
+        t |> equal(back[0].runs[1].engine, "mlx-audio")
+        remove(TMP)
+    }
+    t |> run("a TTS row and an LLM row of one model and leg are two rows") @(t : T?) {
+        var m = BenchModel(gguf = "kokoro-82m.gguf")
+        var llm = BenchRun(engine = "das", backend = "cpu", flavor = "tuned", box = "m1", cmd = "llm")
+        var tts = BenchRun(engine = "das", backend = "cpu", flavor = "tuned", workload = "tts", box = "m1", cmd = "tts")
+        upsert_bench_run(m.runs, llm)
+        upsert_bench_run(m.runs, tts)
+        t |> equal(length(m.runs), 2)
     }
 }
 
@@ -176,7 +212,7 @@ def test_asr_catalog_invariants(t : T?) {
         var libriCount = 0
         // the Metal-rail roster: metal_served decides which rows get GPU board cells and
         // which reference legs pair GPU-vs-GPU, so a silent flip re-lanes the public board
-        let metal_families <- {"Whisper tiny", "Whisper large-v3-turbo", "Canary-Qwen 2.5B",
+        let metal_families <- {"Parakeet-TDT v2", "Parakeet-TDT v3", "Whisper tiny", "Whisper large-v3-turbo", "Canary-Qwen 2.5B",
                                "Qwen3-ASR-0.6B", "Gemma-4 E2B audio", "Qwen3-Omni-30B audio"}
         for (spec in cat) {
             if (!empty(spec.libri_short)) {
@@ -186,7 +222,9 @@ def test_asr_catalog_invariants(t : T?) {
                 t |> success(wav != "gemma4a_test2.wav", "no untraceable clips in the catalog")
             }
             let wl = asr_workload(spec)
-            t |> success(wl == "asr" || wl == "audio-chat", "workload classifies")
+            var inscope chats <- {"Gemma-4 E2B audio", "Qwen3-Omni-30B audio"}
+            t |> equal(wl, key_exists(chats, spec.display) ? "audio-chat" : "asr",
+                       "{spec.display}: the chat models are audio-chat, every speech-to-text model asr")
             t |> equal(spec.metal_served, key_exists(metal_families, spec.display),
                        "{spec.display}: metal_served matches the Metal-rail roster")
         }
@@ -300,21 +338,20 @@ def test_das_run_unstamped(t : T?) {
 
 [test]
 def test_workload_scope(t : T?) {
-    t |> run("the -w scope table: llm/asr/image cells per workload, unknown rejected") @(t : T?) {
-        var llm = false
-        var asr = false
-        var image = false
-        t |> success(workload_scope("all", llm, asr, image), "all is known")
-        t |> success(llm && asr && image, "all selects every cell set")
-        t |> success(workload_scope("llm", llm, asr, image), "llm is known")
-        t |> success(llm && !asr && image, "llm selects text + image (image rides the llm sweep)")
-        t |> success(workload_scope("asr", llm, asr, image), "asr is known")
-        t |> success(!llm && asr && !image, "asr selects only the audio cells")
-        t |> success(workload_scope("image", llm, asr, image), "image is known")
-        t |> success(!llm && !asr && image, "image narrows to the image cells alone")
-        t |> success(!workload_scope("bogus", llm, asr, image), "an unknown workload is rejected")
-        t |> success(!llm && !asr && !image, "a rejection selects nothing")
-        t |> success(!workload_scope("", llm, asr, image), "the empty workload is rejected")
+    t |> run("the -w scope table: llm/asr/image/tts cells per workload, unknown rejected") @(t : T?) {
+        let all = workload_scope("all")
+        t |> success(all.known && all.llm && all.asr && all.image && all.tts, "all selects every cell set")
+        let llm = workload_scope("llm")
+        t |> success(llm.known && llm.llm && !llm.asr && llm.image && !llm.tts, "llm selects text + image (image rides the llm sweep)")
+        let asr = workload_scope("asr")
+        t |> success(asr.known && !asr.llm && asr.asr && !asr.image && !asr.tts, "asr selects only the audio cells")
+        let image = workload_scope("image")
+        t |> success(image.known && !image.llm && !image.asr && image.image && !image.tts, "image narrows to the image cells alone")
+        let tts = workload_scope("tts")
+        t |> success(tts.known && !tts.llm && !tts.asr && !tts.image && tts.tts, "tts selects only the synthesis cells")
+        let bogus = workload_scope("bogus")
+        t |> success(!bogus.known && !bogus.llm && !bogus.asr && !bogus.image && !bogus.tts, "an unknown workload is rejected and selects nothing")
+        t |> success(!workload_scope("").known, "the empty workload is rejected")
     }
 }
 
@@ -384,11 +421,11 @@ def test_batched_rows_carry_the_leg_shape(t : T?) {
                     }
                     rows++
                     let at = "{base_name(path)} {m.gguf} {r.engine} {r.backend}/{r.flavor}"
-                    if (r.backend == "metal") {
+                    if (r.backend != "cpu") {
                         t |> success(find(r.cmd, "--npl-plen") < 0 && find(r.cmd, "--no-op-offload") < 0,
-                            "{at}: the metal leg's batched row rides the flat rows' shape and carries no cpu-only flag")
+                            "{at}: a GPU leg's batched row rides the flat rows' shape and carries no cpu-only flag")
                         t |> success(!ref_batched || find(r.cmd, "-npp 512 ") >= 0,
-                            "{at}: the metal reference's streams start from the flat rows' 512-token prompt")
+                            "{at}: a GPU reference's streams start from the flat rows' 512-token prompt")
                     } else {
                         t |> success(!das_batched || find(r.cmd, "--npl-plen 128 --npl-reps 3") >= 0,
                             "{at}: the cpu leg's das child takes the 128 x 3 shape")
@@ -568,5 +605,160 @@ def test_sibling_mtmd(t : T?) {
     t |> run("the stock llama-mtmd-cli resolves as llama-bench's sibling, or not at all") @(t : T?) {
         t |> equal(sibling_mtmd(""), "", "no stock ref = no sibling")
         t |> equal(sibling_mtmd("/nonexistent/bin/llama-bench"), "", "a missing sibling refuses instead of naming a dead path")
+    }
+}
+
+[test]
+def test_held_annotation_lands(t : T?) {
+    t |> run("an annotation's held reaches only the selected run, and rides the store") @(t : T?) {
+        var models : array<BenchModel>
+        models |> emplace(make_model())
+        var annos : array<BenchAnnotation>
+        annos |> emplace(BenchAnnotation(gguf = "ggml-tiny.bin", engine = "das",
+            comment = "held off the board", held = "followup_general.md 219"))
+        apply_annotations(models, annos)
+        t |> equal(models[0].runs[0].held, "followup_general.md 219", "selected run held")
+        t |> equal(models[0].runs[1].held, "", "reference run untouched")
+        t |> success(write_bench_records(TMP, models), "the store writes")
+        var back : array<BenchModel>
+        t |> success(read_bench_records(TMP, back), "store re-reads")
+        t |> equal(back[0].runs[0].held, "followup_general.md 219", "held round-trips")
+        remove(TMP)
+        delete back
+        delete annos
+        delete models
+    }
+}
+
+// the audio-chat shape the rule was written on: a short clip read at a cold start against two
+// even ones, and the das row that carries every clip's length
+def private omni_rates(jfk_ms : double) : table<string; double> {
+    return <- { "jfk.wav" => jfk_ms / 11.0lf, "jfk3.wav" => 553.2lf / 33.0lf, "gb1.wav" => 7075.4lf / 198.734375lf }
+}
+
+[test]
+def test_audio_outlier_rule(t : T?) {
+    t |> run("a clip past the multiple of the run's median rate is the outlier; an even run has none") @(t : T?) {
+        t |> equal(audio_outlier_clips(omni_rates(34960.4lf)), [ "jfk.wav" ], "3178 ms a second against a median of 36")
+        t |> equal(length(audio_outlier_clips(omni_rates(357.6lf))), 0, "33 ms a second sits inside the run")
+        t |> equal(length(audio_outlier_clips({ "jfk.wav" => 3178.0lf, "jfk3.wav" => 16.8lf })), 0, "two clips rate nothing")
+        t |> equal(length(audio_outlier_clips({ "a" => 100.0lf, "b" => 100.0lf, "c" => 100.0lf, "d" => 401.0lf })), 1, "an even count's median is the middle pair's mean")
+        t |> equal(void_clips_of(" jfk.wav , gb1.wav,"), [ "jfk.wav", "gb1.wav" ], "the comma list reads trimmed, no empty name")
+    }
+    t |> run("the stored run is rated over the das row's clip lengths where it recorded none") @(t : T?) {
+        var models : array<BenchModel>
+        models |> emplace(make_model())
+        let lengths <- clip_lengths(models, "ggml-tiny.bin", "asr")
+        t |> equal(lengths?["jfk.wav"] ?? 0.0lf, 11.0lf)
+        t |> equal(lengths?["gb1.wav"] ?? 0.0lf, 198.7lf)
+        t |> equal(length(lengths), 2)
+        var ref = BenchRun(engine = "llama-mtmd-cli", backend = "metal", flavor = "stock", workload = "audio-chat",
+            box = "testbox", threads = 8, date = "2026-10-21", cmd = "test")
+        ref.tests |> insert("asr:jfk.wav", BenchTest(ms = 34960.4lf))
+        ref.tests |> insert("asr:jfk3.wav", BenchTest(ms = 553.2lf))
+        ref.tests |> insert("asr:gb1.wav", BenchTest(ms = 7075.4lf))
+        let borrowed <- { "jfk.wav" => 11.0lf, "jfk3.wav" => 33.0lf, "gb1.wav" => 198.734375lf }
+        t |> equal(run_outlier_clips(ref, borrowed), [ "jfk.wav" ], "rated over the borrowed lengths")
+        let unknown : table<string; double>
+        t |> equal(length(run_outlier_clips(ref, unknown)), 0, "a clip with no length is not rated")
+        delete models
+    }
+}
+
+[test]
+def test_void_outlier_pass(t : T?) {
+    t |> run("the recorder re-measures the flagged clip once and voids what stays off") @(t : T?) {
+        let lengths <- { "jfk.wav" => 11.0lf, "jfk3.wav" => 33.0lf, "gb1.wav" => 198.734375lf }
+        var ref = BenchRun(engine = "llama-mtmd-cli", backend = "metal", flavor = "stock", workload = "audio-chat",
+            box = "testbox", threads = 8, date = "2026-10-21", cmd = "test")
+        ref.tests |> insert("asr:jfk.wav", BenchTest(ms = 34960.4lf))
+        ref.tests |> insert("asr:jfk3.wav", BenchTest(ms = 553.2lf))
+        ref.tests |> insert("asr:gb1.wav", BenchTest(ms = 7075.4lf))
+        var asked : array<string>
+        var voided <- void_outlier_clips(ref, lengths, "test ref") $(clip) {
+            asked |> push(clip)
+            return BenchTest(ms = 34000.0lf)   // the re-measure reads the same
+        }
+        t |> equal(asked, [ "jfk.wav" ], "the flagged clip alone is re-measured, once")
+        t |> equal(voided, [ "jfk.wav" ])
+        t |> equal(ref.void_clips, "jfk.wav", "the row carries the verdict")
+        t |> equal(ref.tests?["asr:jfk.wav"]?.ms ?? 0.0lf, 34000.0lf, "the re-measure replaced the test")
+        delete voided
+        delete asked
+    }
+    t |> run("a re-measure that lands inside the run clears the clip") @(t : T?) {
+        let lengths <- { "jfk.wav" => 11.0lf, "jfk3.wav" => 33.0lf, "gb1.wav" => 198.734375lf }
+        var ref = BenchRun(engine = "llama-mtmd-cli", backend = "metal", flavor = "stock", workload = "audio-chat",
+            box = "testbox", threads = 8, date = "2026-10-21", cmd = "test")
+        ref.tests |> insert("asr:jfk.wav", BenchTest(ms = 34960.4lf))
+        ref.tests |> insert("asr:jfk3.wav", BenchTest(ms = 553.2lf))
+        ref.tests |> insert("asr:gb1.wav", BenchTest(ms = 7075.4lf))
+        var voided <- void_outlier_clips(ref, lengths, "test ref") $(_clip) {
+            return BenchTest(ms = 400.0lf)   // the cold start gone
+        }
+        t |> equal(length(voided), 0, "nothing voided")
+        t |> equal(ref.void_clips, "")
+        t |> equal(ref.tests?["asr:jfk.wav"]?.ms ?? 0.0lf, 400.0lf, "the fresh timing stands")
+        delete voided
+    }
+    t |> run("an even run re-measures nothing") @(t : T?) {
+        let lengths <- { "jfk.wav" => 11.0lf, "jfk3.wav" => 33.0lf, "gb1.wav" => 198.734375lf }
+        var ref = BenchRun(engine = "llama-mtmd-cli", backend = "cpu", flavor = "stock", workload = "audio-chat",
+            box = "testbox", threads = 8, date = "2026-10-21", cmd = "test")
+        ref.tests |> insert("asr:jfk.wav", BenchTest(ms = 9365.4lf))
+        ref.tests |> insert("asr:jfk3.wav", BenchTest(ms = 25961.6lf))
+        ref.tests |> insert("asr:gb1.wav", BenchTest(ms = 158455.9lf))
+        var asked = 0
+        var voided <- void_outlier_clips(ref, lengths, "test ref") $(_clip) {
+            asked++
+            return BenchTest(ms = 1.0lf)
+        }
+        t |> equal(asked, 0, "the even run is never re-measured")
+        t |> equal(length(voided), 0)
+        t |> equal(ref.tests?["asr:jfk.wav"]?.ms ?? 0.0lf, 9365.4lf, "every timing stands")
+        delete voided
+    }
+}
+
+[test]
+def test_board_policy_helpers(t : T?) {
+    t |> run("a clip's length is the smallest positive one any run wrote, under its prefix alone") @(t : T?) {
+        var lengths : table<string; double>
+        borrow_clip_length(lengths, "asr:", "asr:jfk.wav", 11.0lf)
+        borrow_clip_length(lengths, "asr:", "asr:jfk.wav", 12.0lf)
+        borrow_clip_length(lengths, "asr:", "asr:jfk.wav", 0.0lf)
+        borrow_clip_length(lengths, "asr:", "tts:g2p20@alba", 9.0lf)
+        t |> equal(lengths?["jfk.wav"] ?? 0.0lf, 11.0lf, "the smaller length wins, a zero borrows nothing")
+        borrow_clip_length(lengths, "asr:", "asr:jfk.wav", 10.5lf)
+        t |> equal(lengths?["jfk.wav"] ?? 0.0lf, 10.5lf, "a smaller one later replaces it")
+        t |> equal(length(lengths), 1, "a key under another prefix borrows nothing")
+    }
+    t |> run("a clip rates over its own length, else the borrowed one, else not at all") @(t : T?) {
+        let lengths <- { "jfk.wav" => 11.0lf }
+        var rates : table<string; double>
+        rate_clip(rates, lengths, "gb1.wav", 990.0lf, 9.9lf)
+        rate_clip(rates, lengths, "jfk.wav", 110.0lf, 0.0lf)
+        rate_clip(rates, lengths, "hp0.wav", 500.0lf, 0.0lf)
+        rate_clip(rates, lengths, "jfk3.wav", 0.0lf, 33.0lf)
+        t |> equal(rates?["gb1.wav"] ?? 0.0lf, 100.0lf, "its own length")
+        t |> equal(rates?["jfk.wav"] ?? 0.0lf, 10.0lf, "the borrowed length")
+        t |> equal(length(rates), 2, "no length, or no wall, rates nothing")
+    }
+    t |> run("the voided clips are the rule's verdict and the named ones, sorted, each once") @(t : T?) {
+        let rates <- { "a" => 100.0lf, "b" => 100.0lf, "c" => 100.0lf, "d" => 401.0lf }
+        t |> equal(voided_clips(rates, "c, d"), [ "c", "d" ], "a named outlier counts once")
+        t |> equal(voided_clips(rates, ""), [ "d" ], "the rule alone")
+        let even <- { "a" => 100.0lf, "b" => 100.0lf, "c" => 100.0lf }
+        t |> equal(length(voided_clips(even, "")), 0, "an even run with no names voids nothing")
+    }
+    t |> run("a selector takes a run where each of its fields is empty or equal") @(t : T?) {
+        let run = RunKey(box = "m5max", engine = "das", backend = "metal", flavor = "tuned", workload = "asr")
+        t |> success(key_selects(RunKey(), run), "an empty selector takes every run")
+        t |> success(key_selects(RunKey(box = "m5max", workload = "asr"), run), "the fields it names match")
+        t |> success(!key_selects(RunKey(engine = "llama.cpp"), run), "another engine")
+        t |> success(!key_selects(RunKey(flavor = "accel"), run), "another flavor")
+        t |> success(!key_selects(RunKey(backend = "cpu"), run), "another backend")
+        t |> success(!key_selects(RunKey(box = "gnr"), run), "another box")
+        t |> success(!key_selects(RunKey(workload = "tts"), run), "another workload")
     }
 }

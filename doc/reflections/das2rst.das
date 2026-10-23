@@ -53,6 +53,7 @@ require daslib/lpipe
 require daslib/random
 require daslib/math_bits
 require daslib/math_boost
+require daslib/color_mapping
 require daslib/array_boost
 require daslib/archive
 require daslib/unroll
@@ -940,6 +941,15 @@ def document_module_math_boost(_root : string) {
         group_by_regex("Integer rounding", mod, %regex~(round_up)$%%)
     )
     document("Boost package for math", mod, "math_boost.rst", groups)
+}
+
+def document_module_color_mapping(_root : string) {
+    var mod = find_module("color_mapping")
+    var groups <- array<DocGroup>(
+        group_by_regex("Tone mapping", mod, %regex~.*(tone_reinhard|tone_aces_fit|tone_pbr_neutral)$%%),
+        group_by_regex("sRGB transfer functions", mod, %regex~.*(color_srgb_encode_channel|color_srgb_decode_channel|color_srgb_encode|color_srgb_decode)$%%)
+    )
+    document("Color mapping", mod, "color_mapping.rst", groups)
 }
 
 def document_module_md_boost(_root : string) {
@@ -2142,6 +2152,7 @@ def main {  // nolint:STYLE038 — flat one-call-per-documented-module dispatch 
     document_module_match(root)
     document_module_math_bits(root)
     document_module_math_boost(root)
+    document_module_color_mapping(root)
     document_module_option(root)
     document_module_profiler(root)
     document_module_profiler_boost(root)

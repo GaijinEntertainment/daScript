@@ -38,6 +38,7 @@ SET(AOT_GLSL_MODULE_FILES ${DASGLSL_AOT_FILES})
 SET(AOT_SPIRV_MODULE_FILES ${DASSPIRV_AOT_FILES}
     tests/spirv/_spirv_common.das
     tests/spirv/_texture_grad_shaders.das
+    tests/spirv/_color_mapping_shader.das
 )
 SET(AOT_MSL_MODULE_FILES ${DASMETAL_AOT_FILES} tests/msl/_msl_common.das)
 

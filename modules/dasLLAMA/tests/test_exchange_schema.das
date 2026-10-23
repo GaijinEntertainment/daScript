@@ -234,6 +234,45 @@ def test_hostile_records(t : T?) {
 }
 
 [test]
+def test_held_bound(t : T?) {
+    t |> run("the held annotation is a bounded string") @(t : T?) {
+        var r1 <- make_das_run()
+        r1.held = "followup_general.md 219"
+        var runs1 : array<BenchRun>
+        runs1 |> emplace(r1)
+        var e1 : array<string>
+        t |> success(validate_record_store(write_store(runs1), e1), "a ledger-row hold passes (the control)")
+        delete e1
+        var r2 <- make_das_run()
+        r2.held = "HELD_PLACEHOLDER"
+        var runs2 : array<BenchRun>
+        runs2 |> emplace(r2)
+        let numeric = replace(write_store(runs2), "\"HELD_PLACEHOLDER\"", "7")
+        t |> success(find(numeric, "HELD_PLACEHOLDER") < 0, "the fixture's held value is the number 7")
+        var e2 : array<string>
+        t |> success(!validate_record_store(numeric, e2), "a numeric held is a hostile record")
+        t |> success(has_error_at(e2, ".held"), "... named at its path: {join(e2, "; ")}")
+        delete e2
+        var r3 <- make_das_run()
+        r3.held = repeat("x", 1025)
+        var runs3 : array<BenchRun>
+        runs3 |> emplace(r3)
+        var e3 : array<string>
+        t |> success(!validate_record_store(write_store(runs3), e3), "an over-long held is a hostile record")
+        t |> success(has_error_at(e3, ".held"), "... named at its path: {join(e3, "; ")}")
+        delete e3
+        remove(TMP)
+    }
+}
+
+def private has_error_at(errors : array<string>; key : string) : bool {
+    for (e in errors) {
+        return true if (find(e, key) >= 0)
+    }
+    return false
+}
+
+[test]
 def test_tune_stamp_bound(t : T?) {
     t |> run("the tune stamp names a perm a tile family, under a bound of its own") @(t : T?) {
         var r1 <- make_das_run()

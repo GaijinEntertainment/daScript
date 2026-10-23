@@ -75,6 +75,13 @@ The tuner is the detector, so the human never has to be. For a box with existing
   models.
 - Windows boxes: run everything from a shell where `cmake`/`git` resolve; the rig handles
   SMT masking itself.
+- **A rented board box needs the RAM of the board's largest file**: Qwen3-Omni-30B Q8_0 is 31 GB and
+  the 35B 22 GB, so a 32 GB box cannot hold the board. On AWS the c-family 4xlarge (32 GB) mints a
+  class profile (`HOW_TO_GET_SIDECAR.md`) and the m-family 4xlarge of the same CPU (64 GB, 16 cores)
+  runs the board, on a 250 GB gp3 volume; the box tag comes from its CPU (`box_ident.das`).
+- **A fresh box fetches the board's files, not the manifest**: `fetch_models --fetch --board`, then
+  `--convert` after the ASR rig (section 2). A box's own ffmpeg decodes the corpus's ogg sources to
+  other bytes - copy `gb1.wav`, `hp0.wav` and `hp0x2.wav` from a manifest-clean box (section 3).
 - Set the box identity FIRST - every store filename derives from it:
 
 ```sh
@@ -142,7 +149,8 @@ cmake --build build --config Release -j 16        # 15-25 min clean
 
 ```sh
 export DASLLAMA_MODELS_DIR=<dir>       # WHISPER_CPP_MODELS too, or point both at ONE dir
-bin/daslang modules/dasLLAMA/performance/fetch_models.das -- --fetch
+bin/daslang modules/dasLLAMA/performance/fetch_models.das -- --fetch --board   # a board box: the files the sweeps read
+bin/daslang modules/dasLLAMA/performance/fetch_models.das -- --fetch           # a dev box: the whole manifest, test carriers too
 # after section 3's setup_asr_rig (the nemo venv + refs): the conversions, tool-driven
 bin/daslang modules/dasLLAMA/performance/fetch_models.das -- --convert
 bin/daslang modules/dasLLAMA/performance/fetch_models.das --   # later: verify-only, must end 0 failed
@@ -200,8 +208,11 @@ merge against the commit the patch was cut at, and a shallow clone holds no blob
 the apply stops at `repository lacks the necessary blob to perform 3-way merge`. Deepen it first
 (`git -C <llama.cpp> fetch --unshallow origin`).
 
-A Vulkan reference (`-DGGML_VULKAN=ON`) is built with a glslc that knows
-`GL_NV_cooperative_matrix_decode_vector` - Vulkan SDK 1.4.357 or later - and its device banner
+A Vulkan reference is the `vulkan` flavor (`--flavor vulkan`, `-DGGML_VULKAN=ON`; the vulkan leg's
+`--ref-vulkan` / `LLAMA_BENCH_VULKAN`), built with a glslc that knows
+`GL_NV_cooperative_matrix_decode_vector` - Vulkan SDK 1.4.357 or later (a distro's packaged SDK
+lags it; the LunarG tarball `https://sdk.lunarg.com/sdk/download/latest/linux/vulkan_sdk.tar.xz`
+carries a current glslc, and its `setup-env.sh` reads `$1`, so source it outside `set -u`) - and its device banner
 reads `NV_coopmat2v` on a driver that lists the extension. Built with an older SDK the exe keeps
 its 64-deep expert-tile k step over a scalar decode and under-reads llama.cpp by about a quarter
 on a MoE model (the RTX 5060 Ti's Qwen3.6-35B-A3B UD-IQ2_XXS pp512 2080 against 2829); a banner
@@ -285,7 +296,9 @@ from EVERY subsequent `--workload asr` sweep, which then maps all seven models i
 # the tune generation already exists (the release minted it); Parsec/remote-desktop OFF stays
 # good hygiene, but the noise gates now DETECT a loud box - a mint that succeeded is a mint
 # that measured, and the sidecar's provenance says under what conditions
-bin/daslang modules/dasLLAMA/performance/gen_bench_records.das -- --workload all
+bin/daslang modules/dasLLAMA/performance/gen_bench_records.das -- --workload all \
+    --ref-clean <ref>/build-clean-cpu/bin/llama-bench --ref-stock <ref>/build-stock/bin/llama-bench
+# a board mint refuses to start without the reference its legs pair against
 ```
 
 - Thread policy is automatic: `min(16, physical performance cores)`, both engines, pinned on

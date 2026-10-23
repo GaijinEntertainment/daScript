@@ -6,7 +6,7 @@ benchmarked binary's identity: the version capture in the profiling rig records 
 
 ## mtmd-timing.patch
 
-Base: the reference engine @ `ebd048fc5` (the upstream ggml-org checkout, `$LCPP` - the clone URL is in
+Base: the reference engine @ `9febe63d5` (b11798) (the upstream ggml-org checkout, `$LCPP` - the clone URL is in
 `../../../performance/setup_asr_rig.das`). Applied to the CPU-only build whose
 `llama-mtmd-cli` serves as the audio-in reference (`MTMD_BIN`). Three changes:
 

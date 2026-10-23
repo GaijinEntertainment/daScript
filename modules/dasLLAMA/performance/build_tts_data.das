@@ -6,6 +6,7 @@ require strings
 require daslib/fio
 require daslib/clargs
 require dasllama/dasllama_env
+require ../harness/tts_corpus.das   // tts_corpus_path - the tagger's held-out fixture
 
 // Regenerate the TTS model-store data from the experiment tree: the G2P pack (which also emits
 // the tag-keyed lexicon words), the silver tagging prose sampled around those words, the tagger
@@ -50,7 +51,7 @@ def main() : int {
     let store = empty(args.models) ? (empty(g_env_harness.models_dir) ? "/Users/borisbatkin/Work/llama.cpp/models/" : g_env_harness.models_dir) : args.models
     let py = path_join(args.root, ".venv-g2p/bin/python")
     let harness = path_join(get_das_root(), "modules/dasLLAMA/harness")
-    let fixture = path_join(get_das_root(), "modules/dasLLAMA/tests/_tts_fixtures/g2p_corpus.json")
+    let fixture = tts_corpus_path()
     let silver = path_join(args.root, "work/silver_focus")
     let focus = path_join(args.root, "work/focus_words.txt")
     let additions = path_join(harness, "g2p_local_additions.json")

@@ -34,6 +34,9 @@ struct FetchArgs {
     @clarg_doc = "Run the on-box conversion recipes for absent converted entries (canary) — needs the setup_asr_rig nemo venv + refs; POSIX boxes only"
     convert : bool
 
+    @clarg_doc = "Only the files the board sweeps read (official rows, the ASR and TTS catalogs) - a board box's fetch"
+    board : bool
+
     @clarg_short = "o"
     @clarg_doc = "Only entries whose local name contains this substring"
     only : string
@@ -88,10 +91,23 @@ def private convert_canary(path : string) {
     return if (empty(hub))
     hub_download(py, "snapshot_download; print(snapshot_download('nvidia/canary-qwen-2.5b'))")
     hub_download(py, "snapshot_download; print(snapshot_download('Qwen/Qwen3-1.7B', allow_patterns=['tokenizer*','*.json']))")
-    // MTMD_BIN sits at <checkout>/build-cpu/bin/llama-mtmd-cli — its checkout carries the
-    // gguf writer the decoder conversion drives
-    let lcpp = dir_name(dir_name(dir_name(g_env_prof.mtmd_bin)))
+    // the mtmd reference sits at <checkout>/build-cpu/bin/llama-mtmd-cli (mtmd_bin: MTMD_BIN, else
+    // setup_asr_rig's default) - its checkout carries the gguf writer the decoder conversion drives
+    let lcpp = dir_name(dir_name(dir_name(mtmd_bin())))
     run_capture("{py} modules/dasLLAMA/harness/convert_canary_to_ggml.py --src \"{hub}/models--nvidia--canary-qwen-2.5b\" --qwen3-tokenizer \"{hub}/models--Qwen--Qwen3-1.7B\" --llama-cpp \"{lcpp}\" --out-dir \"{dir_name(path)}\" --decoder-outtype f16", false)
+    // the serving artifact is the f16 decoder re-quantized to Q8_0 by the same checkout's quantize tool
+    let f16 = "{dir_name(path)}/canary-qwen-2.5b-decoder-f16.gguf"
+    let q8 = "{dir_name(path)}/canary-qwen-2.5b-decoder-q8_0.gguf"
+    let quant = normalize("{lcpp}/build-cpu/bin/llama-quantize")
+    if (!stat(quant).is_valid) {
+        run_capture("cmake --build \"{lcpp}/build-cpu\" --config Release --target llama-quantize -j 8", false)
+    }
+    if (stat(f16).is_valid && !stat(q8).is_valid) {
+        run_capture("\"{quant}\" \"{f16}\" \"{q8}\" Q8_0", false)
+    }
+    if (!stat(q8).is_valid) {
+        to_log(LOG_ERROR, "fetch_models: the canary decoder's Q8_0 serving artifact did not materialize ({q8}) - the f16 conversion or the quantize failed\n")
+    }
 }
 
 // one canary invocation produces both the encoder and the decoder
@@ -135,7 +151,8 @@ def main() : int {
     var pending = 0
     var failed = 0
     var canary_done = false
-    for (e in models_provenance()) {
+    var entries <- cfg.board ? board_provenance() : models_provenance()
+    for (e in entries) {
         if (!empty(cfg.only) && find(e.name, cfg.only) < 0) {
             continue
         }

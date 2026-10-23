@@ -1004,6 +1004,8 @@ annotation_argument_value
     |   '-' LONG_INTEGER[value]  { $$ = new AnnotationArgument("",int64_t(0ull - uint64_t($value))); }
     |   '-' LONG_INTEGER_MIN     { $$ = new AnnotationArgument("",int64_t(INT64_MIN)); }
     |   UNSIGNED_LONG_INTEGER[value] { $$ = new AnnotationArgument("",uint64_t($value)); }
+    |   UNSIGNED_INTEGER[value]  { $$ = new AnnotationArgument("",uint64_t($value)); }
+    |   UNSIGNED_INT8[value]     { $$ = new AnnotationArgument("",uint64_t($value)); }
     |   '-' INTEGER[value]       { $$ = new AnnotationArgument("",int32_t(0u - uint32_t($value))); }
     |   DAS_FLOAT[value]         { $$ = new AnnotationArgument("",float($value)); }
     |   '-' DAS_FLOAT[value]     { $$ = new AnnotationArgument("",-float($value)); }
@@ -1039,6 +1041,8 @@ annotation_argument
     |   annotation_argument_name[name] '=' '-' LONG_INTEGER[value] { $$ = new AnnotationArgument(*$name,int64_t(0ull - uint64_t($value)),tokAt(scanner,@name)); delete $name; }
     |   annotation_argument_name[name] '=' '-' LONG_INTEGER_MIN { $$ = new AnnotationArgument(*$name,int64_t(INT64_MIN),tokAt(scanner,@name)); delete $name; }
     |   annotation_argument_name[name] '=' UNSIGNED_LONG_INTEGER[value] { $$ = new AnnotationArgument(*$name,uint64_t($value),tokAt(scanner,@name)); delete $name; }
+    |   annotation_argument_name[name] '=' UNSIGNED_INTEGER[value] { $$ = new AnnotationArgument(*$name,uint64_t($value),tokAt(scanner,@name)); delete $name; }
+    |   annotation_argument_name[name] '=' UNSIGNED_INT8[value] { $$ = new AnnotationArgument(*$name,uint64_t($value),tokAt(scanner,@name)); delete $name; }
     |   annotation_argument_name[name] '=' '-' INTEGER[value]       { $$ = new AnnotationArgument(*$name,int32_t(0u - uint32_t($value)),tokAt(scanner,@name)); delete $name; }
     |   annotation_argument_name[name] '=' DAS_FLOAT[value]         { $$ = new AnnotationArgument(*$name,float($value),tokAt(scanner,@name)); delete $name; }
     |   annotation_argument_name[name] '=' '-' DAS_FLOAT[value]     { $$ = new AnnotationArgument(*$name,-float($value),tokAt(scanner,@name)); delete $name; }
@@ -3320,7 +3324,7 @@ type_declaration_no_options
         $$->typeMacroExpr.insert($$->typeMacroExpr.begin(), new ExprConstString(tokAt(scanner,@name), *$name));
         delete $name;
     }
-    |   '$' name_in_namespace[name] '<' { yyextra->das_arrow_depth ++; } type_declaration_no_options_list[declL] '>' optional_expr_list_in_braces[arguments] {
+    |   '$' name_in_namespace[name] '<' { yyextra->das_arrow_depth ++; } type_declaration_no_options_list[declL] '>' { yyextra->das_arrow_depth --; } optional_expr_list_in_braces[arguments] {
         $$ = new TypeDecl(Type::typeMacro, tokAt(scanner,@$));
         $$->at = tokRangeAt(scanner,@name, @arguments);
         $$->typeMacroExpr = typesAndSequenceToList($declL,$arguments);

@@ -1,92 +1,18 @@
 options gen2
 options indenting = 4
 
-require dastest/testing_boost public
+require _lint_child public
 
-require strings
-require daslib/strings_boost
 require daslib/fio
-
-var private _tmp_dir : string
-var private _tmp_dir_inited = false
-
-def private tmp_root() : string {
-    if (!_tmp_dir_inited) {
-        let r = create_temp_directory_result("lint_result_cache")
-        if (!(r is value)) {
-            panic("could not create temp dir for the lint cache test: {unsafe(r.error)}")
-        }
-        _tmp_dir = unsafe(r.value)
-        _tmp_dir_inited = true
-    }
-    return _tmp_dir
-}
-
-[finalize]
-def cleanup_temp_dir {
-    if (_tmp_dir_inited && !empty(_tmp_dir)) {
-        rmdir_rec(_tmp_dir)
-    }
-}
-
-def private plant(dir, name, content : string) {
-    fopen(path_join(dir, name), "wb") $(f) {
-        if (f != null) {
-            fwrite(f, content)
-        }
-    }
-}
 
 //! A tree of three files: `a.das` requires the module `b.das`, `c.das` carries a LINT003 finding
 def private build_tree(name : string) : string {
-    let root = path_join(tmp_root(), name)
+    let root = path_join(test_temp_dir(), name)
     mkdir_rec(root)
     plant(root, "b.das", "options gen2\n\nmodule b public\n\ndef public twice(x : int) : int => x * 2\n")
     plant(root, "a.das", "options gen2\n\nrequire b\n\n[export]\ndef main \{\n    print(\"\{twice(2)\}\\n\")\n\}\n")
     plant(root, "c.das", "options gen2\n\n[export]\ndef main \{\n    var x = 13\n    print(\"\{x\}\\n\")\n\}\n")
     return root
-}
-
-def private das_exe() : string {
-    let args <- get_command_line_arguments()
-    return empty(args) ? "" : args[0]
-}
-
-//! `host`: daslang's flags before the script; `extra`: after `--`
-def private run_lint(root : string; extra, host : array<string>) : string {
-    var argv <- [das_exe(), "-dasroot", get_das_root()]
-    argv |> push_from(host)
-    argv |> push("{get_das_root()}/utils/lint/main.das")
-    argv |> push("--")
-    argv |> push(root)
-    argv |> push("--cache-dir")
-    argv |> push(path_join(root, "cache"))
-    argv |> push_from(extra)
-    var output : string
-    unsafe(popen_argv(argv, 0.0, $(f) {
-        if (f != null) {
-            output = fread(f)
-        }
-    }))
-    return output
-}
-
-def private entry_count(root : string) : int {
-    var n = 0
-    dir(path_join(root, "cache")) $(name) {
-        n++ if (name != "." && name != ".." && name != "lint_hash.txt")
-    }
-    return n
-}
-
-def private status_of(out, root, file : string) : string {
-    let path = to_generic_path(path_join(root, file))
-    for (line in split(out, "\n")) {
-        for (status in ["PASS", "CACHED", "WARN"]) {
-            return status if (line |> starts_with("{status} ") && find(to_generic_path(line), path) >= 0)
-        }
-    }
-    return "?"
 }
 
 [test]

@@ -125,8 +125,16 @@ def test_family_encode_buckets(t : T?) {
         t |> equal(whisper_encode_bucket(), "wh.encode_total")
         t |> equal(canary_encode_bucket(), "cn.encode")
         t |> equal(gemma4a_encode_bucket(), "g4a.encode")
+        t |> equal(PARAKEET_ENCODE_BUCKET, "pk.encode_total")
         t |> equal(qwen3a_encode_bucket(false), "q3a.encode")
         t |> equal(qwen3a_encode_bucket(true), "q3o.encode")
+    }
+    t |> run("the facade's asr_encode_bucket answers each family's own bucket") @(t : T?) {
+        for (kind, want in [AsrKind.whisper, AsrKind.canary, AsrKind.gemma4a, AsrKind.parakeet, AsrKind.qwen3a, AsrKind.qwen3omni],
+                ["wh.encode_total", "cn.encode", "g4a.encode", "pk.encode_total", "q3a.encode", "q3o.encode"]) {
+            var inscope m <- AsrModel(kind = kind)
+            t |> equal(asr_encode_bucket(m), want, "{kind}")
+        }
     }
 }
 

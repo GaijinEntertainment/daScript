@@ -495,7 +495,7 @@ def load_whisper_model(path : string; enc_q8, dec_q8 : bool) : WhisperModel {
 [init]
 def private register_whisper_image_tags {
     register_image_family_tag("whisper-q8")
-    register_image_family_tag("whisper-f32")
+    register_image_family_tag("whisper-f32", true)   // config-free: the exact lane's planes are the file's own, no box property shapes them
     register_image_family_tag("whisper-f32-q8")
 }
 

@@ -145,6 +145,10 @@ class LadderServer : HvWebServer {
         POST("/admin/import-official") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             return handle_import_official(req, resp)
         }
+        POST("/admin/import-annotations") <| @(var req : HttpRequest?;
+                                               var resp : HttpResponse?) : http_status {
+            return handle_import_annotations(req, resp)
+        }
         POST("/admin/import-sidecar") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             return handle_import_sidecar(req, resp)
         }
@@ -198,6 +202,14 @@ def private handle_versions(var req : HttpRequest?; var resp : HttpResponse?) : 
 }
 
 def private run_to_jv(r : Run) : JsonValue? {
+    var jerr = ""
+    var audio : JsonValue?
+    if (!empty(r.Audio)) {
+        audio = read_json(r.Audio, jerr)
+    }
+    if (audio == null) {
+        audio = JV(array<JsonValue?>())
+    }
     return JV((
         id = r.Id, submission_id = r.SubmissionId, model_idx = r.ModelIdx, run_idx = r.RunIdx,
         gguf = r.Gguf, model_arch = r.ModelArch, quant = r.Quant,
@@ -207,7 +219,9 @@ def private run_to_jv(r : Run) : JsonValue? {
         version = r.Version, dasllama_version = r.DasllamaVersion,
         engine_sha = r.EngineSha, tune_sha = r.TuneSha,
         source = r.Source, verified = r.Verified != 0,
-        pp512 = r.Pp512, tg128 = r.Tg128, tg128b4 = r.Tg128b4, cpu = r.Cpu))
+        pp512 = r.Pp512, tg128 = r.Tg128, tg128b4 = r.Tg128b4,
+        cpu = r.Cpu, gpu = r.Gpu, audio = audio,
+        img_enc = r.ImgEnc, img_pp = r.ImgPp, img_tg = r.ImgTg, voided_tests = r.VoidedTests))
 }
 
 def private handle_runs(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
@@ -385,6 +399,15 @@ def private put_status_of(status : PutStatus) : http_status {
     return http_status.BAD_REQUEST
 }
 
+//! A sidecar put's JSON reply: the stored sidecar's address, or why
+//! it was refused.
+def private sidecar_reply_body(r : PutSidecarResult) : string {
+    if (r.status == PutStatus.ok) {
+        return write_json(JV((sha = r.sha, created = r.created, url = "/api/sidecar/{r.sha}")))
+    }
+    return write_json(JV((error = r.status == PutStatus.invalid ? r.error : "{r.status}")))
+}
+
 def private handle_submit_sidecar(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
     let t0 = ref_time_ticks()
     let ip = client_ip_of(req)
@@ -405,14 +428,7 @@ def private handle_submit_sidecar(var req : HttpRequest?; var resp : HttpRespons
     }
     let r = put_sidecar(g_db, doc, ip, g_policy, current_unix_time())
     let status = put_status_of(r.status)
-    var body = ""
-    if (r.status == PutStatus.ok) {
-        body = write_json(JV((sha = r.sha, created = r.created, url = "/api/sidecar/{r.sha}")))
-    } elif (r.status == PutStatus.invalid) {
-        body = write_json(JV((error = r.error)))
-    } else {
-        body = write_json(JV((error = "{r.status}")))
-    }
+    let body = sidecar_reply_body(r)
     log_request("POST", "/api/submit/sidecar", int(status), ip, length(doc), length(body), t0)
     return resp |> JSON(body, status)
 }
@@ -571,56 +587,69 @@ def private handle_admin_sidecar_delete(var req : HttpRequest?; var resp : HttpR
     return resp |> JSON(body, status)
 }
 
-def private handle_import_sidecar(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+//! The reply an operator import route sends: its status and its JSON
+//! body.
+typedef ImportReply = tuple<status : http_status; body : string>
+
+//! An operator import route: the loopback-operator gate, the body
+//! gate, then `reply_of` maps the document to the reply; the request
+//! logs under `route`.
+def private handle_operator_import(var req : HttpRequest?; var resp : HttpResponse?; route : string;
+                                   reply_of : block<(doc : string) : ImportReply>) : http_status {
     let t0 = ref_time_ticks()
     let ip = client_ip_of(req)
     if (!is_operator_caller(req)) {
-        log_request("POST", "/admin/import-sidecar", 403, ip, 0, 0, t0)
+        log_request("POST", route, 403, ip, 0, 0, t0)
         return resp |> JSON(write_json(JV((error = "forbidden"))), http_status.FORBIDDEN)
     }
     var early = http_status.OK
-    let doc = submit_body_of(req, "/admin/import-sidecar", resp, early, t0)
+    let doc = submit_body_of(req, route, resp, early, t0)
     if (empty(doc)) {
         return early
     }
-    let r = plant_sidecar(g_db, doc, g_policy, current_unix_time())
-    let status = put_status_of(r.status)
-    var body = ""
-    if (r.status == PutStatus.ok) {
-        body = write_json(JV((sha = r.sha, created = r.created, url = "/api/sidecar/{r.sha}")))
-    } elif (r.status == PutStatus.invalid) {
-        body = write_json(JV((error = r.error)))
-    } else {
-        body = write_json(JV((error = "{r.status}")))
+    let r = invoke(reply_of, doc)
+    log_request("POST", route, int(r.status), ip, length(doc), length(r.body), t0)
+    return resp |> JSON(r.body, r.status)
+}
+
+def private handle_import_sidecar(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+    return handle_operator_import(req, resp,
+                                  "/admin/import-sidecar") $(doc : string) : ImportReply {
+        let r = plant_sidecar(g_db, doc, g_policy, current_unix_time())
+        return (status = put_status_of(r.status), body = sidecar_reply_body(r))
     }
-    log_request("POST", "/admin/import-sidecar", int(status), ip, length(doc), length(body), t0)
-    return resp |> JSON(body, status)
 }
 
 def private handle_import_official(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
-    let t0 = ref_time_ticks()
-    let ip = client_ip_of(req)
-    if (!is_operator_caller(req)) {
-        log_request("POST", "/admin/import-official", 403, ip, 0, 0, t0)
-        return resp |> JSON(write_json(JV((error = "forbidden"))), http_status.FORBIDDEN)
+    return handle_operator_import(req, resp,
+                                  "/admin/import-official") $(doc : string) : ImportReply {
+        let r = import_official_store(g_db, doc, current_unix_time())
+        if (!r.ok) {
+            return (status = http_status.BAD_REQUEST, body = write_json(JV((error = r.error))))
+        }
+        let body = write_json(JV((runs_added = r.runs_added,
+                                  runs_replaced = r.runs_replaced)))
+        return (status = http_status.OK, body = body)
     }
-    var early = http_status.OK
-    let doc = submit_body_of(req, "/admin/import-official", resp, early, t0)
-    if (empty(doc)) {
-        return early
+}
+
+def private handle_import_annotations(var req : HttpRequest?;
+                                      var resp : HttpResponse?) : http_status {
+    return handle_operator_import(req, resp,
+                                  "/admin/import-annotations") $(doc : string) : ImportReply {
+        let r = import_annotations(g_db, doc)
+        if (!r.ok) {
+            return (status = http_status.BAD_REQUEST, body = write_json(JV((error = r.error))))
+        }
+        return (status = http_status.OK, body = write_json(JV((holds = r.holds, voids = r.voids))))
     }
-    let r = import_official_store(g_db, doc, current_unix_time())
-    let status = r.ok ? http_status.OK : http_status.BAD_REQUEST
-    let body = (r.ok
-        ? write_json(JV((runs_added = r.runs_added, runs_replaced = r.runs_replaced)))
-        : write_json(JV((error = r.error))))
-    log_request("POST", "/admin/import-official", int(status), ip, length(doc), length(body), t0)
-    return resp |> JSON(body, status)
 }
 
 def import_official_dir(db : SqlRunner; dir_path : string; now : int64) : int {
     //! Startup import: every `records/<box>.json` store in the dir (single-dot
-    //! names only — tune sidecars, annotations, and `_` scratch are not stores).
+    //! names only — tune sidecars, annotations, and `_` scratch are not
+    //! stores),
+    //! then the holds of the dir's `annotations.json`.
     //! Returns imported-store count; each file logs its own result.
     var imported = 0
     dir(dir_path) $(name) {
@@ -637,6 +666,13 @@ def import_official_dir(db : SqlRunner; dir_path : string; now : int64) : int {
             } else {
                 logger_error("ladder", "official import FAILED {name}: {r.error}")
             }
+        }
+    }
+    let annotations = fread(path_join(dir_path, "annotations.json"))
+    if (!empty(annotations)) {
+        let h = import_annotations(db, annotations)
+        if (!h.ok) {
+            logger_error("ladder", "annotations import FAILED: {h.error}")
         }
     }
     return imported

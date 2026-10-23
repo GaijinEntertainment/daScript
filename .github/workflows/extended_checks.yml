@@ -293,3 +293,17 @@ jobs:
           | while read -r id; do gh cache delete "$id" -R ${{ github.repository }}; done
         true
 
+  commit_messages:
+    if: github.event_name == 'pull_request' && inputs.lane != 'extended_nightly'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    - uses: wagoid/commitlint-github-action@v6
+      with:
+        configFile: ci/commitlint.json

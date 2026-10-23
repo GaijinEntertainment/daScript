@@ -68,6 +68,15 @@ def test_pybench_args(t : T?) {
         let bare <- asr_pybench_args("nemo", "nvidia/canary-qwen-2.5b", ["jfk.wav"], 8, 3)
         t |> success(!has(bare, "--device"), "no device argument when none is asked")
     }
+    t |> run("the mlx arm runs the MLX venv's script over the variant, with no device and no recovery file") @(t : T?) {
+        let args <- asr_pybench_args("mlx", "parakeet-v3", ["jfk.wav", "gb1.wav"], 8, 3, "mps")
+        t |> equal(args[0], mlx_py(), "the MLX venv's interpreter")
+        t |> success(find(args[1], "mlx_asr_bench.py") >= 0, "the mlx script is the target")
+        t |> equal(arg_value(args, "--variant"), "parakeet-v3", "the variant names the MLX checkpoint")
+        t |> success(!has(args, "--device"), "MLX runs on the GPU - device never reaches it")
+        t |> success(!has(args, "--out"), "no recovery file - mlx rows parse from stdout")
+        t |> equal(arg_value(args, "--reps"), "3", "reps literal")
+    }
 }
 
 [test]
@@ -78,6 +87,15 @@ def test_gpu_pair_roster(t : T?) {
         t |> success(asr_gpu_pair_tool("nemo"), "nemo pairs (torch-MPS)")
         t |> success(!asr_gpu_pair_tool("onnx"), "onnx is CPU-only")
         t |> success(!asr_gpu_pair_tool("parakeet-cli"), "parakeet-cli runs -ng on the rig")
+    }
+    t |> run("the gpu-only roster names the references with no CPU leg") @(t : T?) {
+        t |> success(asr_gpu_only_tool("mlx"), "mlx runs on the Apple GPU alone")
+        for (tool in ["whisper-cli", "mtmd", "nemo", "onnx", "parakeet-cli"]) {
+            t |> success(!asr_gpu_only_tool(tool), "{tool} keeps its CPU leg")
+        }
+        t |> equal(asr_engine_name("mlx"), "mlx-audio", "the MLX reference's engine is its package")
+        t |> equal(asr_engine_name("mtmd"), "llama-mtmd-cli", "mtmd's engine is the binary")
+        t |> equal(asr_engine_name("onnx"), "onnx", "every other tool is its own engine")
     }
 }
 
@@ -168,6 +186,11 @@ def test_board_store_guard(t : T?) {
         t |> success(find(refusal, "--catalog all") >= 0, "the refusal names the flag that drew it: {refusal}")
         t |> success(find(refusal, "--store") >= 0, "the refusal names the fix: {refusal}")
         t |> equal(board_store_refusal("all", false, "/tmp/sweep.json"), "", "an explicit store admits the sweep")
+    }
+    t |> run("the mlx-lm rows never enter the board") @(t : T?) {
+        let refusal = board_store_refusal("official", false, "", "modules/dasLLAMA/performance/records/m5.json")
+        t |> success(find(refusal, "--mlx-lm-store") >= 0, "an mlx-lm store on the board is refused: {refusal}")
+        t |> equal(board_store_refusal("official", false, "", "/tmp/mlx_lm_m5.json"), "", "a scratch mlx-lm store beside the board mint is admitted")
     }
     t |> run("an explicit store inside records/ is still the board") @(t : T?) {
         let board = "modules/dasLLAMA/performance/records/m5.json"
@@ -264,4 +287,205 @@ def test_bench_env_line_spells_home_as_tilde(t : T?) {
     }
     t |> success(find(line, "DASLLAMA_MODELS_DIR=~/\"my models\"") >= 0, "the env receipt spells the home ~ outside the quotes a value with a space needs: {line}")
     t |> success(find(line, "/Users/") < 0, "no home directory survives in the env receipt")
+}
+
+[test]
+def test_tts_ref_args(t : T?) {
+    let kokoro = tts_spec_of("/models/kokoro-82m.gguf")
+    t |> run("the torch arm runs the tts venv's instrument over one model on the asked device") @(t : T?) {
+        let args <- tts_ref_args(kokoro, false, "mps", 20, 3, 8)
+        t |> equal(args[0], tts_py(), "the tts venv's interpreter")
+        t |> success(find(args[1], "tts_ref_bench.py") >= 0, "the reference instrument is the target")
+        t |> equal(arg_value(args, "--models"), "kokoro-82m:af_heart", "one model a process, at the das voice")
+        t |> equal(arg_value(args, "--device"), "mps", "the torch device")
+        t |> equal(arg_value(args, "--limit"), "20", "the corpus head both engines speak")
+        t |> equal(arg_value(args, "--passes"), "3", "best of the rig's reps")
+        t |> equal(arg_value(args, "--threads"), "8", "threads literal")
+        t |> success(!has(args, "--engine"), "torch is the instrument's default engine")
+    }
+    t |> run("the mlx arm runs the mlx venv's interpreter and never a device") @(t : T?) {
+        let args <- tts_ref_args(kokoro, true, "mps", 20, 3, 8)
+        t |> equal(args[0], mlx_py(), "the mlx venv's interpreter")
+        t |> equal(arg_value(args, "--engine"), "mlx", "the MLX ports")
+        t |> success(!has(args, "--device"), "MLX runs on the GPU - device never reaches it")
+    }
+    t |> run("the reference row's engine names the package, or mlx-audio") @(t : T?) {
+        t |> equal(tts_ref_engine(kokoro, false), "kokoro")
+        t |> equal(tts_ref_engine(tts_spec_of("kitten-nano.gguf"), false), "kittentts")
+        t |> equal(tts_ref_engine(tts_spec_of("pocket-tts-en-q8.gguf"), false), "pocket-tts")
+        t |> equal(tts_ref_engine(kokoro, true), "mlx-audio")
+    }
+}
+
+[test]
+def test_tts_catalog_seams(t : T?) {
+    t |> run("a GGUF path finds its catalog row by file name; an unlisted one finds none") @(t : T?) {
+        let s = tts_spec_of("/some/dir/kitten-mini.gguf")
+        t |> equal(s.file, "kitten-mini.gguf")
+        t |> equal(s.voice, "Bella")
+        t |> success(!s.torch_gpu, "kitten's package runs the onnxruntime CPU provider")
+        t |> success(tts_spec_of("kokoro-82m.gguf").torch_gpu, "kokoro's torch model takes mps and cuda")
+        t |> success(empty(tts_spec_of("stories15M.gguf").file), "no row for a non-TTS file")
+    }
+    t |> run("every catalog row is a TTS file with a voice and a reference name, its file unique") @(t : T?) {
+        var inscope cat <- tts_catalog()
+        var inscope seen : table<string>
+        for (s in cat) {
+            t |> success(!empty(s.voice) && !empty(s.ref) && !empty(s.package) && !empty(s.display), "{s.file} carries its fields")
+            t |> success(!key_exists(seen, s.file), "{s.file} listed once")
+            seen |> insert(s.file)
+        }
+    }
+    t |> run("both engines record under one key: the sentence count and the voice") @(t : T?) {
+        t |> equal(tts_test_key(20, "af_heart"), "tts:g2p20@af_heart")
+        t |> equal(tts_bench_label(20), "g2p20")
+    }
+    t |> run("the das child carries the row's file and voice, the rig's sentences and reps, the leg") @(t : T?) {
+        let cfg = Args(tts_sentences = 7, tts_reps = 2)
+        let args <- tts_das_args(tts_spec_of("kokoro-82m.gguf"), cfg, 6, "cell.json", "/opt/rig/dasllama-bench", "metal")
+        t |> success(has(args, "--tts"), "the TTS cell mode")
+        t |> success(ends_with(arg_value(args, "-m"), "kokoro-82m.gguf"), "the model under the models dir")
+        t |> equal(arg_value(args, "--tts-voice"), "af_heart")
+        t |> equal(arg_value(args, "--tts-sentences"), "7")
+        t |> equal(arg_value(args, "-r"), "2")
+        t |> equal(arg_value(args, "--json-path"), "cell.json")
+        t |> equal(arg_value(args, "--ngl"), "1", "the metal leg's flag")
+        let cpu <- tts_das_args(tts_spec_of("kokoro-82m.gguf"), cfg, 6, "cell.json", "/opt/rig/dasllama-bench", "")
+        t |> success(!has(cpu, "--ngl") && !has(cpu, "--accel"), "the neon leg carries no leg flag")
+        let accel <- media_leg_args("accel")
+        t |> success(length(accel) == 1 && accel[0] == "--accel", "the amx leg's flag")
+        t |> equal(media_leg_args("metal"), [ "--ngl", "1" ], "a media cell's metal leg")
+        t |> equal(media_leg_args("metal", 99), [ "--ngl", "99" ], "the image cell's metal leg")
+        t |> equal(length(media_leg_args("", 99)), 0, "the neon leg carries no flag")
+    }
+}
+
+[test]
+def test_tts_reference_output(t : T?) {
+    let out = "ref bench: x\nVERSIONS\ttorch 2.14.0 / kokoro 0.9.4 (tts_ref_bench.py --device cpu, requirements-tts.txt)\n  lj000 9.2 s\nkokoro-82m af_heart: ...\nBENCH\tkokoro-82m\tg2p20\t187.5000\t0\t14444.90\t0.07704\n"
+    t |> run("the BENCH row reads back as the summed generation ms and audio seconds") @(t : T?) {
+        var audio_s = -1.0lf
+        let ms = parse_bench_best(out, tts_bench_label(20), audio_s)
+        t |> equal(ms, 14444.9lf)
+        t |> equal(audio_s, 187.5lf)
+        var none_s = -1.0lf
+        t |> success(parse_bench_best(out, tts_bench_label(5), none_s) < 0.0lf, "another sentence count reads no row")
+    }
+    t |> run("the VERSIONS line names the packages, and reads empty when the instrument printed none") @(t : T?) {
+        t |> equal(ref_versions_line(out), "torch 2.14.0 / kokoro 0.9.4 (tts_ref_bench.py --device cpu, requirements-tts.txt)")
+        t |> equal(ref_versions_line("BENCH\tx\tg2p20\t1\t0\t1\t1\n"), "")
+    }
+    t |> run("a probe's warning line ahead of VERSIONS stays out of the field") @(t : T?) {
+        let probe = "[0;93m2026-10-20 W:onnxruntime: device discovery failed[m\nVERSIONS\tonnx-asr 0.7.0 / onnxruntime 1.22.0 (requirements-onnx.txt)\n"
+        t |> equal(ref_versions_line(probe), "onnx-asr 0.7.0 / onnxruntime 1.22.0 (requirements-onnx.txt)")
+    }
+}
+
+[test]
+def test_tts_corpus_head(t : T?) {
+    let corpus = "[\{\"id\": \"a\", \"text\": \"One.\"\}, \{\"id\": \"b\", \"text\": \"\"\}, \{\"id\": \"c\", \"text\": \"Three.\"\}, \{\"id\": \"d\", \"text\": \"Four.\"\}]"
+    t |> run("the head skips a sentence with no text and stops at n") @(t : T?) {
+        var inscope head <- tts_corpus_head(corpus, 2)
+        t |> equal(length(head), 2)
+        t |> equal(head[0].id, "a")
+        t |> equal(head[1].id, "c", "the textless row is not a sentence")
+        var inscope all <- tts_corpus_head(corpus, 10)
+        t |> equal(length(all), 3, "a short corpus answers fewer")
+        var inscope bad <- tts_corpus_head("not json", 5)
+        t |> success(empty(bad), "an unparsed corpus answers none")
+    }
+    t |> run("the committed corpus holds the default head") @(t : T?) {
+        var inscope head <- tts_corpus_head(fread(tts_corpus_path()), TTS_BENCH_SENTENCES)
+        t |> equal(length(head), TTS_BENCH_SENTENCES)
+    }
+}
+
+[test]
+def test_tts_seat_verdict(t : T?) {
+    t |> run("no serve is a CPU cell, every call served a GPU one, anything between neither") @(t : T?) {
+        t |> equal(tts_seat_verdict([20, 20, 0], [0, 0, 0]), "none", "the knob-off cell")
+        t |> equal(tts_seat_verdict([20, 20, 0], [20, 20, 0]), "all", "a seat no call reached is no fallback")
+        t |> equal(tts_seat_verdict([20, 20, 1], [20, 19, 1]), "partial", "one chunk's decode fell to the CPU chain")
+        t |> equal(tts_seat_verdict([20, 20], [20, 0]), "partial", "a seat that never served beside one that did")
+        t |> equal(tts_seat_verdict(array<int>(), array<int>()), "none", "a family with no seats")
+    }
+}
+
+[test]
+def test_mlx_lm_reference(t : T?) {
+    t |> run("the mlx-lm argv is the flat reference's shape, the batched row only past one stream") @(t : T?) {
+        let flat <- mlx_lm_bench_args("mlx-community/Qwen3.8-27B-4bit", 512, 128, 5, 1)
+        t |> equal(flat[0], mlx_py(), "the MLX venv's interpreter")
+        t |> success(find(flat[1], "mlx_lm_bench.py") >= 0, "the mlx-lm script is the target")
+        t |> equal(arg_value(flat, "--model"), "mlx-community/Qwen3.8-27B-4bit", "the checkpoint")
+        t |> equal(arg_value(flat, "-p"), "512", "prompt length")
+        t |> equal(arg_value(flat, "-n"), "128", "generated tokens")
+        t |> equal(arg_value(flat, "-r"), "5", "trials")
+        t |> success(!has(flat, "--npl"), "no batched row at one stream")
+        let batched <- mlx_lm_bench_args("m", 512, 128, 5, 4)
+        t |> equal(arg_value(batched, "--npl"), "4", "the batched row's streams")
+    }
+    t |> run("the row parser keeps whole ROW lines with a positive rate") @(t : T?) {
+        let out = "VERSIONS\tmlx-lm=0.32.2\nROW\tpp512\t1500.5\t12.0\nnoise\nROW\ttg128\t80.25\t0.5\nROW\ttg128@4\t0\t0\nROW\tbad\tx\t1\nROW\tshort\t3\n"
+        let rows <- mlx_lm_rows(out)
+        t |> equal(length(rows), 2, "the two good rows, a zero rate, a non-number and a short line dropped")
+        t |> equal(rows[0].test, "pp512", "first test")
+        t |> equal(rows[0].tok_s, 1500.5lf, "first rate")
+        t |> equal(rows[1].test, "tg128", "second test")
+        t |> equal(rows[1].stddev, 0.5lf, "second stddev")
+    }
+}
+
+[test]
+def test_board_refs_guard(t : T?) {
+    t |> run("a board mint refuses a leg whose llama-bench is unset") @(t : T?) {
+        t |> success(find(board_refs_refusal(true, true, true, true, "", "/b/stock"), "--ref-clean") >= 0, "the cpu leg without its clean ref")
+        t |> success(find(board_refs_refusal(true, true, false, true, "", ""), "--ref-stock") >= 0, "the metal leg without its stock ref")
+        t |> equal(board_refs_refusal(true, true, true, true, "/b/clean", "/b/stock"), "", "both refs set - the board mint starts")
+        t |> equal(board_refs_refusal(true, true, false, true, "", "/b/stock"), "", "a metal-only run needs no clean ref")
+        t |> equal(board_refs_refusal(false, true, true, true, "", ""), "", "a scratch store may run das-only")
+        t |> equal(board_refs_refusal(true, false, true, true, "", ""), "", "an asr/tts-only run reads no llama-bench")
+    }
+}
+
+[test]
+def test_vulkan_leg_guards(t : T?) {
+    t |> run("the vulkan leg runs alone, off Apple, under the GPU ask, on a dasVulkan build") @(t : T?) {
+        t |> equal(vulkan_leg_refusal(false, true, true, false), "", "no vulkan leg - nothing to refuse")
+        t |> success(find(vulkan_leg_refusal(true, false, true, true), "Apple") >= 0, "refused on Apple")
+        var built = false
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            built = true
+        }
+        if (built) {
+            t |> success(find(vulkan_leg_refusal(true, false, false, false), "DASLLAMA_GPU") >= 0, "refused without the GPU ask")
+            t |> success(find(vulkan_leg_refusal(true, true, false, true), "alone") >= 0, "refused beside another leg")
+            t |> equal(vulkan_leg_refusal(true, false, false, true), "", "admitted alone under the ask")
+        } else {
+            t |> success(find(vulkan_leg_refusal(true, false, false, true), "dasVulkan") >= 0, "refused on a build without dasVulkan")
+        }
+        t |> success(find(board_refs_refusal(true, true, false, false, "", "", true, ""), "--ref-vulkan") >= 0, "a board mint pairs every vulkan cell")
+        t |> equal(board_refs_refusal(true, true, false, false, "", "", true, "/b/vk"), "", "with the vulkan ref the mint starts")
+    }
+    t |> run("a vulkan cell holds only when every das row served on the device") @(t : T?) {
+        var served <- [BenchModel(gguf = "m.gguf", runs <- [BenchRun(engine = "das", backend = "vulkan")])]
+        var fell <- [BenchModel(gguf = "m.gguf", runs <- [BenchRun(engine = "das", backend = "cpu")])]
+        let empty_cell : array<BenchModel>
+        t |> success(cell_served_on(served, "vulkan"), "a vulkan-stamped das row holds")
+        t |> success(!cell_served_on(fell, "vulkan"), "a cpu-stamped das row on the vulkan leg fails")
+        t |> success(!cell_served_on(empty_cell, "vulkan"), "a cell with no das row fails")
+        t |> success(cell_served_on(fell, "cpu"), "the cpu legs stamp themselves")
+        delete served
+        delete fell
+    }
+}
+
+[test]
+def test_ref_py(t : T?) {
+    t |> run("a reference venv's interpreter: the env override when set, else the venv beside the asr benches") @(t : T?) {
+        t |> equal(ref_py("/opt/py/bin/python3", "onnx"), normalize("/opt/py/bin/python3"), "the override wins")
+        let dflt = ref_py("", "tts")
+        t |> success(find(dflt, ".venv-tts") >= 0, "the default names the venv: {dflt}")
+        t |> success(find(ref_py("", "mlx"), ".venv-mlx") >= 0, "each name its own venv")
+    }
 }

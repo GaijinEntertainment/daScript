@@ -53,10 +53,10 @@ row or a provenance declaration pins, answers to `performance/REVIEW.md`.** A mo
 `.gguf`, a `.dlim`, an mmproj (a multimodal projector weight file), or a picture or audio fixture
 file. A test or tool merely opening by name a model file the catalog already stocks does not route.
 
-**A change to the sidecar-exchange client (`dasllama/dasllama_exchange.das`) - the code that
-downloads tune winners to a box and submits that box's winners back - its schema, or a
-tune-boot path (a startup path that loads a tune sidecar) that reaches it, applies
-`performance/REVIEW.md` and `REVIEW_EXCHANGE.md`.**
+**A change to the sidecar-exchange client (`dasllama/dasllama_exchange.das`, which downloads tune
+winners to a box and submits that box's winners back), to a validator it calls (`validate_sidecar`,
+`validate_sidecar_submission`, `validate_record_submission`), or to a tune-boot path (a startup path
+that loads a tune sidecar) reaching it, applies `performance/REVIEW.md` and `REVIEW_EXCHANGE.md`.**
 
 **A diff that adds a module under `dasllama/` whose code only some of `tests/run.das`'s areas
 (`audio`, `vision`, `tts`, `llm`, `infra`) run in their tests gives it a `MODULE_AREAS` row
@@ -93,12 +93,12 @@ on the family's smallest GGUF under `LARGE_TIER_BYTES` (`tests/_model_tier.das`)
 **A GPU kernel, driver, dispatch class (a class a `[metal_dispatch]` or `[vk_dispatch]`
 declares), or K/V-mirror (the device copy of the K/V cache a GPU decode reads and writes)
 change, or a change to a `kv_*` function that a GPU driver file (`dasllama_metal*.das`,
-`dasllama_vulkan*.das`, `dasllama_gpu*.das`) calls, wherever the diff puts it, applies
+`dasllama_*vulkan*.das`, `dasllama_gpu*.das`) calls, wherever the diff puts it, applies
 `REVIEW_GPU.md`.**
 
 **A call that creates, enables or tears down device-home serving (`create_device_session`,
 `set_device_kv`, `moe_gpu_drop_model`), or a call or definition of a `set_*` / `reset_*` function
-in `dasllama/dasllama_core.das`, `dasllama_env.das` or a `dasllama_{gpu,vulkan,metal}*.das` file,
+in `dasllama/dasllama_core.das`, `dasllama_env.das` or a `dasllama_{gpu,metal}*.das` or `dasllama_*vulkan*.das` file,
 wherever the diff puts it, applies `REVIEW_GPU.md`.**
 
 **A GPU kernel timing race (two kernels timed against each other to pick one - not a data race), a

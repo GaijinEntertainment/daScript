@@ -281,10 +281,21 @@ sample. No broken links, consistent Forge chrome on every page.
 `site/dasllama.html` renders entirely from `site/files/dasllama/bench_records.json` - every
 row is a das measurement paired with its reference run, every ratio derived in
 `files/dasllama.js`, nothing hand-placed. The first paint reads `bench_cells.json` beside it -
-the same merge minus the receipt fields (command, environment, tune stamps, input hashes, the
+the board rows minus the receipt fields (command, environment, tune stamps, input hashes, the
 full hardware line, ASR transcripts), a fifth of the bytes - and the full store loads once, on
-the first receipt a visitor opens. Both files come from the per-box record stores in one run
-and are COMMITTED (no CI fetch); `test_site_records.das` fails when either drifts:
+the first receipt a visitor opens. The board rows are the projection `board_models`
+(`modules/dasLLAMA/performance/gen_site_records.das`) makes of the merge: the current release's
+das rows (`DASLLAMA_RELEASE`) on the current boards (every box not in `RETIRED_BOXES`,
+`dasllama/dasllama_exchange_schema.das`), the reference rows that have one of those to pair
+with, and no row an annotation holds; older releases and retired boards stay in
+`bench_records.json` and on dasllama.io's ladder under "all versions". Every audio row's
+`void_clips` carries the outlier rule's verdict
+(`modules/dasLLAMA/ARCHITECTURE_MEASUREMENT.md#audio-outlier-rule`), and the page shows a
+voided clip's raw times with no speedup, no bar and no place in the hero. An image-chat run's
+`void_clips` names the `img:<cell>` cells an annotation withholds: such a cell and its ratio read
+`✱`, never the `-` of a cell nobody measured, and the row leaves the bars. Both files come from
+the per-box record stores in one run and are COMMITTED (no CI fetch); `test_site_records.das`
+fails when either drifts:
 
 ```bash
 bin/daslang modules/dasLLAMA/performance/gen_site_records.das
@@ -294,7 +305,9 @@ cd site && python3 -m http.server 8000    # eyeball all three sections before pu
 Measurement methodology and the sweep tooling live in `modules/dasLLAMA/METHODOLOGY.md`
 (published at /doc/reference/dasllama_methodology.html) and
 `modules/dasLLAMA/BRINGUP.md`. Hand-written per-row notes go in
-`modules/dasLLAMA/performance/records/annotations.json` - never edit the JSON by hand.
+`modules/dasLLAMA/performance/records/annotations.json` - never edit the JSON by hand. An
+annotation's `held` names the ledger row that keeps the selected runs off the board (a broken
+test is ledgered, not shown); the rows stay in the records.
 
 ## Updating the data-queries performance page
 

@@ -237,7 +237,9 @@ reference below the indexer's `indexer_top_k` budget.
   Verify by default, `--fetch` downloads; it never converts on `--fetch`, never benches, and
   it touches no tune state (`tune_policy(missing="fallback")`). BRINGUP.md sec.2 is the runbook.
 - **`dasllama/dasllama_exchange_schema.das`** - engine-free validation for exchange submissions
-  (record stores + tune sidecars); the dasllama.io ladder service builds on it.
+  (record stores + tune sidecars) and the board policy the recorder, the site projection and the
+  ladder share (`RETIRED_BOXES`, the audio outlier rule and its clip rates, the run-key matcher);
+  the dasllama.io ladder service builds on it.
 - **`dasllama/dasllama_exchange.das`** - the sidecar-exchange client (a sanctioned public entry
   point, and the engine's only `dashv` requirer: `performance/REVIEW.das` walks `dasllama/` for a
   second one; a measurement harness under `harness/` talking HTTP to a reference engine's server

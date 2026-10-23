@@ -1519,7 +1519,10 @@ def tune_cpu_class() : string {
         return fallback_feature_ok("avx2") ? "x86-avx2" : "x86-base"
     }
     if (arch == "arm64" || arch == "aarch64") {
-        return fallback_feature_ok("i8mm") ? "arm-i8mm" : "arm-neon"
+        if (fallback_feature_ok("i8mm")) {
+            return fallback_feature_ok("sve") ? "arm-sve" : "arm-i8mm"
+        }
+        return "arm-neon"
     }
     return "{get_platform_name()}-{arch}"
 }

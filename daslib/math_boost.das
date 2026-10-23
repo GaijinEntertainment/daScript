@@ -65,7 +65,7 @@ def UCOLOR_TO_RGB(x : uint) {
 
 def linear_to_SRGB(x : float) {
     //! convert value from linear space to sRGB curve space
-    if (x <= 0.00031308) {
+    if (x <= 0.0031308) {
         return 12.92 * x
     } else {
         return 1.055 * pow(x, (1.0 / 2.4)) - 0.055

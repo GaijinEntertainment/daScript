@@ -459,16 +459,6 @@
     per-clip `cmd` (schema addition) or a receipt template with the `-f` slot marked; the das
     rows are unaffected (one process serves the whole ladder).
 
-
-- **`check_committed_records` gate in `performance/REVIEW.das`** (fused-image-span review round):
-    machine-check the two records-provenance rules - every `runs[]` row's
-    `hardware.remote_desktop == "off"`, every row `sha` and sidecar `provenance.engine_sha`
-    an ancestor of HEAD, and `provenance.dasllama_version` equal to `DASLLAMA_RELEASE` at that
-    commit. When it lands, the two prose rules in `performance/REVIEW.md` collapse to the
-    "weakening that gate is a defect" residue form. Also owed: a re-mint of the gemma-3-4b cpu
-    image row (hand-minted in the gemma3v arc; still stamps `parsec` + a pre-branch sha, and
-    the image sweep's catalog does not reach it).
-
 41. **`add_user_audio` (samples in) serves the whisper-class `AudioTower` families only - the
     qwen3a conformer (Qwen3-Omni) has no chat splice, and gemma4a hears only through the
     pre-encoded rows seam (`add_user_audio_rows` off an `AudioEmbedder`).** Surfaced by the omni showcase test (the
@@ -1286,8 +1276,8 @@
    file dastest runs is in a `run.das` suite or its header names `DASLLAMA_CPU_PREFILL`; every
    test file has a `CMakeLists.txt` row. (c) `performance/REVIEW.das`: a `url =` / `bytes =` /
    `sha256 =` literal in any `.das` under the folder other than `model_specs.das` and
-   `profile_common.das`; every `records/<box>.json` row's `tune_sha` names an archive that exists;
-   a `defaults/` profile's `provenance.dasllama_version` equals `DASLLAMA_RELEASE`. (d)
+   `profile_common.das`; every retired-box `records/<box>.json` row's `tune_sha` names an archive
+   that exists (current-release rows are checked). (d)
    `harness/REVIEW.das` (new): `tune_kernels.das`'s `benches` list ends in `dot_q8q8_laneq4x4`.
    (e) `benchmarks/REVIEW.das` (new): nothing under `benchmarks/` or `performance/` but the two
    reference cells writes under `performance/records/`. (f) `daslib`: a `daslib/*.das` emitting a
@@ -1763,13 +1753,6 @@
    restart placed by the witness lines rather than a frame count), and the tts area runs green
    through `tests/run.das -- --area tts`.
 
-166. **A `--tts` path in `benchmarks/lcpp_bench.das`.** The bench has no TTS cell, so every TTS
-   turn wall in `PERF_LEDGER.md` comes from `harness/tts_synth.das` under
-   `REVIEW_MEASUREMENT.md`'s harness carve-out and no board row records what a synthesis costs.
-   Done = `lcpp_bench --tts -m <gguf>` serves the g2p corpus's first N sentences at a named
-   voice and prints the per-sentence wall and the real-time factor as its other modalities do,
-   `gen_bench_records` carries a `tts` workload, and the StyleTTS2 ledger entry cites the row.
-
 167. **A sampler arm on `benchmarks/lcpp_bench.das`'s tg row.** The bench's only sampler knob
     is `--mtp-temp`, a temperature alone, so no board row holds a sampled decode rate and the
     candidate-list sampler's `PERF_LEDGER.md` entry reads its rates off `dasllama-cli`'s stats
@@ -2142,3 +2125,75 @@
     under the server's sampler, the SSE path) naming where the margin goes, and the served decode at or above off on this
     file at depth 1.
 
+
+219. **Kitten speaks the TTS board's corpus half again as long as the reference package.** On the g2p corpus head (20
+    sentences, voice Bella) the das Kitten rows produce 242.6 s of audio on nano and 206.5 s on mini, where the
+    `kittentts` package and mlx-audio's port produce about 160 s and 145 s; Kokoro agrees on every engine (145.7 against
+    146.6 / 146.7; `PERF_LEDGER.md`, the 2026-10-22 release-17 boards entry). The parity rail (`test_tts_kitten.das`) feeds the oracle's own tokens, so a
+    front end that lengthens the token stream - our g2p, then `kitten_phonemes_from_misaki`, where the references read
+    the fixture's espeak string - passes it. The board's Kitten rows stay off the published board until this lands.
+    Done = the das Kitten audio on the corpus head within a few percent of the package's, a cell holding the facade's
+    front end against the package's on corpus sentences (the token stream and the duration, a lengthened stream the
+    control), and the Kitten TTS rows re-measured.
+
+220. **The CPU batched decode row (`tg128@4`) has never been profiled on a routed model.** On the release-17 board
+    gpt-oss-20b mxfp4 reads 0.72 of llama.cpp's batched decode on Zen4 (AWS m7a, 46.9 against 64.7 tok/s) and 0.94 on
+    the M5 Max; Qwen3.6-35B-A3B UD-Q4_K_M reads 0.94 on the M5; the dense carriers sit at 0.98-0.99 on Zen4
+    (`PERF_LEDGER.md`, the 2026-10-22 release-17 boards entry). Done = a `forward_profile` split of the batched step
+    against the single-stream step on both routed carriers (the expert GEMMs at four rows, the lane split, the router
+    and combine per row) naming where the batch loses its sharing, and the routed carriers' batched row at or above
+    llama.cpp's on both boxes - `bin/daslang modules/dasLLAMA/performance/gen_bench_records.das -- -w llm --backend cpu
+    -o gpt-oss-20b-mxfp4` and `-o Qwen3.6-35B-A3B-MTP-UD-Q4_K_M` on an AWS m7a box and the M5 Max, `--ref-clean`
+    naming the clean-cpu `llama-bench` `benchmarks/setup_lcpp_ref.das` builds at `DEFAULT_REF_SHA` (its sibling
+    `llama-batched-bench` times the reference's `tg128@4`), no other environment setting.
+
+222. **The Vulkan board measures the LLM workload alone.** `gen_bench_records` runs its Vulkan leg on `doLlm` only: the
+    ASR, TTS and image-chat passes carry Metal and CPU legs and no Vulkan one, and no GPU reference is paired for them off
+    Apple (the Metal legs pair whisper-cli's and mtmd's Metal builds, NeMo on MPS and mlx-audio). The engine serves those
+    workloads on Vulkan - the whisper, parakeet, canary and gemma4a towers, the ASR decoder and the TTS driver each hold
+    their parity cells - so the release-17 pod board (RTX PRO 4500) carries six LLM pairs and no audio or image row.
+    Done = a Vulkan leg on the asr, tts and image passes, each das cell paired with the reference's own GPU build (a
+    whisper.cpp and an mtmd Vulkan build at `-ngl 99`, NeMo and the TTS packages on CUDA) through `asr_gpu_pair_tool` and
+    the TTS seats' roster, `vulkan_leg_refusal` admitting them, `test_gen_records_args.das` holding the pairing, and the
+    pod board re-measured with those rows - `DASLLAMA_GPU=1 bin/daslang modules/dasLLAMA/performance/gen_bench_records.das
+    -- --legs vulkan -w all --ref-vulkan <the vulkan flavor's llama-bench>` on a dasVulkan build on the RunPod RTX PRO
+    4500 pod, `WHISPER_CPP`, `MTMD_BIN` and `NEMO_PY` naming those Vulkan and CUDA reference builds.
+
+223. **NeMo's Canary-Qwen `generate` on MPS answers a 3-token stub, and why is unknown.** The Metal reference row of
+    Canary-Qwen 2.5B (`benchmarks/asr/canary_qwen_bench.py --device mps`, nemo 3.1.0 / torch 2.12.1, the same HF snapshot
+    either way) sometimes returns a stub under the bench's eight-id bar (`rep_is_degenerate`) in place of the jfk
+    transcript: run to run on the M5 Max, one process transcribes jfk every call, another answers the stub on its first
+    call and the transcript after it, a third answers the stub on every call of the process. The CPU arm never stubs. The bench discards a stub (`rep_is_degenerate`),
+    runs an untimed warm-up first and re-runs a stubbed rep up to `--retries` times, so a one-off stub costs nothing - but
+    a process stuck on stubs lands no row, and the board keeps the last good one. Done = the cause named (an MPS kernel,
+    the SALM prompt path, the audio locator's embedding on the device - a dumped stub's logits against a transcript's say
+    which), the bench either fixing it or refusing the arm by name, and the reference row landing on every sweep.
+
+224. **Two llama-mtmd-cli image cells contradict the reference's own numbers, and the board withholds them.** Its
+    Qwen image turn's prefill (`img:pp`) reads an order under its own text prefill on the same model - Qwen3-VL-4B Q8_0
+    on the M5 CPU: 30 tok/s against llama-bench's pp512 of 222 - and on Metal 441 tok/s against 2108 for gemma-4-E4B's
+    image turn on the same GPU; Qwen2.5-Omni-3B the same on every box. Its gemma-4-E4B vision encode (`img:enc`) on
+    the ARM CPUs reads 10.8-13.6 s (the M5 Max, Graviton4) where the same model and picture encode in 0.43-0.73 s on
+    the x86 boards (`PERF_LEDGER.md`, the 2026-10-22 release-17 boards entry). `records/annotations.json` voids those
+    cells (`void_clips`), so neither site prints the cell or a ratio off it. Done = each named - mtmd's M-RoPE image
+    chunk evaluated as something other than one prefill batch, and an op of gemma-4's vision tower with no ARM CPU path,
+    or our pairing timing the wrong span - and the cells either re-measured on a corrected reference invocation with the
+    voids dropped, or kept voided with the cause written in the note. The re-measure is `bin/daslang
+    modules/dasLLAMA/performance/gen_bench_records.das -- -w image --backend cpu -o <model>` (and `--backend metal` for
+    the Qwen Metal cell) on the M5 Max, a Graviton4 and an x86 board, `--ref-clean` / `--ref-stock` naming the
+    `llama-bench` builds whose sibling `llama-mtmd-cli` `benchmarks/setup_lcpp_ref.das` patches and builds at
+    `DEFAULT_REF_SHA`, no other environment setting.
+
+225. **The Granite Rapids board's prefill trails llama.cpp's further than every other board's.** On AWS m8i
+    (Xeon 6975P-C, 8 cores with SMT, the x86-amx class) the release-17 pp512 ratios read Qwen3.6-35B-A3B UD-Q4_K_M
+    0.91x (119.7 tok/s), gpt-oss-20b 1.95x, gemma-4-E4B 1.21x, Qwen3-VL-4B 1.60x, where the Zen4 board (EPYC 9R14,
+    16 cores) reads 2.34x (424.8), 2.55x, 1.82x, 2.45x and Graviton4 2.26x, 2.16x, 1.76x, 1.84x; decode sits with
+    the other boards (`PERF_LEDGER.md`, the 2026-10-22 release-17 boards entry). Against its own release-16 rows the
+    board's prefill moved up 1-12 %, so this is the AMX prefill path's
+    standing, not a regression; the routed 35B, far under half the Zen4 rate, says the expert GEMMs lose most -
+    an AMX tile load off a 64-byte boundary (an expert slice, a panel's row stride, the bf16 activation plane) is a
+    candidate. Done = a `forward_profile` of the 35B and E4B prefill on a c8i/m8i box naming the losing kernels, the
+    tile loads' alignment checked on the served planes, and the pp512 ratios at the Zen4 board's standing - `bin/daslang
+    modules/dasLLAMA/performance/gen_bench_records.das -- -w llm --backend cpu -o <model>` over the four carriers on an
+    AWS m8i box, `--ref-clean` naming the clean-cpu `llama-bench` `benchmarks/setup_lcpp_ref.das` builds at
+    `DEFAULT_REF_SHA`, no other environment setting.

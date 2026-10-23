@@ -21,12 +21,15 @@ add_custom_target(check_dasgen
     COMMENT "Checking generated builtin .inc files are up to date (dasgen)"
 )
 
-# check_lint_tree lints DAS_CHUNKS of the tree in parallel. LINT019 needs every compile's nolint
+# check_lint_tree lints DAS_CHUNKS of the tree in parallel, each chunk one process that compiles the
+# shared modules its files require once. LINT019 needs every compile's nolint
 set(_lint_roots daslib utils modules tutorials examples tests src)
 list(TRANSFORM _lint_roots PREPEND "${PROJECT_SOURCE_DIR}/" OUTPUT_VARIABLE _lint_globs)
 list(TRANSFORM _lint_globs APPEND "/*.das")
 file(GLOB_RECURSE _lint_files RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS ${_lint_globs})
 list(FILTER _lint_files EXCLUDE REGEX "(^|/)(\\.[^/]*|node_modules|_[^/]*)(/|$)")
+# modules/dasLLAMA lints in check_lint_dasllama - one process over the module instead of its engine graph compiled per chunk
+list(FILTER _lint_files EXCLUDE REGEX "^modules/dasLLAMA/")
 list(LENGTH _lint_files _lint_count)
 math(EXPR _lint_size "(${_lint_count} + 127) / 128")
 DAS_CHUNKS(_lint_chunks ${_lint_size} ${_lint_files})
@@ -38,6 +41,10 @@ foreach(_n ${_lint_chunks})
     list(APPEND _lint_targets lint_tree_chunk_${_n})
 endforeach()
 add_custom_target(check_lint_tree DEPENDS ${_lint_targets})
+add_custom_target(check_lint_dasllama
+    COMMAND $<TARGET_FILE:daslang> ./utils/lint/main.das -- modules/dasLLAMA -q --silent
+    DEPENDS daslang WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    COMMENT "Linting modules/dasLLAMA in one process, its engine graph compiled once")
 
 set(_dupe_paths -p daslib -p utils -p src)
 file(GLOB _dupe_entries LIST_DIRECTORIES true RELATIVE ${PROJECT_SOURCE_DIR} ${PROJECT_SOURCE_DIR}/modules/*/*)
