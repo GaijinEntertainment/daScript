@@ -648,8 +648,10 @@ namespace das
         }
         virtual ExpressionPtr transformCall ( ExprCallFunc * call,
                 string & err ) override {
-            const auto & type = call->arguments[1]->type;
-            if ( !type->isRef() || type->constant ) {
+            const auto & destination = call->arguments[1];
+            const auto & type = destination->type;
+            if ( type->constant ||
+                    (!type->ref && !destination->rtti_isVar()) ) {
                 err = "sscan_json destination must be a mutable reference";
             }
             return nullptr;

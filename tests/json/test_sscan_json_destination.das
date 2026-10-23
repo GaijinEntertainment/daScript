@@ -16,6 +16,12 @@ def private scan_struct(text : string; var value : ScanDestination) : bool =>
 def private scan_array(text : string; var value : array<int>) : bool =>
     sscan_json(text, value)
 
+def private scan_table(text : string; var value : table<string; int>) : bool =>
+    sscan_json(text, value)
+
+def private scan_fixed_array(text : string; var value : int[2]) : bool =>
+    sscan_json(text, value)
+
 def private with_destination(var value : ScanDestination;
                              body : block<(var item : ScanDestination)>
                              ) {
@@ -51,6 +57,13 @@ def test_forwarded_scan_destinations(t : T?) {
     var items : array<int>
     t |> success(scan_array("[3,4]", items))
     t |> equal(items, [3, 4])
+    var mapping : table<string; int>
+    t |> success(scan_table("\{\"value\":7\}", mapping))
+    t |> equal(mapping?["value"] ?? 0, 7)
+    var fixed : int[2]
+    t |> success(scan_fixed_array("[3,4]", fixed))
+    t |> equal(fixed[0], 3)
+    t |> equal(fixed[1], 4)
     with_destination(value) $(var item) {
         t |> success(sscan_json("\{\"value\":9\}", item))
     }
