@@ -1,0 +1,3 @@
+options gen2
+
+require nonexistent_project_module
