@@ -209,6 +209,47 @@ def private check_shadow_filters(t : T?; var renderer : GltfPbrRenderer; model :
     t |> equal(uint(GL_NO_ERROR), glGetError())
 }
 
+def private check_linear_output(t : T?) {
+    var color_only = GL_COLOR_ATTACHMENT0
+    glDrawBuffers(1, safe_addr(color_only))
+    var scene <- render_fixture_scene()
+    defer(){delete scene}
+    let radiance = float3(.18, 2.0, 4.0)
+    scene.materials <- [GltfMaterial(baseColorFactor = float4(0.0, 0.0, 0.0, 1.0),
+        emissiveFactor = radiance)]
+    scene.meshes[0].primitives[0].material = 0
+    var model <- upload_gltf(scene)
+    defer(){delete model}
+    var renderer <- gltf_pbr_create()
+    defer(){delete renderer}
+    t |> equal(renderer.linearOutput, false, "renderer defaults to legacy display encoding")
+    let dark = GltfPbrLight(intensity = 0.0, ambient = float3(0.0), environment = 0.0)
+    let fog = float3(.2, .4, .6)
+    for (linear in fixed_array(false, true, false)) {
+        renderer.linearOutput = linear
+        let expected = linear ? radiance : pow(radiance, float3(1.0 / 2.2))
+        for (effect in range(3)) {
+            renderer.atmosphere = (effect == 1 ?
+                Atmosphere(color = fog, density = 100.0) : Atmosphere())
+            renderer.backgroundTint = (effect == 2 ?
+                float4(.5, .25, 1.0, 1.0) : float4(1.0, 1.0, 1.0, 0.0))
+            glClearColor(0.0, 0.0, 0.0, 0.0); glClear(GL_COLOR_BUFFER_BIT)
+            gltf_pbr_render(renderer, model, scene, identity4x4(), identity4x4(),
+                float3(0.0, 0.0, 2.0), dark)
+            let pixel = read_rgba(GL_COLOR_ATTACHMENT0)
+            var reference = expected
+            if (effect == 1){reference = linear ? pow(fog, float3(2.2)) : fog}
+            elif (effect == 2){
+                reference = float3(dot(expected, float3(.299, .587, .114))) * float3(.5, .25, 1.0)
+            }
+            t |> success(length(pixel.xyz - reference) < .005,
+                "linear={linear} effect={effect}: RGB {pixel.xyz} matches {reference}")
+            t |> equal(pixel.w, 1.0, "linear mode preserves opaque alpha")
+        }
+    }
+    t |> equal(glGetError(), uint(GL_NO_ERROR))
+}
+
 def private check_draw_opacity(t : T?; var renderer : GltfPbrRenderer; var model : GltfGlModel; var scene : GltfScene){
     var color_only = GL_COLOR_ATTACHMENT0; glDrawBuffers(1, safe_addr(color_only))
     scene.materials <- [GltfMaterial()]
@@ -623,6 +664,7 @@ def gltf_surface_motion_and_shadow_fallback_render_on_gl(t : T?){
     glDisable(GL_DEPTH_TEST)
 
     check_surface_motion(t, renderer, model, scene)
+    check_linear_output(t)
 
     check_point_light_rejections(t, model, scene)
     check_many_point_lights(t, renderer, model, scene)

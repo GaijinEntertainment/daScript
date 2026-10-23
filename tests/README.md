@@ -448,6 +448,12 @@ Every `.das` file in this directory tree is listed below, grouped by subdirector
 |---|---|---|
 | test_delegate.das | C#-like delegate system - assign, append, invoke, void/non-void, multi-arg, zero-arg, utilities | |
 
+## glsl/
+
+| File | Description | Expects errors |
+|---|---|---|
+| test_color_mapping.das | All seven color mapping helpers compile from runtime inputs as desktop GLSL 330 and GLSL ES 3.00, validated with glslangValidator | |
+
 ## interfaces/
 
 | File | Description | Expects errors |
@@ -902,6 +908,8 @@ Coverage of per-iteration `finally` semantics across every loop form. Each cell 
 | math_misc.das | Misc math - min, lerp, reflect, dot, length, cross, noise, ceili, saturate | |
 | math_pack_unpack.das | pack_float_to_byte / unpack_byte_to_float with fuzzing | |
 | math_quaternions.das | Quaternion operations with fuzzing | |
+| test_color_mapping.das | Tone mapping reference values, input bounds, and scalar/RGB sRGB transfer behavior | |
+| test_srgb_transfer.das | Scalar/RGB sRGB encoding across the linear segment and power curve, preserving RGBA alpha | |
 
 ## msl/
 
@@ -996,6 +1004,13 @@ Coverage of per-iteration `finally` semantics across every loop form. Each cell 
 | test_soa_container.das | SOA container operations - erase, pop, resize, reserve, clear | |
 | test_soa_iteration.das | SOA iteration - for loop, index access | |
 | test_soa_noncopyable.das | SOA with non-copyable fields (array&lt;int&gt;) - push, erase, iterate | |
+
+## spirv/
+
+| File | Description | Expects errors |
+|---|---|---|
+| _color_mapping_shader.das | *(helper)* Fragment shader exercising all seven color mapping helpers from runtime input | |
+| test_color_mapping.das | SPIR-V color mapping shader version, input/output stores, and spirv-val validation | |
 
 ## spoof/
 

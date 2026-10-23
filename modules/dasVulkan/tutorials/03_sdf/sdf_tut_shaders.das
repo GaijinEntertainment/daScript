@@ -14,6 +14,7 @@ options indenting = 4
 
 module sdf_tut_shaders public
 
+require daslib/color_mapping
 require vulkan/vulkan_boost public  // CommandBuffer + PipelineLayout for the generated push_constants function
 require vulkan/spirv_vulkan_shader public
 require spirv/spirv_builtins public
@@ -176,14 +177,6 @@ def private blob_color(p : float3; t : float) : float3 {
     return float3(r, g, b) * lift
 }
 
-// Reinhard tone map. Compresses any HDR overshoot (rim glow + sun disc) into [0,1]. Output stays
-// LINEAR -- the linear->sRGB gamma encode happens at the sRGB-readback blit boundary (and the
-// sRGB swapchain blit for the window), not here.
-def private tonemap(c : float3) : float3 {
-    let one = float3(1.0f, 1.0f, 1.0f)
-    return c / (one + c)
-}
-
 [vulkan_compute_shader(local_size_x=8, local_size_y=8, name="sdf_spv")]
 def sdf_main {
     let gid = gl_GlobalInvocationID
@@ -237,7 +230,7 @@ def sdf_main {
         col = lerp(lit, sky_color(rd, sun_dir), float3(f, f, f))
     }
 
-    col = tonemap(col)
+    col = tone_reinhard(col)
     let coord = int2(int(gid.x), int(gid.y))
     imageStore(out_img, coord, float4(col, 1.0f))
 }

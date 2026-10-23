@@ -75,3 +75,27 @@ Companion to `ARCHITECTURE.md` in this folder; section numbers are unique across
   to a relaxed `atomic_fetch_add_explicit` - both return the old value; a kernel that reads the
   return (a compaction slot) computes the same on a CPU run, and `tests/metal/test_metal_atomics.das`
   holds the returned values on both halves.
+
+## Color output boundaries {#color-output-boundaries}
+
+`tone_reinhard` and `tone_aces_fit` take exposed scene-linear Rec.709 RGB and
+return display-linear Rec.709 RGB. Their tutorial consumers own presentation:
+
+- `tone_aces_fit` and `composite_fs` in `tutorials/opengl/11_hdr/11_hdr.das`
+  and `tutorials/opengl/12_gltf/12_gltf.das` agree that composition applies the
+  approximate 2.2 display transfer after the shared operator.
+- `tone_aces_fit` and `hdr_composite_fs` in
+  `modules/dasVulkan/tutorials/11_hdr/hdr_tut_shaders.das` agree that composition
+  writes linear values. `render_hdr_frame` in the sibling `hdr_tut.das` performs the
+  sRGB readback conversion through its destination format; the window blit also
+  targets an sRGB attachment.
+- `tone_reinhard` and `sdf_main` in
+  `modules/dasVulkan/tutorials/03_sdf/sdf_tut_shaders.das` agree that the storage
+  image receives linear values. The sibling `render_sdf_frame` readback uses an sRGB
+  intermediate image.
+- `tone_reinhard` and `fs_main` in `tutorials/opengl/03_sdf/03_sdf.das` agree on
+  the existing direct mapped output: that tutorial has no additional shader
+  transfer step. Sharing the curve does not change its presentation convention.
+
+The operator/consumer boundaries have no default-suite end-to-end display check.
+The shared source does not make the OpenGL and Vulkan presentation targets equivalent.

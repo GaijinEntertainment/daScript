@@ -31,6 +31,7 @@ def release() {
     release_include_from("include/fast_float/LICENSE", "licenses/FAST_FLOAT.LICENSE")
     release_include_from("src/misc/LUAU.LICENSE", "licenses/LUAU.LICENSE")
     release_include_from("3rdparty/unicode/LICENSE.txt", "licenses/UNICODE.LICENSE")
+    release_include_from("daslib/color_mapping.LICENSE", "licenses/COLOR_MAPPING.LICENSE")
     release_include_from("modules/dasHV/HV.LICENSE", "licenses/HV.LICENSE")
     release_include_from("modules/dasHV/OPENSSL.LICENSE", "licenses/OPENSSL.LICENSE")
     release_include_from("modules/dasAudio/LICENSE.MINIAUDIO", "licenses/MINIAUDIO.LICENSE")

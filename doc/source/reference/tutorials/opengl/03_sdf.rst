@@ -24,9 +24,10 @@ This rung is the one that really exercises the GLSL emitter. The shader is
 authored as a dozen-plus ordinary daslang functions -- SDF primitives
 (``sd_sphere`` / ``sd_torus`` / ``sd_plane``), IQ's smooth-union ``smin``, the
 scene ``map``, a forward-difference ``get_normal``, the ``march`` and
-``soft_shadow`` loops, and the ``sky_color`` / ``ground_color`` / ``blob_color`` /
-``tonemap`` shading -- all of which dasGlsl emits as GLSL functions (with forward
-declarations) ahead of ``main()``. It leans on a wide intrinsic surface
+``soft_shadow`` loops, the ``sky_color`` / ``ground_color`` / ``blob_color``
+shading helpers, and the shared ``tone_reinhard`` operator from
+``daslib/color_mapping``. dasGlsl translates this code to GLSL. It leans on a wide
+intrinsic surface
 (``length`` / ``normalize`` / ``cross`` / ``dot`` / ``floor`` / ``pow`` / ``exp`` /
 ``cos`` / ``sin`` / ``clamp`` / ``min`` / ``max`` / ``mix``), 2- and 3-component
 swizzles, and ``for`` / ``break`` control flow -- the daslang ``for (i in

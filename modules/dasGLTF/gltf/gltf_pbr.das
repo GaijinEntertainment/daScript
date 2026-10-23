@@ -170,6 +170,7 @@ var @uniform u_roughness_factor : float
 var @uniform u_emissive_factor : float3
 var @uniform u_normal_scale : float
 var @uniform u_occlusion_strength : float
+var @uniform u_linear_output : int
 var @uniform u_draw_opacity : float
 var @uniform u_alpha_cutoff : float
 var @uniform u_alpha_mode         : float   // 0 OPAQUE, 1 MASK, 2 BLEND
@@ -291,12 +292,13 @@ def gltf_pbr_fs {
     }
     if (u_ssao_enabled > 0.5){ambient *= texture(u_ssao_tex, gl_FragCoord.xy * u_ssao_inverse_size).x}
     let linear = u_unlit > 0.5 ? base.xyz : ambient + direct * gltf_shadow_visibility(v_world_pos, n, u_light_dir) + local_light + emissive
-    // no sRGB default framebuffer -> encode linear -> sRGB (approximate 2.2 gamma)
-    var out_rgb = gltf_srgb_encode(linear)
+    var out_rgb = u_linear_output != 0 ? linear : gltf_srgb_encode(linear)
     let grey = dot(out_rgb, float3(0.299, 0.587, 0.114))
     out_rgb = lerp(out_rgb, float3(grey) * u_background_tint.xyz, u_background_tint.w)
     let transmission = atmosphere_transmittance(u_cam_pos, v_world_pos, u_fog_params, max(u_fog_falloff, 0.01))
-    out_rgb = lerp(u_fog_color, out_rgb, transmission)
+    let fog_color = (u_linear_output != 0 ?
+        pow(max(u_fog_color, float3(0.0)), float3(2.2)) : u_fog_color)
+    out_rgb = lerp(fog_color, out_rgb, transmission)
     let out_a = (u_alpha_mode > 1.5 ? base.w : 1.0) * u_draw_opacity
     o_color = float4(out_rgb, out_a)
 }
@@ -315,6 +317,7 @@ def gltf_pbr_silhouette_fs {
 
 [safe_when_uninitialized]
 struct GltfPbrRenderer {
+    linearOutput : bool //! True: linear output; caller owns the target and tone mapping.
     shadowFilter : int
     shadowComparison : GltfShadowComparison
     materialWetness : float
@@ -624,6 +627,7 @@ def gltf_pbr_render(var r : GltfPbrRenderer; model : GltfGlModel; scene : GltfSc
                     view, proj : float4x4; camPos : float3; light : GltfPbrLight; opacity : float = 1.0) {
     gltf_shadow_comparison_bind(r.shadowComparison, r.shadowTex, r.localShadowTex); u_shadow_filter = r.shadowFilter
     gl_use_program_filtered(r.program)
+    u_linear_output = r.linearOutput ? 1 : 0
     u_draw_opacity = clamp(opacity, 0.0, 1.0)
     u_viewProj = proj * view
     u_cam_pos = camPos
