@@ -11,8 +11,6 @@ cask "dasllama" do
   homepage "https://dasllama.io"
 
   depends_on arch: :arm64
-  # the formula puts the same commands on PATH
-  conflicts_with formula: "dasllama"
 
   # the app's launcher is the watchdog: it starts the server and puts the mark in the menu bar
   app "dasllama-server.app"

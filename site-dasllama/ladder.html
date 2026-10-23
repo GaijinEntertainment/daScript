@@ -35,18 +35,23 @@
 
 <div class="forge-container">
 
+<nav class="dio-ladder-jump" aria-label="ladder sections"><a href="#llm">llm</a><a href="#image-chat">image in · vision models</a><a href="#asr">asr · speech-to-text</a><a href="#tts">tts · text-to-speech</a><a href="#audio-chat">audio in · chat models</a></nav>
+
+<section class="dio-ladder-sec" id="llm">
+<h2 class="dio-ladder-sec__h">LLM <span>text generation · pp512 / tg128 / tg128@4 tok/s</span></h2>
+
 <!-- filter selects are built by dasllama-io.js from the rows actually on the board -->
 <div class="dl-filters" id="ladder-filters"></div>
 
 <div class="dl-viewbar">
-<div class="dl-seg" id="view"><button data-view="bars">bars</button><button class="is-on" data-view="table">table</button></div>
-<div class="dl-seg" id="metric" style="visibility:hidden"><button class="is-on" data-metric="pp">pp512</button><button data-metric="tg">tg128</button><button data-metric="tgb">tg128@4</button></div>
+<div class="dl-seg" id="view"><button class="is-on" data-view="bars">bars</button><button data-view="table">table</button></div>
+<div class="dl-seg" id="metric"><button class="is-on" data-metric="pp">pp512</button><button data-metric="tg">tg128</button><button data-metric="tgb">tg128@4</button></div>
 </div>
 
 <!-- both views render from /api/runs joined with the verbatim /api/submission/:id documents -->
-<div class="dl-bars" id="bars" hidden></div>
+<div class="dl-bars" id="bars"></div>
 
-<div class="dl-table-wrap" id="table-wrap"><table class="dl-table dl-table--bench" id="ladder-table">
+<div class="dl-table-wrap" id="table-wrap" hidden><table class="dl-table dl-table--bench" id="ladder-table">
 <tbody><tr><td class="dl-empty">loading the ladder…</td></tr></tbody>
 </table></div>
 
@@ -57,6 +62,66 @@
 <span><span class="dl-src__dot dl-src__dot--un"></span>unverified — kept, not promoted</span>
 <span><span class="dl-src__badge">community</span>submitted; a row with no badge is ours</span>
 </div>
+</section>
+
+<!-- image chat pairs like the LLM section: one picture, the vision tower's encode in wall ms, then the
+     turn's prefill and decode rates, each against llama-mtmd-cli on the same lane in the same submission -->
+<section class="dio-ladder-sec" id="image-chat">
+<h2 class="dio-ladder-sec__h">Image in <span>vision models · one 640×480 picture · vision-tower encode ms / prefill / decode tok/s</span></h2>
+<div class="dl-filters" id="image-chat-filters"></div>
+<div class="dl-viewbar">
+<div class="dl-seg" id="image-chat-view"><button class="is-on" data-view="bars">bars</button><button data-view="table">table</button></div>
+<div class="dl-seg" id="image-chat-metric"><button class="is-on" data-metric="pp">prefill</button><button data-metric="tg">decode</button></div>
+</div>
+<div class="dl-bars" id="image-chat-bars"></div>
+<div class="dl-table-wrap" id="image-chat-wrap" hidden><table class="dl-table dl-table--bench" id="image-chat-table">
+<tbody><tr><td class="dl-empty">loading the ladder…</td></tr></tbody>
+</table></div>
+<div class="dl-caption" id="image-chat-caption"></div>
+</section>
+
+<!-- the audio ladders rank every engine within one test: × realtime = audio seconds ÷ wall seconds;
+     each section carries the LLM section's bars/table toggle, its bars the das rows paired with the
+     reference raced on the same lane in the same submission -->
+<section class="dio-ladder-sec" id="asr">
+<h2 class="dio-ladder-sec__h">ASR <span>speech-to-text · one row per engine run, ranked within a clip · das rows paired with the reference on their lane</span></h2>
+<div class="dl-filters" id="asr-filters"></div>
+<div class="dl-viewbar">
+<div class="dl-seg" id="asr-view"><button class="is-on" data-view="bars">bars</button><button data-view="table">table</button></div>
+</div>
+<div class="dl-bars" id="asr-bars"></div>
+<div class="dl-table-wrap" id="asr-wrap" hidden><table class="dl-table dl-table--bench" id="asr-table">
+<tbody><tr><td class="dl-empty">loading the ladder…</td></tr></tbody>
+</table></div>
+<div class="dl-caption" id="asr-caption"></div>
+</section>
+
+<section class="dio-ladder-sec" id="tts">
+<h2 class="dio-ladder-sec__h">TTS <span>text-to-speech · one row per engine run, ranked within a sentence or the whole set · das rows paired with the reference on their lane</span></h2>
+<div class="dl-filters" id="tts-filters"></div>
+<div class="dl-viewbar">
+<div class="dl-seg" id="tts-view"><button class="is-on" data-view="bars">bars</button><button data-view="table">table</button></div>
+</div>
+<div class="dl-bars" id="tts-bars"></div>
+<div class="dl-table-wrap" id="tts-wrap" hidden><table class="dl-table dl-table--bench" id="tts-table">
+<tbody><tr><td class="dl-empty">loading the ladder…</td></tr></tbody>
+</table></div>
+<div class="dl-caption" id="tts-caption"></div>
+</section>
+
+<section class="dio-ladder-sec" id="audio-chat">
+<h2 class="dio-ladder-sec__h">Audio in <span>chat models transcribing the speech-to-text clips · one row per engine run, ranked within a clip · das rows paired with the reference on their lane</span></h2>
+<div class="dl-filters" id="audio-chat-filters"></div>
+<div class="dl-viewbar">
+<div class="dl-seg" id="audio-chat-view"><button class="is-on" data-view="bars">bars</button><button data-view="table">table</button></div>
+</div>
+<div class="dl-bars" id="audio-chat-bars"></div>
+<div class="dl-table-wrap" id="audio-chat-wrap" hidden><table class="dl-table dl-table--bench" id="audio-chat-table">
+<tbody><tr><td class="dl-empty">loading the ladder…</td></tr></tbody>
+</table></div>
+<div class="dl-caption" id="audio-chat-caption"></div>
+</section>
+
 <p class="dio-note">Rows render client-side from <span style="color:var(--fg-dim)">/api/runs</span>; every number and command line in a receipt comes from the verbatim submission document. · <a href="https://daslang.io/doc/reference/dasllama_methodology.html">methodology ↗</a></p>
 </div>
 

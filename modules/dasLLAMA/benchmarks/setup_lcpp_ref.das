@@ -13,11 +13,13 @@ require daslib/strings_boost
 //              kernels don't use it)
 //   stock:     release defaults — llama.cpp as people actually run it (Accelerate + Metal on
 //              macOS); one build serves CPU rows (-ngl 0) and Metal rows (-ngl 99)
+//   vulkan:    release defaults plus -DGGML_VULKAN=ON — the vulkan leg's reference (-ngl 99); its
+//              glslc comes from a Vulkan SDK of 1.4.357 or later (BRINGUP.md, reference engines)
 // Usage: bin/daslang modules/dasLLAMA/benchmarks/setup_lcpp_ref.das -- --src ~/Work/llama.cpp
 // Point lcpp_bench --ref (or LLAMA_BENCH) at the reported binaries.
 
 // bump deliberately; the sha a record carries is what pins its ref, this is just the default
-let DEFAULT_REF_SHA = "6fdd0ac8907fd973a42b876357823ad2124cd8ed"   // b10659
+let DEFAULT_REF_SHA = "9febe63d5a379f8568bae7116a5b2ba844a4a4a6"   // b11798
 
 [CommandLineArgs]
 struct Args {
@@ -28,7 +30,7 @@ struct Args {
     @clarg_doc = "llama.cpp commit to pin (default: the standing reference sha)"
     sha : string
 
-    @clarg_doc = "Build flavor, repeatable: clean-cpu | stock (default: both)"
+    @clarg_doc = "Build flavor, repeatable: clean-cpu | stock | vulkan (default: clean-cpu and stock)"
     flavor : array<string>
 
     @clarg_short = "j"
@@ -64,9 +66,13 @@ def private shell_unsafe(s : string) : bool {
         find(s, "%") >= 0 || find(s, "\n") >= 0 || find(s, "\r") >= 0)
 }
 
+[arch(at="../ARCHITECTURE_MEASUREMENT.md#vulkan-reference-rows")]
 def private flavor_flags(flavor : string) : string {
     if (flavor == "clean-cpu") {
         return " -DGGML_ACCELERATE=OFF -DGGML_BLAS=OFF -DGGML_METAL=OFF"
+    }
+    if (flavor == "vulkan") {
+        return " -DGGML_VULKAN=ON"
     }
     return ""   // stock: release defaults
 }
@@ -121,8 +127,8 @@ def main : int {
         flavors <- ["clean-cpu", "stock"]   // nolint:PERF030 — the enclosing empty(flavors) guard proves the target holds nothing
     }
     for (f in flavors) {
-        if (f != "clean-cpu" && f != "stock") {
-            print("error: unknown flavor `{f}` - expected clean-cpu | stock\n")
+        if (f != "clean-cpu" && f != "stock" && f != "vulkan") {
+            print("error: unknown flavor `{f}` - expected clean-cpu | stock | vulkan\n")
             return 1
         }
     }
@@ -155,7 +161,7 @@ def main : int {
     return rc
 }
 
-[arch(at="../ARCHITECTURE_MEASUREMENT.md#asr-gpu-pairs")]
+[arch(at="../ARCHITECTURE_MEASUREMENT_AUDIO.md#asr-gpu-pairs")]
 def private build_flavor(dest, f, short_sha : string; jobs : int) : int {
     let build_dir = path_join(dest, "build-{f}")
     print("=== {f} -> {build_dir} (minutes-class: configure + build llama-bench)\n")

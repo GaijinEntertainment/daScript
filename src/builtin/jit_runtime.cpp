@@ -723,7 +723,7 @@ extern "C" {
             jmp_buf ev;
             jmp_buf * JB = context->throwBuf;
             context->throwBuf = &ev;
-            if ( !setjmp(ev) ) {
+            if ( !das_setjmp(ev) ) {
                 context->invoke(*try_block, nullptr, nullptr, at);
             } else {
                 context->throwBuf = JB;

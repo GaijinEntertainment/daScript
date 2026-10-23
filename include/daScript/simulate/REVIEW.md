@@ -24,6 +24,12 @@ annotation appends it after that type's last member, or bumps `LLVM_JIT_CODEGEN_
 members it read by offset; a member inserted before them moves every later one under code that
 still uses the old offsets.
 
+**A diff that changes `CodeOfPolicies`' layout or a field's meaning without changing its size - a
+reorder, a repurpose, a member that lands in a padding pocket, the appended `bool` among them -
+bumps `DAS_POLICIES_VERSION` (`code_of_policies.h`) in the same change.** The ABI stamp folds the
+version and the size alone, so a host built on the old headers passes the stamp check and the
+library reads the new field off the host's padding.
+
 **A diff that hashes a table key hashes a builtin key type - one in `heap.h`'s
 `makeTableKeyValueNode` list - as itself through `hash_function(context, key)` (`hash.h`),
 and a handled key type as the value type its annotation's `makeValueType()` returns.** A

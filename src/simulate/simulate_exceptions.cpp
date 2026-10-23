@@ -47,7 +47,7 @@ namespace das {
             //  this is a known issue with longjmp on x64, and this workaround disables stack unwinding
             ((_JUMP_BUFFER *)throwBuf)->Frame = 0;
 #endif
-            longjmp(*throwBuf,1);
+            das_longjmp(*throwBuf,1);
         } else {
             string msg = "\nunhandled exception\n" + exceptionAt.describe() + ": " + exception;
             to_err(&at, msg.c_str());
@@ -71,7 +71,7 @@ namespace das {
             ((_JUMP_BUFFER *)throwBuf)->Frame = 0;
 #endif
 
-            longjmp(*throwBuf,1);
+            das_longjmp(*throwBuf,1);
         } else {
             if ( exception ) {
                 string msg = "\nunhandled exception\n" + exceptionAt.describe() + ": " + exception + "\n";
@@ -113,7 +113,7 @@ namespace das {
         jmp_buf ev;
         jmp_buf * JB = throwBuf;
         throwBuf = &ev;
-        if ( !setjmp(ev) ) {
+        if ( !das_setjmp(ev) ) {
             vres = node->eval(*this);
         } else {
             abiArg = aa;
@@ -153,7 +153,7 @@ namespace das {
         jmp_buf ev;
         jmp_buf * JB = throwBuf;
         throwBuf = &ev;
-        if ( !setjmp(ev) ) {
+        if ( !das_setjmp(ev) ) {
             subexpr();
             bres = true;
         } else {
@@ -205,7 +205,7 @@ namespace das {
         jmp_buf ev;
         jmp_buf * JB = throwBuf;
         throwBuf = &ev;
-        if ( !setjmp(ev) ) {
+        if ( !das_setjmp(ev) ) {
             vres = callWithCopyOnReturn(fnPtr, args, res, 0);
         } else {
             abiArg = aa;
@@ -224,6 +224,7 @@ namespace das {
     vec4f WIN_EH_NO_ASAN SimNode_TryCatch::eval ( Context & context ) {
         DAS_PROFILE_NODE
         auto aa = context.abiArg; auto acm = context.abiCMRES; auto fcd = context.fastCallDepth;
+        auto atba = context.abiThisBlockArg;
         char * EP, * SP;
         context.stack.watermark(EP,SP);
         #if DAS_ENABLE_EXCEPTIONS
@@ -232,6 +233,7 @@ namespace das {
             } catch ( const dasException & ) {
                 context.abiArg = aa;
                 context.abiCMRES = acm;
+                context.abiThisBlockArg = atba;
                 context.fastCallDepth = fcd;
                 context.stack.pop(EP,SP);
                 context.stopFlags = 0;
@@ -243,12 +245,13 @@ namespace das {
             jmp_buf ev;
             jmp_buf * JB = context.throwBuf;
             context.throwBuf = &ev;
-            if ( !setjmp(ev) ) {
+            if ( !das_setjmp(ev) ) {
                 try_block->eval(context);
             } else {
                 context.throwBuf = JB;
                 context.abiArg = aa;
                 context.abiCMRES = acm;
+                context.abiThisBlockArg = atba;
                 context.fastCallDepth = fcd;
                 context.stack.pop(EP,SP);
                 context.stopFlags = 0;
@@ -265,6 +268,7 @@ namespace das {
     vec4f WIN_EH_NO_ASAN SimNodeDebug_TryCatch::eval ( Context & context ) {
         DAS_PROFILE_NODE
         auto aa = context.abiArg; auto acm = context.abiCMRES; auto fcd = context.fastCallDepth;
+        auto atba = context.abiThisBlockArg;
         char * EP, * SP;
         context.stack.watermark(EP,SP);
         #if DAS_ENABLE_EXCEPTIONS
@@ -274,6 +278,7 @@ namespace das {
             } catch ( const dasException & ) {
                 context.abiArg = aa;
                 context.abiCMRES = acm;
+                context.abiThisBlockArg = atba;
                 context.fastCallDepth = fcd;
                 context.stack.pop(EP,SP);
                 context.stopFlags = 0;
@@ -286,13 +291,14 @@ namespace das {
             jmp_buf ev;
             jmp_buf * JB = context.throwBuf;
             context.throwBuf = &ev;
-            if ( !setjmp(ev) ) {
+            if ( !das_setjmp(ev) ) {
                 DAS_SINGLE_STEP(context,try_block->debugInfo,false);
                 try_block->eval(context);
             } else {
                 context.throwBuf = JB;
                 context.abiArg = aa;
                 context.abiCMRES = acm;
+                context.abiThisBlockArg = atba;
                 context.fastCallDepth = fcd;
                 context.stack.pop(EP,SP);
                 context.stopFlags = 0;
@@ -328,7 +334,7 @@ namespace das {
         jmp_buf ev;
         jmp_buf * JB = __context__->throwBuf;
         __context__->throwBuf = &ev;
-        if ( !setjmp(ev) ) {
+        if ( !das_setjmp(ev) ) {
             try_block();
         } else {
             __context__->fastCallDepth = fcd;

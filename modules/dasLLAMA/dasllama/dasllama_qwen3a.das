@@ -129,7 +129,7 @@ def private image_post_load(var st : Qwen3aStaging) {}
 
 [init]
 def private register_qwen3a_image_tags {
-    register_image_family_tag("qwen3a-f32")
+    register_image_family_tag("qwen3a-f32", true)   // config-free: the exact lane's planes are the file's own, no box property shapes them
     register_image_family_tag("qwen3a-q8")
 }
 

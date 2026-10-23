@@ -43,4 +43,5 @@ the reference build; that number gets its own sentence.**
 
 **A sentence promising a run of the reference build - or a number only such a run can give, a row
 of its table or a ratio against it - names that run: exe and model names, command line, and
-environment settings the command line does not show.**
+environment settings the command line does not show.** A citation of an architecture section that
+states that run's recipe in full - no placeholder in its exe, model or command line - names it.

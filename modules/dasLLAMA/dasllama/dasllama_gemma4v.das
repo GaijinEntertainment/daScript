@@ -211,7 +211,7 @@ let private GEMMA4V_TAG_Q8 = "gemma4v-q8"
 
 [init]
 def private register_gemma4v_image_tags {
-    register_image_family_tag(GEMMA4V_TAG)
+    register_image_family_tag(GEMMA4V_TAG, true)   // config-free: the exact lane's planes are the file's own, no box property shapes them
     register_image_family_tag(GEMMA4V_TAG_Q8)
 }
 

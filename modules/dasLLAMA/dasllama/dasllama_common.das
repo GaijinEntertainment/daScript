@@ -6950,6 +6950,9 @@ def set_moe_fused_expert_gemms(on : bool) {
 //! Whether the MoE prefill uses the grouped expert-bucketed path.
 def get_moe_grouped_prefill() : bool => g_moe_grouped_prefill
 
+//! Whether the grouped MoE prefill runs its expert GEMMs fused (region-list) rather than per expert.
+def get_moe_fused_expert_gemms() : bool => g_moe_fused_expert_gemms
+
 var g_forward_prof_acc : table<string; int64>
 
 //! Start a fresh measurement window (zero the per-section accumulators).

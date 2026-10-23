@@ -7,6 +7,8 @@ require dasllama/dasllama_math
 require dasllama/dasllama_math_default        // registers the "portable" backend at [init]
 require dasllama/dasllama_math_aarch64_neon   // registers "arm64-sdot" on arm64+jit
 require ?llvm dasllama/dasllama_math_gen
+require ?das_metal dasllama/dasllama_metal_gemm   // registers the batch-only "metal" donor on Apple builds
+require ?vulkan dasllama/dasllama_math_vulkan     // registers the batch-only "vulkan" donor where dasVulkan builds
 require dasllama/dasllama_kqformat            // KqFmt + kq_fmt_stamp: the registry cell walks every format
 require daslib/enum_trait                     // for (f in type<KqFmt>)
 
@@ -88,7 +90,7 @@ def test_seat_restores_the_pin(t : T?) {
 //! An available registered backend other than `not`, "" when the build registers none.
 def private other_available(not : string) : string {
     for (n in kernel_backend_names()) {
-        return n if (n != not && kernel_backend_available_(n))
+        return n if (n != not && !kernel_backend_batch_only(n) && kernel_backend_available_(n))
     }
     return ""
 }
@@ -292,5 +294,74 @@ def test_batch_backend_pin(t : T?) {
         if (saved != "") {
             select_kernel_backend(saved)
         }
+    }
+}
+
+[test]
+def test_batch_only_backends_refuse_the_whole_seat(t : T?) {
+    t |> run("a batch-only backend is never pinned or selected as the whole backend") @(t : T?) {
+        t |> success(!kernel_backend_batch_only("portable"), "the portable backend serves every slot")
+        let seat = kernel_backend_seat()
+        var checked = 0
+        for (n in kernel_backend_names()) {
+            continue if (!kernel_backend_batch_only(n))
+            let before = active_kernel_backend()
+            pin_kernel_backend(n)
+            t |> equal(active_kernel_backend(), before, "pin_kernel_backend('{n}') keeps the active backend")
+            t |> equal(kernel_backend_pin(), seat.pin, "... and sets no pin")
+            select_kernel_backend(n)
+            t |> equal(active_kernel_backend(), before, "select_kernel_backend('{n}') keeps it too")
+            checked++
+        }
+        restore_kernel_backend(seat)
+        var donors = 0
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            t |> success(registered("metal") && kernel_backend_batch_only("metal"), "the metal donor registers batch-only")
+            donors++
+        }
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            t |> success(registered("vulkan") && kernel_backend_batch_only("vulkan"), "the vulkan donor registers batch-only")
+            donors++
+        }
+        if (donors > 0) {
+            t |> success(checked >= donors, "every donor this build registers was walked: {checked} of {donors}")
+        } elif (checked == 0) {
+            t |> skip("this build registers no batch-only backend (no das_metal, no dasVulkan)")
+        }
+    }
+}
+
+// whether pinning `name` panicked, with DASLLAMA_PIN_BACKEND read as `env_pin` for the call
+def private pin_panics(name, env_pin : string) : bool {
+    var tripped = false
+    try {
+        pin_kernel_backend_(name, env_pin)
+    } recover {
+        tripped = true
+    }
+    return tripped
+}
+
+[test]
+def test_env_pin_refuses_what_cannot_take(t : T?) {
+    t |> run("a pin that cannot take: the reason named, the environment's pin panics, an in-process one warns") @(t : T?) {
+        t |> equal(kernel_backend_pin_refusal("portable"), "", "the portable backend pins")
+        t |> success(!empty(kernel_backend_pin_refusal("no-such-backend")), "an unregistered name is refused by name")
+        let seat = kernel_backend_seat()
+        t |> success(pin_panics("no-such-backend", "no-such-backend"), "the environment's unregistered pin panics")
+        t |> success(!pin_panics("no-such-backend", ""), "the same pin in process warns (the control)")
+        t |> success(!pin_panics("no-such-backend", "portable"), "a pin the environment did not name warns")
+        t |> success(!pin_panics("portable", "portable"), "the environment's pin that takes runs")
+        restore_kernel_backend(seat)
+        var checked = 0
+        for (n in kernel_backend_names()) {
+            continue if (!kernel_backend_batch_only(n))
+            t |> success(!empty(kernel_backend_pin_refusal(n)), "batch-only '{n}' is refused by name")
+            t |> success(pin_panics(n, n), "the environment's pin of batch-only '{n}' panics, never measuring the default under its name")
+            t |> equal(kernel_backend_pin(), seat.pin, "... and sets no pin")
+            checked++
+        }
+        restore_kernel_backend(seat)
+        to_log(LOG_INFO, "batch-only backends checked: {checked}\n")
     }
 }

@@ -56,7 +56,7 @@
 		"dot_q4" : "vec8_u2",
 		"iq4xsq8_gemv_gen" : "dot_maddubs_width256_mr8",
 		"iq2xsq8_gemv_gen" : "dot_maddubs_width256_mr8",
-		"rope_scaled_neox_tab" : "vec8",
+		"rope_scaled_neox_tab" : "plain",
 		"quantize_q8_0_bs_into_ptr" : "vec16_u2",
 		"iq2xsq8_tile_gen" : "dot_maddubs_width256_mr8",
 		"quantize_q8kv_row" : "plain",
@@ -91,21 +91,21 @@
 	},
 	"provenance" : {
 		"platform" : "linux",
-		"noise_floor_cv_pct" : "0.48",
+		"noise_floor_cv_pct" : "0.34",
 		"features" : "avx2;f16c;fma;sse4.2",
 		"class" : "x86-avx2",
-		"written" : "2026-10-14T10:00:05.926Z",
+		"written" : "2026-10-21T22:58:13.635Z",
 		"validation_demoted" : "0",
-		"dasllama_version" : "16",
-		"mint_gen_ms" : "738014",
+		"dasllama_version" : "17",
+		"mint_gen_ms" : "750530",
 		"arch" : "x86_64",
 		"validation" : "ok",
-		"noise_probes" : "start cv 0.48%; mid1 cv 0.28%; mid2 cv 0.21%; end cv 0.26%",
-		"mint_total_ms" : "793475",
+		"noise_probes" : "start cv 0.07%; mid1 cv 0.20%; mid2 cv 0.12%; end cv 0.34%",
+		"mint_total_ms" : "809190",
 		"mode" : "normal",
 		"origin" : "profile",
 		"noise" : "ok",
-		"mint_kernels_ms" : "55456",
-		"validation_max_drift_pct" : "0.14"
+		"mint_kernels_ms" : "58657",
+		"validation_max_drift_pct" : "0.92"
 	}
 }

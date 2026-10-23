@@ -15,6 +15,7 @@
   /* ── shared utils ─────────────────────────────────────────────── */
   function fmt(n, d) { return Number(n).toFixed(d == null ? 0 : d); }
   function tps(v) { return v > 0 ? fmt(v, 1) : '-'; }
+  function ms(v) { return v > 0 ? fmt(v, 0) : '-'; }
   function ratio(das, ref) { return (ref > 0 && das > 0) ? das / ref : null; }
 
   // community rows are third-party text — escape everything that reaches innerHTML.
@@ -30,7 +31,13 @@
     return /^\/api\/[A-Za-z0-9_./-]+$/.test(String(u)) ? String(u) : '#';
   }
   function boxLabel(cpu, fallback) {
-    return cpu ? String(cpu).replace('64-Core Processor', '').trim() : fallback;
+    return cpu ? String(cpu).replace(/\s*\d+-Core Processor$/, '').trim() : fallback;
+  }
+
+  // a discrete GPU's run leads with the card: the CPU only feeds it
+  function machineLabel(cpu, gpu, backend, fallback) {
+    var box = boxLabel(cpu, fallback);
+    return backend === 'vulkan' && gpu ? String(gpu).replace(/^NVIDIA\s+/, '') + ' · ' + box : box;
   }
 
   function api(url) {
@@ -82,19 +89,53 @@
     { backend: 'vulkan', das: 'tuned', ref: 'stock',     label: 'gpu' }
   ];
 
-  function buildRows(runs) {
+  // an mlx-lm row (Apple boxes, backend metal) is a row of its own on the LLM ladder, paired
+  // with the llama.cpp stock run of its backend like a das gpu row
+  function laneOf(fr) {
+    if (fr.engine === 'mlx-lm') return { backend: fr.backend, ref: 'stock', label: fr.backend === 'cpu' ? 'cpu' : 'gpu' };
+    for (var i = 0; i < LANES.length; i++) {
+      if (LANES[i].backend === fr.backend && LANES[i].das === fr.flavor) return LANES[i];
+    }
+    return null;
+  }
+
+  /* A pair section's cells, each a /api/runs field: the LLM ladder's three rates, and the image
+     turn's encode - the vision tower alone, wall ms, so its ratio is the reference's over das's -
+     beside its prefill and decode rates. */
+  var LLM_CELLS = [
+    { key: 'pp', field: 'pp512', label: 'pp512' },
+    { key: 'tg', field: 'tg128', label: 'tg128' },
+    { key: 'tgb', field: 'tg128b4', label: 'tg128@4' }
+  ];
+  var IMAGE_CELLS = [
+    { key: 'enc', field: 'img_enc', label: 'encode ms', time: true, test: 'img:enc' },
+    { key: 'pp', field: 'img_pp', label: 'prefill', test: 'img:pp' },
+    { key: 'tg', field: 'img_tg', label: 'decode', test: 'img:tg' }
+  ];
+
+  // the tests a board annotation voided on a run (`voided_tests`, a comma list): the store
+  // serves such a cell as 0, so only this list tells a withheld cell from an unmeasured one
+  function voidedTest(fr, test) {
+    if (!fr || !test) return false;
+    return String(fr.voided_tests || '').split(',').some(function (s) { return s.trim() === test; });
+  }
+
+  function withheldCell() {
+    return '<td class="dl-num dl-dim" title="withheld: the run measured this cell, but a board annotation withholds it - the annotation\'s note (records/annotations.json) gives the reason">✱</td>';
+  }
+
+  function buildRows(runs, workload, cells) {
+    workload = workload || '';
+    cells = cells || LLM_CELLS;
     var out = [];
     runs.forEach(function (fr) {
-      if (fr.engine !== 'das' || fr.workload) return;   // the ladder is LLM rows; audio is a follow-up
-      var lane = null;
-      for (var i = 0; i < LANES.length; i++) {
-        if (LANES[i].backend === fr.backend && LANES[i].das === fr.flavor) { lane = LANES[i]; break; }
-      }
+      if ((fr.engine !== 'das' && fr.engine !== 'mlx-lm') || (fr.workload || '') !== workload) return;   // audio has its own ladders
+      var lane = laneOf(fr);
       var ref = null;
       if (lane) {
         runs.forEach(function (r) {
           if (r.submission_id !== fr.submission_id || r.model_idx !== fr.model_idx) return;
-          if (r.engine === 'das' || r.box !== fr.box) return;
+          if (r.engine !== 'llama.cpp' || r.box !== fr.box) return;
           if (r.backend !== lane.backend || r.flavor !== lane.ref) return;
           if ((r.workload || '') !== (fr.workload || '')) return;
           if (!ref || String(r.date || '').localeCompare(String(ref.date || '')) > 0) ref = r;
@@ -102,22 +143,25 @@
       }
       var laneLabel = lane ? lane.label :
         (fr.backend === 'cpu' ? 'cpu' : (fr.backend === 'metal' || fr.backend === 'vulkan') ? 'gpu' : fr.backend);
-      out.push({
+      var row = {
         model: String(fr.gguf).replace(/\.gguf$/, ''), arch: fr.model_arch || '', quant: fr.quant || '',
-        size: fr.size_bytes || 0, box: fr.box,
-        boxName: boxLabel(fr.cpu, fr.box),
+        size: fr.size_bytes || 0, box: fr.box, engine: fr.engine,
+        boxName: machineLabel(fr.cpu, fr.gpu, fr.backend, fr.box),
         lane: laneLabel, threads: fr.threads || 0,
         source: fr.source || '', verified: !!fr.verified,
-        version: fr.dasllama_version || 0, date: fr.date || '',
+        version: riderVersion(runs, fr, workload), date: fr.date || '',
         submissionId: fr.submission_id,
-        pp_das: fr.pp512 || 0, pp_ref: ref ? ref.pp512 || 0 : 0,
-        tg_das: fr.tg128 || 0, tg_ref: ref ? ref.tg128 || 0 : 0,
-        tgb_das: fr.tg128b4 || 0, tgb_ref: ref ? ref.tg128b4 || 0 : 0,
-        pp_ratio: ref ? ratio(fr.pp512, ref.pp512) : null,
-        tg_ratio: ref ? ratio(fr.tg128, ref.tg128) : null,
-        tgb_ratio: ref ? ratio(fr.tg128b4, ref.tg128b4) : null,
         das: fr, ref: ref
+      };
+      cells.forEach(function (c) {
+        var d = fr[c.field] || 0, rv = ref ? ref[c.field] || 0 : 0;
+        row[c.key + '_das'] = d;
+        row[c.key + '_ref'] = rv;
+        row[c.key + '_ratio'] = ref ? (c.time ? ratio(rv, d) : ratio(d, rv)) : null;   // >1 = das faster
+        row[c.key + '_das_withheld'] = voidedTest(fr, c.test);
+        row[c.key + '_ref_withheld'] = voidedTest(ref, c.test);
       });
+      out.push(row);
     });
     return out;
   }
@@ -147,6 +191,12 @@
     if (r.comment) lines.push('        <span class="dl-receipt-note"><b>note</b>  ' + esc(r.comment) + '</span>');
   }
 
+  // a receipt side's tag: the engine name, padded to the 'reference' column, escaped
+  function sideTag(engine) {
+    var s = String(engine || '');
+    return esc(s.length < 9 ? (s + '         ').slice(0, 9) : s);
+  }
+
   // the BenchRun a flat row points at inside its submission document; the flat row itself
   // when the document does not hold that slot
   function docRun(doc, fr) {
@@ -158,7 +208,7 @@
   function rowReceipt(r) {
     return loadDoc(r.submissionId).then(function (doc) {
       var lines = [];
-      sideLines('das      ', docRun(doc, r.das), lines);
+      sideLines(sideTag(r.engine), docRun(doc, r.das), lines);
       lines.push('');
       if (r.ref) sideLines('reference', docRun(doc, r.ref), lines);
       else lines.push('<b>reference</b>  none rode along — the absolute numbers stand alone, no parity claimed.');
@@ -203,6 +253,8 @@
 
     var sort = { key: spec.sort.key, desc: !!spec.sort.desc };
     var filter = {};
+    // a required filter has no "all" option: reset returns it to its initial value
+    function resetValue(f) { return f.required ? String(f.initial || '') : ''; }
     spec.filterDefs.forEach(function (f) { filter[f.field] = f.initial || ''; });
 
     function colOf(key) {
@@ -252,7 +304,7 @@
       } else {
         bodyHTML = rows.map(function (r, i) {
           var tds = spec.cols.map(function (c) {
-            var out = c.cell(r);
+            var out = c.cell(r, i);
             if (out.charAt(0) === '<') return out;
             var cls = [];
             if (c.num) cls.push('dl-num');
@@ -308,7 +360,7 @@
         }
         return '<label>' + esc(f.title || f.field) +
           ' <select class="js-filter" data-field="' + f.field + '">' +
-          '<option value="">' + esc(f.all) + '</option>' +
+          (f.required ? '' : '<option value="">' + esc(f.all) + '</option>') +
           opts.map(function (o) {
             var sel = String(o.v) === String(f.initial || '') ? ' selected' : '';
             return '<option value="' + esc(o.v) + '"' + sel + '>' + esc(o.label) + '</option>';
@@ -321,8 +373,8 @@
         sel.addEventListener('change', function () { filter[sel.dataset.field] = sel.value; render(); });
       });
       filterBox.querySelector('.js-reset').addEventListener('click', function () {
-        spec.filterDefs.forEach(function (f) { filter[f.field] = ''; });
-        filterBox.querySelectorAll('.js-filter').forEach(function (s) { s.value = ''; });
+        spec.filterDefs.forEach(function (f) { filter[f.field] = resetValue(f); });
+        filterBox.querySelectorAll('.js-filter').forEach(function (s) { s.value = filter[s.dataset.field]; });
         sort = { key: spec.sort.key, desc: !!spec.sort.desc };
         render();
       });
@@ -345,11 +397,13 @@
       var dasW = (it.das / mx) * 100, refW = (it.ref / mx) * 100;
       var rcls = it.ratio > 1.005 ? 'dl-win' : (it.ratio < 0.995 ? 'dl-loss' : '');
       var rec = !!(receiptFn && it.r);
+      // bars are RATES on both sides (tok/s on the LLM ladder, ×RT on the audio ladders), so
+      // longer amber always means faster; a section names its own unit through dasText/refText
       return '<div class="dl-bar-row' + (rec ? ' js-bar-expand" data-bar="' + i : '') + '">' +
         '<div class="dl-bar-label">' + esc(it.label) + '<span class="dl-dim2">' + esc(it.sub) + '</span></div>' +
         '<div class="dl-bar-pair">' +
-        '<div class="dl-bar-line"><div class="dl-bar-das" style="width:' + dasW.toFixed(2) + '%"></div><span class="dl-bar-val dl-bar-val--das">' + tps(it.das) + '</span></div>' +
-        '<div class="dl-bar-line"><div class="dl-bar-ref" style="width:' + refW.toFixed(2) + '%"></div><span class="dl-bar-val">' + tps(it.ref) + '</span></div>' +
+        '<div class="dl-bar-line"><div class="dl-bar-das" style="width:' + dasW.toFixed(2) + '%"></div><span class="dl-bar-val dl-bar-val--das">' + (it.dasText || tps(it.das)) + '</span></div>' +
+        '<div class="dl-bar-line"><div class="dl-bar-ref" style="width:' + refW.toFixed(2) + '%"></div><span class="dl-bar-val">' + (it.refText || tps(it.ref)) + '</span></div>' +
         '</div>' +
         '<div class="dl-bar-ratio ' + rcls + '">' + fmt(it.ratio, 2) + '×</div>' +
         '</div>' +
@@ -365,6 +419,60 @@
         fillReceipt(n.querySelector('.dl-bench-receipt'), items[Number(el.dataset.bar)].r, receiptFn);
       });
     });
+  }
+
+  /* ── the bars/table toggle every ladder section shares ───────────
+     ids: { view, metric (optional), bars, wrap, filters }; drawBars(barsBox, metric) paints the
+     bars from the section's rows under its current filters. The bars are the default view;
+     they redraw on every filter change and reset while they are the visible view. */
+  function wireViews(ids, drawBars) {
+    var viewSeg = document.getElementById(ids.view);
+    var metricSeg = ids.metric ? document.getElementById(ids.metric) : null;
+    var barsBox = document.getElementById(ids.bars), tableWrap = document.getElementById(ids.wrap);
+    if (!viewSeg || !barsBox || !tableWrap) return;
+    function metric() {
+      var b = metricSeg && metricSeg.querySelector('.is-on');
+      return b ? b.dataset.metric : '';
+    }
+    function draw() { drawBars(barsBox, metric()); }
+    function setSeg(seg, btn) {
+      seg.querySelectorAll('button').forEach(function (b) { b.classList.toggle('is-on', b === btn); });
+    }
+    viewSeg.querySelectorAll('button').forEach(function (b) {
+      b.addEventListener('click', function () {
+        setSeg(viewSeg, b);
+        var bars = b.dataset.view === 'bars';
+        barsBox.hidden = !bars;
+        tableWrap.hidden = bars;
+        if (metricSeg) metricSeg.style.visibility = bars ? 'visible' : 'hidden';
+        if (bars) draw();
+      });
+    });
+    if (metricSeg) {
+      metricSeg.querySelectorAll('button').forEach(function (b) {
+        b.addEventListener('click', function () { setSeg(metricSeg, b); draw(); });
+      });
+    }
+    var fbox = document.getElementById(ids.filters);
+    if (fbox) {
+      fbox.addEventListener('change', function () { if (!barsBox.hidden) draw(); });
+      var reset = fbox.querySelector('.js-reset');
+      if (reset) reset.addEventListener('click', function () { if (!barsBox.hidden) draw(); });
+    }
+    if (!barsBox.hidden) draw();
+  }
+
+  function unpairedNote(solo, what) {
+    if (!solo) return '';
+    return what + ' rows are not plotted — bars are pairs. ' + solo + ' row' + (solo > 1 ? 's' : '') +
+      ' in this filter ' + (solo > 1 ? 'have' : 'has') + ' no reference run; the table shows ' + (solo > 1 ? 'them' : 'it') + '.';
+  }
+
+  function pairAllNote(solo) {
+    if (!solo) return '';
+    return solo + ' row' + (solo > 1 ? 's' : '') + ' in this filter ' + (solo > 1 ? 'are' : 'is') +
+      ' not plotted — a bar needs prefill and decode both paired, and ' + (solo > 1 ? 'these miss' : 'it misses') +
+      ' a reference run or ' + (solo > 1 ? 'carry' : 'carries') + ' a withheld cell ✱; the table shows ' + (solo > 1 ? 'them' : 'it') + '.';
   }
 
   /* ── ladder page ──────────────────────────────────────────────── */
@@ -392,12 +500,49 @@
       '</span></td>';
   }
 
-  function mountLadder(rows) {
+  /* The paired sections (LLM, image chat): `sec` names the section's elements and the empty text,
+     `cells` its metric groups - the das number under the cell's own label, the reference beside
+     it as 'lcpp', the ratio last; a time cell prints wall ms. */
+  var PAIR_SECTIONS = {
+    llm: { table: 'ladder-table', filters: 'ladder-filters', caption: 'ladder-caption', view: 'view',
+           metric: 'metric', bars: 'bars', wrap: 'table-wrap', workload: '', cells: LLM_CELLS,
+           empty: 'Nothing on the ladder yet — the first accepted submission lands here.' },
+    image: { table: 'image-chat-table', filters: 'image-chat-filters', caption: 'image-chat-caption', view: 'image-chat-view',
+             metric: 'image-chat-metric', bars: 'image-chat-bars', wrap: 'image-chat-wrap', workload: 'image-chat', cells: IMAGE_CELLS,
+             barsPairAll: ['pp', 'tg'],
+             empty: 'No image-chat runs on the ladder yet.' }
+  };
+
+  // a withheld side reads ✱ in its own cell and in the ratio, never the "not raced" of a row
+  // whose reference did not run
+  function withheld(r, key) { return r[key + '_das_withheld'] || r[key + '_ref_withheld']; }
+
+  function pairCols(cells) {
+    var cols = [];
+    cells.forEach(function (c) {
+      var show = c.time ? ms : tps;
+      function side(s) {
+        var k = c.key + '_' + s;
+        return function (r) { return r[k + '_withheld'] ? withheldCell() : show(r[k]); };
+      }
+      cols.push(
+        { key: c.key + '_das', label: c.label, num: true, grp: true, grpStart: true,
+          get: function (r) { return r[c.key + '_das']; }, cell: side('das') },
+        { key: c.key + '_ref', label: 'lcpp', num: true, dim: true,
+          get: function (r) { return r[c.key + '_ref']; }, cell: side('ref') },
+        { key: c.key + '_ratio', label: 'ratio', num: true, grp: true,
+          get: function (r) { return r[c.key + '_ratio']; },
+          cell: function (r) { return withheld(r, c.key) ? withheldCell() : ratioCell(r[c.key + '_ratio']); } });
+    });
+    return cols;
+  }
+
+  function mountPairs(sec, rows) {
     var init = latestVersion(rows);
     var t = makeTable({
-      table: '#ladder-table', filters: '#ladder-filters', caption: '#ladder-caption',
+      table: '#' + sec.table, filters: '#' + sec.filters, caption: '#' + sec.caption,
       rows: rows, sort: { key: 'date', desc: true },
-      emptyText: 'Nothing on the ladder yet — the first accepted submission lands here.',
+      emptyText: sec.empty,
       tiebreak: function (a, b) { return a.model.localeCompare(b.model) || a.boxName.localeCompare(b.boxName); },
       cols: [
         { key: 'model', label: 'model', get: function (r) { return r.model; },
@@ -407,117 +552,325 @@
           }, cls: 'dl-td-model' },
         { key: 'box', label: 'machine', get: function (r) { return r.boxName; },
           cell: function (r) { return esc(r.boxName); }, cls: 'dl-dim2 dl-td-machine' },
+        { key: 'engine', label: 'engine', get: function (r) { return r.engine; },
+          cell: function (r) { return esc(r.engine); }, cls: 'dl-dim2' },
         { key: 'lane', label: 'category', get: function (r) { return r.lane; },
           cell: function (r) { return esc(r.lane); }, cls: 'dl-dim2 dl-td-lane' },
         { key: 'threads', label: 'threads', num: true, dim: true,
           get: function (r) { return r.threads; },
           cell: function (r) { return r.threads ? String(r.threads) : '-'; } },
         { key: 'size', label: 'GB', num: true, dim: true, get: function (r) { return r.size; },
-          cell: function (r) { return r.size ? fmt(r.size / 1073741824, 1) : '-'; } },
-        // the das number heads each metric group under the metric's own name; the reference beside it is 'lcpp'
-        { key: 'pp_das', label: 'pp512', num: true, grp: true, grpStart: true,
-          get: function (r) { return r.pp_das; }, cell: function (r) { return tps(r.pp_das); } },
-        { key: 'pp_ref', label: 'lcpp', num: true, dim: true,
-          get: function (r) { return r.pp_ref; }, cell: function (r) { return tps(r.pp_ref); } },
-        { key: 'pp_ratio', label: 'ratio', num: true, grp: true,
-          get: function (r) { return r.pp_ratio; }, cell: function (r) { return ratioCell(r.pp_ratio); } },
-        { key: 'tg_das', label: 'tg128', num: true, grp: true, grpStart: true,
-          get: function (r) { return r.tg_das; }, cell: function (r) { return tps(r.tg_das); } },
-        { key: 'tg_ref', label: 'lcpp', num: true, dim: true,
-          get: function (r) { return r.tg_ref; }, cell: function (r) { return tps(r.tg_ref); } },
-        { key: 'tg_ratio', label: 'ratio', num: true, grp: true,
-          get: function (r) { return r.tg_ratio; }, cell: function (r) { return ratioCell(r.tg_ratio); } },
-        { key: 'tgb_das', label: 'tg128@4', num: true, grp: true, grpStart: true,
-          get: function (r) { return r.tgb_das; }, cell: function (r) { return tps(r.tgb_das); } },
-        { key: 'tgb_ref', label: 'lcpp', num: true, dim: true,
-          get: function (r) { return r.tgb_ref; }, cell: function (r) { return tps(r.tgb_ref); } },
-        { key: 'tgb_ratio', label: 'ratio', num: true, grp: true,
-          get: function (r) { return r.tgb_ratio; }, cell: function (r) { return ratioCell(r.tgb_ratio); } },
+          cell: function (r) { return r.size ? fmt(r.size / 1073741824, 1) : '-'; } }
+      ].concat(pairCols(sec.cells), [
         { key: 'source', label: 'source', grpStart: true,
           get: function (r) { return r.source + (r.verified ? '' : ' unverified'); },
           cell: sourceCell },
         { key: 'date', label: 'date', num: true, dim: true,
           get: function (r) { return r.date; }, cell: function (r) { return esc(r.date); } }
-      ],
+      ]),
       filterDefs: [
         { field: 'version', title: 'version', all: 'all versions',
           get: function (r) { return r.version; }, options: versionOptions,
           initial: init > 0 ? String(init) : '' },
         { field: 'model', title: 'model', all: 'all models', get: function (r) { return r.model; } },
         { field: 'box', title: 'machine', all: 'all machines', get: function (r) { return r.box; }, label: function (r) { return r.boxName; } },
+        { field: 'engine', title: 'engine', all: 'all engines', get: function (r) { return r.engine; } },
         { field: 'lane', title: 'category', all: 'all categories', get: function (r) { return r.lane; } },
         { field: 'source', title: 'source', all: 'all sources',
           get: function (r) { return r.source; } }
       ],
       receipt: rowReceipt,
       summary: function (shown, total) {
-        var solo = shown.filter(function (r) { return r.pp_ratio === null && r.tg_ratio === null; }).length;
+        function anyWithheld(r) { return sec.cells.some(function (c) { return withheld(r, c.key); }); }
+        var solo = shown.filter(function (r) { return r.pp_ratio === null && r.tg_ratio === null && !anyWithheld(r); }).length;
+        var held = shown.filter(anyWithheld).length;
         return esc(measuredLine(shown)) +
           ' &nbsp;·&nbsp; showing ' + shown.length + ' of ' + total + ' rows' +
           (solo ? ' (' + solo + ' das-only)' : '') +
           ' &nbsp;·&nbsp; click any row for its receipt' +
-          ' &nbsp;·&nbsp; an empty ratio means <b style="color:var(--fg);font-weight:400">not raced</b>, never implied parity';
+          ' &nbsp;·&nbsp; an empty ratio means <b style="color:var(--fg);font-weight:400">not raced</b>, never implied parity' +
+          (held ? ' &nbsp;·&nbsp; ✱ = withheld: the cell was measured, and a board annotation withholds it (' + held + ' row' + (held > 1 ? 's' : '') + ')' : '');
       }
     });
 
-    // stats aside: rows · boxes · last submission date
-    var aside = document.getElementById('dio-ladder-stats');
-    if (aside) {
-      var boxes = {}, last = '';
-      rows.forEach(function (r) {
-        boxes[r.box] = true;
-        if (r.date > last) last = r.date;
-      });
-      aside.innerHTML = '<b>' + rows.length + '</b> rows · <b>' + Object.keys(boxes).length + '</b> boxes<br/>' +
-        'last measurement <b>' + esc(last || '—') + '</b><br/>' +
-        '<a href="https://daslang.io/doc/reference/dasllama_methodology.html" style="color:var(--amber-dim);border-bottom:1px solid var(--rule)">methodology ↗</a>';
-    }
-
     // bars view: paired rows only, current filters applied, ranked by the active metric
-    var viewSeg = document.getElementById('view'), metricSeg = document.getElementById('metric');
-    var barsBox = document.getElementById('bars'), tableWrap = document.getElementById('table-wrap');
-    function drawBars() {
-      var m = 'pp';
-      var mb = metricSeg && metricSeg.querySelector('.is-on');
-      if (mb) m = mb.dataset.metric;
+    wireViews({ view: sec.view, metric: sec.metric, bars: sec.bars, wrap: sec.wrap, filters: sec.filters }, function (barsBox, m) {
+      m = m || 'pp';
       var vis = t ? t.visible() : rows;
-      var paired = vis.filter(function (r) { return r[m + '_ratio'] !== null; })
+      // a section naming barsPairAll plots a row only where every one of those metrics paired, so its
+      // metric views list the same rows
+      var need = sec.barsPairAll || [m];
+      var paired = vis.filter(function (r) { return need.every(function (k) { return r[k + '_ratio'] !== null; }); })
         .sort(function (a, b) { return b[m + '_ratio'] - a[m + '_ratio']; });
       // every visible row NOT plotted for this metric — a row that raced pp512 but not tg128 is
       // unplotted on the tg128 view and must still be counted (was: only both-null rows)
-      var solo = vis.length - paired.length;
       renderPairBars(barsBox, paired.map(function (r) {
-        return { label: r.model, sub: r.boxName + ' · ' + r.lane,
+        return { label: r.model, sub: r.boxName + ' · ' + r.lane + (r.engine === 'das' ? '' : ' · ' + r.engine),
                  das: r[m + '_das'], ref: r[m + '_ref'], ratio: r[m + '_ratio'], r: r };
-      }), rowReceipt,
-      solo ? 'das-only rows are not plotted — bars are pairs. ' + solo + ' row' + (solo > 1 ? 's' : '') + ' in this filter ' + (solo > 1 ? 'have' : 'has') + ' no reference run; the table shows ' + (solo > 1 ? 'them' : 'it') + '.' : '');
-    }
-    function setSeg(seg, btn) {
-      seg.querySelectorAll('button').forEach(function (b) { b.classList.toggle('is-on', b === btn); });
-    }
-    if (viewSeg) {
-      viewSeg.querySelectorAll('button').forEach(function (b) {
-        b.addEventListener('click', function () {
-          setSeg(viewSeg, b);
-          var bars = b.dataset.view === 'bars';
-          barsBox.hidden = !bars;
-          tableWrap.hidden = bars;
-          if (metricSeg) metricSeg.style.visibility = bars ? 'visible' : 'hidden';
-          if (bars) drawBars();
+      }), rowReceipt, sec.barsPairAll ? pairAllNote(vis.length - paired.length)
+                                     : unpairedNote(vis.length - paired.length, 'das-only'));
+    });
+  }
+
+  function fillLadderStats(rows) {
+    var aside = document.getElementById('dio-ladder-stats');
+    if (!aside) return;
+    var boxes = {}, last = '';
+    rows.forEach(function (r) {
+      boxes[r.box] = true;
+      if (r.date > last) last = r.date;
+    });
+    aside.innerHTML = '<b>' + rows.length + '</b> rows · <b>' + Object.keys(boxes).length + '</b> boxes<br/>' +
+      'last measurement <b>' + esc(last || '—') + '</b><br/>' +
+      '<a href="https://daslang.io/doc/reference/dasllama_methodology.html" style="color:var(--amber-dim);border-bottom:1px solid var(--rule)">methodology ↗</a>';
+  }
+
+  /* ── audio ladders (asr, tts, audio-chat): every engine is a row, ranked within one test ──
+     A row is one (run, test) cell from the run's `audio` array: wall ms and the audio
+     seconds it covers. The rank metric is × realtime = audio_s / wall s, higher is better.
+     ASR clips are fixed files, so a run that did not record a clip's length borrows it from
+     any run that did; TTS audio length is the engine's own output, so it is never borrowed
+     and a row without one ranks last. A cell the store voided (the outlier rule, or the run's
+     own void_clips) keeps its wall time, ranks last and fronts no ratio.
+     Pairing follows the LLM ladder's rule - within one submission only, and on the same lane:
+     a das row's reference is the fastest non-das run of its submission, model, box and hardware
+     class (cpu against cpu, any GPU against any GPU) that timed the same test, and the ratio is
+     the reference's wall over das's. A das row with no such run keeps an empty ratio. */
+  var AUDIO = {
+    asr: { borrow: true, pooled: false, prefer: ['gb1.wav'], unit: 'clip',
+           empty: 'No speech-to-text runs on the ladder yet.' },
+    tts: { borrow: false, pooled: true, prefer: ['all'], unit: 'sentence',
+           empty: 'No text-to-speech runs on the ladder yet — the first measured run lands here.' },
+    'audio-chat': { borrow: true, pooled: false, prefer: ['jfk.wav'], unit: 'clip',
+           empty: 'No audio-chat runs on the ladder yet.' }
+  };
+  var POOLED = 'all';
+
+  function riderVersion(runs, fr, workload) {
+    if (fr.dasllama_version || fr.engine === 'das') return fr.dasllama_version || 0;
+    var best = 0, any = 0;
+    runs.forEach(function (r) {
+      if (r.submission_id !== fr.submission_id || r.engine !== 'das' || r.box !== fr.box) return;
+      var v = r.dasllama_version || 0;
+      if (v > any) any = v;
+      if (r.workload === workload && r.model_idx === fr.model_idx && v > best) best = v;
+    });
+    return best || any;
+  }
+
+  function hwClass(backend) { return backend === 'cpu' ? 'cpu' : 'gpu'; }
+
+  function audioLane(fr) {
+    var hw = hwClass(fr.backend);
+    return fr.flavor && fr.flavor !== 'stock' ? hw + ' · ' + fr.flavor : hw;
+  }
+
+  function pairKey(r) {
+    return [r.submissionId, r.das.model_idx, r.box, hwClass(r.das.backend), r.bucket].join('|');
+  }
+
+  // every das row takes the fastest reference row under its key; a voided side pairs nothing
+  function pairAudioRows(rows) {
+    var best = {};
+    rows.forEach(function (r) {
+      if (r.engine === 'das' || r.voided || !(r.ms > 0)) return;
+      var k = pairKey(r);
+      if (!best[k] || r.ms < best[k].ms) best[k] = r;
+    });
+    rows.forEach(function (r) {
+      r.ref = null; r.ref_ms = 0; r.ref_rtf = null; r.ref_engine = ''; r.ratio = null;
+      if (r.engine !== 'das') return;
+      var ref = best[pairKey(r)];
+      if (!ref || r.voided || ref.n !== r.n) return;
+      r.ref = ref.das; r.ref_ms = ref.ms; r.ref_rtf = ref.rtf; r.ref_engine = ref.engine;
+      r.ratio = ratio(ref.ms, r.ms);   // times, so inverted: >1 = das faster
+    });
+    return rows;
+  }
+
+  function buildAudioRows(runs, workload) {
+    var cfg = AUDIO[workload];
+    var dur = {};
+    if (cfg.borrow) {
+      runs.forEach(function (fr) {
+        if (fr.workload !== workload) return;
+        (fr.audio || []).forEach(function (c) {
+          // the smallest recorded length: a run that rounds (199 for 198.73) never wins
+          var a = Number(c.audio_s) || 0;
+          if (a > 0 && !(dur[c.test] <= a)) dur[c.test] = a;
         });
       });
     }
-    if (metricSeg) {
-      metricSeg.querySelectorAll('button').forEach(function (b) {
-        b.addEventListener('click', function () { setSeg(metricSeg, b); drawBars(); });
+    var out = [];
+    runs.forEach(function (fr) {
+      if (fr.workload !== workload) return;
+      var base = {
+        model: String(fr.gguf).replace(/\.(gguf|bin)$/, ''), arch: fr.model_arch || '', quant: fr.quant || '',
+        box: fr.box, boxName: machineLabel(fr.cpu, fr.gpu, fr.backend, fr.box), engine: fr.engine || '', lane: audioLane(fr),
+        threads: fr.threads || 0, source: fr.source || '', verified: !!fr.verified,
+        version: riderVersion(runs, fr, workload), date: fr.date || '',
+        submissionId: fr.submission_id, das: fr
+      };
+      var poolMs = 0, poolAudio = 0, poolN = 0;
+      (fr.audio || []).forEach(function (c) {
+        var ms = Number(c.ms) || 0;
+        var audio = Number(c.audio_s) || (cfg.borrow ? dur[c.test] || 0 : 0);
+        var voided = !!c.voided;
+        if (audio > 0 && !voided) { poolMs += ms; poolAudio += audio; poolN++; }
+        out.push(Object.assign({ bucket: String(c.test), test: String(c.test), ms: ms, audio: audio, voided: voided,
+          n: 1, rtf: (ms > 0 && audio > 0 && !voided) ? audio / (ms / 1000) : null }, base));
       });
-    }
-    var fbox = document.getElementById('ladder-filters');
-    if (fbox) fbox.addEventListener('change', function () { if (!barsBox.hidden) drawBars(); });
-    if (fbox) {
-      var reset = fbox.querySelector('.js-reset');
-      if (reset) reset.addEventListener('click', function () { if (!barsBox.hidden) drawBars(); });
-    }
+      if (cfg.pooled && poolN > 0) {
+        out.push(Object.assign({ bucket: POOLED, test: '', ms: poolMs, audio: poolAudio, voided: false, n: poolN,
+          rtf: poolAudio / (poolMs / 1000) }, base));
+      }
+    });
+    return pairAudioRows(out);
+  }
+
+  function bucketOptions(cfg) {
+    return function (rows) {
+      var seen = {};
+      rows.forEach(function (r) {
+        var b = seen[r.bucket] || (seen[r.bucket] = { n: 0, audio: 0 });
+        b.n++;
+        if (r.n === 1 && r.audio > b.audio) b.audio = r.audio;
+      });
+      return Object.keys(seen).sort(function (a, b) {
+        if (a === POOLED) return -1;
+        if (b === POOLED) return 1;
+        return (seen[a].audio - seen[b].audio) || a.localeCompare(b);
+      }).map(function (k) {
+        var s = seen[k];
+        var label = k === POOLED ? 'all ' + cfg.unit + 's (Σ)' : k + (cfg.borrow && s.audio ? ' · ' + fmt(s.audio, 0) + ' s' : '');
+        return { v: k, label: label + ' · ' + s.n + ' row' + (s.n > 1 ? 's' : '') };
+      });
+    };
+  }
+
+  function defaultBucket(rows, cfg) {
+    var count = {};
+    rows.forEach(function (r) { count[r.bucket] = (count[r.bucket] || 0) + 1; });
+    for (var i = 0; i < cfg.prefer.length; i++) if (count[cfg.prefer[i]]) return cfg.prefer[i];
+    var best = '';
+    Object.keys(count).forEach(function (k) { if (!best || count[k] > count[best]) best = k; });
+    return best;
+  }
+
+  function rtfText(v) { return fmt(v, v >= 100 ? 0 : 1) + '×'; }
+
+  function rtfCell(r, top) {
+    if (r.voided) return '<td class="dl-num dl-dim" title="voided: this clip ran far past the run\'s own rate on its other clips - a cold start or a runaway, not a speed">—✱</td>';
+    if (r.rtf === null) return '<td class="dl-num dl-dim" title="the run recorded no audio length">—</td>';
+    var w = top > 0 ? Math.max(2, Math.min(100, r.rtf / top * 100)) : 0;
+    return '<td class="dl-num dio-rtf"><span class="dio-rtf__bar" style="width:' + w.toFixed(1) + '%"></span>' +
+      '<span class="dio-rtf__val">' + rtfText(r.rtf) + '</span></td>';
+  }
+
+  function audioRatioCell(r) {
+    if (r.engine !== 'das') return '<td class="dl-num dl-dim" title="a reference engine\'s row - the yardstick, not a racer">—</td>';
+    return ratioCell(r.ratio);
+  }
+
+  function audioReceipt(workload) {
+    return function (r) {
+      return loadDoc(r.submissionId).then(function (doc) {
+        var lines = [];
+        var run = docRun(doc, r.das);
+        sideLines(sideTag(r.engine), run, lines);
+        var t = r.test && run.tests && run.tests[workload + ':' + r.test];
+        if (t && t.text) {
+          var text = String(t.text);
+          lines.push('        transcript: ' + esc(text.length > 240 ? text.slice(0, 240) + '…' : text));
+        }
+        if (!r.test) lines.push('        Σ over ' + Number(r.n) + ' ' + AUDIO[workload].unit + 's with a recorded audio length');
+        lines.push('');
+        var subId = Number(r.submissionId) || 0;
+        lines.push('<a href="/api/submission/' + subId + '">verbatim submission #' + subId + ' ↗</a>');
+        return lines.join('\n');
+      });
+    };
+  }
+
+  function mountAudioLadder(workload, rows) {
+    var cfg = AUDIO[workload];
+    var init = latestVersion(rows);
+    // a bar's length is relative to the fastest row of its own test, whatever the filters show
+    var topOf = {};
+    rows.forEach(function (r) { if (r.rtf > (topOf[r.bucket] || 0)) topOf[r.bucket] = r.rtf; });
+    var t = makeTable({
+      table: '#' + workload + '-table', filters: '#' + workload + '-filters', caption: '#' + workload + '-caption',
+      rows: rows, sort: { key: 'rtf', desc: true }, emptyText: cfg.empty,
+      tiebreak: function (a, b) { return (a.ms - b.ms) || a.model.localeCompare(b.model); },
+      cols: [
+        { key: 'rank', label: '#', num: true, dim: true, get: function (r) { return r.rtf; },
+          cell: function (r, i) { return String(i + 1); } },
+        { key: 'model', label: 'model', get: function (r) { return r.model; },
+          cell: function (r) {
+            var sub = [r.arch, r.quant].filter(Boolean).join(' · ');
+            return esc(r.model) + (sub ? ' <span class="dl-model-sub">' + esc(sub) + '</span>' : '');
+          }, cls: 'dl-td-model' },
+        { key: 'engine', label: 'engine', get: function (r) { return r.engine; },
+          cell: function (r) { return esc(r.engine); } },
+        // the rank metric sits beside the identity, so a phone sees it without scrolling the table
+        { key: 'rtf', label: '× realtime', num: true, grp: true, grpStart: true, get: function (r) { return r.rtf; },
+          cell: function (r) { return rtfCell(r, topOf[r.bucket] || 0); } },
+        { key: 'ms', label: 'wall ms', num: true, grp: true, get: function (r) { return r.ms; },
+          cell: function (r) { return r.ms > 0 ? fmt(r.ms, r.ms >= 100 ? 0 : 1) : '-'; } },
+        { key: 'audio', label: 'audio s', num: true, dim: true, get: function (r) { return r.audio; },
+          cell: function (r) { return r.audio > 0 ? fmt(r.audio, 1) : '-'; } },
+        { key: 'ref_engine', label: 'reference', grpStart: true, get: function (r) { return r.ref_engine; },
+          cell: function (r) { return r.ref_engine ? esc(r.ref_engine) : '-'; }, cls: 'dl-dim2' },
+        { key: 'ref_ms', label: 'ref ms', num: true, dim: true, get: function (r) { return r.ref_ms; },
+          cell: function (r) { return r.ref_ms > 0 ? fmt(r.ref_ms, r.ref_ms >= 100 ? 0 : 1) : '-'; } },
+        { key: 'ratio', label: 'ratio', num: true, grp: true, get: function (r) { return r.ratio; },
+          cell: audioRatioCell },
+        { key: 'box', label: 'machine', grpStart: true, get: function (r) { return r.boxName; },
+          cell: function (r) { return esc(r.boxName); }, cls: 'dl-dim2 dl-td-machine' },
+        { key: 'lane', label: 'backend', get: function (r) { return r.lane; },
+          cell: function (r) { return esc(r.lane); }, cls: 'dl-dim2 dl-td-lane' },
+        { key: 'threads', label: 'threads', num: true, dim: true, get: function (r) { return r.threads; },
+          cell: function (r) { return r.threads ? String(r.threads) : '-'; } },
+        { key: 'source', label: 'source', grpStart: true,
+          get: function (r) { return r.source + (r.verified ? '' : ' unverified'); }, cell: sourceCell },
+        { key: 'date', label: 'date', num: true, dim: true,
+          get: function (r) { return r.date; }, cell: function (r) { return esc(r.date); } }
+      ],
+      filterDefs: [
+        { field: 'bucket', title: cfg.unit, required: true, get: function (r) { return r.bucket; },
+          options: bucketOptions(cfg), initial: defaultBucket(rows, cfg) },
+        { field: 'version', title: 'version', all: 'all versions',
+          get: function (r) { return r.version; }, options: versionOptions,
+          initial: init > 0 ? String(init) : '' },
+        { field: 'model', title: 'model', all: 'all models', get: function (r) { return r.model; } },
+        { field: 'box', title: 'machine', all: 'all machines', get: function (r) { return r.box; }, label: function (r) { return r.boxName; } },
+        { field: 'engine', title: 'engine', all: 'all engines', get: function (r) { return r.engine; } },
+        { field: 'source', title: 'source', all: 'all sources', get: function (r) { return r.source; } }
+      ],
+      receipt: audioReceipt(workload),
+      summary: function (shown) {
+        var line = measuredLine(shown);
+        var when = line ? esc(line) + ' &nbsp;·&nbsp; ' : '';
+        var voided = shown.filter(function (r) { return r.voided; }).length;
+        return when + 'showing ' + shown.length + ' row' + (shown.length === 1 ? '' : 's') +
+          (voided ? ' (' + voided + ' voided ✱)' : '') +
+          ' &nbsp;·&nbsp; ranked by × realtime = audio seconds ÷ wall seconds, higher is faster' +
+          ' &nbsp;·&nbsp; ratio = the reference\'s wall ÷ das\'s on the same ' + cfg.unit + ', the fastest reference raced on the lane in the same submission' +
+          ' &nbsp;·&nbsp; an empty ratio means <b style="color:var(--fg);font-weight:400">not raced</b>, never implied parity' +
+          ' &nbsp;·&nbsp; click any row for its receipt';
+      }
+    });
+
+    wireViews({ view: workload + '-view', bars: workload + '-bars', wrap: workload + '-wrap', filters: workload + '-filters' }, function (barsBox) {
+      var vis = t ? t.visible() : rows;
+      var paired = vis.filter(function (r) { return r.ratio !== null && r.rtf !== null && r.ref_rtf !== null; })
+        .sort(function (a, b) { return b.ratio - a.ratio; });
+      renderPairBars(barsBox, paired.map(function (r) {
+        return { label: r.model, sub: r.boxName + ' · ' + r.lane + ' · ' + r.ref_engine + ' · ' + (r.test || 'all ' + cfg.unit + 's'),
+                 das: r.rtf, ref: r.ref_rtf, dasText: rtfText(r.rtf) + 'RT', refText: rtfText(r.ref_rtf) + 'RT',
+                 ratio: r.ratio, r: r };
+      }), audioReceipt(workload), unpairedNote(vis.length - paired.length, 'unpaired'));
+    });
   }
 
   /* ── home page ────────────────────────────────────────────────── */
@@ -530,7 +883,7 @@
 
     var barsBox = document.getElementById('dio-teaser-bars');
     if (!barsBox) return;
-    var paired = rows.filter(function (r) { return r.pp_ratio !== null; })
+    var paired = rows.filter(function (r) { return r.engine === 'das' && r.pp_ratio !== null; })
       .sort(function (a, b) { return b.date.localeCompare(a.date); }).slice(0, 3);
     if (!paired.length) {
       // the teaser plots PAIRED rows; say so, and don't contradict the "N measurements" tile
@@ -809,11 +1162,31 @@
 
   if (document.getElementById('ladder-table')) {
     loadBoard().then(function (runs) {
-      mountLadder(buildRows(runs));
+      var llm = buildRows(runs);
+      mountPairs(PAIR_SECTIONS.llm, llm);
+      var all = llm.slice();
+      if (document.getElementById(PAIR_SECTIONS.image.table)) {
+        var image = buildRows(runs, 'image-chat', IMAGE_CELLS);
+        mountPairs(PAIR_SECTIONS.image, image);
+        all = all.concat(image);
+      }
+      Object.keys(AUDIO).forEach(function (w) {
+        if (!document.getElementById(w + '-table')) return;
+        var rows = buildAudioRows(runs, w);
+        mountAudioLadder(w, rows);
+        // the stats count runs, not (run, test) rows
+        var seen = {};
+        rows.forEach(function (r) {
+          if (!seen[r.das.id]) { seen[r.das.id] = 1; all.push(r); }
+        });
+      });
+      fillLadderStats(all);
     }).catch(function () {
-      unreachable(document.getElementById('table-wrap'));
-      var f = document.getElementById('ladder-filters');
-      if (f) f.hidden = true;
+      ['table-wrap', 'image-chat-wrap', 'asr-wrap', 'tts-wrap', 'audio-chat-wrap'].forEach(function (id) { unreachable(document.getElementById(id)); });
+      ['ladder-filters', 'image-chat-filters', 'asr-filters', 'tts-filters', 'audio-chat-filters'].forEach(function (id) {
+        var f = document.getElementById(id);
+        if (f) f.hidden = true;
+      });
     });
   }
 

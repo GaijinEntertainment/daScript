@@ -1,0 +1,638 @@
+[
+  {
+    "gguf":"Qwen3VL-4B-Instruct-Q8_0.gguf",
+    "runs":[
+      {
+        "engine":"das",
+        "backend":"vulkan",
+        "flavor":"tuned",
+        "box":"rtxpro4500",
+        "threads":16,
+        "date":"2026-10-21",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench/dasllama-bench.exe -- -m /workspace/models/Qwen3VL-4B-Instruct-Q8_0.gguf -p 512 -n 128 -r 5 -t 16 -o json --json-path modules/dasLLAMA/performance/records/_cell_rtxpro4500.json --npl 4",
+        "hardware":{
+          "cpu":"AMD EPYC 7543P 32-Core Processor",
+          "arch":"x86_64",
+          "os":"Ubuntu 24.04.1 LTS 6.8.0-147-generic",
+          "total_cores":64,
+          "ram_gb":252,
+          "gpu":"NVIDIA RTX PRO 4500 Blackwell",
+          "smt":"on",
+          "remote_desktop":"off"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":11949.743827716515,
+            "stddev":327.87939453125
+          },
+          "tg128":{
+            "tok_s":160.42373150416032,
+            "stddev":0.02186175063252449
+          },
+          "tg128@4":{
+            "tok_s":551.10997067751373,
+            "stddev":0.84683966636657715
+          }
+        },
+        "source":"official",
+        "sha":"896bd646d",
+        "version":"0.6.5",
+        "dasllama_version":17,
+        "versions":"exe one unit",
+        "tune":"k4q8_tile_gen=dot_maddubs_width256_mr8 (manifest); k5q8_tile_gen=dot_maddubs_width256_mr8 (manifest); k6q8_tile_gen=dot_maddubs_width256_mr8 (manifest); q40q8_tile_gen=dot_maddubs_width256_mr8 (manifest); iq4xsq8_tile_gen=dot_maddubs_width256_mr8 (manifest); iq3s4q8_tile_gen=dot_maddubs_width256_mr8 (manifest); k3q8_tile_gen=dot_maddubs_width256_mr8 (manifest); iq3sq8_tile_gen=dot_maddubs_width256_mr8 (manifest); iq3xxsq8_tile_gen=dot_maddubs_width256_mr8 (manifest); iq4nlq8_tile_gen=dot_maddubs_width256_mr8 (manifest); k2q8_tile_gen=dot_maddubs_width256_mr8 (manifest); iq2sq8_tile_gen=dot_maddubs_width256_mr8 (manifest); iq2xsq8_tile_gen=dot_maddubs_width256_mr8 (manifest); iq2xxsq8_tile_gen=dot_maddubs_width256_mr8 (manifest); q8q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); iq4nl32q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); q4032q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); q51q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); q5032q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); mx4q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); k4q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); k5q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); k6q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); k3q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); k2q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); q40q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); iq4nlq8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); iq4xsq8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); iq3s4q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); iq3sq8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); iq3xxsq8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); iq2sq8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); iq2xsq8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); iq2xxsq8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); q8q8_tile_gen=dot_maddubs_width256_mr8_kstep2 (manifest); q51q8_tile_gen=dot_maddubs_width256_mr8 (manifest); iq4nl32q8_tile_gen=dot_maddubs_width256_mr8 (manifest); q4032q8_tile_gen=dot_maddubs_width256_mr8 (manifest); q5032q8_tile_gen=dot_maddubs_width256_mr8 (manifest)",
+        "tune_sha":"9a7eeedf5f0439a7539017c2a410e60c8576b8135659bc44e2fa1f34641c9c11",
+        "noise":"ok",
+        "parity":"ok",
+        "exec_fmt":"weights q8 native; q8 activations; f16 scales; planar x64-gen (repacked)",
+        "env":"DASLLAMA_BOX=rtxpro4500 DASLLAMA_GPU=1 DASLLAMA_MODELS_DIR=/workspace/models/",
+        "files":[
+          {
+            "role":"weights",
+            "name":"Qwen3VL-4B-Instruct-Q8_0.gguf",
+            "sha256":"054721f478bc5fa6beffb7f38eae575d45298f88cbb8d2f83ef675a727863eb1",
+            "bytes":4280406144
+          }
+        ]
+      },
+      {
+        "engine":"llama.cpp",
+        "backend":"vulkan",
+        "flavor":"stock",
+        "box":"rtxpro4500",
+        "threads":16,
+        "date":"2026-10-21",
+        "cmd":"/workspace/llama.cpp-ref-9febe63/build-vulkan/bin/llama-bench -m /workspace/models/Qwen3VL-4B-Instruct-Q8_0.gguf -ngl 99 -t 16 -p 512 -n 128 -r 5 -o json ; /workspace/llama.cpp-ref-9febe63/build-vulkan/bin/llama-batched-bench -m /workspace/models/Qwen3VL-4B-Instruct-Q8_0.gguf -ngl 99 -t 16 -c 4096 -b 2048 -ub 512 -npp 512 -ntg 128 -npl 4 -fa on",
+        "hardware":{
+          "cpu":"AMD EPYC 7543P 32-Core Processor",
+          "arch":"x86_64",
+          "os":"Ubuntu 24.04.1 LTS 6.8.0-147-generic",
+          "total_cores":64,
+          "ram_gb":252,
+          "gpu":"NVIDIA RTX PRO 4500 Blackwell",
+          "smt":"on",
+          "remote_desktop":"off"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":10638.234077999999,
+            "stddev":304.220484
+          },
+          "tg128":{
+            "tok_s":154.712965,
+            "stddev":0.62265999999999999
+          },
+          "tg128@4":{
+            "tok_s":484.28800048828123,
+            "stddev":4.336723804473877
+          }
+        },
+        "source":"official",
+        "sha":"9febe63d5",
+        "exec_fmt":"native gguf formats",
+        "files":[
+          {
+            "role":"weights",
+            "name":"Qwen3VL-4B-Instruct-Q8_0.gguf",
+            "sha256":"054721f478bc5fa6beffb7f38eae575d45298f88cbb8d2f83ef675a727863eb1",
+            "bytes":4280406144
+          }
+        ]
+      }
+    ],
+    "arch":"qwen3vl",
+    "quant":"q8",
+    "params_b":4.0224680959999999,
+    "active_b":4.0222720000000001,
+    "size_bytes":4280406144
+  },
+  {
+    "gguf":"Qwen2.5-Omni-3B-Q8_0.gguf",
+    "runs":[
+      {
+        "engine":"das",
+        "backend":"vulkan",
+        "flavor":"tuned",
+        "box":"rtxpro4500",
+        "threads":16,
+        "date":"2026-10-21",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench/dasllama-bench.exe -- -m /workspace/models/Qwen2.5-Omni-3B-Q8_0.gguf -p 512 -n 128 -r 5 -t 16 -o json --json-path modules/dasLLAMA/performance/records/_cell_rtxpro4500.json --npl 4",
+        "hardware":{
+          "cpu":"AMD EPYC 7543P 32-Core Processor",
+          "arch":"x86_64",
+          "os":"Ubuntu 24.04.1 LTS 6.8.0-147-generic",
+          "total_cores":64,
+          "ram_gb":252,
+          "gpu":"NVIDIA RTX PRO 4500 Blackwell",
+          "smt":"on",
+          "remote_desktop":"off"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":14754.545759328748,
+            "stddev":330.9486083984375
+          },
+          "tg128":{
+            "tok_s":203.03639743418037,
+            "stddev":0.030688418075442314
+          },
+          "tg128@4":{
+            "tok_s":707.51132786762651,
+            "stddev":1.0723390579223633
+          }
+        },
+        "source":"official",
+        "sha":"896bd646d",
+        "version":"0.6.5",
+        "dasllama_version":17,
+        "versions":"exe one unit",
+        "tune":"k4q8_tile_gen=dot_maddubs_width256_mr8 (manifest); k5q8_tile_gen=dot_maddubs_width256_mr8 (manifest); k6q8_tile_gen=dot_maddubs_width256_mr8 (manifest); q40q8_tile_gen=dot_maddubs_width256_mr8 (manifest); iq4xsq8_tile_gen=dot_maddubs_width256_mr8 (manifest); iq3s4q8_tile_gen=dot_maddubs_width256_mr8 (manifest); k3q8_tile_gen=dot_maddubs_width256_mr8 (manifest); iq3sq8_tile_gen=dot_maddubs_width256_mr8 (manifest); iq3xxsq8_tile_gen=dot_maddubs_width256_mr8 (manifest); iq4nlq8_tile_gen=dot_maddubs_width256_mr8 (manifest); k2q8_tile_gen=dot_maddubs_width256_mr8 (manifest); iq2sq8_tile_gen=dot_maddubs_width256_mr8 (manifest); iq2xsq8_tile_gen=dot_maddubs_width256_mr8 (manifest); iq2xxsq8_tile_gen=dot_maddubs_width256_mr8 (manifest); q8q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); iq4nl32q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); q4032q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); q51q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); q5032q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); mx4q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); k4q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); k5q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); k6q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); k3q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); k2q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); q40q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); iq4nlq8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); iq4xsq8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); iq3s4q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); iq3sq8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); iq3xxsq8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); iq2sq8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); iq2xsq8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); iq2xxsq8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); q8q8_tile_gen=dot_maddubs_width256_mr8_kstep2 (manifest); q51q8_tile_gen=dot_maddubs_width256_mr8 (manifest); iq4nl32q8_tile_gen=dot_maddubs_width256_mr8 (manifest); q4032q8_tile_gen=dot_maddubs_width256_mr8 (manifest); q5032q8_tile_gen=dot_maddubs_width256_mr8 (manifest)",
+        "tune_sha":"9a7eeedf5f0439a7539017c2a410e60c8576b8135659bc44e2fa1f34641c9c11",
+        "noise":"ok",
+        "parity":"ok",
+        "exec_fmt":"weights q8 native; q8 activations; f16 scales; planar x64-gen (repacked)",
+        "env":"DASLLAMA_BOX=rtxpro4500 DASLLAMA_GPU=1 DASLLAMA_MODELS_DIR=/workspace/models/",
+        "files":[
+          {
+            "role":"weights",
+            "name":"Qwen2.5-Omni-3B-Q8_0.gguf",
+            "sha256":"c7d8b07c8d8d7a9ed1de1b8df7ac821eb4d259a224bd44310baacfaa5a473d4c",
+            "bytes":3616087360
+          }
+        ]
+      },
+      {
+        "engine":"llama.cpp",
+        "backend":"vulkan",
+        "flavor":"stock",
+        "box":"rtxpro4500",
+        "threads":16,
+        "date":"2026-10-21",
+        "cmd":"/workspace/llama.cpp-ref-9febe63/build-vulkan/bin/llama-bench -m /workspace/models/Qwen2.5-Omni-3B-Q8_0.gguf -ngl 99 -t 16 -p 512 -n 128 -r 5 -o json ; /workspace/llama.cpp-ref-9febe63/build-vulkan/bin/llama-batched-bench -m /workspace/models/Qwen2.5-Omni-3B-Q8_0.gguf -ngl 99 -t 16 -c 4096 -b 2048 -ub 512 -npp 512 -ntg 128 -npl 4 -fa on",
+        "hardware":{
+          "cpu":"AMD EPYC 7543P 32-Core Processor",
+          "arch":"x86_64",
+          "os":"Ubuntu 24.04.1 LTS 6.8.0-147-generic",
+          "total_cores":64,
+          "ram_gb":252,
+          "gpu":"NVIDIA RTX PRO 4500 Blackwell",
+          "smt":"on",
+          "remote_desktop":"off"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":14024.339553,
+            "stddev":213.49359200000001
+          },
+          "tg128":{
+            "tok_s":197.59430599999999,
+            "stddev":0.12331499999999999
+          },
+          "tg128@4":{
+            "tok_s":607.72600097656255,
+            "stddev":1.29060959815979
+          }
+        },
+        "source":"official",
+        "sha":"9febe63d5",
+        "exec_fmt":"native gguf formats",
+        "files":[
+          {
+            "role":"weights",
+            "name":"Qwen2.5-Omni-3B-Q8_0.gguf",
+            "sha256":"c7d8b07c8d8d7a9ed1de1b8df7ac821eb4d259a224bd44310baacfaa5a473d4c",
+            "bytes":3616087360
+          }
+        ]
+      }
+    ],
+    "arch":"qwen2vl",
+    "quant":"q8",
+    "params_b":3.3971036159999999,
+    "active_b":3.3968619520000001,
+    "size_bytes":3616087360
+  },
+  {
+    "gguf":"gemma-4-E4B-it-Q8_0.gguf",
+    "runs":[
+      {
+        "engine":"das",
+        "backend":"vulkan",
+        "flavor":"tuned",
+        "box":"rtxpro4500",
+        "threads":16,
+        "date":"2026-10-21",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench/dasllama-bench.exe -- -m /workspace/models/gemma-4-E4B-it-Q8_0.gguf -p 512 -n 128 -r 5 -t 16 -o json --json-path modules/dasLLAMA/performance/records/_cell_rtxpro4500.json --npl 4",
+        "hardware":{
+          "cpu":"AMD EPYC 7543P 32-Core Processor",
+          "arch":"x86_64",
+          "os":"Ubuntu 24.04.1 LTS 6.8.0-147-generic",
+          "total_cores":64,
+          "ram_gb":252,
+          "gpu":"NVIDIA RTX PRO 4500 Blackwell",
+          "smt":"on",
+          "remote_desktop":"off"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":9956.7544741001002,
+            "stddev":194.39144897460938
+          },
+          "tg128":{
+            "tok_s":114.89310391265353,
+            "stddev":6.4235882759094238
+          },
+          "tg128@4":{
+            "tok_s":418.98663557118499,
+            "stddev":0.32969221472740173
+          }
+        },
+        "source":"official",
+        "sha":"896bd646d",
+        "version":"0.6.5",
+        "dasllama_version":17,
+        "versions":"exe one unit",
+        "tune":"k4q8_tile_gen=dot_maddubs_width256_mr8 (manifest); k5q8_tile_gen=dot_maddubs_width256_mr8 (manifest); k6q8_tile_gen=dot_maddubs_width256_mr8 (manifest); q40q8_tile_gen=dot_maddubs_width256_mr8 (manifest); iq4xsq8_tile_gen=dot_maddubs_width256_mr8 (manifest); iq3s4q8_tile_gen=dot_maddubs_width256_mr8 (manifest); k3q8_tile_gen=dot_maddubs_width256_mr8 (manifest); iq3sq8_tile_gen=dot_maddubs_width256_mr8 (manifest); iq3xxsq8_tile_gen=dot_maddubs_width256_mr8 (manifest); iq4nlq8_tile_gen=dot_maddubs_width256_mr8 (manifest); k2q8_tile_gen=dot_maddubs_width256_mr8 (manifest); iq2sq8_tile_gen=dot_maddubs_width256_mr8 (manifest); iq2xsq8_tile_gen=dot_maddubs_width256_mr8 (manifest); iq2xxsq8_tile_gen=dot_maddubs_width256_mr8 (manifest); q8q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); iq4nl32q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); q4032q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); q51q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); q5032q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); mx4q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); k4q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); k5q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); k6q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); k3q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); k2q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); q40q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); iq4nlq8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); iq4xsq8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); iq3s4q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); iq3sq8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); iq3xxsq8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); iq2sq8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); iq2xsq8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); iq2xxsq8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); q8q8_tile_gen=dot_maddubs_width256_mr8_kstep2 (manifest); q51q8_tile_gen=dot_maddubs_width256_mr8 (manifest); iq4nl32q8_tile_gen=dot_maddubs_width256_mr8 (manifest); q4032q8_tile_gen=dot_maddubs_width256_mr8 (manifest); q5032q8_tile_gen=dot_maddubs_width256_mr8 (manifest)",
+        "tune_sha":"9a7eeedf5f0439a7539017c2a410e60c8576b8135659bc44e2fa1f34641c9c11",
+        "noise":"ok",
+        "parity":"ok",
+        "exec_fmt":"weights q8 native; q8 activations; f16 scales; planar x64-gen (repacked)",
+        "env":"DASLLAMA_BOX=rtxpro4500 DASLLAMA_GPU=1 DASLLAMA_MODELS_DIR=/workspace/models/",
+        "files":[
+          {
+            "role":"weights",
+            "name":"gemma-4-E4B-it-Q8_0.gguf",
+            "sha256":"34be82b17b4942d389b9b527170c4b058027abdd32531fda063d3d97dd8ce80a",
+            "bytes":8031242688
+          }
+        ]
+      },
+      {
+        "engine":"llama.cpp",
+        "backend":"vulkan",
+        "flavor":"stock",
+        "box":"rtxpro4500",
+        "threads":16,
+        "date":"2026-10-21",
+        "cmd":"/workspace/llama.cpp-ref-9febe63/build-vulkan/bin/llama-bench -m /workspace/models/gemma-4-E4B-it-Q8_0.gguf -ngl 99 -t 16 -p 512 -n 128 -r 5 -o json ; /workspace/llama.cpp-ref-9febe63/build-vulkan/bin/llama-batched-bench -m /workspace/models/gemma-4-E4B-it-Q8_0.gguf -ngl 99 -t 16 -c 4096 -b 2048 -ub 512 -npp 512 -ntg 128 -npl 4 -fa on",
+        "hardware":{
+          "cpu":"AMD EPYC 7543P 32-Core Processor",
+          "arch":"x86_64",
+          "os":"Ubuntu 24.04.1 LTS 6.8.0-147-generic",
+          "total_cores":64,
+          "ram_gb":252,
+          "gpu":"NVIDIA RTX PRO 4500 Blackwell",
+          "smt":"on",
+          "remote_desktop":"off"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":9080.7625279999993,
+            "stddev":27.487835
+          },
+          "tg128":{
+            "tok_s":117.947928,
+            "stddev":0.10502599999999999
+          },
+          "tg128@4":{
+            "tok_s":334.5100036621094,
+            "stddev":97.191032409667969
+          }
+        },
+        "source":"official",
+        "sha":"9febe63d5",
+        "exec_fmt":"native gguf formats",
+        "files":[
+          {
+            "role":"weights",
+            "name":"gemma-4-E4B-it-Q8_0.gguf",
+            "sha256":"34be82b17b4942d389b9b527170c4b058027abdd32531fda063d3d97dd8ce80a",
+            "bytes":8031242688
+          }
+        ]
+      }
+    ],
+    "arch":"gemma4",
+    "quant":"q8",
+    "params_b":7.5180692899999997,
+    "active_b":4.5888307199999998,
+    "size_bytes":8031242688
+  },
+  {
+    "gguf":"gpt-oss-20b-mxfp4.gguf",
+    "runs":[
+      {
+        "engine":"das",
+        "backend":"vulkan",
+        "flavor":"tuned",
+        "box":"rtxpro4500",
+        "threads":16,
+        "date":"2026-10-21",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench/dasllama-bench.exe -- -m /workspace/models/gpt-oss-20b-mxfp4.gguf -p 512 -n 128 -r 5 -t 16 -o json --json-path modules/dasLLAMA/performance/records/_cell_rtxpro4500.json --npl 4",
+        "hardware":{
+          "cpu":"AMD EPYC 7543P 32-Core Processor",
+          "arch":"x86_64",
+          "os":"Ubuntu 24.04.1 LTS 6.8.0-147-generic",
+          "total_cores":64,
+          "ram_gb":252,
+          "gpu":"NVIDIA RTX PRO 4500 Blackwell",
+          "smt":"on",
+          "remote_desktop":"off"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":6443.3662081537941,
+            "stddev":100.42453002929688
+          },
+          "tg128":{
+            "tok_s":234.36036628481898,
+            "stddev":0.14524863660335541
+          },
+          "tg128@4":{
+            "tok_s":500.12140940933489,
+            "stddev":9.6509819030761719
+          }
+        },
+        "source":"official",
+        "sha":"896bd646d",
+        "version":"0.6.5",
+        "dasllama_version":17,
+        "versions":"exe one unit",
+        "tune":"k4q8_tile_gen=dot_maddubs_width256_mr8 (manifest); k5q8_tile_gen=dot_maddubs_width256_mr8 (manifest); k6q8_tile_gen=dot_maddubs_width256_mr8 (manifest); q40q8_tile_gen=dot_maddubs_width256_mr8 (manifest); iq4xsq8_tile_gen=dot_maddubs_width256_mr8 (manifest); iq3s4q8_tile_gen=dot_maddubs_width256_mr8 (manifest); k3q8_tile_gen=dot_maddubs_width256_mr8 (manifest); iq3sq8_tile_gen=dot_maddubs_width256_mr8 (manifest); iq3xxsq8_tile_gen=dot_maddubs_width256_mr8 (manifest); iq4nlq8_tile_gen=dot_maddubs_width256_mr8 (manifest); k2q8_tile_gen=dot_maddubs_width256_mr8 (manifest); iq2sq8_tile_gen=dot_maddubs_width256_mr8 (manifest); iq2xsq8_tile_gen=dot_maddubs_width256_mr8 (manifest); iq2xxsq8_tile_gen=dot_maddubs_width256_mr8 (manifest); q8q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); iq4nl32q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); q4032q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); q51q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); q5032q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); mx4q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); k4q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); k5q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); k6q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); k3q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); k2q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); q40q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); iq4nlq8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); iq4xsq8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); iq3s4q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); iq3sq8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); iq3xxsq8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); iq2sq8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); iq2xsq8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); iq2xxsq8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); q8q8_tile_gen=dot_maddubs_width256_mr8_kstep2 (manifest); q51q8_tile_gen=dot_maddubs_width256_mr8 (manifest); iq4nl32q8_tile_gen=dot_maddubs_width256_mr8 (manifest); q4032q8_tile_gen=dot_maddubs_width256_mr8 (manifest); q5032q8_tile_gen=dot_maddubs_width256_mr8 (manifest)",
+        "tune_sha":"9a7eeedf5f0439a7539017c2a410e60c8576b8135659bc44e2fa1f34641c9c11",
+        "noise":"ok",
+        "parity":"ok",
+        "exec_fmt":"weights mxfp4/q8 native; q8 activations; f16 scales; planar x64-gen (repacked)",
+        "env":"DASLLAMA_BOX=rtxpro4500 DASLLAMA_GPU=1 DASLLAMA_MODELS_DIR=/workspace/models/",
+        "files":[
+          {
+            "role":"weights",
+            "name":"gpt-oss-20b-mxfp4.gguf",
+            "sha256":"be37a636aca0fc1aae0d32325f82f6b4d21495f06823b5fbc1898ae0303e9935",
+            "bytes":12109566560
+          }
+        ]
+      },
+      {
+        "engine":"llama.cpp",
+        "backend":"vulkan",
+        "flavor":"stock",
+        "box":"rtxpro4500",
+        "threads":16,
+        "date":"2026-10-21",
+        "cmd":"/workspace/llama.cpp-ref-9febe63/build-vulkan/bin/llama-bench -m /workspace/models/gpt-oss-20b-mxfp4.gguf -ngl 99 -t 16 -p 512 -n 128 -r 5 -o json ; /workspace/llama.cpp-ref-9febe63/build-vulkan/bin/llama-batched-bench -m /workspace/models/gpt-oss-20b-mxfp4.gguf -ngl 99 -t 16 -c 4096 -b 2048 -ub 512 -npp 512 -ntg 128 -npl 4 -fa on",
+        "hardware":{
+          "cpu":"AMD EPYC 7543P 32-Core Processor",
+          "arch":"x86_64",
+          "os":"Ubuntu 24.04.1 LTS 6.8.0-147-generic",
+          "total_cores":64,
+          "ram_gb":252,
+          "gpu":"NVIDIA RTX PRO 4500 Blackwell",
+          "smt":"on",
+          "remote_desktop":"off"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":6892.2561880000003,
+            "stddev":212.67988700000001
+          },
+          "tg128":{
+            "tok_s":221.52698799999999,
+            "stddev":0.67091199999999995
+          },
+          "tg128@4":{
+            "tok_s":351.38400268554688,
+            "stddev":2.5260021686553955
+          }
+        },
+        "source":"official",
+        "sha":"9febe63d5",
+        "exec_fmt":"native gguf formats",
+        "files":[
+          {
+            "role":"weights",
+            "name":"gpt-oss-20b-mxfp4.gguf",
+            "sha256":"be37a636aca0fc1aae0d32325f82f6b4d21495f06823b5fbc1898ae0303e9935",
+            "bytes":12109566560
+          }
+        ]
+      }
+    ],
+    "arch":"gpt-oss",
+    "quant":"q8",
+    "params_b":20.914757183999999,
+    "active_b":4.1862758400000004,
+    "size_bytes":12109566560
+  },
+  {
+    "gguf":"Qwen3.8-27B-Q4_K_M.gguf",
+    "runs":[
+      {
+        "engine":"das",
+        "backend":"vulkan",
+        "flavor":"tuned",
+        "box":"rtxpro4500",
+        "threads":16,
+        "date":"2026-10-21",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench/dasllama-bench.exe -- -m /workspace/models/Qwen3.8-27B-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 16 -o json --json-path modules/dasLLAMA/performance/records/_cell_rtxpro4500.json --npl 4",
+        "hardware":{
+          "cpu":"AMD EPYC 7543P 32-Core Processor",
+          "arch":"x86_64",
+          "os":"Ubuntu 24.04.1 LTS 6.8.0-147-generic",
+          "total_cores":64,
+          "ram_gb":252,
+          "gpu":"NVIDIA RTX PRO 4500 Blackwell",
+          "smt":"on",
+          "remote_desktop":"off"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":1748.994475701968,
+            "stddev":11.294088363647461
+          },
+          "tg128":{
+            "tok_s":38.802125582289982,
+            "stddev":0.019108714535832405
+          },
+          "tg128@4":{
+            "tok_s":133.33210340352497,
+            "stddev":3.2407708168029785
+          }
+        },
+        "source":"official",
+        "sha":"896bd646d",
+        "version":"0.6.5",
+        "dasllama_version":17,
+        "versions":"exe one unit",
+        "tune":"k4q8_tile_gen=dot_maddubs_width256_mr8 (manifest); k5q8_tile_gen=dot_maddubs_width256_mr8 (manifest); k6q8_tile_gen=dot_maddubs_width256_mr8 (manifest); q40q8_tile_gen=dot_maddubs_width256_mr8 (manifest); iq4xsq8_tile_gen=dot_maddubs_width256_mr8 (manifest); iq3s4q8_tile_gen=dot_maddubs_width256_mr8 (manifest); k3q8_tile_gen=dot_maddubs_width256_mr8 (manifest); iq3sq8_tile_gen=dot_maddubs_width256_mr8 (manifest); iq3xxsq8_tile_gen=dot_maddubs_width256_mr8 (manifest); iq4nlq8_tile_gen=dot_maddubs_width256_mr8 (manifest); k2q8_tile_gen=dot_maddubs_width256_mr8 (manifest); iq2sq8_tile_gen=dot_maddubs_width256_mr8 (manifest); iq2xsq8_tile_gen=dot_maddubs_width256_mr8 (manifest); iq2xxsq8_tile_gen=dot_maddubs_width256_mr8 (manifest); q8q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); iq4nl32q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); q4032q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); q51q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); q5032q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); mx4q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); k4q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); k5q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); k6q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); k3q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); k2q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); q40q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); iq4nlq8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); iq4xsq8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); iq3s4q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); iq3sq8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); iq3xxsq8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); iq2sq8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); iq2xsq8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); iq2xxsq8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); q8q8_tile_gen=dot_maddubs_width256_mr8_kstep2 (manifest); q51q8_tile_gen=dot_maddubs_width256_mr8 (manifest); iq4nl32q8_tile_gen=dot_maddubs_width256_mr8 (manifest); q4032q8_tile_gen=dot_maddubs_width256_mr8 (manifest); q5032q8_tile_gen=dot_maddubs_width256_mr8 (manifest)",
+        "tune_sha":"9a7eeedf5f0439a7539017c2a410e60c8576b8135659bc44e2fa1f34641c9c11",
+        "noise":"ok",
+        "parity":"ok",
+        "exec_fmt":"weights k4/k6/q8 native; q8 activations; f16 scales; planar x64-gen (repacked)",
+        "env":"DASLLAMA_BOX=rtxpro4500 DASLLAMA_GPU=1 DASLLAMA_MODELS_DIR=/workspace/models/",
+        "files":[
+          {
+            "role":"weights",
+            "name":"Qwen3.8-27B-Q4_K_M.gguf",
+            "sha256":"31629f53165ab6a7dad8c9847dcfd1fdf55829dac1e6e748f4a68581b0033d34",
+            "bytes":18973870432
+          }
+        ]
+      },
+      {
+        "engine":"llama.cpp",
+        "backend":"vulkan",
+        "flavor":"stock",
+        "box":"rtxpro4500",
+        "threads":16,
+        "date":"2026-10-21",
+        "cmd":"/workspace/llama.cpp-ref-9febe63/build-vulkan/bin/llama-bench -m /workspace/models/Qwen3.8-27B-Q4_K_M.gguf -ngl 99 -t 16 -p 512 -n 128 -r 5 -o json ; /workspace/llama.cpp-ref-9febe63/build-vulkan/bin/llama-batched-bench -m /workspace/models/Qwen3.8-27B-Q4_K_M.gguf -ngl 99 -t 16 -c 4096 -b 2048 -ub 512 -npp 512 -ntg 128 -npl 4 -fa on",
+        "hardware":{
+          "cpu":"AMD EPYC 7543P 32-Core Processor",
+          "arch":"x86_64",
+          "os":"Ubuntu 24.04.1 LTS 6.8.0-147-generic",
+          "total_cores":64,
+          "ram_gb":252,
+          "gpu":"NVIDIA RTX PRO 4500 Blackwell",
+          "smt":"on",
+          "remote_desktop":"off"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":1850.434485,
+            "stddev":7.0919340000000002
+          },
+          "tg128":{
+            "tok_s":38.35736,
+            "stddev":0.094979999999999995
+          },
+          "tg128@4":{
+            "tok_s":104.5759994506836,
+            "stddev":0.41015976667404175
+          }
+        },
+        "source":"official",
+        "sha":"9febe63d5",
+        "exec_fmt":"native gguf formats",
+        "files":[
+          {
+            "role":"weights",
+            "name":"Qwen3.8-27B-Q4_K_M.gguf",
+            "sha256":"31629f53165ab6a7dad8c9847dcfd1fdf55829dac1e6e748f4a68581b0033d34",
+            "bytes":18973870432
+          }
+        ]
+      }
+    ],
+    "arch":"qwen35",
+    "quant":"q8",
+    "params_b":26.895998464000002,
+    "active_b":23.84986112,
+    "size_bytes":18973870432
+  },
+  {
+    "gguf":"Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf",
+    "runs":[
+      {
+        "engine":"das",
+        "backend":"vulkan",
+        "flavor":"tuned",
+        "box":"rtxpro4500",
+        "threads":16,
+        "date":"2026-10-21",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench/dasllama-bench.exe -- -m /workspace/models/Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 16 -o json --json-path modules/dasLLAMA/performance/records/_cell_rtxpro4500.json --npl 4",
+        "hardware":{
+          "cpu":"AMD EPYC 7543P 32-Core Processor",
+          "arch":"x86_64",
+          "os":"Ubuntu 24.04.1 LTS 6.8.0-147-generic",
+          "total_cores":64,
+          "ram_gb":252,
+          "gpu":"NVIDIA RTX PRO 4500 Blackwell",
+          "smt":"on",
+          "remote_desktop":"off"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":4955.1543185701303,
+            "stddev":122.81476593017578
+          },
+          "tg128":{
+            "tok_s":166.17652046324747,
+            "stddev":0.10029131174087524
+          },
+          "tg128@4":{
+            "tok_s":421.52244586427912,
+            "stddev":20.291950225830078
+          }
+        },
+        "source":"official",
+        "sha":"896bd646d",
+        "version":"0.6.5",
+        "dasllama_version":17,
+        "versions":"exe one unit",
+        "tune":"k4q8_tile_gen=dot_maddubs_width256_mr8 (manifest); k5q8_tile_gen=dot_maddubs_width256_mr8 (manifest); k6q8_tile_gen=dot_maddubs_width256_mr8 (manifest); q40q8_tile_gen=dot_maddubs_width256_mr8 (manifest); iq4xsq8_tile_gen=dot_maddubs_width256_mr8 (manifest); iq3s4q8_tile_gen=dot_maddubs_width256_mr8 (manifest); k3q8_tile_gen=dot_maddubs_width256_mr8 (manifest); iq3sq8_tile_gen=dot_maddubs_width256_mr8 (manifest); iq3xxsq8_tile_gen=dot_maddubs_width256_mr8 (manifest); iq4nlq8_tile_gen=dot_maddubs_width256_mr8 (manifest); k2q8_tile_gen=dot_maddubs_width256_mr8 (manifest); iq2sq8_tile_gen=dot_maddubs_width256_mr8 (manifest); iq2xsq8_tile_gen=dot_maddubs_width256_mr8 (manifest); iq2xxsq8_tile_gen=dot_maddubs_width256_mr8 (manifest); q8q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); iq4nl32q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); q4032q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); q51q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); q5032q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); mx4q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); k4q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); k5q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); k6q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); k3q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); k2q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); q40q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); iq4nlq8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); iq4xsq8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); iq3s4q8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); iq3sq8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); iq3xxsq8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); iq2sq8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); iq2xsq8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); iq2xxsq8_rm_gemv_gen=dot_maddubs_width256_mr8 (fallback); q8q8_tile_gen=dot_maddubs_width256_mr8_kstep2 (manifest); q51q8_tile_gen=dot_maddubs_width256_mr8 (manifest); iq4nl32q8_tile_gen=dot_maddubs_width256_mr8 (manifest); q4032q8_tile_gen=dot_maddubs_width256_mr8 (manifest); q5032q8_tile_gen=dot_maddubs_width256_mr8 (manifest)",
+        "tune_sha":"9a7eeedf5f0439a7539017c2a410e60c8576b8135659bc44e2fa1f34641c9c11",
+        "noise":"ok",
+        "parity":"ok",
+        "exec_fmt":"weights k4/k5/k6/q8 native; q8 activations; f16 scales; planar x64-gen (repacked)",
+        "env":"DASLLAMA_BOX=rtxpro4500 DASLLAMA_GPU=1 DASLLAMA_MODELS_DIR=/workspace/models/",
+        "files":[
+          {
+            "role":"weights",
+            "name":"Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf",
+            "sha256":"0b21525e972670ed59e1812e170b27c26355381f0656ecc4e25617ece7dac58b",
+            "bytes":22663387424
+          }
+        ]
+      },
+      {
+        "engine":"llama.cpp",
+        "backend":"vulkan",
+        "flavor":"stock",
+        "box":"rtxpro4500",
+        "threads":16,
+        "date":"2026-10-21",
+        "cmd":"/workspace/llama.cpp-ref-9febe63/build-vulkan/bin/llama-bench -m /workspace/models/Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf -ngl 99 -t 16 -p 512 -n 128 -r 5 -o json ; /workspace/llama.cpp-ref-9febe63/build-vulkan/bin/llama-batched-bench -m /workspace/models/Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf -ngl 99 -t 16 -c 4096 -b 2048 -ub 512 -npp 512 -ntg 128 -npl 4 -fa on",
+        "hardware":{
+          "cpu":"AMD EPYC 7543P 32-Core Processor",
+          "arch":"x86_64",
+          "os":"Ubuntu 24.04.1 LTS 6.8.0-147-generic",
+          "total_cores":64,
+          "ram_gb":252,
+          "gpu":"NVIDIA RTX PRO 4500 Blackwell",
+          "smt":"on",
+          "remote_desktop":"off"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":5556.2848610000001,
+            "stddev":168.24372
+          },
+          "tg128":{
+            "tok_s":166.73123100000001,
+            "stddev":0.51389099999999999
+          },
+          "tg128@4":{
+            "tok_s":354.42000122070311,
+            "stddev":35.464244842529297
+          }
+        },
+        "source":"official",
+        "sha":"9febe63d5",
+        "exec_fmt":"native gguf formats",
+        "files":[
+          {
+            "role":"weights",
+            "name":"Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf",
+            "sha256":"0b21525e972670ed59e1812e170b27c26355381f0656ecc4e25617ece7dac58b",
+            "bytes":22663387424
+          }
+        ]
+      }
+    ],
+    "arch":"qwen35moe",
+    "quant":"q8",
+    "params_b":35.505251456000003,
+    "active_b":2.8626124800000001,
+    "size_bytes":22663387424
+  }
+]

@@ -1028,6 +1028,7 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(allow_local_variable_shadowing)>("allow_local_variable_shadowing");
             addField<DAS_BIND_MANAGED_FIELD(allow_shared_lambda)>("allow_shared_lambda");
             addField<DAS_BIND_MANAGED_FIELD(ignore_shared_modules)>("ignore_shared_modules");
+            addField<DAS_BIND_MANAGED_FIELD(promote_shared_unoptimized)>("promote_shared_unoptimized");
             addField<DAS_BIND_MANAGED_FIELD(default_module_public)>("default_module_public");
             addField<DAS_BIND_MANAGED_FIELD(no_deprecated)>("no_deprecated");
             addField<DAS_BIND_MANAGED_FIELD(no_aliasing)>("no_aliasing");

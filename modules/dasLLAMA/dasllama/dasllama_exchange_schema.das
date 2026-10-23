@@ -350,6 +350,7 @@ def private validate_run(run : JsonValue const?; submission : bool; path : strin
     let source = chk_str(run, "source", false, MAX_SHORT, path, errors)
     chk_str(run, "comment", false, MAX_CMD, path, errors)
     chk_str(run, "void_clips", false, MAX_PROV_VALUE, path, errors)
+    chk_str(run, "held", false, MAX_PROV_VALUE, path, errors)
     chk_num(run, "dasllama_version", false, 0.0lf, 1000000.0lf, path, errors)
     validate_hardware(run, path, errors)
     validate_tests(run, path, errors)
@@ -808,4 +809,95 @@ def parse_sidecar_info(text : string; var info : SidecarInfo) : bool {
     info.identity.os_build = "{ident.os_build}"
     info.identity.cpu = "{ident.cpu}"
     return info.kernel_count > 0
+}
+
+// ===== Board policy: the record-reading rules the site projection, the recorder and the ladder share =====
+
+//! The boxes whose boards are history: their rows stay in the records and on the ladder's
+//! "all versions" view, and nothing of theirs projects onto the daslang.io cards.
+let RETIRED_BOXES <- { "m1", "m3air", "m4", "zen2", "zen4" }
+
+//! The workloads whose runs carry audio cells; a cell is a test keyed "<prefix><name>" with the
+//! prefix `audio_test_prefix` names.
+let AUDIO_WORKLOADS <- ["asr", "tts", "audio-chat"]
+
+//! An audio workload's test-key prefix: an audio-chat run times the speech-to-text clips under
+//! their "asr:" keys, every other workload its own name.
+def audio_test_prefix(workload : string) : string => workload == "audio-chat" ? "asr:" : "{workload}:"
+
+//! A clip whose milliseconds per audio second run past this multiple of its run's median rate is
+//! not a speed of that engine - a cold start, a decode runaway - and never fronts a ratio.
+let AUDIO_OUTLIER_RATE_MULT = 4.0lf
+
+//! The clips of one run the outlier rule voids: `rates` maps a clip to its milliseconds per audio
+//! second, and a clip past `AUDIO_OUTLIER_RATE_MULT` times the median of them all is voided. Under
+//! three clips nothing is - a median of two is their mean, which neither can pass fourfold.
+[arch(at="../ARCHITECTURE_MEASUREMENT.md#audio-outlier-rule")]
+def audio_outlier_clips(rates : table<string; double>) : array<string> {
+    var sorted <- [for (r in values(rates)); r; where r > 0.0lf]
+    let n = length(sorted)
+    if (n < 3) {
+        return <- array<string>()
+    }
+    sort(sorted)
+    let median = (n % 2 == 1) ? sorted[n / 2] : (sorted[n / 2 - 1] + sorted[n / 2]) * 0.5lf
+    var out <- [for (clip, r in keys(rates), values(rates)); clip; where r > AUDIO_OUTLIER_RATE_MULT * median]
+    sort(out)
+    return <- out
+}
+
+//! The clips a run's `void_clips` field names - the comma list the annotations and the recorder
+//! write - with the spaces around each name dropped.
+def void_clips_of(field : string) : array<string> =>
+    <- [for (c in split(field, ",")); strip(c); where !empty(strip(c))]
+
+//! Folds one test's recorded audio length into `lengths`, keyed by the test past `prefix`: the
+//! smallest positive length any run wrote wins, since a run that rounds (199 for 198.73) must
+//! never. A reference run records no length, so its clips are rated with the lengths folded here.
+def borrow_clip_length(var lengths : table<string; double>; prefix, key : string; audio_s : double) {
+    return if (!(key |> starts_with(prefix)) || audio_s <= 0.0lf)
+    let clip = slice(key, length(prefix))
+    let known = lengths?[clip] ?? 0.0lf
+    if (known <= 0.0lf || audio_s < known) {
+        lengths[clip] = audio_s
+    }
+}
+
+//! Rates one clip into `rates`: its best wall over its own audio seconds, else over the length
+//! `lengths` borrowed from the model's other runs; a clip with neither, or with no wall, is not rated.
+def rate_clip(var rates : table<string; double>; lengths : table<string; double>; clip : string; ms, audio_s : double) {
+    let audio = audio_s > 0.0lf ? audio_s : (lengths?[clip] ?? 0.0lf)
+    if (ms > 0.0lf && audio > 0.0lf) {
+        rates[clip] = ms / audio
+    }
+}
+
+//! The clips a run reads voided on the board: the outlier rule's verdict over `rates` unioned with
+//! the names its `void_clips` field carries, sorted, each once.
+def voided_clips(rates : table<string; double>; void_field : string) : array<string> {
+    var out <- audio_outlier_clips(rates)
+    var inscope named <- void_clips_of(void_field)
+    for (c in named) {
+        if (!has_value(out, c)) {
+            out |> push(c)
+        }
+    }
+    sort(out)
+    return <- out
+}
+
+//! The string fields an annotation selects a run by; "" on the selector's side is any.
+struct RunKey {
+    box : string
+    engine : string
+    backend : string
+    flavor : string
+    workload : string
+}
+
+//! Whether selector `sel` takes run `key`: every field of `sel` empty or equal to `key`'s.
+def key_selects(sel, key : RunKey) : bool {
+    return ((empty(sel.box) || sel.box == key.box) && (empty(sel.engine) || sel.engine == key.engine)
+        && (empty(sel.backend) || sel.backend == key.backend) && (empty(sel.flavor) || sel.flavor == key.flavor)
+        && (empty(sel.workload) || sel.workload == key.workload))
 }

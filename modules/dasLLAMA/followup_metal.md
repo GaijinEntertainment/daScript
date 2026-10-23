@@ -213,7 +213,7 @@ llama.cpp. The scratch store is not in the tree; the rows here are the record.
 | Qwen3-8B-BF16 (llama.cpp bf16, das q8-requant: no ratio) | 2734 +- 10 | 3496 +- 10 | - | 34.9 +- 0.1 | 65.9 +- 0.1 | - | 40/40 |
 | Qwen3-30B-A3B-Instruct-2507-Q4_K_M (board row: `performance/records/m5.json`) | 3414 +- 13 | 3761 +- 13 | 1.10 | 136.3 +- 1.2 | 164.6 +- 0.2 | 1.21 | 40/40 |
 | Qwen3-Coder-30B-A3B-Instruct-Q4_K_M | 3387 | 3669 | 1.08 | 137.1 | 165.3 | 1.21 | 40/40 |
-| Qwen3.8-27B-Q4_K_M (board row: `performance/records/m5.json`) [dn q8] | 752 | 906 +- 6 | 1.20 | 25.3 +- 0.4 | 28.0 | 1.11 | 40/40 |
+| Qwen3.8-27B-Q4_K_M (board row: `performance/records/m5.json`, das sha 9c5f93d3e) [dn q8] | 752 | 906 +- 6 | 1.20 | 25.3 +- 0.4 | 28.0 | 1.11 | 40/40 |
 | Qwen3.6-35B-A3B-UD-Q4_K_M [dn+shexp q8] | 3173 +- 15 | 3426 +- 9 | 1.08 | 95.7 +- 0.8 | 127.5 +- 0.2 | 1.33 | 40/40 |
 | Qwen3-30B-A3B-Q8_0 | 3392 +- 23 | 3515 +- 21 | 1.04 | 104.8 +- 0.5 | 122.1 | 1.16 | 40/40 |
 | Qwen3-Coder-30B-A3B-Instruct-Q8_0 | 3334 | 3381 | 1.01 | 103.5 | 122.3 | 1.18 | 40/40 |
@@ -1005,3 +1005,15 @@ then the rider is a one-row segment of a window that is no stall.
 shape; the figures in `PERF_LEDGER.md`'s 2026-10-19 long-prompt entry), and neither a 16-bit word view of the quants nor a
 lane-eight mapping with shuffle reductions beat it - both read slower, the hardware reduction being the cheap part. Done =
 a block-codec stamp within 1.15x of f16 a key on the race at 2048 and 8192, or the lever named that keeps it where it is.
+
+## 57. A CPU cell on the M5 Max reads the scheduler's core-tier placement, not only the kernels
+
+The M5 Max's two tiers ("Super" 6, "Performance" 12) are both compute tiers to macOS QoS, and macOS has no core pin, so
+the hard affinity mode (`USER_INTERACTIVE`) cannot keep the lanes on the Super tier; a static team split waits for its
+slowest lane. A lighter decode chunk (c4a2939e26's GEMV tail, faster per kernel) lets macOS park some of the six Whisper
+tiny lanes on the Performance tier, and every parallel phase after the first decode runs slower there, so a code change
+can move an M5 CPU row with no kernel change: the board's Whisper tiny CPU gb1 + hp0 reads 1688.0 ms on release 17
+against 1631.4 on release 16 (`PERF_LEDGER.md`, the 2026-10-22 release-17 boards entry). Done = team splits that absorb
+mixed-speed lanes (more chunks than lanes, claimed dynamically, or the slow lanes weighted down), a cell holding a
+split's wall against its fastest lane's chunk time with one lane slowed artificially (the static split the control),
+and Whisper tiny CPU on the M5 back at its release-16 board figure with the GEMV tail kept.

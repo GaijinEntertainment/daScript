@@ -59,6 +59,10 @@ compares against the predicates that accessor reads for its unpinned default (wh
 calls), or against the accessor's own answer read before the load, never against a hardcoded
 lane.** The default lane differs per box.
 
+A lane pin is a knob that picks the lane a load serves on - a `set_<family>_q8`-class setter, a
+`set_metal_tensor_crowns` / `pin_metal_tensor_crowns` pin, or the CPU kernel backend's pin
+(`pin_kernel_backend`, `DASLLAMA_PIN_BACKEND`).
+
 **A cell of `test_model_image*.das` whose subject is a lane pin's effect on the image identity
 loads through `load_model_image` (`../dasllama/dasllama_image.das`), the loader that bakes the
 `.dlim`, never through a staging path around it.** The pin is part of what the image identity
