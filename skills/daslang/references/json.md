@@ -28,6 +28,15 @@ Round-trips structs, classes (deref the pointer: `sprint_json(*ptr, false)`), ar
 tuples, variants (key = the active field name), enums, bitfields, vector types, pointers, and all
 primitives. **Unknown keys are silently ignored** - validate required fields yourself.
 
+`sscan_json` writes into a mutable destination; constants and temporary
+values are compile errors. Forward scalar destinations with `var value : T&`.
+
+`sprint_json` writes non-finite reals as `NaN`, `Infinity`, and `-Infinity`.
+`sscan_json` accepts these spellings for `float`, `double`, `float16`, and
+real vector components, including nested values and skipped unknown fields.
+These are Python-compatible extensions; strict JSON forbids these tokens.
+Use finite values when exchanging data with a strict JSON reader.
+
 | Annotation | Effect |
 |---|---|
 | `@optional` | Omit the field on output when it equals the default/empty value |

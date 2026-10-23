@@ -236,6 +236,13 @@ simple values too::
   sprint_json("hello", false)     // "hello"
   sprint_json([10, 20, 30], false) // [10,20,30]
 
+``sprint_json`` writes non-finite real values as ``NaN``, ``Infinity``,
+and ``-Infinity``. ``sscan_json`` accepts these spellings for ``float``,
+``double``, ``float16``, and real vector components, including values in
+nested containers and unknown fields it skips. These are Python-compatible
+extensions to JSON; strict JSON does not allow these tokens. Use finite
+values when exchanging data with a strict JSON reader.
+
 Field annotations
 =================
 
@@ -308,6 +315,9 @@ sscan_json
 directly into a struct using RTTI, without going through ``JsonValue?``.
 It supports all the same types: structs, pointers, arrays, tables, tuples,
 variants, enums, bitfields, vector types, and all scalar types.
+The destination must be mutable. Constants and temporary values are
+compile errors. A helper forwarding a scalar destination takes
+``var value : T&`` so the scan updates its caller's value.
 It also respects ``@rename`` field annotations::
 
   struct Config {
@@ -322,7 +332,7 @@ It also respects ``@rename`` field annotations::
   // ok == true, cfg.host == "localhost", cfg.port == 8080
   // cfg._type == "server", cfg.tags == ["prod", "v2"]
 
-``sscan_json`` returns ``true`` on success and ``false`` on malformed JSON.
+``sscan_json`` returns ``true`` on success and ``false`` on a parse error.
 Unknown keys are silently ignored, and missing fields keep their default values.
 
 Round-trip with ``sprint_json``::

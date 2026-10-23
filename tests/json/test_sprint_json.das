@@ -44,6 +44,68 @@ def test_sprint_basic_types(t : T?) {
     }
 }
 
+let private pos_inf = 1.0lf / 0.0lf // nolint:LINT006 - non-finite input
+let private quiet_nan = 0.0lf / 0.0lf // nolint:LINT006 - non-finite input
+
+struct NonFiniteReals {
+    low : double
+    high : float
+    missing : double
+    point : float2
+    tiny : float16
+}
+
+[test]
+def test_sprint_non_finite_reals(t : T?) {
+    t |> run("scalars") @(t : T?) {
+        for ((value, text) in [(pos_inf, "Infinity"),
+                (-pos_inf, "-Infinity"), (quiet_nan, "NaN"),
+                (1.5lf, "1.5")]) {
+            t |> equal(sprint_json(value, false), text)
+            t |> equal(sprint_json(float(value), false), text)
+            t |> equal(sprint_json(float16(float(value)), false), text)
+        }
+    }
+    t |> run("fields and vectors") @(t : T?) {
+        let json = sprint_json(NonFiniteReals(low = -pos_inf,
+            high = float(pos_inf), missing = quiet_nan,
+            point = float2(-float(pos_inf), 1.5),
+            tiny = float16(float(pos_inf))), false)
+        for (spelling in ["\"low\":-Infinity", "\"high\":Infinity",
+                "\"missing\":NaN", "\"point\":\{\"x\":-Infinity,\"y\":1.5\}",
+                "\"tiny\":Infinity"]) {
+            t |> success(find(json, spelling) >= 0, "{spelling} in {json}")
+        }
+    }
+}
+
+def private check_sprint_real_vector(t : T?; value : auto; text : string) {
+    t |> equal(sprint_json(value, false), text)
+}
+
+[test]
+def test_sprint_non_finite_vectors(t : T?) {
+    let inf = float(pos_inf)
+    let nan = float(quiet_nan)
+    let pair = "\{\"x\":Infinity,\"y\":-Infinity\}"
+    let triple = "\{\"x\":Infinity,\"y\":-Infinity,\"z\":NaN\}"
+    let quad = "\{\"x\":Infinity,\"y\":-Infinity,\"z\":NaN,\"w\":1.5\}"
+    check_sprint_real_vector(t, float2(inf, -inf), pair)
+    check_sprint_real_vector(t, float3(inf, -inf, nan), triple)
+    check_sprint_real_vector(t, float4(inf, -inf, nan, 1.5), quad)
+    check_sprint_real_vector(t, half2(inf, -inf), pair)
+    check_sprint_real_vector(t, half3(inf, -inf, nan), triple)
+    check_sprint_real_vector(t, half4(inf, -inf, nan, 1.5), quad)
+    let keyed <- { float2(inf, -inf) => 7 }
+    t |> equal(sprint_json(keyed, false),
+        "\{\"[Infinity,-Infinity]\":7\}")
+    t |> equal(sprint_json([[nan, inf], [-inf, 1.5]], false),
+        "[[NaN,Infinity],[-Infinity,1.5]]")
+    t |> equal(sprint_json(half8(inf, -inf, nan, 1.5,
+        0.0, nan, -inf, inf), false),
+        "[Infinity,-Infinity,NaN,1.5,0,NaN,-Infinity,Infinity]")
+}
+
 // ============================================================
 //  sprint_json: containers
 // ============================================================
