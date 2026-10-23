@@ -129,6 +129,31 @@ IF ((NOT DAS_HV_INCLUDED) AND ((NOT ${DAS_HV_DISABLED}) OR (NOT DEFINED DAS_HV_D
 		)
 	ENDIF()
 
+    list(GET HV_LIBRARIES 0 HV_ARCHIVE)
+    add_library(dasHV_libhv STATIC IMPORTED GLOBAL)
+    if(CMAKE_CONFIGURATION_TYPES)
+        set_property(TARGET dasHV_libhv PROPERTY
+            IMPORTED_CONFIGURATIONS "${CMAKE_CONFIGURATION_TYPES}")
+        foreach(config IN LISTS CMAKE_CONFIGURATION_TYPES)
+            string(TOUPPER "${config}" config_upper)
+            string(REPLACE "$<CONFIG>" "${config}" hv_location
+                "${HV_ARCHIVE}")
+            set_property(TARGET dasHV_libhv PROPERTY
+                IMPORTED_LOCATION_${config_upper} "${hv_location}")
+        endforeach()
+    else()
+        string(REPLACE "$<CONFIG>" "${CMAKE_BUILD_TYPE}" hv_location
+            "${HV_ARCHIVE}")
+        set_property(TARGET dasHV_libhv PROPERTY IMPORTED_LOCATION
+            "${hv_location}")
+    endif()
+    set_property(TARGET dasHV_libhv PROPERTY
+        INTERFACE_LINK_LIBRARIES "${OPENSSL_LIBRARIES_FILES}")
+    add_dependencies(dasHV_libhv LIBHV)
+    list(REMOVE_AT HV_LIBRARIES 0)
+    set(HV_LIBRARIES "$<BUILD_INTERFACE:dasHV_libhv>"
+        "$<INSTALL_INTERFACE:${HV_ARCHIVE}>" ${HV_LIBRARIES})
+
     LIST(APPEND CMAKE_MODULE_PATH ${DAS_HV_DIR})
 
 	# libDasModuleHV
