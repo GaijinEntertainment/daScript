@@ -4,7 +4,7 @@ certifi==2026.10.19
 cffi==2.1.1
 charset-normalizer==3.5.2
 click==8.5.0
-filelock==4.2.4
+filelock==4.2.1
 fsspec==2026.9.0
 h11==0.16.0
 hf-xet==1.7.0
