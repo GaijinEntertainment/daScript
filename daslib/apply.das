@@ -47,6 +47,10 @@ def private field_rtti_annotations(fld : FieldDeclaration) : ExpressionPtr {
             value.data = RttiValue(tString = string(ann.sValue))
         } elif (ann.basicType == Type.tInt) {
             value.data = RttiValue(tInt = ann.iValue)
+        } elif (ann.basicType == Type.tInt64) {
+            value.data = RttiValue(tInt64 = ann.lValue)
+        } elif (ann.basicType == Type.tUInt64) {
+            value.data = RttiValue(tUInt64 = ann.ulValue)
         } elif (ann.basicType == Type.tFloat) {
             value.data = RttiValue(tFloat = ann.fValue)
         } elif (ann.basicType == Type.tBool) {
