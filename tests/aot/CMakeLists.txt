@@ -48,13 +48,10 @@ SET(AOT_DASTEST_MODULE_FILES dastest/review_gate.das)
 list(FILTER AOT_TESTS_FILES EXCLUDE REGEX "/_")
 
 FILE(GLOB AOT_BARE_BLOCK_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/bare_block/*.das")
-list(FILTER AOT_BARE_BLOCK_FILES EXCLUDE REGEX "failed_|cant_|invalid_")
 
 FILE(GLOB AOT_DASBIND_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/dasbind/*.das")
 
 FILE(GLOB AOT_CLASS_BOOST_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/class_boost/*.das")
-# Exclude expect-error tests (they intentionally fail to compile)
-list(FILTER AOT_CLASS_BOOST_FILES EXCLUDE REGEX "failed_")
 
 FILE(GLOB AOT_DASPEG_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/dasPEG/*.das")
 
@@ -82,9 +79,8 @@ ENDIF()
 # The engine's own AOT tier is the opt-in examples/dasLLAMA target (CPU modules only).
 
 FILE(GLOB AOT_DECS_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/decs/*.das")
-# Exclude expect-error tests (they intentionally fail to compile)
 # Exclude test_stages_extra (it is a module, compiled via DAS_AOT_LIB below)
-list(FILTER AOT_DECS_FILES EXCLUDE REGEX "failed_|test_stages_extra")
+list(FILTER AOT_DECS_FILES EXCLUDE REGEX "test_stages_extra")
 
 # Decs test module files (libraries required by decs tests)
 SET(AOT_DECS_MODULE_FILES
@@ -108,8 +104,6 @@ SET(AOT_DASSQLITE_MODULE_FILES ${DASSQLITE_AOT_FILES})
 SET(AOT_DASSQLITE_FILES)
 IF(NOT DAS_SQLITE_DISABLED)
     FILE(GLOB AOT_DASSQLITE_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/dasSQLITE/*.das")
-    # Exclude expect-error tests (they intentionally fail to compile)
-    list(FILTER AOT_DASSQLITE_FILES EXCLUDE REGEX "failed_")
 ENDIF()
 
 SET(AOT_SQL_CONFORMANCE_MODULE_FILES)
@@ -208,14 +202,12 @@ FILE(GLOB AOT_FLATTEN_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "te
 list(FILTER AOT_FLATTEN_FILES EXCLUDE REGEX "_err_|flat_api_macro")
 
 FILE(GLOB AOT_INTERFACES_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/interfaces/*.das")
-# Exclude expect-error tests and AOT codegen failures
-list(FILTER AOT_INTERFACES_FILES EXCLUDE REGEX "failed_|test_missing_")
+# Exclude AOT codegen failures
+list(FILTER AOT_INTERFACES_FILES EXCLUDE REGEX "test_missing_")
 
 FILE(GLOB AOT_LINQ_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/linq/*.das")
-# Exclude module files (they are compiled via DAS_AOT_LIB below) and
-# expect-error tests (use `expect` to assert intentional macro_failed
-# diagnostics; AOT cannot compile them)
-list(FILTER AOT_LINQ_FILES EXCLUDE REGEX "/_|failed_")
+# Exclude module files (they are compiled via DAS_AOT_LIB below)
+list(FILTER AOT_LINQ_FILES EXCLUDE REGEX "/_")
 
 # Linq test module files (libraries required by linq tests)
 SET(AOT_LINQ_MODULE_FILES
@@ -238,11 +230,8 @@ FILE(GLOB AOT_MACRO_BOOST_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS
 list(FILTER AOT_MACRO_BOOST_FILES EXCLUDE REGEX "/_")
 
 FILE(GLOB AOT_WITH_BOOST_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/with_boost/*.das")
-# Exclude failed_* expected-failure compile tests — they're not AOT-able.
-list(FILTER AOT_WITH_BOOST_FILES EXCLUDE REGEX "/failed_")
 
 FILE(GLOB AOT_MATCH_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/match/*.das")
-list(FILTER AOT_MATCH_FILES EXCLUDE REGEX "/failed_")
 
 # Macro_boost test module files (probe call_macro required transitively by tests)
 SET(AOT_MACRO_BOOST_MODULE_FILES
@@ -259,8 +248,6 @@ SET(AOT_MATH_MODULE_FILES
 )
 
 FILE(GLOB AOT_STRINGS_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/strings/*.das")
-# Exclude expect-error tests
-list(FILTER AOT_STRINGS_FILES EXCLUDE REGEX "failed_")
 
 FILE(GLOB AOT_QUOTE_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/quote/*.das")
 # Exclude fixture modules (compiled via DAS_AOT_LIB below)
@@ -365,29 +352,23 @@ list(FILTER AOT_LSP_FILES EXCLUDE REGEX "/_")
 FILE(GLOB AOT_LINT_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/lint/*.das")
 # Exclude _*.das fixture files (consumed at runtime via compile_file, not invoked by dastest)
 list(FILTER AOT_LINT_FILES EXCLUDE REGEX "/_")
-# Exclude failed_*.das fixtures (expect compile errors that AOT codegen can't process)
-list(FILTER AOT_LINT_FILES EXCLUDE REGEX "/failed_")
 
 FILE(GLOB AOT_PROMOTE_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/promote/*.das")
-# Exclude expect-error tests (range overflow doesn't AOT)
-list(FILTER AOT_PROMOTE_FILES EXCLUDE REGEX "failed_")
 
 FILE(GLOB AOT_RTTI_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/rtti/*.das")
 list(FILTER AOT_RTTI_FILES EXCLUDE REGEX "/_")
 
 FILE(GLOB AOT_FIXED_ARRAY_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/fixed_array/*.das")
-# Exclude failed_* expect-fixtures and _-prefixed target-spec files (enabled at Stage 1)
-list(FILTER AOT_FIXED_ARRAY_FILES EXCLUDE REGEX "failed_|/_")
+# Exclude _-prefixed target-spec files (enabled at Stage 1)
+list(FILTER AOT_FIXED_ARRAY_FILES EXCLUDE REGEX "/_")
 
 FILE(GLOB AOT_TYPEMACRO_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/typemacro/*.das")
-# Exclude the _-prefixed macro modules (compile-time only, options no_aot) and failed_* expect-fixtures;
+# Exclude the _-prefixed macro modules (compile-time only, options no_aot);
 # the reifier's fixture module carries a runtime class a stamp derives, so it is an AOT input
-list(FILTER AOT_TYPEMACRO_FILES EXCLUDE REGEX "failed_|/_")
+list(FILTER AOT_TYPEMACRO_FILES EXCLUDE REGEX "/_")
 SET(AOT_TYPEMACRO_MODULE_FILES tests/typemacro/_template_struct_instance_mod.das)
 
 FILE(GLOB AOT_LANGUAGE_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/language/*.das")
-# Exclude expect-error tests and no_aot files
-list(FILTER AOT_LANGUAGE_FILES EXCLUDE REGEX "failed_|cant_|invalid_")
 # Exclude module files (they are compiled via DAS_AOT_LIB below)
 list(FILTER AOT_LANGUAGE_FILES EXCLUDE REGEX "/_")
 
@@ -708,7 +689,7 @@ if(NOT ${DAS_LLVM_DISABLED})
     list(FILTER LLVM_AOT_TEST_FILES EXCLUDE REGEX "/_")
     # jit_fastpath (is_jit_function/remove_jit semantics) and typeinfo behave differently under
     # SimNode_Jit binding; llvm_code/compile-only are not object-emitted. Everything else is covered.
-    list(FILTER LLVM_AOT_TEST_FILES EXCLUDE REGEX "/(cant_|llvm_tune|llvm_code|llvm_compile_only|dll_cache|jit_fastpath|typeinfo)|_solid\\.das$")
+    list(FILTER LLVM_AOT_TEST_FILES EXCLUDE REGEX "/(failed_|cant_|invalid_|llvm_tune|llvm_code|llvm_compile_only|dll_cache|jit_fastpath|typeinfo)|_solid\\.das$")
     # msl/metal exercise 16/8-bit lattice + simdgroup ops the LLVM JIT declines (lattice_fallback in
     # llvm_jit.das) — they interpret, so they have no emitted object; keep them out of the AOT rail.
     # spirv joins them on the fp16 side: aarch64 lowers the lattice natively (g_lattice_fp16_ops_native),

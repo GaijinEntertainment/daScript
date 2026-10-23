@@ -23,10 +23,6 @@ struct public JitCtx {
     builder : LLVMOpaqueBuilder -const? -const
 }
 
-// Set by llvm_macro before codegen when prog.policies.jit_exe_mode is true.
-// Read by intrinsic_is_standalone_exe to fold $::is_standalone_exe() into a constant.
-var public g_jit_exe_mode = false
-
 let g_intrin_lookup <- {
 // $, aka builtin
     // misc

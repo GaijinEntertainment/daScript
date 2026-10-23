@@ -6,6 +6,7 @@ require daslib/fio
 require daslib/strings_boost
 require daslib/clargs
 require strings
+require jit
 
 
 let OUTPUT_DIR = test_temp_dir()
@@ -96,7 +97,19 @@ def test_jit_lib_shared(t : T?) {
     var host_lines : array<string>
     let host_rc = run_host(bin, "_jit_lib_probe_host.das", host_lines)
     report(host_lines, "host")
-    t |> success(host_rc == 0, "a struct, a renamed call and a lambda-using body all answer through C")
+    t |> success(host_rc == 0,
+        "a struct, a renamed call, a lambda-using body and a table all answer through C")
+    var lib = load_dynamic_library(shared_artifact("{OUTPUT_DIR}/jit_lib_probe"))
+    t |> success(lib != null, "the shared library loads")
+    if (lib != null) {
+        t |> success(get_function_address(lib, "jit_lib_probe_tally") != null,
+            "jit_lib_probe_tally is exported")
+        t |> success(get_function_address(lib, "`jit`table_at`tInt` glob") == null,
+            "the int-key table_at slot is not exported")
+        t |> success(get_function_address(lib, "__das_clone_init_script") == null,
+            "__das_clone_init_script is not exported")
+        close_dynamic_library(lib)
+    }
 }
 
 

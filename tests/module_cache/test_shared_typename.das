@@ -42,7 +42,7 @@ def test_shared_typename_cache(t : T?) {
         t |> strictEqual(read_size, long_length(bytes))
     }
     let stream_magic = "\xc4\x82\xcd\xea\x04"
-    let version_231 = [0xe7u8, 0x01u8]
+    let version_232 = [0xe8u8, 0x01u8]
     let version_offset = length(stream_magic)
     t |> strictEqual(length(bytes) >= version_offset + 2, true)
     t |> strictEqual(find(bytes, stream_magic), 0)
@@ -61,7 +61,7 @@ def test_shared_typename_cache(t : T?) {
             [bad_marker, marker, marker],
             [clean, "deser: FALLBACK", clean]) {
         if (phase == "legacy") {
-            for (b, i in version_231, count()) {
+            for (b, i in version_232, count()) {
                 bytes[version_offset + i] = b
             }
         }

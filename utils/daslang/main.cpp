@@ -817,6 +817,7 @@ void print_help() {
         << "    -no-lint    skip the lint pass (Program::lint)\n"
         << "    --ast-verify  force-include daslib/ast_verify; checks AST structural invariants before each inference pass\n"
         << "    --ast-verify-batch  checks the finished tree only (no per-pass walks, no cross-module sweeps): cheap enough to gate many files (CI)\n"
+        << "    --ast-verify-each-pass  also runs the verifier after every inference pass\n"
         << "    -log-compile-time  log detailed per-module compile-time breakdown (parse / infer with pass count / optimize / macro (in infer) / macro mods / simulate) + function count,\n"
         << "                a cached module's read time (and its macro-context simulate), and the process startup timeline (builtin modules / module scan / initialize / compile / simulate / run / teardown / shutdown)\n"
         << "    --          separator for script arguments\n"
@@ -1214,7 +1215,7 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
                 printf("tracking JobStatus #%" PRIu64 "\n", id);
             } else if ( cmd=="-das-wait-debugger") {
                 debuggerRequired = true;
-            } else if ( cmd=="-ast-verify" || cmd=="-ast-verify-batch" ) {
+            } else if ( cmd=="-ast-verify" || cmd=="-ast-verify-batch" || cmd=="-ast-verify-each-pass" ) {
                 astVerifyRequired = true;   // daslib/ast_verify reads --ast-verify-batch from argv itself
             } else if ( cmd=="-linear-stack-allocator") {
                 scopedStackAllocator = false;

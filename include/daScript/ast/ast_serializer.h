@@ -365,7 +365,7 @@ namespace das {
         AstSerializer & serializeModule ( Module & module, bool already_exists );
 
         static constexpr uint32_t getVersion () {
-            return 232;   // 232: shared compound type elements keep separators
+            return 233;   // 233: shared compound type elements keep separators
         }
 
         void serializeProgram ( ProgramPtr program, ModuleGroup & libGroup ) noexcept;
