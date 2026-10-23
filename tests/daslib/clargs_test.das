@@ -157,11 +157,156 @@ struct MutexConfig {
 }
 
 [CommandLineArgs]
+struct MutexValueConfig {
+    name : string
+    @clarg_required
+    mode : string
+    @clarg_mutex_group = "verbosity"
+    quiet : bool
+    @clarg_mutex_group = "verbosity"
+    loud : bool
+}
+
+[CommandLineArgs]
+struct PositionalValueConfig {
+    @clarg_positional
+    command : string
+    name : string
+    @clarg_required
+    mode : string
+}
+
+[CommandLineArgs]
+struct PositionalMutexValueConfig {
+    @clarg_positional
+    command : string
+    name : string
+    @clarg_required
+    mode : string
+    @clarg_mutex_group = "verbosity"
+    quiet : bool
+    @clarg_mutex_group = "verbosity"
+    loud : bool
+}
+
+[CommandLineArgs]
+struct CountValueConfig {
+    name : string
+    @clarg_count
+    @clarg_short = "v"
+    verbose : int
+}
+
+[CommandLineArgs]
 struct CountConfig {
     @clarg_count
     @clarg_short = "v"
     @clarg_doc = "verbosity"
     verbose : int
+}
+
+[test]
+def test_consumed_flag_values(t : T?) {
+    t |> run("a string value cannot enable a boolean") @(t : T?) {
+        var r <- parse_args(type<Config>, ["--name", "--verbose"])
+        if (r |> is_err) { t |> failure(r |> unwrap_err); return }
+        let cfg <- r |> move_unwrap
+        t |> equal(cfg.name, "--verbose")
+        t |> equal(cfg.verbose, false)
+    }
+    t |> run("a value is not another occurrence of its flag") @(t : T?) {
+        var r <- parse_args(type<Config>, ["--name", "--name=Bob"])
+        if (r |> is_err) { t |> failure(r |> unwrap_err); return }
+        let cfg <- r |> move_unwrap
+        t |> equal(cfg.name, "--name=Bob")
+    }
+    t |> run("an array value cannot enable a boolean") @(t : T?) {
+        var r <- parse_args(type<Config>, ["--tags", "--verbose"])
+        if (r |> is_err) { t |> failure(r |> unwrap_err); return }
+        let cfg <- r |> move_unwrap
+        t |> equal(cfg.tags, ["--verbose"])
+        t |> equal(cfg.verbose, false)
+    }
+    t |> run("a value cannot set an optional flag") @(t : T?) {
+        var r <- parse_args(type<OptionalConfig>, ["--name", "--verbose"])
+        if (r |> is_err) { t |> failure(r |> unwrap_err); return }
+        let cfg <- r |> move_unwrap
+        t |> equal(cfg.name |> unwrap_or(""), "--verbose")
+        t |> success(cfg.verbose |> is_none)
+    }
+    t |> run("a value cannot set an enum flag") @(t : T?) {
+        var r <- parse_args(type<Config>, ["--name", "--color=Green"])
+        if (r |> is_err) { t |> failure(r |> unwrap_err); return }
+        let cfg <- r |> move_unwrap
+        t |> equal(cfg.name, "--color=Green")
+        t |> equal(cfg.color, Color.Red)
+    }
+    t |> run("only unconsumed flags contribute to a count") @(t : T?) {
+        var r <- parse_args(type<CountValueConfig>,
+            ["--name", "-v", "-v"])
+        if (r |> is_err) { t |> failure(r |> unwrap_err); return }
+        let cfg <- r |> move_unwrap
+        t |> equal(cfg.name, "-v")
+        t |> equal(cfg.verbose, 1)
+    }
+    t |> run("a value does not violate a count flag") @(t : T?) {
+        var r <- parse_args(type<CountValueConfig>,
+            ["--name", "--verbose=2"])
+        if (r |> is_err) { t |> failure(r |> unwrap_err); return }
+        let cfg <- r |> move_unwrap
+        t |> equal(cfg.name, "--verbose=2")
+        t |> equal(cfg.verbose, 0)
+    }
+}
+
+[test]
+def test_consumed_flag_values_with_schema(t : T?) {
+    t |> run("positionals keep consumed flag values separate") @(t : T?) {
+        var r <- parse_args(type<PositionalConfig>,
+            ["--root", "--force", "run"])
+        if (r |> is_err) { t |> failure(r |> unwrap_err); return }
+        let cfg <- r |> move_unwrap
+        t |> equal(cfg.root, "--force")
+        t |> equal(cfg.command, "run")
+        t |> equal(cfg.force, false)
+    }
+    t |> run("consumed values do not enter mutex groups") @(t : T?) {
+        var r <- parse_args(type<MutexValueConfig>,
+            ["--mode=a", "--name", "--loud", "--quiet"])
+        if (r |> is_err) { t |> failure(r |> unwrap_err); return }
+        let cfg <- r |> move_unwrap
+        t |> equal(cfg.name, "--loud")
+        t |> success(cfg.quiet && !cfg.loud)
+    }
+    t |> run("positional mutex parsing keeps values separate") @(t : T?) {
+        var r <- parse_args(type<PositionalMutexValueConfig>,
+            ["run", "--mode=a", "--name", "--loud", "--quiet"])
+        if (r |> is_err) { t |> failure(r |> unwrap_err); return }
+        let cfg <- r |> move_unwrap
+        t |> equal(cfg.command, "run")
+        t |> equal(cfg.name, "--loud")
+        t |> success(cfg.quiet && !cfg.loud)
+    }
+    t |> run("a value cannot satisfy another required flag") @(t : T?) {
+        let r <- parse_args(type<ConfigWithRequired>,
+            ["--foo", "--bar-required=x"])
+        t |> success(r |> is_err)
+    }
+    t |> run("mutex required checks skip flag values") @(t : T?) {
+        let r <- parse_args(type<MutexValueConfig>,
+            ["--name", "--mode=a"])
+        t |> success(r |> is_err)
+    }
+    t |> run("positional required checks skip flag values") @(t : T?) {
+        let r <- parse_args(type<PositionalValueConfig>,
+            ["run", "--name", "--mode=a"])
+        t |> success(r |> is_err)
+    }
+    t |> run("positional mutex required checks skip flag values") @(t : T?) {
+        let r <- parse_args(type<PositionalMutexValueConfig>,
+            ["run", "--name", "--mode=a"])
+        t |> success(r |> is_err)
+    }
 }
 
 [test]
