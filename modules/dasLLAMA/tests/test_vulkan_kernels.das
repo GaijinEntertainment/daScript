@@ -31,7 +31,7 @@ require ?vulkan dasllama/dasllama_kqformat
 require ?vulkan dasllama/dasllama_convert   // quantize_q8_0_into: the hyper-connection low-rank requant's oracle
 require ?vulkan spirv/spirv_dis   // foreach_inst / count_op_operand_at: the stamp-shape cells' instruction walks
 require ?vulkan spirv/spirv_grammar   // SpvOp / SpvDecoration / SpvStorageClass
-require dasllama/dasllama_gemm_schema   // Q8_BLOCK_ELEMS sizes the q8 plane helper outside the vulkan arm; kq_dev_ssb_i - the fixtures size their device scale planes per format
+require dasllama/dasllama_gemm_schema   // nolint:STYLE029,LINT019 — kq_dev_ssb_i sizes the fixtures' device scale planes inside the vulkan arm; the darwin world reads only its kqformat re-export
 require ?vulkan daslib/shader_lingua_franca   // gl_GlobalInvocationID — the CPU replay drives it per lane (only vulkan-guarded arms replay)
 require dasllama/dasllama_common   // MoeGate: the routing cells' select oracle takes the softmax router
 require dasllama/dasllama_arch_qwen35
@@ -51,11 +51,7 @@ require daslib/f16_cvt   // nolint:STYLE030,LINT019 — the half conversions of 
 let private NAN_HALF = 0x7E00   //! the sentinel half no kernel writes: a NaN
 let private NAN_HALF_PAIR = 0x7E007E00u   //! ... in both lanes of a word
 let private TILE_SLACK_ROWS = int(TILE_READ_SLACK)   //! the cm2 fixtures' rows past the last region, the engine's count: a stamp that loads partial columns unclamped (`STILE`) reads the last region's column rounded up to its BN, so the slack holds while every such stamp keeps BN <= slack + 1
-let private TILE_CELL_K = 768   //! every per-format tile cell's K: three unrolled superblock passes on both depths (a K-quant width is a multiple of 256, so no K-quant stamp ever takes the k loop's tail; the q8 s and e cells' Q8_CELL_K takes the edge path)
-let private Q8_CELL_K = 544     //! the q8 cm2 s and e cells' K: 512 + 32, off the 64-deep stamp's k grid, so the tile takes its padded edge path (the l and m cells run K = 576, the fast path)
-let private TILE_CELL_D = 160   //! every tile cell's weight rows a plane: one full 128-tile and a 32-row remainder - the KHR arm's edge tile, the cm2 arms' clamped second tile over rows 32..160
-let private TILE_CELL_ROWS0 = 300   //! the tile cells' two regions: on every arm's rows a workgroup, whole tiles and an edge
-let private TILE_CELL_ROWS1 = 260
+let private Q8_CELL_K = 544     //! the q8 cm2 s and e cells' K: 512 + 32, off the 64-deep stamp's k grid, so the tile takes its padded edge path (the l and m cells run K = 576, the fast path; TILE_CELL_K, the per-format cells' K, sits in _vk_kq_fixtures)
 
 let private I8_SENTINEL_BITS = 0x80808080u   //! a Q8 quant plane's fill: -128 in every byte, a value no requant produces (|q| <= 127)
 
@@ -120,16 +116,6 @@ def private tile_fixture(n, blk_k : int; var wqh, wsh : array<uint>; xf_mul, xf_
     return <- f
 }
 
-//! one q8 fmt-0 host plane of `totblk` blocks: the s8 quant words hashed at `i * wq_mul + wq_add`, the f16 scale pairs at `i * ws_mul + ws_add`
-def private q8_plane(totblk : int; wq_mul, wq_add, ws_mul, ws_add : uint; var wqh, wsh : array<uint>) {
-    let qwords = totblk * int(Q8_BLOCK_ELEMS / 4l)   //! a byte an element: q8 has no `kq_desc` stride row (`kq_qsb` panics on it by design)
-    let swords = (totblk * 2 + 3) / 4   //! an f16 scale a block
-    delete wqh
-    delete wsh
-    wqh <- hashed_words(qwords, wq_mul, wq_add)
-    wsh <- ws_plane(swords, ws_mul, ws_add)
-}
-
 //! the tile cells' q8 fmt-0 host planes from two seeds, K = n over both weight planes
 def private q8_planes(n : int; wq_seed, ws_seed : uint; var wqh, wsh : array<uint>) => q8_plane(2 * TILE_CELL_D * (n / 32), 1u, wq_seed, 1u, ws_seed, wqh, wsh)
 
@@ -178,107 +164,6 @@ def private tile_cell_arms(t : T?; tag : string; fmt : int; var f : TileFixture;
     return <- y_ref
 }
 
-//! a per-format tile cell's scale-row form: the words one superblock (or one per-32 block) lays in the device's scale plane
-enum private ScaleForm {
-    d_dmin_hash   //! [d | dmin], then four hashed sub-scale words
-    d_pairs       //! four words of two per-block f16 d, then a zero pad word
-    hash_d        //! four hashed signed sub-scale words, then [d | 0]
-    d_hi_hash     //! [d | the row's hashed high bits], then one hashed word of 4-bit sub-scale fields
-    q51_dm        //! one [d | m] word a block, m signed
-    iq4nl32_d     //! two f16 d a word
-    mx4_e8m0      //! four E8M0 bytes a word
-}
-
-//! one row of the per-format tile table: the format, its K and scale unit, the hashed quant words a unit, the scale-row form
-//! with its d / dmin multipliers and hash seed, the activation plane's hash offset, the arms (per-32 formats run s, e and KHR),
-//! the format's oracle and the sibling codebook's oracle its planes must read apart under (`control`, when set)
-struct private FmtTile {
-    fmt : KqFmt
-    n, blk_k, wq_words : int
-    wq_seed : uint
-    form : ScaleForm
-    dmul, mmul : float
-    sseed, xf_add : uint
-    per32 : bool
-    oracle : function<(wq : array<uint>; wsu : array<uint>; xf : array<uint>; recs : array<uint>; nrec, n, d : int; var y : array<float>) : void>
-    control : function<(wq : array<uint>; wsu : array<uint>; xf : array<uint>; recs : array<uint>; nrec, n, d : int; var y : array<float>) : void>
-}
-
-//! the per-format tile cells' table: one row a `kq_sb` or per-32 format
-def private fmt_tile_rows() : array<FmtTile> {
-    var rows : array<FmtTile>
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        rows <- [
-            FmtTile(fmt = KqFmt.k4, n = TILE_CELL_K, blk_k = 256, wq_words = 32, wq_seed = 29u, form = ScaleForm.d_dmin_hash, dmul = 0.0002, mmul = 0.00005, sseed = 613u, xf_add = 5u, oracle = @@k4f16_gemm_oracle),
-            FmtTile(fmt = KqFmt.k5, n = TILE_CELL_K, blk_k = 256, wq_words = 40, wq_seed = 29u, form = ScaleForm.d_dmin_hash, dmul = 0.0002, mmul = 0.00005, sseed = 613u, xf_add = 5u, oracle = @@k5f16_gemm_oracle),
-            FmtTile(fmt = KqFmt.k2, n = TILE_CELL_K, blk_k = 256, wq_words = 16, wq_seed = 31u, form = ScaleForm.d_dmin_hash, dmul = 0.0004, mmul = 0.0003, sseed = 91u, xf_add = 7u, oracle = @@k2f16_gemm_oracle),
-            FmtTile(fmt = KqFmt.iq2s, n = TILE_CELL_K, blk_k = 256, wq_words = 18, wq_seed = 29u, form = ScaleForm.d_dmin_hash, dmul = 0.0002, mmul = 0.0, sseed = 613u, xf_add = 5u, oracle = @@iq2sf16_gemm_oracle),
-            FmtTile(fmt = KqFmt.iq2xs, n = TILE_CELL_K, blk_k = 256, wq_words = 16, wq_seed = 29u, form = ScaleForm.d_dmin_hash, dmul = 0.0002, mmul = 0.0, sseed = 613u, xf_add = 5u, oracle = @@iq2xsf16_gemm_oracle),
-            FmtTile(fmt = KqFmt.q40, n = TILE_CELL_K, blk_k = 256, wq_words = 32, wq_seed = 29u, form = ScaleForm.d_pairs, dmul = 0.0002, mmul = 0.00013, xf_add = 5u, oracle = @@q40f16_gemm_oracle),
-            FmtTile(fmt = KqFmt.iq4nl, n = TILE_CELL_K, blk_k = 256, wq_words = 32, wq_seed = 29u, form = ScaleForm.d_pairs, dmul = 0.0002, mmul = 0.00013, xf_add = 5u, oracle = @@iq4nlf16_gemm_oracle),
-            FmtTile(fmt = KqFmt.k3, n = TILE_CELL_K, blk_k = 256, wq_words = 24, wq_seed = 29u, form = ScaleForm.hash_d, dmul = 0.0002, sseed = 811u, xf_add = 5u, oracle = @@k3f16_gemm_oracle),
-            FmtTile(fmt = KqFmt.k6, n = TILE_CELL_K, blk_k = 256, wq_words = 48, wq_seed = 41u, form = ScaleForm.hash_d, dmul = 0.0002, sseed = 811u, xf_add = 5u, oracle = @@k6f16_gemm_oracle),
-            FmtTile(fmt = KqFmt.iq3s, n = TILE_CELL_K, blk_k = 256, wq_words = 26, wq_seed = 29u, form = ScaleForm.d_hi_hash, dmul = 0.0002, sseed = 613u, xf_add = 5u, oracle = @@iq3sf16_gemm_oracle, control = @@iq3xxsf16_gemm_oracle),
-            FmtTile(fmt = KqFmt.iq2xxs, n = TILE_CELL_K, blk_k = 256, wq_words = 16, wq_seed = 29u, form = ScaleForm.d_hi_hash, dmul = 0.0002, sseed = 613u, xf_add = 5u, oracle = @@iq2xxsf16_gemm_oracle),
-            FmtTile(fmt = KqFmt.iq3xxs, n = TILE_CELL_K, blk_k = 256, wq_words = 24, wq_seed = 29u, form = ScaleForm.d_hi_hash, dmul = 0.0002, sseed = 613u, xf_add = 5u, oracle = @@iq3xxsf16_gemm_oracle, control = @@iq2xxsf16_gemm_oracle),
-            FmtTile(fmt = KqFmt.iq4xs, n = TILE_CELL_K, blk_k = 256, wq_words = 32, wq_seed = 29u, form = ScaleForm.d_hi_hash, dmul = 0.0002, sseed = 613u, xf_add = 5u, oracle = @@iq4xsf16_gemm_oracle, control = @@iq3s4f16_gemm_oracle),
-            FmtTile(fmt = KqFmt.iq3s4, n = TILE_CELL_K, blk_k = 256, wq_words = 32, wq_seed = 29u, form = ScaleForm.d_hi_hash, dmul = 0.0002, sseed = 613u, xf_add = 5u, oracle = @@iq3s4f16_gemm_oracle, control = @@iq4xsf16_gemm_oracle),
-            FmtTile(fmt = KqFmt.q51, n = 704, blk_k = 32, wq_words = 5, wq_seed = 37u, form = ScaleForm.q51_dm, xf_add = 5u, per32 = true, oracle = @@q51f16_gemm_oracle),         //! the 26B-A4B's expert width: 22 blocks, two unrolled 256-passes and a 192 tail
-            FmtTile(fmt = KqFmt.iq4nl32, n = 640, blk_k = 32, wq_words = 4, wq_seed = 41u, form = ScaleForm.iq4nl32_d, xf_add = 5u, per32 = true, oracle = @@iq4nl32f16_gemm_oracle, control = @@q4032f16_gemm_oracle),   //! Qwen3.8-Flash-Next's expert width: 20 blocks, two unrolled 256-passes and a 128 tail
-            FmtTile(fmt = KqFmt.q4032, n = 896, blk_k = 32, wq_words = 4, wq_seed = 43u, form = ScaleForm.iq4nl32_d, xf_add = 5u, per32 = true, oracle = @@q4032f16_gemm_oracle, control = @@iq4nl32f16_gemm_oracle),   //! Qwen2.5-0.5B's width: 28 blocks, three unrolled 256-passes and a 128 tail
-            FmtTile(fmt = KqFmt.q5032, n = 1408, blk_k = 32, wq_words = 5, wq_seed = 47u, form = ScaleForm.iq4nl32_d, xf_add = 5u, per32 = true, oracle = @@q5032f16_gemm_oracle, control = @@q5032_noqh_f16_gemm_oracle),   //! Qwen1.5-MoE's expert down width: 44 blocks, five unrolled 256-passes and a 128 tail
-            FmtTile(fmt = KqFmt.mx4, n = 704, blk_k = 32, wq_words = 4, wq_seed = 53u, form = ScaleForm.mx4_e8m0, xf_add = 5u, per32 = true, oracle = @@mx4f16_gemm_oracle)            //! 22 blocks: eleven 64-deep k steps, two unrolled 256-passes and a 192 tail
-        ]
-    }
-    return <- rows
-}
-
-//! a table row's host planes over both weight planes: the quant words hashed at `i + wq_seed` (cool scales throughout: the tile's f16 sums stay far from 65504)
-def private fmt_tile_planes(row : FmtTile; var wqh, wsh : array<uint>) {
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        let units = 2 * TILE_CELL_D * (row.n / row.blk_k)
-        delete wqh
-        wqh <- hashed_words(units * row.wq_words, 1u, row.wq_seed)
-        if (row.form == ScaleForm.d_dmin_hash || row.form == ScaleForm.d_pairs || row.form == ScaleForm.hash_d) {
-            wsh |> resize(units * 5)
-        } elif (row.form == ScaleForm.d_hi_hash) {
-            wsh |> resize(units * 2)
-        } elif (row.form == ScaleForm.q51_dm) {
-            wsh |> resize(units)
-        }
-        for (sb in range(units)) {
-            if (row.form == ScaleForm.d_dmin_hash) {
-                wsh[sb * 5] = packHalf2x16(float2(row.dmul * float(1 + sb % 7), row.mmul * float(1 + sb % 5)))
-                for (wi in range(4)) {
-                    wsh[sb * 5 + 1 + wi] = hash_word(uint(sb * 4 + wi) + row.sseed)
-                }
-            } elif (row.form == ScaleForm.d_pairs) {
-                for (wi in range(4)) {
-                    let p = sb * 4 + wi
-                    wsh[sb * 5 + wi] = packHalf2x16(float2(row.dmul * float(1 + p % 7), row.mmul * float(1 + p % 5)))
-                }
-            } elif (row.form == ScaleForm.hash_d) {
-                for (wi in range(4)) {
-                    wsh[sb * 5 + wi] = hash_word(uint(sb * 4 + wi) + row.sseed)
-                }
-                wsh[sb * 5 + 4] = packHalf2x16(float2(row.dmul * float(1 + sb % 7), 0.0))
-            } elif (row.form == ScaleForm.d_hi_hash) {
-                wsh[sb * 2] = packHalf2x16(float2(row.dmul * float(1 + sb % 7), 0.0)) | (hash_word(uint(sb * 2) + row.sseed) << 16u)
-                wsh[sb * 2 + 1] = hash_word(uint(sb * 2 + 1) + row.sseed)
-            } elif (row.form == ScaleForm.q51_dm) {
-                wsh[sb] = packHalf2x16(float2(0.0002 * float(1 + sb % 7), 0.0001 * float(sb % 5) - 0.0002))
-            }
-        }
-        if (row.form == ScaleForm.iq4nl32_d) {
-            delete wsh
-            wsh <- iq4nl32_scale_words(units, 0.0002)
-        } elif (row.form == ScaleForm.mx4_e8m0) {
-            delete wsh
-            wsh <- mx4_scale_words(units)
-        }
-    }
-}
-
 //! one per-format tile cell: the table row's planes through `tile_cell_arms` - the cm2 l/m/s/e tiles and the KHR tile, or s, e and
 //! KHR on a per-32 format - against its oracle; a row with a `control` then reads the same planes apart under the sibling codebook
 def private fmt_tile_cell(t : T?; fmt : KqFmt) {
@@ -293,7 +178,7 @@ def private fmt_tile_cell(t : T?; fmt : KqFmt) {
         var wqh, wsuh : array<uint>
         fmt_tile_planes(rows[at], wqh, wsuh)
         var f <- tile_fixture(rows[at].n, rows[at].blk_k, wqh, wsuh, 3u, rows[at].xf_add)
-        let arms <- rows[at].per32 ? [ARM_CM2_S, ARM_CM2_E, ARM_KHR] : tile_arms_all()
+        let arms <- fmt == KqFmt.mx4 ? [ARM_CM2_S, ARM_CM2_E, ARM_KHR] : tile_arms_all()   // the expert-only form has no dense l or m column
         let name = "{fmt}"
         var y_ref <- tile_cell_arms(t, name, int(fmt), f, arms, rows[at].oracle)
         if (!empty(y_ref) && rows[at].control != null) {
@@ -329,24 +214,6 @@ def private q8_tile_cell(t : T?; arm, k : int; wq_seed, ws_seed, xf_mul, xf_add 
     } else {
         t |> skip("dasVulkan not present")
     }
-}
-
-//! a two-region tile schedule: records [wblk0, row0, cnt, wg0] - rows [0, cnt0) from weight block 0, rows [cnt0, cnt0 + cnt1)
-//! from `wblk1` - then the workgroup map at `ttile` rows by `wtiles` weight tiles, `extra` zero words past it; `wgs` the map's length
-def private two_region_sched(cnt0, cnt1, wblk1, ttile, wtiles, extra : int) : tuple<words : array<uint>; wgs : int> {
-    let wgs0 = ((cnt0 + ttile - 1) / ttile) * wtiles
-    let wgs = wgs0 + ((cnt1 + ttile - 1) / ttile) * wtiles
-    var words : array<uint>
-    words |> resize(2 * 4 + wgs + extra)
-    words[2] = uint(cnt0)
-    words[4] = uint(wblk1)
-    words[5] = uint(cnt0)
-    words[6] = uint(cnt1)
-    words[7] = uint(wgs0)
-    for (w in range(wgs)) {
-        words[8 + w] = w < wgs0 ? 0u : 1u
-    }
-    return <- (words = words, wgs = wgs)
 }
 
 //! the host planes of an sdot4-feed tile cell: the weight quants and scales, the activation quants and their per-unit scales
@@ -919,7 +786,7 @@ def test_vkd_ext_roster(t0 : T?) {
     }
 }
 
-[test, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
+[test, arch(at="../ARCHITECTURE_GPU_SHARED_GEMM.md#cm2-decode-16bit-lanes")]
 def test_vkd_direct_decode(t0 : T?) {
     t0 |> run("a [spirv_decode] method called directly from the kernel body == the same method on the CPU") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -1687,17 +1554,6 @@ def private actf16_halves(g, u : array<float>; nelem, elem0 : int; ubase : int =
 // Synthetic planes — any bit pattern is valid K-quant data, EXCEPT the scale words, which are
 // composed from finite halves so a NaN can't poison the compare.
 
-def private safe_half(i : uint) : uint {
-    let tab = fixed_array(0x3C00u, 0xB800u, 0x3400u, 0x4200u, 0x2E00u, 0xBC00u, 0x3E00u, 0xB000u)
-    return tab[i % 8u]
-}
-
-def private ws_word(i : uint) : uint => safe_half(i * 7u + 3u) | (safe_half(i * 3u + 1u) << 16u)
-
-//! `n` scale words `ws_word(i * mul + add)`: two finite halves a word
-def private ws_plane(n : int; mul, add : uint) : array<uint> =>
-    <- [for (i in range(n)); ws_word(uint(i) * mul + add)]
-
 // ===== CPU oracles =====
 // The reference side of every arm: plain sequential math (the Metal kernel-unit pattern), or the
 // class's own per-block methods driven lane-free. Device subgroup/tile folds reassociate float
@@ -1784,27 +1640,6 @@ def private kq_leaf_rails_engage(ensure : block<(fmt : int) : bool>) : bool {
         if (!invoke(ensure, f)) return false
     }
     return true
-}
-
-//! a decode GEMV cell's host planes: the weight quants and scales, the region records, one activation row's quants and scales
-struct private GemvFix {
-    wqh, wsh, xqh : array<uint>
-    xsh : array<float>
-    regs : array<uint>
-}
-
-//! `nreg` regions of `d` rows, region r's weights at r x d x `units` units, the scale plane `wsh` moved in; the weight quants
-//! `units` a row of `wq_words` words hashed at `i + wq_seed`, the activation row's `xunits` of `xq_words` at
-//! `hash_word(i * xq_mul + xq_add)`, its scales `xs0 + (i % xs_mod) * xs_step`
-def private gemv_fix(nreg, d, units, wq_words : int; wq_seed : uint; var wsh : array<uint>; xunits, xq_words : int; xq_mul, xq_add : uint;
-                     xs0, xs_step : float; xs_mod : int) : GemvFix {
-    var f <- GemvFix(wqh <- hashed_words(nreg * d * units * wq_words, 1u, wq_seed), wsh <- wsh,
-        xqh <- hashed_words(xunits * xq_words, xq_mul, xq_add), xsh <- row_fill(xunits, 1, 0, xs_step, -xs0, xs_mod))
-    f.regs |> resize(nreg * 2)
-    for (r in range(nreg)) {
-        f.regs[r * 2] = uint(r * d * units)
-    }
-    return <- f
 }
 
 let private GEMV_PLANES = fixed_array(0, 1, 2, 3, 4, 5)   //! a GEMV cell's plane ids in the classes' binding order
@@ -2006,48 +1841,6 @@ def test_vkd_kq_gemv_family(t0 : T?) {
             t |> skip("dasVulkan not present")
         }
     }
-}
-
-//! the token-table gather's expected rows: row r the table row `ids[r]` at superblock `wblk0`, each element the class's own
-//! `blk_decode` lane under the lo or hi term pair `blk_fold` reads, times `escale`; an `EMB_ID_HOST` row the host's staged row
-def private emb_gather_oracle(fmt : int; wq, ws : array<uint>; ids : array<uint>; xh : array<float>; n : int; wblk0 : uint; escale : float) : array<float> {
-    var y : array<float>
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        var noq : array<uint>
-        var nos : array<float>
-        var k = kq_cls_ref(fmt, wq, ws, noq, nos)
-        let nsb = n / 256
-        y |> resize(length(ids) * n)
-        for (r in range(length(ids))) {
-            if (ids[r] == EMB_ID_HOST) {
-                for (e in range(n)) {
-                    y[r * n + e] = xh[r * n + e]
-                }
-                continue
-            }
-            for (b in range(nsb * 8)) {
-                var wl = uint4(0u)
-                var wh = uint4(0u)
-                let terms = k->blk_decode(wblk0 + ids[r] * uint(nsb) + uint(b / 8), uint(b % 8), wl, wh)
-                let bsum = k->fold_reads_bsum()
-                for (e in range(32)) {
-                    let w = e < 16 ? wl : wh
-                    let word = (e % 16) / 4
-                    let lane = word == 0 ? w.x : (word == 1 ? w.y : (word == 2 ? w.z : w.w))
-                    let q = float(int(int8((lane >> uint((e % 4) * 8)) & 0xFFu)))
-                    let a = e < 16 ? terms.x : terms.z
-                    let c = bsum ? (e < 16 ? terms.y : terms.w) : 0.0
-                    y[r * n + b * 32 + e] = (a * q + c) * escale
-                }
-            }
-        }
-        unsafe {
-            delete k
-        }
-        delete noq
-        delete nos
-    }
-    return <- y
 }
 
 //! the token-table gather's leaves (`KqEmb<Fmt>`, `KqGemvLeafT` under `EMB`) for every superblock format: four rows - three token
@@ -3097,52 +2890,30 @@ def test_vkd_k5_cm2_batch(t0 : T?) {
 
 [test]
 def test_vkd_q51_cm2_batch(t0 : T?) {
-    t0 |> run("cm2 Q5_1 s and e tiles == the CPU oracle (the per-32 plane verbatim: nibble | qh bit, d * q + m off one word)") <| @(t : T?) {
+    t0 |> run("cm2 Q5_1 l/m/s/e tiles and the KHR tile == the CPU oracle (the per-32 plane verbatim: nibble | qh bit, d * q + m off one word)") <| @(t : T?) {
         fmt_tile_cell(t, KqFmt.q51)
     }
 }
 
-//! the iq4nl32 cells' scale words: cool f16 d, two blocks a word, so the tile's f16 sums stay far from 65504
-def private iq4nl32_scale_words(totblk : int; mul : float) : array<uint> {
-    var w : array<uint>
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        w |> resize((totblk + 1) / 2)
-        for (i in range(length(w))) {
-            w[i] = packHalf2x16(float2(mul * float(1 + (2 * i) % 7), mul * float(1 + (2 * i + 1) % 7)))
-        }
-    }
-    return <- w
-}
-
 [test]
 def test_vkd_iq4nl32_cm2_batch(t0 : T?) {
-    t0 |> run("cm2 IQ4_NL per-32 s and e tiles == the CPU oracle (the per-32 plane verbatim: d * LUT[nibble] off a half-word d)") <| @(t : T?) {
+    t0 |> run("cm2 IQ4_NL per-32 l/m/s/e tiles and the KHR tile == the CPU oracle (the per-32 plane verbatim: d * LUT[nibble] off a half-word d)") <| @(t : T?) {
         fmt_tile_cell(t, KqFmt.iq4nl32)
     }
 }
 
 [test]
 def test_vkd_q4032_cm2_batch(t0 : T?) {
-    t0 |> run("cm2 Q4_0 per-32 s and e tiles == the CPU oracle (iq4nl32's plane form: d * (nibble - 8) off a half-word d)") <| @(t : T?) {
+    t0 |> run("cm2 Q4_0 per-32 l/m/s/e tiles and the KHR tile == the CPU oracle (iq4nl32's plane form: d * (nibble - 8) off a half-word d)") <| @(t : T?) {
         fmt_tile_cell(t, KqFmt.q4032)
     }
 }
 
 [test]
 def test_vkd_q5032_cm2_batch(t0 : T?) {
-    t0 |> run("cm2 Q5_0 per-32 s and e tiles == the CPU oracle (q51's quant form under a half-word d: d * (q - 16), the qh bit as q's fifth)") <| @(t : T?) {
+    t0 |> run("cm2 Q5_0 per-32 l/m/s/e tiles and the KHR tile == the CPU oracle (q51's quant form under a half-word d: d * (q - 16), the qh bit as q's fifth)") <| @(t : T?) {
         fmt_tile_cell(t, KqFmt.q5032)
     }
-}
-
-//! the mx4 cells' E8M0 bytes: exponents 112..124 (2^-16 .. 2^-4 halved), four a word, so the tile's f16 sums stay far from 65504
-def private mx4_scale_words(totblk : int) : array<uint> {
-    var w : array<uint>
-    w |> resize((totblk + 3) / 4)
-    for (b in range(totblk)) {
-        w[b / 4] |= uint(112 + b % 13) << uint((b % 4) * 8)
-    }
-    return <- w
 }
 
 [test]
@@ -3431,7 +3202,7 @@ def test_vkd_at_attn(t0 : T?) {
                     var sc = cp |> cls_set(fixed_array(pq, pk, pv, py), @@set_at_attn_cls)
                     var pc = AtAttnArgs(rows = uint(rows), w0 = uint(w0), qd = uint(qd),
                         kvd = uint(kvd), hs = uint(hs), kv_mul = uint(kv_mul),
-                        flags = gated ? 1u : 0u, dpl = uint(hs / 32), scale = scale)
+                        flags = gated ? AT_ATTN_FLAG_GATED : 0u, dpl = uint(hs / 32), scale = scale)
                     cp |> cell_record() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
                         enc_at_attn_cls(raw2, h2, sc, pc, int64(nheads * ((rows + 7) / 8)))
                     }
@@ -5462,21 +5233,6 @@ def test_vkd_q8_gemv_pair(t0 : T?) {
     }
 }
 
-//! a per-32 plane's scale words for `totblk` blocks: q51's d | m halves, iq4nl32's two halves a word, mx4's four E8M0 bytes a word
-def private blk32_scale_plane(f : KqFmt; totblk : int) : array<uint> {
-    var words : array<uint>
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        if (f == KqFmt.q51) {
-            words <- [for (b in range(totblk)); packHalf2x16(float2(0.002 * float(1 + b % 7), 0.001 * float(b % 5) - 0.002))]
-        } elif (f == KqFmt.iq4nl32 || f == KqFmt.q4032 || f == KqFmt.q5032) {
-            words <- iq4nl32_scale_words(totblk, 0.002)
-        } else {
-            words <- mx4_scale_words(totblk)
-        }
-    }
-    return <- words
-}
-
 //! the per-32 formats' columns against the engine's scalar dots: column c's activation row (the quants and scales c x nb
 //! blocks in) dotted with every weight row, landing at c x d + row
 def private blk32_ncol_oracle(f : KqFmt; wqh, wsh, xqh : array<uint>; xsh : array<float>; n, d, ncol_max : int) : array<float> {
@@ -6246,7 +6002,7 @@ def test_vkd_at_prep(t0 : T?) {
             let rows = 3
             let w0 = 5      // the k panel lands at absolute positions
             let eps = 0.00001
-            let flags = 3   // gated q + qk-norm
+            let flags = AT_FLAG_GATED_Q | AT_FLAG_QK_NORM
             // smalls layout (offsets ride meta words / push args): eps@0, rmsq@16, rmsk@16+hs,
             // cos rows, sin rows
             let rmsq_off = 16
@@ -6272,13 +6028,13 @@ def test_vkd_at_prep(t0 : T?) {
                 var scq = cp |> cls_set(fixed_array(psq, pqp, pg, psm, pb), @@set_at_prep_cls)
                 var sck = cp |> cls_set(fixed_array(psk, pkp, pg, psm, pb), @@set_at_prep_cls)
                 var pcq = AtPrepArgs(d = uint(qd), nh = uint(nh), hs = uint(hs),
-                    half = uint(half), flags = uint(flags), rms_off = uint(rmsq_off),
+                    half = uint(half), flags = flags, rms_off = uint(rmsq_off),
                     cos_off = uint(cos_off), sin_off = uint(sin_off), obase = 0u,
-                    qsrc = 1u, boff = 0u, hasb = 1u, eps = eps)
+                    is_q_pass = 1u, boff = 0u, hasb = 1u, eps = eps)
                 var pck = AtPrepArgs(d = uint(kvd), nh = uint(nkvh), hs = uint(hs),
-                    half = uint(half), flags = uint(flags), rms_off = uint(rmsk_off),
+                    half = uint(half), flags = flags, rms_off = uint(rmsk_off),
                     cos_off = uint(cos_off), sin_off = uint(sin_off), obase = uint(w0),
-                    qsrc = 0u, boff = uint(qd), hasb = 1u, eps = eps)
+                    is_q_pass = 0u, boff = uint(qd), hasb = 1u, eps = eps)
                 cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
                     enc_at_prep_cls(raw, h, scq, pcq, int64(rows))
                     enc_at_prep_cls(raw, h, sck, pck, int64(rows))
@@ -9034,8 +8790,8 @@ def test_vk_coopmat_default_and_tile_pick(t0 : T?) {
             t |> equal(cm2_tile_cols(768l, 64l), 32l)       // ... up to the half-m edge
             t |> equal(cm2_tile_cols(768l, 65l), 128l)      // past it an m column is more than half full
             t |> equal(batch_tile_edges(int(KqFmt.iq3s4), 672l, 112l, true).tc, 128l, "the batch arm's cm2 column follows the pick on a superblock format")
-            t |> equal(batch_tile_edges(int(KqFmt.iq4nl32), 2560l, 112l, true).tc, 32l, "... and is the s column on a per-32 expert plane, its one cm2 stamp")
-            t |> equal(batch_tile_edges(int(KqFmt.q51), 2560l, 512l, true).tc, 32l, "... q51 too")
+            t |> equal(batch_tile_edges(int(KqFmt.iq4nl32), 2560l, 112l, true).tc, cm2_tile_cols(2560l, 112l), "... and on a per-32 plane, which carries the l and m columns too")
+            t |> equal(batch_tile_edges(int(KqFmt.q51), 2560l, 512l, true).tc, cm2_tile_cols(2560l, 512l), "... q51 too")
             t |> equal(batch_tile_edges(int(KqFmt.mx4), 2880l, 512l, true).tc, 32l, "... and mx4")
             t |> equal(cm2_tiles(512l, 512l), 16l)                             // the 1B k/v shape: four m columns of four
             t |> equal(pick_str(cm2_gemm_pick(512l, 512l, 2048l)), "256x4x512")   // ... alone it fills under half the SMs: four l chunks (32 workgroups of 8 steps, 205 units with the reduce, against 320 whole)

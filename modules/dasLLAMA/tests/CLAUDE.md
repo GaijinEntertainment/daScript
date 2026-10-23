@@ -914,7 +914,8 @@ typed (`plane_as`); `plane_upload` and `plane_refill` re-lay a plane between two
 absolute floor, relative to the expectation's largest magnitude, or per element against an envelope or a
 bar array; a NaN or a length difference is always off), logs the measured max difference with its row,
 head and column and the bar there, and runs the poisoned-element control; `check_count` is its count
-alone, what a control that poisons the kernel's input asserts above 0. The in-test forms
+alone, and `check_exceeds` the control's verdict over it - every element of both sides finite and the
+count above 0 - what a control that poisons the kernel's input asserts. The in-test forms
 the cells share with the Metal gate, and the CPU re-derivations of engine loops the engine keeps
 private (the ALBERT embedding sum, the duration sigmoid sums), live in `_tts_kernel_oracles.das`, which
 requires no device module. The kernel cells' other shared references - the engine's table rope by its
@@ -1075,14 +1076,14 @@ same two regions, whole and under a k split with the reduce, wherever the device
 matrices at subgroup 32; `test_vkd_f32_khr_batch` is the same tile over a file's f32 rows (`F32KhrBatch`, each
 weight rounded to f16 on the stage) against the f16-rounding oracle over one region, whole and in two k chunks
 through the reduce, on the same device condition; `test_vkd_actf16_strided` holds the f16 act over the
-strided side rows (`ubase` / `ustride` / `ulen`) against the CPU form, the contiguous read its control; q51's expert rail rides `test_vkd_q51_cm2_batch` - its s and e stamps
+strided side rows (`ubase` / `ustride` / `ulen`) against the CPU form, the contiguous read its control; q51's rail rides `test_vkd_q51_cm2_batch` - its l, m and s stamps (the m stamp its e column too)
 on a cm2 device and its KHR tile wherever the device has KHR cooperative matrices at subgroup 32,
 over the per-32 plane with hand-packed d | m words - and `test_vkd_q51_gemv`,
 its Q8_0-activation decode GEMV against the scalar dot's float order at 704 and 1408 (every per-32 GEMV cell also runs the
 format's summed twin over one, two and four token rows of two slots each - `per32_sum_rows_cell`: every row its slots' scalar
 dots under their weights, a poisoned last row the control, a wider dispatch's rows bit for bit the narrower one's); mx4's rail
-rides `test_vkd_mx4_cm2_batch` (the same three arms over the doubled-magnitude plane, every nibble
-code reached), `test_vkd_mx4_gemv` (the Q8_0-fed decode GEMV at 704 and gpt-oss's 2880) and
+rides `test_vkd_mx4_cm2_batch` (the s and e tiles and the KHR tile - the expert-only form has no dense l or m
+column - over the doubled-magnitude plane, every nibble code reached), `test_vkd_mx4_gemv` (the Q8_0-fed decode GEMV at 704 and gpt-oss's 2880) and
 `test_vkd_mx4_gemv_gu` (the fused gate + up + act + requant twin byte for byte against the split
 path and the CPU chain, biased and unbiased, the gate rows' bar with its poison)) run five
 arms: the cm2 l/m/s tiles and the
@@ -1875,7 +1876,7 @@ other every off-pick step discarded (the recurrent states put back from the snap
 (`vk_rdec_chain_stats`).
 
 `test_gpu_resident_hybrid_mtp_block_codec` runs the head over a block-codec mirror
-(`ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-kv-block-codecs`), calling the cells above under a
+(`ARCHITECTURE_GPU_SHARED_ATTN.md#vk-kv-block-codecs`), calling the cells above under a
 `set_gpu_kv_dtype` pin it puts back, their sessions on the armed codec (`load_mtp_carrier` asserts
 the mirror armed at the codec asked): under q8_0 the draft, the verify, the warmed head rows and the
 six rounds, on the f16 bars; under tq4 the verify and the forced reject, which hold the driver to
@@ -1911,7 +1912,7 @@ the one-step-off control) at one window and two windows, with the arm witnesses 
 carries the bias and the driver armed on it; skips without the model or the armed tier. Its IQ4_NL mint
 (`Qwen2.5-0.5B-Instruct-IQ4_NL-local.gguf`, a recipe row in `../performance/model_specs.das`) runs the same two cells with
 every dense plane's iq4nl32 tag asserted (`dense_planes_tagged`, `_resident_feed.das`) and every call served. The same
-carrier holds the K/V mirror's block codecs (`ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-kv-block-codecs`)
+carrier holds the K/V mirror's block codecs (`ARCHITECTURE_GPU_SHARED_ATTN.md#vk-kv-block-codecs`)
 through the rig of `_kv_codec_cells.das`, whose loader (`with_codec_model`) pins the codec through
 `set_gpu_kv_dtype` for the load, puts back the pin it found (or lifts it where nobody had asked),
 asserts the mirror armed at the codec asked, and skips where `DASLLAMA_VK_KV32=1` armed an f32
@@ -2024,7 +2025,8 @@ llama family (Llama-3.2-1B Q8_0 and its Q4_0 requant `Llama-3.2-1B-Instruct-Q4_0
 recipe row is `../performance/model_specs.das`'s, Llama-3.2-3B Q8_0, Llama-3.1-8B Q4_K_M,
 `DASLLAMA_GPU=1`; the Q4_0 file's planes run the kq batch arm off the f16 feed and the cm2 tiles on it; the Q5_1 mint
 `Llama-3.2-1B-Instruct-Q5_1-local.gguf`, its recipe row beside the Q4_0's, keeps every dense plane's q51 tag - asserted, the
-window's GEMMs on the s tile on the f16 feed and the per-32 batch tile off it - and runs the peel cell below too): the
+window's GEMMs on the cm2 column the shape picks on the f16 feed and the per-32 batch tile off it - and runs the peel cell
+below too): the
 NORM rope, no q/k/v bias, no q/k norm, the tied classifier of the 3.2 files - the qwen2 file's
 forced-feed form and bar at one window and two windows per carrier, with the arm witnesses that
 the file is a llama with neither bias nor NEOX rope, and the pool's spin-window witness - the
@@ -2041,6 +2043,58 @@ control, both sides' argmax rows decoded; a tail one row past the N-row command'
 chain, no peel counted, on the same bar, as does the eight-row tail with the peel's lever off
 (`set_vulkan_prefill_peel`, put back as found) - the peel counter's control; the plan (`resident_plan_pick`) charges the per-row planes at `RDEC_NROW_MAX` rows. The forced-feed helpers it shares with the
 other resident files live in `_resident_feed.das`. Skips without the model or the armed tier.
+`test_gpu_resident_cuda_llama.das` - stocked suite, `-jit` only; the CUDA home's whole-model driver
+(`DASLLAMA_GPU=1 DASLLAMA_CUDA=1`, the dense slice: one Q8_0 arena, the f16 mirror, the token step as a
+captured graph, the prefill as the window chain over the cm2 tiles - one session's rows, or several sessions' chunks as
+the segmented window, which `test_gpu_resident_segments.das` holds on this home too) on Llama-3.2-1B Q8_0 in the llama file's
+forced-feed form at 40 tokens (one window) and at a prompt of two windows (the file pins `PF_WINDOW_ROWS` as the
+other resident files do, every load through `load_resident` at one region with the resident route pinned), with the
+witnesses that the CUDA driver served every position, ran the windows the
+prompt takes, replayed the captured graph past the first step and took the attention's unsplit form for every fed step
+under the unsplit position and for none past it (the one-window cells' steps under `RD_UNSPLIT_POS`, the two-window
+cells' past it; a device that splits no keys has no such form, and the cell then holds the count at zero), a CPU run
+with the model off the device moving neither the position nor the window counter and holding no graph (their control);
+the Q4_K_M file (the K-quant planes) and the Q5_1 mint (the per-32 planes) the same way at one window and two, the Q5_0
+mint (the q5032 planes), the IQ4_XS file and the IQ4_NL mint (the codebook planes, their decode through the home's byte
+permute) at one window, and Llama-3.2-3B Q8_0 (head 128: the window's attention on the h128 flash tile) at one window
+and two; and the short window's peel through the N-row command on the CUDA driver
+(`peel_cell` of `_resident_feed.das`, the Vulkan llama file's and the hybrid file's cell): on the Q8_0, Q4_K_M and Q5_1
+carriers, after a 40-row opening, tails of 1, 2, 5 and 8 rows as one prefill call peel (a peel and a prefill counted)
+within the split bar of the same tail stepped a row at a time, the row one step off the control; one row past the
+per-row planes and the eight-row tail with the lever off take the window chain. Skips without `DASLLAMA_CUDA=1`, without
+the armed tier, without the file, or, on the forced-feed cells, where the prompt window is not `PF_WINDOW_ROWS` rows.
+`test_gpu_resident_cuda_codec.das` - stocked suite, `-jit` only: the same
+driver under the block-codec mirrors: the codec rig's forced-feed form (`_kv_codec_cells`) under q8_0 on the 1B Q8_0 at
+one window and two and on the Q4_K_M at one, at the Vulkan codec carriers' 10% bar, and the distance form under tq4 on
+the Q4_K_M at the Vulkan llama codec file's bars; the same skips, and under `DASLLAMA_VK_KV32=1` (the f32 mirror armed
+over the asked codec). `test_gpu_resident_cuda_batch.das` - stocked suite,
+`-jit` only: the same driver's N-row token command (`ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command` on the CUDA
+home) - sessions a mirror region each, six batched steps through one command against each session stepped alone on
+the one-row command: every row's logits a step within the split bar of the session alone (the Q8_0 rows read bit for
+bit; the K-quant rows round apart, as on Vulkan), every row the compare and its control read asserted finite, the row
+one step off the control, both sides' argmax pieces decoded a row, the N-row counter up by every step and unmoved by
+the sessions alone, its row counter (`rdec_nrow_rows`) up by every row of every step, every call served - two rows at
+two regions on the 1B Q8_0 (the q8 two-column stamp launched) and Q4_K_M, twelve rows at twelve regions on the Q8_0
+(one command of twelve rows a step, a tile of eight columns and one of four: the q8 eight- and four-column stamps
+launched); the same skips, and where the driver declines the model at the cell's region count. The CUDA kernel cells
+beside them, `test_cuda_kernels.das` (model-free; a CUDA device with NVRTC, else every cell but the leak gate skips;
+the per-format cells - the kq cm2 tiles, the kq and per-32 GEMVs, the token-table gathers, the Q8_K feeds - also skip
+without dasVulkan): the q8 GEMV and its rate, the MMQ int8 GEMM against the block-scaled reference, the cm2 l tile
+against the f16-feed oracle whole and split in two k chunks through the reduce (`test_cud_q8_cm2l_split`), its rate at
+the 1B window's shapes - each rate cell's warm-up held to the oracle first, the GEMV's every row and the tile's
+activation rows 0, 255, 256 and 511 over every column, the tile's bit for bit on a fixture its f16 accumulator holds
+exactly (sixteen +-1 activations a row over the 2^-7 block scale) - the word copy (a quad-lane run and a three-word tail, the
+device block and the out block under a word sentinel), the flash tiles at heads 64 and 128 with their f16-out twins,
+whole and under a 40-key window, the compile gate over every `[cuda_dispatch]` kernel of the home, the shutdown leak
+gate, the K-quant and per-32 GEMV leaves and cm2 tiles against the Vulkan cells' oracles, the token-table gathers, the
+Q8_K feeds (the quants a byte within one step, the scales and the in-place residual row through `check_rows`, the
+residual row moved off its input), and the K/V mirror's
+block codecs - the q8_0 store at token rows and window rows against the CPU cache's bytes, the tq4 store at seven arms
+(heads of 32 to 512, a shared-KV layer's rotation alone, the window stamp, the warm with no q head) against the CPU
+rotation and the cache's bytes bit for bit, the q8_0 and tq4 shadows against the CPU dequant as halves bit for bit,
+the tq4 un-rotation bit for bit and under the head gate, the decode attention's q8_0 and tq4 stamps on both slabs
+against the CPU attention over the dequantized rows (the oracles and staged fixtures the Vulkan codec cells share
+through `_kv_codec_oracles.das`).
 `test_gpu_resident_segments.das` - stocked suite, `-jit` only; the whole-model resident driver's
 SEGMENTED window (`ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-segments`, `DASLLAMA_GPU=1`) on
 Llama-3.2-1B at Q8_0 (the ids form) and Q4_K_M (the x form), two mirror regions: two host-cached
@@ -2077,7 +2131,10 @@ gemma rig's bar) runs the segments cell and the two 300-row tails, then the host
 tier's token-table gate unseated (`unregister_embed_gpu_gate`, put back as found) the host embeds every row, the side rows have no
 ids to gather off, and two openings ride no segmented window - each its own window, its last row within the bar of the same
 opening prefilled alone with the gate back, the openings' segmented window in the segments cell the counter's control. The file never holds more live host-cached sessions than regions: a later
-prefill would take a live session's region, which the engine leaves to the scheduler's pin. Skips
+prefill would take a live session's region, which the engine leaves to the scheduler's pin. Under
+`DASLLAMA_CUDA=1` the llama cells run the same way on the CUDA home's segmented window, the segmented-window
+counter then `cud_rdec_prefill_segment_windows`, and the recurrent and E-series cells skip - that home serves the dense
+slice alone. Skips
 without the model or the armed tier, and on a card whose room the plan does not fit at two regions.
 `test_batch_decode.das` - stocked suite, `-jit` only: the CPU batched stack against the
 per-session sequential forward on llama2.c's stories15M (fp32, Q8 and Q4_0 weights - the Q4_0
@@ -3147,7 +3204,8 @@ double expectation) passes rows inside it and reds one element past it, a NaN on
 length difference red at any bar, the poisoned-expectation control reds a bar too loose to see it
 (at the last element or a chosen one, and an empty compare that has none), `check_count` counts a
 NaN on either side, a finite miss and each element of a length difference off and equal rows 0 while
-asserting nothing, and `check_rows` is `check` over rows and heads; `check_exact` does the same over bytes and words; the host helpers
+asserting nothing, `check_exceeds` passes a finite miss and reds equal rows (the control) and a NaN or
+an infinity on either side, and `check_rows` is `check` over rows and heads; `check_exact` does the same over bytes and words; the host helpers
 (`plane_of`, `poisoned_copy`, the generic `copy_span`, `argmax_of`, `opaque`, `jit_only`) and the
 `Sweep` tally (lengths, misses, NaN, poison legs inside a loose bar, inert elements) each against
 hand-counted results.

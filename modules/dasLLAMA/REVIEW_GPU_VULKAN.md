@@ -2,7 +2,15 @@
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 docs: `ARCHITECTURE_GPU_VULKAN.md`, every `ARCHITECTURE_GPU_VULKAN_<CONCERN>.md` companion beside
-it, and `ARCHITECTURE_GPU.md`. Planned work: `followup_vulkan.md`.
+it, `ARCHITECTURE_GPU.md`, `ARCHITECTURE_GPU_SHARED_GEMM.md` and `ARCHITECTURE_GPU_SHARED_ATTN.md`.
+Planned work: `followup_vulkan.md`.
+
+**A diff that changes a GEMM tile class or template - `KqCm2BatchT`, a `<Fmt>Cm2T`, a
+`<Fmt>KhrBatch`, a stamp of one - or a kernel body that calls `coopmatLoadTensor`,
+`coopmatLoadTensorDecode` or a `[spirv_decode]` method, or a prefill GEMM's k split
+(`cm2_gemm_pick`, `F16G_SPLIT`, or an encode that splits k), or that changes the SPIR-V words a
+GEMM tile stamp emits (its `DASLLAMA_VK_SPV_DUMP` output against the base branch's), applies
+`REVIEW_GPU_VULKAN_TILES.md` (beside this file) too.**
 
 **A diff that adds a Vulkan dispatch family - a `[vk_dispatch]` class and the `ensure_<family>` /
 `set_<family>` pair generated from it - or that caches a descriptor set or a host address (a
@@ -26,15 +34,6 @@ the same change.**
 once at the function that starts the encode chain binding the buffer, against a size no buffer of
 that chain can exceed.** The bind site cannot shrink a buffer that was sized wrong.
 
-**Never take a quant byte out of an `unpack8` select in a kq superblock format's cm2 decode body -
-the `decode` method of its `<Fmt>Cm2T` class in `dasllama/dasllama_vulkan_classes.das`, or its
-four-wide twin (`decode_v4`) - load the 16-bit lane from the `int16[N]` block member and shift
-the byte out, and assemble a field that straddles two lanes from those lanes, never from selected
-bytes.** Indexing `unpack8` of a 32-bit word with a runtime value drops the whole kernel off the
-driver's block-load path, about 3x slower, and on the expert-schedule shape an `unpack8` lane select
-costs another 1.1x to 1.5x over the shift form; the Q8_0 tile's 16-bit-lane select is the measured
-exception (`ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes`).
-
 **A diff that changes when `vk_rdec_prefill_ids` - the resident prefill that takes token ids
 rather than embeddings - accepts a call, or when the override that routes to it
 (`vulkan_resident_prefill`) accepts one, updates `vulkan_embed_gpu_gate` in the same
@@ -44,82 +43,60 @@ embed when that gate returns true, so a gate true where the prefill path decline
 next consumer an unfilled residual stream.
 
 **A Vulkan-tier serving gate that decides at load - a predicate or per-layer loop whose true
-branch dispatches through a call into the tier (a `moe_gpu_*`, `vk_*` or `rdec_*` entry), wherever the diff puts it, and whose
-false branch or `continue` routes work off the path it armed, to the CPU path or to another
-path inside the tier - is a defect when it does not log, at load, how many layers or planes it
-routed off and why.** A silent decline is a fallback a user finds only by profiling.
+branch dispatches through a call into the tier (a `moe_gpu_*`, `vk_*` or `rdec_*` entry),
+wherever the diff puts it, and whose false branch or `continue` routes work off the path it
+armed, to the CPU path or to another path inside the tier - is a defect when it does not log, at
+load, how many layers or planes it routed off and why.** A silent decline is a fallback a user
+finds only by profiling.
 
 **A Vulkan-tier serving gate that decides per call - a predicate or loop whose true branch
-dispatches through a call into the tier (a `moe_gpu_*`, `vk_*` or `rdec_*` entry), wherever the diff puts it, and whose false
-branch or `continue` routes work off the path it armed, to the CPU path, to another path inside
-the tier, or to a slower form inside the same path (a host upload in place of a device-to-device
-copy) because of a model, session or device property, never because of the work's size - that does
-not log the concrete reason it declined, once per reason per armed model, is a defect.**
+dispatches through a call into the tier (a `moe_gpu_*`, `vk_*` or `rdec_*` entry), wherever the
+diff puts it, and whose false branch or `continue` routes work off the path it armed, to the CPU
+path, to another path inside the tier, or to a slower form inside the same path (a host upload in
+place of a device-to-device copy) because of a model, session or device property, never because
+of the work's size - that does not log the concrete reason it declined, once per reason per
+armed model, is a defect.**
 
 **A `*_decline_words` return that a diff adds or changes, for a reason a `VK_DECLINE_WORDS_*`
 constant in `dasllama/dasllama_vulkan_tower.das` already states, returns that constant or starts
 its text with it - never a second wording of that reason.**
 
-**A diff that adds or changes a function under `dasllama/` that calls `vk_moe_init()` and that is
-not reached only through a hook `install_vk_moe_hooks` installs makes it test
-`gpu_want_arms_tier()` first, and
-decline without calling it when the want is off; a serving hook - a hook slot the CPU chain calls
-to hand work to the GPU - that keeps a `VkDeclineCounter` counts that decline under its decline
-enum's `device` member, the reason `VK_DECLINE_WORDS_DEVICE` words.** `vk_moe_init` reads no
-knob, so a caller that skips the test serves on a box whose `DASLLAMA_GPU` says no.
+**A diff that adds or changes a function under `dasllama/` that calls `vk_moe_init()`, and that
+is reachable other than through a hook `install_vk_moe_hooks` installs, makes that function test
+`gpu_want_arms_tier()` first and decline without calling `vk_moe_init()` when the test returns
+false.** `vk_moe_init` reads no knob, so a caller that skips the test serves on a box whose
+`DASLLAMA_GPU` says no.
 
-**A diff that changes what a device limit or extension decides for the tier - which path
-serves, how much it arms, whether it declines - adds that limit or extension to `vk_ext_roster`
+**A serving hook - a hook slot the CPU chain calls to hand work to the GPU - that keeps a
+`VkDeclineCounter` counts a decline on a false `gpu_want_arms_tier()` under its decline enum's
+`device` member, with `VK_DECLINE_WORDS_DEVICE` as the reason text.**
+
+**A diff that changes what a device limit decides for the tier - which path serves, how much it
+arms, whether it declines - adds that limit to `vk_ext_roster`
 (`dasllama/dasllama_vulkan_common.das`) with what the tier does with it and what serves without
-it, or adds the new route to the entry it already has, in the same change.** A caller family - the
-functions that reach the tier through one serving hook - whose serving or declining the diff makes
-a limit or extension decide is a new route.
-
-**The coordinate a k loop's counter feeds to `coopmatLoadTensor` / `coopmatLoadTensorDecode`
-starts at a literal or at a value rounded down to the loop's step - never at a bare runtime
-product or a buffer-read value.** That coordinate is `c0` where the contraction runs along
-columns, `r0` where it runs along rows. The shader compiler vectorizes the decode-load only
-where it can prove the coordinate's alignment, and an unproven start runs the same loop at half
-the rate (`ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default`).
-
-**A cm2 tile - `cm2_tile` of `KqCm2BatchT` in `dasllama/dasllama_vulkan_classes.das`, the
-NV_cooperative_matrix2 GEMM body stamped per weight format, token-column width (`BN`) and k step
-(`BK`) - never loads weights through a clamped (`tensorLayout2DPad`) layout on its fast path - the
-branch it takes when its 128 weight rows fit the plane, the plane's width is a whole number of k
-steps, and its token column is whole or its stamp loads partial columns unclamped (`STILE`); every
-other tile takes the edge path.** A clamped decode-load runs every tile at a third the speed
-(`ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default`).
-
-**A weight tile the plane cannot fill starts at the plane's last whole 128 rows, never past the
-plane's end.** The whole dispatch already runs at its partial workgroups' rate, and a load past
-the plane reads memory the plane does not own
-(`ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default`).
-
-**A scale cache a cm2 tile stages indexes a row by its offset from the tile's first row
-(`wg_m0`), never by `bc.x & 127`.** `bc.x` is the plane's absolute row, and a last-window tile
-does not start on a 128 multiple.
-
-**Never split k on a prefill GEMM whose output rows start above row 0 - encode it whole, whatever
-splitter it uses (`cm2_gemm_pick`, or the small f16 GEMM's `F16G_SPLIT` chunks).** The split-k
-reduce sums partial planes counted from row 0, so a dispatch starting above row 0 would reduce
-the wrong rows.
+it; a diff that makes a limit or extension the roster already names decide a new route adds the
+route to that entry, in the same change.** A new route is a caller family - the functions that
+reach the tier through one serving hook - whose serving or declining the limit or extension now
+decides. Weakening `check_vk_extension_roster` (`REVIEW.das`) is a defect.
 
 **Never leave a K/V codec unserved by the kernels that read or write the whole-model driver's
-`k_slabs`/`v_slabs` mirror slabs, or the decode block's per-layer `DatLayer.k_mir`/`v_mir` pair - a
-K/V codec is the mirror's storage form: f16 or f32 elements on both, q8_0 or tq4 blocks on the
-driver's slabs alone.** Three shapes serve a codec: stamps of one template cover it; a
-single-codec kernel has a sibling behind an arming gate on the driver's codec (`RDec.kv_dt`); or
-a kernel that reads f16 or f32 rows binds, in the mirror's place, the float rows a block codec's
-store quantizes from (`RDec.kst_dev`/`vst_dev`, `pf_kst`/`pf_vst`) or its f16 copy of one layer's
-rows (`RDec.ksh_dev`/`vsh_dev`). A codec no kernel covers silently drops that codec's GPU path.
+`k_slabs`/`v_slabs` mirror slabs, or the decode block's per-layer `DatLayer.k_mir`/`v_mir` pair -
+a K/V codec is a storage form those buffers take: a value of `RDec.kv_dt` on the driver's slabs,
+an element type on the decode block's pair.** Three shapes serve a codec: stamps of one template
+cover it; a single-codec kernel has a sibling behind an arming gate on the driver's codec
+(`RDec.kv_dt`); or a kernel that reads f16 or f32 rows binds, in the mirror's place, the float
+rows a block codec's store quantizes from (`RDec.kst_dev`/`vst_dev`, `pf_kst`/`pf_vst`) or its
+f16 copy of one layer's rows (`RDec.ksh_dev`/`vsh_dev`). A codec no kernel covers silently drops
+that codec's GPU path.
 
 **A per-layer dispatch, or the upload of a session's CPU K/V rows into the mirror and their copy
-back, reaches its layer's slab only through the layer's slab number - `rd_slab(L)` for the slab
-pair, `<per-slab array>[L.mir_slab]` for a per-slab set - never `rd_slab_at` or a slab number of
-its own. A diff that adds an array with one entry per slab adds the array's name to `REVIEW.das`'s
-`check_mirror_slab_access` in the same change. Weakening that check is a defect.** A slab holds a contiguous run of layers
+back, reaches its layer's slab pair through `rd_slab(L)` - never through `rd_slab_at` or a slab
+number of its own.** A slab holds a contiguous run of layers
 (`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan`), so a site that names a slab number itself
 binds the wrong rows for every layer in another slab, with no error.
+
+**A diff that adds an array with one entry per slab adds the array's name to `REVIEW.das`'s
+`check_mirror_slab_access` in the same change; weakening that check is a defect.**
 
 **Never write a block codec's mirror bytes from any kernel but the codec's store kernel
 (`KvQ8StoreT`, `KvTq4StoreT`).** When a session passes to the CPU chain, the tier copies the
@@ -129,83 +106,36 @@ hands the CPU chain rows its own store never writes.
 **Under a tq4 mirror, never let anything read an attention output row before `KvTq4Unrot` has run
 on it - the requant folded into the decode attention's store (`DaAttnArgs.rqk`), the head gate
 (`DaAttnArgs.gated`), the f16 feed's conversion of the window tiles' f32 rows, or a reader the
-diff adds: run it after the un-rotation instead.** The attention dispatches leave their rows in tq4's rotated basis
-(`ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-kv-tq4-basis`).
-
-**A diff that changes the shared `KqCm2BatchT` - its `cm2_tile`, its `run`, or a
-`@template_constant` default declared there - puts every format's probe rows in the PR body, both
-the `DASLLAMA_VK_DECVEC=1` and the `=0` rows.**
-
-**A diff that changes a format's own cm2 tile - its `<Fmt>Cm2T`, a `@template_constant`
-`override`n on a stamp, a stamp's tile typedefs or instance set, or its decode body or four-wide
-twin (`decode_v4`) - puts that format's probe rows in the PR body, both the `DASLLAMA_VK_DECVEC=1` and the `=0`
-rows.**
-
-**A diff that owes a cm2 stamp's probe rows takes them from that stamp's `harness/vk_gemm_probe.das`
-arm - `cm2:<fmt>` or `cm2g:<fmt>` for the l and m stamps (`<Fmt>Cm2LBatch`, `<Fmt>Cm2MBatch`),
-`moe:<fmt>` or `moesk:<fmt>` for the s and e stamps (`<Fmt>Cm2SBatch`, `<Fmt>Cm2EBatch`) - never
-from another arm and never from a whole-model sweep; a stamp the probe admits no arm for answers
-with its tile cell's run in `tests/test_vulkan_kernels.das` instead.**
-
-**A diff that answers a probe-row or kernel-cell duty with a claim that a stamp's emitted words
-did not move carries that stamp's `DASLLAMA_VK_SPV_DUMP` words diffed against master's.**
-
-**A diff that changes the shared `khr_tile` or `run` of `KqCm2BatchT` runs every format's kernel
-cell (its test block in `tests/test_vulkan_kernels.das`) on the KHR arm and puts the runs in the PR
-body.**
-
-**A diff that changes what a format's own KHR tile emits - its `khr_stage16` override, or a
-constant or a gated member the KHR stamp emits - runs that format's kernel cell on the KHR arm and
-puts the run in the PR body.** A KHR tile is the `<Fmt>KhrBatch` class stamped per weight format in
-`dasllama/dasllama_vulkan_classes.das`; a member a `@template_gate` admits on the stamp is emitted
-whether or not its body reads it.
-
-**A diff that owes a KHR tile's kernel-cell run carries with it either the `khrx` probe rows
-(`harness/vk_gemm_probe.das`) or a `tests/test_gpu_resident_hybrid.das` run on a model in that
-format.**
+diff adds: run it after the un-rotation instead.** The attention dispatches leave their rows in
+tq4's rotated basis (`ARCHITECTURE_GPU_SHARED_ATTN.md#vk-kv-tq4-basis`).
 
 **A diff that retires a shape a fixture under `tests/spirv/` (repo root) declares replaces that
 fixture's declaration in the same change.** The emitter suite validates the shapes it emits; a
 fixture left on a retired shape validates nothing the stamp runs.
 
-**A diff that adds a `<Fmt>KhrBatch` stamp adds that format's KHR arm to its kernel cell in
-`tests/test_vulkan_kernels.das`, in the same change.**
-
-**A kernel body that calls a `[spirv_decode]` method directly passes the plane element itself
-(`decode(wq[i], ...)`), never a local copy of it (`let blk = wq[i]` then `decode(blk, ...)`).**
-Both compile: on the element the emitter passes the index and the callee chains through the
-plane; on a copy it loads and spills the whole block per call
-(`ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes`).
-
-**A diff whose probe rows show a format's `DASLLAMA_VK_DECVEC=1` row slower than its `=0` row
-ships one of two fixes in the same change: a hand-written `decode_v4` under `override DECV4 = true`
-on that format's class (`dasllama/dasllama_vulkan_classes.das`), re-measured so its `=1` row now
-beats its `=0` row; or `override DECV4 = false` and `override DECVEC = false` together, which puts
-the format back on the scalar callback.** With `DECV4 = true` the class never reads `DECVEC`, so
-`override DECVEC = false` alone leaves the hand-written twin running.
-
 **A GPU timestamp in `dasllama/dasllama_vulkan_decode.das` recorded by a command whose stamps
 `rdq_sample` reads goes through `rd_ts` with the name its interval is reported under - never a
 bare `pfq_ts`; the command's first stamp is the anchor and takes the empty name.** The profiler
-(`rdq_sample`)
-sums intervals by the recorder's own names, so a bare stamp records more stamps than the recorder
-has names and the token's roles are not summed; a name's prefix (`a:` `d:` `m:` `p:` `t:`) picks
-its table, and a name shared by two stamps sums them on purpose.
+(`rdq_sample`) sums intervals by the recorder's own names, so a bare stamp records more stamps
+than the recorder has names and the token's roles are not summed; a name's prefix (`a:` `d:` `m:`
+`p:` `t:`) picks its table, and a name shared by two stamps sums them on purpose.
 
-**A decode GEMV class - a `KqGemvBase` leaf in `dasllama/dasllama_vulkan_classes.das` - that
-stages a codebook into `@workgroup` memory reads it from the family's grid buffer (`gridb`,
-filled by `kq_grid_dev` at the format's `KQ_GRID_<FMT>` offset), never from a `*_grid_word`
-accessor.** The accessor is a constant composite the driver reads lane-serially per index,
-while the grid buffer is staged once per workgroup and read by every row that workgroup serves,
-whatever their number (`ARCHITECTURE_GPU_VULKAN.md#kq-gemv-grid-buffer`).
+**A decode GEMV class - `KqGemvLeafT` or a `<Fmt>GemvT` template deriving from it in
+`dasllama/dasllama_gpu_kernels_discrete.das`, or a stamp of one in
+`dasllama/dasllama_vulkan_classes.das` - that stages a codebook into `@workgroup` memory reads it
+from the family's grid buffer (`gridb`, filled by `kq_grid_dev` at the format's `KQ_GRID_<FMT>`
+offset), never from a `*_grid_word` accessor.**
+The accessor is a constant composite the driver reads lane-serially per index, while the grid
+buffer is staged once per workgroup and read by every row that workgroup serves, whatever their
+number (`ARCHITECTURE_GPU_VULKAN.md#kq-gemv-grid-buffer`).
 
 **Never let a reduce write a workgroup slot while the previous reduce's partials still occupy it -
 pass the other slot, or put a `barrier()` between the two reduces.** A reduce sums a value across
 the workgroup through a `@workgroup` staging array - every `WgReduceBase` reduce
-(`dasllama/dasllama_vulkan_classes.das`) or `GkWgReduce` reduce (`dasllama/dasllama_gpu_kernels_common.das`) that takes a `slot`
-argument, 0 or 1 (`dasllama/dasllama_vulkan_classes.das`); a slot is the run of partials one
-reduce writes into that array. A reduce carries one barrier, so a thread still summing the first
-reduce's partials would read the second's writes out of the same slot.
+(`dasllama/dasllama_vulkan_classes.das`) or `GkWgReduce` reduce
+(`dasllama/dasllama_gpu_kernels_common.das`) that takes a `slot` argument, 0 or 1; a slot is the
+run of partials one reduce writes into that array. A reduce carries one barrier, so a thread
+still summing the first reduce's partials would read the second's writes out of the same slot.
 
 **A diff that adds or changes a builder in `dasllama/dasllama_vulkan_decode.das` that asks
 `set_<family>` for a class ensures `ensure_<family>` on every path that reaches it.** A set asked
@@ -224,8 +154,9 @@ slots, and nothing refuses it.
 **A diff that changes how many GPU timestamps the resident prefill's window command records in
 the window `pf_prof_report` reads - the call's last - through a `pfq_ts` call in `pf_run` or in
 any function `pf_run` reaches, all in `dasllama/dasllama_vulkan_prefill.das`, updates
-`pf_roles_per_layer` and that file's `pf_prof_report` in the same change.** Both index a fixed count per layer, so one extra or
-missing timestamp reports every later stamp under the wrong role name.
+`pf_roles_per_layer` and that file's `pf_prof_report` in the same change.** Both index a fixed
+count per layer, so one extra or missing timestamp reports every later stamp under the wrong role
+name.
 
 **A descriptor set the resident driver builds binds a buffer it allocated per row or per region -
 one slot per batched row (`* RDec.nb`, the rows the per-row planes hold), or
@@ -235,17 +166,17 @@ row or region at run time, from `TokMeta` or its push constants, so a set narrow
 every other row's or region's dispatch past its binding, with no error.
 
 **A diff that fills a `TokMeta` block, wherever it puts it, writes every field but the pads with
-the row's own value: `mirbase` the row's K/V mirror base in elements past the base the kernel's
-push constants carry (0 where the push carries the row's own base), `dnslot` the row's slot in the
-deltanet state and conv-history buffers (0 where they hold one slot); a field a zero-initialized
-literal leaves at 0 counts as written only where 0 is that row's value.** A kernel reads each
-field from the row's block,
-so a field left unwritten sends the row to whatever position, base or state the memory held, with
-no error.
+the row's own value: `mirbase` the row's K/V mirror base in elements past the base the push
+constants or launch parameters of the kernel carry (0 where they carry the own base of the row),
+`dnslot` the row's slot in the deltanet state and conv-history buffers (0 where they hold one
+slot); a field a zero-initialized literal leaves at 0 counts as written only where 0 is that row's
+value.** A kernel reads each field from the row's block, so a field left unwritten sends the row
+to whatever position, base or state the memory held, with no error.
 
-**A `TokMeta` buffer or binding is sized `TOK_META_BYTES` times the rows the block holds, never a
-byte literal.** A literal stops matching when `TokMeta` gains a field, and every row past the first
-then reads its fields outside the binding, with no error.
+**A `TokMeta` buffer or binding is sized `TOK_META_BYTES`
+(`dasllama/dasllama_gpu_kernels_discrete.das`) times the rows the block holds, never a literal or
+a size constant of its own.** A literal stops matching when `TokMeta` gains a field, and every row
+past the first then reads its fields outside the binding, with no error.
 
 **A diff that adds a recorded form - a recorder that builds, into its own command buffer, a
 command whose stamps `rdq_sample` reads (`dasllama/dasllama_vulkan_decode.das`) - gives that
@@ -265,16 +196,16 @@ never overwritten - from the copy's submit to the writing submit with no other c
 between the two.**
 Nothing else orders the copy's read before that write.
 
-**A diff that adds an integer division or modulo to kernel code in `dasllama/dasllama_vulkan_classes.das`
-or `dasllama/dasllama_gpu_kernels_common.das` - a kernel body or any method it calls,
-`dasllama/dasllama_gpu_math.das`'s helpers included - that the diff does not move unchanged, with
-the values feeding its divisor, from kernel code in these three files, or changes such a
-division's divisor, the values that feed it, or its
-guard, where the divisor is not a literal or a template constant, clamps the divisor to at
-least one (`max(1u, ...)`) before the division, or places the division inside an `if` whose
-condition compares that divisor expression itself with zero.** An integer division by zero is
-undefined in SPIR-V, and some drivers evaluate both arms of a `?:` select, so neither a select nor a
-condition on another expression guards it.
+**Every integer division or modulo a diff adds or changes in kernel code of
+`dasllama/dasllama_vulkan_classes.das`, `dasllama/dasllama_gpu_kernels_discrete.das` or
+`dasllama/dasllama_gpu_kernels_common.das` - a kernel body or any method it calls,
+`dasllama/dasllama_gpu_math.das`'s helpers included - whose divisor is not a literal or a template
+constant clamps the divisor to at least one (`max(1u, ...)`) before the division, or sits inside
+an `if` whose condition compares that divisor expression itself with zero.** Editing the divisor,
+the values feeding it, or its guard changes a division; moving one unchanged between these files,
+with the values feeding its divisor, does not add it. An integer division by zero is undefined in
+SPIR-V, and some drivers evaluate both arms of a `?:` select, so neither a select nor a condition
+on another expression guards it.
 
 **A diff that adds or changes a path under `dasllama/` that re-records the split form of the
 one-row token command in `RDec.cmd[region]` - the chain recorded there with the attention at
@@ -292,6 +223,6 @@ availability outside `vk_rdec_prepare` can turn a form on after the recording pa
 (`dasllama/dasllama_vulkan_common.das`; `upload_region_at` on such a buffer is one such write)
 after any device command has touched that buffer is a defect - finish every host write before the
 device's first touch, or stage through a pinned buffer on the transfer queue.** A per-call fill of
-a slot a device command read in an earlier call is the same cycle, spread across calls. The NVIDIA driver shadows a large mapped
-allocation and migrates it at the device's first touch, and a write-migrate-write cycle hangs the
-machine.
+a slot a device command read in an earlier call is the same cycle, spread across calls. The
+NVIDIA driver shadows a large mapped allocation and migrates it at the device's first touch, and
+a write-migrate-write cycle hangs the machine.

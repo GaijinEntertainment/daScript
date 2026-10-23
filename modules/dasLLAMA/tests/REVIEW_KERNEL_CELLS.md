@@ -12,46 +12,47 @@ module here; it may widen a quantized operand through a `../dasllama/` function 
 quantized block to floats, and calls no other `../dasllama/` function - a kernel under
 `../dasllama/` is never one. A sentinel is a value the kernel cannot write from the cell's own
 inputs - a NaN where every input is finite, or a fixed bit pattern no finite input yields; a
-zero-filled or newly allocated buffer is not one. To loosen an assert is to let
-pass an input the old assert failed. A kernel-unit cell is a cell in which a `[metal_dispatch]` or
-`[vk_dispatch]` class is dispatched, or a CPU kernel in `../dasllama/dasllama_math*.das` is called,
-by a statement in test code outside a CPU oracle - the cell itself, or a helper in its own file or in a `_*.das`
+zero-filled or newly allocated buffer is not one. To loosen an assert is to let pass an input the
+old assert failed. A kernel class is a class that a GPU dispatch annotation - `[metal_dispatch]`,
+`[vk_dispatch]` or `[cuda_dispatch]` - compiles to a device kernel. A home is the GPU backend a
+stamp runs on - Metal, Vulkan or CUDA. A kernel-unit cell is a cell in which a kernel class is
+dispatched, or a CPU kernel in `../dasllama/dasllama_math*.das` is called, by a statement in test
+code outside a CPU oracle - the cell itself, or a helper in its own file or in a `_*.das`
 test-helper module - itself or through a router, a `../dasllama/` function whose only job is to
 pick which compiled form (stamp) of the dispatched class or the CPU kernel runs; a kernel run
 inside any other `../dasllama/` function does not make a cell a kernel-unit cell. A kernel run is a
 dispatch or a CPU kernel call. A gate is any call site that supplies a kernel's dispatch count or
 fills its kargs (kernel-argument) struct itself, other than a serving call in `../dasllama/` the
-kernel exists for - a cell, a probe, a harness. A stamp is a `[vk_dispatch]` or
-`[metal_dispatch]` class that compiles to its own shader module - a class no other class derives
-from; every rule here treats each stamp as its own class. A path of a class is each branch a value read from the
-kargs or from any bound buffer selects, and each trip-count regime of each loop whose bound such a
-value sets - the regimes read against the loop's stride: zero, under one stride, a whole number of
-strides, and past a whole number of strides (the tail). A branch or loop inside a function the
-class's methods call, other than a method of the class, is not a path of the class - covering it
-is the job of that function's cells. A branch or regime is a path only where a serving call in
-`../dasllama/` can reach it on some shape that call does not decline, whether or not any model file
-the box holds has that shape. A bound assert is an assert whose pass
-means two sides agree or a figure is good enough - a difference between two computed sides, a
-rate, an error, or a count the run decides, within a nonzero tolerance or past a floor or ceiling;
-a guard that keeps a later index or compare well-defined (a length past the index it reads) is not
-one, a counter asserted to show a route ran is not one, and an assert a rule of this list requires
-to show a compare can fail - the in-place cell's output-differs-from-input assert among them - is
-not a bound assert, and is not the control a bound assert needs. A sibling stamp is another stamp
-derived from the same class; it stands in for a stamp only where the code a rule asks about is the
-class's own, neither stamp overrides it - overriding a template constant that code reads overrides
-it - both stamps are in the same home (Metal or Vulkan), and the sibling's cell compiles once the
-diff is applied. A control is an extra assert
-in the same cell proving a compare can fail - a poisoned input, or a poisoned expectation (the
-expected value with a known amount added), that must land outside the bar, a mechanism unhooked
-whose result must miss, or a second, independent computation the result must agree with; a cell's
-own reference is never its control.
+kernel exists for - a cell, a probe, a harness. A stamp is a kernel class that compiles to its own
+shader module - a class no other class derives from; every rule here treats each stamp as its own
+class. A path of a class is each branch a value read from the kargs or from any bound buffer
+selects, and each trip-count regime of each loop whose bound such a value sets - the regimes read
+against the loop's stride: zero, under one stride, a whole number of strides, and past a whole
+number of strides (the tail). A branch or loop inside a function the class's methods call, other
+than a method of the class, is not a path of the class - covering it is the job of that function's
+cells. A branch or regime is a path only where a serving call in `../dasllama/` can reach it on
+some shape that call does not decline, whether or not any model file the box holds has that shape.
+A bound assert is a compare of two computed sides, or a measured quality figure against a
+tolerance; a floor on a capacity, a configuration or a roster size is not one, a guard that keeps a
+later index or compare well-defined (a length past the index it reads) is not one, a counter
+asserted to show a route ran is not one, and an assert a rule of this list requires to show a
+compare can fail - the in-place cell's output-differs-from-input assert among them - is not a bound
+assert, and is not the control a bound assert needs. A sibling stamp is another stamp derived from
+the same class; it stands in for a stamp only where the code a rule asks about is the class's own,
+neither stamp overrides it - overriding a template constant that code reads overrides it - the
+sibling's cell compiles once the diff is applied, and the two stamps are in the same home or the
+stamp is CUDA's and the sibling Vulkan's. A control is an extra assert in the same cell proving a
+compare can fail - a poisoned input, or a poisoned expectation (the expected value with a known
+amount added), that must land outside the bar, a mechanism unhooked whose result must miss, or a
+second, independent computation the result must agree with; a cell's own reference is never its
+control.
 
 **A diff that changes a kernel's dispatch grid (the count its dispatch needs, or its workgroup
 size) or its kargs (the struct, any buffer binding, or the layout of a struct a bound buffer holds)
 corrects or deletes, in the same change, every gate dispatching that kernel whose dispatch count,
-workgroup size, buffer bindings, kargs values or bound-struct contents the change made wrong.** A gate left on the old count dispatches the wrong
-shape with no error; a stale kargs gate reads the wrong buffer and passes on garbage that happens to
-compare.
+workgroup size, buffer bindings, kargs values or bound-struct contents the change made wrong.** A
+gate left on the old count dispatches the wrong shape with no error; a stale kargs gate reads the
+wrong buffer and passes on garbage that happens to compare.
 
 **A diff that changes a Metal kernel's `@workgroup` state or the size of a stamp's `@workgroup`
 array updates, in the same change, every gate that dispatches that kernel and every gate that
@@ -62,18 +63,17 @@ sets no threadgroup memory for a kernel with `@workgroup` state reads garbage si
 every kernel-unit cell expectation over that kernel's output.** An expectation over rows the kernel
 no longer writes compares the sentinel to a sum.
 
-**A diff that dispatches an existing `[vk_dispatch]` or `[metal_dispatch]` class at a workgroup
-size no kernel-unit cell runs it at, or with a grid formula (the expression that computes its
-dispatch count from the call's sizes) no kernel-unit cell computes its count with, ships a
-kernel-unit cell that dispatches it at that workgroup size, or whose dispatch count that same
-expression computes, in the same change.**
+**A diff that dispatches an existing kernel class at a workgroup size no kernel-unit cell runs it
+at, or with a grid formula (the expression that computes its dispatch count from the call's sizes)
+no kernel-unit cell computes its count with, ships a kernel-unit cell that dispatches it at that
+workgroup size, or whose dispatch count that same expression computes, in the same change.**
 
 **A kernel-unit cell's compare of kernel output against its reference logs, whether it passes or
 fails, the largest difference it measured with that element's row and column, or, for an output
 with one value per row (a max, a denominator), the largest difference and its row; an exact
 compare - a sentinel scan, a per-row flag - logs its mismatch count and first mismatching index
-(for a per-row output, its row) instead.** A failure, or a pass that looks wrong, must say how far and where, not
-only how many.
+(for a per-row output, its row) instead.** A failure, or a pass that looks wrong, must say how far
+and where, not only how many.
 
 **A kernel-unit cell with a kernel run whose output no CPU-oracle compare covers at that run's
 shapes - every size its dispatch grid or a loop bound reads, the row count included - is a
@@ -81,25 +81,23 @@ defect: the compare sits in that cell, or - where the cell compares two kernel f
 other - in a cell of the same file that dispatches one of those two forms at the same
 shapes.** Two forms can be bit-equal and both wrong.
 
-**A diff that changes an existing `[vk_dispatch]` or `[metal_dispatch]` class's branch
-selection - a branch added, or a predicate widened or narrowed, so that a different set of kargs
-values, or of marker values a bound buffer holds, reaches a path - ships a kernel-unit cell that
-dispatches that class at a value the change moved onto or off that path, or names the existing
-cell that already does.** A sibling stamp's cell counts. At every value the change left where it
-was the kernel computes what it did before, so a cell that dispatches only those values passes
-whether the change is right or wrong.
+**A diff that changes an existing kernel class's branch selection - a branch added, or a predicate
+widened or narrowed, so that a different set of kargs values, or of marker values a bound buffer
+holds, reaches a path - ships a kernel-unit cell that dispatches that class at a value the change
+moved onto or off that path, or names the existing cell that already does.** A sibling stamp's
+cell counts. At every value the change left where it was the kernel computes what it did before,
+so a cell that dispatches only those values passes whether the change is right or wrong.
 
-**A diff that adds a kargs field to a `[vk_dispatch]` or `[metal_dispatch]` class, or changes what
-an existing field means, so that a stamp reads or writes different elements, ships for each such
-stamp a kernel-unit cell that dispatches it, or a sibling stamp, with the field at a value a serving
-call in `../dasllama/` can pass and at which the elements read or written differ from the ones
-before the change - for an added field, never 0 and never the value a serving call that does not
-use the field passes.** At the value where nothing moved, a cell passes whether the new indexing
-is right or wrong.
+**A diff that adds a kargs field to a kernel class, or changes what an existing field means, so that
+a stamp reads or writes different elements, ships for each such stamp a kernel-unit cell that
+dispatches it, or a sibling stamp, with the field at a value a serving call in `../dasllama/` can
+pass and at which the elements read or written differ from the ones before the change - for an
+added field, never 0 and never the value a serving call that does not use the field passes.** At
+the value where nothing moved, a cell passes whether the new indexing is right or wrong.
 
-**A diff that adds a `[vk_dispatch]` or `[metal_dispatch]` class ships a kernel-unit cell that
-dispatches it on every path its body has.** A path no cell reaches is one a merge can drop and
-every cell still passes.
+**A diff that adds a kernel class ships a kernel-unit cell that dispatches it on every path its body
+has - a sibling stamp's cell counts.** A
+path no cell reaches is one a merge can drop and every cell still passes.
 
 **Before every kernel run whose output a kernel-unit cell reads in any assert, directly or through
 a later run in the same cell, the cell fills with a sentinel every range of that run's output
@@ -124,11 +122,11 @@ can wrongly satisfy a tolerant compare.
 assert, in the same change.**
 
 **A size, depth, row count or block offset that a kernel-unit cell's name, a comment inside the
-cell, or an assert's text claims, and that the cell passes as a literal argument to the kernel it dispatches
-or calls, is asserted in that cell - by an assert that a figure the run produces (the count it
-wrote, the offset it read or wrote at) equals that value, or by comparing against the oracle every
-output element the value sizes or places.** A count or offset the dispatch pads, clamps or derives from
-that literal gets its own assert.
+cell, or an assert's text claims, and that the cell passes as a literal argument to the kernel it
+dispatches or calls, is asserted in that cell - by an assert that a figure the run produces (the
+count it wrote, the offset it read or wrote at) equals that value, or by comparing against the
+oracle every output element the value sizes or places.** A count or offset the dispatch pads,
+clamps or derives from that literal gets its own assert.
 
 **A kernel-unit cell whose kernel computes at a narrower precision than its oracle at any
 step - operands, accumulator, or the stored result - bounds that step's error by construction
@@ -148,5 +146,5 @@ horizon.** A leak then fails the ordinary compare, so the cell needs no separate
 **A kernel-unit cell that binds a buffer its kernel indexes by a slot id or an element offset read
 from a field of the row's `TokMeta` block sizes that buffer to cover every row's range - through
 the highest slot id plus one slot, or through the highest offset plus the span the kernel reads or
-writes past it - never to the dispatch's row count.** A one-row
-dispatch whose row sits in slot 1 writes past a one-slot buffer, and no error says so.
+writes past it - never to the dispatch's row count.** A one-row dispatch whose row sits in slot 1
+writes past a one-slot buffer, and no error says so.

@@ -32,6 +32,11 @@ let private PLE_RING = 8   //! the projection race's weight copies: 440 MB of f3
 class ProbeArCombG4X1 : ArCombG4T {
     override OUT_F32 = true
     override OUT_X4 = false
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        comb_g4_body()
+    }
 }
 
 //! the median per-dispatch device time over the rounds of `rec`'s DISPATCHES dispatches, and the rounds' cv

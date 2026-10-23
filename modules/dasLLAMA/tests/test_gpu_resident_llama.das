@@ -120,7 +120,8 @@ def test_gpu_resident_llama_1b_q40(t : T?) {
 }
 
 //! the 1B's Q5_1 requant (`-local`, the catalog row's recipe): every dense plane keeps the per-32 q51 tag - the window's GEMMs on
-//! the s tile on the f16 feed and the per-32 batch tile off it, the steps on the per-32 GEMVs; the tied table demotes to q8
+//! the cm2 column the shape picks on the f16 feed and the per-32 batch tile off it, the steps on the per-32 GEMVs; the tied
+//! table demotes to q8
 [test]
 def test_gpu_resident_llama_1b_q51(t : T?) {
     let file = "Llama-3.2-1B-Instruct-Q5_1-local.gguf"
@@ -144,10 +145,8 @@ def test_gpu_resident_llama_8b_k(t : T?) {
     llama_cells(t, "Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf")
 }
 
-let private PEEL_OPEN = 40l
-let private PEEL_STEPS = 4l
-
-//! tails of 1, 2, 5 and 8 rows peel (a peel and a prefill counted) within the split bar of the row-at-a-time tail; one row more takes the chain
+//! tails of 1, 2, 5 and 8 rows peel (a peel and a prefill counted) within the split bar of the row-at-a-time tail; one row more
+//! takes the chain, as does the eight-row tail with the lever off (`peel_cell`)
 [cold_path]
 def private llama_peel(t : T?; file : string) {
     let path = llama_model_path(t, file)
@@ -155,52 +154,7 @@ def private llama_peel(t : T?; file : string) {
     var tr <- load_resident(path, 1l)   //! the route pinned on for the load, the levers put back
     t |> success(moe_gpu_resident_active(), "the whole-model driver armed on the model (the load log names any decline)")
     with_dasllama_jobque_() {
-        let at_once = rdec_token_n_rows()
-        t |> success(at_once >= 8l, "the N-row token command steps eight rows or more at once on the model ({at_once})")
-        var cap = 0l
-        let plan = resident_plan_pick(tr, mirror_kv_dtype(), cap, false)
-        t |> success(plan.scratch_bytes >= tr.config.vocab_size * 4l * RDEC_NROW_MAX, "the plan charges the per-row planes at {RDEC_NROW_MAX} rows whatever the region count ({plan.scratch_bytes} B of scratch)")
-        var opening <- resident_prompt(PEEL_OPEN)
-        var feed <- resident_feed(at_once + 1l)
-        let lever = vulkan_prefill_peel()
-        for (k in [1l, 2l, 5l, 8l, at_once + 1l, -8l]) {   //! -8: the eight-row tail with the peel's lever off, the chain's leg over the same rows
-            let rows = abs(k)
-            let peels = k > 0l && k <= at_once
-            set_vulkan_prefill_peel(k > 0l)
-            var tail <- [for (i in range64(rows)); feed[i]]
-            var steps <- ramp_ids(PEEL_STEPS, rows, 2500l, 71l, 4500l)
-            var sa <- create_session(tr, gpu_device_session_dtype_())
-            eval(tr, sa, opening)
-            let peels0 = moe_gpu_resident_peels()
-            let pf0 = moe_gpu_resident_prefills()
-            forward_prefill(tr, sa, tail, rows, PEEL_OPEN)   //! the prefill call a scheduler's chunk takes (`eval` steps a one-token tail)
-            t |> equal(moe_gpu_resident_peels() - peels0, peels ? 1l : 0l, "a tail of {rows} rows {peels ? "peels through the token command" : k < 0l ? "takes the window chain with the lever off" : "takes the window chain"}")
-            t |> equal(moe_gpu_resident_prefills() - pf0, 1l, "the tail of {rows} counted one served prefill")
-            sa.n_past = PEEL_OPEN + rows   //! `forward_prefill` leaves the position to its caller
-            var got <- steps_after(tr, sa, steps)
-            var sb <- create_session(tr, gpu_device_session_dtype_())
-            eval(tr, sb, opening)
-            var inscope one : array<int64>
-            one |> resize(1)
-            for (i in range64(rows)) {
-                one[0] = tail[i]
-                eval_(tr, sb, one)
-            }
-            var want <- steps_after(tr, sb, steps)
-            let what = "{file}, a tail of {rows} rows{k < 0l ? " with the lever off" : ""}"
-            rows_within_control(t, what, got, want, SPLIT_BAR_REL, 1l, 1.0, $(r) => r == 0l ? "the tail's last row" : "step {r}")
-            log_argmax_rows(tr, "{what}: the row-at-a-time rows, then the tail's", got, want)
-            served_every_call(t)
-            delete sa
-            delete sb
-            delete got
-            delete want
-            delete tail
-            delete steps
-        }
-        set_vulkan_prefill_peel(lever)
-        delete opening
-        delete feed
+        peel_cell(t, tr, SPLIT_BAR_REL, "{file}, ", true)
     }
     delete tr
 }

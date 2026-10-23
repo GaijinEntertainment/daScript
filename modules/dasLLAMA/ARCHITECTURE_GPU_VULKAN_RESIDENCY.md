@@ -6,8 +6,9 @@ token rows' gather off the table's own plane, the marks swap that lets one GPU s
 call passing to the CPU rails takes first. The room the plan may fill on a shared card - the OS's answer, the
 headroom, the guards, the pageable allocation shapes - is `ARCHITECTURE_GPU_VULKAN_ROOM.md`. The driver's other parts are its siblings': the logits landing in
 `ARCHITECTURE_GPU_VULKAN_LANDING.md`, the NextN draft head in `ARCHITECTURE_GPU_VULKAN_MTP.md`, the N-row token command
-in `ARCHITECTURE_GPU_VULKAN_NROW.md`, the prefill chain and byte stores in `ARCHITECTURE_GPU_VULKAN.md`, the
-cooperative-matrix GEMM tiles in `ARCHITECTURE_GPU_VULKAN_GEMM.md`, the per-op tier's decode era in
+in `ARCHITECTURE_GPU_VULKAN_NROW.md`, the prefill chain in `ARCHITECTURE_GPU_VULKAN.md`, the byte stores and the
+gather kernels in `ARCHITECTURE_GPU_SHARED_ROWS.md`, the cooperative-matrix GEMM tiles in `ARCHITECTURE_GPU_VULKAN_GEMM.md`
+and `ARCHITECTURE_GPU_SHARED_GEMM.md`, the per-op tier's decode era in
 `ARCHITECTURE_GPU_VULKAN_DECODE.md`; the GPU backend role table stays in `ARCHITECTURE_GPU.md#gpu-backends`.
 
 ### The residency plan sizes a whole model before a byte uploads {#resident-plan}
@@ -27,7 +28,7 @@ formats) and the optional f32 embedding are the terms beside it. KV is reserved 
 grows: on a discrete card the two compete directly, and evicting weights to grow KV would mean
 re-uploading gigabytes. The mirror's codec is f16 by default (`resident_mirror_dtype`): the
 flash-attention arms read f16 rows natively, and an f16 row is half an f32 row; a block codec the caller
-asks for (q8_0, tq4: `ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-kv-block-codecs`) is about half or a quarter of that again, and `DASLLAMA_VK_KV32=1`
+asks for (q8_0, tq4: `ARCHITECTURE_GPU_SHARED_ATTN.md#vk-kv-block-codecs`) is about half or a quarter of that again, and `DASLLAMA_VK_KV32=1`
 arms f32 mirrors as an A/B instrument. Only sessions of the armed codec are served. A decline carries a reason, and where the numbers allow one it carries
 the remedy that works - a shorter context, because the weights are fixed and the KV is not. The
 plan takes that remedy itself once: a mirror that does not fit is re-planned at seven eighths of
@@ -167,19 +168,7 @@ the state (`RDec.snap_ring_off`), saved, loaded and peeked with it (`vk_rdec_dn_
 **Where the table sits on the device in a format a gather reads, neither the window nor a token
 command brings a row across the bus: the window gathers its rows off the token ids, the one-row step
 off its one token id, the N-row command, the verify and the draft off their rows' ids.** Which gather
-a table takes is its disk type's:
-
-| Table on disk | Gather | Its plane |
-|---|---|---|
-| Q8_0 | `EmbGather` (four elements a thread off the per-32 plane) | the tied classifier's at its block, or an untied table's linear q8 copy |
-| a superblock format (the 14 `kq_sb` tags) | its `KqEmb<Fmt>` leaf | the tied classifier's K-quant plane, or an untied table's own (`resident_emb_plane`) |
-| F32, F16, BF16 | `EmbGatherF32` | the table's exact f32 rows (F16/BF16 widen without loss, `Model.emb_f32_exact`) uploaded whole under `RDEC_EMB_F32_CAP` |
-
-A `KqEmb<Fmt>` leaf is the format's own decode GEMV leaf stamped under `KqGemvLeafT`'s `EMB`: a
-thread a 32-block, element k the int8 lane `blk_decode` leaves and the term pair `blk_fold` reads (the
-per-format arithmetic is the GEMV's own, never re-spelled), the grid formats staging their codebook as
-the GEMV does. A per-32 table (q51, iq4nl32, q4032, q5032) is the `Blk32GemvRunT` family's `EMB` leaf
-(`Q51Emb`, `Iq4nl32Emb`, `Q4032Emb`, `Q5032Emb`), its block decode the GEMV's own; mx4 never tags a table.
+a table takes is its disk type's (`ARCHITECTURE_GPU_SHARED_ROWS.md#token-table-gather`).
 `resident_arm_emb` hands the plane to the tier (`rdec_set_emb` for a quantized plane in the arena,
 `rdec_upload_emb_f32` for the f32 rows) and logs why the host embeds where it does: a prepared image (it does not carry `emb_f32_exact`), a plane past the room or the cap, a trimmed
 image, a per-layer-embedding model whose side table stays on the host, a hyper-connection model (its

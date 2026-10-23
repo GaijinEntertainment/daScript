@@ -133,6 +133,17 @@ let public RDEC_CODEC_BYTE_SPAN = 4_294_967_296l   //! one side of a block-codec
 let public RDEC_EXPERTS_MAX = 512l   //! the experts a routed layer's select and bucket schedule reach on the device: a workgroup of 256 threads two logits deep, or of 512
 let public RDEC_ROUTED_SLOTS = 128l   //! the routed slots a decode step stages: every row's k picks fit in them (the depth-8 verify's nine rows at eight picks), and the hot expert pool takes no more picks a step
 let public RDEC_NORM_ROWS = 10l   //! rms_att, rms_ffn, post-attention, post-FFN, the per-layer-embedding post norm, then the gemma-4 MoE layer's router scale, routed pre norm, dense post norm and routed post norm, then the attention output bias row (gpt-oss) - zero rows where a model lacks them
+//! the per-layer row indices in the norms plane; a zero row where a model lacks the row
+let public RDEC_NORM_ATT = 0l
+let public RDEC_NORM_FFN = 1l
+let public RDEC_NORM_POST_ATT = 2l
+let public RDEC_NORM_POST_FFN = 3l
+let public RDEC_NORM_PLE_POST = 4l   //! the per-layer-embedding branch's post norm (gemma-4 E-series)
+let public RDEC_NORM_ROUTER = 5l     //! gemma-4: the router's input scale over sqrt(dim)
+let public RDEC_NORM_PRE_FFN2 = 6l   //! gemma-4: the routed pre norm
+let public RDEC_NORM_POST_FFN1 = 7l  //! gemma-4: the dense branch's post norm
+let public RDEC_NORM_POST_FFN2 = 8l  //! gemma-4: the routed sum's post norm
+let public RDEC_NORM_OBIAS = 9l      //! the attention output bias row (gpt-oss), added to the wo GEMV's row at the residual step
 let public RDEC_HEAD_NORM_ROWS = 5l   //! the NextN draft head's block: its attention norm, its FFN norm, the embed norm, the carry norm, the head norm (the final norm's row where the file ships none)
 let public RDEC_HEAD_ATT = 0l
 let public RDEC_HEAD_FFN = 1l
@@ -146,6 +157,23 @@ def public rdec_head_norm_base(n_layers, dim, qk_hs : int64) : int64 => rdec_nor
 
 //! the norms plane's final-norm row, past every layer's `RDEC_NORM_ROWS` rows
 def public rdec_norms_final_base(n_layers, dim : int64) : int64 => n_layers * RDEC_NORM_ROWS * dim
+
+//! layer `l`'s norm row of `kind` (`RDEC_NORM_*`) in the norms plane, in floats
+def public rdec_norm_off(l, kind, dim : int64) : int64 => (l * RDEC_NORM_ROWS + kind) * dim
+
+let public RDEC_AR_MAX_DIM = 8_192l   //! the residual step's row stash: 32 KB of the 48 KiB workgroup memory the tier requires of a device
+let public RDEC_MIR_SLACK_ROWS = 16l   //! the K/V rows a flash fragment may read past a window's end
+let public RDEC_MIR_SLACK = RDEC_MIR_SLACK_ROWS * RDEC_AR_MAX_DIM   //! slack elements past each K/V mirror's last plane and past a block codec's shadow row
+
+//! a layer's K/V mirror base in region `region`: the layer's base and the region's stride of `mir_units`
+def public rdec_mir_region_base(layer_base, region, mir_units : int64) : int64 => layer_base + region * mir_units
+
+//! a tier entry's arm line under the noisy gate, said once an outcome: `said` holds the last outcome logged (-1 = none)
+def public arm_say(var said : int&; outcome : int; msg : string) {
+    return if (!dasllama_noisy() || said == outcome)
+    said = outcome
+    to_log(LOG_INFO, "dasLLAMA noisy: {msg}\n")
+}
 
 //! the norms plane's q/k rows, past the final-norm row
 def public rdec_norms_qk_base(n_layers, dim : int64) : int64 => rdec_norms_final_base(n_layers, dim) + dim
@@ -548,6 +576,9 @@ def public gpu_resident_route_lever() : bool => g_gpu_resident_route
 //! The whole-model driver is wanted on this load: the knob and the in-process lever both on.
 def public gpu_want_resident : bool => g_env_gpu.gpu_resident && g_gpu_resident_route
 
+//! the CUDA home takes the tier's seats in place of the Vulkan home (DASLLAMA_CUDA): both entries read it at their [init]
+def public gpu_want_cuda : bool => g_env_gpu.cuda
+
 //! Install the resident driver's hybrid (deltanet) seats - separately, so a tier without them
 //! declines recurrent layers by name instead of serving a model it cannot step.
 def public install_moe_gpu_resident_dn(set_dn_layer : RdecSetDnLayerFn; upload_dn_ba : RdecUploadDnBaFn; dn_own : RdecDnOwnFn; dn_prefill_own : RdecDnPrefillOwnFn) {
@@ -693,13 +724,32 @@ def public rdec_prefill_caps(caps : array<RdecPfCap>) {
     invoke(g_rdec_prefill_caps, caps)
 }
 
+def public rdec_window_segs(segs : array<RdecPfSeg>; w0, wlen : int64; var out : array<RdecPfSeg>) {
+    //! a part's `row0` is window-local, its `pos0` the segment's position at its first row, its `seg` the call's segment
+    out |> clear()
+    for (sg, i in segs, count()) {
+        let lo = max(sg.row0, w0)
+        let hi = min(sg.row0 + sg.npos, w0 + wlen)
+        continue if (hi <= lo)
+        out |> push(RdecPfSeg(row0 = lo - w0, npos = hi - lo, pos0 = sg.pos0 + (lo - sg.row0), region = sg.region, seg = int64(i)))
+    }
+}
+
+//! the slot of the segment whose last row is window row `row` of the window at `w0`, else -1
+def public rdec_seg_ending_at(segs : array<RdecPfSeg>; w0, row : int64) : int64 {
+    for (sg, i in segs, count()) {
+        return int64(i) if (sg.row0 + sg.npos - 1l == w0 + row)
+    }
+    return -1l
+}
+
 //! The segmented resident prefill: every segment's embedded rows (or ids, where the driver gathers) and rope rows back to
 //! back in segment order, each segment's logits at its slot of `logits` (`vocab` floats a slot)
 typedef RdecPrefillSegsFn = function<(x_batch : array<float>; tokens : array<int64>; use_ids : bool; emb_scale : float; cos_batch : array<float>; segs : array<RdecPfSeg>; var logits : array<float>; experts : RdecHostExpertsRowsFn) : void>
 
 [unused_argument(x_batch, tokens, use_ids, emb_scale, cos_batch, segs, logits, experts)]
 def private rdec_unset_prefill_segs(x_batch : array<float>; tokens : array<int64>; use_ids : bool; emb_scale : float; cos_batch : array<float>; segs : array<RdecPfSeg>; var logits : array<float>; experts : RdecHostExpertsRowsFn) {
-    panic("dasLLAMA: segmented resident prefill hit without an installed GPU driver - require dasllama/dasllama_math_vulkan (the Vulkan tier installs it)")
+    panic("dasLLAMA: segmented resident prefill hit without an installed GPU driver - require dasllama/dasllama_math_vulkan or dasllama/dasllama_math_cuda (the Vulkan and CUDA tiers install it)")
 }
 
 var g_rdec_prefill_segs = @@rdec_unset_prefill_segs
@@ -2123,6 +2173,7 @@ def public install_moe_gpu_resident_batch(token_n : RdecTokenNFn; rows : functio
 def public rdec_token_n(x : array<float>; cossin : array<float>; ple : array<float>; ple_raw : bool; ids : array<int64>; poss : array<int64>; cnts : array<int64>; regs : array<int64>; nrows : int64; lrows : array<float?>; var picks : array<int64>) {
     invoke(g_rdec_token_n, x, cossin, ple, ple_raw, ids, poss, cnts, regs, nrows, lrows, picks)
     g_rdec_nrow_steps++
+    g_rdec_nrow_rows += nrows
 }
 
 //! the rows the armed driver's N-row command steps at once; 0 where the model or the driver has none
@@ -2131,6 +2182,10 @@ def public rdec_token_n_rows() : int64 => invoke(g_rdec_token_n_rows)
 var private g_rdec_nrow_steps = 0l
 //! the N-row commands served this process - one a group of a batched step, one a peeled window: a cell reads the difference across its steps
 def public rdec_nrow_steps() : int64 => g_rdec_nrow_steps
+
+var private g_rdec_nrow_rows = 0l
+//! the rows the N-row commands carried this process: its difference over `rdec_nrow_steps`' is a command's row count
+def public rdec_nrow_rows() : int64 => g_rdec_nrow_rows
 
 [unused_argument(regions)]
 def private moe_gpu_no_binding_cap(regions : int64) : int64 => 0l

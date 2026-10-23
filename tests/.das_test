@@ -7,8 +7,10 @@ require daslib/rtti
 def can_visit_folder(folder_name : string; var result : bool?) {
     // the probe suite runs on 64-bit hosts only - tests/dasbind/CMakeLists.txt builds its library nowhere
     // else; a 64-bit tree missing that library fails the suite loudly. It skips the ser/deser sweep: a
-    // deserialized program never applies [extern], so the bound function it names is not in dasbind
-    if (folder_name == "dasbind") {
+    // deserialized program never applies [extern], so the bound function it names is not in dasbind.
+    // tests/cuda reaches the driver's late externs through cuda_driver.das, so it takes the same gate:
+    // [extern] refuses to apply where DAS_BIND_EXTERNAL is off (every 32-bit host)
+    if (folder_name == "dasbind" || folder_name == "cuda") {
         *result = typeinfo sizeof(type<void?>) == 8
         if (*result) {
             let args <- get_command_line_arguments()

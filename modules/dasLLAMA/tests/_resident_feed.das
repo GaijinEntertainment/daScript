@@ -32,7 +32,7 @@ require math   // abs
 //! the served tile arm, so a red names which prefill tile it came from
 def tile_arm_tag() : string {
     static_if (typeinfo builtin_module_exists(vulkan)) {
-        return "coopmat mode {g_gpu.coopmat_mode}"
+        return g_gpu != null ? "coopmat mode {g_gpu.coopmat_mode}" : "no vulkan device armed"   // the CUDA home leaves the Vulkan state down
     } else {
         return "no vulkan module"
     }
@@ -111,6 +111,22 @@ def resident_ready(t : T?; path : string) : bool {
         return false
     }
     return true
+}
+
+//! the CUDA home asked for (`DASLLAMA_CUDA=1` beside `DASLLAMA_GPU=1`); false after the loud skip
+def cuda_home_asked(t : T?) : bool {
+    if (!gpu_want_cuda()) {
+        t |> skip("the CUDA home is not asked for - needs DASLLAMA_CUDA=1 beside DASLLAMA_GPU=1")
+        return false
+    }
+    return true
+}
+
+//! `file`'s path for a cell on the CUDA home: the home asked for and the model ready (`resident_ready`), else "" after the loud skip
+def cuda_model_path(t : T?; file : string) : string {
+    return "" if (!cuda_home_asked(t))
+    let path = path_join(models_dir(), file)
+    return resident_ready(t, path) ? path : ""
 }
 
 //! the levers a resident load pins, as the cell found them: the whole-model route's lever (never `gpu_want_resident`, which
@@ -846,31 +862,45 @@ def greedy_chain_cell(t : T?; path : string) {
 }
 
 let private PEEL_OPEN = 40l
+let private PEEL_STEPS = 4l
 
 //! after a `PEEL_OPEN`-row opening, tails of 1, 2, 5 and 8 rows as one prefill call peel through the token commands - the in-order
 //! rows command past one row, every recurrent layer stepping the rows one after another in the region's slot - (a peel and a
-//! prefill counted, the recurrent state at the tail's end), and four fed steps read within `rel` of the same tail stepped a row
-//! at a time on a second session, the row one step off the control; one row past the per-row planes takes the chain
-def recurrent_peel_cell(t : T?; var tr : Model; rel : float) {
+//! prefill counted, the recurrent state at the tail's end on a recurrent model), and four fed steps read within `rel` of the
+//! same tail stepped a row at a time on a second session, the row one step off the control; one row past the per-row planes
+//! takes the chain, as does the eight-row tail with the peel's lever off under `lever_off` - the chain's leg over the same rows,
+//! the peel counter's control; the plan charges the per-row planes at `RDEC_NROW_MAX` rows whatever the region count
+def peel_cell(t : T?; var tr : Model; rel : float; tag : string; lever_off : bool) {
     let at_once = rdec_token_n_rows()
-    t |> success(at_once >= 8l, "the token commands step eight rows or more at once on the hybrid ({at_once})")
+    t |> success(at_once >= 8l, "the token commands step eight rows or more at once on the model ({at_once})")
+    var cap = 0l
+    let plan = resident_plan_pick(tr, mirror_kv_dtype(), cap, false)
+    t |> success(plan.scratch_bytes >= tr.config.vocab_size * 4l * RDEC_NROW_MAX, "the plan charges the per-row planes at {RDEC_NROW_MAX} rows whatever the region count ({plan.scratch_bytes} B of scratch)")
+    let recurrent = tr.config.recr_mask != 0ul
     var opening <- resident_prompt(PEEL_OPEN)
     var feed <- resident_feed(at_once + 1l)
     let lever = vulkan_prefill_peel()
-    set_vulkan_prefill_peel(true)
-    for (rows in [1l, 2l, 5l, 8l, at_once + 1l]) {
-        let peels = rows <= at_once
+    var legs <- [1l, 2l, 5l, 8l, at_once + 1l]
+    if (lever_off) {
+        legs |> push(-8l)   // the eight-row tail with the lever off
+    }
+    for (k in legs) {
+        let rows = abs(k)
+        let peels = k > 0l && k <= at_once
+        set_vulkan_prefill_peel(k > 0l)
         var tail <- [for (i in range64(rows)); feed[i]]
-        var steps <- ramp_ids(4l, rows, 2500l, 71l, 4500l)
+        var steps <- ramp_ids(PEEL_STEPS, rows, 2500l, 71l, 4500l)
         var sa <- create_session(tr, mirror_kv_dtype())
         eval(tr, sa, opening)
         let peels0 = moe_gpu_resident_peels()
         let pf0 = moe_gpu_resident_prefills()
-        forward_prefill(tr, sa, tail, rows, PEEL_OPEN)
-        t |> equal(moe_gpu_resident_peels() - peels0, peels ? 1l : 0l, "a tail of {rows} rows {peels ? "peels through the token commands" : "takes the window chain"}")
+        forward_prefill(tr, sa, tail, rows, PEEL_OPEN)   // the prefill call a scheduler's chunk takes (`eval` steps a one-token tail)
+        t |> equal(moe_gpu_resident_peels() - peels0, peels ? 1l : 0l, "a tail of {rows} rows {peels ? "peels through the token commands" : k < 0l ? "takes the window chain with the lever off" : "takes the window chain"}")
         t |> equal(moe_gpu_resident_prefills() - pf0, 1l, "the tail of {rows} counted one served prefill")
-        t |> equal(sa.dn_pos, PEEL_OPEN + rows, "the recurrent state stands at the tail's end")
-        sa.n_past = PEEL_OPEN + rows
+        if (recurrent) {
+            t |> equal(sa.dn_pos, PEEL_OPEN + rows, "the recurrent state stands at the tail's end")
+        }
+        sa.n_past = PEEL_OPEN + rows   // `forward_prefill` leaves the position to its caller
         var got <- steps_after(tr, sa, steps)
         var sb <- create_session(tr, mirror_kv_dtype())
         eval(tr, sb, opening)
@@ -881,7 +911,7 @@ def recurrent_peel_cell(t : T?; var tr : Model; rel : float) {
             eval_(tr, sb, one)
         }
         var want <- steps_after(tr, sb, steps)
-        let what = "a tail of {rows} rows"
+        let what = "{tag}a tail of {rows} rows{k < 0l ? " with the lever off" : ""}"
         rows_within_control(t, what, got, want, rel, 1l, 1.0, $(r) => r == 0l ? "the tail's last row" : "step {r}")
         log_argmax_rows(tr, "{what}: the row-at-a-time rows, then the tail's", got, want)
         served_every_call(t)
@@ -893,6 +923,12 @@ def recurrent_peel_cell(t : T?; var tr : Model; rel : float) {
         delete steps
     }
     set_vulkan_prefill_peel(lever)
+    delete legs
     delete opening
     delete feed
+}
+
+//! `peel_cell` on a recurrent carrier: the five tails, no lever-off leg
+def recurrent_peel_cell(t : T?; var tr : Model; rel : float) {
+    peel_cell(t, tr, rel, "", false)
 }

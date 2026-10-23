@@ -9,6 +9,7 @@ require daslib/ast
 require daslib/ast_boost
 require daslib/templates_boost
 require daslib/rtti
+require daslib/shader_emit_common
 require strings
 require daslib/strings_boost   // split / strip — the grid & params micro-format tokenizers
 require daslib/cmp
@@ -252,20 +253,8 @@ def private const_t(var t : TypeDecl?) : TypeDecl? {
     return t
 }
 
-// the msl globals a [metal_kernel] method names: its `name =` argument when present, else the
-// derived <Class>_<method>_msl (msl_shader.das's msl_global_name is the rule). The emitter hangs
-// _entry/_fastmath/_census/_tgmem off exactly this stem, so a derivation that assumes the
-// un-named spelling asks for a global a named kernel never created.
-def public msl_global_of(fn : Function?) : string {
-    for (ann in fn.annotations) {
-        if (ann.annotation.name == "metal_kernel") {
-            let named = find_arg(ann.arguments, "name") ?as tString ?? ""
-            return named if (!empty(named))
-        }
-    }
-    let stem = replace("{fn.name}", "`", "_")
-    return "{stem}_msl"
-}
+//! the stem the emitter hangs a [metal_kernel] method's _entry/_fastmath/_census/_tgmem off - a named kernel's stem is its name
+def public msl_global_of(fn : Function?) : string => kernel_global_name(fn, "metal_kernel", "_msl")
 
 struct private StampSpec {
     name : string

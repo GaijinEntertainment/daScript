@@ -1,14 +1,10 @@
 # Builtin Modules Code Review Checklist
 
-**Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
-`ARCHITECTURE.md`.
+**Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
+docs: `ARCHITECTURE.md`, `ARCHITECTURE_DASBIND.md`.
 
-- **Weakening `review_nttp.das`'s bind-flavor scan, which `REVIEW.das` runs, is a defect - a bind
-  the scan reports is rebound with the other call: `addExtern` becomes `addExternInline` in an
-  Inline module, and `addExternInline` becomes `addExtern` in any other module.** A bind's flavor
-  is which of the two calls registers it; an Inline module is one of the modules the next sentence
-  lists. The Inline modules are `$` (builtin), `math`, `strings` and `jit`. Which
-  shared generic helpers the scan exempts is read from the scan itself.
+- **Weakening the bind-flavor scan in `review_nttp.das`, which `REVIEW.das` runs, is a defect -
+  adding a prefix to `is_shared_generic_helper` or loosening `is_plain_value_bind` weakens it.**
 
 - **A diff that adds or changes a bind - any `addExtern*` call - under this folder states in the
   PR description that `REVIEW.das` ran on a binary built from the diff** - the bind-flavor scan in
@@ -39,13 +35,12 @@
   there - is a defect** - the module cache is on by default, so an ungated line prints on an
   ordinary run.
 
-- **A diff that adds a builtin a `.das_module` descriptor can call whose effect outlives the
-  descriptor's own program - a row in a process-wide registration table a warm start must
-  reproduce without running the descriptor - records the call between
-  `begin_dynamic_module_recording` and `end_dynamic_module_recording` (`module_builtin_fio.cpp`)
-  as a row `read_manifest` reads back and `init_dyn_modules` replays (`src/ast/dyn_modules.cpp`),
-  in the same change.** A replayed start never runs the descriptor, so an effect the recorder
-  does not see is an effect every warm start silently lacks.
+- **A diff that adds a builtin a `.das_module` descriptor can call, whose effect is a row in a
+  process-wide registration table, records each call between `begin_dynamic_module_recording`
+  and `end_dynamic_module_recording` (`module_builtin_fio.cpp`) as a manifest row that
+  `read_manifest` reads back and `init_dyn_modules` replays (`src/ast/dyn_modules.cpp`), in the
+  same change.** A warm start - one that replays the recorded manifest instead of running the
+  descriptor - lacks every effect the recorder did not see.
 
 - **A diff that moves a bind between modules - any `addExtern*` call whose module changes, or a
   builtin whose `vector<T>` functions follow a type to another module - bumps
@@ -54,11 +49,16 @@
   hash, never the module an extern lives in, so a cached DLL binds the old name and crashes on
   the hit.
 
-- **A diff that changes how an `[extern]` call reaches its bind - the wrapper tables, the
-  `systemV_extra` list, the arm64 layout, the `das_arm64_call` trampoline, or when and from
-  what the `__dasbind__` proxy is registered and the call retargeted - updates
-  `ARCHITECTURE.md#interpreter-extern-call` in the same change.** Comments in `module_builtin_dasbind.cpp` cite that
-  section instead of restating it, so a stale section is what the next reader trusts.
+- **A diff that changes any flag a bind sets on its `Function` - `sideEffectFlags` included -
+  bumps `LLVM_JIT_CODEGEN_VERSION` in `modules/dasLLVM/daslib/llvm_jit_plan.das` (repo root), in
+  the same change.** A caller's JIT cache key folds the hashes of the functions
+  it calls but skips every builtin one, so a cached DLL keeps the code the old flag produced.
+
+- **A diff that changes how an `[extern]` call reaches its bind - `bindDynamicLibrary`, the
+  `FastCallWrapper` tables, the `systemV_extra` list (`generate_x86_64_calls.das`),
+  `Arm64Layout`, the `das_arm64_call` trampoline, or when `transformCall` declines, registers the
+  `__dasbind__` proxy, or retargets the call - updates
+  `ARCHITECTURE_DASBIND.md#interpreter-extern-call` in the same change.**
 
 - **A diff that changes what `ModuleFileCache::defaultPath` or `ModuleFileCache::embeddedHostOptions`
   folds into the module-cache key - the binary, the command line, the environment names, or
@@ -73,22 +73,24 @@
 
 - **A diff that changes a C++ type das binds through an annotation with `addField` in this folder
   and leaves a member whose type is a standard-library class other than `std::string`, or a
-  platform struct embedded by value, before the last das-visible field is a defect - declare that
-  member after that field.** A cross-compiled exe bakes the host's field offsets into the code it
+  platform struct (a struct an OS or C runtime header declares) embedded by value, before the
+  last das-visible field (a field an `addField` call names) is a defect - declare that member
+  after that field.** A cross-compiled exe bakes the host's field offsets into the code it
   generates, and the target's standard library sizes such a member differently, so every
   das-visible field behind one is read at the wrong address.
 
 - **A diff that adds a member whose type is a standard-library class other than `std::string`, or
-  a platform struct embedded by value, to a type das holds by value (`isLocal`, `canCopy` or
-  `canMove` true in its annotation), or makes a type holding one by-value, is a defect - build the
-  type from fixed-width scalars and `std::string`, and copy what das needs out of a platform struct
-  instead of embedding one.** The exe bakes the host's `sizeof` for such a type, so a target that
-  sizes an embedded member differently gives every das local of it the wrong length.
+  a platform struct (a struct an OS or C runtime header declares) embedded by value, to a type das
+  holds by value (`isLocal`, `canCopy` or `canMove` true in its annotation), or makes a type
+  holding one by-value, is a defect - build the type from fixed-width scalars and `std::string`,
+  and copy what das needs out of a platform struct instead of embedding one.** The exe bakes the
+  host's `sizeof` for such a type, so a target that sizes an embedded member differently gives
+  every das local of it the wrong length.
 
 - **A diff that changes the data-member order or data-member set of a C++ type das binds
   through an annotation states its `--jit-check-abi` result for a cross target in its own PR
-  description.** The check reports a mismatch at the bundle's first launch, for the types the
-  bundle links; nothing native can observe one.
+  description.** `--jit-check-abi` compares each bound type's size and field offsets against the
+  cross target's; a native build and test never shows the mismatch.
 
 - **A `string` streamed in `module_builtin_ast_serialize.cpp` whose storage does not outlive the
   module-cache record being written or read - a computed mangled name, a lookup key, a container

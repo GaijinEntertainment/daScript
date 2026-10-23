@@ -676,6 +676,10 @@ def public coopmatPerElement(var dst; src; fn; e0, e1, e2) : void {}
 [unused_argument(dst, src, fn, e0, e1, e2, e3), sideeffects]
 def public coopmatPerElement(var dst; src; fn; e0, e1, e2, e3) : void {}
 
+//! facc[r,c] += float(sacc[r,c]) * rs[rbase + r] * cs[cbase + c]
+[unused_argument(facc, sacc, rs, rbase, cs, cbase), sideeffects]
+def public coopmatScaleAcc(var facc; sacc; rs; rbase : uint; cs; cbase : uint) : void {}
+
 // ===== componentwise coopmat arithmetic (SPV_KHR_cooperative_matrix extends the scalar opcodes) =====
 // dst = a OP b, all three the same float tile type (dst may alias a or b). coopmatMulElem is the
 // COMPONENTWISE (Hadamard) product — matrix multiply stays coopmatMulAdd.

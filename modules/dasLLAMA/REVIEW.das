@@ -233,6 +233,10 @@ var private GPU_ROLES_VULKAN <- {
     "classes", "common", "decode", "prefill", "seams", "dispatch", "tower", "asr_dec", "mtp_gemma"
 }
 
+var private GPU_ROLES_CUDA <- {
+    "classes", "common", "dispatch", "decode"
+}
+
 // the fastmath default, mechanically: a [metal_kernel] declaring fastmath=false reds unless
 // its kernel name is listed here against the test that reds under fast math (the failing test
 // ships with the kernel per the checklist; adding a row is a gate edit the master's weakening
@@ -531,20 +535,37 @@ def private check_kq_form_matrix {
 def private check_gpu_role_partition {
     dir("modules/dasLLAMA/dasllama") $(name) {
         return if (!ends_with(name, ".das"))
-        for (backend in ["metal", "vulkan"]) {
+        for (backend in ["metal", "vulkan", "cuda"]) {
             let prefix = "dasllama_{backend}_"
             continue if (!starts_with(name, prefix))
             var role = ""
             peek_data(name) $(d) {
                 role = slice(d, length(prefix), length(d) - length(".das"))
             }
-            let known = backend == "metal" ? key_exists(GPU_ROLES_METAL, role) : key_exists(GPU_ROLES_VULKAN, role)
+            var known = key_exists(GPU_ROLES_CUDA, role)
+            if (backend == "metal") {
+                known = key_exists(GPU_ROLES_METAL, role)
+            } elif (backend == "vulkan") {
+                known = key_exists(GPU_ROLES_VULKAN, role)
+            }
             if (!known) {
                 gate_finding("modules/dasLLAMA/dasllama/{name}",
                     "backend file with role '{role}' that the partition does not carry - add the role to ARCHITECTURE_GPU.md#gpu-backends's role table and this gate's set in the same change")
             }
         }
     }
+}
+
+//! a `class [template] X [: Y]` line's parts; an empty name where `line` declares no class
+def private class_header(line : string) : tuple<name : string; base : string; has_base : bool; is_template : bool> {
+    return (name = "", base = "", has_base = false, is_template = false) if (!(line |> starts_with("class ")))
+    var rest = slice(line, length("class "))
+    let is_tpl = rest |> starts_with("template ")
+    if (is_tpl) {
+        rest = slice(rest, length("template "))
+    }
+    let colon = find(rest, " : ")
+    return (name = ident_prefix(rest), base = colon >= 0 ? ident_prefix(slice(rest, colon + 3)) : "", has_base = colon >= 0, is_template = is_tpl)
 }
 
 // A serialized exe restores globals as DATA - a function value assigned in a declaration
@@ -563,15 +584,11 @@ def private rb_scan_classes(text : string; var declared, class_names : table<str
     var cur = ""
     for (line in split(text, "\n")) {
         if (line |> starts_with("class ")) {
-            var rest = slice(line, length("class "))
-            if (rest |> starts_with("template ")) {
-                rest = slice(rest, length("template "))
-            }
-            cur = ident_prefix(rest)
+            let hdr = class_header(line)
+            cur = hdr.name
             class_names |> insert(cur)
-            let colon = find(rest, " : ")
-            if (colon >= 0) {
-                class_base[cur] = ident_prefix(slice(rest, colon + 3))
+            if (hdr.has_base) {
+                class_base[cur] = hdr.base
             }
         } elif (line |> starts_with("}")) {
             cur = ""
@@ -1103,8 +1120,10 @@ def private check_image_layout_stamp {
 // ===== the Vulkan checklist's mechanical checks (REVIEW_GPU_VULKAN.md) =====
 
 let private VK_CLASSES = "modules/dasLLAMA/dasllama/dasllama_vulkan_classes.das"
+let private DISCRETE_KERNELS = "modules/dasLLAMA/dasllama/dasllama_gpu_kernels_discrete.das"   //! the bodies the discrete homes stamp: the GEMV family and its grid literals
 let private KQ_FORMAT = "modules/dasLLAMA/dasllama/dasllama_kqformat.das"
 let private VK_COMMON = "modules/dasLLAMA/dasllama/dasllama_vulkan_common.das"
+let private GPU_TIER = "modules/dasLLAMA/dasllama/dasllama_gpu_tier.das"   //! the constants both discrete homes' drivers read
 let private BLOCKS_FILE = "modules/dasLLAMA/dasllama/dasllama_blocks.das"
 
 // a das integer literal's value at the head of `s` (digit separators and the l/u suffix dropped), -1 when none
@@ -1143,16 +1162,16 @@ def private class_lines(path, header : string) : array<string> {
 // its override compile, and that format decodes garbage on every KHR card while the cm2 arms stay green.
 def private check_khr_stage16_abstract {
     var found = false
-    for (line in class_lines(VK_CLASSES, "class template KqCm2BatchT")) {
+    for (line in class_lines(DISCRETE_KERNELS, "class template KqCm2BatchT")) {
         let s = strip(line)
         continue if (!(s |> starts_with("def ")) || find(s, "khr_stage16(") < 0)
         found = true
         if (!(s |> starts_with("def abstract khr_stage16"))) {
-            gate_finding(VK_CLASSES, "khr_stage16 on KqCm2BatchT has a body - it stays abstract, so a format template that forgets its override fails to compile instead of decoding garbage on every KHR card")
+            gate_finding(DISCRETE_KERNELS, "khr_stage16 on KqCm2BatchT has a body - it stays abstract, so a format template that forgets its override fails to compile instead of decoding garbage on every KHR card")
         }
     }
     if (!found) {
-        gate_finding(VK_CLASSES, "no `def khr_stage16` inside `class template KqCm2BatchT` - the KHR stage's abstract rule has nothing to read; keep the spelling or move this check with it")
+        gate_finding(DISCRETE_KERNELS, "no `def khr_stage16` inside `class template KqCm2BatchT` - the KHR stage's abstract rule has nothing to read; keep the spelling or move this check with it")
     }
 }
 
@@ -1170,9 +1189,9 @@ def private literal_after(lines : array<string>; marker : string) : int {
 // The add+rms row slab triple agrees: the constant, ArBase's @workgroup row slab, and the dense-width
 // cap of the Vulkan servability gate. A cap raised without the slab writes past the slab's end on the device.
 def private check_ar_max_dim_triple {
-    var inscope common_lines <- split(strip_line_comments(fread(VK_COMMON)), "\n")
-    let constant = literal_after(common_lines, "let AR_MAX_DIM = ")
-    var inscope ar_lines <- class_lines(VK_CLASSES, "class template ArBase")
+    var inscope common_lines <- split(strip_line_comments(fread(GPU_TIER)), "\n")
+    let constant = literal_after(common_lines, "let public RDEC_AR_MAX_DIM = ")
+    var inscope ar_lines <- class_lines(DISCRETE_KERNELS, "class template ArBase")
     let slab = literal_after(ar_lines, "@workgroup row : float[")
     var gate = -1
     var inscope fns <- function_bodies(BLOCKS_FILE) $(header) {
@@ -1183,17 +1202,17 @@ def private check_ar_max_dim_triple {
         gate = literal_after(body_lines, "c.dim > ")
     }
     if (constant < 0) {
-        gate_finding(VK_COMMON, "no `let AR_MAX_DIM = N` line - the add+rms slab triple has no constant to compare against")
+        gate_finding(GPU_TIER, "no `let public RDEC_AR_MAX_DIM = N` line - the add+rms slab triple has no constant to compare against")
     }
     if (slab < 0) {
-        gate_finding(VK_CLASSES, "no `@workgroup row : float[N]` inside `class template ArBase` - the add+rms slab triple has no slab to compare")
+        gate_finding(DISCRETE_KERNELS, "no `@workgroup row : float[N]` inside `class template ArBase` - the add+rms slab triple has no slab to compare")
     }
     if (gate < 0) {
         gate_finding(BLOCKS_FILE, "no `c.dim > N` inside attn_dec_shape_ok - the add+rms slab triple has no servability cap to compare")
     }
     return if (constant < 0 || slab < 0 || gate < 0)
     if (constant != slab || constant != gate) {
-        gate_finding(VK_CLASSES, "the add+rms row slab triple disagrees: AR_MAX_DIM {constant} (dasllama_vulkan_common.das), ArBase.row[{slab}], attn_dec_shape_ok's c.dim cap {gate} (dasllama_blocks.das) - a cap past the slab writes past its end on the device; change the three together")
+        gate_finding(VK_CLASSES, "the add+rms row slab triple disagrees: RDEC_AR_MAX_DIM {constant} (dasllama_gpu_tier.das), ArBase.row[{slab}], attn_dec_shape_ok's c.dim cap {gate} (dasllama_blocks.das) - a cap past the slab writes past its end on the device; change the three together")
     }
 }
 
@@ -1203,7 +1222,7 @@ var private CM2_NO_EXEMPT : table<string>
 //! every `class template <Fmt>Cm2T` on the cm2 base - directly, or through another format's template (`Iq4nlCm2T : Q40Cm2T`)
 def private cm2_format_templates(exempt : table<string>) : array<string> {
     var out : array<string>
-    for (line in split(strip_line_comments(fread(VK_CLASSES)), "\n")) {
+    for (line in split(strip_line_comments(fread(DISCRETE_KERNELS)), "\n")) {
         continue if (!(line |> starts_with("class template ")))
         let name = ident_prefix(slice(line, length("class template ")))
         let base = cm2_template_base(line)
@@ -1225,9 +1244,9 @@ def private cm2_template_chain_lines(name : string) : array<string> {
     var out : array<string>
     var cur = name
     while (!empty(cur) && cur != "KqCm2BatchT") {
-        out |> push_from(class_lines(VK_CLASSES, "class template {cur}"))
+        out |> push_from(class_lines(DISCRETE_KERNELS, "class template {cur}"))
         var next = ""
-        for (line in split(strip_line_comments(fread(VK_CLASSES)), "\n")) {
+        for (line in split(strip_line_comments(fread(DISCRETE_KERNELS)), "\n")) {
             if (line |> starts_with("class template {cur} ")) {
                 next = cm2_template_base(line)
                 break
@@ -1308,14 +1327,14 @@ def private stamp_bk(lines : array<string>; template_bk : int) : int {
 
 //! the cm2 template's own BK (`@template_constant BK : uint = N`), -1 when the line is not there
 def private cm2_template_bk : int {
-    var inscope base_lines <- class_lines(VK_CLASSES, "class template KqCm2BatchT")
+    var inscope base_lines <- class_lines(DISCRETE_KERNELS, "class template KqCm2BatchT")
     return literal_after(base_lines, "@template_constant BK : uint = ")
 }
 
 def private check_cm2_ladder_set(trio : LadderTrio; exempt : table<string>) {
     var inscope templates <- cm2_format_templates(exempt)
     if (empty(templates)) {
-        gate_finding(VK_CLASSES, "no `class template <Fmt>Cm2T : KqCm2BatchT` found - the {trio.ladder}* ladder rule has no templates to walk; keep the spelling or move this check with it")
+        gate_finding(DISCRETE_KERNELS, "no `class template <Fmt>Cm2T : KqCm2BatchT` found - the {trio.ladder}* ladder rule has no templates to walk; keep the spelling or move this check with it")
         return
     }
     let classes = strip_line_comments(fread(VK_CLASSES))
@@ -1500,7 +1519,7 @@ def private check_cm2_stamp_tile(path : string; st : VkStamp; d : StampDefaults)
 //! (`override GRID_WORDS` / `override GRID_OFF`): each held to the `let KQ_GRID_<FMT>_WORDS` line and the
 //! `let KQ_GRID_<FMT> = KQ_GRID_<PREV> + KQ_GRID_<PREV>_WORDS` chain the host fill (`kq_grid_dev`) reads
 def private check_kq_gemv_grid_literals {
-    var inscope lines <- split(strip_line_comments(fread(VK_CLASSES)), "\n")
+    var inscope lines <- split(strip_line_comments(fread(DISCRETE_KERNELS)), "\n")
     var words, offs : table<string; int>
     var templates : array<string>
     for (line in lines) {
@@ -1521,11 +1540,11 @@ def private check_kq_gemv_grid_literals {
         }
     }
     if (empty(templates)) {
-        gate_finding(VK_CLASSES, "no `class template <Fmt>GemvT : KqGemvLeafT` found - the grid literal rule has no templates to walk; keep the spelling or move this check with it")
+        gate_finding(DISCRETE_KERNELS, "no `class template <Fmt>GemvT : KqGemvLeafT` found - the grid literal rule has no templates to walk; keep the spelling or move this check with it")
         return
     }
     for (tpl in templates) {
-        var inscope body <- class_lines(VK_CLASSES, "class template {tpl}")
+        var inscope body <- class_lines(DISCRETE_KERNELS, "class template {tpl}")
         continue if (ident_after(body, "override GRID = ") != "true")
         let fmt = to_upper(slice(tpl, 0, length(tpl) - length("GemvT")))
         let want_words = words?[fmt] ?? -1
@@ -1533,16 +1552,16 @@ def private check_kq_gemv_grid_literals {
         let got_words = literal_after(body, "override GRID_WORDS = ")
         let got_off = literal_after(body, "override GRID_OFF = ")
         if (want_words < 0 || want_off < 0) {
-            gate_finding(VK_CLASSES, "{tpl}: no `let KQ_GRID_{fmt}_WORDS` / `let KQ_GRID_{fmt}` for its grid - the host fill and the stamp read the codebook from different rosters")
+            gate_finding(DISCRETE_KERNELS, "{tpl}: no `let KQ_GRID_{fmt}_WORDS` / `let KQ_GRID_{fmt}` for its grid - the host fill and the stamp read the codebook from different rosters")
         } elif (got_words != want_words || got_off != want_off) {
-            gate_finding(VK_CLASSES, "{tpl}: `override GRID_WORDS = {got_words}u` / `override GRID_OFF = {got_off}u` against KQ_GRID_{fmt}_WORDS = {want_words} at word {want_off} - a template constant is a literal, so the stamp's copy moves with the `let` chain in the same change")
+            gate_finding(DISCRETE_KERNELS, "{tpl}: `override GRID_WORDS = {got_words}u` / `override GRID_OFF = {got_off}u` against KQ_GRID_{fmt}_WORDS = {want_words} at word {want_off} - a template constant is a literal, so the stamp's copy moves with the `let` chain in the same change")
         }
     }
 }
 
 def private check_cm2_stamp_tiles {
     var inscope templates <- cm2_format_templates(CM2_NO_EXEMPT)
-    var inscope base_lines <- class_lines(VK_CLASSES, "class template KqCm2BatchT")
+    var inscope base_lines <- class_lines(DISCRETE_KERNELS, "class template KqCm2BatchT")
     let bn0 = literal_after(base_lines, "@template_constant BN : uint = ")
     let bk0 = literal_after(base_lines, "@template_constant BK : uint = ")
     let unr0 = literal_after(base_lines, "@template_constant UNR : uint = ")
@@ -1550,7 +1569,7 @@ def private check_cm2_stamp_tiles {
     let s_rows = literal_after(all_lines, "let SCHED_S_ROWS = ")
     let m_rows = literal_after(all_lines, "let SCHED_M_ROWS = ")
     if (bn0 < 0 || bk0 < 0 || unr0 < 0) {
-        gate_finding(VK_CLASSES, "no `@template_constant BN : uint = N` / `BK : uint = N` / `UNR : uint = N` inside `class template KqCm2BatchT` - the stamp tile rule has no defaults to read; keep the spelling or move this check with it")
+        gate_finding(DISCRETE_KERNELS, "no `@template_constant BN : uint = N` / `BK : uint = N` / `UNR : uint = N` inside `class template KqCm2BatchT` - the stamp tile rule has no defaults to read; keep the spelling or move this check with it")
     }
     if (s_rows < 0 || m_rows < 0) {
         gate_finding(VK_CLASSES, "no `let SCHED_S_ROWS = N` / `let SCHED_M_ROWS = N` line - the stamp tile rule has no schedule widths to compare; keep the spelling or move this check with it")
@@ -1803,9 +1822,10 @@ def private check_gemm_gen_stamp {
 // One device and queue per GPU family, from its _common file's init. The exceptions the rule
 // names: dasllama_metal_gemm.das owns its device (ARCHITECTURE_GPU.md#gpu-backends), and the two
 // tuner race entries build theirs because the tuner runs before the driver inits.
-let private DEVICE_CREATION_FILES <- {"dasllama_metal_common.das", "dasllama_vulkan_common.das", "dasllama_metal_gemm.das"}
+let private DEVICE_CREATION_FILES <- {"dasllama_metal_common.das", "dasllama_vulkan_common.das", "dasllama_cuda_common.das", "dasllama_metal_gemm.das"}
 let private DEVICE_CREATION_FUNCTIONS <- {"metal_tensor_race", "metal_tensor_race_decode"}
-let private DEVICE_CREATION_CALLS <- ["metal_create_system_default_device(", "metal_new_command_queue(", "create_device_storage_8_16_int_dot"]
+let private DEVICE_CREATION_CALLS <- ["metal_create_system_default_device(", "metal_new_command_queue(", "create_device_storage_8_16_int_dot",
+    "cuda_create_context(", "cuda_stream_create("]
 
 def private def_name_of(body : string) : string {
     let nl = find(body, "\n")
@@ -1991,6 +2011,158 @@ def private check_require_bans {
                 gate_finding(path, "requires `audio` - only dasllama_audio_io.das decodes audio containers (ARCHITECTURE_MEDIA.md#tower-audio-charters); decode through that file")
             } elif (m == "stbimage" && base != "dasllama_vision_io.das") {
                 gate_finding(path, "requires `stbimage` - only dasllama_vision_io.das decodes images (ARCHITECTURE_MEDIA.md#tower-audio-charters); decode through that file")
+            }
+        }
+    }
+}
+
+let private SHARED_KERNEL_FILES <- ["modules/dasLLAMA/dasllama/dasllama_gpu_kernels_discrete.das",
+    "modules/dasLLAMA/dasllama/dasllama_gpu_kernels_common.das"]
+let private CUDA_CLASSES_FILE = "modules/dasLLAMA/dasllama/dasllama_cuda_classes.das"
+let private METAL_KERNELS_FILE = "modules/dasLLAMA/dasllama/dasllama_metal_kernels.das"
+
+//! the discrete templates one home stamps - the row of
+//! followup_general.md naming the stamps that wait on their families
+var private DISCRETE_ONE_HOME_STAMPS <- { "DaAttnBWT", "DaAttnBH128T", "F32RowsKhrT",
+    "FaH256T", "FaH512T", "Mx4Cm2T", "Mx4GemvGuT", "Q8GemvPleActT", "ArCombBase", "ArCombG4T",
+    "QknRopeKvT" }
+
+//! `class [template] X : Y` lines of `path`: X's base, whether X is a
+//! template, and the home or shared file X lives in
+def private scan_class_decls(path, home : string; var base : table<string; string>;
+                             var templates, owner : table<string; string>) {
+    for (line in split(read_lf(path), "\n")) {
+        let hdr = class_header(line)
+        continue if (empty(hdr.name))
+        owner[hdr.name] = home
+        if (hdr.is_template) {
+            templates[hdr.name] = home
+        }
+        if (hdr.has_base) {
+            base[hdr.name] = hdr.base
+        }
+    }
+}
+
+[arch(at = "ARCHITECTURE_GPU.md#gpu-backends")]
+def private check_shared_template_homes {
+    var base, templates, owner : table<string; string>
+    for (path in SHARED_KERNEL_FILES) {
+        scan_class_decls(path, base_name(path), base, templates, owner)
+    }
+    dir(ENGINE_DIR) $(name) {
+        return if (!ends_with(name, ".das"))
+        for (home in ["metal", "vulkan", "cuda"]) {
+            if (name |> starts_with("dasllama_{home}_")) {
+                scan_class_decls("{ENGINE_DIR}/{name}", home, base, templates, owner)
+            }
+        }
+    }
+    //! "<shared template>|<home>" for every shared template a home's class
+    //! derives, through any chain of intermediates
+    var stamped, seen : table<string>
+    for (name, home in keys(owner), values(owner)) {
+        continue if (home |> ends_with(".das"))
+        var c = base?[name] ?? ""
+        clear(seen)
+        while (!empty(c) && !key_exists(seen, c)) {
+            seen |> insert(c)
+            if ((owner?[c] ?? "") |> ends_with(".das")) {
+                stamped |> insert("{c}|{home}")
+            }
+            c = base?[c] ?? ""
+        }
+    }
+    let discrete = base_name(SHARED_KERNEL_FILES[0])
+    for (t, file in keys(templates), values(templates)) {
+        continue if (!(file |> ends_with(".das")))
+        let path = "{ENGINE_DIR}/{file}"
+        if (file == discrete) {
+            let vk = key_exists(stamped, "{t}|vulkan")
+            let cu = key_exists(stamped, "{t}|cuda")
+            if (key_exists(DISCRETE_ONE_HOME_STAMPS, t)) {
+                if (vk && cu) {
+                    gate_finding(path, ("`{t}` is stamped by both discrete homes now " +
+                        "(ARCHITECTURE_GPU_SHARED_KERNELS.md#gpu-shared-kernels) - drop it from " +
+                        "DISCRETE_ONE_HOME_STAMPS in REVIEW.das and from followup_general.md's row " +
+                        "of stamps that wait on their families"))
+                }
+            } elif (!vk || !cu) {
+                let which = vk ? "only the Vulkan home" : (cu ? "only the CUDA home" : "no home")
+                gate_finding(path, ("`{t}` is a discrete template that {which} stamps - the discrete " +
+                    "file holds the bodies both discrete homes stamp (ARCHITECTURE_GPU.md#gpu-backends); " +
+                    "a body one home runs lives in that home's classes file, and a stamp the other " +
+                    "home's family brings later is a followup_general.md row plus a " +
+                    "DISCRETE_ONE_HOME_STAMPS name in REVIEW.das"))
+            }
+        } elif (!key_exists(stamped, "{t}|metal") || !key_exists(stamped, "{t}|vulkan")) {
+            gate_finding(path, ("`{t}` is a common template that only one of the Metal and Vulkan " +
+                "homes stamps - the common file holds the kernels both stamp " +
+                "(ARCHITECTURE_GPU_SHARED_KERNELS.md#gpu-shared-kernels); a body one home runs " +
+                "lives in that home's kernel file"))
+        }
+    }
+}
+
+[arch(at = "ARCHITECTURE_GPU_SHARED_KERNELS.md#gpu-shared-kernels")]
+def private check_shared_file_spelling {
+    for (path in [SHARED_KERNEL_FILES[0], SHARED_KERNEL_FILES[1], CUDA_CLASSES_FILE]) {
+        var markers = false
+        for (m in das_requires(path)) {
+            continue if (!(m |> starts_with("spirv/")))
+            if (m == "spirv/spirv_markers") {
+                markers = true
+            } else {
+                gate_finding(path, ("requires `{m}` - a shared kernel file and the CUDA home's classes " +
+                    "file read the marker annotations from the emitter-free `spirv/spirv_markers`, " +
+                    "never the emitter behind `spirv_shader` (ARCHITECTURE_GPU.md#gpu-backends)"))
+            }
+        }
+        if (!markers) {
+            gate_finding(path, ("does not require `spirv/spirv_markers` - the marker annotations' " +
+                "home (ARCHITECTURE_GPU.md#gpu-backends)"))
+        }
+    }
+    var files : array<string>
+    collect_das_files(ENGINE_DIR, files, true)
+    for (path in files) {
+        let base = base_name(path)
+        continue if (base == base_name(SHARED_KERNEL_FILES[0]) || base == base_name(METAL_KERNELS_FILE))
+        var line_no = 0
+        for (line in split(read_lf(path), "\n")) {
+            line_no++
+            continue if (!(line |> starts_with("def gk_subgroup_")) &&
+                !(line |> starts_with("def public gk_subgroup_")) &&
+                !(line |> starts_with("def private gk_subgroup_")))
+            gate_finding(path, line_no, ("defines a `gk_subgroup_*` lane primitive - the discrete file " +
+                "carries the one copy in SPIR-V's spelling, which both discrete emitters lower, and a " +
+                "home defines its own only where its spelling differs, Metal's `simd_*` " +
+                "(ARCHITECTURE_GPU_SHARED_KERNELS.md#gpu-shared-kernels)"))
+        }
+    }
+}
+
+[arch(at = "ARCHITECTURE_GPU.md#gpu-backends")]
+def private check_shared_file_cites {
+    for (path in SHARED_KERNEL_FILES) {
+        var line_no = 0
+        for (line in split(read_lf(path), "\n")) {
+            line_no++
+            continue if (find(line, "arch(at") < 0)
+            var from = find(line, "ARCHITECTURE_")
+            while (from >= 0) {
+                let end = find(line, ".md", from)
+                break if (end < 0)
+                let doc = slice(line, from, end)
+                from = find(line, "ARCHITECTURE_", end)
+                for (home in ["VULKAN", "VK", "METAL", "CUDA"]) {
+                    continue if (find(doc, home) < 0)
+                    gate_finding(path, line_no, ("cites `{doc}.md`, a home's document - a shared kernel file " +
+                        "cites ARCHITECTURE_GPU.md or an ARCHITECTURE_GPU_SHARED_*.md companion, since its " +
+                        "mechanism is neither home's (ARCHITECTURE_GPU.md#gpu-backends); move the section " +
+                        "into a shared companion, or cite the shared section that carries the mechanism"))
+                    break
+                }
             }
         }
     }
@@ -2758,6 +2930,9 @@ def main() : int {
     check_device_creation_sites()
     check_arch_cites_by_name()
     check_require_bans()
+    check_shared_template_homes()
+    check_shared_file_spelling()
+    check_shared_file_cites()
     check_test_heap_model()
     check_harness_dashv()
     check_bench_stamps()

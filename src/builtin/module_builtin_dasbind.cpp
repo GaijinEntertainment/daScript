@@ -33,7 +33,7 @@
 #else
 #define DAS_ARM64_CALL_SYMBOL "das_arm64_call"
 #endif
-// src/builtin/ARCHITECTURE.md#interpreter-extern-call
+// src/builtin/ARCHITECTURE_DASBIND.md#interpreter-extern-call
 __asm__(
     ".text\n"
     ".p2align 2\n"
@@ -176,7 +176,7 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
     #undef  AX
     #undef  AD
 
-    // src/builtin/ARCHITECTURE.md#interpreter-extern-call
+    // src/builtin/ARCHITECTURE_DASBIND.md#interpreter-extern-call
     struct Arm64Layout {
         struct Slot { uint8_t argIndex, bytes; uint16_t offset; };
         uint8_t gprArg[8] = {}, fprArg[8] = {};
@@ -355,6 +355,20 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
         return libhandle;
     }
 
+    static void * searchDynamicLibraryWithExtension ( const string & library ) {
+        void * libhandle = searchDynamicLibrary(library);
+        if ( !libhandle ) {
+            // an [extern] may name its library without one, so every platform can spell the
+            // same binding: add this one's extension and walk the same search again
+            string ext = DAS_SHARED_LIBRARY_EXTENSION;
+            if ( library.length()<ext.length() ||
+                 library.compare(library.length()-ext.length(), ext.length(), ext)!=0 ) {
+                libhandle = searchDynamicLibrary(library + ext);
+            }
+        }
+        return libhandle;
+    }
+
     static void * bindDynamicLibrary ( const string & library ) {
         lock_guard<mutex> guard(g_dasBindLibMutex);
         // LLVM.dll pulls in libz3, whose static initializer leaks 40 bytes nothing here can free.
@@ -363,15 +377,13 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
         if ( it!=g_dasBindLib.end() ) {
             return it->second;
         } else {
-            void * libhandle = searchDynamicLibrary(library);
-            if ( !libhandle ) {
-                // an [extern] may name its library without one, so every platform can spell the
-                // same binding: add this one's extension and walk the same search again
-                string ext = DAS_SHARED_LIBRARY_EXTENSION;
-                if ( library.length()<ext.length() ||
-                     library.compare(library.length()-ext.length(), ext.length(), ext)!=0 ) {
-                    libhandle = searchDynamicLibrary(library + ext);
-                }
+            void * libhandle = nullptr;
+            size_t pos = 0;
+            while ( !libhandle && pos <= library.length() ) {
+                auto next = library.find(';', pos);
+                if ( next==string::npos ) next = library.length();
+                if ( next > pos ) libhandle = searchDynamicLibraryWithExtension(library.substr(pos, next-pos));
+                pos = next + 1;
             }
             g_dasBindLib[library] = libhandle;
             return libhandle;
@@ -691,6 +703,13 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
             bif->noAot = true;
             bif->userScenario = true;
             bif->sideEffectFlags = fun->sideEffectFlags | uint32_t(SideEffects::accessExternal);
+            // src/builtin/ARCHITECTURE_DASBIND.md#interpreter-extern-call
+            for ( auto & a : fun->arguments ) {
+                if ( a->type->isRef() && !a->type->constant ) {
+                    bif->sideEffectFlags |= uint32_t(SideEffects::modifyArgument);
+                    break;
+                }
+            }
             // and collect it
             bif->gc_collect(module->module_gc_root.get(), gc_root::gc_get_active_root());
             // and now try to add or replace the function in the module
@@ -734,7 +753,7 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
             if ( arg->type->isString() ) {
                 if ( arg->rtti_isCallFunc() ) {
                     auto pCall = static_cast<ExprCallFunc*>(arg);
-                    if ( pCall->func->name!="safe_pass_string") {
+                    if ( !pCall->func || pCall->func->name!="safe_pass_string") {
                         return true;
                     }
                 } else if ( strcmp(arg->__rtti,"ExprConstString")==0 ) {
@@ -751,6 +770,9 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
 
         virtual ExpressionPtr transformCall ( ExprCallFunc * call, string & err ) override {
             if ( !call->func ) return nullptr;
+            for ( auto & arg : call->arguments ) {
+                if ( !arg->type ) return nullptr;   // src/builtin/ARCHITECTURE_DASBIND.md#interpreter-extern-call
+            }
             string bindName = bindNameOf(call->func, err);
             if ( !err.empty() ) return nullptr;    // the inferer reports it
             bool hasBindFunction = !bindName.empty();

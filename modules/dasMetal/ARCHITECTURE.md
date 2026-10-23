@@ -75,7 +75,7 @@ reused as-is.
 |---|---|---|
 | `src/dasMetal.h` | hand | The C++ header `src/dasMetal.mm` and any embedder share: the opaque handle struct declarations and the `DAS_MOD_API` prototype of every extern below. Declarations only - no implementation, no Obj-C, no binding registration. |
 | `src/dasMetal.mm` | hand | `Module("das_metal")` - Obj-C++ shim over Metal.framework. Opaque annotated handles (device, queue, command buffer, compute encoder, pipeline state, library, function, buffer) + the extern surface below. Compiled with ARC; handles cross to das as `__bridge_retained void*`; `metal_release` = `__bridge_transfer`. Shim-side live-object counter for the leak gate. APPLE-only; links `-framework Metal -framework Foundation`. |
-| `metal/msl_types.das` | hand | daslang `TypeDecl` -> MSL type name: 32-bit scalars/bool plus the 16- and 8-bit scalars (`half`/`short`/`char` in MSL) and their 2/3/4 vectors, classified via the shared `daslib/shader_block_layout` rails. `msl_buffer_elem_name` gives the layout-bearing spelling: 3-lane elements take MSL's `packed_T3` (das packs tightly; unified memory means the das array IS the buffer). |
+| `metal/msl_types.das` | hand | The two layout units MSL adds over `daslib/shader_emit_common`'s spellings: `msl_tg_elem_bytes`, a threadgroup element at MSL's plain stride (a 3-lane vector strides four lanes), and `msl_buffer_elem_name`, the buffer element spelling, where a 3-lane element takes MSL's `packed_T3` (das packs tightly; unified memory means the das array IS the buffer). |
 | `metal/metal_builtins.das` | hand | Metal-only builtin surface over the shared lingua franca (the spirv_builtins pattern): re-exports `daslib/shader_lingua_franca` (whence `gl_WorkGroupSize` and the four `gl_Subgroup*` IDs, shared with dasSpirv) and adds the `simd_sum`/`simd_max`/`simd_shuffle*` intrinsics (Metal spellings, float/int/uint). The CPU bodies return their argument unchanged - on the CPU a simdgroup is one lane. The int and uint `atomicAdd` both emitters lower sit in the lingua franca with a CPU body that adds and returns the old value. |
 | `metal/msl_emit.das` | hand | The text emitter: `generate_msl(fn, var errors, cfg, var census, var tgmem) : string`. Manual recursion (`emit_value`/`emit_stmt`, mirroring `spirv_emit`). Kernel-signature synthesis from `@ssbo` globals (the one structural novelty - below). Records the construct census at every emit site. An `atomicAdd` on an `@ssbo` or `@workgroup` element lowers to a relaxed `atomic_fetch_add_explicit` through the element's address space; a local, a state member or a float element is refused by name. |
 | `metal/msl_shader.das` | hand | `[metal_kernel]` function-macro (`MetalKernel : AstFunctionAnnotation`, modeled on `SpirvShader`), applied to a **class method**; args: `name`, `fastmath` (default **true**). `apply` declares the public MSL-text global - the `name=` argument, or `<Class>_<method>_msl` derived from the method - plus a `<name>_fastmath : bool` companion feeding the pipeline-compile options; **`fixup` fills `glob.init = new ExprConstString(...)`** - the initializer is a constant string, so nothing has to be called to build it and the late `fixup` pass is enough. Does `require msl_emit public` + `require metal_builtins public`. |
@@ -218,11 +218,12 @@ das body carries an `ldb` that must equal the emitted step's B extent. The secon
 caller: the `@workgroup` array handed in as `wt` is sized by the caller against a stride only
 this document and the emitter know.
 
-**Staged rows are padded, not packed.** A 64-deep row of halves is 128 bytes, which is the
-threadgroup bank-conflict worst case: every row then starts in the same bank. Rows pad to 72
-halves, and a 32-deep tail row pads to 40, so consecutive rows walk the banks instead. The pad
-is the row stride the `matmul2d` tensor extent carries, so the emitter passes the stride
-explicitly rather than letting the extent default to the packed width. A reduction width known
+**A 64-deep staged row is padded, not packed.** A 64-deep row of halves is 128 bytes, which is
+the threadgroup bank-conflict worst case: every row then starts in the same bank. In `bk = 64`
+and `bk = 128` modes, rows pad to 72 halves and the 32-deep tail row pads to 40, so consecutive
+rows walk the banks instead; `bk = 32` stages packed 32-half rows, 64 bytes, off that worst case.
+The pad is the row stride the `matmul2d` tensor carries, so the emitter passes the stride
+explicitly rather than letting it default to the packed width. A reduction width known
 only at run time reaches a Metal kernel the same way, as `dynamic_extent` on that tensor
 descriptor - this emitter's runtime-extent descriptor.
 
@@ -239,9 +240,24 @@ overlaps `op.run` on chunk `b`, because the two touch disjoint halves of `wt`. A
 preload, and running the preload anyway reads W blocks past the panel's `ldwb` stride and writes
 `wt` bytes the tail chunk then writes again with no barrier between the two.
 
+**The destination cooperative tensor arrives zeroed.** `get_destination_cooperative_tensor` hands
+back the accumulator already zero, held in the register layout the tensor unit's fast path uses.
+A walk that writes it element by element before the first `run` makes the compiler materialize
+every element as an addressable per-thread value outside that layout, and the `matmul2d` then runs
+off its fast path for the whole accumulation loop.
+
 ## 10. tmm2d device-pair steps {#tmm2d-device-pair}
 
 The `devab` steps hand `matmul2d` two device tensors of half and stage nothing: no threadgroup
 tile, no barrier, the reduction width a run-time extent. `devab` reads B in the weight layout, one
 row an output column; `devabnt` reads B in its natural layout, one row a reduction step. A float
 operand is refused, since the pair exists for the native half x half path.
+
+## Shim autorelease pools {#shim-autorelease-pools}
+
+Every Objective-C property read in `src/dasMetal.mm` - `obj.prop`, or `[obj prop]` with no
+argument - sits inside an `@autoreleasepool` block, in its own function or in every caller of the
+`static` helper it sits in. A getter that returns an object or an inner pointer (`contents`)
+autoreleases, and no pool drains on a daslang host thread, so an unpooled read leaks the object
+without a message. A getter that returns a scalar autoreleases nothing; `REVIEW.das` lists those
+in `SCALAR_GETTERS`, the reads it lets sit outside a pool.

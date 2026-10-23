@@ -243,9 +243,8 @@ Companion to `ARCHITECTURE.md` in this folder; section numbers are unique across
   STYLE029 fires only when exactly one re-exported module is used: two or more is an
   aggregation facade.
 - **Metric rules attribute code to the module that can fix it.** STYLE037/038 walk the
-  `fromGeneric` chain to its root (`[template]` generics instantiate INTO the caller);
-  generated carriers stay unmetered; closures are not length-checked separately - the
-  host trips first.
+  `fromGeneric` chain to its root (`[template]` generics instantiate INTO the caller); generated
+  carriers stay unmetered; closures are not length-checked separately - the host trips first.
 - **STYLE041 is sound because of a reference count, not the structural scan.** The scan
   classifies writes, plumb reads, and the single consuming `if`, arming the candidate with
   that count; `preVisitExprVar` counts every reference in the function, and the warning
@@ -255,9 +254,8 @@ Companion to `ARCHITECTURE.md` in this folder; section numbers are unique across
   when a generic binds; one still set on a resolved cast target was never consumed - but
   an `auto`/unresolved-alias target has simply not been substituted yet, hence the
   `isAutoOrAlias` bail.
-- **STYLE039 requires non-ASCII in both the value and its source span** - escape-spelled
-  bytes in ASCII source are log-safe, and span-slicing keeps a neighbouring comment's
-  typography from firing.
+- **STYLE039 requires non-ASCII in both the value and its source span** - escape-spelled bytes in
+  ASCII source are log-safe, and span-slicing keeps a neighbouring comment's typography from firing.
 - **The unsafe-frame walk**: `preVisitExpression` pushes one frame per expression node,
   `visitExpression` pops it - the popped frame is the subtree's summary, stored in
   `unsafeExprs` for `visitExprUnsafe` (STYLE024 vs STYLE025), propagated to the parent
@@ -283,9 +281,11 @@ Companion to `ARCHITECTURE.md` in this folder; section numbers are unique across
   caps report-arg recursion at 8 and fails closed (deeper is unknown shape);
   `LINT_SKIP_HEADER_LINES = 16` exists so prose quoting the directive cannot unlint a
   file; STYLE037's 20 and `note_type`'s depth 24 have no recorded derivation.
+- **Collapse checks partition their overlaps**: STYLE021 owns the const-key run over STYLE031,
+  STYLE032 owns fresh-empty declarations over STYLE033, and STYLE033's chain-receiver check leaves
+  a plain-variable receiver to STYLE033's variable-form check.
 - **C++ mirror pairs**: the STYLE024/025 unsafe map <-> infer's `unsafe_*` rules;
-  `style036_inert_contract` <-> infer's contract clearing. Nothing fails when one side
-  moves alone.
+  `style036_inert_contract` <-> infer's contract clearing. Nothing fails when one side moves alone.
 
 ### 4.1 STYLE029/030 over a require group {#style-lint-require-group}
 

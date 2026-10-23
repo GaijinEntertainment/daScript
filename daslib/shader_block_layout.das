@@ -55,6 +55,13 @@ def public scalar_class(bt : Type) : int {
     return -1
 }
 
+//! a float or half scalar or vector (`scalar_class` 2)
+def public is_float_class(bt : Type) : bool => scalar_class(bt) == 2
+
+//! a signed integer scalar or vector of any lattice width
+//! (`scalar_class` 0)
+def public is_signed_class(bt : Type) : bool => scalar_class(bt) == 0
+
 def public scalar_width(bt : Type) : int {
     if (bt == Type.tFloat16 || bt == Type.tHalf2 || bt == Type.tHalf3 || bt == Type.tHalf4
             || bt == Type.tInt16 || bt == Type.tShort2 || bt == Type.tShort3 || bt == Type.tShort4

@@ -1,6 +1,6 @@
 // The K/V codec cells' rig, one carrier a file: a model loaded with the device mirror asked at a block codec, and the
 // forms that hold the device to the CPU chain under it - the forced-feed bar, the three-chain distance form, the stored
-// rows, and the per-op rails' form (`ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-kv-block-codecs`,
+// rows, and the per-op rails' form (`ARCHITECTURE_GPU_SHARED_ATTN.md#vk-kv-block-codecs`,
 // `ARCHITECTURE_GPU_VULKAN_DECODE.md#decode-attention-block`). A file states its carrier's bars with the readings behind them.
 
 options gen2

@@ -19,6 +19,7 @@ require daslib/fio
 require dasllama/dasllama_math   // with_dasllama_jobque_ (the engine-standard jobque config)
 require dasllama/dasllama_gpu_tier   // moe_gpu_tier_installed / gpu_want_auto: is the tier armed
 require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active: did the whole-model driver take the MoE
+require dasllama/dasllama_gpu_math   // nolint:STYLE030,LINT019 — the grid helpers, read under the vulkan static_if, unused in the darwin world
 require dasllama/dasllama_moe   // heat_totals, heat_reset and the shared expert's row counters: the per-op heat cell's witnesses
 require ?vulkan dasllama/dasllama_vulkan_common   // the resolved coopmat mode and the kernel census, where the module exists
 require dasllama/dasllama_kqformat

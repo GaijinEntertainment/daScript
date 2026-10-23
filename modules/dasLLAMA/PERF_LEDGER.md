@@ -1793,7 +1793,7 @@ what it costs today and what the fix would change.
     76.6 / 98.1 (the reference's cv 6.1%, void); Qwen3-ASR-1.7B 4 s 85.5 / 95.1, 8 s 130.8 / 164.4.
 
 - **MEASURED (2026-10-02) - the K/V mirror's block codecs on the whole-model driver
-  (`ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-kv-block-codecs`, `set_gpu_kv_dtype` / the server's `--kv-dtype`): a
+  (`ARCHITECTURE_GPU_SHARED_ATTN.md#vk-kv-block-codecs`, `set_gpu_kv_dtype` / the server's `--kv-dtype`): a
   q8_0 mirror is 17/32 of the f16 mirror's bytes and tq4 9/32, and on a model whose context was asked whole
   the bytes they give back are resident layers - the 35B at 131072 positions goes from seven routed layers'
   experts on the host to none and reads 3.1-3.4x the prompt rate; on a model the card holds whole they cost
@@ -1885,7 +1885,7 @@ what it costs today and what the fix would change.
   11.371113 after the first step): the block attends its own float rows under every codec, and the codec
   is the cache's.
 
-  The 1B's long prompt is the shadow's price (`ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-kv-block-codecs`): the
+  The 1B's long prompt is the shadow's price (`ARCHITECTURE_GPU_SHARED_ATTN.md#vk-kv-block-codecs`): the
   flash tiles read f16 rows, so each layer of each window dequantizes the span it attends first, and tq4
   adds the rotation of the window's rows and the un-rotation of its attention rows. The decode attention
   reads the blocks natively and the token rate does not follow the codec beyond the rows' own spread (the
@@ -1964,7 +1964,7 @@ what it costs today and what the fix would change.
   `test_gpu_resident_regions_q8kv.das` and `test_gpu_resident_regions_tq4kv.das` (26 cells each), and
   `test_vulkan_mint_kv_codecs`. On Qwen2.5-0.5B a tq4 mirror sits 51.6 summed over nine rows from the f16
   chain and the CPU's tq4 chain 54.3 - the codec's own distance, which the distance cells measure on both
-  chains (`ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-kv-tq4-basis`).
+  chains (`ARCHITECTURE_GPU_SHARED_ATTN.md#vk-kv-tq4-basis`).
 - **MEASURED (2026-10-02) - the remaining families through the server, smallest up.** M5 Max, Metal,
   `dasllama-server` against the pinned llama-server, `harness/served_bench.das` as the qwen ladder
   ran it; the 24B and up at 2 reps (the rows' turns run 17 s a reply on a 40 GB model). Every
@@ -3412,7 +3412,7 @@ what it costs today and what the fix would change.
   every other stamp keeps 64.** The cm2 tile template's k step (`BK`) is a stamp constant: the s
   and e stamps (the expert schedule's 32-row and 128-row columns, `CM2_TC_E` in the class ladders)
   of iq2xxs, iq2xs, iq2s, iq3xxs and iq3s run 32-deep, every other stamp 64
-  (`ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default` carries the tile readings behind the split). On the
+  (`ARCHITECTURE_GPU_SHARED_GEMM.md#cm2-tile-body` carries the tile readings behind the split). On the
   RTX 5060 Ti (`benchmarks/lcpp_bench.das -jit --for-debug-purposes -r 3 -p 512 -n 128 -t 16`
   under `DASLLAMA_GPU=1 DASLLAMA_IMAGE=0 DASLLAMA_ALLOW_UNTUNED=1 DASLLAMA_GPU_MIN_CTX=2048`, the
   x64-gen backend, untuned-stamped; the arms' rates sit in `followup_vulkan.md` item 45):
@@ -3447,7 +3447,7 @@ what it costs today and what the fix would change.
   cold:k6`'s flush row: 43.0 us against 26.7 warm; 3 us on the RTX 5060 Ti), and four copies run
   the m tiles 10-14% faster hot there (`harness/vk_gemm_probe.das -- cm2:k6` gate m 57.3 -> 64.5
   TFLOP/s, q/wo m 51.1 -> 55.5; the l and s tiles' sweep sits in `followup_vulkan.md` item 45,
-  `ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default`). Pod (the bench form of the two rows above at `-n
+  `ARCHITECTURE_GPU_SHARED_GEMM.md#cm2-tile-body`). Pod (the bench form of the two rows above at `-n
   32`, `-t 8`, the scalar decode arm): pp512 1.021x of the eight-copy form, tg32 1.007x; the
   32-deep expert stamps at 2 copies read below their eight-copy form with e_gate / e_up longer, at
   8 as before. RTX 5060 Ti (`-r 5`, `-t 16`, same session): the 35B twin arm within noise of the
@@ -3456,7 +3456,7 @@ what it costs today and what the fix would change.
 
 - **LANDED (2026-09-10) - the iq2xxs and iq2s scalar decode callbacks in pair form.** The callback
   derives every shared read from the pair's first element and selects the element last
-  (`ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes`), so the driver's two-wide callback commons the
+  (`ARCHITECTURE_GPU_SHARED_GEMM.md#cm2-decode-16bit-lanes`), so the driver's two-wide callback commons the
   pair's work. Linux RTX 5080 (the scalar decode arm, the bench form of the rows above): the skewed
   expert schedule's e+s ladder `moesk:iq2xxs` 0.357 -> 0.316 ms (gate/up) and 0.360 -> 0.320 (down),
   `moesk:iq2s` 0.428 -> 0.380 and 0.484 -> 0.432 (`harness/vk_gemm_probe.das`); the 35B pp512
@@ -6588,3 +6588,54 @@ so every figure is direction-grade.
   `test_gpu_resident_moe_formats.das` holds every moe-formats carrier at `MOE_LOGIT_BAR_REL` (the routed block's bar
   `test_gpu_resident_moe.das` reads) through the one-copy rail, one window and two, and the expert-cache cell's
   second feed reads fewer planes than its first.
+
+### From the dasCUDA arc (2026-10-22, the reference box: Threadripper 3990X, RTX 5060 Ti 16 GB, driver 610.74, Windows, clocks locked at 2400; and 2026-10-23, RunPod RTX PRO 4500 Blackwell 32 GB, driver 595.91, Linux, on boost - the container refuses `nvidia-smi -lgc`)
+
+Every rate of ours is `debug-jit`, untuned: `DASLLAMA_GPU=1 DASLLAMA_ALLOW_UNTUNED=1 [DASLLAMA_CUDA=1] bin/daslang -jit
+modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m <gguf> -p 512 -n 128 -r 3 -t 16 --ngl 0 --for-debug-purposes` (the pod's runs
+add `-o md`), the CUDA home under `DASLLAMA_CUDA=1` and the Vulkan home without it. llama.cpp's run is its b10660 CUDA build,
+`llama-bench -ngl 99 -fa 1 -p 512 -n 128 -r 3` (`ARCHITECTURE_MEASUREMENT.md#cuda-reference-rows`). Each figure is the mean of
+3 reps +/- their standard deviation, as each bench prints it. No record store carries a CUDA row (the bench stamps the
+device tier `vulkan`; `followup_general.md` item 227), so every figure is direction-grade; pp512 / tg128 in tok/s.
+
+- **The 5060 Ti, ours CUDA against llama.cpp CUDA.** Llama-3.2-1B Q8_0 26840 +/- 377 / 273 +/- 0.9 (llama.cpp `external`:
+  19083 +/- 1030 / 254 +/- 0.4); Q4_K_M 19675 +/- 170 / 395 +/- 1.0 (llama.cpp `external`: 17692 +/- 1043 / 372 +/- 4.2);
+  Q5_1 19927 +/- 229 / 363 +/- 0.5 (llama.cpp `external`: 17867 +/- 1125 / 331 +/- 0.4); IQ4_XS 19666 +/- 82 / 427 +/- 0.6
+  (llama.cpp `external`: 19677 +/- 1489 / 388 +/- 5.2). Llama-3.2-3B Q8_0 9982 +/- 126 / 109 +/- 0.3 (llama.cpp
+  `external`: 7751 +/- 485 / 106.6 +/- 0.6). Llama-3.1-8B Q4_K_M 3371 +/- 10 / 80.5 +/- 0.09 (llama.cpp `external`: 3229
+  +/- 63 / 80.5 +/- 0.75); Q8_0 4627 +/- 8 / 49.4 +/- 0.06 (llama.cpp `external`: 3436 +/- 82 / 46.8 +/- 1.9). The token
+  step is a captured graph replayed under programmatic launches, the attention unsplit under `RD_UNSPLIT_POS` (the entries
+  above).
+- **The pod, ours CUDA / ours Vulkan / llama.cpp CUDA.** Llama-3.2-1B Q8_0 50581 +/- 255 / 505.1 +/- 0.3, 41081 +/- 88 /
+  502.4 +/- 0.2 (llama.cpp `external`: 38686 +/- 6871 / 489.9 +/- 1.6); Q4_K_M 40385 +/- 34 / 682.8 +/- 0.3, 40477 +/- 110
+  / 644.4 +/- 0.3 (llama.cpp `external`: 35605 +/- 5446 / 687.2 +/- 0.9); Q5_1 42043 +/- 31 / 665.9 +/- 3.1, 25629 +/-
+  17597 / 625.3 +/- 0.3 (the Vulkan pp carried one slow rep in two runs) (llama.cpp `external`: 35249 +/- 6060 / 634.4 +/-
+  2.5). Llama-3.2-3B Q8_0 17200 +/- 139 / 202.4 +/- 0.3, 15232 +/- 118 / 204.2 +/- 0.04 (llama.cpp `external`: 16072 +/-
+  1908 / 202.9 +/- 0.3); Q4_K_M 15182 +/- 500 / 293.9 +/- 0.9, 15050 +/- 352 / 286.9 +/- 0.1 (llama.cpp `external`: 14887
+  +/- 1721 / 295.5 +/- 0.3). Decode at parity with llama.cpp on every row (0.99 to 1.05), prefill ahead on every row
+  (1.02 to 1.31); the Q5_1 prefill gap the 5060 Ti showed before the per-32 l and m leaves is gone on both cards.
+- **The lasting allocations the CUDA route adds, a model** (`dasllama_cuda_decode.das`; computed from the geometry, no
+  device measurement; the 1B values at dim 2048, 16 layers, kv_dim 512, hidden 8192, vocab 128256, 32 heads of 64, `rope` (the
+  rope row's floats) 64, one region, on the 5060 Ti's 36 SMs). The weight arenas (`cud_arena_reserve`): a format's
+  `blocks x (quant bytes + scale bytes)` a block over every plane the resident walk places in it, at least 64 scale
+  bytes - the model's resident plane bytes. The K and V mirror slabs: `2 x regions x (mir_units + slack units) x unit
+  bytes`, `mir_units` the plan's `n_layers x n_ctx x kv_dim` on a dense model and the slack `RDEC_MIR_SLACK` (131072)
+  elements - under f16, `4 x regions x (n_layers x n_ctx x kv_dim + 131072)` bytes: 134742016 at n_ctx 4096, 4295491584 at
+  131072. A block codec's f16 shadows (`ksh`, `vsh`): `4 x (n_ctx x kv_dim + 131072)` bytes - 8912896 at n_ctx 4096,
+  268959744 at 131072 - the slack added to the element count as the Vulkan home's shadow adds it. The step's per-row planes at the N-row command's 16 rows: `16 x (16 dim + 1.125
+  wide + 9.125 qd + 8 kv_dim + 9.125 hidden + 4 rope + 4 vocab) + 64 n_heads x (nsplit x (head + 2) + 1) + 8192` bytes,
+  `wide` the widest of qd, hidden and dim and `nsplit` `da_nsplit`'s (3 on the 1B), plus `128 x kv_dim` under a block codec
+  - 10860544 on the 1B, the logits 8208384 of it. The norms plane `4 x ((10 n_layers + 1) x dim + 2)`. The mapped host
+  blocks: the in block `4 x (144 + 16 x (rope + dim))` (135744 on the 1B), the out block `64 x vocab + 64` (8208448). The
+  window planes (`crd_pf_setup`, `np` the prompt window's rows, 2048 by default): `np x (15.125 dim + 11.125 qd + 12
+  kv_dim + 11.125 hidden + 4 rope) + 256 x (dim + qd + hidden)` at the model's widest layer, plus `8 x np x kv_dim` under a
+  block codec, the split-k scratch `262144 x SMs` and a schedule buffer of `4 x (4 + max(cm2_tiles_at(dmax, np, 32), 8 x
+  cm2_tiles_at(dmax, np, 128)))` bytes a role a layer (`dmax` the widest GEMM output), seven roles - 90965760 at np 512, 326108928 at 2048 on the 1B.
+- **The cm2 tiles at two blocks an SM on the 5060 Ti** (`min_blocks = 2` at 128 registers, `dasllama_cuda_classes.das`).
+  The l tile: the gate/up shape 458 -> 344 us, the down shape 402 -> 424 us, the square shape even. The m tile under the
+  pipelined decode: 93 / 351 / 345 us at the window's three shapes, against 102 / 413 / 377 us unbound.
+- **The window GEMMs' k split on the 5060 Ti** (`cud_cm2_pick`). Unsplit, the down and q/o shapes run 32 l tiles on 36
+  SMs, one block an SM; the k/v shapes run 16 m tiles. A grid short of two blocks an SM splits k until it fills them.
+- **The pod's cells on the Linux build.** `tests/cuda` 79 of 79, `test_cuda_kernels.das` 44 of 44, the CUDA llama parity
+  file 19 of 22 (three unstocked mints skip), the codec file 6 of 6, the batch file 6 of 6, the segments file 2 of 2 with
+  the recurrent and E-series cells skipping under the CUDA ask by design.

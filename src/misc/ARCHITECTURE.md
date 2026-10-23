@@ -5,7 +5,8 @@
 - `job_que.cpp` - compute lanes, OS placement, dispatch and spin/park scheduling.
 - `job_que_spin.h` - spin deadline construction, renewal and expiration; its clock type is
   supplied by the runtime or a deterministic test.
-- `sysos.cpp` - the per-platform core-count probes `job_que.cpp` calls, and the das root.
+- `sysos.cpp` - the per-platform core-count probes `job_que.cpp` calls, the das root, and the
+  dynamic-library loader.
 - `network.cpp` - the single-client TCP `Server` the DAP debugger and `daslib/network` sit on,
   the `Client` end beside it, `probe_local_port`, and the two helpers every socket error passes
   through.
@@ -275,3 +276,13 @@ and shrink's contract is to give unused memory back. A deck with one live object
 whole: the heap does not move objects, so a partly used deck is reclaimed only by its last
 object dying. `Shoe::lastChunk` is cleared on every pass, because it may have named a deck that
 is gone. Under ASan `maxShoeAllocation` is 0, so no deck exists and the pass finds nothing.
+
+## A bare library name loads through the system's own search order {#bare-library-name}
+
+On Windows `loadDynamicLibrary` hands a name with no `/` or `\` - `msvcrt`, `nvcuda` - to
+`LoadLibraryA`, which searches the application directory, system32, then `PATH`. A name with a
+directory is made absolute with `GetFullPathNameA` and loaded by `LoadLibraryExA` with
+`LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR`, so the library's own imports resolve from its folder. That
+flag fails with `ERROR_INVALID_PARAMETER` for anything but an absolute path, and
+`GetFullPathNameA` turns a bare name into `<CWD>/<name>`, an absolute path to no file, so the
+second route cannot carry a bare name.

@@ -279,6 +279,22 @@ the irregular long tail: structs/commands whose params are flags-output, raw
 vk_view / classifier rules don't cover. Each is logged at generation time. Most
 are exotic extensions; revisit case-by-case if a consumer needs one.
 
+## Class-form render shaders
+
+Compute already has the class form (`[spirv_kernel]`: annotated members are the resources,
+methods are the kernels). Vertex and fragment shaders only have the module-global form
+(`var @in @location = 0 ...`, `[vulkan_vertex_shader]`). The class form for render is one
+class per pipeline: `@uniform` / `@ssbo` / texture / sampler members with `@set` and
+`@binding`, a vertex method taking a `@location`-annotated input struct and returning a
+varyings struct whose position field is the `@builtin`, a fragment method taking that
+varyings struct and returning the color outputs. The macro then generates the descriptor-set
+layouts, the vertex-input state and the uniform writers from the class, and the CPU twin of
+each stage is a pure function a test calls directly. dasWebGPU ships this model first
+(class-only, no global form); its `[wgpu_vertex]` / `[wgpu_fragment]` front-end is the
+shape to share, and the fold of the three kernel-class classifiers (dasSpirv, dasMetal,
+dasWebGPU) into one front-end is the step that lands it here. The global form stays for the
+existing tutorials until then.
+
 ## Delete the GLSL compile helper (decided 2026-07-16, do ~2026-07-30)
 
 `cmake/DasVulkanCompileShader.cmake` (+ its `include` at `CMakeLists.txt:21`) is

@@ -172,6 +172,14 @@ def test_check_nan_and_length(t : T?) {
         }
         t |> equal(fails, 0, "a miss asserts nothing")
     }
+    t |> run("check_exceeds passes a finite miss alone") @(t : T?) {
+        let want <- [1.0, 2.0, 3.0]
+        t |> equal(probe_fails() $(p) { check_exceeds(p, "miss", [1.0, 2.5, 3.0], want, BAR_APPROX); }, 0, "a finite miss passes")
+        t |> equal(probe_fails() $(p) { check_exceeds(p, "equal", want, want, BAR_APPROX); }, 1, "control: equal rows red")
+        t |> equal(probe_fails() $(p) { check_exceeds(p, "nan out", [1.0, NAN_SENTINEL, 3.0], want, WIDE_BAR); }, 2, "a NaN in the kernel's output reds, though check_count counts it off")
+        t |> equal(probe_fails() $(p) { check_exceeds(p, "nan ref", want, [1.0, NAN_SENTINEL, 3.0], WIDE_BAR); }, 2, "a NaN in the reference reds")
+        t |> equal(probe_fails() $(p) { check_exceeds(p, "inf ref", want, [1.0, INFINITE_DIFF, 3.0], WIDE_BAR); }, 2, "an infinity in the reference reds")
+    }
     t |> run("check_rows is check with its rows and heads") @(t : T?) {
         let fails = probe_fails() $(p) {
             check_rows(p, "rows", [1.0, 2.0, 3.5, 4.0], [1.0, 2.0, 3.0, 4.0], BAR_APPROX, 2, 1)

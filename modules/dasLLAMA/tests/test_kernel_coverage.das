@@ -861,15 +861,17 @@ def test_metal_kernel_coverage(tst : T?) {
 // The Vulkan census's DECLARED blind spots, by census name (`<vk_dispatch name>_spv`): kernel
 // classes no zoo row below can dispatch, each with the reason and the kernel-unit cell that does.
 let private VK_CENSUS_NEVER_DISPATCHED <- [
-    // the q51 expert rail (the 32-block down planes of the 26B-A4B's Q4_K_M: a carrier above the zoo's tier) -
-    // its s and e stamps and its decode GEMV; their coverage is test_vkd_q51_cm2_batch and test_vkd_q51_gemv
-    "q51_batch_cm2s_cls_spv", "q51_batch_cm2e_cls_spv", "q51_gemv_cls_spv",
+    // the q51 rail (the 32-block down planes of the 26B-A4B's Q4_K_M, a carrier above the zoo's tier; the dense planes of the
+    // Llama-3.2-1B Q5_1 mint, which no zoo row loads) - its l, m and s stamps (the m stamp its e column too) and its decode
+    // GEMV; their coverage is test_vkd_q51_cm2_batch and test_vkd_q51_gemv
+    "q51_batch_cm2l_cls_spv", "q51_batch_cm2m_cls_spv", "q51_batch_cm2s_cls_spv", "q51_gemv_cls_spv",
     // the mx4 expert rail (gpt-oss's native-MXFP4 routed stacks: a carrier above the zoo's tier) - its s and e stamps and
     // its decode GEMV; their coverage is test_vkd_mx4_cm2_batch and test_vkd_mx4_gemv
     "mx4_batch_cm2s_cls_spv", "mx4_batch_cm2e_cls_spv", "mx4_gemv_cls_spv",
-    // the iq4nl32 expert rail (the 32-block IQ4_NL down planes off the 256 lattice - Qwen3.8-Flash-Next, above the zoo's tier) -
-    // its s and e stamps and its decode GEMV; their coverage is test_vkd_iq4nl32_cm2_batch and test_vkd_iq4nl32_gemv
-    "iq4nl32_batch_cm2s_cls_spv", "iq4nl32_batch_cm2e_cls_spv", "iq4nl32_gemv_cls_spv",
+    // the iq4nl32 rail (the 32-block IQ4_NL down planes off the 256 lattice - Qwen3.8-Flash-Next, above the zoo's tier; the
+    // dense planes of the Qwen2.5-0.5B IQ4_NL mint, which no zoo row loads) - its l, m and s stamps (the m stamp its e
+    // column too) and its decode GEMV; their coverage is test_vkd_iq4nl32_cm2_batch and test_vkd_iq4nl32_gemv
+    "iq4nl32_batch_cm2l_cls_spv", "iq4nl32_batch_cm2m_cls_spv", "iq4nl32_batch_cm2s_cls_spv", "iq4nl32_gemv_cls_spv",
     // the iq3s4 rail's cm2 l stamp (IQ3_S served as a nibble codebook plane: the zoo's IQ3_S rows dispatch its decode GEMV, its
     // batch tile and its m, s and KHR stamps, none of them a plane tall enough for the l column); its coverage is test_vkd_iq3s4_cm2_batch
     "kq_batch_iq3s4_cm2l_cls_spv",

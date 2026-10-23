@@ -9,6 +9,7 @@ require vulkan
 require vulkan/vulkan_boost
 require dasllama/dasllama_vulkan_common
 require dasllama/dasllama_vulkan_classes
+require dasllama/dasllama_gpu_tier
 
 // The single-op resident-driver seams (vk_add_rms / vk_rope_kv_store / vk_decode_attn) on the
 // CLASS rail: generated per-class sets + push-constant params — no meta buffers.
@@ -20,7 +21,7 @@ def private ensure_ar_state {
         return
     }
     verify(ensure_cls_ar(), "vulkan seams: the ar class rail must engage on a live device")
-    let bytes = AR_MAX_DIM * 4l
+    let bytes = RDEC_AR_MAX_DIM * 4l
     g_gpu.ar_x_dev = make_device_buf(bytes)
     g_gpu.ar_a_dev = make_device_buf(bytes)
     g_gpu.ar_w_dev = make_device_buf(bytes)
@@ -37,7 +38,7 @@ def private ensure_ar_state {
 def vk_add_rms(var x : array<float>; a : array<float>; w : array<float>; var y : array<float>;
                dim : int64; eps, ascale : float; add : bool) {
     verify(vk_moe_init())   // assert() refuses side-effecting expressions; the probe must run
-    assert(dim <= AR_MAX_DIM, "dasLLAMA vulkan: add_rms dim exceeds AR_MAX_DIM")
+    assert(dim <= RDEC_AR_MAX_DIM, "dasLLAMA vulkan: add_rms dim exceeds RDEC_AR_MAX_DIM")
     ensure_ar_state()
     let bytes = dim * 4l
     unsafe {

@@ -11,6 +11,7 @@ require daslib/rtti
 require math
 require strings   // ends_with — generic-instance call names carry a module prefix
 require daslib/strings_boost   // split / strip — the shared grid/params micro-format tokenizers
+require daslib/templates_boost
 
 // Interprocedural read/write classifier over a declared set of tracked module globals — the
 // shared analysis half of the GPU dispatch lenses ([metal_dispatch] + [vk_dispatch]). Given a
@@ -25,6 +26,47 @@ struct AccessResult {
     reads : table<string>
     writes : table<string>
     err : string   // non-empty = unanalyzable construct; the lens turns it into a compile error
+}
+
+def mk_alias_t(at : LineInfo; nm : string; is_const : bool) : TypeDeclPtr {
+    var t = new TypeDecl(at = at, baseType = Type.alias, alias := nm)
+    t.flags.constant = is_const
+    return t
+}
+
+def mk_gvar(at : LineInfo; nm : string) : ExpressionPtr => new ExprVar(at = at, name := nm)
+
+def mk_ret_bool(at : LineInfo; v : bool) : ExpressionPtr =>
+    new ExprReturn(at = at, subexpr = new ExprConstBool(at = at, value = v))
+
+def mk_if_ret(at : LineInfo; var cond : Expression?; ret_val : bool) : ExpressionPtr {
+    var blk <- [mk_ret_bool(at, ret_val)]
+    return new ExprIfThenElse(at = at, cond = cond, if_true = make_expression_block(blk))
+}
+
+def mk_if_do(at : LineInfo; var cond : Expression?; var stmt : Expression?) : ExpressionPtr {
+    var blk <- [unsafe(reinterpret<ExpressionPtr>(stmt))]
+    return new ExprIfThenElse(at = at, cond = cond, if_true = make_expression_block(blk))
+}
+
+def mk_not(at : LineInfo; var e : Expression?) : ExpressionPtr =>
+    new ExprOp1(at = at, op := "!", subexpr = e)
+
+//! a lens's refusal: the error text set, the access result and the tracked set released
+def access_fail(var errors : das_string; msg : string; var res : AccessResult; var tracked : table<string>) : bool {
+    errors := msg
+    delete res
+    delete tracked
+    return false
+}
+
+//! a generated function of `body` added to the compiling module, `decorate` setting its flags first
+def add_generated(at : LineInfo; name : string; var result : TypeDeclPtr; var body : array<ExpressionPtr>; decorate : block<(var fn : Function?) : void>) : bool {
+    var fn = new Function(at = at, atDecl = at, name := name, flags = FunctionFlags.generated, result = result)
+    invoke(decorate, fn)
+    fn.body = make_expression_block(body)
+    fn.body |> force_at(at)
+    return compiling_module() |> add_function(fn)
 }
 
 // write-root of an assignment target: peel subscripts/fields/swizzles down to the base variable.
@@ -381,6 +423,7 @@ class private AccessVisitor : AstVisitor {
                 || cname |> ends_with("tmm2d_tg_begin_nt") || cname |> ends_with("tmm2d_tg_step_nt")
                 || cname |> ends_with("tmm2d_tile_tg") || cname |> ends_with("tmm2d_tg_rowscale")
                 || cname |> ends_with("i_das_ptr_add")
+                || cname == "cp_async_16" || cname == "ldmatrix"
                 || cname == "q8_quad_dot" || cname == "q8_oct_dot") {
             // plain reads (the generic pass records them) — or, for the staged-GEMM protocol
             // begin/step, only untracked locals/@workgroup tiles. Pointer arithmetic is neither:
@@ -603,14 +646,29 @@ def private class_method(mod : Module?; st : StructurePtr; mname : string) : Fun
         return null if (ea == null)
         var nm = string(ea.target)
         let sep = find(nm, "::")
+        var owner = ""
         if (sep >= 0) {
+            owner = slice(nm, 0, sep)
             nm = slice(nm, sep + 2)
         }
+        let other = (!empty(owner) && owner != "_" && owner != mod.name) ? find_module(owner) : null
         var found : Function?
-        mod |> for_each_function(nm) $(cfn) {
+        (other != null ? other : mod) |> for_each_function(nm) $(cfn) {
             if (cfn.name == nm) {
                 found = cfn
             }
+        }
+        //! an unresolved name (`_::`) of a base class's method lives in the base's module - a hoisted base under a Vulkan or CUDA leaf
+        var base = st.parent
+        while (found == null && base != null) {
+            if (base._module != null && base._module != mod) {
+                base._module |> for_each_function(nm) $(cfn) {
+                    if (cfn.name == nm) {
+                        found = cfn
+                    }
+                }
+            }
+            base = base.parent
         }
         return found
     }

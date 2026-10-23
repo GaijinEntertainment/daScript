@@ -25,6 +25,7 @@ require msl_types
 require daslib/ast
 require daslib/ast_boost
 require daslib/rtti
+require daslib/shader_emit_common
 require daslib/strings_boost
 require strings
 require math
@@ -63,7 +64,7 @@ struct private MslMember {
 // method's UserFn entry is scan bookkeeping only: recursion detection + the write-set walk)
 struct private UserFn {
     @do_not_delete fn : FunctionPtr             // gc_node-owned AST — never finalized from here
-    msl_name : string
+    name : string
     is_method : bool            // spliced inline — no emitted function text
     builtins : table<string>    // gl_* this fn's OWN body reads (hidden trailing params; spliced methods read entry params)
     calls : array<int>          // ufn indices this fn's body calls (transitive builtin closure)
@@ -80,7 +81,8 @@ struct private MslCtx {
     renames : table<string; string>             // das identifier -> MSL-safe identifier
     ptrs : table<string; string>                // pointer local (addr(member[..])) -> its member (das names)
     ptr_space : table<string; string>           // pointer local/param -> "device" | "threadgroup" (call-site check)
-    ustructs : table<string; string>            // @uniform struct name -> its MSL definition (preamble)
+    // @uniform struct name -> its MSL definition (preamble)
+    arg_structs : table<string; string>
     helpers : table<string>                     // preamble helper functions referenced by lowered calls
     gen_helpers : table<string; string>         // GENERATED preamble helpers (tensor ops): mangled name -> text
     const_tables : table<string; string>        // hoisted program-scope constant arrays: MSL name -> definition text
@@ -88,10 +90,11 @@ struct private MslCtx {
     tg_accs : table<string; string>             // staged-GEMM acc local -> "m|n|sgs|kk|at" (decl suppressed on GPU)
     mpp_used : bool                             // a tile_tg/rowscale-only kernel still needs the MPP include
     self_name : string
-    user_fns : table<string; int>               // ufn key -> ufns index
-    ufns : array<UserFn>
+    user_fn_index : table<string; int>          // user_fn_key -> user_fns index
+    user_fns : array<UserFn>
     scan_stack : array<string>                  // discovery stack — recursion is a compile error
-    cur_ufn : int = -1                          // ufn being scanned/emitted; -1 = the kernel itself
+    // ufn being scanned/emitted; -1 = the kernel itself
+    cur_user_fn : int = -1
     fn_depth : int                              // > 0 while emitting a user function body
     @do_not_delete kcls : StructurePtr          // the CONCRETE kernel class (devirtualization table)
     tail_ok : bool = true                       // current statement is in kernel tail position (splice return gate)
@@ -109,35 +112,7 @@ let private MSL_RESERVED : table<string> <- {
     "union", "signed", "unsigned", "void", "atomic_int", "atomic_uint"
 }
 
-def private msl_safe_name(name : string) : string =>
-    key_exists(MSL_RESERVED, name) ? "{name}_" : name
-
-// a call to a GENERIC instance arrives named `__::module`name`hash` (the sgmat load/store
-// overloads take an untyped buffer parameter, so they instantiate); the base name is the
-// segment before the trailing hash — plain calls pass through
-def private call_base_name(cname : string) : string {
-    if ((cname |> find("`")) < 0) {
-        return cname
-    }
-    var parts <- split(cname, "`")
-    let base = length(parts) >= 2 ? parts[length(parts) - 2] : cname
-    delete parts
-    return base
-}
-
-def private err(var ctx : MslCtx; at : LineInfo; msg : string) {
-    ctx.errors |> push("{msg} at line {int(at.line)}")
-}
-
-// the dedicated 8/16-lane diagnostic every shader emitter shares (dasGlsl wording): these lattice
-// forms exist on the CPU only — shader vectors cap at 4 lanes on every target
-def private reject_cpu_only_width(var ctx : MslCtx; at : LineInfo; t : TypeDecl?) : bool {
-    if (t != null && cpu_only_lattice_width(t.baseType)) {
-        err(ctx, at, "type {t.baseType} is CPU-only (8/16-lane lattice forms do not exist in shaders - vectors cap at 4 lanes)")
-        return true
-    }
-    return false
-}
+def private msl_safe_name(name : string) : string => shader_safe_name(MSL_RESERVED, name)
 
 // ===== builtin globals (name-keyed, mirroring spirv_emit's classifier) =====
 
@@ -168,45 +143,6 @@ def private builtin_msl_info(name : string) : tuple<ok : bool; mslType : string;
 
 // ===== member + builtin scans =====
 
-// A struct bound as ONE @uniform value (the kargs form). Fields are restricted to 4-byte
-// scalars so the das layout and the MSL layout are the same bytes with no padding rules — the
-// host writes the das struct straight through setBytes. Returns "" (after err) if it cannot.
-def private uniform_struct(var ctx : MslCtx; st : StructurePtr; at : LineInfo) : string {
-    if (st == null) {
-        err(ctx, at, "@uniform struct member has no structure type")
-        return ""
-    }
-    let sname = msl_safe_name(string(st.name))
-    if (key_exists(ctx.ustructs, sname)) {
-        return sname
-    }
-    var lines : array<string>
-    var bad = false
-    for (f in st.fields) {
-        let ft = f._type
-        let tn = ft == null ? "" : msl_type_name(ft)
-        // int/uint/float only: every other MSL type either changes size across the seam or
-        // carries alignment padding, and then the host's byte image stops matching
-        if (empty(tn) || !(tn == "int" || tn == "uint" || tn == "float")) {
-            err(ctx, at, "@uniform struct `{st.name}` field `{f.name}` is {ft == null ? "?" : describe(ft)} - only int/uint/float fields lower (a 4-byte-scalar struct is the same bytes in das and MSL)")
-            bad = true
-            continue
-        }
-        lines |> push("    {tn} {msl_safe_name(string(f.name))};")
-    }
-    if (empty(lines) && !bad) {
-        err(ctx, at, "@uniform struct `{st.name}` has no fields")
-        bad = true
-    }
-    if (bad) {
-        delete lines
-        return ""
-    }
-    ctx.ustructs[sname] = "struct {sname} \{\n{join(lines, "\n")}\n\};"
-    delete lines
-    return sname
-}
-
 def private scan_members(var ctx : MslCtx; fn : FunctionPtr) {
     for (fld in fn.classParent.fields) {
         if ((fld.name == "__rtti" || fld.name == "__finalize") ||
@@ -235,29 +171,34 @@ def private scan_members(var ctx : MslCtx; fn : FunctionPtr) {
             // plain member = STATE: a kernel-entry thread-local every spliced method body sees —
             // loop-carried rider state (carried pointer walks) from class-grade source
             if (binding >= 0) {
-                err(ctx, fld.at, "state member `{fld.name}` has @binding = {binding} - plain members are thread-locals, not bindable buffers")
+                shader_error(ctx, fld.at, "state member `{fld.name}` has @binding = {binding} - " +
+                    "plain members are thread-locals, not bindable buffers")
                 continue
             }
             let sName = string(fld.name)
             if (fld._type != null && fld._type.baseType == Type.tPointer) {
                 let spt = fld._type.firstType
                 if (spt == null) {
-                    err(ctx, fld.at, "pointer member `{fld.name}` is a void pointer - MSL needs an element type")
+                    shader_error(ctx, fld.at,
+                        "pointer member `{fld.name}` is a void pointer - MSL needs an element type")
                     continue
                 }
                 if (reject_cpu_only_width(ctx, fld.at, spt)) {
                     continue
                 }
                 let pelem = msl_buffer_elem_name(spt)
-                if (empty(pelem) || pelem != msl_type_name(spt)) {
-                    err(ctx, fld.at, "pointer member `{fld.name}` pointee type {describe(spt)} has no MSL pointer form")
+                if (empty(pelem) || pelem != shader_type_name(spt)) {
+                    shader_error(ctx, fld.at, "pointer member `{fld.name}` pointee type " +
+                        "{describe(spt)} has no MSL pointer form")
                     continue
                 }
                 if (fld.init != null) {
                     // the decl is always `= nullptr`: a pointer's address space (and its root
                     // buffer) resolve from the ASSIGNMENT sites, and there is no kernel-entry
                     // value to point at yet
-                    err(ctx, fld.at, "pointer state member `{fld.name}` takes no initializer - bind it inside a method (`{fld.name} = unsafe(addr(buffer[i]))`)")
+                    shader_error(ctx, fld.at, "pointer state member `{fld.name}` takes no " +
+                        "initializer - bind it inside a method (`{fld.name} = " +
+                        "unsafe(addr(buffer[i]))`)")
                     continue
                 }
                 ctx.renames[sName] = msl_safe_name(sName)
@@ -270,13 +211,15 @@ def private scan_members(var ctx : MslCtx; fn : FunctionPtr) {
                 if (reject_cpu_only_width(ctx, fld.at, fld._type.firstType)) {
                     continue
                 }
-                let aelem = msl_type_name(fld._type.firstType)
+                let aelem = shader_type_name(fld._type.firstType)
                 if (empty(aelem) || fld._type.fixedDim == 0) {
-                    err(ctx, fld.at, "state member `{fld.name}` element type has no MSL form")
+                    shader_error(ctx, fld.at,
+                        "state member `{fld.name}` element type has no MSL form")
                     continue
                 }
                 if (fld.init != null) {
-                    err(ctx, fld.at, "state member `{fld.name}` takes no array initializer - das zero-init is the MSL form")
+                    shader_error(ctx, fld.at, "state member `{fld.name}` takes no array " +
+                        "initializer - das zero-init is the MSL form")
                     continue
                 }
                 ctx.renames[sName] = msl_safe_name(sName)
@@ -287,9 +230,11 @@ def private scan_members(var ctx : MslCtx; fn : FunctionPtr) {
             if (reject_cpu_only_width(ctx, fld.at, fld._type)) {
                 continue
             }
-            let selem = fld._type != null ? msl_type_name(fld._type) : ""
+            let selem = fld._type != null ? shader_type_name(fld._type) : ""
             if (empty(selem)) {
-                err(ctx, fld.at, "member `{fld.name}` is neither @ssbo, @uniform, @workgroup, nor a state-capable thread-local (scalars, their vectors, T[N], T?); got {fld._type == null ? "?" : describe(fld._type)}")
+                shader_error(ctx, fld.at, "member `{fld.name}` is neither @ssbo, @uniform, " +
+                    "@workgroup, nor a state-capable thread-local (scalars, their vectors, T[N], " +
+                    "T?); got {fld._type == null ? "?" : describe(fld._type)}")
                 continue
             }
             var initText = ""
@@ -300,7 +245,8 @@ def private scan_members(var ctx : MslCtx; fn : FunctionPtr) {
                 }
                 if (!(sie is ExprConstInt || sie is ExprConstUInt || sie is ExprConstFloat ||
                         sie is ExprConstFloat16 || sie is ExprConstBool)) {
-                    err(ctx, fld.at, "state member `{fld.name}` initializer must be a scalar constant - complex init belongs in a method")
+                    shader_error(ctx, fld.at, "state member `{fld.name}` initializer must be a " +
+                        "scalar constant - complex init belongs in a method")
                     continue
                 }
                 initText = emit_value(ctx, sie)
@@ -311,15 +257,18 @@ def private scan_members(var ctx : MslCtx; fn : FunctionPtr) {
             continue
         }
         if ((isSsbo ? 1 : 0) + (isUniform ? 1 : 0) + (isWorkgroup ? 1 : 0) > 1) {
-            err(ctx, fld.at, "member `{fld.name}` mixes @ssbo/@uniform/@workgroup - pick one")
+            shader_error(ctx, fld.at,
+                "member `{fld.name}` mixes @ssbo/@uniform/@workgroup - pick one")
             continue
         }
         if (setIdx != 0) {
-            err(ctx, fld.at, "member `{fld.name}` has @set = {setIdx} - Metal has no descriptor sets; only @set = 0 (or none) is allowed")
+            shader_error(ctx, fld.at, "member `{fld.name}` has @set = {setIdx} - Metal has no " +
+                "descriptor sets; only @set = 0 (or none) is allowed")
         }
         if (isWorkgroup) {
             if (binding >= 0) {
-                err(ctx, fld.at, "@workgroup member `{fld.name}` has @binding = {binding} - threadgroup memory is not a bindable buffer")
+                shader_error(ctx, fld.at, "@workgroup member `{fld.name}` has @binding = " +
+                    "{binding} - threadgroup memory is not a bindable buffer")
                 continue
             }
             var wgElem = ""
@@ -330,18 +279,20 @@ def private scan_members(var ctx : MslCtx; fn : FunctionPtr) {
                 if (reject_cpu_only_width(ctx, fld.at, fld._type.firstType)) {
                     continue
                 }
-                wgElem = msl_type_name(fld._type.firstType)
+                wgElem = shader_type_name(fld._type.firstType)
                 wgElemBytes = msl_tg_elem_bytes(fld._type.firstType)
                 wgDim = fld._type.fixedDim
             } else {
                 if (reject_cpu_only_width(ctx, fld.at, fld._type)) {
                     continue
                 }
-                wgElem = msl_type_name(fld._type)
+                wgElem = shader_type_name(fld._type)
                 wgElemBytes = msl_tg_elem_bytes(fld._type)
             }
             if (empty(wgElem) || (wgDim == 0)) {
-                err(ctx, fld.at, "@workgroup member `{fld.name}` must be a scalar, vector, or single-dimension fixed array of those (e.g. uint[64]); got {fld._type == null ? "?" : describe(fld._type)}")
+                shader_error(ctx, fld.at, "@workgroup member `{fld.name}` must be a scalar, " +
+                    "vector, or single-dimension fixed array of those (e.g. uint[64]); got " +
+                    "{fld._type == null ? "?" : describe(fld._type)}")
                 continue
             }
             let wgName = string(fld.name)
@@ -352,7 +303,8 @@ def private scan_members(var ctx : MslCtx; fn : FunctionPtr) {
             continue
         }
         if (binding < 0) {
-            err(ctx, fld.at, "member `{fld.name}` has no @binding - every buffer needs an explicit [[buffer(N)]] index")
+            shader_error(ctx, fld.at, "member `{fld.name}` has no @binding - every buffer needs " +
+                "an explicit [[buffer(N)]] index")
             continue
         }
         var elem = ""
@@ -360,22 +312,26 @@ def private scan_members(var ctx : MslCtx; fn : FunctionPtr) {
         var isUstruct = false
         if (isSsbo) {
             if (fld._type == null || fld._type.baseType != Type.tArray) {
-                err(ctx, fld.at, "@ssbo member `{fld.name}` must be array<T>; got {fld._type == null ? "?" : describe(fld._type)}")
+                shader_error(ctx, fld.at, "@ssbo member `{fld.name}` must be array<T>; got " +
+                    "{fld._type == null ? "?" : describe(fld._type)}")
                 continue
             }
             if (reject_cpu_only_width(ctx, fld.at, fld._type.firstType)) {
                 continue
             }
             elem = msl_buffer_elem_name(fld._type.firstType)
-            valueElem = msl_type_name(fld._type.firstType)
+            valueElem = shader_type_name(fld._type.firstType)
             if (empty(elem)) {
-                err(ctx, fld.at, "@ssbo member `{fld.name}` element type {describe(fld._type.firstType)} has no MSL form (int/uint/float scalars, the 16/8-bit lattice, their 2/3/4 vectors)")
+                shader_error(ctx, fld.at, "@ssbo member `{fld.name}` element type " +
+                    "{describe(fld._type.firstType)} has no MSL form (int/uint/float scalars, " +
+                    "the 16/8-bit lattice, their 2/3/4 vectors)")
                 continue
             }
         } elif (fld._type != null && fld._type.baseType == Type.tStructure) {
             // the kargs form: ONE bound value carrying many scalars, so a kernel with a dozen
             // uniforms costs one bind instead of a dozen
-            elem = uniform_struct(ctx, fld._type.structType, fld.at)
+            elem = scalar_args_struct(ctx, fld._type.structType, fld.at, MSL_RESERVED,
+                "@uniform", "MSL", "struct")
             if (empty(elem)) {
                 continue
             }
@@ -383,23 +339,27 @@ def private scan_members(var ctx : MslCtx; fn : FunctionPtr) {
             isUstruct = true
         } else {
             if (fld._type != null && fld._type.baseType == Type.tArray) {
-                err(ctx, fld.at, "@uniform member `{fld.name}` must be a scalar, vector, or a struct of 4-byte scalars - array members are @ssbo buffers")
+                shader_error(ctx, fld.at, "@uniform member `{fld.name}` must be a scalar, " +
+                    "vector, or a struct of 4-byte scalars - array members are @ssbo buffers")
                 continue
             }
             if (reject_cpu_only_width(ctx, fld.at, fld._type)) {
                 continue
             }
             elem = msl_buffer_elem_name(fld._type)
-            valueElem = msl_type_name(fld._type)
+            valueElem = shader_type_name(fld._type)
             if (empty(elem)) {
-                err(ctx, fld.at, "@uniform member `{fld.name}` type {fld._type == null ? "?" : describe(fld._type)} has no MSL form (int/uint/float scalars, the 16/8-bit lattice, their 2/3/4 vectors)")
+                shader_error(ctx, fld.at, "@uniform member `{fld.name}` type " +
+                    "{fld._type == null ? "?" : describe(fld._type)} has no MSL form " +
+                    "(int/uint/float scalars, the 16/8-bit lattice, their 2/3/4 vectors)")
                 continue
             }
         }
         let fldName = string(fld.name)
         for (existing, m in keys(ctx.members), values(ctx.members)) {
             if (m.binding == binding) {
-                err(ctx, fld.at, "members `{existing}` and `{fldName}` share @binding = {binding} - bindings must be unique within a kernel class")
+                shader_error(ctx, fld.at, "members `{existing}` and `{fldName}` share @binding = " +
+                    "{binding} - bindings must be unique within a kernel class")
             }
         }
         ctx.renames[fldName] = msl_safe_name(fldName)
@@ -414,7 +374,8 @@ def private scan_members(var ctx : MslCtx; fn : FunctionPtr) {
         }
     }
     if (empty(ctx.errors) && ssboCount == 0) {
-        err(ctx, fn.at, "kernel class `{fn.classParent.name}` has no @ssbo members - a kernel with no buffers cannot observe or produce anything")
+        shader_error(ctx, fn.at, "kernel class `{fn.classParent.name}` has no @ssbo members - a " +
+            "kernel with no buffers cannot observe or produce anything")
     }
 }
 
@@ -504,7 +465,8 @@ def private scan_state_ptr_assign(var ctx : MslCtx; left, right : Expression?) {
     }
     let prevRoot = ctx.members?[mem]?.sptr_root ?? ""
     if (!empty(prevRoot) && prevRoot != root) {
-        err(ctx, left.at, "pointer member `{mem}` is assigned from both `{prevRoot}` and `{root}` - one root buffer per pointer member")
+        shader_error(ctx, left.at, "pointer member `{mem}` is assigned from both `{prevRoot}` " +
+            "and `{root}` - one root buffer per pointer member")
         return
     }
     let rootWg = ctx.members?[root]?.workgroup ?? false
@@ -550,60 +512,33 @@ def private is_user_fn(fn : FunctionPtr) : bool {
     return mname != "metal_builtins" && mname != "shader_lingua_franca"
 }
 
-// generic INSTANCES can share a bare name — the parameter types join the key so every
-// instance emits as its own MSL function
-def private ufn_key(fn : FunctionPtr) : string {
-    return build_string() $(var w) {
-        w |> write(fn._module != null ? string(fn._module.name) : "")
-        w |> write("::")
-        w |> write(fn.name)
-        for (v in fn.arguments) {
-            w |> write("|")
-            w |> write(v._type != null ? describe(v._type) : "?")
-        }
-    }
-}
-
-// MSL-safe, collision-free emitted name: the bare das name when free, else base_N. A method
-// spelled like its class would be a C++ constructor — force the suffix.
-def private ufn_msl_name(var ctx : MslCtx; base_name : string) : string {
-    let base = msl_safe_name(base_name)
-    var taken = ctx.kcls != null && ctx.kcls.name == base
-    for (u in ctx.ufns) {
-        if (u.msl_name == base) {
-            taken = true
-        }
-    }
-    return taken ? "{base}_{length(ctx.ufns)}" : base
-}
-
 def private discover_user_fn(var ctx : MslCtx; fn : FunctionPtr; at : LineInfo) : int {
-    let key = ufn_key(fn)
+    let key = user_fn_key(fn)
     let bn = call_base_name("{fn.name}")
     // the stack check comes FIRST: a function registers before its body scans, so a
     // recursive self-call would otherwise hit the fast path and lower silently
     for (s in ctx.scan_stack) {
         if (s == key) {
-            err(ctx, at, "function `{bn}` is recursive - MSL forbids recursion")
+            shader_error(ctx, at, "function `{bn}` is recursive - MSL forbids recursion")
             return -1
         }
     }
-    if (key_exists(ctx.user_fns, key)) {
-        return ctx.user_fns[key]
+    if (key_exists(ctx.user_fn_index, key)) {
+        return ctx.user_fn_index[key]
     }
     if (fn.body == null) {
-        err(ctx, at, "function `{bn}` has no body to lower")
+        shader_error(ctx, at, "function `{bn}` has no body to lower")
         return -1
     }
-    let idx = length(ctx.ufns)
-    ctx.user_fns[key] = idx
-    ctx.ufns |> emplace <| UserFn(fn = unsafe(reinterpret<FunctionPtr>(fn)),
-        msl_name = ufn_msl_name(ctx, bn))
+    let idx = length(ctx.user_fns)
+    ctx.user_fn_index[key] = idx
+    ctx.user_fns |> emplace <| UserFn(fn = unsafe(reinterpret<FunctionPtr>(fn)),
+        name = unique_fn_name(ctx, MSL_RESERVED, bn))
     ctx.scan_stack |> push(key)
-    let prev = ctx.cur_ufn
-    ctx.cur_ufn = idx
+    let prev = ctx.cur_user_fn
+    ctx.cur_user_fn = idx
     scan_body(ctx, fn.body)
-    ctx.cur_ufn = prev
+    ctx.cur_user_fn = prev
     ctx.scan_stack |> pop()
     return idx
 }
@@ -630,85 +565,47 @@ def private resolve_method(var ctx : MslCtx; mname : string; at : LineInfo) : Fu
             if (ea != null && ea.func != null) {
                 return unsafe(reinterpret<FunctionPtr>(ea.func))
             }
-            err(ctx, at, "method `{mname}` of `{ctx.kcls.name}` has no resolvable body (abstract, or its field is not a plain method)")
+            shader_error(ctx, at, "method `{mname}` of `{ctx.kcls.name}` has no resolvable body " +
+                "(abstract, or its field is not a plain method)")
             return null
         }
     }
-    err(ctx, at, "method `{mname}` is not a member of `{ctx.kcls.name}`")
+    shader_error(ctx, at, "method `{mname}` is not a member of `{ctx.kcls.name}`")
     return null
 }
 
 def private discover_method(var ctx : MslCtx; mfn : FunctionPtr; mname : string; at : LineInfo) : int {
-    let key = ufn_key(mfn)
+    let key = user_fn_key(mfn)
     for (s in ctx.scan_stack) {
         if (s == key) {
-            err(ctx, at, "method `{mname}` is recursive - MSL forbids recursion")
+            shader_error(ctx, at, "method `{mname}` is recursive - MSL forbids recursion")
             return -1
         }
     }
-    if (key_exists(ctx.user_fns, key)) {
-        return ctx.user_fns[key]
+    if (key_exists(ctx.user_fn_index, key)) {
+        return ctx.user_fn_index[key]
     }
     if (mfn.body == null) {
-        err(ctx, at, "method `{mname}` has no body to lower")
+        shader_error(ctx, at, "method `{mname}` has no body to lower")
         return -1
     }
-    let idx = length(ctx.ufns)
-    ctx.user_fns[key] = idx
-    ctx.ufns |> emplace <| UserFn(fn = unsafe(reinterpret<FunctionPtr>(mfn)),
-        msl_name = ufn_msl_name(ctx, mname), is_method = true)
+    let idx = length(ctx.user_fns)
+    ctx.user_fn_index[key] = idx
+    ctx.user_fns |> emplace <| UserFn(fn = unsafe(reinterpret<FunctionPtr>(mfn)),
+        name = unique_fn_name(ctx, MSL_RESERVED, mname), is_method = true)
     ctx.scan_stack |> push(key)
-    let prev = ctx.cur_ufn
+    let prev = ctx.cur_user_fn
     let prev_self = ctx.self_name
-    ctx.cur_ufn = idx
+    ctx.cur_user_fn = idx
     ctx.self_name = !empty(mfn.arguments) ? string(mfn.arguments[0].name) : ""
     scan_body(ctx, mfn.body)
     ctx.self_name = prev_self
-    ctx.cur_ufn = prev
+    ctx.cur_user_fn = prev
     ctx.scan_stack |> pop()
     return idx
 }
 
-// the method-field reference of an invoke (arguments[0]), Ref2Value-peeled; null when the
-// invoke is not the `type<Cls>.method` shape
-def private invoke_method_field(e : Expression?) : ExprField? {
-    if (e == null) {
-        return null
-    }
-    if (e is ExprRef2Value) {
-        return invoke_method_field((e as ExprRef2Value).subexpr)
-    }
-    return e ?as ExprField
-}
-
-// receiver of a method call must peel down to self — kernels hold exactly one instance
-def private receiver_is_self(ctx : MslCtx; e : Expression?) : bool {
-    if (e == null) {
-        return false
-    }
-    if (e is ExprRef2Value) {
-        return receiver_is_self(ctx, (e as ExprRef2Value).subexpr)
-    }
-    if (e is ExprCast) {
-        return receiver_is_self(ctx, (e as ExprCast).subexpr)
-    }
-    let ev = e ?as ExprVar
-    return ev != null && ev.name == ctx.self_name
-}
-
 // a member passed to a callee's writable (non-const) array param is a write to that member
-// a parameter the callee may store through: a mutable buffer/tile/ref, or a pointer whose
-// POINTEE is mutable (`T?`; `T const?` is read-only — the pointer's own const says nothing)
-def private param_is_written(pt : TypeDecl?) : bool {
-    if (pt == null) {
-        return false
-    }
-    if (pt.baseType == Type.tPointer) {
-        return pt.firstType != null && !pt.firstType.flags.constant
-    }
-    return (pt.baseType == Type.tArray || pt.baseType == Type.tFixedArray || pt.flags.ref) && !pt.flags.constant
-}
-
 def private mark_call_arg_writes(var ctx : MslCtx; fn : FunctionPtr; ec : ExprCall?) {
     let na = length(ec.arguments)
     let np = length(fn.arguments)
@@ -825,8 +722,8 @@ def private scan_body(var ctx : MslCtx; e : Expression?) {
         if (is_user_fn(ecs.func)) {
             let ui = discover_user_fn(ctx, ecs.func, ecs.at)
             if (ui >= 0) {
-                if (ctx.cur_ufn >= 0) {
-                    ctx.ufns[ctx.cur_ufn].calls |> push(ui)
+                if (ctx.cur_user_fn >= 0) {
+                    ctx.user_fns[ctx.cur_user_fn].calls |> push(ui)
                 }
                 mark_call_arg_writes(ctx, ecs.func, ecs)
             }
@@ -837,14 +734,14 @@ def private scan_body(var ctx : MslCtx; e : Expression?) {
     } elif (e is ExprInvoke) {
         let ei = e as ExprInvoke
         let mf = length(ei.arguments) >= 2 ? invoke_method_field(ei.arguments[0]) : null
-        if (ei.isInvokeMethod && mf != null && receiver_is_self(ctx, ei.arguments[1])) {
+        if (ei.isInvokeMethod && mf != null && is_self_ref(ctx, ei.arguments[1])) {
             let mname = string(mf.name)
             let mfn = resolve_method(ctx, mname, ei.at)
             if (mfn != null) {
                 let ui = discover_method(ctx, mfn, mname, ei.at)
                 if (ui >= 0) {
-                    if (ctx.cur_ufn >= 0) {
-                        ctx.ufns[ctx.cur_ufn].calls |> push(ui)
+                    if (ctx.cur_user_fn >= 0) {
+                        ctx.user_fns[ctx.cur_user_fn].calls |> push(ui)
                     }
                     // method params start at fn.arguments[1] (self); call args at arguments[2]
                     let na = length(ei.arguments) - 2
@@ -878,8 +775,8 @@ def private scan_body(var ctx : MslCtx; e : Expression?) {
             let bi = builtin_msl_info(string(ev.name))
             if (bi.ok) {
                 ctx.builtins_used |> insert(string(ev.name))
-                if (ctx.cur_ufn >= 0) {   // hidden trailing param on this function
-                    ctx.ufns[ctx.cur_ufn].builtins |> insert(string(ev.name))
+                if (ctx.cur_user_fn >= 0) {   // hidden trailing param on this function
+                    ctx.user_fns[ctx.cur_user_fn].builtins |> insert(string(ev.name))
                 }
             }
         }
@@ -893,10 +790,10 @@ def private ufn_all_builtins(ctx : MslCtx; idx : int; var seen : table<int>; var
         return
     }
     seen |> insert(idx)
-    for (b in keys(ctx.ufns[idx].builtins)) {
+    for (b in keys(ctx.user_fns[idx].builtins)) {
         out |> insert(b)
     }
-    for (c in ctx.ufns[idx].calls) {
+    for (c in ctx.user_fns[idx].calls) {
         ufn_all_builtins(ctx, c, seen, out)
     }
 }
@@ -918,113 +815,11 @@ def private note(var ctx : MslCtx; kind : string) {
     ctx.census |> insert(kind)
 }
 
-// scalar class of a type for census keys: {f,i,u}{32,16,8} scalars (+ bool), the same with a `v`
-// suffix for their 2/3/4 vectors (lane count does not change the emitted text, so the census is
-// lane-agnostic). Classification rides the shared shader_block_layout rails.
-//! the simdgroup intrinsics' operand is a float, int or uint scalar - the generic CPU stubs bind
-//! any value, the emitter is the gate
-def private simd_operand_check(var ctx : MslCtx; ec : ExprCall?; cname : string) {
-    let t = ec.arguments[0]._type
-    let bt = t != null ? t.baseType : Type.none
-    if (bt != Type.tFloat && bt != Type.tInt && bt != Type.tUInt) {
-        err(ctx, ec.arguments[0].at, "{cname}: the operand is a float, int or uint scalar, not {t != null ? describe(t) : "an untyped value"}")
-    }
-}
-
-def private census_class(t : TypeDecl?) : string {
-    if (t == null) {
-        return "?"
-    }
-    let bt = t.baseType
-    if (bt == Type.tBool) {
-        return "bool"
-    }
-    let cls = scalar_class(bt)
-    if (cls < 0) {
-        return "?"
-    }
-    let prefix = cls == 0 ? "i" : (cls == 1 ? "u" : "f")
-    let suffix = component_count(bt) > 1 ? "v" : ""
-    return "{prefix}{scalar_width(bt)}{suffix}"
-}
-
-def private is_vec_class(cls : string) : bool => cls |> ends_with("v")
-
-def private op2_census_name(op : string) : string {
-    if (op == "+") {
-        return "add"
-    } elif (op == "-") {
-        return "sub"
-    } elif (op == "*") {
-        return "mul"
-    } elif (op == "/") {
-        return "div"
-    } elif (op == "%") {
-        return "mod"
-    } elif (op == "&") {
-        return "band"
-    } elif (op == "|") {
-        return "bor"
-    } elif (op == "^") {
-        return "bxor"
-    } elif (op == "<<") {
-        return "shl"
-    } elif (op == ">>") {
-        return "shr"
-    }
-    return ""
-}
-
-def private cmp_census_name(op : string) : string {
-    if (op == "==") {
-        return "eq"
-    } elif (op == "!=") {
-        return "ne"
-    } elif (op == "<") {
-        return "lt"
-    } elif (op == "<=") {
-        return "le"
-    } elif (op == ">") {
-        return "gt"
-    } elif (op == ">=") {
-        return "ge"
-    }
-    return ""
-}
-
-def private compound_base(op : string) : string {
-    if (op == "+=") {
-        return "+"
-    } elif (op == "-=") {
-        return "-"
-    } elif (op == "*=") {
-        return "*"
-    } elif (op == "/=") {
-        return "/"
-    } elif (op == "%=") {
-        return "%"
-    } elif (op == "&=") {
-        return "&"
-    } elif (op == "|=") {
-        return "|"
-    } elif (op == "^=") {
-        return "^"
-    } elif (op == "<<=") {
-        return "<<"
-    } elif (op == ">>=") {
-        return ">>"
-    }
-    return ""
-}
-
-// das interpolates uint as hex ("{1u}" is "0x1"); go through int64 for a decimal MSL literal
-def private msl_uint_literal(v : uint) : string => "{int64(uint64(v))}u"
-
 // das prints integral floats bare ("{2f}" is "2"), and bare-int + suffix is not a valid MSL
 // literal; `suffix` is "f" for float and "h" for half (the das float16 literal's MSL spelling)
 def private msl_float_literal(var ctx : MslCtx; at : LineInfo; v : float; suffix : string) : string {
     if (!is_finite(v)) {
-        err(ctx, at, "non-finite float literal has no MSL form")
+        shader_error(ctx, at, "non-finite float literal has no MSL form")
         return "0.0{suffix}"
     }
     let s = "{v}"
@@ -1036,7 +831,7 @@ def private msl_float_literal(var ctx : MslCtx; at : LineInfo; v : float; suffix
 
 def private emit_value(var ctx : MslCtx; e : Expression?) : string {
     if (e == null) {
-        err(ctx, LineInfo(), "internal: null expression")
+        shader_error(ctx, LineInfo(), "internal: null expression")
         return "/*null*/"
     }
     if (e is ExprRef2Value) {
@@ -1046,7 +841,7 @@ def private emit_value(var ctx : MslCtx; e : Expression?) : string {
         return "{(e as ExprConstInt).value}"
     } elif (e is ExprConstUInt) {
         note(ctx, "const.uint")
-        return msl_uint_literal((e as ExprConstUInt).value)
+        return uint_literal((e as ExprConstUInt).value)
     } elif (e is ExprConstFloat) {
         note(ctx, "const.float")
         return msl_float_literal(ctx, e.at, (e as ExprConstFloat).value, "f")
@@ -1071,15 +866,16 @@ def private emit_value(var ctx : MslCtx; e : Expression?) : string {
     } elif (e is ExprConstUInt2) {
         note(ctx, "const.u32v")
         let v = (e as ExprConstUInt2).value
-        return "uint2({msl_uint_literal(v.x)}, {msl_uint_literal(v.y)})"
+        return "uint2({uint_literal(v.x)}, {uint_literal(v.y)})"
     } elif (e is ExprConstUInt3) {
         note(ctx, "const.u32v")
         let v = (e as ExprConstUInt3).value
-        return "uint3({msl_uint_literal(v.x)}, {msl_uint_literal(v.y)}, {msl_uint_literal(v.z)})"
+        return "uint3({uint_literal(v.x)}, {uint_literal(v.y)}, {uint_literal(v.z)})"
     } elif (e is ExprConstUInt4) {
         note(ctx, "const.u32v")
         let v = (e as ExprConstUInt4).value
-        return "uint4({msl_uint_literal(v.x)}, {msl_uint_literal(v.y)}, {msl_uint_literal(v.z)}, {msl_uint_literal(v.w)})"
+        return ("uint4({uint_literal(v.x)}, {uint_literal(v.y)}, " +
+            "{uint_literal(v.z)}, {uint_literal(v.w)})")
     } elif (e is ExprConstFloat2) {
         note(ctx, "const.f32v")
         let v = (e as ExprConstFloat2).value
@@ -1098,7 +894,8 @@ def private emit_value(var ctx : MslCtx; e : Expression?) : string {
         // renames also catches for-loop iterators, whose ExprVar flags are not `local`
         if (ev.varFlags.local || ev.varFlags.argument || ev.varFlags._block || key_exists(ctx.renames, name)) {
             if (name == ctx.self_name) {
-                err(ctx, ev.at, "`self` used as a value - only member access (self.field) lowers to MSL")
+                shader_error(ctx, ev.at,
+                    "`self` used as a value - only member access (self.field) lowers to MSL")
                 return "/*self*/"
             }
             note(ctx, "expr.var")
@@ -1109,7 +906,8 @@ def private emit_value(var ctx : MslCtx; e : Expression?) : string {
             note(ctx, "expr.builtin.{bi.attr}")
             return name
         }
-        err(ctx, ev.at, "global `{name}` is not a supported builtin - kernels reach data only through @ssbo members and builtin IDs")
+        shader_error(ctx, ev.at, "global `{name}` is not a supported builtin - kernels reach " +
+            "data only through @ssbo members and builtin IDs")
         return "/*{name}*/"
     } elif (e is ExprField) {
         let ef = e as ExprField
@@ -1129,7 +927,9 @@ def private emit_value(var ctx : MslCtx; e : Expression?) : string {
             note(ctx, "expr.member.ustruct")
             return "{ctx.members[um].msl_name}.{msl_safe_name(fieldName)}"
         }
-        err(ctx, ef.at, "field access `.{fieldName}` is not a kernel-class member access - only self.<@ssbo/@uniform member> and one hop into a @uniform struct lower to MSL")
+        shader_error(ctx, ef.at, "field access `.{fieldName}` is not a kernel-class member " +
+            "access - only self.<@ssbo/@uniform member> and one hop into a @uniform struct " +
+            "lower to MSL")
         return "/*.{fieldName}*/"
     } elif (e is ExprCall && call_base_name("{(e as ExprCall).name}") == "i_das_ptr_add") {
         // das pointer arithmetic (`p = unsafe(p + n)`): args = (ptr, elems, elem_size); MSL
@@ -1144,12 +944,14 @@ def private emit_value(var ctx : MslCtx; e : Expression?) : string {
         let pat = sub ?as ExprAt
         let pmem = pat != null ? member_lookup(ctx, pat.subexpr) : ""
         if (empty(pmem)) {
-            err(ctx, e.at, "addr() in a kernel must take a kernel-class member element (addr(member[expr]))")
+            shader_error(ctx, e.at,
+                "addr() in a kernel must take a kernel-class member element (addr(member[expr]))")
             return "/*addr*/"
         }
         let pm = ctx.members[pmem]
         if (pm.uniform || pm.packed) {
-            err(ctx, e.at, "addr() over a @uniform or packed 3-lane member has no MSL pointer form")
+            shader_error(ctx, e.at,
+                "addr() over a @uniform or packed 3-lane member has no MSL pointer form")
             return "/*addr*/"
         }
         note(ctx, pm.workgroup ? "expr.addr.tg" : "expr.addr.dev")
@@ -1175,7 +977,7 @@ def private emit_value(var ctx : MslCtx; e : Expression?) : string {
         for (fch in sw.fields) {
             let f = int(fch)
             if (f < 0 || f > 3) {
-                err(ctx, sw.at, "swizzle component {f} out of xyzw range")
+                shader_error(ctx, sw.at, "swizzle component {f} out of xyzw range")
                 return "/*swizzle*/"
             }
             comps |> push(compName[f])
@@ -1186,7 +988,7 @@ def private emit_value(var ctx : MslCtx; e : Expression?) : string {
         let op2 = e as ExprOp2
         let op = string(op2.op)
         if (op2._type != null && op2._type.baseType == Type.tVoid) {
-            err(ctx, op2.at, "compound assignment `{op}` used as a value")
+            shader_error(ctx, op2.at, "compound assignment `{op}` used as a value")
             return "/*op {op}*/"
         }
         let cmp = cmp_census_name(op)
@@ -1203,7 +1005,8 @@ def private emit_value(var ctx : MslCtx; e : Expression?) : string {
                     note(ctx, "op.ne.{lcls}")
                     return "any({l} != {r})"
                 }
-                err(ctx, op2.at, "ordered comparison `{op}` on vectors has no scalar das form")
+                shader_error(ctx, op2.at,
+                    "ordered comparison `{op}` on vectors has no scalar das form")
                 return "/*op {op}*/"
             }
             note(ctx, "op.{cmp}.{lcls}")
@@ -1217,12 +1020,13 @@ def private emit_value(var ctx : MslCtx; e : Expression?) : string {
         }
         let opName = op2_census_name(op)
         if (empty(opName)) {
-            err(ctx, op2.at, "operator `{op}` is not in the supported MSL set")
+            shader_error(ctx, op2.at, "operator `{op}` is not in the supported MSL set")
             return "/*op {op}*/"
         }
         let cls = census_class(op2._type)
         if (cls == "?") {
-            err(ctx, op2.at, "operator `{op}` result type {describe(op2._type)} has no MSL form")
+            shader_error(ctx, op2.at,
+                "operator `{op}` result type {describe(op2._type)} has no MSL form")
             return "/*op {op}*/"
         }
         let l = emit_value(ctx, op2.left)
@@ -1261,12 +1065,12 @@ def private emit_value(var ctx : MslCtx; e : Expression?) : string {
             note(ctx, "op.postdec")
             return "({sub}--)"
         }
-        err(ctx, op1.at, "unary operator `{op}` is not in the supported MSL set")
+        shader_error(ctx, op1.at, "unary operator `{op}` is not in the supported MSL set")
         return "/*op {op}*/"
     } elif (e is ExprOp3) {
         let op3 = e as ExprOp3
         if (op3.op != "?") {
-            err(ctx, op3.at, "ternary operator `{op3.op}` is not supported")
+            shader_error(ctx, op3.at, "ternary operator `{op3.op}` is not supported")
             return "/*op {op3.op}*/"
         }
         if (op3.subexpr is ExprConstBool) {
@@ -1284,28 +1088,8 @@ def private emit_value(var ctx : MslCtx; e : Expression?) : string {
     } elif (e is ExprCall) {
         return emit_call_value(ctx, e as ExprCall)
     }
-    err(ctx, e.at, "expression {e.__rtti} is not in the supported MSL subset")
+    shader_error(ctx, e.at, "expression {e.__rtti} is not in the supported MSL subset")
     return "/*{e.__rtti}*/"
-}
-
-// das spelling of a scalar/vector type — ctor/convert calls carry it as the call name
-// (float4, half2, byte4, int16, ...); "" for types with no ctor surface here
-def private das_type_spelling(bt : Type) : string {
-    let cls = scalar_class(bt)
-    if (cls < 0) {
-        return ""
-    }
-    let w = scalar_width(bt)
-    let cc = component_count(bt)
-    var base = ""
-    if (cls == 2) {
-        base = w == 32 ? "float" : (cc > 1 ? "half" : "float16")
-    } elif (cls == 0) {
-        base = w == 32 ? "int" : (w == 16 ? (cc > 1 ? "short" : "int16") : (cc > 1 ? "byte" : "int8"))
-    } else {
-        base = w == 32 ? "uint" : (w == 16 ? (cc > 1 ? "ushort" : "uint16") : (cc > 1 ? "ubyte" : "uint8"))
-    }
-    return cc > 1 ? "{base}{cc}" : base
 }
 
 // simdgroup_matrix reference structs (metal_builtins) — the das struct name IS the MSL spelling
@@ -1369,7 +1153,7 @@ def private emit_call_value(var ctx : MslCtx; ec : ExprCall?) : string {
     let na = length(ec.arguments)
     if (key_exists(MSL_MATH_UNARY, cname)) {
         if (na != 1) {
-            err(ctx, ec.at, "{cname} takes exactly one argument")
+            shader_error(ctx, ec.at, "{cname} takes exactly one argument")
             return "/*call {cname}*/"
         }
         if (reject_cpu_only_width(ctx, ec.at, ec.arguments[0]._type)) {
@@ -1378,7 +1162,8 @@ def private emit_call_value(var ctx : MslCtx; ec : ExprCall?) : string {
         let acls = census_class(ec.arguments[0]._type)
         let ok = (acls |> starts_with("f")) || (cname == "abs" && (acls |> starts_with("i")))
         if (!ok) {
-            err(ctx, ec.at, "{cname} lowers for float{cname == "abs" ? "/signed-int" : ""} classes only - argument is {acls}")
+            shader_error(ctx, ec.at, "{cname} lowers for " +
+                "float{cname == "abs" ? "/signed-int" : ""} classes only - argument is {acls}")
             return "/*call {cname}*/"
         }
         let v = emit_value(ctx, ec.arguments[0])
@@ -1387,7 +1172,7 @@ def private emit_call_value(var ctx : MslCtx; ec : ExprCall?) : string {
     }
     if (key_exists(MSL_BITCASTS, cname)) {
         if (na != 1) {
-            err(ctx, ec.at, "{cname} takes exactly one argument")
+            shader_error(ctx, ec.at, "{cname} takes exactly one argument")
             return "/*call {cname}*/"
         }
         if (reject_cpu_only_width(ctx, ec.at, ec._type)) {
@@ -1395,11 +1180,11 @@ def private emit_call_value(var ctx : MslCtx; ec : ExprCall?) : string {
         }
         let v = emit_value(ctx, ec.arguments[0])
         note(ctx, "call.bitcast.{census_class(ec.arguments[0]._type)}.{census_class(ec._type)}")
-        return "as_type<{msl_type_name(ec._type)}>({v})"
+        return "as_type<{shader_type_name(ec._type)}>({v})"
     }
     if (key_exists(MSL_DOT_HELPERS, cname)) {
         if (na != 2) {
-            err(ctx, ec.at, "{cname} takes exactly two arguments")
+            shader_error(ctx, ec.at, "{cname} takes exactly two arguments")
             return "/*call {cname}*/"
         }
         let a = emit_value(ctx, ec.arguments[0])
@@ -1410,7 +1195,7 @@ def private emit_call_value(var ctx : MslCtx; ec : ExprCall?) : string {
     }
     if (key_exists(MSL_MATH_BINARY, cname)) {
         if (na != 2) {
-            err(ctx, ec.at, "{cname} takes exactly two arguments")
+            shader_error(ctx, ec.at, "{cname} takes exactly two arguments")
             return "/*call {cname}*/"
         }
         if (reject_cpu_only_width(ctx, ec.at, ec.arguments[0]._type)) {
@@ -1418,7 +1203,7 @@ def private emit_call_value(var ctx : MslCtx; ec : ExprCall?) : string {
         }
         let acls = census_class(ec.arguments[0]._type)
         if (!(acls |> starts_with("f")) && !(acls |> starts_with("i")) && !(acls |> starts_with("u"))) {
-            err(ctx, ec.at, "{cname} lowers for numeric classes only - argument is {acls}")
+            shader_error(ctx, ec.at, "{cname} lowers for numeric classes only - argument is {acls}")
             return "/*call {cname}*/"
         }
         let a = emit_value(ctx, ec.arguments[0])
@@ -1428,7 +1213,7 @@ def private emit_call_value(var ctx : MslCtx; ec : ExprCall?) : string {
     }
     if (key_exists(MSL_MATH_TERNARY, cname)) {
         if (na != 3) {
-            err(ctx, ec.at, "{cname} takes exactly three arguments")
+            shader_error(ctx, ec.at, "{cname} takes exactly three arguments")
             return "/*call {cname}*/"
         }
         if (reject_cpu_only_width(ctx, ec.at, ec.arguments[0]._type)) {
@@ -1436,11 +1221,12 @@ def private emit_call_value(var ctx : MslCtx; ec : ExprCall?) : string {
         }
         let acls = census_class(ec.arguments[0]._type)
         if (!(acls |> starts_with("f")) && !(acls |> starts_with("i")) && !(acls |> starts_with("u"))) {
-            err(ctx, ec.at, "{cname} lowers for numeric classes only - argument is {acls}")
+            shader_error(ctx, ec.at, "{cname} lowers for numeric classes only - argument is {acls}")
             return "/*call {cname}*/"
         }
         if (cname == "mad" && !(acls |> starts_with("f"))) {
-            err(ctx, ec.at, "mad lowers for float classes only (MSL has no integer fma) - argument is {acls}")
+            shader_error(ctx, ec.at,
+                "mad lowers for float classes only (MSL has no integer fma) - argument is {acls}")
             return "/*call {cname}*/"
         }
         let a = emit_value(ctx, ec.arguments[0])
@@ -1451,27 +1237,28 @@ def private emit_call_value(var ctx : MslCtx; ec : ExprCall?) : string {
     }
     if (cname == "simd_sum" || cname == "simd_max") {
         if (na != 1) {
-            err(ctx, ec.at, "{cname} takes exactly one argument")
+            shader_error(ctx, ec.at, "{cname} takes exactly one argument")
             return "/*call {cname}*/"
         }
-        simd_operand_check(ctx, ec, cname)
+        return "/*call {cname}*/" if (!scalar_operand_ok(ctx, ec, cname))
         let v = emit_value(ctx, ec.arguments[0])
         note(ctx, "call.{cname}.{census_class(ec._type)}")
         return "{cname}({v})"
     } elif (cname == "simd_shuffle" || cname == "simd_shuffle_up" ||
             cname == "simd_shuffle_down" || cname == "simd_shuffle_xor") {
         if (na != 2) {
-            err(ctx, ec.at, "{cname} takes exactly two arguments")
+            shader_error(ctx, ec.at, "{cname} takes exactly two arguments")
             return "/*call {cname}*/"
         }
-        simd_operand_check(ctx, ec, cname)
+        return "/*call {cname}*/" if (!scalar_operand_ok(ctx, ec, cname))
         let v = emit_value(ctx, ec.arguments[0])
         let l = emit_value(ctx, ec.arguments[1])
         note(ctx, "call.{cname}.{census_class(ec._type)}")
         return "{cname}({v}, {l})"
     } elif (cname == "atomicAdd") {
         if (na != 2) {
-            err(ctx, ec.at, "atomicAdd takes exactly two arguments (the lvalue, the addend)")
+            shader_error(ctx, ec.at,
+                "atomicAdd takes exactly two arguments (the lvalue, the addend)")
             return "/*call {cname}*/"
         }
         //! u32 or i32: the two overloads the shared builtins declare
@@ -1480,12 +1267,12 @@ def private emit_call_value(var ctx : MslCtx; ec : ExprCall?) : string {
         let tgt : Expression? = a0 is ExprRef2Value ? (a0 as ExprRef2Value).subexpr : a0
         let mem = tgt is ExprAt ? member_lookup(ctx, (tgt as ExprAt).subexpr) : ""
         if (empty(mem) || (ctx.members?[mem]?.state ?? false)) {
-            err(ctx, ec.at, "atomicAdd's target must be an element of an @ssbo"
+            shader_error(ctx, ec.at, "atomicAdd's target must be an element of an @ssbo"
                 + " or @workgroup member")
             return "/*call {cname}*/"
         }
         if (acls != "i32" && acls != "u32") {
-            err(ctx, ec.at, "atomicAdd lowers an int or uint element only, not {acls}")
+            shader_error(ctx, ec.at, "atomicAdd lowers an int or uint element only, not {acls}")
             return "/*call {cname}*/"
         }
         let wg = ctx.members?[mem]?.workgroup ?? false
@@ -1497,7 +1284,7 @@ def private emit_call_value(var ctx : MslCtx; ec : ExprCall?) : string {
         return "atomic_fetch_add_explicit(({space} {aty}*)&({tv}), {v}, memory_order_relaxed)"
     } elif (cname == "make_filled_simdgroup_float8x8" || cname == "make_filled_simdgroup_half8x8") {
         if (na != 1) {
-            err(ctx, ec.at, "{cname} takes exactly one fill value")
+            shader_error(ctx, ec.at, "{cname} takes exactly one fill value")
             return "/*call {cname}*/"
         }
         let sgname = cname == "make_filled_simdgroup_half8x8" ? "simdgroup_half8x8" : "simdgroup_float8x8"
@@ -1533,7 +1320,7 @@ def private emit_call_value(var ctx : MslCtx; ec : ExprCall?) : string {
                 note(ctx, "cvt.{src}.{dst}")
             }
         }
-        return "{msl_type_name(ec._type)}({join(args, ", ")})"
+        return "{shader_type_name(ec._type)}({join(args, ", ")})"
     }
     if (!empty(spell) && na == 1 && cname == "{spell}_sat") {
         let cls = scalar_class(ec._type.baseType)
@@ -1547,15 +1334,16 @@ def private emit_call_value(var ctx : MslCtx; ec : ExprCall?) : string {
                 hi = w == 16 ? "32767" : "127"
             }
             note(ctx, "cvt_sat.{census_class(ec.arguments[0]._type)}.{census_class(ec._type)}")
-            return "{msl_type_name(ec._type)}(clamp({v}, {lo}, {hi}))"
+            return "{shader_type_name(ec._type)}(clamp({v}, {lo}, {hi}))"
         }
     }
     if (is_user_fn(ec.func)) {
         // Phase 0: a user function lowers 1:1 as a plain MSL function (emitted in the preamble);
         // gl_* builtins it reaches thread through as hidden trailing arguments
-        let ui = ctx.user_fns?[ufn_key(ec.func)] ?? -1
+        let ui = ctx.user_fn_index?[user_fn_key(ec.func)] ?? -1
         if (ui < 0) {
-            err(ctx, ec.at, "internal: user function `{cname}` was not discovered at scan time")
+            shader_error(ctx, ec.at,
+                "internal: user function `{cname}` was not discovered at scan time")
             return "/*call {cname}*/"
         }
         var args : array<string>
@@ -1565,7 +1353,8 @@ def private emit_call_value(var ctx : MslCtx; ec : ExprCall?) : string {
                 let pt = ec.func.arguments[i]._type
                 let wm = member_lookup(ctx, ec.arguments[i])
                 if (!empty(wm) && (ctx.members?[wm]?.workgroup ?? false) && pt != null && pt.flags.ref) {
-                    err(ctx, ec.at, "@workgroup member `{wm}` bound to a `&` parameter - address spaces differ; pass the fixed array itself")
+                    shader_error(ctx, ec.at, "@workgroup member `{wm}` bound to a `&` parameter " +
+                        "- address spaces differ; pass the fixed array itself")
                 }
                 check_ptr_arg(ctx, ec.func.arguments[i], ec.arguments[i], ec.at)
             }
@@ -1575,9 +1364,10 @@ def private emit_call_value(var ctx : MslCtx; ec : ExprCall?) : string {
         args |> push_from(hidden)   // in scope by the same name in the entry and in every helper
         delete hidden
         note(ctx, "call.user")
-        return "{ctx.ufns[ui].msl_name}({join(args, ", ")})"
+        return "{ctx.user_fns[ui].name}({join(args, ", ")})"
     }
-    err(ctx, ec.at, "call `{cname}` is not a supported MSL builtin and not a lowerable user function - kernels reach only the MSL subset")
+    shader_error(ctx, ec.at, "call `{cname}` is not a supported MSL builtin and not a lowerable " +
+        "user function - kernels reach only the MSL subset")
     return "/*call {cname}*/"
 }
 
@@ -1818,20 +1608,23 @@ def private splice_ptr_local_type(var ctx : MslCtx; pt : TypeDecl?; arg : Expres
                                   mname, pname : string; at : LineInfo) : string {
     let pointee = pt.firstType
     if (pointee == null) {
-        err(ctx, at, "method `{mname}` parameter `{pname}` is a void pointer - MSL needs an element type")
+        shader_error(ctx, at,
+            "method `{mname}` parameter `{pname}` is a void pointer - MSL needs an element type")
         return ""
     }
     if (reject_cpu_only_width(ctx, at, pointee)) {
         return ""
     }
     let elem = msl_buffer_elem_name(pointee)
-    if (empty(elem) || elem != msl_type_name(pointee)) {
-        err(ctx, at, "method `{mname}` parameter `{pname}` pointee type {describe(pointee)} has no MSL pointer form")
+    if (empty(elem) || elem != shader_type_name(pointee)) {
+        shader_error(ctx, at, "method `{mname}` parameter `{pname}` pointee type " +
+            "{describe(pointee)} has no MSL pointer form")
         return ""
     }
     let space = ptr_arg_space(ctx, arg)
     if (empty(space)) {
-        err(ctx, at, "method `{mname}` pointer parameter `{pname}` has no traceable address space - pass `addr(member[i])`, a pointer local, or a pointer parameter")
+        shader_error(ctx, at, "method `{mname}` pointer parameter `{pname}` has no traceable " +
+            "address space - pass `addr(member[i])`, a pointer local, or a pointer parameter")
         return ""
     }
     return pointee.flags.constant ? "{space} const {elem}*" : "{space} {elem}*"
@@ -1850,7 +1643,7 @@ def private bind_method_args(var ctx : MslCtx; mfn : FunctionPtr; mname : string
         let pname = string(pv.name)
         let arg = ei.arguments[i + 2]
         if (pt == null) {
-            err(ctx, ei.at, "method `{mname}` parameter `{pname}` has no type")
+            shader_error(ctx, ei.at, "method `{mname}` parameter `{pname}` has no type")
             bind.ok = false
             continue
         }
@@ -1860,12 +1653,14 @@ def private bind_method_args(var ctx : MslCtx; mfn : FunctionPtr; mname : string
         // (array / fixed array) is a reference either way and still substitutes.
         if (pt.baseType == Type.tPointer && !pt.flags.constant && !pt.flags.ref) {
             if (!arg_ptrish(arg)) {
-                err(ctx, ei.at, "method `{mname}` buffer/pointer parameter `{pname}` needs a member, pointer local, or addr() argument to splice")
+                shader_error(ctx, ei.at, "method `{mname}` buffer/pointer parameter `{pname}` " +
+                    "needs a member, pointer local, or addr() argument to splice")
                 bind.ok = false
                 continue
             }
             if (value_pos) {
-                err(ctx, ei.at, "method `{mname}` writable parameter `{pname}` cannot splice in value position - call it as a statement")
+                shader_error(ctx, ei.at, "method `{mname}` writable parameter `{pname}` cannot " +
+                    "splice in value position - call it as a statement")
                 bind.ok = false
                 continue
             }
@@ -1882,7 +1677,8 @@ def private bind_method_args(var ctx : MslCtx; mfn : FunctionPtr; mname : string
         }
         if (pt.baseType == Type.tArray || pt.baseType == Type.tFixedArray || pt.baseType == Type.tPointer) {
             if (!arg_ptrish(arg)) {
-                err(ctx, ei.at, "method `{mname}` buffer/pointer parameter `{pname}` needs a member, pointer local, or addr() argument to splice")
+                shader_error(ctx, ei.at, "method `{mname}` buffer/pointer parameter `{pname}` " +
+                    "needs a member, pointer local, or addr() argument to splice")
                 bind.ok = false
                 continue
             }
@@ -1894,7 +1690,8 @@ def private bind_method_args(var ctx : MslCtx; mfn : FunctionPtr; mname : string
         }
         if (pt.flags.ref && !pt.flags.constant) {
             if (!arg_lvalue_shape(arg)) {
-                err(ctx, ei.at, "method `{mname}` `&` parameter `{pname}` needs an lvalue argument (variable, member, element)")
+                shader_error(ctx, ei.at, "method `{mname}` `&` parameter `{pname}` needs an " +
+                    "lvalue argument (variable, member, element)")
                 bind.ok = false
                 continue
             }
@@ -1906,7 +1703,8 @@ def private bind_method_args(var ctx : MslCtx; mfn : FunctionPtr; mname : string
         }
         let writable = !pt.flags.constant && !pt.flags.ref
         if (writable && value_pos) {
-            err(ctx, ei.at, "method `{mname}` writable parameter `{pname}` cannot splice in value position - call it as a statement")
+            shader_error(ctx, ei.at, "method `{mname}` writable parameter `{pname}` cannot " +
+                "splice in value position - call it as a statement")
             bind.ok = false
             continue
         }
@@ -1914,9 +1712,9 @@ def private bind_method_args(var ctx : MslCtx; mfn : FunctionPtr; mname : string
             bind.ok = false
             continue
         }
-        let tn = msl_type_name(pt)
+        let tn = shader_type_name(pt)
         if (empty(tn)) {
-            err(ctx, ei.at, "method `{mname}` parameter `{pname}` type has no MSL form")
+            shader_error(ctx, ei.at, "method `{mname}` parameter `{pname}` type has no MSL form")
             bind.ok = false
             continue
         }
@@ -1927,7 +1725,9 @@ def private bind_method_args(var ctx : MslCtx; mfn : FunctionPtr; mname : string
             }
         } elif (value_pos) {
             if (body_var_refs(mfn.body, pname) > 1) {
-                err(ctx, ei.at, "method `{mname}` names parameter `{pname}` more than once - a computed argument cannot splice in value position; hoist it to a local first")
+                shader_error(ctx, ei.at, "method `{mname}` names parameter `{pname}` more than " +
+                    "once - a computed argument cannot splice in value position; hoist it to " +
+                    "a local first")
                 bind.ok = false
                 continue
             }
@@ -1945,8 +1745,9 @@ def private bind_method_args(var ctx : MslCtx; mfn : FunctionPtr; mname : string
 // result is that expression under the param bindings, parenthesized
 def private emit_invoke_value(var ctx : MslCtx; ei : ExprInvoke?) : string {
     let mf = length(ei.arguments) >= 2 ? invoke_method_field(ei.arguments[0]) : null
-    if (!(ei.isInvokeMethod && mf != null && receiver_is_self(ctx, ei.arguments[1]))) {
-        err(ctx, ei.at, "invoke has no MSL lowering - only method calls on the kernel's own self lower")
+    if (!(ei.isInvokeMethod && mf != null && is_self_ref(ctx, ei.arguments[1]))) {
+        shader_error(ctx, ei.at,
+            "invoke has no MSL lowering - only method calls on the kernel's own self lower")
         return "/*invoke*/"
     }
     let mname = string(mf.name)
@@ -1956,7 +1757,8 @@ def private emit_invoke_value(var ctx : MslCtx; ei : ExprInvoke?) : string {
     }
     let ret = lone_stmt(mfn.body) ?as ExprReturn
     if (ret == null || ret.subexpr == null) {
-        err(ctx, ei.at, "method `{mname}` used in value position must be a single `return <expr>` body (arrow form) - call it as a statement instead")
+        shader_error(ctx, ei.at, "method `{mname}` used in value position must be a single " +
+            "`return <expr>` body (arrow form) - call it as a statement instead")
         return "/*invoke {mname}*/"
     }
     ctx.splice_seq++
@@ -1986,8 +1788,9 @@ def private emit_invoke_value(var ctx : MslCtx; ei : ExprInvoke?) : string {
 // site (a spliced return exits the whole kernel — correct exactly there).
 def private emit_method_splice(var ctx : MslCtx; ei : ExprInvoke?; indent : string; var lines : array<string>) {
     let mf = length(ei.arguments) >= 2 ? invoke_method_field(ei.arguments[0]) : null
-    if (!(ei.isInvokeMethod && mf != null && receiver_is_self(ctx, ei.arguments[1]))) {
-        err(ctx, ei.at, "invoke has no MSL lowering - only method calls on the kernel's own self lower")
+    if (!(ei.isInvokeMethod && mf != null && is_self_ref(ctx, ei.arguments[1]))) {
+        shader_error(ctx, ei.at,
+            "invoke has no MSL lowering - only method calls on the kernel's own self lower")
         return
     }
     let mname = string(mf.name)
@@ -1996,11 +1799,13 @@ def private emit_method_splice(var ctx : MslCtx; ei : ExprInvoke?; indent : stri
         return
     }
     if (mfn.result != null && mfn.result.baseType != Type.tVoid) {
-        err(ctx, ei.at, "method `{mname}` returns a value its statement call discards - splice it in value position, or make it void")
+        shader_error(ctx, ei.at, "method `{mname}` returns a value its statement call discards - " +
+            "splice it in value position, or make it void")
         return
     }
     if (!ctx.tail_ok && stmt_has_return(mfn.body)) {
-        err(ctx, ei.at, "method `{mname}` contains `return` but the call is not in kernel tail position - a spliced return would exit the whole kernel")
+        shader_error(ctx, ei.at, "method `{mname}` contains `return` but the call is not in " +
+            "kernel tail position - a spliced return would exit the whole kernel")
         return
     }
     ctx.splice_seq++
@@ -2102,9 +1907,13 @@ def private check_ptr_arg(var ctx : MslCtx; pv : VariablePtr; arg : Expression?;
     let want = ptr_param_space(pv)
     let got = ptr_arg_space(ctx, arg)
     if (empty(got)) {
-        err(ctx, at, "argument bound to pointer parameter `{pv.name}` has no traceable address space - pass `addr(member[i])`, a pointer local, or a pointer parameter")
+        shader_error(ctx, at, "argument bound to pointer parameter `{pv.name}` has no traceable " +
+            "address space - pass `addr(member[i])`, a pointer local, or a pointer parameter")
     } elif (got != want) {
-        err(ctx, at, "pointer parameter `{pv.name}` is `{want}` but the argument points into {got} memory - {want == "device" ? "mark it `@threadgroup`" : "drop the `@threadgroup`"} or pass a {want} pointer")
+        shader_error(ctx, at, "pointer parameter `{pv.name}` is `{want}` but the argument points " +
+            "into {got} memory - " +
+            "{want == "device" ? "mark it `@threadgroup`" : "drop the `@threadgroup`"} " +
+            "or pass a {want} pointer")
     }
 }
 
@@ -2157,7 +1966,8 @@ def private emit_store_target(var ctx : MslCtx; e : Expression?) : string {
         return "{sub}[{idx}]"
     }
     if (lvalue_touches_packed(ctx, e)) {
-        err(ctx, e.at, "component or swizzle writes into a packed 3-lane buffer element are not supported - assign the whole element")
+        shader_error(ctx, e.at, "component or swizzle writes into a packed 3-lane buffer element " +
+            "are not supported - assign the whole element")
         return "/*packed store*/"
     }
     return emit_value(ctx, e)
@@ -2174,12 +1984,13 @@ def private emit_sgmat_load_store(var ctx : MslCtx; ec : ExprCall?; indent : str
     let isLoad = cname == "simdgroup_load"
     let nargs = length(ec.arguments)
     if (!(nargs == 4 || (isLoad && nargs == 5))) {
-        err(ctx, ec.at, "{cname} takes (matrix, buffer, offset, stride{isLoad ? "[, transpose]" : ""})")
+        shader_error(ctx, ec.at,
+            "{cname} takes (matrix, buffer, offset, stride{isLoad ? "[, transpose]" : ""})")
         return
     }
     let sgname = sgmat_type_name(ec.arguments[0]._type)
     if (empty(sgname)) {
-        err(ctx, ec.at, "{cname} first argument must be a simdgroup matrix")
+        shader_error(ctx, ec.at, "{cname} first argument must be a simdgroup matrix")
         return
     }
     // pointer-local source: simdgroup_load(m, p, off, stride) where p = unsafe(addr(member[..]))
@@ -2192,7 +2003,8 @@ def private emit_sgmat_load_store(var ctx : MslCtx; ec : ExprCall?; indent : str
         let pmem0 = ctx.ptrs[pn0]
         let pmm = ctx.members[pmem0]
         if (!isLoad) {
-            err(ctx, ec.at, "simdgroup_store through a das pointer is not supported - store to the @ssbo member directly")
+            shader_error(ctx, ec.at, "simdgroup_store through a das pointer is not supported - " +
+                "store to the @ssbo member directly")
             return
         }
         let pmv = emit_value(ctx, ec.arguments[0])
@@ -2211,12 +2023,13 @@ def private emit_sgmat_load_store(var ctx : MslCtx; ec : ExprCall?; indent : str
     }
     let mem = member_lookup(ctx, ec.arguments[1])
     if (empty(mem)) {
-        err(ctx, ec.at, "{cname} {isLoad ? "source" : "destination"} must be an @ssbo or @workgroup member, or a das pointer local over one")
+        shader_error(ctx, ec.at, "{cname} {isLoad ? "source" : "destination"} must be an @ssbo " +
+            "or @workgroup member, or a das pointer local over one")
         return
     }
     let m = ctx.members[mem]
     if (m.uniform) {
-        err(ctx, ec.at, "{cname} cannot address a @uniform member - use an @ssbo buffer")
+        shader_error(ctx, ec.at, "{cname} cannot address a @uniform member - use an @ssbo buffer")
         return
     }
     let mv = emit_value(ctx, ec.arguments[0])
@@ -2243,7 +2056,7 @@ def private emit_sgmat_to_half(var ctx : MslCtx; ec : ExprCall?; indent : string
     if (length(ec.arguments) != 2
             || sgmat_type_name(ec.arguments[0]._type) != "simdgroup_half8x8"
             || sgmat_type_name(ec.arguments[1]._type) != "simdgroup_float8x8") {
-        err(ctx, ec.at, "sgmat_to_half takes (simdgroup_half8x8, simdgroup_float8x8)")
+        shader_error(ctx, ec.at, "sgmat_to_half takes (simdgroup_half8x8, simdgroup_float8x8)")
         return
     }
     let d = emit_value(ctx, ec.arguments[0])
@@ -2258,21 +2071,22 @@ def private emit_sgmat_to_half(var ctx : MslCtx; ec : ExprCall?; indent : string
 // `*(threadgroup half4*)(dst + idx) = half4(v);` (idx % 4 == 0 by contract; 8-byte alignment)
 def private emit_tg_store_half4(var ctx : MslCtx; ec : ExprCall?; indent : string; var lines : array<string>) {
     if (length(ec.arguments) != 3) {
-        err(ctx, ec.at, "tg_store_half4 takes (workgroup array, index, float4)")
+        shader_error(ctx, ec.at, "tg_store_half4 takes (workgroup array, index, float4)")
         return
     }
     let mem = member_lookup(ctx, ec.arguments[0])
     if (empty(mem)) {
-        err(ctx, ec.at, "tg_store_half4 destination must be a @workgroup member")
+        shader_error(ctx, ec.at, "tg_store_half4 destination must be a @workgroup member")
         return
     }
     let m = ctx.members[mem]
     if (!m.workgroup) {
-        err(ctx, ec.at, "tg_store_half4 destination must be a @workgroup member")
+        shader_error(ctx, ec.at, "tg_store_half4 destination must be a @workgroup member")
         return
     }
     if (m.elem != "half") {
-        err(ctx, ec.at, "tg_store_half4 destination must be a float16 workgroup array (got {m.elem})")
+        shader_error(ctx, ec.at,
+            "tg_store_half4 destination must be a float16 workgroup array (got {m.elem})")
         return
     }
     let idx = emit_value(ctx, ec.arguments[1])
@@ -2285,21 +2099,22 @@ def private emit_tg_store_half4(var ctx : MslCtx; ec : ExprCall?; indent : strin
 // (idx % 4 == 0 by contract; 16-byte alignment)
 def private emit_tg_store_float4(var ctx : MslCtx; ec : ExprCall?; indent : string; var lines : array<string>) {
     if (length(ec.arguments) != 3) {
-        err(ctx, ec.at, "tg_store_float4 takes (workgroup array, index, float4)")
+        shader_error(ctx, ec.at, "tg_store_float4 takes (workgroup array, index, float4)")
         return
     }
     let mem = member_lookup(ctx, ec.arguments[0])
     if (empty(mem)) {
-        err(ctx, ec.at, "tg_store_float4 destination must be a @workgroup member")
+        shader_error(ctx, ec.at, "tg_store_float4 destination must be a @workgroup member")
         return
     }
     let m = ctx.members[mem]
     if (!m.workgroup) {
-        err(ctx, ec.at, "tg_store_float4 destination must be a @workgroup member")
+        shader_error(ctx, ec.at, "tg_store_float4 destination must be a @workgroup member")
         return
     }
     if (m.elem != "float") {
-        err(ctx, ec.at, "tg_store_float4 destination must be a float workgroup array (got {m.elem})")
+        shader_error(ctx, ec.at,
+            "tg_store_float4 destination must be a float workgroup array (got {m.elem})")
         return
     }
     let idx = emit_value(ctx, ec.arguments[1])
@@ -2315,14 +2130,14 @@ def private emit_sgmat_multiply(var ctx : MslCtx; ec : ExprCall?; indent : strin
     let isMac = cname == "simdgroup_multiply_accumulate"
     let want = isMac ? 4 : 3
     if (length(ec.arguments) != want) {
-        err(ctx, ec.at, "{cname} takes {want} simdgroup-matrix arguments")
+        shader_error(ctx, ec.at, "{cname} takes {want} simdgroup-matrix arguments")
         return
     }
     var classes, parts : array<string>
     for (arg in ec.arguments) {
         let sgname = sgmat_type_name(arg._type)
         if (empty(sgname)) {
-            err(ctx, arg.at, "{cname} arguments must be simdgroup matrices")
+            shader_error(ctx, arg.at, "{cname} arguments must be simdgroup matrices")
             return
         }
         classes |> push(sgmat_census_class(sgname))
@@ -2352,7 +2167,7 @@ def private tmm2d_const_uint(var ctx : MslCtx; e : Expression?; what : string) :
     if (v is ExprConstUInt) {
         return (v as ExprConstUInt).value
     }
-    err(ctx, e.at, "tmm2d: {what} must be a compile-time uint constant")
+    shader_error(ctx, e.at, "tmm2d: {what} must be a compile-time uint constant")
     return 0u
 }
 
@@ -2606,13 +2421,13 @@ def private tg_acc_name(var ctx : MslCtx; e : Expression?) : string {
     if (a is ExprVar) {
         return msl_safe_name(string((a as ExprVar).name))
     }
-    err(ctx, e.at, "tmm2d_tg_*: acc must be a plain local variable")
+    shader_error(ctx, e.at, "tmm2d_tg_*: acc must be a plain local variable")
     return "__bad_acc"
 }
 
 def private emit_tmm2d_tg_begin(var ctx : MslCtx; ec : ExprCall?; indent : string; var lines : array<string>) {
     if (length(ec.arguments) != 5) {
-        err(ctx, ec.at, "tmm2d_tg_begin takes exactly 5 arguments")
+        shader_error(ctx, ec.at, "tmm2d_tg_begin takes exactly 5 arguments")
         return
     }
     let acc = tg_acc_name(ctx, ec.arguments[0])
@@ -2642,7 +2457,7 @@ def private emit_tmm2d_tg_begin(var ctx : MslCtx; ec : ExprCall?; indent : strin
 // overwrite-mode op per call; both operands staged f16 tiles, kk a call-site constant.
 def private emit_tmm2d_tile_tg(var ctx : MslCtx; ec : ExprCall?; indent : string; var lines : array<string>) {
     if (length(ec.arguments) != 7) {
-        err(ctx, ec.at, "tmm2d_tile_tg takes exactly 7 arguments")
+        shader_error(ctx, ec.at, "tmm2d_tile_tg takes exactly 7 arguments")
         return
     }
     let ta = emit_value(ctx, ec.arguments[0])
@@ -2674,7 +2489,7 @@ def private emit_tmm2d_tile_tg(var ctx : MslCtx; ec : ExprCall?; indent : string
 // the final 1/sum in one primitive; each lane touches only elements it owns, no barrier
 def private emit_tmm2d_tg_rowscale(var ctx : MslCtx; ec : ExprCall?; indent : string; var lines : array<string>) {
     if (length(ec.arguments) != 4) {
-        err(ctx, ec.at, "tmm2d_tg_rowscale takes exactly 4 arguments")
+        shader_error(ctx, ec.at, "tmm2d_tg_rowscale takes exactly 4 arguments")
         return
     }
     let acc = tg_acc_name(ctx, ec.arguments[0])
@@ -2696,7 +2511,7 @@ def private emit_tmm2d_tg_rowscale(var ctx : MslCtx; ec : ExprCall?; indent : st
 // order (V rows land with coalesced copies, no transpose gather); pairs begin_nt/step_nt
 def private emit_tmm2d_tg_begin_nt(var ctx : MslCtx; ec : ExprCall?; indent : string; var lines : array<string>) {
     if (length(ec.arguments) != 5) {
-        err(ctx, ec.at, "tmm2d_tg_begin_nt takes exactly 5 arguments")
+        shader_error(ctx, ec.at, "tmm2d_tg_begin_nt takes exactly 5 arguments")
         return
     }
     let acc = tg_acc_name(ctx, ec.arguments[0])
@@ -2723,7 +2538,7 @@ def private emit_tmm2d_tg_begin_nt(var ctx : MslCtx; ec : ExprCall?; indent : st
 
 def private emit_tmm2d_tg_step_nt(var ctx : MslCtx; ec : ExprCall?; indent : string; var lines : array<string>) {
     if (length(ec.arguments) != 6) {
-        err(ctx, ec.at, "tmm2d_tg_step_nt takes exactly 6 arguments")
+        shader_error(ctx, ec.at, "tmm2d_tg_step_nt takes exactly 6 arguments")
         return
     }
     let acc = tg_acc_name(ctx, ec.arguments[0])
@@ -2748,10 +2563,13 @@ def private emit_tmm2d_tg_step_nt(var ctx : MslCtx; ec : ExprCall?; indent : str
 // the AV-shape step (P streamed, V rows coalesced)
 def private emit_tmm2d_tg_begin_devant(var ctx : MslCtx; ec : ExprCall?; indent : string; var lines : array<string>) {
     if (!ctx.float_a_ok) {
-        err(ctx, ec.at, "tmm2d_tg_begin_devant: this flavor streams a FLOAT A operand by construction (off the native half path, measured 8-11% per GEMM) - license the deliberate f32 form with [metal_kernel(float_a_ok=true)], or use the deva flavor with an f16 stream")
+        shader_error(ctx, ec.at, "tmm2d_tg_begin_devant: this flavor streams a FLOAT A operand " +
+            "by construction (off the native half path, measured 8-11% per GEMM) - license the " +
+            "deliberate f32 form with [metal_kernel(float_a_ok=true)], or use the deva flavor " +
+            "with an f16 stream")
     }
     if (length(ec.arguments) != 5) {
-        err(ctx, ec.at, "tmm2d_tg_begin_devant takes exactly 5 arguments")
+        shader_error(ctx, ec.at, "tmm2d_tg_begin_devant takes exactly 5 arguments")
         return
     }
     let acc = tg_acc_name(ctx, ec.arguments[0])
@@ -2779,7 +2597,7 @@ def private emit_tmm2d_tg_begin_devant(var ctx : MslCtx; ec : ExprCall?; indent 
 
 def private emit_tmm2d_tg_step_devant(var ctx : MslCtx; ec : ExprCall?; indent : string; var lines : array<string>) {
     if (length(ec.arguments) != 7) {
-        err(ctx, ec.at, "tmm2d_tg_step_devant takes exactly 7 arguments")
+        shader_error(ctx, ec.at, "tmm2d_tg_step_devant takes exactly 7 arguments")
         return
     }
     let acc = tg_acc_name(ctx, ec.arguments[0])
@@ -2811,7 +2629,8 @@ def private tmm2d_a_elem(var ctx : MslCtx; e : Expression?) : string {
         return "half"
     }
     if (t == null || t.firstType == null || t.firstType.baseType != Type.tFloat) {
-        err(ctx, e.at, "tmm2d: the A operand streams float or float16 activations, not {t != null && t.firstType != null ? describe(t.firstType) : "an untyped pointer"}")
+        shader_error(ctx, e.at, "tmm2d: the A operand streams float or float16 activations, not " +
+            "{t != null && t.firstType != null ? describe(t.firstType) : "an untyped pointer"}")
     }
     return "float"
 }
@@ -2822,10 +2641,12 @@ def private tmm2d_a_elem(var ctx : MslCtx; e : Expression?) : string {
 // type, so the begin must type the operand the steps will stream.
 def private emit_tmm2d_tg_begin_deva(var ctx : MslCtx; ec : ExprCall?; indent : string; var lines : array<string>) {
     if (tmm2d_a_elem(ctx, ec.arguments[1]) == "float" && !ctx.float_a_ok) {
-        err(ctx, ec.at, "tmm2d_tg_begin_deva: FLOAT A operand keeps matmul2d off the native half path (measured 8-11% per GEMM) - stamp a float16 XT twin, or license the deliberate f32 fallback with [metal_kernel(float_a_ok=true)]")
+        shader_error(ctx, ec.at, "tmm2d_tg_begin_deva: FLOAT A operand keeps matmul2d off the " +
+            "native half path (measured 8-11% per GEMM) - stamp a float16 XT twin, or license " +
+            "the deliberate f32 fallback with [metal_kernel(float_a_ok=true)]")
     }
     if (length(ec.arguments) != 6) {
-        err(ctx, ec.at, "tmm2d_tg_begin_deva takes exactly 6 arguments")
+        shader_error(ctx, ec.at, "tmm2d_tg_begin_deva takes exactly 6 arguments")
         return
     }
     let acc = tg_acc_name(ctx, ec.arguments[0])
@@ -2855,7 +2676,7 @@ def private emit_tmm2d_tg_begin_deva(var ctx : MslCtx; ec : ExprCall?; indent : 
 [arch(at="../ARCHITECTURE.md#tmm2d-staging")]
 def private emit_tmm2d_tg_step_deva(var ctx : MslCtx; ec : ExprCall?; indent : string; var lines : array<string>) {
     if (length(ec.arguments) != 7) {
-        err(ctx, ec.at, "tmm2d_tg_step_deva takes exactly 7 arguments")
+        shader_error(ctx, ec.at, "tmm2d_tg_step_deva takes exactly 7 arguments")
         return
     }
     let acc = tg_acc_name(ctx, ec.arguments[0])
@@ -2873,7 +2694,8 @@ def private emit_tmm2d_tg_step_deva(var ctx : MslCtx; ec : ExprCall?; indent : s
     if (!empty(witness) && !(witness |> ends_with("|{at}"))) {
         // begin typed the destination's A operand from ITS pointer; a step streaming the other
         // element type emits an MSL template error at PSO compile with no das-level trace
-        err(ctx, ec.at, "tmm2d_tg_step_deva: A stream is {at} but tmm2d_tg_begin_deva's witness typed {witness} - begin and steps must stream the same element type")
+        shader_error(ctx, ec.at, "tmm2d_tg_step_deva: A stream is {at} but tmm2d_tg_begin_deva's " +
+            "witness typed {witness} - begin and steps must stream the same element type")
     }
     note(ctx, "call.tmm2d_tg_step_deva")
     let ldb = kk == 64u ? 72u : kk
@@ -2888,7 +2710,9 @@ def private emit_tmm2d_tg_step_deva(var ctx : MslCtx; ec : ExprCall?; indent : s
 def private tmm2d_devab_half(var ctx : MslCtx; e : Expression?; what : string) {
     let t = e._type
     if (t == null || t.firstType == null || t.firstType.baseType != Type.tFloat16) {
-        err(ctx, e.at, "tmm2d devab: the {what} operand is a device float16 stream, not {t != null && t.firstType != null ? describe(t.firstType) : "an untyped pointer"} - write the operand's half twin first")
+        shader_error(ctx, e.at, "tmm2d devab: the {what} operand is a device float16 stream, not " +
+            "{t != null && t.firstType != null ? describe(t.firstType) : "an untyped pointer"} - " +
+            "write the operand's half twin first")
     }
 }
 
@@ -2896,7 +2720,7 @@ def private tmm2d_devab_half(var ctx : MslCtx; e : Expression?; what : string) {
 def private emit_tmm2d_tg_begin_devab(var ctx : MslCtx; ec : ExprCall?; indent : string; var lines : array<string>; natural_b : bool) {
     let cname = natural_b ? "tmm2d_tg_begin_devabnt" : "tmm2d_tg_begin_devab"
     if (length(ec.arguments) != 4) {
-        err(ctx, ec.at, "{cname} takes exactly 4 arguments")
+        shader_error(ctx, ec.at, "{cname} takes exactly 4 arguments")
         return
     }
     let acc = tg_acc_name(ctx, ec.arguments[0])
@@ -2924,7 +2748,7 @@ def private emit_tmm2d_tg_begin_devab(var ctx : MslCtx; ec : ExprCall?; indent :
 def private emit_tmm2d_tg_step_devab(var ctx : MslCtx; ec : ExprCall?; indent : string; var lines : array<string>; natural_b : bool) {
     let cname = natural_b ? "tmm2d_tg_step_devabnt" : "tmm2d_tg_step_devab"
     if (length(ec.arguments) != 8) {
-        err(ctx, ec.at, "{cname} takes exactly 8 arguments")
+        shader_error(ctx, ec.at, "{cname} takes exactly 8 arguments")
         return
     }
     let acc = tg_acc_name(ctx, ec.arguments[0])
@@ -2951,7 +2775,7 @@ def private emit_tmm2d_tg_step_devab(var ctx : MslCtx; ec : ExprCall?; indent : 
 
 def private emit_tmm2d_tg_step(var ctx : MslCtx; ec : ExprCall?; indent : string; var lines : array<string>) {
     if (length(ec.arguments) != 6) {
-        err(ctx, ec.at, "tmm2d_tg_step takes exactly 6 arguments")
+        shader_error(ctx, ec.at, "tmm2d_tg_step takes exactly 6 arguments")
         return
     }
     let acc = tg_acc_name(ctx, ec.arguments[0])
@@ -2973,7 +2797,7 @@ def private emit_tmm2d_tg_step(var ctx : MslCtx; ec : ExprCall?; indent : string
 
 def private emit_tmm2d_tg_store(var ctx : MslCtx; ec : ExprCall?; indent : string; var lines : array<string>) {
     if (length(ec.arguments) != 5) {
-        err(ctx, ec.at, "tmm2d_tg_store takes exactly 5 arguments")
+        shader_error(ctx, ec.at, "tmm2d_tg_store takes exactly 5 arguments")
         return
     }
     let acc = tg_acc_name(ctx, ec.arguments[0])
@@ -2995,7 +2819,7 @@ def private emit_tmm2d_tg_store(var ctx : MslCtx; ec : ExprCall?; indent : strin
 // elements it owns (RNE) and writes them through the device half pointer directly
 def private emit_tmm2d_tg_store_half(var ctx : MslCtx; ec : ExprCall?; indent : string; var lines : array<string>) {
     if (length(ec.arguments) != 5) {
-        err(ctx, ec.at, "tmm2d_tg_store_half takes exactly 5 arguments")
+        shader_error(ctx, ec.at, "tmm2d_tg_store_half takes exactly 5 arguments")
         return
     }
     let acc = tg_acc_name(ctx, ec.arguments[0])
@@ -3019,7 +2843,7 @@ def private emit_tmm2d_tg_store_half(var ctx : MslCtx; ec : ExprCall?; indent : 
 // edits only elements it owns, so no cross-thread visibility is needed before the store
 def private emit_tmm2d_tg_store_bias(var ctx : MslCtx; ec : ExprCall?; indent : string; var lines : array<string>) {
     if (length(ec.arguments) != 6) {
-        err(ctx, ec.at, "tmm2d_tg_store_bias takes exactly 6 arguments")
+        shader_error(ctx, ec.at, "tmm2d_tg_store_bias takes exactly 6 arguments")
         return
     }
     let acc = tg_acc_name(ctx, ec.arguments[0])
@@ -3056,11 +2880,12 @@ def private emit_tmm2d(var ctx : MslCtx; ec : ExprCall?; indent : string; var li
     }
     if ((kind == "q8u" || kind == "bf" || kind == "hw" || kind == "q8b") && !ctx.float_a_ok) {
         let fix = kind == "q8b" ? "this form has no half-A twin - license it with [metal_kernel(float_a_ok=true)] or move to tmm2d_q8u_f32" : "pass the f16 activation panel (the overload picks the half helper by pointee), or license the deliberate f32 fallback with [metal_kernel(float_a_ok=true)]"
-        err(ctx, ec.at, "{cname}: FLOAT A operand keeps matmul2d off the native half path (measured 8-11% per GEMM) - {fix}")
+        shader_error(ctx, ec.at, "{cname}: FLOAT A operand keeps matmul2d off the native half " +
+            "path (measured 8-11% per GEMM) - {fix}")
     }
     let want_args = kind == "bf" || kind == "bfh" || kind == "hw" || kind == "hwh" ? 10 : (kind == "q8b" ? 11 : 14)
     if (length(ec.arguments) != want_args) {
-        err(ctx, ec.at, "{cname} takes exactly {want_args} arguments")
+        shader_error(ctx, ec.at, "{cname} takes exactly {want_args} arguments")
         return
     }
     let m = tmm2d_const_uint(ctx, ec.arguments[0], "m (tile rows)")
@@ -3076,7 +2901,8 @@ def private emit_tmm2d(var ctx : MslCtx; ec : ExprCall?; indent : string; var li
     if (kind == "q8u" || kind == "q8uh") {
         bk = tmm2d_const_uint(ctx, ec.arguments[13], "bk (resident staging footprint)")
         if (bk != 32u && bk != 64u && bk != 128u) {
-            err(ctx, ec.at, "{cname}: bk must be 32, 64, or 128 (= 64-deep double-buffered: two ping-pong tiles, an n*144-half wt)")
+            shader_error(ctx, ec.at, "{cname}: bk must be 32, 64, or 128 (= 64-deep " +
+                "double-buffered: two ping-pong tiles, an n*144-half wt)")
             return
         }
         nvals = 13
@@ -3110,15 +2936,18 @@ def private hoist_const_table(var ctx : MslCtx; v : VariablePtr) {
     let et = v._type.firstType
     let n = v._type.fixedDim
     if (!v._type.flags.constant) {
-        err(ctx, v.at, "fixed-array local `{v.name}` initializer hoists to a program-scope constant table - it must be a `let` (a written table has no constant form)")
+        shader_error(ctx, v.at, "fixed-array local `{v.name}` initializer hoists to a " +
+            "program-scope constant table - it must be a `let` (a written table has no " +
+            "constant form)")
         return
     }
     if (reject_cpu_only_width(ctx, v.at, et)) {
         return
     }
-    let ename = msl_type_name(et)
+    let ename = shader_type_name(et)
     if (empty(ename)) {
-        err(ctx, v.at, "local array `{v.name}` element type {describe(et)} has no MSL form")
+        shader_error(ctx, v.at,
+            "local array `{v.name}` element type {describe(et)} has no MSL form")
         return
     }
     var mk : ExprMakeArray?
@@ -3131,7 +2960,8 @@ def private hoist_const_table(var ctx : MslCtx; v : VariablePtr) {
         }
     }
     if (mk == null || length(mk.values) != n) {
-        err(ctx, v.at, "fixed-array local `{v.name}` hoists to a program-scope constant table - its initializer must be a `fixed_array<T>(...)` of exactly {n} elements")
+        shader_error(ctx, v.at, "fixed-array local `{v.name}` hoists to a program-scope constant " +
+            "table - its initializer must be a `fixed_array<T>(...)` of exactly {n} elements")
         return
     }
     var vals : array<string>
@@ -3140,7 +2970,9 @@ def private hoist_const_table(var ctx : MslCtx; v : VariablePtr) {
         if (!(el is ExprConstInt || el is ExprConstUInt || el is ExprConstInt64 || el is ExprConstUInt64 ||
                 el is ExprConstFloat || el is ExprConstDouble || el is ExprConstInt8 || el is ExprConstUInt8 ||
                 el is ExprConstInt16 || el is ExprConstUInt16)) {
-            err(ctx, v.at, "fixed-array local `{v.name}` hoists to a program-scope constant table - every element must be an integer or float scalar literal (bool, half and vector literals do not hoist)")
+            shader_error(ctx, v.at, "fixed-array local `{v.name}` hoists to a program-scope " +
+                "constant table - every element must be an integer or float scalar literal " +
+                "(bool, half and vector literals do not hoist)")
             return
         }
         vals |> push(emit_value(ctx, el))
@@ -3227,12 +3059,14 @@ def private emit_stmt(var ctx : MslCtx; e : Expression?; indent : string; var li
                 let pat = (v.init as ExprRef2Ptr).subexpr as ExprAt
                 let pmem = member_lookup(ctx, pat.subexpr)
                 if (empty(pmem)) {
-                    err(ctx, v.at, "addr() in a kernel must take a kernel-class member element (addr(member[expr]))")
+                    shader_error(ctx, v.at, "addr() in a kernel must take a kernel-class member " +
+                        "element (addr(member[expr]))")
                     continue
                 }
                 let pm = ctx.members[pmem]
                 if (pm.uniform || pm.packed) {
-                    err(ctx, v.at, "addr() over a @uniform or packed 3-lane member has no MSL pointer form")
+                    shader_error(ctx, v.at,
+                        "addr() over a @uniform or packed 3-lane member has no MSL pointer form")
                     continue
                 }
                 let pname0 = string(v.name)
@@ -3273,9 +3107,10 @@ def private emit_stmt(var ctx : MslCtx; e : Expression?; indent : string; var li
                 if (reject_cpu_only_width(ctx, v.at, et)) {
                     continue
                 }
-                let ename = msl_type_name(et)
+                let ename = shader_type_name(et)
                 if (empty(ename)) {
-                    err(ctx, v.at, "local array `{v.name}` element type {describe(et)} has no MSL form")
+                    shader_error(ctx, v.at,
+                        "local array `{v.name}` element type {describe(et)} has no MSL form")
                     continue
                 }
                 note(ctx, "stmt.var.array")
@@ -3285,9 +3120,9 @@ def private emit_stmt(var ctx : MslCtx; e : Expression?; indent : string; var li
             if (reject_cpu_only_width(ctx, v.at, v._type)) {
                 continue
             }
-            let tname = msl_type_name(v._type)
+            let tname = shader_type_name(v._type)
             if (empty(tname)) {
-                err(ctx, v.at, "local `{v.name}` type {describe(v._type)} has no MSL form")
+                shader_error(ctx, v.at, "local `{v.name}` type {describe(v._type)} has no MSL form")
                 continue
             }
             let vname = string(v.name)
@@ -3313,11 +3148,12 @@ def private emit_stmt(var ctx : MslCtx; e : Expression?; indent : string; var li
         let op = string(op2.op)
         let base = compound_base(op)
         if (op2._type == null || op2._type.baseType != Type.tVoid || empty(base)) {
-            err(ctx, op2.at, "operator `{op}` as a statement is not an assignment")
+            shader_error(ctx, op2.at, "operator `{op}` as a statement is not an assignment")
             return
         }
         if (is_packed_elem_at(ctx, op2.left) || lvalue_touches_packed(ctx, op2.left)) {
-            err(ctx, op2.at, "compound assignment into a packed 3-lane buffer element is not supported - load into a local, compute, then assign the whole element")
+            shader_error(ctx, op2.at, "compound assignment into a packed 3-lane buffer element " +
+                "is not supported - load into a local, compute, then assign the whole element")
             return
         }
         let l = emit_value(ctx, op2.left)
@@ -3346,7 +3182,7 @@ def private emit_stmt(var ctx : MslCtx; e : Expression?; indent : string; var li
             note(ctx, "op.postdec")
             lines |> push("{indent}{sub}--;")
         } else {
-            err(ctx, op1.at, "unary `{op}` is not a statement")
+            shader_error(ctx, op1.at, "unary `{op}` is not a statement")
         }
     } elif (e is ExprIfThenElse) {
         emit_if(ctx, e as ExprIfThenElse, indent, lines, "")
@@ -3376,7 +3212,7 @@ def private emit_stmt(var ctx : MslCtx; e : Expression?; indent : string; var li
         // barrier — the same lowering SPIRV-Cross ships under MoltenVK
         if (cname == "barrier" || cname == "memoryBarrierShared") {
             if (!empty(ec.arguments)) {
-                err(ctx, ec.at, "{cname}() takes no arguments")
+                shader_error(ctx, ec.at, "{cname}() takes no arguments")
                 return
             }
             note(ctx, cname == "barrier" ? "call.barrier" : "call.memory_barrier_shared")
@@ -3427,7 +3263,8 @@ def private emit_stmt(var ctx : MslCtx; e : Expression?; indent : string; var li
             note(ctx, "stmt.call_user")
             lines |> push("{indent}{emit_call_value(ctx, ec)};")
         } else {
-            err(ctx, ec.at, "call `{cname}` as a statement has no MSL lowering - only barrier()/memoryBarrierShared() sync and the simdgroup_matrix ops are supported")
+            shader_error(ctx, ec.at, "call `{cname}` as a statement has no MSL lowering - only " +
+                "barrier()/memoryBarrierShared() sync and the simdgroup_matrix ops are supported")
         }
     } elif (e is ExprBreak) {
         note(ctx, "stmt.break")
@@ -3439,7 +3276,7 @@ def private emit_stmt(var ctx : MslCtx; e : Expression?; indent : string; var li
         let er = e as ExprReturn
         if (er.subexpr != null) {
             if (ctx.fn_depth == 0) {
-                err(ctx, er.at, "kernels return void - `return <value>` has no MSL form")
+                shader_error(ctx, er.at, "kernels return void - `return <value>` has no MSL form")
                 return
             }
             note(ctx, "stmt.return_value")
@@ -3449,7 +3286,7 @@ def private emit_stmt(var ctx : MslCtx; e : Expression?; indent : string; var li
         note(ctx, "stmt.return")
         lines |> push("{indent}return;")
     } else {
-        err(ctx, e.at, "statement {e.__rtti} is not in the supported MSL subset")
+        shader_error(ctx, e.at, "statement {e.__rtti} is not in the supported MSL subset")
     }
 }
 
@@ -3496,19 +3333,21 @@ def private emit_loop_hints(var ctx : MslCtx; anns : AnnotationArgumentList; at 
             note(ctx, "stmt.for.unroll")
             lines |> push("{indent}#pragma clang loop unroll_count({a.iValue})")
         } else {
-            err(ctx, at, "loop hint `{a.name}` has no MSL lowering - supported: unroll, unroll_full, unroll_disable, unroll_count=N")
+            shader_error(ctx, at, "loop hint `{a.name}` has no MSL lowering - supported: unroll, " +
+                "unroll_full, unroll_disable, unroll_count=N")
         }
     }
 }
 
 def private emit_for(var ctx : MslCtx; fr : ExprFor?; indent : string; var lines : array<string>) {
     if (length(fr.iteratorVariables) != 1 || length(fr.sources) != 1) {
-        err(ctx, fr.at, "only a single `for (i in range(...))` loop lowers to MSL")
+        shader_error(ctx, fr.at, "only a single `for (i in range(...))` loop lowers to MSL")
         return
     }
     let iv = fr.iteratorVariables[0]
     if (iv._type == null || (iv._type.baseType != Type.tInt && iv._type.baseType != Type.tUInt)) {
-        err(ctx, iv.at, "for-loop induction variable `{iv.name}` must be int or uint (range/urange source)")
+        shader_error(ctx, iv.at,
+            "for-loop induction variable `{iv.name}` must be int or uint (range/urange source)")
         return
     }
     let isU = iv._type.baseType == Type.tUInt
@@ -3530,12 +3369,12 @@ def private emit_for(var ctx : MslCtx; fr : ExprFor?; indent : string; var lines
     } else {
         let src = fr.sources[0] ?as ExprCall
         if (src == null || (src.name != "range" && src.name != "urange")) {
-            err(ctx, fr.at, "for-loop source must be range(...) or urange(...)")
+            shader_error(ctx, fr.at, "for-loop source must be range(...) or urange(...)")
             return
         }
         let na = length(src.arguments)
         if (na != 1 && na != 2) {
-            err(ctx, fr.at, "range with a step is not supported")
+            shader_error(ctx, fr.at, "range with a step is not supported")
             return
         }
         lo = na == 2 ? emit_value(ctx, src.arguments[0]) : (isU ? "0u" : "0")
@@ -3577,7 +3416,7 @@ def private ufn_param_ptr(var ctx : MslCtx; v : VariablePtr; t : TypeDecl?;
                           dname, name : string; at : LineInfo) : string {
     let pt = t.firstType
     if (pt == null) {
-        err(ctx, at, "parameter `{dname}` is a void pointer - MSL needs an element type")
+        shader_error(ctx, at, "parameter `{dname}` is a void pointer - MSL needs an element type")
         return ""
     }
     if (reject_cpu_only_width(ctx, at, pt)) {
@@ -3585,11 +3424,12 @@ def private ufn_param_ptr(var ctx : MslCtx; v : VariablePtr; t : TypeDecl?;
     }
     let elem = msl_buffer_elem_name(pt)
     if (empty(elem)) {
-        err(ctx, at, "parameter `{dname}` pointee type has no MSL form")
+        shader_error(ctx, at, "parameter `{dname}` pointee type has no MSL form")
         return ""
     }
-    if (elem != msl_type_name(pt)) {
-        err(ctx, at, "parameter `{dname}`: 3-lane packed elements do not lower through pointer parameters")
+    if (elem != shader_type_name(pt)) {
+        shader_error(ctx, at,
+            "parameter `{dname}`: 3-lane packed elements do not lower through pointer parameters")
         return ""
     }
     let space = ptr_param_space(v)
@@ -3609,7 +3449,7 @@ def private ufn_param(var ctx : MslCtx; v : VariablePtr; at : LineInfo) : string
     ctx.renames[dname] = name
     let t = v._type
     if (t == null) {
-        err(ctx, at, "parameter `{dname}` has no type")
+        shader_error(ctx, at, "parameter `{dname}` has no type")
         return ""
     }
     if (t.baseType == Type.tArray) {
@@ -3618,11 +3458,12 @@ def private ufn_param(var ctx : MslCtx; v : VariablePtr; at : LineInfo) : string
         }
         let elem = msl_buffer_elem_name(t.firstType)
         if (empty(elem)) {
-            err(ctx, at, "parameter `{dname}` element type has no MSL form")
+            shader_error(ctx, at, "parameter `{dname}` element type has no MSL form")
             return ""
         }
-        if (elem != msl_type_name(t.firstType)) {
-            err(ctx, at, "parameter `{dname}`: 3-lane packed elements do not lower through parameters")
+        if (elem != shader_type_name(t.firstType)) {
+            shader_error(ctx, at,
+                "parameter `{dname}`: 3-lane packed elements do not lower through parameters")
             return ""
         }
         note(ctx, t.flags.constant ? "ufn.param.buffer_const" : "ufn.param.buffer")
@@ -3632,9 +3473,9 @@ def private ufn_param(var ctx : MslCtx; v : VariablePtr; at : LineInfo) : string
         if (reject_cpu_only_width(ctx, at, t.firstType)) {
             return ""
         }
-        let elem = msl_type_name(t.firstType)
+        let elem = shader_type_name(t.firstType)
         if (empty(elem)) {
-            err(ctx, at, "parameter `{dname}` element type has no MSL form")
+            shader_error(ctx, at, "parameter `{dname}` element type has no MSL form")
             return ""
         }
         note(ctx, t.flags.constant ? "ufn.param.tg_const" : "ufn.param.tg")
@@ -3646,9 +3487,10 @@ def private ufn_param(var ctx : MslCtx; v : VariablePtr; at : LineInfo) : string
     if (reject_cpu_only_width(ctx, at, t)) {
         return ""
     }
-    let tn = msl_type_name(t)
+    let tn = shader_type_name(t)
     if (empty(tn)) {
-        err(ctx, at, "parameter `{dname}` type has no MSL form (scalars, their 2/3/4 vectors, array<T>, T[N])")
+        shader_error(ctx, at, "parameter `{dname}` type has no MSL form (scalars, their 2/3/4 " +
+            "vectors, array<T>, T[N])")
         return ""
     }
     if (t.flags.ref && !t.flags.constant) {
@@ -3665,7 +3507,7 @@ def private emit_one_ufn(var ctx : MslCtx; idx : int) {
     var save_ptrs <- ctx.ptrs
     var save_ptr_space <- ctx.ptr_space
     let save_self = ctx.self_name
-    let fn = ctx.ufns[idx].fn
+    let fn = ctx.user_fns[idx].fn
     ctx.self_name = ""
     var params : array<string>
     params |> reserve(length(fn.arguments) + 4)
@@ -3685,9 +3527,10 @@ def private emit_one_ufn(var ctx : MslCtx; idx : int) {
     var ret = "void"
     if (fn.result != null && fn.result.baseType != Type.tVoid) {
         if (!reject_cpu_only_width(ctx, fn.at, fn.result)) {
-            ret = msl_type_name(fn.result)
+            ret = shader_type_name(fn.result)
             if (empty(ret)) {
-                err(ctx, fn.at, "return type of `{ctx.ufns[idx].msl_name}` has no MSL form")
+                shader_error(ctx, fn.at,
+                    "return type of `{ctx.user_fns[idx].name}` has no MSL form")
                 ret = "void"
             }
         }
@@ -3697,9 +3540,9 @@ def private emit_one_ufn(var ctx : MslCtx; idx : int) {
     emit_stmt(ctx, fn.body, "    ", body_lines)
     ctx.fn_depth--
     note(ctx, "decl.user_fn")
-    let sig = "{ret} {ctx.ufns[idx].msl_name}({join(params, ", ")})"
-    ctx.ufns[idx].proto = "{sig};"
-    ctx.ufns[idx].text = build_string() $(var w) {
+    let sig = "{ret} {ctx.user_fns[idx].name}({join(params, ", ")})"
+    ctx.user_fns[idx].proto = "{sig};"
+    ctx.user_fns[idx].text = build_string() $(var w) {
         w |> write(sig)
         w |> write(" \{\n")
         w |> write(join(body_lines, "\n"))
@@ -3716,21 +3559,21 @@ def private emit_one_ufn(var ctx : MslCtx; idx : int) {
 // free functions: prototypes first, then bodies, in pinned (name-sorted) order — call order
 // can't bite. Methods never emit as functions — their bodies splice at each call site.
 def private emit_user_fns(var ctx : MslCtx) : string {
-    if (empty(ctx.ufns)) {
+    if (empty(ctx.user_fns)) {
         return ""
     }
-    var order <- [for (i in range(length(ctx.ufns))); i; where !ctx.ufns[i].is_method]
-    order |> sort() <| cmp_by(ctx.ufns[_].msl_name)
+    var order <- [for (i in range(length(ctx.user_fns))); i; where !ctx.user_fns[i].is_method]
+    order |> sort() <| cmp_by(ctx.user_fns[_].name)
     for (i in order) {
         emit_one_ufn(ctx, i)
     }
     return build_string() $(var w) {
         for (i in order) {
-            w |> write(ctx.ufns[i].proto)
+            w |> write(ctx.user_fns[i].proto)
             w |> write("\n")
         }
         for (i in order) {
-            w |> write(ctx.ufns[i].text)
+            w |> write(ctx.user_fns[i].text)
             w |> write("\n")
         }
     }
@@ -3739,15 +3582,8 @@ def private emit_user_fns(var ctx : MslCtx) : string {
 // ===== kernel signature + driver =====
 
 [macro_function]
-def public kernel_entry_name(fn : FunctionPtr; cfg : MslEmitConfig) : string {
-    if (!empty(cfg.kernel_name)) {
-        return cfg.kernel_name
-    }
-    // methods arrive named `Class`method` — the MSL entry point is the bare method name
-    let name = "{fn.name}"
-    let tick = name |> rfind("`")
-    return msl_safe_name(tick >= 0 ? (name |> slice(tick + 1)) : name)
-}
+def public kernel_entry_name(fn : FunctionPtr; cfg : MslEmitConfig) : string =>
+    shader_entry_name(fn, cfg.kernel_name, MSL_RESERVED)
 
 //! Lower a [metal_kernel] class method to MSL text. On any error the return is "" and `errors`
 //! explains; `census` collects the construct kinds emitted (gate B).
@@ -3819,7 +3655,8 @@ def public generate_msl(fn : FunctionPtr; var errors : array<string>; cfg : MslE
         let m = ctx.members[name]
         if (m.sptr) {
             if (empty(m.sptr_space)) {
-                err(ctx, fn.at, "pointer member `{name}` is never assigned from a kernel buffer - its address space cannot be resolved")
+                shader_error(ctx, fn.at, "pointer member `{name}` is never assigned from a " +
+                    "kernel buffer - its address space cannot be resolved")
                 continue
             }
             note(ctx, "decl.state.ptr")
@@ -3849,7 +3686,8 @@ def public generate_msl(fn : FunctionPtr; var errors : array<string>; cfg : MslE
         let m = ctx.members[name]
         if (m.uniform) {
             if (m.written) {
-                err(ctx, fn.at, "@uniform member `{name}` is written - uniforms are read-only; outputs are @ssbo buffers")
+                shader_error(ctx, fn.at, "@uniform member `{name}` is written - uniforms are " +
+                    "read-only; outputs are @ssbo buffers")
                 continue
             }
             note(ctx, m.packed ? "param.uniform_packed" : "param.uniform")
@@ -3892,10 +3730,10 @@ def public generate_msl(fn : FunctionPtr; var errors : array<string>; cfg : MslE
         cts |> sort()   // pinned order, same reason
         helper_text = join(cts, "\n") + "\n" + helper_text
     }
-    if (!empty(ctx.ustructs)) {
+    if (!empty(ctx.arg_structs)) {
         // @uniform struct definitions come first — the kernel signature names them.
         // Sorted: table order is hash-based
-        var us <- [for (v in values(ctx.ustructs)); v]
+        var us <- [for (v in values(ctx.arg_structs)); v]
         us |> sort()
         note(ctx, "decl.uniform_struct")
         helper_text = join(us, "\n") + "\n" + helper_text
