@@ -398,7 +398,7 @@ namespace das {
             "builtIn", "promoted", "isPublic", "isModule", "isSolidContext",
             "fromExtraDependency", "doNotAllowUnsafe",
             "wasParsedNameless", "visibleEverywhere", "allowPodInscope",
-            "neverInline"
+            "neverInline", "fromModuleCache"
         };
         return ft;
     }
