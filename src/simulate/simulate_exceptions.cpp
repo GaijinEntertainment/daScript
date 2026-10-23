@@ -224,6 +224,7 @@ namespace das {
     vec4f WIN_EH_NO_ASAN SimNode_TryCatch::eval ( Context & context ) {
         DAS_PROFILE_NODE
         auto aa = context.abiArg; auto acm = context.abiCMRES; auto fcd = context.fastCallDepth;
+        auto atba = context.abiThisBlockArg;
         char * EP, * SP;
         context.stack.watermark(EP,SP);
         #if DAS_ENABLE_EXCEPTIONS
@@ -232,6 +233,7 @@ namespace das {
             } catch ( const dasException & ) {
                 context.abiArg = aa;
                 context.abiCMRES = acm;
+                context.abiThisBlockArg = atba;
                 context.fastCallDepth = fcd;
                 context.stack.pop(EP,SP);
                 context.stopFlags = 0;
@@ -249,6 +251,7 @@ namespace das {
                 context.throwBuf = JB;
                 context.abiArg = aa;
                 context.abiCMRES = acm;
+                context.abiThisBlockArg = atba;
                 context.fastCallDepth = fcd;
                 context.stack.pop(EP,SP);
                 context.stopFlags = 0;
@@ -265,6 +268,7 @@ namespace das {
     vec4f WIN_EH_NO_ASAN SimNodeDebug_TryCatch::eval ( Context & context ) {
         DAS_PROFILE_NODE
         auto aa = context.abiArg; auto acm = context.abiCMRES; auto fcd = context.fastCallDepth;
+        auto atba = context.abiThisBlockArg;
         char * EP, * SP;
         context.stack.watermark(EP,SP);
         #if DAS_ENABLE_EXCEPTIONS
@@ -274,6 +278,7 @@ namespace das {
             } catch ( const dasException & ) {
                 context.abiArg = aa;
                 context.abiCMRES = acm;
+                context.abiThisBlockArg = atba;
                 context.fastCallDepth = fcd;
                 context.stack.pop(EP,SP);
                 context.stopFlags = 0;
@@ -293,6 +298,7 @@ namespace das {
                 context.throwBuf = JB;
                 context.abiArg = aa;
                 context.abiCMRES = acm;
+                context.abiThisBlockArg = atba;
                 context.fastCallDepth = fcd;
                 context.stack.pop(EP,SP);
                 context.stopFlags = 0;
