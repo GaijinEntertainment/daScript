@@ -615,7 +615,7 @@ def test_vkt_tower_vision_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate
                 var s_pool = cp |> cls_set(fixed_array(gxp, poolp), @@set_tower_pool_2d_cls)
                 var s_aff = cp |> cls_set(fixed_array(ax_std_p, bp, mp), @@set_tower_affine_rows_cls)
                 var s_aff0 = cp |> cls_set(fixed_array(ax_scale_p, bp, mp), @@set_tower_affine_rows_cls)
-                var pa_im = GkPatchIm2colArgs(w = uint(VR_W), h = uint(VR_H), p = uint(VR_P), row_dim = uint(VR_PD), npos = uint(npos),
+                var pa_im = GkPatchIm2colArgs(w = uint(VR_W), p = uint(VR_P), row_dim = uint(VR_PD), npos = uint(npos),
                     total = uint(npos_pad * VR_PD), scale = 2.0, shift = -1.0)
                 var pa_pos = GkPosAdd2DArgs(dim = uint(d), ncols = uint(VR_PW), pos_entries = uint(VR_POS_ENTRIES), total = uint(nd), tboff = 0u)
                 var pa_asm = GkStemAsmArgs(dim = uint(d), pw = uint(VR_PW), total = uint(nd), boff = 0u, poff = 0u)

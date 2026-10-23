@@ -1,42 +1,21 @@
 options gen2
 options indenting = 4
 
-// daslang TypeDecl -> MSL type name. Covers the 32-bit scalars + their 2/3/4 vectors and the
-// 16/8-bit lattice (MSL has native half/short/ushort/char/uchar), classified via the shared
-// shader_block_layout rails. 8/16-lane lattice forms are CPU-only by design (shader vectors cap
-// at 4 lanes) — callers key their dedicated fail-closed diagnostic on cpu_only_lattice_width.
+// The MSL side of the type rail: the spellings are
+// `daslib/shader_emit_common`'s (the 32-bit scalars, their 2/3/4
+// vectors and the 16/8-bit lattice are MSL's own
+// half/short/ushort/char/uchar); here the two layout units MSL adds -
+// threadgroup elements at the plain stride and buffer elements at the
+// packed one. 8/16-lane lattice forms are CPU-only by design (shader
+// vectors cap at 4 lanes) — callers key their dedicated
+// fail-closed diagnostic on cpu_only_lattice_width.
 
 module msl_types shared public
 
 require daslib/ast
 require daslib/rtti
 require daslib/shader_block_layout public
-
-//! MSL spelling of a daslang type, or "" when the type has no supported MSL form.
-def public msl_type_name(t : TypeDecl?) : string {
-    if (t == null) {
-        return ""
-    }
-    let bt = t.baseType
-    if (bt == Type.tBool) {
-        return "bool"
-    }
-    let cls = scalar_class(bt)
-    if (cls < 0) {
-        return ""
-    }
-    let w = scalar_width(bt)
-    var base = ""
-    if (cls == 2) {
-        base = w == 32 ? "float" : "half"
-    } elif (cls == 0) {
-        base = w == 32 ? "int" : (w == 16 ? "short" : "char")
-    } else {
-        base = w == 32 ? "uint" : (w == 16 ? "ushort" : "uchar")
-    }
-    let cc = component_count(bt)
-    return cc > 1 ? "{base}{cc}" : base
-}
+require daslib/shader_emit_common public
 
 //! MSL byte size of a THREADGROUP-resident element — the dynamic-shmem layout unit. Unlike the
 //! packed buffer path, threadgroup memory uses MSL's plain (non-packed) spellings, so 3-lane
@@ -61,7 +40,7 @@ def public msl_tg_elem_bytes(t : TypeDecl?) : uint64 {
 //! elements must take MSL's packed_T3 spelling (identical bytes to das). 1/2/4-lane sizes match
 //! the plain spelling already.
 def public msl_buffer_elem_name(t : TypeDecl?) : string {
-    let plain = msl_type_name(t)
+    let plain = shader_type_name(t)
     if (empty(plain)) {
         return ""
     }

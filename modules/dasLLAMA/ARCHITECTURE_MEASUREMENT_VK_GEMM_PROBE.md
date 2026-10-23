@@ -69,8 +69,7 @@ is the 512-expert carrier's row: the gate/up shape (d 640, K 2560) and the down 
 Qwen3.8-Flash-Next reads at its median layer (479 of 512 experts touched; the touched experts'
 rows by rank decile 643, 148, 102, 73, 50, 38, 24, 16, 9, 4, 1) - the per-layer expert pass a
 layer-major prompt would run on the device, which the three stamps' figures sum to; a per-32
-format (the carrier's `iq4nl32` down stacks) runs the whole-bucket form alone, its one cm2 stamp
-being the s column. Each
+format (the carrier's `iq4nl32` down stacks) runs the whole-bucket form alone on the s column. Each
 profile runs two schedule forms and their alternates in one process: the whole buckets at the s
 column, and the ladder, where a bucket past 32 rows takes whole 128-row columns on the e stamp
 with the last one partial and a remainder of at most 32 rows past them takes the s column; the
@@ -131,7 +130,7 @@ the next dispatch finds its code, descriptors and planes out of every cache - th
 window chain streams between two uses of one stamp; the flush writes the feed's region, so the
 stamp after it waits on the flush and the next flush waits on the stamp.
 
-Two arms race the KHR staged tile (`ARCHITECTURE_GPU_VULKAN_KHR.md#khr-mm-kq-tile`) against what a
+Two arms race the KHR staged tile (`ARCHITECTURE_GPU_SHARED_GEMM.md#khr-mm-kq-tile`) against what a
 cm2 card serves in its place, each form whole over the same planes, sixteen dispatches over two
 alternating outputs, the arms in turn inside each round. `kqst:<fmt>` puts a K-quant format's cm2
 l, m and s stamps, on the decode arm the device runs, beside the staged tile at gemma-4 E2B's role

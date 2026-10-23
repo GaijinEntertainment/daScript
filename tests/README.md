@@ -6,6 +6,8 @@ Every `.das` file in this directory tree is listed below, grouped by subdirector
 
 **Files a test writes:** the extended checks run the daslang sweep and the daslang_static sweep in one parallel group on one tree, so two runs of the same test file can overlap. A test writes only under `test_temp_dir()` (`dastest/testing_boost`), a directory private to its run and removed when the run ends, or under its own `create_temp_directory` (`daslib/fio`). `REVIEW.das` (this folder) is the gate: it finds a write call in a test file - fio's file and directory calls, a writing `fopen`, `stbi_write_*`, an image `save` - whose path is built from `get_das_root()` directly, through a helper that returns such a path, or through a variable or field bound to one, and a writing `fopen` of a relative literal path. A call to any other function hands back its own value, whatever its arguments name. It reads the files dastest runs as tests (no `_`-prefixed file or directory on the path); `--root <dir>` points it at another folder, which `dastest/test_tests_review_gate.das` uses to run it over `dastest/_tests_gate_fixture/`. One test names a path under the tree on purpose: `jit_tests/dll_cache.das` checks the default JIT DLL cache, which content-addresses and cleans its DLLs only at its default home, `.cache/daslang/<namespace>/` - a pinned `jit_output_path` turns both off. Its probe script sits under `test_temp_dir()`, so the namespace (a hash of the script's path) is private to the run, and the test removes that directory when it ends.
 
+**What `test_aot` compiles:** every file not marked `options no_aot` that an `AOT_*_FILES` variable of `tests/aot/CMakeLists.txt` holds after its filters; a folder `tests/<name>/` that `DAS_AOT_SUITES` lists is globbed whole only where no variable already covers it. Per-PR CI builds only the subset binary (`test_aot_subset`, `tests/language` alone); the full `test_aot` runs nightly and under `preflight --full`.
+
 **Naming convention for expected-failure tests:** Files that are expected to *fail compilation* use one of three filename prefixes: `failed_`, `cant_`, or `invalid_`. Tools that need to skip files with no compilable AST (e.g. `--ser` serialization passes) should filter on these three prefixes.
 
 ## live_host/
@@ -949,6 +951,19 @@ Coverage of per-iteration `finally` semantics across every loop form. Each cell 
 | test_metal_sgmat.das | simdgroup_matrix tile ops GPU vs CPU twins - bit-exact on exact-int values | |
 | test_metal_sgmat_tiled.das | Tiled sgmat GEMM (threadgroup staging + barriers) vs CPU reference | |
 | test_metal_simd.das | simd_sum/shuffle intrinsics under uniform flow - kernel reports width/lane/sgid (M1 width 32) | |
+
+## cuda/
+
+> dasCUDA's text emitter and host gate. Every file compiles on every lane; the GPU arms feint where no NVIDIA driver, NVRTC or device is.
+
+| File | Description | Expects errors |
+|---|---|---|
+| _cuda_common.das | *(helper)* Shared fixtures - the kernel classes every suite emits, CPU-runs and launches, plus the declared census | |
+| test_cuda_plumbing.das | Host gate - driver and NVRTC, the cubin cache, a hand-written kernel launched with the struct-of-pointers parameter blob, graphs, the boost's refusals and panics, the leak gate | |
+| test_cuda_emit.das | Emitted text shape of every construct family on the fixtures, plus every fixture's text through NVRTC for the card present | |
+| test_cuda_census.das | Census gate - union of construct kinds the emitter records across every fixture == `declared_cuda_census`, both directions | |
+| test_cuda_oracle.das | Behavioral gate - each fixture method on the CPU vs its emitted text on the GPU; ints bit-exact, floats under the fastmath tolerance | |
+| test_cuda_reject.das | Rejection gate - kernel classes compiled at run time from source text the emitter must refuse, the refusal text asserted | |
 
 ## network/
 

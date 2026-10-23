@@ -12,6 +12,7 @@ require daslib/rtti
 require strings
 require daslib/strings_boost   // split / strip — the grid & params micro-format tokenizers
 require dasllama_kernel_access   // the shared body-walk classifier (field mode) — access is DERIVED
+require dasllama_dispatch_scan
 
 // The dasLLAMA Vulkan kernel-dispatch lens ([metal_dispatch]'s sibling). [vk_dispatch] reads a
 // [spirv_kernel] class's member annotations and generates the class's dispatch surface over the
@@ -23,19 +24,9 @@ require dasllama_kernel_access   // the shared body-walk classifier (field mode)
 // @role is a cross-checked assertion, weight/alias stay declared. The hazard rail is untouched:
 // the class pipeline registers binding masks, sets carry per-binding region bits.
 
-struct private VkBufField {
-    name : string
-    binding : int
-    role : string
-}
-
-def private mk_alias_t(at : LineInfo; nm : string; is_const : bool) : TypeDeclPtr {
-    var t = new TypeDecl(at = at, baseType = Type.alias, alias := nm)
-    t.flags.constant = is_const
-    return t
-}
-
-def private mk_gvar(at : LineInfo; nm : string) : ExpressionPtr => new ExprVar(at = at, name := nm)
+let private VK_WORDS = LensWords(lens = "[vk_dispatch]", kernel = "spirv_kernel", grid_note = " (vkCmdDispatch x,1,1)",
+    uniform_note = "UBO members are not lensed yet; params ride the @push_constant struct",
+    args_many = "more than one @push_constant member", args_word = "@push_constant")
 
 //! the captured blob global of a [spirv_kernel] method: its `name =` argument, else `<method>`spirv`
 def private spirv_blob_of(kfn : Function?) : string {
@@ -48,7 +39,7 @@ def private spirv_blob_of(kfn : Function?) : string {
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-readonly-lens")]
-def private family_write_mask(st : StructurePtr; mod : Module?; bufs : array<VkBufField>; tracked : table<string>) : uint {
+def private family_write_mask(st : StructurePtr; mod : Module?; bufs : array<LensBuf>; tracked : table<string>) : uint {
     var wmask = 0u
     mod |> for_each_function("") $(fn) {
         if (!empty(fn.arguments) && fn.arguments[0]._type.structType == st) {
@@ -95,36 +86,6 @@ def private stamp_readonly(var st : StructurePtr; base : string; write_mask : ui
     return true
 }
 
-def private mk_ret_bool(at : LineInfo; v : bool) : ExpressionPtr =>
-    new ExprReturn(at = at, subexpr = new ExprConstBool(at = at, value = v))
-
-def private mk_if_ret(at : LineInfo; var cond : Expression?; ret_val : bool) : ExpressionPtr {
-    var blk <- [mk_ret_bool(at, ret_val)]
-    return new ExprIfThenElse(at = at, cond = cond, if_true = make_expression_block(blk))
-}
-
-def private mk_if_do(at : LineInfo; var cond : Expression?; var stmt : Expression?) : ExpressionPtr {
-    var blk <- [unsafe(reinterpret<ExpressionPtr>(stmt))]
-    return new ExprIfThenElse(at = at, cond = cond, if_true = make_expression_block(blk))
-}
-
-def private mk_not(at : LineInfo; var e : Expression?) : ExpressionPtr =>
-    new ExprOp1(at = at, op := "!", subexpr = e)
-
-def private access_fail(var errors : das_string; msg : string; var res : AccessResult; var tracked : table<string>) : bool {
-    errors := msg
-    delete res
-    delete tracked
-    return false
-}
-
-def private add_generated(at : LineInfo; name : string; var result : TypeDeclPtr; var body : array<ExpressionPtr>; decorate : block<(var fn : Function?) : void>) : bool {
-    var fn = new Function(at = at, atDecl = at, name := name, flags = FunctionFlags.generated, result = result)
-    invoke(decorate, fn)
-    fn.body = make_expression_block(body)
-    fn.body |> force_at(at)
-    return compiling_module() |> add_function(fn)
-}
 
 [structure_macro(name = vk_dispatch)]
 class VkDispatch : AstStructureAnnotation {
@@ -134,207 +95,39 @@ class VkDispatch : AstStructureAnnotation {
     fam_count : table<string; int>   // "{module}`{family}" -> next ordinal
     seen_ord : table<string; int>    // "{module}`{name}" -> assigned ordinal
 
-    def override apply(var st : StructurePtr; var group : ModuleGroup; var args : AnnotationArgumentList; var errors : das_string) : bool {   // nolint:STYLE037,STYLE038 — flat per-argument validation + emit table
+    def override apply(var st : StructurePtr; var group : ModuleGroup; var args : AnnotationArgumentList; var errors : das_string) : bool {   // nolint:STYLE038 — flat emit table
         let at = st.at
-        let base = find_arg(args, "name") ?as tString ?? ""
-        let grid = find_arg(args, "grid") ?as tString ?? ""
-        if (empty(base)) {
-            errors := "[vk_dispatch]: 'name' (the generated surface's base name) is required"
-            return false
-        }
-        // multi-kernel form: N [vk_dispatch] instances on one class, each passing kernel= (its
-        // [spirv_kernel] method) + the shared family= (the ensure_/set_ surface); instance N's
-        // pipe slot = its arrival order within the family
-        let kern = find_arg(args, "kernel") ?as tString ?? ""
-        let famArg = find_arg(args, "family") ?as tString ?? ""
-        let family = empty(famArg) ? base : famArg
-        let multi = !empty(kern)
-        if (!multi && !empty(famArg)) {
-            errors := "[vk_dispatch] {base}: family= without kernel= - a family instance must name its [spirv_kernel] method"
-            return false
-        }
+        var scan <- lens_scan(st, args, VK_WORDS, fam_count, seen_ord, errors)
+        return false if (!scan.ok)
         // census/override display name: the vk_dispatch name= ("<base>_spv"), not the blob
         // global's mangled default — templated instances drop [spirv_kernel] name=, and a
         // backticked "{Class}`run`spirv" makes the SPV-override filename unusable
-        let disp_name = "{base}_spv"
-        let mname = "{compiling_module().name}"
-        let bkey = "{mname}`{base}"
-        let fkey = "{mname}`{family}"
-        var ord = 0
-        if (key_exists(seen_ord, bkey)) {
-            ord = seen_ord[bkey]
-        } else {
-            if (key_exists(fam_count, fkey)) {
-                ord = fam_count[fkey]
-            }
-            seen_ord[bkey] = ord
-            fam_count[fkey] = ord + 1
-        }
-        if (empty(grid)) {
-            errors := "[vk_dispatch] {base}: 'grid' is required (1D: int | param | param/coverage)"
-            return false
-        }
-        if (find(grid, ",") >= 0) {
-            errors := "[vk_dispatch] {base}: grid '{grid}' - only a 1D grid is supported (vkCmdDispatch x,1,1)"
-            return false
-        }
-        let dparts <- split(grid, "/")
-        if (length(dparts) > 2) {
-            errors := "[vk_dispatch] {base}: grid '{strip(grid)}' has more than one '/' (int | param | param/coverage)"
+        let disp_name = "{scan.base}_spv"
+        let nb = length(scan.blist)   // the set builder's arity: one buffer/size/bits entry per declared binding
+        if (scan.blist[nb - 1] > 11) {
+            errors := "[vk_dispatch] {scan.base}: binding {scan.blist[nb - 1]} - the hazard rail's SetBits caps at binding 11"
             return false
         }
 
-        kargs_as(st, "push_constant")
-        // Collect @ssbo members (binding order; same-binding VIEWS legal — access unions into the
-        // slot) + the single @push_constant params struct. @workgroup/@private_global/methods skip.
-        var bufs : array<VkBufField>
-        var push_t : TypeDeclPtr
-        var push_fields = 0
-        var wg_bytes = 0   // @workgroup footprint — ensure_ gates it against the device cap
-        for (field in st.fields) {
-            var is_ssbo = false
-            var is_push = false
-            var is_wg = false
-            for (annDecl in field.annotation) {
-                if (annDecl.name == "ssbo") {
-                    is_ssbo = true
-                } elif (annDecl.name == "push_constant") {
-                    is_push = true
-                } elif (annDecl.name == "workgroup") {
-                    is_wg = true
-                } elif (annDecl.name == "uniform") {
-                    errors := "[vk_dispatch] {base}: member '{field.name}' is @uniform - UBO members are not lensed yet; params ride the @push_constant struct"
-                    return false
-                }
-            }
-            if (is_wg) {
-                wg_bytes += field._type.sizeOf
-                continue
-            }
-            if (is_push) {
-                if (push_t != null) {
-                    errors := "[vk_dispatch] {base}: more than one @push_constant member"
-                    return false
-                }
-                if (field._type == null || field._type.baseType != Type.tStructure || field._type.structType == null) {
-                    errors := "[vk_dispatch] {base}: @push_constant member '{field.name}' must be a struct"
-                    return false
-                }
-                for (pf in field._type.structType.fields) {
-                    let bt = pf._type != null ? pf._type.baseType : Type.none
-                    if (bt != Type.tInt && bt != Type.tUInt && bt != Type.tFloat) {
-                        errors := "[vk_dispatch] {base}: @push_constant field '{pf.name}' must be a 4-byte scalar (int/uint/float)"
-                        return false
-                    }
-                    push_fields++
-                }
-                push_t = clone_type(unsafe(reinterpret<TypeDeclPtr>(field._type)))
-                continue
-            }
-            if (!is_ssbo) {
-                continue
-            }
-            let binding = find_arg(field.annotation, "binding") ?as tInt ?? -1
-            if (binding < 0) {
-                errors := "[vk_dispatch] {base}: @ssbo member '{field.name}' has no @binding"
-                return false
-            }
-            let role = find_arg(field.annotation, "role") ?as tString ?? ""
-            if (!role_ok(role)) {
-                errors := "[vk_dispatch] {base}: member '{field.name}' has unknown @role '{role}' (read/write/readwrite/weight/alias)"
-                return false
-            }
-            bufs |> push(VkBufField(name = "{field.name}", binding = binding, role = role))
-        }
-        if (empty(bufs)) {
-            errors := "[vk_dispatch] {base}: no @ssbo members to bind"
-            return false
-        }
-        // the class's distinct bindings, ascending (gaps legal — the layout lists exactly these;
-        // same-binding views collapse to one slot)
-        var covered : table<int>
-        var blist : array<int>
-        for (bf in bufs) {
-            if (!key_exists(covered, bf.binding)) {
-                covered |> insert(bf.binding)
-                blist |> push(bf.binding)
-            }
-        }
-        sort(blist)
-        if (blist[length(blist) - 1] > 11) {
-            errors := "[vk_dispatch] {base}: binding {blist[length(blist) - 1]} - the hazard rail's SetBits caps at binding 11"
-            return false
-        }
-        let nb = length(blist)   // the set builder's arity: one buffer/size/bits entry per declared binding
-
-        // the kernel method + derived access -> per-binding read/write masks
-        var nmatch = 0
-        let kfn = find_kernel_fn(st, compiling_module(), "spirv_kernel", kern, nmatch)
-        if (empty(kern)) {
-            if (kfn == null || nmatch != 1) {
-                errors := "[vk_dispatch] {base}: expected exactly one [spirv_kernel] method on {st.name} (found {nmatch}) - multi-kernel classes pick per instance via kernel="
-                return false
-            }
-        } elif (kfn == null) {
-            errors := "[vk_dispatch] {base}: no [spirv_kernel] method '{kern}' on {st.name}"
-            return false
-        } elif (nmatch != 1) {
-            errors := "[vk_dispatch] {base}: kernel='{kern}' names {nmatch} [spirv_kernel] methods on {st.name} - a prefix picks exactly one"
-            return false
-        }
-        var tracked : table<string>
-        for (bf in bufs) {
-            tracked |> insert(bf.name)
-        }
-        var res <- classify_field_access(kfn, compiling_module(), st, tracked)
-        if (!empty(res.err)) {
-            return access_fail(errors, "[vk_dispatch] {base}: {res.err}", res, tracked)
-        }
-        var rmask = 0u
-        var wmask = 0u
-        for (bf in bufs) {
-            let dr = derived_role(res, bf.name)
-            let decl = bf.role
-            if (decl == "weight") {
-                if (key_exists(res.writes, bf.name)) {
-                    return access_fail(errors, "[vk_dispatch] {base}: member '{bf.name}' declares @role='weight' but the kernel body writes it", res, tracked)
-                }
-            } elif (multi) {
-                // per-kernel view of shared members: unused-here is fine (a sibling kernel uses
-                // it), and the declared role must COVER this kernel's derived access
-                let cov = (empty(dr) || decl == "" || decl == "alias" || decl == dr
-                    || (decl == "readwrite" && (dr == "read" || dr == "write")))
-                if (!cov) {
-                    return access_fail(errors, "[vk_dispatch] {base}: member '{bf.name}' declares @role='{decl}' but kernel '{kern}' derives '{dr}' - the declared role must cover every kernel", res, tracked)
-                }
-            } elif (decl != "" && decl != "alias" && decl != dr) {
-                let drName = empty(dr) ? "unused" : dr
-                return access_fail(errors, "[vk_dispatch] {base}: member '{bf.name}' declares @role='{decl}' but the body derives '{drName}' - fix whichever is wrong", res, tracked)
-            } elif (decl == "" && empty(dr)) {
-                return access_fail(errors, "[vk_dispatch] {base}: @ssbo member '{bf.name}' is never accessed by the kernel body - declare @role (weight/alias) or drop the binding", res, tracked)
-            }
-            let bit = 1u << uint(bf.binding)
-            if (key_exists(res.reads, bf.name)) {
-                rmask |= bit
-            }
-            if (key_exists(res.writes, bf.name)) {
-                wmask |= bit
-            }
-        }
-        delete res
-        let write_mask = family_write_mask(st, compiling_module(), bufs, tracked)
+        let acc = lens_access(st, scan, VK_WORDS, errors)
+        return false if (acc.kfn == null)
+        let kfn = acc.kfn
+        let rmask = acc.rmask
+        let wmask = acc.wmask
+        var tracked <- lens_tracked(scan)
+        let write_mask = family_write_mask(st, compiling_module(), scan.bufs, tracked)
         delete tracked
-        if (!stamp_readonly(st, base, write_mask, errors)) {
+        if (!stamp_readonly(st, scan.base, write_mask, errors)) {
             return false
         }
 
         // ===== the generated surface =====
         // one VkdClass global + one set builder per FAMILY (ordinal 0 generates them); every
         // instance generates its own ensure_<base> (lazy pipe slot) + enc_<base>
-        let gname = "{family}`vkd"
-        if (ord == 0) {
+        let gname = "{scan.family}`vkd"
+        if (scan.ord == 0) {
             if (!add_global_var(compiling_module(), gname, mk_alias_t(at, "VkdClass", false), at, false)) {
-                errors := "[vk_dispatch] {base}: can't add class-state global {gname}"
+                errors := "[vk_dispatch] {scan.base}: can't add class-state global {gname}"
                 return false
             }
         }
@@ -345,7 +138,7 @@ class VkDispatch : AstStructureAnnotation {
             // to_array_move, the spirv_shader capture shape)
             var mkArr = new ExprMakeArray(at = at, makeType = new TypeDecl(at = at, baseType = Type.tInt))
             mkArr.gen2 = true
-            for (bind in blist) {
+            for (bind in scan.blist) {
                 mkArr.values |> emplace_new <| new ExprConstInt(at = at, value = bind)
             }
             var bl = new ExprCall(at = at, name := "to_array_move")
@@ -353,32 +146,32 @@ class VkDispatch : AstStructureAnnotation {
             var ci = new ExprCall(at = at, name := "vkd_class_init")
             ci.arguments |> emplace_new <| mk_gvar(at, gname)
             ci.arguments |> emplace_new <| bl
-            ci.arguments |> emplace_new <| new ExprConstInt(at = at, value = push_fields * 4)
+            ci.arguments |> emplace_new <| new ExprConstInt(at = at, value = scan.args_fields * 4)
             var cp = new ExprCall(at = at, name := "vkd_class_pipe")
             cp.arguments |> emplace_new <| mk_gvar(at, gname)
-            cp.arguments |> emplace_new <| new ExprConstInt(at = at, value = ord)
+            cp.arguments |> emplace_new <| new ExprConstInt(at = at, value = scan.ord)
             cp.arguments |> emplace_new <| mk_gvar(at, spirv_blob_of(kfn))
             cp.arguments |> emplace_new <| new ExprConstUInt(at = at, value = rmask)
             cp.arguments |> emplace_new <| new ExprConstUInt(at = at, value = wmask)
             cp.arguments |> emplace_new <| new ExprConstString(at = at, value := disp_name)
             var pm = new ExprCall(at = at, name := "vkd_pipe_made")
             pm.arguments |> emplace_new <| mk_gvar(at, gname)
-            pm.arguments |> emplace_new <| new ExprConstInt(at = at, value = ord)
+            pm.arguments |> emplace_new <| new ExprConstInt(at = at, value = scan.ord)
             var body : array<ExpressionPtr>
             body |> push(mk_if_ret(at, mk_not(at, new ExprCall(at = at, name := "vk_moe_init")), false))
-            if (wg_bytes > 0) {
+            if (scan.wg_bytes > 0) {
                 // over-cap classes decline by name BEFORE the pipeline build (MoltenVK's 32 KB
                 // threadgroup cap fails the COMPILE otherwise — an opaque INITIALIZATION_FAILED)
                 var wf = new ExprCall(at = at, name := "vkd_wg_fits")
-                wf.arguments |> emplace_new <| new ExprConstInt(at = at, value = wg_bytes)
-                wf.arguments |> emplace_new <| new ExprConstString(at = at, value := base)
+                wf.arguments |> emplace_new <| new ExprConstInt(at = at, value = scan.wg_bytes)
+                wf.arguments |> emplace_new <| new ExprConstString(at = at, value := scan.base)
                 body |> push(mk_if_ret(at, mk_not(at, wf), false))
             }
             body |> push(mk_if_do(at, mk_not(at, new ExprField(at = at, value = mk_gvar(at, gname), name := "ready")), ci))
             body |> push(mk_if_do(at, mk_not(at, pm), cp))
             body |> push(mk_ret_bool(at, true))
-            if (!add_generated(at, "ensure_{base}", new TypeDecl(at = at, baseType = Type.tBool), body) $(var _fn : Function?) {}) {
-                errors := "[vk_dispatch] {base}: failed to add ensure_{base}"
+            if (!add_generated(at, "ensure_{scan.base}", new TypeDecl(at = at, baseType = Type.tBool), body) $(var _fn : Function?) {}) {
+                errors := "[vk_dispatch] {scan.base}: failed to add ensure_{scan.base}"
                 return false
             }
         }
@@ -391,21 +184,21 @@ class VkDispatch : AstStructureAnnotation {
             cs.arguments |> emplace_new <| new ExprConstUInt(at = at, value = rmask)
             cs.arguments |> emplace_new <| new ExprConstUInt(at = at, value = wmask)
             var body <- array<ExpressionPtr>(cs)
-            if (!add_generated(at, "{base}`census", new TypeDecl(at = at, baseType = Type.tVoid), body) $(var fn : Function?) {
+            if (!add_generated(at, "{scan.base}`census", new TypeDecl(at = at, baseType = Type.tVoid), body) $(var fn : Function?) {
                     fn.flags.init = true
                     fn.flags.privateFunction = true
                 }) {
-                errors := "[vk_dispatch] {base}: failed to add the census [init]"
+                errors := "[vk_dispatch] {scan.base}: failed to add the census [init]"
                 return false
             }
         }
 
         // set_<family>(bufs, sizes, gbits) : VkDescriptorSet — a set over the FAMILY layout
-        if (ord == 0) {
+        if (scan.ord == 0) {
             var body : array<ExpressionPtr>
             var ws = new ExprCall(at = at, name := "vkd_cached_set")   //! the family's name rides along, so a set asked before the class's ensure names its class
             ws.arguments |> emplace_new <| mk_gvar(at, gname)
-            ws.arguments |> emplace_new <| new ExprConstString(at = at, value := family)
+            ws.arguments |> emplace_new <| new ExprConstString(at = at, value := scan.family)
             ws.arguments |> emplace_new <| mk_gvar(at, "bufs")
             ws.arguments |> emplace_new <| mk_gvar(at, "sizes")
             ws.arguments |> emplace_new <| mk_gvar(at, "gbits")
@@ -416,12 +209,12 @@ class VkDispatch : AstStructureAnnotation {
             sizes_t.flags.constant = true
             var gbits_t = make_fixed_array_type(nb, new TypeDecl(at = at, baseType = Type.tUInt))
             gbits_t.flags.constant = true
-            if (!add_generated(at, "set_{family}", mk_alias_t(at, "VkDescriptorSet", false), body) $(var fn : Function?) {
+            if (!add_generated(at, "set_{scan.family}", mk_alias_t(at, "VkDescriptorSet", false), body) $(var fn : Function?) {
                     fn.arguments |> emplace_new <| new Variable(at = at, name := "bufs", _type = bufs_t)
                     fn.arguments |> emplace_new <| new Variable(at = at, name := "sizes", _type = sizes_t)
                     fn.arguments |> emplace_new <| new Variable(at = at, name := "gbits", _type = gbits_t)
                 }) {
-                errors := "[vk_dispatch] {base}: failed to add set_{family}"
+                errors := "[vk_dispatch] {scan.base}: failed to add set_{scan.family}"
                 return false
             }
         }
@@ -429,7 +222,7 @@ class VkDispatch : AstStructureAnnotation {
         // enc_<base>(raw, h, set_, pc, params...) — push + hazard dispatch
         {
             var body : array<ExpressionPtr>
-            if (push_t != null) {
+            if (scan.args_t != null) {
                 var pp = new ExprCall(at = at, name := "vkd_push")
                 pp.arguments |> emplace_new <| mk_gvar(at, "raw")
                 pp.arguments |> emplace_new <| mk_gvar(at, gname)
@@ -441,64 +234,25 @@ class VkDispatch : AstStructureAnnotation {
             dp.arguments |> emplace_new <| mk_gvar(at, "h")
             dp.arguments |> emplace_new <| mk_gvar(at, gname)
             dp.arguments |> emplace_new <| mk_gvar(at, "set_")
-            dp.arguments |> emplace_new <| new ExprConstInt(at = at, value = ord)
-            dp.arguments |> emplace_new <| mk_grid_dim(at, grid)
+            dp.arguments |> emplace_new <| new ExprConstInt(at = at, value = scan.ord)
+            dp.arguments |> emplace_new <| mk_grid_dim(at, scan.grid)
             body |> push(dp)
-            var fn = new Function(at = at, atDecl = at, name := "enc_{base}",
+            var fn = new Function(at = at, atDecl = at, name := "enc_{scan.base}",
                 flags = FunctionFlags.generated,
                 result = new TypeDecl(at = at, baseType = Type.tVoid))
             fn.arguments |> emplace_new <| new Variable(at = at, name := "raw", _type = mk_alias_t(at, "VkCommandBuffer", true))
             var ht = mk_alias_t(at, "VkHaz", false)
             fn.arguments |> emplace_new <| new Variable(at = at, name := "h", _type = ht)
             fn.arguments |> emplace_new <| new Variable(at = at, name := "set_", _type = mk_alias_t(at, "VkDescriptorSet", false))
-            if (push_t != null) {
-                push_t.flags.ref = true
-                fn.arguments |> emplace_new <| new Variable(at = at, name := "pc", _type = push_t)
+            if (scan.args_t != null) {
+                scan.args_t.flags.ref = true
+                fn.arguments |> emplace_new <| new Variable(at = at, name := "pc", _type = scan.args_t)
             }
-            let params = find_arg(args, "params") ?as tString ?? ""
-            if (!empty(strip(params))) {
-                for (p in split(params, ",")) {
-                    var inscope nt <- split(p, ":")
-                    if (length(nt) != 2) {
-                        errors := "[vk_dispatch] {base}: param '{strip(p)}' must be 'name : type'"
-                        return false
-                    }
-                    var ok = true
-                    var pt = param_type(at, strip(nt[1]), ok)
-                    if (!ok) {
-                        errors := "[vk_dispatch] {base}: param '{strip(p)}' has unsupported type '{strip(nt[1])}' (int/uint/int64/uint64)"
-                        return false
-                    }
-                    pt.flags.constant = true
-                    fn.arguments |> emplace_new <| new Variable(at = at, name := "{strip(nt[0])}", _type = pt)
-                }
-            }
-            // the ceil-div grid builds with int64 literals and daslang has no promotion — any
-            // name a divide-form grid references must be an int64 param (bare single-name grids
-            // go through uint() and accept all four types)
-            if (find(grid, "/") >= 0) {
-                for (gtok in split(grid, "/")) {
-                    let gs = strip(gtok)
-                    if (is_digit_tok(gs)) {
-                        continue
-                    }
-                    var good = false
-                    for (p in split(params, ",")) {
-                        var inscope nt <- split(p, ":")
-                        if (length(nt) == 2 && strip(nt[0]) == gs && strip(nt[1]) == "int64") {
-                            good = true
-                        }
-                    }
-                    if (!good) {
-                        errors := "[vk_dispatch] {base}: grid '{grid}' references '{gs}', which must be declared an int64 param (the generated ceil-div math is int64)"
-                        return false
-                    }
-                }
-            }
+            return false if (!lens_params(fn, at, args, scan, VK_WORDS, errors))
             fn.body = make_expression_block(body)
             fn.body |> force_at(at)
             if (!(compiling_module() |> add_function(fn))) {
-                errors := "[vk_dispatch] {base}: failed to add enc_{base}"
+                errors := "[vk_dispatch] {scan.base}: failed to add enc_{scan.base}"
                 return false
             }
         }

@@ -347,8 +347,15 @@ void builtin_printw(char * utf8string) {
 #endif
 
 void builtin_printw(char * utf8string) {
+#if defined(__clang__) || defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
     std::wstring_convert<std::codecvt_utf8<wchar_t>> utf8_conv;
     auto outs = utf8_conv.from_bytes(utf8string);
+#if defined(__clang__) || defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif
 #if defined(_MSC_VER)
     _setmode(_fileno(stdout), _O_U8TEXT);
 #else

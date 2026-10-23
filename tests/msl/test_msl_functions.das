@@ -165,3 +165,17 @@ def test_msl_const_tables(t : T?) {
         t |> equal(count_in_consttab("constant uint tbl"), 3, "three distinct tables, none overwritten by a rename")
     }
 }
+
+[test]
+def test_msl_template_call(t : T?) {
+    t |> run("a [template] instance lowers and is called by its base name") <| @(t : T?) {
+        t |> success(find(tmpl_call_msl, "uint tf_scale(uint x)") >= 0,
+            "the instance is declared by its base name")
+        t |> success(find(tmpl_call_msl, "o[i] = tf_scale(i);") >= 0,
+            "the call names the base name")
+        t |> success(find(tmpl_call_msl, "0x") < 0, "no hashed name survives")
+        if (find(tmpl_call_msl, "0x") >= 0 || find(tmpl_call_msl, "uint tf_scale(uint x)") < 0) {
+            to_log(LOG_ERROR, "template call MSL:\n{tmpl_call_msl}\n")
+        }
+    }
+}

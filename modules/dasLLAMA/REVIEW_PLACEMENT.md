@@ -16,24 +16,25 @@ checklist's own.
 
 **A top-level declaration under `dasllama/` - a def, a class (a kernel class among them), a
 struct, an enum, a typedef, a module global (`let` or `var`, private or not), a named constant or
-a `require` - lands in the file whose charter line names its concern, or the diff adds the concern to the charter line of the file it lands in.
-Another file's charter naming the same kind of code does not license the landing.**
+a `require` - lands in the file whose charter line names its concern, or the diff adds the concern
+to the charter line of the file it lands in. Another file's charter naming the same kind of code
+does not license the landing.**
 
 **A landing in a file whose charter row carries a `must not hold` cell - the concerns that file
 never holds - naming the landed concern is a defect - land it where its concern is chartered, or
 change that charter row in the same change.**
 
-**A diff that lands, in one backend's file, a concern a two-file role row of
-`ARCHITECTURE_GPU.md#gpu-backends` scopes to the other backend ("on Vulkan ...", "Metal's ...",
+**A diff that lands, in one backend's file, a concern a role row of
+`ARCHITECTURE_GPU.md#gpu-backends` scopes to another backend ("on Vulkan ...", "Metal's ...",
 "on a build without das_metal" - the Vulkan file) is a defect - land it in the backend file the
-row names; a concern the row names without a backend lands in either.**
+row names; a concern the row names without a backend lands in any file of the row.**
 
 **A diff adding a new item of the sort a charter line's parenthetical lists (a model family, a
 weight format, a dispatch arm) lands it in that charter line's file, whether or not the
 parenthetical names it, and adds it to the parenthetical in the same change.**
 
-**Never add a charter line for a file outside `dasllama/` - that file answers to its own
-folder's checklist.**
+**Never add a charter line for a file outside `dasllama/` - state what it holds in its own
+folder's architecture doc or `CLAUDE.md` instead.**
 
 **The expression that computes a dispatch's workgroup counts from one coopmat form's tile shape,
 for a class whose family - every class stamped from one class template, directly or through a
@@ -47,9 +48,14 @@ state, lands in `dasllama/dasllama_vulkan_classes.das`; a stamp selector it is h
 naming the stamp, such as a variant ordinal - is one of those arguments.** A stamp is one class
 stamped from a kernel class template.
 
-**A Vulkan function that reads shape values alone for its result - a bool or a count - (a model's dims,
-row counts and formats - nothing read off a device) lands in `dasllama/dasllama_vulkan_classes.das`,
-whichever file calls it.**
+**A function that reads shape values alone for its result - a bool or a count over a model's
+dims, row counts and formats, nothing read off a device - that a `dasllama/dasllama_*vulkan*.das`
+file calls and no `dasllama/dasllama_*cuda*.das` file calls lands in
+`dasllama/dasllama_vulkan_classes.das`.**
+
+**A function that reads shape values alone for its result, called from both a
+`dasllama/dasllama_*vulkan*.das` file and a `dasllama/dasllama_*cuda*.das` file, lands in
+`dasllama/dasllama_gpu_math.das`.**
 
 **A Vulkan descriptor set's writer - a host-side ensure/set/encode chain whose pick reads driver
 state (`g_rd`, or an `RLayer` field read from a global or an argument), or a function that builds
@@ -64,13 +70,18 @@ function moves the chain with it.**
 **A HOST-side tensor format conversion lands in `dasllama/dasllama_convert.das`.**
 
 **A kernel-side helper - a free `def` outside any class that a kernel body calls - that one
-backend's kernels splice lands in that backend's kernel file (`dasllama/dasllama_metal_kernels.das`,
-`dasllama/dasllama_vulkan_classes.das`); one that both backends' kernels splice and that reads no
-codebook table lands once, never as a copy per backend: in
-`dasllama/dasllama_gpu_kernels_common.das` when it carries `[spirv_inline]`, in
-`dasllama/dasllama_gpu_math.das` otherwise.**
+home's kernels splice lands in that home's kernel file: `dasllama/dasllama_metal_kernels.das`,
+`dasllama/dasllama_vulkan_classes.das` or `dasllama/dasllama_cuda_classes.das`.**
 
-**A method of a class template both backends stamp lands with its template.**
+**A kernel-side helper that the Vulkan and the CUDA kernels splice and the Metal kernels do not
+lands once in `dasllama/dasllama_gpu_kernels_discrete.das` - never as a copy per home.**
+
+**A kernel-side helper that reads no codebook table and that the Metal kernels and a discrete
+home's kernels splice lands once - never as a copy per home - in
+`dasllama/dasllama_gpu_kernels_common.das` when it carries `[spirv_inline]`, and in
+`dasllama/dasllama_gpu_math.das` when it does not.**
+
+**A method of a class template more than one home stamps lands with its template.**
 
 **A disk-order -> compute-order transform lands by its consumer: a transform into the layout
 the CPU kernels read row by row in `dasllama/dasllama_repack.das`, a transform into the layout a
@@ -84,24 +95,31 @@ already-decoded f32 row is not a codec primitive.
 tokenizer's own file (`dasllama/dasllama_spm.das` / `dasllama/dasllama_bpe.das`).**
 
 **A GPU kernel body under `dasllama/` - the arithmetic loop a dispatch class (a class a
-`[metal_dispatch]` or `[vk_dispatch]` declares) picks one variant of - lands in its backend's
-kernel file, `dasllama/dasllama_metal_kernels.das` or `dasllama/dasllama_vulkan_classes.das`, where
-one backend stamps it, and as a `class template` in `dasllama/dasllama_gpu_kernels_common.das` where
-both do (`ARCHITECTURE_GPU_SHARED_KERNELS.md#gpu-shared-kernels`).** A
-class stamped from a template declared elsewhere is not a kernel body: it compiles its own
-pipeline where it is stamped.
+`[metal_dispatch]`, `[vk_dispatch]` or `[cuda_dispatch]` declares) picks one variant of - that
+one home stamps lands in that home's kernel file: `dasllama/dasllama_metal_kernels.das`,
+`dasllama/dasllama_vulkan_classes.das` or `dasllama/dasllama_cuda_classes.das`.** A class stamped
+from a template declared elsewhere is not a kernel body: it compiles its own pipeline where it is
+stamped.
+
+**A `class template` two homes stamp never sits in one home's kernel file: it lands in
+`dasllama/dasllama_gpu_kernels_discrete.das` when the Vulkan and the CUDA homes stamp it and Metal
+does not, and in `dasllama/dasllama_gpu_kernels_common.das` when the Metal and the Vulkan homes
+stamp it, whether or not the CUDA home does
+(`ARCHITECTURE_GPU_SHARED_KERNELS.md#gpu-shared-kernels`).** Weakening `REVIEW.das`'s
+`check_shared_template_homes` is a defect.
 
 **A CPU kernel body under `dasllama/` - a function whose loop turns a weight format's packed bytes
 into a dot product or a dequantized f32 row, a `[tune]` variant, a function a
 `register_kernel_backend` call or a `KernelBackend` field default names, or a scalar body those
-call - lands in a tier file,
-`dasllama/dasllama_math_<tier>.das`, never in `dasllama/dasllama_math.das`; a body that a
+call - lands in a tier file, `dasllama/dasllama_math_<tier>.das`, never in
+`dasllama/dasllama_math.das`; a body that a
 `register_kernel_backend` call in another tier file names, or that two tier files' calls name,
 lands in `dasllama/dasllama_math_default.das`.**
 
 **A branch - one arm of an `if` or a `match` - that only one model family takes, in a file whose
-charter line names no concern of that family, lands in that family's own file (`dasllama/dasllama_arch_<name>.das` for a text model, `dasllama/dasllama_<family>.das`
-for a media or speech model).**
+charter line names no concern of that family, lands in that family's own file
+(`dasllama/dasllama_arch_<name>.das` for a text model, `dasllama/dasllama_<family>.das` for a media
+or speech model).**
 
 **Engine code - a `dasllama/` file in no row of the role table of
 `ARCHITECTURE_GPU.md#gpu-backends` - that calls a tier seat (a hook
@@ -132,9 +150,15 @@ root).
 **An `[init]`-only side-effect require in an engine file (`dasllama/`) lives in
 `dasllama/dasllama_common.das` when `dasllama_common.das`'s own code needs the registration to have
 run and the registered module does not require the engine back, and in
-`dasllama/dasllama_transformer.das` otherwise - a require of a backend's entry as that umbrella's
-conditional require on the backend module, `require ?vulkan ...` or `require ?das_metal ...`.**
-The require umbrella breaks the cycle a module requiring the engine back would close.
+`dasllama/dasllama_transformer.das` otherwise.** The require umbrella breaks the cycle a module
+requiring the engine back would close.
+
+**A diff that requires a backend's entry in `dasllama/dasllama_transformer.das`, for a backend
+whose module a build can lack, writes the umbrella's conditional require on the backend module
+(`require ?vulkan ...` / `require ?das_metal ...`) - never a plain require.**
+
+**A diff that requires a backend's entry in `dasllama/dasllama_transformer.das`, for a backend
+whose module always registers (`dasCUDA`), writes a plain require.**
 
 **A registration only a program root (test, harness, benchmark, tool) needs gets no side-effect
 require in an engine file - the program root requires the registration module directly.**
@@ -147,7 +171,7 @@ that establishes it.** The `[init]` is the only code that runs where the global 
 side-effect require in the same change that adds it** - a registration no engine file reaches
 never fires for a consumer of the `dasllama/dasllama.das` facade.
 
-**Platform-specific code - a device call, a `require` of a backend module (the platform's C++
-binding: `vulkan`, `das_metal`), or a read of a backend's own state other than its
-`g_env_<backend>` knobs - in an engine file (`dasllama/`) lands only in one of that backend's
-role files or its entry, per the role table of `ARCHITECTURE_GPU.md#gpu-backends`.**
+**Platform-specific code - a device call, a `require` of a backend module (the platform's binding:
+`vulkan`, `das_metal`, a `cuda/` module of `dasCUDA`), or a read of a backend's own state other
+than its `g_env_<backend>` knobs - in an engine file (`dasllama/`) lands only in one of that
+backend's role files or its entry, per the role table of `ARCHITECTURE_GPU.md#gpu-backends`.**

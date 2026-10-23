@@ -29,18 +29,19 @@ lives (the architecture doc or the code) or drops it.**
 
 **A diff that rewrites the problem a `followup_*.md` row states deletes the row, repoints every
 checked-in citation that names it to the new row's number or drops it, and adds the new problem
-under a new number; deleting a resolved item, or narrowing a row's problem to the part the diff leaves unresolved, is
-not a rewrite.** A row rewritten under its number turns every citation of that number into a citation
-of something else.
+under a new number; deleting a resolved item, or narrowing a row's problem to the part the diff
+leaves unresolved, is not a rewrite.** A row rewritten under its number turns every citation of
+that number into a citation of something else.
 
 **A diff files planned work in the ledger that owns it: `followup_metal.md` for work that would
-change a Metal kernel, driver or dispatch and no Vulkan one, or CPU engine work whose problem
-reproduces only on macOS; `followup_vulkan.md` for work that would change a Vulkan kernel, driver
-or dispatch and no Metal one; `followup_general.md` for everything else, work on both backends and
-rig and instrument rows included.**
+change a Metal kernel, driver or dispatch and no Vulkan or CUDA one, or CPU engine work whose
+problem reproduces only on macOS; `followup_vulkan.md` for work that would change a Vulkan kernel,
+driver or dispatch, outside every template the CUDA home also stamps, and no Metal or CUDA one;
+`followup_general.md` for everything else, rig and instrument rows included.**
 
 **A number a run of this repository produced, written by a diff into an `ARCHITECTURE*.md` or a
-`followup_*.md`, has its entry in `PERF_LEDGER.md`; a `followup_*.md` row that carries one cites the entry it comes from.**
+`followup_*.md`, has its entry in `PERF_LEDGER.md`; a `followup_*.md` row that carries one cites
+the entry it comes from.**
 
 **A diff that adds, removes, or moves a `##` or `###` heading of an `ARCHITECTURE_*.md` companion,
 or adds or removes a companion, updates every text that lists a companion's contents - the

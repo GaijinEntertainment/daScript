@@ -292,16 +292,6 @@ def private vk_device_name : string {
     }
 }
 
-// vulkan_moe_gpu_arm is idempotent and re-runs on every re-arm, so log only on OUTCOME CHANGE.
-// An unconditional line here floods the log (14k lines in one GLM run) and gets tuned out.
-def private arm_say(outcome : int; msg : string) {
-    if (!dasllama_noisy() || g_vk_arm_said == outcome) {
-        return
-    }
-    g_vk_arm_said = outcome
-    to_log(LOG_INFO, "dasLLAMA noisy: {msg}\n")
-}
-
 //! Arm the vulkan MoE tier from the effective GPU want (env-else-programmatic). Registered as
 //! the ``moe_gpu_tier_arm_`` probe; ``[init]`` also runs it directly for the env-only path.
 //! Idempotent — re-arming after ``set_gpu_tier_want_`` just refreshes the layer count.
@@ -310,18 +300,18 @@ def vulkan_moe_gpu_arm : bool {
     // the want truth is gpu_want_arms_tier — ONE definition shared with the loud-failure
     // checks, so "would arm" and "should have armed" can never drift apart
     if (!gpu_want_arms_tier()) {   // checked first — the device probe is not free
-        arm_say(0, "GPU tier NOT armed - no rail requested (set DASLLAMA_GPU=1 or call set_gpu_tier_want_)")
+        arm_say(g_vk_arm_said, 0, "GPU tier NOT armed - no rail requested (set DASLLAMA_GPU=1 or call set_gpu_tier_want_)")
         return false
     }
     if (!vulkan_backend_available()) {
-        arm_say(2, "GPU tier NOT armed - {g_vk_why}")
+        arm_say(g_vk_arm_said, 2, "GPU tier NOT armed - {g_vk_why}")
         return false
     }
     set_moe_gpu_layer_count(layers)
     if (!moe_gpu_tier_installed()) {
         install_vk_moe_hooks()
     }
-    arm_say(1, "GPU tier armed - vulkan, moe layers {layers}{layers < 0l ? " (auto)" : ""}, stream {gpu_want_moe_stream()}")
+    arm_say(g_vk_arm_said, 1, "GPU tier armed - vulkan, moe layers {layers}{layers < 0l ? " (auto)" : ""}, stream {gpu_want_moe_stream()}")
     return true
 }
 
@@ -585,6 +575,10 @@ def vk_host_rows(twin : void?; var yp : float?; q : uint8 const?; s : uint8 cons
 
 [init, arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
 def dasllama_math_vulkan_register() {
+    if (gpu_want_cuda()) {   //! the CUDA home takes every seat below (dasllama_math_cuda); this home installs nothing
+        to_log(LOG_INFO, "dasLLAMA vulkan tier: standing down - DASLLAMA_CUDA asks the CUDA home for the GPU tier\n")
+        return
+    }
     register_kernel_backend(KernelBackend(name = "vulkan", mm = @@vulkan_no_gemv, batch = @@vulkan_no_batch,
         group3 = @@vulkan_no_group3, repack = @@vulkan_repack_noop,
         needs_repack = false, batch_only = true, priority = -1, available = @@vulkan_backend_available))

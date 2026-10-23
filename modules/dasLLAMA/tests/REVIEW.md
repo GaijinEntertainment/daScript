@@ -7,22 +7,28 @@ docs: `../ARCHITECTURE.md`, `../ARCHITECTURE_IMAGE_LEDGER.md`. Planned work:
 A cell is one `t |> run` subtest, or a `[test]` function that runs no subtest, and owns the asserts
 of every helper it calls; a test file is a `.das` dastest runs - one holding a `[test]` function, or
 one whose `cant_`, `failed_` or `invalid_` prefix makes its compile the assertion. A gate function
-is a named function a cell of a `test_metal_*_kernels.das` or `test_vulkan_*kernels.das` file calls
-to compare one kernel against its CPU oracle. A file's `CLAUDE.md` entry is every `CLAUDE.md`
-clause stating a fact about the file (named with or without its `.das` suffix), one of its cells,
-or one of its gate functions, wherever in `CLAUDE.md` the clause sits; a brace list naming several
-files at once (`test_metal_{prefill,decode}_kernels`) or a suite roster states none. A compare's
-two sides are the two computations whose mismatch reds the assert; a reference that only decides
-where the compare stops is neither side. A stocked artifact is a file a test reads from under
-`models_dir()` that neither this repo's build nor its tests produce - model files, mmprojs,
-front-end packs, image fixtures, oracle dumps. An area is one of the file groups `run.das`'s
-`area_tests` table names, which `--changed` maps the changed paths to.
+is a named function a cell of a `test_*_kernels.das` file calls to compare one kernel against its
+CPU oracle. A kernel class is a class that a GPU dispatch annotation - `[metal_dispatch]`,
+`[vk_dispatch]` or `[cuda_dispatch]` - compiles to a device kernel. A file's `CLAUDE.md` entry is
+every `CLAUDE.md` clause stating a fact about the file (named with or without its `.das` suffix),
+one of its cells, or one of its gate functions, wherever in `CLAUDE.md` the clause sits; a brace
+list naming several files at once (`test_metal_{prefill,decode}_kernels`) or a suite roster states
+none. A compare's two sides are the two computations whose mismatch reds the assert; a reference
+that only decides where the compare stops is neither side. A bound assert is a compare of two
+computed sides, or a measured quality figure against a tolerance; a floor on a capacity, a
+configuration or a roster size is not one, nor is an index guard or a route counter. A stocked
+artifact is a file a test reads from under `models_dir()` that neither this repo's build nor its
+tests produce - model files, mmprojs, front-end packs, image fixtures, oracle dumps. An area is a
+name in `run.das`'s `AREAS` list, standing for the files `run.das`'s `area_tests` returns for it;
+`--changed` maps the changed paths to areas.
 
-**A kernel-unit cell - one in which its own code, a helper in its file or a `_*.das` helper module
-dispatches a `[metal_dispatch]` / `[vk_dispatch]` class or calls a `../dasllama/dasllama_math*.das`
+**A kernel-unit cell - one in which test code outside a CPU oracle (the cell, a helper in its file
+or a `_*.das` helper module) dispatches a kernel class or calls a `../dasllama/dasllama_math*.das`
 kernel (a function writing an output buffer from operand buffers), directly or through a
 `../dasllama/` router whose only job is to pick which compiled form of that class or kernel runs -
-applies `REVIEW_KERNEL_CELLS.md` (beside this file) too, wherever the diff puts it.**
+applies `REVIEW_KERNEL_CELLS.md` (beside this file) too, wherever the diff puts it.** A CPU oracle
+is the same computation in plain code in this folder; it may widen a quantized block to floats
+through a `../dasllama/` function and calls no other `../dasllama/` function.
 
 **A diff that touches a test file or cell `REVIEW_PINNED_GATES.md` (beside this file) lists, or
 changes which `run.das` suites list one, applies that checklist too.**
@@ -34,10 +40,11 @@ its evidence, applies `REVIEW_PINNED_GATES.md` too.** An assert that compares ag
 `../dasllama/` constant by name, not against a literal copy of it, keeps nothing in step.
 
 **A cell that calls - in its own code or through a helper - a `../dasllama/` call that sets a
-module or process global a later load, route choice or kernel dispatch reads (a `set_*`, `pin_*`,
-`register_*`, `select_*_override` or `unset_*` call), or that passes a loader parameter choosing
+module or process global a later load, route choice or kernel dispatch reads (a `set_*`,
+`enable_*`, `disable_*`, `pin_*`, `reset_*`, `restore_*`, `register_*`, `select_*_override` or
+`unset_*` call), or that passes a loader parameter choosing
 a family's serving lane (the q8 or float weight form the family runs), or whose claim depends on
-which route or serving lane runs it - a lane pin, a driver hook, a CPU-vs-GPU compare - applies
+which route or serving lane runs it - a compare of a CPU run against a GPU run among them - applies
 `REVIEW_LANE_PINS.md` (beside this file) too.**
 
 **A cell that feeds, preprocesses, or asserts on media bytes an encoder consumes - pixels or
@@ -45,10 +52,6 @@ audio samples - compares an encoder's output rows against a second source, or co
 transcripts, applies `REVIEW_MEDIA_CELLS.md` (beside this file) too.** An encoder is any stage
 of a vision tower, an audio tower or a speech synthesizer - never the language model that reads
 their rows.
-
-**Weakening `test_metal_float_a_gate.das` - the gate that checks the MSL emitter refuses a float A
-operand (the activation input) to a `tmm2d_*` tiled matrix-multiply call without the
-`[metal_kernel(float_a_ok=true)]` annotation - is a defect.**
 
 **Every PR runs `run.das -- --suite model-free`, and `run.das -- --changed` on a box with the
 models stocked (the stocked files of the areas the change reaches; a core module with no
@@ -100,7 +103,8 @@ a run of skips is not the coverage the suite owes.
 **A diff that registers a test file in this folder in a `CMakeLists.txt` is a defect - a
 `run.das` suite listing is the only registration these files get.**
 
-**A diff that adds a test file here adds its `CLAUDE.md` entry in the same change.**
+**A diff that adds a test file here adds its `CLAUDE.md` entry in the same change, every clause
+of it true of the file as added.**
 
 **A diff that adds a cell or a gate function to a file whose `CLAUDE.md` entry names every cell,
 or every gate function, of that file adds the new name to that entry in the same change.**
@@ -128,8 +132,8 @@ names every fact the cells that file runs skip on.**
 **A diff that changes `run.das`'s flag surface - a flag, a suite name, an area name, or what a
 flag does - adds it to or corrects it in `CLAUDE.md`'s "Run suites ONLY through the runner"
 block and `../CLAUDE.md` in the same change.** A data row in a table `run.das` looks up -
-`MODULE_AREAS`, a suite's or an area's file list - is not the surface. A copy the code has left
-behind sends its reader to a flag that no longer does what the text says.
+`MODULE_AREAS`, a suite's or an area's file list - is not the surface. A stale copy sends its
+reader to a flag that no longer does what the text says.
 
 **On every platform, a cell that neither asserts nor registers a skip is a defect.** A cell that
 returns without asserting registers `t |> skip` there; `feint` is a print, not a skip.
@@ -155,13 +159,15 @@ cannot require `_model_tier.das` open-codes the same two checks: the file and ev
 are present, and their total size is under `LARGE_TIER_BYTES` unless `DASLLAMA_PARITY_FULL=1` is
 set.** `DASLLAMA_PARITY_FULL=1` is a final pre-PR switch, not the iteration loop.
 
-**A test - or a program a test builds or spawns - whose subject is not the `.dlim` image rail (a
-cell whose subject is a lane knob's effect on the image identity has the rail as its subject)
-never mints or maps a MODEL image: it either runs with `DASLLAMA_IMAGE=0` in its environment, or
-calls nothing that reaches a baking loader - one that writes a `.dlim` beside the model when
-`DASLLAMA_IMAGE` is unset: `load_<family>_tower`, `load_<family>_embedder`, `load_model_cached`,
-`load_tts_model`.** Such a test loads a media carrier in memory from the family's `stage_*`
-staging - its `mint_*` twin, or `cache_via_image_staged` with an empty image path.
+**A test - or a program a test builds or spawns - whose subject is not the `.dlim` model image
+(its mint, its map or its identity; a cell whose subject is how a lane pin - a call that picks the
+weight form, the Metal tensor crowns or the CPU kernel backend a load serves on - changes the image
+identity has the image as its subject) never mints or maps a MODEL image: it either runs with
+`DASLLAMA_IMAGE=0` in its environment, or calls nothing that reaches a baking loader - one that
+writes a `.dlim` beside the model when `DASLLAMA_IMAGE` is unset: `load_<family>_tower`,
+`load_<family>_embedder`, `load_model_cached`, `load_tts_model`.** Such a test loads a media
+carrier in memory from the family's `stage_*` staging - its `mint_*` twin, or
+`cache_via_image_staged` with an empty image path.
 
 **A predicate whose value the BOX decides (a device capability, a policy default) and that
 therefore cannot differ between two runs on one machine is never tested through its own
@@ -169,9 +175,8 @@ value; test it through the argv it gates or the mode it selects.**
 
 **A test for an added, moved, or edited registration - the `register_*` call, its key, or the
 lookup that reads it - reaches the registered thing through its registry, and never calls it
-directly.** A registry is the storage
-a `register_*` call writes and a lookup reads at dispatch - a table, a list, or a single hook
-global - or the `[EnvConfig]` env registry.
+directly.** A registry is the storage a `register_*` call writes and a lookup reads at dispatch -
+a table, a list, or a single hook global - or the `[EnvConfig]` env registry.
 
 **A `corpus_case` call in `test_tokenizer.das` that does not assert BOTH the exact reference ids
 and a lossless round-trip is a defect.**
@@ -181,8 +186,8 @@ forward pass - without logging both sides in the most readable form its fixture 
 defect: with a tokenizer, each side's decoded text for a token or id compare, one log record a
 side with its newlines escaped (`log_gen_texts` in `_model_tier.das` writes that form), and each
 side's argmax decoded piece plus the measured max difference for a logits compare; with a raw-id
-fixture and no tokenizer, the ids, one log record a side.** A failure, or a pass that looks wrong, must be readable in the log, not only as an id or
-float difference.
+fixture and no tokenizer, the ids, one log record a side.** A failure, or a pass that looks
+wrong, must be readable in the log, not only as an id or float difference.
 
 **A size, depth or row count that a cell's name, a comment on or inside the cell or a helper it
 calls, or an assert's text claims, and that the cell does not pass as a literal argument straight
@@ -194,8 +199,9 @@ cap, a resize, or a counter showing a route ran is no such count, and a device's
 
 **An exact token or id compare over a prompt whose continuation can tie states in the cell what
 makes its two sides compute bit-identical logits - one shared entry point, an assert pinning the
-lane, or a lane pin plus why the one storage layout (a flat K/V cache against a paged one) or
-batch shape that alone differs leaves the logits bit-identical; a compare no such statement
+lane, or a lane pin (a call that picks the weight form, the Metal tensor crowns or the CPU kernel
+backend a load serves on) plus why the one storage layout (a flat K/V cache against a paged one)
+or batch shape that alone differs leaves the logits bit-identical; a compare no such statement
 covers - different lanes, backends or kernel forms among them - is a defect, and takes the
 forced-feed logits-tolerance form: the same fixed tokens fed to both sides, the logits compared
 within a bar.** A continuation can tie unless every next token is dictated by the prompt's own
@@ -209,8 +215,7 @@ script in `../harness/`; for an oracle dump, the mint script stocked beside the 
 
 **A diff that adds a cell reading a stocked artifact from a model file's directory names that
 artifact in the `companions` of that model file's row in `../performance/model_specs.das`, in the
-same change.** A box that fetches the row
-alone then has what the cell reads.
+same change.** A box that fetches the row alone then has what the cell reads.
 
 **A test that reads a vision encode oracle dump without naming the minting arm in its header - the
 backend, the flash-attention setting and the mmproj precision the dump came from - is a defect.**
@@ -242,9 +247,7 @@ the text a red prints - the cell label or the assert.**
 **A diff that adds or loosens (lets pass an input the old assert failed) a bound assert in a cell
 that is not a kernel-unit cell, or moves one onto another route, lane or backend, ships in the
 same change, in each such cell holding the assert, a control that lands outside that bound on that
-route.** A bound assert holds a computed difference, rate, error or run-decided count within a
-nonzero tolerance or past a floor or ceiling - never an index guard or a route counter. A bound
-nothing has exceeded where it is applied is not known to discriminate there.
+route.** A bound nothing has exceeded where it is applied is not known to discriminate there.
 
 **A diff that adds, in a cell that is not a kernel-unit cell, an assert on a counter showing a
 route ran ships in the same change a control under which the route does not run and the counter
@@ -253,8 +256,8 @@ cell the same file runs.** A counter that rises on both legs shows nothing about
 
 **A control for a bound assert in a cell that is not a kernel-unit cell changes an input the
 computation reads - a zeroed weight region, a poisoned input element, a mechanism disabled - and
-re-runs the compare, or holds the output against the reference computed over inputs one row off
-(the row one step off); a value added to the output after the fact is not one.**
+re-runs the compare, or holds the output against the reference computed over inputs one row off;
+a value added to the output after the fact is not one.**
 
 **A within-bar float compare that a diff adds, changes, moves or extracts into a helper reds on a
 NaN in the output, the reference or their difference: it passes on `d <= bar`, counts a miss on
@@ -265,8 +268,8 @@ holding one, or a NaN sentinel the kernel never overwrote, passes.
 
 **A must-exceed assert - one that passes only when a value lands outside its bar, by `d > bar` or
 by a miss count above zero, as a control does - that a diff adds, changes, moves or extracts into
-a helper asserts every value it reads finite first.** A NaN read as infinite, or counted as a
-miss, passes it.
+a helper asserts every value it reads finite first, or routes through `_compares.das`'
+`check_exceeds`, which does.** A NaN read as infinite, or counted as a miss, passes it.
 
 **A poison control on a tower a GPU driver serves - a run of the gate with a block's weights
 zeroed, which must fail - zeroes that block's GEMM weights in every plane the served route reads

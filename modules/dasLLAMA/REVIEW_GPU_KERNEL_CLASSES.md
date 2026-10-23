@@ -11,9 +11,17 @@ count, a row count). A base shell is the dispatch-less base class whose methods 
 flat into each deriving class. A stamp is a kernel class that compiles to a shader module -
 standalone, a template instance or a base-shell derivative. A census key is a kernel name
 `modules/dasLLAMA/tests/test_kernel_coverage.das` counts, that the engine's Metal or Vulkan driver
-compiles at any point of a run, and that the pre-change tree does not compile. A crown is a kernel family a box's tune sidecar enables. A lens is the `[metal_dispatch]` /
-`[vk_dispatch]` macro that generates a class's builder from its bindings; kargs is the
-kernel-argument struct a dispatch hands its kernel.
+compiles at any point of a run, and that the pre-change tree does not compile. A crown is a kernel
+family a box's tune sidecar enables. A lens is the `[metal_dispatch]`, `[vk_dispatch]` or
+`[cuda_dispatch]` macro that generates a class's builder from its bindings; kargs is the
+kernel-argument struct a dispatch hands its kernel. A home is one backend's own kernel files -
+Metal's, Vulkan's or CUDA's - as against the shared files `dasllama/dasllama_gpu_kernels_common.das`
+(Metal and Vulkan stamp it) and `dasllama/dasllama_gpu_kernels_discrete.das` (Vulkan and CUDA stamp
+it).
+
+**A diff that adds a `class template` a GPU home stamps, or moves one between a home's file,
+`dasllama/dasllama_gpu_kernels_discrete.das` and `dasllama/dasllama_gpu_kernels_common.das`,
+applies `REVIEW_PLACEMENT.md` too.**
 
 **A kernel twin that binds a different kargs (kernel-argument struct) type than its sibling twin
 is a defect, even where one twin ignores a field of it.**
@@ -36,8 +44,8 @@ changes, the shared guard and index arithmetic living in the template or the she
 **A diff that adds a bit-for-bit compare, or changes text on the path one covers - two kernel
 bodies that compile to separate shader modules, which a cell under `modules/dasLLAMA/tests/`
 holds bit for bit against each other - spells as `mad` every floating-point multiply on that path
-that feeds an add, shared method or function text included.** A driver decides per shader module whether to
-contract a multiply-add into one fma, so two bodies spelled alike round a ulp apart.
+that feeds an add, shared method or function text included.** A driver decides per shader module
+whether to contract a multiply-add into one fma, so two bodies spelled alike round a ulp apart.
 
 **A value that no model file and no request can change - a tile width, a math constant, a cap
 fixed by the model architecture the class serves - which every dispatch site under `dasllama/`
@@ -56,9 +64,10 @@ not a read.
 
 **A diff that changes a class body, a class template, a base shell, or a helper a stamp's body
 splices diffs, for every stamp built from what it changed, that stamp's generated source against
-the pre-change tree's (the files `DASLLAMA_METAL_MSL_DUMP=<dir>` writes, or a disassembly diff of
-the `.spv` files `DASLLAMA_VK_SPV_DUMP=<dir>` writes), and its PR body names each stamp with the
-kind of difference read there - never the source text.**
+the pre-change tree's (the files `DASLLAMA_METAL_MSL_DUMP=<dir>` writes, a disassembly diff of
+the `.spv` files `DASLLAMA_VK_SPV_DUMP=<dir>` writes, or the CUDA C text global a `[cuda_kernel]`
+method generates), and its PR body names each stamp with the kind of difference read there -
+never the source text.**
 
 **The kind a PR body names for a changed stamp is one of these: no difference; a difference
 confined to whitespace, scoping braces, parentheses or identifier names; the expression text
@@ -76,29 +85,42 @@ writes any field declared on it - fields in the stamp or in the shell may share 
 `@role = "alias"` marks such a view - including a field touched only under a run-time flag.
 
 **A diff that moves a kernel class out of the class template its siblings stamp, or off the base
-shell they derive from, gives the class a `//!` line above its `[metal_dispatch]` /
-`[vk_dispatch]` declaration naming the body difference that keeps it out of that template or
-shell.**
+shell they derive from, gives the class a `//!` line above its `[metal_dispatch]`,
+`[vk_dispatch]` or `[cuda_dispatch]` declaration naming the body difference that keeps it out of
+that template or shell.**
 
 **A diff that adds a kernel class stamping or deriving from - through an intermediate template
-too - a template both backends (Metal and Vulkan) stamp
-(`dasllama/dasllama_gpu_kernels_common.das`), or makes an existing class do so, gives the class a `//!` line above its own declaration naming
-that shared template itself, not the intermediate one.**
+too - a template more than one home stamps (`dasllama/dasllama_gpu_kernels_common.das`,
+`dasllama/dasllama_gpu_kernels_discrete.das`), or makes an existing class do so, gives the class a
+`//!` line above its own declaration naming that shared template itself, not the intermediate
+one.**
 
-**A diff that adds or changes a `[metal_dispatch]` / `[vk_dispatch]` binding that no site writes
+**A diff that adds a name to `DISCRETE_ONE_HOME_STAMPS` in `REVIEW.das` - the license for a
+`class template` in `dasllama/dasllama_gpu_kernels_discrete.das` that only one discrete home
+stamps - names the template, and the family of the home that does not stamp it, in the
+`followup_general.md` row of stamps that wait on their families, in the same change; a diff that
+removes a name from the list removes it from that row too.**
+
+**Weakening `check_shared_template_homes` in `REVIEW.das` is a defect.** It holds every
+`class template` in `dasllama/dasllama_gpu_kernels_discrete.das` to a stamp from the Vulkan and
+the CUDA home or a `DISCRETE_ONE_HOME_STAMPS` license, and every one in
+`dasllama/dasllama_gpu_kernels_common.das` to a stamp from the Metal and the Vulkan home, through
+any chain of intermediate templates.
+
+**A diff that adds or changes a binding of a class a lens declares that no site writes
 after arming - a binding filled before the first encode and never written again - puts
 `@role = "weight"` on a field at that binding.**
 
 **`@role = "weight"` on data written during a step - a pooled buffer the host refills each encode,
 or one another kernel rewrites - is a defect, judged per stamp by the buffer its dispatch sites
-bind; such a field either omits `@role` or names the access its body performs.** Neither lens
-orders a `weight` read after the write that refilled the buffer, and neither refuses the role on a
-field the body only reads.
+bind; such a field either omits `@role` or names the access its body performs.** Neither the
+Metal nor the Vulkan lens orders a `weight` read after the write that refilled the buffer, and
+neither refuses the role on a field the body only reads.
 
-**A diff that adds a `[metal_dispatch]` or `[vk_dispatch]` class under `dasllama/` that the
-engine's Metal or Vulkan driver never compiles at any point of a run is a defect - the class
-moves into the file under `modules/dasLLAMA/benchmarks/` or `modules/dasLLAMA/tests/` that
-compiles it, and a class nothing compiles is deleted.**
+**A diff that adds a `[metal_dispatch]`, `[vk_dispatch]` or `[cuda_dispatch]` class under
+`dasllama/` that the engine's Metal, Vulkan or CUDA driver never compiles at any point of a run is
+a defect - the class moves into the file under `modules/dasLLAMA/benchmarks/` or
+`modules/dasLLAMA/tests/` that compiles it, and a class nothing compiles is deleted.**
 
 **A diff that adds a new census key a census row dispatches names, in the PR body, that row and
 its nonzero count for the key, read from a census run on the key's backend.**
@@ -126,9 +148,9 @@ for the key with a `CENSUS_CROWN_CONDITIONAL` row (both in
 **Weakening the blind-entry asserts in `modules/dasLLAMA/tests/test_kernel_coverage.das` - that
 an entry matches a compiled census key, and that it matches no dispatched one - is a defect.**
 
-**Weakening any refusal the lens - the macro behind `[metal_dispatch]` / `[vk_dispatch]` that
-derives each field's access and generates the builder - makes at compile time, or any
-`test_lens_*` / `test_vkd_lens_*` cell that holds one, is a defect.**
+**Weakening any refusal a lens - the macro behind `[metal_dispatch]`, `[vk_dispatch]` or
+`[cuda_dispatch]` that derives each field's access and generates the builder - makes at compile
+time, or any cell that holds one, is a defect.**
 
 **Weakening any refusal the manual-dispatch check in `dasllama/dasllama_metal_lens.das` makes in a
 module whose name starts with `dasllama` and contains `metal` - a direct
@@ -136,10 +158,10 @@ module whose name starts with `dasllama` and contains `metal` - a direct
 `kn_kargs` on fewer paths than it calls `kn_dispatch` - is a defect; a module that adds
 `options _metal_manual_dispatch = true` weakens it.**
 
-**A diff that adds a refusal to the `[metal_dispatch]` / `[vk_dispatch]` lens lands the cell that
-holds it in the same change** - a `test_lens_*` cell in
-`modules/dasLLAMA/tests/test_metal_misc_kernels.das` for Metal, a `test_vkd_lens_*` cell in
-`modules/dasLLAMA/tests/test_vulkan_kernels.das` for Vulkan.
+**A diff that adds a refusal to a lens lands the cell that holds it in the same change** - a
+`test_lens_*` cell in `modules/dasLLAMA/tests/test_metal_misc_kernels.das` for Metal, a
+`test_vkd_lens_*` cell in `modules/dasLLAMA/tests/test_vulkan_kernels.das` for Vulkan, a cell in
+`modules/dasLLAMA/tests/test_cuda_kernels.das` for CUDA.
 
 **A diff that replaces a refusal with a derivation - the lens computing the value it used to
 demand, so no class can compile with that value missing - points that refusal's cell at the
@@ -157,12 +179,11 @@ entry, a number nothing keeps gets none.** The setter checks only how many argum
 never which field each position carries.
 
 **A diff that adds a hand-written encode or descriptor-set helper, or a hand-rolled bind list on a
-dispatch - a buffer or kargs field bound by literal number instead of through the builder the
-`[metal_dispatch]` / `[vk_dispatch]` lens generates for that class; code the diff only moves or
-renames is not added - says why the generated builder cannot serve that site, in a comment at
-the site or in the PR body.** A body that only picks,
-defaults or composes generated builders binds nothing; an ordered argument list into a generated
-`set_*` setter restates no binding number and is not one.
+dispatch - a buffer or kargs field bound by literal number instead of through the builder a
+lens generates for that class; code the diff only moves or renames is not added - says why the
+generated builder cannot serve that site, in a comment at the site or in the PR body.** A body
+that only picks, defaults or composes generated builders binds nothing; an ordered argument list
+into a generated `set_*` setter restates no binding number and is not one.
 
 **A value that reaches the kernel twice device-side - a scalar bound both as a uniform buffer
 and as a kargs field - is a defect: bind it once, as a kargs field.** A `params=` value consumed
@@ -171,8 +192,7 @@ the device, so it does not count.
 
 **Never bind a scalar that a stamp's other bound scalars already determine by integer
 arithmetic at every dispatch site of that stamp - derive it in the stamp's body from them
-instead.** Binding an integer count
-separately adds a second place to get it wrong.
+instead.** Binding an integer count separately adds a second place to get it wrong.
 
 **A diff that adds or changes a kernel-class method whose returned value is used anywhere but
 as the whole right-hand side of a `let` or an assignment - an argument, an operand, a subscript,

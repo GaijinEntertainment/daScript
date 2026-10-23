@@ -1493,6 +1493,13 @@ if (NOT ${DAS_TOOLS_DISABLED})
 
     MACRO(SETUP_COMPILER_BINARY target_name library_name modules dyn_modules)
         add_executable(${target_name} ${DAS_DASCRIPT_MAIN_SRC})
+        # the main thread's native stack at Linux's 8 MB on Windows too (its default is 1 MB): the JIT'd call chains run
+        # on it, and an in-process compiler a module calls on the main thread (NVRTC) recurses deep below them
+        if (MSVC)
+            target_link_options(${target_name} PRIVATE /STACK:8388608)
+        elseif (WIN32)
+            target_link_options(${target_name} PRIVATE -Wl,--stack,8388608)
+        endif()
         TARGET_LINK_LIBRARIES(${target_name} ${library_name} ${SRC_LIBRARIES} ${${modules}})
         ADD_DEPENDENCIES(${target_name} ${library_name} ${${dyn_modules}})
         # Static modules generated include.
@@ -2481,7 +2488,7 @@ install(CODE [[
         get_filename_component(_name "${_f}" NAME)
         get_filename_component(_f_abs "${_f}" ABSOLUTE)
         if((_name MATCHES "^REVIEW.*\\.(md|das)$"
-                OR _name MATCHES "^(ARCHITECTURE[A-Za-z_]*|MASTERPLAN[A-Za-z_]*|PERF_LEDGER|PROFILE|THINKING)\\.md$"
+                OR _name MATCHES "^(ARCHITECTURE[A-Za-z_]*|MASTERPLAN[A-Za-z_]*|PERF_LEDGER|LEDGER|PROFILE|THINKING)\\.md$"
                 OR _name MATCHES "^followup_.*\\.md$")
             AND NOT _f_abs STREQUAL _root_common
             AND NOT _f_abs STREQUAL _root_arch_common)

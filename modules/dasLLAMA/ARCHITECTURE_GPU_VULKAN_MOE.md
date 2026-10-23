@@ -3,17 +3,22 @@
 Companion to `ARCHITECTURE_GPU_VULKAN.md`; a section is cited by its anchor. This
 document carries the resident driver's routed block in its two eras:
 the MoE block of the prefill window with its Q8-fed chain, the whole-model driver's MoE token
-command, the select that reaches 512 experts two logits a thread, and the gemma-4 form both eras
-take. The window
-chain the prefill block runs inside (`ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain`), the recurrent block beside it (`ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-dn-block`), the Q8
-requant byte store (`ARCHITECTURE_GPU_VULKAN.md#q8-requant-byte-store`), the decode GEMV family's grid codebook buffer (`ARCHITECTURE_GPU_VULKAN.md#kq-gemv-grid-buffer`) and the
-tile probe's shared descriptor set layout (`ARCHITECTURE_GPU_VULKAN.md#khrx-shared-set-layout`) are `ARCHITECTURE_GPU_VULKAN.md`'s. The
+command, and the gemma-4 form both eras
+take. The kernels the block runs that more than one home stamps - the combine on the residual step
+(`ARCHITECTURE_GPU_SHARED_ROWS.md#moe-combine-row`), its gemma-4 form (`ARCHITECTURE_GPU_SHARED_ROWS.md#moe-g4-combine`),
+the select that reaches 512 experts two logits a thread (`ARCHITECTURE_GPU_SHARED_ROWS.md#vk-topk-depth`), the routed
+weights' scales (`ARCHITECTURE_GPU_SHARED_ROWS.md#moe-wscale`), the fused gate-up GEMV
+(`ARCHITECTURE_GPU_SHARED_GEMM.md#moe-gate-up-fused`) and the mx4 tile decode (`ARCHITECTURE_GPU_SHARED_GEMM.md#cm2-mx4-decode`) -
+are in `ARCHITECTURE_GPU_SHARED_ROWS.md` and `ARCHITECTURE_GPU_SHARED_GEMM.md`. The window
+chain the prefill block runs inside (`ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain`), the recurrent block beside it (`ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-dn-block`), the decode GEMV family's grid codebook buffer (`ARCHITECTURE_GPU_VULKAN.md#kq-gemv-grid-buffer`) and the
+tile probe's shared descriptor set layout (`ARCHITECTURE_GPU_VULKAN.md#khrx-shared-set-layout`) are `ARCHITECTURE_GPU_VULKAN.md`'s; the Q8
+requant byte store is `ARCHITECTURE_GPU_SHARED_ROWS.md#q8-requant-byte-store`. The
 token command's attention and recurrent heads this block's tail follows, and the per-op tier's
 decode era - the decode span whose kernels the routed block runs - are in
 `ARCHITECTURE_GPU_VULKAN_DECODE.md`. The cooperative-matrix tiles the expert GEMMs run on and
 the per-op tier's MoE expert chain are in `ARCHITECTURE_GPU_VULKAN_GEMM.md`, and the lane split
 of the decode GEMV family the token command's expert GEMVs take is
-`ARCHITECTURE_GPU_VULKAN_GEMM.md#kq-gemv-lanes`. What a model has to fit on the card before any
+`ARCHITECTURE_GPU_SHARED_GEMM.md#kq-gemv-lanes`. What a model has to fit on the card before any
 of this runs is in `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`. The GPU backend
 role table these sections build on stays in `ARCHITECTURE_GPU.md#gpu-backends`.
 
@@ -69,15 +74,11 @@ except where a probe arm is named.
   tile's column at the format's own k step, keyed `CM2_TC_E` in the class ladders
   (`ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default`) - and every piece dispatches one workgroup per
   column tile per 128-row weight tile of the plane. In mm mode both piece kinds run the KHR
-  128 x 128 tile (`ARCHITECTURE_GPU_VULKAN_KHR.md#khr-mm-kq-tile`) over the same records and maps -
+  128 x 128 tile (`ARCHITECTURE_GPU_SHARED_GEMM.md#khr-mm-kq-tile`) over the same records and maps -
   a 32-row s piece is an edge tile there, and the workgroup counts agree because a column is one
   tile either way - so a KHR-mode card serves the resident MoE block (`vk_rdec_moe_ok`). The
-  per-32 expert rails ride the same pieces through their own `<Fmt>Cm2T` stamps; the mx4 one
-  needs no codebook - the e2m1 nibble decodes as the DOUBLED magnitude {0, 1, 2, 3, 4, 6, 8, 12},
-  built per byte by shift and mask, against the HALVED E8M0 scale (`e8m0_half`; the bit patterns
-  below exponent 2 are the denormals), the CPU `dot_mx4q8_scalar`'s own arithmetic, so the tile,
-  the decode GEMV and the CPU dot agree by construction, and its scale plane is one byte a block,
-  read four blocks a word. The s pieces' records sit at `[0, ne)`,
+  per-32 expert rails ride the same pieces through their own `<Fmt>Cm2T` stamps; the mx4 one's
+  decode is `ARCHITECTURE_GPU_SHARED_GEMM.md#cm2-mx4-decode`. The s pieces' records sit at `[0, ne)`,
   the m pieces' at `[ne, 2 ne)`,
   and each dispatch's map at its own offset past the records (`PF_MOE_MAP_OFF`, 4096 words for up
   to 512 experts twice), the two tile counts scanned as one packed word (its halves stay under
@@ -104,27 +105,7 @@ except where a probe arm is named.
   again. The window planes carry 128 rows of read slack past the last bucket row (the s and m
   tiles load a partial column unclamped, `ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default`) and hold a
   whole window of `pf_window_rows() x k` bucket rows, so the block never chunks.
-- **The combine rides the residual step.** The add+rms that follows the block (`ClsArComb`,
-  its f16 twin `ClsArCombF16B` where the next layer's head takes the f16 feed) adds the shared
-  expert's down rows at the sigmoid of the gate logit - the dense tail ran the shared triple
-  first, as the layer's dense triple at the shared width - and the k weighted expert rows
-  through the slot map, straight into the residual, then norms the row for the next layer. A
-  layer without a shared expert takes the same step with the add partner off. The step sums
-  the FFN row first - the gated shared row, then the slots in order - and adds it to the
-  residual, the order the separate combine dispatch and the plain add it replaced took, so the
-  resident-vs-CPU bars of the MoE files keep their calibration: the fold's natural order - the
-  residual first - moves the rounding enough to flip a router near-tie downstream, and one step
-  of the 35B two-window cell reads 1.50 logits off the CPU chain against a 1.39 bar where the
-  chain's order reads 0.39. The row pass reads the first eight slots' metas - row base, routing
-  weight, bias row - once per thread into a per-thread array, then walks FOUR columns a round,
-  the four columns' loads written ahead of their adds; slots past eight walk the memory form (a one-workgroup row kernel
-  is its dependent-load rounds, and a column a round over 2880 columns is twelve of them - the
-  token command's one-row form, `ARCHITECTURE_GPU_VULKAN_MOE.md#resident-moe-token`); a slot-major pass through the row stash instead read 2.4 ms more on the 30B window, the
-  shared-memory read-modify-write per slot costing what the register sum does not. The token
-  command's tail folds the same way; the residual step read those rows anyway, and the fold took
-  one dispatch per layer out of both chains. There is no Q8 requant leaf: a third form would
-  bind a ninth buffer, past the eight the hazard rail carries, so where the next layer's head
-  takes the Q8 feed the f32 leaf writes the normed row and a separate requant follows it.
+- **The combine rides the residual step:** `ARCHITECTURE_GPU_SHARED_ROWS.md#moe-combine-row`.
 
 The router reads the f32 normed rows, so an MoE layer takes the split add+rms arm at the FFN
 site (the fused twins never store `xb`), and the last-layer FFN slice of
@@ -170,10 +151,10 @@ slab feeding a per-32 down take the leaf template's fused arm for the three - `K
 and its requant a 32-row block a workgroup, one dispatch where three
 ran; `RLayer.egu`), down runs k regions into the
 routed rows; and the residual step that follows folds the combine in (`ClsArComb`, the prefill's
-`ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block` kernel at one row): the shared expert's row in `ffnout` at the sigmoid of its gate
+`ARCHITECTURE_GPU_SHARED_ROWS.md#moe-combine-row` kernel at one row): the shared expert's row in `ffnout` at the sigmoid of its gate
 logit, the k weighted routed rows through the top-k's slot map, then the next layer's norm - a
 layer without a shared expert takes the same step with the add partner off. A one-row dispatch is
-latency, not bandwidth: the step's row pass is the `ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block` form - the first eight slots' metas
+latency, not bandwidth: the step's row pass is the `ARCHITECTURE_GPU_SHARED_ROWS.md#moe-combine-row` form - the first eight slots' metas
 read once a thread, four columns a round with the loads written ahead of the adds, the sums still in slot
 order - so an element waits on one load round per four columns rather than one per column; on
 the `DASLLAMA_GPU_PROF=1` token profile (`vk_rdec moe avg/token`, `benchmarks/lcpp_bench.das`
@@ -187,11 +168,7 @@ carries. **gpt-oss's softmax-weight gate rides the renormalized-softmax arm.** T
 k on the raw logits (under the router bias) and softmaxes over the picks alone, which is the
 softmax over every expert renormalized over the picks - the weights the `norm_topk` arm already
 computes - so the host passes `norm_topk` for it and the top-k kernels carry no second gate.
-Native-MXFP4 routed stacks take `KqGemvK4Gu`'s fusion (`Mx4GemvGu` on `Mx4Gemv`'s row dot;
-the `GEMV_SHELL_GU` stamp `RLayer.egu` reads, under its own set layout): a workgroup owns 32 hidden rows of one slot, a subgroup a row over both
-stacks - the up stack's regions at their own binding, inside the gate stack's slab - and the
-first subgroup adds the slot's expert bias rows, activates and quantizes the block with the
-requant kernel's own amax and quant, so the bytes are the split path's. The slot regions are
+Native-MXFP4 routed stacks take `KqGemvK4Gu`'s fusion (`ARCHITECTURE_GPU_SHARED_GEMM.md#moe-gate-up-fused`). The slot regions are
 device buffers the top-k fills each token; the dense triple's host-filled regions stay what they are.
 
 **A recurrent MoE layer takes the routed block after its deltanet head** (the hybrid MoE,
@@ -218,19 +195,6 @@ declines a router the top-k kernels do not serve - a gate off the two softmax fo
 selection bias, more than 512 experts or more picks a row than the 128 routed slots - by name too; the router bias, the
 biased stacks and the mx4 stacks are gpt-oss's served form (`ARCHITECTURE_GPU_VULKAN_MOE.md#resident-moe-token`).
 
-### The select reaches 512 experts two logits a thread {#vk-topk-depth}
-
-**A select workgroup holds `DEPTH` logits a thread, so 256 threads reach 512 experts.**
-`GkTopKRow.select_row` (at 256 lanes) reads expert `tid + i x 256` for `i < DEPTH`: the row max over every held
-logit, the exp floored at -80 and the thread's sum before the workgroup sum, then each pick takes a
-thread's largest held weight (the lower expert on a tie) into the same subgroup and workgroup
-reduction the one-deep form runs, and the picked expert's holder knocks it out. At `DEPTH` 1 the
-arithmetic is the one-deep form's, so a model at 256 experts or fewer reads the same picks.
-`topk_depth` picks the stamp by the expert count (`TopKN2` / `TopKRows2` past 256, in their
-one-deep classes' set families), `RDEC_EXPERTS_MAX` (512) is the reach the plan admits, and the
-window's bucket schedule takes its 512-thread stamp at the same count. No 512-expert carrier fits
-the 32 GB card whole; the kernels hold to the host select (`test_vkd_topk_n`, `test_vkd_moe_routing`).
-
 ### The gemma-4 form of the routed block {#vk-gemma4-moe-block}
 
 **A gemma-4 MoE layer (`RdecLayerGeom.moe_g4`, the config's dense shared expert) is the routed
@@ -252,13 +216,8 @@ The top-k folds the checkpoint's per-expert down scale into each routing weight 
 renormalization (`GkTopKArgs.dsoff`, in the decode's and the window's top-k alike, names the layer's row in the
 `[n_moe x ne]` scale plane `rdec_prepare_moe` uploads; `GK_NO_DSCALE` on every other model, the
 binding filled and never read), where the CPU chain scales the picked weights before the expert
-GEMVs - the select's `DSCALE` arm both homes stamp (`ARCHITECTURE_GPU_PREFILL_MOE.md#moe-wscale`). The combine
-(`ClsArCombG4`, the f16 normed-row twin `ClsArCombG4F16B`) is the residual step of the CPU chain's `gemma4_moe_ffn` on
-the template both homes stamp (`GkMoeCombG4`, args `GkMoeCombArgs`): the k weighted routed rows summed in slot order
-(`GkMoeCombine.slot_sum_into`, the routed combine's own sum) and normed under the routed post norm (`rpost_off`), the
-dense row in `ffnout` normed under the dense post norm (`dpost_off`), the two added and normed under the layer's post-FFN
-norm (`spost_off`), the residual `(x + that) * out_scale`, then the next layer's norm (`nwoff`) - four workgroup
-reductions over one row stash, the dense row re-read from `ffnout` rather than staged twice. Where the down experts are a
+GEMVs - the select's `DSCALE` arm both homes stamp (`ARCHITECTURE_GPU_SHARED_ROWS.md#moe-wscale`). The combine
+(`ClsArCombG4`, the f16 normed-row twin `ClsArCombG4F16B`) is `ARCHITECTURE_GPU_SHARED_ROWS.md#moe-g4-combine`. Where the down experts are a
 per-32 format (Q5_1, IQ4_NL off the lattice, Q4_0, Q5_0, MXFP4) the token commands' down GEMV folds the k rows itself
 (`Blk32GemvT.sum_shell`, stamped `Q51GemvSum` and its four twins: a subgroup a (token row, model-dim row), the row's k
 regions' dots summed under the routing weights), so the combine reads that row

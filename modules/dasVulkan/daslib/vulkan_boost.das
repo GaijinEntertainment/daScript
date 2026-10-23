@@ -993,11 +993,20 @@ def public select_transfer_queue_family(phys : VkPhysicalDevice) : int {
     return found
 }
 
-//! Superset of create_device_storage_8_16_int_dot_coopmat that ALSO enables VK_NV_cooperative_matrix2 +
-//! ``bufferDeviceAddress`` (gate with ``cooperative_matrix2_supported``), plus the opportunistic set (coopvec,
-//! residency levers, timelineSemaphore, external_memory_host, the four-wide decode unless ``decode_vector`` is false) and ``transfer_family``.
+//!@nolint
+//! Superset of create_device_storage_8_16_int_dot_coopmat that ALSO
+//! enables VK_NV_cooperative_matrix2 + ``bufferDeviceAddress`` (gate
+//! with ``cooperative_matrix2_supported``), plus the opportunistic
+//! set (coopvec, residency levers, timelineSemaphore,
+//! external_memory_host, ``pipelineExecutableInfo`` of
+//! VK_KHR_pipeline_executable_properties, the four-wide decode unless
+//! ``decode_vector`` is false) and ``transfer_family``.
 [arch(at="../ARCHITECTURE.md#storage-8-16"), arch(at="../ARCHITECTURE.md#subgroup-pair")]
-def public create_device_storage_8_16_int_dot_coopmat2(phys : VkPhysicalDevice; queue_family : uint; transfer_family : int = -1; decode_vector : bool = true) : Device {   // nolint:STYLE038 — linear feature/extension pNext-chain assembly, one hop per capability
+def public create_device_storage_8_16_int_dot_coopmat2(   // nolint:STYLE037,STYLE038 - pNext hops
+                                                       phys : VkPhysicalDevice;
+                                                       queue_family : uint;
+                                                       transfer_family : int = -1;
+                                                       decode_vector : bool = true) : Device {
     var q12q = VkPhysicalDeviceVulkan12Features()
     var qcv = VkPhysicalDeviceCooperativeVectorFeaturesNV()
     var qmp = VkPhysicalDeviceMemoryPriorityFeaturesEXT()
@@ -1057,8 +1066,16 @@ def public create_device_storage_8_16_int_dot_coopmat2(phys : VkPhysicalDevice; 
     f13.computeFullSubgroups = 1u
     var f2 = VkPhysicalDeviceFeatures2()
     f2.features.shaderInt16 = 1u
+    let with_exec_props = pipeline_exec_props_supported(phys)
+    var fpe = VkPhysicalDevicePipelineExecutablePropertiesFeaturesKHR()
+    fpe.pipelineExecutableInfo = 1u
     unsafe {
-        f2.pNext = addr<void?>(f11)
+        if (with_exec_props) {
+            f2.pNext = addr<void?>(fpe)
+            fpe.pNext = addr<void?>(f11)
+        } else {
+            f2.pNext = addr<void?>(f11)
+        }
         f11.pNext = addr<void?>(f12)
         if (with_fullsg) {
             f13.shaderIntegerDotProduct = 1u
@@ -1117,6 +1134,9 @@ def public create_device_storage_8_16_int_dot_coopmat2(phys : VkPhysicalDevice; 
     }
     if (with_decvec) {
         ext |> push("VK_NV_cooperative_matrix_decode_vector")
+    }
+    if (with_exec_props) {
+        ext |> push("VK_KHR_pipeline_executable_properties")
     }
     push_memory_management_extensions(ext, with_memprio, with_pageable, with_extmemhost)
     var fams <- [queue_family]
@@ -1908,6 +1928,17 @@ def public create_compute_pipeline(device : Device; layout : PipelineLayout; sha
     return <- b
 }
 
+var private g_pipeline_capture = false
+
+//! pipelines created after set_pipeline_capture(true) carry the
+//! capture flags dump_pipeline_executables reads
+def public set_pipeline_capture(on : bool) {
+    g_pipeline_capture = on
+}
+
+//! the switch set_pipeline_capture last set
+def public pipeline_capture : bool => g_pipeline_capture
+
 //! create a compute pipeline from a shader module + layout (owns the VkPipeline;
 //! finalizes via vkDestroyPipeline). Wraps the batch vkCreateComputePipelines at count 1.
 def public create_compute_pipeline(device : Device; layout : PipelineLayout; shader : ShaderModule; entry : string = "main") : Pipeline {
@@ -1918,6 +1949,8 @@ def public create_compute_pipeline(device : Device; layout : PipelineLayout; sha
     var cp = VkComputePipelineCreateInfo()
     cp.stage = stage
     cp.layout = boost_value_to_vk(layout)
+    cp.flags.capture_statistics_khr = g_pipeline_capture
+    cp.flags.capture_internal_representations_khr = g_pipeline_capture
     var h : VkPipeline
     unsafe {
         vk_check(vkCreateComputePipelines(boost_value_to_vk(device), null, 1u, addr(cp), null, addr(h)), null)
@@ -1944,6 +1977,8 @@ def public create_compute_pipeline_full_subgroups(device : Device; layout : Pipe
     var cp = VkComputePipelineCreateInfo()
     cp.stage = stage
     cp.layout = boost_value_to_vk(layout)
+    cp.flags.capture_statistics_khr = g_pipeline_capture
+    cp.flags.capture_internal_representations_khr = g_pipeline_capture
     var h : VkPipeline
     unsafe {
         vk_check(vkCreateComputePipelines(boost_value_to_vk(device), null, 1u, addr(cp), null, addr(h)), null)

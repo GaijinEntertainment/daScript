@@ -11,6 +11,7 @@ module _msl_common shared public
 
 require metal/msl_shader public
 require math
+require daslib/templates
 
 class MulAB {
     @ssbo @binding = 0 a : array<float>
@@ -690,6 +691,25 @@ class UkStride {
     def ukstride {
         let i = gl_GlobalInvocationID.x
         ys[i] = ufx_pick(sa, xs, i) + ufx_pick(sb, xs, i)
+    }
+}
+
+struct TagA {
+    unused : int
+}
+
+[template(fmt), unused_argument(fmt)]
+def tf_scale(fmt : TagA; x : uint) : uint => x * 3u
+
+//! a [template] instance called by its base name,
+//! never its hashed one
+class TmplCall {
+    @ssbo @binding = 0 o : array<uint>
+
+    [metal_kernel(name="tmpl_call_msl"), marker(no_coverage)]
+    def tmpl_call {
+        let i = gl_GlobalInvocationID.x
+        o[i] = tf_scale(type<TagA>, i)
     }
 }
 
@@ -1444,7 +1464,9 @@ def public all_msl_censuses : array<string> {
         vecarith_msl_census, control_msl_census, loops_msl_census, reduce_msl_census, simd_msl_census,
         halfarith_msl_census, latconv_msl_census, packed3_msl_census, sgmat_msl_census,
         sgmat_tiled_msl_census, sgmat_rolled_msl_census, mathcalls_msl_census, userfns_msl_census,
-        ufxcls_msl_census, ukargs_msl_census, ukstride_msl_census, consttab_msl_census, statearr_msl_census,
+        ufxcls_msl_census, ukargs_msl_census, ukstride_msl_census, tmpl_call_msl_census,
+        consttab_msl_census,
+        statearr_msl_census,
         tmmhw_msl_census, tmmhwh_msl_census, tmmq8u_msl_census, tmmq8uh_msl_census,
         tmmq8uh64_msl_census, tmmq8uh128_msl_census, tmmdeva_msl_census, tmmdevaf_msl_census,
         tmmnt_msl_census, tmmdevant_msl_census, tmmdevab_msl_census, tmmdevabnt_msl_census, sgmathalf_msl_census, sgmat_store_tg_msl_census,

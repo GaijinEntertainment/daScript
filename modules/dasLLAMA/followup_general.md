@@ -2197,3 +2197,91 @@
     modules/dasLLAMA/performance/gen_bench_records.das -- -w llm --backend cpu -o <model>` over the four carriers on an
     AWS m8i box, `--ref-clean` naming the clean-cpu `llama-bench` `benchmarks/setup_lcpp_ref.das` builds at
     `DEFAULT_REF_SHA`, no other environment setting.
+
+226. **The CUDA home's stamps that wait on their families.** Eleven discrete templates have a Vulkan stamp and no CUDA
+    stamp (`DISCRETE_ONE_HOME_STAMPS` in `REVIEW.das` names them for the stamp census), each a family the CUDA home's
+    dense slice does not serve yet: `DaAttnBWT` and `DaAttnBH128T` (the batched attention at wide and 128 heads; the
+    CUDA window declines past 512 and sends every other width to `DaAttnBT`), `F32RowsKhrT` (the MoE router's f32
+    rows), `FaH256T` and `FaH512T` (the flash tiles past 128; the owed h96 stamp joins them - Phi's head), `Mx4Cm2T`
+    and `Mx4GemvGuT` (MXFP4), `Q8GemvPleActT` (gemma-3n's PLE), `ArCombBase` and `ArCombG4T` (the routed residual
+    combines), and `QknRopeKvT` (the q/k-normed rope store); the 19 CUDA leaves the home never
+    dispatched (the sink attention stamps, the routed combines, the paired N-column Q8 forms, the biased act, the f32
+    gather, the q/k-normed rope stores) went with them. Done = each returns as one leaf the day the CUDA driver
+    dispatches it, under `REVIEW_GPU_KERNEL_CLASSES.md`'s stamp census, and its name leaves the gate's set.
+
+227. **The CUDA home answers to the Vulkan home's name in the records and the image rail.** `lcpp_bench` stamps every
+    device-tier row `vulkan` (`BenchRun.backend` at its three sites), the records rig keys its device leg on that word
+    (`gen_bench_records`'s legs, the schema's `stored_row_leg`, the site projection), and `image_lane_name` folds every
+    `vulkan*` tag into the one `vulkan` lane, so a CUDA mint and a Vulkan mint of one file share a `.dlim` (the CUDA home
+    serves off the lane's planar families, so the twin it maps is the Vulkan home's). Done = a `cuda` backend value on the
+    bench row and a `cuda` leg in the records rig paired with llama.cpp's CUDA build (`--ref` on the pod's `build-cuda`
+    `llama-bench`), the site printing it, and a ruling on the lane - its own `cuda` lane, or the shared lane renamed for
+    both discrete homes, which re-mints every box.
+
+228. **Vulkan-only text inside the shared companions.** The sections that moved whole from the Vulkan documents into
+    `ARCHITECTURE_GPU_SHARED_GEMM.md`, `ARCHITECTURE_GPU_SHARED_ROWS.md` and `ARCHITECTURE_GPU_SHARED_ATTN.md` keep their
+    `vk-` anchor names (every citer names them) and, in the block codecs' case, a NextN paragraph that is the Vulkan
+    home's alone. Done = the NextN paragraph back in `ARCHITECTURE_GPU_VULKAN_MTP.md` under its own anchor, cited from
+    the Vulkan driver; the anchor names stay unless a rename pays for its citer churn.
+
+229. **The Vulkan home's own copies of shared bodies.** `DecCombineT` is `GkMoeCombine` plus a residual epilogue;
+    `Q8ActRqB` is `ActRqT` plus the biased arm `ActF16T` carries; `Q8Batch.run` is `Blk32BatchT`'s pass over the Q8_0
+    decode; the `KqBatch*` sdot4 leaves spell every superblock format's block decode a second time beside the shared
+    `<Fmt>GemvT.blk_decode` (the same plane word offsets, the same scale terms); `F16GemmCm2` / `F16GemmKhr` and
+    `RouterGemm` / `F32GemmT` differ on the matrix primitive and the tile geometry alone. Done = a `RESID` constant on
+    `GkMoeCombine`, a `BIASED` constant on `ActRqT`, a q8 tag for `blk32_quad` / `blk32_scale`, per-format
+    `[template(fmt)]` decode functions the sdot4 leaves and the GEMV templates both call, each fold measured on the pod
+    (`vk_gemm_probe`) before it lands.
+
+230. **The per-32 and nibble-superblock cm2 decode templates fold.** `Q51Cm2T`, `Q4032Cm2T`, `Mx4Cm2T` (and their
+    constant-only children) share every nibble line and differ in the scale read and the per-element law; `K4Cm2T` and
+    `Q40Cm2T` differ in the sub-block scale source and the linear law; the `Q51` and `MX4` bool constants of
+    `Blk32GemvT` / `Blk32BatchT` restate the `FMT` tag, and a stamp that sets `FMT` q51 without `Q51` silently drops the
+    min term; the per-32 cm2 scale reads are spelled inline at thirteen sites where `blk32_scale` exists. Done = one
+    `Blk32Cm2T` over the format tag with the law as a `[template(fmt)]` overload, a `sub_scale` hook on the nibble
+    superblock template, `blk_xdot` / `wdot` dispatched on the tag, the inline scale reads through `blk32_scale`; the
+    146 cm2 column leaves (89 Vulkan, 57 CUDA) then stamp from one macro over `KqFmt`, as `kq_tile_stamp` already
+    generates their ladders.
+
+231. **The window rope-and-store body is written twice.** `RopeKvStoreBT` (the discrete homes' window form) carries its
+    own pair math beside `GkRopeKvStore`'s, which Metal already serves the window through (`MetalRopeStoreBF16`); the
+    window form adds the gated q stride, the k rows at a plane of their own and the cos-then-sin table row. Done =
+    `RopeKvStoreBT` a stamp of `GkRopeKvStore` with `qstride` and a k-row base in `GkRopeKvArgs`, the Vulkan and CUDA
+    window dispatches rebinding to its eight slots, the rope-store cells on both homes bit for bit the old body.
+
+232. **Dead constants and fields the stamps all set alike.** `GkQknRopeKv.LANES` / `EPT` (every stamp 256 and 1; the
+    `EPT` loops collapse to one pair a thread), `GkPostAddLnArgs.rows` (31 writers, no kernel reads it),
+    `KqCm2BatchT.DECVEC` (nothing overrides it since the opt-outs closed; `REVIEW_GPU_VULKAN_TILES.md` still names it as the
+    format's lever, so the rule goes with it), `gemv_grid_fmt` omitting iq3s where the CPU chain's grid list carries it.
+    Done = each deleted with its branches, the rule text following, the iq3s lane rule measured before it changes.
+
+233. **The kernel cells copy their fixture halves across homes.** `test_cuda_kernels.das`'s codec and feed arms are
+    reduced copies of the Vulkan cells' (fixture, oracle, control), the dispatch the only axis; the CUDA and Vulkan
+    dispatch lenses share about 210 lines of their scan modulo the error tag (`dasllama_cuda_dispatch.das`,
+    `dasllama_vulkan_dispatch.das`). Done = the fixture-and-verify halves in `_kv_codec_oracles` / `_vk_kq_fixtures`
+    with the dispatch a block each home's cell fills; one `lens_scan` in `dasllama_kernel_access` returning the buffers,
+    the args struct, the binding list and the ordinal, the generated surface staying per lens.
+
+234. **Unmeasured asymmetries between the two discrete homes' stamps.** The grid-codebook s tiles keep the template's
+    `BK` 64 on CUDA where the Vulkan twins set 32 (measured on the expert schedule's s pieces alone); the per-32 l tiles
+    carry `min_blocks = 2` with no measurement; the two homes pass different arguments to the shared `da_nsplit` - the
+    Vulkan driver the row's attention workgroups (the rule's words), the CUDA driver the q-head count, so the CUDA split
+    count is the smaller (3 against 9 on the 1B); fed the workgroups, the CUDA Q8_0 peel cell's rows drift far off the
+    one-row steps' while the batch cells stay bit for bit, a mechanism not yet found. Done = the s tiles and the l
+    tiles raced on the CUDA home (`gemm_cuda_vs_vulkan`), the loser deleted; the split-count argument on CUDA traced to
+    the peel's divergence and aligned.
+
+235. **The CUDA-only leaves without a cell.** A CUDA stamp of a shared template is covered by the Vulkan cell over the
+    same body (one text, the oracle held on one home, the CUDA emit fixture holding the lowering -
+    `tests/REVIEW_KERNEL_CELLS.md`'s sibling-stamp clause); the leaves only the CUDA home dispatches are not: the
+    `words_copy` kernel, the `__byte_perm` codebook word map, the clock probe, the N-column `q8_gemv_n2` / `n4` / `n8`
+    forms and their gate-up twins, the `rope_kv_*_cuda` stores, the `cls_ar*` / `cls_dn_rq` row classes and
+    `tower_clamp_cvt_cls_cuda`. The words copy, the byte permute and the Q8_0 GEMV family hold cells in
+    `tests/test_cuda_kernels.das`; the rest run under the model-backed parity files alone. Done = one oracle cell per
+    CUDA-only leaf in `test_cuda_kernels.das` with its negative control, under `tests/REVIEW_KERNEL_CELLS.md`.
+
+236. **The CUDA cm2 l tile accumulates in f16.** The Vulkan twin accumulates in f32; on the hashed fixture at the rate
+    shapes the f16 accumulator's worst miss is 0.5 to 1.4 percent of the largest output against the cell's 2e-3 bar, so
+    the rate cell runs on a fixture f16 holds exactly and the l-tile cells at k 576 and 2048 keep the bar with no
+    derivation. Done = the f32 accumulator raced against the f16 one on the three rate shapes (`gemm_cuda_vs_vulkan`),
+    f32 kept only where it is no slower, and a per-k error derivation on the l-tile cells either way.

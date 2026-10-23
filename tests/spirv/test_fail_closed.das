@@ -154,6 +154,13 @@ def test_fail_closed_rejections(t : T?) {   // nolint:STYLE038 — flat one-chec
         check_rejects(t, "_fc_wgsize_stage", "builtin 'gl_WorkGroupSize' is not available in the fragment stage")
         // cooperative matrices are subgroup-scoped -> compute-only; a coopmat op in a fragment shader is rejected
         check_rejects(t, "_fc_coopmat_stage", "coopmatLoad is only valid in a compute shader")
+        check_rejects(t, "_fc_scaleacc_stage", "coopmatScaleAcc is only valid in a compute shader")
+        check_rejects(t, "_fc_scaleacc_shape",
+            "coopmatScaleAcc: an f32 workgroup accumulator and the s32 accumulator of its shape")
+        check_rejects(t, "_fc_scaleacc_shared",
+            "coopmatScaleAcc: rs must be a @workgroup float array")
+        check_rejects(t, "_fc_scaleacc_arity",
+            "coopmatScaleAcc expects (facc, sacc, rs, rbase, cs, cbase)")
         // @workgroup memory and barrier(): compute / mesh / task only
         check_rejects(t, "_fc_wg_stage",
             "@workgroup is only valid in a compute, mesh or task shader")

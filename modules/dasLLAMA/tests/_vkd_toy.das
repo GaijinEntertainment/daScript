@@ -9,7 +9,7 @@ require vulkan
 require vulkan/vulkan_boost
 require dasllama/dasllama_vulkan_common
 require dasllama/dasllama_vulkan_dispatch
-require dasllama/dasllama_vulkan_classes   // Q8Cm2T: the two toy stamps below
+require dasllama/dasllama_gpu_kernels_discrete
 require daslib/typemacro_boost
 require math   // the cloned template body's min/max
 
@@ -77,6 +77,11 @@ class ToyQ8Cm2Strip : Q8Cm2T {
     typedef BT = coopmatWgB_f16_64x256
     typedef ACC = coopmatWgAcc_f16_128x256
     typedef ACCW = coopmatWgAcc_f32_128x256
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        cm2_body()
+    }
 }
 
 [vk_dispatch(name = "toy_q8_cm2_twin_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -85,4 +90,9 @@ class ToyQ8Cm2Twin : Q8Cm2T {
     typedef BT = coopmatWgB_f16_64x256
     typedef ACC = coopmatWgAcc_f16_128x256
     typedef ACCW = coopmatWgAcc_f32_128x256
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        cm2_body()
+    }
 }

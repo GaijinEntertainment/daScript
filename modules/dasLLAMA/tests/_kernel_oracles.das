@@ -12,6 +12,7 @@ require dasllama/dasllama_lint public
 require math
 require dasllama/dasllama_math   // rope_scaled_tab, rope_scaled_neox_tab, rope_scaled_neox_tab_part
 require dasllama/dasllama_gpu_math
+require daslib/shader_lingua_franca
 
 //! The engine's table rope over `n` elements of `v` from `base`, heads `hs` wide, on the `tcos` / `tsin` rows: the partial
 //! form whenever `rot` names a prefix short of `hs`, else the NEOX or the interleaved pairing as `neox` names - the engine's
@@ -366,4 +367,68 @@ def dw_s2_front_ref(first, relu : bool; iw, ch, oh, ow, valid : int; xv, wv, bv 
         }
     }
     return <- want
+}
+
+//! the GEMM oracles' region-record walk: each record's `cnt` rows from `row0` at every output column, y[row * d + c] = `dot`(row, c, wblk0)
+def rec_walk(recs : array<uint>; nrec, d : int; var y : array<float>; dot : block<(row, c, wblk0 : int) : float>) {
+    for (rr in range(nrec)) {
+        let wblk0 = int(recs[rr * 4])
+        let row0 = int(recs[rr * 4 + 1])
+        for (r in range(int(recs[rr * 4 + 2]))) {
+            for (c in range(d)) {
+                y[(row0 + r) * d + c] = invoke(dot, row0 + r, c, wblk0)
+            }
+        }
+    }
+}
+
+def byte_u8(a : array<uint>; i : int) : int => int(a[i / 4] >> uint((i % 4) * 8)) & 0xFF
+
+def byte_s8(a : array<uint>; i : int) : int {
+    let b = byte_u8(a, i)
+    return b >= 128 ? b - 256 : b
+}
+
+def half_at(a : array<uint>; hi : int) : float {
+    let w = unpackHalf2x16(a[hi / 2])
+    return hi % 2 == 0 ? w.x : w.y
+}
+
+//! summed per (row, col) in block order; the device tiles reassociate, so a compare takes the approx bar
+def q8f16_gemm_oracle(wq : array<uint>; wsw : array<uint>; xf : array<uint>;
+                      recs : array<uint>; nrec, n, d : int; var y : array<float>) {
+    let nbb = n / 32
+    rec_walk(recs, nrec, d, y) $(row, c, wblk0 : int) : float {
+        var acc = 0.0
+        for (b in range(nbb)) {
+            let wb = wblk0 + c * nbb + b
+            let wsf = wb % 2 == 0 ? unpackHalf2x16(wsw[wb / 2]).x : unpackHalf2x16(wsw[wb / 2]).y
+            var bacc = 0.0
+            for (j in range(32)) {
+                bacc += float(byte_s8(wq, wb * 32 + j)) * half_at(xf, row * n + b * 32 + j)
+            }
+            acc += bacc * wsf
+        }
+        return acc
+    }
+}
+
+//! exact int dots a 32-block folded in block order; the device folds reassociate, so a compare takes the approx bar
+def q8_gemm_oracle(wq : array<uint>; wsw : array<uint>; xq : array<uint>; xs : array<float>;
+                   recs : array<uint>; nrec, n, d : int; var y : array<float>) {
+    let nbb = n / 32
+    rec_walk(recs, nrec, d, y) $(row, c, wblk0 : int) : float {
+        var acc = 0.0
+        for (b in range(nbb)) {
+            let wb = wblk0 + c * nbb + b
+            let xb = row * nbb + b
+            var idot = 0
+            for (j in range(8)) {
+                idot += sdot4(wq[wb * 8 + j], xq[xb * 8 + j])
+            }
+            let wsf = wb % 2 == 0 ? unpackHalf2x16(wsw[wb / 2]).x : unpackHalf2x16(wsw[wb / 2]).y
+            acc += float(idot) * wsf * xs[xb]
+        }
+        return acc
+    }
 }

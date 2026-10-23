@@ -28,32 +28,35 @@ device: `enc_kq_dq_<fmt>` or `enc_dequant_<fmt>h`) - is a defect.** A form one f
 another lacks dispatches the two through different kernel sequences on one machine, so a timing
 compared across the two measures the sequences, not the formats' kernels.
 
-**A diff that changes when a format's Metal MoE twin pick - `metal_moe_kq_twin_pick`, or a
-per-format condition beside it, the per-dispatch choice between the tensor-op kernel of the same
-form and the base kernel - takes the twin (the window's mean rows per expert, the K width, or
-whether the race chose the twin as the winner on this machine) makes the same change for every
-`KqFmt` member of the format's `moe_mm` / `moe_mm_split` stamp family, in the same change; a member
-whose twin cannot run a given K width is outside the trigger at that width.** When two formats'
+**A diff that changes when a Metal MoE format takes its tensor-op twin over its base kernel of
+the same form - in `metal_moe_kq_twin_pick` or a per-format condition beside it, by the window's
+mean rows per expert, the K width, or this machine's race winner - makes the identical edit for
+every `KqFmt` member of that format's `moe_mm` / `moe_mm_split` stamp family, at every K width
+the member's twin can run, in that diff.** When two formats'
 picks differ, a timing compared across them measures one format's base kernel against the other's
 tensor twin, not the two formats' kernels.
 
-**A literal that stands for a per-format quantity of a `KqFmt` member, in any unit (words, halves,
-superblocks), written outside a Metal or SPIR-V kernel body and outside a definition home -
-`dasllama/dasllama_kqformat.das`, the `ggml_type_bytes` table (`dasllama/dasllama_gguf.das`), the
-`Q8_*` constants of `dasllama/dasllama_gemm_schema.das`, a `@template_constant` on a Metal or SPIR-V
-kernel class, the pins of `tests/test_kqformat.das` - is a defect: read it through a `KqFmt` accessor
-(`kq_elems`, `kq_disk_bytes`, ...), through `kq_qsb` / `kq_ssb` on a format id, or through a named
-constant a definition home declares, declared there in the same change when none exists.** A
-number derived from several formats' sizes is such a literal; a kernel builder's `requires =`
-alignment string takes a literal integer alone (the lens accepts no name there), so that literal is
-pinned in `tests/test_kqformat.das` against the format's block length; a test's expected-message
-text is not a literal of this rule. A literal `32` reads
-like a tile width.
+**A literal that stands for a per-format quantity of a `KqFmt` member, in any unit (words,
+halves, superblocks) - a number derived from several formats' sizes included - written anywhere
+but a GPU kernel body, a kernel builder's `requires =` alignment string, a test's expected-message
+text, or a definition home - `dasllama/dasllama_kqformat.das`, the `ggml_type_bytes` table
+(`dasllama/dasllama_gguf.das`), the `Q8_*` constants of `dasllama/dasllama_gemm_schema.das`, a
+`@template_constant` on a GPU kernel class, the pins of `tests/test_kqformat.das` - is a defect:
+read it through a `KqFmt` accessor (`kq_elems`, `kq_disk_bytes`, ...), through `kq_qsb` /
+`kq_ssb` on a format id, or through a named constant a definition home declares, declared there
+in the same change when none exists.** A literal `32` reads like a tile width.
 
-**A diff that writes a per-format quantity of a `KqFmt` member as a bare literal in a Metal or
-SPIR-V kernel body is a defect - read it through a `@template_constant` declared on the shared base of its class family, or
-on the class when it has none; a diff that declares such a constant pins its value against the
-format's `kq_desc` row in `tests/test_kqformat.das` in the same change.**
+**A diff that writes a literal integer into a kernel builder's `requires =` alignment string pins
+it against the format's block length in `tests/test_kqformat.das` in the same change** - the lens
+accepts no name there.
+
+**A diff that writes a per-format quantity of a `KqFmt` member as a bare literal in a GPU kernel
+body is a defect - read it through a `@template_constant` declared on the shared base of its
+class family, or on the class when it has none.**
+
+**A diff that declares, on a GPU kernel class, a `@template_constant` holding a per-format
+quantity of a `KqFmt` member pins its value against the format's `kq_desc` row in
+`tests/test_kqformat.das` in the same change.**
 
 **A diff that adds or changes a `kq_desc` row (`dasllama/dasllama_kqformat.das`) or a
 `ggml_type_bytes` entry (`dasllama/dasllama_gguf.das`) lands the row's pins in
@@ -61,11 +64,12 @@ format's `kq_desc` row in `tests/test_kqformat.das` in the same change.**
 value, and its `disk_bytes` inside the walk that checks every row against `ggml_type_bytes`.**
 Narrowing the row's literal pins or the `ggml_type_bytes` walk is a defect.
 
-A site is a weight plane a backend's (CPU, Metal, Vulkan) serving call reads. A lever is an env
-knob or setter that changes which form a site reads. A converted copy is any form of the weights -
-other than a re-encoding of their own quantized values that is value-exact against the disk form
-and has no wider element type (`ARCHITECTURE_ENGINE_FORMATS.md#served-form`) - whose bytes outlive
-the one kernel call or window that made them, or reach the `.dlim` image.
+A site is a weight plane a backend's serving call reads, on the CPU or on any GPU backend. A
+lever is an env knob or setter that changes which form a site reads. A converted copy is any form
+of the weights - other than a re-encoding of their own quantized values that is value-exact
+against the disk form and has no wider element type
+(`ARCHITECTURE_ENGINE_FORMATS.md#served-form`) - whose bytes outlive the one kernel call or window
+that made them, or reach the `.dlim` image.
 
 **A diff that makes a site read a weight format through a converted copy, or hands a GPU site to
 the CPU's kernels, on a run with every lever at its default is a defect - add that backend's
@@ -82,8 +86,9 @@ fails or converts at load with no message naming the site.
 **A diff that adds or changes a site that names, with a literal `KqFmt` member, the format of a
 weight plane whose disk type some `KqFmt` member describes is a defect: tag the plane from its
 disk type with `kq_tag` / `kq_fmt_of` (`dasllama/dasllama_load.das`) and read that tag at the
-site instead.** A literal at the site is a conversion no report names: every disk type the file carries becomes the literal's form, and each
-backend that copies the literal serves that form in place of the file's.
+site instead.** A literal at the site is a conversion no report names: every disk type the file
+carries becomes the literal's form, and each backend that copies the literal serves that form in
+place of the file's.
 
 **Weakening `REVIEW.das`'s `check_load_big_format` is a defect.** That check fails every `load_big`
 call in `dasllama/dasllama_load.das` that passes no format: such a call converts the plane to one
@@ -97,15 +102,16 @@ instead, or cite the follow-up row that ledgers it.**
 
 **A diff that states, in any document, PR description, test name or predicate, that a backend
 serves a weight format at a site lands or cites a subtest that loads a file whose plane at that
-site is in that format on disk, and asserts that the loader's format tag for that plane
-equals its disk type and that a kernel counter (`metal_kernel_count(name)` on Metal, the Vulkan
-driver's per-kernel census count) that no other plane of that file moves rose during the run.**
-The file is a downloaded `performance/model_specs.das` row's file, or, when no downloaded row
-carries the format, a row whose `file` ends `-local.gguf` and whose `recipe` requantizes into it. A
-subtest that only asserts the backend ran still passes when the site reads a converted copy or runs
-on the CPU pre-step.
+site is in that format on disk, and asserts that the loader's format tag for that plane equals
+its disk type and that a kernel counter (`metal_kernel_coverage_of(name)` on Metal,
+`vk_kernel_coverage_of(name)` on Vulkan, `cud_kernel_coverage_of(name)` on CUDA) that no other
+plane of that file moves rose during the run.** The file is a downloaded
+`performance/model_specs.das` row's file, or, when no downloaded row carries the format, a row
+whose `file` ends `-local.gguf` and whose `recipe` requantizes into it. A subtest that only
+asserts the backend ran still passes when the site reads a converted copy or runs on the CPU
+pre-step.
 
 **A diff that adds a lever, off by default, that makes a site read a weight format through a
-converted copy names the lever in the same change - in `ARCHITECTURE_GPU_ASYMMETRIES.md` where
-only one GPU backend carries it, else in
+converted copy names the lever in the same change - in `ARCHITECTURE_GPU_ASYMMETRIES.md` when one
+GPU backend carries it and another lacks it, else in
 `ARCHITECTURE_MEASUREMENT.md#sanctioned-instrumentation-rails`.**

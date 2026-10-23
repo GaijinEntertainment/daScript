@@ -6,9 +6,9 @@ docs: `ARCHITECTURE_MEASUREMENT.md`, `ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md`,
 `ARCHITECTURE_MEASUREMENT_SERVED.md`. Planned work: `followup_metal.md`, `followup_vulkan.md`,
 `followup_general.md`.
 
-Every rule below that governs a figure binds a figure this change writes or changes - in the
-repo outside `site*/` (repo root), in a commit message, or in its PR body. It does not bind a
-figure a changed line carries unchanged.
+**A rule here that governs a figure binds only a figure the change writes or changes - in the repo
+outside `site*/` (repo root), in a commit message, or in its PR body - never one a changed line
+carries unchanged.**
 
 A figure is any number a run produced - a rate, a wall, a count, a byte size, or a ratio or
 percentage of two such numbers, produced by the runs its sides came from - or an error or
@@ -23,18 +23,20 @@ the wall of one internal stage (one model component's forward pass, one decoder 
 leg.
 
 An instrument is a file whose printed or returned result is a wall or rate of a run it drove,
-read by its own clock or by timestamps the device driver (Metal or Vulkan) returns, wherever the
-file sits; a file reading a spawned child process's clock, and a profiler-gated report a serving
-path prints beside its served output, are not one. A harness is the `harness/` script that drove
+read by its own clock or by timestamps a GPU driver returns, wherever the file sits; a file
+reading a spawned child process's clock, and a profiler-gated report a serving path prints beside
+its served output, are not one. A harness is the `harness/` script that drove
 a run, where one did. A route is the end-to-end code path a served turn takes, including the
 default route - the one a run given no command-line arguments and no environment overrides takes.
 
 The flags of a serving run are the tier (`-jit` or not), the `DAS_TUNE_POLICY` value in force,
 the CPU kernel backend the registry served (the one `DASLLAMA_PIN_BACKEND` pinned, or, with it
-unset, the one the auto-selection picked), the GPU backend where one served (Metal or Vulkan)
-with its device, and on Vulkan the coopmat mode (`DASLLAMA_COOPMAT`). The flags of an instrument
-run are the tier, the `DAS_TUNE_POLICY` value, the device, the coopmat mode where the GPU backend
-has one, and the instrument's arguments.
+unset, the one the auto-selection picked), the GPU backend where one served with its device, on
+Vulkan the coopmat mode (`DASLLAMA_COOPMAT`), and on CUDA the prefill GEMM form
+(`DASLLAMA_CUDA_MMQ`) and whether a launch overlaps the tail of the one before it
+(`DASLLAMA_CUDA_PDL`). The flags of an instrument run are the tier, the `DAS_TUNE_POLICY` value,
+the device, `DASLLAMA_COOPMAT` on Vulkan or `DASLLAMA_CUDA_MMQ` and `DASLLAMA_CUDA_PDL` on CUDA,
+and the instrument's arguments.
 
 The flags of a test run - a dastest test whose reading sets or checks a tolerance - are the tier,
 the `DAS_TUNE_POLICY` value, the device, the CPU kernel backend the registry served, the GPU
@@ -96,17 +98,14 @@ that line or paragraph covers.**
 
 **A `PERF_LEDGER.md` entry states a turn wall (the wall of one whole served request, whatever the
 modality) or a tok/s rate of the engine this repository builds only when one of these produced
-it, named in the entry:**
-- `benchmarks/lcpp_bench.das`, as the released exe from `daspkg release` or as the `-jit` script;
-- a spawned or manual cell;
-- for a modality `lcpp_bench.das` has no command-line flag for, the `harness/` instrument, with its
-  command line;
-- for a figure timed through the scheduler or the server, `harness/served_bench.das` with its
-  command line, or an out-of-process replay named as the replay (its name, its request count),
-  over a server whose flags the entry states.
-A turn wall or tok/s rate printed by any other instrument stays in that run's log: the ledger entry
-carries what the instrument decided - served, declined, how many rows it counted - never that wall
-or rate.
+it, named in the entry: `benchmarks/lcpp_bench.das`, as the released exe from `daspkg release` or
+as the `-jit` script; a spawned or manual cell; for a modality `lcpp_bench.das` has no
+command-line flag for, the `harness/` instrument, with its command line; for a figure timed
+through the scheduler or the server, `harness/served_bench.das` with its command line, or an
+out-of-process replay named as the replay (its name, its request count), over a server whose
+flags the entry states.** A turn wall or tok/s rate printed by any other instrument stays in that
+run's log: the ledger entry carries what the instrument decided - served, declined, how many rows
+it counted - never that wall or rate.
 
 **A pair of `-jit` readings held against each other keeps each arm's absolute wall or rate
 beside the pair, wherever the diff states it - checked-in text, commit message or PR body.**
@@ -210,8 +209,8 @@ same change: the same instrument's row on the same fixture and input size with e
 environment override changed; the same instrument's row on the same fixture, input size, flags and
 overrides at a named other commit, tagged `direction-grade`; the other arm of the race the number
 comes from; or a third-party row that cites the architecture section holding the part of its recipe
-its own `cmd` and `versions` fields do not carry.** A
-number with no alternate beside it cannot be compared to anything.
+its own `cmd` and `versions` fields do not carry.** A number with no alternate beside it cannot
+be compared to anything.
 
 **A diff that records a third-party row lands, in the same change, every part of that row's
 recipe its own `cmd` and `versions` fields do not carry - the program, its version, the model, the
@@ -250,5 +249,5 @@ the pinned backend's layout, so a pin set after the load never reaches them.
 
 **A diff that adds or changes a CPU kernel-backend pin path makes the run refuse or skip when
 `kernel_backend_pin_refusal` names a reason - a backend the box has not registered, a batch-only
-backend, or one the box cannot run - never fall through to the default.** A
-misspelled pin that falls through measures the default backend under the pinned one's name.
+backend, or one the box cannot run - never fall through to the default.** A misspelled pin that
+falls through measures the default backend under the pinned one's name.

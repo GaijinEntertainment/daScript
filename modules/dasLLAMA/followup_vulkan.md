@@ -658,7 +658,7 @@ module) is independent and can land any time - it is pure structure.
     llama.cpp's cm2 `mul_mat_id` tile at 754 / 788 / 870 / 797 on the same uniform buckets (its
     `test-backend-ops perf`), the select form 1.28x / 1.24x / 1.49x / 1.08x of those times;
     iq2xs 651, iq4xs 632, k4 746 and q8 885 already sat under its 744 / 959 / 1009 / 998. The rule in
-    `ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes`. The selects left: k5's qh byte in its twin,
+    `ARCHITECTURE_GPU_SHARED_GEMM.md#cm2-decode-16bit-lanes`. The selects left: k5's qh byte in its twin,
     the k3 and K-quant scalar decodes (the edge path and the scalar-callback arm) - the same
     lever, unmeasured.
 
@@ -771,7 +771,7 @@ module) is independent and can land any time - it is pure structure.
     kq-only file. A card without NV_coopmat2 (every AMD and Intel part, the GTX line)
     prefilled a 27B at a third of the reference exe's rate. The fix was the format decode on
     the mul_mm L-tile, the way it moved onto the cm2 template.
-    THE KHR kq TILE LANDED (2026-09-07 evening, `ARCHITECTURE_GPU_VULKAN_KHR.md#khr-mm-kq-tile`): the
+    THE KHR kq TILE LANDED (2026-09-07 evening, `ARCHITECTURE_GPU_SHARED_GEMM.md#khr-mm-kq-tile`): the
     cm2 template's KHR arm, every kq format, 0 of 89600 off on all thirteen; the 4B Q4_K_M mm
     row 1564 -> 2378 (0.56x of the reference exe's `mul_mm.comp` 4221), the 27B UD-IQ4_XS
     221 -> 395 (0.59x of the same tile's 675), decode unchanged. Its three measured steps: the
@@ -782,7 +782,7 @@ module) is independent and can land any time - it is pure structure.
     edge-store slab the shipped class carried beside its two 10 KB staging arrays - a probe arm
     of that evening (since retired), the copy plus that one array touched on a path no dispatch
     takes, read 28.5: 8 KB more shared memory per workgroup is one workgroup fewer per SM (the
-    two-array footprint is now the tile's own, `ARCHITECTURE_GPU_VULKAN_KHR.md#khr-mm-kq-tile`). The staging arrays are
+    two-array footprint is now the tile's own, `ARCHITECTURE_GPU_SHARED_GEMM.md#khr-mm-kq-tile`). The staging arrays are
     now `uint` f16 pairs (the activation words stored as they arrive, no unpack) and the edge
     tile's f32 fragments bounce through the weight array once the k loop is done, the row guards
     hoisted out of the loop: the shipped class 25.6 -> 32.1 / 23.9 -> 31.4 / 25.6 -> 32.2 on the
@@ -922,13 +922,13 @@ module) is independent and can land any time - it is pure structure.
     window), the router tile prefetches its stage as a 64 x 32 tile (6.6 -> 4.3 ms): the 30B
     3448.9 / 124.6 (0.98x / 1.07x, the window 144.9 ms against 142.3), the 35B 2946.0 / 95.2
     (1.03x / 1.33x), the twin 5348.3 / 163.4 (1.05x / 0.94x). The remainder pass's first
-    lever: the routed combine rides the residual step in both chains (`ClsArComb`, `ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block` /
+    lever: the routed combine rides the residual step in both chains (`ClsArComb`, `ARCHITECTURE_GPU_SHARED_ROWS.md#moe-combine-row` /
     `ARCHITECTURE_GPU_VULKAN_MOE.md#resident-moe-token`), one dispatch per layer fewer, in the two kernels' sum order so the MoE files'
     bars keep their calibration; then the router tile's float4 stage (its scalar stage was
     bank-conflict bound: 4.3 -> 2.4 ms per 30B window), the residual step's slot groups (eight
     rows in flight, then four: the twin's one-row step 360 -> 290 us per token) and the
     FFN-norm requant skipped on a layer with no shared expert (540 us per 30B window that
-    nothing read); then the decode GEMV family's lanes per row (`ARCHITECTURE_GPU_VULKAN_GEMM.md#kq-gemv-lanes`: a subgroup over one, two or four rows by the row length, the expert rows of a MoE
+    nothing read); then the decode GEMV family's lanes per row (`ARCHITECTURE_GPU_SHARED_GEMM.md#kq-gemv-lanes`: a subgroup over one, two or four rows by the row length, the expert rows of a MoE
     being the short ones - iq2s at K 768 148 -> 337 GB/s on the probe). The rows on the final
     kernels, pp512 / tg128: the 30B 3482.6 / 132.0 (0.99x / 1.13x, the window 143.4 ms against
     142.3, the token 6.79 ms), the 35B 2962.8 / 107.1 (1.04x / 1.50x), the twin 5395.3 / 166.8
@@ -1011,7 +1011,7 @@ module) is independent and can land any time - it is pure structure.
     arm (1.00x of the reference's scalar arm) and 2996 -> 3236 with the twin (1.14x of its four-wide
     arm); on a Linux RTX 5080 (driver 580.173, the real scalar arm, `-t 8`, 16 vCPU) the merged code
     read 3304.5 / 130.7 and the slice 3835.5 / 131.2 with every expert stamp at 32 against the
-    reference exe's 5217.0 / 146.2 on that host (0.63x -> 0.74x pp), the GEMM companion's `ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default` and
+    reference exe's 5217.0 / 146.2 on that host (0.63x -> 0.74x pp), the GEMM companion's `ARCHITECTURE_GPU_SHARED_GEMM.md#cm2-tile-body` and
     `PERF_LEDGER.md` carry it. The reference build's k step is one number for every quant type -
     `mmqid_bk` follows `coopmat2_decode_vector` alone; its mul_mat_id tiles are BM 128 with BN 128 past
     64 routed rows and 64 below, never split-k; its expert k loop is `[[dont_unroll]]`, so a halved
@@ -1085,7 +1085,7 @@ module) is independent and can land any time - it is pure structure.
     the SPIR-V dump shows the control on `OpLoopMerge`), while the hand form - an outer runtime loop
     over an inner literal-bound `[unroll]` loop - unrolls, so the driver honours `Unroll` only on a
     constant trip count; and a plain `while (k < k1)` over the general `k0`/`k1`/`ybase` bounds also
-    drops the no-split arm's literal-bound form (`ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default`), so that experiment confounded the two -
+    drops the no-split arm's literal-bound form (`ARCHITECTURE_GPU_SHARED_GEMM.md#cm2-tile-body`), so that experiment confounded the two -
     a clean hint re-test on the no-split path alone is still owed. The iq2s k step was re-asked under
     the new unroll, since the skewed probe read the 64-deep m stamp 4% ahead of the 32-deep e stamp on
     the pod (7-14% on the 5060 Ti): the 35B's down plane at 64 read pp512 3903 against 3987 and e_down
@@ -1150,7 +1150,7 @@ module) is independent and can land any time - it is pure structure.
     declines the resident driver (the 2048 MB headroom fallback) - `DASLLAMA_GPU_VRAM_MB=15500` pins the
     cap and a 20 s pause clears it; the 27B Q4_K_M (16.6 GB) does not fit the 5080. The K-quant lever
     landed as the reference exe's `shAscales` form: the k4, k5 and iq4xs tiles stage the sub-block scales
-    per superblock (GEMM companion `ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes`) - `cm2:k5` gate l 83.9 -> 116.2 TFLOP/s and m 62.7 -> 99.9,
+    per superblock (GEMM companion `ARCHITECTURE_GPU_SHARED_GEMM.md#cm2-decode-16bit-lanes`) - `cm2:k5` gate l 83.9 -> 116.2 TFLOP/s and m 62.7 -> 99.9,
     `cm2:k4` gate l 119.5 - past the reference exe's 93-96 - and `cm2:iq4xs` gate l 109.4, m 102.9, q/wo
     l 91.4 (upstream carries no cache for IQ4_XS); the 35B 5010 -> 5091 +- 52 (0.970x of the day's 5247),
     the 9B 4369 -> 5133 +- 8 (0.892x; its window 116 -> 99 ms against the reference's 89 - what is left
@@ -1458,7 +1458,7 @@ module) is independent and can land any time - it is pure structure.
 67. **The GEMM probe's `moe:` and `moesk:` arms admit no per-32 format.** `harness/vk_gemm_probe.das`
     refuses `moe:q51` and `moe:mx4` ("needs q8 or a kq superblock format name"), so the two per-32
     rails' s and e stamps (`Q51Cm2SBatch` / `EBatch`, `Mx4Cm2SBatch` / `EBatch`) have no probe rows
-    and the `DASLLAMA_VK_DECVEC` pair `REVIEW_GPU_VULKAN.md` asks of a changed cm2 tile cannot be
+    and the `DASLLAMA_VK_DECVEC` pair `REVIEW_GPU_VULKAN_TILES.md` asks of a changed cm2 tile cannot be
     taken for them; the kernel cells hold the stamps meanwhile. The arms need the per-32 plane
     builders (the block-32 quant and scale planes) beside their kq ones, then the rows.
 68. **The routed 26B's perplexity cells measure the device compiler's rounding, not the driver.**
@@ -1639,7 +1639,7 @@ module) is independent and can land any time - it is pure structure.
     (`tests/_vkd_oracles.das`) sharing one format list. Untested branches: the `[grid_words]` and
     `kq_tile_stamp` macro diagnostics (no failing fixture), and the two decode call sites that clamp
     past +-65504 through `cvt_f32_to_f16` where the old cast gave +-inf (no plane carries such a value).
-    Owed on a decode-vector card: the `DECVEC=1` probe rows `REVIEW_GPU_VULKAN.md` asks of the cm2
+    Owed on a decode-vector card: the `DECVEC=1` probe rows `REVIEW_GPU_VULKAN_TILES.md` asks of the cm2
     decode folds - the pod's RTX PRO 4500 has no coopmat2 decode-vector, so only the `=0` rows were read.
     Two folds the pass landed and took back on the served row: `MmBatchT`'s `l_tile` / `m_tile` (BT alone)
     as one coopmat accumulator array walked under `[unroll_full]` read flat per dispatch on the 4096x4096
@@ -2179,3 +2179,13 @@ module) is independent and can land any time - it is pure structure.
     speculation off a plain stream reads token for token a plan without the head and asks no draft seat, and the same
     image with speculation on drafts and verifies on the device without a re-mint; the existing
     `test_gpu_resident_hybrid_mtp_*` cells run under the opt-in.
+
+160. **Every class pipeline is built with no `VkPipelineCache`, so a fresh box compiles all 420 dispatch classes
+    from SPIR-V at the first load.** Both `create_compute_pipeline` helpers (`vulkan_boost.das`) pass `null` for the
+    cache, and the only thing keeping a repeat load warm is the vendor driver's own on-disk cache (NVIDIA's
+    `GLCache`, shared with OpenGL), which a fresh box, a driver update or a disabled cache empties. dasVulkan binds
+    `create_pipeline_cache`, `get_pipeline_cache_data` and `merge_pipeline_caches` already. The work: one cache handle
+    created at device init from a file under `.cache/daslang/` keyed by the device's `pipelineCacheUUID` (the shape the
+    CUDA cubin cache takes), passed by the two helpers, its bytes written at quit; a blob the driver does not recognize
+    starts empty. Measure first: `g_vkd_pipe_build_us` cold (the vendor cache cleared) against warm. Done = a model's
+    first load on a cleared vendor cache within 10% of its warm load's pipeline build share.

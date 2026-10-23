@@ -126,6 +126,9 @@ struct public GpuTierEnv {
     @clarg_doc = "One switch for the measured-best GPU rail set; any DASLLAMA_GPU_* knob still overrides individually. On a Vulkan build it is also the want the tower driver reads before any device init: the vision and audio towers' block loops serve on the device only while it is on, and decline `device` otherwise."
     gpu : Option<bool>
 
+    @clarg_doc = "The CUDA home takes the GPU tier's seats in place of the Vulkan home (with DASLLAMA_GPU on): the whole-model driver for a dense q8 model on an NVIDIA card through the driver API and NVRTC, no Vulkan call made. Off, the Vulkan home serves as before."
+    cuda : bool = false
+
     @clarg_default_doc = "-1 (auto)"
     @clarg_doc = "How many MoE expert layers to hold resident on the GPU; -1 lets the upload walk place the split."
     gpu_moe_layers : Option<int64>
@@ -433,7 +436,7 @@ struct public MetalEnv {
 [EnvConfig(env_prefix = "DASLLAMA"), arch(at="../ARCHITECTURE_RUNTIME.md#env-knobs")]
 struct public VulkanEnv {
     @clarg_default_doc = "auto"
-    @clarg_doc = "Cooperative-matrix mode (auto = cm2 where the device has NV_cooperative_matrix2, else mm, else sdot4); the flash-attention twin needs it even when the GEMM runs sdot4."
+    @clarg_doc = "Cooperative-matrix mode (auto = cm2 where the device has NV_cooperative_matrix2, else mm, else sdot4; `f16` and `int8` pick the KHR f16 and int8 batch tiles, which auto never does); the flash-attention twin needs it even when the GEMM runs sdot4."
     coopmat : string = ""
 
     @clarg_default_doc = "32"
@@ -524,8 +527,14 @@ struct public VulkanEnv {
     @clarg_doc = "cm2 prefill tile pick: 0 = the wave model's pick (`cm2_gemm_pick`), 128 = force the m tile, 256 = force the l tile (A/B instrument). Inert on the KHR arm (DASLLAMA_COOPMAT=mm, or a device without NV_coopmat2), whose kq tile has one geometry."
     cm2_tile : int64 = 0l
 
-    @clarg_doc = "cm2 split-k: 0 = the wave model's pick (`cm2_gemm_pick`), 1 = off, N = force N k-chunks (A/B instrument; shrinks if N strands an empty tail). On the KHR arm the chunks ride its one 128-column geometry."
+    @clarg_doc = "cm2 split-k: 0 = the pick's own (the Vulkan wave model `cm2_gemm_pick`; the CUDA home's `cud_cm2_pick` splits a grid short of two blocks an SM until it fills the card and runs a full grid whole), 1 = off, N = force N k-chunks on either home (A/B instrument; shrinks if N strands an empty tail). On the KHR arm the chunks ride its one 128-column geometry."
     cm2_splitk : int64 = 0l
+
+    @clarg_doc = "The CUDA home's window chain on the int8 MMQ GEMM (`q8_mmq`): the activations requantized to Q8_0 blocks between the GEMMs, as the token step's feeds are. 1 = where every GEMM shape of the model fits the tile (d a multiple of 128, the reduction a multiple of 256), 0 = the f16-fed cm2 tiles (A/B instrument). The load log names the pick."
+    cuda_mmq : int64 = 1l
+
+    @clarg_doc = "The CUDA home's launches under programmatic dependent launch: a kernel is launched while the one before it in the stream still runs, and its entry wait (`griddepcontrol.wait`, in every emitted kernel on sm_90 and up) holds its reads until that one completes, so the launch latency rides under the predecessor's tail. 1 = on where the card is sm_90 or newer, 0 = plain stream order (A/B instrument). The device-ready log line names the state."
+    cuda_pdl : int64 = 1l
 
     @clarg_path
     @clarg_doc = "Directory of <kernel>.spv files served instead of the emitted words at pipeline creation (offline spirv-opt / hand-patched A/B instrument)."

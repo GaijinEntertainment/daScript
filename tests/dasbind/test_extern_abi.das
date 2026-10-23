@@ -17,6 +17,15 @@ let REAPPLY_FIXTURE = "{get_das_root()}/tests/dasbind/_reapply_fixture.das"
 [extern(cdecl, name="dasbind_probe_dbl_at45", library="dasbind_probe")]
 def probe_dbl_at45(a0, a1, a2, a3 : int64; a4, a5 : double) : double => 0.0lf
 
+[extern(cdecl, late, name="dasbind_probe_dbl_at45", library="dasbind_no_such_probe;dasbind_probe")]
+def probe_dbl_at45_candidates(a0, a1, a2, a3 : int64; a4, a5 : double) : double => 0.0lf
+
+[extern(cdecl, name="dasbind_probe_ref_write", library="dasbind_probe")]
+def probe_ref_write(var out : int64&; v : int64) : int => 0
+
+[extern(stdcall, late, name="GetTickCount64", library="kernel32")]
+def windows_tick_count64() : uint64 => 0ul
+
 [extern(cdecl, name="dasbind_probe_dbl_at6", library="dasbind_probe")]
 def probe_dbl_at6(a0, a1, a2, a3, a4, a5 : int64; a6 : double; a7 : int64) : double => 0.0lf
 
@@ -54,6 +63,23 @@ def probe_stack_dbl_result(a0 : double; a1, a2, a3, a4, a5, a6, a7, a8 : int64; 
 def test_extern_argument_passing(t : T?) {
     t |> run("doubles in positions 4 and 5 reach the callee's float registers") @(t : T?) {
         t |> equal(probe_dbl_at45(1l, 2l, 3l, 4l, 1.5lf, 2.5lf), 4331.5lf)
+    }
+    t |> run("a library candidate list binds through the first name that loads") @(t : T?) {
+        t |> equal(probe_dbl_at45_candidates(1l, 2l, 3l, 4l, 1.5lf, 2.5lf), 4331.5lf)
+    }
+    t |> run("a non-const reference argument carries the callee's write back " +
+            "to the caller") @(t : T?) {
+        var out = 0l
+        t |> equal(probe_ref_write(out, 14l), 1)
+        t |> equal(out, 42l, "the extern wrote through the reference")
+    }
+    t |> run("a bare system library name loads from the system directory") @(t : T?) {
+        if (get_running_platform_name() != "windows") {
+            t |> skip("kernel32 is a Windows library")
+            return
+        }
+        t |> success(windows_tick_count64() > 0ul,
+            "GetTickCount64 answered through a bare `kernel32` name")
     }
     t |> run("a double in position 6, followed by an integer so no register residue can stand in") @(t : T?) {
         t |> equal(probe_dbl_at6(1l, 2l, 3l, 4l, 5l, 6l, 1.5lf, 7l), 7654324.0lf)

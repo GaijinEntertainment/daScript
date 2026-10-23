@@ -231,6 +231,27 @@ bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- --tok -m <model.g
 - Single-threaded by nature, txt output only, no records rail: a decision instrument for tokenizer
   work, not a board row.
 
+## The CUDA home cell (`DASLLAMA_CUDA=1`)
+
+The LLM cell on the CUDA home - its dense slice's prefill window chain and token step - on a box with
+an NVIDIA card, its driver and the toolkit's NVRTC. No rig leg spawns it (`followup_general.md` item
+227: the row stamps the device tier `vulkan`), so it runs by hand, one stocked dense llama file a
+process, `--ngl 0` with the GPU tier armed by the environment:
+
+```sh
+DASLLAMA_GPU=1 DASLLAMA_CUDA=1 modules/dasLLAMA/performance/_rig/dasllama-bench/dasllama-bench \
+  -m <Llama-3.2-1B-Instruct-Q8_0.gguf> -p 512 -n 128 -r 5 --ngl 0
+```
+
+- The `config:` line reads `gpu cuda` when the CUDA tier armed. A model the dense slice declines
+  logs the reason on a `cuda resident` line, and the row is then not the CUDA home's.
+- The same command without `DASLLAMA_CUDA=1` is the Vulkan home's row on the same card, the
+  cell's alternate. The llama.cpp row is the CUDA build of
+  `ARCHITECTURE_MEASUREMENT.md#cuda-reference-rows`, run beside it - `--ref` would run it at this
+  cell's `--ngl 0`, on the CPU.
+- `DASLLAMA_CUDA_MMQ=1` moves the prefill's window GEMMs onto the int8 MMQ kernel where every
+  plane is Q8_0 (`ARCHITECTURE_GPU_ASYMMETRIES.md#gpu-asymmetries`).
+
 ---
 
 ## The tune generation - session cadence

@@ -28,6 +28,11 @@ Background on the hash machinery is in [`skills/internal/aot_testing.md`](aot_te
    ```
    find tests dastest daslib modules examples utils tutorials -type d -name _aot_generated -print0 | xargs -0 rm -rf
    ```
+   A wipe is not enough when the generator reads a stale AST module cache: it regenerates the stub
+   from the cached pre-edit body of a module you edited in the same session, and the runtime hashes
+   the current source - "other functions of module X link" on exactly the functions whose bodies
+   you changed, with a fresh `_aot_generated`, is this. Delete `.cache/daslang/**/*.dascache`
+   before the regeneration.
    `dastest/_aot_generated` holds the `testing` module's stub; a wipe that skips it leaves
    every test's `testing::run` link red whatever else you regenerate.
 

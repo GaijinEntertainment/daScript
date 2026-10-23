@@ -2076,8 +2076,8 @@ def private vt_planes_up(r : VtResident; planes : array<float>; w, h : int64) {
 }
 
 //! the patch im2col over the planes into the column plane at the scratch's row capacity, the pixel map as the stamp's scale and shift
-def private vt_vis_im2col(raw : VkCommandBuffer; var h : VkHaz; var r : VtResident; w, hh, patch, pd, npos : int64; scale, shift : float) {
-    var pc = GkPatchIm2colArgs(w = uint(w), h = uint(hh), p = uint(patch), row_dim = uint(pd), npos = uint(npos), total = uint(r.cap_rows * pd),
+def private vt_vis_im2col(raw : VkCommandBuffer; var h : VkHaz; var r : VtResident; w, patch, pd, npos : int64; scale, shift : float) {
+    var pc = GkPatchIm2colArgs(w = uint(w), p = uint(patch), row_dim = uint(pd), npos = uint(npos), total = uint(r.cap_rows * pd),
         scale = scale, shift = shift)
     enc_tower_patch_im2col_cls(raw, h, r.s_vis_im2col, pc, (r.cap_rows * pd + 255l) / 256l)
     vt_pt(raw, VtProfRole.im2col)
@@ -3293,7 +3293,7 @@ def private vulkan_gemma3v_chain(t : Gemma3vTower; var s : Gemma3vState; planes 
     }
     vt_planes_up(r, planes, w, h)
     vt_chain_one_shot("gemma3v stem", 0l, npos) $(raw : VkCommandBuffer; var hz : VkHaz) {
-        vt_vis_im2col(raw, hz, r, w, h, t.patch, pd, npos, 1.0, 0.0)
+        vt_vis_im2col(raw, hz, r, w, t.patch, pd, npos, 1.0, 0.0)
         var pc_patch = vt_pc32(pd, d, npos, t.patch_w, t.patch_b)
         enc_f32_gemm_b_cls(raw, hz, r.s_vis_patch, pc_patch, f32_gemm_wgs(npos, d))
         vt_pt(raw, VtProfRole.gemm_pw)
@@ -3461,7 +3461,7 @@ def private vulkan_qwen3v_chain(t : Qwen3vTower; var s : Qwen3vState; planes : a
     var pc_bqkv = GkBiasActArgs(d = uint(3l * d), nelem = uint(3l * nd), boff = 0u, act = BIAS_ACT_NONE)
     var pc_gelu = GkBiasActArgs(d = uint(ff), nelem = uint(nff), boff = 0u, act = BIAS_ACT_GELU_TANH)
     vt_chain_one_shot("qwen3v", t.n_layer, npos) $(raw : VkCommandBuffer; var hz : VkHaz) {
-        vt_vis_im2col(raw, hz, r, w, h, t.patch, pd, npos, 1.0, 0.0)
+        vt_vis_im2col(raw, hz, r, w, t.patch, pd, npos, 1.0, 0.0)
         var pc_patch = vt_pc32(pd, d, npos, t.patch_w)
         enc_f32_gemm_cls(raw, hz, r.s_vis_patch, pc_patch, f32_gemm_wgs(npos, d))
         vt_pt(raw, VtProfRole.gemm_pw)
@@ -3627,7 +3627,7 @@ def private vulkan_qwen25v_chain(t : Qwen25vTower; var s : Qwen25vState; planes 
     var pc_glu = GkBiasGateArgs(d = uint(ff), nelem = uint(nff), goff = 0u, uoff = 0u)
     var pc_win = GkWinAttnArgs(nheads = uint(t.n_head), hs = uint(hs), scale = scale)
     vt_chain_one_shot("qwen25v", t.n_layer, npos) $(raw : VkCommandBuffer; var hz : VkHaz) {
-        vt_vis_im2col(raw, hz, r, w, h, t.patch, pd, npos, 1.0, 0.0)
+        vt_vis_im2col(raw, hz, r, w, t.patch, pd, npos, 1.0, 0.0)
         var pc_patch = vt_pc32(pd, d, npos, t.patch_w)
         enc_f32_gemm_cls(raw, hz, r.s_vis_patch, pc_patch, f32_gemm_wgs(npos, d))
         vt_pt(raw, VtProfRole.gemm_pw)
@@ -3765,7 +3765,7 @@ def private vulkan_gemma4uv_encode(t : Gemma4uvEmbedder; var s : Gemma4uvState; 
     let nd = npos * d
     let bp_out = npos * proj * 4l
     vt_chain_one_shot("gemma4uv", 0l, npos) $(raw : VkCommandBuffer; var hz : VkHaz) {
-        vt_vis_im2col(raw, hz, r, w, h, t.patch, pd, npos, 1.0, 0.0)
+        vt_vis_im2col(raw, hz, r, w, t.patch, pd, npos, 1.0, 0.0)
         var pc_ln1 = gk_ln_args(uint(pd), uint(npos), GEMMA4UV_LN_EPS, uint(t.ln1_w), uint(t.ln1_b))
         enc_tower_ln_cls(raw, hz, r.s_vis_pool, pc_ln1, npos)
         vt_pt(raw, VtProfRole.ln)
@@ -3930,7 +3930,7 @@ def private vulkan_gemma4v_chain(t : Gemma4vTower; var s : Gemma4vState; planes 
     let wg32_d = f32_gemm_wgs(npos, d)
     let wg32_ff = f32_gemm_wgs(npos, ff)
     vt_chain_one_shot("gemma4v", t.n_layer, npos) $(raw : VkCommandBuffer; var hz : VkHaz) {
-        vt_vis_im2col(raw, hz, r, w, h, t.patch, pd, npos, 2.0, -1.0)
+        vt_vis_im2col(raw, hz, r, w, t.patch, pd, npos, 2.0, -1.0)
         var pc_patch = vt_pc32(pd, d, npos)
         enc_f32_gemm_cls(raw, hz, r.s_vis_patch, pc_patch, f32_gemm_wgs(npos, d))
         vt_pt(raw, VtProfRole.gemm_pw)

@@ -7401,7 +7401,7 @@ class MetalMoeSelect512 : MetalMoeSelectT {
     override DEPTH = 16
 }
 
-//! the gemma-4 stamps: the down scales in the select (`ARCHITECTURE_GPU_PREFILL_MOE.md#moe-wscale` says why they are stamps of their own)
+//! the gemma-4 stamps: the down scales in the select (`ARCHITECTURE_GPU_SHARED_ROWS.md#moe-wscale` says why they are stamps of their own)
 [metal_dispatch(name = "enc_moe_select_ds", pso = "g_pso_moe_select_ds", tgmem = "MetalMoeSelectDs_metal_moe_select_msl_tgmem", tg = 32, grid = "nst", params = "nst : int64")]
 class MetalMoeSelectDs : MetalMoeSelectT {
     override DSCALE = true
@@ -7776,7 +7776,7 @@ class MetalG4RouterNorm {
 
 //! the router select over `nrows` streams' logits into `bsel`, every picked weight under the model's `expert_weights_scale` and,
 //! where `bds` is the layer's per-expert down-scale row (gemma-4), that expert's scale - the select's own fold, no pass after it
-[arch(at="../ARCHITECTURE_GPU_PREFILL_MOE.md#moe-wscale")]
+[arch(at="../ARCHITECTURE_GPU_SHARED_ROWS.md#moe-wscale")]
 def enc_moe_select_rows(enc : MetalComputeEncoder?; c : Config; blg, bsel : MetalBuffer?; nrows : int64; lstride : int64 = 0l;
                         bds : MetalBuffer? = null) {
     let sw = c.moe_gate == MoeGate.softmax_weight
@@ -11962,7 +11962,7 @@ class MetalClsSelect : GkClsSelect {
 class MetalClsEpilogue : GkClsEpilogue {
     [metal_kernel(name="metal_cls_epi_msl")]
     def metal_cls_epi {
-        epi_elem(gl_GlobalInvocationID.x)
+        epi_body()
     }
 }
 

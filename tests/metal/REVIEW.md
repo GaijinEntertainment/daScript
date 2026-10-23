@@ -17,3 +17,7 @@ of the method cannot stop at a barrier.
 
 **A diff that adds or changes a `[test]` in this folder that creates any Metal object asserts
 `metal_live_object_count() == 0` before that test returns.**
+
+**A test in this folder that needs a Metal device calls the dastest `skip` (`dastest/testing.das`)
+and returns when no Metal device is present.** A device-less machine then reports the test skipped
+rather than failed or silently passed.

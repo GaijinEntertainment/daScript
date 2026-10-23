@@ -16,6 +16,7 @@ options indenting = 4
 module spirv_shader shared public
 
 require spirv_emit
+require spirv_markers public
 require spirv_reflect public   // every shader-bearing module's globals call its unpack_spirv_words
 require spirv_builtins public
 require daslib/ast
@@ -271,45 +272,3 @@ class SpirvClosestHitShader : SpirvShader {
     def override shader_stage() : ShaderStage => ShaderStage.ClosestHit
 }
 
-// [spirv_decode] — marks a daslang function as a cm2 DECODE function (SPV_NV_cooperative_matrix2):
-// referenced via @@name from coopmatLoadTensorDecode and emitted as a real SPIR-V function with the
-// rigid (PhysicalStorageBuffer block pointer, uint[2], uint[2]) signature. Marker only — signature
-// validation happens at emission (register_decode_func); the body stays CPU-callable, so reference
-// math can call the exact decode the GPU runs.
-[function_macro(name="spirv_decode")]
-class SpirvDecodeAnnotation : AstFunctionAnnotation {
-    def override apply(var func : FunctionPtr; var group : ModuleGroup; var args : AnnotationArgumentList; var errors : das_string) : bool {
-        // pin against the CPU auto-inliner: the emitter must see the body as authored
-        func.moreFlags.neverInline = true
-        return true
-    }
-}
-
-// [spirv_combine] — a cm2 REDUCE combine function: referenced via @@name from coopmatReduce and
-// emitted as a SPIR-V function of the by-value (T, T) -> T shape (T = the tile component type).
-// [spirv_per_element] — a cm2 per-element function for coopmatPerElement: by-value
-// (row : uint, col : uint, elem : T, extras...) -> T; extras mirror the call site's trailing
-// arguments (a coopmat extra arrives as its per-element component). Marker only — signature
-// validation happens at emission (register_callback_func); bodies stay CPU-callable so oracle
-// math can run the exact combine/per-element code the GPU runs.
-[function_macro(name="spirv_combine")]
-class SpirvCombineAnnotation : AstFunctionAnnotation {
-    def override apply(var func : FunctionPtr; var group : ModuleGroup; var args : AnnotationArgumentList; var errors : das_string) : bool {
-        func.moreFlags.neverInline = true
-        return true
-    }
-}
-
-//! [spirv_inline] - a shader helper the emitter inlines at every
-//! call site instead of emitting an OpFunction; a marker the emitter
-//! reads, the CPU body untouched
-[function_macro(name="spirv_inline")]
-class SpirvInlineAnnotation : AstFunctionAnnotation {}
-
-[function_macro(name="spirv_per_element")]
-class SpirvPerElementAnnotation : AstFunctionAnnotation {
-    def override apply(var func : FunctionPtr; var group : ModuleGroup; var args : AnnotationArgumentList; var errors : das_string) : bool {
-        func.moreFlags.neverInline = true
-        return true
-    }
-}

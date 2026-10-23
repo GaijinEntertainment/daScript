@@ -177,7 +177,7 @@ def private metal_gemma4uv_encode(t : Gemma4uvEmbedder; var s : Gemma4uvState; p
     var pos2d = GkPosAdd2DArgs(dim = uint(d), ncols = uint(n_cols), pos_entries = uint(t.pos_entries), total = uint(npos * d), tboff = uint(t.pos_w))
     var err = ""
     let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026 — the error-text fetch runs only on the failure leg
-        tw_patch_im2col(enc, bplanes, bx0, w, h, t.patch, t.patch_dim, npos, mp, 1.0, 0.0)
+        tw_patch_im2col(enc, bplanes, bx0, w, t.patch, t.patch_dim, npos, mp, 1.0, 0.0)
         // ln1 over the im2col rows, in place
         enc_ln(enc, bx0, bx0, bblob, gk_ln_args(uint(t.patch_dim), uint(npos), GEMMA4UV_LN_EPS, uint(t.ln1_w), uint(t.ln1_b)), npos)
         // the patch GEMM: per-plane format (gemma-4's shipped mmproj is MIXED)
@@ -1758,8 +1758,8 @@ def private tw_planes_up(planes : array<float>; w, h : int64) : MetalBuffer? {
 def private tw_planes_bytes(w, h : int64) : uint64 => uint64(w * h * 3l * 4l)
 
 [arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-encode-chains")]
-def private tw_patch_im2col(enc : MetalComputeEncoder?; bplanes, bx0 : MetalBuffer?; w, h, patch, row_dim, npos, mp : int64; scale, shift : float) {
-    var pa = GkPatchIm2colArgs(w = uint(w), h = uint(h), p = uint(patch), row_dim = uint(row_dim),
+def private tw_patch_im2col(enc : MetalComputeEncoder?; bplanes, bx0 : MetalBuffer?; w, patch, row_dim, npos, mp : int64; scale, shift : float) {
+    var pa = GkPatchIm2colArgs(w = uint(w), p = uint(patch), row_dim = uint(row_dim),
         npos = uint(npos), total = uint(mp * row_dim), scale = scale, shift = shift)
     enc_tw_patch_im2col(enc, bplanes, bx0, pa, mp * row_dim)
 }
@@ -1769,7 +1769,7 @@ def private tw_patch_im2col(enc : MetalComputeEncoder?; bplanes, bx0 : MetalBuff
 def private g4v_stem_body(enc : MetalComputeEncoder?; t : Gemma4vTower; e : G4vEnds; bblob, bwblob, bx : MetalBuffer?;
                           u_d : MetalBuffer?; mp, npos : int64) {
     let d = t.n_embd
-    tw_patch_im2col(enc, e.bplanes, e.bx0, e.w, e.h, t.patch, t.patch_dim, npos, mp, 2.0, -1.0)   //! inp_raw_scaled: [0, 1] -> [-1, 1]
+    tw_patch_im2col(enc, e.bplanes, e.bx0, e.w, t.patch, t.patch_dim, npos, mp, 2.0, -1.0)   //! inp_raw_scaled: [0, 1] -> [-1, 1]
     tw_mm(enc, false, t.patch_bf16, bwblob, bblob, t.patch_w, e.bx0, null, bx, 0ul, e.u_pd, u_d, mp, d, t.patch_dim, false)
     var pos2d = GkPosAdd2DArgs(dim = uint(d), ncols = uint(e.n_cols), pos_entries = uint(t.pos_entries), total = uint(npos * d), tboff = uint(t.pos_w))
     enc_posadd2d(enc, bx, bblob, pos2d, npos * d)
@@ -2097,7 +2097,7 @@ def private metal_gemma3v_blocks(t : Gemma3vTower; var s : Gemma3vState; planes 
     var tl = g3v_tail_make(t, npos)
     var err = ""
     let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026 — the error-text fetch runs only on the failure leg
-        tw_patch_im2col(enc, bplanes, bx0, w, h, t.patch, pd, npos, mp, 1.0, 0.0)
+        tw_patch_im2col(enc, bplanes, bx0, w, t.patch, pd, npos, mp, 1.0, 0.0)
         enc_f32_mm(enc, bblob, uint64(t.patch_w * 4l), bx0, bx, 0ul, u_pd, u_d, mp, d)
         tw_bias(enc, bx, bblob, GkBiasActArgs(d = uint(d), nelem = uint(npos * d), boff = uint(t.patch_b), act = BIAS_ACT_NONE))
         enc_add(enc, bx, 0ul, bblob, uint64(t.pos_w * 4l), u_totd, npos * d)
@@ -2304,7 +2304,7 @@ def private metal_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; planes : a
     let f16w = f16_route && bwh != null && bxh != null
     let bf16w = bf16_route && bwh != null
     let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026 — the error-text fetch runs only on the failure leg
-        tw_patch_im2col(enc, bplanes, bx0, w, h, t.patch, t.patch_dim, npos, mp, 1.0, 0.0)
+        tw_patch_im2col(enc, bplanes, bx0, w, t.patch, t.patch_dim, npos, mp, 1.0, 0.0)
         enc_f32_mm(enc, bblob, uint64(t.patch_w * 4l), bx0, braw, 0ul, u_pd, u_d, mp, d)
         if (bposr != null) {
             var asm_r = GkStemAsmArgs(dim = uint(d), pw = uint(s.grid_w), total = uint(npos * d), boff = uint(t.patch_b), poff = 0u)
@@ -2511,7 +2511,7 @@ def private metal_qwen25v_blocks(t : Qwen25vTower; var s : Qwen25vState; planes 
     let f16w = f16_route && bwh != null && bxh != null
     let bf16w = bf16_route && bwh != null
     let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026 — the error-text fetch runs only on the failure leg
-        tw_patch_im2col(enc, bplanes, bx0, w, h, t.patch, pd, npos, mp, 1.0, 0.0)
+        tw_patch_im2col(enc, bplanes, bx0, w, t.patch, pd, npos, mp, 1.0, 0.0)
         enc_f32_mm(enc, bblob, uint64(t.patch_w * 4l), bx0, braw, 0ul, u_pd, u_d, mp, d)
         var kg = GkRowGatherArgs(c = uint(d), rows = uint(npos), aoff = 0u, boff = 0u, coff = 0u, out_off = 0u, add_b = 0u, add_c = 0u, scale = 1.0)
         enc_row_gather(enc, braw, bsrc, g_one, g_one, bx, kg, npos * d)
