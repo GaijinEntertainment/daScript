@@ -351,6 +351,21 @@ def public flag_present(args : array<string>; arg_info : CommandArgumentInfo) : 
     return is_some(env_raw_value(arg_info))
 }
 
+//! The parse error for the first required flag `args` leaves out - "" when none is missing, or when
+//! `args` asks for the command's help (its bool `help` flag), so `--help` answers on a command with a
+//! required flag. `with_positional` counts a required positional among the required flags.
+def public missing_required_flag(args : array<string>; command_info : CommandInfo; with_positional : bool) : string {
+    for (arg in command_info.args) {
+        return "" if (arg.field_name == "help" && arg.value_type == Type.tBool && present_in_argv(args, arg))
+    }
+    for (arg in command_info.args) {
+        if (arg.is_required && (with_positional || !arg.is_positional) && !arg.is_count && !flag_present(args, arg)) {
+            return "{arg.flag_name}: missing required flag"
+        }
+    }
+    return ""
+}
+
 [unused_argument(t)]
 def public parse_argument(args : array<string>; arg_info : CommandArgumentInfo; t : type<string>) : Result<Option<string>; string> {
     let opt = find_flag_raw_value(args, arg_info)
@@ -1115,10 +1130,9 @@ class ArgsMacro : AstStructureAnnotation {
                 if (!empty(mutex_err)) {
                     return err(mutex_err, type<$t(st)>)
                 }
-                for (arg in command_info.args) {
-                    if (arg.is_required && !arg.is_positional && !arg.is_count && !flag_present(args, arg)) {
-                        return err("{arg.flag_name}: missing required flag", type<$t(st)>)
-                    }
+                let missing = missing_required_flag(args, command_info, false)
+                if (!empty(missing)) {
+                    return err(missing, type<$t(st)>)
                 }
                 return move_ok(dst, type<string>)
             }
@@ -1132,10 +1146,9 @@ class ArgsMacro : AstStructureAnnotation {
                 let command_info <- get_command_info(type<$t(st)>)
                 let positionals <- collect_positional_args(args, command_info)
                 $b(init_exprs)
-                for (arg in command_info.args) {
-                    if (arg.is_required && !arg.is_positional && !arg.is_count && !flag_present(args, arg)) {
-                        return err("{arg.flag_name}: missing required flag", type<$t(st)>)
-                    }
+                let missing = missing_required_flag(args, command_info, false)
+                if (!empty(missing)) {
+                    return err(missing, type<$t(st)>)
                 }
                 return move_ok(dst, type<string>)
             }
@@ -1152,10 +1165,9 @@ class ArgsMacro : AstStructureAnnotation {
                 if (!empty(mutex_err)) {
                     return err(mutex_err, type<$t(st)>)
                 }
-                for (arg in command_info.args) {
-                    if (arg.is_required && !arg.is_count && !flag_present(args, arg)) {
-                        return err("{arg.flag_name}: missing required flag", type<$t(st)>)
-                    }
+                let missing = missing_required_flag(args, command_info, true)
+                if (!empty(missing)) {
+                    return err(missing, type<$t(st)>)
                 }
                 return move_ok(dst, type<string>)
             }
@@ -1167,10 +1179,9 @@ class ArgsMacro : AstStructureAnnotation {
             var dst = default<$t(st)>
             let command_info <- get_command_info(type<$t(st)>)
             $b(init_exprs)
-            for (arg in command_info.args) {
-                if (arg.is_required && !arg.is_count && !flag_present(args, arg)) {
-                    return err("{arg.flag_name}: missing required flag", type<$t(st)>)
-                }
+            let missing = missing_required_flag(args, command_info, true)
+            if (!empty(missing)) {
+                return err(missing, type<$t(st)>)
             }
             return move_ok(dst, type<string>)
         }
