@@ -4,8 +4,21 @@
 <author><name>dasllama.io</name></author>
 <link href="https://dasllama.io/"/>
 <link href="https://dasllama.io/feed.xml" rel="self"/>
-<updated>2026-10-09T00:00:00Z</updated>
+<updated>2026-10-23T00:00:00Z</updated>
 <id>https://dasllama.io/</id>
+<entry>
+<title>dasllama 0.6.6 - the release-17 re-mint, and pip install dasllama on pypi.org.</title>
+<link href="https://dasllama.io/#n-2026-10-23-dasllama-0-6-6"/>
+<id>https://dasllama.io/#n-2026-10-23-dasllama-0-6-6</id>
+<updated>2026-10-23T00:00:00Z</updated>
+<content type="html">&lt;p&gt;&lt;a href=&quot;https://github.com/GaijinEntertainment/daScript/releases/tag/dasllama-v0.6.6&quot;&gt;dasllama-v0.6.6&lt;/a&gt; carries
+the release-17 re-mint: every &lt;code&gt;[tune]&lt;/code&gt; kernel ships as one clone per CPU class from the release-17
+class profiles - arm-neon, arm-i8mm, arm-sve, x86-avx2, x86-vnni512 and x86-amx - and the
+&lt;a href=&quot;/ladder.html&quot;&gt;ladder&lt;/a&gt; measures it on the M5 Max, Granite Rapids, EPYC 9R14, Graviton4 and an
+RTX PRO 4500. The wheels are on pypi.org now, so &lt;code&gt;pip install dasllama&lt;/code&gt; needs no index; brew,
+scoop, the &lt;code&gt;.deb&lt;/code&gt; and the &lt;code&gt;.rpm&lt;/code&gt; install the same four programs, and the &lt;a href=&quot;/#get-it&quot;&gt;get it&lt;/a&gt;
+section names every form.&lt;/p&gt;</content>
+</entry>
 <entry>
 <title>dasllama 0.6.6-RC1 - the first release on dasllama&#x27;s own tag, one day after the daslang candidate.</title>
 <link href="https://dasllama.io/#n-2026-10-09-dasllama-0-6-6-rc1"/>
