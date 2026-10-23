@@ -33,3 +33,27 @@ def test_describe_purity(t : T?) {
         t |> equal("{describe(fresh)}", d0, "repeated describe of the same node must be stable")
     }
 }
+
+[test]
+def test_describe_shared_element_types(t : T?) {
+    ast_gc_guard() {
+        var element = new TypeDecl(baseType = Type.tFloat)
+        for (kind, expected in [Type.tTuple, Type.tVariant, Type.option],
+                ["tuple<a:float;b:float;c:float>",
+                 "variant<a:float;b:float;c:float>", "float|float|float"]) {
+            var compound = new TypeDecl(baseType = kind)
+            compound.argTypes |> resize(3)
+            if (kind != Type.option) {
+                compound.argNames |> resize(3)
+            }
+            for (name, i in ["a", "b", "c"], range(3)) {
+                compound.argTypes[i] = element
+                if (kind != Type.option) {
+                    compound.argNames[i] := name
+                }
+            }
+            t |> equal(describe(compound), expected,
+                "elements sharing one TypeDecl are each separated")
+        }
+    }
+}
