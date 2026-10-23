@@ -228,16 +228,7 @@ def private span_keys(var p : Expression?; cuts : array<int64>) : array<string> 
 }
 
 [macro_function]
-def private variant_name(typ : TypeDeclPtr) : string {
-    //! The name a variant is declared with: its alias, or the ``aka`` name ``describe`` prints for a copied type.
-    return string(typ.alias) if (!empty(typ.alias))
-    let d = describe(typ)
-    let aka_pos = find(d, " aka ")
-    return "variant" if (aka_pos < 0)
-    let name = slice(d, aka_pos + 5)
-    let stop = find(name, " ")
-    return stop < 0 ? name : slice(name, 0, stop)
-}
+def private variant_name(typ : TypeDeclPtr) : string => empty(typ.alias) ? "variant" : string(typ.alias)
 
 [macro_function]
 def private variant_key(typ : TypeDeclPtr; alt : string) : string {
