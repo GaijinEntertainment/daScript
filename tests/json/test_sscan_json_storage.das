@@ -6,14 +6,18 @@ struct ScanDestination {
     value : int
 }
 
+struct DerivedDestination : ScanDestination {
+    extra : int
+}
+
 def private scan_selected(text : string; choose_first : bool;
                           var first, second : auto(T)) : bool =>
     sscan_json(text, choose_first ? first : second)
 
-def private scan_cast(text : string; var value : ScanDestination) : bool =>
-    sscan_json(text, unsafe(reinterpret<ScanDestination>(value)))
+def private scan_cast(text : string; var value : DerivedDestination) : bool =>
+    sscan_json(text, cast<ScanDestination>(value))
 
-def private scan_fallback(text : string; value : ScanDestination?;
+def private scan_fallback(text : string; var value : ScanDestination?;
                           var fallback : ScanDestination) : bool =>
     sscan_json(text, value ?? fallback)
 
@@ -44,9 +48,10 @@ def test_selected_scan_storage(t : T?) {
 
 [test]
 def test_cast_scan_storage(t : T?) {
-    var value : ScanDestination
+    var value = DerivedDestination(extra = 11)
     t |> success(scan_cast("\{\"value\":7\}", value))
     t |> equal(value.value, 7)
+    t |> equal(value.extra, 11)
 }
 
 [test]
