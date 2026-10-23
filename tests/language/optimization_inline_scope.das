@@ -9,7 +9,7 @@ require dastest/testing_boost public
 require strings
 require daslib/strings_boost
 require _inline_scope_helper
-require _inline_unoptimized_scope_helper
+require _inline_unoptimized_scope_helper // nolint:STYLE030 call inlined
 require _optimized_body_helper
 
 // structural FIRED proof + behavioral safety net for cross-module splices whose

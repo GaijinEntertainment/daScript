@@ -17,9 +17,8 @@ def private tiny_scale_helper(x : int) : int => x + 3
 
 def small_boost(x : int) : int => x + 1
 
-def public gscale(a : auto(TT); k : TT) : TT {
-    return tiny_scale_helper(small_boost(a)) * k
-}
+def public gscale(a : auto(TT); k : TT) : TT =>
+    tiny_scale_helper(small_boost(a)) * k
 
 def with_auto_inline_visibility_mid(blk : block<(root : string) : void>) {
     with_auto_inline_visibility_root() $(root) {

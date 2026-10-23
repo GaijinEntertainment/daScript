@@ -19,9 +19,7 @@ def private hidden_boost(x : int) : int => x + secret_bias
 var private g_shared = 100
 
 [inline]
-def scoped_add(a, b : int) : int {
-    return hidden_boost(a) + hidden_boost(b)
-}
+def scoped_add(a, b : int) : int => hidden_boost(a) + hidden_boost(b)
 
 [inline]
 def scoped_pick(v : int) : int {
