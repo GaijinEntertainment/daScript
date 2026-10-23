@@ -63,3 +63,18 @@ def test_typedecl_payload(t : T?) {
         t |> equal(typeinfo typename(_g), "float")
     }
 }
+
+[test]
+def test_shift_after_type_list(t : T?) {
+    // '>>' after a closed type list is a shift, not two '>'
+    t |> run("shift and rotate after name<types> forms") @(t : T?) {
+        var _a : tm_make<float>(4, true, "arr")
+        var _b : $tm_make<int>(2, true, "arr")
+        let x = 0x100u
+        t |> equal(x >> 4u, 0x10u)
+        t |> equal(x >>> 4u, 0x10u)
+        var y = x
+        y >>= 8u
+        t |> equal(y, 1u)
+    }
+}
