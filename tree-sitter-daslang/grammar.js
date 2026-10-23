@@ -295,6 +295,8 @@ export default grammar({
       alias($._integer, $.constant_integer),
       alias($._long_integer, $.constant_integer64),
       alias($._unsigned_long_integer, $.constant_unsigned_integer64),
+      alias($._unsigned_integer, $.constant_unsigned_integer),
+      alias($._unsigned_int8, $.constant_unsigned_integer8),
       alias($._float, $.constant_float),
       $.constant_boolean,
       seq('-', choice(
