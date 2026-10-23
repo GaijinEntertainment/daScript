@@ -233,7 +233,6 @@ namespace das {
                     && !dest->isVisibleDirectly(owner) ) {
                     verdict.invisibleSymbol = name;
                     verdict.invisibleModule = owner->name;
-                    return;
                 }
                 if ( verdict.scope.empty() ) verdict.scope = name;
             }
@@ -2093,7 +2092,8 @@ namespace das {
                         siteFail(site, "can't inline " + subj.name + " across modules: " + verdict.hardWhy, callLike->at);
                         return false;
                     }
-                    if ( !verdict.invisibleSymbol.empty() ) {
+                    if ( site.kind==SiteKind::AutoCall
+                        && !verdict.invisibleSymbol.empty() ) {
                         siteFail(site, "can't inline " + subj.name
                             + " across modules: body references '"
                             + verdict.invisibleSymbol + "' from module "

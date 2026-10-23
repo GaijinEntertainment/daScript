@@ -365,7 +365,7 @@ namespace das {
         AstSerializer & serializeModule ( Module & module, bool already_exists );
 
         static constexpr uint32_t getVersion () {
-            return 234;   // 234: inlining requires visible dependencies
+            return 235;   // 235: auto inlining requires visible dependencies
         }
 
         void serializeProgram ( ProgramPtr program, ModuleGroup & libGroup ) noexcept;
