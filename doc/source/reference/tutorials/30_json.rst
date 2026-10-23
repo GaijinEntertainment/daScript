@@ -332,7 +332,7 @@ It also respects ``@rename`` field annotations::
   // ok == true, cfg.host == "localhost", cfg.port == 8080
   // cfg._type == "server", cfg.tags == ["prod", "v2"]
 
-``sscan_json`` returns ``true`` on success and ``false`` on malformed JSON.
+``sscan_json`` returns ``true`` on success and ``false`` on a parse error.
 Unknown keys are silently ignored, and missing fields keep their default values.
 
 Round-trip with ``sprint_json``::
