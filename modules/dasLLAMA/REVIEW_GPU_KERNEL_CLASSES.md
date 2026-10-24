@@ -122,6 +122,12 @@ neither refuses the role on a field the body only reads.
 a defect - the class moves into the file under `modules/dasLLAMA/benchmarks/` or
 `modules/dasLLAMA/tests/` that compiles it, and a class nothing compiles is deleted.**
 
+**A diff that deletes either window GEMM form the CUDA home picks between at run time - the int8
+MMQ chain or the f16-fed cm2 tiles under `DASLLAMA_CUDA_MMQ` - on the ground that the other wins on
+every card measured is a defect; the knob's default moves, the loser stays compiled.** The winner
+is the card's and the driver's, not the kernels' - the same silicon favors the f16 tile under its
+Vulkan driver - so a card that flips the pick turns the pair into a per-box race, never a deletion.
+
 **A diff that adds a new census key a census row dispatches names, in the PR body, that row and
 its nonzero count for the key, read from a census run on the key's backend.**
 

@@ -224,5 +224,6 @@ asymmetries a stamp family ledgers - stays in `ARCHITECTURE_GPU.md#gpu-backends`
   its plane's first block of 8, and the window's rows are a multiple of 128, the CUDA window chain requantizes the activations to Q8_0 blocks
   between the GEMMs and runs them on the int8 MMQ kernel, as the token step's feeds are; `=0`, or a model that misses
   any of these, takes the f16-fed cm2 tiles, so the knob changes the prefill's rounding and its logits. The window log
-  line names the form. The Vulkan window's form follows the device's coopmat mode
+  line names the form. Both forms stay compiled whichever one a card favors: the int8 against f16 tensor rate is the
+  card's and the driver's, and the default is a static pick until a card flips it. The Vulkan window's form follows the device's coopmat mode
   (`ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default`), and the knob reaches nothing there or on Metal.
