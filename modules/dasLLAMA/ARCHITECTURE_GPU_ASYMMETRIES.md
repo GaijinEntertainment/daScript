@@ -229,7 +229,10 @@ asymmetries a stamp family ledgers - stays in `ARCHITECTURE_GPU.md#gpu-backends`
   apart: the requant kernels write each activation block's scale x quant sum beside its scale (`OUT_SUM`), the stage
   keeps each row's `-dmin x mn` and each token's sum as halves over sixteen blocks, and one f16 tensor product a fragment
   pair every sixteen blocks folds the rank-sixteen correction into the f32 accumulators - a per-block fixup off shared
-  memory cost the leaf a fifth of its rate. The knob changes the prefill's rounding and its logits; the window log line
-  names the planes on each form. Both forms stay compiled whichever one a card favors: the int8 against f16 tensor rate
+  memory cost the leaf a fifth of its rate. A format whose scale changes every sixteen elements (Q6_K, Q3_K, Q2_K, the
+  iq2 strips) stays on the f16 tiles: the int8 product over sixteen issues at the k32 shape's cost for half its work, so
+  a Q6_K leaf on it read 37 to 39 TFLOP/s against the Q6_K cm2 tile's 38 to 51 on the same shapes - MMQ is a
+  per-32-scale property. The knob changes the prefill's rounding and its logits; the window log line names the planes on
+  each form. Both forms stay compiled whichever one a card favors: the int8 against f16 tensor rate
   is the card's and the driver's, and the default is a static pick until a card flips it. The Vulkan window's form follows the device's coopmat mode
   (`ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default`), and the knob reaches nothing there or on Metal.
