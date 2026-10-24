@@ -4,8 +4,8 @@ options stack = 524288
 
 // The window chain's tiles on both discrete homes of one card, the same planes: the Vulkan class kernel through the hazard
 // rail and the CUDA class kernel through its launch rail - the Q8_0 cm2 l and m tiles (the window's batch GEMM) at a
-// llama-1B prefill window's shapes (512 rows by the projection and FFN widths), the K-quant cm2 tiles and the int8 GEMM
-// at the same shapes, the cm2 flash tile at head 64 over the same window (32 heads, kv width 512) and the decode
+// llama-1B prefill window's shapes (512 rows by the projection and FFN widths), the K-quant cm2 tiles and the int8 GEMM's
+// Q8_0 and Q4_K leaves at the same shapes, the cm2 flash tile at head 64 over the same window (32 heads, kv width 512) and the decode
 // attention's split and unsplit forms - the time a dispatch and the rate it makes.
 // Baseline: the mmq arm, checked against the CPU reference mmq_ref. Compare region: 64 sampled outputs, token (s x 7919) % 512
 // and row (s x 104729 + 13) % d for s < 64. Every Vulkan and CUDA tile, flash and decode-attention arm is timing-only.
@@ -30,6 +30,7 @@ let ROUNDS = 10
 let WARMUPS = 2
 let DISPATCHES = 20
 let MMQ_REL_BOUND = 1.0e-3   //! the MMQ kernel cell's bar (`test_cud_q8_mmq`): relative to the larger magnitude, floored at 1
+let K4_MMQ_REL_BOUND = 2.0e-3   //! the Q4_K leaf's (`test_cud_k4_mmq`, the f16 tiles' `TILE_BAR`): relative to the compare region's largest magnitude
 let ROWS = 512
 let FA_HEADS = 32
 let FA_HS = 64
@@ -173,6 +174,7 @@ def race_kq_tile(fmt : int; p : Planes; k, d, tc : int) : RaceRow {
 struct MmqPlanes {
     xq : array<uint>    //! the activation quants, a byte an element, [token][k]
     xs : array<float>   //! a scale a 32-block a token
+    xsum : array<float> //! a block's scale x the sum of its quants (the Q4_K leaf's min-term feed)
 }
 
 def xf_at(p : Planes; e : int) : float {
@@ -186,6 +188,7 @@ def mmq_planes(p : Planes; k : int) : MmqPlanes {
     let nb = k / 32
     m.xq |> resize(ROWS * k / 4)
     m.xs |> resize(ROWS * nb)
+    m.xsum |> resize(ROWS * nb)
     for (tok in range(ROWS)) {
         for (b in range(nb)) {
             var amax = 0.0
@@ -195,11 +198,14 @@ def mmq_planes(p : Planes; k : int) : MmqPlanes {
             let sc = amax / 127.0
             m.xs[tok * nb + b] = sc
             let inv = sc > 0.0 ? 1.0 / sc : 0.0
+            var qsum = 0
             for (i in range(32)) {
                 let e = tok * k + b * 32 + i
                 let q = clamp(roundi(xf_at(p, e) * inv), -127, 127)
+                qsum += q
                 m.xq[e / 4] |= uint(q & 255) << uint((e % 4) * 8)
             }
+            m.xsum[tok * nb + b] = sc * float(qsum)
         }
     }
     return <- m
@@ -229,38 +235,82 @@ def mmq_ref(p : Planes; m : MmqPlanes; k, tok, row : int) : float {
     return acc
 }
 
-//! the MMQ arm's report line: its largest relative error against the reference over the compare region, then its rounds
-//! when the error is inside `MMQ_REL_BOUND`, or the miss and no time; 1 when it measured
-def mmq_report(shape : string; p : Planes; m : MmqPlanes; k, d : int) : int {
-    if (!dasllama_cuda_classes::ensure_q8_mmq()) {
+//! the Q4_K reference over the engine's repacked superblocks (a 32-block's 16 bytes: element i the low nibble, i + 16 the
+//! high; five scale words a superblock): every block's xs x (d sc dot - dmin mn xsum)
+def k4_mmq_ref(p : Planes; m : MmqPlanes; k, tok, row : int) : float {
+    let nb = k / 32
+    let nsb = k / 256
+    var acc = 0.0
+    for (b in range(nb)) {
+        let sb = row * nsb + b / 8
+        let g = b % 8
+        let dm = unpackHalf2x16(p.ws[sb * 5])
+        let sc = float((p.ws[sb * 5 + 1 + g / 4] >> uint((g % 4) * 8)) & 255u)
+        let mn = float((p.ws[sb * 5 + 3 + g / 4] >> uint((g % 4) * 8)) & 255u)
+        var dot = 0
+        var xsm = 0
+        for (i in range(32)) {
+            let wb = (sb * 8 + g) * 16 + i % 16
+            let byte = int((p.wq[wb / 4] >> uint((wb % 4) * 8)) & 255u)
+            let xv = byte_at(m.xq, tok * k + b * 32 + i)
+            dot += (i < 16 ? byte & 15 : byte >> 4) * xv
+            xsm += xv
+        }
+        acc += m.xs[tok * nb + b] * (dm.x * sc * float(dot) - dm.y * mn * float(xsm))
+    }
+    return acc
+}
+
+//! the MMQ arm's report line - the Q8_0 leaf, or under `k4` the Q4_K one with its sum feed: its largest relative error against
+//! the reference over the compare region, then its rounds when the error is inside `MMQ_REL_BOUND`, or the miss and no time;
+//! 1 when it measured
+def mmq_report(shape : string; p : Planes; m : MmqPlanes; k, d : int; k4 : bool) : int {
+    if (!(k4 ? dasllama_cuda_classes::ensure_k4_mmq() : dasllama_cuda_classes::ensure_q8_mmq())) {
         print("{shape} cuda refused: {CU_CLASS_REFUSED}\n")
         return 0
     }
     let cs = g_cud.stream
-    var bufs = fixed_array(buf_upload(p.wq, cs), buf_upload(p.ws, cs), buf_upload(m.xq, cs), buf_upload(m.xs, cs), buf_fill(ROWS * d, 0.0, cs))
+    var bufs = fixed_array(buf_upload(p.wq, cs), buf_upload(p.ws, cs), buf_upload(m.xq, cs), buf_upload(m.xs, cs), buf_fill(ROWS * d, 0.0, cs), buf_upload(m.xsum, cs))
     var pc = MmqArgs(n = uint(k), d = uint(d), rows = uint(ROWS))
     let wgs = dasllama_cuda_classes::mmq_wgs(int64(d), int64(ROWS))
-    dasllama_cuda_classes::enc_q8_mmq(g_cud.stream, bufs, pc, wgs)
+    mmq_launch(k4, bufs, pc, wgs)
     cud_sync()
     let y <- buf_download(bufs[4], ROWS * d, type<float>)
-    var err = 0.0
+    var wants : float[64]
+    var ymax = 1.0
     for (s in range(64)) {
         let tok = (s * 7919) % ROWS
         let row = (s * 104729 + 13) % d
-        let want = mmq_ref(p, m, k, tok, row)
-        let got = y[tok * d + row]
-        err = max(err, abs(got - want) / max(1.0, max(abs(got), abs(want))))
+        wants[s] = k4 ? k4_mmq_ref(p, m, k, tok, row) : mmq_ref(p, m, k, tok, row)
+        ymax = max(ymax, abs(wants[s]))
     }
-    if (!(err <= MMQ_REL_BOUND)) {
+    // the Q8 leaf's error is per element (exact int dots, f32 scales); the Q4_K leaf's min terms are f16-staged, so its bound
+    // is the f16 tiles' - relative to the region's largest magnitude
+    let bound = k4 ? K4_MMQ_REL_BOUND : MMQ_REL_BOUND
+    var err = 0.0
+    for (s in range(64)) {
+        let got = y[((s * 7919) % ROWS) * d + (s * 104729 + 13) % d]
+        err = max(err, abs(got - wants[s]) / (k4 ? ymax : max(1.0, max(abs(got), abs(wants[s])))))
+    }
+    if (!(err <= bound)) {
         cuda_mem_free(bufs)
-        print("{shape} cuda MISS: max rel err {err} > {MMQ_REL_BOUND}\n")
+        print("{shape} cuda MISS: max rel err {err} > {bound}\n")
         return 0
     }
     let row = cuda_rounds(ROUNDS, WARMUPS, DISPATCHES) $(_i) {
-        dasllama_cuda_classes::enc_q8_mmq(g_cud.stream, bufs, pc, wgs)
+        mmq_launch(k4, bufs, pc, wgs)
     }
     cuda_mem_free(bufs)
-    return report_cuda(shape, row, "bounded vs cpu: max rel err {err} <= {MMQ_REL_BOUND}", "TFLOP/s") $(us) => tflops(k, d, us)
+    return report_cuda(shape, row, "bounded vs cpu: max rel err {err} <= {bound}", "TFLOP/s") $(us) => tflops(k, d, us)
+}
+
+//! one dispatch of the MMQ leaf `k4` names over `bufs` (the Q8_0 leaf binds the first five: no sum feed)
+def mmq_launch(k4 : bool; bufs : uint64[6]; var pc : MmqArgs; wgs : int64) {
+    if (k4) {
+        dasllama_cuda_classes::enc_k4_mmq(g_cud.stream, bufs, pc, wgs)
+    } else {
+        dasllama_cuda_classes::enc_q8_mmq(g_cud.stream, fixed_array(bufs[0], bufs[1], bufs[2], bufs[3], bufs[4]), pc, wgs)
+    }
 }
 
 struct FaPlanes {
@@ -440,7 +490,15 @@ def main {
     for (s in shapes) {
         var p <- planes(s.k, s.d, 128)
         var m <- mmq_planes(p, s.k)
-        measured += mmq_report(pad_right("mmq k {s.k} d {s.d}", 24, ' '), p, m, s.k, s.d)
+        measured += mmq_report(pad_right("mmq k {s.k} d {s.d}", 24, ' '), p, m, s.k, s.d, false)
+        delete m
+        delete p
+    }
+    print("the Q4_K int8 GEMM (CUDA alone): the nibble decode in the weight stage and the min term\n")
+    for (s in shapes) {
+        var p <- kq_tile_planes(int(KqFmt.k4), s.k, s.d, 128)
+        var m <- mmq_planes(p, s.k)
+        measured += mmq_report(pad_right("k4 mmq k {s.k} d {s.d}", 24, ' '), p, m, s.k, s.d, true)
         delete m
         delete p
     }

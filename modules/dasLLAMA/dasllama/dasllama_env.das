@@ -530,7 +530,7 @@ struct public VulkanEnv {
     @clarg_doc = "cm2 split-k: 0 = the pick's own (the Vulkan wave model `cm2_gemm_pick`; the CUDA home's `cud_cm2_pick` splits a grid short of two blocks an SM until it fills the card and runs a full grid whole), 1 = off, N = force N k-chunks on either home (A/B instrument; shrinks if N strands an empty tail). On the KHR arm the chunks ride its one 128-column geometry."
     cm2_splitk : int64 = 0l
 
-    @clarg_doc = "The CUDA home's window chain on the int8 MMQ GEMM (`q8_mmq`): the activations requantized to Q8_0 blocks between the GEMMs, as the token step's feeds are. 1 = where every GEMM shape of the model fits the tile (d a multiple of 128, the reduction a multiple of 256), 0 = the f16-fed cm2 tiles (A/B instrument). The load log names the pick."
+    @clarg_doc = "The CUDA home's window chain on the int8 MMQ GEMM (`q8_mmq`, `k4_mmq`): the activations requantized to Q8_0 blocks between the GEMMs, as the token step's feeds are. 1 = every Q8_0 or Q4_K plane whose shape fits the tile (the output width a multiple of 128, the reduction of 256) runs on the MMQ leaf of its format, the other planes on the f16-fed cm2 tiles; 0 = the cm2 tiles everywhere (A/B instrument). The load log names the pick."
     cuda_mmq : int64 = 1l
 
     @clarg_doc = "The CUDA home's launches under programmatic dependent launch: a kernel is launched while the one before it in the stream still runs, and its entry wait (`griddepcontrol.wait`, in every emitted kernel on sm_90 and up) holds its reads until that one completes, so the launch latency rides under the predecessor's tail. 1 = on where the card is sm_90 or newer, 0 = plain stream order (A/B instrument). The device-ready log line names the state."

@@ -1528,6 +1528,7 @@ class template GkWdecAttnPart : GkWgReduce {
 [ |> template_struct_instance]
 class template GkQ8BlockStore : GkWgReduce {
     @template_constant OUT_Q8 : bool = false   //!< the stamp quantizes its rows into Q8_0 blocks: `outq` and the block scales `outs`
+    @template_constant OUT_SUM : bool = false  //!< beside the scales, each block's scale x the sum of its quants (`outsum`): the int8 GEMM's min-term feed
 
     [arch(at="../ARCHITECTURE_GPU_SHARED_ROWS.md#q8-requant-byte-store")]
     def blk_store(b, lane8 : uint; v : float4) {
@@ -1539,10 +1540,23 @@ class template GkQ8BlockStore : GkWgReduce {
                 outs[b] = d
             }
             let qb = b * KQ_B32_ELEMS_U + lane8 * 4u
-            outq[qb] = q8_quant1(v.x, id)
-            outq[qb + 1u] = q8_quant1(v.y, id)
-            outq[qb + 2u] = q8_quant1(v.z, id)
-            outq[qb + 3u] = q8_quant1(v.w, id)
+            let q0 = q8_quant1(v.x, id)
+            let q1 = q8_quant1(v.y, id)
+            let q2 = q8_quant1(v.z, id)
+            let q3 = q8_quant1(v.w, id)
+            outq[qb] = q0
+            outq[qb + 1u] = q1
+            outq[qb + 2u] = q2
+            outq[qb + 3u] = q3
+            static_if (OUT_SUM) {
+                var sf = float(int(q0) + int(q1) + int(q2) + int(q3))   // the eight lanes' sums fold like the amax: exact in f32
+                sf += gk_subgroup_xor(sf, 1u)
+                sf += gk_subgroup_xor(sf, 2u)
+                sf += gk_subgroup_xor(sf, 4u)
+                if (lane8 == 0u) {
+                    outsum[b] = d * sf
+                }
+            }
         }
     }
 
@@ -1824,6 +1838,7 @@ class template GkAddRmsRows : GkResidualRow {
     @ssbo @binding = 3 @role = "write" @template_gate = OUT_Q8 outq : array<int8>
     @ssbo @binding = 10 @role = "write" @template_gate = OUT_Q8 outs : array<float>   //! past every combine family's own bindings
     @ssbo @binding = 12 @role = "write" @template_gate = HX yh : array<float16>       //! the f32 row's f16 twin
+    @ssbo @binding = 13 @role = "write" @template_gate = OUT_SUM outsum : array<float>   //! the blocks' scale x quant sum
     @kargs pa : GkAddRmsArgs
     @template_constant OUT_F32 : bool = false
     @template_constant OUT_F16 : bool = false

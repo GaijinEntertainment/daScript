@@ -288,6 +288,86 @@ def test_cud_q8_mmq(t0 : T?) {
     }
 }
 
+//! the Q4_K leaf over the engine's repacked superblocks (a 32-block's 16 bytes: element i the low nibble, i + 16 the high; five
+//! scale words a superblock) against the GEMV's fold of each block: xs x (d sc dot - dmin mn xsum)
+[test]
+def test_cud_k4_mmq(t0 : T?) {
+    t0 |> run("CUDA MMQ-shaped Q4_K GEMM == the block-scaled CPU reference") <| @(t : T?) {
+        if (!ensure_k4_mmq()) {
+            t |> skip("no CUDA device with NVRTC")
+            return
+        }
+        let k = 1024   // four superblocks: the scale rows hand over three times, the min terms fold in two groups of sixteen blocks
+        let d = 256
+        let rows = 256
+        let nsb = k / 256
+        let nb = k / 32
+        var wq <- hashed_words(d * nsb * 32, 11u, 5u)   // eight uint4 a superblock
+        var ws : array<uint>
+        ws |> resize(d * nsb * 5)
+        for (sb in range(d * nsb)) {
+            ws[sb * 5] = packHalf2x16(float2(0.002 + 0.001 * float(sb % 7), 0.0005 + 0.0003 * float(sb % 5)))
+            for (g in range(8)) {
+                let sc = uint((sb * 3 + g * 7) % 64)
+                let mn = uint((sb * 5 + g * 11) % 64)
+                ws[sb * 5 + 1 + g / 4] |= sc << uint((g % 4) * 8)
+                ws[sb * 5 + 3 + g / 4] |= mn << uint((g % 4) * 8)
+            }
+        }
+        var xq <- hashed_words(rows * k / 4, 7u, 3u)
+        var xs <- row_fill(rows * nb, 1, 0, 0.125, 0.25, 5)
+        var xsum : array<float>
+        xsum |> resize(rows * nb)
+        for (tok in range(rows)) {
+            for (blk in range(nb)) {
+                var sm = 0
+                for (i in range(32)) {
+                    let xi = tok * k + blk * 32 + i
+                    let xb = int((xq[xi / 4] >> uint((xi % 4) * 8)) & 255u)
+                    sm += xb >= 128 ? xb - 256 : xb
+                }
+                xsum[tok * nb + blk] = xs[tok * nb + blk] * float(sm)
+            }
+        }
+        let s = g_cud.stream
+        var bufs = fixed_array(buf_upload(wq, s), buf_upload(ws, s), buf_upload(xq, s), buf_upload(xs, s), buf_fill(rows * d, Y_SENTINEL, s), buf_upload(xsum, s))
+        var pc = MmqArgs(n = uint(k), d = uint(d), rows = uint(rows))
+        enc_k4_mmq(g_cud.stream, bufs, pc, mmq_wgs(int64(d), int64(rows)))
+        t |> success(cud_sync(), "k4 mmq: the launch completes ({cuda_last_error()})")
+        let y <- buf_download(bufs[4], rows * d, type<float>)
+        cuda_mem_free(bufs)
+        var want : array<float>
+        want |> resize(rows * d)
+        for (tok in range(rows)) {
+            for (row in range(d)) {
+                var acc = 0.0
+                for (blk in range(nb)) {
+                    let sb = row * nsb + blk / 8
+                    let g = blk % 8
+                    let dm = unpackHalf2x16(ws[sb * 5])
+                    let sc = float((ws[sb * 5 + 1 + g / 4] >> uint((g % 4) * 8)) & 255u)
+                    let mn = float((ws[sb * 5 + 3 + g / 4] >> uint((g % 4) * 8)) & 255u)
+                    var dot = 0
+                    var xsm = 0
+                    for (i in range(32)) {
+                        let wb = (sb * 8 + g) * 16 + i % 16
+                        let byte = int((wq[wb / 4] >> uint((wb % 4) * 8)) & 255u)
+                        let code = i < 16 ? byte & 15 : byte >> 4
+                        let xi = tok * k + blk * 32 + i
+                        let xb = int((xq[xi / 4] >> uint((xi % 4) * 8)) & 255u)
+                        let xv = xb >= 128 ? xb - 256 : xb
+                        dot += code * xv
+                        xsm += xv
+                    }
+                    acc += xs[tok * nb + blk] * (dm.x * sc * float(dot) - dm.y * mn * float(xsm))
+                }
+                want[tok * d + row] = acc
+            }
+        }
+        check_rows(t, "k4 MMQ vs the block-scaled reference", y, want, TILE_BAR, d)   // the min terms are f16-staged: the f16 tiles' bar, not the Q8 leaf's per-element one
+    }
+}
+
 //! the K-quant cm2 tiles (the shared decode-in-load templates) on the l, m and s columns against the Vulkan cells' per-format oracles,
 //! over the Vulkan cells' hashed planes and two regions of activation rows (whole tiles and an edge each)
 [test]

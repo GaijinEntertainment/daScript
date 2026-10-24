@@ -2365,6 +2365,7 @@ class template RqPlainT : RqT {
     @ssbo @binding = 0 src : array<float>
     @ssbo @binding = 1 outq : array<int8>
     @ssbo @binding = 2 outs : array<float>
+    @ssbo @binding = 3 @template_gate = OUT_SUM outsum : array<float>   //! the blocks' scale x quant sum
     @push_constant pa : RqArgs
     @template_constant CLAMP : bool = false
 
@@ -2401,6 +2402,7 @@ class template ActRqT : RqT {
     @ssbo @binding = 1 up : array<float>       //! up rows (act's u side)
     @ssbo @binding = 2 outq : array<int8>      //! quantized bytes out
     @ssbo @binding = 3 outs : array<float>     //! per-block scales out
+    @ssbo @binding = 4 @template_gate = OUT_SUM outsum : array<float>   //! the blocks' scale x quant sum
     @push_constant pa : ActArgs
 
     def act_mul(v, u : float) : float => gk_act_mul(v, u, pa.act)
