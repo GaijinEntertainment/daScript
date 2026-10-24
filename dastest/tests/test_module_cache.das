@@ -55,7 +55,7 @@ def test_module_cache_filenames(t : T?) {
     t |> success(first != module_cache_path("first/test.das", policies))
 }
 
-//! A separate runner exposes invalid internal arguments through its exit code.
+//! A fresh runner exposes invalid arguments through its exit code.
 [test]
 def test_invalid_worker_module_cache_path(t : T?) {
     let malformed = base64_encode(test_temp_dir()) + "=ignored"
@@ -73,7 +73,7 @@ def test_invalid_worker_module_cache_path(t : T?) {
     }
 }
 
-//! Separate runners prove cache reads across fresh processes and workers.
+//! Fresh runners expose persistent records across processes.
 [test]
 def test_dastest_cache_per_test_file(t : T?) {
     let folder = test_temp_dir()
@@ -125,7 +125,7 @@ def test_dastest_cache_per_test_file(t : T?) {
     t |> equal(cache_count(cache), 2)
 }
 
-//! Fresh processes expose compiled macro values reused across environments.
+//! Fresh runners expose stale macro values after environment changes.
 [test]
 def test_dastest_cache_compile_environment(t : T?) {
     let folder = test_temp_dir()
@@ -148,7 +148,7 @@ def test_dastest_cache_compile_environment(t : T?) {
     }
 }
 
-//! Fresh runners expose project-policy changes behind a previously cached file.
+//! Fresh runners reload project policies during dastest startup.
 [test]
 def test_dastest_cache_project_options(t : T?) {
     let folder = test_temp_dir()
