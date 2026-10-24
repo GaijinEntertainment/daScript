@@ -161,8 +161,9 @@ caveat or correction goes in a new dated entry.**
 sentence of the entry stating what its figures show - adds a new dated entry that carries them and
 names the old entry and the figure or conclusion it replaces.**
 
-**A `PERF_LEDGER.md` entry never carries a timing that argues for code the same diff does not
-land - that timing goes in the PR that lands the code.**
+**A `PERF_LEDGER.md` entry never carries a figure given as the reason to pick a value, formula or
+kernel that the same diff neither lands nor names as the Done of a `followup_*.md` row citing that
+entry - that figure goes in the PR that lands the code.**
 
 **A diff that lets a served turn, or a media encode a turn takes (an image, a video frame or an
 audio chunk), reach code no spawned or manual cell's input reaches - a new dispatch arm, a
@@ -183,10 +184,15 @@ run printed none.** A fat exe is what `daspkg release --fat <class>` builds (`DA
 `ARCHITECTURE_MEASUREMENT_FAT_START.md#fat-first-start`).
 
 **A diff whose PR body, or a line it adds or changes, states that a route the tree served before the
-diff runs faster or does less work, where a rig leg runs the changed lines, re-mints in the same
-change a board row (`performance/records/<box>.json`) from that leg and names that row in the PR
-body.** The board is the module's committed record of what serving costs; a kernel win that never
-lands there is invisible to the next regression check.
+diff runs faster or does less work, where a rig leg runs the changed lines, writes that leg's walls
+on every board box that runs it into a dated `PERF_LEDGER.md` entry naming the exe's commit and the
+command, and names in the PR body the `followup_general.md` row under which the release re-mint owes
+the board row; the release re-mint
+(`ARCHITECTURE_MEASUREMENT_RELEASE.md#board-rows-release-boundary`) is the diff that re-mints the
+row in `performance/records/<box>.json` and names it in its PR body.** The board is the module's
+committed record of what a release's exe costs to serve; a kernel win that lands in no ledger entry
+is invisible to the next regression check, and a row minted between releases shows a speed no
+shipped binary gives.
 
 **A diff whose PR body, or a line it adds or changes, states that a route the tree served before the
 diff runs faster or does less work, where no rig leg runs the changed lines, states in its PR body

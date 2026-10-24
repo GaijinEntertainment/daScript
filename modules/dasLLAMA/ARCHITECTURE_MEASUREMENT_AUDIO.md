@@ -42,6 +42,21 @@ marker already being in the tree, three-way - still applies after the reference 
 boxes `performance/setup_asr_rig.das` builds a second, Metal-ON copy of the same patched checkout,
 because `-ngl` on a Metal-OFF build is inert; `mtmd_bin_metal()` returns "" when it is absent and the GPU reference leg skips loudly.
 
+### The ASR board's CPU reference rows {#asr-cpu-references}
+
+A CPU ASR cell pairs the das row with the tool `asr_catalog()` names for the model, each spawned by
+`performance/gen_bench_records.das -w asr` on the same box at the box's thread count, best of
+`--asr-reps` per clip. `llama-mtmd-cli` comes from the reference checkout `setup_asr_rig.das` pins
+at `LLAMA_CPP_COMMIT` with `benchmarks/asr/patches/mtmd-timing.patch` applied and built CPU-only
+(`setup_asr_rig --refs`); `run_asr_mtmd` runs it greedy (`--temp 0`) with no GPU layers (`-ngl 0`)
+over the model's Q8_0 file and its bf16 mmproj, and reads the reference's encode figure as the
+`encode_prefill_ms` field of the first `MTMD_TIMING` line of the best-total rep - encode plus
+prefill, so a reference encode cell carries the prefill the das cell's does not. `whisper-cli` and
+`parakeet-cli` come from the pinned whisper.cpp checkout and run over the q8_0 model file the rig
+quantizes beside the fp file; the ONNX and NeMo tools run from the rig's venvs. The reference's
+encoder runs its mmproj's bf16 weights in bf16 arithmetic and the das row widens them to f32, so an
+encode pair compares two arithmetics as well as two engines.
+
 ### The MLX ASR reference {#mlx-asr-reference}
 
 An MLX ASR row (`engine` `mlx-audio`, `backend` `metal`) is one `gen_bench_records` spawn of
