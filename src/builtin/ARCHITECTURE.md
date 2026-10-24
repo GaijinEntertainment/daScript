@@ -140,19 +140,11 @@ operator, so a container element or a field of a local record streams through `s
 whatever its type. The empty string is most of the occurrences, every unaliased `TypeDecl`
 carrying one, so it answers from its own slot without hashing.
 
-**Types.** A `TypeDecl` reference streams as a number (`TypeRef`): 0 null, 1 an inline payload,
-2 a fresh table entry whose payload follows, 3 and up an entry already in the table followed by
-its own `at`. A type carrying expressions - a fixed-dim expression, a type macro - is not tableable and
-streams inline, and so does any type with such a child: the table dedups by content, and an
-expression is not content the key covers. The writer keys the live type and hashes and compares
-its content recursively, the two `findAlias` cache bits masked out of both the key and the stream
-since they are a cache and not part of the type; the reader keeps the first decoded instance and
-deep-copies it for every later reference, so no two nodes share a type. A type takes its number
-AFTER its payload on both sides: the payload can carry a same-module structure inline whose field
-holds a type equal to this one, and with the number taken first the reader would copy a prototype
-it has not finished decoding. The writer counts fresh entries apart from the map, since an equal
-type registered from inside the payload keeps the map's number while the reader pushes every
-fresh entry.
+**Types.** A `TypeDecl` reference streams as 0 null, 1 a payload, or 2 and up a node the record
+already streamed, which the reader answers with the same pointer - a record reads back with the
+sharing its writer had (`src/ast/ARCHITECTURE_GC.md#type-remap`). A node takes its number before
+its payload: an inline same-module structure can hold that very node. A module the reader builds
+carries `fromModuleCache`, and `daslib/ast_verify` skips it, since its types are shared.
 
 **Files and lines.** A `FileInfo` streams as its per-record number, the first mention carrying
 the payload after the number; a record names its own few files, so the number is one byte. A

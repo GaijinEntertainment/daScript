@@ -133,8 +133,7 @@ namespace das {
         lastWriteFileInfo = nullptr;
         lineBaseFile = nullptr;
         lineBaseLine = 0;
-        writeTypes.clear();
-        writeFreshTypeCount = 0;
+        writeTypeNodes.clear();
         readTypes.clear();
         writeExprClasses.clear();
         readExprClasses.clear();
@@ -870,66 +869,7 @@ namespace das {
         return *this;
     }
 
-    static bool typeTableable ( const TypeDecl * t ) {
-        if ( t->fixedDimExpr || !t->typeMacroExpr.empty() ) return false;
-        if ( t->firstType && !typeTableable(t->firstType) ) return false;
-        if ( t->secondType && !typeTableable(t->secondType) ) return false;
-        for ( auto & a : t->argTypes ) {
-            if ( a && !typeTableable(a) ) return false;
-        }
-        return true;
-    }
-
-    static uint64_t hashTypeContent ( const TypeDecl * t ) {
-        // FNV-1a over the words: hash_combine64 runs wyhash per word and costs 4 ms of a 16 ms write
-        uint64_t h = 14695981039346656037ull;
-        auto mix = [&h]( uint64_t v ) { h = (h ^ v) * 1099511628211ull; };
-        mix(uint32_t(t->baseType));
-        mix(t->flags & ~TypeDecl::aliasCacheFlags());
-        mix(uint32_t(t->fixedDim));
-        mix(uintptr_t(t->structType) >> 4);
-        mix(uintptr_t(t->enumType) >> 4);
-        mix(uintptr_t(t->annotation) >> 4);
-        mix(uintptr_t(t->module) >> 4);
-        if ( !t->alias.empty() ) mix(hash_block64((const uint8_t *) t->alias.data(), t->alias.size()));
-        mix(t->firstType ? hashTypeContent(t->firstType) : 7);
-        mix(t->secondType ? hashTypeContent(t->secondType) : 11);
-        mix(t->argTypes.size());
-        for ( auto & a : t->argTypes ) mix(a ? hashTypeContent(a) : 13);
-        mix(t->argNames.size());
-        for ( auto & n : t->argNames ) mix(hash_block64((const uint8_t *) n.data(), n.size()));
-        return h;
-    }
-
-    static bool sameTypeContent ( const TypeDecl * a, const TypeDecl * b ) {
-        if ( a == b ) return true;
-        if ( a->baseType != b->baseType ) return false;
-        if ( ((a->flags ^ b->flags) & ~TypeDecl::aliasCacheFlags()) != 0 ) return false;
-        if ( a->fixedDim != b->fixedDim ) return false;
-        if ( a->structType != b->structType || a->enumType != b->enumType || a->annotation != b->annotation || a->module != b->module ) return false;
-        if ( a->alias != b->alias ) return false;
-        if ( (a->firstType == nullptr) != (b->firstType == nullptr) ) return false;
-        if ( a->firstType && !sameTypeContent(a->firstType, b->firstType) ) return false;
-        if ( (a->secondType == nullptr) != (b->secondType == nullptr) ) return false;
-        if ( a->secondType && !sameTypeContent(a->secondType, b->secondType) ) return false;
-        if ( a->argTypes.size() != b->argTypes.size() ) return false;
-        for ( size_t i = 0; i != a->argTypes.size(); ++i ) {
-            if ( (a->argTypes[i] == nullptr) != (b->argTypes[i] == nullptr) ) return false;
-            if ( a->argTypes[i] && !sameTypeContent(a->argTypes[i], b->argTypes[i]) ) return false;
-        }
-        if ( a->argNames != b->argNames ) return false;
-        return true;
-    }
-
-    size_t AstSerializer::TypeHash::operator () ( const TypeDecl * t ) const noexcept {
-        return size_t(hashTypeContent(t));
-    }
-
-    bool AstSerializer::TypeEqual::operator () ( const TypeDecl * a, const TypeDecl * b ) const noexcept {
-        return sameTypeContent(a, b);
-    }
-
-    enum TypeRef : uint32_t { TypeRefNull = 0, TypeRefInline = 1, TypeRefFresh = 2, TypeRefFirstEntry = 3 };
+    enum TypeRef : uint32_t { TypeRefNull = 0, TypeRefPayload = 1, TypeRefFirstNode = 2 };
 
     // src/builtin/ARCHITECTURE.md#module-cache-record-bytes
     AstSerializer & AstSerializer::operator << ( TypeDeclPtr & type ) {
@@ -939,48 +879,30 @@ namespace das {
             if ( !type ) {
                 uint32_t ref = TypeRefNull;
                 serializeAdaptiveSize32(ref);
-                return *this;
-            }
-            if ( !typeTableable(type) ) {
-                uint32_t ref = TypeRefInline;
+            } else if ( auto it = writeTypeNodes.find(type); it != writeTypeNodes.end() ) {
+                uint32_t ref = TypeRefFirstNode + it->second;
+                serializeAdaptiveSize32(ref);
+            } else {
+                writeTypeNodes.emplace(type, uint32_t(writeTypeNodes.size()));
+                uint32_t ref = TypeRefPayload;
                 serializeAdaptiveSize32(ref);
                 type->serialize(*this);
-                return *this;
             }
-            if ( auto it = writeTypes.find(type); it != writeTypes.end() ) {
-                uint32_t known = it->second;
-                serializeAdaptiveSize32(known);
-                *this << type->at;
-                return *this;
-            }
-            uint32_t ref = TypeRefFresh;
-            serializeAdaptiveSize32(ref);
-            type->serialize(*this);
-            writeFreshTypeCount ++;
-            writeTypes.emplace(type, writeFreshTypeCount - 1 + TypeRefFirstEntry);
         } else {
             uint32_t number = 0;
             serializeAdaptiveSize32(number);
             if ( number == TypeRefNull ) {
                 type = nullptr;
-                return *this;
-            }
-            if ( number == TypeRefInline ) {
+            } else if ( number == TypeRefPayload ) {
                 type = new TypeDecl();
-                type->serialize(*this);
-                return *this;
-            }
-            if ( number == TypeRefFresh ) {
-                type = new TypeDecl();
-                type->serialize(*this);
                 readTypes.push_back(type);
-                return *this;
+                type->serialize(*this);
+            } else {
+                uint32_t index = number - TypeRefFirstNode;
+                SERIALIZER_VERIFYF(index < readTypes.size(), "corrupt stream: type node #%u past the %u numbered so far",
+                    index, unsigned(readTypes.size()));
+                type = readTypes[index];
             }
-            uint32_t index = number - TypeRefFirstEntry;
-            SERIALIZER_VERIFYF(index < readTypes.size(), "corrupt stream: type #%u past the %u numbered so far",
-                number, unsigned(readTypes.size()));
-            type = new TypeDecl(*readTypes[index]);
-            *this << type->at;
         }
         return *this;
     }
@@ -1529,8 +1451,7 @@ namespace das {
 
     AstSerializer & AstSerializer::serializeModule ( Module & module, bool already_exists ) {
         thisModule = &module;
-        writeTypes.clear();
-        writeFreshTypeCount = 0;
+        writeTypeNodes.clear();
         readTypes.clear();
         if ( writing ) {
             module.serialize(*this, already_exists);
@@ -3033,15 +2954,18 @@ namespace das {
         // the next promoteToBuiltin trips its own assert on it
         const bool selfBuiltIn = builtIn;
         const bool selfPromoted = promoted;
+        const bool selfFromModuleCache = fromModuleCache;
         if ( ser.writing ) {
             builtIn = false;
             promoted = false;
+            fromModuleCache = false;
         }
         ser << name << nameHash << moduleFlags << inlineTempIndex;
         ser.serializeTemp(fileName);
         ser.serializeTemp(promotedRequire);
         builtIn = selfBuiltIn;
         promoted = selfPromoted;
+        fromModuleCache = ser.writing ? selfFromModuleCache : true;
         ser << annotationData << requireModule;
         // das-declared distinct types round-trip with the module (C++-module annotations
         // re-register on load, parser-created ones don't). they stream BEFORE aliasTypes and

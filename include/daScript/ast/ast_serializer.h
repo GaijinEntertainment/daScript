@@ -161,10 +161,7 @@ namespace das {
         uint32_t            lastWriteFileInfoNumber = 0;
         FileInfo *          lineBaseFile = nullptr;
         uint32_t            lineBaseLine = 0;
-        struct TypeHash  { size_t operator () ( const TypeDecl * t ) const noexcept; };
-        struct TypeEqual { bool operator () ( const TypeDecl * a, const TypeDecl * b ) const noexcept; };
-        das_hash_map<const TypeDecl *, uint32_t, TypeHash, TypeEqual>  writeTypes;
-        uint32_t                                    writeFreshTypeCount = 0;
+        das_hash_map<const TypeDecl *, uint32_t>    writeTypeNodes;
         vector<TypeDecl *>                          readTypes;
         das_hash_map<uint32_t, uint32_t>            writeExprClasses;
         vector<Annotation *>                        readExprClasses;
@@ -365,7 +362,7 @@ namespace das {
         AstSerializer & serializeModule ( Module & module, bool already_exists );
 
         static constexpr uint32_t getVersion () {
-            return 233;   // 233: CodeOfPolicies carries promote_shared_unoptimized
+            return 234;   // 234: a type reference names the node it points at, so the reader restores shared types
         }
 
         void serializeProgram ( ProgramPtr program, ModuleGroup & libGroup ) noexcept;

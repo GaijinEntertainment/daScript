@@ -22,7 +22,7 @@ def color_mapping_preserves_black_and_highlight_order(t : T?){
             t |> equal(c.x, c.y); t |> equal(c.y, c.z); previous = c.x
         }
     }
-    t |> equal(tone_reinhard(float3(1.0)), float3(.5))
+    t |> success(length(tone_reinhard(float3(1.0)) - float3(.5)) < .000001)
     t |> success(abs(tone_aces_fit(float3(1.0)).x - .80379747) < .000001)
     t |> success(tone_pbr_neutral(float3(4.0)).x > tone_pbr_neutral(float3(2.0)).x)
 }

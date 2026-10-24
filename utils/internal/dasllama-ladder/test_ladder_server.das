@@ -704,16 +704,13 @@ def test_official_dir_imports_its_annotations(t : T?) {
 
 //! the operator CLI's contract is its exit code and the line it
 //! prints, so the op runs in a child
-def private run_admin(args : string; var output : string&) : int {
+def private run_admin(args : array<string>; var output : string&) : int {
     let argv <- get_command_line_arguments()
     let root = get_das_root()
-    let cmd = ("\"{argv[0]}\" -dasroot \"{root}\" " +
-        "\"{root}/utils/internal/dasllama-ladder/admin.das\" -- {args} 2>&1")
-    return unsafe(popen_timeout(cmd, 300.0) $(f) {
-        if (f != null) {
-            output = fread(f)
-        }
-    })
+    var cmd <- [argv[0], "-dasroot", root,
+        "{root}/utils/internal/dasllama-ladder/admin.das", "--"]
+    cmd |> push_from(args)
+    return run_and_capture(cmd, output, 300.0)
 }
 
 [test]
@@ -729,7 +726,7 @@ def test_admin_import_annotations(t : T?) {
             tt |> success(r.ok, "the official store lands ({r.error})")
         }
         var out = ""
-        let rc = run_admin("--db \"{db_path}\" --op import-annotations --file \"{ann}\"", out)
+        let rc = run_admin(["--db", db_path, "--op", "import-annotations", "--file", ann], out)
         tt |> equal(rc, 0, "the import exits 0: {out}")
         tt |> success(find(out, "1 hold(s), 0 void(s) imported") >= 0,
             "it reports the hold: {out}")
@@ -740,7 +737,7 @@ def test_admin_import_annotations(t : T?) {
         var missing = ""
         let absent = path_join(test_temp_dir(), "absent.json")
         let rc_missing = run_admin(
-            "--db \"{db_path}\" --op import-annotations --file \"{absent}\"", missing)
+            ["--db", db_path, "--op", "import-annotations", "--file", absent], missing)
         tt |> equal(rc_missing, 1, "a missing file exits 1: {missing}")
         tt |> success(find(missing, "cannot read") >= 0, "it names the unread file: {missing}")
         remove(db_path)

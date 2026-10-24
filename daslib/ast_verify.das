@@ -1715,10 +1715,13 @@ def private program_asked_for_verify(prog : ProgramPtr) : bool {
     return asked
 }
 
+def private verifies(mod : Module?) : bool =>
+    mod != null && !mod.moduleFlags.builtIn && !mod.moduleFlags.fromModuleCache
+
 [post_compile_macro]
 class AstPostCompileVerifyMacro : AstPassMacro {
     def override apply(var prog : ProgramPtr; mod : Module?) : bool {
-        if (mod != null && !mod.moduleFlags.builtIn && program_asked_for_verify(prog)) {
+        if (verifies(mod) && program_asked_for_verify(prog)) {
             verify_module(prog, mod)
             if (batch_mode()) {
                 verify_module_after_infer(prog, mod)
@@ -1737,7 +1740,7 @@ class AstPostCompileVerifyMacro : AstPassMacro {
 [post_rewrite_macro]
 class AstPostRewriteVerifyMacro : AstPassMacro {
     def override apply(prog : ProgramPtr; mod : Module?) : bool {
-        if (mod != null && !mod.moduleFlags.builtIn) {
+        if (verifies(mod)) {
             verify_module(prog, mod)
         }
         return true
@@ -1751,7 +1754,7 @@ class AstSimulateVerifyMacro : AstSimulateMacro {
     //! here. Not reached under -compile-only, which never simulates.
     def override simulate(_prog : Program?; _ctx : Context?) : bool {
         let mod = compiling_module()
-        if (mod != null && !mod.moduleFlags.builtIn) {
+        if (verifies(mod)) {
             verify_module(compiling_program(), mod)
             if (batch_mode()) {
                 verify_module_after_infer(compiling_program(), mod)
