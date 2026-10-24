@@ -41,6 +41,7 @@ require daslib/jobque_boost
 require daslib/clargs
 require daslib/enum_trait   // to_enum: --mtp-accept by the MtpAccept member's name
 require daslib/fio
+require daslib/logger   // --prof: the report is an info-level log, so the flag raises the floor to it
 require daslib/md_boost
 require math
 require dasllama/dasllama_env
@@ -1547,8 +1548,11 @@ def main() : int {
         return 0
     }
     if (cfg.prof && !JOBQUE_PROFILING_ENABLED) {
-        print("--prof needs the marker rail compiled in - rerun with JOBQUE_PROFILING=1 (or --jobque-profiling)\n")
+        print("--prof needs the marker rail compiled in - rerun with JOBQUE_PROFILING=1 (the DLL cache keeps the rail-less build: add -jit-no-cache)\n")
         return 1
+    }
+    if (cfg.prof && logger_get_min_level() > LOG_INFO) {
+        set_env_variable("DAS_LOG_LEVEL", "info")   //! the report is an info-level log: the flag raises the floor to info unless the logger already admits it
     }
     // measurement exists only from the released exe: a -jit SCRIPT run reads whatever sidecar
     // sits beside the script and re-keys nothing — its numbers must never enter records
