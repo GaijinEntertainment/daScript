@@ -225,9 +225,11 @@ asymmetries a stamp family ledgers - stays in `ARCHITECTURE_GPU.md#gpu-backends`
   the leaf carries a min term), at a window of whole 128-row tiles, runs on that leaf over the activations requantized
   to Q8_0 blocks between the GEMMs, as the token step's feeds are; every other site - the other formats, a shape off the
   tile, `=0` - takes the f16-fed cm2 tiles, and a layer whose sites split produces both feeds (the residual step's
-  requant, then its f16 norm pass with no add). `=1` leaves out the leaves the measured cards' windows ran slower on
-  than the tiles (Q5_1: its five-word blocks and its m cost the leaf a third of the Q8 one's rate, under the feeds' cost)
-  and `=2` arms every leaf, a new card's own measurement. The Q8_0 leaf stages raw blocks by cp.async; the other leaves
+  requant, then its f16 norm pass with no add). `=1` leaves out the leaves whose windows did not beat the tiles on every
+  measured card - Q5_1 lost on both (its five-word blocks and its m cost the leaf a third of the Q8 one's rate, under the
+  feeds' cost), Q5_0 won on the RTX 5060 Ti and lost on the RTX PRO 4500, the first format the two cards split - and
+  `=2` arms every leaf, a new card's own measurement; the split is what makes the pick a per-box race rather than a
+  default (the ledger's row). The Q8_0 leaf stages raw blocks by cp.async; the other leaves
   (`MmqT` under `KQ` for the superblock formats, `B32` with the format's tag for the per-32 ones) decode their codes to
   int8 through registers in the weight stage - the codebook formats through the home's permute decode, Q4_0 and Q5_0
   with their offsets folded into the signed codes - a scale a block. The leaves with a min term (Q4_K's `dmin x mn`,
