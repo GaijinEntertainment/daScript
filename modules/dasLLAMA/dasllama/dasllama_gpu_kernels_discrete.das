@@ -1672,7 +1672,8 @@ class template Nv4GemvT : KqGemvLeafT {
         wl = uint4(mx4_word(wv.x & KQC_NIBBLE_MASK), mx4_word(wv.y & KQC_NIBBLE_MASK), mx4_word(wv.z & KQC_NIBBLE_MASK), mx4_word(wv.w & KQC_NIBBLE_MASK))
         wh = uint4(mx4_word((wv.x >> 4u) & KQC_NIBBLE_MASK), mx4_word((wv.y >> 4u) & KQC_NIBBLE_MASK), mx4_word((wv.z >> 4u) & KQC_NIBBLE_MASK), mx4_word((wv.w >> 4u) & KQC_NIBBLE_MASK))
         let sw = wsu[wsb * 5u + blk / 2u] >> ((blk & 1u) * 16u)
-        return float4(ue4m3_half_f32(sw & 0xFFu), 0.0, ue4m3_half_f32((sw >> 8u) & 0xFFu), 0.0)
+        let s2 = uint_bits_to_float(wsu[wsb * 5u + 4u])   // the plane's per-tensor scale, the device row's fifth word
+        return float4(ue4m3_half_f32(sw & 0xFFu) * s2, 0.0, ue4m3_half_f32((sw >> 8u) & 0xFFu) * s2, 0.0)
     }
 
     def override fold_reads_bsum : bool => false
@@ -5744,7 +5745,7 @@ class template Nv4Cm2T : KqCm2BatchT {
             let hh = (e0 >> 4u) & 1u
             let w4 = wq4[blk * 8u + g]
             let si = g * 2u + hh
-            let sc = ue4m3_half_f32((ws[blk * 5u + (si >> 2u)] >> ((si & 3u) * 8u)) & 0xFFu)
+            let sc = ue4m3_half_f32((ws[blk * 5u + (si >> 2u)] >> ((si & 3u) * 8u)) & 0xFFu) * uint_bits_to_float(ws[blk * 5u + 4u])
             for [unroll_full] (c in range(4)) {
                 khr_put4(sbase + uint(c) * 2u, mx4_dec4((w4[c] >> (hh * 4u)) & 0x0F0F0F0Fu, sc))
             }
@@ -5759,7 +5760,7 @@ class template Nv4Cm2T : KqCm2BatchT {
         let q = (uint(int(blk.qs[int(bidx >> 1u)])) >> ((bidx & 1u) * 8u + (e >> 4u) * 4u)) & 0xFu
         let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
         let si = g * 2u + (e >> 4u)
-        let sc = ue4m3_half_f32((ws[srow + (si >> 2u)] >> ((si & 3u) * 8u)) & 0xFFu)
+        let sc = ue4m3_half_f32((ws[srow + (si >> 2u)] >> ((si & 3u) * 8u)) & 0xFFu) * uint_bits_to_float(ws[srow + 4u])
         return float16(mx4_dec4(q, sc).x)
     }
 
@@ -5774,7 +5775,7 @@ class template Nv4Cm2T : KqCm2BatchT {
         let nw = ((l0 >> sh) & 0xFu) | (((l0 >> (sh + 8u)) & 0xFu) << 8u) | (((l1 >> sh) & 0xFu) << 16u) | (((l1 >> (sh + 8u)) & 0xFu) << 24u)
         let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
         let si = g * 2u + (e >> 4u)
-        let sc = ue4m3_half_f32((ws[srow + (si >> 2u)] >> ((si & 3u) * 8u)) & 0xFFu)
+        let sc = ue4m3_half_f32((ws[srow + (si >> 2u)] >> ((si & 3u) * 8u)) & 0xFFu) * uint_bits_to_float(ws[srow + 4u])
         return half4(mx4_dec4(nw, sc))
     }
 }

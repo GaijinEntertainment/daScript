@@ -95,11 +95,13 @@ the last two from the tree:
    A format whose value carries a whole-tensor factor beside its block scales (NVFP4: ModelOpt's second
    scaling level, a `<tensor>.scale` GGUF tensor) keeps the plane bytes pure and lands the factor in the
    matmul epilogues (`ARCHITECTURE_ENGINE_FORMATS.md#nv4-site-scale`): `detect_site_scales` reads it per
-   site after the layout, and every path that reaches the planes - the two plane entries, the device
-   batch GEMM's CPU side and the fused decode chains of `dasllama_blocks.das`, which invoke the rows
-   cores on raw plane pointers and never pass through `mm_at_kq_pre` - multiplies its rows by it; a
-   path left out serves the weights a thousandfold off and the text reads as garbage with every kernel
-   cell green.
+   site after the layout, and every CPU path that reaches the planes - the two plane entries and the
+   fused decode chains of `dasllama_blocks.das`, which invoke the rows cores on raw plane pointers and
+   never pass through `mm_at_kq_pre` - multiplies its rows by it; the device rows carry the factor in
+   their scale row's pad word, written by the gather, so the GPU decodes fold it with no epilogue (the
+   kernel cells' fixtures fill that word through `kq_ws_plane`, never a bare `ws_plane` - a hashed pad
+   reads as a wild f32). A path left out serves the weights a thousandfold off and the text reads as
+   garbage with every kernel cell green.
 
 Write the answers down; they are the first lines of the PR body's format section.
 

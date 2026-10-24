@@ -3339,8 +3339,9 @@ class KqBatchNv4 : KqBatchBase {
         if (wt * 32u + slane < pa.d) {
             let wsb = wsb0 + (wt * 32u + slane) * nsb + s
             let sw = wsu[wsb * 5u + sblk / 2u] >> ((sblk & 1u) * 16u)
-            slo = ue4m3_half_f32(sw & 0xFFu)
-            shi = ue4m3_half_f32((sw >> 8u) & 0xFFu)
+            let s2 = uint_bits_to_float(wsu[wsb * 5u + 4u])   // the plane's per-tensor scale, the device row's fifth word
+            slo = ue4m3_half_f32(sw & 0xFFu) * s2
+            shi = ue4m3_half_f32((sw >> 8u) & 0xFFu) * s2
         }
         wsw[sblk * 32u + slane] = slo
         wsw2[sblk * 32u + slane] = shi

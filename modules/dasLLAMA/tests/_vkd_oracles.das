@@ -527,8 +527,9 @@ def lut_gemv_float_oracle(wq, ws, xq : array<uint>; xs : array<float>; regions :
     return <- y
 }
 
-//! the nv4 sub-block scale `si` of superblock `sb`'s device row: byte si of the row's first four words, UE4M3 at half
-def nv4_row_sc(ws : array<uint>; sb, si : int) : float => ue4m3_half_f32(uint(byte_u8(ws, sb * 20 + si)))
+//! the nv4 sub-block scale `si` of superblock `sb`'s device row: byte si of the row's first four words, UE4M3 at half, under
+//! the plane's per-tensor scale in the row's fifth word
+def nv4_row_sc(ws : array<uint>; sb, si : int) : float => ue4m3_half_f32(uint(byte_u8(ws, sb * 20 + si))) * uint_bits_to_float(ws[sb * 5 + 4])
 
 //! NVFP4 GEMV float oracle: w = MX4_LUT[q] x the sub-block's UE4M3 scale at half straight off the plane bytes - a 32-block's
 //! low 16 under scale byte 2 blk, its high 16 under 2 blk + 1, over the k4 nibble tiling
@@ -1261,6 +1262,10 @@ enum ScaleForm {
     nv4_bytes     //! four words of UE4M3 sub-block scale bytes, then a zero pad word
 }
 
+//! the nv4 cells' per-tensor scale word of superblock `sb` (the device row's fifth word): a 1.0 .. 1.75 ladder, so a decode
+//! that drops it reads off the bar and the f16 sums stay cool
+def nv4_scale2_word(sb : int) : uint => float_bits_to_uint(1.0 + 0.25 * float(sb % 4))
+
 //! the nv4 cells' scale bytes: UE4M3 codes with exponents 1..10 (2^-7 .. 2^2 at half) and every mantissa, four a word, so the
 //! tile's f16 sums stay far from 65504 and no code reads as the nan zero
 def nv4_scale_word(i, seed : uint) : uint {
@@ -1422,6 +1427,7 @@ def fmt_tile_planes(row : FmtTile; var wqh, wsh : array<uint>) {
             for (wi in range(4)) {
                 wsh[sb * 5 + wi] = nv4_scale_word(uint(sb * 4 + wi), row.sseed)
             }
+            wsh[sb * 5 + 4] = nv4_scale2_word(sb)
         }
     }
     if (row.form == ScaleForm.iq4nl32_d) {

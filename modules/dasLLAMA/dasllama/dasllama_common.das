@@ -5010,8 +5010,7 @@ def mm_b_kq(var s : Session; var y : array<float>; t : Model; fmt : KqFmt; woff 
     if (t.kq_repacked && kernel_backend_has_kq_batch()) {
         requant_rows_q8k_bs(x, n, npos, s.xqb, s.xsb, s.xbsb)   // kq v2: Q8_K-form image
         if (npos >= 32l && moe_gpu_dense_on_gpu(int(fmt), woff)) {
-            matmul_gpu_dense(y, woff, s.xqb, s.xsb, n, d, npos, int(fmt))   // in-kernel bsums, xbsb unused
-            apply_site_scale(y, t, fmt, woff, 0l, npos * d)
+            matmul_gpu_dense(y, woff, s.xqb, s.xsb, n, d, npos, int(fmt))   // in-kernel bsums, xbsb unused; the device rows carry nv4's scale2
             return
         }
         mm_b_kq_pre(y, t, fmt, woff, s.xqb, s.xsb, s.xbsb, n, d, npos)

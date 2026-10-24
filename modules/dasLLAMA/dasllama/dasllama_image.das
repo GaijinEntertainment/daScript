@@ -1350,6 +1350,9 @@ def private vk_mint_gather_hook(fmt : int; woff, n, rows, slice_rows, mr, kgroup
         }
         vk_mint_zero_view(f, woff, n * rows)
     }
+    if (f == KqFmt.nv4) {   // the view's planes sit rebased: the plane's per-tensor scale rides under the rebased key
+        g_vk_mint_job_view.site_scale[site_scale_key(f, woff - g_vk_mint_view_rebase)] = site_scale(*g_vk_mint_streamed_model, f, woff)
+    }
     layout_gather_dispatch(g_vk_mint_job_view, f, woff - g_vk_mint_view_rebase, n, rows, slice_rows, mr, kgroup, wbias, wq, ws, disk)
     return true
 }
