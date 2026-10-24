@@ -33,6 +33,7 @@ def private allow_cpu_prefill_intent() {
 
 let private LOGIT_BAR_REL = 0.06   //! of the step's max |logit|: the CUDA llama file's bar
 let private FILE_06B = "Qwen3-0.6B-Q8_0.gguf"   //! head 128 over 16 q heads and 8 k heads, the per-head q/k norm, no attention bias
+let private FILE_4B = "Qwen3-4B-Instruct-2507-Q8_0.gguf"   //! the larger dense qwen3: 36 layers over 2560, the same head geometry at 32 q heads
 
 [test]
 def test_gpu_resident_cuda_qwen3_06b(t : T?) {
@@ -41,5 +42,15 @@ def test_gpu_resident_cuda_qwen3_06b(t : T?) {
     }
     t |> run("{FILE_06B}: a {PF_WINDOW_ROWS + 88l}-token prompt (two windows) and eight steps on the CUDA driver") @(t : T?) {
         cuda_forced_feed(t, FILE_06B, "qwen3", PF_WINDOW_ROWS + 88l, 2l, LOGIT_BAR_REL)
+    }
+}
+
+[test]
+def test_gpu_resident_cuda_qwen3_4b(t : T?) {
+    t |> run("{FILE_4B}: one window (40 tokens) and eight steps on the CUDA driver") @(t : T?) {
+        cuda_forced_feed(t, FILE_4B, "qwen3", 40l, 1l, LOGIT_BAR_REL)
+    }
+    t |> run("{FILE_4B}: a {PF_WINDOW_ROWS + 88l}-token prompt (two windows) and eight steps on the CUDA driver") @(t : T?) {
+        cuda_forced_feed(t, FILE_4B, "qwen3", PF_WINDOW_ROWS + 88l, 2l, LOGIT_BAR_REL)
     }
 }

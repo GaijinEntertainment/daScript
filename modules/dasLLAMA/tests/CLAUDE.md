@@ -2091,11 +2091,13 @@ launched); the same skips, and where the driver declines the model at the cell's
 `test_gpu_resident_cuda_qwen3.das` - stocked suite, `-jit` only: the same driver on Qwen3-0.6B Q8_0, the q/k-normed
 carrier, whose norm, rope and K/V store run as the fused pass `CuQknRopeKv` in the token command and the window chain,
 in the CUDA llama file's forced-feed form at one window and two (`cuda_forced_feed` of `_cuda_feed.das`, the CUDA
-files' one body); the same skips. `test_gpu_resident_cuda_phi3.das` - stocked suite, `-jit` only: the same driver on
+files' one body), and on Qwen3-4B Q8_0 (36 layers, the larger dense qwen3: the mirror slabs and the weight upload a
+gigabyte class up) the same way; the same skips. `test_gpu_resident_cuda_phi3.das` - stocked suite, `-jit` only: the same driver on
 Phi-3.5-mini Q4_K_M (head 96: the window's attention on the h96 flash tile, the K-quant planes, the fused qkv and gate-up
-planes, the long-rope factors) in the same form at the two-window prompt - after the 40-token prompt the one-row steps at
-positions 41 and 44 sit 7.7 and 6.6 percent of the max logit off the CPU chain on both attention paths, past the llama
-bar, so the file holds no one-window arm; the same skips. The CUDA kernel cells
+planes, the long-rope factors) in the same form at the two-window prompt - after the 40-token prompt the K-quant file's
+one-row steps at positions 41 and 44 sit 7.7 and 6.6 percent of the max logit off the CPU chain on both attention paths,
+past the llama bar, so that file holds no one-window arm - and the Q8_0 file (the q8 decode chain) at one window and two;
+the same skips. The CUDA kernel cells
 beside them, `test_cuda_kernels.das` (model-free; a CUDA device with NVRTC, else every cell but the leak gate skips;
 the per-format cells - the kq cm2 tiles, the kq and per-32 GEMVs, the token-table gathers, the Q8_K feeds - also skip
 without dasVulkan): the q8 GEMV and its rate, the MMQ int8 GEMM against the block-scaled reference, the cm2 l tile

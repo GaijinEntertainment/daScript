@@ -266,10 +266,13 @@ def private cud_decline(why : string) : bool {
     return false
 }
 
+//! a zero-filled device block; the clear rides g_cud.stream like every write a kernel reads - the stream-less memset runs on
+//! the legacy stream, which the home's non-blocking stream never waits for, and a large clear then lands after the first
+//! kernels wrote into the block
 def private dev_zeroed(bytes : int64) : uint64 {
     let d = cuda_mem_alloc(uint64(bytes))
     if (d != 0ul) {
-        cuda_memset_d8(d, 0u8, uint64(bytes))
+        cuda_memset_d8(d, 0u8, uint64(bytes), g_cud.stream)
     }
     return d
 }
@@ -1414,9 +1417,9 @@ def cud_rdec_kv_read(l, row0, nrows : int64; var kp : uint8?; var vp : uint8?) {
     verify(L.ring == 0l, "cud decode: a ringed layer's rows - the dense slice keeps flat slabs")
     let rowb = kv_row_units(g_crd.kv_dt, L.kvd) * g_crd.unit_bytes
     let base = uint64((crd_mir_base(*g_crd, L) + row0 * kv_row_units(g_crd.kv_dt, L.kvd)) * g_crd.unit_bytes)
-    unsafe {
-        cuda_memcpy_dtoh(reinterpret<void?>(kp + row0 * rowb), g_crd.k_slabs[L.mir_slab] + base, uint64(nrows * rowb))
-        cuda_memcpy_dtoh(reinterpret<void?>(vp + row0 * rowb), g_crd.v_slabs[L.mir_slab] + base, uint64(nrows * rowb))
+    unsafe {   //! on g_cud.stream, behind the store that wrote the rows
+        cuda_memcpy_dtoh(reinterpret<void?>(kp + row0 * rowb), g_crd.k_slabs[L.mir_slab] + base, uint64(nrows * rowb), g_cud.stream)
+        cuda_memcpy_dtoh(reinterpret<void?>(vp + row0 * rowb), g_crd.v_slabs[L.mir_slab] + base, uint64(nrows * rowb), g_cud.stream)
     }
 }
 

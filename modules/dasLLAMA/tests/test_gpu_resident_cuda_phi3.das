@@ -31,13 +31,24 @@ def private allow_cpu_prefill_intent() {
 
 let private LOGIT_BAR_REL = 0.06   //! of the step's max |logit|: the CUDA llama file's bar
 let private FILE_35 = "Phi-3.5-mini-instruct-Q4_K_M.gguf"   //! head 96: the h96 flash tile, the K-quant planes
+let private FILE_35_Q8 = "Phi-3.5-mini-instruct-Q8_0.gguf"   //! the same model on the q8 decode chain
 
-//! the two-window prompt alone: after a 40-token prompt the one-row steps at positions 41 and 44 round 7.7 and 6.6 percent of the
-//! max logit apart from the CPU's on both attention paths, and the fixture's one-step-off rows sit 6.5 percent apart at one
-//! step, so no one bar holds both arms (`../followup_general.md`, the row on the phi one-row steps)
+//! the K-quant file's two-window prompt alone: after a 40-token prompt its one-row steps at positions 41 and 44 round 7.7 and
+//! 6.6 percent of the max logit apart from the CPU's, the Q8_0 file's within 0.73 of a 1.9 bar there, and the fixture's
+//! one-step-off rows sit 6.5 percent apart at one step, so no one bar holds the K-quant file's both arms
 [test]
 def test_gpu_resident_cuda_phi35_mini(t : T?) {
     t |> run("{FILE_35}: a {PF_WINDOW_ROWS + 88l}-token prompt (two windows) and eight steps on the CUDA driver") @(t : T?) {
         cuda_forced_feed(t, FILE_35, "phi3", PF_WINDOW_ROWS + 88l, 2l, LOGIT_BAR_REL)
+    }
+}
+
+[test]
+def test_gpu_resident_cuda_phi35_mini_q8(t : T?) {
+    t |> run("{FILE_35_Q8}: one window (40 tokens) and eight steps on the CUDA driver") @(t : T?) {
+        cuda_forced_feed(t, FILE_35_Q8, "phi3", 40l, 1l, LOGIT_BAR_REL)
+    }
+    t |> run("{FILE_35_Q8}: a {PF_WINDOW_ROWS + 88l}-token prompt (two windows) and eight steps on the CUDA driver") @(t : T?) {
+        cuda_forced_feed(t, FILE_35_Q8, "phi3", PF_WINDOW_ROWS + 88l, 2l, LOGIT_BAR_REL)
     }
 }

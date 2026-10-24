@@ -1672,6 +1672,79 @@ def private check_vk_extension_roster {
     delete files
 }
 
+//! the device copies and clears the CUDA home issues; each names its stream as the last argument
+let private CUDA_STREAM_OPS <- ["cuda_memset_d8(", "cuda_memcpy_htod(", "cuda_memcpy_dtoh(", "cuda_memcpy_dtod("]
+
+//! the argument text of the first `call` on `line`, "" when the line holds no such call
+def private call_args_of(line : string; call : string) : string {
+    let at = find(line, call)
+    return "" if (at < 0)
+    var depth = 0
+    var out = ""
+    peek_data(line) $(d) {
+        var i = at + length(call)
+        let start = i
+        while (i < length(d)) {
+            let c = int(d[i])
+            if (c == '(') {
+                depth++
+            } elif (c == ')') {
+                if (depth == 0) {
+                    out = slice(d, start, i)
+                    return
+                }
+                depth--
+            }
+            i++
+        }
+    }
+    return out
+}
+
+//! the last top-level comma-separated argument of `args`, stripped
+def private last_arg_of(args : string) : string {
+    var depth = 0
+    var cut = -1
+    peek_data(args) $(d) {
+        for (i in range(length(d))) {
+            let c = int(d[i])
+            if (c == '(' || c == '[') {
+                depth++
+            } elif (c == ')' || c == ']') {
+                depth--
+            } elif (c == ',' && depth == 0) {
+                cut = i
+            }
+        }
+    }
+    return strip(cut < 0 ? args : slice(args, cut + 1))
+}
+
+// The CUDA home's stream is non-blocking: a stream-less copy or clear runs on the legacy stream, which never orders
+// against it, so a clear can land after the first kernels wrote into the block and a read can leave before the kernel
+// that fills it ran. Every such call in the home names its stream.
+def private check_cuda_stream_discipline {
+    var files : array<string>
+    collect_das_files("modules/dasLLAMA/dasllama", files)
+    for (p in files) {
+        let name = base_name(p)
+        continue if (!(name |> starts_with("dasllama_cuda_")) && name != "dasllama_math_cuda.das")
+        var line_no = 0
+        for (line in split(strip_line_comments(fread(p)), "\n")) {
+            line_no++
+            for (op in CUDA_STREAM_OPS) {
+                let args = call_args_of(line, op)
+                continue if (empty(args))
+                let last = last_arg_of(args)
+                if (!(last == "s" || last == "stream" || last |> ends_with(".stream"))) {
+                    gate_finding(p, line_no, "{op}...) names no stream - the home's stream is non-blocking and a stream-less copy or clear runs on the legacy stream, unordered against every kernel; pass g_cud.stream (or the launch's `s`) as the last argument")
+                }
+            }
+        }
+    }
+    delete files
+}
+
 // A Vulkan pipeline is built only by the `[vk_dispatch]`-generated `ensure_*`: a hand build bypasses the
 // hazard rail and the dispatch census, so its races and its coverage are invisible. The two llama.cpp
 // shader ports under performance/ are reference measurements of another engine's kernels, outside this walk.
@@ -2921,6 +2994,7 @@ def main() : int {
     check_kq_gemv_grid_literals()
     check_kq_form_matrix()
     check_vk_extension_roster()
+    check_cuda_stream_discipline()
     check_no_hand_pipelines()
     check_verify_decline_before_state_move()
     check_test_file_placement()
