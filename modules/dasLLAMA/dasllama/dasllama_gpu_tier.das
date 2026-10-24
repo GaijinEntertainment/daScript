@@ -200,6 +200,7 @@ struct RdecLayerGeom {
     out_scale : float               //! the layer's output scale on its FFN residual step; 1.0 = none
     kv_shared : bool                //! the layer projects Q only and attends over a donor layer's K/V rows (`mir_base` is the donor's; gemma-4 E-series)
     attn_cap : float                //! the attention logit softcap on the scaled scores (gemma-2: 50); 0 = none
+    s2 : float[7]                   //! each site's per-tensor weight scale - q, k, v, o, gate, up, down - NVFP4's `.scale`, 1 where the plane carries none
     moe_g4 : bool                   //! the gemma-4 MoE layer: a parallel dense shared expert, the routed branch and the router each on their own norm of x
 }
 //! qd / kv_dim / head_size / hidden / rot are the layers' maxima; `mir_units` one K/V mirror slab's units a region (elements, or 32-element blocks under a block codec; the widest slab's, every slab the same stride), `n_slabs` the slabs a side, `cos_elems` a position's cos/sin

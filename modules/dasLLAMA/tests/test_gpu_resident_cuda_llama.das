@@ -11,6 +11,7 @@ require dasllama/dasllama_math
 require dasllama/dasllama_gpu_tier
 require dasllama/dasllama_env
 require dasllama/dasllama_gpu_resident
+require dasllama/dasllama_cuda_decode   // set_cuda_mmq_pin - the FP4 arm's knob-off control
 require _model_tier
 require _resident_feed
 require _cuda_feed
@@ -42,6 +43,7 @@ let private FILE_1B_Q50 = "Llama-3.2-1B-Instruct-Q5_0-local.gguf"   //! the q503
 let private FILE_1B_IQ4XS = "Llama-3.2-1B-Instruct-IQ4_XS.gguf"      //! the iq4xs planes: the codebook decode through the home's permute
 let private FILE_1B_IQ4NL = "Llama-3.2-1B-Instruct-IQ4_NL-local.gguf"   //! the iq4nl superblock planes (on the 256 lattice), the same decode
 let private FILE_1B_Q40 = "Llama-3.2-1B-Instruct-Q4_0-local.gguf"       //! the q40 superblock planes: the signed nibble codes under the d pairs
+let private FILE_1B_NV4 = "Llama-3.2-1B-Instruct-NVFP4-local.gguf"      //! the nv4 planes: the window on the FP4 tensor rung (W4A4 - the activations quantized to e2m1 per token), the steps on the nv4 GEMV leaves
 let private FILE_3B = "Llama-3.2-3B-Instruct-Q8_0.gguf"   //! head size 128: the window's attention on the h128 flash tile
 
 [test]
@@ -99,6 +101,28 @@ def test_gpu_resident_cuda_llama_1b_iq4nl(t : T?) {
 def test_gpu_resident_cuda_llama_1b_q40(t : T?) {
     t |> run("{FILE_1B_Q40}: one window (40 tokens) and eight steps on the CUDA driver") @(t : T?) {
         cuda_forced_feed(t, FILE_1B_Q40, "llama", 40l, 1l, LOGIT_BAR_REL)
+    }
+}
+
+//! the FP4 tensor leaf's bar: W4A4 quantizes the window's activations to e2m1 per token on top of the weights' 4 bits, a
+//! precision step the CPU chain (f32 activations) does not take - the 1B's rows read up to 0.135 of the step's max logit
+//! against the dense bar's 0.06 (the argmax matched; llama.cpp's own measurement of the same step: +0.7% perplexity), and the
+//! tightest one-step-off control sits at 0.158, so the bar is pinned between them; the cm2 tiles' arm of the same carrier
+//! below holds the dense bar, so the extra is the feed's
+let private LOGIT_BAR_REL_FP4 = 0.14
+
+[test]
+def test_gpu_resident_cuda_llama_1b_nv4(t : T?) {
+    t |> run("{FILE_1B_NV4}: one window (40 tokens) and eight steps on the CUDA driver, the window on the FP4 tensor leaf") @(t : T?) {
+        cuda_forced_feed(t, FILE_1B_NV4, "llama", 40l, 1l, LOGIT_BAR_REL_FP4)
+    }
+    t |> run("{FILE_1B_NV4}: a {PF_WINDOW_ROWS + 88l}-token prompt (two windows) and eight steps on the CUDA driver, the windows on the FP4 tensor leaf") @(t : T?) {
+        cuda_forced_feed(t, FILE_1B_NV4, "llama", PF_WINDOW_ROWS + 88l, 2l, LOGIT_BAR_REL_FP4)
+    }
+    t |> run("{FILE_1B_NV4}: one window (40 tokens) and eight steps with the MMQ knob off - the cm2 tiles over f16 activations hold the dense bar (the FP4 arm's control)") @(t : T?) {
+        set_cuda_mmq_pin(0l)
+        cuda_forced_feed(t, FILE_1B_NV4, "llama", 40l, 1l, LOGIT_BAR_REL)
+        set_cuda_mmq_pin(-1l)
     }
 }
 

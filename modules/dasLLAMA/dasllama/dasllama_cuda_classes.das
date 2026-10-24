@@ -2545,6 +2545,335 @@ class CuQ8Mmq : MmqT {
     }
 }
 
+struct MmqFp4Args {
+    n : uint      //! reduction width, a multiple of 256 (a superblock the scale row)
+    d : uint      //! the weight rows (the output width), a multiple of 128
+    rows : uint   //! the tokens, a multiple of 128
+    wblk : uint   //! the plane's first superblock
+    s2 : float    //! the plane's per-tensor scale (NVFP4's `.scale`; 1 where the file carries none)
+}
+
+//! a k4-tiled 32-block (byte j: element j low, j + 16 high) as the FP4 feed pairs it - the two 16-strips in turn, each a
+//! byte (k, k + 8): the block-scaled mma reads both operands under one permutation inside every scaled strip
+def nv4_fp4_pairs(w : uint4) : uint4 {
+    let m = KQC_NIBBLE_MASK
+    return uint4((w.x & m) | ((w.z & m) << 4u), (w.y & m) | ((w.w & m) << 4u),
+        ((w.x >> 4u) & m) | (w.z & 0xF0F0F0F0u), ((w.y >> 4u) & m) | (w.w & 0xF0F0F0F0u))
+}
+
+//! NVFP4 on the FP4 tensor rung (`cuda_intrinsics`' block-scaled mma, sm_120a): the MMQ tile - a block of sixteen warps a
+//! 128 x 128 tile of weight rows x tokens, k 128 a step - over raw e2m1 nibbles on both sides: the weights' k4-tiled 32-blocks
+//! re-paired through registers into the feed's (k, k + 8) order, the activations' FP4 feed staged by cp.async, each side's
+//! UE4M3 strip scales a word a k64 beside its row; no decode, no per-32 fold - the per-token row scale and the plane's
+//! factor land in the epilogue. A two-deep ring at 80-byte rows (four uint4 and a pad: eight rows on eight bank groups)
+[ |> template_struct_instance]
+class template MmqFp4T {
+    @ssbo @binding = 0 @readonly wq4 : array<uint4>    //! the nv4 quant plane: superblock sb's 32-block g at sb * 8 + g
+    @ssbo @binding = 1 @readonly wsu : array<uint>     //! the nv4 scale rows: five words a superblock, word j the k64 strip j's four UE4M3 codes
+    @ssbo @binding = 2 @readonly xq4 : array<uint4>    //! the FP4 feed: a token's k / 2 nibble bytes, (k, k + 8) pairs inside each 16
+    @ssbo @binding = 3 @readonly xsw : array<uint>     //! ... its k / 64 scale words, four UE4M3 codes each
+    @ssbo @binding = 4 @readonly xrs : array<float>    //! ... its row scale
+    @ssbo @binding = 5 y : array<float>                //! [token][d]
+    @kargs pa : MmqFp4Args
+    @workgroup sa : uint4[1280]     //! two stages x 128 rows x five uint4 (a step's four 32-blocks and a pad)
+    @workgroup sb : uint4[1280]
+    @workgroup swa : uint[512]      //! two stages x 128 rows x the step's two k64 scale words
+    @workgroup swb : uint[512]      //! ... the tokens'
+
+    [spirv_inline]
+    def mmq_body {   // nolint:STYLE038 - the pipeline and its unrolled products, register- and barrier-coupled
+        let nsb = pa.n / 256u
+        let nb4 = pa.n / 128u
+        let ttiles = pa.rows / 128u
+        let tix = gl_WorkGroupID.x
+        let m0 = (tix / ttiles) * 128u
+        let t0 = (tix % ttiles) * 128u
+        let tid = gl_LocalInvocationID.x
+        let warp = tid >> 5u
+        let lane = tid & 31u
+        let wm = warp >> 2u
+        let wn = warp & 3u
+        let g = lane >> 2u
+        let t = lane & 3u
+        let mt = lane >> 3u
+        let mr = lane & 7u
+        // the weight stage through registers: a lane one 32-block of a row (the k4 uint4 in, the re-paired uint4 out), eight rows
+        // a warp; the activation stage by cp.async: the same lane map, a token's four uint4 of the step
+        let krow = (warp << 3u) + (lane >> 2u)
+        let kblk = lane & 3u
+        let ksrc = (pa.wblk + (m0 + krow) * nsb) * 8u + kblk   // step kb adds (kb >> 1) * 8 + (kb & 1) * 4
+        let kdst = krow * 5u + kblk
+        let xsrc = (t0 + krow) * (pa.n / 32u) + kblk             // a token's row is n / 32 uint4; step kb adds kb * 4
+        // the scale words: thread w of 128 writes row w's two (`wstage`), thread 128 + w token w's (`xstage`)
+        let wi = tid & 127u
+        let wstage = tid < 128u
+        let xstage = tid >= 128u && tid < 256u
+        let wsrow = (pa.wblk + (m0 + wi) * nsb) * 5u   // step kb: + (kb >> 1) * 5 + (kb & 1) * 2
+        let xsrow = (t0 + wi) * (pa.n / 64u)           // step kb: + kb * 2
+        var f00, f01, f10, f11 : coopmatAcc_f32_16x16
+        var wnext = wq4[ksrc]
+        sa[kdst] = nv4_fp4_pairs(wnext)
+        if (nb4 > 1u) {
+            wnext = wq4[ksrc + 4u]
+        }
+        cp_async_16(unsafe(addr(sb[kdst])), unsafe(addr(xq4[xsrc])))
+        cp_async_commit()
+        if (wstage) {
+            swa[wi * 2u] = wsu[wsrow]
+            swa[wi * 2u + 1u] = wsu[wsrow + 1u]
+        } elif (xstage) {
+            swb[wi * 2u] = xsw[xsrow]
+            swb[wi * 2u + 1u] = xsw[xsrow + 1u]
+        }
+        var kb = 0u
+        while (kb < nb4) {
+            cp_async_wait(0)   // this step's stage landed
+            barrier()          // ... and every warp is done with the other stage, which the next copies overwrite
+            let st = kb & 1u
+            let nk = kb + 1u
+            if (nk < nb4) {
+                let st2 = nk & 1u
+                sa[st2 * 640u + kdst] = nv4_fp4_pairs(wnext)
+                if (nk + 1u < nb4) {
+                    wnext = wq4[ksrc + ((nk + 1u) >> 1u) * 8u + ((nk + 1u) & 1u) * 4u]
+                }
+                cp_async_16(unsafe(addr(sb[st2 * 640u + kdst])), unsafe(addr(xq4[xsrc + nk * 4u])))
+                if (wstage) {
+                    let so = wsrow + (nk >> 1u) * 5u + (nk & 1u) * 2u
+                    swa[st2 * 256u + wi * 2u] = wsu[so]
+                    swa[st2 * 256u + wi * 2u + 1u] = wsu[so + 1u]
+                } elif (xstage) {
+                    swb[st2 * 256u + wi * 2u] = xsw[xsrow + nk * 2u]
+                    swb[st2 * 256u + wi * 2u + 1u] = xsw[xsrow + nk * 2u + 1u]
+                }
+            }
+            cp_async_commit()
+            for [unroll] (h in range(2)) {   // the step's two k64 halves
+                let hu = uint(h)
+                let abase = st * 640u + (wm * 32u + mr + 8u * (mt & 1u)) * 5u + hu * 2u + (mt >> 1u)   // the lane's A row: (rows lo, k lo), (rows hi, k lo), (rows lo, k hi), (rows hi, k hi)
+                let bbase = st * 640u + (wn * 32u + mr + 8u * (mt >> 1u)) * 5u + hu * 2u + (mt & 1u)   // the lane's B row: (n lo, k lo), (n lo, k hi), (n hi, k lo), (n hi, k hi)
+                var a0, a1 : coopmatA_e2m1_16x64
+                ldmatrix(a0, unsafe(addr(sa[abase])))
+                ldmatrix(a1, unsafe(addr(sa[abase + 80u])))
+                var b0, b1 : coopmatB_e2m1_64x16
+                ldmatrix(b0, unsafe(addr(sb[bbase])))
+                ldmatrix(b1, unsafe(addr(sb[bbase + 80u])))
+                let sw = st * 256u + (wm * 32u + g + 8u * (lane & 1u)) * 2u + hu   // the lane's A rows' words: row g from lane % 4 == 0, row g + 8 from lane % 4 == 1
+                let sx = st * 256u + (wn * 32u + g) * 2u + hu                      // column g of each n-half, from lane % 4 == 0
+                let sa0 = swa[sw]
+                let sa1 = swa[sw + 32u]
+                let sb00 = swb[sx]
+                let sb01 = swb[sx + 16u]
+                let sb10 = swb[sx + 32u]
+                let sb11 = swb[sx + 48u]
+                mma_block_scaled(f00, a0, b0, sa0, sb00, sb01)
+                mma_block_scaled(f01, a0, b1, sa0, sb10, sb11)
+                mma_block_scaled(f10, a1, b0, sa1, sb00, sb01)
+                mma_block_scaled(f11, a1, b1, sa1, sb10, sb11)
+            }
+            kb++
+        }
+        // the epilogue: the tokens' row scales under the plane's factor, then the store (column-major over [token][d]: a token's
+        // row is the fragment's column)
+        let c0 = t0 + wn * 32u + 2u * t
+        let cs0 = float4(xrs[c0], xrs[c0 + 1u], xrs[c0 + 8u], xrs[c0 + 9u]) * pa.s2
+        let cs1 = float4(xrs[c0 + 16u], xrs[c0 + 17u], xrs[c0 + 24u], xrs[c0 + 25u]) * pa.s2
+        mma_scale_cols(f00, cs0)
+        mma_scale_cols(f10, cs0)
+        mma_scale_cols(f01, cs1)
+        mma_scale_cols(f11, cs1)
+        let d = int(pa.d)
+        let ybase = int((t0 + wn * 32u) * pa.d + m0 + wm * 32u)
+        coopmatStore(f00, y, ybase, d, 1)
+        coopmatStore(f01, y, ybase + 16 * d, d, 1)
+        coopmatStore(f10, y, ybase + 16, d, 1)
+        coopmatStore(f11, y, ybase + 16 * d + 16, d, 1)
+    }
+}
+
+//! the NVFP4 leaf on the FP4 tensor rung: the window chain's GEMM for nv4 planes under DASLLAMA_CUDA_MMQ
+[cuda_dispatch(name = "nv4_mmq", grid = "wgs", params = "wgs : int64")]
+class CuNv4Mmq : MmqFp4T {
+    [cuda_kernel(local_size_x = 512, name = "nv4_mmq_cuda")]
+    def run {
+        mmq_body()
+    }
+}
+
+let FP4_ROW_SCALE_DIV = 2688.0   //! 6 x 448: the e2m1 range times the UE4M3 range - the FP4 feed's row scale divides by it
+
+//! one 16-strip of a row already divided by its row scale, as the FP4 feed stores it: the UE4M3 code off the strip's largest
+//! magnitude over 6, and the two nibble words (k, k + 8) a byte under that code's value
+def fp4_strip(v : float[16]; var code : uint&; var w0, w1 : uint&) {
+    var sub = 0.0
+    for [unroll] (i in range(16)) {
+        sub = max(sub, abs(v[i]))
+    }
+    code = cvt_ue4m3(sub / 6.0)
+    let sval = ue4m3_half_f32(code) * 2.0
+    let inv = sval > 0.0 ? 1.0 / sval : 0.0
+    w0 = cvt_e2m1x2(v[0] * inv, v[8] * inv) | (cvt_e2m1x2(v[1] * inv, v[9] * inv) << 8u) | (cvt_e2m1x2(v[2] * inv, v[10] * inv) << 16u) | (cvt_e2m1x2(v[3] * inv, v[11] * inv) << 24u)
+    w1 = cvt_e2m1x2(v[4] * inv, v[12] * inv) | (cvt_e2m1x2(v[5] * inv, v[13] * inv) << 8u) | (cvt_e2m1x2(v[6] * inv, v[14] * inv) << 16u) | (cvt_e2m1x2(v[7] * inv, v[15] * inv) << 24u)
+}
+
+struct Fp4RowsArgs {
+    k : uint        //! the row width, a multiple of 64
+    inbase : uint   //! the source rows' element base
+    act : uint      //! the activation code (the act form)
+    ubase : uint    //! the act form's up side: its element base, and with `ustride` the rows of `ulen` elements sit `ustride` apart
+    ustride : uint
+    ulen : uint
+}
+
+//! The FP4 activation feed a workgroup a row (256 lanes): the row's largest magnitude over 6 x 448 as its f32 scale, then a
+//! lane a k64 - four strips, each a UE4M3 code off its largest over 6 and sixteen e2m1 nibbles in (k, k + 8) pairs - into
+//! the nibble words, the code words and the row scale the FP4 tensor rung reads; the source element is the stamp's
+//! (`load1`: a float plane, or the gate / up pair through the activation)
+[ |> template_struct_instance]
+class template Fp4FeedT : GkWgReduce {
+    @template_constant ACT : bool = false   //!< the act form: element e is act(gate[e]) x up[e] (`gk_up_at` for the up side's layout)
+    @ssbo @binding = 0 @readonly src : array<float>                      //! the rows (the act form's gate)
+    @ssbo @binding = 1 @readonly @template_gate = ACT up : array<float>
+    @ssbo @binding = 2 outq : array<uint>      //! [row][k / 8] nibble words
+    @ssbo @binding = 3 outsw : array<uint>     //! [row][k / 64] code words
+    @ssbo @binding = 4 outrs : array<float>    //! [row] scales
+    @kargs pa : Fp4RowsArgs
+
+    def load1(e : uint) : float {
+        static_if (ACT) {
+            return gk_act_mul(src[e], up[gk_up_at(e, pa.ubase, pa.ustride, pa.ulen)], pa.act)
+        } else {
+            return src[e]
+        }
+    }
+
+    [spirv_inline]
+    def fp4_body {
+        let tok = gl_WorkGroupID.x
+        let base = pa.inbase + tok * pa.k
+        let tid = gl_LocalInvocationID.x
+        var m = 0.0
+        var e = tid
+        while (e < pa.k) {
+            m = max(m, abs(load1(base + e)))
+            e += 256u
+        }
+        var amax = 0.0
+        wg_max_into(m, 0u, amax)
+        let rs = amax / FP4_ROW_SCALE_DIV
+        let inv_rs = rs > 0.0 ? 1.0 / rs : 0.0
+        if (tid == 0u) {
+            outrs[tok] = rs
+        }
+        let nk64 = pa.k / 64u
+        var j = tid
+        while (j < nk64) {
+            var scw = 0u
+            for [unroll] (s in range(4)) {
+                var v : float[16]
+                let e0 = base + j * 64u + uint(s) * 16u
+                for [unroll] (i in range(16)) {
+                    v[i] = load1(e0 + uint(i)) * inv_rs
+                }
+                var code = 0u
+                var w0 = 0u
+                var w1 = 0u
+                fp4_strip(v, code, w0, w1)
+                let qo = tok * (pa.k / 8u) + j * 8u + uint(s) * 2u
+                outq[qo] = w0
+                outq[qo + 1u] = w1
+                scw |= code << uint(s * 8)
+            }
+            outsw[tok * nk64 + j] = scw
+            j += 256u
+        }
+    }
+}
+
+//! the FP4 feed of a float plane's rows
+[cuda_dispatch(name = "fp4_rows", grid = "nrows", params = "nrows : int64")]
+class CuFp4Rows : Fp4FeedT {
+    [cuda_kernel(local_size_x = 256, name = "fp4_rows_cuda", precise = true)]
+    def run {
+        fp4_body()
+    }
+}
+
+//! the FP4 feed of a gate / up pair through the activation: the down GEMM's hidden feed
+[cuda_dispatch(name = "fp4_actrows", grid = "nrows", params = "nrows : int64")]
+class CuFp4ActRows : Fp4FeedT {
+    override ACT = true
+
+    [cuda_kernel(local_size_x = 256, name = "fp4_actrows_cuda", precise = true)]
+    def run {
+        fp4_body()
+    }
+}
+
+//! the residual step on `GkAddRmsRows` with the FP4 feed of its normed row in one dispatch, a workgroup a row: the x feed
+//! of the FP4 tensor rung's q / k / v and gate / up sites
+[ |> template_struct_instance]
+class template ArRqFp4T : ArBase {
+    override NORM_SWITCH = true
+    @ssbo @binding = 3 outq4 : array<uint>      //! [row][dim / 8] nibble words (the Q8_0 form's `outq` sits off this stamp's gate)
+    @ssbo @binding = 10 outsw : array<uint>     //! [row][dim / 64] code words - past every combine family's own bindings
+    @ssbo @binding = 11 outrs : array<float>    //! [row] scales
+
+    [spirv_inline]
+    def ar_fp4_body {
+        let tok = gl_WorkGroupID.x
+        var ss = 0.0
+        accum_row_into(tok * pa.dim, ss)
+        var inv = 0.0
+        row_inv_into(ss, inv)
+        let tid = gl_LocalInvocationID.x
+        var m = 0.0
+        var e = tid
+        while (e < pa.dim) {
+            m = max(m, abs(normed_at(e, 0.0, inv)))
+            e += 256u
+        }
+        var amax = 0.0
+        wg_max_into(m, 0u, amax)
+        let rs = amax / FP4_ROW_SCALE_DIV
+        let inv_rs = rs > 0.0 ? 1.0 / rs : 0.0
+        if (tid == 0u) {
+            outrs[tok] = rs
+        }
+        let nk64 = pa.dim / 64u
+        var j = tid
+        while (j < nk64) {
+            var scw = 0u
+            for [unroll] (s in range(4)) {
+                var v : float[16]
+                let e0 = j * 64u + uint(s) * 16u
+                for [unroll] (i in range(16)) {
+                    v[i] = normed_at(e0 + uint(i), 0.0, inv) * inv_rs
+                }
+                var code = 0u
+                var w0 = 0u
+                var w1 = 0u
+                fp4_strip(v, code, w0, w1)
+                let qo = tok * (pa.dim / 8u) + j * 8u + uint(s) * 2u
+                outq4[qo] = w0
+                outq4[qo + 1u] = w1
+                scw |= code << uint(s * 8)
+            }
+            outsw[tok * nk64 + j] = scw
+            j += 256u
+        }
+    }
+}
+
+//! the residual step with the FP4 feed, the window's rows
+[cuda_dispatch(name = "cls_ar_fp4_b", grid = "nrows", params = "nrows : int64")]
+class CuClsArAddRmsFp4B : ArRqFp4T {
+    [cuda_kernel(local_size_x = 256, name = "cls_ar_fp4_b_cuda", precise = true)]
+    def run {
+        ar_fp4_body()
+    }
+}
+
 //! the Q4_K leaf: the same tile over nibble codes decoded in the weight stage, with the min term's rank-sixteen correction
 [cuda_dispatch(name = "k4_mmq", grid = "wgs", params = "wgs : int64")]
 class CuK4Mmq : MmqT {

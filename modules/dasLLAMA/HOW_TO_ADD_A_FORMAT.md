@@ -49,7 +49,12 @@ the last two from the tree:
    and guard arithmetic (Vulkan: `KqGemvLeafT`, `KqCm2BatchT`, `Blk32GemvRunT`; Metal:
    `MetalGemvSiteT`, `MetalKqTileDecodeT`, `MetalKqMulMmSplitTensorBase`, `MetalEmbedKqT`); a
    format template derives a family template and holds one format's block term (`Iq4xsGemvT :
-   KqGemvLeafT`, `MetalKqGemvIq4T : MetalGemvSiteT`). A new format adds stamps, never a class
+   KqGemvLeafT`, `MetalKqGemvIq4T : MetalGemvSiteT`). A format with a tensor instruction of its own
+   on one home (NVFP4: Blackwell's block-scaled FP4 mma) adds a home-own MMQ-shaped leaf there
+   (`MmqFp4T` / `CuNv4Mmq` in `dasllama_cuda_classes.das`, its feed kernels beside it, the driver's
+   leaf list and feeds in `dasllama_cuda_decode.das`) on top of the shared decode templates every
+   home stamps - the non-native homes serve the format through those templates and stop there
+   (`ARCHITECTURE_GPU_ASYMMETRIES.md`). A new format adds stamps, never a class
    written beside its family; `REVIEW_GPU_KERNEL_CLASSES.md` binds the class shape. Take the first
    rung that fits:
    - **An existing block term serves the format under a template constant** - the format's stamps

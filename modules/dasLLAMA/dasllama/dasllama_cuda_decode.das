@@ -128,6 +128,7 @@ struct CudLayer {
     out_scale, attn_cap : float
     bq, bk, bv, bo, b1, b3, b2 : int64
     fq, fk, fv, fo, f1, f3, f2 : int
+    s2 : float[7]   //! the sites' per-tensor weight scales (q, k, v, o, gate, up, down): the FP4 leaf's epilogue factor
     qkv_merged : bool
     nreg_qkv : int64
     regs_qkv : uint64   //! the merged q+k+v GEMV's region records, else the q plane's one record
@@ -185,6 +186,10 @@ struct CudRdec {
     pf_x, pf_xf, pf_q, pf_kv, pf_v, pf_attn, pf_af, pf_xb2, pf_gate, pf_up, pf_hf, pf_ffnout, pf_cos, pf_xq, pf_xs : uint64
     pf_aq, pf_as, pf_hq, pf_hs : uint64   //! the MMQ chain's Q8_0 feeds of the wo and down GEMMs (the x feed is pf_xq / pf_xs)
     pf_xsum, pf_asum, pf_hsum : uint64    //! the feeds' blocks' scale x quant sum beside each scale plane: the min-term leaves' feed, allocated under pf_mmq_min
+    pf_fp4 : bool                         //! an nv4 site takes the FP4 tensor rung: its feeds below are allocated
+    pf_x4q, pf_x4s, pf_xrs : uint64       //! the FP4 feed of the x sites: nibble words, code words, row scales
+    pf_a4q, pf_a4s, pf_ars : uint64       //! ... of the wo site
+    pf_h4q, pf_h4s, pf_hrs : uint64       //! ... of the down site
     pf_kst, pf_vst : uint64   //! a block-codec mirror's staged K and V rows of the window, the codec's window store's source
     pf_mmq_min : bool        //! some window site takes an MMQ leaf with a min term (Q4_K, Q5_1): the requant kernels write the block sums beside the scales
     pf_splitk : uint64       //! the split-k partial planes (the Vulkan home's scratch bound: 256 KB an SM)
@@ -200,7 +205,8 @@ def private crd_free_buffers(var r : CudRdec) {
         cuda_mem_free(b)
     }
     for (b in [r.pf_x, r.pf_xf, r.pf_q, r.pf_kv, r.pf_v, r.pf_attn, r.pf_af, r.pf_xb2, r.pf_gate, r.pf_up, r.pf_hf, r.pf_ffnout, r.pf_cos, r.pf_xq, r.pf_xs, r.pf_splitk,
-                r.pf_aq, r.pf_as, r.pf_hq, r.pf_hs, r.pf_xsum, r.pf_asum, r.pf_hsum, r.pf_kst, r.pf_vst]) {
+                r.pf_aq, r.pf_as, r.pf_hq, r.pf_hs, r.pf_xsum, r.pf_asum, r.pf_hsum, r.pf_kst, r.pf_vst,
+                r.pf_x4q, r.pf_x4s, r.pf_xrs, r.pf_a4q, r.pf_a4s, r.pf_ars, r.pf_h4q, r.pf_h4s, r.pf_hrs]) {
         cuda_mem_free(b)
     }
     for (b in r.k_slabs) {
@@ -419,6 +425,7 @@ def cud_rdec_set_layer(l, mir_idx : int64; bq, bk, bv, bo, b1, b3, b2 : int64; f
     L.window = g.window; L.ring = g.ring; L.mir_base = g.mir_base; L.mir_slab = g.mir_slab; L.cbase = g.cbase
     L.bq = bq; L.bk = bk; L.bv = bv; L.bo = bo; L.b1 = b1; L.b3 = b3; L.b2 = b2
     L.fq = fq; L.fk = fk; L.fv = fv; L.fo = fo; L.f1 = f1; L.f3 = f3; L.f2 = f2
+    L.s2 = g.s2
     let q8 = int(KqFmt.q8)
     verify(cud_fmt_ok(fq) && cud_fmt_ok(fk) && cud_fmt_ok(fv) && cud_fmt_ok(fo) && cud_fmt_ok(f1) && cud_fmt_ok(f3) && cud_fmt_ok(f2),
         "cud decode: a plane in a format the slice does not serve reached set_layer - the place seat admits the arena formats alone")
@@ -935,30 +942,42 @@ def private cud_cm2_pick(d, rows, n : int64) : tuple<tc : int64; nsplit : int64;
 def private cud_sched_make(words : int64) : CudSched => CudSched(buf = dev_zeroed(words * 4l), wblk = -1l, rows = -1l)
 
 //! the MMQ leaves by format: the Q8_0 one, the superblock ones (Q4_K, IQ4_XS, Q4_0, IQ4_NL), the per-32 ones (Q5_1, Q5_0 and
-//! the off-lattice Q4_0 and IQ4_NL); a leaf with a min term (Q4_K, Q5_1) reads the activation blocks' sums
-let private MMQ_LEAF_FMTS <- [int(KqFmt.q8), int(KqFmt.k4), int(KqFmt.iq4xs), int(KqFmt.q40), int(KqFmt.iq4nl), int(KqFmt.q51), int(KqFmt.q5032), int(KqFmt.q4032), int(KqFmt.iq4nl32)]
-let private MMQ_LEAF_NAMES <- ["Q8_0", "Q4_K", "IQ4_XS", "Q4_0", "IQ4_NL", "Q5_1", "Q5_0", "Q4_0 (per-32)", "IQ4_NL (per-32)"]
+//! the off-lattice Q4_0 and IQ4_NL), and NVFP4 on the FP4 tensor rung (its own feed: e2m1 nibbles, UE4M3 strip codes, a row
+//! scale); a leaf with a min term (Q4_K, Q5_1) reads the activation blocks' sums
+let private MMQ_LEAF_FMTS <- [int(KqFmt.q8), int(KqFmt.k4), int(KqFmt.iq4xs), int(KqFmt.q40), int(KqFmt.iq4nl), int(KqFmt.q51), int(KqFmt.q5032), int(KqFmt.q4032), int(KqFmt.iq4nl32), int(KqFmt.nv4)]
+let private MMQ_LEAF_NAMES <- ["Q8_0", "Q4_K", "IQ4_XS", "Q4_0", "IQ4_NL", "Q5_1", "Q5_0", "Q4_0 (per-32)", "IQ4_NL (per-32)", "NVFP4 (FP4 tensor)"]
 //! the leaves whose windows did not beat the cm2 tiles on every measured card - Q5_1 lost on both, Q5_0 won on the RTX 5060 Ti and
 //! lost on the RTX PRO 4500 - so the pick between the two forms is a card's to race, not a default's; `DASLLAMA_CUDA_MMQ=2` arms them
 let private MMQ_RACE_FMTS <- [int(KqFmt.q51), int(KqFmt.q5032)]
 
 def private crd_mmq_min(fmt : int) : bool => fmt == int(KqFmt.k4) || fmt == int(KqFmt.q51)
 
+var private g_cuda_mmq_pin = -1l   //! a test's pin over DASLLAMA_CUDA_MMQ for the loads after it; -1 = the knob
+
+//! the MMQ knob a cell pins for the loads after it (0 the cm2 tiles everywhere, 1 the measured leaves, 2 every leaf); -1 puts
+//! the environment's value back
+def public set_cuda_mmq_pin(v : int64) {
+    g_cuda_mmq_pin = v
+}
+
+def private crd_mmq_knob() : int64 => g_cuda_mmq_pin >= 0l ? g_cuda_mmq_pin : g_env_vulkan.cuda_mmq
+
 //! whether a window GEMM site - a `d` x `n` plane of format `fmt` at block `wblk` - takes the int8 MMQ tile: the knob asks it
 //! (1: the leaves the measured cards favor, 2: every leaf), the window is whole tiles, the format has a leaf, the output width
 //! is a multiple of 128, the reduction of 256 and a Q8_0 plane's first block of 8 (eight scales a quad); a leaf with a min
 //! term folds it sixteen blocks at a time, so its reduction is a multiple of 512
 def private crd_site_mmq(r : CudRdec; fmt : int; n, d, wblk : int64) : bool {
-    return false if (g_env_vulkan.cuda_mmq == 0l || r.pf_np % 128l != 0l || d % 128l != 0l || n % 256l != 0l || find_index(MMQ_LEAF_FMTS, fmt) < 0
-        || (g_env_vulkan.cuda_mmq == 1l && find_index(MMQ_RACE_FMTS, fmt) >= 0))
+    let knob = crd_mmq_knob()
+    return false if (knob == 0l || r.pf_np % 128l != 0l || d % 128l != 0l || n % 256l != 0l || find_index(MMQ_LEAF_FMTS, fmt) < 0
+        || (knob == 1l && find_index(MMQ_RACE_FMTS, fmt) >= 0))
     return wblk % 8l == 0l if (fmt == int(KqFmt.q8))
     return !crd_mmq_min(fmt) || n % 512l == 0l
 }
 
-//! the MMQ leaves the model's window sites take: whether one carries a min term (the feeds the window produces follow), and
-//! their names for the load log
-def private crd_mmq_leaves(r : CudRdec) : tuple<min : bool; planes : string> {
-    var on : bool[9]
+//! the MMQ leaves the model's window sites take: whether one carries a min term and whether one is the FP4 leaf (the feeds the
+//! window produces follow), and their names for the load log
+def private crd_mmq_leaves(r : CudRdec) : tuple<min : bool; fp4 : bool; planes : string> {
+    var on : bool[10]
     for (L in r.layers) {
         let kv_merged = L.fk == L.fv && L.bv == L.bk + kq_blocks_for(r.dim, L.kvd, L.fk)
         let kd = kv_merged ? 2l * L.kvd : L.kvd
@@ -970,54 +989,66 @@ def private crd_mmq_leaves(r : CudRdec) : tuple<min : bool; planes : string> {
         }
     }
     var mn = false
+    var fp4 = false
     var planes = ""
-    for (i in range(9)) {
+    for (i in range(10)) {
         continue if (!on[i])
         mn = mn || crd_mmq_min(MMQ_LEAF_FMTS[i])
+        fp4 = fp4 || MMQ_LEAF_FMTS[i] == int(KqFmt.nv4)
         planes = empty(planes) ? MMQ_LEAF_NAMES[i] : "{planes}, {MMQ_LEAF_NAMES[i]}"
     }
-    return (min = mn, planes = planes)
+    return (min = mn, fp4 = fp4, planes = planes)
 }
 
-//! the x feeds a layer's q/k/v sites (`qkv`) or its gate/up sites read: the Q8_0 feed where a site takes an MMQ leaf, the f16
-//! feed where one takes the cm2 tiles
-def private crd_x_feeds(r : CudRdec; L : CudLayer; qkv : bool) : tuple<mmq : bool; f16 : bool> {
+//! the x feeds a layer's q/k/v sites (`qkv`) or its gate/up sites read: the Q8_0 feed where a site takes an int8 MMQ leaf, the
+//! FP4 feed where one takes the FP4 leaf, the f16 feed where one takes the cm2 tiles
+def private crd_x_feeds(r : CudRdec; L : CudLayer; qkv : bool) : tuple<mmq : bool; fp4 : bool; f16 : bool> {
     var mmq = false
+    var fp4 = false
     var f16 = false
     if (qkv) {
         let kv_merged = L.fk == L.fv && L.bv == L.bk + kq_blocks_for(r.dim, L.kvd, L.fk)
         for (site in [(fmt = L.fq, d = L.qd, b = L.bq), (fmt = L.fk, d = kv_merged ? 2l * L.kvd : L.kvd, b = L.bk), (fmt = L.fv, d = L.kvd, b = L.bv)]) {
             let m = crd_site_mmq(r, site.fmt, r.dim, site.d, site.b)
-            mmq = mmq || m
+            mmq = mmq || (m && site.fmt != int(KqFmt.nv4))
+            fp4 = fp4 || (m && site.fmt == int(KqFmt.nv4))
             f16 = f16 || !m
         }
     } else {
         for (site in [(fmt = L.f1, b = L.b1), (fmt = L.f3, b = L.b3)]) {
             let m = crd_site_mmq(r, site.fmt, r.dim, L.hid, site.b)
-            mmq = mmq || m
+            mmq = mmq || (m && site.fmt != int(KqFmt.nv4))
+            fp4 = fp4 || (m && site.fmt == int(KqFmt.nv4))
             f16 = f16 || !m
         }
     }
-    return (mmq = mmq, f16 = f16)
+    return (mmq = mmq, fp4 = fp4, f16 = f16)
 }
 
-//! the residual step's normed rows into the feeds the next sites read: the Q8_0 blocks (their sums beside where a Q4_K leaf
-//! reads them), the f16 rows, or both - the second pass norms the stream the first already updated, adding nothing
-def private crd_x_norm(r : CudRdec; var s : void?; aa : uint64; var pc : GkAddRmsArgs; wlen : int64; feeds : tuple<mmq : bool; f16 : bool>) {
+//! the residual step's normed rows into the feeds the next sites read: the FP4 feed, the Q8_0 blocks (their sums beside where a
+//! Q4_K leaf reads them), the f16 rows, or several - the first pass adds the partner into the stream, every later pass norms the
+//! stream the first already updated, adding nothing
+def private crd_x_norm(r : CudRdec; var s : void?; aa : uint64; pc : GkAddRmsArgs; wlen : int64; feeds : tuple<mmq : bool; fp4 : bool; f16 : bool>) {
+    var pcx = pc
+    var partner = aa
+    if (feeds.fp4) {
+        enc_cls_ar_fp4_b(s, fixed_array(r.pf_x, partner, r.norms, r.pf_x4q, r.pf_x4s, r.pf_xrs), pcx, wlen)
+        pcx.add_on = 0u
+        pcx.pre_on = 0u
+        partner = r.pf_x
+    }
     if (feeds.mmq) {
         if (r.pf_mmq_min) {
-            enc_cls_ar_rq_sum_b(s, fixed_array(r.pf_x, aa, r.norms, r.pf_xq, r.pf_xs, r.pf_xsum), pc, wlen)
+            enc_cls_ar_rq_sum_b(s, fixed_array(r.pf_x, partner, r.norms, r.pf_xq, r.pf_xs, r.pf_xsum), pcx, wlen)
         } else {
-            enc_cls_ar_rq_b(s, fixed_array(r.pf_x, aa, r.norms, r.pf_xq, r.pf_xs), pc, wlen)
+            enc_cls_ar_rq_b(s, fixed_array(r.pf_x, partner, r.norms, r.pf_xq, r.pf_xs), pcx, wlen)
         }
-        if (feeds.f16) {
-            var pcn = pc
-            pcn.add_on = 0u
-            pcn.pre_on = 0u
-            enc_cls_ar_f16_b(s, fixed_array(r.pf_x, r.pf_x, r.norms, r.pf_xf), pcn, wlen)
-        }
-    } else {
-        enc_cls_ar_f16_b(s, fixed_array(r.pf_x, aa, r.norms, r.pf_xf), pc, wlen)
+        pcx.add_on = 0u
+        pcx.pre_on = 0u
+        partner = r.pf_x
+    }
+    if (feeds.f16) {
+        enc_cls_ar_f16_b(s, fixed_array(r.pf_x, partner, r.norms, r.pf_xf), pcx, wlen)
     }
 }
 
@@ -1052,13 +1083,25 @@ def private crd_mmq(fmt : int; wblk : int64; a : CudArena; xq, xs, xsum, y : uin
     }
 }
 
-//! a window GEMM site on whichever feed its plane takes: the Q8_0 feed on an MMQ leaf, else the f16 feed on the plane format's cm2 tiles
-def private crd_site(r : CudRdec; var sc : CudSched; fmt : int; wblk : int64; xf, xq, xs, xsum, y : uint64; n, d, rows : int64) {
+//! one window GEMM on the FP4 leaf: `rows` rows of the FP4 feed (`x4q` nibble words, `x4s` strip-code words, `xrs` row scales)
+//! against the nv4 plane at superblock `wblk` under the plane's factor `s2` - into y[rows x d]; the rows pad to the tile as the
+//! int8 leaves' do
+def private crd_mmq_fp4(wblk : int64; a : CudArena; x4q, x4s, xrs, y : uint64; n, d, rows : int64; s2 : float) {
+    let rp = (rows + 127l) / 128l * 128l
+    var pc = MmqFp4Args(n = uint(n), d = uint(d), rows = uint(rp), wblk = uint(wblk), s2 = s2)
+    enc_nv4_mmq(g_cud.stream, fixed_array(a.wq, a.ws, x4q, x4s, xrs, y), pc, mmq_wgs(d, rp))
+}
+
+//! a window GEMM site on whichever feed its plane takes: the FP4 feed on the FP4 leaf, the Q8_0 feed on an int8 MMQ leaf, else
+//! the f16 feed on the plane format's cm2 tiles
+def private crd_site(r : CudRdec; var sc : CudSched; fmt : int; wblk : int64; xf, xq, xs, xsum, x4q, x4s, xrs, y : uint64; n, d, rows : int64; s2 : float) {
     let a = g_cud_arenas[fmt]
-    if (crd_site_mmq(r, fmt, n, d, wblk)) {
-        crd_mmq(fmt, wblk, a, xq, xs, xsum, y, n, d, rows)
-    } else {
+    if (!crd_site_mmq(r, fmt, n, d, wblk)) {
         crd_gemm(sc, fmt, wblk, a, xf, y, n, d, rows)
+    } elif (fmt == int(KqFmt.nv4)) {
+        crd_mmq_fp4(wblk, a, x4q, x4s, xrs, y, n, d, rows, s2)
+    } else {
+        crd_mmq(fmt, wblk, a, xq, xs, xsum, y, n, d, rows)
     }
 }
 
@@ -1131,6 +1174,18 @@ def private crd_pf_setup(var r : CudRdec) {
     r.pf_xs = dev_zeroed(np * (dim / Q8_BLOCK_ELEMS) * 4l)
     let leaves = crd_mmq_leaves(r)
     r.pf_mmq_min = leaves.min
+    r.pf_fp4 = leaves.fp4
+    if (r.pf_fp4) {
+        r.pf_x4q = dev_zeroed(np * dim / 2l)
+        r.pf_x4s = dev_zeroed(np * dim / 16l)
+        r.pf_xrs = dev_zeroed(np * 4l)
+        r.pf_a4q = dev_zeroed(np * qd / 2l)
+        r.pf_a4s = dev_zeroed(np * qd / 16l)
+        r.pf_ars = dev_zeroed(np * 4l)
+        r.pf_h4q = dev_zeroed(np * hid / 2l)
+        r.pf_h4s = dev_zeroed(np * hid / 16l)
+        r.pf_hrs = dev_zeroed(np * 4l)
+    }
     r.pf_aq = dev_zeroed(np * qd)
     r.pf_as = dev_zeroed(np * (qd / Q8_BLOCK_ELEMS) * 4l)
     r.pf_hq = dev_zeroed(np * hid)
@@ -1140,8 +1195,8 @@ def private crd_pf_setup(var r : CudRdec) {
         r.pf_asum = dev_zeroed(np * (qd / Q8_BLOCK_ELEMS) * 4l)
         r.pf_hsum = dev_zeroed(np * (hid / Q8_BLOCK_ELEMS) * 4l)
     }
-    let pick = empty(leaves.planes) ? "the f16-fed cm2 tiles" : "the int8 MMQ kernel over Q8_0 feeds for the {leaves.planes} planes, the f16-fed cm2 tiles for the rest"
-    to_log(LOG_INFO, "dasLLAMA cuda tier: the window chain's GEMMs on {pick} (DASLLAMA_CUDA_MMQ={g_env_vulkan.cuda_mmq})\n")
+    let pick = empty(leaves.planes) ? "the f16-fed cm2 tiles" : "the MMQ kernels (int8 over Q8_0 feeds; NVFP4 on the FP4 tensor rung) for the {leaves.planes} planes, the f16-fed cm2 tiles for the rest"
+    to_log(LOG_INFO, "dasLLAMA cuda tier: the window chain's GEMMs on {pick} (DASLLAMA_CUDA_MMQ={crd_mmq_knob()})\n")
     r.pf_splitk_bytes = 262_144l * int64(g_cud.sm_count)
     r.pf_splitk = dev_zeroed(r.pf_splitk_bytes)
     let dmax = max(max(qd, 2l * kvd), max(dim, hid))
@@ -1207,7 +1262,10 @@ def private crd_window_attn(r : CudRdec; L : CudLayer; kmir, vmir : uint64; wseg
         var pcc = gk_f16_rows_args(uint(wlen * qd))
         enc_tower_clamp_cvt_cls(s, fixed_array(r.pf_attn, r.pf_af), pcc, rq_wgs(false, wlen * qd))
     }
-    if (o_mmq) {
+    if (o_mmq && L.fo == int(KqFmt.nv4)) {
+        var pcf = Fp4RowsArgs(k = uint(qd), inbase = 0u)
+        enc_fp4_rows(s, fixed_array(r.pf_attn, r.pf_a4q, r.pf_a4s, r.pf_ars), pcf, wlen)
+    } elif (o_mmq) {
         var pcq = RqArgs(inbase = 0u, nblk = uint(wlen * qd / kq_unit(false)), lo = 0.0, hi = 0.0)
         if (r.pf_mmq_min) {
             enc_cls_dn_rq_sum(s, fixed_array(r.pf_attn, r.pf_aq, r.pf_as, r.pf_asum), pcq, rq_wgs(false, wlen * qd))
@@ -1300,7 +1358,7 @@ def private crd_window(var r : CudRdec; w0, wlen : int64; segs, wsegs : array<Rd
     var s = g_cud.stream
     let dim = r.dim
     let nlfin = uint(rdec_norms_final_base(r.n_layers, dim))
-    var pc_pro = GkAddRmsArgs(dim = uint(dim), add_on = 0u, woff = 0u, eps = r.eps, ascale = 1.0)
+    let pc_pro = GkAddRmsArgs(dim = uint(dim), add_on = 0u, woff = 0u, eps = r.eps, ascale = 1.0)
     crd_x_norm(r, s, r.pf_x, pc_pro, wlen, crd_x_feeds(r, r.layers[0], true))
     for (l in range64(r.n_layers)) {
         var L & = unsafe(r.layers[l])
@@ -1309,15 +1367,15 @@ def private crd_window(var r : CudRdec; w0, wlen : int64; segs, wsegs : array<Rd
         let hid = L.hid
         let kmir = r.k_slabs[L.mir_slab]
         let vmir = r.v_slabs[L.mir_slab]
-        crd_site(r, L.sch[SCH_Q], L.fq, L.bq, r.pf_xf, r.pf_xq, r.pf_xs, r.pf_xsum, r.pf_q, dim, qd, wlen)
+        crd_site(r, L.sch[SCH_Q], L.fq, L.bq, r.pf_xf, r.pf_xq, r.pf_xs, r.pf_xsum, r.pf_x4q, r.pf_x4s, r.pf_xrs, r.pf_q, dim, qd, wlen, L.s2[0])
         let kv_merged = L.fk == L.fv && L.bv == L.bk + kq_blocks_for(dim, kvd, L.fk)
         var voff = kvd
         var kstride = 2l * kvd
         if (kv_merged) {
-            crd_site(r, L.sch[SCH_K], L.fk, L.bk, r.pf_xf, r.pf_xq, r.pf_xs, r.pf_xsum, r.pf_kv, dim, 2l * kvd, wlen)
+            crd_site(r, L.sch[SCH_K], L.fk, L.bk, r.pf_xf, r.pf_xq, r.pf_xs, r.pf_xsum, r.pf_x4q, r.pf_x4s, r.pf_xrs, r.pf_kv, dim, 2l * kvd, wlen, L.s2[1])
         } else {
-            crd_site(r, L.sch[SCH_K], L.fk, L.bk, r.pf_xf, r.pf_xq, r.pf_xs, r.pf_xsum, r.pf_kv, dim, kvd, wlen)
-            crd_site(r, L.sch[SCH_V], L.fv, L.bv, r.pf_xf, r.pf_xq, r.pf_xs, r.pf_xsum, r.pf_v, dim, kvd, wlen)
+            crd_site(r, L.sch[SCH_K], L.fk, L.bk, r.pf_xf, r.pf_xq, r.pf_xs, r.pf_xsum, r.pf_x4q, r.pf_x4s, r.pf_xrs, r.pf_kv, dim, kvd, wlen, L.s2[1])
+            crd_site(r, L.sch[SCH_V], L.fv, L.bv, r.pf_xf, r.pf_xq, r.pf_xs, r.pf_xsum, r.pf_x4q, r.pf_x4s, r.pf_xrs, r.pf_v, dim, kvd, wlen, L.s2[2])
             cuda_memcpy_dtod(r.pf_kv + uint64(wlen * kvd * 4l), r.pf_v, uint64(wlen * kvd * 4l), s)
             voff = wlen * kvd
             kstride = kvd
@@ -1325,21 +1383,24 @@ def private crd_window(var r : CudRdec; w0, wlen : int64; segs, wsegs : array<Rd
         let kvq = kv_block_codec(r.kv_dt)
         crd_window_kv(r, l, L, kmir, vmir, wsegs, wlen, voff, kstride)
         crd_window_attn(r, L, kvq ? r.ksh : kmir, kvq ? r.vsh : vmir, wsegs, wlen, kvq, r.kv_dt == KVDtype.tq4)
-        crd_site(r, L.sch[SCH_O], L.fo, L.bo, r.pf_af, r.pf_aq, r.pf_as, r.pf_asum, r.pf_xb2, qd, dim, wlen)
-        var pc8 = GkAddRmsArgs(dim = uint(dim), add_on = 1u, woff = uint(norm_off(l, RDEC_NORM_FFN)), eps = r.eps, ascale = 1.0,
+        crd_site(r, L.sch[SCH_O], L.fo, L.bo, r.pf_af, r.pf_aq, r.pf_as, r.pf_asum, r.pf_a4q, r.pf_a4s, r.pf_ars, r.pf_xb2, qd, dim, wlen, L.s2[3])
+        let pc8 = GkAddRmsArgs(dim = uint(dim), add_on = 1u, woff = uint(norm_off(l, RDEC_NORM_FFN)), eps = r.eps, ascale = 1.0,
             pre_on = L.pre_post ? 1u : 0u, pwoff = uint(norm_off(l, RDEC_NORM_POST_ATT)))
         crd_x_norm(r, s, r.pf_xb2, pc8, wlen, crd_x_feeds(r, L, false))
-        crd_site(r, L.sch[SCH_G], L.f1, L.b1, r.pf_xf, r.pf_xq, r.pf_xs, r.pf_xsum, r.pf_gate, dim, hid, wlen)
-        crd_site(r, L.sch[SCH_U], L.f3, L.b3, r.pf_xf, r.pf_xq, r.pf_xs, r.pf_xsum, r.pf_up, dim, hid, wlen)
+        crd_site(r, L.sch[SCH_G], L.f1, L.b1, r.pf_xf, r.pf_xq, r.pf_xs, r.pf_xsum, r.pf_x4q, r.pf_x4s, r.pf_xrs, r.pf_gate, dim, hid, wlen, L.s2[4])
+        crd_site(r, L.sch[SCH_U], L.f3, L.b3, r.pf_xf, r.pf_xq, r.pf_xs, r.pf_xsum, r.pf_x4q, r.pf_x4s, r.pf_xrs, r.pf_up, dim, hid, wlen, L.s2[5])
         var pc12 = ActArgs(nelem = uint(wlen * hid), act = L.gelu ? ACT_GELU : ACT_SILU, nblk = uint(wlen * hid / kq_unit(false)), elem0 = 0u)
         if (!crd_site_mmq(r, L.f2, hid, dim, L.b2)) {
             enc_actf16_cls(s, fixed_array(r.pf_gate, r.pf_up, r.pf_hf), pc12, rq_wgs(false, wlen * hid))
+        } elif (L.f2 == int(KqFmt.nv4)) {
+            var pcf = Fp4RowsArgs(k = uint(hid), inbase = 0u, act = L.gelu ? ACT_GELU : ACT_SILU)
+            enc_fp4_actrows(s, fixed_array(r.pf_gate, r.pf_up, r.pf_h4q, r.pf_h4s, r.pf_hrs), pcf, wlen)
         } elif (r.pf_mmq_min) {
             enc_q8_actrq_sum_cls(s, fixed_array(r.pf_gate, r.pf_up, r.pf_hq, r.pf_hs, r.pf_hsum), pc12, rq_wgs(false, wlen * hid))
         } else {
             enc_q8_actrq_cls(s, fixed_array(r.pf_gate, r.pf_up, r.pf_hq, r.pf_hs), pc12, rq_wgs(false, wlen * hid))
         }
-        crd_site(r, L.sch[SCH_D], L.f2, L.b2, r.pf_hf, r.pf_hq, r.pf_hs, r.pf_hsum, r.pf_ffnout, hid, dim, wlen)
+        crd_site(r, L.sch[SCH_D], L.f2, L.b2, r.pf_hf, r.pf_hq, r.pf_hs, r.pf_hsum, r.pf_h4q, r.pf_h4s, r.pf_hrs, r.pf_ffnout, hid, dim, wlen, L.s2[6])
         let last_layer = l + 1l == r.n_layers
         var pc14 = GkAddRmsArgs(dim = uint(dim), add_on = 1u, woff = last_layer ? nlfin : uint(norm_off(l + 1l, RDEC_NORM_ATT)), eps = r.eps,
             ascale = L.out_scale, pre_on = L.pre_post ? 1u : 0u, pwoff = uint(norm_off(l, RDEC_NORM_POST_FFN)))

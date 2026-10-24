@@ -21,6 +21,8 @@ require dasllama/dasllama_vulkan_classes
 require dasllama/dasllama_cuda_classes
 require dasllama/dasllama_gpu_tier
 require ../tests/_vk_kq_fixtures.das
+require ../tests/_fp4_feed.das   // the FP4 activation feed the nv4 leaf's arm quantizes the panel into, and its reference value
+require dasllama/dasllama_gpu_math   // ue4m3_half_f32: the nv4 reference's weight scales
 require _cuda_probe_fixture
 require daslib/strings_boost
 require math
@@ -383,6 +385,57 @@ def mmq_report(shape : string; p : Planes; m : MmqPlanes; k, d, fmt : int) : int
     return report_cuda(shape, row, "bounded vs cpu: max rel err {err} <= {bound}", "TFLOP/s") $(us) => tflops(k, d, us)
 }
 
+//! the nv4 weight at (row, kk) of the tile planes: the k4-tiled nibble through the e2m1 table under its strip's UE4M3 scale
+def nv4_weight_at(p : Planes; nsb, row, kk : int) : float {
+    let sb = kk / 256
+    let g = (kk % 256) / 32
+    let e = kk % 32
+    let nib = (p.wq[((row * nsb + sb) * 8 + g) * 4 + (e % 16) / 4] >> uint(((e % 16) % 4) * 8 + (e / 16) * 4)) & 15u
+    let strip = g * 2 + e / 16
+    let code = (p.ws[(row * nsb + sb) * 5 + strip / 4] >> uint((strip % 4) * 8)) & 0xFFu
+    return float(MX4_LUT[int(nib)]) * ue4m3_half_f32(code)
+}
+
+//! the FP4 tensor rung's arm (CUDA alone): the nv4 leaf over the panel quantized into the FP4 feed, its largest relative error
+//! against the e2m1 x UE4M3 reference over the compare region, then its rounds; 1 when it measured
+def fp4_mmq_report(shape : string; p : Planes; k, d : int) : int {
+    if (!dasllama_cuda_classes::ensure_nv4_mmq()) {
+        print("{shape} cuda refused: {CU_CLASS_REFUSED}\n")
+        return 0
+    }
+    let nsb = k / 256
+    var inscope xrows <- [for (e in range(ROWS * k)); xf_at(p, e)]
+    var inscope feed <- fp4_feed_rows(xrows, ROWS, k)
+    let cs = g_cud.stream
+    var bufs = fixed_array(buf_upload(p.wq, cs), buf_upload(p.ws, cs), buf_upload(feed.xq, cs), buf_upload(feed.xsw, cs), buf_upload(feed.xrs, cs), buf_fill(ROWS * d, 0.0, cs))
+    var pc = MmqFp4Args(n = uint(k), d = uint(d), rows = uint(ROWS), wblk = 0u, s2 = 1.0)
+    let wgs = dasllama_cuda_classes::mmq_wgs(int64(d), int64(ROWS))
+    dasllama_cuda_classes::enc_nv4_mmq(g_cud.stream, bufs, pc, wgs)
+    cud_sync()
+    let y <- buf_download(bufs[5], ROWS * d, type<float>)
+    var err = 0.0
+    for (s in range(64)) {
+        let tok = (s * 7919) % ROWS
+        let row = (s * 104729 + 13) % d
+        var want = 0.0
+        for (kk in range(k)) {
+            want += nv4_weight_at(p, nsb, row, kk) * fp4_feed_value(feed, k, tok, kk)
+        }
+        let got = y[tok * d + row]
+        err = max(err, abs(got - want) / max(1.0, max(abs(got), abs(want))))
+    }
+    if (!(err <= MMQ_REL_BOUND)) {
+        cuda_mem_free(bufs)
+        print("{shape} cuda MISS: max rel err {err} > {MMQ_REL_BOUND}\n")
+        return 0
+    }
+    let row = cuda_rounds(ROUNDS, WARMUPS, DISPATCHES) $(_i) {
+        dasllama_cuda_classes::enc_nv4_mmq(g_cud.stream, bufs, pc, wgs)
+    }
+    cuda_mem_free(bufs)
+    return report_cuda(shape, row, "bounded vs cpu: max rel err {err} <= {MMQ_REL_BOUND}", "TFLOP/s") $(us) => tflops(k, d, us)
+}
+
 //! one dispatch of the MMQ leaf of `fmt` over `bufs` (the leaves without a min term bind the first five: no sum feed)
 def mmq_launch(fmt : int; bufs : uint64[6]; var pc : MmqArgs; wgs : int64) {
     var b5 = fixed_array(bufs[0], bufs[1], bufs[2], bufs[3], bufs[4])
@@ -593,6 +646,32 @@ def race_sb_rows(shapes : array<tuple<k : int; d : int>>; only : table<string; v
     return measured
 }
 
+//! the superblock int8 GEMMs (CUDA alone) and the nv4 leaf on the FP4 tensor rung - every format of the list, or the ones
+//! `only` names; the rows measured
+def race_sb_mmq_rows(shapes : array<tuple<k : int; d : int>>; only : table<string; void>) : int {
+    var measured = 0
+    print("the superblock int8 GEMMs (CUDA alone): the decode in the weight stage, Q4_K's min term, the codebooks, Q4_0's offset\n")
+    for (fmt in fixed_array(int(KqFmt.k4), int(KqFmt.iq4xs), int(KqFmt.q40), int(KqFmt.iq4nl))) {
+        if (!empty(only) && !key_exists(only, "{kq_fmt_of_slot(fmt)}")) continue
+        for (s in shapes) {
+            var p <- kq_tile_planes(fmt, s.k, s.d, 128)
+            var m <- mmq_planes(p, s.k)
+            measured += mmq_report(pad_right("{kq_fmt_of_slot(fmt)} mmq k {s.k} d {s.d}", 24, ' '), p, m, s.k, s.d, fmt)
+            delete m
+            delete p
+        }
+    }
+    if (empty(only) || key_exists(only, "nv4")) {
+        print("the nv4 leaf on the FP4 tensor rung (CUDA alone): raw e2m1 on both sides under the block-scaled mma\n")
+        for (s in shapes) {
+            var p <- kq_tile_planes(int(KqFmt.nv4), s.k, s.d, 128)
+            measured += fp4_mmq_report(pad_right("nv4 fp4 mmq k {s.k} d {s.d}", 24, ' '), p, s.k, s.d)
+            delete p
+        }
+    }
+    return measured
+}
+
 [export]
 def main {
     let shapes <- [(k = 2048, d = 2048), (k = 2048, d = 8192), (k = 8192, d = 2048)]
@@ -601,6 +680,7 @@ def main {
     if (!empty(only)) {
         dasllama_vulkan_classes::ensure_q8_batch_cm2l_cls()   // arms the device the format picks read their mode off
         measured += race_sb_rows(shapes, only)
+        measured += race_sb_mmq_rows(shapes, only)
         cud_shutdown()
         require_measured(measured)
         return
@@ -627,16 +707,7 @@ def main {
         delete m
         delete p
     }
-    print("the superblock int8 GEMMs (CUDA alone): the decode in the weight stage, Q4_K's min term, the codebooks, Q4_0's offset\n")
-    for (fmt in fixed_array(int(KqFmt.k4), int(KqFmt.iq4xs), int(KqFmt.q40), int(KqFmt.iq4nl))) {
-        for (s in shapes) {
-            var p <- kq_tile_planes(fmt, s.k, s.d, 128)
-            var m <- mmq_planes(p, s.k)
-            measured += mmq_report(pad_right("{kq_fmt_of_slot(fmt)} mmq k {s.k} d {s.d}", 24, ' '), p, m, s.k, s.d, fmt)
-            delete m
-            delete p
-        }
-    }
+    measured += race_sb_mmq_rows(shapes, only)
     print("the per-32 int8 GEMMs (CUDA alone): Q5_1's min term, Q4_0 and Q5_0's offsets in the codes, IQ4_NL's codebook\n")
     for (fmt in fixed_array(int(KqFmt.q51), int(KqFmt.q4032), int(KqFmt.q5032), int(KqFmt.iq4nl32))) {
         for (s in shapes) {

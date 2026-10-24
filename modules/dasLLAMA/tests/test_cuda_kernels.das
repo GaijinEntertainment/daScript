@@ -26,6 +26,8 @@ require ?vulkan _vkd_oracles   // the kq oracle runs the Vulkan leaves' decodes 
 require dasllama/dasllama_math
 require daslib/math_bits   // nolint:STYLE030,LINT019 — the word hashes of the CUDA cells, inside the vulkan arm alone
 require dasllama/dasllama_kqformat
+require dasllama/dasllama_gpu_math   // ue4m3_half_f32 - the nv4 MMQ cell's reference scales
+require _fp4_feed   // the FP4 feed kernels' CPU oracle
 require dasllama/dasllama_gemm_schema   // nolint:STYLE029,LINT019 — the schedule widths, read only inside the vulkan arm
 require dasllama/dasllama_convert   // nolint:STYLE029,LINT019 — the plane converters, read only inside the vulkan arm
 require dasllama/dasllama_gpu_kernels_discrete
@@ -285,6 +287,77 @@ def test_cud_q8_mmq(t0 : T?) {
             }
         }
         check_rows(t, "q8 MMQ vs the block-scaled reference", y, want, Q8_GEMV_BAR, d)
+    }
+}
+
+//! a UE4M3 scale word of four codes in [0x30, 0x40) - values 0.5 .. 2 at the eighth, every product short and dyadic
+def private nv4_test_scale_word(i : int) : uint {
+    var w = 0u
+    for (s in range(4)) {
+        w |= (0x30u + uint((i * 4 + s * 3 + i / 7) % 16)) << uint(s * 8)
+    }
+    return w
+}
+
+//! the NVFP4 leaf on the FP4 tensor rung: the k4-tiled nv4 plane (a 32-block's 16 bytes: element i the low nibble, i + 16 the
+//! high; the superblock's sixteen UE4M3 strip codes as four words) against an FP4 feed in the (k, k + 8) pairing, the
+//! reference every element's e2m1 x UE4M3 on both sides, the token's row scale and the plane's factor over the sum
+[test]
+def test_cud_nv4_mmq(t0 : T?) {
+    t0 |> run("CUDA NVFP4 GEMM on the FP4 tensor rung == the e2m1 x UE4M3 CPU reference under the row scales and the plane's factor") <| @(t : T?) {
+        if (!ensure_nv4_mmq()) {
+            t |> skip("no CUDA device with NVRTC")
+            return
+        }
+        let k = 768   // three superblocks: six k128 steps, the two-deep ring wraps
+        let d = 256
+        let rows = 256
+        let nsb = k / 256
+        let s2 = 0.75
+        var wq <- hashed_words(d * nsb * 32, 1u, 23u)
+        var ws : array<uint>
+        ws |> resize(d * nsb * 5)
+        for (sb in range(d * nsb)) {
+            for (j in range(4)) {
+                ws[sb * 5 + j] = nv4_test_scale_word(sb * 4 + j)
+            }
+        }
+        var xq <- hashed_words(rows * k / 8, 5u, 7u)
+        var xs : array<uint>
+        xs |> resize(rows * k / 64)
+        for (i in range(rows * k / 64)) {
+            xs[i] = nv4_test_scale_word(i + 3)
+        }
+        var xr <- [for (tok in range(rows)); 0.5 + 0.125 * float(tok % 7)]
+        let s = g_cud.stream
+        var bufs = fixed_array(buf_upload(wq, s), buf_upload(ws, s), buf_upload(xq, s), buf_upload(xs, s), buf_upload(xr, s), buf_fill(rows * d, Y_SENTINEL, s))
+        var pc = MmqFp4Args(n = uint(k), d = uint(d), rows = uint(rows), wblk = 0u, s2 = s2)
+        enc_nv4_mmq(g_cud.stream, bufs, pc, mmq_wgs(int64(d), int64(rows)))
+        t |> success(cud_sync(), "nv4 mmq: the launch completes ({cuda_last_error()})")
+        let y <- buf_download(bufs[5], rows * d, type<float>)
+        cuda_mem_free(bufs)
+        var want : array<float>
+        want |> resize(rows * d)
+        for (tok in range(rows)) {
+            for (row in range(d)) {
+                var acc = 0.0
+                for (kk in range(k)) {
+                    let sb = kk / 256
+                    let g = (kk % 256) / 32
+                    let e = kk % 32
+                    let wbyte = (wq[((row * nsb + sb) * 8 + g) * 4 + (e % 16) / 4] >> uint(((e % 16) % 4) * 8 + (e / 16) * 4)) & 15u
+                    let wstrip = g * 2 + e / 16
+                    let wsc = (ws[(row * nsb + sb) * 5 + wstrip / 4] >> uint((wstrip % 4) * 8)) & 0xFFu
+                    let j = kk % 16
+                    let xbi = tok * (k / 2) + (kk / 16) * 8 + j % 8   // the feed's byte: strip kk / 16, pair j % 8, the high nibble past 7
+                    let xnib = (xq[xbi / 4] >> uint((xbi % 4) * 8 + (j / 8) * 4)) & 15u
+                    let xsc = (xs[tok * (k / 64) + kk / 64] >> uint(((kk / 16) % 4) * 8)) & 0xFFu
+                    acc += float(MX4_LUT[int(wbyte)]) * ue4m3_half_f32(wsc) * float(MX4_LUT[int(xnib)]) * ue4m3_half_f32(xsc)
+                }
+                want[tok * d + row] = acc * xr[tok] * s2
+            }
+        }
+        check_rows(t, "nv4 MMQ on the FP4 rung vs the e2m1 x UE4M3 reference", y, want, Q8_GEMV_BAR, d)
     }
 }
 
@@ -888,6 +961,88 @@ def private cud_feed_ar(t : T?; var s : void?; sent : float; q8k : bool) {
         delete y_ref
         delete q_ref
         delete s_ref
+    }
+}
+
+//! the FP4 feed planes of `rows` rows of `k` read back off the device against the CPU feed: the nibble words and code words off
+//! by count, the row scales held to the approx bar
+def private fp4_feed_compare(t : T?; tag : string; bufs : uint64[5]; qi, si, ri : int; ref : Fp4Feed; rows, k : int; allowed : int) {
+    var q <- buf_download(bufs[qi], rows * k / 8, type<uint>)
+    var sw <- buf_download(bufs[si], rows * k / 64, type<uint>)
+    var rs <- buf_download(bufs[ri], rows, type<float>)
+    var off = 0
+    for (i in range(rows * k / 8)) {
+        off += q[i] != ref.xq[i] ? 1 : 0
+    }
+    for (i in range(rows * k / 64)) {
+        off += sw[i] != ref.xsw[i] ? 1 : 0
+    }
+    t |> success(off <= allowed, "{tag}: {off} nibble / code words off the CPU feed (at most {allowed})")
+    check_rows(t, "{tag}: the row scales vs the CPU feed", rs, ref.xrs, BAR_APPROX_CTRL, 1)
+    delete q
+    delete sw
+    delete rs
+}
+
+//! the FP4 feed kernels: a float plane's rows (bit for bit the CPU feed - the kernel is `precise`), the gate / up pair through the
+//! activation (the act's exponential is fast-math: a few strips may round their code or a nibble the other way), and the fused
+//! residual step + norm + feed against the CPU norm's feed
+[test]
+def test_cud_fp4_feeds(t0 : T?) {
+    t0 |> run("CUDA FP4 feed kernels (fp4_rows, fp4_actrows, cls_ar_fp4_b) == the CPU feed") <| @(t : T?) {
+        if (!ensure_fp4_rows() || !ensure_fp4_actrows() || !ensure_cls_ar_fp4_b()) {
+            t |> skip("no CUDA device with NVRTC")
+            return
+        }
+        var s = g_cud.stream
+        let rows = 6
+        let k = 2048
+        var inscope src <- row_fill(rows * k, 37, 0, 0.09, 4.2, 101)
+        var inscope ref <- fp4_feed_rows(src, rows, k)
+        var bufs = fixed_array(buf_upload(src, s), 0ul, buf_fill(rows * k / 8, 0u, s), buf_fill(rows * k / 64, 0u, s), buf_fill(rows, NAN_SENTINEL, s))
+        var pc = Fp4RowsArgs(k = uint(k), inbase = 0u)
+        enc_fp4_rows(s, fixed_array(bufs[0], bufs[2], bufs[3], bufs[4]), pc, int64(rows))
+        t |> success(cud_sync(), "fp4_rows: the launch completes ({cuda_last_error()})")
+        fp4_feed_compare(t, "fp4_rows", bufs, 2, 3, 4, ref, rows, k, 0)
+        cuda_mem_free(bufs[0])
+        var inscope gh <- row_fill(rows * k, 29, 0, 0.21, 6.0, 61)
+        var inscope uh <- row_fill(rows * k, 11, 0, 0.17, 4.0, 47)
+        var inscope act <- [for (i in range(rows * k)); gk_act_mul(gh[i], uh[i], ACT_SILU)]
+        var inscope aref <- fp4_feed_rows(act, rows, k)
+        bufs[0] = buf_upload(gh, s)
+        bufs[1] = buf_upload(uh, s)
+        var pca = Fp4RowsArgs(k = uint(k), inbase = 0u, act = ACT_SILU)
+        enc_fp4_actrows(s, fixed_array(bufs[0], bufs[1], bufs[2], bufs[3], bufs[4]), pca, int64(rows))
+        t |> success(cud_sync(), "fp4_actrows: the launch completes ({cuda_last_error()})")
+        fp4_feed_compare(t, "fp4_actrows", bufs, 2, 3, 4, aref, rows, k, rows * k / 800)
+        cuda_mem_free(bufs[0])
+        cuda_mem_free(bufs[1])
+        let eps = 1e-5
+        let ascale = 1.25
+        var inscope x <- row_fill(rows * k, 37, 0, 0.09, 4.2, 101)
+        var inscope a <- row_fill(rows * k, 13, 0, 0.06, 2.6, 89)
+        var inscope w <- row_fill(k, 1, 0, 0.04, -0.5, 17)
+        var inscope y_ref : array<float>
+        y_ref |> resize(rows * k)
+        for (r in range(rows)) {
+            var inscope xr <- [for (i in range(k)); (x[r * k + i] + a[r * k + i]) * ascale]
+            var inscope yr : array<float>
+            yr |> resize(k)
+            rmsnorm(yr, xr, w, int64(k), eps)
+            for (i in range(k)) {
+                y_ref[r * k + i] = yr[i]
+            }
+        }
+        var inscope nref <- fp4_feed_rows(y_ref, rows, k)
+        bufs[0] = buf_upload(x, s)
+        bufs[1] = buf_upload(a, s)
+        let wb = buf_upload(w, s)
+        var pcn = GkAddRmsArgs(dim = uint(k), add_on = 1u, eps = eps, ascale = ascale)
+        enc_cls_ar_fp4_b(s, fixed_array(bufs[0], bufs[1], wb, bufs[2], bufs[3], bufs[4]), pcn, int64(rows))
+        t |> success(cud_sync(), "cls_ar_fp4_b: the launch completes ({cuda_last_error()})")
+        fp4_feed_compare(t, "cls_ar_fp4_b", bufs, 2, 3, 4, nref, rows, k, rows * k / 800)
+        cuda_mem_free(wb)
+        cuda_mem_free(bufs)
     }
 }
 
