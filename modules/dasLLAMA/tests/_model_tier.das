@@ -17,6 +17,7 @@ require dastest/testing_boost public
 require daslib/fio public
 require strings public
 require daslib/strings_boost   // split — the DASLLAMA_TEST_ARMS comma list
+require daslib/utf8_utils   // each_word - the transcript compares' word tokens
 require math   // the tower-parity statistics
 require dasllama/dasllama_gguf   // gguf_shard_paths — split models tier on their TOTAL size
 require dasllama/dasllama_common   // decode_ — the eyeball rail detokenizes through the model
@@ -389,3 +390,11 @@ def model_available(t : T?; path : string) : bool {
 
 //! true under the JIT with the model at `path` stocked; else the cell has registered the loud skip and its caller returns
 def jit_model_available(t : T?; path : string) : bool => jit_only(t) && model_available(t, path)
+
+//! a transcript's lower-cased word tokens, the punctuation and casing a near-tie token can flip left
+//! out - what two rails of the same model must agree on
+def transcript_words(text : string) : array<string> {
+    var words : array<string>
+    each_word(text, words)
+    return <- words
+}

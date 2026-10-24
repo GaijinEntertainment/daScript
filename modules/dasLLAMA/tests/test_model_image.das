@@ -2487,24 +2487,6 @@ def test_gemma4a_tower_metal_e4b(t : T?) {
     g4a_tower_metal_cell(t, "E4B", "gemma-4-E4B-it-Q8_0.gguf", "mmproj-gemma-4-E4B-it-BF16.gguf", 2560l)
 }
 
-//! the letters and digits of a transcript, one space between runs - what two rails must agree on
-def private words_only(text : string) : string {
-    return build_string() $(var w) {
-        var gap = true
-        peek_data(text) $(d) {
-            for (c in d) {
-                if (is_alnum(int(c))) {
-                    write_char(w, int(c))
-                    gap = false
-                } elif (!gap) {
-                    write_char(w, ' ')
-                    gap = true
-                }
-            }
-        }
-    }
-}
-
 def private g4a_tower_metal_cell(tst : T?; tag, dec_file, mmp_file : string; want_proj : int64) {
     tst |> run("gemma4a tower {tag}: the Metal Conformer chain, the projector tail on the device, matches the CPU f32 rail on jfk") @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -2519,11 +2501,13 @@ def private g4a_tower_metal_cell(tst : T?; tag, dec_file, mmp_file : string; wan
             }
             var cpu_text = ""
             var gpu_text = ""
+            var half_text = ""
             var lang = ""
             var nlayer = 0l
             var enc_delta = 0l
             var blk_delta = 0l
             var enc_rel_l2 = 0.0
+            let tower_was = metal_tower_knob()
             with_dasllama_jobque_() {
                 var dec <- load_model_(dec_path, QuantMode.q8)
                 dec.config.seq_len = min(dec.config.seq_len, 8192l)
@@ -2548,6 +2532,14 @@ def private g4a_tower_metal_cell(tst : T?; tag, dec_file, mmp_file : string; wan
                 let s1 = metal_tower_stats()
                 enc_delta = s1.encodes - s0.encodes
                 blk_delta = s1.blocks - s0.blocks
+                var inscope half := samples
+                for (i in range64(long_length(half) / 2l, long_length(half))) {
+                    half[i] = 0.0
+                }
+                var inscope s3 <- create_gemma4a_asr_session(dec)
+                gemma4a_transcribe(dec, enc, s3, half, $(seg : TranscribeSegment) {
+                    half_text += seg.text
+                }, lang)
                 var inscope stc = Gemma4aState()
                 var inscope stg = Gemma4aState()
                 set_metal_tower(false)
@@ -2558,6 +2550,7 @@ def private g4a_tower_metal_cell(tst : T?; tag, dec_file, mmp_file : string; wan
                 gemma4a_encode(enc, stg)
                 enc_rel_l2 = rel_l2(stg.out, stc.out)
                 t |> success(stg.out_ready && !stc.out_ready, "the device leg ran the projector tail, the CPU leg its own")
+                set_metal_tower(tower_was)
                 reset_gemma4a_q8()
                 delete dec
             }
@@ -2568,8 +2561,9 @@ def private g4a_tower_metal_cell(tst : T?; tag, dec_file, mmp_file : string; wan
             to_log(LOG_INFO, "gemma4a mtower CPU eyeball: {cpu_text}\n")
             to_log(LOG_INFO, "gemma4a mtower GPU eyeball: {gpu_text}\n")
             t |> success(!empty(gpu_text), "non-empty transcript")
-            //! the words, not the punctuation: a comma rides a near-tie token the two rails' rounding can split
-            t |> equal(words_only(cpu_text), words_only(gpu_text), "transcript equality CPU vs GPU, punctuation aside")
+            // the words, not the punctuation: a comma rides a near-tie token the two rails' rounding can split
+            t |> equal(join(transcript_words(cpu_text), " "), join(transcript_words(gpu_text), " "), "transcript equality CPU vs GPU, punctuation aside")
+            t |> success(join(transcript_words(half_text), " ") != join(transcript_words(cpu_text), " "), "control: the GPU route fed the clip with its second half silenced reads other words")
             delete samples
         } else {
             t |> skip("no Metal build - the gemma4a Conformer driver has no device to serve")
