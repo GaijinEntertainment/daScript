@@ -30,8 +30,8 @@ points at a file that no longer exists.
 
 **A diff that rewrites the rows of a `records/<box>.json` file under this folder - a re-mint -
 updates, in the same change, every checked-in number under `modules/dasLLAMA/` cited from a
-replaced row, or makes that citation name the replaced row's `sha` (a row with no `sha`: the
-checkout its provenance names).**
+replaced row, or makes that citation name the replaced row's `sha` (a reference-engine row with no
+`sha`: the checkout or requirements file its `versions` field names).**
 
 **A diff that writes a run row carrying a `sha` to `records/<box>.json` names, in the PR body, for
 each box it writes, the commit the timing exe was built at and when it was built** - the bench
@@ -39,8 +39,9 @@ stamps the HEAD checked out when it runs, not the exe's build, so the diff alone
 build timed the row.
 
 **A diff that writes a `das` row (a run row whose `engine` is `das`) carrying a `sha` mints every
-cell of it from the released `lcpp_bench` exe (`../benchmarks/lcpp_bench.das` built by
-`daspkg release`) built at that `sha` - re-mint otherwise.**
+cell of it from the released `lcpp_bench` exe (`../benchmarks/lcpp_bench.das`, the `dasllama-bench`
+exe `daspkg release` writes under `_rig/`) built at that `sha`, and names that exe in the row's
+`cmd` - re-mint otherwise.**
 
 **A diff that writes a `das` row to `records/<box>.json` from a run under `DASLLAMA_CUDA=1` is
 a defect until the bench row carries a `cuda` backend value (`../followup_general.md` names the
@@ -56,7 +57,7 @@ and mints every cell of it from a binary built from that pinned checkout, in a f
 binaries of one build - names both exes in the row's `cmd`.**
 
 **A diff that writes a reference-engine row carrying no `sha` to `records/<box>.json` names,
-in that row's provenance, the checkout that built the binary it timed; a reference row timed
+in that row's `versions` field, the checkout that built the binary it timed; a reference row timed
 through a Python package names, instead, the `../benchmarks/asr/requirements-<name>.txt` file
 it installed from.**
 

@@ -199,8 +199,16 @@ the tokens or rows it divides the wall by, or the reference build it times (`DEF
 the run measures) - ships before/after rows for each affected cell and corpus, or withdraws the
 affected rows and names the withdrawal and its reason in the PR body.**
 
-**Before/after rows or a withdrawal shipped for a changed board cell land in the file the affected
-rows live in - `performance/records/<box>.json` or `PERF_LEDGER.md`.**
+**A re-minted row of a changed board cell replaces the old row in `performance/records/<box>.json`,
+and a new dated `PERF_LEDGER.md` entry in the same change puts the old figure beside the new one;
+a re-minted row that a `held` entry holds deletes that entry in the same change.**
+
+**A withdrawn row of a changed board cell is deleted from `performance/records/<box>.json` or gets
+a `held` entry - a `performance/records/annotations.json` entry carrying the row's `gguf`, `box`,
+`engine`, `backend`, `flavor` and `workload`, whose `held` field names the follow-up ledger row that
+keeps it off the board - and stays recorded.**
+
+**A `PERF_LEDGER.md` entry that withdraws an earlier entry's figure states the withdrawal's reason.**
 
 **A rate or wall of any served-turn leg, or a ratio of two such rates or walls, written down as
 a measurement rather than as a prediction is a defect unless it cites the committed board row it

@@ -10,6 +10,25 @@ and coverage; this ledger is the backlog for the perf pass that follows them. Ev
 what it costs today and what the fix would change.
 
 ## Entries
+- **MEASURED (2026-10-24, `direction-grade`) - the M5 kitten board pairs speak the pack's own voice.** A kitten voice
+  name resolves through the pack's `voice_aliases` table on both sides of a pair
+  (`ARCHITECTURE_MEASUREMENT_AUDIO.md#the-tts-reference-instrument`). The kitten reference rows the 2026-10-22 entry
+  cites spoke the pack's Kiki voice (`expr-voice-5-f`) for `Bella` (`expr-voice-2-f`), so this entry replaces that
+  entry's kitten reference figures - `kittentts` 159.95 s / 144.98 s and `mlx-audio` 159.85 s / 144.83 s of audio on
+  the corpus head against das's 242.60 / 206.50 - and the 2026-09-24 entry's conclusion that Kitten's package speaks
+  shorter audio than das for the same phonemes (its speed prior and 5000-sample trim): in the same voice the two sides
+  agree within 2%, and a kitten pair compares on audio seconds as every other TTS pair does. `m5.json`, the corpus
+  head (`tts:g2p20@Bella`, `audio_s`; walls in ms, das against the reference, the reference's 2026-10-22 wall in
+  parentheses): kitten-nano - das `cpu/tuned` (259d0a3fb) 242.60 s, 3560 ms against `kittentts` `cpu/stock` (torch
+  2.14.0 / kittentts 0.8.1 / onnxruntime 1.29.0) 237.85 s, 6165 ms (4256); das `metal/tuned` (259d0a3fb) 242.43 s, 550
+  ms against `mlx-audio` `metal/stock` (mlx 0.32.4 / mlx-audio 0.6.1) 237.63 s, 1578 ms (1285); kitten-mini - das cpu
+  206.50 s, 7329 ms against `kittentts` 207.65 s, 41545 ms (28742); das metal 206.58 s, 1729 ms against `mlx-audio`
+  207.25 s, 5062 ms (4181). The das rows' walls stand within 5% of the 2026-10-22 rows' (cpu 3570 / 7412, metal 580 /
+  1773; the nano metal wall moves the most, 580 to 550), on macOS 27.0.1 with the `rm_gemv` family on the box profile
+  (`records/m5.tune.918b6c0e2d0f.json`) where the earlier rows ran its fallback. The AWS boxes' kitten reference rows
+  (`epyc9r14`, `gnr`, `graviton4`) still speak Kiki - 159.95 s of kitten-nano audio on each, 144.7 / 144.7 / 144.6 s
+  of kitten-mini - and are held off the board - `followup_general.md` row 238.
+
 - **MEASURED (2026-10-22, `direction-grade`) - the release-17 boards' figures the ledger rows cite.** Every figure is a
   committed board row of `performance/records/<box>.json`, named below by box, model, `(engine, backend, flavor)`,
   date and `sha`; a das row is a `gen_bench_records.das` spawned cell of the released `lcpp_bench` exe, a reference
