@@ -59,9 +59,8 @@ let KQ_DEV_SSB = 20l
 //! native high bits above it, word 1 = eight 4-bit fields.
 def kq_two_word_row(f : KqFmt) : bool => f == KqFmt.iq4xs || f == KqFmt.iq3s || f == KqFmt.iq3xxs || f == KqFmt.iq2xxs || f == KqFmt.iq3s4
 
-//! The device scale-row stride of a kq format: 8 B for the two-word-row formats, 32 B for nv4 (its sixteen sub-block
-//! scales decoded to halves under the plane's per-tensor scale), KQ_DEV_SSB for the rest.
-def kq_dev_ssb(f : KqFmt) : int64 => f == KqFmt.nv4 ? 32l : (kq_two_word_row(f) ? 8l : KQ_DEV_SSB)
+//! The device scale-row stride of a kq format: 8 B for the two-word-row formats, KQ_DEV_SSB for the rest.
+def kq_dev_ssb(f : KqFmt) : int64 => kq_two_word_row(f) ? 8l : KQ_DEV_SSB
 
 //! kq_dev_ssb over the tier's int(KqFmt) stack-format space.
 def kq_dev_ssb_i(fmt : int) : int64 {

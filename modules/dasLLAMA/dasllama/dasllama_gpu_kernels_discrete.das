@@ -1663,16 +1663,17 @@ class template Iq4nlGemvT : Q40GemvT {
     def override fold_reads_bsum : bool => false
 }
 
-//! NVFP4: w = sc16 x MX4_LUT[q], sc16 a sub-block's scale half (UE4M3 at half under the plane's per-tensor scale) - a
-//! 32-block's two halves under the two halves of word `blk` of the device row; signed codes, so no bsum term
+//! NVFP4: w = sc16 x MX4_LUT[q], sc16 a sub-block's UE4M3 scale at half under the plane's per-tensor scale (the device row's
+//! fifth word) - a 32-block's two halves under two scales off the row's byte pair 2g, 2g + 1; signed codes, so no bsum term
 [ |> template_struct_instance]
 class template Nv4GemvT : KqGemvLeafT {
     def override blk_decode(wsb, blk : uint; var wl : uint4&; var wh : uint4&) : float4 {
         let wv = wq4[wsb * 8u + blk]
         wl = uint4(mx4_word(wv.x & KQC_NIBBLE_MASK), mx4_word(wv.y & KQC_NIBBLE_MASK), mx4_word(wv.z & KQC_NIBBLE_MASK), mx4_word(wv.w & KQC_NIBBLE_MASK))
         wh = uint4(mx4_word((wv.x >> 4u) & KQC_NIBBLE_MASK), mx4_word((wv.y >> 4u) & KQC_NIBBLE_MASK), mx4_word((wv.z >> 4u) & KQC_NIBBLE_MASK), mx4_word((wv.w >> 4u) & KQC_NIBBLE_MASK))
-        let sp = unpackHalf2x16(wsu[wsb * 8u + blk])
-        return float4(sp.x, 0.0, sp.y, 0.0)
+        let sw = wsu[wsb * 5u + blk / 2u] >> ((blk & 1u) * 16u)
+        let s2 = uint_bits_to_float(wsu[wsb * 5u + 4u])
+        return float4(ue4m3_half_f32(sw & 0xFFu) * s2, 0.0, ue4m3_half_f32((sw >> 8u) & 0xFFu) * s2, 0.0)
     }
 
     def override fold_reads_bsum : bool => false
@@ -4512,6 +4513,8 @@ class template KqCm2BatchT : MoeCmBase {
     @workgroup @template_gate = IQLUT iq4lut : float16[16]   //! kvalues_iq4nl as f16
     @template_constant IQODD : bool = false               //!< under IQLUT the staged codebook is iq3s4's odd values 2q - 15
     @template_constant MX4LUT : bool = false              //!< under IQLUT the staged codebook is the doubled e2m1 magnitudes (nv4)
+    @template_constant UE4LUT : bool = false              //! stage the 128 UE4M3 codes at half under the plane's per-tensor scale (nv4)
+    @workgroup @template_gate = UE4LUT ue4lut : float16[128]
     @template_constant Q50 : bool = false   //!< q51's block under one d: d * (q - 16), q5032
     @template_constant SCGRID : bool = false              //!< under SCIQ4 the two-word row's sub-scale is the iq3 row's 1 + 2s (`grid_sc`), not iq4xs's ls - 32
     @template_constant IQ3GRID : bool = false             //! stage the 2 KB iq3s grid into workgroup memory
@@ -4582,6 +4585,12 @@ class template KqCm2BatchT : MoeCmBase {
                         iq4lut[li] = float16(float((int((tbl[int(li >> 2u)] >> ((li & 3u) * 8u)) & 255u) ^ 128) - 128))
                     }
                 }
+            }
+        }
+        static_if (UE4LUT) {
+            if (gl_LocalInvocationID.x < 128u) {   // the plane's factor sits in every row's fifth word; the region's first row serves
+                let code = gl_LocalInvocationID.x
+                ue4lut[code] = float16(ue4m3_half_f32(code) * uint_bits_to_float(ws[wblk0 * 5u + 4u]))
             }
         }
         static_if (IQ3GRID) {
@@ -5736,8 +5745,9 @@ class template Iq4nlCm2T : Q40Cm2T {
     override IQLUT = true
 }
 
-//! NVFP4 on the cm2 tile: the k4-tiled nibbles through the staged e2m1 table under the sixteen scale halves of the device
-//! row (eight words, sub-block order) - 32-block g's low half reads half 2g, its high half 2g + 1; iq4nl's decode shape
+//! NVFP4 on the cm2 tile: the k4-tiled nibbles through the staged e2m1 table under the sixteen UE4M3 sub-block scales of
+//! the device row (four words, sub-block order) read through the staged scale table, which carries the per-tensor factor -
+//! 32-block g's low half reads byte 2g, its high half 2g + 1; iq4nl's decode shape, two table reads an element
 [ |> template_struct_instance]
 class template Nv4Cm2T : KqCm2BatchT {
     typedef BLK = VkK4Blk
@@ -5745,6 +5755,7 @@ class template Nv4Cm2T : KqCm2BatchT {
     override DECV4 = true
     override IQLUT = true
     override MX4LUT = true
+    override UE4LUT = true
 
     def override khr_stage16(blk, e0, sbase : uint) : void {
         static_if (KHR) {
@@ -5752,7 +5763,7 @@ class template Nv4Cm2T : KqCm2BatchT {
             let hh = (e0 >> 4u) & 1u
             let w4 = wq4[blk * 8u + g]
             let si = g * 2u + hh
-            let sc = q40_d_of(ws[blk * 8u + (si >> 1u)], si)
+            let sc = float(ue4lut[int((ws[blk * 5u + (si >> 2u)] >> ((si & 3u) * 8u)) & 0x7Fu)])
             for [unroll_full] (c in range(4)) {
                 let w = w4[c] >> (hh * 4u)
                 khr_put4(sbase + uint(c) * 2u, float4(sc * float(iq4lut[int(w & 0xFu)]), sc * float(iq4lut[int((w >> 8u) & 0xFu)]),
@@ -5767,9 +5778,9 @@ class template Nv4Cm2T : KqCm2BatchT {
         let e = cib.y & 31u
         let bidx = g * 16u + (e & 15u)
         let q = (uint(int(blk.qs[int(bidx >> 1u)])) >> ((bidx & 1u) * 8u + (e >> 4u) * 4u)) & 0xFu
-        let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 8u
+        let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
         let si = g * 2u + (e >> 4u)
-        let sc = q40_d_of(ws[srow + (si >> 1u)], si)
+        let sc = float(ue4lut[int((ws[srow + (si >> 2u)] >> ((si & 3u) * 8u)) & 0x7Fu)])
         return float16(sc * float(iq4lut[int(q)]))
     }
 
@@ -5781,9 +5792,9 @@ class template Nv4Cm2T : KqCm2BatchT {
         let l0 = uint(int(blk.qs[li])) & 0xFFFFu
         let l1 = uint(int(blk.qs[li + 1])) & 0xFFFFu
         let sh = (e >> 4u) * 4u
-        let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 8u
+        let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
         let si = g * 2u + (e >> 4u)
-        let sc = q40_d_of(ws[srow + (si >> 1u)], si)
+        let sc = float(ue4lut[int((ws[srow + (si >> 2u)] >> ((si & 3u) * 8u)) & 0x7Fu)])
         return half4(float4(sc * float(iq4lut[int((l0 >> sh) & 0xFu)]), sc * float(iq4lut[int((l0 >> (sh + 8u)) & 0xFu)]),
             sc * float(iq4lut[int((l1 >> sh) & 0xFu)]), sc * float(iq4lut[int((l1 >> (sh + 8u)) & 0xFu)])))
     }

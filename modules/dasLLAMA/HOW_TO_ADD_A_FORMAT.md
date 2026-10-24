@@ -97,9 +97,12 @@ the last two from the tree:
    matmul epilogues (`ARCHITECTURE_ENGINE_FORMATS.md#nv4-site-scale`): `detect_site_scales` reads it per
    site after the layout, and every CPU path that reaches the planes - the two plane entries and the
    fused decode chains of `dasllama_blocks.das`, which invoke the rows cores on raw plane pointers and
-   never pass through `mm_at_kq_pre` - multiplies its rows by it; the gather folds the factor into the
-   device scale row's halves, so the GPU decodes read a plain half scale with no epilogue. A path left
-   out serves the weights a thousandfold off and the text reads as garbage with every kernel cell green.
+   never pass through `mm_at_kq_pre` - multiplies its rows by it; the device rows carry the factor in
+   their scale row's pad word, written by the gather, so the GPU decodes fold it with no epilogue (the
+   kernel cells' fixtures fill that word through `kq_ws_plane`, never a bare `ws_plane` - a hashed pad
+   reads as a wild f32, and a tile stages its scale table off the region's first row, so the word is one
+   value a plane). A path left out serves the weights a thousandfold off and the text reads as garbage
+   with every kernel cell green.
 
 Write the answers down; they are the first lines of the PR body's format section.
 
@@ -431,8 +434,8 @@ by construction); then the end-to-end run.
 ## 6. Vulkan - `dasllama_vulkan_classes.das`, `dasllama_vulkan_common.das`
 
 The tier reads the CPU planes verbatim (`stack_plane_bytes` -> `arena_block_bytes` ->
-`kq_qsb(vk_kq_schema_id(fmt))` x `kq_dev_ssb(fmt)` - 20 B for a decoded row, 32 B for nv4's sixteen
-halves, 8 B for the codebook formats' two-word row the gather packs), so a format whose plane pair already has the 20 B
+`kq_qsb(vk_kq_schema_id(fmt))` x `kq_dev_ssb(fmt)` - 20 B for a decoded row, 8 B for the codebook
+formats' two-word row the gather packs), so a format whose plane pair already has the 20 B
 decoded scale row needs no upload work - only the id bridge and the kernels. The IQ4_XS arms:
 
 1. `vk_kq_schema_id` (`dasllama_vulkan_common.das`): the `int(KqFmt)` -> kernel-id arm
@@ -555,7 +558,7 @@ either shell - never the `*_grid_word` accessor, which the batch and cm2 tiles k
 On an NV_coopmat2 device the f16 feed serves every kq format through ONE tile template
 (`KqCm2BatchT`): a new format is a format template authoring `[spirv_decode] def decode` over the
 DEVICE forms (quants as the gather lays them out - k4/k5 re-paired k/k+16, q40/iq4xs/k3 verbatim;
-scales the `kq_dev_ssb(fmt)` row - 20 B decoded, nv4's sixteen halves, or the codebook formats' two words) in PAIR form -
+scales the `kq_dev_ssb(fmt)` row - 20 B decoded, or the codebook formats' two words) in PAIR form -
 every shared read derived from `e & ~1u`, both elements computed, the element selected last
 (`ARCHITECTURE_GPU_SHARED_GEMM.md#cm2-decode-16bit-lanes`; iq2xxs's `decode` is the model) - plus
 its width stamps (the l, m and s columns, and on a 32-step decode the expert schedule's e column -

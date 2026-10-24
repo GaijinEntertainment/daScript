@@ -137,7 +137,7 @@ def kq_tile_planes(fmt, k, d, tc : int) : Planes {
     var p : Planes
     let nsb = k / 256
     p.wq <- hashed_words(d * nsb * int(kq_qsb(kq_fmt_of_slot(fmt)) / 4l), 1u, uint(fmt) * 77777u)
-    p.ws <- ws_plane(d * nsb * int(kq_dev_ssb_i(fmt) / 4l), 1u, uint(fmt) * 13u)
+    p.ws <- kq_ws_plane(fmt, d * nsb * int(kq_dev_ssb_i(fmt) / 4l), 1u, uint(fmt) * 13u)
     p.xf <- ws_plane((ROWS + int(TILE_READ_SLACK)) * k / 2, 3u, 5u)
     var sr <- two_region_sched(ROWS, 0, 0, tc, (d + 127) / 128, 0)
     p.sched <- sr.words
