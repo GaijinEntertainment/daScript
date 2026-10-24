@@ -198,12 +198,13 @@ def build_outline_cmd(file, glob_filter, das_root : string) : string {
     }
     let sg = get_ast_grep_cmd()
     let cd_root = "cd \"{das_root}\" && "
-    var cmd = "{cd_root}{sg} scan -r \"{rules_path}\" --json \"{target}\""
+    let head = "{cd_root}{sg} scan{ast_grep_opts()} -r \"{rules_path}\""
+    var cmd = head + " --json \"{target}\""
     if (!empty(glob_filter) && !empty(file)) {
         // both file and glob — use glob as filter
-        cmd = "{cd_root}{sg} scan -r \"{rules_path}\" --globs \"{glob_filter}\" --json \"{resolve_path(file)}\""
+        cmd = head + " --globs \"{glob_filter}\" --json \"{resolve_path(file)}\""
     } elif (!empty(glob_filter)) {
-        cmd = "{cd_root}{sg} scan -r \"{rules_path}\" --globs \"{glob_filter}\" --json \"{das_root}\""
+        cmd = head + " --globs \"{glob_filter}\" --json \"{das_root}\""
     }
     return cmd
 }

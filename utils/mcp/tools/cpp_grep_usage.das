@@ -53,6 +53,7 @@ def do_cpp_grep_usage(symbol, directory, context_lines_str, glob_filter : string
     let rule_path = cpp_write_grep_rule_file(symbol, rule_err)
     if (empty(rule_path)) return make_tool_result(rule_err, true)
     var args <- [sg, "scan", "-r", rule_path, "--json"]
+    push_ast_grep_opts(args)
     cpp_push_glob_args(args, search_dirs, glob_filter)
     args |> push_from(search_dirs)
     var raw_json : string
