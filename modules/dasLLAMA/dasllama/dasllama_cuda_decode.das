@@ -938,8 +938,9 @@ def private cud_sched_make(words : int64) : CudSched => CudSched(buf = dev_zeroe
 //! the off-lattice Q4_0 and IQ4_NL); a leaf with a min term (Q4_K, Q5_1) reads the activation blocks' sums
 let private MMQ_LEAF_FMTS <- [int(KqFmt.q8), int(KqFmt.k4), int(KqFmt.iq4xs), int(KqFmt.q40), int(KqFmt.iq4nl), int(KqFmt.q51), int(KqFmt.q5032), int(KqFmt.q4032), int(KqFmt.iq4nl32)]
 let private MMQ_LEAF_NAMES <- ["Q8_0", "Q4_K", "IQ4_XS", "Q4_0", "IQ4_NL", "Q5_1", "Q5_0", "Q4_0 (per-32)", "IQ4_NL (per-32)"]
-//! the leaves the measured cards' windows ran slower on than the cm2 tiles: `DASLLAMA_CUDA_MMQ=2` arms them for a card's own measurement
-let private MMQ_RACE_FMTS <- [int(KqFmt.q51)]
+//! the leaves whose windows did not beat the cm2 tiles on every measured card - Q5_1 lost on both, Q5_0 won on the RTX 5060 Ti and
+//! lost on the RTX PRO 4500 - so the pick between the two forms is a card's to race, not a default's; `DASLLAMA_CUDA_MMQ=2` arms them
+let private MMQ_RACE_FMTS <- [int(KqFmt.q51), int(KqFmt.q5032)]
 
 def private crd_mmq_min(fmt : int) : bool => fmt == int(KqFmt.k4) || fmt == int(KqFmt.q51)
 
