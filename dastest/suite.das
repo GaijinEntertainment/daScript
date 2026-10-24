@@ -202,7 +202,8 @@ def test_file(file_name : string; var ctx : SuiteCtx; var file_ctx : FileCtx) : 
                 cop.rtti = true
                 access |> add_extra_module("coverage", "{get_das_root()}/daslib/coverage.das")
             }
-            let cache = (empty(ctx.moduleCacheDir) ? ""
+            let cache = (empty(ctx.moduleCacheDir)
+                    || !empty(ctx.projectPath) ? ""
                 : path_join(ctx.moduleCacheDir, base_name(module_cache_path(
                     get_full_file_name(file_name), cop))))
             let verdict = compile_file(file_name, access, unsafe(addr(mg)),

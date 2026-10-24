@@ -147,3 +147,32 @@ def test_dastest_cache_compile_environment(t : T?) {
             "mc_env_case.das", "DAS_CACHE_KEY_PROBE=2222")
     }
 }
+
+//! Fresh runners expose project-policy changes behind a previously cached file.
+[test]
+def test_dastest_cache_project_options(t : T?) {
+    let folder = test_temp_dir()
+    let fixtures = path_join(get_das_root(), "dastest/tests/_fixtures")
+    let name = "mc_project_case.das"
+    t |> success(fwrite(path_join(folder, name),
+        fread(path_join(fixtures, name))))
+    let source = fread(path_join(fixtures, "mc_project.das_project"))
+    let project = path_join(folder, "mc_project.das_project")
+    let cache = path_join(folder, "project caches")
+    var argv <- [get_host_binary(), "-dasroot", get_das_root(),
+        "-no-module-cache", path_join(get_das_root(), "dastest/dastest.das"),
+        "--", "--test", path_join(folder, name), "--compile-only",
+        "--test-project", project, "--module-cache-dir", cache, "--verbose"]
+    for (allow in [true, false]) {
+        t |> success(fwrite(project, allow ? source
+            : replace(source, "ALLOW_HEAP = true", "ALLOW_HEAP = false")))
+        var output : string
+        let code = run_and_capture(argv, output, 300.0)
+        t |> equal(code, allow ? 0 : 1, output)
+        if (!allow) {
+            t |> success(find(output,
+                "option persistent_heap is not allowed here") >= 0, output)
+        }
+    }
+    t |> success(!fexist(cache), "custom project contexts are not cached")
+}

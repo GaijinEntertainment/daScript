@@ -34,6 +34,8 @@ Running only **some** selected benchmarks (uses `vector_alloc` as a filtering pr
 - `--test-project <path.das_project>`: Project file. Will be used to compile given tests
 - `--module-cache-dir <dir>`: Keep AST caches per test file and compile
   configuration, including isolated workers. `--verbose` prints each verdict.
+  Custom test projects compile from source because their callbacks are
+  outside the cache identity.
 - `--uri-paths`: Print uri paths instead of file paths (vscode friendly)
 - `--color`: Print colored output
 - `--headless`: Passed to every test run, including each `--run` worker, so a harness that reads it opens no window
