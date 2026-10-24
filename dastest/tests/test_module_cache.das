@@ -18,11 +18,12 @@ def cache_count(folder : string) : int {
 
 def run_cached(t : T?; folder, cache, phase : string;
                markers : array<string>;
-               isolated = false; verbose = true) {
+               isolated = false; verbose = true;
+               file = "mc_key_case.das"; environment : string = "") {
     var argv <- [get_host_binary(), "-dasroot", get_das_root(),
         "-module-cache", path_join(folder, "host.bin"),
         path_join(get_das_root(), "dastest/dastest.das"), "--",
-        "--test", path_join(folder, "mc_key_case.das"),
+        "--test", path_join(folder, file),
         "--module-cache-dir", cache]
     if (verbose) argv |> push("--verbose")
     if (isolated) {
@@ -30,7 +31,9 @@ def run_cached(t : T?; folder, cache, phase : string;
             "1"])
     }
     var output : string
-    let code = run_and_capture(argv, output, 300.0)
+    var env : array<string>
+    if (!empty(environment)) env |> push(environment)
+    let code = run_and_capture(argv, "", env, output, 300.0)
     t |> equal(code, 0, "{phase}: {output}")
     for (marker in markers) {
         t |> success(find(output, marker) >= 0, "{phase}: {output}")
@@ -111,4 +114,27 @@ def test_dastest_cache_per_test_file(t : T?) {
         ["key=2222", "module cache clean:"], true)
     run_cached(t, folder, worker_cache, "isolated quiet", ["key=2222"],
         true, false)
+}
+
+//! Fresh processes expose compiled macro values reused across environments.
+[test]
+def test_dastest_cache_compile_environment(t : T?) {
+    let folder = test_temp_dir()
+    let fixtures = path_join(get_das_root(), "dastest/tests/_fixtures")
+    for (name in ["mc_env_mod.das", "mc_env_value.das", "mc_env_case.das"]) {
+        t |> success(fwrite(path_join(folder, name),
+            fread(path_join(fixtures, name))))
+    }
+    for (isolated in [false, true]) {
+        let cache = path_join(folder, isolated ? "workers" : "plain")
+        run_cached(t, folder, cache, "environment cold",
+            ["env=1111", "module cache none:"], isolated, true,
+            "mc_env_case.das", "DAS_CACHE_KEY_PROBE=1111")
+        run_cached(t, folder, cache, "environment warm",
+            ["env=1111", "module cache clean:"], isolated, true,
+            "mc_env_case.das", "DAS_CACHE_KEY_PROBE=1111")
+        run_cached(t, folder, cache, "environment changed",
+            ["env=2222", "module cache none:"], isolated, true,
+            "mc_env_case.das", "DAS_CACHE_KEY_PROBE=2222")
+    }
 }
