@@ -32,9 +32,10 @@ def fa_head_ok(hs : int64) : bool => hs == 64l || hs == 128l || hs == 256l || hs
 def fa_khr_serves(hs : int64; cap : float; gated : bool) : bool
     => fa_head_ok(hs) && !gated && (cap == 0.0 || hs == 256l)
 
-//! the cm2 flash tile serves a head of 64, 128, 256 or 512, gated at 256 alone, the softcap at an ungated 256 alone
+//! the cm2 flash tile serves a head of 64, 96, 128, 256 or 512 (96 is its alone: the KHR lane map walks a head in 64-wide
+//! halves), gated at 256 alone, the softcap at an ungated 256 alone
 def fa_cm2_serves(hs : int64; cap : float; gated : bool) : bool
-    => fa_head_ok(hs) && (!gated || hs == 256l) && (cap == 0.0 || (hs == 256l && !gated))
+    => (fa_head_ok(hs) || hs == 96l) && (!gated || hs == 256l) && (cap == 0.0 || (hs == 256l && !gated))
 
 
 // ===== add + rmsnorm =====
@@ -2188,6 +2189,28 @@ class FaCm2H128F16 : FaH128T {
     }
 }
 
+//! the flash tile at head 96 (`FaH96T`): phi-3's heads, the cm2 arm alone
+[vk_dispatch(name = "fa_cm2_h96_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
+class FaCm2H96 : FaH96T {
+    typedef OT = float
+
+    [spirv_kernel(local_size_x = 128)]
+    def run {
+        fa_body()
+    }
+}
+
+[vk_dispatch(name = "fa_cm2_h96_f16_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
+class FaCm2H96F16 : FaH96T {
+    typedef OT = float16
+    override OUT16 = true
+
+    [spirv_kernel(local_size_x = 128)]
+    def run {
+        fa_body()
+    }
+}
+
 //! the bidirectional twin: the padded route of the 72- and 80-wide tower heads (gemma3v, qwen3v, qwen25v), zero pads exact
 [vk_dispatch(name = "fa_cm2_h128_bidir_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
 class FaCm2H128Bidir : FaH128T {
@@ -2468,6 +2491,9 @@ def private fa_stamp_refuse(khr : bool; hs : int64; gated, cap, sink, f16, bidir
     if (khr && gated) {
         panic("vk flash: the KHR flash tile has no gated stamp")
     }
+    if (khr && hs == 96l) {
+        panic("vk flash: the KHR flash tile has no head-96 stamp (its lane map walks the head in 64-wide halves)")
+    }
     if (cap && hs != 256l) {
         panic("vk flash: the softcap stamps serve head size 256 alone")
     }
@@ -2477,19 +2503,19 @@ def private fa_stamp_refuse(khr : bool; hs : int64; gated, cap, sink, f16, bidir
     if (sink && hs != 64l) {   //! the gated and capped stamps sit at 256 alone (above), so this one test also keeps the sinks off them
         panic("vk flash: the sink stamps serve head size 64 alone")
     }
-    if (hs != 64l && hs != 128l && hs != 256l && hs != 512l) {
+    if (hs != 64l && hs != 96l && hs != 128l && hs != 256l && hs != 512l) {
         panic("vk flash: a stamp for a head size the tile never serves")
     }
 }
 
 //! every flash stamp's stem, four a form - cm2 f32, KHR f32, cm2 f16, KHR f16 - over the forms h64, h128, h256, h512, gated h256,
 //! capped h256, the h64 sink and the h64 and h128 bidirectional twins; `-` where a form has no such stamp
-let private FA_STAMPS = "fa_cm2_h64 fa_khr_h64 fa_cm2_h64_f16 fa_khr_h64_f16 fa_cm2_h128 fa_khr_h128 fa_cm2_h128_f16 fa_khr_h128_f16 fa_cm2_h256 fa_khr_h256 fa_cm2_h256_f16 fa_khr_h256_f16 fa_cm2_h512 fa_khr_h512 fa_cm2_h512_f16 fa_khr_h512_f16 fa_cm2_h256_g - fa_cm2_h256_g_f16 - fa_cm2_h256_cap fa_khr_h256_cap fa_cm2_h256_cap_f16 fa_khr_h256_cap_f16 fa_cm2_h64_sink fa_khr_h64_sink fa_cm2_h64_sink_f16 fa_khr_h64_sink_f16 fa_cm2_h64_bidir fa_khr_h64_bidir - - fa_cm2_h128_bidir fa_khr_h128_bidir - -"
+let private FA_STAMPS = "fa_cm2_h64 fa_khr_h64 fa_cm2_h64_f16 fa_khr_h64_f16 fa_cm2_h128 fa_khr_h128 fa_cm2_h128_f16 fa_khr_h128_f16 fa_cm2_h256 fa_khr_h256 fa_cm2_h256_f16 fa_khr_h256_f16 fa_cm2_h512 fa_khr_h512 fa_cm2_h512_f16 fa_khr_h512_f16 fa_cm2_h256_g - fa_cm2_h256_g_f16 - fa_cm2_h256_cap fa_khr_h256_cap fa_cm2_h256_cap_f16 fa_khr_h256_cap_f16 fa_cm2_h64_sink fa_khr_h64_sink fa_cm2_h64_sink_f16 fa_khr_h64_sink_f16 fa_cm2_h64_bidir fa_khr_h64_bidir - - fa_cm2_h128_bidir fa_khr_h128_bidir - - fa_cm2_h96 - fa_cm2_h96_f16 -"
 
 //! the flash stamp's ordinal in FA_STAMPS, once the refusals passed
 def private fa_stamp_key(khr : bool; hs : int64; gated, cap, sink, f16, bidir : bool) : int {
     fa_stamp_refuse(khr, hs, gated, cap, sink, f16, bidir)
-    let form = bidir ? (hs == 64l ? 7 : 8) : (sink ? 6 : (hs == 64l ? 0 : (hs == 128l ? 1 : (hs == 512l ? 3 : (gated ? 4 : (cap ? 5 : 2))))))
+    let form = bidir ? (hs == 64l ? 7 : 8) : (sink ? 6 : (hs == 64l ? 0 : (hs == 128l ? 1 : (hs == 96l ? 9 : (hs == 512l ? 3 : (gated ? 4 : (cap ? 5 : 2)))))))
     return form * 4 + (f16 ? 2 : 0) + (khr ? 1 : 0)
 }
 

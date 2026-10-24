@@ -758,6 +758,9 @@ def fa_run(t : T?; hs, window : int) {
     if (hs == 64) {
         enc_fa_cm2_h64_cls(g_cud.stream, bufs, pc, wgs)
         enc_fa_cm2_h64_f16_cls(g_cud.stream, bufs16, pc, wgs)
+    } elif (hs == 96) {
+        enc_fa_cm2_h96_cls(g_cud.stream, bufs, pc, wgs)
+        enc_fa_cm2_h96_f16_cls(g_cud.stream, bufs16, pc, wgs)
     } else {
         enc_fa_cm2_h128_cls(g_cud.stream, bufs, pc, wgs)
         enc_fa_cm2_h128_f16_cls(g_cud.stream, bufs16, pc, wgs)
@@ -1248,6 +1251,18 @@ def test_cud_tq4_da_attn(t0 : T?) {
 }
 
 //! the flash tile at head 128: the 3B class's attention, 32 keys a step
+[test]
+def test_cud_fa_h96(t0 : T?) {
+    t0 |> run("CUDA cm2 flash tile at head 96, f32 and f16 out == the CPU attention oracle, whole and under a 40-key window") <| @(t : T?) {
+        if (!ensure_fa_cm2_h96_cls() || !ensure_fa_cm2_h96_f16_cls()) {
+            t |> skip("no CUDA device with NVRTC")
+            return
+        }
+        fa_run(t, 96, 0)
+        fa_run(t, 96, 40)
+    }
+}
+
 [test]
 def test_cud_fa_h128(t0 : T?) {
     t0 |> run("CUDA cm2 flash tile at head 128, f32 and f16 out == the CPU attention oracle, whole and under a 40-key window") <| @(t : T?) {

@@ -463,6 +463,12 @@ struct coopmatWgB_f16_128x32 {}
 [arch(at="../ARCHITECTURE_COOPMAT.md#cm2-tile-markers")]
 struct coopmatWgAcc_f16_64x128 {}
 struct coopmatWgAcc_f32_64x128 {}
+// the h96 flash tile's shapes (phi-3's heads)
+struct coopmatWgA_f16_64x96 {}
+struct coopmatWgB_f16_96x32 {}
+struct coopmatWgB_f16_32x96 {}
+struct coopmatWgAcc_f16_64x96 {}
+struct coopmatWgAcc_f32_64x96 {}
 struct coopmatWgA_f16_64x256 {}
 struct coopmatWgB_f16_256x32 {}
 struct coopmatWgB_f16_32x256 {}
@@ -542,6 +548,14 @@ def public coopmatMulAdd(a : coopmatWgA_f16_64x32; b : coopmatWgB_f16_32x32; c :
 def public coopmatMulAdd(a : coopmatWgA_f16_64x32; b : coopmatWgB_f16_32x128; c : coopmatWgAcc_f32_64x128) : coopmatWgAcc_f32_64x128 =>
     c
 [unused_argument(a, b), sideeffects]
+def public coopmatMulAdd(a : coopmatWgA_f16_64x96; b : coopmatWgB_f16_96x32;
+                         c : coopmatWgAcc_f32_64x32) : coopmatWgAcc_f32_64x32 =>
+    c
+[unused_argument(a, b), sideeffects]
+def public coopmatMulAdd(a : coopmatWgA_f16_64x32; b : coopmatWgB_f16_32x96;
+                         c : coopmatWgAcc_f32_64x96) : coopmatWgAcc_f32_64x96 =>
+    c
+[unused_argument(a, b), sideeffects]
 def public coopmatMulAdd(a : coopmatWgA_f16_64x256; b : coopmatWgB_f16_256x32; c : coopmatWgAcc_f32_64x32) : coopmatWgAcc_f32_64x32 =>
     c
 [unused_argument(a, b), sideeffects]
@@ -558,6 +572,10 @@ def public coopmatMulAdd(a : coopmatWgA_f16_64x64; b : coopmatWgB_f16_64x64; c :
     c
 [unused_argument(a, b), sideeffects]
 def public coopmatMulAdd(a : coopmatWgA_f16_64x32; b : coopmatWgB_f16_32x128; c : coopmatWgAcc_f16_64x128) : coopmatWgAcc_f16_64x128 =>
+    c
+[unused_argument(a, b), sideeffects]
+def public coopmatMulAdd(a : coopmatWgA_f16_64x32; b : coopmatWgB_f16_32x96;
+                         c : coopmatWgAcc_f16_64x96) : coopmatWgAcc_f16_64x96 =>
     c
 [unused_argument(a, b), sideeffects]
 def public coopmatMulAdd(a : coopmatWgA_f16_64x32; b : coopmatWgB_f16_32x256; c : coopmatWgAcc_f16_64x256) : coopmatWgAcc_f16_64x256 =>
@@ -634,6 +652,8 @@ def public coopmatConvert(var dst : coopmatWgAcc_f32_64x32; src : coopmatWgAcc_f
 def public coopmatConvert(var dst : coopmatWgAcc_f32_64x64; src : coopmatWgAcc_f16_64x64) : void {}
 [unused_argument(dst, src), sideeffects]
 def public coopmatConvert(var dst : coopmatWgAcc_f32_64x128; src : coopmatWgAcc_f16_64x128) : void {}
+[unused_argument(dst, src), sideeffects]
+def public coopmatConvert(var dst : coopmatWgAcc_f32_64x96; src : coopmatWgAcc_f16_64x96) : void {}
 [unused_argument(dst, src), sideeffects]
 def public coopmatConvert(var dst : coopmatWgAcc_f32_64x256; src : coopmatWgAcc_f16_64x256) : void {}
 [unused_argument(dst, src), sideeffects]

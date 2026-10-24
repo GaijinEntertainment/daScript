@@ -3981,6 +3981,21 @@ class template FaH64T : FaT {
     typedef OF = coopmatWgAcc_f16_64x64
 }
 
+//! hs=96 (phi-3's heads) at Bc=32: the cm2 arm alone - the KHR lane map walks the head in 64-wide halves
+[ |> template_struct_instance]
+class template FaH96T : FaT {
+    override HS = 96u
+    override BC = 32u
+    typedef QACC = coopmatWgAcc_f32_64x96
+    typedef QA = coopmatWgA_f16_64x96
+    typedef SACC = coopmatWgAcc_f32_64x32
+    typedef PA = coopmatWgA_f16_64x32
+    typedef KB = coopmatWgB_f16_96x32
+    typedef VB = coopmatWgB_f16_32x96
+    typedef ONE = coopmatWgB_f16_32x32
+    typedef OF = coopmatWgAcc_f16_64x96
+}
+
 //! hs=128 (llama-3.2-3B-class) at Bc=32
 [ |> template_struct_instance]
 class template FaH128T : FaT {

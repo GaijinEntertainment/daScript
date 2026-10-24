@@ -2260,6 +2260,28 @@ class CuFaCm2H64F16 : FaH64T {
     }
 }
 
+//! the flash tile at head 96 (`FaH96T`): phi-3's heads, 32 keys a step
+[cuda_dispatch(name = "fa_cm2_h96_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
+class CuFaCm2H96 : FaH96T {
+    typedef OT = float
+
+    [cuda_kernel(local_size_x = 128, name = "fa_cm2_h96_cls_cuda")]
+    def run {
+        fa_body()
+    }
+}
+
+[cuda_dispatch(name = "fa_cm2_h96_f16_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
+class CuFaCm2H96F16 : FaH96T {
+    typedef OT = float16
+    override OUT16 = true
+
+    [cuda_kernel(local_size_x = 128, name = "fa_cm2_h96_f16_cls_cuda")]
+    def run {
+        fa_body()
+    }
+}
+
 //! the flash tile at head 128 (`FaH128T`): the llama 3B class and up, 32 keys a step
 [cuda_dispatch(name = "fa_cm2_h128_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
 class CuFaCm2H128 : FaH128T {

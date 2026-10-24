@@ -2189,3 +2189,10 @@ module) is independent and can land any time - it is pure structure.
     CUDA cubin cache takes), passed by the two helpers, its bytes written at quit; a blob the driver does not recognize
     starts empty. Measure first: `g_vkd_pipe_build_us` cold (the vendor cache cleared) against warm. Done = a model's
     first load on a cleared vendor cache within 10% of its warm load's pipeline build share.
+
+161. **The KHR flash tile has no head-96 stamp.** `FaH96T` (phi-3's heads) is stamped on the cm2 arm of both discrete
+    homes; the KHR arm's lane map walks a head in 64-wide halves (`HS / 64u` in `FaT`'s KHR branch: the P x V
+    fragments a subgroup owns and the `fpv` store), so a KHR-only device - no `VK_NV_cooperative_matrix2` - sends a
+    head of 96 to the chunked pair (`fa_khr_serves` keeps `fa_head_ok`, `fa_stamp_refuse` names the gap). Done = the
+    KHR branch walking the head in 32-wide quarters where 96 asks it (six fragments over four subgroups), the
+    `test_vkd_fa_khr` arms at 96 holding the oracle, and the stamp joining `FA_STAMPS` beside the cm2 pair.

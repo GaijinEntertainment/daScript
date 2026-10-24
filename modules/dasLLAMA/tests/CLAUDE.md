@@ -2090,8 +2090,12 @@ two regions on the 1B Q8_0 (the q8 two-column stamp launched) and Q4_K_M, twelve
 launched); the same skips, and where the driver declines the model at the cell's region count.
 `test_gpu_resident_cuda_qwen3.das` - stocked suite, `-jit` only: the same driver on Qwen3-0.6B Q8_0, the q/k-normed
 carrier, whose norm, rope and K/V store run as the fused pass `CuQknRopeKv` in the token command and the window chain,
-in the CUDA llama file's forced-feed form at one window and two (`cuda_forced_feed` of `_cuda_feed.das`, the two files'
-one body); the same skips. The CUDA kernel cells
+in the CUDA llama file's forced-feed form at one window and two (`cuda_forced_feed` of `_cuda_feed.das`, the CUDA
+files' one body); the same skips. `test_gpu_resident_cuda_phi3.das` - stocked suite, `-jit` only: the same driver on
+Phi-3.5-mini Q4_K_M (head 96: the window's attention on the h96 flash tile, the K-quant planes, the fused qkv and gate-up
+planes, the long-rope factors) in the same form at the two-window prompt - after the 40-token prompt the one-row steps at
+positions 41 and 44 sit 7.7 and 6.6 percent of the max logit off the CPU chain on both attention paths, past the llama
+bar, so the file holds no one-window arm; the same skips. The CUDA kernel cells
 beside them, `test_cuda_kernels.das` (model-free; a CUDA device with NVRTC, else every cell but the leak gate skips;
 the per-format cells - the kq cm2 tiles, the kq and per-32 GEMVs, the token-table gathers, the Q8_K feeds - also skip
 without dasVulkan): the q8 GEMV and its rate, the MMQ int8 GEMM against the block-scaled reference, the cm2 l tile
@@ -2099,7 +2103,7 @@ against the f16-feed oracle whole and split in two k chunks through the reduce (
 the 1B window's shapes - each rate cell's warm-up held to the oracle first, the GEMV's every row and the tile's
 activation rows 0, 255, 256 and 511 over every column, the tile's bit for bit on a fixture its f16 accumulator holds
 exactly (sixteen +-1 activations a row over the 2^-7 block scale) - the word copy (a quad-lane run and a three-word tail, the
-device block and the out block under a word sentinel), the flash tiles at heads 64 and 128 with their f16-out twins,
+device block and the out block under a word sentinel), the flash tiles at heads 64, 96 and 128 with their f16-out twins,
 whole and under a 40-key window, the fused q/k norm + rope + K/V store on the f32 and the f16 mirror stamps against the
 oracle the Vulkan cell holds it to (`qkn_rope_rows` of `_kernel_oracles.das`, the rows ahead of the layer's kept at their
 fill), the compile gate over every `[cuda_dispatch]` kernel of the home, the shutdown leak

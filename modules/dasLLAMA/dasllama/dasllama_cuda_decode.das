@@ -1067,7 +1067,7 @@ def private crd_window_attn(r : CudRdec; L : CudLayer; kmir, vmir : uint64; wseg
     let kv16 = shadow || r.kv_dt == KVDtype.f16
     let mmq = r.pf_mmq
     let f16out = !mmq && !rot   // the flash tile's f16 twin lands the cm2 feed itself
-    let fa = kv16 && (hs == 64l || hs == 128l)
+    let fa = kv16 && (hs == 64l || hs == 96l || hs == 128l)
     let convert = !mmq && !(fa && f16out)
     for (sg in wsegs) {
         let mir_base = shadow ? 0u : uint(crd_region_base(r, L, sg.region))
@@ -1081,6 +1081,10 @@ def private crd_window_attn(r : CudRdec; L : CudLayer; kmir, vmir : uint64; wseg
                 enc_fa_cm2_h64_cls(s, fbufs, pcf, fwgs)
             } elif (hs == 64l) {
                 enc_fa_cm2_h64_f16_cls(s, fbufs, pcf, fwgs)
+            } elif (hs == 96l && !f16out) {
+                enc_fa_cm2_h96_cls(s, fbufs, pcf, fwgs)
+            } elif (hs == 96l) {
+                enc_fa_cm2_h96_f16_cls(s, fbufs, pcf, fwgs)
             } elif (!f16out) {
                 enc_fa_cm2_h128_cls(s, fbufs, pcf, fwgs)
             } else {

@@ -1282,6 +1282,7 @@ def private pf_setup {
         && (!kvq8 || (ensure_kv_q8_store_b_cls() && ensure_kv_q8_shadow_cls()))
         && (!kvtq4 || (ensure_kv_tq4_store_b_cls() && ensure_kv_tq4_shadow_cls() && ensure_kv_tq4_unrot_cls()))
         && (!key_exists(fa_hs, 64l) || fa_stamp_pair_ensure(false, 64l, false, false, sinks, any_f16_feed))
+        && (!key_exists(fa_hs, 96l) || fa_stamp_pair_ensure(false, 96l, false, false, false, any_f16_feed))
         && (!key_exists(fa_hs, 128l) || fa_stamp_pair_ensure(false, 128l, false, false, false, any_f16_feed))
         && (!key_exists(fa_hs, 256l) || fa_stamp_pair_ensure(false, 256l, gated_stamp, false, false, any_f16_feed))
         && (!any_cap || fa_stamp_pair_ensure(false, 256l, false, true, false, any_f16_feed))

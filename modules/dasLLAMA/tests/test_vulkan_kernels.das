@@ -3169,7 +3169,9 @@ def private fa_arm_ensure(khr : bool) : bool {
         for (hs in fixed_array(64l, 128l, 256l, 512l)) {
             if (!fa_stamp_pair_ensure(khr, hs, false, false, false, true)) return false
         }
-        if (!fa_stamp_pair_ensure(khr, 64l, false, false, true, true)) return false   //! the sink stamps (gpt-oss)
+        //! the head-96 tile (the cm2 arm alone), then the sink stamps (gpt-oss)
+        let h96_ok = khr || fa_stamp_pair_ensure(false, 96l, false, false, false, true)
+        if (!h96_ok || !fa_stamp_pair_ensure(khr, 64l, false, false, true, true)) return false
     }
     return true
 }
@@ -3203,7 +3205,7 @@ def private fa_flat_read(var cp; khr : bool; hs : int; sink : bool; var sfa; pcf
     return <- cp |> plane_run(py)
 }
 
-def private fa_tile_run(t : T?; khr : bool) {
+def private fa_tile_run(t : T?; khr : bool) {   // nolint:STYLE037 — one arm table over both flash arms; the head-96 skip is its one branch past the limit
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let tag = khr ? "fa_khr" : "fa_cm2"
         let nheads = 4
@@ -3218,8 +3220,10 @@ def private fa_tile_run(t : T?; khr : bool) {
                 (hs = 256, window = 0, sink = false, lead = 0, ring = 0), (hs = 512, window = 0, sink = false, lead = 0, ring = 0),
                 (hs = 128, window = 40, sink = false, lead = 0, ring = 0), (hs = 64, window = 0, sink = true, lead = 0, ring = 0),
                 (hs = 64, window = 40, sink = true, lead = 0, ring = 0), (hs = 64, window = 0, sink = false, lead = 8, ring = 0),
-                (hs = 128, window = 40, sink = false, lead = 0, ring = 128), (hs = 256, window = 40, sink = false, lead = 0, ring = 128))) {
+                (hs = 128, window = 40, sink = false, lead = 0, ring = 128), (hs = 256, window = 40, sink = false, lead = 0, ring = 128),
+                (hs = 96, window = 0, sink = false, lead = 0, ring = 0), (hs = 96, window = 40, sink = false, lead = 0, ring = 0))) {
             let hs = arm.hs
+            continue if (khr && hs == 96)   //! the head-96 tile is a cm2 stamp alone: the KHR lane map walks the head in 64-wide halves
             let window = arm.window   //! a sliding layer's arm: the queries attend the `window` positions up to their own
             let sink = arm.sink
             let lead = arm.lead
