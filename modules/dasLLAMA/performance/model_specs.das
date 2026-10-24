@@ -907,6 +907,11 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
         ModelSpec(file = "Llama-3.2-1B-Instruct-NVFP4-local.gguf", display = "Llama-3.2-1B-nv4", quant_label = "nv4",
             recipe = "llama-quantize --allow-requantize Llama-3.2-1B-Instruct-Q8_0.gguf Llama-3.2-1B-Instruct-NVFP4-local.gguf NVFP4",
             parity <- ev_llama_count([kq_native = true])),
+        // the 8B pair of the same mints: the FP4 leaf's larger dense carrier and its equal-bpw int8 twin
+        ModelSpec(file = "Meta-Llama-3.1-8B-Instruct-NVFP4-local.gguf", display = "Llama-3.1-8B-nv4", quant_label = "nv4",
+            recipe = "llama-quantize --allow-requantize Meta-Llama-3.1-8B-Instruct-Q8_0.gguf Meta-Llama-3.1-8B-Instruct-NVFP4-local.gguf NVFP4"),
+        ModelSpec(file = "Meta-Llama-3.1-8B-Instruct-Q4_0-local.gguf", display = "Llama-3.1-8B-q40", quant_label = "q4_0",
+            recipe = "llama-quantize --allow-requantize Meta-Llama-3.1-8B-Instruct-Q8_0.gguf Meta-Llama-3.1-8B-Instruct-Q4_0-local.gguf Q4_0"),
         // the dense q51 carrier: every dense plane on the per-32 Q5_1 planes
         ModelSpec(file = "Llama-3.2-1B-Instruct-Q5_1-local.gguf",
             recipe = "llama-quantize --allow-requantize Llama-3.2-1B-Instruct-Q8_0.gguf Llama-3.2-1B-Instruct-Q5_1-local.gguf Q5_1"),
