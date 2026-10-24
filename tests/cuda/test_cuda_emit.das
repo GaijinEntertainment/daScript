@@ -282,6 +282,15 @@ def test_cuda_intrinsics(t : T?) {
         has(t, intrin_cuda, "asm volatile(\"membar.cta;\" ::  : \"memory\");", "inline PTX, no operands")
         has(t, intrin_cuda, "unsigned r; asm volatile(\"add.u32 %0, %1, %2;\" : \"=r\"(r) : \"r\"(a0), \"r\"(a1) : \"memory\"); return r;", "inline PTX with a result and two operands")
     }
+    t |> run("the FP4 tensor rung: e2m1 fragments through ldmatrix, the block-scaled mma, the conversions, the arch marker") <| @(t : T?) {
+        has(t, intrin_fp4_cuda, "#define __DAS_ARCH_A__ 1", "the arch-specific target's marker")
+        has(t, intrin_fp4_cuda, "__das_ldm___das_cmA_e2m1(fa, (sa + (", "the e2m1 A fragment off the lane's row address")
+        has(t, intrin_fp4_cuda, "mma.sync.aligned.kind::mxf4nvf4.block_scale.scale_vec::4X.m16n8k64.row.col.f32.e2m1.e2m1.f32.ue4m3 \{%0,%1,%2,%3\}, \{%4,%5,%6,%7\}, \{%8,%9\}, \{%0,%1,%2,%3\}, %10, \{0,0\}, %11, \{0,0\};", "the block-scaled FP4 mma")
+        has(t, intrin_fp4_cuda, "\"+f\"(f.r[4]), \"+f\"(f.r[5]), \"+f\"(f.r[6]), \"+f\"(f.r[7]) : \"r\"(a.r[0]), \"r\"(a.r[1]), \"r\"(a.r[2]), \"r\"(a.r[3]), \"r\"(b.r[2]), \"r\"(b.r[3]), \"r\"(sa), \"r\"(sb1)", "the second n-half under its own B scale word")
+        has(t, intrin_fp4_cuda, "f.r[k] *= c[((k >> 2) << 1) | (k & 1)];", "the column scale's element map")
+        has(t, intrin_fp4_cuda, "cvt.rn.satfinite.e2m1x2.f32 t, %1, %2; cvt.u16.u8 %0, t; \}\" : \"=h\"(d) : \"f\"(hi), \"f\"(lo)", "the e2m1 pair conversion through a byte register, the low nibble from the first argument")
+        has(t, intrin_fp4_cuda, "cvt.rn.satfinite.e4m3x2.f32 %0, %1, %1;\" : \"=h\"(d) : \"f\"(p)", "the UE4M3 conversion off the low byte, no immediate operand")
+    }
 }
 
 [test]

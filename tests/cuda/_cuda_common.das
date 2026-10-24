@@ -1054,6 +1054,47 @@ class Intrin {
     }
 }
 
+//! the FP4 tensor rung over one warp: a 16x64 e2m1 A tile and a [n][k] 16x64 e2m1 B tile through cp.async and ldmatrix, the
+//! block-scaled product under a UE4M3 scale word a row and a column (the k16 strips' four codes), and the two conversions
+//! over a sweep the CPU bodies answer
+class IntrinFp4 {
+    @ssbo @binding = 0 a4 : array<uint4>      //! A 16x64 e2m1 row-major: row r at uint4 2r, 2r + 1, nibble k of the row's 32 bytes element k
+    @ssbo @binding = 1 b4 : array<uint4>      //! B as [n][k]: column n at uint4 2n, 2n + 1
+    @ssbo @binding = 2 saw : array<uint>      //! a row's four UE4M3 scale codes, byte i the k16 strip i
+    @ssbo @binding = 3 sbw : array<uint>      //! a column's
+    @ssbo @binding = 4 o : array<float>       //! the 16x16 product
+    @ssbo @binding = 5 xin : array<float>     //! 128 e2m1 inputs as 64 pairs, 64 UE4M3 inputs, then the product's sixteen column factors
+    @ssbo @binding = 6 cv : array<uint>       //! 64 e2m1 pair bytes, then 64 UE4M3 codes
+    @workgroup sa : uint4[32]
+    @workgroup sb : uint4[32]
+
+    [cuda_kernel(name="intrin_fp4_cuda", local_size_x = 32), marker(no_coverage)]
+    def intrin_fp4 {
+        let lane = gl_SubgroupInvocationID
+        cp_async_16(unsafe(addr(sa[lane])), unsafe(addr(a4[lane])))
+        cp_async_16(unsafe(addr(sb[lane])), unsafe(addr(b4[lane])))
+        cp_async_commit()
+        cp_async_wait(0)
+        barrier()
+        let mt = lane >> 3u
+        let r = lane & 7u
+        var fa : coopmatA_e2m1_16x64
+        var fb : coopmatB_e2m1_64x16
+        ldmatrix(fa, unsafe(addr(sa[(r + 8u * (mt & 1u)) * 2u + (mt >> 1u)])))   // (rows lo, k lo), (rows hi, k lo), (rows lo, k hi), (rows hi, k hi)
+        ldmatrix(fb, unsafe(addr(sb[(r + 8u * (mt >> 1u)) * 2u + (mt & 1u)])))   // (n lo, k lo), (n lo, k hi), (n hi, k lo), (n hi, k hi)
+        let g = lane >> 2u
+        var f : coopmatAcc_f32_16x16
+        mma_block_scaled(f, fa, fb, saw[g + 8u * (lane & 1u)], sbw[g], sbw[8u + g])
+        let t = lane & 3u
+        mma_scale_cols(f, float4(xin[192u + 2u * t], xin[193u + 2u * t], xin[200u + 2u * t], xin[201u + 2u * t]))   // the sixteen column factors after the sweep
+        coopmatStore(f, o, 0, 16, 0)
+        cv[lane] = cvt_e2m1x2(xin[2u * lane], xin[2u * lane + 1u])
+        cv[32u + lane] = cvt_e2m1x2(xin[64u + 2u * lane], xin[64u + 2u * lane + 1u])
+        cv[64u + lane] = cvt_ue4m3(xin[128u + lane])
+        cv[96u + lane] = cvt_ue4m3(xin[160u + lane])
+    }
+}
+
 //! the float exchange the kernel vocabulary does not declare: the emitter lowers every atomic by name
 def private atomicExchange(var mem : float&; value : float) : float {
     let old = mem
@@ -1200,6 +1241,12 @@ def public declared_cuda_census : table<string> {   // nolint:STYLE038 - one fla
         "call.ldmatrix.A.s8",
         "call.ldmatrix.B.s8",
         "call.mma_scale_acc",
+        "call.ldmatrix.A.e2m1",
+        "call.ldmatrix.B.e2m1",
+        "call.mma_block_scaled",
+        "call.mma_scale_cols",
+        "call.cvt_e2m1x2",
+        "call.cvt_ue4m3",
         "expr.addr.global",
         "expr.addr.shared",
         "stmt.call_intrinsic",
@@ -1476,8 +1523,8 @@ def public all_cuda_censuses : array<string> {
         precise_cuda_census, vecarith_cuda_census, control_cuda_census, mathcalls_cuda_census, reduce_cuda_census, halfarith_cuda_census,
         userfns_cuda_census, atomics_cuda_census, consttab_cuda_census, lattice_cuda_census, ptrs_cuda_census,
         alias_cuda_census, blocks_cuda_census, packs_cuda_census, coop_cuda_census, cm2_cuda_census, cm2w8_cuda_census,
-        cm2dec_cuda_census, cm2deck_cuda_census, cm2raw_cuda_census, cm2i8_cuda_census, intrin_cuda_census, diverge_cuda_census,
-        pins_cuda_census]
+        cm2dec_cuda_census, cm2deck_cuda_census, cm2raw_cuda_census, cm2i8_cuda_census, intrin_cuda_census, intrin_fp4_cuda_census,
+        diverge_cuda_census, pins_cuda_census]
 }
 
 def public all_cuda_texts : array<tuple<name : string; text : string; entry : string>> {
@@ -1508,6 +1555,7 @@ def public all_cuda_texts : array<tuple<name : string; text : string; entry : st
         (name = "cm2raw", text = cm2raw_cuda, entry = cm2raw_cuda_entry),
         (name = "cm2i8", text = cm2i8_cuda, entry = cm2i8_cuda_entry),
         (name = "intrin", text = intrin_cuda, entry = intrin_cuda_entry),
+        (name = "intrin_fp4", text = intrin_fp4_cuda, entry = intrin_fp4_cuda_entry),
         (name = "diverge", text = diverge_cuda, entry = diverge_cuda_entry),
         (name = "pins", text = pins_cuda, entry = pins_cuda_entry)]
 }
