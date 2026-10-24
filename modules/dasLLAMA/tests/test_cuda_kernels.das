@@ -1307,6 +1307,100 @@ def private rate_rows_check(t : T?; y : uint64; wqh, wsh, xfh : array<uint>; row
 }
 
 //! the cm2 l tile at a llama-1B prefill window's shapes (512 rows by the projection and the FFN widths), event-timed
+//! a mirror plane's `n` elements as floats: the halves unpacked under `f16`
+def private cud_mirror_floats(buf : uint64; n : int; f16 : bool) : array<float> {
+    if (f16) {
+        var hk <- buf_download(buf, n, type<uint16>)
+        var out <- [for (h in hk); f16_to_f32(uint(h))]
+        delete hk
+        return <- out
+    }
+    return <- buf_download(buf, n, type<float>)
+}
+
+//! the fused q/k norm, rope and K/V store on this home's stamp (`qkn_rope_cls`, or under `f16` its half-mirror twin) on one
+//! row, a head a workgroup, against the oracle both homes' cells hold it to: the four q heads normed and roped in place, the
+//! two k heads normed, roped and stored at mirror row `krow`, each k head's workgroup copying its raw V row
+def private cud_qkn_rope_arm(t : T?; f16 : bool) {
+    let nh = 4
+    let nkvh = 2
+    let hs = 64
+    let qd = nh * hs
+    let kvd = nkvh * hs
+    let krow = 192
+    let eps = 0.00001
+    let mirn = krow + nkvh * hs
+    let name = f16 ? "qkn_rope_f16" : "qkn_rope_kv"
+    var q0h <- row_fill(qd, 31, 0, 0.05, 1.6, 67)
+    var kvh <- row_fill(qd + 2 * kvd, 23, 0, 0.04, 1.5, 71)
+    var csh <- row_fill(hs, 13, 0, 0.045, 0.9, 41)
+    var wnh <- [for (i in range(2 * hs)); 0.75 + float(i % 11) * 0.05]
+    let bh : array<float>
+    var pc = GkQknRopeArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs), half = uint(hs / 2), neox = 1u, nh = uint(nh),
+        layerbase = uint(krow), qwoff = 0u, kwoff = uint(hs), eps = eps, qstride = uint(hs), cosrow = uint(hs))
+    var s = g_cud.stream
+    var nanfill <- [for (_i in range(mirn / 2)); HALF_NAN_PAIR]
+    var tok : array<TokMeta>
+    tok |> resize(1)   // the mirror row is layerbase alone: a zero token block
+    let pq = buf_upload(q0h, s)
+    let pkv = buf_upload(kvh, s)
+    let pkm = f16 ? buf_upload(nanfill, s) : buf_fill(mirn, Y_SENTINEL, s)
+    let pvm = f16 ? buf_upload(nanfill, s) : buf_fill(mirn, Y_SENTINEL, s)
+    let pcs = buf_upload(csh, s)
+    let pwn = buf_upload(wnh, s)
+    let ptok = buf_upload(tok, s)
+    var bufs = fixed_array(pq, pkv, pkm, pvm, pcs, pwn, ptok, pcs, pkv)
+    if (f16) {
+        enc_qkn_rope_f16_cls(s, bufs, pc, int64(nh + nkvh))
+    } else {
+        enc_qkn_rope_cls(s, bufs, pc, int64(nh + nkvh))
+    }
+    t |> success(cud_sync(), "{name}: the launch completes ({cuda_last_error()})")
+    var q_cls <- buf_download(pq, qd, type<float>)
+    var mk <- cud_mirror_floats(pkm, mirn, f16)
+    var mv <- cud_mirror_floats(pvm, mirn, f16)
+    cuda_mem_free(fixed_array(pq, pkv, pkm, pvm, pcs, pwn, ptok))   //! the bias and V-source bindings alias the cos and projection planes: each block freed once
+    var ref <- qkn_rope_rows(q0h, kvh, bh, wnh, csh, 0, nh, nkvh, hs, krow, mirn, eps) $(x : float) => f16 ? f16_to_f32(f32_to_f16(x)) : x
+    check_rows(t, "{name}, q", q_cls, ref.q, BAR_APPROX_CTRL, qd, hs)
+    var mk_rows <- [for (i in range(krow, mirn)); mk[i]]
+    var mv_rows <- [for (i in range(krow, mirn)); mv[i]]
+    var rk_rows <- [for (i in range(krow, mirn)); ref.mk[i]]
+    var rv_rows <- [for (i in range(krow, mirn)); ref.mv[i]]
+    check_rows(t, "{name}, the K mirror rows", mk_rows, rk_rows, BAR_APPROX_CTRL, hs)
+    check_rows(t, "{name}, the V mirror rows", mv_rows, rv_rows, BAR_APPROX_CTRL, hs)
+    var untouched = 0
+    for (i in range(krow)) {
+        untouched += (f16 ? (is_nan(mk[i]) && is_nan(mv[i])) : (mk[i] == Y_SENTINEL && mv[i] == Y_SENTINEL)) ? 1 : 0
+    }
+    t |> equal(untouched, krow, "{name}: the mirror rows ahead of the layer's keep their fill")
+    delete mk_rows
+    delete mv_rows
+    delete rk_rows
+    delete rv_rows
+    delete ref
+    delete q_cls
+    delete mk
+    delete mv
+    delete nanfill
+    delete tok
+    delete q0h
+    delete kvh
+    delete csh
+    delete wnh
+}
+
+[test]
+def test_cud_qkn_rope(t0 : T?) {
+    t0 |> run("CUDA fused q/k norm + rope + K/V store == the CPU oracle, the f32 and the f16 mirror stamps") <| @(t : T?) {
+        if (!ensure_qkn_rope_cls() || !ensure_qkn_rope_f16_cls()) {
+            t |> skip("no CUDA device with NVRTC")
+            return
+        }
+        cud_qkn_rope_arm(t, false)
+        cud_qkn_rope_arm(t, true)
+    }
+}
+
 [test]
 def test_cud_q8_cm2l_rate(t0 : T?) {
     t0 |> run("CUDA q8 cm2 l-tile at pp512 shapes: a rate, logged") <| @(t : T?) {

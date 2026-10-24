@@ -24,8 +24,8 @@ require math
 // replayed a token (the per-step inputs ride pinned host buffers a words-copy kernel reads), the prefill as the window
 // chain over the f16-fed cm2 tiles (the Vulkan home's window, a window of the engine's prompt rows at a time) or the
 // home's own int8 MMQ GEMM where every Q8_0 shape fits its tile and DASLLAMA_CUDA_MMQ asks it. What the
-// slice declines, by name, before a byte uploads: a recurrent or routed layer, a NextN head, a gated or q/k-normed or
-// biased attention, a plane format outside the arena set. The mirror holds a region a stream; the token step's chain runs
+// slice declines, by name, before a byte uploads: a recurrent or routed layer, a NextN head, a gated or biased
+// attention, a plane format outside the arena set. The mirror holds a region a stream; the token step's chain runs
 // one row or the N-row command's rows, captured as a graph a row count and mode; the window chain holds one session's
 // rows or several sessions' chunks as segments, each into its own region.
 
@@ -142,6 +142,8 @@ struct CudRdec {
     ready : bool
     n_layers, dim, qd, kv_dim, n_heads, hidden, vocab : int64
     neox : bool
+    qk_norm : bool       //! the per-head q/k norm rides the rope pass (`CuQknRopeKv`), its weight rows in the norms plane past the final norm
+    head_size : int64    //! the widest head class: the q/k norm rows' stride in the norms plane
     eps, scale : float
     kv_dt : KVDtype
     unit_bytes : int64   //! a mirror unit's bytes: the element's under a scalar codec
@@ -299,7 +301,6 @@ def cud_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidd
     if (n_attn != n_layers) return cud_decline("{n_layers - n_attn} layers without attention")
     if (head) return cud_decline("a NextN draft head")
     if (carry) return cud_decline("the post-norm carry")
-    if (qk_norm) return cud_decline("the q/k norm")
     if (q_gated) return cud_decline("a gated query")
     if (regions < 1l) return cud_decline("{regions} mirror regions")
     if (dim > RDEC_AR_MAX_DIM || head_size > 512l || kv_dim > RDEC_AR_MAX_DIM) return cud_decline("dim {dim}, kv_dim {kv_dim} or head_size {head_size} past the row stashes")
@@ -308,7 +309,7 @@ def cud_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidd
     if (!empty(refused)) return cud_decline("{length(refused)} kernels did not compile ({refused[0]} first)")
     crd_drop()
     g_crd = new CudRdec(n_layers = n_layers, dim = dim, qd = qd, kv_dim = kv_dim, n_heads = n_heads, hidden = hidden, vocab = vocab,
-        neox = neox, eps = eps, scale = scale, kv_dt = dt, regions = regions, cos_elems = cos_elems)
+        neox = neox, qk_norm = qk_norm, head_size = head_size, eps = eps, scale = scale, kv_dt = dt, regions = regions, cos_elems = cos_elems)
     var r & = unsafe(*g_crd)
     r.unit_bytes = kv_unit_bytes(dt)
     r.mir_units = mir_units + kv_row_units(dt, RDEC_MIR_SLACK)
@@ -357,7 +358,7 @@ def cud_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidd
     r.pick_part_id = dev_zeroed(4l * int64(CLS_ARGMAX_CHUNKS) * nb)
     r.tok = dev_zeroed(int64(CRD_IN_HDR_WORDS) * 4l)   // the in block's header as the kernels read it: the rows' TokMeta blocks, then the ids the gather reads
     r.dummy = dev_zeroed(256l)
-    r.ar_scal_off = rdec_norms_len(n_layers, dim, 0l, false)
+    r.ar_scal_off = rdec_norms_len(n_layers, dim, qk_norm ? head_size : 0l, false)
     r.norms_bytes = (r.ar_scal_off + 2l) * 4l
     r.norms = dev_zeroed(r.norms_bytes)
     let slab_bytes = regions * r.mir_units * r.unit_bytes
@@ -575,23 +576,47 @@ def private crd_ffn(r : CudRdec; var s : void?; l : int64; L : CudLayer; nlfin :
     }
 }
 
+//! the fused q/k norm, rope and K/V store pass's args for layer `l`: the q heads then the k heads a workgroup each (`rowwg`), the
+//! norm rows past the final norm at the widest head's stride, the bias rows absent (the slice declines a biased attention)
+def private crd_qkn_rope_args(r : CudRdec; l : int64; L : CudLayer; layerbase, nkh, kvrow, qrow, ring : int64) : GkQknRopeArgs {
+    let qkbase = rdec_norms_qk_base(r.n_layers, r.dim)   // nolint:LINT021 — the norm row offsets multiply 64-bit before the arg-field narrow
+    return GkQknRopeArgs(qd = uint(L.qd), kvd = uint(L.kvd), hs = uint(L.hs), half = uint(L.rot / 2l), neox = r.neox ? 1u : 0u,
+        nh = uint(r.n_heads), layerbase = uint(layerbase),
+        qwoff = uint(qkbase + l * 2l * r.head_size), kwoff = uint(qkbase + (l * 2l + 1l) * r.head_size),
+        eps = r.eps, qstride = uint(L.hs), boff = 0u, hasb = 0u, cbase = uint(L.cbase), vfk = L.vfk ? 1u : 0u, vnorm = 0u,
+        rowwg = uint(r.n_heads + nkh), kvrow = uint(kvrow), qrow = uint(qrow), cosrow = uint(r.cos_elems), ring = uint(ring))
+}
+
 //! the rows' rope on q and k, and k and v into the mirror at each row's position and region (the row's token block); under a
 //! block codec the rope stages the floats (row i of the staged planes, addressed through the staged token blocks) and the
-//! codec's store quantizes them into the mirror
-def private crd_token_kv(r : CudRdec; var s : void?; L : CudLayer; kmir, vmir : uint64; kvrow, nrows : int64) {
+//! codec's store quantizes them into the mirror; a q/k-normed model's rows take the fused pass instead
+def private crd_token_kv(r : CudRdec; var s : void?; l : int64; L : CudLayer; kmir, vmir : uint64; kvrow, nrows : int64) {
     let qd = L.qd
     let kvd = L.kvd
     let hs = L.hs
     let kvq = kv_block_codec(r.kv_dt)
-    let qpairs = qd / 2l
-    let npairs = qpairs + kvd / 2l
-    var pcr = gk_rope_kv_args(qd, kvd, hs, qpairs, npairs, r.neox, false, hs, 0l, L.cbase, nrows, kvrow, kvrow, r.cos_elems, kvq ? 0l : L.mir_base, L.ring)
-    let rwgs = (npairs * nrows + int64(CUD_WG_X) - 1l) / int64(CUD_WG_X)
-    var rbufs = fixed_array(r.kv, r.kv, r.kv, kvq ? r.kst : kmir, kvq ? r.vst : vmir, r.dummy, r.cos, r.cos, kvq ? r.stage_tok : r.tok)
-    if (r.kv_dt == KVDtype.f16) {
-        enc_rope_kv_f16_cls(s, rbufs, pcr, rwgs)
+    if (r.qk_norm) {
+        //! the fused pass, a head a workgroup over the rows: the q heads, then the k heads (each storing its V row); the norm rows
+        //! sit past the final norm at the widest head's stride, as the Vulkan home's token command reads them
+        let nkh = L.kv_shared ? 0l : kvd / hs
+        var pcf = crd_qkn_rope_args(r, l, L, kvq ? 0l : L.mir_base, nkh, kvrow, kvrow, kvq ? 0l : L.ring)
+        var qbufs = fixed_array(r.kv, r.kv, kvq ? r.kst : kmir, kvq ? r.vst : vmir, r.cos, r.norms, kvq ? r.stage_tok : r.tok, r.dummy, r.kv)
+        if (r.kv_dt == KVDtype.f16) {
+            enc_qkn_rope_f16_cls(s, qbufs, pcf, (r.n_heads + nkh) * nrows)
+        } else {
+            enc_qkn_rope_cls(s, qbufs, pcf, (r.n_heads + nkh) * nrows)
+        }
     } else {
-        enc_rope_kv_cls(s, rbufs, pcr, rwgs)
+        let qpairs = qd / 2l
+        let npairs = qpairs + kvd / 2l
+        var pcr = gk_rope_kv_args(qd, kvd, hs, qpairs, npairs, r.neox, false, hs, 0l, L.cbase, nrows, kvrow, kvrow, r.cos_elems, kvq ? 0l : L.mir_base, L.ring)
+        let rwgs = (npairs * nrows + int64(CUD_WG_X) - 1l) / int64(CUD_WG_X)
+        var rbufs = fixed_array(r.kv, r.kv, r.kv, kvq ? r.kst : kmir, kvq ? r.vst : vmir, r.dummy, r.cos, r.cos, kvq ? r.stage_tok : r.tok)
+        if (r.kv_dt == KVDtype.f16) {
+            enc_rope_kv_f16_cls(s, rbufs, pcr, rwgs)
+        } else {
+            enc_rope_kv_cls(s, rbufs, pcr, rwgs)
+        }
     }
     if (r.kv_dt == KVDtype.tq4) {
         let nkh = kvd / hs
@@ -689,7 +714,7 @@ def private crd_chain(var r : CudRdec; nrows : int64; logits_on, gathered, unspl
         }
         let kmir = r.k_slabs[L.mir_slab]
         let vmir = r.v_slabs[L.mir_slab]
-        crd_token_kv(r, s, L, kmir, vmir, kvrow, nrows)
+        crd_token_kv(r, s, l, L, kmir, vmir, kvrow, nrows)
         let rqk = crd_token_attn(r, s, L, kmir, vmir, kvrow, nrows, unsplit)
         if (rqk == DA_RQ_NONE && kq_sb(L.fo)) {   // no fold (a head off the superblock, or tq4): the separate Q8_K requant
             var pcq = RqArgs(inbase = 0u, nblk = uint(qd * nrows / kq_unit(true)), lo = 0.0, hi = 0.0)
@@ -1088,13 +1113,35 @@ def private crd_window_attn(r : CudRdec; L : CudLayer; kmir, vmir : uint64; wseg
 }
 
 //! a block codec holds one segment: stage from row 0, the store quantizes, the shadow pass dequantizes what the tiles read
-def private crd_window_kv(r : CudRdec; L : CudLayer; kmir, vmir : uint64; wsegs : array<RdecPfSeg>; wlen, voff, kstride : int64) {
+def private crd_window_kv(r : CudRdec; l : int64; L : CudLayer; kmir, vmir : uint64; wsegs : array<RdecPfSeg>; wlen, voff, kstride : int64) {
     var s = g_cud.stream
     let qd = L.qd
     let kvd = L.kvd
     let hs = uint(L.hs)
     let kvq = kv_block_codec(r.kv_dt)
     verify(!kvq || long_length(wsegs) == 1l, "cud prefill: a block codec's window holds one segment")
+    if (r.qk_norm) {
+        //! the fused pass's window form over each segment: row r at position pos0 + r of its region (a block codec stages from row 0),
+        //! its k row at the projection row's start and its v row `voff` past it, the q rows `qd` apart
+        let nkh = L.kv_shared ? 0l : kvd / L.hs
+        var qbufs = fixed_array(r.pf_q, r.pf_kv, kvq ? r.pf_kst : kmir, kvq ? r.pf_vst : vmir, r.pf_cos, r.norms, r.tok, r.dummy, r.pf_kv)
+        for (sg in wsegs) {
+            var pcf = crd_qkn_rope_args(r, l, L, kvq ? 0l : crd_region_base(r, L, sg.region), nkh, kstride, qd, kvq ? 0l : L.ring)
+            pcf.win = 1u
+            pcf.pos0 = uint(kvq ? sg.row0 : sg.pos0)
+            pcf.row0 = uint(sg.row0)
+            pcf.kbase = 0u
+            pcf.vbase = uint(voff)
+            if (r.kv_dt == KVDtype.f16) {
+                enc_qkn_rope_f16_cls(s, qbufs, pcf, (r.n_heads + nkh) * sg.npos)
+            } else {
+                enc_qkn_rope_cls(s, qbufs, pcf, (r.n_heads + nkh) * sg.npos)
+            }
+        }
+        return if (!kvq)
+        crd_window_kv_codec(r, L, kmir, vmir, wsegs, wlen)
+        return
+    }
     let pairs = qd / 2l + kvd / 2l
     var rbufs = fixed_array(r.pf_q, r.pf_kv, kvq ? r.pf_kst : kmir, kvq ? r.pf_vst : vmir, r.pf_cos, r.dummy)
     for (sg in wsegs) {
@@ -1110,13 +1157,23 @@ def private crd_window_kv(r : CudRdec; L : CudLayer; kmir, vmir : uint64; wsegs 
         }
     }
     return if (!kvq)
+    crd_window_kv_codec(r, L, kmir, vmir, wsegs, wlen)
+}
+
+//! a block codec's window after the rope staged the floats: the codec's store quantizes them into the mirror, the shadow pass
+//! dequantizes the rows the window's attention tiles read
+def private crd_window_kv_codec(r : CudRdec; L : CudLayer; kmir, vmir : uint64; wsegs : array<RdecPfSeg>; wlen : int64) {
+    var s = g_cud.stream
+    let qd = uint(L.qd)
+    let kvd = L.kvd
+    let hs = uint(L.hs)
     let pos0w = wsegs[0].pos0
     let mir_base = uint(crd_region_base(r, L, wsegs[0].region))
     let tq4 = r.kv_dt == KVDtype.tq4
     if (tq4) {
         let nkh = kvd / L.hs
         var pct = KvTqStoreArgs(kvd = uint(kvd), hs = hs, layerbase = mir_base, pos0 = uint(pos0w), nqh = uint(r.n_heads), nkh = uint(nkh),
-            qrow = uint(qd), qstride = hs, inv_sqrt_hs = 1.0 / sqrt(float(hs)), ring = uint(L.ring))
+            qrow = qd, qstride = hs, inv_sqrt_hs = 1.0 / sqrt(float(hs)), ring = uint(L.ring))
         enc_kv_tq4_store_b_cls(s, fixed_array(r.pf_q, r.pf_kst, r.pf_vst, kmir, vmir, r.tq4_signs), pct, wlen * (r.n_heads + 2l * nkh))
     } else {
         var pcs = KvQStoreArgs(kvd = uint(kvd), rows = uint(wlen), layerbase = mir_base, pos0 = uint(pos0w), ring = uint(L.ring))
@@ -1166,7 +1223,7 @@ def private crd_window(var r : CudRdec; w0, wlen : int64; segs, wsegs : array<Rd
             kstride = kvd
         }
         let kvq = kv_block_codec(r.kv_dt)
-        crd_window_kv(r, L, kmir, vmir, wsegs, wlen, voff, kstride)
+        crd_window_kv(r, l, L, kmir, vmir, wsegs, wlen, voff, kstride)
         crd_window_attn(r, L, kvq ? r.ksh : kmir, kvq ? r.vsh : vmir, wsegs, wlen, kvq, r.kv_dt == KVDtype.tq4)
         crd_site(r, L.sch[SCH_O], L.fo, L.bo, r.pf_af, r.pf_aq, r.pf_as, r.pf_xb2, qd, dim, wlen)
         var pc8 = GkAddRmsArgs(dim = uint(dim), add_on = 1u, woff = uint(norm_off(l, RDEC_NORM_FFN)), eps = r.eps, ascale = 1.0,

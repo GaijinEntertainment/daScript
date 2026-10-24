@@ -11,10 +11,9 @@ require dasllama/dasllama_math
 require dasllama/dasllama_gpu_tier
 require dasllama/dasllama_env
 require dasllama/dasllama_gpu_resident
-require dasllama/dasllama_cuda_decode
-require dasllama/dasllama_gpu_math
 require _model_tier
 require _resident_feed
+require _cuda_feed
 
 // The CUDA home's whole-model driver on Llama-3.2-1B Q8_0 (`DASLLAMA_GPU=1 DASLLAMA_CUDA=1`): the dense slice - one
 // arena of Q8_0 planes, the f16 mirror, the token step as a captured graph, the prefill as the window chain over the
@@ -44,89 +43,54 @@ let private FILE_1B_IQ4XS = "Llama-3.2-1B-Instruct-IQ4_XS.gguf"      //! the iq4
 let private FILE_1B_IQ4NL = "Llama-3.2-1B-Instruct-IQ4_NL-local.gguf"   //! the iq4nl superblock planes (on the 256 lattice), the same decode
 let private FILE_3B = "Llama-3.2-3B-Instruct-Q8_0.gguf"   //! head size 128: the window's attention on the h128 flash tile
 
-//! `file` through the CUDA chain and the CPU chain over an `n`-token prompt and eight steps
-def private cuda_forced_feed(t : T?; file : string; n, windows : int64) {
-    let path = cuda_model_path(t, file)
-    if (empty(path) || !assert_pf_window(t)) return
-    var tr <- load_resident(path, 1l)
-    t |> equal(tr.arch, "llama", "the file is a llama-family model")
-    t |> success(moe_gpu_resident_active(), "the whole-model driver armed on the model (the load log names any decline)")
-    let before = cud_rdec_stats()
-    with_dasllama_jobque_() {
-        forced_feed_over(t, tr, "{file} cuda ", n, 8l, LOGIT_BAR_REL) $ {
-            var passes <- gpu_cpu_passes_()
-            t |> equal(length(passes), 0, "the device served every call of the resident run: {passes}")
-            delete passes
-            let st = cud_rdec_stats()
-            t |> success(st.tokens >= n + 8l, "the CUDA driver served every position of the prompt and every fed token ({st.tokens} positions)")
-            t |> equal(st.windows - before.windows, windows, "the prompt ran as {windows} window chain(s) on the CUDA driver")
-            t |> success(st.graph, "the token step replays as a captured graph past the first step")
-            let unsplit_want = st.unsplit_form && n + 8l <= RD_UNSPLIT_POS ? 8l : 0l   // every fed step under the unsplit position takes the unsplit form, none past it
-            t |> equal(st.unsplit - before.unsplit, unsplit_want, "the attention's unsplit form served {unsplit_want} of the fed steps (the keys {n + 8l <= RD_UNSPLIT_POS ? "under" : "past"} the unsplit position{st.unsplit_form ? "" : "; the device splits no keys"})")
-        }
-        var prompt <- resident_prompt(40l)
-        var toks <- resident_feed(8l)
-        let off0 = cud_rdec_stats()
-        var cpu_rows <- feed_alone(tr, mirror_kv_dtype(), prompt, toks)
-        let off1 = cud_rdec_stats()
-        t |> equal(off1.tokens, off0.tokens, "the counters' control: a CPU run with the model off the device serves no position on the CUDA driver")
-        t |> equal(off1.windows, off0.windows, "the counters' control: ... and runs no window chain on it")
-        t |> success(!off1.graph, "the counters' control: ... and holds no captured graph")
-        delete cpu_rows
-        delete prompt
-        delete toks
-    }
-    delete tr
-}
-
 [test]
 def test_gpu_resident_cuda_llama_1b(t : T?) {
     t |> run("{FILE_1B}: one window (40 tokens) and eight steps on the CUDA driver") @(t : T?) {
-        cuda_forced_feed(t, FILE_1B, 40l, 1l)
+        cuda_forced_feed(t, FILE_1B, "llama", 40l, 1l, LOGIT_BAR_REL)
     }
     t |> run("{FILE_1B}: a {PF_WINDOW_ROWS + 88l}-token prompt (two windows) and eight steps on the CUDA driver") @(t : T?) {
-        cuda_forced_feed(t, FILE_1B, PF_WINDOW_ROWS + 88l, 2l)
+        cuda_forced_feed(t, FILE_1B, "llama", PF_WINDOW_ROWS + 88l, 2l, LOGIT_BAR_REL)
     }
 }
 
 [test]
 def test_gpu_resident_cuda_llama_1b_k4(t : T?) {
     t |> run("{FILE_1B_K}: one window (40 tokens) and eight steps on the CUDA driver") @(t : T?) {
-        cuda_forced_feed(t, FILE_1B_K, 40l, 1l)
+        cuda_forced_feed(t, FILE_1B_K, "llama", 40l, 1l, LOGIT_BAR_REL)
     }
     t |> run("{FILE_1B_K}: a {PF_WINDOW_ROWS + 88l}-token prompt (two windows) and eight steps on the CUDA driver") @(t : T?) {
-        cuda_forced_feed(t, FILE_1B_K, PF_WINDOW_ROWS + 88l, 2l)
+        cuda_forced_feed(t, FILE_1B_K, "llama", PF_WINDOW_ROWS + 88l, 2l, LOGIT_BAR_REL)
     }
 }
 
 [test]
 def test_gpu_resident_cuda_llama_1b_q51(t : T?) {
     t |> run("{FILE_1B_Q51}: one window (40 tokens) and eight steps on the CUDA driver") @(t : T?) {
-        cuda_forced_feed(t, FILE_1B_Q51, 40l, 1l)
+        cuda_forced_feed(t, FILE_1B_Q51, "llama", 40l, 1l, LOGIT_BAR_REL)
     }
     t |> run("{FILE_1B_Q51}: a {PF_WINDOW_ROWS + 88l}-token prompt (two windows) and eight steps on the CUDA driver") @(t : T?) {
-        cuda_forced_feed(t, FILE_1B_Q51, PF_WINDOW_ROWS + 88l, 2l)
+        cuda_forced_feed(t, FILE_1B_Q51, "llama", PF_WINDOW_ROWS + 88l, 2l, LOGIT_BAR_REL)
     }
 }
 
 [test]
 def test_gpu_resident_cuda_llama_1b_q50(t : T?) {
     t |> run("{FILE_1B_Q50}: one window (40 tokens) and eight steps on the CUDA driver") @(t : T?) {
-        cuda_forced_feed(t, FILE_1B_Q50, 40l, 1l)
+        cuda_forced_feed(t, FILE_1B_Q50, "llama", 40l, 1l, LOGIT_BAR_REL)
     }
 }
 
 [test]
 def test_gpu_resident_cuda_llama_1b_iq4xs(t : T?) {
     t |> run("{FILE_1B_IQ4XS}: one window (40 tokens) and eight steps on the CUDA driver") @(t : T?) {
-        cuda_forced_feed(t, FILE_1B_IQ4XS, 40l, 1l)
+        cuda_forced_feed(t, FILE_1B_IQ4XS, "llama", 40l, 1l, LOGIT_BAR_REL)
     }
 }
 
 [test]
 def test_gpu_resident_cuda_llama_1b_iq4nl(t : T?) {
     t |> run("{FILE_1B_IQ4NL}: one window (40 tokens) and eight steps on the CUDA driver") @(t : T?) {
-        cuda_forced_feed(t, FILE_1B_IQ4NL, 40l, 1l)
+        cuda_forced_feed(t, FILE_1B_IQ4NL, "llama", 40l, 1l, LOGIT_BAR_REL)
     }
 }
 
@@ -160,9 +124,9 @@ def test_gpu_resident_cuda_llama_peel(t : T?) {
 [test]
 def test_gpu_resident_cuda_llama_3b(t : T?) {
     t |> run("{FILE_3B}: one window (40 tokens) and eight steps on the CUDA driver") @(t : T?) {
-        cuda_forced_feed(t, FILE_3B, 40l, 1l)
+        cuda_forced_feed(t, FILE_3B, "llama", 40l, 1l, LOGIT_BAR_REL)
     }
     t |> run("{FILE_3B}: a {PF_WINDOW_ROWS + 88l}-token prompt (two windows) and eight steps on the CUDA driver") @(t : T?) {
-        cuda_forced_feed(t, FILE_3B, PF_WINDOW_ROWS + 88l, 2l)
+        cuda_forced_feed(t, FILE_3B, "llama", PF_WINDOW_ROWS + 88l, 2l, LOGIT_BAR_REL)
     }
 }

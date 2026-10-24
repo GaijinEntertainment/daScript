@@ -2174,15 +2174,28 @@
     `llama-bench` builds whose sibling `llama-mtmd-cli` `benchmarks/setup_lcpp_ref.das` patches and builds at
     `DEFAULT_REF_SHA`, no other environment setting.
 
-226. **The CUDA home's stamps that wait on their families.** Eleven discrete templates have a Vulkan stamp and no CUDA
+225. **The Granite Rapids board's prefill trails llama.cpp's further than every other board's.** On AWS m8i
+    (Xeon 6975P-C, 8 cores with SMT, the x86-amx class) the release-17 pp512 ratios read Qwen3.6-35B-A3B UD-Q4_K_M
+    0.91x (119.7 tok/s), gpt-oss-20b 1.95x, gemma-4-E4B 1.21x, Qwen3-VL-4B 1.60x, where the Zen4 board (EPYC 9R14,
+    16 cores) reads 2.34x (424.8), 2.55x, 1.82x, 2.45x and Graviton4 2.26x, 2.16x, 1.76x, 1.84x; decode sits with
+    the other boards (`PERF_LEDGER.md`, the 2026-10-22 release-17 boards entry). Against its own release-16 rows the
+    board's prefill moved up 1-12 %, so this is the AMX prefill path's
+    standing, not a regression; the routed 35B, far under half the Zen4 rate, says the expert GEMMs lose most -
+    an AMX tile load off a 64-byte boundary (an expert slice, a panel's row stride, the bf16 activation plane) is a
+    candidate. Done = a `forward_profile` of the 35B and E4B prefill on a c8i/m8i box naming the losing kernels, the
+    tile loads' alignment checked on the served planes, and the pp512 ratios at the Zen4 board's standing - `bin/daslang
+    modules/dasLLAMA/performance/gen_bench_records.das -- -w llm --backend cpu -o <model>` over the four carriers on an
+    AWS m8i box, `--ref-clean` naming the clean-cpu `llama-bench` `benchmarks/setup_lcpp_ref.das` builds at
+    `DEFAULT_REF_SHA`, no other environment setting.
+
+226. **The CUDA home's stamps that wait on their families.** Ten discrete templates have a Vulkan stamp and no CUDA
     stamp (`DISCRETE_ONE_HOME_STAMPS` in `REVIEW.das` names them for the stamp census), each a family the CUDA home's
     dense slice does not serve yet: `DaAttnBWT` and `DaAttnBH128T` (the batched attention at wide and 128 heads; the
     CUDA window declines past 512 and sends every other width to `DaAttnBT`), `F32RowsKhrT` (the MoE router's f32
     rows), `FaH256T` and `FaH512T` (the flash tiles past 128; the owed h96 stamp joins them - Phi's head), `Mx4Cm2T`
-    and `Mx4GemvGuT` (MXFP4), `Q8GemvPleActT` (gemma-3n's PLE), `ArCombBase` and `ArCombG4T` (the routed residual
-    combines), and `QknRopeKvT` (the q/k-normed rope store); the 19 CUDA leaves the home never
-    dispatched (the sink attention stamps, the routed combines, the paired N-column Q8 forms, the biased act, the f32
-    gather, the q/k-normed rope stores) went with them. Done = each returns as one leaf the day the CUDA driver
+    and `Mx4GemvGuT` (MXFP4), `Q8GemvPleActT` (gemma-3n's PLE), and `ArCombBase` and `ArCombG4T` (the routed residual
+    combines); the CUDA leaves the home never dispatched (the sink attention stamps, the routed combines, the paired
+    N-column Q8 forms, the biased act, the f32 gather) went with them. Done = each returns as one leaf the day the CUDA driver
     dispatches it, under `REVIEW_GPU_KERNEL_CLASSES.md`'s stamp census, and its name leaves the gate's set.
 
 227. **The CUDA home answers to the Vulkan home's name in the records and the image rail.** `lcpp_bench` stamps every

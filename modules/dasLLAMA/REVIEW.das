@@ -2024,8 +2024,7 @@ let private METAL_KERNELS_FILE = "modules/dasLLAMA/dasllama/dasllama_metal_kerne
 //! the discrete templates one home stamps - the row of
 //! followup_general.md naming the stamps that wait on their families
 var private DISCRETE_ONE_HOME_STAMPS <- { "DaAttnBWT", "DaAttnBH128T", "F32RowsKhrT",
-    "FaH256T", "FaH512T", "Mx4Cm2T", "Mx4GemvGuT", "Q8GemvPleActT", "ArCombBase", "ArCombG4T",
-    "QknRopeKvT" }
+    "FaH256T", "FaH512T", "Mx4Cm2T", "Mx4GemvGuT", "Q8GemvPleActT", "ArCombBase", "ArCombG4T" }
 
 //! `class [template] X : Y` lines of `path`: X's base, whether X is a
 //! template, and the home or shared file X lives in

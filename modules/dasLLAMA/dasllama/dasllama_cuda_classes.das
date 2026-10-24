@@ -429,6 +429,30 @@ class CuRopeKvStoreF16 : RopeKvStoreT {
     }
 }
 
+//! the fused per-head q/k norm, rope and K/V store of the token command and, under `win`, of the window (`QknRopeKvT` over
+//! the shared `GkQknRopeKv`): a q/k-normed model's one rope pass on this home, the token rows' and the window's forms alike
+[cuda_dispatch(name = "qkn_rope_cls", grid = "wgs", params = "wgs : int64")]
+class CuQknRopeKv : QknRopeKvT {
+    typedef KT = float
+    override CLAMP16 = false
+
+    [cuda_kernel(local_size_x = 256, name = "qkn_rope_cls_cuda")]
+    def run {
+        qkn_rope_body()
+    }
+}
+
+//! the f16-mirror stamp of the fused q/k norm, rope and K/V store, the stores clamped
+[cuda_dispatch(name = "qkn_rope_f16_cls", grid = "wgs", params = "wgs : int64")]
+class CuQknRopeKvF16 : QknRopeKvT {
+    typedef KT = float16
+
+    [cuda_kernel(local_size_x = 256, name = "qkn_rope_f16_cls_cuda")]
+    def run {
+        qkn_rope_body()
+    }
+}
+
 //! the window's rope and K/V store (`RopeKvStoreBT`)
 [cuda_dispatch(name = "rope_kv_b_cls", grid = "wgs", params = "wgs : int64")]
 class CuRopeKvStoreB : RopeKvStoreBT {

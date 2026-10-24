@@ -2087,7 +2087,11 @@ one step off the control, both sides' argmax pieces decoded a row, the N-row cou
 the sessions alone, its row counter (`rdec_nrow_rows`) up by every row of every step, every call served - two rows at
 two regions on the 1B Q8_0 (the q8 two-column stamp launched) and Q4_K_M, twelve rows at twelve regions on the Q8_0
 (one command of twelve rows a step, a tile of eight columns and one of four: the q8 eight- and four-column stamps
-launched); the same skips, and where the driver declines the model at the cell's region count. The CUDA kernel cells
+launched); the same skips, and where the driver declines the model at the cell's region count.
+`test_gpu_resident_cuda_qwen3.das` - stocked suite, `-jit` only: the same driver on Qwen3-0.6B Q8_0, the q/k-normed
+carrier, whose norm, rope and K/V store run as the fused pass `CuQknRopeKv` in the token command and the window chain,
+in the CUDA llama file's forced-feed form at one window and two (`cuda_forced_feed` of `_cuda_feed.das`, the two files'
+one body); the same skips. The CUDA kernel cells
 beside them, `test_cuda_kernels.das` (model-free; a CUDA device with NVRTC, else every cell but the leak gate skips;
 the per-format cells - the kq cm2 tiles, the kq and per-32 GEMVs, the token-table gathers, the Q8_K feeds - also skip
 without dasVulkan): the q8 GEMV and its rate, the MMQ int8 GEMM against the block-scaled reference, the cm2 l tile
@@ -2096,7 +2100,9 @@ the 1B window's shapes - each rate cell's warm-up held to the oracle first, the 
 activation rows 0, 255, 256 and 511 over every column, the tile's bit for bit on a fixture its f16 accumulator holds
 exactly (sixteen +-1 activations a row over the 2^-7 block scale) - the word copy (a quad-lane run and a three-word tail, the
 device block and the out block under a word sentinel), the flash tiles at heads 64 and 128 with their f16-out twins,
-whole and under a 40-key window, the compile gate over every `[cuda_dispatch]` kernel of the home, the shutdown leak
+whole and under a 40-key window, the fused q/k norm + rope + K/V store on the f32 and the f16 mirror stamps against the
+oracle the Vulkan cell holds it to (`qkn_rope_rows` of `_kernel_oracles.das`, the rows ahead of the layer's kept at their
+fill), the compile gate over every `[cuda_dispatch]` kernel of the home, the shutdown leak
 gate, the K-quant and per-32 GEMV leaves and cm2 tiles against the Vulkan cells' oracles, the token-table gathers, the
 Q8_K feeds (the quants a byte within one step, the scales and the in-place residual row through `check_rows`, the
 residual row moved off its input), and the K/V mirror's
