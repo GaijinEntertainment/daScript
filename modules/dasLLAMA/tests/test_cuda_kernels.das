@@ -589,7 +589,7 @@ def test_cud_kq_cm2_family(t0 : T?) {
 //! format at the three lane splits, 256, 512 and 5120 wide - the Vulkan cell's shapes
 [test]
 def test_cud_kq_gemv_family(t0 : T?) {
-    t0 |> run("CUDA kq GEMV leaves == the CPU oracle (all 14 formats)") <| @(t : T?) {
+    t0 |> run("CUDA kq GEMV leaves == the CPU oracle (all 15 formats)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!ensure_q8_gemv_cls()) {
                 t |> skip("no CUDA device with NVRTC")
@@ -712,7 +712,7 @@ def private cud_gather_rows(t : T?; fmt : int; wq, ws, ids : array<uint>; xh : a
 //! one `EMB_ID_HOST` row copying the host's staged row
 [test]
 def test_cud_emb_family(t0 : T?) {
-    t0 |> run("CUDA token-table gather leaves == the oracles (14 superblock formats, 4 per-32 ones)") <| @(t : T?) {
+    t0 |> run("CUDA token-table gather leaves == the oracles (15 superblock formats, 4 per-32 ones)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!ensure_emb_gather_cls()) {
                 t |> skip("no CUDA device with NVRTC")

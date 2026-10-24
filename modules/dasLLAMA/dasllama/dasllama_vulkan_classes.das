@@ -3318,6 +3318,53 @@ class KqBatchIq4nl : KqBatchIq4xs {
     }
 }
 
+// NVFP4 tile: the k4 staging with the mx4 codebook decode in stage_w (signed lanes, no block-sum term) and TWO scale
+// planes - a block's low and high half each under its own UE4M3 sub-block scale at half - per block
+// acc += xs * (slo * ilo + shi * ihi)
+[vk_dispatch(name = "kq_batch_nv4_cls", kernel = "run", family = "kq_batch_cls", grid = "wgs", params = "wgs : int64")]
+class KqBatchNv4 : KqBatchBase {
+    [unused_argument(k)]
+    def override w_quad(wsb, bu, hh, k : uint) : uint4 {
+        let rb4 = wsb * 32u + bu * 4u
+        let sh = hh * 4u
+        return uint4(mx4_word((wq[rb4] >> sh) & 0x0F0F0F0F), mx4_word((wq[rb4 + 1u] >> sh) & 0x0F0F0F0F),
+            mx4_word((wq[rb4 + 2u] >> sh) & 0x0F0F0F0F), mx4_word((wq[rb4 + 3u] >> sh) & 0x0F0F0F0F))
+    }
+
+    def override stage_ws(wsb0, wt, nsb, s, tid : uint) {
+        let slane = tid % 32u
+        let sblk = tid / 32u
+        var slo = 0.0
+        var shi = 0.0
+        if (wt * 32u + slane < pa.d) {
+            let wsb = wsb0 + (wt * 32u + slane) * nsb + s
+            let sw = wsu[wsb * 5u + sblk / 2u] >> ((sblk & 1u) * 16u)
+            slo = ue4m3_half_f32(sw & 0xFFu)
+            shi = ue4m3_half_f32((sw >> 8u) & 0xFFu)
+        }
+        wsw[sblk * 32u + slane] = slo
+        wsw2[sblk * 32u + slane] = shi
+    }
+
+    def override blk_fma(bu, grp, word : uint; xscl : float) : float4 {
+        var l = int4(0)
+        var h = int4(0)
+        var blo = 0
+        var bhi = 0
+        split_dots(bu, grp, word, l, h, blo, bhi)
+        let wlo = float4(wsw[bu * 32u + word], wsw[bu * 32u + word + 8u],
+            wsw[bu * 32u + word + 16u], wsw[bu * 32u + word + 24u])
+        let whi = float4(wsw2[bu * 32u + word], wsw2[bu * 32u + word + 8u],
+            wsw2[bu * 32u + word + 16u], wsw2[bu * 32u + word + 24u])
+        return xscl * (wlo * float4(l) + whi * float4(h))
+    }
+
+    [spirv_kernel(local_size_x = 256, name = "kq_batch_nv4_cls_spv")]
+    def run {
+        tile_shell()
+    }
+}
+
 // Q5_K tile: the k4 compose with the 5th bit OR'd in from the 40B block's qh words
 [vk_dispatch(name = "kq_batch_k5_cls", kernel = "run", family = "kq_batch_cls", grid = "wgs", params = "wgs : int64")]
 class KqBatchK5 : KqBatchBase {
@@ -4817,6 +4864,49 @@ class Iq4nlCm2SBatch : Iq4nlCm2T {
     }
 }
 
+[vk_dispatch(name = "kq_batch_nv4_cm2l_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Nv4Cm2LBatch : Nv4Cm2T {
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x256
+    typedef ACC = coopmatWgAcc_f16_128x256
+    typedef ACCW = coopmatWgAcc_f32_128x256
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        cm2_body()
+    }
+}
+
+[vk_dispatch(name = "kq_batch_nv4_cm2m_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Nv4Cm2MBatch : Nv4Cm2T {
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        cm2_body()
+    }
+}
+
+[vk_dispatch(name = "kq_batch_nv4_cm2s_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Nv4Cm2SBatch : Nv4Cm2T {
+    override BN = 32u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x32
+    typedef ACC = coopmatWgAcc_f16_128x32
+    typedef ACCW = coopmatWgAcc_f32_128x32
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        cm2_body()
+    }
+}
+
 [vk_dispatch(name = "kq_batch_k2_cm2l_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class K2Cm2LBatch : K2Cm2T {
     typedef AT = coopmatWgA_f16_128x64
@@ -5356,6 +5446,22 @@ class Iq3xxsKhrBatch : Iq3xxsCm2T {
 
 [vk_dispatch(name = "kq_batch_iq4nl_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Iq4nlKhrBatch : Iq4nlCm2T {
+    override KHR = true
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        cm2_body()
+    }
+}
+
+[vk_dispatch(name = "kq_batch_nv4_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Nv4KhrBatch : Nv4Cm2T {
     override KHR = true
     override BN = 128u
     override STILE = true
@@ -7546,7 +7652,7 @@ let GEMV_SHELL_PLAIN = 0
 let GEMV_SHELL_SUM = 1   //! the per-32 formats past q8
 let GEMV_SHELL_GU = 2    //! the kq formats the twins stamp, and mx4's biased twin
 //! the (format, shell) pairs no stamp serves
-let GEMV_SHELL_SKIP = "q8/sum_cls k2/sum_cls k3/sum_cls k4/sum_cls k5/sum_cls k6/sum_cls q40/sum_cls iq4xs/sum_cls iq3s/sum_cls iq3xxs/sum_cls iq4nl/sum_cls iq2s/sum_cls iq2xs/sum_cls iq2xxs/sum_cls iq3s4/sum_cls q8/gu_cls q51/gu_cls iq4nl32/gu_cls q4032/gu_cls q5032/gu_cls k2/gu_cls k3/gu_cls k5/gu_cls k6/gu_cls q40/gu_cls iq3s/gu_cls iq3xxs/gu_cls iq4nl/gu_cls iq2xs/gu_cls iq2xxs/gu_cls"
+let GEMV_SHELL_SKIP = "q8/sum_cls k2/sum_cls k3/sum_cls k4/sum_cls k5/sum_cls k6/sum_cls q40/sum_cls iq4xs/sum_cls iq3s/sum_cls iq3xxs/sum_cls iq4nl/sum_cls iq2s/sum_cls iq2xs/sum_cls iq2xxs/sum_cls iq3s4/sum_cls nv4/sum_cls nv4/gu_cls q8/gu_cls q51/gu_cls iq4nl32/gu_cls q4032/gu_cls q5032/gu_cls k2/gu_cls k3/gu_cls k5/gu_cls k6/gu_cls q40/gu_cls iq3s/gu_cls iq3xxs/gu_cls iq4nl/gu_cls iq2xs/gu_cls iq2xxs/gu_cls"
 
 //! whether format `fmt` stamps decode GEMV shell `shell`: no pair of `GEMV_SHELL_SKIP` names it
 def gemv_shell_fmt(fmt, shell : int) : bool => kq_tile_stamped(fmt, GEMV_SHELL_SKIP, shell, GEMV_SHELLS)
@@ -7866,6 +7972,25 @@ class KqGemvIq4nlN : Iq4nlGemvT {
 }
 
 
+[vk_dispatch(name = "kq_gemv_nv4_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvNv4 : Nv4GemvT {
+    [spirv_kernel(local_size_x = 64)]
+    def run {
+        leaf_body()
+    }
+}
+
+[vk_dispatch(name = "kq_gemv_nv4_n_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvNv4N : Nv4GemvT {
+    override NCOL = true
+
+    [spirv_kernel(local_size_x = 64)]
+    def run {
+        leaf_body()
+    }
+}
+
+
 [vk_dispatch(name = "kq_gemv_k3_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvK3 : K3GemvT {
     [spirv_kernel(local_size_x = 64)]
@@ -8098,6 +8223,16 @@ class KqEmbIq4nl : Iq4nlGemvT {
     }
 }
 
+[vk_dispatch(name = "kq_emb_nv4_cls", kernel = "run", family = "kq_emb_cls", grid = "wgs", params = "wgs : int64")]
+class KqEmbNv4 : Nv4GemvT {
+    override EMB = true
+
+    [spirv_kernel(local_size_x = 64)]
+    def run {
+        leaf_body()
+    }
+}
+
 [vk_dispatch(name = "kq_emb_k2_cls", kernel = "run", family = "kq_emb_cls", grid = "wgs", params = "wgs : int64")]
 class KqEmbK2 : K2GemvT {
     override EMB = true
@@ -8204,7 +8339,7 @@ def emb_f32_enc(raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet
 
 //! `npos` rows of `dim` gathered off the table at slab-local block `wblk0` (q8: 32-element blocks, a superblock format: superblocks)
 [arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#vk-token-gather")]
-def emb_cls_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; npos, dim, wblk0 : int64; escale : float) {
+def emb_cls_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; npos, dim, wblk0 : int64; escale : float) {   // nolint:STYLE037 - the stamp's ladder, one arm per KqFmt member
     if (fmt == int(KqFmt.q8)) {
         var pce = EmbArgs(npos = uint(npos), dim = uint(dim), wblk0 = uint(wblk0), embed_scale = escale)
         enc_emb_gather_cls(raw, h, set_, pce, (npos * dim / 4l + 255l) / 256l)

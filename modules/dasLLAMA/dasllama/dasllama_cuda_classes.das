@@ -601,6 +601,14 @@ class CuKqGemvIq4nl : Iq4nlGemvCudT {
     }
 }
 
+[cuda_dispatch(name = "kq_gemv_nv4_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class CuKqGemvNv4 : Nv4GemvT {
+    [cuda_kernel(local_size_x = 64, name = "kq_gemv_nv4_cls_cuda")]
+    def run {
+        leaf_body()
+    }
+}
+
 [cuda_dispatch(name = "kq_gemv_k3_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class CuKqGemvK3 : K3GemvT {
     [cuda_kernel(local_size_x = 64, name = "kq_gemv_k3_cls_cuda")]
@@ -723,6 +731,16 @@ class CuKqGemvIq4nlN : Iq4nlGemvCudT {
     override NCOL = true
 
     [cuda_kernel(local_size_x = 64, name = "kq_gemv_iq4nl_n_cls_cuda")]
+    def run {
+        leaf_body()
+    }
+}
+
+[cuda_dispatch(name = "kq_gemv_nv4_n_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class CuKqGemvNv4N : Nv4GemvT {
+    override NCOL = true
+
+    [cuda_kernel(local_size_x = 64, name = "kq_gemv_nv4_n_cls_cuda")]
     def run {
         leaf_body()
     }
@@ -952,6 +970,16 @@ class CuKqEmbIq4nl : Iq4nlGemvCudT {
     }
 }
 
+[cuda_dispatch(name = "kq_emb_nv4_cls", kernel = "run", family = "kq_emb_cls", grid = "wgs", params = "wgs : int64")]
+class CuKqEmbNv4 : Nv4GemvT {
+    override EMB = true
+
+    [cuda_kernel(local_size_x = 64, name = "kq_emb_nv4_cls_cuda")]
+    def run {
+        leaf_body()
+    }
+}
+
 [cuda_dispatch(name = "kq_emb_k3_cls", kernel = "run", family = "kq_emb_cls", grid = "wgs", params = "wgs : int64")]
 class CuKqEmbK3 : K3GemvT {
     override EMB = true
@@ -1089,7 +1117,7 @@ def cud_kq_grid() : uint64 {
 }
 
 //! the decode GEMV leaf of format `fmt` loads
-def cud_gemv_ensure(fmt : int) : bool {
+def cud_gemv_ensure(fmt : int) : bool {   // nolint:STYLE037 - the stamp's ladder, one arm per KqFmt member
     var r = false
     kq_tile_stamp(fmt, CUD_FMT_SKIP, "gemv") <| $() {
         r = tile_ensure_cls()
@@ -1114,7 +1142,7 @@ def cud_gemv_cls_enc(fmt : int; var s : void?; bufs : uint64 const[6]; var pc : 
 }
 
 //! the token-table gather of format `fmt` loads: q8's `EmbGather`, a superblock format's `KqEmb<Fmt>` leaf, a per-32 format's `<Fmt>Emb`
-def cud_emb_ensure(fmt : int) : bool {
+def cud_emb_ensure(fmt : int) : bool {   // nolint:STYLE037 - the stamp's ladder, one arm per KqFmt member
     return ensure_emb_gather_cls() if (fmt == int(KqFmt.q8))
     var r = false
     kq_tile_stamp(fmt, CUD_EMB_SKIP, "emb") <| $() {
@@ -1624,6 +1652,49 @@ class CuIq4nlCm2S : Iq4nlCm2T {
     typedef ACCW = coopmatWgAcc_f32_128x32
 
     [cuda_kernel(local_size_x = 256, name = "kq_batch_iq4nl_cm2s_cls_cuda")]
+    def run {
+        cm2_body()
+    }
+}
+
+[cuda_dispatch(name = "kq_batch_nv4_cm2l_cls", grid = "wgs", params = "wgs : int64")]
+class CuNv4Cm2L : Nv4Cm2T {
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x256
+    typedef ACC = coopmatWgAcc_f16_128x256
+    typedef ACCW = coopmatWgAcc_f32_128x256
+
+    [cuda_kernel(local_size_x = 256, min_blocks = 2, name = "kq_batch_nv4_cm2l_cls_cuda")]
+    def run {
+        cm2_body()
+    }
+}
+
+[cuda_dispatch(name = "kq_batch_nv4_cm2m_cls", grid = "wgs", params = "wgs : int64")]
+class CuNv4Cm2M : Nv4Cm2T {
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+
+    [cuda_kernel(local_size_x = 256, name = "kq_batch_nv4_cm2m_cls_cuda")]
+    def run {
+        cm2_body()
+    }
+}
+
+[cuda_dispatch(name = "kq_batch_nv4_cm2s_cls", grid = "wgs", params = "wgs : int64")]
+class CuNv4Cm2S : Nv4Cm2T {
+    override BN = 32u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x32
+    typedef ACC = coopmatWgAcc_f16_128x32
+    typedef ACCW = coopmatWgAcc_f32_128x32
+
+    [cuda_kernel(local_size_x = 256, name = "kq_batch_nv4_cm2s_cls_cuda")]
     def run {
         cm2_body()
     }

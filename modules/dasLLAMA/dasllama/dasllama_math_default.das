@@ -9,6 +9,7 @@ require dasllama/dasllama_math       // KernelBackend + register_kernel_backend 
 require dasllama/dasllama_tune       // [tuned]: reconstitute dot_q8q8 from its template with per-box loop hints
 require dasllama/dasllama_tune_scope  // nolint:STYLE030 — the dasllama [tune_scope] must be on the AST before this module's [tuned] kernels pick their perms
 require dasllama/dasllama_gemm_schema  // kq_qsb/kq_ssb — the fmt-id kq plane strides
+require dasllama/dasllama_gpu_math    // ue4m3_half_f32 - the nv4 sub-block scale's one decode
 require daslib/f16_cvt               // wscale_f16 - the binary16 weight-scale plane widens in-loop
 require daslib/jobque_boost public   // parallel_for / notify_and_release (the kernels expand parallel_for)
 require dasllama/dasllama_par        // maybe_parallel_for
@@ -577,6 +578,36 @@ def dot_kq(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : 
 [unused_argument(xbsp)]
 def dot_kq(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64; _f : KqTag_iq3s4) : float => dot_kq_lut(kqrow, ksrow, xqp, xsp, n, iq3s4_lut())
 
+//! The nv4 row dot off the DISK-ORDER planes: per 32-block two exact int dots - the low 16 over MX4_LUT[q] and the
+//! high 16 - each folded by its own sub-block scale (the UE4M3 byte at half) into one float per superblock, then x the
+//! Q8_K scale: q40's per-block float fold order over two scales. Signed codes, so no bsum term.
+[hint(unsafe_range_check, noalias = kqrow, noalias = ksrow, noalias = xqp, noalias = xsp, noalias = xbsp), unused_argument(xbsp)]
+def dot_kq(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64; _f : KqTag_nv4) : float {
+    let lut = mx4_lut()
+    var acc = 0.0
+    unsafe {
+        for (sb in range64(n / 256l)) {
+            let kqo = sb * 128l
+            let kso = sb * 16l
+            var facc = 0.0
+            for (blk in range64(8l)) {
+                let qb = kqo + 16l * blk
+                let ab = (sb * 8l + blk) * 32l
+                var ilo = 0
+                var ihi = 0
+                for (l in range64(16l)) {
+                    let q = int(kqrow[qb + l])
+                    ilo += int(lut[q & 15]) * int(xqp[ab + l])
+                    ihi += int(lut[q >> 4]) * int(xqp[ab + 16l + l])
+                }
+                facc += float(ilo) * ue4m3_half_f32(uint(ksrow[kso + 2l * blk])) + float(ihi) * ue4m3_half_f32(uint(ksrow[kso + 2l * blk + 1l]))
+            }
+            acc += facc * xsp[sb]
+        }
+    }
+    return acc
+}
+
 //! The LUT-plane row dot the iq4xs and iq3s4 forms share (the disk-order planes, `lut` the format's codebook).
 def private dot_kq_lut(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; n : int64; lut : int8[16]) : float {
     var acc = 0.0
@@ -903,7 +934,7 @@ def dot_kq(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : 
     return acc
 }
 
-def private kq_gemv_kernel(fmt : int; var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d : int64) {
+def private kq_gemv_kernel(fmt : int; var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d : int64) {   // nolint:STYLE037 - the stamp's ladder, one arm per KqFmt member
     let kf = kq_fmt_of_id(fmt, "kq_gemv_kernel")
     var myp = yp
     kq_fmt_stamp(kf) $(F) {
@@ -951,6 +982,31 @@ def private dequant_lut_row_grp(kqg : uint8 const?; ksg : uint8 const?; r, mr, n
                         let nib = int(kqg[qb + ((blk * 4l + j) * mr + r) * 4l + t])
                         dst[kb + j * 4l + t] = dl * float(lut[nib & 15])
                         dst[kb + 16l + j * 4l + t] = dl * float(lut[nib >> 4])
+                    }
+                }
+            }
+        }
+    }
+}
+
+//! nv4 grp row dequant: the k4 tiling with the per-block (low, high) UE4M3 pair interleaved where q40's d sits -
+//! w = MX4_LUT[q] x the half's scale at half.
+def private dequant_nv4_row_grp(kqg : uint8 const?; ksg : uint8 const?; r, mr, nsb : int64; var dst : float?) {
+    let lut = mx4_lut()
+    unsafe {
+        for (sbi in range64(nsb)) {
+            let qb = sbi * 128l * mr
+            let sb = sbi * 16l * mr
+            for (blk in range64(8l)) {
+                let kb = sbi * 256l + blk * 32l
+                let so = sb + blk * 2l * mr + 2l * r
+                let slo = ue4m3_half_f32(uint(ksg[so]))
+                let shi = ue4m3_half_f32(uint(ksg[so + 1l]))
+                for (j in range64(4l)) {
+                    for (t in range64(4l)) {
+                        let nib = int(kqg[qb + ((blk * 4l + j) * mr + r) * 4l + t])
+                        dst[kb + j * 4l + t] = float(int(lut[nib & 15])) * slo
+                        dst[kb + 16l + j * 4l + t] = float(int(lut[nib >> 4])) * shi
                     }
                 }
             }
@@ -1204,6 +1260,10 @@ def dequant_kq_row_grp(fmt : int64; kqg : uint8 const?; ksg : uint8 const?; r, m
     }
     if (fmt == 45l) {
         dequant_iq4nl_row_grp(kqg, ksg, r, mr, nsb, dst)
+        return
+    }
+    if (fmt == 49l) {
+        dequant_nv4_row_grp(kqg, ksg, r, mr, nsb, dst)
         return
     }
     if (fmt == 2l) {

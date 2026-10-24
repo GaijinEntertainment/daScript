@@ -1575,6 +1575,7 @@ def resident_decline_reason(t : Model) : string {
     let c = t.config
     if (!moe_gpu_resident_installed()) return "the tier installed no resident-driver seams"
     if (t.quant != QuantMode.q8) return "weights are not in the q8 serving mode ({t.quant})"
+    if (!empty(t.site_scale)) return "a plane with a per-tensor weight scale (NVFP4's scale2) - the device GEMM epilogue does not apply it yet"
     if (c.n_expert > 0l && !rdec_moe_installed()) return "routed experts ({c.n_expert}) - the tier installed no MoE seats; the per-op tier's expert rails serve"
     let run = resident_run_mode_decline()
     if (!empty(run)) return run

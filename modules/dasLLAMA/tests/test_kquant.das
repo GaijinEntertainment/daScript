@@ -18,6 +18,7 @@ require dasllama/dasllama_math_default   // dot_kq on the format tag — the ker
 require dasllama/dasllama_math_gen   // dequant_kq_row_grp, kq_groupn_gen, the bf16 panels
 require dasllama/dasllama_repack     // repack_kq_grp
 require dasllama/dasllama_gemm_schema   // kq_qsb/kq_ssb — the fmt-id plane strides
+require dasllama/dasllama_gpu_math   // ue4m3_half_f32 - the nv4 plane cell's scale formula
 require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration for load_gguf
 require daslib/jobque_boost   // team_parallel_for - the lane-context arm of the iq4nl dequant
 require daslib/algorithm   // fill - the NaN sentinel over a reused output
@@ -32,7 +33,7 @@ require math
 // (DASLLAMA_PARITY_FULL=1) and a backend carrying kq slots - each absence is a loud skip.
 
 //! the superblock format ids the kq gates walk
-let private KQ_IDS = fixed_array(4, 5, 6, 40, 44, 3, 33, 34, 45, 2, 23, 24, 25, 35)
+let private KQ_IDS = fixed_array(4, 5, 6, 40, 44, 3, 33, 34, 45, 2, 23, 24, 25, 35, 49)
 
 // the codebook value of element k of synthetic block `blk` (k < 16 low nibble, else high)
 def private iq4nl32_w(blk, k : int) : float {
@@ -155,6 +156,14 @@ def private kquant_plane_cells(t : T?) {
         var inscope p <- plane_row(KqFmt.q40, build_q40_block())
         let want <- formula_row(256) $(k) => q40_d(k / 32) * float(q4_pat(k) - 8)
         check(t, "q40 plane against the hand-packed values", p.w, want, BAR_EXACT, FLAT_SHAPE)
+    }
+    t |> run("nv4 planes re-pair the hand-packed NVFP4 blocks into the k4 tiling exactly") @(t : T?) {
+        var inscope p <- plane_row(KqFmt.nv4, build_nv4_block())
+        for (s in range(16)) {
+            t |> equal(uint(p.ks[s]), NV4_SC[s], "sub-block scale byte {s} verbatim, in sub-block order")
+        }
+        let want <- formula_row(256) $(k) => float(int(MX4_LUT[q4_pat(k)])) * ue4m3_half_f32(NV4_SC[k / 16])
+        check(t, "nv4 plane against the hand-packed values", p.w, want, BAR_EXACT, FLAT_SHAPE)
     }
     t |> run("iq4xs planes decode the 6-bit sub-scales and the codebook exactly") @(t : T?) {
         var inscope p <- plane_row(KqFmt.iq4xs, build_iq4xs_block())
@@ -1243,6 +1252,23 @@ def test_kq_load_layout(t : T?) {
             dequant_plane_prefix(tr, tr.emb_fmt, tr.wcls_off, n, have)
             check(t, "k6 classifier plane against the file dequant", have, fdq6, BAR_EXACT, FLAT_SHAPE)
             delete fdq6
+            delete have
+        }
+    }
+    t |> run("nv4 load tags the NVFP4 planes, reads their per-tensor scales and places them at their cursor offsets (Qwen3.5-0.8B NVFP4)") @(t : T?) {
+        load_kq_native(t, "Qwen3.5-0.8B-NVFP4-MTP.gguf", true, false) $(tr; path) {
+            t |> success(!tr.kq_repacked, "portable-pinned load keeps the nv4 planes disk-order")
+            t |> success(tr.w2_fmt[0] == KqFmt.nv4, "blk.0.ffn_down tagged nv4")
+            t |> equal(length(tr.site_scale), 108, "every NVFP4 plane's `.scale` tensor lands on the site table")
+            t |> success(abs(site_scale(tr, KqFmt.nv4, tr.w2_offs[0]) - 1.0299681e-4) < 1.0e-9, "blk.0.ffn_down's scale2 is the file's")
+            let n = 8l * 3584l   // eight rows of the down plane
+            var have : array<float>
+            have |> resize(n)
+            dequant_plane_prefix(tr, tr.w2_fmt[0], tr.w2_offs[0], n, have)
+            var gt = 0
+            var fdq <- read_prefix(path, "blk.0.ffn_down.weight", n, gt)
+            check(t, "nv4 ffn_down plane against the file dequant", have, fdq, BAR_EXACT, FLAT_SHAPE)
+            delete fdq
             delete have
         }
     }

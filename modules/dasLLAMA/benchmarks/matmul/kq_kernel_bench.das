@@ -37,7 +37,7 @@ require daslib/strings_boost
 [CommandLineArgs]
 struct BenchArgs {
     @clarg_short = "f"
-    @clarg_doc = "KqFmt names, comma-separated (q8,k4,k5,k6,q40,q51,iq4xs,k3,iq3s,iq3xxs,iq4nl,k2,iq2s,iq2xs,iq2xxs,iq4nl32,iq3s4; mx4 = mxfp4; q8s16 = q8 over binary16 group scales, the GGUF q8_0 tensor's path), or all"
+    @clarg_doc = "KqFmt names, comma-separated (q8,k4,k5,k6,q40,q51,iq4xs,k3,iq3s,iq3xxs,iq4nl,k2,iq2s,iq2xs,iq2xxs,iq4nl32,iq3s4,nv4; mx4 = mxfp4; q8s16 = q8 over binary16 group scales, the GGUF q8_0 tensor's path), or all"
     fmt : string = "all"
     @clarg_doc = "Reduction length - the weight row length (k in test-backend-ops terms)"
     n : int = 14336

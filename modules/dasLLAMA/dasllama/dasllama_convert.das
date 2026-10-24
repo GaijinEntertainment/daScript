@@ -12,6 +12,7 @@ require dasllama/dasllama_par        // maybe_parallel_for (+ its emitted dispat
 require dasllama/dasllama_math       // get_dispatch_lanes — the requant wrappers shape their fan-out
 require dasllama/dasllama_math_default   // dequant_kq_row_grp - the repacked plane's group gather behind kq_plane_row_f32
 require dasllama/dasllama_kqformat public   // KqFmt + the plane stride truth (K4_QSB et al.) — re-exported down the gguf chain
+require dasllama/dasllama_gpu_math   // ue4m3_half_f32 - the nv4 sub-block scale's one decode, shared with the kernel homes
 require dasllama/dasllama_tune       // [tuned]: the f16 row converts carry per-box loop hints
 require daslib/array_boost  // nolint:STYLE030 — temp_array is a [template] the rule misses
 require dasllama/dasllama_tune_scope  // nolint:STYLE030 — the dasllama [tune_scope] must be on the AST before this module's [tuned] kernels pick their perms
@@ -319,7 +320,7 @@ def kq_transcode_superblock(fmt : KqFmt; bytes : array<uint8> | #; bo : int64; v
 //! Units [b0, b1) of a tensor's stride-unit stream through the format's codec - a plain function
 //! beside the codecs, stamped here, so the per-unit codec and byte-copy calls inline.
 [arch(at = "../ARCHITECTURE_CPU_KERNELS.md#jit-partition-inlining")]
-def kq_transcode_units(fmt : KqFmt; srcp : uint8 const?; var kqp : uint8?; var ksp : uint8?; b0, b1, disk, qsb, ssb : int64) {
+def kq_transcode_units(fmt : KqFmt; srcp : uint8 const?; var kqp : uint8?; var ksp : uint8?; b0, b1, disk, qsb, ssb : int64) {   // nolint:STYLE037 - the stamp's ladder, one arm per KqFmt member
     kq_fmt_stamp(fmt) <| $(F) {
         unsafe {
             for (blk in range64(b0, b1)) {
@@ -648,6 +649,8 @@ def dequant_kq_plane_sb(fmt : KqFmt; kq : array<uint8> | #; ks : array<uint8> | 
             dequant_iq4xs_plane_superblock(kq, sb * IQ4XS_QSB, ks, sb * IQ4XS_SSB, dst, doff)
         } elif (fmt == KqFmt.iq3s4) {
             dequant_iq3s4_plane_superblock(kq, sb * IQ4XS_QSB, ks, sb * IQ3S_SSB, dst, doff)
+        } elif (fmt == KqFmt.nv4) {
+            dequant_nv4_plane_superblock(kq, sb * NV4_QSB, ks, sb * NV4_SSB, dst, doff)
         } elif (fmt == KqFmt.k3) {
             dequant_k3_plane_superblock(kq, sb * K3_QSB, ks, sb * K3_SSB, dst, doff)
         } elif (fmt == KqFmt.iq3s) {
@@ -941,6 +944,43 @@ def dequant_iq4nl_plane_superblock(kq : array<uint8> | #; kqo : int64; ks : arra
             let b = int(kq[kqo + blk * 16l + l])
             dst[doff + blk * 32l + l] = d * float(int(lut[b & 15]))
             dst[doff + blk * 32l + 16l + l] = d * float(int(lut[b >> 4]))
+        }
+    }
+}
+
+//! Transcode one NVFP4 superblock (four 36-byte disk blocks: four UE4M3 sub-block scales, then 32 nibble bytes pairing
+//! element j with j + 8 inside a 16-weight sub-block) into the nv4 planes: the sixteen scale bytes verbatim to ks (32-block
+//! g's halves at 2g, 2g + 1), the nibbles re-paired into the k4 tiling at kq (byte j of block g: element j low, j + 16 high)
+def kq_transcode_p(src : uint8 const?; var kq : uint8?; var ks : uint8?; _f : KqTag_nv4) {
+    unsafe {
+        for (g in range64(8l)) {
+            let b = src + (g / 2l) * 36l
+            let s0 = b + 4l + (g % 2l) * 16l   // the 32-block's low 16 weights: sub-block 2(g % 2) of its disk block; the high 16 follow
+            let s1 = s0 + 8l
+            ks[g * 2l] = b[(g % 2l) * 2l]
+            ks[g * 2l + 1l] = b[(g % 2l) * 2l + 1l]
+            for (j in range64(8l)) {
+                let lo = int(s0[j])
+                let hi = int(s1[j])
+                kq[g * 16l + j] = uint8((lo & 15) | ((hi & 15) << 4))
+                kq[g * 16l + 8l + j] = uint8((lo >> 4) | ((hi >> 4) << 4))
+            }
+        }
+    }
+}
+
+//! Reference dequant of one nv4-plane superblock in ggml's own float order: w = float(MX4_LUT[q]) * sc, sc the
+//! sub-block's UE4M3 scale at half (`ue4m3_half_f32`); 32-block g's low 16 under scale byte 2g, its high 16 under
+//! 2g + 1, q the nibble (low = k, high = k + 16 - the k4 tiling the transcode laid).
+def dequant_nv4_plane_superblock(kq : array<uint8> | #; kqo : int64; ks : array<uint8> | #; kso : int64; var dst : array<float> | #; doff : int64) {
+    let lut = mx4_lut()
+    for (g in range64(8l)) {
+        let slo = ue4m3_half_f32(uint(ks[kso + g * 2l]))
+        let shi = ue4m3_half_f32(uint(ks[kso + g * 2l + 1l]))
+        for (l in range64(16l)) {
+            let b = int(kq[kqo + g * 16l + l])
+            dst[doff + g * 32l + l] = float(int(lut[b & 15])) * slo
+            dst[doff + g * 32l + 16l + l] = float(int(lut[b >> 4])) * shi
         }
     }
 }

@@ -402,6 +402,8 @@ def kq_cls_ref(fmt : int; wq, ws, xq : array<uint>; xs : array<float>) : KqGemvB
         k = kx
     } elif (fmt == int(KqFmt.iq4nl)) {
         k = new KqGemvIq4nl()   // pure-ALU codebook - no workgroup state to fill
+    } elif (fmt == int(KqFmt.nv4)) {
+        k = new KqGemvNv4()   // the doubled e2m1 lanes by arithmetic - no workgroup state to fill
     } elif (fmt == int(KqFmt.k2)) {
         k = new KqGemvK2()   // pure ALU - no workgroup state to fill
     } elif (fmt == int(KqFmt.iq2s)) {
@@ -468,7 +470,7 @@ def gemv_float_walk(regions : array<uint>; n, d, nreg : int; sb_dot : block<(var
 
 //! whether `fmt` carries a float witness beside the class oracle (`kq_gemv_float_oracle`)
 def kq_has_float_oracle(fmt : int) : bool {
-    for (f in fixed_array(KqFmt.iq4xs, KqFmt.iq3s4, KqFmt.k3, KqFmt.iq3s, KqFmt.iq3xxs, KqFmt.iq2s, KqFmt.iq2xs, KqFmt.iq2xxs)) {
+    for (f in fixed_array(KqFmt.iq4xs, KqFmt.iq3s4, KqFmt.nv4, KqFmt.k3, KqFmt.iq3s, KqFmt.iq3xxs, KqFmt.iq2s, KqFmt.iq2xs, KqFmt.iq2xxs)) {
         if (int(f) == fmt) return true
     }
     return false
@@ -481,6 +483,8 @@ def kq_gemv_float_oracle(fmt : int; wq, ws, xq : array<uint>; xs : array<float>;
         return <- lut_gemv_float_oracle(wq, ws, xq, xs, regions, n, d, nreg, iq4nl_lut(), false)
     } elif (fmt == int(KqFmt.iq3s4)) {
         return <- lut_gemv_float_oracle(wq, ws, xq, xs, regions, n, d, nreg, iq3s4_lut(), true)
+    } elif (fmt == int(KqFmt.nv4)) {
+        return <- nv4_gemv_float_oracle(wq, ws, xq, xs, regions, n, d, nreg)
     } elif (fmt == int(KqFmt.k3)) {
         return <- k3_gemv_float_oracle(wq, ws, xq, xs, regions, n, d, nreg)
     } elif (fmt == int(KqFmt.iq3s)) {
@@ -518,6 +522,27 @@ def lut_gemv_float_oracle(wq, ws, xq : array<uint>; xs : array<float>; regions :
                 bacc += float(lut[b & 15]) * float(xlo) + float(lut[b >> 4]) * float(xhi)
             }
             acc += xs[xsb] * dd * float(sc) * bacc
+        }
+    }
+    return <- y
+}
+
+//! the nv4 sub-block scale `si` of superblock `sb`'s device row: byte si of the row's first four words, UE4M3 at half
+def nv4_row_sc(ws : array<uint>; sb, si : int) : float => ue4m3_half_f32(uint(byte_u8(ws, sb * 20 + si)))
+
+//! NVFP4 GEMV float oracle: w = MX4_LUT[q] x the sub-block's UE4M3 scale at half straight off the plane bytes - a 32-block's
+//! low 16 under scale byte 2 blk, its high 16 under 2 blk + 1, over the k4 nibble tiling
+def nv4_gemv_float_oracle(wq, ws, xq : array<uint>; xs : array<float>; regions : array<uint>; n, d, nreg : int) : array<float> {
+    var y <- gemv_float_walk(regions, n, d, nreg) $(var acc : float&; sb, xsb : int) {
+        for (blk in range(8)) {
+            var blo = 0.0
+            var bhi = 0.0
+            for (m in range(16)) {
+                let b = byte_u8(wq, sb * 128 + blk * 16 + m)
+                blo += float(MX4_LUT[b & 15]) * float(byte_s8(xq, xsb * 256 + blk * 32 + m))
+                bhi += float(MX4_LUT[b >> 4]) * float(byte_s8(xq, xsb * 256 + blk * 32 + 16 + m))
+            }
+            acc += xs[xsb] * (nv4_row_sc(ws, sb, 2 * blk) * blo + nv4_row_sc(ws, sb, 2 * blk + 1) * bhi)
         }
     }
     return <- y
@@ -924,6 +949,19 @@ def iq4xsf16_gemm_oracle(wq : array<uint>; wsu : array<uint>; xf : array<uint>;
     lutf16_gemm_oracle(wq, wsu, xf, recs, nrec, n, d, y, iq4nl_lut(), false)
 }
 
+//! NVFP4 f16-feed GEMM reference over the device form: per weight MX4_LUT[q] x the sub-block's UE4M3 scale at half (the
+//! sixteen bytes of the 5-word row, in sub-block order) over the k4 nibble tiling, rounded f16 as the decode rounds
+def nv4f16_gemm_oracle(wq : array<uint>; wsu : array<uint>; xf : array<uint>;
+                       recs : array<uint>; nrec, n, d : int; var y : array<float>) {
+    f16_gemm_walk(xf, recs, nrec, n, d, 256, y) $(sb, e : int) : float {
+        let g = e / 32
+        let hh = (e % 32) / 16
+        let by = byte_u8(wq, sb * 128 + g * 16 + e % 16)
+        let q = (by >> (hh * 4)) & 0xF
+        return float(float16(float(MX4_LUT[q]) * nv4_row_sc(wsu, sb, g * 2 + hh)))
+    }
+}
+
 def iq3s4f16_gemm_oracle(wq : array<uint>; wsu : array<uint>; xf : array<uint>;
                          recs : array<uint>; nrec, n, d : int; var y : array<float>) {
     lutf16_gemm_oracle(wq, wsu, xf, recs, nrec, n, d, y, iq3s4_lut(), true)
@@ -1220,6 +1258,18 @@ enum ScaleForm {
     q51_dm        //! one [d | m] word a block, m signed
     iq4nl32_d     //! two f16 d a word
     mx4_e8m0      //! four E8M0 bytes a word
+    nv4_bytes     //! four words of UE4M3 sub-block scale bytes, then a zero pad word
+}
+
+//! the nv4 cells' scale bytes: UE4M3 codes with exponents 1..10 (2^-7 .. 2^2 at half) and every mantissa, four a word, so the
+//! tile's f16 sums stay far from 65504 and no code reads as the nan zero
+def nv4_scale_word(i, seed : uint) : uint {
+    var w = 0u
+    for (b in range(4)) {
+        let h = hash_word(i * 4u + uint(b) + seed)
+        w |= ((1u + h % 10u) << 3u | ((h >> 8u) & 7u)) << uint(b * 8)
+    }
+    return w
 }
 
 //! one row of the per-format tile table: the format, its K and scale unit, the hashed quant words a unit, the scale-row form
@@ -1247,6 +1297,7 @@ def fmt_tile_rows() : array<FmtTile> {
         FmtTile(fmt = KqFmt.iq2xs, n = TILE_CELL_K, blk_k = 256, wq_words = 16, wq_seed = 29u, form = ScaleForm.d_dmin_hash, dmul = 0.0002, mmul = 0.0, sseed = 613u, xf_add = 5u, oracle = @@iq2xsf16_gemm_oracle),
         FmtTile(fmt = KqFmt.q40, n = TILE_CELL_K, blk_k = 256, wq_words = 32, wq_seed = 29u, form = ScaleForm.d_pairs, dmul = 0.0002, mmul = 0.00013, xf_add = 5u, oracle = @@q40f16_gemm_oracle),
         FmtTile(fmt = KqFmt.iq4nl, n = TILE_CELL_K, blk_k = 256, wq_words = 32, wq_seed = 29u, form = ScaleForm.d_pairs, dmul = 0.0002, mmul = 0.00013, xf_add = 5u, oracle = @@iq4nlf16_gemm_oracle),
+        FmtTile(fmt = KqFmt.nv4, n = TILE_CELL_K, blk_k = 256, wq_words = 32, wq_seed = 29u, form = ScaleForm.nv4_bytes, sseed = 613u, xf_add = 5u, oracle = @@nv4f16_gemm_oracle, control = @@iq4nlf16_gemm_oracle),
         FmtTile(fmt = KqFmt.k3, n = TILE_CELL_K, blk_k = 256, wq_words = 24, wq_seed = 29u, form = ScaleForm.hash_d, dmul = 0.0002, sseed = 811u, xf_add = 5u, oracle = @@k3f16_gemm_oracle),
         FmtTile(fmt = KqFmt.k6, n = TILE_CELL_K, blk_k = 256, wq_words = 48, wq_seed = 41u, form = ScaleForm.hash_d, dmul = 0.0002, sseed = 811u, xf_add = 5u, oracle = @@k6f16_gemm_oracle),
         FmtTile(fmt = KqFmt.iq3s, n = TILE_CELL_K, blk_k = 256, wq_words = 26, wq_seed = 29u, form = ScaleForm.d_hi_hash, dmul = 0.0002, sseed = 613u, xf_add = 5u, oracle = @@iq3sf16_gemm_oracle, control = @@iq3xxsf16_gemm_oracle),
@@ -1339,7 +1390,7 @@ def fmt_tile_planes(row : FmtTile; var wqh, wsh : array<uint>) {
     let units = 2 * TILE_CELL_D * (row.n / row.blk_k)
     delete wqh
     wqh <- hashed_words(units * row.wq_words, 1u, row.wq_seed)
-    if (row.form == ScaleForm.d_dmin_hash || row.form == ScaleForm.d_pairs || row.form == ScaleForm.hash_d) {
+    if (row.form == ScaleForm.d_dmin_hash || row.form == ScaleForm.d_pairs || row.form == ScaleForm.hash_d || row.form == ScaleForm.nv4_bytes) {
         wsh |> resize(units * 5)
     } elif (row.form == ScaleForm.d_hi_hash) {
         wsh |> resize(units * 2)
@@ -1367,6 +1418,10 @@ def fmt_tile_planes(row : FmtTile; var wqh, wsh : array<uint>) {
             wsh[sb * 2 + 1] = hash_word(uint(sb * 2 + 1) + row.sseed)
         } elif (row.form == ScaleForm.q51_dm) {
             wsh[sb] = packHalf2x16(float2(0.0002 * float(1 + sb % 7), 0.0001 * float(sb % 5) - 0.0002))
+        } elif (row.form == ScaleForm.nv4_bytes) {
+            for (wi in range(4)) {
+                wsh[sb * 5 + wi] = nv4_scale_word(uint(sb * 4 + wi), row.sseed)
+            }
         }
     }
     if (row.form == ScaleForm.iq4nl32_d) {

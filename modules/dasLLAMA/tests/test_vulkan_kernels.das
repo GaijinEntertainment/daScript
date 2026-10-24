@@ -1631,8 +1631,8 @@ def private check_qbytes(t : T?; tag : string; got, want : array<uint>) {
     delete poisoned
 }
 
-//! the fourteen kq formats with a decode GEMV leaf and a batch tile, the order the family cells walk
-let private KQ_LEAF_FMTS = fixed_array(int(KqFmt.k4), int(KqFmt.q40), int(KqFmt.k5), int(KqFmt.k6), int(KqFmt.iq4xs), int(KqFmt.k3), int(KqFmt.iq3s), int(KqFmt.iq3xxs), int(KqFmt.iq4nl), int(KqFmt.k2), int(KqFmt.iq2s), int(KqFmt.iq2xs), int(KqFmt.iq2xxs), int(KqFmt.iq3s4))
+//! the fifteen kq formats with a decode GEMV leaf and a batch tile, the order the family cells walk
+let private KQ_LEAF_FMTS = fixed_array(int(KqFmt.k4), int(KqFmt.q40), int(KqFmt.k5), int(KqFmt.k6), int(KqFmt.iq4xs), int(KqFmt.k3), int(KqFmt.iq3s), int(KqFmt.iq3xxs), int(KqFmt.iq4nl), int(KqFmt.k2), int(KqFmt.iq2s), int(KqFmt.iq2xs), int(KqFmt.iq2xxs), int(KqFmt.iq3s4), int(KqFmt.nv4))
 
 //! the family's class rails engage on the device: every leaf's pipeline builds, else the cell skips
 def private kq_leaf_rails_engage(ensure : block<(fmt : int) : bool>) : bool {
@@ -1789,7 +1789,7 @@ def private per32_sum_rows_cell(t : T?; fmt : KqFmt; n, wq_words : int; wq_seed,
 
 [test]
 def test_vkd_kq_gemv_family(t0 : T?) {
-    t0 |> run("kq GEMV class family == the CPU oracle (all 14 formats)") <| @(t : T?) {
+    t0 |> run("kq GEMV class family == the CPU oracle (all 15 formats)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!kq_leaf_rails_engage() <| $(fmt : int) => gemv_cls_ensure(fmt)) {
                 t |> skip("no Vulkan device, or a kq GEMV class pipeline failed to build")
@@ -1849,7 +1849,7 @@ def test_vkd_kq_gemv_family(t0 : T?) {
 //! row against `kq_gemv_float_oracle` over the same table row (the lanes in element order, independent of the class bit-math)
 [test]
 def test_vkd_emb_gather_family(t0 : T?) {
-    t0 |> run("the token-table gather's leaves == the class lane decode, and the float witness, for all 14 superblock formats") <| @(t : T?) {
+    t0 |> run("the token-table gather's leaves == the class lane decode, and the float witness, for all 15 superblock formats") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!kq_leaf_rails_engage() <| $(fmt : int) => emb_cls_ensure(fmt)) {
                 t |> skip("no Vulkan device, or a token-table gather pipeline failed to build")
@@ -2475,7 +2475,7 @@ def test_vkd_q8_batch_tile(t0 : T?) {
 
 [test]
 def test_vkd_kq_batch_family(t0 : T?) {
-    t0 |> run("kq batch tile class family == the CPU oracle (all 14 formats)") <| @(t : T?) {
+    t0 |> run("kq batch tile class family == the CPU oracle (all 15 formats)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!kq_leaf_rails_engage() <| $(fmt : int) => kq_batch_cls_ensure(fmt, false)) {
                 t |> skip("no Vulkan device, or a kq batch class pipeline failed to build")
@@ -2882,6 +2882,13 @@ def test_vkd_k2_cm2_batch(t0 : T?) {
 def test_vkd_iq4nl_cm2_batch(t0 : T?) {
     t0 |> run("cm2 IQ4_NL l/m/s/e tiles and the KHR tile == the CPU oracle (codebook + per-block f16 d decode-in-load; the KHR arm stages the same decode)") <| @(t : T?) {
         fmt_tile_cell(t, KqFmt.iq4nl)
+    }
+}
+
+[test]
+def test_vkd_nv4_cm2_batch(t0 : T?) {
+    t0 |> run("cm2 NVFP4 l/m/s/e tiles and the KHR tile == the CPU oracle (the doubled e2m1 codes under the UE4M3 sub-block scales at half, decode-in-load; the KHR arm stages the same decode)") <| @(t : T?) {
+        fmt_tile_cell(t, KqFmt.nv4)
     }
 }
 
@@ -5303,7 +5310,7 @@ def test_vkd_gemv_ncol(t0 : T?) {
                 return
             }
             let fmts <- kq_gemv_fmts()
-            t |> equal(length(fmts), 1 + length(KQ_LEAF_FMTS), "the superblock roster is q8 and the fourteen kq leaves")
+            t |> equal(length(fmts), 1 + length(KQ_LEAF_FMTS), "the superblock roster is q8 and the fifteen kq leaves")
             for (f in type<KqFmt>) {
                 t |> success(gemv_cls_ensure(int(f)), "{f}: the one-column class rail engages")
                 gemv_ncol_arm(t, f, 1024, 96)   //! n a multiple of 256 for the superblock formats, d even for the row-pair stamps
@@ -9709,7 +9716,7 @@ def test_vkd_moe_routing(t0 : T?) {
 def test_vkd_gemv_lane_rule(t0 : T?) {
     t0 |> run("gemv_lanes_per_row: the measured lane split per format class and row length") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            let grid = fixed_array(KqFmt.iq2s, KqFmt.iq2xs, KqFmt.iq2xxs, KqFmt.iq3xxs, KqFmt.iq4xs, KqFmt.iq4nl, KqFmt.iq3s4)
+            let grid = fixed_array(KqFmt.iq2s, KqFmt.iq2xs, KqFmt.iq2xxs, KqFmt.iq3xxs, KqFmt.iq4xs, KqFmt.iq4nl, KqFmt.iq3s4, KqFmt.nv4)
             let lattice = fixed_array(KqFmt.k2, KqFmt.k3, KqFmt.k4, KqFmt.k5, KqFmt.k6, KqFmt.q40, KqFmt.iq3s)
             //! row length -> (the grid formats' lanes, the k-lattice formats' lanes); 0 = the whole subgroup
             let rows = fixed_array((n = 768l, g = 8u, l = 8u), (n = 1024l, g = 8u, l = 16u), (n = 1536l, g = 8u, l = 16u),

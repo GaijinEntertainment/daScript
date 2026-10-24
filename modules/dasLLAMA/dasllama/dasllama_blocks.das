@@ -209,6 +209,11 @@ def private attention_chain_decode(t : Model; var s : Session; l : int64; pos : 
         let kqpo = kq_plane_q(t, fo, t.wo_offs[l])
         let kspo = kq_plane_s(t, fo, t.wo_offs[l])
         let rowso = kq_rows_for(fo)
+        // the planes' per-tensor scales (NVFP4's scale2): the rows core's epilogue, ahead of any bias
+        let scq = site_scale(t, fq, t.wq_offs[l])
+        let sck = site_scale(t, fk, t.wk_offs[l])
+        let scv = site_scale(t, fv, t.wv_offs[l])
+        let sco = site_scale(t, fo, t.wo_offs[l])
         // this position's rope table row (dual-rope arches: the sliding class's row)
         let swa_row = is_sliding && has_dual_rope(c)
         let crow = swa_row ? addr < float const? >(s.rope_cos_swa[0]) : addr < float const? >(s.rope_cos[0])
@@ -240,6 +245,9 @@ def private attention_chain_decode(t : Model; var s : Session; l : int64; pos : 
                             let r1 = min(rend, qd)
                             if (fq != KqFmt.q8) {
                                 invoke(rowsq, qp, kqpq, kspq, kxqp, kxsp, kxbsp, dim, r, r1)
+                                if (scq != 1.0) {
+                                    scale_inplace(qp + r, scq, r1 - r)
+                                }
                             } elif (f16w) {
                                 invoke(mmrows16, qp, wpq, wsq16, xqp, xsp, dim, r, r1)
                             } else {
@@ -254,6 +262,9 @@ def private attention_chain_decode(t : Model; var s : Session; l : int64; pos : 
                             let r1 = min(rend, qd + kv_dim) - qd
                             if (fk != KqFmt.q8) {
                                 invoke(rowsk, kp, kqpk, kspk, kxqp, kxsp, kxbsp, dim, r0, r1)
+                                if (sck != 1.0) {
+                                    scale_inplace(kp + r0, sck, r1 - r0)
+                                }
                             } elif (f16w) {
                                 invoke(mmrows16, kp, wpk, wsk16, xqp, xsp, dim, r0, r1)
                             } else {
@@ -268,6 +279,9 @@ def private attention_chain_decode(t : Model; var s : Session; l : int64; pos : 
                             let r1 = min(rend, qd + 2l * kv_dim) - qd - kv_dim
                             if (fv != KqFmt.q8) {
                                 invoke(rowsv, vp, kqpv, kspv, kxqp, kxsp, kxbsp, dim, r0, r1)
+                                if (scv != 1.0) {
+                                    scale_inplace(vp + r0, scv, r1 - r0)
+                                }
                             } elif (f16w) {
                                 invoke(mmrows16, vp, wpv, wsv16, xqp, xsp, dim, r0, r1)
                             } else {
@@ -469,6 +483,9 @@ def private attention_chain_decode(t : Model; var s : Session; l : int64; pos : 
                     let r1 = int64(je) * 32l
                     if (fo != KqFmt.q8) {
                         invoke(rowso, xb2p, kqpo, kspo, kxqp, kxsp, kxbsp, qd, r0, r1)
+                        if (sco != 1.0) {
+                            scale_inplace(xb2p + r0, sco, r1 - r0)
+                        }
                     } elif (f16w) {
                         invoke(mmrows16, xb2p, wpo, wso16, xqp, xsp, qd, r0, r1)
                     } else {
@@ -3897,6 +3914,10 @@ def ffn_chain_decode(t : Model; var s : Session; l : int64) { // nolint:STYLE038
         let kqp2 = kq_plane_q(t, f2, w2o)
         let ksp2 = kq_plane_s(t, f2, w2o)
         let rows2 = kq_rows_for(f2)
+        // the planes' per-tensor scales (NVFP4's scale2): the rows core's epilogue, ahead of the activation
+        let sc1 = site_scale(t, f1, w1o)
+        let sc3 = site_scale(t, f3, w3o)
+        let sc2 = site_scale(t, f2, w2o)
         team_parallel_stages(s.chain_stages) <| @(stage : int; jb : int; je : int) {   // nolint:PERF026 — dispatch-API lambda capture, see attention_chain_decode
             unsafe {
                 let grain = stage == 0 ? grain0 : 32l
@@ -3906,6 +3927,9 @@ def ffn_chain_decode(t : Model; var s : Session; l : int64) { // nolint:STYLE038
                     // paired gate/up rows, then act + requant on exactly these rows
                     if (f1 != KqFmt.q8) {
                         invoke(rows1, gup, kqp1, ksp1, kxqp, kxsp, kxbsp, dim, r0, r1)
+                        if (sc1 != 1.0) {
+                            scale_inplace(gup + r0, sc1, r1 - r0)
+                        }
                     } elif (f16w) {
                         invoke(mmrows16, gup, wp1, ws116, xqp, xsp, dim, r0, r1)
                     } else {
@@ -3913,6 +3937,9 @@ def ffn_chain_decode(t : Model; var s : Session; l : int64) { // nolint:STYLE038
                     }
                     if (f3 != KqFmt.q8) {
                         invoke(rows3, gup + hidden, kqp3, ksp3, kxqp, kxsp, kxbsp, dim, r0, r1)
+                        if (sc3 != 1.0) {
+                            scale_inplace(gup + hidden + r0, sc3, r1 - r0)
+                        }
                     } elif (f16w) {
                         invoke(mmrows16, gup + hidden, wp3, ws316, xqp, xsp, dim, r0, r1)
                     } else {
@@ -3944,6 +3971,9 @@ def ffn_chain_decode(t : Model; var s : Session; l : int64) { // nolint:STYLE038
                     // down-projection rows + residual add (post-norm/layer_out_scale arches defer the add)
                     if (f2 != KqFmt.q8) {
                         invoke(rows2, xbp, kqp2, ksp2, xq2p, xs2p, xbs2w, hidden, r0, r1)
+                        if (sc2 != 1.0) {
+                            scale_inplace(xbp + r0, sc2, r1 - r0)
+                        }
                     } elif (f16w) {
                         invoke(mmrows16, xbp, wp2, ws216, xq2p, xs2p, hidden, r0, r1)
                     } else {

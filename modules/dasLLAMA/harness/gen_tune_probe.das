@@ -408,6 +408,13 @@ def pack_kq_disk_block(fmt : int64; var blkb : array<uint8>; base : int) {   // 
                 blkb[b * 18 + 2 + i] = uint8((base * 41 + b * 17 + i * 89 + 7) % 256)
             }
         }
+    } elif (fmt == 49l) {
+        // 4 x 36B NVFP4 disk blocks: four UE4M3 sub-block scales then 32 nibble bytes - every byte pattern is legal (0x7F reads as a zero scale)
+        for (b in range(4)) {
+            for (i in range(36)) {
+                blkb[b * 36 + i] = uint8((base * 43 + b * 19 + i * 97 + 11) % 256)
+            }
+        }
     } elif (fmt == 2l) {
         // 84B Q2_K disk block: 16 sc/min bytes, 64 qs, f16 d, f16 dmin - every byte pattern is legal
         for (i in range(80)) {
@@ -529,7 +536,7 @@ def build_kq_fixture(fmt : int64; n, d, ntok : int64) : KqFixture {
 }
 
 //! a kq format's [tune] family registries (the engine's kq_registries), for a caller holding the format as a schema id
-def kq_regs(fmt : int64) : KqRegistries {
+def kq_regs(fmt : int64) : KqRegistries {   // nolint:STYLE037 - the stamp's ladder, one arm per KqFmt member
     var regs : KqRegistries
     let kf = kq_fmt_of_id(int(fmt), "kq_regs")
     kq_fmt_stamp(kf) $(F) {

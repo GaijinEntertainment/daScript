@@ -616,6 +616,27 @@ def build_iq2xxs_block() : array<uint8> {
 // the shared nibble pattern — weight k = d(k/32) * (q4_pat(k) - 8)
 def q40_d(blk : int) : float => float(blk + 1) * 0.0625
 
+//! the nv4 synthetic superblock's sixteen UE4M3 sub-block scales: normals across the exponent range, the largest
+//! finite code (0x7E = 448) and a subnormal (0x03 = 3 x 2^-9) - weight k = MX4_LUT[q4_pat(k)] x ue4m3_half_f32(NV4_SC[k / 16])
+let NV4_SC <- [0x38, 0x3B, 0x40, 0x2A, 0x4F, 0x18, 0x03, 0x7E, 0x30, 0x35, 0x22, 0x47, 0x11, 0x3F, 0x29, 0x08]
+
+//! the nv4 synthetic superblock: four 36B NVFP4 disk blocks - per block four UE4M3 scales (NV4_SC, in sub-block order)
+//! then 32 nibble bytes, byte j of sub-block s pairing element 16s + j (low) with 16s + j + 8 (high) - the PACK direction
+def build_nv4_block() : array<uint8> {
+    var blkb : array<uint8>
+    blkb |> resize(144)
+    for (b in range(4)) {
+        for (s in range(4)) {
+            blkb[b * 36 + s] = uint8(NV4_SC[b * 4 + s])
+            for (j in range(8)) {
+                let e0 = b * 64 + s * 16 + j
+                blkb[b * 36 + 4 + s * 8 + j] = uint8(q4_pat(e0) | (q4_pat(e0 + 8) << 4))
+            }
+        }
+    }
+    return <- blkb
+}
+
 def build_q40_block() : array<uint8> {
     var blkb : array<uint8>
     blkb |> resize(144)
@@ -691,5 +712,5 @@ def build_iq4nl32_block(blk : int) : array<uint8> {
 
 //! the synthetic superblock of format id `fmt` (35 = iq3s4 reads iq3s's; an id with no builder of its own reads k6's)
 def synth_block(fmt : int) : array<uint8> {
-    return <- (fmt == 4 ? build_q4k_block() : (fmt == 5 ? build_q5k_block() : (fmt == 40 ? build_q40_block() : (fmt == 44 ? build_iq4xs_block() : (fmt == 3 ? build_q3k_block() : (fmt == 33 || fmt == 35 ? build_iq3s_block() : (fmt == 34 ? build_iq3xxs_block() : (fmt == 45 ? build_iq4nl_block() : (fmt == 2 ? build_q2k_block() : (fmt == 23 ? build_iq2s_block() : (fmt == 24 ? build_iq2xs_block() : (fmt == 25 ? build_iq2xxs_block() : build_q6k_block()))))))))))))
+    return <- (fmt == 4 ? build_q4k_block() : (fmt == 5 ? build_q5k_block() : (fmt == 40 ? build_q40_block() : (fmt == 49 ? build_nv4_block() : (fmt == 44 ? build_iq4xs_block() : (fmt == 3 ? build_q3k_block() : (fmt == 33 || fmt == 35 ? build_iq3s_block() : (fmt == 34 ? build_iq3xxs_block() : (fmt == 45 ? build_iq4nl_block() : (fmt == 2 ? build_q2k_block() : (fmt == 23 ? build_iq2s_block() : (fmt == 24 ? build_iq2xs_block() : (fmt == 25 ? build_iq2xxs_block() : build_q6k_block())))))))))))))
 }

@@ -418,6 +418,11 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
         ModelSpec(file = "Qwen3.5-0.8B-MTP-Q8_0.gguf",
             url = "{HF}/unsloth/Qwen3.5-0.8B-MTP-GGUF/resolve/main/Qwen3.5-0.8B-Q8_0.gguf",
             bytes = 833592736l, sha256 = "c54f8b67069c70085b98440de696b44da8250250ac69a961b41133def876e262"),
+        // the NVFP4 hybrid: ModelOpt's two-level FP4 (nv4 planes, each with its `.scale` tensor) on the FFN, attention and
+        // deltanet projections, Q4_K / Q5_K / BF16 beside them - the nv4 rail's carrier (tests/test_kquant.das)
+        ModelSpec(file = "Qwen3.5-0.8B-NVFP4-MTP.gguf",
+            url = "{HF}/michaelw9999/Qwen3.5-0.8B-NVFP4-MTP-GGUF/resolve/main/Qwen3.5-0.8B-NVFP4-MTP-GGUF.gguf",
+            bytes = 578052704l, sha256 = "71a0a29da9481f51d8e301f8ffb67feec1627cd18e92183a1f3918b0a7c35728"),
         // the per-32 hybrid table carrier: the Q5_1 token table, classifier, NextN eh_proj and deltanet planes as q51
         ModelSpec(file = "Qwen3.5-0.8B-MTP-Q5_1-local.gguf",
             recipe = "llama-quantize --allow-requantize --pure --token-embedding-type q5_1 --output-tensor-type q5_1 Qwen3.5-0.8B-MTP-Q8_0.gguf Qwen3.5-0.8B-MTP-Q5_1-local.gguf Q5_1"),

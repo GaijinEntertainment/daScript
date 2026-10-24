@@ -1233,7 +1233,7 @@ last column standing),
 `test_vkd_q8_gemv_gu_n` (its N-column stamps - two, four and eight columns, and eleven as an eight-column tile and a
 four-column one - against the one-row
 kernel run a column at a time, bit for bit, each stamp full and short of its width, over silu and
-gelu), `test_vkd_gemv_ncol` (every `KqFmt` member's N-column decode GEMV - q8 and its row-pair stamps, the fourteen kq
+gelu), `test_vkd_gemv_ncol` (every `KqFmt` member's N-column decode GEMV - q8 and its row-pair stamps, the fifteen kq
 leaves, and the per-32 q51 / iq4nl32 / q4032 / q5032 / mx4 leaves - against its one-column
 class a column at a time, bit for bit, at one to eight columns and through the tiled
 encoder at nine and twelve, the one-column rows against the CPU oracle - the

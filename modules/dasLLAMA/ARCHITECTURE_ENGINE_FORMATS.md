@@ -175,6 +175,17 @@ tensor tiles, the routed GEMV and tiles, the token gather. So a host that sums r
 beside a Vulkan device reads the fast planes, and the device reads the same bytes; under Metal
 `auto` keeps the grid, which streams 17% fewer bytes a superblock.
 
+### A per-tensor weight scale rides beside the nv4 planes {#nv4-site-scale}
+
+An NVFP4 weight is its e2m1 code times its 16-weight sub-block's UE4M3 scale times one f32 the whole tensor shares -
+ModelOpt's second level, a separate `<tensor>.scale` GGUF tensor (one value a dense plane, one an expert on a stack).
+Three mantissa bits cannot absorb that f32, so the planes keep the disk bytes and `detect_site_scales` reads every
+`.scale` after the layout into `Model.site_scale`, keyed by format slot and plane offset (`site_scale_key`); the matmul
+epilogues multiply their output rows by `site_scale(t, fmt, woff)` - `mm_at_kq_pre`, `mm_b_kq_pre`, the CPU side of the
+device batch GEMM, and the fused decode chains (attention, FFN, classifier), which run the rows cores on raw plane pointers
+and scale each 32-row slice ahead of any bias; no entry scales by one. A `.scale` another rail serves, or one at a site
+with no epilogue (the stacks and tables the ledger's nv4 row names), refuses the load; the GPU drivers decline the table.
+
 ### The load and image rail {#the-load-and-image-rail}
 
 **`dasllama_load.das`** is the GGUF load walk: metadata to `Config`, the plane layout, disk-format

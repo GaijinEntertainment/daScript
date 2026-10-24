@@ -243,6 +243,15 @@ def mx4_dec4(nib : uint; sc : float) : float4 {
         float(mag2 >> 24u) * (1.0 - 2.0 * float(sgn >> 24u)) * sc)
 }
 
+//! four nibble codes (one per byte of `nib`) to SIGNED int8 lanes of the doubled e2m1 magnitudes: each code's sign bit negates
+//! its byte (a per-byte two's complement through the 0x80 borrow, no carry across lanes) - the nv4 planes' sdot4 lanes
+def mx4_word(nib : uint) : uint {
+    let mag = mx4_mag2x4(nib)
+    let m = ((nib >> 3u) & 0x01010101u) * 0xFFu
+    let neg = (0x80808080u - mag) ^ 0x80808080u
+    return (mag & ~m) | (neg & m)
+}
+
 struct GemvArgs {
     n : uint       //! reduction dim
     d : uint       //! output rows per region
@@ -1175,7 +1184,7 @@ def kq_grid_words() : array<uint> {
 
 //! the codebook and grid formats: a block's decode gathers, so a lane wants more blocks in flight than the k-lattice's
 def gemv_grid_fmt(fmt : int) : bool =>
-    fmt == int(KqFmt.iq2s) || fmt == int(KqFmt.iq2xs) || fmt == int(KqFmt.iq2xxs) || fmt == int(KqFmt.iq3xxs) || fmt == int(KqFmt.iq4xs) || fmt == int(KqFmt.iq4nl) || fmt == int(KqFmt.iq3s4)
+    fmt == int(KqFmt.iq2s) || fmt == int(KqFmt.iq2xs) || fmt == int(KqFmt.iq2xxs) || fmt == int(KqFmt.iq3xxs) || fmt == int(KqFmt.iq4xs) || fmt == int(KqFmt.iq4nl) || fmt == int(KqFmt.iq3s4) || fmt == int(KqFmt.nv4)
 
 [arch(at="../ARCHITECTURE_GPU_SHARED_GEMM.md#kq-gemv-lanes")]
 def gemv_lanes_per_row(fmt : int; n : int64) : uint {
@@ -1649,6 +1658,21 @@ class template Iq4nlGemvT : Q40GemvT {
         iq4_split(wq4[wsb * 8u + blk], wl, wh)
         let d = q40_d(wsb, blk)
         return float4(d, 0.0, d, 0.0)
+    }
+
+    def override fold_reads_bsum : bool => false
+}
+
+//! NVFP4: w = sc16 x MX4_LUT[q], sc16 a sub-block's UE4M3 scale at half - a 32-block's two halves under two scales off
+//! the device row's byte pair 2g, 2g + 1; signed codes, so no bsum term
+[ |> template_struct_instance]
+class template Nv4GemvT : KqGemvLeafT {
+    def override blk_decode(wsb, blk : uint; var wl : uint4&; var wh : uint4&) : float4 {
+        let wv = wq4[wsb * 8u + blk]
+        wl = uint4(mx4_word(wv.x & KQC_NIBBLE_MASK), mx4_word(wv.y & KQC_NIBBLE_MASK), mx4_word(wv.z & KQC_NIBBLE_MASK), mx4_word(wv.w & KQC_NIBBLE_MASK))
+        wh = uint4(mx4_word((wv.x >> 4u) & KQC_NIBBLE_MASK), mx4_word((wv.y >> 4u) & KQC_NIBBLE_MASK), mx4_word((wv.z >> 4u) & KQC_NIBBLE_MASK), mx4_word((wv.w >> 4u) & KQC_NIBBLE_MASK))
+        let sw = wsu[wsb * 5u + blk / 2u] >> ((blk & 1u) * 16u)
+        return float4(ue4m3_half_f32(sw & 0xFFu), 0.0, ue4m3_half_f32((sw >> 8u) & 0xFFu), 0.0)
     }
 
     def override fold_reads_bsum : bool => false
@@ -5704,6 +5728,55 @@ class template Iq3xxsCm2T : KqCm2BatchT {
 [ |> template_struct_instance]
 class template Iq4nlCm2T : Q40Cm2T {
     override IQLUT = true
+}
+
+//! NVFP4 on the cm2 tile: the k4-tiled nibbles under the sixteen UE4M3 sub-block scales of the device row (four words,
+//! the bytes in sub-block order), w = MX4_LUT[q] x the scale at half - 32-block g's low half reads byte 2g, its high 2g + 1
+[ |> template_struct_instance]
+class template Nv4Cm2T : KqCm2BatchT {
+    typedef BLK = VkK4Blk
+    typedef ST = uint
+    override DECV4 = true
+
+    def override khr_stage16(blk, e0, sbase : uint) : void {
+        static_if (KHR) {
+            let g = e0 >> 5u
+            let hh = (e0 >> 4u) & 1u
+            let w4 = wq4[blk * 8u + g]
+            let si = g * 2u + hh
+            let sc = ue4m3_half_f32((ws[blk * 5u + (si >> 2u)] >> ((si & 3u) * 8u)) & 0xFFu)
+            for [unroll_full] (c in range(4)) {
+                khr_put4(sbase + uint(c) * 2u, mx4_dec4((w4[c] >> (hh * 4u)) & 0x0F0F0F0Fu, sc))
+            }
+        }
+    }
+
+    [spirv_decode, arch(at="../ARCHITECTURE_GPU_SHARED_GEMM.md#cm2-decode-16bit-lanes")]
+    def decode(blk : VkK4Blk; bc, cib : uint2) : float16 {
+        let g = cib.y >> 5u
+        let e = cib.y & 31u
+        let bidx = g * 16u + (e & 15u)
+        let q = (uint(int(blk.qs[int(bidx >> 1u)])) >> ((bidx & 1u) * 8u + (e >> 4u) * 4u)) & 0xFu
+        let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
+        let si = g * 2u + (e >> 4u)
+        let sc = ue4m3_half_f32((ws[srow + (si >> 2u)] >> ((si & 3u) * 8u)) & 0xFFu)
+        return float16(mx4_dec4(q, sc).x)
+    }
+
+    [spirv_decode, arch(at="../ARCHITECTURE_GPU_SHARED_GEMM.md#cm2-decode-16bit-lanes")]
+    def decode_v4(blk : VkK4Blk; bc, cib : uint2) : half4 {
+        let g = cib.y >> 5u
+        let e = cib.y & 31u
+        let li = int((g * 16u + (e & 15u)) >> 1u)
+        let l0 = uint(int(blk.qs[li])) & 0xFFFFu
+        let l1 = uint(int(blk.qs[li + 1])) & 0xFFFFu
+        let sh = (e >> 4u) * 4u
+        let nw = ((l0 >> sh) & 0xFu) | (((l0 >> (sh + 8u)) & 0xFu) << 8u) | (((l1 >> sh) & 0xFu) << 16u) | (((l1 >> (sh + 8u)) & 0xFu) << 24u)
+        let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
+        let si = g * 2u + (e >> 4u)
+        let sc = ue4m3_half_f32((ws[srow + (si >> 2u)] >> ((si & 3u) * 8u)) & 0xFFu)
+        return half4(mx4_dec4(nw, sc))
+    }
 }
 
 [ |> template_struct_instance]
