@@ -1450,6 +1450,22 @@ namespace das {
 #endif
 
 #if !DAS_NO_FILEIO
+    static string scriptModuleCachePath ( const char * modName,
+            const CodeOfPolicies & cop ) {
+        char exePath[4096];
+        size_t exeLen = getExecutablePathName(exePath, sizeof(exePath));
+        return ModuleFileCache::defaultPath(modName ? modName : "",
+            exeLen ? string(exePath, exeLen) : string(),
+            ModuleFileCache::embeddedHostOptions(cop));
+    }
+
+    char * rtti_builtin_module_cache_path ( char * modName,
+            const CodeOfPolicies & cop, Context * context,
+            LineInfoArg * at ) {
+        auto path = scriptModuleCachePath(modName, cop);
+        return context->allocateString(path, at);
+    }
+
     // src/builtin/ARCHITECTURE.md#default-module-cache-path
     struct ScriptModuleCache {
         unique_ptr<SerializerSlotsHidden>   hidden;
@@ -1459,10 +1475,7 @@ namespace das {
         bool                                finished = false;
         ScriptModuleCache ( const CodeOfPolicies & cop, const char * modName ) {
             if ( !cop.module_cache ) return;
-            char exePath[4096];
-            size_t exeLen = getExecutablePathName(exePath, sizeof(exePath));
-            path = ModuleFileCache::defaultPath(modName, exeLen ? string(exePath, exeLen) : string(),
-                ModuleFileCache::embeddedHostOptions(cop));
+            path = scriptModuleCachePath(modName, cop);
             install(true);
         }
         ScriptModuleCache ( const string & cachePath ) : path(cachePath) {
@@ -1645,6 +1658,11 @@ namespace das {
         return program;
     }
 #else
+    char * rtti_builtin_module_cache_path ( char *, const CodeOfPolicies &,
+            Context * context, LineInfoArg * at ) {
+        context->throw_error_at(at, "not supported with DAS_NO_FILEIO");
+        return nullptr;
+    }
     void rtti_builtin_compile_file(  char *, smart_ptr<FileAccess>, ModuleGroup*, const CodeOfPolicies &,
             const TBlock<void, bool, smart_ptr<Program>, const string> &, Context * context, LineInfoArg * at ) {
         context->throw_error_at(at, "not supported with DAS_NO_FILEIO");
@@ -1740,6 +1758,10 @@ namespace das {
         addExtern<DAS_BIND_FUN(rtti_builtin_compile_file)>(*this, lib, "compile_file",
             SideEffects::modifyExternal, "rtti_builtin_compile_file")
                 ->args({"module_name","fileAccess","moduleGroup","codeOfPolicies","block","context","line"});
+        addExtern<DAS_BIND_FUN(rtti_builtin_module_cache_path)>(
+            *this, lib, "module_cache_path", SideEffects::accessExternal,
+            "rtti_builtin_module_cache_path")
+                ->args({"module_name","codeOfPolicies","context","line"});
         addExtern<DAS_BIND_FUN(rtti_builtin_compile_file_cached)>(
             *this, lib, "compile_file",
             SideEffects::modifyExternal, "rtti_builtin_compile_file_cached")

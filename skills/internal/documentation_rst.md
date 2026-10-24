@@ -65,6 +65,10 @@ snippet through `bin/Release/daslang` to confirm it compiles and runs;
 
 ### `// stub` files (check after EVERY regeneration)
 
+Grouped overloads use the first signature's handmade topic for their
+shared description. Document every overload there; a topic for a later
+signature is not rendered.
+
 `das2rst.das` writes a `// stub` file into `doc/source/stdlib/handmade/` for every function,
 typedef, structure or class with no handmade doc; the page then shows raw signature text instead of
 a description.

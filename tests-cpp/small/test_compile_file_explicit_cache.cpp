@@ -280,14 +280,25 @@ TEST_CASE("explicit compile_file cache reports unavailable file IO") {
     CodeOfPolicies policies;
     context.setup(0, 0, policies, AnnotationArgumentList());
     TBlock<void,bool,ProgramPtr,const string> block;
-    CHECK_FALSE(context.runWithCatch([&]() {
-        rtti_builtin_compile_file_cached(nullptr, nullptr, nullptr,
-            policies, nullptr, block, &context, nullptr);
-    }));
-    REQUIRE(context.getException() != nullptr);
-    CHECK(string(context.getException()).find("DAS_NO_FILEIO")
-        != string::npos);
-    context.clearException();
+    auto unavailable = [&](auto operation) {
+        CHECK_FALSE(context.runWithCatch(operation));
+        REQUIRE(context.getException() != nullptr);
+        CHECK(string(context.getException()).find("DAS_NO_FILEIO")
+            != string::npos);
+        context.clearException();
+    };
+    SUBCASE("cache path") {
+        unavailable([&]() {
+            rtti_builtin_module_cache_path(nullptr, policies,
+                &context, nullptr);
+        });
+    }
+    SUBCASE("compilation") {
+        unavailable([&]() {
+            rtti_builtin_compile_file_cached(nullptr, nullptr, nullptr,
+                policies, nullptr, block, &context, nullptr);
+        });
+    }
 }
 
 #endif

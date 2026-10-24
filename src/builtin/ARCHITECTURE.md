@@ -65,7 +65,9 @@ the same default cache when its `CodeOfPolicies.module_cache` is set, with
 `ModuleFileCache::embeddedHostOptions` standing in for the host's command line: this process's
 arguments up to `--`, a `--jit-target` after it, and a hash of the policies streamed as a record
 stamps them, so two tools compiling one file under different policies keep separate records
-instead of rewriting one. `ScriptModuleCache` is the guard around that compile: it empties the
+instead of rewriting one. `module_cache_path` exposes this path to scripts;
+dastest keeps its filename in the requested cache directory.
+`ScriptModuleCache` is the guard around that compile: it empties the
 environment's serializer slots before installing - the enclosing compile's stream (a
 `compile_file` from an `[init]` runs under the host's armed cache) never feeds the nested one, a
 cold nested read included - finishes the cache and puts the slots back on every exit, an

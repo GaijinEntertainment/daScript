@@ -138,6 +138,9 @@ namespace das {
             const TBlock<void,bool,smart_ptr<Program>,const string> & block, Context * context, LineInfoArg * at );
     DAS_API void rtti_builtin_compile_file(char * modName, smart_ptr<FileAccess> access, ModuleGroup* module_group, const CodeOfPolicies & cop,
         const TBlock<void, bool, smart_ptr<Program>, const string> & block, Context * context, LineInfoArg * lineinfo);
+    DAS_API char * rtti_builtin_module_cache_path(
+        char * modName, const CodeOfPolicies & cop,
+        Context * context, LineInfoArg * lineinfo);
     DAS_API char * rtti_builtin_compile_file_cached(
         char * modName, smart_ptr<FileAccess> access,
         ModuleGroup* module_group, const CodeOfPolicies & cop,
@@ -209,4 +212,3 @@ namespace das {
     DAS_API TSequence<EnumValueInfo&> each_EnumInfo ( EnumInfo & st, Context * context, LineInfoArg * at );
     DAS_API TSequence<const EnumValueInfo&> each_const_EnumInfo ( const EnumInfo & st, Context * context, LineInfoArg * at );
 }
-

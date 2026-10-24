@@ -14,7 +14,6 @@ require daslib/defer
 require math
 
 require dastest_clargs
-require fs
 require log
 require testing
 require suite_result public
@@ -204,7 +203,8 @@ def test_file(file_name : string; var ctx : SuiteCtx; var file_ctx : FileCtx) : 
                 access |> add_extra_module("coverage", "{get_das_root()}/daslib/coverage.das")
             }
             let cache = (empty(ctx.moduleCacheDir) ? ""
-                : module_cache_file(ctx.moduleCacheDir, file_name))
+                : path_join(ctx.moduleCacheDir, base_name(module_cache_path(
+                    get_full_file_name(file_name), cop))))
             let verdict = compile_file(file_name, access, unsafe(addr(mg)),
                 cop, cache) $(ok, program, output) {
                 var expectedErrors : table<CompilationError; int>

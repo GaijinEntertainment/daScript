@@ -77,11 +77,6 @@ def fix_path(path : string) : string {
 }
 
 
-def module_cache_file(dir, file : string) : string {
-    return join_path(dir, "{base_name(file)}.{hash(file):x}.bin")
-}
-
-
 def scan_dir(path : string; var cache : table<string; void?>; var res : array<string>; suffix = ".das") : bool {
     return scan_dir(path, cache, res, suffix) $(_n) {
         return true

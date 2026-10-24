@@ -2,7 +2,7 @@ options gen2
 options indenting = 4
 
 require dastest/testing_boost public
-require dastest/fs
+require daslib/ast
 require daslib/base64
 require daslib/clargs
 require daslib/fio
@@ -11,7 +11,7 @@ require strings
 def cache_count(folder : string) : int {
     var count = 0
     dir(folder) $(name) {
-        if (ends_with(name, ".bin")) count++
+        if (ends_with(name, ".dascache")) count++
     }
     return count
 }
@@ -45,10 +45,14 @@ def run_cached(t : T?; folder, cache, phase : string;
 
 [test]
 def test_module_cache_filenames(t : T?) {
-    let first = module_cache_file("cache", "first/test.das")
-    t |> equal(first, module_cache_file("cache", "first/test.das"))
-    t |> success(first != module_cache_file("cache", "second/test.das"))
-    t |> success(ends_with(first, ".bin"))
+    var policies = CodeOfPolicies()
+    let first = module_cache_path("first/test.das", policies)
+    t |> equal(first, module_cache_path("first/test.das", policies))
+    t |> success(first != module_cache_path("second/test.das", policies))
+    t |> success(ends_with(first, ".dascache"))
+    t |> success(!empty(module_cache_path("", policies)))
+    policies.no_optimizations = true
+    t |> success(first != module_cache_path("first/test.das", policies))
 }
 
 //! A separate runner exposes invalid internal arguments through its exit code.
@@ -114,6 +118,11 @@ def test_dastest_cache_per_test_file(t : T?) {
         ["key=2222", "module cache clean:"], true)
     run_cached(t, folder, worker_cache, "isolated quiet", ["key=2222"],
         true, false)
+    t |> success(fwrite(path_join(folder, "mc_other_case.das"),
+        fread(path_join(fixtures, "mc_key_case.das"))))
+    run_cached(t, folder, cache, "another test file",
+        ["key=2222", "module cache none:"], false, true, "mc_other_case.das")
+    t |> equal(cache_count(cache), 2)
 }
 
 //! Fresh processes expose compiled macro values reused across environments.

@@ -36,7 +36,7 @@ struct DastestArgs {
     @clarg_doc = "Project file. Will be used to compile given tests"
     test_project : string
 
-    @clarg_doc = "Folder holding one AST module cache per test file"
+    @clarg_doc = "Folder holding per-test AST caches by compile configuration"
     module_cache_dir : string
 
     @clarg_doc = "Number of threads to use in isolated mode; 0 uses a conservative hardware rule for JIT and 2x hardware threads otherwise"
