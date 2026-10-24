@@ -73,9 +73,12 @@ Kyutai's `pocket-tts` on the CPU (one torch thread, the package's pin), all pinn
 `model_specs.das` recipes' revisions from the in-repo `tts` venv; and on the metal leg mlx-audio's
 ports of all three from the `mlx` venv (`--engine mlx`). Both venvs build from committed
 `benchmarks/asr/requirements-*.txt` (`setup_asr_rig --venvs`), and the run prints a `VERSIONS` line
-the row carries. Kitten's package speaks shorter audio than das for the same phonemes (its speed
-prior and 5000-sample trim), so a kitten pair compares on the wall, never on the real-time factor.
-`harness/tts_synth.das` and `harness/pocket_synth.py` stay the scoring rig's synthesis arms.
+the row carries. A kitten voice name resolves through the `voice_aliases` table of the pack (the
+Kitten model repo the recipe pins) on both sides - das reads it from the GGUF, the reference from
+the pack's `config.json` - so a kitten pair speaks the same voice at the same speed prior (the
+per-voice rate multiplier the pack's `speed_priors` assigns) and compares on audio seconds and the
+real-time factor like every other TTS pair. `harness/tts_synth.das` and `harness/pocket_synth.py`
+stay the scoring rig's synthesis arms.
 
 The Pocket family's reference rows outside the board take two more scripts under the same pocket-tts venv:
 `harness/pocket_ref_time.py <configs> <threads> <device>` times the package on the served bench's one sentence at

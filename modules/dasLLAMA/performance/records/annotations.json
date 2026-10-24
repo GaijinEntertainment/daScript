@@ -38,17 +38,63 @@
  },
  {
   "gguf": "kitten-nano.gguf",
-  "engine": "das",
+  "box": "epyc9r14",
+  "engine": "kittentts",
+  "backend": "cpu",
+  "flavor": "stock",
   "workload": "tts",
-  "comment": "Held off the board: das speaks the corpus head about half again as long as the KittenTTS package does for the same sentences (242 s against 160 s), so the wall is not the same work - followup_general.md row 219.",
-  "held": "followup_general.md 219"
+  "comment": "Held off the board: this reference row speaks the pack's Kiki voice for Bella (159.95 s of audio against the das row's 242 s), so its wall is not the das row's work - re-measure on the box, followup_general.md row 238.",
+  "held": "followup_general.md 238"
+ },
+ {
+  "gguf": "kitten-nano.gguf",
+  "box": "gnr",
+  "engine": "kittentts",
+  "backend": "cpu",
+  "flavor": "stock",
+  "workload": "tts",
+  "comment": "Held off the board: this reference row speaks the pack's Kiki voice for Bella (159.95 s of audio against the das row's 242 s), so its wall is not the das row's work - re-measure on the box, followup_general.md row 238.",
+  "held": "followup_general.md 238"
+ },
+ {
+  "gguf": "kitten-nano.gguf",
+  "box": "graviton4",
+  "engine": "kittentts",
+  "backend": "cpu",
+  "flavor": "stock",
+  "workload": "tts",
+  "comment": "Held off the board: this reference row speaks the pack's Kiki voice for Bella (159.95 s of audio against the das row's 242 s), so its wall is not the das row's work - re-measure on the box, followup_general.md row 238.",
+  "held": "followup_general.md 238"
  },
  {
   "gguf": "kitten-mini.gguf",
-  "engine": "das",
+  "box": "epyc9r14",
+  "engine": "kittentts",
+  "backend": "cpu",
+  "flavor": "stock",
   "workload": "tts",
-  "comment": "Held off the board: das speaks the corpus head about half again as long as the KittenTTS package does for the same sentences (207 s against 145 s), so the wall is not the same work - followup_general.md row 219.",
-  "held": "followup_general.md 219"
+  "comment": "Held off the board: this reference row speaks the pack's Kiki voice for Bella (144.7 s of audio against the das row's 206 s), so its wall is not the das row's work - re-measure on the box, followup_general.md row 238.",
+  "held": "followup_general.md 238"
+ },
+ {
+  "gguf": "kitten-mini.gguf",
+  "box": "gnr",
+  "engine": "kittentts",
+  "backend": "cpu",
+  "flavor": "stock",
+  "workload": "tts",
+  "comment": "Held off the board: this reference row speaks the pack's Kiki voice for Bella (144.7 s of audio against the das row's 206 s), so its wall is not the das row's work - re-measure on the box, followup_general.md row 238.",
+  "held": "followup_general.md 238"
+ },
+ {
+  "gguf": "kitten-mini.gguf",
+  "box": "graviton4",
+  "engine": "kittentts",
+  "backend": "cpu",
+  "flavor": "stock",
+  "workload": "tts",
+  "comment": "Held off the board: this reference row speaks the pack's Kiki voice for Bella (144.6 s of audio against the das row's 206 s), so its wall is not the das row's work - re-measure on the box, followup_general.md row 238.",
+  "held": "followup_general.md 238"
  },
  {
   "gguf": "Qwen3VL-4B-Instruct-Q8_0.gguf",

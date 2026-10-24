@@ -2126,16 +2126,6 @@
     file at depth 1.
 
 
-219. **Kitten speaks the TTS board's corpus half again as long as the reference package.** On the g2p corpus head (20
-    sentences, voice Bella) the das Kitten rows produce 242.6 s of audio on nano and 206.5 s on mini, where the
-    `kittentts` package and mlx-audio's port produce about 160 s and 145 s; Kokoro agrees on every engine (145.7 against
-    146.6 / 146.7; `PERF_LEDGER.md`, the 2026-10-22 release-17 boards entry). The parity rail (`test_tts_kitten.das`) feeds the oracle's own tokens, so a
-    front end that lengthens the token stream - our g2p, then `kitten_phonemes_from_misaki`, where the references read
-    the fixture's espeak string - passes it. The board's Kitten rows stay off the published board until this lands.
-    Done = the das Kitten audio on the corpus head within a few percent of the package's, a cell holding the facade's
-    front end against the package's on corpus sentences (the token stream and the duration, a lengthened stream the
-    control), and the Kitten TTS rows re-measured.
-
 220. **The CPU batched decode row (`tg128@4`) has never been profiled on a routed model.** On the release-17 board
     gpt-oss-20b mxfp4 reads 0.72 of llama.cpp's batched decode on Zen4 (AWS m7a, 46.9 against 64.7 tok/s) and 0.94 on
     the M5 Max; Qwen3.6-35B-A3B UD-Q4_K_M reads 0.94 on the M5; the dense carriers sit at 0.98-0.99 on Zen4
@@ -2297,3 +2287,10 @@
     kernel a frame walking the layers with the cache rows in workgroup memory) with the seat cells of
     `tests/test_tts_pocket.das` holding it and the served rows re-read; and the CPU codec chain profiled at the small
     widths (`forward_profile`-style, per kernel) with the per-call setup and the row tile sized to them.
+
+238. **The AWS boxes' `kittentts` reference rows speak a different voice than their das rows.** `records/epyc9r14.json`,
+    `records/gnr.json` and `records/graviton4.json` hold kitten-nano and kitten-mini `kittentts` `cpu/stock` rows that
+    speak the pack's Kiki voice for `Bella` (159.95 s / 144.7 s of audio against the das rows' 242 s / 206 s - the
+    same corpus head in a faster voice, the 2026-10-24 `PERF_LEDGER.md` entry), so their walls are not the das rows'
+    work; `records/annotations.json` holds them off the board, and the M5 rows pair. Done =
+    `gen_bench_records.das -- --workload tts -o kitten` on each of the three boxes and the three holds lifted.

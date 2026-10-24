@@ -71,8 +71,8 @@ A box without an accelerated tier simply shows fewer categories.
   times its synthesis less the text front end, the phoneme models' references (kokoro's torch
   model, KittenTTS's ONNX files) take the corpus's own phoneme strings, and Pocket reads the text
   on both sides. The references are each family's own package on the CPU and, on Apple boxes,
-  kokoro on torch `mps` and mlx-audio's ports in the gpu category. KittenTTS's package speaks
-  shorter audio for the same phonemes, so a kitten pair compares on time, not on audio rate.
+  kokoro on torch `mps` and mlx-audio's ports in the gpu category. A kitten voice name resolves
+  through the pack's own alias table on both sides, so a pair speaks the same voice.
 
 Model load is excluded everywhere. Sweeps run on images the batch bakes itself (the lifecycle
 wipe/bake/delete in `PROFILE.md`) so first-load conversion cost cannot leak into a timed cell; a >3% coefficient of variation on a das cell

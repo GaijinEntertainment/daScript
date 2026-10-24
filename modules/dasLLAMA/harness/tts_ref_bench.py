@@ -11,7 +11,8 @@ the summed audio seconds and best-of generation ms, and one `VERSIONS\t<line>` l
 packages the run took. `--engine torch` (the default) runs the packages - kokoro's torch `KModel`,
 KittenTTS's ONNX files under onnxruntime, Kyutai's `pocket-tts` - from the `tts` venv
 (`setup_asr_rig --venvs`); `--engine mlx` runs mlx-audio's ports on the Apple GPU from the `mlx`
-venv. The kitten voices are the KittenTTS pack names (`Bella` = expr-voice-5-f).
+venv. A kitten voice is a pack voice or one of the pack's alias names, resolved through the
+pack's own `voice_aliases` table (`Bella` = expr-voice-2-f).
 """
 import argparse, json, os, sys, time
 
@@ -20,7 +21,6 @@ FIXTURE = os.path.join(HERE, "..", "tests", "_tts_fixtures", "g2p_corpus.json")
 KOKORO_REPO, KOKORO_REV = "hexgrad/Kokoro-82M", "f3ff3571791e39611d31c381e3a41a3af07b4987"
 KITTEN_REPOS = {"kitten-nano": ("KittenML/kitten-tts-nano-0.8", "7a1db645b1f3ab9420761d87428e042b9cec3f26"),
                 "kitten-mini": ("KittenML/kitten-tts-mini-0.8", "c02725660cea441db4c383af69f1f26f5cd00947")}
-KITTEN_VOICES = {"Bella": "expr-voice-5-f", "Jasper": "expr-voice-5-m"}
 POCKET_LANGUAGES = {"pocket-en": "english_2026-04"}
 MLX_REPOS = {"kokoro-82m": ("mlx-community/Kokoro-82M-bf16", "a71e4d38b236d968966a2002c4c895dbd12b1c3c"),
              "kitten-nano": ("mlx-community/kitten-tts-nano-0.8", "f57e91b190ca3323aa94c7bbdde4565343d79588"),
@@ -62,6 +62,12 @@ def kitten_tokens(ps, cleaner, tokenize):
     return [0] + cleaner(" ".join(tokenize(ps))) + [10, 0]
 
 
+def kitten_voice(aliases, speed_priors, voice):
+    """the pack's voice key for a name - an alias through the pack's own table, a pack voice as itself - and its speed prior"""
+    vkey = aliases.get(voice, voice)
+    return vkey, speed_priors.get(vkey, 1.0)
+
+
 def kitten_synth(name, voice, threads, device):
     import numpy as np
     import onnxruntime as ort
@@ -77,8 +83,7 @@ def kitten_synth(name, voice, threads, device):
     sess = ort.InferenceSession(hf_hub_download(repo, cfg["model_file"], revision=rev), sess_options=so, providers=providers)
     print(f"  {name}: onnxruntime providers {sess.get_providers()}", flush=True)
     voices = np.load(hf_hub_download(repo, cfg["voices"], revision=rev))
-    vkey = KITTEN_VOICES.get(voice, voice)
-    speed = cfg.get("speed_priors", {}).get(vkey, 1.0)
+    vkey, speed = kitten_voice(cfg.get("voice_aliases", {}), cfg.get("speed_priors", {}), voice)
 
     def run(row):
         ps = row["ps_espeak"]
@@ -129,8 +134,7 @@ def mlx_synth(name, voice):
         return run
     if name.startswith("kitten"):
         from mlx_audio.tts.models.kitten_tts.kitten_tts import basic_english_tokenize
-        vkey = KITTEN_VOICES.get(voice, voice)
-        speed = model.speed_priors.get(vkey, 1.0)
+        vkey, speed = kitten_voice(model.voice_aliases, model.speed_priors, voice)
 
         def run(row):
             ps = row["ps_espeak"]
