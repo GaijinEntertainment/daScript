@@ -188,6 +188,7 @@ Defaults (applied before the file is read):
 
 - **STYLE005** is **off** by default. Add ``STYLE005 = true`` to a
   repo's ``.lint_config`` to opt back in.
+- **STYLE048** is **off** by default. Add ``STYLE048 = true`` to opt in.
 - All other rules are on by default.
 
 The file is optional. When missing, unreadable, or syntactically
@@ -3562,6 +3563,46 @@ which ``[ordered(field, field = greater, key = function)]`` can list. ``--fix`` 
 structure and deletes the operator, rewrites a comparator to ``cmp_by``, and adds
 ``require daslib/cmp`` when the module does not see it. Silent when the two sides of a key
 read differently, on ``<=`` and ``>=``, and on any statement besides lets, guards and returns.
+
+STYLE048 — if/elif chain that reads as a ``match``
+==================================================
+
+An ``if``/``elif`` chain whose arms compare the same values against constants, ranges or variant
+cases reads as a ``match``. Each arm's condition is split into its ``||`` alternatives; a test of
+a value against a constant (``x == 5``), a pair of bounds (``lo <= x && x < hi``), a variant
+case (``v is circle``) or a bool tested bare (``b``, ``!b``) becomes that value's pattern, anything
+else becomes the arm's guard. An
+inner ``if`` chain that is the whole body of an arm is flattened into the outer one, so
+conditions over several values become one ``match (a, b)``. The finding prints the header and
+the arm patterns; there is no ``--fix``, since bodies, comments and bindings are the author's.
+
+.. code-block:: das
+
+    if (m == Mode.idle && n >= 0 && n < 10) {          // STYLE048
+        r = 1
+    } elif (m == Mode.run || m == Mode.stop && n == 5) {
+        r = 2
+    } else {
+        r = 3
+    }
+    // suggested: match (m, n) { (Mode.idle, 0..10) / (Mode.run, _) | (Mode.stop, 5) / _ }
+
+The suggestion is checked with the coverage solver ``match`` itself uses
+(``daslib/match_solver.das``):
+
+- arms with the same body join with ``|`` when no arm between them shares a value with them;
+- the trailing ``_`` appears only when some value reaches no arm, and the finding names the
+  values when there are few;
+- an ``else`` no value reaches is dropped from the suggestion and flagged, since a ``match``
+  rejects an unreachable ``_``;
+- an arm no value reaches - every value it tests is taken by an earlier arm - is reported on
+  its own: ``this if/elif arm can never run``. A ``match`` with that arm would not compile.
+
+A chain is reported when at least three arms run something - two when it flattens a nested ``if``
+or matches variant cases - with guards on at most half of them, over at most four values. Values
+are locals, arguments and field paths; floats, ``__rtti`` strings and expressions with calls are
+not matched on. Reported only in a module that requires ``daslib/match`` itself - the rule
+does not suggest a new dependency. Off by default.
 
 -----
 Tests

@@ -21,7 +21,6 @@ require daslib/ast_boost
 require daslib/templates_boost
 require daslib/macro_boost
 require daslib/strings_boost
-require daslib/defer
 require daslib/option
 require daslib/result
 require daslib/match_solver
@@ -127,6 +126,24 @@ def match_custom(mt : MatchType; wths : Expression?; makeType : TypeDeclPtr; acc
     var cond_nz = qmacro(match_copy($i(tempName), $e(access))); cond_nz |> force_at(wths.at)
     to.conditions |> emplace(cond_nz)
     return match_any(makeType, wths, access_new, to)
+}
+
+[macro_function]
+def private is_arrow_arm(e : Expression?) : bool =>
+    e is ExprMakeTuple && length((e as ExprMakeTuple).values) == 2
+
+[macro_function]
+def private is_call_to(wth : Expression?; name, mod : string) {
+    //! A call to ``mod::name`` - spelled plain, module-qualified, or as
+    //! the generic instance infer made of it.
+    if (!(wth is ExprCall)) return false
+    let ecall = wth as ExprCall
+    if (ecall.name == name || ecall.name == "{mod}::{name}") return true
+    var res = false
+    peek(ecall.name) $(call_name) {
+        res = call_name |> starts_with("__::{mod}`{name}")
+    }
+    return res
 }
 
 def public match_peel_r2v(var e : Expression?) : Expression? {
@@ -761,9 +778,9 @@ def private mentions_placeholder(e : Expression?) : bool {
 [macro_function]
 def private is_probed_view(var pat : Expression?) : bool {
     //! A view ``(f(_) => pattern)`` after ``add_probes`` added its probe.
-    var p = peel_r2v(pat)
+    var p = match_peel_r2v(pat)
     return false if (!(p is ExprMakeTuple) || length((p as ExprMakeTuple).values) != 3)
-    return peel_r2v((p as ExprMakeTuple).values[2]).genFlags.generated
+    return match_peel_r2v((p as ExprMakeTuple).values[2]).genFlags.generated
 }
 
 [macro_function]
@@ -781,9 +798,9 @@ def private is_view(var pat : Expression?) : bool {
     //! ``(f(_) => pattern)``: a pair whose first element is a call, an
     //! index or a field read that reads ``_``. After ``add_probes`` the
     //! view has its probe as a third element.
-    var p = peel_r2v(pat)
+    var p = match_peel_r2v(pat)
     return false if (p == null || !(is_arrow_arm(p) || is_probed_view(p)))
-    let head = peel_r2v((p as ExprMakeTuple).values[0])
+    let head = match_peel_r2v((p as ExprMakeTuple).values[0])
     let reads = (head is ExprCall || head is ExprAt || head is ExprSafeAt
         || head is ExprField || head is ExprSafeField)
     return reads && !is_pattern_call(head) && mentions_placeholder(head)
@@ -1503,7 +1520,14 @@ class MatchMacro : AstCallMacro {
     def report_coverage(prog : ProgramPtr; expr : ExprCallMacro?; eblk : ExprBlock?; var types : array<TypeDeclPtr>; var arm_patterns : array<Expression?>;
                         as_value, catch_all : bool) : bool {
         //! Reports unreachable arms and alternatives - not for ``static_match``, whose arms may apply to other instances of a generic - and values an exhaustive match misses; false when it reported any.
-        var cov <- match_coverage(types, arm_patterns)
+        var solved <- match_coverage(types, arm_patterns)
+        if (solved is err) {
+            let arm = (solved as err).arm
+            let built = "the match coverage translation built guard fact of arm {arm}"
+            macro_error(prog, expr.at, "internal error: {built} that the solver can not decide")
+            return false
+        }
+        var cov <- solved as ok
         if (report_match_errors) {
             for (ai in cov.unreachable) {
                 macro_error(prog, eblk.list[ai].at, "unreachable arm: the arms before it already match everything it matches")
@@ -1511,15 +1535,17 @@ class MatchMacro : AstCallMacro {
             for (da in cov.dead_alternatives) {
                 macro_error(prog, eblk.list[da.arm].at, "unreachable alternative `{da.what}`: an earlier arm already matches it")
             }
-            return false if (!empty(cov.unreachable) || !empty(cov.dead_alternatives))
+            return false if (!all_reachable(cov))
         }
-        if (!catch_all && is_some(cov.missing) && (as_value || (report_match_errors && cov.all_finite))) {
+        if (!catch_all && !is_exhaustive(cov)
+                && (as_value || (report_match_errors && cov.all_finite))) {
             let guard_note = (cov.has_guards
                 ? " (a guarded arm covers nothing, unless arms with the same pattern guard by comparing the same two int, enum, string or bool values and cover every outcome)"
                 : "")
-            macro_error(prog, expr.at, (cov.missing == MATCH_ANY_OTHER
+            let fix = "add arms for them, or `_ => ...`{guard_note}"
+            macro_error(prog, expr.at, (cov.missing is unnamed
                 ? "match is not exhaustive: values no arm names are not matched; add a `_ => ...` arm{guard_note}"
-                : "match is not exhaustive: no arm matches {unwrap(cov.missing)}; add arms for them, or `_ => ...`{guard_note}"))
+                : "match is not exhaustive: no arm matches {(cov.missing as named).text}; {fix}"))
             return false
         }
         return true
@@ -1642,4 +1668,469 @@ def private setup {
         compiling_module() |> add_keyword("static_match", false)
         compiling_module() |> add_keyword("match_type", true)
     }
+}
+
+[macro_function]
+def private is_binder(p : Expression?) : bool =>
+    p is ExprVar || (p is ExprTag && (p as ExprTag).name == "v")
+
+[macro_function]
+def private shape_part(var cell : Expression?) : Expression? {
+    //! The destructuring side of a cell: ``n & Point(...)`` is
+    //! ``Point(...)``; a binder or ``_`` is null (matches anything).
+    var p = match_peel_r2v(cell)
+    return null if (p == null || is_binder(p))
+    if (p is ExprOp2 && (p as ExprOp2).op == "&") {
+        var op2 = p as ExprOp2
+        return shape_part(op2.right) if (is_binder(match_peel_r2v(op2.left)))
+        return shape_part(op2.left) if (is_binder(match_peel_r2v(op2.right)))
+    }
+    return p
+}
+
+let private MATCH_NON_NULL = "non-null"
+
+struct private PatternRow {
+    arm : int
+    @do_not_delete cells : array<Expression?>
+}
+
+[macro_function]
+def private constant_key(p : Expression?) : string {
+    if (p is ExprConstEnumeration) {
+        let ce = p as ExprConstEnumeration
+        return "{ce.enumType.name}.{ce.value}"
+    }
+    return p.__rtti |> starts_with("ExprConst") && !is_range_const(p) ? describe(p) : ""
+}
+
+[macro_function]
+def private int_value(var e : Expression?) : Option<int64> {
+    let p = match_peel_r2v(e)
+    return some(int64((p as ExprConstInt).value)) if (p is ExprConstInt)
+    return some(int64((p as ExprConstUInt).value)) if (p is ExprConstUInt)
+    return some((p as ExprConstInt64).value) if (p is ExprConstInt64)
+    return none(type<int64>)
+}
+
+[macro_function]
+def private constant_span(var e : Expression?) : Option<range64> {
+    //! The half-open span of integers a constant range - or a single
+    //! integer constant - matches.
+    var p = match_peel_r2v(e)
+    if (p is ExprConstRange) {
+        let r = (p as ExprConstRange).value
+        return some(interval(int64(r.x), int64(r.y)))
+    } elif (p is ExprConstURange) {
+        let r = (p as ExprConstURange).value
+        return some(interval(int64(r.x), int64(r.y)))
+    } elif (p is ExprConstRange64) {
+        return some((p as ExprConstRange64).value)
+    } elif (is_range_call(p)) {
+        let lo = int_value((p as ExprCall).arguments[0])
+        let hi = int_value((p as ExprCall).arguments[1])
+        return (is_some(lo) && is_some(hi)
+            ? some(interval(unwrap(lo), unwrap(hi)))
+            : none(type<range64>))
+    }
+    let v = int_value(p)
+    return is_some(v) ? some(interval(unwrap(v), unwrap(v) + 1l)) : none(type<range64>)
+}
+
+[macro_function]
+def private variant_name(typ : TypeDeclPtr) : string =>
+    empty(typ.alias) ? "variant" : string(typ.alias)
+
+[macro_function]
+def private variant_key(typ : TypeDeclPtr; alt : string) : string {
+    //! The key spells the arm as a pattern: a case with no value is its
+    //! bare name.
+    let bare = is_bare_variant_case(typ, alt)
+    return bare ? "{variant_name(typ)}({alt})" : "{variant_name(typ)}({alt} = _)"
+}
+
+[macro_function]
+def private is_struct_of(typ : TypeDeclPtr; p : Expression?) : bool {
+    //! ``p`` is a one-element struct pattern of exactly ``typ``.
+    return false if (typ == null || !typ.isStructure || !(p is ExprMakeStruct))
+    let ms = p as ExprMakeStruct
+    return (length(ms.structs) == 1 && ms.makeType != null && ms.makeType.isStructure
+        && is_same_type(typ, ms.makeType, RefMatters.no, ConstMatters.no, TemporaryMatters.no))
+}
+
+[macro_function]
+def private is_irrefutable(typ : TypeDeclPtr; var pat : Expression?) : bool {
+    //! Irrefutable: the pattern can not fail on any value of ``typ`` (on
+    //! a pointer, any non-null one) - ``x``, ``_``, ``(a, _)``,
+    //! ``Point(x = a, y = _)``. Such an arm covers its whole column.
+    var p = match_peel_r2v(pat)
+    return true if (is_binder(p))
+    if (p is ExprOp2 && (p as ExprOp2).op == "&") {
+        var op2 = p as ExprOp2
+        return is_irrefutable(typ, op2.left) && is_irrefutable(typ, op2.right)
+    }
+    if (p is ExprMakeTuple) {
+        for (v in (p as ExprMakeTuple).values) {
+            return false if (!is_rest(v) && !is_irrefutable(null, v))
+        }
+        return true
+    }
+    return false if (typ == null || !is_struct_of(typ.isPointer ? typ.firstType : typ, p))
+    for (mf in *(p as ExprMakeStruct).structs[0]) {
+        return false if (!is_irrefutable(null, mf.value))
+    }
+    return true
+}
+
+[macro_function]
+def private classify_cell(typ : TypeDeclPtr; var pat : Expression?) : SolverCell {
+    //! What one pattern covers of one column: everything, named values,
+    //! or values the analysis can't name.
+    var p = match_peel_r2v(pat)
+    return <- SolverCell(any = true) if (is_binder(p))
+    if (p is ExprOp2) {
+        var op2 = p as ExprOp2
+        if (op2.op == "||") {
+            var l <- classify_cell(typ, op2.left)
+            var r <- classify_cell(typ, op2.right)
+            l.any ||= r.any
+            l.opaque ||= r.opaque
+            l.keys |> push_from(r.keys)
+            l.spans |> push_from(r.spans)
+            return <- l
+        }
+        return <- SolverCell(all_of <- [classify_cell(typ, op2.left),
+                                        classify_cell(typ, op2.right)]) if (op2.op == "&")
+        return <- SolverCell(opaque = true)
+    }
+    let span = constant_span(p)
+    return <- SolverCell(spans <- [unwrap(span)]) if (is_some(span))
+    let key = constant_key(p)
+    return <- SolverCell(keys <- [key]) if (!empty(key))
+    if (typ != null && typ.isVariant && p is ExprMakeVariant
+            && length((p as ExprMakeVariant).variants) == 1) {
+        assume alt = (p as ExprMakeVariant).variants[0]
+        let irrefutable = alt.value == null || is_irrefutable(null, alt.value)
+        return <- SolverCell(keys <- [variant_key(typ, string(alt.name))]) if (irrefutable)
+    }
+    if (typ != null && typ.isVariant && p is ExprAsVariant
+            && is_irrefutable(null, (p as ExprAsVariant).value)) {
+        return <- SolverCell(keys <- [variant_key(typ, string((p as ExprAsVariant).name))])
+    }
+    if (is_variant_call(typ, p) && (length((p as ExprCall).arguments) == 0
+            || is_irrefutable(null, (p as ExprCall).arguments[0]))) {
+        return <- SolverCell(keys <- [variant_key(typ, variant_call_name(p as ExprCall))])
+    }
+    return <- SolverCell(opaque = true) if (!is_irrefutable(typ, p))
+    return <- SolverCell(keys <- [MATCH_NON_NULL]) if (typ != null && typ.isPointer)
+    return <- SolverCell(any = true)
+}
+
+[macro_function]
+def private finite_domain(typ : TypeDeclPtr; name : string) : SolverColumn {
+    //! The column of a value of ``typ``: an enum, bool, variant or struct
+    //! pointer has a finite domain.
+    if (typ != null && typ.isEnum && typ.enumType != null) {
+        return <- SolverColumn(name = name,
+            domain <- some([for (e in typ.enumType.list); "{typ.enumType.name}.{e.name}"]))
+    } elif (typ != null && typ.baseType == Type.tBool) {
+        return <- SolverColumn(name = name, domain <- some(["true", "false"]))
+    } elif (typ != null && typ.isVariant) {
+        return <- SolverColumn(name = name,
+            domain <- some([for (n in typ.argNames); variant_key(typ, string(n))]))
+    } elif (typ != null && typ.isPointer && typ.firstType != null && typ.firstType.isStructure) {
+        return <- SolverColumn(name = name, domain <- some(["null", MATCH_NON_NULL]))
+    }
+    return <- SolverColumn(name = name)
+}
+
+[macro_function]
+def private pattern_part(var pat : Expression?) : Expression? {
+    //! The pattern of an arm without its top-level ``&&`` guard.
+    var p = match_peel_r2v(pat)
+    while (p is ExprOp2 && (p as ExprOp2).op == "&&") {
+        p = match_peel_r2v((p as ExprOp2).left)
+    }
+    return p
+}
+
+[macro_function]
+def private is_guarded(var pat : Expression?) : bool {
+    let p = match_peel_r2v(pat)
+    return p is ExprOp2 && (p as ExprOp2).op == "&&"
+}
+
+[macro_function]
+def private alternatives_of(var cell : Expression?) : array<Expression?> {
+    //! A cell's top-level ``|`` alternatives, each without a binding
+    //! ``n &``; null for one that matches anything.
+    return <- [for (a in op_sides(shape_part(cell), "||")); shape_part(a)]
+}
+
+[macro_function]
+def private column_parts(var typ : TypeDeclPtr) : array<tuple<name : string; typ : TypeDeclPtr>> {
+    //! The parts a tuple or struct column splits into; none for any other
+    //! type.
+    var parts : array<tuple<name : string; typ : TypeDeclPtr>>
+    if (typ != null && typ.baseType == Type.tTuple) {
+        parts <- [for (t, i in typ.argTypes, count()); (name = "_{i}", typ = t)]
+    } elif (typ != null && typ.isStructure && !typ.isPointer && typ.structType != null) {
+        parts <- [for (f in typ.structType.fields); (name = string(f.name), typ = f._type)]
+    }
+    return <- parts
+}
+
+[macro_function]
+def private splits(typ : TypeDeclPtr; alt : Expression?) : bool {
+    //! The cell spells the whole value part by part: a struct pattern of
+    //! exactly the column type, or a full tuple.
+    return true if (alt == null || is_struct_of(typ, alt))
+    return false if (!(alt is ExprMakeTuple) || typ.baseType != Type.tTuple
+        || length((alt as ExprMakeTuple).values) != length(typ.argTypes))
+    return !has_value([for (v in (alt as ExprMakeTuple).values); is_rest(v)], true)
+}
+
+[macro_function]
+def private part_of(var alt : Expression?; idx : int; name : string) : Expression? {
+    return null if (alt == null)
+    return (alt as ExprMakeTuple).values[idx] if (alt is ExprMakeTuple)
+    for (mf in *(alt as ExprMakeStruct).structs[0]) {
+        return mf.value if (mf.name == name)
+    }
+    return null
+}
+
+[macro_function]
+def private split_column(var types : array<TypeDeclPtr>; var labels : array<string>;
+                         var rows : array<PatternRow>; c : int) : bool {
+    //! Splits column ``c`` into its parts when every arm spells it part
+    //! by part; an alternative becomes one row each.
+    var parts <- column_parts(types[c])
+    return false if (empty(parts))
+    var alts <- [for (r in rows); alternatives_of(r.cells[c])]
+    for (ra in alts) {
+        return false if (has_value([for (a in ra); splits(types[c], a)], false))
+    }
+    var split : array<PatternRow>
+    split |> reserve(length(rows))
+    for (r, ra in rows, alts) {
+        for (a in ra) {
+            var nr <- PatternRow(arm = r.arm, cells := r.cells)
+            nr.cells |> erase(c)
+            nr.cells |> reserve(length(nr.cells) + length(parts))
+            for (p, i in parts, count()) {
+                nr.cells |> push(part_of(a, i, p.name), c + i)
+            }
+            split |> emplace(nr)
+        }
+    }
+    delete rows
+    rows <- split
+    let parent = labels[c]
+    types |> erase(c)
+    labels |> erase(c)
+    for (p, i in parts, count()) {
+        types |> push(p.typ, c + i)
+        labels |> push(empty(parent) ? p.name : "{parent}.{p.name}", c + i)
+    }
+    return true
+}
+
+[macro_function]
+def private pattern_rows(var types : array<TypeDeclPtr>;
+                         var patterns : array<Expression?>) : array<PatternRow> {
+    //! One row of cells per arm, per top-level alternative of a
+    //! several-value match; a dropped arm has none.
+    var rows : array<PatternRow>
+    rows |> reserve(length(patterns))
+    for (pat, ai in patterns, count()) {
+        continue if (pat == null)
+        var part = pattern_part(pat)
+        var alts <- length(types) > 1 ? alternatives_of(part) : [part]
+        for (a in alts) {
+            var r <- PatternRow(arm = ai)
+            if (length(types) > 1 && a != null && a is ExprMakeTuple
+                    && length((a as ExprMakeTuple).values) == length(types)) {
+                r.cells <- [for (v in (a as ExprMakeTuple).values); v]
+            } else {
+                r.cells <- [for (_t in types); a]
+            }
+            rows |> emplace(r)
+        }
+    }
+    return <- rows
+}
+
+[macro_function]
+def private is_ordered_type(typ : TypeDeclPtr) : bool {
+    //! Comparisons over these types are total: exactly one of ``<``,
+    //! ``==``, ``>`` holds. Floats are not (NaN).
+    return typ != null && (typ.isEnum || typ.isInteger || typ.baseType == Type.tString)
+}
+
+[macro_function]
+def private operand_type(var e : Expression?;
+                         var names : table<string; TypeDeclPtr>) : TypeDeclPtr {
+    //! The type of a guard operand: a name the pattern binds at a column,
+    //! or an already typed variable or constant.
+    var x = match_peel_r2v(e)
+    return null if (x == null || !(x is ExprVar || x.__rtti |> starts_with("ExprConst")))
+    if (x is ExprVar) {
+        let n = string((x as ExprVar).name)
+        return names[n] if (names |> key_exists(n))
+    }
+    return x._type
+}
+
+def private value_number(var values : table<string; int>; text : string) : int {
+    //! The solver's number for an operand: the same spelling is the same
+    //! value in every arm.
+    values |> insert(text, length(values)) if (!key_exists(values, text))
+    return values?[text] ?? -1
+}
+
+[macro_function]
+def private plain_guard_fact(var g : Expression?; var names : table<string; TypeDeclPtr>;
+                             var values : table<string; int>) : Option<SolverFact> {
+    //! A comparison of two ordered operands, or one bool operand, as a
+    //! solver fact; none when it is anything else.
+    if (g is ExprOp2) {
+        var op2 = g as ExprOp2
+        let ops <- { "<" => SolverCompare.less, "<=" => SolverCompare.less_equal,
+            "==" => SolverCompare.equal, "!=" => SolverCompare.not_equal,
+            ">=" => SolverCompare.greater_equal, ">" => SolverCompare.greater }
+        if (key_exists(ops, string(op2.op)) && is_ordered_type(operand_type(op2.left, names))
+                && is_ordered_type(operand_type(op2.right, names))) {
+            let left = SolverTerm(value = value_number(values, describe(match_peel_r2v(op2.left))))
+            let right = SolverTerm(
+                value = value_number(values, describe(match_peel_r2v(op2.right))))
+            return <- some(SolverFact(node = SolverFactNode(compare = (
+                op = ops?[string(op2.op)] ?? SolverCompare.equal, left = left, right = right))))
+        }
+    }
+    let gt = operand_type(g, names)
+    if (gt != null && gt.baseType == Type.tBool) {
+        let truth = SolverTerm(value = value_number(values, describe(g)))
+        return <- some(SolverFact(node = SolverFactNode(truth = truth)))
+    }
+    return <- none(type<SolverFact>)
+}
+
+[macro_function]
+def private guard_fact(var guard : Expression?; var names : table<string; TypeDeclPtr>;
+                       var values : table<string; int>) : Option<SolverFact> {
+    //! A single comparison or bool test, possibly under ``!``, as a
+    //! solver fact.
+    var g = match_peel_r2v(guard)
+    let negated = g is ExprOp1 && (g as ExprOp1).op == "!"
+    var fact <- plain_guard_fact(negated ? match_peel_r2v((g as ExprOp1).subexpr) : g,
+                                 names, values)
+    return <- fact if (!negated || fact is none)
+    var inner <- fact as some
+    return <- some(SolverFact(node <- SolverFactNode(none_of <- [inner])))
+}
+
+[macro_function]
+def private arm_guard(var pat : Expression?; var types : array<TypeDeclPtr>;
+                      var values : table<string; int>) : SolverGuard {
+    //! The solver's guard for one arm: none, a fact for a single
+    //! comparison or bool test, else opaque.
+    return <- SolverGuard(unguarded) if (pat == null || !is_guarded(pat))
+    var p = match_peel_r2v(pat)
+    return <- SolverGuard(opaque) if (is_guarded((p as ExprOp2).left))
+    var names <- bound_column_types(types, pattern_part(p))
+    var found <- guard_fact((p as ExprOp2).right, names, values)
+    return <- SolverGuard(opaque) if (found is none)
+    return <- SolverGuard(fact <- found as some)
+}
+
+[macro_function]
+def private bound_column_types(var columns : array<TypeDeclPtr>;
+                               var pat : Expression?) : table<string; TypeDeclPtr> {
+    //! Names the pattern binds directly at a column, with that column's
+    //! type; a single tuple column binds per element.
+    var names : table<string; TypeDeclPtr>
+    var p = match_peel_r2v(pat)
+    if (length(columns) == 1 && p is ExprVar) {
+        names[string((p as ExprVar).name)] = columns[0]
+    }
+    let per_element = length(columns) == 1 && columns[0].baseType == Type.tTuple
+    var cols <- per_element ? [for (t in columns[0].argTypes); t] : [for (t in columns); t]
+    return <- names if (!(p is ExprMakeTuple)
+        || length((p as ExprMakeTuple).values) != length(cols))
+    var vars <- [for (v in (p as ExprMakeTuple).values); match_peel_r2v(v)]
+    return <- {for (v, col in vars, cols); string((v as ExprVar).name) => col; where v is ExprVar}
+}
+
+[macro_function]
+def private is_rest(p : Expression const?) : bool {
+    let x = match_peel_r2v(p)
+    return x is ExprTag && (x as ExprTag).name == "..."
+}
+
+[macro_function]
+def private op_sides(var e : Expression?; op : string) : array<Expression?> {
+    //! The operands of a chain of one binary operator, left to right.
+    return <- [e] if (e == null || !(e is ExprOp2) || (e as ExprOp2).op != op)
+    var sides <- op_sides((e as ExprOp2).left, op)
+    sides |> push_from(op_sides((e as ExprOp2).right, op))
+    return <- sides
+}
+
+[macro_function]
+def private is_range_call(pat : Expression?) : bool => (pat is ExprCall
+    && (pat as ExprCall).name == "interval" && length((pat as ExprCall).arguments) == 2)
+
+[macro_function]
+def private variant_call_name(call : ExprCall?) : string {
+    //! The name ``i(n)`` was written with - a call that resolved
+    //! to a function (``some`` from ``daslib/option``) is mangled.
+    return string(call.name) if (call.func == null)
+    return string(call.func.fromGeneric != null ? call.func.fromGeneric.name : call.func.name)
+}
+
+[macro_function]
+def private is_variant_call(typ : TypeDeclPtr; pat : Expression?) : bool {
+    //! ``i(n)`` against a variant with an alternative ``i``, even with
+    //! a function ``i`` in scope; ``nada()`` for an alternative without
+    //! a value.
+    if (typ == null || !typ.isVariant || !(pat is ExprCall)) return false
+    let call = pat as ExprCall
+    let name = variant_call_name(call)
+    let nargs = length(call.arguments)
+    return (nargs <= 1 && get_field_type(typ, name, false) != null
+            && (nargs == 0) == is_bare_variant_case(typ, name))
+}
+
+[macro_function]
+def private is_range_const(pat : Expression?) : bool => (pat is ExprConstRange
+    || pat is ExprConstURange || pat is ExprConstRange64 || pat is ExprConstURange64)
+
+[macro_function]
+def private match_coverage(var types : array<TypeDeclPtr>;
+                           var patterns : array<Expression?>
+                           ) : Result<SolverCoverage; SolverUnsupported> {
+    //! ``solve_coverage`` over match patterns: one column per value
+    //! (struct and tuple columns split into their parts), one arm per
+    //! pattern in source order, null for an arm that was dropped.
+    var parts := types
+    var labels <- [for (_t in types); ""]
+    var rows <- pattern_rows(types, patterns)
+    var c = 0
+    while (c < length(parts)) {
+        c += split_column(parts, labels, rows, c) ? 0 : 1
+    }
+    let columns <- [for (t, l in parts, labels); finite_domain(t, l)]
+    var arms : array<SolverArm>
+    arms |> reserve(length(patterns))
+    var inscope values : table<string; int>
+    for (pat, ai in patterns, count()) {
+        var cells <- [for (r in rows);
+            [for (cell, ci in r.cells, count());
+                cell == null ? SolverCell(any = true) : classify_cell(parts[ci], cell)];
+            where r.arm == ai]
+        var guard <- arm_guard(pat, types, values)
+        arms |> emplace(SolverArm(rows <- cells, guard <- guard))
+    }
+    return <- solve_coverage(columns, arms)
 }
