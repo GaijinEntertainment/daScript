@@ -601,8 +601,34 @@ class CuKqGemvIq4nl : Iq4nlGemvCudT {
     }
 }
 
+//! one quant word's eight nibble codes to signed int8 lanes of the doubled e2m1 magnitudes through byte permutes: a selector
+//! nibble is a code's magnitude bits (its sign bit masked off: a selector nibble's high bit is the permute's sign-replicate
+//! mode, never an index), two permutes a half-word over the magnitude table and two over its negation (`MX4LUT`'s words),
+//! the low and high nibbles' lanes gathered apart, the code's sign bit picking the lane
+def nv4_prmt_split(w : uint; var lo, hi : uint&) {
+    let s = w & 0x77777777u
+    let p0 = byte_perm(0x03020100u, 0x0C080604u, s)
+    let p1 = byte_perm(0x03020100u, 0x0C080604u, s >> 16u)
+    let n0 = byte_perm(0xFDFEFF00u, 0xF4F8FAFCu, s)
+    let n1 = byte_perm(0xFDFEFF00u, 0xF4F8FAFCu, s >> 16u)
+    let ml = ((w >> 3u) & 0x01010101u) * 0xFFu
+    let mh = ((w >> 7u) & 0x01010101u) * 0xFFu
+    lo = (byte_perm(p0, p1, 0x6420u) & ~ml) | (byte_perm(n0, n1, 0x6420u) & ml)
+    hi = (byte_perm(p0, p1, 0x7531u) & ~mh) | (byte_perm(n0, n1, 0x7531u) & mh)
+}
+
+//! the nv4 decode GEMV leaf on the CUDA home: the nibble decode through `byte_perm` (18 lane ops a quant word against the SWAR
+//! formula's 29 - the shared leaf's decode read 4 to 5% behind q40's at the 8B down and q / o shapes), the block scales the
+//! shared leaf's
+[ |> template_struct_instance]
+class template Nv4GemvPrmtT : Nv4GemvT {
+    def override e2m1_split(w : uint; var lo, hi : uint&) {
+        nv4_prmt_split(w, lo, hi)
+    }
+}
+
 [cuda_dispatch(name = "kq_gemv_nv4_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
-class CuKqGemvNv4 : Nv4GemvT {
+class CuKqGemvNv4 : Nv4GemvPrmtT {
     [cuda_kernel(local_size_x = 64, name = "kq_gemv_nv4_cls_cuda")]
     def run {
         leaf_body()
@@ -737,7 +763,7 @@ class CuKqGemvIq4nlN : Iq4nlGemvCudT {
 }
 
 [cuda_dispatch(name = "kq_gemv_nv4_n_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
-class CuKqGemvNv4N : Nv4GemvT {
+class CuKqGemvNv4N : Nv4GemvPrmtT {
     override NCOL = true
 
     [cuda_kernel(local_size_x = 64, name = "kq_gemv_nv4_n_cls_cuda")]

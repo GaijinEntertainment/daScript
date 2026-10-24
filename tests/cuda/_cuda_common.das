@@ -1044,7 +1044,7 @@ class Intrin {
         mma_scale_acc(f, s, float2(row_scales[g], row_scales[g + 8u]),
             float4(col_scales[2u * t], col_scales[2u * t + 1u], col_scales[2u * t + 8u], col_scales[2u * t + 9u]))
         coopmatStore(f, o, 0, 16, 0)
-        misc[lane] = byte_perm(0x03020100u + lane, 0x8f0e0d0cu, 0x7654u + lane)
+        misc[lane] = byte_perm(0x03020100u + lane, 0x8f0e0d0cu, 0x7654u + lane + (lane & 1u) * 0x8000u)   // odd lanes: nibble 3 in sign-replicate mode
         let t0 = clock32()
         bar_sync(1u, 32u)
         let t1 = clock32()

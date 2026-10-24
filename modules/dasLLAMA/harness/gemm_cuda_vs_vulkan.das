@@ -596,23 +596,6 @@ def race_da(p : DaPlanes) : RaceRow {
     return row
 }
 
-//! `--only <fmt,fmt,...>`: the superblock cm2 and MMQ rows of the named formats alone (a format round's A/B), else every arm;
-//! `8b` among the names switches the shapes to the llama-8B window's
-def race_only : table<string; void> {
-    var only : table<string; void>
-    var take = false
-    for (a in get_command_line_arguments()) {
-        if (take) {
-            for (f in split(a, ",")) {
-                only |> insert(f)
-            }
-            take = false
-        }
-        take = a == "--only"
-    }
-    return <- only
-}
-
 //! the q8 cm2 l and m tiles over the window shapes, both homes; the rows measured
 def race_q8_rows(shapes : array<tuple<k : int; d : int>>) : int {
     var measured = 0

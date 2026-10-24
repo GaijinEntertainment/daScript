@@ -252,3 +252,8 @@ asymmetries a stamp family ledgers - stays in `ARCHITECTURE_GPU.md#gpu-backends`
   each form. Both forms stay compiled whichever one a card favors: the int8 against f16 tensor rate
   is the card's and the driver's, and the default is a static pick until a card flips it. The Vulkan window's form follows the device's coopmat mode
   (`ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default`), and the knob reaches nothing there or on Metal.
+- **The nv4 decode GEMV's nibble decode is a byte permute on CUDA and the SWAR formula on the other homes.** The shared
+  leaf (`Nv4GemvT`) routes the e2m1 nibble decode through one virtual (`e2m1_split`); the CUDA home's `Nv4GemvPrmtT`
+  overrides it with `byte_perm` over the doubled-magnitude table and its negation - 18 lane ops a quant word against the
+  formula's 29, the same int8 lanes, so the sums agree bit for bit - and the decode reads at the Q4_0 leaf's rate at the
+  8B shapes where the formula read 4 to 5% behind. Vulkan and Metal have no byte permute; the formula stays theirs.

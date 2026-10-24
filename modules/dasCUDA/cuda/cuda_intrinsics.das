@@ -103,7 +103,7 @@ def public cvt_ue4m3(x : float) : uint {
 [unused_argument(id, count), sideeffects] def public bar_sync(id, count : uint) : void {}
 
 //! __byte_perm: result byte i is byte `sel` nibble i of the eight bytes {b, a} (0-7); the nibble's high bit is ignored, as the
-//! CUDA intrinsic ignores it (the oracle fixture pins this)
+//! CUDA intrinsic ignores it (the oracle fixture's odd lanes set one and pin this)
 def public byte_perm(a, b, sel : uint) : uint {
     var r = 0u
     for (i in range(4)) {

@@ -1184,7 +1184,7 @@ def kq_grid_words() : array<uint> {
 
 //! the codebook and grid formats: a block's decode gathers, so a lane wants more blocks in flight than the k-lattice's
 def gemv_grid_fmt(fmt : int) : bool =>
-    fmt == int(KqFmt.iq2s) || fmt == int(KqFmt.iq2xs) || fmt == int(KqFmt.iq2xxs) || fmt == int(KqFmt.iq3xxs) || fmt == int(KqFmt.iq4xs) || fmt == int(KqFmt.iq4nl) || fmt == int(KqFmt.iq3s4) || fmt == int(KqFmt.nv4)
+    fmt == int(KqFmt.iq2s) || fmt == int(KqFmt.iq2xs) || fmt == int(KqFmt.iq2xxs) || fmt == int(KqFmt.iq3xxs) || fmt == int(KqFmt.iq4xs) || fmt == int(KqFmt.iq4nl) || fmt == int(KqFmt.iq3s4)
 
 [arch(at="../ARCHITECTURE_GPU_SHARED_GEMM.md#kq-gemv-lanes")]
 def gemv_lanes_per_row(fmt : int; n : int64) : uint {
@@ -1667,10 +1667,29 @@ class template Iq4nlGemvT : Q40GemvT {
 //! fifth word) - a 32-block's two halves under two scales off the row's byte pair 2g, 2g + 1; signed codes, so no bsum term
 [ |> template_struct_instance]
 class template Nv4GemvT : KqGemvLeafT {
+    //! one quant word's eight nibble codes to signed int8 lanes of the doubled e2m1 magnitudes, the low nibbles' four in `lo`
+    //! and the high nibbles' in `hi`: the SWAR formula here, a home with a byte permute overrides it (`Nv4GemvPrmtT`)
+    def e2m1_split(w : uint; var lo, hi : uint&) {
+        lo = mx4_word(w & KQC_NIBBLE_MASK)
+        hi = mx4_word((w >> 4u) & KQC_NIBBLE_MASK)
+    }
+
     def override blk_decode(wsb, blk : uint; var wl : uint4&; var wh : uint4&) : float4 {
         let wv = wq4[wsb * 8u + blk]
-        wl = uint4(mx4_word(wv.x & KQC_NIBBLE_MASK), mx4_word(wv.y & KQC_NIBBLE_MASK), mx4_word(wv.z & KQC_NIBBLE_MASK), mx4_word(wv.w & KQC_NIBBLE_MASK))
-        wh = uint4(mx4_word((wv.x >> 4u) & KQC_NIBBLE_MASK), mx4_word((wv.y >> 4u) & KQC_NIBBLE_MASK), mx4_word((wv.z >> 4u) & KQC_NIBBLE_MASK), mx4_word((wv.w >> 4u) & KQC_NIBBLE_MASK))
+        var l0 = 0u
+        var l1 = 0u
+        var l2 = 0u
+        var l3 = 0u
+        var h0 = 0u
+        var h1 = 0u
+        var h2 = 0u
+        var h3 = 0u
+        e2m1_split(wv.x, l0, h0)
+        e2m1_split(wv.y, l1, h1)
+        e2m1_split(wv.z, l2, h2)
+        e2m1_split(wv.w, l3, h3)
+        wl = uint4(l0, l1, l2, l3)
+        wh = uint4(h0, h1, h2, h3)
         let sw = wsu[wsb * 5u + blk / 2u] >> ((blk & 1u) * 16u)
         let s2 = uint_bits_to_float(wsu[wsb * 5u + 4u])
         return float4(ue4m3_half_f32(sw & 0xFFu) * s2, 0.0, ue4m3_half_f32((sw >> 8u) & 0xFFu) * s2, 0.0)

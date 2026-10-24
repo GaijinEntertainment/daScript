@@ -1143,7 +1143,7 @@ def test_intrin_gpu(t : T?) {
             t |> equal(bad, 0, "the int8 product through cp.async + ldmatrix, scaled by row and column, matches")
             var badm = 0
             for (l in range(32)) {
-                badm += gm[l] == byte_perm(0x03020100u + uint(l), 0x8f0e0d0cu, 0x7654u + uint(l)) ? 0 : 1
+                badm += gm[l] == byte_perm(0x03020100u + uint(l), 0x8f0e0d0cu, 0x7654u + uint(l) + uint(l & 1) * 0x8000u) ? 0 : 1
                 badm += gm[32 + l] == 1u ? 0 : 1
                 badm += gm[64 + l] == uint(l) + 5u ? 0 : 1
             }
