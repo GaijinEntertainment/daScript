@@ -1450,6 +1450,22 @@ namespace das {
 #endif
 
 #if !DAS_NO_FILEIO
+    static string scriptModuleCachePath ( const char * modName,
+            const CodeOfPolicies & cop ) {
+        char exePath[4096];
+        size_t exeLen = getExecutablePathName(exePath, sizeof(exePath));
+        return ModuleFileCache::defaultPath(modName ? modName : "",
+            exeLen ? string(exePath, exeLen) : string(),
+            ModuleFileCache::embeddedHostOptions(cop));
+    }
+
+    char * rtti_builtin_module_cache_path ( char * modName,
+            const CodeOfPolicies & cop, Context * context,
+            LineInfoArg * at ) {
+        auto path = scriptModuleCachePath(modName, cop);
+        return context->allocateString(path, at);
+    }
+
     // src/builtin/ARCHITECTURE.md#default-module-cache-path
     struct ScriptModuleCache {
         unique_ptr<SerializerSlotsHidden>   hidden;
@@ -1459,13 +1475,16 @@ namespace das {
         bool                                finished = false;
         ScriptModuleCache ( const CodeOfPolicies & cop, const char * modName ) {
             if ( !cop.module_cache ) return;
-            char exePath[4096];
-            size_t exeLen = getExecutablePathName(exePath, sizeof(exePath));
-            path = ModuleFileCache::defaultPath(modName, exeLen ? string(exePath, exeLen) : string(),
-                ModuleFileCache::embeddedHostOptions(cop));
+            path = scriptModuleCachePath(modName, cop);
+            install(true);
+        }
+        ScriptModuleCache ( const string & cachePath ) : path(cachePath) {
+            install(false);
+        }
+        void install ( bool quiet ) {
             armed = true;
             hidden = make_unique<SerializerSlotsHidden>();
-            cache.install(path, path, true);
+            cache.install(path, path, quiet);
         }
         ModuleFileCache::Result finish () {
             ModuleFileCache::Result res;
@@ -1488,6 +1507,58 @@ namespace das {
         auto cres = moduleCache.finish();
         if ( cres.saveFailed ) issues << "ser: cannot write '" << moduleCache.path << "'\n";
         invokeProgramBlock("rtti_compile", program, issues, program && !program->failed(), block, context, at);
+    }
+
+    struct ModuleCacheFileInfos : ModuleGroupUserData {
+        ModuleCacheFileInfos ()
+            : ModuleGroupUserData("module_cache_file_infos") {}
+        vector<FileInfoPtr> fileInfos;
+    };
+
+    static const char * moduleCacheVerdict (
+            ModuleFileCache::ReadVerdict verdict ) {
+        switch ( verdict ) {
+        case ModuleFileCache::ReadVerdict::clean: return "clean";
+        case ModuleFileCache::ReadVerdict::partial: return "partial";
+        case ModuleFileCache::ReadVerdict::fallback: return "fallback";
+        case ModuleFileCache::ReadVerdict::unavailable: return "unavailable";
+        default: return "none";
+        }
+    }
+
+    char * rtti_builtin_compile_file_cached (
+            char * modName, smart_ptr<FileAccess> access,
+            ModuleGroup* module_group,
+            const CodeOfPolicies & cop, char * moduleCache,
+            const TBlock<void,bool,smart_ptr<Program>,const string> & block,
+            Context * context, LineInfoArg * at ) {
+        TextWriter issues;
+        if ( !access ) access = make_smart<FsFileAccess>();
+        const string cachePath = moduleCache ? moduleCache : "";
+        ScriptModuleCache fileCache(cachePath);
+        auto program = compileDaScript(modName, access, issues,
+            *module_group, cop);
+        auto result = fileCache.finish();
+        auto verdict = moduleCacheVerdict(result.verdict);
+        if ( result.saveFailed ) {
+            issues << "ser: cannot write '" << cachePath << "'\n";
+        }
+        if ( !fileCache.cache.orphanedFileInfos.empty() ) {
+            auto owner = (ModuleCacheFileInfos *)
+                module_group->getUserData("module_cache_file_infos");
+            if ( !owner ) {
+                owner = new ModuleCacheFileInfos();
+                module_group->setUserData(owner);
+            }
+            for ( auto & fi : fileCache.cache.orphanedFileInfos ) {
+                owner->fileInfos.emplace_back(das::move(fi));
+            }
+            fileCache.cache.orphanedFileInfos.clear();
+        }
+        invokeProgramBlock("rtti_compile", program, issues,
+            program && !program->failed(), block, context, at);
+        return context->allocateString(verdict,
+            uint32_t(strlen(verdict)), at);
     }
 
     // src/ast/ARCHITECTURE_BUILT.md#built-programs
@@ -1587,9 +1658,21 @@ namespace das {
         return program;
     }
 #else
+    char * rtti_builtin_module_cache_path ( char *, const CodeOfPolicies &,
+            Context * context, LineInfoArg * at ) {
+        context->throw_error_at(at, "not supported with DAS_NO_FILEIO");
+        return nullptr;
+    }
     void rtti_builtin_compile_file(  char *, smart_ptr<FileAccess>, ModuleGroup*, const CodeOfPolicies &,
             const TBlock<void, bool, smart_ptr<Program>, const string> &, Context * context, LineInfoArg * at ) {
         context->throw_error_at(at, "not supported with DAS_NO_FILEIO");
+    }
+    char * rtti_builtin_compile_file_cached ( char *, smart_ptr<FileAccess>,
+            ModuleGroup*, const CodeOfPolicies &, char *,
+            const TBlock<void, bool, smart_ptr<Program>, const string> &,
+            Context * context, LineInfoArg * at ) {
+        context->throw_error_at(at, "not supported with DAS_NO_FILEIO");
+        return nullptr;
     }
     void rtti_builtin_make_program ( const CodeOfPolicies &, const TBlock<void> &, Context * context, LineInfoArg * at ) {
         context->throw_error_at(at, "not supported with DAS_NO_FILEIO");
@@ -1675,6 +1758,15 @@ namespace das {
         addExtern<DAS_BIND_FUN(rtti_builtin_compile_file)>(*this, lib, "compile_file",
             SideEffects::modifyExternal, "rtti_builtin_compile_file")
                 ->args({"module_name","fileAccess","moduleGroup","codeOfPolicies","block","context","line"});
+        addExtern<DAS_BIND_FUN(rtti_builtin_module_cache_path)>(
+            *this, lib, "module_cache_path", SideEffects::accessExternal,
+            "rtti_builtin_module_cache_path")
+                ->args({"module_name","codeOfPolicies","context","line"});
+        addExtern<DAS_BIND_FUN(rtti_builtin_compile_file_cached)>(
+            *this, lib, "compile_file",
+            SideEffects::modifyExternal, "rtti_builtin_compile_file_cached")
+                ->args({"module_name","fileAccess","moduleGroup",
+                    "codeOfPolicies","moduleCache","block","context","line"});
         addExtern<DAS_BIND_FUN(rtti_builtin_make_program)>(*this, lib, "make_program",
             SideEffects::modifyExternal, "rtti_builtin_make_program")
                 ->args({"codeOfPolicies","block","context","line"});

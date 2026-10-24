@@ -500,7 +500,7 @@ def document_module_rtti(_root : string) {
 def document_module_ast(_root : string) {
     var mod = [get_module("ast_core"), find_module("ast")]
     var groups <- array<DocGroup>(
-        group_by_regex("Compilation and file access", mod, %regex~(compile|compile_file|parse_file|parse_file_no_prerequisites|make_file_access|require_module_now)$%%),
+        group_by_regex("Compilation and file access", mod, %regex~(compile|compile_file|module_cache_path|parse_file|parse_file_no_prerequisites|make_file_access|require_module_now)$%%),
         group_by_regex("Building programs from AST nodes", mod, %regex~(make_program|make_module|make_main_module)$%%),
         group_by_regex("Call generation", mod, %regex~(make_call)$%%),
         group_by_regex("Visitor pattern", mod, %regex~visit.*%%),

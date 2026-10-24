@@ -33,6 +33,7 @@ struct SuiteCtx {
     // Shared options.
     dastestRoot : string
     projectPath : string
+    moduleCacheDir : string
     uriPaths : bool = false
     verbose : bool = false
     compile_only : bool = false
@@ -95,6 +96,7 @@ def SuiteCtx(args : DastestArgs) : SuiteCtx {
     ctx.verbose = args.verbose
     ctx.uriPaths = args.uri_paths
     ctx.projectPath = args.test_project
+    ctx.moduleCacheDir = args.module_cache_dir
     ctx.compile_only = args.compile_only
     ctx.use_aot = args.use_aot || is_in_aot()
     ctx.aot_macros = args.aot_macros
@@ -200,7 +202,12 @@ def test_file(file_name : string; var ctx : SuiteCtx; var file_ctx : FileCtx) : 
                 cop.rtti = true
                 access |> add_extra_module("coverage", "{get_das_root()}/daslib/coverage.das")
             }
-            compile_file(file_name, access, unsafe(addr(mg)), cop) $(ok, program, output) {
+            let cache = (empty(ctx.moduleCacheDir)
+                    || !empty(ctx.projectPath) ? ""
+                : path_join(ctx.moduleCacheDir, base_name(module_cache_path(
+                    get_full_file_name(file_name), cop))))
+            let verdict = compile_file(file_name, access, unsafe(addr(mg)),
+                cop, cache) $(ok, program, output) {
                 var expectedErrors : table<CompilationError; int>
                 if (program != null) {
                     program_for_each_module(program) $(m) {
@@ -310,6 +317,9 @@ def test_file(file_name : string; var ctx : SuiteCtx; var file_ctx : FileCtx) : 
                         log::error(msg)
                     }
                 }
+            }
+            if (ctx.verbose && !empty(cache)) {
+                log::info("module cache {verdict}: {cache}")
             }
         }
     }

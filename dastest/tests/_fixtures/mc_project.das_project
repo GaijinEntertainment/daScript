@@ -1,0 +1,11 @@
+options gen2
+
+let ALLOW_HEAP = true
+
+[export]
+def module_get(req, from : string
+               ) : tuple<string; string; string> const => (req, req + ".das", "")
+
+[export]
+def option_allowed(opt, from : string) : bool =>
+    opt != "persistent_heap" || ALLOW_HEAP

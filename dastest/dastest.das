@@ -16,6 +16,7 @@ require daslib/strings_boost
 require fs
 require suite
 require result_cache
+require daslib/base64
 require log
 require math
 require dastest_clargs
@@ -519,6 +520,15 @@ def main() : int {  // nolint:STYLE037,STYLE038 - CLI dispatch, one arm per mode
         return 1
     }
     var test_args <- parse_result |> move_unwrap
+    if (!empty(test_args.worker_module_cache_dir)) {
+        let decoded = base64_decode(test_args.worker_module_cache_dir)
+        if (decoded.size < 0 || base64_encode(decoded.text)
+                != test_args.worker_module_cache_dir) {
+            log::error("dastest: invalid worker module-cache path")
+            return 1
+        }
+        test_args.module_cache_dir = decoded.text
+    }
 
     // Set BEFORE the --run worker early-return below: workers must honor
     // --failures-only too, or every PASS line of every test flows through the
@@ -742,7 +752,13 @@ def main() : int {  // nolint:STYLE037,STYLE038 - CLI dispatch, one arm per mode
             }
         }
         let cmdPrefix = "{launchPrefix} {jitstr} {aotstr} --{persistentHeapFlag}"
-        let cmdSuffix = " {benchstr}{log::useTtyColors ? " --color" : ""}{headlessFlag}{stackExcFlag}{failuresOnlyFlag}{useAotFlag}{jitFlags}"
+        let moduleCacheFlag = (empty(test_args.module_cache_dir) ? ""
+            : (" --worker-module-cache-dir "
+                + base64_encode(test_args.module_cache_dir)
+                + (test_args.verbose ? " --verbose" : "")))
+        let cmdSuffix = (" {benchstr}{log::useTtyColors ? " --color" : ""}"
+            + "{headlessFlag}{stackExcFlag}{failuresOnlyFlag}"
+            + "{useAotFlag}{jitFlags}{moduleCacheFlag}")
         let batchSize = max(1, test_args.batch)
         // Group files into batches of batchSize. Each batch is run by one worker
         // subprocess (batchCmd); per-file singleCmds are kept so a crash can be

@@ -4156,8 +4156,9 @@ The AST module provides access to the abstract syntax tree representation of das
 ### Compilation and file access
 
 - `compile` - Compiles a daslang program from a source code string using the provided `FileAccess` and `ModuleGroup`, returning a `ProgramPtr` (null on failure).
-- `compile_file` - Compiles a daslang program from a file registered in the given `FileAccess` object, returning a `ProgramPtr` (null on failure).
+- `compile_file` - Compiles a file through `FileAccess` and invokes the block with a success flag, program and diagnostics.
 - `make_file_access` - Creates and returns a new `FileAccessPtr` (`smart_ptr<FileAccess>`) initialized as a default file-system-backed project.
+- `module_cache_path` - Returns the default AST module-cache path for a file and compile policies.
 - `parse_file` - Parses a daslang file and stops there — no type inference, no optimization, no simulation.
 - `parse_file_no_prerequisites` - Parses one file alone and stops there: no prerequisite walk, no type inference, no macro run, and the host's module-cache stream is hidden for the duration.
 - `require_module_now` - Compiles `module_name` - a `shared` module, named by its file - and its prerequisites into the process at the point of the call, or answers the module already there, under `codeOfPolicies`; a null `fileAccess` means the compiling program's own.

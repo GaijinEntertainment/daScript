@@ -36,6 +36,9 @@ struct DastestArgs {
     @clarg_doc = "Project file. Will be used to compile given tests"
     test_project : string
 
+    @clarg_doc = "Folder holding per-test AST caches by compile configuration"
+    module_cache_dir : string
+
     @clarg_doc = "Number of threads to use in isolated mode; 0 uses a conservative hardware rule for JIT and 2x hardware threads otherwise"
     isolated_mode_threads : int
 
@@ -44,6 +47,9 @@ struct DastestArgs {
 
     @clarg_doc = "Stable worker index passed by parent dastest in isolated mode; tests read it from get_user_args() to derive per-worker ports/paths"
     worker_index : int = 0
+
+    @clarg_doc = "Base64 module-cache path passed to isolated workers"
+    worker_module_cache_dir : string
 
     @clarg_doc = "Run all benchmarks this number of times (useful for sample collection)"
     count : int = 1
