@@ -31,7 +31,7 @@ def run_cached(t : T?; folder, cache, phase : string;
             "1"])
     }
     var output : string
-    var env : array<string>
+    var env <- ["TMPDIR={folder}", "TMP={folder}", "TEMP={folder}"]
     if (!empty(environment)) env |> push(environment)
     let code = run_and_capture(argv, "", env, output, 300.0)
     t |> equal(code, 0, "{phase}: {output}")
@@ -159,7 +159,7 @@ def test_dastest_cache_project_options(t : T?) {
     let source = fread(path_join(fixtures, "mc_project.das_project"))
     let project = path_join(folder, "mc_project.das_project")
     let cache = path_join(folder, "project caches")
-    var argv <- [get_host_binary(), "-dasroot", get_das_root(),
+    let argv <- [get_host_binary(), "-dasroot", get_das_root(),
         "-no-module-cache", path_join(get_das_root(), "dastest/dastest.das"),
         "--", "--test", path_join(folder, name), "--compile-only",
         "--test-project", project, "--module-cache-dir", cache, "--verbose"]
