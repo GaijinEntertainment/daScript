@@ -69,6 +69,8 @@ struct Fixture {
     tmp : string
     manifest : string
     utManifest : string
+    utDir : string        //! the copied dasUnitTest module folder under the fixture
+    utArtifact : string   //! the copied artifact in it: the arms move it out and back
     plain : string
     uses : string
     exists : string
@@ -100,6 +102,8 @@ def make_fixture(tmp : string; artifact : string) : Fixture {
         tmp = tmp,
         manifest = path_join(modDir, manifest_file_name()),
         utManifest = path_join(utDir, manifest_file_name()),
+        utDir = utDir,
+        utArtifact = path_join(utDir, base_name(artifact)),
         plain = path_join(tmp, "plain.das"),
         uses = path_join(tmp, "uses.das"),
         exists = path_join(tmp, "exists.das"),
@@ -244,7 +248,6 @@ def arm_math_container_cache(t : T?; fx : Fixture) {
 
 //! a replayed dm row's artifact: there but not loadable, or gone
 def arms_artifact(t : T?; fx : Fixture) {
-    let utDir = path_join(path_join(fx.tmp, "modules"), UNIT_TEST_FOLDER)
     let loading = "[module] require {UNIT_TEST_MODULE}: loading the deferred {UNIT_TEST_CLASS}"
     let missing = "error[20605]: missing prerequisite '{UNIT_TEST_MODULE}'"
     t |> run("a deferred row whose artifact does not load brings every deferred module in, " +
@@ -257,7 +260,7 @@ def arms_artifact(t : T?; fx : Fixture) {
         // the row's file exists, so the manifest replays and defers it;
         // it is no shared module, so the require's dlopen fails
         for (name in ["absent.shared_module", "absent_debug.shared_module"]) {
-            fwrite(path_join(utDir, name), "not a shared module\n")
+            fwrite(path_join(fx.utDir, name), "not a shared module\n")
         }
         fwrite(fx.utManifest, replace(text, UNIT_TEST_ARTIFACT, "absent"))
         var out : string
@@ -287,7 +290,7 @@ def arms_artifact(t : T?; fx : Fixture) {
             "empty fallback attempts remain visible:\n{out}")
         remove_result(fx.utManifest)
         for (name in ["absent.shared_module", "absent_debug.shared_module"]) {
-            remove_result(path_join(utDir, name))
+            remove_result(path_join(fx.utDir, name))
         }
     }
     t |> run("a dm row whose artifact is gone makes the manifest stale: " +
@@ -295,8 +298,8 @@ def arms_artifact(t : T?; fx : Fixture) {
         var warm : string
         t |> success(run_child_reported(t, "rewarm", child_cmd(fx, fx.plain), warm, "PLAIN"),
             "a cold start rewrites the manifest")
-        let copied = path_join(utDir, base_name(unit_test_artifact()))
-        let parked = path_join(fx.tmp, base_name(unit_test_artifact()))
+        let copied = fx.utArtifact
+        let parked = path_join(fx.tmp, "parked.shared_module")
         var rerr : string
         t |> success(rename(copied, parked, rerr), "the artifact leaves the module folder: {rerr}")
         var out : string
@@ -316,7 +319,6 @@ def arms_artifact(t : T?; fx : Fixture) {
 
 //! the module cache against the witness: a record pins what it folded
 def arm_cache_witness(t : T?; fx : Fixture) {
-    let utDir = path_join(path_join(fx.tmp, "modules"), UNIT_TEST_FOLDER)
     t |> run("a module-cache record folded with the module present is refused once it is gone, " +
              "and the other way") @(t : T?) {
         let cache = "-module-cache \"{path_join(fx.tmp, "mc_witness.bin")}\""
@@ -324,8 +326,8 @@ def arm_cache_witness(t : T?; fx : Fixture) {
         let cmd = child_cmd(fx, fx.exists, "", cache)
         t |> success(run_child_reported(t, "cache present", cmd, warm, "EXISTS true"),
             "the cold cache run folds the module as present:\n{warm}")
-        let copied = path_join(utDir, base_name(unit_test_artifact()))
-        let parked = path_join(fx.tmp, base_name(unit_test_artifact()))
+        let copied = fx.utArtifact
+        let parked = path_join(fx.tmp, "parked.shared_module")
         var rerr : string
         t |> success(rename(copied, parked, rerr), "the artifact leaves the module folder: {rerr}")
         var gone : string
