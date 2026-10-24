@@ -95,6 +95,21 @@ stamp's code, refetched after each window's weight stream had passed the L2, cos
 GEMM 16 us of its 27 (`cold:k6`'s flush row, RTX 5080), and four copies run its m tiles 10-14%
 faster hot (`cm2:k6`); the 32-deep e stamps read alike at 8 and 1 (`moesk:`).
 
+**The dense l tile accumulates in f16 on both homes, and its cells' bar is an accumulation bar, not
+an indexing one.** `ACC` is `coopmatWgAcc_f16_128x256` in the Vulkan and the CUDA l stamp and the f32
+`ACCW` is written once, after the clamp; an f32 `ACC` on the CUDA stamp (the same body, the convert a
+copy) reads 0.35 of the f16 stamp's rate at two blocks an SM (the 128 x 256 f32 accumulator spills
+at 128 registers) and 0.57 to 0.77 at one block, on the three rate shapes of
+`harness/gemm_cuda_vs_vulkan.das`, the same-run Vulkan arm within 2 percent across the runs, so f16
+stays. The error it costs: a `mma.sync` k16 step sums its sixteen products wide and rounds the
+running sum to f16 once, so over `s = k / 16` steps the sum carries at most `s` roundings of
+`2^-11` of a partial sum (k 576: 36 steps, 1.8e-2 worst; k 2048: 128, 6.3e-2) and, the roundings
+uncorrelated, `sqrt(s) * 2^-11` typically (2.9e-3 and 5.5e-3 of a partial sum, which the hashed
+fixture holds under its output's largest magnitude). The q8 l-tile cells of `tests/test_cuda_kernels.das`
+read 1.7e-3 of the largest output at k 576 and 1.4e-3 at k 2048 against their 2e-3 bar
+(`TILE_BAR`): the bar measures the accumulation, not only the decode and the indexing, and a fixture
+whose partial sums run larger than its outputs will miss it before the tile is wrong.
+
 **The tile's fast path is what makes the loads unclamped.** It runs when the weight tile is whole
 (`m0 + 128 <= d`), the token column is whole or the stamp carries the partial-column path (`STILE`:
 the s and m columns), and K is a whole number of BK steps; the layouts are then created

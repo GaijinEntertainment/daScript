@@ -138,7 +138,9 @@ let TILE_D = 160            //! the tile cells' weight rows: one full 128-tile a
 let TILE_ROWS0 = 300        //! the two regions' rows: whole tiles and an edge each
 let TILE_ROWS1 = 260
 
-//! the cm2 l tile over two regions of activation rows against the f16-feed oracle: `k` the reduction width
+//! the cm2 l tile over two regions of activation rows against the f16-feed oracle: `k` the reduction width; the tile's
+//! f16 accumulator reads 1.7e-3 of the largest output at k 576 against the 2e-3 bar, so a fixture change here moves the margin
+[arch(at="../ARCHITECTURE_GPU_SHARED_GEMM.md#cm2-tile-body")]
 def q8_cm2l_run(t : T?; k : int; wq_seed, ws_seed, xf_mul, xf_add : uint) {
     let d = TILE_D
     let rows = TILE_ROWS0 + TILE_ROWS1
