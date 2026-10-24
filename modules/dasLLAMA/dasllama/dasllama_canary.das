@@ -789,18 +789,8 @@ def private cn_conv0(m : CanaryEncoder; var st : CanaryState; ih, iw : int64) {
     let oh = conv_s2_out(ih)
     let rows = oh * ow
     ensure_length(st.col, rows * 9l)
-    for (oy in range64(oh)) {
-        for (ox in range64(ow)) {
-            let r = (oy * ow + ox) * 9l
-            for (kh in range64(3l)) {
-                let iy = oy * 2l - 1l + kh
-                for (kw in range64(3l)) {
-                    let ix = ox * 2l - 1l + kw
-                    st.col[r + kh * 3l + kw] = (iy >= 0l && iy < ih && ix >= 0l && ix < iw
-                        ? st.mel[iy * iw + ix] : 0.0)
-                }
-            }
-        }
+    unsafe {
+        im2col_k3s2p1(addr(st.col[0]), addr<float const?>(st.mel[0]), iw, ih, 1l)
     }
     ensure_length(st.y0, rows * cout)
     mm_blob_b(st.y0, m.blob, m.c0_w, st.col, 9l, cout, rows)

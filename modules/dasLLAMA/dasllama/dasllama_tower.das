@@ -723,6 +723,35 @@ def tower_bake_half_twin(blob : array<float>; var wblob : array<uint16>; bf16 : 
 //! the output length of a k3 / stride-2 / pad-1 conv stage over an axis of `l`
 def conv_s2_out(l : int64) : int64 => (l - 1l) / 2l + 1l
 
+//! The 3x3, stride-2, pad-1 im2col every audio front runs (qwen3a, gemma4a, canary): input rows
+//! [ih][iw][cin] (cin fastest) to output rows [oh*ow][cin*9] with column (ic*3 + kh)*3 + kw, zero
+//! past the edges; the output rows split across lanes - pure copies, the same bytes under any split.
+def im2col_k3s2p1(var colp : float?; xp : float const?; iw, ih, cin : int64) {
+    let ow = conv_s2_out(iw)
+    let oh = conv_s2_out(ih)
+    let kdim = cin * 9l
+    maybe_parallel_for(0, int(oh), lanes_for_work(oh * ow * kdim, 0)) $(rb, re) {
+        unsafe {
+            for (oy in range64(int64(rb), int64(re))) {
+                for (ox in range64(ow)) {
+                    let r = (oy * ow + ox) * kdim
+                    for (ic in range64(cin)) {
+                        for (kh in range64(3l)) {
+                            let iy = oy * 2l - 1l + kh
+                            for (kw in range64(3l)) {
+                                let ix = ox * 2l - 1l + kw
+                                colp[r + (ic * 3l + kh) * 3l + kw] = (iy >= 0l && iy < ih && ix >= 0l && ix < iw
+                                    ? xp[(iy * iw + ix) * cin + ic]
+                                    : 0.0)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 //! the Transformer-XL rel-position table [ww x d] into `pos_emb`: row w at relative position tt - 1 - w, (sin, cos) interleaved
 def rel_pos_table(@scratch var pos_emb : array<float>; d, tt, ww : int64) {
     ensure_length(pos_emb, ww * d)
