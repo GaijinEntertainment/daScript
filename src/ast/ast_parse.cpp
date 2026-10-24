@@ -671,6 +671,16 @@ namespace das {
             }
             return;
         }
+        if ( path.compare(0, 7, "module:") == 0 ) {
+            // a builtin module's presence, as `builtin_module_exists` answers it (a deferred row counts): a build
+            // that gains or loses the module refuses a record a compile folded under the other answer
+            string name = path.substr(7);
+            if ( Module::requireEx(name, true) != nullptr || guardModuleAvailable(name) ) {
+                size = 1;
+                hash = FNV64A_SEED;
+            }
+            return;
+        }
 #if !defined(DAS_NO_FILEIO)
         FILE * f = fopen(path.c_str(), "rb");
         if ( !f ) return;

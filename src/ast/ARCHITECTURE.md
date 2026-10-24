@@ -16,7 +16,10 @@ the bytes the compile's `FileAccess` serves for that name match (never a stat, s
 not on disk under that name is covered, and a rewrite that leaves the bytes alone serves), and
 that every compile-time input the record's macros pinned
 (`add_module_cache_dependency` - a file's bytes, an environment variable's value under
-`env:NAME`, a command-line flag's occurrences under `arg:--flag`) still has the same content. A
+`env:NAME`, a command-line flag's occurrences under `arg:--flag`; and the builtin module's
+presence under `module:NAME`, which the `builtin_module_exists` fold pins itself, so a build
+that gains or loses a witness module refuses the record a compile folded under the other
+answer) still has the same content. A
 match deserializes the module and counts it as served; the module object is a `ModuleDas`, the
 class the parser builds, because the AOT emitter asks each module whether it can be AOT'd and a
 plain `Module` answers no. A served module's file record carries the file's name and length,

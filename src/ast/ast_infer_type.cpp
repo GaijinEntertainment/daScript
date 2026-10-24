@@ -2880,6 +2880,22 @@ namespace das {
                         // also accepts shared das modules compiled earlier in the process
                         auto mod = Module::requireEx(evar->name, true);
                         reportAstChanged();
+                        // the record folds this answer: pin the module's presence, so a build that gains or loses the
+                        // module refuses the record (src/ast/ARCHITECTURE.md#module-cache-read)
+                        string dep = "module:" + evar->name;
+                        int64_t depSize = -1;
+                        uint64_t depHash = 0;
+                        statAndHashFileDependency(dep, depSize, depHash);
+                        bool pinned = false;
+                        for ( auto & d : program->moduleCacheDependencies ) {
+                            if ( get<0>(d) == dep ) {
+                                get<1>(d) = depSize;
+                                get<2>(d) = depHash;
+                                pinned = true;
+                                break;
+                            }
+                        }
+                        if ( !pinned ) program->moduleCacheDependencies.emplace_back(dep, depSize, depHash);
                         return new ExprConstBool(expr->at, mod != nullptr || guardModuleAvailable(evar->name));
                     } else {
                         error("unsupported module name subexpression ", expr->subexpr->__rtti, "",

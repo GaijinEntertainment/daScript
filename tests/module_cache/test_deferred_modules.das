@@ -314,6 +314,30 @@ def arms_artifact(t : T?; fx : Fixture) {
     }
 }
 
+//! the module cache against the witness: a record pins what it folded
+def arm_cache_witness(t : T?; fx : Fixture) {
+    let utDir = path_join(path_join(fx.tmp, "modules"), UNIT_TEST_FOLDER)
+    t |> run("a module-cache record folded with the module present is refused once it is gone, " +
+             "and the other way") @(t : T?) {
+        let cache = "-module-cache \"{path_join(fx.tmp, "mc_witness.bin")}\""
+        var warm : string
+        let cmd = child_cmd(fx, fx.exists, "", cache)
+        t |> success(run_child_reported(t, "cache present", cmd, warm, "EXISTS true"),
+            "the cold cache run folds the module as present:\n{warm}")
+        let copied = path_join(utDir, base_name(unit_test_artifact()))
+        let parked = path_join(fx.tmp, base_name(unit_test_artifact()))
+        var rerr : string
+        t |> success(rename(copied, parked, rerr), "the artifact leaves the module folder: {rerr}")
+        var gone : string
+        t |> success(run_child_reported(t, "cache gone", cmd, gone, "EXISTS false"),
+            "the record pinned the module's presence, so the run folds it absent:\n{gone}")
+        t |> success(rename(parked, copied, rerr), "the artifact comes back: {rerr}")
+        var back : string
+        t |> success(run_child_reported(t, "cache back", cmd, back, "EXISTS true"),
+            "the record written absent is refused once the module is back:\n{back}")
+    }
+}
+
 def arms_guards_and_caches(t : T?; fx : Fixture) {
     t |> run("a require guard loads a waiting module, whatever else the compile requires") @(t : T?) {
         var alone : string
@@ -463,6 +487,7 @@ def test_deferred_modules(t : T?) {
     arms_deferred(t, fx)
     arms_guards_and_caches(t, fx)
     arms_artifact(t, fx)
+    arm_cache_witness(t, fx)
     arm_math_container_cache(t, fx)
     arms_nameless_rows(t, fx)
     arm_fallback(t, fx)
