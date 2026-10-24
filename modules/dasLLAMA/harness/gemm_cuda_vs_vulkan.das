@@ -596,7 +596,8 @@ def race_da(p : DaPlanes) : RaceRow {
     return row
 }
 
-//! `--only <fmt,fmt,...>`: the superblock cm2 rows of the named formats alone (a format round's A/B), else every arm
+//! `--only <fmt,fmt,...>`: the superblock cm2 and MMQ rows of the named formats alone (a format round's A/B), else every arm;
+//! `8b` among the names switches the shapes to the llama-8B window's
 def race_only : table<string; void> {
     var only : table<string; void>
     var take = false
@@ -674,8 +675,10 @@ def race_sb_mmq_rows(shapes : array<tuple<k : int; d : int>>; only : table<strin
 
 [export]
 def main {
-    let shapes <- [(k = 2048, d = 2048), (k = 2048, d = 8192), (k = 8192, d = 2048)]
     let only <- race_only()
+    // the window's GEMM shapes: the llama-1B's (dim 2048, hidden 8192), or the 8B's (dim 4096, hidden 14336) under `--only ...,8b`
+    let big = key_exists(only, "8b")
+    let shapes <- [(k = big ? 4096 : 2048, d = big ? 4096 : 2048), (k = big ? 4096 : 2048, d = big ? 14336 : 8192), (k = big ? 14336 : 8192, d = big ? 4096 : 2048)]
     var measured = 0
     if (!empty(only)) {
         dasllama_vulkan_classes::ensure_q8_batch_cm2l_cls()   // arms the device the format picks read their mode off

@@ -2702,18 +2702,26 @@ class CuNv4Mmq : MmqFp4T {
 
 let FP4_ROW_SCALE_DIV = 2688.0   //! 6 x 448: the e2m1 range times the UE4M3 range - the FP4 feed's row scale divides by it
 
-//! one 16-strip of a row already divided by its row scale, as the FP4 feed stores it: the UE4M3 code off the strip's largest
-//! magnitude over 6, and the two nibble words (k, k + 8) a byte under that code's value
-def fp4_strip(v : float[16]; var code : uint&; var w0, w1 : uint&) {
-    var sub = 0.0
-    for [unroll] (i in range(16)) {
-        sub = max(sub, abs(v[i]))
-    }
-    code = cvt_ue4m3(sub / 6.0)
+def fp4_amax4(v : float4) : float => max(max(abs(v.x), abs(v.y)), max(abs(v.z), abs(v.w)))
+
+//! The FP4 feed's strip pass, a lane four consecutive elements `v` of a row already over its row scale, chunk `c` of the row
+//! (element 4c): the sixteen lanes of a k64 hold its four 16-strips, four lanes a strip. The strip's UE4M3 code comes off the
+//! four lanes' largest magnitude over 6 (xor shuffles 1 and 2); lanes 0 / 1 of the strip pair their elements with lane ^ 2's
+//! (k, k + 8) into the nibble word `w` the feed stores - lanes 2 / 3 mirror it and store nothing; `cw` is the k64's code word,
+//! the four strips' codes a byte each joined over shuffles 4 and 8, the k64's first lane storing it. Every lane of the
+//! subgroup runs the pass, a lane past the row with zeros: the shuffles read the whole subgroup
+def fp4_chunk(v : float4; c : uint; var w, cw : uint&) {
+    var m = fp4_amax4(v)
+    m = max(m, gk_subgroup_xor(m, 1u))
+    m = max(m, gk_subgroup_xor(m, 2u))
+    let code = cvt_ue4m3(m / 6.0)
     let sval = ue4m3_half_f32(code) * 2.0
     let inv = sval > 0.0 ? 1.0 / sval : 0.0
-    w0 = cvt_e2m1x2(v[0] * inv, v[8] * inv) | (cvt_e2m1x2(v[1] * inv, v[9] * inv) << 8u) | (cvt_e2m1x2(v[2] * inv, v[10] * inv) << 16u) | (cvt_e2m1x2(v[3] * inv, v[11] * inv) << 24u)
-    w1 = cvt_e2m1x2(v[4] * inv, v[12] * inv) | (cvt_e2m1x2(v[5] * inv, v[13] * inv) << 8u) | (cvt_e2m1x2(v[6] * inv, v[14] * inv) << 16u) | (cvt_e2m1x2(v[7] * inv, v[15] * inv) << 24u)
+    let p = float4(gk_subgroup_xor(v.x, 2u), gk_subgroup_xor(v.y, 2u), gk_subgroup_xor(v.z, 2u), gk_subgroup_xor(v.w, 2u))
+    w = cvt_e2m1x2(v.x * inv, p.x * inv) | (cvt_e2m1x2(v.y * inv, p.y * inv) << 8u) | (cvt_e2m1x2(v.z * inv, p.z * inv) << 16u) | (cvt_e2m1x2(v.w * inv, p.w * inv) << 24u)
+    cw = code << (((c >> 2u) & 3u) * 8u)
+    cw |= gk_subgroup_xor_u(cw, 4u)
+    cw |= gk_subgroup_xor_u(cw, 8u)
 }
 
 struct Fp4RowsArgs {
@@ -2725,15 +2733,18 @@ struct Fp4RowsArgs {
     ulen : uint
 }
 
-//! The FP4 activation feed a workgroup a row (256 lanes): the row's largest magnitude over 6 x 448 as its f32 scale, then a
-//! lane a k64 - four strips, each a UE4M3 code off its largest over 6 and sixteen e2m1 nibbles in (k, k + 8) pairs - into
-//! the nibble words, the code words and the row scale the FP4 tensor rung reads; the source element is the stamp's
-//! (`load1`: a float plane, or the gate / up pair through the activation)
+//! The FP4 activation feed a workgroup a row (256 lanes), a lane four consecutive elements a round: the row's largest magnitude
+//! over 6 x 448 as its f32 scale, then the strip pass (`fp4_chunk`) into the nibble words, the code words and the row scale the
+//! FP4 tensor rung reads; the source element is the stamp's (a float plane, or the gate / up pair through the activation),
+//! read as float4 when the planes sit on the four lattice and the up rows are contiguous, and read twice - a row kept in
+//! registers between the two passes measured no faster at 14336 wide and slower at 4096
 [ |> template_struct_instance]
 class template Fp4FeedT : GkWgReduce {
     @template_constant ACT : bool = false   //!< the act form: element e is act(gate[e]) x up[e] (`gk_up_at` for the up side's layout)
     @ssbo @binding = 0 @readonly src : array<float>                      //! the rows (the act form's gate)
     @ssbo @binding = 1 @readonly @template_gate = ACT up : array<float>
+    @ssbo @binding = 0 @readonly @role = "alias" src4 : array<float4>
+    @ssbo @binding = 1 @readonly @role = "alias" @template_gate = ACT up4 : array<float4>
     @ssbo @binding = 2 outq : array<uint>      //! [row][k / 8] nibble words
     @ssbo @binding = 3 outsw : array<uint>     //! [row][k / 64] code words
     @ssbo @binding = 4 outrs : array<float>    //! [row] scales
@@ -2747,16 +2758,44 @@ class template Fp4FeedT : GkWgReduce {
         }
     }
 
+    //! elements e .. e + 3, `e` a four-multiple off the row base
+    def load4(e : uint) : float4 {
+        if (pa.ustride == 0u && ((pa.inbase | pa.ubase) & 3u) == 0u) {
+            let g = src4[e / 4u]
+            static_if (ACT) {
+                let u = up4[(pa.ubase + e) / 4u]
+                return float4(gk_act_mul(g.x, u.x, pa.act), gk_act_mul(g.y, u.y, pa.act), gk_act_mul(g.z, u.z, pa.act), gk_act_mul(g.w, u.w, pa.act))
+            } else {
+                return g
+            }
+        }
+        return float4(load1(e), load1(e + 1u), load1(e + 2u), load1(e + 3u))
+    }
+
+    //! chunk `cc` of row `tok` through the strip pass and its stores; `on` for a chunk inside the row
+    def strip_put(tok, cc : uint; on : bool; v : float4) {
+        var w = 0u
+        var cw = 0u
+        fp4_chunk(v, cc, w, cw)
+        if (on && (cc & 3u) < 2u) {
+            outq[tok * (pa.k / 8u) + (cc >> 2u) * 2u + (cc & 3u)] = w
+        }
+        if (on && (cc & 15u) == 0u) {
+            outsw[tok * (pa.k / 64u) + (cc >> 4u)] = cw
+        }
+    }
+
     [spirv_inline]
     def fp4_body {
         let tok = gl_WorkGroupID.x
         let base = pa.inbase + tok * pa.k
         let tid = gl_LocalInvocationID.x
+        let nch = pa.k / 4u
         var m = 0.0
-        var e = tid
-        while (e < pa.k) {
-            m = max(m, abs(load1(base + e)))
-            e += 256u
+        var c = tid
+        while (c < nch) {
+            m = max(m, fp4_amax4(load4(base + c * 4u)))
+            c += 256u
         }
         var amax = 0.0
         wg_max_into(m, 0u, amax)
@@ -2765,27 +2804,17 @@ class template Fp4FeedT : GkWgReduce {
         if (tid == 0u) {
             outrs[tok] = rs
         }
-        let nk64 = pa.k / 64u
-        var j = tid
-        while (j < nk64) {
-            var scw = 0u
-            for [unroll] (s in range(4)) {
-                var v : float[16]
-                let e0 = base + j * 64u + uint(s) * 16u
-                for [unroll] (i in range(16)) {
-                    v[i] = load1(e0 + uint(i)) * inv_rs
-                }
-                var code = 0u
-                var w0 = 0u
-                var w1 = 0u
-                fp4_strip(v, code, w0, w1)
-                let qo = tok * (pa.k / 8u) + j * 8u + uint(s) * 2u
-                outq[qo] = w0
-                outq[qo + 1u] = w1
-                scw |= code << uint(s * 8)
+        let nit = (nch + 255u) / 256u
+        var i = 0u
+        while (i < nit) {
+            let cc = tid + i * 256u
+            let on = cc < nch
+            var v = float4(0.0)
+            if (on) {
+                v = load4(base + cc * 4u) * inv_rs
             }
-            outsw[tok * nk64 + j] = scw
-            j += 256u
+            strip_put(tok, cc, on, v)
+            i++
         }
     }
 }
@@ -2840,27 +2869,27 @@ class template ArRqFp4T : ArBase {
         if (tid == 0u) {
             outrs[tok] = rs
         }
-        let nk64 = pa.dim / 64u
-        var j = tid
-        while (j < nk64) {
-            var scw = 0u
-            for [unroll] (s in range(4)) {
-                var v : float[16]
-                let e0 = j * 64u + uint(s) * 16u
-                for [unroll] (i in range(16)) {
-                    v[i] = normed_at(e0 + uint(i), 0.0, inv) * inv_rs
-                }
-                var code = 0u
-                var w0 = 0u
-                var w1 = 0u
-                fp4_strip(v, code, w0, w1)
-                let qo = tok * (pa.dim / 8u) + j * 8u + uint(s) * 2u
-                outq4[qo] = w0
-                outq4[qo + 1u] = w1
-                scw |= code << uint(s * 8)
+        let nch = pa.dim / 4u
+        let nit = (nch + 255u) / 256u
+        var i = 0u
+        while (i < nit) {
+            let cc = tid + i * 256u
+            let on = cc < nch
+            var v = float4(0.0)
+            if (on) {
+                let e0 = cc * 4u
+                v = float4(normed_at(e0, 0.0, inv), normed_at(e0 + 1u, 0.0, inv), normed_at(e0 + 2u, 0.0, inv), normed_at(e0 + 3u, 0.0, inv)) * inv_rs
             }
-            outsw[tok * nk64 + j] = scw
-            j += 256u
+            var w = 0u
+            var cw = 0u
+            fp4_chunk(v, cc, w, cw)
+            if (on && (cc & 3u) < 2u) {
+                outq4[tok * (pa.dim / 8u) + (cc >> 2u) * 2u + (cc & 3u)] = w
+            }
+            if (on && (cc & 15u) == 0u) {
+                outsw[tok * (pa.dim / 64u) + (cc >> 4u)] = cw
+            }
+            i++
         }
     }
 }
