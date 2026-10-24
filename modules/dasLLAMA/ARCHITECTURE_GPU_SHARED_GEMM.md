@@ -72,7 +72,7 @@ construction, and its scale plane is one byte a block, read four blocks a word.
 
 The Vulkan tier does not use the Metal blob's split scale plane
 (`ARCHITECTURE_GPU_QUANT_PLANES.md#metal-kq-split-scale-plane`) - it binds the decoded 20-byte row as five
-uints per superblock, except for iq4xs, iq3s, iq3xxs and iq2xxs, whose device row is two words
+uints per superblock (nv4's sixteen scale halves as eight), except for iq4xs, iq3s, iq3xxs and iq2xxs, whose device row is two words
 (`kq_dev_ssb`): f16 d with the format's native high bits above it, then eight 4-bit sub-scale
 fields - iq4xs's `scales_h` and `scales_l` verbatim, the others' `s` nibbles - which the
 gather packs from the plane's decoded bytes and `iq4xs_sc` / `grid_sc` decode in the kernels.

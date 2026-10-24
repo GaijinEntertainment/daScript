@@ -19,6 +19,7 @@ require dasllama/dasllama_math_gen   // dequant_kq_row_grp, kq_groupn_gen, the b
 require dasllama/dasllama_repack     // repack_kq_grp
 require dasllama/dasllama_gemm_schema   // kq_qsb/kq_ssb — the fmt-id plane strides
 require dasllama/dasllama_gpu_math   // ue4m3_half_f32 - the nv4 plane cell's scale formula
+require daslib/f16_cvt   // f32_to_f16 / f16_to_f32 - the nv4 device row's halves
 require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration for load_gguf
 require daslib/jobque_boost   // team_parallel_for - the lane-context arm of the iq4nl dequant
 require daslib/algorithm   // fill - the NaN sentinel over a reused output
@@ -2012,10 +2013,52 @@ def test_kq_gpu_gather_iq(t : T?) {
 
 [test]
 def test_kq_gpu_gather_grp(t : T?) {
-    for (fmt in [3, 6]) {
+    for (fmt in [3, 6, 49]) {
         t |> run("moe_gpu_gather_stack_kq kq {fmt}: disk-order and grp planes gather identically") @(t : T?) {
             kq_gpu_gather_gate(t, fmt)
         }
+    }
+}
+
+//! the nv4 device scale row the gather writes under per-tensor scale `s2`: sixteen halves a superblock, each the UE4M3 code at
+//! half times `s2` rounded to nearest even; the count of halves off that, and of halves that read back off the code's exact
+//! value (zero at an `s2` of 1 - every UE4M3 code at half is a half)
+def private nv4_gather_half_misses(s2 : float) : int2 {
+    let n = 512l
+    let d = 4l
+    var inscope kq, ks : array<uint8>
+    synth_kq_region(49, kq, ks, d, n, 0xC0FFEEu, 0x9E3779Bu)
+    var m = Model()
+    m.kq[int(KqFmt.nv4)].q := kq
+    m.kq[int(KqFmt.nv4)].s := ks
+    m.site_scale[site_scale_key(KqFmt.nv4, 0l)] = s2
+    var inscope wq, ws : array<uint8>
+    moe_gpu_gather_stack_kq(m, KqFmt.nv4, 0l, n, d, d, false, kq_layout_of(49), wq, ws)
+    var miss = int2(0)
+    if (long_length(ws) != d * (n / 256l) * 32l) {
+        miss.x = 1000000
+    }
+    for (sb in range64(d * n / 256l)) {
+        for (si in range64(16l)) {
+            let exact = ue4m3_half_f32(uint(ks[sb * 16l + si]))
+            let have = uint(ws[sb * 32l + si * 2l]) | (uint(ws[sb * 32l + si * 2l + 1l]) << 8u)
+            miss.x += have != f32_to_f16(exact * s2) ? 1 : 0
+            miss.y += f16_to_f32(have) != exact ? 1 : 0
+        }
+    }
+    delete m
+    return miss
+}
+
+[test]
+def test_kq_gpu_gather_nv4_halves(t : T?) {
+    t |> run("moe_gpu_gather_stack_kq nv4: the device scale row is the UE4M3 codes at half under the per-tensor scale") @(t : T?) {
+        let folded = nv4_gather_half_misses(1.0299681e-4)
+        t |> equal(folded.x, 0, "every half is the code at half times the scale, rounded to nearest even")
+        t |> success(folded.y > 0, "the folded halves read off the bare codes (the compare has teeth)")
+        let unit = nv4_gather_half_misses(1.0)
+        t |> equal(unit.x, 0, "at a scale of 1 the halves are the rounding's")
+        t |> equal(unit.y, 0, "at a scale of 1 every half reads back the code's exact value")
     }
 }
 

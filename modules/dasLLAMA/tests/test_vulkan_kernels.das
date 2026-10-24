@@ -1802,7 +1802,7 @@ def test_vkd_kq_gemv_family(t0 : T?) {
             for (fmt in KQ_LEAF_FMTS) {
                 let sb_words = int(kq_qsb(kq_fmt_of_slot(fmt)) / 4l)
                 let ws_words_n = rows * nsb * int(kq_dev_ssb_i(fmt) / 4l)
-                var inscope wsh <- kq_ws_plane(fmt, ws_words_n, 1u, uint(fmt) * 13u)
+                var inscope wsh <- ws_plane(ws_words_n, 1u, uint(fmt) * 13u)
                 var f <- gemv_fix(nreg, d, nsb, sb_words, uint(fmt) * 77777u, wsh, nsb, 64, 31u, 5u, 0.5, 0.25, 7)
                 var inscope y_ref <- kq_gemv_oracle(fmt, f.wqh, f.wsh, f.xqh, f.xsh, f.regs, nsb * 256, d, nreg)
                 with_cell_planes() $(var cp : CellPlanes) {
@@ -1866,7 +1866,7 @@ def test_vkd_emb_gather_family(t0 : T?) {
             for (fmt in KQ_LEAF_FMTS) {
                 let sb_words = int(kq_qsb(kq_fmt_of_slot(fmt)) / 4l)
                 var inscope wq <- hashed_words((vocab + lead) * nsb * sb_words, 1u, uint(fmt) * 9973u)
-                var inscope ws <- kq_ws_plane(fmt, (vocab + lead) * nsb * int(kq_dev_ssb_i(fmt) / 4l), 1u, uint(fmt) * 17u)
+                var inscope ws <- ws_plane((vocab + lead) * nsb * int(kq_dev_ssb_i(fmt) / 4l), 1u, uint(fmt) * 17u)
                 let wblk0 = uint(lead * nsb)
                 var inscope y_ref <- emb_gather_oracle(fmt, wq, ws, ids, xh, n, wblk0, escale)
                 with_cell_planes() $(var cp : CellPlanes) {
@@ -2493,7 +2493,7 @@ def test_vkd_kq_batch_family(t0 : T?) {
                 let wswords = totsb * int(kq_dev_ssb_i(fmt) / 4l)
                 var p = Sdot4Planes(ws_bytes = int64(wswords) * 4l)
                 p.wqh <- hashed_words(totsb * sb_words, 1u, uint(fmt) * 131u)
-                p.wsh <- kq_ws_plane(fmt, wswords, 1u, uint(fmt) * 17u)
+                p.wsh <- ws_plane(wswords, 1u, uint(fmt) * 17u)
                 p.xqh <- hashed_words(rows * nsb * 64, 7u, 2u)
                 p.xsh <- row_fill(rows * nsb, 1, 0, 0.05, -0.3, 11)
                 //! one family set serves every format; region 1's weights follow region 0's stack in superblock units
@@ -5231,7 +5231,7 @@ def private gemv_ncol_arm(t : T?; f : KqFmt; n, d : int) {
             wsh |> push_from(blk32_scale_plane(f, d * xblk))
         } else {
             wqh |> push_from(hashed_words(d * xblk * int(kq_qsb(f) / 4l), 1u, uint(fmt) * 77777u))
-            wsh |> push_from(kq_ws_plane(fmt, d * xblk * int(kq_dev_ssb(f) / 4l), 1u, uint(fmt) * 13u))
+            wsh |> push_from(ws_plane(d * xblk * int(kq_dev_ssb(f) / 4l), 1u, uint(fmt) * 13u))
         }
         var xqh <- hashed_words(xq_col * ncol_max, 31u, 5u)
         var xsh <- row_fill(xblk * ncol_max, 1, 0, 0.25, -0.5, 7)

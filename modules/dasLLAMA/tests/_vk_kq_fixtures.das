@@ -11,7 +11,6 @@ require dasllama/dasllama_gemm_schema
 require _compares
 require daslib/enum_trait
 require daslib/shader_lingua_franca
-require daslib/math_bits   // float_bits_to_uint: the nv4 device row's per-tensor scale word
 
 // Synthetic K-quant expert stacks in the vulkan tier's DEVICE layout, shared by the tier suite
 // (test_vulkan_tier) and the cm2 expert-chain suite (test_vulkan_moe_cm2): the pow2 scale sets
@@ -262,18 +261,6 @@ def ws_word(i : uint) : uint => safe_half(i * 7u + 3u) | (safe_half(i * 3u + 1u)
 //! `n` scale words `ws_word(i * mul + add)`: two finite halves a word
 def ws_plane(n : int; mul, add : uint) : array<uint> =>
     <- [for (i in range(n)); ws_word(uint(i) * mul + add)]
-
-//! `ws_plane` under a format's device-row rule: an nv4 row's fifth word is the plane's per-tensor scale as f32 bits (a 1.0 ..
-//! 1.75 ladder a superblock), where two hashed halves would read as a wild f32
-def kq_ws_plane(fmt : int; n : int; mul, add : uint) : array<uint> {
-    var w <- ws_plane(n, mul, add)
-    if (fmt == int(KqFmt.nv4)) {
-        for (sb in range(n / 5)) {
-            w[sb * 5 + 4] = float_bits_to_uint(1.0 + 0.25 * float(sb % 4))
-        }
-    }
-    return <- w
-}
 
 //! `nblk` f16 block scales two a word, the small positive ramp `0.002 x (1 + b % 7)`: the CUDA q8 GEMV cells' scale plane
 def ramp_ws_plane(nblk : int) : array<uint> =>

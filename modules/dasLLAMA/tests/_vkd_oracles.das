@@ -527,9 +527,11 @@ def lut_gemv_float_oracle(wq, ws, xq : array<uint>; xs : array<float>; regions :
     return <- y
 }
 
-//! the nv4 sub-block scale `si` of superblock `sb`'s device row: byte si of the row's first four words, UE4M3 at half, under
-//! the plane's per-tensor scale in the row's fifth word
-def nv4_row_sc(ws : array<uint>; sb, si : int) : float => ue4m3_half_f32(uint(byte_u8(ws, sb * 20 + si))) * uint_bits_to_float(ws[sb * 5 + 4])
+//! the nv4 sub-block scale `si` of superblock `sb`'s device row: half si of the row's eight words
+def nv4_row_sc(ws : array<uint>; sb, si : int) : float {
+    let sp = unpackHalf2x16(ws[sb * 8 + si / 2])
+    return (si & 1) == 0 ? sp.x : sp.y
+}
 
 //! NVFP4 GEMV float oracle: w = MX4_LUT[q] x the sub-block's UE4M3 scale at half straight off the plane bytes - a 32-block's
 //! low 16 under scale byte 2 blk, its high 16 under 2 blk + 1, over the k4 nibble tiling
@@ -1259,22 +1261,17 @@ enum ScaleForm {
     q51_dm        //! one [d | m] word a block, m signed
     iq4nl32_d     //! two f16 d a word
     mx4_e8m0      //! four E8M0 bytes a word
-    nv4_bytes     //! four words of UE4M3 sub-block scale bytes, then a zero pad word
+    nv4_halves    //! eight words of two sub-block scale halves - UE4M3 codes at half, as the gather decodes them
 }
 
-//! the nv4 cells' per-tensor scale word of superblock `sb` (the device row's fifth word): a 1.0 .. 1.75 ladder, so a decode
-//! that drops it reads off the bar and the f16 sums stay cool
-def nv4_scale2_word(sb : int) : uint => float_bits_to_uint(1.0 + 0.25 * float(sb % 4))
-
-//! the nv4 cells' scale bytes: UE4M3 codes with exponents 1..10 (2^-7 .. 2^2 at half) and every mantissa, four a word, so the
-//! tile's f16 sums stay far from 65504 and no code reads as the nan zero
+//! the nv4 cells' scale word `i`: two UE4M3 codes with exponents 1..10 (2^-7 .. 2^2 at half) and every mantissa, decoded to
+//! halves as the gather lays them, so the tile's f16 sums stay far from 65504 and no code reads as the nan zero
 def nv4_scale_word(i, seed : uint) : uint {
-    var w = 0u
-    for (b in range(4)) {
-        let h = hash_word(i * 4u + uint(b) + seed)
-        w |= ((1u + h % 10u) << 3u | ((h >> 8u) & 7u)) << uint(b * 8)
-    }
-    return w
+    let h0 = hash_word(i * 2u + seed)
+    let h1 = hash_word(i * 2u + 1u + seed)
+    let c0 = (1u + h0 % 10u) << 3u | ((h0 >> 8u) & 7u)
+    let c1 = (1u + h1 % 10u) << 3u | ((h1 >> 8u) & 7u)
+    return packHalf2x16(float2(ue4m3_half_f32(c0), ue4m3_half_f32(c1)))
 }
 
 //! one row of the per-format tile table: the format, its K and scale unit, the hashed quant words a unit, the scale-row form
@@ -1302,7 +1299,7 @@ def fmt_tile_rows() : array<FmtTile> {
         FmtTile(fmt = KqFmt.iq2xs, n = TILE_CELL_K, blk_k = 256, wq_words = 16, wq_seed = 29u, form = ScaleForm.d_dmin_hash, dmul = 0.0002, mmul = 0.0, sseed = 613u, xf_add = 5u, oracle = @@iq2xsf16_gemm_oracle),
         FmtTile(fmt = KqFmt.q40, n = TILE_CELL_K, blk_k = 256, wq_words = 32, wq_seed = 29u, form = ScaleForm.d_pairs, dmul = 0.0002, mmul = 0.00013, xf_add = 5u, oracle = @@q40f16_gemm_oracle),
         FmtTile(fmt = KqFmt.iq4nl, n = TILE_CELL_K, blk_k = 256, wq_words = 32, wq_seed = 29u, form = ScaleForm.d_pairs, dmul = 0.0002, mmul = 0.00013, xf_add = 5u, oracle = @@iq4nlf16_gemm_oracle),
-        FmtTile(fmt = KqFmt.nv4, n = TILE_CELL_K, blk_k = 256, wq_words = 32, wq_seed = 29u, form = ScaleForm.nv4_bytes, sseed = 613u, xf_add = 5u, oracle = @@nv4f16_gemm_oracle, control = @@iq4nlf16_gemm_oracle),
+        FmtTile(fmt = KqFmt.nv4, n = TILE_CELL_K, blk_k = 256, wq_words = 32, wq_seed = 29u, form = ScaleForm.nv4_halves, sseed = 613u, xf_add = 5u, oracle = @@nv4f16_gemm_oracle, control = @@iq4nlf16_gemm_oracle),
         FmtTile(fmt = KqFmt.k3, n = TILE_CELL_K, blk_k = 256, wq_words = 24, wq_seed = 29u, form = ScaleForm.hash_d, dmul = 0.0002, sseed = 811u, xf_add = 5u, oracle = @@k3f16_gemm_oracle),
         FmtTile(fmt = KqFmt.k6, n = TILE_CELL_K, blk_k = 256, wq_words = 48, wq_seed = 41u, form = ScaleForm.hash_d, dmul = 0.0002, sseed = 811u, xf_add = 5u, oracle = @@k6f16_gemm_oracle),
         FmtTile(fmt = KqFmt.iq3s, n = TILE_CELL_K, blk_k = 256, wq_words = 26, wq_seed = 29u, form = ScaleForm.d_hi_hash, dmul = 0.0002, sseed = 613u, xf_add = 5u, oracle = @@iq3sf16_gemm_oracle, control = @@iq3xxsf16_gemm_oracle),
@@ -1395,8 +1392,10 @@ def fmt_tile_planes(row : FmtTile; var wqh, wsh : array<uint>) {
     let units = 2 * TILE_CELL_D * (row.n / row.blk_k)
     delete wqh
     wqh <- hashed_words(units * row.wq_words, 1u, row.wq_seed)
-    if (row.form == ScaleForm.d_dmin_hash || row.form == ScaleForm.d_pairs || row.form == ScaleForm.hash_d || row.form == ScaleForm.nv4_bytes) {
+    if (row.form == ScaleForm.d_dmin_hash || row.form == ScaleForm.d_pairs || row.form == ScaleForm.hash_d) {
         wsh |> resize(units * 5)
+    } elif (row.form == ScaleForm.nv4_halves) {
+        wsh |> resize(units * 8)
     } elif (row.form == ScaleForm.d_hi_hash) {
         wsh |> resize(units * 2)
     } elif (row.form == ScaleForm.q51_dm) {
@@ -1423,11 +1422,10 @@ def fmt_tile_planes(row : FmtTile; var wqh, wsh : array<uint>) {
             wsh[sb * 2 + 1] = hash_word(uint(sb * 2 + 1) + row.sseed)
         } elif (row.form == ScaleForm.q51_dm) {
             wsh[sb] = packHalf2x16(float2(0.0002 * float(1 + sb % 7), 0.0001 * float(sb % 5) - 0.0002))
-        } elif (row.form == ScaleForm.nv4_bytes) {
-            for (wi in range(4)) {
-                wsh[sb * 5 + wi] = nv4_scale_word(uint(sb * 4 + wi), row.sseed)
+        } elif (row.form == ScaleForm.nv4_halves) {
+            for (wi in range(8)) {
+                wsh[sb * 8 + wi] = nv4_scale_word(uint(sb * 8 + wi), row.sseed)
             }
-            wsh[sb * 5 + 4] = nv4_scale2_word(sb)
         }
     }
     if (row.form == ScaleForm.iq4nl32_d) {

@@ -181,10 +181,10 @@ An NVFP4 weight is its e2m1 code times its 16-weight sub-block's UE4M3 scale tim
 separate `<tensor>.scale` GGUF tensor three mantissa bits cannot absorb. The planes keep the disk bytes; `detect_site_scales`
 reads every `.scale` after the layout into `Model.site_scale`, keyed by format slot and plane offset (`site_scale_key`). The
 CPU epilogues multiply their output rows by `site_scale(t, fmt, woff)` - `mm_at_kq_pre`, `mm_b_kq_pre`, and the fused decode
-chains, which scale each 32-row slice ahead of any bias. The device rows carry it: `moe_gpu_gather_stack_kq` writes its f32
-bits into the fifth word of each nv4 superblock's 20-byte scale row (the pad past the sixteen UE4M3 bytes) and the decode
-templates (`Nv4GemvT`, `Nv4Cm2T`, `KqBatchNv4`) fold it into every sub-block scale, so every GPU home serves it with no
-epilogue (a streamed plane through the mint view's bridge). A `.scale` at a site with no epilogue refuses the load.
+chains, which scale each 32-row slice ahead of any bias. The device rows carry it folded: `moe_gpu_gather_stack_kq` decodes
+each superblock's sixteen UE4M3 codes to halves under the factor (a 32-byte row, `kq_dev_ssb`), so `Nv4GemvT`, `Nv4Cm2T`
+and `KqBatchNv4` read a half scale and the staged e2m1 table - iq4nl's shape at its speed, where the byte decode plus a
+multiply ran 20-30% behind; exact at a factor of 1, else one half rounding of the scale, under the e2m1 step.
 
 ### The load and image rail {#the-load-and-image-rail}
 

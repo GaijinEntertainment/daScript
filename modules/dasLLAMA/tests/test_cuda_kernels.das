@@ -603,7 +603,7 @@ def test_cud_kq_gemv_family(t0 : T?) {
                 for (nsb in fixed_array(1, 2, 20)) {
                     let sb_words = int(kq_qsb(kq_fmt_of_slot(fmt)) / 4l)
                     let ws_words_n = rows * nsb * int(kq_dev_ssb_i(fmt) / 4l)
-                    var inscope wsh <- kq_ws_plane(fmt, ws_words_n, 1u, uint(fmt) * 13u)
+                    var inscope wsh <- ws_plane(ws_words_n, 1u, uint(fmt) * 13u)
                     var f <- gemv_fix(nreg, rows_per_region, nsb, sb_words, uint(fmt) * 77777u, wsh, nsb, 64, 31u, 5u, 0.5, 0.25, 7)
                     var inscope y_ref <- kq_gemv_oracle(fmt, f.wqh, f.wsh, f.xqh, f.xsh, f.regs, nsb * 256, rows_per_region, nreg)
                     var s = g_cud.stream
@@ -730,7 +730,7 @@ def test_cud_emb_family(t0 : T?) {
                 t |> success(cud_emb_ensure(fmt), "{kq_fmt_of_slot(fmt)}: the gather leaf compiles")
                 let sb_words = int(kq_qsb(kq_fmt_of_slot(fmt)) / 4l)
                 var inscope wq <- hashed_words((vocab + lead) * nsb * sb_words, 1u, uint(fmt) * 9973u)
-                var inscope ws <- kq_ws_plane(fmt, (vocab + lead) * nsb * int(kq_dev_ssb_i(fmt) / 4l), 1u, uint(fmt) * 17u)
+                var inscope ws <- ws_plane((vocab + lead) * nsb * int(kq_dev_ssb_i(fmt) / 4l), 1u, uint(fmt) * 17u)
                 var inscope y_ref <- emb_gather_oracle(fmt, wq, ws, ids, xh, n, uint(lead * nsb), escale)
                 var inscope y <- cud_gather_rows(t, fmt, wq, ws, ids, xh, n, lead * nsb, escale)
                 check_rows(t, "{kq_fmt_of_slot(fmt)} token-table gather against the class lane decode", y, y_ref, BAR_APPROX_CTRL, n)

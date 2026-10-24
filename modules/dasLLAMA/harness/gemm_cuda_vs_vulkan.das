@@ -4,7 +4,8 @@ options stack = 524288
 
 // The window chain's tiles on both discrete homes of one card, the same planes: the Vulkan class kernel through the hazard
 // rail and the CUDA class kernel through its launch rail - the Q8_0 cm2 l and m tiles (the window's batch GEMM) at a
-// llama-1B prefill window's shapes (512 rows by the projection and FFN widths), the K-quant cm2 tiles and the int8 GEMM's
+// llama-1B prefill window's shapes (512 rows by the projection and FFN widths), the superblock cm2 tiles (the K-quants and the
+// three 4-bit lattices, NVFP4 among them) and the int8 GEMM's
 // Q8_0 and Q4_K leaves at the same shapes, the cm2 flash tile at head 64 over the same window (32 heads, kv width 512) and the decode
 // attention's split and unsplit forms - the time a dispatch and the rate it makes.
 // Baseline: the mmq arm, checked against the CPU reference mmq_ref. Compare region: 64 sampled outputs, token (s x 7919) % 512
@@ -542,9 +543,24 @@ def race_da(p : DaPlanes) : RaceRow {
     return row
 }
 
-[export]
-def main {
-    let shapes <- [(k = 2048, d = 2048), (k = 2048, d = 8192), (k = 8192, d = 2048)]
+//! `--only <fmt,fmt,...>`: the superblock cm2 rows of the named formats alone (a format round's A/B), else every arm
+def race_only : table<string; void> {
+    var only : table<string; void>
+    var take = false
+    for (a in get_command_line_arguments()) {
+        if (take) {
+            for (f in split(a, ",")) {
+                only |> insert(f)
+            }
+            take = false
+        }
+        take = a == "--only"
+    }
+    return <- only
+}
+
+//! the q8 cm2 l and m tiles over the window shapes, both homes; the rows measured
+def race_q8_rows(shapes : array<tuple<k : int; d : int>>) : int {
     var measured = 0
     print("q8 cm2 tiles over {ROWS} rows, one card, both discrete homes: the best of {ROUNDS} rounds of {DISPATCHES} dispatches after {WARMUPS} warmup rounds, us a dispatch\n")
     for (tc in [256, 128]) {
@@ -555,8 +571,15 @@ def main {
             delete p
         }
     }
-    print("K-quant cm2 tiles (the Q4_K_M file's formats)\n")
-    for (fmt in fixed_array(int(KqFmt.k4), int(KqFmt.k6))) {
+    return measured
+}
+
+//! the superblock formats' cm2 l and m tiles - every format of the list, or the ones `only` names; the rows measured
+def race_sb_rows(shapes : array<tuple<k : int; d : int>>; only : table<string; void>) : int {
+    var measured = 0
+    print("superblock cm2 tiles (the Q4_K_M file's formats; the three 4-bit lattices - Q4_0, IQ4_NL, NVFP4)\n")
+    for (fmt in fixed_array(int(KqFmt.k4), int(KqFmt.k6), int(KqFmt.q40), int(KqFmt.iq4nl), int(KqFmt.nv4))) {
+        if (!empty(only) && !key_exists(only, "{kq_fmt_of_slot(fmt)}")) continue
         for (tc in [256, 128]) {
             for (s in shapes) {
                 var p <- kq_tile_planes(fmt, s.k, s.d, tc)
@@ -567,6 +590,23 @@ def main {
             }
         }
     }
+    return measured
+}
+
+[export]
+def main {
+    let shapes <- [(k = 2048, d = 2048), (k = 2048, d = 8192), (k = 8192, d = 2048)]
+    let only <- race_only()
+    var measured = 0
+    if (!empty(only)) {
+        dasllama_vulkan_classes::ensure_q8_batch_cm2l_cls()   // arms the device the format picks read their mode off
+        measured += race_sb_rows(shapes, only)
+        cud_shutdown()
+        require_measured(measured)
+        return
+    }
+    measured += race_q8_rows(shapes)
+    measured += race_sb_rows(shapes, only)
     print("per-32 cm2 tiles (the Q5_1 file's format)\n")
     for (fmt in fixed_array(int(KqFmt.q51))) {
         for (tc in [256, 128, 32]) {
