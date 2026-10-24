@@ -159,15 +159,17 @@ cannot require `_model_tier.das` open-codes the same two checks: the file and ev
 are present, and their total size is under `LARGE_TIER_BYTES` unless `DASLLAMA_PARITY_FULL=1` is
 set.** `DASLLAMA_PARITY_FULL=1` is a final pre-PR switch, not the iteration loop.
 
-**A test - or a program a test builds or spawns - whose subject is not the `.dlim` model image
-(its mint, its map or its identity; a cell whose subject is how a lane pin - a call that picks the
-weight form, the Metal tensor crowns or the CPU kernel backend a load serves on - changes the image
-identity has the image as its subject) never mints or maps a MODEL image: it either runs with
-`DASLLAMA_IMAGE=0` in its environment, or calls nothing that reaches a baking loader - one that
-writes a `.dlim` beside the model when `DASLLAMA_IMAGE` is unset: `load_<family>_tower`,
-`load_<family>_embedder`, `load_model_cached`, `load_tts_model`.** Such a test loads a media
-carrier in memory from the family's `stage_*` staging - its `mint_*` twin, or
-`cache_via_image_staged` with an empty image path.
+**A test - or a program a test builds or spawns - that is not about the `.dlim` model image runs
+with `DASLLAMA_IMAGE=0` in its environment, or calls nothing that reaches a baking loader, in its
+own code or through a helper.** A test is about the image
+when it checks the image's mint, map or identity, including how a lane pin changes that identity (a
+lane pin is a call that picks the weight form, the Metal tensor crowns - the pin that compiles a
+family's half-precision GEMM twins - or the CPU kernel backend a load serves on). A baking loader
+writes a `.dlim` beside the model when `DASLLAMA_IMAGE` is unset, such as `load_<family>_tower`,
+`load_<family>_embedder`, `load_model_cached`, and `load_tts_model` on a Kokoro or KittenTTS GGUF.
+A test that sets no `DASLLAMA_IMAGE=0` loads its media carrier in memory through the family's
+`stage_*` function paired with its `mint_*`, or through `cache_via_image_staged` with an empty
+image path.
 
 **A predicate whose value the BOX decides (a device capability, a policy default) and that
 therefore cannot differ between two runs on one machine is never tested through its own

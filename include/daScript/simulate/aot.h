@@ -438,6 +438,14 @@ namespace das {
     template <typename TT> __forceinline TT * das_ptr_sub_uint64 ( TT * & ptr, uint64_t value, int ) { return ptr - value; }
     template <typename TT> __forceinline void das_ptr_set_add_uint64 ( TT * & ptr, uint64_t value, int ) { ptr += value; }
     template <typename TT> __forceinline void das_ptr_set_sub_uint64 ( TT * & ptr, uint64_t value, int ) { ptr -= value; }
+    __forceinline nullptr_t das_ptr_add_int32 ( nullptr_t, int32_t, int ) { return nullptr; }
+    __forceinline nullptr_t das_ptr_sub_int32 ( nullptr_t, int32_t, int ) { return nullptr; }
+    __forceinline nullptr_t das_ptr_add_int64 ( nullptr_t, int64_t, int ) { return nullptr; }
+    __forceinline nullptr_t das_ptr_sub_int64 ( nullptr_t, int64_t, int ) { return nullptr; }
+    __forceinline nullptr_t das_ptr_add_uint32 ( nullptr_t, uint32_t, int ) { return nullptr; }
+    __forceinline nullptr_t das_ptr_sub_uint32 ( nullptr_t, uint32_t, int ) { return nullptr; }
+    __forceinline nullptr_t das_ptr_add_uint64 ( nullptr_t, uint64_t, int ) { return nullptr; }
+    __forceinline nullptr_t das_ptr_sub_uint64 ( nullptr_t, uint64_t, int ) { return nullptr; }
 
 
     __forceinline int64_t i_das_ptr_diff ( void * a, void *b, int stride ) {

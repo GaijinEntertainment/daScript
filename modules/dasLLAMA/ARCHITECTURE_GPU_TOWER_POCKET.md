@@ -26,9 +26,17 @@ bought no time on this chain (the row kernels and the attention, not the GEMMs, 
 at three orders of magnitude of agreement. The slab holds every codec weight, keyed on the
 addresses and the lane as the StyleTTS2 slabs are, and drops with them. A chunk past
 `PK_CODEC_MAX_FRAMES` latent frames declines on its row budget (the one-shot rows scale with the
-chunk) and the CPU's windows serve it; the other declines are `knob`, `shape` (a channel count off
-the 8-run lattice, a head over 128 wide, a transformer width off the 32 lattice), `device` and
-`gpu_error`. The frame loop is the family's second seat and the text prompt its third
+chunk) and the CPU's windows serve it; the other declines are `knob`, `shape` (a head other than
+32 or 64 wide, a transformer width off the 4 lattice), `device` and `gpu_error`. A conv whose
+channel count sits off the 8-run lattice the gathering stamp reads (the 2m model's 24- and
+12-channel residual stages) runs as the StyleTTS2 convs off the lattice do: its input compacted
+to `[t][cin]`, im2col chunks under the same first-window geometry, the exact GEMM (`pk_conv`);
+the codec context sizes its panel for the widest such conv (`pk_codec_cols_bytes`). The attention row takes its head size as an argument (`GkPkAttnArgs.hs`, 32 or 64:
+the 256-thread workgroup stages the head's query and splits a column's value sum into 256 / hs
+parts), so the 2026-10 small models' 128-wide, 12-layer decoder with 32-wide heads rides the same
+stamp as the 100M models' 512-wide one; `tts_pk_codec_ok` admits a head from `TTS_PK_ATTN_HS_MIN`
+(32) to `hs` on both drivers, the one floor the slab declares. The seat's distance from the CPU chain
+on the 18m and 7m files, and what it takes off a chunk's codec, are the small-model leg's `PERF_LEDGER.md` entry. The frame loop is the family's second seat and the text prompt its third
 (`ARCHITECTURE_GPU_TOWER_POCKET.md#tower-pocket-frames`).
 
 ### The tower driver's Pocket frames seat {#tower-pocket-frames}
@@ -66,8 +74,19 @@ run reads the same stream, and the last batch's draws past the frames made are r
 generator ends where the CPU loop's does; a command buffer that fails declines the loop as
 `gpu_error`, the generator is put back to where the chunk found it, and the CPU loop reruns the
 chunk from the caches and the stream as they were. The other declines are `knob`, `shape` (the
-backbone and head widths off the 32 lattice, a head size other than the 64 the attention row is
-stamped for, a cache past 2048 rows, a width past the GEMV's 4096-wide stage) and `device`. On the served lanes the seat reads within the CPU chain's own
+backbone and head widths off the 4 lattice, a head size the attention row does not take, a cache
+past 2048 rows, a width past the GEMV's 4096-wide stage: `tts_pk_tf_ok` and `tts_pk_frames_ok`
+name them, the one admission both drivers read) and `device`. The 2026-10 small backbones ride
+the same dispatches: a grouped-query layer's fused projection is `attn_dim + 2 kv_heads dh` wide
+and its rope-and-store epilogue turns the q span and the k span at their own widths (`span`; the
+k and v spans share the rest of `nout`), the voice slot's rows are the key-value width, and the
+attention row reads a query head's keys at its key-value head (`GkPkAttnArgs.kvs`: `d / kvs`
+query heads a key-value head); the `z_proj` bottleneck is one
+more GEMV off the normed residual, whose row - `cond_dim` wide - the EOS logit and the head's
+conditioning read; a time-free head carries a zero row where the lsd head's time constant sits,
+and its tail weighs the noise row by the flow (`GkPkGemvArgs.x0mul`: 1 where the step adds it,
+0 for a drifting head whose output is the frame). The seat's distance from the CPU chain on the 18m,
+7m and 2m files, teacher-forced, is the small-model leg's `PERF_LEDGER.md` entry. On the served lanes the seat reads within the CPU chain's own
 distance from the reference: the CPU quantizes the activations it feeds a q8 or K-quant plane, the
 tower feeds them f32.
 
@@ -86,4 +105,10 @@ and the frames seat's upload read the same cache either way; a served prompt als
 on entry - served or declined, so no decline leaves it for a later chunk - to skip uploading rows the
 device already holds; a frames call over another voice, fill or prompt finds the record stale and
 uploads every row. The prompt declines as the frames seat does (`knob`,
-`shape` - the frames admission plus the GEMM widths on the 64 lattice - `device`, `gpu_error`).
+`shape` - the frames admission plus the q8 and K-quant linears' input on the GEMM's 32 lattice
+(`tts_gemm_lin_ok`); an f32 linear takes any input width on the 4 lattice, its rows expanded into a
+zero-padded panel at the slab's 32-padded K (`pk_rows_expand`; the 2m's 112-wide residual) -
+`device`, `gpu_error`). A width off the 64 lattice the GEMMs pad - the f32 slot's `cout_p`, the
+q8 route's blob rows and bias row padded to 64 with zeros - and the rows are compacted to the
+width before the chain reads them as a residual (`pk_rows_compact`); a 64-lattice width sees no
+copy.

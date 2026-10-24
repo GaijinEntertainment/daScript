@@ -2500,25 +2500,27 @@ def private rope_stride_gate(t : T?; var dev, queue) {
     }
 }
 
-//! 12 new query rows at positions 10.. over a 22-key cache, two heads of 64, the last `ctx` keys
-//! each (0 = every key): `attention_causal_rows` over a `TtsKvCache` of the same keys is the oracle
-def private pk_attn_gate(t : T?; var dev, queue; ctx, n_old : int) {
-    let tag = "pk_attn ctx{ctx} old{n_old}"
+//! 12 new query rows at positions 10.. over a 22-key cache of two key-value heads of `hs` (64, the 100M models; 32, the small
+//! decoders) under 2 grp query heads (grp 1: a query head a key-value head, the 100M's), the last `ctx` keys each (0 = every key):
+//! `attention_causal_rows` over a `TtsKvCache` of the same keys is the oracle
+def private pk_attn_gate(t : T?; var dev, queue; ctx, n_old : int; hs : int = PK_ATTN_HS; grp : int = 1) {
+    let tag = "pk_attn ctx{ctx} old{n_old} hs{hs} grp{grp}"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
         var err : string
         let st = stamp_of(@@enc_pk_attn)
         var pso = mc |> keep_stamp(st, err)
         return if (!pso_ok(t, tag, pso, err))
-        let heads = 2
-        let hs = PK_ATTN_HS
+        let kv_heads = 2
+        let heads = kv_heads * grp
         let d = heads * hs
+        let kvd = kv_heads * hs
         let tt = 12
         let n = n_old + tt
-        let qs = 160
         let qcol = 16
+        let qs = qcol + d + 48   //! the query span sits at qcol among other columns
         var inscope q <- f16_fill(tt * qs, 7, 0.05, -0.6)
-        var inscope k <- f16_fill(n * d, 5, 0.06, -0.7)
-        var inscope vv <- f16_fill(n * d, 3, 0.08, -1.1)
+        var inscope k <- f16_fill(n * kvd, 5, 0.06, -0.7)
+        var inscope vv <- f16_fill(n * kvd, 3, 0.08, -1.1)
         var inscope qn : array<float>
         qn |> resize(tt * d)
         for (r in range(tt)) {
@@ -2527,13 +2529,13 @@ def private pk_attn_gate(t : T?; var dev, queue; ctx, n_old : int) {
             }
         }
         var inscope kc = TtsKvCache()
-        kv_cache_init(kc, int64(heads), int64(hs), int64(n))
-        kv_cache_append(kc, k, vv, int64(n), int64(d))
+        kv_cache_init(kc, int64(kv_heads), int64(hs), int64(n))
+        kv_cache_append(kc, k, vv, int64(n), int64(kvd))
         var inscope want : array<float>
         with_dasllama_jobque_() {
             attention_causal_rows(qn, int64(tt), int64(d), int64(ctx), kc, want)
         }
-        let ka = GkPkAttnArgs(t = uint(tt), qs = uint(qs), qcol = uint(qcol), d = uint(d), pos0 = uint(n_old), ctx = uint(ctx))
+        let ka = GkPkAttnArgs(t = uint(tt), qs = uint(qs), qcol = uint(qcol), d = uint(d), pos0 = uint(n_old), ctx = uint(ctx), hs = uint(hs), kvs = uint(kvd))
         let pq = mc |> in_(q)
         let pv = mc |> in_(vv)
         var bq = mc.buf[pq]
@@ -2553,14 +2555,14 @@ def private pk_attn_gate(t : T?; var dev, queue; ctx, n_old : int) {
             check_buf(t, tag, mc.buf[po], want, bar, Shape(row_width = d, head_width = hs))
         }
         if (ctx > 0 && ctx < n_old) {
-            k[0 * d + 3] += 3.0   //! the first key: outside every query's window, so nothing moves
+            k[0 * kvd + 3] += 3.0   //! the first key: outside every query's window, so nothing moves
             let pk1 = mc |> in_(k)
             let po1 = mc |> out_words(tt * d, -1.0e30)
             if (invoke(run, mc.buf[pk1], mc.buf[po1])) {
                 check_buf(t, "{tag} unseen key", mc.buf[po1], want, bar, Shape(row_width = d, head_width = hs))
             }
         }
-        k[(n - 1) * d + 70] += 3.0   //! the newest key, in the last query's window: its row moves
+        k[(n - 1) * kvd + hs + 6] += 3.0   //! the newest key, the second key-value head, in the last query's window: its row moves
         let pk2 = mc |> in_(k)
         let po2 = mc |> out_words(tt * d, -1.0e30)
         if (invoke(run, mc.buf[pk2], mc.buf[po2])) {
@@ -2770,7 +2772,7 @@ def private pk_gemv_gate(t : T?; var dev, queue; q8 : bool; kind, nin : int) {
             wn[aoff + i] = aux[i]
         }
         let ka = GkPkGemvArgs(nin = uint(nin), nout = uint(nout), stride = uint(stride), eps = eps, boff = uint(boff), xoff = uint(xoff),
-            yoff = uint(yoff), lwoff = uint(lwoff), lboff = uint(lboff), aoff = uint(aoff), loff = uint(loff))
+            yoff = uint(yoff), lwoff = uint(lwoff), lboff = uint(lboff), aoff = uint(aoff), loff = uint(loff), x0mul = 1.0)
         let pw = mc |> in_(wn)
         let pq = mc |> in_plain(blob)
         let pmod = mc |> in_(md)
@@ -3414,6 +3416,10 @@ def test_metal_prefill_kernels(t : T?) {
                 pk_attn_gate(t, dev, queue, 8, 10)
                 pk_attn_gate(t, dev, queue, 0, 300)   //! past one 256-key stride of the staged scores
                 pk_attn_gate(t, dev, queue, 8, 300)
+                pk_attn_gate(t, dev, queue, 0, 10, 32)   //! the small decoders' 32-wide heads: eight parts a column
+                pk_attn_gate(t, dev, queue, 50, 300, 32)
+                pk_attn_gate(t, dev, queue, 0, 10, 64, 4)   //! the grouped-query small backbones: four query heads a key-value head
+                pk_attn_gate(t, dev, queue, 8, 300, 64, 2)
                 rope_store_pocket_gate(t, dev, queue)
                 for (q8 in [false, true]) {
                     for (kind in range(q8 ? 1 : 0, 5)) {   //! the bare q8 dot rides the decode GEMV, gated in test_metal_gemv_kernels

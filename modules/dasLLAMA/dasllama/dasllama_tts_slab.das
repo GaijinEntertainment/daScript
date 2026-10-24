@@ -506,6 +506,9 @@ def tts_lin_ok(l : TtsLinear) : bool =>
 //! a linear the dense GEMM stamps serve: `nin` a multiple of 32, since the stamps read X's K columns to the padded width and the row buffers carry no zeroed pad
 def tts_gemm_lin_ok(l : TtsLinear) : bool => tts_lin_ok(l) && l.nin % 32l == 0l
 
+//! a linear the row GEMV and the expanding rows GEMM serve from f32 rows: `nin` on the 4 lattice (the float4 dot; the rows expand to the padded K), the one admission both homes read
+def tts_lin_ok4(l : TtsLinear) : bool => tts_lin_ok(l) && l.nin % 4l == 0l
+
 //! a BiLSTM a recurrence kernel of `max_hidden` lanes serves
 def tts_lstm_ok(l : TtsBiLstm; nin, max_hidden : int64) : bool {
     let hd = l.fwd.hidden
@@ -594,12 +597,12 @@ var private g_tts_no_freqs : array<float>   //! the rope builder's absent freque
 
 //! the engine's rope tables for positions 0..rows-1 at the transformer's period, cos and sin, each [rows][dh / 2]
 def tts_pk_rope_tabs(tf : PocketTransformer; rows : int64; @exact_size var tcos, tsin : array<float>) {
-    build_rope_tabs(tcos, tsin, tf.period, 1.0, 1.0, g_tts_no_freqs, false, 0l, rows, tf.d / tf.heads)
+    build_rope_tabs(tcos, tsin, tf.period, 1.0, 1.0, g_tts_no_freqs, false, 0l, rows, tf.dh)
 }
 
 //! the same tables into the slab, cos then sin; the cos row's element offset
 def tts_pk_rope_rows(var w : TtsSlabWriter; tf : PocketTransformer; rows : int64; var sin_off : int64&) : int64 {
-    let half = tf.d / tf.heads / 2l
+    let half = tf.dh / 2l
     var inscope @exact_size tcos : array<float>
     var inscope @exact_size tsin : array<float>
     tts_pk_rope_tabs(tf, rows, tcos, tsin)
@@ -781,9 +784,11 @@ struct TtsPkFramesSlab {
     input_linear : TtsConvSlot
     layers : array<TtsPkLayerSlots>
     out_norm : TtsNormSlot
+    has_z : bool          //! the conditioning row is `z_proj`'s, read off the normed residual
+    z_proj : TtsConvSlot
     out_eos : TtsConvSlot
     cond_embed : TtsConvSlot
-    time_const : int64
+    time_const : int64    //! the lsd head's time constant [dim]; a zero row for the time-free heads
     input_proj : TtsConvSlot
     blocks : array<TtsPkHeadSlots>
     final_ln : TtsNormSlot
@@ -845,10 +850,14 @@ def tts_pk_frames_write(var w : TtsSlabWriter; m : PocketModel; var s : TtsPkFra
         s.layers |> push(tts_pk_layer_write(w, l, d))
     }
     s.out_norm = tts_slab_norm_rows(w, m.out_norm, d)
+    s.has_z = pocket_has_z(m)
+    if (s.has_z) {
+        s.z_proj = tts_slab_linear(w, m.z_proj)
+    }
     s.out_eos = tts_slab_linear(w, m.out_eos)
     let h & = unsafe(m.head)
     s.cond_embed = tts_slab_linear(w, h.cond_embed)
-    s.time_const = tts_slab_raw(w, h.time_const.a, h.dim)
+    s.time_const = h.flow == PocketFlow.lsd ? tts_slab_raw(w, h.time_const.a, h.dim) : tts_slab_zero(w, h.dim)
     s.input_proj = tts_slab_linear(w, h.input_proj)
     s.blocks |> reserve(length(h.blocks))
     for (b in h.blocks) {
@@ -896,6 +905,8 @@ def tts_pk_codec_key(mm : PocketMimi) : uint64 {
 
 def tts_pk_frames_key(m : PocketModel) : uint64 {
     var key = hash_combine64(hash_combine64(23ul, tts_lane_key()), tts_lin_key(m.input_linear))
+    key = hash_combine64(hash_combine64(hash_combine64(key, uint64(m.cond_dim)), uint64(int(m.head.flow))), m.z_proj.nout > 0l ? tts_lin_key(m.z_proj) : 0ul)
+    key = hash_combine64(hash_combine64(key, uint64(m.backbone.kv_heads)), uint64(m.backbone.attn_dim))
     key = hash_combine64(hash_combine64(hash_combine64(key, uint64(m.backbone.d)), uint64(m.backbone.heads)), uint64(m.latent_dim))
     key = hash_combine64(hash_combine64(key, uint64(m.backbone.period)), uint64(long_length(m.backbone.layers)))
     for (l in m.backbone.layers) {
@@ -922,27 +933,40 @@ def tts_pk_frames_key(m : PocketModel) : uint64 {
 //! a codec conv the im2col route serves: dense, not itself quantized, a transposed conv's taps past its stride (the padding the one-shot row count assumes)
 def tts_pk_conv_ok(c : TtsConv1d) : bool => tts_conv_ok(c) && !c.q8 && (!c.transposed || c.k > c.stride)
 
-def tts_pk_layer_dims_ok(l : PocketLayer; d, ffn : int64) : bool {
-    return (l.in_proj.nin == d && l.in_proj.nout == 3l * d && l.out_proj.nin == d && l.out_proj.nout == d
+//! a layer's linears at the transformer's widths: the fused projection [attn_dim + 2 kv_heads dh][d], the out projection [d][attn_dim]
+def tts_pk_layer_dims_ok(l : PocketLayer; tf : PocketTransformer) : bool {
+    let d = tf.d
+    let ffn = tf.ffn
+    return (l.in_proj.nin == d && l.in_proj.nout == tts_pk_qkv_width(tf) && l.out_proj.nin == tf.attn_dim && l.out_proj.nout == d
         && l.ffn1.nin == d && l.ffn1.nout == ffn && l.ffn2.nin == ffn && l.ffn2.nout == d
         && long_length(l.norm1.w) == d && long_length(l.norm2.w) == d)
 }
 
-def tts_pk_layer_ok(l : PocketLayer; d, ffn : int64) : bool =>
-    tts_pk_layer_dims_ok(l, d, ffn) && tts_gemm_lin_ok(l.in_proj) && tts_gemm_lin_ok(l.out_proj) && tts_gemm_lin_ok(l.ffn1) && tts_gemm_lin_ok(l.ffn2)
+def tts_pk_layer_ok(l : PocketLayer; tf : PocketTransformer) : bool =>
+    tts_pk_layer_dims_ok(l, tf) && tts_gemm_lin_ok(l.in_proj) && tts_gemm_lin_ok(l.out_proj) && tts_gemm_lin_ok(l.ffn1) && tts_gemm_lin_ok(l.ffn2)
 
-//! a transformer the row kernels serve: the width on the 32 lattice, heads of `hs`, the ffn on the 32 lattice
-def tts_pk_tf_ok(tf : PocketTransformer; hs : int64) : bool {
+let TTS_PK_ATTN_HS_MIN = 32l   //! the narrowest head the shared attention row takes (`GkPkAttnArgs.hs`): the 2026-10 small decoders' 32, both homes
+
+//! a transformer the row kernels serve: the width, ffn and queries on the 4 lattice (the GEMMs' 32 lattice is each linear's own
+//! rule, `tts_gemm_lin_ok`), heads from `hs_min` to `hs` dividing `hs` on the 4 lattice (a driver's attention row takes the head
+//! size as an argument), the queries `attn_dim` wide over the heads and a key-value head serving a whole number of them
+def tts_pk_tf_ok(tf : PocketTransformer; hs : int64; hs_min : int64 = -1l) : bool {
     let d = tf.d
-    return d >= 32l && d % 32l == 0l && tf.heads >= 1l && d % tf.heads == 0l && d / tf.heads == hs && tf.ffn % 32l == 0l
+    return false if (d < 4l || d % 4l != 0l || tf.heads < 1l || tf.kv_heads < 1l || tf.heads % tf.kv_heads != 0l || tf.ffn % 4l != 0l
+        || tf.dh < 1l || tf.attn_dim != tf.heads * tf.dh || tf.attn_dim % 4l != 0l)
+    let dh = tf.dh
+    let lo = hs_min < 0l ? hs : hs_min
+    return dh >= lo && dh <= hs && hs % dh == 0l && dh % 4l == 0l
 }
 
-def tts_pk_codec_ok(mm : PocketMimi; hs, max_keys : int64) : bool {
+//! the codec seat's admission: the decoder transformer the row kernels serve (its heads from `hs_min` to `hs`), its key
+//! window within the staged scores, every conv dense and the transposed ones' taps past their stride
+def tts_pk_codec_ok(mm : PocketMimi; hs, max_keys : int64; hs_min : int64 = -1l) : bool {
     let tf & = unsafe(mm.dec_tf)
     let d = tf.d
-    return false if (!tts_pk_tf_ok(tf, hs) || tf.context < 1l || tf.context > max_keys)
+    return false if (!tts_pk_tf_ok(tf, hs, hs_min) || tf.context < 1l || tf.context > max_keys)
     for (l in tf.layers) {
-        return false if (!tts_pk_layer_ok(l, d, tf.ffn))
+        return false if (!tts_pk_layer_ok(l, tf))
     }
     let up & = unsafe(mm.upsample)
     return false if (!up.transposed || up.groups != up.cin || up.cin != up.cout || up.cin != d || mm.frame_steps != up.stride || empty(up.w)
@@ -955,21 +979,27 @@ def tts_pk_codec_ok(mm : PocketMimi; hs, max_keys : int64) : bool {
     return tts_pk_conv_ok(mm.dec_out) && mm.dec_out.cout >= 1l
 }
 
-//! the frame loop's shapes, every width within the GEMV's `max_nin` stage and each linear one the driver's GEMV serves (`lin_ok`)
+//! the frame loop's shapes, every width within the GEMV's `max_nin` stage and each linear one the driver's GEMV serves (`lin_ok`): the
+//! conditioning row `out_norm`'s own or `z_proj`'s (`cond_dim`), the head's flow any of the three (the tail weighs the noise by it), the
+//! time constant only where `lsd` carries one
 def tts_pk_frames_ok(m : PocketModel; hs, max_nin : int64; lin_ok : block<(l : TtsLinear) : bool>) : bool {
     let tf & = unsafe(m.backbone)
     let d = tf.d
     let ld = m.latent_dim
     let h & = unsafe(m.head)
     let n = h.dim
-    return false if (!tts_pk_tf_ok(tf, hs) || d > max_nin || n > max_nin || tf.ffn > max_nin || ld > max_nin
-        || ld < 4l || ld % 4l != 0l || n < 1l || empty(h.blocks) || long_length(h.time_const.a) != n || long_length(m.emb_std.a) != ld
+    let cd = m.cond_dim
+    let has_z = pocket_has_z(m)
+    return false if (!tts_pk_tf_ok(tf, hs) || d > max_nin || n > max_nin || tf.ffn > max_nin || ld > max_nin || cd < 1l || cd > max_nin || cd % 4l != 0l
+        || (has_z ? (m.z_proj.nin != d || m.z_proj.nout != cd || !invoke(lin_ok, m.z_proj)) : cd != d)
+        || (h.flow == PocketFlow.lsd ? long_length(h.time_const.a) != n : !empty(h.time_const.a))
+        || ld < 4l || ld % 4l != 0l || n < 1l || empty(h.blocks) || long_length(m.emb_std.a) != ld
         || long_length(m.emb_mean.a) != ld || long_length(m.bos_emb.a) != ld || long_length(m.out_norm.w) != d
-        || !invoke(lin_ok, m.input_linear) || m.input_linear.nin != ld || m.input_linear.nout != d || !invoke(lin_ok, m.out_eos) || m.out_eos.nin != d || m.out_eos.nout != 1l)
+        || !invoke(lin_ok, m.input_linear) || m.input_linear.nin != ld || m.input_linear.nout != d || !invoke(lin_ok, m.out_eos) || m.out_eos.nin != cd || m.out_eos.nout != 1l)
     for (l in tf.layers) {
-        return false if (!tts_pk_layer_dims_ok(l, d, tf.ffn) || !invoke(lin_ok, l.in_proj) || !invoke(lin_ok, l.out_proj) || !invoke(lin_ok, l.ffn1) || !invoke(lin_ok, l.ffn2))
+        return false if (!tts_pk_layer_dims_ok(l, tf) || !invoke(lin_ok, l.in_proj) || !invoke(lin_ok, l.out_proj) || !invoke(lin_ok, l.ffn1) || !invoke(lin_ok, l.ffn2))
     }
-    return false if (!invoke(lin_ok, h.cond_embed) || h.cond_embed.nin != d || h.cond_embed.nout != n || !invoke(lin_ok, h.input_proj) || h.input_proj.nin != ld || h.input_proj.nout != n)
+    return false if (!invoke(lin_ok, h.cond_embed) || h.cond_embed.nin != cd || h.cond_embed.nout != n || !invoke(lin_ok, h.input_proj) || h.input_proj.nin != ld || h.input_proj.nout != n)
     for (b in h.blocks) {
         return false if (!invoke(lin_ok, b.adaln) || b.adaln.nin != n || b.adaln.nout != 3l * n || !invoke(lin_ok, b.mlp1) || b.mlp1.nin != n || b.mlp1.nout != n
             || !invoke(lin_ok, b.mlp2) || b.mlp2.nin != n || b.mlp2.nout != n)

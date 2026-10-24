@@ -1437,10 +1437,25 @@ var @scratch g_catt_heads : array<float>
 
 let private CATT_QUERY_BLOCK = 256l   // queries scored together: the scratch is this many rows by the widest window they see
 
-//! Causal multi-head attention of the `t` newest queries q [t][hidden] (positions kc.n - t ..
-//! kc.n - 1, keys and values already appended) over the cache into ctx [t][hidden]: a query sees
-//! the keys up to its own position, or the last `context` of them - in query blocks, each scored over the keys its rows can see.
+//! the key-value head query head `hd` of `hq` reads over a cache of `kv_heads`: the cache's heads
+//! each serve `hq / kv_heads` query heads in order (grouped-query attention); one head each when the counts match
+def kv_head_of(hd, hq, kv_heads : int64) : int64 => hd / (hq / kv_heads)
+
+//! the query heads of a q row `hidden` wide over a cache of `kc.dh`-wide heads; a width the heads
+//! do not tile, or a count the cache's heads do not divide, is refused
+def query_heads_of(hidden : int64; kc : TtsKvCache) : int64 {
+    let hq = hidden / kc.dh
+    if (hq * kc.dh != hidden || hq < kc.heads || hq % kc.heads != 0l) {
+        panic("dasLLAMA tts: {hidden}-wide queries over a cache of {kc.heads} heads of {kc.dh}: the query heads must be a multiple of the cache's")
+    }
+    return hq
+}
+
+//! Causal multi-head attention of the `t` newest queries q [t][hidden] (positions kc.n - t .. kc.n - 1, keys and values
+//! already appended) over the cache into ctx [t][hidden]: a query sees the keys up to its own position, or the last `context`
+//! of them - in query blocks, each scored over the keys its rows can see; `hidden / kc.dh` query heads share the cache's heads in groups (`kv_head_of`).
 def attention_causal_rows(q : array<float>; t, hidden : int64; context : int64; kc : TtsKvCache; @scratch @exact_size var ctx : array<float>) {
+    let hq = query_heads_of(hidden, kc)
     let hh = kc.heads
     let dh = kc.dh
     let cap = kc.cap
@@ -1454,17 +1469,18 @@ def attention_causal_rows(q : array<float>; t, hidden : int64; context : int64; 
     let per_head = bq * dh + bq * wmax + bq * dh + dh * wmax   // qh, s, oh, the key slice
     ctx |> reserve_resize(t * hidden)
     var head_scratch & = g_catt_heads
-    head_scratch |> reserve_resize(hh * per_head)
+    head_scratch |> reserve_resize(hq * per_head)
     let scale = 1.0 / sqrt(float(dh))
     let qp = unsafe(addr<float const?>(q[0]))
     let kp = unsafe(addr<float const?>(kc.k[0]))
     let vp = unsafe(addr<float const?>(kc.v[0]))
     var cp = unsafe(addr(ctx[0]))
     var sp = unsafe(addr(head_scratch[0]))
-    maybe_parallel_for(0, int(hh), int(hh)) $(hb, he) {
+    maybe_parallel_for(0, int(hq), int(hq)) $(hb, he) {
         unsafe {
             for (hd in range64(int64(hb), int64(he))) {
                 let off = hd * dh
+                let hk = kv_head_of(hd, hq, hh)
                 var qh = sp + hd * per_head
                 var s = qh + bq * dh
                 var oh = s + bq * wmax
@@ -1482,7 +1498,7 @@ def attention_causal_rows(q : array<float>; t, hidden : int64; context : int64; 
                         }
                     }
                     for (e in range64(dh)) {
-                        let krow = kp + kv_key_at(dh, cap, hd, e, lo)
+                        let krow = kp + kv_key_at(dh, cap, hk, e, lo)
                         for (j in range64(w)) {
                             ks[e * w + j] = krow[j]
                         }
@@ -1504,7 +1520,7 @@ def attention_causal_rows(q : array<float>; t, hidden : int64; context : int64; 
                     for (i in range64(rows * dh)) {
                         oh[i] = 0.0
                     }
-                    gemm_f32_jo(oh, s, vp + kv_value_at(dh, cap, hd, 0l, lo), rows, w, dh)
+                    gemm_f32_jo(oh, s, vp + kv_value_at(dh, cap, hk, 0l, lo), rows, w, dh)
                     for (i in range64(rows)) {
                         for (e in range64(dh)) {
                             cp[(i0 + i) * hidden + off + e] = oh[i * dh + e]
@@ -1520,7 +1536,7 @@ def attention_causal_rows(q : array<float>; t, hidden : int64; context : int64; 
 //! The scalar reference of `attention_causal_rows` over the same cache: every dot product in
 //! double, no tiles, no lanes - what the rows form is held to.
 def attention_causal_ref(q : array<float>; t, hidden : int64; context : int64; kc : TtsKvCache; @scratch @exact_size var ctx : array<float>) {
-    let hh = kc.heads
+    let hq = query_heads_of(hidden, kc)
     let dh = kc.dh
     let cap = kc.cap
     let p0 = kc.n - t
@@ -1528,7 +1544,8 @@ def attention_causal_ref(q : array<float>; t, hidden : int64; context : int64; k
     var inscope s : array<double>
     s |> resize(kc.n)
     let scale = 1.0lf / sqrt(double(dh))
-    for (hd in range64(hh)) {
+    for (hd in range64(hq)) {
+        let hk = kv_head_of(hd, hq, kc.heads)
         for (i in range64(t)) {
             let last = p0 + i
             let first = context > 0l ? max(0l, last - context + 1l) : 0l
@@ -1536,7 +1553,7 @@ def attention_causal_ref(q : array<float>; t, hidden : int64; context : int64; k
             for (j in range64(first, last + 1l)) {
                 var acc = 0.0lf
                 for (e in range64(dh)) {
-                    acc += double(q[i * hidden + hd * dh + e]) * double(kc.k[kv_key_at(dh, cap, hd, e, j)])
+                    acc += double(q[i * hidden + hd * dh + e]) * double(kc.k[kv_key_at(dh, cap, hk, e, j)])
                 }
                 s[j] = acc * scale
                 mx = max(mx, s[j])
@@ -1549,7 +1566,7 @@ def attention_causal_ref(q : array<float>; t, hidden : int64; context : int64; k
             for (e in range64(dh)) {
                 var acc = 0.0lf
                 for (j in range64(first, last + 1l)) {
-                    acc += s[j] * double(kc.v[kv_value_at(dh, cap, hd, e, j)])
+                    acc += s[j] * double(kc.v[kv_value_at(dh, cap, hk, e, j)])
                 }
                 ctx[i * hidden + hd * dh + e] = float(acc / sum)
             }
@@ -2003,6 +2020,74 @@ def elu_rows(var x : array<float>; n : int64) {
                 x4[i] = max(v, zero) + min(exp(v) - one, zero)   // the two halves are disjoint: one of them is zero
             }
         }
+    }
+}
+
+//! Rows [t][from] packed in place to [t][to] (`to` <= `from`): the served width's padding columns
+//! dropped, so a consumer reads the rows at their channel count. Nothing moves when the strides agree.
+def compact_rows(var y : array<float>; t, from, to : int64) {
+    return if (from == to)
+    if (to > from) {
+        panic("dasLLAMA tts: compact_rows from {from} to {to} columns - the target is wider")
+    }
+    for (r in range64(1l, t)) {
+        copy_floats(y, r * from, y, r * to, to)
+    }
+}
+
+//! The first `n` samples of `wave` ramped from 0 to 1 in place, sample i by i / (n - 1) - a chunk's
+//! onset faded in; `n` past the wave's length keeps the 1 / (n - 1) step and touches every sample, 0 or 1 leaves it as it is.
+def fade_in(var wave : array<float>; n : int64) {
+    let m = min(n, long_length(wave))
+    return if (m < 2l)
+    let step = 1.0 / float(n - 1l)
+    for (i in range64(m)) {
+        wave[i] *= float(i) * step
+    }
+}
+
+//! A voice clip trimmed to end on exactly `pause_sec` of silence (the reference's `end_on_pause`): the trailing 20 ms
+//! frames more than `floor_db` below the loudest one are cut, the last `fade_sec` of what remains fades out linearly to
+//! 0, and `pause_sec` of zeros follows; the frames count from the clip's start, and a clip under one frame is left as it is.
+def end_on_pause(pcm : array<float>; rate : int; @scratch @exact_size var out : array<float>; pause_sec : float = 0.08; fade_sec : float = 0.02; floor_db : float = 35.0) {
+    let frame = max(1l, int64(0.02 * float(rate)))
+    let n = long_length(pcm) / frame
+    if (n == 0l) {
+        out |> reserve_resize(long_length(pcm))
+        copy_floats(pcm, 0l, out, 0l, long_length(pcm))
+        return
+    }
+    var inscope db : array<float>
+    db |> resize(n)
+    var loudest = -1e30
+    for (f in range64(n)) {
+        var acc = 0.0lf
+        for (i in range64(frame)) {
+            let v = double(pcm[f * frame + i])
+            acc += v * v
+        }
+        db[f] = 20.0 * log10(float(sqrt(acc / double(frame))) + 1e-12)
+        loudest = max(loudest, db[f])
+    }
+    var last = n - 1l
+    while (last > 0l && !(db[last] > loudest - floor_db)) {
+        last--
+    }
+    let end = (last + 1l) * frame
+    let fade = min(int64(fade_sec * float(rate)), end)
+    let pause = int64(pause_sec * float(rate))
+    out |> reserve_resize(end + pause)
+    copy_floats(pcm, 0l, out, 0l, end)
+    if (fade > 1l) {
+        let step = 1.0 / float(fade - 1l)
+        for (i in range64(fade)) {
+            out[end - fade + i] *= 1.0 - float(i) * step
+        }
+    } elif (fade == 1l) {
+        out[end - 1l] = 0.0
+    }
+    for (i in range64(pause)) {
+        out[end + i] = 0.0
     }
 }
 

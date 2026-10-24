@@ -81,16 +81,19 @@ unambiguously covers it, or by a citation of a passage or board row whose proven
 it.** A provenance line is a paragraph whose whole content is provenance - the harness, flags, box
 and exe; it covers the rows it names or, when it names none, the paragraphs and tables after it
 up to the next heading, the next provenance line, or the end of the `PERF_LEDGER.md` entry it
-sits in.
+sits in. A `PERF_LEDGER.md` entry is a bullet whose bold head carries a date, or a `###` section
+whose heading line carries a date; its head is that bold head or that heading line, and its opening
+paragraph is the paragraph its bold head sits in, or the first paragraph under its heading line. A
+dated bullet under a dated `###` heading is an entry of its own; every rule reading an entry reads
+the innermost one, and the section's entry is the text before its first dated bullet.
 
 **Where a paragraph or table of a `PERF_LEDGER.md` entry carries a figure from a run other than
 the one the entry's opening paragraph names, that paragraph or table, or a provenance line
-covering it, names the other run.** The opening paragraph is the one the entry's bold head sits
-in; the provenance it states covers every later paragraph and table of that entry that no naming
-of another run covers.
+covering it, names the other run.** The provenance the opening paragraph states covers every later
+paragraph and table of that entry that no naming of another run covers.
 
 **A tag (`external`, `direction-grade`, `out-of-process`, `debug-jit`) in the dated parenthesis of a
-`PERF_LEDGER.md` entry's bold head covers the whole entry. Anywhere else, a tag covers only the
+`PERF_LEDGER.md` entry's head covers the whole entry. Anywhere else, a tag covers only the
 figures of its own sentence. A tag inside a parenthesis covers only that parenthesis's figures,
 and a tag in a parenthesis with no figure covers nothing. A tag outside any parenthesis, in a
 figure-free sentence of a provenance line or of an entry's opening paragraph, covers the figures
@@ -100,7 +103,10 @@ that line or paragraph covers.**
 modality) or a tok/s rate of the engine this repository builds only when one of these produced
 it, named in the entry: `benchmarks/lcpp_bench.das`, as the released exe from `daspkg release` or
 as the `-jit` script; a spawned or manual cell; for a modality `lcpp_bench.das` has no
-command-line flag for, the `harness/` instrument, with its command line; for a figure timed
+command-line flag for, the `harness/` instrument, with its command line; for the browser build,
+the parrot example's measure rail (`examples/dasLLAMA/parrot`, the browser and its worker count
+named) or the node runner `examples/dasLLAMA/wasm/run_node.js` over the AOT host, with its command
+line; for a figure timed
 through the scheduler or the server, `harness/served_bench.das` with its command line, or an
 out-of-process replay named as the replay (its name, its request count), over a server whose
 flags the entry states.** A turn wall or tok/s rate printed by any other instrument stays in that
@@ -148,9 +154,8 @@ is never named by its repository or command line - its role names it.**
 another comes from a script in the tree at the diff's tip, or an exe built from that tree, named
 with its command line.** A figure from a script outside the tree cannot be measured again.
 
-**A diff never changes a dated `PERF_LEDGER.md` entry - one whose bold head, or the heading it
-sits under, carries a date - beyond repairing a link or anchor; a new figure, caveat or correction
-goes in a new dated entry.**
+**A diff never changes a `PERF_LEDGER.md` entry beyond repairing a link or anchor; a new figure,
+caveat or correction goes in a new dated entry.**
 
 **A diff whose figures contradict a dated `PERF_LEDGER.md` entry's figures or conclusion - a
 sentence of the entry stating what its figures show - adds a new dated entry that carries them and

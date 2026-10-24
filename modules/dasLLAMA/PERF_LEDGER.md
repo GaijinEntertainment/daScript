@@ -6639,3 +6639,120 @@ device tier `vulkan`; `followup_general.md` item 227), so every figure is direct
 - **The pod's cells on the Linux build.** `tests/cuda` 79 of 79, `test_cuda_kernels.das` 44 of 44, the CUDA llama parity
   file 19 of 22 (three unstocked mints skip), the codec file 6 of 6, the batch file 6 of 6, the segments file 2 of 2 with
   the recurrent and E-series cells skipping under the CUDA ask by design.
+
+### From the Pocket TTS small-model leg (2026-10-23, Apple M5 Max, the box profile re-minted after the macOS update; `-jit`, the JIT tier, `DAS_TUNE_POLICY` unset; `direction-grade`)
+
+Every rate here compares across processes or commits (one process on the box; the small files are compared with one
+another and the 100M across commits). The instruments: the corpus real-time factor is `harness/tts_rig.py`'s RTF column
+(`python3 modules/dasLLAMA/harness/tts_rig.py --model <file>`: the 200 sentences at `alba` through the facade, the voice
+state built once; a mean over the 200 inputs - the rig prints no spread); the stage split is the facade's
+`DAS_LOG_LEVEL=info` timings line over one synthesis of `harness/pocket_pace.das`'s four-line stanza (7 s of speech; three
+runs within 3 %; the CPU kernels the `arm64-gen` backend the load logs, the Metal seats on unless `DASLLAMA_METAL_TOWER=0`
+names the CPU arm).
+
+- **The 2026-10 small models on the CPU chain against the 100M model on the CPU tower and on its Metal seats.**
+  Real-time factor over the corpus: `pocket-tts-en-18m-q8.gguf` 0.021, `pocket-tts-en-18m-kq.gguf` 0.021,
+  `pocket-tts-en-18m-refl-q8.gguf` 0.023, `pocket-tts-en-7m-q8.gguf` 0.019, `pocket-tts-en-2m.gguf` 0.009, every
+  GPU seat then declining their shapes (the seats took them later in this leg - the fifth item); the 100M `pocket-tts-en-kq.gguf` 0.027 on the CPU
+  tower alone (`DASLLAMA_METAL_TOWER=0`) and 0.009 with its three Metal seats serving. The stanza's stages, ms: the
+  18m backbone 37, head 8, codec 91; the 7m 33, 8, 100; the 2m 17, 6, 38; the 100M on the CPU tower 61, 15, 98 and
+  on Metal 50, 0, 34. So CPU for CPU the 18m is a third faster than the 100M, not the tenth its parameter count
+  says: its backbone step costs 60% of the 100M's for a fifth of the weights, and its codec decoder - a 128-wide
+  12-layer transformer at 200 Hz over 24- to 256-channel convs - costs as much as the 100M's 512-wide 2-layer one
+  with its 64- to 512-channel convs, so the rows kernels at these widths are overhead-bound (the per-row GEMM tile
+  and the per-call setup, not the FLOPs). The codec is two thirds of a small model's wall; the 100M's codec seat
+  does the same speech in 34 ms on the device. The next factor for the browser build sits in the CPU kernels at
+  narrow widths.
+- **The Metal codec seat over the small decoder** (the attention row's head size an argument, `GkPkAttnArgs.hs`;
+  `ARCHITECTURE_GPU_TOWER_POCKET.md#tower-pocket-codec`): the stanza's codec 91 -> 21.7 ms on the 18m, 100 -> 20.8
+  on the 7m (`harness/pocket_pace.das` at one build, the seat off under `DASLLAMA_METAL_TOWER=0` against on); over the corpus `pocket-tts-en-18m-q8.gguf` 0.021 -> 0.011, `pocket-tts-en-18m-kq.gguf` 0.021 -> 0.011,
+  `pocket-tts-en-18m-refl-q8.gguf` 0.023 -> 0.010, `pocket-tts-en-7m-q8.gguf` 0.019 -> 0.008 - level with the 100M
+  model's 0.009 on its three seats, the backbone still on the CPU chain (the frames and prompt seats decline the
+  grouped-query shapes - then; the fifth item). The seat reads 1.3e-6 of the CPU chain on the f32
+  references (GPU-vs-CPU: `tests/run.das -- --area tts`, the `test_pocket_small_models` cell's codec-seat leg); the rig's UTMOS moved 4.341 -> 4.345 (18m-q8) and 4.232 -> 4.238
+  (18m-kq) with the codec's activations exact instead of the CPU's Q8_0 blocks. The 2m's 12-channel residual
+  stage sits off the gathering stamps' 8-run lattice, so its codec stays on the CPU at 0.009.
+- **The browser** (the parrot page's measure button - `examples/dasLLAMA/parrot`'s own rail - on the wasm64 release under
+  Chrome on the same box, `web/output64/examples/parrot`, 7 jobque workers, the portable kernels, the smoke rail's stanza
+  cloned from the reference clip; two runs each within 0.2 %):
+  `pocket-tts-en-18m-kq.gguf` 8.4 s of speech in 667 ms, RTF 0.079 (prompt 28, backbone 104, head 13, codec 522);
+  `pocket-tts-en-kq.gguf` 10.3 s in 1657 ms, RTF 0.161 (prompt 88, backbone 366, head 48, codec 1154); the voice
+  clone of the 6.5 s clip 470 ms against 866. Per second of speech the 18m costs 79 ms against the 100M's 161 - half
+  - with the codec three quarters of its wall (62 against 112 ms a second) and the backbone a third of the 100M's.
+  Both run many times faster than real time in the browser (12.6x and 6.2x); the 2x is the small model's whole
+  browser gain today, and the codec at 128 wide is where the next one sits.
+- **The AOT host under node** (`web/output64/dasllama_aot.wasm`, the same portable chain without a browser,
+  `examples/dasLLAMA/wasm/run_node.js` driving `examples/dasLLAMA/speak.das`, one 4.8 s / 5.4 s sentence at `alba`,
+  two runs each within 1 %): 18m-kq 4.8 s in 407 ms, RTF 0.085; 100M kq 5.4 s in 1428 ms, RTF 0.26 - the browser's
+  ratio, with the 100M paying more here than under Chrome's 7 workers. The same 18m sentence native (`-jit`, the
+  Metal codec seat) 105-128 ms, RTF 0.022-0.027.
+- **The small models on the GPU seats, both homes (the seats took the grouped-query backbones, the bottleneck row and the
+  time-free tail in this leg).** The served bench's protocol (`dasllama-server --tts <file> --gpu metal|vulkan`,
+  `harness/served_bench.das --no-chat --tts-url --tts-voice alba --reps 8`, the box idle, the box profile re-minted that
+  hour; `out-of-process` - the bench client's clock; a row voided on a spread past 3% over its 8 reps is marked, its
+  median kept for the eye, every unmarked row's spread under 3%). M5 Max, Metal, ms a request / s of
+  speech / RTF, two lives:
+  | file | one sentence | two sentences |
+  |---|---|---|
+  | pocket-tts-en-q8 | 50.3 / 4.56 / 0.011 and 49.6 | 91.4 / 8.80 / 0.010 and 92.6 |
+  | pocket-tts-en-kq | 46.3 (void 3.4%) and 45.1 / 4.64 / 0.010 | - |
+  | pocket-tts-en-18m-q8 | 29.5 / 4.56 / 0.006 and 30.0 (void 6.9%) | 51.9 / 8.72 / 0.006 and 51.3 |
+  | pocket-tts-en-18m-kq | 27.9 and 27.0 / 4.40 / 0.006 (both void, 4%) | 49.8 / 8.72 / 0.006 and 49.6 |
+  | pocket-tts-en-7m-q8 | 27.0 (void 4.5%) and 28.1 / 5.04 / 0.006 | 47.6 / 9.44 / 0.005 and 48.6 (void 3.3%) |
+  | pocket-tts-en-2m | 25.0 (void 3.3%) and 25.0 (void 5.2%) / 4.72 / 0.005 | 43.3 / 9.20 / 0.005 and 43.4 |
+  A one-sentence request on a small file is 27-30 ms, where the request path's own jitter is the spread; the two-sentence
+  rows clear the rule. The 18m costs 0.57 of the 100M a request on Metal, the 2m 0.47 - and 18m, 7m and 2m sit within 20% of
+  one another: the frame loop is dispatch-bound below the 18m (row 237). The reference build on the same box and sentence
+  (`external`: `python3 modules/dasLLAMA/harness/pocket_ref_time.py english_2026-04,english_18m_2026-10,english_7m_2026-10,english_2m_2026-10 1 cpu`
+  under the pocket-tts 4.0.1 venv, torch 2.14.1, one CPU thread - the package's own pin; it does not run on MPS, a Metal
+  command-encoder assertion in torch; 8 reps, the median): 100M 325 / 4.72 / 0.069, 18m 156 / 4.36 / 0.036,
+  7m 162 / 4.92 / 0.033, 2m 121 / 4.76 / 0.025 (cv 2-7%). Ours on Metal is 6.5x the reference build on the 100M and 5.3x
+  on the 18m.
+  RTX PRO 4500 (the pod, driver 580.173.02, no CPU profile - every CPU-side kernel on its reference body, so the Vulkan rows
+  are the seats' and nothing else is read there), master c247033f47 (the dasCUDA merge) against the branch at 5ff376734e
+  (its measured tip; the folds after it rewrote the history), `direction-grade`, the bench's one-sentence rows
+  (`out-of-process`, the same server flags and bench command as the Metal rows with `--gpu vulkan`): 100M q8 master 59.9
+  and 61.3 ms / 4.64 s / 0.013 against the branch's 60.8 and 61.4 - no regression; the branch
+  alone 18m-q8 26.8 / 4.32 / 0.006 (its twin 26.2 void 9.3%). The bench's two-sentence rows on the small files read
+  20-30% spreads on this box while eight `curl` requests to the same server, timed by `curl` itself, sit within 2% (100M
+  115 ms, 18m 49-58, 7m 48-50 with one 91, 2m 45-48; the server's own stage clock a chunk: 100M 50.5 and 57.0 ms, 18m
+  21.5 and 21.7, 7m 20.4 and 22.9, 2m 19.2 and 19.3 - prompt 1-4, backbone 15-17 on the small files, codec 3-5) - the
+  spread is the bench client's on that box, not the engine's, and the clean rows there are 18m-q8 50.1 / 8.32 / 0.006 and
+  49.5, 18m-kq 50.1 / 8.72 / 0.006 and 50.4. The engine's clock reads the 18m, 7m and 2m within 15% of one another and at
+  0.4 of the 100M a chunk on Vulkan, the Metal picture again (row 237). The reference build on the same card (`external`:
+  `harness/pocket_ref_time.py <the four configs> 0 cuda` under pocket-tts 4.0.1, torch 2.11.0+cu128, one sentence, 8 reps,
+  the median): 100M 739 ms / 4.96 s / 0.149, 18m 1044 / 4.56 / 0.229, 7m 1149 / 4.80 / 0.239, 2m 885 / 4.76 / 0.186 -
+  launch-bound at batch one, the small models slower than the 100M; on the pod's CPU (`... 1 cpu`: the package's one thread,
+  an EPYC 7543P core): 100M 1463 / 0.307, 18m 913 / 0.204, 7m 551 / 0.113, 2m 592 / 0.124. Our Vulkan 18m at
+  21.6 ms a chunk is 48x the reference build's CUDA figure and 42x its CPU one; the 100M 12x and 25x.
+- **The small files' GPU seats held to the CPU chain** (GPU-vs-CPU on the f32 references: `tests/run.das -- --area tts`
+  on this box, the `test_pocket_small_models` cell of `tests/test_tts_pocket.das`; the first compares to hold these files):
+  the codec seat within `GPU_CODEC_BAR` (1e-5) over every oracle case's latents, reading 2.3e-6; the frames seat
+  teacher-forced within `GPU_FRAME_BAR` (2e-5) over the latents, conditioning and EOS rows, 2.3e-6; the prompt seat's K/V
+  rows within `GPU_PROMPT_BAR` (1e-5), 1.1e-6; the grouped-keys attention kernel cell (`test_vkt_pk_attn_grouped`, RTX
+  PRO 4500 under `DASLLAMA_GPU=1`) 3.6e-7. The same cell's external-reference compares against the oracle's dumps
+  (`harness/pocket_oracle.py` under pocket-tts 4.0.1): the reference build's precomputed voice states match the clip path
+  within 1e-4 on the 2026-10 files and sit 1.5e-2 off on the 2026-04 file, another checkpoint revision.
+- **Memory.** The lasting allocations the small backbones add, a model loaded: the `z_proj` bottleneck's f32 rows,
+  d x 64 x 4 bytes - 131072 on the 18m (d 512), 28672 on the 2m (d 112) - and its slot in each GPU home's frames slab
+  (the 32-padded d by 64 rows); the text table a file stores as low-rank factors, multiplied out at load to f32
+  [4001][d] - 8.2 MB on the 18m, 1.8 MB on the 2m (the 100M stores the full table and allocates as before). The q8
+  blob's rows padded to 64 reach the published 100M q8 file through its 32-row head `final_linear` - 32 more rows of
+  1024 Q8_0 bytes plus their scales, 33 KiB - and the first compares of this leg (the item above) are the only shapes
+  the other size formulas change on; the peak footprint of one load of `pocket-tts-en-q8.gguf` (`-jit`, warm caches,
+  the Metal tower off, `/usr/bin/time -l`, M5 Max) reads 1.76 GB at master c247033f47 and 1.75 GB on the branch, the
+  load 3.2 s and 3.3 s. One flag-free synthesis of the served bench's sentence at `alba` hashes to the same PCM bits on
+  both commits for `pocket-tts-en-q8.gguf` (the Metal seats on, and the CPU chain) and `pocket-tts-en-kq.gguf` (the
+  seats on).
+- **The browser examples keep the 100M model.** The parrot's measure button on the served page (Chrome, this box, no
+  other load): 18m-kq 12x real time, 100M kq 6x. Listening to the two, the 18m reads rushed - the pace difference the
+  rig's durations show - and the 100M's speech is preferred; the parrot stays on `pocket-tts-en-kq.gguf` (the page's
+  `?tts=<file>` picks another file from its manifest), storywish on `pocket-tts-en-stuart-kq.gguf`. The 18m twins stay
+  published for the asking: `pocket-tts-en-18m-kq.gguf` and the one-voice `pocket-tts-en-18m-stuart-kq.gguf` (13 MB
+  against 67; its `stuart_bell` samples are the 18m-kq's, bit for bit).
+- **Quality, the rig at `alba` over 200 sentences** (`harness/tts_rig.py`, WER / UTMOS): 18m-q8 3.09 / 4.341,
+  18m-refl-q8 3.04 / 4.369, 18m-kq 3.18 / 4.232, 7m-q8 3.41 / 4.357, 7m-refl-q8 3.86 / 4.377, 2m 5.32 / 3.777,
+  2m-refl 4.68 / 3.823; the reference build (`external`: `harness/pocket_synth.py` under pocket-tts 4.0.1, one torch
+  thread, the rig's sentences, scored by `harness/tts_rig.py`) 18m 5.41 / 4.364, 7m 5.59 / 4.378, 2m 9.18 / 3.817 - the WER gap is the English normalizer in front of
+  our files (numeric 1.49 against 16.67), the UTMOS gap the served q8 lane's (0.02-0.04). The 100M
+  `pocket-tts-en-kq.gguf` under the 4.0.1 text rules reads 3.86 / 4.319, where its 3.1.0-rules row read 4.09 / 4.333.

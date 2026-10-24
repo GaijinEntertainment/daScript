@@ -30,6 +30,12 @@ def test_catalog_drafters(t : T?) {
     }
 }
 
+//! every file the published text-to-speech set carries - the catalog test holds the set to this list
+let private TTS_SET_FILES <- ["kitten-nano.gguf", "kitten-mini.gguf", "kokoro-82m.gguf", "tts_g2p.bin", "tts_g2p_en_us.bin", "tts_postag.bin",
+                              "pocket-tts-en-q8.gguf", "pocket-tts-de-q8.gguf", "pocket-tts-es-q8.gguf", "pocket-tts-it-q8.gguf", "pocket-tts-pt-q8.gguf", "pocket-tts-fr-q8.gguf", "pocket-tts-en-kq.gguf", "pocket-tts-en-stuart-kq.gguf",
+                              "pocket-tts-en-18m-q8.gguf", "pocket-tts-en-18m-kq.gguf", "pocket-tts-en-18m-stuart-kq.gguf", "pocket-tts-en-7m-q8.gguf", "pocket-tts-en-2m.gguf",
+                              "pocket-tts-en-18m-refl-q8.gguf", "pocket-tts-en-7m-refl-q8.gguf", "pocket-tts-en-2m-refl.gguf"]
+
 [test]
 def test_catalog_table(t : T?) {
     t |> run("entries are pinned, unique, and exactly one is the default") @(t : T?) {
@@ -87,7 +93,7 @@ def test_catalog_table(t : T?) {
         t |> success(tower.url |> starts_with("https://"), "asr tower url must be https")
         t |> success(find(tower.url, "/resolve/main/") < 0, "asr tower url is not commit-pinned")
     }
-    t |> run("the text-to-speech set is pinned like any carrier: nine models, three packs") @(t : T?) {
+    t |> run("the text-to-speech set is pinned like any carrier: nineteen models, three packs") @(t : T?) {
         var inscope set <- serve_tts_set()
         var packs = 0
         var names : table<string>
@@ -102,10 +108,9 @@ def test_catalog_table(t : T?) {
                 packs++
             }
         }
-        t |> equal(length(set), 14, "the set is eleven models (three phoneme families, six Pocket languages, the two small English Pocket forms) and three packs")
+        t |> equal(length(set), 22, "the set is nineteen models (three phoneme families, six Pocket languages, the two small forms of the 100M English model, the eight 2026-10 small English files) and three packs")
         t |> equal(packs, 3, "three front-end packs: the full phoneme pack, its American-only twin, the tagger")
-        for (want in ["kitten-nano.gguf", "kitten-mini.gguf", "kokoro-82m.gguf", "tts_g2p.bin", "tts_g2p_en_us.bin", "tts_postag.bin",
-                      "pocket-tts-en-q8.gguf", "pocket-tts-de-q8.gguf", "pocket-tts-es-q8.gguf", "pocket-tts-it-q8.gguf", "pocket-tts-pt-q8.gguf", "pocket-tts-fr-q8.gguf", "pocket-tts-en-kq.gguf", "pocket-tts-en-stuart-kq.gguf"]) {
+        for (want in TTS_SET_FILES) {
             t |> success(key_exists(names, want), "the set carries {want}")
         }
     }

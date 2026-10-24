@@ -2285,3 +2285,15 @@
     the rate cell runs on a fixture f16 holds exactly and the l-tile cells at k 576 and 2048 keep the bar with no
     derivation. Done = the f32 accumulator raced against the f16 one on the three rate shapes (`gemm_cuda_vs_vulkan`),
     f32 kept only where it is no slower, and a per-k error derivation on the l-tile cells either way.
+
+237. **The small Pocket models are dispatch-bound on the GPU seats and overhead-bound on the CPU chain.** A frame is the
+    same forty-odd dispatches whatever the backbone's width (per layer the norm, the fused projection, the rope-store,
+    the attention row, the out projection, the norm, the two ffn GEMVs; then the head's dozen), so the 2m's 112-wide
+    layers cost a frame what the 18m's 512-wide ones do - the served rows of the Pocket small-model leg's
+    `PERF_LEDGER.md` entry read the 18m, 7m and 2m within 20% of one another a request on both homes: below the
+    18m the GPU buys nothing more. On the CPU the small decoders cost as much as the 100M's with a
+    tenth of its FLOPs: the rows kernels at 128-wide transformers and 24- to 256-channel convs are overhead-bound - the
+    browser build runs that chain. Done = the frame loop fused on both homes (one dispatch a layer, or one persistent
+    kernel a frame walking the layers with the cache rows in workgroup memory) with the seat cells of
+    `tests/test_tts_pocket.das` holding it and the served rows re-read; and the CPU codec chain profiled at the small
+    widths (`forward_profile`-style, per kernel) with the per-call setup and the row tile sized to them.

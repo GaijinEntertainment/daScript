@@ -6,10 +6,11 @@ doc: `ARCHITECTURE_RUNTIME.md`. Planned work: `followup_general.md`.
 A function calls another when its body names that function in a call, a call written inside a
 block or lambda literal included; the function that encloses the literal is the caller. A
 function reaches another when it calls it, or calls a function that reaches it. A serving step
-is one unit of served work the runtime re-enters a path for: a token, a prefill quantum (one
-batch of prompt tokens the prefill path processes in a single pass), one encoded media input (an
-image, a video frame, an audio chunk), or one synthesized speech chunk or frame. A region entry is
-the outermost function the runtime re-enters once per serving step, and any function a serving
+is one unit of work the runtime repeats inside one request it serves: a token, a prefill quantum
+(one batch of prompt tokens the prefill path processes in a single pass), one encoded media input
+of that request (an image, a video frame, an audio chunk), or one synthesized speech chunk or
+frame. A region entry is the outermost function the runtime re-enters once per serving step, and
+any function a serving
 step runs through a function value - one a seat (a module-level variable holding a function,
 filled through a public setter) or a kernel-backend override registration stores, after its
 declaration, for the runtime to call through - where no `[hot_path]`, contract or `[cold_path]`

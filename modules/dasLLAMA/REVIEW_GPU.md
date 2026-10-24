@@ -82,6 +82,13 @@ override (a decode/prefill hook the resident driver registers) or a byte copy of
 device copy of the K/V cache); or adds or changes a GPU path that runs a recurrent forward,
 applies `REVIEW_GPU_RESIDENT.md` too.**
 
+**A diff that adds a module-level variable to a GPU driver file (`dasllama/dasllama_metal*.das`,
+`dasllama/dasllama_*{vulkan,cuda}*.das`, `dasllama/dasllama_gpu*.das`) whose value derives from a
+loaded model's weights, or names, sizes or points at device content built from a loaded model - a
+served model, a draft or tower model, a TTS voice - or that changes or removes a function returning
+such a variable to its no-model value, wherever that function sits, applies
+`REVIEW_GPU_MODEL_SWAP.md` too.**
+
 **A diff that changes a restated property of a kernel class - a binding number, a kargs or
 push-constant layout, a bound struct's layout, threadgroup or workgroup memory, a staging shape or
 the dispatch geometry - resyncs or deletes, in the same change, every timing arm that mirrors
@@ -110,8 +117,9 @@ and every bind argument (buffer, offset, kargs value) unchanged on every input.*
 is anything the call executes or that selects what it executes; only both compares together show
 the change cannot alter what the path computes or selects.
 
-**Never size a device buffer a dispatch writes to the live count of rows, keys or chunks - size
-it to every element the dispatch's full grid writes.** A dispatch writes whole tiles past the live
+**Never size a device buffer a dispatch writes to the live count of rows, keys or chunks, or to a
+live width narrower than the stride the dispatch writes at - size it to every element the
+dispatch's full grid writes.** A dispatch writes whole tiles past the live
 rows, and a batched attention writes, for every row, as many key chunks as the row at the largest
 position has, so a buffer sized to the live count overruns silently into the pool's next buffer.
 
@@ -187,6 +195,20 @@ whether the call carries a uniform attention span - however that parameter is de
 readiness, whether this window's rope tables are staged, is asked by `prefill_decline` /
 `decode_decline` instead.**
 
+**A TTS stage seat - a Pocket or StyleTTS2 stage the Metal and the Vulkan driver both fill -
+admits a shape or a model file through a predicate declared
+in `dasllama/dasllama_tts_slab.das` that every driver filling the seat calls, against limits
+declared as constants there; a diff that changes what such a seat admits changes that predicate,
+so every backend's driver admits the same shapes in the same change.** A model that speaks through
+the GPU on one backend speaks through it on the other.
+
+**Never add to the driver of a TTS stage seat both backends fill a backend-local admission
+constant restating a shared limit, a backend-local shape test on a shape the shared predicate rules
+on, or a decline counted under the driver decline enum's `shape` reason on a shape another backend
+serves - call the shared predicate and read the shared constant instead; a gap one backend has by
+design, an operation its API lacks, is an entry in `ARCHITECTURE_GPU_ASYMMETRIES.md#gpu-asymmetries`
+whose decline counts under a reason naming that operation, never under `shape`.**
+
 **A diff that adds a seat in `dasllama/dasllama_gpu_tier.das` that only the Vulkan or CUDA family
 fills - a seat is a module-level variable that holds a function and has a public setter, whatever
 the setter is named - names the seat, by its setter's name, in the `dasllama_gpu_tier.das` entry of
@@ -219,36 +241,6 @@ variable the engine exposes - lands the same capability on every other backend t
 family, in the same change, wherever that backend's API offers the operations it uses on any
 device it supports; a PR body that defers it is a defect.** A capability one backend
 has makes a served model's behavior depend on the box it runs on.
-
-**A module-level variable in a GPU driver file whose value derives from a loaded model's weights,
-or names, sizes or points at device content built from a loaded model (a served model, a draft or
-tower model, a TTS voice), and which a later call reads before that call writes it - a record of
-the decline reasons the driver has logged for that model is one - gets a model-swap discharge in
-the same change that adds it: a path the unload or reload of that model runs that returns the
-variable to its no-model value.** A global with no discharge survives a model swap and routes the
-next model's dispatches at the old model's planes.
-
-**A diff that adds such a variable to a Vulkan driver file returns it to its no-model value in a
-reset `moe_gpu_model_marks_restore_` or `moe_gpu_drop_model_`
-(`dasllama/dasllama_gpu_resident.das`) runs - in its body, or in a listener the file registers
-with `register_vk_drop_hook` (`dasllama/dasllama_vulkan_common.das`) - in the same change.** The
-drop's sweep runs every registered listener.
-
-**A diff that adds such a variable to a Metal driver file, the tower driver included, returns it
-to its no-model value in a function the file registers with `register_reload_prep`
-(`dasllama/dasllama_metal_common.das`), in the same change.** A model's unload or reload bumps
-the weights epoch, and the bump runs every registered reload prep.
-
-**A diff that adds such a variable to a CUDA driver file (`dasllama/dasllama_*cuda*.das`) returns
-it to its no-model value in `cud_drop_model` (`dasllama/dasllama_cuda_decode.das`) - in its body
-or a function it calls - in the same change.** The tier's model drop runs `cud_drop_model`
-through the hook `dasllama/dasllama_math_cuda.das` installs with `set_moe_gpu_drop_model_hook`.
-
-**A module-level variable in a Vulkan driver file whose value derives from, or names, sizes or
-points at device content built from, a TTS model (a StyleTTS2 or Pocket model) also discharges
-in a listener the file registers with `register_weights_epoch_listener`
-(`dasllama/dasllama_common.das`), in the same change that adds it.** A TTS model's reload runs
-no Vulkan reset, only `bump_weights_epoch`, which every Metal reload prep already runs under.
 
 **A diff that changes how a dev-W resident panel's cache key is built - a dev-W panel is a
 weight plane dequantized once into a device f16 panel - changes both the seed site and the

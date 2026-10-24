@@ -1623,7 +1623,7 @@ def private vulkan_styletts2_generator(d : St2Decoder; x_rows : array<float>; cx
     return true
 }
 
-let private TS_PK_ATTN_HS = int64(TTS_PK_ATTN_HS)             //! the attention row's head size, the kernel body's literal
+let private TS_PK_ATTN_HS = int64(TTS_PK_ATTN_HS)             //! the widest head the attention row takes
 let private TS_PK_ATTN_MAX_KEYS = int64(TTS_PK_ATTN_MAX_KEYS) //! the scores the attention row stages
 let private TS_PK_GEMV_MAX_NIN = int64(TTS_PK_GEMV_MAX_NIN)   //! the x the row GEMV stages
 let private TS_PK_CODEC_MAX_FRAMES = 512l    //! the one-shot codec chain's row budget: past this the CPU's windows serve
@@ -1736,7 +1736,7 @@ def private ts_pk_kv_upload(kc : TtsKvCache; bk, bv : TsRows; r0, r1 : int64) {
 }
 
 def private ts_pk_voice_attach(vs : PocketVoiceState; tf : PocketTransformer) : bool
-    => tts_pk_voice_current(g_ts_pk_voice.meta, vs, length(g_ts_pk_voice.k), tf.d) || ts_pk_voice_rebuild(vs, tf)
+    => tts_pk_voice_current(g_ts_pk_voice.meta, vs, length(g_ts_pk_voice.k), tts_pk_kv_width(tf)) || ts_pk_voice_rebuild(vs, tf)
 
 [cold_path]
 def private ts_pk_voice_rebuild(vs : PocketVoiceState; tf : PocketTransformer) : bool {
@@ -1745,8 +1745,8 @@ def private ts_pk_voice_rebuild(vs : PocketVoiceState; tf : PocketTransformer) :
     v.gen++
     let t0 = ref_time_ticks()
     let cap = vs.caches[0].cap
-    let d = tf.d
-    let half = d / tf.heads / 2l
+    let d = tts_pk_kv_width(tf)
+    let half = tf.dh / 2l
     v.k |> reserve(length(vs.caches))
     v.v |> reserve(length(vs.caches))
     for (kc in vs.caches) {
@@ -1820,11 +1820,13 @@ def private ts_pk_rope(raw : VkCommandBuffer; var h : VkHaz; tabs : TsRows; coff
     vt_pt(raw, VtProfRole.tts_pk)
 }
 
-//! the causal cached attention: q from the qkv rows [t][qs] at column 0, k and v the cache rows [pos][d], o [t][d]; query i at position pos0 + i
-def private ts_pk_attn(raw : VkCommandBuffer; var h : VkHaz; qkv, k, v, o : TsRows; t, qs, d, heads, pos0, ctx : int64) {
+//! the causal cached attention row over `t` query rows of the fused [q | k | v] rows (stride `qs`, query i at position pos0 + i)
+//! against the caches' rows: the transformer's query width, head size, key-value width and heads-per-key-head set the kernel's arguments
+def private ts_pk_attn(raw : VkCommandBuffer; var h : VkHaz; qkv, k, v, o : TsRows; tf : PocketTransformer; t, qs, pos0 : int64) {
     var s = set_tts_pk_attn_cls(fixed_array(qkv.dev, k.dev, v.dev, o.dev), fixed_array(qkv.bytes, k.bytes, v.bytes, o.bytes), fixed_array(qkv.bit, k.bit, v.bit, o.bit))
-    var pa = GkPkAttnArgs(t = uint(t), qs = uint(qs), qcol = 0u, d = uint(d), pos0 = uint(pos0), ctx = uint(ctx))
-    enc_tts_pk_attn_cls(raw, h, s, pa, tts_attn_wgs(t, heads))
+    var pa = GkPkAttnArgs(t = uint(t), qs = uint(qs), qcol = 0u, d = uint(tf.attn_dim), pos0 = uint(pos0), ctx = uint(tf.context), hs = uint(tf.dh),
+        kvs = uint(tts_pk_kv_width(tf)))
+    enc_tts_pk_attn_cls(raw, h, s, pa, tts_attn_wgs(t, tf.heads))
     vt_pt(raw, VtProfRole.tts_pk_attn)
 }
 
@@ -1850,6 +1852,7 @@ struct private TsPkSite {
     x0off : int64
     lat : TsRows
     loff : int64
+    x0mul : float = 1.0   //! the tail's noise weight: 0 for a drifting head, whose output is the frame itself
     eps : float = POCKET_HEAD_LN_EPS   //! the input norm's epsilon: the head's unless the site sits in the backbone
 }
 
@@ -1868,7 +1871,7 @@ let private TS_PK_GEMV_ADD = 7          //! ... or y += d alone
 def private ts_pk_gemv(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; p : TtsConvSlot; nin, nout : int64; kind : int; s : TsPkSite) {
     var pa = GkPkGemvArgs(nin = uint(nin), nout = uint(nout), stride = uint(p.kdim_p), eps = s.eps, woff = uint(p.woff), boff = uint(p.boff),
         xoff = uint(s.xoff), yoff = uint(s.yoff), moff = uint(s.moff), lwoff = uint(s.lwoff), lboff = uint(s.lboff), aoff = uint(s.aoff),
-        x0off = uint(s.x0off), loff = uint(s.loff))
+        x0off = uint(s.x0off), loff = uint(s.loff), x0mul = s.x0mul)
     if (kind == TS_PK_GEMV_DOT) {
         var d0 = set_tts_pk_gemv_dot_cls(fixed_array(slab.dev, s.x.dev, s.y.dev), fixed_array(slab.bytes, s.x.bytes, s.y.bytes), fixed_array(0u, s.x.bit, s.y.bit))
         enc_tts_pk_gemv_dot_cls(raw, h, d0, pa, nout)
@@ -1985,7 +1988,10 @@ struct private TsPkRowsForm {
 def private ts_pk_rows_tf(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; sc_ : TsScratch; tf : PocketTransformer; layers : array<TtsPkLayerSlots>;
                           t : int64; f : TsPkRowsForm; slot_x, slot_xb, slot_qkv, slot_ctx, slot_h : int; kv : block<(li : int) : tuple<k : TsRows; v : TsRows>>) {
     let d = tf.d
-    let dh = d / tf.heads
+    let dh = tf.dh
+    let qd = tf.attn_dim
+    let kvd = tts_pk_kv_width(tf)
+    let qkvw = qd + 2l * kvd
     let nd = t * d
     let half = dh / 2l
     let r_x = ts_rows(sc_, slot_x)
@@ -1993,7 +1999,7 @@ def private ts_pk_rows_tf(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; s
     let r_qkv = ts_rows(sc_, slot_qkv)
     let r_ctx = ts_rows(sc_, slot_ctx)
     let r_h = ts_rows(sc_, slot_h)
-    var kc = GkPkRowsArgs(rows = uint(t), width = uint(d), ss = uint(3l * d), sc = uint(d), sr0 = 0u, ds = uint(d), dc = 0u, dr0 = uint(f.kv_row0))
+    var kc = GkPkRowsArgs(rows = uint(t), width = uint(kvd), ss = uint(qkvw), sc = uint(qd), sr0 = 0u, ds = uint(kvd), dc = 0u, dr0 = uint(f.kv_row0))
     var pa_gelu = TtsElemArgs(nelem = uint(t * tf.ffn), off = 0u, slope = 0.0)
     var s_gelu = set_tts_gelu_tanh_cls(fixed_array(r_h.dev), fixed_array(r_h.bytes), fixed_array(r_h.bit))
     let coff = f.coff + f.pos0 * half
@@ -2004,18 +2010,18 @@ def private ts_pk_rows_tf(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; s
         let cache = invoke(kv, i)
         let kv_only = f.kv_only_last && i == last
         ts_ln(raw, h, slab, s.n1, r_x, r_xb, t, d, tf.eps)
-        ts_lin(raw, h, slab, s.in_proj, d, 3l * d, r_xb, r_qkv, t)
+        ts_lin(raw, h, slab, s.in_proj, d, qkvw, r_xb, r_qkv, t)
         if (!kv_only) {
-            ts_pk_rope(raw, h, f.tabs, coff, soff, r_qkv, t, 3l * d, 0l, d, dh)
+            ts_pk_rope(raw, h, f.tabs, coff, soff, r_qkv, t, qkvw, 0l, qd, dh)
         }
-        ts_pk_rope(raw, h, f.tabs, coff, soff, r_qkv, t, 3l * d, d, d, dh)
-        kc.sc = uint(d)
+        ts_pk_rope(raw, h, f.tabs, coff, soff, r_qkv, t, qkvw, qd, kvd, dh)
+        kc.sc = uint(qd)
         ts_pk_rows(raw, h, r_qkv, cache.k, kc, false)
-        kc.sc = uint(2l * d)
+        kc.sc = uint(qd + kvd)
         ts_pk_rows(raw, h, r_qkv, cache.v, kc, false)
         continue if (kv_only)
-        ts_pk_attn(raw, h, r_qkv, cache.k, cache.v, r_ctx, t, 3l * d, d, tf.heads, f.pos0, tf.context)
-        ts_lin(raw, h, slab, s.out_proj, d, d, r_ctx, r_xb, t)
+        ts_pk_attn(raw, h, r_qkv, cache.k, cache.v, r_ctx, tf, t, qkvw, f.pos0)
+        ts_lin(raw, h, slab, s.out_proj, qd, d, r_ctx, r_xb, t)
         if (s.has_s1) {
             ts_pk_row_scale(raw, h, slab, r_xb, t, d, s.scale1_off)
         }
@@ -2097,7 +2103,7 @@ def private vulkan_pocket_codec(m : PocketModel; latents : array<float>; frames 
         return ts_decline("codec", VulkanTtsDecline.knob)
     }
     let mm & = unsafe(m.mimi)
-    if (frames < 1l || frames > TS_PK_CODEC_MAX_FRAMES || !tts_pk_codec_ok(mm, TS_PK_ATTN_HS, TS_PK_ATTN_MAX_KEYS) || m.frame_samples != mm.frame_steps * mm.hop
+    if (frames < 1l || frames > TS_PK_CODEC_MAX_FRAMES || !tts_pk_codec_ok(mm, TS_PK_ATTN_HS, TS_PK_ATTN_MAX_KEYS, TTS_PK_ATTN_HS_MIN) || m.frame_samples != mm.frame_steps * mm.hop
         || long_length(latents) < frames * mm.quant_proj.cin) {
         return ts_decline("codec", VulkanTtsDecline.shape)
     }
@@ -2156,8 +2162,8 @@ def private ts_pk_frames_floats(m : PocketModel; max_frames, batch, forced_n : i
     var fl : TsFloats
     fl[TS_F_X] = d
     fl[TS_F_XB] = d
-    fl[TS_F_QKV] = 3l * d
-    fl[TS_F_CTX] = d
+    fl[TS_F_QKV] = tts_pk_qkv_width(m.backbone)
+    fl[TS_F_CTX] = m.backbone.attn_dim
     fl[TS_F_H] = m.backbone.ffn
     fl[TS_F_HY] = n
     fl[TS_F_HX] = n
@@ -2167,7 +2173,7 @@ def private ts_pk_frames_floats(m : PocketModel; max_frames, batch, forced_n : i
     fl[TS_F_NOISE] = batch * ld
     fl[TS_F_FORCED] = max(forced_n, 1l) * ld
     fl[TS_F_LATENTS] = max_frames * ld
-    fl[TS_F_CONDS] = max_frames * d
+    fl[TS_F_CONDS] = max_frames * m.cond_dim
     fl[TS_F_EOS] = max_frames
     return fl
 }
@@ -2182,7 +2188,10 @@ def private ts_pk_gemv_add(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; 
 //! one backbone layer at position p: the CPU's `layer_attention` and `layer_ffn` at t = 1 in five dispatches, x the residual in and out
 def private ts_pk_fr_layer(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; sc_ : TsScratch; tf : PocketTransformer; L : TtsPkLayerSlots; li : int; p : int64) {
     let d = tf.d
-    let dh = uint(d / tf.heads)
+    let dh = uint(tf.dh)
+    let qd = tf.attn_dim
+    let kvd = tts_pk_kv_width(tf)
+    let qkvw = qd + 2l * kvd
     let r_x = ts_rows(sc_, TS_F_X)
     let r_qkv = ts_rows(sc_, TS_F_QKV)
     let r_ctx = ts_rows(sc_, TS_F_CTX)
@@ -2191,13 +2200,13 @@ def private ts_pk_fr_layer(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; 
     var sq = set_tts_pk_gemv_ln_qkv_cls(fixed_array(slab.dev, r_x.dev, r_qkv.dev, v.rope.dev, v.k[li].dev, v.v[li].dev),
         fixed_array(slab.bytes, r_x.bytes, r_qkv.bytes, v.rope.bytes, v.k[li].bytes, v.v[li].bytes),
         fixed_array(0u, r_x.bit, r_qkv.bit, v.rope.bit, v.k[li].bit, v.v[li].bit))
-    var pq = GkPkGemvArgs(nin = uint(d), nout = uint(3l * d), stride = uint(L.in_proj.kdim_p), eps = tf.eps, woff = uint(L.in_proj.woff),
+    var pq = GkPkGemvArgs(nin = uint(d), nout = uint(qkvw), stride = uint(L.in_proj.kdim_p), eps = tf.eps, woff = uint(L.in_proj.woff),
         boff = uint(L.in_proj.boff), xoff = 0u, yoff = 0u, moff = 0u, lwoff = uint(L.n1.gwoff), lboff = uint(L.n1.gboff), aoff = 0u, x0off = 0u, loff = 0u,
-        span = uint(d), dh = dh, p = uint(p), coff = 0u, soff = uint(v.sin_off))
-    enc_tts_pk_gemv_ln_qkv_cls(raw, h, sq, pq, 3l * d)
+        span = uint(qd), dh = dh, p = uint(p), coff = 0u, soff = uint(v.sin_off))
+    enc_tts_pk_gemv_ln_qkv_cls(raw, h, sq, pq, qkvw)
     vt_pt(raw, VtProfRole.tts_pk_qkv)
-    ts_pk_attn(raw, h, r_qkv, v.k[li], v.v[li], r_ctx, 1l, 3l * d, d, tf.heads, p, tf.context)
-    ts_pk_gemv_add(raw, h, slab, L.out_proj, d, d, r_ctx, r_x, L.has_s1, L.scale1_off)
+    ts_pk_attn(raw, h, r_qkv, v.k[li], v.v[li], r_ctx, tf, 1l, qkvw, p)
+    ts_pk_gemv_add(raw, h, slab, L.out_proj, qd, d, r_ctx, r_x, L.has_s1, L.scale1_off)
     var s1 = ts_pk_site(r_x, 0l, r_h)
     s1.lwoff = L.n2.gwoff
     s1.lboff = L.n2.gboff
@@ -2237,14 +2246,19 @@ def private ts_pk_frame(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; sc_
         ts_pk_fr_layer(raw, h, slab, sc_, m.backbone, sl.layers[li], li, p)
     }
     ts_ln(raw, h, slab, sl.out_norm, r_x, r_xb, 1l, d, m.backbone.eps)
-    let coff = f * d
-    let kc = GkPkRowsArgs(rows = 1u, width = uint(d), ss = uint(d), sc = 0u, sr0 = 0u, ds = uint(d), dc = 0u, dr0 = uint(f))
-    ts_pk_rows(raw, h, r_xb, r_conds, kc, false)
-    ts_pk_lin(raw, h, slab, sl.out_eos, d, 1l, r_conds, coff, ts_rows(sc_, TS_F_EOS), f)
+    let cd = m.cond_dim
+    let coff = f * cd
+    if (sl.has_z) {
+        ts_pk_lin(raw, h, slab, sl.z_proj, d, cd, r_xb, 0l, r_conds, coff)
+    } else {
+        let kc = GkPkRowsArgs(rows = 1u, width = uint(d), ss = uint(d), sc = 0u, sr0 = 0u, ds = uint(d), dc = 0u, dr0 = uint(f))
+        ts_pk_rows(raw, h, r_xb, r_conds, kc, false)
+    }
+    ts_pk_lin(raw, h, slab, sl.out_eos, cd, 1l, r_conds, coff, ts_rows(sc_, TS_F_EOS), f)
     let noff = i * ld
     var s = ts_pk_site(r_conds, coff, r_hy)
     s.aoff = sl.time_const
-    ts_pk_gemv(raw, h, slab, sl.cond_embed, d, n, TS_PK_GEMV_ADD_SILU, s)
+    ts_pk_gemv(raw, h, slab, sl.cond_embed, cd, n, TS_PK_GEMV_ADD_SILU, s)
     ts_pk_gemv(raw, h, slab, sl.input_proj, ld, n, TS_PK_GEMV_DOT, ts_pk_site(r_noise, noff, r_hx))
     for (blk in sl.blocks) {
         ts_pk_gemv(raw, h, slab, blk.adaln, n, 3l * n, TS_PK_GEMV_DOT, ts_pk_site(r_hy, 0l, r_hmod))
@@ -2267,6 +2281,7 @@ def private ts_pk_frame(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; sc_
     st.x0off = noff
     st.lat = r_lat
     st.loff = f * ld
+    st.x0mul = m.head.flow == PocketFlow.drifting ? 0.0 : 1.0
     ts_pk_gemv(raw, h, slab, sl.final_linear, n, ld, TS_PK_GEMV_TAIL, st)
 }
 
@@ -2313,9 +2328,9 @@ def private vulkan_pocket_frames(m : PocketModel; var vs : PocketVoiceState; n_t
     let ld = m.latent_dim
     let base = vs.len + n_txt
     let shape_ok = tts_pk_frames_ok(m, TS_PK_ATTN_HS, TS_PK_GEMV_MAX_NIN) $(l : TtsLinear) : bool {
-        return tts_gemm_lin_ok(l)
+        return tts_lin_ok4(l)   //! the row GEMV over the slab's f32 rows: the input on the 4 lattice, no GEMM tile
     }
-    if (!tts_pk_frames_admit(m, vs, n_txt, max_frames, TS_PK_ATTN_MAX_KEYS) || d % 4l != 0l || !shape_ok) {
+    if (!tts_pk_frames_admit(m, vs, n_txt, max_frames, TS_PK_ATTN_MAX_KEYS) || !shape_ok) {
         ts_decline("frames", VulkanTtsDecline.shape)
         return none
     }
@@ -2343,7 +2358,7 @@ def private vulkan_pocket_frames(m : PocketModel; var vs : PocketVoiceState; n_t
     let r = ts_pk_frames_loop(m, sl, slab, sc_, base, batch, max_frames, forced_rows, std, frames_after_eos, captured, sc, f0)
     if (r.frames >= 0l) {
         ts_readback(ts_rows(sc_, TS_F_LATENTS), sc_, sc.latents, r.frames * ld)
-        ts_readback(ts_rows(sc_, TS_F_CONDS), sc_, sc.conds, tts_pk_cond_rows(r.frames, f0) * d)
+        ts_readback(ts_rows(sc_, TS_F_CONDS), sc_, sc.conds, tts_pk_cond_rows(r.frames, f0) * m.cond_dim)
     }
     return r
 }
@@ -2357,8 +2372,8 @@ def private ts_pk_prompt_floats(m : PocketModel; t : int64) : TsFloats {
     var fl : TsFloats
     fl[TS_F_X] = t * d
     fl[TS_F_XB] = t * d
-    fl[TS_F_QKV] = t * 3l * d
-    fl[TS_F_CTX] = t * d
+    fl[TS_F_QKV] = t * tts_pk_qkv_width(m.backbone)
+    fl[TS_F_CTX] = t * m.backbone.attn_dim
     fl[TS_F_H] = t * m.backbone.ffn
     return fl
 }
@@ -2389,9 +2404,9 @@ def private vulkan_pocket_prompt(m : PocketModel; var vs : PocketVoiceState; n_t
     let tf & = unsafe(m.backbone)
     let d = tf.d
     let shape_ok = tts_pk_frames_ok(m, TS_PK_ATTN_HS, TS_PK_GEMV_MAX_NIN) $(l : TtsLinear) : bool {
-        return tts_gemm_lin_ok(l)
+        return tts_lin_ok4(l)
     }
-    if (!tts_pk_prompt_admit(m, vs, n_txt, TS_PK_ATTN_MAX_KEYS) || d % 4l != 0l || !shape_ok) {
+    if (!tts_pk_prompt_admit(m, vs, n_txt, TS_PK_ATTN_MAX_KEYS) || !shape_ok) {
         return ts_decline("prompt", VulkanTtsDecline.shape)
     }
     if (!ts_arm_ensure("pocket prompt", @@ts_pk_codec_ensure)) {
@@ -2413,7 +2428,7 @@ def private vulkan_pocket_prompt(m : PocketModel; var vs : PocketVoiceState; n_t
         }
     }
     g_ts_encodes++
-    ts_pk_prompt_readback(vs, sc_, n_txt, d)
+    ts_pk_prompt_readback(vs, sc_, n_txt, tts_pk_kv_width(tf))
     tts_pk_prompt_dev_set(g_ts_pk_prompt_dev, vs, v.gen, sc.rows, n_txt, d)
     return true
 }

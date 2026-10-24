@@ -73,5 +73,8 @@ value at two shapes that differ in it.**
 **A diff that changes the size formula of a lasting allocation that exists before and after it
 without adding a term - a count that starts or stops scaling it, a bound that becomes piecewise -
 records in a `PERF_LEDGER.md` row the peak footprint and wall-clock, each measured before and
-after the diff at a shape where the old and new formulas differ, the row naming that shape.** The
-pair records what the change costs; it sets no pass/fail threshold.
+after the diff at a shape both the old and the new code accept where the two formulas differ, the
+row naming that shape; where the formulas differ only at shapes the old code refuses, the row
+records the new code's peak footprint and wall-clock at the smallest such shape and names the old
+code's refusal in place of the before figure.** The pair records what the change costs; it sets no
+pass/fail threshold.

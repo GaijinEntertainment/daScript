@@ -230,6 +230,8 @@
 
   var modelsBase = new URLSearchParams(location.search).get('models') || 'models/';
   if (!modelsBase.endsWith('/')) modelsBase += '/';
+  // ?tts=<file> picks another Pocket TTS GGUF of the model set (a smaller model to compare) - the set's default otherwise
+  var ttsModel = new URLSearchParams(location.search).get('tts') || 'pocket-tts-en-kq.gguf';
 
   function setProgress(done, total) {
     document.getElementById('fill').style.width = total ? (100 * done / total) + '%' : '0';
@@ -339,7 +341,7 @@
       };
       return c;
     })(),
-    arguments: ['--models', '/models', '--tts-model', 'pocket-tts-en-kq.gguf', '--vad-model', 'silero_vad.bin'],
+    arguments: ['--models', '/models', '--tts-model', ttsModel, '--vad-model', 'silero_vad.bin'],
     print: function (text) { console.log(text); remember(text); },
     printErr: function (text) { console.error(text); remember(text); },
     onAbort: function (what) { showFailure(what || 'abort'); },

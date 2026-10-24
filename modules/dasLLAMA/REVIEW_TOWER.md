@@ -19,8 +19,8 @@ also reached by a touch of `dasllama/dasllama_metal_asr_dec.das` or
 `test_kitten_oracle` in `tests/test_tts_kitten.das`, `test_kokoro_synthesis_metal` and
 `test_kokoro_oracle` in `tests/test_tts_kokoro.das`, and `test_pocket_codec_metal`,
 `test_pocket_codec_metal_served`, `test_pocket_frames_metal`, `test_pocket_frames_metal_served`,
-`test_pocket_frames_after_model_drop` and `test_pocket_synthesis_metal` in
-`tests/test_tts_pocket.das`.
+`test_pocket_frames_after_model_drop`, `test_pocket_synthesis_metal`, `test_pocket_small_models`
+and `test_pocket_small_refl` in `tests/test_tts_pocket.das`.
 
 **A non-comment diff routed here that reaches neither tower says so in the PR body.**
 
@@ -83,15 +83,15 @@ call site skips when the hook serves.
 **A diff that makes a tower chain compute anything the CPU code its seat's hook replaces does not
 compute changes that CPU code the same way, in the same diff.**
 
-**A diff that adds or changes a family's chain in the Metal tower or in the Metal ASR-decoder
-driver (`dasllama/dasllama_metal_asr_dec.das`) and leaves a stage of that family's served chain -
-the mel, the front, the blocks, the tail, the cross-KV or the decode step - on the CPU, for any
-model or weight lane the family serves, while a Metal device is present, the stage's knob is on
-(`DASLLAMA_METAL_TOWER`; `DASLLAMA_METAL_WDEC` for the cross-KV; both `DASLLAMA_METAL_WDEC` and
-`DASLLAMA_METAL_WDEC_STEP` for the decode step), the decode step's decoder is at or above its width
-floor (`set_metal_wdec_step_min_d`) and the stage's command buffer succeeded, is a defect - put
-that stage on the device in the same change.** A stage on the CPU behind a Metal chain reads as served and sets the whole
-chain's rate.
+**A diff that adds or changes a family's chain in the Metal tower or in
+`dasllama/dasllama_metal_asr_dec.das` puts on the device, in the same change, every stage that
+family's CPU chain runs inside a transcription, synthesis or image-encode call, for every model and
+weight lane the family serves.** The duty holds whenever the stage would serve: a Metal device is
+present, the stage's knob is on (`DASLLAMA_METAL_TOWER`; `DASLLAMA_METAL_WDEC` for the cross-KV;
+`DASLLAMA_METAL_WDEC` and `DASLLAMA_METAL_WDEC_STEP` for the decode step), the decode step's decoder
+width is at or above the floor `set_metal_wdec_step_min_d` sets, and the stage's command buffer
+succeeded. A stage left
+on the CPU behind a Metal chain reads as served and sets the whole chain's rate.
 
 **A diff that changes what a TTS seat's chain computes in a tower driver applies `REVIEW_TTS.md`
 too.**

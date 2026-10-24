@@ -42,9 +42,11 @@ is a defect.** How a rows kernel stays split-invariant is `ARCHITECTURE_TTS.md#t
 computed, not copied - exported, or private and reached from an export; a new exported wrapper
 over an existing function counts - or a new weight lane of one ships a numeric cell in the same
 change, in the `tests/` file that holds that kernel family's cells (`test_tts_blocks.das`;
-`test_tower_asr_kernels.das` for the shared resamplers), against the leaf it applies per row -
-the single-row reference kernel it calls for each row - or a double-precision form of its
-arithmetic.**
+`test_tower_asr_kernels.das` for the shared resamplers), holding it bit for bit or within a bar the
+cell names against one of: the leaf it applies per row - the single-row reference kernel it calls
+for each row; a double-precision form of its arithmetic; or expected values the test computes
+itself from the function's definition without calling any `dasllama/dasllama_tts_blocks.das`
+function.**
 
 **A diff that adds a rows form to `dasllama/dasllama_tts_blocks.das` also ships a cell holding it
 against its channel-major form within the dot-envelope bar - each element within a tolerance
@@ -83,10 +85,11 @@ match.**
 step - implemented in a TTS family file is a defect; it goes in
 `dasllama/dasllama_tts_blocks.das`.**
 
-**Family BEHAVIOR in `dasllama/dasllama_tts_blocks.das` or `dasllama/dasllama_styletts2.das` -
-a family-keyed branch, a tensor quirk, a symbol or token rule - is a defect; the quirk goes in
-its family file.** Family DATA is not: the shared carrier holds each family's data record and
-the reader that fills it from the gguf or the image (`ARCHITECTURE_TTS.md#tts-image-rail`).
+**Code in `dasllama/dasllama_tts_blocks.das` or `dasllama/dasllama_styletts2.das` that branches on
+which family is running, or hard-codes a constant or a symbol or token rule only one family uses, is
+a defect - the family file passes the constant in as an argument, or the family's data record on
+the shared carrier holds it, filled by its reader from the gguf or the image
+(`ARCHITECTURE_TTS.md#tts-image-rail`).**
 
 **A diff that adds a field to a family's data record on the shared carrier (`KittenFamily`,
 `KokoroFamily`) also serializes that field in `serialize_image_meta` and grows the field-count
@@ -137,5 +140,8 @@ covers is written once in the converter and again in the reader.
 **A diff that changes what `harness/convert_pocket.py` writes into a published file re-mints
 that file and lands its new bytes and sha256 in `harness/tts_model_card.md` and
 `performance/model_specs.das`, and its new sha256 in every `examples/dasLLAMA/*/models.json`
-(repo root) pinning it, in the same change.** The fetches refuse a file whose sha256 moved, and
-the card is what a reader downloads against.
+(repo root) pinning it, in the same change - or, where the change writes a key the file's driver
+did not have when the file was minted, leaves the file at its pinned bytes and names in its
+`performance/model_specs.das` recipe the converter commit that minted it.** The fetches refuse a
+file whose sha256 moved, and the card is what a reader downloads against; a file read as its own
+driver ran stays the voice its listeners judged.

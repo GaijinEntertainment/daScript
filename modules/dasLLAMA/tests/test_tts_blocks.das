@@ -1160,6 +1160,249 @@ def test_causal_attention(t : T?) {
     }
 }
 
+//! `group` query heads a cache head: bit-equal to the plain form over the cache with each key-value head repeated `group` times (same sums, same order), and within the attention bar of the double reference
+def private gqa_case(t : T?; name : string; n, nt, context, group : int64; seed : uint64) {
+    var r = TtsRng()
+    rng_seed(r, seed)
+    let dh = CATT_HIDDEN / CATT_HEADS
+    let hq = CATT_HEADS * group
+    let hidden = hq * dh
+    var inscope kc = TtsKvCache()
+    var inscope q : array<float>
+    kv_cache_init(kc, CATT_HEADS, dh, n + 8l)
+    var inscope k, v : array<float>
+    rand_fill(r, k, n * CATT_HIDDEN, 1.0)
+    rand_fill(r, v, n * CATT_HIDDEN, 1.0)
+    kv_cache_append(kc, k, v, n, CATT_HIDDEN)
+    rand_fill(r, q, nt * hidden, 1.0)
+    var inscope got, want, wide : array<float>
+    attention_causal_rows(q, nt, hidden, context, kc, got)
+    attention_causal_ref(q, nt, hidden, context, kc, want)
+    var inscope env <- plane_of(length(want), 1.0)
+    let bar = Bar(kind = BarKind.envelope, rel = CATT_BAR, abs_floor = FLOOR, poison = 2.0 * CATT_BAR, poison_at = 7)
+    check(t, "grouped-query attention {name}", got, want, bar, Shape(row_width = int(hidden)), env)
+    var inscope kp := k
+    for (e in range64(dh)) {
+        kp[e] += 3.0   //! the control's input: the first key's first head moved
+    }
+    var inscope kcp = TtsKvCache()
+    kv_cache_init(kcp, CATT_HEADS, dh, n + 8l)
+    kv_cache_append(kcp, kp, v, n, CATT_HIDDEN)
+    var inscope got_p : array<float>
+    attention_causal_rows(q, nt, hidden, context, kcp, got_p)
+    check_exceeds(t, "grouped-query attention {name} control: a moved key", got_p, want, bar)
+    var inscope kx = TtsKvCache()
+    kv_cache_init(kx, hq, dh, n + 8l)
+    var inscope k2, v2 : array<float>
+    k2 |> resize(n * hidden)
+    v2 |> resize(n * hidden)
+    for (p in range64(n)) {
+        for (h in range64(hq)) {
+            for (e in range64(dh)) {
+                k2[p * hidden + h * dh + e] = k[p * CATT_HIDDEN + (h / group) * dh + e]
+                v2[p * hidden + h * dh + e] = v[p * CATT_HIDDEN + (h / group) * dh + e]
+            }
+        }
+    }
+    kv_cache_append(kx, k2, v2, n, hidden)
+    attention_causal_rows(q, nt, hidden, context, kx, wide)
+    let d = split_diff("{name}: grouped against the expanded cache", got, wide)
+    t |> equal(d.diffs, 0, "{d.name}: elements that differ")
+}
+
+[test]
+def test_grouped_query_attention(t : T?) {
+    with_dasllama_jobque_() {
+        gqa_case(t, "prompt 40 of 40, two query heads a cache head", 40l, 40l, 0l, 2l, 31ul)
+        gqa_case(t, "decode step at 41, four a head", 41l, 1l, 0l, 4l, 32ul)
+        gqa_case(t, "17 new rows over 90, window 64, two a head", 90l, 17l, 64l, 2l, 33ul)
+        gqa_case(t, "one query head a cache head is the plain form", 30l, 5l, 0l, 1l, 34ul)
+        var r = TtsRng()
+        rng_seed(r, 35ul)
+        var inscope kc = TtsKvCache()
+        var inscope q : array<float>
+        catt_fixture(r, 12l, 1l, kc, q)
+        var inscope ctx : array<float>
+        var tripped = 0
+        for (hidden in [CATT_HIDDEN + 8l, CATT_HIDDEN / 2l, CATT_HIDDEN / CATT_HEADS * 6l]) {
+            try {
+                attention_causal_rows(q, 1l, hidden, 0l, kc, ctx)
+            } recover {
+                tripped++
+            }
+        }
+        t |> equal(tripped, 3, "a width off the head lattice, fewer query heads than cache heads, and a count the cache's heads do not divide are refused")
+    }
+}
+
+//! rows of a served width packed to their channel count: every kept value at [r][c], nothing moved when the strides agree, a wider target refused
+[test]
+def test_compact_rows(t : T?) {
+    var inscope y : array<float>
+    y |> resize(5 * 16)
+    for (r in range(5)) {
+        for (c in range(16)) {
+            y[r * 16 + c] = float(r * 100 + c)
+        }
+    }
+    compact_rows(y, 5l, 16l, 12l)
+    var bad = 0
+    for (r in range(5)) {
+        for (c in range(12)) {
+            bad += y[r * 12 + c] == float(r * 100 + c) ? 0 : 1
+        }
+    }
+    t |> equal(bad, 0, "elements out of place after packing 16-wide rows to 12")
+    var inscope same : array<float>
+    same |> resize(8)
+    for (i in range(8)) {
+        same[i] = float(i)
+    }
+    compact_rows(same, 2l, 4l, 4l)
+    t |> equal(same[7], 7.0, "equal strides leave the rows as they are")
+    var tripped = false
+    try {
+        compact_rows(same, 2l, 4l, 8l)
+    } recover {
+        tripped = true
+    }
+    t |> success(tripped, "a wider target is refused")
+}
+
+//! the onset ramp: sample i of the first n scaled by i / (n - 1), the rest untouched, clamped past the wave's end, a no-op at 0 or 1 samples
+[test]
+def test_fade_in(t : T?) {
+    var inscope w : array<float>
+    w |> resize(10)
+    for (i in range(10)) {
+        w[i] = 2.0
+    }
+    fade_in(w, 5l)
+    var worst = 0.0
+    for (i in range(5)) {
+        worst = max(worst, nan_wide_diff(w[i], float(2.0lf * double(i) / 4.0lf)))
+    }
+    t |> success(worst < 1.0e-6, "the first five samples ramp 0, 0.5, 1, 1.5, 2 (max |diff| {worst})")
+    var inscope w6 : array<float>
+    w6 |> resize(10)
+    for (i in range(10)) {
+        w6[i] = 2.0
+    }
+    fade_in(w6, 6l)
+    var off = 0.0
+    for (i in range(5)) {
+        off = max(off, nan_wide_diff(w6[i], float(2.0lf * double(i) / 4.0lf)))
+    }
+    t |> success(off > 1.0e-6, "the control: a ramp one sample longer lands outside the bar (max |diff| {off})")
+    t |> equal(w[5], 2.0, "the sixth sample is untouched")
+    t |> equal(w[9], 2.0, "the last sample is untouched")
+    var inscope s : array<float>
+    s |> resize(3)
+    for (i in range(3)) {
+        s[i] = 1.0
+    }
+    fade_in(s, 120l)
+    t |> equal(s[0], 0.0, "a ramp past the end starts at 0")
+    t |> success(abs(s[2] - 2.0 / 119.0) < 1.0e-6, "and keeps the ramp's step - the wave is the start of a longer one")
+    var inscope u : array<float>
+    u |> resize(4)
+    for (i in range(4)) {
+        u[i] = 0.7
+    }
+    fade_in(u, 1l)
+    fade_in(u, 0l)
+    t |> equal(u[0], 0.7, "a ramp of one or zero samples changes nothing")
+}
+
+//! the double form of `end_on_pause` at its defaults: 20 ms frame RMS in dB, the tail more than 35 dB under the loudest frame cut, a linear fade over the last 20 ms, 80 ms of zeros appended
+def private end_on_pause_ref(pcm : array<float>; rate : int) : array<float> {
+    let frame = int64(0.02 * float(rate))
+    let n = long_length(pcm) / frame
+    var inscope db : array<double>
+    db |> resize(n)
+    var loudest = -1.0e300lf
+    for (f in range64(n)) {
+        var acc = 0.0lf
+        for (i in range64(frame)) {
+            acc += double(pcm[f * frame + i]) * double(pcm[f * frame + i])
+        }
+        db[f] = 20.0lf * log10(sqrt(acc / double(frame)) + 1e-12lf)
+        loudest = max(loudest, db[f])
+    }
+    var last = n - 1l
+    while (last > 0l && db[last] <= loudest - 35.0lf) {
+        last--
+    }
+    let end = (last + 1l) * frame
+    let fade = min(int64(0.02 * float(rate)), end)
+    let pause = int64(0.08 * float(rate))
+    var inscope out : array<float>
+    out |> resize(end + pause)
+    for (i in range64(end)) {
+        out[i] = pcm[i]
+    }
+    for (i in range64(fade)) {
+        out[end - fade + i] = float(double(out[end - fade + i]) * (1.0lf - double(i) / double(fade - 1l)))
+    }
+    return <- out
+}
+
+[test]
+def test_end_on_pause(t : T?) {
+    let rate = 24000
+    // half a second of tone, then 300 ms of near-silence 80 dB down: the silence is cut, 80 ms of zeros follow the fade
+    var inscope pcm : array<float>
+    pcm |> resize(rate / 2 + rate * 3 / 10)
+    for (i in range(rate / 2)) {
+        pcm[i] = 0.5 * sin(float(i) * 0.03)
+    }
+    for (i in range(rate / 2, length(pcm))) {
+        pcm[i] = 1.0e-4 * sin(float(i) * 0.7)
+    }
+    var inscope out : array<float>
+    end_on_pause(pcm, rate, out)
+    t |> equal(long_length(out), int64(rate / 2 + rate * 8 / 100), "the tail is cut at the last loud frame and 80 ms of pause follow")
+    var inscope want <- end_on_pause_ref(pcm, rate)
+    t |> equal(length(out), length(want), "the double form agrees on the length")
+    var worst = 0.0
+    for (g, w in out, want) {
+        worst = max(worst, nan_wide_diff(g, w))
+    }
+    t |> success(worst <= 1.0e-6, "end_on_pause against the double form (max |diff| {worst})")
+    var inscope pcm_off := pcm
+    for (i in range(rate / 2 - 480, rate / 2)) {
+        pcm_off[i] = 1.0e-4 * sin(float(i) * 0.7)   //! the control's input: the tone one frame (20 ms) shorter
+    }
+    var inscope want_off <- end_on_pause_ref(pcm_off, rate)
+    t |> success(length(want_off) < length(out), "the control: a tone one frame shorter cuts one frame earlier ({length(want_off)} against {length(out)} samples)")
+    var inscope coarse : array<float>   //! at 50 Hz a frame is one sample and the 20 ms fade one sample: that sample alone goes to zero
+    coarse |> resize(40)
+    for (i in range(40)) {
+        coarse[i] = i < 25 ? 0.5 : 1.0e-4
+    }
+    var inscope out50 : array<float>
+    end_on_pause(coarse, 50, out50)
+    t |> equal(length(out50), 25 + 4, "the one-sample fade: 25 loud samples kept and the 80 ms pause is four samples")
+    t |> equal(out50[24], 0.0, "the one-sample fade zeroes the last kept sample")
+    t |> equal(out50[23], 0.5, "and leaves the one before it")
+    t |> equal(out[rate / 2 - 1], 0.0, "the last kept sample is faded to zero")
+    t |> equal(out[length(out) - 1], 0.0, "the pause is silence")
+    t |> success(abs(out[rate / 2 - 480] - pcm[rate / 2 - 480]) < 1.0e-6, "the fade starts at full level 20 ms before the cut")
+    var inscope flat : array<float>
+    flat |> resize(rate / 10)
+    for (i in range(length(flat))) {
+        flat[i] = 0.01 * sin(float(i) * 0.05)
+    }
+    var inscope out2 : array<float>
+    end_on_pause(flat, rate, out2)
+    t |> equal(length(out2), length(flat) + rate * 8 / 100, "a clip loud to its end keeps every frame and gains the pause")
+    var inscope tiny : array<float>
+    tiny |> resize(100)
+    var inscope out3 : array<float>
+    end_on_pause(tiny, rate, out3)
+    t |> equal(length(out3), 100, "a clip shorter than a frame comes back as it is")
+}
+
 [test]
 def test_elu_and_layer_scale(t : T?) {
     with_dasllama_jobque_() {

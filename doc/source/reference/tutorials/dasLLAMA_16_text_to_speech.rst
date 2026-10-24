@@ -296,14 +296,17 @@ Prepared voice prompts
 ``tts_prepare_voice_prompt`` encodes a reference into a ``TtsVoicePrompt``.
 This step needs a Pocket model with its codec encoder. The value can be serialized
 with ``daslib/json_boost`` and shipped separately from the model weights.
-``tts_voice_prompt_valid`` checks the format, language, sample rate, codec geometry
-and bounded latent frames against the receiving model.
+``tts_voice_prompt_valid`` checks the format, the latent space (``latent_space``, a
+fingerprint every Pocket file carries), sample rate, codec geometry and bounded
+latent frames against the receiving model.
 
 ``tts_register_voice_prompt`` copies a prepared prompt into a named voice. It also
 works with a compatible encoder-free Pocket file. An empty name or invalid prompt
 returns false and leaves the previous voice intact. The caller owns its prompt;
 the model builds conditioning state when the voice is first synthesized.
-Matching geometry does not make prompts portable across unrelated model revisions.
+The fingerprint, not the model's config name or size, decides portability: the
+2026-04 and the 2026-10 English models share one codec, so a prompt prepared on
+the 100M model conditions the small ones; a model of another codec refuses it.
 
 The tutorial's ``--clone`` path also demonstrates a JSON round trip and writes
 speech from the restored prompt:

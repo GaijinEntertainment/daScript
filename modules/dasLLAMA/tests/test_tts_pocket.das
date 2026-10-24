@@ -33,7 +33,11 @@ require _model_tier
 // the 200-sentence corpus and on the byte-fallback probes (`_tts_fixtures/pocket_tokens.json`,
 // written by the oracle script's --tokens-fixture), the decode round trip, then the parity rail.
 // Prepared-prompt transfer needs pocket-tts-en-kq.gguf and pocket-tts-en-stuart-kq.gguf;
-// it uses the checked-in jfk_ask_not.wav reference and skips if either model is absent. The
+// it uses the checked-in jfk_ask_not.wav reference and skips if either model is absent; its last
+// leg registers the prompt in pocket-tts-en-18m-q8.gguf and skips without it. The small-model
+// cells skip per file without its f32 reference, its `tts_oracle/pocket_english_*_2026-10/` dumps
+// or its published file (the refl cells without the `-refl-` files); the no-encoder cells skip
+// without pocket-tts-en-18m-stuart-kq.gguf and pocket-tts-en-18m-kq.gguf. The
 // quiet-floor cell needs pocket-tts-en-kq.gguf alone. The GPU cells skip on a build without a GPU
 // module (das_metal or vulkan) and need a device that serves the tower (they red where a present
 // device declines); the served-lane cells skip unless pocket-tts-en-q8.gguf or pocket-tts-en-kq.gguf is
@@ -70,12 +74,19 @@ struct private ChunkCase {
     chunks : array<string>
 }
 
+struct private PreparedCase {
+    text : string
+    prepared : string
+    frames_after_eos : int
+}
+
 struct private TokFixture {
     language : string
     revision : string
     rows : array<TokRow>
     chunks : array<ChunkCase>
     probes : array<TokProbe>
+    prepared : array<PreparedCase>   //! the terminal-punctuation and replacement rules on short texts
 }
 
 def private load_tokens_fixture(path : string = tokens_fixture_path()) : TokFixture {
@@ -193,9 +204,10 @@ def test_prepare_pocket_text(t : T?) {
     }
     t |> equal(checked, 200, "every fixture row found its corpus sentence")
     t |> equal(bad, 0, "sentences whose preparation differs from the reference's")
-    // the terminal period follows the reference's isalnum: an accented final letter takes one
+    prepared_probes(t, m, fx, "english_2026-04")
     t |> equal(prepare_pocket_text(m, "spero che ti piacerò").prepared, "Spero che ti piacerò.", "an accented final letter takes the period")   // nolint:STYLE039 - the accent is the case
-    t |> equal(prepare_pocket_text(m, "Hello there,").prepared, "Hello there,", "a trailing mark is left as it is")
+    t |> equal(prepare_pocket_text(m, "Hello there,").prepared, "Hello there.", "a trailing weak mark becomes the period")
+    t |> equal(prepare_pocket_text(m, "Hello there?").prepared, "Hello there?", "a trailing sentence mark is left as it is")
     // the word count folds whitespace runs and tabs, as the reference's split() does
     t |> equal(prepare_pocket_text(m, "One two three   four.").frames_after_eos, 3, "four words: the short-text tail")
     t |> equal(prepare_pocket_text(m, "One\ttwo three four five.").frames_after_eos, 1, "five words across a tab: the long-text tail")
@@ -209,6 +221,33 @@ def test_prepare_pocket_text(t : T?) {
     t |> success(tripped, "prepare_pocket_text panics on a blank text")
     var inscope none <- pocket_chunks(m, "  \n ")
     t |> equal(length(none), 0, "a blank text has no chunks")
+}
+
+//! the fixture's short texts through the preparation rules: a terminal mark after a closer, a trailing dash, a sentence end before a comma, the file's replacements
+def private prepared_probes(t : T?; m : PocketModel; fx : TokFixture; tag : string) {
+    t |> success(!empty(fx.prepared), "{tag}: the fixture carries prepared probes")
+    for (p in fx.prepared) {
+        let ours = prepare_pocket_text(m, p.text)
+        t |> equal(ours.prepared, p.prepared, "{tag}: '{p.text}' prepares as the reference does")
+        t |> equal(ours.frames_after_eos + 2, p.frames_after_eos, "{tag}: '{p.text}' keeps the reference's frames after EOS")
+    }
+}
+
+//! the chunker over the fixture's multi-sentence texts, through the facade
+def private chunk_probes(t : T?; m : TtsModel; fx : TokFixture; tag : string) {
+    for (cc in fx.chunks) {
+        var inscope ours <- tts_chunks(m, cc.text)
+        var same = length(ours) == length(cc.chunks)
+        if (same) {
+            for (a, b in ours, cc.chunks) {
+                same = same && a == b
+            }
+        }
+        if (!same) {
+            to_log(LOG_ERROR, "pocket {tag} chunks differ for '{slice(cc.text, 0, 60)}...': ours {ours} reference {cc.chunks}\n")
+        }
+        t |> success(same, "{tag}: chunks of a {length(cc.chunks)}-chunk text match the reference")
+    }
 }
 
 // ===== the parity rail against harness/pocket_oracle.py =====
@@ -311,20 +350,7 @@ def test_pocket_parity(t : T?) {
                 for (l in range(length(vs.caches))) {
                     let name = "kv_voice_L{l}"
                     continue if (!key_exists(dump, name))
-                    var inscope ours : array<float>
-                    let tt = vs.len
-                    let hh = vs.caches[l].heads
-                    let dh = vs.caches[l].dh
-                    let cap = vs.caches[l].cap
-                    ours |> resize(2l * tt * hh * dh)
-                    for (p in range64(tt)) {
-                        for (h in range64(hh)) {
-                            for (e in range64(dh)) {
-                                ours[(p * hh + h) * dh + e] = vs.caches[l].k[(h * dh + e) * cap + p]
-                                ours[tt * hh * dh + (p * hh + h) * dh + e] = vs.caches[l].v[(h * cap + p) * dh + e]
-                            }
-                        }
-                    }
+                    var inscope ours <- cache_rows(vs.caches[l], vs.len)
                     bar_diff(t, "{tag} voice kv layer {l}", ours, dump[name].f, FRAME_BAR, BarMetric.of_peak)
                 }
                 voiced++
@@ -335,7 +361,7 @@ def test_pocket_parity(t : T?) {
 
 // every frame's x1 from the head alone, over the oracle's conditioning rows and noise draws
 def private head_over_frames(m : PocketModel; var sc : PocketScratch; conds, x0 : array<float>; frames : int64) : array<float> {
-    let d = m.backbone.d
+    let d = m.cond_dim
     let ld = m.latent_dim
     var inscope out : array<float>
     out |> resize(frames * ld)
@@ -592,7 +618,7 @@ def private forced_frames(m : PocketModel; var k : ForcedCase; captured, forced 
 def private frame_rows(m : PocketModel; sc : PocketScratch; frames : int64) : FrameRows {
     var r : FrameRows
     r.lat <- copy_span(sc.latents, 0l, frames * m.latent_dim)
-    r.conds <- copy_span(sc.conds, 0l, frames * m.backbone.d)
+    r.conds <- copy_span(sc.conds, 0l, frames * m.cond_dim)
     r.eos <- copy_span(sc.eos_logits, 0l, frames)
     return <- r
 }
@@ -603,7 +629,7 @@ def private same_rng(a, b : TtsRng) : bool =>
 typedef FrameRows = tuple<lat : array<float>; conds : array<float>; eos : array<float>>
 
 //! The frames seat teacher-forced on `k` against the CPU leg, `all_rows` adding conds and EOS; the CPU leg's frame count (-1 unserved) and rows; the knob stays on.
-[cold_path, unused_argument(t, m, k, tag, bar, all_rows, sc)]   // off-Apple the gated body is empty
+[unused_argument(t, m, k, tag, bar, all_rows, sc)]   // off-Apple the gated body is empty
 def private frames_seat_leg(t : T?; m : PocketModel; var k : ForcedCase; tag : string; bar : float; all_rows : bool;
                             var sc : PocketScratch) : tuple<fc : int64; cpu : FrameRows> {
     var r : tuple<fc : int64; cpu : FrameRows>
@@ -615,9 +641,13 @@ def private frames_seat_leg(t : T?; m : PocketModel; var k : ForcedCase; tag : s
         let rng_cpu = sc.rng
         set_serving_gpu_tower(true)
         let h0 = pocket_gpu_stats("frames")
+        let p0 = pocket_gpu_stats("prompt")
+        let c0 = pocket_gpu_stats("codec")
         let e0 = gpu_encodes()
         let fg = forced_frames(m, k, k.x0, k.x1, sc)
         let h1 = pocket_gpu_stats("frames")
+        let p1 = pocket_gpu_stats("prompt")
+        let c1 = pocket_gpu_stats("codec")
         let e1 = gpu_encodes()
         return <- r if (h1.served - h0.served != 1 && !tower_served(t, tag, "{gpu_declines()}"))
         t |> equal(h1.calls - h0.calls, 1, "{tag}: one hook call")
@@ -625,7 +655,9 @@ def private frames_seat_leg(t : T?; m : PocketModel; var k : ForcedCase; tag : s
         return <- r if (fg != fc)
         t |> success(same_rng(sc.rng, rng_cpu), "{tag}: the generator ends where the CPU loop's does")
         let batch = pocket_frame_batch()
-        t |> equal(e1 - e0, (fc + batch) / batch + 2l, "{tag}: one tower encode a batch of {batch}, the prompt's and the codec's")
+        t |> equal(p1.served - p0.served, 1, "{tag}: the prompt seat served the forced case")
+        t |> equal(c1.served - c0.served, 1, "{tag}: the codec seat served the forced case")
+        t |> equal(e1 - e0, (fc + batch) / batch + 2l, "{tag}: one tower encode a batch of {batch}, plus the prompt's and the codec's")
         var inscope gpu <- frame_rows(m, sc, fg)
         let dl = rel_l2(gpu.lat, r.cpu.lat)
         let dc = rel_l2(gpu.conds, r.cpu.conds)
@@ -743,7 +775,7 @@ def private prompt_kv(vs : PocketVoiceState; n : int64) : PromptRows {
 //! The prompt seat against the CPU chain over one case's text: every layer's K and V rows within `bar` with the bar's
 //! one-element control and the text rotated by one token as the compare's control, one hook call served, one encode,
 //! the knob-off leg bit-equal with its decline recorded; false where no device serves (the skip registered).
-[cold_path, unused_argument(t, m, k, tag, bar, sc)]   // off-Apple the gated body is empty
+[unused_argument(t, m, k, tag, bar, sc)]   // off-Apple the gated body is empty
 def private prompt_seat_leg(t : T?; m : PocketModel; var k : ForcedCase; tag : string; bar : float; var sc : PocketScratch) : bool {
     static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
         let n = long_length(k.ids)
@@ -1295,6 +1327,318 @@ def test_pocket_languages(t : T?) {
     }
 }
 
+struct private PocketSmall {
+    config : string      //! the package's config name: the oracle dir carries it
+    file : string        // the published file's stem
+    ref : string         //! the f32 reference's stem (`--keep-f32`; the oracle's exact lane)
+    kv_heads : int64
+    attn_dim : int64
+    flow : PocketFlow
+    q8_file : bool
+    codec_seat : bool    //! the codec seat serves the decoder (32-wide heads; a stage off the 8-run lattice through the im2col route)
+    frames_seat : bool   //! the frames seat serves the backbone and head (grouped keys, the bottleneck row, the time-free tail)
+    prompt_seat : bool   //! the prompt seat serves the backbone's rows form (a residual off the 32 lattice through the expanded rows)
+}
+
+let private SMALL <- [PocketSmall(config = "english_18m_2026-10", file = "pocket-tts-en-18m-q8", ref = "pocket-tts-en-18m", kv_heads = 8l, attn_dim = 512l, flow = PocketFlow.drifting, q8_file = true, codec_seat = true, frames_seat = true, prompt_seat = true),
+                      PocketSmall(config = "english_7m_2026-10", file = "pocket-tts-en-7m-q8", ref = "pocket-tts-en-7m", kv_heads = 2l, attn_dim = 512l, flow = PocketFlow.drifting, q8_file = true, codec_seat = true, frames_seat = true, prompt_seat = true),
+                      PocketSmall(config = "english_2m_2026-10", file = "pocket-tts-en-2m", ref = "pocket-tts-en-2m-f32", kv_heads = 1l, attn_dim = 192l, flow = PocketFlow.pointwise, q8_file = false, codec_seat = true, frames_seat = true, prompt_seat = true)]
+
+let private REWARD_TUNED_TWINS <- ["pocket-tts-en-18m-refl-q8", "pocket-tts-en-7m-refl-q8", "pocket-tts-en-2m-refl"]
+
+def private small_fixture_path() : string => "{get_das_root()}/modules/dasLLAMA/tests/_tts_fixtures/pocket_tokens_english_2026-10.json"
+
+let TRIM_BAR = 1.0e-6   //! the prompt trim against the oracle's trimmed clip: the same fade, in float
+
+//! the small model's shape as the file declares it, and the 4.0.1 driver rules the converter wrote
+def private small_shape_cells(t : T?; m : PocketModel; S : PocketSmall) {
+    let tag = S.config
+    t |> equal(m.language, S.config, "{tag}: the config name")
+    t |> equal(m.lang, "en", "{tag}: English")
+    t |> equal(m.backbone.kv_heads, S.kv_heads, "{tag}: key-value heads")
+    t |> equal(m.backbone.attn_dim, S.attn_dim, "{tag}: the queries' width")
+    t |> equal(m.backbone.dh, 64l, "{tag}: 64-wide heads")
+    t |> equal(int(m.head.flow), int(S.flow), "{tag}: the head's sampling rule")
+    t |> equal(long_length(m.head.time_const.a), 0l, "{tag}: a time-free head bakes no timestep constant")
+    t |> equal(m.z_proj.nout, 64l, "{tag}: the 64-wide bottleneck before the head and the EOS logit")
+    t |> equal(m.cond_dim, 64l, "{tag}: the conditioning row is the bottleneck's")
+    t |> equal(m.head.cond_embed.nin, 64l, "{tag}: the head conditions on it")
+    t |> equal(m.out_eos.nin, 64l, "{tag}: so does the EOS logit")
+    t |> equal(long_length(m.text_emb.a), 4001l * m.backbone.d, "{tag}: the text table is multiplied out to the backbone's width")
+    t |> equal(m.mimi.dec_tf.d, 128l, "{tag}: the narrow codec decoder transformer")
+    t |> equal(m.mimi.upsample.cin, 128l, "{tag}: the upsampler is depthwise over the decoder's width")
+    t |> equal(m.mimi.enc_tf.d, 512l, "{tag}: the encoder is the 100M model's")
+    t |> equal(m.eos_threshold, -1.0, "{tag}: the config's EOS threshold")
+    t |> equal(m.min_frames_before_eos, 6l, "{tag}: EOS ignored on the first six frames")
+    t |> equal(m.fade_in_samples, 120l, "{tag}: a 5 ms fade-in")
+    t |> success(m.prompt_end_on_pause, "{tag}: the voice clip ends on a pause")
+    t |> equal(length(m.replace_chars), 4, "{tag}: the dashes and the curly apostrophes are replaced")
+    t |> equal(length(m.voice_names), 19, "{tag}: the English roster")
+    t |> success(m.cloning, "{tag}: the encoder is inside")
+}
+
+//! the f32-lane rail on the f32 reference: external-reference compares against the oracle's dumps (the prompt trim, the encoder, the voice state, the codec over the oracle's latents (one-shot, no fade), the teacher-forced frames and faded waveform, the head alone), then the GPU seats' GPU-vs-CPU compares
+def private small_parity_cells(t : T?; m : PocketModel; S : PocketSmall; man : PocketManifest; odir : string; var sc : PocketScratch) {
+    var done = 0
+    for (c in man.cases) {
+        continue if (!c.stages || c.voice != "alba")
+        let tag = "{S.config} {c.id} {c.voice}"
+        var inscope dump <- load_tts_dump(path_join(odir, c.file))
+        if (done == 0) {
+            var inscope clip : array<float>
+            pocket_prompt_pcm(m, dump["voice_pcm"].f, clip)
+            t |> equal(long_length(clip), long_length(dump["voice_pcm_trimmed"].f), "{tag}: the trimmed clip's length")
+            bar_diff(t, "{tag} prompt trim", clip, dump["voice_pcm_trimmed"].f, TRIM_BAR, BarMetric.absolute)
+            var inscope lat : array<float>
+            let frames = int(pocket_encode_latents(m, clip, sc, lat))
+            t |> equal(frames, c.voice_frames, "{tag}: the trimmed clip's latent frame count")
+            bar_diff(t, "{tag} codec encode", lat, dump["voice_latents"].f, ENCODER_BAR, BarMetric.of_peak)
+            var inscope vs <- pocket_voice_state(m, dump["voice_pcm"].f, sc)
+            t |> equal(int(vs.len), c.voice_frames + 1, "{tag}: the prompt is the BOS row plus the frames")
+            for (l in range(length(vs.caches))) {
+                let name = "kv_voice_L{l}"
+                continue if (!key_exists(dump, name))
+                var inscope ours <- cache_rows(vs.caches[l], vs.len)
+                bar_diff(t, "{tag} voice kv layer {l}", ours, dump[name].f, FRAME_BAR, BarMetric.of_peak)
+            }
+        }
+        var inscope wave : array<float>
+        pocket_decode_latents(m, dump["latent"].f, int64(c.n_frames), sc, wave)
+        to_log(LOG_INFO, "pocket {tag}: codec decode rel-l2 {rel_l2_common(wave, dump["waveform_oneshot"].f)} against the oracle's one-shot decode\n")
+        bar_diff(t, "{tag} codec decode", wave, dump["waveform_oneshot"].f, CODEC_BAR, BarMetric.of_peak)
+        bar_off_row(t, "{tag} codec decode", wave, dump["waveform_oneshot"].f, CODEC_BAR, int64(m.sample_rate) / 100l)
+        if (S.codec_seat) {
+            static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
+                var inscope cpu : array<float>
+                codec_served_leg(t, m, "{tag} codec seat", dump["latent"].f, int64(c.n_frames), GPU_CODEC_BAR, sc, cpu)
+                set_serving_gpu_tower(false)
+            }
+        }
+        var inscope k <- forced_case(m, c, man, sc, odir)
+        t |> equal(length(k.ids), c.n_tokens, "{tag}: token count")
+        let frames = forced_frames(m, k, k.x0, k.x1, sc)
+        t |> equal(int(frames), c.n_frames, "{tag}: frame count under teacher forcing")
+        var inscope rows <- frame_rows(m, sc, frames)
+        var inscope head_x1 <- head_over_frames(m, sc, k.dump["cond"].f, k.x0, frames)
+        bar_diff(t, "{tag} flow head on the oracle's conditioning", head_x1, k.x1, FRAME_BAR, BarMetric.of_peak)
+        bar_diff(t, "{tag} backbone conditioning (teacher-forced)", rows.conds, k.dump["cond"].f, FRAME_BAR, BarMetric.of_peak)
+        bar_diff(t, "{tag} eos logits (teacher-forced)", rows.eos, k.dump["eos_logit"].f, FRAME_BAR, BarMetric.of_peak)
+        bar_diff(t, "{tag} latents (teacher-forced)", rows.lat, k.dump["latent"].f, FRAME_BAR, BarMetric.of_peak)
+        bar_off_row(t, "{tag} latents (teacher-forced)", rows.lat, k.dump["latent"].f, FRAME_BAR, m.latent_dim)
+        to_log(LOG_INFO, "pocket {tag}: teacher-forced waveform rel-l2 {rel_l2_common(sc.wave, k.dump["waveform"].f)} against the oracle's\n")
+        bar_diff(t, "{tag} waveform (teacher-forced, faded in)", sc.wave, k.dump["waveform"].f, CODEC_BAR * 4.0, BarMetric.of_peak)
+        bar_off_row(t, "{tag} waveform (teacher-forced, faded in)", sc.wave, k.dump["waveform"].f, CODEC_BAR * 4.0, int64(m.sample_rate) / 100l)
+        t |> equal(sc.wave[0], 0.0, "{tag}: the chunk's first sample is faded to zero")
+        to_log(LOG_INFO, "pocket {tag}: {timings_line(k.tm, m.sample_rate)}\n")
+        static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
+            if (S.frames_seat) {
+                var inscope leg <- frames_seat_leg(t, m, k, "{tag} frames seat", GPU_FRAME_BAR, true, sc)
+                t |> success(leg.fc > 0l, "{tag}: the frames seat served the teacher-forced case")
+            }
+            if (S.prompt_seat) {
+                prompt_seat_leg(t, m, k, "{tag} prompt seat", GPU_PROMPT_BAR, sc)
+            }
+            set_serving_gpu_tower(false)
+        }
+        done++
+        break if (done >= 2)
+    }
+    t |> success(done > 0, "{S.config}: at least one stage case ran")
+}
+
+//! a bar's control over the inputs: the reference one row off (its rows rotated by `row` elements) lands outside the of-peak bar
+def private bar_off_row(t : T?; tag : string; ours, ref : array<float>; bar : float; row : int64) {
+    let n = long_length(ref)
+    return if (n < 2l * row || long_length(ours) != n)
+    var inscope off <- [for (i in range64(n)); ref[(i + row) % n]]
+    check_exceeds(t, "{tag}: the reference one row off", ours, off, Bar(kind = BarKind.rel_of_max, rel = bar))
+}
+
+//! a cache's filled rows as the oracle lays them out: [2][positions][heads][dh]
+def private cache_rows(kc : TtsKvCache; tt : int64) : array<float> {
+    var inscope ours : array<float>
+    let per = tt * kc.heads * kc.dh
+    ours |> resize(2l * per)
+    unsafe {
+        kv_cache_read_rows(kc, 0l, tt, 0l, addr(ours[0]), addr(ours[per]))
+    }
+    return <- ours
+}
+
+// the published file: its served lane's teacher-forced latents against the oracle at the q8 bar,
+// the tokenizer and the chunker on the 2026-10 fixture, one sentence through the facade with the
+// GPU seats armed, every seat serving
+def private small_published_cells(t : T?; S : PocketSmall; man : PocketManifest; odir : string; fx : TokFixture) {
+    let path = path_join(models_dir(), "{S.file}.gguf")
+    return if (!model_available(t, path))
+    var inscope sc = PocketScratch()
+    with_gpu_cell() {
+        defer() {
+            reset_pocket_q8()
+        }
+        reset_pocket_q8()
+        set_serving_gpu_tower(false)
+        let q8_lane = pocket_serves_q8()   //! the unpinned default lane, read before the load
+        var inscope m <- load_pocket(path)
+        t |> equal(m.backbone.layers[0].in_proj.q8, q8_lane && S.q8_file, "{S.config}: the published file's backbone GEMMs serve {S.q8_file ? "Q8_0 blocks on the q8 lane" : "f32 planes (its widths are off the 32 lattice)"}")
+        var bad = 0
+        for (r in fx.rows) {
+            var inscope ours <- pocket_text_ids(m, r.prepared)
+            bad += ids_equal(ours, r.ids) ? 0 : 1
+        }
+        for (p in fx.probes) {
+            var inscope ours <- pocket_text_ids(m, p.text)
+            bad += ids_equal(ours, p.ids) ? 0 : 1
+        }
+        t |> equal(bad, 0, "{S.config}: sentences and probes whose ids differ from the reference")
+        prepared_probes(t, m, fx, S.config)
+        for (c in man.cases) {
+            continue if (!c.stages || c.voice != "alba")
+            var inscope lat <- forced_latents(m, c, man, sc, odir)
+            var inscope dump <- load_tts_dump(path_join(odir, c.file))
+            let n = min(long_length(lat), long_length(dump["latent"].f))
+            var inscope a <- copy_span(lat, 0l, n)
+            var inscope b <- copy_span(dump["latent"].f, 0l, n)
+            bar_diff(t, "pocket {S.config} {c.id} published file latents (teacher-forced)", a, b, Q8_RMS_BAR, BarMetric.rel_l2, rms(b))
+            break
+        }
+    }
+    with_dasllama_jobque_() {
+        var inscope tm <- load_tts_model(path)
+        var inscope c2 <- caps(tm)
+        t |> success(c2.cloning && length(c2.voices) == 19 && c2.langs[0] == "en", "{S.config}: the facade reports a cloning English model with the roster")
+        chunk_probes(t, tm, fx, S.config)
+        static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
+            with_gpu_knobs() {
+                set_serving_gpu_tower(true)
+                let d0 <- gpu_declines()
+                let c0 = pocket_gpu_stats("codec")
+                let f0 = pocket_gpu_stats("frames")
+                let p0 = pocket_gpu_stats("prompt")
+                var inscope a <- synthesize(tm, fx.rows[0].prepared, "alba")
+                let st = speech_level(a.pcm)
+                t |> success(st.finite && st.rms > 0.01, "{S.config}: '{fx.rows[0].prepared}' speaks with the seats armed ({length(a.pcm)} samples, rms {st.rms})")
+                let d1 <- gpu_declines()
+                if ((d1?["device"] ?? 0l) > (d0?["device"] ?? 0l)) {
+                    t |> skip("{S.config}: no GPU device serves the seats (declines {d1})")
+                } else {
+                    let c1 = pocket_gpu_stats("codec")
+                    let seats_declined = (S.codec_seat ? 0l : 1l) + (S.frames_seat ? 0l : 1l) + (S.prompt_seat ? 0l : 1l)
+                    t |> success((d1?["shape"] ?? 0l) - (d0?["shape"] ?? 0l) >= seats_declined, "{S.config}: {seats_declined} seat(s) decline the small shapes by shape")
+                    if (S.codec_seat) {
+                        t |> equal(c1.served - c0.served, 1, "{S.config}: the codec seat served the chunk (declines {d1})")
+                    }
+                    if (S.frames_seat) {
+                        t |> equal(pocket_gpu_stats("frames").served - f0.served, 1, "{S.config}: the frames seat served the chunk (declines {d1})")
+                    }
+                    if (S.prompt_seat) {
+                        t |> equal(pocket_gpu_stats("prompt").served - p0.served, 1, "{S.config}: the prompt seat served the chunk (declines {d1})")
+                    }
+                }
+                to_log(LOG_INFO, "pocket {S.config} published: {timings_line(a.timings, a.sample_rate)}\n")
+            }
+        } else {
+            var inscope a <- synthesize(tm, fx.rows[0].prepared, "alba")
+            let st = speech_level(a.pcm)
+            t |> success(st.finite && st.rms > 0.01, "{S.config}: '{fx.rows[0].prepared}' speaks ({length(a.pcm)} samples, rms {st.rms})")
+        }
+    }
+}
+
+[cold_path]
+//! the frames admission's clauses the small backbones added, each refused alone on the loaded model and the model put back: the
+//! bottleneck's widths, the conditioning row's lattice, a time-free head carrying a time constant; and the slab key moving with the row
+def private small_admission_cells(t : T?; var m : PocketModel; S : PocketSmall) {
+    let admits = tts_pk_frames_ok(m, 64l, 4096l) $(l : TtsLinear) : bool {
+        return tts_lin_ok(l)
+    }
+    t |> success(admits, "{S.config}: the loaded model is admitted")
+    let key = tts_pk_frames_key(m)
+    m.cond_dim += 2l
+    t |> success(!tts_pk_frames_ok(m, 64l, 4096l) $(l : TtsLinear) : bool {
+        return tts_lin_ok(l)
+    }, "{S.config}: a conditioning row off the 4 lattice is refused")
+    t |> success(tts_pk_frames_key(m) != key, "{S.config}: the slab key moves with the conditioning row")
+    m.cond_dim -= 2l
+    m.z_proj.nin += 4l
+    t |> success(!tts_pk_frames_ok(m, 64l, 4096l) $(l : TtsLinear) : bool {
+        return tts_lin_ok(l)
+    }, "{S.config}: a bottleneck not reading the residual's width is refused")
+    m.z_proj.nin -= 4l
+    m.head.time_const.a |> push(0.0)
+    t |> success(!tts_pk_frames_ok(m, 64l, 4096l) $(l : TtsLinear) : bool {
+        return tts_lin_ok(l)
+    }, "{S.config}: a time-free head carrying a time constant is refused")
+    m.head.time_const.a |> pop()
+    t |> equal(tts_pk_frames_key(m), key, "{S.config}: the model put back keys as before")
+}
+
+//! the chunker's decimal rule over the two tokens about a mark: a decimal point inside a number never ends a chunk, a point
+//! followed by a space does
+def private small_decimal_cells(t : T?; m : PocketModel; S : PocketSmall) {
+    var inscope chunks <- pocket_chunks(m, "The ratio reads 3.14 in the book. The ratio reads 3.14 in the book. The ratio reads 3.14 in the book.", 12)
+    var split = 0
+    var whole = 0
+    for (c in chunks) {
+        split += ends_with(c, "3.") ? 1 : 0
+        whole += find(c, "3.14") >= 0 ? 1 : 0
+    }
+    t |> success(length(chunks) >= 3 && split == 0 && whole >= 3, "{S.config}: no chunk ends inside a decimal ({length(chunks)} chunks, {whole} carry 3.14 whole)")
+    var inscope spaced <- pocket_chunks(m, "The ratio reads 3. 14 in the book. The ratio reads 3. 14 in the book. The ratio reads 3. 14 in the book.", 12)
+    var ends = 0
+    for (c in spaced) {
+        ends += ends_with(c, "3.") ? 1 : 0
+    }
+    t |> success(ends >= 1, "{S.config}: a point before a space is a sentence end (the control: {length(spaced)} chunks, {ends} end at 3.)")
+}
+
+def private small_cells(t : T?; S : PocketSmall) {
+    let ref_path = path_join(models_dir(), "{S.ref}.gguf")
+    let odir = path_join(models_dir(), "tts_oracle/pocket_{S.config}")
+    return if (!model_available(t, ref_path))
+    var inscope man <- load_manifest(odir)
+    if (empty(man.cases)) {
+        t |> skip("{S.config}: no oracle dumps under {odir}")
+        return
+    }
+    var inscope fx <- load_tokens_fixture(small_fixture_path())
+    pocket_lane_cell(PocketLane.f32) {
+        set_serving_gpu_tower(false)
+        var inscope m <- load_pocket(ref_path)
+        t |> success(!m.q8, "{S.config}: the reference lane serves f32")
+        small_shape_cells(t, m, S)
+        small_admission_cells(t, m, S)
+        small_decimal_cells(t, m, S)
+        var inscope sc = PocketScratch()
+        small_parity_cells(t, m, S, man, odir, sc)
+    }
+    small_published_cells(t, S, man, odir, fx)
+}
+
+[test]
+def test_pocket_small_models(t : T?) {
+    for (S in SMALL) {
+        small_cells(t, S)
+    }
+}
+
+//! the reward-tuned twins: the same shapes and rules, one sentence each through the facade
+[test]
+def test_pocket_small_refl(t : T?) {
+    with_dasllama_jobque_() {
+        for (stem in REWARD_TUNED_TWINS) {
+            let path = path_join(models_dir(), "{stem}.gguf")
+            continue if (!model_available(t, path))
+            var inscope tm <- load_tts_model(path)
+            t |> success(tm.pocket.language |> ends_with("_refl_2026-10"), "{stem}: a reward-tuned 2026-10 config")
+            t |> equal(tm.pocket.min_frames_before_eos, 6l, "{stem}: the 4.0.1 driver rules")
+            var inscope a <- synthesize(tm, "The quick brown fox jumps over the lazy dog.", "alba")
+            let st = speech_level(a.pcm)
+            t |> success(st.finite && st.rms > 0.01, "{stem}: speaks ({length(a.pcm)} samples, rms {st.rms})")
+        }
+    }
+}
+
 [test]
 def test_pocket_facade(t : T?) {
     facade_smoke(t, gguf_path(), false, 19) $(var m : TtsModel; c : TtsCaps) {
@@ -1304,21 +1648,11 @@ def test_pocket_facade(t : T?) {
         t |> equal(c.langs[0], "en")
         t |> equal(c.voice_langs[0], "en")
         t |> equal(tts_voice_lang(m, "alba"), "en")
+        t |> success(m.pocket.min_frames_before_eos == 0l && m.pocket.fade_in_samples == 0l && !m.pocket.prompt_end_on_pause,
+            "a file minted before the driver keys reads no EOS guard, no fade and no prompt trim - what its oracle ran")
         // the chunker: the reference's own chunk lists over multi-sentence texts
         var inscope fx <- load_tokens_fixture()
-        for (cc in fx.chunks) {
-            var inscope ours <- tts_chunks(m, cc.text)
-            var same = length(ours) == length(cc.chunks)
-            if (same) {
-                for (a, b in ours, cc.chunks) {
-                    same = same && a == b
-                }
-            }
-            if (!same) {
-                to_log(LOG_ERROR, "pocket chunks differ for '{slice(cc.text, 0, 60)}...': ours {ours} reference {cc.chunks}\n")
-            }
-            t |> success(same, "chunks of a {length(cc.chunks)}-chunk text match the reference")
-        }
+        chunk_probes(t, m, fx, "english_2026-04")
         // one sentence spoken
         var inscope a <- synthesize(m, "The quick brown fox jumps over the lazy dog.", "alba")
         let st = speech_level(a.pcm)
@@ -1370,10 +1704,36 @@ def private pocket_refusals(t : T?; var m : TtsModel; clip : array<float>) {
 
 // the file shape a demo ships: one voice stored as its latent frames, the codec encoder left out
 // (`convert_pocket.py --voices stuart_bell --no-cloning --kq`) - it speaks its roster from the
-// stored frames, says it cannot clone, and refuses a clip by name
+// stored frames, says it cannot clone, and refuses a clip by name; the 18m twin speaks the same
+// samples as the full 18m-kq file, whose stuart_bell tensors it carries unchanged
 [test]
 def test_pocket_no_encoder(t : T?) {
-    let path = path_join(models_dir(), "pocket-tts-en-stuart-kq.gguf")
+    for (file in ["pocket-tts-en-stuart-kq.gguf", "pocket-tts-en-18m-stuart-kq.gguf"]) {
+        no_encoder_cells(t, file)
+    }
+    let one_voice = path_join(models_dir(), "pocket-tts-en-18m-stuart-kq.gguf")
+    let full = path_join(models_dir(), "pocket-tts-en-18m-kq.gguf")
+    if (!model_available(t, one_voice) || !model_available(t, full)) { return }
+    with_dasllama_jobque_() {
+        var inscope a <- speak_stuart(one_voice)
+        var inscope b <- speak_stuart(full)
+        t |> equal(length(a), length(b), "the one-voice file speaks as many samples as the full one")
+        var md = 0.0
+        for (x, y in a, b) { md = max(md, nan_wide_diff(x, y)) }
+        t |> equal(md, 0.0, "and the same samples")
+    }
+}
+
+[cold_path]
+def private speak_stuart(path : string) : array<float> {
+    var inscope m <- load_tts_model(path)
+    var inscope a <- synthesize(m, "Whose woods these are I think I know.", "stuart_bell")
+    return <- clone(a.pcm)
+}
+
+[cold_path]
+def private no_encoder_cells(t : T?; file : string) {
+    let path = path_join(models_dir(), file)
     if (!model_available(t, path)) {
         return
     }
@@ -1533,6 +1893,9 @@ def test_pocket_prepared_prompt_transfer(t : T?) {
         t |> success(!receiver.pocket.cloning, "receiving file has no encoder")
         var inscope restored = TtsVoicePrompt()
         t |> success(sscan_json(serialized, restored))
+        restored.latent_space ^= 1ul
+        t |> success(!tts_register_voice_prompt(receiver, "prepared", restored), "another latent space is refused")
+        restored.latent_space ^= 1ul
         t |> success(tts_register_voice_prompt(receiver, "prepared", restored))
         t |> success(!key_exists(receiver.pocket.voice_states, "prepared"), "conditioning is lazy")
         var inscope audio <- synthesize(receiver, "Hello from a prepared voice.", "prepared")
@@ -1540,5 +1903,76 @@ def test_pocket_prepared_prompt_transfer(t : T?) {
         t |> success(stats.finite && stats.rms > .001, "restored voice produces finite audible speech")
         t |> success(length(audio.pcm) >= 2400, "nonempty speech")
         t |> success(key_exists(receiver.pocket.voice_states, "prepared"), "synthesis built conditioning")
+        let small_path = path_join(models_dir(), "pocket-tts-en-18m-q8.gguf")
+        if (!model_available(t, small_path)) { return }
+        var inscope small <- load_tts_model(small_path)
+        t |> success(small.pocket.language != restored.language, "the small model carries another config name")
+        t |> success(tts_register_voice_prompt(small, "prepared", restored), "a 2026-04 prompt conditions a 2026-10 model")
+        var inscope small_audio <- synthesize(small, "Hello from a prepared voice.", "prepared")
+        let small_stats = speech_level(small_audio.pcm)
+        t |> success(small_stats.finite && small_stats.rms > .001, "the small model speaks the transferred voice")
+        var inscope clip2 <- load_audio_mono("{get_das_root()}/modules/dasLLAMA/models/jfk_ask_not.wav", 24000)
+        resize(clip2, 24000)
+        var inscope padded := clip2
+        padded |> resize(36000)   //! the clip then half a second of near-silence: the 4.0.1 trim cuts it back to the last loud frame plus 80 ms
+        for (i in range(24000, 36000)) {
+            padded[i] = 1.0e-4 * sin(float(i) * 0.3)
+        }
+        var inscope p1 <- tts_prepare_voice_prompt(small, clip2, 24000)
+        var inscope p2 <- tts_prepare_voice_prompt(small, padded, 24000)
+        let f1 = long_length(p1.latents) / small.pocket.latent_dim
+        let f2 = long_length(p2.latents) / small.pocket.latent_dim
+        t |> success(f2 <= f1 + 2l, "the small model trims the clip to end on a pause before the encoder: {f2} frames against {f1} for the clip alone (an untrimmed clip adds six)")
     }
+}
+
+//! the EOS rule's guard: a logit over the threshold on a chunk's first `min_frames_before_eos` frames pins nothing
+[test]
+def test_pocket_eos_guard(t : T?) {
+    var inscope m = PocketModel(eos_threshold = -1.0, min_frames_before_eos = 6l)
+    var eos_at = -1l
+    t |> success(!pocket_eos_stops(m, 0.0, 3l, 2, eos_at) && eos_at < 0l, "frame 3 over the threshold is ignored under the guard")
+    t |> success(!pocket_eos_stops(m, 0.0, 6l, 2, eos_at) && eos_at == 6l, "frame 6 pins EOS")
+    t |> success(pocket_eos_stops(m, 0.0, 8l, 2, eos_at), "two frames past it the loop stops")
+    m.min_frames_before_eos = 0l
+    var eos_at0 = -1l
+    t |> success(!pocket_eos_stops(m, 0.0, 3l, 2, eos_at0) && eos_at0 == 3l, "with no guard frame 3 pins EOS (the control)")
+    t |> success(!pocket_eos_stops(m, -2.0, 3l, 2, eos_at) && eos_at == 6l, "a logit under the threshold moves nothing")
+}
+
+def private fingerprint_of(rate : int; ld, fs : int64; mean0, std0 : float) : uint64 {
+    var inscope m = PocketModel(sample_rate = rate, latent_dim = ld, frame_samples = fs)
+    m.emb_mean.a |> push(mean0)
+    m.emb_std.a |> push(std0)
+    return pocket_latent_space_id(m)
+}
+
+//! the latent-space fingerprint reads every one of its inputs: the rate, the latent width, the frame length and both statistics
+[test]
+def test_pocket_latent_space_fingerprint(t : T?) {
+    let id = fingerprint_of(24000, 32l, 1920l, 0.1, 1.5)
+    t |> equal(id, fingerprint_of(24000, 32l, 1920l, 0.1, 1.5), "the same space reads the same id")
+    t |> success(id != fingerprint_of(16000, 32l, 1920l, 0.1, 1.5), "the sample rate moves it")
+    t |> success(id != fingerprint_of(24000, 64l, 1920l, 0.1, 1.5), "the latent width moves it")
+    t |> success(id != fingerprint_of(24000, 32l, 1600l, 0.1, 1.5), "the frame length moves it")
+    t |> success(id != fingerprint_of(24000, 32l, 1920l, 0.2, 1.5), "the latent mean moves it")
+    t |> success(id != fingerprint_of(24000, 32l, 1920l, 0.1, 1.6), "the latent deviation moves it")
+}
+
+def private tf_shell(d, heads, kv, dh, attn, ffn : int64) : PocketTransformer => PocketTransformer(d = d, heads = heads, kv_heads = kv, dh = dh, attn_dim = attn, ffn = ffn)
+
+//! the shared transformer admission's rejections, each clause alone off a shape it admits
+[test]
+def test_pocket_shape_admission(t : T?) {
+    t |> success(tts_pk_tf_ok(tf_shell(64l, 1l, 1l, 64l, 64l, 64l), 64l), "one 64-wide head is admitted at hs 64 with no floor")
+    t |> success(!tts_pk_tf_ok(tf_shell(64l, 2l, 1l, 32l, 64l, 64l), 64l), "a 32-wide head is refused at hs 64 with no floor (the head is the stamp's)")
+    t |> success(tts_pk_tf_ok(tf_shell(64l, 2l, 1l, 32l, 64l, 64l), 64l, 32l), "two 32-wide query heads over one key-value head are admitted at the 32 floor")
+    t |> success(!tts_pk_tf_ok(tf_shell(66l, 2l, 1l, 32l, 64l, 64l), 64l, 32l), "a width off the 4 lattice is refused")
+    t |> success(!tts_pk_tf_ok(tf_shell(64l, 2l, 0l, 32l, 64l, 64l), 64l, 32l), "no key-value head is refused")
+    t |> success(!tts_pk_tf_ok(tf_shell(64l, 3l, 2l, 32l, 96l, 64l), 64l, 32l), "query heads not a multiple of the key-value heads are refused")
+    t |> success(!tts_pk_tf_ok(tf_shell(64l, 2l, 1l, 32l, 96l, 64l), 64l, 32l), "an attention width that is not heads x dh is refused")
+    t |> success(!tts_pk_tf_ok(tf_shell(64l, 2l, 1l, 16l, 32l, 64l), 64l, 32l), "a head under the floor is refused")
+    t |> success(!tts_pk_tf_ok(tf_shell(96l, 2l, 1l, 48l, 96l, 64l), 64l, 32l), "a head that does not divide hs is refused")
+    t |> success(!tts_pk_tf_ok(tf_shell(256l, 2l, 1l, 128l, 256l, 64l), 64l, 32l), "a head past hs is refused")
+    t |> success(!tts_pk_tf_ok(tf_shell(64l, 2l, 1l, 32l, 64l, 66l), 64l, 32l), "an ffn width off the 4 lattice is refused")
 }

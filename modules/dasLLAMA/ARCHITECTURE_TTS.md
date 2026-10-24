@@ -74,8 +74,8 @@ buffers, the chunk cap and the idle release, the streamed source - is `ARCHITECT
   (`ARCHITECTURE_POCKET.md`) the causal cached attention over a per-layer `TtsKvCache` (keys
   transposed per head, values per head, a key window; the queries go in blocks, each scored over
   the keys its rows can see, so the scratch is a block by its window and never the cache
-  squared; a cache grows with its fill kept), rope over rows, per-channel layer scale and the
-  replicate left pad. A weight is an ONNX-layout array plus the served layout
+  squared; a cache grows with its fill kept), rope over rows, per-channel layer scale, the replicate left pad, the conv rows' pad-column
+  compaction (`compact_rows`), the onset fade (`fade_in`) and the trailing-pause trim (`end_on_pause`). A weight is an ONNX-layout array plus the served layout
   `conv1d_prepare` / `linear_prepare` mint for the consumer the reader names (`served_rows`,
   `rows_only`, `vec_only`), the unread one dropped - or the file's own K-quant planes
   (`linear_take_kq`), the kq lane beside f32 and q8; beside every weight array sits its `TtsSpan` into the

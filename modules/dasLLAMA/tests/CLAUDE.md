@@ -886,6 +886,10 @@ own layouts with three poisoned rows past the appended 45 - a 45-query prompt ov
 decode step at position 44 over an 8-key window (the query its own one-row plane) and the
 prompt over a 16-key window - at the approx bar (controls: a poisoned key just before the decode
 step's window leaves its output bit for bit, the 16-key window moves the prompt's rows);
+`test_vkt_pk_attn_grouped` the same row over grouped keys - a 21-query prompt of four 32-wide query
+heads over two key-value heads, the caches' rows at the key-value width (`kvs`), every key and an
+8-key window, against `attention_causal_rows` (control: the window moves the late rows off the
+every-key rows, through `check_exceeds`);
 `test_vkt_pk_gemv` the row GEMV's five stamps (`TtsPkGemvDot`, `TtsPkGemvLnSilu`, `TtsPkGemvGate`,
 `TtsPkGemvAddSilu`, `TtsPkGemvTail`) at nin 200 (off the lane multiple) and nout 45 (off the
 four-row multiple) against `linear_vec` under the CPU chain's norm, modulation, SiLU, gated
@@ -899,7 +903,10 @@ heads against the CPU chains - the normed qkv row's q span roped into y and its 
 copied into the caches' row at the position (`rope_rows` on `linear_vec` over `layernorm_rows`),
 the residual joins with and without the layer scale over a residual row, the normed GELU (controls: the
 k and v spans and the caches' other rows keep their sentinel and poison, the residual row moves off its
-input); `test_vkt_pk_rope` the rows rope (`TtsPkRope`) on the
+input), then the qkv stamp's grouped form over the same weight rows - one 32-wide key-value head under the
+two query heads, nout = d + 2 dh, the k and v spans at the key-value width into caches of that width
+(control: the v row is the narrow span's, outside the bar of the wide form's v span through
+`check_exceeds`); `test_vkt_pk_rope` the rows rope (`TtsPkRope`) on the
 k span of 23 rows x 384 at column 128, two 64-wide heads at position 37, the tables from
 `build_rope_tabs`, against `rope_rows` at the approx bar (the q and v spans bit for bit untouched);
 every written-only output under a NaN fill, every compare with its poisoned element.
@@ -3514,7 +3521,10 @@ skip included; and, model-free, the seat-name refusal of `styletts2_gpu_stats`.
 `test_tts_pocket.das` - stocked suite (`pocket-tts-en.gguf` + `tts_oracle/pocket_english_2026-04/`
 under the models dir, minted by `../harness/convert_pocket.py` and `../harness/pocket_oracle.py`): the
 unigram tokenizer id for id against the package on the 200-sentence corpus and the byte-fallback
-probes (`_tts_fixtures/pocket_tokens.json`, the oracle script's `--tokens-fixture`), the decode
+probes (`_tts_fixtures/pocket_tokens.json`, the oracle script's `--tokens-fixture --no-replace` -
+the file predates the replacement keys, so its fixture carries the package's rules with the table
+off), the preparation rules on the fixture's short texts (the terminal mark after a closer, a
+trailing dash, a sentence end before a comma), the decode
 round trip; the parity rail - the codec decoder over the oracle's latents (one shot), the codec
 encoder and the voice prompt's key-value rows per layer, then teacher-forced frames (the oracle's
 noise and its own frames fed back): the head alone on the oracle's conditioning, the backbone
@@ -3576,12 +3586,42 @@ facade. Two more carriers gate their own cells: the small form `pocket-tts-en-kq
 K-quant file: its Q4_K tensors arrive as kq planes on the unpinned lane, the head as Q8_0; the
 teacher-forced latents of the kq lane held to the q8 lane of the same file at the q8 bar with a
 poisoned-expectation control, the f16 twin's distance logged, the exact lane speaking) and the
-one-voice `pocket-tts-en-stuart-kq.gguf` (no codec encoder: `caps()` reports one voice and
-`cloning = false`, the stored voice speaks from its latent frames, `tts_register_voice` refuses
-by name). The prepared-prompt transfer cell uses both KQ files and the checked-in
+one-voice `pocket-tts-en-stuart-kq.gguf` and its 18m twin `pocket-tts-en-18m-stuart-kq.gguf`
+(no codec encoder: `caps()` reports one voice and `cloning = false`, the stored voice speaks
+from its latent frames, `tts_register_voice` refuses by name; the 18m twin speaks the same
+samples as `pocket-tts-en-18m-kq.gguf` on `stuart_bell`, whose tensors it carries unchanged). The prepared-prompt transfer cell uses both KQ files and the checked-in
 `modules/dasLLAMA/models/jfk_ask_not.wav`: encode a one-second reference, serialize it,
-destroy the source model, register in the encoder-free model, and assert finite audible
-speech plus lazy conditioning-state creation. It skips if either KQ model is absent.
+destroy the source model, register in the encoder-free model (the record with its `latent_space`
+moved is refused first), and assert finite audible speech plus lazy conditioning-state creation;
+its last leg registers the same 2026-04 prompt in `pocket-tts-en-18m-q8.gguf`, a 2026-10 file of
+the same codec under another config name, and hears it speak. It skips if either KQ model is
+absent, the last leg without the 18m file. The 2026-10
+small English models (`test_pocket_small_models`: the f32 references `pocket-tts-en-18m.gguf`,
+`pocket-tts-en-7m.gguf`, `pocket-tts-en-2m-f32.gguf`, the oracle dirs
+`tts_oracle/pocket_english_{18m,7m,2m}_2026-10/`, the fixture
+`_tts_fixtures/pocket_tokens_english_2026-10.json`; each model skips where its reference or
+oracle is absent): the shape the file declares (key-value heads, the queries' width, 64-wide
+heads, the head's sampling rule with no timestep constant, the 64-wide `z_proj` bottleneck the
+head and the EOS logit read, the text table multiplied out, the 128-wide decoder behind the
+100M encoder) and the 4.0.1 driver rules (the EOS threshold, six guarded frames, the 5 ms
+fade-in, the prompt trim, four replacements); the parity rail on the f32 lane - the prompt
+trim against the oracle's trimmed clip within `TRIM_BAR`, the encoder and the voice state's
+rows, the codec over the oracle's latents against its one-shot decode, the teacher-forced
+frames (the head alone, the conditioning, the EOS logits, the latents) and the faded waveform
+against the oracle's, every one within the 100M rail's own bars (reads float noise: codec
+decode 2e-6 to 4e-6 of the peak, latents 5e-5 on the M5 Max); the published file
+(`pocket-tts-en-{18m-q8,7m-q8,2m}.gguf`) - its backbone GEMMs' format, the tokenizer and the
+preparation probes on the fixture, the teacher-forced latents at the q8 bar, the chunk lists
+through the facade, and one sentence spoken with the GPU seats armed - each seat the file's row
+of `SMALL` says admits it served once - every seat on every file: the 2m's 112-wide residual rides the
+prompt seat through rows expanded to the GEMM's padded input and its 12-channel codec stages through
+the im2col route - none declining by shape; on the references the frames and
+prompt seats run teacher-forced against the CPU chain through `frames_seat_leg` and
+`prompt_seat_leg` (within `GPU_FRAME_BAR` and `GPU_PROMPT_BAR`; read 2.3e-6 and 1.1e-6 on the M5
+Max - grouped keys, the bottleneck row, the time-free tail) and the codec seat over the oracle's
+latents within `GPU_CODEC_BAR` through `codec_served_leg` (reads 1.3e-6 on the M5 Max), the
+32-wide heads on the attention row; and the reward-tuned twins (`test_pocket_small_refl`:
+`pocket-tts-en-{18m-refl-q8,7m-refl-q8,2m-refl}.gguf`, one sentence each through the facade).
 `test_tts_facade.das` - stocked suite; model-free cells: the sentence chunker (the reference
 driver's boundary rule, the cap counted in codepoints, the hard split of a whitespace-free run,
 the appended comma as Kitten's driver rule and the bare text Kokoro's sends), the normalizer the
@@ -3625,7 +3665,15 @@ sites the cap never touches - each axis carrying a witness arm that its narrow l
 rows GEMM to fewer lanes than its wide one) and the must-panic cells for the rows conv's shape
 refusals; then the continuous-audio family's kernels - the causal cached attention (`TtsKvCache`,
 `attention_causal_rows`) against its double-precision reference at a prompt, a decode step, a
-key window and a one-key window, bit-equal on both split axes, the cache's overflow panic -
+key window and a one-key window, bit-equal on both split axes, the cache's overflow panic; the
+grouped-query form (two and four query heads a cache head) bit-equal to the plain form over the
+cache with every key-value head repeated, within the attention bar of the double reference, and
+the three refusals (a width off the head lattice, fewer query heads than cache heads, a count
+the cache's heads do not divide); `compact_rows` (every kept value at its channel-count slot, a
+wider target refused), `fade_in` (the ramp's values, the clamp past the wave's end, the no-op at
+one or zero samples) and `end_on_pause` against its double form (the cut at the last loud frame,
+the fade to zero, the pause of zeros; a clip loud to its end keeps every frame, one under a frame
+comes back as it is) -
 `elu_rows`, `layer_scale_rows` and `pad_edge_left_rows` against their scalar forms; and the
 harmonic source's window forms: each resampler's window form (output columns from the source
 columns its taps read, both at strides off the whole row, on both arithmetics and at the source's
