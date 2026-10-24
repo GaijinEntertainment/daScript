@@ -222,11 +222,13 @@ def tts_register_voice(var m : TtsModel; name : string; pcm : array<float>; samp
 }
 
 struct TtsVoicePrompt {
-    //! Portable Pocket codec latents. Prepare with an encoder-bearing model; register with
-    //! a compatible model, including a compact file without the encoder. Serialization is caller-owned.
-    version : int = 1                         //! Serialized prompt format version.
+    //! Portable Pocket codec latents. Prepare with an encoder-bearing model; register with any
+    //! model of the same latent space (`latent_space`), whichever config name or size it carries and
+    //! whether or not it ships the encoder. Serialization is caller-owned.
+    version : int = 2                         //! Serialized prompt format version.
     family : string = "pocket"                //! Model family tag.
-    language : string                        //! Language expected by the receiving model.
+    latent_space : uint64                    //! Fingerprint of the latent space the frames were encoded in.
+    language : string                        //! Language of the preparing model, informational.
     sample_rate : int                        //! Reference audio sample rate in hertz.
     latent_dim : int64                       //! Number of codec latent values per frame.
     frame_samples : int64                    //! Number of PCM samples represented by each frame.
@@ -234,8 +236,8 @@ struct TtsVoicePrompt {
 }
 
 def tts_voice_prompt_valid(m : TtsModel; prompt : TtsVoicePrompt) : bool {
-    //! Validate bounded finite latent frames and the model's language/codec geometry before registration.
-    if (m.kind != TtsKind.pocket || prompt.version != 1 || prompt.family != "pocket" || prompt.language != m.pocket.language || prompt.sample_rate != m.pocket.sample_rate || prompt.sample_rate <= 0 || prompt.latent_dim != m.pocket.latent_dim || prompt.latent_dim <= 0l || prompt.frame_samples != m.pocket.frame_samples || prompt.frame_samples <= 0l || empty(prompt.latents)) {
+    //! Validate bounded finite latent frames and the model's latent space and codec geometry before registration.
+    if (m.kind != TtsKind.pocket || prompt.version != 2 || prompt.family != "pocket" || prompt.latent_space != m.pocket.latent_space_id || prompt.sample_rate != m.pocket.sample_rate || prompt.sample_rate <= 0 || prompt.latent_dim != m.pocket.latent_dim || prompt.latent_dim <= 0l || prompt.frame_samples != m.pocket.frame_samples || prompt.frame_samples <= 0l || empty(prompt.latents)) {
         return false
     }
     let frames = long_length(prompt.latents) / prompt.latent_dim
@@ -249,13 +251,15 @@ def tts_voice_prompt_valid(m : TtsModel; prompt : TtsVoicePrompt) : bool {
 }
 
 def tts_prepare_voice_prompt(var m : TtsModel; pcm : array<float>; sample_rate : int) : TtsVoicePrompt {
-    //! Encode a reference once for shipping as a voice prompt. The original model revision's
-    //! language/codec must match the receiving model; incompatible data is rejected on registration.
+    //! Encode a reference once for shipping as a voice prompt. The receiving model must read the
+    //! same latent space (`latent_space`); incompatible data is rejected on registration.
     if (m.kind != TtsKind.pocket || sample_rate != m.pocket.sample_rate || empty(pcm) || long_length(pcm) > POCKET_MAX_VOICE_SECONDS * int64(sample_rate)) {
         panic("dasLLAMA tts: a voice prompt requires a compatible encoder and a nonempty reference of at most 60 seconds")
     }
-    var prompt = TtsVoicePrompt(language = m.pocket.language, sample_rate = sample_rate, latent_dim = m.pocket.latent_dim, frame_samples = m.pocket.frame_samples)
-    pocket_encode_latents(m.pocket, pcm, m.pocket_scratch, prompt.latents)
+    var prompt = TtsVoicePrompt(latent_space = m.pocket.latent_space_id, language = m.pocket.language, sample_rate = sample_rate, latent_dim = m.pocket.latent_dim, frame_samples = m.pocket.frame_samples)
+    var inscope clip : array<float>
+    pocket_prompt_pcm(m.pocket, pcm, clip)
+    pocket_encode_latents(m.pocket, clip, m.pocket_scratch, prompt.latents)
     return <- prompt
 }
 

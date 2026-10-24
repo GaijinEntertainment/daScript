@@ -692,7 +692,7 @@ class template GkWgReduce {
     }
 }
 
-let GK_PK_ATTN_HS = 64u            //! the head size the attention row is stamped for, the body's literal: another head size declines at the driver
+let GK_PK_ATTN_HS = 64u            //! the widest head the attention row stages (`qh`'s literal); a head of `hs` <= this, dividing it and on the 4 lattice, rides `pa.hs`
 let GK_PK_ATTN_MAX_KEYS = 2048u    //! the scores a row stages, the body's literal: a longer key range declines at the driver
 
 struct GkPkAttnArgs {
@@ -702,11 +702,13 @@ struct GkPkAttnArgs {
     d : uint      //! the heads' width, the cache rows' and o's row stride
     pos0 : uint   //! the first query's position
     ctx : uint    //! the keys a query sees at most, 0 = every key up to itself
+    hs : uint     //! the head size: 64 (the 100M models) or 32 (the 2026-10 small decoders); 256 / hs parts share a column's value sum
+    kvs : uint    //! the cache rows' stride (the key-value heads side by side); 0 reads as d; d / kvs query heads share a key-value head
 }
 
 //! the causal cached attention of one query row over the caches' rows (the CPU `attention_causal_rows`): query i at position
 //! pos0 + i sees the keys up to itself, the last `ctx` of them when ctx is nonzero; the scaled query staged, the scores staged
-//! and softmaxed in two passes, the value sum in four parts of 64 columns; a workgroup of 256 a (head, row), reductions as statement methods
+//! and softmaxed in two passes, the value sum in 256 / hs parts of hs columns; a workgroup of 256 a (head, row), reductions as statement methods
 [ |> template_struct_instance]
 class template GkPkAttn : GkWgReduce {
     @ssbo @binding = 0 @role = "read" q : array<float>
@@ -714,36 +716,36 @@ class template GkPkAttn : GkWgReduce {
     @ssbo @binding = 2 @role = "read" v : array<float>
     @ssbo @binding = 3 @role = "write" o : array<float>
     @kargs pa : GkPkAttnArgs
-    @workgroup qh : float[64]
+    @workgroup qh : float[64]     //! == GK_PK_ATTN_HS, the array's literal
     @workgroup sc : float[2048]   //! == GK_PK_ATTN_MAX_KEYS, the array's literal
     @workgroup po : float[256]
-    //! a column's quarter of the value sum: the keys `quarter`, `quarter` + 4, ... in order, eight a step with their loads
-    //! in flight together, the column at `vb` in the first key's row
-    def value_sum_into(vb, quarter, nk : uint; var acc : float&) {
+    //! a column's part `pt` of the value sum over `parts`: the keys `pt`, `pt` + parts, ... in order, eight a step with their
+    //! loads in flight together, the column at `vb` in the first key's row
+    def value_sum_into(vb, kvs, pt, parts, nk : uint; var acc : float&) {
         acc = 0.0
-        var jj = quarter
-        while (jj + 28u < nk) {
-            let v0 = v[vb + jj * pa.d]
-            let v1 = v[vb + (jj + 4u) * pa.d]
-            let v2 = v[vb + (jj + 8u) * pa.d]
-            let v3 = v[vb + (jj + 12u) * pa.d]
-            let v4 = v[vb + (jj + 16u) * pa.d]
-            let v5 = v[vb + (jj + 20u) * pa.d]
-            let v6 = v[vb + (jj + 24u) * pa.d]
-            let v7 = v[vb + (jj + 28u) * pa.d]
+        var jj = pt
+        while (jj + 7u * parts < nk) {
+            let v0 = v[vb + jj * kvs]
+            let v1 = v[vb + (jj + parts) * kvs]
+            let v2 = v[vb + (jj + 2u * parts) * kvs]
+            let v3 = v[vb + (jj + 3u * parts) * kvs]
+            let v4 = v[vb + (jj + 4u * parts) * kvs]
+            let v5 = v[vb + (jj + 5u * parts) * kvs]
+            let v6 = v[vb + (jj + 6u * parts) * kvs]
+            let v7 = v[vb + (jj + 7u * parts) * kvs]
             acc += sc[jj] * v0
-            acc += sc[jj + 4u] * v1
-            acc += sc[jj + 8u] * v2
-            acc += sc[jj + 12u] * v3
-            acc += sc[jj + 16u] * v4
-            acc += sc[jj + 20u] * v5
-            acc += sc[jj + 24u] * v6
-            acc += sc[jj + 28u] * v7
-            jj += 32u
+            acc += sc[jj + parts] * v1
+            acc += sc[jj + 2u * parts] * v2
+            acc += sc[jj + 3u * parts] * v3
+            acc += sc[jj + 4u * parts] * v4
+            acc += sc[jj + 5u * parts] * v5
+            acc += sc[jj + 6u * parts] * v6
+            acc += sc[jj + 7u * parts] * v7
+            jj += 8u * parts
         }
         while (jj < nk) {
-            acc += sc[jj] * v[vb + jj * pa.d]
-            jj += 4u
+            acc += sc[jj] * v[vb + jj * kvs]
+            jj += parts
         }
     }
 
@@ -756,17 +758,20 @@ class template GkPkAttn : GkWgReduce {
         let p = pa.pos0 + i
         let j0 = tts_window_start(p, pa.ctx)
         let nk = p + 1u - j0
-        if (lid < 64u) {
-            qh[lid] = q[i * pa.qs + pa.qcol + h * 64u + lid] / sqrt(float(64u))
+        let hs = max(pa.hs, 1u)
+        let kvs = pa.kvs == 0u ? pa.d : pa.kvs
+        let kh = h / max(pa.d / kvs, 1u)
+        if (lid < hs) {
+            qh[lid] = q[i * pa.qs + pa.qcol + h * hs + lid] / sqrt(float(hs))
         }
         barrier()
         var m = -1.0e30
         var j = lid
         while (j < nk) {
-            let krow = (j0 + j) * pa.d + h * 64u
+            let krow = (j0 + j) * kvs + kh * hs
             var sdot = 0.0
             var e = 0u
-            while (e < 64u) {
+            while (e < hs) {
                 let k0 = k[krow + e]
                 let k1 = k[krow + e + 1u]
                 let k2 = k[krow + e + 2u]
@@ -800,20 +805,21 @@ class template GkPkAttn : GkWgReduce {
             j += 256u
         }
         barrier()
-        let col = lid % 64u
-        let quarter = lid / 64u
+        let col = lid % hs
+        let vpart = lid / hs
+        let parts = 256u / hs
         var vs = 0.0
-        value_sum_into(j0 * pa.d + h * 64u + col, quarter, nk, vs)
-        po[quarter * 64u + col] = vs
+        value_sum_into(j0 * kvs + kh * hs + col, kvs, vpart, parts, nk, vs)
+        po[vpart * hs + col] = vs
         barrier()
-        if (lid < 64u) {
+        if (lid < hs) {
             var tot = 0.0
             var pp = 0u
-            while (pp < 4u) {
-                tot += po[pp * 64u + lid]
+            while (pp < parts) {
+                tot += po[pp * hs + lid]
                 pp++
             }
-            o[i * pa.d + h * 64u + lid] = tot
+            o[i * pa.d + h * hs + lid] = tot
         }
     }
 }
@@ -835,11 +841,12 @@ struct GkPkGemvArgs {
     aoff : uint     //! the slab vector in wn: the add-SiLU's [nout], the tail's scale [nout] then shift [nout], the residual's scale [nout]
     x0off : uint    //! the tail's noise row in x0
     loff : uint     //! the tail's latent row in lat
-    span : uint     //! the rope-store epilogue: the q, k and v spans' width (the backbone's d), the caches' row stride
+    span : uint     //! the rope-store epilogue: the q span's width (the queries', `attn_dim`); the k and v spans share the rest of nout, (nout - span) / 2 each - the caches' row stride
     dh : uint       //! ... the head size
     p : uint        //! ... the position: the tables' row and the caches' row
     coff : uint     //! ... the cos table [pos][dh / 2] in tabs
     soff : uint     //! ... the sin table, the same layout
+    x0mul : float   //! the tail: the noise row's weight in the frame - 1 where the flow steps from the noise (lsd, pointwise), 0 where the output is the frame itself (drifting)
 }
 
 //! The Pocket frame's row GEMV: y [nout] = W . x [nin] + b at one row, x staged in the workgroup - as it is, under NORM_IN through a
@@ -1012,7 +1019,7 @@ class template GkPkGemv : GkWgReduce {
                 y[pa.yoff + row] = silu_f32(d + aux_at(row))
             }
             static_if (EPI == 4) {
-                let tv = d + x0[pa.x0off + row]
+                let tv = d + pa.x0mul * x0[pa.x0off + row]
                 y[pa.yoff + row] = tv
                 lat[pa.loff + row] = tv * aux_at(row) + aux_at(pa.nout + row)
             }
@@ -1043,9 +1050,10 @@ class template GkPkGemv : GkWgReduce {
     def rope_store(row : uint; r0, r1 : float) {
         static_if (ROPE_STORE) {
             let span = max(pa.span, 1u)
+            let kvspan = max((pa.nout - span) / 2u, 1u)
             let dh = max(pa.dh, 2u)
-            let sp = row / span
-            let c = row % span
+            let sp = row < span ? 0u : (row < span + kvspan ? 1u : 2u)
+            let c = sp == 0u ? row : (row - span) % kvspan
             if (sp < 2u) {
                 let hh = dh / 2u
                 let tb = pa.p * hh + (c % dh) / 2u
@@ -1057,12 +1065,12 @@ class template GkPkGemv : GkWgReduce {
                     y[pa.yoff + c] = o0
                     y[pa.yoff + c + 1u] = o1
                 } else {
-                    kc[pa.p * pa.span + c] = o0
-                    kc[pa.p * pa.span + c + 1u] = o1
+                    kc[pa.p * kvspan + c] = o0
+                    kc[pa.p * kvspan + c + 1u] = o1
                 }
             } else {
-                vc[pa.p * pa.span + c] = r0
-                vc[pa.p * pa.span + c + 1u] = r1
+                vc[pa.p * kvspan + c] = r0
+                vc[pa.p * kvspan + c + 1u] = r1
             }
         }
     }

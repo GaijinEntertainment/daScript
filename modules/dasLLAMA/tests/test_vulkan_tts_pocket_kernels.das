@@ -218,7 +218,7 @@ def private pk_attn_device(kc : TtsKvCache; qfull : array<float>) : PkAttnOut {
             var s_b = cp |> cls_set(fixed_array(qdp, kp, vp, ob), @@set_tts_pk_attn_cls)
             var s_x = cp |> cls_set(fixed_array(qdp, kxp, vxp, ox), @@set_tts_pk_attn_cls)
             var s_c = cp |> cls_set(fixed_array(qp, kp, vp, oc), @@set_tts_pk_attn_cls)
-            var pa = GkPkAttnArgs(t = uint(PA_T), qs = uint(PA_QS), qcol = uint(PA_QCOL), d = uint(d), pos0 = 0u, ctx = 0u)
+            var pa = GkPkAttnArgs(t = uint(PA_T), qs = uint(PA_QS), qcol = uint(PA_QCOL), d = uint(d), pos0 = 0u, ctx = 0u, hs = uint(PA_DH))
             var pb = pa
             pb.t = 1u
             pb.pos0 = uint(PA_DEC_POS)
@@ -268,6 +268,81 @@ def test_vkt_pk_attn(t0 : T?) {
             }
             t |> success(moved > 0, "tts_pk_attn control: the 16-key window moves the prompt's late rows off the every-key rows ({moved} apart)")
             t |> success(outside_run(got.a_whole, 0, PA_T * d, NAN_SENTINEL), "tts_pk_attn: the elements past the rows keep their sentinel")
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
+//! the grouped-query form of the row: four query heads of 32 over two key-value heads (a small backbone's grouping in small), the
+//! queries' span among other columns, the caches' rows the key-value width; the CPU `attention_causal_rows` reads a query head's keys
+//! at its key-value head the same way
+let private PGQ_HEADS = 4
+let private PGQ_KV_HEADS = 2
+let private PGQ_DH = 32
+let private PGQ_D = 128        //! the queries' width, PGQ_HEADS x PGQ_DH
+let private PGQ_KVD = 64       //! the caches' row width, PGQ_KV_HEADS x PGQ_DH
+let private PGQ_T = 21
+let private PGQ_CAP = 40
+let private PGQ_QS = 200
+let private PGQ_QCOL = 24
+
+[test]
+def test_vkt_pk_attn_grouped(t0 : T?) {
+    t0 |> run("the attention row over grouped keys == the CPU attention_causal_rows: four query heads a pair of key-value heads, every key, then an 8-key window") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!vk_moe_init() || !ensure_tts_pk_attn_cls()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            let d = PGQ_D
+            let kvd = PGQ_KVD
+            let qfull <- row_fill(PGQ_T * PGQ_QS, 43, 5, 0.02, 0.93)
+            let q <- [for (e in range(PGQ_T * d)); qfull[(e / d) * PGQ_QS + PGQ_QCOL + e % d]]
+            let kr <- row_fill(PGQ_T * kvd, 19, 7, 0.02, 0.91)
+            let vr <- row_fill(PGQ_T * kvd, 59, 13, 0.04, 1.7)
+            var inscope kc : TtsKvCache
+            var inscope want_a, want_w : array<float>
+            with_dasllama_jobque_() {
+                kv_cache_init(kc, int64(PGQ_KV_HEADS), int64(PGQ_DH), int64(PGQ_CAP))
+                kv_cache_append(kc, kr, vr, int64(PGQ_T), int64(kvd))
+                attention_causal_rows(q, int64(PGQ_T), int64(d), 0l, kc, want_a)
+                attention_causal_rows(q, int64(PGQ_T), int64(d), 8l, kc, want_w)
+            }
+            // the caches' rows as the device holds them: [pos][kv_heads dh], the rows past the appended ones poisoned
+            var inscope krows <- poison_plane(PGQ_CAP * kvd)
+            var inscope vrows <- poison_plane(PGQ_CAP * kvd)
+            for (p in range(PGQ_T)) {
+                for (h in range(PGQ_KV_HEADS)) {
+                    for (j in range(PGQ_DH)) {
+                        krows[p * kvd + h * PGQ_DH + j] = kc.k[int64(h * PGQ_DH + j) * int64(PGQ_CAP) + int64(p)]
+                        vrows[p * kvd + h * PGQ_DH + j] = kc.v[(int64(h * PGQ_CAP) + int64(p)) * int64(PGQ_DH) + int64(j)]
+                    }
+                }
+            }
+            var inscope got : PkAttnOut   // a: every key, c: the 8-key window
+            with_cell_planes() $(var cp : CellPlanes) {
+                let qp = cp |> in_(qfull, 0, SLACK)
+                let kp = cp |> in_(krows, 0, SLACK)
+                let vp = cp |> in_(vrows, 0, SLACK)
+                let oa = cp |> out_(PGQ_T * d)
+                let ow = cp |> out_(PGQ_T * d)
+                var s_a = cp |> cls_set(fixed_array(qp, kp, vp, oa), @@set_tts_pk_attn_cls)
+                var s_w = cp |> cls_set(fixed_array(qp, kp, vp, ow), @@set_tts_pk_attn_cls)
+                var pa = GkPkAttnArgs(t = uint(PGQ_T), qs = uint(PGQ_QS), qcol = uint(PGQ_QCOL), d = uint(d), pos0 = 0u, ctx = 0u, hs = uint(PGQ_DH),
+                    kvs = uint(kvd))
+                var pw = pa
+                pw.ctx = 8u
+                cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                    enc_tts_pk_attn_cls(raw, h, s_a, pa, tts_attn_wgs(int64(PGQ_T), int64(PGQ_HEADS)))
+                    enc_tts_pk_attn_cls(raw, h, s_w, pw, tts_attn_wgs(int64(PGQ_T), int64(PGQ_HEADS)))
+                }
+                got.a <- cp |> plane_run(oa)
+                got.c <- cp |> plane_run(ow)
+            }
+            check_rows(t, "tts_pk_attn grouped t{PGQ_T} every key vs the CPU attention_causal_rows", got.a, want_a, BAR_APPROX, d, PGQ_DH)
+            check_rows(t, "tts_pk_attn grouped t{PGQ_T} ctx 8 vs the CPU attention_causal_rows", got.c, want_w, BAR_APPROX, d, PGQ_DH)
+            check_exceeds(t, "tts_pk_attn grouped control: the 8-key window moves the late rows off the every-key rows", got.c, got.a, BAR_APPROX)
         } else {
             t |> skip("dasVulkan not present")
         }
@@ -382,7 +457,7 @@ def private pk_gemv_device(f : PkGemvFix) : PkGemvRows {
             var s_tail = cp |> cls_set(fixed_array(wp, xp, tailp, mp, x0p, latp), @@set_tts_pk_gemv_tail_cls)
             var pa = GkPkGemvArgs(nin = uint(PG_NIN), nout = uint(nout), stride = uint(PG_STRIDE), eps = PG_EPS, woff = uint(f.woff),
                 boff = uint(f.boff), xoff = uint(PG_XOFF), yoff = uint(PG_YOFF), moff = uint(PG_MOFF), lwoff = uint(f.lwoff),
-                lboff = uint(f.lboff), aoff = uint(f.aoff), x0off = uint(PG_X0OFF), loff = uint(PG_LOFF))
+                lboff = uint(f.lboff), aoff = uint(f.aoff), x0off = uint(PG_X0OFF), loff = uint(PG_LOFF), x0mul = 1.0)
             let rows = int64(nout)
             cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
                 enc_tts_pk_gemv_dot_cls(raw, h, s_dot, pa, rows)
@@ -558,7 +633,7 @@ def private pk_fused_fixture() : PkFusedFix {
 }
 
 [test]
-def test_vkt_pk_gemv_fused(t0 : T?) {
+def test_vkt_pk_gemv_fused(t0 : T?) {   // nolint:STYLE038 one fixture and one command buffer carry the wide and the grouped qkv forms together
     t0 |> run("the frame loop's fused stamps == the CPU chains: the normed qkv row roped into y and the caches, the residual adds, the normed GELU") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!vk_moe_init() || !ensure_tts_pk_gemv_ln_qkv_cls() || !ensure_tts_pk_gemv_add_scale_cls() || !ensure_tts_pk_gemv_add_cls()
@@ -600,6 +675,13 @@ def test_vkt_pk_gemv_fused(t0 : T?) {
                 var s_as = cp |> cls_set(fixed_array(wp, xp, yasp), @@set_tts_pk_gemv_add_scale_cls)
                 var s_a = cp |> cls_set(fixed_array(wp, xp, yap), @@set_tts_pk_gemv_add_cls)
                 var s_g = cp |> cls_set(fixed_array(wp, xp, ygp), @@set_tts_pk_gemv_ln_gelu_cls)
+                let kvd = PF_DH   //! the grouped-query form: one key-value head of PF_DH under the two query heads, nout = d + 2 kvd, the k and v spans read off the same weight rows
+                let nout2 = d + 2 * kvd
+                let nc2 = PF_CAP * kvd
+                let kc2p = cp |> io_(poison_plane(nc2))
+                let vc2p = cp |> io_(poison_plane(nc2))
+                let y2p = cp |> out_(nout2, PF_YOFF, SLACK)
+                var s_g2 = cp |> cls_set(fixed_array(wp, xp, y2p, tp, kc2p, vc2p), @@set_tts_pk_gemv_ln_qkv_cls)
                 var pq = GkPkGemvArgs(nin = uint(d), nout = uint(3 * d), stride = uint(PF_STRIDE), eps = PG_EPS, woff = uint(f.woff_q), boff = uint(f.boff_q),
                     xoff = uint(PF_XOFF), yoff = uint(PF_YOFF), moff = 0u, lwoff = uint(f.lwoff), lboff = uint(f.lboff), aoff = uint(f.aoff), x0off = 0u, loff = 0u,
                     span = uint(d), dh = uint(PF_DH), p = uint(PF_P), coff = uint(f.coff), soff = uint(f.soff))
@@ -607,11 +689,14 @@ def test_vkt_pk_gemv_fused(t0 : T?) {
                 ps.nout = uint(d)
                 ps.woff = uint(f.woff_s)
                 ps.boff = uint(f.boff_s)
+                var pg = pq
+                pg.nout = uint(nout2)
                 cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
                     enc_tts_pk_gemv_ln_qkv_cls(raw, h, s_qkv, pq, int64(3 * d))
                     enc_tts_pk_gemv_add_scale_cls(raw, h, s_as, ps, int64(d))
                     enc_tts_pk_gemv_add_cls(raw, h, s_a, ps, int64(d))
                     enc_tts_pk_gemv_ln_gelu_cls(raw, h, s_g, ps, int64(d))
+                    enc_tts_pk_gemv_ln_qkv_cls(raw, h, s_g2, pg, int64(nout2))
                 }
                 let y_run <- cp |> plane_run(yp)
                 let kc <- cp |> plane_run(kcp)
@@ -629,6 +714,18 @@ def test_vkt_pk_gemv_fused(t0 : T?) {
                 t |> success(elem_all(other_rows, 2.0 * POISON), "tts_pk_gemv_ln_qkv: the caches' other rows are untouched")
                 t |> success(outside_run(cp |> plane_whole(ygp), PF_YOFF, d, NAN_SENTINEL), "tts_pk_gemv_ln_gelu: the slots outside the row keep their sentinel")
                 t |> success(yas[0] != f.y0[0] && ya[0] != f.y0[0], "the adds' in place control: the residual row is moved off its input")
+                var want_k2 <- copy_span(qkv_row, d, kvd)
+                rope_rows(want_k2, 1l, int64(kvd), int64(PF_DH), int64(PF_P), PO_THETA)
+                let want_v2 <- copy_span(qkv_row, d + kvd, kvd)
+                let kc2 <- cp |> plane_run(kc2p)
+                let vc2 <- cp |> plane_run(vc2p)
+                check_rows(t, "tts_pk_gemv_ln_qkv grouped q vs the CPU chain", copy_span(cp |> plane_run(y2p), 0, d), want_q, BAR_APPROX, FLAT_ROWS)
+                check_rows(t, "tts_pk_gemv_ln_qkv grouped k cache (one key-value head under two query heads) vs the CPU chain", copy_span(kc2, PF_P * kvd, kvd), want_k2, BAR_APPROX, FLAT_ROWS)
+                check_rows(t, "tts_pk_gemv_ln_qkv grouped v cache vs the CPU chain", copy_span(vc2, PF_P * kvd, kvd), want_v2, BAR_APPROX, FLAT_ROWS)
+                check_exceeds(t, "tts_pk_gemv_ln_qkv grouped control: the v row is the narrow span's rows, not the wide form's", copy_span(vc2, PF_P * kvd, kvd), copy_span(want_v, 0, kvd), BAR_APPROX)
+                t |> success(outside_run(cp |> plane_whole(y2p), PF_YOFF, d, NAN_SENTINEL), "tts_pk_gemv_ln_qkv grouped: only the q span lands in y")
+                let other_rows2 <- [for (i in range(nc2)); kc2[i] + vc2[i]; where i / kvd != PF_P]
+                t |> success(elem_all(other_rows2, 2.0 * POISON), "tts_pk_gemv_ln_qkv grouped: the caches' other rows are untouched")
             }
         } else {
             t |> skip("dasVulkan not present")

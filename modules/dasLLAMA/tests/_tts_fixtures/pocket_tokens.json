@@ -1,6 +1,7 @@
 {
  "language": "english_2026-04",
  "revision": "19f95fe2df36e79fbd9f10008595cc4c977a0fcc",
+ "replace_characters": {},
  "rows": [
   {
    "id": "lj000",
@@ -115,7 +116,7 @@
   },
   {
    "id": "lj002",
-   "prepared": "Produced the block books, which were the immediate predecessors of the true printed book,",
+   "prepared": "Produced the block books, which were the immediate predecessors of the true printed book.",
    "frames_after_eos": 3,
    "ids": [
     497,
@@ -143,7 +144,7 @@
     2334,
     278,
     755,
-    262
+    263
    ]
   },
   {
@@ -199,7 +200,7 @@
   },
   {
    "id": "lj004",
-   "prepared": "And it is worth mention in passing that, as an example of fine typography,",
+   "prepared": "And it is worth mention in passing that, as an example of fine typography.",
    "frames_after_eos": 3,
    "ids": [
     287,
@@ -224,12 +225,12 @@
     1162,
     1566,
     327,
-    262
+    263
    ]
   },
   {
    "id": "lj005",
-   "prepared": "The earliest book printed with movable types, the Gutenberg, or \"forty-two line Bible\" of about fourteen fifty-five,",
+   "prepared": "The earliest book printed with movable types, the Gutenberg, or \"forty-two line Bible\" of about fourteen fifty-five.",
    "frames_after_eos": 3,
    "ids": [
     364,
@@ -270,7 +271,7 @@
     337,
     1101,
     314,
-    262
+    263
    ]
   },
   {
@@ -313,7 +314,7 @@
   },
   {
    "id": "lj007",
-   "prepared": "Now, as all books not primarily intended as picture-books consist principally of types composed to form letterpress,",
+   "prepared": "Now, as all books not primarily intended as picture-books consist principally of types composed to form letterpress.",
    "frames_after_eos": 3,
    "ids": [
     553,
@@ -351,12 +352,12 @@
     260,
     2259,
     2187,
-    262
+    263
    ]
   },
   {
    "id": "lj008",
-   "prepared": "It is of the first importance that the letter used should be fine in form;",
+   "prepared": "It is of the first importance that the letter used should be fine in form.",
    "frames_after_eos": 3,
    "ids": [
     333,
@@ -377,7 +378,7 @@
     1295,
     276,
     1291,
-    1230
+    263
    ]
   },
   {
@@ -429,7 +430,7 @@
   },
   {
    "id": "lj010",
-   "prepared": "And it was a matter of course that in the Middle Ages, when the craftsmen took care that beautiful form should always be a part of their productions whatever they were,",
+   "prepared": "And it was a matter of course that in the Middle Ages, when the craftsmen took care that beautiful form should always be a part of their productions whatever they were.",
    "frames_after_eos": 3,
    "ids": [
     287,
@@ -478,7 +479,7 @@
     482,
     293,
     379,
-    262
+    263
    ]
   },
   {
@@ -615,7 +616,7 @@
   },
   {
    "id": "lj014",
-   "prepared": "The first books were printed in black letter, i.e. the letter which was a Gothic development of the ancient Roman character,",
+   "prepared": "The first books were printed in black letter, i.e. the letter which was a Gothic development of the ancient Roman character.",
    "frames_after_eos": 3,
    "ids": [
     364,
@@ -651,12 +652,12 @@
     3304,
     596,
     1233,
-    262
+    263
    ]
   },
   {
    "id": "lj015",
-   "prepared": "And which developed more completely and satisfactorily on the side of the \"lower-case\" than the capital letters;",
+   "prepared": "And which developed more completely and satisfactorily on the side of the \"lower-case\" than the capital letters.",
    "frames_after_eos": 3,
    "ids": [
     287,
@@ -692,7 +693,7 @@
     260,
     2259,
     261,
-    1230
+    263
    ]
   },
   {
@@ -773,7 +774,7 @@
   },
   {
    "id": "lj018",
-   "prepared": "Of the more formal ecclesiastical writing which obtained at that time; this has since been called \"missal type,\"",
+   "prepared": "Of the more formal ecclesiastical writing which obtained at that time; this has since been called \"missal type.\"",
    "frames_after_eos": 3,
    "ids": [
     1811,
@@ -812,7 +813,7 @@
     261,
     326,
     990,
-    1733
+    1447
    ]
   },
   {
@@ -872,7 +873,7 @@
   },
   {
    "id": "lj020",
-   "prepared": "But the first Bible actually dated (which also was printed at Maintz by Peter Schoeffer in the year fourteen sixty-two)",
+   "prepared": "But the first Bible actually dated (which also was printed at Maintz by Peter Schoeffer in the year fourteen sixty-two).",
    "frames_after_eos": 3,
    "ids": [
     352,
@@ -912,7 +913,8 @@
     337,
     274,
     1635,
-    45
+    45,
+    263
    ]
   },
   {
@@ -960,7 +962,7 @@
   },
   {
    "id": "lj022",
-   "prepared": "On the whole the type of this book may be considered the ne-plus-ultra of Gothic type,",
+   "prepared": "On the whole the type of this book may be considered the ne-plus-ultra of Gothic type.",
    "frames_after_eos": 3,
    "ids": [
     1341,
@@ -990,12 +992,12 @@
     465,
     485,
     990,
-    262
+    263
    ]
   },
   {
    "id": "lj023",
-   "prepared": "Especially as regards the lower-case letters; and type very similar was used during the next fifteen or twenty years not only by Schoeffer,",
+   "prepared": "Especially as regards the lower-case letters; and type very similar was used during the next fifteen or twenty years not only by Schoeffer.",
    "frames_after_eos": 3,
    "ids": [
     520,
@@ -1042,7 +1044,7 @@
     1450,
     1870,
     1701,
-    262
+    263
    ]
   },
   {
@@ -1145,7 +1147,7 @@
   },
   {
    "id": "lj027",
-   "prepared": "In fourteen sixty-five Sweynheim and Pannartz began printing in the monastery of Subiaco near Rome,",
+   "prepared": "In fourteen sixty-five Sweynheim and Pannartz began printing in the monastery of Subiaco near Rome.",
    "frames_after_eos": 3,
    "ids": [
     565,
@@ -1185,12 +1187,12 @@
     1937,
     970,
     680,
-    262
+    263
    ]
   },
   {
    "id": "lj028",
-   "prepared": "And used an exceedingly beautiful type, which is indeed to look at a transition between Gothic and Roman,",
+   "prepared": "And used an exceedingly beautiful type, which is indeed to look at a transition between Gothic and Roman.",
    "frames_after_eos": 3,
    "ids": [
     287,
@@ -1222,7 +1224,7 @@
     485,
     269,
     3304,
-    262
+    263
    ]
   },
   {
@@ -1262,7 +1264,7 @@
   },
   {
    "id": "lj030",
-   "prepared": "They printed very few books in this type, three only; but in their very first books in Rome, beginning with the year fourteen sixty-eight,",
+   "prepared": "They printed very few books in this type, three only; but in their very first books in Rome, beginning with the year fourteen sixty-eight.",
    "frames_after_eos": 3,
    "ids": [
     438,
@@ -1301,7 +1303,7 @@
     337,
     336,
     1627,
-    262
+    263
    ]
   },
   {
@@ -1332,7 +1334,7 @@
   },
   {
    "id": "lj032",
-   "prepared": "But about the same year Mentelin at Strasburg began to print in a type which is distinctly Roman;",
+   "prepared": "But about the same year Mentelin at Strasburg began to print in a type which is distinctly Roman.",
    "frames_after_eos": 3,
    "ids": [
     352,
@@ -1360,12 +1362,12 @@
     3402,
     323,
     3304,
-    1230
+    263
    ]
   },
   {
    "id": "lj033",
-   "prepared": "And the next year Gunther Zeiner at Augsburg followed suit;",
+   "prepared": "And the next year Gunther Zeiner at Augsburg followed suit.",
    "frames_after_eos": 3,
    "ids": [
     287,
@@ -1388,7 +1390,7 @@
     880,
     278,
     2860,
-    1230
+    263
    ]
   },
   {
@@ -1440,7 +1442,7 @@
   },
   {
    "id": "lj035",
-   "prepared": "The Roman type of all these printers is similar in character,",
+   "prepared": "The Roman type of all these printers is similar in character.",
    "frames_after_eos": 3,
    "ids": [
     364,
@@ -1458,7 +1460,7 @@
     276,
     596,
     1233,
-    262
+    263
    ]
   },
   {
@@ -1501,7 +1503,7 @@
   },
   {
    "id": "lj037",
-   "prepared": "It must be said that it is in no way like the transition type of Subiaco,",
+   "prepared": "It must be said that it is in no way like the transition type of Subiaco.",
    "frames_after_eos": 3,
    "ids": [
     333,
@@ -1524,7 +1526,7 @@
     1354,
     655,
     756,
-    262
+    263
    ]
   },
   {
@@ -5429,7 +5431,7 @@
     "by a similar process produced the block books, which were the immediate predecessors of the true printed book,",
     "the invention of movable metal letters in the middle of the fifteenth century may justly be considered as the invention of the art of printing.",
     "And it is worth mention in passing that, as an example of fine typography, the earliest book printed with movable types, the Gutenberg,",
-    "or \"forty-two line Bible\" of about fourteen fifty-five,"
+    "or \"forty-two line Bible\" of about fourteen fifty-five."
    ]
   },
   {
@@ -5461,6 +5463,12 @@
     "Dr. Smith paid $12.50 at 3.14 p. m. ; then he left! Really? Yes... quite so. Dr.",
     "Smith paid $12.50 at 3.14 p. m. ; then he left! Really? Yes... quite so. Dr. Smith paid $12.50 at 3.14 p.",
     "m. ; then he left! Really? Yes... quite so."
+   ]
+  },
+  {
+   "text": "\"Is it late?\", she asked. He said “no” - I counted to 3. 14 people were there, and it’s fine",
+   "chunks": [
+    "\"Is it late?\", she asked. He said “no” - I counted to 3. 14 people were there, and it’s fine."
    ]
   }
  ],
@@ -5578,6 +5586,68 @@
     994,
     261
    ]
+  }
+ ],
+ "prepared": [
+  {
+   "text": "hello world",
+   "prepared": "Hello world.",
+   "frames_after_eos": 5
+  },
+  {
+   "text": "Well,",
+   "prepared": "Well.",
+   "frames_after_eos": 5
+  },
+  {
+   "text": "(he left)",
+   "prepared": "(he left).",
+   "frames_after_eos": 5
+  },
+  {
+   "text": "She said \"go\"",
+   "prepared": "She said \"go\".",
+   "frames_after_eos": 5
+  },
+  {
+   "text": "wait —",
+   "prepared": "Wait.",
+   "frames_after_eos": 5
+  },
+  {
+   "text": "10%",
+   "prepared": "10%.",
+   "frames_after_eos": 5
+  },
+  {
+   "text": "Really?!",
+   "prepared": "Really?!",
+   "frames_after_eos": 5
+  },
+  {
+   "text": "“Hi?”, she said; then left",
+   "prepared": "“Hi?”, she said; then left.",
+   "frames_after_eos": 3
+  },
+  {
+   "text": "don’t stop",
+   "prepared": "Don’t stop.",
+   "frames_after_eos": 5
+  },
+  {
+   "text": "a–b",
+   "prepared": "A–b.",
+   "frames_after_eos": 5
+  },
+  {
+   "text": "ends on a quote.\"",
+   "prepared": "Ends on a quote.\"",
+   "frames_after_eos": 5
+  },
+  {
+   "text": "x",
+   "prepared": "X.",
+   "frames_after_eos": 5
   }
  ]
 }

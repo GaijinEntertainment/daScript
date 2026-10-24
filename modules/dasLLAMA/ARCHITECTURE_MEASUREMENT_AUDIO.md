@@ -77,6 +77,16 @@ the row carries. Kitten's package speaks shorter audio than das for the same pho
 prior and 5000-sample trim), so a kitten pair compares on the wall, never on the real-time factor.
 `harness/tts_synth.das` and `harness/pocket_synth.py` stay the scoring rig's synthesis arms.
 
+The Pocket family's reference rows outside the board take two more scripts under the same pocket-tts venv:
+`harness/pocket_ref_time.py <configs> <threads> <device>` times the package on the served bench's one sentence at
+`alba` (one untimed request, then eight; the median wall, the seconds of speech, the real-time factor and the
+spread; `0` threads leaves torch's default, `cpu`, `cuda` or `mps` the device) - the third-party row beside a
+`dasllama-server --tts` row of `harness/served_bench.das`; `harness/pocket_ref_pace.py` reads the package's pace
+on three texts (total seconds, the lead and tail silence, the pauses of five or more quiet 20 ms windows, the words
+a second of speech), the twin of `harness/pocket_pace.das`'s reading of our files, whose `DAS_LOG_LEVEL=info`
+timings lines are the stage split (prompt, backbone, head, codec) of each synthesis. A ledger row from either
+names the venv's pocket-tts and torch versions beside its command.
+
 ### The TTS reference's CUDA provider and its g2p-venv runs {#tts-ref-g2p-venv}
 
 `harness/tts_ref_bench.py --device cuda` opens a Kitten session on onnxruntime's CUDA execution

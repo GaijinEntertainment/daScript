@@ -14,11 +14,12 @@ def private prompt_test_model() : TtsModel {
     model.pocket.sample_rate = 24000
     model.pocket.latent_dim = 32l
     model.pocket.frame_samples = 1920l
+    model.pocket.latent_space_id = 0x5eed0001ul
     return <- model
 }
 
 def private prompt_test_value() : TtsVoicePrompt {
-    var prompt = TtsVoicePrompt(language = "english_2026-04", sample_rate = 24000, latent_dim = 32l, frame_samples = 1920l)
+    var prompt = TtsVoicePrompt(latent_space = 0x5eed0001ul, language = "english_2026-04", sample_rate = 24000, latent_dim = 32l, frame_samples = 1920l)
     resize(prompt.latents, 64)
     return <- prompt
 }
@@ -44,7 +45,7 @@ def test_prepared_voice_registration_is_owned_and_transactional(t : T?) {
     t |> success(sscan_json(sprint_json(source_prompt, false), restored_prompt))
     t |> success(tts_voice_prompt_valid(model, restored_prompt))
     t |> success(!tts_register_voice_prompt(model, "", restored_prompt), "empty names refused")
-    restored_prompt.language = "french"
+    restored_prompt.latent_space++
     t |> success(!tts_register_voice_prompt(model, "extra", restored_prompt))
     t |> equal(model.pocket.voice_latents["extra"][0], .5, "rejection preserves the existing voice")
     t |> equal(length(model.pocket.voice_names), 1)
@@ -52,13 +53,13 @@ def test_prepared_voice_registration_is_owned_and_transactional(t : T?) {
 
 [test]
 def test_prepared_voice_prompt_rejects_incompatible_data(t : T?) {
-    for (invalid in ["kind", "version", "family", "language", "rate", "width", "stride", "empty", "partial", "too_long", "nan", "positive_inf", "negative_inf", "positive_bound", "negative_bound"]) {
+    for (invalid in ["kind", "version", "family", "latent_space", "rate", "width", "stride", "empty", "partial", "too_long", "nan", "positive_inf", "negative_inf", "positive_bound", "negative_bound"]) {
         var inscope model <- prompt_test_model()
         var inscope prompt <- prompt_test_value()
         if (invalid == "kind") { model.kind = TtsKind.kitten }
-        elif (invalid == "version") { prompt.version = 2 }
+        elif (invalid == "version") { prompt.version = 1 }
         elif (invalid == "family") { prompt.family = "other" }
-        elif (invalid == "language") { prompt.language = "other" }
+        elif (invalid == "latent_space") { prompt.latent_space++ }
         elif (invalid == "rate") { prompt.sample_rate = 16000 }
         elif (invalid == "width") { prompt.latent_dim = 16l }
         elif (invalid == "stride") { prompt.frame_samples = 960l }

@@ -3399,7 +3399,7 @@ Text to speech in pure daslang: load a converted StyleTTS2-lineage GGUF (KittenT
 - `tts_prepare_voice_prompt` - Encode a reference once for shipping as a voice prompt.
 - `tts_register_voice` - Clone a voice: `pcm` (mono, at the model's own sample rate - `caps().sample_rate`) joins the roster under `name` and speaks from the next synthesis on.
 - `tts_register_voice_prompt` - Add or replace a named prepared voice without a codec encoder.
-- `tts_voice_prompt_valid` - Validate bounded finite latent frames and the model's language/codec geometry before registration.
+- `tts_voice_prompt_valid` - Validate bounded finite latent frames and the model's latent space and codec geometry before registration.
 
 ### Text front end
 

@@ -50,8 +50,12 @@ stamped from a kernel class template.
 
 **A function that reads shape values alone for its result - a bool or a count over a model's
 dims, row counts and formats, nothing read off a device - that a `dasllama/dasllama_*vulkan*.das`
-file calls and no `dasllama/dasllama_*cuda*.das` file calls lands in
-`dasllama/dasllama_vulkan_classes.das`.**
+file calls and no `dasllama/dasllama_*cuda*.das` or `dasllama/dasllama_metal*.das` file calls lands
+in `dasllama/dasllama_vulkan_classes.das`.**
+
+**A function that reads shape values alone for its result, called from a
+`dasllama/dasllama_*vulkan*.das` file and a `dasllama/dasllama_metal*.das` file and from no
+`dasllama/dasllama_*cuda*.das` file, lands in a file that every calling file already requires.**
 
 **A function that reads shape values alone for its result, called from both a
 `dasllama/dasllama_*vulkan*.das` file and a `dasllama/dasllama_*cuda*.das` file, lands in

@@ -13141,7 +13141,7 @@ class MetalTwBiasGate : GkBiasGate {
     }
 }
 
-let PK_ATTN_HS = int(GK_PK_ATTN_HS)   //!< the head size the attention row's body is stamped for
+let PK_ATTN_HS = int(GK_PK_ATTN_HS)   //!< the widest head the attention row takes; a narrower head shares a column's value sum across 256 / hs parts
 let PK_ATTN_MAX_KEYS = int64(GK_PK_ATTN_MAX_KEYS)   //!< the scores the attention row stages in threadgroup memory - the body's literal
 
 //! the subgroup primitives the shared reductions ride, Metal's spelling
@@ -13161,7 +13161,7 @@ def gk_subgroup_min_u(v : uint) : uint {
 }
 
 //! The Pocket chains' causal cached attention row; a threadgroup a (head, row) over staged scores.
-[metal_dispatch(name = "enc_pk_attn", pso = "g_pso_pk_attn", tgmem = "metal_pk_attn_msl_tgmem", tg = 256, grid = "total", params = "total : int64")]
+[metal_dispatch(name = "enc_pk_attn", pso = "g_pso_pk_attn", tgmem = "metal_pk_attn_msl_tgmem", tg = 256, grid = "total", params = "total : int64", requires = "pa.hs % 4")]
 class MetalPkAttn : GkPkAttn {
     [metal_kernel(name="metal_pk_attn_msl")]
     def metal_pk_attn {

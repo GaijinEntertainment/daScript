@@ -141,14 +141,15 @@ stride rows with no pad) and the biased tile, the depthwise transposed upsample 
 the transformer as the CPU's layer loop - the layernorm into a copy, the qkv projection, the
 NORM rope on the q and k spans against the slab's tables (`TtsPkRope`), the k and v columns
 copied to one row set the layers reuse (`TtsPkRows`), the causal attention over the context
-window (`TtsPkAttn`, a workgroup a head and query row, the head size the body's literal 64, the
-value sum walking eight keys a step so a lane's loads sit in flight together),
+window (`TtsPkAttn`, a workgroup a head and query row, the head size an argument - 64 or 32, the
+floor `TTS_PK_ATTN_HS_MIN` both homes read - the value sum walking eight keys a step so a lane's
+loads sit in flight together),
 the output projection, the layer scale (`TtsPkRowScale`), the residual seam on the post-add
 layernorm stamp against the slab's zero row, the ffn with the tanh GELU - then dec_in, per
 ratio the ELU (`TtsPkRowsElu`), the transposed upsample and the ELU-conv-ELU-conv residual
 block, the last ELU, dec_out and the sample column copied out. The frames seat: the voice's
-K/V rows live on the device per backbone layer as [cap][d] rows under a key over the host
-caches, with the rope tables for every position they can hold; the chunk's text rows come up
+K/V rows live on the device per backbone layer as [cap][kv_heads dh] rows under a key over the host
+caches (the attention row reads a query head's keys at its key-value head, `GkPkAttnArgs.kvs`), with the rope tables for every position they can hold; the chunk's text rows come up
 before the loop, but for the rows a served prompt seat left there (`TtsPkPromptDev`, spent on entry
 by the frames call after it, served or declined); each frame is the CPU's `frame_step` and `head_step` at t = 1 - the input
 linear, per layer five dispatches (the qkv row off the residual's norm with its q span roped in
@@ -161,8 +162,10 @@ float4 of it a step - the slab writer lays every run on the 16-byte lattice - an
 row base sits off it, the lanes folded by shuffle; the
 bare dot, the layernorm and the layernorm-modulate-SiLU prologues, the gated residual, the
 add-SiLU over the slab vector, the residual joins with and without the scale row, the GELU, the
-qkv rope-and-store - the rope's pairs sit in a workgroup's even and odd rows, so the span sits on
-the four lattice - and the tail that adds the noise row and denormalizes the latent). The frames run in
+qkv rope-and-store - the rope's pairs sit in a workgroup's even and odd rows, so the spans sit on
+the four lattice; the q span and the k span at their own widths - and the tail that adds the noise
+row by the flow's weight and denormalizes the latent); the `z_proj` bottleneck and the time-free
+heads ride as `ARCHITECTURE_GPU_TOWER_POCKET.md#tower-pocket-frames` says, the same dispatches. The frames run in
 batches of eight a submit (`set_pocket_frame_batch`, the one knob both drivers read), the EOS rule
 walked on the host between batches from the logits read back, the generator rewound past the frames
 made - the one host loop both drivers run (`pocket_frames_batched`, `dasllama_pocket.das`), each
@@ -174,10 +177,15 @@ position (`TtsPkRope`, stamped from the `GkRopeTab` template both homes share), 
 values into the voice slot's rows at those positions, the attention over the slot's rows below
 them, the last layer ending at its keys and values (only the caches are read after a prompt - the
 CPU chain's `transformer_rows` makes the same cut under `kv_only_last`); the rows come back to the host caches after the
-submit, so the CPU frame loop reads them as its own.
+submit, so the CPU frame loop reads them as its own. The prompt seat serves an f32 linear at any
+input width on the 4 lattice: the f32 GEMM stages each x row's columns out to the slab's 32-padded K,
+reading zero past the row's width (`stage_x`), where the weight columns past the width are zero too -
+no row reads past its own bytes.
 
 The declines: `knob`, `shape` (a width off the 64 lattice, a head width other than 64 or 128,
-more than 512 tokens for the attention stage, an LSTM direction over 256 hidden), `device` (the
+more than 512 tokens for the attention stage, an LSTM direction over 256 hidden, and the Pocket
+seats' admission of `ARCHITECTURE_GPU_TOWER_POCKET.md#tower-pocket-frames`, the one both homes
+read), `device` (the
 tier has no device, or a class failed to build), `memory` (a slab or scratch allocation failed),
 `gpu_error`. Engage is `vulkan_tts_stats`' `encodes` beside the family's own seat counters
 (`styletts2_gpu_stats`); the parity instruments are the per-stage cells on identical inputs on

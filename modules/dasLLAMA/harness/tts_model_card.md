@@ -53,6 +53,14 @@ No espeak-ng, no phonemizer: the front end is data, and the data is in the two p
 | `pocket-tts-fr-q8.gguf` | Pocket TTS French (24 layers, the only French model Kyutai ships), one voice (`estelle`) | 377328320 | `490b404e533d2e2f8610657078f3a83c3c0fc0d03a1af7ab8b979745fdbb8738` |
 | `pocket-tts-en-kq.gguf` | Pocket TTS English in the small form: the backbone and the codec transformers as Q4_K, the flow head as Q8_0, the codec convolutions f16, the embedding table Q4_K; its tokenizer, the codec encoder (so it clones) and the 19 voices as latent frames | 77765536 | `2bd5ef27bfbc88769c5339ff5e8b74349fb015b77a0015a03514a21e4a95ac64` |
 | `pocket-tts-en-stuart-kq.gguf` | the same small form with one voice (`stuart_bell`) as latent frames and no codec encoder: reads text in that voice, cannot clone | 67004480 | `c0e086a080a0a41d5121870f560f0e79d47be3e61ddd5032d49e556363e78277` |
+| `pocket-tts-en-18m-q8.gguf` | Kyutai Pocket TTS English 18.2M (`english_18m_2026-10`: an 8-layer 512-wide backbone, a 128-wide decoder behind the 100M model's encoder), the served GEMMs Q8_0, the rest f16, the 19 voices and the encoder inside | 36712480 | `d5b138be971d7907eb7a568b827510d85775d7ce933fad4dba0245d2d0536fa2` |
+| `pocket-tts-en-18m-kq.gguf` | the 18.2M model in the small form: the backbone and the text table Q4_K, the flow head and the decoder transformer Q8_0 | 23547232 | `ed8db0741c377ea21a3603101d9215b538e2c143b1916f459e1b599ce096716b` |
+| `pocket-tts-en-18m-stuart-kq.gguf` | the 18.2M small form with one voice (`stuart_bell`) as latent frames and no codec encoder: reads text in that voice, cannot clone | 12793728 | `3678b27db407fa0715feb7c0863c63c1cb00a28f9387fa76f8e4922e30c8f124` |
+| `pocket-tts-en-7m-q8.gguf` | Pocket TTS English 6.9M (`english_7m_2026-10`: a 224-wide grouped-query backbone), the served GEMMs Q8_0 | 22991840 | `b3d99bc412613c4323f023572c782b980a375fed83d88239b7e5d68de2621c4c` |
+| `pocket-tts-en-2m.gguf` | Pocket TTS English 1.9M (`english_2m_2026-10`: a 112-wide backbone, a 4-layer decoder), every tensor f16 - its widths sit off the quant lattices | 23758400 | `612a583ce4811f8904200295fa9293423074cffe4eadbcc3a5232aec1be5f68d` |
+| `pocket-tts-en-18m-refl-q8.gguf` | the 18.2M model after Kyutai's reward fine-tuning (`english_18m_refl_2026-10`), the q8 form | 36712480 | `3460c9cff8102e997369ab3ee7e32e1d020a8f1cffc4a454dc1ecb059f51d4dc` |
+| `pocket-tts-en-7m-refl-q8.gguf` | the 6.9M model after reward fine-tuning (`english_7m_refl_2026-10`), the q8 form | 22991840 | `80ca90b4a60716693722ed19a91945d326f4611f8573defe27f722d6f4bd50a2` |
+| `pocket-tts-en-2m-refl.gguf` | the 1.9M model after reward fine-tuning (`english_2m_refl_2026-10`), f16 | 23758432 | `54dead7cb04aa87971b32f4a25288d566c95c739290581df91742155fcc61230` |
 
 The packs sit beside whichever GGUF you load; the loader reads them from the model's
 directory - `tts_g2p.bin` when it is there, else `tts_g2p_en_us.bin`. The GGUFs carry f32 weights: dasLLAMA quantizes the served layouts to Q8_0 at first
@@ -89,7 +97,37 @@ at a real-time factor of 0.028 on an Apple M5 Max, measured 2026-09-17 with the 
 convolutions Q8_0, served on int8 activations - read 3.86 / 4.295 on the same box and rig, the
 served lane's UTMOS now matching the f32 lane's 4.330); it is the file the browser examples on
 dasllama.io fetch. `pocket-tts-en-stuart-kq.gguf` is that form with one voice, `stuart_bell`,
-and no codec encoder, 67 MB: it reads text in that voice and cannot clone.
+and no codec encoder, 67 MB: it reads text in that voice and cannot clone. The 18.2M model's
+twins of these two files - `pocket-tts-en-18m-kq.gguf` (24 MB) and
+`pocket-tts-en-18m-stuart-kq.gguf` (13 MB) - are the same forms at half the bytes and twice the
+browser speed; the pages keep the 100M model, whose pace reads more naturally.
+
+The 2026-10 small English models are Kyutai's distilled Pocket TTS at 18.2M, 6.9M and 1.9M
+parameters (`english_18m_2026-10`, `english_7m_2026-10`, `english_2m_2026-10`; the `-refl`
+files are the same models after Kyutai's reward fine-tuning), each with the same 19 voices
+and the 100M model's codec encoder inside, so each clones. They follow pocket-tts 4.0.1's
+driver: the voice clip is trimmed to end on a pause, the end-of-speech logit is ignored on a
+chunk's first six frames, each chunk fades in over 5 ms, and a trailing comma or dash becomes
+a period. On the 200-sentence rig at `alba` on an Apple M5 Max (measured 2026-10-23,
+`harness/tts_rig.py`, the JIT tier, the CPU chain - the GPU seats decline these shapes):
+`pocket-tts-en-18m-q8.gguf` reads WER 3.09 / UTMOS 4.341, `pocket-tts-en-18m-refl-q8.gguf`
+3.04 / 4.369, `pocket-tts-en-18m-kq.gguf` 3.18 / 4.232, `pocket-tts-en-7m-q8.gguf` 3.41 /
+4.357, `pocket-tts-en-7m-refl-q8.gguf` 3.86 / 4.377, `pocket-tts-en-2m.gguf` 5.32 / 3.777 and
+`pocket-tts-en-2m-refl.gguf` 4.68 / 3.823; the reference package on the same sentences reads
+5.41 / 4.364 (18m), 5.59 / 4.378 (7m) and 9.18 / 3.817 (2m) - the WER gap is the English
+normalizer in front of our files (the reference reads "1995" as digits), the UTMOS gap the q8
+lane's. The 100M `pocket-tts-en-kq.gguf` under the same 4.0.1 text rules reads 3.86 / 4.319
+(its earlier 4.09 / 4.333 row above was under the 3.1.0 rules). On that box, served
+through `dasllama-server` on the Metal seats (one sentence, eight requests), the 100M q8 file
+answers in 50 ms for 4.6 s of speech (a real-time factor of 0.011), the 18m files in 28-30 ms
+for 4.4-4.6 s (0.006), the 7m in 28 ms for 5.0 s (0.006) and the 2m in 25 ms for 4.7 s
+(0.005) - every stage of every file on the GPU seats. The reference package on the same box and
+sentence, one CPU thread as it pins, takes 325 ms on the 100M and 156 ms on the 18m. Every figure of
+this paragraph is the Pocket small-model leg's entry of `PERF_LEDGER.md`, with its instruments and
+commands.
+In the browser (the parrot page's wasm64 build under Chrome on the same box, seven workers)
+`pocket-tts-en-18m-kq.gguf` runs at 0.079 against the 100M kq file's 0.161 - twice as fast,
+twelve times faster than real time - and clones a 6.5 s voice in 0.47 s against 0.87.
 
 Kitten nano is the phoneme families' served default: 59 MB, eight voices, a real-time factor of 0.03 on an Apple
 M1 Max (measured 2026-09-02 with the same rig). Its voices are `expr-voice-2-m` through
@@ -123,10 +161,20 @@ voices.
   `kyutai/pocket-tts-without-voice-cloning` at `d29db7978e464fb90cb3359ee0c69a273b9142cc`; the
   voice clips from `kyutai/tts-voices` at `323332d33f997de8394f24a193e1a76df720e01a`
   (`voice-zero/`, `voice-donations/`, `vctk/`, `alba-mackenna/casual.wav`).
-- `pocket-tts-en-kq.gguf` / `pocket-tts-en-stuart-kq.gguf`: the same sources through
-  `modules/dasLLAMA/harness/convert_pocket.py --kq` (the second with `--voices stuart_bell
+- `pocket-tts-en-kq.gguf` / `pocket-tts-en-stuart-kq.gguf`, and the 18.2M model's
+  `pocket-tts-en-18m-kq.gguf` / `pocket-tts-en-18m-stuart-kq.gguf`: the same sources through
+  `modules/dasLLAMA/harness/convert_pocket.py --kq` (the one-voice files with `--voices stuart_bell
   --no-cloning`); the K-quant blocks are ggml's own quantizer, and each voice is stored as the
   latent frames of its clip through the model's codec encoder.
+- `pocket-tts-en-18m-q8.gguf`, `pocket-tts-en-7m-q8.gguf`, `pocket-tts-en-18m-refl-q8.gguf`,
+  `pocket-tts-en-7m-refl-q8.gguf` (`--q8`), `pocket-tts-en-2m.gguf`, `pocket-tts-en-2m-refl.gguf`
+  (f16) and `pocket-tts-en-18m-kq.gguf` (`--kq`): converted by `modules/dasLLAMA/harness/convert_pocket.py`
+  under pocket-tts 4.0.1 from `kyutai/pocket-tts` `languages/<config>/model.safetensors` at
+  `db04f0e653473e5c7333c69686ac92b7460b0c1d` (the configs `english_18m_2026-10`,
+  `english_7m_2026-10`, `english_2m_2026-10` and their `_refl_` twins) and the tokenizer of
+  `kyutai/pocket-tts-without-voice-cloning` at `a7056f505a4a8ca72d8b5fb1440071d6f1a35739`; the
+  same 19 clips, each trimmed to end on a pause as the package's prompt path trims it, then
+  through the codec encoder (the 100M model's, which these bundles carry unchanged).
 
 The whole set is rebuilt by `modules/dasLLAMA/performance/build_tts_data.das`. Parity against
 the reference implementations (block by block, and the front end sentence by sentence on a

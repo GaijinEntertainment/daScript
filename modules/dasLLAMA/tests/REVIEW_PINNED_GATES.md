@@ -176,6 +176,10 @@ must keep holding:
   voices and speaking.
 - `test_tts_pocket.das`'s `test_pocket_quiet_floor` cell must hold the served lane's quiet floor
   against the f32 lane's.
+- `test_tts_pocket.das`'s `test_pocket_small_models` cell must hold, for each `SMALL` row's
+  published file, the 19-voice English roster and the four character replacements its config
+  carries, as the reference build's config lists them, and each seat serving, or declining with the
+  `shape` reason, as that row's seat columns say.
 - `test_whisper.das`'s `test_canary_qwen_oracle` cell, an external-reference compare, must hold
   the forced walk over `../harness/canary_qwen_expected.tsv`'s ids within `CN_TIE_BAR` of our
   argmax at every step of its three clips, on the CPU chain and on the Metal tower, its control the

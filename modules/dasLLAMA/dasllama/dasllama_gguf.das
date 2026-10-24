@@ -478,6 +478,13 @@ def gguf_has(m : GGUFMeta; key : string) : bool => key_exists(m.kv, key)
 //! `gguf_int` where the key is present, `dflt` where the file omits it - the one spelling of has-then-read.
 def gguf_int_or(m : GGUFMeta; bytes : array<uint8> | #; key : string; dflt : int64) : int64 => key_exists(m.kv, key) ? gguf_int(m, bytes, key) : dflt
 
+//! the same has-then-read for a float, a bool stored as an integer, and a string
+def gguf_f32_or(m : GGUFMeta; bytes : array<uint8> | #; key : string; dflt : float) : float => key_exists(m.kv, key) ? gguf_f32(m, bytes, key) : dflt
+
+def gguf_bool_or(m : GGUFMeta; bytes : array<uint8> | #; key : string; dflt : bool) : bool => key_exists(m.kv, key) ? gguf_int(m, bytes, key) != 0l : dflt
+
+def gguf_str_or(m : GGUFMeta; bytes : array<uint8> | #; key : string; dflt : string) : string => key_exists(m.kv, key) ? gguf_str(m, bytes, key) : dflt
+
 //! Read an integer-typed value (any width / signedness) widened to int64.
 def gguf_int(m : GGUFMeta; bytes : array<uint8> | #; key : string) : int64 {
     if (!key_exists(m.kv, key)) {

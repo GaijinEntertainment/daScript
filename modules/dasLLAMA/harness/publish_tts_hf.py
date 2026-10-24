@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-# Publish the dasLLAMA text-to-speech set to a Hugging Face model repository: the three GGUFs,
-# the two front-end packs, their .LICENSE sidecars, the licence texts and the model card
+# Publish the dasLLAMA text-to-speech set to a Hugging Face model repository: the GGUFs,
+# the front-end packs, their .LICENSE sidecars, the licence texts and the model card
 # (harness/tts_model_card.md). Stages a copy, verifies every sha256 against the card's table,
 # then uploads one commit and prints the commit-pinned resolve URLs the serving catalog rows
 # take (performance/model_specs.das, serve_tts_set).
@@ -16,7 +16,9 @@ MODULE = os.path.dirname(HERE)
 CARD = os.path.join(HERE, "tts_model_card.md")
 FILES = ["kitten-nano.gguf", "kitten-mini.gguf", "kokoro-82m.gguf", "tts_g2p.bin", "tts_g2p_en_us.bin", "tts_postag.bin",
          "pocket-tts-en-q8.gguf", "pocket-tts-de-q8.gguf", "pocket-tts-es-q8.gguf", "pocket-tts-it-q8.gguf",
-         "pocket-tts-pt-q8.gguf", "pocket-tts-fr-q8.gguf", "pocket-tts-en-kq.gguf", "pocket-tts-en-stuart-kq.gguf"]
+         "pocket-tts-pt-q8.gguf", "pocket-tts-fr-q8.gguf", "pocket-tts-en-kq.gguf", "pocket-tts-en-stuart-kq.gguf",
+         "pocket-tts-en-18m-q8.gguf", "pocket-tts-en-18m-kq.gguf", "pocket-tts-en-18m-stuart-kq.gguf", "pocket-tts-en-7m-q8.gguf",
+         "pocket-tts-en-2m.gguf", "pocket-tts-en-18m-refl-q8.gguf", "pocket-tts-en-7m-refl-q8.gguf", "pocket-tts-en-2m-refl.gguf"]
 LICENCES = ["LICENSE.APACHE-2.0", "LICENSE.CMUDICT", "LICENSE.UD_EWT", "LICENSE.SPACY", "LICENSE.STYLETTS2", "LICENSE.CC-BY-4.0",
             "LICENSE.POCKET_TTS"]
 

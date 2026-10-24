@@ -9,6 +9,7 @@ require math
 require strings
 require daslib/fio
 require daslib/strings_boost
+require daslib/math_bits   // float_bits_to_uint
 require dasllama/dasllama_gguf
 require dasllama/dasllama_common   // reserve_resize
 require dasllama/dasllama_math
@@ -30,8 +31,8 @@ require dasllama/dasllama_tts_blocks
 
 struct PocketLayer {
     norm1 : TtsNorm = TtsNorm()
-    in_proj : TtsLinear = TtsLinear()    // [3d][d]: q, k, v stacked, each [heads][dh]
-    out_proj : TtsLinear = TtsLinear()
+    in_proj : TtsLinear = TtsLinear()    //! [attn_dim + 2 kv_heads dh][d]: q, k, v stacked, each [heads][dh]
+    out_proj : TtsLinear = TtsLinear()   //! [d][attn_dim]
     norm2 : TtsNorm = TtsNorm()
     ffn1 : TtsLinear = TtsLinear()
     ffn2 : TtsLinear = TtsLinear()
@@ -42,11 +43,22 @@ struct PocketLayer {
 struct PocketTransformer {
     layers : array<PocketLayer>
     d : int64
-    heads : int64
+    heads : int64        // query heads
+    kv_heads : int64     //! key-value heads, each shared by heads / kv_heads query heads
+    attn_dim : int64     //! the queries' and the attention output's width; d unless the config says otherwise
+    dh : int64           //! attn_dim / heads
     ffn : int64
     context : int64      // the key window; 0 = every key
     period : float       // the rotary embedding's max period
     eps : float
+}
+
+//! The one-step head's sampling rule: `lsd` takes two timestep embeddings and adds the noise back, `pointwise` adds
+//! the noise back with no timestep, `drifting` is the head's output alone.
+enum PocketFlow {
+    lsd
+    drifting
+    pointwise
 }
 
 struct PocketResBlock {
@@ -58,13 +70,14 @@ struct PocketResBlock {
 
 struct PocketHead {
     input_proj : TtsLinear = TtsLinear()
-    cond_embed : TtsLinear = TtsLinear()
-    time_const : TtsWeight = TtsWeight()   // the two timestep embeddings of the one-step decode, averaged, baked at load
+    cond_embed : TtsLinear = TtsLinear()   //! [dim][cond_dim]
+    time_const : TtsWeight = TtsWeight()   //! the two timestep embeddings of the one-step decode, averaged, baked at load; empty but for `lsd`
     blocks : array<PocketResBlock>
     final_ln : TtsNorm = TtsNorm()         // the final layer's norm has no affine: unit weights minted at load
     final_adaln : TtsLinear = TtsLinear()
     final_linear : TtsLinear = TtsLinear()
     dim : int64
+    flow : PocketFlow = PocketFlow.lsd
 }
 
 struct PocketResConv {
@@ -116,10 +129,15 @@ struct PocketModel {
     latent_dim : int64
     default_temperature : float
     eos_threshold : float
+    min_frames_before_eos : int64   //! the chunk's first frames, on which the EOS logit is ignored
+    fade_in_samples : int64         //! a chunk's onset ramps in over this many samples
+    prompt_end_on_pause : bool      //! a voice clip is trimmed to end on a pause before the encoder hears it
     frames_after_eos : int   // -1: the text-length guess
     pad_short_inputs : bool
     remove_semicolons : bool
     append_terminal_punctuation : bool
+    capitalize_first_letter : bool
+    replace_chars : table<int; string>   //! per-codepoint rewrites before tokenization ("" deletes)
     bos_before_voice : bool
     default_voice : string
     voice_names : array<string>
@@ -127,16 +145,19 @@ struct PocketModel {
     voice_latents : table<string; array<float>>   // a voice as its clip's latent frames [frames][latent_dim]: the roster's stored form
     voice_states : table<string; PocketVoiceState>
     cloning : bool           // the file carries the codec encoder, so a clip can become a voice
-    text_emb : TtsWeight = TtsWeight()     // [n_bins + 1][d]
+    text_emb : TtsWeight = TtsWeight()     //! [n_bins + 1][d]; a low-rank table is multiplied out at load
     bos_emb : TtsWeight = TtsWeight()      // [latent_dim]: the first frame's input
     bos_voice : TtsWeight = TtsWeight()    // [d]: the row before the voice prompt
     input_linear : TtsLinear = TtsLinear()
     backbone : PocketTransformer = PocketTransformer()
     out_norm : TtsNorm = TtsNorm()
+    z_proj : TtsLinear = TtsLinear()       //! [cond_dim][d] after out_norm, the head's and the EOS logit's input; nout 0 = none
+    cond_dim : int64                       //! the conditioning row's width: z_proj's, else d
     out_eos : TtsLinear = TtsLinear()
     speaker_proj : TtsLinear = TtsLinear()
     emb_std : TtsWeight = TtsWeight()
     emb_mean : TtsWeight = TtsWeight()
+    latent_space_id : uint64
     head : PocketHead = PocketHead()
     mimi : PocketMimi = PocketMimi()
     tok : SpmTokenizer = SpmTokenizer()
@@ -195,12 +216,14 @@ def finalize(var m : PocketModel) {
     delete m.voices
     delete m.voice_latents
     delete m.voice_states
+    delete m.replace_chars
     delete m.text_emb
     delete m.bos_emb
     delete m.bos_voice
     delete m.input_linear
     delete m.backbone
     delete m.out_norm
+    delete m.z_proj
     delete m.out_eos
     delete m.speaker_proj
     delete m.emb_std
@@ -222,7 +245,8 @@ struct PocketScratch {
     @scratch @exact_size ctx : array<float>
     @scratch @exact_size h : array<float>
     @scratch @exact_size x_in : array<float>     // the frame loop's latent input
-    @scratch @exact_size cond : array<float>     // the backbone's last row after out_norm
+    @scratch @exact_size zn : array<float>       //! the backbone's last row after out_norm, where z_proj reads it
+    @scratch @exact_size cond : array<float>     //! the conditioning row: out_norm's row, or z_proj's
     @scratch @exact_size eos : array<float>
     @scratch @exact_size hy : array<float>       // the head's conditioning
     @scratch @exact_size hx : array<float>       // the head's running state
@@ -232,7 +256,7 @@ struct PocketScratch {
     @scratch @exact_size x0 : array<float>
     @scratch @exact_size x1 : array<float>
     @scratch @exact_size latents : array<float>  // [frames][latent_dim], denormalized
-    @scratch @exact_size conds : array<float>    // [frames][d]: every frame's conditioning row, the parity rail's witness
+    @scratch @exact_size conds : array<float>    //! [frames][cond_dim]: every frame's conditioning row, the parity rail's witness
     @scratch @exact_size eos_logits : array<float>
     @scratch @exact_size ca : array<float>       // the codec chain's ping-pong rows, one window wide
     @scratch @exact_size cb : array<float>
@@ -258,6 +282,7 @@ def finalize(var sc : PocketScratch) {
     delete sc.ctx
     delete sc.h
     delete sc.x_in
+    delete sc.zn
     delete sc.cond
     delete sc.eos
     delete sc.hy
@@ -431,21 +456,43 @@ def private read_res_conv(m : GGUFMeta; bytes : array<uint8> | #; prefix : strin
     return <- b
 }
 
-def private read_transformer(m : GGUFMeta; bytes : array<uint8> | #; prefix : string; n_layers, d, heads, ffn, context : int64;
-                             period : float; with_scale : bool) : PocketTransformer {
+//! the shape of one transformer: its width, query heads, key-value heads (the query heads when the config names none),
+//! the queries' width (d when none), feed-forward width and key window
+struct PocketTfShape {
+    layers : int64
+    d : int64
+    heads : int64
+    kv_heads : int64
+    attn_dim : int64
+    ffn : int64
+    context : int64
+    period : float
+}
+
+def private read_transformer(m : GGUFMeta; bytes : array<uint8> | #; prefix : string; s : PocketTfShape; with_scale : bool) : PocketTransformer {
     var tf = PocketTransformer()
-    tf.d = d
-    tf.heads = heads
-    tf.ffn = ffn
-    tf.context = context
-    tf.period = period
+    tf.d = s.d
+    tf.heads = s.heads
+    tf.kv_heads = s.kv_heads
+    tf.attn_dim = s.attn_dim
+    tf.ffn = s.ffn
+    tf.context = s.context
+    tf.period = s.period
     tf.eps = LN_EPS
-    tf.layers |> resize(int(n_layers))
-    for (i in range64(n_layers)) {
+    if (s.heads < 1l || s.attn_dim % s.heads != 0l || s.kv_heads < 1l || s.heads % s.kv_heads != 0l) {
+        panic("dasLLAMA pocket: '{prefix}' has {s.heads} heads over {s.attn_dim} query lanes and {s.kv_heads} key-value heads: the heads must tile the width and the key-value heads divide the heads")
+    }
+    tf.dh = s.attn_dim / s.heads
+    let qkv = s.attn_dim + 2l * s.kv_heads * tf.dh
+    tf.layers |> resize(int(s.layers))
+    for (i in range64(s.layers)) {
         let p = "{prefix}.{i}"
         tf.layers[i].norm1 <- read_norm(m, bytes, "{p}.norm1")
         tf.layers[i].in_proj <- read_linear(m, bytes, "{p}.self_attn.in_proj")
         tf.layers[i].out_proj <- read_linear(m, bytes, "{p}.self_attn.out_proj")
+        if (tf.layers[i].in_proj.nout != qkv || tf.layers[i].in_proj.nin != s.d || tf.layers[i].out_proj.nin != s.attn_dim || tf.layers[i].out_proj.nout != s.d) {
+            panic("dasLLAMA pocket: '{p}' projects [{tf.layers[i].in_proj.nout}][{tf.layers[i].in_proj.nin}] in and [{tf.layers[i].out_proj.nout}][{tf.layers[i].out_proj.nin}] out; the config says {qkv} query-key-value lanes over {s.d} and {s.attn_dim} back")
+        }
         tf.layers[i].norm2 <- read_norm(m, bytes, "{p}.norm2")
         tf.layers[i].ffn1 <- read_linear(m, bytes, "{p}.linear1")
         tf.layers[i].ffn2 <- read_linear(m, bytes, "{p}.linear2")
@@ -481,17 +528,27 @@ def private time_embed_at(m : GGUFMeta; bytes : array<uint8> | #; prefix : strin
     return <- h2
 }
 
+def private flow_of(name : string) : PocketFlow {
+    return PocketFlow.lsd if (name == "lsd")
+    return PocketFlow.drifting if (name == "drifting")
+    return PocketFlow.pointwise if (name == "pointwise")
+    panic("dasLLAMA pocket: the flow head's type '{name}' is not one the engine samples (lsd, drifting, pointwise)")
+    return PocketFlow.lsd
+}
+
 [arch(at="../ARCHITECTURE_POCKET.md#pocket-one-step-head")]
-def private read_head(m : GGUFMeta; bytes : array<uint8> | #; var hd : PocketHead; depth : int64) {
+def private read_head(m : GGUFMeta; bytes : array<uint8> | #; var hd : PocketHead; depth : int64; flow : PocketFlow) {
+    hd.flow = flow
     hd.input_proj <- read_linear(m, bytes, "head.input_proj", true)
     hd.cond_embed <- read_linear(m, bytes, "head.cond_embed", true)
     hd.dim = hd.cond_embed.nout
-    // one decode step integrates from s = 0 to t = 1: the two embeddings are constants
-    var inscope t0 <- time_embed_at(m, bytes, "head.time_embed.0", 0.0lf)
-    var inscope t1 <- time_embed_at(m, bytes, "head.time_embed.1", 1.0lf)
-    hd.time_const.a |> reserve_resize(hd.dim)
-    for (j in range64(hd.dim)) {
-        hd.time_const.a[j] = (t0[j] + t1[j]) * 0.5
+    if (flow == PocketFlow.lsd) {
+        var inscope t0 <- time_embed_at(m, bytes, "head.time_embed.0", 0.0lf)
+        var inscope t1 <- time_embed_at(m, bytes, "head.time_embed.1", 1.0lf)
+        hd.time_const.a |> reserve_resize(hd.dim)
+        for (j in range64(hd.dim)) {
+            hd.time_const.a[j] = (t0[j] + t1[j]) * 0.5
+        }
     }
     hd.blocks |> reserve_resize(depth)
     for (i in range64(depth)) {
@@ -511,7 +568,8 @@ def private read_head(m : GGUFMeta; bytes : array<uint8> | #; var hd : PocketHea
     }
 }
 
-def private read_mimi(m : GGUFMeta; bytes : array<uint8> | #; var mm : PocketMimi; n_layers, d, heads, ffn, context : int64; period : float; encoder : bool) {
+//! the codec's two transformers, the encoder's and the decoder's; a file whose config names no decoder side carries the encoder's shape under both
+def private read_mimi(m : GGUFMeta; bytes : array<uint8> | #; var mm : PocketMimi; enc, dec : PocketTfShape; encoder : bool) {
     mm.ratios <- gguf_int_array(m, bytes, "pocket.mimi.ratios")
     let nr = long_length(mm.ratios)
     mm.hop = 1l
@@ -519,9 +577,10 @@ def private read_mimi(m : GGUFMeta; bytes : array<uint8> | #; var mm : PocketMim
         mm.hop *= r
     }
     mm.quant_proj <- read_conv(m, bytes, "mimi.quantizer.output_proj", 1l, 1l, false)
-    // the two resamplers are kernel 2 x stride and mirror each other; the upsampler is always in the file
-    mm.frame_steps = m.tensors[need_tensor(m, "mimi.upsample.convtr.convtr.weight")].dims[0] / 2l
-    mm.upsample <- read_conv(m, bytes, "mimi.upsample.convtr.convtr", mm.frame_steps, d, true)
+    // both resamplers are kernel 2 x stride, mirroring each other; the upsampler is always in the file, depthwise over the decoder side's width
+    let up_dims & = unsafe(m.tensors[need_tensor(m, "mimi.upsample.convtr.convtr.weight")].dims)
+    mm.frame_steps = up_dims[0] / 2l
+    mm.upsample <- read_conv(m, bytes, "mimi.upsample.convtr.convtr", mm.frame_steps, up_dims[2], true)
     if (encoder) {
         // the encoder's stages read the ratios reversed: 1 -> 64 channels first, doubling per stage
         mm.enc_in <- read_conv(m, bytes, "mimi.encoder.model.0.conv", 1l, 1l, false)
@@ -533,14 +592,14 @@ def private read_mimi(m : GGUFMeta; bytes : array<uint8> | #; var mm : PocketMim
             mm.enc_down[i] <- read_conv(m, bytes, "mimi.encoder.model.{3l + 3l * i}.conv", ratio, 1l, false)
         }
         mm.enc_out <- read_conv(m, bytes, "mimi.encoder.model.{2l + 3l * nr}.conv", 1l, 1l, false)
-        mm.enc_tf <- read_transformer(m, bytes, "mimi.enc_tf", n_layers, d, heads, ffn, context, period, true)
+        mm.enc_tf <- read_transformer(m, bytes, "mimi.enc_tf", enc, true)
         mm.downsample <- read_conv(m, bytes, "mimi.downsample.conv.conv", 0l, 1l, false)
         if (mm.downsample.k / 2l != mm.frame_steps) {
             panic("dasLLAMA pocket: the downsampler's kernel {mm.downsample.k} and the upsampler's {2l * mm.frame_steps} disagree on the frame stride")
         }
         mm.downsample.stride = mm.frame_steps
     }
-    mm.dec_tf <- read_transformer(m, bytes, "mimi.dec_tf", n_layers, d, heads, ffn, context, period, true)
+    mm.dec_tf <- read_transformer(m, bytes, "mimi.dec_tf", dec, true)
     mm.dec_in <- read_conv(m, bytes, "mimi.decoder.model.0.conv", 1l, 1l, false)
     mm.dec_up |> resize(int(nr))
     mm.dec_res |> resize(int(nr))
@@ -582,6 +641,107 @@ def private read_roster(g : GGUFMeta; bytes : array<uint8> | #; var m : PocketMo
 def pocket_has_voice(m : PocketModel; name : string) : bool =>
     key_exists(m.voice_latents, name) || key_exists(m.voices, name)
 
+def private read_text_table(g : GGUFMeta; bytes : array<uint8> | #; var m : PocketModel; d : int64) {
+    if (gguf_find_tensor(g, "flow_lm.conditioner.proj.weight") < 0) {
+        m.text_emb <- read_weight(g, bytes, "flow_lm.conditioner.embed.weight")
+        return
+    }
+    var inscope low <- read_arr(g, bytes, "flow_lm.conditioner.embed.weight")
+    var inscope proj = TtsLinear()
+    proj.w <- read_arr(g, bytes, "flow_lm.conditioner.proj.weight")
+    let ti = need_tensor(g, "flow_lm.conditioner.proj.weight")
+    proj.nin = g.tensors[ti].dims[0]
+    proj.nout = g.tensors[ti].dims[1]
+    if (proj.nout != d || long_length(low) % proj.nin != 0l) {
+        panic("dasLLAMA pocket: the text table's projection is [{proj.nout}][{proj.nin}] over a table of {long_length(low)} values; the backbone is {d} wide")
+    }
+    linear_prepare(proj, true)
+    linear_rows(proj, low, long_length(low) / proj.nin, m.text_emb.a)
+}
+
+[arch(at="../ARCHITECTURE_POCKET.md#pocket-one-step-head"), arch(at="../ARCHITECTURE_POCKET.md#pocket-chunker")]
+def private read_driver_rules(g : GGUFMeta; bytes : array<uint8> | #; var m : PocketModel; path : string) {
+    m.eos_threshold = gguf_f32_or(g, bytes, "pocket.eos_threshold", -4.0)
+    m.min_frames_before_eos = gguf_int_or(g, bytes, "pocket.min_frames_before_eos", 0l)
+    m.fade_in_samples = gguf_int_or(g, bytes, "pocket.fade_in_samples", 0l)
+    m.prompt_end_on_pause = gguf_bool_or(g, bytes, "pocket.prompt_end_on_pause", false)
+    m.frames_after_eos = int(gguf_int(g, bytes, "pocket.frames_after_eos"))
+    m.pad_short_inputs = gguf_int(g, bytes, "pocket.pad_short_inputs") != 0l
+    m.remove_semicolons = gguf_int(g, bytes, "pocket.remove_semicolons") != 0l
+    m.append_terminal_punctuation = gguf_int(g, bytes, "pocket.append_terminal_punctuation") != 0l
+    m.capitalize_first_letter = gguf_bool_or(g, bytes, "pocket.capitalize_first_letter", true)
+    return if (!gguf_has(g, "pocket.replace_from"))
+    var inscope from <- gguf_str_array(g, bytes, "pocket.replace_from")
+    var inscope to <- gguf_str_array(g, bytes, "pocket.replace_to")
+    if (length(from) != length(to)) {
+        panic("dasLLAMA pocket: '{path}' names {length(from)} characters to replace and {length(to)} replacements")
+    }
+    for (src, dst in from, to) {
+        var inscope cps <- utf8_to_cpts(src)
+        if (length(cps) != 1) {
+            panic("dasLLAMA pocket: '{path}' replaces '{src}', which is not one character")
+        }
+        m.replace_chars[cps[0]] = clone_string(dst)
+    }
+}
+
+def private read_flow_lm(g : GGUFMeta; bytes : array<uint8> | #; var m : PocketModel; path : string) {
+    let d = gguf_int(g, bytes, "pocket.backbone.d_model")
+    let heads = gguf_int(g, bytes, "pocket.backbone.heads")
+    let bb = PocketTfShape(layers = gguf_int(g, bytes, "pocket.backbone.layers"), d = d, heads = heads,
+        kv_heads = gguf_int_or(g, bytes, "pocket.backbone.kv_heads", heads), attn_dim = gguf_int_or(g, bytes, "pocket.backbone.attn_dim", d),
+        ffn = gguf_int_or(g, bytes, "pocket.backbone.ffn", d * gguf_int(g, bytes, "pocket.backbone.hidden_scale")), context = 0l,
+        period = gguf_f32(g, bytes, "pocket.backbone.rope_max_period"))
+    read_text_table(g, bytes, m, d)
+    m.bos_emb <- read_weight(g, bytes, "flow_lm.bos_emb")
+    m.bos_voice <- read_weight(g, bytes, "flow_lm.bos_before_voice")
+    m.input_linear <- read_linear(g, bytes, "flow_lm.input_linear")
+    m.backbone <- read_transformer(g, bytes, "backbone", bb, false)
+    m.out_norm <- read_norm(g, bytes, "flow_lm.out_norm")
+    m.cond_dim = d
+    if (gguf_find_tensor(g, "flow_lm.z_proj.weight") >= 0) {
+        m.z_proj <- read_linear(g, bytes, "flow_lm.z_proj", true)
+        m.cond_dim = m.z_proj.nout
+    }
+    m.out_eos <- read_linear(g, bytes, "flow_lm.out_eos", true)
+    if (m.out_eos.nin != m.cond_dim) {
+        panic("dasLLAMA pocket: '{path}' reads its EOS logit over {m.out_eos.nin} lanes, the conditioning row is {m.cond_dim} wide")
+    }
+    m.speaker_proj.w <- read_arr(g, bytes, "flow_lm.speaker_proj_weight")
+    m.speaker_proj.nin = m.latent_dim
+    m.speaker_proj.nout = d
+    linear_prepare(m.speaker_proj, true)
+    m.emb_std <- read_weight(g, bytes, "flow_lm.emb_std")
+    m.emb_mean <- read_weight(g, bytes, "flow_lm.emb_mean")
+    read_head(g, bytes, m.head, gguf_int(g, bytes, "pocket.head.depth"), flow_of(gguf_str_or(g, bytes, "pocket.head.flow_type", "lsd")))
+    if (m.head.cond_embed.nin != m.cond_dim) {
+        panic("dasLLAMA pocket: '{path}' conditions its head on {m.head.cond_embed.nin} lanes, the conditioning row is {m.cond_dim} wide")
+    }
+}
+
+//! a backbone with the `z_proj` bottleneck: its conditioning row is `cond_dim` wide, else the residual's `d`
+def pocket_has_z(m : PocketModel) : bool => m.z_proj.nout > 0l
+
+//! the key-value rows' width: the key-value heads side by side
+def tts_pk_kv_width(tf : PocketTransformer) : int64 => tf.kv_heads * tf.dh
+
+//! the fused projection's width: the q span (`attn_dim`) and the k and v spans at the key-value width
+def tts_pk_qkv_width(tf : PocketTransformer) : int64 => tf.attn_dim + 2l * tts_pk_kv_width(tf)
+
+//! The latent space a voice prompt is read in: the codec geometry and the backbone's latent
+//! statistics, which every file carries whether or not it ships the encoder. Two files agree
+//! here exactly when a prompt prepared on one conditions the other.
+def pocket_latent_space_id(m : PocketModel) : uint64 {
+    var h = hash_combine64(hash_combine64(uint64(m.sample_rate), uint64(m.latent_dim)), uint64(m.frame_samples))
+    for (v in m.emb_mean.a) {
+        h = hash_combine64(h, uint64(float_bits_to_uint(v)))
+    }
+    for (v in m.emb_std.a) {
+        h = hash_combine64(h, uint64(float_bits_to_uint(v)))
+    }
+    return h
+}
+
 //! Load a converted Pocket TTS GGUF: the scalars from its `pocket.*` metadata, the weights
 //! prepared for the rows kernels, the tokenizer, and the roster (its states built on first use).
 def load_pocket(path : string) : PocketModel {
@@ -612,11 +772,7 @@ def load_pocket(path : string) : PocketModel {
         m.sample_rate = int(gguf_int(g, bytes, "pocket.sample_rate"))
         m.latent_dim = gguf_int(g, bytes, "pocket.latent_dim")
         m.default_temperature = gguf_f32(g, bytes, "pocket.default_temperature")
-        m.eos_threshold = -4.0
-        m.frames_after_eos = int(gguf_int(g, bytes, "pocket.frames_after_eos"))
-        m.pad_short_inputs = gguf_int(g, bytes, "pocket.pad_short_inputs") != 0l
-        m.remove_semicolons = gguf_int(g, bytes, "pocket.remove_semicolons") != 0l
-        m.append_terminal_punctuation = gguf_int(g, bytes, "pocket.append_terminal_punctuation") != 0l
+        read_driver_rules(g, bytes, m, path)
         m.bos_before_voice = gguf_int(g, bytes, "pocket.bos_before_voice") != 0l
         m.default_voice = gguf_str(g, bytes, "pocket.default_voice")
         g_stage_file_q8 = gguf_has(g, "pocket.weights") && gguf_str(g, bytes, "pocket.weights") == "q8"
@@ -625,29 +781,18 @@ def load_pocket(path : string) : PocketModel {
         }
         m.cloning = !gguf_has(g, "pocket.cloning") || gguf_int(g, bytes, "pocket.cloning") != 0l
         read_roster(g, bytes, m, path)
-        let d = gguf_int(g, bytes, "pocket.backbone.d_model")
-        let heads = gguf_int(g, bytes, "pocket.backbone.heads")
-        let layers = gguf_int(g, bytes, "pocket.backbone.layers")
-        let ffn = d * gguf_int(g, bytes, "pocket.backbone.hidden_scale")
-        let period = gguf_f32(g, bytes, "pocket.backbone.rope_max_period")
-        m.text_emb <- read_weight(g, bytes, "flow_lm.conditioner.embed.weight")
-        m.bos_emb <- read_weight(g, bytes, "flow_lm.bos_emb")
-        m.bos_voice <- read_weight(g, bytes, "flow_lm.bos_before_voice")
-        m.input_linear <- read_linear(g, bytes, "flow_lm.input_linear")
-        m.backbone <- read_transformer(g, bytes, "backbone", layers, d, heads, ffn, 0l, period, false)
-        m.out_norm <- read_norm(g, bytes, "flow_lm.out_norm")
-        m.out_eos <- read_linear(g, bytes, "flow_lm.out_eos", true)
-        m.speaker_proj.w <- read_arr(g, bytes, "flow_lm.speaker_proj_weight")
-        m.speaker_proj.nin = m.latent_dim
-        m.speaker_proj.nout = d
-        linear_prepare(m.speaker_proj, true)
-        m.emb_std <- read_weight(g, bytes, "flow_lm.emb_std")
-        m.emb_mean <- read_weight(g, bytes, "flow_lm.emb_mean")
-        read_head(g, bytes, m.head, gguf_int(g, bytes, "pocket.head.depth"))
-        read_mimi(g, bytes, m.mimi, gguf_int(g, bytes, "pocket.mimi.layers"), gguf_int(g, bytes, "pocket.mimi.d_model"),
-            gguf_int(g, bytes, "pocket.mimi.heads"), gguf_int(g, bytes, "pocket.mimi.dim_feedforward"),
-            gguf_int(g, bytes, "pocket.mimi.context"), gguf_f32(g, bytes, "pocket.mimi.rope_max_period"), m.cloning)
+        read_flow_lm(g, bytes, m, path)
+        let enc = PocketTfShape(layers = gguf_int(g, bytes, "pocket.mimi.layers"), d = gguf_int(g, bytes, "pocket.mimi.d_model"),
+            heads = gguf_int(g, bytes, "pocket.mimi.heads"), kv_heads = gguf_int(g, bytes, "pocket.mimi.heads"), attn_dim = gguf_int(g, bytes, "pocket.mimi.d_model"),
+            ffn = gguf_int(g, bytes, "pocket.mimi.dim_feedforward"), context = gguf_int(g, bytes, "pocket.mimi.context"),
+            period = gguf_f32(g, bytes, "pocket.mimi.rope_max_period"))
+        let dec = PocketTfShape(layers = gguf_int_or(g, bytes, "pocket.mimi.dec.layers", enc.layers), d = gguf_int_or(g, bytes, "pocket.mimi.dec.d_model", enc.d),
+            heads = gguf_int_or(g, bytes, "pocket.mimi.dec.heads", enc.heads), kv_heads = gguf_int_or(g, bytes, "pocket.mimi.dec.heads", enc.heads),
+            attn_dim = gguf_int_or(g, bytes, "pocket.mimi.dec.d_model", enc.d), ffn = gguf_int_or(g, bytes, "pocket.mimi.dec.dim_feedforward", enc.ffn),
+            context = gguf_int_or(g, bytes, "pocket.mimi.dec.context", enc.context), period = gguf_f32_or(g, bytes, "pocket.mimi.dec.rope_max_period", enc.period))
+        read_mimi(g, bytes, m.mimi, enc, dec, m.cloning)
         m.frame_samples = m.mimi.hop * m.mimi.frame_steps
+        m.latent_space_id = pocket_latent_space_id(m)   //! after the codec geometry it hashes is read
         m.unk_id = gguf_int(g, bytes, "tokenizer.ggml.unknown_token_id")
         m.byte_fallback = gguf_int(g, bytes, "tokenizer.ggml.byte_fallback") != 0l
         m.reserved_ids |> push(m.unk_id)
@@ -666,18 +811,21 @@ def load_pocket(path : string) : PocketModel {
 
 // ===== the transformer, rows form =====
 
-// q, k, v out of the stacked projection rows [t][3d]
-def private split_qkv(qkv : array<float>; t, d : int64; @scratch @exact_size var q : array<float>;
+//! q [t][qd], k and v [t][kvd] out of the stacked projection rows [t][qd + 2 kvd]
+def private split_qkv(qkv : array<float>; t, qd, kvd : int64; @scratch @exact_size var q : array<float>;
                       @scratch @exact_size var k : array<float>; @scratch @exact_size var v : array<float>) {
-    q |> reserve_resize(t * d)
-    k |> reserve_resize(t * d)
-    v |> reserve_resize(t * d)
+    q |> reserve_resize(t * qd)
+    k |> reserve_resize(t * kvd)
+    v |> reserve_resize(t * kvd)
+    let w = qd + 2l * kvd
     for (r in range64(t)) {
-        let row = r * 3l * d
-        for (j in range64(d)) {
-            q[r * d + j] = qkv[row + j]
-            k[r * d + j] = qkv[row + d + j]
-            v[r * d + j] = qkv[row + 2l * d + j]
+        let row = r * w
+        for (j in range64(qd)) {
+            q[r * qd + j] = qkv[row + j]
+        }
+        for (j in range64(kvd)) {
+            k[r * kvd + j] = qkv[row + qd + j]
+            v[r * kvd + j] = qkv[row + qd + kvd + j]
         }
     }
 }
@@ -696,17 +844,19 @@ def private proj(l : TtsLinear; x : array<float>; t : int64; @scratch @exact_siz
 def private layer_attention(l : PocketLayer; tf : PocketTransformer; var x : array<float>; t, pos0 : int64;
                             var kc : TtsKvCache; var sc : PocketScratch; kv_only : bool = false) {
     let d = tf.d
-    let dh = d / tf.heads
+    let dh = tf.dh
+    let qd = tf.attn_dim
+    let kvd = tts_pk_kv_width(tf)
     layernorm_rows_into(x, sc.xb, t, d, l.norm1, tf.eps)
     proj(l.in_proj, sc.xb, t, sc.qkv)
-    split_qkv(sc.qkv, t, d, sc.q, sc.k, sc.v)
+    split_qkv(sc.qkv, t, qd, kvd, sc.q, sc.k, sc.v)
     if (!kv_only) {
-        rope_rows(sc.q, t, d, dh, pos0, tf.period)
+        rope_rows(sc.q, t, qd, dh, pos0, tf.period)
     }
-    rope_rows(sc.k, t, d, dh, pos0, tf.period)
-    kv_cache_append(kc, sc.k, sc.v, t, d)
+    rope_rows(sc.k, t, kvd, dh, pos0, tf.period)
+    kv_cache_append(kc, sc.k, sc.v, t, kvd)
     return if (kv_only)
-    attention_causal_rows(sc.q, t, d, tf.context, kc, sc.ctx)
+    attention_causal_rows(sc.q, t, qd, tf.context, kc, sc.ctx)
     proj(l.out_proj, sc.ctx, t, sc.xb)
     if (!empty(l.scale1.a)) {
         layer_scale_rows(sc.xb, t, d, l.scale1.a)
@@ -743,7 +893,7 @@ def transformer_rows(tf : PocketTransformer; var x : array<float>; t, pos0 : int
 def private caches_init(var caches : array<TtsKvCache>; tf : PocketTransformer; cap : int64) {
     caches |> resize(length(tf.layers))
     for (kc in caches) {
-        kv_cache_init(kc, tf.heads, tf.d / tf.heads, cap)
+        kv_cache_init(kc, tf.kv_heads, tf.dh, cap)
     }
 }
 
@@ -797,6 +947,7 @@ def private stream_conv(c : TtsConv1d; var cr : PocketConvCarry; x : array<float
     } else {
         conv1d_rows(c, cr.n > 0l ? sc.cs : x, tin, y)
         t_out = conv1d_out_len(c, tin)
+        compact_rows(y, t_out, c.cout_s, c.cout)   // a stage off the 16 lattice (the 2m decoder's 24- and 12-channel ones) reads at its channel count
     }
     if (need > 0l) {
         if (cr.n > 0l) {
@@ -815,8 +966,9 @@ def private res_conv_stream(b : PocketResConv; var cr : PocketConvCarry; x : arr
     copy_rows(sc.cc, x, t * w)
     elu_rows(sc.cc, t * w)
     stream_conv(b.conv1, cr, sc.cc, t, sc, sc.cpad)
-    elu_rows(sc.cpad, t * b.conv1.cout_s)
+    elu_rows(sc.cpad, t * b.conv1.cout)
     conv1d_rows(b.conv2, sc.cpad, t, y)
+    compact_rows(y, t, b.conv2.cout_s, b.conv2.cout)
     add_inplace_rows(y, x, t * w)
 }
 
@@ -957,7 +1109,7 @@ def pocket_decode_latents(m : PocketModel; latents : array<float>; frames : int6
     caches_init(sc.codec_caches, mm.dec_tf, frames * mm.frame_steps)
     wave |> reserve_resize(frames * m.frame_samples)
     let window = codec_window(frames)
-    let stride = mm.dec_out.cout_s
+    let stride = mm.dec_out.cout
     var f0 = 0l
     var pos = 0l
     var out = 0l
@@ -966,6 +1118,7 @@ def pocket_decode_latents(m : PocketModel; latents : array<float>; frames : int6
         sc.lw |> reserve_resize(n * ld)
         copy_floats(latents, f0 * ld, sc.lw, 0l, n * ld)
         conv1d_rows(mm.quant_proj, sc.lw, n, sc.ca)
+        compact_rows(sc.ca, n, mm.quant_proj.cout_s, mm.quant_proj.cout)
         var t = stream_conv(mm.upsample, dc[0], sc.ca, n, sc, sc.cb)
         transformer_rows(mm.dec_tf, sc.cb, t, pos, sc.codec_caches, sc)
         pos += t
@@ -990,12 +1143,25 @@ def pocket_decode_latents(m : PocketModel; latents : array<float>; frames : int6
 let private VOICE_CACHE_GROW = 64l   // rows past a chunk's need the caches grow by, so a run of chunks of one length grows once
 let POCKET_MAX_VOICE_SECONDS = 60l   // the longest clip a voice is cloned from: the state is the clip's frames per layer
 
+//! The clip as the encoder hears it: trimmed to end on a pause where the file's driver did
+//! (`prompt_end_on_pause`), else as it came - `pocket_voice_state`'s and the prepared prompt's first step.
+def pocket_prompt_pcm(m : PocketModel; pcm : array<float>; @scratch @exact_size var out : array<float>) {
+    if (m.prompt_end_on_pause) {
+        end_on_pause(pcm, m.sample_rate, out)
+        return
+    }
+    out |> reserve_resize(long_length(pcm))
+    copy_floats(pcm, 0l, out, 0l, long_length(pcm))
+}
+
 //! The backbone's memory of a clip: its latents projected into the model's width, the BOS row in
 //! front, run through the backbone at positions 0..; the state a synthesis continues from.
 [arch(at="../ARCHITECTURE_POCKET.md#pocket-voice-state")]
 def pocket_voice_state(m : PocketModel; pcm : array<float>; var sc : PocketScratch) : PocketVoiceState {
+    var inscope clip : array<float>
+    pocket_prompt_pcm(m, pcm, clip)
     var inscope lat : array<float>
-    let frames = pocket_encode_latents(m, pcm, sc, lat)
+    let frames = pocket_encode_latents(m, clip, sc, lat)
     return <- voice_state_from_latents(m, lat, frames, sc)
 }
 
@@ -1106,14 +1272,116 @@ def private word_count(cps : array<int>) : int {
     return words
 }
 
-//! The reference driver's preparation of one chunk: line breaks to spaces and ONE pass of two
-//! spaces to one (its own rule, not a whitespace fold), an initial capital, a terminal mark, the
+let private TERMINAL_MARKS <- ['.', '!', '?', 0x2026]       //! . ! ? and the ellipsis
+let private WEAK_MARKS <- [',', ';', ':', '-', 0x2013, 0x2014]   //! , ; : - and the two dashes
+let private CLOSERS <- ['"', '\'', 0x201d, 0x2019, ')', ']', 0xbb]   //! the quotes and brackets a sentence may end inside
+
+def private is_end_mark(c : int) : bool => find_index(TERMINAL_MARKS, c) >= 0
+
+def private is_weak(c : int) : bool => find_index(WEAK_MARKS, c) >= 0
+
+def private is_closer(c : int) : bool => find_index(CLOSERS, c) >= 0
+
+//! the length of cps[0..n) once the trailing codepoints `drop` names are removed
+def private rstrip_cps(cps : array<int>; n0 : int; drop : block<(c : int) : bool>) : int {
+    var n = n0
+    while (n > 0 && invoke(drop, cps[n - 1])) {
+        n--
+    }
+    return n
+}
+
+//! one codepoint onto the folded text: whitespace becomes one pending space, written before the next mark
+def private push_folded(var out : array<int>; var pending_space : bool&; c : int) {
+    if (cpt_is_whitespace(c)) {
+        pending_space = !empty(out)
+        return
+    }
+    if (pending_space) {
+        out |> push(' ')
+        pending_space = false
+    }
+    out |> push(c)
+}
+
+//! the reference's per-character rewrites, then its whitespace fold (runs of any whitespace to one space, the ends
+//! stripped), then a sentence mark followed by a comma, semicolon or colon loses that mark - what a deleted quote leaves behind
+def private replace_and_fold(m : PocketModel; text : string) : string {
+    var inscope cps <- utf8_to_cpts(text)
+    var inscope out : array<int>
+    out |> reserve(length(cps))
+    var pending_space = false
+    for (c in cps) {
+        if (!key_exists(m.replace_chars, c)) {
+            push_folded(out, pending_space, c)
+            continue
+        }
+        var rep = ""
+        m.replace_chars |> get(c) $(v) {
+            rep = v
+        }
+        var inscope rc <- utf8_to_cpts(rep)
+        for (c2 in rc) {
+            push_folded(out, pending_space, c2)
+        }
+    }
+    var inscope kept : array<int>
+    kept |> reserve(length(out))
+    var i = 0
+    while (i < length(out)) {
+        kept |> push(out[i])
+        if (is_end_mark(out[i])) {
+            var j = i + 1
+            while (j < length(out) && cpt_is_whitespace(out[j])) {
+                j++
+            }
+            if (j < length(out) && (out[j] == ',' || out[j] == ';' || out[j] == ':')) {
+                i = j + 1
+                continue
+            }
+        }
+        i++
+    }
+    return cpts_to_utf8(kept)
+}
+
+//! the reference's terminal-punctuation rule: a prompt already ending in a sentence mark - closing quotes or brackets
+//! after it allowed - is left alone, one ending in a weak mark has that mark (and the spaces about it) replaced by a
+//! period before the closers, and anything else takes a period after its closers
+def private ensure_terminal_punctuation(cps : array<int>) : string {
+    let core_n = rstrip_cps(cps, length(cps)) $(c) {
+        return is_closer(c) || c == ' '
+    }
+    return cpts_to_utf8(cps) if (core_n == 0 || is_end_mark(cps[core_n - 1]))
+    if (is_weak(cps[core_n - 1])) {
+        let kept = rstrip_cps(cps, core_n) $(c) {
+            return is_weak(c) || c == ' '
+        }
+        var closers_lo = core_n
+        while (closers_lo < length(cps) && cpt_is_whitespace(cps[closers_lo])) {
+            closers_lo++
+        }
+        var closers_hi = length(cps)
+        while (closers_hi > closers_lo && cpt_is_whitespace(cps[closers_hi - 1])) {
+            closers_hi--
+        }
+        return "{cpts_to_utf8(cps, 0, kept)}.{cpts_to_utf8(cps, closers_lo, closers_hi)}"
+    }
+    return "{cpts_to_utf8(cps)}."
+}
+
+//! The reference driver's preparation of one chunk: the per-character rewrites and the whitespace fold where the file
+//! names rewrites, line breaks to spaces and ONE pass of two spaces to one, an initial capital, a terminal mark, the
 //! short-input padding; the frames it keeps generating after EOS. An empty text is refused, as there.
 def prepare_pocket_text(m : PocketModel; text : string) : tuple<prepared : string; frames_after_eos : int> {
-    var s = strip(text) |> replace("\n", " ") |> replace("\r", " ") |> replace("  ", " ")
+    var s = strip(text)
+    if (!empty(m.replace_chars)) {
+        s = replace_and_fold(m, s)
+    }
     if (empty(s)) {
         panic("dasLLAMA pocket: the text is empty - nothing to say")
     }
+    s = s |> replace("\n", " ") |> replace("\r", " ") |> replace("  ", " ")
     if (m.remove_semicolons) {
         s = replace(s, ";", ",")
     }
@@ -1122,19 +1390,16 @@ def prepare_pocket_text(m : PocketModel; text : string) : tuple<prepared : strin
     let guess = words <= 4 ? 3 : 1
     // the reference upper-cases the first character; an ASCII one turns here, an accented one
     // stays as it is (no case table for it in the engine)
-    let first = cpts_to_utf8(cps, 0, 1)
-    let up = to_upper(first)
-    if (up != first) {
-        s = "{up}{cpts_to_utf8(cps, 1, length(cps))}"
-    }
-    // the released driver's rule (pocket-tts 3.1.0, the oracle): a prompt ending in a letter or
-    // digit - accented letters included, the reference asks isalnum - takes a period; any mark,
-    // a comma included, is left as it is
-    if (m.append_terminal_punctuation) {
-        let last = cps[length(cps) - 1]
-        if (cpt_is_letter(last) || cpt_is_number(last)) {
-            s = "{s}."
+    if (m.capitalize_first_letter) {
+        let first = cpts_to_utf8(cps, 0, 1)
+        let up = to_upper(first)
+        if (up != first) {
+            s = "{up}{cpts_to_utf8(cps, 1, length(cps))}"
+            cps[0] = utf8_to_cpts(up)[0]
         }
+    }
+    if (m.append_terminal_punctuation) {
+        s = ensure_terminal_punctuation(cps)
     }
     if (m.pad_short_inputs && words < 5) {
         s = "        {s}"
@@ -1155,22 +1420,21 @@ def private marker_ids(m : PocketModel; s : string) : array<int64> {
     return <- ids
 }
 
-// a boundary that sits right after a decimal point's period is no sentence end
+[arch(at="../ARCHITECTURE_POCKET.md#pocket-chunker")]
 def private decimal_boundary(m : PocketModel; ids : array<int64>; at : int) : bool {
     var inscope head, tail : array<int64>
-    head |> reserve(at)
-    tail |> reserve(length(ids) - at)
-    for (i, id in count(), ids) {
-        if (i < at) {
-            head |> push(id)
-        } else {
-            tail |> push(id)
-        }
+    head |> reserve(2)
+    tail |> reserve(2)
+    for (i in range(max(0, at - 2), at)) {
+        head |> push(ids[i])
+    }
+    for (i in range(at - 1, min(at + 1, length(ids)))) {
+        tail |> push(ids[i])
     }
     var inscope pre <- utf8_to_cpts(spm_decode_ids(m.tok, head))
     var inscope suf <- utf8_to_cpts(spm_decode_ids(m.tok, tail))
     let n = length(pre)
-    return n >= 2 && pre[n - 1] == '.' && cpt_is_number(pre[n - 2]) && !empty(suf) && cpt_is_number(suf[0])
+    return n >= 2 && pre[n - 1] == '.' && cpt_is_number(pre[n - 2]) && length(suf) >= 2 && cpt_is_number(suf[1])
 }
 
 // the reference's boundary walk: a segment ends after a run of marker ids
@@ -1271,7 +1535,12 @@ def private frame_step(m : PocketModel; var vs : PocketVoiceState; pos : int64; 
     let d = m.backbone.d
     linear_rows_decode(m.input_linear, sc.x_in, sc.rows)
     transformer_rows(m.backbone, sc.rows, 1l, pos, vs.caches, sc)
-    layernorm_rows_into(sc.rows, sc.cond, 1l, d, m.out_norm, m.backbone.eps)
+    if (pocket_has_z(m)) {
+        layernorm_rows_into(sc.rows, sc.zn, 1l, d, m.out_norm, m.backbone.eps)
+        linear_vec(m.z_proj, sc.zn, sc.cond)
+    } else {
+        layernorm_rows_into(sc.rows, sc.cond, 1l, d, m.out_norm, m.backbone.eps)
+    }
     linear_vec(m.out_eos, sc.cond, sc.eos)
     return sc.eos[0]
 }
@@ -1283,12 +1552,14 @@ def modulate(var x : array<float>; mod : array<float>; n : int64) {
     }
 }
 
-//! The flow head at one step: x1 = x0 + v(0, 1, x0 | cond).
+//! The flow head at one step: x1 = x0 + v(0, 1, x0 | cond) for `lsd`, x0 + v(x0 | cond) for `pointwise`, v(x0 | cond) for `drifting`.
 def private head_step(hd : PocketHead; var sc : PocketScratch) {
     let n = hd.dim
     linear_vec(hd.cond_embed, sc.cond, sc.hy)
-    for (j in range64(n)) {
-        sc.hy[j] += hd.time_const.a[j]
+    if (hd.flow == PocketFlow.lsd) {
+        for (j in range64(n)) {
+            sc.hy[j] += hd.time_const.a[j]
+        }
     }
     silu(sc.hy, n)
     linear_vec(hd.input_proj, sc.x0, sc.hx)
@@ -1307,16 +1578,17 @@ def private head_step(hd : PocketHead; var sc : PocketScratch) {
     layernorm_rows_into(sc.hx, sc.hn, 1l, n, hd.final_ln, POCKET_HEAD_LN_EPS)
     modulate(sc.hn, sc.hmod, n)
     linear_vec(hd.final_linear, sc.hn, sc.x1)
+    return if (hd.flow == PocketFlow.drifting)
     for (j in range64(long_length(sc.x1))) {
         sc.x1[j] += sc.x0[j]
     }
 }
 
 //! The flow head alone, the parity rail's seam: the normalized frame `x1` the head samples from a
-//! conditioning row and a noise draw.
+//! conditioning row (`cond_dim` wide) and a noise draw.
 def pocket_head(m : PocketModel; cond, x0 : array<float>; var sc : PocketScratch; @scratch @exact_size var x1 : array<float>) {
-    sc.cond |> reserve_resize(m.backbone.d)
-    copy_floats(cond, 0l, sc.cond, 0l, m.backbone.d)
+    sc.cond |> reserve_resize(m.cond_dim)
+    copy_floats(cond, 0l, sc.cond, 0l, m.cond_dim)
     sc.x0 |> reserve_resize(m.latent_dim)
     for (j in range64(m.latent_dim)) {
         sc.x0[j] = x0[j]
@@ -1355,10 +1627,10 @@ def private caches_ready(var vs : PocketVoiceState; n_txt : int64) {
 def pocket_noise_at(var sc : PocketScratch; captured : array<float>; at : int64; std : float) : float =>
     at < long_length(captured) ? captured[at] : rng_normal(sc.rng) * std
 
-//! The EOS rule on frame `frame`'s logit: the first crossing of the threshold pins `eos_at`, and
-//! the loop stops `frames_after_eos` frames past it - both loops stop by this one rule.
+//! The EOS rule on frame `frame`'s logit: the first crossing of the threshold from frame `min_frames_before_eos` on
+//! pins `eos_at`, and the loop stops `frames_after_eos` frames past it - both loops stop by this one rule.
 def pocket_eos_stops(m : PocketModel; eos : float; frame : int64; frames_after_eos : int; var eos_at : int64&) : bool {
-    if (eos > m.eos_threshold && eos_at < 0l) {
+    if (eos > m.eos_threshold && eos_at < 0l && frame >= m.min_frames_before_eos) {
         eos_at = frame
     }
     return eos_at >= 0l && frame >= eos_at + int64(frames_after_eos)
@@ -1458,7 +1730,7 @@ def pocket_prompt_rows(m : PocketModel; ids : array<int64>; var vs : PocketVoice
 [hot_path]
 def pocket_synthesize(m : PocketModel; ids : array<int64>; var vs : PocketVoiceState; temp : float; frames_after_eos : int;
                       captured, forced : array<float>; var tm : TtsTimings; var sc : PocketScratch) : int64 {
-    let d = m.backbone.d
+    let cd = m.cond_dim
     let ld = m.latent_dim
     let n_txt = long_length(ids)
     let clock = ref_time_ticks()
@@ -1468,7 +1740,7 @@ def pocket_synthesize(m : PocketModel; ids : array<int64>; var vs : PocketVoiceS
     let max_frames = pocket_max_frames(n_txt)
     unsafe {
         scratch_resize(sc.latents, max_frames * ld)
-        scratch_resize(sc.conds, max_frames * d)
+        scratch_resize(sc.conds, max_frames * cd)
         scratch_resize(sc.eos_logits, max_frames)
         scratch_resize(sc.x_in, ld)
         scratch_resize(sc.x0, ld)
@@ -1501,8 +1773,8 @@ def pocket_synthesize(m : PocketModel; ids : array<int64>; var vs : PocketVoiceS
         let tb = ref_time_ticks()
         let eos = frame_step(m, vs, vs.len + n_txt + frames, sc)
         backbone_us += int64(get_time_usec(tb))
-        for (j in range64(d)) {
-            sc.conds[frames * d + j] = sc.cond[j]
+        for (j in range64(cd)) {
+            sc.conds[frames * cd + j] = sc.cond[j]
         }
         sc.eos_logits[frames] = eos
         break if (pocket_eos_stops(m, eos, frames, frames_after_eos, eos_at))
@@ -1526,6 +1798,7 @@ def pocket_synthesize(m : PocketModel; ids : array<int64>; var vs : PocketVoiceS
     tm.head_us = head_us
     let tc = ref_time_ticks()
     pocket_decode_latents(m, sc.latents, frames, sc, sc.wave)
+    fade_in(sc.wave, m.fade_in_samples)
     tm.codec_us = int64(get_time_usec(tc))
     tm.samples = long_length(sc.wave)
     tm.total_us = int64(get_time_usec(clock))

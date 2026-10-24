@@ -1,26 +1,33 @@
 """Pocket TTS bundle -> dasLLAMA GGUF.
 
-    ~/Work/tts-ab/pocket/.venv-pocket/bin/python convert_pocket.py --language english_2026-04 \\
+    ~/Work/tts-ab/pocket/venv-4/bin/python convert_pocket.py --language english_18m_2026-10 \\
         --hub ~/Work/tts-ab/pocket/hub --out ~/Work/llama.cpp/models [--llama-cpp ~/Work/llama.cpp]
 
-Reads one language's pinned bundle (`<hub>/pocket-tts/languages/<language>/model.safetensors`, the
+Reads one config's pinned bundle (`<hub>/pocket-tts/languages/<language>/model.safetensors`, the
 gated repo with the Mimi encoder populated), its tokenizer
 (`<hub>/pocket-tts-without-voice-cloning/languages/<language>/tokenizer.model`), the config the
-package ships for that language, and the bundled voice clips, and writes
+package (pocket-tts 4.0.1) ships under that name, and the bundled voice clips, and writes
 `pocket-tts-<language>.gguf` under `general.architecture = "pocket-tts"`:
 
-- every weight as f16 (the bundles are bf16; f16 keeps 3 more mantissa bits - the loss is the
-  bf16 file's own), under the CANONICAL names below (GGML caps a name at 63 bytes; 16 of the
-  bundle's names are longer), [out, in] like PyTorch;
+- every weight as f16 (the 100M bundles are bf16, the 2026-10 small ones f32; f16 keeps 3 more
+  mantissa bits than bf16 - the loss is the bf16 file's own), under the CANONICAL names below
+  (GGML caps a name at 63 bytes; 16 of the bundle's names are longer), [out, in] like PyTorch;
 - the unigram SentencePiece tokenizer as `tokenizer.ggml.model = "t5"` (upstream's name for a
   unigram model) with `tokenizer.ggml.tokens` / `scores` / `token_type` and the special ids;
-- the model's scalars as `pocket.*` metadata (from the config, not guessed);
+- the model's scalars as `pocket.*` metadata (from the config, not guessed): the backbone's
+  widths (`attn_dim` and `kv_heads` for the grouped-query small models, `ffn` for an explicit
+  feed-forward width), `z_dim` for the bottleneck before the head and the EOS logit, `text_rank`
+  for a low-rank text table, the flow head's type, the decoder-side codec geometry
+  (`pocket.mimi.dec.*`, equal to the encoder's where a config names none), and the package's
+  driver rules - the EOS threshold, the frames EOS is ignored on, the fade-in, the prompt trim,
+  the per-character replacements;
 - each bundled voice as `voice_latents.<name>` [frames][latent_dim] f32 - the clip's frames
-  through the package's own codec encoder, the form a voice state is built from (the reader
-  also takes the older `voice.<name>` PCM form, which needs the encoder); `--voices` picks the
-  roster, the CC BY-NC clips of the package's English roster are never in it (the sidecar names
-  every clip's source and licence); `--no-cloning` leaves the codec encoder out and says so in
-  `pocket.cloning`, so the file serves its roster and refuses to clone.
+  through the package's own codec encoder after its prompt trim (`end_on_pause`), the form a
+  voice state is built from and the form the package's own precomputed states come from (the
+  reader also takes the older `voice.<name>` PCM form, which needs the encoder); `--voices`
+  picks the roster, the CC BY-NC clips of the package's English roster are never in it (the
+  sidecar names every clip's source and licence); `--no-cloning` leaves the codec encoder out
+  and says so in `pocket.cloning`, so the file serves its roster and refuses to clone.
 
 Canonical names: `flow_lm.transformer.layers.N.*` -> `backbone.N.*`; `flow_lm.flow_net.*` ->
 `head.*`; `mimi.encoder_transformer.transformer.layers.N.*` -> `mimi.enc_tf.N.*`, the decoder
@@ -79,9 +86,11 @@ LANGUAGE_VOICES = {
     "portuguese": {"rafael": ("g-Vi8PgmSY0-enhanced-v2.wav", "kyutai/pocket-tts repo clip")},
     "french_24l": {"estelle": ("tts-voices:unmute-prod-website/developpeuse-3.wav", "CC0 (unmute-prod-website)")},
 }
-DEFAULT_VOICE = {"english_2026-04": "alba", "english": "alba", "italian": "giovanni", "spanish": "lola",
-                 "german": "juergen", "portuguese": "rafael", "french_24l": "estelle"}
-DEFAULT_TEMPERATURE = 0.7   # pocket_tts/default_parameters.py when the config carries none
+DEFAULT_VOICE = {"italian": "giovanni", "spanish": "lola", "german": "juergen", "portuguese": "rafael", "french_24l": "estelle"}
+ENGLISH_DEFAULT_VOICE = "alba"
+# pocket_tts/utils/config.py Config defaults when the config carries none
+DEFAULT_TEMPERATURE = 0.3
+DEFAULT_EOS_THRESHOLD = -4.0
 
 
 def q8_linear(name, shape):
@@ -206,18 +215,34 @@ def encoder_tensor(name):
 
 
 def clip_encoder(language):
-    """The package's own codec encoder over a 24 kHz clip -> its latent frames [frames][latent_dim],
-    the form the roster is stored in: a voice is the backbone's memory of those frames, so the
-    file needs no clip samples and, with --no-cloning, no encoder."""
+    """The package's own prompt path over a 24 kHz clip -> its latent frames [frames][latent_dim],
+    the form the roster is stored in: the clip trimmed to end on a pause (`end_on_pause`, what
+    `get_state_for_audio_prompt` does first), then the codec encoder. A voice is the backbone's
+    memory of those frames, so the file needs no clip samples and, with --no-cloning, no encoder."""
     import torch
     from pocket_tts import TTSModel
+    from pocket_tts.data.audio_utils import end_on_pause
     model = TTSModel.load_model(language=language)
 
     def encode(pcm):
         with torch.no_grad():
-            lat = model.mimi.encode_to_latent(torch.from_numpy(np.ascontiguousarray(pcm, dtype=np.float32))[None, None])
+            clip = end_on_pause(torch.from_numpy(np.ascontiguousarray(pcm, dtype=np.float32))[None], model.sample_rate)
+            lat = model.mimi.encode_to_latent(clip[None])
         return np.ascontiguousarray(lat[0].numpy(), dtype=np.float32)
     return encode
+
+
+def driver_rules():
+    """The package's generation-time constants the reader needs to reproduce its output: the frames
+    EOS is ignored on at the start of a chunk, and the package version the file follows."""
+    from importlib.metadata import version
+    from pocket_tts import TTSModel
+    return dict(min_frames_before_eos=int(getattr(TTSModel, "_MIN_FRAMES_BEFORE_EOS", 0)), version=version("pocket-tts"))
+
+
+def fade_in_samples(sample_rate):
+    """The package's 5 ms onset fade, in samples of the codec's rate."""
+    return int(sample_rate) // 200
 
 
 def kq_tensor(name, shape):
@@ -253,11 +278,14 @@ def read_safetensors(path):
         for k, v in hdr.items():
             if k == "__metadata__":
                 continue
-            assert v["dtype"] == "BF16", (k, v["dtype"])
             a, b = v["data_offsets"]
             f.seek(base + a)
-            raw = np.frombuffer(f.read(b - a), dtype=np.uint16)
-            out[k] = (raw.astype(np.uint32) << 16).view(np.float32).reshape(v["shape"])
+            raw = f.read(b - a)
+            if v["dtype"] == "BF16":
+                out[k] = (np.frombuffer(raw, dtype=np.uint16).astype(np.uint32) << 16).view(np.float32).reshape(v["shape"])
+            else:
+                assert v["dtype"] == "F32", (k, v["dtype"])
+                out[k] = np.frombuffer(raw, dtype=np.float32).reshape(v["shape"]).copy()
         return out
 
 
@@ -308,6 +336,8 @@ def main():
     ap.add_argument("--voices", default="", help="the roster as a comma list of the language's voice names (default: every voice the language ships)")
     ap.add_argument("--no-cloning", action="store_true", help="leave the codec encoder out: the roster speaks from its stored latents, "
                     "tts_register_voice refuses, and the file is smaller by the encoder")
+    ap.add_argument("--keep-f32", action="store_true", help="store an unquantized tensor as the bundle stores it (f32 for the 2026-10 small "
+                    "models) instead of f16: the parity rail's reference, local only")
     a = ap.parse_args()
     sys.path.insert(0, os.path.join(a.llama_cpp, "gguf-py"))
     import gguf
@@ -355,7 +385,7 @@ def main():
             tensors[name] = ("q8", np.ascontiguousarray(v.astype(np.float32)))
             quantized.append(name)
         else:
-            tensors[name] = np.ascontiguousarray(v.astype(np.float16))
+            tensors[name] = np.ascontiguousarray(v.astype(np.float32 if a.keep_f32 else np.float16))
 
     voices = {}
     sources = {}
@@ -381,18 +411,23 @@ def main():
         voices[vname] = latents
         sources[vname] = (rel, licence, len(pcm))
         tensors["voice_latents." + vname] = latents
-    default_voice = DEFAULT_VOICE.get(lang, next(iter(voices)))
+    default_voice = ENGLISH_DEFAULT_VOICE if lang.startswith("english") else DEFAULT_VOICE.get(lang, next(iter(voices)))
     if default_voice not in voices:
         default_voice = next(iter(voices))
     assert default_voice in voices, (default_voice, list(voices))
 
     fl = cfg["flow_lm"]
     mm = cfg["mimi"]
+    tf = fl["transformer"]
+    dec_tf = mm.get("decoder_transformer") or mm["transformer"]
+    dec_seanet = mm.get("decoder_seanet") or mm["seanet"]
+    assert [int(r) for r in dec_seanet["ratios"]] == ratios, "the decoder's ratios differ from the encoder's; the reader shares them"
+    rules = driver_rules()
     stem = a.name or (f"pocket-tts-{lang}-q8" if a.q8 else f"pocket-tts-{lang}")
     path = os.path.join(a.out, stem + ".gguf")
     w = gguf.GGUFWriter(path, ARCH)
     w.add_name(f"Pocket TTS {lang}" + (" Q4_K" if a.kq else " Q8_0" if a.q8 else ""))
-    w.add_string("pocket.weights", "q8" if a.q8 else "f16")
+    w.add_string("pocket.weights", "q8" if a.q8 else "f32" if a.keep_f32 else "f16")
     if a.kq:
         w.add_string("pocket.kq", "q4_k")
     w.add_bool("pocket.cloning", not a.no_cloning)
@@ -402,21 +437,37 @@ def main():
     w.add_string("pocket.revision", weights_rev)
     w.add_string("pocket.tokenizer_revision", tok_rev)
     w.add_string("pocket.source", f"kyutai/pocket-tts languages/{lang}/model.safetensors")
+    w.add_string("pocket.driver", f"pocket-tts {rules['version']}")
     w.add_float32("pocket.default_temperature", float(cfg.get("default_temperature", DEFAULT_TEMPERATURE)))
+    w.add_float32("pocket.eos_threshold", float(cfg.get("default_eos_threshold", DEFAULT_EOS_THRESHOLD)))
+    # the package's driver rules (pocket_tts/models/tts_model.py): the first-frames EOS guard, a 5 ms fade-in, the voice clip trimmed to end on a pause
+    w.add_uint32("pocket.min_frames_before_eos", rules["min_frames_before_eos"])
+    w.add_uint32("pocket.fade_in_samples", fade_in_samples(mm["sample_rate"]))
+    w.add_bool("pocket.prompt_end_on_pause", True)
     # the package's per-config text rules (pocket_tts/utils/config.py Config defaults)
     w.add_bool("pocket.pad_short_inputs", bool(cfg.get("pad_with_spaces_for_short_inputs", False)))
     w.add_bool("pocket.remove_semicolons", bool(cfg.get("remove_semicolons", False)))
     w.add_bool("pocket.append_terminal_punctuation", bool(cfg.get("append_terminal_punctuation", True)))
+    w.add_bool("pocket.capitalize_first_letter", bool(cfg.get("capitalize_first_letter", True)))
+    replace = dict(cfg.get("replace_characters") or {})
+    if replace:
+        w.add_array("pocket.replace_from", list(replace.keys()))
+        w.add_array("pocket.replace_to", [str(v) for v in replace.values()])
     w.add_int32("pocket.frames_after_eos", int(cfg.get("model_recommended_frames_after_eos") or -1))
     w.add_uint32("pocket.sample_rate", int(mm["sample_rate"]))
     w.add_float32("pocket.frame_rate", float(mm["frame_rate"]))
     w.add_uint32("pocket.latent_dim", int(mm["quantizer"]["dimension"]))
-    w.add_uint32("pocket.backbone.layers", int(fl["transformer"]["num_layers"]))
-    w.add_uint32("pocket.backbone.d_model", int(fl["transformer"]["d_model"]))
-    w.add_uint32("pocket.backbone.heads", int(fl["transformer"]["num_heads"]))
-    w.add_uint32("pocket.backbone.hidden_scale", int(fl["transformer"]["hidden_scale"]))
-    w.add_float32("pocket.backbone.rope_max_period", float(fl["transformer"]["max_period"]))
+    w.add_uint32("pocket.backbone.layers", int(tf["num_layers"]))
+    w.add_uint32("pocket.backbone.d_model", int(tf["d_model"]))
+    w.add_uint32("pocket.backbone.heads", int(tf["num_heads"]))
+    w.add_uint32("pocket.backbone.hidden_scale", int(tf["hidden_scale"]))
+    w.add_uint32("pocket.backbone.ffn", int(tf.get("dim_feedforward") or int(tf["d_model"]) * int(tf["hidden_scale"])))
+    w.add_uint32("pocket.backbone.attn_dim", int(tf.get("attn_dim") or tf["d_model"]))
+    w.add_uint32("pocket.backbone.kv_heads", int(tf.get("num_kv_heads") or tf["num_heads"]))
+    w.add_float32("pocket.backbone.rope_max_period", float(tf["max_period"]))
     w.add_bool("pocket.bos_before_voice", bool(fl["insert_bos_before_voice"]))
+    w.add_uint32("pocket.z_dim", int(fl.get("z_dim") or 0))
+    w.add_uint32("pocket.text_rank", int(fl["lookup_table"].get("rank") or 0))
     w.add_uint32("pocket.head.depth", int(fl["flow"]["depth"]))
     w.add_uint32("pocket.head.dim", int(fl["flow"]["dim"]))
     w.add_string("pocket.head.flow_type", str(fl["flow"].get("type", "lsd")))
@@ -428,11 +479,24 @@ def main():
     w.add_float32("pocket.mimi.layer_scale", float(mm["transformer"]["layer_scale"]))
     w.add_float32("pocket.mimi.rope_max_period", float(mm["transformer"].get("max_period", 10000.0)))
     w.add_uint32("pocket.mimi.n_filters", int(mm["seanet"]["n_filters"]))
-    w.add_array("pocket.mimi.ratios", [int(r) for r in mm["seanet"]["ratios"]])
+    w.add_array("pocket.mimi.ratios", ratios)
     w.add_uint32("pocket.mimi.kernel_size", int(mm["seanet"]["kernel_size"]))
     w.add_uint32("pocket.mimi.residual_kernel_size", int(mm["seanet"]["residual_kernel_size"]))
     w.add_uint32("pocket.mimi.last_kernel_size", int(mm["seanet"]["last_kernel_size"]))
     w.add_uint32("pocket.mimi.compress", int(mm["seanet"]["compress"]))
+    w.add_uint32("pocket.mimi.outer_dim", int(mm.get("outer_dim") or mm["seanet"]["dimension"]))
+    w.add_uint32("pocket.mimi.dec.d_model", int(dec_tf["d_model"]))
+    w.add_uint32("pocket.mimi.dec.heads", int(dec_tf["num_heads"]))
+    w.add_uint32("pocket.mimi.dec.layers", int(dec_tf["num_layers"]))
+    w.add_uint32("pocket.mimi.dec.context", int(dec_tf["context"]))
+    w.add_uint32("pocket.mimi.dec.dim_feedforward", int(dec_tf["dim_feedforward"]))
+    w.add_float32("pocket.mimi.dec.layer_scale", float(dec_tf["layer_scale"]))
+    w.add_float32("pocket.mimi.dec.rope_max_period", float(dec_tf.get("max_period", 10000.0)))
+    w.add_uint32("pocket.mimi.dec.n_filters", int(dec_seanet["n_filters"]))
+    w.add_uint32("pocket.mimi.dec.kernel_size", int(dec_seanet["kernel_size"]))
+    w.add_uint32("pocket.mimi.dec.residual_kernel_size", int(dec_seanet["residual_kernel_size"]))
+    w.add_uint32("pocket.mimi.dec.last_kernel_size", int(dec_seanet["last_kernel_size"]))
+    w.add_uint32("pocket.mimi.dec.compress", int(dec_seanet["compress"]))
     w.add_string("pocket.default_voice", default_voice)
     w.add_array("pocket.voices", list(voices.keys()))
     w.add_tokenizer_model("t5")
@@ -464,8 +528,8 @@ def main():
         f.write(f"{stem}.gguf - Kyutai Pocket TTS ({lang}) weights{' (the backbone and codec transformers as Q4_K, the head as Q8_0)' if a.kq else (' (the served GEMMs as Q8_0)' if a.q8 else '')}"
                 f"{' without the codec encoder' if a.no_cloning else ''}, CC BY 4.0 (Kyutai), converted from kyutai/pocket-tts "
                 f"languages/{lang}/model.safetensors @ {weights_rev} and the unigram SentencePiece tokenizer @ {tok_rev} by "
-                "modules/dasLLAMA/harness/convert_pocket.py; the reference implementation is MIT (github.com/kyutai-labs/pocket-tts). "
-                "Bundled voices (each the codec encoder's latent frames of the clip named):\n")
+                f"modules/dasLLAMA/harness/convert_pocket.py over pocket-tts {rules['version']}; the reference implementation is MIT (github.com/kyutai-labs/pocket-tts). "
+                "Bundled voices (each the codec encoder's latent frames of the clip named, the clip trimmed to end on a pause as the package's prompt path trims it):\n")
         for vname, (rel, licence, n) in sources.items():
             f.write(f"  voice_latents.{vname}: {rel} ({n / SAMPLE_RATE:.1f} s) - {licence}\n")
         for vname, why in EXCLUDED_VOICES.items():

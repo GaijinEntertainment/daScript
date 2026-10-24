@@ -291,8 +291,9 @@ test('the packs on disk turn the card into one button per speech model', async (
     const { posts } = await openControl(page, { catalog: doc });
     await expect(page.locator('#tts-offer button')).toHaveCount(models.length);
     for (const m of models) {
-        await expect(page.locator('#tts-offer button', { hasText: modelName(m.file) }))
-            .toHaveText('download ' + modelName(m.file) + ' (' + sizeMB(m.bytes) + ')');
+        // the whole label: one model's name can prefix another's (a model and its refl twin)
+        const label = 'download ' + modelName(m.file) + ' (' + sizeMB(m.bytes) + ')';
+        await expect(page.locator('#tts-offer button', { hasText: label })).toHaveText(label);
     }
     await page.locator('#tts-offer button').first().click();
     expect(lastJson(posts.filter(p => p.path === '/catalog/download')))

@@ -132,8 +132,8 @@ body clamps the index under it - declines a shape larger than that literal in th
 before the dispatch is recorded.** Workgroup memory has no bounds check, so an
 index past the literal reads or writes another stage's bytes.
 
-**Never let a pad row that feeds the reduction of a live output row - a pad along the reduction
-axis - reach a `matmul2d` or a staged cooperative tile as an operand; stage it as zero, or bound
-the walk at the live row count. A pad row is a row past a buffer's live count that the dispatch
-producing the buffer did not write.** A pad along the reduction axis holds recycled pool bytes,
-so it multiplies stale values (NaN included) into every live output row.
+**Never let a pad - an element the dispatch producing the buffer did not write, at a position the
+reduction walks: a row past the buffer's live count when the reduction runs down rows, or a column
+past a row's live width when it runs along a row - reach a `matmul2d` or a staged cooperative tile
+as an operand; stage it as zero, or bound the walk at the live extent of that axis.** A pad holds recycled pool
+bytes, so it multiplies stale values (NaN included) into every live output row.
