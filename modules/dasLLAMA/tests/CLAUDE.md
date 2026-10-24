@@ -2100,9 +2100,11 @@ past the llama bar, so that file holds no one-window arm - and the Q8_0 file (th
 the same skips. The CUDA kernel cells
 beside them, `test_cuda_kernels.das` (model-free; a CUDA device with NVRTC, else every cell but the leak gate skips;
 the per-format cells - the kq cm2 tiles, the kq and per-32 GEMVs, the token-table gathers, the Q8_K feeds - also skip
-without dasVulkan): the q8 GEMV and its rate, the MMQ int8 GEMM's three leaves against the block-scaled reference - the
-Q8_0 and the IQ4_XS one (the codebook's signed codes) per element, the Q4_K one (its min terms f16-staged and folded
-sixteen blocks at a time over four superblocks) at the f16 tiles' bar - the cm2 l tile
+without dasVulkan): the q8 GEMV and its rate, the MMQ int8 GEMM's leaves against their references - the Q8_0 one and
+the superblock ones without a min term (IQ4_XS and IQ4_NL through the codebook, Q4_0's nibbles less eight) per element
+against the block-scaled fold, the Q4_K one (its min terms f16-staged and folded sixteen blocks at a time over four
+superblocks) at the f16 tiles' bar, and the per-32 ones (Q5_1, Q4_0, Q5_0, IQ4_NL off the 256 lattice) against the
+engine's own per-32 dequant dotted with the activation quants, Q5_1 at the f16 tiles' bar for its m - the cm2 l tile
 against the f16-feed oracle whole and split in two k chunks through the reduce (`test_cud_q8_cm2l_split`), its rate at
 the 1B window's shapes - each rate cell's warm-up held to the oracle first, the GEMV's every row and the tile's
 activation rows 0, 255, 256 and 511 over every column, the tile's bit for bit on a fixture its f16 accumulator holds

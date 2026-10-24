@@ -41,6 +41,7 @@ let private FILE_1B_Q51 = "Llama-3.2-1B-Instruct-Q5_1-local.gguf"   //! every de
 let private FILE_1B_Q50 = "Llama-3.2-1B-Instruct-Q5_0-local.gguf"   //! the q5032 planes
 let private FILE_1B_IQ4XS = "Llama-3.2-1B-Instruct-IQ4_XS.gguf"      //! the iq4xs planes: the codebook decode through the home's permute
 let private FILE_1B_IQ4NL = "Llama-3.2-1B-Instruct-IQ4_NL-local.gguf"   //! the iq4nl superblock planes (on the 256 lattice), the same decode
+let private FILE_1B_Q40 = "Llama-3.2-1B-Instruct-Q4_0-local.gguf"       //! the q40 superblock planes: the signed nibble codes under the d pairs
 let private FILE_3B = "Llama-3.2-3B-Instruct-Q8_0.gguf"   //! head size 128: the window's attention on the h128 flash tile
 
 [test]
@@ -91,6 +92,13 @@ def test_gpu_resident_cuda_llama_1b_iq4xs(t : T?) {
 def test_gpu_resident_cuda_llama_1b_iq4nl(t : T?) {
     t |> run("{FILE_1B_IQ4NL}: one window (40 tokens) and eight steps on the CUDA driver") @(t : T?) {
         cuda_forced_feed(t, FILE_1B_IQ4NL, "llama", 40l, 1l, LOGIT_BAR_REL)
+    }
+}
+
+[test]
+def test_gpu_resident_cuda_llama_1b_q40(t : T?) {
+    t |> run("{FILE_1B_Q40}: one window (40 tokens) and eight steps on the CUDA driver") @(t : T?) {
+        cuda_forced_feed(t, FILE_1B_Q40, "llama", 40l, 1l, LOGIT_BAR_REL)
     }
 }
 

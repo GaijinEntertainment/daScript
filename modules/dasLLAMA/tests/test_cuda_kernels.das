@@ -368,59 +368,164 @@ def test_cud_k4_mmq(t0 : T?) {
     }
 }
 
-//! the IQ4_XS leaf: the Q4_K nibble tiling read through the codebook, a two-word scale row a superblock (d and the scales'
-//! high bits, then the scales' low nibbles); the reference folds each block as xs x d x (ls - 32) x dot
+//! one superblock leaf without a min term over the Q4_K nibble tiling: IQ4_XS (the codebook; a two-word scale row - d and the
+//! scales' high bits, the scales' low nibbles), Q4_0 (the nibbles less eight; the d-pair row) or IQ4_NL (the codebook; the
+//! d-pair row); the reference folds each block as xs x scale x dot
+def private cud_sb_mmq_run(t : T?; f : KqFmt) {
+    let k = 1024   // four superblocks: the scale rows hand over three times
+    let d = 256
+    let rows = 256
+    let nsb = k / 256
+    let nb = k / 32
+    let lut = f != KqFmt.q40
+    let xs2 = f == KqFmt.iq4xs
+    var wq <- hashed_words(d * nsb * 32, 17u, 9u + uint(f))   // eight uint4 a superblock
+    var ws <- hashed_words(d * nsb * (xs2 ? 2 : 5), 5u, 23u)   // IQ4_XS: the scale bits hashed, d in the first word's low half; else four words of d pairs and a pad
+    for (sb in range(d * nsb)) {
+        if (xs2) {
+            ws[sb * 2] = (ws[sb * 2] & 0xFFFF0000u) | (packHalf2x16(float2(0.002 + 0.001 * float(sb % 7), 0.0)) & 0xFFFFu)
+        } else {
+            for (j in range(4)) {
+                ws[sb * 5 + j] = packHalf2x16(float2(0.002 + 0.001 * float((sb + 2 * j) % 7), 0.0015 + 0.001 * float((sb + 2 * j + 1) % 5)))
+            }
+            ws[sb * 5 + 4] = 0u
+        }
+    }
+    var xq <- hashed_words(rows * k / 4, 7u, 3u)
+    var xs <- row_fill(rows * nb, 1, 0, 0.125, 0.25, 5)
+    var s = g_cud.stream
+    var bufs = fixed_array(buf_upload(wq, s), buf_upload(ws, s), buf_upload(xq, s), buf_upload(xs, s), buf_fill(rows * d, Y_SENTINEL, s))
+    var pc = MmqArgs(n = uint(k), d = uint(d), rows = uint(rows))
+    let wgs = mmq_wgs(int64(d), int64(rows))
+    if (xs2) {
+        enc_iq4xs_mmq(s, bufs, pc, wgs)
+    } elif (lut) {
+        enc_iq4nl_mmq(s, bufs, pc, wgs)
+    } else {
+        enc_q40_mmq(s, bufs, pc, wgs)
+    }
+    t |> success(cud_sync(), "{f} mmq: the launch completes ({cuda_last_error()})")
+    let y <- buf_download(bufs[4], rows * d, type<float>)
+    cuda_mem_free(bufs)
+    var want : array<float>
+    want |> resize(rows * d)
+    for (tok in range(rows)) {
+        for (row in range(d)) {
+            var acc = 0.0
+            for (blk in range(nb)) {
+                let sb = row * nsb + blk / 8
+                let g = blk % 8
+                var dot = 0
+                for (i in range(32)) {
+                    let wb = (sb * 8 + g) * 16 + i % 16
+                    let byte = int((wq[wb / 4] >> uint((wb % 4) * 8)) & 255u)
+                    let nib = i < 16 ? byte & 15 : byte >> 4
+                    let code = lut ? int(iq4_word(uint(nib)) & 255u) : nib - 8
+                    let xi = tok * k + blk * 32 + i
+                    let xb = int((xq[xi / 4] >> uint((xi % 4) * 8)) & 255u)
+                    dot += (code >= 128 ? code - 256 : code) * (xb >= 128 ? xb - 256 : xb)
+                }
+                let sc = xs2 ? unpackHalf2x16(ws[sb * 2]).x * float(iq4xs_sc(ws[sb * 2], ws[sb * 2 + 1], uint(g))) : q40_d_of(ws[sb * 5 + g / 2], uint(g))
+                acc += float(dot) * sc * xs[tok * nb + blk]
+            }
+            want[tok * d + row] = acc
+        }
+    }
+    check_rows(t, "{f} MMQ vs the block-scaled reference", y, want, Q8_GEMV_BAR, d)
+}
+
 [test]
-def test_cud_iq4xs_mmq(t0 : T?) {
-    t0 |> run("CUDA MMQ-shaped IQ4_XS GEMM == the block-scaled CPU reference") <| @(t : T?) {
-        if (!ensure_iq4xs_mmq()) {
+def test_cud_sb_mmq(t0 : T?) {
+    t0 |> run("CUDA MMQ-shaped superblock GEMMs without a min term (IQ4_XS, Q4_0, IQ4_NL) == the block-scaled CPU reference") <| @(t : T?) {
+        if (!(ensure_iq4xs_mmq() && ensure_q40_mmq() && ensure_iq4nl_mmq())) {
             t |> skip("no CUDA device with NVRTC")
             return
         }
-        let k = 1024   // four superblocks: the scale rows hand over three times
-        let d = 256
-        let rows = 256
-        let nsb = k / 256
-        let nb = k / 32
-        var wq <- hashed_words(d * nsb * 32, 17u, 9u)   // eight uint4 a superblock
-        var ws <- hashed_words(d * nsb * 2, 5u, 23u)    // the scale bits hashed ...
-        for (sb in range(d * nsb)) {
-            ws[sb * 2] = (ws[sb * 2] & 0xFFFF0000u) | (packHalf2x16(float2(0.002 + 0.001 * float(sb % 7), 0.0)) & 0xFFFFu)   // ... d in the low half
+        for (f in [KqFmt.iq4xs, KqFmt.q40, KqFmt.iq4nl]) {
+            cud_sb_mmq_run(t, f)
         }
-        var xq <- hashed_words(rows * k / 4, 7u, 3u)
-        var xs <- row_fill(rows * nb, 1, 0, 0.125, 0.25, 5)
-        let s = g_cud.stream
-        var bufs = fixed_array(buf_upload(wq, s), buf_upload(ws, s), buf_upload(xq, s), buf_upload(xs, s), buf_fill(rows * d, Y_SENTINEL, s))
-        var pc = MmqArgs(n = uint(k), d = uint(d), rows = uint(rows))
-        enc_iq4xs_mmq(g_cud.stream, bufs, pc, mmq_wgs(int64(d), int64(rows)))
-        t |> success(cud_sync(), "iq4xs mmq: the launch completes ({cuda_last_error()})")
-        let y <- buf_download(bufs[4], rows * d, type<float>)
-        cuda_mem_free(bufs)
-        var want : array<float>
-        want |> resize(rows * d)
-        for (tok in range(rows)) {
-            for (row in range(d)) {
-                var acc = 0.0
-                for (blk in range(nb)) {
-                    let sb = row * nsb + blk / 8
-                    let g = blk % 8
-                    let w0 = ws[sb * 2]
-                    let w1 = ws[sb * 2 + 1]
-                    var dot = 0
-                    for (i in range(32)) {
-                        let wb = (sb * 8 + g) * 16 + i % 16
-                        let byte = int((wq[wb / 4] >> uint((wb % 4) * 8)) & 255u)
-                        let code = int(iq4_word(uint(i < 16 ? byte & 15 : byte >> 4)) & 255u)
-                        let xi = tok * k + blk * 32 + i
-                        let xb = int((xq[xi / 4] >> uint((xi % 4) * 8)) & 255u)
-                        dot += (code >= 128 ? code - 256 : code) * (xb >= 128 ? xb - 256 : xb)
-                    }
-                    acc += float(dot) * (unpackHalf2x16(w0).x * float(iq4xs_sc(w0, w1, uint(g)))) * xs[tok * nb + blk]
+    }
+}
+
+//! one per-32 leaf against the engine's own per-32 dequant of each block dotted with the activation quants: Q5_1 with its m
+//! through the f16-staged correction (the f16 tiles' bar), Q4_0, Q5_0 and IQ4_NL per element
+def private cud_b32_mmq_run(t : T?; f : KqFmt) {
+    let fmt = int(f)
+    let k = 1024   // thirty-two blocks a row: the min term's two groups of sixteen
+    let d = 256
+    let rows = 256
+    let nb = k / 32
+    let qwords = int(kq_qsb(f) / 4l)
+    var wq <- hashed_words(d * nb * qwords, 19u, uint(fmt) * 31u)
+    // the scale plane in the format's form: Q5_1 a d | m word a block, the others two d halves a word
+    var ws <- (f == KqFmt.q51
+        ? [for (b in range(d * nb)); packHalf2x16(float2(0.002 * float(1 + b % 7), 0.001 * float(b % 5) - 0.002))]
+        : [for (j in range(d * nb / 2)); packHalf2x16(float2(0.002 * float(1 + (2 * j) % 7), 0.002 * float(1 + (2 * j + 1) % 7)))])
+    var xq <- hashed_words(rows * k / 4, 7u, 3u)
+    var xs <- row_fill(rows * nb, 1, 0, 0.125, 0.25, 5)
+    var xsum : array<float>
+    xsum |> resize(rows * nb)
+    for (tok in range(rows)) {
+        for (blk in range(nb)) {
+            var sm = 0
+            for (i in range(32)) {
+                let xi = tok * k + blk * 32 + i
+                let xb = int((xq[xi / 4] >> uint((xi % 4) * 8)) & 255u)
+                sm += xb >= 128 ? xb - 256 : xb
+            }
+            xsum[tok * nb + blk] = xs[tok * nb + blk] * float(sm)
+        }
+    }
+    var s = g_cud.stream
+    var bufs = fixed_array(buf_upload(wq, s), buf_upload(ws, s), buf_upload(xq, s), buf_upload(xs, s), buf_fill(rows * d, Y_SENTINEL, s), buf_upload(xsum, s))
+    var b5 = fixed_array(bufs[0], bufs[1], bufs[2], bufs[3], bufs[4])
+    var pc = MmqArgs(n = uint(k), d = uint(d), rows = uint(rows))
+    let wgs = mmq_wgs(int64(d), int64(rows))
+    if (f == KqFmt.q51) {
+        enc_q51_mmq(s, bufs, pc, wgs)
+    } elif (f == KqFmt.q4032) {
+        enc_q4032_mmq(s, b5, pc, wgs)
+    } elif (f == KqFmt.q5032) {
+        enc_q5032_mmq(s, b5, pc, wgs)
+    } else {
+        enc_iq4nl32_mmq(s, b5, pc, wgs)
+    }
+    t |> success(cud_sync(), "{f} mmq: the launch completes ({cuda_last_error()})")
+    let y <- buf_download(bufs[4], rows * d, type<float>)
+    cuda_mem_free(bufs)
+    let kqb <- [for (i in range(length(wq) * 4)); uint8((wq[i / 4] >> uint((i % 4) * 8)) & 0xFFu)]
+    let ksb <- [for (i in range(length(ws) * 4)); uint8((ws[i / 4] >> uint((i % 4) * 8)) & 0xFFu)]
+    var want : array<float>
+    want |> resize(rows * d)
+    var w : array<float>
+    w |> resize(32)
+    for (row in range(d)) {
+        for (blk in range(nb)) {
+            dequant_b32_plane_block(f, kqb, ksb, int64(row * nb + blk), w, 0l)
+            for (tok in range(rows)) {
+                var dot = 0.0
+                for (i in range(32)) {
+                    let xi = tok * k + blk * 32 + i
+                    let xb = int((xq[xi / 4] >> uint((xi % 4) * 8)) & 255u)
+                    dot += w[i] * float(xb >= 128 ? xb - 256 : xb)
                 }
-                want[tok * d + row] = acc
+                want[tok * d + row] += dot * xs[tok * nb + blk]
             }
         }
-        check_rows(t, "iq4xs MMQ vs the block-scaled reference", y, want, Q8_GEMV_BAR, d)
+    }
+    check_rows(t, "{f} MMQ vs the dequantized reference", y, want, f == KqFmt.q51 ? TILE_BAR : Q8_GEMV_BAR, d)
+}
+
+[test]
+def test_cud_b32_mmq(t0 : T?) {
+    t0 |> run("CUDA MMQ-shaped per-32 GEMMs (Q5_1, Q4_0, Q5_0, IQ4_NL) == the dequantized CPU reference") <| @(t : T?) {
+        if (!(ensure_q51_mmq() && ensure_q4032_mmq() && ensure_q5032_mmq() && ensure_iq4nl32_mmq())) {
+            t |> skip("no CUDA device with NVRTC")
+            return
+        }
+        for (f in [KqFmt.q51, KqFmt.q4032, KqFmt.q5032, KqFmt.iq4nl32]) {
+            cud_b32_mmq_run(t, f)
+        }
     }
 }
 

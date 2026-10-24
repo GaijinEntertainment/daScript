@@ -2056,26 +2056,74 @@ def public mmq_wgs(d, rows : int64) : int64 => (d / 128l) * (rows / 128l)
 //! fragments), sixteen warps the tile; a format joins by staging its blocks decoded to int8 in the weight tile's slot
 [ |> template_struct_instance]
 class template MmqT {
+    //! every leaf names a format tag `FMT`: a per-32 leaf's (`B32`) picks its block words, scale word and decode through the `blk32_*` family, the others' is unread
     @template_constant K4 : bool = false      //!< the weight side: Q4_K superblocks decoded to int8 through registers, a scale and a min a 32-block
-    @template_constant IQ4XS : bool = false   //!< ... IQ4_XS superblocks: the nibbles through the codebook to signed int8, a scale a 32-block, no min
-    @template_constant KQ : bool = false      //!< a superblock leaf (K4 or IQ4XS): the scale rows as words, the weight stage through registers; off, raw Q8_0 blocks by cp.async
+    @template_constant LUT : bool = false     //!< ... a codebook superblock format (IQ4_XS, IQ4_NL): the nibbles through the codebook to signed int8, a scale a 32-block, no min
+    @template_constant SIGN8 : bool = false   //!< ... Q4_0 superblocks: the nibbles less eight as signed int8, a scale a 32-block, no min
+    @template_constant QSC : bool = false     //!< the superblock scale row is Q4_0's (five words of d pairs: Q4_0, IQ4_NL); off, IQ4_XS's two words or Q4_K's five
+    @template_constant KQ : bool = false      //!< a superblock leaf (K4, LUT or SIGN8): the scale rows as words, the weight stage through registers
+    @template_constant B32 : bool = false     //!< a per-32 leaf (`FMT`: Q5_1, Q4_0, Q5_0, IQ4_NL): a block's words through registers, a scale word a block; off every stage axis, raw Q8_0 blocks by cp.async
+    @template_constant WORDS : bool = false   //!< the scale plane as words (`wsu`: every leaf but Q8_0's halves)
+    @template_constant MIN : bool = false     //!< the leaf's blocks carry a min (Q4_K's dmin x mn, Q5_1's m): the activation sums feed the rank-sixteen correction
     @ssbo @binding = 0 @readonly wq4 : array<uint4>    //! Q8_0 blocks as two uint4: (row, kb) at (row * nb + kb) * 2; Q4_K and IQ4_XS superblocks as eight, block g's 16 nibble bytes at (row * nsb + sb) * 8 + g
-    @ssbo @binding = 1 @readonly @template_gate = "!KQ" ws4 : array<uint4>    //! weight scales as halves, (row, kb) at row * nb + kb
-    @ssbo @binding = 1 @readonly @template_gate = KQ wsu : array<uint>        //! the scale rows: Q4_K's five words a superblock - d | dmin, eight sc bytes, eight mn bytes; IQ4_XS's two - d with the scales' high bits, the scales' low nibbles
+    @ssbo @binding = 0 @readonly @template_gate = B32 wq : array<uint>        //! the same plane as words: a per-32 block's four nibble words and, on Q5_1 and Q5_0, its qh word
+    @ssbo @binding = 1 @readonly @template_gate = "!WORDS" ws4 : array<uint4>    //! weight scales as halves, (row, kb) at row * nb + kb
+    @ssbo @binding = 1 @readonly @template_gate = WORDS wsu : array<uint>        //! the scale rows: Q4_K's five words a superblock - d | dmin, eight sc bytes, eight mn bytes; IQ4_XS's two - d with the scales' high bits, the scales' low nibbles; a per-32 format's word a block or a pair
     @ssbo @binding = 2 @readonly xq4 : array<uint4>    //! the activation quants, the same shape over tokens
     @ssbo @binding = 3 @readonly xs4 : array<uint4>    //! activation scales as floats, (token, kb) at token * nb + kb
     @ssbo @binding = 4 y : array<float>                //! [token][d]
-    @ssbo @binding = 5 @readonly @template_gate = K4 xsum4 : array<uint4>   //! the activation blocks' scale x quant sum, the shape of xs4
+    @ssbo @binding = 5 @readonly @template_gate = MIN xsum4 : array<uint4>   //! the activation blocks' scale x quant sum, the shape of xs4
     @kargs pa : MmqArgs
     @workgroup sa : uint4[2304]     //! two stages x 128 rows x nine uint4 (four blocks and a pad)
     @workgroup sb : uint4[2304]
     @workgroup sws : float2[512]    //! row-scale pairs: slot (r >> 4) * 8 + (r & 7) holds rows g, g + 8
     @workgroup sxs : float4[256]    //! token-scale quads: slot (c >> 4) * 4 + ((c & 7) >> 1)
-    @workgroup @template_gate = K4 rm16 : uint4[512]    //! the rows' -dmin x mn as halves: [group][row][16 blocks], two groups of four steps in turn
-    @workgroup @template_gate = K4 cx16 : uint4[512]    //! the tokens' scale x sum as halves: [group][token][16 blocks]
+    @workgroup @template_gate = MIN rm16 : uint4[512]    //! the rows' min terms as halves (-dmin x mn, or m): [group][row][16 blocks], two groups of four steps in turn
+    @workgroup @template_gate = MIN cx16 : uint4[512]    //! the tokens' scale x sum as halves: [group][token][16 blocks]
 
     //! a quad of IQ4_XS nibble lanes through the codebook to signed int8 lanes, the home's permute decode a word
     def iq4_quad(n : uint4) : uint4 => uint4(cud_iq4_word(n.x), cud_iq4_word(n.y), cud_iq4_word(n.z), cud_iq4_word(n.w))
+
+    //! a superblock leaf's 32-block half `sh` (0: elements 0..15, 4: 16..31) as the int8 codes its format means off the block's nibble quad
+    def sb_codes(w : uint4; sh : uint) : uint4 {
+        static_if (K4) {
+            return blk32_nib_quad(w, sh)
+        } elif (LUT) {
+            return iq4_quad(blk32_nib_quad(w, sh))
+        } else {
+            return blk32_q40_quad(w, sh)
+        }
+    }
+
+    //! a per-32 block's half `sh` as signed int8 lanes: the format's decode, IQ4_NL's through the home's permute
+    def b32_codes(w4 : uint4; qh, sh : uint) : uint4 {
+        static_if (typeinfo typename(type<FMT>) == typeinfo typename(type<KqTag_iq4nl32>)) {
+            return iq4_quad(blk32_nib_quad(w4, sh))
+        } else {
+            return blk32_quad(type<FMT>, w4, qh, sh)
+        }
+    }
+
+    //! block `wb`'s four nibble words and its qh word (the first nibble word again where the format has none)
+    def b32_words(wb : uint; var w4 : uint4&; var qh : uint&) {
+        static_if (B32) {
+            let b = wb * blk32_qwords(type<FMT>)
+            w4 = uint4(wq[b], wq[b + 1u], wq[b + 2u], wq[b + 3u])
+            qh = wq[b + blk32_qh_off(type<FMT>)]
+        } else {
+            w4 = uint4(0u)
+            qh = 0u
+        }
+    }
+
+    //! block `wb`'s (scale, min) pair off the scale plane
+    def b32_scale(wb : uint) : float2 {
+        static_if (B32) {
+            return blk32_scale(type<FMT>, wsu[blk32_sword(type<FMT>, wb)], wb)
+        } else {
+            return float2(0.0)
+        }
+    }
 
     [spirv_inline]
     def mmq_body {   // nolint:STYLE037,STYLE038 - the pipeline and its unrolled products, register- and barrier-coupled; the Q4_K arm's stage and scale rows ride the same barriers
@@ -2128,21 +2176,27 @@ class template MmqT {
         let k4src = (pa.wblk + (m0 + k4row) * nsb) * 8u + k4blk   // the lane's quad of superblock 0: step kb adds (kb >> 1) * 8 + (kb & 1) * 4
         let k4dst = k4row * 9u + k4blk * 2u
         var wnext : uint4
+        var qhn = 0u
+        let b32b0 = pa.wblk + (m0 + k4row) * nb + k4blk   // a per-32 leaf: the lane's block of step 0; step kb adds kb * 4
         static_if (KQ) {
             wnext = wq4[k4src]
-            static_if (K4) {
-                sa[k4dst] = blk32_nib_quad(wnext, 0u)
-                sa[k4dst + 1u] = blk32_nib_quad(wnext, 4u)
-            } else {
-                sa[k4dst] = iq4_quad(blk32_nib_quad(wnext, 0u))
-                sa[k4dst + 1u] = iq4_quad(blk32_nib_quad(wnext, 4u))
-            }
+            sa[k4dst] = sb_codes(wnext, 0u)
+            sa[k4dst + 1u] = sb_codes(wnext, 4u)
             if (nb4 > 1u) {
                 wnext = wq4[k4src + 4u]
             }
         } else {
-            cp_async_16(unsafe(addr(sa[sdst])), unsafe(addr(wq4[wsrc])))
-            cp_async_16(unsafe(addr(sa[sdst + 576u])), unsafe(addr(wq4[wsrc + src2])))
+            static_if (B32) {
+                b32_words(b32b0, wnext, qhn)
+                sa[k4dst] = b32_codes(wnext, qhn, 0u)
+                sa[k4dst + 1u] = b32_codes(wnext, qhn, 4u)
+                if (nb4 > 1u) {
+                    b32_words(b32b0 + 4u, wnext, qhn)
+                }
+            } else {
+                cp_async_16(unsafe(addr(sa[sdst])), unsafe(addr(wq4[wsrc])))
+                cp_async_16(unsafe(addr(sa[sdst + 576u])), unsafe(addr(wq4[wsrc + src2])))
+            }
         }
         cp_async_16(unsafe(addr(sb[sdst])), unsafe(addr(xq4[xsrc])))
         cp_async_16(unsafe(addr(sb[sdst + 576u])), unsafe(addr(xq4[xsrc + src2])))
@@ -2152,9 +2206,12 @@ class template MmqT {
         var xscur = uint4(0u)
         // a superblock leaf's scale row rides registers a superblock (two steps) at a time: `k4s` the superblock being written,
         // `k4sn` the next; Q4_K's row is five words, IQ4_XS's two
-        let scw = K4 ? 5u : 2u
+        let scw = (K4 || QSC) ? 5u : 2u
         var k4s, k4sn : uint[5]
         let k4srow = (pa.wblk + (m0 + wr) * nsb) * scw
+        // a per-32 leaf's scale pairs ride registers a step ahead: `b32s` the four (scale, min) pairs of the step being written
+        var b32s : float2[4]
+        let b32w0 = pa.wblk + (m0 + wr) * nb   // the row's first block; step kb's four blocks follow at kb * 4
         if (wstage) {
             static_if (KQ) {
                 for [unroll] (j in range(5)) {
@@ -2172,6 +2229,10 @@ class template MmqT {
                     }
                     rm16[wr * 2u][0] = packHalf2x16(float2(mn4[0], mn4[1]))   // step 0: group 0, piece 0, the first half of the piece
                     rm16[wr * 2u][1] = packHalf2x16(float2(mn4[2], mn4[3]))
+                } elif (QSC) {
+                    for [unroll] (b in range(4)) {
+                        sws[uint(b) * 64u + wslot][int(wcomp)] = q40_d_of(k4s[b >> 1], uint(b))
+                    }
                 } else {
                     let dx = unpackHalf2x16(k4s[0]).x
                     for [unroll] (b in range(4)) {
@@ -2186,13 +2247,29 @@ class template MmqT {
                     }
                 }
             } else {
-                wcur = ws4[wb8 + (m0 + wr) * nb8]
-                let h0 = unpackHalf2x16(wcur.x)
-                let h1 = unpackHalf2x16(wcur.y)
-                sws[wslot][int(wcomp)] = h0.x
-                sws[64u + wslot][int(wcomp)] = h0.y
-                sws[128u + wslot][int(wcomp)] = h1.x
-                sws[192u + wslot][int(wcomp)] = h1.y
+                static_if (B32) {
+                    for [unroll] (b in range(4)) {
+                        b32s[b] = b32_scale(b32w0 + uint(b))
+                        sws[uint(b) * 64u + wslot][int(wcomp)] = b32s[b].x
+                    }
+                    static_if (MIN) {
+                        rm16[wr * 2u][0] = packHalf2x16(float2(b32s[0].y, b32s[1].y))
+                        rm16[wr * 2u][1] = packHalf2x16(float2(b32s[2].y, b32s[3].y))
+                    }
+                    if (nb4 > 1u) {
+                        for [unroll] (b in range(4)) {
+                            b32s[b] = b32_scale(b32w0 + 4u + uint(b))
+                        }
+                    }
+                } else {
+                    wcur = ws4[wb8 + (m0 + wr) * nb8]
+                    let h0 = unpackHalf2x16(wcur.x)
+                    let h1 = unpackHalf2x16(wcur.y)
+                    sws[wslot][int(wcomp)] = h0.x
+                    sws[64u + wslot][int(wcomp)] = h0.y
+                    sws[128u + wslot][int(wcomp)] = h1.x
+                    sws[192u + wslot][int(wcomp)] = h1.y
+                }
             }
         } elif (xstage) {
             xcur = xs4[((t0 + xc) * nb) / 4u]
@@ -2200,14 +2277,14 @@ class template MmqT {
             sxs[32u + xslot][int(xcomp)] = uint_bits_to_float(xcur.y)
             sxs[64u + xslot][int(xcomp)] = uint_bits_to_float(xcur.z)
             sxs[96u + xslot][int(xcomp)] = uint_bits_to_float(xcur.w)
-            static_if (K4) {
+            static_if (MIN) {
                 xscur = xsum4[((t0 + xc) * nb) / 4u]
                 cx16[xc * 2u][0] = packHalf2x16(float2(uint_bits_to_float(xscur.x), uint_bits_to_float(xscur.y)))
                 cx16[xc * 2u][1] = packHalf2x16(float2(uint_bits_to_float(xscur.z), uint_bits_to_float(xscur.w)))
             }
             if (nb4 > 1u) {
                 xcur = xs4[((t0 + xc) * nb) / 4u + 1u]
-                static_if (K4) {
+                static_if (MIN) {
                     xscur = xsum4[((t0 + xc) * nb) / 4u + 1u]
                 }
             }
@@ -2224,19 +2301,22 @@ class template MmqT {
                     let st2 = nk & 1u
                     let nsrc = nk * 8u
                     static_if (KQ) {
-                        static_if (K4) {
-                            sa[st2 * 1152u + k4dst] = blk32_nib_quad(wnext, 0u)
-                            sa[st2 * 1152u + k4dst + 1u] = blk32_nib_quad(wnext, 4u)
-                        } else {
-                            sa[st2 * 1152u + k4dst] = iq4_quad(blk32_nib_quad(wnext, 0u))
-                            sa[st2 * 1152u + k4dst + 1u] = iq4_quad(blk32_nib_quad(wnext, 4u))
-                        }
+                        sa[st2 * 1152u + k4dst] = sb_codes(wnext, 0u)
+                        sa[st2 * 1152u + k4dst + 1u] = sb_codes(wnext, 4u)
                         if (nk + 1u < nb4) {
                             wnext = wq4[k4src + ((nk + 1u) >> 1u) * 8u + ((nk + 1u) & 1u) * 4u]
                         }
                     } else {
-                        cp_async_16(unsafe(addr(sa[st2 * 1152u + sdst])), unsafe(addr(wq4[wsrc + nsrc])))
-                        cp_async_16(unsafe(addr(sa[st2 * 1152u + sdst + 576u])), unsafe(addr(wq4[wsrc + nsrc + src2])))
+                        static_if (B32) {
+                            sa[st2 * 1152u + k4dst] = b32_codes(wnext, qhn, 0u)
+                            sa[st2 * 1152u + k4dst + 1u] = b32_codes(wnext, qhn, 4u)
+                            if (nk + 1u < nb4) {
+                                b32_words(b32b0 + (nk + 1u) * 4u, wnext, qhn)
+                            }
+                        } else {
+                            cp_async_16(unsafe(addr(sa[st2 * 1152u + sdst])), unsafe(addr(wq4[wsrc + nsrc])))
+                            cp_async_16(unsafe(addr(sa[st2 * 1152u + sdst + 576u])), unsafe(addr(wq4[wsrc + nsrc + src2])))
+                        }
                     }
                     cp_async_16(unsafe(addr(sb[st2 * 1152u + sdst])), unsafe(addr(xq4[xsrc + nsrc])))
                     cp_async_16(unsafe(addr(sb[st2 * 1152u + sdst + 576u])), unsafe(addr(xq4[xsrc + nsrc + src2])))
@@ -2268,6 +2348,11 @@ class template MmqT {
                                 let mc = int((nk & 1u) * 2u)
                                 rm16[me][mc] = packHalf2x16(float2(mn4[0], mn4[1]))
                                 rm16[me][mc + 1] = packHalf2x16(float2(mn4[2], mn4[3]))
+                            } elif (QSC) {
+                                let b0 = (nk & 1u) * 4u   // step nk's four blocks of the superblock: their d pairs in words 2 .. 3 (nk odd) or 0 .. 1
+                                for [unroll] (b in range(4)) {
+                                    sws[st2 * 256u + uint(b) * 64u + wslot][int(wcomp)] = q40_d_of(k4s[int((b0 + uint(b)) >> 1u)], b0 + uint(b))
+                                }
                             } else {
                                 let dx = unpackHalf2x16(k4s[0]).x
                                 let b0 = (nk & 1u) * 4u   // step nk's four blocks of the superblock
@@ -2276,14 +2361,31 @@ class template MmqT {
                                 }
                             }
                         } else {
-                            let h0 = unpackHalf2x16(q == 0 ? wcur.z : wcur.x)   // step nk's four halves: words 2 (nk & 1) .. of its pair's eight
-                            let h1 = unpackHalf2x16(q == 0 ? wcur.w : wcur.y)
-                            sws[st2 * 256u + wslot][int(wcomp)] = h0.x
-                            sws[st2 * 256u + 64u + wslot][int(wcomp)] = h0.y
-                            sws[st2 * 256u + 128u + wslot][int(wcomp)] = h1.x
-                            sws[st2 * 256u + 192u + wslot][int(wcomp)] = h1.y
-                            if (q == 0 && kb2 + 2u < nb4) {   // the quad's last word read: the next pair's quad takes its registers a step ahead
-                                wcur = ws4[wb8 + (m0 + wr) * nb8 + (kb2 >> 1u) + 1u]
+                            static_if (B32) {
+                                for [unroll] (b in range(4)) {
+                                    sws[st2 * 256u + uint(b) * 64u + wslot][int(wcomp)] = b32s[b].x
+                                }
+                                static_if (MIN) {
+                                    let me = (((nk >> 2u) & 1u) * 128u + wr) * 2u + ((nk >> 1u) & 1u)
+                                    let mc = int((nk & 1u) * 2u)
+                                    rm16[me][mc] = packHalf2x16(float2(b32s[0].y, b32s[1].y))
+                                    rm16[me][mc + 1] = packHalf2x16(float2(b32s[2].y, b32s[3].y))
+                                }
+                                if (nk + 1u < nb4) {
+                                    for [unroll] (b in range(4)) {
+                                        b32s[b] = b32_scale(b32w0 + (nk + 1u) * 4u + uint(b))
+                                    }
+                                }
+                            } else {
+                                let h0 = unpackHalf2x16(q == 0 ? wcur.z : wcur.x)   // step nk's four halves: words 2 (nk & 1) .. of its pair's eight
+                                let h1 = unpackHalf2x16(q == 0 ? wcur.w : wcur.y)
+                                sws[st2 * 256u + wslot][int(wcomp)] = h0.x
+                                sws[st2 * 256u + 64u + wslot][int(wcomp)] = h0.y
+                                sws[st2 * 256u + 128u + wslot][int(wcomp)] = h1.x
+                                sws[st2 * 256u + 192u + wslot][int(wcomp)] = h1.y
+                                if (q == 0 && kb2 + 2u < nb4) {   // the quad's last word read: the next pair's quad takes its registers a step ahead
+                                    wcur = ws4[wb8 + (m0 + wr) * nb8 + (kb2 >> 1u) + 1u]
+                                }
                             }
                         }
                     } elif (xstage) {
@@ -2291,7 +2393,7 @@ class template MmqT {
                         sxs[st2 * 128u + 32u + xslot][int(xcomp)] = uint_bits_to_float(xcur.y)
                         sxs[st2 * 128u + 64u + xslot][int(xcomp)] = uint_bits_to_float(xcur.z)
                         sxs[st2 * 128u + 96u + xslot][int(xcomp)] = uint_bits_to_float(xcur.w)
-                        static_if (K4) {
+                        static_if (MIN) {
                             let xe = (((nk >> 2u) & 1u) * 128u + xc) * 2u + ((nk >> 1u) & 1u)
                             let xcc = int((nk & 1u) * 2u)
                             cx16[xe][xcc] = packHalf2x16(float2(uint_bits_to_float(xscur.x), uint_bits_to_float(xscur.y)))
@@ -2299,7 +2401,7 @@ class template MmqT {
                         }
                         if (nk + 1u < nb4) {
                             xcur = xs4[((t0 + xc) * nb) / 4u + nk + 1u]
-                            static_if (K4) {
+                            static_if (MIN) {
                                 xscur = xsum4[((t0 + xc) * nb) / 4u + nk + 1u]
                             }
                         }
@@ -2332,7 +2434,7 @@ class template MmqT {
                     s11 = coopmatMulAdd(a1, b1, s11)
                     mma_scale_acc(f11, s11, rs1, cs1)
                 }
-                static_if (K4) {
+                static_if (MIN) {
                     if ((kb & 3u) == 3u) {   // sixteen blocks' min terms complete: the rank-sixteen correction as one f16 product a fragment pair
                         let mg = (kb >> 2u) & 1u
                         let ra = (mg * 128u + wm * 32u + mr + 8u * (mt & 1u)) * 2u + (mt >> 1u)   // the lane's A row: (rows lo, blocks lo) .. (rows hi, blocks hi)
@@ -2364,6 +2466,8 @@ class template MmqT {
 //! the Q8_0 leaf of the MMQ template: the window chain's GEMM under DASLLAMA_CUDA_MMQ
 [cuda_dispatch(name = "q8_mmq", grid = "wgs", params = "wgs : int64")]
 class CuQ8Mmq : MmqT {
+    typedef FMT = KqTag_q4032
+
     [cuda_kernel(local_size_x = 512, name = "q8_mmq_cuda")]
     def run {
         mmq_body()
@@ -2373,7 +2477,10 @@ class CuQ8Mmq : MmqT {
 //! the Q4_K leaf: the same tile over nibble codes decoded in the weight stage, with the min term's rank-sixteen correction
 [cuda_dispatch(name = "k4_mmq", grid = "wgs", params = "wgs : int64")]
 class CuK4Mmq : MmqT {
+    typedef FMT = KqTag_q4032
     override KQ = true
+    override WORDS = true
+    override MIN = true
     override K4 = true
 
     [cuda_kernel(local_size_x = 512, name = "k4_mmq_cuda")]
@@ -2385,10 +2492,95 @@ class CuK4Mmq : MmqT {
 //! the IQ4_XS leaf: the nibbles through the codebook to signed codes in the weight stage, a scale a block, no min term
 [cuda_dispatch(name = "iq4xs_mmq", grid = "wgs", params = "wgs : int64")]
 class CuIq4xsMmq : MmqT {
+    typedef FMT = KqTag_q4032
     override KQ = true
-    override IQ4XS = true
+    override WORDS = true
+    override LUT = true
 
     [cuda_kernel(local_size_x = 512, name = "iq4xs_mmq_cuda")]
+    def run {
+        mmq_body()
+    }
+}
+
+//! the superblock Q4_0 leaf (a Q4_0 plane on the 256 lattice): the nibbles less eight as signed codes, a d a block off the d-pair row
+[cuda_dispatch(name = "q40_mmq", grid = "wgs", params = "wgs : int64")]
+class CuQ40Mmq : MmqT {
+    typedef FMT = KqTag_q4032
+    override KQ = true
+    override WORDS = true
+    override QSC = true
+    override SIGN8 = true
+
+    [cuda_kernel(local_size_x = 512, name = "q40_mmq_cuda")]
+    def run {
+        mmq_body()
+    }
+}
+
+//! the superblock IQ4_NL leaf (an IQ4_NL plane on the 256 lattice): the nibbles through the codebook, a d a block off the d-pair row
+[cuda_dispatch(name = "iq4nl_mmq", grid = "wgs", params = "wgs : int64")]
+class CuIq4nlMmq : MmqT {
+    typedef FMT = KqTag_q4032
+    override KQ = true
+    override WORDS = true
+    override QSC = true
+    override LUT = true
+
+    [cuda_kernel(local_size_x = 512, name = "iq4nl_mmq_cuda")]
+    def run {
+        mmq_body()
+    }
+}
+
+//! the Q5_1 leaf: five words a block, the nibbles with their fifth bits, d and m - the m through the rank-sixteen correction
+[cuda_dispatch(name = "q51_mmq", grid = "wgs", params = "wgs : int64")]
+class CuQ51Mmq : MmqT {
+    typedef FMT = KqTag_q51
+    override B32 = true
+    override WORDS = true
+    override MIN = true
+
+    [cuda_kernel(local_size_x = 512, name = "q51_mmq_cuda")]
+    def run {
+        mmq_body()
+    }
+}
+
+//! the Q4_0 leaf: four words a block, the nibbles less eight as signed codes, a d a block
+[cuda_dispatch(name = "q4032_mmq", grid = "wgs", params = "wgs : int64")]
+class CuQ4032Mmq : MmqT {
+    typedef FMT = KqTag_q4032
+    override B32 = true
+    override WORDS = true
+
+    [cuda_kernel(local_size_x = 512, name = "q4032_mmq_cuda")]
+    def run {
+        mmq_body()
+    }
+}
+
+//! the Q5_0 leaf: five words a block, the five-bit codes less sixteen as signed codes, a d a block
+[cuda_dispatch(name = "q5032_mmq", grid = "wgs", params = "wgs : int64")]
+class CuQ5032Mmq : MmqT {
+    typedef FMT = KqTag_q5032
+    override B32 = true
+    override WORDS = true
+
+    [cuda_kernel(local_size_x = 512, name = "q5032_mmq_cuda")]
+    def run {
+        mmq_body()
+    }
+}
+
+//! the IQ4_NL leaf: four words a block, the nibbles through the codebook, a d a block
+[cuda_dispatch(name = "iq4nl32_mmq", grid = "wgs", params = "wgs : int64")]
+class CuIq4nl32Mmq : MmqT {
+    typedef FMT = KqTag_iq4nl32
+    override B32 = true
+    override WORDS = true
+
+    [cuda_kernel(local_size_x = 512, name = "iq4nl32_mmq_cuda")]
     def run {
         mmq_body()
     }
