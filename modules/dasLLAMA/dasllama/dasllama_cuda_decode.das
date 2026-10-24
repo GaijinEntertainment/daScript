@@ -135,6 +135,8 @@ struct CudLayer {
     regs_k : uint64
     regs_v : uint64
     regs_o, regs_gate, regs_up, regs_down : uint64   //! the unfused sites' one-record region buffers (a fused Q8_0 site carries its block in its args)
+    regs_gu : uint64      //! the gate and up records as one two-region buffer: the token step's one GEMV over both planes (`gu_merged`)
+    gu_merged : bool      //! gate and up share a format, so one dispatch of two regions serves both at one row - the pair of calls past it
     wo_ar, gate_up_fused, down_ar : bool   //! the Q8_0 fused sites the layer takes: wo and down with the residual epilogue, gate and up with the act
     sch : CudSched[7]   //! the window chain's GEMM schedules, one a role (SCH_*)
 }
@@ -216,7 +218,7 @@ def private crd_free_buffers(var r : CudRdec) {
         cuda_mem_free(b)
     }
     for (L in r.layers) {
-        for (b in [L.regs_qkv, L.regs_k, L.regs_v, L.regs_o, L.regs_gate, L.regs_up, L.regs_down]) {
+        for (b in [L.regs_qkv, L.regs_k, L.regs_v, L.regs_o, L.regs_gate, L.regs_up, L.regs_gu, L.regs_down]) {
             cuda_mem_free(b)
         }
         for (sc in L.sch) {
@@ -340,7 +342,7 @@ def cud_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidd
     r.as_ = dev_zeroed((qd / Q8_BLOCK_ELEMS) * 4l * nb)
     r.hq = dev_zeroed(hidden * nb)
     r.hs_ = dev_zeroed((hidden / Q8_BLOCK_ELEMS) * 4l * nb)
-    r.gate = dev_zeroed(hidden * 4l * nb)
+    r.gate = dev_zeroed(hidden * 4l * max(nb, 2l))   //! the merged gate-up GEMV lands both rows here at one row
     r.up = dev_zeroed(hidden * 4l * nb)
     r.ffnout = dev_zeroed(dim * 4l * nb)
     r.xb2 = dev_zeroed(dim * 4l * nb)
@@ -439,6 +441,8 @@ def cud_rdec_set_layer(l, mir_idx : int64; bq, bk, bv, bo, b1, b3, b2 : int64; f
     L.regs_o = cud_regions([uint(bo), 0u])
     L.regs_gate = cud_regions([uint(b1), 0u])
     L.regs_up = cud_regions([uint(b3), 0u])
+    L.gu_merged = f1 == f3 && !L.gate_up_fused   // one GEMV over both planes needs them in one arena
+    L.regs_gu = cud_regions([uint(b1), 0u, uint(b3), 0u])
     L.regs_down = cud_regions([uint(b2), 0u])
     if (L.qkv_merged) {
         // kvd-row regions (q's qd / kvd, then k, then v) fill the projection row in one dispatch; a record counts the format's blocks
@@ -561,14 +565,23 @@ def private crd_ffn(r : CudRdec; var s : void?; l : int64; L : CudLayer; nlfin :
         var pcgu = GuNArgs(n = uint(dim), d = uint(L.hid), gblk = uint(L.b1), ublk = uint(L.b3), act = act, ncols = nr)
         cud_gu_n_enc(s, fixed_array(a1.wq, a1.ws, a1.wq, a1.ws, r.xq, r.xs, r.hq, r.hs_), pcgu, L.hid / 32l)
     } else {
-        crd_gemv(s, L.f1, L.regs_gate, r.xq, r.xs, r.gate, dim, L.hid, 0u, 1l, nr, uint(L.hid))
-        crd_gemv(s, L.f3, L.regs_up, r.xq, r.xs, r.up, dim, L.hid, 0u, 1l, nr, uint(L.hid))
-        let kq2 = kq_sb(L.f2)
-        var pca2 = ActArgs(nelem = uint(L.hid * nrows), act = act, nblk = uint(L.hid * nrows / kq_unit(kq2)), elem0 = 0u)
-        if (kq2) {
-            enc_q8k_actrq_cls(s, fixed_array(r.gate, r.up, r.hq, r.hs_), pca2, rq_wgs(true, L.hid * nrows))
+        //! at one row the merged form: one GEMV over the gate and up regions lands [gate | up] in r.gate, and the act reads
+        //! its up side `hid` past the gate's; the rows form keeps a dispatch a plane (its y rows are `hid` apart a column)
+        let merged = L.gu_merged && nrows == 1l
+        var up = r.up
+        if (merged) {
+            crd_gemv(s, L.f1, L.regs_gu, r.xq, r.xs, r.gate, dim, L.hid, 0u, 2l)
+            up = r.gate
         } else {
-            enc_q8_actrq_cls(s, fixed_array(r.gate, r.up, r.hq, r.hs_), pca2, rq_wgs(false, L.hid * nrows))
+            crd_gemv(s, L.f1, L.regs_gate, r.xq, r.xs, r.gate, dim, L.hid, 0u, 1l, nr, uint(L.hid))
+            crd_gemv(s, L.f3, L.regs_up, r.xq, r.xs, r.up, dim, L.hid, 0u, 1l, nr, uint(L.hid))
+        }
+        let kq2 = kq_sb(L.f2)
+        var pca2 = ActArgs(nelem = uint(L.hid * nrows), act = act, nblk = uint(L.hid * nrows / kq_unit(kq2)), elem0 = 0u, ubase = merged ? uint(L.hid) : 0u)
+        if (kq2) {
+            enc_q8k_actrq_cls(s, fixed_array(r.gate, up, r.hq, r.hs_), pca2, rq_wgs(true, L.hid * nrows))
+        } else {
+            enc_q8_actrq_cls(s, fixed_array(r.gate, up, r.hq, r.hs_), pca2, rq_wgs(false, L.hid * nrows))
         }
     }
     let nxt = l + 1l < r.n_layers ? uint(norm_off(l + 1l, RDEC_NORM_ATT)) : nlfin
