@@ -264,7 +264,7 @@ namespace das {
                                     continue;
                                 }
                             }
-                            // src/ast/ARCHITECTURE.md#module-scan-manifest
+                            // src/ast/ARCHITECTURE_MODULE_SCAN.md#module-scan-manifest
                             auto guardAvailable = [&](const string & guard) {
                                 if ( guard.empty() ) return true;
                                 if ( guard.find('/')!=string::npos ) {
@@ -283,7 +283,7 @@ namespace das {
                                 return src + 6 < src_end && memcmp(src, "public", 6) == 0;
                             };
                             if ( isReq && src[0]=='[' ) {
-                                // src/ast/ARCHITECTURE.md#module-scan-manifest
+                                // src/ast/ARCHITECTURE_MODULE_SCAN.md#module-scan-manifest
                                 src ++;
                                 while ( src < src_end && isspaceE(src[0]) ) {    // the parser reads tokens, so a newline inside the brackets is nothing
                                     src ++;
@@ -475,7 +475,7 @@ namespace das {
                     }
                     module = Module::requireEx(mod, allowPromoted, modRec.name, info.fileName); // try native with that name AGAIN (promoted?)
                     if ( !module ) {
-                        // src/ast/ARCHITECTURE.md#module-scan-manifest
+                        // src/ast/ARCHITECTURE_MODULE_SCAN.md#module-scan-manifest
                         if ( auto loader = getDeferredModuleLoader(); loader && loader(mod) ) {
                             module = Module::requireEx(mod, allowPromoted, modRec.name, info.fileName);
                             if ( log && module ) {

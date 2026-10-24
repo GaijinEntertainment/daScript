@@ -333,6 +333,7 @@ namespace das {
     DAS_API bool load_deferred_dynamic_module ( const char * ) GENERATE_IO_STUB_RET
     DAS_API size_t load_all_deferred_dynamic_modules () GENERATE_IO_STUB_RET
     DAS_API bool is_dynamic_module_deferred ( const char * ) GENERATE_IO_STUB_RET
+    DAS_API bool dynamic_module_artifact_exists ( const char * ) GENERATE_IO_STUB_RET
     DAS_API bool pending_dynamic_module_artifact_present () GENERATE_IO_STUB_RET
     DAS_API string registered_dynamic_module_name ( const char *, const char * ) GENERATE_IO_STUB_RET
     DAS_API void clear_deferred_dynamic_modules () GENERATE_IO_STUB
@@ -2486,7 +2487,7 @@ namespace das {
     // after the folder scan, so module enumeration order stops mattering.
     static vector<tuple<string,string,string>> g_pending_dynamic_modules; // path, cpp_class_name, last dlopen error
 
-    // the descriptor manifest recorder (dyn_modules.h, src/ast/ARCHITECTURE.md#module-scan-manifest)
+    // the descriptor manifest recorder (dyn_modules.h, src/ast/ARCHITECTURE_MODULE_SCAN.md#module-scan-manifest)
     static thread_local bool                         g_manifest_recording = false;
     static thread_local bool                         g_manifest_opt_out = false;
     static thread_local vector<DynModuleManifestRow> g_manifest_rows;
@@ -2639,7 +2640,7 @@ namespace das {
         string path, cpp_class, das_name;
         int on_error = 0;
     };
-    static vector<DeferredDynamicModule> g_deferred_dynamic_modules;    // src/ast/ARCHITECTURE.md#module-scan-manifest
+    static vector<DeferredDynamicModule> g_deferred_dynamic_modules;    // src/ast/ARCHITECTURE_MODULE_SCAN.md#module-scan-manifest
     static std::recursive_mutex g_deferred_dynamic_modules_mutex;       // a run-time has_module reads while another thread's compile loads
 
     DAS_API void defer_dynamic_module ( const char * path, const char * cpp_class, int on_error, const char * das_name ) {
@@ -2709,13 +2710,18 @@ namespace das {
         }
     }
 
-    // src/ast/ARCHITECTURE.md#module-scan-manifest - a pending row whose artifact is on disk failed on something
+    // src/ast/ARCHITECTURE_MODULE_SCAN.md#module-scan-manifest - a pending row whose artifact is on disk failed on something
     // other than a missing file: on a platform that resolves imports at load, a sibling the
     // deferred set still holds
+    DAS_API bool dynamic_module_artifact_exists(const char * path) {
+        if (!path) return false;
+        std::error_code ec;
+        return std::filesystem::exists(das_to_path(dynamic_module_actual_path(path).c_str()), ec) && !ec;
+    }
+
     DAS_API bool pending_dynamic_module_artifact_present() {
         for (auto & pr : g_pending_dynamic_modules) {
-            std::error_code ec;
-            if (std::filesystem::exists(das_to_path(dynamic_module_actual_path(get<0>(pr).c_str()).c_str()), ec) && !ec) return true;
+            if (dynamic_module_artifact_exists(get<0>(pr).c_str())) return true;
         }
         return false;
     }

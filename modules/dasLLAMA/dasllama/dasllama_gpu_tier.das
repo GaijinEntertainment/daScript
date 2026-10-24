@@ -576,8 +576,21 @@ def public gpu_resident_route_lever() : bool => g_gpu_resident_route
 //! The whole-model driver is wanted on this load: the knob and the in-process lever both on.
 def public gpu_want_resident : bool => g_env_gpu.gpu_resident && g_gpu_resident_route
 
-//! the CUDA home takes the tier's seats in place of the Vulkan home (DASLLAMA_CUDA): both entries read it at their [init]
-def public gpu_want_cuda : bool => g_env_gpu.cuda
+var private g_cuda_want_refused = false
+
+//! the CUDA home takes the tier's seats in place of the Vulkan home (DASLLAMA_CUDA): both entries read it at their [init];
+//! a build without dasCUDA (no `cuda` witness module) has no CUDA home, so the knob is off there, said once
+def public gpu_want_cuda : bool {
+    static_if (typeinfo builtin_module_exists(cuda)) {
+        return g_env_gpu.cuda
+    } else {
+        if (g_env_gpu.cuda && !g_cuda_want_refused) {
+            g_cuda_want_refused = true
+            to_log(LOG_WARNING, "dasLLAMA: DASLLAMA_CUDA asks for the CUDA home, which this build does not carry (DAS_CUDA_DISABLED, or a 32-bit host) - the Vulkan home keeps the GPU tier\n")
+        }
+        return false
+    }
+}
 
 //! Install the resident driver's hybrid (deltanet) seats - separately, so a tier without them
 //! declines recurrent layers by name instead of serving a model it cannot step.

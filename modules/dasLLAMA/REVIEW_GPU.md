@@ -1,8 +1,8 @@
 # dasLLAMA GPU Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `ARCHITECTURE_GPU.md`, `ARCHITECTURE_GPU_ASYMMETRIES.md`, `ARCHITECTURE_GPU_RACE_SHAPES.md`,
-`ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md`, `ARCHITECTURE_MEASUREMENT.md`. Planned work:
+docs: `ARCHITECTURE_GPU.md`, `ARCHITECTURE_GPU_BATCH.md`, `ARCHITECTURE_GPU_ASYMMETRIES.md`,
+`ARCHITECTURE_GPU_RACE_SHAPES.md`, `ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md`, `ARCHITECTURE_MEASUREMENT.md`. Planned work:
 `followup_metal.md`, `followup_vulkan.md`, `followup_general.md`.
 
 **A diff touching a GPU kernel timing arm - code that dispatches a kernel to measure it rather

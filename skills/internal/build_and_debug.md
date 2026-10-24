@@ -117,7 +117,7 @@ Dev-tier rails that cut the edit-compile-run loop. Never benchmark through `--ji
 Optional modules are controlled by CMake flags (`DAS_*_DISABLED`). The active configuration lives in `.vscode/settings.json` under `cmake.configureSettings` (the "WIP" block is the active one; others are commented-out presets).
 
 Key flags (defaults are MIXED - see the `option(DAS_*_DISABLED ...)` block near the top of CMakeLists.txt):
-- Default `OFF` (module ENABLED by default): `DAS_HV_DISABLED` (dasHV - HTTP/WebSocket via libhv), `DAS_GLFW_DISABLED` (GLFW/OpenGL windowing), `DAS_PUGIXML_DISABLED` (XML), `DAS_AUDIO_DISABLED`, `DAS_STBIMAGE_DISABLED`, `DAS_STDDLG_DISABLED`
+- Default `OFF` (module ENABLED by default): `DAS_HV_DISABLED` (dasHV - HTTP/WebSocket via libhv), `DAS_GLFW_DISABLED` (GLFW/OpenGL windowing), `DAS_PUGIXML_DISABLED` (XML), `DAS_AUDIO_DISABLED`, `DAS_STBIMAGE_DISABLED`, `DAS_STDDLG_DISABLED`, `DAS_CUDA_DISABLED` (dasCUDA - pure das over the driver and NVRTC, no toolkit at build time; its `cuda` witness module is what `require ?cuda` reads, and the package is skipped on 32-bit hosts whatever the flag says)
 - Default `ON` (module DISABLED by default): `DAS_LLVM_DISABLED` (LLVM JIT), `DAS_CLANG_BIND_DISABLED` (Clang bindings), `DAS_SQLITE_DISABLED`
 - dasImgui is in-tree (`modules/dasImgui`) with `DAS_IMGUI_DISABLED` (default `OFF` = enabled). It needs dasGlfw + dasClipboard - a derived gate in `modules/dasImgui/CMakeLists.txt` drops it when either is disabled. Its still-external dependents (dasImguiImplot, dasImguiNodeEditor) are cloned into `modules/` by consumers like the wasm playground (see `.github/workflows/wasmboy.yml`)
 

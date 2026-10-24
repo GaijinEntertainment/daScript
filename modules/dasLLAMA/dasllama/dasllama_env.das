@@ -126,7 +126,7 @@ struct public GpuTierEnv {
     @clarg_doc = "One switch for the measured-best GPU rail set; any DASLLAMA_GPU_* knob still overrides individually. On a Vulkan build it is also the want the tower driver reads before any device init: the vision and audio towers' block loops serve on the device only while it is on, and decline `device` otherwise."
     gpu : Option<bool>
 
-    @clarg_doc = "The CUDA home takes the GPU tier's seats in place of the Vulkan home (with DASLLAMA_GPU on): the whole-model driver for a dense q8 model on an NVIDIA card through the driver API and NVRTC, no Vulkan call made. Off, the Vulkan home serves as before."
+    @clarg_doc = "The CUDA home takes the GPU tier's seats in place of the Vulkan home (with DASLLAMA_GPU on): the whole-model driver for a dense q8 model on an NVIDIA card through the driver API and NVRTC, no Vulkan call made. Off, the Vulkan home serves as before. A build without dasCUDA (`DAS_CUDA_DISABLED`, or a 32-bit host) has no CUDA home: the knob is ignored with one warning and the Vulkan home keeps the tier."
     cuda : bool = false
 
     @clarg_default_doc = "-1 (auto)"

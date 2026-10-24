@@ -20,8 +20,13 @@ unsuffixed export is an older entry point the library may stop exporting.
 **A diff that adds an extern to `cuda/cuda_driver.das` gives it the same `windows_library` and
 `linux_library` candidate lists as the other externs of the same library.**
 
-**Never add a C++ source under this module - a driver or toolkit entry point binds through a
-dasbind `[extern(late)]` instead.**
+**Never add a C++ source under this module beyond the `cuda` witness `src/dasCUDA.cpp`, and
+never give the witness a binding - a driver or toolkit entry point binds through a dasbind
+`[extern(late)]` instead.**
+
+**A guard on this module from outside it names the witness - `require ?cuda <target>`,
+`has_module("cuda")`, `builtin_module_exists(cuda)` - never a `cuda/` path.** The files are on
+disk in a build configured without the package, so a path guard reads that build as having CUDA.
 
 **Never bind managed memory (`cuMemAllocManaged`) and never return a device address as a host
 pointer - bytes move through `cuda_memcpy_*` and `cuda_memset_d8`, and a host-visible block is

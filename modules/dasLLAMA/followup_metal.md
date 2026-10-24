@@ -789,8 +789,7 @@ weights exactly.
 
 ## 34. The single-row NextN verify under a window or sinks still asks the chunked pair
 
-The fused single-pass attention (`MetalSqAttnD*`, `ARCHITECTURE_GPU.md`'s batched-driver
-paragraph) costs about a quarter of the chunked pair a cached key, and one row shape still asks
+The fused single-pass attention (`MetalSqAttnD*`, `ARCHITECTURE_GPU_BATCH.md#metal-batch-row-shapes`) costs about a quarter of the chunked pair a cached key, and one row shape still asks
 the pair: the single-row driver's NextN verify rows on a model with a sliding window or attention
 sinks (the batch driver's verify, which the assistant drafter rides, takes the fused form there) -
 a shape no served NextN carrier has. The work: the NextN verify asks the fused form's window and

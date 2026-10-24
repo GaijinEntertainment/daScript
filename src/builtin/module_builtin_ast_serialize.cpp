@@ -1304,7 +1304,7 @@ namespace das {
         return *this;
     }
 
-    // a read no prerequisite walk precedes meets a deferred C++ module here (src/ast/ARCHITECTURE.md#module-scan-manifest)
+    // a read no prerequisite walk precedes meets a deferred C++ module here (src/ast/ARCHITECTURE_MODULE_SCAN.md#module-scan-manifest)
     static Module * requireBuiltinModule ( const string & name ) {
         auto m = Module::require(name);
         if ( !m ) {

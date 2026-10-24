@@ -931,7 +931,7 @@ def private rope_store_single(var e : SingleLayerEnc; t : Model; enc : MetalComp
 //! Whether the fused single-pass attention serves a model's rows: a lane owns one quad of the head (a head of 64, 96 or 128),
 //! a simdgroup 128 dims of a wide one (a head of 256 or 512), on every mirror codec. A model's two head classes each
 //! need their stamp: `hs_sw` is the sliding class's head, the base head where there is one class.
-[arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
+[arch(at="../ARCHITECTURE_GPU_BATCH.md#metal-batch-row-shapes")]
 def private attn_d_serves(head_size, hs_sw : int64) : bool
     => attn_d_head_ok(head_size) && attn_d_head_ok(hs_sw) && g_env_attn_d
 

@@ -199,7 +199,7 @@ namespace das {
         return loader && loader(name) && Module::requireEx(name, false);
     }
 
-    // src/ast/ARCHITECTURE.md#module-scan-manifest - process-wide, like the native paths: a descriptor registers once per process
+    // src/ast/ARCHITECTURE_MODULE_SCAN.md#module-scan-manifest - process-wide, like the native paths: a descriptor registers once per process
     static das_map<string, vector<ModuleGroupMember>> g_moduleGroups;
     static mutex g_moduleGroupsMutex;
 
@@ -235,7 +235,7 @@ namespace das {
 
         string notInitialized;
         if ( !InitializeDependencies(notInitialized) ) {
-            // a half-warm tree: a descriptor compiled cold loaded its module, its dependency's replayed row waits (src/ast/ARCHITECTURE.md#module-scan-manifest)
+            // a half-warm tree: a descriptor compiled cold loaded its module, its dependency's replayed row waits (src/ast/ARCHITECTURE_MODULE_SCAN.md#module-scan-manifest)
             load_all_deferred_dynamic_modules();
             if ( !InitializeDependencies(notInitialized) ) {
                 DAS_FATAL_ERROR("Unable to initialize some modules:%s\n", notInitialized.c_str());

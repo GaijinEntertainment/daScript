@@ -1108,7 +1108,7 @@ namespace das
 
     DAS_API bool isValidBuiltinName ( const string & name, bool canPunkt = false );
 
-    // src/ast/ARCHITECTURE.md#module-scan-manifest
+    // src/ast/ARCHITECTURE_MODULE_SCAN.md#module-scan-manifest
     typedef bool (*DeferredModuleLoader) ( const string & name );
     DAS_API void setDeferredModuleLoader ( DeferredModuleLoader loader );
     DAS_API DeferredModuleLoader getDeferredModuleLoader ();

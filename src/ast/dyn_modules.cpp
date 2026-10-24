@@ -37,7 +37,7 @@ static Result run_descriptor(smart_ptr<FileAccess> fa, const string & mod_filena
     ModuleGroup dummyGroup;
     CodeOfPolicies policies;
     policies.no_init_check = true;
-    policies.ignore_shared_modules = true;  // src/ast/ARCHITECTURE.md#module-scan-manifest
+    policies.ignore_shared_modules = true;  // src/ast/ARCHITECTURE_MODULE_SCAN.md#module-scan-manifest
     auto program = compileDaScript(mod_filename, fa, tout, dummyGroup, policies);
     if ( program->failed() ) {
         for ( auto & err : program->errors ) {
@@ -89,7 +89,7 @@ static Result run_descriptor(smart_ptr<FileAccess> fa, const string & mod_filena
     return Result::OK;
 }
 
-// src/ast/ARCHITECTURE.md#module-scan-manifest - one file per binary kind and per compile target,
+// src/ast/ARCHITECTURE_MODULE_SCAN.md#module-scan-manifest - one file per binary kind and per compile target,
 // so a dynamic-module build and a static one, a native run and a --jit-target one, sharing a
 // tree never rewrite each other's rows
 static string manifest_file_name() {
@@ -282,6 +282,7 @@ static ManifestRead read_manifest(const string & file, uint32_t descSize, uint64
             row.dynamic = true;
             if ( !parse_on_error(fields[3], row.on_error) ) return damaged("dm on_error field");
             row.a = fields[1]; row.b = fields[2]; row.c = fields[4];
+            if ( !row.c.empty() && !dynamic_module_artifact_exists(row.a.c_str()) ) return stale("artifact missing");
             res.rows.push_back(das::move(row));
         } else if ( kind == "grp" ) {
             if ( fields.size() != 4 ) return damaged("grp field count");
@@ -364,7 +365,7 @@ static bool write_manifest(const string & file, uint32_t descSize, uint64_t desc
 #endif
 }
 
-// src/ast/ARCHITECTURE.md#module-scan-manifest - a replayed manifest with a nameless dm row, kept until the scan ends
+// src/ast/ARCHITECTURE_MODULE_SCAN.md#module-scan-manifest - a replayed manifest with a nameless dm row, kept until the scan ends
 struct NamelessRowsManifest {
     string descriptor, file;
     uint32_t descSize = 0;
@@ -433,7 +434,7 @@ static Result init_dyn_modules(smart_ptr<FileAccess> fa, string path, TextWriter
         for ( auto & row : mr.rows ) {
             nameless |= row.dynamic && row.c.empty();
         }
-        if ( nameless ) {   // src/ast/ARCHITECTURE.md#module-scan-manifest - named at the end of the scan once the module registered
+        if ( nameless ) {   // src/ast/ARCHITECTURE_MODULE_SCAN.md#module-scan-manifest - named at the end of the scan once the module registered
             g_nameless_manifests.push_back({mod_filename, manifest, len, stamp, key, mr.deps, mr.rows});
         }
         for ( auto & row : mr.rows ) {
@@ -642,7 +643,7 @@ static void move_all_nodes(gc_root & from, gc_root & to) {
     }
 }
 
-// src/ast/ARCHITECTURE.md#module-scan-manifest
+// src/ast/ARCHITECTURE_MODULE_SCAN.md#module-scan-manifest
 static bool load_deferred_module_for_require(const string & name) {
     static recursive_mutex loadMutex;
     lock_guard<recursive_mutex> guard(loadMutex);
@@ -744,7 +745,7 @@ bool require_dynamic_modules(FileAccessPtr file_access,
     // before its dependency — its register_dynamic_module dlopen then fails and is
     // deferred. Retry the deferred set in fixed-point passes so order stops mattering.
     retry_pending_dynamic_modules();
-    // src/ast/ARCHITECTURE.md#module-scan-manifest - still pending with its artifact on disk: an import a deferred row holds
+    // src/ast/ARCHITECTURE_MODULE_SCAN.md#module-scan-manifest - still pending with its artifact on disk: an import a deferred row holds
     if ( pending_dynamic_module_artifact_present() ) {
         if ( trace_scan() ) {
             LOG(LogLevel::info) << "[module] a pending module's artifact exists - loading every deferred module\n";

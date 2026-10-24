@@ -89,6 +89,10 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
   Vulkan default.
 - `ARCHITECTURE_GPU_QUANT_PLANES.md` - the Metal kq split scale plane, the iquant GEMV grid read
   with its f4-slab twin, and the Metal GEMV site abstraction.
+- `ARCHITECTURE_GPU_BATCH.md` - the per-layer FFN widths on the Metal drivers and the Vulkan
+  whole-model driver, and the Metal batch driver's row shapes - the E-series rows, a MoE's shared
+  expert, a deltanet hybrid's recurrent rows, and the split single-pass attention the single row
+  and the verify rows take too (`ARCHITECTURE_GPU_BATCH.md#metal-batch-row-shapes`).
 - `ARCHITECTURE_GPU_PREFILL.md` - the Metal prefill driver's attention slab, pad rows, chunked
   submission, the f16 twin dual-store, the last-layer FFN tail, and the hyper-connection window.
 - `ARCHITECTURE_GPU_PREFILL_GEMM.md` - the Metal prefill driver's GEMM form ladder, dev-W knee map,
