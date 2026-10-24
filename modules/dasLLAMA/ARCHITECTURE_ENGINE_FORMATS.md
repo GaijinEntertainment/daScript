@@ -246,8 +246,9 @@ repack walks that plane's region alone (`shexp_plane_q8`).
 
 - **`dasllama_math.das`** - the numeric ABSTRACTION: typedefs, active backend pointers, public
   wrappers, dispatch shaping, and the array-sizing helpers every tier and the engine share
-  (`reserve_resize`, `grow_resize`, `ensure_length`, `overwrite_resize`). Kernels themselves
-  live in a tier file; a kernel body here is a placement defect.
+  (`reserve_resize`, `grow_resize`, `ensure_length`, `overwrite_resize`), the `[tuned]` fp32
+  loop-hint families (`dot`, `axpy`, the elementwise set, `f32_batch_tile`) and the fp32 batch walk
+  (`matmul_batch_core`, `f32_batch_block`); every other kernel lives in a tier file.
 - **`dasllama_math_default.das`** - the portable backend, always registered, always correct,
   out-ranked by any platform tier - the per-32 rail's portable kernels and scalar leaves, which
   seat every backend's unset per-32 slot (`#per-32-rail`) - and the ONE body of every Q8*Q8 and

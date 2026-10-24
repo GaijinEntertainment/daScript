@@ -183,3 +183,22 @@ pre-scale), the per-(token, v-head) delta rule against that session's state, and
 out-norm epilogue. One token of a decode step, one position of a prefill and one row of a
 B-session batched step all walk those same three pieces, so no caller can round apart from
 another; what differs is only the lane split over (token, head) and the projections around them.
+
+### The fp32 batch tile walks an absolute lattice {#f32-batch-tile-lattice}
+
+`matmul_batch_core` computes Y = X*W^T in four-row by four-token tiles (`f32_batch_tile`): each step
+along n loads four weights and four inputs and issues sixteen FMAs into sixteen SIMD accumulators,
+where one `dot` per output loads two values per FMA. A tile's accumulators and a lone `dot` round
+differently, so which kernel computes an output has to be a property of the output alone. The
+lattice is the 4x4 grid counted from row 0 and token 0, the same whatever range a chunk covers: the
+dispatch unit is a row tile, a token chunk is whole tiles, every token block
+(`f32_batch_token_block`: the X rows that fit the smaller of the box's q8 L2 budget and
+`g_f32_batch_x_block` bytes, rounded down to whole tiles, or the whole token range when it fits)
+starts on the lattice, and only the rows past the last whole row tile of d and the tokens past the
+last whole token tile of ntok take `dot` (`f32_dot_rows`). Any row chunking, worker count or token
+split then lands the same bits (`test_matmul_batch.das`'s lanes cell holds the threaded walk to the
+one-worker walk bit for bit); a batch and the same tokens one at a time do not, and
+`test_matmul_batch.das` holds the fp32 path to the per-token dot within `F32_TILE_REL`.
+`g_f32_batch_tile_min_n` routes a dot shorter than it to `f32_dot_rows` whole; it ships at 1, so the
+tile serves every length, and `harness/f32_batch_race.das` is the lever that races the two constants
+and the nest against the tile.

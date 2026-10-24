@@ -668,51 +668,140 @@ def private matmul_at(var y : array<float>; wp : float const?; x : array<float>;
 }
 
 //! Batched fp32 GEMM for prefill: Y [ntok x d] = X [ntok x n]·Wᵀ, W row-major [d x n]. Both
-//! token-major. Weight-stationary nest (rows outer) — each weight row streams from DRAM once,
-//! reused across all ntok tokens (vs ntok× matmul re-reading W). Bit-for-bit ntok× matmul.
+//! token-major. Four weight rows by four tokens a tile, the tails through `dot`; a tile's outputs
+//! agree with ntok× matmul to the tile's rounding, the tails bit-for-bit.
 def matmul_batch(var y : array<float>; w : array<float> | #; x : array<float>; n, d, ntok : int64) {
     unsafe {
         matmul_batch_core(addr(y[0]), addr<float const?>(w[0]), addr<float const?>(x[0]), n, d, ntok)
     }
 }
 
-// The fp32 batch GEMM core: 1-D row split, except ROW-STARVED shapes (MoE router: d=n_expert=128,
-// grain 16 => 8 chunks idling half a 16-lane box) split tokens too — a flat (row-chunk × token-block)
-// domain. Disjoint stores, same dot per (row, token) — bit-identical either way.
-def private matmul_batch_core(var yp : float?; wp : float const?; xp : float const?; n, d, ntok : int64) {
-    var myp = yp
-    let rch = matmul_chunks(int(d), get_q8_batch_chunks_per_job(), n * d * ntok)
-    let L = lanes_for_work(n * d * ntok, g_batch_lane_cap)
-    let tb = (rch < L && ntok >= 128l) ? min(int64((2 * L + rch - 1) / rch), ntok / 64l) : 1l
-    if (tb <= 1l) {
-        maybe_parallel_for(0, int(d), rch) $(rb, re) {
+//! Four weight rows by four tokens, each output a dot over n in its own accumulator; `yp` at
+//! y[t0 * d + i0] (token-major), `wp` at row i0, `xp` at token t0. Public: the tuner's
+//! [dasllama_grid] scan reads it.
+[hint(unsafe_range_check, noalias = yp, noalias = wp, noalias = xp)]
+def template f32_batch_tile_template(var yp : float ?; wp, xp : float const ?; n, d : int64) : void {
+    var a00 = 0.0; var a01 = 0.0; var a02 = 0.0; var a03 = 0.0
+    var a10 = 0.0; var a11 = 0.0; var a12 = 0.0; var a13 = 0.0
+    var a20 = 0.0; var a21 = 0.0; var a22 = 0.0; var a23 = 0.0
+    var a30 = 0.0; var a31 = 0.0; var a32 = 0.0; var a33 = 0.0
+    let w1 = unsafe(wp + n); let w2 = unsafe(wp + 2l * n); let w3 = unsafe(wp + 3l * n)
+    let x1 = unsafe(xp + n); let x2 = unsafe(xp + 2l * n); let x3 = unsafe(xp + 3l * n)
+    for [tune = 1] (j in range64(n)) {
+        unsafe {
+            let xa = xp[j]; let xb = x1[j]; let xc = x2[j]; let xd = x3[j]
+            let wa = wp[j]
+            a00 = mad(wa, xa, a00); a01 = mad(wa, xb, a01); a02 = mad(wa, xc, a02); a03 = mad(wa, xd, a03)
+            let wb = w1[j]
+            a10 = mad(wb, xa, a10); a11 = mad(wb, xb, a11); a12 = mad(wb, xc, a12); a13 = mad(wb, xd, a13)
+            let wc = w2[j]
+            a20 = mad(wc, xa, a20); a21 = mad(wc, xb, a21); a22 = mad(wc, xc, a22); a23 = mad(wc, xd, a23)
+            let wd = w3[j]
+            a30 = mad(wd, xa, a30); a31 = mad(wd, xb, a31); a32 = mad(wd, xc, a32); a33 = mad(wd, xd, a33)
+        }
+    }
+    unsafe {
+        yp[0l] = a00; yp[1l] = a10; yp[2l] = a20; yp[3l] = a30
+        yp[d] = a01; yp[d + 1l] = a11; yp[d + 2l] = a21; yp[d + 3l] = a31
+        yp[2l * d] = a02; yp[2l * d + 1l] = a12; yp[2l * d + 2l] = a22; yp[2l * d + 3l] = a32
+        yp[3l * d] = a03; yp[3l * d + 1l] = a13; yp[3l * d + 2l] = a23; yp[3l * d + 3l] = a33
+    }
+}
+[hint(unsafe_range_check, noalias = yp, noalias = wp, noalias = xp), tuned(fallback = "vec8")]
+def f32_batch_tile(var yp : float?; wp, xp : float const?; n, d : int64) {}
+
+//! The tile walk over rows [r0, r1) by tokens [t0, t1) in token blocks of `x_block_tok`
+[hint(noalias = yp, noalias = wp, noalias = xp), arch(at = "../ARCHITECTURE_CPU_KERNELS.md#f32-batch-tile-lattice")]
+def f32_batch_block(var yp : float?; wp, xp : float const?; n, d, r0, r1, t0, t1, x_block_tok : int64) {
+    let ra = min(r1, ((r0 + 3l) / 4l) * 4l)
+    let r4 = ra + ((r1 - ra) / 4l) * 4l
+    f32_dot_rows(yp, wp, xp, n, d, r0, ra, t0, t1)
+    var tbeg = t0
+    while (tbeg < t1) {
+        let tend = min(tbeg + x_block_tok, t1)
+        let t4 = tbeg + ((tend - tbeg) / 4l) * 4l
+        var i = ra
+        while (i < r4) {
             unsafe {
-                for (i in range(rb, re)) {
-                    let wrow = wp + int64(i) * n
-                    for (tk in range64(ntok)) {
-                        myp[tk * d + int64(i)] = dot(wrow, xp + tk * n, n)
-                    }
+                let wrow = wp + i * n
+                var tk = tbeg
+                while (tk < t4) {
+                    f32_batch_tile(yp + tk * d + i, wrow, xp + tk * n, n, d)
+                    tk += 4l
                 }
             }
+            f32_dot_rows(yp, wp, xp, n, d, i, i + 4l, t4, tend)
+            i += 4l
+        }
+        f32_dot_rows(yp, wp, xp, n, d, r4, r1, tbeg, tend)
+        tbeg = tend
+    }
+}
+
+//! Rows [r0, r1) by tokens [t0, t1), each output its own `dot`: the tile walk's tails and the row nest
+//! share it, and the outputs are independent, so the loop order moves no bit.
+[hint(noalias = yp, noalias = wp, noalias = xp), arch(at = "../ARCHITECTURE_CPU_KERNELS.md#kernel-visibility-lifted-workers")]
+def f32_dot_rows(var yp : float?; wp, xp : float const?; n, d, r0, r1, t0, t1 : int64) {
+    unsafe {
+        for (i in range64(r0, r1)) {
+            let wrow = wp + i * n
+            for (tk in range64(t0, t1)) {
+                yp[tk * d + i] = dot(wrow, xp + tk * n, n)
+            }
+        }
+    }
+}
+
+//! The X rows one tile-walk block reads stay in one core's L2 while every row tile re-reads them: the
+//! block's bytes, under the box's q8 budget, whole tiles. 256 KB is `harness/f32_batch_race.das`'s
+//! pick; the setter is that race's lever.
+var private g_f32_batch_x_block = 256l * 1024l
+def public set_f32_batch_x_block(bytes : int64) { g_f32_batch_x_block = max(bytes, 4l * 1024l) }
+def public get_f32_batch_x_block() : int64 => g_f32_batch_x_block
+//! Under this dot length the row nest (`f32_dot_rows`) serves instead of the tile. Shipped at 1, so
+//! the tile serves every length; the setter is `harness/f32_batch_race.das`'s lever to the nest arm.
+var private g_f32_batch_tile_min_n = 1l
+def public set_f32_batch_tile_min_n(n : int64) { g_f32_batch_tile_min_n = max(n, 1l) }
+def public get_f32_batch_tile_min_n() : int64 => g_f32_batch_tile_min_n
+
+def private f32_batch_token_block(n, ntok : int64) : int64 {
+    let fit = min(get_q8_l2_budget(), g_f32_batch_x_block) / max(n * 4l, 1l)
+    return clamp((fit / 4l) * 4l, 4l, max(ntok, 4l))
+}
+
+// The fp32 batch GEMM core: 1-D row split, except ROW-STARVED shapes (MoE router: d=n_expert=128,
+// grain 16 => 8 chunks idling half a 16-lane box) split tokens too — a flat (row-chunk × token-block)
+// domain. Disjoint stores, the same tile walk per (row range, token range) either way.
+def private matmul_batch_core(var yp : float?; wp : float const?; xp : float const?; n, d, ntok : int64) {
+    var myp = yp
+    if (n < g_f32_batch_tile_min_n) {   // the row nest: only the race reaches it at the shipped 1
+        let rch0 = matmul_chunks(int(d), get_q8_batch_chunks_per_job(), n * d * ntok)
+        maybe_parallel_for(0, int(d), rch0) $(rb, re) {
+            f32_dot_rows(myp, wp, xp, n, d, int64(rb), int64(re), 0l, ntok)
         }
         return
     }
-    let rows_per = (d + int64(rch) - 1l) / int64(rch)
-    let tok_per = (ntok + tb - 1l) / tb
+    let row_tiles = (d + 3l) / 4l   // the dispatch unit: every chunk edge sits on the tile lattice
+    let rch = matmul_chunks(int(row_tiles), get_q8_batch_chunks_per_job(), n * d * ntok)
+    let L = lanes_for_work(n * d * ntok, g_batch_lane_cap)
+    let tb = (rch < L && ntok >= 128l) ? min(int64((2 * L + rch - 1) / rch), ntok / 64l) : 1l
+    let x_block_tok = f32_batch_token_block(n, ntok)
+    if (tb <= 1l) {
+        maybe_parallel_for(0, int(row_tiles), rch) $(rb, re) {
+            f32_batch_block(myp, wp, xp, n, d, int64(rb) * 4l, min(int64(re) * 4l, d), 0l, ntok, x_block_tok)
+        }
+        return
+    }
+    let tiles_per = (row_tiles + int64(rch) - 1l) / int64(rch)
+    let tok_per = (((ntok + tb - 1l) / tb + 3l) / 4l) * 4l   // whole tiles on the token axis too
     maybe_parallel_for(0, int(int64(rch) * tb), int(int64(rch) * tb)) $(cb, ce) {
-        unsafe {
-            for (c in range(cb, ce)) {
-                let rc = int64(c) / tb
-                let tc = int64(c) % tb
-                let r1 = min(rc * rows_per + rows_per, d)
-                let t1 = min(tc * tok_per + tok_per, ntok)
-                for (i in range64(rc * rows_per, r1)) {
-                    let wrow = wp + i * n
-                    for (tk in range64(tc * tok_per, t1)) {
-                        myp[tk * d + i] = dot(wrow, xp + tk * n, n)
-                    }
-                }
-            }
+        for (c in range(cb, ce)) {
+            let rc = int64(c) / tb
+            let tc = int64(c) % tb
+            let r0 = min(rc * tiles_per * 4l, d)
+            let r1 = min(r0 + tiles_per * 4l, d)
+            let t1 = min(tc * tok_per + tok_per, ntok)
+            f32_batch_block(myp, wp, xp, n, d, r0, r1, tc * tok_per, t1, x_block_tok)
         }
     }
 }
