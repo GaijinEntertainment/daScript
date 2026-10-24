@@ -2056,10 +2056,12 @@ def public mmq_wgs(d, rows : int64) : int64 => (d / 128l) * (rows / 128l)
 //! fragments), sixteen warps the tile; a format joins by staging its blocks decoded to int8 in the weight tile's slot
 [ |> template_struct_instance]
 class template MmqT {
-    @template_constant K4 : bool = false   //!< the weight side: Q4_K superblocks decoded to int8 through registers (a scale and a min a 32-block), else raw Q8_0 blocks by cp.async
-    @ssbo @binding = 0 @readonly wq4 : array<uint4>    //! Q8_0 blocks as two uint4: (row, kb) at (row * nb + kb) * 2; Q4_K superblocks as eight, block g's 16 nibble bytes at (row * nsb + sb) * 8 + g
-    @ssbo @binding = 1 @readonly @template_gate = "!K4" ws4 : array<uint4>    //! weight scales as halves, (row, kb) at row * nb + kb
-    @ssbo @binding = 1 @readonly @template_gate = K4 wsu : array<uint>        //! the Q4_K scale rows: five words a superblock - d | dmin, the eight sc bytes, the eight mn bytes
+    @template_constant K4 : bool = false      //!< the weight side: Q4_K superblocks decoded to int8 through registers, a scale and a min a 32-block
+    @template_constant IQ4XS : bool = false   //!< ... IQ4_XS superblocks: the nibbles through the codebook to signed int8, a scale a 32-block, no min
+    @template_constant KQ : bool = false      //!< a superblock leaf (K4 or IQ4XS): the scale rows as words, the weight stage through registers; off, raw Q8_0 blocks by cp.async
+    @ssbo @binding = 0 @readonly wq4 : array<uint4>    //! Q8_0 blocks as two uint4: (row, kb) at (row * nb + kb) * 2; Q4_K and IQ4_XS superblocks as eight, block g's 16 nibble bytes at (row * nsb + sb) * 8 + g
+    @ssbo @binding = 1 @readonly @template_gate = "!KQ" ws4 : array<uint4>    //! weight scales as halves, (row, kb) at row * nb + kb
+    @ssbo @binding = 1 @readonly @template_gate = KQ wsu : array<uint>        //! the scale rows: Q4_K's five words a superblock - d | dmin, eight sc bytes, eight mn bytes; IQ4_XS's two - d with the scales' high bits, the scales' low nibbles
     @ssbo @binding = 2 @readonly xq4 : array<uint4>    //! the activation quants, the same shape over tokens
     @ssbo @binding = 3 @readonly xs4 : array<uint4>    //! activation scales as floats, (token, kb) at token * nb + kb
     @ssbo @binding = 4 y : array<float>                //! [token][d]
@@ -2071,6 +2073,9 @@ class template MmqT {
     @workgroup sxs : float4[256]    //! token-scale quads: slot (c >> 4) * 4 + ((c & 7) >> 1)
     @workgroup @template_gate = K4 rm16 : uint4[512]    //! the rows' -dmin x mn as halves: [group][row][16 blocks], two groups of four steps in turn
     @workgroup @template_gate = K4 cx16 : uint4[512]    //! the tokens' scale x sum as halves: [group][token][16 blocks]
+
+    //! a quad of IQ4_XS nibble lanes through the codebook to signed int8 lanes, the home's permute decode a word
+    def iq4_quad(n : uint4) : uint4 => uint4(cud_iq4_word(n.x), cud_iq4_word(n.y), cud_iq4_word(n.z), cud_iq4_word(n.w))
 
     [spirv_inline]
     def mmq_body {   // nolint:STYLE037,STYLE038 - the pipeline and its unrolled products, register- and barrier-coupled; the Q4_K arm's stage and scale rows ride the same barriers
@@ -2123,10 +2128,15 @@ class template MmqT {
         let k4src = (pa.wblk + (m0 + k4row) * nsb) * 8u + k4blk   // the lane's quad of superblock 0: step kb adds (kb >> 1) * 8 + (kb & 1) * 4
         let k4dst = k4row * 9u + k4blk * 2u
         var wnext : uint4
-        static_if (K4) {
+        static_if (KQ) {
             wnext = wq4[k4src]
-            sa[k4dst] = blk32_nib_quad(wnext, 0u)
-            sa[k4dst + 1u] = blk32_nib_quad(wnext, 4u)
+            static_if (K4) {
+                sa[k4dst] = blk32_nib_quad(wnext, 0u)
+                sa[k4dst + 1u] = blk32_nib_quad(wnext, 4u)
+            } else {
+                sa[k4dst] = iq4_quad(blk32_nib_quad(wnext, 0u))
+                sa[k4dst + 1u] = iq4_quad(blk32_nib_quad(wnext, 4u))
+            }
             if (nb4 > 1u) {
                 wnext = wq4[k4src + 4u]
             }
@@ -2140,26 +2150,39 @@ class template MmqT {
         var wcur = uint4(0u)
         var xcur = uint4(0u)
         var xscur = uint4(0u)
-        // the Q4_K scale rows ride registers a superblock (two steps) at a time: `k4s` the superblock being written, `k4sn` the next
+        // a superblock leaf's scale row rides registers a superblock (two steps) at a time: `k4s` the superblock being written,
+        // `k4sn` the next; Q4_K's row is five words, IQ4_XS's two
+        let scw = K4 ? 5u : 2u
         var k4s, k4sn : uint[5]
-        let k4srow = (pa.wblk + (m0 + wr) * nsb) * 5u
+        let k4srow = (pa.wblk + (m0 + wr) * nsb) * scw
         if (wstage) {
-            static_if (K4) {
+            static_if (KQ) {
                 for [unroll] (j in range(5)) {
-                    k4s[j] = wsu[k4srow + uint(j)]
+                    if (uint(j) < scw) {
+                        k4s[j] = wsu[k4srow + uint(j)]
+                    }
                 }
-                let dm = unpackHalf2x16(k4s[0])
-                var mn4 : float[4]
-                for [unroll] (b in range(4)) {
-                    let sm = k4_scale_min(dm, k4s[1], k4s[3], uint(b))
-                    sws[uint(b) * 64u + wslot][int(wcomp)] = sm.x
-                    mn4[b] = -sm.y
+                static_if (K4) {
+                    let dm = unpackHalf2x16(k4s[0])
+                    var mn4 : float[4]
+                    for [unroll] (b in range(4)) {
+                        let sm = k4_scale_min(dm, k4s[1], k4s[3], uint(b))
+                        sws[uint(b) * 64u + wslot][int(wcomp)] = sm.x
+                        mn4[b] = -sm.y
+                    }
+                    rm16[wr * 2u][0] = packHalf2x16(float2(mn4[0], mn4[1]))   // step 0: group 0, piece 0, the first half of the piece
+                    rm16[wr * 2u][1] = packHalf2x16(float2(mn4[2], mn4[3]))
+                } else {
+                    let dx = unpackHalf2x16(k4s[0]).x
+                    for [unroll] (b in range(4)) {
+                        sws[uint(b) * 64u + wslot][int(wcomp)] = dx * float(iq4xs_sc(k4s[0], k4s[1], uint(b)))
+                    }
                 }
-                rm16[wr * 2u][0] = packHalf2x16(float2(mn4[0], mn4[1]))   // step 0: group 0, piece 0, the first half of the piece
-                rm16[wr * 2u][1] = packHalf2x16(float2(mn4[2], mn4[3]))
                 if (nsb > 1u) {
                     for [unroll] (j in range(5)) {
-                        k4sn[j] = wsu[k4srow + 5u + uint(j)]
+                        if (uint(j) < scw) {
+                            k4sn[j] = wsu[k4srow + scw + uint(j)]
+                        }
                     }
                 }
             } else {
@@ -2200,9 +2223,14 @@ class template MmqT {
                 if (nk < nb4) {
                     let st2 = nk & 1u
                     let nsrc = nk * 8u
-                    static_if (K4) {
-                        sa[st2 * 1152u + k4dst] = blk32_nib_quad(wnext, 0u)
-                        sa[st2 * 1152u + k4dst + 1u] = blk32_nib_quad(wnext, 4u)
+                    static_if (KQ) {
+                        static_if (K4) {
+                            sa[st2 * 1152u + k4dst] = blk32_nib_quad(wnext, 0u)
+                            sa[st2 * 1152u + k4dst + 1u] = blk32_nib_quad(wnext, 4u)
+                        } else {
+                            sa[st2 * 1152u + k4dst] = iq4_quad(blk32_nib_quad(wnext, 0u))
+                            sa[st2 * 1152u + k4dst + 1u] = iq4_quad(blk32_nib_quad(wnext, 4u))
+                        }
                         if (nk + 1u < nb4) {
                             wnext = wq4[k4src + ((nk + 1u) >> 1u) * 8u + ((nk + 1u) & 1u) * 4u]
                         }
@@ -2213,30 +2241,40 @@ class template MmqT {
                     cp_async_16(unsafe(addr(sb[st2 * 1152u + sdst])), unsafe(addr(xq4[xsrc + nsrc])))
                     cp_async_16(unsafe(addr(sb[st2 * 1152u + sdst + 576u])), unsafe(addr(xq4[xsrc + nsrc + src2])))
                     if (wstage) {
-                        static_if (K4) {
+                        static_if (KQ) {
                             if (q == 1) {   // step nk opens a superblock: the prefetched row takes over, the row after it is fetched a superblock ahead
                                 for [unroll] (j in range(5)) {
                                     k4s[j] = k4sn[j]
                                 }
                                 if ((nk >> 1u) + 1u < nsb) {
                                     for [unroll] (j in range(5)) {
-                                        k4sn[j] = wsu[k4srow + ((nk >> 1u) + 1u) * 5u + uint(j)]
+                                        if (uint(j) < scw) {
+                                            k4sn[j] = wsu[k4srow + ((nk >> 1u) + 1u) * scw + uint(j)]
+                                        }
                                     }
                                 }
                             }
-                            let dm = unpackHalf2x16(k4s[0])
-                            let scw = q == 1 ? k4s[1] : k4s[2]   // step nk's four blocks: the superblock's first four (nk even) or last four
-                            let mnw = q == 1 ? k4s[3] : k4s[4]
-                            var mn4 : float[4]
-                            for [unroll] (b in range(4)) {
-                                let sm = k4_scale_min(dm, scw, mnw, uint(b))
-                                sws[st2 * 256u + uint(b) * 64u + wslot][int(wcomp)] = sm.x
-                                mn4[b] = -sm.y
+                            static_if (K4) {
+                                let dm = unpackHalf2x16(k4s[0])
+                                let sc4 = q == 1 ? k4s[1] : k4s[2]   // step nk's four blocks: the superblock's first four (nk even) or last four
+                                let mnw = q == 1 ? k4s[3] : k4s[4]
+                                var mn4 : float[4]
+                                for [unroll] (b in range(4)) {
+                                    let sm = k4_scale_min(dm, sc4, mnw, uint(b))
+                                    sws[st2 * 256u + uint(b) * 64u + wslot][int(wcomp)] = sm.x
+                                    mn4[b] = -sm.y
+                                }
+                                let me = (((nk >> 2u) & 1u) * 128u + wr) * 2u + ((nk >> 1u) & 1u)   // step nk's group, its row, the piece holding its four blocks
+                                let mc = int((nk & 1u) * 2u)
+                                rm16[me][mc] = packHalf2x16(float2(mn4[0], mn4[1]))
+                                rm16[me][mc + 1] = packHalf2x16(float2(mn4[2], mn4[3]))
+                            } else {
+                                let dx = unpackHalf2x16(k4s[0]).x
+                                let b0 = (nk & 1u) * 4u   // step nk's four blocks of the superblock
+                                for [unroll] (b in range(4)) {
+                                    sws[st2 * 256u + uint(b) * 64u + wslot][int(wcomp)] = dx * float(iq4xs_sc(k4s[0], k4s[1], b0 + uint(b)))
+                                }
                             }
-                            let me = (((nk >> 2u) & 1u) * 128u + wr) * 2u + ((nk >> 1u) & 1u)   // step nk's group, its row, the piece holding its four blocks
-                            let mc = int((nk & 1u) * 2u)
-                            rm16[me][mc] = packHalf2x16(float2(mn4[0], mn4[1]))
-                            rm16[me][mc + 1] = packHalf2x16(float2(mn4[2], mn4[3]))
                         } else {
                             let h0 = unpackHalf2x16(q == 0 ? wcur.z : wcur.x)   // step nk's four halves: words 2 (nk & 1) .. of its pair's eight
                             let h1 = unpackHalf2x16(q == 0 ? wcur.w : wcur.y)
@@ -2332,12 +2370,25 @@ class CuQ8Mmq : MmqT {
     }
 }
 
-//! the Q4_K leaf: the same tile over nibble codes decoded in the weight stage, with the min term's rank-one correction
+//! the Q4_K leaf: the same tile over nibble codes decoded in the weight stage, with the min term's rank-sixteen correction
 [cuda_dispatch(name = "k4_mmq", grid = "wgs", params = "wgs : int64")]
 class CuK4Mmq : MmqT {
+    override KQ = true
     override K4 = true
 
     [cuda_kernel(local_size_x = 512, name = "k4_mmq_cuda")]
+    def run {
+        mmq_body()
+    }
+}
+
+//! the IQ4_XS leaf: the nibbles through the codebook to signed codes in the weight stage, a scale a block, no min term
+[cuda_dispatch(name = "iq4xs_mmq", grid = "wgs", params = "wgs : int64")]
+class CuIq4xsMmq : MmqT {
+    override KQ = true
+    override IQ4XS = true
+
+    [cuda_kernel(local_size_x = 512, name = "iq4xs_mmq_cuda")]
     def run {
         mmq_body()
     }

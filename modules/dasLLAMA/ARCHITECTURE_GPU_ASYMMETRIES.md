@@ -220,12 +220,13 @@ asymmetries a stamp family ledgers - stays in `ARCHITECTURE_GPU.md#gpu-backends`
   (`ARCHITECTURE_GPU_SHARED_GEMM.md#khr-mm-kq-tile`) or, on a device with neither, the Q8-fed chain's batch tiles
   (`ARCHITECTURE_GPU_VULKAN_MOE.md#vk-moe-q8-chain`) - and has no tile-per-expert form to route away from.
 - **The int8 MMQ prefill is the CUDA home's alone** (`DASLLAMA_CUDA_MMQ`, on by default; `crd_site_mmq`): a window
-  GEMM site whose plane is Q8_0 or Q4_K, whose output width is a multiple of 128 and whose reduction of 256 (512 for
-  Q4_K), at a window of whole 128-row tiles, runs on the MMQ leaf of its format over the activations requantized to
-  Q8_0 blocks between the GEMMs, as the token step's feeds are; every other site - the other formats, a shape off the
-  tile, `=0` - takes the f16-fed cm2 tiles, and a layer whose sites split produces both feeds (the residual step's
-  requant, then its f16 norm pass with no add). The Q8_0 leaf stages raw blocks by cp.async; the Q4_K leaf
-  (`MmqT` under `K4`) decodes the nibbles to int8 through registers in its weight stage and carries the min term
+  GEMM site whose plane is Q8_0, Q4_K or IQ4_XS, whose output width is a multiple of 128 and whose reduction of 256
+  (512 for Q4_K), at a window of whole 128-row tiles, runs on the MMQ leaf of its format over the activations
+  requantized to Q8_0 blocks between the GEMMs, as the token step's feeds are; every other site - the other formats, a
+  shape off the tile, `=0` - takes the f16-fed cm2 tiles, and a layer whose sites split produces both feeds (the
+  residual step's requant, then its f16 norm pass with no add). The Q8_0 leaf stages raw blocks by cp.async; the
+  superblock leaves (`MmqT` under `K4` and `IQ4XS`) decode their codes to int8 through registers in the weight stage -
+  IQ4_XS's nibbles through the codebook's permute decode, a scale a block and no min. The Q4_K leaf carries the min term
   apart: the requant kernels write each activation block's scale x quant sum beside its scale (`OUT_SUM`), the stage
   keeps each row's `-dmin x mn` and each token's sum as halves over sixteen blocks, and one f16 tensor product a fragment
   pair every sixteen blocks folds the rank-sixteen correction into the f32 accumulators - a per-block fixup off shared

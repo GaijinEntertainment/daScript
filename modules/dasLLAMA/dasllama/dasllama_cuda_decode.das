@@ -936,20 +936,22 @@ def private cud_cm2_pick(d, rows, n : int64) : tuple<tc : int64; nsplit : int64;
 def private cud_sched_make(words : int64) : CudSched => CudSched(buf = dev_zeroed(words * 4l), wblk = -1l, rows = -1l)
 
 //! whether a window GEMM site - a `d` x `n` plane of format `fmt` at block `wblk` - takes the int8 MMQ tile: the knob asks it,
-//! the window is whole tiles, the format has a leaf (Q8_0, Q4_K), the output width is a multiple of 128, the reduction of 256
-//! and a Q8_0 plane's first block of 8 (eight scales a quad); the Q4_K leaf folds its min terms sixteen blocks at a time, so
-//! its reduction is a multiple of 512
+//! the window is whole tiles, the format has a leaf (Q8_0, Q4_K, IQ4_XS), the output width is a multiple of 128, the
+//! reduction of 256 and a Q8_0 plane's first block of 8 (eight scales a quad); the Q4_K leaf folds its min terms sixteen
+//! blocks at a time, so its reduction is a multiple of 512
 def private crd_site_mmq(r : CudRdec; fmt : int; n, d, wblk : int64) : bool {
     return false if (g_env_vulkan.cuda_mmq == 0l || r.pf_np % 128l != 0l || d % 128l != 0l || n % 256l != 0l)
     return wblk % 8l == 0l if (fmt == int(KqFmt.q8))
-    return fmt == int(KqFmt.k4) && n % 512l == 0l
+    return n % 512l == 0l if (fmt == int(KqFmt.k4))
+    return fmt == int(KqFmt.iq4xs)
 }
 
 //! the MMQ leaves the model's window sites take, by format: the feeds the window produces follow (the Q4_K leaf reads the
-//! activation blocks' sums beside their scales)
-def private crd_mmq_leaves(r : CudRdec) : tuple<q8 : bool; k4 : bool> {
+//! activation blocks' sums beside their scales), and the load log names them
+def private crd_mmq_leaves(r : CudRdec) : tuple<q8 : bool; k4 : bool; iq4xs : bool> {
     var q8 = false
     var k4 = false
+    var iq4xs = false
     for (L in r.layers) {
         let kv_merged = L.fk == L.fv && L.bv == L.bk + kq_blocks_for(r.dim, L.kvd, L.fk)
         let kd = kv_merged ? 2l * L.kvd : L.kvd
@@ -959,9 +961,10 @@ def private crd_mmq_leaves(r : CudRdec) : tuple<q8 : bool; k4 : bool> {
             continue if (!crd_site_mmq(r, site.fmt, site.n, site.d, site.b))
             q8 = q8 || site.fmt == int(KqFmt.q8)
             k4 = k4 || site.fmt == int(KqFmt.k4)
+            iq4xs = iq4xs || site.fmt == int(KqFmt.iq4xs)
         }
     }
-    return (q8 = q8, k4 = k4)
+    return (q8 = q8, k4 = k4, iq4xs = iq4xs)
 }
 
 //! the x feeds a layer's q/k/v sites (`qkv`) or its gate/up sites read: the Q8_0 feed where a site takes an MMQ leaf, the f16
@@ -1015,6 +1018,8 @@ def private crd_mmq(fmt : int; wblk : int64; a : CudArena; xq, xs, xsum, y : uin
     var pc = MmqArgs(n = uint(n), d = uint(d), rows = uint(rp), wblk = uint(wblk))
     if (fmt == int(KqFmt.k4)) {
         enc_k4_mmq(g_cud.stream, fixed_array(a.wq, a.ws, xq, xs, y, xsum), pc, mmq_wgs(d, rp))
+    } elif (fmt == int(KqFmt.iq4xs)) {
+        enc_iq4xs_mmq(g_cud.stream, fixed_array(a.wq, a.ws, xq, xs, y), pc, mmq_wgs(d, rp))
     } else {
         enc_q8_mmq(g_cud.stream, fixed_array(a.wq, a.ws, xq, xs, y), pc, mmq_wgs(d, rp))
     }
@@ -1109,7 +1114,11 @@ def private crd_pf_setup(var r : CudRdec) {
         r.pf_asum = dev_zeroed(np * (qd / Q8_BLOCK_ELEMS) * 4l)
         r.pf_hsum = dev_zeroed(np * (hid / Q8_BLOCK_ELEMS) * 4l)
     }
-    let mmq_planes = r.pf_mmq_q8 && r.pf_mmq_k4 ? "Q8_0 and Q4_K" : (r.pf_mmq_q8 ? "Q8_0" : (r.pf_mmq_k4 ? "Q4_K" : ""))
+    var mmq_planes = ""
+    for (on, name in [leaves.q8, leaves.k4, leaves.iq4xs], ["Q8_0", "Q4_K", "IQ4_XS"]) {
+        continue if (!on)
+        mmq_planes = empty(mmq_planes) ? name : "{mmq_planes}, {name}"
+    }
     let pick = empty(mmq_planes) ? "the f16-fed cm2 tiles" : "the int8 MMQ kernel over Q8_0 feeds for the {mmq_planes} planes, the f16-fed cm2 tiles for the rest"
     to_log(LOG_INFO, "dasLLAMA cuda tier: the window chain's GEMMs on {pick} (DASLLAMA_CUDA_MMQ={g_env_vulkan.cuda_mmq})\n")
     r.pf_splitk_bytes = 262_144l * int64(g_cud.sm_count)

@@ -261,11 +261,37 @@ def k4_mmq_ref(p : Planes; m : MmqPlanes; k, tok, row : int) : float {
     return acc
 }
 
-//! the MMQ arm's report line - the Q8_0 leaf, or under `k4` the Q4_K one with its sum feed: its largest relative error against
-//! the reference over the compare region, then its rounds when the error is inside `MMQ_REL_BOUND`, or the miss and no time;
+//! the IQ4_XS reference over the engine's repacked superblocks (the Q4_K nibble tiling, the codebook's signed values; a two-word
+//! scale row - d with the scales' high bits, the scales' low nibbles): every block's xs x d x (ls - 32) x dot
+def iq4xs_mmq_ref(p : Planes; m : MmqPlanes; k, tok, row : int) : float {
+    let nb = k / 32
+    let nsb = k / 256
+    var acc = 0.0
+    for (b in range(nb)) {
+        let sb = row * nsb + b / 8
+        let g = b % 8
+        let w0 = p.ws[sb * 2]
+        let w1 = p.ws[sb * 2 + 1]
+        var dot = 0
+        for (i in range(32)) {
+            let wb = (sb * 8 + g) * 16 + i % 16
+            let byte = int((p.wq[wb / 4] >> uint((wb % 4) * 8)) & 255u)
+            let code = int(iq4_word(uint(i < 16 ? byte & 15 : byte >> 4)) & 255u)
+            dot += (code >= 128 ? code - 256 : code) * byte_at(m.xq, tok * k + b * 32 + i)
+        }
+        acc += float(dot) * (unpackHalf2x16(w0).x * float(iq4xs_sc(w0, w1, uint(g)))) * m.xs[tok * nb + b]
+    }
+    return acc
+}
+
+//! the MMQ arm's report line for the leaf of `fmt` (Q8_0; Q4_K with its sum feed; IQ4_XS): its largest relative error against
+//! the reference over the compare region, then its rounds when the error is inside the leaf's bound, or the miss and no time;
 //! 1 when it measured
-def mmq_report(shape : string; p : Planes; m : MmqPlanes; k, d : int; k4 : bool) : int {
-    if (!(k4 ? dasllama_cuda_classes::ensure_k4_mmq() : dasllama_cuda_classes::ensure_q8_mmq())) {
+def mmq_report(shape : string; p : Planes; m : MmqPlanes; k, d, fmt : int) : int {
+    let k4 = fmt == int(KqFmt.k4)
+    let iq4 = fmt == int(KqFmt.iq4xs)
+    let armed = k4 ? dasllama_cuda_classes::ensure_k4_mmq() : (iq4 ? dasllama_cuda_classes::ensure_iq4xs_mmq() : dasllama_cuda_classes::ensure_q8_mmq())
+    if (!armed) {
         print("{shape} cuda refused: {CU_CLASS_REFUSED}\n")
         return 0
     }
@@ -273,7 +299,7 @@ def mmq_report(shape : string; p : Planes; m : MmqPlanes; k, d : int; k4 : bool)
     var bufs = fixed_array(buf_upload(p.wq, cs), buf_upload(p.ws, cs), buf_upload(m.xq, cs), buf_upload(m.xs, cs), buf_fill(ROWS * d, 0.0, cs), buf_upload(m.xsum, cs))
     var pc = MmqArgs(n = uint(k), d = uint(d), rows = uint(ROWS))
     let wgs = dasllama_cuda_classes::mmq_wgs(int64(d), int64(ROWS))
-    mmq_launch(k4, bufs, pc, wgs)
+    mmq_launch(fmt, bufs, pc, wgs)
     cud_sync()
     let y <- buf_download(bufs[4], ROWS * d, type<float>)
     var wants : float[64]
@@ -281,11 +307,11 @@ def mmq_report(shape : string; p : Planes; m : MmqPlanes; k, d : int; k4 : bool)
     for (s in range(64)) {
         let tok = (s * 7919) % ROWS
         let row = (s * 104729 + 13) % d
-        wants[s] = k4 ? k4_mmq_ref(p, m, k, tok, row) : mmq_ref(p, m, k, tok, row)
+        wants[s] = k4 ? k4_mmq_ref(p, m, k, tok, row) : (iq4 ? iq4xs_mmq_ref(p, m, k, tok, row) : mmq_ref(p, m, k, tok, row))
         ymax = max(ymax, abs(wants[s]))
     }
-    // the Q8 leaf's error is per element (exact int dots, f32 scales); the Q4_K leaf's min terms are f16-staged, so its bound
-    // is the f16 tiles' - relative to the region's largest magnitude
+    // the Q8_0 and IQ4_XS leaves' error is per element (exact int dots, f32 scales); the Q4_K leaf's min terms are f16-staged,
+    // so its bound is the f16 tiles' - relative to the region's largest magnitude
     let bound = k4 ? K4_MMQ_REL_BOUND : MMQ_REL_BOUND
     var err = 0.0
     for (s in range(64)) {
@@ -298,16 +324,18 @@ def mmq_report(shape : string; p : Planes; m : MmqPlanes; k, d : int; k4 : bool)
         return 0
     }
     let row = cuda_rounds(ROUNDS, WARMUPS, DISPATCHES) $(_i) {
-        mmq_launch(k4, bufs, pc, wgs)
+        mmq_launch(fmt, bufs, pc, wgs)
     }
     cuda_mem_free(bufs)
     return report_cuda(shape, row, "bounded vs cpu: max rel err {err} <= {bound}", "TFLOP/s") $(us) => tflops(k, d, us)
 }
 
-//! one dispatch of the MMQ leaf `k4` names over `bufs` (the Q8_0 leaf binds the first five: no sum feed)
-def mmq_launch(k4 : bool; bufs : uint64[6]; var pc : MmqArgs; wgs : int64) {
-    if (k4) {
+//! one dispatch of the MMQ leaf of `fmt` over `bufs` (the leaves without a min term bind the first five: no sum feed)
+def mmq_launch(fmt : int; bufs : uint64[6]; var pc : MmqArgs; wgs : int64) {
+    if (fmt == int(KqFmt.k4)) {
         dasllama_cuda_classes::enc_k4_mmq(g_cud.stream, bufs, pc, wgs)
+    } elif (fmt == int(KqFmt.iq4xs)) {
+        dasllama_cuda_classes::enc_iq4xs_mmq(g_cud.stream, fixed_array(bufs[0], bufs[1], bufs[2], bufs[3], bufs[4]), pc, wgs)
     } else {
         dasllama_cuda_classes::enc_q8_mmq(g_cud.stream, fixed_array(bufs[0], bufs[1], bufs[2], bufs[3], bufs[4]), pc, wgs)
     }
@@ -490,17 +518,19 @@ def main {
     for (s in shapes) {
         var p <- planes(s.k, s.d, 128)
         var m <- mmq_planes(p, s.k)
-        measured += mmq_report(pad_right("mmq k {s.k} d {s.d}", 24, ' '), p, m, s.k, s.d, false)
+        measured += mmq_report(pad_right("mmq k {s.k} d {s.d}", 24, ' '), p, m, s.k, s.d, int(KqFmt.q8))
         delete m
         delete p
     }
-    print("the Q4_K int8 GEMM (CUDA alone): the nibble decode in the weight stage and the min term\n")
-    for (s in shapes) {
-        var p <- kq_tile_planes(int(KqFmt.k4), s.k, s.d, 128)
-        var m <- mmq_planes(p, s.k)
-        measured += mmq_report(pad_right("k4 mmq k {s.k} d {s.d}", 24, ' '), p, m, s.k, s.d, true)
-        delete m
-        delete p
+    print("the superblock int8 GEMMs (CUDA alone): the decode in the weight stage, Q4_K's min term, IQ4_XS's codebook\n")
+    for (fmt in fixed_array(int(KqFmt.k4), int(KqFmt.iq4xs))) {
+        for (s in shapes) {
+            var p <- kq_tile_planes(fmt, s.k, s.d, 128)
+            var m <- mmq_planes(p, s.k)
+            measured += mmq_report(pad_right("{kq_fmt_of_slot(fmt)} mmq k {s.k} d {s.d}", 24, ' '), p, m, s.k, s.d, fmt)
+            delete m
+            delete p
+        }
     }
     var fp <- fa_planes()
     let fa_row = race_fa(fp)

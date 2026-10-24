@@ -368,6 +368,62 @@ def test_cud_k4_mmq(t0 : T?) {
     }
 }
 
+//! the IQ4_XS leaf: the Q4_K nibble tiling read through the codebook, a two-word scale row a superblock (d and the scales'
+//! high bits, then the scales' low nibbles); the reference folds each block as xs x d x (ls - 32) x dot
+[test]
+def test_cud_iq4xs_mmq(t0 : T?) {
+    t0 |> run("CUDA MMQ-shaped IQ4_XS GEMM == the block-scaled CPU reference") <| @(t : T?) {
+        if (!ensure_iq4xs_mmq()) {
+            t |> skip("no CUDA device with NVRTC")
+            return
+        }
+        let k = 1024   // four superblocks: the scale rows hand over three times
+        let d = 256
+        let rows = 256
+        let nsb = k / 256
+        let nb = k / 32
+        var wq <- hashed_words(d * nsb * 32, 17u, 9u)   // eight uint4 a superblock
+        var ws <- hashed_words(d * nsb * 2, 5u, 23u)    // the scale bits hashed ...
+        for (sb in range(d * nsb)) {
+            ws[sb * 2] = (ws[sb * 2] & 0xFFFF0000u) | (packHalf2x16(float2(0.002 + 0.001 * float(sb % 7), 0.0)) & 0xFFFFu)   // ... d in the low half
+        }
+        var xq <- hashed_words(rows * k / 4, 7u, 3u)
+        var xs <- row_fill(rows * nb, 1, 0, 0.125, 0.25, 5)
+        let s = g_cud.stream
+        var bufs = fixed_array(buf_upload(wq, s), buf_upload(ws, s), buf_upload(xq, s), buf_upload(xs, s), buf_fill(rows * d, Y_SENTINEL, s))
+        var pc = MmqArgs(n = uint(k), d = uint(d), rows = uint(rows))
+        enc_iq4xs_mmq(g_cud.stream, bufs, pc, mmq_wgs(int64(d), int64(rows)))
+        t |> success(cud_sync(), "iq4xs mmq: the launch completes ({cuda_last_error()})")
+        let y <- buf_download(bufs[4], rows * d, type<float>)
+        cuda_mem_free(bufs)
+        var want : array<float>
+        want |> resize(rows * d)
+        for (tok in range(rows)) {
+            for (row in range(d)) {
+                var acc = 0.0
+                for (blk in range(nb)) {
+                    let sb = row * nsb + blk / 8
+                    let g = blk % 8
+                    let w0 = ws[sb * 2]
+                    let w1 = ws[sb * 2 + 1]
+                    var dot = 0
+                    for (i in range(32)) {
+                        let wb = (sb * 8 + g) * 16 + i % 16
+                        let byte = int((wq[wb / 4] >> uint((wb % 4) * 8)) & 255u)
+                        let code = int(iq4_word(uint(i < 16 ? byte & 15 : byte >> 4)) & 255u)
+                        let xi = tok * k + blk * 32 + i
+                        let xb = int((xq[xi / 4] >> uint((xi % 4) * 8)) & 255u)
+                        dot += (code >= 128 ? code - 256 : code) * (xb >= 128 ? xb - 256 : xb)
+                    }
+                    acc += float(dot) * (unpackHalf2x16(w0).x * float(iq4xs_sc(w0, w1, uint(g)))) * xs[tok * nb + blk]
+                }
+                want[tok * d + row] = acc
+            }
+        }
+        check_rows(t, "iq4xs MMQ vs the block-scaled reference", y, want, Q8_GEMV_BAR, d)
+    }
+}
+
 //! the K-quant cm2 tiles (the shared decode-in-load templates) on the l, m and s columns against the Vulkan cells' per-format oracles,
 //! over the Vulkan cells' hashed planes and two regions of activation rows (whole tiles and an edge each)
 [test]
