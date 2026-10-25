@@ -43,6 +43,7 @@
 		"iq3s4q8_tile_gen" : "mr8",
 		"iq4nl32q8_tile_gen" : "mr8",
 		"q8q8_tile_gen" : "mr8_budget",
+		"bf16w_tile_gen" : "mr16",
 		"iq4nlq8_gemv_gen" : "mr8",
 		"k4q8_tile_gen" : "mr8",
 		"k5q8_tile_gen" : "mr8",

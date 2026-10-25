@@ -25,30 +25,27 @@ body (`dasllama/dasllama_par.das`), which can dispatch onto those same lanes.
 
 **A module global whose declaration initializer holds a function value - `var g_x = @@fn`, or a
 table or struct literal with a `@@fn` field - is a defect unless an `[init]` in its file sets it
-again when it reads null; a `let` holding a function value is a defect.** A serialized exe - one
-that restores its built program, globals included, from a saved image at startup - and a forked
+again when it reads null; a module `let` holding a function value is a defect.** A serialized exe -
+one that restores its built program, globals included, from a saved image at startup - and a forked
 context restore globals as data, so a declaration initializer alone arrives null and dies at the
 first invoke while every `-jit` gate stays green.
 
 **Weakening `check_exe_fn_global_restore` (`REVIEW.das`) - the gate that reads those initializers -
 is a defect.**
 
-**A value that a team-lane body reads is a `def` returning it, or a module `let` of a bool,
-number, enum or bitfield type whose initializer is a constant - never a module `var` or any other
-module `let`.** A pooled lane runs in another context, so a module global it reads comes back zero;
-the optimizer, when on, folds such a `let` into its literal at each read.
+**A module-level value that a team-lane body reads is a `def` returning it, or a module `let` of a
+bool, number, enum or bitfield type whose initializer is a constant - never a module `var` or any
+other module `let`.** A pooled lane runs in another context, so a module global it reads comes back
+zero; the optimizer, when on, folds such a `let` into its literal at each read.
 
 **Nothing in a team-lane body names a module global it writes or resizes - write into a buffer the
 dispatching caller sizes and passes in instead.** A pooled lane runs in another context, so a
 resize acts on that context's out-of-date copy of the global.
 
 **An array a `dasllama/` function resizes through the builtin `resize` or any helper that reaches
-it (`reserve_resize`, `grow_resize`, `ensure_length`, `overwrite_resize` among them), whose element
-count grows
-with a count the model file sets and is not declared `@exact_size` (`@scratch @exact_size` when
-the buffer is `@scratch`), is a defect.**
-PERF032 - the lint that flags a `resize` with no reserve before it - checks only `@exact_size`
-arrays.
+it, whose element count grows with a count the model file sets and is not declared `@exact_size`
+(`@scratch @exact_size` when the buffer is `@scratch`), is a defect.** PERF032 - the lint that flags
+a `resize` with no reserve before it - checks only `@exact_size` arrays.
 
 **Every `resize` of a buffer in `dasllama/` whose element count grows with a count the model
 file sets follows a `reserve(n)` or `ensure_capacity(n)` whose `n` is the resized count, or goes
@@ -66,9 +63,9 @@ its own. A plane whose byte count scales with the model and that the load reads 
 gguf without a `FillJob` is the same defect.
 
 **A diff that adds a lasting allocation the path never made before, or adds a term to one's size,
-that grows with a scaling count states that size in bytes in a `PERF_LEDGER.md` row: at the largest shape the code path
-accepts, or, where the path accepts any value of the count, as a formula in the count with its
-value at two shapes that differ in it.**
+that grows with a scaling count states that size in bytes in a `PERF_LEDGER.md` row: at the largest
+shape the code path accepts, or, where the path accepts any value of the count, as a formula in the
+count with its value at two shapes that differ in it.**
 
 **A diff that changes the size formula of a lasting allocation that exists before and after it
 without adding a term - a count that starts or stops scaling it, a bound that becomes piecewise -

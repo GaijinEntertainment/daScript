@@ -1032,6 +1032,36 @@ def bf16w_test_family(fxs : array<Bf16wFixture>) : bool {
     return allok
 }
 
+typedef Bf16wCand = tuple<name : string; fn : Bf16wTileFn; form : int64; ts : int64>
+
+//! the candidates' rounds in turn - one timed run of every candidate, then the next round, three rounds, the best
+//! kept; no warmup round dropped, the gate run before already warmed each; empty where the gate failed
+def private bf16w_time_candidates(cands : array<Bf16wCand>; fx : Bf16wFixture; gated : bool; wvs : array<tuple<string; function<() : bool>>>; cvs : array<tuple<string; function<() : void>>>; var y : array<float>) : array<double> {
+    var dts : array<double>
+    dts |> resize(length(cands))
+    for (dt in dts) {
+        dt = 1.0e30lf
+    }
+    if (!gated) return <- dts
+    for (_rep in range(3)) {
+        for (c, dt in cands, dts) {
+            if (c.form > 0l) {
+                arm_of(wvs, cvs, c.name)
+            }
+            let t0 = ref_time_ticks()
+            if (c.form > 0l) {
+                run_bf16w_variant(c.fn, fx, c.form, c.ts, y)
+            } else {
+                unsafe {   // the reference row serves through the widen walk, not its own body
+                    batch_tile_block(addr(y[0]), addr<uint16 const?>(fx.w16[0]), addr<float const?>(fx.x[0]), fx.n, fx.d, 0l, fx.d, 0l, fx.ntok, fx.ntok)
+                }
+            }
+            dt = min(dt, double(get_time_usec(t0)))
+        }
+    }
+    return <- dts
+}
+
 //! the bf16-weight family's tune pass: every variant gated on the fixture, the tile-form variants and the widen walk
 //! (the `mr16` row's production route) timed on the gemma-E projection's pp512 shape, the fastest the entry
 def bf16w_tune_family(var rows_out : table<string; JsonValue?>) : string {
@@ -1048,6 +1078,8 @@ def bf16w_tune_family(var rows_out : table<string; JsonValue?>) : string {
     var bestDt = 1.0e30lf
     var y : array<float>
     y |> resize(fx.ntok * fx.d)
+    var cands : array<Bf16wCand>
+    var allok = true
     for (v in tvs) {
         let form = int64(forms?[v._0] ?? 0)
         let ts = int64(steps?[v._0] ?? 4)
@@ -1060,30 +1092,25 @@ def bf16w_tune_family(var rows_out : table<string; JsonValue?>) : string {
         var maxdiff = 0.0
         run_bf16w_variant(v._1, fx, form, ts, y)
         if (!close_to_ref(fx, y, maxdiff, bf16w_bar_form(form))) {
-            print("bf16w {v._0}: MISMATCH (maxdiff {maxdiff}) - aborting tune\n")
-            best = ""
+            print("bf16w {v._0}: MISMATCH (maxdiff {maxdiff}, the bound {bf16_envelope(fx.yref, length(y), bf16w_bar_form(form))} past close_tol) - aborting tune\n")
+            allok = false
             break
         }
-        var dt = 1.0e30lf
-        for (_rep in range(3)) {
-            let t0 = ref_time_ticks()
-            if (form > 0l) {
-                run_bf16w_variant(v._1, fx, form, ts, y)
-            } else {
-                unsafe {   // the reference row serves through the widen walk, not its own body
-                    batch_tile_block(addr(y[0]), addr<uint16 const?>(fx.w16[0]), addr<float const?>(fx.x[0]), fx.n, fx.d, 0l, fx.d, 0l, fx.ntok, fx.ntok)
-                }
-            }
-            dt = min(dt, double(get_time_usec(t0)))
-        }
+        tune_detail("bf16w {v._0} (form={form}, tokstep={ts}): ok (maxdiff {maxdiff}, within the bf16 envelope {bf16_envelope(fx.yref, length(y), bf16w_bar_form(form))})\n")
+        cands |> push((name = v._0, fn = v._1, form = form, ts = ts))
+    }
+    var dts <- bf16w_time_candidates(cands, fx, allok, wvs, cvs, y)
+    names |> reserve(length(cands))
+    times |> reserve(length(cands))
+    for (c, dt in cands, dts) {
         let gf = 2.0lf * double(fx.n * fx.d * fx.ntok) / dt / 1000.0lf
-        rows_out[v._0] = JV((tile_us = dt))
-        names |> push(v._0)
+        rows_out[c.name] = JV((tile_us = dt))
+        names |> push(c.name)
         times |> push(dt)
-        tune_detail("bf16w {v._0} (form={form}, tokstep={ts}): ok (maxdiff {maxdiff}), {dt} us ({gf:0.1f} GFLOP/s)\n")
+        tune_detail("bf16w {c.name} (form={c.form}, tokstep={c.ts}): {dt} us ({gf:0.1f} GFLOP/s)\n")
         if (dt < bestDt) {
             bestDt = dt
-            best = v._0
+            best = c.name
         }
     }
     if (!empty(best)) {
@@ -1092,6 +1119,8 @@ def bf16w_tune_family(var rows_out : table<string; JsonValue?>) : string {
     delete names
     delete times
     delete y
+    delete cands
+    delete dts
     delete cvs
     delete wvs
     delete steps

@@ -7,8 +7,9 @@ options _dasllama_internal = true
 // [dasllama_grid] emits, cross-module, each template's <name>__<suffix> variant clones plus a
 // <name>_template_variants() fn-ptr registry; the bench runs the registry INTERLEAVED under the
 // JIT (loop hints only bite there — see dasllama_tune), correctness-gates every variant vs an f64
-// reference (exact equality for the requant), and reports each variant's time as a DELTA vs that
-// kernel's SHIPPED fallback perm.
+// reference over every element the kernel writes (exact equality for the requant; TOL relative
+// elsewhere, a REJECTED row names it), and reports each variant's time as a DELTA vs that kernel's
+// SHIPPED fallback perm - the baseline arm; a report row's rounds follow one warm round it drops.
 //
 // Run:  bin/daslang -jit modules/dasLLAMA/harness/tune_kernels.das, then rebuild/rerun the model
 // with -jit to pick up the sidecar (it re-keys the JIT DLL cache). The debugging concession is
@@ -420,7 +421,7 @@ def private print_race(kernel : string; names : array<string>; med, best : array
     tune_detail("--- {kernel} ---\n")
     for (i in range(length(names))) {
         if (!ok[i]) {
-            tune_detail("  {names[i]}: REJECTED\n")
+            tune_detail("  {names[i]}: REJECTED - outside {TOL} relative of the f64 reference\n")
             continue
         }
         let delta = base > 0.0lf ? (med[i] - base) / base * 100.0lf : 0.0lf
