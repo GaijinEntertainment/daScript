@@ -398,7 +398,7 @@ def private gemma4_moe_prefill_grouped(t : Model; var s : Session; l : int64; np
     trace_tag(TRACE_TAG_ROUTE)
     let ts_route = prof_ticks()
     gemma4_router(t, s.xb2_b, s.x_b, l, dim, npos)
-    mm_fblob_b(s.moe_rlog, t, t.router_off + l * ne * dim, s.xb2_b, dim, ne, npos)
+    mm_fblob_rows(s.moe_rlog, t, t.router_off + l * ne * dim, s.xb2_b, dim, ne, npos)
     for (p in range64(npos)) {
         moe_select(c, unsafe(addr(s.moe_rlog[p * ne])), s.moe_idx_b, s.moe_w_b, p * k)
     }

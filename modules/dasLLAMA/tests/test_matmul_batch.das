@@ -124,8 +124,29 @@ def test_matmul_batch_lanes(t : T?) {
     }
 }
 
+//! Y [ntok x d] as the per-token `matmul` lands it, a token at a time: the nest cells' expectation
+def private per_token_matmul(w, x : array<float>; n, d, ntok : int64) : array<float> {
+    var want : array<float>
+    want |> resize(ntok * d)
+    var xt : array<float>
+    xt |> resize(n)
+    var yt : array<float>
+    yt |> resize(d)
+    for (tk in range64(ntok)) {
+        for (j in range64(n)) {
+            xt[j] = x[tk * n + j]
+        }
+        matmul(yt, w, xt, n, d)
+        for (i in range64(d)) {
+            want[tk * d + i] = yt[i]
+        }
+    }
+    return <- want
+}
+
 //! the race's nest arm, reached through the knob alone: every output the per-token `dot`'s bits,
-//! where the tile at the shipped knob lands other bits (the control that the knob switched arms)
+//! where the tile at the shipped knob lands other bits (the control that the knob switched arms);
+//! then the nest as its own entry at the MoE router's shape, the tile at the shipped knob apart again
 [test]
 def test_matmul_batch_nest_arm(t : T?) {
     t |> run("fp32 batch: the row nest under the knob is the per-token matmul bit for bit") @(t : T?) {
@@ -134,21 +155,7 @@ def test_matmul_batch_nest_arm(t : T?) {
         let ntok = 37l
         let w <- fillf(n * d)
         let x <- fillf(ntok * n)
-        var want : array<float>
-        want |> resize(ntok * d)
-        var xt : array<float>
-        xt |> resize(n)
-        var yt : array<float>
-        yt |> resize(d)
-        for (tk in range64(ntok)) {
-            for (j in range64(n)) {
-                xt[j] = x[tk * n + j]
-            }
-            matmul(yt, w, xt, n, d)
-            for (i in range64(d)) {
-                want[tk * d + i] = yt[i]
-            }
-        }
+        let want <- per_token_matmul(w, x, n, d, ntok)
         let min_n_was = get_f32_batch_tile_min_n()
         set_f32_batch_tile_min_n(1l << 30)
         var nest_y <- nan_fill(ntok * d)
@@ -162,6 +169,24 @@ def test_matmul_batch_nest_arm(t : T?) {
             matmul_batch(tile_y, w, x, n, d, ntok)
         }
         t |> success(log_exact("fp32 batch tile at the shipped knob", tile_y, want) > 0, "control: the tile at the shipped knob rounds apart from the per-token dot")
+    }
+    t |> run("fp32 batch: the nest entry is the per-token matmul bit for bit at the router's shape") @(t : T?) {
+        let n = 2048l   // a 128-expert router over a 2048 hidden, a 97-token prompt: a whole row tile set, a token tail
+        let d = 128l
+        let ntok = 97l
+        let w <- fillf(n * d)
+        let x <- fillf(ntok * n)
+        let want <- per_token_matmul(w, x, n, d, ntok)
+        var rows_y <- nan_fill(ntok * d)
+        with_shipped_knobs() {
+            matmul_batch_rows(rows_y, w, 0l, x, n, d, ntok)
+        }
+        t |> equal(log_exact("fp32 batch rows entry", rows_y, want), 0, "elements differing between the nest entry and the per-token matmul")
+        var tile_y <- nan_fill(ntok * d)
+        with_shipped_knobs() {
+            matmul_batch(tile_y, w, x, n, d, ntok)
+        }
+        t |> success(log_exact("fp32 batch tile at the router's shape", tile_y, want) > 0, "control: the tile at the shipped knob rounds apart from the per-token dot at this shape")
     }
 }
 

@@ -17,14 +17,41 @@ require daslib/jobque_boost
 require daslib/fio
 require daslib/linq   // sequence_equal: the logits rows and the codec-encoded KV byte blobs compare element for element (byte equality IS bit-exactness for a same-dtype pair)
 require dasllama/dasllama_math  // with_dasllama_jobque_ + the runtime knob setters (engine-level, not re-exported)
+require _compares   // mismatch_rel, logits_maxdiff: the tile arm's bar
 
 // forward_prefill / forward_batch must be BIT-FOR-BIT identical to calling forward() once per
 // position: same last-position logits AND same KV cache — both for a from-scratch prompt and for a
-// prefill that continues an already-populated cache (start_pos > 0, the multi-turn-chat path).
+// prefill that continues an already-populated cache (start_pos > 0, the multi-turn-chat path). The
+// fp32 model's batched GEMMs ride the tile walk, which rounds in its lanes
+// (ARCHITECTURE_CPU_KERNELS.md#f32-batch-tile-lattice), so its bit-exact cells pin the row nest - the
+// same dot on both paths, as the Q8 cell's portable pin is - and one tile cell holds the shipped walk's
+// last-position logits within PREFILL_TILE_REL of Nx forward.
 // Needs llama2.c's stories15M.bin (gitignored, 60MB); skips cleanly when absent.
 // override the machine-local llama2.c checkout with DASLLAMA_LLAMA2C_DIR (e.g. on the x64 handoff box)
 let MODEL_PATH = path_join(llama2c_dir(), "stories15M.bin")
 let TOKENIZER_PATH = path_join(llama2c_dir(), "tokenizer.bin")
+let PREFILL_TILE_REL = 1.0e-4   // ten times the 1e-5 six layers of the tile's lane rounding put on the 15M model's logits
+
+// the shipped tile walk: forward_batch lands other bits than Nx forward (the control that the arm left
+// the nest), the last-position logits within the tile's rounding
+def check_prefill_tile(t : T?; tr : Model; prompt : array<int64>) {
+    let c = tr.config
+    let n = long_length(prompt)
+    with_dasllama_jobque_() {
+        set_prefill_attn_mode(AttnPrefillMode.classic)
+        var sr <- make_run_state(c)
+        for (p in range64(n)) {
+            forward(tr, sr, prompt[p], p)
+        }
+        var sp <- make_run_state(c)
+        forward_batch(tr, sp, prompt, n, 0l)
+        to_log(LOG_INFO, "tile prefill: last-position logits off Nx forward by {logits_maxdiff(sp.logits, sr.logits)} over logits up to {logits_maxabs(sr.logits)}\n")
+        t |> equal(mismatch_rel("tile prefill logits", sp.logits, sr.logits, PREFILL_TILE_REL), 0, "tile walk: last-position logits within {PREFILL_TILE_REL} of Nx forward")
+        t |> success(!sequence_equal(sr.logits, sp.logits), "control: the tile walk lands other bits than Nx forward")
+        delete sr
+        delete sp
+    }
+}
 
 // forward_batch over the whole prompt (one batched pass from position 0) == N× forward.
 def check_prefill(t : T?; tr : Model; prompt : array<int64>; mode : AttnPrefillMode) {
@@ -83,9 +110,13 @@ def test_prefill_fp32(t : T?) {
         var tk <- load_tokenizer(TOKENIZER_PATH, tr.config.vocab_size)
         let prompt <- encode(tk, "Once upon a time, there was a little girl", true, false)
         let long_prompt <- [for (i in range64(200l)); i % 200l + 1l]
+        let min_n_was = get_f32_batch_tile_min_n()
+        set_f32_batch_tile_min_n(1l << 30)   // the row nest: the per-token dot on both paths
         check_prefill(t, tr, prompt, AttnPrefillMode.classic)
         check_continuation(t, tr, prompt, 4l, AttnPrefillMode.classic)
         check_prefill(t, tr, long_prompt, AttnPrefillMode.classic)   // 200 tok trips g_attn_par_threshold (threaded arm)
+        set_f32_batch_tile_min_n(min_n_was)
+        check_prefill_tile(t, tr, prompt)
         delete tk
         delete tr
     }

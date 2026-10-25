@@ -2943,7 +2943,7 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
     // 1. route every position: one batched router GEMM, then the shared select per row; shexp gate dots ride along
     trace_tag(TRACE_TAG_ROUTE)
     let ts_route = prof_ticks()
-    mm_fblob_b(s.moe_rlog, t, t.router_off + l * ne * dim, s.xb_b, dim, ne, npos)
+    mm_fblob_rows(s.moe_rlog, t, t.router_off + l * ne * dim, s.xb_b, dim, ne, npos)
     prof_add("moe_router", ts_route)
     let ts_select = prof_ticks()
     // per-row bias+select+gate dot, threaded: serial loop was ~2-3ms every-lane-idle/layer here

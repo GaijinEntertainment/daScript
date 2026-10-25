@@ -3743,11 +3743,16 @@ def mm_fblob(var y : array<float>; t : Model; woff : int64; x : array<float>; n,
     matmul(y, t.fblob, woff, x, n, d)
 }
 
-// Batched fp32 matmul against the aux blob: Y [npos x d] token-major from X [npos x n] — the grouped
-// MoE prefill's router. matmul_batch rounds in its tile's lanes (ARCHITECTURE_CPU_KERNELS.md#f32-batch-tile-lattice),
-// so a prefill's routing matches decode's to the lanes' rounding: a near-tie top-k can part the two.
+// Batched fp32 matmul against the aux blob: Y [npos x d] token-major from X [npos x n], through the
+// tile walk, which rounds in its lanes (ARCHITECTURE_CPU_KERNELS.md#f32-batch-tile-lattice).
 def mm_fblob_b(var y : array<float>; t : Model; woff : int64; x : array<float>; n, d, npos : int64) {
     matmul_batch(y, t.fblob, woff, x, n, d, npos)
+}
+
+//! The same through the row nest: every output the per-token `mm_fblob`'s bits. The MoE router's
+//! prefill takes it, so a prefill routes a token as decode would.
+def mm_fblob_rows(var y : array<float>; t : Model; woff : int64; x : array<float>; n, d, npos : int64) {
+    matmul_batch_rows(y, t.fblob, woff, x, n, d, npos)
 }
 
 // rmsnorm with the weight at `woff` in the fp32 aux blob — straight to the tuned pointer core.

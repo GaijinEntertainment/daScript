@@ -201,4 +201,9 @@ one-worker walk bit for bit); a batch and the same tokens one at a time do not, 
 `test_matmul_batch.das` holds the fp32 path to the per-token dot within `F32_TILE_REL`.
 `g_f32_batch_tile_min_n` routes a dot shorter than it to `f32_dot_rows` whole; it ships at 1, so the
 tile serves every length, and `harness/f32_batch_race.das` is the lever that races the two constants
-and the nest against the tile.
+and the nest against the tile. `matmul_batch_rows` is the nest as its own entry, under no knob: a
+batch whose outputs decide what decode decides on the GEMV's bits takes it - the MoE router's prefill
+logits (`mm_fblob_rows`), whose top-k over tile-rounded logits parts from decode's at a near tie and
+routes the token to another expert than decode would (`test_parity.das` holds the 26B-A4B's Q4_0 file
+to its pinned tokens on the CPU backend; `test_matmul_batch.das` holds the entry to the per-token
+matmul bit for bit at the router's shape).

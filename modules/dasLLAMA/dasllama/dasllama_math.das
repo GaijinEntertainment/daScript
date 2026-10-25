@@ -759,7 +759,8 @@ var private g_f32_batch_x_block = 256l * 1024l
 def public set_f32_batch_x_block(bytes : int64) { g_f32_batch_x_block = max(bytes, 4l * 1024l) }
 def public get_f32_batch_x_block() : int64 => g_f32_batch_x_block
 //! Under this dot length the row nest (`f32_dot_rows`) serves instead of the tile. Shipped at 1, so
-//! the tile serves every length; the setter is `harness/f32_batch_race.das`'s lever to the nest arm.
+//! the tile serves every length; the setter is the lever to the nest arm (`harness/f32_batch_race.das`,
+//! `tests/test_prefill.das`'s bit-exact cells).
 var private g_f32_batch_tile_min_n = 1l
 def public set_f32_batch_tile_min_n(n : int64) { g_f32_batch_tile_min_n = max(n, 1l) }
 def public get_f32_batch_tile_min_n() : int64 => g_f32_batch_tile_min_n
@@ -769,16 +770,23 @@ def private f32_batch_token_block(n, ntok : int64) : int64 {
     return clamp((fit / 4l) * 4l, 4l, max(ntok, 4l))
 }
 
+//! The row nest over rows [0, d) by every token, the rows split across the lanes: every output the
+//! per-token `dot`'s bits
+def private batch_rows_core(var yp : float?; wp : float const?; xp : float const?; n, d, ntok : int64) {
+    var myp = yp
+    let rch = matmul_chunks(int(d), get_q8_batch_chunks_per_job(), n * d * ntok)
+    maybe_parallel_for(0, int(d), rch) $(rb, re) {
+        f32_dot_rows(myp, wp, xp, n, d, int64(rb), int64(re), 0l, ntok)
+    }
+}
+
 // The fp32 batch GEMM core: 1-D row split, except ROW-STARVED shapes (MoE router: d=n_expert=128,
 // grain 16 => 8 chunks idling half a 16-lane box) split tokens too — a flat (row-chunk × token-block)
 // domain. Disjoint stores, the same tile walk per (row range, token range) either way.
 def private matmul_batch_core(var yp : float?; wp : float const?; xp : float const?; n, d, ntok : int64) {
     var myp = yp
-    if (n < g_f32_batch_tile_min_n) {   // the row nest: only the race reaches it at the shipped 1
-        let rch0 = matmul_chunks(int(d), get_q8_batch_chunks_per_job(), n * d * ntok)
-        maybe_parallel_for(0, int(d), rch0) $(rb, re) {
-            f32_dot_rows(myp, wp, xp, n, d, int64(rb), int64(re), 0l, ntok)
-        }
+    if (n < g_f32_batch_tile_min_n) {   // the row nest: the knob's arm, reached under the lever alone
+        batch_rows_core(yp, wp, xp, n, d, ntok)
         return
     }
     let row_tiles = (d + 3l) / 4l   // the dispatch unit: every chunk edge sits on the tile lattice
@@ -866,6 +874,15 @@ def private matmul_batch_at(var y : array<float>; wp : float const?; x : array<f
 //! Blob+offset form of matmul_batch (see the matmul woff overload).
 def matmul_batch(var y : array<float>; w : array<float>; woff : int64; x : array<float>; n, d, ntok : int64) {
     matmul_batch_at(y, unsafe(addr<float const?>(w[woff])), x, n, d, ntok)
+}
+
+//! The blob+offset batch through the row nest, no knob and no override seam: every output the
+//! per-token `matmul`'s bits. A batch whose outputs decide something decode decides on the GEMV's
+//! bits - the MoE router's top-k - takes it; the tile's lanes would part a near tie.
+def matmul_batch_rows(var y : array<float>; w : array<float>; woff : int64; x : array<float>; n, d, ntok : int64) {
+    unsafe {
+        batch_rows_core(addr(y[0]), addr<float const?>(w[woff]), addr<float const?>(x[0]), n, d, ntok)
+    }
 }
 
 //! Borrowed-plane form: the weights live in a prepared image, indexed from `woff`.
