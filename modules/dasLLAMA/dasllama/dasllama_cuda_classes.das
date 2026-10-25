@@ -1149,7 +1149,7 @@ def cud_gemv_ensure(fmt : int) : bool {   // nolint:STYLE037 - the stamp's ladde
 }
 
 //! the int8 MMQ leaf of `fmt` compiled, Q8_0's for a format with no leaf of its own
-def cud_mmq_ensure(fmt : int) : bool {   // nolint:STYLE037 - the leaves' ladder, one arm per MMQ format
+def cud_mmq_ensure(fmt : int) : bool {
     if (fmt == int(KqFmt.k4)) {
         return ensure_k4_mmq()
     } elif (fmt == int(KqFmt.iq4xs)) {
@@ -1171,7 +1171,7 @@ def cud_mmq_ensure(fmt : int) : bool {   // nolint:STYLE037 - the leaves' ladder
 }
 
 //! one dispatch of the int8 MMQ leaf of `fmt`; `bufs` is [wq, ws, xq, xs, y, xsum] - a leaf without a min term binds the first five
-def cud_mmq_enc(fmt : int; var s : void?; bufs : uint64 const[6]; var pc : MmqArgs; wgs : int64) {   // nolint:STYLE037 - the leaves' ladder, one arm per MMQ format
+def cud_mmq_enc(fmt : int; var s : void?; bufs : uint64 const[6]; var pc : MmqArgs; wgs : int64) {
     var b5 = fixed_array(bufs[0], bufs[1], bufs[2], bufs[3], bufs[4])
     if (fmt == int(KqFmt.k4)) {
         enc_k4_mmq(s, bufs, pc, wgs)

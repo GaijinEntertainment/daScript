@@ -3212,7 +3212,7 @@ def private fa_flat_read(var cp; khr : bool; hs : int; sink : bool; var sfa; pcf
     return <- cp |> plane_run(py)
 }
 
-def private fa_tile_run(t : T?; khr : bool) {   // nolint:STYLE037 — one arm table over both flash arms; the head-96 skip is its one branch past the limit
+def private fa_tile_run(t : T?; khr : bool) {   // nolint:STYLE037,LINT019 — one arm table over both flash arms; the head-96 skip is its one branch past the limit
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let tag = khr ? "fa_khr" : "fa_cm2"
         let nheads = 4
