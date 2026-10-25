@@ -130,7 +130,10 @@ tier, not the backend serving it. The roles:
   `enc_*` builder; the iq4 family's iq4nl stamps (`MetalKqGemvIq4T`, `MetalKqMvIq4T`, `MetalKqMvB8Iq4T`) and the mul_mm tensor
   template's compact-scale stamps off the same family (`MetalKqMulMmIq4xsTensorT` at IQ4NL, the dense `MetalKqMulMmIq4nlT` / `TH`
   and `MetalKqMulMmQ40T` / `TH`, the four `MetalMoeMulMmQ40*` expert stamps) bind the strip plane unread, so both formats share
-  one set layout and one host bind path; every dev-W dequant stamp (`MetalKqDequant<Fmt>`) inherits the mul_mm scaffold's
+  one set layout and one host bind path, and the family's nv4 stamps (every class at `NV4`: the GEMV and routed GEMV, the
+  small-batch forms and their half-x twins, the simdgroup and routed base tiles, the tensor twins, the dequant pass, the
+  token gather) bind the d plane unread instead - the sixteen UE4M3 bytes are the strip view - so nv4 keeps the same layout and
+  path; every dev-W dequant stamp (`MetalKqDequant<Fmt>`) inherits the mul_mm scaffold's
   `xf`, `y` and `ndim` bindings unread (it writes only the f16 panel at binding 7) and the per-32 tensor template
   (`MetalKqMulMmB32TensorT`) its `ksc` strip view unread (a per-32 scale plane has no strips), so every dense format's
   dequant pass and twins keep one set layout and one host bind path (`pf_enc_kq_dense_site`); the MoE tile lab's knockout stamps (`LabMoe*Ko*`,

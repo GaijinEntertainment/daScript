@@ -385,7 +385,10 @@ fam-gemma4e-e2b-emb-q51 fam-gemma4e-e2b-ple-q6k fam-gemma4e-e2b-ple-q50`; an emb
 format tag); `--arm fam-gemma4e` selects them all.
 
 Metal format census (`test_metal_format_census.das`, entry below): `census-iq4xs census-tied
-census-f16 census-iq3s4 census-iq3s4-moe` and the per-32 mints `census-q51 census-iq4nl32
+census-f16 census-iq3s4 census-iq3s4-moe census-nv4 census-nv4-table census-nv4-hybrid census-moe-nv4` (the nv4 mints:
+the Llama-3.2-1B NVFP4 mint with every dense plane nv4, its table mint with the nv4 token table and tied classifier, the
+Qwen3.5-0.8B-MTP `--pure` mint with the deltanet planes, the NextN eh_proj, the table and the classifier nv4, and the
+Qwen3-30B-A3B `--pure` mint - large tier, family `qwen3moe` - with every routed stack nv4) and the per-32 mints `census-q51 census-iq4nl32
 census-iq4nl32-table census-q4032 census-q5032 census-q51-table census-moe-q51 census-moe-q4032
 census-moe-q5032`. Vulkan format census (`test_gpu_resident_format_census.das`, entry below):
 `vk-census vk-gather vk-perop-ffn vk-per32-iq4nl32 vk-per32-q4032 vk-per32-q5032 vk-per32-q51`;

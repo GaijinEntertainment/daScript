@@ -198,7 +198,7 @@ def metal_blob_fill_blocks(t : Model; b0, nblk : int64; var dst : array<uint8>) 
 [arch(at = "../ARCHITECTURE_GPU_QUANT_PLANES.md#metal-kq-split-scale-plane")]
 def metal_blob_scale_plane(var t : Model; name : string) : bool {
     var f = KqFmt.q8
-    if (!(name |> ends_with("s")) || !kq_fmt_of_name(slice(name, 0, length(name) - 1), f) || !kq_sb(f) || f == KqFmt.q40 || f == KqFmt.iq4nl) {
+    if (!(name |> ends_with("s")) || !kq_fmt_of_name(slice(name, 0, length(name) - 1), f) || !kq_sb(f) || f == KqFmt.q40 || f == KqFmt.iq4nl || f == KqFmt.nv4) {
         return false
     }
     if (empty(t.kq[int(f)].s)) {

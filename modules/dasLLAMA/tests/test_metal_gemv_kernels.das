@@ -44,6 +44,7 @@ def private kq_gemv_stamp(vform) {   //! generic, as the gates are: the Apple ha
     if (vform == "iq3xxs") return stamp_of(@@enc_kq_iq3xxs_c)
     if (vform == "iq3xxsf4") return stamp_of(@@enc_kq_iq3xxs_f4_c)
     if (vform == "q40") return stamp_of(@@enc_kq_q40_c)
+    if (vform == "nv4") return stamp_of(@@enc_kq_nv4_c)
     if (vform == "iq4nl") return stamp_of(@@enc_kq_iq4nl_c)
     if (vform == "k2") return stamp_of(@@enc_kq_k2_c)
     if (vform == "iq2s") return stamp_of(@@enc_kq_iq2s_c)
@@ -54,7 +55,7 @@ def private kq_gemv_stamp(vform) {   //! generic, as the gates are: the Apple ha
 }
 
 def private kq_gemv_gate(t : T?; var dev, queue; vform : string; n, d : int) {
-    let fmt = vform == "k4" ? 4 : (vform == "k6" ? 6 : (vform == "iq4xs" ? 44 : (vform == "iq3s4" ? 35 : (vform == "k3" ? 3 : (vform == "iq3s" || vform == "iq3sf4" ? 33 : (vform == "iq3xxs" || vform == "iq3xxsf4" ? 34 : (vform == "q40" ? 40 : (vform == "iq4nl" ? 45 : (vform == "iq2s" ? 23 : (vform == "iq2xs" ? 24 : (vform == "iq2xxs" || vform == "iq2xxsf4" ? 25 : (vform == "k2" ? 2 : 5))))))))))))
+    let fmt = vform == "k4" ? 4 : (vform == "k6" ? 6 : (vform == "iq4xs" ? 44 : (vform == "iq3s4" ? 35 : (vform == "k3" ? 3 : (vform == "iq3s" || vform == "iq3sf4" ? 33 : (vform == "iq3xxs" || vform == "iq3xxsf4" ? 34 : (vform == "q40" ? 40 : (vform == "nv4" ? 49 : (vform == "iq4nl" ? 45 : (vform == "iq2s" ? 23 : (vform == "iq2xs" ? 24 : (vform == "iq2xxs" || vform == "iq2xxsf4" ? 25 : (vform == "k2" ? 2 : 5)))))))))))))
     let tag = "kq_gemv_{vform} n={n} d={d}"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
         var err : string
@@ -98,6 +99,7 @@ def private kq_mvb2_stamp(f) {
     if (f == KqFmt.iq2xs) return stamp_of(@@enc_kq_mvb2_iq2xs_c)
     if (f == KqFmt.iq2s) return stamp_of(@@enc_kq_mvb2_iq2s_c)
     if (f == KqFmt.q40) return stamp_of(@@enc_kq_mvb2_q40_c)
+    if (f == KqFmt.nv4) return stamp_of(@@enc_kq_mvb2_nv4_c)
     if (f == KqFmt.iq4nl) return stamp_of(@@enc_kq_mvb2_iq4nl_c)
     if (f == KqFmt.k2) return stamp_of(@@enc_kq_mvb2_k2_c)
     if (f == KqFmt.iq3xxs) return stamp_of(@@enc_kq_mvb2_iq3xxs_c)
@@ -116,6 +118,7 @@ def private kq_mvb4_stamp(f) {
     if (f == KqFmt.iq2xs) return stamp_of(@@enc_kq_mvb4_iq2xs_c)
     if (f == KqFmt.iq2s) return stamp_of(@@enc_kq_mvb4_iq2s_c)
     if (f == KqFmt.q40) return stamp_of(@@enc_kq_mvb4_q40_c)
+    if (f == KqFmt.nv4) return stamp_of(@@enc_kq_mvb4_nv4_c)
     if (f == KqFmt.iq4nl) return stamp_of(@@enc_kq_mvb4_iq4nl_c)
     if (f == KqFmt.k2) return stamp_of(@@enc_kq_mvb4_k2_c)
     if (f == KqFmt.iq3xxs) return stamp_of(@@enc_kq_mvb4_iq3xxs_c)
@@ -134,6 +137,7 @@ def private kq_mvb8_stamp(f) {
     if (f == KqFmt.iq2xs) return stamp_of(@@enc_kq_mvb8_iq2xs_c)
     if (f == KqFmt.iq2s) return stamp_of(@@enc_kq_mvb8_iq2s_c)
     if (f == KqFmt.q40) return stamp_of(@@enc_kq_mvb8_q40_c)
+    if (f == KqFmt.nv4) return stamp_of(@@enc_kq_mvb8_nv4_c)
     if (f == KqFmt.iq4nl) return stamp_of(@@enc_kq_mvb8_iq4nl_c)
     if (f == KqFmt.k2) return stamp_of(@@enc_kq_mvb8_k2_c)
     if (f == KqFmt.iq3xxs) return stamp_of(@@enc_kq_mvb8_iq3xxs_c)
@@ -278,8 +282,8 @@ def private kq_half_gate(t : T?; var queue; fmt, n, d, nr, ys : int) {
     }
 }
 
-//! every K-quant format with a half-x route, by schema id (the race table's thirteen)
-let private KQ_HALF_FORMATS <- [for (f in [KqFmt.k2, KqFmt.k3, KqFmt.k4, KqFmt.k5, KqFmt.k6, KqFmt.iq2s, KqFmt.iq2xs, KqFmt.iq2xxs, KqFmt.iq3s, KqFmt.iq3xxs, KqFmt.q40, KqFmt.iq4xs, KqFmt.iq4nl]); kq_desc(f).schema_id]
+//! every K-quant format with a half-x route, by schema id (the race table's rows)
+let private KQ_HALF_FORMATS <- [for (f in [KqFmt.k2, KqFmt.k3, KqFmt.k4, KqFmt.k5, KqFmt.k6, KqFmt.iq2s, KqFmt.iq2xs, KqFmt.iq2xxs, KqFmt.iq3s, KqFmt.iq3xxs, KqFmt.q40, KqFmt.nv4, KqFmt.iq4xs, KqFmt.iq4nl]); kq_desc(f).schema_id]
 
 [test]
 def test_metal_kq_half_forms(t : T?) {
@@ -335,6 +339,7 @@ def private moe_gemv_stamp(f) {
     if (f == KqFmt.iq3s4) return stamp_of(@@enc_moe_gemv_iq3s4_c)
     if (f == KqFmt.iq4nl) return stamp_of(@@enc_moe_gemv_iq4nl_c)
     if (f == KqFmt.k2) return stamp_of(@@enc_moe_gemv_k2_c)
+    if (f == KqFmt.nv4) return stamp_of(@@enc_moe_gemv_nv4_c)
     if (f != KqFmt.q40) {
         panic("moe_gemv_stamp: no expert GEMV for {f}")
     }
@@ -721,6 +726,8 @@ def test_metal_kq_gemv_kernels(t : T?) {
                 kq_gemv_gate(t, dev, queue, "iq4nl", 512, 30)
                 kq_gemv_gate(t, dev, queue, "q40", 1280, 11)
                 kq_gemv_gate(t, dev, queue, "q40", 512, 30)
+                kq_gemv_gate(t, dev, queue, "nv4", 1280, 11)
+                kq_gemv_gate(t, dev, queue, "nv4", 512, 30)
                 kq_gemv_gate(t, dev, queue, "k2", 1280, 11)
                 kq_gemv_gate(t, dev, queue, "k2", 512, 30)
                 kq_gemv_gate(t, dev, queue, "iq2s", 1280, 11)
@@ -732,7 +739,7 @@ def test_metal_kq_gemv_kernels(t : T?) {
                 kq_gemv_gate(t, dev, queue, "iq2xxsf4", 1280, 11)
                 kq_gemv_gate(t, dev, queue, "iq2xxsf4", 512, 30)
                 // the small-batch twins: nr = 2 / 3 (b4 col guard) / 6 (b8 pad), ys > d
-                for (fmt in [4, 5, 6, 44, 35, 3, 33, 34, 45, 40, 2, 23, 24, 25]) {
+                for (fmt in [4, 5, 6, 44, 35, 3, 33, 34, 45, 40, 49, 2, 23, 24, 25]) {
                     kq_mvb_gate(t, dev, queue, fmt, 2, 768, 17, 2, 22)
                     if (fmt == 4) {   // the two-row tile: d=17 leaves a tail pair with one live row, d=32 none
                         kq_mvb_gate(t, dev, queue, fmt, 2, 768, 17, 2, 22, true)
@@ -745,7 +752,7 @@ def test_metal_kq_gemv_kernels(t : T?) {
                     kq_mvb_gate(t, dev, queue, fmt, 8, 768, 17, 16, 22)   // two full groups
                 }
                 // expert-indexed: shared-x (gate/up) and per-slot (down) forms
-                for (fmt in [4, 5, 6, 3, 33, 34, 23, 24, 25, 44, 35, 40, 45, 2]) {
+                for (fmt in [4, 5, 6, 3, 33, 34, 23, 24, 25, 44, 35, 40, 49, 45, 2]) {
                     moe_kq_gemv_gate(t, dev, queue, fmt, 512, 9, 5, 3, 2, false)
                     moe_kq_gemv_gate(t, dev, queue, fmt, 512, 9, 5, 3, 2, true)
                 }

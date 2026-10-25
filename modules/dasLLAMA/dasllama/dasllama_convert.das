@@ -631,7 +631,7 @@ def dequant_k6_plane_superblock(kq : array<uint8> | #; kqo : int64; ks : array<u
 
 //! One superblock of a kq plane pair dequantized into `dst[doff..]`, reading the scale plane in
 //! whichever form the carrier holds: the CPU row form, or on a Metal-blob model the split GPU
-//! form (16B strips first, d tails after; k4/k5 strips compacted, q40/iq4nl unsplit). `sb` = superblock index.
+//! form (16B strips first, d tails after; k4/k5 strips compacted, q40/iq4nl/nv4 unsplit). `sb` = superblock index.
 [arch(at = "../ARCHITECTURE_GPU_QUANT_PLANES.md#metal-kq-split-scale-plane")]
 def dequant_kq_plane_sb(fmt : KqFmt; kq : array<uint8> | #; ks : array<uint8> | #; sb : int64; metal_blob : bool; var dst : array<float> | #; doff : int64) { // nolint:STYLE037 — one arm per format, two carrier forms
     if (fmt == KqFmt.k4) {
@@ -642,6 +642,8 @@ def dequant_kq_plane_sb(fmt : KqFmt; kq : array<uint8> | #; ks : array<uint8> | 
         dequant_q40_plane_superblock(kq, sb * Q40_QSB, ks, sb * Q40_SSB, dst, doff)
     } elif (fmt == KqFmt.iq4nl) {
         dequant_iq4nl_plane_superblock(kq, sb * Q40_QSB, ks, sb * Q40_SSB, dst, doff)
+    } elif (fmt == KqFmt.nv4) {   //! the compact UE4M3 row is one form on both carriers
+        dequant_nv4_plane_superblock(kq, sb * NV4_QSB, ks, sb * NV4_SSB, dst, doff)
     } elif (!metal_blob) {
         if (fmt == KqFmt.k6) {
             dequant_k6_plane_superblock(kq, sb * K6_QSB, ks, sb * K6_SSB, dst, doff)
@@ -649,8 +651,6 @@ def dequant_kq_plane_sb(fmt : KqFmt; kq : array<uint8> | #; ks : array<uint8> | 
             dequant_iq4xs_plane_superblock(kq, sb * IQ4XS_QSB, ks, sb * IQ4XS_SSB, dst, doff)
         } elif (fmt == KqFmt.iq3s4) {
             dequant_iq3s4_plane_superblock(kq, sb * IQ4XS_QSB, ks, sb * IQ3S_SSB, dst, doff)
-        } elif (fmt == KqFmt.nv4) {
-            dequant_nv4_plane_superblock(kq, sb * NV4_QSB, ks, sb * NV4_SSB, dst, doff)
         } elif (fmt == KqFmt.k3) {
             dequant_k3_plane_superblock(kq, sb * K3_QSB, ks, sb * K3_SSB, dst, doff)
         } elif (fmt == KqFmt.iq3s) {

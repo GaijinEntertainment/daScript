@@ -2179,6 +2179,7 @@ def test_metal_misc_kernels(t : T?) {
                 embed_kq_gate(t, dev, queue, stamp_of(@@enc_embed_kq_iq3s4), 35, 512, 5)
                 embed_kq_gate(t, dev, queue, stamp_of(@@enc_embed_kq_iq4nl), 45, 512, 5)
                 embed_kq_gate(t, dev, queue, stamp_of(@@enc_embed_kq_q40), 40, 512, 5)
+                embed_kq_gate(t, dev, queue, stamp_of(@@enc_embed_kq_nv4), 49, 512, 5)
                 embed_kq_gate(t, dev, queue, stamp_of(@@enc_embed_kq_k3), 3, 512, 5)
                 embed_kq_gate(t, dev, queue, stamp_of(@@enc_embed_kq_k2), 2, 512, 5)
                 embed_kq_gate(t, dev, queue, stamp_of(@@enc_embed_kq_iq3s), 33, 512, 5)
@@ -2678,9 +2679,20 @@ def test_kq_rows_race_verdicts(t : T?) {
                 t |> success(r.winner == "tensor" || r.winner == "simdgroup", "{r.family}: a verdict, not a dispatch failure ({r.winner}: {r.note})")
                 t |> success(!(r.note |> starts_with("twin OUTPUT MISMATCH")), "{r.family}: the twin's output agreed with the base arm's ({r.note})")
             }
-            t |> equal(seen, 13, "every K-quant format with a small-batch twin raced")
+            t |> equal(seen, length(KQ_ROWS_RACE_FORMATS), "every K-quant format with a small-batch twin raced")
             t |> equal(form, 1, "the k4 twin's two-row tile raced its two-column form")
-            t |> equal(half, 13, "every K-quant format's half-x route raced the box's f32 rows route")
+            t |> equal(half, length(KQ_ROWS_RACE_FORMATS), "every K-quant format's half-x route raced the box's f32 rows route")
+            //! every superblock format the Metal tier serves races its rows, so the table can drop no format; iq3s4's small-batch
+            //! forms ship no half-x twin, so it alone has no row
+            for (slot in range(KQ_FMT_COUNT)) {
+                let kf = kq_fmt_of_slot(slot)
+                continue if (kf == KqFmt.q8 || kf == KqFmt.iq3s4 || !kq_sb(kf) || !kq_fmt_gpu_supported(kf))
+                var raced = false
+                for (r in KQ_ROWS_RACE_FORMATS) {
+                    raced = raced || r.fmt == kf
+                }
+                t |> success(raced, "{kf}: a served superblock format has its row in the race table")
+            }
             // every rows verdict is written back before the half races, so each half race's base arm is the rows route
             // the box will run: the crown the process holds after the race is the verdict the race returned
             for (r in res) {

@@ -122,9 +122,9 @@ neither refuses the role on a field the body only reads.
 a defect - the class moves into the file under `modules/dasLLAMA/benchmarks/` or
 `modules/dasLLAMA/tests/` that compiles it, and a class nothing compiles is deleted.**
 
-**A diff that deletes either window GEMM form the CUDA home picks between at run time - the int8
-MMQ chain or the f16-fed cm2 tiles under `DASLLAMA_CUDA_MMQ` - on the ground that the other wins on
-every card measured is a defect; the knob's default moves, the loser stays compiled.** The winner
+**A diff that deletes a GEMM form `DASLLAMA_CUDA_MMQ` selects between, on the ground that another form
+wins on every card measured, is a defect - move the knob's default instead and keep the loser
+compiled.** The winner
 is the card's and the driver's, not the kernels' - the same silicon favors the f16 tile under its
 Vulkan driver - so a card that flips the pick turns the pair into a per-box race, never a deletion.
 
@@ -146,10 +146,12 @@ or covers it by prefix, carries for each key it covers the reason no census row 
 stocked model that dispatches it where one does - one the `stocked` suite runs on a box that has
 it - and the model-free test cell that dispatches it.**
 
-**A diff that adds a new census key that serves only under a crown adds, in the same change, a
-census row that pins the crown (`pin_metal_tensor_crowns`), or a `CENSUS_NEVER_DISPATCHED` entry
-for the key with a `CENSUS_CROWN_CONDITIONAL` row (both in
-`modules/dasLLAMA/tests/test_kernel_coverage.das`) naming the crown.**
+**A diff that adds a new Metal census key that is dispatched only under a crown adds, in the same
+change, either a census row that pins the crown (`pin_metal_tensor_crowns`), or a
+`CENSUS_NEVER_DISPATCHED` entry plus a `CENSUS_CROWN_CONDITIONAL` entry naming the crown (both in
+`modules/dasLLAMA/tests/test_kernel_coverage.das`); both entries spell the key exactly.** The
+blind-entry asserts look the row up by the entry's exact text, and they count the dispatches of every
+key the entry is a prefix of.
 
 **Weakening the blind-entry asserts in `modules/dasLLAMA/tests/test_kernel_coverage.das` - that
 an entry matches a compiled census key, and that it matches no dispatched one - is a defect.**

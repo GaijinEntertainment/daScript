@@ -1906,7 +1906,7 @@ def test_metal_prefill_kq_tail(t : T?) {
 let private SCRATCH_SHORT = 200l   //! pads to 224 rows: past the base forms' scratch floor, under a crowned K-quant twin's
 let private SCRATCH_LONG = 400l    //! pads to 416 rows: past a crowned K-quant twin's floor
 //! every dense twin crown: a carrier's mixed planes (a K-quant file's Q6_K and Q5_K sites beside its own) all sit on twins
-let private SCRATCH_TWIN_CROWNS = "mulmm_q8,kq_mulmm_k4,kq_mulmm_k5,kq_mulmm_k6,kq_mulmm_iq4xs,kq_mulmm_iq4nl,kq_mulmm_q40,kq_mulmm_k3,kq_mulmm_iq3s,kq_mulmm_iq3xxs,kq_mulmm_k2,kq_mulmm_iq2s,kq_mulmm_iq2xs,kq_mulmm_iq2xxs,kq_mulmm_q51,kq_mulmm_iq4nl32,kq_mulmm_q4032,kq_mulmm_q5032"
+let private SCRATCH_TWIN_CROWNS = "mulmm_q8,kq_mulmm_k4,kq_mulmm_k5,kq_mulmm_k6,kq_mulmm_iq4xs,kq_mulmm_iq4nl,kq_mulmm_q40,kq_mulmm_nv4,kq_mulmm_k3,kq_mulmm_iq3s,kq_mulmm_iq3xxs,kq_mulmm_k2,kq_mulmm_iq2s,kq_mulmm_iq2xs,kq_mulmm_iq2xxs,kq_mulmm_q51,kq_mulmm_iq4nl32,kq_mulmm_q4032,kq_mulmm_q5032"
 
 //! the last row's logits after one prefill window on an f16 session
 def private one_window_logits(trp : Model; w : array<int64>) : array<float> {
