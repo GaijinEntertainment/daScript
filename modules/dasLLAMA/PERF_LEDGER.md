@@ -6804,7 +6804,7 @@ device tier `vulkan`; `followup_general.md` item 227), so every figure is direct
   file 19 of 22 (three unstocked mints skip), the codec file 6 of 6, the batch file 6 of 6, the segments file 2 of 2 with
   the recurrent and E-series cells skipping under the CUDA ask by design.
 - **The MMQ leaves against the cm2 tiles, the 5060 Ti at locked clocks** (`harness/gemm_cuda_vs_vulkan.das -- --only
-  <fmt>`, the 1B window's three shapes at 512 rows, the Q4_K cm2 tiles as the control; `followup_general.md` item 244
+  <fmt>`, the 1B window's three shapes at 512 rows, the Q4_K cm2 tiles as the control; `followup_general.md` item 245
   carries the pick). Per kernel: the Q8 leaf 67 to 74 TFLOP/s, Q4_0 65 to 72, Q4_K 63 to 66, IQ4_XS 63 to 69, IQ4_NL 60
   to 65, Q5_0 51 to 55, Q5_1 47 to 50, the Q4_K cm2 tiles 41 to 55; a Q6_K leaf on the k16 int8 product 36.8 to 38.9
   against the Q6_K cm2 tile's 38 to 51 (the leaf is not kept - MMQ is a per-32-scale property). The windows
@@ -6869,7 +6869,7 @@ device tier `vulkan`; `followup_general.md` item 227), so every figure is direct
 - **The CUDA resident bars** (`tests/_cuda_feed.das`, of the step's max |logit| against the CPU chain). The dense
   carriers' `LOGIT_BAR_REL` 0.06 holds the Llama 1B Q8_0 / Q4_K_M / Q5_1 / Q5_0 / IQ4_XS / IQ4_NL files, the Phi-3.5-mini
   Q4_K_M (its two-window arm; the one-window arm's steps 41 and 44 read 2.64 and 2.75 of 34 and 42 - 7.7 and 6.6% - the
-  argmax the CPU's, `followup_general.md` item 243) and Q8_0 files, the Qwen3-0.6B and 4B files, and the 1B NVFP4 mint
+  argmax the CPU's, `followup_general.md` item 244) and Q8_0 files, the Qwen3-0.6B and 4B files, and the 1B NVFP4 mint
   on the cm2 tiles. The 1B NVFP4 mint on the FP4 leaf holds `LOGIT_BAR_REL_FP4` 0.14: the arm's worst step 0.135, the
   tightest one-step-off control 0.158 - W4A4's activation step, which the f32 chain does not take.
 
