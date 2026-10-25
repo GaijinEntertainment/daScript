@@ -1471,6 +1471,16 @@ def private checkpoint_write_row(var writer : StringBuilderWriter;
     }
 }
 
+def private checkpoint_write_line_break(var writer : StringBuilderWriter;
+                                        var active_style : TerminalCell) {
+    if (!checkpoint_same_style(active_style, TerminalCell())) {
+        let esc = to_char(27)
+        writer |> write("{esc}[0m")
+        active_style = TerminalCell()
+    }
+    writer |> write("\r\n")
+}
+
 def private checkpoint_write_buffer(var writer : StringBuilderWriter;
                                     buffer : TerminalBuffer const;
                                     include_history : bool;
@@ -1480,14 +1490,14 @@ def private checkpoint_write_buffer(var writer : StringBuilderWriter;
     let line_count = (include_history ? length(buffer.history) : 0) + length(buffer.screen)
     if (include_history) {
         for (row in range(length(buffer.history))) {
-            if (line > 0) writer |> write("\r\n")
+            if (line > 0) checkpoint_write_line_break(writer, active_style)
             checkpoint_write_row(writer, buffer.history[history_index(buffer, row)],
                 active_style, active_hyperlink)
             line++
         }
     }
     for (row in range(length(buffer.screen))) {
-        if (line > 0) writer |> write("\r\n")
+        if (line > 0) checkpoint_write_line_break(writer, active_style)
         checkpoint_write_row(writer, buffer.screen[screen_index(buffer, row)],
             active_style, active_hyperlink)
         line++
