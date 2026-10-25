@@ -207,3 +207,20 @@ logits (`mm_fblob_rows`), whose top-k over tile-rounded logits parts from decode
 routes the token to another expert than decode would (`test_parity.das` holds the 26B-A4B's Q4_0 file
 to its pinned tokens on the CPU backend; `test_matmul_batch.das` holds the entry to the per-token
 matmul bit for bit at the router's shape).
+
+### A bf16 weight plane multiplies as the reference does, through the matrix unit {#bf16-weight-tile-family}
+
+The reference encoders multiply a bf16 plane - a tower's GEMMs, the gemma-E per-layer projection -
+as bf16 times bf16 with the activations rounded to bf16, and so does `bf16w_tile_gen`: `bf16w_batch`
+rounds the f32 activations to bf16 once per call (`xbf16_build_f32`, the rounded values kept widened
+too), packs sixteen rows of the plane into the TMUL B layout the quant families' bf16 tile already
+reads (`bf16w_panel_build`: k-pair rows of sixteen columns, one 32-bit move a pair, since the plane
+holds the pairs the tile wants), and runs the same `amx_bf16` emitter over the panel and the
+activation plane. A unit is `tileform` groups of sixteen rows over whole `tokstep` blocks; every
+tail - a unit short of its groups, the tokens past the last block, the rows past the last group -
+takes the widen tile walk over the same rounded activations, so one call's outputs share their
+activation bits whatever lattice computed them. The family declines where no sidecar names a perm,
+where the box has no AMX bf16, or where n is off the 32 lattice, and the widen walk
+(`matmul_batch_core` over the halfword plane) serves instead; the tile's sums come out of the matrix
+unit in another order than a sequential dot, so a cell holds the family to the bf16 envelope of the
+largest output, not to the widen walk's bits.

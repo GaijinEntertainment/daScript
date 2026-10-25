@@ -4099,7 +4099,7 @@ def bf16w_panel_build(wp : uint16 const?; n, g0, groups : int64; var dst : uint1
 //! the bf16-weight batch GEMM through the stamped tile family, units of `tileform` groups over whole
 //! `tokstep` blocks, every tail through the widen walk over the same bf16-rounded activations; false
 //! where the family declines or the shape is off its lattice (n % 32, d under 16, ntok under a tile)
-[hot_path]
+[hot_path, arch(at = "../ARCHITECTURE_CPU_KERNELS.md#bf16-weight-tile-family")]
 def bf16w_batch(var yp : float?; wp : uint16 const?; xp : float const?; n, d, ntok : int64) : bool {
     let form = int64(bf16w_tileform_gen())
     if (form <= 0l || n % 32l != 0l || d < 16l || !bf16w_witness_gen()) return false

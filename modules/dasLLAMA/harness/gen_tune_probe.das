@@ -1011,12 +1011,15 @@ def run_bf16w_variant(tile : Bf16wTileFn; fx : Bf16wFixture; form, ts : int64; v
     }
 }
 
-def close_to_bf16w_ref(fx : Bf16wFixture; y : array<float>; var maxdiff : float&) : bool {
+//! `y` against the oracle at close_tol, widened to the bf16 envelope on a tile form: the TMUL sums its
+//! pairs in another order than the double oracle, a few f32 ulps of the largest output over 2560 terms
+def close_to_bf16w_ref(fx : Bf16wFixture; y : array<float>; form : int64; var maxdiff : float&) : bool {
+    let envelope = bf16_envelope(fx.yref, length(y), form)
     var ok = true
     for (i in range64(fx.ntok * fx.d)) {
         let diff = abs(y[i] - fx.yref[i])
         maxdiff = max(maxdiff, diff)
-        ok = ok && diff <= close_tol(fx.yref[i])
+        ok = ok && diff <= max(close_tol(fx.yref[i]), envelope)
     }
     return ok
 }
@@ -1040,9 +1043,9 @@ def bf16w_test_family(fxs : array<Bf16wFixture>) : bool {
             var inscope y : array<float>
             y |> resize(fx.ntok * fx.d)
             run_bf16w_variant(v._1, fx, form, ts, y)
-            let fxok = close_to_bf16w_ref(fx, y, maxdiff)
+            let fxok = close_to_bf16w_ref(fx, y, form, maxdiff)
             if (!fxok) {
-                dump_mismatch("bf16w {v._0} n={fx.n}", y, fx.yref, int(fx.d)) $(i : int) => close_tol(fx.yref[i])
+                dump_mismatch("bf16w {v._0} n={fx.n}", y, fx.yref, int(fx.d)) $(i : int) => max(close_tol(fx.yref[i]), bf16_envelope(fx.yref, length(y), form))
             }
             ok = ok && fxok
         }
@@ -1081,7 +1084,7 @@ def bf16w_tune_family(var rows_out : table<string; JsonValue?>) : string {
         }
         var maxdiff = 0.0
         run_bf16w_variant(v._1, fx, form, ts, y)
-        if (!close_to_bf16w_ref(fx, y, maxdiff)) {
+        if (!close_to_bf16w_ref(fx, y, form, maxdiff)) {
             print("bf16w {v._0}: MISMATCH (maxdiff {maxdiff}) - aborting tune\n")
             best = ""
             break

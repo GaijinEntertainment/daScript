@@ -3701,6 +3701,14 @@ explains).
 each against an in-test reference; `rel_pos_table` against an fp64 sin/cos reference, its
 relative-position-0 row exactly (0, 1) pairs, the table of one frame more as the control that
 must miss the bar.
+`test_matmul_batch.das` - model-free: the batched GEMMs against a plain double oracle under a NaN
+sentinel - the fp32 tile walk within `F32_TILE_REL` of the oracle at every tail shape with an
+`all_finite` assert and a poisoned expectation, the threaded walk bit for bit the one-lane walk (its
+control a moved element), the row nest under `set_f32_batch_tile_min_n` bit for bit the per-token
+`matmul` (the tile at the shipped knob rounding apart is the control), the bf16 plane through the
+same walk at every tail shape and the GEMV shaper, its oracle over the bf16-rounded activations
+where the box stamps `bf16w_tile_gen` (every walk pinned to the shipped knobs through
+`with_shipped_knobs`), and the Q8 path bit for bit.
 `test_tower_asr_kernels.das` - model-free: the public tower / audio / TTS kernels with no CPU
 unit of their own, each against an in-test fp64 reference over a procedural seeded-LCG fixture
 and each bar carrying its own must-EXCEED poison arm - the padded-width GEMM wrappers
