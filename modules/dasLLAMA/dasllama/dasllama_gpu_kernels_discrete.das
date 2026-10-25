@@ -243,6 +243,20 @@ def mx4_dec4(nib : uint; sc : float) : float4 {
         float(mag2 >> 24u) * (1.0 - 2.0 * float(sgn >> 24u)) * sc)
 }
 
+//! the doubled e2m1 magnitudes {0 1 2 3 4 6 8 12} as two byte words, then their negatives: the codebook a byte permute reads
+let MX4_BYTES_LO = 0x03020100u
+let MX4_BYTES_HI = 0x0C080604u
+let MX4_NEG_BYTES_LO = 0xFDFEFF00u
+let MX4_NEG_BYTES_HI = 0xF4F8FAFCu
+
+//! four nibble codes (a byte each) to SIGNED int8 lanes of the doubled e2m1 magnitudes, each sign bit negating its byte with no carry across lanes
+def mx4_word(nib : uint) : uint {
+    let mag = mx4_mag2x4(nib)
+    let m = ((nib >> 3u) & 0x01010101u) * 0xFFu
+    let neg = (0x80808080u - mag) ^ 0x80808080u
+    return (mag & ~m) | (neg & m)
+}
+
 struct GemvArgs {
     n : uint       //! reduction dim
     d : uint       //! output rows per region
@@ -1654,6 +1668,41 @@ class template Iq4nlGemvT : Q40GemvT {
     def override fold_reads_bsum : bool => false
 }
 
+//! NVFP4: w = sc16 x MX4_LUT[q], sc16 a sub-block's UE4M3 scale at half under the plane's per-tensor scale (the device row's
+//! fifth word) - a 32-block's two halves under two scales off the row's byte pair 2g, 2g + 1; signed codes, so no bsum term
+[ |> template_struct_instance]
+class template Nv4GemvT : KqGemvLeafT {
+    //! one quant word's eight nibble codes to signed int8 lanes of the doubled e2m1 magnitudes, the low nibbles' four in `lo`
+    //! and the high nibbles' in `hi`: the SWAR formula here, a home with a byte permute overrides it (`Nv4GemvPrmtT`)
+    def e2m1_split(w : uint; var lo, hi : uint&) {
+        lo = mx4_word(w & KQC_NIBBLE_MASK)
+        hi = mx4_word((w >> 4u) & KQC_NIBBLE_MASK)
+    }
+
+    def override blk_decode(wsb, blk : uint; var wl : uint4&; var wh : uint4&) : float4 {
+        let wv = wq4[wsb * 8u + blk]
+        var l0 = 0u
+        var l1 = 0u
+        var l2 = 0u
+        var l3 = 0u
+        var h0 = 0u
+        var h1 = 0u
+        var h2 = 0u
+        var h3 = 0u
+        e2m1_split(wv.x, l0, h0)
+        e2m1_split(wv.y, l1, h1)
+        e2m1_split(wv.z, l2, h2)
+        e2m1_split(wv.w, l3, h3)
+        wl = uint4(l0, l1, l2, l3)
+        wh = uint4(h0, h1, h2, h3)
+        let sw = wsu[wsb * 5u + blk / 2u] >> ((blk & 1u) * 16u)
+        let site_scale = uint_bits_to_float(wsu[wsb * 5u + 4u])
+        return float4(ue4m3_half_f32(sw & 0xFFu) * site_scale, 0.0, ue4m3_half_f32((sw >> 8u) & 0xFFu) * site_scale, 0.0)
+    }
+
+    def override fold_reads_bsum : bool => false
+}
+
 //! Q3_K: q = 2-bit qs | hmask bit << 2, minus 4; signed per-16 sc x d
 [ |> template_struct_instance]
 class template K3GemvT : KqGemvLeafT {
@@ -2365,6 +2414,7 @@ class template RqPlainT : RqT {
     @ssbo @binding = 0 src : array<float>
     @ssbo @binding = 1 outq : array<int8>
     @ssbo @binding = 2 outs : array<float>
+    @ssbo @binding = 3 @template_gate = OUT_SUM outsum : array<float>   //! the blocks' scale x quant sum
     @push_constant pa : RqArgs
     @template_constant CLAMP : bool = false
 
@@ -2401,6 +2451,7 @@ class template ActRqT : RqT {
     @ssbo @binding = 1 up : array<float>       //! up rows (act's u side)
     @ssbo @binding = 2 outq : array<int8>      //! quantized bytes out
     @ssbo @binding = 3 outs : array<float>     //! per-block scales out
+    @ssbo @binding = 4 @template_gate = OUT_SUM outsum : array<float>   //! the blocks' scale x quant sum
     @push_constant pa : ActArgs
 
     def act_mul(v, u : float) : float => gk_act_mul(v, u, pa.act)
@@ -3981,6 +4032,21 @@ class template FaH64T : FaT {
     typedef OF = coopmatWgAcc_f16_64x64
 }
 
+//! hs=96 (phi-3's heads) at Bc=32: the cm2 arm alone - the KHR lane map walks the head in 64-wide halves
+[ |> template_struct_instance]
+class template FaH96T : FaT {
+    override HS = 96u
+    override BC = 32u
+    typedef QACC = coopmatWgAcc_f32_64x96
+    typedef QA = coopmatWgA_f16_64x96
+    typedef SACC = coopmatWgAcc_f32_64x32
+    typedef PA = coopmatWgA_f16_64x32
+    typedef KB = coopmatWgB_f16_96x32
+    typedef VB = coopmatWgB_f16_32x96
+    typedef ONE = coopmatWgB_f16_32x32
+    typedef OF = coopmatWgAcc_f16_64x96
+}
+
 //! hs=128 (llama-3.2-3B-class) at Bc=32
 [ |> template_struct_instance]
 class template FaH128T : FaT {
@@ -4470,6 +4536,9 @@ class template KqCm2BatchT : MoeCmBase {
     @template_constant IQLUT : bool = false               //! stage the iq4nl codebook into workgroup memory
     @workgroup @template_gate = IQLUT iq4lut : float16[16]   //! kvalues_iq4nl as f16
     @template_constant IQODD : bool = false               //!< under IQLUT the staged codebook is iq3s4's odd values 2q - 15
+    @template_constant MX4LUT : bool = false              //!< under IQLUT the staged codebook is the doubled e2m1 magnitudes (nv4)
+    @template_constant UE4LUT : bool = false              //! stage the 128 UE4M3 codes at half under the plane's per-tensor scale (nv4)
+    @workgroup @template_gate = UE4LUT ue4lut : float16[128]
     @template_constant Q50 : bool = false   //!< q51's block under one d: d * (q - 16), q5032
     @template_constant SCGRID : bool = false              //!< under SCIQ4 the two-word row's sub-scale is the iq3 row's 1 + 2s (`grid_sc`), not iq4xs's ls - 32
     @template_constant IQ3GRID : bool = false             //! stage the 2 KB iq3s grid into workgroup memory
@@ -4532,9 +4601,20 @@ class template KqCm2BatchT : MoeCmBase {
                 static_if (IQODD) {
                     iq4lut[li] = float16(float(int(li) * 2 - 15))
                 } else {
-                    let tbl = uint4(3215825025u, 4142587343u, 639175937u, 1901675829u)
-                    iq4lut[li] = float16(float((int((tbl[int(li >> 2u)] >> ((li & 3u) * 8u)) & 255u) ^ 128) - 128))
+                    static_if (MX4LUT) {
+                        let tbl = uint4(MX4_BYTES_LO, MX4_BYTES_HI, MX4_NEG_BYTES_LO, MX4_NEG_BYTES_HI)
+                        iq4lut[li] = float16(float((int((tbl[int(li >> 2u)] >> ((li & 3u) * 8u)) & 255u) ^ 128) - 128))
+                    } else {
+                        let tbl = uint4(3215825025u, 4142587343u, 639175937u, 1901675829u)
+                        iq4lut[li] = float16(float((int((tbl[int(li >> 2u)] >> ((li & 3u) * 8u)) & 255u) ^ 128) - 128))
+                    }
                 }
+            }
+        }
+        static_if (UE4LUT) {
+            if (gl_LocalInvocationID.x < 128u) {
+                let code = gl_LocalInvocationID.x
+                ue4lut[code] = float16(ue4m3_half_f32(code) * uint_bits_to_float(ws[wblk0 * 5u + 4u]))
             }
         }
         static_if (IQ3GRID) {
@@ -5687,6 +5767,61 @@ class template Iq3xxsCm2T : KqCm2BatchT {
 [ |> template_struct_instance]
 class template Iq4nlCm2T : Q40Cm2T {
     override IQLUT = true
+}
+
+//! NVFP4 on the cm2 tile: the k4-tiled nibbles through the staged e2m1 table under the sixteen UE4M3 sub-block scales of
+//! the device row (four words, sub-block order) read through the staged scale table, which carries the site scale -
+//! 32-block g's low half reads byte 2g, its high half 2g + 1; iq4nl's decode shape, two table reads an element
+[ |> template_struct_instance]
+class template Nv4Cm2T : KqCm2BatchT {
+    typedef BLK = VkK4Blk
+    typedef ST = uint
+    override DECV4 = true
+    override IQLUT = true
+    override MX4LUT = true
+    override UE4LUT = true
+
+    def override khr_stage16(blk, e0, sbase : uint) : void {
+        static_if (KHR) {
+            let g = e0 >> 5u
+            let hh = (e0 >> 4u) & 1u
+            let w4 = wq4[blk * 8u + g]
+            let si = g * 2u + hh
+            let sc = float(ue4lut[int((ws[blk * 5u + (si >> 2u)] >> ((si & 3u) * 8u)) & 0x7Fu)])
+            for [unroll_full] (c in range(4)) {
+                let w = w4[c] >> (hh * 4u)
+                khr_put4(sbase + uint(c) * 2u, float4(sc * float(iq4lut[int(w & 0xFu)]), sc * float(iq4lut[int((w >> 8u) & 0xFu)]),
+                    sc * float(iq4lut[int((w >> 16u) & 0xFu)]), sc * float(iq4lut[int((w >> 24u) & 0xFu)])))
+            }
+        }
+    }
+
+    [spirv_decode, arch(at="../ARCHITECTURE_GPU_SHARED_GEMM.md#cm2-decode-16bit-lanes")]
+    def decode(blk : VkK4Blk; bc, cib : uint2) : float16 {
+        let g = cib.y >> 5u
+        let e = cib.y & 31u
+        let bidx = g * 16u + (e & 15u)
+        let q = (uint(int(blk.qs[int(bidx >> 1u)])) >> ((bidx & 1u) * 8u + (e >> 4u) * 4u)) & 0xFu
+        let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
+        let si = g * 2u + (e >> 4u)
+        let sc = float(ue4lut[int((ws[srow + (si >> 2u)] >> ((si & 3u) * 8u)) & 0x7Fu)])
+        return float16(sc * float(iq4lut[int(q)]))
+    }
+
+    [spirv_decode, arch(at="../ARCHITECTURE_GPU_SHARED_GEMM.md#cm2-decode-16bit-lanes")]
+    def decode_v4(blk : VkK4Blk; bc, cib : uint2) : half4 {
+        let g = cib.y >> 5u
+        let e = cib.y & 31u
+        let li = int((g * 16u + (e & 15u)) >> 1u)
+        let l0 = uint(int(blk.qs[li])) & 0xFFFFu
+        let l1 = uint(int(blk.qs[li + 1])) & 0xFFFFu
+        let sh = (e >> 4u) * 4u
+        let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
+        let si = g * 2u + (e >> 4u)
+        let sc = float(ue4lut[int((ws[srow + (si >> 2u)] >> ((si & 3u) * 8u)) & 0x7Fu)])
+        return half4(float4(sc * float(iq4lut[int((l0 >> sh) & 0xFu)]), sc * float(iq4lut[int((l0 >> (sh + 8u)) & 0xFu)]),
+            sc * float(iq4lut[int((l1 >> sh) & 0xFu)]), sc * float(iq4lut[int((l1 >> (sh + 8u)) & 0xFu)])))
+    }
 }
 
 [ |> template_struct_instance]

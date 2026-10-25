@@ -49,7 +49,12 @@ the last two from the tree:
    and guard arithmetic (Vulkan: `KqGemvLeafT`, `KqCm2BatchT`, `Blk32GemvRunT`; Metal:
    `MetalGemvSiteT`, `MetalKqTileDecodeT`, `MetalKqMulMmSplitTensorBase`, `MetalEmbedKqT`); a
    format template derives a family template and holds one format's block term (`Iq4xsGemvT :
-   KqGemvLeafT`, `MetalKqGemvIq4T : MetalGemvSiteT`). A new format adds stamps, never a class
+   KqGemvLeafT`, `MetalKqGemvIq4T : MetalGemvSiteT`). A format with a tensor instruction of its own
+   on one home (NVFP4: Blackwell's block-scaled FP4 mma) adds a home-own MMQ-shaped leaf there
+   (`MmqFp4T` / `CuNv4Mmq` in `dasllama_cuda_classes.das`, its feed kernels beside it, the driver's
+   leaf list and feeds in `dasllama_cuda_decode.das`) on top of the shared decode templates every
+   home stamps - the non-native homes serve the format through those templates and stop there
+   (`ARCHITECTURE_GPU_ASYMMETRIES.md`). A new format adds stamps, never a class
    written beside its family; `REVIEW_GPU_KERNEL_CLASSES.md` binds the class shape. Take the first
    rung that fits:
    - **An existing block term serves the format under a template constant** - the format's stamps
@@ -91,6 +96,18 @@ the last two from the tree:
    format's block length divides and mark each served, with the step that adds its kernels, or
    declined by name at load (step 8 names each backend's decline). The list joins the PR body
    with the other answers, and step 8's served cells cover it.
+
+   A format whose value carries a whole-tensor factor beside its block scales (NVFP4: ModelOpt's second
+   scaling level, a `<tensor>.scale` GGUF tensor) keeps the plane bytes pure and lands the factor in the
+   matmul epilogues (`ARCHITECTURE_ENGINE_FORMATS_NV4.md#nv4-site-scale`): `detect_site_scales` reads it per
+   site after the layout, and every CPU path that reaches the planes - the two plane entries and the
+   fused decode chains of `dasllama_blocks.das`, which invoke the rows cores on raw plane pointers and
+   never pass through `mm_at_kq_pre` - multiplies its rows by it; the device rows carry the factor in
+   their scale row's pad word, written by the gather, so the GPU decodes fold it with no epilogue (the
+   kernel cells' fixtures fill that word through `kq_ws_plane`, never a bare `ws_plane` - a hashed pad
+   reads as a wild f32, and a tile stages its scale table off the region's first row, so the word is one
+   value a plane). A path left out serves the weights a thousandfold off and the text reads as garbage
+   with every kernel cell green.
 
 Write the answers down; they are the first lines of the PR body's format section.
 
@@ -574,7 +591,9 @@ its own four-wide decode twin: a second `[spirv_decode] def decode_v4` returning
 `override DECV4 = true`, computing the four consecutive elements in the scalar `decode`'s operation
 order and sharing what they share (two 16-bit lanes and one scale extraction for a K-quant, one grid
 word and its four sign bits for a grid format). A format may start on the template's `DECVEC` axis,
-the twin the emitter synthesizes over `decode` by repeating the scalar body four times. The probe
+the twin the emitter synthesizes over `decode` by repeating the scalar body four times. A `[spirv_decode]`
+method calls no method of its own class: a scale read factored into a helper fails the lowering with
+`invoke is not supported in SPIR-V shaders` on every stamp of the template - inline it in each decode. The probe
 decides which twin ships: run `harness/vk_gemm_probe.das -- cm2:<fmt>` (both twin arms in one
 process); a format whose four-wide row loses to its scalar row ships a twin that wins or turns both
 axes off. Gate: a device-form CPU oracle (`<fmt>f16_gemm_oracle`) and an l/m/s/e cell in

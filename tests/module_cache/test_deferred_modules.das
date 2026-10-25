@@ -69,6 +69,8 @@ struct Fixture {
     tmp : string
     manifest : string
     utManifest : string
+    utDir : string        //! the copied dasUnitTest module folder under the fixture
+    utArtifact : string   //! the copied artifact in it: the arms move it out and back
     plain : string
     uses : string
     exists : string
@@ -100,6 +102,8 @@ def make_fixture(tmp : string; artifact : string) : Fixture {
         tmp = tmp,
         manifest = path_join(modDir, manifest_file_name()),
         utManifest = path_join(utDir, manifest_file_name()),
+        utDir = utDir,
+        utArtifact = path_join(utDir, base_name(artifact)),
         plain = path_join(tmp, "plain.das"),
         uses = path_join(tmp, "uses.das"),
         exists = path_join(tmp, "exists.das"),
@@ -242,6 +246,103 @@ def arm_math_container_cache(t : T?; fx : Fixture) {
     }
 }
 
+[arch(at="ARCHITECTURE.md#file-charters")]
+def arms_artifact_unloadable_or_gone(t : T?; fx : Fixture) {
+    let loading = "[module] require {UNIT_TEST_MODULE}: loading the deferred {UNIT_TEST_CLASS}"
+    let missing = "error[20605]: missing prerequisite '{UNIT_TEST_MODULE}'"
+    t |> run("a deferred row whose artifact does not load brings every deferred module in, " +
+             "and the require fails as on a cold start") @(t : T?) {
+        var warm : string
+        t |> success(run_child_reported(t, "rewarm", child_cmd(fx, fx.plain), warm, "PLAIN"),
+            "a cold start rewrites the manifest")
+        let text = fread(fx.utManifest)
+        t |> success(find(text, "\ndm\t") >= 0, "the manifest carries the dm row: {text}")
+        for (name in ["absent.shared_module", "absent_debug.shared_module"]) {
+            fwrite(path_join(fx.utDir, name), "not a shared module\n")
+        }
+        fwrite(fx.utManifest, replace(text, UNIT_TEST_ARTIFACT, "absent"))
+        var out : string
+        let rc = run_child(child_cmd(fx, fx.uses), out)
+        t |> success(rc != 0 && find(out, "LENGTH") < 0, "the program does not run:\n{out}")
+        t |> success(find(out, loading) >= 0, "the require asks for the row:\n{out}")
+        t |> success(find(out, "[module] loading every deferred module (") >= 0,
+            "the failed load brings the rest in:\n{out}")
+        t |> success(find(out, missing) >= 0,
+            "the require fails with the missing-module error:\n{out}")
+        var disabled = ""
+        let modules = path_join(get_das_root(), "modules")
+        dir(modules) $(name) {
+            let descriptor = path_join(path_join(modules, name), ".das_module")
+            if (name != UNIT_TEST_FOLDER && fexist(descriptor)) {
+                disabled += " --disable-module \"{name}\""
+            }
+        }
+        let empty_rc = run_child(child_cmd(fx, fx.uses, disabled), out)
+        t |> success(empty_rc != 0 && find(out, "LENGTH") < 0,
+            "missing artifact still rejects execution with no other deferred rows")
+        t |> success(find(out, loading) >= 0,
+            "the isolated child requests its deferred module:\n{out}")
+        t |> success(find(out, missing) >= 0,
+            "the isolated child reports the missing module:\n{out}")
+        t |> success(find(out, "[module] loading every deferred module (0)") >= 0,
+            "empty fallback attempts remain visible:\n{out}")
+        remove_result(fx.utManifest)
+        for (name in ["absent.shared_module", "absent_debug.shared_module"]) {
+            remove_result(path_join(fx.utDir, name))
+        }
+    }
+    t |> run("a dm row whose artifact is gone makes the manifest stale: " +
+             "the descriptor recompiles, and has_module answers absent") @(t : T?) {
+        var warm : string
+        t |> success(run_child_reported(t, "rewarm", child_cmd(fx, fx.plain), warm, "PLAIN"),
+            "a cold start rewrites the manifest")
+        with_artifact_parked(t, fx) {
+            var out : string
+            t |> success(run_child_reported(t, "gone", child_cmd(fx, fx.hasModule), out,
+                "HAS false"), "the build does not have the module:\n{out}")
+            let line = descriptor_line(out, UNIT_TEST_FOLDER)
+            t |> success(line |> starts_with("compiled (artifact missing)"),
+                "the stale manifest recompiles the descriptor:\n{out}")
+            t |> success(find(out, "{UNIT_TEST_CLASS} <- ") >= 0 && find(out, ": FAILED") >= 0,
+                "the register fails quietly, as on a cold start:\n{out}")
+        }
+        var again : string
+        t |> success(run_child_reported(t, "back", child_cmd(fx, fx.hasModule), again, "HAS true"),
+            "the next start has the module again:\n{again}")
+    }
+}
+
+//! `blk` runs with the unit-test module's artifact moved out of its
+//! folder, the artifact back in place after it
+def private with_artifact_parked(t : T?; fx : Fixture; blk : block<void>) {
+    let parked = path_join(fx.tmp, "parked.shared_module")
+    var rerr : string
+    let left = rename(fx.utArtifact, parked, rerr)
+    t |> success(left, "the artifact leaves the module folder: {rerr}")
+    invoke(blk)
+    let back = rename(parked, fx.utArtifact, rerr)
+    t |> success(back, "the artifact comes back: {rerr}")
+}
+
+def arm_cache_pins_presence(t : T?; fx : Fixture) {
+    t |> run("a module-cache record folded with the module present is refused once it is gone, " +
+             "and the other way") @(t : T?) {
+        let cache = "-module-cache \"{path_join(fx.tmp, "mc_witness.bin")}\""
+        var warm : string
+        let cmd = child_cmd(fx, fx.exists, "", cache)
+        t |> success(run_child_reported(t, "cache present", cmd, warm, "EXISTS true"),
+            "the cold cache run folds the module as present:\n{warm}")
+        with_artifact_parked(t, fx) {
+            var gone : string
+            t |> success(run_child_reported(t, "cache gone", cmd, gone, "EXISTS false"),
+                "the record pinned the module's presence, so the run folds it absent:\n{gone}")
+        }
+        var back : string
+        t |> success(run_child_reported(t, "cache back", cmd, back, "EXISTS true"),
+            "the record written absent is refused once the module is back:\n{back}")
+    }
+}
+
 def arms_guards_and_caches(t : T?; fx : Fixture) {
     t |> run("a require guard loads a waiting module, whatever else the compile requires") @(t : T?) {
         var alone : string
@@ -263,32 +364,6 @@ def arms_guards_and_caches(t : T?; fx : Fixture) {
         t |> equal("compiled (manifests ignored)", descriptor_line(out, "deferred_probe"), "the pure-das descriptor compiles:\n{out}")
         t |> success(find(out, "{UNIT_TEST_CLASS} <- ") >= 0 && find(out, ": loaded") >= 0, "the shared module loads on start:\n{out}")
         t |> success(!stat(fx.manifest).is_valid && !stat(fx.utManifest).is_valid, "no manifest was written")
-    }
-    t |> run("a deferred row whose artifact is gone brings every deferred module in, and the require fails as on a cold start") @(t : T?) {
-        var warm : string
-        t |> success(run_child_reported(t, "rewarm", child_cmd(fx, fx.plain), warm, "PLAIN"), "a cold start rewrites the manifest")
-        let text = fread(fx.utManifest)
-        t |> success(find(text, "\ndm\t") >= 0, "the manifest carries the dm row: {text}")
-        fwrite(fx.utManifest, replace(text, UNIT_TEST_ARTIFACT, "absent"))
-        var out : string
-        let rc = run_child(child_cmd(fx, fx.uses), out)
-        t |> success(rc != 0 && find(out, "LENGTH") < 0, "the program does not run:\n{out}")
-        t |> success(find(out, "[module] require {UNIT_TEST_MODULE}: loading the deferred {UNIT_TEST_CLASS}") >= 0, "the require asks for the row:\n{out}")
-        t |> success(find(out, "[module] loading every deferred module (") >= 0, "the failed load brings the rest in:\n{out}")
-        t |> success(find(out, "error[20605]: missing prerequisite '{UNIT_TEST_MODULE}'") >= 0, "the require fails with the missing-module error:\n{out}")
-        var disabled = ""
-        let modules = path_join(get_das_root(), "modules")
-        dir(modules) $(name) {
-            if (name != UNIT_TEST_FOLDER && fexist(path_join(path_join(modules, name), ".das_module"))) {
-                disabled += " --disable-module \"{name}\""
-            }
-        }
-        let empty_rc = run_child(child_cmd(fx, fx.uses, disabled), out)
-        t |> success(empty_rc != 0 && find(out, "LENGTH") < 0, "missing artifact still rejects execution with no other deferred rows")
-        t |> success(find(out, "[module] require {UNIT_TEST_MODULE}: loading the deferred {UNIT_TEST_CLASS}") >= 0, "the isolated child requests its deferred module:\n{out}")
-        t |> success(find(out, "error[20605]: missing prerequisite '{UNIT_TEST_MODULE}'") >= 0, "the isolated child reports the missing module:\n{out}")
-        t |> success(find(out, "[module] loading every deferred module (0)") >= 0, "empty fallback attempts remain visible:\n{out}")
-        remove_result(fx.utManifest)
     }
     t |> run("a module cache written by an eager start serves a lazy start, and -log-compile-time shows the reads and the timeline") @(t : T?) {
         let cache = "-module-cache \"{path_join(fx.tmp, "mc.bin")}\""
@@ -416,6 +491,8 @@ def test_deferred_modules(t : T?) {
     let fx = make_fixture(tmp, artifact)
     arms_deferred(t, fx)
     arms_guards_and_caches(t, fx)
+    arms_artifact_unloadable_or_gone(t, fx)
+    arm_cache_pins_presence(t, fx)
     arm_math_container_cache(t, fx)
     arms_nameless_rows(t, fx)
     arm_fallback(t, fx)

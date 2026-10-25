@@ -1233,7 +1233,7 @@ last column standing),
 `test_vkd_q8_gemv_gu_n` (its N-column stamps - two, four and eight columns, and eleven as an eight-column tile and a
 four-column one - against the one-row
 kernel run a column at a time, bit for bit, each stamp full and short of its width, over silu and
-gelu), `test_vkd_gemv_ncol` (every `KqFmt` member's N-column decode GEMV - q8 and its row-pair stamps, the fourteen kq
+gelu), `test_vkd_gemv_ncol` (every `KqFmt` member's N-column decode GEMV - q8 and its row-pair stamps, the fifteen kq
 leaves, and the per-32 q51 / iq4nl32 / q4032 / q5032 / mx4 leaves - against its one-column
 class a column at a time, bit for bit, at one to eight columns and through the tiled
 encoder at nine and twelve, the one-column rows against the CPU oracle - the
@@ -2087,16 +2087,36 @@ one step off the control, both sides' argmax pieces decoded a row, the N-row cou
 the sessions alone, its row counter (`rdec_nrow_rows`) up by every row of every step, every call served - two rows at
 two regions on the 1B Q8_0 (the q8 two-column stamp launched) and Q4_K_M, twelve rows at twelve regions on the Q8_0
 (one command of twelve rows a step, a tile of eight columns and one of four: the q8 eight- and four-column stamps
-launched); the same skips, and where the driver declines the model at the cell's region count. The CUDA kernel cells
+launched); the same skips, and where the driver declines the model at the cell's region count.
+`test_gpu_resident_cuda_qwen3.das` - stocked suite, `-jit` only: the same driver on Qwen3-0.6B Q8_0, the q/k-normed
+carrier, whose norm, rope and K/V store run as the fused pass `CuQknRopeKv` in the token command and the window chain,
+in the CUDA llama file's forced-feed form at one window and two (`cuda_forced_feed` of `_cuda_feed.das`, the CUDA
+files' one body), and on Qwen3-4B Q8_0 (36 layers, the larger dense qwen3: the mirror slabs and the weight upload a
+gigabyte class up) the same way; the same skips. `test_gpu_resident_cuda_phi3.das` - stocked suite, `-jit` only: the same driver on
+Phi-3.5-mini Q4_K_M (head 96: the window's attention on the h96 flash tile, the K-quant planes, the fused qkv and gate-up
+planes, the long-rope factors) in the same form at the two-window prompt - after the 40-token prompt the K-quant file's
+one-row steps at positions 41 and 44 sit 7.7 and 6.6 percent of the max logit off the CPU chain on both attention paths,
+past the llama bar, so that file holds no one-window arm - and the Q8_0 file (the q8 decode chain) at one window and two;
+the same skips. The CUDA kernel cells
 beside them, `test_cuda_kernels.das` (model-free; a CUDA device with NVRTC, else every cell but the leak gate skips;
 the per-format cells - the kq cm2 tiles, the kq and per-32 GEMVs, the token-table gathers, the Q8_K feeds - also skip
-without dasVulkan): the q8 GEMV and its rate, the MMQ int8 GEMM against the block-scaled reference, the cm2 l tile
+without dasVulkan): the q8 GEMV and its rate, the MMQ int8 GEMM's leaves against their references - the Q8_0 one and
+the superblock ones without a min term (IQ4_XS and IQ4_NL through the codebook, Q4_0's nibbles less eight) per element
+against the block-scaled fold, the Q4_K one (its min terms f16-staged and folded sixteen blocks at a time over four
+superblocks) at the f16 tiles' bar, the NVFP4 one on the FP4 tensor rung (`test_cud_nv4_mmq`: the k4-tiled nv4 plane
+against an FP4 feed in the (k, k + 8) pairing, every element e2m1 x UE4M3 on both sides, the token's row scale and the
+plane's factor over the sum) with its feed kernels (`test_cud_fp4_feeds`: a float plane's rows bit for bit the CPU feed
+of `_fp4_feed.das`, the gate / up pair through the activation and the fused residual step within a count of strips
+that round the other way), and the per-32 ones (Q5_1, Q4_0, Q5_0, IQ4_NL off the 256 lattice) against the
+engine's own per-32 dequant dotted with the activation quants, Q5_1 at the f16 tiles' bar for its m - the cm2 l tile
 against the f16-feed oracle whole and split in two k chunks through the reduce (`test_cud_q8_cm2l_split`), its rate at
 the 1B window's shapes - each rate cell's warm-up held to the oracle first, the GEMV's every row and the tile's
 activation rows 0, 255, 256 and 511 over every column, the tile's bit for bit on a fixture its f16 accumulator holds
 exactly (sixteen +-1 activations a row over the 2^-7 block scale) - the word copy (a quad-lane run and a three-word tail, the
-device block and the out block under a word sentinel), the flash tiles at heads 64 and 128 with their f16-out twins,
-whole and under a 40-key window, the compile gate over every `[cuda_dispatch]` kernel of the home, the shutdown leak
+device block and the out block under a word sentinel), the flash tiles at heads 64, 96 and 128 with their f16-out twins,
+whole and under a 40-key window, the fused q/k norm + rope + K/V store on the f32 and the f16 mirror stamps against the
+oracle the Vulkan cell holds it to (`qkn_rope_rows` of `_kernel_oracles.das`, the rows ahead of the layer's kept at their
+fill), the compile gate over every `[cuda_dispatch]` kernel of the home, the shutdown leak
 gate, the K-quant and per-32 GEMV leaves and cm2 tiles against the Vulkan cells' oracles, the token-table gathers, the
 Q8_K feeds (the quants a byte within one step, the scales and the in-place residual row through `check_rows`, the
 residual row moved off its input), and the K/V mirror's

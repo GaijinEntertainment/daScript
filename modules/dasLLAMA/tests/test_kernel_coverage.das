@@ -875,6 +875,12 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // the iq3s4 rail's cm2 l stamp (IQ3_S served as a nibble codebook plane: the zoo's IQ3_S rows dispatch its decode GEMV, its
     // batch tile and its m, s and KHR stamps, none of them a plane tall enough for the l column); its coverage is test_vkd_iq3s4_cm2_batch
     "kq_batch_iq3s4_cm2l_cls_spv",
+    // the nv4 rail (NVFP4 planes: no zoo row loads an nv4 file - the 1B mint is machine-local and the ModelOpt files keep BF16 k/v
+    // planes the whole-model driver declines) - its decode GEMV and token-table gather, its per-op batch tile, its cm2 l, m and s
+    // stamps and its KHR tile; their coverage is test_vkd_gemv_ncol, test_vkd_emb_gather_family, test_vkd_kq_batch_family and
+    // test_vkd_nv4_cm2_batch
+    "kq_gemv_nv4_cls_spv", "kq_emb_nv4_cls_spv", "kq_batch_nv4_cls_spv", "kq_batch_nv4_cm2l_cls_spv", "kq_batch_nv4_cm2m_cls_spv",
+    "kq_batch_nv4_cm2s_cls_spv", "kq_batch_nv4_khr_cls_spv",
     // the hyper-connection chain (Qwen3.8-Flash-Next, the one qwen4exp carrier, above the zoo's tier): the mixer seams and the
     // n-gram side input; their coverage is test_vkd_hc_seams, test_vkd_hc_rows and test_vkd_ple_side, the serving run
     // test_gpu_resident_hc.das
@@ -1064,7 +1070,7 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     "q8_gemv_n2_cls_spv", "q8_gemv_n4_cls_spv", "q8_gemv_n8_cls_spv",
     "q8_gemv_n2p_cls_spv", "q8_gemv_n4p_cls_spv", "q8_gemv_n8p_cls_spv",
     "kq_gemv_k4_n_cls_spv", "kq_gemv_k5_n_cls_spv", "kq_gemv_k6_n_cls_spv", "kq_gemv_q40_n_cls_spv", "kq_gemv_iq4xs_n_cls_spv", "kq_gemv_iq3s4_n_cls_spv",
-    "kq_gemv_k3_n_cls_spv", "kq_gemv_k2_n_cls_spv", "kq_gemv_iq3s_n_cls_spv", "kq_gemv_iq3xxs_n_cls_spv", "kq_gemv_iq4nl_n_cls_spv",
+    "kq_gemv_k3_n_cls_spv", "kq_gemv_k2_n_cls_spv", "kq_gemv_iq3s_n_cls_spv", "kq_gemv_iq3xxs_n_cls_spv", "kq_gemv_iq4nl_n_cls_spv", "kq_gemv_nv4_n_cls_spv",
     "kq_gemv_iq2s_n_cls_spv", "kq_gemv_iq2xs_n_cls_spv", "kq_gemv_iq2xxs_n_cls_spv",
     // the fused gate-up GEMV's N stamps serve only the N-row token command, which the zoo's one-region load never engages
     // (the batched rows need a region a row; the stocked regions files - test_gpu_resident_regions_qwen3.das and the
@@ -1226,6 +1232,8 @@ def test_vulkan_kernel_coverage_serving(tst : T?) {
             vk_cov_model(t, path_join(models_dir(), "tinyllama-1.1b-chat-v1.0.Q8_0.gguf"), "llama", [2, 4, 8])
             // gemma3 q8: the per-op arena rails + qk_norm
             vk_cov_model(t, path_join(models_dir(), "gemma-3-1b-it-Q8_0.gguf"), "gemma3", none)
+            //! phi3 K-quant: a head of 96 - the window's head-96 flash tiles (`fa_cm2_h96*`), the token step's narrow attention
+            vk_cov_model(t, path_join(models_dir(), "Phi-3.5-mini-instruct-Q4_K_M.gguf"), "phi3", none)
             vk_cov_codecs(t)
             vk_cov_mode_sweep(t)
             // qwen3.5 q8: the DeltaNet chains (conv/step/scan + the decode step)

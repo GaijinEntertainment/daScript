@@ -923,8 +923,8 @@ let private TTS_BLOCKS_FILE = "modules/dasLLAMA/dasllama/dasllama_tts_blocks.das
 // the TTS block file's *_prepare mints, the layout helpers and the layout constants' declaration
 // lines, hashed in file order. A closure change with IMAGE_VERSION unmoved is red; the finding prints the
 // value to re-stamp with.
-let private IMAGE_LAYOUT_STAMP_VERSION = 53
-let private IMAGE_LAYOUT_STAMP_HASH = 0xd9063b1e3122083bul
+let private IMAGE_LAYOUT_STAMP_VERSION = 54
+let private IMAGE_LAYOUT_STAMP_HASH = 0x8df75dd6dcc76f80ul
 
 // The helpers that decide WHERE bytes land: the page pad, the plane and total sizing, the
 // writer's append / zero-fill / header patch, the header's scalar stores, the lattice
@@ -1672,6 +1672,73 @@ def private check_vk_extension_roster {
     delete files
 }
 
+//! the device copies and clears the CUDA home issues; each names its stream as the last argument
+let private CUDA_STREAM_OPS <- ["cuda_memset_d8(", "cuda_memcpy_htod(", "cuda_memcpy_dtoh(", "cuda_memcpy_dtod("]
+
+//! the argument text of the first `call` (its text ending in `(`) on `line`, "" when the line holds no such call
+def private call_args_of(line : string; call : string) : string {
+    let at = find(line, call)
+    return "" if (at < 0)
+    let open = at + length(call) - 1
+    var out = ""
+    peek_data(line) $(d) {
+        let close = paren_close(d, open)
+        if (close >= 0) {
+            out = slice(d, open + 1, close)
+        }
+    }
+    return out
+}
+
+//! the offsets of the commas of `d[from, to)` outside every bracket: the argument separators of a call's argument text
+def private arg_commas(d; from, to : int) : array<int> {
+    var depth = 0
+    var cuts : array<int>
+    for (i in range(from, to)) {
+        let c = int(d[i])
+        if (c == '(' || c == '[' || c == '{') {
+            depth++
+        } elif (c == ')' || c == ']' || c == '}') {
+            depth--
+        } elif (c == ',' && depth == 0) {
+            cuts |> push(i)
+        }
+    }
+    return <- cuts
+}
+
+//! the last top-level comma-separated argument of `args`, stripped
+def private last_arg_of(args : string) : string {
+    var cut = -1
+    peek_data(args) $(d) {
+        var inscope cuts <- arg_commas(d, 0, length(d))
+        cut = empty(cuts) ? -1 : cuts[length(cuts) - 1]
+    }
+    return strip(cut < 0 ? args : slice(args, cut + 1))
+}
+
+def private check_cuda_stream_discipline {
+    var files : array<string>
+    collect_das_files("modules/dasLLAMA/dasllama", files)
+    for (p in files) {
+        let name = base_name(p)
+        continue if (!(name |> starts_with("dasllama_cuda_")) && name != "dasllama_math_cuda.das")
+        var line_no = 0
+        for (line in split(strip_line_comments(fread(p)), "\n")) {
+            line_no++
+            for (op in CUDA_STREAM_OPS) {
+                let args = call_args_of(line, op)
+                continue if (empty(args))
+                let last = last_arg_of(args)
+                if (!(last == "s" || last == "stream" || last |> ends_with(".stream"))) {
+                    gate_finding(p, line_no, "{op}...) names no stream - the home's stream is non-blocking and a stream-less copy or clear runs on the legacy stream, unordered against every kernel (ARCHITECTURE_GPU.md#gpu-backends); pass g_cud.stream (or the launch's `s`) as the last argument")
+                }
+            }
+        }
+    }
+    delete files
+}
+
 // A Vulkan pipeline is built only by the `[vk_dispatch]`-generated `ensure_*`: a hand build bypasses the
 // hazard rail and the dispatch census, so its races and its coverage are invisible. The two llama.cpp
 // shader ports under performance/ are reference measurements of another engine's kernels, outside this walk.
@@ -1799,7 +1866,7 @@ let private GEMM_GEN_FILES = [
     "modules/dasLLAMA/dasllama/dasllama_gemm_gen.das",
     "modules/dasLLAMA/dasllama/dasllama_gemm_schema.das"
 ]
-let private GEMM_GEN_STAMP_HASH = 0x13a6a4a55671fefaul
+let private GEMM_GEN_STAMP_HASH = 0x97b0e9baa24da790ul
 
 [arch(at = "ARCHITECTURE_ENGINE_FORMATS.md#cpu-kernel-tiers")]
 def private check_gemm_gen_stamp {
@@ -2024,8 +2091,7 @@ let private METAL_KERNELS_FILE = "modules/dasLLAMA/dasllama/dasllama_metal_kerne
 //! the discrete templates one home stamps - the row of
 //! followup_general.md naming the stamps that wait on their families
 var private DISCRETE_ONE_HOME_STAMPS <- { "DaAttnBWT", "DaAttnBH128T", "F32RowsKhrT",
-    "FaH256T", "FaH512T", "Mx4Cm2T", "Mx4GemvGuT", "Q8GemvPleActT", "ArCombBase", "ArCombG4T",
-    "QknRopeKvT" }
+    "FaH256T", "FaH512T", "Mx4Cm2T", "Mx4GemvGuT", "Q8GemvPleActT", "ArCombBase", "ArCombG4T" }
 
 //! `class [template] X : Y` lines of `path`: X's base, whether X is a
 //! template, and the home or shared file X lives in
@@ -2553,19 +2619,10 @@ let private LOAD_FILE = "modules/dasLLAMA/dasllama/dasllama_load.das"
 //! the top-level argument count of the call whose `(` sits at `open`
 def private call_arg_count(line : string; open : int) : int {
     var n = 1
-    var depth = 0
     peek_data(line) $(d) {
-        for (i in range(open, length(d))) {
-            let ch = int(d[i])
-            if (ch == '(' || ch == '[' || ch == '{') {
-                depth++
-            } elif (ch == ')' || ch == ']' || ch == '}') {
-                depth--
-                break if (depth == 0)
-            } elif (ch == ',' && depth == 1) {
-                n++
-            }
-        }
+        let close = paren_close(d, open)
+        var inscope cuts <- arg_commas(d, open + 1, close < 0 ? length(d) : close)
+        n += length(cuts)
     }
     return n
 }
@@ -2922,6 +2979,7 @@ def main() : int {
     check_kq_gemv_grid_literals()
     check_kq_form_matrix()
     check_vk_extension_roster()
+    check_cuda_stream_discipline()
     check_no_hand_pipelines()
     check_verify_decline_before_state_move()
     check_test_file_placement()

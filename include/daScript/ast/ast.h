@@ -1108,7 +1108,7 @@ namespace das
 
     DAS_API bool isValidBuiltinName ( const string & name, bool canPunkt = false );
 
-    // src/ast/ARCHITECTURE.md#module-scan-manifest
+    // src/ast/ARCHITECTURE_MODULE_SCAN.md#module-scan-manifest
     typedef bool (*DeferredModuleLoader) ( const string & name );
     DAS_API void setDeferredModuleLoader ( DeferredModuleLoader loader );
     DAS_API DeferredModuleLoader getDeferredModuleLoader ();
@@ -1750,6 +1750,8 @@ namespace das
     // size, hash_block64 of the content - the file's bytes, the variable's value, the flag's
     // occurrences)
     DAS_API void statAndHashFileDependency ( const string & path, int64_t & size, uint64_t & hash );
+    DAS_API void pinModuleCacheDependency ( Program * program, const string & path );
+    DAS_API bool isBuiltinModulePresent ( const string & name );
 
     // access function from class adapter
     DAS_API int adapt_field_offset ( const char * fName, const StructInfo * info );

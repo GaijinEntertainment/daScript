@@ -606,6 +606,10 @@ def private coop_info(name : string) : CoopInfo {
         return CoopInfo(ok = true, ctype = "__das_cmB_s8", use = "B", comp = "s8")
     } elif (name == "coopmatAcc_s32_16x16") {
         return CoopInfo(ok = true, ctype = "__das_cmC_s32", use = "C", comp = "s32")
+    } elif (name == "coopmatA_e2m1_16x64") {
+        return CoopInfo(ok = true, ctype = "__das_cmA_e2m1", use = "A", comp = "e2m1")
+    } elif (name == "coopmatB_e2m1_64x16") {
+        return CoopInfo(ok = true, ctype = "__das_cmB_e2m1", use = "B", comp = "e2m1")
     }
     return CoopInfo(ok = false)
 }
@@ -626,6 +630,8 @@ struct __das_cmC_f16 \{ uint r[4]; \};
 struct __das_cmA_s8 \{ uint r[4]; \};
 struct __das_cmB_s8 \{ uint r[4]; \};
 struct __das_cmC_s32 \{ int r[8]; \};
+struct __das_cmA_e2m1 \{ uint r[4]; \};
+struct __das_cmB_e2m1 \{ uint r[4]; \};
 __device__ __forceinline__ int __das_lane() \{ return int((threadIdx.x + threadIdx.y * blockDim.x + threadIdx.z * blockDim.x * blockDim.y) & 31u); \}
 __device__ __forceinline__ uint __das_ld32(const char* p) \{ return *(const uint*)p; \}
 __device__ __forceinline__ uint __das_ldh2(const char* p0, const char* p1) \{ return uint(*(const ushort*)p0) | (uint(*(const ushort*)p1) << 16); \}
@@ -764,6 +770,10 @@ def private emit_coop_stmt(var ctx : CudaCtx; ec : ExprCall?) : string {
     let ci = coop_type_of(ec.arguments[0]._type)
     if (!ci.ok || (is_load ? ci.use == "C" : ci.use != "C")) {
         shader_error(ctx, ec.at, "{cname}: the first argument must be a {is_load ? "KHR A or B tile" : "KHR accumulator tile"} local, not {describe(ec.arguments[0]._type)}")
+        return ""
+    }
+    if (ci.comp == "e2m1") {
+        shader_error(ctx, ec.at, "{cname}: an e2m1 fragment loads through ldmatrix alone")
         return ""
     }
     let eb = coop_buf_elem_bytes(ec.arguments[1]._type)
@@ -3095,7 +3105,12 @@ def private atomic_call(var ctx : CudaCtx; ec : ExprCall?; cname : string) : str
 }
 
 //! the CUDA-only intrinsics a body calls as statements
-let private INTRINSIC_STATEMENTS : table<string> <- { "cp_async_16", "cp_async_commit", "cp_async_wait", "ldmatrix", "mma_scale_acc", "bar_sync", "cuda_asm" }
+let private INTRINSIC_STATEMENTS : table<string> <- { "cp_async_16", "cp_async_commit", "cp_async_wait", "ldmatrix", "mma_scale_acc", "mma_block_scaled", "mma_scale_cols", "bar_sync", "cuda_asm" }
+
+[arch(at="../ARCHITECTURE_EMIT.md#cuda-kernel-vocabulary-tiers")]
+def private need_arch_a(var ctx : CudaCtx) {
+    register_helper(ctx, "{HELPER_RANK_INTRINSIC}arch_a", "#define __DAS_ARCH_A__ 1")
+}
 
 //! the address space a pointer expression reaches: "shared" for a @workgroup member, "global" for a buffer, "" when unknown
 def private ptr_space(ctx : CudaCtx; e : Expression?) : string {
@@ -3175,6 +3190,51 @@ def private cuda_intrinsic_call(var ctx : CudaCtx; ec : ExprCall?; cname : strin
         register_helper(ctx, "{HELPER_RANK_INTRINSIC}mma_scale_acc", "__device__ __forceinline__ void __das_mma_scale_acc(__das_cmC_f32& f, const __das_cmC_s32& s, float2 rs, float4 cs) \{ float r[2] = \{ rs.x, rs.y \}; float c[4] = \{ cs.x, cs.y, cs.z, cs.w \}; _Pragma(\"unroll\") for (int k = 0; k < 8; ++k) \{ f.r[k] += float(s.r[k]) * r[(k >> 1) & 1] * c[((k >> 2) << 1) | (k & 1)]; \} \}")
         census_kind(ctx, "call.mma_scale_acc")
         return "__das_mma_scale_acc({emit_value(ctx, ec.arguments[0])}, {emit_value(ctx, ec.arguments[1])}, {emit_value(ctx, ec.arguments[2])}, {emit_value(ctx, ec.arguments[3])})"
+    }
+    if (cname == "mma_block_scaled") {
+        let fi = na == 6 ? coop_type_of(ec.arguments[0]._type) : CoopInfo(ok = false)
+        let ai = na == 6 ? coop_type_of(ec.arguments[1]._type) : CoopInfo(ok = false)
+        let bi = na == 6 ? coop_type_of(ec.arguments[2]._type) : CoopInfo(ok = false)
+        if (!(fi.ok && ai.ok && bi.ok && fi.comp == "f32" && ai.comp == "e2m1" && ai.use == "A" && bi.comp == "e2m1" && bi.use == "B")) {
+            shader_error(ctx, ec.at, "mma_block_scaled(f32 accumulator, e2m1 A fragment, e2m1 B fragment, A scale word, B scale word of n-half 0, of n-half 1)")
+            return "/*mma_block_scaled*/"
+        }
+        need_coopmat(ctx)
+        need_arch_a(ctx)
+        let op = "mma.sync.aligned.kind::mxf4nvf4.block_scale.scale_vec::4X.m16n8k64.row.col.f32.e2m1.e2m1.f32.ue4m3"
+        register_helper(ctx, "{HELPER_RANK_INTRINSIC}mma_block_scaled", "__device__ __forceinline__ void __das_mma_block_scaled(__das_cmC_f32& f, const __das_cmA_e2m1& a, const __das_cmB_e2m1& b, unsigned sa, unsigned sb0, unsigned sb1) \{ asm volatile(\"{op} \{%0,%1,%2,%3\}, \{%4,%5,%6,%7\}, \{%8,%9\}, \{%0,%1,%2,%3\}, %10, \{0,0\}, %11, \{0,0\};\" : \"+f\"(f.r[0]), \"+f\"(f.r[1]), \"+f\"(f.r[2]), \"+f\"(f.r[3]) : \"r\"(a.r[0]), \"r\"(a.r[1]), \"r\"(a.r[2]), \"r\"(a.r[3]), \"r\"(b.r[0]), \"r\"(b.r[1]), \"r\"(sa), \"r\"(sb0)); asm volatile(\"{op} \{%0,%1,%2,%3\}, \{%4,%5,%6,%7\}, \{%8,%9\}, \{%0,%1,%2,%3\}, %10, \{0,0\}, %11, \{0,0\};\" : \"+f\"(f.r[4]), \"+f\"(f.r[5]), \"+f\"(f.r[6]), \"+f\"(f.r[7]) : \"r\"(a.r[0]), \"r\"(a.r[1]), \"r\"(a.r[2]), \"r\"(a.r[3]), \"r\"(b.r[2]), \"r\"(b.r[3]), \"r\"(sa), \"r\"(sb1)); \}")
+        census_kind(ctx, "call.mma_block_scaled")
+        return "__das_mma_block_scaled({emit_value(ctx, ec.arguments[0])}, {emit_value(ctx, ec.arguments[1])}, {emit_value(ctx, ec.arguments[2])}, {emit_value(ctx, ec.arguments[3])}, {emit_value(ctx, ec.arguments[4])}, {emit_value(ctx, ec.arguments[5])})"
+    }
+    if (cname == "mma_scale_cols") {
+        let fi = na == 2 ? coop_type_of(ec.arguments[0]._type) : CoopInfo(ok = false)
+        if (!(fi.ok && fi.comp == "f32")) {
+            shader_error(ctx, ec.at, "mma_scale_cols(f32 accumulator, column scales)")
+            return "/*mma_scale_cols*/"
+        }
+        need_coopmat(ctx)
+        register_helper(ctx, "{HELPER_RANK_INTRINSIC}mma_scale_cols", "__device__ __forceinline__ void __das_mma_scale_cols(__das_cmC_f32& f, float4 cs) \{ float c[4] = \{ cs.x, cs.y, cs.z, cs.w \}; _Pragma(\"unroll\") for (int k = 0; k < 8; ++k) \{ f.r[k] *= c[((k >> 2) << 1) | (k & 1)]; \} \}")
+        census_kind(ctx, "call.mma_scale_cols")
+        return "__das_mma_scale_cols({emit_value(ctx, ec.arguments[0])}, {emit_value(ctx, ec.arguments[1])})"
+    }
+    if (cname == "cvt_e2m1x2") {
+        if (na != 2) {
+            shader_error(ctx, ec.at, "cvt_e2m1x2(lo, hi)")
+            return "/*cvt_e2m1x2*/"
+        }
+        need_arch_a(ctx)
+        register_helper(ctx, "{HELPER_RANK_INTRINSIC}cvt_e2m1x2", "__device__ __forceinline__ unsigned __das_cvt_e2m1x2(float lo, float hi) \{ unsigned short d; asm(\"\{ .reg .b8 t; cvt.rn.satfinite.e2m1x2.f32 t, %1, %2; cvt.u16.u8 %0, t; \}\" : \"=h\"(d) : \"f\"(hi), \"f\"(lo)); return (unsigned)d & 0xffu; \}")
+        census_kind(ctx, "call.cvt_e2m1x2")
+        return "__das_cvt_e2m1x2({emit_value(ctx, ec.arguments[0])}, {emit_value(ctx, ec.arguments[1])})"
+    }
+    if (cname == "cvt_ue4m3") {
+        if (na != 1) {
+            shader_error(ctx, ec.at, "cvt_ue4m3(x)")
+            return "/*cvt_ue4m3*/"
+        }
+        register_helper(ctx, "{HELPER_RANK_INTRINSIC}cvt_ue4m3", "__device__ __forceinline__ unsigned __das_cvt_ue4m3(float x) \{ float p = x > 0.0f ? x : 0.0f; unsigned short d; asm(\"cvt.rn.satfinite.e4m3x2.f32 %0, %1, %1;\" : \"=h\"(d) : \"f\"(p)); return (unsigned)d & 0xffu; \}")
+        census_kind(ctx, "call.cvt_ue4m3")
+        return "__das_cvt_ue4m3({emit_value(ctx, ec.arguments[0])})"
     }
     if (cname == "bar_sync") {
         if (na != 2) {

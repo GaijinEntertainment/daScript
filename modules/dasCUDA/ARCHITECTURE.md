@@ -22,7 +22,7 @@ plain pointers, a by-value argument struct, streams in place of command buffers.
   `int` results, and the surface this module needs carries no structure, so `cuda/cuda_driver.das`
   declares each entry point with `[extern(cdecl, late, name=..., windows_library=...,
   linux_library=...)]` and nothing is compiled: no `cuda.h`, no `nvrtc.h`, no toolkit at build
-  time, no C++ module, and an installed SDK runs it without a rebuild. The structs the wider
+  time, no C++ binding, and an installed SDK runs it without a rebuild. The structs the wider
   driver API carries - strided 2D and 3D copies, texture descriptors, explicit graph node
   parameters, the virtual-memory allocation properties - sit outside this surface; one that
   becomes needed is a das struct of scalars passed by address, still an extern, never a binder.
@@ -49,9 +49,8 @@ plain pointers, a by-value argument struct, streams in place of command buffers.
 - **64-bit hosts only; never Apple, never wasm.** The descriptor registers the `cuda/` paths
   only where a pointer is 8 bytes: no CUDA driver exists for a 32-bit host, and `[extern]`
   refuses to apply there (`DAS_BIND_EXTERNAL` is off), so on a 32-bit host `require cuda/...`
-  is a missing module and a `require ?cuda/cuda_driver` guard reads as absent. On a 64-bit
-  host the files compile everywhere; `cuda_available()` answers false where no driver library
-  loads, and a consumer feints on it.
+  is a missing module. On a 64-bit host the files compile everywhere; `cuda_available()`
+  answers false where no driver library loads, and a consumer feints on it.
 - **Device memory is a 64-bit device address, never a host pointer.** `cuda_mem_alloc` returns
   a `uint64`; the host reaches it only through explicit copies (`cuda_memcpy_*`), with pinned,
   device-mapped host memory (`cuda_mem_alloc_host_mapped`) where a kernel's inputs or its answer
@@ -84,6 +83,18 @@ plain pointers, a by-value argument struct, streams in place of command buffers.
   invisible to all six das leak detectors; the boost counts each live kind and
   `cuda_live_object_report` lists them, so every test file closes on
   `cuda_log_leaks_if_any() == 0`.
+
+### The cuda witness module {#cuda-witness-module}
+
+"No CUDA" is the build configuration's word, never the filesystem's. The `cuda` witness module
+(`src/dasCUDA.cpp`, the module's one C++ source) binds nothing: it is compiled in exactly when the
+package is configured, which `CMakeLists.txt` admits on 64-bit hosts with `DAS_CUDA_DISABLED` off,
+and the descriptor registers it through the two-argument `register_dynamic_module`, which skips
+silently where no `.shared_module` was built. The `cuda/` files sit on disk in every checkout, so
+a path guard (`require ?cuda/cuda_driver`) would read a disabled build as present; every consumer
+guards on the witness instead - `require ?cuda <target>` in dasLLAMA's engine, `has_module("cuda")`
+in `tests/.das_test`, `builtin_module_exists(cuda)` under a `static_if` - and a disabled build
+loads no CUDA home and runs no `tests/cuda` cell.
 
 ### Programmatic dependent launch {#cuda-programmatic-dependent-launch}
 

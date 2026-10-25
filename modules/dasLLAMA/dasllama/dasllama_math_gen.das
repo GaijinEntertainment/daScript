@@ -9,6 +9,7 @@ require dasllama/dasllama_lint public
 require dasllama/dasllama_math
 require dasllama/dasllama_math_aarch64_neon
 require dasllama/dasllama_math_default  // the row-major tail dots of the slot walks
+require dasllama/dasllama_gpu_math      // ue4m3_half_f32 - the nv4 sub-block scale's one decode
 require dasllama/dasllama_tune  // [from_template]: the slot walks stamped per scale plane
 require dasllama/dasllama_repack  // the grp<mr> repack family + kq panel unpack (pure transforms; the _gen/_bake twins below feed them numbers)
 require daslib/f16_cvt  // the kq reference bodies widen the f16 (s, o) scale pairs
@@ -263,6 +264,8 @@ def k6q8_layout_gen() : int => q8q8_repack_type(GEMM_REFERENCE_MR()).interleave
 
 def q40q8_layout_gen() : int => q8q8_repack_type(GEMM_REFERENCE_MR()).interleave
 
+def nv4q8_layout_gen() : int => q8q8_repack_type(GEMM_REFERENCE_MR()).interleave
+
 //! The kq families' amx companions (the amx_bf16 leg): tileform = the operand form (0 = quant planes +
 //! Q8_K; N = a bf16 panel of N groups + bf16 activations, a tile call covering amx_bf16_tile_tokens()),
 //! amx_cfg = the per-chunk LDTILECFG, witness = the XTILEDATA grant.
@@ -294,6 +297,16 @@ def q40q8_witness_gen() : bool => false
 
 def q40q8_panel_gen(kqg : uint8 const?; ksg : uint8 const?; mr, nsb, n, ngr : int64; var dst : uint16?) : void {
     kq_panel_rows_bf16(40, kqg, ksg, mr, nsb, n, ngr, dst)
+}
+
+def nv4q8_tileform_gen() : int => 0
+
+def nv4q8_amx_cfg_gen() : void {}
+
+def nv4q8_witness_gen() : bool => false
+
+def nv4q8_panel_gen(kqg : uint8 const?; ksg : uint8 const?; mr, nsb, n, ngr : int64; var dst : uint16?) : void {
+    kq_panel_rows_bf16(49, kqg, ksg, mr, nsb, n, ngr, dst)
 }
 
 def iq4xsq8_tileform_gen() : int => 0
@@ -406,6 +419,7 @@ def private kq_tileform(_f : KqTag_k4) : int => k4q8_tileform_gen()
 def private kq_tileform(_f : KqTag_k5) : int => k5q8_tileform_gen()
 def private kq_tileform(_f : KqTag_k6) : int => k6q8_tileform_gen()
 def private kq_tileform(_f : KqTag_q40) : int => q40q8_tileform_gen()
+def private kq_tileform(_f : KqTag_nv4) : int => nv4q8_tileform_gen()
 def private kq_tileform(_f : KqTag_iq4xs) : int => iq4xsq8_tileform_gen()
 def private kq_tileform(_f : KqTag_iq3s4) : int => iq3s4q8_tileform_gen()
 def private kq_tileform(_f : KqTag_k3) : int => k3q8_tileform_gen()
@@ -418,7 +432,7 @@ def private kq_tileform(_f : KqTag_iq2xs) : int => iq2xsq8_tileform_gen()
 def private kq_tileform(_f : KqTag_iq2xxs) : int => iq2xxsq8_tileform_gen()
 
 //! the operand form the format's stamped tile reads: 0 = quant planes, N = a bf16 panel of N row groups
-def kq_tileform_of(fmt : int) : int {
+def kq_tileform_of(fmt : int) : int {   // nolint:STYLE037 - the stamp's ladder, one arm per KqFmt member
     var form = 0
     let kf = kq_fmt_of_id(fmt, "kq_tileform_of")
     kq_fmt_stamp(kf) $(F) {
@@ -457,6 +471,11 @@ def private kq_amx_arm(_f : KqTag_k6) {
 def private kq_amx_arm(_f : KqTag_q40) {
     q40q8_witness_gen()
     q40q8_amx_cfg_gen()
+}
+
+def private kq_amx_arm(_f : KqTag_nv4) {
+    nv4q8_witness_gen()
+    nv4q8_amx_cfg_gen()
 }
 
 def private kq_amx_arm(_f : KqTag_iq4xs) {
@@ -515,6 +534,8 @@ def private kq_ref_row_dot(fmt : int; kqg : uint8 const?; ksg : uint8 const?; r,
         return kq_grp_row_dot(4l, kqg, ksg, r, mr, xq, xs, xbs, n)
     } elif (fmt == 40) {
         return q40_grp_row_dot(kqg, ksg, r, mr, xq, xs, xbs, n)
+    } elif (fmt == 49) {
+        return nv4_grp_row_dot(kqg, ksg, r, mr, xq, xs, xbs, n)
     } elif (fmt == 44) {
         return iq4xs_grp_row_dot(kqg, ksg, r, mr, xq, xs, xbs, n)
     } elif (fmt == 35) {
@@ -555,6 +576,10 @@ def k6q8_tile4_gen(var yp : float?; kqg : uint8 const?; ksg : uint8 const?; xqp 
 
 def q40q8_tile4_gen(var yp : float?; kqg : uint8 const?; ksg : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d, g, t0 : int64) : void {
     kq_tile_ref(40, yp, kqg, ksg, xqp, xsp, xbsp, n, d, g, t0)
+}
+
+def nv4q8_tile4_gen(var yp : float?; kqg : uint8 const?; ksg : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d, g, t0 : int64) : void {
+    kq_tile_ref(49, yp, kqg, ksg, xqp, xsp, xbsp, n, d, g, t0)
 }
 
 def iq4xsq8_tile4_gen(var yp : float?; kqg : uint8 const?; ksg : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d, g, t0 : int64) : void {
@@ -644,6 +669,9 @@ def kq_layout_of(fmt : int) : int64 {
     if (fmt == 40) {
         return int64(q40q8_layout_gen())
     }
+    if (fmt == 49) {
+        return int64(nv4q8_layout_gen())
+    }
     if (fmt == 44) {
         return int64(iq4xsq8_layout_gen())
     }
@@ -702,6 +730,37 @@ def q40_grp_row_dot(kqg : uint8 const?; ksg : uint8 const?; r, mr : int64; xqp :
                 let isub = ilo + ihi - 8 * (xbsp[b * 2l] + xbsp[b * 2l + 1l])
                 let d = f16_to_f32(uint(ksg[sb + blk * 2l * mr + 2l * r]) | (uint(ksg[sb + blk * 2l * mr + 2l * r + 1l]) << 8u))
                 facc += float(isub) * d
+            }
+            acc += facc * xsp[sbi]
+        }
+    }
+    return acc
+}
+
+//! the nv4 stubs' reference body and the tests' repack oracle, in the nv4 dot_kq's float fold order
+[unused_argument(xbsp)]
+def nv4_grp_row_dot(kqg : uint8 const?; ksg : uint8 const?; r, mr : int64; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64) : float {
+    let lut = mx4_lut()
+    var acc = 0.0
+    let nsb = n / 256l
+    unsafe {
+        for (sbi in range64(nsb)) {
+            let qb = sbi * 128l * mr
+            let sb = sbi * 16l * mr
+            var facc = 0.0
+            for (blk in range64(8l)) {
+                let b = sbi * 8l + blk
+                var ilo = 0
+                var ihi = 0
+                for (j in range64(4l)) {
+                    for (t in range64(4l)) {
+                        let nib = int(kqg[qb + ((blk * 4l + j) * mr + r) * 4l + t])
+                        ilo += int(lut[nib & 15]) * int(xqp[b * 32l + j * 4l + t])
+                        ihi += int(lut[nib >> 4]) * int(xqp[b * 32l + 16l + j * 4l + t])
+                    }
+                }
+                let so = sb + blk * 2l * mr + 2l * r
+                facc += float(ilo) * ue4m3_half_f32(uint(ksg[so])) + float(ihi) * ue4m3_half_f32(uint(ksg[so + 1l]))
             }
             acc += facc * xsp[sbi]
         }
@@ -830,6 +889,7 @@ def grp_row_dot(kqg : uint8 const?; ksg : uint8 const?; r, mr : int64; xqp : int
 def grp_row_dot(kqg : uint8 const?; ksg : uint8 const?; r, mr : int64; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64; _f : KqTag_k5) : float => kq_grp_row_dot(5l, kqg, ksg, r, mr, xqp, xsp, xbsp, n)
 def grp_row_dot(kqg : uint8 const?; ksg : uint8 const?; r, mr : int64; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64; _f : KqTag_k6) : float => kq_grp_row_dot(6l, kqg, ksg, r, mr, xqp, xsp, xbsp, n)
 def grp_row_dot(kqg : uint8 const?; ksg : uint8 const?; r, mr : int64; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64; _f : KqTag_q40) : float => q40_grp_row_dot(kqg, ksg, r, mr, xqp, xsp, xbsp, n)
+def grp_row_dot(kqg : uint8 const?; ksg : uint8 const?; r, mr : int64; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64; _f : KqTag_nv4) : float => nv4_grp_row_dot(kqg, ksg, r, mr, xqp, xsp, xbsp, n)
 def grp_row_dot(kqg : uint8 const?; ksg : uint8 const?; r, mr : int64; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64; _f : KqTag_iq4xs) : float => iq4xs_grp_row_dot(kqg, ksg, r, mr, xqp, xsp, xbsp, n)
 def grp_row_dot(kqg : uint8 const?; ksg : uint8 const?; r, mr : int64; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64; _f : KqTag_iq3s4) : float => iq3s4_grp_row_dot(kqg, ksg, r, mr, xqp, xsp, xbsp, n)
 def grp_row_dot(kqg : uint8 const?; ksg : uint8 const?; r, mr : int64; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64; _f : KqTag_k3) : float => k3_grp_row_dot(kqg, ksg, r, mr, xqp, xsp, xbsp, n)
@@ -966,6 +1026,30 @@ def k6q8_tile_gen(var yp : float?; kqg : uint8 const?; ksg : uint8 const?; xqp :
  hint(unsafe_range_check, noalias = kqg, noalias = ksg, noalias = xqp, noalias = xsp, noalias = xbsp)]
 def q40q8_tile_gen(var yp : float?; kqg : uint8 const?; ksg : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d, g, t0 : int64) : void {
     kq_tile_ref(40, yp, kqg, ksg, xqp, xsp, xbsp, n, d, g, t0)
+}
+
+[hint(unsafe_range_check, noalias = kqp, noalias = ksp, noalias = xqp, noalias = xsp, noalias = xbsp)]
+def nv4q8_gemv_gen(var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, rb, re : int64) : void {
+    kq_gemv_ref(yp, kqp, ksp, xqp, xsp, xbsp, n, rb, re, int64(nv4q8_layout_gen()), NV4_QSB, NV4_SSB, KqTag_nv4())
+}
+
+[tune_perm(mr = 8),
+ tune_perm(dot = "maddubs", width = 256, mr = 8, requires = "avx2"),
+ tune_perm(dot = "vpdpbusd", width = 256, mr = 8, requires = "avxvnni|avx512vnni"),
+ tune_perm(dot = "vpdpbusd", width = 512, mr = 16, requires = "avx512vnni,avx512bw"),
+ tune_perm(dot = "vpdpbusd", width = 256, mr = 16, requires = "avx512vnni,avx512bw"),
+ tune_companion(fn = "nv4q8_gemv_gen", gen = "dasllama_gemm_gen::nv4_gemv"),
+ tune_companion(fn = "nv4q8_layout_gen", gen = "dasllama_gemm_gen::q8q8_layout"),
+ tune_companion(fn = "nv4q8_tileform_gen", gen = "dasllama_gemm_gen::kq_tileform"),
+ tune_companion(fn = "nv4q8_amx_cfg_gen", gen = "dasllama_gemm_gen::kq_amx_cfg"),
+ tune_companion(fn = "nv4q8_witness_gen", gen = "dasllama_gemm_gen::kq_witness"),
+ tune_companion(fn = "nv4q8_panel_gen", gen = "dasllama_gemm_gen::nv4_panel"),
+ tune_companion(fn = "nv4q8_tile4_gen", gen = "dasllama_gemm_gen::nv4_tile4"),
+ tune(gen = "dasllama_gemm_gen::nv4_tile",
+      fallback = "dot_vpdpbusd_width512_mr16;dot_vpdpbusd_width256_mr8;dot_maddubs_width256_mr8;mr8"),
+ hint(unsafe_range_check, noalias = kqg, noalias = ksg, noalias = xqp, noalias = xsp, noalias = xbsp)]
+def nv4q8_tile_gen(var yp : float?; kqg : uint8 const?; ksg : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d, g, t0 : int64) : void {
+    kq_tile_ref(49, yp, kqg, ksg, xqp, xsp, xbsp, n, d, g, t0)
 }
 
 [hint(unsafe_range_check, noalias = kqp, noalias = ksp, noalias = xqp, noalias = xsp, noalias = xbsp)]
@@ -3317,7 +3401,7 @@ def private mx4q8_batch_groupn_gen(var yp : float?; wn : uint8 const?; we : uint
 // mm_kq slot: the K-quant twin of q8q8_kernel_gen/mx4q8_kernel_gen — group chunks handed to
 // the stamped kq rows core for the format, row tail (d % mr) row-major via the portable dots
 // (tail rows stay disk-order in the repack)
-def private kq_kernel_gen(fmt : int; var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d : int64) {
+def private kq_kernel_gen(fmt : int; var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d : int64) {   // nolint:STYLE037 - the stamp's ladder, one arm per KqFmt member
     let mr = kq_layout_of(fmt)
     let ng = d / mr
     var myp = yp
@@ -3370,6 +3454,10 @@ def kq_gemv_gen(var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : i
 
 def kq_gemv_gen(var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, rb, re : int64; _f : KqTag_q40) {
     q40q8_gemv_gen(yp, kqp, ksp, xqp, xsp, xbsp, n, rb, re)
+}
+
+def kq_gemv_gen(var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, rb, re : int64; _f : KqTag_nv4) {
+    nv4q8_gemv_gen(yp, kqp, ksp, xqp, xsp, xbsp, n, rb, re)
 }
 
 def kq_gemv_gen(var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, rb, re : int64; _f : KqTag_iq4xs) {
@@ -3453,6 +3541,10 @@ def kq_tile_gen(var yp : float?; kqg : uint8 const?; ksg : uint8 const?; xqp : i
     q40q8_tile_gen(yp, kqg, ksg, xqp, xsp, xbsp, n, d, g, tk)
 }
 
+def kq_tile_gen(var yp : float?; kqg : uint8 const?; ksg : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d, g, tk : int64; _f : KqTag_nv4) {
+    nv4q8_tile_gen(yp, kqg, ksg, xqp, xsp, xbsp, n, d, g, tk)
+}
+
 def kq_tile_gen(var yp : float?; kqg : uint8 const?; ksg : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d, g, tk : int64; _f : KqTag_iq4xs) {
     iq4xsq8_tile_gen(yp, kqg, ksg, xqp, xsp, xbsp, n, d, g, tk)
 }
@@ -3530,6 +3622,10 @@ def private kq_tile4_gen(var yp : float?; kqg : uint8 const?; ksg : uint8 const?
 
 def private kq_tile4_gen(var yp : float?; kqg : uint8 const?; ksg : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d, g, tk : int64; _f : KqTag_q40) {
     q40q8_tile4_gen(yp, kqg, ksg, xqp, xsp, xbsp, n, d, g, tk)
+}
+
+def private kq_tile4_gen(var yp : float?; kqg : uint8 const?; ksg : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d, g, tk : int64; _f : KqTag_nv4) {
+    nv4q8_tile4_gen(yp, kqg, ksg, xqp, xsp, xbsp, n, d, g, tk)
 }
 
 def private kq_tile4_gen(var yp : float?; kqg : uint8 const?; ksg : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d, g, tk : int64; _f : KqTag_iq4xs) {
@@ -3698,6 +3794,10 @@ def private kq_panel_gen(kqg : uint8 const?; ksg : uint8 const?; mr, nsb, n, ngr
     q40q8_panel_gen(kqg, ksg, mr, nsb, n, ngr, dst)
 }
 
+def private kq_panel_gen(kqg : uint8 const?; ksg : uint8 const?; mr, nsb, n, ngr : int64; var dst : uint16?; _f : KqTag_nv4) {
+    nv4q8_panel_gen(kqg, ksg, mr, nsb, n, ngr, dst)
+}
+
 def private kq_panel_gen(kqg : uint8 const?; ksg : uint8 const?; mr, nsb, n, ngr : int64; var dst : uint16?; _f : KqTag_iq4xs) {
     iq4xsq8_panel_gen(kqg, ksg, mr, nsb, n, ngr, dst)
 }
@@ -3827,6 +3927,17 @@ def kq_registries(_f : KqTag_iq3s4) : KqRegistries {
     }
 }
 
+//! no tile registry: a declined tile would run the reference body over planes repacked at the layout companion's mr (the gate reads maxdiff nan)
+def kq_registries(_f : KqTag_nv4) : KqRegistries {
+    static_if (typeinfo module_exists(llvm_tune)) {
+        return <- KqRegistries(tile4 <- nv4q8_tile4_gen_variants(), gemv <- nv4q8_gemv_gen_variants(),
+            layout <- nv4q8_layout_gen_variants(), tileform <- nv4q8_tileform_gen_variants(), amx_cfg <- nv4q8_amx_cfg_gen_variants(),
+            witness <- nv4q8_witness_gen_variants(), panel <- nv4q8_panel_gen_variants())
+    } else {
+        return <- KqRegistries()
+    }
+}
+
 def kq_registries(_f : KqTag_k3) : KqRegistries {
     static_if (typeinfo module_exists(llvm_tune)) {
         return <- KqRegistries(tile <- k3q8_tile_gen_variants(), tile4 <- k3q8_tile4_gen_variants(), gemv <- k3q8_gemv_gen_variants(),
@@ -3908,7 +4019,7 @@ def kq_registries(_f : KqTag_iq2xxs) : KqRegistries {
 }
 
 //! the format's stamped panel companion over grp16 planes, for a caller holding the format as a run-time id
-def kq_panel_bf16(fmt : int; kqg : uint8 const?; ksg : uint8 const?; mr, nsb, n, ngr : int64; var dst : uint16?) {
+def kq_panel_bf16(fmt : int; kqg : uint8 const?; ksg : uint8 const?; mr, nsb, n, ngr : int64; var dst : uint16?) {   // nolint:STYLE037 - the stamp's ladder, one arm per KqFmt member
     let kf = kq_fmt_of_id(fmt, "kq_panel_bf16")
     kq_fmt_stamp(kf) $(F) {
         kq_panel_gen(kqg, ksg, mr, nsb, n, ngr, dst, F)
@@ -3938,7 +4049,7 @@ def kq_panel_rows_bf16(fmt : int; kqg : uint8 const?; ksg : uint8 const?; mr, ns
     delete rowf
 }
 
-def private kq_batch_cell_bf16(fmt : int; var myp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; xbp : uint8 const?; n, d, mr, TB : int64; ub, ue : int; tb0, tend : int64; ngr : int64; var pp : uint16?) {
+def private kq_batch_cell_bf16(fmt : int; var myp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; xbp : uint8 const?; n, d, mr, TB : int64; ub, ue : int; tb0, tend : int64; ngr : int64; var pp : uint16?) {   // nolint:STYLE037 - the stamp's ladder, one arm per KqFmt member
     let nsb = n / 256l
     let qsb = kq_qsb(fmt)
     let ssb = kq_ssb(fmt)
@@ -4464,7 +4575,7 @@ def private q5032q8_batch_groupn_gen(var yp : float?; wq : uint8 const?; ws : ui
 // kq_groupn slot: region-list kq GEMV, the kq twin of q8q8_groupn_gen — region-contiguous group
 // spans through the format's rows core, row tails disk-order per region. Not `private`: the
 // groupn bit-exactness gate in test_kquant drives it directly.
-def kq_groupn_gen(fmt : int; var yp : float?; kqp : uint8 const?; ksp : uint8 const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d : int64) {
+def kq_groupn_gen(fmt : int; var yp : float?; kqp : uint8 const?; ksp : uint8 const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d : int64) {   // nolint:STYLE037 - the stamp's ladder, one arm per KqFmt member
     let qsb = kq_qsb(fmt)
     let ssb = kq_ssb(fmt)
     let mr = kq_layout_of(fmt)
@@ -4570,7 +4681,7 @@ def private gen_backend(name : string) : KernelBackend {
             mm_kq = @@kq_kernel_gen, repack_kq = @@repack_kq_gen,
             kq_rows_k4 = @@k4q8_gemv_gen, kq_rows_k5 = @@k5q8_gemv_gen,
             kq_rows_k6 = @@k6q8_gemv_gen, kq_rows_q40 = @@q40q8_gemv_gen, kq_rows_iq4xs = @@iq4xsq8_gemv_gen, kq_rows_k3 = @@k3q8_gemv_gen, kq_rows_iq3s = @@iq3sq8_gemv_gen, kq_rows_iq3xxs = @@iq3xxsq8_gemv_gen, kq_rows_iq4nl = @@iq4nlq8_gemv_gen, kq_rows_k2 = @@k2q8_gemv_gen, kq_rows_iq2s = @@iq2sq8_gemv_gen, kq_rows_iq2xs = @@iq2xsq8_gemv_gen, kq_rows_iq2xxs = @@iq2xxsq8_gemv_gen,
-            kq_rows_iq3s4 = @@iq3s4q8_gemv_gen,
+            kq_rows_iq3s4 = @@iq3s4q8_gemv_gen, kq_rows_nv4 = @@nv4q8_gemv_gen,
             kq_batch = @@kq_batch_kernel_gen,
             kq_groupn = @@kq_groupn_gen, kq_batch_groupn = @@kq_batch_groupn_gen,
             b32 = gen_b32_slots(),

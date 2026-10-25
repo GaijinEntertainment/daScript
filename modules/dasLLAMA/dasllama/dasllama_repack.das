@@ -154,7 +154,7 @@ def private repack_unit_form(var kq : uint8?; var ks : uint8?; nunits, d, mr, qs
 
 //! One weight tensor's planes ([d rows x n cols] at the pointers) into the grp<mr> interleave the
 //! format's kernels read, in place - the format's `repack_grp` overload through the stamp.
-def repack_kq_grp(fmt : KqFmt; var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
+def repack_kq_grp(fmt : KqFmt; var kq : uint8?; var ks : uint8?; n, d, mr : int64) {   // nolint:STYLE037 - the stamp's ladder, one arm per KqFmt member
     kq_fmt_stamp(fmt) $(F) {
         repack_grp(kq, ks, n, d, mr, F)
     }
@@ -352,6 +352,11 @@ def repack_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64; _f : KqTag_q4
 //! iq4nl: q40's plane shapes byte for byte.
 def repack_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64; _f : KqTag_iq4nl) {
     repack_grp(kq, ks, n, d, mr, KqTag_q40())
+}
+
+[arch(at="../ARCHITECTURE_ENGINE_FORMATS_NV4.md#nv4-planes")]
+def repack_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64; _f : KqTag_nv4) {
+    repack_unit_form(kq, ks, n / KQ_SB_ELEMS, d, mr, NV4_QSB, NV4_SSB, verbatim_unit_field(2l, 8l))
 }
 
 //! iq4xs: the q40 quant gather (the disk k/k+16 pairing IS the k4 tiling) and the k4 row over

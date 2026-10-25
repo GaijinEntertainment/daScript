@@ -2876,11 +2876,10 @@ namespace das {
                 } else {
                     if (expr->subexpr->rtti_isVar()) {
                         auto evar = static_cast<ExprVar*>(expr->subexpr);
-                        // allowPromoted: pairs with the `require ?guard` check (ast_parse.cpp), which
-                        // also accepts shared das modules compiled earlier in the process
-                        auto mod = Module::requireEx(evar->name, true);
                         reportAstChanged();
-                        return new ExprConstBool(expr->at, mod != nullptr || guardModuleAvailable(evar->name));
+                        // src/ast/ARCHITECTURE.md#module-cache-read
+                        pinModuleCacheDependency(program, "module:" + evar->name);
+                        return new ExprConstBool(expr->at, isBuiltinModulePresent(evar->name));
                     } else {
                         error("unsupported module name subexpression ", expr->subexpr->__rtti, "",
                               expr->at, CompilationError::invalid_typeinfo_module_subexpression);

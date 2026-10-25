@@ -141,7 +141,7 @@ def race_q8(p : GemvFix; n, d : int) : RaceRow {
 //! a K-quant plane pair of `d` rows of `n` elements in the device layout, hashed, with its Q8_K activation row
 def kq_planes(fmt, d, n : int) : GemvFix {
     let nsb = n / 256
-    var wsh <- ws_plane(d * nsb * int(kq_dev_ssb_i(fmt) / 4l), 1u, uint(fmt) * 13u)
+    var wsh <- kq_ws_plane(fmt, d * nsb * int(kq_dev_ssb_i(fmt) / 4l), 1u, uint(fmt) * 13u)
     return <- gemv_fix(1, d, nsb, int(kq_qsb(kq_fmt_of_slot(fmt)) / 4l), uint(fmt) * 77777u, wsh, nsb, 64, 31u, 5u, 0.5, 0.25, 7)
 }
 
@@ -170,8 +170,51 @@ def race_kq(fmt : int; p : GemvFix; n, d : int) : RaceRow {
         $(bufs) { cud_gemv_enc(fmt, g_cud.stream, bufs, pc, int64(d)); })
 }
 
+//! the same race at `lanes` lanes a row (0 = the whole subgroup) in place of the rule's, both homes
+def race_kq_lanes(fmt : int; p : GemvFix; n, d : int; lanes : uint) : RaceRow {
+    var pc = GemvArgs(n = uint(n), d = uint(d), nreg = 1u, ybase = 0u, lanes_per_row = lanes)
+    let vk_armed = gemv_cls_ensure(fmt)
+    let cu_armed = cud_gemv_ensure(fmt)
+    let vk_wgs = vk_armed ? gemv_wgs(int64(d), lanes) : 0l
+    let cu_wgs = cu_armed ? cud_gemv_wgs(int64(d), lanes) : 0l
+    return race_gemv(p, d, vk_armed, cu_armed,
+        $(bufs; sizes; bits) { return gemv_cls_set(fmt, bufs, sizes, bits); },
+        $(cmd : VkCommandBuffer; var hz : VkHaz; var set_ : VkDescriptorSet) { gemv_cls_enc(fmt, cmd, hz, set_, pc, vk_wgs); },
+        $(bufs) { cud_gemv_cls_enc(fmt, g_cud.stream, bufs, pc, cu_wgs); })
+}
+
+//! `--only <fmt,...>`: the named superblock formats at the llama-8B token step's shapes, at the rule's lanes a row and at 8, 16 and the whole subgroup (a lane-rule A/B); the rows measured
+def race_only_rows(only : table<string; void>) : int {
+    var measured = 0
+    let shapes <- [(n = 4096, d = 4096), (n = 4096, d = 14336), (n = 14336, d = 4096)]
+    print("superblock decode GEMV at the llama-8B shapes, the rule's lanes a row then 8 / 16 / 32, both homes\n")
+    for (fmt in fixed_array(int(KqFmt.k4), int(KqFmt.k5), int(KqFmt.k6), int(KqFmt.iq4xs), int(KqFmt.q40), int(KqFmt.iq4nl), int(KqFmt.nv4))) {
+        continue if (!key_exists(only, "{kq_fmt_of_slot(fmt)}"))
+        for (s in shapes) {
+            var p <- kq_planes(fmt, s.d, s.n)
+            let bytes = kq_bytes(fmt, s.n, s.d)
+            let row = race_kq(fmt, p, s.n, s.d)
+            let rule = gemv_lanes_per_row(fmt, int64(s.n))
+            measured += report_race(pad_right("{kq_fmt_of_slot(fmt)} n {s.n} d {s.d} rule {rule == 0u ? 32 : int(rule)}", 30, ' '), row, "GB/s") $(us) => gbs(bytes, us)
+            for (lanes in fixed_array(8u, 16u, 0u)) {
+                let lrow = race_kq_lanes(fmt, p, s.n, s.d, lanes)
+                measured += report_race(pad_right("{kq_fmt_of_slot(fmt)} n {s.n} d {s.d} lanes {lanes == 0u ? 32 : int(lanes)}", 30, ' '), lrow, "GB/s") $(us) => gbs(bytes, us)
+            }
+            delete p
+        }
+    }
+    return measured
+}
+
 [export]
 def main {
+    let only <- only_arms()
+    if (!empty(only)) {
+        let measured = race_only_rows(only)
+        cud_shutdown()
+        require_measured(measured)
+        return
+    }
     let shapes <- [(n = 2048, d = 2048), (n = 8192, d = 2048), (n = 2048, d = 8192), (n = 2048, d = 128256)]
     var measured = 0
     print("q8 decode GEMV, one card, both discrete homes: the best of {ROUNDS} rounds of {DISPATCHES} dispatches after {WARMUPS} warmup rounds, us a dispatch, the weights a ring past {RING_BYTES >> 20l} MB\n")

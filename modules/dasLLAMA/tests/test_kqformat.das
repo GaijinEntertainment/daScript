@@ -56,6 +56,7 @@ def test_kqfmt_enum_values(t : T?) {
         t |> equal(int(KqFmt.iq3s4), 17)
         t |> equal(int(KqFmt.q4032), 18)
         t |> equal(int(KqFmt.q5032), 19)
+        t |> equal(int(KqFmt.nv4), 20)
     }
 }
 
@@ -107,6 +108,14 @@ def test_kqfmt_predicates(t : T?) {
         t |> equal(kq_ssb(KqFmt.q5032), 2l)    // per 32-BLOCK: f16 d
         t |> equal(kq_elems(KqFmt.q5032), 32l)
         t |> equal(kq_ggml_type(KqFmt.q5032), GGML_TYPE_Q5_0)
+        t |> success(kq_sb(KqFmt.nv4) && kq_sb(int(KqFmt.nv4)), "nv4 is superblock on both predicates")
+        t |> equal(kq_qsb(KqFmt.nv4), 128l)   // 128 nibble bytes a superblock, the k4 tiling
+        t |> equal(kq_ssb(KqFmt.nv4), 16l)    // sixteen UE4M3 sub-block scales a superblock
+        t |> equal(kq_elems(KqFmt.nv4), 256l)
+        t |> equal(kq_ggml_type(KqFmt.nv4), GGML_TYPE_NVFP4)
+        t |> equal(GGML_TYPE_NVFP4, 40)
+        t |> equal(kq_desc(KqFmt.nv4).schema_id, 49)
+        t |> equal(kq_desc(KqFmt.nv4).disk_bytes, 144l)   // four 36-byte disk blocks
         t |> equal(kq_desc(KqFmt.q5032).schema_id, -1)          // no kq kernel takes it by id
         for (q in range(16)) {
             t |> equal(int(Q40_LUT[q]), q - 8, "the linear codebook's level {q}")
@@ -238,7 +247,7 @@ def test_kqfmt_id_bridge(t : T?) {
 }
 
 [test]
-def test_kqfmt_elems_and_stream(t : T?) {
+def test_kqfmt_elems_and_stream(t : T?) {   // nolint:STYLE038 - one pin per KqFmt member
     t |> run("elems per stride unit: 256 for the lattice, 32 elsewhere") @(t : T?) {
         t |> equal(kq_elems(KqFmt.k4), 256l)
         t |> equal(kq_elems(KqFmt.k5), 256l)
@@ -316,6 +325,7 @@ def test_kqfmt_elems_and_stream(t : T?) {
         t |> equal(kq_stream_code(KqFmt.iq3s4), 35)
         t |> equal(kq_stream_code(KqFmt.q4032), 47)
         t |> equal(kq_stream_code(KqFmt.q5032), 48)
+        t |> equal(kq_stream_code(KqFmt.nv4), 49)
     }
 }
 
@@ -411,7 +421,7 @@ def private stamp_family(_f : KqTag_k4) : string => "k4"
 def private stamp_family(_f : KqTag_q51) : string => "q51"
 def private stamp_family(_f : auto(TT)) : string => "other:{typeinfo typename(type<TT>)}"
 
-def private stamped_family(fmt : KqFmt) : string {
+def private stamped_family(fmt : KqFmt) : string {   // nolint:STYLE037 - the stamp's ladder, one arm per KqFmt member
     var r = ""
     kq_fmt_stamp(fmt) <| $(F) {
         r = stamp_family(F)

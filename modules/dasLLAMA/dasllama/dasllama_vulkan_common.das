@@ -2968,6 +2968,9 @@ struct RLayer {
     s_actrq : VkDescriptorSet
     s_gu : VkDescriptorSet          //! the fused gate + up + act + Q8_0 requant dispatch (`Q8GemvGuN1`), where the triple is q8 with a Q8_0 feed
     gate_up_fused : bool
+    s_gu_merged : VkDescriptorSet      //! the gate + up two-region class GEMV (f1 == f3, one slab): the one-row command's one dispatch over both planes
+    s_actrq_merged : VkDescriptorSet   //! ... and its act set, the up side read `hid` past the gate's in the gate buffer
+    gu_merged : bool
     s_down : VkDescriptorSet
     s_addr_next : VkDescriptorSet
     s_addr_next_rq : VkDescriptorSet
@@ -2976,7 +2979,7 @@ struct RLayer {
     rq_next_stamp : RqStamp         //! the next-layer site's: the following head's feed form, the row stored for a recurrent head
     // host-visible per-dispatch buffers: the class GEMV region pairs
     m_q, m_k, m_v, m_wo : HostBuf
-    m_gate, m_up, m_down : HostBuf
+    m_gate, m_up, m_gu, m_down : HostBuf
     made : bool
     // the layer's attention geometry (an attention layer's class: gemma-4's sliding and global layers differ in head size and kv width)
     hs, qd, kvd, hid, rot : int64   //! head size, query width, kv width, dense FFN width, rotary width per head

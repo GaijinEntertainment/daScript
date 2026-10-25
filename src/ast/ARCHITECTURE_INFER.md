@@ -2,7 +2,7 @@
 
 Companion to `ARCHITECTURE.md` in this folder; section numbers are unique across the family.
 
-## 5. Overloads of `=`, `<-` and `:=` (`ast_infer_type_op.cpp`, `ast_infer_type_function.cpp`) {#assign-operator-lookup}
+## Overloads of `=`, `<-` and `:=` (`ast_infer_type_op.cpp`, `ast_infer_type_function.cpp`) {#assign-operator-lookup}
 
 An `ExprCopy` or `ExprMove` whose `no_promotion` flag is clear first looks for a user function
 named `=` or `<-` whose two parameters take the left type as a mutable reference and the right

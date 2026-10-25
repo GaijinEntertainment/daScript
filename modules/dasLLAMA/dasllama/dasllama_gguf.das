@@ -14,6 +14,7 @@ require daslib/strings_convert     // try_to_int (validating shard-index parse)
 require dasllama/dasllama_env       // g_env_engine.mtp_head — the split NextN head sidecar override
 require daslib/f16_cvt public  // f16_to_f32 / f32_to_f16 (re-export: whisper/vad/parakeet/audio callers)
 require dasllama/dasllama_convert public   // the pure codec layer (readers/dequants/transcodes/encoder) — split out 2026-07-29
+require dasllama/dasllama_gpu_math   // ue4m3_half_f32 - the NVFP4 reader's sub-block scale decode
 require dasllama/dasllama_par       // maybe_parallel_for (+ its emitted dispatch counters) — the transcode hot loops thread when a jobque is up
 require dasllama/dasllama_math      // e8m0_half — the MXFP4 scale decode
 
@@ -52,6 +53,7 @@ def ggml_type_bytes(gt : int; n : int64) : int64 {
     if (gt == GGML_TYPE_Q5_1) return n / 32l * 24l
     if (gt == GGML_TYPE_Q8_0) return n / 32l * 34l
     if (gt == GGML_TYPE_MXFP4) return n / 32l * 17l
+    if (gt == GGML_TYPE_NVFP4) return n / 64l * 36l
     if (gt == GGML_TYPE_Q2_K) return n / 256l * 84l
     if (gt == GGML_TYPE_Q3_K || gt == GGML_TYPE_IQ3_S) return n / 256l * 110l
     if (gt == GGML_TYPE_Q4_K) return n / 256l * 144l
@@ -79,7 +81,7 @@ def kq_disk_bytes(f : KqFmt; n : int64) : int64 => ggml_type_bytes(kq_ggml_type(
 
 let private GGML_TYPE_NAMES <- {
     GGML_TYPE_F32 => "F32", GGML_TYPE_F16 => "F16", GGML_TYPE_BF16 => "BF16",
-    GGML_TYPE_Q4_0 => "Q4_0", GGML_TYPE_Q5_0 => "Q5_0", GGML_TYPE_Q5_1 => "Q5_1", GGML_TYPE_Q8_0 => "Q8_0", GGML_TYPE_MXFP4 => "MXFP4",
+    GGML_TYPE_Q4_0 => "Q4_0", GGML_TYPE_Q5_0 => "Q5_0", GGML_TYPE_Q5_1 => "Q5_1", GGML_TYPE_Q8_0 => "Q8_0", GGML_TYPE_MXFP4 => "MXFP4", GGML_TYPE_NVFP4 => "NVFP4",
     GGML_TYPE_Q2_K => "Q2_K", GGML_TYPE_Q3_K => "Q3_K", GGML_TYPE_Q4_K => "Q4_K", GGML_TYPE_Q5_K => "Q5_K", GGML_TYPE_Q6_K => "Q6_K",
     GGML_TYPE_IQ2_XXS => "IQ2_XXS", GGML_TYPE_IQ2_XS => "IQ2_XS", GGML_TYPE_IQ2_S => "IQ2_S",
     GGML_TYPE_IQ3_XXS => "IQ3_XXS", GGML_TYPE_IQ3_S => "IQ3_S", GGML_TYPE_IQ4_NL => "IQ4_NL", GGML_TYPE_IQ4_XS => "IQ4_XS",
@@ -775,6 +777,7 @@ def gguf_kq_fmt_of_type(gtype : int) : KqFmt {
     if (gtype == GGML_TYPE_IQ2_S) return KqFmt.iq2s
     if (gtype == GGML_TYPE_IQ2_XS) return KqFmt.iq2xs
     if (gtype == GGML_TYPE_IQ2_XXS) return KqFmt.iq2xxs
+    if (gtype == GGML_TYPE_NVFP4) return KqFmt.nv4
     return KqFmt.q8
 }
 
@@ -858,6 +861,24 @@ def gguf_read_tensor_f32(m : GGUFMeta; srcbytes : array<uint8> | #; name : strin
                 dst[dst_off + blk * 32l + k + 16l] = float((b >> 4) - 8) * d
             }
             bo += 16l
+        }
+    } elif (gtype == GGML_TYPE_NVFP4) {
+        if (src_off % 64l != 0l || expect_n % 64l != 0l) {
+            panic("gguf: tensor '{name}' NVFP4 slice [{src_off}, +{expect_n}) is not block-aligned")
+        }
+        let lut = mx4_lut()
+        let nb = expect_n / 64l
+        var bo = base + (src_off / 64l) * 36l
+        for (blk in range64(nb)) {
+            for (s in range64(4l)) {
+                let sc = ue4m3_half_f32(uint(bytes[bo + s]))
+                for (j in range64(8l)) {
+                    let b = int(bytes[bo + 4l + s * 8l + j])
+                    dst[dst_off + blk * 64l + s * 16l + j] = float(int(lut[b & 15])) * sc
+                    dst[dst_off + blk * 64l + s * 16l + 8l + j] = float(int(lut[b >> 4])) * sc
+                }
+            }
+            bo += 36l
         }
     } elif (gtype == GGML_TYPE_Q5_0) {
         // block of 32: fp16 scale d (2 bytes) + 4 bytes of high bits + 16 bytes (split-half

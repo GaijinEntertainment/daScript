@@ -175,6 +175,8 @@ tensor tiles, the routed GEMV and tiles, the token gather. So a host that sums r
 beside a Vulkan device reads the fast planes, and the device reads the same bytes; under Metal
 `auto` keeps the grid, which streams 17% fewer bytes a superblock.
 
+The nv4 member - its planes' bytes and the per-tensor scale beside them - is `ARCHITECTURE_ENGINE_FORMATS_NV4.md`.
+
 ### The load and image rail {#the-load-and-image-rail}
 
 **`dasllama_load.das`** is the GGUF load walk: metadata to `Config`, the plane layout, disk-format

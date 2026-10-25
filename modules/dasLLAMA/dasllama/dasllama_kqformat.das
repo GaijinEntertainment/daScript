@@ -28,7 +28,9 @@ require daslib/strings_boost
 //! plane form); q4032 = native Q4_0 per-32 planes (a Q4_0 plane off
 //! the 256 lattice - iq4nl32's plane form under the linear codebook);
 //! q5032 = native Q5_0 per-32 planes on any 32-multiple row
-//! (q51's quant plane - 16 nibble bytes + the qh word - under one f16 d, weight d x (q - 16)). New members append — the int value is the device stack tag and the image plane id.
+//! (q51's quant plane - 16 nibble bytes + the qh word - under one f16 d, weight d x (q - 16)); nv4 = native NVFP4 superblock
+//! planes (four 64-weight disk blocks a superblock: e2m1 nibbles re-paired into the k4 tiling, sixteen UE4M3 scales - one a
+//! 16-weight sub-block - verbatim). New members append — the int value is the device stack tag and the image plane id.
 enum KqFmt : uint8 {
     q8
     k4
@@ -50,6 +52,7 @@ enum KqFmt : uint8 {
     iq3s4
     q4032
     q5032
+    nv4
 }
 
 //! One empty tag type per KqFmt member - the overload key of every per-format function family
@@ -75,6 +78,7 @@ struct KqTag_iq4nl32 {}
 struct KqTag_iq3s4 {}
 struct KqTag_q4032 {}
 struct KqTag_q5032 {}
+struct KqTag_nv4 {}
 
 [call_macro(name = "kq_fmt_stamp")]
 class KqFmtStamp : AstCallMacro {
@@ -155,7 +159,7 @@ class GridWordsMacro : AstFunctionAnnotation {
 }
 
 //! the formats whose cm2 e stamp is the m stamp byte for byte (their k step is 64, the m tile's), so the e ladder takes the m class; the five grid-codebook formats and mx4 step 32 on the e column and keep a stamp of their own
-let KQ_CM2E_ALIASES_M = "q8 k4 k5 k6 q40 iq4xs iq3s4 iq4nl k3 k2 q51 q4032 q5032 iq4nl32"
+let KQ_CM2E_ALIASES_M = "q8 k4 k5 k6 q40 iq4xs iq3s4 iq4nl k3 k2 q51 q4032 q5032 iq4nl32 nv4"
 
 def kq_cm2e_aliases_m(fmt_name : string) : bool => word_in(KQ_CM2E_ALIASES_M, fmt_name)
 
@@ -397,6 +401,7 @@ let GGML_TYPE_Q6_K = 14
 let GGML_TYPE_IQ4_XS = 23
 let GGML_TYPE_BF16 = 30
 let GGML_TYPE_MXFP4 = 39
+let GGML_TYPE_NVFP4 = 40
 // ... and the ids the load declines by name: no reader arm and no `KqFmt` member carries them
 let GGML_TYPE_Q4_1 = 3
 let GGML_TYPE_IQ1_S = 19
@@ -437,7 +442,7 @@ let KQ_MX4_SBYTES = 1u
 
 //! The descriptor row of a format - a new format is one row here plus its planes; every
 //! per-format accessor below is a field of this row.
-def kq_desc(f : KqFmt) : KqDesc {
+def kq_desc(f : KqFmt) : KqDesc {   // nolint:STYLE037 - one arm per KqFmt member, the honest shape
     if (f == KqFmt.k4) {
         return KqDesc(fmt = f, qsb = K4_QSB, ssb = K4_SSB, elems = KQ_SB_ELEMS, disk_bytes = 144l, ggml_type = GGML_TYPE_Q4_K, schema_id = 4, stream_code = 4)
     }
@@ -495,6 +500,9 @@ def kq_desc(f : KqFmt) : KqDesc {
     if (f == KqFmt.q5032) {
         return KqDesc(fmt = f, qsb = Q5032_QB, ssb = Q5032_SB, elems = KQ_B32_ELEMS, disk_bytes = 22l, ggml_type = GGML_TYPE_Q5_0, schema_id = -1, stream_code = Q5032_STREAM_TAG)
     }
+    if (f == KqFmt.nv4) {
+        return KqDesc(fmt = f, qsb = NV4_QSB, ssb = NV4_SSB, elems = KQ_SB_ELEMS, disk_bytes = 144l, ggml_type = GGML_TYPE_NVFP4, schema_id = 49, stream_code = 49)
+    }
     return KqDesc(fmt = KqFmt.q8, qsb = 0l, ssb = 0l, elems = KQ_B32_ELEMS, disk_bytes = 34l, ggml_type = GGML_TYPE_Q8_0, schema_id = -1, stream_code = 0)
 }
 
@@ -541,7 +549,7 @@ def kq_blocks_for(n, rows : int64; fmt : int) : int64 {
 }
 
 //! the KqFmt slot count of a per-format table (int(KqFmt) indexes it; members append, so the last is the bound)
-let KQ_FMT_COUNT = int(KqFmt.q5032) + 1
+let KQ_FMT_COUNT = int(KqFmt.nv4) + 1
 
 //! the format an `int(KqFmt)` slot names - the per-format slot the GPU drivers and the image's plane tables index by; the caller holds the slot inside the enum's range
 def kq_fmt_of_slot(slot : int) : KqFmt => unsafe(reinterpret<KqFmt>(uint8(slot)))
@@ -620,6 +628,8 @@ let Q4032_QB = 16l     // Q4_0 quant plane PER 32-BLOCK: 16 nibble bytes (elemen
 let Q4032_SB = 2l      // Q4_0 scale plane PER 32-BLOCK: f16 d
 let Q5032_QB = 20l     // Q5_0 quant plane PER 32-BLOCK: q51's form - 16 nibble bytes (element j low, j + 16 high), then the qh word
 let Q5032_SB = 2l      // Q5_0 scale plane PER 32-BLOCK: f16 d
+let NV4_QSB = 128l     //! NVFP4 quant plane: 128 nibble bytes a superblock, in the k4 tiling
+let NV4_SSB = 16l      //! NVFP4 scale plane: 16 UE4M3 bytes a superblock, one a 16-weight sub-block
 //! a per-32 block's nibble bytes: elem j low in byte j, j + 16 high
 let B32_NIB_BYTES = int64(KQ_B32_QWORDS) * 4l
 //! q51's and q5032's qh word after the nibbles: elem k's bit 4 at k
@@ -672,6 +682,9 @@ let Q40_LUT = q40_lut()
 //! The MXFP4 nibble codebook: the e2m1 values DOUBLED (nibble -> +-{0, .5, 1, 1.5, 2, 3, 4, 6} x 2, OCP MX
 //! spec) as int8; the halved E8M0 scale (`e8m0_half`) compensates the doubling.
 def mx4_lut() : int8[16] => fixed_array<int8>(0, 1, 2, 3, 4, 6, 8, 12, 0, -1, -2, -3, -4, -6, -8, -12)
+
+//! mx4_lut's main-context copy (tests, oracles).
+let MX4_LUT = mx4_lut()
 
 //! The iq3s4 index of one signed odd IQ3_S weight value.
 def iq3s4_index(v : int) : int => (v + 15) / 2

@@ -10,6 +10,7 @@ module _cuda_probe_fixture shared public
 require vulkan
 require daslib/fio
 require math
+require daslib/strings_boost
 require dasllama/dasllama_vulkan_common
 require dasllama/dasllama_cuda_common
 require _vk_probe_fixture
@@ -118,4 +119,20 @@ def require_measured(measured : int) {
         print("no arm measured\n")
         unsafe(exit(1))
     }
+}
+
+//! `--only <name,name,...>` off the command line as a set: a race's arm filter (format names, a shape switch), empty = every arm
+def only_arms : table<string; void> {
+    var only : table<string; void>
+    var take = false
+    for (a in get_command_line_arguments()) {
+        if (take) {
+            for (f in split(a, ",")) {
+                only |> insert(f)
+            }
+            take = false
+        }
+        take = a == "--only"
+    }
+    return <- only
 }

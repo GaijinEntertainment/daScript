@@ -63,6 +63,8 @@
 		"quantize_q8kv_row" : "plain",
 		"axpy_f16" : "vec16_u2",
 		"q40q8_tile_gen" : "dot_amx_bf16_width512_mr16_kstep1_nrsplit2",
+		"nv4q8_tile_gen" : "dot_vpdpbusd_width512_mr16",
+		"nv4q8_gemv_gen" : "dot_vpdpbusd_width512_mr16",
 		"dot_q8q8kv" : "vec16_u2",
 		"dot_q8q8_laneq4x4" : "",
 		"dot_bf16" : "vec8_u2",

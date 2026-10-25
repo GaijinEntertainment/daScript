@@ -6803,6 +6803,75 @@ device tier `vulkan`; `followup_general.md` item 227), so every figure is direct
 - **The pod's cells on the Linux build.** `tests/cuda` 79 of 79, `test_cuda_kernels.das` 44 of 44, the CUDA llama parity
   file 19 of 22 (three unstocked mints skip), the codec file 6 of 6, the batch file 6 of 6, the segments file 2 of 2 with
   the recurrent and E-series cells skipping under the CUDA ask by design.
+- **The MMQ leaves against the cm2 tiles, the 5060 Ti at locked clocks** (`harness/gemm_cuda_vs_vulkan.das -- --only
+  <fmt>`, the 1B window's three shapes at 512 rows, the Q4_K cm2 tiles as the control; `followup_general.md` item 245
+  carries the pick). Per kernel: the Q8 leaf 67 to 74 TFLOP/s, Q4_0 65 to 72, Q4_K 63 to 66, IQ4_XS 63 to 69, IQ4_NL 60
+  to 65, Q5_0 51 to 55, Q5_1 47 to 50, the Q4_K cm2 tiles 41 to 55; a Q6_K leaf on the k16 int8 product 36.8 to 38.9
+  against the Q6_K cm2 tile's 38 to 51 (the leaf is not kept - MMQ is a per-32-scale property). The windows
+  (`lcpp_bench`, the command above, `DASLLAMA_CUDA_MMQ=1` against `=0`): pp512 MMQ against cm2 27150 against 20310 on
+  Llama 1B Q8_0, 10050 against 7065 on Llama 3B Q8_0, 7045 against 4883 on Qwen3-4B Q8_0, 8019 against 5653 on Phi-3.5
+  Q8_0; the Llama 1B windows 1.27x (Q4_0), 1.23x (IQ4_XS), 1.16x (Q4_K_M), 1.15x (IQ4_NL), 1.05x (Q5_0) and 0.96x (Q5_1)
+  over the tiles; on the pod 50751 against 39945 on the 1B Q8_0 and 17174 against 14559 on the 3B. tg128 the same on both
+  forms everywhere.
+- **The FP4 leaf (`CuNv4Mmq`) and its feeds, the 5060 Ti at locked clocks** (`harness/gemm_cuda_vs_vulkan.das -- --only
+  nv4,q40`, 512 rows, the 1B window's three shapes; commit 9a69dcc10a the leaf, 158c85196c the feeds, a7657463c9 the strip
+  code). The leaf 39.2 / 141.8 / 144.8 us = 110 / 121 / 119 TFLOP/s against the Q4_0 int8 leaf's 66.0 / 252.0 / 240.2 us
+  (65 / 68 / 72) and the cm2 f16 tiles' 101 to 111 / 307 to 325 / 381 to 419 us, bounded against the e2m1 x UE4M3
+  reference at 5e-6; one block of 512 threads an SM at 86 registers and 45056 B of shared. The 2-block form (`min_blocks =
+  2`, 64 registers) read 42.8 / 150.7 / 162.0 us - 9 to 12% slower, spilling; not kept. The feeds on the 8B NVFP4 window
+  (nsys 2026.4.1, `DASLLAMA_CUDA_PDL=0`): a lane a k64 of strided scalar loads read `CuFp4ActRows` 534 us a call,
+  `CuClsArAddRmsFp4B` 68, `CuFp4Rows` 32 (the Q8 twins 142 and 42; the feeds 22 ms of the window's 64 ms of GEMM); a lane
+  a float4 chunk reads 175 / 51 / 13 us, and the window went 5472 to 6265 pp512. A row kept in `float4[16]` registers
+  between the two passes read 185 / 22 us for the act and plain feeds - no gain and a loss; not kept. The rows: Llama
+  3.2-1B NVFP4-local pp512 19821 / tg128 400.7 on the cm2 tiles, 26113 / 404 on the leaf, our Q4_0-local 25546 / 413.0
+  (llama.cpp `external`, native FP4: 26594 / 380.4; Q4_0 19580 / 402.7); Meta-Llama-3.1-8B NVFP4-local 5472 -> 6265 / 83.0
+  -> 82.4, Q4_0-local 4520 / 84.8 (llama.cpp `external`: 5948 / 86.0; Q4_0 3691 / 86.3). The pod (boost): 1B NVFP4 55133 /
+  733, Q4_0 49114 / 757 (llama.cpp `external`: 41921 +/- 13663 / 700; Q4_0 37702 +/- 5962 / 732); 8B NVFP4 11787 -> 14072 /
+  150.3, Q4_0 8017 / 157.7 (llama.cpp `external`: 12047 / 160.2; Q4_0 7903 / 158.8).
+- **The nv4 decode GEMV's nibble decode, the 5060 Ti at locked clocks** (`harness/gemv_cuda_vs_vulkan.das -- --only
+  nv4,q40`, the 8B shapes at the rule's lanes and 8 / 16 / 32, CUDA event us; commit 516e4e1fb8). The SWAR formula at the
+  rule's lanes: nv4 27.75 / 84.33 / 88.84 against Q4_0 26.48 / 84.14 / 84.77 (4.8 / 0.2 / 4.8% behind - the whole of the 3%
+  tg gap, weighted). The byte permute at 32 lanes a row: nv4 26.60 / 84.13 / 85.02 against Q4_0 26.47 / 84.07 / 84.41
+  (0.5 / 0.1 / 0.7%). The 8B token step back to back (`lcpp_bench -p 16 -n 128 -r 5`, clocks 2392): NVFP4 80.30 +/- 2.24
+  against Q4_0 80.80 +/- 2.35 tok/s. The pod after it: 8B NVFP4 tg128 150.3 -> 154.7, Q4_0 157.8.
+- **The gate and up GEMVs as one dispatch at one row** (`CudLayer.gu_merged`, commit 634d570472; the Vulkan twin
+  `RLayer.gu_merged`, 3d905bc190). Per layer under nsys with `DASLLAMA_CUDA_PDL=0` on the 8B token step: ours 332 us
+  against the reference build's 347 traced; its `rms_norm_f32` 3.2 + `quantize_q8_1` 2.9 x 5 against our `ArAddRmsRqK`
+  4.3 and requants 0.9 to 1.3; its `flash_attn_ext_f16` 5.5 + `flash_attn_combine_results` 5.8 against our 7.0; its
+  `rope_neox` 1.0 x 2 + `k_set_rows` 1.0 against our 1.5; the one line ours lost, gate + up as two GEMV launches of 83.3
+  against its one fused `mul_mat_vec_q` launch of 162.4. (Under `DASLLAMA_CUDA_PDL=1` the trace counts a kernel's
+  `griddepcontrol.wait` as its span - every small kernel read 6 to 14 us and the lever was a phantom.) The A/B, `lcpp_bench
+  -p 16 -n 128 -r 5` at clocks 2392 on the 8B: NVFP4 84.02 -> 84.35, Q4_0 84.09 -> 84.53 tok/s; the pod 8B NVFP4 tg128
+  154.7 -> 155.9, Q4_0 157.8 -> 158.9 (llama.cpp `external` Q4_0 158.8). The Vulkan twin on the 5060 Ti: Q4_0 78.10 ->
+  78.49, NVFP4 77.55 -> 79.00. The merge sizes the gate buffer `hid x 4 x max(nb, 2)` bytes in place of `hid x 4 x nb` -
+  at nb = 1 one more f32 row (57344 bytes on the 8B, 32768 on the 1B), no change above it; its wall-clock before and
+  after is the A/B above.
+- **W4A4's perplexity cost on the FP4 leaf** (`harness/w4a4_ppl.das -- -m <nv4 gguf> --text wiki.test.raw --windows
+  <n> --ctx 512 --stride 400`, `DASLLAMA_GPU=1 DASLLAMA_CUDA=1 DASLLAMA_ALLOW_UNTUNED=1`; the FP4 leaf through
+  `set_cuda_mmq_pin(1)` against the f16 tiles through `set_cuda_mmq_pin(0)` on the same windows and the same nv4 weights,
+  the next token scored off the last row, the delta in nats +/- its standard error; commit a7657463c9). The nearest strip
+  code: 1B (600 windows) 16.74 against 15.37, +0.0858 +/- 0.0163 (+9.0%); 8B (300 windows) 8.855 against 8.491, +0.0420
+  +/- 0.0140 (+4.3%). The least-squared-error pick over five codes: 1B 17.17 against 15.37, +0.1111 +/- 0.0156 (+11.75%);
+  8B 8.00 against 7.59, +0.0527 +/- 0.0169 (+5.4%); the 8B pp512 6265 -> 5872 - worse on both counts, not kept. The nearest
+  code stepped up once where it saturates the strip's largest value (`fp4_strip_code`, kept): 1B 16.23 against 15.37,
+  +0.0550 +/- 0.0166 (+5.7%); 8B 7.80 against 7.59, +0.0277 +/- 0.0188 (+2.8%); the argmax 267 of 271 and 153 of 153. The
+  reference build's own rows (`llama-perplexity -c 512` on wikitext-2 test, the CUDA build b10660): 8B Q8_0 7.3282,
+  NVFP4-local 8.3443 (its W4A4 at batch 512) against 8.0135 at `-ub 8` (weight-only), Q4_0-local 7.7523, Q4_K_M 7.4978; 1B
+  Q8_0 14.0135, NVFP4-local 17.0224 against 16.0061 at `-ub 8`, Q4_0-local 16.0415, Q4_K_M 14.5497; a 1B NVFP4 mint with an
+  imatrix 17.0224 - identical, its quantizer reads no imatrix for this type. The format's weights sit 6 to 8% behind Q4_0
+  on these models by that quantizer; W4A4 adds 2.8 to 5.7% on ours and 4.1 to 6.3% on the reference build.
+- **The lasting allocations the FP4 leaf and the nv4 planes add** (`crd_pf_setup`, `np` the window's rows; computed from
+  the geometry, no device measurement). The FP4 feeds, when a plane takes the leaf: `np x (dim + qd + hid) x (1/2 + 1/16)
+  + 12 np` bytes - the nibbles, a UE4M3 code a strip of sixteen, an f32 row scale a feed - 3545088 at np 512 on the 1B
+  (dim 2048, qd 2048, hid 8192), 14180352 at 2048; 6494208 and 25976832 on the 8B (4096, 4096, 14336). The Q8 feeds' block
+  sums (`pf_xsum`, `pf_asum`, `pf_hsum`), when a plane takes a min-term leaf: `np x (dim + qd + hid) / 8` bytes - 786432
+  at np 512 on the 1B. `Model.site_scale`: one f32 a `.scale` tensor of the file, in the model and the image.
+- **The CUDA resident bars** (`tests/_cuda_feed.das`, of the step's max |logit| against the CPU chain). The dense
+  carriers' `LOGIT_BAR_REL` 0.06 holds the Llama 1B Q8_0 / Q4_K_M / Q5_1 / Q5_0 / IQ4_XS / IQ4_NL files, the Phi-3.5-mini
+  Q4_K_M (its two-window arm; the one-window arm's steps 41 and 44 read 2.64 and 2.75 of 34 and 42 - 7.7 and 6.6% - the
+  argmax the CPU's, `followup_general.md` item 244) and Q8_0 files, the Qwen3-0.6B and 4B files, and the 1B NVFP4 mint
+  on the cm2 tiles. The 1B NVFP4 mint on the FP4 leaf holds `LOGIT_BAR_REL_FP4` 0.14: the arm's worst step 0.135, the
+  tightest one-step-off control 0.158 - W4A4's activation step, which the f32 chain does not take.
 
 ### From the Pocket TTS small-model leg (2026-10-23, Apple M5 Max, the box profile re-minted after the macOS update; `-jit`, the JIT tier, `DAS_TUNE_POLICY` unset; `direction-grade`)
 

@@ -2174,15 +2174,28 @@
     `llama-bench` builds whose sibling `llama-mtmd-cli` `benchmarks/setup_lcpp_ref.das` patches and builds at
     `DEFAULT_REF_SHA`, no other environment setting.
 
-226. **The CUDA home's stamps that wait on their families.** Eleven discrete templates have a Vulkan stamp and no CUDA
+225. **The Granite Rapids board's prefill trails llama.cpp's further than every other board's.** On AWS m8i
+    (Xeon 6975P-C, 8 cores with SMT, the x86-amx class) the release-17 pp512 ratios read Qwen3.6-35B-A3B UD-Q4_K_M
+    0.91x (119.7 tok/s), gpt-oss-20b 1.95x, gemma-4-E4B 1.21x, Qwen3-VL-4B 1.60x, where the Zen4 board (EPYC 9R14,
+    16 cores) reads 2.34x (424.8), 2.55x, 1.82x, 2.45x and Graviton4 2.26x, 2.16x, 1.76x, 1.84x; decode sits with
+    the other boards (`PERF_LEDGER.md`, the 2026-10-22 release-17 boards entry). Against its own release-16 rows the
+    board's prefill moved up 1-12 %, so this is the AMX prefill path's
+    standing, not a regression; the routed 35B, far under half the Zen4 rate, says the expert GEMMs lose most -
+    an AMX tile load off a 64-byte boundary (an expert slice, a panel's row stride, the bf16 activation plane) is a
+    candidate. Done = a `forward_profile` of the 35B and E4B prefill on a c8i/m8i box naming the losing kernels, the
+    tile loads' alignment checked on the served planes, and the pp512 ratios at the Zen4 board's standing - `bin/daslang
+    modules/dasLLAMA/performance/gen_bench_records.das -- -w llm --backend cpu -o <model>` over the four carriers on an
+    AWS m8i box, `--ref-clean` naming the clean-cpu `llama-bench` `benchmarks/setup_lcpp_ref.das` builds at
+    `DEFAULT_REF_SHA`, no other environment setting.
+
+226. **The CUDA home's stamps that wait on their families.** Ten discrete templates have a Vulkan stamp and no CUDA
     stamp (`DISCRETE_ONE_HOME_STAMPS` in `REVIEW.das` names them for the stamp census), each a family the CUDA home's
     dense slice does not serve yet: `DaAttnBWT` and `DaAttnBH128T` (the batched attention at wide and 128 heads; the
     CUDA window declines past 512 and sends every other width to `DaAttnBT`), `F32RowsKhrT` (the MoE router's f32
-    rows), `FaH256T` and `FaH512T` (the flash tiles past 128; the owed h96 stamp joins them - Phi's head), `Mx4Cm2T`
-    and `Mx4GemvGuT` (MXFP4), `Q8GemvPleActT` (gemma-3n's PLE), `ArCombBase` and `ArCombG4T` (the routed residual
-    combines), and `QknRopeKvT` (the q/k-normed rope store); the 19 CUDA leaves the home never
-    dispatched (the sink attention stamps, the routed combines, the paired N-column Q8 forms, the biased act, the f32
-    gather, the q/k-normed rope stores) went with them. Done = each returns as one leaf the day the CUDA driver
+    rows), `FaH256T` and `FaH512T` (the flash tiles past 128), `Mx4Cm2T`
+    and `Mx4GemvGuT` (MXFP4), `Q8GemvPleActT` (gemma-3n's PLE), and `ArCombBase` and `ArCombG4T` (the routed residual
+    combines); the CUDA leaves the home never dispatched (the sink attention stamps, the routed combines, the paired
+    N-column Q8 forms, the biased act, the f32 gather) went with them. Done = each returns as one leaf the day the CUDA driver
     dispatches it, under `REVIEW_GPU_KERNEL_CLASSES.md`'s stamp census, and its name leaves the gate's set.
 
 227. **The CUDA home answers to the Vulkan home's name in the records and the image rail.** `lcpp_bench` stamps every
@@ -2256,12 +2269,6 @@
     `tests/test_cuda_kernels.das`; the rest run under the model-backed parity files alone. Done = one oracle cell per
     CUDA-only leaf in `test_cuda_kernels.das` with its negative control, under `tests/REVIEW_KERNEL_CELLS.md`.
 
-236. **The CUDA cm2 l tile accumulates in f16.** The Vulkan twin accumulates in f32; on the hashed fixture at the rate
-    shapes the f16 accumulator's worst miss is 0.5 to 1.4 percent of the largest output against the cell's 2e-3 bar, so
-    the rate cell runs on a fixture f16 holds exactly and the l-tile cells at k 576 and 2048 keep the bar with no
-    derivation. Done = the f32 accumulator raced against the f16 one on the three rate shapes (`gemm_cuda_vs_vulkan`),
-    f32 kept only where it is no slower, and a per-k error derivation on the l-tile cells either way.
-
 237. **The small Pocket models are dispatch-bound on the GPU seats and overhead-bound on the CPU chain.** A frame is the
     same forty-odd dispatches whatever the backbone's width (per layer the norm, the fused projection, the rope-store,
     the attention row, the out projection, the norm, the two ffn GEMVs; then the head's dozen), so the 2m's 112-wide
@@ -2334,3 +2341,94 @@
     rig exe; the references `llama-bench` clean-cpu and stock builds at `benchmarks/setup_lcpp_ref.das`'s
     `DEFAULT_REF_SHA` through `LLAMA_BENCH_CLEAN` / `LLAMA_BENCH_STOCK`, `llama-mtmd-cli` beside the stock build;
     `ARCHITECTURE_MEASUREMENT_AUDIO.md#asr-cpu-references` for the ASR pair).
+
+243. **Phi-4-mini: a partial rotary under per-pair rope factors - whenever the work is in the area, not sooner.** The
+    phi3 family's second head width (128 over 24 heads)
+    rotates 96 of the head under the longrope factors, and the loader refuses the pair (`dasllama_load.das`: the arch
+    carries no `partial_rope` opt-in, and the `_part` leaves' factor pointer is fail-closed - "partial rotary combined
+    with per-pair rope factors is not supported"), so `microsoft_Phi-4-mini-instruct-Q8_0.gguf` (the manifest's row)
+    loads nowhere. Done = `partial_rope` on the phi3 arch, the factor tensor read at `rope_dim / 2` pairs, the rope
+    table and the `_part` leaves taking the factors over the rotated span, the CUDA token command's rope taking the
+    layer's `rot` (it passes the head today, as no partial-rope dense model reached it), and the file served on the
+    CPU and both discrete homes through the forced-feed form, within the phi bar.
+
+244. **Phi-3.5-mini's one-row steps after a short prompt sit past the llama bar on the CUDA home.** After the 40-token
+    `resident_prompt` the steps at positions 41 and 44 read 2.64 and 2.75 of a 34 and 42 max logit apart from the CPU
+    chain (7.7 and 6.6 percent against the 6 percent bar), the same on the h96 flash tile and on the chunked pair, the
+    argmax the CPU's at every step; the two-window prompt's steps hold the bar at 0.5 to 1.5, and the fixture's
+    one-step-off rows sit 3.17 of 49 apart at one of them, so a wider bar lets the control through (the readings: a
+    one-window `cuda_forced_feed` arm of `tests/test_gpu_resident_cuda_phi3.das` run through `tests/run.das` on the 5060
+    Ti, not kept in the file; `PERF_LEDGER.md`, the dasCUDA arc's "CUDA resident bars" entry).
+    `tests/test_gpu_resident_cuda_phi3.das` holds the two-window arm of the Q4_K_M file meanwhile. The site is the
+    K-quant one-row decode chain, not the attention: on the Q8_0 file both homes read 0.21 to 0.73 of bars of 1.9 to
+    2.9 at every step (the file's cells in the same test), while on the Q4_K_M file the Vulkan home reads 1.40 and 2.42
+    at the same two steps (bars 2.06 and 2.50) and the CUDA home 2.64 and 2.75, the f32 mirror moving neither. Done =
+    the CUDA home's K-quant one-row chain brought to the Vulkan home's rounding at that step - the arms the K-quant chain
+    alone takes (`followup_vulkan.md` item 75's list: the split add+rms and the Q8_K requant a site) compared between
+    the homes on the phi shapes - and the one-window arm of the Q4_K_M file back at the llama bar.
+
+245. **The int8 MMQ window GEMM serves the 32-wide-scale formats but Q5_K; the rest stay on the f16 tiles.** `MmqT`
+    stages raw Q8_0 blocks, the superblock nibbles of Q4_K (the min term folded as an f16 product every sixteen blocks),
+    IQ4_XS and IQ4_NL (the codebook) and Q4_0 (less eight), and the per-32 blocks of Q5_1 (its m the same way), Q5_0 and
+    the off-lattice Q4_0 and IQ4_NL, against Q8-quantized activations on the int8 tensor cores, and `crd_site_mmq` picks
+    per plane - the Q5_1 and Q5_0 leaves only under `DASLLAMA_CUDA_MMQ=2`: Q5_1's five-word blocks and its m hold it to
+    47 to 50 TFLOP/s on the RTX 5060 Ti and its window read 0.96 of the tiles' on both cards under the feeds' cost (a
+    two-uint4 window over the 20-byte block in place of five word loads is the untried lever), and Q5_0 split the cards
+    (1.04 on the RTX 5060 Ti, 0.97 on the RTX PRO 4500) - the first format whose MMQ-against-cm2 pick is a card's to
+    race rather than a default's, and a tie that close is not worth a race of its own: the pair turns into a
+    `[tune_perm]` family raced per box when one card needs more than one format raced;
+    every other format - Q6_K and the 16-wide-scale superblock formats (Q2_K, Q3_K, the iq2 strips), Q5_K, the grid
+    codebook formats, MXFP4 - runs the window on the f16-fed cm2 tiles, so a Q4_K_M file's Q6_K planes still do, and a
+    layer with both kinds of site pays the f16 norm pass beside the requant. Per kernel at the 1B window's shapes on the
+    RTX 5060 Ti (`harness/gemm_cuda_vs_vulkan.das`, locked clocks): the Q8 leaf 67 to 74 TFLOP/s, the Q4_0 one 65 to
+    72, Q4_K 63 to 66, IQ4_XS 63 to 69, IQ4_NL 60 to 65, Q5_0 51 to 55, Q5_1 47 to 50, against the Q4_K cm2 tiles' 41
+    to 55; the Llama 1B windows read 1.27x (Q4_0), 1.23x (IQ4_XS), 1.16x (Q4_K_M), 1.15x (IQ4_NL) and 1.05x (Q5_0) over
+    the tiles (every figure of this row: `PERF_LEDGER.md`, the dasCUDA arc's "MMQ leaves against the cm2 tiles" entry).
+    A format whose scale changes every sixteen elements (Q6_K,
+    Q3_K, Q2_K, the iq2 strips) has no leaf to wait on: the int8 product over sixteen (`mma.sync.m16n8k16.s8`) issues at
+    the k32 shape's cost for half its work, and a Q6_K leaf on it read 36.8 to 38.9 TFLOP/s against the Q6_K cm2 tile's
+    38 to 51 on the same shapes, the Q4_K_M windows unmoved - MMQ is a per-32-scale property, and those planes stay on
+    the f16 tiles (a Q8_0 window twin of them, requantized at load, would ride the Q8 leaf at a memory cost; not taken).
+    Done = the Q5_K leaf (the Q4_K arm with its fifth bit; no stocked carrier is pure Q5_K, the Q3_K_L and Q5_K_M mixes
+    carry its planes), the format matrix over the 1B requant zoo, and the pp512 rows on the 5060 Ti and the pod against
+    the cm2 tiles (`lcpp_bench` under `DASLLAMA_CUDA_MMQ=0`) and the reference build's CUDA bench on the same files (the
+    recipe `ARCHITECTURE_MEASUREMENT.md#cuda-reference-rows` names). On Q8_0 the MMQ
+    chain wins on both cards measured, by more on the smaller one: pp512 MMQ against cm2 on the RTX 5060 Ti at locked
+    clocks reads 27150 against 20310 on Llama 1B, 10050 against 7065 on Llama 3B, 7045 against 4883 on Qwen3-4B and 8019
+    against 5653 on Phi-3.5 (1.34x to 1.44x); on the RTX PRO 4500 50751 against 39945 on the 1B and 17174 against 14559
+    on the 3B (1.27x, 1.18x); tg128 is the same on both forms everywhere. Neither form is deleted on the strength of the
+    cards measured so far: the first card that needs more than one format raced turns the pair into a `[tune_perm]`
+    family raced per box, and until then the knob's default is the pick.
+
+246. **NVFP4 (`nv4`) serves on the CPU rail and the GPU homes' decode kernels; the rest of its sites, homes and the FP4
+    tensor op are owed.** The member lands as a superblock format - four 64-weight disk blocks a superblock, the e2m1
+    nibbles re-paired into the k4 tiling, the sixteen UE4M3 sub-block scales verbatim, the doubled `mx4_lut` under the
+    scale at half (`ue4m3_half_f32`), the per-tensor `.scale` as the matmul epilogue
+    (`ARCHITECTURE_ENGINE_FORMATS_NV4.md#nv4-site-scale`) - with the CPU dot, grp repack and reference GEMV / tile bodies,
+    the shared `Nv4GemvT` and `Nv4Cm2T` templates stamped on Vulkan (the per-op `KqBatchNv4` beside them) and CUDA, and
+    the kernel cells of both homes, the per-tensor factor riding each device scale row's pad word so the whole-model
+    drivers serve it (the nv4 cm2 tiles race at Q4_0's time on both homes, `harness/gemm_cuda_vs_vulkan --only nv4,q40`).
+    Not yet served: (1) the pp512 / tg128 rows on the 5060 Ti - the ModelOpt files keep BF16 k/v planes beside an nv4 q,
+    which the whole-model drivers decline as mixed feeds, so a dense carrier with every plane nv4 is still to mint (the
+    pod's 27B iMatrix file, FFN nv4 under Q5_K attention, serves whole); (2) a `.scale` at the expert and shared-expert stacks,
+    the token table, the classifier, the NextN projection and the PLE table - `refuse_site_scale` refuses the load by
+    name; (3) the Metal tier - `kq_fmt_gpu_supported` leaves nv4 off its roster, so the tier declines it; (4) the CPU
+    JIT emitter arm (`panel_supported` leaves 49 out, so the `nv4q8_tile_gen` family declines to its reference body and
+    `kq_registries` ships no tile registry); (5) the one-copy rare rail's `nv4q8_rm_gemv_gen` family, the Vulkan host
+    twin cells and the served cells per site x backend; (6) on the CUDA home's FP4 leaf (`CuNv4Mmq`, the window chain's
+    GEMM for nv4 planes under the MMQ knob, W4A4 - the activations quantized to e2m1 per token by the `fp4_rows` /
+    `fp4_actrows` / `cls_ar_fp4_b` feeds): the tile runs one block an SM (44 KB of shared, 512
+    threads, 86 registers; the 2-block form at 64 registers spills and reads 9 to 12% slower on the RTX 5060 Ti at the 1B
+    window's shapes), the window's pp512 ahead of llama.cpp's native path on both cards and its tg128 4 to 6% under it -
+    the decode's room is the nv4 GEMV leaf's UE4M3 decode - and the non-native rails - Vulkan, Metal, the CPU - stay on
+    the decode kernels by the ruling that NVFP4 is a specialty hardware format. Every figure here is a `PERF_LEDGER.md`
+    row of the dasCUDA arc (the FP4 leaf and its feeds, the nv4 decode GEMV, W4A4's perplexity cost). Done = each item its
+    own commit; the pp512 / tg128 rows of the impact carrier (Qwen3.8-27B NVFP4 on the pod against its Q4_K_M) beside them.
+
+247. **The KHR flash tile has no head-96 stamp.** `FaH96T` (phi-3's heads) is stamped on the cm2 arm of both discrete
+    homes; the KHR arm's lane map walks a head in 64-wide halves (`HS / 64u` in `FaT`'s KHR branch: the P x V
+    fragments a subgroup owns and the `fpv` store), so a KHR-only device - no `VK_NV_cooperative_matrix2` - sends a
+    head of 96 to the chunked pair (`fa_khr_serves` keeps `fa_head_ok`, `fa_stamp_refuse` names the gap). `FaT` is a
+    discrete template the CUDA home stamps too, so the stamp is both homes' work. Done = the KHR branch walking the head
+    in 32-wide quarters where 96 asks it (six fragments over four subgroups), the `test_vkd_fa_khr` arms at 96 holding
+    the oracle, and the stamp joining `FA_STAMPS` beside the cm2 pair.

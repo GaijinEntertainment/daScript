@@ -126,7 +126,7 @@ struct public GpuTierEnv {
     @clarg_doc = "One switch for the measured-best GPU rail set; any DASLLAMA_GPU_* knob still overrides individually. On a Vulkan build it is also the want the tower driver reads before any device init: the vision and audio towers' block loops serve on the device only while it is on, and decline `device` otherwise."
     gpu : Option<bool>
 
-    @clarg_doc = "The CUDA home takes the GPU tier's seats in place of the Vulkan home (with DASLLAMA_GPU on): the whole-model driver for a dense q8 model on an NVIDIA card through the driver API and NVRTC, no Vulkan call made. Off, the Vulkan home serves as before."
+    @clarg_doc = "The CUDA home takes the GPU tier's seats in place of the Vulkan home (with DASLLAMA_GPU on): the whole-model driver for a dense q8 model on an NVIDIA card through the driver API and NVRTC, no Vulkan call made. Off, the Vulkan home serves as before. A build without dasCUDA (`DAS_CUDA_DISABLED`, or a 32-bit host) has no CUDA home: the knob is ignored with one warning and the Vulkan home keeps the tier."
     cuda : bool = false
 
     @clarg_default_doc = "-1 (auto)"
@@ -530,7 +530,7 @@ struct public VulkanEnv {
     @clarg_doc = "cm2 split-k: 0 = the pick's own (the Vulkan wave model `cm2_gemm_pick`; the CUDA home's `cud_cm2_pick` splits a grid short of two blocks an SM until it fills the card and runs a full grid whole), 1 = off, N = force N k-chunks on either home (A/B instrument; shrinks if N strands an empty tail). On the KHR arm the chunks ride its one 128-column geometry."
     cm2_splitk : int64 = 0l
 
-    @clarg_doc = "The CUDA home's window chain on the int8 MMQ GEMM (`q8_mmq`): the activations requantized to Q8_0 blocks between the GEMMs, as the token step's feeds are. 1 = where every GEMM shape of the model fits the tile (d a multiple of 128, the reduction a multiple of 256), 0 = the f16-fed cm2 tiles (A/B instrument). The load log names the pick."
+    @clarg_doc = "The CUDA home's window chain on the MMQ GEMMs: the int8 one (`q8_mmq` and the leaves of Q4_K, IQ4_XS, Q4_0, IQ4_NL, Q5_0, Q5_1), the activations requantized to Q8_0 blocks between the GEMMs, as the token step's feeds are; and NVFP4's FP4 tensor leaf (`nv4_mmq`, W4A4: the activations quantized to e2m1 per token). 1 = every plane whose format's leaf beat the cm2 tiles in the measured cards' windows, where its shape fits the tile (the output width a multiple of 128, the reduction of 256), runs on that leaf, the other planes on the f16-fed cm2 tiles; 2 = every leaf, the ones the cards split or lost on too (Q5_0, Q5_1) - a new card's own measurement; 0 = the cm2 tiles everywhere (A/B instrument). The FP4 leaf needs compute capability 120; below it an nv4 plane stays on the tiles under every value. The first window reads the value once and keeps it. The load log names the pick, and the value with the setter that gave it (`set_cuda_mmq_pin` under a test's pin)."
     cuda_mmq : int64 = 1l
 
     @clarg_doc = "The CUDA home's launches under programmatic dependent launch: a kernel is launched while the one before it in the stream still runs, and its entry wait (`griddepcontrol.wait`, in every emitted kernel on sm_90 and up) holds its reads until that one completes, so the launch latency rides under the predecessor's tail. 1 = on where the card is sm_90 or newer, 0 = plain stream order (A/B instrument). The device-ready log line names the state."

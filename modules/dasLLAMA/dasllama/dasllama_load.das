@@ -1719,6 +1719,75 @@ def private ple_kind_f32(m : GGUFMeta; layers : int64; kind : string) : bool {
 //! a device driver on this load reads the shared expert and the tied classifier off planes of their own: an armed GPU tier, or a Metal mode
 def private device_reads_side_planes() : bool => moe_gpu_tier_installed() || get_metal_mode() != MetalMode.off
 
+[arch(at="../ARCHITECTURE_ENGINE_FORMATS_NV4.md#nv4-site-scale")]
+def private note_site_scale(var t : Model; m : GGUFMeta; bytes : array<uint8> | #; name : string; fmt : KqFmt; woff : int64) {
+    let sname = "{trim_suffix(name, ".weight")}.scale"
+    return if (gguf_find_tensor(m, sname) < 0)
+    if (fmt != KqFmt.nv4) {
+        panic("dasLLAMA load: {name} carries a per-tensor scale ({sname}) and serves as {ggml_type_name(kq_ggml_type(fmt))} - the scale lands only on the NVFP4 planes' epilogue")
+    }
+    var v : array<float>
+    v |> resize(1)
+    gguf_read_tensor_f32(m, bytes, sname, v, 0l, 1l, 0l)
+    t.site_scale[site_scale_key(fmt, woff)] = v[0]
+    delete v
+}
+
+[arch(at="../ARCHITECTURE_ENGINE_FORMATS_NV4.md#nv4-site-scale")]
+def private refuse_site_scale(m : GGUFMeta; name : string) {
+    let sname = "{trim_suffix(name, ".weight")}.scale"
+    if (gguf_find_tensor(m, sname) >= 0) {
+        panic("dasLLAMA load: {name} carries a per-tensor scale ({sname}) at a site the engine applies no per-tensor scale to (the expert and shared-expert stacks, the token table, the classifier, the NextN projection, the PLE table)")
+    }
+}
+
+[arch(at = "../ARCHITECTURE_ENGINE_FORMATS_NV4.md#nv4-site-scale")]
+def private detect_site_scales(var t : Model; m : GGUFMeta; bytes : array<uint8> | #) {
+    t.site_scale |> clear()
+    let layers = t.config.n_layers + t.config.n_layer_nextn
+    for (l in range64(layers)) {
+        if (l < long_length(t.wq_offs)) {
+            if (t.config.fused_qkv) {
+                note_site_scale(t, m, bytes, "blk.{l}.attn_qkv.weight", fmt_at(t.wq_fmt, l), t.wq_offs[l])
+                note_site_scale(t, m, bytes, "blk.{l}.attn_qkv.weight", fmt_at(t.wk_fmt, l), t.wk_offs[l])
+                note_site_scale(t, m, bytes, "blk.{l}.attn_qkv.weight", fmt_at(t.wv_fmt, l), t.wv_offs[l])
+                note_site_scale(t, m, bytes, "blk.{l}.ffn_up.weight", fmt_at(t.w1_fmt, l), t.w1_offs[l])
+                note_site_scale(t, m, bytes, "blk.{l}.ffn_up.weight", fmt_at(t.w3_fmt, l), t.w3_offs[l])
+            } else {
+                note_site_scale(t, m, bytes, "blk.{l}.attn_q.weight", fmt_at(t.wq_fmt, l), t.wq_offs[l])
+                note_site_scale(t, m, bytes, "blk.{l}.attn_k.weight", fmt_at(t.wk_fmt, l), t.wk_offs[l])
+                note_site_scale(t, m, bytes, "blk.{l}.attn_v.weight", fmt_at(t.wv_fmt, l), t.wv_offs[l])
+                note_site_scale(t, m, bytes, "blk.{l}.ffn_gate.weight", fmt_at(t.w1_fmt, l), t.w1_offs[l])
+                note_site_scale(t, m, bytes, "blk.{l}.ffn_up.weight", fmt_at(t.w3_fmt, l), t.w3_offs[l])
+            }
+            note_site_scale(t, m, bytes, "blk.{l}.attn_output.weight", fmt_at(t.wo_fmt, l), t.wo_offs[l])
+            note_site_scale(t, m, bytes, "blk.{l}.ffn_down.weight", fmt_at(t.w2_fmt, l), t.w2_offs[l])
+        }
+        if (layer_is_recurrent(t.config, l) && l < long_length(t.dnqkv_offs)) {
+            note_site_scale(t, m, bytes, "blk.{l}.attn_qkv.weight", fmt_at(t.dnqkv_fmt, l), t.dnqkv_offs[l])
+            note_site_scale(t, m, bytes, "blk.{l}.attn_gate.weight", fmt_at(t.dngate_fmt, l), t.dngate_offs[l])
+            if (!t.dn_grouped) {
+                note_site_scale(t, m, bytes, "blk.{l}.ssm_out.weight", fmt_at(t.dnout_fmt, l), t.dnout_offs[l])
+            }
+            if (!t.dn_ba_f32) {
+                note_site_scale(t, m, bytes, t.dn_grouped ? "blk.{l}.ssm_ba.weight" : "blk.{l}.ssm_beta.weight", fmt_at(t.dnbeta_fmt, l), t.dnbeta_offs[l])
+                if (!t.dn_grouped) {
+                    note_site_scale(t, m, bytes, "blk.{l}.ssm_alpha.weight", fmt_at(t.dnalpha_fmt, l), t.dnalpha_offs[l])
+                }
+            }
+        }
+        for (stem in ["ffn_gate_exps", "ffn_up_exps", "ffn_down_exps", "ffn_gate_up_exps", "ffn_gate_shexp", "ffn_up_shexp", "ffn_down_shexp", "nextn.eh_proj"]) {
+            refuse_site_scale(m, "blk.{l}.{stem}.weight")
+        }
+    }
+    refuse_site_scale(m, "token_embd.weight")
+    refuse_site_scale(m, "output.weight")
+    refuse_site_scale(m, "per_layer_token_embd.weight")
+    if (!empty(t.site_scale)) {
+        to_log(LOG_INFO, "dasLLAMA load: {length(t.site_scale)} planes carry a site scale (NVFP4's per-tensor scale) - the matmul epilogues apply it\n")
+    }
+}
+
 //! the deltanet planes' tags off the file on every load; true when any is not q8
 def private detect_dn_formats(var t : Model; m : GGUFMeta; layers : int64) : bool {
     var any = false
@@ -2515,6 +2584,7 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
             g_fill_plan_mode = false
         }
         let sz = layout_offsets(t)
+        detect_site_scales(t, m, bytes)
         // fp32 aux (embedding + norms) is always present; the big-weight storage matches `mode`
         reserve_resize(t.fblob, sz.fblob_n)
         if (sz.bf16_n > 0l) {

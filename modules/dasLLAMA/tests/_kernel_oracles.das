@@ -432,3 +432,60 @@ def q8_gemm_oracle(wq : array<uint>; wsw : array<uint>; xq : array<uint>; xs : a
         return acc
     }
 }
+
+//! `n` elements of `src` from `soff`, plus the bias row `bh` from `boff` when the cell has one (an empty `bh`: no bias)
+def biased_row(src : array<float>; soff : int; bh : array<float>; boff, n : int) : array<float> {
+    if (empty(bh)) {
+        return <- [for (i in range(n)); src[soff + i]]
+    }
+    return <- [for (i in range(n)); src[soff + i] + bh[boff + i]]
+}
+
+//! the rope oracle's cos and sin rows: the two halves of the `hs`-wide cos | sin row at `at`
+def cossin_rows(csh : array<float>; at, hs : int) : tuple<c : array<float>; s : array<float>> {
+    var c <- [for (j in range(hs / 2)); csh[at + j]]
+    var s <- [for (j in range(hs / 2)); csh[at + hs / 2 + j]]
+    return <- (c = c, s = s)
+}
+
+//! the fused qk-norm + rope + KV-store oracle at one position (both homes' `QknRopeKvT` cells): each head row biased when `bh` is set, rmsnormed on `wnh` (q heads on its first `hs`, k heads on the next), table-roped on the cos | sin row `csh`; k lands at mirror row `krow`, v copies its raw row plus bias, both through `round`
+def qkn_rope_rows(q0h, kvh, bh, wnh, csh : array<float>; bpad, nh, nkvh, hs, krow, mirn : int; eps : float;
+                  round : block<(x : float) : float>) : tuple<q : array<float>; mk : array<float>; mv : array<float>> {
+    let qd = nh * hs
+    let kvd = nkvh * hs
+    var cs <- cossin_rows(csh, 0, hs)
+    var q, mk, mv : array<float>
+    q |> resize(qd)
+    mk |> resize(mirn)
+    mv |> resize(mirn)
+    for (wid in range(nh + nkvh)) {
+        let is_k = wid >= nh
+        let hh = is_k ? wid - nh : wid
+        let sbase = is_k ? qd + hh * hs : hh * hs
+        var inscope row <- is_k ? biased_row(kvh, sbase, bh, bpad + sbase, hs) : biased_row(q0h, sbase, bh, bpad + sbase, hs)
+        var inscope nrow : array<float>
+        nrow |> resize(hs)
+        unsafe {
+            rmsnorm(addr<float?>(nrow[0]), addr<float const?>(row[0]), addr<float const?>(wnh[is_k ? hs : 0]), int64(hs), eps)
+        }
+        rope_tab_ref(nrow, 0, hs, hs, hs, true, cs.c, cs.s)
+        for (i in range(hs)) {
+            if (is_k) {
+                mk[krow + hh * hs + i] = invoke(round, nrow[i])
+            } else {
+                q[hh * hs + i] = nrow[i]
+            }
+        }
+        if (is_k) {
+            var inscope vrow <- biased_row(kvh, qd + kvd + hh * hs, bh, bpad + qd + kvd + hh * hs, hs)
+            for (i in range(hs)) {
+                mv[krow + hh * hs + i] = invoke(round, vrow[i])
+            }
+            delete vrow
+        }
+        delete row
+        delete nrow
+    }
+    delete cs
+    return <- (q = q, mk = mk, mv = mv)
+}

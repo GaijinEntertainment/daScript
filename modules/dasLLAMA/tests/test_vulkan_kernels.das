@@ -499,7 +499,8 @@ def test_vkd_fa_stamp_refusals(t0 : T?) {
                 t |> success(fa_ladder_panics(enc, true, 256l, true, false), "the KHR arm has no gated stamp: the {ladder} ladder refuses")
                 t |> success(fa_ladder_panics(enc, false, 128l, false, true), "no softcap stamp off head size 256: the {ladder} ladder refuses")
                 t |> success(fa_ladder_panics(enc, false, 128l, true, false), "no gated stamp off head size 256: the {ladder} ladder refuses")
-                t |> success(fa_ladder_panics(enc, false, 96l, false, false), "a head size no stamp serves: the {ladder} ladder refuses")
+                t |> success(fa_ladder_panics(enc, false, 112l, false, false), "a head size no stamp serves: the {ladder} ladder refuses")
+                t |> success(fa_ladder_panics(enc, true, 96l, false, false), "the KHR arm has no head-96 stamp: the {ladder} ladder refuses")
             }
             t |> success(fa_ladder_panics(false, false, 128l, false, false, true), "no sink stamp off head size 64: the ensure ladder refuses")
             t |> success(fa_ladder_panics(false, false, 256l, false, true, true), "no sink stamp at the softcap's head size: the ensure ladder refuses")
@@ -1631,8 +1632,8 @@ def private check_qbytes(t : T?; tag : string; got, want : array<uint>) {
     delete poisoned
 }
 
-//! the fourteen kq formats with a decode GEMV leaf and a batch tile, the order the family cells walk
-let private KQ_LEAF_FMTS = fixed_array(int(KqFmt.k4), int(KqFmt.q40), int(KqFmt.k5), int(KqFmt.k6), int(KqFmt.iq4xs), int(KqFmt.k3), int(KqFmt.iq3s), int(KqFmt.iq3xxs), int(KqFmt.iq4nl), int(KqFmt.k2), int(KqFmt.iq2s), int(KqFmt.iq2xs), int(KqFmt.iq2xxs), int(KqFmt.iq3s4))
+//! the fifteen kq formats with a decode GEMV leaf and a batch tile, the order the family cells walk
+let private KQ_LEAF_FMTS = fixed_array(int(KqFmt.k4), int(KqFmt.q40), int(KqFmt.k5), int(KqFmt.k6), int(KqFmt.iq4xs), int(KqFmt.k3), int(KqFmt.iq3s), int(KqFmt.iq3xxs), int(KqFmt.iq4nl), int(KqFmt.k2), int(KqFmt.iq2s), int(KqFmt.iq2xs), int(KqFmt.iq2xxs), int(KqFmt.iq3s4), int(KqFmt.nv4))
 
 //! the family's class rails engage on the device: every leaf's pipeline builds, else the cell skips
 def private kq_leaf_rails_engage(ensure : block<(fmt : int) : bool>) : bool {
@@ -1789,7 +1790,7 @@ def private per32_sum_rows_cell(t : T?; fmt : KqFmt; n, wq_words : int; wq_seed,
 
 [test]
 def test_vkd_kq_gemv_family(t0 : T?) {
-    t0 |> run("kq GEMV class family == the CPU oracle (all 14 formats)") <| @(t : T?) {
+    t0 |> run("kq GEMV class family == the CPU oracle (all 15 formats)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!kq_leaf_rails_engage() <| $(fmt : int) => gemv_cls_ensure(fmt)) {
                 t |> skip("no Vulkan device, or a kq GEMV class pipeline failed to build")
@@ -1802,7 +1803,7 @@ def test_vkd_kq_gemv_family(t0 : T?) {
             for (fmt in KQ_LEAF_FMTS) {
                 let sb_words = int(kq_qsb(kq_fmt_of_slot(fmt)) / 4l)
                 let ws_words_n = rows * nsb * int(kq_dev_ssb_i(fmt) / 4l)
-                var inscope wsh <- ws_plane(ws_words_n, 1u, uint(fmt) * 13u)
+                var inscope wsh <- kq_ws_plane(fmt, ws_words_n, 1u, uint(fmt) * 13u)
                 var f <- gemv_fix(nreg, d, nsb, sb_words, uint(fmt) * 77777u, wsh, nsb, 64, 31u, 5u, 0.5, 0.25, 7)
                 var inscope y_ref <- kq_gemv_oracle(fmt, f.wqh, f.wsh, f.xqh, f.xsh, f.regs, nsb * 256, d, nreg)
                 with_cell_planes() $(var cp : CellPlanes) {
@@ -1849,7 +1850,7 @@ def test_vkd_kq_gemv_family(t0 : T?) {
 //! row against `kq_gemv_float_oracle` over the same table row (the lanes in element order, independent of the class bit-math)
 [test]
 def test_vkd_emb_gather_family(t0 : T?) {
-    t0 |> run("the token-table gather's leaves == the class lane decode, and the float witness, for all 14 superblock formats") <| @(t : T?) {
+    t0 |> run("the token-table gather's leaves == the class lane decode, and the float witness, for all 15 superblock formats") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!kq_leaf_rails_engage() <| $(fmt : int) => emb_cls_ensure(fmt)) {
                 t |> skip("no Vulkan device, or a token-table gather pipeline failed to build")
@@ -1866,7 +1867,7 @@ def test_vkd_emb_gather_family(t0 : T?) {
             for (fmt in KQ_LEAF_FMTS) {
                 let sb_words = int(kq_qsb(kq_fmt_of_slot(fmt)) / 4l)
                 var inscope wq <- hashed_words((vocab + lead) * nsb * sb_words, 1u, uint(fmt) * 9973u)
-                var inscope ws <- ws_plane((vocab + lead) * nsb * int(kq_dev_ssb_i(fmt) / 4l), 1u, uint(fmt) * 17u)
+                var inscope ws <- kq_ws_plane(fmt, (vocab + lead) * nsb * int(kq_dev_ssb_i(fmt) / 4l), 1u, uint(fmt) * 17u)
                 let wblk0 = uint(lead * nsb)
                 var inscope y_ref <- emb_gather_oracle(fmt, wq, ws, ids, xh, n, wblk0, escale)
                 with_cell_planes() $(var cp : CellPlanes) {
@@ -2283,21 +2284,6 @@ def test_vkd_act_family(t0 : T?) {
     }
 }
 
-//! `n` elements of `src` from `soff`, plus the bias row `bh` from `boff` when the cell has one (an empty `bh`: no bias)
-def private biased_row(src : array<float>; soff : int; bh : array<float>; boff, n : int) : array<float> {
-    if (empty(bh)) {
-        return <- [for (i in range(n)); src[soff + i]]
-    }
-    return <- [for (i in range(n)); src[soff + i] + bh[boff + i]]
-}
-
-//! the rope oracle's cos and sin rows: the two halves of the `hs`-wide cos | sin row at `at`
-def private cossin_rows(csh : array<float>; at, hs : int) : tuple<c : array<float>; s : array<float>> {
-    var c <- [for (j in range(hs / 2)); csh[at + j]]
-    var s <- [for (j in range(hs / 2)); csh[at + hs / 2 + j]]
-    return <- (c = c, s = s)
-}
-
 //! the KV writers' rows at one position: q from `q0h` at `qoff`, k and v from `kvh` at `koff` / `voff`, each biased by its
 //! `bh` row past `bpad` (q, then k, then v) when the cell has one; q and k rotated by the engine's table rope on the cos | sin
 //! row of `csh` at `csoff`; k and v through `round`, the mirror's grid
@@ -2317,50 +2303,6 @@ def private rope_kv_rows(q0h, kvh, bh, csh : array<float>; qoff, koff, voff, cso
     }
     delete cs
     return <- (q = q, k = k, v = v)
-}
-
-//! the fused qk-norm + rope + KV-store oracle at one position: each head row biased (when `bh` is set), normed by the engine's
-//! rmsnorm on its weight row (q heads on `wnh`'s first `hs`, k heads on the next), rotated by the engine's table rope on the
-//! cos | sin row `csh`; k lands at mirror row `krow` and v copies its raw row plus its bias, both through `round`
-def private qkn_rope_rows(q0h, kvh, bh, wnh, csh : array<float>; bpad, nh, nkvh, hs, krow, mirn : int; eps : float;
-                          round : block<(x : float) : float>) : tuple<q : array<float>; mk : array<float>; mv : array<float>> {
-    let qd = nh * hs
-    let kvd = nkvh * hs
-    var cs <- cossin_rows(csh, 0, hs)
-    var q, mk, mv : array<float>
-    q |> resize(qd)
-    mk |> resize(mirn)
-    mv |> resize(mirn)
-    for (wid in range(nh + nkvh)) {
-        let is_k = wid >= nh
-        let hh = is_k ? wid - nh : wid
-        let sbase = is_k ? qd + hh * hs : hh * hs
-        var inscope row <- is_k ? biased_row(kvh, sbase, bh, bpad + sbase, hs) : biased_row(q0h, sbase, bh, bpad + sbase, hs)
-        var inscope nrow : array<float>
-        nrow |> resize(hs)
-        unsafe {
-            rmsnorm(addr<float?>(nrow[0]), addr<float const?>(row[0]), addr<float const?>(wnh[is_k ? hs : 0]), int64(hs), eps)
-        }
-        rope_tab_ref(nrow, 0, hs, hs, hs, true, cs.c, cs.s)
-        for (i in range(hs)) {
-            if (is_k) {
-                mk[krow + hh * hs + i] = invoke(round, nrow[i])
-            } else {
-                q[hh * hs + i] = nrow[i]
-            }
-        }
-        if (is_k) {
-            var inscope vrow <- biased_row(kvh, qd + kvd + hh * hs, bh, bpad + qd + kvd + hh * hs, hs)
-            for (i in range(hs)) {
-                mv[krow + hh * hs + i] = invoke(round, vrow[i])
-            }
-            delete vrow
-        }
-        delete row
-        delete nrow
-    }
-    delete cs
-    return <- (q = q, mk = mk, mv = mv)
 }
 
 //! the rope + K/V store (`rope_kv_cls`, or under `f16` its half-mirror twin) on one row against the CPU oracle: the q rows roped
@@ -2534,7 +2476,7 @@ def test_vkd_q8_batch_tile(t0 : T?) {
 
 [test]
 def test_vkd_kq_batch_family(t0 : T?) {
-    t0 |> run("kq batch tile class family == the CPU oracle (all 14 formats)") <| @(t : T?) {
+    t0 |> run("kq batch tile class family == the CPU oracle (all 15 formats)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!kq_leaf_rails_engage() <| $(fmt : int) => kq_batch_cls_ensure(fmt, false)) {
                 t |> skip("no Vulkan device, or a kq batch class pipeline failed to build")
@@ -2552,7 +2494,7 @@ def test_vkd_kq_batch_family(t0 : T?) {
                 let wswords = totsb * int(kq_dev_ssb_i(fmt) / 4l)
                 var p = Sdot4Planes(ws_bytes = int64(wswords) * 4l)
                 p.wqh <- hashed_words(totsb * sb_words, 1u, uint(fmt) * 131u)
-                p.wsh <- ws_plane(wswords, 1u, uint(fmt) * 17u)
+                p.wsh <- kq_ws_plane(fmt, wswords, 1u, uint(fmt) * 17u)
                 p.xqh <- hashed_words(rows * nsb * 64, 7u, 2u)
                 p.xsh <- row_fill(rows * nsb, 1, 0, 0.05, -0.3, 11)
                 //! one family set serves every format; region 1's weights follow region 0's stack in superblock units
@@ -2945,6 +2887,13 @@ def test_vkd_iq4nl_cm2_batch(t0 : T?) {
 }
 
 [test]
+def test_vkd_nv4_cm2_batch(t0 : T?) {
+    t0 |> run("cm2 NVFP4 l/m/s/e tiles and the KHR tile == the CPU oracle (the doubled e2m1 codes under the UE4M3 sub-block scales at half, decode-in-load; the KHR arm stages the same decode)") <| @(t : T?) {
+        fmt_tile_cell(t, KqFmt.nv4)
+    }
+}
+
+[test]
 def test_vkd_iq4xs_cm2_batch(t0 : T?) {
     t0 |> run("cm2 IQ4_XS l/m/s/e tiles and the KHR tile == the CPU oracle (workgroup-staged codebook decode-in-load; the KHR arm stages the same decode)") <| @(t : T?) {
         fmt_tile_cell(t, KqFmt.iq4xs)
@@ -3228,7 +3177,8 @@ def private fa_arm_ensure(khr : bool) : bool {
         for (hs in fixed_array(64l, 128l, 256l, 512l)) {
             if (!fa_stamp_pair_ensure(khr, hs, false, false, false, true)) return false
         }
-        if (!fa_stamp_pair_ensure(khr, 64l, false, false, true, true)) return false   //! the sink stamps (gpt-oss)
+        let h96_ok = khr || fa_stamp_pair_ensure(false, 96l, false, false, false, true)
+        if (!h96_ok || !fa_stamp_pair_ensure(khr, 64l, false, false, true, true)) return false
     }
     return true
 }
@@ -3262,7 +3212,7 @@ def private fa_flat_read(var cp; khr : bool; hs : int; sink : bool; var sfa; pcf
     return <- cp |> plane_run(py)
 }
 
-def private fa_tile_run(t : T?; khr : bool) {
+def private fa_tile_run(t : T?; khr : bool) {   // nolint:STYLE037,LINT019 — one arm table over both flash arms; the head-96 skip is its one branch past the limit
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let tag = khr ? "fa_khr" : "fa_cm2"
         let nheads = 4
@@ -3277,8 +3227,10 @@ def private fa_tile_run(t : T?; khr : bool) {
                 (hs = 256, window = 0, sink = false, lead = 0, ring = 0), (hs = 512, window = 0, sink = false, lead = 0, ring = 0),
                 (hs = 128, window = 40, sink = false, lead = 0, ring = 0), (hs = 64, window = 0, sink = true, lead = 0, ring = 0),
                 (hs = 64, window = 40, sink = true, lead = 0, ring = 0), (hs = 64, window = 0, sink = false, lead = 8, ring = 0),
-                (hs = 128, window = 40, sink = false, lead = 0, ring = 128), (hs = 256, window = 40, sink = false, lead = 0, ring = 128))) {
+                (hs = 128, window = 40, sink = false, lead = 0, ring = 128), (hs = 256, window = 40, sink = false, lead = 0, ring = 128),
+                (hs = 96, window = 0, sink = false, lead = 0, ring = 0), (hs = 96, window = 40, sink = false, lead = 0, ring = 0))) {
             let hs = arm.hs
+            continue if (khr && hs == 96)   // the KHR flash tile has no head-96 stamp (../ARCHITECTURE_GPU_SHARED_ATTN.md#flash-attn-tile)
             let window = arm.window   //! a sliding layer's arm: the queries attend the `window` positions up to their own
             let sink = arm.sink
             let lead = arm.lead
@@ -5279,7 +5231,7 @@ def private gemv_ncol_arm(t : T?; f : KqFmt; n, d : int) {
             wsh |> push_from(blk32_scale_plane(f, d * xblk))
         } else {
             wqh |> push_from(hashed_words(d * xblk * int(kq_qsb(f) / 4l), 1u, uint(fmt) * 77777u))
-            wsh |> push_from(ws_plane(d * xblk * int(kq_dev_ssb(f) / 4l), 1u, uint(fmt) * 13u))
+            wsh |> push_from(kq_ws_plane(fmt, d * xblk * int(kq_dev_ssb(f) / 4l), 1u, uint(fmt) * 13u))
         }
         var xqh <- hashed_words(xq_col * ncol_max, 31u, 5u)
         var xsh <- row_fill(xblk * ncol_max, 1, 0, 0.25, -0.5, 7)
@@ -5358,7 +5310,7 @@ def test_vkd_gemv_ncol(t0 : T?) {
                 return
             }
             let fmts <- kq_gemv_fmts()
-            t |> equal(length(fmts), 1 + length(KQ_LEAF_FMTS), "the superblock roster is q8 and the fourteen kq leaves")
+            t |> equal(length(fmts), 1 + length(KQ_LEAF_FMTS), "the superblock roster is q8 and the fifteen kq leaves")
             for (f in type<KqFmt>) {
                 t |> success(gemv_cls_ensure(int(f)), "{f}: the one-column class rail engages")
                 gemv_ncol_arm(t, f, 1024, 96)   //! n a multiple of 256 for the superblock formats, d even for the row-pair stamps
@@ -9764,7 +9716,7 @@ def test_vkd_moe_routing(t0 : T?) {
 def test_vkd_gemv_lane_rule(t0 : T?) {
     t0 |> run("gemv_lanes_per_row: the measured lane split per format class and row length") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            let grid = fixed_array(KqFmt.iq2s, KqFmt.iq2xs, KqFmt.iq2xxs, KqFmt.iq3xxs, KqFmt.iq4xs, KqFmt.iq4nl, KqFmt.iq3s4)
+            let grid = fixed_array(KqFmt.iq2s, KqFmt.iq2xs, KqFmt.iq2xxs, KqFmt.iq3xxs, KqFmt.iq4xs, KqFmt.iq4nl, KqFmt.iq3s4, KqFmt.nv4)
             let lattice = fixed_array(KqFmt.k2, KqFmt.k3, KqFmt.k4, KqFmt.k5, KqFmt.k6, KqFmt.q40, KqFmt.iq3s)
             //! row length -> (the grid formats' lanes, the k-lattice formats' lanes); 0 = the whole subgroup
             let rows = fixed_array((n = 768l, g = 8u, l = 8u), (n = 1024l, g = 8u, l = 16u), (n = 1536l, g = 8u, l = 16u),

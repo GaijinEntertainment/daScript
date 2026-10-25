@@ -9,6 +9,6 @@ require dastest/review_gate
 [export]
 def main : int {
     gate_reset()
-    gate_descriptor_census("modules/dasCUDA/.das_module", ["modules/dasCUDA/cuda"], { "cuda" })
+    gate_descriptor_census("modules/dasCUDA/.das_module", ["modules/dasCUDA/cuda"], { "cuda", "Module_CUDA" })
     return gate_verdict("dasCUDA")
 }

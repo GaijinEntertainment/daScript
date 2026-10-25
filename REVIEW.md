@@ -19,6 +19,12 @@ from `tests-cpp/small/`.**
 answers to `modules/<M>/REVIEW.md` too, when that file exists - the reviewer applies this route,
 because the review walk does not.**
 
+**A guard on the `dasCUDA` package in a file outside `modules/dasCUDA/` tests for the `cuda`
+module - the module `modules/dasCUDA/src/dasCUDA.cpp` registers, built only when the build
+configures the package - through `require ?cuda <target>`, `has_module("cuda")` or
+`builtin_module_exists(cuda)`, never through a `cuda/` path.** The `cuda/` files of the package
+are on disk in a build configured without it, so a path guard reads that build as having CUDA.
+
 **Weakening `REVIEW.das` (beside this file) is a defect: dropping a check it runs, narrowing
 what a check walks, or rewording a finding so it no longer names what failed.**
 

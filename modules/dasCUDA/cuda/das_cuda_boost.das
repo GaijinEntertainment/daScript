@@ -563,11 +563,12 @@ def public cubin_cached(source, name : string; compile_opts : array<string>; var
     return <- image
 }
 
-//! source text -> loaded module, cubin for the context's device (cached in `cache_dir`). Null with
-//! `error` filled on a compile or load failure.
+//! source text -> loaded module, cubin for the context's device (cached in `cache_dir`); null with `error` filled on a compile or load failure
+[arch(at="../ARCHITECTURE_EMIT.md#cuda-kernel-vocabulary-tiers")]
 def public module_from_source(cc : CudaContext?; source, name : string; var error : string&; arch_suffix : string = "";
                               cache_dir : string = CUDA_CACHE_DIR) : CudaModule? {
-    var image <- cubin_cached(source, name, cuda_compile_options(cc, arch_suffix), error, cache_dir)
+    let suffix = !empty(arch_suffix) ? arch_suffix : (find(source, "__DAS_ARCH_A__") >= 0 ? "a" : "")
+    var image <- cubin_cached(source, name, cuda_compile_options(cc, suffix), error, cache_dir)
     return null if (empty(image))
     return cuda_load_module(image, error)
 }

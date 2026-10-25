@@ -241,6 +241,16 @@ are PTX's and CUDA's, and a body that calls one is a CUDA-only kernel by constru
 | `byte_perm(a, b, sel)` | `__byte_perm` | emulated (the selector nibble's high bit ignored, as the intrinsic ignores it) |
 | `clock32()` | `(unsigned)clock()` | the CPU tick counter's low word |
 | `cuda_asm(fmt, a0..)` / `cuda_asm_value(fmt, a0..)` | a `__device__` helper a call site wrapping `asm volatile(fmt :: "r"(a0)..)`, the `_value` form with `%0` its `unsigned` result; `fmt` a constant, up to three operands | no-op / `0` |
+| `coopmatA_e2m1_16x64` / `coopmatB_e2m1_64x16` + `ldmatrix` | the FP4 fragments: four words a lane, the s8 fragments' lane map over nibbles (A: k 8t..8t+7 and 32+8t.. of rows g, g + 8; B: the same over the columns of each n-half) - loaded through the same `ldmatrix.x4` off a 32-byte k64 row; `coopmatLoad` / `coopmatMulAdd` refuse them | none (a fixture's CPU replay computes its reference apart) |
+| `mma_block_scaled(f, a, b, scale_a, scale_b0, scale_b1)` | two `mma.sync.aligned.kind::mxf4nvf4.block_scale.scale_vec::4X.m16n8k64.row.col.f32.e2m1.e2m1.f32.ue4m3`, one an n-half: f += A x B over k64, every value e2m1 x the UE4M3 scale of its k16 strip with no halving, `scale_a` the four scale bytes of the lane's A row (row g read from the lanes with lane % 4 == 0, row g + 8 from lane % 4 == 1), `scale_b0` / `scale_b1` column g's of each n-half (lane % 4 == 0); the other lanes' scale words are ignored | no-op |
+| `mma_scale_cols(f, cs)` | `f.r[k] *= cs[column of k]` over the lane's eight elements, `cs` in `mma_scale_acc`'s column order: the FP4 product's per-token epilogue, the block-scaled mma having no s32 stage to fold a column scale into | no-op |
+| `cvt_e2m1x2(lo, hi)` | `cvt.rn.satfinite.e2m1x2.f32` into a `.b8` register widened by `cvt.u16.u8` (the destination is a byte, which no asm constraint names) - the pair's byte, `lo` in the low nibble (the PTX operand order puts the first source in the upper nibble, so the helper swaps) | round to nearest even over {0, 0.5, 1, 1.5, 2, 3, 4, 6}, a tie to the even code, saturated at 6 |
+| `cvt_ue4m3(x)` | `cvt.rn.satfinite.e4m3x2.f32` over max(x, 0) in both sources (a constant source lands as an immediate `cvt` refuses), the low byte: the UE4M3 code | round to nearest even at bias 7 with the m x 2^-9 subnormals, 448 and past it 0x7E |
+
+The FP4 rung assembles under the arch-specific target alone (`sm_120a`; plain `sm_120` rejects every
+block-scaled kind), so a text that uses it carries `#define __DAS_ARCH_A__ 1` and `module_from_source`
+compiles it with the `a` suffix - the launcher never learns which kernels need it. An `a` cubin has no
+forward PTX JIT, so those kernels bake per arch.
 
 The floor is `cuda_asm`: anything PTX says a body can say from day one; a named intrinsic is the
-rung above it with a census kind and a fixture (`tests/cuda`, the `Intrin` class).
+rung above it with a census kind and a fixture (`tests/cuda`, the `Intrin` and `IntrinFp4` classes).

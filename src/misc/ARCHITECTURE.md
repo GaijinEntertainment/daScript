@@ -242,7 +242,7 @@ directory the process has at that call. The form is lexical: a symlink in the pa
 written. The root `getDasRoot` derives from the executable's path goes through the same call,
 the `.` it answers for a binary outside a `bin` folder included. `get_das_root()` therefore
 answers the same string from every such start, and so does everything built on it - the module
-scan's descriptor folders and manifest key (`src/ast/ARCHITECTURE.md#module-scan-manifest`), the
+scan's descriptor folders and manifest key (`src/ast/ARCHITECTURE_MODULE_SCAN.md#module-scan-manifest`), the
 paths a descriptor registers, the file names a compile reports.
 
 The reason is the manifest key. A descriptor's rows carry the root as the descriptor read it, so

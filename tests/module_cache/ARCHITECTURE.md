@@ -4,7 +4,7 @@ Contract: `ARCHITECTURE_COMMON.md` (repo root). These tests exercise the module 
 daslang host installs unasked - its per-compile key, and the front end's record-by-record read;
 this document states what the folder is and why its tests take the shape they do.
 
-## 1. File charters
+## 1. File charters {#file-charters}
 
 - `test_default_cache_path.das` - the default cache as the host installs it with no flag: that
   it stays silent on every read outcome, that its file is keyed per compile input, that each
@@ -77,8 +77,11 @@ this document states what the folder is and why its tests take the shape they do
   and is taken, as it is with a `require UnitTest` above it, below it, or in the entry while
   the guard sits in a module walked earlier;
   `-ignore-manifest` compiles every descriptor, loads every C++ module on start and writes no
-  manifest; a manifest row hand-edited to an absent artifact makes the require bring every
-  deferred module in and then fail on the missing prerequisite; a nameless `dm` row added by
+  manifest; a manifest row hand-edited to an artifact that exists but is no shared module still
+  replays and defers, and the require's failed dlopen brings every deferred module in and then
+  fails on the missing prerequisite; a `dm` row whose artifact is gone makes the manifest stale,
+  so the descriptor recompiles and `has_module` answers absent; a module-cache record folded
+  with the module present is refused once it is gone, and the other way; a nameless `dm` row added by
   hand whose path is a file that exists and is no shared module fails at the scan and, its
   artifact present, makes the scan bring every deferred module in before any require; the real
   `dm` row with its name blanked loads at the scan, gets its name written back, and the next start

@@ -443,7 +443,22 @@ def test_cuda_reject_khr_tiles(t : T?) {
                 "        var a : coopmatA_f16_16x16\n        var b : coopmatB_f16_16x16\n        var c : coopmatAcc_s32_16x16\n        c = coopmatMulAdd(a, b, c)"),
             tile_arm("_reject_mma_scale_acc", "mma_scale_acc(f32 accumulator, s32 accumulator, row scales, column scales)",
                 "def mma_scale_acc(var f : coopmatAcc_f32_16x16; s : coopmatAcc_f32_16x16; rs : float2; cs : float4) \{\n    let z = rs.x + cs.x\n\}",
-                "        var f : coopmatAcc_f32_16x16\n        var s : coopmatAcc_f32_16x16\n        mma_scale_acc(f, s, float2(1.0), float4(1.0))")
+                "        var f : coopmatAcc_f32_16x16\n        var s : coopmatAcc_f32_16x16\n        mma_scale_acc(f, s, float2(1.0), float4(1.0))"),
+            tile_arm("_reject_e2m1_load", "an e2m1 fragment loads through ldmatrix alone",
+                "def coopmatLoad(var d : coopmatA_e2m1_16x64; src : array<float16>; idx : uint; stride, layout : int) \{\n    let z = idx\n\}",
+                "        var a : coopmatA_e2m1_16x64\n        coopmatLoad(a, h, 0u, 16, 0)"),
+            tile_arm("_reject_mma_block_scaled_frags", "mma_block_scaled(f32 accumulator, e2m1 A fragment, e2m1 B fragment",
+                "def mma_block_scaled(var f : coopmatAcc_f32_16x16; a : coopmatA_f16_16x16; b : coopmatB_f16_16x16; sa, sb0, sb1 : uint) \{\n    let z = sa + sb0 + sb1\n\}",
+                "        var f : coopmatAcc_f32_16x16\n        var a : coopmatA_f16_16x16\n        var b : coopmatB_f16_16x16\n        mma_block_scaled(f, a, b, 1u, 1u, 1u)"),
+            tile_arm("_reject_mma_scale_cols_acc", "mma_scale_cols(f32 accumulator, column scales)",
+                "def mma_scale_cols(var f : coopmatAcc_s32_16x16; cs : float4) \{\n    let z = cs.x\n\}",
+                "        var f : coopmatAcc_s32_16x16\n        mma_scale_cols(f, float4(1.0))"),
+            tile_arm("_reject_cvt_e2m1x2_arity", "cvt_e2m1x2(lo, hi)",
+                "def cvt_e2m1x2(lo : float) : uint => 0u",
+                "        o[0] = float(cvt_e2m1x2(1.0))"),
+            tile_arm("_reject_cvt_ue4m3_arity", "cvt_ue4m3(x)",
+                "def cvt_ue4m3(x, y : float) : uint => 0u",
+                "        o[0] = float(cvt_ue4m3(1.0, 2.0))")
         ])
     }
 }

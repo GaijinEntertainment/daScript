@@ -17,6 +17,7 @@ require dasllama/dasllama_par           // maybe_parallel_for + jobque probes
 require dasllama/dasllama_load   // StreamReg + the streaming-fill hook contract this file registers into
 require dasllama/dasllama_ple   // ple_planes: the per-layer-embedding planes the walkers pack
 require daslib/enum_trait   // the plane table walks the KqFmt enum
+require daslib/math_bits    // float_bits_to_uint: the nv4 device row's per-tensor scale word
 require strings   // the scale-plane name's format prefix
 require math
 
@@ -1049,7 +1050,7 @@ def moe_gpu_gather_stack_mx4(t : Model; woff : int64; n, rows, slice_rows : int6
 // Gather one PREPARED K-quant weight stack into the GPU tier's device planes — quant payloads
 // row-major per superblock in the k/k+16 nibble pairing, plus the device scale rows (decoded 20 B, or
 // the codebook formats' two words); grp<mr> interleave or disk-order in, identical device bytes out.
-[arch(at = "../ARCHITECTURE_CPU_KERNELS.md#kq-subblock-planes")]
+[arch(at = "../ARCHITECTURE_CPU_KERNELS.md#kq-subblock-planes"), arch(at = "../ARCHITECTURE_ENGINE_FORMATS_NV4.md#nv4-site-scale")]
 def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice_rows : int64;
                             repacked : bool; mr : int64; var wq : array<uint8>; var ws : array<uint8>) {
     let nsb = n / KQ_SUPERBLOCK_ELEMS
@@ -1065,6 +1066,7 @@ def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice
     let qrow = nsb * qsb
     let srow = nsb * dssb
     let ng = repacked ? slice_rows / mr : 0l
+    let nv4_site_scale_bits = fmt == KqFmt.nv4 ? float_bits_to_uint(site_scale(t, fmt, woff)) : 0u
     unsafe {
         let sb0 = woff / KQ_SUPERBLOCK_ELEMS
         let qp = addr<uint8 const?>(t.kq[int(fmt)].q[sb0 * qsb])
@@ -1160,13 +1162,13 @@ def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice
                                 dsc[17] = gs[16l * mr + 2l * r + 1l]
                                 dsc[18] = uint8(0)
                                 dsc[19] = uint8(0)
-                            } elif (fmt == KqFmt.q40 || fmt == KqFmt.iq4nl) {
-                                for (blk in range64(8l)) {   // 8 per-block f16 d, mr-interleaved (iq4nl repacks with q40's interleave)
+                            } elif (fmt == KqFmt.q40 || fmt == KqFmt.iq4nl || fmt == KqFmt.nv4) {
+                                for (blk in range64(8l)) {   // 8 per-block f16 d (nv4: UE4M3 byte pairs), mr-interleaved (iq4nl repacks with q40's interleave)
                                     dsc[blk * 2l] = gs[blk * 2l * mr + 2l * r]
                                     dsc[blk * 2l + 1l] = gs[blk * 2l * mr + 2l * r + 1l]
                                 }
                                 for (idx in range64(16l, 20l)) {
-                                    dsc[idx] = uint8(0)
+                                    dsc[idx] = uint8((nv4_site_scale_bits >> uint((idx - 16l) * 8l)) & 0xFFu)
                                 }
                             } elif (fmt == KqFmt.k2) {   // the field-major grp header re-packs to [d][dmin][16 pair bytes]
                                 dsc[0] = gs[16l * mr + 2l * r]
@@ -1191,7 +1193,7 @@ def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice
                         } else {
                             let rq = qp + sliceQ + ri * qrow + sbi * qsb
                             let rs = sp + sliceS + ri * srow + sbi * dssb
-                            if (fmt == KqFmt.q40 || fmt == KqFmt.iq4xs || fmt == KqFmt.iq3s4 || fmt == KqFmt.k3 || fmt == KqFmt.iq3s || fmt == KqFmt.iq3xxs || fmt == KqFmt.iq4nl || fmt == KqFmt.k2 || fmt == KqFmt.iq2s || fmt == KqFmt.iq2xs || fmt == KqFmt.iq2xxs) {
+                            if (fmt == KqFmt.q40 || fmt == KqFmt.iq4xs || fmt == KqFmt.iq3s4 || fmt == KqFmt.k3 || fmt == KqFmt.iq3s || fmt == KqFmt.iq3xxs || fmt == KqFmt.iq4nl || fmt == KqFmt.nv4 || fmt == KqFmt.k2 || fmt == KqFmt.iq2s || fmt == KqFmt.iq2xs || fmt == KqFmt.iq2xxs) {
                                 for (m in range64(qsb)) {   // disk bytes already in the device form (k/k+16 pairs; k3's lanes)
                                     dq[m] = rq[m]
                                 }
@@ -1220,12 +1222,12 @@ def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice
                             }
                             if (two_word_row) {   // the plane row (d, then the eight decoded sub-scale bytes at 4) packs to two words
                                 pack_iq_dev_row(fmt, dsc, rs, rs + 4l, 1l)
-                            } elif (fmt == KqFmt.k6 || fmt == KqFmt.q40 || fmt == KqFmt.k3 || fmt == KqFmt.iq4nl || fmt == KqFmt.k2 || fmt == KqFmt.iq2s || fmt == KqFmt.iq2xs) {   // rows already in the decoded device form
+                            } elif (fmt == KqFmt.k6 || fmt == KqFmt.q40 || fmt == KqFmt.k3 || fmt == KqFmt.iq4nl || fmt == KqFmt.nv4 || fmt == KqFmt.k2 || fmt == KqFmt.iq2s || fmt == KqFmt.iq2xs) {   // rows already in the decoded device form
                                 for (idx in range64(dssb)) {
                                     dsc[idx] = rs[idx]
                                 }
                                 for (idx in range64(dssb, KQ_DEV_SSB)) {
-                                    dsc[idx] = uint8(0)
+                                    dsc[idx] = uint8((nv4_site_scale_bits >> uint((idx - 16l) * 8l)) & 0xFFu)
                                 }
                             } else {
                                 for (idx in range64(4l)) {   // f16 d + f16 dmin verbatim

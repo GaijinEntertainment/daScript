@@ -748,7 +748,7 @@ namespace das
         }
     };
 
-    // src/ast/ARCHITECTURE.md#module-scan-manifest
+    // src/ast/ARCHITECTURE_MODULE_SCAN.md#module-scan-manifest
     __forceinline Module * vectorHomeModule ( const TypeDeclPtr & elem, const ModuleLibrary & library ) {
         auto t = elem;
         while ( t && t->isPointer() && t->firstType ) t = t->firstType;

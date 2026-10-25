@@ -32,9 +32,9 @@ def fa_head_ok(hs : int64) : bool => hs == 64l || hs == 128l || hs == 256l || hs
 def fa_khr_serves(hs : int64; cap : float; gated : bool) : bool
     => fa_head_ok(hs) && !gated && (cap == 0.0 || hs == 256l)
 
-//! the cm2 flash tile serves a head of 64, 128, 256 or 512, gated at 256 alone, the softcap at an ungated 256 alone
+//! the cm2 flash tile serves a head of 64, 96, 128, 256 or 512, gated at 256 alone, the softcap at an ungated 256 alone
 def fa_cm2_serves(hs : int64; cap : float; gated : bool) : bool
-    => fa_head_ok(hs) && (!gated || hs == 256l) && (cap == 0.0 || (hs == 256l && !gated))
+    => (fa_head_ok(hs) || hs == 96l) && (!gated || hs == 256l) && (cap == 0.0 || (hs == 256l && !gated))
 
 
 // ===== add + rmsnorm =====
@@ -2188,6 +2188,29 @@ class FaCm2H128F16 : FaH128T {
     }
 }
 
+//! the flash tile at head 96 (`FaH96T`): phi-3's heads, the cm2 arm alone
+[vk_dispatch(name = "fa_cm2_h96_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
+class FaCm2H96 : FaH96T {
+    typedef OT = float
+
+    [spirv_kernel(local_size_x = 128)]
+    def run {
+        fa_body()
+    }
+}
+
+//! the head-96 flash tile with the f16 O store: `FaH96T` over `FaT`
+[vk_dispatch(name = "fa_cm2_h96_f16_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
+class FaCm2H96F16 : FaH96T {
+    typedef OT = float16
+    override OUT16 = true
+
+    [spirv_kernel(local_size_x = 128)]
+    def run {
+        fa_body()
+    }
+}
+
 //! the bidirectional twin: the padded route of the 72- and 80-wide tower heads (gemma3v, qwen3v, qwen25v), zero pads exact
 [vk_dispatch(name = "fa_cm2_h128_bidir_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
 class FaCm2H128Bidir : FaH128T {
@@ -2468,6 +2491,9 @@ def private fa_stamp_refuse(khr : bool; hs : int64; gated, cap, sink, f16, bidir
     if (khr && gated) {
         panic("vk flash: the KHR flash tile has no gated stamp")
     }
+    if (khr && hs == 96l) {
+        panic("vk flash: the KHR flash tile has no head-96 stamp (its lane map walks the head in 64-wide halves)")
+    }
     if (cap && hs != 256l) {
         panic("vk flash: the softcap stamps serve head size 256 alone")
     }
@@ -2477,19 +2503,19 @@ def private fa_stamp_refuse(khr : bool; hs : int64; gated, cap, sink, f16, bidir
     if (sink && hs != 64l) {   //! the gated and capped stamps sit at 256 alone (above), so this one test also keeps the sinks off them
         panic("vk flash: the sink stamps serve head size 64 alone")
     }
-    if (hs != 64l && hs != 128l && hs != 256l && hs != 512l) {
+    if (hs != 64l && hs != 96l && hs != 128l && hs != 256l && hs != 512l) {
         panic("vk flash: a stamp for a head size the tile never serves")
     }
 }
 
 //! every flash stamp's stem, four a form - cm2 f32, KHR f32, cm2 f16, KHR f16 - over the forms h64, h128, h256, h512, gated h256,
-//! capped h256, the h64 sink and the h64 and h128 bidirectional twins; `-` where a form has no such stamp
-let private FA_STAMPS = "fa_cm2_h64 fa_khr_h64 fa_cm2_h64_f16 fa_khr_h64_f16 fa_cm2_h128 fa_khr_h128 fa_cm2_h128_f16 fa_khr_h128_f16 fa_cm2_h256 fa_khr_h256 fa_cm2_h256_f16 fa_khr_h256_f16 fa_cm2_h512 fa_khr_h512 fa_cm2_h512_f16 fa_khr_h512_f16 fa_cm2_h256_g - fa_cm2_h256_g_f16 - fa_cm2_h256_cap fa_khr_h256_cap fa_cm2_h256_cap_f16 fa_khr_h256_cap_f16 fa_cm2_h64_sink fa_khr_h64_sink fa_cm2_h64_sink_f16 fa_khr_h64_sink_f16 fa_cm2_h64_bidir fa_khr_h64_bidir - - fa_cm2_h128_bidir fa_khr_h128_bidir - -"
+//! capped h256, the h64 sink, the h64 and h128 bidirectional twins and h96 (cm2 alone); `-` where a form has no such stamp
+let private FA_STAMPS = "fa_cm2_h64 fa_khr_h64 fa_cm2_h64_f16 fa_khr_h64_f16 fa_cm2_h128 fa_khr_h128 fa_cm2_h128_f16 fa_khr_h128_f16 fa_cm2_h256 fa_khr_h256 fa_cm2_h256_f16 fa_khr_h256_f16 fa_cm2_h512 fa_khr_h512 fa_cm2_h512_f16 fa_khr_h512_f16 fa_cm2_h256_g - fa_cm2_h256_g_f16 - fa_cm2_h256_cap fa_khr_h256_cap fa_cm2_h256_cap_f16 fa_khr_h256_cap_f16 fa_cm2_h64_sink fa_khr_h64_sink fa_cm2_h64_sink_f16 fa_khr_h64_sink_f16 fa_cm2_h64_bidir fa_khr_h64_bidir - - fa_cm2_h128_bidir fa_khr_h128_bidir - - fa_cm2_h96 - fa_cm2_h96_f16 -"
 
 //! the flash stamp's ordinal in FA_STAMPS, once the refusals passed
 def private fa_stamp_key(khr : bool; hs : int64; gated, cap, sink, f16, bidir : bool) : int {
     fa_stamp_refuse(khr, hs, gated, cap, sink, f16, bidir)
-    let form = bidir ? (hs == 64l ? 7 : 8) : (sink ? 6 : (hs == 64l ? 0 : (hs == 128l ? 1 : (hs == 512l ? 3 : (gated ? 4 : (cap ? 5 : 2))))))
+    let form = bidir ? (hs == 64l ? 7 : 8) : (sink ? 6 : (hs == 64l ? 0 : (hs == 128l ? 1 : (hs == 96l ? 9 : (hs == 512l ? 3 : (gated ? 4 : (cap ? 5 : 2)))))))
     return form * 4 + (f16 ? 2 : 0) + (khr ? 1 : 0)
 }
 
@@ -3287,6 +3313,48 @@ class KqBatchIq4nl : KqBatchIq4xs {
     }
 
     [spirv_kernel(local_size_x = 256, name = "kq_batch_iq4nl_cls_spv")]
+    def override run {
+        tile_shell()
+    }
+}
+
+//! NVFP4 tile: the k4 staging over signed e2m1 lanes (no block-sum term), each block's low and high half under its own UE4M3 sub-block scale at half
+//! nv4 (NVFP4 as a nibble codebook plane): iq4xs's tiling and codebook staging under the doubled e2m1 magnitudes, two
+//! UE4M3 half scales a block in place of the one sub-scale
+[vk_dispatch(name = "kq_batch_nv4_cls", kernel = "run", family = "kq_batch_cls", grid = "wgs", params = "wgs : int64")]
+class KqBatchNv4 : KqBatchIq4xs {
+    def override cb_word(n : uint) : uint => mx4_word(n)
+
+    def override stage_ws(wsb0, wt, nsb, s, tid : uint) {
+        let slane = tid % 32u
+        let sblk = tid / 32u
+        var slo = 0.0
+        var shi = 0.0
+        if (wt * 32u + slane < pa.d) {
+            let wsb = wsb0 + (wt * 32u + slane) * nsb + s
+            let sw = wsu[wsb * 5u + sblk / 2u] >> ((sblk & 1u) * 16u)
+            let site_scale = uint_bits_to_float(wsu[wsb * 5u + 4u])
+            slo = ue4m3_half_f32(sw & 0xFFu) * site_scale
+            shi = ue4m3_half_f32((sw >> 8u) & 0xFFu) * site_scale
+        }
+        wsw[sblk * 32u + slane] = slo
+        wsw2[sblk * 32u + slane] = shi
+    }
+
+    def override blk_fma(bu, grp, word : uint; xscl : float) : float4 {
+        var l = int4(0)
+        var h = int4(0)
+        var blo = 0
+        var bhi = 0
+        split_dots(bu, grp, word, l, h, blo, bhi)
+        let wlo = float4(wsw[bu * 32u + word], wsw[bu * 32u + word + 8u],
+            wsw[bu * 32u + word + 16u], wsw[bu * 32u + word + 24u])
+        let whi = float4(wsw2[bu * 32u + word], wsw2[bu * 32u + word + 8u],
+            wsw2[bu * 32u + word + 16u], wsw2[bu * 32u + word + 24u])
+        return xscl * (wlo * float4(l) + whi * float4(h))
+    }
+
+    [spirv_kernel(local_size_x = 256, name = "kq_batch_nv4_cls_spv")]
     def override run {
         tile_shell()
     }
@@ -4791,6 +4859,52 @@ class Iq4nlCm2SBatch : Iq4nlCm2T {
     }
 }
 
+//! the nv4 cm2 l tile: `Nv4Cm2T`
+[vk_dispatch(name = "kq_batch_nv4_cm2l_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Nv4Cm2LBatch : Nv4Cm2T {
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x256
+    typedef ACC = coopmatWgAcc_f16_128x256
+    typedef ACCW = coopmatWgAcc_f32_128x256
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        cm2_body()
+    }
+}
+
+//! the nv4 cm2 m tile: `Nv4Cm2T`
+[vk_dispatch(name = "kq_batch_nv4_cm2m_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Nv4Cm2MBatch : Nv4Cm2T {
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        cm2_body()
+    }
+}
+
+//! the nv4 cm2 s tile: `Nv4Cm2T`
+[vk_dispatch(name = "kq_batch_nv4_cm2s_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Nv4Cm2SBatch : Nv4Cm2T {
+    override BN = 32u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x32
+    typedef ACC = coopmatWgAcc_f16_128x32
+    typedef ACCW = coopmatWgAcc_f32_128x32
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        cm2_body()
+    }
+}
+
 [vk_dispatch(name = "kq_batch_k2_cm2l_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class K2Cm2LBatch : K2Cm2T {
     typedef AT = coopmatWgA_f16_128x64
@@ -5330,6 +5444,23 @@ class Iq3xxsKhrBatch : Iq3xxsCm2T {
 
 [vk_dispatch(name = "kq_batch_iq4nl_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Iq4nlKhrBatch : Iq4nlCm2T {
+    override KHR = true
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        cm2_body()
+    }
+}
+
+//! the nv4 KHR tile: `Nv4Cm2T` on the KHR arm
+[vk_dispatch(name = "kq_batch_nv4_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Nv4KhrBatch : Nv4Cm2T {
     override KHR = true
     override BN = 128u
     override STILE = true
@@ -7520,7 +7651,7 @@ let GEMV_SHELL_PLAIN = 0
 let GEMV_SHELL_SUM = 1   //! the per-32 formats past q8
 let GEMV_SHELL_GU = 2    //! the kq formats the twins stamp, and mx4's biased twin
 //! the (format, shell) pairs no stamp serves
-let GEMV_SHELL_SKIP = "q8/sum_cls k2/sum_cls k3/sum_cls k4/sum_cls k5/sum_cls k6/sum_cls q40/sum_cls iq4xs/sum_cls iq3s/sum_cls iq3xxs/sum_cls iq4nl/sum_cls iq2s/sum_cls iq2xs/sum_cls iq2xxs/sum_cls iq3s4/sum_cls q8/gu_cls q51/gu_cls iq4nl32/gu_cls q4032/gu_cls q5032/gu_cls k2/gu_cls k3/gu_cls k5/gu_cls k6/gu_cls q40/gu_cls iq3s/gu_cls iq3xxs/gu_cls iq4nl/gu_cls iq2xs/gu_cls iq2xxs/gu_cls"
+let GEMV_SHELL_SKIP = "q8/sum_cls k2/sum_cls k3/sum_cls k4/sum_cls k5/sum_cls k6/sum_cls q40/sum_cls iq4xs/sum_cls iq3s/sum_cls iq3xxs/sum_cls iq4nl/sum_cls iq2s/sum_cls iq2xs/sum_cls iq2xxs/sum_cls iq3s4/sum_cls nv4/sum_cls nv4/gu_cls q8/gu_cls q51/gu_cls iq4nl32/gu_cls q4032/gu_cls q5032/gu_cls k2/gu_cls k3/gu_cls k5/gu_cls k6/gu_cls q40/gu_cls iq3s/gu_cls iq3xxs/gu_cls iq4nl/gu_cls iq2xs/gu_cls iq2xxs/gu_cls"
 
 //! whether format `fmt` stamps decode GEMV shell `shell`: no pair of `GEMV_SHELL_SKIP` names it
 def gemv_shell_fmt(fmt, shell : int) : bool => kq_tile_stamped(fmt, GEMV_SHELL_SKIP, shell, GEMV_SHELLS)
@@ -7840,6 +7971,27 @@ class KqGemvIq4nlN : Iq4nlGemvT {
 }
 
 
+//! the nv4 decode GEMV: `Nv4GemvT` on the SWAR nibble decode
+[vk_dispatch(name = "kq_gemv_nv4_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvNv4 : Nv4GemvT {
+    [spirv_kernel(local_size_x = 64)]
+    def run {
+        leaf_body()
+    }
+}
+
+//! its N-column stamp: `Nv4GemvT`
+[vk_dispatch(name = "kq_gemv_nv4_n_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvNv4N : Nv4GemvT {
+    override NCOL = true
+
+    [spirv_kernel(local_size_x = 64)]
+    def run {
+        leaf_body()
+    }
+}
+
+
 [vk_dispatch(name = "kq_gemv_k3_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvK3 : K3GemvT {
     [spirv_kernel(local_size_x = 64)]
@@ -8072,6 +8224,17 @@ class KqEmbIq4nl : Iq4nlGemvT {
     }
 }
 
+//! the nv4 token-table gather: `Nv4GemvT`'s decode over the table rows
+[vk_dispatch(name = "kq_emb_nv4_cls", kernel = "run", family = "kq_emb_cls", grid = "wgs", params = "wgs : int64")]
+class KqEmbNv4 : Nv4GemvT {
+    override EMB = true
+
+    [spirv_kernel(local_size_x = 64)]
+    def run {
+        leaf_body()
+    }
+}
+
 [vk_dispatch(name = "kq_emb_k2_cls", kernel = "run", family = "kq_emb_cls", grid = "wgs", params = "wgs : int64")]
 class KqEmbK2 : K2GemvT {
     override EMB = true
@@ -8178,7 +8341,7 @@ def emb_f32_enc(raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet
 
 //! `npos` rows of `dim` gathered off the table at slab-local block `wblk0` (q8: 32-element blocks, a superblock format: superblocks)
 [arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#vk-token-gather")]
-def emb_cls_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; npos, dim, wblk0 : int64; escale : float) {
+def emb_cls_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; npos, dim, wblk0 : int64; escale : float) {   // nolint:STYLE037 - the stamp's ladder, one arm per KqFmt member
     if (fmt == int(KqFmt.q8)) {
         var pce = EmbArgs(npos = uint(npos), dim = uint(dim), wblk0 = uint(wblk0), embed_scale = escale)
         enc_emb_gather_cls(raw, h, set_, pce, (npos * dim / 4l + 255l) / 256l)

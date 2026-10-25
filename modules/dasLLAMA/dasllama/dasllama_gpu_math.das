@@ -387,6 +387,19 @@ def tts_div(a, b : float) : float {
 //! the f32 bits, the denormal pair e < 2 included; the CPU `e8m0_half`'s value
 def e8m0_half_f32(ex : uint) : float => uint_bits_to_float(ex < 2u ? (0x00200000u << ex) : ((ex - 1u) << 23u))
 
+//! an NVFP4 UE4M3 scale byte at HALF its value (`mx4_lut`'s magnitudes are doubled): e = 0 is the subnormal, m x 2^-10 at half, the 0x7F nan code reads as zero
+def ue4m3_half_f32(b : uint) : float {
+    let e = (b >> 3u) & 15u
+    let m = b & 7u
+    if (b == 0x7Fu) {
+        return 0.0
+    }
+    if (e == 0u) {
+        return float(m) * 0.0009765625
+    }
+    return uint_bits_to_float(((e + 119u) << 23u) | (m << 20u))
+}
+
 //! `v` stored as a half, saturated at the half's largest finite magnitude instead of overflowing to infinity
 def half_sat(v : float) : float16 => float16(clamp(v, -65504.0, 65504.0))
 

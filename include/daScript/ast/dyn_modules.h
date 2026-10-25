@@ -30,7 +30,7 @@ DAS_CC_API bool require_dynamic_modules(smart_ptr<FileAccess> file_access,
                                      const vector<string> &disabled_modules,
                                      TextWriter &tout);
 
-// src/ast/ARCHITECTURE.md#module-scan-manifest
+// src/ast/ARCHITECTURE_MODULE_SCAN.md#module-scan-manifest
 struct DynModuleManifestRow {
     bool    dynamic = false;    // false: native path (a=mod_name, b=src, c=dst); true: dynamic module (a=path, b=cpp class, c=das name)
     bool    group = false;      // group member (a=group, b=member, c=guard or empty)
@@ -47,6 +47,7 @@ DAS_API bool load_deferred_dynamic_module(const char * das_name);
 DAS_API size_t load_all_deferred_dynamic_modules();                 // the count it attempted
 DAS_API string describe_pending_dynamic_modules();                  // "" when nothing is pending
 DAS_API bool is_dynamic_module_deferred(const char * das_name);
+DAS_API bool dynamic_module_artifact_exists(const char * path);     //! the row's file, under the _debug rewrite a debug build applies
 DAS_API bool pending_dynamic_module_artifact_present();             // a dlopen-failed row whose file exists: an import the deferred set holds
 DAS_API string registered_dynamic_module_name(const char * path, const char * cpp_class);   // empty while that row's module is not registered
 DAS_API void clear_deferred_dynamic_modules();                      // the rows are the scan's: cleared at scan start and at shutdown

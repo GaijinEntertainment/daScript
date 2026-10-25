@@ -40,7 +40,7 @@ require dasllama/dasllama_gemm_schema   // the q8 block geometry the mint's zero
 // WhisperModel.enc) contribute their planes under dotted names ("enc.fblob"); string-array
 // fields ride the meta blob via serialize_strings — raw string pointers can't be planes.
 
-let IMAGE_VERSION = 53   // a trimmed Vulkan lane's plan carries its host-layer split as a `VkBakeRole.host_split` marker entry
+let IMAGE_VERSION = 54   // the plane table carries the nv4 slot (NVFP4)
 
 //! The metal (blob-only) flavor's identity tag: q8 planes ride the 34B block_q8_0 blob and the
 //! kq scale planes their GPU forms (convert_model_to_metal_blob) — flavors are per-config and
@@ -810,6 +810,7 @@ def serialize_image_meta(var arch : Archive; var t : Model) {
     arch |> serialize_raw(t.wcls_fmt)
     arch |> serialize_raw(t.emb_fmt)
     arch |> serialize_raw(t.ple_emb_fmt)
+    arch |> serialize(t.site_scale)
     arch |> serialize_raw(t.router_off)
     arch |> serialize_raw(t.shexp_gate_off)
     arch |> serialize_raw(t.moe_router_scale_off)
@@ -867,7 +868,7 @@ def serialize_image_meta(var arch : Archive; var t : Model) {
 }
 
 //! the 4 deliberate skips: blocks, blob_scaled, image_map, image_bytes; the plane table counts as ONE field.
-let IMAGE_META_FIELDS = 84 + 4
+let IMAGE_META_FIELDS = 85 + 4
 
 // the tokenizer's tripwires: the SentencePiece backend's six serialized meta fields + its three
 // derived tables (lookup, pair_merge, bkey_id); the BPE backend's eight (merge_rank rides as the
@@ -1348,6 +1349,9 @@ def private vk_mint_gather_hook(fmt : int; woff, n, rows, slice_rows, mr, kgroup
             g_vk_mint_decline_reason = "the mint cannot gather {f} at element {woff} ({n}x{rows}) off the gguf - no run of streamed jobs holds it, an entry shape the mint does not know"
         }
         vk_mint_zero_view(f, woff, n * rows)
+    }
+    if (f == KqFmt.nv4) {   // the view's planes sit rebased: the plane's per-tensor scale rides under the rebased key
+        g_vk_mint_job_view.site_scale[site_scale_key(f, woff - g_vk_mint_view_rebase)] = site_scale(*g_vk_mint_streamed_model, f, woff)
     }
     layout_gather_dispatch(g_vk_mint_job_view, f, woff - g_vk_mint_view_rebase, n, rows, slice_rows, mr, kgroup, wbias, wq, ws, disk)
     return true

@@ -15,20 +15,16 @@ def das_exe() : string {
     return empty(args) ? "" : args[0]
 }
 
-//! the manifest the running binary's kind writes beside a descriptor: a dynamic-module build and
-//! a static one keep their own (src/ast/ARCHITECTURE.md#module-scan-manifest)
-def manifest_file_name() : string {
-    return das_is_dll_build() ? ".das_module.manifest" : ".das_module.static.manifest"
-}
+//! the manifest file this binary's kind writes beside a descriptor
+def manifest_file_name() : string =>
+    das_is_dll_build() ? ".das_module.manifest" : ".das_module.static.manifest"
 
-def twin_manifest_file_name() : string {
-    return das_is_dll_build() ? ".das_module.static.manifest" : ".das_module.manifest"
-}
+def twin_manifest_file_name() : string =>
+    das_is_dll_build() ? ".das_module.static.manifest" : ".das_module.manifest"
 
 //! the manifest a `--jit-target` run of this kind writes: the target's platform name sits before `.manifest`
-def target_manifest_file_name(target : string) : string {
-    return das_is_dll_build() ? ".das_module.{target}.manifest" : ".das_module.static.{target}.manifest"
-}
+def target_manifest_file_name(target : string) : string =>
+    das_is_dll_build() ? ".das_module.{target}.manifest" : ".das_module.static.{target}.manifest"
 
 //! the other binary kind's daslang beside this one - `daslang_static` beside `daslang` and back; "" when absent
 def twin_exe() : string {
@@ -43,7 +39,8 @@ def twin_exe() : string {
 //! descriptor's verdict and each shared-module load; the prefix also keeps the command from
 //! opening with a quote, which cmd.exe would strip
 def trace_prefix() : string {
-    return get_platform_name() == "windows" ? "set \"DAS_TRACE_MODULE_LOAD=1\"&& " : "DAS_TRACE_MODULE_LOAD=1 "
+    let trace_env = "DAS_TRACE_MODULE_LOAD=1"
+    return get_platform_name() == "windows" ? "set \"{trace_env}\"&& " : "{trace_env} "
 }
 
 //! stderr joins stdout: the scan trace goes through the logger
