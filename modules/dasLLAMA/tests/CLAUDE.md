@@ -1009,7 +1009,7 @@ compact rows on sixteen windows (one ragged) against `attention_bidir_windows` w
 over the same rows as the leak control, the rms seam and the gated hidden (the shared bias-gate stamp
 `TowerBiasGate16`, the qwen25v hidden's) against their CPU forms;
 the bias class's erf arm (the whisper-class towers' GELU) against `gelu_erf_batch` at 1e-5
-relative - the f32 evaluation of the CPU's double erfc - with the tanh arm missing that bar as the
+relative - the shader's f32 evaluation of the CPU kernel's erfc fit - with the tanh arm missing that bar as the
 told-apart control, and its silu arm (canary's FFN) against `silu` with the tanh arm as its
 control; the Conformer classes (the silu rows - the bias class's silu arm with no bias row - the
 GLU, the causal depthwise taps, the chunk-12 relative-position attention on both head-width stamps,
@@ -2870,7 +2870,8 @@ Q8_0 blocks where the device feeds f16), the tail counter `vulkan_tower_tail_enc
 alone with the blocks on the device on both, another mel's rows outside the bar as the control, all of which skip without their carriers (the qwen2audio / voxtral / omni-3b f32 mmprojs, the E2B bf16
 mmproj, the canary f32 encoder, the parakeet f32 encoder, the ultravox f16 mmproj, the Qwen3-ASR bf16 mmproj), without
 jfk.wav, without a Vulkan device under `DASLLAMA_GPU=1`, and on a das_metal build.
-`test_whisper.das` - stocked suite; model-gated: the whisper/parakeet/canary/gemma4a/omni
+`test_whisper.das` - stocked suite; the qwen3a mel cell (model-free: the lanes' mel image against the one-lane
+image element for element - the DFT GEMM splits on whole 4-row tiles so every row rounds as one lane's); model-gated: the whisper/parakeet/canary/gemma4a/omni
 oracle cells (the parakeet v2 cell also runs the transcription with single-thread mode off and
 on: the team leg dispatches, the one-lane leg never does, and its tokens are the team leg's - the
 decode step's one-lane form against its team publish, both texts logged - and the session that

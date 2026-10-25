@@ -34,10 +34,11 @@ through a `../dasllama/` function and calls no other `../dasllama/` function.
 changes which `run.das` suites list one, applies that checklist too.**
 
 **A diff that adds a cell or an assert whose expected value must be kept in step with something
-maintained outside the cell (a document, a checked-in table, a committed artifact's form, a roster
-or a knob list) - never a value the cell's own claim defines - or that a checked-in table names as
-its evidence, applies `REVIEW_PINNED_GATES.md` too.** An assert that compares against a
-`../dasllama/` constant by name, not against a literal copy of it, keeps nothing in step.
+maintained outside the cell - anything the cell restates as a literal or a copied condition: a
+document, a checked-in table, a committed artifact's form, a roster, a knob list, an engine dispatch
+condition - never a value the cell's own claim defines - or that a checked-in table names as its
+evidence, applies `REVIEW_PINNED_GATES.md` too.** An assert that compares against a `../dasllama/`
+constant by name, not against a literal copy of it, keeps nothing in step.
 
 **A cell that calls - in its own code or through a helper - a `../dasllama/` call that sets a
 module or process global a later load, route choice or kernel dispatch reads (a `set_*`,
@@ -199,15 +200,16 @@ number can produce.** A value set through a knob setter or a config field (`set_
 cap, a resize, or a counter showing a route ran is no such count, and a device's geometry
 (subgroup width, SM count) is no coverage claim.
 
-**An exact token or id compare over a prompt whose continuation can tie states in the cell what
-makes its two sides compute bit-identical logits - one shared entry point, an assert pinning the
-lane, or a lane pin (a call that picks the weight form, the Metal tensor crowns or the CPU kernel
-backend a load serves on) plus why the one storage layout (a flat K/V cache against a paged one)
-or batch shape that alone differs leaves the logits bit-identical; a compare no such statement
-covers - different lanes, backends or kernel forms among them - is a defect, and takes the
-forced-feed logits-tolerance form: the same fixed tokens fed to both sides, the logits compared
-within a bar.** A continuation can tie unless every next token is dictated by the prompt's own
-sequence (a count, an arithmetic series, a fixed enumeration); prose always can.
+**An exact compare of a text model's tokens or ids over a prompt whose continuation can tie states
+in the cell what makes its two sides compute bit-identical logits - one shared entry point, an
+assert pinning the lane, or a lane pin (a call that picks the weight form, the Metal tensor crowns
+or the CPU kernel backend a load serves on) plus why the one storage layout (a flat K/V cache
+against a paged one) or batch shape that alone differs leaves the logits bit-identical; a compare no
+such statement covers - different lanes, backends or kernel forms among them - is a defect, and
+takes the forced-feed logits-tolerance form: the same fixed tokens fed to both sides, the logits
+compared within a bar.** A continuation can tie unless every next token is dictated by the prompt's
+own sequence (a count, an arithmetic series, a fixed enumeration); prose always can. An ASR
+transcript compare answers to `REVIEW_MEDIA_CELLS.md`.
 
 **A test in this folder that loads a stocked artifact whose producer none of the following names
 is a defect.** Any one of these names the producer: a row in `../performance/model_specs.das`; a

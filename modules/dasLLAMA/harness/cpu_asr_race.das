@@ -1,12 +1,14 @@
 options gen2
 options _dasllama_internal = true
 
-// The CPU ASR line's three in-process races, one line a candidate, best of --reps interleaved:
-//   --arm bf16   the bf16 weight plane against the f32 plane through matmul_batch at the gemma-E
-//                projection's pp512 shape, the Qwen3-ASR conv's and a vision patch class - the stamped
-//                bf16w family where the sidecar names a perm, the widen walk elsewhere
-//   --arm mel    log_mel_qwen3a over a 60 s synthetic clip, one lane against the lanes, the two
-//                images compared element for element
+// The CPU ASR line's four in-process races, one line a candidate, best of --reps interleaved rounds:
+//   --arm bf16   the bf16 weight plane's routes against the f32 plane through matmul_batch at the gemma-E
+//                projection's pp512 shape, the Qwen3-ASR conv's and a vision patch class: the stamped
+//                bf16w family where the sidecar names a perm, the widen walk, the row nest it replaced
+//   --arm gelu   gelu_erf on the float lattice against the double erfc body it replaced, in place over a
+//                tower's FFN plane
+//   --arm mel    log_mel_qwen3a over a 60 s synthetic clip, one lane against the lanes, the two images
+//                compared element for element
 //   --arm kpass  the decode attention's K pass over a model-sized f16 cache (28 layers x 3000 keys x
 //                8 kv heads x 128, two q heads a kv head): the (kv head, slice) unit order against one
 //                slice over every kv head, one lane and all lanes
@@ -20,6 +22,7 @@ require dasllama/dasllama_kv_codec
 require dasllama/dasllama_qwen3a
 require dasllama/dasllama_audio
 require dasllama/dasllama_par
+require _race_fixture
 require daslib/jobque_boost
 require daslib/f16_cvt
 require daslib/clargs
@@ -27,9 +30,9 @@ require math
 
 [CommandLineArgs]
 struct Args {
-    @clarg_doc = "Which race: bf16 | mel | kpass | all (default: all)"
+    @clarg_doc = "Which race: bf16 | gelu | mel | kpass | all (default: all)"
     arm : string = "all"
-    @clarg_doc = "Timed rounds a candidate, the best kept (default: 5)"
+    @clarg_doc = "Timed rounds a candidate, interleaved, the best kept (default: 5)"
     reps : int = 5
     @clarg_short = "?"
     @clarg_name = "show-help"
@@ -37,52 +40,84 @@ struct Args {
     help : bool
 }
 
-def private bf16_bits_of(v : float) : uint16 {
-    let bits = unsafe(reinterpret<uint>(v))
-    return uint16((bits + 0x7FFFu + ((bits >> 16u) & 1u)) >> 16u)
+//! one candidate's line: its best round in ms, the median and the cv beside it, `rate` the figure the best makes
+def private line(race, who : string; us : array<int>; rate : block<(ms : float) : string>) {
+    let st = stats(us)
+    print("{race} {who}: {st.best} ms ({invoke(rate, st.best)}; median {st.median} ms, cv {st.cv})\n")
 }
 
-def private best_ms(reps : int; blk : block<() : void>) : double {
-    var best = 1.0e30lf
-    for (_r in range(reps)) {
-        let t0 = ref_time_ticks()
-        invoke(blk)
-        best = min(best, double(get_time_usec(t0)) / 1000.0lf)
-    }
-    return best
-}
+//! past every dot length: the row nest serves every output
+let private NEST_ONLY_MIN_N = 1l << 30
 
 def private race_bf16(n, d, ntok : int64; reps : int) {
-    var w : array<float>
+    let w <- race_fill(int(n * d), 1, 1.2, 0.0)
     var w16 : array<uint16>
-    var x, y : array<float>
-    w |> reserve_resize(int(n * d))
-    w16 |> reserve_resize(int(n * d))
-    x |> reserve_resize(int(ntok * n))
-    y |> reserve_resize(int(ntok * d))
-    for (i in range64(n * d)) {
-        w[i] = float(i % 13l) * 0.1 - 0.6
-        w16[i] = bf16_bits_of(w[i])
+    w16 |> resize(n * d)
+    for (h, v in w16, w) {
+        h = bf16_bits(v)
     }
-    for (i in range64(ntok * n)) {
-        x[i] = float(i % 7l) * 0.2 - 0.7
-    }
-    matmul_bf16_batch(y, w16, 0l, x, n, d, ntok)   // warm
-    matmul_batch(y, w, x, n, d, ntok)
-    var bf = 1.0e30lf
-    var ff = 1.0e30lf
-    for (_r in range(reps)) {
-        let tb = best_ms(1) {
+    let x <- race_fill(int(ntok * n), 2, 1.4, 0.0)
+    var y : array<float>
+    y |> resize(ntok * d)
+    let family = get_bf16_batch_gen()
+    let min_n = get_f32_batch_tile_min_n()
+    let labels <- [family != null ? "bf16 plane, the stamped family" : "bf16 plane, the widen walk (no family stamped)",
+                   "f32 plane, the tile walk", "bf16 plane, the widen walk", "bf16 plane, the row nest"]
+    var times <- time_rounds(length(labels), reps, 1, $(i : int) {
+        if (i == 0) {
+            set_bf16_batch_gen(family)
+        } else {
+            let none : Bf16BatchGenFn
+            set_bf16_batch_gen(none)
+        }
+        set_f32_batch_tile_min_n(i == 3 ? NEST_ONLY_MIN_N : min_n)
+    }, $(i : int) {
+        if (i == 1) {
+            matmul_batch(y, w, x, n, d, ntok)
+        } else {
             matmul_bf16_batch(y, w16, 0l, x, n, d, ntok)
         }
-        bf = min(bf, tb)
-        let tf = best_ms(1) {
-            matmul_batch(y, w, x, n, d, ntok)
-        }
-        ff = min(ff, tf)
-    }
+    })
+    set_bf16_batch_gen(family)
+    set_f32_batch_tile_min_n(min_n)
     let fl = 2.0lf * double(n * d * ntok) / 1.0e6lf
-    print("bf16 n={n} d={d} ntok={ntok}: bf16 plane {bf} ms ({fl / bf} GFLOP/s, {bf16w_tileform_gen() > 0 ? "the stamped family" : "the widen walk"}), f32 plane {ff} ms ({fl / ff} GFLOP/s)\n")
+    for (lbl, us in labels, times) {
+        line("bf16 n={n} d={d} ntok={ntok}", lbl, us) $(ms : float) => "{fl / double(ms)} GFLOP/s"
+    }
+}
+
+//! the GELU body before the float kernel: erfc as the NR rational fit over libm's exp, every op in double
+def private gelu_erf_double(var x : array<float>) {
+    for (v in x) {
+        let d = double(v)
+        let z = abs(d) * 0.7071067811865476lf
+        let t = 1.0lf / (1.0lf + 0.5lf * z)
+        let erfc = t * exp(-z * z - 1.26551223lf + t * (1.00002368lf + t * (0.37409196lf + t * (0.09678418lf + t * (-0.18628806lf
+            + t * (0.27886807lf + t * (-1.13520398lf + t * (1.48851587lf + t * (-0.82215223lf + t * 0.17087277lf)))))))))
+        v = float(d >= 0.0lf ? 0.5lf * d * (2.0lf - erfc) : 0.5lf * d * erfc)
+    }
+}
+
+def private race_gelu(reps : int) {
+    let n = 1024 * 4096
+    let x0 <- race_fill(n, 3, 8.0, 0.0)
+    var x : array<float>
+    x |> resize(n)
+    let labels <- ["the float kernel", "the double body"]
+    var times <- time_rounds(length(labels), reps, 1, $(_i : int) {
+        for (d, s in x, x0) {
+            d = s
+        }
+    }, $(i : int) {
+        if (i == 0) {
+            gelu_erf(unsafe(addr(x[0])), int64(n))
+        } else {
+            gelu_erf_double(x)
+        }
+    })
+    for (lbl, us in labels, times) {
+        line("gelu_erf {n} elements", lbl, us) $(ms : float) => "{ms * 1.0e6 / float(n)} ns an element"
+    }
 }
 
 def private race_mel(reps : int) {
@@ -93,21 +128,24 @@ def private race_mel(reps : int) {
     }
     set_single_thread_(true)
     var inscope a <- log_mel_qwen3a(samples, 128l)
-    let one = best_ms(reps) {
-        var inscope m <- log_mel_qwen3a(samples, 128l)
-    }
     set_single_thread_(false)
     var inscope b <- log_mel_qwen3a(samples, 128l)
-    let thr = best_ms(reps) {
+    let labels <- ["one lane", "the lanes"]
+    var times <- time_rounds(length(labels), reps, 1, $(i : int) {
+        set_single_thread_(i == 0)
+    }, $(_i : int) {
         var inscope m <- log_mel_qwen3a(samples, 128l)
-    }
+    })
+    set_single_thread_(false)
     var diff = 0
     for (p, q in a.data, b.data) {
         if (p != q) {
             diff++
         }
     }
-    print("mel 60 s x 128: one lane {one} ms, the lanes {thr} ms, elements apart {diff} of {length(a.data)}\n")
+    for (lbl, us in labels, times) {
+        line("mel 60 s x 128", lbl, us) $(_ms : float) => "elements apart {diff} of {length(a.data)}"
+    }
 }
 
 let KP_L = 28l
@@ -188,20 +226,18 @@ def private race_kpass(reps : int) {
     var att : array<float>
     att |> resize(2l * KP_KVH * KP_SEQ)
     let mb = double(KP_L * KP_KEYS * kvdim * 2l) / 1.0e6lf
-    let h1 = best_ms(reps) {
-        kpass_heads(kall, q, att, 1)
+    let labels <- ["(kv head, slice) units, one lane", "(kv head, slice) units, {KP_KVH * KP_NSL} units on the lanes",
+                   "a slice over every kv head, one lane", "a slice over every kv head, {KP_NSL} units on the lanes"]
+    var times <- time_rounds(length(labels), reps, 1) $(i : int) {
+        if (i < 2) {
+            kpass_heads(kall, q, att, i == 0 ? 1 : int(KP_KVH * KP_NSL))
+        } else {
+            kpass_rows(kall, q, att, i == 2 ? 1 : int(KP_NSL))
+        }
     }
-    let hn = best_ms(reps) {
-        kpass_heads(kall, q, att, int(KP_KVH * KP_NSL))
+    for (lbl, us in labels, times) {
+        line("kpass {mb} MB of f16 keys a step", lbl, us) $(ms : float) => "{mb / double(ms)} GB/s, {ms / float(KP_L)} ms a layer"
     }
-    let r1 = best_ms(reps) {
-        kpass_rows(kall, q, att, 1)
-    }
-    let rn = best_ms(reps) {
-        kpass_rows(kall, q, att, int(KP_NSL))
-    }
-    print("kpass {mb} MB of f16 keys a step, (kv head, slice) units: one lane {h1} ms ({mb / h1} GB/s), {KP_KVH * KP_NSL} units {hn} ms ({mb / hn} GB/s, {hn / double(KP_L)} ms a layer)\n")
-    print("kpass {mb} MB of f16 keys a step, a slice over every kv head: one lane {r1} ms ({mb / r1} GB/s), {KP_NSL} units {rn} ms ({mb / rn} GB/s, {rn / double(KP_L)} ms a layer)\n")
 }
 
 [export]
@@ -222,6 +258,9 @@ def main() : int {
             race_bf16(2560l, 10752l, 512l, cfg.reps)
             race_bf16(4320l, 480l, 800l, cfg.reps)
             race_bf16(1152l, 1152l, 256l, cfg.reps)
+        }
+        if (cfg.arm == "all" || cfg.arm == "gelu") {
+            race_gelu(cfg.reps)
         }
         if (cfg.arm == "all" || cfg.arm == "mel") {
             race_mel(cfg.reps)

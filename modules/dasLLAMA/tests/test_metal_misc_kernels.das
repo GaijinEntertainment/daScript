@@ -942,7 +942,7 @@ def private gelu_flavor_gate(t : T?; var dev, queue; total : int; lut : bool) {
         }
         return if (!ran || total < 8)
         // LUT: one f16 ulp at |g|~10 (RNE tie flips between the tanh and exp-identity evals);
-        // erf: the CPU's double-precision NR erfc against the same form in f32
+        // erf: the CPU's f32 NR erfc fit against the shader's evaluation of the same fit - a few ulp apart
         check_buf(t, "{tag}: form-matched inside the flavor bar", mc.buf[bg], want, Bar(abs_floor = lut ? 1e-2 : 1e-5), FLAT_SHAPE)
         var inscope back <- mc |> plane_run(bg)
         t |> success(back[total - 1] == 50.0 && back[total - 3] == 100.0, "{tag}: positive saturation exact")

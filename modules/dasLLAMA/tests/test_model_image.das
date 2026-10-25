@@ -2434,6 +2434,21 @@ def test_gemma4a_encoder_image_roundtrip(t : T?) {
     }
 }
 
+//! the q8 tower's transcript against the f32 rail's as word lists - a comma rides a near-tie token
+//! the two rails' rounding can split - both lists logged, the control a list one word short
+def same_words(t : T?; who : string; q8_text, f32_text : string) {
+    let q8 = join(transcript_words(q8_text), " ")
+    let f32 = join(transcript_words(f32_text), " ")
+    to_log(LOG_INFO, "{who} q8 words : {q8}\n")
+    to_log(LOG_INFO, "{who} f32 words: {f32}\n")
+    t |> equal(q8, f32, "q8 tower transcript matches the f32 rail, punctuation aside")
+    var short <- transcript_words(q8_text)
+    if (!empty(short)) {
+        short |> erase(length(short) - 1)
+    }
+    t |> success(join(short, " ") != f32, "control: the q8 words one short miss the f32 rail")
+}
+
 [test]
 def test_gemma4a_transcribe_q8_ab(t : T?) {
     t |> run("gemma4a transcribe: the q8 tower vs the f32 rail on jfk, the same words") @(t : T?) {
@@ -2469,10 +2484,7 @@ def test_gemma4a_transcribe_q8_ab(t : T?) {
             reset_gemma4a_q8()
             delete dec
         }
-        to_log(LOG_INFO, "gemma4a q8 : {q8_text}\n")
-        to_log(LOG_INFO, "gemma4a f32: {f32_text}\n")
-        // the words, not the punctuation: a comma rides a near-tie token the two rails' rounding can split
-        t |> equal(join(transcript_words(q8_text), " "), join(transcript_words(f32_text), " "), "q8 tower transcript matches the f32 rail, punctuation aside")
+        same_words(t, "gemma4a", q8_text, f32_text)
         delete samples
     }
 }
@@ -2734,10 +2746,7 @@ def test_qwen3a_transcribe_q8_ab(t : T?) {
             reset_qwen3a_q8()
             delete dec
         }
-        to_log(LOG_INFO, "qwen3a q8 : {q8_text}\n")
-        to_log(LOG_INFO, "qwen3a f32: {f32_text}\n")
-        // the words, not the punctuation: a comma rides a near-tie token the two rails' rounding can split
-        t |> equal(join(transcript_words(q8_text), " "), join(transcript_words(f32_text), " "), "q8 tower transcript matches the f32 rail, punctuation aside")
+        same_words(t, "qwen3a", q8_text, f32_text)
         delete samples
     }
 }

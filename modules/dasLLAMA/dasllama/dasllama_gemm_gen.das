@@ -3074,12 +3074,6 @@ def private bf16w_tile_gen(var gc : LlvmCodeCtx) : bool {
     return emit_amx_bf16_tile(gc, p)
 }
 
-def private bf16w_tokstep_gen(var gc : LlvmCodeCtx) : bool =>
-    int_companion(gc) $(p) => dot_kind(p.dotPrim) == DOT_AMX_BF16 ? 32 : 4
-
-def private bf16w_tileform_gen(var gc : LlvmCodeCtx) : bool =>
-    int_companion(gc) $(p) => dot_kind(p.dotPrim) == DOT_AMX_BF16 ? p.nrsplit : 0
-
 def private is_witness_signature(fn : Function const?) : bool => nullary_signature(fn, Type.tBool)
 
 // The witness: `() : bool` — did the stamped family actually EMIT on this target? Reference
@@ -5027,8 +5021,6 @@ def public register_dasllama_gemm_generators {
     register_llvm_code_generator("dasllama_gemm_gen::kq_witness", @@witness_gen)
     register_llvm_code_generator("dasllama_gemm_gen::kq_tileform", @@tileform_gen)
     register_llvm_code_generator("dasllama_gemm_gen::bf16w_tile", @@bf16w_tile_gen)
-    register_llvm_code_generator("dasllama_gemm_gen::bf16w_tokstep", @@bf16w_tokstep_gen)
-    register_llvm_code_generator("dasllama_gemm_gen::bf16w_tileform", @@bf16w_tileform_gen)
     register_llvm_code_generator("dasllama_gemm_gen::q8_panel", @@q8_panel_gen)
     register_llvm_code_generator("dasllama_gemm_gen::q8_panel_s16", @@q8_panel_s16_gen)
     for (f in type<KqFmt>) {

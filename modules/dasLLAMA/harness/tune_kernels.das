@@ -16,6 +16,8 @@ options _dasllama_internal = true
 
 require dasllama/dasllama_math   // side-effect: loads the *_template kernels for the cross-module scan
 require dasllama/dasllama_math_default   // dot_q8q8_template lives here
+require dasllama/dasllama_math_gen   // bf16_bits - the bf16 tile bench's weights round as the engine's planes do
+require ../tests/_compares.das   // erf_series - the GELU bench's oracle, the kernel cells' too
 require dasllama/dasllama_math_aarch64_neon   // laneq4x4 template (the repack backend "arm64-gen" registers via dasllama_common's math_gen require)
 require dasllama/dasllama_kv_codec   // nolint:STYLE030 — side-effect: the KV-codec *_template kernels for the cross-module scan
 require dasllama/dasllama_convert    // side-effect: the f16 row-convert templates for the cross-module scan
@@ -1018,33 +1020,11 @@ def bench_scale() : string {
     return report("scale_inplace", race)
 }
 
-// ===== softmax: (var x, size) in-place — reset before each timing block; repeated softmax of a
-// distribution stays a bounded distribution, so no denormal/inf drift over REPS.
-
-def bench_softmax() : string {
-    let vs <- softmax_template_variants()
-    var inscope d0, d : array<float>
-    d0 |> resize(N)
+//! an in-place `(var x, n)` kernel's race: `d0` reset before every run, the result gated f64-relative on `want`
+def private bench_unary_inplace(kernel : string; vs : array<tuple<string; auto(UF)>>; d0 : array<float>; want : array<double>) : string {
+    var inscope d : array<float>
     d |> resize(N)
-    for (i in range64(N)) {
-        d0[i] = 4.0f * sin(float(i) * 0.11f)   // scores in [-4,4], a realistic logit spread
-    }
     var dp = unsafe(addr(d[0]))
-    var inscope want : array<double>
-    want |> resize(N)
-    var mx = -1.0e30lf
-    for (i in range64(N)) {
-        mx = max(mx, double(d0[i]))
-    }
-    var wsum = 0.0lf
-    for (i in range64(N)) {
-        let e = exp(double(d0[i]) - mx)
-        want[i] = e
-        wsum += e
-    }
-    for (i in range64(N)) {
-        want[i] /= wsum
-    }
     var sink = 0.0f
     var inscope race <- race_variants(vs, $(i : int) : bool {
         reset_stream(dp, d0)
@@ -1067,31 +1047,27 @@ def bench_softmax() : string {
         sink += d[0]
     })
     tune_detail("  checksum {sink}\n")
-    return report("softmax", race)
+    return report(kernel, race)
 }
 
-// ===== bf16_batch_tile: the f32 tile over a bf16 weight plane - the same gate, the weights bf16 bits.
-
-def private bf16_bits_of(v : float) : uint16 {
-    let bits = unsafe(reinterpret<uint>(v))
-    return uint16((bits + 0x7FFFu + ((bits >> 16u) & 1u)) >> 16u)
+//! the four-rows-by-four-tokens tile race over a weight plane of either lattice, gated f64-relative on all sixteen dots
+def private w_val(wp : float const?; i : int64) : double => double(unsafe(wp[i]))
+def private w_val(wp : uint16 const?; i : int64) : double {
+    unsafe {
+        return double(reinterpret<float>(uint(wp[i]) << 16u))
+    }
 }
 
-def bench_bf16_batch_tile() : string {
-    let vs <- bf16_batch_tile_template_variants()
-    let D = 4l
-    var inscope w16 : array<uint16>
+def private bench_batch_tile(kernel : string; vs : array<tuple<string; auto(TF)>>; wp : auto const?) : string {
+    let D = 4l   // y row stride: the tile is the whole y
     var inscope x, y : array<float>
-    w16 |> resize(4l * N)
     var xp = aligned_f32(x, 4l * N)
     var yp = aligned_f32(y, 4l * D)
     unsafe {
         for (i in range64(4l * N)) {
-            w16[i] = bf16_bits_of(sin(float(i) * 0.1f))
             xp[i] = cos(float(i) * 0.07f)
         }
     }
-    let wp = unsafe(addr<uint16 const?>(w16[0]))
     var sink = 0.0f
     var inscope race <- race_variants(vs, $(i : int) : bool {
         let f = vs[i]._1
@@ -1101,7 +1077,7 @@ def bench_bf16_batch_tile() : string {
             for (tk in range64(4l)) {
                 var want = 0.0lf
                 for (j in range64(N)) {
-                    want += double(unsafe(reinterpret<float>(uint(w16[r * N + j]) << 16u))) * double(unsafe(xp[tk * N + j]))
+                    want += w_val(wp, r * N + j) * double(unsafe(xp[tk * N + j]))
                 }
                 let rel = rel_err(double(unsafe(yp[tk * D + r])), want)
                 maxrel = worst_rel(maxrel, rel)
@@ -1117,61 +1093,65 @@ def bench_bf16_batch_tile() : string {
         sink += y[0]
     })
     tune_detail("  checksum {sink}\n")
-    return report("bf16_batch_tile", race)
+    return report(kernel, race)
+}
+
+// ===== softmax: (var x, size) in-place — reset before each timing block; repeated softmax of a
+// distribution stays a bounded distribution, so no denormal/inf drift over REPS.
+
+def bench_softmax() : string {
+    let vs <- softmax_template_variants()
+    var inscope d0 : array<float>
+    d0 |> resize(N)
+    for (i in range64(N)) {
+        d0[i] = 4.0f * sin(float(i) * 0.11f)   // scores in [-4,4], a realistic logit spread
+    }
+    var inscope want : array<double>
+    want |> resize(N)
+    var mx = -1.0e30lf
+    for (i in range64(N)) {
+        mx = max(mx, double(d0[i]))
+    }
+    var wsum = 0.0lf
+    for (i in range64(N)) {
+        let e = exp(double(d0[i]) - mx)
+        want[i] = e
+        wsum += e
+    }
+    for (i in range64(N)) {
+        want[i] /= wsum
+    }
+    return bench_unary_inplace("softmax", vs, d0, want)
+}
+
+// ===== bf16_batch_tile: the f32 tile over a bf16 weight plane - the same gate, the weights bf16 bits.
+
+def bench_bf16_batch_tile() : string {
+    let vs <- bf16_batch_tile_template_variants()
+    var inscope w16 : array<uint16>
+    w16 |> resize(4l * N)
+    for (i in range64(4l * N)) {
+        w16[i] = bf16_bits(sin(float(i) * 0.1f))
+    }
+    return bench_batch_tile("bf16_batch_tile", vs, unsafe(addr<uint16 const?>(w16[0])))
 }
 
 // ===== gelu_erf: in place over N, gated f64-relative against the erf series' GELU on a [-4, 4] spread.
 
-def private erf_series(x : double) : double {
-    var sum = 0.0lf
-    var term = x
-    var k = 0
-    while (abs(term) > 1.0e-18lf && k < 200) {
-        sum += term / double(2 * k + 1)
-        k++
-        term *= -x * x / double(k)
-    }
-    return sum * 2.0lf / sqrt(3.141592653589793lf)
-}
-
 def bench_gelu_erf() : string {
     let vs <- gelu_erf_template_variants()
-    var inscope d0, d : array<float>
+    var inscope d0 : array<float>
     d0 |> resize(N)
-    d |> resize(N)
     for (i in range64(N)) {
         d0[i] = 4.0f * sin(float(i) * 0.11f)
     }
-    var dp = unsafe(addr(d[0]))
     var inscope want : array<double>
     want |> resize(N)
     for (i in range64(N)) {
         let x = double(d0[i])
         want[i] = 0.5lf * x * (1.0lf + erf_series(x * 0.7071067811865476lf))
     }
-    var sink = 0.0f
-    var inscope race <- race_variants(vs, $(i : int) : bool {
-        reset_stream(dp, d0)
-        let f = vs[i]._1
-        invoke(f, dp, N)
-        var maxrel = 0.0lf
-        for (j in range64(N)) {
-            let rel = rel_err(double(d[j]), want[j])
-            maxrel = worst_rel(maxrel, rel)
-        }
-        return maxrel <= TOL
-    }, $(_i : int) {
-        reset_stream(dp, d0)
-    }, $(i : int) {
-        let f = vs[i]._1
-        for (_rep in range(reps_of(i))) {
-            invoke(f, dp, N)
-        }
-    }, $ {
-        sink += d[0]
-    })
-    tune_detail("  checksum {sink}\n")
-    return report("gelu_erf", race)
+    return bench_unary_inplace("gelu_erf", vs, d0, want)
 }
 
 // ===== rmsnorm: (var o, x, weight, size, eps) out-of-place — repeatable, no reset needed.
@@ -1817,43 +1797,14 @@ def bench_gemm_tile() : string {
 
 def bench_f32_batch_tile() : string {
     let vs <- f32_batch_tile_template_variants()
-    let D = 4l   // y row stride: the tile is the whole y
-    var inscope w, x, y : array<float>
+    var inscope w : array<float>
     var wp = aligned_f32(w, 4l * N)
-    var xp = aligned_f32(x, 4l * N)
-    var yp = aligned_f32(y, 4l * D)
     unsafe {
         for (i in range64(4l * N)) {
             wp[i] = sin(float(i) * 0.1f)
-            xp[i] = cos(float(i) * 0.07f)
         }
+        return bench_batch_tile("f32_batch_tile", vs, reinterpret<float const?>(wp))
     }
-    var sink = 0.0f
-    var inscope race <- race_variants(vs, $(i : int) : bool {
-        let f = vs[i]._1
-        invoke(f, yp, wp, xp, N, D)
-        var maxrel = 0.0lf
-        for (r in range64(4l)) {
-            for (tk in range64(4l)) {
-                var want = 0.0lf
-                for (j in range64(N)) {
-                    want += double(unsafe(wp[r * N + j])) * double(unsafe(xp[tk * N + j]))
-                }
-                let rel = rel_err(double(unsafe(yp[tk * D + r])), want)
-                maxrel = worst_rel(maxrel, rel)
-            }
-        }
-        return maxrel <= TOL
-    }, $(_i : int) {}, $(i : int) {
-        let f = vs[i]._1
-        for (_rep in range(reps_of(i))) {
-            invoke(f, yp, wp, xp, N, D)
-        }
-    }, $ {
-        sink += y[0]
-    })
-    tune_detail("  checksum {sink}\n")
-    return report("f32_batch_tile", race)
 }
 
 // ===== dot_q8q8_laneq4x4: arm64+JIT only (the repack backend must be registered so the pin lands

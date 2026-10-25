@@ -909,6 +909,7 @@ var private g_bf16_batch_gen : Bf16BatchGenFn
 def set_bf16_batch_gen(fn : Bf16BatchGenFn) {
     g_bf16_batch_gen = fn
 }
+def get_bf16_batch_gen() : Bf16BatchGenFn => g_bf16_batch_gen
 
 // the one body: the float-override seam then the core. Both weight forms below reach it with a
 // base pointer, so a borrowed plane and an owned blob take the identical route.

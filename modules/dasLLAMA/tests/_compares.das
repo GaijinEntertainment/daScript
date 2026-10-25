@@ -594,6 +594,19 @@ def sweep_inert(var r : Sweep; got, before : array<float>) {
     }
 }
 
+//! erf by its Maclaurin series in double, run until a term is under 1e-18 - the GELU oracles' erf
+def erf_series(x : double) : double {
+    var sum = 0.0lf
+    var term = x
+    var k = 0
+    while (abs(term) > 1.0e-18lf && k < 200) {
+        sum += term / double(2 * k + 1)
+        k++
+        term *= -x * x / double(k)
+    }
+    return sum * 2.0lf / sqrt(3.141592653589793lf)
+}
+
 //! The sweep's verdict: `cases` lengths run (0 = at least one), none off its bar, no poison leg inside it, the largest
 //! difference logged; `moved` also asks every element of an in-place run to have moved.
 def report_sweep(t : T?; name : string; r : Sweep; cases : int = 0; moved : bool = false) {

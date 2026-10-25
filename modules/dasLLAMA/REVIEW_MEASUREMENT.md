@@ -81,6 +81,9 @@ A `held` entry is a `performance/records/annotations.json` entry carrying a boar
 `box`, `engine`, `backend`, `flavor` and `workload`, whose `held` field names the follow-up ledger
 row that keeps the row off the board.
 
+**A diff that owes a figure from every board box of the author's lists the author's board boxes in
+its PR body.**
+
 **The naming that a rule governing a figure asks for attaches to a figure only by a sentence, a
 table heading, a provenance line or a `PERF_LEDGER.md` entry's opening paragraph that
 unambiguously covers it, or by a citation of a passage or board row whose provenance covers
@@ -173,11 +176,10 @@ entry - that figure goes in the PR that lands the code.**
 
 **A diff that lets a served turn, or a media encode a turn takes (an image, a video frame or an
 audio chunk), reach code no spawned or manual cell's input reaches - a new dispatch arm, a
-window-size arm inside a path a cell drives at other sizes, or a changed default route - adds to
-`performance/gen_bench_records.das` a cell whose input reaches it, writes the new cell's figures
-from every board box of the author's that can mint them into a dated `PERF_LEDGER.md` entry, in the
-same change, and names in its PR body the `followup_general.md` row under which the release re-mint
-owes its rows.**
+window-size arm inside a path a cell drives at other sizes, or a changed default route - adds a
+spawned cell whose input reaches it, writes the new cell's figures from every board box of the
+author's that can mint them into a dated `PERF_LEDGER.md` entry, in the same change, and names in
+its PR body the `followup_general.md` row under which the release re-mint owes its rows.**
 
 **A change that owes a ledger figure no box of the author's can mint names instead, in the same
 change, an artifact that shows the new code ran end to end - a record, a gate output, an
@@ -194,18 +196,20 @@ run printed none.** A fat exe is what `daspkg release --fat <class>` builds (`DA
 
 **A diff whose PR body, or a line it adds or changes, states that a route the tree served before the
 diff runs faster or does less work, where a rig leg runs the changed lines, writes that leg's walls
-from every board box of the author's that runs it into a dated `PERF_LEDGER.md` entry naming the
+from every board box of the author's that can mint it into a dated `PERF_LEDGER.md` entry naming the
 exe's commit and the command, and names in the PR body the `followup_general.md` row under which the
-release re-mint owes every board box's row; no diff but the release re-mint writes those rows into
-`performance/records/<box>.json`.** The board is the module's committed record of what a release's
-exe costs to serve; a kernel win that lands in no ledger entry is invisible to the next regression
-check, and a row minted between releases shows a speed no shipped binary gives
+release re-mint owes every board box's row.** The board is the module's committed record of what a
+release's exe costs to serve; a kernel win that lands in no ledger entry is invisible to the next
+regression check, and a row minted between releases shows a speed no shipped binary gives
 (`ARCHITECTURE_MEASUREMENT_RELEASE.md#board-rows-release-boundary`).
 
 **The release re-mint re-mints, on each board box it runs on, every row a `followup_general.md` row
 owes it there, deletes any `held` entry holding one, names each row in its PR body, and puts each
-changed cell's last board figure beside the new one in a dated `PERF_LEDGER.md` entry in the same
+re-minted row's last board figure beside the new one in a dated `PERF_LEDGER.md` entry in the same
 change.**
+
+**No diff but the release re-mint writes a row into `performance/records/<box>.json`; a figure any
+other diff owes lands in a dated `PERF_LEDGER.md` entry.**
 
 **A diff whose PR body, or a line it adds or changes, states that a route the tree served before the
 diff runs faster or does less work, where no rig leg runs the changed lines, states in its PR body
@@ -216,20 +220,19 @@ the model components (encoder, decoder, tower) it runs or the backend that serve
 or rows it divides the wall by, or the reference build it times (`DEFAULT_REF_SHA` in
 `benchmarks/setup_lcpp_ref.das`, or anything else deciding which reference binary or environment the
 run measures) - deletes each affected row or gives it a `held` entry, writes the cell's new figures
-from every board box of the author's that runs the cell into a dated `PERF_LEDGER.md` entry beside
-the old ones, and names in its PR body the `followup_general.md` row under which the release re-mint
-owes the cell's rows; no diff but the release re-mint writes those rows into
-`performance/records/<box>.json`.**
-
+from every board box of the author's that can mint it into a dated `PERF_LEDGER.md` entry beside the
+old ones, and names in its PR body the `followup_general.md` row under which the release re-mint
+owes the cell's rows.**
 
 **A `PERF_LEDGER.md` entry that withdraws an earlier entry's figure states the withdrawal's
 reason.**
 
-**A rate or wall of any served-turn leg, or a ratio of two such rates or walls, written down as
-a measurement rather than as a prediction is a defect unless it cites the committed board row it
-came from, or names harness, flags, environment overrides, box, the exe or script that ran it,
-and - for a figure aggregated over more than one timed run or input - the number of runs or
-inputs and the spread of the per-run figures: the standard deviation, or the min and max.**
+**A rate or wall of any served-turn leg, or a ratio of two such rates or walls, written down as a
+measurement rather than as a prediction is a defect unless it cites the committed board row it came
+from, or names harness, flags, environment overrides, box, the exe or script that ran it, and - for
+a figure aggregated over more than one timed run or input - the number of runs or inputs and the
+spread of the per-run figures: the standard deviation, or the min and max - or, where the instrument
+prints no spread, the `followup_general.md` row owing it.**
 
 **A diff that records a measured number an instrument prints - a time, a rate, or a figure
 computed from one - or changes what such a number measures, ships that number's alternate in the

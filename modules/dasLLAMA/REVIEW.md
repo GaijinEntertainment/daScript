@@ -15,9 +15,9 @@ rewrites the problem a `followup_*.md` row states, adds a file under `dasllama/`
 STYLE037/STYLE038 suppression anywhere under this folder applies `REVIEW_DOCS.md` (beside this
 file) too.**
 
-**A diff that adds, changes or drops a check in a `REVIEW.das` under this folder, or adds a name
-to a check's licensed set - the names a check does not flag - applies `REVIEW_GATES.md` (beside
-this file) too.**
+**A diff that adds, changes or drops a check in a `REVIEW.das` under this folder, adds a name to a
+check's licensed set - the names a check does not flag - or changes a constant a check compares
+against, applies `REVIEW_GATES.md` (beside this file) too.**
 
 **Wherever it lives, each of these answers to this folder's `benchmarks/REVIEW.md` beside its own
 folder's checklist: code that times a run on its own clock (not a spawned child's) and hands the
@@ -182,16 +182,18 @@ Every recorded row, tune sidecar and exchange entry carries the release, so a bu
 on another module's hook, moves a family encode stage (a `dasllama/dasllama_<family>.das` stage
 turning input into embeddings or filling a cache the next stage reads) onto a GPU hook, calls a
 `set_*_q8` lane setter under `dasllama/` or `harness/`, adds or changes an override (an environment
-knob, a setter only code outside `dasllama/` sets, or a state file a run reads, that moves a gate,
-policy or threshold off its default), or adds or changes an announce (the line a run prints where
-an override changes the outcome) applies `REVIEW_OVERRIDES.md` (beside this file) too.**
+knob, a setter only code outside `dasllama/` sets, or a state file a run reads (a tune sidecar is
+not one: it names kernel perms, which the tune framework's own gates rule), that moves a gate,
+policy or threshold off its default), or adds or changes an announce (the line a run prints where an
+override changes the outcome) applies `REVIEW_OVERRIDES.md` (beside this file) too.**
 
-**A diff that cites a timing (in a `PERF_LEDGER.md` row, a `followup_*.md` row, a commit message
-or the PR body) as the reason it picks one candidate over another - a constant's value, a formula,
-or a predicate choosing among kernels that compute the same result - takes the winner from one
-script that races every candidate in one process, interleaved, each chosen by a flag or argument
-in the code the diff ships** - two commits or two processes differ by everything else that
-changed, so their timings pick nothing.
+**A diff that cites a timing (in a `PERF_LEDGER.md` row, a `followup_*.md` row, a commit message or
+the PR body) as the reason it picks one candidate over another - a constant's value, a body
+replacing another that computes the same quantity, a predicate or a dispatch order choosing among
+kernels that compute the same result - takes the winner from one script that races every candidate
+in one process, interleaved, each chosen by a flag or argument in the code the diff ships, or
+carried as an arm of the race script where the diff deletes it** - two commits or two processes
+differ by everything else that changed, so their timings pick nothing.
 
 **A diff that picks a candidate by racing every candidate in one process, interleaved, puts the
 race's output lines, one per candidate and each naming it, in the PR body or in a `PERF_LEDGER.md`
@@ -203,21 +205,21 @@ at least one value on each side of it that the device admits, in that race.**
 
 **A new call site of a CPU or GPU matrix multiply whose weight operand is an f32 plane, outside a
 correctness-comparison path (one whose only job is to produce a reference result to check another
-against), where the same backend already serves the same weights and shape through a kernel on a
-quantized or f16 form of them, is a defect - call that kernel instead.** A site that must stay f32
-for another reason is ledgered on its file's charter line (the line, in the companion that
-`ARCHITECTURE.md#file-charters` routes to, that says what the file holds); a comment at the call
-site does not discharge this.
+against) or a timing race's reference arm, where the same backend already serves the same weights
+and shape through a kernel on a form of them other than f32, is a defect - call that kernel
+instead.** A site that must stay f32 for another reason is ledgered on its file's charter line (the
+line, in the companion that `ARCHITECTURE.md#file-charters` routes to, that says what the file
+holds); a comment at the call site does not discharge this.
 
 **A caller and its callee never both check one guard: the caller keeps the check and the callee
 drops it when the callee is `[cold_path]`; where the caller's check also gates its own work, the
 caller computes the decision once and passes it to the callee; otherwise the caller's copy goes.**
 An edit to either copy leaves the caller testing a condition the callee no longer applies.
 
-**Logic or a named constant that two files in one folder both use, and that neither the language
-nor the test contract forces them to restate (one predicate written over an enum and again over
-its int value; a test's CPU reference copy of the arithmetic it checks), lands once - in a file
-both already require, or in a new file both require when they share none - never as a second
+**Logic or a named constant that two files in one folder both use, and that neither the language nor
+the test contract forces them to restate (a test's CPU reference copy of the arithmetic it checks is
+forced; one predicate written over an enum and again over its int value is not), lands once - in a
+file both already require, or in a new file both require when they share none - never as a second
 copy.** Two spellings drift apart on the first edit to one.
 
 **A piece that two folders both need, neither containing the other, lands in the folder that owns

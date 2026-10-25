@@ -199,12 +199,12 @@ def private bf16_bits_of(v : float) : uint16 {
 
 //! the bf16 plane through the same walk: Y against the plain oracle over the widened weights within
 //! the tile's rounding, a NaN sentinel under every output, the poisoned expectation the control;
-//! where the box stamps the half-width family (`bf16w_tileform_gen() > 0`, every call of ntok past a
-//! tile on an n of whole 32s) the oracle's activations are the family's bf16-rounded ones
+//! where the stamped half-width family serves the shape (`bf16w_batch_serves`) the oracle's
+//! activations are the family's bf16-rounded ones
 def check_bf16(t : T?; n, d, ntok : int64) {
     let wf <- fillf(n * d)
     var x <- fillf(ntok * n)
-    if (bf16w_tileform_gen() > 0 && n % 32l == 0l && ntok > 1l && ntok >= int64(bf16w_tokstep_gen())) {
+    if (ntok > 1l && bf16w_batch_serves(n, d, ntok)) {
         for (k in range64(ntok * n)) {
             x[k] = unsafe(reinterpret<float>(uint(bf16_bits_of(x[k])) << 16u))
         }
@@ -223,6 +223,7 @@ def check_bf16(t : T?; n, d, ntok : int64) {
         matmul_bf16_batch(y, w16, 0l, x, n, d, ntok)
     }
     t |> success(all_finite(y), "bf16 batch {n}x{d} ntok={ntok}: every output finite")
+    t |> success(all_finite(want), "bf16 batch {n}x{d} ntok={ntok}: every oracle element finite")
     t |> equal(mismatch_rel("bf16 batch {n}x{d} ntok={ntok}", y, want, F32_TILE_REL), 0, "bf16 batch {n}x{d} ntok={ntok}: elements past {F32_TILE_REL} relative of the plain oracle over the widened weights")
     want[(ntok * d) / 2l] += 1.0e-3 * max(abs(want[(ntok * d) / 2l]), 1.0)
     t |> success(mismatch_rel("bf16 batch {n}x{d} ntok={ntok} poisoned", y, want, F32_TILE_REL) > 0, "control: the poisoned element must miss the {F32_TILE_REL} bar")

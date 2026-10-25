@@ -296,6 +296,32 @@ def test_qwen3a_tower(t : T?) {
 }
 
 [test]
+def test_qwen3a_mel_lanes(t : T?) {
+    t |> run("qwen3a mel: the lanes' image is the one-lane image, element for element") @(t : T?) {
+        var samples : array<float>
+        samples |> resize(16000 * 10)
+        for (i in range(16000 * 10)) {
+            samples[i] = 0.3 * sin(float(i) * 0.01) + 0.1 * sin(float(i) * 0.37)
+        }
+        with_dasllama_jobque_() {
+            set_single_thread_(true)
+            var inscope one <- log_mel_qwen3a(samples, 128l)
+            set_single_thread_(false)
+            var inscope lanes <- log_mel_qwen3a(samples, 128l)
+            t |> equal(one.n_len, lanes.n_len, "the two images span the same frames")
+            t |> success(!empty(one.data), "the image has elements")
+            var apart = 0
+            for (p, q in one.data, lanes.data) {
+                if (p != q) {
+                    apart++
+                }
+            }
+            t |> equal(apart, 0, "elements apart between the one-lane and the lanes' mel")
+        }
+    }
+}
+
+[test]
 def test_parakeet_oracle(t : T?) {
     t |> run("parakeet-TDT greedy on jfk.wav is token-for-token with parakeet-cli") @(t : T?) {
         let path = path_join(whisper_dir(), "ggml-parakeet-tdt-0.6b-v2-f32.bin")

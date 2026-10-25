@@ -311,16 +311,6 @@ let GE_POS = 25l
 let GE_REL = 1.0e-6lf
 let GE_FLOOR = 1.0e-6lf
 
-def private erf_ref(z : double) : double {
-    var term = z
-    var sum = z
-    for (k in range(1, 60)) {
-        term *= -z * z / double(k)
-        sum += term / double(2 * k + 1)
-    }
-    return sum * 2.0lf / sqrt(DBL_PI)
-}
-
 def private gelu_fixture(var x : array<float>) {
     lcg_seed(0x9E10ul)
     fill(x, GE_D * GE_POS, 4.0)
@@ -331,7 +321,7 @@ def private gelu_ref(x : array<float>; var want : array<double>; var env : array
     env |> resize(long_length(x))
     for (v, w, e in x, want, env) {
         let d = double(v)
-        w = 0.5lf * d * (1.0lf + erf_ref(d * 0.7071067811865476lf))
+        w = 0.5lf * d * (1.0lf + erf_series(d * 0.7071067811865476lf))
         e = abs(d)
     }
 }

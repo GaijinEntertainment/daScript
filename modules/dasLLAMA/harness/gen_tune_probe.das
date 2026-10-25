@@ -943,10 +943,7 @@ struct Bf16wFixture {
     yref : array<float>
 }
 
-def private bf16_round(v : float) : float {
-    let bits = unsafe(reinterpret<uint>(v))
-    return unsafe(reinterpret<float>(((bits + 0x7FFFu + ((bits >> 16u) & 1u)) >> 16u) << 16u))
-}
+def private bf16_round(v : float) : float => unsafe(reinterpret<float>(uint(bf16_bits(v)) << 16u))
 
 def build_bf16w_fixture(n, d, ntok : int64) : Bf16wFixture {
     var fx = Bf16wFixture(n = n, d = d, ntok = ntok)
@@ -972,12 +969,11 @@ def build_bf16w_fixture(n, d, ntok : int64) : Bf16wFixture {
     return <- fx
 }
 
-//! one variant over the fixture as bf16w_batch walks it, one lane; form 0 (the reference row) walks one group at four tokens
+//! one variant over the fixture through the family's walk, one lane; form 0 (the reference row) walks one group at four tokens
 def run_bf16w_variant(tile : Bf16wTileFn; fx : Bf16wFixture; form, ts : int64; var y : array<float>) {
     let groups = max(form, 1l)
     let step = form > 0l ? ts : 4l
     let ng = fx.d / 16l
-    let tbs = (fx.ntok / step) * step
     var panel : array<uint16>
     panel |> resize(groups * 16l * fx.n)
     unsafe {
@@ -987,23 +983,8 @@ def run_bf16w_variant(tile : Bf16wTileFn; fx : Bf16wFixture; form, ts : int64; v
         let xb = xbf16_build_f32(addr<float const?>(fx.x[0]), fx.n, fx.ntok, xr)
         let xrc = reinterpret<float const?>(xr)
         var pp = addr(panel[0])
-        var g0 = 0l
-        while (g0 < ng) {
-            let gn = min(groups, ng - g0)
-            if (gn == groups) {
-                bf16w_panel_build(wp, fx.n, g0, groups, pp)
-                var tk = 0l
-                while (tk < tbs) {
-                    invoke(tile, yp, reinterpret<uint8 const?>(pp), null, reinterpret<int8 const?>(xb), null, null, fx.n, fx.d, g0, tk)
-                    tk += step
-                }
-                if (tbs < fx.ntok) {
-                    batch_tile_block(yp, wp, xrc, fx.n, fx.d, g0 * 16l, (g0 + groups) * 16l, tbs, fx.ntok, fx.ntok - tbs)
-                }
-            } else {
-                batch_tile_block(yp, wp, xrc, fx.n, fx.d, g0 * 16l, (g0 + gn) * 16l, 0l, fx.ntok, fx.ntok)
-            }
-            g0 += groups
+        bf16w_walk(yp, wp, xrc, fx.n, fx.d, 0l, ng, groups, fx.ntok, step, pp) $(g, tk : int64) {
+            invoke(tile, yp, reinterpret<uint8 const?>(pp), null, reinterpret<int8 const?>(xb), null, null, fx.n, fx.d, g, tk)
         }
         if (ng * 16l < fx.d) {
             batch_tile_block(yp, wp, xrc, fx.n, fx.d, ng * 16l, fx.d, 0l, fx.ntok, fx.ntok)
@@ -1011,18 +992,9 @@ def run_bf16w_variant(tile : Bf16wTileFn; fx : Bf16wFixture; form, ts : int64; v
     }
 }
 
-//! `y` against the oracle at close_tol, widened to the bf16 envelope on a tile form: the TMUL sums its
-//! pairs in another order than the double oracle, a few f32 ulps of the largest output over 2560 terms
-def close_to_bf16w_ref(fx : Bf16wFixture; y : array<float>; form : int64; var maxdiff : float&) : bool {
-    let envelope = bf16_envelope(fx.yref, length(y), form)
-    var ok = true
-    for (i in range64(fx.ntok * fx.d)) {
-        let diff = abs(y[i] - fx.yref[i])
-        maxdiff = max(maxdiff, diff)
-        ok = ok && diff <= max(close_tol(fx.yref[i]), envelope)
-    }
-    return ok
-}
+//! the bar form of a bf16w row's compare: every row's tails run the box's f32 tile perm over 2560-term
+//! dots that cancel, so the bf16 envelope holds the reference row as it holds a tile form
+def private bf16w_bar_form(form : int64) : int64 => max(form, 1l)
 
 def bf16w_test_family(fxs : array<Bf16wFixture>) : bool {
     var tvs <- bf16w_tile_gen_variants()
@@ -1043,9 +1015,9 @@ def bf16w_test_family(fxs : array<Bf16wFixture>) : bool {
             var inscope y : array<float>
             y |> resize(fx.ntok * fx.d)
             run_bf16w_variant(v._1, fx, form, ts, y)
-            let fxok = close_to_bf16w_ref(fx, y, form, maxdiff)
+            let fxok = close_to_ref(fx, y, maxdiff, bf16w_bar_form(form))
             if (!fxok) {
-                dump_mismatch("bf16w {v._0} n={fx.n}", y, fx.yref, int(fx.d)) $(i : int) => max(close_tol(fx.yref[i]), bf16_envelope(fx.yref, length(y), form))
+                dump_mismatch("bf16w {v._0} n={fx.n}", y, fx.yref, int(fx.d)) $(i : int) => max(close_tol(fx.yref[i]), bf16_envelope(fx.yref, length(y), bf16w_bar_form(form)))
             }
             ok = ok && fxok
         }
@@ -1087,7 +1059,7 @@ def bf16w_tune_family(var rows_out : table<string; JsonValue?>) : string {
         }
         var maxdiff = 0.0
         run_bf16w_variant(v._1, fx, form, ts, y)
-        if (!close_to_bf16w_ref(fx, y, form, maxdiff)) {
+        if (!close_to_ref(fx, y, maxdiff, bf16w_bar_form(form))) {
             print("bf16w {v._0}: MISMATCH (maxdiff {maxdiff}) - aborting tune\n")
             best = ""
             break
