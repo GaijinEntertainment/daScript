@@ -66,12 +66,20 @@ A cell, script or exe of this repository is a spawned or manual cell, a script i
 diff's tip, or an exe built from that tree; a script outside the tree is not one, whatever it
 calls.
 
-A box can mint a spawned cell when a rig leg it neither refuses nor skips drives the path the owed
-row measures and `performance/gen_bench_records.das --catalog official` carries the model; a
-manual cell when it runs the documented command's OS and backend and holds its model; a cell owed
-for new code when a rig leg or a documented command reaches that code's input. A row owed for a
-route that no rig leg drives and no `PROFILE.md` section documents a command for is one no box can
-mint.
+A box can mint a figure from a spawned cell when a rig leg it neither refuses nor skips drives the
+path the owed figure measures and `performance/gen_bench_records.das --catalog official` carries the
+model; from a manual cell when it runs the documented command's OS and backend and holds its model;
+a figure owed for new code when a rig leg or a documented command reaches that code's input. A
+figure owed for a route that no rig leg drives and no `PROFILE.md` section documents a command for
+is one no box can mint.
+
+A board box is a box with a `performance/records/<box>.json`. The release re-mint is a diff that
+runs `performance/gen_bench_records.das` with a release's exe on one or more board boxes and writes
+their rows into `performance/records/<box>.json`.
+
+A `held` entry is a `performance/records/annotations.json` entry carrying a board row's `gguf`,
+`box`, `engine`, `backend`, `flavor` and `workload`, whose `held` field names the follow-up ledger
+row that keeps the row off the board.
 
 **The naming that a rule governing a figure asks for attaches to a figure only by a sentence, a
 table heading, a provenance line or a `PERF_LEDGER.md` entry's opening paragraph that
@@ -166,14 +174,16 @@ entry - that figure goes in the PR that lands the code.**
 **A diff that lets a served turn, or a media encode a turn takes (an image, a video frame or an
 audio chunk), reach code no spawned or manual cell's input reaches - a new dispatch arm, a
 window-size arm inside a path a cell drives at other sizes, or a changed default route - adds to
-`performance/gen_bench_records.das` a cell whose input reaches it, in the same change, and names in
-its PR body the `followup_general.md` row under which the release re-mint owes its rows.**
+`performance/gen_bench_records.das` a cell whose input reaches it, writes the new cell's figures
+from every board box of the author's that can mint them into a dated `PERF_LEDGER.md` entry, in the
+same change, and names in its PR body the `followup_general.md` row under which the release re-mint
+owes its rows.**
 
-**A change that owes a cell no box of the author's can run, or a ledger figure no box of the
-author's can measure, names instead, in the same change, an artifact that shows the new code ran end
-to end - a record, a gate output, an instrument's print - or the profile output that shows the
-change is faster (`benchmarks/lcpp_bench.das`'s `forward_profile` rows, or the tier's
-`DASLLAMA_GPU_PROF=1` token ledger), with the flags that run took.**
+**A change that owes a ledger figure no box of the author's can mint names instead, in the same
+change, an artifact that shows the new code ran end to end - a record, a gate output, an
+instrument's print - or the profile output that shows the change is faster
+(`benchmarks/lcpp_bench.das`'s `forward_profile` rows, or the tier's `DASLLAMA_GPU_PROF=1` token
+ledger), with the flags that run took.**
 
 **A diff that changes `dasllama/dasllama_metal_kernels.das` (the kernel library
 `metal_decode_init` compiles), `performance/profile_common.das`, or a `dasllama/` module
@@ -184,20 +194,18 @@ run printed none.** A fat exe is what `daspkg release --fat <class>` builds (`DA
 
 **A diff whose PR body, or a line it adds or changes, states that a route the tree served before the
 diff runs faster or does less work, where a rig leg runs the changed lines, writes that leg's walls
-from every board box of the author's that runs it - a board box is one with a
-`performance/records/<box>.json` - into a dated `PERF_LEDGER.md` entry naming the exe's commit and
-the command, and names in the PR body the `followup_general.md` row under which the release re-mint
-- `performance/gen_bench_records.das` run over every board box with a release's exe - owes every
-board box's row; no diff but the release re-mint writes those rows into
+from every board box of the author's that runs it into a dated `PERF_LEDGER.md` entry naming the
+exe's commit and the command, and names in the PR body the `followup_general.md` row under which the
+release re-mint owes every board box's row; no diff but the release re-mint writes those rows into
 `performance/records/<box>.json`.** The board is the module's committed record of what a release's
 exe costs to serve; a kernel win that lands in no ledger entry is invisible to the next regression
 check, and a row minted between releases shows a speed no shipped binary gives
 (`ARCHITECTURE_MEASUREMENT_RELEASE.md#board-rows-release-boundary`).
 
-**The release re-mint re-mints every row a `followup_general.md` row owes it in
-`performance/records/<box>.json`, deletes any `held` entry holding one, names each row in its PR
-body, and puts each changed cell's last board figure beside the new one in a dated `PERF_LEDGER.md`
-entry in the same change.**
+**The release re-mint re-mints, on each board box it runs on, every row a `followup_general.md` row
+owes it there, deletes any `held` entry holding one, names each row in its PR body, and puts each
+changed cell's last board figure beside the new one in a dated `PERF_LEDGER.md` entry in the same
+change.**
 
 **A diff whose PR body, or a line it adds or changes, states that a route the tree served before the
 diff runs faster or does less work, where no rig leg runs the changed lines, states in its PR body
@@ -213,12 +221,9 @@ the old ones, and names in its PR body the `followup_general.md` row under which
 owes the cell's rows; no diff but the release re-mint writes those rows into
 `performance/records/<box>.json`.**
 
-**A withdrawn row of a changed board cell is deleted from `performance/records/<box>.json` or gets
-a `held` entry - a `performance/records/annotations.json` entry carrying the row's `gguf`, `box`,
-`engine`, `backend`, `flavor` and `workload`, whose `held` field names the follow-up ledger row that
-keeps it off the board - and stays recorded.**
 
-**A `PERF_LEDGER.md` entry that withdraws an earlier entry's figure states the withdrawal's reason.**
+**A `PERF_LEDGER.md` entry that withdraws an earlier entry's figure states the withdrawal's
+reason.**
 
 **A rate or wall of any served-turn leg, or a ratio of two such rates or walls, written down as
 a measurement rather than as a prediction is a defect unless it cites the committed board row it
