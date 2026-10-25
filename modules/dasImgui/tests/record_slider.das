@@ -20,11 +20,6 @@ require daslib/json_boost public
 //! the scrub stays in the box and reads at a natural speed; drag_through_voice asserts the value
 //! actually MOVED (a no-op drag aborts the recording at teardown).
 
-def widget_bbox(var snap : JsonValue?; ident : string) : float4 {
-    var b = snap?["globals"]?[ident]?["bbox"]
-    return float4(b?["x"] ?? 0.0f, b?["y"] ?? 0.0f, b?["z"] ?? 0.0f, b?["w"] ?? 0.0f)
-}
-
 def sub_bbox(var snap : JsonValue?; ident : string; component : int) : float4 {
     var b = snap?["globals"]?[ident]?["sub_bboxes"]?[component]
     return float4(b?["x"] ?? 0.0f, b?["y"] ?? 0.0f, b?["z"] ?? 0.0f, b?["w"] ?? 0.0f)

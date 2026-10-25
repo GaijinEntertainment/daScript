@@ -42,14 +42,25 @@ The regular browser regression command is documented in [BROWSER_TESTS.md](../..
   regression, not proof of real OS candidate-window behavior.
 - The custom text editor needs explicit platform text-input ownership and caret
   publication for browser IME. This is distinct from its existing grapheme model.
-- macOS GLFW accepts committed/marked text, but its candidate rectangle is based on
-  the view origin, not the ImGui caret. Marked text and Enter/command routing need
-  native Cocoa integration and real input-method checks.
-- Windows has the ImGui/GLFW IMM candidate-position path. Real Microsoft IME
-  conversion, cancellation, Enter routing and supplementary characters remain
-  unverified; existing hooks do not constitute acceptance.
-- Linux X11 has XIM committed-text support. Preedit, candidate placement and key
-  consumption need testing with IBus/Fcitx. The SDK configuration currently disables
+- Desktop composition runs on dasGlfw's patched GLFW 3.5.1 (upstream IME pull requests
+  #2130 and #1972): dasImgui draws the preedit at the caret in the field's font,
+  publishes the candidate rectangle, holds GLFW text-input focus only while a field
+  owns text input, and on a click commits the composition into the field it leaves, as
+  the browser does.
+- macOS: automated real-IME sessions (Japanese Romaji, Pinyin ABC) pass in the stock
+  single-line, multiline and custom editor fields - preedit visible, conversion Enter
+  not submitted, Backspace/Escape kept inside the composition, a click commits into the
+  field it leaves.
+  Korean 2-Set passes a hand check (it does not start under System Events keystrokes).
+- Windows: the patch moves IME handling into GLFW and hides the system composition
+  window; dasImgui's overlay replaces it. Real Microsoft IME sessions are unverified.
+- Linux X11 uses the over-the-spot style: IBus/Fcitx draw the preedit at the published
+  spot, and keys the input method consumes are dropped. A click mid-composition resets the
+  input context first, so Hangul and Mozc commit into the field being left; libpinyin
+  discards on reset. Text-input focus is released only after keys settle. A candidate
+  popup sits over the window: a click on a field it covers lands on the popup.
+  ibus-hangul needs its default `use-event-forwarding = true`; with it off, Space overtakes
+  the last syllable in every XIM client, Tk included. The SDK configuration disables
   Wayland; do not report Wayland acceptance from an X11 test.
 
 ## Manual matrix
@@ -59,9 +70,9 @@ An unchecked item is unverified, not a known failure.
 
 | Platform | Input methods / actions | Status |
 | -- | -- | -- |
-| macOS native | Pinyin, Japanese conversion, Korean 2-set; emoji picker | Pending; caret/preedit gap above |
+| macOS native | Pinyin, Japanese conversion, Korean 2-set; emoji picker | Pinyin + Japanese pass (automated real IME), Korean by hand; emoji picker pending |
 | Windows native | Microsoft Pinyin/Japanese/Korean; Win+. emoji picker | Pending |
-| Linux X11 | IBus/Fcitx Pinyin, Japanese, Korean; emoji/paste | Pending |
+| Linux X11 | IBus/Fcitx Pinyin, Japanese, Korean; emoji/paste | IBus libpinyin, Mozc, Hangul pass (automated, Debian 12 XFCE); Fcitx, emoji/paste pending |
 | Chromium desktop | Real OS IME + synthetic CDP composition regression | Synthetic regression passes; real IME pending |
 | Safari desktop | Real OS IME, emoji picker, focus changes | Pending |
 | Firefox desktop | Real OS IME, emoji picker, focus changes | Pending |

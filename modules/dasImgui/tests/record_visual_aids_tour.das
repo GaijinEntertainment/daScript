@@ -19,11 +19,6 @@ require daslib/json_boost public
 //!   4. key HUD    - type into NAME_INPUT; focus rect + keycaps; value verified.
 //!   5. chords     - Ctrl+A then Backspace; the buffer must clear.
 
-def widget_bbox(var snap : JsonValue?; ident : string) : float4 {
-    var b = snap?["globals"]?[ident]?["bbox"]
-    return float4(b?["x"] ?? 0.0f, b?["y"] ?? 0.0f, b?["z"] ?? 0.0f, b?["w"] ?? 0.0f)
-}
-
 def widget_center(var snap : JsonValue?; ident : string) : tuple<float; float> {
     let b = widget_bbox(snap, ident)
     return ((b.x + b.z) * 0.5f, (b.y + b.w) * 0.5f)

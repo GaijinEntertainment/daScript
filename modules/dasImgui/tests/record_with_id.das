@@ -17,11 +17,6 @@ require daslib/json_boost public
 //!   path= per-call -> drag the slider whose driver path is pinned to "rps_stable"
 //! Each click asserts click_count ticked; the drag asserts the value moved — a dud aborts at teardown.
 
-def widget_bbox(var snap : JsonValue?; ident : string) : float4 {
-    var b = snap?["globals"]?[ident]?["bbox"]
-    return float4(b?["x"] ?? 0.0f, b?["y"] ?? 0.0f, b?["z"] ?? 0.0f, b?["w"] ?? 0.0f)
-}
-
 [export]
 def main {
     with_recording_app("examples/tutorial/with_id.das",

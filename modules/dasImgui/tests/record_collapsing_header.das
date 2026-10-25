@@ -28,11 +28,6 @@ def widget_center(var snap : JsonValue?; ident : string) : tuple<float; float> {
     return ((x + z) * 0.5f, (y + w) * 0.5f)
 }
 
-def widget_bbox(var snap : JsonValue?; ident : string) : float4 {
-    var b = snap?["globals"]?[ident]?["bbox"]
-    return float4(b?["x"] ?? 0.0f, b?["y"] ?? 0.0f, b?["z"] ?? 0.0f, b?["w"] ?? 0.0f)
-}
-
 [export]
 def main {
     with_recording_app("examples/tutorial/collapsing_header.das",

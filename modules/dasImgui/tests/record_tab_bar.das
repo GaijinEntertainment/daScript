@@ -17,16 +17,6 @@ require daslib/json_boost public
 //! (a real click on the header's close glyph flips DRAFT_TAB.open false). A click that fails to
 //! switch / toggle / close aborts the recording at teardown.
 
-def widget_bbox(var snap : JsonValue?; ident : string) : float4 {
-    var b = snap?["globals"]?[ident]?["bbox"]
-    return float4(
-        b?["x"] ?? 0.0f,
-        b?["y"] ?? 0.0f,
-        b?["z"] ?? 0.0f,
-        b?["w"] ?? 0.0f
-    )
-}
-
 [export]
 def main { // nolint:STYLE038
     with_recording_app("examples/tutorial/tab_bar.das",

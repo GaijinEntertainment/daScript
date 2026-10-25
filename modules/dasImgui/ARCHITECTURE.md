@@ -91,8 +91,57 @@ ordinary controls. Component commands retain their normal shortcut routing.
 Keyboard admission checks actual item ownership instead of WantTextInput, which
 now also reflects the custom editor's own platform request. Caret publication
 continues through blink-off frames and clipped primary segments.
-The standard platform backend owns native candidate-window integration; publishing
-the caret does not implement missing Cocoa/X11 preedit support.
+On the desktop the same published caret feeds native composition (below).
+
+## Native composition {#native-composition}
+
+The desktop backend (`src/native_input.h`) is the native counterpart of the browser bridge,
+on the input-method API of dasGlfw's patched GLFW (`modules/dasGlfw/ARCHITECTURE.md`, the
+input-method patch). It attaches to the context that initializes the GLFW backend, through an
+end-of-frame context hook, and replaces ImGui's `Platform_SetImeDataFn`: on Windows that
+default talks to IMM directly and would fight GLFW for the same window.
+
+Each frame the hook reads the frame's platform IME data and the text-input owner
+(`GetTextInputOwner` - the active stock item, else the custom editor's recorded owner). With
+multi-viewports on, the owner's viewport may be a detached window: the state follows that
+viewport's GLFW window - preedit callback, text-input focus and caret rectangle move with it,
+and fall back to the main window when the detached one closes.
+
+- GLFW's text-input focus follows the owner. While no field wants text the input method is
+  off, so keys reach shortcuts and games unconverted. Focus is released only once no key has
+  been held for a tenth of a second: Enter, Escape and Tab end editing while still down, and an
+  X11 input context that loses focus before IBus has handed a key's release back lets IBus pass
+  the next key after refocus through unconverted.
+- The caret rectangle goes to `glfwSetPreeditCursorRectangle` whenever it moves; the
+  candidate window opens beside the caret.
+- A click finishes the composition into the field it leaves, as the browser bridge does. A
+  start-of-frame context hook finds a mouse press in ImGui's input queue before ImGui handles
+  it. When the preedit is known (macOS, Windows) it
+  inserts the preedit text ahead of the press and cancels the input method's composition. On
+  X11 IBus reports no preedit in the over-the-spot style, so the hook resets the input context
+  and holds the press, and everything queued after it, for one frame: an engine that commits on
+  reset (Hangul, Mozc) sends its text within a millisecond, and the press goes back into the
+  queue behind it. An engine that discards on reset (libpinyin) loses its composition, as it
+  does in every X11 client. A press is finished once, by its event id. An owner change by any
+  other route cancels the composition.
+- The preedit GLFW reports is drawn on the foreground draw list at the caret: the field's
+  background, the text, one underline per conversion block (thicker under the focused block),
+  and the input method's caret. It is drawn with the font the field used: the `InputText`
+  wrappers and `SetTextInputCaret` record the current font for the active owner. A field
+  outside those paths falls back to the default font.
+
+Committed text arrives as ordinary character events, so stock fields and the custom editor
+insert it with no composition-specific code. The patched GLFW holds back the keys the input
+method consumes - the Enter that confirms a conversion, Backspace and Escape inside the
+composition - so they never reach ImGui. On X11 GLFW uses the over-the-spot style: the input
+method draws the preedit itself at the published spot, and no preedit callback arrives.
+
+When real input is detached (`imgui_set_real_input_callbacks(false)`), composition is cancelled
+and text-input focus is released; owner tracking and drawing continue, so a test can inject
+preedit (`imgui_ime_inject_preedit`, one block or two with the second focused) and read back
+the owner, text, caret, text-input focus, published rectangle, drawn overlay, its marks and its
+font (`imgui_ime_*`). The headless backend has no window; the same state and overlay
+run there with no GLFW calls.
 
 ## 6. A texture reference crosses the native JIT by address {#texture-ref-abi}
 
