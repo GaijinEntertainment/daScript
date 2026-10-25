@@ -156,8 +156,8 @@ SET(imgui_INCLUDE_DIR ${DAS_IMGUI_DIR}/imgui)
 
 # GLFW headers. Superbuild: dasGlfw's CMakeLists (included earlier -- the modules
 # glob is alphabetical) already set GLFW_INCLUDE_DIR for the ExternalProject it
-# drives. Desktop standalone: the built GLFW 3.4 include from the sibling dasGlfw
-# module. Web standalone: the vendored 3.4 headers in dasGlfw/web_include (no GLFW
+# drives. Desktop standalone: the built GLFW 3.5.1 include from the sibling dasGlfw
+# module. Web standalone: the vendored patched 3.5.1 headers in dasGlfw/web_include (no GLFW
 # source build; emcc's -sUSE_GLFW=3 supplies the symbols at the final app link).
 IF(COMMAND ADD_MODULE_CPP)
     IF(NOT DEFINED GLFW_INCLUDE_DIR)
@@ -388,16 +388,16 @@ IF(COMMAND ADD_MODULE_CPP)
         # ExternalProject declares (set in root scope by its CMakeLists, like
         # GLFW_INCLUDE_DIR) — Ninja's build graph only has a rule for the
         # declared byproduct, not the unversioned symlinks install also lays
-        # down (libglfw.so vs libglfw.so.3.4 broke the doc lane).
+        # down (libglfw.so vs libglfw.so.3.5 broke the doc lane).
         TARGET_LINK_LIBRARIES(imguiApp PRIVATE ${DAS_GLFW_DYN_PATH})
         ADD_DEPENDENCIES(imguiApp GLFW3_DYN)
         # The NEEDED entry that link records is the plain SONAME (libglfw.so.3) — the same
         # name a system GLFW 3.3 provides. The startup module scan dlopens .shared_modules
         # in readdir order, and whichever libglfw.so.3 enters the process FIRST is stuck:
         # if imguiApp loads before dasModuleGlfw and resolves the system 3.3, dasModuleGlfw
-        # then fails dlopen on its 3.4-only symbols and the glfw module silently never
+        # then fails dlopen on its 3.4+ symbols and the glfw module silently never
         # registers (every bundled daslang exits "Unable to initialize some modules").
-        # Point imguiApp's installed artifact at the bundled 3.4 explicitly, mirroring
+        # Point imguiApp's installed artifact at the bundled 3.5 explicitly, mirroring
         # dasModuleGlfw's own INSTALL_RPATH, so enumeration order stops deciding which
         # GLFW wins. APPEND: the ADD_DAS_SHARED_MODULE_LIB macro already contributes
         # $ORIGIN / @loader_path.

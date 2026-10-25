@@ -13,7 +13,7 @@ class GlfwGen : CppGenBind {
         bind_module = "dasGLFW"
         bind_das_module = "glfw"
         let pfn = "GLFW/glfw3.h"
-        let pfp = "{get_das_root()}/modules/dasGlfw/glfw/include/"
+        let pfp = "{get_das_root()}/modules/dasGlfw/glfw/Release/include/"
         let args <- array<string>(
             "-xc++-header",
             "-std=c++1z",
@@ -36,7 +36,7 @@ class GlfwGen : CppGenBind {
         }
         // No emscripten_skip_function override: the 11 GLFW functions emcc's JS GLFW
         // (library_glfw.js) does not provide are implemented as honest C stubs in
-        // src/glfw_emscripten_stubs.c, so the full 3.4 surface registers on web too.
+        // src/glfw_emscripten_stubs.c, so the full surface registers on web.
         // Skipping registration is NOT fail-closed there — a host-cross-compiled card
         // resolves referenced externs by mangled name at startup, and a das-visible
         // function missing from the wasm-side module is a startup fatal.

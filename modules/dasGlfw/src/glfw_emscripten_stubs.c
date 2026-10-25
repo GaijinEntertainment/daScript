@@ -1,7 +1,7 @@
-// GLFW 3.4 entry points missing from emscripten's -sUSE_GLFW=3 JS library
+// GLFW 3.4+ and input-method entry points missing from emscripten's -sUSE_GLFW=3 JS library
 // (src/lib/libglfw.js — a GLFW 3.3-era subset; absence of every function below
 // verified against emsdk 5.0.7, the exact pin in .github/workflows/pages.yml).
-// The daslang binding registers the full 3.4 surface unconditionally so the
+// The daslang binding registers the full patched surface unconditionally so the
 // das-visible module is identical on desktop and web: a host-cross-compiled
 // card resolves every referenced extern by mangled name at startup
 // (jit_init_extern_function), and a registration missing on the wasm side is a
@@ -9,7 +9,7 @@
 // most honest web behavior available; one line per stub names the JS-side gap.
 
 #ifndef __EMSCRIPTEN__
-#error "glfw_emscripten_stubs.c is web-only: it backfills GLFW 3.4 entry points absent from emcc's -sUSE_GLFW=3 JS library. Desktop builds link real GLFW 3.4."
+#error "glfw_emscripten_stubs.c is web-only: it backfills GLFW 3.4+ and input-method entry points absent from emcc's -sUSE_GLFW=3 JS library. Desktop builds link the patched GLFW 3.5.1."
 #endif
 
 #define GLFW_INCLUDE_NONE
@@ -112,4 +112,35 @@ void glfwSetWindowTitle(GLFWwindow * window, const char * title) {
 const char * glfwGetWindowTitle(GLFWwindow * window) {
     (void)window;
     return s_window_title ? s_window_title : "";
+}
+
+// ===== input-method API (dasGlfw's patch: modules/dasGlfw/patches) =====
+// libglfw.js has no input-method surface; dasImgui's browser bridge composes text
+// through a DOM textarea instead, so the web build has no preedit to report.
+
+void glfwGetPreeditCursorRectangle(GLFWwindow * window, int * x, int * y, int * w, int * h) {
+    (void)window;
+    if (x) *x = 0;
+    if (y) *y = 0;
+    if (w) *w = 0;
+    if (h) *h = 0;
+}
+
+void glfwSetPreeditCursorRectangle(GLFWwindow * window, int x, int y, int w, int h) {
+    (void)window; (void)x; (void)y; (void)w; (void)h;
+}
+
+void glfwResetPreeditText(GLFWwindow * window) {
+    (void)window;
+}
+
+void glfwSetTextInputFocus(GLFWwindow * window, int focused) {
+    (void)window; (void)focused;
+}
+
+// NULL with a zero count is the documented "no such candidate" return.
+unsigned int * glfwGetPreeditCandidate(GLFWwindow * window, int index, int * textCount) {
+    (void)window; (void)index;
+    if (textCount) *textCount = 0;
+    return NULL;
 }
