@@ -121,10 +121,10 @@ def private attention_chain_decode(t : Model; var s : Session; l : int64; pos : 
         s.chain_stages |> resize(5)
         s.chain_stages[0] = int3(0, ngq, n0)
         s.chain_stages[1] = int3(0, nslots, nslots)
-        s.chain_stages[2] = int3(0, int(n_kv_heads) * nsl, int(n_kv_heads) * nsl)
+        s.chain_stages[2] = int3(0, nsl, nsl)
         s.chain_stages[3] = int3(0, nhu, nhu)
         s.chain_stages[4] = int3(0, ngrp, n2)
-        count_parallel_dispatch(min(n0, ngq) + nslots + int(n_kv_heads) * nsl + nhu + min(n2, ngrp))
+        count_parallel_dispatch(min(n0, ngq) + nslots + nsl + nhu + min(n2, ngrp))
     } else {
         s.chain_stages |> resize(4)
         s.chain_stages[0] = int3(0, ngq, n0)
@@ -350,15 +350,15 @@ def private attention_chain_decode(t : Model; var s : Session; l : int64; pos : 
                     }
                 }
             } elif (stage == 2) {
-                // flash-decode partials: unit = (KV-head, slice) — K/V rows stream ONCE, serving all kv_mul q-heads
+                // flash-decode partials: unit = one slice over EVERY kv head - each K/V row streams once, whole
                 unsafe {
                     for (u in range(jb, je)) {
-                        let kvh = int64(u / nsl)
-                        let sl = int64(u % nsl)
-                        let kvhoff = kvh * head_size
-                        let qh0 = kvh * kv_mul
+                        let sl = int64(u)
                         let j0 = sl * slice_len
                         let j1 = min(j0 + slice_len, cnt)
+                        for (kvh in range64(n_kv_heads)) {
+                        let kvhoff = kvh * head_size
+                        let qh0 = kvh * kv_mul
                         // K pass: each K row read once, dotted against every group q-head
                         kv_slice_scores_d(attp, qp, attqp, attsp, kcl, kdt, runsp, nrun, kstart, j0, j1, kv_dim, kvhoff, head_size,
                             qh0, kv_mul, seq_len, scale)
@@ -403,6 +403,7 @@ def private attention_chain_decode(t : Model; var s : Session; l : int64; pos : 
                         // V pass: each V row read once, weighted into every group head's partial
                         kv_slice_av_d(flop, attp, vcl, vdt, runsp, nrun, kstart, j0, j1, kv_dim, kvhoff, head_size,
                             qh0, kv_mul, seq_len, int64(nsl), sl)
+                        }
                     }
                 }
             } elif (stage == 3 && nsl > 1) {
@@ -2943,7 +2944,7 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
     // 1. route every position: one batched router GEMM, then the shared select per row; shexp gate dots ride along
     trace_tag(TRACE_TAG_ROUTE)
     let ts_route = prof_ticks()
-    mm_fblob_b(s.moe_rlog, t, t.router_off + l * ne * dim, s.xb_b, dim, ne, npos)
+    mm_fblob_rows(s.moe_rlog, t, t.router_off + l * ne * dim, s.xb_b, dim, ne, npos)
     prof_add("moe_router", ts_route)
     let ts_select = prof_ticks()
     // per-row bias+select+gate dot, threaded: serial loop was ~2-3ms every-lane-idle/layer here

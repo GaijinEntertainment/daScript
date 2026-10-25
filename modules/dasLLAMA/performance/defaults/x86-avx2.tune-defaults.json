@@ -43,6 +43,7 @@
 		"iq3s4q8_tile_gen" : "dot_maddubs_width256_mr8",
 		"iq4nl32q8_tile_gen" : "dot_maddubs_width256_mr8",
 		"q8q8_tile_gen" : "dot_maddubs_width256_mr8_kstep2",
+		"bf16w_tile_gen" : "mr16",
 		"iq4nlq8_gemv_gen" : "dot_maddubs_width256_mr8",
 		"k4q8_tile_gen" : "dot_maddubs_width256_mr8",
 		"k5q8_tile_gen" : "dot_maddubs_width256_mr8",

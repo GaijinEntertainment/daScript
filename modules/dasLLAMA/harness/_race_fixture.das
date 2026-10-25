@@ -23,6 +23,7 @@ struct RaceTally {
 //! `count` operands off an LCG seeded by `salt`: (u - 0.5) x amp + bias, u on [0, 1) in 2^-16 steps; `stir` joins the step's increment
 def race_fill(count, salt : int; amp, bias : float; stir : uint = 0u) : array<float> {
     var xa : array<float>
+    xa |> reserve(count)
     xa |> resize(count)
     var st = uint(salt) * 2654435761u + 12345u
     for (i in range(count)) {

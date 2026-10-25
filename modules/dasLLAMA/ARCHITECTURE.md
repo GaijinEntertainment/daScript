@@ -222,7 +222,8 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
   host, the score dot classic prefill shares with decode, the module-scope visibility a lifted
   worker lambda needs of its kernel, the two interleaves a grp<mr> repack is made of, the bf16
   tile that keeps its sum in the matrix unit, the JIT partition a hot leaf instantiates in, and the
-  fp32 batch tile's lattice (`ARCHITECTURE_CPU_KERNELS.md#f32-batch-tile-lattice`); the q8 chain's
+  batch tile's lattice (`ARCHITECTURE_CPU_KERNELS.md#f32-batch-tile-lattice`) and the bf16 weight
+  plane's matrix-unit family (`ARCHITECTURE_CPU_KERNELS.md#bf16-weight-tile-family`); the q8 chain's
   activation forms against the reference's
   (`ARCHITECTURE_CPU_KERNELS.md#q8-activation-forms`).
 

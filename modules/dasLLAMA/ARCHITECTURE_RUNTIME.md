@@ -172,7 +172,9 @@ and stop-string tails a tick by design, so an entry contract would name its own 
 instrument (`harness/served_bench.das`), and its one logging per-token branch - the budget's forced close - is a `[cold_path]` helper.
 The batched step's `eval_batch_` (reached through `scheduler_step` and the public `eval_batch`) and the media prefill's
 `eval_embd_` are uncovered the same way: each grows its workspace and its row set a call by design, and their perf gates are
-the batched-row cells and the served-turn instrument.
+the batched-row cells and the served-turn instrument. The qwen3a log-mel (`log_mel_qwen3a`) is uncovered the same
+way: it builds its window, twiddles, filterbank and image a clip by design, one call a transcription, and its perf gate
+is the ASR cells' encode wall.
 
 ### The post-CPU-burn GPU ramp and the residency heartbeat {#the-post-cpu-burn-gpu-ramp-and}
 

@@ -6,9 +6,8 @@ docs: `ARCHITECTURE.md`, `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_ENGINE_SERVING.
 `ARCHITECTURE_MEDIA.md`, `ARCHITECTURE_TTS.md`, `ARCHITECTURE_POCKET.md`. Planned work:
 `followup_general.md`, `followup_vulkan.md` for Vulkan, `followup_metal.md` for Metal.
 
-A charter line is a file's line in the companion `File charters` section that
-`ARCHITECTURE.md#file-charters` routes that file to, or its role row or file bullet in
-`ARCHITECTURE_GPU.md#gpu-backends`.
+A charter line is a file's line in the companion section that `ARCHITECTURE.md#file-charters` routes
+that file to, or its role row or file bullet in `ARCHITECTURE_GPU.md#gpu-backends`.
 
 **A per-file inventory restated in this checklist is a defect of the checklist.** The charter
 lines own the per-file list; a rule naming what KIND of code lands in which file is the
@@ -30,8 +29,9 @@ change that charter row in the same change.**
 row names; a concern the row names without a backend lands in any file of the row.**
 
 **A diff adding a new item of the sort a charter line's parenthetical lists (a model family, a
-weight format, a dispatch arm) lands it in that charter line's file, whether or not the
-parenthetical names it, and adds it to the parenthetical in the same change.**
+weight format, a dispatch arm - and a function of the sort a parenthetical of function names lists)
+lands it in that charter line's file, whether or not the parenthetical names it, and adds it to the
+parenthetical in the same change.**
 
 **Never add a charter line for a file outside `dasllama/` - state what it holds in its own
 folder's architecture doc or `CLAUDE.md` instead.**
@@ -87,9 +87,10 @@ home's kernels splice lands once - never as a copy per home - in
 
 **A method of a class template more than one home stamps lands with its template.**
 
-**A disk-order -> compute-order transform lands by its consumer: a transform into the layout
-the CPU kernels read row by row in `dasllama/dasllama_repack.das`, a transform into the layout a
-GPU plane or gather reads in `dasllama/dasllama_layout.das`.**
+**A disk-order -> compute-order transform lands by its consumer: a transform into the layout the CPU
+kernels read row by row in `dasllama/dasllama_repack.das`, a transform into the layout a GPU plane
+or gather reads in `dasllama/dasllama_layout.das`; a panel a batch call builds into scratch and
+consumes in the same call is no such transform and lands beside the walk that builds it.**
 
 **A CPU KV-cache store, read, score dot, or V-accumulate OVER CACHE BYTES - a codec primitive
 that knows the K/V element format - lands in `dasllama/dasllama_kv_codec.das`.** A dot over an
@@ -113,12 +114,12 @@ stamp it, whether or not the CUDA home does
 `check_shared_template_homes` is a defect.
 
 **A CPU kernel body under `dasllama/` - a function whose loop turns a weight format's packed bytes
-into a dot product or a dequantized f32 row, a `[tune]` variant, a function a
-`register_kernel_backend` call or a `KernelBackend` field default names, or a scalar body those
-call - lands in a tier file, `dasllama/dasllama_math_<tier>.das`, never in
-`dasllama/dasllama_math.das`; a body that a
-`register_kernel_backend` call in another tier file names, or that two tier files' calls name,
-lands in `dasllama/dasllama_math_default.das`.**
+(block-quantized bytes with their scales, not an f16 or bf16 element plane) into a dot product or a
+dequantized f32 row, a `[tune]` variant, a function a `register_kernel_backend` call or a
+`KernelBackend` field default names, or a scalar body those call - lands in a tier file,
+`dasllama/dasllama_math_<tier>.das`, never in `dasllama/dasllama_math.das`; a body that a
+`register_kernel_backend` call in another tier file names, or that two tier files' calls name, lands
+in `dasllama/dasllama_math_default.das`.**
 
 **A branch - one arm of an `if` or a `match` - that only one model family takes, in a file whose
 charter line names no concern of that family, lands in that family's own file
@@ -134,8 +135,8 @@ calls that seat; a seat's first engine-side call lands by its concern's charter 
 in the kernel's file, and that file's charter line names the condition that selects the
 branch.**
 
-**Code two tower families both need that names no family type - compute, stage/read, or load
-orchestration - lands in `dasllama/dasllama_tower.das`.**
+**Code two tower families' files call directly that names no family type - compute, stage/read, or
+load orchestration - lands in `dasllama/dasllama_tower.das`.**
 
 **No signature in `dasllama/dasllama_tower.das` takes a type that
 `dasllama/dasllama_audio.das`, `dasllama/dasllama_vision.das`, or a family file declares - the
@@ -168,8 +169,9 @@ whose module always registers (`dasCUDA`), writes a plain require.**
 require in an engine file - the program root requires the registration module directly.**
 
 **A function-typed global that a job (a forked context) invokes, or that a serialized exe must
-re-establish and no other file's `[init]` arms, lands in a `dasllama/` file beside the `[init]`
-that establishes it.** The `[init]` is the only code that runs where the global arrives unset.
+re-establish and no other file's `[init]` arms, lands in a `dasllama/` file beside the `[init]` that
+establishes it; a global declared beside its public setter, filled from the registering file's
+`[init]`, complies.** The `[init]` is the only code that runs where the global arrives unset.
 
 **A `dasllama/` module whose `[init]` registers a hook the engine dispatches through gets its
 side-effect require in the same change that adds it** - a registration no engine file reaches

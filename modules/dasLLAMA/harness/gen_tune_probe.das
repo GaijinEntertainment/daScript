@@ -926,6 +926,210 @@ def b32_tune_family(fmt : KqFmt; var rows_out : table<string; JsonValue?>) : str
     return best
 }
 
+// ===== the bf16-weight tile family (bf16w_tile_gen): a native bf16 plane against f32 activations =====
+// Its walk is bf16w_batch's, one lane: a panel of `form` groups a unit, `tokstep` tiles over the
+// whole token blocks, the widen walk over the same rounded activations for every tail. The oracle
+// is a double dot over the bf16-rounded activations and the widened weights, so the stamped tile
+// and the reference row answer to one truth within close_tol.
+
+typedef Bf16wTileFn = function<(var yp : float?; panel : uint8 const?; sp : float const?; xb : int8 const?; xs : float const?; xbs : int const?; n : int64; d : int64; g : int64; t0 : int64) : void>
+
+struct Bf16wFixture {
+    n : int64
+    d : int64
+    ntok : int64
+    w16 : array<uint16>
+    x : array<float>
+    yref : array<float>
+}
+
+def private bf16_round(v : float) : float => unsafe(reinterpret<float>(uint(bf16_bits(v)) << 16u))
+
+def build_bf16w_fixture(n, d, ntok : int64) : Bf16wFixture {
+    var fx = Bf16wFixture(n = n, d = d, ntok = ntok)
+    fx.w16 |> resize(n * d)
+    fx.x |> resize(ntok * n)
+    fx.yref |> resize(ntok * d)
+    for (i in range64(n * d)) {
+        let w = bf16_round(sin(float(i) * 0.013) * 0.7)
+        fx.w16[i] = uint16(unsafe(reinterpret<uint>(w)) >> 16u)
+    }
+    for (i in range64(ntok * n)) {
+        fx.x[i] = cos(float(i) * 0.0071) * 0.9
+    }
+    for (t in range64(ntok)) {
+        for (r in range64(d)) {
+            var acc = 0.0lf
+            for (k in range64(n)) {
+                acc += double(bf16_round(fx.x[t * n + k])) * double(unsafe(reinterpret<float>(uint(fx.w16[r * n + k]) << 16u)))
+            }
+            fx.yref[t * d + r] = float(acc)
+        }
+    }
+    return <- fx
+}
+
+//! one variant over the fixture through the family's walk, one lane; form 0 (the reference row) walks one group at four tokens
+def run_bf16w_variant(tile : Bf16wTileFn; fx : Bf16wFixture; form, ts : int64; var y : array<float>) {
+    let groups = max(form, 1l)
+    let step = form > 0l ? ts : 4l
+    let ng = fx.d / 16l
+    var panel : array<uint16>
+    panel |> resize(groups * 16l * fx.n)
+    unsafe {
+        let wp = addr<uint16 const?>(fx.w16[0])
+        var yp = addr(y[0])
+        var xr : float?
+        let xb = xbf16_build_f32(addr<float const?>(fx.x[0]), fx.n, fx.ntok, xr)
+        let xrc = reinterpret<float const?>(xr)
+        var pp = addr(panel[0])
+        bf16w_walk(yp, wp, xrc, fx.n, fx.d, 0l, ng, groups, fx.ntok, step, pp) $(g, tk : int64) {
+            invoke(tile, yp, reinterpret<uint8 const?>(pp), null, reinterpret<int8 const?>(xb), null, null, fx.n, fx.d, g, tk)
+        }
+        if (ng * 16l < fx.d) {
+            batch_tile_block(yp, wp, xrc, fx.n, fx.d, ng * 16l, fx.d, 0l, fx.ntok, fx.ntok)
+        }
+    }
+}
+
+//! the bar form of a bf16w row's compare: every row's tails run the box's f32 tile perm over 2560-term
+//! dots that cancel, so the bf16 envelope holds the reference row as it holds a tile form
+def private bf16w_bar_form(form : int64) : int64 => max(form, 1l)
+
+def bf16w_test_family(fxs : array<Bf16wFixture>) : bool {
+    var tvs <- bf16w_tile_gen_variants()
+    var forms <- forms_of(bf16w_tileform_gen_variants())
+    var steps <- forms_of(bf16w_tokstep_gen_variants())
+    var wvs <- bf16w_witness_gen_variants()
+    var cvs <- bf16w_amx_cfg_gen_variants()
+    var allok = true
+    for (v in tvs) {
+        let form = int64(forms?[v._0] ?? 0)
+        let ts = int64(steps?[v._0] ?? 4)
+        if (form > 0l) {
+            arm_of(wvs, cvs, v._0)
+        }
+        var ok = true
+        var maxdiff = 0.0
+        for (fx in fxs) {
+            var inscope y : array<float>
+            y |> resize(fx.ntok * fx.d)
+            run_bf16w_variant(v._1, fx, form, ts, y)
+            let fxok = close_to_ref(fx, y, maxdiff, bf16w_bar_form(form))
+            if (!fxok) {
+                dump_mismatch("bf16w {v._0} n={fx.n}", y, fx.yref, int(fx.d)) $(i : int) => max(close_tol(fx.yref[i]), bf16_envelope(fx.yref, length(y), bf16w_bar_form(form)))
+            }
+            ok = ok && fxok
+        }
+        print("bf16w {v._0} (form={form}, tokstep={ts}): {ok ? "ok" : "MISMATCH"} (maxdiff {maxdiff})\n")
+        allok = allok && ok
+    }
+    delete cvs
+    delete wvs
+    delete steps
+    delete forms
+    delete tvs
+    return allok
+}
+
+typedef Bf16wCand = tuple<name : string; fn : Bf16wTileFn; form : int64; ts : int64>
+
+//! the candidates' rounds in turn - one timed run of every candidate, then the next round, three rounds, the best
+//! kept; no warmup round dropped, the gate run before already warmed each; empty where the gate failed
+def private bf16w_time_candidates(cands : array<Bf16wCand>; fx : Bf16wFixture; gated : bool; wvs : array<tuple<string; function<() : bool>>>; cvs : array<tuple<string; function<() : void>>>; var y : array<float>) : array<double> {
+    var dts : array<double>
+    dts |> resize(length(cands))
+    for (dt in dts) {
+        dt = 1.0e30lf
+    }
+    if (!gated) return <- dts
+    for (_rep in range(3)) {
+        for (c, dt in cands, dts) {
+            if (c.form > 0l) {
+                arm_of(wvs, cvs, c.name)
+            }
+            let t0 = ref_time_ticks()
+            if (c.form > 0l) {
+                run_bf16w_variant(c.fn, fx, c.form, c.ts, y)
+            } else {
+                unsafe {   // the reference row serves through the widen walk, not its own body
+                    batch_tile_block(addr(y[0]), addr<uint16 const?>(fx.w16[0]), addr<float const?>(fx.x[0]), fx.n, fx.d, 0l, fx.d, 0l, fx.ntok, fx.ntok)
+                }
+            }
+            dt = min(dt, double(get_time_usec(t0)))
+        }
+    }
+    return <- dts
+}
+
+//! the bf16-weight family's tune pass: every variant gated on the fixture, the tile-form variants and the widen walk
+//! (the `mr16` row's production route) timed on the gemma-E projection's pp512 shape, the fastest the entry
+def bf16w_tune_family(var rows_out : table<string; JsonValue?>) : string {
+    let entry = "bf16w_tile_gen"
+    var fx <- build_bf16w_fixture(2560l, 1024l, 512l)
+    var tvs <- bf16w_tile_gen_variants()
+    var forms <- forms_of(bf16w_tileform_gen_variants())
+    var steps <- forms_of(bf16w_tokstep_gen_variants())
+    var wvs <- bf16w_witness_gen_variants()
+    var cvs <- bf16w_amx_cfg_gen_variants()
+    var names : array<string>
+    var times : array<double>
+    var best = ""
+    var bestDt = 1.0e30lf
+    var y : array<float>
+    y |> resize(fx.ntok * fx.d)
+    var cands : array<Bf16wCand>
+    var allok = true
+    for (v in tvs) {
+        let form = int64(forms?[v._0] ?? 0)
+        let ts = int64(steps?[v._0] ?? 4)
+        // a tile-form row races; the base row `mr16` stands for the widen walk; a declined perm (form 0 under
+        // another name) is no candidate - its time would be the base row's and a tie could crown it
+        continue if (form <= 0l && v._0 != "mr16")
+        if (form > 0l) {
+            arm_of(wvs, cvs, v._0)
+        }
+        var maxdiff = 0.0
+        run_bf16w_variant(v._1, fx, form, ts, y)
+        if (!close_to_ref(fx, y, maxdiff, bf16w_bar_form(form))) {
+            print("bf16w {v._0}: MISMATCH (maxdiff {maxdiff}, the bound {bf16_envelope(fx.yref, length(y), bf16w_bar_form(form))} past close_tol) - aborting tune\n")
+            allok = false
+            break
+        }
+        tune_detail("bf16w {v._0} (form={form}, tokstep={ts}): ok (maxdiff {maxdiff}, within the bf16 envelope {bf16_envelope(fx.yref, length(y), bf16w_bar_form(form))})\n")
+        cands |> push((name = v._0, fn = v._1, form = form, ts = ts))
+    }
+    var dts <- bf16w_time_candidates(cands, fx, allok, wvs, cvs, y)
+    names |> reserve(length(cands))
+    times |> reserve(length(cands))
+    for (c, dt in cands, dts) {
+        let gf = 2.0lf * double(fx.n * fx.d * fx.ntok) / dt / 1000.0lf
+        rows_out[c.name] = JV((tile_us = dt))
+        names |> push(c.name)
+        times |> push(dt)
+        tune_detail("bf16w {c.name} (form={c.form}, tokstep={c.ts}): {dt} us ({gf:0.1f} GFLOP/s)\n")
+        if (dt < bestDt) {
+            bestDt = dt
+            best = c.name
+        }
+    }
+    if (!empty(best)) {
+        best = names[gen_sticky(entry, names, times, find_index(names, best))]
+    }
+    delete names
+    delete times
+    delete y
+    delete cands
+    delete dts
+    delete cvs
+    delete wvs
+    delete steps
+    delete forms
+    delete tvs
+    delete fx
+    return best
+}
+
 def kq_test_family(fmt : int64; kfxs : array<KqFixture>) : bool {
     var regs <- kq_regs(fmt)
     var gtab <- by_suffix(regs.gemv)
@@ -1306,6 +1510,10 @@ def test_mode : bool { // nolint:STYLE037,STYLE038 — flat per-variant correctn
         delete kfxs
     }
     delete kids
+    // the bf16-weight family: every tail in the first shape, the conv front's in the second
+    var inscope bfxs <- [ <- build_bf16w_fixture(2560l, 200l, 100l), <- build_bf16w_fixture(1152l, 480l, 300l)]
+    allok = bf16w_test_family(bfxs) && allok
+    delete bfxs
     delete wtab
     delete mtab
     delete gtab
@@ -1720,11 +1928,12 @@ def tune_mode_run : bool { // nolint:STYLE037,STYLE038 — flat family-by-family
     var kids <- kq_family_ids()
     var kqSel <- [for (fmt in kids); fmt; where tune_family_selected(kq_tile_entry(fmt))]
     let wantQ8 = tune_family_selected("q8q8_tile_gen")
+    let wantBf16w = tune_family_selected("bf16w_tile_gen")
     let b32All = fixed_array(KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032, KqFmt.q5032)
     var b32Sel <- [for (f in b32All); f; where tune_family_selected(b32_tile_entry(f))]
-    let familyTotal = 1 + length(kids) + length(b32All)   // q8q8, the kq families, the per-32 families
+    let familyTotal = 2 + length(kids) + length(b32All)   // q8q8, the kq families, the per-32 families, the bf16-weight family
     delete kids
-    let planTotal = (wantQ8 ? 2 : 0) + length(kqSel) + length(b32Sel)
+    let planTotal = (wantQ8 ? 2 : 0) + length(kqSel) + length(b32Sel) + (wantBf16w ? 1 : 0)
     if (planTotal == 0) {
         print("tune-only '{tune_only_filter()}': no generator family matches - half skipped, sidecar untouched\n")
         delete kqSel
@@ -1805,6 +2014,20 @@ def tune_mode_run : bool { // nolint:STYLE037,STYLE038 — flat family-by-family
         print("{entry} winner: {empty(qw) ? "reference (gate-failure fallback)" : qw}\n")
     }
     delete b32Sel
+    if (wantBf16w) {
+        let entry = "bf16w_tile_gen"
+        interrupt_gate(entry)
+        let bf_t0 = ref_time_ticks()
+        tune_progress_kernel_begin(entry, ROUNDS)
+        var brows : table<string; JsonValue?>
+        let bw = bf16w_tune_family(brows)
+        tune_detail("TUNE_GEN_TIME bf16w family {get_time_usec(bf_t0) / 1000} ms\n")
+        tune_progress_kernel_end(entry, bw, empty(bw) ? "rejected" : "beats")
+        // a gate failure queues the base row - its production route is the widen walk - so the scope completes
+        pending[entry] = empty(bw) ? "mr16" : bw
+        g_rows[entry] = JV(brows)
+        print("{entry} winner: {empty(bw) ? "mr16 (gate-failure fallback)" : bw}\n")
+    }
     var ok = true
     if (wantQ8) {
         interrupt_gate("confirm_e2e_prefill")

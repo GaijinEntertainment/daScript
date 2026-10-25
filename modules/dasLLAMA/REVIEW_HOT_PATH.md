@@ -3,20 +3,20 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 doc: `ARCHITECTURE_RUNTIME.md`. Planned work: `followup_general.md`.
 
-A function calls another when its body names that function in a call, a call written inside a
-block or lambda literal included; the function that encloses the literal is the caller. A
-function reaches another when it calls it, or calls a function that reaches it. A serving step
-is one unit of work the runtime repeats inside one request it serves: a token, a prefill quantum
-(one batch of prompt tokens the prefill path processes in a single pass), one encoded media input
-of that request (an image, a video frame, an audio chunk), or one synthesized speech chunk or
-frame. A region entry is the outermost function the runtime re-enters once per serving step, and
-any function a serving
-step runs through a function value - one a seat (a module-level variable holding a function,
-filled through a public setter) or a kernel-backend override registration stores, after its
-declaration, for the runtime to call through - where no `[hot_path]`, contract or `[cold_path]`
-function reaches the `invoke`. An interior function is a function, not itself a region entry,
-that has at least one caller under `dasllama/` and whose every such caller the runtime re-enters
-once per serving step (`ARCHITECTURE_RUNTIME.md#the-hot-path-coverage-model`).
+A function calls another when its body names that function in a call, a call written inside a block
+or lambda literal included; the function that encloses the literal is the caller; an `invoke`
+through a seat or a function value names no function and calls none. A function reaches another when
+it calls it, or calls a function that reaches it. A serving step is one unit of work the runtime
+repeats inside one request it serves: a token, a prefill quantum (one batch of prompt tokens the
+prefill path processes in a single pass), one encoded media input of that request (an image, a video
+frame, an audio chunk), or one synthesized speech chunk or frame. A region entry is the outermost
+function the runtime re-enters once per serving step, and any function a serving step runs through a
+function value - one a seat (a module-level variable holding a function, filled through a public
+setter) or a kernel-backend override registration stores, after its declaration, for the runtime to
+call through - where no `[hot_path]`, contract or `[cold_path]` function reaches the `invoke`. An
+interior function is a function, not itself a region entry, that has at least one caller under
+`dasllama/` and whose every such caller the runtime re-enters once per serving step
+(`ARCHITECTURE_RUNTIME.md#the-hot-path-coverage-model`).
 
 **A diff that adds a kernel dispatch, a loop or a call that the runtime re-enters once per serving
 step makes sure the function that records the dispatch or holds the loop or call is, or is reached

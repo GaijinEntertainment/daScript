@@ -6,7 +6,8 @@ doc: `ARCHITECTURE.md`. Planned work: `followup_general.md`.
 **An edit to a `REVIEW.das` under this folder never weakens a check: drops it while code it
 guards remains in the tree and no lint takes it over, narrows what it walks (a file or folder it
 stops reading), edits the fixed value a check compares against - a hash, a count or a list -
-where the finding text does not tell the author to, or leaves it passing code its finding text
+where the finding text does not tell the author to or the condition it states for doing so
+does not hold, or leaves it passing code its finding text
 still names as a defect - fix the flagged code instead.**
 
 **A finding text names what failed; a diff that rewords one keeps it naming what failed.**

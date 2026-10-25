@@ -3063,6 +3063,17 @@ def private tokstep_gen(var gc : LlvmCodeCtx) : bool {
 def private tileform_gen(var gc : LlvmCodeCtx) : bool =>
     int_companion(gc) $(p) => dot_kind(p.dotPrim) == DOT_AMX_BF16 ? p.nrsplit : 0
 
+//! The bf16-weight tile family: a native bf16 plane packed as the AMX B layout (k-pair rows of
+//! sixteen rows, `bf16w_panel_build`) against a bf16 activation plane; the amx_bf16 perm is the
+//! TMUL tile over them - the same emitter as the quant families' bf16 leg, the panel already bf16
+[arch(at = "../ARCHITECTURE_CPU_KERNELS.md#amx-bf16-tile")]
+def private bf16w_tile_gen(var gc : LlvmCodeCtx) : bool {
+    if (!is_tile_signature(gc.fn)) return false
+    let p = parse_perm(gc)
+    if (perm_declines(gc, p) || dot_kind(p.dotPrim) != DOT_AMX_BF16) return false
+    return emit_amx_bf16_tile(gc, p)
+}
+
 def private is_witness_signature(fn : Function const?) : bool => nullary_signature(fn, Type.tBool)
 
 // The witness: `() : bool` — did the stamped family actually EMIT on this target? Reference
@@ -5009,6 +5020,7 @@ def public register_dasllama_gemm_generators {
     register_llvm_code_generator("dasllama_gemm_gen::kq_amx_cfg", @@cfg_gen)
     register_llvm_code_generator("dasllama_gemm_gen::kq_witness", @@witness_gen)
     register_llvm_code_generator("dasllama_gemm_gen::kq_tileform", @@tileform_gen)
+    register_llvm_code_generator("dasllama_gemm_gen::bf16w_tile", @@bf16w_tile_gen)
     register_llvm_code_generator("dasllama_gemm_gen::q8_panel", @@q8_panel_gen)
     register_llvm_code_generator("dasllama_gemm_gen::q8_panel_s16", @@q8_panel_s16_gen)
     for (f in type<KqFmt>) {

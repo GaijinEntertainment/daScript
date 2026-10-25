@@ -5,6 +5,7 @@ options persistent_heap   // a dastest root frees what it deletes only on this h
 require dastest/testing_boost public
 require dasllama/dasllama_math
 require dasllama/dasllama_math_default  // registers the portable Q8·Q8 backend (the matmul_q8q8 wrappers dispatch to it)
+require dasllama/dasllama_math_gen   // bf16w_tileform_gen: the bf16 plane's walk rounds its activations where the half-width family serves
 require dasllama/dasllama_convert
 require daslib/jobque_boost
 require _compares   // row_fill
@@ -124,8 +125,29 @@ def test_matmul_batch_lanes(t : T?) {
     }
 }
 
+//! Y [ntok x d] as the per-token `matmul` lands it, a token at a time: the nest cells' expectation
+def private per_token_matmul(w, x : array<float>; n, d, ntok : int64) : array<float> {
+    var want : array<float>
+    want |> resize(ntok * d)
+    var xt : array<float>
+    xt |> resize(n)
+    var yt : array<float>
+    yt |> resize(d)
+    for (tk in range64(ntok)) {
+        for (j in range64(n)) {
+            xt[j] = x[tk * n + j]
+        }
+        matmul(yt, w, xt, n, d)
+        for (i in range64(d)) {
+            want[tk * d + i] = yt[i]
+        }
+    }
+    return <- want
+}
+
 //! the race's nest arm, reached through the knob alone: every output the per-token `dot`'s bits,
-//! where the tile at the shipped knob lands other bits (the control that the knob switched arms)
+//! where the tile at the shipped knob lands other bits (the control that the knob switched arms);
+//! then the nest as its own entry at the MoE router's shape, the tile at the shipped knob apart again
 [test]
 def test_matmul_batch_nest_arm(t : T?) {
     t |> run("fp32 batch: the row nest under the knob is the per-token matmul bit for bit") @(t : T?) {
@@ -134,21 +156,7 @@ def test_matmul_batch_nest_arm(t : T?) {
         let ntok = 37l
         let w <- fillf(n * d)
         let x <- fillf(ntok * n)
-        var want : array<float>
-        want |> resize(ntok * d)
-        var xt : array<float>
-        xt |> resize(n)
-        var yt : array<float>
-        yt |> resize(d)
-        for (tk in range64(ntok)) {
-            for (j in range64(n)) {
-                xt[j] = x[tk * n + j]
-            }
-            matmul(yt, w, xt, n, d)
-            for (i in range64(d)) {
-                want[tk * d + i] = yt[i]
-            }
-        }
+        let want <- per_token_matmul(w, x, n, d, ntok)
         let min_n_was = get_f32_batch_tile_min_n()
         set_f32_batch_tile_min_n(1l << 30)
         var nest_y <- nan_fill(ntok * d)
@@ -163,6 +171,62 @@ def test_matmul_batch_nest_arm(t : T?) {
         }
         t |> success(log_exact("fp32 batch tile at the shipped knob", tile_y, want) > 0, "control: the tile at the shipped knob rounds apart from the per-token dot")
     }
+    t |> run("fp32 batch: the nest entry is the per-token matmul bit for bit at the router's shape") @(t : T?) {
+        let n = 2048l   // a 128-expert router over a 2048 hidden, a 97-token prompt: a whole row tile set, a token tail
+        let d = 128l
+        let ntok = 97l
+        let w <- fillf(n * d)
+        let x <- fillf(ntok * n)
+        let want <- per_token_matmul(w, x, n, d, ntok)
+        var rows_y <- nan_fill(ntok * d)
+        with_shipped_knobs() {
+            matmul_batch_rows(rows_y, w, 0l, x, n, d, ntok)
+        }
+        t |> equal(log_exact("fp32 batch rows entry", rows_y, want), 0, "elements differing between the nest entry and the per-token matmul")
+        var tile_y <- nan_fill(ntok * d)
+        with_shipped_knobs() {
+            matmul_batch(tile_y, w, x, n, d, ntok)
+        }
+        t |> success(log_exact("fp32 batch tile at the router's shape", tile_y, want) > 0, "control: the tile at the shipped knob rounds apart from the per-token dot at this shape")
+    }
+}
+
+//! the weight as bf16 bits (round to nearest even), and the oracle over the widened value
+def private bf16_bits_of(v : float) : uint16 {
+    let bits = unsafe(reinterpret<uint>(v))
+    return uint16((bits + 0x7FFFu + ((bits >> 16u) & 1u)) >> 16u)
+}
+
+//! the bf16 plane through the same walk: Y against the plain oracle over the widened weights within
+//! the tile's rounding, a NaN sentinel under every output, the poisoned expectation the control;
+//! where the stamped half-width family serves the shape (`bf16w_batch_serves`) the oracle's
+//! activations are the family's bf16-rounded ones
+def check_bf16(t : T?; n, d, ntok : int64) {
+    let wf <- fillf(n * d)
+    var x <- fillf(ntok * n)
+    if (ntok > 1l && bf16w_batch_serves(n, d, ntok)) {
+        for (k in range64(ntok * n)) {
+            x[k] = unsafe(reinterpret<float>(uint(bf16_bits_of(x[k])) << 16u))
+        }
+    }
+    var w16 : array<uint16>
+    w16 |> resize(n * d)
+    var wwide : array<float>
+    wwide |> resize(n * d)
+    for (k in range64(n * d)) {
+        w16[k] = bf16_bits_of(wf[k])
+        wwide[k] = unsafe(reinterpret<float>(uint(w16[k]) << 16u))
+    }
+    var want <- oracle_fp32(wwide, x, n, d, ntok)
+    var y <- nan_fill(ntok * d)
+    with_shipped_knobs() {
+        matmul_bf16_batch(y, w16, 0l, x, n, d, ntok)
+    }
+    t |> success(all_finite(y), "bf16 batch {n}x{d} ntok={ntok}: every output finite")
+    t |> success(all_finite(want), "bf16 batch {n}x{d} ntok={ntok}: every oracle element finite")
+    t |> equal(mismatch_rel("bf16 batch {n}x{d} ntok={ntok}", y, want, F32_TILE_REL), 0, "bf16 batch {n}x{d} ntok={ntok}: elements past {F32_TILE_REL} relative of the plain oracle over the widened weights")
+    want[(ntok * d) / 2l] += 1.0e-3 * max(abs(want[(ntok * d) / 2l]), 1.0)
+    t |> success(mismatch_rel("bf16 batch {n}x{d} ntok={ntok} poisoned", y, want, F32_TILE_REL) > 0, "control: the poisoned element must miss the {F32_TILE_REL} bar")
 }
 
 // Q8·Q8: same, with weights quantized once and the activation quantized per token.
@@ -226,6 +290,18 @@ def test_matmul_batch(t : T?) {
         }
         t |> run("fp32 tiles with row and token tails 100x13 ntok=7") @(t : T?) {
             check_fp32(t, 100l, 13l, 7l)
+        }
+        t |> run("bf16 plane 1152x480 ntok=300") @(t : T?) {
+            check_bf16(t, 1152l, 480l, 300l)
+        }
+        t |> run("bf16 plane, row and token tails 100x13 ntok=7") @(t : T?) {
+            check_bf16(t, 100l, 13l, 7l)
+        }
+        t |> run("bf16 plane, a group tail and a token tail 2560x200 ntok=100") @(t : T?) {
+            check_bf16(t, 2560l, 200l, 100l)
+        }
+        t |> run("bf16 plane ntok=1, the gemv shaper") @(t : T?) {
+            check_bf16(t, 96l, 7l, 1l)
         }
         t |> run("fp32 threaded 1152x480 ntok=300") @(t : T?) {
             check_fp32(t, 1152l, 480l, 300l)

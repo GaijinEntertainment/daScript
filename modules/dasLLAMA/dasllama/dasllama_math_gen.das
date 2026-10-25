@@ -16,6 +16,7 @@ require daslib/tune public  // [tune]/[tune_perm]/[tune_companion] + [llvm_code]
 require [tune_framework] public  // PUBLIC so tune_status reaches app roots that require this module; the one framework call below sits under static_if
 require dasllama/dasllama_tune_scope  // nolint:STYLE029,LINT019 — an ORDER dependency, not a symbol use: the dasllama [tune_scope] must be on the AST before this module's [tune] kernels pick their perms
 require dasllama/dasllama_gemm_schema
+require dasllama/dasllama_convert  // widen_bf16 - the bf16w family's rounded activations widened for its tails
 require daslib/jobque_boost public
 require dasllama/dasllama_par
 require dasllama/dasllama_env  // DASLLAMA_ALLOW_UNTUNED wires tune_suppress_mint at [init]
@@ -3572,7 +3573,7 @@ def private kq_tile4_gen(var yp : float?; kqg : uint8 const?; ksg : uint8 const?
 }
 
 //! bf16 round-to-nearest-even of an f32 bit pattern; the operands are finite products, a NaN payload is not preserved
-def private bf16_bits(f : float) : uint16 {
+def bf16_bits(f : float) : uint16 {
     let u = unsafe(reinterpret<uint>(f))
     return uint16((u + 0x7FFFu + ((u >> 16u) & 1u)) >> 16u)
 }
@@ -3627,7 +3628,12 @@ def kq_walk_panel_bytes(fmt : int; n, mr : int64) : int64 {
     return kq_reads_packed_planes(int64(fmt)) ? 0l : mr * (n / KQ_SB_ELEMS) * KQ_SB_ELEMS
 }
 
-def xbf16_build(xqp : int8 const?; xsp : float const?; n, ntok, bsz : int64) : uint8 const? {
+def private x_as_float(v : int8) : float => float(v)
+def private x_as_float(v : float) : float => v
+
+//! the activation plane as bf16 bits in the 64-aligned scratch: token t's element i is `x[t * n + i]`
+//! times its block scale `xsp[t * nblk + i / bsz]`, or the element itself under a null `xsp`
+def xbf16_build(xqp : auto const?; xsp : float const?; n, ntok, bsz : int64) : uint8 const? {
     let nblk = n / bsz
     g_kq_xbf16 |> overwrite_resize(ntok * n + 32l)
     unsafe {
@@ -3640,9 +3646,9 @@ def xbf16_build(xqp : int8 const?; xsp : float const?; n, ntok, bsz : int64) : u
                     let srow = xsp + int64(t) * nblk
                     var hrow = hx + int64(t) * n
                     for (bi in range64(nblk)) {
-                        let s = srow[bi]
+                        let s = xsp == null ? 1.0 : srow[bi]
                         for (i in range64(bi * bsz, bi * bsz + bsz)) {
-                            hrow[i] = bf16_bits(float(xrow[i]) * s)
+                            hrow[i] = bf16_bits(x_as_float(xrow[i]) * s)
                         }
                     }
                 }
@@ -4006,6 +4012,131 @@ def private kq_batch_cell_gen(fmt : int; var myp : float?; kqp : uint8 const?; k
             }
         }
     }
+}
+
+// ===== the bf16-weight batch family: a native bf16 plane (a tower's or the gemma-E projection's) against
+// f32 activations, through the AMX bf16 tile - the activations rounded to bf16 first
+
+//! the vector contract's reference values: no tile form, four tokens a call
+def bf16w_tokstep_gen() : int => 4
+def bf16w_tileform_gen() : int => 0
+def bf16w_amx_cfg_gen() : void {}
+def bf16w_witness_gen() : bool => false
+
+[tune_perm(mr = 16),
+ tune_perm(dot = "amx_bf16", width = 512, mr = 16, kstep = 1, nrsplit = 2, requires = "amx-bf16,avx512bf16,avx512vnni"),
+ tune_perm(dot = "amx_bf16", width = 512, mr = 16, kstep = 1, nrsplit = 1, requires = "amx-bf16,avx512bf16,avx512vnni"),
+ tune_companion(fn = "bf16w_tokstep_gen", gen = "dasllama_gemm_gen::q8q8_tokstep"),
+ tune_companion(fn = "bf16w_tileform_gen", gen = "dasllama_gemm_gen::kq_tileform"),
+ tune_companion(fn = "bf16w_amx_cfg_gen", gen = "dasllama_gemm_gen::kq_amx_cfg"),
+ tune_companion(fn = "bf16w_witness_gen", gen = "dasllama_gemm_gen::kq_witness"),
+ tune(gen = "dasllama_gemm_gen::bf16w_tile", fallback = "mr16"),
+ hint(unsafe_range_check, noalias = yp, noalias = panel, noalias = xb), unused_argument(_sp, _xs, _xbs)]
+def bf16w_tile_gen(var yp : float?; panel : uint8 const?; _sp : float const?; xb : int8 const?; _xs : float const?; _xbs : int const?; n, d, g, t0 : int64) : void {
+    // the reference: group g's sixteen rows by four tokens from t0, every product the widened bf16 pair
+    unsafe {
+        let pw = reinterpret<uint16 const?>(panel)
+        let xw = reinterpret<uint16 const?>(xb)
+        for (c in range64(16l)) {
+            for (t in range64(4l)) {
+                var acc = 0.0
+                let xrow = xw + (t0 + t) * n
+                for (kp in range64(n / 2l)) {
+                    let w0 = reinterpret<float>(uint(pw[kp * 32l + c * 2l]) << 16u)
+                    let w1 = reinterpret<float>(uint(pw[kp * 32l + c * 2l + 1l]) << 16u)
+                    acc = mad(w0, reinterpret<float>(uint(xrow[2l * kp]) << 16u), acc)
+                    acc = mad(w1, reinterpret<float>(uint(xrow[2l * kp + 1l]) << 16u), acc)
+                }
+                yp[(t0 + t) * d + g * 16l + c] = acc
+            }
+        }
+    }
+}
+
+var private @scratch @exact_size g_bf16w_xr : array<float>
+
+//! an f32 activation plane rounded to bf16 for the tile, and in `xr` the same rounded values widened
+//! back to f32 for the walk's tails, so every product of one call sees one rounding
+def xbf16_build_f32(xp : float const?; n, ntok : int64; var xr : float?&) : uint8 const? {
+    let hx = xbf16_build(xp, null, n, ntok, n)
+    g_bf16w_xr |> overwrite_resize(ntok * n)
+    unsafe {
+        var rp = addr(g_bf16w_xr[0])
+        widen_bf16(rp, reinterpret<uint16 const?>(hx), ntok * n)
+        xr = rp
+    }
+    return hx
+}
+
+//! `groups` sixteen-row groups from row g0 * 16 of a bf16 plane as the tile's k-pair rows: group gi's
+//! row c holds weights (2kp, 2kp + 1) at halfword gi * 16n + kp * 32 + 2c - one uint32 move a pair
+def bf16w_panel_build(wp : uint16 const?; n, g0, groups : int64; var dst : uint16?) {
+    unsafe {
+        let n2 = n / 2l
+        for (gi in range64(groups)) {
+            var dst32 = reinterpret<uint?>(dst + gi * 16l * n)
+            for (c in range64(16l)) {
+                let src32 = reinterpret<uint const?>(wp + ((g0 + gi) * 16l + c) * n)
+                for (kp in range64(n2)) {
+                    dst32[kp * 16l + c] = src32[kp]
+                }
+            }
+        }
+    }
+}
+
+//! whether `bf16w_batch` takes the shape on this box: a stamped tile form, a witnessed AMX bf16 unit,
+//! n of whole 32s, d of a tile or more, ntok of a `tokstep` block or more
+def bf16w_batch_serves(n, d, ntok : int64) : bool {
+    let form = int64(bf16w_tileform_gen())
+    if (form <= 0l || n % 32l != 0l || d < 16l || !bf16w_witness_gen()) return false
+    return ntok >= int64(bf16w_tokstep_gen())
+}
+
+//! the bf16-weight batch GEMM through the stamped tile family, units of `tileform` groups over whole
+//! `tokstep` blocks, every tail through the widen walk over the same bf16-rounded activations; false
+//! where the family declines or the shape is off its lattice (n % 32, d under 16, ntok under a tile)
+[hot_path, arch(at = "../ARCHITECTURE_CPU_KERNELS.md#bf16-weight-tile-family")]
+def bf16w_batch(var yp : float?; wp : uint16 const?; xp : float const?; n, d, ntok : int64) : bool {
+    if (!bf16w_batch_serves(n, d, ntok)) return false
+    let form = int64(bf16w_tileform_gen())
+    let ts = int64(bf16w_tokstep_gen())
+    let ng = d / 16l
+    let nu = bf16_units(ng, form)
+    var xr : float?
+    let xb = xbf16_build_f32(xp, n, ntok, xr)
+    let xrc = unsafe(reinterpret<float const?>(xr))
+    var panels = walk_panels(form * 16l * n * 2l)
+    var pbase = panels.base
+    let pstride = panels.stride
+    let chunks = matmul_chunks(int(ng * 16l), get_q8_batch_chunks_per_job(), n * d * ntok)
+    var myp = yp
+    maybe_parallel_for_indexed(0, nu, min(chunks, nu)) $(slot, ub, ue) {
+        bf16w_amx_cfg_gen()
+        unsafe {
+            var pp = reinterpret<uint16?>(pbase + int64(slot) * pstride)
+            bf16w_walk(myp, wp, xrc, n, d, int64(bf16_unit_group(ub, form, ng)), int64(bf16_unit_group(ue, form, ng)), form, ntok, ts, pp) $(g, tk : int64) {
+                bf16w_tile_gen(myp, reinterpret<uint8 const?>(pp), null, reinterpret<int8 const?>(xb), null, null, n, d, g, tk)
+            }
+        }
+    }
+    if (ng * 16l < d) {
+        batch_tile_block(yp, wp, xrc, n, d, ng * 16l, d, 0l, ntok, ntok)
+    }
+    return true
+}
+
+//! the family's walk over row groups [g0, g1) and every token, one lane: the shared bf16 walk with the
+//! family's panel, the tile the caller names, and the widen walk over the rounded activations `xrc` for
+//! the token tail (four tokens a group) and the group tail short of a unit (a token at a time)
+def bf16w_walk(var yp : float?; wp : uint16 const?; xrc : float const?; n, d, g0, g1, form, ntok, ts : int64; var pp : uint16?; tile : block<(g, tk : int64) : void>) {
+    bf16_walk(g0, g1, form, 0l, ntok, ntok, ts, $(g : int64) {
+        bf16w_panel_build(wp, n, g, form, pp)
+    }, tile, $(g, tk : int64) {
+        batch_tile_block(yp, wp, xrc, n, d, g * 16l, (g + 1l) * 16l, tk, tk + 4l, 4l)
+    }, $(g, gn, tk : int64) {
+        batch_tile_block(yp, wp, xrc, n, d, g * 16l, (g + gn) * 16l, tk, tk + 1l, 1l)
+    })
 }
 
 //! the bf16 walk's token block: the knob or the floor, whichever is larger, in whole tiles and under no L2 clamp - the walk builds a row group's panel once per block, so a block the clamp cuts pays a second panel and a token tail
@@ -4385,6 +4516,7 @@ def dasllama_math_gen_register() {
     set_bake_b32_repack(KqFmt.q4032, @@repack_q4032_bake)
     set_bake_b32_repack(KqFmt.q5032, @@repack_q5032_bake)
     set_bake_q8q8_repack(@@repack_q8q8_bake)
+    set_bf16_batch_gen(@@bf16w_batch)
     set_bake_mx4_repack(@@repack_mx4_bake)
     set_bake_kq_repack(@@repack_kq_bake)
     // needs_repack keeps this out of auto-select (direct callers stay on arm64-sdot). q8_layout

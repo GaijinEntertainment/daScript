@@ -236,7 +236,8 @@ arm's gates and the served arms' GPU home: the file's entry below), its arms:
   ringed key run at the wrap, the trunk's pick alike), the drafts and the streams token for token, the ringed run's accepted
   drafts within a tenth of the flat run's;
 - `mtp-gdraft-depth` (served) - the counting walk at depths 3 and 1 token for token the plain scheduler's, every round
-  drafting the knob's depth across a 64-row page (depth 1's one a round the control), then four reasoning budgets at depth 3
+  drafting the knob's depth across a 64-row page but the last round the 32-token budget clips (depth 1's one a round the
+  control), then four reasoning budgets at depth 3
   whose forced close lands at the budget on the speculating stream;
 - `mtp-gdraft-joint` (served) - three streams on three regions at depths 1 and 2, a tick's verify carrying all three, the
   joint verifies counted; the control is one stream at depth 1 counting none;
@@ -486,7 +487,8 @@ is its untied twin on TinyLlama-1.1B - the blob plane carrying the classifier AN
 embedding's linear q8 copy (`emb_q8` without `cls_q8`): the layout gate admits the copy, cold
 mint and warm map keep the q8 table with no fp32 copy, GPU serve, the same teacher-forced bar
 (`--arm metal` and `--arm untied` both select it - substring match). The ASR-family
-arms (`parakeet` transcript-exact, `qwen3a`/`canary`/`gemma4a` element-exact planes,
+arms (`parakeet` transcript-exact, `qwen3a`/`canary`/`gemma4a` element-exact planes - the gemma4a and qwen3a q8-against-f32
+transcribe cells comparing word lists, a comma riding a near-tie token between the two rails -,
 `canary-dec` = the opt-in fp32 Model rail, token-exact) re-save their images from cold each
 run like the voxtral arm. The canary arm carries both lanes: the f32 element-exact cell and
 the q8 cell (read-time transcode - qblob/qscales/compact-blob element-exact vs a staged read).
@@ -1007,7 +1009,7 @@ compact rows on sixteen windows (one ragged) against `attention_bidir_windows` w
 over the same rows as the leak control, the rms seam and the gated hidden (the shared bias-gate stamp
 `TowerBiasGate16`, the qwen25v hidden's) against their CPU forms;
 the bias class's erf arm (the whisper-class towers' GELU) against `gelu_erf_batch` at 1e-5
-relative - the f32 evaluation of the CPU's double erfc - with the tanh arm missing that bar as the
+relative - the shader's f32 evaluation of the CPU kernel's erfc fit - with the tanh arm missing that bar as the
 told-apart control, and its silu arm (canary's FFN) against `silu` with the tanh arm as its
 control; the Conformer classes (the silu rows - the bias class's silu arm with no bias row - the
 GLU, the causal depthwise taps, the chunk-12 relative-position attention on both head-width stamps,
@@ -2868,7 +2870,8 @@ Q8_0 blocks where the device feeds f16), the tail counter `vulkan_tower_tail_enc
 alone with the blocks on the device on both, another mel's rows outside the bar as the control, all of which skip without their carriers (the qwen2audio / voxtral / omni-3b f32 mmprojs, the E2B bf16
 mmproj, the canary f32 encoder, the parakeet f32 encoder, the ultravox f16 mmproj, the Qwen3-ASR bf16 mmproj), without
 jfk.wav, without a Vulkan device under `DASLLAMA_GPU=1`, and on a das_metal build.
-`test_whisper.das` - stocked suite; model-gated: the whisper/parakeet/canary/gemma4a/omni
+`test_whisper.das` - stocked suite; the qwen3a mel cell (model-free: the lanes' mel image against the one-lane
+image element for element - the DFT GEMM splits on whole 4-row tiles so every row rounds as one lane's); model-gated: the whisper/parakeet/canary/gemma4a/omni
 oracle cells (the parakeet v2 cell also runs the transcription with single-thread mode off and
 on: the team leg dispatches, the one-lane leg never does, and its tokens are the team leg's - the
 decode step's one-lane form against its team publish, both texts logged - and the session that
@@ -3700,6 +3703,14 @@ explains).
 each against an in-test reference; `rel_pos_table` against an fp64 sin/cos reference, its
 relative-position-0 row exactly (0, 1) pairs, the table of one frame more as the control that
 must miss the bar.
+`test_matmul_batch.das` - model-free: the batched GEMMs against a plain double oracle under a NaN
+sentinel - the fp32 tile walk within `F32_TILE_REL` of the oracle at every tail shape with an
+`all_finite` assert and a poisoned expectation, the threaded walk bit for bit the one-lane walk (its
+control a moved element), the row nest under `set_f32_batch_tile_min_n` bit for bit the per-token
+`matmul` (the tile at the shipped knob rounding apart is the control), the bf16 plane through the
+same walk at every tail shape and the GEMV shaper, its oracle over the bf16-rounded activations
+where the box stamps `bf16w_tile_gen` (every walk pinned to the shipped knobs through
+`with_shipped_knobs`), and the Q8 path bit for bit.
 `test_tower_asr_kernels.das` - model-free: the public tower / audio / TTS kernels with no CPU
 unit of their own, each against an in-test fp64 reference over a procedural seeded-LCG fixture
 and each bar carrying its own must-EXCEED poison arm - the padded-width GEMM wrappers
