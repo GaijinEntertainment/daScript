@@ -2704,7 +2704,7 @@ def kq_fmt_row_ok(f : KqFmt; n : int64) : KqFmt {
     if (f == KqFmt.q51 || f == KqFmt.q5032) return on32 ? f : KqFmt.q8
     if (f == KqFmt.iq4nl && off256) return on32 ? KqFmt.iq4nl32 : KqFmt.q8
     if (f == KqFmt.q40 && off256) return on32 ? KqFmt.q4032 : KqFmt.q8
-    return f == KqFmt.k5 && off256 ? KqFmt.q8 : f
+    return (f == KqFmt.k5 || f == KqFmt.nv4) && off256 ? KqFmt.q8 : f   //! NVFP4's 64-weight disk block lands on rows the superblock member cannot hold
 }
 
 def kq_fmt_expert_ok(f : KqFmt; n : int64) : KqFmt => kq_fmt_row_ok(f, n)
