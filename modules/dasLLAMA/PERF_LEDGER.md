@@ -10,6 +10,49 @@ and coverage; this ledger is the backlog for the perf pass that follows them. Ev
 what it costs today and what the fix would change.
 
 ## Entries
+- **MEASURED (2026-10-25, `debug-jit`, `direction-grade`) - the float GELU, the bf16 plane walk, the AMX bf16 weight
+  tile, the mel's lanes and the decoder's K/V bytes, on the three AWS boards.** Every figure here is a `-jit` script
+  run (the three boards' rows excepted), `DAS_TUNE_POLICY` unset, `DAS_TUNE_MANIFEST` the box's rig release sidecar
+  under `performance/_rig/dasllama-bench/` (the M5: `performance/m5.tune.json`), `DASLLAMA_ALLOW_UNTUNED=1`, branch
+  `bbatkin/bf16-tower-gemm` at the commit named. The boards' Qwen3-ASR CPU rows at 3f7134f8f: each box's rig exe
+  re-released at that tip (`daspkg release --quick`, no policy override, the sidecar re-minted - the Granite Rapids
+  box's names `bf16w_tile_gen` = `dot_amx_bf16_width512_mr16_kstep1_nrsplit2`) and `performance/gen_bench_records.das
+  -- --workload asr -o Qwen3-ASR` run on it, the references `ARCHITECTURE_MEASUREMENT_AUDIO.md#asr-cpu-references`,
+  every cell the best of `--asr-reps` 2 (the exe prints a clip's best alone, `followup_general.md` row 241), das
+  against `llama-mtmd-cli` on gb1 (198.7 s), total / encode ms, every `was` the 2026-10-24 tile entry's ea6d942c2 row:
+  gnr (AWS m8i, Xeon 6975P-C, 8 cores) 13807 / 2007 against 20857 / 7481 (1.51x; was 15797 / 2917 against 21610 /
+  7304), epyc9r14 (AWS m7a, 16 cores) 11694 / 2499 against 15916 / 8009 (1.36x; was 12784 / 3071 against 15981 /
+  8051), graviton4 (AWS m8g, 16 cores) 8406 / 2462 against 67900 / 64309 (8.1x; was 9209 / 3168 against 67958 /
+  64362); none published, the release re-mint owes the board (row 238). The Xeon's stage split
+  (`harness/asr_stage_probe.das -- -m Qwen3-ASR-0.6B-Q8_0.gguf --mmproj mmproj-Qwen3-ASR-0.6B-bf16.gguf -w gb1.wav -r
+  1 --lang auto`, `JOBQUE_PROFILING=1 DAS_LOG_LEVEL=info -no-module-cache` for the engine buckets, gb1): at 7d7e39fc7
+  (the GELU kernel and the bf16 walk) against ea6d942c2 (the 2026-10-24 tile entry's split) the encode 2451 against
+  2924 ms, `enc.ffn.gelu` 41 against 194, `q3a.conv.mm` 1123 against 1446, `q3a.blocks` 588 against 726, `q3a.mel` 396
+  against 403 (the mel's frame split is 258ca3799e; the race below carries it). `q3a.conv.mm` is GEMM-bound: 200
+  chunks of a 3.3 GFLOP c2 and a 0.86 GFLOP c3 are 840 GFLOP at 750 GFLOP/s of f32 tile on 8 cores, against the race's
+  1000 hot; the mmproj's conv weights are F16 and its blocks run the q8 lane, so the bf16 family reaches the conv
+  front only through an f16 ruling (row 240). `harness/cpu_asr_race.das -- --reps 5` (`-no-module-cache`, one process
+  a box, interleaved best of 5) at 24db4942af: the `bf16` arm, the bf16 plane through `matmul_bf16_batch` against the
+  f32 plane through `matmul_batch`, GFLOP/s at n d ntok 2560 10752 512 / 4320 480 800 / 1152 1152 256 - gnr on the
+  stamped AMX family 3921 / 3041 / 4093 against 782 / 923 / 1019; epyc9r14 on the widen walk 1667 / 1638 / 1537
+  against 1610 / 1618 / 1618; graviton4 on the widen walk 664 / 599 / 657 against 599 / 563 / 636; the M5 Max on the
+  widen walk 978 / 846 / 672 against 988 / 786 / 761 (the dot_bf16 nest the walk replaces read 86 GFLOP/s on gnr at
+  the conv shape, the 2026-10-24 entry's nest arm). The `mel` arm (`log_mel_qwen3a` over a 60 s synthetic clip, 128
+  mels; one lane / the lanes, ms): gnr 98.4 / 16.5, epyc9r14 101.0 / 15.1, graviton4 105.2 / 13.1, M5 52.2 / 10.2, 0
+  of 768128 elements apart on every box. The `kpass` arm (the decode attention's K pass over 28 layers x 3000 keys x 8
+  kv heads x 128, f16, two q heads a kv head, `dot_f16` a key a head; GB/s one lane / all lanes): (kv head, slice)
+  units gnr 3.6 / 30.3, epyc9r14 2.9 / 35.2, graviton4 8.4 / 87.5, M5 15.6 / 139.4; one slice over every kv head gnr
+  9.1 / 62.1, epyc9r14 13.4 / 69.0, graviton4 9.6 / 102.0, M5 23.1 / 200.0. gemma-4-E4B Q8_0 pp512 on gnr
+  (`benchmarks/lcpp_bench.das -- -m gemma-4-E4B-it-Q8_0.gguf -p 512 -n 0 -r 3 -t 8 --for-debug-purposes`, the file
+  `unsloth/gemma-4-E4B-it-GGUF` at `resolve/main`): master 2d7d99fbf 284.7 +/- 18.3 tok/s (cv 6.4%, void),
+  24e19e9916's kernels on the widen walk 359.8 +/- 0.3, the same with the AMX entry in the sidecar 368.8 +/- 0.2, the
+  frozen fixture's 8 opening tokens matching on all three. The decode on gnr at 24e19e9916's kernels (the stage probe,
+  the engine buckets on): f16 K/V (the ASR session's default) 11115 ms over 451 steps, `attn_chain` 8843 of it,
+  `blk_ffn` 1843, `mm_gemm` 525; `--kv q8` (the q8_0 K/V codec) 6285 ms over 443 steps, `attn_chain` 4097 - the
+  transcript moves (row 242). The chain's units re-ordered to one slice over every kv head (fcfb1dacd8) read
+  `attn_chain` 8942 ms against 24e19e9916's 8724 on gnr - within the run's noise; the kpass arm's two-fold does not
+  reach the chain, whose wall sits elsewhere.
+
 - **MEASURED (2026-10-24, `direction-grade`) - the fp32 batch GEMM tile and the lane-split conv front on the three AWS
   boards.** `matmul_batch_core` runs a four-by-four tile (`f32_batch_tile`,
   `ARCHITECTURE_CPU_KERNELS.md#f32-batch-tile-lattice`); `harness/f32_batch_race.das -- --reps 5` races its two

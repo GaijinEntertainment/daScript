@@ -2295,22 +2295,19 @@
     `bin/daslang modules/dasLLAMA/performance/gen_bench_records.das -- -w llm --backend cpu -o Qwen3.6-35B` there,
     `--ref-clean` naming the clean-cpu `llama-bench` `benchmarks/setup_lcpp_ref.das` builds at `DEFAULT_REF_SHA`.
 
-240. **The bf16 towers multiply in f32, and the Qwen3-ASR decoder's attention over the audio context is unshared.** The
-    reference's encoders run bf16 x bf16 arithmetic (its mmproj weights stay bf16, its activations round to bf16, the
-    dot is the half-width one - `vdpbf16ps`, the AMX bf16 tile, NEON `bfdot`); ours widen every bf16 or f16 tower tensor
-    to f32 at load and run f32 x f32 - the Qwen3-ASR conv front (`conv2d_s2`, `dasllama_qwen3a.das`), the gemma4a and
-    Omni audio encoders, the vision towers - so on every mmproj line the encode pays twice the weight bytes and no
-    half-width dot (the 2026-10-24 `PERF_LEDGER.md` tile entry: the Xeon's encode is 2917 ms against the reference's
-    7304 after the fp32 tile, with that arithmetic gap still in it). The Qwen3-ASR decoder spends its 451 steps (11.5 s
-    on gnr; the release-17 Zen4 row's total less its encode reads 9.6 s, the 2026-10-22 entry) in `attn_chain` and
-    `blk_attn` over the ~3000 audio tokens. Done = a `[tune]` family for the bf16-weight batch GEMM in the generator
-    (`dasllama_gemm_gen.das`: an f32-to-bf16 activation panel, `vdpbf16ps` on avx512bf16, `bfdot` on the arm bf16
-    extension, the AMX bf16 tile on the x86-amx class, the fp32 tile the reference body and fallback, a bf16-class gate
-    in `harness/gen_tune_probe.das`), the bf16 tower planes served through it, and a decode attention step that shares
-    the audio-context K/V reads across heads, with the Qwen3-ASR conv front's first layer (nine taps a dot, n 9) and
-    its erf GELU (an exp in double a lane) served through the same family and a float-lattice GELU - the Qwen3-ASR and
-    image-chat CPU rows re-minted on every board box,
-    `bin/daslang modules/dasLLAMA/performance/gen_bench_records.das -- -w asr -o Qwen3-ASR` and `-w image` on each.
+240. **The bf16 towers' conv fronts are F16, and the half-width family has only its AMX leg.** `bf16w_tile_gen`
+    (`dasllama_math_gen.das`) multiplies a native bf16 plane as the reference does - the activations rounded to bf16,
+    the TMUL bf16 tile over a k-pair panel - and `matmul_bf16_batch` reaches it where a sidecar names an `amx_bf16`
+    perm; the gemma-E per-layer projection and the bf16 vision patch planes ride it (the 2026-10-25 `PERF_LEDGER.md`
+    Granite Rapids entry: E4B pp512 359.8 -> 368.8 tok/s over the widen walk, the tile 3921 against the f32 plane's
+    782 GFLOP/s at that shape). What is left: the Qwen3-ASR mmproj's conv weights are F16 (`a.conv2d.*.weight`,
+    `a.conv_out.weight`), its blocks run the q8 lane, so the conv front's 1123 ms of f32 tile on the Xeon reaches the
+    matrix unit only through an f16 operand - AMX-FP16 (Granite Rapids on, Sapphire Rapids off) or an f16-to-bf16
+    panel (three mantissa bits under the reference's f16 x f16); and the family has no vector leg, so Zen4
+    (`vdpbf16ps`, avx512bf16) and Graviton (`bfdot` / `bfmmla`, the arm bf16 extension) run the widen walk. Done = the
+    conv front's operand ruled and served through the family, `vdpbf16ps` and `bfdot` perms in `dasllama_gemm_gen.das`
+    over the same panel with the probe gating them, and the Qwen3-ASR and image-chat CPU rows re-minted on every board
+    box at the release re-mint.
 
 241. **The bench exe's ASR and TTS cells print a clip's best of their reps alone.** `lcpp_bench --asr` and `--tts`
     keep the minimum over `-r` reps (`r.enc_ms = min(...)`, the sentence sums) and the record row carries that one wall,
@@ -2318,3 +2315,15 @@
     per-rep spread to give where `REVIEW_MEASUREMENT.md`'s served-turn rule asks for one. Done = the ASR and TTS cells
     print every rep's wall beside the best (`rep i: <ms>` lines) and the record row's `tests` entry carries `ms_reps`, the
     recorder and `test_bench_records_schema.das` reading it back, so a ledger entry can quote the min and max.
+
+242. **The ASR decoder's attention wall on CPU is its K/V bytes, and the session's codec is f16.** On the Granite
+    Rapids board the Qwen3-ASR decode over the ~3000 audio tokens spends `attn_chain` 8.8 s of 11.1 s (451 steps)
+    under the f16 K/V codec the ASR session defaults to (`set_asr_kv`), and 4.1 s of 6.3 s under q8_0 (443 steps - the
+    transcript moves); in `harness/cpu_asr_race.das`'s K pass the box streams 30 GB/s over (kv head, slice) units and
+    62 GB/s by slices over every kv head, and the chain re-ordered to the latter did not move (the 2026-10-25
+    `PERF_LEDGER.md` Granite Rapids entry). The reference decodes its f16 K/V at about 32 ms a step (its 21610 ms gb1
+    total less its 7304 ms encode over the 451 steps, the 2026-10-24 tile entry's `llama-mtmd-cli` figures) against
+    our 24.6 (11115 ms over 451). Done = a ruling on the ASR session's CPU codec - q8_0 by default with the parity
+    cells' bars re-cut on its transcripts, or f16 kept and the row closed - written into
+    `ARCHITECTURE_MEASUREMENT_AUDIO.md` and the facade's default, and the Qwen3-ASR CPU rows re-minted on every board
+    box at the release re-mint.
