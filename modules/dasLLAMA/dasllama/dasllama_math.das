@@ -2591,6 +2591,34 @@ def exp4(x : float4) : float4 {
     }
 }
 
+//! gelu_erf(x) = 0.5 x (1 + erf(x / sqrt 2)) in place on the float lattice: erfc(|x| / sqrt 2) as the NR
+//! rational fit (fractional error under 1.2e-7) over exp4's polynomial a lane, the sign picking 0.5 x erfc
+//! or 0.5 x (2 - erfc) so both tails keep relative accuracy; all arithmetic, so the loop vectorizes.
+[hint(unsafe_range_check, noalias = x)]
+def template gelu_erf_template(var x : float ?; n : int64) : void {
+    for [tune = 1] (i in range64(n)) {
+        unsafe {
+            let v = x[i]
+            let z = abs(v) * 0.7071067811865476
+            let t = 1.0 / (1.0 + 0.5 * z)
+            let a = max(-z * z - 1.26551223 + t * (1.00002368 + t * (0.37409196 + t * (0.09678418 + t * (-0.18628806
+                + t * (0.27886807 + t * (-1.13520398 + t * (1.48851587 + t * (-0.82215223 + t * 0.17087277)))))))), -87.0)
+            let zz = mad(a, 1.4426950216293335, 12582912.0)
+            let nn = zz - 12582912.0
+            let b = mad(nn, -1.428606765330187e-06, mad(nn, -0.693145751953125, a))
+            let u = b * b
+            let p = mad(mad(mad(0.008247390389442444, b, 0.04189976677298546), u,
+                mad(0.16668395698070526, b, 0.4999912679195404)), u, 0.9999994039535522 * b)
+            let k = reinterpret<float>((reinterpret<uint>(zz) << 23u) + 0x3f800000u)
+            let erfc = t * mad(p, k, k)
+            x[i] = v >= 0.0 ? 0.5 * v * (2.0 - erfc) : 0.5 * v * erfc
+        }
+    }
+}
+
+[hint(unsafe_range_check, noalias = x), tuned]
+def gelu_erf(var x : float?; n : int64) {}
+
 //! Index of the max element, first-index-wins on ties — the greedy-decode argmax. Chunked team
 //! scan (serial 151-262k-vocab scan idled every lane 210-284us/token); combine folds candidates
 //! in index order with strict >, so the result is bit-identical to the serial loop for ANY split.

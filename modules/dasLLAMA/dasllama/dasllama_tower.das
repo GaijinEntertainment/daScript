@@ -90,30 +90,8 @@ def ln_block_regions(o : LayerOffs; d, ff : int64; var out : Q8Region[int(LN_BLO
     out[LN_GEMM_FC2] = Q8Region(woff = o.fc2_w, n = ff, rows = d)
 }
 
-// erfc rational approximation (Numerical Recipes 6.2), |fractional error| < 1.2e-7 —
-// float-level agreement with the reference erff. Double internally.
-def private erf_nr(x : double) : double {
-    let z = abs(x)
-    let t = 1.0lf / (1.0lf + 0.5lf * z)
-    let erfc = t * exp(-z * z - 1.26551223lf + t * (1.00002368lf + t * (0.37409196lf + t * (0.09678418lf +
-        t * (-0.18628806lf + t * (0.27886807lf + t * (-1.13520398lf + t * (1.48851587lf +
-        t * (-0.82215223lf + t * 0.17087277lf)))))))))
-    return x >= 0.0lf ? 1.0lf - erfc : erfc - 1.0lf
-}
-
-//! gelu_erf(x) = 0.5·x·(1 + erf(x/√2)) — the EXACT erf form,
-//! not the tanh approximation ``gelu`` uses. Whisper's conv frontend and encoder FFN both
-//! use this flavor. In place over the first ``size`` elements.
-def gelu_erf(var x : float?; size : int64) {
-    let inv_sqrt2 = 0.7071067811865476lf
-    unsafe {
-        for (i in range64(size)) {
-            let v = double(x[i])
-            x[i] = float(0.5lf * v * (1.0lf + erf_nr(v * inv_sqrt2)))
-        }
-    }
-}
-
+//! gelu_erf(x) = 0.5·x·(1 + erf(x/√2)) — the erf form, not the tanh approximation ``gelu`` uses
+//! (the kernel: dasllama_math); whisper's conv frontend and encoder FFN use it. In place over ``size``.
 def gelu_erf(var x : array<float> | #; size : int64) {
     if (size <= 0l) return
     gelu_erf(unsafe(addr(x[0])), size)

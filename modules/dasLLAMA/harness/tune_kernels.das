@@ -80,6 +80,8 @@ struct GridRopeTab {}
 struct GridGemm {}
 [dasllama_grid(src = "f32_batch_tile_template")]
 struct GridF32BatchTile {}
+[dasllama_grid(src = "gelu_erf_template")]
+struct GridGeluErf {}
 [dasllama_grid(src = "dot_q8q8_laneq4x4_template")]
 struct GridLaneq {}
 [dasllama_grid(src = "dot_f16_template")]
@@ -157,7 +159,7 @@ let TARGET_WINDOW_US = 20000.0lf   // same window as tuner_noise's PROBE_WINDOW_
 let MAX_REPS_SCALE = 32
 // The outer progress denominator, needed before the first kernel runs so it cannot be derived
 // from the results. A mismatch only skews the bar, and main says so at the end.
-let TUNED_KERNEL_COUNT = 26
+let TUNED_KERNEL_COUNT = 27
 
 struct private KernelResult {
     kernel : string
@@ -1064,6 +1066,60 @@ def bench_softmax() : string {
     })
     tune_detail("  checksum {sink}\n")
     return report("softmax", race)
+}
+
+// ===== gelu_erf: in place over N, gated f64-relative against the erf series' GELU on a [-4, 4] spread.
+
+def private erf_series(x : double) : double {
+    var sum = 0.0lf
+    var term = x
+    var k = 0
+    while (abs(term) > 1.0e-18lf && k < 200) {
+        sum += term / double(2 * k + 1)
+        k++
+        term *= -x * x / double(k)
+    }
+    return sum * 2.0lf / sqrt(3.141592653589793lf)
+}
+
+def bench_gelu_erf() : string {
+    let vs <- gelu_erf_template_variants()
+    var inscope d0, d : array<float>
+    d0 |> resize(N)
+    d |> resize(N)
+    for (i in range64(N)) {
+        d0[i] = 4.0f * sin(float(i) * 0.11f)
+    }
+    var dp = unsafe(addr(d[0]))
+    var inscope want : array<double>
+    want |> resize(N)
+    for (i in range64(N)) {
+        let x = double(d0[i])
+        want[i] = 0.5lf * x * (1.0lf + erf_series(x * 0.7071067811865476lf))
+    }
+    var sink = 0.0f
+    var inscope race <- race_variants(vs, $(i : int) : bool {
+        reset_stream(dp, d0)
+        let f = vs[i]._1
+        invoke(f, dp, N)
+        var maxrel = 0.0lf
+        for (j in range64(N)) {
+            let rel = rel_err(double(d[j]), want[j])
+            maxrel = worst_rel(maxrel, rel)
+        }
+        return maxrel <= TOL
+    }, $(_i : int) {
+        reset_stream(dp, d0)
+    }, $(i : int) {
+        let f = vs[i]._1
+        for (_rep in range(reps_of(i))) {
+            invoke(f, dp, N)
+        }
+    }, $ {
+        sink += d[0]
+    })
+    tune_detail("  checksum {sink}\n")
+    return report("gelu_erf", race)
 }
 
 // ===== rmsnorm: (var o, x, weight, size, eps) out-of-place — repeatable, no reset needed.
@@ -1975,7 +2031,7 @@ def main : int { // nolint:STYLE037,STYLE038 — flat one-bench-per-kernel rail;
         ("cvt_q8kv_to_f32", @@bench_cvt_q8kv_to_f32), ("quantize_q8kv_row", @@bench_quantize_q8kv_row),
         ("dot_mx4q8", @@bench_dot_mx4q8), ("quantize_q8_0_into_ptr", @@bench_quantize),
         ("quantize_q8_0_bs_into_ptr", @@bench_quantize_bs), ("rope_scaled_neox_tab", @@bench_rope_tab),
-        ("gemm_f32_uk_4x16", @@bench_gemm_tile), ("f32_batch_tile", @@bench_f32_batch_tile),
+        ("gemm_f32_uk_4x16", @@bench_gemm_tile), ("f32_batch_tile", @@bench_f32_batch_tile), ("gelu_erf", @@bench_gelu_erf),
         ("dot_q8q8_laneq4x4", @@bench_laneq4x4)
     ]
     let partialMint = !empty(tune_only_filter())
