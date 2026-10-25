@@ -57,11 +57,18 @@ module style_lint shared private
 //!   STYLE045 — a &&/||/! condition over one int variable that an
 //!     interval lattice collapses to a single comparison ('x != 1 &&
 //!     x > 0' is 'x >= 2')
+//!   STYLE048 — if/elif chain (nested ifs that are a whole arm body
+//!     flattened in) whose arms test the same subjects against
+//!     constants, ranges or variant cases — rewrite as a 'match'
+//!     (default off)
 
 require daslib/ast_boost
 require daslib/dupe_detect
 require daslib/is_local
 require daslib/lint_config
+require daslib/match_solver
+require daslib/option
+require daslib/result
 require daslib/strings_boost
 require math
 require strings
@@ -341,6 +348,621 @@ struct private St047Site {
     edits : array<LintFix>
 }
 
+let ST048_MAX_ALTS = 8
+let ST048_MAX_SUBJECTS = 4
+
+enum private St048Kind {
+    eq
+    lo
+    hi
+    variant_case
+}
+
+struct St048Atom {
+    //! One test a match pattern can hold: `subject` against a constant, a
+    //! range bound or a variant case. `text` is what the hint prints,
+    //! `cell` what the solver compares, `column` the subject's domain.
+    subject : string
+    kind : St048Kind
+    text : string
+    cell : SolverCell
+    column : SolverColumn
+}
+
+struct St048Alt {
+    //! One AND-group of an arm's condition: its atoms, and whether
+    //! anything is left to a guard.
+    atoms : array<St048Atom>
+    guard : bool
+}
+
+struct St048Arm {
+    //! One arm of the chain; `body` is the described body, "" when the
+    //! arm runs nothing.
+    alts : array<St048Alt>
+    is_else : bool
+    //! A `synthetic` arm is the fall-through a flattened inner chain
+    //! with no `else` leaves.
+    synthetic : bool
+    body : string
+    //! `node` is the `if` the arm's test belongs to.
+    @do_not_delete node : ExprIfThenElse const?
+}
+
+struct St048Chain {
+    //! The arms of an if/elif chain, inner chains flattened in; no arms
+    //! when it has no match spelling.
+    arms : array<St048Arm>
+    flattened : bool
+}
+
+struct St048Pattern {
+    //! One AND-group as per-subject patterns - `pats` to print, `cells`
+    //! to solve - plus whether anything is left to a guard.
+    pats : table<string; string>
+    cells : table<string; SolverCell>
+    guard : bool
+}
+
+struct St048Row {
+    //! Arm `src` of the chain as the hint prints it (`cells`, a row of
+    //! per-subject patterns per alternative) and as the solver sees it
+    //! (`arm`).
+    src : int
+    cells : array<array<string>>
+    arm : SolverArm
+    arms : array<int>
+}
+
+def private st048_subject_path(e : Expression?) : bool {
+    if (e is ExprRef2Value) return st048_subject_path((e as ExprRef2Value).subexpr)
+    if (e is ExprVar) {
+        let v = (e as ExprVar).variable
+        return v != null && !v.flags.generated && !starts_with(string(v.name), "__")
+    }
+    return (e is ExprField && (e as ExprField).name != "__rtti" &&
+            st048_subject_path((e as ExprField).value))
+}
+
+def private st048_subject_text(e : Expression?) : string {
+    if (e is ExprRef2Value) return st048_subject_text((e as ExprRef2Value).subexpr)
+    return describe(e)
+}
+
+def private st048_const_text(e : Expression?) : string {
+    //! The constant as written, so a character literal stays 'w' and an
+    //! enum value keeps its short name.
+    if (e is ExprRef2Value) return st048_const_text((e as ExprRef2Value).subexpr)
+    var text = ""
+    if (e.at.fileInfo != null && e.at.line != 0u && e.at.line == e.at.last_line &&
+            e.at.last_column > e.at.column) {
+        get_file_source_line(e.at.fileInfo, e.at.line) $(line) {
+            let start = int(e.at.column)
+            let finish = int(e.at.last_column)
+            if (start >= 0 && finish <= length(line)) {
+                text = strip(slice(line, start, finish))
+            }
+        }
+    }
+    return empty(text) ? describe(e) : text
+}
+
+def private st048_succ_text(text : string; past : Option<int64>) : string {
+    //! The bound one past an inclusive one, spelled as the source spelled
+    //! it: hex stays hex, and a type suffix stays.
+    return text if (is_none(past))
+    var suffix = ""
+    for (s in ["ul", "UL", "u", "U", "l", "L"]) {
+        if (ends_with(text, s)) {
+            suffix = s
+            break
+        }
+    }
+    let hex = starts_with(text, "0x") || starts_with(text, "0X")
+    return hex ? "0x{fmt(":X", unwrap(past))}{suffix}" : "{unwrap(past)}{suffix}"
+}
+
+def private st048_int(e : Expression?) : Option<int64> {
+    //! An integer constant's value; none when it does not fit an int64.
+    if (e is ExprRef2Value) return st048_int((e as ExprRef2Value).subexpr)
+    return some(int64((e as ExprConstInt).value)) if (e is ExprConstInt)
+    return some(int64((e as ExprConstUInt).value)) if (e is ExprConstUInt)
+    return some((e as ExprConstInt64).value) if (e is ExprConstInt64)
+    if (e is ExprConstUInt64 && (e as ExprConstUInt64).value <= uint64(LONG_MAX)) {
+        return some(int64((e as ExprConstUInt64).value))
+    }
+    return none(type<int64>)
+}
+
+def private st048_key(e : Expression?) : string {
+    //! The name the solver compares a non-integer constant by; an enum
+    //! value is spelled as its domain lists it.
+    if (e is ExprRef2Value) return st048_key((e as ExprRef2Value).subexpr)
+    if (e is ExprConstEnumeration) {
+        let ce = e as ExprConstEnumeration
+        return "{ce.enumType.name}.{ce.value}"
+    }
+    return describe(e)
+}
+
+def private st048_const(e : Expression?) : bool {
+    if (e is ExprRef2Value) return st048_const((e as ExprRef2Value).subexpr)
+    return is_expr_const(e)
+}
+
+def private st048_column(t : TypeDeclPtr) : SolverColumn {
+    //! The solver's column for a subject of type `t`: every value of a
+    //! finite type, spelled as `st048_key` spells its constants.
+    if (t.isEnum && t.enumType != null) {
+        let names <- [for (e in t.enumType.list); "{t.enumType.name}.{e.name}"]
+        return <- SolverColumn(domain <- some(names))
+    } elif (t.baseType == Type.tBool) {
+        return <- SolverColumn(domain <- some(["true", "false"]))
+    } elif (t.isVariant) {
+        return <- SolverColumn(domain <- some([for (n in t.argNames); string(n)]))
+    }
+    return <- SolverColumn()
+}
+
+def private st048_span(sname : string; kind : St048Kind; text : string;
+                       lo, hi : Option<int64>) : Option<St048Atom> {
+    //! An atom over the integers from `lo` up to `hi`; none when a bound
+    //! did not fit an int64.
+    return none(type<St048Atom>) if (is_none(lo) || is_none(hi))
+    return some(St048Atom(subject = sname, kind = kind, text = text,
+                          cell = SolverCell(spans <- [interval(unwrap(lo), unwrap(hi))])))
+}
+
+def private st048_compare(op : string; subj, k : Expression?) : Option<St048Atom> {
+    return none(type<St048Atom>) if (!st048_subject_path(subj) || !st048_const(k))
+    let t = subj._type
+    let sname = st048_subject_text(subj)
+    let ktext = st048_const_text(k)
+    let integral = (t != null && (t.baseType == Type.tInt || t.baseType == Type.tUInt ||
+                    t.baseType == Type.tInt64 || t.baseType == Type.tUInt64))
+    if (integral) {
+        let n = st048_int(k)
+        let past = is_some(n) && unwrap(n) < LONG_MAX ? some(unwrap(n) + 1l) : none(type<int64>)
+        if (op == "==") return st048_span(sname, St048Kind.eq, ktext, n, past)
+        if (op == ">=") return st048_span(sname, St048Kind.lo, ktext, n, some(LONG_MAX))
+        if (op == ">") {
+            let lo_text = st048_succ_text(ktext, past)
+            return st048_span(sname, St048Kind.lo, lo_text, past, some(LONG_MAX))
+        }
+        if (op == "<") return st048_span(sname, St048Kind.hi, ktext, some(LONG_MIN), n)
+        if (op == "<=") {
+            let hi_text = st048_succ_text(ktext, past)
+            return st048_span(sname, St048Kind.hi, hi_text, some(LONG_MIN), past)
+        }
+        return none(type<St048Atom>)
+    }
+    let keyed = (t != null &&
+                 (t.isInteger || t.isEnum || t.isString || t.baseType == Type.tBool))
+    return none(type<St048Atom>) if (op != "==" || !keyed)
+    return some(St048Atom(subject = sname, kind = St048Kind.eq, text = ktext,
+                          cell = SolverCell(keys <- [st048_key(k)]), column = st048_column(t)))
+}
+
+def private st048_flag(e : Expression?) : Option<St048Atom> {
+    //! A bool subject tested bare - `b` is `b == true`, `!b` is
+    //! `b == false`, the spelling STYLE018 asks for.
+    let negated = e is ExprOp1 && (e as ExprOp1).op == "!"
+    let flag = negated ? (e as ExprOp1).subexpr : e
+    let bool_flag = (st048_subject_path(flag) && flag._type != null &&
+                     flag._type.baseType == Type.tBool)
+    return none(type<St048Atom>) if (!bool_flag)
+    let value = negated ? "false" : "true"
+    return some(St048Atom(subject = st048_subject_text(flag), kind = St048Kind.eq, text = value,
+                          cell = SolverCell(keys <- [value]), column = st048_column(flag._type)))
+}
+
+def private st048_variant(e : ExprIsVariant?) : Option<St048Atom> {
+    return none(type<St048Atom>) if (!st048_subject_path(e.value))
+    let name = string(e.name)
+    return some(St048Atom(subject = st048_subject_text(e.value), kind = St048Kind.variant_case,
+                          text = name,
+                          cell = SolverCell(keys <- [name]), column = st048_column(e.value._type)))
+}
+
+def private st048_leaf(e : Expression?) : Option<St048Atom> {
+    if (e is ExprRef2Value) return st048_leaf((e as ExprRef2Value).subexpr)
+    return st048_variant(e as ExprIsVariant) if (e is ExprIsVariant)
+    var flag <- st048_flag(e)
+    return <- flag if (is_some(flag))
+    return none(type<St048Atom>) if (!(e is ExprOp2))
+    let op = string((e as ExprOp2).op)
+    var direct <- st048_compare(op, (e as ExprOp2).left, (e as ExprOp2).right)
+    return <- direct if (is_some(direct))
+    let flipped = op == "<" ? ">" : op == "<=" ? ">=" : op == ">" ? "<" : op == ">=" ? "<=" : op
+    return st048_compare(flipped, (e as ExprOp2).right, (e as ExprOp2).left)
+}
+
+def private st048_cross(a, b : array<St048Alt>) : array<St048Alt> {
+    //! Every AND-group of `a` joined with every AND-group of `b`.
+    var res : array<St048Alt>
+    res |> reserve(length(a) * length(b))
+    for (x in a) {
+        for (y in b) {
+            var atoms := x.atoms
+            atoms |> push_clone_from(y.atoms)
+            res |> emplace(St048Alt(atoms <- atoms, guard = x.guard || y.guard))
+        }
+    }
+    return <- res
+}
+
+def private st048_dnf(e : Expression?) : array<St048Alt> {
+    //! The condition as an OR of AND-groups; empty when it expands past
+    //! ST048_MAX_ALTS.
+    if (e is ExprRef2Value) return <- st048_dnf((e as ExprRef2Value).subexpr)
+    let is_or = e is ExprOp2 && (e as ExprOp2).op == "||"
+    if (is_or || (e is ExprOp2 && (e as ExprOp2).op == "&&")) {
+        var l <- st048_dnf((e as ExprOp2).left)
+        let r <- st048_dnf((e as ExprOp2).right)
+        let width = is_or ? length(l) + length(r) : length(l) * length(r)
+        if (empty(l) || empty(r) || width > ST048_MAX_ALTS) {
+            return <- array<St048Alt>()
+        }
+        return <- st048_cross(l, r) if (!is_or)
+        l |> push_clone_from(r)
+        return <- l
+    }
+    var leaf <- st048_leaf(e)
+    return <- [St048Alt(atoms <- [move_unwrap(leaf)])] if (is_some(leaf))
+    return <- [St048Alt(guard = true)]
+}
+
+def private st048_inner_if(body : Expression?) : ExprIfThenElse? {
+    //! The `if` that is the whole of `body`, when it is one.
+    var b = body
+    return null if (b == null)
+    while (b is ExprBlock) {
+        let blk = b as ExprBlock
+        return null if (length(blk.list) != 1 || !empty(blk.finalList))
+        b = blk.list[0]
+    }
+    return (b as ExprIfThenElse) if (b is ExprIfThenElse &&
+                                     !(b as ExprIfThenElse).if_flags.isStatic)
+    return null
+}
+
+def private st048_body_text(body : Expression?) : string {
+    let nothing = body == null || (body is ExprBlock && empty((body as ExprBlock).list))
+    return nothing ? "" : describe(body)
+}
+
+def private st048_flatten(alts : array<St048Alt>; body : Expression?; node : ExprIfThenElse const?;
+                          var seen : table<uint64>) : St048Chain {
+    //! The arms of an inner chain that is the whole `body` of an outer
+    //! arm, each crossed with the outer `alts`; no arms when it does not
+    //! flatten - only an inner chain that leaves nothing to a guard does.
+    let inner = st048_inner_if(body)
+    return St048Chain() if (inner == null)
+    var inscope inner_seen : table<uint64>
+    var nested <- st048_collect(inner, inner_seen)
+    let guarded = has_value([for (arm in nested.arms);
+                             has_value([for (alt in arm.alts); alt.guard], true)], true)
+    return St048Chain() if (empty(nested.arms) || guarded)
+    for (k in keys(inner_seen)) {
+        seen |> insert(k)
+    }
+    var res = St048Chain(flattened = true)
+    res.arms |> reserve(length(nested.arms) + 1)
+    for (ia in nested.arms) {
+        var arm_alts <- ia.is_else ? clone_to_move(alts) : st048_cross(alts, ia.alts)
+        res.arms |> emplace(St048Arm(alts <- arm_alts, body = ia.body, node = ia.node))
+    }
+    if (!nested.arms[length(nested.arms) - 1].is_else) {
+        res.arms |> emplace(St048Arm(alts := alts, synthetic = true, node = node))
+    }
+    return <- res
+}
+
+def private st048_collect(head : ExprIfThenElse?; var seen : table<uint64>) : St048Chain {
+    //! The arms of the if/elif chain at `head`, an inner chain that is a
+    //! whole arm body flattened in; no arms when a condition expands too
+    //! far.
+    var chain : St048Chain
+    var node = head
+    while (node != null) {
+        seen |> insert(intptr(node))
+        var alts <- st048_dnf(node.cond)
+        return <- St048Chain() if (empty(alts))
+        var nested <- st048_flatten(alts, node.if_true, node, seen)
+        if (empty(nested.arms)) {
+            let body = st048_body_text(node.if_true)
+            chain.arms |> emplace(St048Arm(alts <- alts, body = body, node = node))
+        } else {
+            chain.flattened = true
+            chain.arms |> push_clone_from(nested.arms)
+        }
+        let if_false = node.if_false
+        var next : ExprIfThenElse?
+        if (if_false != null) {
+            next = (if_false is ExprIfThenElse ? (if_false as ExprIfThenElse)
+                                               : st048_inner_if(if_false))
+        }
+        if (next == null && if_false != null) {
+            let body = st048_body_text(if_false)
+            chain.arms |> emplace(St048Arm(is_else = true, body = body, node = node))
+        }
+        node = next
+    }
+    return <- chain
+}
+
+def private st048_fold(alt : St048Alt) : St048Pattern {
+    //! One AND-group as per-subject patterns: a `lo` and a `hi` bound on
+    //! one subject intersect into a range; a second test of a subject, or
+    //! a one-sided bound, goes to the guard.
+    var res = St048Pattern(guard = alt.guard)
+    var inscope lo, hi : table<string; string>
+    var inscope bounds : table<string; SolverCell>
+    for (a in alt.atoms) {
+        if (a.kind == St048Kind.lo || a.kind == St048Kind.hi) {
+            let lo_bound = a.kind == St048Kind.lo
+            let taken = lo_bound ? key_exists(lo, a.subject) : key_exists(hi, a.subject)
+            if (taken) {
+                res.guard = true
+                continue
+            }
+            if (a.kind == St048Kind.lo) {
+                lo |> insert(a.subject, a.text)
+            } else {
+                hi |> insert(a.subject, a.text)
+            }
+            if (!key_exists(bounds, a.subject)) {
+                bounds |> emplace(a.subject, SolverCell())
+            }
+            bounds[a.subject].all_of |> push_clone(a.cell)
+        } elif (key_exists(res.pats, a.subject)) {
+            res.guard = true
+        } else {
+            let pat = a.kind == St048Kind.variant_case ? "{a.text}(...)" : a.text
+            res.pats |> insert(a.subject, pat)
+            res.cells |> insert_clone(a.subject, a.cell)
+        }
+    }
+    for (s in keys(bounds)) {
+        if (!key_exists(lo, s) || !key_exists(hi, s) || key_exists(res.pats, s)) {
+            res.guard = true
+            continue
+        }
+        res.pats |> insert(s, "{lo?[s] ?? ""}..{hi?[s] ?? ""}")
+        get(bounds, s) $(cell) {
+            res.cells |> insert_clone(s, cell)
+        }
+    }
+    return <- res
+}
+
+def private st048_subjects(chain : St048Chain;
+                           folded : array<array<St048Pattern>>) : array<string> {
+    //! The match header in first-test order: a subject two or more arms
+    //! test - any count in a flattened chain; a subject one arm tests
+    //! stays in that arm's guard.
+    var inscope arms_testing : table<string; int>
+    for (pats in folded) {
+        var inscope tested : table<string>
+        for (p in pats) {
+            for (s in keys(p.pats)) {
+                tested |> insert(s)
+            }
+        }
+        for (s in keys(tested)) {
+            arms_testing[s] = (arms_testing?[s] ?? 0) + 1
+        }
+    }
+    let least = chain.flattened ? 1 : 2
+    var subjects : array<string>
+    for (arm in chain.arms) {
+        for (alt in arm.alts) {
+            for (a in alt.atoms) {
+                if ((arms_testing?[a.subject] ?? 0) >= least && !has_value(subjects, a.subject)) {
+                    subjects |> push(a.subject)
+                }
+            }
+        }
+    }
+    return <- subjects
+}
+
+def private st048_rows(chain : St048Chain; folded : array<array<St048Pattern>>;
+                       subjects : array<string>) : array<St048Row> {
+    //! Each arm's patterns over the header; an arm is guarded when it
+    //! leaves an atom no pattern holds, or tests a subject the header
+    //! dropped.
+    var rows : array<St048Row>
+    rows |> reserve(length(chain.arms))
+    for (arm, pats, ai in chain.arms, folded, count()) {
+        var guarded = false
+        var alts : array<array<SolverCell>>
+        alts |> reserve(length(pats) + 1)
+        for (p in pats) {
+            let dropped = has_value([for (s in keys(p.pats)); has_value(subjects, s)], false)
+            guarded ||= p.guard || dropped
+            var row : array<SolverCell>
+            row |> reserve(length(subjects))
+            for (s in subjects) {
+                var cell = SolverCell(any = true)
+                get(p.cells, s) $(c) {
+                    cell := c
+                }
+                row |> emplace(cell)
+            }
+            alts |> emplace(row)
+        }
+        if (arm.is_else) {
+            alts |> emplace([for (_s in subjects); SolverCell(any = true)])
+        }
+        var guard <- guarded ? SolverGuard(opaque) : SolverGuard(unguarded)
+        rows |> emplace(St048Row(src = ai,
+                                 cells <- [for (p in pats);
+                                           [for (s in subjects); p.pats?[s] ?? "_"]],
+                                 arm = SolverArm(rows <- alts, guard <- guard)))
+    }
+    return <- rows
+}
+
+def private st048_guard(row : St048Row) : bool => !(row.arm.guard is unguarded)
+
+def private st048_pays(chain : St048Chain; rows : array<St048Row>) : bool {
+    //! Three arms that run something, or two when the chain flattens a
+    //! nested if or matches variant cases, with guards on at most half; a
+    //! guarded arm with alternatives has no match spelling.
+    var arms = 0
+    var guarded = 0
+    var has_variant = false
+    for (row in rows) {
+        assume arm = chain.arms[row.src]
+        continue if (arm.is_else)
+        return false if (st048_guard(row) && length(row.cells) > 1)
+        arms++ if (!empty(arm.body))
+        guarded++ if (st048_guard(row))
+        has_variant ||= has_value([for (alt in arm.alts);
+                                   has_value([for (a in alt.atoms);
+                                              a.kind == St048Kind.variant_case], true)], true)
+    }
+    return guarded * 2 <= arms && (arms >= 3 || (arms >= 2 && (chain.flattened || has_variant)))
+}
+
+def private st048_requires_match(prog : ProgramPtr; mod : Module?) : bool {
+    //! STYLE048 suggests ``match`` only to a module that already requires
+    //! ``daslib/match`` itself.
+    var seen = false
+    if (mod != null) {
+        program_for_each_module(prog) $(m) {
+            seen ||= m.name == "match" && is_visible_directly(mod, m)
+        }
+    }
+    return seen
+}
+
+def private st048_coverage(chain : St048Chain; rows : array<St048Row>;
+                           subjects : array<string>) : Result<SolverCoverage; SolverUnsupported> {
+    //! The solver's answer for the rows; a subject's column - its
+    //! domain - comes from the atoms that test it.
+    var inscope columns : array<SolverColumn>
+    columns |> reserve(length(subjects))
+    for (s in subjects) {
+        var column : SolverColumn
+        for (arm in chain.arms) {
+            for (alt in arm.alts) {
+                for (a in alt.atoms) {
+                    if (a.subject == s && column.domain is none) {
+                        column := a.column
+                    }
+                }
+            }
+        }
+        columns |> emplace(column)
+    }
+    var inscope arms <- [for (row in rows); clone_to_move(row.arm)]
+    return <- solve_coverage(columns, arms)
+}
+
+def private st048_clear_between(rows : array<St048Row>; cov : SolverCoverage; i, j : int) : bool {
+    //! No arm between `i` and `j` shares a value with `j`, so moving
+    //! `j`'s patterns up to `i` changes no value's arm. `arms` are the
+    //! solver's arm numbers a row holds.
+    for (k in range(i + 1, j)) {
+        for (a in rows[k].arms) {
+            for (b in rows[j].arms) {
+                return false if (arms_overlap(cov, a, b))
+            }
+        }
+    }
+    return true
+}
+
+def private st048_merge_bodies(chain : St048Chain; var rows : array<St048Row>;
+                               cov : SolverCoverage) : void {
+    //! An arm whose body repeats an earlier arm's joins it with `|` - the
+    //! earliest such arm that no arm in between shares a value with.
+    var j = 1
+    while (j < length(rows)) {
+        var target = -1
+        let body = chain.arms[rows[j].src].body
+        if (!chain.arms[rows[j].src].is_else && !st048_guard(rows[j]) && !empty(body)) {
+            for (i in range(j)) {
+                let same = !st048_guard(rows[i]) && chain.arms[rows[i].src].body == body
+                if (same && st048_clear_between(rows, cov, i, j)) {
+                    target = i
+                    break
+                }
+            }
+        }
+        if (target < 0) {
+            j++
+            continue
+        }
+        rows[target].cells |> push_clone_from(rows[j].cells)
+        rows[target].arm.rows |> push_clone_from(rows[j].arm.rows)
+        rows[target].arms |> push_from(rows[j].arms)
+        rows |> erase(j)
+    }
+}
+
+def private st048_single_diff(a, b : array<string>) : int {
+    //! The one subject where two alternatives differ, both holding a
+    //! pattern there; -1 otherwise.
+    var slot = -1
+    for (x, y, k in a, b, count()) {
+        continue if (x == y)
+        return -1 if (slot >= 0 || x == "_" || y == "_")
+        slot = k
+    }
+    return slot
+}
+
+def private st048_factor(var cells : array<array<string>>) : void {
+    //! Two alternatives that differ in one subject fold into one, that
+    //! subject's patterns joined with `|`.
+    var a = 0
+    while (a < length(cells)) {
+        var merged = false
+        for (b in range(a + 1, length(cells))) {
+            let slot = st048_single_diff(cells[a], cells[b])
+            if (slot >= 0) {
+                cells[a][slot] = "{cells[a][slot]} | {cells[b][slot]}"
+                cells |> erase(b)
+                merged = true
+                break
+            }
+        }
+        a = merged ? 0 : a + 1
+    }
+}
+
+def private st048_render(chain : St048Chain; rows : array<St048Row>; subjects : array<string>;
+                         cov : SolverCoverage; else_dead : bool) : string {
+    //! The suggested match, one line: arms separated by ` / `, a
+    //! `_ => {}` arm when some value reaches none.
+    var arms : array<string>
+    arms |> reserve(length(rows) + 1)
+    for (row in rows) {
+        assume arm = chain.arms[row.src]
+        if (arm.is_else) {
+            arms |> push("_")
+            continue
+        }
+        var inscope alts <- [for (c in row.cells);
+                             length(subjects) > 1 ? "({join(c, ", ")})" : c[0]]
+        let guard = st048_guard(row) ? " && <guard>" : ""
+        let nothing = empty(arm.body) ? " => \{\}" : ""
+        arms |> push("{join(alts, " | ")}{guard}{nothing}")
+    }
+    let has_else = !empty(rows) && chain.arms[rows[length(rows) - 1].src].is_else
+    if (!has_else && !is_exhaustive(cov)) {
+        arms |> push("_ => \{\}")
+    }
+    let listed = !has_else && missing_fully_listed(cov) && cov.all_finite
+    let unmatched = listed ? " [unmatched: {(cov.missing as named).text}]" : ""
+    let dead_else = else_dead ? " [the else branch never runs]" : ""
+    let note = chain.flattened ? " [nested if flattened]" : ""
+    return "match ({join(subjects, ", ")}) \{ {join(arms, " / ")} \}{unmatched}{dead_else}{note}"
+}
+
 class StyleLintVisitor : AstVisitor {
     compile_time_errors : bool
     comment_hygiene : bool = false
@@ -366,6 +988,8 @@ class StyleLintVisitor : AstVisitor {
     used_modules : table<string>
     unresolved_call_names : table<string>
     @do_not_delete st041_candidates : table<Variable?; St041Candidate>
+    st048_seen : table<uint64>
+    st048_sees_match : bool
     st047_sites : array<St047Site>
 
     //! STYLE047 - a block literal comparing two elements key by key.
@@ -1678,10 +2302,49 @@ class StyleLintVisitor : AstVisitor {
         }
     }
 
+    def check_style048(ifte : ExprIfThenElse?) : void {
+        return if (!st048_sees_match || key_exists(st048_seen, intptr(ifte)))
+        let chain <- st048_collect(ifte, st048_seen)
+        let folded <- [for (arm in chain.arms); [for (alt in arm.alts); st048_fold(alt)]]
+        let subjects <- st048_subjects(chain, folded)
+        return if (empty(subjects) || length(subjects) > ST048_MAX_SUBJECTS)
+        var rows <- st048_rows(chain, folded, subjects)
+        var solved <- st048_coverage(chain, rows, subjects)
+        return if (solved is err)
+        let cov <- solved as ok
+        for (row, ri in rows, count()) {
+            row.arms |> push(ri)
+        }
+        var dead_arms = false
+        for (ai in cov.unreachable) {
+            assume arm = chain.arms[rows[ai].src]
+            if (!arm.synthetic && !arm.is_else) {
+                dead_arms = true
+                let why = "the arms before it already take every value it tests"
+                style_warning("STYLE048: this if/elif arm can never run; {why}", arm.node.at)
+            }
+        }
+        return if (dead_arms || !empty(cov.dead_alternatives) || !st048_pays(chain, rows))
+        let else_dead = has_value([for (row, ai in rows, count());
+                                   chain.arms[row.src].is_else && !is_reachable(cov, ai)], true)
+        let unreachable = length(cov.unreachable)
+        for (k in range(unreachable)) {
+            rows |> erase(cov.unreachable[unreachable - 1 - k])
+        }
+        st048_merge_bodies(chain, rows, cov)
+        for (row in rows) {
+            st048_factor(row.cells)
+        }
+        let hint = st048_render(chain, rows, subjects, cov, else_dead)
+        let what = "if/elif chain compares the same values against constants"
+        style_warning("STYLE048: {what}; rewrite it as {hint}", ifte.at)
+    }
+
     def override preVisitExprIfThenElse(ifte : ExprIfThenElse?) : void {
         if (ifte.if_flags.isStatic || ifte.genFlags.generated) return
         st037_bump()
         check_style045(ifte)
+        check_style048(ifte)
         let cond = ifte.cond
         if (cond is ExprConstBool) {
             let cbool = cond as ExprConstBool
@@ -3908,6 +4571,7 @@ def public style_lint(prog : ProgramPtr; compile_time_errors : bool; disabled_co
     astVisitor.strict_smart_pointers = strict_smart_pointers_for(prog)
     astVisitor.with_module_is_unsafe = (prog._options |> find_arg("with_module_is_unsafe")) ?as tBool ?? false
     astVisitor.this_module = prog.getThisModule
+    astVisitor.st048_sees_match = st048_requires_match(prog, astVisitor.this_module)
     let empty_enabled : table<string>
     astVisitor.analyze_requires = astVisitor.this_module != null && require_analysis_enabled(disabled_codes, empty_enabled)
     make_visitor(*astVisitor) $(astVisitorAdapter) {
@@ -3950,6 +4614,7 @@ def public style_lint_collect(prog : ProgramPtr; var warnings : array<string>;
     astVisitor.strict_smart_pointers = strict_smart_pointers_for(prog)
     astVisitor.with_module_is_unsafe = (prog._options |> find_arg("with_module_is_unsafe")) ?as tBool ?? false
     astVisitor.this_module = prog.getThisModule
+    astVisitor.st048_sees_match = st048_requires_match(prog, astVisitor.this_module)
     astVisitor.analyze_requires = astVisitor.this_module != null && require_analysis_enabled(disabled_codes, enabled_codes)
     make_visitor(*astVisitor) $(astVisitorAdapter) {
         visit_with_generics(prog, astVisitorAdapter)
@@ -3984,6 +4649,7 @@ def public style_lint_collect_issues(prog : ProgramPtr; var issues : array<LintI
     astVisitor.strict_smart_pointers = strict_smart_pointers_for(prog)
     astVisitor.with_module_is_unsafe = (prog._options |> find_arg("with_module_is_unsafe")) ?as tBool ?? false
     astVisitor.this_module = prog.getThisModule
+    astVisitor.st048_sees_match = st048_requires_match(prog, astVisitor.this_module)
     astVisitor.analyze_requires = astVisitor.this_module != null && require_analysis_enabled(disabled_codes, enabled_codes)
     make_visitor(*astVisitor) $(astVisitorAdapter) {
         visit_with_generics(prog, astVisitorAdapter)
