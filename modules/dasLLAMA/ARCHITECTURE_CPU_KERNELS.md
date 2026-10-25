@@ -195,11 +195,11 @@ dispatch unit is a row tile, a token chunk is whole tiles, every token block
 (`f32_batch_token_block`: the X rows that fit the smaller of the box's q8 L2 budget and
 `g_f32_batch_x_block` bytes, rounded down to whole tiles, or the whole token range when it fits)
 starts on the lattice, and only the rows past the last whole row tile of d and the tokens past the
-last whole token tile of ntok take `dot` (`f32_dot_rows`). Any row chunking, worker count or token
+last whole token tile of ntok take `dot` (`batch_dot_rows`). Any row chunking, worker count or token
 split then lands the same bits (`test_matmul_batch.das`'s lanes cell holds the threaded walk to the
 one-worker walk bit for bit); a batch and the same tokens one at a time do not, and
 `test_matmul_batch.das` holds the fp32 path to the per-token dot within `F32_TILE_REL`.
-`g_f32_batch_tile_min_n` routes a dot shorter than it to `f32_dot_rows` whole; it ships at 1, so the
+`g_f32_batch_tile_min_n` routes a dot shorter than it to `batch_dot_rows` whole; it ships at 1, so the
 tile serves every length, and `harness/f32_batch_race.das` is the lever that races the two constants
 and the nest against the tile. `matmul_batch_rows` is the nest as its own entry, under no knob: a
 batch whose outputs decide what decode decides on the GEMV's bits takes it - the MoE router's prefill

@@ -190,6 +190,36 @@ def test_matmul_batch_nest_arm(t : T?) {
     }
 }
 
+//! the weight as bf16 bits (round to nearest even), and the oracle over the widened value
+def private bf16_bits_of(v : float) : uint16 {
+    let bits = unsafe(reinterpret<uint>(v))
+    return uint16((bits + 0x7FFFu + ((bits >> 16u) & 1u)) >> 16u)
+}
+
+//! the bf16 plane through the same walk: Y against the plain oracle over the widened weights within
+//! the tile's rounding, a NaN sentinel under every output, the poisoned expectation the control
+def check_bf16(t : T?; n, d, ntok : int64) {
+    let wf <- fillf(n * d)
+    let x <- fillf(ntok * n)
+    var w16 : array<uint16>
+    w16 |> resize(n * d)
+    var wwide : array<float>
+    wwide |> resize(n * d)
+    for (k in range64(n * d)) {
+        w16[k] = bf16_bits_of(wf[k])
+        wwide[k] = unsafe(reinterpret<float>(uint(w16[k]) << 16u))
+    }
+    var want <- oracle_fp32(wwide, x, n, d, ntok)
+    var y <- nan_fill(ntok * d)
+    with_shipped_knobs() {
+        matmul_bf16_batch(y, w16, 0l, x, n, d, ntok)
+    }
+    t |> success(all_finite(y), "bf16 batch {n}x{d} ntok={ntok}: every output finite")
+    t |> equal(mismatch_rel("bf16 batch {n}x{d} ntok={ntok}", y, want, F32_TILE_REL), 0, "bf16 batch {n}x{d} ntok={ntok}: elements past {F32_TILE_REL} relative of the plain oracle over the widened weights")
+    want[(ntok * d) / 2l] += 1.0e-3 * max(abs(want[(ntok * d) / 2l]), 1.0)
+    t |> success(mismatch_rel("bf16 batch {n}x{d} ntok={ntok} poisoned", y, want, F32_TILE_REL) > 0, "control: the poisoned element must miss the {F32_TILE_REL} bar")
+}
+
 // Q8·Q8: same, with weights quantized once and the activation quantized per token.
 def check_q8(t : T?; n, d, ntok : int64) {
     let nb = n / 32l
@@ -251,6 +281,15 @@ def test_matmul_batch(t : T?) {
         }
         t |> run("fp32 tiles with row and token tails 100x13 ntok=7") @(t : T?) {
             check_fp32(t, 100l, 13l, 7l)
+        }
+        t |> run("bf16 plane 1152x480 ntok=300") @(t : T?) {
+            check_bf16(t, 1152l, 480l, 300l)
+        }
+        t |> run("bf16 plane, row and token tails 100x13 ntok=7") @(t : T?) {
+            check_bf16(t, 100l, 13l, 7l)
+        }
+        t |> run("bf16 plane ntok=1, the gemv shaper") @(t : T?) {
+            check_bf16(t, 96l, 7l, 1l)
         }
         t |> run("fp32 threaded 1152x480 ntok=300") @(t : T?) {
             check_fp32(t, 1152l, 480l, 300l)

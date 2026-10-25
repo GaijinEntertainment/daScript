@@ -82,6 +82,8 @@ struct GridGemm {}
 struct GridF32BatchTile {}
 [dasllama_grid(src = "gelu_erf_template")]
 struct GridGeluErf {}
+[dasllama_grid(src = "bf16_batch_tile_template")]
+struct GridBf16BatchTile {}
 [dasllama_grid(src = "dot_q8q8_laneq4x4_template")]
 struct GridLaneq {}
 [dasllama_grid(src = "dot_f16_template")]
@@ -159,7 +161,7 @@ let TARGET_WINDOW_US = 20000.0lf   // same window as tuner_noise's PROBE_WINDOW_
 let MAX_REPS_SCALE = 32
 // The outer progress denominator, needed before the first kernel runs so it cannot be derived
 // from the results. A mismatch only skews the bar, and main says so at the end.
-let TUNED_KERNEL_COUNT = 27
+let TUNED_KERNEL_COUNT = 28
 
 struct private KernelResult {
     kernel : string
@@ -1066,6 +1068,56 @@ def bench_softmax() : string {
     })
     tune_detail("  checksum {sink}\n")
     return report("softmax", race)
+}
+
+// ===== bf16_batch_tile: the f32 tile over a bf16 weight plane - the same gate, the weights bf16 bits.
+
+def private bf16_bits_of(v : float) : uint16 {
+    let bits = unsafe(reinterpret<uint>(v))
+    return uint16((bits + 0x7FFFu + ((bits >> 16u) & 1u)) >> 16u)
+}
+
+def bench_bf16_batch_tile() : string {
+    let vs <- bf16_batch_tile_template_variants()
+    let D = 4l
+    var inscope w16 : array<uint16>
+    var inscope x, y : array<float>
+    w16 |> resize(4l * N)
+    var xp = aligned_f32(x, 4l * N)
+    var yp = aligned_f32(y, 4l * D)
+    unsafe {
+        for (i in range64(4l * N)) {
+            w16[i] = bf16_bits_of(sin(float(i) * 0.1f))
+            xp[i] = cos(float(i) * 0.07f)
+        }
+    }
+    let wp = unsafe(addr<uint16 const?>(w16[0]))
+    var sink = 0.0f
+    var inscope race <- race_variants(vs, $(i : int) : bool {
+        let f = vs[i]._1
+        invoke(f, yp, wp, xp, N, D)
+        var maxrel = 0.0lf
+        for (r in range64(4l)) {
+            for (tk in range64(4l)) {
+                var want = 0.0lf
+                for (j in range64(N)) {
+                    want += double(unsafe(reinterpret<float>(uint(w16[r * N + j]) << 16u))) * double(unsafe(xp[tk * N + j]))
+                }
+                let rel = rel_err(double(unsafe(yp[tk * D + r])), want)
+                maxrel = worst_rel(maxrel, rel)
+            }
+        }
+        return maxrel <= TOL
+    }, $(_i : int) {}, $(i : int) {
+        let f = vs[i]._1
+        for (_rep in range(reps_of(i))) {
+            invoke(f, yp, wp, xp, N, D)
+        }
+    }, $ {
+        sink += y[0]
+    })
+    tune_detail("  checksum {sink}\n")
+    return report("bf16_batch_tile", race)
 }
 
 // ===== gelu_erf: in place over N, gated f64-relative against the erf series' GELU on a [-4, 4] spread.
@@ -2031,7 +2083,7 @@ def main : int { // nolint:STYLE037,STYLE038 — flat one-bench-per-kernel rail;
         ("cvt_q8kv_to_f32", @@bench_cvt_q8kv_to_f32), ("quantize_q8kv_row", @@bench_quantize_q8kv_row),
         ("dot_mx4q8", @@bench_dot_mx4q8), ("quantize_q8_0_into_ptr", @@bench_quantize),
         ("quantize_q8_0_bs_into_ptr", @@bench_quantize_bs), ("rope_scaled_neox_tab", @@bench_rope_tab),
-        ("gemm_f32_uk_4x16", @@bench_gemm_tile), ("f32_batch_tile", @@bench_f32_batch_tile), ("gelu_erf", @@bench_gelu_erf),
+        ("gemm_f32_uk_4x16", @@bench_gemm_tile), ("f32_batch_tile", @@bench_f32_batch_tile), ("bf16_batch_tile", @@bench_bf16_batch_tile), ("gelu_erf", @@bench_gelu_erf),
         ("dot_q8q8_laneq4x4", @@bench_laneq4x4)
     ]
     let partialMint = !empty(tune_only_filter())

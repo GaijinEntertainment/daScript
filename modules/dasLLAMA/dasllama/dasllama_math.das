@@ -710,12 +710,56 @@ def template f32_batch_tile_template(var yp : float ?; wp, xp : float const ?; n
 [hint(unsafe_range_check, noalias = yp, noalias = wp, noalias = xp), tuned(fallback = "vec8")]
 def f32_batch_tile(var yp : float?; wp, xp : float const?; n, d : int64) {}
 
-//! The tile walk over rows [r0, r1) by tokens [t0, t1) in token blocks of `x_block_tok`
+//! The f32 tile over a bf16 weight plane: the same sixteen accumulators, each weight widened by the
+//! exact high-half shift as it is read, so a bf16 plane pays half the weight bytes for the same products.
+[hint(unsafe_range_check, noalias = yp, noalias = wp, noalias = xp)]
+def template bf16_batch_tile_template(var yp : float ?; wp : uint16 const ?; xp : float const ?; n, d : int64) : void {
+    var a00 = 0.0; var a01 = 0.0; var a02 = 0.0; var a03 = 0.0
+    var a10 = 0.0; var a11 = 0.0; var a12 = 0.0; var a13 = 0.0
+    var a20 = 0.0; var a21 = 0.0; var a22 = 0.0; var a23 = 0.0
+    var a30 = 0.0; var a31 = 0.0; var a32 = 0.0; var a33 = 0.0
+    let w1 = unsafe(wp + n); let w2 = unsafe(wp + 2l * n); let w3 = unsafe(wp + 3l * n)
+    let x1 = unsafe(xp + n); let x2 = unsafe(xp + 2l * n); let x3 = unsafe(xp + 3l * n)
+    for [tune = 1] (j in range64(n)) {
+        unsafe {
+            let xa = xp[j]; let xb = x1[j]; let xc = x2[j]; let xd = x3[j]
+            let wa = reinterpret<float>(uint(wp[j]) << 16u)
+            a00 = mad(wa, xa, a00); a01 = mad(wa, xb, a01); a02 = mad(wa, xc, a02); a03 = mad(wa, xd, a03)
+            let wb = reinterpret<float>(uint(w1[j]) << 16u)
+            a10 = mad(wb, xa, a10); a11 = mad(wb, xb, a11); a12 = mad(wb, xc, a12); a13 = mad(wb, xd, a13)
+            let wc = reinterpret<float>(uint(w2[j]) << 16u)
+            a20 = mad(wc, xa, a20); a21 = mad(wc, xb, a21); a22 = mad(wc, xc, a22); a23 = mad(wc, xd, a23)
+            let wd = reinterpret<float>(uint(w3[j]) << 16u)
+            a30 = mad(wd, xa, a30); a31 = mad(wd, xb, a31); a32 = mad(wd, xc, a32); a33 = mad(wd, xd, a33)
+        }
+    }
+    unsafe {
+        yp[0l] = a00; yp[1l] = a10; yp[2l] = a20; yp[3l] = a30
+        yp[d] = a01; yp[d + 1l] = a11; yp[d + 2l] = a21; yp[d + 3l] = a31
+        yp[2l * d] = a02; yp[2l * d + 1l] = a12; yp[2l * d + 2l] = a22; yp[2l * d + 3l] = a32
+        yp[3l * d] = a03; yp[3l * d + 1l] = a13; yp[3l * d + 2l] = a23; yp[3l * d + 3l] = a33
+    }
+}
+[hint(unsafe_range_check, noalias = yp, noalias = wp, noalias = xp), tuned(fallback = "vec8")]
+def bf16_batch_tile(var yp : float?; wp : uint16 const?; xp : float const?; n, d : int64) {}
+
+//! the walk's tile and tail dot by weight lattice: the f32 plane's and the bf16 plane's
+def private batch_tile(var yp : float?; wp : float const?; xp : float const?; n, d : int64) {
+    f32_batch_tile(yp, wp, xp, n, d)
+}
+def private batch_tile(var yp : float?; wp : uint16 const?; xp : float const?; n, d : int64) {
+    bf16_batch_tile(yp, wp, xp, n, d)
+}
+def private row_dot(wrow : float const?; xrow : float const?; n : int64) : float => dot(wrow, xrow, n)
+def private row_dot(wrow : uint16 const?; xrow : float const?; n : int64) : float => dot_bf16(xrow, wrow, n)
+
+//! The tile walk over rows [r0, r1) by tokens [t0, t1) in token blocks of `x_block_tok`, over an f32 or a
+//! bf16 weight plane
 [hint(noalias = yp, noalias = wp, noalias = xp), arch(at = "../ARCHITECTURE_CPU_KERNELS.md#f32-batch-tile-lattice")]
-def f32_batch_block(var yp : float?; wp, xp : float const?; n, d, r0, r1, t0, t1, x_block_tok : int64) {
+def batch_tile_block(var yp : float?; wp : auto const?; xp : float const?; n, d, r0, r1, t0, t1, x_block_tok : int64) {
     let ra = min(r1, ((r0 + 3l) / 4l) * 4l)
     let r4 = ra + ((r1 - ra) / 4l) * 4l
-    f32_dot_rows(yp, wp, xp, n, d, r0, ra, t0, t1)
+    batch_dot_rows(yp, wp, xp, n, d, r0, ra, t0, t1)
     var tbeg = t0
     while (tbeg < t1) {
         let tend = min(tbeg + x_block_tok, t1)
@@ -726,14 +770,14 @@ def f32_batch_block(var yp : float?; wp, xp : float const?; n, d, r0, r1, t0, t1
                 let wrow = wp + i * n
                 var tk = tbeg
                 while (tk < t4) {
-                    f32_batch_tile(yp + tk * d + i, wrow, xp + tk * n, n, d)
+                    batch_tile(yp + tk * d + i, wrow, xp + tk * n, n, d)
                     tk += 4l
                 }
             }
-            f32_dot_rows(yp, wp, xp, n, d, i, i + 4l, t4, tend)
+            batch_dot_rows(yp, wp, xp, n, d, i, i + 4l, t4, tend)
             i += 4l
         }
-        f32_dot_rows(yp, wp, xp, n, d, r4, r1, tbeg, tend)
+        batch_dot_rows(yp, wp, xp, n, d, r4, r1, tbeg, tend)
         tbeg = tend
     }
 }
@@ -741,12 +785,12 @@ def f32_batch_block(var yp : float?; wp, xp : float const?; n, d, r0, r1, t0, t1
 //! Rows [r0, r1) by tokens [t0, t1), each output its own `dot`: the tile walk's tails and the row nest
 //! share it, and the outputs are independent, so the loop order moves no bit.
 [hint(noalias = yp, noalias = wp, noalias = xp), arch(at = "../ARCHITECTURE_CPU_KERNELS.md#kernel-visibility-lifted-workers")]
-def f32_dot_rows(var yp : float?; wp, xp : float const?; n, d, r0, r1, t0, t1 : int64) {
+def batch_dot_rows(var yp : float?; wp : auto const?; xp : float const?; n, d, r0, r1, t0, t1 : int64) {
     unsafe {
         for (i in range64(r0, r1)) {
             let wrow = wp + i * n
             for (tk in range64(t0, t1)) {
-                yp[tk * d + i] = dot(wrow, xp + tk * n, n)
+                yp[tk * d + i] = row_dot(wrow, xp + tk * n, n)
             }
         }
     }
@@ -758,7 +802,7 @@ def f32_dot_rows(var yp : float?; wp, xp : float const?; n, d, r0, r1, t0, t1 : 
 var private g_f32_batch_x_block = 256l * 1024l
 def public set_f32_batch_x_block(bytes : int64) { g_f32_batch_x_block = max(bytes, 4l * 1024l) }
 def public get_f32_batch_x_block() : int64 => g_f32_batch_x_block
-//! Under this dot length the row nest (`f32_dot_rows`) serves instead of the tile. Shipped at 1, so
+//! Under this dot length the row nest (`batch_dot_rows`) serves instead of the tile. Shipped at 1, so
 //! the tile serves every length; the setter is the lever to the nest arm (`harness/f32_batch_race.das`,
 //! `tests/test_prefill.das`'s bit-exact cells).
 var private g_f32_batch_tile_min_n = 1l
@@ -772,18 +816,18 @@ def private f32_batch_token_block(n, ntok : int64) : int64 {
 
 //! The row nest over rows [0, d) by every token, the rows split across the lanes: every output the
 //! per-token `dot`'s bits
-def private batch_rows_core(var yp : float?; wp : float const?; xp : float const?; n, d, ntok : int64) {
+def private batch_rows_core(var yp : float?; wp : auto const?; xp : float const?; n, d, ntok : int64) {
     var myp = yp
     let rch = matmul_chunks(int(d), get_q8_batch_chunks_per_job(), n * d * ntok)
     maybe_parallel_for(0, int(d), rch) $(rb, re) {
-        f32_dot_rows(myp, wp, xp, n, d, int64(rb), int64(re), 0l, ntok)
+        batch_dot_rows(myp, wp, xp, n, d, int64(rb), int64(re), 0l, ntok)
     }
 }
 
 // The fp32 batch GEMM core: 1-D row split, except ROW-STARVED shapes (MoE router: d=n_expert=128,
 // grain 16 => 8 chunks idling half a 16-lane box) split tokens too — a flat (row-chunk × token-block)
 // domain. Disjoint stores, the same tile walk per (row range, token range) either way.
-def private matmul_batch_core(var yp : float?; wp : float const?; xp : float const?; n, d, ntok : int64) {
+def private matmul_batch_core(var yp : float?; wp : auto const?; xp : float const?; n, d, ntok : int64) {
     var myp = yp
     if (n < g_f32_batch_tile_min_n) {   // the row nest: the knob's arm, reached under the lever alone
         batch_rows_core(yp, wp, xp, n, d, ntok)
@@ -796,7 +840,7 @@ def private matmul_batch_core(var yp : float?; wp : float const?; xp : float con
     let x_block_tok = f32_batch_token_block(n, ntok)
     if (tb <= 1l) {
         maybe_parallel_for(0, int(row_tiles), rch) $(rb, re) {
-            f32_batch_block(myp, wp, xp, n, d, int64(rb) * 4l, min(int64(re) * 4l, d), 0l, ntok, x_block_tok)
+            batch_tile_block(myp, wp, xp, n, d, int64(rb) * 4l, min(int64(re) * 4l, d), 0l, ntok, x_block_tok)
         }
         return
     }
@@ -809,7 +853,7 @@ def private matmul_batch_core(var yp : float?; wp : float const?; xp : float con
             let r0 = min(rc * tiles_per * 4l, d)
             let r1 = min(r0 + tiles_per * 4l, d)
             let t1 = min(tc * tok_per + tok_per, ntok)
-            f32_batch_block(myp, wp, xp, n, d, r0, r1, tc * tok_per, t1, x_block_tok)
+            batch_tile_block(myp, wp, xp, n, d, r0, r1, tc * tok_per, t1, x_block_tok)
         }
     }
 }
@@ -902,8 +946,8 @@ def matmul_batch(var y : array<float>; w : PlaneF; woff : int64; x : PlaneF; n, 
 }
 
 //! Batched matvec against a native-BF16 weight [d x n] at halfword offset woff: Y [ntok x d]
-//! token-major. Bit-for-bit matmul_batch's fp32 expand at half the weight read (dot_bf16's widen
-//! is exact). Decode (ntok == 1) takes the GEMV chunk shaper.
+//! token-major, the fp32 tile walk over the halfword plane (the widen is exact, so the outputs are
+//! matmul_batch's over the expanded plane). Decode (ntok == 1) takes the GEMV chunk shaper.
 def matmul_bf16_batch(var y : array<float>; w : array<uint16>; woff : int64; x : array<float>; n, d, ntok : int64) {
     matmul_bf16_batch_at(y, unsafe(addr<uint16 const?>(w[woff])), x, n, d, ntok)
 }
@@ -920,14 +964,15 @@ def private matmul_bf16_batch_at(var y : array<float>; wp : uint16 const?; x : a
         if (g_fp_override_active && ntok >= g_fp_override_min_ntok && invoke(g_mm_bf16_batch_override, yp, wp, xp, n, d, ntok)) {
             return
         }
-        let nch = ntok == 1l ? matmul_chunks_gemv(int(d), 1, n * d) : matmul_chunks(int(d), get_q8_batch_chunks_per_job(), n * d * ntok)
+        if (ntok > 1l) {
+            matmul_batch_core(yp, wp, xp, n, d, ntok)
+            return
+        }
+        let nch = matmul_chunks_gemv(int(d), 1, n * d)
         maybe_parallel_for(0, int(d), nch) $(rb, re) {
             unsafe {
                 for (i in range(rb, re)) {
-                    let wrow = wp + int64(i) * n
-                    for (tk in range64(ntok)) {
-                        yp[tk * d + int64(i)] = dot_bf16(xp + tk * n, wrow, n)
-                    }
+                    yp[int64(i)] = dot_bf16(xp, wp + int64(i) * n, n)
                 }
             }
         }
