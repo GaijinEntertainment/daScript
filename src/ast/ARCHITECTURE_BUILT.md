@@ -2,7 +2,7 @@
 
 Companion to `ARCHITECTURE.md` in this folder; section numbers are unique across the family.
 
-## 6. Built programs (`ast_parse.cpp`, the `ast` module's `make_program`) {#built-programs}
+## Built programs (`ast_parse.cpp`, the `ast` module's `make_program`) {#built-programs}
 
 A built program is a program whose modules come from code, not from source text: a host builds
 each module out of AST nodes, and the compiler does the rest. It follows `compileDaScript` step

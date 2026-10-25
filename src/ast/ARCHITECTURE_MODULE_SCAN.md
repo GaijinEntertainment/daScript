@@ -2,7 +2,7 @@
 
 Companion to `ARCHITECTURE.md` in this folder; section numbers are unique across the family.
 
-## 2. The module scan and the descriptor manifest (`dyn_modules.cpp`) {#module-scan-manifest}
+## The module scan and the descriptor manifest (`dyn_modules.cpp`) {#module-scan-manifest}
 
 `require_dynamic_modules` walks `<dasroot>/modules/`, then the project root's, then each
 `-load_module` folder, and for every `.das_module` it finds calls `init_dyn_modules`. A

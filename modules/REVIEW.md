@@ -10,14 +10,10 @@ module `modules/<M>/` registers, or when every module it requires, `daslib/` asi
 under `modules/<M>/`. A `[test]` file under `modules/<M>/` also answers to
 `modules/<M>/tests/REVIEW.md` where that checklist exists.
 
-**A guard on the `dasCUDA` package from outside `modules/dasCUDA/` names its witness module -
-`require ?cuda <target>`, `has_module("cuda")`, `builtin_module_exists(cuda)` - never a `cuda/`
-path.** The package's `.das` files are on disk in a build configured without it, so a path guard
-reads that build as having CUDA (`modules/dasCUDA/ARCHITECTURE.md#cuda-witness-module`).
-
-**A diff that changes a `.das` file declaring a function that carries an annotation, registered
-by a module under this folder, whose name ends in `_kernel` or `_shader` - or a `.das` file such a
-file requires, directly or through other requires - applies `REVIEW_SHADER_EMITTERS.md` too.**
+**A diff that changes a `.das` file declaring a function annotated with an annotation that a
+module under this folder registers and whose own name ends in `_kernel` or `_shader` - or a
+`.das` file such a file requires, directly or through other requires - applies
+`REVIEW_SHADER_EMITTERS.md` too.**
 
 **A diff that changes a `.das` under this folder that the full `test_aot` binary compiles - a
 file in a `*_AOT_FILES` list of its module's `CMakeLists.txt` or an `AOT_*_MODULE_FILES` list of

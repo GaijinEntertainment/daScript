@@ -7,7 +7,7 @@ host-built programs, `ARCHITECTURE_GC.md` gc roots, `ARCHITECTURE_SHARED.md` sha
 the inliner's conditional call lowering.
 The rest of inference, with parsing and simulation, is in `skills/internal/cpp_codebase_notes.md` (repo-only).
 
-## 1. The module-cache read in `trySerializeProgramModule` (`ast_parse.cpp`) {#module-cache-read}
+## The module-cache read in `trySerializeProgramModule` (`ast_parse.cpp`) {#module-cache-read}
 
 The front end parses modules in require order. When a module cache is installed
 (`ModuleFileCache`), each module first tries `trySerializeProgramModule`. The reader stands at
@@ -87,7 +87,7 @@ every program it read, das reading them back through `ast_serializer_finalize_us
 `ast_serializer_setup_usec`, and the decode is the read minus both; `-log-compile-time`'s cache
 line prints decode against finalize, with the macro simulate named inside finalize.
 
-## 3. A require after the walk (`requireModuleNow`, `ast_parse.cpp`) {#require-after-walk}
+## A require after the walk (`requireModuleNow`, `ast_parse.cpp`) {#require-after-walk}
 
 `requireModuleNow(requireName, access, logs, policies)` is a `require` issued by code that runs
 after the prerequisite walk - a macro, a simulate macro, an `[init]` - for a module the walk
@@ -134,7 +134,7 @@ the requirer's position, or read mid-record; so a nested walk hides the stream f
 (`CompileEnvScope`), parses its modules from source, once per process, and pushes no
 record. A module whose parse failed pushes no record either, whatever the walk.
 
-## 4. Program-scoped symbol state (`ast.h`, `ast_export.cpp`, `ast_allocate_stack.cpp`) {#program-scoped-symbol-state}
+## Program-scoped symbol state (`ast.h`, `ast_export.cpp`, `ast_allocate_stack.cpp`) {#program-scoped-symbol-state}
 
 Whether a program uses a function or a global, and the slot each holds in that program's
 context, are decided per program - the symbol-use pass (`markSymbolUse` and its variants,

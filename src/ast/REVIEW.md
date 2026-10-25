@@ -1,15 +1,15 @@
 # AST Code Review Checklist
 
-**Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture docs:
-`ARCHITECTURE.md`, `ARCHITECTURE_INFER.md`, `ARCHITECTURE_MODULE_SCAN.md`. A diff touching `promoteInitToAssign`
-(`ast_infer_type_function.cpp`) or `isPromotedInitCall` (`ast_generate.cpp`) applies
-`daslib/REVIEW.md` (repo root) too -
-the `daslib/builtin.das` (repo root) helpers they name are the other side of a recorded pair
-(`daslib/ARCHITECTURE_SYNTAX.md`, repo root).
+**Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
+docs: `ARCHITECTURE.md`, `ARCHITECTURE_INFER.md`, `ARCHITECTURE_MODULE_SCAN.md`. A diff touching
+`promoteInitToAssign` (`ast_infer_type_function.cpp`) or `isPromotedInitCall`
+(`ast_generate.cpp`) applies `daslib/REVIEW.md` (repo root) too - the `daslib/builtin.das`
+(repo root) helpers they name change with them.
 
 - **Weakening `REVIEW.das` (beside this file) is a defect:** dropping its scan of the prints in
-  `trySerializeProgramModule` (`ast_parse.cpp`, `ARCHITECTURE.md#module-cache-read`) or of the module-cache
-  read diagnostics elsewhere in that file, or a finding text that no longer names what failed.
+  `trySerializeProgramModule` (`ast_parse.cpp`, `ARCHITECTURE.md#module-cache-read`) or of the
+  module-cache read diagnostics elsewhere in that file, or a finding text that no longer names
+  what failed.
   What the gate enforces is read from the gate itself.
 
 - **A diff that adds a module-cache read diagnostic outside `trySerializeProgramModule`
@@ -88,7 +88,8 @@ the `daslib/builtin.das` (repo root) helpers they name are the other side of a r
   or `:=` the user wrote - an inliner result store, a `let` relocated into an assignment, a
   loop counter or control flag, a yield, finally-return or capture store - passes `true` as the
   constructor's `no_promo` argument, or sets `no_promotion` from the node it rewrites
-  (`ARCHITECTURE_INFER.md#assign-operator-lookup`).** A store that performs a user-written `:=` one field at a
-  time, as a generated clone does, is the user's store and passes no flag. A compiler-made
+  (`ARCHITECTURE_INFER.md#assign-operator-lookup`).** A store that performs a user-written `:=`
+  one field at a time, as a generated clone does, is the user's store and passes no flag. A
+  compiler-made
   store that reaches the user's `operator =` runs it at a site the user never wrote, and only
   in the build configuration that builds the store.
