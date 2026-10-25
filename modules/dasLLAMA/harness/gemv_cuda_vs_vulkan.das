@@ -208,7 +208,7 @@ def race_only_rows(only : table<string; void>) : int {
 
 [export]
 def main {
-    let only <- race_only()
+    let only <- only_arms()
     if (!empty(only)) {
         let measured = race_only_rows(only)
         cud_shutdown()

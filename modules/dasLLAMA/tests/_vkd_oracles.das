@@ -1259,8 +1259,8 @@ enum ScaleForm {
     nv4_bytes     //! four words of UE4M3 sub-block scale bytes, then the per-tensor scale word
 }
 
-//! the nv4 cells' per-tensor scale word of region `region`, one value a region (`../ARCHITECTURE_ENGINE_FORMATS_NV4.md#nv4-site-scale`): a 1.0 .. 1.75 ladder, so a decode that drops it reads off the bar and the f16 sums stay cool
-def nv4_scale2_word(region : int) : uint => float_bits_to_uint(1.0 + 0.25 * float(region % 4))
+//! the nv4 cells' site scale word of region `region`, one value a region (`../ARCHITECTURE_ENGINE_FORMATS_NV4.md#nv4-site-scale`): a 1.0 .. 1.75 ladder, so a decode that drops it reads off the bar and the f16 sums stay cool
+def nv4_site_scale_word(region : int) : uint => float_bits_to_uint(1.0 + 0.25 * float(region % 4))
 
 //! the nv4 cells' scale bytes, four a word: UE4M3 codes at exponents 1..10 (2^-7 .. 2^2 at half) and every mantissa, so the tile's f16 sums stay far from 65504 and no code reads as the nan zero
 def nv4_scale_word(i, seed : uint) : uint {
@@ -1422,7 +1422,7 @@ def fmt_tile_planes(row : FmtTile; var wqh, wsh : array<uint>) {
             for (wi in range(4)) {
                 wsh[sb * 5 + wi] = nv4_scale_word(uint(sb * 4 + wi), row.sseed)
             }
-            wsh[sb * 5 + 4] = nv4_scale2_word(sb / (TILE_CELL_D * (row.n / row.blk_k)))
+            wsh[sb * 5 + 4] = nv4_site_scale_word(sb / (TILE_CELL_D * (row.n / row.blk_k)))
         }
     }
     if (row.form == ScaleForm.iq4nl32_d) {

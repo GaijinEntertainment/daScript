@@ -563,9 +563,7 @@ def public cubin_cached(source, name : string; compile_opts : array<string>; var
     return <- image
 }
 
-//! source text -> loaded module, cubin for the context's device (cached in `cache_dir`). Null with
-//! `error` filled on a compile or load failure. A text the emitter marked `__DAS_ARCH_A__` (the FP4 tensor rung)
-//! compiles for the arch-specific target when the caller named no suffix.
+//! source text -> loaded module, cubin for the context's device (cached in `cache_dir`); null with `error` filled on a compile or load failure
 [arch(at="../ARCHITECTURE_EMIT.md#cuda-kernel-vocabulary-tiers")]
 def public module_from_source(cc : CudaContext?; source, name : string; var error : string&; arch_suffix : string = "";
                               cache_dir : string = CUDA_CACHE_DIR) : CudaModule? {

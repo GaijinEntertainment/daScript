@@ -243,6 +243,12 @@ def mx4_dec4(nib : uint; sc : float) : float4 {
         float(mag2 >> 24u) * (1.0 - 2.0 * float(sgn >> 24u)) * sc)
 }
 
+//! the doubled e2m1 magnitudes {0 1 2 3 4 6 8 12} as two byte words, then their negatives: the codebook a byte permute reads
+let MX4_BYTES_LO = 0x03020100u
+let MX4_BYTES_HI = 0x0C080604u
+let MX4_NEG_BYTES_LO = 0xFDFEFF00u
+let MX4_NEG_BYTES_HI = 0xF4F8FAFCu
+
 //! four nibble codes (a byte each) to SIGNED int8 lanes of the doubled e2m1 magnitudes, each sign bit negating its byte with no carry across lanes
 def mx4_word(nib : uint) : uint {
     let mag = mx4_mag2x4(nib)
@@ -4596,7 +4602,7 @@ class template KqCm2BatchT : MoeCmBase {
                     iq4lut[li] = float16(float(int(li) * 2 - 15))
                 } else {
                     static_if (MX4LUT) {
-                        let tbl = uint4(0x03020100u, 0x0C080604u, 0xFDFEFF00u, 0xF4F8FAFCu)   // {0 1 2 3 4 6 8 12}, then their negatives
+                        let tbl = uint4(MX4_BYTES_LO, MX4_BYTES_HI, MX4_NEG_BYTES_LO, MX4_NEG_BYTES_HI)
                         iq4lut[li] = float16(float((int((tbl[int(li >> 2u)] >> ((li & 3u) * 8u)) & 255u) ^ 128) - 128))
                     } else {
                         let tbl = uint4(3215825025u, 4142587343u, 639175937u, 1901675829u)
@@ -5764,7 +5770,7 @@ class template Iq4nlCm2T : Q40Cm2T {
 }
 
 //! NVFP4 on the cm2 tile: the k4-tiled nibbles through the staged e2m1 table under the sixteen UE4M3 sub-block scales of
-//! the device row (four words, sub-block order) read through the staged scale table, which carries the per-tensor factor -
+//! the device row (four words, sub-block order) read through the staged scale table, which carries the site scale -
 //! 32-block g's low half reads byte 2g, its high half 2g + 1; iq4nl's decode shape, two table reads an element
 [ |> template_struct_instance]
 class template Nv4Cm2T : KqCm2BatchT {

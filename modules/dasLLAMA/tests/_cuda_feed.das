@@ -19,9 +19,10 @@ require dasllama/dasllama_cuda_decode   // cud_rdec_stats
 require _model_tier
 require _resident_feed
 
-//! `file` of family `arch` through the CUDA chain and the CPU chain over an `n`-token prompt and eight steps, at `bar` of the step's max |logit|
 let LOGIT_BAR_REL = 0.06   //! the dense carriers' bar, of the step's max |logit|: every CUDA resident file reads it
 
+//! `file` of family `arch` through the CUDA chain and the CPU chain over an `n`-token prompt and eight steps, at `bar` of the step's max |logit|
+[cold_path]
 def cuda_forced_feed(t : T?; file, arch : string; n, windows : int64; bar : float) {
     let path = cuda_model_path(t, file)
     if (empty(path) || !assert_pf_window(t)) return

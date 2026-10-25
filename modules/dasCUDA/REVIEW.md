@@ -24,10 +24,6 @@ unsuffixed export is an older entry point the library may stop exporting.
 never give the witness a binding - a driver or toolkit entry point binds through a dasbind
 `[extern(late)]` instead.**
 
-**A guard on this module from outside it names the witness - `require ?cuda <target>`,
-`has_module("cuda")`, `builtin_module_exists(cuda)` - never a `cuda/` path.** The files are on
-disk in a build configured without the package, so a path guard reads that build as having CUDA.
-
 **Never bind managed memory (`cuMemAllocManaged`) and never return a device address as a host
 pointer - bytes move through `cuda_memcpy_*` and `cuda_memset_d8`, and a host-visible block is
 the mapped pair `cuda_mem_alloc_host_mapped` hands back.**

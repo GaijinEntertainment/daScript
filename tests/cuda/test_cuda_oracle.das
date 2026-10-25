@@ -10,6 +10,7 @@ options indenting = 4
 require dastest/testing_boost public
 require _cuda_common
 require daslib/fio
+require daslib/math_bits   // uint_bits_to_float - the convert sweep's NaN input
 require math
 
 let N = 256
@@ -961,11 +962,11 @@ struct IntrinParams {
 struct IntrinFp4Params {
     a4 : uint64
     b4 : uint64
-    saw : uint64
-    sbw : uint64
+    a_scale_words : uint64
+    b_scale_words : uint64
     o : uint64
     xin : uint64
-    cv : uint64
+    cvt_out : uint64
 }
 
 def private e2m1_value(c : uint) : float {
@@ -974,18 +975,22 @@ def private e2m1_value(c : uint) : float {
     return (c & 8u) != 0u ? -v : v
 }
 
-//! UE4M3: bias 7, subnormals m x 2^-9
 def private ue4m3_value(c : uint) : float {
     let e = int((c >> 3u) & 15u)
     let m = float(c & 7u)
-    return e == 0 ? m * 0.001953125 : pow(2.0, float(e - 7)) * (1.0 + m / 8.0)
+    return e == 0 ? m * pow(2.0, -9.0) : pow(2.0, float(e - 7)) * (1.0 + m / 8.0)
 }
 
 //! every e2m1 tie in [-8, 7.875], the UE4M3 subnormal half-steps and mantissa midpoints, a geometric run to saturation
 def private fp4_cvt_inputs() : array<float> {
     var xin <- [for (i in range(128)); float(i - 64) * 0.125]
-    var inscope ue <- [for (i in range(64)); i < 16 ? float(i) * 0.0009765625 : (i < 48 ? 1.0 + float(i - 16) * 0.0625 : pow(2.0, float(i - 48)) * 1.3)]
+    var inscope ue <- [for (i in range(64)); i < 16 ? float(i) * pow(2.0, -10.0) : (i < 48 ? 1.0 + float(i - 16) * 0.0625 : pow(2.0, float(i - 48)) * 1.3)]
     var inscope dyadic_col_factors <- [for (i in range(16)); 0.5 + 0.25 * float(i % 5)]
+    //! the signs and the non-numbers: -0.0 carries its sign into the e2m1 nibble, a negative or NaN UE4M3 input reads as code 0
+    xin[0] = -0.0
+    xin[1] = uint_bits_to_float(0x7FC00000u)
+    ue[62] = -0.5
+    ue[63] = uint_bits_to_float(0x7FC00000u)
     xin |> push_from(ue, dyadic_col_factors)
     return <- xin
 }
@@ -996,30 +1001,30 @@ def test_intrin_fp4_gpu(t : T?) {
         with_cuda_context() $(cc : CudaContext?) {
             return if (!gpu_ready(cc))
             var a8, b8 : array<uint8>
-            var saw, sbw : array<uint>
+            var a_scale_words, b_scale_words : array<uint>
             a8 |> resize(16 * 32)
             b8 |> resize(16 * 32)
             for (i in range(16 * 32)) {
                 a8[i] = uint8((i * 7 + 3) % 256)
                 b8[i] = uint8((i * 13 + 5) % 256)
             }
-            for (i in range(16)) {   //! scale codes in [0x30, 0x40), values in [0.5, 2): every product and sum stays dyadic and short
+            for (i in range(16)) {   // scale codes in [0x30, 0x40), values in [0.5, 2): every product and sum stays dyadic and short
                 var wa = 0u
                 var wb = 0u
                 for (s in range(4)) {
                     wa |= (0x30u + uint((i * 4 + s * 3) % 16)) << uint(s * 8)
                     wb |= (0x30u + uint((i * 5 + s * 7 + 2) % 16)) << uint(s * 8)
                 }
-                saw |> push(wa)
-                sbw |> push(wb)
+                a_scale_words |> push(wa)
+                b_scale_words |> push(wb)
             }
             var inscope xin <- fp4_cvt_inputs()
             var err : string
-            var p = IntrinFp4Params(a4 = buf_upload(a8), b4 = buf_upload(b8), saw = buf_upload(saw), sbw = buf_upload(sbw),
-                o = buf_fill(256, 0.0), xin = buf_upload(xin), cv = buf_fill(128, 0u))
+            var p = IntrinFp4Params(a4 = buf_upload(a8), b4 = buf_upload(b8), a_scale_words = buf_upload(a_scale_words), b_scale_words = buf_upload(b_scale_words),
+                o = buf_fill(256, 0.0), xin = buf_upload(xin), cvt_out = buf_fill(128, 0u))
             t |> success(launch(cc, intrin_fp4_cuda, "intrin_fp4", intrin_fp4_cuda_entry, p, 32u, err, intrin_fp4_cuda_smem, 32u), "intrin_fp4 launch: {err}")
             let go <- buf_download(p.o, 256, type<float>)
-            let gcv <- buf_download(p.cv, 128, type<uint>)
+            let gcv <- buf_download(p.cvt_out, 128, type<uint>)
             var bad = 0
             var worst = 0.0
             for (r in range(16)) {
@@ -1028,10 +1033,10 @@ def test_intrin_fp4_gpu(t : T?) {
                     for (k in range(64)) {
                         let ac = (uint(a8[r * 32 + k / 2]) >> uint((k & 1) * 4)) & 15u
                         let bc = (uint(b8[n * 32 + k / 2]) >> uint((k & 1) * 4)) & 15u
-                        let sc = ue4m3_value((saw[r] >> uint((k / 16) * 8)) & 0xFFu) * ue4m3_value((sbw[n] >> uint((k / 16) * 8)) & 0xFFu)
+                        let sc = ue4m3_value((a_scale_words[r] >> uint((k / 16) * 8)) & 0xFFu) * ue4m3_value((b_scale_words[n] >> uint((k / 16) * 8)) & 0xFFu)
                         s += e2m1_value(ac) * e2m1_value(bc) * sc
                     }
-                    s *= xin[192 + n]
+                    s *= xin[int(FP4_XIN_COL_FACTORS) + n]
                     let d = abs(go[r * 16 + n] - s)
                     worst = max(worst, d)
                     bad += d <= 1.0e-4 * max(1.0, abs(s)) ? 0 : 1
@@ -1042,11 +1047,11 @@ def test_intrin_fp4_gpu(t : T?) {
             for (l in range(32)) {
                 badc += gcv[l] == cvt_e2m1x2(xin[2 * l], xin[2 * l + 1]) ? 0 : 1
                 badc += gcv[32 + l] == cvt_e2m1x2(xin[64 + 2 * l], xin[64 + 2 * l + 1]) ? 0 : 1
-                badc += gcv[64 + l] == cvt_ue4m3(xin[128 + l]) ? 0 : 1
-                badc += gcv[96 + l] == cvt_ue4m3(xin[160 + l]) ? 0 : 1
+                badc += gcv[int(FP4_CV_UE4M3) + l] == cvt_ue4m3(xin[int(FP4_XIN_UE4M3) + l]) ? 0 : 1
+                badc += gcv[int(FP4_CV_UE4M3) + 32 + l] == cvt_ue4m3(xin[int(FP4_XIN_UE4M3) + 32 + l]) ? 0 : 1
             }
             t |> equal(badc, 0, "cvt_e2m1x2 and cvt_ue4m3 match their CPU bodies over the sweep (ties to even, saturation, the subnormals)")
-            for (q in [p.a4, p.b4, p.saw, p.sbw, p.o, p.xin, p.cv]) {
+            for (q in [p.a4, p.b4, p.a_scale_words, p.b_scale_words, p.o, p.xin, p.cvt_out]) {
                 cuda_mem_free(q)
             }
         }

@@ -298,20 +298,10 @@ namespace das {
 #endif
         }
 #endif
-        int64_t size = -1;
-        uint64_t hash = 0;
-        statAndHashFileDependency(fullPath, size, hash);
 #if !defined(DAS_NO_FILEIO)
         if ( !virtualInput ) das_dep_note_read(fullPath.c_str());
 #endif
-        for ( auto & dep : program->moduleCacheDependencies ) {
-            if ( get<0>(dep) == fullPath ) {
-                get<1>(dep) = size;
-                get<2>(dep) = hash;
-                return;
-            }
-        }
-        program->moduleCacheDependencies.emplace_back(fullPath, size, hash);
+        pinModuleCacheDependency(program.get(), fullPath);
     }
 
     char * ast_describe_typedecl ( TypeDecl * t, bool d_extra, bool d_contracts, bool d_module, Context * context, LineInfoArg * at ) {

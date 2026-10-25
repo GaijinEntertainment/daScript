@@ -165,7 +165,7 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
     upload_zeros(r.ar_cnt_dev, 0l, 16l)   //! the counter starts at zero; every epilogue dispatch leaves it there
     r.aq_dev = make_device_buf(qd * nb)
     r.as_dev = make_device_buf((qd / 32l) * 4l * nb)
-    r.gate_dev = make_device_buf(hidden * 4l * max(nb, 2l))   //! the merged gate-up GEMV lands both rows here at one row
+    r.gate_dev = make_device_buf(hidden * 4l * max(nb, 2l))   // the merged gate-up GEMV lands both rows here at one row
     r.up_dev = make_device_buf(hidden * 4l * nb)
     r.ffnout_dev = make_device_buf(dim * 4l * nb)
     r.xb2_dev = make_device_buf(dim * 4l * nb)
@@ -368,8 +368,8 @@ def private rd_ffn_sets(var L : RLayer; b1, b3, b2 : int64; f1, f3, f2 : int) {
     L.gate_up_fused = rd_gu_fits(f1, f3, f2) && vk_fuse_on() && (vk_fuse_bisect_bits() & FUSE_BX_GU) == 0l
     L.gu_merged = !L.gate_up_fused && vk_fuse_on() && f1 == f3 && arena_slab_idx(b1) == arena_slab_idx(b3)
     if (L.gu_merged) {
-        L.s_gu2 = arena_gemv_set_x(f1, p1, L.m_gu.buf, g_rd.gate_dev, hid * 4l * max(nb, 2l), VHZ_GATE)
-        L.s_actrq_gu = set_actrq_cls(fixed_array(g_rd.gate_dev, g_rd.gate_dev, g_gpu.hq_dev, g_gpu.hs_dev),
+        L.s_gu_merged = arena_gemv_set_x(f1, p1, L.m_gu.buf, g_rd.gate_dev, hid * 4l * max(nb, 2l), VHZ_GATE)
+        L.s_actrq_merged = set_actrq_cls(fixed_array(g_rd.gate_dev, g_rd.gate_dev, g_gpu.hq_dev, g_gpu.hs_dev),
             fixed_array(hid * 4l * max(nb, 2l), hid * 4l * max(nb, 2l), BATCH_HQ_BYTES, BATCH_HS_BYTES),
             fixed_array(VHZ_GATE, VHZ_GATE, VHZ_HQ, VHZ_HQ))
     }
@@ -2758,8 +2758,8 @@ def private rd_encode_ffn(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
     } else {
         let merged = one && L.gu_merged
         if (merged) {
-            var pcgu2 = GemvArgs(n = uint(dim), d = uint(hid), nreg = 2u, ybase = 0u, ncols = 1u, ystride = uint(hid))
-            gemv_enc(L.f1, raw, h, L.s_gu2, pcgu2, 2l * hid)
+            var pc_gu_merged = GemvArgs(n = uint(dim), d = uint(hid), nreg = 2u, ybase = 0u, ncols = 1u, ystride = uint(hid))
+            gemv_enc(L.f1, raw, h, L.s_gu_merged, pc_gu_merged, 2l * hid)
             rd_ts(raw, "{pfx}gu")
         } else {
             rd_gemv(L.f1, raw, h, L.s_gate, dim, hid, ncols, uint(hid))
@@ -2769,7 +2769,7 @@ def private rd_encode_ffn(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
         }
         if ((nrow_bx & NROW_BX_ACTRQ) == 0) {
             var pc_act = ActArgs(nelem = uint(hid) * nr, act = act, ubase = merged ? uint(hid) : 0u)
-            actrq_enc(raw, h, merged ? L.s_actrq_gu : L.s_actrq, kq_sb(L.f2), pc_act, hid * nrows)
+            actrq_enc(raw, h, merged ? L.s_actrq_merged : L.s_actrq, kq_sb(L.f2), pc_act, hid * nrows)
             rd_ts(raw, L.moe ? "m:sh_act" : "{pfx}actrq")
         }
     }

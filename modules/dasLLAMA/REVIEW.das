@@ -1675,47 +1675,44 @@ def private check_vk_extension_roster {
 //! the device copies and clears the CUDA home issues; each names its stream as the last argument
 let private CUDA_STREAM_OPS <- ["cuda_memset_d8(", "cuda_memcpy_htod(", "cuda_memcpy_dtoh(", "cuda_memcpy_dtod("]
 
-//! the argument text of the first `call` on `line`, "" when the line holds no such call
+//! the argument text of the first `call` (its text ending in `(`) on `line`, "" when the line holds no such call
 def private call_args_of(line : string; call : string) : string {
     let at = find(line, call)
     return "" if (at < 0)
-    var depth = 0
+    let open = at + length(call) - 1
     var out = ""
     peek_data(line) $(d) {
-        var i = at + length(call)
-        let start = i
-        while (i < length(d)) {
-            let c = int(d[i])
-            if (c == '(') {
-                depth++
-            } elif (c == ')') {
-                if (depth == 0) {
-                    out = slice(d, start, i)
-                    return
-                }
-                depth--
-            }
-            i++
+        let close = paren_close(d, open)
+        if (close >= 0) {
+            out = slice(d, open + 1, close)
         }
     }
     return out
 }
 
+//! the offsets of the commas of `d[from, to)` outside every bracket: the argument separators of a call's argument text
+def private arg_commas(d; from, to : int) : array<int> {
+    var depth = 0
+    var cuts : array<int>
+    for (i in range(from, to)) {
+        let c = int(d[i])
+        if (c == '(' || c == '[' || c == '{') {
+            depth++
+        } elif (c == ')' || c == ']' || c == '}') {
+            depth--
+        } elif (c == ',' && depth == 0) {
+            cuts |> push(i)
+        }
+    }
+    return <- cuts
+}
+
 //! the last top-level comma-separated argument of `args`, stripped
 def private last_arg_of(args : string) : string {
-    var depth = 0
     var cut = -1
     peek_data(args) $(d) {
-        for (i in range(length(d))) {
-            let c = int(d[i])
-            if (c == '(' || c == '[') {
-                depth++
-            } elif (c == ')' || c == ']') {
-                depth--
-            } elif (c == ',' && depth == 0) {
-                cut = i
-            }
-        }
+        var inscope cuts <- arg_commas(d, 0, length(d))
+        cut = empty(cuts) ? -1 : cuts[length(cuts) - 1]
     }
     return strip(cut < 0 ? args : slice(args, cut + 1))
 }
@@ -2622,19 +2619,10 @@ let private LOAD_FILE = "modules/dasLLAMA/dasllama/dasllama_load.das"
 //! the top-level argument count of the call whose `(` sits at `open`
 def private call_arg_count(line : string; open : int) : int {
     var n = 1
-    var depth = 0
     peek_data(line) $(d) {
-        for (i in range(open, length(d))) {
-            let ch = int(d[i])
-            if (ch == '(' || ch == '[' || ch == '{') {
-                depth++
-            } elif (ch == ')' || ch == ']' || ch == '}') {
-                depth--
-                break if (depth == 0)
-            } elif (ch == ',' && depth == 1) {
-                n++
-            }
-        }
+        let close = paren_close(d, open)
+        var inscope cuts <- arg_commas(d, open + 1, close < 0 ? length(d) : close)
+        n += length(cuts)
     }
     return n
 }

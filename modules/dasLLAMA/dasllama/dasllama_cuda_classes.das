@@ -145,7 +145,7 @@ class CuClsArAddRmsRqB : ArRqBase {
     }
 }
 
-//! the same step writing each block's scale x quant sum beside the scales: the K-quant MMQ chain's x feed
+//! the same step writing each block's scale x quant sum beside the scales: the K-quant MMQ chain's x feed - `ArRqBase`
 [cuda_dispatch(name = "cls_ar_rq_sum_b", grid = "nrows", params = "nrows : int64")]
 class CuClsArAddRmsRqSumB : ArRqBase {
     override OUT_SUM = true
@@ -176,7 +176,7 @@ class CuDnRequant : RqPlainT {
     }
 }
 
-//! the Q8_0 requant writing each block's scale x quant sum beside the scales: the K-quant MMQ chain's attention feed
+//! the Q8_0 requant writing each block's scale x quant sum beside the scales: the K-quant MMQ chain's attention feed - `RqPlainT`
 [cuda_dispatch(name = "cls_dn_rq_sum", kernel = "run", family = "rq_cls", grid = "wgs", params = "wgs : int64")]
 class CuDnRequantSum : RqPlainT {
     override OUT_SUM = true
@@ -207,7 +207,7 @@ class CuQ8ActRq : ActRqT {
     }
 }
 
-//! the act + requant writing each block's scale x quant sum beside the scales: the K-quant MMQ chain's hidden feed
+//! the act + requant writing each block's scale x quant sum beside the scales: the K-quant MMQ chain's hidden feed - `ActRqT`
 [cuda_dispatch(name = "q8_actrq_sum_cls", kernel = "run", family = "actrq_cls", grid = "wgs", params = "wgs : int64")]
 class CuQ8ActRqSum : ActRqT {
     override OUT_SUM = true
@@ -475,7 +475,7 @@ class CuQknRopeKv : QknRopeKvT {
     }
 }
 
-//! the f16-mirror stamp of the fused q/k norm, rope and K/V store, the stores clamped
+//! the f16-mirror stamp of the fused q/k norm, rope and K/V store, the stores clamped - `QknRopeKvT`
 [cuda_dispatch(name = "qkn_rope_f16_cls", grid = "wgs", params = "wgs : int64")]
 class CuQknRopeKvF16 : QknRopeKvT {
     typedef KT = float16
@@ -531,13 +531,14 @@ class CuKqGemvQ40 : Q40GemvT {
 //! by a dynamic vector index, which NVCC lowers to a local-memory array - eight such reads a word, and the iq4xs GEMV ran at
 //! a third of Vulkan's rate on the wide planes. Here each nibble's three low bits select a byte of the codebook's lower or
 //! upper half in one permute each, and the fourth bit picks between the halves
+//! four bytes picked by `sel` out of the pair (a0, a1) where `m`'s byte is clear and out of (b0, b1) where it is set: one codebook half or table a byte
+[spirv_inline]
+def prmt_pick(sel, a0, a1, b0, b1, m : uint) : uint => (byte_perm(a0, a1, sel) & ~m) | (byte_perm(b0, b1, sel) & m)
+
 [spirv_inline]
 def cud_iq4_word(n : uint) : uint {
     let sel = (n & 7u) | ((n >> 4u) & 0x70u) | ((n >> 8u) & 0x700u) | ((n >> 12u) & 0x7000u)
-    let lo = byte_perm(IQ4NL_WORD0, IQ4NL_WORD1, sel)
-    let hi = byte_perm(IQ4NL_WORD2, IQ4NL_WORD3, sel)
-    let m = ((n >> 3u) & 0x01010101u) * 0xFFu
-    return (lo & ~m) | (hi & m)
+    return prmt_pick(sel, IQ4NL_WORD0, IQ4NL_WORD1, IQ4NL_WORD2, IQ4NL_WORD3, ((n >> 3u) & 0x01010101u) * 0xFFu)
 }
 
 //! the codebook GEMV templates on the permute decode: home-only templates under the shared leaf shape, the shared
@@ -604,14 +605,12 @@ class CuKqGemvIq4nl : Iq4nlGemvCudT {
 //! eight nibble codes to signed int8 e2m1 lanes through `byte_perm`; the selectors mask each sign bit, since a selector nibble's high bit is prmt's sign-replicate mode
 def nv4_prmt_split(w : uint; var lo, hi : uint&) {
     let s = w & 0x77777777u
-    let p0 = byte_perm(0x03020100u, 0x0C080604u, s)
-    let p1 = byte_perm(0x03020100u, 0x0C080604u, s >> 16u)
-    let n0 = byte_perm(0xFDFEFF00u, 0xF4F8FAFCu, s)
-    let n1 = byte_perm(0xFDFEFF00u, 0xF4F8FAFCu, s >> 16u)
-    let ml = ((w >> 3u) & 0x01010101u) * 0xFFu
-    let mh = ((w >> 7u) & 0x01010101u) * 0xFFu
-    lo = (byte_perm(p0, p1, 0x6420u) & ~ml) | (byte_perm(n0, n1, 0x6420u) & ml)
-    hi = (byte_perm(p0, p1, 0x7531u) & ~mh) | (byte_perm(n0, n1, 0x7531u) & mh)
+    let p0 = byte_perm(MX4_BYTES_LO, MX4_BYTES_HI, s)
+    let p1 = byte_perm(MX4_BYTES_LO, MX4_BYTES_HI, s >> 16u)
+    let n0 = byte_perm(MX4_NEG_BYTES_LO, MX4_NEG_BYTES_HI, s)
+    let n1 = byte_perm(MX4_NEG_BYTES_LO, MX4_NEG_BYTES_HI, s >> 16u)
+    lo = prmt_pick(0x6420u, p0, p1, n0, n1, ((w >> 3u) & 0x01010101u) * 0xFFu)
+    hi = prmt_pick(0x7531u, p0, p1, n0, n1, ((w >> 7u) & 0x01010101u) * 0xFFu)
 }
 
 //! the nv4 decode GEMV leaf on the CUDA home: the nibble decode through `byte_perm`, the block scales the shared leaf's
@@ -622,6 +621,7 @@ class template Nv4GemvPrmtT : Nv4GemvT {
     }
 }
 
+//! the nv4 decode GEMV: `Nv4GemvT` through the home's permute leaf
 [cuda_dispatch(name = "kq_gemv_nv4_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class CuKqGemvNv4 : Nv4GemvPrmtT {
     [cuda_kernel(local_size_x = 64, name = "kq_gemv_nv4_cls_cuda")]
@@ -757,6 +757,7 @@ class CuKqGemvIq4nlN : Iq4nlGemvCudT {
     }
 }
 
+//! its N-column stamp: `Nv4GemvT` through the home's permute leaf
 [cuda_dispatch(name = "kq_gemv_nv4_n_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class CuKqGemvNv4N : Nv4GemvPrmtT {
     override NCOL = true
@@ -991,6 +992,7 @@ class CuKqEmbIq4nl : Iq4nlGemvCudT {
     }
 }
 
+//! the nv4 token-table gather: `Nv4GemvT`'s decode over the table rows
 [cuda_dispatch(name = "kq_emb_nv4_cls", kernel = "run", family = "kq_emb_cls", grid = "wgs", params = "wgs : int64")]
 class CuKqEmbNv4 : Nv4GemvT {
     override EMB = true
@@ -1144,6 +1146,52 @@ def cud_gemv_ensure(fmt : int) : bool {   // nolint:STYLE037 - the stamp's ladde
         r = tile_ensure_cls()
     }
     return r
+}
+
+//! the int8 MMQ leaf of `fmt` compiled, Q8_0's for a format with no leaf of its own
+def cud_mmq_ensure(fmt : int) : bool {   // nolint:STYLE037 - the leaves' ladder, one arm per MMQ format
+    if (fmt == int(KqFmt.k4)) {
+        return ensure_k4_mmq()
+    } elif (fmt == int(KqFmt.iq4xs)) {
+        return ensure_iq4xs_mmq()
+    } elif (fmt == int(KqFmt.q40)) {
+        return ensure_q40_mmq()
+    } elif (fmt == int(KqFmt.iq4nl)) {
+        return ensure_iq4nl_mmq()
+    } elif (fmt == int(KqFmt.q51)) {
+        return ensure_q51_mmq()
+    } elif (fmt == int(KqFmt.q4032)) {
+        return ensure_q4032_mmq()
+    } elif (fmt == int(KqFmt.q5032)) {
+        return ensure_q5032_mmq()
+    } elif (fmt == int(KqFmt.iq4nl32)) {
+        return ensure_iq4nl32_mmq()
+    }
+    return ensure_q8_mmq()
+}
+
+//! one dispatch of the int8 MMQ leaf of `fmt`; `bufs` is [wq, ws, xq, xs, y, xsum] - a leaf without a min term binds the first five
+def cud_mmq_enc(fmt : int; var s : void?; bufs : uint64 const[6]; var pc : MmqArgs; wgs : int64) {   // nolint:STYLE037 - the leaves' ladder, one arm per MMQ format
+    var b5 = fixed_array(bufs[0], bufs[1], bufs[2], bufs[3], bufs[4])
+    if (fmt == int(KqFmt.k4)) {
+        enc_k4_mmq(s, bufs, pc, wgs)
+    } elif (fmt == int(KqFmt.q51)) {
+        enc_q51_mmq(s, bufs, pc, wgs)
+    } elif (fmt == int(KqFmt.iq4xs)) {
+        enc_iq4xs_mmq(s, b5, pc, wgs)
+    } elif (fmt == int(KqFmt.q40)) {
+        enc_q40_mmq(s, b5, pc, wgs)
+    } elif (fmt == int(KqFmt.iq4nl)) {
+        enc_iq4nl_mmq(s, b5, pc, wgs)
+    } elif (fmt == int(KqFmt.q4032)) {
+        enc_q4032_mmq(s, b5, pc, wgs)
+    } elif (fmt == int(KqFmt.q5032)) {
+        enc_q5032_mmq(s, b5, pc, wgs)
+    } elif (fmt == int(KqFmt.iq4nl32)) {
+        enc_iq4nl32_mmq(s, b5, pc, wgs)
+    } else {
+        enc_q8_mmq(s, b5, pc, wgs)
+    }
 }
 
 //! `bufs` is the family's [wq, ws, regions, xq, xs, y]; a kq leaf gets the grid codebooks appended as its seventh
@@ -1678,6 +1726,7 @@ class CuIq4nlCm2S : Iq4nlCm2T {
     }
 }
 
+//! the nv4 cm2 l tile: `Nv4Cm2T`
 [cuda_dispatch(name = "kq_batch_nv4_cm2l_cls", grid = "wgs", params = "wgs : int64")]
 class CuNv4Cm2L : Nv4Cm2T {
     typedef AT = coopmatWgA_f16_128x64
@@ -1691,6 +1740,7 @@ class CuNv4Cm2L : Nv4Cm2T {
     }
 }
 
+//! the nv4 cm2 m tile: `Nv4Cm2T`
 [cuda_dispatch(name = "kq_batch_nv4_cm2m_cls", grid = "wgs", params = "wgs : int64")]
 class CuNv4Cm2M : Nv4Cm2T {
     override BN = 128u
@@ -1706,6 +1756,7 @@ class CuNv4Cm2M : Nv4Cm2T {
     }
 }
 
+//! the nv4 cm2 s tile: `Nv4Cm2T`
 [cuda_dispatch(name = "kq_batch_nv4_cm2s_cls", grid = "wgs", params = "wgs : int64")]
 class CuNv4Cm2S : Nv4Cm2T {
     override BN = 32u
@@ -2151,16 +2202,15 @@ class template MmqT {
     //! every leaf names a format tag `FMT`: a per-32 leaf's (`B32`) picks its block words, scale word and decode through the `blk32_*` family, the others' is unread
     @template_constant K4 : bool = false      //!< the weight side: Q4_K superblocks decoded to int8 through registers, a scale and a min a 32-block
     @template_constant LUT : bool = false     //!< ... a codebook superblock format (IQ4_XS, IQ4_NL): the nibbles through the codebook to signed int8, a scale a 32-block, no min
-    @template_constant SIGN8 : bool = false   //!< ... Q4_0 superblocks: the nibbles less eight as signed int8, a scale a 32-block, no min
     @template_constant QSC : bool = false     //!< the superblock scale row is Q4_0's (five words of d pairs: Q4_0, IQ4_NL); off, IQ4_XS's two words or Q4_K's five
-    @template_constant KQ : bool = false      //!< a superblock leaf (K4, LUT or SIGN8): the scale rows as words, the weight stage through registers
+    @template_constant KQ : bool = false      //!< a superblock leaf (K4, LUT or the Q4_0 superblock leaf): the scale rows as words, the weight stage through registers
     @template_constant B32 : bool = false     //!< a per-32 leaf (`FMT`: Q5_1, Q4_0, Q5_0, IQ4_NL): a block's words through registers, a scale word a block; off every stage axis, raw Q8_0 blocks by cp.async
     @template_constant WORDS : bool = false   //!< the scale plane as words (`wsu`: every leaf but Q8_0's halves)
     @template_constant MIN : bool = false     //!< the leaf's blocks carry a min (Q4_K's dmin x mn, Q5_1's m): the activation sums feed the rank-sixteen correction
-    @ssbo @binding = 0 @readonly wq4 : array<uint4>    //! Q8_0 blocks as two uint4: (row, kb) at (row * nb + kb) * 2; Q4_K and IQ4_XS superblocks as eight, block g's 16 nibble bytes at (row * nsb + sb) * 8 + g
-    @ssbo @binding = 0 @readonly @template_gate = B32 wq : array<uint>        //! the same plane as words: a per-32 block's four nibble words and, on Q5_1 and Q5_0, its qh word
+    @ssbo @binding = 0 @readonly @role = "weight" wq4 : array<uint4>    //! Q8_0 blocks as two uint4: (row, kb) at (row * nb + kb) * 2; Q4_K and IQ4_XS superblocks as eight, block g's 16 nibble bytes at (row * nsb + sb) * 8 + g
+    @ssbo @binding = 0 @readonly @role = "weight" @template_gate = B32 wq : array<uint>        //! the same plane as words: a per-32 block's four nibble words and, on Q5_1 and Q5_0, its qh word
     @ssbo @binding = 1 @readonly @template_gate = "!WORDS" ws4 : array<uint4>    //! weight scales as halves, (row, kb) at row * nb + kb
-    @ssbo @binding = 1 @readonly @template_gate = WORDS wsu : array<uint>        //! the scale rows: Q4_K's five words a superblock - d | dmin, eight sc bytes, eight mn bytes; IQ4_XS's two - d with the scales' high bits, the scales' low nibbles; a per-32 format's word a block or a pair
+    @ssbo @binding = 1 @readonly @role = "weight" @template_gate = WORDS wsu : array<uint>        //! the scale rows: Q4_K's five words a superblock - d | dmin, eight sc bytes, eight mn bytes; IQ4_XS's two - d with the scales' high bits, the scales' low nibbles; a per-32 format's word a block or a pair
     @ssbo @binding = 2 @readonly xq4 : array<uint4>    //! the activation quants, the same shape over tokens
     @ssbo @binding = 3 @readonly xs4 : array<uint4>    //! activation scales as floats, (token, kb) at token * nb + kb
     @ssbo @binding = 4 y : array<float>                //! [token][d]
@@ -2263,25 +2313,25 @@ class template MmqT {
         let sdst = srow * 9u + sj
         // the KQ and B32 leaves' weight stage goes through registers: a lane one 32-block of a row (16 nibble bytes in, two int8 quads out),
         // eight rows a warp, the whole tile in one copy; the next step's quad is loaded under this step's products
-        let k4row = (warp << 3u) + (lane >> 2u)
-        let k4blk = lane & 3u
-        let k4src = (pa.wblk + (m0 + k4row) * nsb) * 8u + k4blk   // the lane's quad of superblock 0: step kb adds (kb >> 1) * 8 + (kb & 1) * 4
-        let k4dst = k4row * 9u + k4blk * 2u
+        let krow = (warp << 3u) + (lane >> 2u)
+        let kblk = lane & 3u
+        let ksrc = (pa.wblk + (m0 + krow) * nsb) * 8u + kblk   // the lane's quad of superblock 0: step kb adds (kb >> 1) * 8 + (kb & 1) * 4
+        let kdst = krow * 9u + kblk * 2u
         var wnext : uint4
         var qhn = 0u
-        let b32b0 = pa.wblk + (m0 + k4row) * nb + k4blk   // a per-32 leaf: the lane's block of step 0; step kb adds kb * 4
+        let b32b0 = pa.wblk + (m0 + krow) * nb + kblk   // a per-32 leaf: the lane's block of step 0; step kb adds kb * 4
         static_if (KQ) {
-            wnext = wq4[k4src]
-            sa[k4dst] = sb_codes(wnext, 0u)
-            sa[k4dst + 1u] = sb_codes(wnext, 4u)
+            wnext = wq4[ksrc]
+            sa[kdst] = sb_codes(wnext, 0u)
+            sa[kdst + 1u] = sb_codes(wnext, 4u)
             if (nb4 > 1u) {
-                wnext = wq4[k4src + 4u]
+                wnext = wq4[ksrc + 4u]
             }
         } else {
             static_if (B32) {
                 b32_words(b32b0, wnext, qhn)
-                sa[k4dst] = b32_codes(wnext, qhn, 0u)
-                sa[k4dst + 1u] = b32_codes(wnext, qhn, 4u)
+                sa[kdst] = b32_codes(wnext, qhn, 0u)
+                sa[kdst + 1u] = b32_codes(wnext, qhn, 4u)
                 if (nb4 > 1u) {
                     b32_words(b32b0 + 4u, wnext, qhn)
                 }
@@ -2298,14 +2348,14 @@ class template MmqT {
         var xscur = uint4(0u)
         let sb_sc_words = (K4 || QSC) ? 5u : 2u
         var sb_sc_cur, sb_sc_next : uint[5]
-        let k4srow = (pa.wblk + (m0 + wr) * nsb) * sb_sc_words
+        let ksrow = (pa.wblk + (m0 + wr) * nsb) * sb_sc_words
         var b32_sc_min : float2[4]
         let b32_row_blk0 = pa.wblk + (m0 + wr) * nb
         if (wstage) {
             static_if (KQ) {
                 for [unroll] (j in range(5)) {
                     if (uint(j) < sb_sc_words) {
-                        sb_sc_cur[j] = wsu[k4srow + uint(j)]
+                        sb_sc_cur[j] = wsu[ksrow + uint(j)]
                     }
                 }
                 static_if (K4) {
@@ -2331,7 +2381,7 @@ class template MmqT {
                 if (nsb > 1u) {
                     for [unroll] (j in range(5)) {
                         if (uint(j) < sb_sc_words) {
-                            sb_sc_next[j] = wsu[k4srow + sb_sc_words + uint(j)]
+                            sb_sc_next[j] = wsu[ksrow + sb_sc_words + uint(j)]
                         }
                     }
                 }
@@ -2390,15 +2440,15 @@ class template MmqT {
                     let st2 = nk & 1u
                     let nsrc = nk * 8u
                     static_if (KQ) {
-                        sa[st2 * 1152u + k4dst] = sb_codes(wnext, 0u)
-                        sa[st2 * 1152u + k4dst + 1u] = sb_codes(wnext, 4u)
+                        sa[st2 * 1152u + kdst] = sb_codes(wnext, 0u)
+                        sa[st2 * 1152u + kdst + 1u] = sb_codes(wnext, 4u)
                         if (nk + 1u < nb4) {
-                            wnext = wq4[k4src + ((nk + 1u) >> 1u) * 8u + ((nk + 1u) & 1u) * 4u]
+                            wnext = wq4[ksrc + ((nk + 1u) >> 1u) * 8u + ((nk + 1u) & 1u) * 4u]
                         }
                     } else {
                         static_if (B32) {
-                            sa[st2 * 1152u + k4dst] = b32_codes(wnext, qhn, 0u)
-                            sa[st2 * 1152u + k4dst + 1u] = b32_codes(wnext, qhn, 4u)
+                            sa[st2 * 1152u + kdst] = b32_codes(wnext, qhn, 0u)
+                            sa[st2 * 1152u + kdst + 1u] = b32_codes(wnext, qhn, 4u)
                             if (nk + 1u < nb4) {
                                 b32_words(b32b0 + (nk + 1u) * 4u, wnext, qhn)
                             }
@@ -2418,7 +2468,7 @@ class template MmqT {
                                 if ((nk >> 1u) + 1u < nsb) {
                                     for [unroll] (j in range(5)) {
                                         if (uint(j) < sb_sc_words) {
-                                            sb_sc_next[j] = wsu[k4srow + ((nk >> 1u) + 1u) * sb_sc_words + uint(j)]
+                                            sb_sc_next[j] = wsu[ksrow + ((nk >> 1u) + 1u) * sb_sc_words + uint(j)]
                                         }
                                     }
                                 }
@@ -2585,8 +2635,8 @@ def nv4_fp4_pairs(w : uint4) : uint4 {
 //! factor land in the epilogue. A two-deep ring at 80-byte rows (four uint4 and a pad: eight rows on eight bank groups)
 [ |> template_struct_instance]
 class template MmqFp4T {
-    @ssbo @binding = 0 @readonly wq4 : array<uint4>    //! the nv4 quant plane: superblock sb's 32-block g at sb * 8 + g
-    @ssbo @binding = 1 @readonly wsu : array<uint>     //! the nv4 scale rows: five words a superblock, word j the k64 strip j's four UE4M3 codes
+    @ssbo @binding = 0 @readonly @role = "weight" wq4 : array<uint4>    //! the nv4 quant plane: superblock sb's 32-block g at sb * 8 + g
+    @ssbo @binding = 1 @readonly @role = "weight" wsu : array<uint>     //! the nv4 scale rows: five words a superblock, word j the k64 strip j's four UE4M3 codes
     @ssbo @binding = 2 @readonly xq4 : array<uint4>    //! the FP4 feed: a token's k / 2 nibble bytes, (k, k + 8) pairs inside each 16
     @ssbo @binding = 3 @readonly xsw : array<uint>     //! ... its k / 64 scale words, four UE4M3 codes each
     @ssbo @binding = 4 @readonly xrs : array<float>    //! ... its row scale
@@ -2775,19 +2825,20 @@ class template Fp4FeedT : GkWgReduce {
         }
     }
 
-    //! elements e .. e + 3, `e` a four-multiple off the row base
-    def load4(e : uint) : float4 {
-        if (pa.ustride == 0u && ((pa.inbase | pa.ubase) & 3u) == 0u) {
-            let g = src4[e / 4u]
-            static_if (ACT) {
-                let u = up4[(pa.ubase + e) / 4u]
-                return float4(gk_act_mul(g.x, u.x, pa.act), gk_act_mul(g.y, u.y, pa.act), gk_act_mul(g.z, u.z, pa.act), gk_act_mul(g.w, u.w, pa.act))
-            } else {
-                return g
-            }
+    //! elements e .. e + 3 off the float4 bindings, `e` a four-multiple off a four-aligned row base
+    def load4_lanes(e : uint) : float4 {
+        let g = src4[e / 4u]
+        static_if (ACT) {
+            let u = up4[(pa.ubase + e) / 4u]
+            return float4(gk_act_mul(g.x, u.x, pa.act), gk_act_mul(g.y, u.y, pa.act), gk_act_mul(g.z, u.z, pa.act), gk_act_mul(g.w, u.w, pa.act))
+        } else {
+            return g
         }
-        return float4(load1(e), load1(e + 1u), load1(e + 2u), load1(e + 3u))
     }
+
+    //! elements e .. e + 3, `e` a four-multiple off the row base: the float4 lanes where both bases sit on the four lattice and the up side is unstrided, else four scalar reads
+    def load4(e : uint) : float4 =>
+        (pa.ustride == 0u && ((pa.inbase | pa.ubase) & 3u) == 0u) ? load4_lanes(e) : float4(load1(e), load1(e + 1u), load1(e + 2u), load1(e + 3u))
 
     //! chunk `cc` of row `tok` through the strip pass and its stores; `on` for a chunk inside the row
     def strip_put(tok, cc : uint; on : bool; v : float4) {
@@ -2956,7 +3007,6 @@ class CuQ40Mmq : MmqT {
     override KQ = true
     override WORDS = true
     override QSC = true
-    override SIGN8 = true
 
     [cuda_kernel(local_size_x = 512, name = "q40_mmq_cuda")]
     def run {
@@ -3118,6 +3168,7 @@ class CuFaCm2H96 : FaH96T {
     }
 }
 
+//! the head-96 flash tile with the f16 O store: `FaH96T` over `FaT`
 [cuda_dispatch(name = "fa_cm2_h96_f16_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
 class CuFaCm2H96F16 : FaH96T {
     typedef OT = float16

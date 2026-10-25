@@ -2710,15 +2710,15 @@ namespace das {
         }
     }
 
-    // src/ast/ARCHITECTURE_MODULE_SCAN.md#module-scan-manifest - a pending row whose artifact is on disk failed on something
-    // other than a missing file: on a platform that resolves imports at load, a sibling the
-    // deferred set still holds
     DAS_API bool dynamic_module_artifact_exists(const char * path) {
         if (!path) return false;
         std::error_code ec;
         return std::filesystem::exists(das_to_path(dynamic_module_actual_path(path).c_str()), ec) && !ec;
     }
 
+    // src/ast/ARCHITECTURE_MODULE_SCAN.md#module-scan-manifest - a pending row whose artifact is on disk failed on something
+    // other than a missing file: on a platform that resolves imports at load, a sibling the
+    // deferred set still holds
     DAS_API bool pending_dynamic_module_artifact_present() {
         for (auto & pr : g_pending_dynamic_modules) {
             if (dynamic_module_artifact_exists(get<0>(pr).c_str())) return true;

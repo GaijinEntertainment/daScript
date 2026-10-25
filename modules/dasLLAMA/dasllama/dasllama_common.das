@@ -1686,7 +1686,7 @@ struct Model {
     dnalpha_fmt : array<KqFmt>
     wcls_fmt : KqFmt = KqFmt.q8
     emb_fmt : KqFmt = KqFmt.q8
-    //! the per-tensor weight scale a plane carries beside its blocks (NVFP4's scale2, the file's `<tensor>.scale`), keyed by
+    //! the site scale a plane carries beside its blocks (NVFP4's per-tensor scale, the file's `<tensor>.scale`), keyed by
     //! `site_scale_key`: the matmul epilogues multiply their rows by it, never the plane; a plane with no entry scales by one
     site_scale : table<int64; float>
     // gemma4 E-series PLE token table (per_layer_token_embd) — gather-only (whole superblock-
@@ -4967,8 +4967,6 @@ def private kq_slot(what : string; fmt : KqFmt) : int {
     return int(fmt)
 }
 
-// K-quant GEMV against a PRE-quantized activation (xq/xs/xbs already filled by the bs quantizer).
-// kq_repacked loads run the backend's stamped cores; disk-order loads run the portable kernels.
 def site_scale_key(fmt : KqFmt; woff : int64) : int64 => (int64(fmt) << 52) | woff
 
 [arch(at = "../ARCHITECTURE_ENGINE_FORMATS_NV4.md#nv4-site-scale")]
@@ -4977,12 +4975,12 @@ def site_scale(t : Model; fmt : KqFmt; woff : int64) : float => empty(t.site_sca
 def private apply_site_scale(var y : array<float>; t : Model; fmt : KqFmt; woff, yoff, count : int64) {
     let sc = site_scale(t, fmt, woff)
     if (sc != 1.0) {
-        for (i in range64(yoff, yoff + count)) {
-            y[i] *= sc
-        }
+        scale_inplace(unsafe(addr(y[yoff])), sc, count)
     }
 }
 
+// K-quant GEMV against a PRE-quantized activation (xq/xs/xbs already filled by the bs quantizer).
+// kq_repacked loads run the backend's stamped cores; disk-order loads run the portable kernels.
 def mm_at_kq_pre(var y : array<float>; t : Model; fmt : KqFmt; woff : int64; xq : array<int8>; xs : array<float>; xbs : array<int>; n, d : int64; yoff : int64 = 0l) {
     let i = kq_slot("mm_at_kq_pre", fmt)
     if (t.kq_repacked) {

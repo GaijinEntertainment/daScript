@@ -118,7 +118,7 @@ context carries a context mutex from its creation (`makeMacroModule`), because
 twice by two callers. The call saves and restores the environment's bound program, compiler log
 and compiling names around the walk in a scope object, since it may run mid-parse of another
 module and an unwind must put them back; the symbol state its passes compute lives on its own
-`Program` (sec.4), so the caller's - which may be mid-simulate with a JIT reading it - is
+`Program` (`#program-scoped-symbol-state`), so the caller's - which may be mid-simulate with a JIT reading it - is
 untouched. One recursive mutex serializes every late require in the process. The late walk has
 no module cache of its own: a stream holds many compiles in order, shared modules written once
 (a persistent serializer, dastest's `--ser`), read at a parse's start and written at its end.
@@ -160,7 +160,7 @@ that context has none, putting back what was there. A context that still has no 
 read, nothing is used and nothing holds a slot. The index tables are per allocation:
 `allocateStack` clears both before numbering, so -1 means this pass never saw the object, and a
 folding round's slots do not survive into the final pass. A compile nested inside another - a
-macro calling `compile`, a late `require` (sec.3), the folding program - fills its own tables
+macro calling `compile`, a late `require` (`#require-after-walk`), the folding program - fills its own tables
 and leaves the outer program's answers standing. The stream a module-cache record carries has
 neither the flag nor the slot: both are recomputed by the reading program. Three per-compile
 values still live on the objects: `Variable::stackTop` and `Function::totalStackSize` /

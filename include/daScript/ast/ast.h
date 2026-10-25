@@ -1750,6 +1750,8 @@ namespace das
     // size, hash_block64 of the content - the file's bytes, the variable's value, the flag's
     // occurrences)
     DAS_API void statAndHashFileDependency ( const string & path, int64_t & size, uint64_t & hash );
+    DAS_API void pinModuleCacheDependency ( Program * program, const string & path );
+    DAS_API bool isBuiltinModulePresent ( const string & name );
 
     // access function from class adapter
     DAS_API int adapt_field_offset ( const char * fName, const StructInfo * info );

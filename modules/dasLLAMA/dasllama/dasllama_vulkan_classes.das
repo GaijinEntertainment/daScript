@@ -2199,6 +2199,7 @@ class FaCm2H96 : FaH96T {
     }
 }
 
+//! the head-96 flash tile with the f16 O store: `FaH96T` over `FaT`
 [vk_dispatch(name = "fa_cm2_h96_f16_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
 class FaCm2H96F16 : FaH96T {
     typedef OT = float16
@@ -2508,7 +2509,7 @@ def private fa_stamp_refuse(khr : bool; hs : int64; gated, cap, sink, f16, bidir
 }
 
 //! every flash stamp's stem, four a form - cm2 f32, KHR f32, cm2 f16, KHR f16 - over the forms h64, h128, h256, h512, gated h256,
-//! capped h256, the h64 sink and the h64 and h128 bidirectional twins; `-` where a form has no such stamp
+//! capped h256, the h64 sink, the h64 and h128 bidirectional twins and h96 (cm2 alone); `-` where a form has no such stamp
 let private FA_STAMPS = "fa_cm2_h64 fa_khr_h64 fa_cm2_h64_f16 fa_khr_h64_f16 fa_cm2_h128 fa_khr_h128 fa_cm2_h128_f16 fa_khr_h128_f16 fa_cm2_h256 fa_khr_h256 fa_cm2_h256_f16 fa_khr_h256_f16 fa_cm2_h512 fa_khr_h512 fa_cm2_h512_f16 fa_khr_h512_f16 fa_cm2_h256_g - fa_cm2_h256_g_f16 - fa_cm2_h256_cap fa_khr_h256_cap fa_cm2_h256_cap_f16 fa_khr_h256_cap_f16 fa_cm2_h64_sink fa_khr_h64_sink fa_cm2_h64_sink_f16 fa_khr_h64_sink_f16 fa_cm2_h64_bidir fa_khr_h64_bidir - - fa_cm2_h128_bidir fa_khr_h128_bidir - - fa_cm2_h96 - fa_cm2_h96_f16 -"
 
 //! the flash stamp's ordinal in FA_STAMPS, once the refusals passed
@@ -3318,15 +3319,11 @@ class KqBatchIq4nl : KqBatchIq4xs {
 }
 
 //! NVFP4 tile: the k4 staging over signed e2m1 lanes (no block-sum term), each block's low and high half under its own UE4M3 sub-block scale at half
+//! nv4 (NVFP4 as a nibble codebook plane): iq4xs's tiling and codebook staging under the doubled e2m1 magnitudes, two
+//! UE4M3 half scales a block in place of the one sub-scale
 [vk_dispatch(name = "kq_batch_nv4_cls", kernel = "run", family = "kq_batch_cls", grid = "wgs", params = "wgs : int64")]
-class KqBatchNv4 : KqBatchBase {
-    [unused_argument(k)]
-    def override w_quad(wsb, bu, hh, k : uint) : uint4 {
-        let rb4 = wsb * 32u + bu * 4u
-        let sh = hh * 4u
-        return uint4(mx4_word((wq[rb4] >> sh) & 0x0F0F0F0F), mx4_word((wq[rb4 + 1u] >> sh) & 0x0F0F0F0F),
-            mx4_word((wq[rb4 + 2u] >> sh) & 0x0F0F0F0F), mx4_word((wq[rb4 + 3u] >> sh) & 0x0F0F0F0F))
-    }
+class KqBatchNv4 : KqBatchIq4xs {
+    def override cb_word(n : uint) : uint => mx4_word(n)
 
     def override stage_ws(wsb0, wt, nsb, s, tid : uint) {
         let slane = tid % 32u
@@ -3358,7 +3355,7 @@ class KqBatchNv4 : KqBatchBase {
     }
 
     [spirv_kernel(local_size_x = 256, name = "kq_batch_nv4_cls_spv")]
-    def run {
+    def override run {
         tile_shell()
     }
 }
@@ -4862,6 +4859,7 @@ class Iq4nlCm2SBatch : Iq4nlCm2T {
     }
 }
 
+//! the nv4 cm2 l tile: `Nv4Cm2T`
 [vk_dispatch(name = "kq_batch_nv4_cm2l_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Nv4Cm2LBatch : Nv4Cm2T {
     typedef AT = coopmatWgA_f16_128x64
@@ -4875,6 +4873,7 @@ class Nv4Cm2LBatch : Nv4Cm2T {
     }
 }
 
+//! the nv4 cm2 m tile: `Nv4Cm2T`
 [vk_dispatch(name = "kq_batch_nv4_cm2m_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Nv4Cm2MBatch : Nv4Cm2T {
     override BN = 128u
@@ -4890,6 +4889,7 @@ class Nv4Cm2MBatch : Nv4Cm2T {
     }
 }
 
+//! the nv4 cm2 s tile: `Nv4Cm2T`
 [vk_dispatch(name = "kq_batch_nv4_cm2s_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Nv4Cm2SBatch : Nv4Cm2T {
     override BN = 32u
@@ -5458,6 +5458,7 @@ class Iq4nlKhrBatch : Iq4nlCm2T {
     }
 }
 
+//! the nv4 KHR tile: `Nv4Cm2T` on the KHR arm
 [vk_dispatch(name = "kq_batch_nv4_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Nv4KhrBatch : Nv4Cm2T {
     override KHR = true
@@ -7970,6 +7971,7 @@ class KqGemvIq4nlN : Iq4nlGemvT {
 }
 
 
+//! the nv4 decode GEMV: `Nv4GemvT` on the SWAR nibble decode
 [vk_dispatch(name = "kq_gemv_nv4_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvNv4 : Nv4GemvT {
     [spirv_kernel(local_size_x = 64)]
@@ -7978,6 +7980,7 @@ class KqGemvNv4 : Nv4GemvT {
     }
 }
 
+//! its N-column stamp: `Nv4GemvT`
 [vk_dispatch(name = "kq_gemv_nv4_n_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvNv4N : Nv4GemvT {
     override NCOL = true
@@ -8221,6 +8224,7 @@ class KqEmbIq4nl : Iq4nlGemvT {
     }
 }
 
+//! the nv4 token-table gather: `Nv4GemvT`'s decode over the table rows
 [vk_dispatch(name = "kq_emb_nv4_cls", kernel = "run", family = "kq_emb_cls", grid = "wgs", params = "wgs : int64")]
 class KqEmbNv4 : Nv4GemvT {
     override EMB = true

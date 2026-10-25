@@ -117,9 +117,9 @@ def test_gpu_resident_cuda_llama_1b_nv4(t : T?) {
         cuda_forced_feed(t, FILE_1B_NV4, "llama", PF_WINDOW_ROWS + 88l, 2l, LOGIT_BAR_REL_FP4)
     }
     t |> run("{FILE_1B_NV4}: one window (40 tokens) and eight steps with the MMQ knob off - the cm2 tiles over f16 activations hold the dense bar (the FP4 arm's control)") @(t : T?) {
-        set_cuda_mmq_pin(0l)
+        set_cuda_mmq_pin(CUDA_MMQ_OFF)
         cuda_forced_feed(t, FILE_1B_NV4, "llama", 40l, 1l, LOGIT_BAR_REL)
-        set_cuda_mmq_pin(-1l)
+        set_cuda_mmq_pin(CUDA_MMQ_UNPINNED)
     }
 }
 

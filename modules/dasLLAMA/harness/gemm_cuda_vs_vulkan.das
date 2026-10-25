@@ -9,7 +9,8 @@ options stack = 524288
 // Q4_0, IQ4_NL and the four per-32 formats) and the FP4 rung's nv4 leaf at the same shapes, the cm2 flash tile at head 64
 // over the same window (32 heads, kv width 512) and the decode
 // attention's split and unsplit forms - the time a dispatch and the rate it makes.
-// Baseline: the mmq arm, checked against the CPU reference mmq_ref. Compare region: 64 sampled outputs, token (s x 7919) % 512
+// Baseline: each MMQ arm against its CPU reference under its leaf's bound (per element, or relative to the region's largest
+// magnitude for the min-term leaves). Compare region: 64 sampled outputs, token (s x 7919) % 512
 // and row (s x 104729 + 13) % d for s < 64. Every Vulkan and CUDA tile, flash and decode-attention arm is timing-only.
 // The arms of a race run in turn, one round of each (a round: one submit of DISPATCHES dispatches); each arm drops 2 warmup
 // rounds, and every number is its best round after them, in microseconds a dispatch.
@@ -22,14 +23,13 @@ require dasllama/dasllama_vulkan_classes
 require dasllama/dasllama_cuda_classes
 require dasllama/dasllama_gpu_tier
 require ../tests/_vk_kq_fixtures.das
-require ../tests/_fp4_feed.das   // the FP4 activation feed the nv4 leaf's arm quantizes the panel into, and its reference value
-require dasllama/dasllama_gpu_math   // ue4m3_half_f32: the nv4 reference's weight scales
+require ../tests/_fp4_feed.das   // fp4_feed_rows, fp4_feed_value
+require ../tests/_mmq_ref.das   // the MMQ leaves' CPU references, the kernel cells' own
 require _cuda_probe_fixture
 require daslib/strings_boost
 require math
 require dasllama/dasllama_kqformat
 require dasllama/dasllama_gemm_schema
-require dasllama/dasllama_convert
 
 let ROUNDS = 10
 let WARMUPS = 2
@@ -216,11 +216,6 @@ def mmq_planes(p : Planes; k : int) : MmqPlanes {
     return <- m
 }
 
-def byte_at(words : array<uint>; i : int) : int {
-    let b = int((words[i / 4] >> uint((i % 4) * 8)) & 255u)
-    return b >= 128 ? b - 256 : b
-}
-
 def ws_at(p : Planes; i : int) : float {
     let v = unpackHalf2x16(p.ws[i / 2])
     return (i & 1) == 0 ? v.x : v.y
@@ -233,139 +228,52 @@ def mmq_ref(p : Planes; m : MmqPlanes; k, tok, row : int) : float {
     for (b in range(nb)) {
         var dot = 0
         for (i in range(32)) {
-            dot += byte_at(p.wq, (row * nb + b) * 32 + i) * byte_at(m.xq, tok * k + b * 32 + i)
+            dot += word_i8_at(p.wq, (row * nb + b) * 32 + i) * word_i8_at(m.xq, tok * k + b * 32 + i)
         }
         acc += float(dot) * ws_at(p, row * nb + b) * m.xs[tok * nb + b]
     }
     return acc
 }
 
-//! the Q4_K reference over the engine's repacked superblocks (element i the low nibble, i + 16 the high; five scale words a superblock): every block's xs x (d sc dot - dmin mn xsum)
-def k4_mmq_ref(p : Planes; m : MmqPlanes; k, tok, row : int) : float {
-    let nb = k / 32
-    let nsb = k / 256
-    var acc = 0.0
-    for (b in range(nb)) {
-        let sb = row * nsb + b / 8
-        let g = b % 8
-        let dm = unpackHalf2x16(p.ws[sb * 5])
-        let sc = float((p.ws[sb * 5 + 1 + g / 4] >> uint((g % 4) * 8)) & 255u)
-        let mn = float((p.ws[sb * 5 + 3 + g / 4] >> uint((g % 4) * 8)) & 255u)
-        var dot = 0
-        var xsm = 0
-        for (i in range(32)) {
-            let wb = (sb * 8 + g) * 16 + i % 16
-            let byte = int((p.wq[wb / 4] >> uint((wb % 4) * 8)) & 255u)
-            let xv = byte_at(m.xq, tok * k + b * 32 + i)
-            dot += (i < 16 ? byte & 15 : byte >> 4) * xv
-            xsm += xv
-        }
-        acc += m.xs[tok * nb + b] * (dm.x * sc * float(dot) - dm.y * mn * float(xsm))
-    }
-    return acc
-}
-
-//! the min-term-free superblock leaves over the Q4_K nibble tiling - IQ4_XS's codebook under d x (ls - 32) off its two-word scale row, Q4_0's nibbles less eight and IQ4_NL's codebook under the five-word row's d pairs: every block's xs x scale x dot
-def sb_mmq_ref(p : Planes; m : MmqPlanes; k, tok, row, fmt : int) : float {
-    let nb = k / 32
-    let nsb = k / 256
-    let lut = fmt != int(KqFmt.q40)
-    let xs2 = fmt == int(KqFmt.iq4xs)
-    var acc = 0.0
-    for (b in range(nb)) {
-        let sb = row * nsb + b / 8
-        let g = b % 8
-        var dot = 0
-        for (i in range(32)) {
-            let wb = (sb * 8 + g) * 16 + i % 16
-            let byte = int((p.wq[wb / 4] >> uint((wb % 4) * 8)) & 255u)
-            let nib = i < 16 ? byte & 15 : byte >> 4
-            let code = lut ? int(iq4_word(uint(nib)) & 255u) : nib - 8
-            dot += (code >= 128 ? code - 256 : code) * byte_at(m.xq, tok * k + b * 32 + i)
-        }
-        let sc = xs2 ? unpackHalf2x16(p.ws[sb * 2]).x * float(iq4xs_sc(p.ws[sb * 2], p.ws[sb * 2 + 1], uint(g))) : q40_d_of(p.ws[sb * 5 + g / 2], uint(g))
-        acc += float(dot) * sc * m.xs[tok * nb + b]
-    }
-    return acc
-}
-
-//! a per-32 leaf's reference: the block through the engine's own per-32 dequant, dotted with the activation's quants under its scale
-def b32_mmq_ref(f : KqFmt; b32_wq_bytes, b32_ws_bytes : array<uint8>; m : MmqPlanes; k, tok, row : int) : float {
-    let nb = k / 32
-    var w : array<float>
-    w |> resize(32)
-    var acc = 0.0
-    for (b in range(nb)) {
-        dequant_b32_plane_block(f, b32_wq_bytes, b32_ws_bytes, int64(row * nb + b), w, 0l)
-        var dot = 0.0
-        for (i in range(32)) {
-            dot += w[i] * float(byte_at(m.xq, tok * k + b * 32 + i))
-        }
-        acc += dot * m.xs[tok * nb + b]
-    }
-    return acc
-}
-
-def mmq_ensure(fmt : int) : bool {
-    if (fmt == int(KqFmt.k4)) {
-        return dasllama_cuda_classes::ensure_k4_mmq()
-    } elif (fmt == int(KqFmt.iq4xs)) {
-        return dasllama_cuda_classes::ensure_iq4xs_mmq()
-    } elif (fmt == int(KqFmt.q40)) {
-        return dasllama_cuda_classes::ensure_q40_mmq()
-    } elif (fmt == int(KqFmt.iq4nl)) {
-        return dasllama_cuda_classes::ensure_iq4nl_mmq()
-    } elif (fmt == int(KqFmt.q51)) {
-        return dasllama_cuda_classes::ensure_q51_mmq()
-    } elif (fmt == int(KqFmt.q4032)) {
-        return dasllama_cuda_classes::ensure_q4032_mmq()
-    } elif (fmt == int(KqFmt.q5032)) {
-        return dasllama_cuda_classes::ensure_q5032_mmq()
-    } elif (fmt == int(KqFmt.iq4nl32)) {
-        return dasllama_cuda_classes::ensure_iq4nl32_mmq()
-    }
-    return dasllama_cuda_classes::ensure_q8_mmq()
-}
-
 def mmq_is_b32(fmt : int) : bool => fmt == int(KqFmt.q51) || fmt == int(KqFmt.q4032) || fmt == int(KqFmt.q5032) || fmt == int(KqFmt.iq4nl32)
 
 //! the MMQ arm's report line for the leaf of `fmt` (Q8_0, a superblock or a per-32 leaf): its largest relative error over the compare region, then its rounds when inside the leaf's bound, else the miss and no time; 1 when it measured
 def mmq_report(shape : string; p : Planes; m : MmqPlanes; k, d, fmt : int) : int {
-    if (!mmq_ensure(fmt)) {
+    if (!cud_mmq_ensure(fmt)) {
         print("{shape} cuda refused: {CU_CLASS_REFUSED}\n")
         return 0
     }
-    let k4 = fmt == int(KqFmt.k4)
-    let sb = fmt == int(KqFmt.iq4xs) || fmt == int(KqFmt.q40) || fmt == int(KqFmt.iq4nl)
-    let b32 = mmq_is_b32(fmt)
-    let f16min = k4 || fmt == int(KqFmt.q51)
+    let is_k4 = fmt == int(KqFmt.k4)
+    let is_sb_leaf = fmt == int(KqFmt.iq4xs) || fmt == int(KqFmt.q40) || fmt == int(KqFmt.iq4nl)
+    let is_b32 = mmq_is_b32(fmt)
+    let has_min_term = is_k4 || fmt == int(KqFmt.q51)
     let cs = g_cud.stream
     var bufs = fixed_array(buf_upload(p.wq, cs), buf_upload(p.ws, cs), buf_upload(m.xq, cs), buf_upload(m.xs, cs), buf_fill(ROWS * d, 0.0, cs), buf_upload(m.xsum, cs))
     var pc = MmqArgs(n = uint(k), d = uint(d), rows = uint(ROWS))
     let wgs = dasllama_cuda_classes::mmq_wgs(int64(d), int64(ROWS))
-    mmq_launch(fmt, bufs, pc, wgs)
+    cud_mmq_enc(fmt, g_cud.stream, bufs, pc, wgs)
     cud_sync()
     let y <- buf_download(bufs[4], ROWS * d, type<float>)
-    let b32_wq_bytes <- [for (i in range(length(p.wq) * 4)); uint8((p.wq[i / 4] >> uint((i % 4) * 8)) & 0xFFu)]
-    let b32_ws_bytes <- [for (i in range(length(p.ws) * 4)); uint8((p.ws[i / 4] >> uint((i % 4) * 8)) & 0xFFu)]
+    let b32_wq_bytes <- word_plane_bytes(p.wq)
+    let b32_ws_bytes <- word_plane_bytes(p.ws)
     var wants : float[64]
     var ymax = 1.0
     for (s in range(64)) {
         let tok = (s * 7919) % ROWS
         let row = (s * 104729 + 13) % d
-        if (b32) {
-            wants[s] = b32_mmq_ref(kq_fmt_of_slot(fmt), b32_wq_bytes, b32_ws_bytes, m, k, tok, row)
+        if (is_b32) {
+            wants[s] = b32_mmq_ref(kq_fmt_of_slot(fmt), b32_wq_bytes, b32_ws_bytes, m.xq, m.xs, k, tok, row)
         } else {
-            wants[s] = k4 ? k4_mmq_ref(p, m, k, tok, row) : (sb ? sb_mmq_ref(p, m, k, tok, row, fmt) : mmq_ref(p, m, k, tok, row))
+            wants[s] = is_k4 ? k4_mmq_ref(p.wq, p.ws, m.xq, m.xs, k, tok, row) : (is_sb_leaf ? sb_mmq_ref(fmt, p.wq, p.ws, m.xq, m.xs, k, tok, row) : mmq_ref(p, m, k, tok, row))
         }
         ymax = max(ymax, abs(wants[s]))
     }
     // no min term: exact int dots under f32 scales, a per-element bound; a min term is f16-staged, so the f16 tiles' bound, relative to the region's largest magnitude
-    let bound = f16min ? MIN_TERM_MMQ_REL_BOUND : MMQ_REL_BOUND
+    let bound = has_min_term ? MIN_TERM_MMQ_REL_BOUND : MMQ_REL_BOUND
     var err = 0.0
     for (s in range(64)) {
         let got = y[((s * 7919) % ROWS) * d + (s * 104729 + 13) % d]
-        err = max(err, abs(got - wants[s]) / (f16min ? ymax : max(1.0, max(abs(got), abs(wants[s])))))
+        err = max(err, abs(got - wants[s]) / (has_min_term ? ymax : max(1.0, max(abs(got), abs(wants[s])))))
     }
     if (!(err <= bound)) {
         cuda_mem_free(bufs)
@@ -373,21 +281,10 @@ def mmq_report(shape : string; p : Planes; m : MmqPlanes; k, d, fmt : int) : int
         return 0
     }
     let row = cuda_rounds(ROUNDS, WARMUPS, DISPATCHES) $(_i) {
-        mmq_launch(fmt, bufs, pc, wgs)
+        cud_mmq_enc(fmt, g_cud.stream, bufs, pc, wgs)
     }
     cuda_mem_free(bufs)
     return report_cuda(shape, row, "bounded vs cpu: max rel err {err} <= {bound}", "TFLOP/s") $(us) => tflops(k, d, us)
-}
-
-//! the nv4 weight at (row, kk) of the tile planes: the k4-tiled nibble through the e2m1 table under its strip's UE4M3 scale
-def nv4_weight_at(p : Planes; nsb, row, kk : int) : float {
-    let sb = kk / 256
-    let g = (kk % 256) / 32
-    let e = kk % 32
-    let nib = (p.wq[((row * nsb + sb) * 8 + g) * 4 + (e % 16) / 4] >> uint(((e % 16) % 4) * 8 + (e / 16) * 4)) & 15u
-    let strip = g * 2 + e / 16
-    let code = (p.ws[(row * nsb + sb) * 5 + strip / 4] >> uint((strip % 4) * 8)) & 0xFFu
-    return float(MX4_LUT[int(nib)]) * ue4m3_half_f32(code)
 }
 
 //! the FP4 tensor rung's arm (CUDA alone): the nv4 leaf over the panel quantized into the FP4 feed, its largest relative error against the e2m1 x UE4M3 reference, then its rounds; 1 when it measured
@@ -396,7 +293,6 @@ def fp4_mmq_report(shape : string; p : Planes; k, d : int) : int {
         print("{shape} cuda refused: {CU_CLASS_REFUSED}\n")
         return 0
     }
-    let nsb = k / 256
     var inscope xrows <- [for (e in range(ROWS * k)); xf_at(p, e)]
     var inscope feed <- fp4_feed_rows(xrows, ROWS, k)
     let cs = g_cud.stream
@@ -410,10 +306,7 @@ def fp4_mmq_report(shape : string; p : Planes; k, d : int) : int {
     for (s in range(64)) {
         let tok = (s * 7919) % ROWS
         let row = (s * 104729 + 13) % d
-        var want = 0.0
-        for (kk in range(k)) {
-            want += nv4_weight_at(p, nsb, row, kk) * fp4_feed_value(feed, k, tok, kk)
-        }
+        let want = nv4_mmq_ref(p.wq, p.ws, feed, k, tok, row, 1.0)
         let got = y[tok * d + row]
         err = max(err, abs(got - want) / max(1.0, max(abs(got), abs(want))))
     }
@@ -427,30 +320,6 @@ def fp4_mmq_report(shape : string; p : Planes; k, d : int) : int {
     }
     cuda_mem_free(bufs)
     return report_cuda(shape, row, "bounded vs cpu: max rel err {err} <= {MMQ_REL_BOUND}", "TFLOP/s") $(us) => tflops(k, d, us)
-}
-
-//! one dispatch of the MMQ leaf of `fmt` over `bufs` (the leaves without a min term bind the first five: no sum feed)
-def mmq_launch(fmt : int; bufs : uint64[6]; var pc : MmqArgs; wgs : int64) {
-    var b5 = fixed_array(bufs[0], bufs[1], bufs[2], bufs[3], bufs[4])
-    if (fmt == int(KqFmt.k4)) {
-        dasllama_cuda_classes::enc_k4_mmq(g_cud.stream, bufs, pc, wgs)
-    } elif (fmt == int(KqFmt.q51)) {
-        dasllama_cuda_classes::enc_q51_mmq(g_cud.stream, bufs, pc, wgs)
-    } elif (fmt == int(KqFmt.iq4xs)) {
-        dasllama_cuda_classes::enc_iq4xs_mmq(g_cud.stream, b5, pc, wgs)
-    } elif (fmt == int(KqFmt.q40)) {
-        dasllama_cuda_classes::enc_q40_mmq(g_cud.stream, b5, pc, wgs)
-    } elif (fmt == int(KqFmt.iq4nl)) {
-        dasllama_cuda_classes::enc_iq4nl_mmq(g_cud.stream, b5, pc, wgs)
-    } elif (fmt == int(KqFmt.q4032)) {
-        dasllama_cuda_classes::enc_q4032_mmq(g_cud.stream, b5, pc, wgs)
-    } elif (fmt == int(KqFmt.q5032)) {
-        dasllama_cuda_classes::enc_q5032_mmq(g_cud.stream, b5, pc, wgs)
-    } elif (fmt == int(KqFmt.iq4nl32)) {
-        dasllama_cuda_classes::enc_iq4nl32_mmq(g_cud.stream, b5, pc, wgs)
-    } else {
-        dasllama_cuda_classes::enc_q8_mmq(g_cud.stream, b5, pc, wgs)
-    }
 }
 
 struct FaPlanes {
@@ -650,7 +519,7 @@ def race_sb_mmq_rows(shapes : array<tuple<k : int; d : int>>; only : table<strin
 
 [export]
 def main {
-    let only <- race_only()
+    let only <- only_arms()
     let llama8b_shapes = key_exists(only, "8b")
     let shapes <- [(k = llama8b_shapes ? 4096 : 2048, d = llama8b_shapes ? 4096 : 2048), (k = llama8b_shapes ? 4096 : 2048, d = llama8b_shapes ? 14336 : 8192), (k = llama8b_shapes ? 14336 : 8192, d = llama8b_shapes ? 4096 : 2048)]
     var measured = 0

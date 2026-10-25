@@ -122,7 +122,7 @@ def require_measured(measured : int) {
 }
 
 //! `--only <name,name,...>` off the command line as a set: a race's arm filter (format names, a shape switch), empty = every arm
-def race_only : table<string; void> {
+def only_arms : table<string; void> {
     var only : table<string; void>
     var take = false
     for (a in get_command_line_arguments()) {

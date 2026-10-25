@@ -27,7 +27,7 @@ that finds no region.
 
 **A diff that calls a setter whose value the next load reads to plan what the device holds - a
 `set_gpu_*` or `reset_gpu_*` function of `dasllama/dasllama_core.das`, `set_pf_window_rows_pin`,
-`set_expert_cache_mb`, `set_gpu_want_pf_stream`; that list is the trigger - calls it before the
+`set_expert_cache_mb`, `set_gpu_want_pf_stream`, `set_cuda_mmq_pin`; that list is the trigger - calls it before the
 load it governs.** The load reads these values once, to decide what the whole-model GPU driver
 holds on the device; a value set after the load never reaches that decision.
 

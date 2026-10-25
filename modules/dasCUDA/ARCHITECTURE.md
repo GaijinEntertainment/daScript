@@ -46,16 +46,6 @@ plain pointers, a by-value argument struct, streams in place of command buffers.
   `cuda_nvrtc_library_loads`, which loads the file by its full path first so the later
   bare-name resolve finds the module already in the process. A box without NVRTC still runs
   cubins; `cuda_nvrtc_available()` says which box this is.
-- **"No CUDA" is the build configuration's word, never the filesystem's.** The `cuda` witness
-  module (`src/dasCUDA.cpp`, the module's one C++ source) binds nothing: it is compiled in
-  exactly when the package is configured, which `CMakeLists.txt` admits on 64-bit hosts with
-  `DAS_CUDA_DISABLED` off, and the descriptor registers it through the two-argument
-  `register_dynamic_module`, which skips silently where no `.shared_module` was built. The
-  `cuda/` files sit on disk in every checkout, so a path guard (`require ?cuda/cuda_driver`)
-  would read a disabled build as present; every consumer guards on the witness instead -
-  `require ?cuda <target>` in dasLLAMA's engine, `has_module("cuda")` in `tests/.das_test`,
-  `builtin_module_exists(cuda)` under a `static_if` - and a disabled build loads no CUDA home
-  and runs no `tests/cuda` cell.
 - **64-bit hosts only; never Apple, never wasm.** The descriptor registers the `cuda/` paths
   only where a pointer is 8 bytes: no CUDA driver exists for a 32-bit host, and `[extern]`
   refuses to apply there (`DAS_BIND_EXTERNAL` is off), so on a 32-bit host `require cuda/...`
@@ -93,6 +83,18 @@ plain pointers, a by-value argument struct, streams in place of command buffers.
   invisible to all six das leak detectors; the boost counts each live kind and
   `cuda_live_object_report` lists them, so every test file closes on
   `cuda_log_leaks_if_any() == 0`.
+
+### The cuda witness module {#cuda-witness-module}
+
+"No CUDA" is the build configuration's word, never the filesystem's. The `cuda` witness module
+(`src/dasCUDA.cpp`, the module's one C++ source) binds nothing: it is compiled in exactly when the
+package is configured, which `CMakeLists.txt` admits on 64-bit hosts with `DAS_CUDA_DISABLED` off,
+and the descriptor registers it through the two-argument `register_dynamic_module`, which skips
+silently where no `.shared_module` was built. The `cuda/` files sit on disk in every checkout, so
+a path guard (`require ?cuda/cuda_driver`) would read a disabled build as present; every consumer
+guards on the witness instead - `require ?cuda <target>` in dasLLAMA's engine, `has_module("cuda")`
+in `tests/.das_test`, `builtin_module_exists(cuda)` under a `static_if` - and a disabled build
+loads no CUDA home and runs no `tests/cuda` cell.
 
 ### Programmatic dependent launch {#cuda-programmatic-dependent-launch}
 

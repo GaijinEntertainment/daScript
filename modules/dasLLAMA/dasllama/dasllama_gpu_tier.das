@@ -577,15 +577,15 @@ def public gpu_resident_route_lever() : bool => g_gpu_resident_route
 //! The whole-model driver is wanted on this load: the knob and the in-process lever both on.
 def public gpu_want_resident : bool => g_env_gpu.gpu_resident && g_gpu_resident_route
 
-var private g_cuda_want_refused = false
+var private g_cuda_want_warned = false
 
 //! the CUDA home takes the tier's seats in place of the Vulkan home (DASLLAMA_CUDA), read at both entries' [init]; off, warned once, in a build without dasCUDA
 def public gpu_want_cuda : bool {
     static_if (typeinfo builtin_module_exists(cuda)) {
         return g_env_gpu.cuda
     } else {
-        if (g_env_gpu.cuda && !g_cuda_want_refused) {
-            g_cuda_want_refused = true
+        if (g_env_gpu.cuda && !g_cuda_want_warned) {
+            g_cuda_want_warned = true
             to_log(LOG_WARNING, "dasLLAMA: DASLLAMA_CUDA asks for the CUDA home, which this build does not carry (DAS_CUDA_DISABLED, or a 32-bit host) - the Vulkan home keeps the GPU tier\n")
         }
         return false

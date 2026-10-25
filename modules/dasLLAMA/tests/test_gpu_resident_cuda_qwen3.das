@@ -14,14 +14,11 @@ require _model_tier
 require _resident_feed
 require _cuda_feed
 
-// The CUDA home's whole-model driver on Qwen3-0.6B Q8_0 (`DASLLAMA_GPU=1 DASLLAMA_CUDA=1`): the q/k-normed carrier,
-// whose norm, rope and K/V store run as the fused pass `CuQknRopeKv` in the token command and in the window chain. The
-// forced-feed logits-tolerance form of the CUDA llama file: the same fixed tokens through the CUDA chain and the all-CPU
-// chain, the prefill logits and every step's within the bar, the one-step-off control past it, at 40 tokens (one window)
-// and at a prompt of two windows; the witnesses that the CUDA driver served every position, ran the windows the prompt
-// takes and replayed the captured graph past the first step, a CPU run with the model off the device moving none of
-// them (the control). Every cell skips off the JIT, without DASLLAMA_CUDA=1, without DASLLAMA_GPU=1 on a device the
-// driver serves, without the file under models_dir(), or where the prompt window is not PF_WINDOW_ROWS rows.
+// The CUDA home's whole-model driver on Qwen3-0.6B and Qwen3-4B Q8_0 (`DASLLAMA_GPU=1 DASLLAMA_CUDA=1`): the q/k-normed
+// carriers, whose norm, rope and K/V store run as the fused pass `CuQknRopeKv` in the token command and in the window
+// chain, through the forced-feed form the CUDA files share (`_cuda_feed.das`). Every cell skips off the JIT, without
+// DASLLAMA_CUDA=1, without DASLLAMA_GPU=1 on a device the driver serves, without the file under models_dir(), or where
+// the prompt window is not PF_WINDOW_ROWS rows.
 
 [init]
 def private allow_cpu_prefill_intent() {

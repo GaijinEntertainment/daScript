@@ -11,7 +11,8 @@ require _model_tier
 require _format_census   // census_cell - the per-32 table carriers' sites
 require _kq_fixtures   // the synthetic superblocks and plane regions; dot_kq and the kernel stamps on the run-time format
 require dasllama/dasllama_gguf
-require dasllama/dasllama_common   // dequant_kq_plane_sb - the carrier-form dispatcher
+require dasllama/dasllama_common   // dequant_kq_plane_sb - the carrier-form dispatcher; mm_b_kq - the site-scale epilogue cell's matmul
+require dasllama/dasllama_core   // create_session - the session that matmul takes
 require dasllama/dasllama_convert
 require dasllama/dasllama_math   // with_kernel_backend - the layout arm needs disk-order planes
 require dasllama/dasllama_math_default   // dot_kq on the format tag — the kernel arms gate it vs the plane dequant
@@ -1222,6 +1223,32 @@ def private load_kq_native(t : T?; file : string; pin_portable, q40 : bool; blk 
     delete tr
 }
 
+//! the per-tensor scale reaches the CPU matmul's epilogue: eight rows of blk.0.ffn_down through `mm_b_kq` against the file
+//! dequant's dot times the site scale, x on the int lattice so the Q8 activation step is exact
+def private check_nv4_site_scale_epilogue(t : T?; tr : Model; fdq : array<float>) {
+    let cols = 3584l
+    var x <- [for (k in range64(cols)); float((k * 37l) % 255l - 127l)]
+    var y : array<float>
+    y |> resize(8l)
+    var s <- create_session(tr, mirror_kv_dtype())
+    mm_b_kq(s, y, tr, KqFmt.nv4, tr.w2_offs[0], x, cols, 8l, 1l)
+    delete s
+    let sc = site_scale(tr, KqFmt.nv4, tr.w2_offs[0])
+    var want : array<float>
+    want |> resize(8l)
+    for (r in range64(8l)) {
+        var acc = 0.0lf
+        for (k in range64(cols)) {
+            acc += double(fdq[r * cols + k]) * double(x[k])
+        }
+        want[r] = float(acc * double(sc))
+    }
+    check(t, "nv4 ffn_down rows through mm_b_kq against the file dequant's dot under the site scale", y, want, BAR_APPROX, FLAT_SHAPE)
+    delete want
+    delete y
+    delete x
+}
+
 [test]
 def test_kq_load_layout(t : T?) {
     // End-to-end stage-2 oracle: a kquant_native load must place every tagged tensor at its
@@ -1261,7 +1288,7 @@ def test_kq_load_layout(t : T?) {
             t |> success(!tr.kq_repacked, "portable-pinned load keeps the nv4 planes disk-order")
             t |> success(tr.w2_fmt[0] == KqFmt.nv4, "blk.0.ffn_down tagged nv4")
             t |> equal(length(tr.site_scale), 108, "every NVFP4 plane's `.scale` tensor lands on the site table")
-            t |> success(abs(site_scale(tr, KqFmt.nv4, tr.w2_offs[0]) - 1.0299681e-4) < 1.0e-9, "blk.0.ffn_down's scale2 is the file's")
+            t |> success(abs(site_scale(tr, KqFmt.nv4, tr.w2_offs[0]) - 1.0299681e-4) < 1.0e-9, "blk.0.ffn_down's site scale is the file's")
             let n = 8l * 3584l   // eight rows of the down plane
             var have : array<float>
             have |> resize(n)
@@ -1269,6 +1296,7 @@ def test_kq_load_layout(t : T?) {
             var gt = 0
             var fdq <- read_prefix(path, "blk.0.ffn_down.weight", n, gt)
             check(t, "nv4 ffn_down plane against the file dequant", have, fdq, BAR_EXACT, FLAT_SHAPE)
+            check_nv4_site_scale_epilogue(t, tr, fdq)
             delete fdq
             delete have
         }
@@ -2020,25 +2048,32 @@ def test_kq_gpu_gather_grp(t : T?) {
     }
 }
 
-//! the count of bytes and words off the nv4 device scale row the gather writes under per-tensor scale `s2`: the sixteen UE4M3 codes verbatim in sub-block order, then `s2`'s f32 bits in the fifth word
-def private nv4_gather_row_misses(s2 : float) : int {
+let private NV4_ROW_LENGTH_OFF = 1000000   //! `nv4_gather_row_misses` when the gathered scale row is not the twenty bytes a superblock
+
+//! the count of bytes and words off the nv4 device scale row the gather writes under site scale `site_scale_v`: the sixteen UE4M3 codes verbatim in sub-block order, then `site_scale_v`'s f32 bits in the fifth word
+def private nv4_gather_row_misses(site_scale_v : float) : int {
     let n = 512l
     let d = 4l
+    let nv4_id = kq_schema_id(KqFmt.nv4)
     var inscope kq, ks : array<uint8>
-    synth_kq_region(49, kq, ks, d, n, 0xC0FFEEu, 0x9E3779Bu)
+    synth_kq_region(nv4_id, kq, ks, d, n, 0xC0FFEEu, 0x9E3779Bu)
     var m = Model()
     m.kq[int(KqFmt.nv4)].q := kq
     m.kq[int(KqFmt.nv4)].s := ks
-    m.site_scale[site_scale_key(KqFmt.nv4, 0l)] = s2
+    m.site_scale[site_scale_key(KqFmt.nv4, 0l)] = site_scale_v
     var inscope wq, ws : array<uint8>
-    moe_gpu_gather_stack_kq(m, KqFmt.nv4, 0l, n, d, d, false, kq_layout_of(49), wq, ws)
-    var miss = long_length(ws) != d * (n / 256l) * 20l ? 1000000 : 0
+    moe_gpu_gather_stack_kq(m, KqFmt.nv4, 0l, n, d, d, false, kq_layout_of(nv4_id), wq, ws)
+    if (long_length(ws) != d * (n / 256l) * 20l) {
+        delete m
+        return NV4_ROW_LENGTH_OFF
+    }
+    var miss = 0
     for (sb in range64(d * n / 256l)) {
         for (si in range64(16l)) {
             miss += ws[sb * 20l + si] != ks[sb * 16l + si] ? 1 : 0
         }
         let w = uint(ws[sb * 20l + 16l]) | (uint(ws[sb * 20l + 17l]) << 8u) | (uint(ws[sb * 20l + 18l]) << 16u) | (uint(ws[sb * 20l + 19l]) << 24u)
-        miss += w != float_bits_to_uint(s2) ? 1 : 0
+        miss += w != float_bits_to_uint(site_scale_v) ? 1 : 0
     }
     delete m
     return miss

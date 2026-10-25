@@ -15,12 +15,14 @@ struct CudGpu {
     cc : CudaContext?
     name : string
     sm_count : int
+    sm : int                 //! the compute capability as major x 10 + minor (sm_120 reads 120)
     subgroup_size : int64    //! a warp
     rows_per_wg : int64      //! subgroups a workgroup at `CUD_WG_X` - the GEMV ladders' output rows a workgroup
     stream : void?
 }
 
 let CUD_WG_X = 64u   //! the kernel workgroup width the GEMV ladders size against (the Vulkan home's `WG_X`)
+let FP4_RUNG_SM = 120   //! the first compute capability with the FP4 tensor rung (the block-scaled mma, an `sm_120a` text): below it the FP4 leaf has no kernel
 
 var g_cud : CudGpu
 
@@ -44,12 +46,13 @@ def cud_init() : bool {
     g_cud.cc = cc
     g_cud.name = cuda_device_name(cc)
     g_cud.sm_count = cuda_device_sm_count(cc)
+    g_cud.sm = cuda_device_compute_capability(cc)
     g_cud.subgroup_size = 32l
     g_cud.rows_per_wg = int64(CUD_WG_X / 32u)
     g_cud.stream = cuda_stream_create()
     g_cud.ready = true
-    cuda_set_launch_pdl(cuda_device_compute_capability(cc) >= 90 && g_env_vulkan.cuda_pdl != 0l)   // every kernel of the home comes through the emitter, which puts the entry wait in each
-    to_log(LOG_INFO, "dasLLAMA cuda tier: device ready ({g_cud.name}, {g_cud.sm_count} SMs, sm_{cuda_device_compute_capability(cc)}, driver {cuda_driver_version()}, nvrtc {cuda_nvrtc_version()}, programmatic dependent launch {cuda_launch_pdl() ? "on" : "off"})\n")
+    cuda_set_launch_pdl(g_cud.sm >= 90 && g_env_vulkan.cuda_pdl != 0l)   // every kernel of the home comes through the emitter, which puts the entry wait in each
+    to_log(LOG_INFO, "dasLLAMA cuda tier: device ready ({g_cud.name}, {g_cud.sm_count} SMs, sm_{g_cud.sm}, driver {cuda_driver_version()}, nvrtc {cuda_nvrtc_version()}, programmatic dependent launch {cuda_launch_pdl() ? "on" : "off"})\n")
     return true
 }
 

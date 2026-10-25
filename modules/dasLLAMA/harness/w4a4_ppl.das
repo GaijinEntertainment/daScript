@@ -53,9 +53,10 @@ struct ArmScore {
     hits : int64         //! the windows whose argmax was that token
 }
 
-//! every window's score under the MMQ knob at `pin`: 1 the FP4 leaf (W4A4), 0 the f16 tiles (weight-only)
+//! every window's score under the MMQ knob at `pin`: `CUDA_MMQ_WINNERS` the FP4 leaf (W4A4), `CUDA_MMQ_OFF` the f16 tiles (weight-only)
 def arm_score(tr : Model; ids : array<int64>; windows, ctx, stride, pin : int64) : ArmScore {
     set_cuda_mmq_pin(pin)
+    let windows0 = cud_rdec_stats().windows
     var sc : ArmScore
     sc.nll |> reserve(windows)
     with_dasllama_jobque_() {
@@ -73,7 +74,8 @@ def arm_score(tr : Model; ids : array<int64>; windows, ctx, stride, pin : int64)
             delete prompt
         }
     }
-    set_cuda_mmq_pin(-1l)
+    verify(cud_rdec_stats().windows >= windows0 + windows, "w4a4_ppl: the CUDA window chain served fewer windows than scored - an arm ran on the CPU")
+    set_cuda_mmq_pin(CUDA_MMQ_UNPINNED)
     return <- sc
 }
 
@@ -108,7 +110,7 @@ def mean_of(v : array<float>) : double {
     return acc / double(length(v))
 }
 
-[export]
+[export, cold_path]
 def main() : int {
     if (!jit_enabled()) {
         print("This instrument is JIT-only - run with: daslang -jit <file>\n")
@@ -145,13 +147,13 @@ def main() : int {
     if (long_length(ids) < need) {
         panic("{cfg.text} tokenizes to {long_length(ids)} ids, under the {need} the windows need")
     }
-    var on <- arm_score(tr, ids, windows, ctx, stride, 1l)
-    var off <- arm_score(tr, ids, windows, ctx, stride, 0l)
-    let m_on = mean_of(on.nll)
-    let m_off = mean_of(off.nll)
+    var w4a4 <- arm_score(tr, ids, windows, ctx, stride, CUDA_MMQ_WINNERS)
+    var weight_only <- arm_score(tr, ids, windows, ctx, stride, CUDA_MMQ_OFF)
+    let m_w4a4 = mean_of(w4a4.nll)
+    let m_weight_only = mean_of(weight_only.nll)
     var dsum = 0.0lf
     var dsq = 0.0lf
-    for (a, b in on.nll, off.nll) {
+    for (a, b in w4a4.nll, weight_only.nll) {
         let d = double(a) - double(b)
         dsum += d
         dsq += d * d
@@ -160,10 +162,10 @@ def main() : int {
     let dmean = dsum / n
     let se = sqrt(max(dsq / n - dmean * dmean, 0.0lf) / n)
     print("W4A4 against weight-only on {cfg.model}: {cfg.windows} windows of {cfg.ctx} tokens, stride {cfg.stride}, the window's next token scored\n")
-    print("  ppl  W4A4 (FP4 leaf) {exp(m_on)}  weight-only (f16 tiles) {exp(m_off)}  argmax hits {on.hits} / {off.hits}\n")
+    print("  ppl  W4A4 (FP4 leaf) {exp(m_w4a4)}  weight-only (f16 tiles) {exp(m_weight_only)}  argmax hits {w4a4.hits} / {weight_only.hits}\n")
     print("  paired nll delta (W4A4 - weight-only) {dmean} +- {se} = a ppl ratio of {exp(dmean)}\n")
-    delete on
-    delete off
+    delete w4a4
+    delete weight_only
     delete ids
     delete tr
     return 0

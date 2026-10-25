@@ -2968,8 +2968,8 @@ struct RLayer {
     s_actrq : VkDescriptorSet
     s_gu : VkDescriptorSet          //! the fused gate + up + act + Q8_0 requant dispatch (`Q8GemvGuN1`), where the triple is q8 with a Q8_0 feed
     gate_up_fused : bool
-    s_gu2 : VkDescriptorSet         //! the gate + up two-region class GEMV (f1 == f3, one slab): the one-row command's one dispatch over both planes
-    s_actrq_gu : VkDescriptorSet    //! ... and its act set, the up side read `hid` past the gate's in the gate buffer
+    s_gu_merged : VkDescriptorSet      //! the gate + up two-region class GEMV (f1 == f3, one slab): the one-row command's one dispatch over both planes
+    s_actrq_merged : VkDescriptorSet   //! ... and its act set, the up side read `hid` past the gate's in the gate buffer
     gu_merged : bool
     s_down : VkDescriptorSet
     s_addr_next : VkDescriptorSet

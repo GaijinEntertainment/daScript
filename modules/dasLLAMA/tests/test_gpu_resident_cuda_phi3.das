@@ -17,10 +17,9 @@ require _cuda_feed
 // The CUDA home's whole-model driver on the phi3 family: Phi-3.5-mini Q4_K_M (head 96 over 32 heads - the window's
 // attention on the h96 flash tile, the K-quant planes, the fused qkv and gate-up planes, the long-rope factors). The
 // forced-feed logits-tolerance form of the CUDA llama file on the body the CUDA files share (`_cuda_feed.das`): the Q4_K_M
-// file at a prompt of two windows alone (its one-window steps sit past the llama bar, `followup_general.md` row 240), the
-// Q8_0 file at 40 tokens (one window) and at two windows. Every cell skips off the JIT, without DASLLAMA_CUDA=1, without
-// DASLLAMA_GPU=1 on a device the driver serves, without the file under models_dir(), or where the prompt window is not
-// PF_WINDOW_ROWS rows.
+// file at two windows alone, the Q8_0 file at 40 tokens (one window) and at two windows. Every cell skips off the JIT,
+// without DASLLAMA_CUDA=1, without DASLLAMA_GPU=1 on a device the driver serves, without the file under models_dir(), or
+// where the prompt window is not PF_WINDOW_ROWS rows.
 
 [init]
 def private allow_cpu_prefill_intent() {

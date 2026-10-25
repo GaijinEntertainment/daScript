@@ -455,7 +455,8 @@ def areas_for_path(path : string) : array<string> {
                 return <- ["audio", "vision"]
             } elif (name == "_vkd_oracles.das") {
                 return <- ["llm", "tts", "audio", "vision"]   //! CellPlanes is the harness of the TTS and tower Vulkan cells too
-            } elif (name |> starts_with("_vk") || name == "_metal_kernel_common.das" || name == "_mtl_toy.das" || name == "_kq_dot.das" || name == "_kernel_oracles.das" || name == "_kv_codec_oracles.das") {
+            } elif (name |> starts_with("_vk") || name == "_metal_kernel_common.das" || name == "_mtl_toy.das" || name == "_kq_dot.das" || name == "_kernel_oracles.das" || name == "_kv_codec_oracles.das"
+                    || name == "_fp4_feed.das" || name == "_mmq_ref.das") {
                 return <- ["llm"]
             } elif (name == "_kq_fixtures.das") {
                 return <- ["llm", "tts"]   //! the K-quant lane cell of test_tts_blocks reads its planes

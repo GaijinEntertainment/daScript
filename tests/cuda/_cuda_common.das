@@ -1054,17 +1054,22 @@ class Intrin {
     }
 }
 
+//! the `IntrinFp4` fixture's section offsets: `xin` holds 128 e2m1 inputs, 64 UE4M3 inputs, then the product's sixteen column factors; `cvt_out` 64 e2m1 pair bytes, then 64 UE4M3 codes
+let FP4_XIN_UE4M3 = 128u
+let FP4_XIN_COL_FACTORS = 192u
+let FP4_CV_UE4M3 = 64u
+
 //! the FP4 tensor rung over one warp: a 16x64 e2m1 A tile and a [n][k] 16x64 e2m1 B tile through cp.async and ldmatrix, the
 //! block-scaled product under a UE4M3 scale word a row and a column (the k16 strips' four codes), and the two conversions
 //! over a sweep the CPU bodies answer
 class IntrinFp4 {
     @ssbo @binding = 0 a4 : array<uint4>      //! A 16x64 e2m1 row-major: row r at uint4 2r, 2r + 1, nibble k of the row's 32 bytes element k
     @ssbo @binding = 1 b4 : array<uint4>      //! B as [n][k]: column n at uint4 2n, 2n + 1
-    @ssbo @binding = 2 saw : array<uint>      //! a row's four UE4M3 scale codes, byte i the k16 strip i
-    @ssbo @binding = 3 sbw : array<uint>      //! a column's
+    @ssbo @binding = 2 a_scale_words : array<uint>   //! a row's four UE4M3 scale codes, byte i the k16 strip i
+    @ssbo @binding = 3 b_scale_words : array<uint>   //! a column's
     @ssbo @binding = 4 o : array<float>       //! the 16x16 product
-    @ssbo @binding = 5 xin : array<float>     //! 128 e2m1 inputs as 64 pairs, 64 UE4M3 inputs, then the product's sixteen column factors
-    @ssbo @binding = 6 cv : array<uint>       //! 64 e2m1 pair bytes, then 64 UE4M3 codes
+    @ssbo @binding = 5 xin : array<float>     //! the conversion sweep's inputs and the column factors, at the `FP4_XIN_*` offsets
+    @ssbo @binding = 6 cvt_out : array<uint>  //! the conversions' codes, the UE4M3 ones from `FP4_CV_UE4M3`
     @workgroup sa : uint4[32]
     @workgroup sb : uint4[32]
 
@@ -1084,14 +1089,14 @@ class IntrinFp4 {
         ldmatrix(fb, unsafe(addr(sb[(r + 8u * (mt >> 1u)) * 2u + (mt & 1u)])))
         let g = lane >> 2u
         var f : coopmatAcc_f32_16x16
-        mma_block_scaled(f, fa, fb, saw[g + 8u * (lane & 1u)], sbw[g], sbw[8u + g])
+        mma_block_scaled(f, fa, fb, a_scale_words[g + 8u * (lane & 1u)], b_scale_words[g], b_scale_words[8u + g])
         let t = lane & 3u
-        mma_scale_cols(f, float4(xin[192u + 2u * t], xin[193u + 2u * t], xin[200u + 2u * t], xin[201u + 2u * t]))
+        mma_scale_cols(f, float4(xin[FP4_XIN_COL_FACTORS + 2u * t], xin[FP4_XIN_COL_FACTORS + 1u + 2u * t], xin[FP4_XIN_COL_FACTORS + 8u + 2u * t], xin[FP4_XIN_COL_FACTORS + 9u + 2u * t]))
         coopmatStore(f, o, 0, 16, 0)
-        cv[lane] = cvt_e2m1x2(xin[2u * lane], xin[2u * lane + 1u])
-        cv[32u + lane] = cvt_e2m1x2(xin[64u + 2u * lane], xin[64u + 2u * lane + 1u])
-        cv[64u + lane] = cvt_ue4m3(xin[128u + lane])
-        cv[96u + lane] = cvt_ue4m3(xin[160u + lane])
+        cvt_out[lane] = cvt_e2m1x2(xin[2u * lane], xin[2u * lane + 1u])
+        cvt_out[32u + lane] = cvt_e2m1x2(xin[64u + 2u * lane], xin[64u + 2u * lane + 1u])
+        cvt_out[FP4_CV_UE4M3 + lane] = cvt_ue4m3(xin[FP4_XIN_UE4M3 + lane])
+        cvt_out[FP4_CV_UE4M3 + 32u + lane] = cvt_ue4m3(xin[FP4_XIN_UE4M3 + 32u + lane])
     }
 }
 

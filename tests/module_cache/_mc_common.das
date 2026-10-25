@@ -39,8 +39,8 @@ def twin_exe() : string {
 //! descriptor's verdict and each shared-module load; the prefix also keeps the command from
 //! opening with a quote, which cmd.exe would strip
 def trace_prefix() : string {
-    let on = "DAS_TRACE_MODULE_LOAD=1"
-    return get_platform_name() == "windows" ? "set \"{on}\"&& " : "{on} "
+    let trace_env = "DAS_TRACE_MODULE_LOAD=1"
+    return get_platform_name() == "windows" ? "set \"{trace_env}\"&& " : "{trace_env} "
 }
 
 //! stderr joins stdout: the scan trace goes through the logger

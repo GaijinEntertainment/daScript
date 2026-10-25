@@ -246,18 +246,27 @@ asymmetries a stamp family ledgers - stays in `ARCHITECTURE_GPU.md#gpu-backends`
   instruction consumes. Its feed is W4A4: the activations quantized to e2m1 per token (`fp4_rows`, `fp4_actrows`, the
   residual step's `cls_ar_fp4_b`; a row scale of amax / (6 x 448), a UE4M3 code a strip - the nearest to its largest over
   6, stepped up once where that code would saturate the largest value (`fp4_strip_code`: the nearest alone saturates on
-  half of all strips and reads 9% on the 1B's pp-path perplexity against 5.7% with the step; llama.cpp's least-squared-
-  error pick over five codes trades the outlier for the bulk and measured worse than either) - the nibbles in the same
+  half of all strips and reads 9% on the 1B's pp-path perplexity against 5.7% with the step; a least-squared-error pick
+  over five candidate codes trades the outlier for the bulk and measured worse than either - `PERF_LEDGER.md`, the dasCUDA
+  arc's W4A4 entry) - the nibbles in the same
   pairing; a feed reads its row twice, once for the row scale and once for the strips - a row kept in registers between the
   two passes measured no faster at 14336 wide and slower at 4096), the row scale and the plane's per-tensor factor applied to the accumulator's columns in
   the epilogue; a layer whose sites split across the three feeds produces each from the one residual step. On the RTX
   5060 Ti the leaf ran 110 to 121 TFLOP/s against the Q4_0 int8 leaf's 65 to 72 and the cm2 tiles' 40 to 56 at the 1B
-  window's shapes. The knob changes the prefill's rounding and its logits; the window log line names the planes on
-  each form. Both forms stay compiled whichever one a card favors: the int8 against f16 tensor rate
+  window's shapes (`PERF_LEDGER.md`, the dasCUDA arc's FP4-leaf entry: the command, the shapes, the forms not kept). The
+  knob changes the prefill's rounding and its logits; the window log line names the planes on each form, and under the
+  test pin `set_cuda_mmq_pin` it names the pin's value in place of the knob's. The first window sizes the feeds under the
+  knob's answer and keeps it (`CudRdec.pf_knob`), so a pin moved after it changes no later pick onto a feed that was never
+  allocated. The FP4 leaf is picked on a card at compute capability 120 or above (`FP4_RUNG_SM`: the block-scaled mma is
+  an `sm_120a` text); below it an nv4 plane's window runs on the cm2 tiles under any knob value. Both forms stay compiled whichever one a card favors: the int8 against f16 tensor rate
   is the card's and the driver's, and the default is a static pick until a card flips it. The Vulkan window's form follows the device's coopmat mode
   (`ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default`), and the knob reaches nothing there or on Metal.
 - **The nv4 decode GEMV's nibble decode is a byte permute on CUDA and the SWAR formula on the other homes.** The shared
   leaf (`Nv4GemvT`) routes the e2m1 nibble decode through one virtual (`e2m1_split`); the CUDA home's `Nv4GemvPrmtT`
   overrides it with `byte_perm` over the doubled-magnitude table and its negation - 18 lane ops a quant word against the
   formula's 29, the same int8 lanes, so the sums agree bit for bit - and the decode reads at the Q4_0 leaf's rate at the
-  8B shapes where the formula read 4 to 5% behind. Vulkan and Metal have no byte permute; the formula stays theirs.
+  8B shapes where the formula read 4 to 5% behind (`PERF_LEDGER.md`, the dasCUDA arc's nv4 decode GEMV entry). Vulkan and
+  Metal have no byte permute; the formula stays theirs.
+- **`set_cuda_mmq_pin` is a CUDA-only setter.** It pins the MMQ knob's answer ahead of a load, so one process can hold a
+  carrier to the leaves and then to the tiles (the resident cells' knob-off control, the W4A4 instrument). The Vulkan
+  window's form follows the device's coopmat mode and Metal has one window form, so neither home has a pin to set.

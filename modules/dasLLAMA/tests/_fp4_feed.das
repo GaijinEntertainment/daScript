@@ -9,7 +9,7 @@ module _fp4_feed shared
 require cuda/cuda_intrinsics   // cvt_e2m1x2 / cvt_ue4m3: the conversions' CPU bodies
 require dasllama/dasllama_gpu_math   // ue4m3_half_f32
 require dasllama/dasllama_kqformat   // MX4_LUT
-require dasllama/dasllama_cuda_classes   // fp4_strip_code / FP4_ROW_SCALE_DIV: the strip code and the row scale, the kernels' own
+require dasllama/dasllama_cuda_classes   // FP4_CODE_MAX / FP4_ROW_SCALE_DIV: the code range and the row scale, the kernels' own
 require math
 
 struct Fp4Feed {
@@ -21,13 +21,22 @@ struct Fp4Feed {
 //! the UE4M3 code's value (bias 7, the subnormals m x 2^-9)
 def ue4m3_value(code : uint) : float => ue4m3_half_f32(code) * 2.0
 
-//! one 16-strip of a row already divided by the row scale: its UE4M3 code off the strip's largest magnitude (the kernel's `fp4_strip_code`) and its two nibble words, (k, k + 8) a byte under that code's value
-def fp4_strip_words(v : float[16]; var code : uint&; var w0, w1 : uint&) {
-    var sub = 0.0
-    for (i in range(16)) {
-        sub = max(sub, abs(v[i]))
+//! the smallest UE4M3 code whose scale holds a strip's largest magnitude `m` at or under the e2m1 top (6), the top code where none does:
+//! what the kernel's `fp4_strip_code` reaches as the nearest code stepped up once where it saturates, found here by a scan
+def fp4_strip_code_scan(m : float) : uint {
+    for (c in range(int(FP4_CODE_MAX))) {
+        return uint(c) if (ue4m3_value(uint(c)) * 6.0 >= m)
     }
-    code = fp4_strip_code(sub)
+    return FP4_CODE_MAX
+}
+
+//! one 16-strip of a row already divided by the row scale: its UE4M3 code off the strip's largest magnitude and its two nibble words, (k, k + 8) a byte under that code's value
+def fp4_strip_words(v : float[16]; var code : uint&; var w0, w1 : uint&) {
+    var strip_amax = 0.0
+    for (i in range(16)) {
+        strip_amax = max(strip_amax, abs(v[i]))
+    }
+    code = fp4_strip_code_scan(strip_amax)
     let sval = ue4m3_value(code)
     let inv = sval > 0.0 ? 1.0 / sval : 0.0
     w0 = cvt_e2m1x2(v[0] * inv, v[8] * inv) | (cvt_e2m1x2(v[1] * inv, v[9] * inv) << 8u) | (cvt_e2m1x2(v[2] * inv, v[10] * inv) << 16u) | (cvt_e2m1x2(v[3] * inv, v[11] * inv) << 24u)
@@ -71,5 +80,5 @@ def fp4_feed_value(f : Fp4Feed; k, tok, kk : int) : float {
     let bi = tok * (k / 2) + (kk / 16) * 8 + j % 8
     let nib = (f.xq[bi / 4] >> uint((bi % 4) * 8 + (j / 8) * 4)) & 15u
     let code = (f.xsw[tok * (k / 64) + kk / 64] >> uint(((kk / 16) % 4) * 8)) & 0xFFu
-    return float(MX4_LUT[int(nib)]) * 0.5 * ue4m3_value(code) * f.xrs[tok]
+    return float(MX4_LUT[int(nib)]) * ue4m3_half_f32(code) * f.xrs[tok]
 }

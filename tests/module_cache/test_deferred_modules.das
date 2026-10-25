@@ -296,23 +296,32 @@ def arms_artifact_unloadable_or_gone(t : T?; fx : Fixture) {
         var warm : string
         t |> success(run_child_reported(t, "rewarm", child_cmd(fx, fx.plain), warm, "PLAIN"),
             "a cold start rewrites the manifest")
-        let copied = fx.utArtifact
-        let parked = path_join(fx.tmp, "parked.shared_module")
-        var rerr : string
-        t |> success(rename(copied, parked, rerr), "the artifact leaves the module folder: {rerr}")
-        var out : string
-        t |> success(run_child_reported(t, "gone", child_cmd(fx, fx.hasModule), out, "HAS false"),
-            "the build does not have the module:\n{out}")
-        let line = descriptor_line(out, UNIT_TEST_FOLDER)
-        t |> success(line |> starts_with("compiled (artifact missing)"),
-            "the stale manifest recompiles the descriptor:\n{out}")
-        t |> success(find(out, "{UNIT_TEST_CLASS} <- ") >= 0 && find(out, ": FAILED") >= 0,
-            "the register fails quietly, as on a cold start:\n{out}")
-        t |> success(rename(parked, copied, rerr), "the artifact comes back: {rerr}")
+        with_artifact_parked(t, fx) {
+            var out : string
+            t |> success(run_child_reported(t, "gone", child_cmd(fx, fx.hasModule), out,
+                "HAS false"), "the build does not have the module:\n{out}")
+            let line = descriptor_line(out, UNIT_TEST_FOLDER)
+            t |> success(line |> starts_with("compiled (artifact missing)"),
+                "the stale manifest recompiles the descriptor:\n{out}")
+            t |> success(find(out, "{UNIT_TEST_CLASS} <- ") >= 0 && find(out, ": FAILED") >= 0,
+                "the register fails quietly, as on a cold start:\n{out}")
+        }
         var again : string
         t |> success(run_child_reported(t, "back", child_cmd(fx, fx.hasModule), again, "HAS true"),
             "the next start has the module again:\n{again}")
     }
+}
+
+//! `blk` runs with the unit-test module's artifact moved out of its
+//! folder, the artifact back in place after it
+def private with_artifact_parked(t : T?; fx : Fixture; blk : block<void>) {
+    let parked = path_join(fx.tmp, "parked.shared_module")
+    var rerr : string
+    let left = rename(fx.utArtifact, parked, rerr)
+    t |> success(left, "the artifact leaves the module folder: {rerr}")
+    invoke(blk)
+    let back = rename(parked, fx.utArtifact, rerr)
+    t |> success(back, "the artifact comes back: {rerr}")
 }
 
 def arm_cache_pins_presence(t : T?; fx : Fixture) {
@@ -323,14 +332,11 @@ def arm_cache_pins_presence(t : T?; fx : Fixture) {
         let cmd = child_cmd(fx, fx.exists, "", cache)
         t |> success(run_child_reported(t, "cache present", cmd, warm, "EXISTS true"),
             "the cold cache run folds the module as present:\n{warm}")
-        let copied = fx.utArtifact
-        let parked = path_join(fx.tmp, "parked.shared_module")
-        var rerr : string
-        t |> success(rename(copied, parked, rerr), "the artifact leaves the module folder: {rerr}")
-        var gone : string
-        t |> success(run_child_reported(t, "cache gone", cmd, gone, "EXISTS false"),
-            "the record pinned the module's presence, so the run folds it absent:\n{gone}")
-        t |> success(rename(parked, copied, rerr), "the artifact comes back: {rerr}")
+        with_artifact_parked(t, fx) {
+            var gone : string
+            t |> success(run_child_reported(t, "cache gone", cmd, gone, "EXISTS false"),
+                "the record pinned the module's presence, so the run folds it absent:\n{gone}")
+        }
         var back : string
         t |> success(run_child_reported(t, "cache back", cmd, back, "EXISTS true"),
             "the record written absent is refused once the module is back:\n{back}")

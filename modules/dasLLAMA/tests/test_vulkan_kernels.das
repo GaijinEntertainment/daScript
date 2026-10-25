@@ -499,7 +499,8 @@ def test_vkd_fa_stamp_refusals(t0 : T?) {
                 t |> success(fa_ladder_panics(enc, true, 256l, true, false), "the KHR arm has no gated stamp: the {ladder} ladder refuses")
                 t |> success(fa_ladder_panics(enc, false, 128l, false, true), "no softcap stamp off head size 256: the {ladder} ladder refuses")
                 t |> success(fa_ladder_panics(enc, false, 128l, true, false), "no gated stamp off head size 256: the {ladder} ladder refuses")
-                t |> success(fa_ladder_panics(enc, false, 96l, false, false), "a head size no stamp serves: the {ladder} ladder refuses")
+                t |> success(fa_ladder_panics(enc, false, 112l, false, false), "a head size no stamp serves: the {ladder} ladder refuses")
+                t |> success(fa_ladder_panics(enc, true, 96l, false, false), "the KHR arm has no head-96 stamp: the {ladder} ladder refuses")
             }
             t |> success(fa_ladder_panics(false, false, 128l, false, false, true), "no sink stamp off head size 64: the ensure ladder refuses")
             t |> success(fa_ladder_panics(false, false, 256l, false, true, true), "no sink stamp at the softcap's head size: the ensure ladder refuses")
@@ -3229,7 +3230,7 @@ def private fa_tile_run(t : T?; khr : bool) {   // nolint:STYLE037 — one arm t
                 (hs = 128, window = 40, sink = false, lead = 0, ring = 128), (hs = 256, window = 40, sink = false, lead = 0, ring = 128),
                 (hs = 96, window = 0, sink = false, lead = 0, ring = 0), (hs = 96, window = 40, sink = false, lead = 0, ring = 0))) {
             let hs = arm.hs
-            continue if (khr && hs == 96)   //! the KHR flash tile has no head-96 stamp (../ARCHITECTURE_GPU_SHARED_ATTN.md#flash-attn-tile)
+            continue if (khr && hs == 96)   // the KHR flash tile has no head-96 stamp (../ARCHITECTURE_GPU_SHARED_ATTN.md#flash-attn-tile)
             let window = arm.window   //! a sliding layer's arm: the queries attend the `window` positions up to their own
             let sink = arm.sink
             let lead = arm.lead

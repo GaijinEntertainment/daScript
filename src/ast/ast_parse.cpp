@@ -653,6 +653,26 @@ namespace das {
     static constexpr uint32_t SER_MAX_MACRO_DEPS = 4096u;
     static constexpr uint64_t FNV64A_SEED = 14695981039346656037ull;   // any nonzero constant serves: size (-1 absent vs 0 empty) already separates the states
 
+    bool isBuiltinModulePresent ( const string & name ) {
+        // allowPromoted: pairs with the `require ?guard` check, which also accepts shared das
+        // modules compiled earlier in the process
+        return Module::requireEx(name, true) != nullptr || guardModuleAvailable(name);
+    }
+
+    void pinModuleCacheDependency ( Program * program, const string & path ) {
+        int64_t size = -1;
+        uint64_t hash = 0;
+        statAndHashFileDependency(path, size, hash);
+        for ( auto & dep : program->moduleCacheDependencies ) {
+            if ( get<0>(dep) == path ) {
+                get<1>(dep) = size;
+                get<2>(dep) = hash;
+                return;
+            }
+        }
+        program->moduleCacheDependencies.emplace_back(path, size, hash);
+    }
+
     void statAndHashFileDependency ( const string & path, int64_t & size, uint64_t & hash ) {
         size = -1;
         hash = 0;
@@ -672,10 +692,7 @@ namespace das {
             return;
         }
         if ( path.compare(0, 7, "module:") == 0 ) {
-            // a builtin module's presence, as `builtin_module_exists` answers it (a deferred row counts): a build
-            // that gains or loses the module refuses a record a compile folded under the other answer
-            string name = path.substr(7);
-            if ( Module::requireEx(name, true) != nullptr || guardModuleAvailable(name) ) {
+            if ( isBuiltinModulePresent(path.substr(7)) ) {
                 size = 1;
                 hash = FNV64A_SEED;
             }

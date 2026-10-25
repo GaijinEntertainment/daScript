@@ -1719,6 +1719,28 @@ def private ple_kind_f32(m : GGUFMeta; layers : int64; kind : string) : bool {
 //! a device driver on this load reads the shared expert and the tied classifier off planes of their own: an armed GPU tier, or a Metal mode
 def private device_reads_side_planes() : bool => moe_gpu_tier_installed() || get_metal_mode() != MetalMode.off
 
+[arch(at="../ARCHITECTURE_ENGINE_FORMATS_NV4.md#nv4-site-scale")]
+def private note_site_scale(var t : Model; m : GGUFMeta; bytes : array<uint8> | #; name : string; fmt : KqFmt; woff : int64) {
+    let sname = "{trim_suffix(name, ".weight")}.scale"
+    return if (gguf_find_tensor(m, sname) < 0)
+    if (fmt != KqFmt.nv4) {
+        panic("dasLLAMA load: {name} carries a per-tensor scale ({sname}) and serves as {ggml_type_name(kq_ggml_type(fmt))} - the scale lands only on the NVFP4 planes' epilogue")
+    }
+    var v : array<float>
+    v |> resize(1)
+    gguf_read_tensor_f32(m, bytes, sname, v, 0l, 1l, 0l)
+    t.site_scale[site_scale_key(fmt, woff)] = v[0]
+    delete v
+}
+
+[arch(at="../ARCHITECTURE_ENGINE_FORMATS_NV4.md#nv4-site-scale")]
+def private refuse_site_scale(m : GGUFMeta; name : string) {
+    let sname = "{trim_suffix(name, ".weight")}.scale"
+    if (gguf_find_tensor(m, sname) >= 0) {
+        panic("dasLLAMA load: {name} carries a per-tensor scale ({sname}) at a site the engine applies no per-tensor scale to (the expert and shared-expert stacks, the token table, the classifier, the NextN projection, the PLE table)")
+    }
+}
+
 [arch(at = "../ARCHITECTURE_ENGINE_FORMATS_NV4.md#nv4-site-scale")]
 def private detect_site_scales(var t : Model; m : GGUFMeta; bytes : array<uint8> | #) {
     t.site_scale |> clear()
@@ -1762,29 +1784,7 @@ def private detect_site_scales(var t : Model; m : GGUFMeta; bytes : array<uint8>
     refuse_site_scale(m, "output.weight")
     refuse_site_scale(m, "per_layer_token_embd.weight")
     if (!empty(t.site_scale)) {
-        to_log(LOG_INFO, "dasLLAMA load: {length(t.site_scale)} planes carry a per-tensor weight scale (NVFP4's scale2) - the matmul epilogues apply it\n")
-    }
-}
-
-[arch(at="../ARCHITECTURE_ENGINE_FORMATS_NV4.md#nv4-site-scale")]
-def private note_site_scale(var t : Model; m : GGUFMeta; bytes : array<uint8> | #; name : string; fmt : KqFmt; woff : int64) {
-    let sname = "{slice(name, 0, length(name) - length(".weight"))}.scale"
-    return if (gguf_find_tensor(m, sname) < 0)
-    if (fmt != KqFmt.nv4) {
-        panic("dasLLAMA load: {name} carries a per-tensor scale ({sname}) and serves as {fmt} - the scale lands only on the nv4 planes' epilogue")
-    }
-    var v : array<float>
-    v |> resize(1)
-    gguf_read_tensor_f32(m, bytes, sname, v, 0l, 1l, 0l)
-    t.site_scale[site_scale_key(fmt, woff)] = v[0]
-    delete v
-}
-
-[arch(at="../ARCHITECTURE_ENGINE_FORMATS_NV4.md#nv4-site-scale")]
-def private refuse_site_scale(m : GGUFMeta; name : string) {
-    let sname = "{slice(name, 0, length(name) - length(".weight"))}.scale"
-    if (gguf_find_tensor(m, sname) >= 0) {
-        panic("dasLLAMA load: {name} carries a per-tensor scale ({sname}) at a site the engine does not scale yet (followup_general.md, the nv4 row)")
+        to_log(LOG_INFO, "dasLLAMA load: {length(t.site_scale)} planes carry a site scale (NVFP4's per-tensor scale) - the matmul epilogues apply it\n")
     }
 }
 

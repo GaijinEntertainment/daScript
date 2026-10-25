@@ -1,13 +1,6 @@
 SET(DAS_CUDA_DETECTED TRUE)
 
-# Pure daslang: the driver API and NVRTC bind as dasbind late externs over the libraries the
-# driver and the toolkit install, so there is no SDK at build time. The one C++ source is the
-# `cuda` witness module (src/dasCUDA.cpp): compiled in exactly when this package is, so
-# `require ?cuda <target>` follows the configure - the das files below are on disk in every
-# checkout and would otherwise satisfy a path guard in a build without CUDA. The package is
-# 64-bit only (no driver, no [extern] on a 32-bit host) and -DDAS_CUDA_DISABLED=ON drops it;
-# the descriptor registers the files on 64-bit hosts only, and a box without the driver
-# answers cuda_available() false.
+# modules/dasCUDA/ARCHITECTURE.md#cuda-witness-module
 IF ((NOT DAS_CUDA_DAS_INCLUDED) AND (NOT DAS_CUDA_DISABLED) AND (CMAKE_SIZEOF_VOID_P EQUAL 8))
     SET(DAS_CUDA_DAS_INCLUDED TRUE)
     MESSAGE(STATUS "dasCUDA module included.")

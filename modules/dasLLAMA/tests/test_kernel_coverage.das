@@ -875,6 +875,12 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // the iq3s4 rail's cm2 l stamp (IQ3_S served as a nibble codebook plane: the zoo's IQ3_S rows dispatch its decode GEMV, its
     // batch tile and its m, s and KHR stamps, none of them a plane tall enough for the l column); its coverage is test_vkd_iq3s4_cm2_batch
     "kq_batch_iq3s4_cm2l_cls_spv",
+    // the nv4 rail (NVFP4 planes: no zoo row loads an nv4 file - the 1B mint is machine-local and the ModelOpt files keep BF16 k/v
+    // planes the whole-model driver declines) - its decode GEMV and token-table gather, its per-op batch tile, its cm2 l, m and s
+    // stamps and its KHR tile; their coverage is test_vkd_gemv_ncol, test_vkd_emb_gather_family, test_vkd_kq_batch_family and
+    // test_vkd_nv4_cm2_batch
+    "kq_gemv_nv4_cls_spv", "kq_emb_nv4_cls_spv", "kq_batch_nv4_cls_spv", "kq_batch_nv4_cm2l_cls_spv", "kq_batch_nv4_cm2m_cls_spv",
+    "kq_batch_nv4_cm2s_cls_spv", "kq_batch_nv4_khr_cls_spv",
     // the hyper-connection chain (Qwen3.8-Flash-Next, the one qwen4exp carrier, above the zoo's tier): the mixer seams and the
     // n-gram side input; their coverage is test_vkd_hc_seams, test_vkd_hc_rows and test_vkd_ple_side, the serving run
     // test_gpu_resident_hc.das
