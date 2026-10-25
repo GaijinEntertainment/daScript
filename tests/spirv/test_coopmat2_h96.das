@@ -48,9 +48,9 @@ class Cm2H96Cls {
         var o : coopmatWgAcc_f32_64x96
         var kc = 0u
         while (kc < pa.n) {
+            var s : coopmatWgAcc_f32_64x32
             var k : coopmatWgB_f16_96x32
             coopmatLoadTensor(k, kb, 0u, tlk, 0u, 96u, kc, 32u, tv)
-            var s : coopmatWgAcc_f32_64x32
             s = coopmatMulAdd(q, k, s)
             var p : coopmatWgA_f16_64x32
             coopmatConvert(p, s)

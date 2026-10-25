@@ -10,7 +10,6 @@ require dasllama/dasllama_gpu_math   // ue4m3_half_f32
 require dasllama/dasllama_convert   // dequant_b32_plane_block
 require daslib/shader_lingua_franca   // unpackHalf2x16
 require _fp4_feed   // Fp4Feed, fp4_feed_value
-require math
 
 //! byte `i` of a word plane as a signed int8
 def word_i8_at(words : array<uint>; i : int) : int {
@@ -24,7 +23,8 @@ def word_plane_bytes(words : array<uint>) : array<uint8> => [for (i in range(len
 //! each Q8 block's scale x quant sum over `rows` rows of `k` - the min-term leaves' third feed, as the requant kernels write it
 def q8_block_sums(xq : array<uint>; xs : array<float>; rows, k : int) : array<float> {
     let nb = k / 32
-    var xsum <- [for (i in range(rows * nb)); 0.0]
+    var xsum : array<float>
+    xsum |> resize(rows * nb)
     for (tok in range(rows)) {
         for (blk in range(nb)) {
             var qsum = 0
