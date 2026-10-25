@@ -224,11 +224,15 @@ def arms_calls(t : T?; fx : Fixture) {
         var out : string
         let lint = "{fx.cmdPrefix} -no-module-cache \"{path_join(get_das_root(), "utils/lint/main.das")}\" -- --quiet"
         let oneUsed = write_driver(fx, "lint_group_used.das", "require [probe_group]", "alpha_value()")
-        run_child("{lint} \"{oneUsed}\"", out)
-        t |> success(find(out, "STYLE030") < 0 && find(out, "STYLE029") < 0 && find(out, "0 issue(s)") >= 0, "beta unused beside a used alpha draws nothing:\n{out}")
+        var rc = run_child("{lint} \"{oneUsed}\"", out)
+        t |> equal(0, rc, "beta unused beside a used alpha draws nothing:\n{out}")
         let noneUsed = write_driver(fx, "lint_group_unused.das", "require [probe_group]", "0")
-        run_child("{lint} \"{noneUsed}\"", out)
-        t |> success(find(out, "STYLE030: require [group] is unused") >= 0 && find(out, "grp_alpha/alpha") >= 0 && find(out, "grp_beta/beta") >= 0 && find(out, "1 issue(s)") >= 0, "an unused group is one finding naming its members:\n{out}")
+        rc = run_child("{lint} \"{noneUsed}\"", out)
+        t |> equal(2, rc, "an unused group is an issue:\n{out}")
+        let named = find(out, "grp_alpha/alpha") >= 0 && find(out, "grp_beta/beta") >= 0
+        let findings = count_of(out, "STYLE030: require [group] is unused")
+        t |> equal(1, findings, "an unused group is one finding:\n{out}")
+        t |> success(named, "the finding names the group's members:\n{out}")
     }
 }
 

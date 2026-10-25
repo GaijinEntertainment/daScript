@@ -1304,7 +1304,9 @@ def run_folder_passes(docs_roots : array<string>; disabled_codes, enabled_codes 
 }
 
 // Prints the summary block; returns the process exit code (0 clean, 1 errors, 2 issues).
-def print_summary(files_count, total_issues, total_errors, total_skipped, total_excluded : int) : int {
+def print_summary(files_count, total_issues, total_errors, total_skipped, total_excluded : int;
+                  quiet : bool) : int {
+    if (quiet && total_issues == 0 && total_errors == 0) return 0
     print("\n--- Summary ---\n")
     let skip_part = total_skipped > 0 ? ", {total_skipped} skipped" : ""
     let excl_part = total_excluded > 0 ? ", {total_excluded} excluded by path policy" : ""
@@ -1470,5 +1472,6 @@ def main() : int {
 
     total_issues += run_folder_passes(docs_roots, disabled_codes, enabled_codes)
 
-    return print_summary(length(files), total_issues, total_errors, total_skipped, total_excluded)
+    return print_summary(length(files), total_issues, total_errors, total_skipped, total_excluded,
+        cfg.quiet)
 }
