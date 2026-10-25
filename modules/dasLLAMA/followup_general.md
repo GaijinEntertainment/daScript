@@ -2412,7 +2412,12 @@
     which the whole-model drivers decline as mixed feeds, so a dense carrier with every plane nv4 is still to mint (the
     pod's 27B iMatrix file, FFN nv4 under Q5_K attention, serves whole); (2) a `.scale` at the expert and shared-expert stacks,
     the token table, the classifier, the NextN projection and the PLE table - `refuse_site_scale` refuses the load by
-    name; (3) the Metal tier - `kq_fmt_gpu_supported` leaves nv4 off its roster, so the tier declines it; (4) the CPU
+    name; (3) on the Metal tier a plane under a per-tensor `.scale` - the tier serves nv4 at every site off the compact
+    16-byte UE4M3 row (the iq4 family's stamps under `NV4`), and that row has no pad word for the factor, so
+    `kq_load_gpu_unserved` declines such a plane by site and member - the ModelOpt files' carrier; (3b) a plane whose
+    rows sit off the 256 lattice - NVFP4's 64-weight disk block fills them, Qwen1.5-MoE's 1408-wide stacks among them -
+    falls to the q8 rail on every home (`kq_fmt_row_ok`), a converted copy the load report names; serving its own bytes
+    takes a per-64 nv4 member in the per-32 rail's shape; (4) the CPU
     JIT emitter arm (`panel_supported` leaves 49 out, so the `nv4q8_tile_gen` family declines to its reference body and
     `kq_registries` ships no tile registry); (5) the one-copy rare rail's `nv4q8_rm_gemv_gen` family, the Vulkan host
     twin cells and the served cells per site x backend; (6) on the CUDA home's FP4 leaf (`CuNv4Mmq`, the window chain's

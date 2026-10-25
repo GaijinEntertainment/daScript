@@ -178,7 +178,7 @@ def record_needs(var tab : table<string; int64>; missing : MetalNeed) {
 //! instead of reaching a dispatcher, whose default arm reads a superblock layout
 def kq_fmt_gpu_supported(f : KqFmt) : bool =>
     (f == KqFmt.q8 || f == KqFmt.k4 || f == KqFmt.k5 || f == KqFmt.k6 || f == KqFmt.iq4xs || f == KqFmt.k3 || f == KqFmt.iq3s || f == KqFmt.iq3xxs
-        || f == KqFmt.iq4nl || f == KqFmt.q40 || f == KqFmt.k2 || f == KqFmt.iq2s || f == KqFmt.iq2xs || f == KqFmt.iq2xxs || f == KqFmt.iq3s4
+        || f == KqFmt.iq4nl || f == KqFmt.q40 || f == KqFmt.nv4 || f == KqFmt.k2 || f == KqFmt.iq2s || f == KqFmt.iq2xs || f == KqFmt.iq2xxs || f == KqFmt.iq3s4
         || kq_dense_b32(f))
 
 //! the formats the K-quant token-table gather has a stamp for: every
@@ -233,10 +233,22 @@ def kq_fmt_one_row_gemv(f : KqFmt; kdim : int64) : bool =>
         && kdim % kq_unit(f) == 0l))
 
 //! the first layer of `a` whose plane format no Metal kernel reads, named by layer, site and `KqFmt` member; "" when every one has a kernel
-def private dense_fmts_unserved(a : array<KqFmt>; role : string) : string {
+//! one dense site's planes by layer: the first whose format no Metal kernel reads, or whose weights ride a per-tensor `.scale`,
+//! named by layer, site and `KqFmt` member; "" when every plane serves
+def private dense_fmts_unserved(t : Model; a : array<KqFmt>; offs : array<int64>; role : string) : string {
     for (f, l in a, count()) {
         return "layer {l}'s {kq_site_words(role)} plane is {f}" if (!kq_fmt_gpu_supported(f))
+        let why = plane_scale_unserved(t, f, offs, l, kq_site_words(role))
+        return why if (!empty(why))
     }
+    return ""
+}
+
+//! the words for layer `l`'s plane of one site when its weights ride a per-tensor `.scale` (`Model.site_scale`, keyed by format
+//! and plane offset) - the Metal kernels read a plane's own bytes and apply no epilogue factor; "" otherwise
+def private plane_scale_unserved(t : Model; f : KqFmt; offs : array<int64>; l : int; words : string) : string {
+    return "" if (empty(t.site_scale) || l >= length(offs))
+    return "layer {l}'s {words} plane is {f} under a per-tensor .scale" if (key_exists(t.site_scale, site_scale_key(f, offs[l])))
     return ""
 }
 
@@ -244,13 +256,13 @@ def private dense_fmts_unserved(a : array<KqFmt>; role : string) : string {
 //! every one has a kernel - the decode, batch and prefill gates decline `kquant_native` on it
 def kq_load_gpu_unserved(t : Model) : string {
     return "" if (!t.kquant_native)
-    var why = dense_fmts_unserved(t.wq_fmt, "attn_q")
-    why = empty(why) ? dense_fmts_unserved(t.wk_fmt, "attn_k") : why
-    why = empty(why) ? dense_fmts_unserved(t.wv_fmt, "attn_v") : why
-    why = empty(why) ? dense_fmts_unserved(t.wo_fmt, "attn_output") : why
-    why = empty(why) ? dense_fmts_unserved(t.w1_fmt, "ffn_gate") : why
-    why = empty(why) ? dense_fmts_unserved(t.w3_fmt, "ffn_up") : why
-    why = empty(why) ? dense_fmts_unserved(t.w2_fmt, "ffn_down") : why
+    var why = dense_fmts_unserved(t, t.wq_fmt, t.wq_offs, "attn_q")
+    why = empty(why) ? dense_fmts_unserved(t, t.wk_fmt, t.wk_offs, "attn_k") : why
+    why = empty(why) ? dense_fmts_unserved(t, t.wv_fmt, t.wv_offs, "attn_v") : why
+    why = empty(why) ? dense_fmts_unserved(t, t.wo_fmt, t.wo_offs, "attn_output") : why
+    why = empty(why) ? dense_fmts_unserved(t, t.w1_fmt, t.w1_offs, "ffn_gate") : why
+    why = empty(why) ? dense_fmts_unserved(t, t.w3_fmt, t.w3_offs, "ffn_up") : why
+    why = empty(why) ? dense_fmts_unserved(t, t.w2_fmt, t.w2_offs, "ffn_down") : why
     return why if (!empty(why))
     return "the {kq_site_words("output")} plane is {t.wcls_fmt}" if (!kq_fmt_gpu_supported(t.wcls_fmt))
     return "the {kq_site_words("token_embd")} plane is {t.emb_fmt}" if (!kq_fmt_gpu_supported(t.emb_fmt))
@@ -316,6 +328,11 @@ def dn_fmts_unserved(t : Model) : string {
         why = empty(why) ? one_row_unserved(l, kq_site_words("ssm_out"), fmt_at(t.dnout_fmt, l), c.ssm_d_inner) : why
         why = empty(why) ? one_row_unserved(l, kq_site_words("ssm_beta"), fmt_at(t.dnbeta_fmt, l), c.dim) : why
         why = empty(why) ? one_row_unserved(l, kq_site_words("ssm_alpha"), fmt_at(t.dnalpha_fmt, l), c.dim) : why
+        why = empty(why) ? plane_scale_unserved(t, fmt_at(t.dnqkv_fmt, l), t.dnqkv_offs, int(l), "deltanet qkv") : why
+        why = empty(why) ? plane_scale_unserved(t, fmt_at(t.dngate_fmt, l), t.dngate_offs, int(l), "deltanet gate") : why
+        why = empty(why) ? plane_scale_unserved(t, fmt_at(t.dnout_fmt, l), t.dnout_offs, int(l), kq_site_words("ssm_out")) : why
+        why = empty(why) ? plane_scale_unserved(t, fmt_at(t.dnbeta_fmt, l), t.dnbeta_offs, int(l), kq_site_words("ssm_beta")) : why
+        why = empty(why) ? plane_scale_unserved(t, fmt_at(t.dnalpha_fmt, l), t.dnalpha_offs, int(l), kq_site_words("ssm_alpha")) : why
         return why if (!empty(why))
     }
     return ""
@@ -345,7 +362,7 @@ def moe_site_ok(fmt : KqFmt; off, ege : int64) : bool {
     if (fmt == KqFmt.q8) {
         return off >= 0l && (off % 256l) == 0l && (ege % 32l) == 0l
     }
-    if (fmt == KqFmt.k4 || fmt == KqFmt.k5 || fmt == KqFmt.q40 || fmt == KqFmt.iq4nl || fmt == KqFmt.k2) {   // compact 16B scale rows, or k2's 4B d tail: every bind is aligned at a whole superblock
+    if (fmt == KqFmt.k4 || fmt == KqFmt.k5 || fmt == KqFmt.q40 || fmt == KqFmt.iq4nl || fmt == KqFmt.nv4 || fmt == KqFmt.k2) {   // compact 16B scale rows, or k2's 4B d tail: every bind is aligned at a whole superblock
         return off >= 0l && (off % 256l) == 0l && (ege % 256l) == 0l
     }
     if (fmt == KqFmt.k6 || fmt == KqFmt.iq4xs || fmt == KqFmt.iq3s4 || fmt == KqFmt.k3 || fmt == KqFmt.iq3s || fmt == KqFmt.iq3xxs || fmt == KqFmt.iq2s || fmt == KqFmt.iq2xs || fmt == KqFmt.iq2xxs) {
@@ -364,7 +381,7 @@ def moe_site_ok(fmt : KqFmt; off, ege : int64) : bool {
 //! `experts_mx4`, a stack property, and ride their own arm); any other tag declines `graph`
 def moe_fmt_metal_served(f : KqFmt) : bool {
     return (f == KqFmt.q8 || f == KqFmt.q51 || f == KqFmt.iq4nl32 || f == KqFmt.q4032 || f == KqFmt.q5032 || f == KqFmt.k4 || f == KqFmt.k5 || f == KqFmt.k6 || f == KqFmt.k3 || f == KqFmt.q40
-        || f == KqFmt.iq4xs || f == KqFmt.iq3s || f == KqFmt.iq3xxs || f == KqFmt.iq2s || f == KqFmt.iq2xs || f == KqFmt.iq2xxs
+        || f == KqFmt.nv4 || f == KqFmt.iq4xs || f == KqFmt.iq3s || f == KqFmt.iq3xxs || f == KqFmt.iq2s || f == KqFmt.iq2xs || f == KqFmt.iq2xxs
         || f == KqFmt.k2 || f == KqFmt.iq4nl || f == KqFmt.iq3s4)
 }
 

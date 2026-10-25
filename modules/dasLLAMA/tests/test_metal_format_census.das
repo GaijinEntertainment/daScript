@@ -177,11 +177,7 @@ def test_metal_format_census_iq3s4(t : T?) {
             census_cell(t, trg, path, "blob twin", ["attention q/k/v/o", "token table", "classifier"])
             window_and_steps_cell(t, tr, trg, DENSE_KQ_BAR, "MetalEmbedK6_metal_embed_kq", "iq3s4") $ {
                 //! the last layer's FFN tail narrows to the last row, so one of its sites rides the single-row GEMV
-                //! the tensor twins compile only under the dev-W panel lever, so their counts read 0 when nothing compiled them
-                let mm_n = (metal_kernel_count("MetalKqMulMmIq3s4_metal_kq_mulmm") + metal_kernel_count_compiled("MetalKqMulMmIq3s4T_metal_kq_mulmm_iq4xs_t")
-                    + metal_kernel_count_compiled("MetalKqMulMmIq3s4TH_metal_kq_mulmm_iq4xs_t") + metal_kernel_count_compiled("MetalKqMulMmIq3s4TH128_metal_kq_mulmm_iq4xs_t")
-                    + metal_kernel_count_compiled("MetalKqMulMmIq3s4THDb_metal_kq_mulmm_db") + metal_kernel_count_compiled("MetalKqMulMmIq3s4THDb128_metal_kq_mulmm_db")
-                    + metal_kernel_count_compiled("MetalKqDequantIq3s4_metal_kq_dequant"))   //! the dev-W pass ahead of the twins under the crown
+                let mm_n = iq4_family_mm_dispatches("Iq3s4")
                 let gv_w = metal_kernel_count("MetalKqGemvIq3s4_metal_kq_gemv_iq4")
                 t |> success(mm_n + gv_w >= n35 && mm_n > 0l, "the window's iq3s4 sites rode the iq3s4 stamps ({mm_n} GEMM and {gv_w} GEMV dispatches, {n35} planes)")
             }
@@ -270,8 +266,8 @@ def private per32_gemv_dispatches() : int64 {
     return n
 }
 
-//! the sites a per-32 carrier must carry: the dense ones, and on the hybrid the deltanet planes and the NextN eh_proj
-def private per32_census_sites(hybrid : bool) : array<string> {
+//! the sites a dense carrier must carry: the dense ones, and on the hybrid the deltanet planes and the NextN eh_proj
+def private dense_census_sites(hybrid : bool) : array<string> {
     var s <- ["attention q/k/v/o", "token table", "classifier"]
     if (hybrid) {
         s |> push("deltanet qkv/gate/out")
@@ -301,7 +297,7 @@ def test_metal_format_census_per32(t : T?) {
                 tr.config.seq_len = min(tr.config.seq_len, 512l)
                 let np32 = per32_planes(tr)
                 t |> success(np32 > 0l, "{spec.arm}: the dense planes load as q51 / iq4nl32 / q4032 / q5032 ({np32} planes)")
-                let want <- per32_census_sites(spec.hy)
+                let want <- dense_census_sites(spec.hy)
                 census_cell(t, tr, path, "planar", want)
                 var trg <- blob_twin(t, path, 512l)
                 census_cell(t, trg, path, "blob twin", want)
@@ -323,6 +319,112 @@ def test_metal_format_census_per32(t : T?) {
             } else {
                 t |> skip("dasMetal not built")
             }
+        }
+    }
+}
+
+//! the window's GEMM dispatches of an iq4-family format by its class stem (`Iq3s4`, `Nv4`): the simdgroup base, the tensor twins
+//! with the dev-W pass ahead of them (compiled only under the format's crown, so an uncompiled twin reads 0), and the small-batch
+//! forms a short window takes
+def private iq4_family_mm_dispatches(stem : string) : int64 {
+    var n = metal_kernel_count("MetalKqMulMm{stem}_metal_kq_mulmm") + metal_kernel_count_compiled("MetalKqDequant{stem}_metal_kq_dequant")
+    for (v in ["T", "TH", "TH128"]) {
+        n += metal_kernel_count_compiled("MetalKqMulMm{stem}{v}_metal_kq_mulmm_iq4xs_t")
+    }
+    for (v in ["THDb", "THDb128"]) {
+        n += metal_kernel_count_compiled("MetalKqMulMm{stem}{v}_metal_kq_mulmm_db")
+    }
+    n += metal_kernel_count("MetalKqMvB2{stem}_metal_kq_mv_iq4") + metal_kernel_count("MetalKqMvB4{stem}_metal_kq_mv_iq4")
+    return n + metal_kernel_count("MetalKqMvB8{stem}_metal_kq_mvb8_iq4")
+}
+
+//! the nv4 dense carriers (`../performance/model_specs.das`): Llama-3.2-1B's NVFP4 mint (every dense plane nv4 under a Q6_K
+//! table), its table mint (the nv4 token table, the tied classifier reading it) and the Qwen3.5-0.8B-MTP `--pure` mint (the
+//! deltanet planes, the NextN eh_proj, the table and the classifier as nv4) - each site's census asserted native, the window on
+//! the nv4 forms and the steps on the nv4 GEMVs against the CPU chain
+[test]
+def test_metal_format_census_nv4(t : T?) {
+    for (spec in [(file = "Llama-3.2-1B-Instruct-NVFP4-local.gguf", fam = "llama", arm = "census-nv4", emb = "MetalEmbedK6_metal_embed_kq", hy = false),
+                  (file = "Llama-3.2-1B-Instruct-emb-NVFP4-local.gguf", fam = "llama", arm = "census-nv4-table", emb = "MetalEmbedNv4_metal_embed_kq", hy = false),
+                  (file = "Qwen3.5-0.8B-MTP-NVFP4-pure-local.gguf", fam = "qwen35", arm = "census-nv4-hybrid", emb = "MetalEmbedNv4_metal_embed_kq", hy = true)]) {
+        t |> run("{spec.file}: the nv4 planes serve their own bytes on Metal - census, window and steps") <| @(t : T?) {
+            if (!family_on(t, spec.fam) || !arm_on(t, spec.arm)) return
+            static_if (typeinfo builtin_module_exists(das_metal)) {
+                let path = path_join(models_dir(), spec.file)
+                return if (!jit_model_available(t, path))
+                let pins = census_pin()
+                var tr <- load_model_(path, QuantMode.q8)
+                tr.config.seq_len = min(tr.config.seq_len, 512l)
+                let nplanes = planes_tagged(tr, KqFmt.nv4)
+                t |> success(nplanes > 0l, "{spec.arm}: the dense planes load as nv4 ({nplanes} planes)")
+                let want <- dense_census_sites(spec.hy)
+                census_cell(t, tr, path, "planar", want)
+                var trg <- blob_twin(t, path, 512l)
+                census_cell(t, trg, path, "blob twin", want)
+                window_and_steps_cell(t, tr, trg, DENSE_KQ_BAR, spec.emb, spec.arm) $ {
+                    //! the last layer's FFN tail narrows to the last row, so its three sites ride the single-row GEMV; the hybrid's
+                    //! beta/alpha window rows ride the routed GEMV
+                    let w = iq4_family_mm_dispatches("Nv4") + metal_kernel_count("MetalKqGemvNv4_metal_kq_gemv_iq4") + metal_kernel_count("metal_moe_gemv_nv4")
+                    t |> success(w >= nplanes, "{spec.arm}: the window's nv4 sites rode the nv4 stamps ({w} dispatches, {nplanes} planes)")
+                }
+                let gv = metal_kernel_count("MetalKqGemvNv4_metal_kq_gemv_iq4")
+                t |> success(gv >= DECODE_STEPS * nplanes, "{spec.arm}: the steps read every nv4 plane through its GEMV ({gv} dispatches, {DECODE_STEPS * nplanes} planes)")
+                metal_decode_shutdown()
+                metal_prefill_shutdown()
+                delete trg
+                delete tr
+                t |> equal(metal_live_object_count(), 0l, "no leaked Metal objects after shutdown")
+                census_unpin(pins)
+            } else {
+                t |> skip("dasMetal not built")
+            }
+        }
+    }
+}
+
+//! the nv4 routed MoE's bar against the CPU chain: the Qwen3-30B-A3B NVFP4 mint's window reads under 2 and its steps 2.4 on the M5
+//! Max (a 4-bit routed stack's near-ties amplify a float-class difference), the one-step-off rows 10 and up
+let private NV4_MOE_BAR = 3.0
+
+//! the nv4 MoE carrier (large tier): the Qwen3-30B-A3B `--pure` NVFP4 mint - the 768-wide routed stacks, the table and the
+//! classifier as nv4 (the Qwen1.5-MoE's 1408-wide stacks sit off the 256 lattice, where NVFP4's 64-weight disk block lands and the
+//! nv4 superblock cannot, so that file's experts fall to the q8 rail) - each site's census asserted native, the window and the steps
+//! on the nv4 routed stamps against the CPU chain
+[test]
+def test_metal_format_census_nv4_moe(t : T?) {
+    t |> run("Qwen3-30B-A3B-NVFP4-pure-local.gguf: the nv4 routed stacks serve their own bytes on Metal - census, window and steps") <| @(t : T?) {
+        if (!family_on(t, "qwen3moe") || !arm_on(t, "census-moe-nv4")) return
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            let path = path_join(models_dir(), "Qwen3-30B-A3B-NVFP4-pure-local.gguf")
+            return if (!jit_model_available(t, path))
+            let pins = census_pin()
+            var tr <- load_model_(path, QuantMode.q8)
+            tr.config.seq_len = min(tr.config.seq_len, 512l)
+            let nexp = (long_count(tr.we1_fmt, $(x) => x == KqFmt.nv4)
+                + long_count(tr.we2_fmt, $(x) => x == KqFmt.nv4)
+                + long_count(tr.we3_fmt, $(x) => x == KqFmt.nv4))
+            t |> success(nexp >= 3l * tr.config.n_layers, "census-moe-nv4: every routed stack loads as nv4 ({nexp} stacks)")
+            let want <- ["attention q/k/v/o", "routed experts", "token table", "classifier"]
+            census_cell(t, tr, path, "planar", want)
+            var trg <- blob_twin(t, path, 512l)
+            census_cell(t, trg, path, "blob twin", want)
+            window_and_steps_cell(t, tr, trg, NV4_MOE_BAR, "MetalEmbedNv4_metal_embed_kq", "census-moe-nv4") $ {
+                var mm = metal_kernel_count("metal_moe_mulmm_nv4") + metal_kernel_count("metal_moe_gemv_nv4")
+                for (v in ["T", "TH", "TH128", "THR"]) {
+                    mm += metal_kernel_count_compiled("MetalMoeMulMmNv4{v}_metal_moe_mulmm_iq4xs_t")
+                }
+                t |> success(mm >= nexp, "census-moe-nv4: the window's nv4 expert stacks rode the nv4 routed stamps ({mm} dispatches, {nexp} stacks)")
+            }
+            let gv = metal_kernel_count("metal_moe_gemv_nv4")
+            t |> success(gv >= DECODE_STEPS * nexp, "census-moe-nv4: the steps read every nv4 expert stack through the routed GEMV ({gv} dispatches, {DECODE_STEPS * nexp} stacks)")
+            metal_decode_shutdown()
+            metal_prefill_shutdown()
+            delete trg
+            delete tr
+            t |> equal(metal_live_object_count(), 0l, "no leaked Metal objects after shutdown")
+            census_unpin(pins)
+        } else {
+            t |> skip("dasMetal not built")
         }
     }
 }

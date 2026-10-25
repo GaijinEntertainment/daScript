@@ -1746,21 +1746,16 @@ def private detect_site_scales(var t : Model; m : GGUFMeta; bytes : array<uint8>
     t.site_scale |> clear()
     let layers = t.config.n_layers + t.config.n_layer_nextn
     for (l in range64(layers)) {
+        let qkv = t.config.fused_qkv
         if (l < long_length(t.wq_offs)) {
-            if (t.config.fused_qkv) {
-                note_site_scale(t, m, bytes, "blk.{l}.attn_qkv.weight", fmt_at(t.wq_fmt, l), t.wq_offs[l])
-                note_site_scale(t, m, bytes, "blk.{l}.attn_qkv.weight", fmt_at(t.wk_fmt, l), t.wk_offs[l])
-                note_site_scale(t, m, bytes, "blk.{l}.attn_qkv.weight", fmt_at(t.wv_fmt, l), t.wv_offs[l])
-                note_site_scale(t, m, bytes, "blk.{l}.ffn_up.weight", fmt_at(t.w1_fmt, l), t.w1_offs[l])
-                note_site_scale(t, m, bytes, "blk.{l}.ffn_up.weight", fmt_at(t.w3_fmt, l), t.w3_offs[l])
-            } else {
-                note_site_scale(t, m, bytes, "blk.{l}.attn_q.weight", fmt_at(t.wq_fmt, l), t.wq_offs[l])
-                note_site_scale(t, m, bytes, "blk.{l}.attn_k.weight", fmt_at(t.wk_fmt, l), t.wk_offs[l])
-                note_site_scale(t, m, bytes, "blk.{l}.attn_v.weight", fmt_at(t.wv_fmt, l), t.wv_offs[l])
-                note_site_scale(t, m, bytes, "blk.{l}.ffn_gate.weight", fmt_at(t.w1_fmt, l), t.w1_offs[l])
-                note_site_scale(t, m, bytes, "blk.{l}.ffn_up.weight", fmt_at(t.w3_fmt, l), t.w3_offs[l])
-            }
+            note_site_scale(t, m, bytes, qkv ? "blk.{l}.attn_qkv.weight" : "blk.{l}.attn_q.weight", fmt_at(t.wq_fmt, l), t.wq_offs[l])
+            note_site_scale(t, m, bytes, qkv ? "blk.{l}.attn_qkv.weight" : "blk.{l}.attn_k.weight", fmt_at(t.wk_fmt, l), t.wk_offs[l])
+            note_site_scale(t, m, bytes, qkv ? "blk.{l}.attn_qkv.weight" : "blk.{l}.attn_v.weight", fmt_at(t.wv_fmt, l), t.wv_offs[l])
             note_site_scale(t, m, bytes, "blk.{l}.attn_output.weight", fmt_at(t.wo_fmt, l), t.wo_offs[l])
+        }
+        if (l < long_length(t.w1_offs)) {   //! a pure-MoE file carries no dense FFN planes
+            note_site_scale(t, m, bytes, qkv ? "blk.{l}.ffn_up.weight" : "blk.{l}.ffn_gate.weight", fmt_at(t.w1_fmt, l), t.w1_offs[l])
+            note_site_scale(t, m, bytes, "blk.{l}.ffn_up.weight", fmt_at(t.w3_fmt, l), t.w3_offs[l])
             note_site_scale(t, m, bytes, "blk.{l}.ffn_down.weight", fmt_at(t.w2_fmt, l), t.w2_offs[l])
         }
         if (layer_is_recurrent(t.config, l) && l < long_length(t.dnqkv_offs)) {

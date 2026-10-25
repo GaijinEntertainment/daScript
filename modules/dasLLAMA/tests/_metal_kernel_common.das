@@ -506,6 +506,13 @@ def kq_fill_planes(fmt, nsb : int; var kq : array<uint8>; var ks : array<uint8>)
             ks[nsb * 16 + b * 4 + 2] = uint8(mbits & 0xFFu)
             ks[nsb * 16 + b * 4 + 3] = uint8(mbits >> 8u)
         }
+    } elif (fmt == 49) {
+        // nv4: the sixteen UE4M3 sub-block scales a superblock, verbatim; codes 0x30..0x4F keep every scale at half within 0.25 .. 3.75
+        let nv4_sbytes = nsb * int(kq_ssb(KqFmt.nv4))
+        ks |> resize(nv4_sbytes)
+        for (i in range(nv4_sbytes)) {
+            ks[i] = uint8(0x30 + int(kq_hash_byte(i * 11 + 5)) % 32)
+        }
     } elif (fmt == 45 || fmt == 40) {
         // iq4nl and q40: 16B/sb = 8 per-32-block f16 d's, verbatim (no strips)
         ks |> resize(nsb * 16)
@@ -579,7 +586,7 @@ def kq_split_doff(fmt, nsb : int) : uint64 =>
 //! One row's reference dequant (nb superblocks from sb_base) off split-scale planes, through the engine's own plane-row dequant.
 def kq_row_ref(fmt, sb_base, nb, nsb_total : int; kq, ks : array<uint8>; var wrow : array<float>) {
     let tail = fmt == 2 ? 4l : 2l   //! the engine finds the d tail from the plane's length: the fixture's plane holds nsb_total superblocks exactly
-    assert(fmt == 4 || fmt == 5 || fmt == 40 || fmt == 45 || long_length(ks) == int64(nsb_total) * (16l + tail), "kq_row_ref: the scale plane holds nsb_total superblocks")
+    assert(fmt == 4 || fmt == 5 || fmt == 40 || fmt == 45 || fmt == 49 || long_length(ks) == int64(nsb_total) * (16l + tail), "kq_row_ref: the scale plane holds nsb_total superblocks")
     let f = kq_fmt_of_id(fmt, "kq_row_ref")
     kq_plane_row_f32(f, kq, ks, int64(nb) * kq_elems(f), 1l, 1l, 0l, wrow, 0l, int64(sb_base), true)
 }

@@ -448,7 +448,7 @@ def test_dn_metal_plane_formats(t : T?) {
 [test]
 def test_moe_metal_expert_formats(t : T?) {
     t |> run("the Metal routed block admits exactly the expert plane formats it has kernels for; every other format declines") @(t : T?) {
-        for (f in [KqFmt.q8, KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032, KqFmt.q5032, KqFmt.k4, KqFmt.k5, KqFmt.k6, KqFmt.k3, KqFmt.k2, KqFmt.q40, KqFmt.iq4xs, KqFmt.iq4nl, KqFmt.iq3s, KqFmt.iq3xxs, KqFmt.iq2s, KqFmt.iq2xs, KqFmt.iq2xxs, KqFmt.iq3s4]) {
+        for (f in [KqFmt.q8, KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032, KqFmt.q5032, KqFmt.k4, KqFmt.k5, KqFmt.k6, KqFmt.k3, KqFmt.k2, KqFmt.q40, KqFmt.nv4, KqFmt.iq4xs, KqFmt.iq4nl, KqFmt.iq3s, KqFmt.iq3xxs, KqFmt.iq2s, KqFmt.iq2xs, KqFmt.iq2xxs, KqFmt.iq3s4]) {
             var m <- moe_shell(f)
             t |> success(moe_metal_ok(m), "{f} expert planes are served")
             delete m
@@ -603,6 +603,35 @@ def test_metal_fmt_decline_names_site(t : T?) {
         t |> equal(kq_load_gpu_unserved(m), "the classifier plane is mx4")
         delete m
     }
+    t |> run("an nv4 plane serves; the same plane under a per-tensor .scale names its layer, site and member") @(t : T?) {
+        var m <- shell(2l, 0ul)
+        m.quant = QuantMode.q8
+        m.kquant_native = true
+        m.wq_fmt <- [KqFmt.nv4, KqFmt.nv4]
+        m.wk_fmt <- [KqFmt.nv4, KqFmt.nv4]
+        m.wv_fmt <- [KqFmt.nv4, KqFmt.nv4]
+        m.wo_fmt <- [KqFmt.nv4, KqFmt.nv4]
+        m.w1_fmt <- [KqFmt.nv4, KqFmt.nv4]
+        m.w3_fmt <- [KqFmt.nv4, KqFmt.nv4]
+        m.w2_fmt <- [KqFmt.nv4, KqFmt.nv4]
+        m.wq_offs <- [0l, 1024l]   //! every site its own plane offset: the key is format and offset
+        m.wk_offs <- [0l, 2048l]
+        m.wv_offs <- [0l, 3072l]
+        m.wo_offs <- [0l, 4096l]
+        m.w1_offs <- [0l, 5120l]
+        m.w3_offs <- [0l, 6144l]
+        m.w2_offs <- [0l, 7168l]
+        t |> equal(kq_load_gpu_unserved(m), "", "every dense plane nv4 with no .scale: served")
+        for (off, role in [1024l, 2048l, 3072l, 4096l, 5120l, 6144l, 7168l], ["attn_q", "attn_k", "attn_v", "attn_output", "ffn_gate", "ffn_up", "ffn_down"]) {
+            m.site_scale[site_scale_key(KqFmt.nv4, off)] = 0.01
+            t |> equal(kq_load_gpu_unserved(m), "layer 1's {kq_site_words(role)} plane is nv4 under a per-tensor .scale")
+            t |> equal(decode_shape_decline(m, DECODE_NEEDS_OK, true, false, false, mint_time = true), MetalDecodeDecline.kquant_native,
+                "{role}: the gate's reason is the enum value the declines table counts")
+            m.site_scale |> clear()
+        }
+        t |> equal(kq_load_gpu_unserved(m), "", "the .scale gone, the planes serve again")
+        delete m
+    }
     t |> run("a routed stack's unserved format names its layer, site and member under graph") @(t : T?) {
         var m <- moe_shell(KqFmt.k4)
         t |> equal(moe_fmts_unserved(m), "", "a k4 stack has the routed block's kernels")
@@ -658,6 +687,25 @@ def test_metal_graph_decline_names_site(t : T?) {
         m.dnalpha_fmt[1] = KqFmt.mx4
         t |> success(!dn_ba_metal_window_ok(m), "the window's beta/alpha gate declines an mx4 alpha plane")
         t |> equal(dn_ba_window_fmts_unserved(m), "layer 1's deltanet alpha plane is mx4")
+        m.dnalpha_fmt[1] = KqFmt.k4
+        m.dnqkv_fmt <- [KqFmt.nv4, KqFmt.nv4, KqFmt.nv4]
+        m.dngate_fmt <- [KqFmt.nv4, KqFmt.nv4, KqFmt.nv4]
+        m.dnout_fmt <- [KqFmt.nv4, KqFmt.nv4, KqFmt.nv4]
+        m.dnbeta_fmt <- [KqFmt.nv4, KqFmt.nv4, KqFmt.nv4]
+        m.dnalpha_fmt <- [KqFmt.nv4, KqFmt.nv4, KqFmt.nv4]
+        m.dnqkv_offs <- [0l, 8192l, 16384l]   //! every site its own plane offset: the key is format and offset
+        m.dngate_offs <- [0l, 9216l, 17408l]
+        m.dnout_offs <- [0l, 10240l, 18432l]
+        m.dnbeta_offs <- [0l, 11264l, 19456l]
+        m.dnalpha_offs <- [0l, 12288l, 20480l]
+        t |> equal(dn_fmts_unserved(m), "", "nv4 deltanet planes with no .scale: served")
+        for (off, words in [8192l, 9216l, 10240l, 11264l, 12288l],
+                            ["deltanet qkv", "deltanet gate", kq_site_words("ssm_out"), kq_site_words("ssm_beta"), kq_site_words("ssm_alpha")]) {
+            m.site_scale[site_scale_key(KqFmt.nv4, off)] = 0.01
+            t |> success(!dn_metal_ok(m), "{words}: a deltanet plane under a per-tensor .scale declines the hybrid")
+            t |> equal(dn_fmts_unserved(m), "layer 1's {words} plane is nv4 under a per-tensor .scale")
+            m.site_scale |> clear()
+        }
         delete m
     }
 }

@@ -385,6 +385,8 @@ def test_kq_fmt_row_demotion(t : T?) {
         t |> equal(kq_fmt_row_ok(KqFmt.q40, 650l), KqFmt.q8)              // off the 32 lattice too: the q8 rail
         t |> equal(kq_fmt_row_ok(KqFmt.iq4nl, 704l), KqFmt.iq4nl32)
         t |> equal(kq_fmt_row_ok(KqFmt.k5, 704l), KqFmt.q8)
+        t |> equal(kq_fmt_row_ok(KqFmt.nv4, 1408l), KqFmt.q8)    // NVFP4's 64-weight disk block fills a 1408 row the nv4 superblock cannot: the q8 rail
+        t |> equal(kq_fmt_row_ok(KqFmt.nv4, 1536l), KqFmt.nv4)
         t |> equal(kq_fmt_row_ok(KqFmt.iq4nl, 768l), KqFmt.iq4nl)
         t |> equal(kq_fmt_row_ok(KqFmt.q40, 768l), KqFmt.q40)
         // the two other gemma widths off the superblock lattice: 1152 (gemma-3-1b dim), 2112 (gemma-4 26B dense down)

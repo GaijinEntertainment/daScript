@@ -8,7 +8,7 @@ backend role table these sections build on stays in `ARCHITECTURE_GPU.md#gpu-bac
 
 ### The Metal kq split scale plane {#metal-kq-split-scale-plane}
 
-Every superblock format but k4, k5, q40 and iq4nl stores its Metal-blob scale row SPLIT into two
+Every superblock format but k4, k5, q40, iq4nl and nv4 stores its Metal-blob scale row SPLIT into two
 regions of one buffer: the 16-byte sub-scale strips of every superblock first, then the packed
 per-superblock d tail. A kernel binds that one buffer twice - the strips at `soff = sb0 * 16` and
 the tail at `doff = nsb * 16 + sb0 * 2` - so the two reads stride independently and the strip
@@ -21,7 +21,11 @@ both off one walk, `IQODD` swapping the codebook (`iq3s4_val`, `2q - 15`) for `i
 a region's bind offset must be a multiple of 512 elements - the `(off/256)*2` d-plane bind is
 4-byte aligned only then - which is what `metal_blob_off_ok` and `moe_site_ok` check. iq4nl is
 the exception: it reuses q40's 16-byte plane of eight f16 d per superblock, binds once, and
-ignores `doff`. The Vulkan tier does not use this form; the device scale row it binds is
+ignores `doff`. nv4 binds the same way: its 16-byte row is the sixteen UE4M3 sub-block scales
+verbatim, byte `2g + h` scaling half `h` of 32-block `g` (`nv4_sub_scale`, the byte at half through
+`ue4m3_half_f32`), the iq4 family's stamps reading it under `NV4` with the doubled e2m1 codebook
+(`mx4_val`) in the codebook slot. A plane under a per-tensor `.scale` (`Model.site_scale`) declines
+`kquant_native` by site and member: the kernels apply no epilogue factor. The Vulkan tier does not use this form; the device scale row it binds is
 `ARCHITECTURE_GPU_SHARED_GEMM.md#kq-dev-scale-row`.
 
 ### The iquant GEMV grid read and its f4-slab twin {#metal-iquant-gemv-grid}

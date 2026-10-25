@@ -96,7 +96,9 @@ added field, never 0 and never the value a serving call that does not use the fi
 the value where nothing moved, a cell passes whether the new indexing is right or wrong.
 
 **A diff that adds a kernel class ships a kernel-unit cell that dispatches it on every path its body
-has - a sibling stamp's cell counts.** A
+has - a sibling stamp's cell counts, and for a stamp whose override changes only `static_if` arms, none
+of which holds a branch or a loop a kargs or bound-buffer value sets, a cell counts that dispatches it
+at the arguments of sibling cells that together reach every sibling path.** A
 path no cell reaches is one a merge can drop and every cell still passes.
 
 **Before every kernel run whose output a kernel-unit cell reads in any assert, directly or through
@@ -119,7 +121,7 @@ input by more than that tolerance.** An in-place kernel that never ran leaves th
 can wrongly satisfy a tolerant compare.
 
 **A diff that adds or loosens, in a kernel-unit cell, a bound assert ships a control for each such
-assert, in the same change.**
+assert, in the same change - a control that runs with that assert on every call.**
 
 **A size, depth, row count or block offset that a kernel-unit cell's name, a comment inside the
 cell, or an assert's text claims, and that the cell passes as a literal argument to the kernel it

@@ -687,8 +687,11 @@ arms:
    decode arm; the split formats bind it at `doff`, and copying their arm reads the scale plane's
    tail as the d row.
 5. **Tests:** `dequant_iq4xs_plane_superblock_at` (`dasllama_convert.das`, the split-layout twin the
-   CPU row calls), fixtures at fmt 44 in `tests/_metal_kernel_common.das` (`kq_fill_planes`,
-   `kq_row_ref`), then the format's arm in every per-format stamp picker and its calls:
+   CPU row calls) and the format's arm in `dequant_kq_plane_sb` on the BLOB carrier - a compact
+   format's arm sits ahead of the `!metal_blob` fork, as q40's does; without it every kernel cell's
+   CPU oracle panics `has no kq plane pair` and the cells read as errors, not as kernel misses -
+   fixtures at fmt 44 in `tests/_metal_kernel_common.das` (`kq_fill_planes`,
+   `kq_row_ref` - a compact format joins the assert's compact list there), then the format's arm in every per-format stamp picker and its calls:
    `kq_gemv_stamp` and `kq_mvb2_stamp` / `kq_mvb4_stamp` / `kq_mvb8_stamp` plus `kq_gemv_gate`'s
    variant-to-id ternary in `test_metal_gemv_kernels.das` (GEMV, B2/B4/B8), `kq_mm_base_stamp` /
    `kq_mm_form_kernel` in `tests/_metal_kq_kernels.das` (mul_mm, base and tensor forms). Each picker

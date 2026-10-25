@@ -2972,7 +2972,8 @@ def test_k6_scale_split_sizing(t : T?) {
         t |> success(!metal_blob_scale_plane(m, "k6"), "no s suffix")
         t |> success(!metal_blob_scale_plane(m, "zzs"), "no such format")
         t |> success(!metal_blob_scale_plane(m, "q8s"), "q8 is off the lattice")
-        t |> success(!metal_blob_scale_plane(m, "q40s") && !metal_blob_scale_plane(m, "iq4nls"), "q40 and iq4nl carry no split scale plane")
+        t |> success(!metal_blob_scale_plane(m, "q40s") && !metal_blob_scale_plane(m, "iq4nls") && !metal_blob_scale_plane(m, "nv4s"),
+            "q40, iq4nl and nv4 carry no split scale plane")
     }
     t |> run("k6 scale split at 27B-scale strip clears max_unreserved_size") @(t : T?) {
         if (!arm_on(t, "mechanics")) {

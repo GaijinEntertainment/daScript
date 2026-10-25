@@ -242,6 +242,7 @@ var g_pso_emb_kq_iq4xs : MetalComputePipeline?
 var g_pso_emb_kq_iq3s4 : MetalComputePipeline?
 var g_pso_emb_kq_iq4nl : MetalComputePipeline?
 var g_pso_emb_kq_q40 : MetalComputePipeline?
+var g_pso_emb_kq_nv4 : MetalComputePipeline?
 var g_pso_emb_kq_k3 : MetalComputePipeline?
 var g_pso_emb_kq_k2 : MetalComputePipeline?
 var g_pso_emb_kq_iq3s : MetalComputePipeline?
@@ -270,6 +271,7 @@ var g_pso_moe_kq_iq2xxs : MetalComputePipeline?
 var g_pso_moe_kq_iq4xs : MetalComputePipeline?
 var g_pso_moe_kq_iq3s4 : MetalComputePipeline?
 var g_pso_moe_kq_q40 : MetalComputePipeline?
+var g_pso_moe_kq_nv4 : MetalComputePipeline?
 var g_pso_moe_kq_iq4nl : MetalComputePipeline?
 var g_pso_moe_kq_k2 : MetalComputePipeline?
 var g_pso_moe_kq_k5 : MetalComputePipeline?
@@ -448,6 +450,11 @@ var g_pso_kq_mvb2_q40 : MetalComputePipeline?
 var g_pso_kq_mvb4_q40 : MetalComputePipeline?
 var g_pso_kq_mvb8_q40 : MetalComputePipeline?
 var g_pso_kq_mm_b40 : MetalComputePipeline?
+var g_pso_kq_nv4 : MetalComputePipeline?   //! the nv4 stamps: the iq4 family under the UE4M3 byte pair
+var g_pso_kq_mvb2_nv4 : MetalComputePipeline?
+var g_pso_kq_mvb4_nv4 : MetalComputePipeline?
+var g_pso_kq_mvb8_nv4 : MetalComputePipeline?
+var g_pso_kq_mm_b49 : MetalComputePipeline?
 var g_pso_kq_mm_b51 : MetalComputePipeline?
 var g_pso_kq_mm_b4n32 : MetalComputePipeline?
 var g_pso_kq_iq2s : MetalComputePipeline?
@@ -486,6 +493,9 @@ var g_pso_kq_mvb8h_iq4nl : MetalComputePipeline?
 var g_pso_kq_mvb2h_q40 : MetalComputePipeline?
 var g_pso_kq_mvb4h_q40 : MetalComputePipeline?
 var g_pso_kq_mvb8h_q40 : MetalComputePipeline?
+var g_pso_kq_mvb2h_nv4 : MetalComputePipeline?
+var g_pso_kq_mvb4h_nv4 : MetalComputePipeline?
+var g_pso_kq_mvb8h_nv4 : MetalComputePipeline?
 var g_pso_kq_mvb2h_k3 : MetalComputePipeline?
 var g_pso_kq_mvb4h_k3 : MetalComputePipeline?
 var g_pso_kq_mvb8h_k3 : MetalComputePipeline?
@@ -1236,7 +1246,7 @@ def kq_quants_of(dev : MetalDevice?; t : Model; fmt : KqFmt; off : int64) : tupl
 }
 
 //! One kq tensor's GPU-form scale bind (the gemv lab's layouts, pre-baked by the blob transform):
-//! k4/k5/q40/iq4nl = 16B compact blocks at soff, doff 0; every other format is the split plane -
+//! k4/k5/q40/iq4nl/nv4 = 16B compact blocks at soff, doff 0; every other format is the split plane -
 //! sub-scale strips at soff, the packed f16 d plane at doff, the kernels binding the buffer twice.
 [arch(at = "../ARCHITECTURE_GPU_QUANT_PLANES.md#metal-kq-split-scale-plane")]
 def kq_scales_of(dev : MetalDevice?; t : Model; fmt : KqFmt; off : int64) : tuple<buf : MetalBuffer?; soff : uint64; doff : uint64> {
@@ -1250,10 +1260,10 @@ def kq_scales_of(dev : MetalDevice?; t : Model; fmt : KqFmt; off : int64) : tupl
             doff = uint64(kq_scale_doff(fmt, plane_sb, sb0)))
 }
 
-//! A superblock's packed d-tail bytes in a kq format's split scale plane: 0 for the compact formats (k4/k5/q40/iq4nl -
+//! A superblock's packed d-tail bytes in a kq format's split scale plane: 0 for the compact formats (k4/k5/q40/iq4nl/nv4 -
 //! one 16B block, no tail), 4 for k2 (d and dmin), 2 for every other format.
 def kq_scale_d_tail(fmt : KqFmt) : int64 {
-    let compact = fmt == KqFmt.k4 || fmt == KqFmt.k5 || fmt == KqFmt.q40 || fmt == KqFmt.iq4nl
+    let compact = fmt == KqFmt.k4 || fmt == KqFmt.k5 || fmt == KqFmt.q40 || fmt == KqFmt.iq4nl || fmt == KqFmt.nv4
     return compact ? 0l : (fmt == KqFmt.k2 ? 4l : 2l)
 }
 
@@ -3219,6 +3229,13 @@ def public b32_code_val(q : uint; q40l : bool) : float => q40l ? float(int(q) - 
 [arch(at = "../ARCHITECTURE_GPU_QUANT_PLANES.md#metal-kq-split-scale-plane")]
 def public iq3s4_val(q : uint) : float => float(2 * int(q) - 15)
 
+//! an nv4 nibble's value: the doubled e2m1 magnitudes (`mx4_lut`) as two packed words, the sign off bit 3
+def public mx4_val(q : uint) : float {
+    let w = (q & 4u) == 0u ? 50462976u : 201852420u   //! 0x03020100 and 0x0C080604: the magnitudes 0 1 2 3 and 4 6 8 12
+    let m = float((w >> ((q & 3u) * 8u)) & 255u)
+    return (q & 8u) == 0u ? m : -m
+}
+
 // ===== Metal-4 tensor twin race scaffolding (shared by the per-module race sections) =====
 
 struct public MetalTensorRaceResult {
@@ -3275,6 +3292,7 @@ enum KqRaceScaleForm {
     split_dmin  //!< k2: 16B strips + a 4B d+dmin tail
     pure_d      //!< iq4nl, q40 and the per-32 d-only planes: a pure-d plane, 8 f16 per superblock
     pair_dm     //!< q5_1: d and m a 32-block, 16 f16 per superblock
+    ue4m3       //!< nv4: sixteen UE4M3 sub-block scales a superblock, one byte each
 }
 
 //! A K-quant weight fixture in the engine's split-plane layout: random quant bits (any pattern is a
@@ -3306,6 +3324,10 @@ def race_kq_planes(dev : MetalDevice?; nblk, qu_per_sb : int; sform : KqRaceScal
             for (b in range(sbytes / 2)) {
                 ph[b] = float16(0.25)
             }
+        }
+    } elif (sform == KqRaceScaleForm.ue4m3) {
+        for (i in range(sbytes)) {
+            splane[i] = uint8(0x30)   //! UE4M3 e = 6, m = 0: 0.25 at half
         }
     } else {
         unsafe {

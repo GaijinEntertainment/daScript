@@ -244,7 +244,7 @@ def private kq_dq_split(fmt : int) : bool => fmt != 4 && fmt != 5 && fmt != 6
 def private kq_dq_dispatch(enc; fmt : int; dq_pso;
                            bks, bkq, bwh, bk, bn; nsb, nb, tbase, td, kdim : int) {
     let f = kq_fmt_of_id(fmt, "kq_dq_dispatch")
-    let compact = fmt == 4 || fmt == 5 || fmt == 45 || fmt == 40
+    let compact = fmt == 4 || fmt == 5 || fmt == 45 || fmt == 40 || fmt == 49
     let so = uint64(tbase * nb * 16)
     let d0 = compact ? so : uint64(nsb * 16 + tbase * nb * (fmt == 2 ? 4 : 2))
     let qo = uint64(tbase) * uint64(nb) * uint64(kq_qsb(fmt))
@@ -409,7 +409,7 @@ def private kq_dbuf_gate(t : T?; var dev, queue; fmt : int; m, kdim, ndim : int;
         let by_b = mc |> out_words(m * ndim, -500.0)
         let bk = mc |> in_plain([uint(kdim)])
         let bn = mc |> in_plain([uint(ndim)])
-        let compact = fmt == 4 || fmt == 5 || fmt == 45 || fmt == 40
+        let compact = fmt == 4 || fmt == 5 || fmt == 45 || fmt == 40 || fmt == 49
         let doff = compact ? 0ul : uint64(nsb * 16)
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
             invoke(ka.enc, enc, pso_a, mc.buf[bks], doff, mc.buf[bks], 0ul, mc.buf[bkq], 0ul, mc.buf[bx], 0ul, mc.buf[by_a], 0ul, mc.buf[bk], mc.buf[bn], int64(m), int64(ndim))
@@ -967,6 +967,7 @@ def private moe_kq_base(f) {   //! generic, as the gates are: the Apple half alo
     if (f == KqFmt.iq3s4) return kernel_of(@@pf_enc_moe_mm_iq3s4_c)
     if (f == KqFmt.iq4nl) return kernel_of(@@pf_enc_moe_mm_iq4nl_c)
     if (f == KqFmt.q40) return kernel_of(@@pf_enc_moe_mm_q40_c)
+    if (f == KqFmt.nv4) return kernel_of(@@pf_enc_moe_mm_nv4_c)
     if (f == KqFmt.iq3s) return kernel_of(@@pf_enc_moe_mm_iq3s_c)
     if (f == KqFmt.iq3xxs) return kernel_of(@@pf_enc_moe_mm_iq3xxs_c)
     if (f == KqFmt.iq2s) return kernel_of(@@pf_enc_moe_mm_iq2s_c)
@@ -989,6 +990,7 @@ def private moe_split_twin(f; form : MoeSplitForm) {   //! generic, as the gates
     if (f == KqFmt.iq4xs) return moe_form(form, kernel_of(@@pf_enc_moe_mm_iq4xs_th_c), kernel_of(@@pf_enc_moe_mm_iq4xs_th128_c), kernel_of(@@pf_enc_moe_mm_iq4xs_thr_c))
     if (f == KqFmt.iq3s4) return moe_form(form, kernel_of(@@pf_enc_moe_mm_iq3s4_th_c), kernel_of(@@pf_enc_moe_mm_iq3s4_th128_c), kernel_of(@@pf_enc_moe_mm_iq3s4_thr_c))
     if (f == KqFmt.q40) return moe_form(form, kernel_of(@@pf_enc_moe_mm_q40_th_c), kernel_of(@@pf_enc_moe_mm_q40_th128_c), kernel_of(@@pf_enc_moe_mm_q40_thr_c))
+    if (f == KqFmt.nv4) return moe_form(form, kernel_of(@@pf_enc_moe_mm_nv4_th_c), kernel_of(@@pf_enc_moe_mm_nv4_th128_c), kernel_of(@@pf_enc_moe_mm_nv4_thr_c))
     if (f == KqFmt.iq3s) return moe_form(form, kernel_of(@@pf_enc_moe_mm_iq3s_th_c), kernel_of(@@pf_enc_moe_mm_iq3s_th128_c), kernel_of(@@pf_enc_moe_mm_iq3s_thr_c))
     if (f == KqFmt.iq3xxs) return moe_form(form, kernel_of(@@pf_enc_moe_mm_iq3xxs_th_c), kernel_of(@@pf_enc_moe_mm_iq3xxs_th128_c), kernel_of(@@pf_enc_moe_mm_iq3xxs_thr_c))
     if (f == KqFmt.iq2s) return moe_form(form, kernel_of(@@pf_enc_moe_mm_iq2s_th_c), kernel_of(@@pf_enc_moe_mm_iq2s_th128_c), kernel_of(@@pf_enc_moe_mm_iq2s_thr_c))
@@ -1612,6 +1614,8 @@ def test_metal_gemm_kernels(t : T?) {
                 kq_mulmm_gate(t, dev, queue, 45, false, 32, 256, 128)
                 kq_mulmm_gate(t, dev, queue, 40, false, 64, 512, 64)
                 kq_mulmm_gate(t, dev, queue, 40, false, 32, 256, 128)
+                kq_mulmm_gate(t, dev, queue, 49, false, 64, 512, 64)
+                kq_mulmm_gate(t, dev, queue, 49, false, 32, 256, 128)
                 kq_mulmm_gate(t, dev, queue, 2, false, 64, 512, 64)
                 kq_mulmm_gate(t, dev, queue, 2, false, 32, 256, 128)
                 kq_mulmm_gate(t, dev, queue, 23, false, 64, 512, 64)
@@ -1621,7 +1625,7 @@ def test_metal_gemm_kernels(t : T?) {
                 kq_mulmm_gate(t, dev, queue, 25, false, 64, 512, 64)
                 kq_mulmm_gate(t, dev, queue, 25, false, 32, 256, 128)
                 // the iquant tensor twins (T, TH and the tall TH128 stamps; twins skip without Metal-4)
-                for (fmt in [44, 35, 45, 40, 3, 33, 34, 2, 23, 24, 25]) {
+                for (fmt in [44, 35, 45, 40, 49, 3, 33, 34, 2, 23, 24, 25]) {
                     kq_mulmm_gate(t, dev, queue, fmt, true, 64, 512, 64)
                     kq_mulmm_gate(t, dev, queue, fmt, true, 64, 512, 64, halfx = true)
                     kq_mulmm_gate(t, dev, queue, fmt, true, 256, 512, 64, halfx = true, tall = true)
@@ -1636,18 +1640,18 @@ def test_metal_gemm_kernels(t : T?) {
                 q8_devw_gate(t, dev, queue, 64, 256, 64)
                 q8_devw_gate(t, dev, queue, 32, 288, 128)   // non-256-multiple block count arms the dequant tail guard
                 q8_devw_gate(t, dev, queue, 128, 256, 128, mt = 128)   // tall dev-W GEMM stamp
-                for (fmt in [4, 5, 6, 44, 35, 45, 40, 3, 33, 34, 2, 23, 24, 25]) {
+                for (fmt in [4, 5, 6, 44, 35, 45, 40, 49, 3, 33, 34, 2, 23, 24, 25]) {
                     kq_devw_gate(t, dev, queue, fmt, 64, 512, 64)
                     kq_devw_gate(t, dev, queue, fmt, 32, 512, 128)   // ndim%128: the tiled leg runs
                 }
-                for (fmt in [0, 4, 5, 6, 44, 45, 40, 3, 33, 34, 2, 23, 24, 25]) {
+                for (fmt in [0, 4, 5, 6, 44, 45, 40, 49, 3, 33, 34, 2, 23, 24, 25]) {
                     devw_bake_mirror_gate(t, dev, queue, fmt, 64, 512)
                 }
                 q8_dbuf_gate(t, dev, queue, 128, 256, 64)
                 q8_dbuf_gate(t, dev, queue, 128, 288, 128)   //! kdim%64 == 32: the tail chunk on both arms
                 q8_dbuf_gate(t, dev, queue, 256, 512, 128)   //! two M-tiles, deeper K
                 q8_dbuf_gate(t, dev, queue, 64, 256, 64, mt = 32)   //! the 32-row stamp pair
-                for (fmt in [4, 5, 6, 44, 35, 45, 40, 3, 33, 34, 2, 23, 24, 25]) {
+                for (fmt in [4, 5, 6, 44, 35, 45, 40, 49, 3, 33, 34, 2, 23, 24, 25]) {
                     kq_dbuf_gate(t, dev, queue, fmt, 128, 512, 64)
                     kq_dbuf_gate(t, dev, queue, fmt, 64, 512, 64, mt = 32)   //! the 32-row stamp pair
                 }
@@ -1679,7 +1683,7 @@ def test_metal_gemm_kernels(t : T?) {
                 q8_gemm64_b_gate(t, dev, queue, true, 64, 128, 128)
                 // the MoE gathered mul_mm family: kq trio + q8/mx4 with their tensor twins
                 // (a zero-count expert rides the first arm; twins are contiguous-only by design)
-                for (fmt in [4, 5, 6, 3, 2, 44, 35, 45, 40, 33, 34, 23, 24, 25]) {
+                for (fmt in [4, 5, 6, 3, 2, 44, 35, 45, 40, 49, 33, 34, 23, 24, 25]) {
                     moe_mulmm_kq_gate(t, dev, queue, fmt, 256, 64, [32, 0, 40, 8], true)   // the in-kernel gather; a zero-count expert
                     moe_mulmm_kq_gate(t, dev, queue, fmt, 256, 128, [8, 33], false)   // 2 col tiles + contiguous
                     moe_mulmm_split_gate(t, dev, queue, fmt, 256, 128, [8, 33])

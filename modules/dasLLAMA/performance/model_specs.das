@@ -425,6 +425,9 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
         // the per-32 hybrid table carrier: the Q5_1 token table, classifier, NextN eh_proj and deltanet planes as q51
         ModelSpec(file = "Qwen3.5-0.8B-MTP-Q5_1-local.gguf",
             recipe = "llama-quantize --allow-requantize --pure --token-embedding-type q5_1 --output-tensor-type q5_1 Qwen3.5-0.8B-MTP-Q8_0.gguf Qwen3.5-0.8B-MTP-Q5_1-local.gguf Q5_1"),
+        // the nv4 hybrid carrier (tests/test_metal_format_census.das, `census-nv4-hybrid`): every plane NVFP4 - the deltanet planes, the NextN eh_proj, the table and the classifier - with no `.scale`
+        ModelSpec(file = "Qwen3.5-0.8B-MTP-NVFP4-pure-local.gguf",
+            recipe = "llama-quantize --allow-requantize --pure --token-embedding-type nvfp4 --output-tensor-type nvfp4 Qwen3.5-0.8B-MTP-Q8_0.gguf Qwen3.5-0.8B-MTP-NVFP4-pure-local.gguf NVFP4"),
         // the embedding model whose file names its read: `qwen3.pooling_type` last, `add_eos_token` on
         // (tests/test_embeddings.das holds its model card's cosine matrix as the oracle)
         ModelSpec(file = "Qwen3-Embedding-0.6B-Q8_0.gguf",
@@ -865,6 +868,9 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             parity <- ev_qwen_count([kq_native = true, moe_reference = true])),
         ModelSpec(file = "Qwen3-30B-A3B-Q8_0.gguf", display = "Qwen3-30B-A3B-q8",
             parity <- ev_qwen_count([moe_reference = true])),
+        // the nv4 MoE carrier (tests/test_metal_format_census.das, `census-moe-nv4`): the 768-wide routed stacks, the table and the classifier NVFP4 - every row on the 256 lattice; no `.scale`
+        ModelSpec(file = "Qwen3-30B-A3B-NVFP4-pure-local.gguf",
+            recipe = "llama-quantize --allow-requantize --pure --token-embedding-type nvfp4 --output-tensor-type nvfp4 Qwen3-30B-A3B-Q8_0.gguf Qwen3-30B-A3B-NVFP4-pure-local.gguf NVFP4"),
         ModelSpec(file = "Qwen3-30B-A3B-Instruct-2507-UD-Q3_K_XL.gguf", display = "Qwen3-30B-A3B-q3kxl", quant_label = "q3_k_xl",
             parity <- ev_qwen_count([kq_native = true, moe_reference = true])),
         ModelSpec(file = "Qwen3-30B-A3B-Thinking-2507-UD-Q3_K_XL.gguf", display = "Qwen3-30B-A3B-thinking-q3kxl", quant_label = "q3_k_xl",
@@ -900,10 +906,13 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
         ModelSpec(file = "Llama-3.2-1B-Instruct-Q4_0-local.gguf", display = "Llama-3.2-1B-q40", quant_label = "q4_0",
             recipe = "llama-quantize --allow-requantize Llama-3.2-1B-Instruct-Q8_0.gguf Llama-3.2-1B-Instruct-Q4_0-local.gguf Q4_0",
             parity <- ev_llama_count([kq_native = true])),
-        // the dense nv4 carrier, the CUDA home's vehicle: every dense plane NVFP4 under a Q6_K table, no `.scale` (the ModelOpt files' BF16 k/v beside an nv4 q is a mixed feed the whole-model drivers decline); the NVFP4 target is the `nvfp4-quantize` branch of the local llama.cpp clone - upstream has the ftype, not its llama-quantize option row
+        // the dense nv4 carrier, the CUDA home's vehicle and the Metal census's (tests/test_metal_format_census.das, `census-nv4`): every dense plane NVFP4 under a Q6_K table, no `.scale` (the ModelOpt files' BF16 k/v beside an nv4 q is a mixed feed the whole-model drivers decline); the NVFP4 target is the `nvfp4-quantize` branch of the local llama.cpp clone - upstream has the ftype, not its llama-quantize option row
         ModelSpec(file = "Llama-3.2-1B-Instruct-NVFP4-local.gguf", display = "Llama-3.2-1B-nv4", quant_label = "nv4",
             recipe = "llama-quantize --allow-requantize Llama-3.2-1B-Instruct-Q8_0.gguf Llama-3.2-1B-Instruct-NVFP4-local.gguf NVFP4",
             parity <- ev_llama_count([kq_native = true])),
+        // the nv4 table carrier (tests/test_metal_format_census.das, `census-nv4-table`): the same mint with the token table nv4, the tied classifier reading it
+        ModelSpec(file = "Llama-3.2-1B-Instruct-emb-NVFP4-local.gguf",
+            recipe = "llama-quantize --allow-requantize --token-embedding-type nvfp4 Llama-3.2-1B-Instruct-Q8_0.gguf Llama-3.2-1B-Instruct-emb-NVFP4-local.gguf NVFP4"),
         // the 8B pair of the same mints: the FP4 leaf's larger dense carrier and its equal-bpw int8 twin
         ModelSpec(file = "Meta-Llama-3.1-8B-Instruct-NVFP4-local.gguf", display = "Llama-3.1-8B-nv4", quant_label = "nv4",
             recipe = "llama-quantize --allow-requantize Meta-Llama-3.1-8B-Instruct-Q8_0.gguf Meta-Llama-3.1-8B-Instruct-NVFP4-local.gguf NVFP4"),

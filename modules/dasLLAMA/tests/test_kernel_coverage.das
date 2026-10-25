@@ -65,7 +65,7 @@ require dasllama/dasllama_env   // nolint:STYLE030,LINT019 — the read sites si
 let private CENSUS_NEVER_DISPATCHED <- [
     // the classifier tail's selection (compiled on every Metal arm, dispatched only for a sampled stream's step; the zoo's rows
     // step greedy); its coverage is cls_select_gate in test_metal_misc_kernels.das
-    "MetalClsSelect",
+    "metal_cls_select",
     // the MoE expert mul_mm tall M-tile pair (128-row floor + remainder) in q5_K: the zoo
     // stocks no Q5_K MoE carrier, where every other format's pair rides a census row's
     // window. Its coverage is the tall-pair kernel-unit gate in test_metal_gemm_kernels.das
@@ -136,6 +136,14 @@ let private CENSUS_NEVER_DISPATCHED <- [
     // T/TH keys the row DOES dispatch. Their coverage is kq_mvb_gate(fmt 40) in
     // test_metal_gemv_kernels.das and kq_mulmm_gate(fmt 40) in test_metal_gemm_kernels.das
     "MetalKqMvB2Q40", "MetalKqMvB4Q40", "MetalKqMvB8Q40", "MetalKqMulMmQ40_metal_kq_mulmm",
+    // the nv4 half-x small-batch twins: the NVFP4 llama row's batched steps dispatch the f32 forms, and the half forms wait
+    // on a `kq_rows_half_nv4` crown no box has raced. Their coverage is test_metal_kq_half_forms in test_metal_gemv_kernels.das;
+    // the nv4 token-table gather's carrier (an NVFP4 table) is minted nowhere - its coverage is embed_kq_gate (fmt 49) in
+    // test_metal_misc_kernels.das
+    "MetalKqMvB2Nv4H", "MetalKqMvB4Nv4H", "MetalKqMvB8Nv4H", "MetalEmbedNv4",
+    // the nv4 dense tensor twins the NVFP4 llama row dispatches only under the `kq_mulmm_nv4` crown (full keys: the T stem is a
+    // prefix of every other twin's); their coverage is kq_mulmm_gate(fmt 49) in test_metal_gemm_kernels.das
+    "MetalKqMulMmNv4T_metal_kq_mulmm_iq4xs_t", "MetalKqMulMmNv4TH_metal_kq_mulmm_iq4xs_t",
     // the dev-W dequant kernels of the split-scale and iquant formats: the image mint's dev-W bake
     // runs one per format, and no stocked census carrier holds a plane in any of them (same zoo
     // quants as above). Their coverage is kq_devw_gate in test_metal_gemm_kernels.das, whose
@@ -147,9 +155,9 @@ let private CENSUS_NEVER_DISPATCHED <- [
     // twins and dev-W passes: no stocked carrier holds a dense plane in these formats at a DRAM-class panel (the gemma4moe
     // row reaches q40's under its crown). Their coverage is kq_mulmm_gate (tall) and kq_dbuf_gate (the 128- and 32-row
     // pairs) in test_metal_gemm_kernels.das, and b32_dense_twins in test_metal_prefill_kernels.das
-    "MetalKqMulMmIq4xsTH128", "MetalKqMulMmIq3s4TH128", "MetalKqMulMmIq4nlTH128", "MetalKqMulMmQ40TH128", "MetalKqMulMmK3TH128", "MetalKqMulMmK2TH128", "MetalKqMulMmIq2sTH128", "MetalKqMulMmIq2xsTH128", "MetalKqMulMmIq2xxsTH128",
-    "MetalKqMulMmIq4xsTHDb", "MetalKqMulMmIq3s4THDb", "MetalKqMulMmIq4nlTHDb", "MetalKqMulMmQ40THDb", "MetalKqMulMmK3THDb", "MetalKqMulMmK2THDb", "MetalKqMulMmIq2sTHDb", "MetalKqMulMmIq2xsTHDb", "MetalKqMulMmIq2xxsTHDb", "MetalKqMulMmIq3sTHDb", "MetalKqMulMmIq3xxsTHDb",
-    "MetalKqMulMmIq4xsTHDb128", "MetalKqMulMmIq3s4THDb128", "MetalKqMulMmIq4nlTHDb128", "MetalKqMulMmQ40THDb128", "MetalKqMulMmK3THDb128", "MetalKqMulMmK2THDb128", "MetalKqMulMmIq2sTHDb128", "MetalKqMulMmIq2xsTHDb128", "MetalKqMulMmIq2xxsTHDb128", "MetalKqMulMmIq3sTHDb128", "MetalKqMulMmIq3xxsTHDb128",
+    "MetalKqMulMmIq4xsTH128", "MetalKqMulMmIq3s4TH128", "MetalKqMulMmIq4nlTH128", "MetalKqMulMmQ40TH128", "MetalKqMulMmNv4TH128", "MetalKqMulMmK3TH128", "MetalKqMulMmK2TH128", "MetalKqMulMmIq2sTH128", "MetalKqMulMmIq2xsTH128", "MetalKqMulMmIq2xxsTH128",
+    "MetalKqMulMmIq4xsTHDb", "MetalKqMulMmIq3s4THDb", "MetalKqMulMmIq4nlTHDb", "MetalKqMulMmQ40THDb", "MetalKqMulMmNv4THDb", "MetalKqMulMmK3THDb", "MetalKqMulMmK2THDb", "MetalKqMulMmIq2sTHDb", "MetalKqMulMmIq2xsTHDb", "MetalKqMulMmIq2xxsTHDb", "MetalKqMulMmIq3sTHDb", "MetalKqMulMmIq3xxsTHDb",
+    "MetalKqMulMmIq4xsTHDb128", "MetalKqMulMmIq3s4THDb128", "MetalKqMulMmIq4nlTHDb128", "MetalKqMulMmQ40THDb128", "MetalKqMulMmNv4THDb128", "MetalKqMulMmK3THDb128", "MetalKqMulMmK2THDb128", "MetalKqMulMmIq2sTHDb128", "MetalKqMulMmIq2xsTHDb128", "MetalKqMulMmIq2xxsTHDb128", "MetalKqMulMmIq3sTHDb128", "MetalKqMulMmIq3xxsTHDb128",
     "MetalKqMulMmQ51T", "MetalKqMulMmQ51TH", "MetalKqMulMmQ51TH128", "MetalKqMulMmQ51THDb", "MetalKqMulMmQ51THDb128", "MetalKqDequantQ51",
     "MetalKqMulMmIq4nl32T", "MetalKqMulMmIq4nl32TH", "MetalKqMulMmIq4nl32TH128", "MetalKqMulMmIq4nl32THDb", "MetalKqMulMmIq4nl32THDb128", "MetalKqDequantIq4nl32",
     "MetalKqMulMmQ4032T", "MetalKqMulMmQ4032TH", "MetalKqMulMmQ4032TH128", "MetalKqMulMmQ4032THDb", "MetalKqMulMmQ4032THDb128",
@@ -163,6 +171,7 @@ let private CENSUS_NEVER_DISPATCHED <- [
     // (pf_enc_moe_mm's last arm). followup_metal.md sec.14 owes that arm
     "MetalMoeMulMmK3T", "MetalMoeMulMmK3TH", "MetalMoeMulMmK3TH128", "MetalMoeMulMmK3THR",
     "MetalMoeMulMmIq4xsT", "MetalMoeMulMmIq4xsTH", "MetalMoeMulMmIq4xsTH128", "MetalMoeMulMmIq4xsTHR",
+    "MetalMoeMulMmNv4T", "MetalMoeMulMmNv4TH", "MetalMoeMulMmNv4TH128", "MetalMoeMulMmNv4THR",
     "MetalMoeMulMmIq3sT", "MetalMoeMulMmIq3sTH", "MetalMoeMulMmIq3sTH128", "MetalMoeMulMmIq3sTHR",
     "MetalMoeMulMmIq3xxsT", "MetalMoeMulMmIq3xxsTH", "MetalMoeMulMmIq3xxsTH128", "MetalMoeMulMmIq3xxsTHR",
     "MetalMoeMulMmIq2sT", "MetalMoeMulMmIq2sTH", "MetalMoeMulMmIq2sTH128", "MetalMoeMulMmIq2sTHR",
@@ -179,7 +188,7 @@ let private CENSUS_NEVER_DISPATCHED <- [
     // the expert-indexed GEMVs of the same formats, on the same expert planes nothing stocks.
     // Their coverage is moe_kq_gemv_gate in test_metal_gemv_kernels.das
     "metal_moe_gemv_k3", "metal_moe_gemv_iq4xs", "metal_moe_gemv_iq3s", "metal_moe_gemv_iq3xxs",
-    "metal_moe_gemv_iq2s", "metal_moe_gemv_iq2xs", "metal_moe_gemv_iq2xxs",
+    "metal_moe_gemv_iq2s", "metal_moe_gemv_iq2xs", "metal_moe_gemv_iq2xxs", "metal_moe_gemv_nv4",
     // the Q2_K and superblock IQ4_NL routed forms - the gathered GEMV, the simdgroup base mul_mm and the four tensor
     // twins: no stocked MoE carrier holds a k2 or iq4nl expert plane. Their coverage is moe_kq_gemv_gate (fmt 2 / 45) in
     // test_metal_gemv_kernels.das and moe_mulmm_kq_gate / moe_mulmm_split_gate in test_metal_gemm_kernels.das
@@ -187,7 +196,7 @@ let private CENSUS_NEVER_DISPATCHED <- [
     // the simdgroup base mul_mm of the split formats - the routed site's form on a box without the tensor toolchain, or
     // where the window took no gather panel: the same expert planes nothing stocks. Their coverage is moe_mulmm_kq_gate
     // in test_metal_gemm_kernels.das
-    "metal_moe_mulmm_k3", "metal_moe_mulmm_k2", "metal_moe_mulmm_iq4xs", "metal_moe_mulmm_iq4nl", "metal_moe_mulmm_q40",
+    "metal_moe_mulmm_k3", "metal_moe_mulmm_k2", "metal_moe_mulmm_iq4xs", "metal_moe_mulmm_iq4nl", "metal_moe_mulmm_q40", "metal_moe_mulmm_nv4",
     "metal_moe_mulmm_iq3s", "metal_moe_mulmm_iq3xxs", "metal_moe_mulmm_iq2s", "metal_moe_mulmm_iq2xs", "metal_moe_mulmm_iq2xxs",
     // the dense per-32 forms (q51, iq4nl32): a dense Q5_1 or off-lattice IQ4_NL plane loads in its own form
     // (`kq_fmt_row_ok`), and no stocked census carrier holds one - the census-q51 / census-iq4nl32 arms mint
@@ -309,6 +318,10 @@ def private census_zoo(t : T?) {
     set_wscale_f16(false)
     // the q5_K tail on the same carrier — Q5_K_M rows drive the k5 GEMV/mulmm/batch tiles
     cov_model(t, path_join(models_dir(), "Llama-3.2-1B-Instruct-Q5_K_M.gguf"), "llama",
+        [KVDtype.f16], [2, 4, 8])
+    // the NVFP4 mint of the same carrier (every dense plane nv4 under a Q6_K table): the nv4 GEMV, its small-batch forms
+    // and its dense mul_mm under the box's crown
+    cov_model(t, path_join(models_dir(), "Llama-3.2-1B-Instruct-NVFP4-local.gguf"), "llama",
         [KVDtype.f16], [2, 4, 8])
     // gemma2: K-quant weights x softcap/sliding/geglu/wide heads; B=4/8 drive the
     // k4/k6 batch tiles; the three codecs reach the head-of-256 fused attention's three stamps
@@ -729,6 +742,9 @@ let private CENSUS_CROWN_CONDITIONAL : table<string; string> <- {
     "MetalKqMulMmIq3s4TH128" => "kq_mulmm_iq3s4", "MetalKqMulMmIq3s4THDb" => "kq_mulmm_iq3s4", "MetalKqMulMmIq3s4THDb128" => "kq_mulmm_iq3s4",
     "MetalKqMulMmIq4nlTH128" => "kq_mulmm_iq4nl", "MetalKqMulMmIq4nlTHDb" => "kq_mulmm_iq4nl", "MetalKqMulMmIq4nlTHDb128" => "kq_mulmm_iq4nl",
     "MetalKqMulMmQ40TH128" => "kq_mulmm_q40", "MetalKqMulMmQ40THDb" => "kq_mulmm_q40", "MetalKqMulMmQ40THDb128" => "kq_mulmm_q40",
+    "MetalKqMulMmNv4TH128" => "kq_mulmm_nv4", "MetalKqMulMmNv4THDb" => "kq_mulmm_nv4", "MetalKqMulMmNv4THDb128" => "kq_mulmm_nv4",
+    "MetalKqMulMmNv4T_metal_kq_mulmm_iq4xs_t" => "kq_mulmm_nv4", "MetalKqMulMmNv4TH_metal_kq_mulmm_iq4xs_t" => "kq_mulmm_nv4",
+    "MetalKqMvB2Nv4H" => "kq_rows_half_nv4", "MetalKqMvB4Nv4H" => "kq_rows_half_nv4", "MetalKqMvB8Nv4H" => "kq_rows_half_nv4",
     "MetalKqMulMmK3TH128" => "kq_mulmm_k3", "MetalKqMulMmK3THDb" => "kq_mulmm_k3", "MetalKqMulMmK3THDb128" => "kq_mulmm_k3",
     "MetalKqMulMmK2TH128" => "kq_mulmm_k2", "MetalKqMulMmK2THDb" => "kq_mulmm_k2", "MetalKqMulMmK2THDb128" => "kq_mulmm_k2",
     "MetalKqMulMmIq2sTH128" => "kq_mulmm_iq2s", "MetalKqMulMmIq2sTHDb" => "kq_mulmm_iq2s", "MetalKqMulMmIq2sTHDb128" => "kq_mulmm_iq2s",
