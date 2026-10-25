@@ -2296,18 +2296,22 @@
     `--ref-clean` naming the clean-cpu `llama-bench` `benchmarks/setup_lcpp_ref.das` builds at `DEFAULT_REF_SHA`.
 
 240. **The bf16 towers' conv fronts are F16, and the half-width family has only its AMX leg.** `bf16w_tile_gen`
-    (`dasllama_math_gen.das`) multiplies a native bf16 plane as the reference does - the activations rounded to bf16,
-    the TMUL bf16 tile over a k-pair panel - and `matmul_bf16_batch` reaches it where a sidecar names an `amx_bf16`
-    perm; the gemma-E per-layer projection and the bf16 vision patch planes ride it (the 2026-10-25 `PERF_LEDGER.md`
-    Granite Rapids entry, `debug-jit`: E4B pp512 359.8 -> 368.8 tok/s over the widen walk against the committed
-    `records/gnr.json` E4B CPU pp512 row's 325.7, the tile 3921 against the f32 plane's 782 GFLOP/s at that shape). What
-    is left: the Qwen3-ASR mmproj's conv weights are F16 (`a.conv2d.*.weight`, `a.conv_out.weight`), its blocks run the
-    q8 lane, so the conv front's 1123 ms of f32 tile on the Xeon reaches the matrix unit only through an f16 operand -
-    AMX-FP16 (Granite Rapids on, Sapphire Rapids off) or an f16-to-bf16 panel (three mantissa bits under the reference's
-    f16 x f16); and the family has no vector leg, so Zen4 (`vdpbf16ps`, avx512bf16) and Graviton (`bfdot` / `bfmmla`,
-    the arm bf16 extension) run the widen walk. Done = the conv front's operand ruled and served through the family,
-    `vdpbf16ps` and `bfdot` perms in `dasllama_gemm_gen.das` over the same panel with the probe gating them, and the
-    Qwen3-ASR, gemma-4-E4B and image-chat CPU rows re-minted on every board box at the release re-mint.
+    (`dasllama_math_gen.das`) multiplies a native bf16 plane as bf16 times bf16 - the activations rounded to bf16, the
+    TMUL bf16 tile over a k-pair panel - and `matmul_bf16_batch` reaches it where a sidecar names an `amx_bf16` perm;
+    the gemma-E per-layer projection and the bf16 vision patch planes ride it (the 2026-10-25 `PERF_LEDGER.md` Granite
+    Rapids entry, `debug-jit`: E4B pp512 359.8 -> 368.8 tok/s over the widen walk against the committed
+    `records/gnr.json` E4B CPU pp512 row's 325.7 (the 2026-10-22 release-17 entry), the tile 3921 against the f32
+    plane's 782 GFLOP/s at that shape). What is left: the Qwen3-ASR mmproj's conv weights are F16 (`a.conv2d.*.weight`,
+    `a.conv_out.weight`), its blocks run the q8 lane, so the conv front's 1123 ms of f32 tile on the Xeon reaches the
+    matrix unit only through an f16 operand - AMX-FP16 (Granite Rapids on, Sapphire Rapids off) or an f16-to-bf16 panel
+    (three mantissa bits under the reference's f16 x f16); and the family has no vector leg, so Zen4 (`vdpbf16ps`,
+    avx512bf16) and Graviton (`bfdot` / `bfmmla`, the arm bf16 extension) run the widen walk. Done = the conv front's
+    operand ruled and served through the family, `vdpbf16ps` and `bfdot` perms in `dasllama_gemm_gen.das` over the same
+    panel with the probe gating them, and the Qwen3-ASR, gemma-4-E4B and image-chat CPU rows re-minted on every board
+    box at the release re-mint (`performance/gen_bench_records.das -- --workload asr -o Qwen3-ASR` and `--workload
+    llm,image -o gemma-4-E4B-it-Q8_0` with the release's rig exe; the references `llama-bench` clean-cpu and stock
+    builds at `benchmarks/setup_lcpp_ref.das`'s `DEFAULT_REF_SHA` through `LLAMA_BENCH_CLEAN` / `LLAMA_BENCH_STOCK`,
+    `llama-mtmd-cli` beside the stock build; `ARCHITECTURE_MEASUREMENT_AUDIO.md#asr-cpu-references` for the ASR pair).
 
 241. **The bench exe's ASR and TTS cells print a clip's best of their reps alone.** `lcpp_bench --asr` and `--tts`
     keep the minimum over `-r` reps (`r.enc_ms = min(...)`, the sentence sums) and the record row carries that one wall,
@@ -2326,4 +2330,7 @@
     against our 24.6 (11115 ms over 451). Done = a ruling on the ASR session's CPU codec - q8_0 by default with the
     parity cells' bars re-cut on its transcripts, or f16 kept and the row closed - written into
     `ARCHITECTURE_MEASUREMENT_AUDIO.md` and the facade's default, and the Qwen3-ASR CPU rows re-minted on every board
-    box at the release re-mint.
+    box at the release re-mint (`performance/gen_bench_records.das -- --workload asr -o Qwen3-ASR` with the release's
+    rig exe; the references `llama-bench` clean-cpu and stock builds at `benchmarks/setup_lcpp_ref.das`'s
+    `DEFAULT_REF_SHA` through `LLAMA_BENCH_CLEAN` / `LLAMA_BENCH_STOCK`, `llama-mtmd-cli` beside the stock build;
+    `ARCHITECTURE_MEASUREMENT_AUDIO.md#asr-cpu-references` for the ASR pair).

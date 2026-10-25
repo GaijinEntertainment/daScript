@@ -439,7 +439,7 @@ def log_mel_qwen3a(samples : array<float> | #; n_mel : int64) : WhisperMel {
                 }
             }
             // power -> mel: float products in groups of 4 summed in float, groups accumulated in
-            // double (reference-exact rounding), floor 2^-24, log10
+            // double (the rounding the parity cells hold), floor 2^-24, log10
             let mel_floor = 5.960464477539063e-08lf
             let log10_e = 0.43429448190325176lf
             maybe_parallel_for(0, int(n_len), lanes_for_work(n_len * n_mel * n_bins, 0)) $(rb, re) {

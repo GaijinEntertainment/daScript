@@ -211,12 +211,11 @@ another expert than decode would (`test_parity.das` holds the 26B-A4B's Q4_0 fil
 tokens on the CPU backend; `test_matmul_batch.das` holds the entry to the per-token matmul bit for
 bit at the router's shape).
 
-### A bf16 plane multiplies through the matrix unit as the reference does {#bf16-weight-tile-family}
+### A bf16 plane multiplies through the matrix unit on bf16 activations {#bf16-weight-tile-family}
 
-The reference build multiplies a bf16 weight plane - an encoder tower's GEMMs, gemma-E's per-layer
-projection - as bf16 times bf16: it rounds the f32 activations to bf16 first. `bf16w_batch` does the
-same through the `bf16w_tile_gen` family where the family serves the call; a declined call
-multiplies the f32 activations unrounded. Once per call, `xbf16_build_f32` rounds the activations to
+A bf16 weight plane - an encoder tower's GEMMs, gemma-E's per-layer projection - multiplies as bf16
+times bf16, the f32 activations rounded to bf16 first: `bf16w_batch` runs the `bf16w_tile_gen` family
+where the family serves the call; a declined call multiplies the f32 activations unrounded. Once per call, `xbf16_build_f32` rounds the activations to
 bf16 (nearest even) and also keeps the rounded values widened back to f32.
 
 For each unit, `bf16w_panel_build` packs the plane's rows into the B-tile layout the quant families'

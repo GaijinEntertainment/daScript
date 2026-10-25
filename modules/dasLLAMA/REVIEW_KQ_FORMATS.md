@@ -100,16 +100,15 @@ every lever at its default, a site that backend's serving call reaches reads the
 converted copy or hands a GPU site to the CPU's kernels is a defect - state that site as a gap
 instead, or cite the follow-up row that ledgers it.**
 
-**A diff that states, in any document, PR description, test name or predicate, that a backend
-serves a weight format at a site lands or cites a subtest that loads a file whose plane at that
-site is in that format on disk, and asserts that the loader's format tag for that plane equals
-its disk type and that a kernel counter (`metal_kernel_coverage_of(name)` on Metal,
-`vk_kernel_coverage_of(name)` on Vulkan, `cud_kernel_coverage_of(name)` on CUDA) that no other
-plane of that file moves rose during the run.** The file is a downloaded
-`performance/model_specs.das` row's file, or, when no downloaded row carries the format, a row
-whose `file` ends `-local.gguf` and whose `recipe` requantizes into it. A subtest that only
-asserts the backend ran still passes when the site reads a converted copy or runs on the CPU
-pre-step.
+**A diff that states, in any document, PR description, test name or predicate, that a GPU backend
+serves a `KqFmt` member at a site lands or cites a subtest that loads a file whose plane at that
+site is in that format on disk, and asserts that the loader's format tag for that plane equals its
+disk type and that a kernel counter (`metal_kernel_coverage_of(name)` on Metal,
+`vk_kernel_coverage_of(name)` on Vulkan, `cud_kernel_coverage_of(name)` on CUDA) that no other plane
+of that file moves rose during the run.** The file is a downloaded `performance/model_specs.das`
+row's file, or, when no downloaded row carries the format, a row whose `file` ends `-local.gguf` and
+whose `recipe` requantizes into it. A subtest that only asserts the backend ran still passes when
+the site reads a converted copy or runs on the CPU pre-step.
 
 **A diff that adds a lever, off by default, that makes a site read a weight format through a
 converted copy names the lever in the same change - in `ARCHITECTURE_GPU_ASYMMETRIES.md` when one

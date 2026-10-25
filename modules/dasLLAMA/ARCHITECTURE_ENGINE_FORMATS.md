@@ -245,47 +245,48 @@ repack walks that plane's region alone (`shexp_plane_q8`).
 ### CPU kernel tiers {#cpu-kernel-tiers}
 
 - **`dasllama_math.das`** - the numeric ABSTRACTION: typedefs, active backend pointers, public
-wrappers, dispatch shaping, and the array-sizing helpers every tier and the engine share
-(`reserve_resize`, `grow_resize`, `ensure_length`, `overwrite_resize`), the `[tuned]` fp32 loop-hint
-families (`dot`, `axpy`, the elementwise set, `f32_batch_tile`) and the fp32 batch walk
-(`matmul_batch_core`, `batch_tile_block`, generic over the f32 and bf16 weight lattices -
-`bf16_batch_tile` widens each halfword by the exact shift); every other kernel lives in a tier file.
+  wrappers, dispatch shaping, and the array-sizing helpers every tier and the engine share
+  (`reserve_resize`, `grow_resize`, `ensure_length`, `overwrite_resize`), the `[tuned]` fp32
+  loop-hint families (`dot`, `axpy`, the elementwise set, `f32_batch_tile`) and the fp32 batch walk
+  (`matmul_batch_core`, `batch_tile_block`, generic over the f32 and bf16 weight lattices - `bf16_batch_tile`
+  widens each halfword by the exact shift); every other kernel lives in a tier file.
 - **`dasllama_math_default.das`** - the portable backend, always registered, always correct,
-out-ranked by any platform tier - the per-32 rail's portable kernels and scalar leaves, which seat
-every backend's unset per-32 slot (`#per-32-rail`) - and the ONE body of every Q8*Q8 and mx4 kernel
-shape: each shape is a `def template` over a dot and a chunk-split placeholder, and
-`[from_template]` stamps it per (dot, split) and per weight-scale plane (the f32 plane and the
-wscale_f16 halfword plane, bit-identical over the widened plane). The idot4 stamps the arm64 tier
-registers live here too: the `idot4` builtin is plain das that every target lowers for itself. -
-**`dasllama_math_aarch64_neon.das`** - the arm64 lane-indexed SDOT tier: the `sdot4_laneq` / `tbl16`
-composers only, plus the registration of the idot4 stamps as "arm64-sdot". Its `[init]` never fires
-off-arch (`ARCHITECTURE_INVARIANTS.md#inherited-invariants`, three-layer safety model), so an
-intrinsic here needs a correct scalar fallback body, not a guard at the call site. -
-**`dasllama_math_accelerate.das`** - the Accelerate/BNNS float tier (AMX on M1-M3, SME on M4+), for
-genuinely-float planes only. BLAS-for-quant is ruled out structurally
-(`ARCHITECTURE_INVARIANTS.md#inherited-invariants`). - **`dasllama_math_gen.das`** /
-**`dasllama_gemm_gen.das`** / **`dasllama_gemm_schema.das`** / **`dasllama_gemm_register.das`** -
-the generated GEMM tier: the runtime registration, the tile generator, the layout/perm schema shared
-by generator and runtime, and the `[tune]` family registration. A hand-written tile that the
-generator could emit belongs in the generator. The bf16 tile's operand builders - the activation
-widen (`xbf16_build`, its `bf16_bits` narrow, the f32 plane's `xbf16_build_f32`), the row-dequant
-reference panel (`kq_panel_rows_bf16`) and the native bf16 plane's k-pair panel
-(`bf16w_panel_build`) - sit in `dasllama_math_gen.das` beside the walk that runs them once per batch
-call, in its JIT partition (`ARCHITECTURE_CPU_KERNELS.md#jit-partition-inlining`). The JIT cache
-keys a generated kernel by its stub's hash and its perm's arguments, never by the generator's text,
-so `REVIEW.das`'s `check_gemm_gen_stamp` pins one hash over `dasllama_gemm_gen.das` and
-`dasllama_gemm_schema.das` with their comments and blank lines cut: a code edit to either is red
-until the stamp moves, and the finding asks for the `LLVM_JIT_CODEGEN_VERSION` bump that re-keys the
-cached kernels. The check licenses no names. - **`dasllama_tune.das`** - the per-box loop-hint tuner
-(`[tuned]` / `[dasllama_grid]`) and the perm-less clone `[from_template]` (a template body into an
-empty stub, placeholder calls renamed to the annotation's targets - the kernel shapes' stamp).
-Tuning POLICY lives here; tuned VALUES live in the box's sidecar, never in source. The framework is
-OPTIONAL: `llvm_tune` comes through the `tune_framework` group, empty in a build that did not
-configure dasLLVM, and every use of it sits behind `static_if (typeinfo module_exists(llvm_tune))`,
-so a build without dasLLVM opens no sidecar, reads no policy env and reports nothing - `[tuned]`
-stamps the declared `fallback=` (or `DEFAULT_PERM`) and the AST rewrite is unchanged.
-`box_profile_verdict_at` answers the reason NAME rather than llvm_tune's enum for the same reason: a
-signature cannot be gated. - **`dasllama_tune_scope.das`** - the one `[tune_scope]` declaration
-(tuner, covered modules, version pin, shipped defaults), in a module every kernel module requires: a
-kernel reads its class entry in the defaults profile at its own compile, so the scope must be on the
-AST first.
+  out-ranked by any platform tier - the per-32 rail's portable kernels and scalar leaves, which
+  seat every backend's unset per-32 slot (`#per-32-rail`) - and the ONE body of every Q8*Q8 and
+  mx4 kernel shape: each shape is a `def template` over a dot and a chunk-split placeholder, and `[from_template]` stamps
+  it per (dot, split) and per weight-scale plane (the f32 plane and the wscale_f16 halfword plane,
+  bit-identical over the widened plane). The idot4 stamps the arm64 tier registers live here too:
+  the `idot4` builtin is plain das that every target lowers for itself.
+- **`dasllama_math_aarch64_neon.das`** - the arm64 lane-indexed SDOT tier: the `sdot4_laneq` /
+  `tbl16` composers only, plus the registration of the idot4 stamps as "arm64-sdot". Its `[init]`
+  never fires off-arch (`ARCHITECTURE_INVARIANTS.md#inherited-invariants`, three-layer safety model), so an
+  intrinsic here needs a correct scalar fallback body, not a guard at the call site.
+- **`dasllama_math_accelerate.das`** - the Accelerate/BNNS float tier (AMX on M1-M3, SME on M4+),
+  for genuinely-float planes only. BLAS-for-quant is ruled out structurally
+  (`ARCHITECTURE_INVARIANTS.md#inherited-invariants`).
+- **`dasllama_math_gen.das`** / **`dasllama_gemm_gen.das`** / **`dasllama_gemm_schema.das`** /
+  **`dasllama_gemm_register.das`** - the generated GEMM tier: the runtime registration, the tile
+  generator, the layout/perm schema shared by generator and runtime, and the `[tune]` family
+  registration. A hand-written tile that the generator could emit belongs in the generator.
+  The bf16 tile's operand builders - the activation widen (`xbf16_build`, its `bf16_bits`
+  narrow, the f32 plane's `xbf16_build_f32`), the row-dequant reference panel
+  (`kq_panel_rows_bf16`) and the native bf16 plane's k-pair panel (`bf16w_panel_build`) - sit in
+  `dasllama_math_gen.das` beside the walk that runs them once per batch call, in its JIT
+  partition (`ARCHITECTURE_CPU_KERNELS.md#jit-partition-inlining`). The JIT cache keys a
+  generated kernel by its stub's hash and its perm's arguments, never by the generator's text,
+  so `REVIEW.das`'s `check_gemm_gen_stamp` pins one hash over `dasllama_gemm_gen.das` and
+  `dasllama_gemm_schema.das` with their comments and blank lines cut: a code edit to either is red until the stamp
+  moves, and the finding asks for the `LLVM_JIT_CODEGEN_VERSION` bump that re-keys the cached
+  kernels. The check licenses no names.
+- **`dasllama_tune.das`** - the per-box loop-hint tuner (`[tuned]` / `[dasllama_grid]`) and the
+  perm-less clone `[from_template]` (a template body into an empty stub, placeholder calls
+  renamed to the annotation's targets - the kernel shapes' stamp). Tuning
+  POLICY lives here; tuned VALUES live in the box's sidecar, never in source. The framework is
+  OPTIONAL: `llvm_tune` comes through the `tune_framework` group, empty in a build that did not
+  configure dasLLVM, and every use of it sits behind `static_if (typeinfo module_exists(llvm_tune))`, so a build without dasLLVM opens no
+  sidecar, reads no policy env and reports nothing - `[tuned]` stamps the declared `fallback=`
+  (or `DEFAULT_PERM`) and the AST rewrite is unchanged. `box_profile_verdict_at` answers the
+  reason NAME rather than llvm_tune's enum for the same reason: a signature cannot be gated.
+- **`dasllama_tune_scope.das`** - the one `[tune_scope]` declaration (tuner, covered modules,
+  version pin, shipped defaults), in a module every kernel module requires: a kernel reads its
+  class entry in the defaults profile at its own compile, so the scope must be on the AST first.

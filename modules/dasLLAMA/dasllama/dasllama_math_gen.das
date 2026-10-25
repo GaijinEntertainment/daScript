@@ -4015,7 +4015,7 @@ def private kq_batch_cell_gen(fmt : int; var myp : float?; kqp : uint8 const?; k
 }
 
 // ===== the bf16-weight batch family: a native bf16 plane (a tower's or the gemma-E projection's) against
-// f32 activations, through the AMX bf16 tile - the activations rounded to bf16 as the reference's are
+// f32 activations, through the AMX bf16 tile - the activations rounded to bf16 first
 
 //! the vector contract's reference values: no tile form, four tokens a call
 def bf16w_tokstep_gen() : int => 4
