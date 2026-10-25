@@ -10,3 +10,4 @@ Function has all sideeffects, except for a user scenario. This is to bind functi
 Function may access global state (variables and such).
 Function is using 'invoke', so we don't know any additional side effects.
 Mask for all sideefects, which can be inferred from the code.
+Function may raise: it can panic or throw when called, so an unused call is not deleted.

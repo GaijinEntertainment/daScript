@@ -4,3 +4,4 @@ Expression has no side effects.
 Expression has no native side effects, i.e. expression itself has no sideeffects.
 Expression is a for loop source.
 Expression is a call argument.
+Expression may raise: it can panic or throw when evaluated, so an unused one is not deleted.

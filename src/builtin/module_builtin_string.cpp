@@ -1199,13 +1199,13 @@ namespace das
                 SideEffects::modifyArgumentAndExternal, "builtin_strdup")->arg("anything")->unsafeOperation = true;
             // regular string
             addExternInline<DAS_BIND_FUN(get_character_at)>(*this, lib, "character_at",
-                SideEffects::none, "get_character_at")->args({"str","idx","context","at"});
+                SideEffects::none, "get_character_at")->args({"str","idx","context","at"})->setMayRaise();
             addExternInline<DAS_BIND_FUN(get_character_uat)>(*this, lib, "character_uat",
                 SideEffects::none, "get_character_uat")->args({"str","idx"})->unsafeOperation = true;
             addExternInline<DAS_BIND_FUN(get_first_character)>(*this, lib, "first_character",
-                SideEffects::none, "get_first_character")->args({"str","context","at"});
+                SideEffects::none, "get_first_character")->args({"str","context","at"})->setMayRaise();
             addExternInline<DAS_BIND_FUN(get_first_character_ds)>(*this, lib, "first_character",
-                SideEffects::none, "get_first_character_ds")->args({"str","context","at"});
+                SideEffects::none, "get_first_character_ds")->args({"str","context","at"})->setMayRaise();
             addExternInline<DAS_BIND_FUN(with_das_string)>(*this, lib, "with_das_string",
                 SideEffects::invoke, "with_das_string")->args({"block","context","at"});
             addExternInline<DAS_BIND_FUN(string_repeat)>(*this, lib, "repeat",
@@ -1307,25 +1307,25 @@ namespace das
                 SideEffects::modifyExternal, "builtin_string_split")->args({"str","delimiter","block","context","lineinfo"});
             // conversion which throws exception on error. detects hex automatically
             addExternInline<DAS_BIND_FUN(string_to_int8)>(*this, lib, "int8",
-                SideEffects::none, "string_to_int8")->args({"str","context","at"});
+                SideEffects::none, "string_to_int8")->args({"str","context","at"})->setMayRaise();
             addExternInline<DAS_BIND_FUN(string_to_uint8)>(*this, lib, "uint8",
-                SideEffects::none, "string_to_uint8")->args({"str","context","at"});
+                SideEffects::none, "string_to_uint8")->args({"str","context","at"})->setMayRaise();
             addExternInline<DAS_BIND_FUN(string_to_int16)>(*this, lib, "int16",
-                SideEffects::none, "string_to_int16")->args({"str","context","at"});
+                SideEffects::none, "string_to_int16")->args({"str","context","at"})->setMayRaise();
             addExternInline<DAS_BIND_FUN(string_to_uint16)>(*this, lib, "uint16",
-                SideEffects::none, "string_to_uint16")->args({"str","context","at"});
+                SideEffects::none, "string_to_uint16")->args({"str","context","at"})->setMayRaise();
             addExternInline<DAS_BIND_FUN(string_to_int)>(*this, lib, "int",
-                SideEffects::none, "string_to_int")->args({"str","context","at"});
+                SideEffects::none, "string_to_int")->args({"str","context","at"})->setMayRaise();
             addExternInline<DAS_BIND_FUN(string_to_uint)>(*this, lib, "uint",
-                SideEffects::none, "string_to_uint")->args({"str","context","at"});
+                SideEffects::none, "string_to_uint")->args({"str","context","at"})->setMayRaise();
             addExternInline<DAS_BIND_FUN(string_to_int64)>(*this, lib, "int64",
-                SideEffects::none, "string_to_int64")->args({"str","context","at"});
+                SideEffects::none, "string_to_int64")->args({"str","context","at"})->setMayRaise();
             addExternInline<DAS_BIND_FUN(string_to_uint64)>(*this, lib, "uint64",
-                SideEffects::none, "string_to_uint64")->args({"str","context","at"});
+                SideEffects::none, "string_to_uint64")->args({"str","context","at"})->setMayRaise();
             addExternInline<DAS_BIND_FUN(string_to_float)>(*this, lib, "float",
-                SideEffects::none, "string_to_float")->args({"str","context","at"});
+                SideEffects::none, "string_to_float")->args({"str","context","at"})->setMayRaise();
             addExternInline<DAS_BIND_FUN(string_to_double)>(*this, lib, "double",
-                SideEffects::none, "string_to_double")->args({"str","context","at"});
+                SideEffects::none, "string_to_double")->args({"str","context","at"})->setMayRaise();
             // fast conversion, returns 0 if fails
             addExternInline<DAS_BIND_FUN(fast_to_int8)>(*this, lib, "to_int8",
                 SideEffects::none, "fast_to_int8")->args({"value","hex"})->arg_init(1,new ExprConstBool(false));
@@ -1398,7 +1398,7 @@ namespace das
             addExternInline<DAS_BIND_FUN(builtin_das_string_escape)>(*this, lib, "escape",
                 SideEffects::none, "builtin_das_string_escape")->args({"str","context","at"})->setTempStringResult();
             addExternInline<DAS_BIND_FUN(builtin_string_unescape)>(*this, lib, "unescape",
-                SideEffects::none, "builtin_string_unescape")->args({"str","context", "at"})->setTempStringResult();
+                SideEffects::none, "builtin_string_unescape")->args({"str","context", "at"})->setMayRaise()->setTempStringResult();
             addExternInline<DAS_BIND_FUN(builtin_string_safe_unescape)>(*this, lib, "safe_unescape",
                 SideEffects::none, "builtin_string_safe_unescape")->args({"str","context","at"})->setTempStringResult();
             addExternInline<DAS_BIND_FUN(builtin_string_replace)>(*this, lib, "replace",

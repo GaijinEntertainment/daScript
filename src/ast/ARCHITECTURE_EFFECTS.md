@@ -40,3 +40,25 @@ Every consumer below needs the whole mask; none of them is safe with any one of 
 The inliner (`isReorderSafe`, `calleeWriteFree`) reads the whole mask too. CSE reads it minus
 `CSE_TRANSPARENT_CALL_EFFECTS`: an argument write is stamped at the call, and a captured string
 writes no memory CSE tracks.
+
+`SideEffects::mayRaise` is outside the mask: a call that can raise is still pure for folding,
+rewriting, escape analysis and the lint, and `10 / 2` still folds at compile time while `10 / 0` is
+left to raise at run time. A builtin declares the bit in its binding (integer `/` and `%`, `panic`,
+the string conversions and character reads). A das function gets it the way it gets every other
+inferred bit: `getSideEffects` (`ast_unused.cpp`) sets it from the function's own nodes and ORs it
+in from every callee. A callee still being analyzed - a call cycle - counts as raising, since an
+unreported raise would be dropped.
+
+`NoSideEffectVisitor` (`ast_const_folding.cpp`) sets `Expression::mayRaise` beside `noSideEffects`,
+for the whole subtree: `a[10] + 1` raises although its root does not, and a call or an operator
+raises when its function does. A node built after the walk has `mayRaise` clear, but also
+`noSideEffects`, so it is never dropped before the next walk computes it. An `ExprMakeBlock` does not raise: making a block runs
+none of its body, and whatever the body raises surfaces where the block is invoked.
+
+Both visitors take the node rule from `nodeRaises` and the call rule from `callRaises`
+(`ast_effects.cpp`). `ExprAt` raises unless its bound check is gone (`noBoundCheck`); `ExprPtr2Ref`
+and an `ExprField` through a pointer raise unless the dereference is unchecked (`unsafeDeref`, where
+a null pointer is undefined behavior, not a raise); `ExprAsVariant`, `ExprAssert` and an `ExprInvoke`
+(its target is unknown) always raise. Only a pass that deletes
+an evaluation asks, and only through `droppable`, which wants `noSideEffects` and no `mayRaise` together. CSE does not: it reuses the first
+evaluation, which still raises.

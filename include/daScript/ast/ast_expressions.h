@@ -1161,6 +1161,7 @@ namespace das
         virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual void dispatch( Visitor & vis ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
+        virtual bool rtti_isAssert() const override { return true; }
         bool isVerify = false;
     };
 

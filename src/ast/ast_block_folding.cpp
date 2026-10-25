@@ -2,6 +2,7 @@
 
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_visitor.h"
+#include "ast_effects.h"
 
 namespace das {
 
@@ -359,7 +360,7 @@ namespace das {
                         newRet->moveSemantics = lr->moveSemantics;
                         reportFolding();
                         return newRet;
-                    } else if ( !lr->subexpr && !rr->subexpr && expr->cond->noSideEffects ) {
+                    } else if ( !lr->subexpr && !rr->subexpr && droppable(expr->cond) ) {
                         // this is actually if ( a ) return; else return;
                         // evaluating `a` does nothing, so the whole thing is a bare return
                         reportFolding();

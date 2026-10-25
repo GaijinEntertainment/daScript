@@ -362,7 +362,7 @@ namespace das {
         AstSerializer & serializeModule ( Module & module, bool already_exists );
 
         static constexpr uint32_t getVersion () {
-            return 236;   // 236: the record header pins a builtin_module_exists fold's module presence
+            return 237;   // 237: SideEffects::mayRaise in a function's sideEffectFlags
         }
 
         void serializeProgram ( ProgramPtr program, ModuleGroup & libGroup ) noexcept;
