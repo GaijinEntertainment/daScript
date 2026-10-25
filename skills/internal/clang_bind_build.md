@@ -11,7 +11,8 @@ The CMake hard-pins the version: `find_package(Clang <major>.<minor> ...)` in [m
 **Get the right package.** From the LLVM release for that version (e.g. <https://github.com/llvm/llvm-project/releases/tag/llvmorg-22.1.5>):
 
 - **Windows (MSVC): use the `clang+llvm-<ver>-x86_64-pc-windows-msvc.tar.xz` archive - NOT the `LLVM-<ver>-win64.exe` installer.** The installer ships `libclang.dll`/`.lib` + headers but **no `lib/cmake/clang`**, so `find_package(Clang)` fails (`Clang_DIR-NOTFOUND`). The `clang+llvm-...-windows-msvc` archive is the full SDK (`bin/`, `lib/`, `include/`, **`lib/cmake/clang/`**) and is MSVC-ABI-built, so it links into daslang's MSVC build. Its `libclang.dll` is self-contained (LLVM statically linked), so no companion DLLs are needed at runtime.
-- **Linux / macOS:** the distro/`apt.llvm.org` `libclang-dev` + `llvm-<ver>-dev` packages, or the matching `clang+llvm-<ver>-<triple>` archive.
+- **Linux:** the distro/`apt.llvm.org` `libclang-dev` + `llvm-<ver>-dev` packages, or the matching `clang+llvm-<ver>-<triple>` archive.
+- **macOS:** Homebrew's `llvm` (`brew install llvm`, keg-only), configured with `-DPATH_TO_LIBCLANG=/opt/homebrew/opt/llvm`. The module builds with `-fno-blocks` on Apple, so `clang-c/Index.h` declares the same opaque `*VisitorBlock` types the committed binding was generated with.
 - **Windows (mingw/clang64):** msys2's `mingw-w64-clang-x86_64-toolchain` ships libclang + its cmake package; the libclang there is dynamically linked, so the `.shared_module` needs the full `libclang + libLLVM + libc++ + ...` chain copied next to `daslang.exe` (the CMake POST_BUILD handles this).
 
 **Where it goes.** `PATH_TO_LIBCLANG` defaults to `<daslang_root>/../libclang` (a sibling folder of the checkout). Extract the archive there (so `../libclang/lib/cmake/clang/ClangConfig.cmake` exists), or point at it explicitly with `-DPATH_TO_LIBCLANG=<dir>`.
@@ -33,9 +34,14 @@ The self-binder regenerates a module's committed glue from the live headers:
 # dasClangBind's own bindings (from clang-c/Index.h)
 bin/Release/daslang.exe modules/dasClangBind/bind/bind_clangbind.das -- --clang_path <libclang-include-dir>/
 
+# dasGlfw (parses the built, patched GLFW headers under modules/dasGlfw/glfw/Release/include)
+bin/daslang modules/dasGlfw/bind/bind_glfw.das
+
 # dasImgui (parses imgui headers; -i input dir, -o output src dir)
 bin/Release/daslang.exe modules/dasImgui/bind/bind_imgui.das -- -i <imgui-headers>/ -o <module-src>/
 ```
+
+A regenerated binding can add a `func_<N>.cpp` chunk; add it to the module's CMake source list in the same commit. Generated output is host-neutral: the binder keeps `size_t`/`long` spellings rather than this host's widths, and strips the header root from `// from` comments in both the given and the symlink-resolved form.
 
 CI guards staleness with `git diff --exit-code -- <module>/src/` after running the binder - if your committed `*.inc`/`func_*.cpp` don't match a fresh regen, the build fails with a "generated files are out of date" message. Always re-run the binder and commit the result after touching a binder or bumping the libclang version.
 
@@ -55,3 +61,4 @@ The generated output is **patch-version-sensitive** - regenerating with a differ
 - **`C1001` / `LNK1000` during "Generating code"** - MSVC's link-time-codegen (LTCG) choking on a **stale incremental database** (`.ipdb`/`.iobj`) from prior builds (`"no usable IPDB/IOBJ ... fall back to full compilation"` confirms it). Not a code bug - clean-rebuild the offending target: `cmake --build build --target <name> --clean-first`. Common after a config change forces a recompile in a long-lived `build/`. (See `skills/internal/build_and_debug.md`.)
 - **Too-old SDK is silently skipped** - the `find_package(Clang 22.1)` has no `EXACT`, so it accepts any `22.1.x` or newer; a too-old SDK (e.g. 16.0.6 against a 22.1 pin) is rejected and the whole module is skipped with no error (you just get no `cbind`). A *too-new* major can satisfy the pin yet drift from the committed bindings' `clang-c` API - keep the SDK on the pinned `major.minor` (see version-bump note above).
 - **CRT match (static deps only)** - a *static* C/C++ lib linked into a module must use the same MSVC CRT as daslang or you get `LNK2038: RuntimeLibrary mismatch`. daslang uses the dynamic CRT (`/MD`) by default and the static CRT (`/MT`) only when `DAS_USE_STATIC_STD_LIBS=ON` (CMakeCommon.txt); a static dep must mirror that - see the `DAS_USE_STATIC_STD_LIBS`-gated `BUILD_FOR_MT` in [modules/dasHV/CMakeLists.txt](../modules/dasHV/CMakeLists.txt). libclang is exempt: it is consumed as a DLL via its import lib, so its internal CRT is sealed behind the C API and never has to match.
+- **Turn dasClangBind off after regenerating.** Its libclang carries a second copy of LLVM; any process that loads every shared module - the wasm cross-compile behind `daspkg release wasm` does - then has two LLVMs and dasLLVM crashes in its pass manager. Reconfigure with `-DDAS_CLANG_BIND_DISABLED=ON` and delete `modules/dasClangBind/dasModuleClangBind.shared_module`; turning the option off does not remove the built module.
