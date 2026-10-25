@@ -16,6 +16,7 @@ require dasllama/dasllama_env
 require dasllama/dasllama_plane public   // PlaneF/PlaneI8 — the borrowed weight planes; re-exported for deleters
 require dasllama/dasllama_asr_types public   // TranscribeSegment/AsrCaps — the shared ASR floor
 require dasllama/dasllama_math
+require dasllama/dasllama_par   // maybe_parallel_for - the mel's frame split
 require dasllama/dasllama_gguf
 require dasllama/dasllama_audio
 require dasllama/dasllama_tower
@@ -418,36 +419,57 @@ def log_mel_qwen3a(samples : array<float> | #; n_mel : int64) : WhisperMel {
     if (!mel_on_gpu) {
         var inscope reim : array<float>
         reim |> reserve_resize(int(m.n_len * n_bins * 2l))
-        gemm_f32(unsafe(addr(reim[0])), unsafe(addr(xw[0])), unsafe(addr(twiddles[0])),
-                 m.n_len, n_fft, n_bins * 2l)
-
-        // power -> mel: float products in groups of 4 summed in float, groups accumulated in
-        // double (reference-exact rounding), floor 2^-24, log10
-        let mel_floor = 5.960464477539063e-08lf
-        let log10_e = 0.43429448190325176lf
-        var inscope power : array<float>
-        power |> resize(int(n_bins))
-        for (i in range64(m.n_len)) {
-            for (k in range64(n_bins)) {
-                let re = reim[i * n_bins * 2l + k * 2l]
-                let im = reim[i * n_bins * 2l + k * 2l + 1l]
-                power[k] = re * re + im * im
+        let n_len = m.n_len
+        unsafe {
+            // every frame is its own row of the DFT GEMM and its own mel fold, so both split over
+            // frames with the per-element arithmetic - and the bits - of the one-lane run
+            var reimp = addr(reim[0])
+            let xwp = addr<float const?>(xw[0])
+            let twp = addr<float const?>(twiddles[0])
+            let fltp = addr<float const?>(filters[0])
+            var md = addr(m.data[0])
+            // whole 4-row tiles a chunk: gemm_f32 runs its rows past the last tile through the scalar
+            // strip, so a chunk edge off the tile lattice would round those rows apart from the one-lane run
+            let n_tiles = (n_len + 3l) / 4l
+            maybe_parallel_for(0, int(n_tiles), lanes_for_work(n_len * n_fft * n_bins * 2l, 0)) $(tb, te) {
+                let r0 = int64(tb) * 4l
+                let r1 = min(int64(te) * 4l, n_len)
+                unsafe {
+                    gemm_f32(reimp + r0 * n_bins * 2l, xwp + r0 * n_fft, twp, r1 - r0, n_fft, n_bins * 2l)
+                }
             }
-            for (j in range64(n_mel)) {
-                var sum = 0.0lf
-                var k = 0l
-                while (k + 3l < n_bins) {
-                    sum += double(power[k] * filters[j * n_bins + k]
-                        + power[k + 1l] * filters[j * n_bins + k + 1l]
-                        + power[k + 2l] * filters[j * n_bins + k + 2l]
-                        + power[k + 3l] * filters[j * n_bins + k + 3l])
-                    k += 4l
+            // power -> mel: float products in groups of 4 summed in float, groups accumulated in
+            // double (reference-exact rounding), floor 2^-24, log10
+            let mel_floor = 5.960464477539063e-08lf
+            let log10_e = 0.43429448190325176lf
+            maybe_parallel_for(0, int(n_len), lanes_for_work(n_len * n_mel * n_bins, 0)) $(rb, re) {
+                var inscope power : array<float>
+                power |> resize(int(n_bins))
+                unsafe {
+                    for (i in range64(int64(rb), int64(re))) {
+                        for (k in range64(n_bins)) {
+                            let rv = reimp[i * n_bins * 2l + k * 2l]
+                            let iv = reimp[i * n_bins * 2l + k * 2l + 1l]
+                            power[k] = rv * rv + iv * iv
+                        }
+                        for (j in range64(n_mel)) {
+                            var sum = 0.0lf
+                            var k = 0l
+                            while (k + 3l < n_bins) {
+                                sum += double(power[k] * fltp[j * n_bins + k]
+                                    + power[k + 1l] * fltp[j * n_bins + k + 1l]
+                                    + power[k + 2l] * fltp[j * n_bins + k + 2l]
+                                    + power[k + 3l] * fltp[j * n_bins + k + 3l])
+                                k += 4l
+                            }
+                            while (k < n_bins) {
+                                sum += double(power[k] * fltp[j * n_bins + k])
+                                k++
+                            }
+                            md[j * n_len + i] = float(log(max(sum, mel_floor)) * log10_e)
+                        }
+                    }
                 }
-                while (k < n_bins) {
-                    sum += double(power[k] * filters[j * n_bins + k])
-                    k++
-                }
-                m.data[j * m.n_len + i] = float(log(max(sum, mel_floor)) * log10_e)
             }
         }
     }
