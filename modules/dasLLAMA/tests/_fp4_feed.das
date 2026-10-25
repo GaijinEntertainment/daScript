@@ -9,6 +9,7 @@ module _fp4_feed shared
 require cuda/cuda_intrinsics   // cvt_e2m1x2 / cvt_ue4m3: the conversions' CPU bodies
 require dasllama/dasllama_gpu_math   // ue4m3_half_f32
 require dasllama/dasllama_kqformat   // MX4_LUT
+require dasllama/dasllama_cuda_classes   // fp4_strip_code / FP4_ROW_SCALE_DIV: the strip code and the row scale, the kernels' own
 require math
 
 struct Fp4Feed {
@@ -17,19 +18,17 @@ struct Fp4Feed {
     xrs : array<float>  //! [token] row scales
 }
 
-let FP4_ROW_SCALE_DIV = 2688.0   //! 6 x 448: the e2m1 range times the UE4M3 range, the row scale's denominator
-
 //! the UE4M3 code's value (bias 7, the subnormals m x 2^-9)
 def ue4m3_value(code : uint) : float => ue4m3_half_f32(code) * 2.0
 
-//! one 16-strip of a row already divided by the row scale: its UE4M3 code off the strip's largest magnitude over 6, and the
-//! two nibble words (k, k + 8) a byte under that code's value
+//! one 16-strip of a row already divided by the row scale: its UE4M3 code off the strip's largest magnitude (the kernel's
+//! `fp4_strip_code`), and the two nibble words (k, k + 8) a byte under that code's value
 def fp4_strip_words(v : float[16]; var code : uint&; var w0, w1 : uint&) {
     var sub = 0.0
     for (i in range(16)) {
         sub = max(sub, abs(v[i]))
     }
-    code = cvt_ue4m3(sub / 6.0)
+    code = fp4_strip_code(sub)
     let sval = ue4m3_value(code)
     let inv = sval > 0.0 ? 1.0 / sval : 0.0
     w0 = cvt_e2m1x2(v[0] * inv, v[8] * inv) | (cvt_e2m1x2(v[1] * inv, v[9] * inv) << 8u) | (cvt_e2m1x2(v[2] * inv, v[10] * inv) << 16u) | (cvt_e2m1x2(v[3] * inv, v[11] * inv) << 24u)

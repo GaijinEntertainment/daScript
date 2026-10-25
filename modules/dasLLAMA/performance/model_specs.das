@@ -903,7 +903,7 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             parity <- ev_llama_count([kq_native = true])),
         // the dense nv4 carrier: every dense plane NVFP4 under a Q6_K table, no per-tensor `.scale` - the CUDA home's vehicle
         // (the ModelOpt files keep BF16 k/v beside an nv4 q, which the whole-model drivers decline as mixed feeds); the
-        // NVFP4 target is a two-line local llama-quantize patch (the ftype exists upstream, the option row does not)
+        // NVFP4 target is a two-line llama-quantize patch, the `nvfp4-quantize` branch of the local llama.cpp clone (the ftype exists upstream, the option row does not)
         ModelSpec(file = "Llama-3.2-1B-Instruct-NVFP4-local.gguf", display = "Llama-3.2-1B-nv4", quant_label = "nv4",
             recipe = "llama-quantize --allow-requantize Llama-3.2-1B-Instruct-Q8_0.gguf Llama-3.2-1B-Instruct-NVFP4-local.gguf NVFP4",
             parity <- ev_llama_count([kq_native = true])),

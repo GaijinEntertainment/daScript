@@ -2730,17 +2730,28 @@ let FP4_ROW_SCALE_DIV = 2688.0   //! 6 x 448: the e2m1 range times the UE4M3 ran
 
 def fp4_amax4(v : float4) : float => max(max(abs(v.x), abs(v.y)), max(abs(v.z), abs(v.w)))
 
+let FP4_CODE_MAX = 126u   //! the largest UE4M3 code a strip scale takes (448; the code past it is the format's NaN)
+
+//! the UE4M3 code of a strip whose largest magnitude is `m`: the nearest code to m / 6, stepped up once where that code's
+//! scale leaves `m` past 6 - the e2m1 converter saturates it there, and a strip's largest values are the ones the next
+//! layer's weights are tuned to (the least-squared-error pick over the five codes around the nearest one measured worse
+//! on the model: it trades the outlier for the bulk)
+def fp4_strip_code(m : float) : uint {
+    let code = cvt_ue4m3(m / 6.0)
+    return ue4m3_half_f32(code) * 12.0 < m && code < FP4_CODE_MAX ? code + 1u : code
+}
+
 //! The FP4 feed's strip pass, a lane four consecutive elements `v` of a row already over its row scale, chunk `c` of the row
 //! (element 4c): the sixteen lanes of a k64 hold its four 16-strips, four lanes a strip. The strip's UE4M3 code comes off the
-//! four lanes' largest magnitude over 6 (xor shuffles 1 and 2); lanes 0 / 1 of the strip pair their elements with lane ^ 2's
-//! (k, k + 8) into the nibble word `w` the feed stores - lanes 2 / 3 mirror it and store nothing; `cw` is the k64's code word,
-//! the four strips' codes a byte each joined over shuffles 4 and 8, the k64's first lane storing it. Every lane of the
-//! subgroup runs the pass, a lane past the row with zeros: the shuffles read the whole subgroup
+//! four lanes' largest magnitude (xor shuffles 1 and 2; `fp4_strip_code`); lanes 0 / 1 of the strip pair their elements with
+//! lane ^ 2's (k, k + 8) into the nibble word `w` the feed stores - lanes 2 / 3 mirror it and store nothing; `cw` is the
+//! k64's code word, the four strips' codes a byte each joined over shuffles 4 and 8, the k64's first lane storing it. Every
+//! lane of the subgroup runs the pass, a lane past the row with zeros: the shuffles read the whole subgroup
 def fp4_chunk(v : float4; c : uint; var w, cw : uint&) {
     var m = fp4_amax4(v)
     m = max(m, gk_subgroup_xor(m, 1u))
     m = max(m, gk_subgroup_xor(m, 2u))
-    let code = cvt_ue4m3(m / 6.0)
+    let code = fp4_strip_code(m)
     let sval = ue4m3_half_f32(code) * 2.0
     let inv = sval > 0.0 ? 1.0 / sval : 0.0
     let p = float4(gk_subgroup_xor(v.x, 2u), gk_subgroup_xor(v.y, 2u), gk_subgroup_xor(v.z, 2u), gk_subgroup_xor(v.w, 2u))

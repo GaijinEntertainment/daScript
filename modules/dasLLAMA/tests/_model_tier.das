@@ -37,6 +37,15 @@ def mirror_kv_dtype() : KVDtype => gpu_device_session_dtype_()
 
 let SUPPRESSED_LOGIT = -1.0e30   //! a pinned id's logit on both arms
 
+//! the log-probability of `target` under the logits row `v` (a NaN row reads as its NaN; the floor keeps a pinned id out of the max)
+def target_logp(v : array<float>; target : int64) : float {
+    for (x in v) {
+        return x if (is_nan(x))
+    }
+    let m = max(SUPPRESSED_LOGIT, hmax(unsafe(addr<float const?>(v[0])), long_length(v)))
+    return v[target] - m - float(log(hlse(v, m)))
+}
+
 //! the largest |logit| among the live ones: a suppressed id (`SUPPRESSED_LOGIT`) would set a relative bar to nonsense
 def live_maxabs(v : array<float>) : float {
     var m = 0.0

@@ -244,8 +244,11 @@ asymmetries a stamp family ledgers - stays in `ARCHITECTURE_GPU.md#gpu-backends`
   UE4M3 scale a k16 strip is the format's own, so the weight stage re-pairs the k4-tiled 32-blocks into the feed's
   (k, k + 8) order and stages no int8 at all - the sixteen-wide scale that keeps Q6_K off the int8 leaf is what the
   instruction consumes. Its feed is W4A4: the activations quantized to e2m1 per token (`fp4_rows`, `fp4_actrows`, the
-  residual step's `cls_ar_fp4_b`; a row scale of amax / (6 x 448), a UE4M3 code a strip off its largest over 6, the
-  nibbles in the same pairing), the row scale and the plane's per-tensor factor applied to the accumulator's columns in
+  residual step's `cls_ar_fp4_b`; a row scale of amax / (6 x 448), a UE4M3 code a strip - the nearest to its largest over
+  6, stepped up once where that code would saturate the largest value (`fp4_strip_code`: the nearest alone saturates on
+  half of all strips and reads 9% on the 1B's pp-path perplexity against 5.7% with the step; llama.cpp's least-squared-
+  error pick over five codes trades the outlier for the bulk and measured worse than either) - the nibbles in the same
+  pairing), the row scale and the plane's per-tensor factor applied to the accumulator's columns in
   the epilogue; a layer whose sites split across the three feeds produces each from the one residual step. On the RTX
   5060 Ti the leaf ran 110 to 121 TFLOP/s against the Q4_0 int8 leaf's 65 to 72 and the cm2 tiles' 40 to 56 at the 1B
   window's shapes. The knob changes the prefill's rounding and its logits; the window log line names the planes on
