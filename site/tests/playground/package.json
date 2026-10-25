@@ -9,6 +9,6 @@
         "test:no-wasm": "playwright test --grep-invert @wasm"
     },
     "devDependencies": {
-        "@playwright/test": "^1.50.0"
+        "@playwright/test": "^1.64.1"
     }
 }
