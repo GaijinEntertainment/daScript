@@ -5,6 +5,7 @@ options persistent_heap   // a dastest root frees what it deletes only on this h
 require dastest/testing_boost public
 require dasllama/dasllama_math
 require dasllama/dasllama_math_default  // registers the portable Q8·Q8 backend (the matmul_q8q8 wrappers dispatch to it)
+require dasllama/dasllama_math_gen   // bf16w_tileform_gen: the bf16 plane's walk rounds its activations where the half-width family serves
 require dasllama/dasllama_convert
 require daslib/jobque_boost
 require _compares   // row_fill
@@ -197,10 +198,17 @@ def private bf16_bits_of(v : float) : uint16 {
 }
 
 //! the bf16 plane through the same walk: Y against the plain oracle over the widened weights within
-//! the tile's rounding, a NaN sentinel under every output, the poisoned expectation the control
+//! the tile's rounding, a NaN sentinel under every output, the poisoned expectation the control;
+//! where the box stamps the half-width family (`bf16w_tileform_gen() > 0`, every call of ntok past a
+//! tile on an n of whole 32s) the oracle's activations are the family's bf16-rounded ones
 def check_bf16(t : T?; n, d, ntok : int64) {
     let wf <- fillf(n * d)
-    let x <- fillf(ntok * n)
+    var x <- fillf(ntok * n)
+    if (bf16w_tileform_gen() > 0 && n % 32l == 0l && ntok > 1l && ntok >= int64(bf16w_tokstep_gen())) {
+        for (k in range64(ntok * n)) {
+            x[k] = unsafe(reinterpret<float>(uint(bf16_bits_of(x[k])) << 16u))
+        }
+    }
     var w16 : array<uint16>
     w16 |> resize(n * d)
     var wwide : array<float>
@@ -287,6 +295,9 @@ def test_matmul_batch(t : T?) {
         }
         t |> run("bf16 plane, row and token tails 100x13 ntok=7") @(t : T?) {
             check_bf16(t, 100l, 13l, 7l)
+        }
+        t |> run("bf16 plane, a group tail and a token tail 2560x200 ntok=100") @(t : T?) {
+            check_bf16(t, 2560l, 200l, 100l)
         }
         t |> run("bf16 plane ntok=1, the gemv shaper") @(t : T?) {
             check_bf16(t, 96l, 7l, 1l)
