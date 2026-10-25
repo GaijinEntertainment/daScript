@@ -492,28 +492,15 @@ def private conv2d_s2(@scratch var out : array<float>; @scratch var col : array<
     let rows = oh * ow
     var tc = ref_time_ticks()
     col |> resize(rows * kdim)
-    for (oy in range64(oh)) {
-        for (ox in range64(ow)) {
-            let r = (oy * ow + ox) * kdim
-            for (ic in range64(cin)) {
-                for (kh in range64(3l)) {
-                    let iy = oy * 2l - 1l + kh
-                    for (kw in range64(3l)) {
-                        let ix = ox * 2l - 1l + kw
-                        col[r + (ic * 3l + kh) * 3l + kw] = (iy >= 0l && iy < ih && ix >= 0l && ix < iw
-                            ? x[(iy * iw + ix) * cin + ic]
-                            : 0.0)
-                    }
-                }
-            }
-        }
+    unsafe {
+        im2col_k3s2p1(addr(col[0]), addr<float const?>(x[0]), iw, ih, cin)
     }
     asr_prof_add("q3a.conv.im2col", tc)
     tc = ref_time_ticks()
     out |> resize(rows * cout)
     mm_blob_b(out, blob, w_off, col, kdim, cout, rows)
     add_bias_rows(out, blob, b_off, cout, rows)
-    gelu_erf(out, rows * cout)
+    gelu_erf_batch(out, cout, rows)   // the row-threaded twin of gelu_erf: the same erf per element
     asr_prof_add("q3a.conv.mm", tc)
 }
 

@@ -22,7 +22,6 @@ require math
 require strings
 require _model_tier   // model_available() presence/size-tier gate (see the file's header)
 require dasllama/dasllama_env
-require daslib/strings_boost   // split_by_chars — the crowned word-level cell's normalizer
 require ?das_metal dasllama/dasllama_metal_asr_dec   // set_metal_wdec — the CPU-claim cells pin the GPU cross-KV hook off
 require ?das_metal dasllama/dasllama_metal_tower     // set_metal_tower — the mtmd-oracle cells pin the GPU conv hook off
 require ?das_metal dasllama/dasllama_metal_prefill   // metal_prefill_shutdown — the crown-pin cell drops the trio's cached flags
@@ -1214,20 +1213,6 @@ def test_whisper_tower_fp32_knob(t : T?) {
     }
 }
 
-// lowercase word list, punctuation dropped - the grade the crowned lane answers to
-def private word_forms(text : string) : array<string> {
-    let lowered = to_lower(text)
-    let norm = build_string() $(w) {
-        peek_data(lowered) $(d) {
-            for (b in d) {
-                let c = int(b)
-                w |> write(is_alnum(c) ? to_char(c) : " ")
-            }
-        }
-    }
-    return <- [for (w in split_by_chars(norm, " ")); w; where !empty(w)]
-}
-
 [test]
 def test_whisper_crowned_word_level(t : T?) {
     t |> run("the CROWNED lanes agree at word level on jfk (the crowned-pipeline quality gate)") @(t : T?) {
@@ -1245,6 +1230,8 @@ def test_whisper_crowned_word_level(t : T?) {
             // garbled kernel on the mixed lane's route does not. Per-VARIANT dispatch
             // witnesses (kcov row asserts) are followup 60's stronger form - tiny's hs=64
             // attention may not take the tensor QK route at all
+            let tower_was = metal_tower_knob()
+            let wdec_was = metal_wdec_knob()
             set_metal_tower(true)
             set_metal_wdec(true)
             set_metal_wdec_step(true)
@@ -1254,6 +1241,7 @@ def test_whisper_crowned_word_level(t : T?) {
             metal_tower_shutdown()
             metal_wdec_shutdown()
             metal_prefill_shutdown()
+            set_asr_fp32(false)
             set_asr_tower_fp32(true)
             var inscope mm <- load_asr_model(model_path)
             set_asr_tower_fp32(false)
@@ -1281,8 +1269,8 @@ def test_whisper_crowned_word_level(t : T?) {
                            "both lanes' encoders GPU-served (tower encode delta)")
                 t |> success(metal_wdec_stats().steps - w0.steps > 0l,
                              "the crowned decoder served (wdec step delta)")
-                let wa <- word_forms(text_default)
-                let wb <- word_forms(text_mixed)
+                let wa <- transcript_words(text_default)
+                let wb <- transcript_words(text_mixed)
                 t |> success(!empty(wa) && !empty(wb), "both crowned lanes produced words")
                 t |> equal(length(wa), length(wb), "word count agrees across crowned lanes")
                 let flips = mismatch_exact(wa, wb)
@@ -1293,8 +1281,8 @@ def test_whisper_crowned_word_level(t : T?) {
             metal_tower_shutdown()
             metal_wdec_shutdown()
             metal_prefill_shutdown()
-            set_metal_tower(true)   // restore: the defaults later cells' GPU-serving claims see
-            set_metal_wdec(true)
+            set_metal_tower(tower_was)
+            set_metal_wdec(wdec_was)
             set_metal_wdec_step(true)
             set_metal_wdec_step_min_d(METAL_WDEC_STEP_MIN_D)   // the measured serving floor (the declaration default)
             delete m

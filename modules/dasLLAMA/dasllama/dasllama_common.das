@@ -3744,7 +3744,8 @@ def mm_fblob(var y : array<float>; t : Model; woff : int64; x : array<float>; n,
 }
 
 // Batched fp32 matmul against the aux blob: Y [npos x d] token-major from X [npos x n] — the grouped
-// MoE prefill's router. matmul_batch is bit-for-bit npos x matmul, so routing matches decode exactly.
+// MoE prefill's router. matmul_batch rounds in its tile's lanes (ARCHITECTURE_CPU_KERNELS.md#f32-batch-tile-lattice),
+// so a prefill's routing matches decode's to the lanes' rounding: a near-tie top-k can part the two.
 def mm_fblob_b(var y : array<float>; t : Model; woff : int64; x : array<float>; n, d, npos : int64) {
     matmul_batch(y, t.fblob, woff, x, n, d, npos)
 }

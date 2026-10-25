@@ -568,6 +568,7 @@ def cpp_run_scan(search_dirs : array<string>; glob_filter : string; var err_mess
         dirs_to_scan |> push_from(search_dirs)
     }
     var args <- [sg, "scan", "-r", rules_path, "--json"]
+    push_ast_grep_opts(args)
     cpp_push_glob_args(args, dirs_to_scan, glob_filter)
     args |> push_from(dirs_to_scan)
     var raw : string

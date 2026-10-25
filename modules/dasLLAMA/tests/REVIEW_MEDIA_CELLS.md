@@ -39,7 +39,9 @@ the serving one; its tensor twin is the same kernel written on Metal's tensor pr
 twins' rounding legitimately flips tokens.
 
 **An ASR transcript cell that cannot assert the equality its comparison calls for converts to
-one of: a forced-feed logits compare within a tolerance bar; equal transcript text with the
+one of: a forced-feed logits compare within a tolerance bar; equal transcript text - or, where the
+token the lanes' rounding flips carries punctuation or casing alone, equal `transcript_words`
+lists (`_model_tier.das`) with a control on the device route whose words must differ - with the
 encoder output rows held within a tolerance of the other side's; or equal transcript text with
 the encoder output rows held by the twin bar - never to a text compare alone.** The twin bar holds
 the device chain's distance from the CPU exact chain within a stated multiple of the CPU q8

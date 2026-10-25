@@ -20,8 +20,27 @@ def private try_ast_grep(cmd : string) : bool {
         if (find(line, "ast-grep") >= 0) {
             found = true
         }
+        if (find(line, "custom languages are ignored") >= 0) {
+            ast_grep_needs_custom_languages = true
+        }
     }))
     return found && rc == 0
+}
+
+//! ast-grep 0.51+ ignores sgconfig.yml's custom languages unless told
+//! to allow them, and says so on every run, the version probe
+//! included; the daslang grammar is one, so every call carries it
+var private ast_grep_needs_custom_languages = false
+
+let private AST_GREP_ALLOW_CUSTOM <- ["--custom-languages", "allow"]
+
+def ast_grep_opts() : string
+    => ast_grep_needs_custom_languages ? " " + join(AST_GREP_ALLOW_CUSTOM, " ") : ""
+
+def push_ast_grep_opts(var args : array<string>) {
+    if (ast_grep_needs_custom_languages) {
+        args |> push_from(AST_GREP_ALLOW_CUSTOM)
+    }
 }
 
 def detect_ast_grep() : string {
@@ -93,9 +112,10 @@ def do_grep_usage(symbol, directory, context_lines_str, glob_filter : string) : 
     // build ast-grep command
     let sg = get_ast_grep_cmd()
     let cd_root = "cd \"{das_root}\" && "
-    var cmd = "{cd_root}{sg} run -p \"{symbol}\" -l daslang --json \"{search_dir}\""
+    let head = "{cd_root}{sg} run{ast_grep_opts()} -p \"{symbol}\" -l daslang"
+    var cmd = head + " --json \"{search_dir}\""
     if (!empty(glob_filter)) {
-        cmd = "{cd_root}{sg} run -p \"{symbol}\" -l daslang --globs \"{glob_filter}\" --json \"{search_dir}\""
+        cmd = head + " --globs \"{glob_filter}\" --json \"{search_dir}\""
     }
     var raw_json : string
     unsafe(popen(cmd) $(f) {

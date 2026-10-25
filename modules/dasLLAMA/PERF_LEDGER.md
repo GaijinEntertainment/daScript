@@ -10,6 +10,76 @@ and coverage; this ledger is the backlog for the perf pass that follows them. Ev
 what it costs today and what the fix would change.
 
 ## Entries
+- **MEASURED (2026-10-24, `direction-grade`) - the fp32 batch GEMM tile and the lane-split conv front on the three AWS
+  boards.** `matmul_batch_core` runs a four-by-four tile (`f32_batch_tile`,
+  `ARCHITECTURE_CPU_KERNELS.md#f32-batch-tile-lattice`); `harness/f32_batch_race.das -- --reps 5` races its two
+  constants and the tile against the dot-a-cell nest it replaces in one process, interleaved, best of 5 (`bin/daslang
+  -jit`, `DAS_TUNE_POLICY` unset and no other override; GFLOP/s; the M5 Max under `DAS_TUNE_MANIFEST` naming a scratch
+  sidecar the tuner minted for this kernel - `f32_batch_tile` vec4_u4 - with `DASLLAMA_ALLOW_UNTUNED=1` for the rest,
+  the Granite Rapids box - AWS m8i, Xeon 6975P-C, 8 cores - under its rig's minted sidecar, vec16_u2). The X block at
+  n 4320 d 480 ntok 800: M5 1463 / 1461 / 1431 / 1448 / 1441 / 1419 and Xeon 1067 / 1075 / 1053 / 1049 / 947 / 349 at
+  64K / 128K / 256K / 512K / 1M / 4M; at n 1152 d 480 ntok 1536: M5 1431 / 1466 / 1497 / 1505 / 1511 / 1494, Xeon 943
+  / 980 / 999 / 984 / 955 / 310 - the walk holds 256 KB. The tile against the nest at those shapes: M5 1405 against
+  509 and 1493 against 525, Xeon 1064 against 86 and 999 against 85. The tile against the nest at d 480 ntok 3200 by
+  dot length 8 / 16 / 24 / 32 / 48 / 64 / 128: M5 346 / 578 / 730 / 862 / 1010 / 1105 / 1333 against 123 / 161 / 155 /
+  351 / 254 / 452 / 514, Xeon 95 / 54 / 53 / 101 / 150 / 191 / 326 against 38 / 48 / 50 / 44 / 37 / 158 / 215 - the
+  tile wins at every length, so it serves every length and the nest stays as the race's arm. The conv front's im2col
+  and erf GELU ran in one lane (`bin/daslang -jit modules/dasLLAMA/harness/asr_stage_probe.das -- -m
+  Qwen3-ASR-0.6B-Q8_0.gguf --mmproj mmproj-Qwen3-ASR-0.6B-bf16.gguf -w gb1.wav -r 1 --lang auto`, debug-jit, one rep,
+  `DAS_TUNE_POLICY` unset, `DAS_TUNE_MANIFEST` the rig release's minted sidecar under
+  `performance/_rig/dasllama-bench/` on the Xeon and `performance/m5.tune.json` on the M5: the Xeon's `q3a.conv.mm`
+  13293 ms before the tile, 5719 with it, 1446 with the two across lanes; its encode 15227 / 7728 / 2924 ms; the M5
+  encode 287 ms throughout, its blocks on the Metal seat). The boards' CPU rows: `performance/gen_bench_records.das --
+  --workload asr -o <model>` and `--workload tts -o kitten` on each box, the released `dasllama-bench` exe minted on
+  the box (`daspkg release`, the box class's backend, no policy override) at the branch's tip (ea6d942c2; kitten and
+  whisper rows at 5907be553 / 13c357f98, the same kernels), the references
+  `ARCHITECTURE_MEASUREMENT_AUDIO.md#asr-cpu-references` and `#the-tts-reference-instrument`, every cell the best of
+  the rig's reps (`--asr-reps` 2 a clip, `--tts-reps` 3 a sentence; the exe prints a clip's best alone, so no per-rep
+  spread is on record for these cells - `followup_general.md` row 241); das against the reference on gb1 (198.7 s),
+  total / encode ms, every `was` figure the 2026-10-22 release-17 boards entry's: Qwen3-ASR-0.6B Q8_0 - gnr 15797 /
+  2917 against `llama-mtmd-cli` 21610 / 7304 (1.37x; was 26609 / 13996 against 15555 / 7076, 0.58x), epyc9r14 12784 /
+  3071 against 15981 / 8051 (1.25x; was 16875 / 7257 against 15882 / 8040), graviton4 9209 / 3168 against 67958 /
+  64362 (7.4x; was 16446 / 10522 against 67613); whisper large-v3-turbo - epyc9r14 10805 against 35132 (was 10892
+  against 35126), graviton4 14633 against 82439 (was 14643 against 89922); whisper tiny - epyc9r14 946 against 1517
+  (was 966 against 1531), graviton4 973 against 4042 (was 916 against 4064) - the whisper encoder is not on the fp32
+  batch path. The kitten TTS rows re-measured in the pack's own voice (`tts:g2p20@Bella`, ms, das against `kittentts`,
+  audio seconds agreeing within 2%): gnr nano 8370 against 8211, mini 13022 against 88939; epyc9r14 9849 against
+  11445, 13845 against 112833; graviton4 6991 against 8698, 10373 against 92066 - the generator's conv stages are not
+  on the fp32 batch path, so the tile is not in these walls. None of these rows is published: the record stores and
+  the site merge stay at release 17, the release re-mint owes the rows under `followup_general.md` row 238
+  (`ARCHITECTURE_MEASUREMENT_RELEASE.md#board-rows-release-boundary`). What the Xeon's encode still holds (the same
+  probe run): `q3a.conv.mm` 1446 ms of a 2924 ms encode - the first conv's nine-tap GEMM, which the race reads at 95
+  GFLOP/s against the wide layers' thousand, and the erf GELU, whose exp runs in double a lane; its decode, 11.5 s
+  over 451 steps, is the attention over the ~3000 audio tokens (all three in row 240's Done). The reference's encoder
+  runs bf16 x bf16 arithmetic where ours widens the file's bf16 to f32 and multiplies in f32 (the mmproj conv weights,
+  2 bytes a weight more and no half-width dot); the whole bf16 tower set shares that gap.
+
+- **MEASURED (2026-10-24, `direction-grade`) - the Granite Rapids board's losses are the DeltaNet scan and the f32
+  conv front, not the AMX crowns.** AWS m8i.4xlarge (Xeon 6975P-C, 8 cores with SMT, 61 GB, the `x86-amx` class),
+  master 1f52af3e4, the released `dasllama-bench` exe minted on the box (68 kernels, noise ok; `DASLLAMA_PIN_BACKEND`
+  unset, the registry's own pick of the `x86-amx` backend), 8 threads unless named, 3 reps. Qwen3.6-35B-A3B UD-Q4_K_M
+  pp512: `DAS_TUNE_POLICY` unset 119.7 +/- 1.6 tok/s, `DAS_TUNE_POLICY=reference` (the unstamped bodies) 122.1 +/-
+  1.3, tuned at 16 threads 136.9 +/- 1.7; gemma-4-E4B Q8_0 pp512: `DAS_TUNE_POLICY` unset 321.6 +/- 18.8 (cv 5.8%,
+  void), reference 328.8 +/- 0.6 - the tune crowns, the `amx_bf16` tile among them, move neither model, so the board's
+  0.91x on the 35B (119.7 against `llama-bench` `clean-cpu` 131.8 tok/s) is not the AMX prefill path. The `lcpp_bench
+  --prof` buckets (`JOBQUE_PROFILING=1 bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m
+  Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf -p 512 -n 0 -t 8 --prof`, debug-jit, one rep, `DAS_TUNE_POLICY` unset,
+  `DAS_TUNE_MANIFEST` the rig release's minted sidecar under `performance/_rig/dasllama-bench/`; shares of the 4.22 s
+  pp512 window, the wrappers nest): `dn_scan` 2670 ms (63%) - the DeltaNet chunked scan, `deltanet_prefill_chunked`
+  threads one v-head per lane and the box has 8 lanes where the Zen4 board has 16 - `blk_ffn` 1046 (25%, the MoE
+  block), `mm_gemm` 921, `moe_router` 266, `dn_mm_in` 185; the census reads 40 grouped MoE prefill arms, E=256 k=8, so
+  an expert sees about 16 tokens at pp512, under the 32-token amx tile step. Qwen3-ASR-0.6B Q8_0 on gb1 (198.7 s), the
+  release-17 board rows' encode and total walls: gnr das 13996 / 26609 ms against llama-mtmd-cli 7076 / 15555;
+  epyc9r14 das 7257 / 16875 against 8040 / 15882 - our encode is the same core-seconds on both boxes (core-bound), the
+  reference's encode is 2.3x faster per core on the Xeon. `harness/asr_stage_probe.das` on gnr (`bin/daslang -jit
+  modules/dasLLAMA/harness/asr_stage_probe.das -- -m Qwen3-ASR-0.6B-Q8_0.gguf --mmproj mmproj-Qwen3-ASR-0.6B-bf16.gguf
+  -w gb1.wav -r 1 --lang auto`, debug-jit, one rep, the same sidecar, `DAS_TUNE_POLICY` unset): `q3a.conv.mm` 13293 ms
+  of the 15227 ms encode - the conv2d front's im2col GEMM through `matmul_batch_core` (`dasllama_math.das`), a
+  dot-per-row-per-token f32 nest with no register tile; the transformer blocks 683 ms; decode 10918 ms over 451 steps
+  with `attn_chain` and `blk_attn` the dominant buckets (the audio context is about 3000 tokens). The M5 `accel`
+  flavor, which hands that GEMM to Accelerate, encodes gb1 in 3856 ms against the tuned flavor's 6460 (the release-17
+  boards entry).
+
 - **MEASURED (2026-10-24, `direction-grade`) - the M5 kitten board pairs speak the pack's own voice.** A kitten voice
   name resolves through the pack's `voice_aliases` table on both sides of a pair
   (`ARCHITECTURE_MEASUREMENT_AUDIO.md#the-tts-reference-instrument`). The kitten reference rows the 2026-10-22 entry

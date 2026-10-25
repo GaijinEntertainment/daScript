@@ -447,7 +447,9 @@ twin-knob freeze and whisper's own wblob-ONLY poison that must CHANGE the GPU tr
 (both legs are whisper's alone; qwen3a carries neither; a twin-W route reads its GEMM weights
 from `wblob` alone, so zeroing that buffer alone poisons it, while a route that also reads the
 f32 plane, `fblob`, is poisoned only with both zeroed), the gemma4a Metal
-Conformer cells, E2B and E4B (f32-lane transcript equality CPU vs GPU + the soft tokens' rel-l2 +
+Conformer cells, E2B and E4B (f32-lane transcript word lists equal CPU vs GPU - punctuation aside, a
+comma riding a near-tie token - with the control of the GPU route fed the clip with its second half
+silenced reading other words, + the soft tokens' rel-l2 +
 counter deltas, the projector tail run on the device - `out_ready` set on the device leg and clear
 on the CPU leg - and the two projector widths read off the file: the encoder's 1536 on both, the
 embedder's 1536 on E2B and 2560 on E4B; the lane pin/reset discipline mirrors qwen3a's), the canary Metal FastConformer cell (the
@@ -3688,8 +3690,11 @@ the phase past 1e5 radians turns a ulp of an increment into radians; the pod's x
 2.5e-3 on kitten's ONNX law, the M5 Max under 1e-4) fed the oracle's F0,
 the source spectrum's magnitude within 1e-4 of its peak and its phase within 1e-2 rad where the
 magnitude carries signal, and the generator (its stage-0 internals included) within 1e-4 fed the
-oracle's spectrum and decoder output; the end-to-end waveform difference is logged, not gated (the
-F0 phase drift the file header explains).
+oracle's spectrum and decoder output - its conv_post seam within `SEAM_CONV_POST_BAR` (2.5e-4 of the
+peak) and the waveform within `SEAM_WAVE_BAR` (1e-3, absolute), the fp32 batch tile rounding apart from
+the per-token dot, each with the control of the generator fed `gen_in` rotated one row landing outside
+the bar; the end-to-end waveform difference is logged, not gated (the F0 phase drift the file header
+explains).
 `test_tower_helpers.das` - model-free: the shared encoder-tower helpers in `dasllama/dasllama_tower`
 (clamp, row norms, f16-table GEGLU-quick, im2col, two-axis rope, avg-pool, `attention_bidir`),
 each against an in-test reference; `rel_pos_table` against an fp64 sin/cos reference, its

@@ -2174,20 +2174,6 @@
     `llama-bench` builds whose sibling `llama-mtmd-cli` `benchmarks/setup_lcpp_ref.das` patches and builds at
     `DEFAULT_REF_SHA`, no other environment setting.
 
-225. **The Granite Rapids board's prefill trails llama.cpp's further than every other board's.** On AWS m8i
-    (Xeon 6975P-C, 8 cores with SMT, the x86-amx class) the release-17 pp512 ratios read Qwen3.6-35B-A3B UD-Q4_K_M
-    0.91x (119.7 tok/s), gpt-oss-20b 1.95x, gemma-4-E4B 1.21x, Qwen3-VL-4B 1.60x, where the Zen4 board (EPYC 9R14,
-    16 cores) reads 2.34x (424.8), 2.55x, 1.82x, 2.45x and Graviton4 2.26x, 2.16x, 1.76x, 1.84x; decode sits with
-    the other boards (`PERF_LEDGER.md`, the 2026-10-22 release-17 boards entry). Against its own release-16 rows the
-    board's prefill moved up 1-12 %, so this is the AMX prefill path's
-    standing, not a regression; the routed 35B, far under half the Zen4 rate, says the expert GEMMs lose most -
-    an AMX tile load off a 64-byte boundary (an expert slice, a panel's row stride, the bf16 activation plane) is a
-    candidate. Done = a `forward_profile` of the 35B and E4B prefill on a c8i/m8i box naming the losing kernels, the
-    tile loads' alignment checked on the served planes, and the pp512 ratios at the Zen4 board's standing - `bin/daslang
-    modules/dasLLAMA/performance/gen_bench_records.das -- -w llm --backend cpu -o <model>` over the four carriers on an
-    AWS m8i box, `--ref-clean` naming the clean-cpu `llama-bench` `benchmarks/setup_lcpp_ref.das` builds at
-    `DEFAULT_REF_SHA`, no other environment setting.
-
 226. **The CUDA home's stamps that wait on their families.** Eleven discrete templates have a Vulkan stamp and no CUDA
     stamp (`DISCRETE_ONE_HOME_STAMPS` in `REVIEW.das` names them for the stamp census), each a family the CUDA home's
     dense slice does not serve yet: `DaAttnBWT` and `DaAttnBH128T` (the batched attention at wide and 128 heads; the
@@ -2291,6 +2277,44 @@
 238. **The AWS boxes' `kittentts` reference rows speak a different voice than their das rows.** `records/epyc9r14.json`,
     `records/gnr.json` and `records/graviton4.json` hold kitten-nano and kitten-mini `kittentts` `cpu/stock` rows that
     speak the pack's Kiki voice for `Bella` (159.95 s / 144.7 s of audio against the das rows' 242 s / 206 s - the
-    same corpus head in a faster voice, the 2026-10-24 `PERF_LEDGER.md` entry), so their walls are not the das rows'
-    work; `records/annotations.json` holds them off the board, and the M5 rows pair. Done =
-    `gen_bench_records.das -- --workload tts -o kitten` on each of the three boxes and the three holds lifted.
+    same corpus head in a faster voice, the 2026-10-24 `PERF_LEDGER.md` kitten entry), so their walls are not the das
+    rows' work; `records/annotations.json` holds them off the board, and the M5 rows pair. The three boxes' kitten pairs
+    are measured in the pack's own voice (the 2026-10-24 `PERF_LEDGER.md` tile entry) and land with the next release's
+    re-mint. Done = `gen_bench_records.das -- --workload tts -o kitten` on each of the three boxes in that re-mint, the
+    rows committed with the site merge and the six `held` entries deleted in the same change.
+
+239. **The DeltaNet prefill scan is one v-head per lane, and an 8-core box pays for it.** On the Granite Rapids board
+    (AWS m8i, 8 cores) Qwen3.6-35B-A3B UD-Q4_K_M pp512 reads 0.91x of llama.cpp where Zen4 (16 cores) reads 2.34x; the
+    tune crowns move nothing (tuned 119.7 against the unstamped bodies' 122.1 tok/s; the 2.34x is the 2026-10-22 release-17 boards entry's) and the `--prof` buckets put
+    `dn_scan` at 63% of the window and the MoE block at 25% (the 2026-10-24 `PERF_LEDGER.md` Granite Rapids entry).
+    `deltanet_prefill_chunked` (`dasllama_arch_qwen35.das`) threads the chunked scan over v-heads alone, so the scan's
+    parallelism is the head count and its wall doubles when the lane count halves; the MoE experts see about 16 tokens
+    each at pp512, under the 32-token `amx_bf16` tile step, so the AMX class runs them on the vector lattice. Done = the
+    scan splits below a head (a chunk's intra-head work over lanes, or heads x state columns) and the amx class gains a
+    small-M tile for the expert slices, with the 35B pp512 ratio on an m8i box at the Zen4 board's standing -
+    `bin/daslang modules/dasLLAMA/performance/gen_bench_records.das -- -w llm --backend cpu -o Qwen3.6-35B` there,
+    `--ref-clean` naming the clean-cpu `llama-bench` `benchmarks/setup_lcpp_ref.das` builds at `DEFAULT_REF_SHA`.
+
+240. **The bf16 towers multiply in f32, and the Qwen3-ASR decoder's attention over the audio context is unshared.** The
+    reference's encoders run bf16 x bf16 arithmetic (its mmproj weights stay bf16, its activations round to bf16, the
+    dot is the half-width one - `vdpbf16ps`, the AMX bf16 tile, NEON `bfdot`); ours widen every bf16 or f16 tower tensor
+    to f32 at load and run f32 x f32 - the Qwen3-ASR conv front (`conv2d_s2`, `dasllama_qwen3a.das`), the gemma4a and
+    Omni audio encoders, the vision towers - so on every mmproj line the encode pays twice the weight bytes and no
+    half-width dot (the 2026-10-24 `PERF_LEDGER.md` tile entry: the Xeon's encode is 2917 ms against the reference's
+    7304 after the fp32 tile, with that arithmetic gap still in it). The Qwen3-ASR decoder spends its 451 steps (11.5 s
+    on gnr; the release-17 Zen4 row's total less its encode reads 9.6 s, the 2026-10-22 entry) in `attn_chain` and
+    `blk_attn` over the ~3000 audio tokens. Done = a `[tune]` family for the bf16-weight batch GEMM in the generator
+    (`dasllama_gemm_gen.das`: an f32-to-bf16 activation panel, `vdpbf16ps` on avx512bf16, `bfdot` on the arm bf16
+    extension, the AMX bf16 tile on the x86-amx class, the fp32 tile the reference body and fallback, a bf16-class gate
+    in `harness/gen_tune_probe.das`), the bf16 tower planes served through it, and a decode attention step that shares
+    the audio-context K/V reads across heads, with the Qwen3-ASR conv front's first layer (nine taps a dot, n 9) and
+    its erf GELU (an exp in double a lane) served through the same family and a float-lattice GELU - the Qwen3-ASR and
+    image-chat CPU rows re-minted on every board box,
+    `bin/daslang modules/dasLLAMA/performance/gen_bench_records.das -- -w asr -o Qwen3-ASR` and `-w image` on each.
+
+241. **The bench exe's ASR and TTS cells print a clip's best of their reps alone.** `lcpp_bench --asr` and `--tts`
+    keep the minimum over `-r` reps (`r.enc_ms = min(...)`, the sentence sums) and the record row carries that one wall,
+    so a ledger entry quoting an uncommitted row - the 2026-10-24 `PERF_LEDGER.md` tile entry's three boards - has no
+    per-rep spread to give where `REVIEW_MEASUREMENT.md`'s served-turn rule asks for one. Done = the ASR and TTS cells
+    print every rep's wall beside the best (`rep i: <ms>` lines) and the record row's `tests` entry carries `ms_reps`, the
+    recorder and `test_bench_records_schema.das` reading it back, so a ledger entry can quote the min and max.

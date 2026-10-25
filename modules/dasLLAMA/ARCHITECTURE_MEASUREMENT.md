@@ -1,19 +1,19 @@
 # dasLLAMA Architecture - the benchmark rig and instrumentation rails
 
-Companion to `ARCHITECTURE.md`; a section is cited by its anchor. The instruments that time a
-kernel away from the served graph - kernel-race fidelity, the gemv's own tune seat, the CPU kernel
-bench's fixture - and the timing-race vocabulary
-(`ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md#timing-race-vocabulary`) are
-`ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md`; the Vulkan GEMM probe's arms, shapes and alternates are
-`ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md#vk-gemm-probe`; a fat exe's first-start race and where
-it keeps its sidecar are `ARCHITECTURE_MEASUREMENT_FAT_START.md#fat-first-start`; the client clock
-around a live server's turns is `ARCHITECTURE_MEASUREMENT_SERVED.md#served-turn-instrument`; the
-reference build's forced feed beside the gemma feed cells is
-`ARCHITECTURE_MEASUREMENT_FORCED_FEED.md#reference-forced-feed`; the ASR board's GPU row pairs
-(`ARCHITECTURE_MEASUREMENT_AUDIO.md#asr-gpu-pairs`), the MLX ASR reference
-(`ARCHITECTURE_MEASUREMENT_AUDIO.md#mlx-asr-reference`), the TTS reference instrument
-(`ARCHITECTURE_MEASUREMENT_AUDIO.md#the-tts-reference-instrument`) and its CUDA provider and
-g2p-venv runs (`ARCHITECTURE_MEASUREMENT_AUDIO.md#tts-ref-g2p-venv`) are the audio companion's.
+Companion to `ARCHITECTURE.md`; a section is cited by its anchor. The instruments that time a kernel
+away from the served graph and the timing-race vocabulary are
+`ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md#timing-race-vocabulary`; the Vulkan GEMM probe's arms,
+shapes and alternates are `ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md#vk-gemm-probe`; a fat exe's
+first-start race and where it keeps its sidecar are
+`ARCHITECTURE_MEASUREMENT_FAT_START.md#fat-first-start`; the client clock around a live server's
+turns is `ARCHITECTURE_MEASUREMENT_SERVED.md#served-turn-instrument`; the reference build's forced
+feed beside the gemma feed cells is `ARCHITECTURE_MEASUREMENT_FORCED_FEED.md#reference-forced-feed`;
+the ASR board's GPU row pairs (`ARCHITECTURE_MEASUREMENT_AUDIO.md#asr-gpu-pairs`), the MLX ASR
+reference (`ARCHITECTURE_MEASUREMENT_AUDIO.md#mlx-asr-reference`), the TTS reference instrument
+(`ARCHITECTURE_MEASUREMENT_AUDIO.md#the-tts-reference-instrument`), its CUDA provider and g2p-venv
+runs (`ARCHITECTURE_MEASUREMENT_AUDIO.md#tts-ref-g2p-venv`) and the ASR board's CPU references
+(`ARCHITECTURE_MEASUREMENT_AUDIO.md#asr-cpu-references`) are the audio companion's; a board row's
+release boundary is `ARCHITECTURE_MEASUREMENT_RELEASE.md#board-rows-release-boundary`.
 
 ### There is ONE benchmark rig, and the records are the baseline {#one-benchmark-rig}
 

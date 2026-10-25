@@ -201,6 +201,8 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
   (`ARCHITECTURE_MEASUREMENT_AUDIO.md#asr-gpu-pairs`), the MLX ASR reference, the TTS reference
   instrument (`ARCHITECTURE_MEASUREMENT_AUDIO.md#the-tts-reference-instrument`), and its CUDA
   provider and g2p-venv runs.
+- `ARCHITECTURE_MEASUREMENT_RELEASE.md` - where a between-release kernel change's board rows land
+  (`ARCHITECTURE_MEASUREMENT_RELEASE.md#board-rows-release-boundary`).
 - `ARCHITECTURE_MEASUREMENT_FAT_START.md` - a fat exe's first-start race and its per-user
   sidecar (`ARCHITECTURE_MEASUREMENT_FAT_START.md#fat-first-start`), and the per-box runtime
   file a run with no sidecar of its own races into
@@ -219,7 +221,9 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
   row-group decodes, the VBMI symbol lattice, the tier that selects on the target rather than the
   host, the score dot classic prefill shares with decode, the module-scope visibility a lifted
   worker lambda needs of its kernel, the two interleaves a grp<mr> repack is made of, the bf16
-  tile that keeps its sum in the matrix unit, and the JIT partition a hot leaf instantiates in; the q8 chain's activation forms against the reference's
+  tile that keeps its sum in the matrix unit, the JIT partition a hot leaf instantiates in, and the
+  fp32 batch tile's lattice (`ARCHITECTURE_CPU_KERNELS.md#f32-batch-tile-lattice`); the q8 chain's
+  activation forms against the reference's
   (`ARCHITECTURE_CPU_KERNELS.md#q8-activation-forms`).
 
 - `ARCHITECTURE_TTS.md` - the TTS block home's two layouts, tap stacking, the padded concat

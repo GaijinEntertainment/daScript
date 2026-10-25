@@ -353,7 +353,13 @@ def check_count(got : array<float>; want : array<auto(WT)>; bar : Bar; env : arr
 def check_exceeds(t : T?; tag : string; got : array<float>; want : array<auto(WT)>; bar : Bar) {
     let finite = all_finite(got) && all(want, $(w) => !is_nan(w) && abs(w) < WT(INFINITE_DIFF))
     t |> success(finite, "{tag}: every element the control reads is finite")
-    t |> success(finite && check_count(got, want, bar) > 0, "{tag}: lands outside the bar")
+    let outside = check_count(got, want, bar)
+    var worst = 0.0
+    for (g, w in got, want) {
+        worst = max(worst, nan_wide_diff(g, float(w)))
+    }
+    to_log(LOG_INFO, "{tag}: {outside} of {length(want)} elements outside the bar, the largest difference {worst}\n")
+    t |> success(finite && outside > 0, "{tag}: lands outside the bar ({outside} of {length(want)} elements, the largest difference {worst})")
 }
 
 //! `check` on an `envelope` or `per_element` bar: `env` holds each element's envelope or its own bar

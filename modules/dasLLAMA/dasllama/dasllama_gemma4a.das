@@ -781,21 +781,8 @@ def private g4a_conv_stage(enc : Gemma4aEncoder; var st : Gemma4aState; var out 
     let kdim = cin * 9l
     let rows = oh * ow
     ensure_length(st.col, rows * kdim)
-    for (oy in range64(oh)) {
-        for (ox in range64(ow)) {
-            let r = (oy * ow + ox) * kdim
-            for (ic in range64(cin)) {
-                for (kh in range64(3l)) {
-                    let iy = oy * 2l - 1l + kh
-                    for (kw in range64(3l)) {
-                        let ix = ox * 2l - 1l + kw
-                        st.col[r + (ic * 3l + kh) * 3l + kw] = (iy >= 0l && iy < ih && ix >= 0l && ix < iw
-                            ? x[(iy * iw + ix) * cin + ic]
-                            : 0.0)
-                    }
-                }
-            }
-        }
+    unsafe {
+        im2col_k3s2p1(addr(st.col[0]), addr<float const?>(x[0]), iw, ih, cin)
     }
     ensure_length(out, rows * cout)
     mm_blob_b(out, enc.blob, w_off, st.col, kdim, cout, rows)

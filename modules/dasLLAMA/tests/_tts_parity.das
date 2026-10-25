@@ -27,12 +27,15 @@ require _gpu_knobs public
 // dumps (harness/kitten_oracle.py, harness/kokoro_oracle.py): the token ids against the
 // reference driver on every case, identical durations on every case, and on the bring-up set
 // every stage through the decoder output within BAR of the oracle's peak, the sine source
-// within BAR fed the oracle's F0, the generator within BAR fed the oracle's source signal and
-// decoder output. The end-to-end waveform difference is logged, not gated: the source
+// within SOURCE_BAR fed the oracle's F0, the generator within BAR fed the oracle's source signal
+// and decoder output up to its conv_post seam, which the fp32 batch tile rounds apart from the
+// per-token dot (SEAM_CONV_POST_BAR, SEAM_WAVE_BAR). The end-to-end waveform difference is logged, not gated: the source
 // integrates F0 into a phase of 1e5 radians, so the GEMM-order rounding the predictor's F0
 // carries becomes radians of harmonic phase.
 
 let BAR = 1e-4
+let SEAM_CONV_POST_BAR = 2.5e-4   //! of the oracle's peak: the fp32 batch tile rounds conv_post apart from the per-token dot the 1e-4 bar was cut on
+let SEAM_WAVE_BAR = 1e-3   //! absolute, the waveform after conv_post: the same rounding, -60 dB
 let SOURCE_BAR = 5e-3   //! the harmonic source against the oracle's, absolute: the phase past 1e5 radians turns a ulp of an increment into radians, and the pod's x64 chain reads 2.5e-3 on kitten's ONNX law where the M5 Max reads under 1e-4
 
 //! The Metal driver's bars: rel-l2 against the CPU chain fed the same inputs on the f32 lane (the readings: tests/CLAUDE.md).
@@ -222,6 +225,8 @@ def private seam_check(t : T?; m, m8 : StyleTts2Model; tag : string; dump : tabl
         spec := spec_ref
     }
     var inscope wave : array<float>
+    let tile_min_n_was = get_f32_batch_tile_min_n()
+    set_f32_batch_tile_min_n(1l)   // the bars below are the tile's: pin its route
     styletts2_generator(m.decoder, gen_in, cw, f2, style_dec, spec, frames, tr, wave, sc)
     with_gpu_knobs() {
         gpu_seam_check(t, m, tag, gen_in, cw, f2, style_dec, spec, frames, wave, sc)
@@ -235,9 +240,29 @@ def private seam_check(t : T?; m, m8 : StyleTts2Model; tag : string; dump : tabl
     stage_diff(t, "{tag} SEAM", "rb1", tr.rb1, dump)
     stage_diff(t, "{tag} SEAM", "rb2", tr.rb2, dump)
     stage_diff(t, "{tag} SEAM", "ups1", tr.ups1, dump)
-    stage_diff(t, "{tag} SEAM", "conv_post", tr.conv_post, dump)
-    stage_diff(t, "{tag} SEAM", "waveform", wave, dump, BarMetric.absolute)
+    stage_diff(t, "{tag} SEAM", "conv_post", tr.conv_post, dump, BarMetric.of_peak, SEAM_CONV_POST_BAR)
+    stage_diff(t, "{tag} SEAM", "waveform", wave, dump, BarMetric.absolute, SEAM_WAVE_BAR)
+    // the widened bars' control on the route itself: the generator fed gen_in rotated one row lands outside both
+    var inscope gen_rot : array<float>
+    gen_rot |> resize(long_length(gen_in))
+    for (r in range64(f2)) {
+        let src = ((r + 1l) % f2) * cw
+        for (c in range64(cw)) {
+            gen_rot[r * cw + c] = gen_in[src + c]
+        }
+    }
+    var tr2 = new StyleTts2Trace()
+    var inscope wave2 : array<float>
+    styletts2_generator(m.decoder, gen_rot, cw, f2, style_dec, spec, frames, tr2, wave2, sc)
+    dump |> get("conv_post") $(tensor) {
+        check_exceeds(t, "{tag} SEAM conv_post, the input rotated", tr2.conv_post, tensor.f, Bar(kind = BarKind.rel_of_max, rel = SEAM_CONV_POST_BAR, abs_floor = 0.0))
+    }
+    dump |> get("waveform") $(tensor) {
+        check_exceeds(t, "{tag} SEAM waveform, the input rotated", wave2, tensor.f, Bar(kind = BarKind.rel_of_larger, rel = 0.0, abs_floor = SEAM_WAVE_BAR))
+    }
+    set_f32_batch_tile_min_n(tile_min_n_was)
     unsafe {
+        delete tr2
         delete tr
     }
 }
