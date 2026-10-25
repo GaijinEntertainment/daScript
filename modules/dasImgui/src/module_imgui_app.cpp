@@ -8,6 +8,8 @@
 #ifdef __EMSCRIPTEN__
 #include <emscripten/html5.h>
 #include "browser_input.h"
+#else
+#include "native_input.h"
 #endif
 
 using namespace das;
@@ -28,6 +30,7 @@ IMPLEMENT_EXTERNAL_TYPE_FACTORY(GLFWwindow,GLFWwindow)
 #endif
 
 MAKE_EXTERNAL_TYPE_FACTORY(ImDrawData,ImDrawData);
+MAKE_EXTERNAL_TYPE_FACTORY(ImFont,ImFont);
 
 #endif
 
@@ -72,6 +75,15 @@ static void install_imgui_browser_callbacks(GLFWwindow * window) {
 }
 #endif
 
+static bool imgui_glfw_initialized ( bool ok, GLFWwindow * window ) {
+#ifndef __EMSCRIPTEN__
+    if ( ok ) native_ime_attach(window);
+#else
+    (void)window;
+#endif
+    return ok;
+}
+
 // modules/dasImgui/ARCHITECTURE.md#browser-callback-routing
 DAS_MOD_API bool das_imgui_init_glfw_for_opengl ( GLFWwindow * window, bool install_callbacks ) {
     const bool ok = ImGui_ImplGlfw_InitForOpenGL(window, install_callbacks);
@@ -79,7 +91,15 @@ DAS_MOD_API bool das_imgui_init_glfw_for_opengl ( GLFWwindow * window, bool inst
     if ( ok && install_callbacks )
         install_imgui_browser_callbacks(window);
 #endif
-    return ok;
+    return imgui_glfw_initialized(ok, window);
+}
+
+DAS_MOD_API bool das_imgui_init_glfw_for_vulkan ( GLFWwindow * window, bool install_callbacks ) {
+    return imgui_glfw_initialized(ImGui_ImplGlfw_InitForVulkan(window, install_callbacks), window);
+}
+
+DAS_MOD_API bool das_imgui_init_glfw_for_other ( GLFWwindow * window, bool install_callbacks ) {
+    return imgui_glfw_initialized(ImGui_ImplGlfw_InitForOther(window, install_callbacks), window);
 }
 
 // modules/dasImgui/ARCHITECTURE.md#browser-callback-routing
@@ -93,6 +113,9 @@ DAS_MOD_API void das_imgui_shutdown_glfw() {
         emscripten_set_fullscreenchange_callback(EMSCRIPTEN_EVENT_TARGET_DOCUMENT, nullptr, false, nullptr);
         g_emscripten_callback_owner = nullptr;
     }
+#endif
+#ifndef __EMSCRIPTEN__
+    if (native_ime.owner == ImGui::GetCurrentContext()) native_ime_detach();
 #endif
     ImGui_ImplGlfw_Shutdown();
 }
@@ -136,6 +159,9 @@ DAS_MOD_API void das_imgui_synth_input_char ( uint32_t cp ) {
 // vice-versa). Must run on the render/main thread — glfwSet*Callback requires it.
 // modules/dasImgui/ARCHITECTURE.md#browser-callback-routing
 DAS_MOD_API void das_imgui_set_real_input_callbacks ( bool enabled ) {
+#ifndef __EMSCRIPTEN__
+    native_ime_set_enabled(enabled);
+#endif
     GLFWwindow * w = glfwGetCurrentContext();
     if ( !w ) return;
     if ( enabled ) ImGui_ImplGlfw_InstallCallbacks(w);
@@ -145,6 +171,109 @@ DAS_MOD_API void das_imgui_set_real_input_callbacks ( bool enabled ) {
     browser_clipboard_tick();
     if ( enabled ) install_imgui_browser_callbacks(w);
     else emscripten_set_wheel_callback("#canvas", nullptr, false, nullptr);
+#endif
+}
+
+// modules/dasImgui/ARCHITECTURE.md#native-composition
+DAS_MOD_API void das_imgui_ime_inject_preedit ( const char * text, int32_t caret, int32_t split ) {
+#ifndef __EMSCRIPTEN__
+    if ( !ImGui::GetCurrentContext() ) return;
+    if ( native_ime.owner != ImGui::GetCurrentContext() ) {
+        native_ime_attach(nullptr);
+        native_ime.owner_id = das::GetTextInputOwner();
+    }
+    const char * utf8 = text ? text : "";
+    std::vector<ImWchar> codepoints(ImTextCountCharsFromUtf8(utf8, nullptr) + 1);
+    const int size = ImTextStrFromUtf8(codepoints.data(), (int)codepoints.size(), utf8, nullptr);
+    const int whole[1] = { size };
+    const int halves[2] = { split, size - split };
+    const bool two = split > 0 && split < size;
+    native_ime_apply_preedit(size, codepoints.data(), size ? (two ? 2 : 1) : 0, two ? halves : whole, two ? 1 : 0, caret < 0 ? size : caret);
+#else
+    (void)text; (void)caret; (void)split;
+#endif
+}
+
+DAS_MOD_API char * das_imgui_ime_preedit ( das::Context * context, das::LineInfoArg * at ) {
+    std::string utf8;
+#ifndef __EMSCRIPTEN__
+    std::vector<ImWchar> text(native_ime.preedit.begin(), native_ime.preedit.end());
+    text.push_back(0);
+    utf8.resize(ImTextCountUtf8BytesFromStr(text.data(), nullptr) + 1);
+    utf8.resize(ImTextStrToUtf8(utf8.data(), (int)utf8.size(), text.data(), nullptr));
+#endif
+    return context->allocateString(utf8, at);
+}
+
+DAS_MOD_API int32_t das_imgui_ime_caret () {
+#ifndef __EMSCRIPTEN__
+    return native_ime.caret;
+#else
+    return 0;
+#endif
+}
+
+DAS_MOD_API uint32_t das_imgui_ime_owner () {
+#ifndef __EMSCRIPTEN__
+    return native_ime.owner_id;
+#else
+    return 0;
+#endif
+}
+
+DAS_MOD_API int32_t das_imgui_ime_text_focus () {
+#ifndef __EMSCRIPTEN__
+    return native_ime.text_focus;
+#else
+    return -1;
+#endif
+}
+
+DAS_MOD_API bool das_imgui_ime_has_window () {
+#ifndef __EMSCRIPTEN__
+    return native_ime.window != nullptr;
+#else
+    return false;
+#endif
+}
+
+DAS_MOD_API float4 das_imgui_ime_cursor_rect () {
+#ifndef __EMSCRIPTEN__
+    if ( native_ime.active ) {
+        int x = 0, y = 0, w = 0, h = 0;
+        glfwGetPreeditCursorRectangle(native_ime.active, &x, &y, &w, &h);
+        return float4((float)x, (float)y, (float)w, (float)h);
+    }
+    const ImVec4 & r = native_ime.cursor_rect;
+    return float4(r.x, r.y, r.z, r.w);
+#else
+    return float4(0.0f);
+#endif
+}
+
+DAS_MOD_API float4 das_imgui_ime_overlay_marks () {
+#ifndef __EMSCRIPTEN__
+    const ImVec4 & m = native_ime.marks;
+    return float4(m.x, m.y, m.z, m.w);
+#else
+    return float4(0.0f);
+#endif
+}
+
+DAS_MOD_API ImFont * das_imgui_ime_overlay_font () {
+#ifndef __EMSCRIPTEN__
+    return native_ime.overlay_font;
+#else
+    return nullptr;
+#endif
+}
+
+DAS_MOD_API float4 das_imgui_ime_overlay () {
+#ifndef __EMSCRIPTEN__
+    const ImVec4 & r = native_ime.overlay;
+    return float4(r.x, r.y, r.z, r.w);
+#else
+    return float4(0.0f);
 #endif
 }
 
@@ -197,10 +326,10 @@ public:
         // GLFW
         addExtern<DAS_BIND_FUN(das_imgui_init_glfw_for_opengl)>(*this,lib,"ImGui_ImplGlfw_InitForOpenGL",
             SideEffects::worstDefault, "das_imgui_init_glfw_for_opengl");
-        addExtern<DAS_BIND_FUN(ImGui_ImplGlfw_InitForVulkan)>(*this,lib,"ImGui_ImplGlfw_InitForVulkan",
-            SideEffects::worstDefault, "ImGui_ImplGlfw_InitForVulkan");
-        addExtern<DAS_BIND_FUN(ImGui_ImplGlfw_InitForOther)>(*this,lib,"ImGui_ImplGlfw_InitForOther",
-            SideEffects::worstDefault, "ImGui_ImplGlfw_InitForOther");
+        addExtern<DAS_BIND_FUN(das_imgui_init_glfw_for_vulkan)>(*this,lib,"ImGui_ImplGlfw_InitForVulkan",
+            SideEffects::worstDefault, "das_imgui_init_glfw_for_vulkan");
+        addExtern<DAS_BIND_FUN(das_imgui_init_glfw_for_other)>(*this,lib,"ImGui_ImplGlfw_InitForOther",
+            SideEffects::worstDefault, "das_imgui_init_glfw_for_other");
         addExtern<DAS_BIND_FUN(das_imgui_shutdown_glfw)>(*this,lib,"ImGui_ImplGlfw_Shutdown",
             SideEffects::worstDefault, "das_imgui_shutdown_glfw");
         addExtern<DAS_BIND_FUN(das_imgui_glfw_new_frame)>(*this,lib,"ImGui_ImplGlfw_NewFrame",
@@ -209,6 +338,26 @@ public:
         // imgui_live_core to suppress real input AT THE SOURCE when user control is off.
         addExtern<DAS_BIND_FUN(das_imgui_set_real_input_callbacks)>(*this,lib,"imgui_set_real_input_callbacks",
             SideEffects::worstDefault, "das_imgui_set_real_input_callbacks");
+        addExtern<DAS_BIND_FUN(das_imgui_ime_inject_preedit)>(*this,lib,"imgui_ime_inject_preedit",
+            SideEffects::worstDefault, "das_imgui_ime_inject_preedit");
+        addExtern<DAS_BIND_FUN(das_imgui_ime_preedit)>(*this,lib,"imgui_ime_preedit",
+            SideEffects::accessExternal, "das_imgui_ime_preedit");
+        addExtern<DAS_BIND_FUN(das_imgui_ime_caret)>(*this,lib,"imgui_ime_caret",
+            SideEffects::accessExternal, "das_imgui_ime_caret");
+        addExtern<DAS_BIND_FUN(das_imgui_ime_owner)>(*this,lib,"imgui_ime_owner",
+            SideEffects::accessExternal, "das_imgui_ime_owner");
+        addExtern<DAS_BIND_FUN(das_imgui_ime_text_focus)>(*this,lib,"imgui_ime_text_focus",
+            SideEffects::accessExternal, "das_imgui_ime_text_focus");
+        addExtern<DAS_BIND_FUN(das_imgui_ime_has_window)>(*this,lib,"imgui_ime_has_window",
+            SideEffects::accessExternal, "das_imgui_ime_has_window");
+        addExtern<DAS_BIND_FUN(das_imgui_ime_cursor_rect)>(*this,lib,"imgui_ime_cursor_rect",
+            SideEffects::accessExternal, "das_imgui_ime_cursor_rect");
+        addExtern<DAS_BIND_FUN(das_imgui_ime_overlay)>(*this,lib,"imgui_ime_overlay",
+            SideEffects::accessExternal, "das_imgui_ime_overlay");
+        addExtern<DAS_BIND_FUN(das_imgui_ime_overlay_marks)>(*this,lib,"imgui_ime_overlay_marks",
+            SideEffects::accessExternal, "das_imgui_ime_overlay_marks");
+        addExtern<DAS_BIND_FUN(das_imgui_ime_overlay_font)>(*this,lib,"imgui_ime_overlay_font",
+            SideEffects::accessExternal, "das_imgui_ime_overlay_font");
         // Default Arrow cursor at init (covers the pre-first-frame / macOS no-move-refresh gap).
         addExtern<DAS_BIND_FUN(das_imgui_set_default_cursor)>(*this,lib,"imgui_set_default_cursor",
             SideEffects::worstDefault, "das_imgui_set_default_cursor");
@@ -248,6 +397,18 @@ public:
         tw << "DAS_MOD_API void das_imgui_set_real_input_callbacks ( bool enabled );\n";
         tw << "DAS_MOD_API void das_imgui_glfw_new_frame();\n";
         tw << "DAS_MOD_API void das_imgui_set_default_cursor ( GLFWwindow * window );\n";
+        tw << "DAS_MOD_API bool das_imgui_init_glfw_for_vulkan ( GLFWwindow * window, bool install_callbacks );\n";
+        tw << "DAS_MOD_API bool das_imgui_init_glfw_for_other ( GLFWwindow * window, bool install_callbacks );\n";
+        tw << "DAS_MOD_API void das_imgui_ime_inject_preedit ( const char * text, int32_t caret, int32_t split );\n";
+        tw << "DAS_MOD_API char * das_imgui_ime_preedit ( das::Context * context, das::LineInfoArg * at );\n";
+        tw << "DAS_MOD_API int32_t das_imgui_ime_caret ();\n";
+        tw << "DAS_MOD_API uint32_t das_imgui_ime_owner ();\n";
+        tw << "DAS_MOD_API int32_t das_imgui_ime_text_focus ();\n";
+        tw << "DAS_MOD_API bool das_imgui_ime_has_window ();\n";
+        tw << "DAS_MOD_API float4 das_imgui_ime_cursor_rect ();\n";
+        tw << "DAS_MOD_API float4 das_imgui_ime_overlay ();\n";
+        tw << "DAS_MOD_API float4 das_imgui_ime_overlay_marks ();\n";
+        tw << "DAS_MOD_API ImFont * das_imgui_ime_overlay_font ();\n";
         return ModuleAotType::cpp;
     }
 };

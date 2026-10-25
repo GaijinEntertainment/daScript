@@ -318,7 +318,7 @@
                     if (canvas && canvas.focus) canvas.focus();
                     if (frame.contentWindow) {
                         frame.contentWindow.addEventListener('keydown', function (e) {
-                            if (SCROLL_KEYS[e.key]) e.preventDefault();
+                            if (SCROLL_KEYS[e.key] && !(e.target && e.target.closest && e.target.closest('input,textarea,[contenteditable]'))) e.preventDefault();
                         }, { passive: false });
                     }
                 } catch (e) {}

@@ -1,0 +1,3610 @@
+diff --git a/include/GLFW/glfw3.h b/include/GLFW/glfw3.h
+index dec57002..abc1c8cf 100644
+--- a/include/GLFW/glfw3.h
++++ b/include/GLFW/glfw3.h
+@@ -1155,6 +1155,7 @@ extern "C" {
+ #define GLFW_LOCK_KEY_MODS           0x00033004
+ #define GLFW_RAW_MOUSE_MOTION        0x00033005
+ #define GLFW_UNLIMITED_MOUSE_BUTTONS 0x00033006
++#define GLFW_IME                     0x00033007
+ 
+ #define GLFW_CURSOR_NORMAL          0x00034001
+ #define GLFW_CURSOR_HIDDEN          0x00034002
+@@ -1308,6 +1309,11 @@ extern "C" {
+  *  Platform selection [init hint](@ref GLFW_PLATFORM).
+  */
+ #define GLFW_PLATFORM               0x00050003
++/*! @brief Preedit candidate init hint.
++ *
++ *  Preedit candidate [init hint](@ref GLFW_MANAGE_PREEDIT_CANDIDATE_hint).
++ */
++#define GLFW_MANAGE_PREEDIT_CANDIDATE 0x00050004
+ /*! @brief macOS specific init hint.
+  *
+  *  macOS specific [init hint](@ref GLFW_COCOA_CHDIR_RESOURCES_hint).
+@@ -1323,6 +1329,11 @@ extern "C" {
+  *  X11 specific [init hint](@ref GLFW_X11_XCB_VULKAN_SURFACE_hint).
+  */
+ #define GLFW_X11_XCB_VULKAN_SURFACE 0x00052001
++/*! @brief X11 specific init hint.
++ *
++ *  X11 specific [init hint](@ref GLFW_X11_ONTHESPOT_hint).
++ */
++#define GLFW_X11_ONTHESPOT          0x00052002
+ /*! @brief Wayland specific init hint.
+  *
+  *  Wayland specific [init hint](@ref GLFW_WAYLAND_LIBDECOR_hint).
+@@ -1949,6 +1960,67 @@ typedef void (* GLFWcharfun)(GLFWwindow* window, unsigned int codepoint);
+  */
+ typedef void (* GLFWcharmodsfun)(GLFWwindow* window, unsigned int codepoint, int mods);
+ 
++/*! @brief The function pointer type for preedit callbacks.
++ *
++ *  This is the function pointer type for preedit callback functions.
++ *
++ *  @param[in] window The window that received the event.
++ *  @param[in] preedit_count Preedit string count.
++ *  @param[in] preedit_string Preedit string.
++ *  @param[in] block_count Attributed block count.
++ *  @param[in] block_sizes List of attributed block size.
++ *  @param[in] focused_block Focused block index.
++ *  @param[in] caret Caret position.
++ *
++ *  @sa @ref ime_support
++ *  @sa glfwSetPreeditCallback
++ *
++ *  @ingroup input
++ */
++typedef void (* GLFWpreeditfun)(GLFWwindow* window,
++                                int preedit_count,
++                                unsigned int* preedit_string,
++                                int block_count,
++                                int* block_sizes,
++                                int focused_block,
++                                int caret);
++
++/*! @brief The function pointer type for IME status change callbacks.
++ *
++ *  This is the function pointer type for IME status change callback functions.
++ *
++ *  @param[in] window The window that received the event.
++ *
++ *  @sa @ref ime_support
++ *  @sa glfwSetIMEStatusCallback
++ *
++ *  @ingroup monitor
++ */
++typedef void (* GLFWimestatusfun)(GLFWwindow* window);
++
++/*! @brief The function pointer type for preedit candidate callbacks.
++ *
++ *  This is the function pointer type for preedit candidate callback functions.
++ *  Use @ref glfwGetPreeditCandidate to get the candidate text for a specific index.
++ *
++ *  @param[in] window The window that received the event.
++ *  @param[in] candidates_count Candidates count.
++ *  @param[in] selected_index.Index of selected candidate.
++ *  @param[in] page_start Start index of candidate currently displayed.
++ *  @param[in] page_size Count of candidates currently displayed.
++ *
++ *  @sa @ref ime_support
++ *  @sa @ref glfwSetPreeditCandidateCallback
++ *  @sa @ref glfwGetPreeditCandidate
++ *
++ *  @ingroup input
++ */
++typedef void (* GLFWpreeditcandidatefun)(GLFWwindow* window,
++                                         int candidates_count,
++                                         int selected_index,
++                                         int page_start,
++                                         int page_size);
++
+ /*! @brief The function pointer type for path drop callbacks.
+  *
+  *  This is the function pointer type for path drop callbacks.  A path drop
+@@ -4664,13 +4736,13 @@ GLFWAPI void glfwPostEmptyEvent(void);
+  *
+  *  This function returns the value of an input option for the specified window.
+  *  The mode must be one of @ref GLFW_CURSOR, @ref GLFW_STICKY_KEYS,
+- *  @ref GLFW_STICKY_MOUSE_BUTTONS, @ref GLFW_LOCK_KEY_MODS or
+- *  @ref GLFW_RAW_MOUSE_MOTION.
++ *  @ref GLFW_STICKY_MOUSE_BUTTONS, @ref GLFW_LOCK_KEY_MODS,
++ *  @ref GLFW_RAW_MOUSE_MOTION or @ref GLFW_IME.
+  *
+  *  @param[in] window The window to query.
+  *  @param[in] mode One of `GLFW_CURSOR`, `GLFW_STICKY_KEYS`,
+- *  `GLFW_STICKY_MOUSE_BUTTONS`, `GLFW_LOCK_KEY_MODS` or
+- *  `GLFW_RAW_MOUSE_MOTION`.
++ *  `GLFW_STICKY_MOUSE_BUTTONS`, `GLFW_LOCK_KEY_MODS`, `GLFW_RAW_MOUSE_MOTION`,
++ *  or `GLFW_IME`.
+  *
+  *  @errors Possible errors include @ref GLFW_NOT_INITIALIZED and @ref
+  *  GLFW_INVALID_ENUM.
+@@ -4689,8 +4761,9 @@ GLFWAPI int glfwGetInputMode(GLFWwindow* window, int mode);
+  *
+  *  This function sets an input mode option for the specified window.  The mode
+  *  must be one of @ref GLFW_CURSOR, @ref GLFW_STICKY_KEYS,
+- *  @ref GLFW_STICKY_MOUSE_BUTTONS, @ref GLFW_LOCK_KEY_MODS
+- *  @ref GLFW_RAW_MOUSE_MOTION, or @ref GLFW_UNLIMITED_MOUSE_BUTTONS.
++ *  @ref GLFW_STICKY_MOUSE_BUTTONS, @ref GLFW_LOCK_KEY_MODS,
++ *  @ref GLFW_RAW_MOUSE_MOTION, @ref GLFW_UNLIMITED_MOUSE_BUTTONS,
++ *  @ref GLFW_IME.
+  *
+  *  If the mode is `GLFW_CURSOR`, the value must be one of the following cursor
+  *  modes:
+@@ -4735,10 +4808,13 @@ GLFWAPI int glfwGetInputMode(GLFWwindow* window, int mode);
+  *  callback, or `GLFW_FALSE` to limit the mouse buttons sent to the callback
+  *  to the mouse button token values up to `GLFW_MOUSE_BUTTON_LAST`.
+  *
++ *  If the mode is `GLFW_IME`, the value must be either `GLFW_TRUE` to turn on
++ *  IME, or `GLFW_FALSE` to turn off it.
++ *
+  *  @param[in] window The window whose input mode to set.
+  *  @param[in] mode One of `GLFW_CURSOR`, `GLFW_STICKY_KEYS`,
+- *  `GLFW_STICKY_MOUSE_BUTTONS`, `GLFW_LOCK_KEY_MODS` or
+- *  `GLFW_RAW_MOUSE_MOTION`.
++ *  `GLFW_STICKY_MOUSE_BUTTONS`, `GLFW_LOCK_KEY_MODS`,
++ *  `GLFW_RAW_MOUSE_MOTION` or `GLFW_IME`.
+  *  @param[in] value The new value of the specified input mode.
+  *
+  *  @errors Possible errors include @ref GLFW_NOT_INITIALIZED, @ref
+@@ -5168,6 +5244,137 @@ GLFWAPI void glfwDestroyCursor(GLFWcursor* cursor);
+  */
+ GLFWAPI void glfwSetCursor(GLFWwindow* window, GLFWcursor* cursor);
+ 
++/*! @brief Retrieves the area of the preedit text cursor.
++ *
++ *  This area is used to decide the position of the candidate window.
++ *  The cursor position is relative to the window.
++ *
++ *  @param[in] window The window to set the preedit text cursor for.
++ *  @param[out] x The preedit text cursor x position (relative position from window coordinates).
++ *  @param[out] y The preedit text cursor y position (relative position from window coordinates).
++ *  @param[out] w The preedit text cursor width.
++ *  @param[out] h The preedit text cursor height.
++ *
++ *  @par Thread Safety
++ *  This function may only be called from the main thread.
++ *
++ *  @sa @ref ime_support
++ *
++ *  @since Added in GLFW 3.X.
++ *
++ *  @ingroup input
++ */
++GLFWAPI void glfwGetPreeditCursorRectangle(GLFWwindow* window, int* x, int* y, int* w, int* h);
++
++/*! @brief Sets the area of the preedit text cursor.
++ *
++ *  This area is used to decide the position of the candidate window.
++ *  The cursor position is relative to the window.
++ *
++ *  @param[in] window The window to set the text cursor for.
++ *  @param[in] x The preedit text cursor x position (relative position from window coordinates).
++ *  @param[in] y The preedit text cursor y position (relative position from window coordinates).
++ *  @param[in] w The preedit text cursor width.
++ *  @param[in] h The preedit text cursor height.
++ *
++ *  @par Thread Safety
++ *  This function may only be called from the main thread.
++ *
++ *  @sa @ref ime_support
++ *
++ *  @since Added in GLFW 3.X.
++ *
++ *  @ingroup input
++ */
++GLFWAPI void glfwSetPreeditCursorRectangle(GLFWwindow* window, int x, int y, int w, int h);
++
++/*! @brief Resets IME input status.
++ *
++ *  This function resets IME's preedit text.
++ *
++ *  @param[in] window The window.
++ *
++ *  @remark @x11 Since over-the-spot style is used by default, you don't need
++ *  to use this function.
++ *
++ *  @remark @wayland This function is currently not supported.
++ *
++ *  @par Thread Safety
++ *  This function may only be called from the main thread.
++ *
++ *  @sa @ref ime_support
++ *
++ *  @since Added in GLFW 3.X.
++ *
++ *  @ingroup input
++ */
++GLFWAPI void glfwResetPreeditText(GLFWwindow* window);
++
++/*! @brief Sets whether the application is in a text input context.
++ *
++ *  This function tells GLFW whether the specified window is currently handling
++ *  application text input, such as a chat box, text field, search box, rename
++ *  dialog or editor.  Text input focus is separate from native window focus.
++ *
++ *  Pass `GLFW_TRUE` when the application enters a text input context and
++ *  `GLFW_FALSE` when it leaves that context.  This does not turn the IME on or
++ *  off, switch input languages or force a specific platform input source.
++ *
++ *  For compatibility, applications that never call this function keep the same
++ *  platform text input behavior as before this API was introduced.  Once this
++ *  function is called for a window, the application is responsible for
++ *  notifying GLFW when text input begins and ends.
++ *
++ *  This function is related to but distinct from `GLFW_IME`.  Applications
++ *  should normally prefer this function unless they specifically need
++ *  platform-dependent IME state control.
++ *
++ *  @param[in] window The window whose text input focus state to set.
++ *  @param[in] focused `GLFW_TRUE` to enter text input focus, or `GLFW_FALSE`
++ *  to leave it.
++ *
++ *  @errors Possible errors include @ref GLFW_NOT_INITIALIZED and @ref
++ *  GLFW_PLATFORM_ERROR.
++ *
++ *  @thread_safety This function must only be called from the main thread.
++ *
++ *  @sa @ref ime_support
++ *  @sa @ref glfwSetInputMode
++ *
++ *  @since Added in GLFW 3.X.
++ *
++ *  @ingroup input
++ */
++GLFWAPI void glfwSetTextInputFocus(GLFWwindow* window, int focused);
++
++/*! @brief Returns the preedit candidate.
++ *
++ *  This function returns the text and the text-count of the preedit candidate.
++ *
++ *  By default, the IME manages the preedit candidates, so there is no need to
++ *  use this function.  See @ref glfwSetPreeditCandidateCallback and
++ *  [GLFW_MANAGE_PREEDIT_CANDIDATE](@ref GLFW_MANAGE_PREEDIT_CANDIDATE_hint) for details.
++ *
++ *  @param[in] window The window.
++ *  @param[in] index The index of the candidate.
++ *  @param[out] textCount The text-count of the candidate.
++ *  @return The text of the candidate as Unicode code points.
++ *
++ *  @remark @macos @x11 @wayland Don't support this function.
++ *
++ *  @par Thread Safety
++ *  This function may only be called from the main thread.
++ *
++ *  @sa @ref ime_support
++ *  @sa @ref glfwSetPreeditCandidateCallback
++ *  @sa [GLFW_MANAGE_PREEDIT_CANDIDATE](@ref GLFW_MANAGE_PREEDIT_CANDIDATE_hint)
++ *
++ *  @since Added in GLFW 3.X.
++ *
++ *  @ingroup input
++ */
++GLFWAPI unsigned int* glfwGetPreeditCandidate(GLFWwindow* window, int index, int* textCount);
++
+ /*! @brief Sets the key callback.
+  *
+  *  This function sets the key callback of the specified window, which is called
+@@ -5303,6 +5510,124 @@ GLFWAPI GLFWcharfun glfwSetCharCallback(GLFWwindow* window, GLFWcharfun callback
+  */
+ GLFWAPI GLFWcharmodsfun glfwSetCharModsCallback(GLFWwindow* window, GLFWcharmodsfun callback);
+ 
++/*! @brief Sets the preedit callback.
++ *
++ *  This function sets the preedit callback of the specified
++ *  window, which is called when an IME is processing text before committed.
++ *
++ *  Callback receives relative position of input cursor inside preedit text and
++ *  attributed text blocks.  This callback is used for on-the-spot text editing
++ *  with IME.
++ *
++ *  @param[in] window The window whose callback to set.
++ *  @param[in] cbfun The new callback, or `NULL` to remove the currently set
++ *  callback.
++ *  @return The previously set callback, or `NULL` if no callback was set or an
++ *  error occurred.
++ *
++ *  @callback_signature
++ *  @code
++ *  void function_name(GLFWwindow* window,
++                       int preedit_count,
++                       unsigned int* preedit_string,
++                       int block_count,
++                       int* block_sizes,
++                       int focused_block,
++                       int caret)
++ *  @endcode
++ *  For more information about the callback parameters, see the
++ *  [function pointer type](@ref GLFWpreeditfun).
++ *
++ *  @remark @x11 Since over-the-spot style is used by default, you don't need
++ *  to use this function.
++ *
++ *  @par Thread Safety
++ *  This function may only be called from the main thread.
++ *
++ *  @sa @ref ime_support
++ *
++ *  @since Added in GLFW 3.X
++ *
++ *  @ingroup input
++ */
++GLFWAPI GLFWpreeditfun glfwSetPreeditCallback(GLFWwindow* window, GLFWpreeditfun cbfun);
++
++/*! @brief Sets the IME status change callback.
++ *
++ *  This function sets the IME status callback of the specified
++ *  window, which is called when an IME is switched on and off.
++ *
++ *  @param[in] window The window whose callback to set.
++ *  @param[in] cbfun The new callback, or `NULL` to remove the currently set
++ *  callback.
++ *  @return The previously set callback, or `NULL` if no callback was set or an
++ *  error occurred.
++ *
++ *  @callback_signature
++ *  @code
++ *  void function_name(GLFWwindow* window)
++ *  @endcode
++ *  For more information about the callback parameters, see the
++ *  [function pointer type](@ref GLFWimestatusfun).
++ *
++ *  @remark @x11 @wayland Don't support this function.  The callback is not called.
++ *
++ *  @par Thread Safety
++ *  This function may only be called from the main thread.
++ *
++ *  @sa @ref ime_support
++ *
++ *  @since Added in GLFW 3.X
++ *
++ *  @ingroup input
++ */
++GLFWAPI GLFWimestatusfun glfwSetIMEStatusCallback(GLFWwindow* window, GLFWimestatusfun cbfun);
++
++/*! @brief Sets the preedit candidate change callback.
++ *
++ *  This function sets the preedit candidate callback of the specified
++ *  window, which is called when the candidates are updated and can be used
++ *  to display them by the application side.
++ *
++ *  By default, this callback is not called because the IME displays the
++ *  candidates and there is nothing to do on the application side.  Only when
++ *  the application side needs to use this to manage the displaying of 
++ *  IME candidates, you can set
++ *  [GLFW_MANAGE_PREEDIT_CANDIDATE](@ref GLFW_MANAGE_PREEDIT_CANDIDATE_hint) init hint
++ *  and stop the IME from managing it.
++ * 
++ *  @param[in] window The window whose callback to set.
++ *  @param[in] cbfun The new callback, or `NULL` to remove the currently set
++ *  callback.
++ *  @return The previously set callback, or `NULL` if no callback was set or an
++ *  error occurred.
++ *
++ *  @callback_signature
++ *  @code
++ *  void function_name(GLFWwindow* window,
++                       int candidates_count,
++                       int selected_index,
++                       int page_start,
++                       int page_size)
++ *  @endcode
++ *  For more information about the callback parameters, see the
++ *  [function pointer type](@ref GLFWpreeditcandidatefun).
++ *
++ *  @remark @macos @x11 @wayland Don't support this function.  The callback is
++ *  not called.
++ *
++ *  @par Thread Safety
++ *  This function may only be called from the main thread.
++ *
++ *  @sa @ref ime_support
++ *  @sa [GLFW_MANAGE_PREEDIT_CANDIDATE](@ref GLFW_MANAGE_PREEDIT_CANDIDATE_hint)
++ *
++ *  @since Added in GLFW 3.X
++ *
++ *  @ingroup input
++ */
++GLFWAPI GLFWpreeditcandidatefun glfwSetPreeditCandidateCallback(GLFWwindow* window, GLFWpreeditcandidatefun cbfun);
++
+ /*! @brief Sets the mouse button callback.
+  *
+  *  This function sets the mouse button callback of the specified window, which
+diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
+index 24f099fe..bcd3871d 100644
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -105,6 +105,8 @@ if (GLFW_BUILD_WAYLAND)
+     generate_wayland_protocol("fractional-scale-v1.xml")
+     generate_wayland_protocol("xdg-activation-v1.xml")
+     generate_wayland_protocol("xdg-decoration-unstable-v1.xml")
++    generate_wayland_protocol("text-input-unstable-v1.xml")
++    generate_wayland_protocol("text-input-unstable-v3.xml")
+ endif()
+ 
+ if (WIN32 AND GLFW_BUILD_SHARED_LIBRARY)
+diff --git a/src/cocoa_init.m b/src/cocoa_init.m
+index 95d6289e..f8423fe6 100644
+--- a/src/cocoa_init.m
++++ b/src/cocoa_init.m
+@@ -349,22 +349,70 @@ static GLFWbool initializeTIS(void)
+         return GLFW_FALSE;
+     }
+ 
++    CFStringRef* kCategoryKeyboardInputSource =
++        CFBundleGetDataPointerForName(_glfw.ns.tis.bundle,
++                                      CFSTR("kTISCategoryKeyboardInputSource"));
++    CFStringRef* kPropertyInputSourceCategory =
++        CFBundleGetDataPointerForName(_glfw.ns.tis.bundle,
++                                      CFSTR("kTISPropertyInputSourceCategory"));
++    CFStringRef* kPropertyInputSourceID =
++        CFBundleGetDataPointerForName(_glfw.ns.tis.bundle,
++                                      CFSTR("kTISPropertyInputSourceID"));
++    CFStringRef* kPropertyInputSourceIsSelectCapable =
++        CFBundleGetDataPointerForName(_glfw.ns.tis.bundle,
++                                      CFSTR("kTISPropertyInputSourceIsSelectCapable"));
++    CFStringRef* kPropertyInputSourceType =
++        CFBundleGetDataPointerForName(_glfw.ns.tis.bundle,
++                                      CFSTR("kTISPropertyInputSourceType"));
+     CFStringRef* kPropertyUnicodeKeyLayoutData =
+         CFBundleGetDataPointerForName(_glfw.ns.tis.bundle,
+                                       CFSTR("kTISPropertyUnicodeKeyLayoutData"));
++    CFStringRef* kTypeKeyboardInputMethodModeEnabled =
++        CFBundleGetDataPointerForName(_glfw.ns.tis.bundle,
++                                      CFSTR("kTISTypeKeyboardInputMethodModeEnabled"));
++    _glfw.ns.tis.CopyCurrentASCIICapableKeyboardInputSource =
++        CFBundleGetFunctionPointerForName(_glfw.ns.tis.bundle,
++                                          CFSTR("TISCopyCurrentASCIICapableKeyboardInputSource"));
++    _glfw.ns.tis.CopyCurrentKeyboardInputSource =
++        CFBundleGetFunctionPointerForName(_glfw.ns.tis.bundle,
++                                          CFSTR("TISCopyCurrentKeyboardInputSource"));
+     _glfw.ns.tis.CopyCurrentKeyboardLayoutInputSource =
+         CFBundleGetFunctionPointerForName(_glfw.ns.tis.bundle,
+                                           CFSTR("TISCopyCurrentKeyboardLayoutInputSource"));
++    _glfw.ns.tis.CopyInputSourceForLanguage =
++        CFBundleGetFunctionPointerForName(_glfw.ns.tis.bundle,
++                                          CFSTR("TISCopyInputSourceForLanguage"));
++    _glfw.ns.tis.CreateASCIICapableInputSourceList =
++        CFBundleGetFunctionPointerForName(_glfw.ns.tis.bundle,
++                                          CFSTR("TISCreateASCIICapableInputSourceList"));
++    _glfw.ns.tis.CreateInputSourceList =
++        CFBundleGetFunctionPointerForName(_glfw.ns.tis.bundle,
++                                          CFSTR("TISCreateInputSourceList"));
+     _glfw.ns.tis.GetInputSourceProperty =
+         CFBundleGetFunctionPointerForName(_glfw.ns.tis.bundle,
+                                           CFSTR("TISGetInputSourceProperty"));
++    _glfw.ns.tis.SelectInputSource =
++        CFBundleGetFunctionPointerForName(_glfw.ns.tis.bundle,
++                                          CFSTR("TISSelectInputSource"));
+     _glfw.ns.tis.GetKbdType =
+         CFBundleGetFunctionPointerForName(_glfw.ns.tis.bundle,
+                                           CFSTR("LMGetKbdType"));
+ 
+-    if (!kPropertyUnicodeKeyLayoutData ||
++    if (!kCategoryKeyboardInputSource||
++        !kPropertyInputSourceCategory ||
++        !kPropertyInputSourceID ||
++        !kPropertyInputSourceIsSelectCapable||
++        !kPropertyInputSourceType||
++        !kPropertyUnicodeKeyLayoutData ||
++        !kTypeKeyboardInputMethodModeEnabled ||
++        !TISCopyCurrentASCIICapableKeyboardInputSource ||
++        !TISCopyCurrentKeyboardInputSource ||
+         !TISCopyCurrentKeyboardLayoutInputSource ||
++        !TISCopyInputSourceForLanguage ||
++        !TISCreateASCIICapableInputSourceList ||
++        !TISCreateInputSourceList ||
+         !TISGetInputSourceProperty ||
++        !TISSelectInputSource ||
+         !LMGetKbdType)
+     {
+         _glfwInputError(GLFW_PLATFORM_ERROR,
+@@ -372,8 +420,20 @@ static GLFWbool initializeTIS(void)
+         return GLFW_FALSE;
+     }
+ 
++    _glfw.ns.tis.kCategoryKeyboardInputSource =
++        *kCategoryKeyboardInputSource;
++    _glfw.ns.tis.kPropertyInputSourceCategory =
++        *kPropertyInputSourceCategory;
++    _glfw.ns.tis.kPropertyInputSourceID =
++        *kPropertyInputSourceID;
++    _glfw.ns.tis.kPropertyInputSourceIsSelectCapable =
++        *kPropertyInputSourceIsSelectCapable;
++    _glfw.ns.tis.kPropertyInputSourceType =
++        *kPropertyInputSourceType;
+     _glfw.ns.tis.kPropertyUnicodeKeyLayoutData =
+         *kPropertyUnicodeKeyLayoutData;
++    _glfw.ns.tis.kTypeKeyboardInputMethodModeEnabled =
++        *kTypeKeyboardInputMethodModeEnabled;
+ 
+     return updateUnicodeData();
+ }
+@@ -474,6 +534,11 @@ GLFWbool _glfwConnectCocoa(int platformID, _GLFWplatform* platform)
+         .getKeyScancode = _glfwGetKeyScancodeCocoa,
+         .setClipboardString = _glfwSetClipboardStringCocoa,
+         .getClipboardString = _glfwGetClipboardStringCocoa,
++        .updatePreeditCursorRectangle = _glfwUpdatePreeditCursorRectangleCocoa,
++        .resetPreeditText = _glfwResetPreeditTextCocoa,
++        .setTextInputFocus = _glfwSetTextInputFocusCocoa,
++        .setIMEStatus = _glfwSetIMEStatusCocoa,
++        .getIMEStatus = _glfwGetIMEStatusCocoa,
+         .initJoysticks = _glfwInitJoysticksCocoa,
+         .terminateJoysticks = _glfwTerminateJoysticksCocoa,
+         .pollJoystick = _glfwPollJoystickCocoa,
+diff --git a/src/cocoa_platform.h b/src/cocoa_platform.h
+index 175372d6..0a1625b7 100644
+--- a/src/cocoa_platform.h
++++ b/src/cocoa_platform.h
+@@ -109,11 +109,29 @@ typedef VkResult (APIENTRY *PFN_vkCreateMetalSurfaceEXT)(VkInstance,const VkMeta
+ #define GLFW_NSGL_LIBRARY_CONTEXT_STATE _GLFWlibraryNSGL nsgl;
+ 
+ // HIToolbox.framework pointer typedefs
++#define kTISCategoryKeyboardInputSource _glfw.ns.tis.kCategoryKeyboardInputSource
++#define kTISPropertyInputSourceCategory _glfw.ns.tis.kPropertyInputSourceCategory
++#define kTISPropertyInputSourceID _glfw.ns.tis.kPropertyInputSourceID
++#define kTISPropertyInputSourceIsSelectCapable _glfw.ns.tis.kPropertyInputSourceIsSelectCapable
++#define kTISPropertyInputSourceType _glfw.ns.tis.kPropertyInputSourceType
+ #define kTISPropertyUnicodeKeyLayoutData _glfw.ns.tis.kPropertyUnicodeKeyLayoutData
++#define kTISTypeKeyboardInputMethodModeEnabled _glfw.ns.tis.kTypeKeyboardInputMethodModeEnabled
++typedef TISInputSourceRef (*PFN_TISCopyCurrentASCIICapableKeyboardInputSource)(void);
++#define TISCopyCurrentASCIICapableKeyboardInputSource _glfw.ns.tis.CopyCurrentASCIICapableKeyboardInputSource
++typedef TISInputSourceRef (*PFN_TISCopyCurrentKeyboardInputSource)(void);
++#define TISCopyCurrentKeyboardInputSource _glfw.ns.tis.CopyCurrentKeyboardInputSource
+ typedef TISInputSourceRef (*PFN_TISCopyCurrentKeyboardLayoutInputSource)(void);
+ #define TISCopyCurrentKeyboardLayoutInputSource _glfw.ns.tis.CopyCurrentKeyboardLayoutInputSource
++typedef TISInputSourceRef (*PFN_TISCopyInputSourceForLanguage)(CFStringRef);
++#define TISCopyInputSourceForLanguage _glfw.ns.tis.CopyInputSourceForLanguage
++typedef CFArrayRef (*PFN_TISCreateASCIICapableInputSourceList)(void);
++#define TISCreateASCIICapableInputSourceList _glfw.ns.tis.CreateASCIICapableInputSourceList
++typedef CFArrayRef (*PEN_TISCreateInputSourceList)(CFDictionaryRef,Boolean);
++#define TISCreateInputSourceList _glfw.ns.tis.CreateInputSourceList
+ typedef void* (*PFN_TISGetInputSourceProperty)(TISInputSourceRef,CFStringRef);
+ #define TISGetInputSourceProperty _glfw.ns.tis.GetInputSourceProperty
++typedef OSStatus (*PFN_TISSelectInputSource)(TISInputSourceRef);
++#define TISSelectInputSource _glfw.ns.tis.SelectInputSource
+ typedef UInt8 (*PFN_LMGetKbdType)(void);
+ #define LMGetKbdType _glfw.ns.tis.GetKbdType
+ 
+@@ -184,10 +202,22 @@ typedef struct _GLFWlibraryNS
+ 
+     struct {
+         CFBundleRef     bundle;
++        PFN_TISCopyCurrentASCIICapableKeyboardInputSource CopyCurrentASCIICapableKeyboardInputSource;
++        PFN_TISCopyCurrentKeyboardInputSource CopyCurrentKeyboardInputSource;
+         PFN_TISCopyCurrentKeyboardLayoutInputSource CopyCurrentKeyboardLayoutInputSource;
++        PFN_TISCopyInputSourceForLanguage CopyInputSourceForLanguage;
++        PFN_TISCreateASCIICapableInputSourceList CreateASCIICapableInputSourceList;
++        PEN_TISCreateInputSourceList CreateInputSourceList;
+         PFN_TISGetInputSourceProperty GetInputSourceProperty;
++        PFN_TISSelectInputSource SelectInputSource;
+         PFN_LMGetKbdType GetKbdType;
++        CFStringRef     kCategoryKeyboardInputSource;
++        CFStringRef     kPropertyInputSourceCategory;
++        CFStringRef     kPropertyInputSourceID;
++        CFStringRef     kPropertyInputSourceIsSelectCapable;
++        CFStringRef     kPropertyInputSourceType;
+         CFStringRef     kPropertyUnicodeKeyLayoutData;
++        CFStringRef     kTypeKeyboardInputMethodModeEnabled;
+     } tis;
+ } _GLFWlibraryNS;
+ 
+@@ -268,6 +298,12 @@ void _glfwSetCursorCocoa(_GLFWwindow* window, _GLFWcursor* cursor);
+ void _glfwSetClipboardStringCocoa(const char* string);
+ const char* _glfwGetClipboardStringCocoa(void);
+ 
++void _glfwUpdatePreeditCursorRectangleCocoa(_GLFWwindow* window);
++void _glfwResetPreeditTextCocoa(_GLFWwindow* window);
++void _glfwSetTextInputFocusCocoa(_GLFWwindow* window, GLFWbool focused);
++void _glfwSetIMEStatusCocoa(_GLFWwindow* window, int active);
++int _glfwGetIMEStatusCocoa(_GLFWwindow* window);
++
+ EGLenum _glfwGetEGLPlatformCocoa(EGLint** attribs);
+ EGLNativeDisplayType _glfwGetEGLNativeDisplayCocoa(void);
+ EGLNativeWindowType _glfwGetEGLNativeWindowCocoa(_GLFWwindow* window);
+diff --git a/src/cocoa_window.m b/src/cocoa_window.m
+index 61049808..81b35495 100644
+--- a/src/cocoa_window.m
++++ b/src/cocoa_window.m
+@@ -321,6 +321,11 @@ - (void)windowDidChangeOcclusionState:(NSNotification* )notification
+     }
+ }
+ 
++- (void)imeStatusChangeNotified:(NSNotification *)notification
++{
++    _glfwInputIMEStatus(window);
++}
++
+ @end
+ 
+ 
+@@ -565,9 +570,17 @@ - (void)keyDown:(NSEvent *)event
+     const int key = translateKey([event keyCode]);
+     const int mods = translateFlags([event modifierFlags]);
+ 
+-    _glfwInputKey(window, key, [event keyCode], GLFW_PRESS, mods);
++    if (![self hasMarkedText])
++        _glfwInputKey(window, key, [event keyCode], GLFW_PRESS, mods);
+ 
+-    [self interpretKeyEvents:@[event]];
++    if (!window->textInputFocusInitialized || window->textInputFocus)
++        [self interpretKeyEvents:@[event]];
++    else
++    {
++        NSString* characters = [event characters];
++        if (characters)
++            [self insertText:characters replacementRange:[self selectedRange]];
++    }
+ }
+ 
+ - (void)flagsChanged:(NSEvent *)event
+@@ -686,7 +699,7 @@ - (BOOL)hasMarkedText
+ - (NSRange)markedRange
+ {
+     if ([markedText length] > 0)
+-        return NSMakeRange(0, [markedText length] - 1);
++        return NSMakeRange(0, [markedText length]);
+     else
+         return kEmptyRange;
+ }
+@@ -705,11 +718,95 @@ - (void)setMarkedText:(id)string
+         markedText = [[NSMutableAttributedString alloc] initWithAttributedString:string];
+     else
+         markedText = [[NSMutableAttributedString alloc] initWithString:string];
++
++    NSString* markedTextString = markedText.string;
++
++    NSUInteger textLen = [markedTextString length];
++    _GLFWpreedit* preedit = &window->preedit;
++    int textBufferCount = preedit->textBufferCount;
++    while (textBufferCount < textLen + 1)
++        textBufferCount = textBufferCount == 0 ? 1 : textBufferCount * 2;
++    if (textBufferCount != preedit->textBufferCount)
++    {
++        unsigned int* preeditText = _glfw_realloc(preedit->text,
++                                                  sizeof(unsigned int) * textBufferCount);
++        if (preeditText == NULL)
++            return;
++        preedit->text = preeditText;
++        preedit->textBufferCount = textBufferCount;
++    }
++
++    // NSString handles text data in UTF16 by default, so we have to convert them
++    // to UTF32. Not only the encoding, but also the number of characters and
++    // the position of each block.
++    int currentBlockIndex = 0;
++    int currentBlockLength = 0;
++    int currentBlockLocation = 0;
++    int focusedBlockIndex = 0;
++    NSInteger preeditTextLength = 0;
++    NSRange range = NSMakeRange(0, textLen);
++    while (range.length)
++    {
++        uint32_t codepoint = 0;
++        NSRange currentBlockRange;
++        [markedText attributesAtIndex:range.location
++                       effectiveRange:&currentBlockRange];
++
++        if (preedit->blockSizesBufferCount < 1 + currentBlockIndex)
++        {
++            int blockBufferCount = (preedit->blockSizesBufferCount == 0)
++                ? 1 : preedit->blockSizesBufferCount * 2;
++            int* blocks = _glfw_realloc(preedit->blockSizes,
++                                        sizeof(int) * blockBufferCount);
++            if (blocks == NULL)
++                return;
++            preedit->blockSizes = blocks;
++            preedit->blockSizesBufferCount = blockBufferCount;
++        }
++
++        if (currentBlockLocation != currentBlockRange.location)
++        {
++            currentBlockLocation = currentBlockRange.location;
++            preedit->blockSizes[currentBlockIndex++] = currentBlockLength;
++            currentBlockLength = 0;
++            if (selectedRange.location == currentBlockRange.location)
++                focusedBlockIndex = currentBlockIndex;
++        }
++
++        if ([markedTextString getBytes:&codepoint
++                             maxLength:sizeof(codepoint)
++                            usedLength:NULL
++                              encoding:NSUTF32StringEncoding
++                               options:0
++                                 range:range
++                        remainingRange:&range])
++        {
++            if (codepoint >= 0xf700 && codepoint <= 0xf7ff)
++                continue;
++
++            preedit->text[preeditTextLength++] = codepoint;
++            currentBlockLength++;
++        }
++    }
++    preedit->blockSizes[currentBlockIndex] = currentBlockLength;
++    preedit->blockSizesCount = 1 + currentBlockIndex;
++    preedit->textCount = preeditTextLength;
++    preedit->text[preeditTextLength] = 0;
++    preedit->focusedBlockIndex = focusedBlockIndex;
++    // The caret is always at the last of preedit in macOS.
++    preedit->caretIndex = preeditTextLength;
++
++    _glfwInputPreedit(window);
+ }
+ 
+ - (void)unmarkText
+ {
+     [[markedText mutableString] setString:@""];
++    window->preedit.blockSizesCount = 0;
++    window->preedit.textCount = 0;
++    window->preedit.focusedBlockIndex = 0;
++    window->preedit.caretIndex = 0;
++    _glfwInputPreedit(window);
+ }
+ 
+ - (NSArray*)validAttributesForMarkedText
+@@ -731,8 +828,19 @@ - (NSUInteger)characterIndexForPoint:(NSPoint)point
+ - (NSRect)firstRectForCharacterRange:(NSRange)range
+                          actualRange:(NSRangePointer)actualRange
+ {
+-    const NSRect frame = [window->ns.view frame];
+-    return NSMakeRect(frame.origin.x, frame.origin.y, 0.0, 0.0);
++    int x = window->preedit.cursorPosX;
++    int y = window->preedit.cursorPosY;
++    int w = window->preedit.cursorWidth;
++    int h = window->preedit.cursorHeight;
++
++    const NSRect frame =
++        [window->ns.object contentRectForFrameRect:[window->ns.object frame]];
++
++    return NSMakeRect(frame.origin.x + x,
++                      // The y-axis is upward on macOS, so this conversion is needed.
++                      frame.origin.y + frame.size.height - y - h,
++                      w,
++                      h);
+ }
+ 
+ - (void)insertText:(id)string replacementRange:(NSRange)replacementRange
+@@ -766,6 +874,8 @@ - (void)insertText:(id)string replacementRange:(NSRange)replacementRange
+             _glfwInputChar(window, codepoint, mods, plain);
+         }
+     }
++
++    [self unmarkText];
+ }
+ 
+ - (void)doCommandBySelector:(SEL)selector
+@@ -1010,6 +1120,12 @@ GLFWbool _glfwCreateWindowCocoa(_GLFWwindow* window,
+         }
+     }
+ 
++    [[NSNotificationCenter defaultCenter]
++        addObserver:window->ns.delegate
++           selector:@selector(imeStatusChangeNotified:)
++               name:NSTextInputContextKeyboardSelectionDidChangeNotification
++             object:nil];
++
+     return GLFW_TRUE;
+ 
+     } // autoreleasepool
+@@ -1022,6 +1138,8 @@ void _glfwDestroyWindowCocoa(_GLFWwindow* window)
+     if (_glfw.ns.disabledCursorWindow == window)
+         _glfw.ns.disabledCursorWindow = NULL;
+ 
++    [[NSNotificationCenter defaultCenter] removeObserver:window->ns.delegate];
++
+     [window->ns.object orderOut:nil];
+ 
+     if (window->monitor)
+@@ -1909,6 +2027,124 @@ void _glfwSetClipboardStringCocoa(const char* string)
+     } // autoreleasepool
+ }
+ 
++void _glfwUpdatePreeditCursorRectangleCocoa(_GLFWwindow* window)
++{
++    // Do nothing. Instead, implement `firstRectForCharacterRange` callback
++    // to update the position.
++}
++
++void _glfwResetPreeditTextCocoa(_GLFWwindow* window)
++{
++    @autoreleasepool {
++
++    NSTextInputContext* context = [NSTextInputContext currentInputContext];
++    [context discardMarkedText];
++    [window->ns.view unmarkText];
++
++    } // autoreleasepool
++}
++
++void _glfwSetTextInputFocusCocoa(_GLFWwindow* window, GLFWbool focused)
++{
++    if (!focused)
++        _glfwResetPreeditTextCocoa(window);
++}
++
++void _glfwSetIMEStatusCocoa(_GLFWwindow* window, int active)
++{
++    @autoreleasepool {
++
++    if (active)
++    {
++        NSArray* locales = CFBridgingRelease(CFLocaleCopyPreferredLanguages());
++        // Select the most preferred locale.
++        CFStringRef locale = (__bridge CFStringRef) [locales firstObject];
++        if (locale)
++        {
++            TISInputSourceRef source = TISCopyInputSourceForLanguage(locale);
++            if (source)
++            {
++                CFStringRef sourceType = TISGetInputSourceProperty(source,
++                                                                   kTISPropertyInputSourceType);
++
++                if (sourceType != kTISTypeKeyboardInputMethodModeEnabled)
++                    TISSelectInputSource(source);
++                else
++                {
++                    // Some IMEs return a input-method that has input-method-modes for `TISCopyInputSourceForLanguage()`.
++                    // We can't select these input-methods directly, but need to find
++                    // a input-method-mode of the input-method.
++                    // Example:
++                    //  - Input Method: com.apple.inputmethod.SCIM
++                    //  - Input Mode: com.apple.inputmethod.SCIM.ITABC
++                    NSString* sourceID =
++                        (__bridge NSString *) TISGetInputSourceProperty(source, kTISPropertyInputSourceID);
++                    NSDictionary* properties = @{
++                        (__bridge NSString *) kTISPropertyInputSourceCategory: (__bridge NSString *) kTISCategoryKeyboardInputSource,
++                        (__bridge NSString *) kTISPropertyInputSourceIsSelectCapable: @YES,
++                        };
++                    NSArray* selectableSources =
++                        CFBridgingRelease(TISCreateInputSourceList((__bridge CFDictionaryRef) properties, NO));
++                    for (id sourceCandidate in selectableSources)
++                    {
++                        TISInputSourceRef sourceCandidateRef = (__bridge TISInputSourceRef) sourceCandidate;
++                        NSString* sourceCandidateID =
++                            (__bridge NSString *) TISGetInputSourceProperty(sourceCandidateRef, kTISPropertyInputSourceID);
++                        if ([sourceCandidateID hasPrefix:sourceID])
++                        {
++                            TISSelectInputSource(sourceCandidateRef);
++                            break;
++                        }
++                    }
++                }
++
++                CFRelease(source);
++            }
++        }
++    }
++    else
++    {
++        TISInputSourceRef source = TISCopyCurrentASCIICapableKeyboardInputSource();
++        TISSelectInputSource(source);
++        CFRelease(source);
++    }
++
++    // `NSTextInputContextKeyboardSelectionDidChangeNotification` is sometimes
++    // not called immediately after this, so call the callback here.
++    _glfwInputIMEStatus(window);
++
++    } // autoreleasepool
++}
++
++int _glfwGetIMEStatusCocoa(_GLFWwindow* window)
++{
++    @autoreleasepool {
++
++    NSArray* asciiInputSources =
++        CFBridgingRelease(TISCreateASCIICapableInputSourceList());
++
++    TISInputSourceRef currentSource = TISCopyCurrentKeyboardInputSource();
++    NSString* currentSourceID =
++        (__bridge NSString *) TISGetInputSourceProperty(currentSource,
++                                                        kTISPropertyInputSourceID);
++    CFRelease(currentSource);
++
++    for (int i = 0; i < [asciiInputSources count]; i++)
++    {
++        TISInputSourceRef asciiSource =
++            (__bridge TISInputSourceRef) [asciiInputSources objectAtIndex:i];
++        NSString* asciiSourceID =
++            (__bridge NSString *) TISGetInputSourceProperty(asciiSource,
++                                                            kTISPropertyInputSourceID);
++        if ([asciiSourceID compare:currentSourceID] == NSOrderedSame)
++            return GLFW_FALSE;
++    }
++
++    return GLFW_TRUE;
++
++    } // autoreleasepool
++}
++
+ EGLenum _glfwGetEGLPlatformCocoa(EGLint** attribs)
+ {
+     if (_glfw.egl.ANGLE_platform_angle)
+diff --git a/src/init.c b/src/init.c
+index 7cd872c7..892380e7 100644
+--- a/src/init.c
++++ b/src/init.c
+@@ -52,6 +52,7 @@ static _GLFWinitconfig _glfwInitHints =
+     .hatButtons = true,
+     .angleType = GLFW_ANGLE_PLATFORM_TYPE_NONE,
+     .platformID = GLFW_ANY_PLATFORM,
++    .managePreeditCandidate = GLFW_FALSE,
+     .vulkanLoader = NULL,
+     .ns =
+     {
+@@ -61,6 +62,7 @@ static _GLFWinitconfig _glfwInitHints =
+     .x11 =
+     {
+         .xcbVulkanSurface = true,
++        .onTheSpotIMStyle = false
+     },
+     .wl =
+     {
+@@ -175,6 +177,29 @@ size_t _glfwEncodeUTF8(char* s, uint32_t codepoint)
+     return count;
+ }
+ 
++// Decode a Unicode code point from a UTF-8 stream
++// Based on cutef8 by Jeff Bezanson (Public Domain)
++//
++uint32_t _glfwDecodeUTF8(const char** s)
++{
++    uint32_t codepoint = 0, count = 0;
++    static const uint32_t offsets[] =
++    {
++        0x00000000u, 0x00003080u, 0x000e2080u,
++        0x03c82080u, 0xfa082080u, 0x82082080u
++    };
++
++    do
++    {
++        codepoint = (codepoint << 6) + (unsigned char) **s;
++        (*s)++;
++        count++;
++    } while ((**s & 0xc0) == 0x80);
++
++    assert(count <= 6);
++    return codepoint - offsets[count - 1];
++}
++
+ // Splits and translates a text/uri-list into separate file paths
+ // NOTE: This function destroys the provided string
+ //
+@@ -450,6 +475,9 @@ GLFWAPI void glfwInitHint(int hint, int value)
+         case GLFW_PLATFORM:
+             _glfwInitHints.platformID = value;
+             return;
++        case GLFW_MANAGE_PREEDIT_CANDIDATE:
++            _glfwInitHints.managePreeditCandidate = value;
++            return;
+         case GLFW_COCOA_CHDIR_RESOURCES:
+             _glfwInitHints.ns.chdir = value;
+             return;
+@@ -459,6 +487,9 @@ GLFWAPI void glfwInitHint(int hint, int value)
+         case GLFW_X11_XCB_VULKAN_SURFACE:
+             _glfwInitHints.x11.xcbVulkanSurface = value;
+             return;
++        case GLFW_X11_ONTHESPOT:
++            _glfwInitHints.x11.onTheSpotIMStyle = value;
++            return;
+         case GLFW_WAYLAND_LIBDECOR:
+             _glfwInitHints.wl.libdecorMode = value;
+             return;
+diff --git a/src/input.c b/src/input.c
+index b68ddef4..96fa01c7 100644
+--- a/src/input.c
++++ b/src/input.c
+@@ -328,6 +328,48 @@ void _glfwInputChar(_GLFWwindow* window, uint32_t codepoint, int mods, GLFWbool
+     }
+ }
+ 
++// Notifies shared code of a preedit event
++//
++void _glfwInputPreedit(_GLFWwindow* window)
++{
++    if (window->callbacks.preedit)
++    {
++        _GLFWpreedit *preedit = &window->preedit;
++        window->callbacks.preedit((GLFWwindow*) window,
++                                  preedit->textCount,
++                                  preedit->text,
++                                  preedit->blockSizesCount,
++                                  preedit->blockSizes,
++                                  preedit->focusedBlockIndex,
++                                  preedit->caretIndex);
++    }
++}
++
++// Notifies shared code of a IME status event
++//
++void _glfwInputIMEStatus(_GLFWwindow* window)
++{
++    if (window->callbacks.imestatus)
++    {
++        window->callbacks.imestatus((GLFWwindow*) window);
++    }
++}
++
++// Notifies shared code of a preedit candidate event
++//
++void _glfwInputPreeditCandidate(_GLFWwindow* window)
++{
++    if (window->callbacks.preeditCandidate)
++    {
++        _GLFWpreedit* preedit = &window->preedit;
++        window->callbacks.preeditCandidate((GLFWwindow*) window,
++                                           preedit->candidateCount,
++                                           preedit->candidateSelection,
++                                           preedit->candidatePageStart,
++                                           preedit->candidatePageSize);
++    }
++}
++
+ // Notifies shared code of a scroll event
+ //
+ void _glfwInputScroll(_GLFWwindow* window, double xoffset, double yoffset)
+@@ -577,6 +619,8 @@ GLFWAPI int glfwGetInputMode(GLFWwindow* handle, int mode)
+             return window->rawMouseMotion;
+         case GLFW_UNLIMITED_MOUSE_BUTTONS:
+             return window->disableMouseButtonLimit;
++        case GLFW_IME:
++            return _glfw.platform.getIMEStatus(window);
+     }
+ 
+     _glfwInputError(GLFW_INVALID_ENUM, "Invalid input mode 0x%08X", mode);
+@@ -690,6 +734,12 @@ GLFWAPI void glfwSetInputMode(GLFWwindow* handle, int mode, int value)
+             window->disableMouseButtonLimit = value ? GLFW_TRUE : GLFW_FALSE;
+             return;
+         }
++
++        case GLFW_IME:
++        {
++            _glfw.platform.setIMEStatus(window, value ? GLFW_TRUE : GLFW_FALSE);
++            return;
++        }
+     }
+ 
+     _glfwInputError(GLFW_INVALID_ENUM, "Invalid input mode 0x%08X", mode);
+@@ -949,6 +999,75 @@ GLFWAPI void glfwSetCursor(GLFWwindow* windowHandle, GLFWcursor* cursorHandle)
+     _glfw.platform.setCursor(window, cursor);
+ }
+ 
++GLFWAPI void glfwGetPreeditCursorRectangle(GLFWwindow* handle, int* x, int* y, int* w, int* h)
++{
++    _GLFWwindow* window = (_GLFWwindow*) handle;
++    _GLFWpreedit* preedit = &window->preedit;
++    if (x)
++        *x = preedit->cursorPosX;
++    if (y)
++        *y = preedit->cursorPosY;
++    if (w)
++        *w = preedit->cursorWidth;
++    if (h)
++        *h = preedit->cursorHeight;
++}
++
++GLFWAPI void glfwSetPreeditCursorRectangle(GLFWwindow* handle, int x, int y, int w, int h)
++{
++    _GLFWwindow* window = (_GLFWwindow*) handle;
++    _GLFWpreedit* preedit = &window->preedit;
++
++    if (x == preedit->cursorPosX &&
++        y == preedit->cursorPosY &&
++        w == preedit->cursorWidth &&
++        h == preedit->cursorHeight)
++    {
++        return;
++    }
++
++    preedit->cursorPosX = x;
++    preedit->cursorPosY = y;
++    preedit->cursorWidth = w;
++    preedit->cursorHeight = h;
++
++    _glfw.platform.updatePreeditCursorRectangle(window);
++}
++
++GLFWAPI void glfwResetPreeditText(GLFWwindow* handle)
++{
++    _GLFWwindow* window = (_GLFWwindow*) handle;
++    _glfw.platform.resetPreeditText(window);
++}
++
++GLFWAPI void glfwSetTextInputFocus(GLFWwindow* handle, int focused)
++{
++    _GLFW_REQUIRE_INIT();
++
++    _GLFWwindow* window = (_GLFWwindow*) handle;
++    assert(window != NULL);
++
++    focused = focused ? GLFW_TRUE : GLFW_FALSE;
++    window->textInputFocusInitialized = GLFW_TRUE;
++    window->textInputFocus = focused;
++    _glfw.platform.setTextInputFocus(window, focused);
++}
++
++GLFWAPI unsigned int* glfwGetPreeditCandidate(GLFWwindow* handle, int index, int* textCount)
++{
++    _GLFWwindow* window = (_GLFWwindow*) handle;
++    _GLFWpreedit* preedit = &window->preedit;
++
++    if (preedit->candidateCount <= index)
++        return NULL;
++
++    if (textCount)
++        *textCount = preedit->candidates[index].textCount;
++
++
++    return preedit->candidates[index].text;
++}
++
+ GLFWAPI GLFWkeyfun glfwSetKeyCallback(GLFWwindow* handle, GLFWkeyfun cbfun)
+ {
+     _GLFW_REQUIRE_INIT_OR_RETURN(NULL);
+@@ -982,6 +1101,31 @@ GLFWAPI GLFWcharmodsfun glfwSetCharModsCallback(GLFWwindow* handle, GLFWcharmods
+     return cbfun;
+ }
+ 
++GLFWAPI GLFWpreeditfun glfwSetPreeditCallback(GLFWwindow* handle, GLFWpreeditfun cbfun)
++{
++    _GLFWwindow* window = (_GLFWwindow*) handle;
++    _GLFW_REQUIRE_INIT_OR_RETURN(NULL);
++    _GLFW_SWAP(GLFWpreeditfun, window->callbacks.preedit, cbfun);
++    return cbfun;
++}
++
++GLFWAPI GLFWimestatusfun glfwSetIMEStatusCallback(GLFWwindow* handle, GLFWimestatusfun cbfun)
++{
++    _GLFWwindow* window = (_GLFWwindow*) handle;
++    _GLFW_REQUIRE_INIT_OR_RETURN(NULL);
++    _GLFW_SWAP(GLFWimestatusfun, window->callbacks.imestatus, cbfun);
++    return cbfun;
++}
++
++GLFWAPI GLFWpreeditcandidatefun glfwSetPreeditCandidateCallback(GLFWwindow* handle,
++                                                                GLFWpreeditcandidatefun cbfun)
++{
++    _GLFWwindow* window = (_GLFWwindow*) handle;
++    _GLFW_REQUIRE_INIT_OR_RETURN(NULL);
++    _GLFW_SWAP(GLFWpreeditcandidatefun, window->callbacks.preeditCandidate, cbfun);
++    return cbfun;
++}
++
+ GLFWAPI GLFWmousebuttonfun glfwSetMouseButtonCallback(GLFWwindow* handle,
+                                                       GLFWmousebuttonfun cbfun)
+ {
+diff --git a/src/internal.h b/src/internal.h
+index fc3ceda5..57b43315 100644
+--- a/src/internal.h
++++ b/src/internal.h
+@@ -63,22 +63,24 @@
+ typedef int GLFWbool;
+ typedef void (*GLFWproc)(void);
+ 
+-typedef struct _GLFWerror       _GLFWerror;
+-typedef struct _GLFWinitconfig  _GLFWinitconfig;
+-typedef struct _GLFWwndconfig   _GLFWwndconfig;
+-typedef struct _GLFWctxconfig   _GLFWctxconfig;
+-typedef struct _GLFWfbconfig    _GLFWfbconfig;
+-typedef struct _GLFWcontext     _GLFWcontext;
+-typedef struct _GLFWwindow      _GLFWwindow;
+-typedef struct _GLFWplatform    _GLFWplatform;
+-typedef struct _GLFWlibrary     _GLFWlibrary;
+-typedef struct _GLFWmonitor     _GLFWmonitor;
+-typedef struct _GLFWcursor      _GLFWcursor;
+-typedef struct _GLFWmapelement  _GLFWmapelement;
+-typedef struct _GLFWmapping     _GLFWmapping;
+-typedef struct _GLFWjoystick    _GLFWjoystick;
+-typedef struct _GLFWtls         _GLFWtls;
+-typedef struct _GLFWmutex       _GLFWmutex;
++typedef struct _GLFWerror            _GLFWerror;
++typedef struct _GLFWinitconfig       _GLFWinitconfig;
++typedef struct _GLFWwndconfig        _GLFWwndconfig;
++typedef struct _GLFWctxconfig        _GLFWctxconfig;
++typedef struct _GLFWfbconfig         _GLFWfbconfig;
++typedef struct _GLFWcontext          _GLFWcontext;
++typedef struct _GLFWpreedit          _GLFWpreedit;
++typedef struct _GLFWpreeditcandidate _GLFWpreeditcandidate;
++typedef struct _GLFWwindow           _GLFWwindow;
++typedef struct _GLFWplatform         _GLFWplatform;
++typedef struct _GLFWlibrary          _GLFWlibrary;
++typedef struct _GLFWmonitor          _GLFWmonitor;
++typedef struct _GLFWcursor           _GLFWcursor;
++typedef struct _GLFWmapelement       _GLFWmapelement;
++typedef struct _GLFWmapping          _GLFWmapping;
++typedef struct _GLFWjoystick         _GLFWjoystick;
++typedef struct _GLFWtls              _GLFWtls;
++typedef struct _GLFWmutex            _GLFWmutex;
+ 
+ #define GL_VERSION 0x1f02
+ #define GL_NONE 0
+@@ -378,6 +380,7 @@ struct _GLFWinitconfig
+     bool          hatButtons;
+     int           angleType;
+     int           platformID;
++    GLFWbool      managePreeditCandidate;
+     PFN_vkGetInstanceProcAddr vulkanLoader;
+     struct {
+         bool      menubar;
+@@ -385,6 +388,7 @@ struct _GLFWinitconfig
+     } ns;
+     struct {
+         bool      xcbVulkanSurface;
++        bool      onTheSpotIMStyle;
+     } x11;
+     struct {
+         int       libdecorMode;
+@@ -526,6 +530,39 @@ struct _GLFWcontext
+     GLFW_PLATFORM_CONTEXT_STATE
+ };
+ 
++// Preedit structure for Input Method Editor/Engine
++//
++struct _GLFWpreedit
++{
++    unsigned int*          text;
++    int                    textCount;
++    int                    textBufferCount;
++    int*                   blockSizes;
++    int                    blockSizesCount;
++    int                    blockSizesBufferCount;
++    int                    focusedBlockIndex;
++    int                    caretIndex;
++    int                    cursorPosX, cursorPosY, cursorWidth, cursorHeight;
++
++    // Used only when apps display candidates by themselves.
++    // Usually, OS displays them, so apps don't need to do it.
++    _GLFWpreeditcandidate* candidates;
++    int                    candidateCount;
++    int                    candidateBufferCount;
++    int                    candidateSelection;
++    int                    candidatePageStart;
++    int                    candidatePageSize;
++};
++
++// Preedit candidate structure
++//
++struct _GLFWpreeditcandidate
++{
++    unsigned int*       text;
++    int                 textCount;
++    int                 textBufferCount;
++};
++
+ // Window and context structure
+ //
+ struct _GLFWwindow
+@@ -555,6 +592,12 @@ struct _GLFWwindow
+     GLFWbool            stickyMouseButtons;
+     GLFWbool            lockKeyMods;
+     GLFWbool            disableMouseButtonLimit;
++
++    // Preserve legacy text input behavior for backward compatibility until
++    // glfwSetTextInputFocus is used for this window.
++    GLFWbool            textInputFocusInitialized;
++    GLFWbool            textInputFocus;
++
+     int                 cursorMode;
+     char                mouseButtons[GLFW_MOUSE_BUTTON_LAST + 1];
+     char                keys[GLFW_KEY_LAST + 1];
+@@ -564,6 +607,8 @@ struct _GLFWwindow
+ 
+     _GLFWcontext        context;
+ 
++    _GLFWpreedit        preedit;
++
+     struct {
+         GLFWwindowposfun          pos;
+         GLFWwindowsizefun         size;
+@@ -581,6 +626,9 @@ struct _GLFWwindow
+         GLFWkeyfun                key;
+         GLFWcharfun               character;
+         GLFWcharmodsfun           charmods;
++        GLFWpreeditfun            preedit;
++        GLFWimestatusfun          imestatus;
++        GLFWpreeditcandidatefun   preeditCandidate;
+         GLFWdropfun               drop;
+     } callbacks;
+ 
+@@ -700,6 +748,11 @@ struct _GLFWplatform
+     int (*getKeyScancode)(int);
+     void (*setClipboardString)(const char*);
+     const char* (*getClipboardString)(void);
++    void (*updatePreeditCursorRectangle)(_GLFWwindow*);
++    void (*resetPreeditText)(_GLFWwindow*);
++    void (*setTextInputFocus)(_GLFWwindow*,GLFWbool);
++    void (*setIMEStatus)(_GLFWwindow*,int);
++    int  (*getIMEStatus)(_GLFWwindow*);
+     GLFWbool (*initJoysticks)(void);
+     void (*terminateJoysticks)(void);
+     GLFWbool (*pollJoystick)(_GLFWjoystick*,int);
+@@ -935,6 +988,9 @@ void _glfwInputKey(_GLFWwindow* window,
+                    int key, int scancode, int action, int mods);
+ void _glfwInputChar(_GLFWwindow* window,
+                     uint32_t codepoint, int mods, GLFWbool plain);
++void _glfwInputPreedit(_GLFWwindow* window);
++void _glfwInputIMEStatus(_GLFWwindow* window);
++void _glfwInputPreeditCandidate(_GLFWwindow* window);
+ void _glfwInputScroll(_GLFWwindow* window, double xoffset, double yoffset);
+ void _glfwInputMouseClick(_GLFWwindow* window, int button, int action, int mods);
+ void _glfwInputCursorPos(_GLFWwindow* window, double xpos, double ypos);
+@@ -1011,6 +1067,7 @@ void _glfwTerminateVulkan(void);
+ const char* _glfwGetVulkanResultString(VkResult result);
+ 
+ size_t _glfwEncodeUTF8(char* s, uint32_t codepoint);
++uint32_t _glfwDecodeUTF8(const char** s);
+ char** _glfwParseUriList(char* text, int* count);
+ 
+ char* _glfw_strdup(const char* source);
+diff --git a/src/null_init.c b/src/null_init.c
+index fd0d9e96..b0be07b4 100644
+--- a/src/null_init.c
++++ b/src/null_init.c
+@@ -55,6 +55,11 @@ GLFWbool _glfwConnectNull(int platformID, _GLFWplatform* platform)
+         .getKeyScancode = _glfwGetKeyScancodeNull,
+         .setClipboardString = _glfwSetClipboardStringNull,
+         .getClipboardString = _glfwGetClipboardStringNull,
++        .updatePreeditCursorRectangle = _glfwUpdatePreeditCursorRectangleNull,
++        .resetPreeditText = _glfwResetPreeditTextNull,
++        .setTextInputFocus = _glfwSetTextInputFocusNull,
++        .setIMEStatus = _glfwSetIMEStatusNull,
++        .getIMEStatus = _glfwGetIMEStatusNull,
+         .initJoysticks = _glfwInitJoysticksNull,
+         .terminateJoysticks = _glfwTerminateJoysticksNull,
+         .pollJoystick = _glfwPollJoystickNull,
+diff --git a/src/null_platform.h b/src/null_platform.h
+index dbcb835b..0516c653 100644
+--- a/src/null_platform.h
++++ b/src/null_platform.h
+@@ -270,6 +270,12 @@ const char* _glfwGetClipboardStringNull(void);
+ const char* _glfwGetScancodeNameNull(int scancode);
+ int _glfwGetKeyScancodeNull(int key);
+ 
++void _glfwUpdatePreeditCursorRectangleNull(_GLFWwindow* window);
++void _glfwResetPreeditTextNull(_GLFWwindow* window);
++void _glfwSetTextInputFocusNull(_GLFWwindow* window, GLFWbool focused);
++void _glfwSetIMEStatusNull(_GLFWwindow* window, int active);
++int _glfwGetIMEStatusNull(_GLFWwindow* window);
++
+ EGLenum _glfwGetEGLPlatformNull(EGLint** attribs);
+ EGLNativeDisplayType _glfwGetEGLNativeDisplayNull(void);
+ EGLNativeWindowType _glfwGetEGLNativeWindowNull(_GLFWwindow* window);
+diff --git a/src/null_window.c b/src/null_window.c
+index f0e1dcc9..61cf1e60 100644
+--- a/src/null_window.c
++++ b/src/null_window.c
+@@ -551,6 +551,27 @@ const char* _glfwGetClipboardStringNull(void)
+     return _glfw.null.clipboardString;
+ }
+ 
++void _glfwUpdatePreeditCursorRectangleNull(_GLFWwindow* window)
++{
++}
++
++void _glfwResetPreeditTextNull(_GLFWwindow* window)
++{
++}
++
++void _glfwSetTextInputFocusNull(_GLFWwindow* window, GLFWbool focused)
++{
++}
++
++void _glfwSetIMEStatusNull(_GLFWwindow* window, int active)
++{
++}
++
++int _glfwGetIMEStatusNull(_GLFWwindow* window)
++{
++    return GLFW_FALSE;
++}
++
+ EGLenum _glfwGetEGLPlatformNull(EGLint** attribs)
+ {
+     if (_glfw.egl.EXT_platform_base && _glfw.egl.MESA_platform_surfaceless)
+diff --git a/src/win32_init.c b/src/win32_init.c
+index d526fe8a..248ace6b 100644
+--- a/src/win32_init.c
++++ b/src/win32_init.c
+@@ -163,6 +163,35 @@ static GLFWbool loadLibraries(void)
+             _glfwPlatformGetModuleSymbol(_glfw.win32.ntdll.instance, "RtlVerifyVersionInfo");
+     }
+ 
++    _glfw.win32.imm32.instance = _glfwPlatformLoadModule("imm32.dll");
++    if (_glfw.win32.imm32.instance)
++    {
++        _glfw.win32.imm32.ImmGetCandidateListW_ = (PFN_ImmGetCandidateListW)
++            _glfwPlatformGetModuleSymbol(_glfw.win32.imm32.instance, "ImmGetCandidateListW");
++        _glfw.win32.imm32.ImmGetCompositionStringW_ = (PFN_ImmGetCompositionStringW)
++            _glfwPlatformGetModuleSymbol(_glfw.win32.imm32.instance, "ImmGetCompositionStringW");
++        _glfw.win32.imm32.ImmGetContext_ = (PFN_ImmGetContext)
++            _glfwPlatformGetModuleSymbol(_glfw.win32.imm32.instance, "ImmGetContext");
++        _glfw.win32.imm32.ImmAssociateContext_ = (PFN_ImmAssociateContext)
++            _glfwPlatformGetModuleSymbol(_glfw.win32.imm32.instance, "ImmAssociateContext");
++        _glfw.win32.imm32.ImmGetConversionStatus_ = (PFN_ImmGetConversionStatus)
++            _glfwPlatformGetModuleSymbol(_glfw.win32.imm32.instance, "ImmGetConversionStatus");
++        _glfw.win32.imm32.ImmGetDescriptionW_ = (PFN_ImmGetDescriptionW)
++            _glfwPlatformGetModuleSymbol(_glfw.win32.imm32.instance, "ImmGetDescriptionW");
++        _glfw.win32.imm32.ImmGetOpenStatus_ = (PFN_ImmGetOpenStatus)
++            _glfwPlatformGetModuleSymbol(_glfw.win32.imm32.instance, "ImmGetOpenStatus");
++        _glfw.win32.imm32.ImmNotifyIME_ = (PFN_ImmNotifyIME)
++            _glfwPlatformGetModuleSymbol(_glfw.win32.imm32.instance, "ImmNotifyIME");
++        _glfw.win32.imm32.ImmReleaseContext_ = (PFN_ImmReleaseContext)
++            _glfwPlatformGetModuleSymbol(_glfw.win32.imm32.instance, "ImmReleaseContext");
++        _glfw.win32.imm32.ImmSetCompositionWindow_ = (PFN_ImmSetCompositionWindow)
++            _glfwPlatformGetModuleSymbol(_glfw.win32.imm32.instance, "ImmSetCompositionWindow");
++        _glfw.win32.imm32.ImmSetCandidateWindow_ = (PFN_ImmSetCandidateWindow)
++            _glfwPlatformGetModuleSymbol(_glfw.win32.imm32.instance, "ImmSetCandidateWindow");
++        _glfw.win32.imm32.ImmSetOpenStatus_ = (PFN_ImmSetOpenStatus)
++            _glfwPlatformGetModuleSymbol(_glfw.win32.imm32.instance, "ImmSetOpenStatus");
++    }
++
+     return GLFW_TRUE;
+ }
+ 
+@@ -592,6 +621,11 @@ GLFWbool _glfwConnectWin32(int platformID, _GLFWplatform* platform)
+         .getKeyScancode = _glfwGetKeyScancodeWin32,
+         .setClipboardString = _glfwSetClipboardStringWin32,
+         .getClipboardString = _glfwGetClipboardStringWin32,
++        .updatePreeditCursorRectangle = _glfwUpdatePreeditCursorRectangleWin32,
++        .resetPreeditText = _glfwResetPreeditTextWin32,
++        .setTextInputFocus = _glfwSetTextInputFocusWin32,
++        .setIMEStatus = _glfwSetIMEStatusWin32,
++        .getIMEStatus = _glfwGetIMEStatusWin32,
+         .initJoysticks = _glfwInitJoysticksWin32,
+         .terminateJoysticks = _glfwTerminateJoysticksWin32,
+         .pollJoystick = _glfwPollJoystickWin32,
+@@ -704,6 +738,7 @@ void _glfwTerminateWin32(void)
+     _glfwPlatformFreeModule(_glfw.win32.dwmapi.instance);
+     _glfwPlatformFreeModule(_glfw.win32.shcore.instance);
+     _glfwPlatformFreeModule(_glfw.win32.ntdll.instance);
++    _glfwPlatformFreeModule(_glfw.win32.imm32.instance);
+ 
+     memset(&_glfw.win32, 0, sizeof(_glfw.win32));
+ }
+diff --git a/src/win32_platform.h b/src/win32_platform.h
+index 5e9a6605..3c92278e 100644
+--- a/src/win32_platform.h
++++ b/src/win32_platform.h
+@@ -70,6 +70,7 @@
+ #include <dinput.h>
+ #include <xinput.h>
+ #include <dbt.h>
++#include <imm.h>
+ 
+ // HACK: Define macros that some windows.h variants don't
+ #ifndef WM_COPYGLOBALDATA
+@@ -258,6 +259,32 @@ typedef HRESULT (WINAPI * PFN_GetDpiForMonitor)(HMONITOR,MONITOR_DPI_TYPE,UINT*,
+ typedef LONG (WINAPI * PFN_RtlVerifyVersionInfo)(OSVERSIONINFOEXW*,ULONG,ULONGLONG);
+ #define RtlVerifyVersionInfo _glfw.win32.ntdll.RtlVerifyVersionInfo_
+ 
++// imm32 function pointer typedefs
++typedef DWORD  (WINAPI * PFN_ImmGetCandidateListW)(HIMC,DWORD,LPCANDIDATELIST,DWORD);
++typedef LONG (WINAPI * PFN_ImmGetCompositionStringW)(HIMC,DWORD,LPVOID,DWORD);
++typedef HIMC (WINAPI * PFN_ImmGetContext)(HWND);
++typedef HIMC (WINAPI * PFN_ImmAssociateContext)(HWND,HIMC);
++typedef BOOL (WINAPI * PFN_ImmGetConversionStatus)(HIMC,LPDWORD,LPDWORD);
++typedef UINT (WINAPI * PFN_ImmGetDescriptionW)(HKL,LPWSTR,UINT);
++typedef BOOL (WINAPI * PFN_ImmGetOpenStatus)(HIMC);
++typedef BOOL (WINAPI * PFN_ImmNotifyIME)(HIMC,DWORD,DWORD,DWORD);
++typedef BOOL (WINAPI * PFN_ImmReleaseContext)(HWND,HIMC);
++typedef BOOL (WINAPI * PFN_ImmSetCompositionWindow)(HIMC,LPCOMPOSITIONFORM);
++typedef BOOL (WINAPI * PFN_ImmSetCandidateWindow)(HIMC,LPCANDIDATEFORM);
++typedef BOOL (WINAPI * PFN_ImmSetOpenStatus)(HIMC,BOOL);
++#define ImmGetCandidateListW _glfw.win32.imm32.ImmGetCandidateListW_
++#define ImmGetCompositionStringW _glfw.win32.imm32.ImmGetCompositionStringW_
++#define ImmGetContext _glfw.win32.imm32.ImmGetContext_
++#define ImmAssociateContext _glfw.win32.imm32.ImmAssociateContext_
++#define ImmGetConversionStatus _glfw.win32.imm32.ImmGetConversionStatus_
++#define ImmGetDescriptionW _glfw.win32.imm32.ImmGetDescriptionW_
++#define ImmGetOpenStatus _glfw.win32.imm32.ImmGetOpenStatus_
++#define ImmNotifyIME _glfw.win32.imm32.ImmNotifyIME_
++#define ImmReleaseContext _glfw.win32.imm32.ImmReleaseContext_
++#define ImmSetCompositionWindow _glfw.win32.imm32.ImmSetCompositionWindow_
++#define ImmSetCandidateWindow _glfw.win32.imm32.ImmSetCandidateWindow_
++#define ImmSetOpenStatus _glfw.win32.imm32.ImmSetOpenStatus_
++
+ // WGL extension pointer typedefs
+ typedef BOOL (WINAPI * PFNWGLSWAPINTERVALEXTPROC)(int);
+ typedef BOOL (WINAPI * PFNWGLGETPIXELFORMATATTRIBIVARBPROC)(HDC,int,int,UINT,const int*,int*);
+@@ -355,6 +382,7 @@ typedef struct _GLFWlibraryWGL
+ typedef struct _GLFWwindowWin32
+ {
+     HWND                handle;
++    HIMC                textInputContext;
+     HICON               bigIcon;
+     HICON               smallIcon;
+ 
+@@ -442,6 +470,22 @@ typedef struct _GLFWlibraryWin32
+         HINSTANCE                       instance;
+         PFN_RtlVerifyVersionInfo        RtlVerifyVersionInfo_;
+     } ntdll;
++
++    struct {
++        HINSTANCE                       instance;
++        PFN_ImmGetCandidateListW        ImmGetCandidateListW_;
++        PFN_ImmGetCompositionStringW    ImmGetCompositionStringW_;
++        PFN_ImmGetContext               ImmGetContext_;
++        PFN_ImmAssociateContext         ImmAssociateContext_;
++        PFN_ImmGetConversionStatus      ImmGetConversionStatus_;
++        PFN_ImmGetDescriptionW          ImmGetDescriptionW_;
++        PFN_ImmGetOpenStatus            ImmGetOpenStatus_;
++        PFN_ImmNotifyIME                ImmNotifyIME_;
++        PFN_ImmReleaseContext           ImmReleaseContext_;
++        PFN_ImmSetCompositionWindow     ImmSetCompositionWindow_;
++        PFN_ImmSetCandidateWindow       ImmSetCandidateWindow_;
++        PFN_ImmSetOpenStatus            ImmSetOpenStatus_;
++    } imm32;
+ } _GLFWlibraryWin32;
+ 
+ // Win32-specific per-monitor data
+@@ -536,6 +580,12 @@ void _glfwSetCursorWin32(_GLFWwindow* window, _GLFWcursor* cursor);
+ void _glfwSetClipboardStringWin32(const char* string);
+ const char* _glfwGetClipboardStringWin32(void);
+ 
++void _glfwUpdatePreeditCursorRectangleWin32(_GLFWwindow* window);
++void _glfwResetPreeditTextWin32(_GLFWwindow* window);
++void _glfwSetTextInputFocusWin32(_GLFWwindow* window, GLFWbool focused);
++void _glfwSetIMEStatusWin32(_GLFWwindow* window, int active);
++int _glfwGetIMEStatusWin32(_GLFWwindow* window);
++
+ EGLenum _glfwGetEGLPlatformWin32(EGLint** attribs);
+ EGLNativeDisplayType _glfwGetEGLNativeDisplayWin32(void);
+ EGLNativeWindowType _glfwGetEGLNativeWindowWin32(_GLFWwindow* window);
+diff --git a/src/win32_window.c b/src/win32_window.c
+index 8f83a9a0..db5bfd00 100644
+--- a/src/win32_window.c
++++ b/src/win32_window.c
+@@ -35,6 +35,42 @@
+ #include <assert.h>
+ #include <windowsx.h>
+ #include <shellapi.h>
++#include <wchar.h>
++
++// Converts utf16 units to Unicode code points (UTF32).
++// Returns GLFW_TRUE when the converting completes and the result is assigned to
++// the argument `codepoint`.
++// Returns GLFW_FALSE when the converting is not yet completed (for
++// Surrogate-pair processing) and the unit is assigned to the argument
++// `highsurrogate`. It will be used in the next unit's processing.
++//
++static GLFWbool convertToUTF32FromUTF16(WCHAR utf16_unit,
++                                        WCHAR* highsurrogate,
++                                        uint32_t* codepoint)
++{
++    *codepoint = 0;
++
++    if (utf16_unit >= 0xd800 && utf16_unit <= 0xdbff)
++    {
++        *highsurrogate = (WCHAR) utf16_unit;
++        return GLFW_FALSE;
++    }
++
++    if (utf16_unit >= 0xdc00 && utf16_unit <= 0xdfff)
++    {
++        if (*highsurrogate)
++        {
++            *codepoint += (*highsurrogate - 0xd800) << 10;
++            *codepoint += (WCHAR) utf16_unit - 0xdc00;
++            *codepoint += 0x10000;
++        }
++    }
++    else
++        *codepoint = (WCHAR) utf16_unit;
++
++    *highsurrogate = 0;
++    return GLFW_TRUE;
++}
+ 
+ // Returns the window style for the specified window
+ //
+@@ -526,6 +562,323 @@ static void maximizeWindowManually(_GLFWwindow* window)
+                  SWP_NOACTIVATE | SWP_NOZORDER | SWP_FRAMECHANGED);
+ }
+ 
++// Store candidate text from the buffer data
++//
++static void setCandidate(_GLFWpreeditcandidate* candidate, LPWSTR buffer)
++{
++    size_t bufferCount = wcslen(buffer);
++    int textBufferCount = candidate->textBufferCount;
++    uint32_t codepoint;
++    WCHAR highSurrogate = 0;
++    int convertedLength = 0;
++    int i;
++
++    while ((size_t) textBufferCount < bufferCount + 1)
++        textBufferCount = (textBufferCount == 0) ? 1 : textBufferCount * 2;
++    if (textBufferCount != candidate->textBufferCount)
++    {
++        unsigned int* text =
++            _glfw_realloc(candidate->text,
++                          sizeof(unsigned int) * textBufferCount);
++        if (text == NULL)
++            return;
++        candidate->text = text;
++        candidate->textBufferCount = textBufferCount;
++    }
++
++    for (i = 0; (size_t) i < bufferCount; ++i)
++    {
++        if (convertToUTF32FromUTF16(buffer[i],
++                                    &highSurrogate,
++                                    &codepoint))
++            candidate->text[convertedLength++] = codepoint;
++    }
++
++    candidate->textCount = convertedLength;
++}
++
++// Get preedit candidates of Imm32 and pass them to candidate-callback
++//
++static void getImmCandidates(_GLFWwindow* window)
++{
++    _GLFWpreedit* preedit = &window->preedit;
++    HIMC hIMC = ImmGetContext(window->win32.handle);
++    DWORD candidateListBytes = ImmGetCandidateListW(hIMC, 0, NULL, 0);
++
++    if (candidateListBytes == 0)
++    {
++        ImmReleaseContext(window->win32.handle, hIMC);
++        return;
++    }
++
++    {
++        int i;
++        int bufferCount = preedit->candidateBufferCount;
++        LPCANDIDATELIST candidateList = _glfw_calloc(candidateListBytes, 1);
++        if (candidateList == NULL)
++        {
++            ImmReleaseContext(window->win32.handle, hIMC);
++            return;
++        }
++        ImmGetCandidateListW(hIMC, 0, candidateList, candidateListBytes);
++        ImmReleaseContext(window->win32.handle, hIMC);
++
++        while ((DWORD) bufferCount < candidateList->dwCount + 1)
++            bufferCount = (bufferCount == 0) ? 1 : bufferCount * 2;
++        if (bufferCount != preedit->candidateBufferCount)
++        {
++            _GLFWpreeditcandidate* candidates =
++                _glfw_realloc(preedit->candidates,
++                              sizeof(_GLFWpreeditcandidate) * bufferCount);
++            if (candidates == NULL)
++            {
++                _glfw_free(candidateList);
++                return;
++            }
++            // `realloc` does not initialize the increased area with 0.
++            // This logic should be moved to a more appropriate place to share
++            // when other platforms support this feature.
++            for (i = preedit->candidateBufferCount; i < bufferCount; ++i)
++            {
++                candidates[i].text = NULL;
++                candidates[i].textCount = 0;
++                candidates[i].textBufferCount = 0;
++            }
++            preedit->candidates = candidates;
++            preedit->candidateBufferCount = bufferCount;
++        }
++
++        for (i = 0; (DWORD) i < candidateList->dwCount; ++i)
++            setCandidate(&preedit->candidates[i],
++                         (LPWSTR)((char*) candidateList + candidateList->dwOffset[i]));
++
++        preedit->candidateCount = candidateList->dwCount;
++        preedit->candidateSelection = candidateList->dwSelection;
++        preedit->candidatePageStart = candidateList->dwPageStart;
++        preedit->candidatePageSize = candidateList->dwPageSize;
++
++        _glfw_free(candidateList);
++    }
++
++    _glfwInputPreeditCandidate(window);
++}
++
++// Clear preedit candidates
++static void clearImmCandidate(_GLFWwindow* window)
++{
++    window->preedit.candidateCount = 0;
++    window->preedit.candidateSelection = 0;
++    window->preedit.candidatePageStart = 0;
++    window->preedit.candidatePageSize = 0;
++    _glfwInputPreeditCandidate(window);
++}
++
++// Get preedit texts of Imm32 and pass them to preedit-callback
++//
++static GLFWbool getImmPreedit(_GLFWwindow* window)
++{
++    _GLFWpreedit* preedit = &window->preedit;
++    HIMC hIMC = ImmGetContext(window->win32.handle);
++    // get preedit data sizes
++    LONG preeditBytes = ImmGetCompositionStringW(hIMC, GCS_COMPSTR, NULL, 0);
++    LONG attrBytes = ImmGetCompositionStringW(hIMC, GCS_COMPATTR, NULL, 0);
++    LONG clauseBytes = ImmGetCompositionStringW(hIMC, GCS_COMPCLAUSE, NULL, 0);
++    LONG cursorPos = ImmGetCompositionStringW(hIMC, GCS_CURSORPOS, NULL, 0);
++
++    if (preeditBytes > 0)
++    {
++        int textBufferCount = preedit->textBufferCount;
++        int blockBufferCount = preedit->blockSizesBufferCount;
++        int textLen = preeditBytes / sizeof(WCHAR);
++        LPWSTR buffer = _glfw_calloc(preeditBytes, 1);
++        LPSTR attributes = _glfw_calloc(attrBytes, 1);
++        DWORD* clauses = _glfw_calloc(clauseBytes, 1);
++
++        if (!buffer || (attrBytes > 0 && !attributes) || (clauseBytes > 0 && !clauses))
++        {
++            _glfw_free(buffer);
++            _glfw_free(attributes);
++            _glfw_free(clauses);
++            ImmReleaseContext(window->win32.handle, hIMC);
++            return GLFW_FALSE;
++        }
++
++        // get preedit data
++        ImmGetCompositionStringW(hIMC, GCS_COMPSTR, buffer, preeditBytes);
++        if (attributes)
++            ImmGetCompositionStringW(hIMC, GCS_COMPATTR, attributes, attrBytes);
++        if (clauses)
++            ImmGetCompositionStringW(hIMC, GCS_COMPCLAUSE, clauses, clauseBytes);
++
++        // realloc preedit text
++        while (textBufferCount < textLen + 1)
++            textBufferCount = (textBufferCount == 0) ? 1 : textBufferCount * 2;
++        if (textBufferCount != preedit->textBufferCount)
++        {
++            size_t bufsize = sizeof(unsigned int) * textBufferCount;
++            unsigned int* preeditText = _glfw_realloc(preedit->text,
++                                                      bufsize);
++
++            if (preeditText == NULL)
++            {
++                _glfw_free(buffer);
++                _glfw_free(attributes);
++                _glfw_free(clauses);
++                ImmReleaseContext(window->win32.handle, hIMC);
++                return GLFW_FALSE;
++            }
++            preedit->text = preeditText;
++            preedit->textBufferCount = textBufferCount;
++        }
++
++        // realloc blocks
++        preedit->blockSizesCount = clauses ? clauseBytes / sizeof(DWORD) - 1 : 1;
++        while (blockBufferCount < preedit->blockSizesCount)
++            blockBufferCount = (blockBufferCount == 0) ? 1 : blockBufferCount * 2;
++        if (blockBufferCount != preedit->blockSizesBufferCount)
++        {
++            size_t bufsize = sizeof(int) * blockBufferCount;
++            int* blocks = _glfw_realloc(preedit->blockSizes,
++                                        bufsize);
++
++            if (blocks == NULL)
++            {
++                _glfw_free(buffer);
++                _glfw_free(attributes);
++                _glfw_free(clauses);
++                ImmReleaseContext(window->win32.handle, hIMC);
++                return GLFW_FALSE;
++            }
++            preedit->blockSizes = blocks;
++            preedit->blockSizesBufferCount = blockBufferCount;
++        }
++
++        // store preedit text & block sizes
++        {
++            // Win32 API handles text data in UTF16, so we have to convert them
++            // to UTF32. Not only the encoding, but also the number of characters,
++            // the position of each block and the cursor.
++            int i;
++            uint32_t codepoint;
++            WCHAR highSurrogate = 0;
++            int convertedLength = 0;
++            int blockIndex = 0;
++            int currentBlockLength = 0;
++
++            // The last element of clauses is a block count, but
++            // text length is convenient.
++            if (clauses)
++                clauses[preedit->blockSizesCount] = textLen;
++
++            for (i = 0; i < textLen; i++)
++            {
++                if (clauses && clauses[blockIndex + 1] <= (DWORD) i)
++                {
++                    preedit->blockSizes[blockIndex++] = currentBlockLength;
++                    currentBlockLength = 0;
++                }
++
++                if (convertToUTF32FromUTF16(buffer[i],
++                                            &highSurrogate,
++                                            &codepoint))
++                {
++                    preedit->text[convertedLength++] = codepoint;
++                    currentBlockLength++;
++                }
++                else if ((LONG) i < cursorPos)
++                {
++                    // A high surrogate appears before cursorPos, so needs to
++                    // fix cursorPos on UTF16 for UTF32
++                    cursorPos--;
++                }
++            }
++            preedit->blockSizes[blockIndex] = currentBlockLength;
++            preedit->textCount = convertedLength;
++            preedit->text[convertedLength] = 0;
++            preedit->caretIndex = cursorPos;
++
++            preedit->focusedBlockIndex = 0;
++            if (attributes && clauses)
++            {
++                for (i = 0; i < preedit->blockSizesCount; i++)
++                {
++                    if (attributes[clauses[i]] == ATTR_TARGET_CONVERTED ||
++                        attributes[clauses[i]] == ATTR_TARGET_NOTCONVERTED)
++                    {
++                        preedit->focusedBlockIndex = i;
++                        break;
++                    }
++                }
++            }
++        }
++
++        _glfw_free(buffer);
++        _glfw_free(attributes);
++        _glfw_free(clauses);
++
++        _glfwInputPreedit(window);
++    }
++
++    ImmReleaseContext(window->win32.handle, hIMC);
++    return GLFW_TRUE;
++}
++
++// Clear peedit data
++//
++static void clearImmPreedit(_GLFWwindow* window)
++{
++    window->preedit.blockSizesCount = 0;
++    window->preedit.textCount = 0;
++    window->preedit.focusedBlockIndex = 0;
++    window->preedit.caretIndex = 0;
++    _glfwInputPreedit(window);
++}
++
++static GLFWbool textInputFocusDisabled(_GLFWwindow* window)
++{
++    return window->textInputFocusInitialized && !window->textInputFocus;
++}
++
++// Commit the result texts of Imm32 to character-callback
++//
++static GLFWbool commitImmResultStr(_GLFWwindow* window)
++{
++    HIMC hIMC;
++    LONG bytes;
++    uint32_t codepoint;
++    WCHAR highSurrogate = 0;
++
++    if (!window->callbacks.character)
++        return GLFW_FALSE;
++
++    hIMC = ImmGetContext(window->win32.handle);
++    // get preedit data sizes
++    bytes = ImmGetCompositionStringW(hIMC, GCS_RESULTSTR, NULL, 0);
++
++    if (bytes > 0)
++    {
++        int i;
++        int length = bytes / sizeof(WCHAR);
++        LPWSTR buffer = _glfw_calloc(bytes, 1);
++
++        // get preedit data
++        ImmGetCompositionStringW(hIMC, GCS_RESULTSTR, buffer, bytes);
++
++        for (i = 0; i < length; i++)
++        {
++            if (convertToUTF32FromUTF16(buffer[i],
++                                        &highSurrogate,
++                                        &codepoint))
++                window->callbacks.character((GLFWwindow*) window, codepoint);
++        }
++
++        _glfw_free(buffer);
++    }
++
++    ImmReleaseContext(window->win32.handle, hIMC);
++    return GLFW_TRUE;
++}
++
+ // Window procedure for user-created windows
+ //
+ static LRESULT CALLBACK windowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
+@@ -554,6 +907,23 @@ static LRESULT CALLBACK windowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM l
+ 
+     switch (uMsg)
+     {
++        case WM_IME_SETCONTEXT:
++        {
++            if (textInputFocusDisabled(window))
++                break;
++
++            // To draw preedit text by an application side
++            if (lParam & ISC_SHOWUICOMPOSITIONWINDOW)
++                lParam &= ~ISC_SHOWUICOMPOSITIONWINDOW;
++
++            if (_glfw.hints.init.managePreeditCandidate &&
++                (lParam & ISC_SHOWUICANDIDATEWINDOW))
++            {
++                lParam &= ~ISC_SHOWUICANDIDATEWINDOW;
++            }
++            break;
++        }
++
+         case WM_MOUSEACTIVATE:
+         {
+             // HACK: Postpone cursor disabling when the window was activated by
+@@ -659,27 +1029,11 @@ static LRESULT CALLBACK windowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM l
+         case WM_CHAR:
+         case WM_SYSCHAR:
+         {
+-            if (wParam >= 0xd800 && wParam <= 0xdbff)
+-                window->win32.highSurrogate = (WCHAR) wParam;
+-            else
+-            {
+-                uint32_t codepoint = 0;
+-
+-                if (wParam >= 0xdc00 && wParam <= 0xdfff)
+-                {
+-                    if (window->win32.highSurrogate)
+-                    {
+-                        codepoint += (window->win32.highSurrogate - 0xd800) << 10;
+-                        codepoint += (WCHAR) wParam - 0xdc00;
+-                        codepoint += 0x10000;
+-                    }
+-                }
+-                else
+-                    codepoint = (WCHAR) wParam;
+-
+-                window->win32.highSurrogate = 0;
++            uint32_t codepoint;
++            if (convertToUTF32FromUTF16((WCHAR) wParam,
++                                        &window->win32.highSurrogate,
++                                        &codepoint))
+                 _glfwInputChar(window, codepoint, getKeyMods(), uMsg != WM_SYSCHAR);
+-            }
+ 
+             if (uMsg == WM_SYSCHAR && window->win32.keymenu)
+                 break;
+@@ -798,6 +1152,63 @@ static LRESULT CALLBACK windowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM l
+             break;
+         }
+ 
++        case WM_IME_COMPOSITION:
++        {
++            if (textInputFocusDisabled(window))
++                return 0;
++
++            if (lParam & (GCS_RESULTSTR | GCS_COMPSTR))
++            {
++                if (lParam & GCS_RESULTSTR)
++                    commitImmResultStr(window);
++                if (lParam & GCS_COMPSTR)
++                    getImmPreedit(window);
++                return TRUE;
++            }
++            break;
++        }
++
++        case WM_IME_ENDCOMPOSITION:
++        {
++            if (textInputFocusDisabled(window))
++                return 0;
++
++            clearImmPreedit(window);
++            // Usually clearing candidates in IMN_CLOSECANDIDATE is sufficient.
++            // However, some IME need it here, e.g. Google Japanese Input.
++            clearImmCandidate(window);
++            return TRUE;
++        }
++
++        case WM_IME_NOTIFY:
++        {
++            if (textInputFocusDisabled(window))
++                return 0;
++
++            switch (wParam)
++            {
++                case IMN_SETOPENSTATUS:
++                {
++                    _glfwInputIMEStatus(window);
++                    return TRUE;
++                }
++
++                case IMN_OPENCANDIDATE:
++                case IMN_CHANGECANDIDATE:
++                {
++                    getImmCandidates(window);
++                    return TRUE;
++                }
++
++                case IMN_CLOSECANDIDATE:
++                {
++                    clearImmCandidate(window);
++                    return TRUE;
++                }
++            }
++            break;
++        }
++
+         case WM_LBUTTONDOWN:
+         case WM_RBUTTONDOWN:
+         case WM_MBUTTONDOWN:
+@@ -1561,6 +1972,9 @@ void _glfwDestroyWindowWin32(_GLFWwindow* window)
+ 
+     if (window->win32.handle)
+     {
++        if (window->win32.textInputContext)
++            ImmAssociateContext(window->win32.handle, window->win32.textInputContext);
++
+         RemovePropW(window->win32.handle, L"GLFW");
+         DestroyWindow(window->win32.handle);
+         window->win32.handle = NULL;
+@@ -2451,6 +2865,121 @@ const char* _glfwGetClipboardStringWin32(void)
+     return _glfw.win32.clipboardString;
+ }
+ 
++void _glfwUpdatePreeditCursorRectangleWin32(_GLFWwindow* window)
++{
++    _GLFWpreedit* preedit = &window->preedit;
++    HWND hWnd = window->win32.handle;
++    HIMC hIMC = ImmGetContext(hWnd);
++
++    int x = preedit->cursorPosX;
++    int y = preedit->cursorPosY;
++    int w = preedit->cursorWidth;
++    int h = preedit->cursorHeight;
++
++    COMPOSITIONFORM areaRect = { CFS_RECT, { x, y }, { x, y, x + w, y + h } };
++    if (!hIMC)
++        return;
++
++    ImmSetCompositionWindow(hIMC, &areaRect);
++
++    CANDIDATEFORM excludeRect = { 0, CFS_EXCLUDE, { x, y }, { x, y, x + w, y + h } };
++    ImmSetCandidateWindow(hIMC, &excludeRect);
++
++    ImmReleaseContext(hWnd, hIMC);
++}
++
++void _glfwResetPreeditTextWin32(_GLFWwindow* window)
++{
++    HWND hWnd = window->win32.handle;
++    HIMC hIMC = ImmGetContext(hWnd);
++    GLFWbool releaseContext = GLFW_TRUE;
++
++    if (!hIMC && window->win32.textInputContext)
++    {
++        hIMC = window->win32.textInputContext;
++        releaseContext = GLFW_FALSE;
++    }
++
++    if (hIMC)
++    {
++        ImmNotifyIME(hIMC, NI_COMPOSITIONSTR, CPS_CANCEL, 0);
++        if (releaseContext)
++            ImmReleaseContext(hWnd, hIMC);
++    }
++
++    clearImmPreedit(window);
++    clearImmCandidate(window);
++}
++
++void _glfwSetTextInputFocusWin32(_GLFWwindow* window, GLFWbool focused)
++{
++    if (focused)
++    {
++        if (window->win32.textInputContext)
++        {
++            ImmAssociateContext(window->win32.handle,
++                                window->win32.textInputContext);
++            window->win32.textInputContext = NULL;
++            _glfwUpdatePreeditCursorRectangleWin32(window);
++        }
++    }
++    else
++    {
++        _glfwResetPreeditTextWin32(window);
++
++        if (!window->win32.textInputContext)
++        {
++            window->win32.textInputContext =
++                ImmAssociateContext(window->win32.handle, NULL);
++        }
++    }
++}
++
++void _glfwSetIMEStatusWin32(_GLFWwindow* window, int active)
++{
++    HWND hWnd = window->win32.handle;
++    HIMC hIMC = window->win32.textInputContext;
++    GLFWbool releaseContext = GLFW_FALSE;
++
++    if (!hIMC)
++    {
++        hIMC = ImmGetContext(hWnd);
++        releaseContext = GLFW_TRUE;
++    }
++
++    if (!hIMC)
++        return;
++
++    ImmSetOpenStatus(hIMC, active ? TRUE : FALSE);
++
++    if (releaseContext)
++        ImmReleaseContext(hWnd, hIMC);
++}
++
++int _glfwGetIMEStatusWin32(_GLFWwindow* window)
++{
++    HWND hWnd = window->win32.handle;
++    HIMC hIMC = window->win32.textInputContext;
++    GLFWbool releaseContext = GLFW_FALSE;
++    BOOL result;
++
++    if (!hIMC)
++    {
++        hIMC = ImmGetContext(hWnd);
++        releaseContext = GLFW_TRUE;
++    }
++
++    if (!hIMC)
++        return GLFW_FALSE;
++
++    result = ImmGetOpenStatus(hIMC);
++
++    if (releaseContext)
++        ImmReleaseContext(hWnd, hIMC);
++
++    return result ? GLFW_TRUE : GLFW_FALSE;
++}
++
+ EGLenum _glfwGetEGLPlatformWin32(EGLint** attribs)
+ {
+     if (_glfw.egl.ANGLE_platform_angle)
+diff --git a/src/window.c b/src/window.c
+index 5f92e97f..68e0c597 100644
+--- a/src/window.c
++++ b/src/window.c
+@@ -243,6 +243,11 @@ GLFWAPI GLFWwindow* glfwCreateWindow(int width, int height,
+     window->denom       = GLFW_DONT_CARE;
+     window->title       = _glfw_strdup(title);
+ 
++    window->preedit.cursorPosX = 0;
++    window->preedit.cursorPosY = height;
++    window->preedit.cursorWidth = 0;
++    window->preedit.cursorHeight = 0;
++
+     if (!_glfw.platform.createWindow(window, &wndconfig, &ctxconfig, &fbconfig))
+     {
+         glfwDestroyWindow((GLFWwindow*) window);
+@@ -494,6 +499,11 @@ GLFWAPI void glfwDestroyWindow(GLFWwindow* handle)
+         *prev = window->next;
+     }
+ 
++    // Clear memory for preedit text
++    if (window->preedit.text)
++        _glfw_free(window->preedit.text);
++    if (window->preedit.blockSizes)
++        _glfw_free(window->preedit.blockSizes);
+     _glfw_free(window->title);
+     _glfw_free(window);
+ }
+diff --git a/src/wl_init.c b/src/wl_init.c
+index e6da5782..0499c832 100644
+--- a/src/wl_init.c
++++ b/src/wl_init.c
+@@ -49,6 +49,8 @@
+ #include "fractional-scale-v1-client-protocol.h"
+ #include "xdg-activation-v1-client-protocol.h"
+ #include "idle-inhibit-unstable-v1-client-protocol.h"
++#include "text-input-unstable-v1-client-protocol.h"
++#include "text-input-unstable-v3-client-protocol.h"
+ 
+ // NOTE: Versions of wayland-scanner prior to 1.17.91 named every global array of
+ //       wl_interface pointers 'types', making it impossible to combine several unmodified
+@@ -91,6 +93,14 @@
+ #include "idle-inhibit-unstable-v1-client-protocol-code.h"
+ #undef types
+ 
++#define types _glfw_text_input_v1_types
++#include "text-input-unstable-v1-client-protocol-code.h"
++#undef types
++
++#define types _glfw_text_input_v3_types
++#include "text-input-unstable-v3-client-protocol-code.h"
++#undef types
++
+ static void wmBaseHandlePing(void* userData,
+                              struct xdg_wm_base* wmBase,
+                              uint32_t serial)
+@@ -201,6 +211,20 @@ static void registryHandleGlobal(void* userData,
+                              &wp_fractional_scale_manager_v1_interface,
+                              1);
+     }
++    else if (strcmp(interface, "zwp_text_input_manager_v1") == 0)
++    {
++        _glfw.wl.textInputManagerV1 =
++            wl_registry_bind(registry, name,
++                             &zwp_text_input_manager_v1_interface,
++                             1);
++    }
++    else if (strcmp(interface, "zwp_text_input_manager_v3") == 0)
++    {
++        _glfw.wl.textInputManagerV3 =
++            wl_registry_bind(registry, name,
++                             &zwp_text_input_manager_v3_interface,
++                             1);
++    }
+ }
+ 
+ static void registryHandleGlobalRemove(void* userData,
+@@ -442,6 +466,11 @@ GLFWbool _glfwConnectWayland(int platformID, _GLFWplatform* platform)
+         .getKeyScancode = _glfwGetKeyScancodeWayland,
+         .setClipboardString = _glfwSetClipboardStringWayland,
+         .getClipboardString = _glfwGetClipboardStringWayland,
++        .updatePreeditCursorRectangle = _glfwUpdatePreeditCursorRectangleWayland,
++        .resetPreeditText = _glfwResetPreeditTextWayland,
++        .setTextInputFocus = _glfwSetTextInputFocusWayland,
++        .setIMEStatus = _glfwSetIMEStatusWayland,
++        .getIMEStatus = _glfwGetIMEStatusWayland,
+ #if defined(GLFW_BUILD_LINUX_JOYSTICK)
+         .initJoysticks = _glfwInitJoysticksLinux,
+         .terminateJoysticks = _glfwTerminateJoysticksLinux,
+@@ -988,6 +1017,10 @@ void _glfwTerminateWayland(void)
+         xdg_activation_v1_destroy(_glfw.wl.activationManager);
+     if (_glfw.wl.fractionalScaleManager)
+         wp_fractional_scale_manager_v1_destroy(_glfw.wl.fractionalScaleManager);
++    if (_glfw.wl.textInputManagerV1)
++        zwp_text_input_manager_v1_destroy(_glfw.wl.textInputManagerV1);
++    if (_glfw.wl.textInputManagerV3)
++        zwp_text_input_manager_v3_destroy(_glfw.wl.textInputManagerV3);
+     if (_glfw.wl.registry)
+         wl_registry_destroy(_glfw.wl.registry);
+     if (_glfw.wl.display)
+diff --git a/src/wl_platform.h b/src/wl_platform.h
+index 405ea633..4616c125 100644
+--- a/src/wl_platform.h
++++ b/src/wl_platform.h
+@@ -435,6 +435,13 @@ typedef struct _GLFWwindowWayland
+         uint32_t                    buttonPressSerial;
+         const char*                 cursorName;
+     } fallback;
++
++    struct zwp_text_input_v1* textInputV1;
++    struct zwp_text_input_v3* textInputV3;
++    struct {
++        char* preeditText;
++        char* commitTextOnReset;
++    } textInputV1Context;
+ } _GLFWwindowWayland;
+ 
+ // Wayland-specific global data
+@@ -459,6 +466,8 @@ typedef struct _GLFWlibraryWayland
+     struct zwp_idle_inhibit_manager_v1*     idleInhibitManager;
+     struct xdg_activation_v1*               activationManager;
+     struct wp_fractional_scale_manager_v1*  fractionalScaleManager;
++    struct zwp_text_input_manager_v1*       textInputManagerV1;
++    struct zwp_text_input_manager_v3*       textInputManagerV3;
+ 
+     _GLFWofferWayland*          offers;
+     unsigned int                offerCount;
+@@ -709,6 +718,12 @@ void _glfwSetCursorWayland(_GLFWwindow* window, _GLFWcursor* cursor);
+ void _glfwSetClipboardStringWayland(const char* string);
+ const char* _glfwGetClipboardStringWayland(void);
+ 
++void _glfwUpdatePreeditCursorRectangleWayland(_GLFWwindow* window);
++void _glfwResetPreeditTextWayland(_GLFWwindow* window);
++void _glfwSetTextInputFocusWayland(_GLFWwindow* window, GLFWbool focused);
++void _glfwSetIMEStatusWayland(_GLFWwindow* window, int active);
++int _glfwGetIMEStatusWayland(_GLFWwindow* window);
++
+ EGLenum _glfwGetEGLPlatformWayland(EGLint** attribs);
+ EGLNativeDisplayType _glfwGetEGLNativeDisplayWayland(void);
+ EGLNativeWindowType _glfwGetEGLNativeWindowWayland(_GLFWwindow* window);
+diff --git a/src/wl_window.c b/src/wl_window.c
+index fd8553a5..b81a0864 100644
+--- a/src/wl_window.c
++++ b/src/wl_window.c
+@@ -53,6 +53,8 @@
+ #include "xdg-activation-v1-client-protocol.h"
+ #include "idle-inhibit-unstable-v1-client-protocol.h"
+ #include "fractional-scale-v1-client-protocol.h"
++#include "text-input-unstable-v1-client-protocol.h"
++#include "text-input-unstable-v3-client-protocol.h"
+ 
+ #define GLFW_BORDER_SIZE    4
+ #define GLFW_CAPTION_HEIGHT 24
+@@ -719,6 +721,27 @@ const struct wp_fractional_scale_v1_listener fractionalScaleListener =
+     fractionalScaleHandlePreferredScale,
+ };
+ 
++static void activateTextInputV1(_GLFWwindow* window)
++{
++    if (!window->wl.textInputV1)
++        return;
++    zwp_text_input_v1_show_input_panel(window->wl.textInputV1);
++    zwp_text_input_v1_activate(window->wl.textInputV1, _glfw.wl.seat, window->wl.surface);
++}
++
++static void deactivateTextInputV1(_GLFWwindow* window)
++{
++    if (!window->wl.textInputV1)
++        return;
++    zwp_text_input_v1_hide_input_panel(window->wl.textInputV1);
++    zwp_text_input_v1_deactivate(window->wl.textInputV1, _glfw.wl.seat);
++}
++
++static GLFWbool textInputFocusDisabled(_GLFWwindow* window)
++{
++    return window->textInputFocusInitialized && !window->textInputFocus;
++}
++
+ static void xdgToplevelHandleConfigure(void* userData,
+                                        struct xdg_toplevel* toplevel,
+                                        int32_t width,
+@@ -746,6 +769,8 @@ static void xdgToplevelHandleConfigure(void* userData,
+                 break;
+             case XDG_TOPLEVEL_STATE_ACTIVATED:
+                 window->wl.pending.activated = GLFW_TRUE;
++                if (!textInputFocusDisabled(window))
++                    activateTextInputV1(window);
+                 break;
+         }
+     }
+@@ -1690,15 +1715,22 @@ static void pointerHandleButton(void* userData,
+                                 uint32_t buttonID,
+                                 uint32_t state)
+ {
++    _GLFWwindow* window = wl_surface_get_user_data(_glfw.wl.pointerSurface);
++
+     if (!_glfw.wl.pointerSurface)
+         return;
+ 
++    // On weston, pressing the title bar will cause leave event and never emit
++    // enter event even though back to content area by pressing mouse button
++    // just after it. So activate it here explicitly.
++    if (!textInputFocusDisabled(window))
++        activateTextInputV1(window);
++
+     _glfw.wl.serial = serial;
+ 
+     const int button = buttonID - BTN_LEFT;
+     const int action = (state == WL_POINTER_BUTTON_STATE_PRESSED);
+ 
+-    _GLFWwindow* window = wl_surface_get_user_data(_glfw.wl.pointerSurface);
+     if (window->wl.fallback.decorations)
+     {
+         if (action == GLFW_PRESS)
+@@ -2376,6 +2408,429 @@ GLFWbool _glfwWaitForEGLFrameWayland(_GLFWwindow* window)
+     return window->wl.visible;
+ }
+ 
++// Callbacks for text_input_unstable_v3 protocol.
++//
++// This protocol is widely supported by major desktop environments such as GNOME
++// or KDE.
++//
++static void textInputV3Enter(void* data,
++                             struct zwp_text_input_v3* textInputV3,
++                             struct wl_surface* surface)
++{
++    _GLFWwindow* window = (_GLFWwindow*) data;
++
++    if (!textInputFocusDisabled(window))
++    {
++        zwp_text_input_v3_enable(textInputV3);
++        zwp_text_input_v3_commit(textInputV3);
++    }
++}
++
++static void textInputV3Reset(_GLFWwindow* window)
++{
++    _GLFWpreedit* preedit = &window->preedit;
++
++    preedit->textCount = 0;
++    preedit->blockSizesCount = 0;
++    preedit->focusedBlockIndex = 0;
++    preedit->caretIndex = 0;
++
++    _glfwInputPreedit(window);
++}
++
++static void textInputV3Leave(void* data,
++                             struct zwp_text_input_v3* textInputV3,
++                             struct wl_surface* surface)
++{
++    _GLFWwindow* window = (_GLFWwindow*) data;
++    zwp_text_input_v3_disable(textInputV3);
++    zwp_text_input_v3_commit(textInputV3);
++
++    // Although this should be handled by IM via preedit callback, it seems that
++    // the behavior varies depending on implemention. It's cleared by IM on
++    // Ubuntu 22.04 but not cleared on Ubuntu 20.04.
++    textInputV3Reset(window);
++}
++
++static int utf8OffsetToCodepointIndex(const char* text, int32_t offset)
++{
++    const char* cur = text;
++    const char* end;
++    int index = 0;
++
++    if (!text || offset <= 0)
++        return 0;
++
++    end = text + offset;
++    while (*cur && cur < end)
++    {
++        _glfwDecodeUTF8(&cur);
++        index++;
++    }
++
++    return index;
++}
++
++static void textInputV3PreeditString(void* data,
++                                     struct zwp_text_input_v3* textInputV3,
++                                     const char* text,
++                                     int32_t cursorBegin,
++                                     int32_t cursorEnd)
++{
++    _GLFWwindow* window = (_GLFWwindow*) data;
++    _GLFWpreedit* preedit = &window->preedit;
++    const char* cur = text;
++    int cursorPos = 0;
++
++    if (textInputFocusDisabled(window))
++        return;
++
++    preedit->textCount = 0;
++    preedit->blockSizesCount = 0;
++    preedit->focusedBlockIndex = 0;
++    preedit->caretIndex = 0;
++
++    cursorPos = utf8OffsetToCodepointIndex(text, cursorBegin);
++
++    // Store preedit text
++    while (cur && *cur)
++    {
++        uint32_t codepoint = _glfwDecodeUTF8(&cur);
++
++        ++preedit->textCount;
++
++        if (preedit->textBufferCount < preedit->textCount + 1)
++        {
++            int bufSize = preedit->textBufferCount;
++
++            while (bufSize < preedit->textCount + 1)
++                bufSize = (bufSize == 0) ? 1 : bufSize * 2;
++            preedit->text = _glfw_realloc(preedit->text,
++                                          sizeof(unsigned int) * bufSize);
++            if (!preedit->text)
++                return;
++            preedit->textBufferCount = bufSize;
++        }
++        preedit->text[preedit->textCount - 1] = codepoint;
++    }
++    if (preedit->text)
++        preedit->text[preedit->textCount] = 0;
++
++    if (cursorPos > preedit->textCount)
++        cursorPos = preedit->textCount;
++    preedit->caretIndex = cursorPos;
++
++    // Store preedit blocks
++    if (preedit->textCount)
++    {
++        int* blocks = preedit->blockSizes;
++        int textCount = preedit->textCount;
++
++        if (!preedit->blockSizes)
++        {
++            int bufSize = 3;
++
++            preedit->blockSizesBufferCount = bufSize;
++            preedit->blockSizes = _glfw_calloc(sizeof(int), bufSize);
++            if (!preedit->blockSizes)
++                return;
++            blocks = preedit->blockSizes;
++        }
++
++        blocks[0] = textCount;
++        preedit->focusedBlockIndex = 0;
++        preedit->blockSizesCount = 1;
++    }
++}
++
++static void textInputV3CommitString(void* data,
++                                    struct zwp_text_input_v3* textInputV3,
++                                    const char* text)
++{
++    _GLFWwindow* window = (_GLFWwindow*) data;
++    const char* cur = text;
++
++    if (textInputFocusDisabled(window))
++        return;
++
++    textInputV3Reset(window);
++
++    if (!window->callbacks.character)
++        return;
++
++    while (cur && *cur)
++    {
++        uint32_t codepoint = _glfwDecodeUTF8(&cur);
++        window->callbacks.character((GLFWwindow*) window, codepoint);
++    }
++}
++
++static void textInputV3DeleteSurroundingText(void* data,
++                                             struct zwp_text_input_v3* textInputV3,
++                                             uint32_t beforeLength,
++                                             uint32_t afterLength)
++{
++}
++
++static void textInputV3Done(void* data,
++                            struct zwp_text_input_v3* textInputV3,
++                            uint32_t serial)
++{
++    _GLFWwindow* window = (_GLFWwindow*) data;
++    if (textInputFocusDisabled(window))
++        return;
++
++    _glfwUpdatePreeditCursorRectangleWayland(window);
++    _glfwInputPreedit(window);
++}
++
++static const struct zwp_text_input_v3_listener textInputV3Listener =
++{
++    textInputV3Enter,
++    textInputV3Leave,
++    textInputV3PreeditString,
++    textInputV3CommitString,
++    textInputV3DeleteSurroundingText,
++    textInputV3Done
++};
++
++// Callbacks for text_input_unstable_v1 protocol
++//
++// This protocol isn't so popular but Weston which is the reference Wayland
++// implementation supports only this protocol and doesn't support
++// text_input_unstable_v3.
++//
++static void textInputV1Enter(void* data,
++                             struct zwp_text_input_v1* textInputV1,
++                             struct wl_surface* surface)
++{
++    _GLFWwindow* window = (_GLFWwindow*) data;
++
++    if (!textInputFocusDisabled(window))
++        activateTextInputV1(window);
++}
++
++static void textInputV1Reset(_GLFWwindow* window)
++{
++    _GLFWpreedit* preedit = &window->preedit;
++
++    preedit->textCount = 0;
++    preedit->blockSizesCount = 0;
++    preedit->focusedBlockIndex = 0;
++    preedit->caretIndex = 0;
++
++    _glfw_free(window->wl.textInputV1Context.preeditText);
++    _glfw_free(window->wl.textInputV1Context.commitTextOnReset);
++    window->wl.textInputV1Context.preeditText = NULL;
++    window->wl.textInputV1Context.commitTextOnReset = NULL;
++
++    _glfwInputPreedit(window);
++}
++
++static void textInputV1Leave(void* data,
++                             struct zwp_text_input_v1* textInputV1)
++{
++    _GLFWwindow* window = (_GLFWwindow*) data;
++    char* commitText = window->wl.textInputV1Context.commitTextOnReset;
++
++    if (textInputFocusDisabled(window))
++    {
++        textInputV1Reset(window);
++        deactivateTextInputV1(window);
++        return;
++    }
++
++    textInputV3CommitString(data, NULL, commitText);
++    textInputV1Reset(window);
++    deactivateTextInputV1(window);
++}
++
++static void textInputV1ModifiersMap(void* data,
++                                    struct zwp_text_input_v1* textInputV1,
++                                    struct wl_array* map)
++{
++}
++
++static void textInputV1InputPanelState(void* data,
++                                       struct zwp_text_input_v1* textInputV1,
++                                       uint32_t state)
++{
++}
++
++static void textInputV1PreeditString(void* data,
++                                     struct zwp_text_input_v1* textInputV1,
++                                     uint32_t serial,
++                                     const char* text,
++                                     const char* commit)
++{
++    _GLFWwindow* window = (_GLFWwindow*) data;
++
++    if (textInputFocusDisabled(window))
++        return;
++
++    _glfw_free(window->wl.textInputV1Context.preeditText);
++    _glfw_free(window->wl.textInputV1Context.commitTextOnReset);
++    window->wl.textInputV1Context.preeditText = strdup(text);
++    window->wl.textInputV1Context.commitTextOnReset = strdup(commit);
++
++    textInputV3PreeditString(data, NULL, text, 0, 0);
++    _glfwInputPreedit(window);
++}
++
++static void textInputV1PreeditStyling(void* data,
++                                      struct zwp_text_input_v1* textInputV1,
++                                      uint32_t index,
++                                      uint32_t length,
++                                      uint32_t style)
++{
++}
++
++static void textInputV1PreeditCursor(void* data,
++                                     struct zwp_text_input_v1* textInputV1,
++                                     int32_t index)
++{
++    _GLFWwindow* window = (_GLFWwindow*) data;
++    _GLFWpreedit* preedit = &window->preedit;
++    const char* text = window->wl.textInputV1Context.preeditText;
++    const char* cur = text;
++
++    if (textInputFocusDisabled(window))
++        return;
++
++    preedit->caretIndex = 0;
++    if (index <= 0 || preedit->textCount == 0)
++        return;
++
++    while (cur && *cur)
++    {
++        _glfwDecodeUTF8(&cur);
++        ++preedit->caretIndex;
++        if (cur >= text + index)
++            break;
++        if (preedit->caretIndex > preedit->textCount)
++            break;
++    }
++}
++
++static void textInputV1CommitString(void* data,
++                                    struct zwp_text_input_v1* textInputV1,
++                                    uint32_t serial,
++                                    const char* text)
++{
++    _GLFWwindow* window = (_GLFWwindow*) data;
++
++    if (textInputFocusDisabled(window))
++        return;
++
++    textInputV1Reset(window);
++    textInputV3CommitString(data, NULL, text);
++}
++
++static void textInputV1CursorPosition(void* data,
++                                      struct zwp_text_input_v1* textInputV1,
++                                      int32_t index,
++                                      int32_t anchor)
++{
++    // It's for surrounding text feature which isn't supported by GLFW.
++}
++
++static void textInputV1DeleteSurroundingText(void* data,
++                                             struct zwp_text_input_v1* textInputV1,
++                                             int32_t index,
++                                             uint32_t length)
++{
++}
++
++static void textInputV1Keysym(void* data,
++                              struct zwp_text_input_v1* textInputV1,
++                              uint32_t serial,
++                              uint32_t time,
++                              uint32_t sym,
++                              uint32_t state,
++                              uint32_t modifiers)
++{
++    _GLFWwindow* window = (_GLFWwindow*) data;
++    if (textInputFocusDisabled(window))
++        return;
++
++    uint32_t scancode;
++
++    // This code supports only weston-keyboard because we aren't aware
++    // of any other input methods that actually support this API.
++    // Supporting all keysyms is overkill for now.
++
++    switch (sym)
++    {
++        case XKB_KEY_Left:
++            scancode = KEY_LEFT;
++            break;
++        case XKB_KEY_Right:
++            scancode = KEY_RIGHT;
++            break;
++        case XKB_KEY_Up:
++            scancode = KEY_UP;
++            break;
++        case XKB_KEY_Down:
++            scancode = KEY_DOWN;
++            break;
++        case XKB_KEY_BackSpace:
++            scancode = KEY_BACKSPACE;
++            break;
++        case XKB_KEY_Tab:
++            scancode = KEY_TAB;
++            break;
++        case XKB_KEY_KP_Enter:
++            scancode = KEY_KPENTER;
++            break;
++        case XKB_KEY_Return:
++            scancode = KEY_ENTER;
++            break;
++        default:
++            return;
++    }
++
++    _glfw.wl.xkb.modifiers = modifiers;
++
++    keyboardHandleKey(data,
++                      _glfw.wl.keyboard,
++                      serial,
++                      time,
++                      scancode,
++                      state);
++}
++
++static void textInputV1Language(void* data,
++                                struct zwp_text_input_v1* textInputV1,
++                                uint32_t serial,
++                                const char* language)
++{
++}
++
++static void textInputV1TextDirection(void* data,
++                                     struct zwp_text_input_v1* textInputV1,
++                                     uint32_t serial,
++                                     uint32_t direction)
++{
++}
++
++static const struct zwp_text_input_v1_listener textInputV1Listener =
++{
++    textInputV1Enter,
++    textInputV1Leave,
++    textInputV1ModifiersMap,
++    textInputV1InputPanelState,
++    textInputV1PreeditString,
++    textInputV1PreeditStyling,
++    textInputV1PreeditCursor,
++    textInputV1CommitString,
++    textInputV1CursorPosition,
++    textInputV1DeleteSurroundingText,
++    textInputV1Keysym,
++    textInputV1Language,
++    textInputV1TextDirection
++};
++
++
+ //////////////////////////////////////////////////////////////////////////
+ //////                       GLFW platform API                      //////
+ //////////////////////////////////////////////////////////////////////////
+@@ -2450,6 +2905,21 @@ GLFWbool _glfwCreateWindowWayland(_GLFWwindow* window,
+             return GLFW_FALSE;
+     }
+ 
++    if (_glfw.wl.textInputManagerV3)
++    {
++        window->wl.textInputV3 =
++            zwp_text_input_manager_v3_get_text_input(_glfw.wl.textInputManagerV3, _glfw.wl.seat);
++        zwp_text_input_v3_add_listener(window->wl.textInputV3,
++                                       &textInputV3Listener, window);
++    }
++    else if (_glfw.wl.textInputManagerV1)
++    {
++        window->wl.textInputV1 =
++            zwp_text_input_manager_v1_create_text_input(_glfw.wl.textInputManagerV1);
++        zwp_text_input_v1_add_listener(window->wl.textInputV1,
++                                       &textInputV1Listener, window);
++    }
++
+     return GLFW_TRUE;
+ }
+ 
+@@ -2475,6 +2945,15 @@ void _glfwDestroyWindowWayland(_GLFWwindow* window)
+     if (window->wl.activationToken)
+         xdg_activation_token_v1_destroy(window->wl.activationToken);
+ 
++    if (window->wl.textInputV1) {
++        zwp_text_input_v1_destroy(window->wl.textInputV1);
++        _glfw_free(window->wl.textInputV1Context.preeditText);
++        _glfw_free(window->wl.textInputV1Context.commitTextOnReset);
++    }
++
++    if (window->wl.textInputV3)
++        zwp_text_input_v3_destroy(window->wl.textInputV3);
++
+     if (window->wl.idleInhibitor)
+         zwp_idle_inhibitor_v1_destroy(window->wl.idleInhibitor);
+ 
+@@ -3499,6 +3978,63 @@ const char* _glfwGetClipboardStringWayland(void)
+     return _glfw.wl.clipboardString;
+ }
+ 
++void _glfwUpdatePreeditCursorRectangleWayland(_GLFWwindow* window)
++{
++    _GLFWpreedit* preedit = &window->preedit;
++    int x = preedit->cursorPosX;
++    int y = preedit->cursorPosY;
++    int w = preedit->cursorWidth;
++    int h = preedit->cursorHeight;
++
++    if (window->wl.textInputV3)
++    {
++        zwp_text_input_v3_set_cursor_rectangle(window->wl.textInputV3, x, y, w, h);
++        zwp_text_input_v3_commit(window->wl.textInputV3);
++    }
++    else if (window->wl.textInputV1)
++        zwp_text_input_v1_set_cursor_rectangle(window->wl.textInputV1, x, y, w, h);
++}
++
++void _glfwResetPreeditTextWayland(_GLFWwindow* window)
++{
++}
++
++void _glfwSetTextInputFocusWayland(_GLFWwindow* window, GLFWbool focused)
++{
++    if (window->wl.textInputV3)
++    {
++        if (focused)
++            zwp_text_input_v3_enable(window->wl.textInputV3);
++        else
++        {
++            zwp_text_input_v3_disable(window->wl.textInputV3);
++            textInputV3Reset(window);
++        }
++
++        zwp_text_input_v3_commit(window->wl.textInputV3);
++    }
++    else if (window->wl.textInputV1)
++    {
++        if (focused)
++            activateTextInputV1(window);
++        else
++        {
++            zwp_text_input_v1_reset(window->wl.textInputV1);
++            textInputV1Reset(window);
++            deactivateTextInputV1(window);
++        }
++    }
++}
++
++void _glfwSetIMEStatusWayland(_GLFWwindow* window, int active)
++{
++}
++
++int _glfwGetIMEStatusWayland(_GLFWwindow* window)
++{
++    return GLFW_FALSE;
++}
++
+ EGLenum _glfwGetEGLPlatformWayland(EGLint** attribs)
+ {
+     if (_glfw.egl.EXT_platform_base && _glfw.egl.EXT_platform_wayland)
+diff --git a/src/x11_init.c b/src/x11_init.c
+index b0acbf7f..737b911c 100644
+--- a/src/x11_init.c
++++ b/src/x11_init.c
+@@ -445,9 +445,14 @@ static GLFWbool hasUsableInputMethodStyle(void)
+     if (XGetIMValues(_glfw.x11.im, XNQueryInputStyle, &styles, NULL) != NULL)
+         return GLFW_FALSE;
+ 
++    if (_glfw.hints.init.x11.onTheSpotIMStyle)
++        _glfw.x11.imStyle = STYLE_ONTHESPOT;
++    else
++        _glfw.x11.imStyle = STYLE_OVERTHESPOT;
++
+     for (unsigned int i = 0;  i < styles->count_styles;  i++)
+     {
+-        if (styles->supported_styles[i] == (XIMPreeditNothing | XIMStatusNothing))
++        if (styles->supported_styles[i] == _glfw.x11.imStyle)
+         {
+             found = GLFW_TRUE;
+             break;
+@@ -1183,6 +1188,11 @@ GLFWbool _glfwConnectX11(int platformID, _GLFWplatform* platform)
+         .getKeyScancode = _glfwGetKeyScancodeX11,
+         .setClipboardString = _glfwSetClipboardStringX11,
+         .getClipboardString = _glfwGetClipboardStringX11,
++        .updatePreeditCursorRectangle = _glfwUpdatePreeditCursorRectangleX11,
++        .resetPreeditText = _glfwResetPreeditTextX11,
++        .setTextInputFocus = _glfwSetTextInputFocusX11,
++        .setIMEStatus = _glfwSetIMEStatusX11,
++        .getIMEStatus = _glfwGetIMEStatusX11,
+ #if defined(GLFW_BUILD_LINUX_JOYSTICK)
+         .initJoysticks = _glfwInitJoysticksLinux,
+         .terminateJoysticks = _glfwTerminateJoysticksLinux,
+@@ -1452,6 +1462,8 @@ int _glfwInitX11(void)
+         _glfwPlatformGetModuleSymbol(_glfw.x11.xlib.handle, "XSetErrorHandler");
+     _glfw.x11.xlib.SetICFocus = (PFN_XSetICFocus)
+         _glfwPlatformGetModuleSymbol(_glfw.x11.xlib.handle, "XSetICFocus");
++    _glfw.x11.xlib.SetICValues = (PFN_XSetICValues)
++        _glfwPlatformGetModuleSymbol(_glfw.x11.xlib.handle, "XSetICValues");
+     _glfw.x11.xlib.SetIMValues = (PFN_XSetIMValues)
+         _glfwPlatformGetModuleSymbol(_glfw.x11.xlib.handle, "XSetIMValues");
+     _glfw.x11.xlib.SetInputFocus = (PFN_XSetInputFocus)
+@@ -1482,6 +1494,8 @@ int _glfwInitX11(void)
+         _glfwPlatformGetModuleSymbol(_glfw.x11.xlib.handle, "XUnmapWindow");
+     _glfw.x11.xlib.UnsetICFocus = (PFN_XUnsetICFocus)
+         _glfwPlatformGetModuleSymbol(_glfw.x11.xlib.handle, "XUnsetICFocus");
++    _glfw.x11.xlib.VaCreateNestedList = (PFN_XVaCreateNestedList)
++        _glfwPlatformGetModuleSymbol(_glfw.x11.xlib.handle, "XVaCreateNestedList");
+     _glfw.x11.xlib.VisualIDFromVisual = (PFN_XVisualIDFromVisual)
+         _glfwPlatformGetModuleSymbol(_glfw.x11.xlib.handle, "XVisualIDFromVisual");
+     _glfw.x11.xlib.WarpPointer = (PFN_XWarpPointer)
+@@ -1514,6 +1528,8 @@ int _glfwInitX11(void)
+         _glfwPlatformGetModuleSymbol(_glfw.x11.xlib.handle, "XrmUniqueQuark");
+     _glfw.x11.xlib.UnregisterIMInstantiateCallback = (PFN_XUnregisterIMInstantiateCallback)
+         _glfwPlatformGetModuleSymbol(_glfw.x11.xlib.handle, "XUnregisterIMInstantiateCallback");
++    _glfw.x11.xlib.mbResetIC = (PFN_XmbResetIC)
++        _glfwPlatformGetModuleSymbol(_glfw.x11.xlib.handle, "XmbResetIC");
+     _glfw.x11.xlib.utf8LookupString = (PFN_Xutf8LookupString)
+         _glfwPlatformGetModuleSymbol(_glfw.x11.xlib.handle, "Xutf8LookupString");
+     _glfw.x11.xlib.utf8SetWMProperties = (PFN_Xutf8SetWMProperties)
+diff --git a/src/x11_platform.h b/src/x11_platform.h
+index 64915fca..293b9126 100644
+--- a/src/x11_platform.h
++++ b/src/x11_platform.h
+@@ -91,6 +91,9 @@
+ #define GLX_CONTEXT_RELEASE_BEHAVIOR_FLUSH_ARB 0x2098
+ #define GLX_CONTEXT_OPENGL_NO_ERROR_ARB 0x31b3
+ 
++#define STYLE_OVERTHESPOT (XIMPreeditNothing | XIMStatusNothing)
++#define STYLE_ONTHESPOT (XIMPreeditCallbacks | XIMStatusCallbacks)
++
+ typedef XID GLXWindow;
+ typedef XID GLXDrawable;
+ typedef struct __GLXFBConfig* GLXFBConfig;
+@@ -165,6 +168,7 @@ typedef Status (* PFN_XSendEvent)(Display*,Window,Bool,long,XEvent*);
+ typedef int (* PFN_XSetClassHint)(Display*,Window,XClassHint*);
+ typedef XErrorHandler (* PFN_XSetErrorHandler)(XErrorHandler);
+ typedef void (* PFN_XSetICFocus)(XIC);
++typedef char* (* PFN_XSetICValues)(XIC,...);
+ typedef char* (* PFN_XSetIMValues)(XIM,...);
+ typedef int (* PFN_XSetInputFocus)(Display*,Window,int,Time);
+ typedef char* (* PFN_XSetLocaleModifiers)(const char*);
+@@ -180,6 +184,7 @@ typedef int (* PFN_XUndefineCursor)(Display*,Window);
+ typedef int (* PFN_XUngrabPointer)(Display*,Time);
+ typedef int (* PFN_XUnmapWindow)(Display*,Window);
+ typedef void (* PFN_XUnsetICFocus)(XIC);
++typedef XVaNestedList (* PFN_XVaCreateNestedList)(int,...);
+ typedef VisualID (* PFN_XVisualIDFromVisual)(Visual*);
+ typedef int (* PFN_XWarpPointer)(Display*,Window,Window,int,int,unsigned int,unsigned int,int,int);
+ typedef void (* PFN_XkbFreeKeyboard)(XkbDescPtr,unsigned int,Bool);
+@@ -191,6 +196,7 @@ typedef KeySym (* PFN_XkbKeycodeToKeysym)(Display*,KeyCode,int,int);
+ typedef Bool (* PFN_XkbQueryExtension)(Display*,int*,int*,int*,int*,int*);
+ typedef Bool (* PFN_XkbSelectEventDetails)(Display*,unsigned int,unsigned int,unsigned long,unsigned long);
+ typedef Bool (* PFN_XkbSetDetectableAutoRepeat)(Display*,Bool,Bool*);
++typedef char* (* PFN_XmbResetIC)(XIC);
+ typedef void (* PFN_XrmDestroyDatabase)(XrmDatabase);
+ typedef Bool (* PFN_XrmGetResource)(XrmDatabase,const char*,const char*,char**,XrmValue*);
+ typedef XrmDatabase (* PFN_XrmGetStringDatabase)(const char*);
+@@ -265,6 +271,7 @@ typedef void (* PFN_Xutf8SetWMProperties)(Display*,Window,const char*,const char
+ #define XSetClassHint _glfw.x11.xlib.SetClassHint
+ #define XSetErrorHandler _glfw.x11.xlib.SetErrorHandler
+ #define XSetICFocus _glfw.x11.xlib.SetICFocus
++#define XSetICValues _glfw.x11.xlib.SetICValues
+ #define XSetIMValues _glfw.x11.xlib.SetIMValues
+ #define XSetInputFocus _glfw.x11.xlib.SetInputFocus
+ #define XSetLocaleModifiers _glfw.x11.xlib.SetLocaleModifiers
+@@ -280,6 +287,7 @@ typedef void (* PFN_Xutf8SetWMProperties)(Display*,Window,const char*,const char
+ #define XUngrabPointer _glfw.x11.xlib.UngrabPointer
+ #define XUnmapWindow _glfw.x11.xlib.UnmapWindow
+ #define XUnsetICFocus _glfw.x11.xlib.UnsetICFocus
++#define XVaCreateNestedList _glfw.x11.xlib.VaCreateNestedList
+ #define XVisualIDFromVisual _glfw.x11.xlib.VisualIDFromVisual
+ #define XWarpPointer _glfw.x11.xlib.WarpPointer
+ #define XkbFreeKeyboard _glfw.x11.xkb.FreeKeyboard
+@@ -291,6 +299,7 @@ typedef void (* PFN_Xutf8SetWMProperties)(Display*,Window,const char*,const char
+ #define XkbQueryExtension _glfw.x11.xkb.QueryExtension
+ #define XkbSelectEventDetails _glfw.x11.xkb.SelectEventDetails
+ #define XkbSetDetectableAutoRepeat _glfw.x11.xkb.SetDetectableAutoRepeat
++#define XmbResetIC _glfw.x11.xlib.mbResetIC
+ #define XrmDestroyDatabase _glfw.x11.xrm.DestroyDatabase
+ #define XrmGetResource _glfw.x11.xrm.GetResource
+ #define XrmGetStringDatabase _glfw.x11.xrm.GetStringDatabase
+@@ -545,6 +554,17 @@ typedef struct _GLFWwindowX11
+     // The time of the last KeyPress event per keycode, for discarding
+     // duplicate key events generated for some keys by ibus
+     Time            keyPressTimes[256];
++
++    // Preedit callbacks
++    XIMCallback preeditStartCallback;
++    XIMCallback preeditDoneCallback;
++    XIMCallback preeditDrawCallback;
++    XIMCallback preeditCaretCallback;
++    XIMCallback statusStartCallback;
++    XIMCallback statusDoneCallback;
++    XIMCallback statusDrawCallback;
++
++    int imeFocus;
+ } _GLFWwindowX11;
+ 
+ // X11-specific global data
+@@ -565,6 +585,8 @@ typedef struct _GLFWlibraryX11
+     XContext        context;
+     // XIM input method
+     XIM             im;
++    // XIM input method style
++    XIMStyle        imStyle;
+     // The previous X error handler, to be restored later
+     XErrorHandler   errorHandler;
+     // Most recent error code received by X error handler
+@@ -710,6 +732,7 @@ typedef struct _GLFWlibraryX11
+         PFN_XSetClassHint SetClassHint;
+         PFN_XSetErrorHandler SetErrorHandler;
+         PFN_XSetICFocus SetICFocus;
++        PFN_XSetICValues SetICValues;
+         PFN_XSetIMValues SetIMValues;
+         PFN_XSetInputFocus SetInputFocus;
+         PFN_XSetLocaleModifiers SetLocaleModifiers;
+@@ -725,9 +748,11 @@ typedef struct _GLFWlibraryX11
+         PFN_XUngrabPointer UngrabPointer;
+         PFN_XUnmapWindow UnmapWindow;
+         PFN_XUnsetICFocus UnsetICFocus;
++        PFN_XVaCreateNestedList VaCreateNestedList;
+         PFN_XVisualIDFromVisual VisualIDFromVisual;
+         PFN_XWarpPointer WarpPointer;
+         PFN_XUnregisterIMInstantiateCallback UnregisterIMInstantiateCallback;
++        PFN_XmbResetIC mbResetIC;
+         PFN_Xutf8LookupString utf8LookupString;
+         PFN_Xutf8SetWMProperties utf8SetWMProperties;
+     } xlib;
+@@ -954,6 +979,12 @@ void _glfwSetCursorX11(_GLFWwindow* window, _GLFWcursor* cursor);
+ void _glfwSetClipboardStringX11(const char* string);
+ const char* _glfwGetClipboardStringX11(void);
+ 
++void _glfwUpdatePreeditCursorRectangleX11(_GLFWwindow* window);
++void _glfwResetPreeditTextX11(_GLFWwindow* window);
++void _glfwSetTextInputFocusX11(_GLFWwindow* window, GLFWbool focused);
++void _glfwSetIMEStatusX11(_GLFWwindow* window, int active);
++int _glfwGetIMEStatusX11(_GLFWwindow* window);
++
+ EGLenum _glfwGetEGLPlatformX11(EGLint** attribs);
+ EGLNativeDisplayType _glfwGetEGLNativeDisplayX11(void);
+ EGLNativeWindowType _glfwGetEGLNativeWindowX11(_GLFWwindow* window);
+diff --git a/src/x11_window.c b/src/x11_window.c
+index f46a7e6c..0603e663 100644
+--- a/src/x11_window.c
++++ b/src/x11_window.c
+@@ -410,29 +410,6 @@ static void updateWindowMode(_GLFWwindow* window)
+     }
+ }
+ 
+-// Decode a Unicode code point from a UTF-8 stream
+-// Based on cutef8 by Jeff Bezanson (Public Domain)
+-//
+-static uint32_t decodeUTF8(const char** s)
+-{
+-    uint32_t codepoint = 0, count = 0;
+-    static const uint32_t offsets[] =
+-    {
+-        0x00000000u, 0x00003080u, 0x000e2080u,
+-        0x03c82080u, 0xfa082080u, 0x82082080u
+-    };
+-
+-    do
+-    {
+-        codepoint = (codepoint << 6) + (unsigned char) **s;
+-        (*s)++;
+-        count++;
+-    } while ((**s & 0xc0) == 0x80);
+-
+-    assert(count <= 6);
+-    return codepoint - offsets[count - 1];
+-}
+-
+ // Convert the specified Latin-1 string to UTF-8
+ //
+ static char* convertLatin1toUTF8(const char* source)
+@@ -561,6 +538,235 @@ static void inputContextDestroyCallback(XIC ic, XPointer clientData, XPointer ca
+     window->x11.ic = NULL;
+ }
+ 
++// IME Start callback (do nothing)
++//
++static void _ximPreeditStartCallback(XIC xic, XPointer clientData, XPointer callData)
++{
++}
++
++// IME Done callback (do nothing)
++//
++static void _ximPreeditDoneCallback(XIC xic, XPointer clientData, XPointer callData)
++{
++}
++
++// IME Draw callback
++// When using the dafault style: STYLE_OVERTHESPOT, this is not used since applications
++// don't need to display preedit texts.
++//
++static void _ximPreeditDrawCallback(XIC xic, XPointer clientData, XIMPreeditDrawCallbackStruct* callData)
++{
++    _GLFWwindow* window = (_GLFWwindow*) clientData;
++    _GLFWpreedit* preedit = &window->preedit;
++
++    if (!callData->text)
++    {
++        // preedit text is empty
++        preedit->textCount = 0;
++        preedit->blockSizesCount = 0;
++        preedit->focusedBlockIndex = 0;
++        preedit->caretIndex = 0;
++        _glfwInputPreedit(window);
++        return;
++    }
++    else if (callData->text->encoding_is_wchar)
++    {
++        // wchar is not supported
++        return;
++    }
++    else
++    {
++        XIMText* text = callData->text;
++        int textLen = preedit->textCount + text->length - callData->chg_length;
++        int textBufferCount = preedit->textBufferCount;
++        int i, j, rstart, rend;
++        const char* src;
++
++        // realloc preedit text
++        while (textBufferCount < textLen + 1)
++            textBufferCount = (textBufferCount == 0) ? 1 : textBufferCount * 2;
++        if (textBufferCount != preedit->textBufferCount)
++        {
++            unsigned int* preeditText = _glfw_realloc(preedit->text,
++                                                      sizeof(unsigned int) * textBufferCount);
++            if (preeditText == NULL)
++                return;
++
++            preedit->text = preeditText;
++            preedit->textBufferCount = textBufferCount;
++        }
++        preedit->textCount = textLen;
++        preedit->text[textLen] = 0;
++
++        // realloc block sizes
++        if (preedit->blockSizesBufferCount == 0)
++        {
++            preedit->blockSizes = _glfw_calloc(4, sizeof(int));
++            preedit->blockSizesBufferCount = 4;
++        }
++
++        // store preedit text
++        src = text->string.multi_byte;
++        rend = 0;
++        rstart = textLen;
++        for (i = 0, j = callData->chg_first; i < text->length; i++)
++        {
++            XIMFeedback f;
++
++            if (i < callData->chg_first || callData->chg_first + textLen < i)
++                continue;
++
++            preedit->text[j++] = _glfwDecodeUTF8(&src);
++            f = text->feedback[i];
++            if ((f & XIMReverse) || (f & XIMHighlight))
++            {
++                rend = i;
++                if (i < rstart)
++                    rstart = i;
++            }
++        }
++
++        // store block sizes
++        // TODO: It doesn't care callData->chg_first != 0 case although it's quite rare.
++        if (rstart == textLen)
++        {
++            preedit->blockSizesCount = 1;
++            preedit->blockSizes[0] = textLen;
++            preedit->blockSizes[1] = 0;
++            preedit->focusedBlockIndex = 0;
++            preedit->caretIndex = callData->caret;
++            _glfwInputPreedit(window);
++        }
++        else if (rstart == 0)
++        {
++            if (rend == textLen -1)
++            {
++                preedit->blockSizesCount = 1;
++                preedit->blockSizes[0] = textLen;
++                preedit->blockSizes[1] = 0;
++                preedit->focusedBlockIndex = 0;
++                preedit->caretIndex = callData->caret;
++                _glfwInputPreedit(window);
++            }
++            else
++            {
++                preedit->blockSizesCount = 2;
++                preedit->blockSizes[0] = rend + 1;
++                preedit->blockSizes[1] = textLen - rend - 1;
++                preedit->blockSizes[2] = 0;
++                preedit->focusedBlockIndex = 0;
++                preedit->caretIndex = callData->caret;
++                _glfwInputPreedit(window);
++            }
++        }
++        else if (rend == textLen - 1)
++        {
++            preedit->blockSizesCount = 2;
++            preedit->blockSizes[0] = rstart;
++            preedit->blockSizes[1] = textLen - rstart;
++            preedit->blockSizes[2] = 0;
++            preedit->focusedBlockIndex = 1;
++            preedit->caretIndex = callData->caret;
++            _glfwInputPreedit(window);
++        }
++        else
++        {
++            preedit->blockSizesCount = 3;
++            preedit->blockSizes[0] = rstart;
++            preedit->blockSizes[1] = rend - rstart + 1;
++            preedit->blockSizes[2] = textLen - rend - 1;
++            preedit->blockSizes[3] = 0;
++            preedit->focusedBlockIndex = 1;
++            preedit->caretIndex = callData->caret;
++            _glfwInputPreedit(window);
++        }
++    }
++}
++
++// IME Caret callback (do nothing)
++//
++static void _ximPreeditCaretCallback(XIC xic, XPointer clientData, XPointer callData)
++{
++}
++
++// IME Status Start callback
++// When using the dafault style: STYLE_OVERTHESPOT, this is not used and the IME status
++// can not be taken.
++//
++static void _ximStatusStartCallback(XIC xic, XPointer clientData, XPointer callData)
++{
++    _GLFWwindow* window = (_GLFWwindow*) clientData;
++    window->x11.imeFocus = GLFW_TRUE;
++}
++
++// IME Status Done callback
++// When using the dafault style: STYLE_OVERTHESPOT, this is not used and the IME status
++// can not be taken.
++//
++static void _ximStatusDoneCallback(XIC xic, XPointer clientData, XPointer callData)
++{
++    _GLFWwindow* window = (_GLFWwindow*) clientData;
++    window->x11.imeFocus = GLFW_FALSE;
++}
++
++// IME Status Draw callback
++// When using the dafault style: STYLE_OVERTHESPOT, this is not used and the IME status
++// can not be taken.
++//
++static void _ximStatusDrawCallback(XIC xic, XPointer clientData, XIMStatusDrawCallbackStruct* callData)
++{
++    _GLFWwindow* window = (_GLFWwindow*) clientData;
++    _glfwInputIMEStatus(window);
++}
++
++// Create XIM Preedit callback
++// When using the dafault style: STYLE_OVERTHESPOT, this is not used since applications
++// don't need to display preedit texts.
++//
++static XVaNestedList _createXIMPreeditCallbacks(_GLFWwindow* window)
++{
++    window->x11.preeditStartCallback.client_data = (XPointer) window;
++    window->x11.preeditStartCallback.callback = (XIMProc) _ximPreeditStartCallback;
++    window->x11.preeditDoneCallback.client_data = (XPointer) window;
++    window->x11.preeditDoneCallback.callback = (XIMProc) _ximPreeditDoneCallback;
++    window->x11.preeditDrawCallback.client_data = (XPointer) window;
++    window->x11.preeditDrawCallback.callback = (XIMProc) _ximPreeditDrawCallback;
++    window->x11.preeditCaretCallback.client_data = (XPointer) window;
++    window->x11.preeditCaretCallback.callback = (XIMProc) _ximPreeditCaretCallback;
++    return XVaCreateNestedList(0,
++                               XNPreeditStartCallback,
++                               &window->x11.preeditStartCallback.client_data,
++                               XNPreeditDoneCallback,
++                               &window->x11.preeditDoneCallback.client_data,
++                               XNPreeditDrawCallback,
++                               &window->x11.preeditDrawCallback.client_data,
++                               XNPreeditCaretCallback,
++                               &window->x11.preeditCaretCallback.client_data,
++                               NULL);
++}
++
++// Create XIM status callback
++// When using the dafault style: STYLE_OVERTHESPOT, this is not used and the IME status
++// can not be taken.
++//
++static XVaNestedList _createXIMStatusCallbacks(_GLFWwindow* window)
++{
++    window->x11.statusStartCallback.client_data = (XPointer) window;
++    window->x11.statusStartCallback.callback = (XIMProc) _ximStatusStartCallback;
++    window->x11.statusDoneCallback.client_data = (XPointer) window;
++    window->x11.statusDoneCallback.callback = (XIMProc) _ximStatusDoneCallback;
++    window->x11.statusDrawCallback.client_data = (XPointer) window;
++    window->x11.statusDrawCallback.callback = (XIMProc) _ximStatusDrawCallback;
++    return XVaCreateNestedList(0,
++                               XNStatusStartCallback,
++                               &window->x11.statusStartCallback.client_data,
++                               XNStatusDoneCallback,
++                               &window->x11.statusDoneCallback.client_data,
++                               XNStatusDrawCallback,
++                               &window->x11.statusDrawCallback.client_data,
++                               NULL);
++}
++
+ // Create the X11 window (and its colormap)
+ //
+ static GLFWbool createNativeWindow(_GLFWwindow* window,
+@@ -1157,6 +1363,10 @@ static void processEvent(XEvent *event)
+         keycode = event->xkey.keycode;
+ 
+     filtered = XFilterEvent(event, None);
++    if (filtered && event->type == KeyPress)
++    {
++        return;
++    }
+ 
+     if (_glfw.x11.randr.available)
+     {
+@@ -1252,21 +1462,8 @@ static void processEvent(XEvent *event)
+ 
+             if (window->x11.ic)
+             {
+-                // HACK: Do not report the key press events duplicated by XIM
+-                //       Duplicate key releases are filtered out implicitly by
+-                //       the GLFW key repeat logic in _glfwInputKey
+-                //       A timestamp per key is used to handle simultaneous keys
+-                // NOTE: Always allow the first event for each key through
+-                //       (the server never sends a timestamp of zero)
+-                // NOTE: Timestamp difference is compared to handle wrap-around
+-                Time diff = event->xkey.time - window->x11.keyPressTimes[keycode];
+-                if (diff == event->xkey.time || (diff > 0 && diff < ((Time)1 << 31)))
+-                {
+-                    if (keycode)
+-                        _glfwInputKey(window, key, keycode, GLFW_PRESS, mods);
+-
+-                    window->x11.keyPressTimes[keycode] = event->xkey.time;
+-                }
++                if (keycode)
++                    _glfwInputKey(window, key, keycode, GLFW_PRESS, mods);
+ 
+                 if (!filtered)
+                 {
+@@ -1294,7 +1491,7 @@ static void processEvent(XEvent *event)
+                         const char* c = chars;
+                         chars[count] = '\0';
+                         while (c - chars < count)
+-                            _glfwInputChar(window, decodeUTF8(&c), mods, plain);
++                            _glfwInputChar(window, _glfwDecodeUTF8(&c), mods, plain);
+                     }
+ 
+                     if (chars != buffer)
+@@ -1755,8 +1952,11 @@ static void processEvent(XEvent *event)
+             else if (window->cursorMode == GLFW_CURSOR_CAPTURED)
+                 captureCursor(window);
+ 
+-            if (window->x11.ic)
++            if (window->x11.ic &&
++                (!window->textInputFocusInitialized || window->textInputFocus))
++            {
+                 XSetICFocus(window->x11.ic);
++            }
+ 
+             _glfwInputWindowFocus(window, GLFW_TRUE);
+             return;
+@@ -1929,16 +2129,55 @@ void _glfwCreateInputContextX11(_GLFWwindow* window)
+     callback.callback = (XIMProc) inputContextDestroyCallback;
+     callback.client_data = (XPointer) window;
+ 
+-    window->x11.ic = XCreateIC(_glfw.x11.im,
+-                               XNInputStyle,
+-                               XIMPreeditNothing | XIMStatusNothing,
+-                               XNClientWindow,
+-                               window->x11.handle,
+-                               XNFocusWindow,
+-                               window->x11.handle,
+-                               XNDestroyCallback,
+-                               &callback,
+-                               NULL);
++    window->x11.imeFocus = GLFW_FALSE;
++
++    if (_glfw.x11.imStyle == STYLE_ONTHESPOT)
++    {
++        // On X11, on-the-spot style is unstable.
++        // Status callbacks are not called and the preedit cursor position
++        // can not be changed.
++        XVaNestedList preeditList = _createXIMPreeditCallbacks(window);
++        XVaNestedList statusList = _createXIMStatusCallbacks(window);
++
++        window->x11.ic = XCreateIC(_glfw.x11.im,
++                                   XNInputStyle,
++                                   _glfw.x11.imStyle,
++                                   XNClientWindow,
++                                   window->x11.handle,
++                                   XNFocusWindow,
++                                   window->x11.handle,
++                                   XNPreeditAttributes,
++                                   preeditList,
++                                   XNStatusAttributes,
++                                   statusList,
++                                   XNDestroyCallback,
++                                   &callback,
++                                   NULL);
++
++        XFree(preeditList);
++        XFree(statusList);
++    }
++    else if (_glfw.x11.imStyle == STYLE_OVERTHESPOT)
++    {
++        window->x11.ic = XCreateIC(_glfw.x11.im,
++                                   XNInputStyle,
++                                   _glfw.x11.imStyle,
++                                   XNClientWindow,
++                                   window->x11.handle,
++                                   XNFocusWindow,
++                                   window->x11.handle,
++                                   XNDestroyCallback,
++                                   &callback,
++                                   NULL);
++    }
++    else
++    {
++        // (XIMPreeditNothing | XIMStatusNothing) is considered as STYLE_OVERTHESPOT.
++        // So this branch should not be used now.
++        _glfwInputError(GLFW_PLATFORM_ERROR,
++                        "X11: Failed to create input context.");
++        return;
++    }
+ 
+     if (window->x11.ic)
+     {
+@@ -3110,6 +3349,112 @@ const char* _glfwGetClipboardStringX11(void)
+     return getSelectionString(_glfw.x11.CLIPBOARD);
+ }
+ 
++// When using STYLE_ONTHESPOT, this doesn't work and the cursor position can't be updated
++//
++void _glfwUpdatePreeditCursorRectangleX11(_GLFWwindow* window)
++{
++    XVaNestedList preedit_attr;
++    XPoint spot;
++    _GLFWpreedit* preedit = &window->preedit;
++
++    if (!window->x11.ic)
++        return;
++
++    spot.x = preedit->cursorPosX + preedit->cursorWidth;
++    spot.y = preedit->cursorPosY + preedit->cursorHeight;
++    preedit_attr = XVaCreateNestedList(0, XNSpotLocation, &spot, NULL);
++    XSetICValues(window->x11.ic, XNPreeditAttributes, preedit_attr, NULL);
++    XFree(preedit_attr);
++}
++
++void _glfwResetPreeditTextX11(_GLFWwindow* window)
++{
++    XIC ic = window->x11.ic;
++    _GLFWpreedit* preedit = &window->preedit;
++
++    /* restore conversion state after resetting ic later */
++    XIMPreeditState preedit_state = XIMPreeditUnKnown;
++    XVaNestedList preedit_attr;
++    char* result;
++
++    if (!ic)
++        return;
++
++    if (_glfw.x11.imStyle == STYLE_OVERTHESPOT)
++    {
++        result = XmbResetIC(ic);
++        if (result)
++            XFree(result);
++        return;
++    }
++
++    if (preedit->textCount == 0)
++        return;
++
++    preedit_attr = XVaCreateNestedList(0, XNPreeditState, &preedit_state, NULL);
++    XGetICValues(ic, XNPreeditAttributes, preedit_attr, NULL);
++    XFree(preedit_attr);
++
++    result = XmbResetIC(ic);
++
++    preedit_attr = XVaCreateNestedList(0, XNPreeditState, preedit_state, NULL);
++    XSetICValues(ic, XNPreeditAttributes, preedit_attr, NULL);
++    XFree(preedit_attr);
++
++    preedit->textCount = 0;
++    preedit->blockSizesCount = 0;
++    preedit->focusedBlockIndex = 0;
++    preedit->caretIndex = 0;
++    _glfwInputPreedit(window);
++
++    XFree (result);
++}
++
++void _glfwSetIMEStatusX11(_GLFWwindow* window, int active)
++{
++    XIC ic = window->x11.ic;
++
++    if (!ic)
++        return;
++
++    // Can not manage IME in the case of over-the-spot.
++    if (_glfw.x11.imStyle == STYLE_OVERTHESPOT)
++        return;
++
++    if (active)
++        XSetICFocus(ic);
++    else
++        XUnsetICFocus(ic);
++}
++
++void _glfwSetTextInputFocusX11(_GLFWwindow* window, GLFWbool focused)
++{
++    XIC ic = window->x11.ic;
++
++    if (!ic)
++        return;
++
++    if (focused)
++        XSetICFocus(ic);
++    else
++    {
++        _glfwResetPreeditTextX11(window);
++        XUnsetICFocus(ic);
++    }
++}
++
++int _glfwGetIMEStatusX11(_GLFWwindow* window)
++{
++    if (!window->x11.ic)
++        return GLFW_FALSE;
++
++    // Can not manage IME in the case of over-the-spot.
++    if (_glfw.x11.imStyle == STYLE_OVERTHESPOT)
++        return GLFW_FALSE;
++
++    return window->x11.imeFocus;
++}
++
+ EGLenum _glfwGetEGLPlatformX11(EGLint** attribs)
+ {
+     if (_glfw.egl.ANGLE_platform_angle)

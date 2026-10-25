@@ -6,3 +6,4 @@ void initFunctions_2();
 void initFunctions_3();
 void initFunctions_4();
 void initFunctions_5();
+void initFunctions_6();

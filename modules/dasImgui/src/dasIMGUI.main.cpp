@@ -48,6 +48,8 @@ namespace das {
     struct CustomTextInputOwner {
         ImGuiID id = 0;
         int frame = -1;
+        ImGuiID font_owner = 0;
+        ImFont * font = nullptr;
     };
 
     static void DeleteTextInputOwner(ImGuiContext*, ImGuiContextHook* hook) {
@@ -69,6 +71,25 @@ namespace das {
         return owner;
     }
 
+    static void NoteTextInputFont(ImGuiContext & context, ImGuiID owner_id) {
+        auto* owner = TextInputOwner(context, true);
+        owner->font_owner = owner_id;
+        owner->font = ImGui::GetFont();
+    }
+
+    ImFont * GetTextInputFont(ImU32 owner_id) {
+        auto* context = ImGui::GetCurrentContext();
+        const auto* owner = context ? TextInputOwner(*context, false) : nullptr;
+        return owner && owner->font_owner == owner_id ? owner->font : nullptr;
+    }
+
+    // modules/dasImgui/ARCHITECTURE.md#native-composition
+    struct TextInputFontNote {
+        ~TextInputFontNote() {
+            if (ImGui::IsItemActive()) NoteTextInputFont(*ImGui::GetCurrentContext(), ImGui::GetItemID());
+        }
+    };
+
     ImU32 GetTextInputOwner() {
         auto* context = ImGui::GetCurrentContext();
         if (!context) return 0;
@@ -87,6 +108,7 @@ namespace das {
         auto* owner = TextInputOwner(context, true);
         owner->id = owner_id;
         owner->frame = context.FrameCount;
+        NoteTextInputFont(context, owner_id);
         auto& ime = context.PlatformImeData;
         ime.WantVisible = true;
         ime.WantTextInput = true;
@@ -202,6 +224,7 @@ namespace das {
         if ( diit->callback.capture ) {
             diit->context = context;
             diit->at = at;
+            TextInputFontNote note;
             return ImGui::InputTextMultiline(
                 label,
                 diit->buffer.data,
@@ -212,6 +235,7 @@ namespace das {
                 diit
             );
         } else {
+            TextInputFontNote note;
             return ImGui::InputTextMultiline(label, diit->buffer.data, diit->buffer.size, size, flags);
         }
     }
@@ -224,6 +248,7 @@ namespace das {
         if ( diit->callback.capture ) {
             diit->context = context;
             diit->at = at;
+            TextInputFontNote note;
             return ImGui::InputText(
                 label,
                 diit->buffer.data,
@@ -233,6 +258,7 @@ namespace das {
                 diit
             );
         } else {
+            TextInputFontNote note;
             return ImGui::InputText(label, diit->buffer.data, diit->buffer.size, flags);
         }
     }
@@ -245,6 +271,7 @@ namespace das {
         if ( diit->callback.capture ) {
             diit->context = context;
             diit->at = at;
+            TextInputFontNote note;
             return ImGui::InputTextWithHint(
                 label,
                 hint,
@@ -255,6 +282,7 @@ namespace das {
                 diit
             );
         } else {
+            TextInputFontNote note;
             return ImGui::InputTextWithHint(label, hint, diit->buffer.data, diit->buffer.size, flags);
         }
     }
@@ -275,12 +303,15 @@ namespace das {
     }
 
     bool InputTextBasic ( uint8_t * buf, int buf_size, const char * label, ImGuiInputTextFlags_ flags ) {
+        TextInputFontNote note;
         return ImGui::InputText(label, (char *)buf, buf_size, flags);
     }
     bool InputTextWithHintBasic ( uint8_t * buf, int buf_size, const char * label, const char * hint, ImGuiInputTextFlags_ flags ) {
+        TextInputFontNote note;
         return ImGui::InputTextWithHint(label, hint, (char *)buf, buf_size, flags);
     }
     bool InputTextMultilineBasic ( uint8_t * buf, int buf_size, const char * label, const ImVec2 & size, ImGuiInputTextFlags_ flags ) {
+        TextInputFontNote note;
         return ImGui::InputTextMultiline(label, (char *)buf, buf_size, size, flags);
     }
 
@@ -302,18 +333,21 @@ namespace das {
     bool InputTextCb ( uint8_t * buf, int buf_size, const char * label, ImGuiInputTextFlags_ flags,
                        Lambda cb, Context * context, LineInfoArg * at ) {
         InputTextLambdaThunk thunk { context, at, cb };
+        TextInputFontNote note;
         return ImGui::InputText(label, (char *)buf, buf_size, flags,
                                 &InputTextLambdaTrampoline, &thunk);
     }
     bool InputTextWithHintCb ( uint8_t * buf, int buf_size, const char * label, const char * hint, ImGuiInputTextFlags_ flags,
                                Lambda cb, Context * context, LineInfoArg * at ) {
         InputTextLambdaThunk thunk { context, at, cb };
+        TextInputFontNote note;
         return ImGui::InputTextWithHint(label, hint, (char *)buf, buf_size, flags,
                                         &InputTextLambdaTrampoline, &thunk);
     }
     bool InputTextMultilineCb ( uint8_t * buf, int buf_size, const char * label, const ImVec2 & size, ImGuiInputTextFlags_ flags,
                                 Lambda cb, Context * context, LineInfoArg * at ) {
         InputTextLambdaThunk thunk { context, at, cb };
+        TextInputFontNote note;
         return ImGui::InputTextMultiline(label, (char *)buf, buf_size, size, flags,
                                          &InputTextLambdaTrampoline, &thunk);
     }

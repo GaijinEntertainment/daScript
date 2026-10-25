@@ -16,7 +16,8 @@ class ClangGen : CppGenBind {
             "-std=c++1z",
             "-I{get_full_file_name(pfp)}",
             "-DWIN32",
-            "-DCINDEX_EXPORTS"
+            "-DCINDEX_EXPORTS",
+            "-fno-blocks"
         )
         func_per_chunk = 20
         super(pfn, pfp, args)

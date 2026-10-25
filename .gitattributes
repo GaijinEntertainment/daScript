@@ -20,6 +20,10 @@ modules/dasClangBind/src/*.cpp text eol=lf
 modules/dasClangBind/src/*.h text eol=lf
 modules/dasClangBind/src/*.inc text eol=lf
 
+# Vendored patches apply with `git apply` against LF upstream sources; a CRLF
+# checkout under autocrlf=true makes every hunk miss.
+modules/dasGlfw/patches/*.patch text eol=lf
+
 # The xxd step (CMakeXxdImpl.txt) regenerates a tracked .das.inc beside its source on every
 # build; the generator writes LF, and this keeps a checkout under autocrlf=true from reading
 # every line as changed and `git add -A` from committing a line-ending flip.

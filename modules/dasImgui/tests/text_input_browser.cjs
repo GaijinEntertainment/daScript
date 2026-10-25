@@ -57,6 +57,15 @@ const { createWasmServer } = require("./_wasm_server.cjs");
           Module.FS.readFile("/text-input-state.json", { encoding: "utf8" }),
         ),
       );
+    const waitSingle = (text, options) =>
+      page.waitForFunction(
+        (text) =>
+          JSON.parse(
+            Module.FS.readFile("/text-input-state.json", { encoding: "utf8" }),
+          ).single === text,
+        text,
+        options,
+      );
     const click = async (target) => {
       const point = await page.evaluate((target) => {
         const state = JSON.parse(
@@ -83,12 +92,7 @@ const { createWasmServer } = require("./_wasm_server.cjs");
       () => document.activeElement?.tagName === "TEXTAREA",
     );
     await page.keyboard.insertText("中文 日本語 한국어 😀");
-    await page.waitForFunction(
-      () =>
-        JSON.parse(
-          Module.FS.readFile("/text-input-state.json", { encoding: "utf8" }),
-        ).single === "中文 日本語 한국어 😀",
-    );
+    await waitSingle("中文 日本語 한국어 😀");
     const rendered = (await state()).widgets.globals["TEXT_INPUT/SINGLE"]
       .payload;
     assert.equal(
@@ -97,6 +101,12 @@ const { createWasmServer } = require("./_wasm_server.cjs");
       ).toString("utf8"),
       "中文 日本語 한국어 😀",
     );
+    await page.keyboard.press("Space");
+    await page.keyboard.type("а");
+    await waitSingle("中文 日本語 한국어 😀 а", { timeout: 5000 });
+    await page.keyboard.press("Backspace");
+    await page.keyboard.press("Backspace");
+    await waitSingle("中文 日本語 한국어 😀");
     const cdp = useWebKit ? null : await context.newCDPSession(page);
     if (cdp) {
       await cdp.send("Input.imeSetComposition", {

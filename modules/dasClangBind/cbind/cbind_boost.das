@@ -159,7 +159,7 @@ def clang_getCursorLocationFullPath(var c : CXCursor) {
     var line, column, offset : uint
     clang_getSpellingLocation(clang_getCursorLocation(c), safe_addr(file), safe_addr(line), safe_addr(column), safe_addr(offset))
     // libclang returns backslashes on Windows; normalize to '/' so prefix matching is OS-independent
-    let fname = string(clang_getFileName(file)) |> replace_multiple([(text = "\\", replacement = "/")])
+    let fname = to_generic_path(string(clang_getFileName(file)))
     return "{fname}:{int(line)}:{int(column)}"
 }
 
@@ -205,6 +205,7 @@ class AnyGenBind {
     verbose_file_skipping = false
     PARSE_FILE_NAME : string
     PARSE_FILE_PREFIX : string
+    PARSE_FILE_PREFIX_RESOLVED : string
     CONST_FILE_NAMES : array<string>
     ARGV : array<string>
     prevFileName : string
@@ -236,7 +237,13 @@ class AnyGenBind {
         // so for the starts_with prefix-strip in
         // clang_getCursorLocationDescription to match on every OS+path-form
         // combination the stored prefix must use forward slashes too.
-        PARSE_FILE_PREFIX = pfp |> replace_multiple([(text = "\\", replacement = "/")])
+        PARSE_FILE_PREFIX = to_generic_path(pfp)
+        // libclang reports included headers by their resolved path
+        if (!empty(pfp)) {
+            let resolved = to_generic_path(get_full_file_name(pfp))
+            let slash = empty(resolved) || resolved |> ends_with("/")
+            PARSE_FILE_PREFIX_RESOLVED = slash ? resolved : "{resolved}/"
+        }
         ARGV := args
     }
     def openFile(path : string) {
@@ -262,7 +269,9 @@ class AnyGenBind {
     // strip the parsed library's header root — paths stay stable across OS and install folder
     def clang_getCursorLocationDescription(var c : CXCursor) : string {
         let full = clang_getCursorLocationFullPath(c)
-        if (!empty(PARSE_FILE_PREFIX) && full |> starts_with(PARSE_FILE_PREFIX)) return full |> slice(length(PARSE_FILE_PREFIX))
+        for (prefix in fixed_array(PARSE_FILE_PREFIX, PARSE_FILE_PREFIX_RESOLVED)) {
+            if (!empty(prefix) && full |> starts_with(prefix)) return full |> slice(length(prefix))
+        }
         return full
     }
     def skip_file(fname : string) : bool {
@@ -747,7 +756,7 @@ class AnyGenBind {
         }
         // libclang returns backslashes on Windows; normalize both sides so the suffix
         // match is OS-independent (else every MacroDefinition cursor filters out)
-        let fnameNorm = fname |> replace_multiple([(text = "\\", replacement = "/")])
+        let fnameNorm = to_generic_path(fname)
         let result = build_string() $(var wr : StringBuilderWriter) {
             clang_visitChildren(clang_getTranslationUnitCursor(unit)) $(var c, _parent) {
                 if (clang_getCursorKind(c) == CXCursorKind.MacroDefinition) {
@@ -755,7 +764,8 @@ class AnyGenBind {
                     var ml, mc, mo : uint
                     clang_getSpellingLocation(clang_getCursorLocation(c), safe_addr(mfile), safe_addr(ml), safe_addr(mc), safe_addr(mo))
                     // builtin / command-line macros have a null CXFile — skip them
-                    if (mfile != null && (string(clang_getFileName(mfile)) |> replace_multiple([(text = "\\", replacement = "/")])) |> ends_with(fnameNorm)) {
+                    let mname = mfile != null ? string(clang_getFileName(mfile)) : ""
+                    if (mfile != null && to_generic_path(mname) |> ends_with(fnameNorm)) {
                         var ext = clang_getCursorExtent(c)
                         var sfile, efile : CXFile
                         var sl, scol, so, el, ecol, eo : uint
@@ -1672,7 +1682,10 @@ class CppGenBind : AnyGenBind {
     def override parse_Alias(var c : CXCursor) {
         let tdn = string(clang_getCursorDisplayName(c))
         var tdt = clang_getCanonicalType(clang_getCursorType(c))
-        let tdts = string(clang_getTypeSpelling(tdt))
+        let canonical = string(clang_getTypeSpelling(tdt))
+        // the canonical spelling bakes in this host's long and size_t
+        let declared = string(clang_getTypeSpelling(clang_getTypedefDeclUnderlyingType(c)))
+        let tdts = canonical |> find("long") >= 0 ? declared : canonical
         fprint(alias_add_file, from_comment(c))
         fprint(alias_add_file, "auto alias_{tdn} = typeFactory<{tdts}>::make(lib);\n")
         fprint(alias_add_file, "alias_{tdn}->alias = \"{tdn}\";\n")

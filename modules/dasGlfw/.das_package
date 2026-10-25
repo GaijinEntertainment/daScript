@@ -16,8 +16,8 @@ def release() {
     if (p == "windows") {
         release_include_dll("glfw3.dll")
     } elif (p == "darwin") {
-        release_include_dll("libglfw.3.4.dylib")
+        release_include_dll("libglfw.3.5.dylib")
     } else {
-        release_include_dll("libglfw.so.3.4")
+        release_include_dll("libglfw.so.3.5")
     }
 }

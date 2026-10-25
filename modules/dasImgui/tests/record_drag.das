@@ -20,11 +20,6 @@ require daslib/json_boost public
 //! frame and the scrub stays in the box; drag_through_voice asserts the value actually MOVED
 //! (a no-op drag aborts the recording at teardown).
 
-def widget_bbox(var snap : JsonValue?; ident : string) : float4 {
-    var b = snap?["globals"]?[ident]?["bbox"]
-    return float4(b?["x"] ?? 0.0f, b?["y"] ?? 0.0f, b?["z"] ?? 0.0f, b?["w"] ?? 0.0f)
-}
-
 [export]
 def main {
     with_recording_app("examples/tutorial/drag.das",

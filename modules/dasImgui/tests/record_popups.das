@@ -18,11 +18,6 @@ require daslib/json_boost public
 //! popup is open. The window popup carries NoOpenOverItems, so a right-click ON the button opens
 //! the item menu (not the window menu); empty-space right-clicks open the window menu.
 
-def widget_bbox(var snap : JsonValue?; ident : string) : float4 {
-    var b = snap?["globals"]?[ident]?["bbox"]
-    return float4(b?["x"] ?? 0.0f, b?["y"] ?? 0.0f, b?["z"] ?? 0.0f, b?["w"] ?? 0.0f)
-}
-
 def widget_center(var snap : JsonValue?; ident : string) : tuple<float; float> {
     let b = widget_bbox(snap, ident)
     return ((b.x + b.z) * 0.5f, (b.y + b.w) * 0.5f)

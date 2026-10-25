@@ -63,13 +63,13 @@ echo "smoke: daspkg release"
 case "$(uname -s)" in
     Darwin)
         BUNDLE="$WORK_DIR/sequence.app/Contents/MacOS"
-        NATIVE="libglfw.3.4.dylib"
+        NATIVE="libglfw.3.5.dylib"
         RUNTIME_PATTERN="liblibDaScriptDyn*.dylib"
         EXE="$BUNDLE/sequence"
         ;;
     *)
         BUNDLE="$WORK_DIR/sequence"
-        NATIVE="libglfw.so.3.4"
+        NATIVE="libglfw.so.3.5"
         RUNTIME_PATTERN="liblibDaScriptDyn*.so"
         EXE="$BUNDLE/sequence.exe"
         ;;

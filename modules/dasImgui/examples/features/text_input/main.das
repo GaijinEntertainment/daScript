@@ -5,6 +5,7 @@ options indenting = 4
 options _ascii_strings = false // Unicode input is the subject of this example.
 
 require imgui/imgui_harness
+require imgui_app
 require imgui/imgui_fonts
 require imgui/imgui_text_source_edit
 require daslib/module_path
@@ -54,7 +55,23 @@ def input_state(_args : JsonValue?) : JsonValue? {
     return JV((single = SINGLE.value, secondary = SECONDARY.value, multiline = MULTILINE.value,
         editor = text_edit_text(g_editor), cursor = int2(g_editor.cursor_line, g_editor.cursor_column),
         editor_focused = g_editor.focused, submissions = g_submissions, submitted = g_submitted,
-        font_directory = font_directory(), fonts_ready = g_fonts_ready, glyphs_ready = g_glyphs_ready, widgets = imgui_snapshot(null)))
+        font_directory = font_directory(), fonts_ready = g_fonts_ready,
+        glyphs_ready = g_glyphs_ready, ime = ime_state(), widgets = imgui_snapshot(null)))
+}
+
+def private ime_state() {
+    return (preedit = imgui_ime_preedit(), caret = imgui_ime_caret(),
+        owner = int64(imgui_ime_owner()), text_focus = imgui_ime_text_focus(),
+        has_window = imgui_ime_has_window(), cursor_rect = imgui_ime_cursor_rect(),
+        overlay = imgui_ime_overlay(), marks = imgui_ime_overlay_marks(),
+        overlay_in_field_font = imgui_ime_overlay_font() == g_font)
+}
+
+[live_command(description = "Inject an input-method composition; args text, caret, split")]
+def ime_preedit(args : JsonValue?) : JsonValue? {
+    let text = args?["text"] ?? ""
+    imgui_ime_inject_preedit(text, args?["caret"] ?? -1, args?["split"] ?? 0)
+    return JV(ime_state())
 }
 
 def private load_sample(value : string) {

@@ -11,82 +11,82 @@
 namespace das {
 #include "dasGLFW.func.aot.decl.inc"
 void Module_dasGLFW::initFunctions_2() {
-// from GLFW/glfw3.h:2928:14
+// from GLFW/glfw3.h:3005:14
 	makeExtern< void (*)(GLFWmonitor *,float) , glfwSetGamma , SimNode_ExtFuncCall >(lib,"glfwSetGamma","glfwSetGamma")
 		->args({"monitor","gamma"})
 		->addToModule(*this, SideEffects::worstDefault);
-// from GLFW/glfw3.h:2958:30
+// from GLFW/glfw3.h:3035:30
 	makeExtern< const GLFWgammaramp * (*)(GLFWmonitor *) , glfwGetGammaRamp , SimNode_ExtFuncCall >(lib,"glfwGetGammaRamp","glfwGetGammaRamp")
 		->args({"monitor"})
 		->addToModule(*this, SideEffects::worstDefault);
-// from GLFW/glfw3.h:2999:14
+// from GLFW/glfw3.h:3076:14
 	makeExtern< void (*)(GLFWmonitor *,const GLFWgammaramp *) , glfwSetGammaRamp , SimNode_ExtFuncCall >(lib,"glfwSetGammaRamp","glfwSetGammaRamp")
 		->args({"monitor","ramp"})
 		->addToModule(*this, SideEffects::worstDefault);
-// from GLFW/glfw3.h:3018:14
+// from GLFW/glfw3.h:3095:14
 	makeExtern< void (*)() , glfwDefaultWindowHints , SimNode_ExtFuncCall >(lib,"glfwDefaultWindowHints","glfwDefaultWindowHints")
 		->addToModule(*this, SideEffects::worstDefault);
-// from GLFW/glfw3.h:3053:14
+// from GLFW/glfw3.h:3130:14
 	makeExtern< void (*)(int,int) , glfwWindowHint , SimNode_ExtFuncCall >(lib,"glfwWindowHint","glfwWindowHint")
 		->args({"hint","value"})
 		->addToModule(*this, SideEffects::worstDefault);
-// from GLFW/glfw3.h:3091:14
+// from GLFW/glfw3.h:3168:14
 	makeExtern< void (*)(int,const char *) , glfwWindowHintString , SimNode_ExtFuncCall >(lib,"glfwWindowHintString","glfwWindowHintString")
 		->args({"hint","value"})
 		->addToModule(*this, SideEffects::worstDefault);
-// from GLFW/glfw3.h:3235:21
+// from GLFW/glfw3.h:3312:21
 	makeExtern< GLFWwindow * (*)(int,int,const char *,GLFWmonitor *,GLFWwindow *) , glfwCreateWindow , SimNode_ExtFuncCall >(lib,"glfwCreateWindow","glfwCreateWindow")
 		->args({"width","height","title","monitor","share"})
 		->addToModule(*this, SideEffects::worstDefault);
-// from GLFW/glfw3.h:3284:13
+// from GLFW/glfw3.h:3361:13
 	makeExtern< int (*)(GLFWwindow *) , glfwWindowShouldClose , SimNode_ExtFuncCall >(lib,"glfwWindowShouldClose","glfwWindowShouldClose")
 		->args({"window"})
 		->addToModule(*this, SideEffects::worstDefault);
-// from GLFW/glfw3.h:3306:14
+// from GLFW/glfw3.h:3383:14
 	makeExtern< void (*)(GLFWwindow *,int) , glfwSetWindowShouldClose , SimNode_ExtFuncCall >(lib,"glfwSetWindowShouldClose","glfwSetWindowShouldClose")
 		->args({"window","value"})
 		->addToModule(*this, SideEffects::worstDefault);
-// from GLFW/glfw3.h:3338:21
+// from GLFW/glfw3.h:3415:21
 	makeExtern< const char * (*)(GLFWwindow *) , glfwGetWindowTitle , SimNode_ExtFuncCall >(lib,"glfwGetWindowTitle","glfwGetWindowTitle")
 		->args({"window"})
 		->addToModule(*this, SideEffects::worstDefault);
-// from GLFW/glfw3.h:3364:14
+// from GLFW/glfw3.h:3441:14
 	makeExtern< void (*)(GLFWwindow *,const char *) , glfwSetWindowTitle , SimNode_ExtFuncCall >(lib,"glfwSetWindowTitle","glfwSetWindowTitle")
 		->args({"window","title"})
 		->addToModule(*this, SideEffects::worstDefault);
-// from GLFW/glfw3.h:3413:14
+// from GLFW/glfw3.h:3490:14
 	makeExtern< void (*)(GLFWwindow *,int,const GLFWimage *) , glfwSetWindowIcon , SimNode_ExtFuncCall >(lib,"glfwSetWindowIcon","glfwSetWindowIcon")
 		->args({"window","count","images"})
 		->addToModule(*this, SideEffects::worstDefault);
-// from GLFW/glfw3.h:3445:14
+// from GLFW/glfw3.h:3522:14
 	makeExtern< void (*)(GLFWwindow *,int *,int *) , glfwGetWindowPos , SimNode_ExtFuncCall >(lib,"glfwGetWindowPos","glfwGetWindowPos")
 		->args({"window","xpos","ypos"})
 		->addToModule(*this, SideEffects::worstDefault);
-// from GLFW/glfw3.h:3480:14
+// from GLFW/glfw3.h:3557:14
 	makeExtern< void (*)(GLFWwindow *,int,int) , glfwSetWindowPos , SimNode_ExtFuncCall >(lib,"glfwSetWindowPos","glfwSetWindowPos")
 		->args({"window","xpos","ypos"})
 		->addToModule(*this, SideEffects::worstDefault);
-// from GLFW/glfw3.h:3510:14
+// from GLFW/glfw3.h:3587:14
 	makeExtern< void (*)(GLFWwindow *,int *,int *) , glfwGetWindowSize , SimNode_ExtFuncCall >(lib,"glfwGetWindowSize","glfwGetWindowSize")
 		->args({"window","width","height"})
 		->addToModule(*this, SideEffects::worstDefault);
-// from GLFW/glfw3.h:3553:14
+// from GLFW/glfw3.h:3630:14
 	makeExtern< void (*)(GLFWwindow *,int,int,int,int) , glfwSetWindowSizeLimits , SimNode_ExtFuncCall >(lib,"glfwSetWindowSizeLimits","glfwSetWindowSizeLimits")
 		->args({"window","minwidth","minheight","maxwidth","maxheight"})
 		->addToModule(*this, SideEffects::worstDefault);
-// from GLFW/glfw3.h:3596:14
+// from GLFW/glfw3.h:3673:14
 	makeExtern< void (*)(GLFWwindow *,int,int) , glfwSetWindowAspectRatio , SimNode_ExtFuncCall >(lib,"glfwSetWindowAspectRatio","glfwSetWindowAspectRatio")
 		->args({"window","numer","denom"})
 		->addToModule(*this, SideEffects::worstDefault);
-// from GLFW/glfw3.h:3634:14
+// from GLFW/glfw3.h:3711:14
 	makeExtern< void (*)(GLFWwindow *,int,int) , glfwSetWindowSize , SimNode_ExtFuncCall >(lib,"glfwSetWindowSize","glfwSetWindowSize")
 		->args({"window","width","height"})
 		->addToModule(*this, SideEffects::worstDefault);
-// from GLFW/glfw3.h:3663:14
+// from GLFW/glfw3.h:3740:14
 	makeExtern< void (*)(GLFWwindow *,int *,int *) , glfwGetFramebufferSize , SimNode_ExtFuncCall >(lib,"glfwGetFramebufferSize","glfwGetFramebufferSize")
 		->args({"window","width","height"})
 		->addToModule(*this, SideEffects::worstDefault);
-// from GLFW/glfw3.h:3700:14
+// from GLFW/glfw3.h:3777:14
 	makeExtern< void (*)(GLFWwindow *,int *,int *,int *,int *) , glfwGetWindowFrameSize , SimNode_ExtFuncCall >(lib,"glfwGetWindowFrameSize","glfwGetWindowFrameSize")
 		->args({"window","left","top","right","bottom"})
 		->addToModule(*this, SideEffects::worstDefault);

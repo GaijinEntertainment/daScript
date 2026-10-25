@@ -64,12 +64,13 @@ IF ((NOT DAS_CLANG_BIND_INCLUDED) AND (${Clang_FOUND}) AND ((NOT ${DAS_CLANG_BIN
 	ADD_MODULE_CPP(dasClangBind)
 	# ADD_MODULE_NATIVE(CLANG_BIND_boost)
 	ADD_MODULE_LIB(libDasModuleClangBind dasModuleClangBind ${DAS_CLANG_BIND_MODULE_SRC} ${DAS_CLANG_BIND_MODULE_PLATFORM_SRC})
+	TARGET_LINK_LIBRARIES(libDasModuleClangBind PRIVATE ${CLANG_BIND_LIBRARIES} libclang)
+	TARGET_LINK_LIBRARIES(dasModuleClangBind PRIVATE ${CLANG_BIND_LIBRARIES} libclang)
 	IF(APPLE)
-		TARGET_LINK_LIBRARIES(libDasModuleClangBind PRIVATE ${CLANG_BIND_LIBRARIES} ${LIBCLANG_LIB}/libclang.dylib)
-		TARGET_LINK_LIBRARIES(dasModuleClangBind PRIVATE ${CLANG_BIND_LIBRARIES} ${LIBCLANG_LIB}/libclang.dylib)
-    ELSE()
-		TARGET_LINK_LIBRARIES(libDasModuleClangBind PRIVATE ${CLANG_BIND_LIBRARIES} libclang)
-		TARGET_LINK_LIBRARIES(dasModuleClangBind PRIVATE ${CLANG_BIND_LIBRARIES} libclang)
+		# clang-c/Index.h declares its *VisitorBlock types as opaque struct pointers unless the
+		# compiler has blocks; Apple clang enables them by default, the committed binding does not.
+		TARGET_COMPILE_OPTIONS(libDasModuleClangBind PRIVATE -fno-blocks)
+		TARGET_COMPILE_OPTIONS(dasModuleClangBind PRIVATE -fno-blocks)
 	ENDIF()
 	# ADD_DEPENDENCIES(libDasModuleClangBind)
 	TARGET_INCLUDE_DIRECTORIES(libDasModuleClangBind PUBLIC ${CLANG_BIND_INCLUDE_DIR} ${CLANG_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})

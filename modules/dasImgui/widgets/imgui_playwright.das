@@ -207,6 +207,13 @@ def public widget_exists(var snap : JsonValue?; ident : string) : bool {
     return !empty(kind)
 }
 
+def public widget_bbox(var snap : JsonValue?; ident : string) : float4 {
+    //! The widget's screen rectangle ``(x0, y0, x1, y1)`` from
+    //! ``snapshot.globals[ident].bbox``; zeros if missing.
+    var b = snap?["globals"]?[ident]?["bbox"]
+    return float4(b?["x"] ?? 0.0f, b?["y"] ?? 0.0f, b?["z"] ?? 0.0f, b?["w"] ?? 0.0f)
+}
+
 def public widget_payload_field(var snap : JsonValue?; ident : string; field : string) : JsonValue? {
     //! Navigate to ``snapshot.globals[ident].payload[field]``; returns null if any link is missing.
     return snap?["globals"]?[ident]?["payload"]?[field]

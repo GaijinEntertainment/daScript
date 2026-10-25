@@ -12,7 +12,7 @@ IF((NOT DAS_GLFW_INCLUDED) AND ((NOT ${DAS_GLFW_DISABLED}) OR (NOT DEFINED DAS_G
 	# directly. Shared verbatim by the desktop and web branches below; the 11
 	# functions emcc's library_glfw.js does not implement resolve on web via the
 	# honest C stubs in src/glfw_emscripten_stubs.c (added in the EMSCRIPTEN branch),
-	# so the same TU set registers the full GLFW 3.4 surface on both.
+	# so the same TU set registers the full GLFW surface on both.
 	SET(DAS_GLFW_BIND_MODULE_SRC
 		${DAS_GLFW_BIND_DIR}/src/aot_dasGLFW.h
 		${DAS_GLFW_BIND_DIR}/src/cb_dasGLFW.h
@@ -41,13 +41,14 @@ IF((NOT DAS_GLFW_INCLUDED) AND ((NOT ${DAS_GLFW_DISABLED}) OR (NOT DEFINED DAS_G
 		${DAS_GLFW_BIND_DIR}/src/dasGLFW.func_3.cpp
 		${DAS_GLFW_BIND_DIR}/src/dasGLFW.func_4.cpp
 		${DAS_GLFW_BIND_DIR}/src/dasGLFW.func_5.cpp
+		${DAS_GLFW_BIND_DIR}/src/dasGLFW.func_6.cpp
 	)
 
 	IF(EMSCRIPTEN)
 		# ===== Web (emscripten) =====
-		# Stock GLFW 3.4 has no web backend, so we do NOT build it from source.
+		# Stock GLFW has no web backend, so we do NOT build it from source.
 		# emcc's -sUSE_GLFW=3 (set in web/CMakeLists.txt) supplies the glfw* symbols
-		# at link time; the vendored 3.4 headers in web_include/ give the C++ binder
+		# at link time; the vendored (patched 3.5.1) headers in web_include/ give the C++ binder
 		# its type/enum/struct declarations. Static module only — the wasm build is a
 		# monolith with no dynamic .shared_module loading, so there is no GLFW3/GLFW3_DYN
 		# ExternalProject, no find_package(OpenGL), and no DLL staging here.
@@ -56,7 +57,7 @@ IF((NOT DAS_GLFW_INCLUDED) AND ((NOT ${DAS_GLFW_DISABLED}) OR (NOT DEFINED DAS_G
 		ADD_MODULE_CPP(dasGLFW)
 		ADD_MODULE_DAS_FROM_DESCRIPTOR(glfw dasglfw)
 		ADD_MODULE_DAS_FROM_DESCRIPTOR(live dasglfw)
-		# glfw_emscripten_stubs.c backfills the GLFW 3.4 entry points missing from
+		# glfw_emscripten_stubs.c backfills the GLFW 3.4+ and input-method entry points missing from
 		# emcc's JS GLFW so the binding's unconditional registrations link — a
 		# das-visible function absent from the wasm-side module is a startup fatal
 		# for cross-compiled cards (mangled-name extern resolution).
@@ -76,23 +77,27 @@ IF((NOT DAS_GLFW_INCLUDED) AND ((NOT ${DAS_GLFW_DISABLED}) OR (NOT DEFINED DAS_G
 	include(ExternalProject)
 
 	# GLFW version and download settings
-	SET(GLFW_VERSION "3.4")
+	SET(GLFW_VERSION "3.5.1")
+	SET(GLFW_LIB_VERSION "3.5")
 	SET(GLFW_URL "https://github.com/glfw/glfw/archive/refs/tags/${GLFW_VERSION}.tar.gz")
-	SET(GLFW_URL_HASH "SHA256=c038d34200234d071fae9345bc455e4a8f2f544ab60150765d7704e08f3dac01")
+	SET(GLFW_URL_HASH "SHA256=5234f4f29473e9a06bc7847d8371858dd135d38466eeeaa652fdc9f8f9ff0c20")
+	# modules/dasGlfw/ARCHITECTURE.md#ime-patch
+	SET(GLFW_PATCH ${DAS_GLFW_DIR}/patches/glfw-3.5.1-ime.patch)
+	find_package(Git REQUIRED)
 
 	# We should set GLFW version here in DLL for MAC and Linux.
 	IF(APPLE)
 		SET(DAS_GLFW_STATIC_PATH ${GLFW_STATIC_LIB_PATH}/lib/libglfw3.a)
-		SET(DAS_GLFW_DYN_PATH ${GLFW_DYNAMIC_LIB_PATH}/lib/libglfw.${GLFW_VERSION}.dylib)
+		SET(DAS_GLFW_DYN_PATH ${GLFW_DYNAMIC_LIB_PATH}/lib/libglfw.${GLFW_LIB_VERSION}.dylib)
 	ELSEIF(UNIX)
 		SET(DAS_GLFW_STATIC_PATH ${GLFW_STATIC_LIB_PATH}/lib/libglfw3.a)
-		SET(DAS_GLFW_DYN_PATH ${GLFW_DYNAMIC_LIB_PATH}/lib/libglfw.so.${GLFW_VERSION})
+		SET(DAS_GLFW_DYN_PATH ${GLFW_DYNAMIC_LIB_PATH}/lib/libglfw.so.${GLFW_LIB_VERSION})
 	ELSE()  # WIN32
 		IF(MSVC)
 			SET(DAS_GLFW_STATIC_PATH ${GLFW_STATIC_LIB_PATH}/lib/glfw3.lib)
 			SET(DAS_GLFW_DYN_PATH ${GLFW_DYNAMIC_LIB_PATH}/lib/glfw3dll.lib)
 		ELSE()  # mingw (clang-mingw / gcc-mingw)
-			# GLFW v3.4 on mingw: static -> libglfw3.a; dynamic import lib ->
+			# GLFW 3.4+ on mingw: static -> libglfw3.a; dynamic import lib ->
 			# libglfw3dll.a; .dll itself stays glfw3.dll (no lib prefix), so
 			# the runtime install line below is unchanged.
 			SET(DAS_GLFW_STATIC_PATH ${GLFW_STATIC_LIB_PATH}/lib/libglfw3.a)
@@ -102,6 +107,8 @@ IF((NOT DAS_GLFW_INCLUDED) AND ((NOT ${DAS_GLFW_DISABLED}) OR (NOT DEFINED DAS_G
 
 	MACRO(BUILD_GLFW glfw_libraries glfw3_target build_shared_libs install_prefix prefix_dir)
 		LIST(APPEND CMAKE_MODULE_PATH ${DAS_GLFW_DIR})
+		SET(GLFW_PATCH_COMMAND ${CMAKE_COMMAND} -E env GIT_CEILING_DIRECTORIES=${prefix_dir}/src
+			${GIT_EXECUTABLE} apply --whitespace=nowarn ${GLFW_PATCH})
 		IF(APPLE)
 			# Forward the macOS SDK sysroot into the GLFW sub-build. Without it the
 			# ExternalProject configures with no -isysroot and falls back to the
@@ -122,6 +129,7 @@ IF((NOT DAS_GLFW_INCLUDED) AND ((NOT ${DAS_GLFW_DISABLED}) OR (NOT DEFINED DAS_G
 				DOWNLOAD_EXTRACT_TIMESTAMP TRUE
 				INACTIVITY_TIMEOUT 60
 				PREFIX ${prefix_dir}
+				PATCH_COMMAND ${GLFW_PATCH_COMMAND}
 				CMAKE_ARGS
 					-DOSX_ARCHITECTURES=${CMAKE_OSX_ARCHITECTURES}
 					-DCMAKE_INSTALL_PREFIX=${install_prefix}/Release
@@ -143,6 +151,7 @@ IF((NOT DAS_GLFW_INCLUDED) AND ((NOT ${DAS_GLFW_DISABLED}) OR (NOT DEFINED DAS_G
 				DOWNLOAD_EXTRACT_TIMESTAMP TRUE
 				INACTIVITY_TIMEOUT 60
 				PREFIX ${prefix_dir}
+				PATCH_COMMAND ${GLFW_PATCH_COMMAND}
 				CMAKE_ARGS
 					-DCMAKE_INSTALL_PREFIX=${install_prefix}/Release
 					-DGLFW_BUILD_EXAMPLES=OFF
@@ -162,6 +171,8 @@ IF((NOT DAS_GLFW_INCLUDED) AND ((NOT ${DAS_GLFW_DISABLED}) OR (NOT DEFINED DAS_G
 
 	BUILD_GLFW(${DAS_GLFW_STATIC_PATH} GLFW3 OFF ${DAS_GLFW_DIR}/glfw ${CMAKE_CURRENT_BINARY_DIR}/libglfw_static)
 	BUILD_GLFW(${DAS_GLFW_DYN_PATH} GLFW3_DYN ON ${DAS_GLFW_DIR}/glfw_dyn ${CMAKE_CURRENT_BINARY_DIR}/libglfw_dyn)
+	ExternalProject_Add_StepDependencies(GLFW3 download ${GLFW_PATCH})
+	ExternalProject_Add_StepDependencies(GLFW3_DYN download ${GLFW_PATCH})
 	# Something wrong with parallel cmake launching. We should launch
 	# consequently.
 	ADD_DEPENDENCIES(GLFW3_DYN GLFW3)
@@ -243,15 +254,15 @@ IF((NOT DAS_GLFW_INCLUDED) AND ((NOT ${DAS_GLFW_DISABLED}) OR (NOT DEFINED DAS_G
 		ADD_CUSTOM_COMMAND(TARGET dasModuleGlfw POST_BUILD
 			COMMAND ${CMAKE_COMMAND} -E make_directory "${PROJECT_SOURCE_DIR}/lib"
 			COMMAND ${CMAKE_COMMAND} -E copy_if_different
-				"${GLFW_DYNAMIC_LIB_PATH}/lib/libglfw.${GLFW_VERSION}.dylib"
-				"${PROJECT_SOURCE_DIR}/lib/libglfw.${GLFW_VERSION}.dylib"
+				"${GLFW_DYNAMIC_LIB_PATH}/lib/libglfw.${GLFW_LIB_VERSION}.dylib"
+				"${PROJECT_SOURCE_DIR}/lib/libglfw.${GLFW_LIB_VERSION}.dylib"
 		)
 	ELSEIF(UNIX)
 		ADD_CUSTOM_COMMAND(TARGET dasModuleGlfw POST_BUILD
 			COMMAND ${CMAKE_COMMAND} -E make_directory "${PROJECT_SOURCE_DIR}/lib"
 			COMMAND ${CMAKE_COMMAND} -E copy_if_different
-				"${GLFW_DYNAMIC_LIB_PATH}/lib/libglfw.so.${GLFW_VERSION}"
-				"${PROJECT_SOURCE_DIR}/lib/libglfw.so.${GLFW_VERSION}"
+				"${GLFW_DYNAMIC_LIB_PATH}/lib/libglfw.so.${GLFW_LIB_VERSION}"
+				"${PROJECT_SOURCE_DIR}/lib/libglfw.so.${GLFW_LIB_VERSION}"
 		)
 	ENDIF()
 
@@ -278,9 +289,9 @@ IF((NOT DAS_GLFW_INCLUDED) AND ((NOT ${DAS_GLFW_DISABLED}) OR (NOT DEFINED DAS_G
 		install(FILES ${DAS_GLFW_DIR}/glfw_dyn/Release/bin/glfw3.dll DESTINATION ${DAS_INSTALL_BINDIR})
 	ELSE()
 		IF(APPLE)
-			install(FILES ${DAS_GLFW_DIR}/glfw_dyn/Release/lib/libglfw.${GLFW_VERSION}.dylib DESTINATION ${DAS_INSTALL_LIBDIR})
+			install(FILES ${DAS_GLFW_DIR}/glfw_dyn/Release/lib/libglfw.${GLFW_LIB_VERSION}.dylib DESTINATION ${DAS_INSTALL_LIBDIR})
 		ELSE()
-			install(FILES ${DAS_GLFW_DIR}/glfw_dyn/Release/lib/libglfw.so.${GLFW_VERSION} DESTINATION ${DAS_INSTALL_LIBDIR})
+			install(FILES ${DAS_GLFW_DIR}/glfw_dyn/Release/lib/libglfw.so.${GLFW_LIB_VERSION} DESTINATION ${DAS_INSTALL_LIBDIR})
 		ENDIF()
 	ENDIF()
 

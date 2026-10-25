@@ -19,11 +19,6 @@ require daslib/json_boost public
 //!                overlap, so its click_count ticks.
 //! A no-op interaction (or the read-only slider unexpectedly moving) aborts the recording at teardown.
 
-def widget_bbox(var snap : JsonValue?; ident : string) : float4 {
-    var b = snap?["globals"]?[ident]?["bbox"]
-    return float4(b?["x"] ?? 0.0f, b?["y"] ?? 0.0f, b?["z"] ?? 0.0f, b?["w"] ?? 0.0f)
-}
-
 [export]
 def main {
     with_recording_app("examples/tutorial/item_flags.das",

@@ -88,7 +88,7 @@
 <template id="loader">{{{ SCRIPT }}}</template>
 <script>
   var SCROLL_KEYS = { ArrowUp:1, ArrowDown:1, ArrowLeft:1, ArrowRight:1, ' ':1, Spacebar:1, PageUp:1, PageDown:1, Home:1, End:1, Tab:1 };
-  window.addEventListener('keydown', function (e) { if (SCROLL_KEYS[e.key]) e.preventDefault(); }, { passive: false });
+  window.addEventListener('keydown', function (e) { if (SCROLL_KEYS[e.key] && !(e.target && e.target.closest && e.target.closest('input,textarea,[contenteditable]'))) e.preventDefault(); }, { passive: false });
 
   // the IMAGE_VERSION this page's program was built with - the deploy stamps it (pages.yml, from
   // modules/dasLLAMA/dasllama/dasllama_image.das); 0 means "not stamped" (a local rig), no check
