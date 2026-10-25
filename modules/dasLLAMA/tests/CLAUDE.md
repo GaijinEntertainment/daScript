@@ -487,7 +487,8 @@ is its untied twin on TinyLlama-1.1B - the blob plane carrying the classifier AN
 embedding's linear q8 copy (`emb_q8` without `cls_q8`): the layout gate admits the copy, cold
 mint and warm map keep the q8 table with no fp32 copy, GPU serve, the same teacher-forced bar
 (`--arm metal` and `--arm untied` both select it - substring match). The ASR-family
-arms (`parakeet` transcript-exact, `qwen3a`/`canary`/`gemma4a` element-exact planes,
+arms (`parakeet` transcript-exact, `qwen3a`/`canary`/`gemma4a` element-exact planes - the gemma4a and qwen3a q8-against-f32
+transcribe cells comparing word lists, a comma riding a near-tie token between the two rails -,
 `canary-dec` = the opt-in fp32 Model rail, token-exact) re-save their images from cold each
 run like the voxtral arm. The canary arm carries both lanes: the f32 element-exact cell and
 the q8 cell (read-time transcode - qblob/qscales/compact-blob element-exact vs a staged read).

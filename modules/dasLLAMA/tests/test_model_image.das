@@ -2436,7 +2436,7 @@ def test_gemma4a_encoder_image_roundtrip(t : T?) {
 
 [test]
 def test_gemma4a_transcribe_q8_ab(t : T?) {
-    t |> run("gemma4a transcribe: the q8 tower vs the f32 rail on jfk, same text") @(t : T?) {
+    t |> run("gemma4a transcribe: the q8 tower vs the f32 rail on jfk, the same words") @(t : T?) {
         return if (!family_on(t, "gemma4a") || !arm_on(t, "gemma4a") || !jit_only(t))
         let dec_path = path_join(models_dir(), "gemma-4-E2B-it-Q8_0.gguf")
         let mmp_path = path_join(models_dir(), "mmproj-gemma-4-E2B-it-bf16.gguf")
@@ -2471,7 +2471,8 @@ def test_gemma4a_transcribe_q8_ab(t : T?) {
         }
         to_log(LOG_INFO, "gemma4a q8 : {q8_text}\n")
         to_log(LOG_INFO, "gemma4a f32: {f32_text}\n")
-        t |> equal(q8_text, f32_text, "q8 tower transcript matches the f32 rail")
+        // the words, not the punctuation: a comma rides a near-tie token the two rails' rounding can split
+        t |> equal(join(transcript_words(q8_text), " "), join(transcript_words(f32_text), " "), "q8 tower transcript matches the f32 rail, punctuation aside")
         delete samples
     }
 }
@@ -2699,7 +2700,7 @@ def test_qwen3a_tower_q8_ab(t : T?) {
 
 [test]
 def test_qwen3a_transcribe_q8_ab(t : T?) {
-    t |> run("qwen3a transcribe: the q8 tower core vs the f32 rail on jfk, same text") @(t : T?) {
+    t |> run("qwen3a transcribe: the q8 tower core vs the f32 rail on jfk, the same words") @(t : T?) {
         return if (!family_on(t, "qwen3a") || !arm_on(t, "qwen3a") || !jit_only(t))
         let dec_path = path_join(models_dir(), "Qwen3-ASR-0.6B-Q8_0.gguf")
         let mmp_path = path_join(models_dir(), "mmproj-Qwen3-ASR-0.6B-bf16.gguf")
@@ -2735,7 +2736,8 @@ def test_qwen3a_transcribe_q8_ab(t : T?) {
         }
         to_log(LOG_INFO, "qwen3a q8 : {q8_text}\n")
         to_log(LOG_INFO, "qwen3a f32: {f32_text}\n")
-        t |> equal(q8_text, f32_text, "q8 tower transcript matches the f32 rail")
+        // the words, not the punctuation: a comma rides a near-tie token the two rails' rounding can split
+        t |> equal(join(transcript_words(q8_text), " "), join(transcript_words(f32_text), " "), "q8 tower transcript matches the f32 rail, punctuation aside")
         delete samples
     }
 }
