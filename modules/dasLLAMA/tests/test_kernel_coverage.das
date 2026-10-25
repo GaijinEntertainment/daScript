@@ -1232,6 +1232,8 @@ def test_vulkan_kernel_coverage_serving(tst : T?) {
             vk_cov_model(t, path_join(models_dir(), "tinyllama-1.1b-chat-v1.0.Q8_0.gguf"), "llama", [2, 4, 8])
             // gemma3 q8: the per-op arena rails + qk_norm
             vk_cov_model(t, path_join(models_dir(), "gemma-3-1b-it-Q8_0.gguf"), "gemma3", none)
+            //! phi3 K-quant: a head of 96 - the window's head-96 flash tiles (`fa_cm2_h96*`), the token step's narrow attention
+            vk_cov_model(t, path_join(models_dir(), "Phi-3.5-mini-instruct-Q4_K_M.gguf"), "phi3", none)
             vk_cov_codecs(t)
             vk_cov_mode_sweep(t)
             // qwen3.5 q8: the DeltaNet chains (conv/step/scan + the decode step)
