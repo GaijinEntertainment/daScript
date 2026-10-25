@@ -15,9 +15,7 @@ def das_exe() : string {
     return empty(args) ? "" : args[0]
 }
 
-//! the manifest the running binary's kind writes beside a descriptor:
-//! a dynamic-module build and a static one keep their own
-//! (src/ast/ARCHITECTURE_MODULE_SCAN.md#module-scan-manifest)
+//! the manifest file this binary's kind writes beside a descriptor
 def manifest_file_name() : string =>
     das_is_dll_build() ? ".das_module.manifest" : ".das_module.static.manifest"
 

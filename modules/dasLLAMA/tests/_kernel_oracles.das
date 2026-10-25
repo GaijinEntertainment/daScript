@@ -448,10 +448,7 @@ def cossin_rows(csh : array<float>; at, hs : int) : tuple<c : array<float>; s : 
     return <- (c = c, s = s)
 }
 
-//! the fused qk-norm + rope + KV-store oracle at one position (both homes' `QknRopeKvT` cells): each head row biased (when `bh`
-//! is set), normed by the engine's rmsnorm on its weight row (q heads on `wnh`'s first `hs`, k heads on the next), rotated by
-//! the engine's table rope on the cos | sin row `csh`; k lands at mirror row `krow` and v copies its raw row plus its bias,
-//! both through `round`
+//! the fused qk-norm + rope + KV-store oracle at one position (both homes' `QknRopeKvT` cells): each head row biased when `bh` is set, rmsnormed on `wnh` (q heads on its first `hs`, k heads on the next), table-roped on the cos | sin row `csh`; k lands at mirror row `krow`, v copies its raw row plus bias, both through `round`
 def qkn_rope_rows(q0h, kvh, bh, wnh, csh : array<float>; bpad, nh, nkvh, hs, krow, mirn : int; eps : float;
                   round : block<(x : float) : float>) : tuple<q : array<float>; mk : array<float>; mv : array<float>> {
     let qd = nh * hs

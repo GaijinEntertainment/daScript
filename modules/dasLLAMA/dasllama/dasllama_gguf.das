@@ -863,8 +863,6 @@ def gguf_read_tensor_f32(m : GGUFMeta; srcbytes : array<uint8> | #; name : strin
             bo += 16l
         }
     } elif (gtype == GGML_TYPE_NVFP4) {
-        // block of 64: four UE4M3 sub-block scales, then 32 nibble bytes (sub-block s's byte j pairs element j with j + 8);
-        // x = MX4_LUT[q] * the scale at half - ggml's dequantize_row_nvfp4 order
         if (src_off % 64l != 0l || expect_n % 64l != 0l) {
             panic("gguf: tensor '{name}' NVFP4 slice [{src_off}, +{expect_n}) is not block-aligned")
         }

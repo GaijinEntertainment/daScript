@@ -263,8 +263,7 @@ def ws_word(i : uint) : uint => safe_half(i * 7u + 3u) | (safe_half(i * 3u + 1u)
 def ws_plane(n : int; mul, add : uint) : array<uint> =>
     <- [for (i in range(n)); ws_word(uint(i) * mul + add)]
 
-//! `ws_plane` under a format's device-row rule: an nv4 row's fifth word is the plane's per-tensor scale as f32 bits (one
-//! value a plane - a tile stages its scale table off the region's first row), where a hashed word would read as a wild f32
+//! `ws_plane` under a format's device-row rule: an nv4 row's fifth word is one finite per-tensor scale a plane, as f32 bits (`../ARCHITECTURE_ENGINE_FORMATS_NV4.md#nv4-site-scale`), where a hashed word would read as a wild f32
 def kq_ws_plane(fmt : int; n : int; mul, add : uint) : array<uint> {
     var w <- ws_plane(n, mul, add)
     if (fmt == int(KqFmt.nv4)) {

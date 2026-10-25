@@ -37,7 +37,8 @@ def mirror_kv_dtype() : KVDtype => gpu_device_session_dtype_()
 
 let SUPPRESSED_LOGIT = -1.0e30   //! a pinned id's logit on both arms
 
-//! the log-probability of `target` under the logits row `v` (a NaN row reads as its NaN; the floor keeps a pinned id out of the max)
+//! the log-probability of `target` under the logits row `v`: a NaN anywhere reads NaN (`hmax` and `hlse` fold with `max`, which drops
+//! a NaN operand, so the row is scanned first); the floor keeps a pinned id out of the max
 def target_logp(v : array<float>; target : int64) : float {
     for (x in v) {
         return x if (is_nan(x))

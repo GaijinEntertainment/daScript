@@ -578,10 +578,7 @@ def dot_kq(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : 
 [unused_argument(xbsp)]
 def dot_kq(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64; _f : KqTag_iq3s4) : float => dot_kq_lut(kqrow, ksrow, xqp, xsp, n, iq3s4_lut())
 
-//! The nv4 row dot off the DISK-ORDER planes: per 32-block two exact int dots - the low 16 over MX4_LUT[q] and the
-//! high 16 - each folded by its own sub-block scale (the UE4M3 byte at half) into one float per superblock, then x the
-//! Q8_K scale: q40's per-block float fold order over two scales. Signed codes, so no bsum term.
-[hint(unsafe_range_check, noalias = kqrow, noalias = ksrow, noalias = xqp, noalias = xsp, noalias = xbsp), unused_argument(xbsp)]
+[hint(unsafe_range_check, noalias = kqrow, noalias = ksrow, noalias = xqp, noalias = xsp, noalias = xbsp), unused_argument(xbsp), arch(at="../ARCHITECTURE_ENGINE_FORMATS_NV4.md#nv4-planes")]
 def dot_kq(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64; _f : KqTag_nv4) : float {
     let lut = mx4_lut()
     var acc = 0.0
@@ -989,8 +986,6 @@ def private dequant_lut_row_grp(kqg : uint8 const?; ksg : uint8 const?; r, mr, n
     }
 }
 
-//! nv4 grp row dequant: the k4 tiling with the per-block (low, high) UE4M3 pair interleaved where q40's d sits -
-//! w = MX4_LUT[q] x the half's scale at half.
 def private dequant_nv4_row_grp(kqg : uint8 const?; ksg : uint8 const?; r, mr, nsb : int64; var dst : float?) {
     let lut = mx4_lut()
     unsafe {

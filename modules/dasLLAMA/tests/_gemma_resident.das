@@ -335,8 +335,6 @@ def prefill_vs_decode(t : T?; n : int64; gf : GemmaFile) {
     }
 }
 
-//! log-softmax of `target` over the live logits (a pinned id at -1e30 drops out of the sum on its own); a NaN anywhere in the
-//! row reads NaN - `hmax` and `hlse` fold with `max`, which drops a NaN operand, so the row is scanned first
 //! teacher-forced negative log-likelihood over `steps` positions after `n` prefilled ids: the sum over the
 //! true next ids, the sum over the ids one position off (the control), and the argmax hits on each
 def private forced_nll(tr : Model; var s : Session; ids : array<int64>; n, steps : int64) : tuple<nll : float; off : float; hits : int64; off_hits : int64> {

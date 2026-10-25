@@ -31,7 +31,6 @@ def private allow_cpu_prefill_intent() {
     }
 }
 
-let private LOGIT_BAR_REL = 0.06   //! of the step's max |logit|: the CUDA llama file's bar
 let private FILE_06B = "Qwen3-0.6B-Q8_0.gguf"   //! head 128 over 16 q heads and 8 k heads, the per-head q/k norm, no attention bias
 let private FILE_4B = "Qwen3-4B-Instruct-2507-Q8_0.gguf"   //! the larger dense qwen3: 36 layers over 2560, the same head geometry at 32 q heads
 

@@ -35,7 +35,6 @@ def private allow_cpu_prefill_intent() {
     }
 }
 
-let private LOGIT_BAR_REL = 0.06   //! of the step's max |logit|: the llama file's bar
 let private FILE_1B = "Llama-3.2-1B-Instruct-Q8_0.gguf"
 let private FILE_1B_K = "Llama-3.2-1B-Instruct-Q4_K_M.gguf"   //! the K-quant planes (q4_K, q6_K): the kq GEMV leaves, the Q8_K feeds, the kq cm2 tiles
 let private FILE_1B_Q51 = "Llama-3.2-1B-Instruct-Q5_1-local.gguf"   //! every dense plane q51 (the mint's recipe row in `../performance/model_specs.das`): the per-32 GEMV leaves, the s tile, the q51 table gather
@@ -104,11 +103,9 @@ def test_gpu_resident_cuda_llama_1b_q40(t : T?) {
     }
 }
 
-//! the FP4 tensor leaf's bar: W4A4 quantizes the window's activations to e2m1 per token on top of the weights' 4 bits, a
-//! precision step the CPU chain (f32 activations) does not take - the 1B's rows read up to 0.135 of the step's max logit
-//! against the dense bar's 0.06 (the argmax matched; llama.cpp's own measurement of the same step: +0.7% perplexity), and the
-//! tightest one-step-off control sits at 0.158, so the bar is pinned between them; the cm2 tiles' arm of the same carrier
-//! below holds the dense bar, so the extra is the feed's
+//! the FP4 leaf's bar: W4A4's e2m1 activations are a step the f32 CPU chain does not take - the 1B's rows read up to 0.135 of the
+//! step's max logit (the argmax matched; llama.cpp measures the same step at +0.7% perplexity) and the tightest one-step-off control
+//! at 0.158, the bar between them; the same carrier's cm2-tiles arm below holds the dense bar, so the extra is the feed's
 let private LOGIT_BAR_REL_FP4 = 0.14
 
 [test]

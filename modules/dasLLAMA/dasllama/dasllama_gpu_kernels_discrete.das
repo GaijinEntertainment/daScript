@@ -243,8 +243,7 @@ def mx4_dec4(nib : uint; sc : float) : float4 {
         float(mag2 >> 24u) * (1.0 - 2.0 * float(sgn >> 24u)) * sc)
 }
 
-//! four nibble codes (one per byte of `nib`) to SIGNED int8 lanes of the doubled e2m1 magnitudes: each code's sign bit negates
-//! its byte (a per-byte two's complement through the 0x80 borrow, no carry across lanes) - the nv4 planes' sdot4 lanes
+//! four nibble codes (a byte each) to SIGNED int8 lanes of the doubled e2m1 magnitudes, each sign bit negating its byte with no carry across lanes
 def mx4_word(nib : uint) : uint {
     let mag = mx4_mag2x4(nib)
     let m = ((nib >> 3u) & 0x01010101u) * 0xFFu
@@ -1691,8 +1690,8 @@ class template Nv4GemvT : KqGemvLeafT {
         wl = uint4(l0, l1, l2, l3)
         wh = uint4(h0, h1, h2, h3)
         let sw = wsu[wsb * 5u + blk / 2u] >> ((blk & 1u) * 16u)
-        let s2 = uint_bits_to_float(wsu[wsb * 5u + 4u])
-        return float4(ue4m3_half_f32(sw & 0xFFu) * s2, 0.0, ue4m3_half_f32((sw >> 8u) & 0xFFu) * s2, 0.0)
+        let site_scale = uint_bits_to_float(wsu[wsb * 5u + 4u])
+        return float4(ue4m3_half_f32(sw & 0xFFu) * site_scale, 0.0, ue4m3_half_f32((sw >> 8u) & 0xFFu) * site_scale, 0.0)
     }
 
     def override fold_reads_bsum : bool => false
@@ -4607,7 +4606,7 @@ class template KqCm2BatchT : MoeCmBase {
             }
         }
         static_if (UE4LUT) {
-            if (gl_LocalInvocationID.x < 128u) {   // the plane's factor sits in every row's fifth word; the region's first row serves
+            if (gl_LocalInvocationID.x < 128u) {
                 let code = gl_LocalInvocationID.x
                 ue4lut[code] = float16(ue4m3_half_f32(code) * uint_bits_to_float(ws[wblk0 * 5u + 4u]))
             }

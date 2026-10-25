@@ -272,9 +272,9 @@ are.** A base off the format's own block grid is gathered under a layout that is
 `DEVICE_CREATION_CALLS` in `REVIEW.das` does not list, adds that spelling to the list in the same
 change.** The gate finds only the spellings it lists, so a new one passes it silently.
 
-**A backend entry whose module always registers (`dasllama/dasllama_math_cuda.das`) calls no
-device function before `cuda_available()` returns true, and registers nothing when it returns
-false.** A box without the driver loads the module too, and its first device call would fault.
+**A backend entry whose module registers in every build that carries it (`dasllama/dasllama_math_cuda.das`)
+calls no device function before `cuda_available()` returns true, and registers nothing when it
+returns false.** A box without the driver loads the module too, and its first device call would fault.
 
 **Weakening `check_shared_file_spelling` in `REVIEW.das` is a defect.** It holds a shared kernel
 file - `dasllama/dasllama_gpu_kernels_common.das` or `dasllama/dasllama_gpu_kernels_discrete.das` -

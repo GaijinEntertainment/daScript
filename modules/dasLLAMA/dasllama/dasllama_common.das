@@ -4969,14 +4969,11 @@ def private kq_slot(what : string; fmt : KqFmt) : int {
 
 // K-quant GEMV against a PRE-quantized activation (xq/xs/xbs already filled by the bs quantizer).
 // kq_repacked loads run the backend's stamped cores; disk-order loads run the portable kernels.
-//! the key of a plane's per-tensor scale in `Model.site_scale`: the format slot above the element offset in that format's plane
 def site_scale_key(fmt : KqFmt; woff : int64) : int64 => (int64(fmt) << 52) | woff
 
-//! the plane's per-tensor scale (NVFP4's scale2); one where the file carries none
-[arch(at = "../ARCHITECTURE_ENGINE_FORMATS.md#nv4-site-scale")]
+[arch(at = "../ARCHITECTURE_ENGINE_FORMATS_NV4.md#nv4-site-scale")]
 def site_scale(t : Model; fmt : KqFmt; woff : int64) : float => empty(t.site_scale) ? 1.0 : (t.site_scale?[site_scale_key(fmt, woff)] ?? 1.0)
 
-//! `count` outputs from `yoff` under the plane's per-tensor scale - the epilogue every CPU matmul of a scaled plane ends on
 def private apply_site_scale(var y : array<float>; t : Model; fmt : KqFmt; woff, yoff, count : int64) {
     let sc = site_scale(t, fmt, woff)
     if (sc != 1.0) {
@@ -5006,11 +5003,12 @@ def private mm_kq(var y : array<float>; t : Model; fmt : KqFmt; woff : int64; x 
 // Batched K-quant matmul. Repacked loads with a kq batch kernel run the native tile: one threaded
 // bs-requant, then ONE weight-stationary GEMM (bit-for-bit npos x the per-position GEMV).
 // Otherwise positions run serially, each bs-quantized then a full row GEMV.
+[arch(at="../ARCHITECTURE_ENGINE_FORMATS_NV4.md#nv4-site-scale")]
 def mm_b_kq(var s : Session; var y : array<float>; t : Model; fmt : KqFmt; woff : int64; x : array<float>; n, d, npos : int64) {
     if (t.kq_repacked && kernel_backend_has_kq_batch()) {
         requant_rows_q8k_bs(x, n, npos, s.xqb, s.xsb, s.xbsb)   // kq v2: Q8_K-form image
         if (npos >= 32l && moe_gpu_dense_on_gpu(int(fmt), woff)) {
-            matmul_gpu_dense(y, woff, s.xqb, s.xsb, n, d, npos, int(fmt))   // in-kernel bsums, xbsb unused; the device rows carry nv4's scale2
+            matmul_gpu_dense(y, woff, s.xqb, s.xsb, n, d, npos, int(fmt))   // in-kernel bsums, xbsb unused
             return
         }
         mm_b_kq_pre(y, t, fmt, woff, s.xqb, s.xsb, s.xbsb, n, d, npos)
@@ -5707,7 +5705,7 @@ def private cls_softcap_chain(t : Model; var s : Session; cap : float) {
         let kqpc = kq_plane_q(t, cls_fmt, t.wcls_off)
         let kspc = kq_plane_s(t, cls_fmt, t.wcls_off)
         let rowsc = kq_rows_for(cls_fmt)
-        let scc = site_scale(t, cls_fmt, t.wcls_off)   // the plane's per-tensor scale (NVFP4's scale2): the rows core's epilogue
+        let scc = site_scale(t, cls_fmt, t.wcls_off)
         team_parallel_stages(s.chain_stages) <| @(stage : int; jb : int; je : int) {   // nolint:PERF026 — dispatch-API lambda capture, see attention_chain_decode
             let r0 = int64(jb) * 32l
             let r1 = int64(je) * 32l

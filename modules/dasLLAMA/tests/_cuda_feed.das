@@ -2,7 +2,7 @@
 // prefill logits and every step's within the bar, the one-step-off control past it, with the witnesses that the CUDA
 // driver served every position, ran the windows the prompt takes and replayed the captured graph past the first step,
 // a CPU run with the model off the device moving none of them (the control). One body for every carrier family the
-// home serves (`test_gpu_resident_cuda_llama.das`, `test_gpu_resident_cuda_qwen3.das`).
+// home serves (`test_gpu_resident_cuda_llama.das`, `test_gpu_resident_cuda_phi3.das`, `test_gpu_resident_cuda_qwen3.das`).
 
 options gen2
 options _dasllama_internal = true
@@ -19,8 +19,9 @@ require dasllama/dasllama_cuda_decode   // cud_rdec_stats
 require _model_tier
 require _resident_feed
 
-//! `file` of family `arch` through the CUDA chain and the CPU chain over an `n`-token prompt and eight steps, at `bar` of
-//! the step's max |logit|
+//! `file` of family `arch` through the CUDA chain and the CPU chain over an `n`-token prompt and eight steps, at `bar` of the step's max |logit|
+let LOGIT_BAR_REL = 0.06   //! the dense carriers' bar, of the step's max |logit|: every CUDA resident file reads it
+
 def cuda_forced_feed(t : T?; file, arch : string; n, windows : int64; bar : float) {
     let path = cuda_model_path(t, file)
     if (empty(path) || !assert_pf_window(t)) return
@@ -37,7 +38,7 @@ def cuda_forced_feed(t : T?; file, arch : string; n, windows : int64; bar : floa
             t |> success(st.tokens >= n + 8l, "the CUDA driver served every position of the prompt and every fed token ({st.tokens} positions)")
             t |> equal(st.windows - before.windows, windows, "the prompt ran as {windows} window chain(s) on the CUDA driver")
             t |> success(st.graph, "the token step replays as a captured graph past the first step")
-            let unsplit_want = st.unsplit_form && n + 8l <= RD_UNSPLIT_POS ? 8l : 0l   // every fed step under the unsplit position takes the unsplit form, none past it
+            let unsplit_want = st.unsplit_form && n + 8l <= RD_UNSPLIT_POS ? 8l : 0l
             t |> equal(st.unsplit - before.unsplit, unsplit_want, "the attention's unsplit form served {unsplit_want} of the fed steps (the keys {n + 8l <= RD_UNSPLIT_POS ? "under" : "past"} the unsplit position{st.unsplit_form ? "" : "; the device splits no keys"})")
         }
         var prompt <- resident_prompt(40l)

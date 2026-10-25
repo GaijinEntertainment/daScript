@@ -246,8 +246,8 @@ def arm_math_container_cache(t : T?; fx : Fixture) {
     }
 }
 
-//! a replayed dm row's artifact: there but not loadable, or gone
-def arms_artifact(t : T?; fx : Fixture) {
+[arch(at="ARCHITECTURE.md#file-charters")]
+def arms_artifact_unloadable_or_gone(t : T?; fx : Fixture) {
     let loading = "[module] require {UNIT_TEST_MODULE}: loading the deferred {UNIT_TEST_CLASS}"
     let missing = "error[20605]: missing prerequisite '{UNIT_TEST_MODULE}'"
     t |> run("a deferred row whose artifact does not load brings every deferred module in, " +
@@ -257,8 +257,6 @@ def arms_artifact(t : T?; fx : Fixture) {
             "a cold start rewrites the manifest")
         let text = fread(fx.utManifest)
         t |> success(find(text, "\ndm\t") >= 0, "the manifest carries the dm row: {text}")
-        // the row's file exists, so the manifest replays and defers it;
-        // it is no shared module, so the require's dlopen fails
         for (name in ["absent.shared_module", "absent_debug.shared_module"]) {
             fwrite(path_join(fx.utDir, name), "not a shared module\n")
         }
@@ -317,8 +315,7 @@ def arms_artifact(t : T?; fx : Fixture) {
     }
 }
 
-//! the module cache against the witness: a record pins what it folded
-def arm_cache_witness(t : T?; fx : Fixture) {
+def arm_cache_pins_presence(t : T?; fx : Fixture) {
     t |> run("a module-cache record folded with the module present is refused once it is gone, " +
              "and the other way") @(t : T?) {
         let cache = "-module-cache \"{path_join(fx.tmp, "mc_witness.bin")}\""
@@ -488,8 +485,8 @@ def test_deferred_modules(t : T?) {
     let fx = make_fixture(tmp, artifact)
     arms_deferred(t, fx)
     arms_guards_and_caches(t, fx)
-    arms_artifact(t, fx)
-    arm_cache_witness(t, fx)
+    arms_artifact_unloadable_or_gone(t, fx)
+    arm_cache_pins_presence(t, fx)
     arm_math_container_cache(t, fx)
     arms_nameless_rows(t, fx)
     arm_fallback(t, fx)

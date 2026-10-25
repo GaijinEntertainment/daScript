@@ -4,9 +4,10 @@ options stack = 524288
 
 // The window chain's tiles on both discrete homes of one card, the same planes: the Vulkan class kernel through the hazard
 // rail and the CUDA class kernel through its launch rail - the Q8_0 cm2 l and m tiles (the window's batch GEMM) at a
-// llama-1B prefill window's shapes (512 rows by the projection and FFN widths), the superblock cm2 tiles (the K-quants and the
-// three 4-bit lattices, NVFP4 among them) and the int8 GEMM's
-// Q8_0 and Q4_K leaves at the same shapes, the cm2 flash tile at head 64 over the same window (32 heads, kv width 512) and the decode
+// llama-1B prefill window's shapes (512 rows by the projection and FFN widths; the llama-8B's under `--only ...,8b`), the
+// superblock cm2 tiles (the K-quants and the three 4-bit lattices, NVFP4 among them), the int8 MMQ leaves (Q8_0, Q4_K, IQ4_XS,
+// Q4_0, IQ4_NL and the four per-32 formats) and the FP4 rung's nv4 leaf at the same shapes, the cm2 flash tile at head 64
+// over the same window (32 heads, kv width 512) and the decode
 // attention's split and unsplit forms - the time a dispatch and the rate it makes.
 // Baseline: the mmq arm, checked against the CPU reference mmq_ref. Compare region: 64 sampled outputs, token (s x 7919) % 512
 // and row (s x 104729 + 13) % d for s < 64. Every Vulkan and CUDA tile, flash and decode-attention arm is timing-only.
@@ -34,7 +35,7 @@ let ROUNDS = 10
 let WARMUPS = 2
 let DISPATCHES = 20
 let MMQ_REL_BOUND = 1.0e-3   //! the MMQ kernel cell's bar (`test_cud_q8_mmq`): relative to the larger magnitude, floored at 1
-let K4_MMQ_REL_BOUND = 2.0e-3   //! the Q4_K leaf's (`test_cud_k4_mmq`, the f16 tiles' `TILE_BAR`): relative to the compare region's largest magnitude
+let MIN_TERM_MMQ_REL_BOUND = 2.0e-3   //! the min-term leaves' (Q4_K, Q5_1; `test_cud_k4_mmq`, the f16 tiles' `TILE_BAR`): relative to the compare region's largest magnitude
 let ROWS = 512
 let FA_HEADS = 32
 let FA_HS = 64
@@ -178,7 +179,7 @@ def race_kq_tile(fmt : int; p : Planes; k, d, tc : int) : RaceRow {
 struct MmqPlanes {
     xq : array<uint>    //! the activation quants, a byte an element, [token][k]
     xs : array<float>   //! a scale a 32-block a token
-    xsum : array<float> //! a block's scale x the sum of its quants (the Q4_K leaf's min-term feed)
+    xsum : array<float> //! a block's scale x the sum of its quants (a min-term leaf's feed: Q4_K, Q5_1)
 }
 
 def xf_at(p : Planes; e : int) : float {
@@ -239,8 +240,7 @@ def mmq_ref(p : Planes; m : MmqPlanes; k, tok, row : int) : float {
     return acc
 }
 
-//! the Q4_K reference over the engine's repacked superblocks (a 32-block's 16 bytes: element i the low nibble, i + 16 the
-//! high; five scale words a superblock): every block's xs x (d sc dot - dmin mn xsum)
+//! the Q4_K reference over the engine's repacked superblocks (element i the low nibble, i + 16 the high; five scale words a superblock): every block's xs x (d sc dot - dmin mn xsum)
 def k4_mmq_ref(p : Planes; m : MmqPlanes; k, tok, row : int) : float {
     let nb = k / 32
     let nsb = k / 256
@@ -265,9 +265,7 @@ def k4_mmq_ref(p : Planes; m : MmqPlanes; k, tok, row : int) : float {
     return acc
 }
 
-//! the superblock leaves without a min term over the engine's repacked superblocks (the Q4_K nibble tiling): IQ4_XS's codebook
-//! values under d x (ls - 32) off its two-word scale row, Q4_0's nibbles less eight and IQ4_NL's codebook values under the d
-//! pairs of their five-word row; every block's xs x scale x dot
+//! the min-term-free superblock leaves over the Q4_K nibble tiling - IQ4_XS's codebook under d x (ls - 32) off its two-word scale row, Q4_0's nibbles less eight and IQ4_NL's codebook under the five-word row's d pairs: every block's xs x scale x dot
 def sb_mmq_ref(p : Planes; m : MmqPlanes; k, tok, row, fmt : int) : float {
     let nb = k / 32
     let nsb = k / 256
@@ -291,15 +289,14 @@ def sb_mmq_ref(p : Planes; m : MmqPlanes; k, tok, row, fmt : int) : float {
     return acc
 }
 
-//! a per-32 leaf's reference: the block dequantized by the engine's own per-32 dequant, dotted with the activation's quants,
-//! under the activation's scale
-def b32_mmq_ref(f : KqFmt; kqb, ksb : array<uint8>; m : MmqPlanes; k, tok, row : int) : float {
+//! a per-32 leaf's reference: the block through the engine's own per-32 dequant, dotted with the activation's quants under its scale
+def b32_mmq_ref(f : KqFmt; b32_wq_bytes, b32_ws_bytes : array<uint8>; m : MmqPlanes; k, tok, row : int) : float {
     let nb = k / 32
     var w : array<float>
     w |> resize(32)
     var acc = 0.0
     for (b in range(nb)) {
-        dequant_b32_plane_block(f, kqb, ksb, int64(row * nb + b), w, 0l)
+        dequant_b32_plane_block(f, b32_wq_bytes, b32_ws_bytes, int64(row * nb + b), w, 0l)
         var dot = 0.0
         for (i in range(32)) {
             dot += w[i] * float(byte_at(m.xq, tok * k + b * 32 + i))
@@ -332,9 +329,7 @@ def mmq_ensure(fmt : int) : bool {
 
 def mmq_is_b32(fmt : int) : bool => fmt == int(KqFmt.q51) || fmt == int(KqFmt.q4032) || fmt == int(KqFmt.q5032) || fmt == int(KqFmt.iq4nl32)
 
-//! the MMQ arm's report line for the leaf of `fmt` (Q8_0; the superblock leaves; the per-32 leaves): its largest relative error
-//! against the reference over the compare region, then its rounds when the error is inside the leaf's bound, or the miss and
-//! no time; 1 when it measured
+//! the MMQ arm's report line for the leaf of `fmt` (Q8_0, a superblock or a per-32 leaf): its largest relative error over the compare region, then its rounds when inside the leaf's bound, else the miss and no time; 1 when it measured
 def mmq_report(shape : string; p : Planes; m : MmqPlanes; k, d, fmt : int) : int {
     if (!mmq_ensure(fmt)) {
         print("{shape} cuda refused: {CU_CLASS_REFUSED}\n")
@@ -351,23 +346,22 @@ def mmq_report(shape : string; p : Planes; m : MmqPlanes; k, d, fmt : int) : int
     mmq_launch(fmt, bufs, pc, wgs)
     cud_sync()
     let y <- buf_download(bufs[4], ROWS * d, type<float>)
-    let kqb <- [for (i in range(length(p.wq) * 4)); uint8((p.wq[i / 4] >> uint((i % 4) * 8)) & 0xFFu)]   // the per-32 reference reads the planes as bytes
-    let ksb <- [for (i in range(length(p.ws) * 4)); uint8((p.ws[i / 4] >> uint((i % 4) * 8)) & 0xFFu)]
+    let b32_wq_bytes <- [for (i in range(length(p.wq) * 4)); uint8((p.wq[i / 4] >> uint((i % 4) * 8)) & 0xFFu)]
+    let b32_ws_bytes <- [for (i in range(length(p.ws) * 4)); uint8((p.ws[i / 4] >> uint((i % 4) * 8)) & 0xFFu)]
     var wants : float[64]
     var ymax = 1.0
     for (s in range(64)) {
         let tok = (s * 7919) % ROWS
         let row = (s * 104729 + 13) % d
         if (b32) {
-            wants[s] = b32_mmq_ref(kq_fmt_of_slot(fmt), kqb, ksb, m, k, tok, row)
+            wants[s] = b32_mmq_ref(kq_fmt_of_slot(fmt), b32_wq_bytes, b32_ws_bytes, m, k, tok, row)
         } else {
             wants[s] = k4 ? k4_mmq_ref(p, m, k, tok, row) : (sb ? sb_mmq_ref(p, m, k, tok, row, fmt) : mmq_ref(p, m, k, tok, row))
         }
         ymax = max(ymax, abs(wants[s]))
     }
-    // a leaf without a min term errs per element (exact int dots, f32 scales); a min term is f16-staged, so that leaf's bound
-    // is the f16 tiles' - relative to the region's largest magnitude
-    let bound = f16min ? K4_MMQ_REL_BOUND : MMQ_REL_BOUND
+    // no min term: exact int dots under f32 scales, a per-element bound; a min term is f16-staged, so the f16 tiles' bound, relative to the region's largest magnitude
+    let bound = f16min ? MIN_TERM_MMQ_REL_BOUND : MMQ_REL_BOUND
     var err = 0.0
     for (s in range(64)) {
         let got = y[((s * 7919) % ROWS) * d + (s * 104729 + 13) % d]
@@ -396,8 +390,7 @@ def nv4_weight_at(p : Planes; nsb, row, kk : int) : float {
     return float(MX4_LUT[int(nib)]) * ue4m3_half_f32(code)
 }
 
-//! the FP4 tensor rung's arm (CUDA alone): the nv4 leaf over the panel quantized into the FP4 feed, its largest relative error
-//! against the e2m1 x UE4M3 reference over the compare region, then its rounds; 1 when it measured
+//! the FP4 tensor rung's arm (CUDA alone): the nv4 leaf over the panel quantized into the FP4 feed, its largest relative error against the e2m1 x UE4M3 reference, then its rounds; 1 when it measured
 def fp4_mmq_report(shape : string; p : Planes; k, d : int) : int {
     if (!dasllama_cuda_classes::ensure_nv4_mmq()) {
         print("{shape} cuda refused: {CU_CLASS_REFUSED}\n")
@@ -408,7 +401,7 @@ def fp4_mmq_report(shape : string; p : Planes; k, d : int) : int {
     var inscope feed <- fp4_feed_rows(xrows, ROWS, k)
     let cs = g_cud.stream
     var bufs = fixed_array(buf_upload(p.wq, cs), buf_upload(p.ws, cs), buf_upload(feed.xq, cs), buf_upload(feed.xsw, cs), buf_upload(feed.xrs, cs), buf_fill(ROWS * d, 0.0, cs))
-    var pc = MmqFp4Args(n = uint(k), d = uint(d), rows = uint(ROWS), wblk = 0u, s2 = 1.0)
+    var pc = MmqFp4Args(n = uint(k), d = uint(d), rows = uint(ROWS), wblk = 0u, site_scale = 1.0)
     let wgs = dasllama_cuda_classes::mmq_wgs(int64(d), int64(ROWS))
     dasllama_cuda_classes::enc_nv4_mmq(g_cud.stream, bufs, pc, wgs)
     cud_sync()
@@ -630,8 +623,7 @@ def race_sb_rows(shapes : array<tuple<k : int; d : int>>; only : table<string; v
     return measured
 }
 
-//! the superblock int8 GEMMs (CUDA alone) and the nv4 leaf on the FP4 tensor rung - every format of the list, or the ones
-//! `only` names; the rows measured
+//! the superblock int8 GEMMs (CUDA alone) and the nv4 leaf on the FP4 tensor rung - every listed format, or the ones `only` names; the rows measured
 def race_sb_mmq_rows(shapes : array<tuple<k : int; d : int>>; only : table<string; void>) : int {
     var measured = 0
     print("the superblock int8 GEMMs (CUDA alone): the decode in the weight stage, Q4_K's min term, the codebooks, Q4_0's offset\n")
@@ -659,9 +651,8 @@ def race_sb_mmq_rows(shapes : array<tuple<k : int; d : int>>; only : table<strin
 [export]
 def main {
     let only <- race_only()
-    // the window's GEMM shapes: the llama-1B's (dim 2048, hidden 8192), or the 8B's (dim 4096, hidden 14336) under `--only ...,8b`
-    let big = key_exists(only, "8b")
-    let shapes <- [(k = big ? 4096 : 2048, d = big ? 4096 : 2048), (k = big ? 4096 : 2048, d = big ? 14336 : 8192), (k = big ? 14336 : 8192, d = big ? 4096 : 2048)]
+    let llama8b_shapes = key_exists(only, "8b")
+    let shapes <- [(k = llama8b_shapes ? 4096 : 2048, d = llama8b_shapes ? 4096 : 2048), (k = llama8b_shapes ? 4096 : 2048, d = llama8b_shapes ? 14336 : 8192), (k = llama8b_shapes ? 14336 : 8192, d = llama8b_shapes ? 4096 : 2048)]
     var measured = 0
     if (!empty(only)) {
         dasllama_vulkan_classes::ensure_q8_batch_cm2l_cls()   // arms the device the format picks read their mode off

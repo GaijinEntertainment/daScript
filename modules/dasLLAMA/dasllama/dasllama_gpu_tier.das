@@ -200,7 +200,7 @@ struct RdecLayerGeom {
     out_scale : float               //! the layer's output scale on its FFN residual step; 1.0 = none
     kv_shared : bool                //! the layer projects Q only and attends over a donor layer's K/V rows (`mir_base` is the donor's; gemma-4 E-series)
     attn_cap : float                //! the attention logit softcap on the scaled scores (gemma-2: 50); 0 = none
-    s2 : float[7]                   //! each site's per-tensor weight scale - q, k, v, o, gate, up, down - NVFP4's `.scale`, 1 where the plane carries none
+    site_scale : float[7]           //! each site's per-tensor weight scale - q, k, v, o, gate, up, down - NVFP4's `.scale`, 1 where the plane carries none
     moe_g4 : bool                   //! the gemma-4 MoE layer: a parallel dense shared expert, the routed branch and the router each on their own norm of x
 }
 //! qd / kv_dim / head_size / hidden / rot are the layers' maxima; `mir_units` one K/V mirror slab's units a region (elements, or 32-element blocks under a block codec; the widest slab's, every slab the same stride), `n_slabs` the slabs a side, `cos_elems` a position's cos/sin
@@ -579,8 +579,7 @@ def public gpu_want_resident : bool => g_env_gpu.gpu_resident && g_gpu_resident_
 
 var private g_cuda_want_refused = false
 
-//! the CUDA home takes the tier's seats in place of the Vulkan home (DASLLAMA_CUDA): both entries read it at their [init];
-//! a build without dasCUDA (no `cuda` witness module) has no CUDA home, so the knob is off there, said once
+//! the CUDA home takes the tier's seats in place of the Vulkan home (DASLLAMA_CUDA), read at both entries' [init]; off, warned once, in a build without dasCUDA
 def public gpu_want_cuda : bool {
     static_if (typeinfo builtin_module_exists(cuda)) {
         return g_env_gpu.cuda

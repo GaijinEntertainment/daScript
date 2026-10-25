@@ -209,7 +209,6 @@ def private attention_chain_decode(t : Model; var s : Session; l : int64; pos : 
         let kqpo = kq_plane_q(t, fo, t.wo_offs[l])
         let kspo = kq_plane_s(t, fo, t.wo_offs[l])
         let rowso = kq_rows_for(fo)
-        // the planes' per-tensor scales (NVFP4's scale2): the rows core's epilogue, ahead of any bias
         let scq = site_scale(t, fq, t.wq_offs[l])
         let sck = site_scale(t, fk, t.wk_offs[l])
         let scv = site_scale(t, fv, t.wv_offs[l])
@@ -3825,6 +3824,7 @@ def ffn_dense_decode(t : Model; var s : Session; l : int64) {
 // Fused dense FFN block: ONE team rendezvous runs [w1+w3 rows + act + requant] -> [w2 rows +
 // residual add] as two stages, gate/up rows PAIRED per chunk (requant lands in xq2/xs2, not
 // xq/xs — other stage-0 chunks still read the input quants). Bit-identical to ffn_dense_decode.
+[arch(at="../ARCHITECTURE_ENGINE_FORMATS_NV4.md#nv4-site-scale")]
 def ffn_chain_decode(t : Model; var s : Session; l : int64) { // nolint:STYLE038 — ONE team rendezvous: the two stages and their paired gate/up chunking share hoisted scratch and must not be split across a barrier
     let c = t.config
     let dim = c.dim
@@ -3914,7 +3914,6 @@ def ffn_chain_decode(t : Model; var s : Session; l : int64) { // nolint:STYLE038
         let kqp2 = kq_plane_q(t, f2, w2o)
         let ksp2 = kq_plane_s(t, f2, w2o)
         let rows2 = kq_rows_for(f2)
-        // the planes' per-tensor scales (NVFP4's scale2): the rows core's epilogue, ahead of the activation
         let sc1 = site_scale(t, f1, w1o)
         let sc3 = site_scale(t, f3, w3o)
         let sc2 = site_scale(t, f2, w2o)

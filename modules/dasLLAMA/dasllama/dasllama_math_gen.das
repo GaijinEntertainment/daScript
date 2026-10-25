@@ -737,9 +737,7 @@ def q40_grp_row_dot(kqg : uint8 const?; ksg : uint8 const?; r, mr : int64; xqp :
     return acc
 }
 
-//! One row's dot off the grp<mr> nv4 planes, scalar - the nv4 stubs' reference body and the tests' repack oracle:
-//! q40's walk with the low and the high 16 of a block each under its own UE4M3 scale at half, over MX4_LUT, no
-//! bsum term. Same float fold order as the nv4 dot_kq.
+//! the nv4 stubs' reference body and the tests' repack oracle, in the nv4 dot_kq's float fold order
 [unused_argument(xbsp)]
 def nv4_grp_row_dot(kqg : uint8 const?; ksg : uint8 const?; r, mr : int64; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64) : float {
     let lut = mx4_lut()
@@ -1035,8 +1033,6 @@ def nv4q8_gemv_gen(var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp 
     kq_gemv_ref(yp, kqp, ksp, xqp, xsp, xbsp, n, rb, re, int64(nv4q8_layout_gen()), NV4_QSB, NV4_SSB, KqTag_nv4())
 }
 
-//! nv4's tile: q40's grid without the amx_bf16 leg (its panel is unwritten); the emitter arm is unwritten too, so every
-//! perm declines and the reference body serves
 [tune_perm(mr = 8),
  tune_perm(dot = "maddubs", width = 256, mr = 8, requires = "avx2"),
  tune_perm(dot = "vpdpbusd", width = 256, mr = 8, requires = "avxvnni|avx512vnni"),
@@ -3931,8 +3927,7 @@ def kq_registries(_f : KqTag_iq3s4) : KqRegistries {
     }
 }
 
-//! nv4's registries: no tile until the emitter arm lands (a declined tile would run the reference body over planes repacked
-//! at the layout companion's mr and read maxdiff nan in the gate), the rest of the family as q40's
+//! no tile registry: a declined tile would run the reference body over planes repacked at the layout companion's mr (the gate reads maxdiff nan)
 def kq_registries(_f : KqTag_nv4) : KqRegistries {
     static_if (typeinfo module_exists(llvm_tune)) {
         return <- KqRegistries(tile4 <- nv4q8_tile4_gen_variants(), gemv <- nv4q8_gemv_gen_variants(),

@@ -140,8 +140,7 @@ let TILE_D = 160            //! the tile cells' weight rows: one full 128-tile a
 let TILE_ROWS0 = 300        //! the two regions' rows: whole tiles and an edge each
 let TILE_ROWS1 = 260
 
-//! the cm2 l tile over two regions of activation rows against the f16-feed oracle: `k` the reduction width; the tile's
-//! f16 accumulator reads 1.7e-3 of the largest output at k 576 against the 2e-3 bar, so a fixture change here moves the margin
+//! the cm2 l tile over two regions of activation rows against the f16-feed oracle: `k` the reduction width
 [arch(at="../ARCHITECTURE_GPU_SHARED_GEMM.md#cm2-tile-body")]
 def q8_cm2l_run(t : T?; k : int; wq_seed, ws_seed, xf_mul, xf_add : uint) {
     let d = TILE_D
@@ -299,9 +298,7 @@ def private nv4_test_scale_word(i : int) : uint {
     return w
 }
 
-//! the NVFP4 leaf on the FP4 tensor rung: the k4-tiled nv4 plane (a 32-block's 16 bytes: element i the low nibble, i + 16 the
-//! high; the superblock's sixteen UE4M3 strip codes as four words) against an FP4 feed in the (k, k + 8) pairing, the
-//! reference every element's e2m1 x UE4M3 on both sides, the token's row scale and the plane's factor over the sum
+//! the NVFP4 leaf on the FP4 tensor rung: the k4-tiled nv4 plane (sixteen UE4M3 strip codes a superblock as four words) against an FP4 feed in the (k, k + 8) pairing, the reference each element's e2m1 x UE4M3 on both sides under the row scale and the plane's factor
 [test]
 def test_cud_nv4_mmq(t0 : T?) {
     t0 |> run("CUDA NVFP4 GEMM on the FP4 tensor rung == the e2m1 x UE4M3 CPU reference under the row scales and the plane's factor") <| @(t : T?) {
@@ -313,7 +310,7 @@ def test_cud_nv4_mmq(t0 : T?) {
         let d = 256
         let rows = 256
         let nsb = k / 256
-        let s2 = 0.75
+        let plane_scale = 0.75
         var wq <- hashed_words(d * nsb * 32, 1u, 23u)
         var ws : array<uint>
         ws |> resize(d * nsb * 5)
@@ -331,7 +328,7 @@ def test_cud_nv4_mmq(t0 : T?) {
         var xr <- [for (tok in range(rows)); 0.5 + 0.125 * float(tok % 7)]
         let s = g_cud.stream
         var bufs = fixed_array(buf_upload(wq, s), buf_upload(ws, s), buf_upload(xq, s), buf_upload(xs, s), buf_upload(xr, s), buf_fill(rows * d, Y_SENTINEL, s))
-        var pc = MmqFp4Args(n = uint(k), d = uint(d), rows = uint(rows), wblk = 0u, s2 = s2)
+        var pc = MmqFp4Args(n = uint(k), d = uint(d), rows = uint(rows), wblk = 0u, site_scale = plane_scale)
         enc_nv4_mmq(g_cud.stream, bufs, pc, mmq_wgs(int64(d), int64(rows)))
         t |> success(cud_sync(), "nv4 mmq: the launch completes ({cuda_last_error()})")
         let y <- buf_download(bufs[5], rows * d, type<float>)
@@ -349,20 +346,19 @@ def test_cud_nv4_mmq(t0 : T?) {
                     let wstrip = g * 2 + e / 16
                     let wsc = (ws[(row * nsb + sb) * 5 + wstrip / 4] >> uint((wstrip % 4) * 8)) & 0xFFu
                     let j = kk % 16
-                    let xbi = tok * (k / 2) + (kk / 16) * 8 + j % 8   // the feed's byte: strip kk / 16, pair j % 8, the high nibble past 7
-                    let xnib = (xq[xbi / 4] >> uint((xbi % 4) * 8 + (j / 8) * 4)) & 15u
+                    let feed_byte = tok * (k / 2) + (kk / 16) * 8 + j % 8
+                    let xnib = (xq[feed_byte / 4] >> uint((feed_byte % 4) * 8 + (j / 8) * 4)) & 15u
                     let xsc = (xs[tok * (k / 64) + kk / 64] >> uint(((kk / 16) % 4) * 8)) & 0xFFu
                     acc += float(MX4_LUT[int(wbyte)]) * ue4m3_half_f32(wsc) * float(MX4_LUT[int(xnib)]) * ue4m3_half_f32(xsc)
                 }
-                want[tok * d + row] = acc * xr[tok] * s2
+                want[tok * d + row] = acc * xr[tok] * plane_scale
             }
         }
         check_rows(t, "nv4 MMQ on the FP4 rung vs the e2m1 x UE4M3 reference", y, want, Q8_GEMV_BAR, d)
     }
 }
 
-//! the Q4_K leaf over the engine's repacked superblocks (a 32-block's 16 bytes: element i the low nibble, i + 16 the high; five
-//! scale words a superblock) against the GEMV's fold of each block: xs x (d sc dot - dmin mn xsum)
+//! the Q4_K leaf over the engine's repacked superblocks (element i the low nibble, i + 16 the high; five scale words a superblock) against the GEMV's fold of each block: xs x (d sc dot - dmin mn xsum)
 [test]
 def test_cud_k4_mmq(t0 : T?) {
     t0 |> run("CUDA MMQ-shaped Q4_K GEMM == the block-scaled CPU reference") <| @(t : T?) {
@@ -441,9 +437,7 @@ def test_cud_k4_mmq(t0 : T?) {
     }
 }
 
-//! one superblock leaf without a min term over the Q4_K nibble tiling: IQ4_XS (the codebook; a two-word scale row - d and the
-//! scales' high bits, the scales' low nibbles), Q4_0 (the nibbles less eight; the d-pair row) or IQ4_NL (the codebook; the
-//! d-pair row); the reference folds each block as xs x scale x dot
+//! one min-term-free superblock leaf over the Q4_K nibble tiling - IQ4_XS (the codebook; a two-word row of d and the scales' bits), Q4_0 (the nibbles less eight; the d-pair row) or IQ4_NL (the codebook; the d-pair row) - against xs x scale x dot a block
 def private cud_sb_mmq_run(t : T?; f : KqFmt) {
     let k = 1024   // four superblocks: the scale rows hand over three times
     let d = 256
@@ -520,8 +514,7 @@ def test_cud_sb_mmq(t0 : T?) {
     }
 }
 
-//! one per-32 leaf against the engine's own per-32 dequant of each block dotted with the activation quants: Q5_1 with its m
-//! through the f16-staged correction (the f16 tiles' bar), Q4_0, Q5_0 and IQ4_NL per element
+//! one per-32 leaf against the engine's own per-32 dequant dotted with the activation quants: Q5_1's m through the f16-staged correction (the f16 tiles' bar), Q4_0, Q5_0 and IQ4_NL per element
 def private cud_b32_mmq_run(t : T?; f : KqFmt) {
     let fmt = int(f)
     let k = 1024   // thirty-two blocks a row: the min term's two groups of sixteen
@@ -964,8 +957,7 @@ def private cud_feed_ar(t : T?; var s : void?; sent : float; q8k : bool) {
     }
 }
 
-//! the FP4 feed planes of `rows` rows of `k` read back off the device against the CPU feed: the nibble words and code words off
-//! by count, the row scales held to the approx bar
+//! the FP4 feed planes of `rows` rows of `k` read back against the CPU feed: nibble and code words off by count (at most `allowed`), the row scales at the approx bar
 def private fp4_feed_compare(t : T?; tag : string; bufs : uint64[5]; qi, si, ri : int; ref : Fp4Feed; rows, k : int; allowed : int) {
     var q <- buf_download(bufs[qi], rows * k / 8, type<uint>)
     var sw <- buf_download(bufs[si], rows * k / 64, type<uint>)
@@ -984,9 +976,7 @@ def private fp4_feed_compare(t : T?; tag : string; bufs : uint64[5]; qi, si, ri 
     delete rs
 }
 
-//! the FP4 feed kernels: a float plane's rows (bit for bit the CPU feed - the kernel is `precise`), the gate / up pair through the
-//! activation (the act's exponential is fast-math: a few strips may round their code or a nibble the other way), and the fused
-//! residual step + norm + feed against the CPU norm's feed
+//! the FP4 feed kernels against the CPU feed: a float plane's rows bit for bit (the kernel is `precise`), the gate / up pair through the act (its fast-math exponential rounds a few strips' code or nibble the other way), the fused residual step + norm + feed
 [test]
 def test_cud_fp4_feeds(t0 : T?) {
     t0 |> run("CUDA FP4 feed kernels (fp4_rows, fp4_actrows, cls_ar_fp4_b) == the CPU feed") <| @(t : T?) {
@@ -1729,9 +1719,7 @@ def private cud_mirror_floats(buf : uint64; n : int; f16 : bool) : array<float> 
     return <- buf_download(buf, n, type<float>)
 }
 
-//! the fused q/k norm, rope and K/V store on this home's stamp (`qkn_rope_cls`, or under `f16` its half-mirror twin) on one
-//! row, a head a workgroup, against the oracle both homes' cells hold it to: the four q heads normed and roped in place, the
-//! two k heads normed, roped and stored at mirror row `krow`, each k head's workgroup copying its raw V row
+//! the fused q/k norm, rope and K/V store (`qkn_rope_cls`, or under `f16` its half-mirror twin) on one row, a head a workgroup, against `qkn_rope_rows`: four q heads in place, two k heads stored at mirror row `krow`, each copying its raw V row
 def private cud_qkn_rope_arm(t : T?; f16 : bool) {
     let nh = 4
     let nkvh = 2
@@ -1770,7 +1758,7 @@ def private cud_qkn_rope_arm(t : T?; f16 : bool) {
     var q_cls <- buf_download(pq, qd, type<float>)
     var mk <- cud_mirror_floats(pkm, mirn, f16)
     var mv <- cud_mirror_floats(pvm, mirn, f16)
-    cuda_mem_free(fixed_array(pq, pkv, pkm, pvm, pcs, pwn, ptok))   //! the bias and V-source bindings alias the cos and projection planes: each block freed once
+    cuda_mem_free(fixed_array(pq, pkv, pkm, pvm, pcs, pwn, ptok))   // the bias and V-source bindings alias the cos and projection planes: each block freed once
     var ref <- qkn_rope_rows(q0h, kvh, bh, wnh, csh, 0, nh, nkvh, hs, krow, mirn, eps) $(x : float) => f16 ? f16_to_f32(f32_to_f16(x)) : x
     check_rows(t, "{name}, q", q_cls, ref.q, BAR_APPROX_CTRL, qd, hs)
     var mk_rows <- [for (i in range(krow, mirn)); mk[i]]

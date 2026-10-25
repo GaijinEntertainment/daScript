@@ -32,8 +32,7 @@ def fa_head_ok(hs : int64) : bool => hs == 64l || hs == 128l || hs == 256l || hs
 def fa_khr_serves(hs : int64; cap : float; gated : bool) : bool
     => fa_head_ok(hs) && !gated && (cap == 0.0 || hs == 256l)
 
-//! the cm2 flash tile serves a head of 64, 96, 128, 256 or 512 (96 is its alone: the KHR lane map walks a head in 64-wide
-//! halves), gated at 256 alone, the softcap at an ungated 256 alone
+//! the cm2 flash tile serves a head of 64, 96, 128, 256 or 512, gated at 256 alone, the softcap at an ungated 256 alone
 def fa_cm2_serves(hs : int64; cap : float; gated : bool) : bool
     => (fa_head_ok(hs) || hs == 96l) && (!gated || hs == 256l) && (cap == 0.0 || (hs == 256l && !gated))
 
@@ -3318,9 +3317,7 @@ class KqBatchIq4nl : KqBatchIq4xs {
     }
 }
 
-// NVFP4 tile: the k4 staging with the mx4 codebook decode in stage_w (signed lanes, no block-sum term) and TWO scale
-// planes - a block's low and high half each under its own UE4M3 sub-block scale at half - per block
-// acc += xs * (slo * ilo + shi * ihi)
+//! NVFP4 tile: the k4 staging over signed e2m1 lanes (no block-sum term), each block's low and high half under its own UE4M3 sub-block scale at half
 [vk_dispatch(name = "kq_batch_nv4_cls", kernel = "run", family = "kq_batch_cls", grid = "wgs", params = "wgs : int64")]
 class KqBatchNv4 : KqBatchBase {
     [unused_argument(k)]
@@ -3339,9 +3336,9 @@ class KqBatchNv4 : KqBatchBase {
         if (wt * 32u + slane < pa.d) {
             let wsb = wsb0 + (wt * 32u + slane) * nsb + s
             let sw = wsu[wsb * 5u + sblk / 2u] >> ((sblk & 1u) * 16u)
-            let s2 = uint_bits_to_float(wsu[wsb * 5u + 4u])   // the plane's per-tensor scale, the device row's fifth word
-            slo = ue4m3_half_f32(sw & 0xFFu) * s2
-            shi = ue4m3_half_f32((sw >> 8u) & 0xFFu) * s2
+            let site_scale = uint_bits_to_float(wsu[wsb * 5u + 4u])
+            slo = ue4m3_half_f32(sw & 0xFFu) * site_scale
+            shi = ue4m3_half_f32((sw >> 8u) & 0xFFu) * site_scale
         }
         wsw[sblk * 32u + slane] = slo
         wsw2[sblk * 32u + slane] = shi

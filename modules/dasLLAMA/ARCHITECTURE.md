@@ -40,6 +40,8 @@ any sibling companion that sends a reader to it.
   (`ARCHITECTURE_ENGINE_FORMATS.md#bpe-merge-heap`), the one RoPE fill over a position source
   (`ARCHITECTURE_ENGINE_FORMATS.md#rope-one-fill`), and the Model's per-format plane table, its
   only `dim` field (`ARCHITECTURE_ENGINE_FORMATS.md#model-plane-table-dim`).
+- `ARCHITECTURE_ENGINE_FORMATS_NV4.md` - the nv4 member: its planes as NVFP4's disk bytes in the k4
+  tiling (`#nv4-planes`) and the per-tensor scale beside them (`#nv4-site-scale`).
 - `ARCHITECTURE_GPU.md` - the GPU backend role table (`ARCHITECTURE_GPU.md#gpu-backends`).
 - `ARCHITECTURE_GPU_ASYMMETRIES.md` - the closed list of the allowed asymmetries between the
   GPU backends - Metal, Vulkan and CUDA (`ARCHITECTURE_GPU_ASYMMETRIES.md#gpu-asymmetries`).

@@ -948,14 +948,12 @@ def dequant_iq4nl_plane_superblock(kq : array<uint8> | #; kqo : int64; ks : arra
     }
 }
 
-//! Transcode one NVFP4 superblock (four 36-byte disk blocks: four UE4M3 sub-block scales, then 32 nibble bytes pairing
-//! element j with j + 8 inside a 16-weight sub-block) into the nv4 planes: the sixteen scale bytes verbatim to ks (32-block
-//! g's halves at 2g, 2g + 1), the nibbles re-paired into the k4 tiling at kq (byte j of block g: element j low, j + 16 high)
+[arch(at="../ARCHITECTURE_ENGINE_FORMATS_NV4.md#nv4-planes")]
 def kq_transcode_p(src : uint8 const?; var kq : uint8?; var ks : uint8?; _f : KqTag_nv4) {
     unsafe {
         for (g in range64(8l)) {
             let b = src + (g / 2l) * 36l
-            let s0 = b + 4l + (g % 2l) * 16l   // the 32-block's low 16 weights: sub-block 2(g % 2) of its disk block; the high 16 follow
+            let s0 = b + 4l + (g % 2l) * 16l
             let s1 = s0 + 8l
             ks[g * 2l] = b[(g % 2l) * 2l]
             ks[g * 2l + 1l] = b[(g % 2l) * 2l + 1l]
@@ -969,9 +967,7 @@ def kq_transcode_p(src : uint8 const?; var kq : uint8?; var ks : uint8?; _f : Kq
     }
 }
 
-//! Reference dequant of one nv4-plane superblock in ggml's own float order: w = float(MX4_LUT[q]) * sc, sc the
-//! sub-block's UE4M3 scale at half (`ue4m3_half_f32`); 32-block g's low 16 under scale byte 2g, its high 16 under
-//! 2g + 1, q the nibble (low = k, high = k + 16 - the k4 tiling the transcode laid).
+[arch(at="../ARCHITECTURE_ENGINE_FORMATS_NV4.md#nv4-planes")]
 def dequant_nv4_plane_superblock(kq : array<uint8> | #; kqo : int64; ks : array<uint8> | #; kso : int64; var dst : array<float> | #; doff : int64) {
     let lut = mx4_lut()
     for (g in range64(8l)) {

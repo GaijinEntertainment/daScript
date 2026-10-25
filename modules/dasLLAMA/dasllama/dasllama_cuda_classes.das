@@ -601,10 +601,7 @@ class CuKqGemvIq4nl : Iq4nlGemvCudT {
     }
 }
 
-//! one quant word's eight nibble codes to signed int8 lanes of the doubled e2m1 magnitudes through byte permutes: a selector
-//! nibble is a code's magnitude bits (its sign bit masked off: a selector nibble's high bit is the permute's sign-replicate
-//! mode, never an index), two permutes a half-word over the magnitude table and two over its negation (`MX4LUT`'s words),
-//! the low and high nibbles' lanes gathered apart, the code's sign bit picking the lane
+//! eight nibble codes to signed int8 e2m1 lanes through `byte_perm`; the selectors mask each sign bit, since a selector nibble's high bit is prmt's sign-replicate mode
 def nv4_prmt_split(w : uint; var lo, hi : uint&) {
     let s = w & 0x77777777u
     let p0 = byte_perm(0x03020100u, 0x0C080604u, s)
@@ -617,9 +614,7 @@ def nv4_prmt_split(w : uint; var lo, hi : uint&) {
     hi = (byte_perm(p0, p1, 0x7531u) & ~mh) | (byte_perm(n0, n1, 0x7531u) & mh)
 }
 
-//! the nv4 decode GEMV leaf on the CUDA home: the nibble decode through `byte_perm` (18 lane ops a quant word against the SWAR
-//! formula's 29 - the shared leaf's decode read 4 to 5% behind q40's at the 8B down and q / o shapes), the block scales the
-//! shared leaf's
+//! the nv4 decode GEMV leaf on the CUDA home: the nibble decode through `byte_perm`, the block scales the shared leaf's
 [ |> template_struct_instance]
 class template Nv4GemvPrmtT : Nv4GemvT {
     def override e2m1_split(w : uint; var lo, hi : uint&) {
@@ -2222,7 +2217,7 @@ class template MmqT {
         }
     }
 
-    [spirv_inline]
+    [spirv_inline, arch(at="../ARCHITECTURE_GPU_ASYMMETRIES.md#gpu-asymmetries")]
     def mmq_body {   // nolint:STYLE037,STYLE038 - the pipeline and its unrolled products, register- and barrier-coupled; the Q4_K arm's stage and scale rows ride the same barriers
         let nb = pa.n / 32u
         let nb4 = pa.n / 128u
@@ -2266,7 +2261,7 @@ class template MmqT {
         let wb8 = pa.wblk / 8u
         let src2 = nb * 128u   // the row 64 down, in uint4
         let sdst = srow * 9u + sj
-        // the Q4_K weight stage goes through registers: a lane one 32-block of a row (16 nibble bytes in, two int8 quads out),
+        // the KQ and B32 leaves' weight stage goes through registers: a lane one 32-block of a row (16 nibble bytes in, two int8 quads out),
         // eight rows a warp, the whole tile in one copy; the next step's quad is loaded under this step's products
         let k4row = (warp << 3u) + (lane >> 2u)
         let k4blk = lane & 3u
@@ -2301,26 +2296,23 @@ class template MmqT {
         var wcur = uint4(0u)
         var xcur = uint4(0u)
         var xscur = uint4(0u)
-        // a superblock leaf's scale row rides registers a superblock (two steps) at a time: `k4s` the superblock being written,
-        // `k4sn` the next; Q4_K's row is five words, IQ4_XS's two
-        let scw = (K4 || QSC) ? 5u : 2u
-        var k4s, k4sn : uint[5]
-        let k4srow = (pa.wblk + (m0 + wr) * nsb) * scw
-        // a per-32 leaf's scale pairs ride registers a step ahead: `b32s` the four (scale, min) pairs of the step being written
-        var b32s : float2[4]
-        let b32w0 = pa.wblk + (m0 + wr) * nb   // the row's first block; step kb's four blocks follow at kb * 4
+        let sb_sc_words = (K4 || QSC) ? 5u : 2u
+        var sb_sc_cur, sb_sc_next : uint[5]
+        let k4srow = (pa.wblk + (m0 + wr) * nsb) * sb_sc_words
+        var b32_sc_min : float2[4]
+        let b32_row_blk0 = pa.wblk + (m0 + wr) * nb
         if (wstage) {
             static_if (KQ) {
                 for [unroll] (j in range(5)) {
-                    if (uint(j) < scw) {
-                        k4s[j] = wsu[k4srow + uint(j)]
+                    if (uint(j) < sb_sc_words) {
+                        sb_sc_cur[j] = wsu[k4srow + uint(j)]
                     }
                 }
                 static_if (K4) {
-                    let dm = unpackHalf2x16(k4s[0])
+                    let dm = unpackHalf2x16(sb_sc_cur[0])
                     var mn4 : float[4]
                     for [unroll] (b in range(4)) {
-                        let sm = k4_scale_min(dm, k4s[1], k4s[3], uint(b))
+                        let sm = k4_scale_min(dm, sb_sc_cur[1], sb_sc_cur[3], uint(b))
                         sws[uint(b) * 64u + wslot][int(wcomp)] = sm.x
                         mn4[b] = -sm.y
                     }
@@ -2328,34 +2320,34 @@ class template MmqT {
                     rm16[wr * 2u][1] = packHalf2x16(float2(mn4[2], mn4[3]))
                 } elif (QSC) {
                     for [unroll] (b in range(4)) {
-                        sws[uint(b) * 64u + wslot][int(wcomp)] = q40_d_of(k4s[b >> 1], uint(b))
+                        sws[uint(b) * 64u + wslot][int(wcomp)] = q40_d_of(sb_sc_cur[b >> 1], uint(b))
                     }
                 } else {
-                    let dx = unpackHalf2x16(k4s[0]).x
+                    let dx = unpackHalf2x16(sb_sc_cur[0]).x
                     for [unroll] (b in range(4)) {
-                        sws[uint(b) * 64u + wslot][int(wcomp)] = dx * float(iq4xs_sc(k4s[0], k4s[1], uint(b)))
+                        sws[uint(b) * 64u + wslot][int(wcomp)] = dx * float(iq4xs_sc(sb_sc_cur[0], sb_sc_cur[1], uint(b)))
                     }
                 }
                 if (nsb > 1u) {
                     for [unroll] (j in range(5)) {
-                        if (uint(j) < scw) {
-                            k4sn[j] = wsu[k4srow + scw + uint(j)]
+                        if (uint(j) < sb_sc_words) {
+                            sb_sc_next[j] = wsu[k4srow + sb_sc_words + uint(j)]
                         }
                     }
                 }
             } else {
                 static_if (B32) {
                     for [unroll] (b in range(4)) {
-                        b32s[b] = b32_scale(b32w0 + uint(b))
-                        sws[uint(b) * 64u + wslot][int(wcomp)] = b32s[b].x
+                        b32_sc_min[b] = b32_scale(b32_row_blk0 + uint(b))
+                        sws[uint(b) * 64u + wslot][int(wcomp)] = b32_sc_min[b].x
                     }
                     static_if (MIN) {
-                        rm16[wr * 2u][0] = packHalf2x16(float2(b32s[0].y, b32s[1].y))
-                        rm16[wr * 2u][1] = packHalf2x16(float2(b32s[2].y, b32s[3].y))
+                        rm16[wr * 2u][0] = packHalf2x16(float2(b32_sc_min[0].y, b32_sc_min[1].y))
+                        rm16[wr * 2u][1] = packHalf2x16(float2(b32_sc_min[2].y, b32_sc_min[3].y))
                     }
                     if (nb4 > 1u) {
                         for [unroll] (b in range(4)) {
-                            b32s[b] = b32_scale(b32w0 + 4u + uint(b))
+                            b32_sc_min[b] = b32_scale(b32_row_blk0 + 4u + uint(b))
                         }
                     }
                 } else {
@@ -2421,20 +2413,20 @@ class template MmqT {
                         static_if (KQ) {
                             if (q == 1) {   // step nk opens a superblock: the prefetched row takes over, the row after it is fetched a superblock ahead
                                 for [unroll] (j in range(5)) {
-                                    k4s[j] = k4sn[j]
+                                    sb_sc_cur[j] = sb_sc_next[j]
                                 }
                                 if ((nk >> 1u) + 1u < nsb) {
                                     for [unroll] (j in range(5)) {
-                                        if (uint(j) < scw) {
-                                            k4sn[j] = wsu[k4srow + ((nk >> 1u) + 1u) * scw + uint(j)]
+                                        if (uint(j) < sb_sc_words) {
+                                            sb_sc_next[j] = wsu[k4srow + ((nk >> 1u) + 1u) * sb_sc_words + uint(j)]
                                         }
                                     }
                                 }
                             }
                             static_if (K4) {
-                                let dm = unpackHalf2x16(k4s[0])
-                                let sc4 = q == 1 ? k4s[1] : k4s[2]   // step nk's four blocks: the superblock's first four (nk even) or last four
-                                let mnw = q == 1 ? k4s[3] : k4s[4]
+                                let dm = unpackHalf2x16(sb_sc_cur[0])
+                                let sc4 = q == 1 ? sb_sc_cur[1] : sb_sc_cur[2]   // step nk's four blocks: the superblock's first four (nk even) or last four
+                                let mnw = q == 1 ? sb_sc_cur[3] : sb_sc_cur[4]
                                 var mn4 : float[4]
                                 for [unroll] (b in range(4)) {
                                     let sm = k4_scale_min(dm, sc4, mnw, uint(b))
@@ -2448,29 +2440,29 @@ class template MmqT {
                             } elif (QSC) {
                                 let b0 = (nk & 1u) * 4u   // step nk's four blocks of the superblock: their d pairs in words 2 .. 3 (nk odd) or 0 .. 1
                                 for [unroll] (b in range(4)) {
-                                    sws[st2 * 256u + uint(b) * 64u + wslot][int(wcomp)] = q40_d_of(k4s[int((b0 + uint(b)) >> 1u)], b0 + uint(b))
+                                    sws[st2 * 256u + uint(b) * 64u + wslot][int(wcomp)] = q40_d_of(sb_sc_cur[int((b0 + uint(b)) >> 1u)], b0 + uint(b))
                                 }
                             } else {
-                                let dx = unpackHalf2x16(k4s[0]).x
-                                let b0 = (nk & 1u) * 4u   // step nk's four blocks of the superblock
+                                let dx = unpackHalf2x16(sb_sc_cur[0]).x
+                                let b0 = (nk & 1u) * 4u
                                 for [unroll] (b in range(4)) {
-                                    sws[st2 * 256u + uint(b) * 64u + wslot][int(wcomp)] = dx * float(iq4xs_sc(k4s[0], k4s[1], b0 + uint(b)))
+                                    sws[st2 * 256u + uint(b) * 64u + wslot][int(wcomp)] = dx * float(iq4xs_sc(sb_sc_cur[0], sb_sc_cur[1], b0 + uint(b)))
                                 }
                             }
                         } else {
                             static_if (B32) {
                                 for [unroll] (b in range(4)) {
-                                    sws[st2 * 256u + uint(b) * 64u + wslot][int(wcomp)] = b32s[b].x
+                                    sws[st2 * 256u + uint(b) * 64u + wslot][int(wcomp)] = b32_sc_min[b].x
                                 }
                                 static_if (MIN) {
                                     let me = (((nk >> 2u) & 1u) * 128u + wr) * 2u + ((nk >> 1u) & 1u)
                                     let mc = int((nk & 1u) * 2u)
-                                    rm16[me][mc] = packHalf2x16(float2(b32s[0].y, b32s[1].y))
-                                    rm16[me][mc + 1] = packHalf2x16(float2(b32s[2].y, b32s[3].y))
+                                    rm16[me][mc] = packHalf2x16(float2(b32_sc_min[0].y, b32_sc_min[1].y))
+                                    rm16[me][mc + 1] = packHalf2x16(float2(b32_sc_min[2].y, b32_sc_min[3].y))
                                 }
                                 if (nk + 1u < nb4) {
                                     for [unroll] (b in range(4)) {
-                                        b32s[b] = b32_scale(b32w0 + (nk + 1u) * 4u + uint(b))
+                                        b32_sc_min[b] = b32_scale(b32_row_blk0 + (nk + 1u) * 4u + uint(b))
                                     }
                                 }
                             } else {
@@ -2532,7 +2524,7 @@ class template MmqT {
                     mma_scale_acc(f11, s11, rs1, cs1)
                 }
                 static_if (MIN) {
-                    if ((kb & 3u) == 3u) {   // sixteen blocks' min terms complete: the rank-sixteen correction as one f16 product a fragment pair
+                    if ((kb & 3u) == 3u) {
                         let mg = (kb >> 2u) & 1u
                         let ra = (mg * 128u + wm * 32u + mr + 8u * (mt & 1u)) * 2u + (mt >> 1u)   // the lane's A row: (rows lo, blocks lo) .. (rows hi, blocks hi)
                         let cb = (mg * 128u + wn * 32u + mr + 8u * (mt >> 1u)) * 2u + (mt & 1u)   // the lane's B row off the [token][blocks] tile
@@ -2576,11 +2568,10 @@ struct MmqFp4Args {
     d : uint      //! the weight rows (the output width), a multiple of 128
     rows : uint   //! the tokens, a multiple of 128
     wblk : uint   //! the plane's first superblock
-    s2 : float    //! the plane's per-tensor scale (NVFP4's `.scale`; 1 where the file carries none)
+    site_scale : float    //! the plane's per-tensor scale (NVFP4's `.scale`; 1 where the file carries none)
 }
 
-//! a k4-tiled 32-block (byte j: element j low, j + 16 high) as the FP4 feed pairs it - the two 16-strips in turn, each a
-//! byte (k, k + 8): the block-scaled mma reads both operands under one permutation inside every scaled strip
+//! a k4-tiled 32-block re-paired into the FP4 feed's (k, k + 8) byte order: the scaled mma needs only both operands under one permutation a strip
 def nv4_fp4_pairs(w : uint4) : uint4 {
     let m = KQC_NIBBLE_MASK
     return uint4((w.x & m) | ((w.z & m) << 4u), (w.y & m) | ((w.w & m) << 4u),
@@ -2630,7 +2621,6 @@ class template MmqFp4T {
         let ksrc = (pa.wblk + (m0 + krow) * nsb) * 8u + kblk   // step kb adds (kb >> 1) * 8 + (kb & 1) * 4
         let kdst = krow * 5u + kblk
         let xsrc = (t0 + krow) * (pa.n / 32u) + kblk             // a token's row is n / 32 uint4; step kb adds kb * 4
-        // the scale words: thread w of 128 writes row w's two (`wstage`), thread 128 + w token w's (`xstage`)
         let wi = tid & 127u
         let wstage = tid < 128u
         let xstage = tid >= 128u && tid < 256u
@@ -2674,18 +2664,18 @@ class template MmqFp4T {
                 }
             }
             cp_async_commit()
-            for [unroll] (h in range(2)) {   // the step's two k64 halves
-                let hu = uint(h)
-                let abase = st * 640u + (wm * 32u + mr + 8u * (mt & 1u)) * 5u + hu * 2u + (mt >> 1u)   // the lane's A row: (rows lo, k lo), (rows hi, k lo), (rows lo, k hi), (rows hi, k hi)
-                let bbase = st * 640u + (wn * 32u + mr + 8u * (mt >> 1u)) * 5u + hu * 2u + (mt & 1u)   // the lane's B row: (n lo, k lo), (n lo, k hi), (n hi, k lo), (n hi, k hi)
+            for [unroll] (k64h in range(2)) {
+                let k64hu = uint(k64h)
+                let abase = st * 640u + (wm * 32u + mr + 8u * (mt & 1u)) * 5u + k64hu * 2u + (mt >> 1u)   // the lane's A row: (rows lo, k lo), (rows hi, k lo), (rows lo, k hi), (rows hi, k hi)
+                let bbase = st * 640u + (wn * 32u + mr + 8u * (mt >> 1u)) * 5u + k64hu * 2u + (mt & 1u)   // the lane's B row: (n lo, k lo), (n lo, k hi), (n hi, k lo), (n hi, k hi)
                 var a0, a1 : coopmatA_e2m1_16x64
                 ldmatrix(a0, unsafe(addr(sa[abase])))
                 ldmatrix(a1, unsafe(addr(sa[abase + 80u])))
                 var b0, b1 : coopmatB_e2m1_64x16
                 ldmatrix(b0, unsafe(addr(sb[bbase])))
                 ldmatrix(b1, unsafe(addr(sb[bbase + 80u])))
-                let sw = st * 256u + (wm * 32u + g + 8u * (lane & 1u)) * 2u + hu   // the lane's A rows' words: row g from lane % 4 == 0, row g + 8 from lane % 4 == 1
-                let sx = st * 256u + (wn * 32u + g) * 2u + hu                      // column g of each n-half, from lane % 4 == 0
+                let sw = st * 256u + (wm * 32u + g + 8u * (lane & 1u)) * 2u + k64hu   // the lane's A rows' words: row g from lane % 4 == 0, row g + 8 from lane % 4 == 1
+                let sx = st * 256u + (wn * 32u + g) * 2u + k64hu                   // column g of each n-half, from lane % 4 == 0
                 let sa0 = swa[sw]
                 let sa1 = swa[sw + 32u]
                 let sb00 = swb[sx]
@@ -2699,11 +2689,10 @@ class template MmqFp4T {
             }
             kb++
         }
-        // the epilogue: the tokens' row scales under the plane's factor, then the store (column-major over [token][d]: a token's
-        // row is the fragment's column)
+        // the store is column-major over [token][d]: a token's row is the fragment's column
         let c0 = t0 + wn * 32u + 2u * t
-        let cs0 = float4(xrs[c0], xrs[c0 + 1u], xrs[c0 + 8u], xrs[c0 + 9u]) * pa.s2
-        let cs1 = float4(xrs[c0 + 16u], xrs[c0 + 17u], xrs[c0 + 24u], xrs[c0 + 25u]) * pa.s2
+        let cs0 = float4(xrs[c0], xrs[c0 + 1u], xrs[c0 + 8u], xrs[c0 + 9u]) * pa.site_scale
+        let cs1 = float4(xrs[c0 + 16u], xrs[c0 + 17u], xrs[c0 + 24u], xrs[c0 + 25u]) * pa.site_scale
         mma_scale_cols(f00, cs0)
         mma_scale_cols(f10, cs0)
         mma_scale_cols(f01, cs1)
@@ -2732,21 +2721,13 @@ def fp4_amax4(v : float4) : float => max(max(abs(v.x), abs(v.y)), max(abs(v.z), 
 
 let FP4_CODE_MAX = 126u   //! the largest UE4M3 code a strip scale takes (448; the code past it is the format's NaN)
 
-//! the UE4M3 code of a strip whose largest magnitude is `m`: the nearest code to m / 6, stepped up once where that code's
-//! scale leaves `m` past 6 - the e2m1 converter saturates it there, and a strip's largest values are the ones the next
-//! layer's weights are tuned to (the least-squared-error pick over the five codes around the nearest one measured worse
-//! on the model: it trades the outlier for the bulk)
+//! the UE4M3 code of a strip whose largest magnitude is `m`: the nearest to m / 6, stepped up once where that code's scale leaves `m` past e2m1's 6
 def fp4_strip_code(m : float) : uint {
     let code = cvt_ue4m3(m / 6.0)
     return ue4m3_half_f32(code) * 12.0 < m && code < FP4_CODE_MAX ? code + 1u : code
 }
 
-//! The FP4 feed's strip pass, a lane four consecutive elements `v` of a row already over its row scale, chunk `c` of the row
-//! (element 4c): the sixteen lanes of a k64 hold its four 16-strips, four lanes a strip. The strip's UE4M3 code comes off the
-//! four lanes' largest magnitude (xor shuffles 1 and 2; `fp4_strip_code`); lanes 0 / 1 of the strip pair their elements with
-//! lane ^ 2's (k, k + 8) into the nibble word `w` the feed stores - lanes 2 / 3 mirror it and store nothing; `cw` is the
-//! k64's code word, the four strips' codes a byte each joined over shuffles 4 and 8, the k64's first lane storing it. Every
-//! lane of the subgroup runs the pass, a lane past the row with zeros: the shuffles read the whole subgroup
+//! the strip pass over chunk `c` (a lane's four elements, over the row scale): `w` is valid where c % 4 < 2, `cw` where c % 16 == 0; every subgroup lane calls it, a lane past the row with zeros
 def fp4_chunk(v : float4; c : uint; var w, cw : uint&) {
     var m = fp4_amax4(v)
     m = max(m, gk_subgroup_xor(m, 1u))
@@ -2773,8 +2754,7 @@ struct Fp4RowsArgs {
 //! The FP4 activation feed a workgroup a row (256 lanes), a lane four consecutive elements a round: the row's largest magnitude
 //! over 6 x 448 as its f32 scale, then the strip pass (`fp4_chunk`) into the nibble words, the code words and the row scale the
 //! FP4 tensor rung reads; the source element is the stamp's (a float plane, or the gate / up pair through the activation),
-//! read as float4 when the planes sit on the four lattice and the up rows are contiguous, and read twice - a row kept in
-//! registers between the two passes measured no faster at 14336 wide and slower at 4096
+//! read as float4 when the planes sit on the four lattice and the up rows are contiguous, and read twice
 [ |> template_struct_instance]
 class template Fp4FeedT : GkWgReduce {
     @template_constant ACT : bool = false   //!< the act form: element e is act(gate[e]) x up[e] (`gk_up_at` for the up side's layout)
@@ -2822,7 +2802,7 @@ class template Fp4FeedT : GkWgReduce {
         }
     }
 
-    [spirv_inline]
+    [spirv_inline, arch(at="../ARCHITECTURE_GPU_ASYMMETRIES.md#gpu-asymmetries")]
     def fp4_body {
         let tok = gl_WorkGroupID.x
         let base = pa.inbase + tok * pa.k

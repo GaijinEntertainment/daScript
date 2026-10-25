@@ -968,27 +968,25 @@ struct IntrinFp4Params {
     cv : uint64
 }
 
-//! the e2m1 value of a nibble code: the magnitude table at the sign
 def private e2m1_value(c : uint) : float {
     let mag = fixed_array<float>(0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0)
     let v = mag[int(c & 7u)]
     return (c & 8u) != 0u ? -v : v
 }
 
-//! the UE4M3 value of a code: bias 7, subnormals m x 2^-9
+//! UE4M3: bias 7, subnormals m x 2^-9
 def private ue4m3_value(c : uint) : float {
     let e = int((c >> 3u) & 15u)
     let m = float(c & 7u)
     return e == 0 ? m * 0.001953125 : pow(2.0, float(e - 7)) * (1.0 + m / 8.0)
 }
 
-//! the conversion sweep: 128 e2m1 inputs as pairs over [-8, 7.875] at the eighth (every tie among them), then 64 UE4M3 inputs -
-//! the subnormal half-steps, the mantissa midpoints past one, a geometric run to saturation
+//! every e2m1 tie in [-8, 7.875], the UE4M3 subnormal half-steps and mantissa midpoints, a geometric run to saturation
 def private fp4_cvt_inputs() : array<float> {
     var xin <- [for (i in range(128)); float(i - 64) * 0.125]
     var inscope ue <- [for (i in range(64)); i < 16 ? float(i) * 0.0009765625 : (i < 48 ? 1.0 + float(i - 16) * 0.0625 : pow(2.0, float(i - 48)) * 1.3)]
-    var inscope cols <- [for (i in range(16)); 0.5 + 0.25 * float(i % 5)]   // the product's column factors: a dyadic ramp, the sums stay exact
-    xin |> push_from(ue, cols)
+    var inscope dyadic_col_factors <- [for (i in range(16)); 0.5 + 0.25 * float(i % 5)]
+    xin |> push_from(ue, dyadic_col_factors)
     return <- xin
 }
 
@@ -997,7 +995,7 @@ def test_intrin_fp4_gpu(t : T?) {
     t |> run("the FP4 tensor rung: the block-scaled e2m1 product through cp.async + ldmatrix == the CPU sum, the conversions == their CPU bodies") <| @(t : T?) {
         with_cuda_context() $(cc : CudaContext?) {
             return if (!gpu_ready(cc))
-            var a8, b8 : array<uint8>   // 16 rows x 32 bytes each
+            var a8, b8 : array<uint8>
             var saw, sbw : array<uint>
             a8 |> resize(16 * 32)
             b8 |> resize(16 * 32)
@@ -1005,7 +1003,7 @@ def test_intrin_fp4_gpu(t : T?) {
                 a8[i] = uint8((i * 7 + 3) % 256)
                 b8[i] = uint8((i * 13 + 5) % 256)
             }
-            for (i in range(16)) {   // scale codes in [0x30, 0x40): values 0.5 .. 2 at the eighth, every product and sum dyadic and short
+            for (i in range(16)) {   //! scale codes in [0x30, 0x40), values in [0.5, 2): every product and sum stays dyadic and short
                 var wa = 0u
                 var wb = 0u
                 for (s in range(4)) {

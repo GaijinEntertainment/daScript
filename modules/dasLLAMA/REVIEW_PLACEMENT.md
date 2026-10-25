@@ -163,7 +163,8 @@ whose module a build can lack, writes the umbrella's conditional require on the 
 (`require ?vulkan ...` / `require ?das_metal ...`) - never a plain require.**
 
 **A diff that requires a backend's entry in `dasllama/dasllama_transformer.das`, for a backend
-whose module always registers (`dasCUDA`), writes a plain require.**
+whose module registers in every build that carries it (`dasCUDA`, under its CMake switch), writes
+a plain require guarded by the module's presence (`require ?cuda`), never a device probe.**
 
 **A registration only a program root (test, harness, benchmark, tool) needs gets no side-effect
 require in an engine file - the program root requires the registration module directly.**

@@ -21,8 +21,7 @@ struct Fp4Feed {
 //! the UE4M3 code's value (bias 7, the subnormals m x 2^-9)
 def ue4m3_value(code : uint) : float => ue4m3_half_f32(code) * 2.0
 
-//! one 16-strip of a row already divided by the row scale: its UE4M3 code off the strip's largest magnitude (the kernel's
-//! `fp4_strip_code`), and the two nibble words (k, k + 8) a byte under that code's value
+//! one 16-strip of a row already divided by the row scale: its UE4M3 code off the strip's largest magnitude (the kernel's `fp4_strip_code`) and its two nibble words, (k, k + 8) a byte under that code's value
 def fp4_strip_words(v : float[16]; var code : uint&; var w0, w1 : uint&) {
     var sub = 0.0
     for (i in range(16)) {

@@ -1720,9 +1720,6 @@ def private last_arg_of(args : string) : string {
     return strip(cut < 0 ? args : slice(args, cut + 1))
 }
 
-// The CUDA home's stream is non-blocking: a stream-less copy or clear runs on the legacy stream, which never orders
-// against it, so a clear can land after the first kernels wrote into the block and a read can leave before the kernel
-// that fills it ran. Every such call in the home names its stream.
 def private check_cuda_stream_discipline {
     var files : array<string>
     collect_das_files("modules/dasLLAMA/dasllama", files)
@@ -1737,7 +1734,7 @@ def private check_cuda_stream_discipline {
                 continue if (empty(args))
                 let last = last_arg_of(args)
                 if (!(last == "s" || last == "stream" || last |> ends_with(".stream"))) {
-                    gate_finding(p, line_no, "{op}...) names no stream - the home's stream is non-blocking and a stream-less copy or clear runs on the legacy stream, unordered against every kernel; pass g_cud.stream (or the launch's `s`) as the last argument")
+                    gate_finding(p, line_no, "{op}...) names no stream - the home's stream is non-blocking and a stream-less copy or clear runs on the legacy stream, unordered against every kernel (ARCHITECTURE_GPU.md#gpu-backends); pass g_cud.stream (or the launch's `s`) as the last argument")
                 }
             }
         }

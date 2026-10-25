@@ -11,7 +11,7 @@ options no_aot   // the stand-ins run only inside a fixture's CPU replay; under 
 module cuda_intrinsics shared public
 
 require spirv/spirv_builtins public
-require math   // the conversions' CPU bodies: abs, floor, min
+require math
 
 [sideeffects, arch(at = "../ARCHITECTURE_EMIT.md#cuda-kernel-vocabulary-tiers")]
 def public cp_async_16(var dst : uint4?; src : uint4?) : void {
@@ -44,20 +44,14 @@ def public ldmatrix(var m : coopmatA_e2m1_16x64; p : uint4?) : void {}
 [unused_argument(m, p), sideeffects, arch(at = "../ARCHITECTURE_EMIT.md#cuda-kernel-vocabulary-tiers")]
 def public ldmatrix(var m : coopmatB_e2m1_64x16; p : uint4?) : void {}
 
-//! the block-scaled FP4 product: f += A x B over k64 with a UE4M3 scale a k16 strip - `sa` the four scale bytes of the lane's
-//! A row (row g from the lanes with lane % 4 == 0, row g + 8 from lane % 4 == 1, the other lanes' words ignored), `sb0` / `sb1`
-//! the four scale bytes of column g of each n-half (from the lanes with lane % 4 == 0); every value e2m1 x ue4m3, no halving
 [unused_argument(f, a, b, sa, sb0, sb1), sideeffects, arch(at = "../ARCHITECTURE_EMIT.md#cuda-kernel-vocabulary-tiers")]
 def public mma_block_scaled(var f : coopmatAcc_f32_16x16; a : coopmatA_e2m1_16x64; b : coopmatB_e2m1_64x16; sa, sb0, sb1 : uint) : void {}
 
-//! f's columns scaled: `cs` the lane's four columns' factors in `mma_scale_acc`'s order (2t, 2t + 1, 8 + 2t, 9 + 2t) - the FP4
-//! product's per-token epilogue, where the block-scaled mma left no s32 stage to fold a column scale into
 [unused_argument(f, cs), sideeffects, arch(at = "../ARCHITECTURE_EMIT.md#cuda-kernel-vocabulary-tiers")]
 def public mma_scale_cols(var f : coopmatAcc_f32_16x16; cs : float4) : void {}
 
 let private E2M1_MAG : float[8] = fixed_array<float>(0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0)
 
-//! the e2m1 code of `x`: the nearest of {0, 0.5, 1, 1.5, 2, 3, 4, 6} at the sign, a tie to the even code, past 6 saturated
 def private e2m1_code(x : float) : uint {
     let a = min(abs(x), 6.0)
     var best = 0u
@@ -72,12 +66,9 @@ def private e2m1_code(x : float) : uint {
     return (x < 0.0 ? 8u : 0u) | best
 }
 
-//! two floats to an e2m1 pair, `lo` in the low nibble: `cvt.rn.satfinite.e2m1x2.f32` (round to nearest even, saturating)
 [arch(at = "../ARCHITECTURE_EMIT.md#cuda-kernel-vocabulary-tiers")]
 def public cvt_e2m1x2(lo, hi : float) : uint => e2m1_code(lo) | (e2m1_code(hi) << 4u)
 
-//! a non-negative float to its UE4M3 code (bias 7, three mantissa bits, subnormals m x 2^-9): `cvt.rn.satfinite.e4m3x2.f32`'s
-//! low byte - round to nearest even, 448 and past it the largest finite code 0x7E, nothing positive below zero
 [arch(at = "../ARCHITECTURE_EMIT.md#cuda-kernel-vocabulary-tiers")]
 def public cvt_ue4m3(x : float) : uint {
     if (!(x > 0.0)) return 0u
@@ -102,8 +93,7 @@ def public cvt_ue4m3(x : float) : uint {
 //! bar.sync id, count: a named barrier over `count` threads (a multiple of the warp)
 [unused_argument(id, count), sideeffects] def public bar_sync(id, count : uint) : void {}
 
-//! __byte_perm: result byte i is byte `sel` nibble i of the eight bytes {b, a} (0-7); the nibble's high bit is ignored, as the
-//! CUDA intrinsic ignores it (the oracle fixture's odd lanes set one and pin this)
+//! __byte_perm: result byte i is byte `sel` nibble i of the eight bytes {b, a} (0-7), the nibble's high bit ignored as the CUDA intrinsic ignores it
 def public byte_perm(a, b, sel : uint) : uint {
     var r = 0u
     for (i in range(4)) {

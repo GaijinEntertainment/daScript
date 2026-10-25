@@ -248,7 +248,8 @@ asymmetries a stamp family ledgers - stays in `ARCHITECTURE_GPU.md#gpu-backends`
   6, stepped up once where that code would saturate the largest value (`fp4_strip_code`: the nearest alone saturates on
   half of all strips and reads 9% on the 1B's pp-path perplexity against 5.7% with the step; llama.cpp's least-squared-
   error pick over five codes trades the outlier for the bulk and measured worse than either) - the nibbles in the same
-  pairing), the row scale and the plane's per-tensor factor applied to the accumulator's columns in
+  pairing; a feed reads its row twice, once for the row scale and once for the strips - a row kept in registers between the
+  two passes measured no faster at 14336 wide and slower at 4096), the row scale and the plane's per-tensor factor applied to the accumulator's columns in
   the epilogue; a layer whose sites split across the three feeds produces each from the one residual step. On the RTX
   5060 Ti the leaf ran 110 to 121 TFLOP/s against the Q4_0 int8 leaf's 65 to 72 and the cm2 tiles' 40 to 56 at the 1B
   window's shapes. The knob changes the prefill's rounding and its logits; the window log line names the planes on

@@ -1050,7 +1050,7 @@ def moe_gpu_gather_stack_mx4(t : Model; woff : int64; n, rows, slice_rows : int6
 // Gather one PREPARED K-quant weight stack into the GPU tier's device planes — quant payloads
 // row-major per superblock in the k/k+16 nibble pairing, plus the device scale rows (decoded 20 B, or
 // the codebook formats' two words); grp<mr> interleave or disk-order in, identical device bytes out.
-[arch(at = "../ARCHITECTURE_CPU_KERNELS.md#kq-subblock-planes")]
+[arch(at = "../ARCHITECTURE_CPU_KERNELS.md#kq-subblock-planes"), arch(at = "../ARCHITECTURE_ENGINE_FORMATS_NV4.md#nv4-site-scale")]
 def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice_rows : int64;
                             repacked : bool; mr : int64; var wq : array<uint8>; var ws : array<uint8>) {
     let nsb = n / KQ_SUPERBLOCK_ELEMS
@@ -1066,9 +1066,7 @@ def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice
     let qrow = nsb * qsb
     let srow = nsb * dssb
     let ng = repacked ? slice_rows / mr : 0l
-    // nv4: the plane's per-tensor scale rides the device row's fifth word (the pad past its 16 scale bytes), the tiles stage
-    // their scale table under it and the GEMV multiplies it in (ARCHITECTURE_ENGINE_FORMATS.md#nv4-site-scale)
-    let s2_bits = fmt == KqFmt.nv4 ? float_bits_to_uint(site_scale(t, fmt, woff)) : 0u
+    let nv4_site_scale_bits = fmt == KqFmt.nv4 ? float_bits_to_uint(site_scale(t, fmt, woff)) : 0u
     unsafe {
         let sb0 = woff / KQ_SUPERBLOCK_ELEMS
         let qp = addr<uint8 const?>(t.kq[int(fmt)].q[sb0 * qsb])
@@ -1170,7 +1168,7 @@ def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice
                                     dsc[blk * 2l + 1l] = gs[blk * 2l * mr + 2l * r + 1l]
                                 }
                                 for (idx in range64(16l, 20l)) {
-                                    dsc[idx] = uint8((s2_bits >> uint((idx - 16l) * 8l)) & 0xFFu)
+                                    dsc[idx] = uint8((nv4_site_scale_bits >> uint((idx - 16l) * 8l)) & 0xFFu)
                                 }
                             } elif (fmt == KqFmt.k2) {   // the field-major grp header re-packs to [d][dmin][16 pair bytes]
                                 dsc[0] = gs[16l * mr + 2l * r]
@@ -1229,7 +1227,7 @@ def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice
                                     dsc[idx] = rs[idx]
                                 }
                                 for (idx in range64(dssb, KQ_DEV_SSB)) {
-                                    dsc[idx] = uint8((s2_bits >> uint((idx - 16l) * 8l)) & 0xFFu)   // zero but for nv4's scale word
+                                    dsc[idx] = uint8((nv4_site_scale_bits >> uint((idx - 16l) * 8l)) & 0xFFu)
                                 }
                             } else {
                                 for (idx in range64(4l)) {   // f16 d + f16 dmin verbatim

@@ -418,8 +418,7 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
         ModelSpec(file = "Qwen3.5-0.8B-MTP-Q8_0.gguf",
             url = "{HF}/unsloth/Qwen3.5-0.8B-MTP-GGUF/resolve/main/Qwen3.5-0.8B-Q8_0.gguf",
             bytes = 833592736l, sha256 = "c54f8b67069c70085b98440de696b44da8250250ac69a961b41133def876e262"),
-        // the NVFP4 hybrid: ModelOpt's two-level FP4 (nv4 planes, each with its `.scale` tensor) on the FFN, attention and
-        // deltanet projections, Q4_K / Q5_K / BF16 beside them - the nv4 rail's carrier (tests/test_kquant.das)
+        // the NVFP4 hybrid, the nv4 rail's carrier (tests/test_kquant.das): ModelOpt's two-level FP4 (nv4 planes, each with its `.scale` tensor) on the FFN, attention and deltanet projections, Q4_K / Q5_K / BF16 beside them
         ModelSpec(file = "Qwen3.5-0.8B-NVFP4-MTP.gguf",
             url = "{HF}/michaelw9999/Qwen3.5-0.8B-NVFP4-MTP-GGUF/resolve/main/Qwen3.5-0.8B-NVFP4-MTP-GGUF.gguf",
             bytes = 578052704l, sha256 = "71a0a29da9481f51d8e301f8ffb67feec1627cd18e92183a1f3918b0a7c35728"),
@@ -901,9 +900,7 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
         ModelSpec(file = "Llama-3.2-1B-Instruct-Q4_0-local.gguf", display = "Llama-3.2-1B-q40", quant_label = "q4_0",
             recipe = "llama-quantize --allow-requantize Llama-3.2-1B-Instruct-Q8_0.gguf Llama-3.2-1B-Instruct-Q4_0-local.gguf Q4_0",
             parity <- ev_llama_count([kq_native = true])),
-        // the dense nv4 carrier: every dense plane NVFP4 under a Q6_K table, no per-tensor `.scale` - the CUDA home's vehicle
-        // (the ModelOpt files keep BF16 k/v beside an nv4 q, which the whole-model drivers decline as mixed feeds); the
-        // NVFP4 target is a two-line llama-quantize patch, the `nvfp4-quantize` branch of the local llama.cpp clone (the ftype exists upstream, the option row does not)
+        // the dense nv4 carrier, the CUDA home's vehicle: every dense plane NVFP4 under a Q6_K table, no `.scale` (the ModelOpt files' BF16 k/v beside an nv4 q is a mixed feed the whole-model drivers decline); the NVFP4 target is the `nvfp4-quantize` branch of the local llama.cpp clone - upstream has the ftype, not its llama-quantize option row
         ModelSpec(file = "Llama-3.2-1B-Instruct-NVFP4-local.gguf", display = "Llama-3.2-1B-nv4", quant_label = "nv4",
             recipe = "llama-quantize --allow-requantize Llama-3.2-1B-Instruct-Q8_0.gguf Llama-3.2-1B-Instruct-NVFP4-local.gguf NVFP4",
             parity <- ev_llama_count([kq_native = true])),

@@ -616,12 +616,10 @@ def build_iq2xxs_block() : array<uint8> {
 // the shared nibble pattern — weight k = d(k/32) * (q4_pat(k) - 8)
 def q40_d(blk : int) : float => float(blk + 1) * 0.0625
 
-//! the nv4 synthetic superblock's sixteen UE4M3 sub-block scales: normals across the exponent range, the largest
-//! finite code (0x7E = 448) and a subnormal (0x03 = 3 x 2^-9) - weight k = MX4_LUT[q4_pat(k)] x ue4m3_half_f32(NV4_SC[k / 16])
+//! the nv4 synthetic superblock's sixteen UE4M3 sub-block scales - normals across the exponent range, the largest finite code (0x7E = 448), a subnormal (0x03 = 3 x 2^-9): weight k = MX4_LUT[q4_pat(k)] x ue4m3_half_f32(NV4_SC[k / 16])
 let NV4_SC <- [0x38, 0x3B, 0x40, 0x2A, 0x4F, 0x18, 0x03, 0x7E, 0x30, 0x35, 0x22, 0x47, 0x11, 0x3F, 0x29, 0x08]
 
-//! the nv4 synthetic superblock: four 36B NVFP4 disk blocks - per block four UE4M3 scales (NV4_SC, in sub-block order)
-//! then 32 nibble bytes, byte j of sub-block s pairing element 16s + j (low) with 16s + j + 8 (high) - the PACK direction
+//! the nv4 synthetic superblock: four 36B NVFP4 disk blocks, each four UE4M3 scales (`NV4_SC`, sub-block order) then 32 nibble bytes, byte j of sub-block s pairing element 16s + j (low) with 16s + j + 8 (high) - the PACK direction
 def build_nv4_block() : array<uint8> {
     var blkb : array<uint8>
     blkb |> resize(144)

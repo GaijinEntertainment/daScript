@@ -354,8 +354,7 @@ def repack_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64; _f : KqTag_iq
     repack_grp(kq, ks, n, d, mr, KqTag_q40())
 }
 
-//! nv4: q40's plane shapes - the k4 nibble tiling as a column gather, the scale row interleaved per block as
-//! [blk 0..7][mr x (low, high) UE4M3 byte pair], the pair where q40 carries its f16 d.
+[arch(at="../ARCHITECTURE_ENGINE_FORMATS_NV4.md#nv4-planes")]
 def repack_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64; _f : KqTag_nv4) {
     repack_unit_form(kq, ks, n / KQ_SB_ELEMS, d, mr, NV4_QSB, NV4_SSB, verbatim_unit_field(2l, 8l))
 }

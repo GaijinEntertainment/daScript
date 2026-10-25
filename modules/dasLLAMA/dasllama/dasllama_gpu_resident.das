@@ -2500,7 +2500,7 @@ def private resident_layer_geom(t : Model; l, mir_base, mir_slab, ring : int64) 
     let vfk = resident_v_from_k(c, l)
     let lf = resident_layer_fmts(t, l)
     return RdecLayerGeom(hs = layer_head_size(c, l), qd = layer_qd(c, l), kvd = layer_kv_dim(c, l),
-        s2 = fixed_array<float>(site_scale(t, lf.fq, t.wq_offs[l]), site_scale(t, lf.fk, t.wk_offs[l]), site_scale(t, lf.fv, t.wv_offs[l]),
+        site_scale = fixed_array<float>(site_scale(t, lf.fq, t.wq_offs[l]), site_scale(t, lf.fk, t.wk_offs[l]), site_scale(t, lf.fv, t.wv_offs[l]),
             site_scale(t, lf.fo, t.wo_offs[l]), site_scale(t, lf.f1, t.w1_offs[l]), site_scale(t, lf.f3, t.w3_offs[l]), site_scale(t, lf.f2, t.w2_offs[l])),
         hid = resident_dense_width(t, l), rot = swa_row ? resident_rot_swa(c) : resident_rot(c),
         window = sliding ? c.sliding_window : 0l, ring = ring, mir_base = mir_base, mir_slab = mir_slab,

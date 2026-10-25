@@ -183,8 +183,7 @@ def race_kq_lanes(fmt : int; p : GemvFix; n, d : int; lanes : uint) : RaceRow {
         $(bufs) { cud_gemv_cls_enc(fmt, g_cud.stream, bufs, pc, cu_wgs); })
 }
 
-//! `--only <fmt,...>`: the named superblock formats at the llama-8B token step's shapes, at the rule's lanes a row and at 8, 16
-//! and the whole subgroup (a lane-rule A/B); the rows measured
+//! `--only <fmt,...>`: the named superblock formats at the llama-8B token step's shapes, at the rule's lanes a row and at 8, 16 and the whole subgroup (a lane-rule A/B); the rows measured
 def race_only_rows(only : table<string; void>) : int {
     var measured = 0
     let shapes <- [(n = 4096, d = 4096), (n = 4096, d = 14336), (n = 14336, d = 4096)]

@@ -3107,8 +3107,7 @@ def private atomic_call(var ctx : CudaCtx; ec : ExprCall?; cname : string) : str
 //! the CUDA-only intrinsics a body calls as statements
 let private INTRINSIC_STATEMENTS : table<string> <- { "cp_async_16", "cp_async_commit", "cp_async_wait", "ldmatrix", "mma_scale_acc", "mma_block_scaled", "mma_scale_cols", "bar_sync", "cuda_asm" }
 
-//! the FP4 tensor rung compiles under the arch-specific target alone (`sm_120a`): the text carries the marker
-//! `module_from_source` reads the `a` suffix off, so no launcher learns which kernels need it
+[arch(at="../ARCHITECTURE_EMIT.md#cuda-kernel-vocabulary-tiers")]
 def private need_arch_a(var ctx : CudaCtx) {
     register_helper(ctx, "{HELPER_RANK_INTRINSIC}arch_a", "#define __DAS_ARCH_A__ 1")
 }

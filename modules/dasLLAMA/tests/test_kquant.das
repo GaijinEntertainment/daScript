@@ -2020,8 +2020,7 @@ def test_kq_gpu_gather_grp(t : T?) {
     }
 }
 
-//! the nv4 device scale row the gather writes under per-tensor scale `s2`: the sixteen UE4M3 codes verbatim in sub-block
-//! order, then the factor's f32 bits in the fifth word; the count of bytes and words off that
+//! the count of bytes and words off the nv4 device scale row the gather writes under per-tensor scale `s2`: the sixteen UE4M3 codes verbatim in sub-block order, then `s2`'s f32 bits in the fifth word
 def private nv4_gather_row_misses(s2 : float) : int {
     let n = 512l
     let d = 4l

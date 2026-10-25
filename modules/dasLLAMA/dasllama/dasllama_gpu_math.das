@@ -387,9 +387,7 @@ def tts_div(a, b : float) : float {
 //! the f32 bits, the denormal pair e < 2 included; the CPU `e8m0_half`'s value
 def e8m0_half_f32(ex : uint) : float => uint_bits_to_float(ex < 2u ? (0x00200000u << ex) : ((ex - 1u) << 23u))
 
-//! an NVFP4 sub-block's UE4M3 scale byte (bias 7, the 0x7F nan code read as zero) at HALF its value, paired with the doubled
-//! e2m1 magnitudes of `mx4_lut`; the normal codes as the f32 bits, the subnormal ones (e = 0: m x 2^-9) as a product -
-//! ggml's `ggml_ue4m3_to_fp32` value for value
+//! an NVFP4 UE4M3 scale byte at HALF its value (`mx4_lut`'s magnitudes are doubled), the 0x7F nan code read as zero; ggml's `ggml_ue4m3_to_fp32` value for value
 def ue4m3_half_f32(b : uint) : float {
     let e = (b >> 3u) & 15u
     let m = b & 7u

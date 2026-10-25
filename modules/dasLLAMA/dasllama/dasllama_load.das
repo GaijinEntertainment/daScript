@@ -1719,10 +1719,7 @@ def private ple_kind_f32(m : GGUFMeta; layers : int64; kind : string) : bool {
 //! a device driver on this load reads the shared expert and the tied classifier off planes of their own: an armed GPU tier, or a Metal mode
 def private device_reads_side_planes() : bool => moe_gpu_tier_installed() || get_metal_mode() != MetalMode.off
 
-//! the per-tensor weight scales the file carries beside its planes (NVFP4's `<tensor>.scale`, ModelOpt's scale2): one f32 a
-//! dense site, keyed by the site's plane offset, read on every load after the layout; a site whose matmul has no epilogue
-//! for it refuses the load by name
-[arch(at = "../ARCHITECTURE_ENGINE_FORMATS.md#nv4-site-scale")]
+[arch(at = "../ARCHITECTURE_ENGINE_FORMATS_NV4.md#nv4-site-scale")]
 def private detect_site_scales(var t : Model; m : GGUFMeta; bytes : array<uint8> | #) {
     t.site_scale |> clear()
     let layers = t.config.n_layers + t.config.n_layer_nextn
@@ -1769,7 +1766,7 @@ def private detect_site_scales(var t : Model; m : GGUFMeta; bytes : array<uint8>
     }
 }
 
-//! the `.scale` sibling of `name` into the site's entry - a scale on a plane served off any rail but nv4 would be dropped, so it refuses
+[arch(at="../ARCHITECTURE_ENGINE_FORMATS_NV4.md#nv4-site-scale")]
 def private note_site_scale(var t : Model; m : GGUFMeta; bytes : array<uint8> | #; name : string; fmt : KqFmt; woff : int64) {
     let sname = "{slice(name, 0, length(name) - length(".weight"))}.scale"
     return if (gguf_find_tensor(m, sname) < 0)
@@ -1783,8 +1780,7 @@ def private note_site_scale(var t : Model; m : GGUFMeta; bytes : array<uint8> | 
     delete v
 }
 
-//! a `.scale` sibling at a site the matmul epilogues do not scale (the expert and shared-expert stacks, the token table, the
-//! classifier, the NextN projection, the PLE table) refuses the load by name
+[arch(at="../ARCHITECTURE_ENGINE_FORMATS_NV4.md#nv4-site-scale")]
 def private refuse_site_scale(m : GGUFMeta; name : string) {
     let sname = "{slice(name, 0, length(name) - length(".weight"))}.scale"
     if (gguf_find_tensor(m, sname) >= 0) {
@@ -2588,7 +2584,7 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
             g_fill_plan_mode = false
         }
         let sz = layout_offsets(t)
-        detect_site_scales(t, m, bytes)   // after the layout: the entries key on the sites' plane offsets
+        detect_site_scales(t, m, bytes)
         // fp32 aux (embedding + norms) is always present; the big-weight storage matches `mode`
         reserve_resize(t.fblob, sz.fblob_n)
         if (sz.bf16_n > 0l) {

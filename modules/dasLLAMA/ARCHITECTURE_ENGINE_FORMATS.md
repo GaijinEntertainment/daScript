@@ -175,16 +175,7 @@ tensor tiles, the routed GEMV and tiles, the token gather. So a host that sums r
 beside a Vulkan device reads the fast planes, and the device reads the same bytes; under Metal
 `auto` keeps the grid, which streams 17% fewer bytes a superblock.
 
-### A per-tensor weight scale rides beside the nv4 planes {#nv4-site-scale}
-
-An NVFP4 weight is its e2m1 code times its 16-weight sub-block's UE4M3 scale times one f32 the whole tensor shares - a
-separate `<tensor>.scale` GGUF tensor three mantissa bits cannot absorb. The planes keep the disk bytes; `detect_site_scales`
-reads every `.scale` after the layout into `Model.site_scale`, keyed by format slot and plane offset (`site_scale_key`). The
-CPU epilogues multiply their output rows by `site_scale(t, fmt, woff)` - `mm_at_kq_pre`, `mm_b_kq_pre`, and the fused decode
-chains, which scale each 32-row slice ahead of any bias. The device rows carry it: `moe_gpu_gather_stack_kq` writes its f32
-bits into the fifth word of each nv4 superblock's 20-byte scale row (the pad past the sixteen UE4M3 bytes; halves cost tg128
-5%). `Nv4GemvT` and `KqBatchNv4` multiply it into each sub-block scale; `Nv4Cm2T` stages the 128 UE4M3 codes at half under it
-once a workgroup (`UE4LUT`, off the region's first row) and decodes through that table and the e2m1 table - iq4nl's shape.
+The nv4 member - its planes' bytes and the per-tensor scale beside them - is `ARCHITECTURE_ENGINE_FORMATS_NV4.md`.
 
 ### The load and image rail {#the-load-and-image-rail}
 

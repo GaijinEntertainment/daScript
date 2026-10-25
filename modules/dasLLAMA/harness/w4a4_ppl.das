@@ -1,5 +1,5 @@
 options gen2
-options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
+options stack = 524288
 options persistent_heap
 options _dasllama_internal = true
 
@@ -77,8 +77,7 @@ def arm_score(tr : Model; ids : array<int64>; windows, ctx, stride, pin : int64)
     return <- sc
 }
 
-//! the text's ids, tokenized a run of lines at a time (the whole file as one string takes the tokenizer past the box's
-//! memory): the first run carries the BOS, the others none
+//! the text's ids, tokenized a run of lines at a time (the whole file as one string takes the tokenizer past the box's memory); the first run alone carries the BOS
 def text_ids(tr : Model; text : string) : array<int64> {
     var ids : array<int64>
     var run : array<string>
@@ -133,7 +132,7 @@ def main() : int {
         }
         text = clone_string(fread(f))
     }
-    var tr <- load_resident(cfg.model, 1l, int64(cfg.ctx) + 8l)   //! the context capped at a window: a session's K/V at the file's full context is gigabytes a window
+    var tr <- load_resident(cfg.model, 1l, int64(cfg.ctx) + 8l)   // the context capped at a window: a session's K/V at the file's full context is gigabytes a window
     if (!moe_gpu_resident_active()) {
         print("the whole-model driver declined {cfg.model} (the load log names why)\n")
         return 1

@@ -346,6 +346,7 @@ def private stack_gemv_set(si : int; meta : uint64; meta_bytes : int64; xq, xs :
 def private stack_gemv_set_x(si, sx : int; y : uint64; y_bytes : int64; ybit : uint) : VkDescriptorSet =>
     stack_gemv_set(si, g_gpu.stacks[si].meta.buf, META_BYTES, g_gpu.stacks[sx].xq.buf, g_gpu.stacks[sx].xs.buf, XQ_BYTES, XS_BYTES, 0u, y, y_bytes, ybit)
 
+[arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command")]
 def private rd_ffn_sets(var L : RLayer; b1, b3, b2 : int64; f1, f3, f2 : int) {
     let dim = g_rd.dim
     let hid = L.hid
@@ -365,8 +366,6 @@ def private rd_ffn_sets(var L : RLayer; b1, b3, b2 : int64; f1, f3, f2 : int) {
         fixed_array(VHZ_GATE, VHZ_UP, VHZ_HQ, VHZ_HQ))
     //! the fused form: gate and up q8 planes over the Q8_0 x, the hidden row's Q8_0 quants out (DASLLAMA_VK_FUSE=0 keeps the three dispatches)
     L.gate_up_fused = rd_gu_fits(f1, f3, f2) && vk_fuse_on() && (vk_fuse_bisect_bits() & FUSE_BX_GU) == 0l
-    //! the merged form past it: gate and up of one format in one slab as two regions of one GEMV at one row, [gate | up] in the
-    //! gate buffer (sized two rows at the least), the act reading its up side `hid` past the gate's
     L.gu_merged = !L.gate_up_fused && vk_fuse_on() && f1 == f3 && arena_slab_idx(b1) == arena_slab_idx(b3)
     if (L.gu_merged) {
         L.s_gu2 = arena_gemv_set_x(f1, p1, L.m_gu.buf, g_rd.gate_dev, hid * 4l * max(nb, 2l), VHZ_GATE)
@@ -2739,6 +2738,7 @@ def private rd_ffn_pfx(L : RLayer) : string => L.moe ? "m:sh_" : rd_head_pfx(L)
 [arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command")]
 def private rd_tail_pfx(L : RLayer) : string => L.moe ? "m:" : rd_head_pfx(L)
 
+[arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command")]
 def private rd_encode_ffn(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; l, nxt, nrows : int64; ncols : uint; nrow_bx : int) {
     let dim = g_rd.dim
     let hid = L.hid
@@ -2756,7 +2756,7 @@ def private rd_encode_ffn(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
         }
         rd_ts(raw, L.moe ? "m:sh_gu" : "{pfx}gu")
     } else {
-        let merged = one && L.gu_merged   //! the rows form keeps a dispatch a plane: its y rows sit `hid` apart a column
+        let merged = one && L.gu_merged
         if (merged) {
             var pcgu2 = GemvArgs(n = uint(dim), d = uint(hid), nreg = 2u, ybase = 0u, ncols = 1u, ystride = uint(hid))
             gemv_enc(L.f1, raw, h, L.s_gu2, pcgu2, 2l * hid)

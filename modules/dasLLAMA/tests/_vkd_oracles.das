@@ -527,12 +527,10 @@ def lut_gemv_float_oracle(wq, ws, xq : array<uint>; xs : array<float>; regions :
     return <- y
 }
 
-//! the nv4 sub-block scale `si` of superblock `sb`'s device row: byte si of the row's first four words, UE4M3 at half, under
-//! the plane's per-tensor scale in the row's fifth word
+//! the nv4 sub-block scale `si` of superblock `sb`'s device row: byte `si` of the row's first four words, UE4M3 at half, under the per-tensor scale in its fifth word
 def nv4_row_sc(ws : array<uint>; sb, si : int) : float => ue4m3_half_f32(uint(byte_u8(ws, sb * 20 + si))) * uint_bits_to_float(ws[sb * 5 + 4])
 
-//! NVFP4 GEMV float oracle: w = MX4_LUT[q] x the sub-block's UE4M3 scale at half straight off the plane bytes - a 32-block's
-//! low 16 under scale byte 2 blk, its high 16 under 2 blk + 1, over the k4 nibble tiling
+//! NVFP4 GEMV float oracle off the plane bytes over the k4 nibble tiling: w = MX4_LUT[q] x the sub-block's UE4M3 scale at half, a 32-block's low 16 under scale byte 2 blk, its high 16 under 2 blk + 1
 def nv4_gemv_float_oracle(wq, ws, xq : array<uint>; xs : array<float>; regions : array<uint>; n, d, nreg : int) : array<float> {
     var y <- gemv_float_walk(regions, n, d, nreg) $(var acc : float&; sb, xsb : int) {
         for (blk in range(8)) {
@@ -950,8 +948,7 @@ def iq4xsf16_gemm_oracle(wq : array<uint>; wsu : array<uint>; xf : array<uint>;
     lutf16_gemm_oracle(wq, wsu, xf, recs, nrec, n, d, y, iq4nl_lut(), false)
 }
 
-//! NVFP4 f16-feed GEMM reference over the device form: per weight MX4_LUT[q] x the sub-block's UE4M3 scale at half (the
-//! sixteen bytes of the 5-word row, in sub-block order) over the k4 nibble tiling, rounded f16 as the decode rounds
+//! NVFP4 f16-feed GEMM reference over the device form and the k4 nibble tiling: per weight MX4_LUT[q] x its sub-block's UE4M3 scale at half (the 5-word row's sixteen bytes), rounded to f16 as the decode rounds
 def nv4f16_gemm_oracle(wq : array<uint>; wsu : array<uint>; xf : array<uint>;
                        recs : array<uint>; nrec, n, d : int; var y : array<float>) {
     f16_gemm_walk(xf, recs, nrec, n, d, 256, y) $(sb, e : int) : float {
@@ -1262,13 +1259,10 @@ enum ScaleForm {
     nv4_bytes     //! four words of UE4M3 sub-block scale bytes, then the per-tensor scale word
 }
 
-//! the nv4 cells' per-tensor scale word (the device row's fifth word) of region `region`: a 1.0 .. 1.75 ladder a region, so
-//! a decode that drops it reads off the bar and the f16 sums stay cool; one value a region because a tile stages its scale
-//! table off the region's first row
+//! the nv4 cells' per-tensor scale word of region `region`, one value a region (`../ARCHITECTURE_ENGINE_FORMATS_NV4.md#nv4-site-scale`): a 1.0 .. 1.75 ladder, so a decode that drops it reads off the bar and the f16 sums stay cool
 def nv4_scale2_word(region : int) : uint => float_bits_to_uint(1.0 + 0.25 * float(region % 4))
 
-//! the nv4 cells' scale bytes: UE4M3 codes with exponents 1..10 (2^-7 .. 2^2 at half) and every mantissa, four a word, so the
-//! tile's f16 sums stay far from 65504 and no code reads as the nan zero
+//! the nv4 cells' scale bytes, four a word: UE4M3 codes at exponents 1..10 (2^-7 .. 2^2 at half) and every mantissa, so the tile's f16 sums stay far from 65504 and no code reads as the nan zero
 def nv4_scale_word(i, seed : uint) : uint {
     var w = 0u
     for (b in range(4)) {

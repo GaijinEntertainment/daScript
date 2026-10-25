@@ -628,8 +628,8 @@ let Q4032_QB = 16l     // Q4_0 quant plane PER 32-BLOCK: 16 nibble bytes (elemen
 let Q4032_SB = 2l      // Q4_0 scale plane PER 32-BLOCK: f16 d
 let Q5032_QB = 20l     // Q5_0 quant plane PER 32-BLOCK: q51's form - 16 nibble bytes (element j low, j + 16 high), then the qh word
 let Q5032_SB = 2l      // Q5_0 scale plane PER 32-BLOCK: f16 d
-let NV4_QSB = 128l     // NVFP4 quant plane: 128 nibble bytes, the disk (k, k + 8 in 16) pairs re-paired into the k4 tiling at transcode
-let NV4_SSB = 16l      // NVFP4 scale plane: 16 UE4M3 bytes, one a 16-weight sub-block - block g's low half at 2g, its high half at 2g + 1
+let NV4_QSB = 128l     //! NVFP4 quant plane: 128 nibble bytes a superblock, in the k4 tiling
+let NV4_SSB = 16l      //! NVFP4 scale plane: 16 UE4M3 bytes a superblock, one a 16-weight sub-block
 //! a per-32 block's nibble bytes: elem j low in byte j, j + 16 high
 let B32_NIB_BYTES = int64(KQ_B32_QWORDS) * 4l
 //! q51's and q5032's qh word after the nibbles: elem k's bit 4 at k
@@ -683,8 +683,7 @@ let Q40_LUT = q40_lut()
 //! spec) as int8; the halved E8M0 scale (`e8m0_half`) compensates the doubling.
 def mx4_lut() : int8[16] => fixed_array<int8>(0, 1, 2, 3, 4, 6, 8, 12, 0, -1, -2, -3, -4, -6, -8, -12)
 
-//! mx4_lut's main-context copy (tests, oracles). The nv4 planes read the same doubled e2m1 codebook under their
-//! halved UE4M3 sub-block scale (`ue4m3_half`).
+//! mx4_lut's main-context copy (tests, oracles).
 let MX4_LUT = mx4_lut()
 
 //! The iq3s4 index of one signed odd IQ3_S weight value.

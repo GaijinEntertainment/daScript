@@ -1044,7 +1044,7 @@ class Intrin {
         mma_scale_acc(f, s, float2(row_scales[g], row_scales[g + 8u]),
             float4(col_scales[2u * t], col_scales[2u * t + 1u], col_scales[2u * t + 8u], col_scales[2u * t + 9u]))
         coopmatStore(f, o, 0, 16, 0)
-        misc[lane] = byte_perm(0x03020100u + lane, 0x8f0e0d0cu, 0x7654u + lane + (lane & 1u) * 0x8000u)   // odd lanes: nibble 3 in sign-replicate mode
+        misc[lane] = byte_perm(0x03020100u + lane, 0x8f0e0d0cu, 0x7654u + lane + (lane & 1u) * 0x8000u)
         let t0 = clock32()
         bar_sync(1u, 32u)
         let t1 = clock32()
@@ -1080,13 +1080,13 @@ class IntrinFp4 {
         let r = lane & 7u
         var fa : coopmatA_e2m1_16x64
         var fb : coopmatB_e2m1_64x16
-        ldmatrix(fa, unsafe(addr(sa[(r + 8u * (mt & 1u)) * 2u + (mt >> 1u)])))   // (rows lo, k lo), (rows hi, k lo), (rows lo, k hi), (rows hi, k hi)
-        ldmatrix(fb, unsafe(addr(sb[(r + 8u * (mt >> 1u)) * 2u + (mt & 1u)])))   // (n lo, k lo), (n lo, k hi), (n hi, k lo), (n hi, k hi)
+        ldmatrix(fa, unsafe(addr(sa[(r + 8u * (mt & 1u)) * 2u + (mt >> 1u)])))
+        ldmatrix(fb, unsafe(addr(sb[(r + 8u * (mt >> 1u)) * 2u + (mt & 1u)])))
         let g = lane >> 2u
         var f : coopmatAcc_f32_16x16
         mma_block_scaled(f, fa, fb, saw[g + 8u * (lane & 1u)], sbw[g], sbw[8u + g])
         let t = lane & 3u
-        mma_scale_cols(f, float4(xin[192u + 2u * t], xin[193u + 2u * t], xin[200u + 2u * t], xin[201u + 2u * t]))   // the sixteen column factors after the sweep
+        mma_scale_cols(f, float4(xin[192u + 2u * t], xin[193u + 2u * t], xin[200u + 2u * t], xin[201u + 2u * t]))
         coopmatStore(f, o, 0, 16, 0)
         cv[lane] = cvt_e2m1x2(xin[2u * lane], xin[2u * lane + 1u])
         cv[32u + lane] = cvt_e2m1x2(xin[64u + 2u * lane], xin[64u + 2u * lane + 1u])
