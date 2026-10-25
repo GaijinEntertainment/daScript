@@ -236,7 +236,8 @@ arm's gates and the served arms' GPU home: the file's entry below), its arms:
   ringed key run at the wrap, the trunk's pick alike), the drafts and the streams token for token, the ringed run's accepted
   drafts within a tenth of the flat run's;
 - `mtp-gdraft-depth` (served) - the counting walk at depths 3 and 1 token for token the plain scheduler's, every round
-  drafting the knob's depth across a 64-row page (depth 1's one a round the control), then four reasoning budgets at depth 3
+  drafting the knob's depth across a 64-row page but the last round the 32-token budget clips (depth 1's one a round the
+  control), then four reasoning budgets at depth 3
   whose forced close lands at the budget on the speculating stream;
 - `mtp-gdraft-joint` (served) - three streams on three regions at depths 1 and 2, a tick's verify carrying all three, the
   joint verifies counted; the control is one stream at depth 1 counting none;

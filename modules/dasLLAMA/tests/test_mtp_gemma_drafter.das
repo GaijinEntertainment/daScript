@@ -933,7 +933,8 @@ def test_gemma_drafter_depth_knob(t : T?) {
                 same_streams(t, trg, "gdraft depth {k}", plain, spec, 32l)
                 let rounds = st1.rounds - st0.rounds
                 t |> success(rounds > 0l, "depth {k}: the tick ran device rounds ({rounds})")
-                t |> equal(st1.drafted - st0.drafted, k * rounds, "depth {k}: every round drafted {k} tokens (the control is depth 1's one a round)")
+                let drafted = st1.drafted - st0.drafted
+                t |> success(drafted > k * (rounds - 1l) && drafted <= k * rounds, "depth {k}: every round drafted {k} tokens but a last round the 32-token budget clips ({drafted} over {rounds} rounds; the control is depth 1's one a round)")
                 t |> success(spec.accepted > 0l, "depth {k}: drafts were accepted ({spec.accepted} of {spec.drafted})")
                 to_log(LOG_INFO, "gdraft depth {k}: {spec.accepted} of {spec.drafted} drafts over {rounds} rounds, {spec.ticks} ticks for 32 tokens\n")
                 delete spec
