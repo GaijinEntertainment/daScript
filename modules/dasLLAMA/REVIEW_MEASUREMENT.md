@@ -198,16 +198,20 @@ shipped binary gives.
 diff runs faster or does less work, where no rig leg runs the changed lines, states in its PR body
 that no rig leg runs them and names the instrument that does, with its command line.**
 
-**A diff that changes what a board cell loads, runs, counts or times - the model or corpus it
-reads, the model components (encoder, decoder, tower) it runs or the backend that serves them,
-the tokens or rows it divides the wall by, or the reference build it times (`DEFAULT_REF_SHA` in
-`benchmarks/setup_lcpp_ref.das`, or anything else deciding which reference binary or environment
-the run measures) - ships before/after rows for each affected cell and corpus, or withdraws the
-affected rows and names the withdrawal and its reason in the PR body.**
+**A diff that changes what a board cell loads, runs, counts or times - the model or corpus it reads,
+the model components (encoder, decoder, tower) it runs or the backend that serves them, the tokens
+or rows it divides the wall by, or the reference build it times (`DEFAULT_REF_SHA` in
+`benchmarks/setup_lcpp_ref.das`, or anything else deciding which reference binary or environment the
+run measures) - withdraws the affected rows (the rule below), writes the cell's new figures on the
+board boxes it measured into a dated `PERF_LEDGER.md` entry beside the old ones, and names in its PR
+body the `followup_general.md` row under which the release re-mint owes the cell's rows; the release
+re-mint (`ARCHITECTURE_MEASUREMENT_RELEASE.md#board-rows-release-boundary`) is the diff that writes
+them.**
 
-**A re-minted row of a changed board cell replaces the old row in `performance/records/<box>.json`,
-and a new dated `PERF_LEDGER.md` entry in the same change puts the old figure beside the new one;
-a re-minted row that a `held` entry holds deletes that entry in the same change.**
+**A re-minted row of a changed board cell replaces the old row in `performance/records/<box>.json`
+in the release re-mint, and a dated `PERF_LEDGER.md` entry in the same change puts the old figure
+beside the new one; a re-minted row that a `held` entry holds deletes that entry in the same
+change.**
 
 **A withdrawn row of a changed board cell is deleted from `performance/records/<box>.json` or gets
 a `held` entry - a `performance/records/annotations.json` entry carrying the row's `gguf`, `box`,
