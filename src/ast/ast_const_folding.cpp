@@ -200,7 +200,7 @@ namespace das {
     // op1
         virtual ExpressionPtr visit ( ExprOp1 * expr ) override {
             if ( !expr->func ) { reportNullFunc(expr, "op1"); return Visitor::visit(expr); }
-            expr->noSideEffects = expr->subexpr->noSideEffects && (expr->func->sideEffectFlags==0);
+            expr->noSideEffects = expr->subexpr->noSideEffects && !expr->func->hasObservableEffects();
             expr->noNativeSideEffects = expr->subexpr->noNativeSideEffects
                 && ((expr->func->sideEffectFlags & uint32_t(SideEffects::inferredSideEffects))==0);
             return Visitor::visit(expr);
@@ -208,7 +208,7 @@ namespace das {
     // op2
         virtual ExpressionPtr visit ( ExprOp2 * expr ) override {
             if ( !expr->func ) { reportNullFunc(expr, "op2"); return Visitor::visit(expr); }
-            expr->noSideEffects = expr->left->noSideEffects && expr->right->noSideEffects && (expr->func->sideEffectFlags==0);
+            expr->noSideEffects = expr->left->noSideEffects && expr->right->noSideEffects && !expr->func->hasObservableEffects();
             expr->noNativeSideEffects = expr->left->noNativeSideEffects && expr->right->noNativeSideEffects
                 && ((expr->func->sideEffectFlags & uint32_t(SideEffects::inferredSideEffects))==0);
             return Visitor::visit(expr);
@@ -223,7 +223,7 @@ namespace das {
     // call
         virtual ExpressionPtr visit ( ExprCall * expr ) override {
             if ( !expr->func ) { reportNullFunc(expr, "call"); return Visitor::visit(expr); }
-            uint32_t sef = expr->func->sideEffectFlags;
+            uint32_t sef = expr->func->observableEffects();
             expr->noSideEffects = (sef==0);
             // A call whose ONLY effect is modifyArgument, and whose every argument is a freshly-built
             // make-local rvalue, is side-effect-free at this site: the writes land on temporaries the
@@ -512,7 +512,7 @@ namespace das {
     }
 
     bool isConstExprFunc ( Function * fun ) {
-        return fun->sideEffectFlags==0 && fun->builtIn && fun->result && fun->result->isFoldable();
+        return !fun->hasObservableEffects() && fun->builtIn && fun->result && fun->result->isFoldable();
     }
 
     // The value of a const is wanted HERE, and its own initializer never folded (lint
@@ -851,7 +851,7 @@ namespace das {
             program->library.foreach([&](Module * mod) -> bool {
                 if ( auto kv = mod->functionsByName.find(hName) ) {
                     for ( auto fn : kv->second ) {
-                        if ( !fn->builtIn || fn->sideEffectFlags || fn->isTemplate ) continue;
+                        if ( !fn->builtIn || fn->hasObservableEffects() || fn->isTemplate ) continue;
                         if ( fn->arguments.size()!=nArgs ) continue;
                         if ( !fn->arguments[0]->type->isSameType(*t0, RefMatters::no, ConstMatters::no, TemporaryMatters::no) ) continue;
                         if ( t1 && !fn->arguments[1]->type->isSameType(*t1, RefMatters::no, ConstMatters::no, TemporaryMatters::no) ) continue;
@@ -947,7 +947,7 @@ namespace das {
         // das bodies on purpose and the call itself is the payload
         bool isNop ( const FunctionPtr & func ) {
             if ( func->builtIn ) return false;
-            if ( func->sideEffectFlags ) return false;
+            if ( func->hasObservableEffects() ) return false;
             if ( func->body->rtti_isBlock() ) {
                 auto block = static_cast<ExprBlock*>(func->body);
                 if ( block->list.size()==0 && block->finalList.size()==0 ) {
@@ -1020,7 +1020,7 @@ namespace das {
 
     // op1
         virtual ExpressionPtr visit ( ExprOp1 * expr ) override {
-            if (expr->func->sideEffectFlags) {
+            if ( expr->func->hasObservableEffects() ) {
                 return Visitor::visit(expr);
             }
             if ( expr->subexpr->constexpression && expr->func->builtIn ) {
@@ -1035,7 +1035,7 @@ namespace das {
                     const bool involutive = inner->subexpr->type &&
                         ( (expr->op=="!" && inner->subexpr->type->isSimpleType(Type::tBool))
                        || (expr->op=="-" && inner->subexpr->type->isNumeric()) );
-                    if ( inner->op==expr->op && inner->func && inner->func->builtIn && !inner->func->sideEffectFlags
+                    if ( inner->op==expr->op && inner->func && inner->func->builtIn && !inner->func->hasObservableEffects()
                         && involutive ) {
                         reportFolding();
                         return inner->subexpr;
@@ -1044,7 +1044,7 @@ namespace das {
                 // !(a<b) → a>=b etc. FP compares change NaN behavior → fast_math
                 if ( expr->op=="!" && expr->subexpr->rtti_isOp2() ) {
                     auto cmp = static_cast<ExprOp2 *>(expr->subexpr);
-                    if ( cmp->func && cmp->func->builtIn && !cmp->func->sideEffectFlags && cmp->type && cmp->type->isSimpleType(Type::tBool) ) {
+                    if ( cmp->func && cmp->func->builtIn && !cmp->func->hasObservableEffects() && cmp->type && cmp->type->isSimpleType(Type::tBool) ) {
                         const char * flip = nullptr;
                         if ( cmp->op=="==" ) flip = "!=";
                         else if ( cmp->op=="!=" ) flip = "==";
@@ -1071,7 +1071,7 @@ namespace das {
         }
     // op2
         virtual ExpressionPtr visit ( ExprOp2 * expr ) override {
-            if (expr->func->sideEffectFlags) {
+            if ( expr->func->hasObservableEffects() ) {
                 return Visitor::visit(expr);
             }
             if ( expr->left->constexpression && expr->right->constexpression && expr->func->builtIn ) {
@@ -1213,7 +1213,7 @@ namespace das {
                     auto trySplat = [&]( Expression * e ) -> Expression * {
                         if ( !e || !e->rtti_isCall() ) return nullptr;
                         auto call = static_cast<ExprCall *>(e);
-                        if ( !call->func || !call->func->builtIn || call->func->sideEffectFlags ) return nullptr;
+                        if ( !call->func || !call->func->builtIn || call->func->hasObservableEffects() ) return nullptr;
                         if ( call->arguments.size()!=1 ) return nullptr;
                         auto & a0 = call->arguments[0];
                         if ( !a0->type || a0->type->baseType!=Type::tFloat || a0->type->ref ) return nullptr;
@@ -1257,7 +1257,7 @@ namespace das {
                     } else if ( expr->left->rtti_isConstant() && expr->right->rtti_isOp2() ) {
                         inner = static_cast<ExprOp2 *>(expr->right); c2 = expr->left;
                     }
-                    if ( inner && inner->op==expr->op && inner->func && inner->func->builtIn && !inner->func->sideEffectFlags
+                    if ( inner && inner->op==expr->op && inner->func && inner->func->builtIn && !inner->func->hasObservableEffects()
                         && inner->type && inner->type->baseType==bt && c2->type && c2->type->baseType==bt
                         && inner->left->type && inner->left->type->baseType==bt
                         && inner->right->type && inner->right->type->baseType==bt ) {
@@ -1501,7 +1501,7 @@ namespace das {
                     return sc;
                 }
             }
-            if ( expr->func->result->isFoldable() && (expr->func->sideEffectFlags==0) ) {
+            if ( expr->func->result->isFoldable() && !expr->func->hasObservableEffects() ) {
                 auto allConst = true;
                 bool canFold = true;
                 for ( auto & arg : expr->arguments ) {
@@ -1607,7 +1607,7 @@ namespace das {
         virtual void preVisit ( ExprCall * expr ) override {
             Visitor::preVisit(expr);
             if ( expr->func && expr->func->hasToRunAtCompileTime ) {
-                if ( expr->func->sideEffectFlags ) {
+                if ( expr->func->hasObservableEffects() ) {
                     program->error("function did not run at compilation time because it has side-effects","","",
                                    expr->at, CompilationError::runtime_function);
                 } else {
@@ -1637,7 +1637,7 @@ namespace das {
         }
         // ExprCall
         virtual ExpressionPtr visit ( ExprCall * expr ) override {
-            if ( expr->func->result->isFoldable() && (expr->func->sideEffectFlags==0) && !expr->func->builtIn ) {
+            if ( expr->func->result->isFoldable() && !expr->func->hasObservableEffects() && !expr->func->builtIn ) {
                 auto allConst = true;
                 for ( auto & arg : expr->arguments ) {
                     if ( arg->type->baseType!=Type::fakeContext && arg->type->baseType!=Type::fakeLineInfo ) {

@@ -972,30 +972,24 @@ namespace das {
                 auto nc = static_cast<ExprNullCoalescing *>(e);
                 return isReorderSafe(nc->subexpr) && isReorderSafe(nc->defaultValue);
             }
-            const uint32_t sideEffectsMask =
-                  uint32_t(SideEffects::userScenario)
-                | uint32_t(SideEffects::modifyExternal)
-                | uint32_t(SideEffects::modifyArgument)
-                | uint32_t(SideEffects::accessGlobal)
-                | uint32_t(SideEffects::invoke);
             if ( e->rtti_isOp1() ) {
                 auto op = static_cast<ExprOp1 *>(e);
-                if ( op->func && (op->func->sideEffectFlags & sideEffectsMask) ) return false;
+                if ( op->func && op->func->hasObservableEffects() ) return false;
                 return isReorderSafe(op->subexpr);
             }
             if ( e->rtti_isOp2() ) {
                 auto op = static_cast<ExprOp2 *>(e);
-                if ( op->func && (op->func->sideEffectFlags & sideEffectsMask) ) return false;
+                if ( op->func && op->func->hasObservableEffects() ) return false;
                 return isReorderSafe(op->left) && isReorderSafe(op->right);
             }
             if ( e->rtti_isOp3() ) {
                 auto op = static_cast<ExprOp3 *>(e);
-                if ( op->func && (op->func->sideEffectFlags & sideEffectsMask) ) return false;
+                if ( op->func && op->func->hasObservableEffects() ) return false;
                 return isReorderSafe(op->subexpr) && isReorderSafe(op->left) && isReorderSafe(op->right);
             }
             if ( e->rtti_isCall() ) {
                 auto c = static_cast<ExprCall *>(e);
-                if ( !c->func || (c->func->sideEffectFlags & sideEffectsMask) ) return false;
+                if ( !c->func || c->func->hasObservableEffects() ) return false;
                 for ( auto & a : c->arguments ) {
                     if ( !isReorderSafe(a) ) return false;
                 }
@@ -1008,13 +1002,7 @@ namespace das {
         // globals - accessGlobal does not split reads from writes - no invokes) cannot
         // invalidate anything an argument expression read
         bool calleeWriteFree ( Function * fn ) {
-            const uint32_t writeMask =
-                  uint32_t(SideEffects::userScenario)
-                | uint32_t(SideEffects::modifyExternal)
-                | uint32_t(SideEffects::modifyArgument)
-                | uint32_t(SideEffects::accessGlobal)
-                | uint32_t(SideEffects::invoke);
-            return (fn->sideEffectFlags & writeMask)==0;
+            return !fn->hasObservableEffects();
         }
 
         // the arguments and parameters of one splice site: a direct call binds the whole

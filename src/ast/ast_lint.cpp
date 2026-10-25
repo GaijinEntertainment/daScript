@@ -1191,7 +1191,7 @@ namespace das {
             tableLookupCollision.push_back(das_hash_set<uint64_t>());
             if ( expr->rtti_isOp2() ) {
                 auto op2 = static_cast<ExprOp2 *>(expr);
-                if ( op2->func && op2->func->builtIn && op2->func->sideEffectFlags==0 ) {
+                if ( op2->func && op2->func->builtIn && !op2->func->hasObservableEffects() ) {
                     program->error("top level no side effect operation " + op2->op, "", "",
                         expr->at, CompilationError::invalid_expression);
                 }
@@ -1207,7 +1207,7 @@ namespace das {
             tableLookupCollision.push_back(das_hash_set<uint64_t>());
             if ( expr->rtti_isOp2() ) {
                 auto op2 = static_cast<ExprOp2 *>(expr);
-                if ( op2->func && op2->func->builtIn && op2->func->sideEffectFlags==0 ) {
+                if ( op2->func && op2->func->builtIn && !op2->func->hasObservableEffects() ) {
                     program->error("top level no side effect operation " + op2->op, "", "",
                         expr->at, CompilationError::invalid_expression);
                 }
