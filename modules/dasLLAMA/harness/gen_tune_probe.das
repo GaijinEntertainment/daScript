@@ -1079,6 +1079,9 @@ def bf16w_tune_family(var rows_out : table<string; JsonValue?>) : string {
     for (v in tvs) {
         let form = int64(forms?[v._0] ?? 0)
         let ts = int64(steps?[v._0] ?? 4)
+        // a tile-form row races; the base row `mr16` stands for the widen walk; a declined perm (form 0 under
+        // another name) is no candidate - its time would be the base row's and a tie could crown it
+        continue if (form <= 0l && v._0 != "mr16")
         if (form > 0l) {
             arm_of(wvs, cvs, v._0)
         }
