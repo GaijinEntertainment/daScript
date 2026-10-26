@@ -1247,8 +1247,7 @@ namespace das {
         }
         if (fns.size() == 1) {
             expr->func = fns.back();
-            expr->func->addr = true;
-            expr->func->fastCall = false;
+            if ( expr->func->module == thisModule ) expr->func->addr = true;
             expr->type = new TypeDecl(Type::tFunction, expr->at);
             expr->type->firstType = new TypeDecl(*expr->func->result);
             if ( !expr->type->firstType->at.fileInfo ) expr->type->firstType->at = expr->at;
