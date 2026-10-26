@@ -1680,9 +1680,9 @@ SIM_NODE_AT_VECTOR(Float, float)
             SimFunction * simFunc = cast<Func>::to(argValues[0]).PTR;
             if (!simFunc) context.throw_error_at(debugInfo,"invoke null function%s",errorMessage);
             if ( argCount>1 ) {
-                return context.call(simFunc, argValues + 1, &debugInfo);
+                return context.callOrFastcall(simFunc, argValues + 1, &debugInfo);
             } else {
-                return context.call(simFunc, nullptr, &debugInfo);
+                return context.callOrFastcall(simFunc, nullptr, &debugInfo);
             }
         }
 #define EVAL_NODE(TYPE,CTYPE)                                                                   \
@@ -1693,9 +1693,9 @@ SIM_NODE_AT_VECTOR(Float, float)
             SimFunction * simFunc = cast<Func>::to(argValues[0]).PTR;                           \
             if (!simFunc) context.throw_error_at(debugInfo,"invoke null function%s",errorMessage); \
             if ( argCount>1 ) {                                                                 \
-                return cast<CTYPE>::to(context.call(simFunc, argValues + 1, &debugInfo));       \
+                return cast<CTYPE>::to(context.callOrFastcall(simFunc, argValues + 1, &debugInfo)); \
             } else {                                                                            \
-                return cast<CTYPE>::to(context.call(simFunc, nullptr, &debugInfo));             \
+                return cast<CTYPE>::to(context.callOrFastcall(simFunc, nullptr, &debugInfo));   \
             }                                                                                   \
         }
         DAS_EVAL_NODE
@@ -1711,7 +1711,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             evalArgs(context, argValues);
             SimFunction* simFunc = cast<Func>::to(argValues[0]).PTR;
             if (!simFunc) context.throw_error_at(debugInfo, "invoke null function%s",errorMessage);
-            return context.call(simFunc, argValues + 1, &debugInfo);
+            return context.callOrFastcall(simFunc, argValues + 1, &debugInfo);
         }
 #define EVAL_NODE(TYPE,CTYPE) \
         virtual CTYPE eval##TYPE ( Context & context ) override { \
@@ -1720,7 +1720,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             evalArgs(context, argValues); \
             SimFunction * simFunc = cast<Func>::to(argValues[0]).PTR; \
             if (!simFunc) context.throw_error_at(debugInfo,"invoke null function%s", errorMessage); \
-            return cast<CTYPE>::to(context.call(simFunc, argValues + 1, &debugInfo)); \
+            return cast<CTYPE>::to(context.callOrFastcall(simFunc, argValues + 1, &debugInfo)); \
         }
         DAS_EVAL_NODE
 #undef  EVAL_NODE

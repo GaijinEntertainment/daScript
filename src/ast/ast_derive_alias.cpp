@@ -21,6 +21,10 @@ namespace das {
         }
     }
 
+    static bool mayHaveAddressTaken ( const ProgramPtr & program, const FunctionPtr & func ) {
+        return func->addressTaken || ( func->module != program->thisModule.get() && ( !func->privateFunction || func->fromGeneric ) );
+    }
+
     bool isCompatibleFunction ( const FunctionPtr & func, const TypeDeclPtr & inv ) {
         if ( func->arguments.size()!=inv->argTypes.size() ) return false;
         if ( !inv->firstType->isSameType(*func->result, RefMatters::yes, ConstMatters::yes, TemporaryMatters::yes) ) {
@@ -40,7 +44,7 @@ namespace das {
             mod->functions.foreach([&](const FunctionPtr & gfunc){
                 // not built-in, used, address taken, can potentially alias, compatible
                 if ( gfunc->isTemplate ) return;
-                if ( !gfunc->builtIn && gfunc->addressTaken && !gfunc->aliasCMRES && program->isUsed(gfunc) && isCompatibleFunction(gfunc, inv) ) {
+                if ( !gfunc->builtIn && mayHaveAddressTaken(program, gfunc) && !gfunc->aliasCMRES && program->isUsed(gfunc) && isCompatibleFunction(gfunc, inv) ) {
                     appendIndVariables(gfunc, sources, accessed);
                 }
             });
@@ -67,7 +71,7 @@ namespace das {
             mod->functions.foreach([&](const FunctionPtr & gfunc){
                 // not built-in, used, address taken, can potentially alias, compatible
                 if ( gfunc->isTemplate ) return;
-                if ( !gfunc->builtIn && gfunc->addressTaken && !gfunc->aliasCMRES && gfunc->lambda && program->isUsed(gfunc) && isCompatibleLambdaFunction(gfunc, inv) ) {
+                if ( !gfunc->builtIn && mayHaveAddressTaken(program, gfunc) && !gfunc->aliasCMRES && gfunc->lambda && program->isUsed(gfunc) && isCompatibleLambdaFunction(gfunc, inv) ) {
                     appendIndVariables(gfunc, sources, accessed);
                 }
             });

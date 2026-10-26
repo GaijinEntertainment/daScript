@@ -921,7 +921,7 @@ namespace das {
     // addr
         virtual void preVisit ( ExprAddr * expr ) override {
             Visitor::preVisit(expr);
-            expr->func->addressTaken = true;
+            if ( func && expr->func->module == func->module ) expr->func->addressTaken = true;
         }
     // if-then-else
         virtual void preVisit ( ExprIfThenElse * expr ) override {
