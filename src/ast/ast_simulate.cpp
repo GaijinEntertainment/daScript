@@ -2626,32 +2626,33 @@ namespace das
             }
             DAS_ASSERT(programIndexOf(context,expr->variable) >= 0 && "using variable which is not used. how?");
             uint64_t mnh = expr->variable->getMangledNameHash();
+            uint32_t offset = context.getGlobalVariable(programIndexOf(context,expr->variable)).offset;
             if ( !expr->variable->module->isSolidContext ) {
                 if ( expr->variable->global_shared ) {
                     if ( expr->r2v ) {
-                        setE(expr, context.code->makeValueNode<SimNode_GetSharedMnhR2V>(expr->type->getR2VType(), at, expr->variable->stackTop, mnh));
+                        setE(expr, context.code->makeValueNode<SimNode_GetSharedMnhR2V>(expr->type->getR2VType(), at, offset, mnh));
                     } else {
-                        setE(expr, context.code->makeNode<SimNode_GetSharedMnh>(at, expr->variable->stackTop, mnh));
+                        setE(expr, context.code->makeNode<SimNode_GetSharedMnh>(at, offset, mnh));
                     }
                 } else {
                     if ( expr->r2v ) {
-                        setE(expr, context.code->makeValueNode<SimNode_GetGlobalMnhR2V>(expr->type->getR2VType(), at, expr->variable->stackTop, mnh));
+                        setE(expr, context.code->makeValueNode<SimNode_GetGlobalMnhR2V>(expr->type->getR2VType(), at, offset, mnh));
                     } else {
-                        setE(expr, context.code->makeNode<SimNode_GetGlobalMnh>(at, expr->variable->stackTop, mnh));
+                        setE(expr, context.code->makeNode<SimNode_GetGlobalMnh>(at, offset, mnh));
                     }
                 }
             } else {
                 if ( expr->variable->global_shared ) {
                     if ( expr->r2v ) {
-                        setE(expr, context.code->makeValueNode<SimNode_GetSharedR2V>(expr->type->getR2VType(), at, expr->variable->stackTop, mnh));
+                        setE(expr, context.code->makeValueNode<SimNode_GetSharedR2V>(expr->type->getR2VType(), at, offset, mnh));
                     } else {
-                        setE(expr, context.code->makeNode<SimNode_GetShared>(at, expr->variable->stackTop, mnh));
+                        setE(expr, context.code->makeNode<SimNode_GetShared>(at, offset, mnh));
                     }
                 } else {
                     if ( expr->r2v ) {
-                        setE(expr, context.code->makeValueNode<SimNode_GetGlobalR2V>(expr->type->getR2VType(), at, expr->variable->stackTop, mnh));
+                        setE(expr, context.code->makeValueNode<SimNode_GetGlobalR2V>(expr->type->getR2VType(), at, offset, mnh));
                     } else {
-                        setE(expr, context.code->makeNode<SimNode_GetGlobal>(at, expr->variable->stackTop, mnh));
+                        setE(expr, context.code->makeNode<SimNode_GetGlobal>(at, offset, mnh));
                     }
                 }
             }
@@ -3747,13 +3748,14 @@ namespace das
                     gvar.debugInfo = helper.makeVariableDebugInfo(*pvar);
                     gvar.flags = 0;
                     if ( pvar->global_shared ) {
-                        gvar.offset = pvar->stackTop = (uint32_t) context.sharedSize;
+                        gvar.offset = (uint32_t) context.sharedSize;
                         gvar.shared = true;
                         context.sharedSize = (context.sharedSize + uint64_t(gvar.size) + 0xful) & ~0xfull;
                     } else {
-                        gvar.offset = pvar->stackTop = (uint32_t) context.globalsSize;
+                        gvar.offset = (uint32_t) context.globalsSize;
                         context.globalsSize = (context.globalsSize + uint64_t(gvar.size) + 0xful) & ~0xfull;
                     }
+                    if ( !isCompilingMacros && !folding ) pvar->stackTop = gvar.offset;
                     gvar.mangledNameHash = pvar->getMangledNameHash();
                     gvar.init = nullptr;
                 });
@@ -3862,13 +3864,13 @@ namespace das
                         }
                         if ( pvar->init->rtti_isMakeLocal() ) {
                             if ( pvar->global_shared ) {
-                                auto sl = context.code->makeNode<SimNode_GetSharedMnh>(pvar->init->at, pvar->stackTop, pvar->getMangledNameHash());
+                                auto sl = context.code->makeNode<SimNode_GetSharedMnh>(pvar->init->at, gvar.offset, pvar->getMangledNameHash());
                                 auto sr = simulateLetInit(context, pvar, false);
                                 auto gvari = context.code->makeNode<SimNode_SetLocalRefAndEval>(pvar->init->at, sl, sr, uint32_t(sizeof(Prologue)));
                                 auto cndb = context.code->makeNode<SimNode_GetArgument>(pvar->init->at, 1); // arg 1 of init script is "init_globals"
                                 gvar.init = context.code->makeNode<SimNode_IfThen>(pvar->init->at, cndb, gvari);
                             } else {
-                                auto sl = context.code->makeNode<SimNode_GetGlobalMnh>(pvar->init->at, pvar->stackTop, pvar->getMangledNameHash());
+                                auto sl = context.code->makeNode<SimNode_GetGlobalMnh>(pvar->init->at, gvar.offset, pvar->getMangledNameHash());
                                 auto sr = simulateLetInit(context, pvar, false);
                                 gvar.init = context.code->makeNode<SimNode_SetLocalRefAndEval>(pvar->init->at, sl, sr, uint32_t(sizeof(Prologue)));
                             }
