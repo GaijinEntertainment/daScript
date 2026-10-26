@@ -14,6 +14,17 @@ namespace  das {
         }
     };
 
+    template <typename TT>
+    FunctionPtr divisionMayRaise ( FunctionPtr fn ) {
+        switch ( Type(ToBasicType<TT>::type) ) {
+            case Type::tFloat: case Type::tFloat2: case Type::tFloat3: case Type::tFloat4:
+            case Type::tDouble: case Type::tFloat16: case Type::tHalf2: case Type::tHalf3: case Type::tHalf4: case Type::tHalf8:
+                return fn;
+            default:
+                return fn->setMayRaise();
+        }
+    }
+
     // basic operations
     template <typename TT, typename PT = TT>
     void addFunctionBasic(Module & mod, const ModuleLibrary & lib) {
@@ -85,11 +96,11 @@ namespace  das {
         addFunctionGroupByAdd<TT>(mod,lib);
         //                                     policy           ret   arg1 arg2    name
         mod.addFunction( (new BuiltInFn<Sim_Mul<TT>,     TT,   TT,  TT>("*",      lib, "Mul")) );
-        mod.addFunction( (new BuiltInFn<Sim_Div<TT>,     TT,   TT,  TT>("/",      lib, "Div")) );
+        mod.addFunction( divisionMayRaise<TT>(new BuiltInFn<Sim_Div<TT>,     TT,   TT,  TT>("/",      lib, "Div")) );
         mod.addFunction( (new BuiltInFn<Sim_SetMul<TT>,  void, TT&, TT>("*=",     lib, "SetMul"))
                         ->setSideEffects(SideEffects::modifyArgument) );
-        mod.addFunction( (new BuiltInFn<Sim_SetDiv<TT>,  void, TT&, TT>("/=",     lib, "SetDiv"))
-                        ->setSideEffects(SideEffects::modifyArgument) );
+        mod.addFunction( divisionMayRaise<TT>((new BuiltInFn<Sim_SetDiv<TT>,  void, TT&, TT>("/=",     lib, "SetDiv"))
+                        ->setSideEffects(SideEffects::modifyArgument)) );
     }
 
     // numeric types
@@ -97,9 +108,9 @@ namespace  das {
     void addFunctionNumericWithMod(Module & mod, const ModuleLibrary & lib) {
         addFunctionNumeric<TT>(mod, lib);
         //                                     policy       ret   arg1 arg2    name
-        mod.addFunction( (new BuiltInFn<Sim_Mod<TT>, TT,   TT,  TT>("%",      lib, "Mod")) );
-        mod.addFunction( (new BuiltInFn<Sim_SetMod<TT>,  void, TT&, TT>("%=",     lib, "SetMod"))
-                        ->setSideEffects(SideEffects::modifyArgument) );
+        mod.addFunction( divisionMayRaise<TT>(new BuiltInFn<Sim_Mod<TT>, TT,   TT,  TT>("%",      lib, "Mod")) );
+        mod.addFunction( divisionMayRaise<TT>((new BuiltInFn<Sim_SetMod<TT>,  void, TT&, TT>("%=",     lib, "SetMod"))
+                        ->setSideEffects(SideEffects::modifyArgument)) );
     }
 
     // vector-scalar combinations
@@ -107,13 +118,13 @@ namespace  das {
     void addFunctionVecNumeric(Module & mod, const ModuleLibrary & lib) {
         //                                     policy               ret   arg1 arg2    name
         mod.addFunction( (new BuiltInFn<Sim_MulScalVec<TT>,  TT,   TTS, TT>("*",    lib, "MulScalVec")) );
-        mod.addFunction( (new BuiltInFn<Sim_DivScalVec<TT>,  TT,   TTS, TT>("/",    lib, "DivScalVec")) );
+        mod.addFunction( divisionMayRaise<TT>(new BuiltInFn<Sim_DivScalVec<TT>,  TT,   TTS, TT>("/",    lib, "DivScalVec")) );
         mod.addFunction( (new BuiltInFn<Sim_MulVecScal<TT>,  TT,   TT,  TTS>("*",    lib, "MulVecScal")) );
-        mod.addFunction( (new BuiltInFn<Sim_DivVecScal<TT>,  TT,   TT,  TTS>("/",    lib, "DivVecScal")) );
+        mod.addFunction( divisionMayRaise<TT>(new BuiltInFn<Sim_DivVecScal<TT>,  TT,   TT,  TTS>("/",    lib, "DivVecScal")) );
         mod.addFunction( (new BuiltInFn<Sim_SetMulScal<TT>,  void, TT&, TTS>("*=",  lib, "SetMulScal"))
                         ->setSideEffects(SideEffects::modifyArgument) );
-        mod.addFunction( (new BuiltInFn<Sim_SetDivScal<TT>,  void, TT&, TTS>("/=",  lib, "SetDivScal"))
-                        ->setSideEffects(SideEffects::modifyArgument) );
+        mod.addFunction( divisionMayRaise<TT>((new BuiltInFn<Sim_SetDivScal<TT>,  void, TT&, TTS>("/=",  lib, "SetDivScal"))
+                        ->setSideEffects(SideEffects::modifyArgument)) );
     }
 
     // inc-dec

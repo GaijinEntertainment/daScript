@@ -137,7 +137,7 @@ MAKE_EXTERNAL_TYPE_FACTORY(ExprUnsafe,das::ExprUnsafe);
 
 DAS_BASE_BIND_ENUM(das::SideEffects, SideEffects,
     none, unsafe, userScenario, modifyExternal, accessExternal, modifyArgument,
-    modifyArgumentAndExternal, worstDefault, accessGlobal, invoke, inferredSideEffects)
+    modifyArgumentAndExternal, worstDefault, accessGlobal, invoke, inferredSideEffects, mayRaise)
 
 DAS_BASE_BIND_ENUM(das::CaptureMode, CaptureMode,
     capture_any, capture_by_copy, capture_by_reference, capture_by_clone, capture_by_move)

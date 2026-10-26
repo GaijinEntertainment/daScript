@@ -931,6 +931,32 @@ namespace das {
         return call->func->getAotBasicName();
     }
 
+    // src/ast/ARCHITECTURE_EFFECTS.md#observable-effects
+    static constexpr uint32_t OBSERVABLE_EFFECTS =
+          uint32_t(SideEffects::userScenario)
+        | uint32_t(SideEffects::modifyExternal)
+        | uint32_t(SideEffects::modifyArgument)
+        | uint32_t(SideEffects::accessGlobal)
+        | uint32_t(SideEffects::invoke)
+        | uint32_t(SideEffects::captureString);
+
+    uint32_t Function::observableEffects() const {
+        return sideEffectFlags & OBSERVABLE_EFFECTS;
+    }
+
+    bool Function::hasObservableEffects() const {
+        return observableEffects()!=0;
+    }
+
+    bool Function::mayRaise() const {
+        return (sideEffectFlags & uint32_t(SideEffects::mayRaise))!=0;
+    }
+
+    FunctionPtr Function::setMayRaise() {
+        sideEffectFlags |= uint32_t(SideEffects::mayRaise);
+        return this;
+    }
+
     FunctionPtr Function::setSideEffects ( SideEffects seFlags ) {
         sideEffectFlags = uint32_t(seFlags) & ~uint32_t(SideEffects::unsafe);
         if ( uint32_t(seFlags) & uint32_t(SideEffects::unsafe) ) {

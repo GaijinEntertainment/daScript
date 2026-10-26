@@ -2537,7 +2537,7 @@ namespace das
         // functions
         addExternInline<DAS_BIND_FUN(builtin_throw)>(*this, lib, "panic",
             SideEffects::modifyExternal, "builtin_throw")
-                ->args({"text","context","at"});
+                ->args({"text","context","at"})->setMayRaise();
         addExternInline<DAS_BIND_FUN(builtin_print)>(*this, lib, "print",
             SideEffects::modifyExternal, "builtin_print")
                 ->args({"text","context","at"});

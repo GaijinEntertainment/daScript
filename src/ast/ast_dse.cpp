@@ -6,6 +6,7 @@
 #include "daScript/ast/ast_cfg.h"
 
 #include "ast_alias.h"
+#include "ast_effects.h"
 
 namespace das {
 
@@ -229,7 +230,7 @@ namespace das {
                 if ( byBase.find(v)==byBase.end() ) continue;   // no stores: unused-var territory
                 if ( !v->init || v->init_via_move || v->init_via_clone ) continue;
                 if ( v->type->isRefType() ) continue;
-                if ( !v->init->noSideEffects ) continue;
+                if ( !droppable(v->init) ) continue;
                 if ( findChain(v, emptyPath)>=0 ) continue;
                 int idx = int(chains.size());
                 chains.push_back(DseChain{v, emptyPath});
@@ -275,7 +276,7 @@ namespace das {
                                 if ( aliasPathAgree(ch.path, C.path, n) ) SI.uses.push_back(ci);
                             }
                         }
-                        SI.rhsPure = static_cast<ExprCopy *>(stmt)->right->noSideEffects;
+                        SI.rhsPure = droppable(static_cast<ExprCopy *>(stmt)->right);
                     } else if ( stmt->rtti_isLet() ) {
                         auto let = static_cast<ExprLet *>(stmt);
                         for ( auto & pv : let->variables ) {
@@ -285,7 +286,7 @@ namespace das {
                                 SI.kills.push_back(ci); // nothing before the declaration observes it
                                 if ( chains[ci].path.empty() && pv->init
                                     && !pv->init_via_move && !pv->init_via_clone
-                                    && pv->init->noSideEffects ) {
+                                    && droppable(pv->init) ) {
                                     SI.letInits.push_back(DseLetInit{ci, pv});
                                 }
                             }

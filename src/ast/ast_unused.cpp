@@ -3,6 +3,7 @@
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_visitor.h"
 #include "daScript/ast/ast_generate.h"
+#include "ast_effects.h"
 
 namespace das {
 
@@ -129,7 +130,14 @@ namespace das {
     class TrackFieldAndAtFlags : public Visitor {
         das_hash_set<const Function *>   asked;
         FunctionPtr             func = nullptr;
+        void markRaise() {
+            if ( func ) func->sideEffectFlags |= uint32_t(SideEffects::mayRaise);
+        }
     public:
+        virtual void preVisitExpression ( Expression * expr ) override {
+            Visitor::preVisitExpression(expr);
+            if ( nodeRaises(expr) ) markRaise();
+        }
     // access_info is informational only (lint/refactor consumers) — reset here, not in
     // TrackVariableFlags, so the phase-2 access_flags rebuild can't interleave with it
         virtual void preVisitLet ( ExprLet * let, const VariablePtr & var, bool last ) override {
@@ -153,7 +161,7 @@ namespace das {
             for ( auto & fn : mod.functions.each() ) {
                 if (!fn->isTemplate && !fn->builtIn) {
                     fn->knownSideEffects = false;
-                    fn->sideEffectFlags &= ~uint32_t(SideEffects::inferredSideEffects);
+                    fn->sideEffectFlags &= ~(uint32_t(SideEffects::inferredSideEffects) | uint32_t(SideEffects::mayRaise));
                 }
             }
             for ( auto & fn : mod.functions.each() ) {
@@ -694,6 +702,7 @@ namespace das {
             Visitor::preVisit(expr);
             if ( !expr->func ) return;
             auto sef = getSideEffects(expr->func);
+            if ( callRaises(expr->func) ) markRaise();
             markPassMutableOperand(expr->func, 0, expr->subexpr);
             if ( sef & uint32_t(SideEffects::modifyArgument) ) {
                 propagateWrite(expr->subexpr);
@@ -704,6 +713,7 @@ namespace das {
             Visitor::preVisit(expr);
             if ( !expr->func ) return;
             auto sef = getSideEffects(expr->func);
+            if ( callRaises(expr->func) ) markRaise();
             markPassMutableOperand(expr->func, 0, expr->left);
             markPassMutableOperand(expr->func, 1, expr->right);
             if ( sef & uint32_t(SideEffects::modifyArgument) ) {
@@ -722,6 +732,7 @@ namespace das {
             Visitor::preVisit(expr);
             if ( !expr->func ) return;
             auto sef = getSideEffects(expr->func);
+            if ( callRaises(expr->func) ) markRaise();
             markPassMutableOperand(expr->func, 0, expr->subexpr);
             markPassMutableOperand(expr->func, 1, expr->left);
             markPassMutableOperand(expr->func, 2, expr->right);
@@ -767,6 +778,7 @@ namespace das {
                 markPassMutableArguments(expr->func, expr->arguments);
                 // if modified, modify CALL
                 auto sef = getSideEffects(expr->func);
+                if ( callRaises(expr->func) ) markRaise();
                 // see ExprCall: a recursive initializer call is still mid-analysis here
                 const bool inCycle = !expr->func->knownSideEffects
                     && asked.find(expr->func) != asked.end();
@@ -806,6 +818,7 @@ namespace das {
             markPassMutableArguments(expr->func, expr->arguments);
             // if modified, modify NEW
             auto sef = getSideEffects(expr->func);
+            if ( callRaises(expr->func) ) markRaise();
             // a recursive (or mutually-recursive) callee is still mid-analysis here, so
             // its modifyArgument / knownSideEffects are not established yet — fall back to
             // the conservative signature rule (a writable-ref argument may be written),
@@ -948,7 +961,7 @@ namespace das {
                 reportFolding();
                 return nullptr;
             }
-            if ( !var->access_ref && !var->access_pass && !var->access_get && var->init->noSideEffects ) {
+            if ( !var->access_ref && !var->access_pass && !var->access_get && droppable(var->init) ) {
                 reportFolding();
                 return nullptr;
             }

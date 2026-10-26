@@ -34,7 +34,7 @@ namespace das {
     TypeDeclPtr makeExprFlagsFlags() {
         auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
         ft->alias = "ExprFlags";
-        ft->argNames = { "constexpression", "noSideEffects", "noNativeSideEffects", "isForLoopSource", "isCallArgument" };
+        ft->argNames = { "constexpression", "noSideEffects", "noNativeSideEffects", "isForLoopSource", "isCallArgument", "mayRaise" };
         return ft;
     }
 
@@ -223,7 +223,7 @@ namespace das {
         auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
         ft->alias = "FunctionSideEffectFlags";
         ft->argNames = { "_unsafe", "userScenario","modifyExternal",
-            "modifyArgument","accessGlobal","invoke"
+            "modifyArgument","accessGlobal","invoke","captureString","mayRaise"
         };
         return ft;
     }
