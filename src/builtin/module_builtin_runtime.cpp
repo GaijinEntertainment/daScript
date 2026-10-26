@@ -2683,7 +2683,7 @@ namespace das
             SideEffects::modifyExternal, "is_intern_strings")
                 ->arg("context");
         // binary serializer
-        addInterop<_builtin_binary_load,void,vec4f,const Array &>(*this,lib,"_builtin_binary_load",
+        addInterop<_builtin_binary_load,void,vec4f &,const Array &>(*this,lib,"_builtin_binary_load",
             SideEffects::modifyArgumentAndExternal, "_builtin_binary_load")
                 ->args({"data","array"});
         addInterop<_builtin_binary_save,void,const vec4f,const Block &>(*this, lib, "_builtin_binary_save",

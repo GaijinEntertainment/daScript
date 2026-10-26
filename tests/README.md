@@ -589,6 +589,7 @@ JIT compilation and code-generation tests. None have `expect` directives. The sl
 | array_comprehension.das | Array/iterator comprehension - square, filtered with `where` | |
 | ascend_ctor.das | `new` with class constructors and fields | |
 | assume.das | `assume` for deep field access | |
+| failed_any_argument_const_ref.das | A builtin argument bound as `vec4f &` rejects const and non-ref values; a builtin's mutable reference argument rejects a struct literal, a function result and a `?:` with a temporary arm | **expect** `30341:3` `30107:3` |
 | failed_assume_loop.das | Circular `assume` detection - direct and indirect loops | **expect** `30127:2` `30305:4` |
 | failed_auto_infer.das | Auto type inference failures - missing overloads, wrong types | **expect** `31101` `31102:8` `30304:2` `30105:1` `30102:2` `30106` `30113` `31300` |
 | auto_infer_success.das | Successful auto type inference - generics, dim, static_if, variants | |

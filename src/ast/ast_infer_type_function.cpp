@@ -241,7 +241,7 @@ namespace das {
             return false;
         }
         if (argType->baseType == Type::anyArgument) {
-            return true;
+            return !argType->ref || (passType->isRef() && (argType->constant || !passType->constant));
         }
         if (inferAuto) {
             // if it's an alias, we de'alias it, and see if it matches at all
