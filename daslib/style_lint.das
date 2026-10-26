@@ -2450,7 +2450,7 @@ class StyleLintVisitor : AstVisitor {
         }
     }
 
-    def override preVisitExprBlock(blk : ExprBlock?) : void {
+    def override preVisitExprBlock(var blk : ExprBlock?) : void {
         if (blk.blockFlags.isClosure) {
             unsafe_block_stack |> push(0)
             if (!blk.genFlags.generated) complexity_stack |> push(1)
@@ -2497,7 +2497,7 @@ class StyleLintVisitor : AstVisitor {
         return blk
     }
 
-    def override preVisitExprBlockExpression(blk : ExprBlock?; expr : ExpressionPtr) : void {
+    def override preVisitExprBlockExpression(var blk : ExprBlock?; expr : ExpressionPtr) : void {
         if (!empty(pending_uninit_vars)) {
             if (expr is ExprCopy) {
                 let v = find_assign_var((expr as ExprCopy).left)
@@ -2766,7 +2766,7 @@ class StyleLintVisitor : AstVisitor {
         st041_candidates |> clear()
     }
 
-    def check_style012_array_init(blk : ExprBlock?; elet : ExprLet?) : void {
+    def check_style012_array_init(var blk : ExprBlock?; elet : ExprLet?) : void {
         if (current_function != null && current_function.fromGeneric != null) return
         var idx = -1
         let n = length(blk.list)
@@ -3167,7 +3167,7 @@ class StyleLintVisitor : AstVisitor {
         }
     }
 
-    def check_style027_for_loop_comprehension(blk : ExprBlock?; elet : ExprLet?) : void {
+    def check_style027_for_loop_comprehension(var blk : ExprBlock?; elet : ExprLet?) : void {
         if (current_function != null && current_function.fromGeneric != null) return
         var idx = -1
         let n = length(blk.list)
@@ -3279,7 +3279,7 @@ class StyleLintVisitor : AstVisitor {
         return (arg as ExprVar).variable == target
     }
 
-    def check_style032_clone_init(blk : ExprBlock?; elet : ExprLet?) : void {
+    def check_style032_clone_init(var blk : ExprBlock?; elet : ExprLet?) : void {
         if (current_function != null && current_function.fromGeneric != null) return
         var idx = -1
         let n = length(blk.list)
@@ -3361,7 +3361,7 @@ class StyleLintVisitor : AstVisitor {
         return false
     }
 
-    def check_style033_existing_runs(blk : ExprBlock?) : void {
+    def check_style033_existing_runs(var blk : ExprBlock?) : void {
         if (current_function != null && current_function.fromGeneric != null) return
         let n = length(blk.list)
         var i = 0
@@ -3406,7 +3406,7 @@ class StyleLintVisitor : AstVisitor {
         return recv
     }
 
-    def check_style033_existing_chain_runs(blk : ExprBlock?) : void {
+    def check_style033_existing_chain_runs(var blk : ExprBlock?) : void {
         if (current_function != null && current_function.fromGeneric != null) return
         let n = length(blk.list)
         var i = 0
@@ -3514,7 +3514,7 @@ class StyleLintVisitor : AstVisitor {
         return jv
     }
 
-    def check_style031_table_init(blk : ExprBlock?; elet : ExprLet?) : void {
+    def check_style031_table_init(var blk : ExprBlock?; elet : ExprLet?) : void {
         if (current_function != null && current_function.fromGeneric != null) return
         var idx = -1
         let n = length(blk.list)
@@ -4438,7 +4438,7 @@ class StyleLintVisitor : AstVisitor {
         }
     }
 
-    def override preVisitExprUnsafe(expr : ExprUnsafe?) : void {
+    def override preVisitExprUnsafe(var expr : ExprUnsafe?) : void {
         let n = length(unsafe_block_stack)
         if (expr != null && !expr.genFlags.generated
             && (current_function == null || current_function.fromGeneric == null)
