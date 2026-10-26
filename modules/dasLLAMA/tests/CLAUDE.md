@@ -3720,7 +3720,25 @@ oracle's spectrum and decoder output - its conv_post seam within `SEAM_CONV_POST
 peak) and the waveform within `SEAM_WAVE_BAR` (1e-3, absolute), the fp32 batch tile rounding apart from
 the per-token dot, each with the control of the generator fed `gen_in` rotated one row landing outside
 the bar; the end-to-end waveform difference is logged, not gated (the F0 phase drift the file header
-explains).
+explains). The whole rail runs under `with_reference_f32_tile` (`_f32_tile_pin.das`): every fp32 batch
+GEMM on `f32_batch_tile`'s declared fallback through the engine's f32 tile pin (`set_f32_tile_pin`), a
+seat of its own ahead of the float-batch override, so a sidecar crowning another permutation moves no bar
+and the rail holds under `DASLLAMA_ACCEL=1` - only the f32 tile is pinned, every other kernel keeps its
+stamp, and the pin is put back however the block leaves, a panic included.
+`test_f32_batch_tile_perms.das` - model-free: every permutation of `f32_batch_tile`'s grid
+(`_f32_tile_pin.das`'s `[dasllama_grid]` clones) over the 4x4 lattice of the inverse STFT's GEMM
+kitten mini ends on (n 11, d 20, 45480 frames) and of a 301-wide dot (d 20, 2048 tokens: past every
+permutation's lanes with a scalar remainder, asserted) under a NaN sentinel, against a double oracle within
+its own order's bound, `2 * eps_f32 * sqrt(depth) * sum |w x|` per output - depth the roundings a
+product passes through, `n / L + log2 L + n % L` over the permutation's `L` lanes, `n` when the loop
+is sequential or shorter than `L` - its largest difference logged with token and row; the control
+moves one weight so its output shifts by twice that output's bound, which must land past it. Then the
+pin itself (`test_f32_tile_pin_seat`): the plain and the offset `matmul_batch` forms under the pin bit for
+bit the reference permutation's lattice plus `dot` over the rest, the pin counting both, with a float-batch
+override armed - the accelerate tier under `DASLLAMA_ACCEL=1`, else a counting stand-in that is offered
+no GEMM while pinned, and unpinned is offered the offset form and never the plain one (the control); the
+pin alone arms no override seat (the lane announce reads that seat); a panic inside the block reaches the
+caller with the pin put back.
 `test_tower_helpers.das` - model-free: the shared encoder-tower helpers in `dasllama/dasllama_tower`
 (clamp, row norms, f16-table GEGLU-quick, im2col, two-axis rope, avg-pool, `attention_bidir`),
 each against an in-test reference; `rel_pos_table` against an fp64 sin/cos reference, its

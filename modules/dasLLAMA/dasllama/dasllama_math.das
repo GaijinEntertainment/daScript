@@ -828,6 +828,7 @@ def private batch_rows_core(var yp : float?; wp : auto const?; xp : float const?
 // grain 16 => 8 chunks idling half a 16-lane box) split tokens too — a flat (row-chunk × token-block)
 // domain. Disjoint stores, the same tile walk per (row range, token range) either way.
 def private matmul_batch_core(var yp : float?; wp : auto const?; xp : float const?; n, d, ntok : int64) {
+    return if (f32_tile_pin_serves(yp, wp, xp, n, d, ntok))
     var myp = yp
     if (n < g_f32_batch_tile_min_n) {   // the row nest: the knob's arm, reached under the lever alone
         batch_rows_core(yp, wp, xp, n, d, ntok)
@@ -902,6 +903,39 @@ def private restore_float_override_defaults {
 
 def float_batch_override_active() : bool => g_fp_override_active
 
+//! The installed float-batch override as ``set_float_batch_override`` takes it, and whether one is installed - a caller
+//! that clears it puts it back through ``set_float_batch_override`` where ``active`` reads true.
+def float_batch_override() : tuple<active : bool; fp : FpBatchOverrideFn; bf16 : Bf16BatchOverrideFn; min_ntok : int64>
+    => (active = g_fp_override_active, fp = g_mm_fp_batch_override, bf16 = g_mm_bf16_batch_override, min_ntok = g_fp_override_min_ntok)
+
+//! The f32 tile pin: a parity rail's own seat, apart from the float-batch override, serving every fp32 batch GEMM
+//! (`matmul_batch_core`'s f32 plane) ahead of that override; null is unpinned. The bf16 plane is never pinned.
+var private g_f32_tile_pin : FpBatchOverrideFn
+var private g_f32_tile_pin_said : table<string>   //! the pin's announce, made once
+
+//! Seats `fn` as the f32 tile pin (null unpins) and answers the pin it replaced, for the caller to put back
+def set_f32_tile_pin(fn : FpBatchOverrideFn) : FpBatchOverrideFn {
+    if (fn != null) {
+        gpu_said_once(g_f32_tile_pin_said, LOG_INFO, "math: ", "set_f32_tile_pin - a pinned tile serves every fp32 batch GEMM ahead of the float-batch override")
+    }
+    let prev = g_f32_tile_pin
+    g_f32_tile_pin = fn
+    return prev
+}
+
+def f32_tile_pinned() : bool => g_f32_tile_pin != null
+
+def private f32_tile_pin_serves(var yp : float?; wp : float const?; xp : float const?; n, d, ntok : int64) : bool =>
+    g_f32_tile_pin != null && invoke(g_f32_tile_pin, yp, wp, xp, n, d, ntok)
+[unused_argument(yp, wp, xp, n, d, ntok)]
+def private f32_tile_pin_serves(var yp : float?; wp : uint16 const?; xp : float const?; n, d, ntok : int64) : bool => false
+
+//! the float-plane override's answer for an f32 batch: off while the tile pin holds the plane
+def private fp_override_serves(var yp : float?; wp : float const?; xp : float const?; n, d, ntok : int64) : bool {
+    return (g_fp_override_active && g_f32_tile_pin == null && ntok >= g_fp_override_min_ntok
+        && invoke(g_mm_fp_batch_override, yp, wp, xp, n, d, ntok))
+}
+
 //! the stamped bf16-weight tile family's batch walk (dasllama_math_gen registers it): true when it
 //! served the call, false where the family declines or the shape is off its lattice
 typedef Bf16BatchGenFn = function<(var yp : float?; wp : uint16 const?; xp : float const?; n : int64; d : int64; ntok : int64) : bool>
@@ -917,9 +951,7 @@ def private matmul_batch_at(var y : array<float>; wp : float const?; x : array<f
     unsafe {
         var yp = addr(y[0])
         let xp = addr<float const?>(x[0])
-        if (g_fp_override_active && ntok >= g_fp_override_min_ntok && invoke(g_mm_fp_batch_override, yp, wp, xp, n, d, ntok)) {
-            return
-        }
+        return if (fp_override_serves(yp, wp, xp, n, d, ntok))
         matmul_batch_core(yp, wp, xp, n, d, ntok)
     }
 }
@@ -948,9 +980,7 @@ def matmul_batch(var y : array<float>; w : PlaneF; woff : int64; x : PlaneF; n, 
     var yp = unsafe(addr(y[0]))
     let wp = plane_at(w, woff)
     let xp = plane_at(x, 0l)
-    if (g_fp_override_active && ntok >= g_fp_override_min_ntok && invoke(g_mm_fp_batch_override, yp, wp, xp, n, d, ntok)) {
-        return
-    }
+    return if (fp_override_serves(yp, wp, xp, n, d, ntok))
     matmul_batch_core(yp, wp, xp, n, d, ntok)
 }
 
