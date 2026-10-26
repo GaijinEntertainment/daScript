@@ -45,6 +45,9 @@ namespace das {
             return isFreshTemporary(static_cast<ExprCast*>(expr)->subexpr);
         } else if ( expr->rtti_isNullCoalescing() ) {
             return isFreshTemporary(static_cast<ExprNullCoalescing*>(expr)->defaultValue);
+        } else if ( expr->rtti_isOp3() ) {
+            auto select = static_cast<ExprOp3*>(expr);
+            return isFreshTemporary(select->left) || isFreshTemporary(select->right);
         } else if ( expr->rtti_isCallLikeExpr() ) {
             return !(expr->type && expr->type->ref);    // a call returning a reference is storage
         }
