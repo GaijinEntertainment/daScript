@@ -242,7 +242,8 @@ The closure, per file in sorted name order: every `Archive` serializer body (a t
 `dasllama_tts_blocks.das` (the TTS blocks' plane packers; a driver's `*_prepare` places no image byte), the
 layout helpers `pad_to_page`, `w_page`, `plane_end`, `image_total_bytes`, `w_append`, `w_zeros`,
 `w_header`, `store_at`, `kq_plane_name`, and the TTS blob's `blob_push`,
-`weight_slot` and `conv1d_weight_row`, and the declaration lines of the layout constants
+`weight_slot` and `conv1d_weight_row`, the streaming Vulkan mint's `vk_mint_plane`, `vk_mint_walk` and
+`vk_mint_sink_append`, GigaAM's streamed weight-plane writer `gg_stream_plane`, and the declaration lines of the layout constants
 `IMAGE_PAGE`, `IMAGE_HEADER_BYTES`, `SECTION_TABLE_SLACK`, `DWRITE_STAGING_BAND`,
 `METAL_BAND_BLOCKS` and `BLOB_ALIGN_FLOATS`. Comments are stripped first, so re-wording one moves nothing, and CRLF
 line ends fold to LF before anything is hashed, so a checkout under `autocrlf` stamps as the

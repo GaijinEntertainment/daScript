@@ -127,8 +127,14 @@ assert, in the same change - a control that runs with that assert on every call.
 cell, or an assert's text claims, and that the cell passes as a literal argument to the kernel it
 dispatches or calls, is asserted in that cell - by an assert that a figure the run produces (the
 count it wrote, the offset it read or wrote at) equals that value, or by comparing against the
-oracle every output element the value sizes or places.** A count or offset the dispatch pads,
-clamps or derives from that literal gets its own assert.
+oracle every output element the value sizes or places.**
+
+**A kernel-unit cell whose dispatch covers more lanes or rows than the size the cell claims sizes
+its output buffer to the dispatch's full lane or row count, fills the elements past the claimed
+size with a sentinel, and asserts each of them still holds the sentinel after the run - or, for a
+kernel whose contract writes those elements (a class that zeroes a padded panel), asserts each
+holds the value that contract names, and holds the elements past the dispatch's own extent at the
+sentinel.**
 
 **A kernel-unit cell whose kernel computes at a narrower precision than its oracle at any
 step - operands, accumulator, or the stored result - bounds that step's error by construction

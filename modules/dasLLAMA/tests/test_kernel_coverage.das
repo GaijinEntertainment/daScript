@@ -1,4 +1,5 @@
-// The parakeet tower row needs ggml-parakeet-tdt-0.6b-v2-f32.bin under whisper_dir() and skips without it; the
+// The parakeet tower row needs ggml-parakeet-tdt-0.6b-v2-f32.bin under whisper_dir() and skips without it, the GigaAM row
+// gigaam-v3-e2e-rnnt-f16.gguf under models_dir() and the gigaam family on; the
 // StyleTTS2 tower row needs kitten-nano.gguf (and kokoro-82m.gguf for the torch-law stamps) under models_dir() and the kitten
 // family on, and skips without them; the Pocket row needs pocket-tts-en.gguf (and pocket-tts-en-kq.gguf for the q8 head stamps) and the pocket family on.
 options gen2
@@ -26,6 +27,8 @@ require dasllama/dasllama_qwen3a    // the cov_tower conv2d + GPU-mel carrier
 require dasllama/dasllama_gemma4a   // the cov_tower Conformer whole-chunk row
 require dasllama/dasllama_canary    // the cov_tower FastConformer row
 require dasllama/dasllama_parakeet  // the cov_tower parakeet row
+require dasllama/dasllama_gigaam    // the cov_tower GigaAM row
+require dasllama/dasllama_vad       // nolint:STYLE030,LINT019 — the cov_tower silero VAD row, inside the GPU static_if halves
 require dasllama/dasllama_qwen25v   // the cov_tower window-ViT row
 require dasllama/dasllama_qwen3v    // the cov_tower GPU-stem row
 require dasllama/dasllama_styletts2
@@ -233,7 +236,11 @@ let private CENSUS_NEVER_DISPATCHED <- [
     // the E-series projection's bf16 halfword walk: it serves bf16 projection rows whose model dim or base is odd, and every
     // stocked E-series carrier's dim is even on an even base. Its coverage is ple_proj_bf16_gate's odd arms in
     // test_metal_prefill_kernels.das
-    "metal_ple_proj_bf16_hw_one", "metal_ple_proj_bf16_hw"
+    "metal_ple_proj_bf16_hw_one", "metal_ple_proj_bf16_hw",
+    // gigaam's depthwise conv over f32 taps: it serves a carrier whose depthwise taps hold no f16, and the census's gigaam
+    // carrier (gigaam-v3-e2e-rnnt-f16.gguf) holds them in f16, which `metal_ga_hdw` serves. Its coverage is ga_dw_gate in
+    // test_metal_prefill_kernels.das
+    "metal_ga_dw"
 ]
 
 [unused_argument(t, path, family, kdts, nbs)]   // off-Apple the gated body is empty
@@ -543,9 +550,30 @@ def private cov_tower_parakeet(t : T?; samples : array<float>) {
             var pst = ParakeetState()
             with_dasllama_jobque() {
                 parakeet_log_mel(samples, pm, pst)
-                parakeet_encode(pm, pst)
+                let tt = parakeet_encode(pm, pst)
+                parakeet_tdt_decode(pm, pst, tt)   //! the transducer decode's four stamps off the encode's device rows
             }
             delete pst
+        }
+    }
+}
+
+//! the GigaAM rotary Conformer's whole encode off the raw samples on the carrier's f16 planes (the exact lane the GPU hook
+//! serves): the device mel, the conv front and the blocks
+[unused_argument(t, samples)]   // off-Apple the gated body is empty
+def private cov_tower_gigaam(t : T?; samples : array<float>) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        let gpath = path_join(models_dir(), "gigaam-v3-e2e-rnnt-f16.gguf")
+        if (family_on(t, "gigaam") && model_available(t, gpath) && !empty(samples)) {
+            var inscope gstg <- stage_gigaam_model(gpath, false)
+            var inscope gm = GigaamModel()
+            mint_gigaam_model(gstg, gm, false)
+            var gst = GigaamState()
+            with_dasllama_jobque() {
+                let tt = gigaam_encode_span(samples, 0l, long_length(samples), gm, gst)
+                gigaam_decode(gm, gst, tt)   //! the transducer decode's four stamps off the encode's device rows
+            }
+            delete gst
         }
     }
 }
@@ -585,12 +613,13 @@ def private cov_tower_gemma4v(t : T?) {
 [unused_argument(t)]   // off-Apple the gated body is empty
 def private cov_tower(t : T?) {
     static_if (typeinfo builtin_module_exists(das_metal)) {
+        let knobs = gpu_knobs()   //! the tower and decoder knobs put back as found at the end
         set_metal_tower(true)
         set_metal_wdec(true)
         set_metal_wdec_step(true)
         set_metal_wdec_step_min_d(0l)   // the census carrier is tiny — under the serving floor
         let wpath = path_join(whisper_dir(), "ggml-tiny.bin")
-        var samples <- load_audio_16k_mono(path_join(models_dir(), "jfk.wav"))
+        var samples <- load_audio_16k_mono(asr_clip("jfk.wav"))
         if (model_available(t, wpath) && !empty(samples)) {
             var inscope w = WhisperModel()
             var inscope stg <- stage_whisper_model(wpath, false, true)
@@ -640,14 +669,48 @@ def private cov_tower(t : T?) {
         cov_tower_gemma4a(t, samples)
         cov_tower_canary(t, samples)
         cov_tower_parakeet(t, samples)
+        cov_tower_gigaam(t, samples)
         delete samples
         cov_tower_gemma4uv(t)
         cov_tower_gemma4v(t)
         cov_tower_gemma3v(t)
         cov_tower_qwen25v(t)
         cov_tower_qwen3v(t)
-        cov_tower_styletts2(t)
-        cov_tower_pocket(t)
+        cov_tower_tail_rows(t)
+        set_gpu_knobs(knobs)
+    }
+}
+
+//! the rows both homes' censuses run past their tower families: the StyleTTS2 synthesis, the Pocket codec and frames, the VAD
+def private cov_tower_tail_rows(t : T?) {
+    cov_tower_styletts2(t)
+    cov_tower_pocket(t)
+    cov_tower_vad(t)
+}
+
+//! the silero VAD's two kernels: the batch probabilities over five seconds of a synthetic signal (the weights ship in-tree, no
+//! carrier needed) and one streaming feed on the device lever; family token `vad`
+[unused_argument(t)]   //! without a GPU module the gated body is empty
+def private cov_tower_vad(t : T?) {
+    static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
+        return if (!family_on(t, "vad"))
+        var inscope v <- load_vad_model(vad_model_path())
+        var sig : array<float>
+        sig |> resize(5 * 16000)
+        for (i in range(length(sig))) {
+            sig[i] = 0.3 * sin(float(i) * 0.05) * sin(float(i) * 0.0007)
+        }
+        with_dasllama_jobque() {
+            var inscope probs <- vad_probs(v, sig)
+            let was = set_vad_stream_gpu(true)
+            var it : VadIter
+            vad_iter_reset(it, default_vad_opts())
+            vad_iter_feed(v, it, sig) $(_ev) {
+                pass
+            }
+            set_vad_stream_gpu(was)
+        }
+        delete sig
     }
 }
 
@@ -968,6 +1031,19 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // the whisper-class projector tails' pair pool and swapped SwiGLU; their coverage is test_vkt_tower_tail_rows
     "tower_pool_rows_cls_spv",
     "tower_swiglu_swapped_cls_spv",
+    // gigaam's biased tap-major depthwise conv: no census row reaches it because the Vulkan census loads no gigaam carrier
+    // (gigaam-v3-e2e-rnnt-f16.gguf, run by test_gigaam_vulkan_twin); its coverage is test_vkt_tower_fastconformer
+    "tower_ga_dw_cls_spv",
+    // the same conv over the carrier's f16 taps, and GigaAM's CTC head pick (the ASR-decoder driver's CTC seat, run by a
+    // gigaam CTC carrier's decode - gigaam-v3-ctc-f16.gguf and gigaam-v3-e2e-ctc-f16.gguf via test_gigaam_ctc_vulkan_twin in
+    // test_audio.das): no census row loads a gigaam carrier; their coverage is test_vkt_tower_ga_dwh and test_vkt_ctc_pick
+    "tower_ga_dwh_cls_spv", "ctc_pick_cls_spv",
+    // the transducer decode's four stamps (the ASR-decoder driver's transducer seat, run by GigaAM's and parakeet's decode - no
+    // zoo row, no audio carrier in the census); their coverage is test_vkt_rnnt
+    "rnnt_gates_cls_spv", "rnnt_proj_cls_spv", "rnnt_joint_cls_spv", "rnnt_pick_cls_spv",
+    // gigaam's device mel's frame window: no census row reaches it because the Vulkan census loads no gigaam carrier
+    // (gigaam-v3-e2e-rnnt-f16.gguf, run by test_gigaam_vulkan_twin); its coverage is test_vkt_tower_ga_mel
+    "tower_ga_frames_cls_spv",
     // parakeet's tap-major subsample depthwise conv2d; its coverage is test_vkt_tower_dw2d
     "tower_pk_dw2d_cls_spv",
     // the bias-less seam of parakeet's blocks; its coverage is test_vkt_tower_ln_rows
@@ -1270,8 +1346,7 @@ def test_vulkan_kernel_coverage_serving(tst : T?) {
             defer() {
                 set_gpu_knobs(knobs)
             }
-            cov_tower_styletts2(t)
-            cov_tower_pocket(t)
+            cov_tower_tail_rows(t)
             vk_kernel_coverage_report()
             var cov <- vk_kernel_coverage()
             var served = 0

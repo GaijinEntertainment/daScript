@@ -4,7 +4,8 @@ Companion to `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`; a section is cited by its a
 what the residency plan of `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan` may fill on a card that
 shares itself with a desktop: the room the OS reports and the headroom where none does, the two guards
 that stand whatever the plan decided, and the two allocation shapes the Windows memory manager pages out
-from under a running model - the priority tag and the mapped memory type - both opt-ins. Every rate in
+from under a running model - the priority tag and the mapped memory type - both opt-ins, and the
+per-call buffers the mapped type never serves. Every rate in
 this document is a `benchmarks/lcpp_bench.das` reading (`-jit --for-debug-purposes`, `DASLLAMA_IMAGE=0`,
 `DASLLAMA_GPU=1`, 16 threads) on the zen2 box's RTX 5060 Ti 16 GB, driver 616.56.
 
@@ -84,3 +85,32 @@ of the pool's host placements at a window's end, which the placement batch close
 misses touches neither. The
 demotion warning (`vk_demotion_check`, the shared usage past the desktop's baseline and our
 own host buffers) is the tell either way.
+
+### Per-call buffers never take the mapped type {#vk-per-call-buffers}
+
+**A per-call buffer is allocated from unmapped device-local memory whatever `DASLLAMA_VK_REBAR`
+says; the mapped type serves long-lived planes alone.** A per-call buffer is one the host refills
+on a later call after a device command has read it: the audio samples and mel rows of a tower's
+front, the encoder rows a decoder reads, rope and position tables, decoder state seeds, the VAD's
+input and carried state, the prefill window's rows, the seams' rows, the KV mirror slabs and the
+remedy mirrors, the n-gram ring, the hot pool's and the stream slots' expert planes, and every TTS
+row buffer. On the mapped type each such refill is a host write after the device's first touch,
+and on the NVIDIA driver a write-migrate-write cycle of a shadowed allocation hangs the machine; the
+type's one gain, the load's direct upload, a per-call buffer never collects.
+
+The property sits on the allocation: `make_device_buf`'s `per_call` flag, spelled
+`make_call_buf` / `try_call_buf` / `soft_call_buf` (`dasllama_vulkan_common.das`), the drivers'
+`vt_call_buf` (tower), `wd_call_buf` and `rv_call_buf` (ASR decoders), and `make_stack_shell`'s
+`per_call` for the pool and stream slots. Every `ts_rows_alloc` row buffer carries it, the TTS
+slabs included: `ts_upload` refills rows of any kind, so the record cannot tell a slab from a slot.
+
+`REVIEW.das`'s `check_per_call_buffers` holds it over `dasllama_vulkan_*.das`: a host upload
+(`upload_region_at`, `upload_region`) is a per-call fill, and every allocation its target buffer
+field can come from - followed through field aliases, `TsRows(dev = s.devs[slot])` and
+`k_slabs |> push(mir.a)` alike, matched by field name across the files - carries a `*_call_buf`
+allocator. The check licenses three shapes: an upload in a `[cold_path]` function (a load-time
+fill), an upload in the function that allocates the buffer (the fill lands before any device
+touch), and an upload into a parameter of the uploading function (a wrapper; its callers'
+uploads are the ones checked). A per-call refill on a cold leg - the n-gram ring's `up`, the
+remedy hydrate, the hot pool's placement, the TTS voice slot - is outside its reach and carries
+the property by the allocation sites above.

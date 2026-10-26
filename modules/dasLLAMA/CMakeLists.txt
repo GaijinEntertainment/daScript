@@ -49,6 +49,7 @@ IF(NOT DAS_LLAMA_INCLUDED)
     )
     # third-party notices: the ported reference implementations (MIT) + the weights terms
     install(FILES ${PROJECT_SOURCE_DIR}/modules/dasLLAMA/LICENSE.PARAKEET DESTINATION ${DAS_INSTALL_DOCDIR} RENAME PARAKEET.LICENSE)
+    install(FILES ${PROJECT_SOURCE_DIR}/modules/dasLLAMA/LICENSE.GIGAAM DESTINATION ${DAS_INSTALL_DOCDIR} RENAME GIGAAM.LICENSE)
     install(FILES ${PROJECT_SOURCE_DIR}/modules/dasLLAMA/LICENSE.SILERO DESTINATION ${DAS_INSTALL_DOCDIR} RENAME SILERO.LICENSE)
     install(FILES ${PROJECT_SOURCE_DIR}/modules/dasLLAMA/LICENSE.LLAMA_CPP DESTINATION ${DAS_INSTALL_DOCDIR} RENAME LLAMA_CPP.LICENSE)
     install(FILES ${PROJECT_SOURCE_DIR}/modules/dasLLAMA/LICENSE.VLLM DESTINATION ${DAS_INSTALL_DOCDIR} RENAME VLLM.LICENSE)
@@ -101,6 +102,9 @@ if(NOT DAS_TOOLS_DISABLED)
             utils/dasllama-server/test_worker_dispatch.das
             utils/dasllama-server/test_constraints.das)
     
+    das_lane_dastest_target(run_tests_dasllama_convert COMMENT "Testing dasllama-convert"
+        JIT_FILES utils/dasllama-convert/test_convert.das)
+
     das_lane_dastest_target(run_tests_dasllama_env_registry COMMENT "Testing the dasLLAMA env-knob registry"
         FILES modules/dasLLAMA/tests/test_env_registry.das)
     

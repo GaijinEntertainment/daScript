@@ -15,18 +15,16 @@ require daslib/apply
 require daslib/archive
 require dasllama/dasllama_env
 require dasllama/dasllama_math
-require dasllama/dasllama_gpu_math
 require dasllama/dasllama_gguf
 require dasllama/dasllama_plane public   // PlaneF/PlaneI8/PlaneI32/PlaneI64 — the borrowed weight planes
 require dasllama/dasllama_asr_types public   // TranscribeSegment/AsrCaps — the shared ASR floor
 require dasllama/dasllama_audio
 require dasllama/dasllama_tower
 require dasllama/dasllama_convert
-require dasllama/dasllama_kv_codec   // dot_f16 / axpy_f16: the decode's weights are read as halves
 require dasllama/dasllama_par
 require dasllama/dasllama_common   // apply_box_profile_runtime for the parakeet-image identity
 require dasllama/dasllama_image
-require dasllama/dasllama_canary   // CanaryLayerOffs: the FastConformer block record parakeet's blocks ride on the GPU drivers
+require dasllama/dasllama_rnnt public   // public: ParakeetToken is RnntToken
 
 // Parakeet-TDT (NVIDIA FastConformer + LSTM predictor + Token-and-Duration Transducer),
 // read from the whisper.cpp-converted ggml bin. Oracle = whisper.cpp's in-tree parakeet-cli
@@ -38,16 +36,8 @@ let private LOCAL_ATTN_THRESHOLD = 8192l   // beyond this the oracle switches to
 // interleaved (re, im) slots of one 512-pt FFT frame — the mel worker's stack buffer
 let private FFT_FRAME = 1024
 
-//! One decoded TDT token: vocab id, chosen duration (index + frames), the encoder frame it
-//! was emitted at, and its (log-)probability under the joint's full-row log-softmax.
-struct ParakeetToken {
-    id : int
-    dur_idx : int
-    dur : int
-    frame : int64
-    p : float
-    plog : float
-}
+//! One decoded TDT token: the shared transducer's record.
+typedef ParakeetToken = RnntToken
 
 //! One conformer block's blob offsets: GEMM regions index qblob on a q8 load, blob on fp32
 //! (identical walks on fp32); the d-vectors, u/v biases and the depthwise taps always index blob.
@@ -268,11 +258,6 @@ def private pk_layer_stride(d, ff, nk : int64) : int64 => 8l * d * d + 4l * ff *
 // and the depthwise kernel
 def private pk_aux_layer_stride(d, nk : int64) : int64 => 16l * d + nk * d
 
-// Attention slab height in rows: 4-aligned (the gemm_f32 row-group invariant) and tall
-// enough that the Kᵀ/pos panel re-streams stay a few percent of the gemm time — B=16
-// measured −12% on hp0x2 encode (panel re-read per 16 rows); B=64 restores it.
-let PK_ATN_BLOCK = 64l
-
 // repack one GEMM region for the active backend (scales index at woff/32, so woff must be 32-aligned)
 def private pk_repack(var st : ParakeetStaging; woff, n, d : int64) {
     if (woff % 32l != 0l) {
@@ -314,22 +299,11 @@ def private pk_repack_all(var st : ParakeetStaging) {
 
 // ===== per-session scratch =====
 
-//! LSTM predictor state (h/c per layer) + the projected prediction vector.
-struct ParakeetPredState {
-    h : array<float>       // [n_layers × pred_dim]
-    c : array<float>
-    pred : array<float>    // joint.pred projection of the last hidden [pred_dim]
-    gates : array<float>   // scratch [4 × pred_dim]: the ih and hh dots summed
-    xin : array<float>     // scratch [pred_dim]: layer input
-    wh : array<uint16>     //!< the stack's weights as halves: a layer's ih then hh [4 pred_dim][pred_dim], then joint.pred [pred_dim][pred_dim]
-    wh_key : uint64        //!< the weight plane `wh` was converted from (0 = none)
-    @scratch bias_off : array<int64>   //!< each layer's gate bias offset in the blob, where a decode step's workers read it
-}
-
 //! Every hot-path buffer of the parakeet pipeline (mel, conv subsampling, encoder, requant,
 //! TDT decode) so a transcribe allocates NOTHING per call. Arrays grow reserve-exact and never
 //! shrink; a default-constructed value is ready to use.
 struct ParakeetState {
+    enc_gen : uint64   //!< the device rows' generation the last encode left (`tower_rows_gen`), 0 for none
     // mel
     mel : WhisperMel = WhisperMel()
     pre : array<float>
@@ -355,13 +329,13 @@ struct ParakeetState {
     posq : array<int8>
     poss : array<float>
     posl : array<float>
-    quh : array<float>
-    quh2 : array<float>
+    qu : array<float>
+    qv : array<float>
     vh : array<float>
-    kth : array<float>
-    scores : array<float>
-    relm : array<float>
-    post : array<float>
+    kt : array<float>
+    sc : array<float>
+    rl : array<float>
+    posh : array<float>
     oh : array<float>
     ao : array<float>
     // q8 activation image (q/k/v share one requant; decode reuses it)
@@ -369,32 +343,8 @@ struct ParakeetState {
     xsi : array<float>
     // decode
     encp : array<float>
-    joint_wt : array<uint16>            //!< the joint net's weight as input columns [pred_dim][n_logits], halves
-    joint_wt_key : uint64               //!< the weight plane `joint_wt` was laid from (0 = none)
-    @scratch dec_stages : array<int3>   //!< a decode step's stage list, int3(range_begin, range_end, num_chunks)
-    logits : array<float>
     @scratch toks : array<ParakeetToken>
-    pred : ParakeetPredState = ParakeetPredState()
-}
-
-// mm_blob_b with the q8 route: activation image (xq, xs) pre-quantized by the caller
-// (asr_requant_rows_q8) so q/k/v and repeat consumers share one requant.
-def private pk_mm(m : ParakeetModel; var y : array<float>; woff : int64; x : array<float>;
-                  xq : array<int8>; xs : array<float>; n, d, npos : int64) {
-    if (m.q8) {
-        matmul_q8q8_batch(y, m.qblob, m.qscales, woff, xq, xs, n, d, npos)
-    } else {
-        mm_blob_b(y, m.blob, woff, x, n, d, npos)
-    }
-}
-
-// requant-and-multiply for single-consumer activations (scratch grows lazily)
-def private pk_mm_rq(m : ParakeetModel; var y : array<float>; woff : int64; x : array<float>;
-                     var xq : array<int8>; var xs : array<float>; n, d, npos : int64) {
-    if (m.q8) {
-        requant_rows_q8_sized(x, n, npos, xq, xs)
-    }
-    pk_mm(m, y, woff, x, xq, xs, n, d, npos)
+    dec : RnntState = RnntState()
 }
 
 // conv taps arrive [ch][3][3] (dw, torch) / [cout][9] (c0, im2col order) / [ch][k]
@@ -480,41 +430,11 @@ def private pk_read_gemm(recs : table<string; PkTensorRec>; b : array<uint8> | #
 //! With ``q8`` the encoder/joint GEMM weights transcode to Q8_0 straight from the mapped file (~4x CPU fast path); conv im2col, depthwise, LSTM, and joint_net stay fp32 (a few % of encode).
 //! Like ``load_model``, caches a box/knob-specific PREPARED IMAGE for fast reload; ``DASLLAMA_IMAGE=0`` disables it, a ``.dlim`` path loads one directly.
 def load_parakeet_model(path : string; q8 : bool = false) : ParakeetModel {
-    pk_announce_lane(q8)
+    announce_lane("parakeet", q8, "f32 planes", "set_parakeet_q8", g_pk_pin != GemmLane.unset, parakeet_gpu_serves())
     let tag = q8 ? "parakeet-q8" : "parakeet-f32"
-    if (path |> ends_with(".dlim")) {
-        // named directly — no source bin to regenerate from, so a wrong identity panics
-        apply_box_profile_runtime()
-        let ts_img = ref_time_ticks()
-        var t = ParakeetModel()
-        if (!load_image(path, t, tag)) {
-            panic("dasLLAMA: '{path}' is not a prepared parakeet image for this box/knobs (identity {image_identity(tag)}) - regenerate it from the source model")
-        }
-        to_log(LOG_INFO, "dasLLAMA: prepared parakeet image mapped in {get_time_usec(ts_img) / 1000} ms - {path}\n")
-        return <- t
+    return <- load_staged_image(path, tag, "parakeet", "source model", type<ParakeetModel>) {
+        return <- stage_parakeet_model(path, q8)
     }
-    if (g_env_engine.image) {
-        apply_box_profile_runtime()   // a backend pin must precede the identity (it names the backend)
-        let img = image_path_for(path, tag)
-        let ts_img = ref_time_ticks()
-        var t = ParakeetModel()
-        if (load_image(img, t, tag)) {
-            to_log(LOG_INFO, "dasLLAMA: prepared parakeet image mapped in {get_time_usec(ts_img) / 1000} ms - {img}\n")
-            return <- t
-        }
-        var inscope st <- stage_parakeet_model(path, q8)
-        var built = ParakeetModel()
-        if (cache_via_image_staged(st, built, img, tag)) {
-            dlim_gc_stale(path, tag)   // the fresh bake ON DISK proves its lane's siblings dead; an in-memory build reaps nothing
-        }
-        return <- built
-    }
-    // no persisted image: mint one in memory and serve THAT — a served model is always
-    // image-backed, so there is no second, array-owning shape of this struct to maintain
-    var inscope st <- stage_parakeet_model(path, q8)
-    var built = ParakeetModel()
-    cache_via_image_staged(st, built, "", tag)
-    return <- built
 }
 
 //! The mint-side carrier: ``e`` holds every scalar the meta blob carries (vocab included), the
@@ -537,14 +457,8 @@ def private serialize_image_meta(var arch : Archive; var st : ParakeetStaging) {
     serialize_image_meta(arch, st.e)
 }
 
-// staging owns its plane bytes outright — every array here is heap, none is borrowed
 def finalize(var st : ParakeetStaging) {
-    apply(st) $ [unused_argument(name)] (name : string; var field) {
-        static_if (typeinfo is_array(field)) {
-            delete field
-        }
-    }
-    delete st.e
+    delete_staging(st)
 }
 
 [unused_argument(st)]
@@ -1039,35 +953,6 @@ def private pk_xf_permute(var xf : array<float>; y6 : array<float>; tt, w3, nch 
     }
 }
 
-// fused bias+relu over rows (the 1x1 conv epilogues) — one float4 pass instead of the
-// add_bias_rows + relu pair re-streaming the image (bench: 11.8x); threads over rows;
-// explicit npos: scratch is oversized
-def private pk_bias_relu(var y : array<float>; blob : PlaneF; b_off, d, npos : int64) {
-    let d4 = d - d % 4l
-    unsafe {
-        var yp = addr(y[0])
-        let bp = plane_at(blob, b_off)
-        let zero = float4(0.0)
-        maybe_parallel_for(0, int(npos), lanes_for_work(npos * d, 0)) $(rb, re) {
-            unsafe {
-                for (p in range64(int64(rb), int64(re))) {
-                    let row = p * d
-                    var i = 0l
-                    while (i < d4) {
-                        let v = (*reinterpret<float4 const?>(yp + row + i)) + (*reinterpret<float4 const?>(bp + i))
-                        *reinterpret<float4?>(yp + row + i) = max(v, zero)
-                        i += 4l
-                    }
-                    while (i < d) {
-                        yp[row + i] = max(yp[row + i] + bp[i], 0.0)
-                        i++
-                    }
-                }
-            }
-        }
-    }
-}
-
 // ===== encoder =====
 
 //! The most encoder frames an encode takes: past it the oracle switches to local attention, which no chain here runs.
@@ -1089,11 +974,17 @@ def parakeet_pos_table(m : ParakeetModel; var st : ParakeetState; tt : int64) {
     st.pos_q8 = m.q8
 }
 
-//! FastConformer encoder over the whole mel: conv subsampling, then 24 conformer blocks (macaron
-//! FFN, rel-pos attention, GLU+depthwise-conv+BN, post norm) — global attention only, panics past
-//! the oracle's 8192-frame local-attention switch. Reads ``st.mel``, leaves rows in ``st.x``.
+//! FastConformer encoder over the whole mel: conv subsampling, then 24 conformer blocks - global attention only, panics past
+//! the oracle's 8192-frame local-attention switch. Reads ``st.mel``, leaves rows in ``st.x`` and the device rows' generation
+//! the encode left in ``st.enc_gen`` (`tower_rows_gen`), the transducer decode's key.
 [hot_path]
 def parakeet_encode(m : ParakeetModel; var st : ParakeetState) : int64 {
+    let tt = pk_encode_rows(m, st)
+    st.enc_gen = tower_rows_gen()
+    return tt
+}
+
+def private pk_encode_rows(m : ParakeetModel; var st : ParakeetState) : int64 {
     let d = m.n_state
     let nch = m.n_sub_ch
     // the conformer block loop walks the subsampled frame count
@@ -1115,14 +1006,14 @@ def parakeet_encode(m : ParakeetModel; var st : ParakeetState) : int64 {
     ensure_length(st.y3, t2 * w2 * nch)
     pk_scan("y0", st.y0, t1 * w1 * nch)
     pk_scan("y2", st.y2, t2 * w2 * nch)
-    pk_mm_rq(m, st.y3, m.c3_w, st.y2, st.xqi, st.xsi, nch, nch, t2 * w2)   // 1x1 conv = per-position channel mix
-    pk_bias_relu(st.y3, m.blob, m.c3_b, nch, t2 * w2)
+    tower_mm_rq(m, st.y3, m.c3_w, st.y2, st.xqi, st.xsi, nch, nch, t2 * w2)   // 1x1 conv = per-position channel mix
+    bias_relu_rows(st.y3, m.blob, m.c3_b, nch, t2 * w2)
     pk_conv2d_dw_s2(st.y5, st.y3, m.blob, m.c5_w, m.c5_b, w2, t2, nch)
     let w3 = conv_s2_out(w2)
     let t3 = conv_s2_out(t2)
     ensure_length(st.y6, t3 * w3 * nch)
-    pk_mm_rq(m, st.y6, m.c6_w, st.y5, st.xqi, st.xsi, nch, nch, t3 * w3)
-    pk_bias_relu(st.y6, m.blob, m.c6_b, nch, t3 * w3)
+    tower_mm_rq(m, st.y6, m.c6_w, st.y5, st.xqi, st.xsi, nch, nch, t3 * w3)
+    bias_relu_rows(st.y6, m.blob, m.c6_b, nch, t3 * w3)
 
     // features per time row: v[f + w3·c] = y6[t][f][c]; then pre_out into the residual stream
     let tt = t3
@@ -1134,14 +1025,13 @@ def parakeet_encode(m : ParakeetModel; var st : ParakeetState) : int64 {
     pk_xf_permute(st.xf, st.y6, tt, w3, nch)
     ensure_length(st.x, tt * d)
     pk_scan("y6", st.y6, t3 * w3 * nch)
-    pk_mm_rq(m, st.x, m.pre_w, st.xf, st.xqi, st.xsi, feat, d, tt)
+    tower_mm_rq(m, st.x, m.pre_w, st.xf, st.xqi, st.xsi, feat, d, tt)
     add_bias_rows(st.x, m.blob, m.pre_b, d, tt)
     pk_scan("pre", st.x, tt * d)
     asr_prof_add("pk.conv_subsample", tp)
     tp = ref_time_ticks()
 
-    // masked tail (padded mel frames past the real audio): none for full-clip encode when
-    // ceil-per-stage == ceil(n/8); the oracle masks keys >= ceil(n_len_org/8)
+    // the oracle masks keys >= ceil(n_len_org/8): no masked tail on a full-clip encode, where ceil-per-stage == ceil(n/8)
     let n_real = (st.mel.n_len_org + m.subsampling - 1l) / m.subsampling
 
     let ww = 2l * tt - 1l
@@ -1190,6 +1080,9 @@ def register_parakeet_gpu_encode(fn : ParakeetGpuEncodeFn) {
 //! the f32 blob, so the un-pinned lane defaults to exact); false on CPU builds or knob-off.
 def parakeet_gpu_serves() : bool => g_pk_serves_set && invoke(g_pk_serves)
 
+//! Would a GPU driver serve the loaded model's encode: the exact lane, with a driver whose knob is on - the facade's device-lane arm.
+def parakeet_device_gpu(m : ParakeetModel) : bool => !m.q8 && parakeet_gpu_serves()
+
 var private g_pk_pin = GemmLane.unset
 
 //! Pin the parakeet weight format for subsequent loads: q8 (the CPU serving lane) vs the fp32
@@ -1205,17 +1098,6 @@ def reset_parakeet_q8() {
 
 [arch(at="../ARCHITECTURE_MEDIA.md#tower-weight-lane")]
 def parakeet_serves_q8() : bool => lane_serves_q8(g_pk_pin, !parakeet_gpu_serves())
-
-[arch(at="../ARCHITECTURE_MEDIA.md#tower-weight-lane")]
-def private pk_announce_lane(q8 : bool) {
-    var why = "the CPU default (DASLLAMA_METAL_TOWER off, or no Metal FastConformer driver)"
-    if (g_pk_pin != GemmLane.unset) {
-        why = "pinned via set_parakeet_q8"
-    } elif (parakeet_gpu_serves()) {
-        why = "the Metal FastConformer driver serves f32 planes"
-    }
-    to_log(LOG_INFO, "dasLLAMA parakeet: GEMM lane {q8 ? "q8" : "f32 planes"} - {why}\n")
-}
 
 //! a parakeet block's offsets as the FastConformer chains read them: canary's record with no GEMM bias (-1 = none)
 def pk_fc_layer(lo : PkLayerOffs) : CanaryLayerOffs {
@@ -1233,532 +1115,39 @@ def pk_fc_layer(lo : PkLayerOffs) : CanaryLayerOffs {
         nout_w = lo.nout_w, nout_b = lo.nout_b)
 }
 
+//! parakeet's CPU block form: no GEMM bias, tap-major taps, the folded BatchNorm, its stage buckets and the NaN scan
+def private pk_cpu_form(m : ParakeetModel) : FcCpuForm {
+    return FcCpuForm(d = m.n_state, ff = 4l * m.n_state, n_head = m.n_head, nk = m.n_conv_kernel, biased = false,
+        prof = FcCpuProf(ffn1 = FcFfnProf(ln = "pk.ffn.ln", a = "pk.ffn.a", silu = "pk.ffn.silu", b = "pk.ffn.b", res = "pk.ffn.res"),
+            ffn = "pk.ffn", proj_ln = "pk.attn_proj.ln", proj_rq = "pk.attn_proj.rq", proj_q = "pk.attn_proj.q",
+            proj_k = "pk.attn_proj.k", proj_v = "pk.attn_proj.v", proj_pos = "pk.attn_proj.pos", proj = "pk.attn_proj",
+            heads_pack = "pk.attn_heads.pack", heads_pos = "pk.attn_heads.pos", heads_blocks = "pk.attn_heads.blocks",
+            heads = "pk.attn_heads", attn_out = "pk.attn_out", conv = "pk.conv_module"),
+        scan_on = g_pk_nan_scan, scan = @@pk_scan_layer)
+}
+
 def private pk_blocks_cpu(m : ParakeetModel; var st : ParakeetState; tt, ww, n_real : int64) {
-    let d = m.n_state
-    let n_head = m.n_head
-    let dh = d / n_head
-    var tp = ref_time_ticks()
-
-    // scratch
-    ensure_length(st.xb, tt * d)
-    ensure_length(st.h, tt * 4l * d)
-    ensure_length(st.qq, tt * d)
-    ensure_length(st.kk, tt * d)
-    ensure_length(st.vv, tt * d)
-    ensure_length(st.posl, ww * d)
-    ensure_length(st.quh, tt * dh)
-    ensure_length(st.quh2, tt * dh)
-    ensure_length(st.vh, tt * dh)
-    ensure_length(st.kth, dh * tt)
-    //! per-job B-row slabs: job li owns slab li; 4-aligned row groups stay bit-exact
-    let atn_jobs = min(int64(lanes_for_work(tt * dh * (2l * tt + ww), 0)),
-        (tt + PK_ATN_BLOCK - 1l) / PK_ATN_BLOCK)
-    ensure_length(st.scores, atn_jobs * PK_ATN_BLOCK * tt)
-    ensure_length(st.relm, atn_jobs * PK_ATN_BLOCK * ww)
-    ensure_length(st.oh, atn_jobs * PK_ATN_BLOCK * dh)
-    ensure_length(st.post, dh * ww)
-    ensure_length(st.ao, tt * d)
-    let scale = 1.0 / sqrt(float(dh))
-
+    let form = pk_cpu_form(m)
     for (l in range64(m.n_layer)) {
-        let lo = pk_layer_offsets(m, l)
-
-        // FFN1 (macaron half)
-        tp = ref_time_ticks()
-        var tf = tp
-        layernorm_batch(st.xb, st.x, m.blob, lo.nf1_w, lo.nf1_b, d, tt, m.eps)
-        asr_prof_add("pk.ffn.ln", tf)
-        tf = ref_time_ticks()
-        pk_mm_rq(m, st.h, lo.ff1a_w, st.xb, st.xqi, st.xsi, d, 4l * d, tt)
-        asr_prof_add("pk.ffn.a", tf)
-        tf = ref_time_ticks()
-        silu4_batch(st.h, 4l * d, tt)
-        asr_prof_add("pk.ffn.silu", tf)
-        tf = ref_time_ticks()
-        pk_mm_rq(m, st.xb, lo.ff1b_w, st.h, st.xqi, st.xsi, 4l * d, d, tt)
-        asr_prof_add("pk.ffn.b", tf)
-        tf = ref_time_ticks()
-        for (i in range64(tt * d)) {
-            st.x[i] += 0.5 * st.xb[i]
-        }
-        asr_prof_add("pk.ffn.res", tf)
-        pk_scan("ffn1", l, st.x, tt * d)
-        asr_prof_add("pk.ffn", tp)
-
-        // rel-pos attention
-        tp = ref_time_ticks()
-        var tq = tp
-        layernorm_batch(st.xb, st.x, m.blob, lo.nat_w, lo.nat_b, d, tt, m.eps)
-        asr_prof_add("pk.attn_proj.ln", tq)
-        tq = ref_time_ticks()
-        if (m.q8) {   // q/k/v share the post-LN activation: one requant, three GEMMs
-            requant_rows_q8_sized(st.xb, d, tt, st.xqi, st.xsi)
-        }
-        asr_prof_add("pk.attn_proj.rq", tq)
-        tq = ref_time_ticks()
-        pk_mm(m, st.qq, lo.q_w, st.xb, st.xqi, st.xsi, d, d, tt)
-        asr_prof_add("pk.attn_proj.q", tq)
-        tq = ref_time_ticks()
-        pk_mm(m, st.kk, lo.k_w, st.xb, st.xqi, st.xsi, d, d, tt)
-        asr_prof_add("pk.attn_proj.k", tq)
-        tq = ref_time_ticks()
-        pk_mm(m, st.vv, lo.v_w, st.xb, st.xqi, st.xsi, d, d, tt)
-        asr_prof_add("pk.attn_proj.v", tq)
-        tq = ref_time_ticks()
-        // pos projection for this layer: [W × d], against the hoisted layer-invariant image
-        pk_mm(m, st.posl, lo.pos_w, st.pos_emb, st.posq, st.poss, d, d, ww)
-        asr_prof_add("pk.attn_proj.pos", tq)
-        asr_prof_add("pk.attn_proj", tp)
-        tp = ref_time_ticks()
-        for (hi in range64(n_head)) {
-            let hoff = hi * dh
-            unsafe {
-                var qup = addr(st.quh[0])
-                var qvp = addr(st.quh2[0])
-                var ktp = addr(st.kth[0])
-                var vhp = addr(st.vh[0])
-                var pop = addr(st.post[0])
-                var scp = addr(st.scores[0])
-                var rlp = addr(st.relm[0])
-                var ohp = addr(st.oh[0])
-                var aop = addr(st.ao[0])
-                let qqp = addr<float const?>(st.qq[0])
-                let kkp = addr<float const?>(st.kk[0])
-                let vvp = addr<float const?>(st.vv[0])
-                let plp = addr<float const?>(st.posl[0])
-                let bup = plane_at(m.blob, lo.bias_u + hi * dh)
-                let bvp = plane_at(m.blob, lo.bias_v + hi * dh)
-                //! the transposed head views build in full before the row GEMMs read them
-                var th = ref_time_ticks()
-                maybe_parallel_for(0, int(tt), lanes_for_work(tt * dh * 4l, 0)) $(rb, re) {
-                    unsafe {
-                        for (t in range64(int64(rb), int64(re))) {
-                            for (j in range64(dh)) {
-                                let qv = qqp[t * d + hoff + j]
-                                qup[t * dh + j] = qv + bup[j]
-                                qvp[t * dh + j] = qv + bvp[j]
-                                ktp[j * tt + t] = kkp[t * d + hoff + j]
-                                vhp[t * dh + j] = vvp[t * d + hoff + j]
-                            }
-                        }
-                    }
-                }
-                asr_prof_add("pk.attn_heads.pack", th)
-                th = ref_time_ticks()
-                maybe_parallel_for(0, int(ww), lanes_for_work(ww * dh, 0)) $(rb, re) {
-                    unsafe {
-                        for (w in range64(int64(rb), int64(re))) {
-                            for (j in range64(dh)) {
-                                pop[j * ww + w] = plp[w * d + hoff + j]
-                            }
-                        }
-                    }
-                }
-                asr_prof_add("pk.attn_heads.pos", th)
-                th = ref_time_ticks()
-                let nblkb = (tt + PK_ATN_BLOCK - 1l) / PK_ATN_BLOCK
-                let npj = (nblkb + atn_jobs - 1l) / atn_jobs
-                maybe_parallel_for(0, int(atn_jobs), int(atn_jobs)) $(jb, je) {
-                    unsafe {
-                        for (li in range64(int64(jb), int64(je))) {
-                            var scs = scp + li * PK_ATN_BLOCK * tt
-                            var rls = rlp + li * PK_ATN_BLOCK * ww
-                            var ohs = ohp + li * PK_ATN_BLOCK * dh
-                            for (blk in range64(li * npj, min((li + 1l) * npj, nblkb))) {
-                                let r0 = blk * PK_ATN_BLOCK
-                                let r1 = min(r0 + PK_ATN_BLOCK, tt)
-                                let nr = r1 - r0
-                                for (i in range64(nr * tt)) {
-                                    scs[i] = 0.0
-                                }
-                                for (i in range64(nr * ww)) {
-                                    rls[i] = 0.0
-                                }
-                                gemm_f32_jo(scs, qup + r0 * dh, ktp, nr, dh, tt)
-                                gemm_f32_jo(rls, qvp + r0 * dh, pop, nr, dh, ww)
-                                for (q in range64(r0, r1)) {
-                                    let base = tt - 1l - q
-                                    var qs = scs + (q - r0) * tt
-                                    let rs = rls + (q - r0) * ww
-                                    for (k in range64(tt)) {
-                                        var s = (qs[k] + rs[base + k]) * scale
-                                        if (k >= n_real) {
-                                            s = -1e30
-                                        }
-                                        qs[k] = s
-                                    }
-                                    softmax(qs, tt)
-                                }
-                                for (i in range64(nr * dh)) {
-                                    ohs[i] = 0.0
-                                }
-                                gemm_f32_jo(ohs, scs, vhp, nr, tt, dh)
-                                for (t in range64(r0, r1)) {
-                                    for (j in range64(dh)) {
-                                        aop[t * d + hoff + j] = ohs[(t - r0) * dh + j]
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                asr_prof_add("pk.attn_heads.blocks", th)
-            }
-        }
-        asr_prof_add("pk.attn_heads", tp)
-        tp = ref_time_ticks()
-        pk_mm_rq(m, st.xb, lo.o_w, st.ao, st.xqi, st.xsi, d, d, tt)
-        add_inplace_rows(st.x, st.xb, tt * d)
-        pk_scan("attn", l, st.x, tt * d)
-        asr_prof_add("pk.attn_out", tp)
-
-        // conv module
-        tp = ref_time_ticks()
-        layernorm_batch(st.xb, st.x, m.blob, lo.ncv_w, lo.ncv_b, d, tt, m.eps)
-        pk_mm_rq(m, st.h, lo.pw1_w, st.xb, st.xqi, st.xsi, d, 2l * d, tt)
-        unsafe {
-            let hp = addr<float const?>(st.h[0])
-            var xbp = addr(st.xb[0])
-            var aop = addr(st.ao[0])
-            let dwp = plane_at(m.blob, lo.dw_w)     // tap-major [k][d] since load
-            let scp = plane_at(m.blob, lo.bn_w)     // folded BN scale (pk_fold_bn)
-            let shp = plane_at(m.blob, lo.bn_b)     // folded BN shift
-            let nk = m.n_conv_kernel
-            let kpad = (nk - 1l) / 2l   // depthwise pad (k−1)/2 both sides
-            let one = float4(1.0, 1.0, 1.0, 1.0)
-            let n4 = d / 4l
-            let d4ok = n4 * 4l == d
-            maybe_parallel_for(0, int(tt), lanes_for_work(tt * d * 4l, 0)) $(rb, re) {
-                unsafe {
-                    for (t in range64(int64(rb), int64(re))) {   // GLU: signal · σ(gate), float4 exp4
-                        if (d4ok) {
-                            let sgp = reinterpret<float4 const?>(hp + t * 2l * d)
-                            let gtp = reinterpret<float4 const?>(hp + t * 2l * d + d)
-                            var o4 = reinterpret<float4?>(xbp + t * d)
-                            for (k in range64(n4)) {
-                                let arg = clamp(-gtp[k], EXP4_LO, EXP4_HI)
-                                o4[k] = sgp[k] / (one + exp4(arg))
-                            }
-                        } else {   // d % 4 != 0 models only
-                            for (j in range64(d)) {
-                                let sg = hp[t * 2l * d + j]
-                                let gt = hp[t * 2l * d + d + j]
-                                xbp[t * d + j] = sg * sigmoid_f32(gt)
-                            }
-                        }
-                    }
-                }
-            }
-            let f4ok = nk == 9l && d4ok
-            maybe_parallel_for(0, int(tt), lanes_for_work(tt * d * (nk + 4l), 0)) $(rb, re) {
-                unsafe {
-                    for (t in range64(int64(rb), int64(re))) {
-                        if (f4ok && t >= kpad && t < tt - kpad) {
-                            var j = 0l
-                            while (j < d) {
-                                let base = (t - 4l) * d + j
-                                var acc = (*reinterpret<float4 const?>(xbp + base)) * (*reinterpret<float4 const?>(dwp + j))
-                                acc = mad(*reinterpret<float4 const?>(xbp + base + d), *reinterpret<float4 const?>(dwp + d + j), acc)
-                                acc = mad(*reinterpret<float4 const?>(xbp + base + 2l * d), *reinterpret<float4 const?>(dwp + 2l * d + j), acc)
-                                acc = mad(*reinterpret<float4 const?>(xbp + base + 3l * d), *reinterpret<float4 const?>(dwp + 3l * d + j), acc)
-                                acc = mad(*reinterpret<float4 const?>(xbp + base + 4l * d), *reinterpret<float4 const?>(dwp + 4l * d + j), acc)
-                                acc = mad(*reinterpret<float4 const?>(xbp + base + 5l * d), *reinterpret<float4 const?>(dwp + 5l * d + j), acc)
-                                acc = mad(*reinterpret<float4 const?>(xbp + base + 6l * d), *reinterpret<float4 const?>(dwp + 6l * d + j), acc)
-                                acc = mad(*reinterpret<float4 const?>(xbp + base + 7l * d), *reinterpret<float4 const?>(dwp + 7l * d + j), acc)
-                                acc = mad(*reinterpret<float4 const?>(xbp + base + 8l * d), *reinterpret<float4 const?>(dwp + 8l * d + j), acc)
-                                let bv4 = mad(acc, *reinterpret<float4 const?>(scp + j), *reinterpret<float4 const?>(shp + j))
-                                let arg = clamp(-bv4, EXP4_LO, EXP4_HI)
-                                *reinterpret<float4?>(aop + t * d + j) = bv4 / (one + exp4(arg))
-                                j += 4l
-                            }
-                        } elif (f4ok) {   // border rows: guarded taps (uniform over j), still f4
-                            var j = 0l
-                            while (j < d) {
-                                var acc = float4(0.0, 0.0, 0.0, 0.0)
-                                for (k in range64(9l)) {
-                                    let src = t + k - kpad
-                                    if (src >= 0l && src < tt) {
-                                        acc = mad(*reinterpret<float4 const?>(xbp + src * d + j), *reinterpret<float4 const?>(dwp + k * d + j), acc)
-                                    }
-                                }
-                                let bv4 = mad(acc, *reinterpret<float4 const?>(scp + j), *reinterpret<float4 const?>(shp + j))
-                                let arg = clamp(-bv4, EXP4_LO, EXP4_HI)
-                                *reinterpret<float4?>(aop + t * d + j) = bv4 / (one + exp4(arg))
-                                j += 4l
-                            }
-                        } else {   // generic k / d % 4 != 0 fallback
-                            for (j in range64(d)) {
-                                var acc = 0.0
-                                for (k in range64(nk)) {
-                                    let src = t + k - kpad
-                                    if (src >= 0l && src < tt) {
-                                        acc += dwp[k * d + j] * xbp[src * d + j]
-                                    }
-                                }
-                                let bv = acc * scp[j] + shp[j]
-                                aop[t * d + j] = bv * sigmoid_f32(bv)   // silu
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        pk_mm_rq(m, st.xb, lo.pw2_w, st.ao, st.xqi, st.xsi, d, d, tt)
-        add_inplace_rows(st.x, st.xb, tt * d)
-        pk_scan("conv", l, st.x, tt * d)
-        asr_prof_add("pk.conv_module", tp)
-
-        // FFN2 (second macaron half)
-        tp = ref_time_ticks()
-        layernorm_batch(st.xb, st.x, m.blob, lo.nf2_w, lo.nf2_b, d, tt, m.eps)
-        pk_mm_rq(m, st.h, lo.ff2a_w, st.xb, st.xqi, st.xsi, d, 4l * d, tt)
-        silu4_batch(st.h, 4l * d, tt)
-        pk_mm_rq(m, st.xb, lo.ff2b_w, st.h, st.xqi, st.xsi, 4l * d, d, tt)
-        for (i in range64(tt * d)) {
-            st.x[i] += 0.5 * st.xb[i]
-        }
-
-        // per-layer post norm
-        layernorm_batch(st.x, st.x, m.blob, lo.nout_w, lo.nout_b, d, tt, m.eps)
-        pk_scan("out", l, st.x, tt * d)
-        asr_prof_add("pk.ffn", tp)
+        fc_block_cpu(m, st, form, FcRelPos(ww = ww, n_real = n_real), pk_fc_layer(pk_layer_offsets(m, l)), l, tt)
     }
 }
 
 // ===== prediction network + joint + TDT greedy =====
 
-// size the predictor state and zero the LSTM h/c (a fresh utterance starts from zeros;
-// the scratch fields are written before every read)
-def private pk_pred_reset(m : ParakeetModel; var s : ParakeetPredState) {
-    let pd = m.n_pred_dim
-    ensure_length(s.h, m.n_pred_layers * pd)
-    ensure_length(s.c, m.n_pred_layers * pd)
-    ensure_length(s.pred, pd)
-    ensure_length(s.gates, 4l * pd)
-    ensure_length(s.xin, pd)
-    for (i in range64(m.n_pred_layers * pd)) {
-        s.h[i] = 0.0
-        s.c[i] = 0.0
-    }
-    s.bias_off |> resize(m.n_pred_layers)
+//! parakeet rides RnntNet's defaults: the LSTM gates packed i, f, o, g, one bias, the first step on the blank's embedding row.
+def private pk_rnnt_net(m : ParakeetModel) : RnntNet {
+    var net = RnntNet(blob = m.blob, n_layers = m.n_pred_layers, pred_dim = m.n_pred_dim, joint_dim = m.n_pred_dim,
+        n_tokens = m.n_vocab + 1l, blank_id = m.blank_id, durations = m.durations, max_symbols = int(m.n_max_tokens),
+        embed = m.embed_off, joint_pred_w = m.joint_pred_w, joint_pred_b = m.joint_pred_b,
+        joint_net_w = m.joint_net_w, joint_net_b = m.joint_net_b,
+        prof_step = "pk.dec.step", prof_pick = "pk.dec.pick", prof_joint = "pk.dec.joint")
     for (l in range64(m.n_pred_layers)) {
-        s.bias_off[l] = m.lstm_b[l]
+        net.lstm_ih[l] = m.lstm_ih[l]
+        net.lstm_hh[l] = m.lstm_hh[l]
+        net.lstm_b[l] = m.lstm_b[l]
     }
-    pk_pred_halves(m, s)
-}
-
-//! The predictor's weights as halves, once a weight plane a session: a token reads every one of them, and
-//! at f32 that read - 26 MB a token on the 0.6B - is the predictor's cost.
-def private pk_pred_halves(m : ParakeetModel; var s : ParakeetPredState) {
-    let pd = m.n_pred_dim
-    let key = intptr(plane_at(m.blob, m.lstm_ih[0]))
-    let per_layer = 8l * pd * pd
-    let need = m.n_pred_layers * per_layer + pd * pd
-    return if (s.wh_key == key && long_length(s.wh) >= need)
-    ensure_length(s.wh, need)
-    unsafe {
-        var hp = addr(s.wh[0])
-        for (l in range64(m.n_pred_layers)) {
-            cvt_f32_to_f16_sat(hp + l * per_layer, plane_at(m.blob, m.lstm_ih[l]), 4l * pd * pd)
-            cvt_f32_to_f16_sat(hp + l * per_layer + 4l * pd * pd, plane_at(m.blob, m.lstm_hh[l]), 4l * pd * pd)
-        }
-        cvt_f32_to_f16_sat(hp + m.n_pred_layers * per_layer, plane_at(m.blob, m.joint_pred_w), pd * pd)
-    }
-    s.wh_key = key
-}
-
-let private PK_JOINT_BLOCK = 256l//!< the logits a lane's block of the joint table covers: its columns sit back to back, so a lane walks its block forward
-
-//! the joint table's blocks: the logits rounded up to whole blocks
-def private pk_joint_blocks(n_logits : int64) : int64 => (n_logits + PK_JOINT_BLOCK - 1l) / PK_JOINT_BLOCK
-
-//! The joint net's weight as halves in logit blocks, once a weight plane a session: [block][pred_dim][PK_JOINT_BLOCK],
-//! a block's input columns back to back, zeros past the last logit. `col` is the caller's scratch of a block of floats.
-def private pk_joint_cols(m : ParakeetModel; var st : ParakeetState; var col : array<float>; pd, n_logits : int64) {
-    let key = intptr(plane_at(m.blob, m.joint_net_w))
-    let nblk = pk_joint_blocks(n_logits)
-    return if (st.joint_wt_key == key && long_length(st.joint_wt) >= nblk * pd * PK_JOINT_BLOCK)
-    ensure_length(st.joint_wt, nblk * pd * PK_JOINT_BLOCK)
-    unsafe {
-        let wp = plane_at(m.blob, m.joint_net_w)
-        var cp = addr(col[0])
-        var tp = addr(st.joint_wt[0])
-        for (b in range64(nblk)) {
-            let live = min(PK_JOINT_BLOCK, n_logits - b * PK_JOINT_BLOCK)
-            for (j in range64(pd)) {
-                for (i in range64(live)) {
-                    cp[i] = wp[(b * PK_JOINT_BLOCK + i) * pd + j]
-                }
-                for (i in range64(live, PK_JOINT_BLOCK)) {
-                    cp[i] = 0.0
-                }
-                cvt_f32_to_f16_sat(tp + (b * pd + j) * PK_JOINT_BLOCK, cp, PK_JOINT_BLOCK)
-            }
-        }
-    }
-    st.joint_wt_key = key
-}
-
-//! One block of the joint's logits: y = b + W . relu(enc + pred) over the block's `live` logits, zeros past them;
-//! `wt` is the block's columns. The ReLU leaves about half the row zero, and only a live column adds.
-def private pk_joint_block(var yp : float?; bp : float const?; wt : uint16 const?; ep, pp : float const?; pd, live : int64) {
-    unsafe {
-        copy_floats(yp, bp, live)
-        for (i in range64(live, PK_JOINT_BLOCK)) {
-            yp[i] = 0.0
-        }
-        for (j in range64(pd)) {
-            let v = ep[j] + pp[j]
-            if (v > 0.0) {
-                axpy_f16(yp, wt + j * PK_JOINT_BLOCK, v, PK_JOINT_BLOCK)
-            }
-        }
-    }
-}
-
-//! Elements [j0, j1) of one LSTM layer's gate math over the summed gate dots `gp` (packed [i, f, o, g], `pd` a
-//! gate) and their bias: the cell and hidden rows advance in place and the hidden lands in `xp`, the next
-//! layer's input. `j0` sits on a float4 group; a `j1` of `pd` takes the scalar tail.
-def private pk_lstm_gates(gp, bp : float const?; var cp, hsp, xp : float?; pd, j0, j1 : int64) {
-    // gates via float4 exp4: σ = 1/(1+exp4(-a)), tanh(a) = 1 − 2/(1+exp4(2a)) (geglu4 identity)
-    unsafe {
-        let one = float4(1.0, 1.0, 1.0, 1.0)
-        let two = float4(2.0, 2.0, 2.0, 2.0)
-        let n4 = min((pd / 4l) * 4l, j1)
-        var j = j0
-        while (j < n4) {
-                let ia = (*reinterpret<float4 const?>(gp + j)) + (*reinterpret<float4 const?>(bp + j))
-                let fa = (*reinterpret<float4 const?>(gp + pd + j)) + (*reinterpret<float4 const?>(bp + pd + j))
-                let oa = (*reinterpret<float4 const?>(gp + 2l * pd + j)) + (*reinterpret<float4 const?>(bp + 2l * pd + j))
-                let ga = (*reinterpret<float4 const?>(gp + 3l * pd + j)) + (*reinterpret<float4 const?>(bp + 3l * pd + j))
-                let ig = one / (one + exp4(clamp(-ia, EXP4_LO, EXP4_HI)))
-                let fg = one / (one + exp4(clamp(-fa, EXP4_LO, EXP4_HI)))
-                let og = one / (one + exp4(clamp(-oa, EXP4_LO, EXP4_HI)))
-                let cg = one - two / (one + exp4(clamp(two * ga, EXP4_LO, EXP4_HI)))
-                let cn = fg * (*reinterpret<float4 const?>(cp + j)) + ig * cg
-                *reinterpret<float4?>(cp + j) = cn
-                let hn = og * (one - two / (one + exp4(clamp(two * cn, EXP4_LO, EXP4_HI))))
-                *reinterpret<float4?>(hsp + j) = hn
-                *reinterpret<float4?>(xp + j) = hn
-                j += 4l
-        }
-        for (jj in range64(max(n4, j0), j1)) {   // scalar tail (pd % 4 != 0 models only)
-            let ig = sigmoid_f32(gp[jj] + bp[jj])
-            let fg = sigmoid_f32(gp[pd + jj] + bp[pd + jj])
-            let og = sigmoid_f32(gp[2l * pd + jj] + bp[2l * pd + jj])
-            let cg = tanh(gp[3l * pd + jj] + bp[3l * pd + jj])
-            let cn = fg * cp[jj] + ig * cg
-            cp[jj] = cn
-            let hn = og * tanh(cn)
-            hsp[jj] = hn
-            xp[jj] = hn
-        }
-    }
-}
-
-let private PK_LSE_CUT = 32.0            //!< a logit this far under the row's maximum is left out of the log-sum: exp(-32) is 1e-14 of the largest term
-let private PK_GATE_CHUNKS = 4           //!< a layer's gate math is a few microseconds whole: more chunks than this cost more in claims than they split
-
-//! What a decode step's stages read and write, by pointer: the workers of a team publish hold a copy.
-struct private PkStepArgs {
-    xip : float?            //!< [pd] the layer input; each layer's gate math leaves its hidden here
-    gp : float?             //!< [4 pd] the gate dots
-    hp : float?             //!< [layers][pd]
-    cp : float?             //!< [layers][pd]
-    pp : float?             //!< [pd] joint.pred's output
-    yp : float?             //!< [n_logits]
-    whp : uint16 const?     //!< the stack's halves, joint.pred's behind the layers'
-    wtp : uint16 const?     //!< the joint net's columns
-    bjp : float const?
-    blob0 : float const?
-    ep : float const?       //!< [pd] the frame's encoder projection
-    ybp : float const?
-    lbp : int64 const?      //!< [layers] gate bias offsets off `blob0`
-    pd : int64
-    n_logits : int64
-    nl : int
-    ngate : int
-}
-
-//! Chunk [jb, je) of stage `sg` of a decode step: a layer's gate dots (even) and gate math (odd), then joint.pred's rows, then the logits.
-[arch(at="../ARCHITECTURE_MEDIA.md#parakeet-decode-step")]
-def private pk_step_stage(var a : PkStepArgs; sg, jb, je : int) {
-    let pd = a.pd
-    unsafe {
-        if (sg < 2 * a.nl) {
-            let l = int64(sg / 2)
-            if (sg % 2 == 0) {
-                let wih = a.whp + l * 8l * pd * pd
-                let whh = wih + 4l * pd * pd
-                let hl = a.hp + l * pd
-                let xip = a.xip
-                var gp = a.gp
-                for (i in range(jb, je)) {
-                    gp[i] = dot_f16(xip, wih + int64(i) * pd, pd) + dot_f16(hl, whh + int64(i) * pd, pd)
-                }
-            } else {
-                pk_lstm_gates(a.gp, a.blob0 + a.lbp[l], a.cp + l * pd, a.hp + l * pd, a.xip, pd, int64(jb) * 4l, je == a.ngate ? pd : int64(je) * 4l)
-            }
-        } elif (sg == 2 * a.nl) {
-            // joint.pred projection of the top hidden, which the last layer left in xin
-            let wjp = a.whp + int64(a.nl) * 8l * pd * pd
-            let xip = a.xip
-            let bjp = a.bjp
-            var pp = a.pp
-            for (i in range(jb, je)) {
-                pp[i] = dot_f16(xip, wjp + int64(i) * pd, pd) + bjp[i]
-            }
-        } else {
-            for (b in range64(int64(jb), int64(je))) {
-                let i0 = b * PK_JOINT_BLOCK
-                pk_joint_block(a.yp + i0, a.ybp + i0, a.wtp + b * pd * PK_JOINT_BLOCK, a.ep, a.pp, pd, min(PK_JOINT_BLOCK, a.n_logits - i0))
-            }
-        }
-    }
-}
-
-//! One decode step as ONE team publish: the predictor's LSTM stack and joint projection for `token` - a negative
-//! token is a blank step, the predictor left where it stands - then the joint's logits at frame `t` into
-//! `st.logits`. Two stages a layer and two behind them: a two-layer predictor fills the publish's six.
-[arch(at="../ARCHITECTURE_MEDIA.md#parakeet-decode-step")]
-def private pk_step(m : ParakeetModel; var st : ParakeetState; token : int; t : int64) {
-    let pd = m.n_pred_dim
-    let nl = int(m.n_pred_layers)
-    let n_logits = m.n_vocab + 1l + m.n_durations
-    let per_layer = 8l * pd * pd
-    let ngate = int((pd + 3l) / 4l)
-    let nblk = int(pk_joint_blocks(n_logits))
-    let n_stages = 2 * nl + 2
-    let dot_chunks = matmul_chunks_gemv(int(4l * pd), 1, per_layer)
-    let proj_chunks = matmul_chunks_gemv(int(pd), 1, pd * pd)
-    unsafe {
-        var a = PkStepArgs(
-            xip = addr(st.pred.xin[0]), gp = addr(st.pred.gates[0]), hp = addr(st.pred.h[0]), cp = addr(st.pred.c[0]),
-            pp = addr(st.pred.pred[0]), yp = addr(st.logits[0]),
-            whp = addr<uint16 const?>(st.pred.wh[0]), wtp = addr<uint16 const?>(st.joint_wt[0]),
-            bjp = plane_at(m.blob, m.joint_pred_b), blob0 = plane_at(m.blob, 0l), ep = addr<float const?>(st.encp[t * pd]),
-            ybp = plane_at(m.blob, m.joint_net_b), lbp = addr<int64 const?>(st.pred.bias_off[0]),
-            pd = pd, n_logits = n_logits, nl = nl, ngate = ngate)
-        if (token >= 0) {
-            copy_floats(a.xip, plane_at(m.blob, m.embed_off + int64(token) * pd), pd)
-        }
-        let first = token >= 0 ? 0 : n_stages - 1
-        if (get_dispatch_lanes() <= 1) {   //! one lane: a team publish would pay its rendezvous and barriers for nothing
-            for (sg in range(first, n_stages)) {
-                pk_step_stage(a, sg, 0, sg == n_stages - 1 ? nblk : sg == n_stages - 2 ? int(pd) : sg % 2 == 0 ? int(4l * pd) : ngate)
-            }
-            return
-        }
-        st.dec_stages |> resize(n_stages - first)
-        for (sg in range(first, n_stages)) {
-            st.dec_stages[sg - first] = (sg == n_stages - 1 ? int3(0, nblk, nblk)   //! a block a chunk: the lanes claim blocks as they free up
-                : sg == n_stages - 2 ? int3(0, int(pd), proj_chunks)
-                : sg % 2 == 0 ? int3(0, int(4l * pd), dot_chunks) : int3(0, ngate, PK_GATE_CHUNKS))
-        }
-        team_parallel_stages(st.dec_stages) <| @(stage : int; jb : int; je : int) {   // nolint:PERF026 — dispatch-API lambda capture, see attention_chain_decode
-            pk_step_stage(a, stage + first, jb, je)
-        }
-    }
+    return net
 }
 
 // NaN/Inf stage scan (debug rail, pairs with the fast_math x64 investigation): bit-pattern
@@ -1770,7 +1159,7 @@ def set_pk_nan_scan(on : bool) {
 }
 
 [cold_path]
-def private pk_scan(tag : string; l : int64; x : array<float>; n : int64) {
+def private pk_scan_layer(tag : string; l : int64; x : array<float>; n : int64) {
     // layered spelling: the layer rides separately so the hot loop builds no string when off
     if (!g_pk_nan_scan) {
         return
@@ -1806,168 +1195,24 @@ def private pk_scan(tag : string; x : array<float>; n : int64) {
     }
 }
 
-// decode trace (debug rail): per-step duration log-probs alongside the choice
-var g_parakeet_trace = false
-
-def set_parakeet_trace(on : bool) {
-    g_parakeet_trace = on
-}
-
-// the per-step TDT trace body (set_parakeet_trace) — opt-in debug leg, off the served path
-[cold_path]
-def private pk_trace_step(m : ParakeetModel; st : ParakeetState; t : int64; n_tok_logits, best, bdur : int; mx : float) {
-    print("  t={t} tok={best} durp=[")
-    for (i in range64(m.n_durations)) {
-        print("{exp(st.logits[int64(n_tok_logits) + i] - mx)} ")
-    }
-    print("] -> {bdur}\n")
-}
-
-//! Greedy TDT decode over the encoder rows in ``st.x``: joint softmax per frame, argmax token
-//! and duration, blank advances time, duration 0 caps at n_max_tokens/frame. Tokens land in
-//! ``st.toks``.
-[hot_path, arch(at="../ARCHITECTURE_MEDIA.md#parakeet-decode-step")]
+//! Greedy TDT decode over the encoder rows in ``st.x``: the joint's encoder projection of every frame,
+//! then the shared transducer loop (`rnnt_greedy`). Tokens land in ``st.toks``.
+[hot_path]
 def parakeet_tdt_decode(m : ParakeetModel; var st : ParakeetState; n_frames : int64) {
-    st.toks |> clear()
     let d = m.n_state
     let pd = m.n_pred_dim
-    let n_logits = m.n_vocab + 1l + m.n_durations
-    let n_tok_logits = int(m.n_vocab + 1l)
-    let n_dur = int(m.n_durations)
-
-    // precompute the joint's encoder projection for every frame [T × pred_dim]
-    let ts_encp = ref_time_ticks()
-    ensure_length(st.encp, n_frames * pd)
-    pk_mm_rq(m, st.encp, m.joint_enc_w, st.x, st.xqi, st.xsi, d, pd, n_frames)
-    add_bias_rows(st.encp, m.blob, m.joint_enc_b, pd, n_frames)
-    asr_prof_add("pk.dec.encp", ts_encp)
-
-    pk_pred_reset(m, st.pred)
-    ensure_length(st.logits, pk_joint_blocks(n_logits) * PK_JOINT_BLOCK)   // whole blocks: the joint writes zeros past the last logit
-    pk_joint_cols(m, st, st.logits, pd, n_logits)
-
-    var t = 0l
-    var emitted = 0
-    var ts = ref_time_ticks()
-    if (n_frames > 0l) {
-        pk_step(m, st, m.blank_id, 0l)
-    }
-    asr_prof_add("pk.dec.step", ts)
-    while (t < n_frames) {
-        ts = ref_time_ticks()
-        // explicit n_logits bounds: the scratch arrays are oversized on reuse
-        let lp = unsafe(addr<float const?>(st.logits[0]))
-        var best = 0
-        var mx = unsafe(lp[0])
-        for (i in range(1, n_tok_logits)) {
-            let v = unsafe(lp[i])
-            if (v > mx) {
-                mx = v
-                best = i
-            }
-        }
-        for (i in range64(int64(n_tok_logits), n_logits)) {
-            mx = max(mx, unsafe(lp[i]))
-        }
-        // duration argmax over fp32 SOFTMAX values, not raw logits: the oracle's probs flush
-        // durations' ~e⁻¹¹⁰ mass to exactly 0.0 on underflow, so ties default to index 0 —
-        // an analytic logit argmax would diverge from the oracle here.
-        var bdur = 0
-        var bdp = exp(st.logits[n_tok_logits] - mx)
-        for (i in range(1, n_dur)) {
-            let dp = exp(st.logits[n_tok_logits + i] - mx)
-            if (dp > bdp) {
-                bdp = dp
-                bdur = i
-            }
-        }
-        var dur = m.durations[bdur]
-        if (g_parakeet_trace) {
-            pk_trace_step(m, st, t, n_tok_logits, best, bdur, mx)
-        }
-
-        if (best == m.blank_id) {
-            if (dur == 0) {
-                dur = 1
-            }
-            t += int64(dur)
-            emitted = 0
-            asr_prof_add("pk.dec.pick", ts)
-            if (t < n_frames) {
-                ts = ref_time_ticks()
-                pk_step(m, st, -1, t)
-                asr_prof_add("pk.dec.joint", ts)
-            }
-            continue
-        }
-
-        // log-softmax over the WHOLE row (the oracle's plog normalizer includes durations); the token slice's mass is this pass's partial sum
-        let cut = mx - PK_LSE_CUT
-        var lse = 0.0lf
-        for (i in range(n_tok_logits)) {
-            let v = unsafe(lp[i])
-            if (v > cut) {
-                lse += double(exp(v - mx))
-            }
-        }
-        let tok_mass = lse
-        for (i in range64(int64(n_tok_logits), n_logits)) {
-            let v = unsafe(lp[i])
-            if (v > cut) {
-                lse += double(exp(v - mx))
-            }
-        }
-        let plog = st.logits[best] - (float(log(lse)) + mx)
-        st.toks |> push(ParakeetToken(id = best, dur_idx = bdur, dur = dur, frame = t,
-            p = float(double(exp(plog)) / (tok_mass / lse)), plog = plog))
-        asr_prof_add("pk.dec.pick", ts)
-        if (dur > 0) {
-            t += int64(dur)
-            emitted = 0
-        } else {
-            emitted++
-            if (emitted >= int(m.n_max_tokens)) {
-                t++
-                emitted = 0
-            }
-        }
-        if (t < n_frames) {
-            ts = ref_time_ticks()
-            pk_step(m, st, best, t)
-            asr_prof_add("pk.dec.step", ts)
-        }
+    let enc = RnntEnc(d = d, w = m.joint_enc_w, b = m.joint_enc_b, q8 = m.q8, gen = st.enc_gen)
+    rnnt_decode(pk_rnnt_net(m), st.dec, enc, st.x, st.encp, n_frames, st.toks) $(var encp) {
+        let ts_encp = ref_time_ticks()
+        ensure_length(encp, n_frames * pd)
+        tower_mm_rq(m, encp, m.joint_enc_w, st.x, st.xqi, st.xsi, d, pd, n_frames)
+        add_bias_rows(encp, m.blob, m.joint_enc_b, pd, n_frames)
+        asr_prof_add("pk.dec.encp", ts_encp)
     }
 }
 
-//! SPM detokenize: ▁ becomes a space, except while the transcript is still empty inside the
-//! FIRST piece (the oracle's piece-to-text rule); `<...>` control pieces
-//! render as nothing.
-def parakeet_detokenize(m : ParakeetModel; toks : array<ParakeetToken> | #) : string {
-    var segs : array<string>
-    var idx = 0
-    for (t in toks) {
-        let piece = m.vocab[t.id]
-        if (length(piece) > 2 && starts_with(piece, "<") && ends_with(piece, ">")) {
-            idx++
-            continue
-        }
-        var s = replace(piece, "▁", " ")   // nolint:STYLE039 (U+2581 is the SentencePiece space marker - vocabulary data, not prose)
-        if (idx == 0) {   // first piece: strip the leading spaces the ▁ prefix produced
-            var lead = 0
-            peek_data(s) $(d) {
-                while (starts_with(d, lead, " ")) {
-                    lead++
-                }
-            }
-            if (lead > 0) {
-                s = slice(s, lead)
-            }
-        }
-        segs |> push(s)
-        idx++
-    }
-    return join(segs, "")
-}
+//! The transcript of `toks`: the shared SentencePiece rule over the model's vocab.
+def parakeet_detokenize(m : ParakeetModel; toks : array<ParakeetToken> | #) : string => asr_spm_detokenize(m.vocab, toks)
 
 // v3 (25-lang) has an 8192-piece SPM vocab; v2 (English) 1024 — the multilingual threshold
 def pk_is_multilingual(m : ParakeetModel) : bool => m.n_vocab >= 8192l
@@ -1975,7 +1220,7 @@ def pk_is_multilingual(m : ParakeetModel) : bool => m.n_vocab >= 8192l
 //! Parakeet's capability sheet: v2 English-only, v3 the 25 EU languages; segment timestamps.
 def parakeet_asr_caps(m : ParakeetModel) : AsrCaps {
     var c = AsrCaps(translate = false, timestamps = AsrTimestamps.segment,
-                    streaming = false, prompt = false)
+                    streaming = false, prompt = false, default_lang = "en")
     if (pk_is_multilingual(m)) {
         c.languages <- ["bg", "hr", "cs", "da", "nl", "en", "et", "fi", "fr", "de",
                         "el", "hu", "it", "lv", "lt", "mt", "pl", "pt", "ro", "sk",
@@ -2011,17 +1256,7 @@ def parakeet_transcribe(m : ParakeetModel; var st : ParakeetState; samples : arr
     tp = ref_time_ticks()
     parakeet_tdt_decode(m, st, tt)
     asr_prof_add("pk.decode_total", tp)
-    var seg = TranscribeSegment(t0 = 0l, t1 = long_length(samples) * 100l / AUDIO_SAMPLE_RATE,
-        text = parakeet_detokenize(m, st.toks))
-    var plog_sum = 0.0lf
-    seg.tokens |> reserve(length(st.toks))
-    for (t in st.toks) {
-        seg.tokens |> push(t.id)
-        plog_sum += double(t.plog)
-    }
-    if (!empty(st.toks)) {
-        seg.avg_logprob = float(plog_sum / double(length(st.toks)))
-    }
+    let seg <- asr_segment(0l, long_length(samples) * 100l / AUDIO_SAMPLE_RATE, parakeet_detokenize(m, st.toks), st.toks)
     if (!pk_is_multilingual(m)) {
         detected_lang = "en"   // v3 transcribes without detecting/reporting a language
     }

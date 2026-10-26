@@ -516,23 +516,25 @@ struct GkDwConvRowsArgs {
     dil : uint     //! the transposed stamp's dilation
     t_in : uint    //! the input rows, and the output rows of the causal and the centered stamps
     t_out : uint   //! the transposed stamp's output rows
-    woff : uint    //! w [c][k]'s element base in wn
-    boff : uint    //! the transposed stamp's bias row in wn
+    woff : uint    //! w [c][k]'s element base in wn, or in wh under TAP_F16
+    boff : uint    //! the transposed and the biased centered stamps' bias row in wn
     bnwoff : uint  //! the centered stamp's folded BatchNorm scale row in wn
     bnboff : uint  //! the centered stamp's folded BatchNorm shift row in wn
 }
 
-//! a depthwise conv on rows, y [t_out][c] from x [t_in][c] and w [c][k] (w [k][c] under TAP_MAJOR, parakeet's load-time repack), one
-//! element an invocation; FORM is the source rule and the epilogue: 0 the transposed conv gathered, bias first and one mad a tap (the CPU
-//! `conv1d_rows_transposed_depthwise`); 1 the causal conv, a row reading the k - 1 rows before it (gemma4a); 2 the centered conv, folded BatchNorm and silu after it
+//! a depthwise conv on rows, y [t_out][c] from x [t_in][c] and w [c][k] (w [k][c] under TAP_MAJOR; the carrier's f16 halfwords off `wh`
+//! under TAP_F16, the bias and norm rows staying in `wn`), one element an invocation; FORM: 0 the transposed conv gathered, bias first,
+//! one mad a tap (`conv1d_rows_transposed_depthwise`); 1 causal (gemma4a); 2 centered, BatchNorm folded, silu; 3 centered, bias first
 [ |> template_struct_instance]
 class template GkDwConvRows {
     @template_constant FORM : int = 0   //!< spelled as its literal: a template constant folds only a literal
     @template_constant K : uint = 0u    //!< the taps where the stamp fixes them, else 0 and the taps are `pa.k`
     @template_constant TAP_MAJOR : bool = false
+    @template_constant TAP_F16 : bool = false
     @ssbo @binding = 0 @role = "read" x : array<float>
     @ssbo @binding = 1 @role = "write" y : array<float>
     @ssbo @binding = 2 @role = "weight" wn : array<float>
+    @ssbo @binding = 3 @role = "weight" @template_gate = TAP_F16 wh : array<float16>
     @kargs pa : GkDwConvRowsArgs
 
     def rows_out : uint {
@@ -558,7 +560,11 @@ class template GkDwConvRows {
     }
 
     def tap(j, kk, nk : uint) : float {
-        static_if (TAP_MAJOR) {
+        static_if (TAP_F16 && TAP_MAJOR) {
+            return float(wh[pa.woff + kk * pa.c + j])
+        } static_elif (TAP_F16) {
+            return float(wh[pa.woff + j * nk + kk])
+        } static_elif (TAP_MAJOR) {
             return wn[pa.woff + kk * pa.c + j]
         } else {
             return wn[pa.woff + j * nk + kk]
@@ -573,7 +579,7 @@ class template GkDwConvRows {
             let j = e % c
             let nk = taps()
             var acc = 0.0
-            static_if (FORM == 0) {
+            static_if (FORM == 0 || FORM == 3) {
                 acc = wn[pa.boff + j]
             }
             var kk = 0u
@@ -652,6 +658,18 @@ class template GkWgReduce {
     @workgroup part : float[128]   //! two slots of 64 subgroup partials, one slot a reduce
     @template_constant RSQRT : bool = false   //!< `wg_rms_inv_into`'s inverse norm: `rsqrt`, else the CPU's `1 / sqrt`
 
+    //! the 32 lanes of a row folded: a butterfly over the row's aligned lane group, every lane holding the row's sum
+    [spirv_inline]
+    def row_sum_into(var s : float&) {
+        var a = s
+        a += gk_subgroup_xor(a, 16u)
+        a += gk_subgroup_xor(a, 8u)
+        a += gk_subgroup_xor(a, 4u)
+        a += gk_subgroup_xor(a, 2u)
+        a += gk_subgroup_xor(a, 1u)
+        s = a
+    }
+
     //! the inverse rms of the squares summed into `ss0` over `n` elements, every thread alike, its spelling the stamp's (`RSQRT`)
     [arch(at="../ARCHITECTURE_GPU_SHARED_KERNELS.md#gpu-kernel-pairs")]
     def wg_rms_inv_into(ss0 : float; n : uint; eps : float; slot : uint; var inv : float&) {
@@ -689,6 +707,38 @@ class template GkWgReduce {
             m = max(m, part[slot * 64u + sgi])
             sgi++
         }
+    }
+}
+
+//! the workgroup's (value, index) maximum on the shared reductions' slots, `parti` the indices beside `part`'s slot 0
+[ |> template_struct_instance]
+class template GkWgArgmax : GkWgReduce {
+    @workgroup parti : uint[64]
+
+    //! every thread holds the maximum and the lowest index among equal values: each subgroup's maximum and the lowest index
+    //! holding it, then the subgroups' in order; the caller barriers before the slots' next write
+    def wg_argmax_into(v0 : float; i0 : uint; var bv : float&; var bi : uint&) {
+        let sm = gk_subgroup_max(v0)
+        let si = gk_subgroup_min_u(v0 == sm ? i0 : 0xFFFFFFFFu)
+        if (gl_SubgroupInvocationID == 0u) {
+            part[gl_SubgroupID] = sm
+            parti[gl_SubgroupID] = si
+        }
+        barrier()
+        var rv = part[0]
+        var ri = parti[0]
+        var sgi = 1u
+        while (sgi < gl_NumSubgroups) {
+            let gv = part[sgi]
+            let gi = parti[sgi]
+            if (gv > rv || (gv == rv && gi < ri)) {
+                rv = gv
+                ri = gi
+            }
+            sgi++
+        }
+        bv = rv
+        bi = ri
     }
 }
 
@@ -877,18 +927,6 @@ class template GkPkGemv : GkWgReduce {
     @workgroup @template_gate = ROPE_STORE dq : float[4]   //! the rope-store stamp: the workgroup's four dots side by side, so an even row turns its pair
 
     def abstract row_dot_into(row, lane : uint; var acc : float&) : void   //! row `row`'s dot with the staged x over its 32 lanes
-
-    //! the 32 lanes of a row folded: a butterfly over the row's aligned lane group, every lane holding the row's sum
-    [spirv_inline]
-    def row_sum_into(var s : float&) {
-        var a = s
-        a += gk_subgroup_xor(a, 16u)
-        a += gk_subgroup_xor(a, 8u)
-        a += gk_subgroup_xor(a, 4u)
-        a += gk_subgroup_xor(a, 2u)
-        a += gk_subgroup_xor(a, 1u)
-        s = a
-    }
 
     //! whether the rows' base, stride and width sit on the four lattice, under `QUAD`
     [spirv_inline]
@@ -2074,6 +2112,95 @@ class template GkMelNorm {
             }
             for (i in urange(pa.valid, pa.n_frames)) {
                 mel[i * nm + j] = 0.0
+            }
+        }
+    }
+}
+
+struct GkFrameWindowArgs {
+    n_fft : uint    //! a frame's taps
+    hop : uint
+    frames : uint   //! the live frames
+    rows : uint     //! the rows written, `n_fft` apart: the live frames, then zero rows (a GEMM's row pad)
+    woff : uint     //! the window [n_fft]'s element base in its binding
+}
+
+//! gigaam's windowed frames off the raw samples, no center padding: row i column j = win[j] x samp[i hop + j], the CPU
+//! frame loop's one product; the row pad zero; one element an invocation over rows x n_fft
+[ |> template_struct_instance]
+class template GkFrameWindow {
+    @ssbo @binding = 0 @role = "read" samp : array<float>
+    @ssbo @binding = 1 @role = "weight" win : array<float>
+    @ssbo @binding = 2 @role = "write" xw : array<float>
+    @kargs pa : GkFrameWindowArgs
+
+    def frame_window_body {
+        let gid = gl_GlobalInvocationID.x
+        let ld = max(pa.n_fft, 1u)
+        if (gid < pa.rows * ld) {
+            let i = gid / ld
+            let j = gid % ld
+            var v = 0.0
+            if (i < pa.frames) {
+                v = win[pa.woff + j] * samp[i * pa.hop + j]
+            }
+            xw[gid] = v
+        }
+    }
+}
+
+let GK_MEL_LOG_MAX = 0u     //! log(max(sum, lo)): gemma4a, the whisper preprocessors
+let GK_MEL_LOG_ADD = 1u     //! log(sum + lo): canary
+let GK_MEL_LOG_CLAMP = 2u   //! log(clamp(sum, lo, hi)): gigaam, the CPU `MelLog.ln_clamp_f`
+
+struct GkMelLogArgs {
+    n_bins : uint
+    n_mel : uint
+    frames : uint                    //! a power row is `n_bins` wide
+    foff : uint                    //! the filters [n_mel][n_bins]' element base in their binding
+    lo : float            //! the floor
+    hi : float            //! the clamp's ceiling (`GK_MEL_LOG_CLAMP` alone)
+    scale : float         //! the log's scale: log10 e for a log10 store, 1 for the natural log
+    frame_major : uint    //! 1 = rows [frame][mel], 0 = [mel][frame] (the whisper preprocessors)
+    form : uint           //! the floor's law, a `GK_MEL_LOG_*` (the body's literals)
+}
+
+//! the log filterbank: one invocation a (frame, mel row) sums the frame's power row against the row's filter in float, the
+//! CPU's `MelSum.float_dot` order, and stores the log of the floored sum times `scale`; the invocation order is the store's,
+//! so either layout writes coalesced
+[ |> template_struct_instance]
+class template GkMelLog {
+    @template_constant GIGAAM : bool = false   //!< gigaam's fixed law as literals: frame-major, the natural log of the sum clamped to gigaam's `GIGAAM_MEL_FLOOR` / `_CEIL`; the kargs' law fields unread
+    @ssbo @binding = 0 @role = "read" pw : array<float>
+    @ssbo @binding = 1 @role = "read" fil : array<float>   //! a seat refills its filters per call (the qwen3a / whisper mel)
+    @ssbo @binding = 2 @role = "write" mel : array<float>
+    @kargs pa : GkMelLogArgs
+
+    def mel_log_body {
+        let gid = gl_GlobalInvocationID.x
+        let nm = max(pa.n_mel, 1u)
+        let nf = max(pa.frames, 1u)
+        if (gid < pa.frames * nm) {
+            static_if (GIGAAM) {
+                let pb = (gid / nm) * pa.n_bins
+                let fb = pa.foff + (gid % nm) * pa.n_bins
+                var sum = 0.0
+                for (k in urange(pa.n_bins)) {
+                    sum += pw[pb + k] * fil[fb + k]
+                }
+                mel[gid] = log(clamp(sum, 1e-9, 1e9))
+            } else {
+                let fm = pa.frame_major != 0u
+                let j = fm ? gid % nm : gid / nf
+                let f = fm ? gid / nm : gid % nf
+                let pb = f * pa.n_bins
+                let fb = pa.foff + j * pa.n_bins
+                var sum = 0.0
+                for (k in urange(pa.n_bins)) {
+                    sum += pw[pb + k] * fil[fb + k]
+                }
+                let v = pa.form == 2u ? clamp(sum, pa.lo, pa.hi) : (pa.form == 1u ? sum + pa.lo : max(sum, pa.lo))
+                mel[gid] = log(v) * pa.scale
             }
         }
     }
@@ -4265,13 +4392,12 @@ struct GkTopKArgs {
 //! largest, the lowest expert on a tie, landing in `pick` / `pickw` for the stamp to write; lane `tid` holds experts tid + i x
 //! LANES for i < DEPTH (a workgroup of LANES lanes - one simdgroup on Metal, 256 on Vulkan); `pick_weight_into` is the renorm
 [ |> template_struct_instance]
-class template GkTopKRow : GkWgReduce {
+class template GkTopKRow : GkWgArgmax {
     @kargs pa : GkTopKArgs
     @template_constant LANES : uint = 256u   //!< the workgroup's lanes
     @template_constant DEPTH : int = 1       //!< the logits a lane holds
     @template_constant DSCALE : bool = false   //!< the per-expert down scale row folds into the picked weights where `dsoff` names one
     @template_constant DSOFF_SWITCH : bool = true   //!< `pa.dsoff` names the row or `GK_NO_DSCALE` at run time; off, a DSCALE stamp always scales
-    @workgroup parti : uint[64]
     @workgroup pick : uint[64]
     @workgroup pickw : float[64]
 
@@ -4282,7 +4408,7 @@ class template GkTopKRow : GkWgReduce {
     def abstract down_scale(e : uint) : float
 
     [arch(at="../ARCHITECTURE_GPU_SHARED_ROWS.md#vk-topk-depth")]
-    def select_row(row, ne, k : uint; raw : bool) {   // nolint:STYLE038 - the softmax and the k argmax passes over the lane's register logits, one pass a pick
+    def select_row(row, ne, k : uint; raw : bool) {
         let tid = gl_LocalInvocationID.x
         var lg : float[DEPTH]
         var lmax = -3.0e38
@@ -4324,38 +4450,22 @@ class template GkTopKRow : GkWgReduce {
                     idx = tid + uint(i) * LANES
                 }
             }
-            let vm = gk_subgroup_max(p)
-            let im = gk_subgroup_min_u(p == vm ? idx : 0xFFFFFFFFu)
-            var bsel = im
+            var bsel = 0u
             static_if (LANES <= 32u) {   //! one subgroup: its pick is the workgroup's, every lane holds it
+                let vm = gk_subgroup_max(p)
+                bsel = gk_subgroup_min_u(p == vm ? idx : 0xFFFFFFFFu)
                 if (tid == 0u) {
-                    pick[j] = im
+                    pick[j] = bsel
                     pickw[j] = vm
                 }
             } else {
-                if (gl_SubgroupInvocationID == 0u) {
-                    part[gl_SubgroupID] = vm
-                    parti[gl_SubgroupID] = im
-                }
-                barrier()
+                var bv = 0.0
+                wg_argmax_into(p, idx, bv, bsel)
                 if (tid == 0u) {
-                    var bv = part[0u]
-                    var bi = parti[0u]
-                    var sgi = 1u
-                    while (sgi < gl_NumSubgroups) {
-                        let pv = part[sgi]
-                        let pi = parti[sgi]
-                        if (pv > bv || (pv == bv && pi < bi)) {
-                            bv = pv
-                            bi = pi
-                        }
-                        sgi++
-                    }
-                    pick[j] = bi
+                    pick[j] = bsel
                     pickw[j] = bv
                 }
                 barrier()
-                bsel = pick[j]
             }
             for [unroll_full] (i in range(DEPTH)) {
                 if (tid + uint(i) * LANES == bsel) {
@@ -4875,6 +4985,850 @@ class template GkMoeCombG4 : GkMoeCombine {
         }
         static_if (HX) {
             yh[i] = float16(v)
+        }
+    }
+}
+
+// ===== the silero VAD (the CPU `vad_chunk_prob` of dasllama_vad.das is the specification) =====
+
+let GK_VAD_CHUNK = 512l    //! the samples a chunk consumes, the bodies' literal: `x` holds the 64-sample context, then the chunks
+let GK_VAD_HIDDEN = 128l   //! the LSTM's width, the bodies' literal
+
+//! the VAD's element offsets in its one weight slab (`vad_build_slab`'s layout) and the chunk count of the dispatch; the
+//! row-major planes sit transposed, k-major, so a dot's lanes read consecutive rows
+struct GkVadArgs {
+    n : uint      //! the chunks
+    stft : uint   //! the windowed DFT basis [256][258]: a sample's 129 real channels, then its 129 imaginary ones
+    c1w : uint    //! the four convs' taps [cin][3][cout] and their bias rows
+    c1b : uint
+    c2w : uint
+    c2b : uint
+    c3w : uint
+    c3b : uint
+    c4w : uint
+    c4b : uint
+    ih : uint     //! the LSTM's input weights [128][512], gate order i, f, g, o along a row
+    hh : uint     //! its recurrence [128][512]
+    lb : uint     //! its summed gate bias [512]
+    fw : uint     //! the decoder row [128]
+    fb : uint     //! the decoder bias
+}
+
+//! the VAD kernels' words for `nch` chunks off the slab's tensor offsets (the model's `VadSlabOffs`), both homes' seats' one form
+def gk_vad_args(o : auto(O); nch : int64) : GkVadArgs {
+    return GkVadArgs(n = uint(nch), stft = uint(o.stft), c1w = uint(o.c1w), c1b = uint(o.c1b), c2w = uint(o.c2w), c2b = uint(o.c2b),
+        c3w = uint(o.c3w), c3b = uint(o.c3b), c4w = uint(o.c4w), c4b = uint(o.c4b), ih = uint(o.ih), hh = uint(o.hh), lb = uint(o.lb),
+        fw = uint(o.fw), fb = uint(o.fb))
+}
+
+//! a VAD seat's call the kernels serve: samples to step, the model's slab, the stream's h, c and context at the kernels' widths
+def gk_vad_shape_ok(m : auto(M); st : auto(S); n : int64) : bool
+    => (n > 0l && !empty(m.slab) && long_length(st.h) == GK_VAD_HIDDEN && long_length(st.c) == GK_VAD_HIDDEN
+        && long_length(st.context) == 64l)
+
+//! the encoder's input at `xp`, both seats' staging: the stream's 64-sample context, the `n` samples at `src`, then zeros to
+//! the end of the `nch` chunks
+def gk_vad_stage(var xp : float?; st : auto(S); src : float const?; n, nch : int64) {
+    unsafe {
+        memcpy(xp, addr(st.context[0]), 256ul)
+        memcpy(xp + 64, src, uint64(n * 4l))
+        for (i in range64(64l + n, 64l + nch * GK_VAD_CHUNK)) {
+            xp[i] = 0.0
+        }
+    }
+}
+
+//! a chunk's encoder, a workgroup of 128 a chunk: the window (context ++ chunk, reflected right by 64), its 129 x 4 STFT
+//! magnitudes, the four k3 pad-1 convs + ReLU (strides 1, 2, 2, 1; taps summed from the bias in (cin, tap) order, the CPU's),
+//! and the LSTM's input gates W_ih . feat into gx [n][512] - no recurrence, so every chunk of a clip is one dispatch
+[ |> template_struct_instance]
+class template GkVadEnc {
+    @ssbo @binding = 0 @role = "read" x : array<float>
+    @ssbo @binding = 1 @role = "weight" wn : array<float>
+    @ssbo @binding = 2 @role = "write" gx : array<float>
+    @kargs pa : GkVadArgs
+    @workgroup win : float[640]
+    @workgroup mag : float[516]   //! [129][4]
+    @workgroup e1 : float[512]    //! [128][4]
+    @workgroup e2 : float[128]    //! [64][2]
+    @workgroup e3 : float[64]
+    @workgroup feat : float[128]
+
+    def vad_enc_body {
+        let n = gl_WorkGroupID.x
+        let lid = gl_LocalInvocationID.x
+        let xb = n * 512u
+        var p = lid
+        while (p < 640u) {
+            win[p] = x[xb + (p < 576u ? p : 1150u - p)]
+            p += 128u
+        }
+        barrier()
+        stft_mags(lid)
+        barrier()
+        conv1(lid)
+        barrier()
+        conv2(lid)
+        barrier()
+        conv3(lid)
+        barrier()
+        conv4(lid)
+        barrier()
+        in_gates(n, lid)
+    }
+
+    //! the 129 x 4 magnitudes, a lane a bin over the four frames
+    def stft_mags(lid : uint) {
+        var fb = lid
+        while (fb < 129u) {
+            var r0 = 0.0
+            var r1 = 0.0
+            var r2 = 0.0
+            var r3 = 0.0
+            var i0 = 0.0
+            var i1 = 0.0
+            var i2 = 0.0
+            var i3 = 0.0
+            var k = 0u
+            while (k < 256u) {
+                let wr = wn[pa.stft + k * 258u + fb]
+                let wi = wn[pa.stft + k * 258u + 129u + fb]
+                let s0 = win[k]
+                let s1 = win[128u + k]
+                let s2 = win[256u + k]
+                let s3 = win[384u + k]
+                r0 += wr * s0
+                r1 += wr * s1
+                r2 += wr * s2
+                r3 += wr * s3
+                i0 += wi * s0
+                i1 += wi * s1
+                i2 += wi * s2
+                i3 += wi * s3
+                k++
+            }
+            mag[fb * 4u] = sqrt(r0 * r0 + i0 * i0)
+            mag[fb * 4u + 1u] = sqrt(r1 * r1 + i1 * i1)
+            mag[fb * 4u + 2u] = sqrt(r2 * r2 + i2 * i2)
+            mag[fb * 4u + 3u] = sqrt(r3 * r3 + i3 * i3)
+            fb += 128u
+        }
+    }
+
+    //! conv1, 129 -> 128 over the four frames at stride 1, a lane an output channel
+    def conv1(lid : uint) {
+        var ot = 0
+        while (ot < 4) {
+            var acc = wn[pa.c1b + lid]
+            var ic = 0u
+            while (ic < 129u) {
+                var kk = 0
+                while (kk < 3) {
+                    let src = ot + kk - 1
+                    if (src >= 0 && src < 4) {
+                        acc += wn[pa.c1w + (ic * 3u + uint(kk)) * 128u + lid] * mag[ic * 4u + uint(src)]
+                    }
+                    kk++
+                }
+                ic++
+            }
+            e1[lid * 4u + uint(ot)] = max(acc, 0.0)
+            ot++
+        }
+    }
+
+    //! conv2, 128 -> 64 at stride 2 onto two frames, a lane an (output channel, frame)
+    def conv2(lid : uint) {
+        let oc2 = lid % 64u
+        let ot2 = int(lid / 64u)
+        var acc2 = wn[pa.c2b + oc2]
+        var ic2 = 0u
+        while (ic2 < 128u) {
+            var kk = 0
+            while (kk < 3) {
+                let src = ot2 * 2 + kk - 1
+                if (src >= 0 && src < 4) {
+                    acc2 += wn[pa.c2w + (ic2 * 3u + uint(kk)) * 64u + oc2] * e1[ic2 * 4u + uint(src)]
+                }
+                kk++
+            }
+            ic2++
+        }
+        e2[oc2 * 2u + uint(ot2)] = max(acc2, 0.0)
+    }
+
+    //! conv3, 64 -> 64 at stride 2 onto one frame (the left pad tap skipped), the first 64 lanes
+    def conv3(lid : uint) {
+        if (lid < 64u) {
+            var acc3 = wn[pa.c3b + lid]
+            var ic3 = 0u
+            while (ic3 < 64u) {
+                acc3 += wn[pa.c3w + (ic3 * 3u + 1u) * 64u + lid] * e2[ic3 * 2u]
+                acc3 += wn[pa.c3w + (ic3 * 3u + 2u) * 64u + lid] * e2[ic3 * 2u + 1u]
+                ic3++
+            }
+            e3[lid] = max(acc3, 0.0)
+        }
+    }
+
+    //! conv4, 64 -> 128 over one frame (the centre tap alone in range), a lane an output channel
+    def conv4(lid : uint) {
+        var acc4 = wn[pa.c4b + lid]
+        var ic4 = 0u
+        while (ic4 < 64u) {
+            acc4 += wn[pa.c4w + (ic4 * 3u + 1u) * 128u + lid] * e3[ic4]
+            ic4++
+        }
+        feat[lid] = max(acc4, 0.0)
+    }
+
+    //! chunk `n`'s input gates W_ih . feat, a lane a row of each gate
+    def in_gates(n, lid : uint) {
+        var g0 = 0.0
+        var g1 = 0.0
+        var g2 = 0.0
+        var g3 = 0.0
+        var i = 0u
+        while (i < 128u) {
+            let f = feat[i]
+            let wr = pa.ih + i * 512u + lid
+            g0 += wn[wr] * f
+            g1 += wn[wr + 128u] * f
+            g2 += wn[wr + 256u] * f
+            g3 += wn[wr + 384u] * f
+            i++
+        }
+        gx[n * 512u + lid] = g0
+        gx[n * 512u + 128u + lid] = g1
+        gx[n * 512u + 256u + lid] = g2
+        gx[n * 512u + 384u + lid] = g3
+    }
+}
+
+//! the VAD's recurrence and decoder over every chunk in one workgroup of 1024 (gate order i, f, g, o: c = f c + i g,
+//! h = o tanh c; probs[step] = sigmoid(final_w . relu(h) + final_b)); h and c enter from st [h | c] and leave there, so a
+//! stream carries them across calls
+[ |> template_struct_instance]
+class template GkVadLstm {
+    @template_constant PTR_LOADS : bool = false   //!< the recurrent rows read off a pointer taken once (the Metal home; SPIR-V takes no address)
+    @ssbo @binding = 0 @role = "read" gx : array<float>
+    @ssbo @binding = 1 @role = "weight" wn : array<float>
+    @ssbo @binding = 2 @role = "readwrite" st : array<float>
+    @ssbo @binding = 3 @role = "write" probs : array<float>
+    @kargs pa : GkVadArgs
+    @workgroup hsh : float[128]
+    @workgroup gsh : float[1024]   //! a gate row's two half dots, the first halves then the second
+    @workgroup dpart : float[128]  //! the decoder's per-subgroup sums over the cell lanes, one a subgroup
+
+    [arch(at="../ARCHITECTURE_GPU_SHARED_KERNELS.md#gpu-kernel-pairs")]
+    def vad_lstm_body {
+        let lid = gl_LocalInvocationID.x
+        var cst = 0.0
+        if (lid < 128u) {
+            hsh[lid] = st[lid]
+            cst = st[128u + lid]
+        }
+        let hb = (lid / 512u) * 64u
+        var w : float[64]
+        let wb = pa.hh + hb * 512u + lid % 512u
+        static_if (PTR_LOADS) {
+            let wp = unsafe(addr(wn[wb]))
+            for [unroll_full] (k in range(64)) {
+                w[k] = unsafe(wp[uint(k) * 512u])
+            }
+        } else {
+            for [unroll_full] (k in range(64)) {
+                w[k] = wn[wb + uint(k) * 512u]
+            }
+        }
+        let j = lid % 128u   //! the hidden unit a cell lane folds; every lane reads its unit's constants, the first 128 use them
+        let bi = wn[pa.lb + j]
+        let bf = wn[pa.lb + 128u + j]
+        let bg = wn[pa.lb + 256u + j]
+        let bo = wn[pa.lb + 384u + j]
+        let fwj = wn[pa.fw + j]
+        let fb = wn[pa.fb]
+        barrier()
+        var step = 0u
+        while (step < pa.n) {
+            let gb = step * 512u + j
+            let xi = gx[gb]
+            let xf = gx[gb + 128u]
+            let xg = gx[gb + 256u]
+            let xo = gx[gb + 384u]
+            var a0 = 0.0
+            var a1 = 0.0
+            var a2 = 0.0
+            var a3 = 0.0
+            for [unroll_full] (k in range(16)) {
+                a0 += w[4 * k] * hsh[hb + uint(4 * k)]
+                a1 += w[4 * k + 1] * hsh[hb + uint(4 * k + 1)]
+                a2 += w[4 * k + 2] * hsh[hb + uint(4 * k + 2)]
+                a3 += w[4 * k + 3] * hsh[hb + uint(4 * k + 3)]
+            }
+            gsh[lid] = (a0 + a1) + (a2 + a3)
+            barrier()
+            if (lid < 128u) {
+                let gi = xi + (gsh[j] + gsh[512u + j]) + bi
+                let gf = xf + (gsh[128u + j] + gsh[640u + j]) + bf
+                let gg = xg + (gsh[256u + j] + gsh[768u + j]) + bg
+                let go = xo + (gsh[384u + j] + gsh[896u + j]) + bo
+                cst = sigmoid_f32(gf) * cst + sigmoid_f32(gi) * tts_tanh(gg)
+                let hn = sigmoid_f32(go) * tts_tanh(cst)
+                hsh[j] = hn
+                let ds = gk_subgroup_add(fwj * max(hn, 0.0))
+                if (gl_SubgroupInvocationID == 0u) {
+                    dpart[gl_SubgroupID] = ds
+                }
+            }
+            barrier()
+            if (lid == 0u) {
+                var tot = 0.0
+                var sg = 0u
+                while (sg * gl_SubgroupSize < 128u) {
+                    tot += dpart[sg]
+                    sg++
+                }
+                probs[step] = sigmoid_f32(tot + fb)
+            }
+            step++
+        }
+        if (lid < 128u) {
+            st[lid] = hsh[lid]
+            st[128u + lid] = cst
+        }
+    }
+}
+
+// ===== the transducer greedy decode (parakeet, GigaAM): a round's predictor step, joint window and pick =====
+
+let GK_RNNT_MAX_PD = 1024u     //! the predictor width the gate rows stage (`xs` / `hs`'s literal): a wider one declines at the driver
+let GK_RNNT_FRAMES = 8u        //! the frames a round's joint scores, the bodies' literal 8: the drivers size the logit rows by it
+let GK_RNNT_MAX_HID = 6144u    //! the joint's staged hidden rows, the frames by the joint width: a joint past 768 declines at the driver
+let GK_RNNT_MAX_DUR = 16u      //! the TDT duration table the state carries
+let GK_RNNT_ST_DUR = 16u       //! the state word the duration table starts at (the pick's literal 16)
+let GK_RNNT_ST_WORDS = 32u     //! the state's words: t, emitted, done, need, the h parity, the tokens, the predictor steps, the rounds, then the table
+let GK_RNNT_TOK_WORDS = 8u     //! a token record's words: id, duration index, duration, frame, p's bits, plog's bits, two pads
+
+//! a frame's logit row stride over `n_logits`: whole 256-logit blocks
+def gk_rnnt_lstride(n_logits : uint) : uint => ((n_logits + 255u) / 256u) * 256u
+
+//! layer `layer`'s input gate rows [4 pd][pd] in the halves, packed i, f, o, g; its recurrence rows follow, the same layout
+def gk_rnnt_wih(layer, pd : uint) : uint => layer * 8u * pd * pd
+
+//! joint.pred's rows [jd][pd] in the halves, behind the `nl` layers' gate rows
+def gk_rnnt_wjp(nl, pd : uint) : uint => nl * 8u * pd * pd
+
+struct GkRnntArgs {
+    pd : uint         //! the predictor's width
+    jd : uint         //! the joint's hidden width
+    nl : uint         //! the predictor's layers
+    layer : uint      //! the layer a gate stamp steps
+    n_tok : uint      //! the token logits, the blank among them; a row's logits are the tokens', then the durations'
+    n_dur : uint
+    n_frames : uint
+    blank : uint
+    max_sym : uint    //! the tokens a frame emits before the decode moves on, where the duration is 0
+    cap : uint        //! the token records the output holds
+    boff : uint       //! the gate stamp's bias rows [4 pd] in wf, the projection stamp's bias [jd]
+    embed : uint      //! the token table [n_tok][pd] in wf
+    jnb : uint        //! the joint net's bias [n_logits] in wf
+    jeb : uint        //! the encoder projection's bias [jd] in wf, added where `eb_on`
+    eb_on : uint      //! 0 = the encoder projection arrives biased
+}
+
+//! The transducer's predictor step (the CPU `rnnt_step_stage`'s gates and projection) under the state's `need` word: GATES one
+//! LSTM layer, a 32-lane group a gate element's four rows and its cell in the CPU's float4 forms, the hidden into the pair's
+//! other half; else joint.pred over the last layer's new hidden (`ARCHITECTURE_MEDIA_ASR.md#rnnt-device-decode`)
+[ |> template_struct_instance]
+class template GkRnntPred : GkWgReduce {
+    @template_constant GATES : bool = true   //!< an LSTM layer's gates and cell; else joint.pred's projection
+    @ssbo @binding = 0 @role = "read" st : array<uint>
+    @ssbo @binding = 1 @role = "weight" wh : array<float16>
+    @ssbo @binding = 2 @role = "weight" wf : array<float>
+    @ssbo @binding = 3 @role = "read" @template_gate = GATES xin : array<float>   //! the first layer's input: the emitted token's embedding row, or zeros
+    @ssbo @binding = 4 @role = "readwrite" hb : array<float>      //! the hidden pair [2][nl][pd]
+    @ssbo @binding = 5 @role = "readwrite" @template_gate = GATES cb : array<float>    //! the cells [nl][pd]
+    @ssbo @binding = 6 @role = "write" @template_gate = "!GATES" pred : array<float>   //! joint.pred's output [jd]
+    @kargs pa : GkRnntArgs
+    @workgroup xs : float[int(GK_RNNT_MAX_PD)]
+    @workgroup @template_gate = GATES hs : float[int(GK_RNNT_MAX_PD)]
+
+    //! the layer's input and its old hidden staged (GATES), or the last layer's new hidden
+    def stage_rows(tid, cur, nxt : uint) {
+        let pd = pa.pd
+        var k = tid
+        static_if (GATES) {
+            if (pa.layer == 0u) {
+                while (k < pd) {
+                    xs[k] = xin[k]
+                    hs[k] = hb[(cur * pa.nl) * pd + k]
+                    k += 256u
+                }
+            } else {
+                while (k < pd) {
+                    xs[k] = hb[(nxt * pa.nl + pa.layer - 1u) * pd + k]
+                    hs[k] = hb[(cur * pa.nl + pa.layer) * pd + k]
+                    k += 256u
+                }
+            }
+        } else {
+            while (k < pd) {
+                xs[k] = hb[(nxt * pa.nl + pa.nl - 1u) * pd + k]
+                k += 256u
+            }
+        }
+    }
+
+    //! the dot of half row `wr` with the staged `xs` over a group's 32 lanes, folded
+    def row_dot_into(wr, lane : uint; var s : float&) {
+        let pd = pa.pd
+        var a = 0.0
+        var k = lane
+        while (k < pd) {
+            a += float(wh[wr + k]) * xs[k]
+            k += 32u
+        }
+        row_sum_into(a)
+        s = a
+    }
+
+    //! group `grp`'s gate element: its four gate rows of both matrices in one walk (eight loads a step in flight), folded, then
+    //! the cell and the new hidden
+    def gate_element(grp, lane, nxt : uint) {
+        static_if (GATES) {
+            let pd = pa.pd
+            let j = min(grp, pd - 1u)
+            let gs = pd * pd
+            let ri = gk_rnnt_wih(pa.layer, pd) + j * pd
+            let rh = ri + 4u * gs
+            var si = 0.0
+            var sf = 0.0
+            var so = 0.0
+            var sg = 0.0
+            var k = lane
+            while (k < pd) {
+                let x = xs[k]
+                let h = hs[k]
+                si += float(wh[ri + k]) * x + float(wh[rh + k]) * h
+                sf += float(wh[ri + gs + k]) * x + float(wh[rh + gs + k]) * h
+                so += float(wh[ri + 2u * gs + k]) * x + float(wh[rh + 2u * gs + k]) * h
+                sg += float(wh[ri + 3u * gs + k]) * x + float(wh[rh + 3u * gs + k]) * h
+                k += 32u
+            }
+            row_sum_into(si)
+            row_sum_into(sf)
+            row_sum_into(so)
+            row_sum_into(sg)
+            if (grp < pd && lane == 0u) {
+                let ia = si + wf[pa.boff + j]
+                let fa = sf + wf[pa.boff + pd + j]
+                let oa = so + wf[pa.boff + 2u * pd + j]
+                let ga = sg + wf[pa.boff + 3u * pd + j]
+                let ig = 1.0 / (1.0 + exp(clamp(-ia, -80.0, 80.0)))
+                let fg = 1.0 / (1.0 + exp(clamp(-fa, -80.0, 80.0)))
+                let og = 1.0 / (1.0 + exp(clamp(-oa, -80.0, 80.0)))
+                let cg = 1.0 - 2.0 / (1.0 + exp(clamp(2.0 * ga, -80.0, 80.0)))
+                let ci = pa.layer * pd + j
+                let cn = fg * cb[ci] + ig * cg
+                cb[ci] = cn
+                hb[(nxt * pa.nl + pa.layer) * pd + j] = og * (1.0 - 2.0 / (1.0 + exp(clamp(2.0 * cn, -80.0, 80.0))))
+            }
+        }
+    }
+
+    def pred_body {
+        if (st[3] != 0u && st[2] == 0u) {
+            let tid = gl_LocalInvocationID.x
+            let cur = st[4]
+            let nxt = 1u - cur
+            stage_rows(tid, cur, nxt)
+            barrier()
+            let grp = gl_WorkGroupID.x * 8u + tid / 32u
+            let lane = tid % 32u
+            static_if (GATES) {
+                gate_element(grp, lane, nxt)
+            } else {
+                let row = min(grp, pa.jd - 1u)
+                var s = 0.0
+                row_dot_into(gk_rnnt_wjp(pa.nl, pa.pd) + row * pa.pd, lane, s)
+                if (grp < pa.jd && lane == 0u) {
+                    pred[row] = s + wf[pa.boff + row]
+                }
+            }
+        }
+    }
+}
+
+//! The transducer's joint over 8 frames from the state's `t` (the CPU `rnnt_joint_block`): relu((encp + b) + pred) staged
+//! [jd][8], a workgroup a 64-logit slice, its eight 32-lane groups an eighth of the half columns each, a lane two adjacent
+//! logits; the eighths summed onto the bias, a frame past the clip writing nothing
+[ |> template_struct_instance]
+class template GkRnntJoint {
+    @ssbo @binding = 0 @role = "read" st : array<uint>
+    @ssbo @binding = 1 @role = "read" encp : array<float>   //! the encoder projection [n_frames][jd]
+    @ssbo @binding = 2 @role = "weight" wf : array<float>
+    @ssbo @binding = 3 @role = "read" pred : array<float>
+    @ssbo @binding = 4 @role = "weight" jw : array<float16>   //! the joint net's columns [block][jd][256]
+    @ssbo @binding = 5 @role = "write" lg : array<float>      //! the window's logit rows [8][lstride]
+    @kargs pa : GkRnntArgs
+    @workgroup hid : float[int(GK_RNNT_MAX_HID)]   //! the staged hidden [jd][8], then the eighths' partials [8][8][64]
+
+    //! column `j`'s weight `w` scaled by every frame's hidden onto the frames' sums
+    def col_fma(w : float; j : uint; var a0, a1 : float4&) {
+        let h = j * 8u
+        a0 += float4(hid[h], hid[h + 1u], hid[h + 2u], hid[h + 3u]) * w
+        a1 += float4(hid[h + 4u], hid[h + 5u], hid[h + 6u], hid[h + 7u]) * w
+    }
+
+    def stage_hidden(tid, t0, nf : uint) {
+        let jd = pa.jd
+        var e = tid
+        if (pa.eb_on != 0u) {
+            while (e < 8u * jd) {
+                let j = e / 8u
+                let f = e % 8u
+                var v = 0.0
+                if (f < nf) {
+                    v = (encp[(t0 + f) * jd + j] + wf[pa.jeb + j]) + pred[j]
+                }
+                hid[e] = max(v, 0.0)
+                e += 256u
+            }
+        } else {
+            while (e < 8u * jd) {
+                let j = e / 8u
+                let f = e % 8u
+                var v = 0.0
+                if (f < nf) {
+                    v = encp[(t0 + f) * jd + j] + pred[j]
+                }
+                hid[e] = max(v, 0.0)
+                e += 256u
+            }
+        }
+    }
+
+    def joint_body {
+        if (st[2] == 0u) {
+            let tid = gl_LocalInvocationID.x
+            let t0 = st[0]
+            let jd = pa.jd
+            let nf = min(8u, pa.n_frames - t0)
+            let n_logits = pa.n_tok + pa.n_dur
+            stage_hidden(tid, t0, nf)
+            barrier()
+            let q = tid / 32u
+            let li = tid % 32u
+            let blk = gl_WorkGroupID.x / 4u
+            let col = (gl_WorkGroupID.x % 4u) * 64u + li * 2u
+            let jq = (jd + 7u) / 8u
+            let j0 = min(q * jq, jd)
+            let j1 = min(j0 + jq, jd)
+            var a0 = float4(0.0, 0.0, 0.0, 0.0)
+            var a1 = float4(0.0, 0.0, 0.0, 0.0)
+            var b0 = float4(0.0, 0.0, 0.0, 0.0)
+            var b1 = float4(0.0, 0.0, 0.0, 0.0)
+            let wb = blk * jd * 256u + col
+            var j = j0
+            while (j + 4u <= j1) {   //! eight column loads in flight a step
+                let c0 = wb + j * 256u
+                let w0 = float(jw[c0])
+                let v0 = float(jw[c0 + 1u])
+                let w1 = float(jw[c0 + 256u])
+                let v1 = float(jw[c0 + 257u])
+                let w2 = float(jw[c0 + 512u])
+                let v2 = float(jw[c0 + 513u])
+                let w3 = float(jw[c0 + 768u])
+                let v3 = float(jw[c0 + 769u])
+                col_fma(w0, j, a0, a1)
+                col_fma(v0, j, b0, b1)
+                col_fma(w1, j + 1u, a0, a1)
+                col_fma(v1, j + 1u, b0, b1)
+                col_fma(w2, j + 2u, a0, a1)
+                col_fma(v2, j + 2u, b0, b1)
+                col_fma(w3, j + 3u, a0, a1)
+                col_fma(v3, j + 3u, b0, b1)
+                j += 4u
+            }
+            while (j < j1) {
+                let c0 = wb + j * 256u
+                let w = float(jw[c0])
+                let v = float(jw[c0 + 1u])
+                col_fma(w, j, a0, a1)
+                col_fma(v, j, b0, b1)
+                j++
+            }
+            barrier()
+            let pb = q * 512u + li * 2u
+            part_store(pb, a0, b0, 0u)
+            part_store(pb, a1, b1, 4u)
+            barrier()
+            var o = tid
+            while (o < 512u) {
+                let f = o / 64u
+                let c = o % 64u
+                let i = blk * 256u + (gl_WorkGroupID.x % 4u) * 64u + c
+                var s = wf[pa.jnb + min(i, n_logits - 1u)]
+                var g = 0u
+                while (g < 8u) {
+                    s += hid[g * 512u + f * 64u + c]
+                    g++
+                }
+                if (i < n_logits && f < nf) {
+                    lg[f * gk_rnnt_lstride(n_logits) + i] = s
+                }
+                o += 256u
+            }
+        }
+    }
+
+    //! a lane's two logits' sums of four frames from `f0` laid in the partials [8 groups][8 frames][64 logits] at `pb`
+    def part_store(pb : uint; a, b : float4; f0 : uint) {
+        hid[pb + f0 * 64u] = a.x
+        hid[pb + f0 * 64u + 1u] = b.x
+        hid[pb + (f0 + 1u) * 64u] = a.y
+        hid[pb + (f0 + 1u) * 64u + 1u] = b.y
+        hid[pb + (f0 + 2u) * 64u] = a.z
+        hid[pb + (f0 + 2u) * 64u + 1u] = b.z
+        hid[pb + (f0 + 3u) * 64u] = a.w
+        hid[pb + (f0 + 3u) * 64u + 1u] = b.w
+    }
+}
+
+//! The transducer's greedy pick over the joint's window, one workgroup of `WG` (the CPU `rnnt_greedy` loop body): blanks advance
+//! inside the window, a token lands its record, lays its embedding row and asks the next predictor step, a spent window leaves the
+//! predictor standing; thread 0 writes the state words (`ARCHITECTURE_MEDIA_ASR.md#rnnt-device-decode`)
+[ |> template_struct_instance]
+class template GkRnntPick : GkWgArgmax {
+    @template_constant WG : uint = 256u   //!< the workgroup's threads, a multiple of 32 up to 1024
+    @ssbo @binding = 0 @role = "readwrite" st : array<uint>
+    @ssbo @binding = 1 @role = "read" lg : array<float>
+    @ssbo @binding = 2 @role = "weight" wf : array<float>
+    @ssbo @binding = 3 @role = "write" xin : array<float>
+    @ssbo @binding = 4 @role = "write" toks : array<uint>   //! the token records [cap][8]
+    @kargs pa : GkRnntArgs
+
+    //! the duration index: the argmax of exp(logit - mx) as the CPU's float rounds it - a normal value, a subnormal (its
+    //! multiple of 2^-149, compared above zero and below every normal), or zero - the first index of a tie
+    def dur_pick_into(row : uint; mx : float; var bdur : uint&) {
+        var bt = 0u
+        var bk = 0.0
+        var d = 0u
+        while (d < pa.n_dur) {
+            let x = lg[row + pa.n_tok + d] - mx
+            var tier = 0u
+            var key = 0.0
+            if (x >= -87.33654) {
+                tier = 2u
+                key = exp(x)
+            } elif (x >= -103.97208) {
+                tier = 1u
+                key = floor(exp(x + 103.27893) + 0.5)
+            }
+            if (d == 0u || tier > bt || (tier == bt && key > bk)) {
+                bt = tier
+                bk = key
+                bdur = d
+            }
+            d++
+        }
+    }
+
+    //! the token's record and the row's log-sums: thread 0 writes it
+    def land_token(row, best, bdur, dur, t, ntok : uint; bv, mx : float) {
+        let tid = gl_LocalInvocationID.x
+        let cut = mx - 32.0
+        var tm = 0.0
+        var al = 0.0
+        var i = tid
+        while (i < pa.n_tok + pa.n_dur) {
+            let v = lg[row + i]
+            if (v > cut) {
+                let e = exp(v - mx)
+                al += e
+                if (i < pa.n_tok) {
+                    tm += e
+                }
+            }
+            i += WG
+        }
+        var tok_mass = 0.0
+        wg_sum_into(tm, 0u, tok_mass)
+        barrier()
+        var lse = 0.0
+        wg_sum_into(al, 1u, lse)
+        barrier()
+        if (tid == 0u && ntok < pa.cap) {
+            let plog = bv - (log(lse) + mx)
+            let p = exp(plog) / (tok_mass / lse)
+            let r = ntok * 8u
+            toks[r] = best
+            toks[r + 1u] = bdur
+            toks[r + 2u] = dur
+            toks[r + 3u] = t
+            toks[r + 4u] = float_bits_to_uint(p)
+            toks[r + 5u] = float_bits_to_uint(plog)
+        }
+    }
+
+    def pick_body {
+        let tid = gl_LocalInvocationID.x
+        if (st[2] == 0u) {
+            let t0 = st[0]
+            let need_was = st[3]
+            var t = t0
+            var emitted = st[1]
+            var ntok = st[5]
+            var need = 0u
+            var done = 0u
+            var tok = 0u
+            var go = true
+            while (go) {
+                if (t >= pa.n_frames) {
+                    done = 1u
+                    go = false
+                } elif (t - t0 >= 8u) {
+                    go = false
+                } else {
+                    let row = (t - t0) * gk_rnnt_lstride(pa.n_tok + pa.n_dur)
+                    var best_v = 0.0
+                    var best = 0u
+                    var mx = 0.0
+                    row_pick_into(row, best_v, best, mx)
+                    var bdur = 0u
+                    var dur = 0u
+                    if (pa.n_dur > 0u) {
+                        dur_pick_into(row, mx, bdur)
+                        dur = st[16u + bdur]
+                    }
+                    if (best == pa.blank) {
+                        t += max(dur, 1u)
+                        emitted = 0u
+                    } else {
+                        land_token(row, best, bdur, dur, t, ntok, best_v, mx)
+                        ntok++
+                        if (dur > 0u) {
+                            t += dur
+                            emitted = 0u
+                        } else {
+                            emitted++
+                            if (emitted >= pa.max_sym) {
+                                t++
+                                emitted = 0u
+                            }
+                        }
+                        need = 1u
+                        tok = best
+                        go = false
+                        if (t >= pa.n_frames) {
+                            done = 1u
+                        }
+                    }
+                }
+            }
+            if (need != 0u) {
+                var k = tid
+                while (k < pa.pd) {
+                    xin[k] = wf[pa.embed + tok * pa.pd + k]
+                    k += WG
+                }
+            }
+            barrier()
+            if (tid == 0u) {
+                store_state(t, emitted, done, need, need_was, ntok)
+            }
+        }
+    }
+
+    //! frame row `row`'s token argmax (the lowest index of a tie) and, where a duration or a token reads it, its maximum over
+    //! the whole row, durations included
+    def row_pick_into(row : uint; var best_v : float&; var best : uint&; var mx : float&) {
+        let tid = gl_LocalInvocationID.x
+        var bv = -3.4e38
+        var bi = 0u   //! a row with no token above the seed (all NaN) picks token 0, as the CPU's `rnnt_row_max`
+        var m = -3.4e38
+        var i = tid
+        while (i < pa.n_tok + pa.n_dur) {
+            let v = lg[row + i]
+            if (i < pa.n_tok && v > bv) {
+                bv = v
+                bi = i
+            }
+            m = max(m, v)
+            i += WG
+        }
+        wg_argmax_into(bv, bi, best_v, best)
+        barrier()
+        if (pa.n_dur > 0u || best != pa.blank) {   //! a blank of a plain RNN-T reads no row maximum
+            wg_max_into(m, 0u, mx)
+            barrier()
+        }
+    }
+
+    //! the round's state words: the predictor parity flipped and the step counted where this round ran one
+    def store_state(t, emitted, done, need, need_was, ntok : uint) {
+        st[0] = t
+        st[1] = emitted
+        st[2] = done
+        st[3] = need
+        if (need_was != 0u) {
+            st[4] = 1u - st[4]
+            st[6] = st[6] + 1u
+        }
+        st[5] = ntok
+        st[7] = st[7] + 1u
+    }
+}
+
+// ===== the CTC head's pick (GigaAM's CTC carrier): the head GEMM's rows land here =====
+
+struct GkCtcPickArgs {
+    nc : uint     //! the classes, the blank among them
+    ldl : uint    //! a frame's logit row stride
+    boff : uint   //! the head's bias [nc] in `wb`
+}
+
+//! The CTC head's pick over the head GEMM's unbiased logit rows, a workgroup of 256 a frame (the CPU `gg_decode_ctc`'s row
+//! loop): the biased row's argmax, the lowest index of a tie (an all-NaN row picks 0), and -log of the row's sum of
+//! exp(logit - max), the emitted token's plog; the host collapses the repeats and the blanks off the records
+[ |> template_struct_instance]
+class template GkCtcPick : GkWgArgmax {
+    @ssbo @binding = 0 @role = "read" lg : array<float>      //! the head GEMM's rows [rows][ldl]
+    @ssbo @binding = 1 @role = "weight" wb : array<float>    //! the plane holding the head's bias
+    @ssbo @binding = 2 @role = "write" pk : array<uint>      //! a frame's record [rows][2]: the class, plog's bits
+    @kargs pa : GkCtcPickArgs
+
+    def ctc_pick_body {
+        let tid = gl_LocalInvocationID.x
+        let row = gl_WorkGroupID.x * pa.ldl
+        var bv = -3.4e38
+        var bi = 0u
+        var i = tid
+        while (i < pa.nc) {
+            let v = lg[row + i] + wb[pa.boff + i]
+            if (v > bv) {
+                bv = v
+                bi = i
+            }
+            i += 256u
+        }
+        var mx = 0.0
+        var best = 0u
+        wg_argmax_into(bv, bi, mx, best)
+        barrier()
+        var s = 0.0
+        i = tid
+        while (i < pa.nc) {
+            s += exp((lg[row + i] + wb[pa.boff + i]) - mx)
+            i += 256u
+        }
+        var tot = 0.0
+        wg_sum_into(s, 1u, tot)
+        if (tid == 0u) {
+            let r = gl_WorkGroupID.x * 2u
+            pk[r] = best
+            pk[r + 1u] = float_bits_to_uint(-log(tot))
         }
     }
 }

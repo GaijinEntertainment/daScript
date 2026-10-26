@@ -132,7 +132,8 @@ rows copied from the shape it borrows).
 
 ## 1. Identity - `dasllama/dasllama_kqformat.das`
 
-The taxonomy every other file keys off. One member and one descriptor row here; every
+The taxonomy every other file keys off (`ARCHITECTURE_ENGINE_FORMATS.md#formats-and-data-movement`,
+the `dasllama_kqformat.das` charter). One member and one descriptor row here; every
 per-format accessor (`kq_sb`, `kq_qsb`, `kq_ssb`, `kq_elems`, `kq_schema_id`, `kq_stream_code`,
 `kq_ggml_type`, the int-id twins in `dasllama_gemm_schema.das`) reads the row.
 
@@ -178,6 +179,9 @@ per-format accessor (`kq_sb`, `kq_qsb`, `kq_ssb`, `kq_elems`, `kq_schema_id`, `k
   member whose `int(KqFmt)` reaches `DAT_KEY_FMTS` grows the radix in the same change.
 
 ## 2. Codec - `dasllama/dasllama_convert.das`, `dasllama/dasllama_gguf.das`
+
+Every conversion lives in `dasllama_convert.das`; the GGUF container finds bytes and dispatches in
+(`ARCHITECTURE_ENGINE_FORMATS.md#formats-and-data-movement`, the two files' charters).
 
 - `KqTag_<fmt>` (`dasllama_kqformat.das`) - the format's empty tag struct beside the others; it
   is the overload key every per-format family resolves on, and `kq_fmt_stamp(fmt) <| $(F)`
@@ -399,7 +403,9 @@ same arc, and never read a first end-to-end wall time as a load-time regression.
 
 ## 5. The JIT emitter - `dasllama_gemm_gen.das`
 
-`kq_tile_gen` / `kq_gemv_gen` are one emitter specialized on the format their key names
+`ARCHITECTURE_ENGINE_FORMATS.md#cpu-kernel-tiers` names the generated GEMM tier's files and the
+stamp that pins them. `kq_tile_gen` / `kq_gemv_gen` are one emitter
+specialized on the format their key names
 (`kq_gen_fmt`) at generation time: the group walk, the slice/loop machinery (`emit_slice`) and
 the store epilogue are format-agnostic; only the block body and the primitives `setup_tile_emit`
 wires differ. The IQ4_XS arms:
@@ -767,7 +773,8 @@ row of the tile's and gemv's `_variants()` registries at one thread on synthetic
 per try), and the reference row at the same shape is the reference exe's `test-backend-ops perf
 -o MUL_MAT -p "type_a=<type>,type_b=f32,m=4096,n=1,"` under `GGML_BENCH_THREADS=1`;
 `harness/kernel_ladder.sh` runs both sides for every format and prints the box's ratio table. The
-app run comes only after a spelling wins there.
+bench's fixture conditions are `ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md#cpu-kernel-bench-fixture`.
+The app run comes only after a spelling wins there.
 
 Pick the vehicle by census, not by name: an ftype is a MIX, and a natural download can put an
 unsupported sibling on `attn_k`/`attn_q` so the file cannot load end to end. `harness/gguf_dump.das`

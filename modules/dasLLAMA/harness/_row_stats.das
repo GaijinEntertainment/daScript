@@ -8,8 +8,11 @@ module _row_stats shared public
 
 require math
 
-//! `vals` sorted in place: the smallest, the median (the upper middle) and the population cv in percent
-def spread_of(var vals : array<float>) : tuple<best : float; median : float; cv : float> {
+//! A row's reps: the smallest, the median (the upper middle), the population cv in percent, the mean and the largest.
+typedef RowSpread = tuple<best : float; median : float; cv : float; mean : float; worst : float>
+
+//! `vals` sorted in place, and their spread
+def spread_of(var vals : array<float>) : RowSpread {
     sort(vals)
     var mean = 0.0
     for (v in vals) {
@@ -20,5 +23,6 @@ def spread_of(var vals : array<float>) : tuple<best : float; median : float; cv 
     for (v in vals) {
         sq += (v - mean) * (v - mean)
     }
-    return (best = vals[0], median = vals[length(vals) / 2], cv = sqrt(sq / float(length(vals))) / mean * 100.0)
+    return (best = vals[0], median = vals[length(vals) / 2], cv = sqrt(sq / float(length(vals))) / mean * 100.0,
+        mean = mean, worst = vals[length(vals) - 1])
 }

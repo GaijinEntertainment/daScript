@@ -34,7 +34,8 @@ Vulkan the coopmat mode (`DASLLAMA_COOPMAT`), and on CUDA the prefill GEMM form
 (`DASLLAMA_CUDA_MMQ`) and whether a launch overlaps the tail of the one before it
 (`DASLLAMA_CUDA_PDL`). The flags of an instrument run are the tier, the `DAS_TUNE_POLICY` value,
 the device, `DASLLAMA_COOPMAT` on Vulkan or `DASLLAMA_CUDA_MMQ` and `DASLLAMA_CUDA_PDL` on CUDA,
-and the instrument's arguments.
+and the instrument's arguments. A run that serves a model through the engine carries every flag of
+a serving run, whatever drives it.
 
 The flags of a test run - a dastest test whose reading sets or checks a tolerance - are the tier,
 the `DAS_TUNE_POLICY` value, the device, the CPU kernel backend the registry served, the GPU
@@ -194,13 +195,14 @@ ledger), with the flags that run took.**
 run printed none.** A fat exe is what `daspkg release --fat <class>` builds (`DAS_TUNE_MODE=fat`,
 `ARCHITECTURE_MEASUREMENT_FAT_START.md#fat-first-start`).
 
-**A diff whose PR body, or a line it adds or changes, states that a route the tree served before the
-diff runs faster or does less work, where a rig leg runs the changed lines, writes that leg's walls
-from every board box of the author's that can mint it into a dated `PERF_LEDGER.md` entry naming the
-exe's commit and the command, and names in the PR body the `followup_general.md` row under which the
-release re-mint owes every board box's row.** The board is the module's committed record of what a
-release's exe costs to serve; a kernel win that lands in no ledger entry is invisible to the next
-regression check, and a row minted between releases shows a speed no shipped binary gives
+**A diff whose PR body, or a line it adds or changes, states that the diff makes an existing
+route - one the tree served before the diff - run faster or do less work, where a rig leg runs the
+changed lines, writes that leg's walls from every board box of the author's that can mint it into
+a dated `PERF_LEDGER.md` entry naming the exe's commit and the command, and names in the PR body
+the `followup_general.md` row under which the release re-mint owes every board box's row.** The
+board is the module's committed record of what a release's exe costs to serve; a kernel win that
+lands in no ledger entry is invisible to the next regression check, and a row minted between
+releases shows a speed no shipped binary gives
 (`ARCHITECTURE_MEASUREMENT_RELEASE.md#board-rows-release-boundary`).
 
 **The release re-mint re-mints, on each board box it runs on, every row a `followup_general.md` row
@@ -211,9 +213,10 @@ change.**
 **No diff but the release re-mint writes a row into `performance/records/<box>.json`; a figure any
 other diff owes lands in a dated `PERF_LEDGER.md` entry.**
 
-**A diff whose PR body, or a line it adds or changes, states that a route the tree served before the
-diff runs faster or does less work, where no rig leg runs the changed lines, states in its PR body
-that no rig leg runs them and names the instrument that does, with its command line.**
+**A diff whose PR body, or a line it adds or changes, states that the diff makes an existing
+route - one the tree served before the diff - run faster or do less work, where no rig leg runs
+the changed lines, states in its PR body that no rig leg runs them and names the instrument that
+does, with its command line.**
 
 **A diff that changes what a board cell loads, runs, counts or times - the model or corpus it reads,
 the model components (encoder, decoder, tower) it runs or the backend that serves them, the tokens
@@ -254,7 +257,8 @@ reference from the section, not from the earlier entry's prose.
 value depends on the box it ran on, names the harness, the flags, the environment overrides, the
 box and the exe or script that produced it - or names the committed record file and the row or key
 it sits under, when that record is a board record or its own fields name that harness, flags, box
-and exe.**
+and exe.** A reading from a GPU, or from a reduction split across lanes or threads, depends on the
+box.
 
 **A figure whose value is the same on every box names the build, fixture, or command that
 reproduces it.**

@@ -62,7 +62,8 @@ what decides that key's value, names the key, when the route answers it and what
 value in the route's `README.md` row, and leaves every other `README.md` passage that names the
 key, or the request field that decides it, stating what the row states, in the same change.** A
 diff changes what decides a key's value only when it adds or removes a request field, flag or
-config key the value depends on, or adds or removes a kind of value the key takes.
+config key the value depends on, or a kind of value the key takes. An error reply's HTTP status
+code counts as a key the route answers.
 
 **A `served` or `served_note` value a diff adds or changes in `openai_server.das` - all of it
 but the engine text it quotes - uses only words a user understands without knowing how the

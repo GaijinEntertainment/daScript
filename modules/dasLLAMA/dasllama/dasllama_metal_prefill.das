@@ -4410,6 +4410,55 @@ class MetalPkDw : GkDwConvRows {
     }
 }
 
+//! gigaam's centered depthwise conv on the template both homes stamp (GkDwConvRows): the file's tap-major taps, its bias row,
+//! no epilogue - the conv module's LayerNorm and SiLU follow as their own rows passes
+[metal_dispatch(name = "enc_ga_dw", pso = "g_pf_pso_ga_dw", tg = 64, grid = "total/64", params = "total : int64")]
+class MetalGaDw : GkDwConvRows {
+    override FORM = 3
+    override TAP_MAJOR = true
+
+    [metal_kernel(name="metal_ga_dw_msl")]
+    def metal_ga_dw {
+        dw_conv_rows_body()
+    }
+}
+
+//! gigaam's depthwise conv over its taps as the carrier's f16 halfwords (`GkDwConvRows`, TAP_F16): the halfword plane at `wh`,
+//! the bias row in the f32 plane
+[metal_dispatch(name = "enc_ga_dwh", pso = "g_pf_pso_ga_dwh", tg = 64, grid = "total/64", params = "total : int64")]
+class MetalGaDwH : GkDwConvRows {
+    override FORM = 3
+    override TAP_MAJOR = true
+    override TAP_F16 = true
+
+    [metal_kernel(name="metal_ga_hdw_msl")]
+    def metal_ga_hdw {
+        dw_conv_rows_body()
+    }
+}
+
+// ===== the silero VAD's two stamps (the tower driver's VAD seat) =====
+
+//! the VAD's encoder on the template both homes stamp (`GkVadEnc`): a threadgroup of 128 a chunk, every chunk of the call
+[metal_dispatch(name = "enc_vad_enc", pso = "g_pf_pso_vad_enc", tgmem = "metal_vad_enc_msl_tgmem", tg = 128, grid = "n", params = "n : int64")]
+class MetalVadEnc : GkVadEnc {
+    [metal_kernel(name="metal_vad_enc_msl")]
+    def metal_vad_enc {
+        vad_enc_body()
+    }
+}
+
+//! the VAD's recurrence and decoder on the template both homes stamp (`GkVadLstm`): one threadgroup of 1024 walks every chunk
+[metal_dispatch(name = "enc_vad_lstm", pso = "g_pf_pso_vad_lstm", tgmem = "metal_vad_lstm_msl_tgmem", tg = 1024, grid = "1")]
+class MetalVadLstm : GkVadLstm {
+    override PTR_LOADS = true
+
+    [metal_kernel(name="metal_vad_lstm_msl")]
+    def metal_vad_lstm {
+        vad_lstm_body()
+    }
+}
+
 //! One stage of the parakeet subsample front's geometry: a k3 stride-2 pad-1 conv over an [ih x iw] image of channel rows.
 struct PkFrontArgs {
     iw : uint       //!< input columns (the mel width, halved a stage)
@@ -4583,6 +4632,26 @@ class MetalCnMelNorm : GkMelNorm {
     }
 }
 
+//! gigaam's windowed frames off the raw samples, on the template both homes stamp (GkFrameWindow)
+[metal_dispatch(name = "enc_ga_frames", pso = "g_pf_pso_ga_frames", tg = 64, grid = "total/64", params = "total : int64")]
+class MetalGaFrames : GkFrameWindow {
+    [metal_kernel(name="metal_ga_frames_msl")]
+    def metal_ga_frames {
+        frame_window_body()
+    }
+}
+
+//! gigaam's clamped-log filterbank over the power rows, on the template both homes stamp (GkMelLog)
+[metal_dispatch(name = "enc_ga_mel", pso = "g_pf_pso_ga_mel", tg = 64, grid = "total/64", params = "total : int64")]
+class MetalGaMel : GkMelLog {
+    override GIGAAM = true
+
+    [metal_kernel(name="metal_ga_mel_msl")]
+    def metal_ga_mel {
+        mel_log_body()
+    }
+}
+
 //! The subsample conv's LayerNorm(channels, weight-only) + ReLU, on the template both homes stamp: the conv GEMM's padded
 //! rows in, compact rows out
 [metal_dispatch(name = "enc_g4a_lnrelu", pso = "g_pf_pso_g4a_lnrelu", tg = 64, grid = "rows/64", params = "rows : int64")]
@@ -4681,11 +4750,17 @@ var private g_pf_pso_fc_twin : MetalComputePipeline?     //!< the all-heads form
 var private g_pf_pso_fc_pexp : MetalComputePipeline?     //!< its rel-shift softmax rows
 var private g_pf_pso_cn_dw : MetalComputePipeline?       //!< its centered depthwise k9 + folded BN + SiLU
 var private g_pf_pso_pk_dw : MetalComputePipeline?       //!< the same on parakeet's tap-major taps
+var private g_pf_pso_ga_dw : MetalComputePipeline?       //!< gigaam's biased centered depthwise conv, no epilogue
+var private g_pf_pso_ga_dwh : MetalComputePipeline?      //!< ... over the carrier's f16 taps
+var private g_pf_pso_vad_enc : MetalComputePipeline?     //!< the silero VAD's encoder, a threadgroup a chunk
+var private g_pf_pso_vad_lstm : MetalComputePipeline?    //!< ... and its recurrence over every chunk
 var private g_pf_pso_pk_dw2d : MetalComputePipeline?     //!< its depthwise stride-2 conv
 var private g_pf_pso_cn_dw2d : MetalComputePipeline?     //!< canary's, over the file's channel-major taps
 var private g_pf_pso_tw_rel_sincos : MetalComputePipeline?   //!< the FastConformers' rel-position table on the device
 var private g_pf_pso_pk_xf : MetalComputePipeline?       //!< its feature rows for the pre-projection
 var private g_pf_pso_cn_melnorm : MetalComputePipeline?  //!< canary's log and per-feature normalization over the mel
+var private g_pf_pso_ga_frames : MetalComputePipeline?   //!< gigaam's windowed frames off the raw samples
+var private g_pf_pso_ga_mel : MetalComputePipeline?      //!< gigaam's clamped-log filterbank
 var private g_pf_pso_tw_pool2 : MetalComputePipeline?    //!< the whisper-class projector tails' pair pool
 var private g_pf_pso_tw_swiglu_rows : MetalComputePipeline?   //!< the ultravox projector's row-split gate
 var private g_pf_pso_tw_pool2d : MetalComputePipeline?   //!< a vision tail's k x k mean pool over the row grid
@@ -5254,8 +5329,12 @@ def public metal_prefill_shutdown {
     release_handles(g_pf_pso_moe_mm_iq2xxs_t, g_pf_pso_moe_mm_iq2xxs_th, g_pf_pso_moe_mm_iq2xxs_th128, g_pf_pso_moe_mm_iq2xxs_thr)
     release_handles(g_pf_pso_twr_flash, g_pf_pso_twr_kvhc, g_pf_pso_twr_win)
     release_handles(g_pf_pso_fc_pack, g_pf_pso_fc_softmax, g_pf_pso_fc_unpack, g_pf_pso_cn_dw, g_pf_pso_pk_dw)
-    release_handles(g_pf_pso_pk_dw2d, g_pf_pso_pk_xf)
+    release_handles(g_pf_pso_pk_dw2d, g_pf_pso_pk_xf, g_pf_pso_ga_dw, g_pf_pso_ga_dwh)
+    release_handles(g_pf_pso_vad_enc, g_pf_pso_vad_lstm)
+    release_handles(g_pf_pso_ga_frames, g_pf_pso_ga_mel)
     release_handles(g_pf_pso_cn_dw2d, g_pf_pso_tw_rel_sincos)
+    pf_rnnt_release()
+    pf_ctc_pick_release()
     release_handles(g_pf_pso_cn_melnorm, g_pf_pso_tw_pool2, g_pf_pso_tw_swiglu_rows, g_pf_pso_tw_pool2d)
     release_handle(g_pf_pso_tw_affine)
     release_handles(g_pf_pso_g4a_attn, g_pf_pso_g4a_glu, g_pf_pso_g4a_dw, g_pf_pso_g4a_axpy)
@@ -5469,6 +5548,12 @@ def private metal_prefill_init : bool {   // nolint:STYLE038 — flat one-compil
     g_pf_pso_fc_unpack = compile_stamp(metal_fc_unpack_msl, ok)
     g_pf_pso_cn_dw = compile_stamp(metal_cn_dw_msl, ok)
     g_pf_pso_pk_dw = compile_stamp(metal_pk_dw_msl, ok)
+    g_pf_pso_ga_dw = compile_stamp(metal_ga_dw_msl, ok)
+    g_pf_pso_ga_dwh = compile_stamp(metal_ga_hdw_msl, ok)
+    g_pf_pso_vad_enc = compile_stamp(metal_vad_enc_msl, ok)
+    g_pf_pso_vad_lstm = compile_stamp(metal_vad_lstm_msl, ok)
+    g_pf_pso_ga_frames = compile_stamp(metal_ga_frames_msl, ok)
+    g_pf_pso_ga_mel = compile_stamp(metal_ga_mel_msl, ok)
     g_pf_pso_pk_dw2d = compile_stamp(metal_pk_dw2d_msl, ok)
     g_pf_pso_cn_dw2d = compile_stamp(metal_cn_dw2d_msl, ok)
     g_pf_pso_tw_rel_sincos = compile_stamp(metal_tw_rel_sincos_msl, ok)
@@ -5793,6 +5878,21 @@ def pf_tower_win_ready() : bool => psos_ready(fixed_array(g_pf_pso_twr_win, g_ps
 //! ride the shared/g4a kernels); the depthwise stamp follows the family's tap layout.
 def pf_fc_ready(tap_major : bool) : bool => psos_ready(fixed_array(g_pf_pso_fc_pack, g_pf_pso_fc_softmax, g_pf_pso_fc_unpack, g_pso_f32mm,
     tap_major ? g_pf_pso_pk_dw : g_pf_pso_cn_dw, g_pf_pso_g4a_glu, g_pf_pso_g4a_axpy, g_pf_pso_tw_rel_sincos))
+
+//! The rotary FastConformer kernel set compiled (gigaam): the conv module's biased depthwise stamps (f32 and f16 taps), the GLU,
+//! the axpy, the slab trio the attention rides with its head restrides and its rope, and the front's im2col.
+def pf_ga_ready() : bool => psos_ready(fixed_array(g_pso_f32mm, g_pf_pso_ga_dw, g_pf_pso_ga_dwh, g_pf_pso_g4a_glu, g_pf_pso_g4a_axpy,
+    g_pf_pso_qkmm, g_pf_pso_rowstat, g_pf_pso_avmm, g_pso_head_pad, g_pso_head_unpad, g_pso_tw_rope_tab, g_pso_st2_im2col))
+
+//! The silero VAD's two kernels compiled - the tower driver's VAD seat's device gate.
+def pf_vad_ready() : bool => psos_ready(fixed_array(g_pf_pso_vad_enc, g_pf_pso_vad_lstm))
+
+//! The largest threadgroup the VAD recurrence's compiled pipeline admits (0 before it compiles): its registers can hold it under
+//! the kernel's 1024 lanes on a GPU with a smaller register file.
+def pf_vad_lstm_lanes() : uint => g_pf_pso_vad_lstm != null ? metal_pipeline_max_total_threads(g_pf_pso_vad_lstm) : 0u
+
+//! The gigaam mel's kernels compiled: the frame window, the exact DFT tile, the power spectrum and the clamped-log filterbank.
+def pf_ga_mel_ready() : bool => psos_ready(fixed_array(g_pf_pso_ga_frames, g_pso_f32_exact_mm, g_pf_pso_q3a_pow, g_pf_pso_ga_mel))
 
 //! The parakeet subsample front's kernels compiled - the whole-encode driver's extra device gate.
 def pf_pk_front_ready() : bool => psos_ready(fixed_array(g_pf_pso_pk_dw2d, g_pf_pso_pk_xf))
@@ -9354,10 +9454,10 @@ def private race_hmm_tall(dev : MetalDevice?; queue : MetalCommandQueue?) : Meta
     let twin_pso = p.twin_pso
     var wa <- race_x_f16(ndim * kdim)
     var xa <- race_x_f16(m * kdim)
-    var bw = race_buf(dev, uint64(ndim * kdim * 2), unsafe(addr<void?>(wa[0])))
-    var bx = race_buf(dev, uint64(m * kdim * 2), unsafe(addr<void?>(xa[0])))
-    var by_base = race_buf(dev, uint64(m * ndim * 4), null)
-    var by_twin = race_buf(dev, uint64(m * ndim * 4), null)
+    var bw = metal_buffer_from(dev, uint64(ndim * kdim * 2), unsafe(addr<void?>(wa[0])))
+    var bx = metal_buffer_from(dev, uint64(m * kdim * 2), unsafe(addr<void?>(xa[0])))
+    var by_base = metal_buffer_from(dev, uint64(m * ndim * 4), null)
+    var by_twin = metal_buffer_from(dev, uint64(m * ndim * 4), null)
     var bk = race_uniform_u32(dev, uint(kdim))
     var bn = race_uniform_u32(dev, uint(ndim))
     let tg = uint3(128u, 1u, 1u)
@@ -9407,10 +9507,10 @@ def private race_mulmm_bf16(dev : MetalDevice?; queue : MetalCommandQueue?) : Me
     for (i in range(ndim * kdim)) {
         wb[i] = uint16(float_bits_to_uint(0.125 * float((i * 3) % 13 - 6)) >> 16u)
     }
-    var bxa = race_buf(dev, uint64(m * kdim * 4), unsafe(addr<void?>(xa[0])))
-    var bwb = race_buf(dev, uint64(ndim * kdim * 2), unsafe(addr<void?>(wb[0])))
-    var by_base = race_buf(dev, uint64(m * ndim * 4), null)
-    var by_twin = race_buf(dev, uint64(m * ndim * 4), null)
+    var bxa = metal_buffer_from(dev, uint64(m * kdim * 4), unsafe(addr<void?>(xa[0])))
+    var bwb = metal_buffer_from(dev, uint64(ndim * kdim * 2), unsafe(addr<void?>(wb[0])))
+    var by_base = metal_buffer_from(dev, uint64(m * ndim * 4), null)
+    var by_twin = metal_buffer_from(dev, uint64(m * ndim * 4), null)
     var bk = race_uniform_u32(dev, uint(kdim))
     var bn = race_uniform_u32(dev, uint(ndim))
     let grid = uint3(uint(m / 32), uint(ndim / 64), 1u)
@@ -9457,10 +9557,10 @@ def private race_mulmm_q8(dev : MetalDevice?; queue : MetalCommandQueue?) : Meta
     let twin_pso = p.twin_pso
     var xa <- race_x_f32(m * kdim)
     var blob <- race_q8_blob(ndim * nkb)
-    var bw = race_buf(dev, uint64(ndim * nkb * 34), unsafe(addr<void?>(blob[0])))
-    var bxa = race_buf(dev, uint64(m * kdim * 4), unsafe(addr<void?>(xa[0])))
-    var by_base = race_buf(dev, uint64(m * ndim * 4), null)
-    var by_twin = race_buf(dev, uint64(m * ndim * 4), null)
+    var bw = metal_buffer_from(dev, uint64(ndim * nkb * 34), unsafe(addr<void?>(blob[0])))
+    var bxa = metal_buffer_from(dev, uint64(m * kdim * 4), unsafe(addr<void?>(xa[0])))
+    var by_base = metal_buffer_from(dev, uint64(m * ndim * 4), null)
+    var by_twin = metal_buffer_from(dev, uint64(m * ndim * 4), null)
     var bk = race_uniform_u32(dev, uint(kdim))
     var bn = race_uniform_u32(dev, uint(ndim))
     let grid = uint3(uint(m / 32), uint(ndim / 64), 1u)
@@ -9524,13 +9624,13 @@ def private race_moe_mulmm_q8(dev : MetalDevice?; queue : MetalCommandQueue?) : 
     for (i in range(m)) {
         bkt[i] = uint(i)   //! identity buckets: gather=0 semantics match
     }
-    var bw = race_buf(dev, uint64(ne * eblk * 34), unsafe(addr<void?>(blob[0])))
-    var bxa = race_buf(dev, uint64(m * kdim * 4), unsafe(addr<void?>(xa[0])))
-    var by_base = race_buf(dev, uint64(m * ndim * 4), null)
-    var by_twin = race_buf(dev, uint64(m * ndim * 4), null)
-    var bcnt = race_buf(dev, uint64(ne * 4), unsafe(addr<void?>(cnt[0])))
-    var bbase = race_buf(dev, uint64(ne * 4), unsafe(addr<void?>(basep[0])))
-    var bbkt = race_buf(dev, uint64(m * 4), unsafe(addr<void?>(bkt[0])))
+    var bw = metal_buffer_from(dev, uint64(ne * eblk * 34), unsafe(addr<void?>(blob[0])))
+    var bxa = metal_buffer_from(dev, uint64(m * kdim * 4), unsafe(addr<void?>(xa[0])))
+    var by_base = metal_buffer_from(dev, uint64(m * ndim * 4), null)
+    var by_twin = metal_buffer_from(dev, uint64(m * ndim * 4), null)
+    var bcnt = metal_buffer_from(dev, uint64(ne * 4), unsafe(addr<void?>(cnt[0])))
+    var bbase = metal_buffer_from(dev, uint64(ne * 4), unsafe(addr<void?>(basep[0])))
+    var bbkt = metal_buffer_from(dev, uint64(m * 4), unsafe(addr<void?>(bkt[0])))
     var rka = moe_mm_ka(KqFmt.q8, int64(kdim), int64(ndim), 1l, false)
     let grid = uint3(uint(rows_per / 32), uint(ndim / 64), uint(ne))
     let tg = uint3(128u, 1u, 1u)
@@ -9625,18 +9725,18 @@ def private race_moe_mulmm_kq(dev : MetalDevice?; queue : MetalCommandQueue?; fa
     for (i in range(m)) {
         bkt[i] = uint(i)   //! identity buckets: gather=0 semantics match
     }
-    var bxa = race_buf(dev, uint64(m * kdim * 4), unsafe(addr<void?>(xa[0])))
-    var by_base = race_buf(dev, uint64(m * ndim * 4), null)
-    var by_twin = race_buf(dev, uint64(m * ndim * 4), null)
-    var by_part_base = race_buf(dev, uint64(m * ndim * 4), null)
-    var by_part_twin = race_buf(dev, uint64(m * ndim * 4), null)
-    var bcnt = race_buf(dev, uint64(ne * 4), unsafe(addr<void?>(cnt[0])))
-    var bcnt_part = race_buf(dev, uint64(ne * 4), unsafe(addr<void?>(cnt_part[0])))
-    var bbase = race_buf(dev, uint64(ne * 4), unsafe(addr<void?>(basep[0])))
-    var bbkt = race_buf(dev, uint64(m * 4), unsafe(addr<void?>(bkt[0])))
+    var bxa = metal_buffer_from(dev, uint64(m * kdim * 4), unsafe(addr<void?>(xa[0])))
+    var by_base = metal_buffer_from(dev, uint64(m * ndim * 4), null)
+    var by_twin = metal_buffer_from(dev, uint64(m * ndim * 4), null)
+    var by_part_base = metal_buffer_from(dev, uint64(m * ndim * 4), null)
+    var by_part_twin = metal_buffer_from(dev, uint64(m * ndim * 4), null)
+    var bcnt = metal_buffer_from(dev, uint64(ne * 4), unsafe(addr<void?>(cnt[0])))
+    var bcnt_part = metal_buffer_from(dev, uint64(ne * 4), unsafe(addr<void?>(cnt_part[0])))
+    var bbase = metal_buffer_from(dev, uint64(ne * 4), unsafe(addr<void?>(basep[0])))
+    var bbkt = metal_buffer_from(dev, uint64(m * 4), unsafe(addr<void?>(bkt[0])))
     var dims = fixed_array(uint(kdim), uint(ndim))
-    var bkd = race_buf(dev, 4ul, unsafe(addr<void?>(dims[0])))
-    var bnd = race_buf(dev, 4ul, unsafe(addr<void?>(dims[1])))
+    var bkd = metal_buffer_from(dev, 4ul, unsafe(addr<void?>(dims[0])))
+    var bnd = metal_buffer_from(dev, 4ul, unsafe(addr<void?>(dims[1])))
     var rka = moe_mm_ka(fmt, int64(kdim), int64(ndim), 1l, false)
     let grid = uint3(uint(rows_per / 32), uint(ndim / 64), uint(ne))
     let tg = uint3(128u, 1u, 1u)
@@ -9718,16 +9818,16 @@ def private race_moe_mulmm_mx4(dev : MetalDevice?; queue : MetalCommandQueue?) :
     for (i in range(m)) {
         bkt[i] = uint(i)
     }
-    var bnq = race_buf(dev, uint64(ne * eblk * 16), unsafe(addr<void?>(nplane[0])))
-    var bee = race_buf(dev, uint64(ne * eblk), unsafe(addr<void?>(eplane[0])))
-    var bvt = race_buf(dev, uint64(16 * 4), unsafe(addr<void?>(vtabh[0])))
-    var bwbb = race_buf(dev, uint64(ne * ndim * 4), null)
-    var bxa = race_buf(dev, uint64(m * kdim * 4), unsafe(addr<void?>(xa[0])))
-    var by_base = race_buf(dev, uint64(m * ndim * 4), null)
-    var by_twin = race_buf(dev, uint64(m * ndim * 4), null)
-    var bcnt = race_buf(dev, uint64(ne * 4), unsafe(addr<void?>(cnt[0])))
-    var bbase = race_buf(dev, uint64(ne * 4), unsafe(addr<void?>(basep[0])))
-    var bbkt = race_buf(dev, uint64(m * 4), unsafe(addr<void?>(bkt[0])))
+    var bnq = metal_buffer_from(dev, uint64(ne * eblk * 16), unsafe(addr<void?>(nplane[0])))
+    var bee = metal_buffer_from(dev, uint64(ne * eblk), unsafe(addr<void?>(eplane[0])))
+    var bvt = metal_buffer_from(dev, uint64(16 * 4), unsafe(addr<void?>(vtabh[0])))
+    var bwbb = metal_buffer_from(dev, uint64(ne * ndim * 4), null)
+    var bxa = metal_buffer_from(dev, uint64(m * kdim * 4), unsafe(addr<void?>(xa[0])))
+    var by_base = metal_buffer_from(dev, uint64(m * ndim * 4), null)
+    var by_twin = metal_buffer_from(dev, uint64(m * ndim * 4), null)
+    var bcnt = metal_buffer_from(dev, uint64(ne * 4), unsafe(addr<void?>(cnt[0])))
+    var bbase = metal_buffer_from(dev, uint64(ne * 4), unsafe(addr<void?>(basep[0])))
+    var bbkt = metal_buffer_from(dev, uint64(m * 4), unsafe(addr<void?>(bkt[0])))
     var rka = moe_mm_mx4_ka(int64(kdim), int64(ndim), 1l, false, false)
     let grid = uint3(uint(rows_per / 32), uint(ndim / 64), uint(ne))
     let tg = uint3(128u, 1u, 1u)
@@ -9792,9 +9892,9 @@ def private race_kq_mulmm(dev : MetalDevice?; queue : MetalCommandQueue?; family
     var bq = planes.bq
     var bs = planes.bs
     let doff = planes.doff
-    var bxa = race_buf(dev, uint64(m * kdim * 4), unsafe(addr<void?>(xa[0])))
-    var by_base = race_buf(dev, uint64(m * ndim * 4), null)
-    var by_twin = race_buf(dev, uint64(m * ndim * 4), null)
+    var bxa = metal_buffer_from(dev, uint64(m * kdim * 4), unsafe(addr<void?>(xa[0])))
+    var by_base = metal_buffer_from(dev, uint64(m * ndim * 4), null)
+    var by_twin = metal_buffer_from(dev, uint64(m * ndim * 4), null)
     var bk = race_uniform_u32(dev, uint(kdim))
     var bn = race_uniform_u32(dev, uint(ndim))
     let grid = uint3(uint(m / 32), uint(ndim / 64), 1u)
@@ -9860,14 +9960,14 @@ def private race_attn_pair(dev : MetalDevice?; queue : MetalCommandQueue?) : arr
         var sv <- race_x_f32(heads * mp * 2)
         var zeros : array<float>
         zeros |> resize(heads * mp * np32)
-        var bq = race_buf(dev, uint64(mp * qd * 4), unsafe(addr<void?>(qv[0])))
-        var bkk = race_buf(dev, uint64(np32 * kvd * 4), unsafe(addr<void?>(kv[0])))
-        var bp = race_buf(dev, uint64(heads * mp * np32 * 2), unsafe(addr<void?>(pv[0])))
-        var batt_b = race_buf(dev, uint64(heads * mp * np32 * 2), unsafe(addr<void?>(zeros[0])))
-        var batt_t = race_buf(dev, uint64(heads * mp * np32 * 2), unsafe(addr<void?>(zeros[0])))
-        var bxb_b = race_buf(dev, uint64(mp * qd * 4), unsafe(addr<void?>(zeros[0])))
-        var bxb_t = race_buf(dev, uint64(mp * qd * 4), unsafe(addr<void?>(zeros[0])))
-        var bstat = race_buf(dev, uint64(heads * mp * 2 * 4), unsafe(addr<void?>(sv[0])))
+        var bq = metal_buffer_from(dev, uint64(mp * qd * 4), unsafe(addr<void?>(qv[0])))
+        var bkk = metal_buffer_from(dev, uint64(np32 * kvd * 4), unsafe(addr<void?>(kv[0])))
+        var bp = metal_buffer_from(dev, uint64(heads * mp * np32 * 2), unsafe(addr<void?>(pv[0])))
+        var batt_b = metal_buffer_from(dev, uint64(heads * mp * np32 * 2), unsafe(addr<void?>(zeros[0])))
+        var batt_t = metal_buffer_from(dev, uint64(heads * mp * np32 * 2), unsafe(addr<void?>(zeros[0])))
+        var bxb_b = metal_buffer_from(dev, uint64(mp * qd * 4), unsafe(addr<void?>(zeros[0])))
+        var bxb_t = metal_buffer_from(dev, uint64(mp * qd * 4), unsafe(addr<void?>(zeros[0])))
+        var bstat = metal_buffer_from(dev, uint64(heads * mp * 2 * 4), unsafe(addr<void?>(sv[0])))
         var rka = AttnArgs(qd = uint(qd), kv_dim = uint(kvd), head_size = uint(hs), kv_mul = 1u,
             npos = uint(np32), np32 = uint(np32), scale = 0.125, qoff = 0u, qrows = uint(mp),
             window = 0u, softcap = 0.0, hass = 0u)
@@ -9966,17 +10066,17 @@ def private race_attn_dev(dev : MetalDevice?; queue : MetalCommandQueue?) : Meta
     if (psos_ready(psos)) {
         var kv <- race_x_f32(nk * kvd)
         var qh <- race_x_f16(mp * qd)
-        var bqh = race_buf(dev, uint64(mp * qd * 2), unsafe(addr<void?>(qh[0])))
-        var bkk = race_buf(dev, uint64(nk * kvd * 4), unsafe(addr<void?>(kv[0])))
-        var bkh = race_buf(dev, uint64(nk * kvd * 2), null)
-        var bvh = race_buf(dev, uint64(nk * kvd * 2), null)
-        var batt_b = race_buf(dev, uint64(heads * mp * nk * 2), null)
-        var batt_t = race_buf(dev, uint64(heads * mp * nk * 2), null)
-        var bstat_b = race_buf(dev, uint64(heads * mp * 2 * 4), null)
-        var bstat_t = race_buf(dev, uint64(heads * mp * 2 * 4), null)
-        var bxb_b = race_buf(dev, uint64(mp * qd * 4), null)
-        var bxb_t = race_buf(dev, uint64(mp * qd * 4), null)
-        var bsink = race_buf(dev, uint64(heads * 4), null)
+        var bqh = metal_buffer_from(dev, uint64(mp * qd * 2), unsafe(addr<void?>(qh[0])))
+        var bkk = metal_buffer_from(dev, uint64(nk * kvd * 4), unsafe(addr<void?>(kv[0])))
+        var bkh = metal_buffer_from(dev, uint64(nk * kvd * 2), null)
+        var bvh = metal_buffer_from(dev, uint64(nk * kvd * 2), null)
+        var batt_b = metal_buffer_from(dev, uint64(heads * mp * nk * 2), null)
+        var batt_t = metal_buffer_from(dev, uint64(heads * mp * nk * 2), null)
+        var bstat_b = metal_buffer_from(dev, uint64(heads * mp * 2 * 4), null)
+        var bstat_t = metal_buffer_from(dev, uint64(heads * mp * 2 * 4), null)
+        var bxb_b = metal_buffer_from(dev, uint64(mp * qd * 4), null)
+        var bxb_t = metal_buffer_from(dev, uint64(mp * qd * 4), null)
+        var bsink = metal_buffer_from(dev, uint64(heads * 4), null)
         var rka = AttnArgs(qd = uint(qd), kv_dim = uint(kvd), head_size = uint(hs), kv_mul = uint(kv_mul),
             npos = uint(nk), np32 = uint(nk), scale = 0.125, qoff = uint(qoff), qrows = uint(mp),
             window = 0u, softcap = 0.0, hass = 0u)
@@ -10088,4 +10188,114 @@ def metal_tensor_race : array<MetalTensorRaceResult> {
     metal_release(queue)
     metal_release(dev)
     return <- results
+}
+
+// ===== the transducer greedy decode's four stamps (the ASR-decoder driver's transducer seat) =====
+
+//! an LSTM layer of the transducer's predictor step on the template both homes stamp (`GkRnntPred`): eight gate elements a
+//! threadgroup of 256
+[metal_dispatch(name = "enc_rnnt_gates", pso = "g_pf_pso_rnnt_gates", tgmem = "metal_rnnt_gates_msl_tgmem", tg = 256, grid = "groups", params = "groups : int64")]
+class MetalRnntGates : GkRnntPred {
+    [metal_kernel(name="metal_rnnt_gates_msl")]
+    def metal_rnnt_gates {
+        pred_body()
+    }
+}
+
+//! joint.pred's projection behind the predictor's last layer (`GkRnntPred`, GATES off): eight rows a threadgroup of 256
+[metal_dispatch(name = "enc_rnnt_proj", pso = "g_pf_pso_rnnt_proj", tgmem = "metal_rnnt_proj_msl_tgmem", tg = 256, grid = "groups", params = "groups : int64")]
+class MetalRnntProj : GkRnntPred {
+    override GATES = false
+
+    [metal_kernel(name="metal_rnnt_proj_msl")]
+    def metal_rnnt_proj {
+        pred_body()
+    }
+}
+
+//! the transducer's joint over a window of frames (`GkRnntJoint`): a 64-logit slice a threadgroup, four a 256-logit block
+[metal_dispatch(name = "enc_rnnt_joint", pso = "g_pf_pso_rnnt_joint", tgmem = "metal_rnnt_joint_msl_tgmem", tg = 256, grid = "slices", params = "slices : int64")]
+class MetalRnntJoint : GkRnntJoint {
+    [metal_kernel(name="metal_rnnt_joint_msl")]
+    def metal_rnnt_joint {
+        joint_body()
+    }
+}
+
+//! the transducer's greedy pick over the window (`GkRnntPick`): one threadgroup of 256
+[metal_dispatch(name = "enc_rnnt_pick", pso = "g_pf_pso_rnnt_pick", tgmem = "metal_rnnt_pick_msl_tgmem", tg = 256, grid = "1")]
+class MetalRnntPick : GkRnntPick {
+    [metal_kernel(name="metal_rnnt_pick_msl")]
+    def metal_rnnt_pick {
+        pick_body()
+    }
+}
+
+var private g_pf_pso_rnnt_gates : MetalComputePipeline?
+var private g_pf_pso_rnnt_proj : MetalComputePipeline?
+var private g_pf_pso_rnnt_joint : MetalComputePipeline?
+var private g_pf_pso_rnnt_pick : MetalComputePipeline?
+var private g_pf_rnnt_tried = false
+
+//! The transducer decode's four pipelines, compiled at the first ask: false where the device or a compile failed.
+def pf_rnnt_ready() : bool {
+    if (!g_pf_rnnt_tried) {
+        pf_rnnt_build()
+    }
+    return psos_ready(fixed_array(g_pf_pso_rnnt_gates, g_pf_pso_rnnt_proj, g_pf_pso_rnnt_joint, g_pf_pso_rnnt_pick))
+}
+
+[cold_path]
+def private pf_rnnt_build {
+    g_pf_rnnt_tried = true
+    if (metal_common_init()) {
+        var ok = true
+        g_pf_pso_rnnt_gates = compile_stamp(metal_rnnt_gates_msl, ok)
+        g_pf_pso_rnnt_proj = compile_stamp(metal_rnnt_proj_msl, ok)
+        g_pf_pso_rnnt_joint = compile_stamp(metal_rnnt_joint_msl, ok)
+        g_pf_pso_rnnt_pick = compile_stamp(metal_rnnt_pick_msl, ok)
+    }
+}
+
+//! The transducer pipelines released; the next ask compiles them again.
+def private pf_rnnt_release {
+    release_handles(g_pf_pso_rnnt_gates, g_pf_pso_rnnt_proj, g_pf_pso_rnnt_joint, g_pf_pso_rnnt_pick)
+    g_pf_rnnt_tried = false
+}
+
+// ===== the CTC head's pick (GigaAM's CTC carrier): the head GEMM is the tower's half or f32 GEMM, its rows land here =====
+
+//! The CTC head's pick on the template both homes stamp (`GkCtcPick`): a threadgroup of 256 a frame
+[metal_dispatch(name = "enc_ctc_pick", pso = "g_pf_pso_ctc_pick", tgmem = "metal_ctc_pick_msl_tgmem", tg = 256, grid = "rows", params = "rows : int64")]
+class MetalCtcPick : GkCtcPick {
+    [metal_kernel(name="metal_ctc_pick_msl")]
+    def metal_ctc_pick {
+        ctc_pick_body()
+    }
+}
+
+var private g_pf_pso_ctc_pick : MetalComputePipeline?
+var private g_pf_ctc_tried = false
+
+//! The CTC pick's pipeline, compiled at the first ask: false where the device or the compile failed.
+def pf_ctc_pick_ready() : bool {
+    if (!g_pf_ctc_tried) {
+        pf_ctc_pick_build()
+    }
+    return g_pf_pso_ctc_pick != null
+}
+
+[cold_path]
+def private pf_ctc_pick_build {
+    g_pf_ctc_tried = true
+    if (metal_common_init()) {
+        var ok = true
+        g_pf_pso_ctc_pick = compile_stamp(metal_ctc_pick_msl, ok)
+    }
+}
+
+//! The CTC pick's pipeline released; the next ask compiles it again.
+def private pf_ctc_pick_release {
+    release_handles(g_pf_pso_ctc_pick)
+    g_pf_ctc_tried = false
 }

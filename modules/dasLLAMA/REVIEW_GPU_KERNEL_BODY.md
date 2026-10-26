@@ -8,15 +8,15 @@ docs: `ARCHITECTURE_GPU.md`, `ARCHITECTURE_GPU_RACE_SHAPES.md`,
 the choice at compile time instead.** A `class template` / `def abstract` / `def override`
 splice is compile-time and conforms - check the emission, not the das spelling.
 
-**A host-fixed branch inside a kernel's main loop whose deciding value is not a per-call extent
+**A host-fixed branch inside a main loop whose deciding value is not a per-call extent
 takes that value from a `@template_constant`, a literal or a module `let` - never a module `var`,
-push constant, uniform or kargs (kernel-argument struct) field.** A host-fixed branch is a bound
-or branch inside the main loop whose deciding value the host fixes before it records the dispatch:
-a bounds guard, a tail guard, a nested loop's own bound, or an `[unroll]` count whose live
-iterations run different bodies - not the main loop's own trip count. A per-call extent is a count,
-base or stride the builder takes per dispatch - a `params=` name or a kargs field - that neither
-the kernel's `requires=` contract nor a `@template_constant` fixes to one value. The main loop is
-the loop whose trip count grows with the work one thread does.
+push constant, uniform or kargs (kernel-argument struct) field.** A host-fixed branch is a bound or
+branch inside a main loop whose deciding value the host fixes before it records the dispatch: a
+bounds guard, a tail guard, a nested loop's own bound, or an `[unroll]` count whose live iterations
+run different bodies - not a main loop's own trip count. A per-call extent is a count, base or
+stride the builder takes per dispatch - a `params=` name or a kargs field - that neither the
+kernel's `requires=` contract nor a `@template_constant` fixes to one value. A main loop is any loop
+whose trip count grows with the work one thread does.
 
 **A host-fixed main-loop branch whose deciding value is a per-call extent is never stamped (baked
 into the kernel as a `@template_constant` or literal): peel it (the full chunks run under the
@@ -28,10 +28,10 @@ the only form.
 
 **A diff that adds or changes, inside a `for [unroll_full]` loop of a Metal kernel, a read of a
 kernel buffer argument whose effective index - through a local, or through the argument of an
-accessor method - is a run-time base plus a constant offset of the loop variable
-takes the address once outside the loop (`let p = unsafe(addr(buf[<base>]))`) and reads
-`unsafe(p[<offset>])`.** `REVIEW.das` flags the same
-sum written directly in the index, and weakening that check is a defect. The Metal compiler does
+accessor method - is a run-time base plus a constant offset of the loop variable takes the address
+once outside the loop (`let p = unsafe(addr(buf[<base>]))`) and reads `unsafe(p[<offset>])`.**
+`REVIEW.das` flags the same sum written directly in the index of a kernel in a
+`dasllama/dasllama_metal_*.das` file, and weakening that check is a defect. The Metal compiler does
 not fold a `uint` index sum into one address, so adjacent loads do not merge
 (`ARCHITECTURE_GPU_PREFILL_WINDOW.md#kernel-load-addressing`).
 
@@ -103,10 +103,11 @@ calls its `wg_sum`, `wg_max` or `wg_rms_inv`; a class template in
 separate sums over parts of the workgroup - is not one value; `ARCHITECTURE_GPU.md#gpu-backends`
 names the bodies that fold that way.
 
-**A diff that adds or changes a kernel body that runs one fold over a `@workgroup` array after
-another over the same array - two calls among `tg_sum_all`, `tg_max_all` and the fold methods of
-`MetalTgReduceBase` or `GkWgReduce`, or one such call inside a loop - puts a `barrier()` between
-them.**
+**A kernel body that runs two folds in a row - two calls among `tg_sum_all`, `tg_max_all` and the
+fold methods of `MetalTgReduceBase`, `WgReduceBase` and `GkWgReduce`, or one such call inside a
+loop - whose writes land in the same `@workgroup` elements (the same array, or the same slot of an
+array a slot argument indexes) puts a `barrier()` between them - or passes the other slot.** A fold
+carries one barrier, so a thread still summing the first fold's partials reads the second's writes.
 
 **Never put an op every lane of its exchange set must reach together - a `barrier()`, a simdgroup
 matrix op, a subgroup shuffle, vote, ballot or reduction, or a call to a function that runs one,

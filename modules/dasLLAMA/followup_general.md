@@ -2427,3 +2427,16 @@
     discrete template the CUDA home stamps too, so the stamp is both homes' work. Done = the KHR branch walking the head
     in 32-wide quarters where 96 asks it (six fragments over four subgroups), the `test_vkd_fa_khr` arms at 96 holding
     the oracle, and the stamp joining `FA_STAMPS` beside the cm2 pair.
+
+248. **The GigaAM v3 ASR cell and its CrispASR and ONNX references hold no board row.** The catalog row `GigaAM v3
+    e2e-RNNT` (`performance/profile_common.das`) pairs the das cell with two `crispasr` references and the `onnx-asr`
+    int8 export (`ARCHITECTURE_MEASUREMENT_AUDIO.md#asr-cpu-references`, `#asr-gpu-pairs`) over three model files:
+    `gigaam-v3-e2e-rnnt-f16.gguf` (the das carrier and the first CrispASR reference), `gigaam-v3-e2e-rnnt-q8_0.gguf`
+    (`crispasr-quantize` beside it) and the `gigaam-v3-e2e-rnnt-int8` export `onnx_bench.py` loads; the CrispASR
+    references run the Metal OFF and ON builds at `CRISPASR_COMMIT`, the onnx one the rig's `.venv-onnx`, and the das
+    cell `DAS_TUNE_MANIFEST` at the box's profile with `DAS_TUNE_POLICY` unset. No `performance/records/<box>.json`
+    carries any of them. The 2026-10-25 `PERF_LEDGER.md` GigaAM entry holds the M5's figures. Done = the release
+    re-mint runs `performance/gen_bench_records.das -- --workload asr -o GigaAM` with the release's rig exe on every
+    board box that can mint the cell - the das `cpu/tuned` row everywhere, the `metal` row and the `crispasr` Metal
+    reference on the Apple boxes, the `crispasr` CPU and `onnx` references wherever `setup_asr_rig --refs --venvs`
+    builds them - and puts each row beside the ledger entry's figure in its own dated entry.

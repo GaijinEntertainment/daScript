@@ -477,6 +477,26 @@ def public dispatch_phase_encode(rows : int64) {
     }
 }
 
+//! A sequential run of steps too small to fill the pool - a transducer decode - narrows it to `lanes`: the workers past
+//! `lanes - 1` go dormant (the caller is a lane), and the answer is the limit it replaced, for `dispatch_lanes_restore`.
+//! Single-thread mode and an app's own worker limit leave the pool alone (-1).
+[arch(at="../ARCHITECTURE_RUNTIME_JOBQUE.md#hybrid-pool-policy")]
+def public dispatch_lanes_narrow(lanes : int) : int {
+    return -1 if (!is_job_que_available() || get_single_thread_() || g_dispatch_worker_limit > 0)
+    let prev = get_jobque_worker_limit()
+    if (lanes - 1 < min(prev, get_total_hw_jobs())) {
+        set_jobque_worker_limit(max(lanes - 1, 0))
+    }
+    return prev
+}
+
+//! Puts back the worker limit `dispatch_lanes_narrow` answered; -1, a pool it left alone, stays as it is.
+def public dispatch_lanes_restore(prev : int) {
+    if (prev >= 0 && is_job_que_available()) {
+        set_jobque_worker_limit(prev)
+    }
+}
+
 //! Dispatch lanes proportional to work: clamp(work / target_chunk_work, 1,
 //! min(get_dispatch_lanes(), lane_cap)). 1 means "not worth a dispatch" — the matmul_chunks
 //! shapers return 1 and the num_jobs form of maybe_parallel_for runs inline. lane_cap 0 = uncapped.
@@ -653,16 +673,33 @@ def matmul(var y : array<float>; w : array<float>; woff : int64; x : array<float
     matmul_at(y, unsafe(addr<float const?>(w[woff])), x, n, d)
 }
 
+//! y[i] = W[i] . x for the rows [rb, re) of `wp` [d][n], on the calling lane: `matmul`'s chunk body, and the whole
+//! matvec where a dispatch costs more than it splits (the VAD's few-hundred-row chunks).
+def matvec_rows(var yp : float?; wp, xp : float const?; n, rb, re : int64) {
+    unsafe {
+        for (i in range64(rb, re)) {
+            yp[i] = dot(wp + i * n, xp, n)
+        }
+    }
+}
+
 def private matmul_at(var y : array<float>; wp : float const?; x : array<float>; n, d : int64) {
     unsafe {
         var yp = addr(y[0])
-        let xp = addr(x[0])
+        let xp = addr<float const?>(x[0])
         maybe_parallel_for(0, int(d), matmul_chunks_gemv(int(d), 1, n * d)) $(rb, re) {
-            unsafe {
-                for (i in range(rb, re)) {
-                    yp[i] = dot(wp + int64(i) * n, xp, n)
-                }
-            }
+            matvec_rows(yp, wp, xp, n, int64(rb), int64(re))
+        }
+    }
+}
+
+//! [C][T] -> [T][C]
+def transpose_ct(x : array<float>; c, t : int64; @scratch var y : array<float>) {
+    y |> reserve_resize(c * t)
+    for (ci in range64(c)) {
+        let row = ci * t
+        for (ti in range64(t)) {
+            y[ti * c + ci] = x[row + ti]
         }
     }
 }

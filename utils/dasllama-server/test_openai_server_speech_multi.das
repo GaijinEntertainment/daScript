@@ -22,7 +22,7 @@ require daslib/strings_boost   // count
 // Model-gated (Qwen3-ASR 0.6B and 1.7B with their mmprojs, kitten-nano with the front-end packs,
 // pocket-tts-en-q8) and JIT-only; skips cleanly otherwise.
 
-let TEST_PORT = 18170   // 18170, 18173 .. 18176: this file's five boots; 18097-18163 belong to the sibling suites
+let TEST_PORT = 18170   // 18170, 18171, 18173 .. 18176: this file's six boots; 18097-18163 belong to the sibling suites
 
 let ASR_A = "Qwen3-ASR-0.6B-Q8_0"
 let ASR_B = "Qwen3-ASR-1.7B-Q8_0"
@@ -274,4 +274,51 @@ def test_asr_load_failure_fails_the_boot(t : T?) {
         }
     }
     t |> equal(panicked, 1, "the boot failed instead of serving without its ASR model")
+}
+
+let GIGAAM = "gigaam-v3-e2e-rnnt-f16"
+let RU_SHORT = "modules/dasLLAMA/benchmarks/asr/corpus/ru_short.wav"
+
+//! A one-file ASR model (GigaAM) serves alone: its worker reports the lane its encoder serves on - the build's GPU tier where
+//! the tower serves its exact lane, though no decoder of it is a Metal-flavor Model - it transcribes the Russian clip, and
+//! /v1/audio/translations refuses it as a model whose caps declare no translation.
+[test]
+def test_gigaam_alone_serves_and_refuses_translation(t : T?) {
+    let gguf = path_join(models_dir(), "{GIGAAM}.gguf")
+    return if (model_missing(t, gguf))
+    if (!stat(RU_SHORT).is_valid) {
+        t |> skip("ru_short.wav not present")
+        return
+    }
+    var decoder = ""
+    with_job_status(1) $(finished) {
+        new_thread() <| @capture(= finished, = gguf) {
+            add_asr_model(gguf, "")
+            run_server(TEST_PORT + 1)   // blocks until POST /shutdown
+            finished |> notify_and_release
+        }
+        let ready = serve_clients(TEST_PORT + 1, 1200, "/v1/models") $(base_url) {
+            let client = openai_client("{base_url}/v1")
+            let res = transcribe(client, GIGAAM, RU_SHORT)
+            t |> success(res.ok && !empty(res.text), "the clip transcribes: '{res.text}'{res.error.message}")
+            let tr = translate(client, GIGAAM, RU_SHORT)
+            t |> success(!tr.ok && tr.error.status == int(http_status.BAD_REQUEST), "/v1/audio/translations answers 400 ({tr.error.status})")
+            t |> success(find(tr.error.message, "does not translate") >= 0, "the 400 names the missing translation: '{tr.error.message}'")
+            GET("{base_url}/v1/stats") $(resp) {
+                var err = ""
+                var js = read_json(resp != null ? string(resp.body) : "", err)
+                decoder = js?["asr"]?["models"]?[0]?["decoder"] ?? ""
+                unsafe {
+                    delete js
+                }
+            }
+        }
+        finished |> join
+        t |> success(ready, "a boot with the GigaAM model alone serves")
+    }
+    if (has_prefill_override("metal")) {
+        t |> equal(decoder, "metal", "the worker reports the Metal tower's lane")
+    } else {
+        t |> success(decoder == "cpu" || decoder == "vulkan", "the worker reports the lane the tower serves ({decoder})")
+    }
 }

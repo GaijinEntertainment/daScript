@@ -17,6 +17,7 @@ require dasllama/dasllama_gemma4v // Gemma4vStaging/stage_gemma4v_tower — the 
 require dasllama/dasllama_gemma3v // Gemma3vStaging/stage_gemma3v_tower — the gemma3v (SigLIP) arm
 require dasllama/dasllama_vision_embedder // the carrier's .dlim route
 require dasllama/dasllama_parakeet // ParakeetStaging/stage_parakeet_model — same, for the parakeet arm
+require dasllama/dasllama_gigaam   // stage_gigaam_model/mint_gigaam_model/gigaam_serves_q8 — the gigaam arm's off-rail truth
 require dasllama/dasllama_config     // DlimConfiguration — the peek/round-trip mechanics arms
 require dasllama/dasllama_styletts2  // stage_styletts2/load_styletts2/mint_styletts2 + the two lane tags — the kitten arm's carrier, its family data riding the image meta
 require dasllama/dasllama_tts        // load_tts_model/caps/synthesize — the kitten arm's facade leg
@@ -50,7 +51,12 @@ require _child_run   // run_child / das_exe - the mx4-stream arm's mint child
 // for text models, element-exact planes for towers, transcript-exact for whisper. The
 // voxtral-mini arm is the designated >2 GiB-plane coverage (its q8 image is 5.4 GB), so it
 // re-saves the image from cold on every run by design. Drive through modules/dasLLAMA/tests/run.das
-// (--suite image); model arms follow the suite's presence/tier gates.
+// (--suite image); model arms follow the suite's presence/tier gates. A model arm skips when its
+// `--arm` token or its family is filtered out, when its carrier is absent from DASLLAMA_MODELS_DIR
+// or is large-tier without DASLLAMA_PARITY_FULL=1, when interpreted (`jit_model_available`), with
+// the image rail off (DASLLAMA_IMAGE=0), and without its clip (the ASR corpus clips under
+// benchmarks/asr/corpus/, `asr_clip`); the Metal arms (gemma4uv-metal, mtower, the whisper cross-KV
+// decoder) skip on a build without das_metal, and mx4-stream's footprint leg off macOS.
 
 // element-exact plane compare: -1 = length mismatch, else the number of differing elements
 // the staged (owned array) side against the served (borrowed plane) side — the only comparison
@@ -309,7 +315,7 @@ def test_tower_exact_lanes_are_config_free(t : T?) {
             return
         }
         let seat = kernel_backend_seat()
-        let exact <- ["whisper-f32", "parakeet-f32", "canary-f32", "gemma4a-f32", "qwen3a-f32", "tower-f32", "gemma4v", "gemma3v", "gemma4uv", "qwen3v", "qwen25v"]
+        let exact <- ["whisper-f32", "parakeet-f32", gigaam_image_tag(false), "canary-f32", "gemma4a-f32", "qwen3a-f32", "tower-f32", "gemma4v", "gemma3v", "gemma4uv", "qwen3v", "qwen25v"]
         var first : table<string; string>
         for (n in whole) {
             pin_kernel_backend(n)
@@ -1416,7 +1422,7 @@ def test_whisper_image_roundtrip(t : T?) {
         if (!family_on(t, "whisper") || !arm_on(t, "whisper")) return
         let path = path_join(whisper_dir(), "ggml-tiny.bin")
         return if (!jit_model_available(t, path))
-        var samples <- load_audio_16k_mono(path_join(models_dir(), "jfk.wav"))
+        var samples <- load_audio_16k_mono(asr_clip("jfk.wav"))
         if (empty(samples)) {
             t |> skip("jfk.wav not present")
             return
@@ -1494,7 +1500,7 @@ def test_whisper_metal_tower(tst : T?) {
             if (!family_on(t, "whisper") || !arm_on(t, "mtower")) return
             let path = path_join(whisper_dir(), "ggml-tiny.bin")
             return if (!jit_model_available(t, path))
-            var samples <- load_audio_16k_mono(path_join(models_dir(), "jfk.wav"))
+            var samples <- load_audio_16k_mono(asr_clip("jfk.wav"))
             if (empty(samples)) {
                 t |> skip("jfk.wav not present")
                 return
@@ -1647,7 +1653,7 @@ def test_whisper_metal_cross_kv(tst : T?) {
             if (!family_on(t, "whisper") || !arm_on(t, "mtower")) return
             let path = path_join(whisper_dir(), "ggml-tiny.bin")
             return if (!jit_model_available(t, path))
-            var samples <- load_audio_16k_mono(path_join(models_dir(), "jfk.wav"))
+            var samples <- load_audio_16k_mono(asr_clip("jfk.wav"))
             if (empty(samples)) {
                 t |> skip("jfk.wav not present")
                 return
@@ -1766,7 +1772,7 @@ def test_parakeet_tower_metal(tst : T?) {
             if (!family_on(t, "parakeet") || !arm_on(t, "mtower")) return
             let path = path_join(whisper_dir(), "ggml-parakeet-tdt-0.6b-v3-f32.bin")
             return if (!jit_model_available(t, path))
-            var samples <- load_audio_16k_mono(path_join(models_dir(), "jfk.wav"))
+            var samples <- load_audio_16k_mono(asr_clip("jfk.wav"))
             if (empty(samples)) {
                 t |> skip("jfk.wav not present")
                 return
@@ -1943,7 +1949,7 @@ def test_parakeet_tower_q8_decline(tst : T?) {
             if (!family_on(t, "parakeet") || !arm_on(t, "mtower")) return
             let path = path_join(whisper_dir(), "ggml-parakeet-tdt-0.6b-v3-f32.bin")
             return if (!jit_model_available(t, path))
-            var samples <- load_audio_16k_mono(path_join(models_dir(), "jfk.wav"))
+            var samples <- load_audio_16k_mono(asr_clip("jfk.wav"))
             if (empty(samples)) {
                 t |> skip("jfk.wav not present")
                 return
@@ -2020,7 +2026,7 @@ def test_parakeet_image_roundtrip(t : T?) {
         if (!family_on(t, "parakeet") || !arm_on(t, "parakeet")) return
         let path = path_join(whisper_dir(), "ggml-parakeet-tdt-0.6b-v3-f32.bin")
         return if (!jit_model_available(t, path))
-        var samples <- load_audio_16k_mono(path_join(models_dir(), "jfk.wav"))
+        var samples <- load_audio_16k_mono(asr_clip("jfk.wav"))
         if (empty(samples)) {
             t |> skip("jfk.wav not present")
             return
@@ -2041,6 +2047,47 @@ def test_parakeet_image_roundtrip(t : T?) {
         t |> success(g.text == a.text, "in-memory mint vs cold-built image transcript")
         t |> success(g.text == b.text, "in-memory mint vs mapped image transcript")
         delete samples
+    }
+}
+
+[cold_path]
+def private asr_text(m : AsrModel; samples : array<float>) : string {
+    var inscope s <- create_session(m)
+    return transcribe(m, s, samples)
+}
+
+[test]
+def test_gigaam_image_roundtrip(t : T?) {
+    t |> run("gigaam v3: the GGUF's cold load bakes its image, the .dlim loads back through load_asr_model, transcript-exact") @(t : T?) {
+        if (!family_on(t, "gigaam") || !arm_on(t, "gigaam")) return
+        let path = path_join(models_dir(), "gigaam-v3-e2e-rnnt-f16.gguf")
+        return if (!jit_model_available(t, path))
+        let wav = asr_clip("ru_short.wav")
+        if (!stat(wav).is_valid) {
+            t |> skip("ru_short.wav not present")
+            return
+        }
+        let samples <- load_audio_16k_mono(wav)
+        with_dasllama_jobque_() {
+            let q8 = gigaam_serves_q8()
+            let img = image_path_for(path, gigaam_image_tag(q8))
+            remove(img)
+            var inscope truth = AsrModel(kind = AsrKind.gigaam)
+            var inscope stg <- stage_gigaam_model(path, q8)
+            mint_gigaam_model(stg, truth.ga, q8)
+            let want = asr_text(truth, samples)
+            var inscope cold <- load_asr_model(path)
+            t |> equal(cold.kind, AsrKind.gigaam, "the GGUF's architecture routes to gigaam")
+            t |> equal(cold.ga.q8, q8, "the cold load takes the lane policy's form")
+            t |> success(stat(img).is_valid, "the cold load baked the image")
+            var inscope mapped <- load_asr_model(img)
+            t |> equal(mapped.kind, AsrKind.gigaam, "the .dlim routes on its family tag")
+            t |> equal(asr_exec_fmt(mapped), asr_exec_fmt(cold), "the mapped image serves the baked lane")
+            to_log(LOG_INFO, "gigaam image-roundtrip ru_short eyeball: '{want}'\n")
+            t |> success(!empty(want), "the in-memory mint transcribes")
+            t |> equal(asr_text(cold, samples), want, "the cold-built image's transcript")
+            t |> equal(asr_text(mapped, samples), want, "the mapped image's transcript")
+        }
     }
 }
 
@@ -2456,9 +2503,9 @@ def test_gemma4a_transcribe_q8_ab(t : T?) {
         let dec_path = path_join(models_dir(), "gemma-4-E2B-it-Q8_0.gguf")
         let mmp_path = path_join(models_dir(), "mmproj-gemma-4-E2B-it-bf16.gguf")
         if (!model_available(t, dec_path) || !model_available(t, mmp_path)) return
-        var samples <- load_audio_16k_mono(path_join(models_dir(), "jfk.wav"))
+        var samples <- load_audio_16k_mono(asr_clip("jfk.wav"))
         if (empty(samples)) {
-            t |> skip("jfk.wav not present beside the models")
+            t |> skip("jfk.wav not present")
             return
         }
         var q8_text = ""
@@ -2507,9 +2554,9 @@ def private g4a_tower_metal_cell(tst : T?; tag, dec_file, mmp_file : string; wan
             let dec_path = path_join(models_dir(), dec_file)
             let mmp_path = path_join(models_dir(), mmp_file)
             if (!model_available(t, dec_path) || !model_available(t, mmp_path)) return
-            var samples <- load_audio_16k_mono(path_join(models_dir(), "jfk.wav"))
+            var samples <- load_audio_16k_mono(asr_clip("jfk.wav"))
             if (empty(samples)) {
-                t |> skip("jfk.wav not present beside the models")
+                t |> skip("jfk.wav not present")
                 return
             }
             var cpu_text = ""
@@ -2592,9 +2639,9 @@ def test_canary_tower_metal(t : T?) {
             let dec_path = path_join(models_dir(), "canary-qwen-2.5b-decoder-q8_0.gguf")
             let mmp_path = path_join(models_dir(), "canary-qwen-2.5b-encoder-f32.bin")
             if (!model_available(t, dec_path) || !model_available(t, mmp_path)) return
-            var samples <- load_audio_16k_mono(path_join(models_dir(), "jfk.wav"))
+            var samples <- load_audio_16k_mono(asr_clip("jfk.wav"))
             if (empty(samples)) {
-                t |> skip("jfk.wav not present beside the models")
+                t |> skip("jfk.wav not present")
                 return
             }
             var cpu_text = ""
@@ -2674,9 +2721,9 @@ def test_qwen3a_tower_q8_ab(t : T?) {
         if (!family_on(t, "qwen3a") || !arm_on(t, "qwen3a")) return
         let path = path_join(models_dir(), "mmproj-Qwen3-ASR-0.6B-bf16.gguf")
         return if (!jit_model_available(t, path))
-        var samples <- load_audio_16k_mono(path_join(models_dir(), "jfk.wav"))
+        var samples <- load_audio_16k_mono(asr_clip("jfk.wav"))
         if (empty(samples)) {
-            t |> skip("jfk.wav not present beside the models")
+            t |> skip("jfk.wav not present")
             return
         }
         set_qwen3a_q8(true)
@@ -2717,9 +2764,9 @@ def test_qwen3a_transcribe_q8_ab(t : T?) {
         let dec_path = path_join(models_dir(), "Qwen3-ASR-0.6B-Q8_0.gguf")
         let mmp_path = path_join(models_dir(), "mmproj-Qwen3-ASR-0.6B-bf16.gguf")
         if (!model_available(t, dec_path) || !model_available(t, mmp_path)) return
-        var samples <- load_audio_16k_mono(path_join(models_dir(), "jfk.wav"))
+        var samples <- load_audio_16k_mono(asr_clip("jfk.wav"))
         if (empty(samples)) {
-            t |> skip("jfk.wav not present beside the models")
+            t |> skip("jfk.wav not present")
             return
         }
         var q8_text = ""
@@ -2762,9 +2809,9 @@ def test_qwen3a_metal_tower(tst : T?) {
             let dec_path = path_join(models_dir(), "Qwen3-ASR-0.6B-Q8_0.gguf")
             let mmp_path = path_join(models_dir(), "mmproj-Qwen3-ASR-0.6B-bf16.gguf")
             if (!model_available(t, dec_path) || !model_available(t, mmp_path)) return
-            var samples <- load_audio_16k_mono(path_join(models_dir(), "jfk.wav"))
+            var samples <- load_audio_16k_mono(asr_clip("jfk.wav"))
             if (empty(samples)) {
-                t |> skip("jfk.wav not present beside the models")
+                t |> skip("jfk.wav not present")
                 return
             }
             var cpu_text = ""

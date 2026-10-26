@@ -53,6 +53,8 @@ require dasllama/dasllama_env
 //       (llama-bench never samples — sampling cost is excluded by design)
 //   tg-real<n> (--mtp-ab, --tok) drops no warmup round: every rep is timed; tg<n>@<npl> drops none either - each rep's
 //       batched command opens with one untimed warm step inside the rep
+//   asr:<clip> (--asr) drops one warmup round: one untimed transcription of the model's
+//       first clip; a clip's row is its best of -r timed transcriptions
 //   tts:g2p<N>@<voice> (--tts) drops one warmup round: one untimed synthesis of the corpus's first
 //       sentence; the row sums each sentence's best of -r timed reps
 //   ours:   bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m <model.gguf>
@@ -211,6 +213,10 @@ struct Args {
     @clarg_name = "asr-clips"
     @clarg_doc = "ASR cell: comma list of corpus clips timed in place of the catalog row's buckets (a lever loop's one clip, or the long clips a row's list stops before)"
     asr_clips : string = ""
+
+    @clarg_name = "asr-q8"
+    @clarg_doc = "ASR cell: pin the encoder lane of the families whose lane follows the tower to q8 (`set_asr_tower_q8`), and under --ngl leave the f32-tower pin off - the q8 lane's wall on the device as well as on the CPU"
+    asr_q8 : bool
 
     @clarg_doc = "TTS cell mode: -m is a TTS GGUF; synthesizes the g2p corpus's first --tts-sentences sentences at --tts-voice, best-of -r per sentence, and emits one tts:g2p<N>@<voice> test (generation ms and audio seconds, summed)"
     tts : bool
@@ -417,7 +423,7 @@ def private asr_measure_spec(spec : AsrModelSpec; reps, threads : int; var jsonM
         static_if (typeinfo builtin_module_exists(das_metal)) {
             let is_metal_tower_family = (m.kind == AsrKind.whisper || m.kind == AsrKind.qwen3a
                 || m.kind == AsrKind.qwen3omni || m.kind == AsrKind.gemma4a
-                || m.kind == AsrKind.canary || m.kind == AsrKind.parakeet)
+                || m.kind == AsrKind.canary || m.kind == AsrKind.parakeet || m.kind == AsrKind.gigaam)
             if (gpu && is_metal_tower_family && (metal_tower_stats().encodes == tw_enc0 || enc_ms <= 0.0lf)) {
                 print("lcpp_bench --asr: LOUD FAIL - gpu row {spec.display} {wav} never dispatched the tower (encodes delta {metal_tower_stats().encodes - tw_enc0}, encode_ms {enc_ms}) - a \"metal\" row that measured the CPU\n")
                 leg_ok = false
@@ -438,7 +444,9 @@ def private asr_measure_spec(spec : AsrModelSpec; reps, threads : int; var jsonM
         }
         run.tests |> insert("asr:{wav}", BenchTest(ms = das_ms, audio_s = audio_s, text = text, encode_ms = enc_ms))
         run.files |> emplace(file_identity("{asr_corpus_dir()}{wav}", "clip"))
-        print("lcpp_bench --asr: {spec.display} {wav} {das_ms} ms ({audio_s} s audio)\n")
+        if (leg_ok) {
+            print("lcpp_bench --asr: {spec.display} {wav} {das_ms} ms ({audio_s} s audio)\n")
+        }
         print("  text: {text}\n")
         delete samples
     }
@@ -507,13 +515,16 @@ def private asr_measure_spec(spec : AsrModelSpec; reps, threads : int; var jsonM
 //! on the standard Metal rail; whisper/parakeet decoders keep their own paths (wdec driver /
 //! CPU by design). A measured gpu row without tower engagement, or a chat-decoder row without
 //! prefill engagement, exits the leg non-zero.
-def private asr_cell_main(model, json_path : string; reps, threads : int; gpu, accel : bool; clip_override : string) : bool {
+def private asr_cell_main(model, json_path : string; reps, threads : int; gpu, accel, q8 : bool; clip_override : string) : bool {
     allow_cpu_prefill()   //! Conformer/planar decoder paths still CPU-prefill by protocol
+    if (q8) {
+        set_asr_tower_q8(true)
+    }
     return false if (!arm_accel_tier(accel, gpu))
     if (gpu) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
             set_metal_mode(MetalMode.when_available)   //! before the loads: the audio-chat decoders mint the blob flavor and ride the Metal rail
-            set_asr_tower_fp32(true)   // f32 TOWER only (q8 towers decline quant_mode); the decoder half stays on its q8 rail
+            set_asr_tower_fp32(!q8)   // the f32 TOWER unless --asr-q8 asks the q8 lane; the decoder half stays on its q8 rail
             set_metal_tower(true)
             set_metal_wdec(true)        // explicit intent, like the CPU arm's pins: a stray
             set_metal_wdec_step(true)   // DASLLAMA_METAL_WDEC=0 must not yield a CPU-decoder "metal" row
@@ -1686,7 +1697,7 @@ def main() : int {
     let pin_desc = "{lcpp_mask_on() ? "hard mask" : "QoS classified"} (bench-forced)"
     say(fmt, "regime: {threads} lanes ({max(threads - 1, 1)} pool workers + main), affinity {pinned ? pin_desc : (is_some(g_env_core.jobque_affinity) ? "env override" : "off (platform default)")}\n")
     if (cfg.asr) {   // the audio cell shares every lane decision above, then runs its own protocol
-        return asr_cell_main(cfg.model, cfg.json_path, reps, threads, gpu, cfg.accel, cfg.asr_clips) ? 0 : 1
+        return asr_cell_main(cfg.model, cfg.json_path, reps, threads, gpu, cfg.accel, cfg.asr_q8, cfg.asr_clips) ? 0 : 1
     }
     if (cfg.tts) {   // the synthesis cell, same deal
         return tts_cell_main(cfg.model, cfg.tts_voice, cfg.json_path, max(cfg.tts_sentences, 1), reps, threads, gpu, cfg.accel) ? 0 : 1

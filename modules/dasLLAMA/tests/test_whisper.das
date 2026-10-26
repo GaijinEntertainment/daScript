@@ -21,7 +21,6 @@ require daslib/defer
 require math
 require strings
 require _model_tier   // model_available() presence/size-tier gate (see the file's header)
-require dasllama/dasllama_env
 require ?das_metal dasllama/dasllama_metal_asr_dec   // set_metal_wdec — the CPU-claim cells pin the GPU cross-KV hook off
 require ?das_metal dasllama/dasllama_metal_tower     // set_metal_tower — the mtmd-oracle cells pin the GPU conv hook off
 require ?das_metal dasllama/dasllama_metal_prefill   // metal_prefill_shutdown — the crown-pin cell drops the trio's cached flags
@@ -37,9 +36,6 @@ require _tower_twin
 // Oracle constants come from whisper-cli (CPU, greedy: -bs 1 -bo 1 -nf -ng). The Vulkan twin
 // needs ggml-tiny.bin and ggml-large-v3-turbo.bin plus jfk.wav, and skips without a Vulkan
 // device under DASLLAMA_GPU=1, on a build with das_metal, and when interpreted.
-
-// the ASR corpus (jfk + LibriSpeech clips) lives under the repo's benchmarks/asr, gitignored
-def private corpus_dir() : string => root_or(g_env_test.corpus_dir, "/Users/borisbatkin/Work/daScript/modules/dasLLAMA/benchmarks/asr/corpus/")
 
 [test]
 def test_f32_to_f16(t : T?) {
@@ -258,7 +254,7 @@ def test_qwen3a_tower(t : T?) {
     t |> run("qwen3a tower: conv2d frontend + windowed encode matches mtmd on jfk") @(t : T?) {
         let path = path_join(models_dir(), "mmproj-Qwen3-ASR-0.6B-bf16.gguf")
         return if (!jit_model_available(t, path))
-        let samples <- load_audio_16k_mono(path_join(models_dir(), "jfk.wav"))
+        let samples <- load_audio_16k_mono(asr_clip("jfk.wav"))
         if (empty(samples)) {
             t |> skip("jfk.wav not present")
             return
@@ -326,7 +322,7 @@ def test_parakeet_oracle(t : T?) {
     t |> run("parakeet-TDT greedy on jfk.wav is token-for-token with parakeet-cli") @(t : T?) {
         let path = path_join(whisper_dir(), "ggml-parakeet-tdt-0.6b-v2-f32.bin")
         return if (!jit_model_available(t, path))
-        let samples <- load_audio_16k_mono(path_join(models_dir(), "jfk.wav"))
+        let samples <- load_audio_16k_mono(asr_clip("jfk.wav"))
         if (empty(samples)) {
             t |> skip("jfk.wav not present")
             return
@@ -402,7 +398,7 @@ def test_parakeet_v3_oracle(t : T?) {
     t |> run("parakeet-TDT v3 (25-lang) greedy on jfk.wav is token-for-token with parakeet-cli") @(t : T?) {
         let path = path_join(whisper_dir(), "ggml-parakeet-tdt-0.6b-v3-f32.bin")
         return if (!jit_model_available(t, path))
-        let samples <- load_audio_16k_mono(path_join(models_dir(), "jfk.wav"))
+        let samples <- load_audio_16k_mono(asr_clip("jfk.wav"))
         if (empty(samples)) {
             t |> skip("jfk.wav not present")
             return
@@ -436,7 +432,7 @@ def test_whisper_transcribe_oracle(t : T?) {
     t |> run("tiny greedy on jfk.wav is token-for-token with whisper-cli") @(t : T?) {
         let model_path = path_join(whisper_dir(), "ggml-tiny.bin")
         return if (!jit_model_available(t, model_path))
-        let samples <- load_audio_16k_mono(path_join(models_dir(), "jfk.wav"))
+        let samples <- load_audio_16k_mono(asr_clip("jfk.wav"))
         if (empty(samples)) {
             t |> skip("jfk.wav not present")
             return
@@ -806,7 +802,7 @@ def test_whisper_q8_0_file(t : T?) {
         let f16_path = path_join(whisper_dir(), "ggml-tiny.bin")
         let q8_path = path_join(whisper_dir(), "ggml-tiny-q8_0.bin")
         return if (!jit_model_available(tt, f16_path) || !jit_model_available(tt, q8_path))
-        let samples <- load_audio_16k_mono(path_join(models_dir(), "jfk.wav"))
+        let samples <- load_audio_16k_mono(asr_clip("jfk.wav"))
         if (empty(samples)) {
             tt |> skip("jfk.wav not present")
             return
@@ -850,7 +846,7 @@ def test_parakeet_q8_0_file(t : T?) {
         let f32_path = path_join(whisper_dir(), "ggml-parakeet-tdt-0.6b-v3-f32.bin")
         let q8_path = path_join(whisper_dir(), "ggml-parakeet-tdt-0.6b-v3-q8_0.bin")
         return if (!jit_model_available(tt, f32_path) || !jit_model_available(tt, q8_path))
-        let samples <- load_audio_16k_mono(path_join(models_dir(), "jfk.wav"))
+        let samples <- load_audio_16k_mono(asr_clip("jfk.wav"))
         if (empty(samples)) {
             tt |> skip("jfk.wav not present")
             return
@@ -872,7 +868,7 @@ def test_whisper_metal_ln_post(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
             let model_path = path_join(whisper_dir(), "ggml-tiny.bin")
             return if (!jit_model_available(tt, model_path))
-            let samples <- load_audio_16k_mono(path_join(models_dir(), "jfk.wav"))
+            let samples <- load_audio_16k_mono(asr_clip("jfk.wav"))
             if (empty(samples)) {
                 tt |> skip("jfk.wav not present")
                 return
@@ -934,7 +930,7 @@ def test_whisper_metal_wdec_flush(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
             let model_path = path_join(whisper_dir(), "ggml-tiny.bin")
             return if (!jit_model_available(tt, model_path))
-            let samples <- load_audio_16k_mono(path_join(models_dir(), "jfk.wav"))
+            let samples <- load_audio_16k_mono(asr_clip("jfk.wav"))
             if (empty(samples)) {
                 tt |> skip("jfk.wav not present")
                 return
@@ -1146,7 +1142,7 @@ def test_whisper_q8_gate(t : T?) {
     t |> run("tiny q8 tower (the load_asr_model default) stays token-identical to fp32 on jfk") @(t : T?) {
         let model_path = path_join(whisper_dir(), "ggml-tiny.bin")
         return if (!jit_model_available(t, model_path))
-        let samples <- load_audio_16k_mono(path_join(models_dir(), "jfk.wav"))
+        let samples <- load_audio_16k_mono(asr_clip("jfk.wav"))
         if (empty(samples)) {
             t |> skip("jfk.wav not present")
             return
@@ -1179,7 +1175,7 @@ def test_whisper_tower_fp32_knob(t : T?) {
     t |> run("tiny mixed f32-enc/q8-dec (set_asr_tower_fp32, the GPU serving mode) stays token-identical on jfk") @(t : T?) {
         let model_path = path_join(whisper_dir(), "ggml-tiny.bin")
         return if (!jit_model_available(t, model_path))
-        let samples <- load_audio_16k_mono(path_join(models_dir(), "jfk.wav"))
+        let samples <- load_audio_16k_mono(asr_clip("jfk.wav"))
         if (empty(samples)) {
             t |> skip("jfk.wav not present")
             return
@@ -1245,7 +1241,7 @@ def test_whisper_crowned_word_level(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
             let model_path = path_join(whisper_dir(), "ggml-tiny.bin")
             return if (!jit_model_available(t, model_path))
-            let samples <- load_audio_16k_mono(path_join(models_dir(), "jfk.wav"))
+            let samples <- load_audio_16k_mono(asr_clip("jfk.wav"))
             if (empty(samples)) {
                 t |> skip("jfk.wav not present")
                 return
@@ -1462,15 +1458,15 @@ def test_canary_qwen_oracle(t : T?) {
         t |> equal(m.cenc.proj_dim, 2048l, "projects to the Qwen3 hidden width")
         with_dasllama_jobque_() {
             // Frozen NeMo SALM greedy ids (harness/canary_qwen_expected.tsv); trailing 151645 = text EOS
-            check_canary_clip(t, m, path_join(corpus_dir(), "jfk.wav"),
+            check_canary_clip(t, m, asr_clip("jfk.wav"),
                 [3036, 773, 847, 12357, 8877, 2548, 537, 1128, 697, 3146, 646, 653, 369, 498, 2548,
                  1128, 498, 646, 653, 369, 697, 3146, 151645])
-            check_canary_clip(t, m, path_join(corpus_dir(), "librispeech/09_1089-134686-0008.wav"),
+            check_canary_clip(t, m, asr_clip("librispeech/09_1089-134686-0008.wav"),
                 [785, 26915, 304, 892, 806, 83909, 413, 55707, 3304, 5086, 572, 264, 9255, 11, 78908,
                  6540, 315, 5561, 151645])
-            check_canary_clip(t, m, path_join(corpus_dir(), "librispeech/05_1089-134686-0004.wav"),
+            check_canary_clip(t, m, asr_clip("librispeech/05_1089-134686-0004.wav"),
                 [2833, 5779, 29160, 451, 11896, 374, 8580, 389, 498, 13, 7684, 3729, 9972, 151645])
-            var inscope jfk <- load_audio_16k_mono(path_join(corpus_dir(), "jfk.wav"))
+            var inscope jfk <- load_audio_16k_mono(asr_clip("jfk.wav"))
             if (!empty(jfk)) {
                 var inscope hs <- create_session(m, "en")
                 heap_flat_leg(t, m, hs, jfk, "canary")
@@ -1500,7 +1496,7 @@ def test_gemma4a_audio_oracle(t : T?) {
         t |> equal(m.g4a.d_model, 1024l, "audio d_model 1024")
         t |> equal(m.g4a.n_head, 8l, "8 heads")
         t |> equal(m.g4a.proj_dim, m.dec.config.dim, "projects into the Gemma-4 embedding width")
-        let wav = path_join(corpus_dir(), "gemma4a_test2.wav")
+        let wav = asr_clip("gemma4a_test2.wav")
         let samples <- load_audio_16k_mono(wav)
         if (empty(samples)) {
             t |> skip("gemma4a_test2.wav not present")
@@ -1582,13 +1578,13 @@ def test_qwen3omni_audio_oracle(t : T?) {
             "detects language internally, no translate / timestamps / streaming")
         with_dasllama_jobque_() {
             // frozen llama-mtmd-cli --temp 0 --jinja greedy ids (trailing 151645 = <|im_end|> EOG)
-            check_q3omni_clip(t, m, path_join(corpus_dir(), "jfk.wav"),
+            check_q3omni_clip(t, m, asr_clip("jfk.wav"),
                 [3036, 773, 11, 847, 12357, 8877, 11, 2548, 537, 1128, 697, 3146, 646, 653, 369,
                  498, 11, 2548, 1128, 498, 646, 653, 369, 697, 3146, 13, 151645])
-            check_q3omni_clip(t, m, path_join(corpus_dir(), "librispeech/09_1089-134686-0008.wav"),
+            check_q3omni_clip(t, m, asr_clip("librispeech/09_1089-134686-0008.wav"),
                 [785, 26915, 304, 892, 806, 83909, 269, 55707, 3304, 5086, 572, 264, 9255, 11,
                  78908, 6540, 315, 5561, 13, 151645])
-            check_q3omni_clip(t, m, path_join(corpus_dir(), "librispeech/05_1089-134686-0004.wav"),
+            check_q3omni_clip(t, m, asr_clip("librispeech/05_1089-134686-0004.wav"),
                 [2833, 5779, 11, 7722, 451, 613, 645, 374, 8580, 389, 498, 13, 7684, 3729, 11,
                  9972, 13, 7684, 3729, 13, 151645])
         }
@@ -1600,7 +1596,7 @@ def test_qwen3omni_audio_oracle(t : T?) {
 def test_mel_state_reuse_deterministic(t : T?) {
     t |> run("gemma4a/canary log-mel is bit-identical across calls on one reused state") @(t : T?) {
         return if (!jit_only(t))
-        let wav = path_join(corpus_dir(), "jfk.wav")
+        let wav = asr_clip("jfk.wav")
         let samples <- load_audio_16k_mono(wav)
         if (empty(samples)) {
             t |> skip("jfk.wav not present in the asr corpus")

@@ -641,26 +641,9 @@ def private load_asr(rig : Rig; asr_spec, mmproj_flag : string; cfg : CliConfig;
     return <- (empty(mmproj) ? load_asr_model(asr) : load_asr_model(asr, mmproj))
 }
 
-//! The language hint a session takes: the flag, else "auto" for a model that detects the
-//! language itself (its caps list no codes), else English. A hint the model cannot take is
-//! refused with what it does take, in `why`.
 def private asr_lang(m : AsrModel; flag : string; var why : string&) : string {
     var inscope c <- caps(m)
-    if (empty(flag)) {
-        return empty(c.languages) ? "auto" : "en"
-    }
-    if (flag == "auto") {
-        return flag
-    }
-    if (empty(c.languages)) {
-        why = "this ASR model detects the language itself - drop --lang (or pass --lang auto)"
-        return ""
-    }
-    if (find_index(c.languages, flag) < 0) {
-        why = "'{flag}' is not a language this ASR model takes - it takes: {join(c.languages, ", ")}"
-        return ""
-    }
-    return flag
+    return asr_lang_hint(c.languages, flag, why)
 }
 
 def private run_transcribe(plan : CliPlan; cfg : CliConfig) : int {

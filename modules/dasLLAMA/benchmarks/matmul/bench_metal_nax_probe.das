@@ -548,10 +548,10 @@ def main {   // nolint:STYLE038,STYLE037 — one-shot probe harness; buffers + P
             let ndim = shp.n
             var blob <- race_q8_blob(ndim * (kdim / 32))
             var xf <- race_x_f32(m * kdim)
-            var bw = race_buf(dev, uint64(long_length(blob)), unsafe(addr<void?>(blob[0])))
-            var bx = race_buf(dev, uint64(m * kdim * 4), unsafe(addr<void?>(xf[0])))
-            var by_a = race_buf(dev, uint64(m * ndim * 4), null)
-            var by_b = race_buf(dev, uint64(m * ndim * 4), null)
+            var bw = metal_buffer_from(dev, uint64(long_length(blob)), unsafe(addr<void?>(blob[0])))
+            var bx = metal_buffer_from(dev, uint64(m * kdim * 4), unsafe(addr<void?>(xf[0])))
+            var by_a = metal_buffer_from(dev, uint64(m * ndim * 4), null)
+            var by_b = metal_buffer_from(dev, uint64(m * ndim * 4), null)
             var bk = race_uniform_u32(dev, uint(kdim))
             var bn = race_uniform_u32(dev, uint(ndim))
             var t_q8u = -1.0lf
@@ -611,7 +611,7 @@ def main {   // nolint:STYLE038,STYLE037 — one-shot probe harness; buffers + P
             for (i in range(m * kdim)) {
                 xh[i] = float16(xf[i])
             }
-            var bxh = race_buf(dev, uint64(m * kdim * 2), unsafe(addr<void?>(xh[0])))
+            var bxh = metal_buffer_from(dev, uint64(m * kdim * 2), unsafe(addr<void?>(xh[0])))
             var t_q8u3 = -1.0lf
             var t_ha = -1.0lf
             race_pair_ms(queue, 5, t_q8u3, t_ha, $(enc) {
@@ -641,7 +641,7 @@ def main {   // nolint:STYLE038,STYLE037 — one-shot probe harness; buffers + P
             // arm D vs the PRODUCTION f16-stream twin (the shipping >=256-row form): both
             // read the same f16 activation panel; arm D's window pays dequant + gemm
             let nblk = ndim * (kdim / 32)
-            var bwh = race_buf(dev, uint64(ndim * kdim * 2), null)
+            var bwh = metal_buffer_from(dev, uint64(ndim * kdim * 2), null)
             var bnb = race_uniform_u32(dev, uint(nblk))
             var t_th = -1.0lf
             var t_dw = -1.0lf
@@ -729,17 +729,17 @@ def main {   // nolint:STYLE038,STYLE037 — one-shot probe harness; buffers + P
             let ndim = g.n
             let nblk = ndim * (kdim / 32)
             var blob <- race_q8_blob(nblk)
-            var bw = race_buf(dev, uint64(long_length(blob)), unsafe(addr<void?>(blob[0])))
-            var bwh = race_buf(dev, uint64(ndim * kdim * 2), null)
+            var bw = metal_buffer_from(dev, uint64(long_length(blob)), unsafe(addr<void?>(blob[0])))
+            var bwh = metal_buffer_from(dev, uint64(ndim * kdim * 2), null)
             var bk = race_uniform_u32(dev, uint(kdim))
             var bn = race_uniform_u32(dev, uint(ndim))
             var bnb = race_uniform_u32(dev, uint(nblk))
             let mb = ndim * kdim * 2 / (1024 * 1024)
             for (m in [128, 512, 2048]) {
                 var xh <- race_x_f16(m * kdim)
-                var bxh = race_buf(dev, uint64(m * kdim * 2), unsafe(addr<void?>(xh[0])))
-                var by_a = race_buf(dev, uint64(m * ndim * 4), null)
-                var by_b = race_buf(dev, uint64(m * ndim * 4), null)
+                var bxh = metal_buffer_from(dev, uint64(m * kdim * 2), unsafe(addr<void?>(xh[0])))
+                var by_a = metal_buffer_from(dev, uint64(m * ndim * 4), null)
+                var by_b = metal_buffer_from(dev, uint64(m * ndim * 4), null)
                 var t_th = -1.0lf
                 var t_dw = -1.0lf
                 race_pair_ms(queue, 5, t_th, t_dw, $(enc) {
@@ -794,13 +794,13 @@ def main {   // nolint:STYLE038,STYLE037 — one-shot probe harness; buffers + P
             let ntile = ndim / gt.tiles
             let nb = kdim / 32
             var blob <- race_q8_blob(ndim * nb)
-            var bw = race_buf(dev, uint64(long_length(blob)), unsafe(addr<void?>(blob[0])))
-            var bwh1 = race_buf(dev, uint64(ntile * kdim * 2), null)
-            var bwh2 = race_buf(dev, uint64(ntile * kdim * 2), null)
+            var bw = metal_buffer_from(dev, uint64(long_length(blob)), unsafe(addr<void?>(blob[0])))
+            var bwh1 = metal_buffer_from(dev, uint64(ntile * kdim * 2), null)
+            var bwh2 = metal_buffer_from(dev, uint64(ntile * kdim * 2), null)
             var xh <- race_x_f16(m * kdim)
-            var bxh = race_buf(dev, uint64(m * kdim * 2), unsafe(addr<void?>(xh[0])))
-            var by_a = race_buf(dev, uint64(m * ndim * 4), null)
-            var by_b = race_buf(dev, uint64(m * ndim * 4), null)
+            var bxh = metal_buffer_from(dev, uint64(m * kdim * 2), unsafe(addr<void?>(xh[0])))
+            var by_a = metal_buffer_from(dev, uint64(m * ndim * 4), null)
+            var by_b = metal_buffer_from(dev, uint64(m * ndim * 4), null)
             var bk = race_uniform_u32(dev, uint(kdim))
             var bn = race_uniform_u32(dev, uint(ndim))
             var bnb_t = race_uniform_u32(dev, uint(ntile * nb))
@@ -867,11 +867,11 @@ def main {   // nolint:STYLE038,STYLE037 — one-shot probe harness; buffers + P
                 let ndim = g.n
                 let m = g.m
                 var blob <- race_q8_blob(ndim * (kdim / 32))
-                var bw = race_buf(dev, uint64(long_length(blob)), unsafe(addr<void?>(blob[0])))
+                var bw = metal_buffer_from(dev, uint64(long_length(blob)), unsafe(addr<void?>(blob[0])))
                 var xh <- race_x_f16(m * kdim)
-                var bxh = race_buf(dev, uint64(m * kdim * 2), unsafe(addr<void?>(xh[0])))
-                var by_a = race_buf(dev, uint64(m * ndim * 4), null)
-                var by_b = race_buf(dev, uint64(m * ndim * 4), null)
+                var bxh = metal_buffer_from(dev, uint64(m * kdim * 2), unsafe(addr<void?>(xh[0])))
+                var by_a = metal_buffer_from(dev, uint64(m * ndim * 4), null)
+                var by_b = metal_buffer_from(dev, uint64(m * ndim * 4), null)
                 var bk = race_uniform_u32(dev, uint(kdim))
                 var bn = race_uniform_u32(dev, uint(ndim))
                 for (leg in [(pso = t64_pso, mt = 64, name = "t64"), (pso = t128_pso, mt = 128, name = "t128")]) {
@@ -930,11 +930,11 @@ def main {   // nolint:STYLE038,STYLE037 — one-shot probe harness; buffers + P
                 let ndim = g.n
                 let m = g.m
                 var blob <- race_q8_blob(ndim * (kdim / 32))
-                var bw = race_buf(dev, uint64(long_length(blob)), unsafe(addr<void?>(blob[0])))
+                var bw = metal_buffer_from(dev, uint64(long_length(blob)), unsafe(addr<void?>(blob[0])))
                 var xh <- race_x_f16(m * kdim)
-                var bxh = race_buf(dev, uint64(m * kdim * 2), unsafe(addr<void?>(xh[0])))
-                var by_a = race_buf(dev, uint64(m * ndim * 4), null)
-                var by_b = race_buf(dev, uint64(m * ndim * 4), null)
+                var bxh = metal_buffer_from(dev, uint64(m * kdim * 2), unsafe(addr<void?>(xh[0])))
+                var by_a = metal_buffer_from(dev, uint64(m * ndim * 4), null)
+                var by_b = metal_buffer_from(dev, uint64(m * ndim * 4), null)
                 var bk = race_uniform_u32(dev, uint(kdim))
                 var bn = race_uniform_u32(dev, uint(ndim))
                 var t_dyn = -1.0lf
@@ -986,11 +986,11 @@ def main {   // nolint:STYLE038,STYLE037 — one-shot probe harness; buffers + P
                     let ndim = g.n
                     let m = g.m
                     var blob <- race_q8_blob(ndim * (kdim / 32))
-                    var bw = race_buf(dev, uint64(long_length(blob)), unsafe(addr<void?>(blob[0])))
+                    var bw = metal_buffer_from(dev, uint64(long_length(blob)), unsafe(addr<void?>(blob[0])))
                     var xh <- race_x_f16(m * kdim)
-                    var bxh = race_buf(dev, uint64(m * kdim * 2), unsafe(addr<void?>(xh[0])))
-                    var by_a = race_buf(dev, uint64(m * ndim * 4), null)
-                    var by_b = race_buf(dev, uint64(m * ndim * 4), null)
+                    var bxh = metal_buffer_from(dev, uint64(m * kdim * 2), unsafe(addr<void?>(xh[0])))
+                    var by_a = metal_buffer_from(dev, uint64(m * ndim * 4), null)
+                    var by_b = metal_buffer_from(dev, uint64(m * ndim * 4), null)
                     var bk = race_uniform_u32(dev, uint(kdim))
                     var bn = race_uniform_u32(dev, uint(ndim))
                     var t_ours = -1.0lf
@@ -1037,11 +1037,11 @@ def main {   // nolint:STYLE038,STYLE037 — one-shot probe harness; buffers + P
                     let ndim = g.n
                     let m = g.m
                     var blob <- race_q8_blob(ndim * (kdim / 32))
-                    var bw = race_buf(dev, uint64(long_length(blob)), unsafe(addr<void?>(blob[0])))
+                    var bw = metal_buffer_from(dev, uint64(long_length(blob)), unsafe(addr<void?>(blob[0])))
                     var xh <- race_x_f16(m * kdim)
-                    var bxh = race_buf(dev, uint64(m * kdim * 2), unsafe(addr<void?>(xh[0])))
-                    var by_a = race_buf(dev, uint64(m * ndim * 4), null)
-                    var by_b = race_buf(dev, uint64(m * ndim * 4), null)
+                    var bxh = metal_buffer_from(dev, uint64(m * kdim * 2), unsafe(addr<void?>(xh[0])))
+                    var by_a = metal_buffer_from(dev, uint64(m * ndim * 4), null)
+                    var by_b = metal_buffer_from(dev, uint64(m * ndim * 4), null)
                     var bk = race_uniform_u32(dev, uint(kdim))
                     var bn = race_uniform_u32(dev, uint(ndim))
                     var t_ours = -1.0lf
@@ -1100,11 +1100,11 @@ def main {   // nolint:STYLE038,STYLE037 — one-shot probe harness; buffers + P
                     var base_pso = mt == 128 ? t128d_pso : t32bk_pso
                     var b64_pso = mt == 128 ? t128b64_pso : t32b64_pso
                     var blob <- race_q8_blob(ndim * (kdim / 32))
-                    var bw = race_buf(dev, uint64(long_length(blob)), unsafe(addr<void?>(blob[0])))
+                    var bw = metal_buffer_from(dev, uint64(long_length(blob)), unsafe(addr<void?>(blob[0])))
                     var xh <- race_x_f16(m * kdim)
-                    var bxh = race_buf(dev, uint64(m * kdim * 2), unsafe(addr<void?>(xh[0])))
-                    var by_a = race_buf(dev, uint64(m * ndim * 4), null)
-                    var by_b = race_buf(dev, uint64(m * ndim * 4), null)
+                    var bxh = metal_buffer_from(dev, uint64(m * kdim * 2), unsafe(addr<void?>(xh[0])))
+                    var by_a = metal_buffer_from(dev, uint64(m * ndim * 4), null)
+                    var by_b = metal_buffer_from(dev, uint64(m * ndim * 4), null)
                     var bk = race_uniform_u32(dev, uint(kdim))
                     var bn = race_uniform_u32(dev, uint(ndim))
                     var t_32 = -1.0lf
@@ -1180,11 +1180,11 @@ def main {   // nolint:STYLE038,STYLE037 — one-shot probe harness; buffers + P
                     let ndim = g.n
                     let m = g.m
                     var blob <- race_q8_blob(ndim * (kdim / 32))
-                    var bw = race_buf(dev, uint64(long_length(blob)), unsafe(addr<void?>(blob[0])))
+                    var bw = metal_buffer_from(dev, uint64(long_length(blob)), unsafe(addr<void?>(blob[0])))
                     var xh <- race_x_f16(m * kdim)
-                    var bxh = race_buf(dev, uint64(m * kdim * 2), unsafe(addr<void?>(xh[0])))
-                    var by_a = race_buf(dev, uint64(m * ndim * 4), null)
-                    var by_b = race_buf(dev, uint64(m * ndim * 4), null)
+                    var bxh = metal_buffer_from(dev, uint64(m * kdim * 2), unsafe(addr<void?>(xh[0])))
+                    var by_a = metal_buffer_from(dev, uint64(m * ndim * 4), null)
+                    var by_b = metal_buffer_from(dev, uint64(m * ndim * 4), null)
                     var bk = race_uniform_u32(dev, uint(kdim))
                     var bn = race_uniform_u32(dev, uint(ndim))
                     var t_ours = -1.0lf
@@ -1231,11 +1231,11 @@ def main {   // nolint:STYLE038,STYLE037 — one-shot probe harness; buffers + P
                 let ndim = g.n
                 let m = g.m
                 var blob <- race_q8_blob(ndim * (kdim / 32))
-                var bw = race_buf(dev, uint64(long_length(blob)), unsafe(addr<void?>(blob[0])))
+                var bw = metal_buffer_from(dev, uint64(long_length(blob)), unsafe(addr<void?>(blob[0])))
                 var xh <- race_x_f16(m * kdim)
-                var bxh = race_buf(dev, uint64(m * kdim * 2), unsafe(addr<void?>(xh[0])))
-                var by_a = race_buf(dev, uint64(m * ndim * 4), null)
-                var by_b = race_buf(dev, uint64(m * ndim * 4), null)
+                var bxh = metal_buffer_from(dev, uint64(m * kdim * 2), unsafe(addr<void?>(xh[0])))
+                var by_a = metal_buffer_from(dev, uint64(m * ndim * 4), null)
+                var by_b = metal_buffer_from(dev, uint64(m * ndim * 4), null)
                 var bk = race_uniform_u32(dev, uint(kdim))
                 var bn = race_uniform_u32(dev, uint(ndim))
                 var t_ours = -1.0lf
@@ -1288,11 +1288,11 @@ def main {   // nolint:STYLE038,STYLE037 — one-shot probe harness; buffers + P
             var thuidx_pso = pipeline_from_source(dev, their_mm_msl(kdim, ndim, m, true, uintidx = true), "their_uidx", true, err)
             if (thinl_pso != null) {
                 var xh2 <- race_x_f16(m * kdim)
-                var bxh2 = race_buf(dev, uint64(m * kdim * 2), unsafe(addr<void?>(xh2[0])))
+                var bxh2 = metal_buffer_from(dev, uint64(m * kdim * 2), unsafe(addr<void?>(xh2[0])))
                 var blob2 <- race_q8_blob(ndim * (kdim / 32))
-                var bw2 = race_buf(dev, uint64(long_length(blob2)), unsafe(addr<void?>(blob2[0])))
-                var bya2 = race_buf(dev, uint64(m * ndim * 4), null)
-                var byb2 = race_buf(dev, uint64(m * ndim * 4), null)
+                var bw2 = metal_buffer_from(dev, uint64(long_length(blob2)), unsafe(addr<void?>(blob2[0])))
+                var bya2 = metal_buffer_from(dev, uint64(m * ndim * 4), null)
+                var byb2 = metal_buffer_from(dev, uint64(m * ndim * 4), null)
                 var t_def = -1.0lf
                 var t_inl = -1.0lf
                 race_pair_ms(queue, 5, t_def, t_inl, $(enc) {
@@ -1322,17 +1322,17 @@ def main {   // nolint:STYLE038,STYLE037 — one-shot probe harness; buffers + P
             }
             print("  PSO caps: ours max={metal_pipeline_max_total_threads(t128d_pso)} theirs max={metal_pipeline_max_total_threads(thf16_pso)}\n")
             var blob <- race_q8_blob(ndim * (kdim / 32))
-            var bw = race_buf(dev, uint64(long_length(blob)), unsafe(addr<void?>(blob[0])))
+            var bw = metal_buffer_from(dev, uint64(long_length(blob)), unsafe(addr<void?>(blob[0])))
             var xh <- race_x_f16(m * kdim)
             var xf : array<float>
             xf |> resize(m * kdim)
             for (i in range(m * kdim)) {
                 xf[i] = float(xh[i])
             }
-            var bxh = race_buf(dev, uint64(m * kdim * 2), unsafe(addr<void?>(xh[0])))
-            var bxf = race_buf(dev, uint64(m * kdim * 4), unsafe(addr<void?>(xf[0])))
-            var by_a = race_buf(dev, uint64(m * ndim * 4), null)
-            var by_b = race_buf(dev, uint64(m * ndim * 4), null)
+            var bxh = metal_buffer_from(dev, uint64(m * kdim * 2), unsafe(addr<void?>(xh[0])))
+            var bxf = metal_buffer_from(dev, uint64(m * kdim * 4), unsafe(addr<void?>(xf[0])))
+            var by_a = metal_buffer_from(dev, uint64(m * ndim * 4), null)
+            var by_b = metal_buffer_from(dev, uint64(m * ndim * 4), null)
             var bk = race_uniform_u32(dev, uint(kdim))
             var bn = race_uniform_u32(dev, uint(ndim))
             for (leg in [(pso = thf32_pso, bx = bxf, name = "f32X"), (pso = thf16_pso, bx = bxh, name = "f16X"),
@@ -1389,13 +1389,13 @@ def main {   // nolint:STYLE038,STYLE037 — one-shot probe harness; buffers + P
                 let m = g.m
                 let nblk = ndim * (kdim / 32)
                 var blob <- race_q8_blob(nblk)
-                var bw = race_buf(dev, uint64(long_length(blob)), unsafe(addr<void?>(blob[0])))
-                var bwh = race_buf(dev, uint64(ndim * kdim * 2), null)
+                var bw = metal_buffer_from(dev, uint64(long_length(blob)), unsafe(addr<void?>(blob[0])))
+                var bwh = metal_buffer_from(dev, uint64(ndim * kdim * 2), null)
                 var bnb = race_uniform_u32(dev, uint(nblk))
                 var xh <- race_x_f16(m * kdim)
-                var bxh = race_buf(dev, uint64(m * kdim * 2), unsafe(addr<void?>(xh[0])))
-                var by_a = race_buf(dev, uint64(m * ndim * 4), null)
-                var by_b = race_buf(dev, uint64(m * ndim * 4), null)
+                var bxh = metal_buffer_from(dev, uint64(m * kdim * 2), unsafe(addr<void?>(xh[0])))
+                var by_a = metal_buffer_from(dev, uint64(m * ndim * 4), null)
+                var by_b = metal_buffer_from(dev, uint64(m * ndim * 4), null)
                 var bk = race_uniform_u32(dev, uint(kdim))
                 var bn = race_uniform_u32(dev, uint(ndim))
                 let warm = race_time_ms(queue, 1) $(enc) {   // populate the panel once, untimed

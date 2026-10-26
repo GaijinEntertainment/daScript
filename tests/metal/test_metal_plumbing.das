@@ -245,3 +245,23 @@ def test_buffer_release_returns_memory(t : T?) {
         }
     }
 }
+
+//! The pool's size buckets on the host, no device: 256 at least,
+//! else the next power of two - a size on a power keeps it, one
+//! past it takes the next.
+[test]
+def test_pool_bucket(t : T?) {
+    t |> run("pool_bucket: 256 at least, the next power of two above") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            t |> equal(pool_bucket(0ul), 256ul, "0 bytes take the 256 floor")
+            t |> equal(pool_bucket(1ul), 256ul, "1 byte takes the 256 floor")
+            t |> equal(pool_bucket(256ul), 256ul, "256 bytes sit on the floor")
+            t |> equal(pool_bucket(257ul), 512ul, "257 bytes take the next power")
+            t |> equal(pool_bucket(1ul << 20ul), 1ul << 20ul, "a power of two keeps its size")
+            let past = (1ul << 20ul) + 1ul
+            t |> equal(pool_bucket(past), 1ul << 21ul, "a power of two plus one takes the next")
+        } else {
+            t |> skip("das_metal is not built on this platform")
+        }
+    }
+}

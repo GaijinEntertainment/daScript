@@ -36,7 +36,7 @@ checklist is `REVIEW.md` beside this file. The engine these programs drive is do
 - `chat.das`, `run.das`, `speak.das`, `speak_server.das`, `transcribe.das`, `dictate.das`,
   `audio_chat.das` - desktop-only programs over the facade; nothing here ships them to a page.
 
-## 2. Definitions
+## 2. Definitions {#definitions}
 
 - **A browser example** is a folder with a `web_shell.html`, wherever under `examples/` it sits: `daspkg release
   wasm` builds it to wasm64 for dasllama.io from the same `main.das` the desktop run uses. The
@@ -96,7 +96,7 @@ activation scratch back once (`tts_release_scratch`) and waits again, so an idle
 model and the voices and not the last run's rows - the browser tab's budget is what a phone
 runs out of - and the next request grows the scratch back for a few milliseconds of allocation.
 
-### 3.3 Input is polled
+### 3.3 Input is polled {#input-is-polled}
 
 Every browser example reads its input inside its own frame. One on the imgui harness (sec.3.7),
 which every example is today, reads ImGui's key and mouse state there - `IsKeyPressed` edge-detects.
@@ -116,7 +116,7 @@ that box is the picture - so a shell sizes the canvas element to the letterboxed
 (`max-width`/`max-height` on the replaced element) instead of stretching it over the stage with
 `object-fit`.
 
-### 3.4 The model set is minted for the build that ships it
+### 3.4 The model set is minted for the build that ships it {#model-set-minted}
 
 Each browser example's `models.json` names its source files by Hugging Face repository, file
 and sha256, in three lists: `images` (a GGUF the build bakes into a `.dlim`), `packs` (a
@@ -215,7 +215,7 @@ output waveform keeps a fixed time scale
 (thirty seconds at least) so the playhead moves at one speed while chunks land. The chords are Ctrl (or Command) with Enter to say and with R
 to record and stop.
 
-### 3.8 The library's two backends
+### 3.8 The library's two backends {#library-two-backends}
 
 `library/dasllama_lib.das` is built by both standalone backends from the one source, and the
 difference decides what a host can do with it. `daslang -lib` jits it into a native shared

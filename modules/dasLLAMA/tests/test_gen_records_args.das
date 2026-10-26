@@ -7,6 +7,7 @@ require dastest/testing_boost public
 require ../performance/profile_common.das
 require ../performance/gen_bench_records.das   // the record rig's own pure seams - file-relative require, explicit .das (pays the rig's compile, like test_tok_seed)
 require daslib/fio
+require math
 require strings
 require daslib/strings_boost
 require daslib/env_registry
@@ -85,17 +86,117 @@ def test_gpu_pair_roster(t : T?) {
         t |> success(asr_gpu_pair_tool("whisper-cli"), "whisper-cli pairs (Metal build)")
         t |> success(asr_gpu_pair_tool("mtmd"), "mtmd pairs (Metal build)")
         t |> success(asr_gpu_pair_tool("nemo"), "nemo pairs (torch-MPS)")
+        t |> success(asr_gpu_pair_tool("crispasr"), "crispasr pairs (its Metal build)")
         t |> success(!asr_gpu_pair_tool("onnx"), "onnx is CPU-only")
         t |> success(!asr_gpu_pair_tool("parakeet-cli"), "parakeet-cli runs -ng on the rig")
     }
     t |> run("the gpu-only roster names the references with no CPU leg") @(t : T?) {
         t |> success(asr_gpu_only_tool("mlx"), "mlx runs on the Apple GPU alone")
-        for (tool in ["whisper-cli", "mtmd", "nemo", "onnx", "parakeet-cli"]) {
+        for (tool in ["whisper-cli", "mtmd", "nemo", "onnx", "parakeet-cli", "crispasr"]) {
             t |> success(!asr_gpu_only_tool(tool), "{tool} keeps its CPU leg")
         }
         t |> equal(asr_engine_name("mlx"), "mlx-audio", "the MLX reference's engine is its package")
         t |> equal(asr_engine_name("mtmd"), "llama-mtmd-cli", "mtmd's engine is the binary")
         t |> equal(asr_engine_name("onnx"), "onnx", "every other tool is its own engine")
+        t |> equal(asr_engine_name("crispasr"), "crispasr", "the CrispASR reference's engine is its exe")
+    }
+}
+
+[test]
+def test_crispasr_parse(t : T?) {
+    t |> run("the wall reads from the finer of the summary line's two fields") @(t : T?) {
+        // a Metal run: 0.04 s at 10 ms is a 12 % step; 206.5x at 0.1 over 126720 samples is 0.02 %
+        let fast = crispasr_line_ms("crispasr: transcribed 7.9s audio in 0.04s (206.5x realtime)", 126720)
+        t |> success(abs(fast - 1000.0lf * 7.92lf / 206.5lf) < 1.0e-6lf, "a high realtime factor answers from the factor ({fast})")
+        // a CPU run: 2.24 s at 10 ms is a 0.2 % step; 8.7x at 0.1 is 0.6 %
+        let slow = crispasr_line_ms("crispasr: transcribed 19.4s audio in 2.24s (8.7x realtime)", 311040)
+        t |> success(abs(slow - 2240.0lf) < 1.0e-6lf, "a low realtime factor answers from the seconds ({slow})")
+        let bare = crispasr_line_ms("crispasr: transcribed 19.4s audio in 2.24s (8.7x realtime)", 0)
+        t |> success(abs(bare - 2240.0lf) < 1.0e-6lf, "no sample count leaves the seconds ({bare})")
+        t |> equal(crispasr_line_ms("crispasr: transcribed garbage", 311040), -1.0lf, "an unparsable line times nothing")
+    }
+    t |> run("each file's block carries its wall and its transcript, log lines dropped") @(t : T?) {
+        let out = ("crispasr 0.8.45 (git 119c4031, Release) [backends: cpu,blas]\n"
+            + "gigaam: backend = CPU\n"
+            + "crispasr: warmup completed in 65 ms\n"
+            + "crispasr: audio: 126720 samples (7.9 s) @ 16000 Hz, 12 threads\n"
+            + "crispasr: gigaam is ru-only - skipping language detection\n"
+            + "crispasr: transcribed 7.9s audio in 0.92s (8.7x realtime)\n"
+            + "V razlichnykh mestakh Rima.\n"
+            + "ggml_metal_free: deallocating\n"
+            + "crispasr: audio: 126720 samples (7.9 s) @ 16000 Hz, 12 threads\n"
+            + "crispasr: transcribed 7.9s audio in 0.90s (8.8x realtime)\n"
+            + "Vtoraya stroka.\n"
+            + "I tretya.\n")
+        var inscope runs <- parse_crispasr_runs(out)
+        t |> equal(length(runs), 2, "one run per transcribed line")
+        t |> success(abs(runs[0].ms - 920.0lf) < 1.0e-6lf, "first wall ({runs[0].ms})")
+        t |> equal(runs[0].text, "V razlichnykh mestakh Rima.", "first transcript, the ggml line dropped")
+        t |> success(abs(runs[1].ms - 900.0lf) < 1.0e-6lf, "second wall ({runs[1].ms})")
+        t |> equal(runs[1].text, "Vtoraya stroka. I tretya.", "a multi-line transcript joins with spaces")
+    }
+    t |> run("the CPU arm runs the Metal-off build, the GPU arm the Metal one") @(t : T?) {
+        t |> success(find(crispasr_bin(false), "build-cpu") >= 0, "cpu arm: {crispasr_bin(false)}")
+        t |> success(find(crispasr_bin(true), "build-cpu") < 0 && find(crispasr_bin(true), "build") >= 0, "gpu arm: {crispasr_bin(true)}")
+    }
+    t |> run("an unparsable seconds field leaves the realtime factor over the sample count") @(t : T?) {
+        let ms = crispasr_line_ms("crispasr: transcribed 7.9s audio in ?s (8.0x realtime)", 128000)
+        t |> success(abs(ms - 1000.0lf) < 1.0e-6lf, "8 s of audio at 8x is a second ({ms})")
+        t |> equal(crispasr_line_ms("crispasr: transcribed 7.9s audio in ?s (8.0x realtime)", 0), -1.0lf, "with no sample count nothing times")
+    }
+    t |> run("the best rep: the fastest run and its transcript, none unless every rep timed") @(t : T?) {
+        var inscope runs <- [CrispasrRun(ms = 920.0lf, text = "a"), CrispasrRun(ms = 900.0lf, text = "b"), CrispasrRun(ms = 950.0lf, text = "c")]
+        let best = crispasr_best(runs, 3)
+        t |> success(best.ms == 900.0lf && best.text == "b", "the fastest of three ({best.ms}, '{best.text}')")
+        let short = crispasr_best(runs, 4)
+        t |> success(short.ms == -1.0lf && empty(short.text), "three runs of four reps discard the clip")
+    }
+    t |> run("the reference rows' stamps and legs: the flavor, the CPU exe, the GPU leg's own build") @(t : T?) {
+        t |> equal(asr_ref_flavor(AsrRef(tool = "crispasr")), "stock", "no catalog flavor stamps stock")
+        t |> equal(asr_ref_flavor(AsrRef(tool = "crispasr", flavor = "q8")), "q8", "the catalog's flavor stamps itself")
+        t |> equal(asr_ref_exe("crispasr"), crispasr_bin(false), "CrispASR's CPU leg runs the Metal-off build")
+        t |> equal(asr_ref_exe("whisper-cli"), whisper_cpp_bin("whisper-cli"), "whisper-cli runs whisper.cpp's build")
+        t |> equal(asr_ref_exe("nope"), "", "a tool the rig does not know runs nothing")
+        var asked = ""
+        let missing = asr_gpu_ref_missing("crispasr") $(exe) {
+            asked = exe
+            return false
+        }
+        t |> equal(asked, crispasr_bin(true), "CrispASR's GPU leg asks for its Metal build")
+        t |> success(find(missing, "no Metal CrispASR build") >= 0, "an absent Metal build skips the leg: '{missing}'")
+        t |> equal(asr_gpu_ref_missing("crispasr") $(_exe) => true, "", "a present Metal build runs it")
+        t |> equal(asr_gpu_ref_missing("onnx") $(_exe) => false, "", "a tool with no GPU build of its own is never skipped here")
+    }
+}
+
+[test]
+def test_cmake_built_bin_layouts(t : T?) {
+    t |> run("a cmake-built binary: MSVC's Release\\x.exe first, then x.exe, then the bare name, the bare path where none exists") @(t : T?) {
+        var terr = ""
+        let root = path_join(temp_directory(terr), "dasllama_cmake_layouts_{ref_time_ticks()}")
+        mkdir_rec(path_join(root, "Release"))
+        let bare = normalize("{root}/x")
+        t |> equal(cmake_built_bin(root, "x"), bare, "nothing built: the bare path")
+        let plant = $(p : string) {
+            fopen(p, "wb") $(f) {
+                if (f != null) {
+                    f |> fwrite("x")
+                }
+            }
+        }
+        invoke(plant, bare)
+        t |> equal(cmake_built_bin(root, "x"), bare, "Mac/Make: the bare name")
+        let exe = normalize("{root}/x.exe")
+        invoke(plant, exe)
+        t |> equal(cmake_built_bin(root, "x"), exe, "Ninja: x.exe over the bare name")
+        let rel = normalize("{root}/Release/x.exe")
+        invoke(plant, rel)
+        t |> equal(cmake_built_bin(root, "x"), rel, "MSVC: Release\\x.exe over both")
+        for (p in [rel, exe, bare]) {
+            remove(p)
+        }
+        rmdir(path_join(root, "Release"))
+        rmdir(root)
     }
 }
 

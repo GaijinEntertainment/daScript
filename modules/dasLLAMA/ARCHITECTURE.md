@@ -79,6 +79,8 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
   out, the retained reference arms beside them, and the sanctioned float-A stamps.
 - `ARCHITECTURE_GPU_TOWER.md` - the Metal tower attention routes, the Metal tower driver's
   encode chains, and the StyleTTS2 synthesis chain.
+- `ARCHITECTURE_GPU_TOWER_FC.md` - the Metal FastConformer chain's second form, the one GigaAM serves
+  through: the rotary position form and the LayerNorm conv-module norm.
 - `ARCHITECTURE_GPU_TOWER_POCKET.md` - the Metal tower driver's Pocket TTS seats: the codec, the
   frame loop and the text prompt.
 - `ARCHITECTURE_GPU_TOWER_VULKAN.md` - the Vulkan tower's row classes and attention routes, the
@@ -86,6 +88,8 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
 - `ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md` - the StyleTTS2 synthesis seats and the Pocket codec,
   frames and prompt seats on the Vulkan tower: the shared weight slab, the f32-exact front end, the source
   and the generator, the seats' scratch and declines.
+- `ARCHITECTURE_GPU_TOWER_VULKAN_FC.md` - the Vulkan FastConformer chain's rotary form (GigaAM): the rope
+  tables, the padded attention route, the LayerNorm conv stamp, the conv front.
 - `ARCHITECTURE_GPU_TOWER_VULKAN_VISION.md` - the Vulkan tower's vision chains: the stems, blocks, taps
   and tails of gemma4uv, gemma4v, gemma3v, qwen3v and qwen25v on both weight lanes, and the lane policy's
   Vulkan default.
@@ -198,7 +202,12 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
 - `ARCHITECTURE_RUNTIME_JOBQUE.md` - the hybrid worker pool, the MoE region split, the job queue
   the engine dispatches on, and the mode that dispatches to none.
 - `ARCHITECTURE_MEDIA.md` - the padded tower GEMM widths, the family GPU hooks, the tower weight
-  lane, the plain-Model ASR decoders, and the parakeet decode step.
+  lane, and the plain-Model ASR decoders.
+- `ARCHITECTURE_MEDIA_ASR.md` - the ASR families' mechanisms - the facade's carrier sniff order, the
+  oracle a family is specified by, the family's tokens, language and long-form policy, the GigaAM
+  Conformer chain's log-mel (`ARCHITECTURE_MEDIA_ASR.md#gigaam-log-mel`), rotary input and planes, and
+  the shared transducer's decode step (`ARCHITECTURE_MEDIA_ASR.md#rnnt-decode-step`) and its device loop
+  (`ARCHITECTURE_MEDIA_ASR.md#rnnt-device-decode`).
 - `ARCHITECTURE_MEASUREMENT.md` - the benchmark rig, the tune gate, the sanctioned
   instrumentation rails, the `[tuned]` perm precedence, the mint wall in the sidecar's provenance,
   the audio outlier rule, the parity fixture's prefix bar, the Vulkan board's reference rows, the
@@ -239,6 +248,8 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
 - `ARCHITECTURE_TTS_MEMORY.md` - the per-synthesis carrier, the generator's six buffers, the
   chunk-sized peak with its cap and the idle release, and the harmonic source streaming in frame
   windows.
+- `ARCHITECTURE_DOCS.md` - the HOW_TO document type: its steps, traps and tense, and the gate
+  that holds them (`ARCHITECTURE_DOCS.md#howto-documents`).
 - `ARCHITECTURE_POCKET.md` - the Pocket codec's windowed stream, a voice as the backbone's
   key-value memory, the one-step head's baked timestep constants, the released chunker, and the
   published file's served quants.

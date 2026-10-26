@@ -45,8 +45,9 @@ function stores, applies `REVIEW_TOWER.md` too.**
 `dasllama/dasllama_gpu_tier.das`, a `[vk_dispatch]` class, a `[spirv_decode]` callback, or a
 cooperative-matrix GEMM class stamped per weight format and column width, on the NV
 cooperative-matrix-2 arm or the KHR cooperative-matrix arm, code that fills, sizes or binds a
-`TokMeta` block, a branch whose true arm calls a `moe_gpu_*`, `vk_*` or `rdec_*` entry,
-or a call of `vk_moe_init` - wherever the diff puts it - applies `REVIEW_GPU_VULKAN.md` too.**
+`TokMeta` block, a branch whose true arm calls a function a `dasllama/dasllama_*vulkan*.das` or
+`dasllama/dasllama_gpu*.das` file declares, or a call of `vk_moe_init` - wherever the diff puts
+it - applies `REVIEW_GPU_VULKAN.md` too.**
 
 **A diff that adds or changes a GPU kernel class - a `[metal_kernel]` def, a class carrying
 `[metal_dispatch]`, `[vk_dispatch]` or `[cuda_dispatch]`, a base shell one derives from, or a class
@@ -85,7 +86,9 @@ applies `REVIEW_GPU_RESIDENT.md` too.**
 **A diff that adds a module-level variable to a GPU driver file (`dasllama/dasllama_metal*.das`,
 `dasllama/dasllama_*{vulkan,cuda}*.das`, `dasllama/dasllama_gpu*.das`) whose value derives from a
 loaded model's weights, or names, sizes or points at device content built from a loaded model - a
-served model, a draft or tower model, a TTS voice - or that changes or removes a function returning
+served model, a draft or tower model, a TTS voice - or that measures how a call served a loaded
+model (a rate later calls size work by), or holds the decline reasons already logged for it, or
+that changes or removes a function returning
 such a variable to its no-model value, wherever that function sits, applies
 `REVIEW_GPU_MODEL_SWAP.md` too.**
 
@@ -167,16 +170,11 @@ encoded GPU work may be reused skip an input that content was built from - it co
 span, element type, layout, position, offset and model shape, the row count, each row's session,
 and any other state the content was built for.** A key skipping an input reuses foreign content.
 
-**A reuse key names a session, or any state that moves or is freed before the model's release,
-by a stable id (a session's `uid`) or a generation, never by its address; an address names only a
-plane that holds still from its load to its release - a weight region, a loaded table - and the
-model's release drops every key holding one.** The scheduler moves sessions in memory as it
-admits and erases streams, so an address key reuses stale content silently.
-
-**Never key reuse of content that reads a device buffer that growing frees and allocates again
-on a host address, an offset or a handle alone - also compare a counter bumped on each
-reallocation, or drop every cached entry built over the old buffer at the reallocation.** An
-address, offset or handle names whatever occupies it now.
+**A reuse key names state by a stable id (a session's `uid`) or a generation; it names state by
+address, offset or handle only when every free of that state also drops the key - a weight region
+or loaded table, dropped at the model's release, or a device buffer that growing reallocates,
+dropped at the reallocation.** An address, offset or handle names whatever occupies it now, so a
+key that outlives the free reuses stale content silently.
 
 **Never compile or release a Metal PSO (pipeline state object) from an engine file (`dasllama/`)
 other than the one that owns its kernel class** - it goes through that file's own init/release pair.
@@ -195,12 +193,10 @@ whether the call carries a uniform attention span - however that parameter is de
 readiness, whether this window's rope tables are staged, is asked by `prefill_decline` /
 `decode_decline` instead.**
 
-**A TTS stage seat - a Pocket or StyleTTS2 stage the Metal and the Vulkan driver both fill -
-admits a shape or a model file through a predicate declared
-in `dasllama/dasllama_tts_slab.das` that every driver filling the seat calls, against limits
-declared as constants there; a diff that changes what such a seat admits changes that predicate,
-so every backend's driver admits the same shapes in the same change.** A model that speaks through
-the GPU on one backend speaks through it on the other.
+**A diff that changes what a TTS stage seat both backends fill (a Pocket or StyleTTS2 stage)
+admits changes the shared admission predicate in `dasllama/dasllama_tts_slab.das`, which every
+driver filling the seat calls against the constants declared there, in the same change.** A
+model that speaks through the GPU on one backend speaks through it on the other.
 
 **Never add to the driver of a TTS stage seat both backends fill a backend-local admission
 constant restating a shared limit, a backend-local shape test on a shape the shared predicate rules
@@ -214,22 +210,25 @@ fills - a seat is a module-level variable that holds a function and has a public
 the setter is named - names the seat, by its setter's name, in the `dasllama_gpu_tier.das` entry of
 `ARCHITECTURE_GPU.md#gpu-backends`; a diff that removes one deletes that name; in the same change.**
 
-**A diff that adds a hook a GPU driver registers in a model family's registry (the hook table
-`dasllama/dasllama_common.das` declares for that family), or a prefill
+**A diff that adds a hook a GPU driver registers in a model family's registry (a `register_*` seat
+that a model family's own file, or `dasllama/dasllama_common.das`, declares), or a prefill
 builder a tower driver borrows, names it - the hook by the seat's register function, the builder
 by its name - in that driver's row of the role table in `ARCHITECTURE_GPU.md#gpu-backends`; a
 diff that removes one deletes its name from that row; in the same change.**
 
 **A diff that adds a function or export that `dasllama/` code outside the backend's own files
 calls, a hook registration no tower driver makes in a model family's registry, a kernel
-annotation, a setter that fills no `dasllama/dasllama_gpu_tier.das` seat, or a decode or prefill
+annotation, a setter that fills no `dasllama/dasllama_gpu_tier.das` seat and that no other
+backend serving the same path fills through a setter that changes the same computed or served
+result, or a decode or prefill
 behavior or a step's precision, that Metal alone has, or that Vulkan or CUDA has and Metal lacks,
 lands its own entry, naming the operation the API or device of the side without it lacks, in
 `ARCHITECTURE_GPU_ASYMMETRIES.md#gpu-asymmetries`; a diff that removes one deletes its entry; in
 the same change.** The same path served faster or slower is not a behavior.
 
 **A diff that adds an environment variable that Metal alone reads, or that Vulkan or CUDA reads and
-Metal does not, and that changes what a backend reading it computes or serves, lands its own entry,
+Metal does not, that no variable read by any other backend serving the same path changes in the
+same way, and that changes what a backend reading it computes or serves, lands its own entry,
 naming the operation the API or device of the side without it lacks, in
 `ARCHITECTURE_GPU_ASYMMETRIES.md#gpu-asymmetries`; a diff that removes one deletes its entry; in
 the same change.** A variable that also adds a backend-only behavior takes one entry, not two.
@@ -272,9 +271,9 @@ are.** A base off the format's own block grid is gathered under a layout that is
 `DEVICE_CREATION_CALLS` in `REVIEW.das` does not list, adds that spelling to the list in the same
 change.** The gate finds only the spellings it lists, so a new one passes it silently.
 
-**A backend entry whose module registers in every build that carries it (`dasllama/dasllama_math_cuda.das`)
-calls no device function before `cuda_available()` returns true, and registers nothing when it
-returns false.** A box without the driver loads the module too, and its first device call would fault.
+**Never call a device function in `dasllama/dasllama_math_cuda.das`'s registration before
+`cuda_available()` returns true, and register nothing when it returns false.** A box without the
+driver loads the module too, and its first device call would fault.
 
 **Weakening `check_shared_file_spelling` in `REVIEW.das` is a defect.** It holds a shared kernel
 file - `dasllama/dasllama_gpu_kernels_common.das` or `dasllama/dasllama_gpu_kernels_discrete.das` -

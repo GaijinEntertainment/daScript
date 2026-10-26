@@ -10,10 +10,10 @@ docs: `ARCHITECTURE.md`, `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_MEASUREMENT.md`
 overload receives, wherever that string is written, applies `REVIEW_TOKENIZER.md` (beside this
 file) too.**
 
-**A diff that touches a `followup_*.md` or an `ARCHITECTURE*.md` under this folder, removes or
-rewrites the problem a `followup_*.md` row states, adds a file under `dasllama/`, or adds a
-STYLE037/STYLE038 suppression anywhere under this folder applies `REVIEW_DOCS.md` (beside this
-file) too.**
+**A diff that touches a `followup_*.md`, an `ARCHITECTURE*.md` or a `HOW_TO_*.md` under this
+folder, removes or rewrites the problem a `followup_*.md` row states, adds a file under `dasllama/`,
+or adds a STYLE037/STYLE038 suppression anywhere under this folder applies `REVIEW_DOCS.md` (beside
+this file) too.**
 
 **A diff that adds, changes or drops a check in a `REVIEW.das` under this folder, adds a name to a
 check's licensed set - the names a check does not flag - or changes a constant a check compares
@@ -120,9 +120,9 @@ any function it calls reads, applies `REVIEW_IMAGE.md`.** A trimmed image's mint
 without the weight planes the GPU driver holds - reads that answer.
 
 **A change to `dasllama/dasllama_audio.das`, `dasllama_audio_io.das`,
-`dasllama_audio_embedder.das`, `dasllama_asr.das`, `dasllama_asr_types.das` or `dasllama_vad.das`
-(all under `dasllama/`), or to an ASR family file - a `dasllama/` file holding one
-speech-recognition family's CPU model - applies `REVIEW_AUDIO.md`.**
+`dasllama_audio_embedder.das`, `dasllama_asr.das`, `dasllama_asr_types.das`, `dasllama_vad.das`
+or `dasllama_rnnt.das` (all under `dasllama/`), or to an ASR family file - a `dasllama/` file
+holding one speech-recognition family's CPU model - applies `REVIEW_AUDIO.md`.**
 
 **A change to `dasllama/dasllama_vision.das`, `dasllama/dasllama_vision_io.das`,
 `dasllama/dasllama_vision_embedder.das`, or a vision family file - one
@@ -179,13 +179,12 @@ Every recorded row, tune sidecar and exchange entry carries the release, so a bu
 `REVIEW_IMAGE.md`.**
 
 **A diff that adds or changes a `dasllama/dasllama_common.das` function working through or reporting
-on another module's hook, moves a family encode stage (a `dasllama/dasllama_<family>.das` stage
-turning input into embeddings or filling a cache the next stage reads) onto a GPU hook, calls a
-`set_*_q8` lane setter under `dasllama/` or `harness/`, adds or changes an override (an environment
-knob, a setter only code outside `dasllama/` sets, or a state file a run reads (a tune sidecar is
-not one: it names kernel perms, which the tune framework's own gates rule), that moves a gate,
-policy or threshold off its default), or adds or changes an announce (the line a run prints where an
-override changes the outcome) applies `REVIEW_OVERRIDES.md` (beside this file) too.**
+on another module's hook, moves a `dasllama/` stage's work onto a GPU hook, calls a `set_*_q8`
+lane setter under `dasllama/` or `harness/`, or adds or changes an override (an environment knob,
+a non-private `dasllama/` setter a file outside `tests/` calls, or an on-disk state file a run
+writes or a user places, any of them moving a gate, policy or threshold off its default) or its
+announce (the line a run prints where the override changes the outcome) applies
+`REVIEW_OVERRIDES.md` (beside this file) too.**
 
 **A diff that cites a timing (in a `PERF_LEDGER.md` row, a `followup_*.md` row, a commit message or
 the PR body) as the reason it picks one candidate over another - a constant's value, a body
@@ -203,17 +202,19 @@ row the diff adds.**
 kernel variant is compiled for: a row count, a byte size, a lane width - times the chosen value and
 at least one value on each side of it that the device admits, in that race.**
 
-**A new call site of a CPU or GPU matrix multiply whose weight operand is an f32 plane, outside a
-correctness-comparison path (one whose only job is to produce a reference result to check another
-against) or a timing race's reference arm, where the same backend already serves the same weights
-and shape through a kernel on a form of them other than f32, is a defect - call that kernel
-instead.** A site that must stay f32 for another reason is ledgered on its file's charter line (the
-line, in the companion that `ARCHITECTURE.md#file-charters` routes to, that says what the file
-holds); a comment at the call site does not discharge this.
+**A call site a diff adds - not a call it moved from another site - of a CPU or GPU matrix
+multiply whose weight operand is an f32 plane, outside a correctness-comparison path (one only
+producing a reference result) or a timing race's reference arm, where the same backend already
+serves the same weights and shape on the run's weight lane (the precision a `set_*_q8` setter or
+its knob picks) through a kernel on a non-f32 form, is a defect - call that kernel instead.** A
+site that must stay f32 for another reason is ledgered on its file's charter line (the line, in
+the companion `ARCHITECTURE.md#file-charters` routes to, saying what the file holds); a call-site
+comment does not discharge this.
 
-**A caller and its callee never both check one guard: the caller keeps the check and the callee
-drops it when the callee is `[cold_path]`; where the caller's check also gates its own work, the
-caller computes the decision once and passes it to the callee; otherwise the caller's copy goes.**
+**A caller and a callee whose every caller sits under this folder never both check one guard: the
+caller keeps the check and the callee drops it when the callee is `[cold_path]`; where the caller's
+check also gates its own work, the caller computes the decision once and passes it to the callee;
+otherwise the caller's copy goes.**
 An edit to either copy leaves the caller testing a condition the callee no longer applies.
 
 **Logic or a named constant that two files in one folder both use, and that neither the language nor
@@ -277,10 +278,10 @@ the reference build (any third-party engine, library or runtime whose figure a s
 with this module's own), or names that build, its binaries or symbols, wherever the diff puts it -
 and the commit message or PR body of such a diff - applies `REVIEW_UPSTREAM.md`.**
 
-**A diff that changes what authoring a new weight format entails - a step added or dropped, a
-file the author must touch, a fixture or probe entry the format must supply, or a gate it must
-pass - updates `HOW_TO_ADD_A_FORMAT.md` in the same change.** The how-to is the next format
-author's whole brief: a step dropped there is a step the next format silently skips.
+**A diff that changes the work a `HOW_TO_*.md` tells its author to do - a step added or dropped, a
+file the author must touch, a table, fixture or probe entry the work must supply, or a gate it must
+pass - updates that HOW_TO in the same change.** A how-to is the next author's whole brief: a step
+dropped there is a step the next author skips without knowing.
 
 **Legal attribution - a third party's copyright line, licence name, or licence text - lives in
 a model card (the provenance-and-licence page beside a released model or pack), this folder's

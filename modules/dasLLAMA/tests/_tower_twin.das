@@ -14,7 +14,7 @@ require dastest/testing_boost public
 require dasllama/dasllama_math   // with_dasllama_jobque_
 require daslib/jobque_boost
 require daslib/defer
-require daslib/fio   // nolint:STYLE030,LINT019 — path_join: the twin cells' jfk.wav, inside the GPU arms alone
+require daslib/fio   // nolint:STYLE030,LINT019 — path_join: the oracle dump's path
 require _compares   // logits_maxdiff
 require _vision_oracle   // the mtmd dump parser and the canvas fixtures the poison legs read
 require _model_tier   // tower_parity_stats - the rel_l2 statistic the audio twins' bar reads
@@ -54,7 +54,7 @@ def jfk_twin_cell(tt : T?; model_path : string; jit_only : bool; body : block<(s
         if (!model_available(tt, model_path)) {
             return
         }
-        let samples <- load_audio_16k_mono(path_join(models_dir(), "jfk.wav"))
+        let samples <- load_audio_16k_mono(asr_clip("jfk.wav"))
         if (empty(samples)) {
             tt |> skip("jfk.wav not present")
             return

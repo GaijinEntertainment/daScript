@@ -1,6 +1,6 @@
 // The CPU references the Metal and the Vulkan kernel cells share - the engine's table rope by its pairing, the gated
 // activation, dense GEMM rows with their envelope, an expert's FFN rows, the Q8_0 requant block check, the attention cells'
-// query rows, the MoE route's padded-CSR prefix, the gemma-4 MoE step - with no device type and no backend require, so a
+// query rows, the MoE route's padded-CSR prefix, the gemma-4 MoE step, the f16-tap depthwise conv - with no device type and no backend require, so a
 // build without either GPU module reads it.
 
 options gen2
@@ -13,6 +13,9 @@ require math
 require dasllama/dasllama_math   // rope_scaled_tab, rope_scaled_neox_tab, rope_scaled_neox_tab_part
 require dasllama/dasllama_gpu_math
 require daslib/shader_lingua_franca
+require daslib/f16_cvt   // f32_to_f16: the depthwise taps' halfwords
+require dasllama/dasllama_plane   // PlaneF / PlaneU16: the CPU depthwise loops' planes
+require dasllama/dasllama_tower   // fc_dw_bias_rows / fc_dw_bias_rows_f16: the CPU depthwise loops
 
 //! The engine's table rope over `n` elements of `v` from `base`, heads `hs` wide, on the `tcos` / `tsin` rows: the partial
 //! form whenever `rot` names a prefix short of `hs`, else the NEOX or the interleaved pairing as `neox` names - the engine's
@@ -488,4 +491,63 @@ def qkn_rope_rows(q0h, kvh, bh, wnh, csh : array<float>; bpad, nh, nkvh, hs, kro
     }
     delete cs
     return <- (q = q, mk = mk, mv = mv)
+}
+
+//! The f16-tap depthwise cells' case (gigaam's conv, `GkDwConvRows` FORM 3 tap-major): `np` rows of `d` channels, `nk` taps
+//! [nk][d] as f16 halfwords, the bias row f32 behind a lead the stamps never read.
+struct DwF16Fix {
+    np : int
+    d : int
+    nk : int
+    boff : int
+    x : array<float>
+    taps : array<uint16>
+    wn : array<float>
+}
+
+def dw_f16_fix(np, d, nk : int) : DwF16Fix {
+    var fx = DwF16Fix(np = np, d = d, nk = nk, boff = 5)
+    fx.x |> resize(np * d)
+    for (i in range(np * d)) {
+        fx.x[i] = 0.09 * float((i * 5) % 43) - 1.7
+    }
+    fx.taps |> resize(nk * d)
+    for (i in range(nk * d)) {
+        fx.taps[i] = uint16(f32_to_f16(0.0371 * float((i * 7) % 31) - 0.8))
+    }
+    fx.wn |> resize(fx.boff + d)
+    for (i in range(fx.boff)) {
+        fx.wn[i] = 1.0e30
+    }
+    for (c in range(d)) {
+        fx.wn[fx.boff + c] = 0.013 * float((c * 3) % 17) - 0.07
+    }
+    return <- fx
+}
+
+//! the CPU loop over the halfword taps (`fc_dw_bias_rows_f16`) - the rows the device stamps are held to; `f32` runs the f32 loop
+//! (`fc_dw_bias_rows`) over the taps widened into an f32 plane instead, the form the halfwords must match to the bit
+def dw_f16_cpu(fx : DwF16Fix; f32 : bool) : array<float> {
+    var o : array<float>
+    o |> resize(fx.np * fx.d)
+    let n = int64(fx.nk * fx.d)
+    unsafe {
+        let bias = PlaneF(p = addr<float const?>(fx.wn[0]), n = long_length(fx.wn))
+        if (f32) {
+            var inscope wide : array<float>
+            wide |> resize(n + int64(fx.d))
+            for (i in range64(n)) {
+                wide[i] = f16_to_f32(uint(fx.taps[i]))
+            }
+            for (c in range(fx.d)) {
+                wide[n + int64(c)] = fx.wn[fx.boff + c]
+            }
+            fc_dw_bias_rows(o, fx.x, PlaneF(p = addr<float const?>(wide[0]), n = long_length(wide)), 0l, n, int64(fx.d), int64(fx.np), int64(fx.nk))
+        } else {
+            let taps = PlaneU16(p = addr<uint16 const?>(fx.taps[0]), n = n)
+            var inscope wide : array<float>
+            fc_dw_bias_rows_f16(o, fx.x, taps, 0l, bias, int64(fx.boff), int64(fx.d), int64(fx.np), int64(fx.nk), wide)
+        }
+    }
+    return <- o
 }

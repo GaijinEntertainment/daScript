@@ -186,7 +186,7 @@ def section_streaming(m : VadModel; speech : array<float>) {
 
 def section_transcribe(asr_paths : array<string>; speech : array<float>; segs : array<SpeechSegment>) {
     var am <- (length(asr_paths) >= 2 ? load_asr_model(asr_paths[0], asr_paths[1]) : load_asr_model(asr_paths[0]))
-    var s = create_session(am, "en")
+    var s = create_session(am)
     for (g in segs) {
         var inscope cut : array<float>
         cut |> resize(g.end - g.start)

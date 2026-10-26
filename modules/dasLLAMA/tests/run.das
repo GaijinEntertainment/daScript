@@ -151,7 +151,9 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
                     "modules/dasLLAMA/tests/test_qwen4exp.das",
                     "modules/dasLLAMA/tests/test_repack.das",
                     "modules/dasLLAMA/tests/test_repack_lane_context.das",
+                    "modules/dasLLAMA/tests/test_review_howto.das",
                     "modules/dasLLAMA/tests/test_rmsnorm.das",
+                    "modules/dasLLAMA/tests/test_rnnt.das",
                     "modules/dasLLAMA/tests/test_rope.das",
                     "modules/dasLLAMA/tests/test_rope_apply.das",
                     "modules/dasLLAMA/tests/test_run_suites.das",
@@ -203,6 +205,7 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
                     "modules/dasLLAMA/tests/test_gemma3v.das",
                     "modules/dasLLAMA/tests/test_gemma4uv.das",
                     "modules/dasLLAMA/tests/test_gemma4v.das",
+                    "modules/dasLLAMA/tests/test_gigaam.das",
                     "modules/dasLLAMA/tests/test_gpu_model_swap.das",
                     "modules/dasLLAMA/tests/test_gpu_moe_shexp.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_gemma2.das",
@@ -323,8 +326,8 @@ let TESTS_DIR = "modules/dasLLAMA/tests"
 //! Non-private: test_run_suites.das holds the union to the model-free + stocked census
 def area_tests(area : string) : array<string> {
     if (area == "audio") {
-        return <- [ "test_asr_verbs.das", "test_audio.das", "test_audio_embedder.das", "test_dasllama_lint_contracts.das",
-                    "test_parrot.das", "test_tower_asr_kernels.das", "test_tower_helpers.das", "test_vad.das", "test_vulkan_tower_kernels.das", "test_whisper.das" ]
+        return <- [ "test_asr_verbs.das", "test_audio.das", "test_audio_embedder.das", "test_dasllama_lint_contracts.das", "test_gigaam.das",
+                    "test_parrot.das", "test_rnnt.das", "test_tower_asr_kernels.das", "test_tower_helpers.das", "test_vad.das", "test_vulkan_tower_kernels.das", "test_whisper.das" ]
     } elif (area == "vision") {
         return <- [ "test_attn_span.das", "test_gemma3v.das", "test_gemma4uv.das", "test_gemma4v.das", "test_qwen25v.das",
                     "test_qwen3v.das", "test_tower_helpers.das", "test_vision.das", "test_vision_chat.das",
@@ -341,7 +344,7 @@ def area_tests(area : string) : array<string> {
                     "test_dasllama_lint_escape.das", "test_dlim_wipe.das",
                     "test_env_registry.das",
                     "test_exchange_schema.das", "test_exe_smoke.das", "test_facade_docs.das", "test_fat_hook_umbrella.das", "test_fat_start.das", "test_gen_records_args.das",
-                    "test_model_specs.das", "test_program_roots.das", "test_run_suites.das", "test_run_summary.das", "test_served_bench.das",
+                    "test_model_specs.das", "test_program_roots.das", "test_review_howto.das", "test_run_suites.das", "test_run_summary.das", "test_served_bench.das",
                     "test_site_records.das", "test_sizing_helpers.das", "test_tok_seed.das", "test_tune_interrupt.das", "test_vk_spv_diff.das" ]
     } elif (area == "llm") {
         return <- [ "test_accel_backend.das", "test_affinity_predicates.das", "test_arch_registry.das", "test_batch_decode.das", "test_bench_rows.das",
@@ -369,7 +372,7 @@ def area_tests(area : string) : array<string> {
 //! the image suite's arms an area owns (substring tokens, `arm_on` semantics); "" = the area has none
 def area_image_arms(area : string) : string {
     if (area == "audio") {
-        return "whisper,voxtral,parakeet,qwen3a,canary,gemma4a,mtower"
+        return "whisper,voxtral,parakeet,gigaam,qwen3a,canary,gemma4a,mtower"
     } elif (area == "vision") {
         return "gemma4uv,gemma4v,gemma3v,gemma4e,tower"
     } elif (area == "llm") {
@@ -392,7 +395,7 @@ let MODULE_AREAS <- {
     "dasllama_asr" => "audio", "dasllama_asr_types" => "audio", "dasllama_audio" => "audio",
     "dasllama_audio_embedder" => "audio", "dasllama_audio_io" => "audio", "dasllama_canary" => "audio",
     "dasllama_gemma4a" => "audio", "dasllama_metal_asr_dec" => "audio", "dasllama_vulkan_asr_dec" => "audio", "dasllama_parakeet" => "audio",
-    "dasllama_qwen3a" => "audio", "dasllama_vad" => "audio", "dasllama_whisper" => "audio",
+    "dasllama_gigaam" => "audio", "dasllama_rnnt" => "audio", "dasllama_qwen3a" => "audio", "dasllama_vad" => "audio", "dasllama_whisper" => "audio",
     "dasllama_gemma3v" => "vision", "dasllama_gemma4uv" => "vision", "dasllama_gemma4v" => "vision",
     "dasllama_qwen25v" => "vision", "dasllama_qwen3v" => "vision", "dasllama_vision" => "vision",
     "dasllama_vision_embedder" => "vision", "dasllama_vision_io" => "vision",

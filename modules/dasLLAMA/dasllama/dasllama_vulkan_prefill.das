@@ -1111,7 +1111,7 @@ def private pf_setup {
     let kvd = g_rd.kv_dim
     let hid = g_rd.hidden
     let wide = max(max(dim, qd), hid)
-    g_rd.pf_x = make_device_buf(np * dim * 4l)
+    g_rd.pf_x = make_call_buf(np * dim * 4l)
     g_rd.pf_xb = make_device_buf(np * dim * 4l)
     g_rd.pf_xq = make_device_buf(np * wide)
     g_rd.pf_xs = make_device_buf(np * (wide / 32l) * 4l)
@@ -1130,10 +1130,10 @@ def private pf_setup {
     g_rd.pf_up = make_device_buf(np * hid * 4l)
     g_rd.pf_ffnout = make_device_buf(np * dim * 4l)
     g_rd.pf_xb2 = make_device_buf(np * dim * 4l)
-    g_rd.pf_cos = make_device_buf(np * g_rd.cos_elems * 4l)
+    g_rd.pf_cos = make_call_buf(np * g_rd.cos_elems * 4l)
     if (g_rd.ple > 0l) {   //! the window's per-layer-embedding side rows, position-major [np x (layers x ple)]
         let all = g_rd.n_layers * g_rd.ple
-        g_rd.pf_ple = make_device_buf(np * all * 4l)
+        g_rd.pf_ple = make_call_buf(np * all * 4l)
         if (g_rd.ple_gpu) {
             // the pre-step on device: the projected plane (the f16 tile over the window's panel, else the router GEMV), then the finish
             g_rd.pf_plep = make_device_buf(np * all * 4l)
@@ -1172,9 +1172,9 @@ def private pf_setup {
             g_rd.pf_cmd_ring |> push(alloc_cmd())
         }
     }
-    g_rd.pf_cap_dev = make_device_buf(PF_CAP_WORDS * 4l)
+    g_rd.pf_cap_dev = make_call_buf(PF_CAP_WORDS * 4l)
     if (rd_emb_on()) {   //! the window's rows gather off their ids; no window row is the host's, so `xh` binds the one-row command's staging unread
-        g_rd.pf_ids = make_device_buf(np * 4l)
+        g_rd.pf_ids = make_call_buf(np * 4l)
         if (g_rd.emb_blk >= 0l) {
             verify(emb_cls_ensure(g_rd.emb_fmt), "vk prefill: the embed-gather class rail must engage")
             g_rd.pf_emb_set = emb_cls_set(g_rd.emb_fmt, arena_planes(g_rd.emb_fmt, g_rd.emb_blk), g_rd.pf_ids, np * 4l, 0u,
@@ -1516,7 +1516,7 @@ def private pf_head_setup : bool {
     if (!vk_range_ok(catb)) return pf_head_decline("the head rows' cat plane ({catb} bytes over the {np}-row window, the widest of the head's planes) passes the device's storage range {vk_max_storage_range()}")
     g_rd.head_pf_wemb = make_device_buf(np * dim * 4l)
     g_rd.head_pf_hsrc = make_device_buf(np * dim * 4l)
-    g_rd.head_pf_hcos = make_device_buf(np * g_rd.cos_elems * 4l)
+    g_rd.head_pf_hcos = make_call_buf(np * g_rd.cos_elems * 4l)
     g_rd.pf_sets[hb + 8] = pf_head_cat_set(1l)
     g_rd.head_pf_s_cat2 = set_cat2_cls(fixed_array(g_rd.head_pf_cat, g_rd.pf_xb2, g_rd.pf_ffnout), fixed_array(catb, np * dim * 4l, np * dim * 4l),
         fixed_array(VHZ_ATT, VHZ_XB2, VHZ_FFO))
@@ -2053,7 +2053,7 @@ def private pf_hc_setup {
     if (g_rd.ngram) {
         let ind = g_rd.ngram_ind
         let hist_bytes = g_rd.regions * g_rd.ngram_nrows * hcd * 4l
-        g_rd.pf_hcemb = make_device_buf(np * ind * 4l)
+        g_rd.pf_hcemb = make_call_buf(np * ind * 4l)
         g_rd.pf_hcembq = make_device_buf(np * ind)
         g_rd.pf_hcembs = make_device_buf(np * (ind / Q8_BLOCK_ELEMS) * 4l)
         g_rd.pf_plekey = make_device_buf(np * hcd * 4l)
@@ -3609,7 +3609,7 @@ def private ensure_at_state {
     g_gpu.at_v_dev = make_device_buf(AT_CTX * AT_MAX_KV * 4l)
     g_gpu.at_vraw_dev = make_device_buf(AT_WINDOW * AT_MAX_KV * 4l)
     g_gpu.at_kv_host = make_host_buf(2l * AT_WINDOW * AT_MAX_KV * 4l, true, [cached = true])
-    g_gpu.at_bias_dev = make_device_buf((AT_MAX_QD + 2l * AT_MAX_KV) * 4l)
+    g_gpu.at_bias_dev = make_call_buf((AT_MAX_QD + 2l * AT_MAX_KV) * 4l)
     // prep (class: GEMM rows, prepped panel, gate stash, smalls, projection bias) — the k/v forms' gate view never fires
     g_gpu.at_prep_q_set = set_at_prep_cls(
         fixed_array(g_gpu.batch_y1_dev, g_gpu.at_q_dev, g_gpu.at_g_dev, g_gpu.at_smalls_dev, g_gpu.at_bias_dev),
@@ -3877,9 +3877,9 @@ def private ensure_stream_slots {
     g_gpu.stream_slots |> reserve(nslots)
     let cap = stream_slot_caps()
     for (_slot in range(nslots)) {
-        let s1 = make_stack_shell(-1l, 0l, 0, cap.gu_wq, cap.gu_ws, [xfer_shared = true])
-        let s3 = make_stack_shell(-1l, 0l, 0, cap.gu_wq, cap.gu_ws, [xfer_shared = true])
-        let s2 = make_stack_shell(-1l, 0l, 0, cap.dn_wq, cap.dn_ws, [xfer_shared = true])
+        let s1 = make_stack_shell(-1l, 0l, 0, cap.gu_wq, cap.gu_ws, [xfer_shared = true, per_call = true])
+        let s3 = make_stack_shell(-1l, 0l, 0, cap.gu_wq, cap.gu_ws, [xfer_shared = true, per_call = true])
+        let s2 = make_stack_shell(-1l, 0l, 0, cap.dn_wq, cap.dn_ws, [xfer_shared = true, per_call = true])
         g_gpu.stacks[s1].batch_meta_ring = XF_RING   //! the per-expert chain fills XF_RING metas ahead of their copies
         g_gpu.stacks[s3].batch_meta_ring = XF_RING
         g_gpu.stacks[s2].batch_meta_ring = XF_RING

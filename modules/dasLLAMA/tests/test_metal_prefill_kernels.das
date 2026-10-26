@@ -30,6 +30,9 @@ require _attn_oracle
 require _compares   // Bar, Shape: the cells' bars; mismatch_rel
 require _kernel_oracles   // padded_bases: the MoE route's padded-CSR prefix the GEMM cells read too; rope_tab_ref
 require _tts_kernel_oracles   // the StyleTTS2 cells' fixtures and double forms the Vulkan TTS cells share
+require _vad_oracle   // the silero VAD cells' fixture and references the Vulkan cells share
+require _rnnt_oracle   // the transducer cells' fixture and references the Vulkan cells share
+require _ctc_oracle   // the CTC pick cells' fixture, cases and reference the Vulkan cell shares
 require daslib/jobque_boost
 require math
 
@@ -752,6 +755,331 @@ def private fc_dw_gate(t : T?; var dev, queue; tap_major : bool) {
             } else {
                 t |> success(mc |> rerun_mismatches(by, want, 1e-5, 1e-6, "{tag} poison (MUST mismatch)") > 0,
                     "{tag}: a poisoned tap reds the bars")
+            }
+        }
+    }
+}
+
+//! gigaam's biased centered depthwise conv (FORM 3, tap-major, no epilogue) vs the CPU loop over 13 rows of 32 at five taps: five f16-exact products and the bias summed in f32 sit well inside 1e-6 relative, and 1e-7 absolute covers the outputs near zero.
+def private ga_dw_gate(t : T?; var dev, queue) {
+    let tag = "ga_dw"
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let kd = kernel_of(@@enc_ga_dw)
+        var pso = mc |> keep_stamp(kd, err)
+        return if (!pso_ok(t, tag, pso, err))
+        let np = 13
+        let d = 32
+        let nk = 5
+        let kpad = (nk - 1) / 2
+        var inscope xv : array<float>
+        xv |> resize(np * d)
+        for (i in range(np * d)) {
+            xv[i] = float(float16(0.09 * float((i * 5) % 43) - 1.7))
+        }
+        var inscope wn : array<float>   // the tap-major taps [nk][d], then the bias row
+        wn |> resize(nk * d + d)
+        for (i in range(nk * d + d)) {
+            wn[i] = float(float16(0.06 * float((i * 7) % 31) - 0.8))
+        }
+        var inscope want : array<float>
+        want |> resize(np * d)
+        for (tt in range(np)) {
+            for (c in range(d)) {
+                var acc = wn[nk * d + c]
+                for (kk in range(nk)) {
+                    let src = tt + kk - kpad
+                    if (src >= 0 && src < np) {
+                        acc += wn[kk * d + c] * xv[src * d + c]
+                    }
+                }
+                want[tt * d + c] = acc
+            }
+        }
+        let bx = mc |> in_(xv)
+        let bwn = mc |> in_(wn)
+        let by = mc |> out_words(np * d, -1.0e30)
+        let total = np * d
+        var ka = GkDwConvRowsArgs(c = uint(d), k = uint(nk), t_in = uint(np), woff = 0u, boff = uint(nk * d))
+        for (leg in range(2)) {
+            if (leg == 1) {
+                wn[nk * d + 7] += 2.0
+                mc |> plane_upload(bwn, wn)
+                mc |> plane_refill(by)
+            }
+            let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+                invoke(kd.enc, enc, pso, mc.buf[bx], mc.buf[by], mc.buf[bwn], ka, int64(total))
+            }
+            return if (!ran)
+            if (leg == 0) {
+                check_buf(t, tag, mc.buf[by], want, Bar(rel = 1e-6, abs_floor = 1e-7, poison_scaled = true), Shape(row_width = d))
+            } else {
+                t |> success(mc |> rerun_mismatches(by, want, 1e-6, 1e-7, "{tag} poison (MUST mismatch)") > 0,
+                    "{tag}: a poisoned bias reds the bars")
+            }
+        }
+    }
+}
+
+//! gigaam's depthwise conv over the carrier's f16 taps (`MetalGaDwH`: FORM 3, tap-major, TAP_F16) vs the CPU loop over the same
+//! halfwords (`fc_dw_bias_rows_f16`) at 13 rows of 64 and 5 taps, and at 40 rows of 96 and 31 taps (a window past every row);
+//! the CPU loop is first held to the f32 loop over the widened taps to the bit - the widen is exact. Five or 31 f16-exact
+//! products and the bias summed in f32 in the same order sit inside 1e-6 relative, 1e-7 absolute near zero; the control a
+//! poisoned halfword tap.
+def private ga_dwh_gate(t : T?; var dev, queue) {
+    for (sh in fixed_array(int3(13, 64, 5), int3(40, 96, 31))) {
+        let tag = "ga_dwh rows {sh.x} d {sh.y} k {sh.z}"
+        var inscope fx <- dw_f16_fix(sh.x, sh.y, sh.z)
+        var inscope want <- dw_f16_cpu(fx, false)
+        var inscope wide <- dw_f16_cpu(fx, true)
+        t |> equal(mismatch_exact(want, wide), 0, "{tag}: the CPU loop over the halfwords is the f32 loop over the widened taps, bit for bit")
+        with_metal_cell(dev, queue) $(var mc : MetalCell) {
+            var err : string
+            let kd = kernel_of(@@enc_ga_dwh)
+            var pso = mc |> keep_stamp(kd, err)
+            return if (!pso_ok(t, tag, pso, err))
+            let bx = mc |> in_(fx.x)
+            let bwn = mc |> in_(fx.wn)
+            let bwh = mc |> in_plain(fx.taps)
+            let total = fx.np * fx.d
+            let by = mc |> out_words(total, -1.0e30)
+            var ka = GkDwConvRowsArgs(c = uint(fx.d), k = uint(fx.nk), t_in = uint(fx.np), woff = 0u, boff = uint(fx.boff))
+            for (leg in range(2)) {
+                if (leg == 1) {
+                    fx.taps[2 * fx.d + 7] = uint16(f32_to_f16(3.0))
+                    mc |> plane_upload(bwh, fx.taps)
+                    mc |> plane_refill(by)
+                }
+                let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+                    invoke(kd.enc, enc, pso, mc.buf[bx], mc.buf[by], mc.buf[bwn], mc.buf[bwh], ka, int64(total))
+                }
+                return if (!ran)
+                if (leg == 0) {
+                    check_buf(t, tag, mc.buf[by], want, Bar(rel = 1e-6, abs_floor = 1e-7, poison_scaled = true), Shape(row_width = fx.d))
+                } else {
+                    t |> success(mc |> rerun_mismatches(by, want, 1e-6, 1e-7, "{tag} poison (MUST mismatch)") > 0,
+                        "{tag}: a poisoned halfword tap reds the bars")
+                }
+            }
+        }
+    }
+}
+
+//! the silero VAD's encoder (`GkVadEnc`) over three chunks behind a context against `vad_enc_oracle`, the slab's tensors past a
+//! NaN lead: the oracle sums in the kernel's order in f32, so the two part only by the device's fused multiply-adds and its
+//! sqrt - a few ulp a stage over five stages (the STFT, three convs, the gate dots), inside 1e-5 relative with 1e-6 absolute for
+//! the gates near zero
+def private vad_enc_gate(t : T?; var dev, queue) {
+    let tag = "vad_enc"
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let kd = kernel_of(@@enc_vad_enc)
+        var pso = mc |> keep_stamp(kd, err)
+        return if (!pso_ok(t, tag, pso, err))
+        let nch = 3
+        var fx <- vad_fixture(nch)
+        let x <- vad_signal(nch)
+        let want <- vad_enc_oracle(x, fx.slab, fx.pa)
+        let bx = mc |> in_(x)
+        let bwn = mc |> in_(fx.slab)
+        let bgx = mc |> out_(nch * 512)
+        var ka = fx.pa
+        for (leg in range(2)) {
+            if (leg == 1) {
+                fx.slab[int(fx.pa.c2w) + 77] += 0.5
+                mc |> plane_upload(bwn, fx.slab)
+                mc |> plane_refill(bgx)
+            }
+            let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+                invoke(kd.enc, enc, pso, mc.buf[bx], mc.buf[bwn], mc.buf[bgx], ka, int64(nch))
+            }
+            return if (!ran)
+            if (leg == 0) {
+                check_buf(t, tag, mc.buf[bgx], want, Bar(rel = 1e-5, abs_floor = 1e-6, poison_scaled = true), Shape(row_width = 512))
+            } else {
+                t |> success(mc |> rerun_mismatches(bgx, want, 1e-5, 1e-6, "{tag} poison (MUST mismatch)") > 0,
+                    "{tag}: a poisoned conv tap reds the bars")
+            }
+        }
+    }
+}
+
+//! the VAD's recurrence (`GkVadLstm`) at one chunk and five from a nonzero state against `vad_lstm_oracle`: the kernel's order
+//! in f32 but the decoder's subgroup fold (128 terms under 0.4) and the device's exp and tanh, a few ulp a step, inside 1e-5
+//! relative with 1e-6 absolute
+def private vad_lstm_gate(t : T?; var dev, queue; nch : int) {
+    let tag = "vad_lstm/{nch}"
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let kd = kernel_of(@@enc_vad_lstm)
+        var pso = mc |> keep_stamp(kd, err)
+        return if (!pso_ok(t, tag, pso, err))
+        var fx <- vad_fixture(nch)
+        let x <- vad_signal(nch)
+        let gx <- vad_enc_oracle(x, fx.slab, fx.pa)
+        var st0 : array<float>
+        for (i in range(256)) {
+            st0 |> push(0.3 * sin(float(i) * 0.7))
+        }
+        let r <- vad_lstm_oracle(gx, fx.slab, st0, fx.pa)
+        t |> success(r.max_gate < 6.0, "{tag}: the fixture's gates sit off saturation (largest |gate| {r.max_gate})")
+        let bgx = mc |> in_(gx)
+        let bwn = mc |> in_(fx.slab)
+        let bst = mc |> io_(st0)
+        let bp = mc |> out_(nch)
+        var ka = fx.pa
+        for (leg in range(2)) {
+            if (leg == 1) {
+                fx.slab[int(fx.pa.hh) + 5 * 512 + 3] += 0.5   //! input 5 (h[5] nonzero) into gate row 3
+                mc |> plane_upload(bwn, fx.slab)
+                mc |> plane_upload(bst, st0)
+                mc |> plane_refill(bp)
+            }
+            let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+                invoke(kd.enc, enc, pso, mc.buf[bgx], mc.buf[bwn], mc.buf[bst], mc.buf[bp], ka)
+            }
+            return if (!ran)
+            if (leg == 0) {
+                check_buf(t, "{tag} probs", mc.buf[bp], r.probs, Bar(rel = 1e-5, abs_floor = 1e-6, poison_scaled = true), Shape(row_width = 1))
+                check_buf(t, "{tag} state", mc.buf[bst], r.st, Bar(rel = 1e-5, abs_floor = 1e-6, poison_scaled = true), Shape(row_width = 128))
+                t |> success(moved_off(r.st, st0, 3, Bar(rel = 1e-5, abs_floor = 1e-6)), "{tag}: the state moved off its input")
+            } else {
+                t |> success(mc |> rerun_mismatches(bst, r.st, 1e-5, 1e-6, "{tag} poison (MUST mismatch)") > 0,
+                    "{tag}: a poisoned recurrence weight reds the bars")
+            }
+        }
+    }
+}
+
+//! gigaam's frame window (`GkFrameWindow`) bit for bit against the CPU frame loop's one product: 5 frames of 40 taps at hop 16
+//! off 110 samples, the window at an offset past a poisoned lead, written as 8 rows of 40 under a sentinel fill - the row pad
+//! zero; a poisoned sample the frames reach reds it.
+def private ga_frames_gate(t : T?; var dev, queue) {
+    let tag = "ga_frames"
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let kd = kernel_of(@@enc_ga_frames)
+        var pso = mc |> keep_stamp(kd, err)
+        return if (!pso_ok(t, tag, pso, err))
+        let n_fft = 40
+        let hop = 16
+        let frames = 5
+        let rows = 8
+        let ld = n_fft   //! the rows sit `n_fft` apart
+        let woff = 7
+        var inscope samp : array<float>
+        samp |> resize(110)
+        for (i in range(110)) {
+            samp[i] = sin(float(i) * 0.37) * 0.8 + 0.01 * float(i % 7)
+        }
+        var inscope win : array<float>
+        win |> resize(woff + n_fft)
+        for (i in range(woff)) {
+            win[i] = 1.0e30
+        }
+        for (j in range(n_fft)) {
+            win[woff + j] = 0.5 - 0.5 * cos(6.2831855 * float(j) / float(n_fft))
+        }
+        var inscope want : array<float>
+        want |> resize(rows * ld)
+        for (i in range(frames)) {
+            for (j in range(n_fft)) {
+                want[i * ld + j] = win[woff + j] * samp[i * hop + j]
+            }
+        }
+        let bs = mc |> in_(samp)
+        let bw = mc |> in_(win)
+        let bxw = mc |> out_words(rows * ld, -1.0e30)
+        var ka = GkFrameWindowArgs(n_fft = uint(n_fft), hop = uint(hop), frames = uint(frames), rows = uint(rows), woff = uint(woff))
+        for (leg in range(2)) {
+            if (leg == 1) {
+                samp[2 * hop + 3] += 0.75
+                mc |> plane_upload(bs, samp)
+                mc |> plane_refill(bxw)
+            }
+            let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+                invoke(kd.enc, enc, pso, mc.buf[bs], mc.buf[bw], mc.buf[bxw], ka, int64(rows * ld))
+            }
+            return if (!ran)
+            if (leg == 0) {
+                check_buf(t, tag, mc.buf[bxw], want, BAR_EXACT, Shape(row_width = ld))
+            } else {
+                t |> success(mc |> rerun_mismatches(bxw, want, 0.0, 0.0, "{tag} poison (MUST mismatch)") > 0,
+                    "{tag}: a poisoned sample reds the frames")
+            }
+        }
+    }
+}
+
+//! gigaam's clamped-log filterbank (`GkMelLog`'s clamp form) against the CPU form - ln(clamp(sum, lo, hi)) over the float sum in
+//! the kernel's order - over 6 frames of 37 power bins and 5 mel rows past a poisoned filter lead: frame 1 all zero reads the
+//! floor's log, frame 4 scaled past the ceiling reads the ceiling's, frame 0 neither (the witnesses' negative twin); 1e-6
+//! relative with a 1e-6 floor covers the device log; a poisoned filter reds it.
+def private ga_mel_gate(t : T?; var dev, queue) {
+    let tag = "ga_mel"
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let kd = kernel_of(@@enc_ga_mel)
+        var pso = mc |> keep_stamp(kd, err)
+        return if (!pso_ok(t, tag, pso, err))
+        let nb = 37
+        let ldp = nb   //! a power row is `n_bins` wide
+        let nm = 5
+        let nf = 6
+        let foff = 11
+        let lo = 1e-9
+        let hi = 1e9
+        var inscope pw : array<float>
+        pw |> resize(nf * ldp)
+        for (f in range(nf)) {
+            for (k in range(nb)) {
+                let v = 0.3 + 0.2 * sin(float(f * 13 + k) * 0.71)
+                pw[f * ldp + k] = f == 1 ? 0.0 : (f == 4 ? v * 1.0e10 : v * float(1 + f * f))
+            }
+        }
+        var inscope fil : array<float>
+        fil |> resize(foff + nm * nb)
+        for (i in range(foff)) {
+            fil[i] = 1.0e30
+        }
+        for (i in range(nm * nb)) {
+            fil[foff + i] = 0.05 * float((i * 7) % 11)
+        }
+        var inscope want : array<float>
+        want |> resize(nf * nm)
+        for (f in range(nf)) {
+            for (j in range(nm)) {
+                var sum = 0.0
+                for (k in range(nb)) {
+                    sum += pw[f * ldp + k] * fil[foff + j * nb + k]
+                }
+                want[f * nm + j] = log(clamp(sum, lo, hi))
+            }
+        }
+        t |> success(abs(want[1 * nm + 2] - log(lo)) < 1e-5, "{tag}: the zero frame reads the floor's log")
+        t |> success(abs(want[4 * nm + 2] - log(hi)) < 1e-5, "{tag}: the loud frame reads the ceiling's log")
+        t |> success(abs(want[0 * nm + 2] - log(lo)) > 1e-5 && abs(want[0 * nm + 2] - log(hi)) > 1e-5,
+            "{tag}: the negative twin - a live frame reads neither the floor's log nor the ceiling's ({want[0 * nm + 2]})")
+        let bp = mc |> in_(pw)
+        let bf = mc |> in_(fil)
+        let bm = mc |> out_words(nf * nm, -1.0e30)
+        var ka = GkMelLogArgs(n_bins = uint(nb), n_mel = uint(nm), frames = uint(nf), foff = uint(foff), lo = lo, hi = hi,
+            scale = 1.0, frame_major = 1u, form = GK_MEL_LOG_CLAMP)
+        for (leg in range(2)) {
+            if (leg == 1) {
+                fil[foff + 2 * nb + 5] += 3.0
+                mc |> plane_upload(bf, fil)
+                mc |> plane_refill(bm)
+            }
+            let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+                invoke(kd.enc, enc, pso, mc.buf[bp], mc.buf[bf], mc.buf[bm], ka, int64(nf * nm))
+            }
+            return if (!ran)
+            if (leg == 0) {
+                check_buf(t, tag, mc.buf[bm], want, Bar(rel = 1e-6, abs_floor = 1e-6, poison_scaled = true), Shape(row_width = nm))
+            } else {
+                t |> success(mc |> rerun_mismatches(bm, want, 1e-6, 1e-6, "{tag} poison (MUST mismatch)") > 0,
+                    "{tag}: a poisoned filter reds the bars")
             }
         }
     }
@@ -3358,6 +3686,13 @@ def test_metal_prefill_kernels(t : T?) {
                 fc_row_gate(t, dev, queue, 300, true)
                 fc_dw_gate(t, dev, queue, false)
                 fc_dw_gate(t, dev, queue, true)
+                ga_dw_gate(t, dev, queue)
+                ga_dwh_gate(t, dev, queue)
+                vad_enc_gate(t, dev, queue)
+                vad_lstm_gate(t, dev, queue, 1)
+                vad_lstm_gate(t, dev, queue, 5)
+                ga_frames_gate(t, dev, queue)
+                ga_mel_gate(t, dev, queue)
                 g4a_dw_gate(t, dev, queue)
                 g4a_glu_gate(t, dev, queue)
                 g4a_lnrelu_gate(t, dev, queue)
@@ -6213,5 +6548,220 @@ def test_moe_padded_bound(t : T?) {
         t |> success(((16l + 256l * 31l + 31l) / 32l) * 32l > pf_moe_padded_rows(16l, 256l), "the worst case over every expert sits above the bound at 2 tokens")
     } else {
         t |> skip("das_metal is not built on this platform")
+    }
+}
+
+//! the transducer's LSTM gates (`GkRnntPred`, GATES) against `rnnt_gates_ref`: the first layer off the predictor input at h
+//! parity 0, the second off the first's new hidden at parity 1, then a state that asks no predictor step and one already done -
+//! the pair and the cells bit for bit as they were; the halves exact, the double reference within `RC_PRED_BAR` - 1e-5 relative,
+//! where the device's f32 dot of at most 128 halves-exact products and its sigmoid / tanh walk under 1e-6 (`_rnnt_oracle.das`)
+def private rnnt_gates_gate(t : T?; var dev, queue; sh : RcShape) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        with_metal_cell(dev, queue) $(var mc : MetalCell) {
+            var err : string
+            let kd = kernel_of(@@enc_rnnt_gates)
+            var pso = mc |> keep_stamp(kd, err)
+            return if (!pso_ok(t, "rnnt_gates", pso, err))
+            var inscope fx <- rnnt_fixture(sh)
+            let bwh = mc |> in_plain(fx.wh)
+            let bwf = mc |> in_(fx.wf)
+            let bxin = mc |> in_(fx.xin)
+            for (leg in fixed_array(int4(0, 0, 1, 0), int4(1, 1, 1, 0), int4(0, 0, 0, 0), int4(1, 0, 1, 1))) {
+                let layer = leg.x
+                let cur = leg.y
+                let active = leg.z != 0 && leg.w == 0
+                let tag = "rnnt_gates {rc_tag(sh)} layer {layer} parity {cur} need {leg.z} done {leg.w}"
+                var inscope st <- rnnt_state(0, 0, leg.w, leg.z, cur, 0)
+                var inscope hb_in <- rnnt_gates_input(fx, layer, cur, active)
+                let bst = mc |> in_plain(st)
+                let bhb = mc |> io_(hb_in)
+                let bcb = mc |> io_(fx.cb)
+                var ka = rnnt_gates_args(fx, layer)
+                let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+                    invoke(kd.enc, enc, pso, mc.buf[bst], mc.buf[bwh], mc.buf[bwf], mc.buf[bxin], mc.buf[bhb], mc.buf[bcb], ka, int64((sh.pd + 7) / 8))
+                }
+                return if (!ran)
+                rnnt_gates_verify(t, tag, mc |> plane_run(bhb), mc |> plane_run(bcb), fx, layer, cur, active)
+            }
+        }
+    }
+}
+
+//! joint.pred (`GkRnntPred`, GATES off) against `rnnt_proj_ref` over the last layer's new hidden at both parities, then a state
+//! that asks no predictor step: the output keeps its sentinel
+def private rnnt_proj_gate(t : T?; var dev, queue; sh : RcShape) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        with_metal_cell(dev, queue) $(var mc : MetalCell) {
+            var err : string
+            let kd = kernel_of(@@enc_rnnt_proj)
+            var pso = mc |> keep_stamp(kd, err)
+            return if (!pso_ok(t, "rnnt_proj", pso, err))
+            var inscope fx <- rnnt_fixture(sh)
+            let bwh = mc |> in_plain(fx.wh)
+            let bwf = mc |> in_(fx.wf)
+            let bhb = mc |> in_(fx.hb)
+            for (leg in fixed_array(int2(0, 1), int2(1, 1), int2(0, 0))) {
+                let tag = "rnnt_proj {rc_tag(sh)} parity {leg.x} need {leg.y}"
+                var inscope st <- rnnt_state(0, 0, 0, leg.y, leg.x, 0)
+                let bst = mc |> in_plain(st)
+                let bpred = mc |> out_(sh.jd)
+                var ka = fx.pa
+                let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+                    invoke(kd.enc, enc, pso, mc.buf[bst], mc.buf[bwh], mc.buf[bwf], mc.buf[bhb], mc.buf[bpred], ka, int64((sh.jd + 7) / 8))
+                }
+                return if (!ran)
+                rnnt_proj_verify(t, tag, mc |> plane_run(bpred), fx, leg.x, leg.y != 0)
+            }
+        }
+    }
+}
+
+//! the joint's window (`GkRnntJoint`) against `rnnt_joint_ref`: eight frames from frame 0 with the encoder projection's bias
+//! added, three frames before the clip's end off a biased projection, then a done clip writing nothing
+def private rnnt_joint_gate(t : T?; var dev, queue; sh : RcShape) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        with_metal_cell(dev, queue) $(var mc : MetalCell) {
+            var err : string
+            let kd = kernel_of(@@enc_rnnt_joint)
+            var pso = mc |> keep_stamp(kd, err)
+            return if (!pso_ok(t, "rnnt_joint", pso, err))
+            var inscope fx <- rnnt_fixture(sh)
+            let benc = mc |> in_(fx.encp)
+            let bwf = mc |> in_(fx.wf)
+            let bpred = mc |> in_(fx.pred)
+            let bjw = mc |> in_plain(fx.jw)
+            for (leg in fixed_array(int3(0, 1, 0), int3(RC_FRAMES - 3, 0, 0), int3(2, 1, 1))) {
+                let tag = "rnnt_joint {rc_tag(sh)} t0 {leg.x} eb_on {leg.y} done {leg.z}"
+                var inscope st <- rnnt_state(leg.x, 0, leg.z, 1, 0, 0)
+                let bst = mc |> in_plain(st)
+                let blg = mc |> out_(8 * sh.lstride)
+                var ka = fx.pa
+                ka.eb_on = uint(leg.y)
+                let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+                    invoke(kd.enc, enc, pso, mc.buf[bst], mc.buf[benc], mc.buf[bwf], mc.buf[bpred], mc.buf[bjw], mc.buf[blg], ka, int64(sh.nblk * 4))
+                }
+                return if (!ran)
+                rnnt_joint_verify(t, tag, mc |> plane_run(blg), fx, leg.x, leg.y != 0, leg.z == 0)
+            }
+        }
+    }
+}
+
+//! the greedy pick (`GkRnntPick`) against `rnnt_pick_ref` on every case of `rnnt_pick_cases`: the state words, the record and
+//! the next input
+def private rnnt_pick_gate(t : T?; var dev, queue; sh : RcShape) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        with_metal_cell(dev, queue) $(var mc : MetalCell) {
+            var err : string
+            let kd = kernel_of(@@enc_rnnt_pick)
+            var pso = mc |> keep_stamp(kd, err)
+            return if (!pso_ok(t, "rnnt_pick", pso, err))
+            var inscope fx <- rnnt_fixture(sh)
+            let bwf = mc |> in_(fx.wf)
+            var inscope cases <- rnnt_pick_cases(fx)
+            for (c in cases) {
+                let tag = "rnnt_pick {rc_tag(sh)} {c.tag}"
+                var inscope want <- rnnt_pick_ref(c.lg, c.st0, fx, c.pa)
+                let bst = mc |> in_plain(c.st0)
+                let blg = mc |> in_(c.lg)
+                let bxin = mc |> out_(sh.pd)
+                let btoks = mc |> out_words(int(c.pa.cap) * 8, NAN_SENTINEL_BITS)
+                var ka = c.pa
+                let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+                    invoke(kd.enc, enc, pso, mc.buf[bst], mc.buf[blg], mc.buf[bwf], mc.buf[bxin], mc.buf[btoks], ka)
+                }
+                return if (!ran)
+                var inscope st <- mc |> plane_as(bst, 0u, int(GK_RNNT_ST_WORDS))
+                var inscope toks <- mc |> plane_as(btoks, 0u, int(c.pa.cap) * 8)
+                rnnt_pick_verify(t, tag, c, st, toks, mc |> plane_run(bxin), want)
+            }
+        }
+    }
+}
+
+[test]
+def test_metal_rnnt_kernels(t : T?) {
+    t |> run("the transducer decode's four stamps == their CPU references, at both fixture shapes (`rc_shapes`)") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            with_metal_gate(t) $(var dev : MetalDevice?; var queue : MetalCommandQueue?) {
+                for (sh in rc_shapes()) {
+                    rnnt_gates_gate(t, dev, queue, sh)
+                    rnnt_proj_gate(t, dev, queue, sh)
+                    rnnt_joint_gate(t, dev, queue, sh)
+                    rnnt_pick_gate(t, dev, queue, sh)
+                }
+            }
+        } else {
+            t |> skip("das_metal is not built on this platform")
+        }
+    }
+}
+
+//! The CTC head's pick (`MetalCtcPick` on `GkCtcPick`, `enc_ctc_pick`) against the CPU row loop: at 34 classes over 64-wide rows (one stride
+//! of the 256 threads, the pad unread), at 1025 over 1088 (a tail past four strides) and at 257 with row 0 all NaN - which
+//! must pick class 0, its plog not compared. Every row's class exact, its plog within 1e-5 relative (a float sum of at most
+//! 1025 exps against the double one, its rounding walk near 1e-6 of a plog of order 1); every record written. The control a
+//! poisoned bias element, the input side, moving a pick or a plog off the reference.
+def private ctc_pick_gate(t : T?; var dev, queue) {
+    for (c in ctc_pick_cases()) {
+        let tag = "ctc_pick nc {c.x} rows {c.y} ldl {c.z}{c.w != 0 ? " NaN row" : ""}"
+        with_metal_cell(dev, queue) $(var mc : MetalCell) {
+            var err : string
+            let kd = kernel_of(@@enc_ctc_pick)
+            var pso = mc |> keep_stamp(kd, err)
+            return if (!pso_ok(t, tag, pso, err))
+            var inscope fx <- ctc_pick_fix(c.x, c.y, c.z, c.w != 0)
+            let want = ctc_pick_ref(fx)
+            let bl = mc |> in_(fx.lg)
+            let bw = mc |> in_(fx.wb)
+            let bo = mc |> out_words(fx.rows * 2, NAN_SENTINEL_BITS)
+            var ka = GkCtcPickArgs(nc = uint(fx.nc), ldl = uint(fx.ldl), boff = uint(fx.boff))
+            for (leg in range(2)) {
+                if (leg == 1) {
+                    fx.wb[fx.boff + 3] += 40.0
+                    mc |> plane_upload(bw, fx.wb)
+                    mc |> plane_refill(bo)
+                }
+                let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+                    invoke(kd.enc, enc, pso, mc.buf[bl], mc.buf[bw], mc.buf[bo], ka, int64(fx.rows))
+                }
+                return if (!ran)
+                var inscope got <- mc |> plane_as(bo, 0u, fx.rows * 2)
+                let r0 = c.w != 0 ? 1 : 0
+                var inscope toks <- [for (r in range(r0, fx.rows)); got[r * 2]]
+                var inscope wtoks <- [for (r in range(r0, fx.rows)); want.tok[r]]
+                var inscope plogs <- [for (r in range(r0, fx.rows)); uint_bits_to_float(got[r * 2 + 1])]
+                var inscope wplogs <- [for (r in range(r0, fx.rows)); want.plog[r]]
+                let bar = Bar(rel = 1e-5, abs_floor = 1e-6, poison_scaled = true)
+                if (leg == 0) {
+                    var unwritten = 0
+                    for (r in range(fx.rows)) {
+                        unwritten += got[r * 2] == NAN_SENTINEL_BITS ? 1 : 0
+                    }
+                    t |> equal(unwritten, 0, "{tag}: every row's record written")
+                    check_exact(t, "{tag}: each row's class", toks, wtoks)
+                    check(t, "{tag}: each row's plog", plogs, wplogs, bar, FLAT_SHAPE)
+                    if (c.w != 0) {
+                        t |> equal(got[0], 0u, "{tag}: the NaN row picks class 0")
+                    }
+                } else {
+                    let moved = mismatch_exact(toks, wtoks) + check_count(plogs, wplogs, bar)
+                    t |> success(moved > 0, "{tag}: the control - a poisoned bias element moves {moved} picks or plogs off the reference")
+                }
+            }
+        }
+    }
+}
+
+[test]
+def test_metal_ctc_pick_kernel(t : T?) {
+    t |> run("the CTC head's pick == the CPU row loop, a NaN row picking class 0") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            with_metal_gate(t) $(var dev : MetalDevice?; var queue : MetalCommandQueue?) {
+                ctc_pick_gate(t, dev, queue)
+            }
+        } else {
+            t |> skip("das_metal is not built on this platform")
+        }
     }
 }

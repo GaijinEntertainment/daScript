@@ -5716,10 +5716,10 @@ def private race_gemmb_family(dev : MetalDevice?; queue : MetalCommandQueue?; fa
     let nkb = kdim / 32
     var xa <- race_x_f32(m * kdim)
     var blob <- race_q8_blob(ndim * nkb)
-    var bw = race_buf(dev, uint64(ndim * nkb * 34), unsafe(addr<void?>(blob[0])))
-    var bxa = race_buf(dev, uint64(m * kdim * 4), unsafe(addr<void?>(xa[0])))
-    var by_base = race_buf(dev, uint64(out_n * 4), null)
-    var by_twin = race_buf(dev, uint64(out_n * 4), null)
+    var bw = metal_buffer_from(dev, uint64(ndim * nkb * 34), unsafe(addr<void?>(blob[0])))
+    var bxa = metal_buffer_from(dev, uint64(m * kdim * 4), unsafe(addr<void?>(xa[0])))
+    var by_base = metal_buffer_from(dev, uint64(out_n * 4), null)
+    var by_twin = metal_buffer_from(dev, uint64(out_n * 4), null)
     let tg = uint3(128u, 1u, 1u)
     race_pair_ms(queue, 5, res.base_ms, res.twin_ms, $(enc) {
         kn_pipeline(enc, base_pso)
@@ -5876,12 +5876,12 @@ def private kq_race_rig(dev : MetalDevice?; qu_per_sb : int; sform : KqRaceScale
     rig.doff = planes.doff
     rig.xa <- race_x_f32(cols * n)
     rig.xh <- [for (v in rig.xa); float16(v)]   //! race_x_f32 sits on the f16 lattice, so both x views read one value
-    rig.bx = race_buf(dev, uint64(cols * n * 4), unsafe(addr<void?>(rig.xa[0])))
-    rig.bxh = race_buf(dev, uint64(cols * n * 2), unsafe(addr<void?>(rig.xh[0])))
-    rig.by_a = race_buf(dev, uint64(cols * rows * 4), null)
-    rig.by_a2 = race_buf(dev, uint64(cols * rows * 4), null)
-    rig.by_b = race_buf(dev, uint64(cols * rows * 4), null)
-    rig.by_b2 = race_buf(dev, uint64(cols * rows * 4), null)
+    rig.bx = metal_buffer_from(dev, uint64(cols * n * 4), unsafe(addr<void?>(rig.xa[0])))
+    rig.bxh = metal_buffer_from(dev, uint64(cols * n * 2), unsafe(addr<void?>(rig.xh[0])))
+    rig.by_a = metal_buffer_from(dev, uint64(cols * rows * 4), null)
+    rig.by_a2 = metal_buffer_from(dev, uint64(cols * rows * 4), null)
+    rig.by_b = metal_buffer_from(dev, uint64(cols * rows * 4), null)
+    rig.by_b2 = metal_buffer_from(dev, uint64(cols * rows * 4), null)
     rig.bn = race_uniform_u32(dev, uint(n))
     rig.bd = race_uniform_u32(dev, uint(rows))
     return <- rig

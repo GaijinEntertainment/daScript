@@ -81,7 +81,7 @@ def compare_words(h : Held; against : string; region : string) : string {
 }
 
 //! an arm's best, median (the upper middle) and population cv of its round times, in ms
-def stats(us : array<int>) : tuple<best : float; median : float; cv : float> {
+def stats(us : array<int>) : RowSpread {
     var ms <- [for (u in us); float(u) / 1000.0]
     return spread_of(ms)
 }

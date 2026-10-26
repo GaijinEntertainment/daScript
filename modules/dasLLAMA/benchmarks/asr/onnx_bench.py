@@ -26,6 +26,9 @@ VARIANTS = {
     "whisper-tiny-fp32": ("onnx-community/whisper-tiny", None),
     "whisper-turbo-int8": ("onnx-community/whisper-large-v3-turbo", "int8"),
     "whisper-turbo-fp32": ("onnx-community/whisper-large-v3-turbo", None),
+    # GigaAM v3 e2e-RNNT (Russian): the handle is onnx-asr's own model alias
+    "gigaam-v3-e2e-rnnt-int8": ("gigaam-v3-e2e-rnnt", "int8"),
+    "gigaam-v3-e2e-rnnt-fp32": ("gigaam-v3-e2e-rnnt", None),
 }
 
 

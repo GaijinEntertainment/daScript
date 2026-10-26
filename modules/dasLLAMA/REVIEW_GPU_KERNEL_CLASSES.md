@@ -16,8 +16,7 @@ family a box's tune sidecar enables. A lens is the `[metal_dispatch]`, `[vk_disp
 `[cuda_dispatch]` macro that generates a class's builder from its bindings; kargs is the
 kernel-argument struct a dispatch hands its kernel. A home is one backend's own kernel files -
 Metal's, Vulkan's or CUDA's - as against the shared files `dasllama/dasllama_gpu_kernels_common.das`
-(Metal and Vulkan stamp it) and `dasllama/dasllama_gpu_kernels_discrete.das` (Vulkan and CUDA stamp
-it).
+and `dasllama/dasllama_gpu_kernels_discrete.das`.
 
 **A diff that adds a `class template` a GPU home stamps, or moves one between a home's file,
 `dasllama/dasllama_gpu_kernels_discrete.das` and `dasllama/dasllama_gpu_kernels_common.das`,
@@ -29,12 +28,12 @@ is a defect, even where one twin ignores a field of it.**
 **Kernel twins keep every `@binding` number they both declare; a field a `@template_gate` omits on
 one twin leaves a hole at its number and renumbers nothing.**
 
-**Two stamps whose `@binding` numbers or kargs field offsets differ never share a host function
-that binds by number - each binds through its own generated builder.**
+**Two stamps that declare the same field at different `@binding` numbers or kargs offsets never
+share a host function that binds by number - each binds through its own generated builder.**
 
-**A diff that makes the `@binding` numbers or kargs field offsets of two stamps of one class
-template or base shell differ ledgers the pair at `ARCHITECTURE_GPU.md#gpu-backends` in the same
-change.**
+**A diff that makes two stamps of one class template or base shell declare the same field at
+different `@binding` numbers or kargs offsets ledgers the pair at
+`ARCHITECTURE_GPU.md#gpu-backends` in the same change.**
 
 **Kernel twins are written once: as stamps of one `class template`, as classes deriving one base
 shell, or - where the value that selects the difference is a run-time count - as one class whose
@@ -92,8 +91,8 @@ that template or shell.**
 **A diff that adds a kernel class stamping or deriving from - through an intermediate template
 too - a template more than one home stamps (`dasllama/dasllama_gpu_kernels_common.das`,
 `dasllama/dasllama_gpu_kernels_discrete.das`), or makes an existing class do so, gives the class a
-`//!` line above its own declaration naming that shared template itself, not the intermediate
-one.**
+`//!` line above its own declaration naming the nearest template in its chain that more than one
+home stamps.**
 
 **A diff that adds a name to `DISCRETE_ONE_HOME_STAMPS` in `REVIEW.das` - the license for a
 `class template` in `dasllama/dasllama_gpu_kernels_discrete.das` that only one discrete home
@@ -198,8 +197,8 @@ and as a kargs field - is a defect: bind it once, as a kargs field.** A `params=
 only host-side - by the `grid=` / `tg=` spec, a `requires=` item, or an `@span` - never reaches
 the device, so it does not count.
 
-**Never bind a scalar that a stamp's other bound scalars already determine by integer
-arithmetic at every dispatch site of that stamp - derive it in the stamp's body from them
+**Never bind a scalar that a stamp's other bound scalars already determine by integer arithmetic at
+every dispatch site of that stamp under `dasllama/` - derive it in the stamp's body from them
 instead.** Binding an integer count separately adds a second place to get it wrong.
 
 **A diff that adds or changes a kernel-class method whose returned value is used anywhere but

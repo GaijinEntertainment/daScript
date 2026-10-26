@@ -13,12 +13,14 @@ require dasllama/dasllama_math   // active repack params — the dq planes carry
 require dasllama/dasllama_layout   // q8_region_to_metal_blob — the 34B-blob upload transform
 require dasllama/dasllama_metal_shapes
 require dasllama/dasllama_whisper
+require dasllama/dasllama_rnnt
 require metal/das_metal_boost
 require dasllama/dasllama_metal_common
 require dasllama/dasllama_metal_lens   // release_handles
 require dasllama/dasllama_gpu_math   // the row stamps' activation codes
 require dasllama/dasllama_metal_kernels
 require dasllama/dasllama_metal_prefill   // metal_prefill_pso_init — the borrowed-builder bring-up seat
+require dasllama/dasllama_metal_tower   // metal_tower_enc_rows - the encode's device rows the transducer projection reads
 
 // The whisper ASR-decoder Metal driver, Q8-NATIVE: cross-KV and the decode step (above the
 // serving floor). Declines by returning false at window claim; mid-window the GPU owns the
@@ -509,10 +511,267 @@ def private metal_whisper_decode(w : WhisperModel; var ds : DecoderState; toks :
     return true
 }
 
+// ===== the transducer greedy decode (parakeet, GigaAM's RNNT head) =====
+
+enum private MetalRnntDecline {
+    knob     //! DASLLAMA_METAL_RNNT=0, or set_metal_rnnt(false)
+    shape    //! a predictor or joint past the bodies' staged widths, a third layer, a duration table past the state's
+    device   //! no device, or a pipeline failed to compile, or a weight buffer failed
+    gpu_error
+    overrun  //! the rounds ran past the clip's budget with the clip not done
+}
+
+var private g_rd_env = true
+var private g_rd_said : table<string>   //! the overrides' announces already made
+var private g_rd_declines : DeclineCounter
+var private g_rd_decodes = 0l     //! clips decoded on the device
+var private g_rd_handoffs = 0l    //! ... whose joint projection read the encode's own device rows
+var private g_rd_projects = 0l    //! ... that projected the encoder rows on the device (the rest decoded off the family's projection)
+var private g_rd_rounds = 0l      //! the rounds the picks ran: a predictor step and a joint window, or a joint window alone
+var private g_rd_steps = 0l       //! the predictor steps among them
+var private g_rd_tokens = 0l
+var private g_rd_cbs = 0l         //! the command buffers the loops took
+var private g_rd_uploads = 0l     //! the weight uploads: one a model, again only where another net takes the seat
+var private g_rd_us_gpu = 0l
+
+//! Engage counters: `decodes` served on the device, `handoffs` among them off the encode's device rows, `projects` among them
+//! projected on the device, `rounds` / `steps` the picks' rounds and predictor steps, `tokens`, `cbs` the command buffers,
+//! `uploads` the weight uploads, `declines` every decline but the knob's.
+def metal_rnnt_stats : tuple<decodes : int64; handoffs : int64; projects : int64; rounds : int64; steps : int64; tokens : int64; cbs : int64; uploads : int64; declines : int64> {
+    return (decodes = g_rd_decodes, handoffs = g_rd_handoffs, projects = g_rd_projects, rounds = g_rd_rounds, steps = g_rd_steps,
+        tokens = g_rd_tokens, cbs = g_rd_cbs, uploads = g_rd_uploads, declines = g_rd_declines.total - (g_rd_declines.by_reason?["{MetalRnntDecline.knob}"] ?? 0l))
+}
+
+//! The transducer seat's declines-by-reason table (a copy), keyed by the decline's name, the knob's among them.
+def metal_rnnt_declines : table<string; int64> => <- clone_to_move(g_rd_declines.by_reason)
+
+//! The transducer loop's GPU-busy microseconds across every served decode.
+def metal_rnnt_us_gpu : int64 => g_rd_us_gpu
+
+//! Pin the transducer decode on the device on/off in-process (DASLLAMA_METAL_RNNT's twin); answers the setting it replaced.
+def set_metal_rnnt(on : bool) : bool {
+    let was = g_rd_env
+    g_rd_env = on
+    return was
+}
+
+[cold_path]
+def private rd_decline(why : MetalRnntDecline) : bool {
+    note_decline(g_rd_declines, "rnnt", "{why}", policy = why == MetalRnntDecline.knob)
+    return false
+}
+
+//! The decode's weights on the device, laid once a model (`rnnt_dev_key`): the state's halves (`wh`, the joint columns `jw`), and
+//! the slab `wf` at `lay`'s offsets.
+struct private RdWeights {
+    key : uint64
+    lay : RnntDevLayout
+    wh : MetalBuffer?
+    jw : MetalBuffer?
+    wf : MetalBuffer?
+    wenc : MetalBuffer?   //! the encoder projection's f32 rows [jd][d], where the seat projects
+}
+
+var private g_rd_w : RdWeights
+var private g_rd_pool : MetalBufferPool
+
+def private rd_release_weights {
+    release_handles(g_rd_w.wh, g_rd_w.jw, g_rd_w.wf, g_rd_w.wenc)
+    g_rd_w.key = 0ul
+}
+
+//! Release the transducer seat's device objects - the weights and the scratch pool - the leak-gate and model-switch rail.
+def metal_rnnt_shutdown {
+    rd_release_weights()
+    pool_drain(g_rd_pool)
+}
+
+def private rd_attach(net : RnntNet; s : RnntState; enc : RnntEnc) : bool {
+    let key = rnnt_dev_key(net, enc)
+    return true if (g_rd_w.key == key && g_rd_w.wh != null)
+    return rd_attach_build(net, s, enc, key)
+}
+
+//! ... uploaded on a new net
+[cold_path]
+def private rd_attach_build(net : RnntNet; s : RnntState; enc : RnntEnc; key : uint64) : bool {
+    rd_release_weights()
+    g_rd_w.lay = rnnt_dev_layout(net)
+    let lay = g_rd_w.lay
+    var inscope wf <- rnnt_dev_slab(net, s, enc, lay)
+    unsafe {
+        g_rd_w.wh = metal_buffer_from(g_dev, uint64(lay.wh_halves * 2l), addr<void?>(s.wh[0]))
+        g_rd_w.jw = metal_buffer_from(g_dev, uint64(lay.jw_halves * 2l), addr<void?>(s.joint_wt[0]))
+        g_rd_w.wf = metal_buffer_from(g_dev, uint64(long_length(wf) * 4l), addr<void?>(wf[0]))
+        if (!enc.q8) {
+            g_rd_w.wenc = metal_buffer_from(g_dev, uint64(net.joint_dim * enc.d * 4l), reinterpret<void?>(plane_at(net.blob, enc.w)))
+        }
+    }
+    if (g_rd_w.wh == null || g_rd_w.jw == null || g_rd_w.wf == null || (!enc.q8 && g_rd_w.wenc == null) || rnnt_dev_faulted(RnntDevFault.device)) {
+        rd_release_weights()
+        return false
+    }
+    g_rd_w.key = key
+    g_rd_uploads++
+    return true
+}
+
+//! Whether the Metal seat projects a lane's encoder half: the f32 plane's, through the exact f32 GEMM.
+def private metal_rnnt_projects(enc : RnntEnc) : bool => g_rd_env && !enc.q8
+
+var private g_rd_rate = 0.3lf   //! the rounds a frame the last served clip took: the first command buffer's estimate
+
+//! The decode's per-clip device state: the state words, the hidden pair and the cells, the predictor input, joint.pred's
+//! output, the window's logits, the token records, the encoder projection and, where the encode left none, the rows.
+struct private RdBufs {
+    st : MetalBuffer?
+    hb : MetalBuffer?
+    cb : MetalBuffer?
+    xin : MetalBuffer?
+    pred : MetalBuffer?
+    lg : MetalBuffer?
+    toks : MetalBuffer?
+    encp : MetalBuffer?
+    rows : MetalBuffer?
+    sizes : uint64[9]
+}
+
+def private rd_bufs_take(net : RnntNet; n_frames, n_logits, cap, d : int64; own_rows : bool) : RdBufs {
+    let pd = net.pred_dim
+    let jd = net.joint_dim
+    let mp = round_up(n_frames, 32l)
+    let sz = fixed_array(uint64(GK_RNNT_ST_WORDS) * 4ul, uint64(2l * net.n_layers * pd * 4l), uint64(net.n_layers * pd * 4l), uint64(pd * 4l),
+        uint64(jd * 4l), uint64(int64(GK_RNNT_FRAMES) * rnnt_joint_blocks(n_logits) * RNNT_JOINT_BLOCK * 4l), uint64(cap * int64(GK_RNNT_TOK_WORDS) * 4l),
+        uint64(mp * jd * 4l), own_rows ? uint64(mp * d * 4l) : 0ul)
+    return RdBufs(sizes = sz, st = pool_acquire(g_rd_pool, g_dev, sz[0]), hb = pool_acquire(g_rd_pool, g_dev, sz[1]),
+        cb = pool_acquire(g_rd_pool, g_dev, sz[2]), xin = pool_acquire(g_rd_pool, g_dev, sz[3]), pred = pool_acquire(g_rd_pool, g_dev, sz[4]),
+        lg = pool_acquire(g_rd_pool, g_dev, sz[5]), toks = pool_acquire(g_rd_pool, g_dev, sz[6]), encp = pool_acquire(g_rd_pool, g_dev, sz[7]),
+        rows = own_rows ? pool_acquire(g_rd_pool, g_dev, sz[8]) : null)
+}
+
+def private rd_bufs_give(var b : RdBufs) {
+    pool_release(g_rd_pool, b.st, b.sizes[0])
+    pool_release(g_rd_pool, b.hb, b.sizes[1])
+    pool_release(g_rd_pool, b.cb, b.sizes[2])
+    pool_release(g_rd_pool, b.xin, b.sizes[3])
+    pool_release(g_rd_pool, b.pred, b.sizes[4])
+    pool_release(g_rd_pool, b.lg, b.sizes[5])
+    pool_release(g_rd_pool, b.toks, b.sizes[6])
+    pool_release(g_rd_pool, b.encp, b.sizes[7])
+    if (b.rows != null) {
+        pool_release(g_rd_pool, b.rows, b.sizes[8])
+    }
+}
+
+//! The clip's start: the state words, the first input, the hidden pair and the cells zeroed.
+def private rd_state_init(net : RnntNet; b : RdBufs) {
+    unsafe {
+        rnnt_dev_state_words(net, reinterpret<uint?>(metal_buffer_contents(b.st)))
+        rnnt_dev_first_input(net, reinterpret<float?>(metal_buffer_contents(b.xin)))
+        memset8(reinterpret<uint8?>(metal_buffer_contents(b.hb)), uint8(0), int(b.sizes[1]))
+        memset8(reinterpret<uint8?>(metal_buffer_contents(b.cb)), uint8(0), int(b.sizes[2]))
+    }
+}
+
+//! A round's dispatches: each layer's gates, joint.pred's projection, the joint window, the pick.
+def private rd_round(enc : MetalComputeEncoder?; net : RnntNet; b : RdBufs; ka : GkRnntArgs; n_logits : int64) {
+    for (l in range64(net.n_layers)) {
+        var kl = rnnt_dev_layer_args(ka, g_rd_w.lay, l)
+        enc_rnnt_gates(enc, b.st, g_rd_w.wh, g_rd_w.wf, b.xin, b.hb, b.cb, kl, (net.pred_dim + 7l) / 8l)
+    }
+    var kr = ka
+    enc_rnnt_proj(enc, b.st, g_rd_w.wh, g_rd_w.wf, b.hb, b.pred, kr, (net.joint_dim + 7l) / 8l)
+    enc_rnnt_joint(enc, b.st, b.encp, g_rd_w.wf, b.pred, g_rd_w.jw, b.lg, kr, rnnt_joint_blocks(n_logits) * 4l)
+    enc_rnnt_pick(enc, b.st, b.lg, g_rd_w.wf, b.xin, b.toks, kr)
+}
+
+//! The transducer's greedy decode on the device: the joint's encoder projection (the exact f32 GEMM off the encode's own
+//! device rows where it left them) or the family's, then command buffers of rounds until the pick marks the clip done; the
+//! token records read back once.
+[hot_path, arch(at="../ARCHITECTURE_MEDIA_ASR.md#rnnt-device-decode")]
+def private metal_rnnt_greedy(net : RnntNet; var s : RnntState; enc : RnntEnc; x, encp : array<float>; n_frames : int64;
+                              @scratch var toks : array<RnntToken>) : bool {
+    if (!g_rd_env) {
+        gpu_said_once(g_rd_said, LOG_INFO, "metal rnnt: ", "DASLLAMA_METAL_RNNT=0 or set_metal_rnnt(false) - the transducer decode runs the CPU loop")
+        return rd_decline(MetalRnntDecline.knob)
+    }
+    let jd = net.joint_dim
+    let d = enc.d
+    let n_logits = rnnt_n_logits(net)
+    let projects = !enc.q8
+    if (!rnnt_dev_shape_ok(net, enc, 64l)) {   //! the exact f32 GEMM's column tile
+        return rd_decline(MetalRnntDecline.shape)
+    }
+    if (!metal_common_init() || !metal_prefill_pso_init() || !pf_rnnt_ready() || (projects && g_pso_f32_exact_mm == null) || !rd_attach(net, s, enc)) {
+        return rd_decline(MetalRnntDecline.device)
+    }
+    if (n_frames <= 0l) {
+        g_rd_decodes++
+        return true
+    }
+    let mp = round_up(n_frames, 32l)
+    var rows_dev = projects ? metal_tower_enc_rows(enc.gen, n_frames * d) : null
+    let handoff = rows_dev != null
+    var b = rd_bufs_take(net, n_frames, n_logits, rnnt_dev_cap(net, n_frames), d, projects && !handoff)
+    rd_state_init(net, b)
+    var u_d, u_jd : MetalBuffer?
+    if (projects) {
+        if (!handoff) {
+            upload_rows_padded(b.rows, unsafe(addr(x[0])), n_frames, mp, d)
+            rows_dev = b.rows
+        }
+        u_d = uniform_u32(uint(d))
+        u_jd = uniform_u32(uint(jd))
+    } else {
+        unsafe {
+            memcpy(metal_buffer_contents(b.encp), addr(encp[0]), n_frames * jd * 4l)
+        }
+    }
+    let ka = rnnt_dev_args(net, g_rd_w.lay, n_frames, projects)
+    var err = ""
+    let sp = unsafe(reinterpret<uint const?>(metal_buffer_contents(b.st)))
+    let run = rnnt_dev_rounds(net, n_frames, sp, g_rd_rate) $(rounds : int64; first : bool) : bool {
+        var gpu_ms = 0.0lf
+        let ok = with_compute_encoder_timed(g_queue, err, gpu_ms) $(enc_ : MetalComputeEncoder?) {   // nolint:PERF026 — the error-text fetch runs only on the failure leg
+            if (first && projects) {
+                enc_f32_exact_mm(enc_, g_rd_w.wenc, 0ul, rows_dev, b.encp, 0ul, u_d, u_jd, mp, jd)
+            }
+            for (_r in range64(rounds)) {
+                rd_round(enc_, net, b, ka, n_logits)
+            }
+        }
+        g_rd_us_gpu += int64(gpu_ms * 1000.0lf)
+        return ok
+    }
+    g_rd_cbs += run.cbs
+    if (run.ok) {
+        rnnt_dev_land_tokens(unsafe(reinterpret<uint const?>(metal_buffer_contents(b.toks))), run.p.ntok, toks)
+        g_rd_decodes++
+        g_rd_tokens += int64(run.p.ntok)
+        g_rd_rounds += run.p.rounds
+        g_rd_steps += run.p.steps
+        if (projects) {
+            g_rd_projects++
+        }
+        if (handoff) {
+            g_rd_handoffs++
+        }
+    }
+    if (u_d != null) {
+        pool_release(g_upool, u_d, 4ul)
+        pool_release(g_upool, u_jd, 4ul)
+    }
+    rd_bufs_give(b)
+    return run.ok || rd_decline(run.overrun ? MetalRnntDecline.overrun : MetalRnntDecline.gpu_error)
+}
+
 [init]
 def dasllama_metal_asr_dec_register {
     g_wd_env = g_env_metal.wdec
     g_wd_step_env = g_env_metal.wdec_step
+    g_rd_env = g_env_metal.rnnt
+    register_reload_prep(@@rd_release_weights)
     register_whisper_cross_kv_gpu(@@metal_whisper_cross_kv)
     register_whisper_decode_gpu(@@metal_whisper_decode)
+    register_rnnt_gpu(@@metal_rnnt_greedy, @@metal_rnnt_projects)
 }

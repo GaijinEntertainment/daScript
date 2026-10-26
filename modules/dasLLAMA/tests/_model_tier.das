@@ -65,6 +65,16 @@ def root_or(set, dflt : string) : string => empty(set) ? dflt : set
 // Machine-local model root; override with DASLLAMA_MODELS_DIR (e.g. the x64 handoff box).
 def models_dir() : string => root_or(g_env_harness.models_dir, "/Users/borisbatkin/Work/llama.cpp/models/")
 
+//! the ASR corpus: the clips `../performance/setup_asr_rig.das --corpus` fetches and `benchmarks/asr/corpus.sha256` pins;
+//! override with DASLLAMA_CORPUS_DIR
+def corpus_dir() : string => root_or(g_env_test.corpus_dir, "{get_das_root()}/modules/dasLLAMA/benchmarks/asr/corpus/")
+
+//! one corpus file by name (`jfk.wav`, `ru_fleurs.json`, `librispeech/<clip>.wav`)
+def asr_clip(name : string) : string => path_join(corpus_dir(), name)
+
+//! an ASR family's oracle dumps under the model root, beside the TTS families' `tts_oracle/`
+def asr_oracle_dir(family : string) : string => path_join(models_dir(), "asr_oracle/{family}")
+
 //! the machine-local llama2.c checkout (stories15M.bin, tokenizer.bin); override with DASLLAMA_LLAMA2C_DIR (e.g. the x64 handoff box)
 def llama2c_dir() : string => root_or(g_env_test.llama2c_dir, "/Users/borisbatkin/Work/llama2.c")
 

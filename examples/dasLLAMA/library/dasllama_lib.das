@@ -187,8 +187,9 @@ def asr_open(model_path : string) : bool {
     }
     queue_acquire()
     g_asr <- load_asr_model(model_path)   // nolint:PERF030 - asr_open refuses while loaded, asr_close deletes it
+    // fresh, or finalized by asr_close
+    g_asr_session <- create_session(g_asr, "")   // nolint:PERF030
     g_asr_loaded = true
-    g_asr_session <- create_session(g_asr, "en")   // nolint:PERF030 - fresh, or finalized by asr_close
     g_reason = ""
     return true
 }

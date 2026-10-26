@@ -43,10 +43,9 @@ cell of it from the released `lcpp_bench` exe (`../benchmarks/lcpp_bench.das`, t
 exe `daspkg release` writes under `_rig/`) built at that `sha`, and names that exe in the row's
 `cmd` - re-mint otherwise.**
 
-**A diff that writes a `das` row to `records/<box>.json` from a run under `DASLLAMA_CUDA=1` is
-a defect until the bench row carries a `cuda` backend value (`../followup_general.md` names the
-work)** - the bench stamps every device-tier row `vulkan`, so a CUDA rate lands in the Vulkan leg
-and reads as the Vulkan home's.
+**A `das` row a diff writes to `records/<box>.json` names the backend its run used; a row the
+bench stamps `vulkan` from a run under `DASLLAMA_CUDA=1` is a defect** - the bench stamps every
+device-tier row `vulkan`, so a CUDA rate lands in the Vulkan leg and reads as the Vulkan home's.
 
 **A diff that writes a reference-engine row (a run row whose `engine` is not `das`) carrying a
 `sha` stamps it with the standing ref pin (`DEFAULT_REF_SHA`, `../benchmarks/setup_lcpp_ref.das`)
@@ -109,10 +108,11 @@ across tools lands in the second tool's record carrying the wrong engine, and lo
 **Outside `model_specs()` (text, in `model_specs.das`) and `asr_catalog()` (audio, in
 `profile_common.das`), a `.das` function under this folder that lists model files, quants,
 board membership, provenance, or parity fixtures is a defect - write it as a view over those
-two functions.** Board membership is which models the site results board shows.
+two functions (a function that iterates, filters or picks their rows).** Board membership is
+which models the site results board shows.
 
-**A diff that adds or changes a view over `model_specs()` or `asr_catalog()` recomputes from
-them on every call; a view storing a `url`, `bytes`, or `sha256` of its own is a defect.**
+**A diff that adds or changes a view over `model_specs()` or `asr_catalog()` recomputes from them
+on every call; a view storing a `url`, `bytes`, or `sha256` of its own is a defect.**
 
 **A view over `model_specs()` or `asr_catalog()` selects its rows by one field whose value on
 the row states membership; a view that matches a field against a list of literal values - file
@@ -121,10 +121,10 @@ drifts from the first.
 
 **A diff that makes a records row, a sidecar archive or a `defaults/` profile under this
 folder pin a model file pins it through that file's row in `model_specs()` (`model_specs.das`)
-or `asr_catalog()` (`profile_common.das`), and that row carries the file's `url`, `bytes` and
-`sha256`, or a `recipe` a reader can run.** One function in `model_specs.das` whose own body
-carries those three fields may stand in for the row; an accessor forwarding to another
-accessor, or an unnamed table lookup, does not.
+or `asr_catalog()` (`profile_common.das`) carrying the file's `url`, `bytes` and `sha256` or a
+`recipe` a reader can run, or through one `model_specs.das` function whose own body carries the
+file's `url`, `bytes` and `sha256`.** An accessor forwarding to another
+accessor, or an unnamed table lookup, does not pin a file.
 
 **A diff that adds a companion artifact - a file fetched or verified with a model and consumed
 beside it: a projector, a draft head, an assistant sidecar, an image fixture - puts it in the
@@ -149,10 +149,11 @@ under `--convert`, a timing runs under `gen_bench_records.das` or a
 
 **A diff that adds a row or a `companions` entry, or changes a `bytes`, `sha256` or `recipe`
 value, in `model_specs.das` or `profile_common.das` records its settling evidence in the PR
-description: one `fetch_models.das -- -o <name>` run per changed row, on a box holding that
-row's model file, ending `0 pending, 0 failed` with the row reported `ok`, plus one unscoped
-`fetch_models.das --` run in which no row the diff touched is `pending`.** A box stocks only
-some of the rows, so an unscoped run's `pending` count is the box's.
+description: one `fetch_models.das -- -o <name>` run per entry it adds or changes (`<name>` the
+entry's local file name), on a box holding that entry's model file, ending `0 pending, 0 failed`
+with the entry `ok`, plus one unscoped `fetch_models.das --` run in which no entry the diff
+touched is `pending`.** A box stocks
+only some rows, so an unscoped run's `pending` count is the box's.
 
 **A diff that adds a `recipe` row carrying no `sha256`, or changes such a row's `recipe`,
 records, in the PR description, the conversion command as run and the produced file's

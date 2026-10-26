@@ -6153,41 +6153,12 @@ class TowerSpecDft {
     }
 }
 
-struct TowerMelLogArgs {
-    n_bins : uint
-    n_mel : uint
-    n_frames : uint
-    floor : float
-    scale : float        //! the log's scale: log10 e for a log10 store, 1 for the natural log
-    frame_major : uint   //! 1 = rows [frame][mel] (gemma4a, canary), 0 = [mel][frame] (the whisper preprocessors)
-    add_floor : uint     //! 1 = log(sum + floor) (canary), 0 = log(max(sum, floor))
-}
-
-//! the log filterbank: one thread per (mel row, frame) sums the frame's spectrum against the row's filter; the thread
-//! order is the store's, so either layout writes coalesced
-[vk_dispatch(name = "tower_mel_log_cls", grid = "wgs", params = "wgs : int64")]
-class TowerMelLog {
-    @ssbo @binding = 0 pw : array<float>
-    @ssbo @binding = 1 fil : array<float>
-    @ssbo @binding = 2 outm : array<float>
-    @push_constant pa : TowerMelLogArgs
-
+//! the log filterbank of gemma4a, canary, gigaam and the whisper preprocessors, on the template both homes stamp (GkMelLog)
+[vk_dispatch(name = "tower_mel_log_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TowerMelLog : GkMelLog {
     [spirv_kernel(local_size_x = 256, name = "tower_mel_log_cls_spv")]
     def run {
-        let gid = gl_GlobalInvocationID.x
-        if (gid < pa.n_mel * pa.n_frames) {
-            let nl = max(1u, pa.n_frames)
-            let nm = max(1u, pa.n_mel)
-            let j = pa.frame_major != 0u ? gid % nm : gid / nl
-            let frame = pa.frame_major != 0u ? gid / nm : gid % nl
-            let pb = frame * pa.n_bins
-            let fb = j * pa.n_bins
-            var sum = 0.0
-            for (k in urange(pa.n_bins)) {
-                sum += pw[pb + k] * fil[fb + k]
-            }
-            outm[gid] = log(pa.add_floor != 0u ? sum + pa.floor : max(sum, pa.floor)) * pa.scale
-        }
+        mel_log_body()
     }
 }
 
@@ -6197,6 +6168,15 @@ class TowerMelNorm : GkMelNorm {
     [spirv_kernel(local_size_x = 64, name = "tower_mel_norm_cls_spv")]
     def run {
         mel_norm_body()
+    }
+}
+
+//! gigaam's windowed frames off the raw samples, on the template both homes stamp (GkFrameWindow)
+[vk_dispatch(name = "tower_ga_frames_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TowerGaFrames : GkFrameWindow {
+    [spirv_kernel(local_size_x = 256, name = "tower_ga_frames_cls_spv")]
+    def run {
+        frame_window_body()
     }
 }
 
@@ -6504,6 +6484,101 @@ class TowerPkDw : GkDwConvRows {
     [spirv_kernel(local_size_x = 256)]
     def run {
         dw_conv_rows_body()
+    }
+}
+
+//! GigaAM's depthwise conv on `GkDwConvRows`: centered over tap-major taps, the bias first and no epilogue (its LayerNorm and
+//! SiLU follow as row passes)
+[vk_dispatch(name = "tower_ga_dw_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TowerGaDw : GkDwConvRows {
+    override FORM = 3
+    override TAP_MAJOR = true
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        dw_conv_rows_body()
+    }
+}
+
+//! the same conv over the carrier's f16 taps (`GkDwConvRows`, TAP_F16): the halfword plane at binding 3, the bias row in `wn`
+[vk_dispatch(name = "tower_ga_dwh_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TowerGaDwH : GkDwConvRows {
+    override FORM = 3
+    override TAP_MAJOR = true
+    override TAP_F16 = true
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        dw_conv_rows_body()
+    }
+}
+
+// ===== the silero VAD's two stamps (the tower driver's VAD seat) =====
+
+//! the VAD's encoder on `GkVadEnc`: a workgroup of 128 a chunk, every chunk of the call
+[vk_dispatch(name = "tower_vad_enc_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TowerVadEnc : GkVadEnc {
+    [spirv_kernel(local_size_x = 128)]
+    def run {
+        vad_enc_body()
+    }
+}
+
+//! the VAD's recurrence and decoder on `GkVadLstm`: one workgroup of 1024 walks every chunk
+[vk_dispatch(name = "tower_vad_lstm_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TowerVadLstm : GkVadLstm {
+    [spirv_kernel(local_size_x = 1024)]
+    def run {
+        vad_lstm_body()
+    }
+}
+
+// ===== the transducer greedy decode's four stamps (the ASR-decoder driver's transducer seat) =====
+
+//! an LSTM layer of the transducer's predictor step on `GkRnntPred`: eight gate elements a workgroup of 256
+[vk_dispatch(name = "rnnt_gates_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class RnntGates : GkRnntPred {
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        pred_body()
+    }
+}
+
+//! joint.pred's projection behind the predictor's last layer (`GkRnntPred`, GATES off): eight rows a workgroup of 256
+[vk_dispatch(name = "rnnt_proj_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class RnntProj : GkRnntPred {
+    override GATES = false
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        pred_body()
+    }
+}
+
+//! the transducer's joint over a window of frames (`GkRnntJoint`): a 64-logit slice a workgroup, four a 256-logit block
+[vk_dispatch(name = "rnnt_joint_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class RnntJoint : GkRnntJoint {
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        joint_body()
+    }
+}
+
+//! the transducer's greedy pick over the window (`GkRnntPick`): one workgroup of 256
+[vk_dispatch(name = "rnnt_pick_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class RnntPick : GkRnntPick {
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        pick_body()
+    }
+}
+
+//! the CTC head's pick over the head GEMM's rows (`GkCtcPick`): a workgroup of 256 a frame
+[vk_dispatch(name = "ctc_pick_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class CtcPick : GkCtcPick {
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        ctc_pick_body()
     }
 }
 
@@ -8378,6 +8453,37 @@ def vt_tile(cm2 : bool; width, rows : int64) : VtTile {
 def vt_tile_ensure(t : VtTile) : bool => t.tc > 0l ? cm2_cls_ensure(int(KqFmt.q8), t.tc) : q8_batch_cls_ensure(t.v)
 
 def vt_tile_groups(t : VtTile; width, rows : int64) : int64 => t.tc > 0l ? cm2_tiles_at(width, rows, t.tc) : vt_gemm_groups(width, rows)
+
+//! a FastConformer block chain's head size: the width over the heads, 0 with no heads
+def vt_fc_hs(d, n_head : int64) : int64 => n_head > 0l ? d / n_head : 0l
+
+//! the FastConformer block chain's widths, heads and row counts at `npos` rows (`ww` the relative form's position window);
+//! `rope_n` the shorter rope table's floats (the rotary form)
+def vt_fc_shape_ok(rotary : bool; d, ff, n_head, conv_kernel, npos, ww, rope_n : int64) : bool {
+    let hs = vt_fc_hs(d, n_head)
+    let heads_ok = rotary ? (hs % 2l == 0l && hs <= 128l && rope_n >= npos * (hs / 2l)) : (hs == 64l || hs == 128l)
+    return (d % 64l == 0l && ff % 64l == 0l && ff >= 2l * d && heads_ok && n_head * hs == d && conv_kernel % 2l == 1l
+        && npos > 0l && (rotary || ww == 2l * npos - 1l))
+}
+
+//! every class and tile the FastConformer block chain dispatches at `npos` rows, compiled; `cm2` the f16 feed's tiles
+def vt_fc_classes_ok(rotary : bool; d, ff, n_head, npos, ww : int64; khr, gemm_khr, cm2 : bool) : bool {
+    let hs = vt_fc_hs(d, n_head)
+    let hsp = hs <= 64l ? 64l : 128l
+    let rel_ok = rotary || ((hs == 64l ? ensure_tower_cn_attn_r64_cls() : ensure_tower_cn_attn_r_cls()) && ensure_tower_rel_sincos_cls())
+    let rot_ok = (!rotary || (ensure_tower_rope_tab_cls() && ensure_tower_hpad_b_cls() && ensure_tower_hunpad_cls() && ensure_tower_ga_dw_cls() && ensure_tower_ga_dwh_cls()
+        && fa_stamp_ensure(khr, hsp, false, false, false, false, true)))
+    if (!rel_ok || !rot_ok || !ensure_tower_ln_cls() || !ensure_tower_clamp_rq_cls() || !ensure_tower_bias_act_cls() || !ensure_tower_post_add_ln_cls()
+            || !ensure_tower_glu_sig_cls() || !ensure_tower_cn_dw_cls() || !ensure_tower_pk_dw_cls() || !ensure_tower_hpad16_cls()
+            || !ensure_tower_hpad16_b_cls() || !f16_gemm_ensure(gemm_khr) || !ensure_tower_post_add_ln_nb_cls() || !ensure_tower_act_cls()) {
+        return false
+    }
+    return (vt_tile_ensure(vt_tile(cm2, d, npos)) && vt_tile_ensure(vt_tile(cm2, ff, npos)) && vt_tile_ensure(vt_tile(cm2, 2l * d, npos))
+        && vt_tile_ensure(vt_tile(cm2, d, rotary ? npos : ww)) && (!cm2 || ensure_tower_clamp_cvt_cls()))
+}
+
+//! the window's element base in the gigaam front's twiddle buffer: past the [n_fft][2 n_bins] twiddles
+def vt_ga_mel_woff(n_fft : int64) : int64 => n_fft * 2l * (n_fft / 2l + 1l)
 
 //! the rows a GEMM record carries: on the l column the encode's rounded up to the column, else the raw count
 [arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]

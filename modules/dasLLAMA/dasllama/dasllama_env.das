@@ -116,6 +116,9 @@ struct public EngineEnv {
 
     @clarg_doc = "Readahead of the prepared image at its map (madvise WILLNEED, synchronous on macOS): a purged page cache then reads the whole image at the SSD's rate before the first token - 103 GB in 15 s on the M5 - instead of paying 2.5x on the routed expert stacks over the first 128 tokens, and a WARM map pays ~2.5 s for the page walk in place of 65 ms. A serving process that runs for hours wants it; a bench, a test or a short session does not."
     prefetch_image : bool = false
+
+    @clarg_doc = "The streaming silero VAD (`vad_iter_feed`, the live-mic callers) runs each feed's whole chunks through the GPU driver's VAD seat (Metal, or Vulkan where it serves) instead of the CPU chunk step; off, the measured-faster form for one 32 ms chunk. The batch VAD (`vad_probs`, `find_speech_timestamps`) takes the seat whatever this says; `set_vad_stream_gpu` is the in-process twin."
+    vad_stream_gpu : bool = false
 }
 
 // Tri-state on purpose: the tier's effective defaults are computed from set_gpu_tier_want state
@@ -282,7 +285,7 @@ struct public MetalEnv {
     @clarg_doc = "Serve the non-causal media span on the prefill driver (AttnArgs.uend); 0 declines it to the CPU arm, which then needs declared CPU intent."
     span : bool = true
 
-    @clarg_doc = "Serve tower/embedder encodes on the Metal tower driver - the gemma4uv chain, the gemma4v ViT and gemma3v SigLIP block loops (their exact-plane lanes), the whisper-class block loops, the gemma4a Conformer and the canary / parakeet FastConformer block loops (their f32 lanes), the whole StyleTTS2 (kitten / kokoro) synthesis - PL-BERT, the text and duration encoders, the duration head, prosody, the decoder, the harmonic source, the generator and the inverse STFT - on both weight lanes, the Pocket TTS codec and frame loop, and the conv frontends (whisper im2col + the qwen3a conv2d, which serves the q8 default); 0 pins the CPU tower."
+    @clarg_doc = "Serve tower/embedder encodes on the Metal tower driver - the gemma4uv chain, the gemma4v ViT and gemma3v SigLIP block loops (their exact-plane lanes), the whisper-class block loops, the gemma4a Conformer and the canary / parakeet FastConformer block loops (their f32 lanes), the whole StyleTTS2 (kitten / kokoro) synthesis - PL-BERT, the text and duration encoders, the duration head, prosody, the decoder, the harmonic source, the generator and the inverse STFT - on both weight lanes, the Pocket TTS codec and frame loop, the conv frontends (whisper im2col + the qwen3a conv2d, which serves the q8 default), the GigaAM encode and CTC head (both weight lanes: the f16 halfwords, the q8 slab), and the silero VAD seat; 0 pins the CPU tower."
     tower : bool = true
 
     @clarg_doc = "Serve a tower's weighted GEMMs from a halfword twin of its weights on the crowned tensor mul_mm twins: the image's baked f16 twin plane where the mint bakes one (only for f16-sourced GEMMs, so it holds the file's own values), and the FastConformer chain's device twin of parakeet's f32 blob. Needs a tensor crown - a box without one, or an image without the plane, keeps the f32 route; 0 pins the f32 GEMM route - the A/B rail."
@@ -296,6 +299,9 @@ struct public MetalEnv {
 
     @clarg_doc = "Serve the whisper DECODE STEP on the GPU too (needs wdec). Small decoders (n_text_state under the 512 floor; set_metal_wdec_step_min_d) keep the CPU rail - the per-dispatch latency floor beats them."
     wdec_step : bool = true
+
+    @clarg_doc = "Serve the transducer greedy decode (parakeet, GigaAM's RNNT head) on the Metal ASR-decoder driver: the joint's encoder projection off the encode's device rows and the whole loop in command buffers of rounds, the tokens read back once; 0 pins the CPU decoder - the A/B rail."
+    rnnt : bool = true
 
     @clarg_doc = "Fused single-pass decode attention (a head of 64, 96, 128, 256 or 512 on every KV codec; sliding windows, attention sinks, the logit soft cap and a second head class included), on the single row, the speculative verify's rows and the batch; 0 is the A/B rail to the chunked pair."
     attn_d : bool = true
@@ -494,8 +500,14 @@ struct public VulkanEnv {
     @clarg_doc = "Serve the vision towers' block loops (gemma4v, gemma3v, qwen3v, qwen25v), the audio towers' (the whisper-class towers, gemma4a, canary) and the TTS seats (the StyleTTS2 families kitten and kokoro, Pocket) on the Vulkan tower and TTS drivers - the announce is `dasLLAMA vulkan tower: <family> serves on the device`, once per model when it first serves; 0 pins the CPU chains, announced once as the knob decline."
     vk_tower : bool = true
 
+    @clarg_doc = "GigaAM's lane policy on the Vulkan tower: 1 prefers the exact lane - the block GEMMs on the f16 GEMM over the carrier's own halfwords - over the q8 image for an un-pinned load; 0 (the default, until the two lanes are timed on a Vulkan box) keeps the q8 image. Both lanes serve on the device; the family's lane pin overrides it, `set_vulkan_gigaam_exact_lane` is the in-process lever."
+    vk_gigaam_exact : bool = false
+
     @clarg_doc = "Serve the whisper decoder side (the per-window cross-KV and the decode step) on the Vulkan ASR-decoder driver - the announce is `dasLLAMA vulkan wdec: the whisper decoder serves on the device`, once per model; 0 pins the CPU decoder, announced once as the knob decline."
     vk_wdec : bool = true
+
+    @clarg_doc = "Serve the transducer greedy decode (parakeet, GigaAM's RNNT head) on the Vulkan ASR-decoder driver: the joint's encoder projection off the encode's device rows where the lane's projection is f32, and the whole loop in command buffers of rounds, the tokens read back once; 0 pins the CPU decoder - the A/B rail."
+    vk_rnnt : bool = true
 
     @clarg_doc = "Merged k|v prefill GEMM - one dispatch over the adjacent k+v arena planes; 0 pins the split k + v dispatches for a same-build A/B."
     vk_kv_merge : bool = true
@@ -799,6 +811,11 @@ struct public ProfilingEnv {
     @clarg_doc = "Directory of whisper.cpp models for ASR reference baselines."
     whisper_cpp_models : string = ""
 
+    @clarg_env = "CRISPASR"
+    @clarg_path
+    @clarg_doc = "CrispASR checkout used for the GigaAM ASR reference baselines (its Metal build in build/, its CPU-only build in build-cpu/)."
+    crispasr : string = "../CrispASR"
+
     @clarg_env = "MTMD_BIN"
     @clarg_path
     @clarg_doc = "llama-mtmd-cli binary for multimodal reference baselines."
@@ -828,6 +845,11 @@ struct public ProfilingEnv {
     @clarg_path
     @clarg_doc = "Python interpreter of the TTS reference venv (kokoro, kittentts, onnxruntime, pocket-tts), for the text-to-speech baselines."
     tts_py : string = ""
+
+    @clarg_env = "GIGAAM_PY"
+    @clarg_path
+    @clarg_doc = "Python interpreter of the GigaAM oracle venv (upstream gigaam + torch), for the GigaAM external-reference dumps."
+    gigaam_py : string = ""
 
     @clarg_env = "OS"
     @clarg_default_doc = "set by Windows"

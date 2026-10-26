@@ -65,15 +65,14 @@ specialization path - one code path per constant shape, a compiled variant or a 
 is a literal - or records the kernel as having none in an `ARCHITECTURE*.md` at the root of the
 module it ships in.**
 
-**A diff that makes a claim, in a commit message, a PR body or a line of an `ARCHITECTURE*.md`,
-about a kernel's emitted shape, or that a kernel's emitted output did not change, reads the claim
-from the emitted artifact - the words or text the opening names for the kernel's emitter - never
-from the das source, and names in its PR body the artifact read and the value read there, or, for
-a no-change claim, that the artifacts before and after the diff matched.** A claim about what the
-emitted text contains or leaves out is a claim about the emitted shape whatever das mechanism
-produces it; a statement whose subject is a das construct (a `static_if` arm, a template
-constant) and that says nothing of the emitted text or words is not one, and a section moved
-between architecture docs with its text unchanged makes no new claim.
+**A diff that makes a new claim, in a commit message, a PR body or a line of an
+`ARCHITECTURE*.md`, about what a kernel's emitted words or text contain or leave out, or that a
+kernel's emitted output did not change, reads the claim from the emitted artifact - the words or
+text the opening names for the kernel's emitter - never from the das source, and names in its PR
+body the artifact read and the value read there, or, for a no-change claim, that the artifacts
+before and after the diff matched.** A claim about a das construct alone, or about where the
+driver keeps a value (registers, spills), names nothing an emitted artifact shows; a section moved
+between architecture docs unchanged makes no new claim.
 
 **A diff that teaches one emitter a kernel-model capability another lacks, or adds a kernel body
 that uses a capability not every emitter has, adds that capability to the emitters lacking it or

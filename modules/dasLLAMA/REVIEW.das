@@ -13,9 +13,11 @@ require dastest/review_gate
 
 let private FACADE = "modules/dasLLAMA/dasllama/dasllama.das"
 // dasllama.das defines nothing itself: it re-exports dasllama_core.das (the facade without the
-// file decoders), which re-exports the TTS surface, so their defs are facade defs and the
-// coverage floor reads all three files.
-let private FACADE_FILES = [FACADE, "modules/dasLLAMA/dasllama/dasllama_core.das", "modules/dasLLAMA/dasllama/dasllama_tts.das"]
+// file decoders), which re-exports the TTS surface and, through the ASR surface, the GigaAM
+// family and the shared transducer, so their defs are facade defs and the coverage floor reads
+// every one of these files.
+let private FACADE_FILES = [FACADE, "modules/dasLLAMA/dasllama/dasllama_core.das", "modules/dasLLAMA/dasllama/dasllama_tts.das",
+                            "modules/dasLLAMA/dasllama/dasllama_gigaam.das", "modules/dasLLAMA/dasllama/dasllama_rnnt.das"]
 let private TUTORIAL_DIR = "tutorials/dasLLAMA"
 let private RST_DIR = "doc/source/reference/tutorials"
 
@@ -89,7 +91,22 @@ var private FACADE_DEFS_WITHOUT_TUTORIAL <- {
     "prefix_state_match_len", "prefix_attach_state_split", "prefix_state_touch",   //! the scheduler's lookups of a recurrent checkpoint in its prefix cache
     "prefix_share_pages", "prefix_insert_snapshot",   //! the scheduler's writes of shared pages and device-taken checkpoints into its prefix cache
     "gpu_device_kv_pool_armed",   //! the scheduler reads DASLLAMA_DEVICE_POOL through it; a user sets the variable
-    "gpu_device_kv_pool_moves"   //! the region-pool traffic counter a fixture or a bench reads
+    "gpu_device_kv_pool_moves",   //! the region-pool traffic counter a fixture or a bench reads
+    "stage_gigaam_model", "mint_gigaam_model", "load_gigaam_model",   //! the ASR loader chain and dasllama-convert stage, mint and load GigaAM; a user program calls load_asr_model
+    "gigaam_check_arch", "gigaam_check_hparams", "gigaam_image_tag",   //! the GigaAM loader chain's file checks and its prepared-image tag
+    "gigaam_transcribe", "gigaam_asr_caps", "gigaam_check_lang", "gigaam_exec_fmt",   //! the ASR surface's GigaAM arm; a user program calls transcribe / caps / create_session
+    "gigaam_device_gpu", "gigaam_gpu_serves", "gigaam_gpu_exact_serves", "gigaam_serves_q8",   //! the ASR surface's lane report for a GigaAM model; a user program reads it through the surface
+    "set_gigaam_q8", "reset_gigaam_q8",   //! the family's weight-lane pin a fixture sets; a user program pins the ASR lane with set_asr_fp32
+    "gigaam_log_mel", "gigaam_conv_out", "gigaam_encode_front", "gigaam_rope_tables",   //! the encoder stages the transcribe arm and the device towers drive
+    "gigaam_encode_block", "gigaam_encode", "gigaam_mel_frames", "gigaam_encode_span",   //! the encoder stages the transcribe arm and the device towers drive
+    "gigaam_layer_offsets", "gigaam_decode", "gigaam_detokenize", "gigaam_chunks", "gigaam_spans",   //! the encoder's plane offsets and the decode stages the transcribe arm drives
+    "register_gigaam_gpu", "register_gigaam_gpu_encode", "register_gigaam_gpu_ctc", "register_rnnt_gpu",   //! the Metal and Vulkan towers and decoders register their device seats through them
+    "rnnt_greedy", "rnnt_decode", "rnnt_n_logits", "rnnt_joint_blocks", "rnnt_step_lanes",   //! the shared transducer decode the parakeet and gigaam families drive
+    "rnnt_dev_args", "rnnt_dev_cap", "rnnt_dev_faulted", "rnnt_dev_first_input", "rnnt_dev_key",   //! the host half of the device transducer decode the Metal and Vulkan seats call
+    "rnnt_dev_land_tokens", "rnnt_dev_layer_args", "rnnt_dev_layout", "rnnt_dev_round_budget",   //! the host half of the device transducer decode the Metal and Vulkan seats call
+    "rnnt_dev_rounds", "rnnt_dev_shape_ok", "rnnt_dev_slab", "rnnt_dev_state_words",   //! the host half of the device transducer decode the Metal and Vulkan seats call
+    "set_rnnt_dev_fault", "set_rnnt_dev_round_budget", "set_rnnt_lane_work_probe_",   //! probe seams a fixture sets to force a device fault, a round budget or a lane split
+    "set_rnnt_trace"   //! the CPU transducer decode's per-frame trace an engine developer flips while bringing a family up
 }
 
 [arch(at = "ARCHITECTURE_TTS.md#text-to-speech")]
@@ -124,6 +141,7 @@ def private check_tutorial_floor(tut_texts, rst_texts : array<string>) {
 
 let private AUDIO_CARRIER = "modules/dasLLAMA/dasllama/dasllama_audio_embedder.das"
 let private VISION_CARRIER = "modules/dasLLAMA/dasllama/dasllama_vision_embedder.das"
+let private ASR_CARRIER = "modules/dasLLAMA/dasllama/dasllama_asr.das"
 
 // The licensed family namers per modality - the ARCHITECTURE_MEDIA.md carrier charters (§1.7,
 // §1.7b) ledger each with its reason.
@@ -137,6 +155,21 @@ var private AUDIO_SEAM_EXEMPT <- {
     "utils/dasllama-convert/main.das"
 }
 
+var private ASR_SEAM_EXEMPT <- {
+    "modules/dasLLAMA/dasllama/dasllama_audio_embedder.das",
+    "modules/dasLLAMA/dasllama/dasllama_metal_tower.das",
+    "modules/dasLLAMA/dasllama/dasllama_metal_asr_dec.das",
+    "modules/dasLLAMA/dasllama/dasllama_vulkan_tower.das",
+    "modules/dasLLAMA/dasllama/dasllama_vulkan_asr_dec.das",
+    "modules/dasLLAMA/benchmarks/asr/asr_bench.das",
+    "modules/dasLLAMA/harness/pk_parity_probe.das",
+    "modules/dasLLAMA/harness/cpu_asr_race.das",
+    "utils/dasllama-convert/main.das"
+}
+
+//! a carrier kind served by another kind's family file - the two kinds share one family by design
+var private ASR_KIND_FILES <- { "dasllama_qwen3omni" => "dasllama_qwen3a" }
+
 var private VISION_SEAM_EXEMPT <- {
     "modules/dasLLAMA/dasllama/dasllama_metal_tower.das",
     "modules/dasLLAMA/dasllama/dasllama_vulkan_tower.das",
@@ -147,7 +180,7 @@ def private carried_families(carrier, kind_enum : string) : array<string> {
     var fams : array<string>
     var in_kind = false
     for (line in split(fread(carrier), "\n")) {
-        if (starts_with(line, "enum {kind_enum}")) {
+        if (starts_with(line, "enum {kind_enum}") || starts_with(line, "enum private {kind_enum}")) {
             in_kind = true
         } elif (in_kind && starts_with(line, "}")) {
             break
@@ -194,13 +227,27 @@ def private collect_das_files(folder : string; var out : array<string>; prune_pr
 }
 
 def private check_family_seams(carrier, kind_enum : string; exempt : table<string>; route_hint : string) {
+    var inscope kind_files : table<string; string>
+    check_family_seams(carrier, kind_enum, exempt, kind_files, "ARCHITECTURE_MEDIA.md's carrier charter", route_hint)
+}
+
+def private check_family_seams(carrier, kind_enum : string; exempt : table<string>; kind_files : table<string; string>;
+                               charter, route_hint : string) {
     var licensed <- [for (k in keys(exempt)); k]
     licensed |> sort()
     let licensed_text = join(licensed, ", ")
-    for (fam in carried_families(carrier, kind_enum)) {
+    var inscope fams <- carried_families(carrier, kind_enum)
+    for (fam in fams) {
+        let owner = kind_files?[fam] ?? fam
+        if (owner != fam) {
+            if (!has_value(fams, owner)) {
+                gate_finding(carrier, "{kind_enum} arm {fam} is declared to share {owner}'s family file, but {owner} is no {kind_enum} arm - a shared file is another kind's own ({charter})")
+            }
+            continue
+        }
         let fam_path = "modules/dasLLAMA/dasllama/{fam}.das"
         if (!fexist(fam_path)) {
-            gate_finding(carrier, "{kind_enum} arm {fam} has no {fam_path} - the carrier names a family the module does not carry, and its seams would go unpoliced")
+            gate_finding(carrier, "{kind_enum} arm {fam} has no {fam_path} - the carrier names a family the module does not carry, and its seams would go unpoliced ({charter})")
             continue
         }
         var inscope names : array<string>
@@ -215,7 +262,7 @@ def private check_family_seams(carrier, kind_enum : string; exempt : table<strin
             let text = strip_line_comments(fread(p))
             for (n in names) {
                 if (contains_word(text, n)) {
-                    gate_finding(p, "names {n}, which the {fam} family owns - outside the family's own file a family type is named only in the carrier, in the licensed namers ARCHITECTURE_MEDIA.md's carrier charter ledgers ({licensed_text}) and under tests/; route through the carrier ({route_hint})")
+                    gate_finding(p, "names {n}, which the {fam} family owns - outside the family's own file a family type is named only in the carrier, in the licensed namers {charter} ledgers ({licensed_text}) and under tests/; route through the carrier ({route_hint})")
                 }
             }
         }
@@ -335,6 +382,251 @@ def private check_mirror_slab_access {
         ["k_slabs[", "v_slabs[", "pf_kv_store_sets[", "pf_kv_shadow_sets["],
         "indexes a K/V mirror slab array by something other than a layer's seat - take the layer's slab through rd_slab(L), or index the per-slab set by L.mir_slab (ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan)") $(line) {
         return find(line, ".mir_slab]") >= 0
+    }
+}
+
+//! one top-level function of a scanned file: its attribute text, parameter names and line span (0-based, inclusive)
+struct private PcFn {
+    attrs : string
+    params : array<string>
+    first : int
+    last : int
+}
+
+//! the parameter names a `def` line declares
+def private def_params(sig : string) : array<string> {
+    var names : array<string>
+    let open = find(sig, "(")
+    return <- names if (open < 0)
+    let close = find(sig, ")", open)
+    let inner = slice(sig, open + 1, close >= 0 ? close : length(sig))
+    for (piece in split(inner, ";")) {
+        let colon = find(piece, ":")
+        continue if (colon < 0)
+        for (n in split(slice(piece, 0, colon), ",")) {
+            let w = ident_suffix(strip(n))
+            names |> push(w) if (!empty(w))
+        }
+    }
+    return <- names
+}
+
+//! the top-level functions of `lines`: a function runs from its `def` to the line before the next column-0 line
+def private pc_functions(lines : array<string>) : array<PcFn> {
+    var fns : array<PcFn>
+    var attrs : array<string>
+    for (line, i in lines, count()) {
+        continue if (empty(line) || is_white_space(first_character(line)) || starts_with(line, "}"))
+        if (!empty(fns) && fns[length(fns) - 1].last < 0) {
+            fns[length(fns) - 1].last = i - 1
+        }
+        if (starts_with(line, "[")) {
+            attrs |> push(line)
+        } elif (starts_with(line, "def ")) {
+            fns |> emplace(PcFn(attrs = join(attrs, " "), params <- def_params(line), first = i, last = -1))
+            attrs |> clear()
+        } else {
+            attrs |> clear()
+        }
+    }
+    if (!empty(fns) && fns[length(fns) - 1].last < 0) {
+        fns[length(fns) - 1].last = length(lines) - 1
+    }
+    return <- fns
+}
+
+//! the text of a call's first argument, from just past its open paren to the first top-level comma
+def private first_arg(s : string; open : int) : string {
+    var depth = 0
+    var n = open + 1
+    peek_data(s) $(d) {
+        while (n < length(d)) {
+            let c = int(d[n])
+            if (c == '(' || c == '[') {
+                depth++
+            } elif (c == ')' || c == ']') {
+                break if (depth == 0)
+                depth--
+            } elif (c == ',' && depth == 0) {
+                break
+            }
+            n++
+        }
+    }
+    return strip(slice(s, open + 1, n))
+}
+
+//! a buffer path with its trailing index groups cut (`s.devs[i]` -> `s.devs`)
+def private cut_index(path : string) : string {
+    var n = 0
+    peek_data(path) $(d) {
+        n = length(d)
+        while (n > 0 && int(d[n - 1]) == ']') {
+            var depth = 0
+            var i = n - 1
+            while (i >= 0) {
+                let c = int(d[i])
+                if (c == ']') {
+                    depth++
+                } elif (c == '[') {
+                    depth--
+                    break if (depth == 0)
+                }
+                i--
+            }
+            break if (i < 0)
+            n = i
+            while (n > 0 && is_white_space(int(d[n - 1]))) {
+                n--
+            }
+        }
+    }
+    return slice(path, 0, n)
+}
+
+let private PC_ALLOCATORS = ["_device_buf(", "_dev_buf(", "_call_buf(", "dev_from(", "dev_upload("]
+
+def private has_allocator(s : string) : bool {
+    for (a in PC_ALLOCATORS) {
+        return true if (find(s, a) >= 0)
+    }
+    return false
+}
+
+//! The right-hand sides that set buffer field `f` in `line`: a field assignment (`.f = `, `.f[i] = `), a named
+//! initializer (`(f = `, `, f = `), or a push into it (`.f |> push(`).
+def private field_rhs(line, f : string) : array<string> {
+    var out : array<string>
+    peek_data(line) $(d) {
+        for (lead in [".", "(", ", "]) {
+            let key = "{lead}{f}"
+            var at = find(line, key)
+            while (at >= 0) {
+                var p = at + length(key)
+                if (p < length(d) && !is_ident_byte(int(d[p]))) {
+                    if (int(d[p]) == '[') {
+                        p = find(line, "]", p) + 1
+                    }
+                    if (p > 0 && find(line, " = ", p) == p) {
+                        out |> push(first_arg(line, p + 2))
+                    } elif (p > 0 && lead == "." && find(line, " |> push(", p) == p) {
+                        out |> push(first_arg(line, p + 8))
+                    }
+                }
+                at = find(line, key, at + 1)
+            }
+        }
+    }
+    return <- out
+}
+
+//! Every allocation that can land in buffer field `f`, followed through field aliases (`dev = s.devs[slot]`,
+//! `k_slabs |> push(mir.a)`): file:line plus whether it carries the per-call property.
+def private pc_field_allocs(f : string; files : array<string>; texts : array<array<string>>; var seen : table<string>;
+                            var out : array<tuple<at : string; call : bool>>) {
+    return if (key_exists(seen, f))
+    seen |> insert(f)
+    for (path, lines in files, texts) {
+        for (line, li in lines, count()) {
+            continue if (find(line, f) < 0)
+            for (rhs in field_rhs(line, f)) {
+                if (has_allocator(rhs)) {
+                    out |> push((at = "{path}:{li + 1}", call = find(rhs, "_call_buf(") >= 0))
+                } else {
+                    let alias = path_prefix(strip(rhs))
+                    if (find(alias, ".") >= 0) {
+                        pc_field_allocs(ident_suffix(cut_index(alias)), files, texts, seen, out)
+                    }
+                }
+            }
+        }
+    }
+}
+
+//! ARCHITECTURE_GPU_VULKAN_ROOM.md#vk-per-call-buffers: a host upload (`upload_region_at`, `upload_region`) in a
+//! function that is neither `[cold_path]` (a load-time fill) nor the one that allocated the buffer is a per-call
+//! fill, and every allocation that can land in its target buffer carries the per-call property (`*_call_buf`)
+def private check_per_call_buffers {
+    var inscope files : array<string>
+    collect_das_files("modules/dasLLAMA/dasllama", files)
+    var inscope vk : array<string>
+    for (p in files) {
+        vk |> push(p) if (starts_with(base_name(p), "dasllama_vulkan_"))
+    }
+    var inscope texts : array<array<string>>
+    texts |> reserve(length(vk))
+    for (p in vk) {
+        texts |> emplace(split(strip_line_comments(fread(p)), "\n"))
+    }
+    for (fi in range(length(vk))) {
+        var inscope fns <- pc_functions(texts[fi])
+        for (fn in fns) {
+            continue if (find(fn.attrs, "cold_path") >= 0)
+            for (li in range(fn.first, fn.last + 1)) {
+                let line = texts[fi][li]
+                for (call in ["upload_region_at(", "upload_region("]) {
+                    let at = upload_call_at(line, call)
+                    if (at >= 0) {
+                        pc_check_site(vk, texts, fi, li, fn, first_arg(line, at + length(call) - 1))
+                    }
+                }
+            }
+        }
+    }
+}
+
+//! where `line` calls `call` (a whole identifier, not the `def` that declares it); -1 where it does not
+def private upload_call_at(line, call : string) : int {
+    let at = find(line, call)
+    return -1 if (at < 0 || find(line, "def {call}") == 0 || find(line, "def private {call}") == 0)
+    var bare = true
+    if (at > 0) {
+        peek_data(line) $(d) {
+            bare = !is_ident_byte(int(d[at - 1]))
+        }
+    }
+    return bare ? at : -1
+}
+
+def private pc_local_rhs(lines : array<string>; fn : PcFn; name : string) : string {
+    for (li in range(fn.first, fn.last + 1)) {
+        let line = strip(lines[li])
+        for (decl in ["let {name} = ", "var {name} = ", "let {name} & = ", "var {name} & = "]) {
+            return slice(line, length(decl)) if (starts_with(line, decl))
+        }
+    }
+    return ""
+}
+
+def private pc_check_site(vk : array<string>; texts : array<array<string>>; fi, li : int; fn : PcFn; target : string) {
+    var path = cut_index(target)
+    if (find(path, ".") < 0) {
+        return if (find_index(fn.params, path) >= 0)
+        let rhs = pc_local_rhs(texts[fi], fn, path)
+        return if (has_allocator(rhs))
+        path = cut_index(path_prefix(rhs))
+        if (find(path, ".") < 0) {
+            gate_finding(vk[fi], li + 1, "a host upload into `{target}`, a buffer this gate cannot follow to its allocation - name it through the field or local it was allocated into (ARCHITECTURE_GPU_VULKAN_ROOM.md#vk-per-call-buffers)")
+            return
+        }
+    }
+    let f = ident_suffix(path)
+    for (bl in range(fn.first, fn.last + 1)) {
+        for (rhs in field_rhs(texts[fi][bl], f)) {
+            return if (has_allocator(rhs))
+        }
+    }
+    var inscope seen : table<string>
+    var inscope allocs : array<tuple<at : string; call : bool>>
+    pc_field_allocs(f, vk, texts, seen, allocs)
+    if (empty(allocs)) {
+        gate_finding(vk[fi], li + 1, "a per-call upload into `{target}`, whose field `{f}` this gate finds no allocation for - allocate it into a field through a `*_call_buf` allocator (ARCHITECTURE_GPU_VULKAN_ROOM.md#vk-per-call-buffers)")
+        return
+    }
+    for (a in allocs) {
+        if (!a.call) {
+            gate_finding(vk[fi], li + 1, "a per-call upload into `{target}`, a buffer allocated at {a.at} without the per-call property - allocate every buffer the host refills after a device read through make_call_buf / try_call_buf / soft_call_buf or the driver's *_call_buf, or mark this function [cold_path] when it is a load-time fill (ARCHITECTURE_GPU_VULKAN_ROOM.md#vk-per-call-buffers)")
+        }
     }
 }
 
@@ -924,7 +1216,7 @@ let private TTS_BLOCKS_FILE = "modules/dasLLAMA/dasllama/dasllama_tts_blocks.das
 // lines, hashed in file order. A closure change with IMAGE_VERSION unmoved is red; the finding prints the
 // value to re-stamp with.
 let private IMAGE_LAYOUT_STAMP_VERSION = 54
-let private IMAGE_LAYOUT_STAMP_HASH = 0x8df75dd6dcc76f80ul
+let private IMAGE_LAYOUT_STAMP_HASH = 0xff3e9603a75ad1beul
 
 // The helpers that decide WHERE bytes land: the page pad, the plane and total sizing, the
 // writer's append / zero-fill / header patch, the header's scalar stores, the lattice
@@ -935,7 +1227,8 @@ var private LAYOUT_HELPERS <- {
     "pad_to_page", "w_page", "plane_end", "image_total_bytes",
     "w_append", "w_zeros", "w_header", "store_at", "kq_plane_name",
     "blob_push", "weight_slot", "conv1d_weight_row",
-    "vk_mint_plane", "vk_mint_walk", "vk_mint_sink_append"
+    "vk_mint_plane", "vk_mint_walk", "vk_mint_sink_append",
+    "gg_stream_plane"
 }
 
 // The constants those helpers place bytes by, and the bands the two streaming writers stage
@@ -1799,6 +2092,43 @@ def private check_verify_decline_before_state_move {
     }
     if (!moved) {
         gate_finding(RESIDENT_FILE, "no `rdec_dn_own_all(` call inside the resident verify seat - the check that every verify-seat decline sits above the recurrent state's move to the device (ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-rollback) has no state move to order against; keep the spelling or move this check with it")
+    }
+}
+
+//! the capacity field a line assigns a non-zero value through a record (`r.cap_rows = cap`), "" elsewhere
+def private cap_assign_field(line : string) : string {
+    let s = strip(line)
+    let eq = find(s, " = ")
+    return "" if (eq < 0)
+    let lhs = slice(s, 0, eq)
+    let dot = rfind(lhs, ".")
+    return "" if (dot < 0 || find(lhs, " ") >= 0 || find(lhs, "[") >= 0)
+    let field = slice(lhs, dot + 1)
+    let is_cap = (field == "cap" || field |> starts_with("cap_") || field |> ends_with("_cap") || find(field, "_cap_") >= 0)
+    return "" if (!is_cap || field |> ends_with("_dev"))
+    let rhs = strip(slice(s, eq + 3))
+    return (rhs == "0l" || rhs == "0") ? "" : field
+}
+
+def private check_vk_scratch_cap_order {
+    var inscope files : array<string>
+    collect_das_files(ENGINE_DIR, files, true)
+    for (path in files) {
+        continue if (!(base_name(path) |> starts_with("dasllama_vulkan")))
+        var inscope fns <- function_bodies(path) $(_header) => true
+        for (f in fns) {
+            var cap_field = ""
+            var line_no = f.line - 1
+            for (line in split(f.body, "\n")) {
+                line_no++
+                if (empty(cap_field)) {
+                    cap_field = cap_assign_field(line)
+                } elif (find(line, "vk_range_ok(") >= 0) {
+                    gate_finding(path, line_no, "`{cap_field}` is assigned above this `vk_range_ok` check - a scratch builder that returns on the range check after setting its capacity leaves the capacity claiming buffers its release destroyed, and the next call within it skips the rebuild and dispatches into freed memory; assign the capacity after the range check (ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains)")
+                    break
+                }
+            }
+        }
     }
 }
 
@@ -2957,8 +3287,149 @@ def private check_tests_doc {
     check_regions_entries()
 }
 
+// ===== the HOW_TO documents' shape (REVIEW_DOCS.md) =====
+
+let private HOWTO_SECTION = "ARCHITECTURE_DOCS.md#howto-documents"
+//! the past-tense markers, lower-cased whole words outside backtick spans - each reads as a record of what happened, never as an instruction
+let private HOWTO_PAST_WORDS <- ["was", "were", "had", "previously", "formerly", "originally"]
+let private HOWTO_PAST_PHRASES <- ["used to ", "turned out", "back then"]
+
+def private outside_code_spans(line : string) : string {
+    let parts <- split(line, "`")
+    return join([for (p, i in parts, count()); p; where i % 2 == 0], " ")
+}
+
+def private digit_at(d; i : int) : bool => i >= 0 && i < length(d) && is_number(int(d[i]))
+
+//! a `20YY-MM` date anywhere on the line - MM a month, 01 to 12 - digits on neither side
+def private has_date(line : string) : bool {
+    var hit = false
+    peek_data(line) $(d) {
+        for (i in range(length(d) - 6)) {
+            if (int(d[i]) == '2' && int(d[i + 1]) == '0' && digit_at(d, i + 2) && digit_at(d, i + 3) && int(d[i + 4]) == '-'
+                    && digit_at(d, i + 5) && digit_at(d, i + 6) && !digit_at(d, i - 1) && !digit_at(d, i + 7)) {
+                let month = (int(d[i + 5]) - '0') * 10 + int(d[i + 6]) - '0'
+                if (month >= 1 && month <= 12) {
+                    hit = true
+                    break
+                }
+            }
+        }
+    }
+    return hit
+}
+
+//! a `#NNN` PR or issue number - a hash and three digits or more
+def private has_pr_number(line : string) : bool {
+    var hit = false
+    peek_data(line) $(d) {
+        for (i in range(length(d) - 3)) {
+            if (int(d[i]) == '#' && digit_at(d, i + 1) && digit_at(d, i + 2) && digit_at(d, i + 3)) {
+                hit = true
+                break
+            }
+        }
+    }
+    return hit
+}
+
+def private past_marker(line : string) : string {
+    let prose = to_lower(outside_code_spans(line))
+    for (w in HOWTO_PAST_WORDS) {
+        return w if (contains_word(prose, w))
+    }
+    for (p in HOWTO_PAST_PHRASES) {
+        return strip(p) if (find(prose, p) >= 0)
+    }
+    return ""
+}
+
+def private cites_architecture_anchor(line : string) : bool {
+    var from = 0
+    while (true) {
+        let at = find(line, "ARCHITECTURE", from)
+        return false if (at < 0)
+        let md = find(line, ".md#", at)
+        let sp = find(line, " ", at)
+        return true if (md >= 0 && (sp < 0 || md < sp))
+        from = at + 12
+    }
+    return false
+}
+
+def private report_uncited_step(path : string; step_line : int) {
+    gate_finding(path, step_line, "a numbered step that cites no `ARCHITECTURE_*.md#<anchor>` - a HOW_TO step names the architecture section that owns it ({HOWTO_SECTION})")
+}
+
+[arch(at = "ARCHITECTURE_DOCS.md#howto-documents")]
+def private check_howto_doc(path : string) {
+    var inscope lines <- split(read_lf(path), "\n")
+    var step_line = 0
+    var step_cited = true
+    var line_no = 0
+    for (line in lines) {
+        line_no++
+        if (starts_with(line, "## ")) {
+            if (!step_cited) {
+                report_uncited_step(path, step_line)
+            }
+            var numbered = false
+            peek_data(line) $(d) {
+                numbered = digit_at(d, 3)
+            }
+            step_line = line_no
+            step_cited = !numbered
+        }
+        step_cited ||= cites_architecture_anchor(line)
+        let marker = past_marker(line)
+        if (!empty(marker)) {
+            gate_finding(path, line_no, "past-tense marker '{marker}' - a HOW_TO is a procedure in the imperative, and what happened lives in git ({HOWTO_SECTION})")
+        }
+        if (has_date(line)) {
+            gate_finding(path, line_no, "a date - a HOW_TO is timeless, and what happened when lives in git ({HOWTO_SECTION})")
+        }
+        if (has_pr_number(line)) {
+            gate_finding(path, line_no, "a PR or issue number - a HOW_TO cites architecture anchors, never the change that made a step ({HOWTO_SECTION})")
+        }
+    }
+    if (!step_cited) {
+        report_uncited_step(path, step_line)
+    }
+}
+
+def private check_howto_docs {
+    var docs : array<string>
+    collect_files_ending("modules/dasLLAMA", ".md", docs)
+    for (path in docs) {
+        if (base_name(path) |> starts_with("HOW_TO_")) {
+            check_howto_doc(path)
+        }
+    }
+}
+
+//! `-- --howto <doc>...` reads only the named documents as HOW_TO documents: the fixture rail of the HOW_TO check.
+def private howto_fixture_args() : array<string> {
+    var docs : array<string>
+    var on = false
+    for (a in get_command_line_arguments()) {
+        if (a == "--howto") {
+            on = true
+        } elif (on) {
+            docs |> push(a)
+        }
+    }
+    return <- docs
+}
+
 [export]
 def main() : int {
+    let fixtures <- howto_fixture_args()
+    if (!empty(fixtures)) {
+        for (doc in fixtures) {
+            check_howto_doc(doc)
+        }
+        return gate_verdict("dasllama --howto")
+    }
     if (!fexist("modules/dasLLAMA/REVIEW.das") || !fexist(FACADE)) {
         to_log(LOG_ERROR, "modules/dasLLAMA/REVIEW.das: run from the repo root\n")
         return 2
@@ -2970,6 +3441,7 @@ def main() : int {
     check_gpu_role_partition()
     check_fastmath_default()
     check_mirror_slab_access()
+    check_per_call_buffers()
     check_metal_kernel_load_addressing()
     check_image_backing_release()
     check_khr_stage16_abstract()
@@ -2982,6 +3454,7 @@ def main() : int {
     check_cuda_stream_discipline()
     check_no_hand_pipelines()
     check_verify_decline_before_state_move()
+    check_vk_scratch_cap_order()
     check_test_file_placement()
     check_unicode_tables_stamp()
     check_gemm_gen_stamp()
@@ -2999,6 +3472,7 @@ def main() : int {
     check_load_big_format()
     check_rdec_pass_words()
     check_tests_doc()
+    check_howto_docs()
     var inscope tut_texts : array<string>
     read_das_stripped(TUTORIAL_DIR, tut_texts)
     var inscope rst_texts : array<string>
@@ -3009,5 +3483,7 @@ def main() : int {
         "load_audio_embedder / encode_audio / audio_probe_proj_dim")
     check_family_seams(VISION_CARRIER, "VisionKind", VISION_SEAM_EXEMPT,
         "load_vision_embedder / encode_image / vision_proj_dim")
+    check_family_seams(ASR_CARRIER, "AsrKind", ASR_SEAM_EXEMPT, ASR_KIND_FILES,
+        "ARCHITECTURE_MEDIA.md#tower-audio-charters", "dasllama_asr.das's public functions")
     return gate_verdict("dasllama")
 }

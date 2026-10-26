@@ -384,9 +384,7 @@ def private serialize_image_meta(var arch : Archive; var st : St2Staging) {
 def private image_post_load(var st : St2Staging) {}
 
 def finalize(var st : St2Staging) {
-    delete st.blob
-    delete st.qblob
-    delete st.e
+    delete_staging(st)
 }
 
 def private styletts2_layout_fingerprint() : uint64 {

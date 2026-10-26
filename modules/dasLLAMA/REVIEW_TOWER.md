@@ -2,71 +2,72 @@
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 docs: `ARCHITECTURE_GPU_TOWER.md`, `ARCHITECTURE_GPU_TOWER_VULKAN.md`,
-`ARCHITECTURE_GPU_TOWER_VULKAN_VISION.md`, `ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md`, `ARCHITECTURE_MEDIA.md`. Planned work: `followup_metal.md`,
-`followup_vulkan.md`.
+`ARCHITECTURE_GPU_TOWER_VULKAN_VISION.md`, `ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md`,
+`ARCHITECTURE_MEDIA.md`. Planned work: `followup_metal.md`, `followup_vulkan.md`.
 
-A tower is the Metal or the Vulkan GPU driver set that runs a family's encoder or synthesis
-stages through hooks - stage seats the CPU chain calls, drop hooks, reload or weights-epoch
-listeners - registered by `dasllama_metal_tower_register` (Metal) or by
-`dasllama_vulkan_tower_register` and `dasllama_vulkan_tts_register` (Vulkan)
-(`ARCHITECTURE_GPU_TOWER.md#tower-reach`). A diff reaches a tower when a function it touches is
-one of those hooks, calls one directly, or is reachable from one through any chain of calls, or when it touches a kernel class or builder a
-driver of that tower or its ASR decoder dispatches, a kernel-argument struct such a driver fills,
-or a kernel template such a class stamps (instantiates into a concrete kernel); the Metal tower is
-also reached by a touch of `dasllama/dasllama_metal_asr_dec.das` or
+A tower is the Metal or the Vulkan GPU driver set that runs a family's encoder or synthesis stages
+through hooks - stage seats the CPU chain calls, drop hooks, reload or weights-epoch listeners -
+registered by `dasllama_metal_tower_register` (Metal) or by `dasllama_vulkan_tower_register` and
+`dasllama_vulkan_tts_register` (Vulkan) (`ARCHITECTURE_GPU_TOWER.md#tower-reach`). A hook
+`dasllama_metal_asr_dec_register` or `dasllama_vulkan_asr_dec_register` registers is an ASR-decoder
+seat of the same backend's tower. A diff reaches a tower when a function it touches is one of those
+hooks, calls one directly, or is reachable from one through any chain of calls, or when it touches a
+kernel class or builder a driver of that tower or its ASR decoder dispatches, a kernel-argument
+struct such a driver fills, or a kernel template such a class stamps (instantiates into a concrete
+kernel); the Metal tower is also reached by a touch of `dasllama/dasllama_metal_asr_dec.das` or
 `dasllama/dasllama_metal_common.das`. An edit that changes no compiled code - a comment, an
-`[arch(at=...)]` citation - reaches no tower. The TTS seat cells are `test_kitten_synthesis_metal` and
-`test_kitten_oracle` in `tests/test_tts_kitten.das`, `test_kokoro_synthesis_metal` and
+`[arch(at=...)]` citation - reaches no tower. The TTS seat cells are `test_kitten_synthesis_metal`
+and `test_kitten_oracle` in `tests/test_tts_kitten.das`, `test_kokoro_synthesis_metal` and
 `test_kokoro_oracle` in `tests/test_tts_kokoro.das`, and `test_pocket_codec_metal`,
 `test_pocket_codec_metal_served`, `test_pocket_frames_metal`, `test_pocket_frames_metal_served`,
-`test_pocket_frames_after_model_drop`, `test_pocket_synthesis_metal`, `test_pocket_small_models`
-and `test_pocket_small_refl` in `tests/test_tts_pocket.das`.
+`test_pocket_frames_after_model_drop`, `test_pocket_synthesis_metal`, `test_pocket_small_models` and
+`test_pocket_small_refl` in `tests/test_tts_pocket.das`.
 
 **A non-comment diff routed here that reaches neither tower says so in the PR body.**
 
 **A diff reaching the Metal tower runs the vision gates `tests/test_gemma4uv.das`,
 `tests/test_gemma4v.das`, `tests/test_gemma3v.das`, `test_qwen3v_tier1_metal` and
 `test_qwen3v_tier1_metal_f16` in `tests/test_qwen3v.das` and `test_qwen25v_tier1_gpu` in
-`tests/test_qwen25v.das`; the audio gates `tests/test_whisper.das`, `tests/test_audio.das` and
-`tests/test_audio_embedder.das`; the TTS seat cells; `test_metal_prefill_kernels` in
-`tests/test_metal_prefill_kernels.das`, the gate of the kernels the tower chains share; and the
-audio-tower run, `tests/test_model_image.das` with the `mtower` arm and no `--family` filter
-(`DASLLAMA_TEST_FAMILY` unset), with `metal_tower_stats()`'s encode count rising across the
-run.** A family filter skips the other families' cells, and a shared path or borrowed kernel
-reaches the ASR decoder with no line of its file touched.
+`tests/test_qwen25v.das`; the audio gates `tests/test_whisper.das`, `tests/test_audio.das`,
+`tests/test_audio_embedder.das`, `tests/test_vad.das`, `test_rnnt_device_twin` in
+`tests/test_rnnt.das` and `test_gigaam_device_decode_twin` in `tests/test_gigaam.das`; the TTS
+seat cells; `test_metal_prefill_kernels` in `tests/test_metal_prefill_kernels.das`, the gate of
+the kernels the tower chains share; and the audio-tower run, `tests/test_model_image.das` with the
+`mtower` arm and no `--family` filter (`DASLLAMA_TEST_FAMILY` unset), with `metal_tower_stats()`'s
+encode count rising across the run.** A family filter skips the other families' cells, and a
+shared path or borrowed kernel reaches the ASR decoder with no line of its file touched.
 
 **A diff reaching the Vulkan tower runs, on a build without the Metal module,
-`test_gemma4v_tier1_vulkan` and `test_gemma4v_vulkan_twin` in `tests/test_gemma4v.das`, `test_gemma3v_vulkan_twin` in
-`tests/test_gemma3v.das`, `test_qwen3v_vulkan_twin` in `tests/test_qwen3v.das`,
-`test_qwen25v_vulkan_twin` in `tests/test_qwen25v.das`, `test_gemma4uv_tier1_vulkan` in `tests/test_gemma4uv.das`, `test_whisper_vulkan_twin` in
-`tests/test_whisper.das`,
-`test_encoder_blocks_vulkan`, `test_gemma4a_vulkan_twin`, `test_canary_vulkan_twin` and
-`test_qwen3a_vulkan_front` in `tests/test_audio.das`, `tests/test_vulkan_tower_kernels.das`, the
-TTS kernel gates `tests/test_vulkan_tts_kernels.das`, `tests/test_vulkan_tts_conv_kernels.das`,
-`tests/test_vulkan_tts_source_kernels.das` and `tests/test_vulkan_tts_pocket_kernels.das`, and
-the TTS seat cells; each
-named `test_*` cell sees the counter of every hook it covers rise.**
+`test_gemma4v_tier1_vulkan` and `test_gemma4v_vulkan_twin` in `tests/test_gemma4v.das`,
+`test_gemma3v_vulkan_twin` in `tests/test_gemma3v.das`, `test_qwen3v_vulkan_twin` in
+`tests/test_qwen3v.das`, `test_qwen25v_vulkan_twin` in `tests/test_qwen25v.das`,
+`test_gemma4uv_tier1_vulkan` in `tests/test_gemma4uv.das`, `test_whisper_vulkan_twin` in
+`tests/test_whisper.das`, `test_encoder_blocks_vulkan`, `test_gemma4a_vulkan_twin`,
+`test_canary_vulkan_twin`, `test_gigaam_vulkan_twin` and `test_qwen3a_vulkan_front` in
+`tests/test_audio.das`, `test_vad_gpu_twin` in `tests/test_vad.das`,
+`tests/test_vulkan_tower_kernels.das`, the TTS kernel gates `tests/test_vulkan_tts_kernels.das`,
+`tests/test_vulkan_tts_conv_kernels.das`, `tests/test_vulkan_tts_source_kernels.das` and
+`tests/test_vulkan_tts_pocket_kernels.das`, and the TTS seat cells; each named `test_*` cell sees
+the counter of every hook it covers rise.**
 
 **A change to `dasllama/dasllama_vulkan_asr_dec.das`, to a kernel class it dispatches, or to a
 function it calls that another file defines runs `test_whisper_vulkan_wdec`
-(`tests/test_whisper.das`).** Its CPU-vs-GPU transcript cells are the Vulkan ASR-decoder driver's
-parity instrument, and a shared function reaches the driver with no line of its own file touched.
+(`tests/test_whisper.das`), `test_rnnt_device_twin` (`tests/test_rnnt.das`),
+`test_parakeet_device_decode_twin` (`tests/test_audio.das`) and `test_gigaam_device_decode_twin`
+(`tests/test_gigaam.das`).** Their CPU-vs-GPU cells are the Vulkan ASR-decoder driver's parity
+instrument, and a shared function reaches the driver with no line of its own file touched.
 
 **A diff that registers a hook into a tower seat from a driver's `[init]`, or changes which hook
 a seat reaches, names in the run list of the tower whose driver registers it a gate that asserts
 the hook's counter rising on a leg where that hook is the only reachable hook raising it, adding
-the cell in the same change.** The counter each hook kind raises: `encodes` and `blocks` for a
-blocks hook, `encodes` for an encode hook, `convs` for a front, conv or chunk hook (each in
-`metal_tower_stats()` or `vulkan_tower_stats()`), `mels` on Vulkan or `metal_tower_mel_encodes()`
-on Metal for the mel hook, `metal_tower_tail_encodes()` on Metal or
-`vulkan_tower_tail_encodes()` on Vulkan for the whisper-class tail hook, and a TTS
-seat's `served` in `styletts2_gpu_stats(<seat>)` or `pocket_gpu_stats(<seat>)`.
+the cell in the same change.** The counter is one the hook's own driver raises only when that
+hook serves.
 
 **A diff that adds a tower kernel (a kernel class a tower driver dispatches), widens the rows an
-existing one reads, or changes the upload or class that fills a padded buffer leaves every row
-past the live row count that any tower kernel reads zeroed - by the upload that fills the
-buffer, or by the class that writes the padded panel.** A reused buffer comes back holding the
-previous encode's bytes, infinities included.
+existing one reads, or changes the upload or class that fills a padded buffer leaves zeroed
+every row past the live row count that a tower kernel reads into a live output row - by the
+upload that fills the buffer, or by the class that writes the padded panel.** A reused buffer
+comes back holding the previous encode's bytes, infinities included.
 
 **A diff that sizes a tower attention buffer sizes it from the largest row count any kernel's
 grid reads, never from the query-row pad alone.** On Metal the pool's power-of-two bucket hides
@@ -74,8 +75,9 @@ a device overrun at some row sizes, so an undersized panel reads past its alloca
 specific canvas sizes.
 
 **A diff that changes the dispatch sequence of a family's chain in a tower driver keeps the chain
-running the operations of the CPU code the seat's hook replaces, in the same order and at
-the same operand shapes; a chain may fuse consecutive operations into one dispatch, or split one
+running the operations of the CPU code the seat's hook replaces, in that code's dependency order
+(an operation moves past another only when neither writes what the other reads) and at the same
+operand shapes; a chain may fuse consecutive operations into one dispatch, or split one
 operation across several dispatches.** That CPU code is what the hook's call site runs when the
 hook declines: the CPU block loop, front, tail or mel beside the call, plus every CPU step the
 call site skips when the hook serves.
@@ -88,10 +90,10 @@ compute changes that CPU code the same way, in the same diff.**
 family's CPU chain runs inside a transcription, synthesis or image-encode call, for every model and
 weight lane the family serves.** The duty holds whenever the stage would serve: a Metal device is
 present, the stage's knob is on (`DASLLAMA_METAL_TOWER`; `DASLLAMA_METAL_WDEC` for the cross-KV;
-`DASLLAMA_METAL_WDEC` and `DASLLAMA_METAL_WDEC_STEP` for the decode step), the decode step's decoder
-width is at or above the floor `set_metal_wdec_step_min_d` sets, and the stage's command buffer
-succeeded. A stage left
-on the CPU behind a Metal chain reads as served and sets the whole chain's rate.
+`DASLLAMA_METAL_WDEC` and `DASLLAMA_METAL_WDEC_STEP` for the decode step; `DASLLAMA_METAL_RNNT` for
+the transducer decode), the decode step's decoder width is at or above the floor
+`set_metal_wdec_step_min_d` sets, and the stage's command buffer succeeded. A stage left on the CPU
+behind a Metal chain reads as served and sets the whole chain's rate.
 
 **A diff that changes what a TTS seat's chain computes in a tower driver applies `REVIEW_TTS.md`
 too.**

@@ -16,7 +16,6 @@ require dasllama/dasllama_env
 require dasllama/dasllama_plane public   // PlaneF/PlaneI8 — the borrowed weight planes; re-exported for deleters
 require dasllama/dasllama_asr_types public   // TranscribeSegment/AsrCaps — the shared ASR floor
 require dasllama/dasllama_math
-require dasllama/dasllama_par   // maybe_parallel_for - the mel's frame split
 require dasllama/dasllama_gguf
 require dasllama/dasllama_audio
 require dasllama/dasllama_tower
@@ -116,13 +115,8 @@ def private serialize_image_meta(var arch : Archive; var st : Qwen3aStaging) {
     serialize_image_meta(arch, st.e)
 }
 
-// staging owns its plane bytes outright — every array here is heap, none is borrowed
 def finalize(var st : Qwen3aStaging) {
-    delete st.cblob
-    delete st.qcblob
-    delete st.qcscales
-    delete st.core
-    delete st.e
+    delete_staging(st)
 }
 
 [unused_argument(st)]
@@ -170,39 +164,9 @@ def private q3a_announce_lane() {
 def load_qwen3a_tower(path : string) : Qwen3aTower {
     let tag = q3a_serve_q8() ? "qwen3a-q8" : "qwen3a-f32"
     q3a_announce_lane()
-    if (path |> ends_with(".dlim")) {
-        // named directly — no mmproj to regenerate from, so a wrong identity panics
-        apply_box_profile_runtime()
-        let ts_img = ref_time_ticks()
-        var t = Qwen3aTower()
-        if (!load_image(path, t, tag)) {
-            panic("dasLLAMA: '{path}' is not a prepared qwen3a-tower image for this box/knobs (identity {image_identity(tag)}) - regenerate it from the source mmproj gguf")
-        }
-        to_log(LOG_INFO, "dasLLAMA: prepared qwen3a-tower image mapped in {get_time_usec(ts_img) / 1000} ms - {path}\n")
-        return <- t
+    return <- load_staged_image(path, tag, "qwen3a-tower", "source mmproj gguf", type<Qwen3aTower>) {
+        return <- stage_qwen3a_tower(path)
     }
-    if (g_env_engine.image) {
-        apply_box_profile_runtime()   // a backend pin must precede the identity (it names the backend)
-        let img = image_path_for(path, tag)
-        let ts_img = ref_time_ticks()
-        var t = Qwen3aTower()
-        if (load_image(img, t, tag)) {
-            to_log(LOG_INFO, "dasLLAMA: prepared qwen3a-tower image mapped in {get_time_usec(ts_img) / 1000} ms - {img}\n")
-            return <- t
-        }
-        var inscope st <- stage_qwen3a_tower(path)
-        var built = Qwen3aTower()
-        if (cache_via_image_staged(st, built, img, tag)) {
-            dlim_gc_stale(path, tag)   // the fresh bake ON DISK proves its lane's siblings dead; an in-memory build reaps nothing
-        }
-        return <- built
-    }
-    // no persisted image: mint one in memory and serve THAT — a served tower is always
-    // image-backed, so there is no second, array-owning shape of this struct to maintain
-    var inscope st <- stage_qwen3a_tower(path)
-    var built = Qwen3aTower()
-    cache_via_image_staged(st, built, "", tag)
-    return <- built
 }
 
 //! Mint a served tower from a staged read WITHOUT touching disk — the off-rail control for suites
@@ -418,60 +382,8 @@ def log_mel_qwen3a(samples : array<float> | #; n_mel : int64) : WhisperMel {
     let mel_on_gpu = whisper_mel_gpu(xw, m.n_len, n_fft, n_bins, n_mel, twiddles, filters, m)
     if (!mel_on_gpu) {
         var inscope reim : array<float>
-        reim |> reserve_resize(int(m.n_len * n_bins * 2l))
-        let n_len = m.n_len
-        unsafe {
-            // every frame is its own row of the DFT GEMM and its own mel fold, so both split over
-            // frames with the per-element arithmetic - and the bits - of the one-lane run
-            var reimp = addr(reim[0])
-            let xwp = addr<float const?>(xw[0])
-            let twp = addr<float const?>(twiddles[0])
-            let fltp = addr<float const?>(filters[0])
-            var md = addr(m.data[0])
-            // whole 4-row tiles a chunk: gemm_f32 runs its rows past the last tile through the scalar
-            // strip, so a chunk edge off the tile lattice would round those rows apart from the one-lane run
-            let n_tiles = (n_len + 3l) / 4l
-            maybe_parallel_for(0, int(n_tiles), lanes_for_work(n_len * n_fft * n_bins * 2l, 0)) $(tb, te) {
-                let r0 = int64(tb) * 4l
-                let r1 = min(int64(te) * 4l, n_len)
-                unsafe {
-                    gemm_f32(reimp + r0 * n_bins * 2l, xwp + r0 * n_fft, twp, r1 - r0, n_fft, n_bins * 2l)
-                }
-            }
-            // power -> mel: float products in groups of 4 summed in float, groups accumulated in
-            // double (the rounding the parity cells hold), floor 2^-24, log10
-            let mel_floor = 5.960464477539063e-08lf
-            let log10_e = 0.43429448190325176lf
-            maybe_parallel_for(0, int(n_len), lanes_for_work(n_len * n_mel * n_bins, 0)) $(rb, re) {
-                var inscope power : array<float>
-                power |> resize(int(n_bins))
-                unsafe {
-                    for (i in range64(int64(rb), int64(re))) {
-                        for (k in range64(n_bins)) {
-                            let rv = reimp[i * n_bins * 2l + k * 2l]
-                            let iv = reimp[i * n_bins * 2l + k * 2l + 1l]
-                            power[k] = rv * rv + iv * iv
-                        }
-                        for (j in range64(n_mel)) {
-                            var sum = 0.0lf
-                            var k = 0l
-                            while (k + 3l < n_bins) {
-                                sum += double(power[k] * fltp[j * n_bins + k]
-                                    + power[k + 1l] * fltp[j * n_bins + k + 1l]
-                                    + power[k + 2l] * fltp[j * n_bins + k + 2l]
-                                    + power[k + 3l] * fltp[j * n_bins + k + 3l])
-                                k += 4l
-                            }
-                            while (k < n_bins) {
-                                sum += double(power[k] * fltp[j * n_bins + k])
-                                k++
-                            }
-                            md[j * n_len + i] = float(log(max(sum, mel_floor)) * log10_e)
-                        }
-                    }
-                }
-            }
-        }
+        mel_spectrum_rows(xw, unsafe(addr<float const?>(twiddles[0])), unsafe(addr<float const?>(filters[0])),
+                          m.n_len, n_fft, n_bins, n_mel, MelForm(sum = MelSum.double_quads, mel_major = true), reim, m.data)
     }
 
     // global max−8 clamp + (x+4)/4, all in double (qwen3a's preprocessor shape)
@@ -682,7 +594,7 @@ def qwen3a_encode_bucket(omni : bool) : string => omni ? "q3o.encode" : "q3a.enc
 //! session's ``context``; Qwen3-Omni is a chat model driven as a transcription turn — no prompt.
 def qwen3a_asr_caps(omni : bool) : AsrCaps {
     return <- AsrCaps(translate = false, timestamps = AsrTimestamps.none,
-                      streaming = false, prompt = !omni)
+                      streaming = false, prompt = !omni, default_lang = "auto")
 }
 
 //! The facade's session arm: language validation (Qwen3-ASR only accepts "auto"), a fresh

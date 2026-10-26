@@ -5,6 +5,7 @@ require dastest/testing_boost public
 require strings
 require dasllama/dasllama_whisper
 require dasllama/dasllama_parakeet
+require dasllama/dasllama_gigaam
 require dasllama/dasllama_canary
 require daslib/defer
 require dasllama/dasllama_gemma4a
@@ -15,7 +16,7 @@ require dasllama/dasllama_audio   // audio_tower_gpu_serves — the qwen3a lane 
 
 // The family-owned halves of the ASR facade verbs (asr_exec_fmt / asr_encode_bucket), fed
 // constructed structs — the moved-bit test the extraction owes. Plus parakeet's SPM detokenizer
-// over a hand-built vocab.
+// and GigaAM's charwise and SPM ones over hand-built vocabs.
 
 // A parakeet model carrying nothing but a toy SPM vocab — parakeet_detokenize reads m.vocab only.
 // ▁ is U+2581, the SentencePiece space marker.
@@ -32,6 +33,83 @@ def private detok(m : ParakeetModel; ids : array<int>) : string {
     return s
 }
 
+//! A GigaAM model carrying nothing but a toy vocab - gigaam_detokenize reads m.vocab and m.spm only.
+def private toy_gigaam(spm : bool) : GigaamModel {
+    var m = GigaamModel(spm = spm)
+    if (spm) {
+        m.vocab <- ["▁При", "вет", "▁мир", ",", "<unk>"]   // nolint:STYLE039 (vocabulary data, not prose)
+    } else {
+        m.vocab <- [" ", "а", "б", "в"]   // nolint:STYLE039 (Russian vocabulary data, not prose)
+    }
+    return <- m
+}
+
+def private ga_detok(m : GigaamModel; ids : array<int>) : string {
+    var toks <- [for (i in ids); GigaamToken(id = i)]
+    let s = gigaam_detokenize(m, toks)
+    delete toks
+    return s
+}
+
+[test]
+def test_gigaam_detokenize(t : T?) {
+    t |> run("charwise pieces join as they are, spaces included") @(t : T?) {
+        var inscope m <- toy_gigaam(false)
+        t |> equal(ga_detok(m, [1, 2, 0, 3]), "аб в", "the space piece is a space")   // nolint:STYLE039 (Russian vocabulary data, not prose)
+        t |> equal(ga_detok(m, [0, 1]), " а", "a leading space piece stays - charwise strips nothing")   // nolint:STYLE039 (Russian vocabulary data, not prose)
+    }
+    t |> run("SentencePiece pieces: the mark becomes a space, the leading one dropped, control pieces vanish") @(t : T?) {
+        var inscope m <- toy_gigaam(true)
+        t |> equal(ga_detok(m, [0, 1, 3, 2]), "Привет, мир", "a word split over two pieces, then punctuation")   // nolint:STYLE039 (Russian vocabulary data, not prose)
+        t |> equal(ga_detok(m, [0, 1, 4, 3]), "Привет,", "a <...> control piece renders as nothing")   // nolint:STYLE039 (Russian vocabulary data, not prose)
+        t |> equal(ga_detok(m, [4, 2]), " мир", "a leading control piece is the first piece: the word after it keeps its space")   // nolint:STYLE039 (Russian vocabulary data, not prose)
+        var none : array<int>
+        t |> equal(ga_detok(m, none), "", "no tokens, no transcript")
+        delete none
+    }
+}
+
+def private caps_of(langs : array<string>) : AsrCaps {
+    var c = AsrCaps()
+    c.languages := langs
+    return <- c
+}
+
+[test]
+def test_asr_default_lang(t : T?) {
+    t |> run("no language asked: the one code a sheet lists, auto where it lists none, English where it lists several") @(t : T?) {
+        let none : array<string>
+        var inscope one <- caps_of(["ru"])
+        var inscope zero <- caps_of(none)
+        var inscope many <- caps_of(["en", "de", "fr"])
+        t |> equal(asr_default_lang(one), "ru")
+        t |> equal(asr_default_lang(zero), "auto")
+        t |> equal(asr_default_lang(many), "en")
+    }
+    t |> run("the GigaAM sheet resolves to Russian") @(t : T?) {
+        var inscope m = GigaamModel()
+        var inscope c <- gigaam_asr_caps(m)
+        t |> equal(asr_default_lang(c), "ru")
+    }
+}
+
+[test]
+def test_gigaam_check_lang(t : T?) {
+    t |> run("ru, \"\" and auto are taken; any other code is refused naming Russian") @(t : T?) {
+        var inscope m = GigaamModel()
+        for (lang in ["ru", "", "auto"]) {
+            let taken = panic_text() ${
+                gigaam_check_lang(m, lang)
+            }
+            t |> equal(taken, "", "'{lang}' taken")
+        }
+        let why = panic_text() ${
+            gigaam_check_lang(m, "en")
+        }
+        t |> success(find(why, "transcribes Russian (ru)") >= 0, "'en' refused: {why}")
+    }
+}
+
 [test]
 def test_family_exec_fmt_verbs(t : T?) {
     t |> run("each family verb stamps its own precision") @(t : T?) {
@@ -44,6 +122,15 @@ def test_family_exec_fmt_verbs(t : T?) {
         var p = ParakeetModel()
         p.q8 = true
         t |> equal(parakeet_exec_fmt(p), "q8", "parakeet single carrier")
+        var ga = GigaamModel()
+        ga.q8 = true
+        t |> equal(gigaam_exec_fmt(ga), "q8", "gigaam q8 lane")
+        ga.q8 = false
+        ga.gemm_f16 = true
+        t |> equal(gigaam_exec_fmt(ga), "f16", "gigaam exact lane names the plane its block GEMMs serve: the carrier's f16")
+        ga.gemm_f16 = false
+        t |> equal(gigaam_exec_fmt(ga), "f32", "gigaam exact lane over a carrier with no f16 block GEMMs: f32")
+        delete ga
         var c = CanaryEncoder()
         c.q8 = true
         t |> equal(canary_exec_fmt(c, "q8"), "q8/q8", "canary q8 rail")
@@ -107,6 +194,19 @@ def test_audio_lane_knobs(t : T?) {
         }
         tt |> equal(parakeet_serves_q8(), !parakeet_gpu_serves(), "the pin's scope ends on the policy")
     }
+    t |> run("gigaam: the q8 lane pin, and reset back to the policy") @(tt : T?) {
+        tt |> equal(gigaam_serves_q8(), !gigaam_gpu_exact_serves(), "the default follows the GPU Conformer driver's faster lane")
+        {
+            defer() {
+                reset_gigaam_q8()
+            }
+            set_gigaam_q8(true)
+            tt |> success(gigaam_serves_q8(), "pinned q8")
+            set_gigaam_q8(false)
+            tt |> success(!gigaam_serves_q8(), "pinned exact")
+        }
+        tt |> equal(gigaam_serves_q8(), !gigaam_gpu_exact_serves(), "the pin's scope ends on the policy")
+    }
     t |> run("the ASR decoder's K/V dtype: f16 by default, the setter's value read back, put back as found") @(tt : T?) {
         let found = get_asr_kv()
         tt |> equal(KVDtype.f16, found, "the serving default")
@@ -126,12 +226,13 @@ def test_family_encode_buckets(t : T?) {
         t |> equal(canary_encode_bucket(), "cn.encode")
         t |> equal(gemma4a_encode_bucket(), "g4a.encode")
         t |> equal(PARAKEET_ENCODE_BUCKET, "pk.encode_total")
+        t |> equal(GIGAAM_ENCODE_BUCKET, "ga.encode_total")
         t |> equal(qwen3a_encode_bucket(false), "q3a.encode")
         t |> equal(qwen3a_encode_bucket(true), "q3o.encode")
     }
     t |> run("the facade's asr_encode_bucket answers each family's own bucket") @(t : T?) {
-        for (kind, want in [AsrKind.whisper, AsrKind.canary, AsrKind.gemma4a, AsrKind.parakeet, AsrKind.qwen3a, AsrKind.qwen3omni],
-                ["wh.encode_total", "cn.encode", "g4a.encode", "pk.encode_total", "q3a.encode", "q3o.encode"]) {
+        for (kind, want in [AsrKind.whisper, AsrKind.canary, AsrKind.gemma4a, AsrKind.parakeet, AsrKind.gigaam, AsrKind.qwen3a, AsrKind.qwen3omni],
+                ["wh.encode_total", "cn.encode", "g4a.encode", "pk.encode_total", "ga.encode_total", "q3a.encode", "q3o.encode"]) {
             var inscope m <- AsrModel(kind = kind)
             t |> equal(asr_encode_bucket(m), want, "{kind}")
         }

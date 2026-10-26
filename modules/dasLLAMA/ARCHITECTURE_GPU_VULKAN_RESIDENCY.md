@@ -129,7 +129,8 @@ mode against host-cached twins on the same device, on a qwen2 and on the E-serie
 **What the plan may fill on a card it shares with a desktop is `ARCHITECTURE_GPU_VULKAN_ROOM.md#vk-plan-room`:**
 the room the OS reports and the headroom where none does, the all-zero-logits and demotion guards that
 stand whatever the plan decided, and the two allocation shapes the Windows memory manager pages out from
-under a running model - the priority tag and the mapped ReBAR type, both opt-ins.
+under a running model - the priority tag and the mapped ReBAR type, both opt-ins - and the per-call buffers
+the mapped type never serves (`ARCHITECTURE_GPU_VULKAN_ROOM.md#vk-per-call-buffers`).
 
 An OPTIONAL plane rides only the room left under the budget at THIS context - what remains of
 `budget_bytes - headroom_bytes` after weights, KV and scratch; the reserved headroom itself

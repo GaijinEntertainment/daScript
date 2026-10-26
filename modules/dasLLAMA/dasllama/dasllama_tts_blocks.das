@@ -532,17 +532,6 @@ def conv1d_prepare(var c : TtsConv1d; q8 : bool = false; repack : bool = false) 
 
 // ===== layout =====
 
-//! [C][T] -> [T][C]
-def transpose_ct(x : array<float>; c, t : int64; @scratch var y : array<float>) {
-    y |> reserve_resize(c * t)
-    for (ci in range64(c)) {
-        let row = ci * t
-        for (ti in range64(t)) {
-            y[ti * c + ci] = x[row + ti]
-        }
-    }
-}
-
 //! [T][C] -> [C][T]
 def transpose_tc(x : array<float>; t, c : int64; @scratch var y : array<float>) {
     transpose_tc_strided(x, t, c, c, y)

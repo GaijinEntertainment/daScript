@@ -19,6 +19,27 @@ Whisper-family audio front-end derive from the whisper.cpp project
 (https://github.com/ggml-org/whisper.cpp), Copyright (c) 2023-2026 The ggml authors, MIT
 License - see `LICENSE.PARAKEET`. Its `ggml-*.bin` model container is read by this module.
 
+## GigaAM (MIT)
+
+The GigaAM ASR implementation (`dasllama/dasllama_gigaam.das`) reimplements the GigaAM v3
+model of the GigaAM project (https://github.com/salute-developers/GigaAM), Copyright (c) 2024
+GigaChat Team, MIT License - see `LICENSE.GIGAAM`; no GigaAM source is included. Its weights
+(`ai-sage/GigaAM-v3` on Hugging Face, MIT License) are read from the `cstr/gigaam-v3-GGUF`
+conversion (https://huggingface.co/cstr/gigaam-v3-GGUF), a format conversion of those weights
+whose MIT License is inherited from `ai-sage/GigaAM-v3`; neither is redistributed here. The Russian
+test and bench clips (`benchmarks/asr/corpus/ru_*.wav`, minted on-box by
+`benchmarks/asr/fetch_fleurs_ru.py`, never committed) are cut from the FLEURS `ru_ru` test split
+(`google/fleurs`, https://huggingface.co/datasets/google/fleurs, Google), Creative Commons
+Attribution 4.0 International - see `LICENSE.CC-BY-4.0`; `ru_fleurs.json` beside them names each
+clip's FLEURS id and carries its reference transcription.
+
+The Russian word-error measurements in `PERF_LEDGER.md` also read the Golos test sets (SberDevices,
+https://www.openslr.org/114/, through the Hugging Face re-hosts `bond005/sberdevices_golos_10h_crowd`
+and `bond005/sberdevices_golos_100h_farfield`), under SberDevices' "Public license with attribution
+and conditions reserved" (https://github.com/sberdevices/golos/blob/master/license/en_us.pdf, a
+reworking of CC BY-SA 4.0 that is not a Creative Commons license). No Golos audio or text is
+redistributed here or used by a test.
+
 ## vLLM (Apache-2.0)
 
 The MoE prefill's expert-bucketing design and the per-expert tile-selection ladders were

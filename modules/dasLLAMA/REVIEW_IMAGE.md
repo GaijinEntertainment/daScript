@@ -20,8 +20,8 @@ inference from them - serves it from its `.dlim`, minted first where it is missi
 in `ARCHITECTURE_IMAGE.md` as a carrier served without an image, in the same change.**
 
 **A weight carrier the image rail serves becomes live only through `build_image` and
-`parse_image` in `dasllama/dasllama_image.das`: reading weights into a live carrier, or releasing
-an image backing, anywhere else is a defect.**
+`parse_image` in `dasllama/dasllama_image.das`, and releases its image backing only through
+`image_backing_release` in the carrier's `finalize`.**
 
 **A second mint path - per family, per format, or per backend - is a defect even where its
 output is identical - add the family, format or backend to the existing mint instead.**
@@ -93,10 +93,15 @@ closure already takes it in.** What the stamp covers is
 **A diff that takes a function out of the layout-stamp closure names it in the PR body as one
 that places no image bytes.**
 
-**A diff that re-stamps the layout-stamp hash without bumping `IMAGE_VERSION`, moving the image
-path, or adding or dropping a field of a struct the image meta serializes carries in the PR body
-the proof that no byte moved: a byte compare of the `.dlim` minted before and after the change,
-for each family and lane the changed functions mint.**
+**A diff that re-stamps the layout-stamp hash, and does none of these - bump `IMAGE_VERSION`,
+move the image path, add or drop a field of a struct the image meta serializes, add a family whose
+images live at new paths - carries in the PR body the proof that no byte moved: a byte compare of
+the `.dlim` minted before and after the change, for each family and lane the changed functions
+mint.**
+
+**A diff that adds a family whose images live at new paths and re-stamps the layout-stamp hash
+changes the stamp's closure only by the serializers it adds, and names them in the PR body; any
+other closure change in it carries the byte compare for the existing families it reaches.**
 
 **Weakening a meta field-count tripwire - `IMAGE_META_FIELDS` and every `*_META_FIELDS`
 constant in a `dasllama/` file - is a defect.** Raising the constant

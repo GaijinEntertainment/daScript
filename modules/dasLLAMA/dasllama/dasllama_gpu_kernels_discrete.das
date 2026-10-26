@@ -2594,33 +2594,16 @@ struct ArgmaxArgs {
     vocab : uint
 }
 
-//! the pick's fold, shared by the two passes: a workgroup's first maximum over its threads' candidates - the subgroups'
-//! maxes, then the lowest id among the lanes holding the widest (every thread returns the same answer)
+//! the pick's fold, shared by the two passes: a workgroup's first maximum over its threads' candidates (`wg_argmax_into`; every
+//! thread returns the same answer)
 [ |> template_struct_instance]
-class template ClsArgmaxBase {
-    @workgroup wm : float[32]   //! a subgroup's max: 256 threads make eight at the tier's subgroup floor of 32, thirty-two at a subgroup of 8
-    @workgroup wi : uint[32]
-
+class template ClsArgmaxBase : GkWgArgmax {
     def lane_val(v : float) : float => sel_lane_val(v)
 
     def fold(m : float; mi : uint) : uint {
-        let sm = subgroupMax(m)
-        let si = subgroupMin(m == sm ? mi : 0xFFFFFFFFu)
-        if (gl_SubgroupInvocationID == 0u) {
-            wm[gl_SubgroupID] = sm
-            wi[gl_SubgroupID] = si
-        }
-        barrier()
-        var bm = wm[0]
-        var bi = wi[0]
-        var sg = 1u
-        while (sg < gl_NumSubgroups) {
-            if (wm[sg] > bm || (wm[sg] == bm && wi[sg] < bi)) {
-                bm = wm[sg]
-                bi = wi[sg]
-            }
-            sg++
-        }
+        var bm = 0.0
+        var bi = 0u
+        wg_argmax_into(m, mi, bm, bi)
         return bi
     }
 }

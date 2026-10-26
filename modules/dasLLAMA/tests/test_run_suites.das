@@ -13,7 +13,7 @@ require strings
 // and every listed file exists. Read off the files' own text, so a misfiled test reds here.
 
 //! the calls through which a test reaches a machine-local fixture root (_model_tier.das)
-let FIXTURE_ROOTS <- ["models_dir()", "model_available(", "llama2c_dir()", "whisper_dir()"]
+let FIXTURE_ROOTS <- ["models_dir()", "model_available(", "llama2c_dir()", "whisper_dir()", "corpus_dir()", "asr_clip(", "asr_oracle_dir("]
 
 def private file_text(path : string) : string {
     var text = ""

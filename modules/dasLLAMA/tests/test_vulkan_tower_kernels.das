@@ -26,9 +26,13 @@ require _attn_oracle   // attn_row_scored: the softmax row the attention oracles
 require _kernel_oracles   // nolint:STYLE030,LINT019 — pos_add_2d_ref, inside the vulkan arms alone
 require dasllama/dasllama_qwen3v   // nolint:STYLE030,LINT019 — q3v_reorder_src, the same
 require _vk_kq_fixtures   // nolint:STYLE030,LINT019 — f16r, inside the vulkan arms alone
+require _vad_oracle   // nolint:STYLE030,LINT019 — the silero VAD cells' fixture and references, inside the vulkan arm alone
+require _rnnt_oracle   // nolint:STYLE030,LINT019 — the transducer cells' fixture and references, inside the vulkan arm alone
+require _ctc_oracle   // nolint:STYLE030,LINT019 — the CTC pick cells' fixture, cases and reference, inside the vulkan arm alone
 require dasllama/dasllama_math
 require dasllama/dasllama_gpu_math   // nolint:STYLE030,LINT019 - the oracles' device-math twins, used only inside the vulkan static_if arms (a build without the module drops them)
 require daslib/jobque_boost
+require daslib/math_bits   // nolint:STYLE030,LINT019 — uint_bits_to_float: the CTC records, inside the vulkan arm alone
 require daslib/linq   // nolint:STYLE030,LINT019 — count: the sentinel words a dispatch left, the pads' zero tails, inside the vulkan arms alone
 
 //! The vision and audio towers' Vulkan kernel classes against their CPU oracles (a Vulkan device,
@@ -116,6 +120,17 @@ def private fa_bidir_arm(t : T?; khr : bool; hs : int) {
     }
 }
 
+//! whether the device carries the flash tile family `khr` names - the cm2 trio, or KHR cooperative matrices at subgroup 32;
+//! a pipeline of a family the device lacks is never built, since a driver without coopmat can fault in its compile
+[unused_argument(khr)]
+def private vkt_fa_arm_on(khr : bool) : bool {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        return khr ? khr_kq_tile_on() : cm2_fa_on()
+    } else {
+        return false
+    }
+}
+
 [test]
 def test_vkt_fa_bidir(t0 : T?) {
     t0 |> run("bidirectional flash attention (h64 and the padded h128, cm2 and KHR arms) == the CPU oracle over every key") <| @(t : T?) {
@@ -125,8 +140,12 @@ def test_vkt_fa_bidir(t0 : T?) {
                 return
             }
             var served = 0
+            if (!vkt_fa_arm_on(false) && !vkt_fa_arm_on(true)) {
+                t |> skip("the device has neither the cm2 flash trio nor KHR cooperative matrices at subgroup 32: no flash tile builds")
+                return
+            }
             for (arm in fixed_array((khr = false, hs = 64), (khr = false, hs = 128), (khr = true, hs = 64), (khr = true, hs = 128))) {
-                if (!fa_stamp_ensure(arm.khr, int64(arm.hs), false, false, false, false, true) || !fa_stamp_ensure(arm.khr, int64(arm.hs), false, false, false, false)) {
+                if (!vkt_fa_arm_on(arm.khr) || !fa_stamp_ensure(arm.khr, int64(arm.hs), false, false, false, false, true) || !fa_stamp_ensure(arm.khr, int64(arm.hs), false, false, false, false)) {
                     to_log(LOG_INFO, "{arm.khr ? "fa_khr" : "fa_cm2"} h{arm.hs} bidir: the device builds no such tile, arm skipped\n")
                     continue
                 }
@@ -851,7 +870,7 @@ def test_vkt_tower_conformer(t0 : T?) {   // nolint:STYLE038 — one flat gate o
 
 let private CN_CONV_KERNEL = 9   //! canary's depthwise taps (centered)
 
-//! the CPU form of canary's rel-pos attention, spelled as `cn_blocks_cpu`'s loop
+//! the CPU form of canary's rel-pos attention, spelled as the rel-pos `fc_attention_cpu`'s loop
 def private cn_attn_ref(q, k, v, posl, wn : array<float>; rows, d, heads, hs, buoff, bvoff : int) : array<float> {
     var ao : array<float>
     ao |> resize(rows * d)
@@ -879,7 +898,7 @@ def private cn_attn_ref(q, k, v, posl, wn : array<float>; rows, d, heads, hs, bu
 def test_vkt_tower_fastconformer(t0 : T?) {
     t0 |> run("the FastConformer conv module tail (the centered depthwise conv + folded BN + silu) == the CPU form") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!vk_moe_init() || !ensure_tower_cn_dw_cls() || !ensure_tower_pk_dw_cls()) {
+            if (!vk_moe_init() || !ensure_tower_cn_dw_cls() || !ensure_tower_pk_dw_cls() || !ensure_tower_ga_dw_cls()) {
                 t |> skip("no Vulkan device")
                 return
             }
@@ -906,16 +925,22 @@ def test_vkt_tower_fastconformer(t0 : T?) {
                 let wp_tm = cp |> in_(wn_tm)
                 var s_dw = cp |> cls_set(fixed_array(gp, cpl, wp), @@set_tower_cn_dw_cls)
                 var s_dw_pk = cp |> cls_set(fixed_array(gp, cpl_pk, wp_tm), @@set_tower_pk_dw_cls)
-                var pa_dw = GkDwConvRowsArgs(c = uint(d), k = uint(CN_CONV_KERNEL), t_in = uint(rows), t_out = uint(rows), woff = uint(taps_off), bnwoff = uint(bnw_off),
-                    bnboff = uint(bnb_off))
+                let cpl_ga = cp |> out_(nd)
+                var s_dw_ga = cp |> cls_set(fixed_array(gp, cpl_ga, wp_tm), @@set_tower_ga_dw_cls)
+                var pa_dw = GkDwConvRowsArgs(c = uint(d), k = uint(CN_CONV_KERNEL), t_in = uint(rows), t_out = uint(rows), woff = uint(taps_off), boff = uint(bnb_off),
+                    bnwoff = uint(bnw_off), bnboff = uint(bnb_off))
                 cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
                     enc_tower_cn_dw_cls(raw, h, s_dw, pa_dw, int64((nd + 255) / 256))
                     enc_tower_pk_dw_cls(raw, h, s_dw_pk, pa_dw, int64((nd + 255) / 256))
+                    enc_tower_ga_dw_cls(raw, h, s_dw_ga, pa_dw, int64((nd + 255) / 256))
                 }
                 let c_dev <- cp |> plane_run(cpl)
                 let c_pk_dev <- cp |> plane_run(cpl_pk)
+                let c_ga_dev <- cp |> plane_run(cpl_ga)
                 var c_ref : array<float>
                 c_ref |> resize(nd)
+                var c_ga_ref : array<float>   //! gigaam's form: the bias row first, no epilogue
+                c_ga_ref |> resize(nd)
                 for (r in range(rows)) {
                     for (c in range(d)) {
                         var acc = 0.0
@@ -927,13 +952,72 @@ def test_vkt_tower_fastconformer(t0 : T?) {
                         }
                         let bv = acc * wn[bnw_off + c] + wn[bnb_off + c]
                         c_ref[r * d + c] = bv * sigmoid_f32(bv)
+                        c_ga_ref[r * d + c] = wn[bnb_off + c] + acc
                     }
                 }
                 check_rows(t, "tower_cn_dw centered taps, folded BatchNorm and silu vs the CPU loop", c_dev, c_ref, BAR_APPROX, d)
                 check_rows(t, "tower_pk_dw the same over tap-major taps vs the CPU loop", c_pk_dev, c_ref, BAR_APPROX, d)
+                check_rows(t, "tower_ga_dw the biased centered conv over tap-major taps vs the CPU loop", c_ga_dev, c_ga_ref, BAR_APPROX, d)
             }
         } else {
             t |> skip("dasVulkan not present")
+        }
+    }
+}
+
+//! gigaam's depthwise conv over the carrier's f16 taps (`TowerGaDwH`: FORM 3, tap-major, TAP_F16) on the shapes the Metal cell runs
+//! vs the CPU loop over the same halfwords (`fc_dw_bias_rows_f16`), itself held to the f32 loop over the widened taps to the
+//! bit; the control a poisoned halfword tap
+[test]
+def test_vkt_tower_ga_dwh(t0 : T?) {
+    t0 |> run("the f16-tap depthwise conv == the CPU loop over the same halfwords") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!vk_moe_init() || !ensure_tower_ga_dwh_cls()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            for (sh in fixed_array(int3(13, 64, 5), int3(40, 96, 31))) {
+                vkt_ga_dwh_case(t, sh)
+            }
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
+[unused_argument(t, sh)]
+def private vkt_ga_dwh_case(t : T?; sh : int3) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        let tag = "tower_ga_dwh rows {sh.x} d {sh.y} k {sh.z}"
+        var inscope fx <- dw_f16_fix(sh.x, sh.y, sh.z)
+        var inscope want <- dw_f16_cpu(fx, false)
+        var inscope wide <- dw_f16_cpu(fx, true)
+        t |> equal(mismatch_exact(want, wide), 0, "{tag}: the CPU loop over the halfwords is the f32 loop over the widened taps, bit for bit")
+        let nd = fx.np * fx.d
+        let bar = Bar(rel = 1e-6, abs_floor = 1e-7, poison_scaled = true)
+        with_cell_planes() $(var cp : CellPlanes) {
+            let gp = cp |> in_(fx.x)
+            let yp = cp |> out_(nd)
+            let wp = cp |> in_(fx.wn)
+            let hp = cp |> in_plain(fx.taps)
+            var s = cp |> cls_set(fixed_array(gp, yp, wp, hp), @@set_tower_ga_dwh_cls)
+            var pa = GkDwConvRowsArgs(c = uint(fx.d), k = uint(fx.nk), t_in = uint(fx.np), t_out = uint(fx.np), woff = 0u, boff = uint(fx.boff))
+            for (leg in range(2)) {
+                if (leg == 1) {
+                    fx.taps[2 * fx.d + 7] = uint16(f32_to_f16(3.0))
+                    cp |> plane_upload(hp, fx.taps)
+                    cp |> plane_refill(yp)
+                }
+                cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                    enc_tower_ga_dwh_cls(raw, h, s, pa, int64((nd + 255) / 256))
+                }
+                var inscope got <- cp |> plane_run(yp)
+                if (leg == 0) {
+                    check_rows(t, "{tag} vs the CPU loop", got, want, bar, fx.d)
+                } else {
+                    t |> success(check_count(got, want, bar) > 0, "{tag}: the control - a poisoned halfword tap reds the bars")
+                }
+            }
         }
     }
 }
@@ -1557,6 +1641,10 @@ def test_vkt_tower_padded_attn(t0 : T?) {
                 return
             }
             let khr = !cm2_fa_on()
+            if (!vkt_fa_arm_on(khr)) {
+                t |> skip("the device has neither the cm2 flash trio nor KHR cooperative matrices at subgroup 32: no flash tile builds")
+                return
+            }
             let fa_ok = fa_stamp_ensure(khr, int64(LN_HSP), false, false, false, false, true)
             if (!fa_ok || !ensure_tower_hpad_cls() || !ensure_tower_hpad16_cls() || !ensure_tower_hunpad_cls()) {
                 t |> skip("the padded route's classes declined on this device")
@@ -2055,12 +2143,12 @@ def test_vkt_tower_front_mel(t0 : T?) {   // nolint:STYLE038 — one flat gate o
                 var s_rel = cp |> cls_set(fixed_array(relp), @@set_tower_rel_sincos_cls)
                 var pa_mag = TowerSpecDftArgs(n_fft = uint(MEL_NFFT), n_frames = uint(MEL_NLEN), mag = 1u)
                 var pa_pow = TowerSpecDftArgs(n_fft = uint(MEL_NFFT), n_frames = uint(MEL_NLEN), mag = 0u)
-                var pa_g4a = TowerMelLogArgs(n_bins = uint(MEL_NBINS), n_mel = uint(MEL_NMEL), n_frames = uint(MEL_NLEN),
-                    floor = MEL_MAX_FLOOR_G4A, scale = 1.0, frame_major = 1u, add_floor = 0u)
-                var pa_cn = TowerMelLogArgs(n_bins = uint(MEL_NBINS), n_mel = uint(MEL_NMEL), n_frames = uint(MEL_NLEN),
-                    floor = MEL_FLOOR_24, scale = 1.0, frame_major = 1u, add_floor = 1u)
-                var pa_wh = TowerMelLogArgs(n_bins = uint(MEL_NBINS), n_mel = uint(MEL_NMEL), n_frames = uint(MEL_NLEN),
-                    floor = MEL_FLOOR_24, scale = MEL_LOG10_E, frame_major = 0u, add_floor = 0u)
+                var pa_g4a = GkMelLogArgs(n_bins = uint(MEL_NBINS), n_mel = uint(MEL_NMEL), frames = uint(MEL_NLEN),
+                    foff = 0u, lo = MEL_MAX_FLOOR_G4A, hi = 0.0, scale = 1.0, frame_major = 1u, form = GK_MEL_LOG_MAX)
+                var pa_cn = GkMelLogArgs(n_bins = uint(MEL_NBINS), n_mel = uint(MEL_NMEL), frames = uint(MEL_NLEN),
+                    foff = 0u, lo = MEL_FLOOR_24, hi = 0.0, scale = 1.0, frame_major = 1u, form = GK_MEL_LOG_ADD)
+                var pa_wh = GkMelLogArgs(n_bins = uint(MEL_NBINS), n_mel = uint(MEL_NMEL), frames = uint(MEL_NLEN),
+                    foff = 0u, lo = MEL_FLOOR_24, hi = 0.0, scale = MEL_LOG10_E, frame_major = 0u, form = GK_MEL_LOG_MAX)
                 var pa_norm = GkMelNormArgs(n_mel = uint(MEL_NMEL), n_frames = uint(NORM_NLEN), valid = uint(NORM_VALID))
                 var pa_dw = GkDwConv2dArgs(iw = uint(FM_IW), ih = uint(FM_IH), ih_valid = uint(FM_IH), ch = uint(DW_CH), woff = 0u, boff = uint(DW_CH * 9))
                 var pa_rel = GkRelSinCosArgs(d = uint(REL_D), tt = uint(tt), rows_pad = uint(2 * tt - 1))
@@ -2203,6 +2291,121 @@ def private cn_rel_plane(q, posl, wn : array<float>; rows, ww, d, hs, hoff, bvof
 }
 
 [test]
+def test_vkt_tower_ga_mel(t0 : T?) {   // nolint:STYLE038 — one flat gate over gigaam's two mel classes: the fixture, one command buffer, the CPU forms and their controls
+    t0 |> run("gigaam's device mel classes (ga_frames, mel_log's clamp form) == the CPU frame loop and the clamped-log form") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!vk_moe_init() || !ensure_tower_ga_frames_cls() || !ensure_tower_mel_log_cls()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            // the frames: 5 of 40 taps at hop 16 off 110 samples, written as 8 rows of 40 - the row pad zero
+            let n_fft = 40
+            let hop = 16
+            let frames = 5
+            let rows = 8
+            let ld = n_fft   // the rows sit `n_fft` apart
+            let woff = 7
+            var samp : array<float>
+            samp |> resize(110)
+            for (i in range(110)) {
+                samp[i] = sin(float(i) * 0.37) * 0.8 + 0.01 * float(i % 7)
+            }
+            var win : array<float>
+            win |> resize(woff + n_fft)
+            for (i in range(woff)) {
+                win[i] = 1.0e30
+            }
+            for (j in range(n_fft)) {
+                win[woff + j] = 0.5 - 0.5 * cos(6.2831855 * float(j) / float(n_fft))
+            }
+            var fr_want : array<float>
+            fr_want |> resize(rows * ld)
+            for (i in range(frames)) {
+                for (j in range(n_fft)) {
+                    fr_want[i * ld + j] = win[woff + j] * samp[i * hop + j]
+                }
+            }
+            // the filterbank: 6 frames of 37 power bins, 5 mel rows past a filter lead; frame 1 all zero reads the floor's log,
+            // frame 4 scaled past the ceiling reads the ceiling's, frame 0 neither
+            let nb = 37
+            let ldp = nb
+            let nm = 5
+            let nf = 6
+            let foff = 11
+            let lo = 1e-9
+            let hi = 1e9
+            var pw : array<float>
+            pw |> resize(nf * ldp)
+            for (f in range(nf)) {
+                for (k in range(nb)) {
+                    let v = 0.3 + 0.2 * sin(float(f * 13 + k) * 0.71)
+                    pw[f * ldp + k] = f == 1 ? 0.0 : (f == 4 ? v * 1.0e10 : v * float(1 + f * f))
+                }
+            }
+            var fil : array<float>
+            fil |> resize(foff + nm * nb)
+            for (i in range(foff)) {
+                fil[i] = 1.0e30
+            }
+            for (i in range(nm * nb)) {
+                fil[foff + i] = 0.05 * float((i * 7) % 11)
+            }
+            var mel_want : array<float>
+            mel_want |> resize(nf * nm)
+            for (f in range(nf)) {
+                for (j in range(nm)) {
+                    var sum = 0.0
+                    for (k in range(nb)) {
+                        sum += pw[f * ldp + k] * fil[foff + j * nb + k]
+                    }
+                    mel_want[f * nm + j] = log(clamp(sum, lo, hi))
+                }
+            }
+            with_cell_planes() $(var cp : CellPlanes) {
+                let sp = cp |> in_(samp)
+                let wp = cp |> in_(win)
+                let fr_lanes = (rows * ld + 255) / 256 * 256   // the dispatches' lanes: the slots past the live ones keep the sentinel
+                let mel_lanes = (nf * nm + 255) / 256 * 256
+                let xwp = cp |> out_(rows * ld, 0, fr_lanes - rows * ld)
+                let pwp = cp |> in_(pw)
+                let filp = cp |> in_(fil)
+                let melp = cp |> out_(nf * nm, 0, mel_lanes - nf * nm)
+                var s_fr = cp |> cls_set(fixed_array(sp, wp, xwp), @@set_tower_ga_frames_cls)
+                var s_mel = cp |> cls_set(fixed_array(pwp, filp, melp), @@set_tower_mel_log_cls)
+                var pa_fr = GkFrameWindowArgs(n_fft = uint(n_fft), hop = uint(hop), frames = uint(frames), rows = uint(rows), woff = uint(woff))
+                var pa_mel = GkMelLogArgs(n_bins = uint(nb), n_mel = uint(nm), frames = uint(nf), foff = uint(foff), lo = lo, hi = hi,
+                    scale = 1.0, frame_major = 1u, form = GK_MEL_LOG_CLAMP)
+                cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                    enc_tower_ga_frames_cls(raw, h, s_fr, pa_fr, int64((rows * ld + 255) / 256))
+                    enc_tower_mel_log_cls(raw, h, s_mel, pa_mel, int64((nf * nm + 255) / 256))
+                }
+                let fr_dev <- cp |> plane_run(xwp)
+                let mel_dev <- cp |> plane_run(melp)
+                check_rows(t, "tower_ga_frames the windowed frames with their zero pads vs the CPU frame loop", fr_dev, fr_want, BAR_EXACT, ld)
+                check_rows(t, "tower_ga_mel the clamped-log filterbank vs the CPU form", mel_dev, mel_want, Bar(rel = 1e-6, abs_floor = 1e-6, poison_scaled = true), nm)
+                t |> success(abs(mel_want[1 * nm + 2] - log(lo)) < 1e-5, "tower_ga_mel: the zero frame reads the floor's log")
+                t |> success(abs(mel_want[4 * nm + 2] - log(hi)) < 1e-5, "tower_ga_mel: the loud frame reads the ceiling's log")
+                t |> success(abs(mel_want[0 * nm + 2] - log(lo)) > 1e-5 && abs(mel_want[0 * nm + 2] - log(hi)) > 1e-5,
+                    "tower_ga_mel: the negative twin - a live frame reads neither the floor's log nor the ceiling's ({mel_want[0 * nm + 2]})")
+                let fr_pad <- cp |> plane_as(xwp, type<uint>, fr_lanes - rows * ld, rows * ld)
+                let mel_pad <- cp |> plane_as(melp, type<uint>, mel_lanes - nf * nm, nf * nm)
+                t |> success(fr_lanes > rows * ld && mel_lanes > nf * nm, "the dispatches carry lanes past the live slots ({fr_lanes - rows * ld} and {mel_lanes - nf * nm})")
+                t |> equal(count(fr_pad, $(w) => w != NAN_SENTINEL_BITS), 0, "tower_ga_frames: the lanes past the live rows write nothing (every slot the sentinel)")
+                t |> equal(count(mel_pad, $(w) => w != NAN_SENTINEL_BITS), 0, "tower_ga_mel: the lanes past the live rows write nothing (every slot the sentinel)")
+            }
+            delete samp
+            delete win
+            delete fr_want
+            delete pw
+            delete fil
+            delete mel_want
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
+[test]
 def test_vkt_tower_cn_attn_rel_plane(t0 : T?) {
     t0 |> run("the rel-plane FastConformer attention (both head widths) over CPU-built planes == the CPU loop") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -2268,6 +2471,262 @@ def test_vkt_tower_cn_attn_rel_plane(t0 : T?) {
             }
         } else {
             t |> skip("dasVulkan not present")
+        }
+    }
+}
+
+//! the silero VAD's two classes against `_vad_oracle.das`'s references (the kernels' order in f32; the device parts by its fmas,
+//! exp, tanh, sqrt and the decoder's subgroup fold, a few ulp a stage, inside the approx bar): the encoder over three chunks,
+//! the recurrence at one chunk and five from a nonzero state in place
+[test]
+def test_vkt_tower_vad(t0 : T?) {
+    t0 |> run("the silero VAD's encoder and recurrence == the CPU references") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!vk_moe_init() || !ensure_tower_vad_enc_cls() || !ensure_tower_vad_lstm_cls()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            let nch = 3
+            let fx <- vad_fixture(nch)
+            let x <- vad_signal(nch)
+            let gx_ref <- vad_enc_oracle(x, fx.slab, fx.pa)
+            with_cell_planes() $(var cp : CellPlanes) {
+                let xp = cp |> in_(x)
+                let wp = cp |> in_(fx.slab)
+                let gp = cp |> out_(nch * 512)
+                var s_enc = cp |> cls_set(fixed_array(xp, wp, gp), @@set_tower_vad_enc_cls)
+                var pa = fx.pa
+                cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                    enc_tower_vad_enc_cls(raw, h, s_enc, pa, int64(nch))
+                }
+                let gx_dev <- cp |> plane_run(gp)
+                check_rows(t, "tower_vad_enc three chunks' input gates vs the CPU reference", gx_dev, gx_ref, BAR_APPROX, 512)
+            }
+            for (steps in [1, 5]) {
+                let fl <- vad_fixture(steps)
+                var inscope xl <- vad_signal(steps)
+                var inscope gx <- vad_enc_oracle(xl, fl.slab, fl.pa)
+                var inscope st0 <- [for (i in range(256)); 0.3 * sin(float(i) * 0.7)]
+                let r <- vad_lstm_oracle(gx, fl.slab, st0, fl.pa)
+                t |> success(r.max_gate < 6.0, "tower_vad_lstm/{steps}: the fixture's gates sit off saturation (largest |gate| {r.max_gate})")
+                with_cell_planes() $(var cp : CellPlanes) {
+                    let gp = cp |> in_(gx)
+                    let wp = cp |> in_(fl.slab)
+                    let sp = cp |> io_(st0)
+                    let pp = cp |> out_(steps)
+                    var s_l = cp |> cls_set(fixed_array(gp, wp, sp, pp), @@set_tower_vad_lstm_cls)
+                    var pa = fl.pa
+                    cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                        enc_tower_vad_lstm_cls(raw, h, s_l, pa, 1l)
+                    }
+                    var inscope p_dev <- cp |> plane_run(pp)
+                    var inscope st_dev <- cp |> plane_run(sp)
+                    check_rows(t, "tower_vad_lstm/{steps} probabilities vs the CPU reference", p_dev, r.probs, BAR_APPROX, 1)
+                    check_rows(t, "tower_vad_lstm/{steps} state left vs the CPU reference", st_dev, r.st, BAR_APPROX, 128)
+                    t |> success(moved_off(r.st, st0, 3, BAR_APPROX), "tower_vad_lstm/{steps}: the state moved off its input")
+                }
+            }
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
+//! the transducer decode's four stamps on the legs the Metal cells run (`test_metal_rnnt_kernels`), at both fixture shapes
+//! (`rc_shapes`), against `_rnnt_oracle.das`
+[test]
+def test_vkt_rnnt(t0 : T?) {
+    t0 |> run("the transducer decode's gates, projection, joint and pick == the CPU references") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!vk_moe_init() || !ensure_rnnt_gates_cls() || !ensure_rnnt_proj_cls() || !ensure_rnnt_joint_cls() || !ensure_rnnt_pick_cls()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            for (sh in rc_shapes()) {
+                var inscope fx <- rnnt_fixture(sh)
+                vkt_rnnt_gates(t, fx)
+                vkt_rnnt_proj(t, fx)
+                vkt_rnnt_joint(t, fx)
+                vkt_rnnt_pick(t, fx)
+            }
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
+//! The CTC head's pick (`CtcPick` on `GkCtcPick`) on the Metal cell's `ctc_pick_cases` (three widths, a tie, NaN pad slots, an
+//! all-NaN row picking class 0) against the CPU row loop: every record written, each class exact, each plog within 1e-5
+//! relative; the control a poisoned bias element moving a pick or a plog off the reference.
+[test]
+def test_vkt_ctc_pick(t0 : T?) {
+    t0 |> run("the CTC head's pick == the CPU row loop, a tie picking the lower class, a NaN row picking class 0") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!vk_moe_init() || !ensure_ctc_pick_cls()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            for (c in ctc_pick_cases()) {
+                vkt_ctc_pick_case(t, c)
+            }
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
+[unused_argument(t, c)]
+def private vkt_ctc_pick_case(t : T?; c : int4) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        let tag = "ctc_pick nc {c.x} rows {c.y} ldl {c.z}{c.w != 0 ? " NaN row" : ""}"
+        var inscope fx <- ctc_pick_fix(c.x, c.y, c.z, c.w != 0)
+        let want = ctc_pick_ref(fx)
+        let r0 = c.w != 0 ? 1 : 0
+        let bar = Bar(rel = 1e-5, abs_floor = 1e-6, poison_scaled = true)
+        with_cell_planes() $(var cp : CellPlanes) {
+            let lp = cp |> in_(fx.lg)
+            let wp = cp |> in_(fx.wb)
+            let pp = cp |> out_words(int64(fx.rows) * 8l, NAN_SENTINEL_BITS)
+            var s = cp |> cls_set(fixed_array(lp, wp, pp), @@set_ctc_pick_cls)
+            var ka = GkCtcPickArgs(nc = uint(fx.nc), ldl = uint(fx.ldl), boff = uint(fx.boff))
+            for (leg in range(2)) {
+                if (leg == 1) {
+                    fx.wb[fx.boff + 3] += 40.0
+                    cp |> plane_upload(wp, fx.wb)
+                    cp |> plane_refill(pp)
+                }
+                cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                    enc_ctc_pick_cls(raw, h, s, ka, int64(fx.rows))
+                }
+                var inscope got <- cp |> plane_as(pp, 0u, fx.rows * 2)
+                var inscope toks <- [for (r in range(r0, fx.rows)); got[r * 2]]
+                var inscope wtoks <- [for (r in range(r0, fx.rows)); want.tok[r]]
+                var inscope plogs <- [for (r in range(r0, fx.rows)); uint_bits_to_float(got[r * 2 + 1])]
+                var inscope wplogs <- [for (r in range(r0, fx.rows)); want.plog[r]]
+                if (leg == 0) {
+                    var unwritten = 0
+                    for (r in range(fx.rows)) {
+                        unwritten += got[r * 2] == NAN_SENTINEL_BITS ? 1 : 0
+                    }
+                    t |> equal(unwritten, 0, "{tag}: every row's record written")
+                    check_exact(t, "{tag}: each row's class", toks, wtoks)
+                    check(t, "{tag}: each row's plog", plogs, wplogs, bar, FLAT_SHAPE)
+                    if (c.w != 0) {
+                        t |> equal(got[0], 0u, "{tag}: the NaN row picks class 0")
+                    }
+                } else {
+                    let moved = mismatch_exact(toks, wtoks) + check_count(plogs, wplogs, bar)
+                    t |> success(moved > 0, "{tag}: the control - a poisoned bias element moves {moved} picks or plogs off the reference")
+                }
+            }
+        }
+    }
+}
+
+//! `test_vkt_rnnt`'s gate legs: the first layer at parity 0, the second at parity 1, a state asking no step, a done clip
+[unused_argument(t, fx)]
+def private vkt_rnnt_gates(t : T?; fx : RnntFix) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        for (leg in fixed_array(int4(0, 0, 1, 0), int4(1, 1, 1, 0), int4(0, 0, 0, 0), int4(1, 0, 1, 1))) {
+            let layer = leg.x
+            let cur = leg.y
+            let active = leg.z != 0 && leg.w == 0
+            let tag = "rnnt_gates {rc_tag(fx.sh)} layer {layer} parity {cur} need {leg.z} done {leg.w}"
+            var inscope st <- rnnt_state(0, 0, leg.w, leg.z, cur, 0)
+            var inscope hb_in <- rnnt_gates_input(fx, layer, cur, active)
+            with_cell_planes() $(var cp : CellPlanes) {
+                let sp = cp |> in_plain(st)
+                let whp = cp |> in_plain(fx.wh)
+                let wfp = cp |> in_(fx.wf)
+                let xp = cp |> in_(fx.xin)
+                let hp = cp |> io_(hb_in)
+                let cbp = cp |> io_(fx.cb)
+                var s = cp |> cls_set(fixed_array(sp, whp, wfp, xp, hp, cbp), @@set_rnnt_gates_cls)
+                var ka = rnnt_gates_args(fx, layer)
+                cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                    enc_rnnt_gates_cls(raw, h, s, ka, int64((fx.sh.pd + 7) / 8))
+                }
+                rnnt_gates_verify(t, tag, cp |> plane_run(hp), cp |> plane_run(cbp), fx, layer, cur, active)
+            }
+        }
+    }
+}
+
+//! `test_vkt_rnnt`'s projection legs: both parities, then a state asking no step
+[unused_argument(t, fx)]
+def private vkt_rnnt_proj(t : T?; fx : RnntFix) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        for (leg in fixed_array(int2(0, 1), int2(1, 1), int2(0, 0))) {
+            let tag = "rnnt_proj {rc_tag(fx.sh)} parity {leg.x} need {leg.y}"
+            var inscope st <- rnnt_state(0, 0, 0, leg.y, leg.x, 0)
+            with_cell_planes() $(var cp : CellPlanes) {
+                let sp = cp |> in_plain(st)
+                let whp = cp |> in_plain(fx.wh)
+                let wfp = cp |> in_(fx.wf)
+                let hp = cp |> in_(fx.hb)
+                let pp = cp |> out_(fx.sh.jd)
+                var s = cp |> cls_set(fixed_array(sp, whp, wfp, hp, pp), @@set_rnnt_proj_cls)
+                var ka = fx.pa
+                cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                    enc_rnnt_proj_cls(raw, h, s, ka, int64((fx.sh.jd + 7) / 8))
+                }
+                rnnt_proj_verify(t, tag, cp |> plane_run(pp), fx, leg.x, leg.y != 0)
+            }
+        }
+    }
+}
+
+//! `test_vkt_rnnt`'s joint legs: eight frames off a projection biased on the device, three before the clip's end off a biased
+//! one, a done clip
+[unused_argument(t, fx)]
+def private vkt_rnnt_joint(t : T?; fx : RnntFix) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        for (leg in fixed_array(int3(0, 1, 0), int3(RC_FRAMES - 3, 0, 0), int3(2, 1, 1))) {
+            let tag = "rnnt_joint {rc_tag(fx.sh)} t0 {leg.x} eb_on {leg.y} done {leg.z}"
+            var inscope st <- rnnt_state(leg.x, 0, leg.z, 1, 0, 0)
+            with_cell_planes() $(var cp : CellPlanes) {
+                let sp = cp |> in_plain(st)
+                let ep = cp |> in_(fx.encp)
+                let wfp = cp |> in_(fx.wf)
+                let pp = cp |> in_(fx.pred)
+                let jwp = cp |> in_plain(fx.jw)
+                let lp = cp |> out_(8 * fx.sh.lstride)
+                var s = cp |> cls_set(fixed_array(sp, ep, wfp, pp, jwp, lp), @@set_rnnt_joint_cls)
+                var ka = fx.pa
+                ka.eb_on = uint(leg.y)
+                cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                    enc_rnnt_joint_cls(raw, h, s, ka, int64(fx.sh.nblk * 4))
+                }
+                rnnt_joint_verify(t, tag, cp |> plane_run(lp), fx, leg.x, leg.y != 0, leg.z == 0)
+            }
+        }
+    }
+}
+
+//! `test_vkt_rnnt`'s pick: every case of `rnnt_pick_cases`
+[unused_argument(t, fx)]
+def private vkt_rnnt_pick(t : T?; fx : RnntFix) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        var inscope cases <- rnnt_pick_cases(fx)
+        for (c in cases) {
+            let tag = "rnnt_pick {rc_tag(fx.sh)} {c.tag}"
+            var inscope want <- rnnt_pick_ref(c.lg, c.st0, fx, c.pa)
+            with_cell_planes() $(var cp : CellPlanes) {
+                let sp = cp |> out_words(int64(GK_RNNT_ST_WORDS) * 4l, 0u)
+                cp |> plane_upload(sp, c.st0)
+                let lp = cp |> in_(c.lg)
+                let wfp = cp |> in_(fx.wf)
+                let xp = cp |> out_(fx.sh.pd)
+                let tp = cp |> out_words(int64(c.pa.cap) * 32l, NAN_SENTINEL_BITS)
+                var s = cp |> cls_set(fixed_array(sp, lp, wfp, xp, tp), @@set_rnnt_pick_cls)
+                var ka = c.pa
+                cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                    enc_rnnt_pick_cls(raw, h, s, ka, 1l)
+                }
+                var inscope stg <- cp |> plane_as(sp, 0u, int(GK_RNNT_ST_WORDS))
+                var inscope toks <- cp |> plane_as(tp, 0u, int(c.pa.cap) * 8)
+                rnnt_pick_verify(t, tag, c, stg, toks, cp |> plane_run(xp), want)
+            }
         }
     }
 }

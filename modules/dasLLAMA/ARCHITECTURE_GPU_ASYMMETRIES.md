@@ -115,6 +115,15 @@ asymmetries a stamp family ledgers - stays in `ARCHITECTURE_GPU.md#gpu-backends`
   tower's `set_metal_fc_attn_dev`): each picks between two forms the Metal prefill or
   tower driver carries side by side, and the Vulkan chain has one form at each of those sites, so nothing to pick.
   The callers outside the backend are the probe `harness/p0_ko_probe.das` and the cells that hold both forms.
+- **The FastConformer chain's profile replay is Metal-only** (`set_metal_fc_prof_replay`): the Metal chain is one
+  command buffer, which leaves no per-kernel split, so under the asr_prof rail the lever replays the rotary form's head
+  restrides and slab trio after the readback (`ARCHITECTURE_GPU_TOWER_FC.md#tower-fc-rotary`); the Vulkan chain
+  carries no replay.
+- **The tower's decline stand-ins are Metal-only setters** (`set_metal_tower_take_max_probe_`: the device's largest
+  buffer under the scratch takes, the `memory` decline's seam; `set_metal_vad_lanes_probe_`: the VAD recurrence
+  pipeline's thread cap, the `device` decline's seam): Metal reads both limits off the device and the pipeline, so a
+  cell reaches those declines through a stand-in; the Vulkan limits are fields of the device record (`g_gpu.msr`,
+  `g_gpu.has_coopmat`) a cell sets and restores directly, so the Vulkan tower has no such setter.
 - **The decode step's per-form A/B levers are Metal-only setters** (`set_metal_batch_gather`: the batched step takes the
   rows the host embeds instead of gathering them off their ids; `set_metal_moe_g4_unfused`: the gemma-4 MoE tail on its
   unfused chain instead of the one-step `MetalMoeCombG4`): the Metal decode driver encodes each step afresh, so a setter

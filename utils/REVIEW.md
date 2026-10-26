@@ -21,7 +21,8 @@ assertion that runs only when the arm skips.
 A CI row is a workflow step whose command runs the arm, directly or through a process it
 spawns. A pull-request lane is a CI job that runs on every pull request. An assertion no CI row
 can run is one that needs something no pull-request lane's runner image provides - a GPU, a host
-tool the image does not carry, a network service, a credential - that list is closed; whether a
+tool the image does not carry, a network service, a credential, a model or data file neither the
+repo checkout nor the build provides - that list is closed; whether a
 row already runs the arm does not decide it. An arm that skips unless something the build can
 produce is present - a target, an exe, a generated file - has assertions a CI row can run. An
 arm that skips unless a host tool is present has assertions a CI row can run when a pull-request

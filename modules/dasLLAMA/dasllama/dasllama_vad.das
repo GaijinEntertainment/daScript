@@ -12,6 +12,9 @@ require daslib/array_boost
 require dasllama/dasllama_math
 require dasllama/dasllama_gguf
 require dasllama/dasllama_gpu_math   // sigmoid_f32
+require dasllama/dasllama_env        // DASLLAMA_VAD_STREAM_GPU
+require dasllama/dasllama_repack     // repack_conv_in_tap_out: the convs' load-time layout
+require dasllama/dasllama_layout     // vad_build_slab, VadSlabOffs: the device slab
 
 // Silero-VAD (v6, 16 kHz) — native reimplementation. Oracle = onnxruntime on the official
 // silero_vad_16k_op15.onnx (proven bit-exact); weights convert from that graph's initializers
@@ -36,7 +39,9 @@ let private SV_C2_OUT =  64l; let private SV_C2_IN = 128l
 let private SV_C3_OUT =  64l; let private SV_C3_IN =  64l
 let private SV_C4_OUT = 128l; let private SV_C4_IN =  64l
 
-//! Silero-VAD model weights (fp32), loaded from a converted silero_vad.bin.
+//! Silero-VAD model weights (fp32), loaded from a converted silero_vad.bin. The conv weights are laid [cin][3][cout] at
+//! load (the file's [cout][cin][3] transposed), so a tap's weights over every output channel sit back to back. `slab`
+//! is every tensor again end to end at `slab_offs` (the device copy's source), `slab_key` its content hash.
 struct VadModel {
     stft    : array<float>   // [258][256] STFT basis (windowed DFT)
     conv1_w : array<float>;  conv1_b : array<float>
@@ -45,6 +50,9 @@ struct VadModel {
     conv4_w : array<float>;  conv4_b : array<float>
     lstm_ih : array<float>;  lstm_hh : array<float>;  lstm_b : array<float>   // [512][128], [512][128], [512]
     final_w : array<float>;  final_b : float          // [128]
+    slab : array<float>
+    slab_offs : VadSlabOffs
+    slab_key : uint64
 }
 
 //! Per-stream VAD state: the 64-sample audio context + LSTM h/c carried across chunks, plus
@@ -55,7 +63,7 @@ struct VadState {
     c       : array<float>   // [128]
     // scratch
     padded  : array<float>   // [640]
-    frame   : array<float>   // [256]
+    @scratch acc : array<float>   // [128] a conv output time step over its output channels
     col     : array<float>   // [258]
     mag     : array<float>   // [129*4]
     e1      : array<float>   // [128*4]
@@ -65,7 +73,6 @@ struct VadState {
     gates   : array<float>   // [512]
     gates2  : array<float>   // [512]
     reluh   : array<float>   // [128]
-    out1    : array<float>   // [1]
 }
 
 // ===== bin container (parakeet-style records) =====
@@ -106,6 +113,26 @@ def private sv_read(recs : table<string; SvRec>; b : array<uint8> | #; name : st
             dst[i] = f16_to_f32(rd_u16(b, r.off + i * 2l))
         }
     }
+}
+
+def private sv_read_conv(recs : table<string; SvRec>; b : array<uint8> | #; name : string;
+                         var dst : array<float>; cout, cin : int64) {
+    var src : array<float>
+    sv_read(recs, b, name, src, cout * cin * 3l)
+    repack_conv_in_tap_out(src, dst, cout, cin, 3l)
+}
+
+var private g_vad_path_probe = ""   //! a test's stand-in for the shipped weights' path; "" = the shipped one
+
+//! Where the shipped Silero-VAD weights live: ``modules/dasLLAMA/models/silero_vad.bin`` under the daslang root.
+def vad_model_path() : string => !empty(g_vad_path_probe) ? g_vad_path_probe : path_join(get_das_root(), "modules/dasLLAMA/models/silero_vad.bin")
+
+//! A test's stand-in for `vad_model_path` (`path`; "" reads the shipped one again) - the missing-weights refusal's seam.
+//! Answers the stand-in it replaced.
+def set_vad_model_path_probe_(path : string) : string {
+    let was = g_vad_path_probe
+    g_vad_path_probe = path
+    return was
 }
 
 //! Load a converted Silero-VAD bin (harness/convert_silero_vad.py output, fp32).
@@ -154,13 +181,13 @@ def load_vad_model(path : string) : VadModel {
             o += n_elem * (ttype == GGML_TYPE_F32 ? 4l : 2l)
         }
         sv_read(recs, bytes, "stft_conv", m.stft, SV_STFT_CH * SV_NFFT)
-        sv_read(recs, bytes, "conv1.w", m.conv1_w, SV_C1_OUT * SV_C1_IN * 3l)
+        sv_read_conv(recs, bytes, "conv1.w", m.conv1_w, SV_C1_OUT, SV_C1_IN)
         sv_read(recs, bytes, "conv1.b", m.conv1_b, SV_C1_OUT)
-        sv_read(recs, bytes, "conv2.w", m.conv2_w, SV_C2_OUT * SV_C2_IN * 3l)
+        sv_read_conv(recs, bytes, "conv2.w", m.conv2_w, SV_C2_OUT, SV_C2_IN)
         sv_read(recs, bytes, "conv2.b", m.conv2_b, SV_C2_OUT)
-        sv_read(recs, bytes, "conv3.w", m.conv3_w, SV_C3_OUT * SV_C3_IN * 3l)
+        sv_read_conv(recs, bytes, "conv3.w", m.conv3_w, SV_C3_OUT, SV_C3_IN)
         sv_read(recs, bytes, "conv3.b", m.conv3_b, SV_C3_OUT)
-        sv_read(recs, bytes, "conv4.w", m.conv4_w, SV_C4_OUT * SV_C4_IN * 3l)
+        sv_read_conv(recs, bytes, "conv4.w", m.conv4_w, SV_C4_OUT, SV_C4_IN)
         sv_read(recs, bytes, "conv4.b", m.conv4_b, SV_C4_OUT)
         sv_read(recs, bytes, "lstm.w_ih", m.lstm_ih, 4l * SV_HIDDEN * SV_HIDDEN)
         sv_read(recs, bytes, "lstm.w_hh", m.lstm_hh, 4l * SV_HIDDEN * SV_HIDDEN)
@@ -171,12 +198,13 @@ def load_vad_model(path : string) : VadModel {
         m.final_b = fb[0]
     }
     fclose(f)
+    vad_build_slab(m, SV_STFT_CH, SV_NFFT, SV_HIDDEN)
     return <- m
 }
 
 // ===== forward =====
 
-def private sv_ensure(var a : array<float>; n : int64) {
+def private sv_ensure(@scratch var a : array<float>; n : int64) {
     if (long_length(a) != n) {
         a |> resize(n)
     }
@@ -185,36 +213,37 @@ def private sv_ensure(var a : array<float>; n : int64) {
 //! Reset a stream: zero the audio context and LSTM state, size scratch. Call before a new stream.
 def vad_reset(var st : VadState) {
     sv_ensure(st.context, SV_CONTEXT); sv_ensure(st.h, SV_HIDDEN); sv_ensure(st.c, SV_HIDDEN)
-    sv_ensure(st.padded, SV_PADDED);   sv_ensure(st.frame, SV_NFFT)
+    sv_ensure(st.padded, SV_PADDED);   sv_ensure(st.acc, SV_C1_OUT)
     sv_ensure(st.col, SV_STFT_CH);     sv_ensure(st.mag, SV_NMAG * SV_NFRAMES)
     sv_ensure(st.e1, SV_C1_OUT * SV_NFRAMES); sv_ensure(st.e2, SV_C2_OUT * 2l)
     sv_ensure(st.e3, SV_C3_OUT * 1l);  sv_ensure(st.feat, SV_C4_OUT * 1l)
     sv_ensure(st.gates, 4l * SV_HIDDEN); sv_ensure(st.gates2, 4l * SV_HIDDEN)
-    sv_ensure(st.reluh, SV_HIDDEN);    sv_ensure(st.out1, 1l)
+    sv_ensure(st.reluh, SV_HIDDEN)
     for (i in range64(SV_CONTEXT)) { st.context[i] = 0.0 }
     for (i in range64(SV_HIDDEN)) { st.h[i] = 0.0; st.c[i] = 0.0 }
 }
 
-// conv1d, kernel 3, pad 1 (SAME), + ReLU. in/out are channel-major [ch][time]. w is [cout][cin][3].
-def private sv_conv1d_relu(var out : array<float>; inp : array<float>; w : array<float>; b : array<float>;
+//! conv1d, kernel 3, pad 1 (SAME), + ReLU. in/out are channel-major [ch][time]; `w` is [cin][3][cout]. Each output sums
+//! its in-range taps in (input channel, tap) order, the pad's taps skipped.
+def private sv_conv1d_relu(var out : array<float>; var acc : array<float>; inp : array<float>; w : array<float>; b : array<float>;
                            cin, cout, ti, stride : int64) {
     let to = (ti + 2l - 3l) / stride + 1l
-    for (oc in range64(cout)) {
-        let bias = b[oc]
+    unsafe {
+        var ap = addr(acc[0])
+        let wp = addr<float const?>(w[0])
         for (ot in range64(to)) {
-            var acc = bias
             let base = ot * stride - 1l   // -1 accounts for pad-left
+            let k0 = max(0l, -base)
+            let k1 = min(3l, ti - base)
+            copy_floats(ap, addr<float const?>(b[0]), cout)
             for (ic in range64(cin)) {
-                let wbase = (oc * cin + ic) * 3l
-                let ibase = ic * ti
-                for (k in range64(3l)) {
-                    let p = base + k
-                    if (p >= 0l && p < ti) {
-                        acc += w[wbase + k] * inp[ibase + p]
-                    }
+                for (k in range64(k0, k1)) {
+                    axpy(ap, wp + (ic * 3l + k) * cout, inp[ic * ti + base + k], cout)
                 }
             }
-            out[oc * to + ot] = max(acc, 0.0)
+            for (oc in range64(cout)) {
+                out[oc * to + ot] = max(ap[oc], 0.0)
+            }
         }
     }
 }
@@ -231,9 +260,9 @@ def vad_chunk_prob(m : VadModel; var st : VadState; chunk : array<float> | #) : 
 
     // 2. STFT -> magnitude [129][4]
     for (t in range64(SV_NFRAMES)) {
-        let base = t * SV_HOP
-        for (j in range64(SV_NFFT)) { st.frame[j] = st.padded[base + j] }
-        matmul(st.col, m.stft, st.frame, SV_NFFT, SV_STFT_CH)
+        unsafe {
+            matvec_rows(addr(st.col[0]), addr<float const?>(m.stft[0]), addr<float const?>(st.padded[t * SV_HOP]), SV_NFFT, 0l, SV_STFT_CH)
+        }
         for (fb in range64(SV_NMAG)) {
             let re = st.col[fb]
             let im = st.col[SV_NMAG + fb]
@@ -242,14 +271,16 @@ def vad_chunk_prob(m : VadModel; var st : VadState; chunk : array<float> | #) : 
     }
 
     // 3. encoder conv stack (strides 1,2,2,1)
-    sv_conv1d_relu(st.e1, st.mag,  m.conv1_w, m.conv1_b, SV_C1_IN, SV_C1_OUT, SV_NFRAMES, 1l)
-    sv_conv1d_relu(st.e2, st.e1,   m.conv2_w, m.conv2_b, SV_C2_IN, SV_C2_OUT, SV_NFRAMES, 2l)
-    sv_conv1d_relu(st.e3, st.e2,   m.conv3_w, m.conv3_b, SV_C3_IN, SV_C3_OUT, 2l, 2l)
-    sv_conv1d_relu(st.feat, st.e3, m.conv4_w, m.conv4_b, SV_C4_IN, SV_C4_OUT, 1l, 1l)
+    sv_conv1d_relu(st.e1, st.acc, st.mag,  m.conv1_w, m.conv1_b, SV_C1_IN, SV_C1_OUT, SV_NFRAMES, 1l)
+    sv_conv1d_relu(st.e2, st.acc, st.e1,   m.conv2_w, m.conv2_b, SV_C2_IN, SV_C2_OUT, SV_NFRAMES, 2l)
+    sv_conv1d_relu(st.e3, st.acc, st.e2,   m.conv3_w, m.conv3_b, SV_C3_IN, SV_C3_OUT, 2l, 2l)
+    sv_conv1d_relu(st.feat, st.acc, st.e3, m.conv4_w, m.conv4_b, SV_C4_IN, SV_C4_OUT, 1l, 1l)
 
     // 4. LSTM cell (pytorch gate order i,f,g,o)
-    matmul(st.gates,  m.lstm_ih, st.feat, SV_HIDDEN, 4l * SV_HIDDEN)
-    matmul(st.gates2, m.lstm_hh, st.h,    SV_HIDDEN, 4l * SV_HIDDEN)
+    unsafe {
+        matvec_rows(addr(st.gates[0]), addr<float const?>(m.lstm_ih[0]), addr<float const?>(st.feat[0]), SV_HIDDEN, 0l, 4l * SV_HIDDEN)
+        matvec_rows(addr(st.gates2[0]), addr<float const?>(m.lstm_hh[0]), addr<float const?>(st.h[0]), SV_HIDDEN, 0l, 4l * SV_HIDDEN)
+    }
     for (j in range64(SV_HIDDEN)) {
         let gi = st.gates[j]                 + st.gates2[j]                 + m.lstm_b[j]
         let gf = st.gates[SV_HIDDEN + j]      + st.gates2[SV_HIDDEN + j]      + m.lstm_b[SV_HIDDEN + j]
@@ -266,17 +297,59 @@ def vad_chunk_prob(m : VadModel; var st : VadState; chunk : array<float> | #) : 
 
     // 5. decoder: relu(h) -> final_conv (128->1) -> sigmoid
     for (j in range64(SV_HIDDEN)) { st.reluh[j] = max(st.h[j], 0.0) }
-    matmul(st.out1, m.final_w, st.reluh, SV_HIDDEN, 1l)
-    let prob = sigmoid_f32(st.out1[0] + m.final_b)
+    let wfp = unsafe(addr<float const?>(m.final_w[0]))
+    let rhp = unsafe(addr<float const?>(st.reluh[0]))
+    let prob = sigmoid_f32(dot(wfp, rhp, SV_HIDDEN) + m.final_b)
 
     // 6. carry context forward (last 64 of chunk)
     for (i in range64(SV_CONTEXT)) { st.context[i] = chunk[SV_CHUNK - SV_CONTEXT + i] }
     return prob
 }
 
+//! the GPU seat: advance the stream `st` over the ceil(n / 512) chunks of the `n` samples at `src` (the ragged tail
+//! zero-padded), its context, h and c carried as `vad_chunk_prob` carries them, appending each chunk's probability to
+//! `probs`; false declines with `st` and `probs` untouched
+typedef VadGpuChunksFn = function<(m : VadModel; var st : VadState; src : float const?; n : int64; var probs : array<float>) : bool>
+var private g_vad_gpu : VadGpuChunksFn
+var private g_vad_gpu_set = false
+var private g_vad_stream_gpu = g_env_engine.vad_stream_gpu
+var private g_vad_said : table<string>   //! the overrides' announces already made
+
+[arch(at="../ARCHITECTURE_MEDIA.md#tower-gpu-hook")]
+def register_vad_gpu(fn : VadGpuChunksFn) {
+    g_vad_gpu = fn
+    g_vad_gpu_set = true
+}
+
+//! Route the streaming `vad_iter_feed` through the GPU seat (`on`) or the CPU chunk step; answers the setting it replaced
+//! (DASLLAMA_VAD_STREAM_GPU's in-process twin). The batch `vad_probs` asks the seat whatever this says.
+def set_vad_stream_gpu(on : bool) : bool {
+    let was = g_vad_stream_gpu
+    g_vad_stream_gpu = on
+    return was
+}
+
+//! the n > 0 samples at `src` through the GPU seat onto `st`, the probabilities appended to `probs`; false = no seat, or declined
+def private vad_gpu_chunks(m : VadModel; var st : VadState; src : float const?; n : int64; var probs : array<float>) : bool {
+    return false if (!g_vad_gpu_set)
+    guard_interp_inference("VAD")
+    return invoke(g_vad_gpu, m, st, src, n, probs)
+}
+
 //! Batch: reset state and return one speech probability per 512-sample chunk over `samples`
-//! (the ragged tail is zero-padded, matching silero get_speech_timestamps).
+//! (the ragged tail is zero-padded, matching silero get_speech_timestamps); the GPU seat serves it where one is registered.
 def vad_probs(m : VadModel; samples : array<float> | #) : array<float> {
+    var st : VadState
+    vad_reset(st)
+    var out : array<float>
+    if (!empty(samples) && vad_gpu_chunks(m, st, unsafe(addr<float const?>(samples[0])), long_length(samples), out)) {
+        return <- out
+    }
+    return <- vad_probs_cpu(m, samples)
+}
+
+//! `vad_probs` on the CPU chunk step alone - the specification the GPU seat is held to.
+def vad_probs_cpu(m : VadModel; samples : array<float> | #) : array<float> {
     var st : VadState
     vad_reset(st)
     var out, chunk : array<float>
@@ -325,11 +398,15 @@ def default_vad_opts() : VadOpts {
 //! prob<neg_threshold sustained for min_silence, short segments dropped, boundaries padded.
 def find_speech_timestamps(m : VadModel; samples : array<float> | #; opts : VadOpts) : array<SpeechSegment> {
     let probs <- vad_probs(m, samples)
+    return <- speech_timestamps_of(probs, long_length(samples), opts)
+}
+
+//! The segmenter alone: the speech regions a clip of `audio_len` samples holds, read off its per-chunk probabilities.
+def speech_timestamps_of(probs : array<float>; audio_len : int64; opts : VadOpts) : array<SpeechSegment> {
     let sr = int64(opts.sampling_rate)
     let min_speech = sr * int64(opts.min_speech_ms) / 1000l
     let min_silence = sr * int64(opts.min_silence_ms) / 1000l
     let speech_pad = sr * int64(opts.speech_pad_ms) / 1000l
-    let audio_len = long_length(samples)
 
     var segs : array<SpeechSegment>
     var triggered = false
@@ -437,13 +514,27 @@ def vad_iter_feed(m : VadModel; var it : VadIter; samples : array<float> | #;
     it.pending |> push_from(samples)
     var consumed = 0l
     let total = long_length(it.pending)
+    var gpu_probs : array<float>
+    let whole = total / SV_CHUNK * SV_CHUNK
+    if (g_vad_stream_gpu) {
+        gpu_said_once(g_vad_said, LOG_INFO, "vad: ", "DASLLAMA_VAD_STREAM_GPU=1 or set_vad_stream_gpu(true) - the streaming VAD feeds its whole chunks to the GPU seat")
+    }
+    let gpu = (g_vad_stream_gpu && whole > 0l
+        && vad_gpu_chunks(m, it.st, unsafe(addr<float const?>(it.pending[0])), whole, gpu_probs))
+    var ci = 0
     while (consumed + SV_CHUNK <= total) {
-        for (j in range64(SV_CHUNK)) {
-            it.chunk[j] = it.pending[consumed + j]
+        var prob = 0.0
+        if (gpu) {
+            prob = gpu_probs[ci]
+            ci++
+        } else {
+            for (j in range64(SV_CHUNK)) {
+                it.chunk[j] = it.pending[consumed + j]
+            }
+            prob = vad_chunk_prob(m, it.st, it.chunk)
         }
         consumed += SV_CHUNK
         it.cur += SV_CHUNK
-        let prob = vad_chunk_prob(m, it.st, it.chunk)
         if (prob >= it.opts.threshold && it.temp_end != 0l) {
             it.temp_end = 0l
         }

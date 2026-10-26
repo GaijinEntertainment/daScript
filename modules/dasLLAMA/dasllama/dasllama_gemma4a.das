@@ -198,14 +198,8 @@ def private serialize_image_meta(var arch : Archive; var st : Gemma4aStaging) {
     serialize_image_meta(arch, st.e)
 }
 
-// staging owns its plane bytes outright — every array here is heap, none is borrowed
 def finalize(var st : Gemma4aStaging) {
-    apply(st) $ [unused_argument(name)] (name : string; var field) {
-        static_if (typeinfo is_array(field)) {
-            delete field
-        }
-    }
-    delete st.e
+    delete_staging(st)
 }
 
 [unused_argument(st)]
@@ -226,7 +220,6 @@ struct Gemma4aState {
     padded : array<float>
     xw : array<float>
     reim : array<float>
-    power : array<float>
     // subsample
     col : array<float>
     y0 : array<float>
@@ -296,42 +289,13 @@ def private g4a_htk_filterbank(n_mel, n_fft, sample_rate : int64) : array<float>
 //! the whole blob fp32. Prepared-image caching matches ``load_model`` (``DASLLAMA_IMAGE=0`` disables).
 def load_gemma4a_encoder(path : string) : Gemma4aEncoder {
     let tag = g4a_serve_q8() ? "gemma4a-q8" : "gemma4a-f32"
-    g4a_announce_lane()
-    if (path |> ends_with(".dlim")) {
-        // named directly — no mmproj to regenerate from, so a wrong identity panics
-        apply_box_profile_runtime()
-        let ts_img = ref_time_ticks()
-        var t = Gemma4aEncoder()
-        if (!load_image(path, t, tag)) {
-            panic("dasLLAMA: '{path}' is not a prepared gemma4a-encoder image for this box/knobs (identity {image_identity(tag)}) - regenerate it from the source mmproj gguf")
-        }
-        to_log(LOG_INFO, "dasLLAMA: prepared gemma4a-encoder image mapped in {get_time_usec(ts_img) / 1000} ms - {path}\n")
-        return <- t
-    }
-    if (g_env_engine.image) {
-        apply_box_profile_runtime()   // a backend pin must precede the identity (it names the backend)
-        let img = image_path_for(path, tag)
-        let ts_img = ref_time_ticks()
-        var t = Gemma4aEncoder()
+    announce_lane("gemma4a encoder", g4a_serve_q8(), "f32 planes", "set_gemma4a_q8", g_g4a_pin != GemmLane.unset, gemma4a_gpu_serves())
+    return <- load_staged_image(path, tag, "gemma4a-encoder", "source mmproj gguf", type<Gemma4aEncoder>, $ {
+        return <- stage_gemma4a_encoder(path)
+    }, $(t : Gemma4aEncoder) {
         // an image minted off a widening embedder read as a square one carries the encoder's width as the decoder's: mint again
-        if (load_image(img, t, tag) && t.proj_dim == gemma4a_probe_proj_dim(path)) {
-            to_log(LOG_INFO, "dasLLAMA: prepared gemma4a-encoder image mapped in {get_time_usec(ts_img) / 1000} ms - {img}\n")
-            return <- t
-        }
-        delete t
-        var inscope st <- stage_gemma4a_encoder(path)
-        var built = Gemma4aEncoder()
-        if (cache_via_image_staged(st, built, img, tag)) {
-            dlim_gc_stale(path, tag)   // the fresh bake ON DISK proves its lane's siblings dead; an in-memory build reaps nothing
-        }
-        return <- built
-    }
-    // no persisted image: mint one in memory and serve THAT — a served encoder is always
-    // image-backed, so there is no second, array-owning shape of this struct to maintain
-    var inscope st <- stage_gemma4a_encoder(path)
-    var built = Gemma4aEncoder()
-    cache_via_image_staged(st, built, "", tag)
-    return <- built
+        return t.proj_dim == gemma4a_probe_proj_dim(path)
+    }, $ [unused_argument(t, src)] (t : Gemma4aEncoder; src : string) {})
 }
 
 //! Mint a served encoder from a staged read WITHOUT touching disk — the off-rail control for
@@ -680,17 +644,6 @@ def reset_gemma4a_q8() {
 //! The lane subsequent loads would take — the facade's exec_fmt and the tests read it.
 def gemma4a_serves_q8() : bool => g4a_serve_q8()
 
-// the lane changes what a load mints and serves, so the load says which and why
-def private g4a_announce_lane() {
-    var why = "the default lane (no GPU driver serving the exact encoder)"
-    if (g_g4a_pin != GemmLane.unset) {
-        why = "pinned via set_gemma4a_q8"
-    } elif (gemma4a_gpu_serves()) {
-        why = "the Metal Conformer driver serves f32 planes"
-    }
-    to_log(LOG_INFO, "dasLLAMA gemma4a: encoder GEMM lane {g4a_serve_q8() ? "q8" : "f32 planes"} - {why}\n")
-}
-
 //! The tower's precision half of the facade's [[asr_exec_fmt]] stamp (the decoder tag comes
 //! from the facade, which owns the shared LLM) - read off the LOADED encoder, not the lane
 //! policy, which a `reset_gemma4a_q8` after the load moves out from under the stamp.
@@ -741,33 +694,9 @@ def g4a_window_frames(enc : Gemma4aEncoder; samples : array<float> | #; off, len
 //! ``[n_len × n_mel]``; ``n_len`` trimmed to the PyTorch frame count.
 [hot_path]
 def gemma4a_log_mel(enc : Gemma4aEncoder; samples : array<float> | #; off, len : int64; var st : Gemma4aState) {
-    let n_mel = enc.n_mel
-    let n_bins = enc.n_bins
     g4a_window_frames(enc, samples, off, len, st)
-    let n_len = st.n_len
-    ensure_length(st.mel, n_len * n_mel)
-    ensure_length(st.reim, n_len * n_bins * 2l)
-    for (i in range64(n_len * n_bins * 2l)) {
-        st.reim[i] = 0.0   //! gemm accumulates: the reused state buffer must start zeroed
-    }
-    gemm_f32(unsafe(addr(st.reim[0])), unsafe(addr(st.xw[0])), plane_at(enc.twiddles, 0l),
-             n_len, G4A_N_FFT, n_bins * 2l)
-
-    ensure_length(st.power, n_bins)
-    for (i in range64(n_len)) {
-        for (k in range64(n_bins)) {
-            let re = st.reim[i * n_bins * 2l + k * 2l]
-            let im = st.reim[i * n_bins * 2l + k * 2l + 1l]
-            st.power[k] = sqrt(re * re + im * im)        // magnitude, not power
-        }
-        for (jm in range64(n_mel)) {
-            var sum = 0.0lf
-            for (k in range64(n_bins)) {
-                sum += double(st.power[k] * enc.filters[jm * n_bins + k])
-            }
-            st.mel[i * n_mel + jm] = float(log(max(sum, G4A_MEL_FLOOR)))
-        }
-    }
+    mel_spectrum_rows(st.xw, plane_at(enc.twiddles, 0l), plane_at(enc.filters, 0l), st.n_len, G4A_N_FFT, enc.n_bins, enc.n_mel,
+                      MelForm(magnitude = true, log = MelLog.ln_max, floor = G4A_MEL_FLOOR), st.reim, st.mel)
 }
 
 // ===== subsample conv (Conv2D k3 s2 p1 + LayerNorm over channels + ReLU) =====
@@ -810,36 +739,6 @@ def private g4a_conv_stage(enc : Gemma4aEncoder; var st : Gemma4aState; var out 
 
 // ===== encoder helpers =====
 
-// mm_blob_b with the q8 route: activation image (xq, xs) pre-quantized by the caller
-def private g4a_mm(enc : Gemma4aEncoder; var y : array<float>; woff : int64; x : array<float>;
-                   xq : array<int8>; xs : array<float>; n, d, npos : int64) {
-    if (enc.q8) {
-        matmul_q8q8_batch(y, enc.qblob, enc.qscales, woff, xq, xs, n, d, npos)
-    } else {
-        mm_blob_b(y, enc.blob, woff, x, n, d, npos)
-    }
-}
-
-// plane-activation twin (the RPE projection: q8 reads the pre-quantized posq/poss image)
-def private g4a_mm(enc : Gemma4aEncoder; var y : array<float>; woff : int64; x : PlaneF;
-                   xq : array<int8>; xs : array<float>; n, d, npos : int64) {
-    if (enc.q8) {
-        matmul_q8q8_batch(y, enc.qblob, enc.qscales, woff, xq, xs, n, d, npos)
-    } else {
-        mm_blob_b(y, enc.blob, woff, x, n, d, npos)
-    }
-}
-
-
-// requant-and-multiply — per-site requant (the clamps differ per site, so images never share)
-def private g4a_mm_rq(enc : Gemma4aEncoder; var st : Gemma4aState; var y : array<float>;
-                      woff : int64; x : array<float>; n, d, npos : int64) {
-    if (enc.q8) {
-        requant_rows_q8_sized(x, n, npos, st.xqi, st.xsi)
-    }
-    g4a_mm(enc, y, woff, x, st.xqi, st.xsi, n, d, npos)
-}
-
 // the RPE table is layer-invariant — copy the plane and requant its q8 image once per encode
 def private g4a_requant_rpe(enc : Gemma4aEncoder; var st : Gemma4aState; d : int64) {
     if (!enc.q8) {
@@ -860,12 +759,12 @@ def private g4a_requant_rpe(enc : Gemma4aEncoder; var st : Gemma4aState; d : int
 def private g4a_mm_clamped(enc : Gemma4aEncoder; var st : Gemma4aState; var y : array<float>;
                            w_off : int64; x : array<float>; n, d, npos : int64; c : Clamp) {
     if (!c.active) {
-        g4a_mm_rq(enc, st, y, w_off, x, n, d, npos)
+        tower_mm_rq(enc, y, w_off, x, st.xqi, st.xsi, n, d, npos)
         return
     }
     ensure_length(st.xc, n * npos)
     clamp_rows(st.xc, x, n * npos, c.imin, c.imax)
-    g4a_mm_rq(enc, st, y, w_off, st.xc, n, d, npos)
+    tower_mm_rq(enc, y, w_off, st.xc, st.xqi, st.xsi, n, d, npos)
     clamp_rows(y, y, d * npos, c.omin, c.omax)
 }
 
@@ -923,7 +822,7 @@ def gemma4a_encode(enc : Gemma4aEncoder; var st : Gemma4aState) : int64 {
 
     // input projection: feat -> d_model
     ensure_length(st.x, npos * d)
-    g4a_mm_rq(enc, st, st.x, enc.inproj_w, st.y1, feat, d, npos)
+    tower_mm_rq(enc, st.x, enc.inproj_w, st.y1, st.xqi, st.xsi, feat, d, npos)
     asr_prof_add("g4a.enc.front", tprof)
 
     ensure_length(st.xb, npos * d)
@@ -982,7 +881,7 @@ def gemma4a_encode(enc : Gemma4aEncoder; var st : Gemma4aState) : int64 {
             st.kk[i] *= k_scale
         }
         // project the RPE table: prpe [13 × d] — the q8 image was requantized before the loop
-        g4a_mm(enc, st.prpe, lo.attn_k_rel, enc.pos_emb, st.posq, st.poss, d, d, G4A_PAST + 1l)
+        tower_mm(enc, st.prpe, lo.attn_k_rel, enc.pos_emb, st.posq, st.poss, d, d, G4A_PAST + 1l)
         for (hh in range64(n_head)) {
             let hoff = hh * dh
             for (i in range64(npos)) {
@@ -1073,7 +972,7 @@ def private g4a_projector_tail(enc : Gemma4aEncoder; var st : Gemma4aState; npos
     let tprof = ref_time_ticks()
     ensure_length(st.tmp, npos * mid)
     ensure_length(st.out, npos * enc.proj_dim)
-    g4a_mm_rq(enc, st, st.tmp, enc.outproj_w, st.x, d, mid, npos)
+    tower_mm_rq(enc, st.tmp, enc.outproj_w, st.x, st.xqi, st.xsi, d, mid, npos)
     add_bias_rows(st.tmp, enc.blob, enc.outproj_b, mid, npos)
     unsafe {
         var tp = addr(st.tmp[0])
@@ -1082,7 +981,7 @@ def private g4a_projector_tail(enc : Gemma4aEncoder; var st : Gemma4aState; npos
             rmsnorm(tp + r * mid, tp + r * mid, wp, mid, enc.eps)
         }
     }
-    g4a_mm_rq(enc, st, st.out, enc.mmproj_w, st.tmp, mid, enc.proj_dim, npos)
+    tower_mm_rq(enc, st.out, enc.mmproj_w, st.tmp, st.xqi, st.xsi, mid, enc.proj_dim, npos)
     asr_prof_add("g4a.enc.proj", tprof)
     return npos
 }
@@ -1134,7 +1033,7 @@ struct Gemma4aAsrSession {
 //! turn. No timestamps; the model reasons then transcribes.
 def gemma4a_asr_caps() : AsrCaps {
     var c = AsrCaps(translate = false, timestamps = AsrTimestamps.none,
-                    streaming = false, prompt = false)
+                    streaming = false, prompt = false, default_lang = "en")
     c.languages <- ["en"]
     return <- c
 }

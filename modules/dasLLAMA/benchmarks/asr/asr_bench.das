@@ -11,6 +11,8 @@ require math
 
 // ASR speed bench: load once, transcribe each file --reps times, one BENCH line per rep.
 // Pairs with side_by_side.sh, which interleaves this against whisper-cli / parakeet-cli.
+// Drops no warmup round: every rep is timed, rep 0 cold. The BENCH row's last column is
+// the tune source; an empty transcription prints REFUSED, not BENCH.
 //
 //   bin/daslang -jit modules/dasLLAMA/benchmarks/asr/asr_bench.das -- \
 //       --model ~/Work/whisper.cpp/models/ggml-tiny.bin --wav corpus/jfk.wav --reps 3
@@ -35,7 +37,7 @@ struct BenchArgs {
     reps : int
 
     @clarg_short = "l"
-    @clarg_doc = "Language (default en)"
+    @clarg_doc = "Language (default: the family's own - en, auto for Qwen3-ASR, ru for GigaAM)"
     lang : string
 
     @clarg_doc = "Print the transcription text of the last rep"
@@ -54,7 +56,41 @@ struct BenchArgs {
     help : bool
 }
 
-[export]
+//! Where this run's kernel winners come from: the manifest DAS_TUNE_MANIFEST names, the
+//! class profile the box applied, or the program's own sidecar; "none" without the framework.
+def private tune_source() : string {
+    static_if (typeinfo module_exists(llvm_tune)) {
+        return tune_manifest_path()
+    } else {
+        return "none"
+    }
+}
+
+//! One clip's timed reps, a BENCH row each, or a REFUSED row where a rep transcribed nothing; answers the last rep's
+//! text and whether every rep transcribed.
+def private bench_clip(m : AsrModel; samples : array<float>; reps : int;
+                       lang, model_name, wav_name : string) : tuple<ok : bool; text : string> {
+    let audio_s = double(length(samples)) / double(AUDIO_SAMPLE_RATE)
+    let tune = tune_source()
+    var ok = true
+    var text = ""
+    for (rep in range(reps)) {
+        var s = create_session(m, lang)
+        let t0 = ref_time_ticks()
+        text = transcribe(m, s, samples)
+        let ms = double(get_time_usec(t0)) / 1000.0lf
+        if (empty(text)) {
+            print("REFUSED\t{wav_name}\tempty transcription\n")
+            ok = false
+            continue
+        }
+        let speed = audio_s / (ms / 1000.0lf)   // x realtime, higher is faster
+        print("BENCH\t{model_name}\t{wav_name}\t{audio_s}\t{rep}\t{ms}\t{speed}\t{tune}\n")
+    }
+    return (ok = ok, text = text)
+}
+
+[export, cold_path]
 def main() : int {
     var r <- parse_args(type<BenchArgs>)
     if (r |> is_err) {
@@ -72,7 +108,7 @@ def main() : int {
         return 1
     }
     let reps = cfg.reps > 0 ? cfg.reps : 3
-    let lang = empty(cfg.lang) ? "en" : cfg.lang
+    let lang = cfg.lang   // "" = the family's own default (create_session)
     let model_name = base_name(cfg.model)
     if (cfg.fp32_tower) {
         set_asr_fp32(true)
@@ -116,19 +152,13 @@ def main() : int {
                 rc = 1   // a measurement tool: a bad fixture is a failed run, never a 0.0 row
                 continue
             }
-            let audio_s = double(length(samples)) / double(AUDIO_SAMPLE_RATE)
             let wav_name = base_name(path)
-            var last_text = ""
-            for (rep in range(reps)) {
-                var s = create_session(m, lang)
-                let t0 = ref_time_ticks()
-                last_text = transcribe(m, s, samples)
-                let ms = double(get_time_usec(t0)) / 1000.0lf
-                let speed = audio_s / (ms / 1000.0lf)   // x realtime, higher is faster
-                print("BENCH\t{model_name}\t{wav_name}\t{audio_s}\t{rep}\t{ms}\t{speed}\n")
+            let clip = bench_clip(m, samples, reps, lang, model_name, wav_name)
+            if (!clip.ok) {
+                rc = 1
             }
             if (cfg.text) {
-                print("TEXT\t{wav_name}\t{last_text}\n")
+                print("TEXT\t{wav_name}\t{clip.text}\n")
             }
             delete samples
         }

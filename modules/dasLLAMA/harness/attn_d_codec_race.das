@@ -46,7 +46,7 @@ def private slab_rows(nrows, rows, kv_dim, salt : int) : array<float> => race_fi
 //! codec), its capacity `cap` and its count `cnt`
 def private route_buf(dev : MetalDevice?; nrows, stride, cap, cnt, base : int) : MetalBuffer? {
     var inscope rt <- [for (r in range(nrows)); uint4(uint(base + r * stride), uint(base + r * stride), uint(cap), uint(cnt))]
-    return race_buf(dev, uint64(nrows) * 16ul, unsafe(addr<void?>(rt[0])))
+    return metal_buffer_from(dev, uint64(nrows) * 16ul, unsafe(addr<void?>(rt[0])))
 }
 
 //! the slab quantized through the shipped codec store: the rows are contiguous, so one call quantizes every block
@@ -105,21 +105,21 @@ def main {
         var k4 <- slab_blocks(kf, nrows * maxd * RING_SLABS, kv_dim, KVDtype.tq4)
         var v4 <- slab_blocks(vf, nrows * maxd * RING_SLABS, kv_dim, KVDtype.tq4)
         var qf <- race_fill(nrows * qstride, 1, 0.5, 0.0, 3u)
-        var bkh = race_buf(dev, uint64(long_length(kh)) * 2ul, unsafe(addr<void?>(kh[0])))
-        var bvh = race_buf(dev, uint64(long_length(vh)) * 2ul, unsafe(addr<void?>(vh[0])))
-        var bk8 = race_buf(dev, uint64(long_length(k8)), unsafe(addr<void?>(k8[0])))
-        var bv8 = race_buf(dev, uint64(long_length(v8)), unsafe(addr<void?>(v8[0])))
-        var bk4 = race_buf(dev, uint64(long_length(k4)), unsafe(addr<void?>(k4[0])))
-        var bv4 = race_buf(dev, uint64(long_length(v4)), unsafe(addr<void?>(v4[0])))
-        var bq = race_buf(dev, uint64(long_length(qf)) * 4ul, unsafe(addr<void?>(qf[0])))
+        var bkh = metal_buffer_from(dev, uint64(long_length(kh)) * 2ul, unsafe(addr<void?>(kh[0])))
+        var bvh = metal_buffer_from(dev, uint64(long_length(vh)) * 2ul, unsafe(addr<void?>(vh[0])))
+        var bk8 = metal_buffer_from(dev, uint64(long_length(k8)), unsafe(addr<void?>(k8[0])))
+        var bv8 = metal_buffer_from(dev, uint64(long_length(v8)), unsafe(addr<void?>(v8[0])))
+        var bk4 = metal_buffer_from(dev, uint64(long_length(k4)), unsafe(addr<void?>(k4[0])))
+        var bv4 = metal_buffer_from(dev, uint64(long_length(v4)), unsafe(addr<void?>(v4[0])))
+        var bq = metal_buffer_from(dev, uint64(long_length(qf)) * 4ul, unsafe(addr<void?>(qf[0])))
         let nsg_max = int(attn_d_groups(int64(maxd)))
         let part_bytes = uint64(nrows) * uint64(heads) * uint64(nsg_max) * uint64(hs + 4) * 4ul
-        var bpart_a = race_buf(dev, part_bytes, null)
-        var bpart_b = race_buf(dev, part_bytes, null)
-        var by_a = race_buf(dev, uint64(nrows) * uint64(qd) * 4ul, null)
-        var by_b = race_buf(dev, uint64(nrows) * uint64(qd) * 4ul, null)
+        var bpart_a = metal_buffer_from(dev, part_bytes, null)
+        var bpart_b = metal_buffer_from(dev, part_bytes, null)
+        var by_a = metal_buffer_from(dev, uint64(nrows) * uint64(qd) * 4ul, null)
+        var by_b = metal_buffer_from(dev, uint64(nrows) * uint64(qd) * 4ul, null)
         var ones <- [for (_ in range(heads)); 1.0]
-        var bsink = race_buf(dev, uint64(heads * 4), unsafe(addr<void?>(ones[0])))   // the combine's sink plane, unread with hass 0
+        var bsink = metal_buffer_from(dev, uint64(heads * 4), unsafe(addr<void?>(ones[0])))   // the combine's sink plane, unread with hass 0
         let scale = 1.0 / sqrt(float(hs))
         let nblk = kv_dim / 32
         let row8 = int(kv_row_bytes(KVDtype.q8_0, int64(kv_dim)))   // a row's bytes under each block codec
