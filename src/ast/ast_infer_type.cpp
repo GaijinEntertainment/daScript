@@ -45,6 +45,9 @@ namespace das {
             return isFreshTemporary(static_cast<ExprCast*>(expr)->subexpr);
         } else if ( expr->rtti_isNullCoalescing() ) {
             return isFreshTemporary(static_cast<ExprNullCoalescing*>(expr)->defaultValue);
+        } else if ( expr->rtti_isOp3() ) {
+            auto select = static_cast<ExprOp3*>(expr);
+            return isFreshTemporary(select->left) || isFreshTemporary(select->right);
         } else if ( expr->rtti_isCallLikeExpr() ) {
             return !(expr->type && expr->type->ref);    // a call returning a reference is storage
         }
@@ -6496,6 +6499,17 @@ namespace das {
             if (!failed) {
                 swap(cargs, expr->arguments);
                 return evalAndFold(expr);
+            }
+        }
+        if (expr->func && expr->func->builtIn) {
+            auto argCount = min(expr->arguments.size(), expr->func->arguments.size());
+            for (size_t ai = 0; ai != argCount; ++ai) {
+                auto farg = expr->func->arguments[ai];
+                if (farg->type->ref && !farg->type->constant && isFreshTemporary(expr->arguments[ai])) {
+                    error("can't pass a temporary value to argument '" + farg->name + "' of " + expr->func->describeName() + ", which writes through it",
+                          "pass a variable, a field, or an element", "",
+                          expr->arguments[ai]->at, CompilationError::invalid_argument_type);
+                }
             }
         }
         if (expr->func) {

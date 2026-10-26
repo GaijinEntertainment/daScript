@@ -557,11 +557,25 @@ JIT compilation and code-generation tests. None have `expect` directives. The sl
 | File | Description | Expects errors |
 |---|---|---|
 | broken.das | Parsing/round-tripping JSON with emoji and long strings | |
+| cant_sscan_array_value.das | sscan_json rejects a `default<array<int>>` destination - a temporary | **expect** `30107` |
+| cant_sscan_conditional_value.das | sscan_json rejects a `?:` destination with a temporary arm | **expect** `30107` |
+| cant_sscan_const_scalar.das | sscan_json rejects a `let` scalar destination | **expect** `30341` |
+| cant_sscan_const_struct.das | sscan_json rejects a `let` struct destination | **expect** `30341` |
+| cant_sscan_fallback_value.das | sscan_json rejects a `??` destination with a temporary fallback | **expect** `30107` |
+| cant_sscan_fixed_array_value.das | sscan_json rejects a fixed-array literal destination | **expect** `30107` |
+| cant_sscan_named_destination.das | sscan_json rejects a `let` destination passed by name | **expect** `30341` |
+| cant_sscan_scalar_value.das | sscan_json rejects a scalar function result destination | **expect** `30341` |
+| cant_sscan_struct_result.das | sscan_json rejects a struct function result destination | **expect** `30107` |
+| cant_sscan_struct_value.das | sscan_json rejects a struct literal destination | **expect** `30107` |
+| cant_sscan_table_value.das | sscan_json rejects a `default<table<string; int>>` destination - a temporary | **expect** `30107` |
+| cant_sscan_vector_value.das | sscan_json rejects a vector constructor destination | **expect** `30341` |
 | safe.das | Safe JSON operators - ?[], ?., ?? fallback | |
 | test_json_edge.das | JSON edge cases - parsing scalars, arrays, nested, whitespace, error recovery | |
 | test_sprint_json.das | sprint_json - basic types, structs, arrays, tables, variants, annotations, RTTI | |
 | test_sscan_json.das | sscan_json - scalars, structs, pointers, arrays, tables, tuples, variants, vectors, ranges, bitfields, enums, @rename, round-trip | |
 | test_sscan_json_fixed_array.das | sscan_json - fixed-array fields (1-D, 2-D, strings, structs) round-trip from sprint_json; a short 1-D list keeps the tail, a long 1-D or 2-D one drops the extra | |
+| test_sscan_json_destination.das | sscan_json - scalar, struct, array, table, fixed-array, pointer and named destinations scan in place, directly and through forwarding functions | |
+| test_sscan_json_storage.das | sscan_json - `?:`, cast and `??` destinations write the selected storage | |
 | test_sscan_json_init.das | sscan_json - created array elements, table values, pointees and variant alternatives run the struct initializer; an existing variant alternative is updated in place | |
 | types.das | JV/from_JV JSON serialization for all basic/vector/struct types | |
 
@@ -589,6 +603,7 @@ JIT compilation and code-generation tests. None have `expect` directives. The sl
 | array_comprehension.das | Array/iterator comprehension - square, filtered with `where` | |
 | ascend_ctor.das | `new` with class constructors and fields | |
 | assume.das | `assume` for deep field access | |
+| failed_any_argument_const_ref.das | A builtin argument bound as `vec4f &` rejects const and non-ref values; a builtin's mutable reference argument rejects a struct literal, a function result and a `?:` with a temporary arm | **expect** `30341:3` `30107:3` |
 | failed_assume_loop.das | Circular `assume` detection - direct and indirect loops | **expect** `30127:2` `30305:4` |
 | failed_auto_infer.das | Auto type inference failures - missing overloads, wrong types | **expect** `31101` `31102:8` `30304:2` `30105:1` `30102:2` `30106` `30113` `31300` |
 | auto_infer_success.das | Successful auto type inference - generics, dim, static_if, variants | |

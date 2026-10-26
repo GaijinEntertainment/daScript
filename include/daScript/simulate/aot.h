@@ -666,7 +666,10 @@ namespace das {
 
     template <typename TT>
     struct das_null_coalescing {
-        static __forceinline TT get ( const TT * ptr, TT value ) {
+        static __forceinline TT & get ( const TT * ptr, TT & value ) {
+            return ptr ? *((TT *)ptr) : value;
+        }
+        static __forceinline TT get ( const TT * ptr, TT && value ) {
             return ptr ? *((TT *)ptr) : value;
         }
         template <typename LPTRX>

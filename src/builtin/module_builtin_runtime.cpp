@@ -1780,12 +1780,7 @@ namespace das
         auto json = cast<char *>::to(args[0]);
         if ( !json ) return cast<bool>::from(false);
         auto typeInfo = call->types[1];
-        char * dst;
-        if ( typeInfo->flags & TypeInfo::flag_refType ) {
-            dst = cast<char *>::to(args[1]);
-        } else {
-            dst = (char *)&args[1];
-        }
+        char * dst = cast<char *>::to(args[1]);
         uint32_t jsonLen = uint32_t(strlen(json));
         bool ok = debug_json_scan(context, dst, typeInfo, json, jsonLen, &call->debugInfo);
         return cast<bool>::from(ok);
@@ -2558,7 +2553,7 @@ namespace das
         addInterop<builtin_json_sprint,char *,vec4f,bool>(*this, lib, "sprint_json",
             SideEffects::modifyExternal, "builtin_json_sprint")
                 ->args({"value","humanReadable"})->setTempStringResult();
-        addInterop<builtin_json_sscan,bool,char *,vec4f>(*this, lib, "sscan_json",
+        addInterop<builtin_json_sscan,bool,char *,vec4f &>(*this, lib, "sscan_json",
             SideEffects::modifyArgumentAndExternal|SideEffects::invoke, "builtin_json_sscan")
                 ->args({"json","value"});
         addExternInline<DAS_BIND_FUN(builtin_terminate)>(*this, lib, "terminate",
@@ -2683,7 +2678,7 @@ namespace das
             SideEffects::modifyExternal, "is_intern_strings")
                 ->arg("context");
         // binary serializer
-        addInterop<_builtin_binary_load,void,vec4f,const Array &>(*this,lib,"_builtin_binary_load",
+        addInterop<_builtin_binary_load,void,vec4f &,const Array &>(*this,lib,"_builtin_binary_load",
             SideEffects::modifyArgumentAndExternal, "_builtin_binary_load")
                 ->args({"data","array"});
         addInterop<_builtin_binary_save,void,const vec4f,const Block &>(*this, lib, "_builtin_binary_save",

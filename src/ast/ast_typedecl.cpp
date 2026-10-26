@@ -4835,7 +4835,7 @@ namespace das
             return false;
         }
         if ( argType->baseType==Type::anyArgument ) {
-            return true;
+            return !argType->ref || (passType->isRef() && (argType->constant || !passType->constant));
         }
         // compare types which don't need inference
         auto tempMatters = argType->implicit ? TemporaryMatters::no : TemporaryMatters::yes;
