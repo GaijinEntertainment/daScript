@@ -952,6 +952,10 @@ struct public CoreEnv {
     @clarg_doc = "The to_log floor daslang reads per call (trace, debug, info, warning, error or critical); see skills/internal/environment_variables.md."
     log_level : string = ""
 
+    @clarg_default_doc = "DAS_LOG_LEVEL, then warning"
+    @clarg_doc = "The daslib/logger floor, read once at init; it wins over DAS_LOG_LEVEL where both are set. See skills/internal/environment_variables.md."
+    logger_level : string = ""
+
     @clarg_doc = "Kernel-tuning policy override. The [tune] framework owns these; see skills/tune.md."
     tune_policy : string = ""
 

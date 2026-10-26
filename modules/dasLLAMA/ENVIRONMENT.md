@@ -335,6 +335,7 @@ Owned by daslang, not by dasLLAMA - listed because dasLLAMA's behaviour depends 
 | `DAS_TUNE_MANIFEST` | path | <app>.tune.json | Kernel-tuning sidecar to read/write. Point it somewhere writable when the app dir is read-only. |
 | `DAS_TUNE_MODE` | text | unset | Kernel-tuning mode. The [tune] framework owns these; see skills/tune.md. |
 | `DAS_LOG_LEVEL` | text | warning (daslang's to_log floor); tests/run.das sets info for itself and its children when unset | The to_log floor daslang reads per call (trace, debug, info, warning, error or critical); see skills/internal/environment_variables.md. |
+| `DAS_LOGGER_LEVEL` | text | DAS_LOG_LEVEL, then warning | The daslib/logger floor, read once at init; it wins over DAS_LOG_LEVEL where both are set. See skills/internal/environment_variables.md. |
 | `DAS_TUNE_POLICY` | text | unset | Kernel-tuning policy override. The [tune] framework owns these; see skills/tune.md. |
 | `DAS_TUNE_COMPILE_FALLBACKS` | text | unset | Semicolon-separated kernel fallbacks for the generated tune probe. |
 | `JOBQUE_PROFILING` | flag | off | Compile the jobque marker rail in (read at COMPILE time by daslib/build_const). Without it trace_tag/trace_marker erase from the program; decode_prof --trace refuses on a build without it. |

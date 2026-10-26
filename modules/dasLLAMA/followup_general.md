@@ -1743,16 +1743,6 @@
     `-jit` script keeps HEAD), and `gen_bench_records` refuses a mint whose exe carries a dirty
     stamp or whose HEAD moved since the exe was built.
 
-165. **The TTS tests to fix at the end of the Metal-gaps arc, after its dedup pass.**
-   `tests/test_storyteller_restart.das`'s cell "a restart while the speech thread is still
-   loading its model skips the replaced story's queued sentences" is red on master (the same red
-   with the tower pinned off and on a master worktree): its premise - a speech thread starved
-   while the story is written, so a restart at frame 100 finds queued sentences to skip - no
-   longer holds on this box, and the cell asserts a skip that never comes. Done = the cell
-   constructs the starvation it asserts (a synthesis slowed under the test's control, or a
-   restart placed by the witness lines rather than a frame count), and the tts area runs green
-   through `tests/run.das -- --area tts`.
-
 167. **A sampler arm on `benchmarks/lcpp_bench.das`'s tg row.** The bench's only sampler knob
     is `--mtp-temp`, a temperature alone, so no board row holds a sampled decode rate and the
     candidate-list sampler's `PERF_LEDGER.md` entry reads its rates off `dasllama-cli`'s stats

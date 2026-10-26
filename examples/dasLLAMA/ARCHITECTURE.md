@@ -72,7 +72,12 @@ Speech runs on its own thread so the frame loop never blocks on synthesis. The f
 pushes its requests into a stream as archived records (a sentence for the story examples; for
 parrot a text to say or a take to clone, the PCM riding in the record) and pops finished clips
 from a second stream; a `SeqBox` carries the number of the story (parrot: the say) being told, so
-a queued sentence of one the user replaced is skipped instead of synthesized. The thread's own
+a queued sentence of one the user replaced is skipped instead of synthesized; the storyteller's
+shutdown publishes a number past every story, so the sentences still queued are skipped and the
+thread reaches its stop line without synthesizing them. The storyteller's thread starts reading requests only once
+its start gate opens (`g_speech_gate`, a channel the thread joins after its setup): the frame thread opens it at once,
+except under `--hold-speech`, where the first story's restart or its end opens it, so every sentence said before then
+is still queued when the thread reads; shutdown opens it too, so a thread held shut still reaches its stop line. The thread's own
 setup - the TTS model path and the voice - rides the same request stream ahead of the first
 request, and so does an engine knob the runtime keeps per context: the frame thread cannot reach
 the speech thread's copy of one, so it sends the value and the thread sets it on itself. Parrot's
