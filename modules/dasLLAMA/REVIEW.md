@@ -97,7 +97,7 @@ and writes) change, or a change to a `kv_*` function that a GPU driver file
 `dasllama/dasllama_gpu*.das`) calls, wherever the diff puts it, applies `REVIEW_GPU.md`.**
 
 **A call that creates, enables or tears down device-home serving (`create_device_session`,
-`set_device_kv`, `moe_gpu_drop_model`), or a call or definition of a `set_*` / `reset_*` function
+`set_device_kv`, `moe_gpu_drop_model`), or a call or definition of a `set_*` / `reset_*` function or an `install_moe_gpu_resident_*` declaration
 in `dasllama/dasllama_core.das`, `dasllama/dasllama_env.das`, or a
 `dasllama/dasllama_{gpu,metal}*.das` or `dasllama/dasllama_*{vulkan,cuda}*.das` file, wherever
 the diff puts it, applies `REVIEW_GPU.md`.**

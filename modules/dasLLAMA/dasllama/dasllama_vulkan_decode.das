@@ -41,7 +41,7 @@ var g_rd_nrow_bisect = 0   //! a probe's bisect of the N-row command, the `NROW_
 //! Resident-driver prepare: allocate all per-token + session buffers for a model's geometry. One
 //! resident model at a time (the arbiter guarantees it). Call before set_layer / token.
 //! `kv_dtype` is the mirror codec, a `KVDtype`'s ordinal (f16 default upstream) — sessions of the same codec byte-copy.
-[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain"), arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command"), arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-draft-head"), arch(at="../ARCHITECTURE_GPU_SHARED_ATTN.md#vk-kv-block-codecs"), arch(at="../ARCHITECTURE_GPU_SHARED_ATTN.md#vk-kv-tq4-basis")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain"), arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command"), arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-draft-head"), arch(at="../ARCHITECTURE_GPU_SHARED_ATTN.md#vk-kv-block-codecs"), arch(at="../ARCHITECTURE_GPU_SHARED_ATTN.md#vk-kv-tq4-basis"), arch(at="../ARCHITECTURE_GPU_SHARED_KERNELS.md#dn-discrete-kernels")]
 def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap : int64;
                     neox : bool; eps, scale : float; qk_norm : bool; kv_dtype : int; q_gated : bool; rot : int64; dn : RdecDnGeom;
                     mir_units, n_slabs, cos_elems, regions : int64; carry, head : bool; verify_rows : int64) : bool {
@@ -75,9 +75,7 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
         return false
     }
     let hybrid = dn.cd > 0l
-    if (hybrid && !(dn.ds <= DN_MAX_DS && dn.ds % 32l == 0l && (dn.ds & (dn.ds - 1l)) == 0l && dn.nvh <= DN_MAX_HEADS && dn.cd <= DN_MAX_CD && 2l * dn.kd <= DN_MAX_QK
-            && dn.dconv <= DN_MAX_DCONV && dn.di == dn.nvh * dn.ds && dn.kd == dn.nkh * dn.ds
-            && dn.cd == 2l * dn.kd + dn.di && dn.di % 32l == 0l && dn.di <= DND_OQ_BYTES)) {
+    if (hybrid && !dn_geom_fits(dn.ds, dn.nvh, dn.nkh, dn.kd, dn.di, dn.cd, dn.dconv)) {
         to_log(LOG_WARNING, "dasLLAMA vulkan resident: deltanet geometry (cd {dn.cd}, kd {dn.kd}, di {dn.di}, heads {dn.nvh}/{dn.nkh}, state {dn.ds}, conv {dn.dconv}) is outside the step kernel's capacity\n")
         return false
     }
@@ -5161,10 +5159,7 @@ def vk_moe_dn_step(var yp : float?; s_qkv, s_z, s_o : int; woq, woz, woo : int64
                    stp : float const?; histp : float const?;
                    dim, cd, kd, di, nvh, nkh, ds, dconv : int64; eps : float) {
     let taps = dconv - 1l
-    assert(ds <= DN_MAX_DS && ds % 32l == 0l && (ds & (ds - 1l)) == 0l && nvh <= DN_MAX_HEADS && cd <= DN_MAX_CD
-           && 2l * kd <= DN_MAX_QK && dconv <= DN_MAX_DCONV && di == nvh * ds && kd == nkh * ds && cd == 2l * kd + di
-           && dim % 32l == 0l && di % 32l == 0l && di <= DND_OQ_BYTES,
-        "dasLLAMA vulkan tier: deltanet geometry outside step capacity")
+    verify(dn_geom_fits(ds, nvh, nkh, kd, di, cd, dconv) && dim % 32l == 0l, "dasLLAMA vulkan tier: deltanet geometry outside step capacity")
     ensure_dnd_state()
     if (!key_exists(g_gpu.dnd_steps, woq)) {
         dnd_step_make(s_qkv, s_z, s_o, woq, woz, woo, dim, cd, kd, di, nvh, nkh, ds, taps, eps)

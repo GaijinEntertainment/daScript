@@ -13,7 +13,9 @@ reference (`ARCHITECTURE_MEASUREMENT_AUDIO.md#mlx-asr-reference`), the TTS refer
 (`ARCHITECTURE_MEASUREMENT_AUDIO.md#the-tts-reference-instrument`), its CUDA provider and g2p-venv
 runs (`ARCHITECTURE_MEASUREMENT_AUDIO.md#tts-ref-g2p-venv`) and the ASR board's CPU references
 (`ARCHITECTURE_MEASUREMENT_AUDIO.md#asr-cpu-references`) are the audio companion's; a board row's
-release boundary is `ARCHITECTURE_MEASUREMENT_RELEASE.md#board-rows-release-boundary`.
+release boundary is `ARCHITECTURE_MEASUREMENT_RELEASE.md#board-rows-release-boundary`; the llama.cpp
+rows a GPU home's records read against are `ARCHITECTURE_MEASUREMENT_REFERENCE_ROWS.md#vulkan-reference-rows`
+and `ARCHITECTURE_MEASUREMENT_REFERENCE_ROWS.md#cuda-reference-rows`.
 
 ### There is ONE benchmark rig, and the records are the baseline {#one-benchmark-rig}
 
@@ -166,24 +168,6 @@ the device, the shape the resident driver's split token command serves. The row 
 (`REVIEW_MEASUREMENT.md`): it names the build tag, the backend build (Vulkan or CUDA) and the
 driver version beside the figures, and `-ngl 99` alone is not the reference - it streams the
 experts across the link every batch and measures the link.
-
-### The Vulkan board's reference rows {#vulkan-reference-rows}
-
-A Vulkan board's reference row (`engine` `llama.cpp`, `backend` `vulkan`) times the `vulkan` flavor
-`benchmarks/setup_lcpp_ref.das --flavor vulkan` builds at `DEFAULT_REF_SHA` (the row's `sha`): the
-Release configure with `-DLLAMA_CURL=OFF -DGGML_VULKAN=ON`, its glslc from a Vulkan SDK of 1.4.357
-or later (`BRINGUP.md`). `gen_bench_records --ref-vulkan <build-vulkan/bin/llama-bench>` (or
-`LLAMA_BENCH_VULKAN`) runs, per model, `llama-bench -m <gguf> -ngl 99 -t <threads> -p 512 -n 128 -r
-5 -o json` for the flat rows and the sibling `llama-batched-bench -m <gguf> -ngl 99 -t <threads> -c
-4096 -b 2048 -ub 512 -npp 512 -ntg 128 -npl 4 -fa on` for `tg128@4`, with no environment setting
-beyond the command line; the row's `cmd` carries both.
-
-### The CUDA reference rows {#cuda-reference-rows}
-
-A llama.cpp row read against `benchmarks/lcpp_bench.das` under `DASLLAMA_CUDA=1` times a Release source build of tag
-b10660 (`6c84c7d5d`) configured `-DGGML_CUDA=ON`: on the Windows reference box under Visual Studio 2022 against the CUDA
-13.4 toolkit (`-T cuda=13.4`, `CMAKE_CUDA_ARCHITECTURES` 120), on the Linux pod the same tag's `build-cuda`. It runs, per
-model, `llama-bench -m <gguf> -ngl 99 -fa 1 -p 512 -n 128 -r 3`, with no environment setting beyond the command line.
 
 ### The committed records gate {#committed-records-gate}
 

@@ -9,7 +9,6 @@ require dasllama/dasllama_common
 require daslib/jobque_boost
 require dasllama/dasllama_math
 require dasllama/dasllama_gpu_tier
-require dasllama/dasllama_env
 require dasllama/dasllama_gpu_resident
 require dasllama/dasllama_cuda_decode   // set_cuda_mmq_pin - the FP4 arm's knob-off control
 require _model_tier
@@ -26,14 +25,6 @@ require _cuda_feed
 // Every cell skips off the JIT, without DASLLAMA_CUDA=1, without DASLLAMA_GPU=1 on a device the driver serves, without
 // the file under models_dir(), or, on the forced-feed cells, where the prompt window is not PF_WINDOW_ROWS rows
 // (`assert_pf_window`: DASLLAMA_GPU_PF_ROWS or a file's pin moved it).
-
-[init]
-def private allow_cpu_prefill_intent() {
-    allow_cpu_prefill()   // the control arm (the model off the device) prefills on the CPU
-    if (pf_window_rows_pin() <= 0l) {   // the cells size their prompts against PF_WINDOW_ROWS; the plan's own pick would run the two-window prompt as one
-        set_pf_window_rows_pin(PF_WINDOW_ROWS)
-    }
-}
 
 let private FILE_1B = "Llama-3.2-1B-Instruct-Q8_0.gguf"
 let private FILE_1B_K = "Llama-3.2-1B-Instruct-Q4_K_M.gguf"   //! the K-quant planes (q4_K, q6_K): the kq GEMV leaves, the Q8_K feeds, the kq cm2 tiles
@@ -116,10 +107,10 @@ def test_gpu_resident_cuda_llama_1b_nv4(t : T?) {
     t |> run("{FILE_1B_NV4}: a {PF_WINDOW_ROWS + 88l}-token prompt (two windows) and eight steps on the CUDA driver, the windows on the FP4 tensor leaf") @(t : T?) {
         cuda_forced_feed(t, FILE_1B_NV4, "llama", PF_WINDOW_ROWS + 88l, 2l, LOGIT_BAR_REL_FP4)
     }
-    t |> run("{FILE_1B_NV4}: one window (40 tokens) and eight steps with the MMQ knob off - the cm2 tiles over f16 activations hold the dense bar (the FP4 arm's control)") @(t : T?) {
-        set_cuda_mmq_pin(CUDA_MMQ_OFF)
-        cuda_forced_feed(t, FILE_1B_NV4, "llama", 40l, 1l, LOGIT_BAR_REL)
-        set_cuda_mmq_pin(CUDA_MMQ_UNPINNED)
+    t |> run("{FILE_1B_NV4}: one window (40 tokens) and eight steps pinned CUDA_MMQ_OFF - the cm2 tiles over f16 activations hold the dense bar (the FP4 arm's control)") @(t : T?) {
+        with_cuda_mmq_pin(CUDA_MMQ_OFF) {
+            cuda_forced_feed(t, FILE_1B_NV4, "llama", 40l, 1l, LOGIT_BAR_REL)
+        }
     }
 }
 

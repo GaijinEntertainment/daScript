@@ -30,6 +30,12 @@ def fp4_strip_code_scan(m : float) : uint {
     return FP4_CODE_MAX
 }
 
+//! one 16-strip's two nibble words off its values already under their scale: (k, k + 8) a byte
+def fp4_strip_nibbles(v : float[16]; var w0, w1 : uint&) {
+    w0 = cvt_e2m1x2(v[0], v[8]) | (cvt_e2m1x2(v[1], v[9]) << 8u) | (cvt_e2m1x2(v[2], v[10]) << 16u) | (cvt_e2m1x2(v[3], v[11]) << 24u)
+    w1 = cvt_e2m1x2(v[4], v[12]) | (cvt_e2m1x2(v[5], v[13]) << 8u) | (cvt_e2m1x2(v[6], v[14]) << 16u) | (cvt_e2m1x2(v[7], v[15]) << 24u)
+}
+
 //! one 16-strip of a row already divided by the row scale: its UE4M3 code off the strip's largest magnitude and its two nibble words, (k, k + 8) a byte under that code's value
 def fp4_strip_words(v : float[16]; var code : uint&; var w0, w1 : uint&) {
     var strip_amax = 0.0
@@ -39,8 +45,11 @@ def fp4_strip_words(v : float[16]; var code : uint&; var w0, w1 : uint&) {
     code = fp4_strip_code_scan(strip_amax)
     let sval = ue4m3_value(code)
     let inv = sval > 0.0 ? 1.0 / sval : 0.0
-    w0 = cvt_e2m1x2(v[0] * inv, v[8] * inv) | (cvt_e2m1x2(v[1] * inv, v[9] * inv) << 8u) | (cvt_e2m1x2(v[2] * inv, v[10] * inv) << 16u) | (cvt_e2m1x2(v[3] * inv, v[11] * inv) << 24u)
-    w1 = cvt_e2m1x2(v[4] * inv, v[12] * inv) | (cvt_e2m1x2(v[5] * inv, v[13] * inv) << 8u) | (cvt_e2m1x2(v[6] * inv, v[14] * inv) << 16u) | (cvt_e2m1x2(v[7] * inv, v[15] * inv) << 24u)
+    var sv : float[16]
+    for (i in range(16)) {
+        sv[i] = v[i] * inv
+    }
+    fp4_strip_nibbles(sv, w0, w1)
 }
 
 //! the feed of `rows` rows of `k` floats (row-major, `k` a multiple of 64)
@@ -74,11 +83,46 @@ def fp4_feed_rows(x : array<float>; rows, k : int) : Fp4Feed {
     return <- f
 }
 
-//! the value the feed stands for at element `kk` of row `tok`: e2m1 x the strip's UE4M3 x the row scale
-def fp4_feed_value(f : Fp4Feed; k, tok, kk : int) : float {
+//! the MXFP4 feed of `rows` rows of `k` floats (`k` a multiple of 64): a UE8M0 code a 32-block by `mx4_block_code`, the nibbles under it in the (k, k + 8) pairing, two codes a k64 word, the row scale 1
+def mx4_feed_rows(x : array<float>; rows, k : int) : Fp4Feed {
+    var f : Fp4Feed
+    f.xq |> resize(rows * k / 8)
+    f.xsw |> resize(rows * k / 64)
+    f.xrs |> resize(rows)
+    for (tok in range(rows)) {
+        f.xrs[tok] = 1.0
+        for (b in range(k / 32)) {
+            var amax = 0.0
+            for (e in range(32)) {
+                amax = max(amax, abs(x[tok * k + b * 32 + e]))
+            }
+            let code = mx4_block_code(amax)
+            let inv = mx4_code_inv(code)
+            f.xsw[tok * (k / 64) + b / 2] |= code << uint((b % 2) * 8)
+            for (s in range(2)) {
+                var v : float[16]
+                for (i in range(16)) {
+                    v[i] = x[tok * k + b * 32 + s * 16 + i] * inv
+                }
+                var w0 = 0u
+                var w1 = 0u
+                fp4_strip_nibbles(v, w0, w1)
+                f.xq[tok * (k / 8) + (b * 2 + s) * 2] = w0
+                f.xq[tok * (k / 8) + (b * 2 + s) * 2 + 1] = w1
+            }
+        }
+    }
+    return <- f
+}
+
+//! the value the feed stands for at element `kk` of row `tok`: e2m1 x the strip's UE4M3 x the row scale, or under `mx` (the MXFP4
+//! feed) e2m1 x the 32-block's UE8M0 (2^(code - 127))
+def fp4_feed_value(f : Fp4Feed; k, tok, kk : int; mx : bool) : float {
     let j = kk % 16
     let bi = tok * (k / 2) + (kk / 16) * 8 + j % 8
     let nib = (f.xq[bi / 4] >> uint((bi % 4) * 8 + (j / 8) * 4)) & 15u
-    let code = (f.xsw[tok * (k / 64) + kk / 64] >> uint(((kk / 16) % 4) * 8)) & 0xFFu
-    return float(MX4_LUT[int(nib)]) * ue4m3_half_f32(code) * f.xrs[tok]
+    let e = float(MX4_LUT[int(nib)])
+    let word = f.xsw[tok * (k / 64) + kk / 64]
+    return e * e8m0_half_f32((word >> uint(((kk / 32) % 2) * 8)) & 0xFFu) if (mx)
+    return e * ue4m3_half_f32((word >> uint(((kk / 16) % 4) * 8)) & 0xFFu) * f.xrs[tok]
 }

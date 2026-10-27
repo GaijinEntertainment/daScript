@@ -225,29 +225,9 @@ class Q8ActRq : ActRqT {
     }
 }
 
-//! the biased twin of the fused act + Q8_0 requant: element e's row (e / brow) names the expert whose gate and up bias rows join before the activation
+//! the biased twin of the fused act + Q8_0 requant (`ActRqBT`: the picks' gate and up bias rows join before the activation)
 [vk_dispatch(name = "q8_actrq_b_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
-class Q8ActRqB : ActRqT {
-    @ssbo @binding = 4 @role = "weight" gb : array<float>   //! the gate-bias plane
-    @ssbo @binding = 5 @role = "weight" ub : array<float>   //! the up-bias plane
-    @ssbo @binding = 6 rex : array<uint>     //! row -> its expert
-
-    //! the biased v, u pair of element e (the gate row's element and the up element at ue)
-    def biased(e, ue : uint) : float2 {
-        let ex = rex[e / pa.brow]
-        let c = e % pa.brow
-        return float2(gate[e] + gb[pa.gboff + ex * pa.brow + c], up[ue] + ub[pa.uboff + ex * pa.brow + c])
-    }
-
-    def override load4(eb : uint) : float4 {
-        let ue = up_at(eb)
-        let p0 = biased(eb, ue)
-        let p1 = biased(eb + 1u, ue + 1u)
-        let p2 = biased(eb + 2u, ue + 2u)
-        let p3 = biased(eb + 3u, ue + 3u)
-        return float4(act_mul(p0.x, p0.y), act_mul(p1.x, p1.y), act_mul(p2.x, p2.y), act_mul(p3.x, p3.y))
-    }
-
+class Q8ActRqB : ActRqBT {
     [spirv_kernel(local_size_x = 256)]
     def run {
         rq_body()
@@ -390,16 +370,6 @@ def cls_sel_plane_off(k, nb : int64) : int64 {
     return off
 }
 
-//! the Vulkan row kernels' value form of the common scan (`GkWgScan`): the exclusive prefix over the `WG` threads' v
-[ |> template_struct_instance]
-class template WgScanT : GkWgScan {
-    def excl_scan(v : uint) : uint {
-        var cum = 0u
-        excl_scan_into(v, cum)
-        return cum
-    }
-}
-
 //! the classifier tail's selection on the template both homes stamp (`GkClsSelect`), a workgroup of 1024 threads a row
 [vk_dispatch(name = "cls_select", grid = "rows", params = "rows : int64")]
 class ClsSelect : GkClsSelect {
@@ -489,41 +459,45 @@ class DecCombineSh : DecCombineT {
     override SH = true
 }
 
-//! the router GEMV on the template both homes stamp (`GkRouterGemv`): a workgroup of 256 an expert row, eight columns a dispatch,
-//! the row read as its weightless rms under the norm row where `norm_on`
-[ |> template_struct_instance]
-class template RouterGemvT : GkRouterGemv {
-    override NORM = true
-    override YSCALE = true
-
-    [spirv_kernel(local_size_x = 256), arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#whole-token-decode-span")]
-    def run {
-        router_row(gl_WorkGroupID.x, gl_LocalInvocationID.x, 256u)
-    }
-}
-
+//! the router GEMV over the f32 rows (`RouterGemvT`, the template both discrete homes stamp)
 [vk_dispatch(name = "router_gemv_cls", grid = "ne", params = "ne : int64")]
 class RouterGemv : RouterGemvT {
     typedef KT = float
     typedef XT = float
+
+    [spirv_kernel(local_size_x = 256), arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#whole-token-decode-span")]
+    def run {
+        router_body()
+    }
 }
 
-//! the bf16 rows read as bf16 pairs, one word a step (the E-series pre-step's projection, its own rows on the device)
+//! the router GEMV (`RouterGemvT`) over the bf16 rows read as bf16 pairs, one word a step (the E-series pre-step's projection,
+//! its own rows on the device)
 [vk_dispatch(name = "router_gemv_bf16_cls", grid = "ne", params = "ne : int64")]
 class RouterGemvBf16 : RouterGemvT {
     typedef KT = uint
     typedef XT = float
     override VW = 2u
     override BF16 = true
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        router_body()
+    }
 }
 
-//! the router GEMV stamp of the template both homes stamp (`GkRouterGemv`) over the bf16 rows a halfword a lane, for an odd dim
-//! or base: a row then starts mid-word, off the pairs' word grid
+//! the router GEMV stamp (`RouterGemvT` over the template both homes stamp, `GkRouterGemv`) over the bf16 rows a halfword a lane,
+//! for an odd dim or base: a row then starts mid-word, off the pairs' word grid
 [vk_dispatch(name = "router_gemv_bf16_hw_cls", grid = "ne", params = "ne : int64")]
 class RouterGemvBf16Hw : RouterGemvT {
     typedef KT = uint16
     typedef XT = float
     override BF16 = true
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        router_body()
+    }
 }
 
 //! the pre-step projection's bf16 rows of model dim `dim` take the halfword stamp: every row starts at a multiple of `dim`, so an odd
@@ -545,132 +519,19 @@ def router_enc_cols(bf16 : bool; raw : VkCommandBuffer; var h : VkHaz; var set_ 
     }
 }
 
-struct DnBaArgs {
-    npos : uint
-    dim : uint
-    nvh : uint       // beta rows (the alpha rows follow them in w)
-    woff : uint      // this layer's [beta ; alpha] row base in w (elements)
-    xstride : uint   // x row stride (elements)
-    obase_b : uint   // beta output base in outp: row p's nvh values at obase_b + p * ostride
-    obase_g : uint   // alpha output base, the same layout
-    ostride : uint
-}
-
+//! the f32 beta/alpha tile GEMM of the window over the f32 normed rows (`DnBaGemmT`, the template both discrete homes stamp)
 [vk_dispatch(name = "dn_ba_cls", grid = "wgs", params = "wgs : int64")]
-class DnBaGemm {
-    @ssbo @binding = 0 @role = "weight" w : array<float>   //! the [beta ; alpha] rows per layer, the file's f32
-    @ssbo @binding = 1 x : array<float>       // the normed rows
-    @ssbo @binding = 2 outp : array<float>    // the layer smalls (beta / g rows, position-major)
-    @push_constant pa : DnBaArgs
-    @workgroup xs : float[528]                 // 16 positions x 32 k, stride 33 (bank-spread)
-    @workgroup ws : float[528]                 // 16 rows x 32 k, stride 33
+class DnBaGemm : DnBaGemmT {
+    typedef XT = float
 
     [spirv_kernel(local_size_x = 256, name = "dn_ba_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-dn-block")]
     def run {
-        let tid = gl_LocalInvocationID.x
-        let ne = 2u * pa.nvh
-        let egroups = (ne + 15u) / 16u
-        let p0 = (gl_WorkGroupID.x / egroups) * 16u
-        let eg0 = (gl_WorkGroupID.x % egroups) * 16u
-        let p = tid / 16u
-        let el = tid % 16u
-        let e = eg0 + el
-        let live = p0 + p < pa.npos && e < ne
-        let r = tid / 32u
-        let k = tid % 32u
-        var a = 0.0
-        var kb = 0u
-        while (kb < pa.dim) {
-            if (p0 + r < pa.npos) {
-                xs[r * 33u + k] = x[(p0 + r) * pa.xstride + kb + k]
-            } else {
-                xs[r * 33u + k] = 0.0
-            }
-            if (p0 + r + 8u < pa.npos) {
-                xs[(r + 8u) * 33u + k] = x[(p0 + r + 8u) * pa.xstride + kb + k]
-            } else {
-                xs[(r + 8u) * 33u + k] = 0.0
-            }
-            if (eg0 + r < ne) {
-                ws[r * 33u + k] = w[pa.woff + (eg0 + r) * pa.dim + kb + k]
-            } else {
-                ws[r * 33u + k] = 0.0
-            }
-            if (eg0 + r + 8u < ne) {
-                ws[(r + 8u) * 33u + k] = w[pa.woff + (eg0 + r + 8u) * pa.dim + kb + k]
-            } else {
-                ws[(r + 8u) * 33u + k] = 0.0
-            }
-            barrier()
-            if (live) {
-                var kk = 0u
-                while (kk < 32u) {
-                    a += xs[p * 33u + kk] * ws[el * 33u + kk]
-                    kk++
-                }
-            }
-            barrier()
-            kb += 32u
-        }
-        if (live) {
-            outp[(e < pa.nvh ? pa.obase_b : pa.obase_g) + (p0 + p) * pa.ostride + (e % pa.nvh)] = a
-        }
+        dn_ba_body()
     }
 }
 
-//! the top-k's records on the select both homes stamp (`GkTopKRow`): row `p`'s picks land in slots `p * k + j` - the expert and
-//! its weight, and under `META` the slot's GEMV records (the decode's), off it the two alone (the window's per-row select, which
-//! the bucket schedule reads)
-[ |> template_struct_instance]
-class template TopKRecords : GkTopKRow {
-    @template_constant META : bool = true
-    @ssbo @binding = 0 logits : array<float>  //! [npos x lstride]
-    @ssbo @binding = 1 @template_gate = META meta1 : array<uint>   //! the gate stack's (wblock, xblock) per slot row
-    @ssbo @binding = 2 @template_gate = META meta3 : array<uint>
-    @ssbo @binding = 3 @template_gate = META meta2 : array<uint>
-    @ssbo @binding = 4 w : array<float>      //! the routing weights, a slot each
-    @ssbo @binding = 5 @role = "weight" ds : array<float>     //! the per-expert down scales (gemma-4), read at dsoff when the push names a row
-    @ssbo @binding = 6 @role = "weight" rb : array<float>     //! the router biases ([ne] a layer, gpt-oss), read at rboff under `rbias_on`
-    @ssbo @binding = 7 eidx : array<uint>    //! the picks' experts, a slot each: the bias rows the act and the combine read
-    override DSCALE = true
-
-    def override logit_at(p, e : uint) : float => logits[p * pa.lstride + e] + (pa.rbias_on != 0u ? rb[pa.rboff + e] : 0.0)
-    def override down_scale(e : uint) : float => ds[pa.dsoff + e]
-
-    //! row `p`: its logits selected, its k slots' records written by thread 0
-    def row_picks(p : uint) {
-        let tid = gl_LocalInvocationID.x
-        select_row(p, pa.ne, pa.k, false)
-        if (tid == 0u) {
-            write_picks(p)
-        }
-    }
-
-    def write_picks(p : uint) {
-        var ws = 0.0
-        pick_wsum_into(pa.k, ws)
-        var jj = 0u
-        while (jj < pa.k) {
-            let s = p * pa.k + jj
-            let ex = min(pick[jj], pa.ne - 1u)   // a NaN row leaves the sentinel: never a wild weight block
-            var wj = 0.0
-            pick_weight_into(jj, ex, pa.norm, ws, pa.wscale, wj)
-            w[s] = wj
-            eidx[s] = ex
-            static_if (META) {
-                meta1[s * 2u] = pa.base1 + ex * pa.stride1
-                meta1[s * 2u + 1u] = p * pa.xnb1
-                meta3[s * 2u] = pa.base3 + ex * pa.stride3
-                meta3[s * 2u + 1u] = p * pa.xnb1
-                meta2[s * 2u] = pa.base2 + ex * pa.stride2
-                meta2[s * 2u + 1u] = s * pa.xnb2
-            }
-            jj++
-        }
-    }
-}
-
-//! a row a workgroup: the decode's per-row select with its slot records (`META`), or the window's picks alone
+//! a row a workgroup: the decode's per-row select with its slot records (`META`), or the window's picks alone - the shared
+//! `TopKRecords` under this home's kernel
 [ |> template_struct_instance]
 class template TopKRowsT : TopKRecords {
     [spirv_kernel(local_size_x = 256), arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command"), arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#whole-token-decode-span"),
@@ -680,31 +541,28 @@ class template TopKRowsT : TopKRecords {
     }
 }
 
+//! the decode's select with its slot records, one logit a thread to 256 experts (`TopKRecords`)
 [vk_dispatch(name = "topk_n_cls", grid = "npos", params = "npos : int64")]
 class TopKN : TopKRowsT {}
 
+//! ... two logits a thread past 256 experts (`TopKRecords`)
 [vk_dispatch(name = "topk_n2_cls", kernel = "run", family = "topk_n_cls", grid = "npos", params = "npos : int64")]
 class TopKN2 : TopKRowsT {
     override DEPTH = 2
 }
 
+//! the window's select, the picks and weights alone (`TopKRecords`)
 [vk_dispatch(name = "topk_rows_cls", grid = "npos", params = "npos : int64")]
 class TopKRows : TopKRowsT {
     override META = false
 }
 
+//! ... two logits a thread past 256 experts (`TopKRecords`)
 [vk_dispatch(name = "topk_rows2_cls", kernel = "run", family = "topk_rows_cls", grid = "npos", params = "npos : int64")]
 class TopKRows2 : TopKRowsT {
     override META = false
     override DEPTH = 2
 }
-
-//! the experts one select workgroup reaches: 256 threads, `TOPK_DEPTH_MAX` logits a thread
-let TOPK_DEPTH_MAX = 2
-let TOPK_EXPERTS_MAX = 256l * int64(TOPK_DEPTH_MAX)
-
-//! the select stamps' depth for `ne` experts: one logit a thread to 256, two past it
-def topk_depth(ne : int64) : int => ne > 256l ? 2 : 1
 
 //! the decode's per-row select over `ne` experts on the stamp its depth names (`topk_n_cls`' one set serves both)
 def topk_n_ensure(ne : int64) : bool => topk_depth(ne) > 1 ? ensure_topk_n2_cls() : ensure_topk_n_cls()
@@ -728,176 +586,21 @@ def topk_rows_enc(ne : int64; raw : VkCommandBuffer; var h : VkHaz; var set_ : V
     }
 }
 
-struct RouterGemmArgs {
-    npos : uint      //! rows
-    ne : uint        //! router rows (the experts, plus the shared expert's gate row when it rides along)
-    dim : uint       //! row width
-    woff : uint      //! this layer's row base in w (elements)
-    ostride : uint   //! the logits row stride (elements)
-}
-
-let ROUTER_TP = 64u   //! the router tile's positions per workgroup
-let ROUTER_TE = 32u   //! ... and router rows
-let ROUTER_TH = ROUTER_TE / 2u   //! an invocation's two rows sit a half-tile apart: e and e + ROUTER_TH
-let ROUTER_K4 = 16u   //! a 64-wide K step in float4
-let ROUTER_LD = ROUTER_K4 + 1u   //! the stage's row stride in float4: the step plus one of pad, so the sixteen rows a warp reads (and a fetch writes) spread the eight bank groups
-
+//! the window's router GEMM on the template both homes stamp (`RouterGemmT`)
 [vk_dispatch(name = "router_gemm_cls", grid = "wgs", params = "wgs : int64")]
-class RouterGemm {
-    @ssbo @binding = 0 @role = "weight" w4 : array<float4>   //! the router rows, row-major [ne x dim] per layer, as the stage's float4
-    @ssbo @binding = 1 x4 : array<float4>      //! the FFN-normed rows, as float4
-    @ssbo @binding = 2 logits : array<float>   //! [npos x ostride]
-    @push_constant pa : RouterGemmArgs
-    @workgroup xs : float4[int(ROUTER_TP * ROUTER_LD)]
-    @workgroup ws : float4[int(ROUTER_TE * ROUTER_LD)]
-
-    //! the stage's float4 of slot `s` (row s / ROUTER_K4, k4 s % ROUTER_K4) of x rows from `p0` at step `kb`; zero past the window
-    def fetch_x(p0, kb, s : uint) : float4 {
-        let row = s / ROUTER_K4
-        if (p0 + row >= pa.npos) return float4(0.0)
-        return x4[((p0 + row) * pa.dim + kb) / 4u + (s % ROUTER_K4)]
-    }
-
-    //! ... and of the router rows from `eg0`; zero past the experts
-    def fetch_w(eg0, kb, s : uint) : float4 {
-        let row = s / ROUTER_K4
-        if (eg0 + row >= pa.ne) return float4(0.0)
-        return w4[(pa.woff + (eg0 + row) * pa.dim + kb) / 4u + (s % ROUTER_K4)]
-    }
-
-    //! a fetched float4 into its stage row at k4 `s % ROUTER_K4`
-    def stage_x(s : uint; v : float4) {
-        xs[(s / ROUTER_K4) * ROUTER_LD + (s % ROUTER_K4)] = v
-    }
-
-    def stage_w(s : uint; v : float4) {
-        ws[(s / ROUTER_K4) * ROUTER_LD + (s % ROUTER_K4)] = v
-    }
-
-    //! `a` plus the four products in k order - the scalar loop's sums to the bit
-    def acc4(a : float; x, w : float4) : float {
-        var s = a
-        s += x.x * w.x
-        s += x.y * w.y
-        s += x.z * w.z
-        s += x.w * w.w
-        return s
-    }
-
-    [spirv_kernel(local_size_x = 256, name = "router_gemm_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block")]
+class RouterGemm : RouterGemmT {
+    [spirv_kernel(local_size_x = 256, name = "router_gemm_cls_spv")]
     def run {
-        let tid = gl_LocalInvocationID.x
-        let egroups = (pa.ne + ROUTER_TE - 1u) / ROUTER_TE
-        let p0 = (gl_WorkGroupID.x / egroups) * ROUTER_TP
-        let eg0 = (gl_WorkGroupID.x % egroups) * ROUTER_TE
-        let tp = tid / ROUTER_TH   //! the invocation's four positions 4tp..4tp+3
-        let te = tid % ROUTER_TH   //! ... and rows te, te + ROUTER_TH
-        var a00 = 0.0
-        var a01 = 0.0
-        var a10 = 0.0
-        var a11 = 0.0
-        var a20 = 0.0
-        var a21 = 0.0
-        var a30 = 0.0
-        var a31 = 0.0
-        //! the stage: 64 x rows x 16 float4 = four per invocation, 32 w rows x 16 = two
-        var xr0 = fetch_x(p0, 0u, tid)
-        var xr1 = fetch_x(p0, 0u, tid + 256u)
-        var xr2 = fetch_x(p0, 0u, tid + 512u)
-        var xr3 = fetch_x(p0, 0u, tid + 768u)
-        var wr0 = fetch_w(eg0, 0u, tid)
-        var wr1 = fetch_w(eg0, 0u, tid + 256u)
-        var kb = 0u
-        while (kb < pa.dim) {
-            stage_x(tid, xr0)
-            stage_x(tid + 256u, xr1)
-            stage_x(tid + 512u, xr2)
-            stage_x(tid + 768u, xr3)
-            stage_w(tid, wr0)
-            stage_w(tid + 256u, wr1)
-            barrier()
-            let nb = kb + 64u
-            if (nb < pa.dim) {
-                xr0 = fetch_x(p0, nb, tid)
-                xr1 = fetch_x(p0, nb, tid + 256u)
-                xr2 = fetch_x(p0, nb, tid + 512u)
-                xr3 = fetch_x(p0, nb, tid + 768u)
-                wr0 = fetch_w(eg0, nb, tid)
-                wr1 = fetch_w(eg0, nb, tid + 256u)
-            }
-            let xb = (4u * tp) * ROUTER_LD
-            let wb = te * ROUTER_LD
-            let wb1 = wb + ROUTER_TH * ROUTER_LD
-            var kk = 0u
-            while (kk < ROUTER_K4) {
-                let x0 = xs[xb + kk]
-                let x1 = xs[xb + ROUTER_LD + kk]
-                let x2 = xs[xb + 2u * ROUTER_LD + kk]
-                let x3 = xs[xb + 3u * ROUTER_LD + kk]
-                let w0 = ws[wb + kk]
-                let w1 = ws[wb1 + kk]
-                a00 = acc4(a00, x0, w0)
-                a01 = acc4(a01, x0, w1)
-                a10 = acc4(a10, x1, w0)
-                a11 = acc4(a11, x1, w1)
-                a20 = acc4(a20, x2, w0)
-                a21 = acc4(a21, x2, w1)
-                a30 = acc4(a30, x3, w0)
-                a31 = acc4(a31, x3, w1)
-                kk++
-            }
-            barrier()
-            kb = nb
-        }
-        let pa0 = p0 + 4u * tp
-        let ea0 = eg0 + te
-        store_pair(pa0, ea0, a00, a01)
-        store_pair(pa0 + 1u, ea0, a10, a11)
-        store_pair(pa0 + 2u, ea0, a20, a21)
-        store_pair(pa0 + 3u, ea0, a30, a31)
-    }
-
-    //! position p's two logits at rows e, e + ROUTER_TH, each within the window and the experts
-    def store_pair(p, e : uint; v0, v1 : float) {
-        if (p >= pa.npos) return
-        if (e < pa.ne) {
-            logits[p * pa.ostride + e] = v0
-        }
-        if (e + ROUTER_TH < pa.ne) {
-            logits[p * pa.ostride + e + ROUTER_TH] = v1
-        }
+        router_gemm_body()
     }
 }
 
 //! npos rows of ne router logits at a row stride of ne, over the router rows at woff: one workgroup per 64 rows x 32 router rows
 def router_gemm_enc(raw : VkCommandBuffer; var h : VkHaz; var rset : VkDescriptorSet; npos, ne, dim, woff : int64) {
     var pc = RouterGemmArgs(npos = uint(npos), ne = uint(ne), dim = uint(dim), woff = uint(woff), ostride = uint(ne))
-    enc_router_gemm_cls(raw, h, rset, pc, ((npos + int64(ROUTER_TP) - 1l) / int64(ROUTER_TP)) * ((ne + int64(ROUTER_TE) - 1l) / int64(ROUTER_TE)))
+    enc_router_gemm_cls(raw, h, rset, pc, router_gemm_wgs(npos, ne))
 }
 
-struct SchedArgs {
-    nk : uint          //! slot rows (npos x k)
-    ne : uint          //! experts (at most 256: one thread per expert)
-    wt_gu : uint       //! the gate/up GEMMs' weight tiles (ceil(nfe / 128))
-    wt_dn : uint       //! the down GEMM's (ceil(dim / 128))
-    map_off : uint     //! the s dispatch's per-wg map word offset in every sched plane; the records precede it
-    map_off_mgu : uint //! the m dispatch's map offset in the gate/up planes
-    map_off_mdn : uint //! ... and in the down plane
-    bound_gu : uint    //! the s dispatch's workgroups per gate/up plane; the map's tail past the schedule reads the sentinel
-    bound_dn : uint
-    bound_mgu : uint   //! the m dispatch's
-    bound_mdn : uint
-    base1 : uint       //! expert 0's block base in the gate plane (slab-local, in the plane's units)
-    stride1 : uint     //! blocks per expert
-    base3 : uint
-    stride3 : uint
-    base2 : uint
-    stride2 : uint
-    s_only : uint      //! every bucket on the s column, a 32-row tile a piece (the Q8-fed chain's sdot4 tiles); 0 = the ladder's m columns too
-}
-
-let SCHED_S_ROWS = 32u    //! the s column: the ladder's small-bucket and remainder tile
-let SCHED_M_ROWS = 128u   //! the m column: whole columns over a big bucket, the last one partial
 let CM2_TC_E = -1l        //! the class ladders' `tc` key for the expert schedule's e column: a sentinel no column width can be (the dense m stamp already keys by its 128 rows)
 
 [arch(at="../ARCHITECTURE_GPU_SHARED_GEMM.md#khr-mm-kq-tile")]
@@ -977,129 +680,7 @@ def cm2_cls_enc(fmt : int; tc : int64; raw : VkCommandBuffer; var h : VkHaz; var
     }
 }
 
-//! the ladder's m rows of a bucket of `c` rows: none up to the s column, else whole m columns plus a
-//! partial one when the remainder passes the s column (a remainder within it takes the s column)
-def sched_ladder_m_rows(c : uint) : uint {
-    if (c <= SCHED_S_ROWS) return 0u
-    return (c % SCHED_M_ROWS) > SCHED_S_ROWS ? c : (c / SCHED_M_ROWS) * SCHED_M_ROWS
-}
-
-//! the window's bucket schedule, a thread an expert: `WG` threads reach `WG` experts (the 512-thread stamp past 256); its scan is `WgScanT`'s
-[ |> template_struct_instance]
-class template MoeSchedT : WgScanT {
-    @ssbo @binding = 0 idx : array<uint>       //! [nk] the picked expert per slot row
-    @ssbo @binding = 1 inv : array<uint>       //! [nk] slot row -> bucket row
-    @ssbo @binding = 2 sched1 : array<uint>    //! the gate plane's records + maps
-    @ssbo @binding = 3 sched3 : array<uint>
-    @ssbo @binding = 4 sched2 : array<uint>
-    @ssbo @binding = 5 bex : array<uint>       //! [nk] bucket row -> its expert (the biased act's row map)
-    @push_constant pa : SchedArgs
-    @workgroup cnt : uint[int(WG)]    //! the experts' slot counts, then their bucket cursors
-
-    //! one piece's record and per-wg map on the three planes: expert `tid`'s `rows` from `row0`,
-    //! record `ri`, its `rt` column tiles from workgroup `wg_gu` / `wg_dn` of the dispatch whose
-    //! maps sit at `map_gu` / `map_dn`
-    def write_piece(ri, row0, rows, rt, wg_gu, wg_dn, map_gu, map_dn : uint) {
-        let tid = gl_LocalInvocationID.x
-        let rb = ri * 4u
-        sched1[rb] = pa.base1 + tid * pa.stride1
-        sched1[rb + 1u] = row0
-        sched1[rb + 2u] = rows
-        sched1[rb + 3u] = wg_gu
-        sched3[rb] = pa.base3 + tid * pa.stride3
-        sched3[rb + 1u] = row0
-        sched3[rb + 2u] = rows
-        sched3[rb + 3u] = wg_gu
-        sched2[rb] = pa.base2 + tid * pa.stride2
-        sched2[rb + 1u] = row0
-        sched2[rb + 2u] = rows
-        sched2[rb + 3u] = wg_dn
-        var g = 0u
-        while (g < rt * pa.wt_gu) {
-            sched1[map_gu + wg_gu + g] = ri
-            sched3[map_gu + wg_gu + g] = ri
-            g++
-        }
-        g = 0u
-        while (g < rt * pa.wt_dn) {
-            sched2[map_dn + wg_dn + g] = ri
-            g++
-        }
-    }
-
-    //! the sentinel tails of the four maps, from the live workgroup counts (the s count in the low
-    //! half of each total, the m count in the high) to the dispatch bounds
-    def write_tails(total_gu, total_dn : uint) {
-        let tid = gl_LocalInvocationID.x
-        var t = (total_gu & 0xFFFFu) + tid
-        while (t < pa.bound_gu) {
-            sched1[pa.map_off + t] = SCHED_NONE
-            sched3[pa.map_off + t] = SCHED_NONE
-            t += WG
-        }
-        t = (total_dn & 0xFFFFu) + tid
-        while (t < pa.bound_dn) {
-            sched2[pa.map_off + t] = SCHED_NONE
-            t += WG
-        }
-        t = (total_gu >> 16u) + tid
-        while (t < pa.bound_mgu) {
-            sched1[pa.map_off_mgu + t] = SCHED_NONE
-            sched3[pa.map_off_mgu + t] = SCHED_NONE
-            t += WG
-        }
-        t = (total_dn >> 16u) + tid
-        while (t < pa.bound_mdn) {
-            sched2[pa.map_off_mdn + t] = SCHED_NONE
-            t += WG
-        }
-    }
-
-    [arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block")]
-    def sched_body {
-        let tid = gl_LocalInvocationID.x
-        let mine = tid < pa.ne
-        cnt[tid] = 0u
-        barrier()
-        var i = tid
-        while (i < pa.nk) {   //! the top-k clamps every pick under ne, so the tally stays inside cnt
-            let _c = atomicAdd(cnt[idx[i]], 1u)
-            i += WG
-        }
-        barrier()
-        let c = mine ? cnt[tid] : 0u
-        let st = excl_scan(c)
-        let mrows = mine && pa.s_only == 0u ? sched_ladder_m_rows(c) : 0u
-        let srows = mine ? c - mrows : 0u
-        let ri_s = excl_scan(srows > 0u ? 1u : 0u)
-        let ri_m = pa.ne + excl_scan(mrows > 0u ? 1u : 0u)
-        let rt_s = (srows + SCHED_S_ROWS - 1u) / SCHED_S_ROWS
-        let rt_m = (mrows + SCHED_M_ROWS - 1u) / SCHED_M_ROWS
-        //! the packed word each scan carries: the s tile count in the low half, the m count in the high
-        let g_gu = excl_scan(rt_s * pa.wt_gu | ((rt_m * pa.wt_gu) << 16u))
-        let total_gu = scan[WG - 1u]
-        let g_dn = excl_scan(rt_s * pa.wt_dn | ((rt_m * pa.wt_dn) << 16u))
-        let total_dn = scan[WG - 1u]
-        if (srows > 0u) {
-            write_piece(ri_s, st + mrows, srows, rt_s, g_gu & 0xFFFFu, g_dn & 0xFFFFu, pa.map_off, pa.map_off)
-        }
-        if (mrows > 0u) {
-            write_piece(ri_m, st, mrows, rt_m, g_gu >> 16u, g_dn >> 16u, pa.map_off_mgu, pa.map_off_mdn)
-        }
-        write_tails(total_gu, total_dn)
-        barrier()   //! every thread has read its count
-        cnt[tid] = st
-        barrier()
-        i = tid
-        while (i < pa.nk) {
-            let b = atomicAdd(cnt[idx[i]], 1u)
-            inv[i] = b
-            bex[b] = idx[i]
-            i += WG
-        }
-    }
-}
-
+//! the window's bucket schedule on the template both homes stamp (`MoeSchedT`)
 [vk_dispatch(name = "moe_sched_cls", grid = "one", params = "one : int64")]
 class MoeSched : MoeSchedT {
     [spirv_kernel(local_size_x = 256)]
@@ -1108,6 +689,7 @@ class MoeSched : MoeSchedT {
     }
 }
 
+//! the 512-thread bucket schedule past 256 experts (`MoeSchedT`)
 [vk_dispatch(name = "moe_sched2_cls", kernel = "run", family = "moe_sched_cls", grid = "one", params = "one : int64")]
 class MoeSched2 : MoeSchedT {
     override WG = 512u
@@ -1129,56 +711,7 @@ def moe_sched_enc(ne : int64; raw : VkCommandBuffer; var h : VkHaz; var set_ : V
     }
 }
 
-struct GatherArgs {
-    n : uint    // row width
-    k : uint    // slots per position (grid entry r sits at position r / k)
-    r0 : uint   // this dispatch's bucket-row window [r0, r1)
-    r1 : uint
-}
-
-//! the routed block's gather: every slot row's activation row into its bucket row, as halves (`XG` float16, the f16-fed tiles'
-//! feed) or as floats (the Q8-fed chain requantizes the gathered rows)
-[ |> template_struct_instance]
-class template MoeGatherT {
-    @template_constant F16 : bool = true
-    @template_constant BYROW : bool = false    //! a workgroup a bucket row of the window (the per-expert chain), not a grid entry
-    @ssbo @binding = 0 x : array<float>        // the normed activation rows, one per position
-    @ssbo @binding = 1 @template_gate = "!BYROW" slot_idx : array<uint>  // position -> its k slot rows (the combine's map)
-    @ssbo @binding = 1 @template_gate = BYROW bkt_grid : array<uint>     // bucket row -> its grid entry (the map's inverse)
-    @ssbo @binding = 2 xg : array<XG>          // the gathered rows, bucket order, window-relative
-    @push_constant pa : GatherArgs
-
-    def gather_body {
-        static_if (BYROW) {
-            let b = gl_WorkGroupID.x
-            let src = (bkt_grid[pa.r0 + b] / max(1u, pa.k)) * pa.n
-            let dst = b * pa.n
-            gather_row(src, dst)
-        } else {
-            let r = gl_WorkGroupID.x
-            let b = slot_idx[r]
-            if (b < pa.r0 || b >= pa.r1) {
-                return
-            }
-            let src = (r / pa.k) * pa.n
-            let dst = (b - pa.r0) * pa.n
-            gather_row(src, dst)
-        }
-    }
-
-    def gather_row(src, dst : uint) {
-        var i = gl_LocalInvocationID.x
-        while (i < pa.n) {
-            static_if (F16) {
-                xg[dst + i] = half_sat(x[src + i])
-            } else {
-                xg[dst + i] = x[src + i]
-            }
-            i += 256u
-        }
-    }
-}
-
+//! the routed block's gather on the template both homes stamp (`MoeGatherT`)
 [vk_dispatch(name = "moe_gather_f16_cls", grid = "nk", params = "nk : int64")]
 class MoeGatherF16 : MoeGatherT {
     typedef XG = float16
@@ -1189,7 +722,7 @@ class MoeGatherF16 : MoeGatherT {
     }
 }
 
-//! the per-expert chain's gather: one workgroup a window row, over the rows of one expert alone
+//! the per-expert chain's gather (`MoeGatherT`): one workgroup a window row, over the rows of one expert alone
 [vk_dispatch(name = "moe_gather_f16_row_cls", grid = "rows", params = "rows : int64")]
 class MoeGatherF16Row : MoeGatherT {
     typedef XG = float16
@@ -1201,6 +734,7 @@ class MoeGatherF16Row : MoeGatherT {
     }
 }
 
+//! the routed block's gather as f32 rows (`MoeGatherT`)
 [vk_dispatch(name = "moe_gather_f32_cls", grid = "nk", params = "nk : int64")]
 class MoeGatherF32 : MoeGatherT {
     typedef XG = float
@@ -1372,483 +906,54 @@ class PleCommit {
 
 // ===== deltanet: the conv front =====
 
-//! the conv front on the template both homes stamp (`GkDnConv`): the taps and the history out of the layer's smalls
+//! the conv front (`DnConvT` over the template every home stamps, `GkDnConv`): the taps and the history out of the layer's smalls
 [vk_dispatch(name = "dn_conv_cls", grid = "wgs", params = "wgs : int64")]
-class DnConv : GkDnConv {
-    @ssbo @binding = 2 @role = "read" smalls : array<float>   //! taps + history + any small planes (push offsets)
-
-    def override seg_row0 : uint => pa.row0
-    def override seg_npos : uint => pa.npos
-    def override tap_at(ch, j : uint) : float => smalls[pa.taps_off + ch * pa.dconv + j]
-    def override hist_at(ch, taps, hidx : uint) : float {
-        if (pa.hist_mode == 1u) {
-            return smalls[pa.hist_off + ch * taps + hidx]
-        }
-        return smalls[pa.hist_off + hidx * pa.cd + ch]
-    }
-
+class DnConv : DnConvT {
     [spirv_kernel(local_size_x = 256, name = "dn_conv_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-dn-block")]
     def run {
         dn_conv_body(gl_WorkGroupID.x, gl_LocalInvocationID.x)
     }
 }
 
-struct DnTailArgs {
-    cd : uint         // conv width (channels)
-    taps : uint       // history rows (dconv - 1)
-    row0 : uint       // the first tail row in src (the window's last taps raw rows)
-    hist_off : uint   // the ring image's float offset in smalls
-    old_rows : uint   //! leading ring rows the call's entry image supplies (a lone window shorter than the taps): new row k is old row k + taps - old_rows
-    old_off : uint    //! the entry image's float offset in smalls (per-channel, the decode step's layout); never the image at `hist_off`
-}
-
-//! the conv ring write both tails stamp (`DnTail` the window's, `DnCapTail` a capture's): thread `idx` of `cd * taps` takes
-//! channel `idx / taps`'s ring row `k = idx % taps` - projected row `row0 + k - old_rows` where `k >= old_rows`, else the entry
-//! image's row `k + taps - old_rows` at `old_off` - into the destination image at `dst0`
-[ |> template_struct_instance]
-class template DnTailT {
-    def abstract src_at(i : uint) : float     //! projected-rows float `i`
-    def abstract entry_at(i : uint) : float   //! smalls float `i`
-    def abstract put(i : uint; v : float) : void
-
-    def tail_tap(idx, cd, taps, row0, old_rows, old_off, dst0 : uint) {
-        if (taps != 0u && idx < cd * taps) {
-            let ch = idx / taps
-            let k = idx % taps
-            var v = 0.0
-            if (k >= old_rows) {
-                v = src_at((row0 + k - old_rows) * cd + ch)
-            } else {
-                v = entry_at(old_off + ch * taps + k + taps - old_rows)
-            }
-            put(dst0 + ch * taps + k, v)
-        }
-    }
-}
-
+//! the window's conv ring hand-off (`DnTailRingT`, the template both discrete homes stamp)
 [vk_dispatch(name = "dn_tail_cls", grid = "wgs", params = "wgs : int64")]
-class DnTail : DnTailT {
-    @ssbo @binding = 0 src : array<float>      // the projected rows (position-major)
-    @ssbo @binding = 1 smalls : array<float>   // the layer's smalls (the ring image at hist_off)
-    @push_constant pa : DnTailArgs
-
-    def override src_at(i : uint) : float => src[i]
-    def override entry_at(i : uint) : float => smalls[i]
-    def override put(i : uint; v : float) : void {
-        smalls[i] = v
-    }
-
+class DnTail : DnTailRingT {
     [spirv_kernel(local_size_x = 256, name = "dn_tail_cls_spv")]
     def run {
-        tail_tap(gl_GlobalInvocationID.x, pa.cd, pa.taps, pa.row0, pa.old_rows, pa.old_off, pa.hist_off)
+        tail_ring_body()
     }
 }
 
 // ===== deltanet: the fused decode step =====
 
-//! the row kernels' reduces in value form over the shared `GkWgReduce` (one wg reduces one row), and the inverse rms
-[ |> template_struct_instance]
-class template WgReduceBase : GkQ8BlockStore {
-    //! `slot` alternates 0 / 1 between consecutive reduces of one kernel
-    def wg_rms_inv(ss0 : float; n : uint; eps : float; slot : uint) : float => 1.0 / sqrt(wg_sum(ss0, slot) / float(n) + eps)
-
-    //! the workgroup sum every thread holds alike (the layernorm's mean and variance ride it, and `wg_rms_inv`) - the
-    //! shared base's reduce in value form, which the SPIR-V emitter takes
-    def wg_sum(v0 : float; slot : uint) : float {
-        var tot = 0.0
-        wg_sum_into(v0, slot, tot)
-        return tot
-    }
-
-    //! the workgroup max every thread holds alike (the chunked attention's score max)
-    def wg_max(v0 : float; slot : uint) : float {
-        var m = 0.0
-        wg_max_into(v0, slot, m)
-        return m
-    }
-}
-
-struct DnStepArgs {
-    cd : uint
-    kd : uint
-    nkh : uint
-    ds : uint
-    dconv : uint
-    beta_off : uint
-    g_off : uint
-    taps_off : uint
-    wnorm_off : uint
-    a_off : uint
-    dt_off : uint
-    hist_off : uint
-    eps : float
-    qscale : float
-    out_f32 : uint
-    beta_row_stride : uint
-    row0 : uint   //! the dispatch's first row: the same-slab verify steps one stream's rows one dispatch a row in one slot, each reading the state the row before it wrote
-}
-
-//! the fused deltanet decode step; its stamps differ on the out-gate alone (`ZSIG`)
-[ |> template_struct_instance]
-class template DnStepFusedT : WgReduceBase {
-    @template_constant ZSIG : bool = false   //!< the out-gate is sigmoid(z) (qwen4exp's `Config.dn_z_sigmoid`) instead of silu(z)
-    @ssbo @binding = 0 proj : array<float>     // the fresh projection row (+ z rows at cd)
-    @ssbo @binding = 1 state : array<float>    // the persistent per-head f32 state (in place)
-    @ssbo @binding = 2 smalls : array<float>   // beta/g/taps/wnorm/a/dt + the conv HISTORY ring (rw)
-    @ssbo @binding = 3 outs : array<float>     // the head's Q8_0 scales
-    @ssbo @binding = 4 outq : array<uint>      // ... and quant words
-    @ssbo @binding = 5 tok : array<TokMeta>    // the shared per-token block (element 0)
-    @ssbo @binding = 6 outf : array<float>     // the head's o row as f32
-    @push_constant pa : DnStepArgs
-    @workgroup dq : float[128]
-    @workgroup dk : float[128]
-    @workgroup dv : float[128]
-    @workgroup dvn : float[128]
-    @workgroup dout : float[128]
-    @workgroup partk : float[256]   //! each row part's k.S column partials (part-major, ds wide: the thread's own slot)
-    @workgroup partq : float[256]   //! ... and q.S
-    @workgroup sg_sumsq : float[16]   //! per-subgroup partial squared sums (q and k); the out-norm's reduce is `WgReduceBase`'s
-    @workgroup sg_qk : float[16]      //! per-subgroup partials of the raw q.k
-    @workgroup ds8 : float[8]
-
-    [spirv_kernel(local_size_x = 256), arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command")]
-    def run {   // nolint:STYLE037,STYLE038 — the fused chain: conv, norms, the delta rule, out-norm and the o row in one dispatch
-        let ds = pa.ds
-        let nvh = max(1u, (pa.cd - 2u * pa.kd) / ds)   //! the head count the geometry pins: cd = 2 kd + nvh ds
-        let row = pa.row0 + gl_WorkGroupID.x / nvh
-        let h = gl_WorkGroupID.x % nvh
-        let taps = pa.dconv - 1u
-        let par = tok[row].parity
-        let slot = tok[row].dnslot
-        let prow = row * (pa.cd + nvh * ds)
-        let ringb = pa.hist_off + slot * 2u * pa.cd * taps
-        let rrb = ringb + par * pa.cd * taps
-        let wrb = ringb + (1u - par) * pa.cd * taps
-        let tid = gl_LocalInvocationID.x
-        let kh = h % pa.nkh
-        var e = tid
-        while (e < 3u * ds) {
-            let sl = e / ds
-            let j = e % ds
-            let ch = (sl == 0u ? kh * ds : (sl == 1u ? pa.kd + kh * ds : 2u * pa.kd + h * ds)) + j
-            let fresh = proj[prow + ch]
-            var acc = fresh * smalls[pa.taps_off + ch * pa.dconv + taps]
-            var k = 0u
-            while (k < taps) {
-                acc += smalls[rrb + ch * taps + k] * smalls[pa.taps_off + ch * pa.dconv + k]
-                k++
-            }
-            if (sl == 2u || h < pa.nkh) {   // this head owns the channel's ring advance
-                k = 0u
-                while (k + 1u < taps) {
-                    smalls[wrb + ch * taps + k] = smalls[rrb + ch * taps + k + 1u]
-                    k++
-                }
-                smalls[wrb + ch * taps + taps - 1u] = fresh
-            }
-            let sv = silu_f32(acc)
-            if (sl == 0u) {
-                dq[j] = sv
-            } elif (sl == 1u) {
-                dk[j] = sv
-            } else {
-                dv[j] = sv
-            }
-            e += 256u
-        }
-        barrier()
-        //! the q and k squared sums and the raw q.k by subgroup adds: the first half of the threads hold q, the second k
-        var pn = 0.0
-        var pq = 0.0
-        if (tid < ds) {
-            pn = dq[tid] * dq[tid]
-            pq = dq[tid] * dk[tid]
-        } elif (tid >= 128u && tid < 128u + ds) {
-            pn = dk[tid - 128u] * dk[tid - 128u]
-        }
-        let sn = subgroupAdd(pn)
-        let spq = subgroupAdd(pq)
-        if (gl_SubgroupInvocationID == 0u) {
-            sg_sumsq[gl_SubgroupID] = sn
-            sg_qk[gl_SubgroupID] = spq
-        }
-        barrier()
-        if (tid == 0u) {   //! q.k is summed raw; the q and k scales apply here
-            var sumq = 0.0
-            var sumk = 0.0
-            var qkr = 0.0
-            let half = gl_NumSubgroups / 2u
-            var sgi = 0u
-            while (sgi < gl_NumSubgroups) {
-                if (sgi < half) {
-                    sumq += sg_sumsq[sgi]
-                    qkr += sg_qk[sgi]
-                } else {
-                    sumk += sg_sumsq[sgi]
-                }
-                sgi++
-            }
-            let sq = (1.0 / max(sqrt(sumq), pa.eps)) * pa.qscale
-            let sk = 1.0 / max(sqrt(sumk), pa.eps)
-            ds8[0u] = sq
-            ds8[1u] = sk
-            let graw = smalls[pa.g_off + row * nvh + h] + smalls[pa.dt_off + h]
-            ds8[2u] = dn_decay(smalls[pa.a_off + h], graw)
-            ds8[3u] = sigmoid_f32(smalls[pa.beta_off + row * pa.beta_row_stride + h])
-            ds8[4u] = qkr * sq * sk
-        }
-        barrier()
-        let sq = ds8[0u]
-        let sk = ds8[1u]
-        let eg = ds8[2u]
-        let bt = ds8[3u]
-        let qk = ds8[4u]
-        let rows_per_part = min(ds, 64u)
-        let nparts = ds / rows_per_part
-        let active = tid < ds * nparts
-        let c = tid % ds
-        let r0 = (tid / ds) * rows_per_part
-        let sbase = slot * nvh * ds * ds + h * ds * ds
-        var sreg : float[64]
-        var ksp = 0.0
-        var qsp = 0.0
-        if (active) {
-            //! the loads first, straight-line (a short part re-reads its last row), so all 64 issue before a sum waits on one
-            for [unroll] (j in range(64)) {
-                sreg[j] = state[sbase + (r0 + min(uint(j), rows_per_part - 1u)) * ds + c]
-            }
-            for [unroll] (j in range(64)) {
-                if (uint(j) < rows_per_part) {
-                    ksp += dk[r0 + uint(j)] * sreg[j]
-                    qsp += dq[r0 + uint(j)] * sreg[j]
-                }
-            }
-        }
-        if (active) {
-            partk[tid] = ksp
-            partq[tid] = qsp
-        }
-        barrier()
-        if (tid < ds) {
-            var ks = 0.0
-            var qs = 0.0
-            var p = 0u
-            while (p < nparts) {
-                ks += partk[p * ds + tid]
-                qs += partq[p * ds + tid]
-                p++
-            }
-            let vn = bt * (dv[tid] - eg * (sk * ks))
-            dvn[tid] = vn
-            dout[tid] = eg * (sq * qs) + qk * vn
-        }
-        barrier()
-        if (active) {
-            let vnc = dvn[c]
-            for [unroll] (j in range(64)) {
-                if (uint(j) < rows_per_part) {
-                    state[sbase + (r0 + uint(j)) * ds + c] = sreg[j] * eg + (sk * dk[r0 + uint(j)]) * vnc
-                }
-            }
-        }
-        var po = 0.0
-        if (tid < ds) {
-            po = dout[tid] * dout[tid]
-        }
-        let oinv = wg_rms_inv(po, ds, pa.eps, 0u)
-        e = tid
-        while (e < ds) {
-            let zv = proj[prow + pa.cd + h * ds + e]
-            let xn = dout[e] * oinv * smalls[pa.wnorm_off + e]
-            dout[e] = xn * dn_zgate(zv, ZSIG)
-            e += 256u
-        }
-        barrier()
-        let orow = (row * nvh + h) * ds
-        if (pa.out_f32 != 0u) {
-            e = tid
-            while (e < ds) {
-                outf[orow + e] = dout[e]
-                e += 256u
-            }
-        } elif (tid < ds / 32u) {   // the head's Q8_0 blocks (ds % 32 asserted host-side)
-            let gb = orow / 32u + tid
-            let jb = tid * 32u
-            var amax = 0.0
-            for (i in range(32)) {
-                amax = max(amax, abs(dout[jb + uint(i)]))
-            }
-            let d = amax / 127.0
-            let id = d != 0.0 ? 1.0 / d : 0.0
-            outs[gb] = d
-            for (wi in range(8)) {
-                let wj = jb + uint(wi) * 4u
-                var word = 0u
-                for (j in range(4)) {
-                    let q = int(round(dout[wj + uint(j)] * id))
-                    word = word | ((uint(q) & 0xFF) << (uint(j) * 8u))
-                }
-                outq[gb * 8u + uint(wi)] = word
-            }
-        }
-    }
-}
-
+//! the fused deltanet decode step (`DnStepFusedT`, the template both discrete homes stamp), the silu out-gate
 [vk_dispatch(name = "dn_step_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
-class DnStepFused : DnStepFusedT {}
+class DnStepFused : DnStepFusedT {
+    [spirv_kernel(local_size_x = 256), arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command")]
+    def run {
+        dn_step_body()
+    }
+}
 
+//! the fused decode step's sigmoid out-gate stamp (`DnStepFusedT`)
 [vk_dispatch(name = "dn_step_sig_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class DnStepFusedSig : DnStepFusedT {
     override ZSIG = true
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        dn_step_body()
+    }
 }
 
 // ===== deltanet: the sequential scan + the gated out-norm =====
 
-struct DnScanArgs {
-    npos : uint
-    cd : uint
-    kd : uint
-    nvh : uint
-    nkh : uint
-    ds : uint
-    beta_off : uint   // raw beta per (pos, head) in smalls; sigmoid in kernel
-    g_off : uint      // raw g per (pos, head); the decay is exp(a * softplus(g + dt))
-    a_off : uint
-    dt_off : uint
-    o_off : uint      // the raw o rows' base in orows (position-major, di wide)
-    di : uint
-    region_state_base : uint
-    row0 : uint       //! the dispatch's first row in the conv rows, the beta / g rows and the o rows: a segmented window scans a segment's rows over its own region's state
-    cap_n : uint      //! the part's captures: records of two words (the row the state stands after, the checkpoint row's float base) at `cap_rec` of `caps`
-    cap_rec : uint
-    cap_state_off : uint   //! the layer's state floats into a checkpoint row (`RLayer.snap_off / 4`)
-}
-
+//! the window's scan (`DnScanT`, the template both discrete homes stamp)
 [vk_dispatch(name = "dn_scan_cls", grid = "wgs", params = "wgs : int64")]
-class DnScan {
-    @ssbo @binding = 0 @readonly conv : array<float>     //! the conv output rows (position-major: q | k | v)
-    @ssbo @binding = 1 state : array<float>              // the persistent per-head f32 state [nvh][ds][ds]
-    @ssbo @binding = 2 @readonly smalls : array<float>   // raw beta/g rows, a/dt per head (push offsets)
-    @ssbo @binding = 3 orows : array<float>              // the raw o rows at o_off
-    @ssbo @binding = 4 @readonly caps : array<uint>      //! the window's capture records
-    @ssbo @binding = 5 capst : array<float>              //! the checkpoint rows (`snap_dev`): a capture's state lands at its row's base plus the layer's
-    @push_constant pa : DnScanArgs
-    @workgroup egs : float[int(DN_WINDOW)]   //! the head's decay per token, exp(a * softplus(g + dt)), staged once per workgroup
-    @workgroup bts : float[int(DN_WINDOW)]   //! the head's sigmoid(beta) per token, the same way
-
-    def cluster_add(v : float; lanes_per_col : uint) : float {
-        var r = v
-        if (lanes_per_col > 4u) {
-            r += subgroupShuffleXor(r, 4u)
-        }
-        if (lanes_per_col > 2u) {
-            r += subgroupShuffleXor(r, 2u)
-        }
-        if (lanes_per_col > 1u) {
-            r += subgroupShuffleXor(r, 1u)
-        }
-        return r
-    }
-
+class DnScan : DnScanT {
     [spirv_kernel(local_size_x = 128, name = "dn_scan_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-dn-block")]
-    def run {   // nolint:STYLE037,STYLE038 — the per-token recurrence over 16 register rows of one column
-        let ds = pa.ds
-        let lanes_per_col = ds / 16u           // 16 state rows each; ds % 16 == 0 host-side
-        let cols_per_block = 32u / lanes_per_col   //! the 128-thread workgroup's four 32-lane blocks, by the invocation id: a cluster's shuffles (masks under 8) stay inside a block on any subgroup width
-        let cols_per_group = 4u * cols_per_block
-        let cgroups = (ds + cols_per_group - 1u) / cols_per_group
-        let h = gl_WorkGroupID.x / cgroups
-        let sl = gl_LocalInvocationID.x & 31u
-        let lane = sl % lanes_per_col
-        let col = (gl_WorkGroupID.x % cgroups) * cols_per_group + (gl_LocalInvocationID.x >> 5u) * cols_per_block + sl / lanes_per_col
-        let live = col < ds                    // a whole cluster shares col, so its shuffles stay uniform
-        let kh = h % pa.nkh
-        let cbase = pa.row0 * pa.cd
-        let q_elem0 = cbase + kh * ds + lane
-        let k_elem0 = cbase + pa.kd + kh * ds + lane
-        let voff = cbase + 2u * pa.kd + h * ds + (live ? col : 0u)   // an idle lane reads column 0: past the last head its own column is past the plane
-        let aa = smalls[pa.a_off + h]
-        let dtb = smalls[pa.dt_off + h]
-        var ti = gl_LocalInvocationID.x
-        while (ti < pa.npos) {
-            let graw = smalls[pa.g_off + (pa.row0 + ti) * pa.nvh + h] + dtb
-            egs[ti] = dn_decay(aa, graw)
-            bts[ti] = sigmoid_f32(smalls[pa.beta_off + (pa.row0 + ti) * pa.nvh + h])
-            ti += 128u
-        }
-        barrier()
-        let sb = pa.region_state_base + h * ds * ds + (live ? col : 0u) + lane * ds
-        let row_stride = lanes_per_col * ds
-        var s : float[16]
-        for [unroll_full] (i in range(16)) {
-            s[i] = state[sb + uint(i) * row_stride]
-        }
-        //! the last token re-reads its own row
-        var k_next, q_next : float[16]
-        var v_next = conv[voff]
-        for [unroll_full] (i in range(16)) {
-            k_next[i] = conv[k_elem0 + uint(i) * lanes_per_col]
-        }
-        for [unroll_full] (i in range(16)) {
-            q_next[i] = conv[q_elem0 + uint(i) * lanes_per_col]
-        }
-        var t = 0u
-        while (t < pa.npos) {
-            let eg = egs[t]
-            let bt = bts[t]
-            let v = v_next
-            var k, q : float[16]
-            for [unroll_full] (i in range(16)) {
-                k[i] = k_next[i]
-            }
-            for [unroll_full] (i in range(16)) {
-                q[i] = q_next[i]
-            }
-            let crow_next = min(t + 1u, pa.npos - 1u) * pa.cd
-            v_next = conv[crow_next + voff]
-            let kbn = crow_next + k_elem0
-            for [unroll_full] (i in range(16)) {
-                k_next[i] = conv[kbn + uint(i) * lanes_per_col]
-            }
-            let qbn = crow_next + q_elem0
-            for [unroll_full] (i in range(16)) {
-                q_next[i] = conv[qbn + uint(i) * lanes_per_col]
-            }
-            var kv = k[0] * s[0]
-            for [unroll_full] (i in range(1, 16)) {
-                kv += k[i] * s[i]
-            }
-            kv = cluster_add(kv, lanes_per_col)
-            let delta = bt * (v - eg * kv)
-            for [unroll_full] (i in range(16)) {
-                s[i] = s[i] * eg + k[i] * delta
-            }
-            var o = q[0] * s[0]
-            for [unroll_full] (i in range(1, 16)) {
-                o += q[i] * s[i]
-            }
-            o = cluster_add(o, lanes_per_col)
-            if (live && lane == 0u) {
-                orows[pa.o_off + (pa.row0 + t) * pa.di + h * ds + col] = o
-            }
-            var ci = 0u
-            while (ci < pa.cap_n) {
-                let rec = pa.cap_rec + ci * 2u
-                if (caps[rec] == t + 1u && live) {
-                    let cb = caps[rec + 1u] + pa.cap_state_off + h * ds * ds + col + lane * ds
-                    for [unroll_full] (i in range(16)) {
-                        capst[cb + uint(i) * row_stride] = s[i]
-                    }
-                }
-                ci++
-            }
-            t++
-        }
-        if (live) {
-            for [unroll_full] (i in range(16)) {
-                state[sb + uint(i) * row_stride] = s[i]
-            }
-        }
+    def run {
+        dn_scan_body()
     }
 }
 
@@ -1862,8 +967,8 @@ struct DnCapTailArgs {
     wg_per_cap : uint     //! the workgroups one capture's elements take: the dispatch is that many a capture, back to back
 }
 
-//! a capture's conv history into its checkpoint row's ring image 0 (the row's parity reads image 0): the taps projected rows before
-//! the capture's row, the rows before the part off the image it entered on
+//! a capture's conv history into its checkpoint row's ring image 0 (`DnTailT`; the row's parity reads image 0): the taps
+//! projected rows before the capture's row, the rows before the part off the image it entered on
 [vk_dispatch(name = "dn_cap_tail_cls", grid = "wgs", params = "wgs : int64")]
 class DnCapTail : DnTailT {
     @ssbo @binding = 0 @readonly src : array<float>      //! the projected rows (position-major)
@@ -1891,26 +996,24 @@ class DnCapTail : DnTailT {
     }
 }
 
-//! the gated out-norm over the scan's raw o rows on the template both homes stamp (`GkDnGate`), one workgroup a row, its
-//! subgroups walking the value heads
-[ |> template_struct_instance]
-class template DnScanP3T : GkDnGate {
+//! the gated out-norm over the scan's raw o rows (`DnScanP3T` over the template every home stamps, `GkDnGate`)
+[vk_dispatch(name = "dn_scan_p3_cls", kernel = "run", grid = "npos", params = "npos : int64")]
+class DnScanP3 : DnScanP3T {
     [spirv_kernel(local_size_x = 256)]
     def run {
-        var h = gl_SubgroupID
-        while (h < pa.nvh) {
-            dn_gate_head(h, gl_WorkGroupID.x)
-            h += gl_NumSubgroups
-        }
+        dn_gate_body()
     }
 }
 
-[vk_dispatch(name = "dn_scan_p3_cls", kernel = "run", grid = "npos", params = "npos : int64")]
-class DnScanP3 : DnScanP3T {}
-
+//! the gated out-norm's sigmoid out-gate stamp (`DnScanP3T`)
 [vk_dispatch(name = "dn_scan_p3_sig_cls", kernel = "run", grid = "npos", params = "npos : int64")]
 class DnScanP3Sig : DnScanP3T {
     override ZSIG = true
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        dn_gate_body()
+    }
 }
 
 // ===== prefill attention: the prep pass =====
@@ -5946,7 +5049,7 @@ struct TtsAttnArgs {
 
 let TTS_ATTN_TCAP = 512u   //! the staged score row's capacity
 
-//! bidirectional multi-head attention in f32 over q, k, v [t][d] (head h at columns h * hs) into out - the CPU
+//! bidirectional multi-head attention (`WgReduceBase`) in f32 over q, k, v [t][d] (head h at columns h * hs) into out - the CPU
 //! `attention_rows` per (query row, head) workgroup: every key's scaled dot, the softmax as max, exp clamped at -80, sum,
 //! then the value sum of the normalized weights, 256 / hs invocations a value column. The driver dispatches it only at
 //! t <= TTS_ATTN_TCAP (the staged score row) and hs 64 or 128 (the value split's lattice); the class declines nothing

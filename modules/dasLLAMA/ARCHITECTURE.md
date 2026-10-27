@@ -45,9 +45,14 @@ any sibling companion that sends a reader to it.
 - `ARCHITECTURE_GPU.md` - the GPU backend role table (`ARCHITECTURE_GPU.md#gpu-backends`).
 - `ARCHITECTURE_GPU_ASYMMETRIES.md` - the closed list of the allowed asymmetries between the
   GPU backends - Metal, Vulkan and CUDA (`ARCHITECTURE_GPU_ASYMMETRIES.md#gpu-asymmetries`).
+- `ARCHITECTURE_GPU_ASYMMETRIES_CUDA.md` - the entries of that list that are the CUDA home's alone: the
+  int8 MMQ prefill, the FP4 expert rung, the nv4 nibble decode, the MMQ pin
+  (`ARCHITECTURE_GPU_ASYMMETRIES_CUDA.md#cuda-asymmetries`).
 - `ARCHITECTURE_GPU_SHARED_KERNELS.md` - the kernels more than one GPU home stamps: the shared templates' mechanism
-  (`ARCHITECTURE_GPU_SHARED_KERNELS.md#gpu-shared-kernels`) and the kernel pairs, their stamps and the pairs that stay
-  per home (`ARCHITECTURE_GPU_SHARED_KERNELS.md#gpu-kernel-pairs`).
+  (`ARCHITECTURE_GPU_SHARED_KERNELS.md#gpu-shared-kernels`), the kernel pairs, their stamps and the pairs that stay
+  per home (`ARCHITECTURE_GPU_SHARED_KERNELS.md#gpu-kernel-pairs`), the routed block's routing kernels both discrete
+  homes stamp (`ARCHITECTURE_GPU_SHARED_KERNELS.md#moe-routing-kernels`) and the deltanet kernels they stamp with
+  their smalls layout and capacities (`ARCHITECTURE_GPU_SHARED_KERNELS.md#dn-discrete-kernels`).
 - `ARCHITECTURE_GPU_SHARED_READINGS.md` - what the shared row templates' stamps read on each home against the per-home
   bodies before them, and the instruments the readings come from (`ARCHITECTURE_GPU_SHARED_READINGS.md#gpu-shared-readings`).
 - `ARCHITECTURE_MEDIA.md` - the encoder-tower, audio, ASR and vision charters.
@@ -210,8 +215,12 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
   (`ARCHITECTURE_MEDIA_ASR.md#rnnt-device-decode`).
 - `ARCHITECTURE_MEASUREMENT.md` - the benchmark rig, the tune gate, the sanctioned
   instrumentation rails, the `[tuned]` perm precedence, the mint wall in the sidecar's provenance,
-  the audio outlier rule, the parity fixture's prefix bar, the Vulkan board's reference rows, the
-  llama.cpp CUDA build's rows (`ARCHITECTURE_MEASUREMENT.md#cuda-reference-rows`), the committed records gate, and the speculative round's ruler record.
+  the audio outlier rule, the parity fixture's prefix bar, the committed records gate, and the
+  speculative round's ruler record.
+- `ARCHITECTURE_MEASUREMENT_REFERENCE_ROWS.md` - the llama.cpp rows a GPU home's records read
+  against: the Vulkan board's (`ARCHITECTURE_MEASUREMENT_REFERENCE_ROWS.md#vulkan-reference-rows`)
+  and the CUDA build's with its kernel-by-kernel trace
+  (`ARCHITECTURE_MEASUREMENT_REFERENCE_ROWS.md#cuda-reference-rows`).
 - `ARCHITECTURE_MEASUREMENT_AUDIO.md` - the audio board's instruments: the ASR board's GPU row pairs
   (`ARCHITECTURE_MEASUREMENT_AUDIO.md#asr-gpu-pairs`), the MLX ASR reference, the TTS reference
   instrument (`ARCHITECTURE_MEASUREMENT_AUDIO.md#the-tts-reference-instrument`), and its CUDA

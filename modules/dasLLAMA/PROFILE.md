@@ -243,14 +243,14 @@ DASLLAMA_GPU=1 DASLLAMA_CUDA=1 modules/dasLLAMA/performance/_rig/dasllama-bench/
   -m <Llama-3.2-1B-Instruct-Q8_0.gguf> -p 512 -n 128 -r 5 --ngl 0
 ```
 
-- The `config:` line reads `gpu cuda` when the CUDA tier armed. A model the dense slice declines
+- The `config:` line reads `gpu cuda` when the CUDA tier armed. A model the CUDA driver declines
   logs the reason on a `cuda resident` line, and the row is then not the CUDA home's.
 - The same command without `DASLLAMA_CUDA=1` is the Vulkan home's row on the same card, the
   cell's alternate. The llama.cpp row is the CUDA build of
-  `ARCHITECTURE_MEASUREMENT.md#cuda-reference-rows`, run beside it - `--ref` would run it at this
+  `ARCHITECTURE_MEASUREMENT_REFERENCE_ROWS.md#cuda-reference-rows`, run beside it - `--ref` would run it at this
   cell's `--ngl 0`, on the CPU.
 - `DASLLAMA_CUDA_MMQ=1` moves the prefill's window GEMMs onto the int8 MMQ kernel where every
-  plane is Q8_0 (`ARCHITECTURE_GPU_ASYMMETRIES.md#gpu-asymmetries`).
+  plane is Q8_0 (`ARCHITECTURE_GPU_ASYMMETRIES_CUDA.md#cuda-asymmetries`).
 
 ---
 

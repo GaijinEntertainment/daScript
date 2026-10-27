@@ -116,12 +116,31 @@ def nv4_weight_at(wq, ws : array<uint>; nsb, row, kk : int) : float {
     return float(MX4_LUT[int(nib)]) * ue4m3_half_f32(code)
 }
 
+//! an mx4 plane's weight at element `kk` of row `row` (`nb` blocks a row, block `wb0` the plane's first): e2m1 x the block's UE8M0, the k4-tiled nibbles read as the FP4 leaf does (element j low in byte j, j + 16 high)
+def mx4_fp4_weight_at(wq, ws : array<uint>; wb0, nb, row, kk : int) : float {
+    let b = wb0 + row * nb + kk / 32
+    let e = kk % 32
+    let nib = (wq[b * 4 + (e % 16) / 4] >> uint(((e % 16) % 4) * 8 + (e / 16) * 4)) & 15u
+    let code = (ws[b / 4] >> uint((b % 4) * 8)) & 0xFFu
+    return float(MX4_LUT[int(nib)]) * e8m0_half_f32(code)
+}
+
+//! the mx4 FP4 leaf's reference: the plane's row against the MXFP4 feed's row
+def mx4_fp4_mmq_ref(wq, ws : array<uint>; feed : Fp4Feed; wb0, k, tok, row : int) : float {
+    let nb = k / 32
+    var acc = 0.0
+    for (kk in range(k)) {
+        acc += mx4_fp4_weight_at(wq, ws, wb0, nb, row, kk) * fp4_feed_value(feed, k, tok, kk, true)
+    }
+    return acc
+}
+
 //! the FP4 leaf's reference: the plane's row against the feed's row, under the plane's site scale
 def nv4_mmq_ref(wq, ws : array<uint>; feed : Fp4Feed; k, tok, row : int; site_scale : float) : float {
     let nsb = k / 256
     var acc = 0.0
     for (kk in range(k)) {
-        acc += nv4_weight_at(wq, ws, nsb, row, kk) * fp4_feed_value(feed, k, tok, kk)
+        acc += nv4_weight_at(wq, ws, nsb, row, kk) * fp4_feed_value(feed, k, tok, kk, false)
     }
     return acc * site_scale
 }

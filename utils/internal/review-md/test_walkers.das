@@ -146,8 +146,9 @@ def private vk_ladder(prefix, tail : string; stamped : bool; skip : string = "")
 //! `vk_classes_text(true)` stamps (or leaves unstamped)
 def private discrete_kernels_text(red : bool) : string {
     var parts <- [
-        ("options gen2\n\nrequire spirv/spirv_markers\n\nclass template ArBase : ResidualT \{\n" +
-            "    @workgroup row : float[8192]\n\}\n\n"),
+        ("options gen2\n\nrequire spirv/spirv_markers\n\n" +
+            "let SCHED_S_ROWS = 32u\nlet SCHED_M_ROWS = 128u\n\n" +
+            "class template ArBase : ResidualT \{\n    @workgroup row : float[8192]\n\}\n\n"),
         "class template KqCm2BatchT : MoeCmBase \{\n    @template_constant BN : uint = 256u\n    @template_constant BK : uint = 64u\n    @template_constant UNR : uint = 4u\n",
         red ? "    def khr_stage16(blk, e0, sbase : uint) : void \{\n    \}\n\}\n\n" : "    def abstract khr_stage16(blk, e0, sbase : uint) : void\n\}\n\n",
         "class template K4Cm2T : KqCm2BatchT \{\n\}\n\nclass template Q8Cm2T : KqCm2BatchT \{\n\}\n\nclass template K4GemvT : KqGemvLeafT \{\n\}\n\n"]
@@ -174,7 +175,7 @@ let CUDA_CLASSES_TEXT = ("options gen2\n\nrequire spirv/spirv_markers\n\n" +
 //! K2 stepping 64 on both columns off the roster; the khr ladders
 //! hand-written, the engine's ladder skipping k5's e tile
 def private vk_classes_text(red : bool) : string {
-    var parts <- [("options gen2\n\nlet SCHED_S_ROWS = 32u\nlet SCHED_M_ROWS = 128u\n\n" +
+    var parts <- [("options gen2\n\n" +
         "class VkArRows : ArBase \{\n\}\n\nclass VkK4Gemv : K4GemvT \{\n\}\n\n")]
     parts |> reserve(24)
     for (fmt in fixed_array((stem = "kq_batch_k4", pfx = "K4"), (stem = "q8_batch", pfx = "Q8"))) {

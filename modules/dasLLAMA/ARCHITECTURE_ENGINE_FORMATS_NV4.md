@@ -38,6 +38,9 @@ shared-expert stacks, the token table, the classifier, the NextN projection, the
 carry it: `moe_gpu_gather_stack_kq` writes its f32 bits into the fifth word of each nv4 superblock's 20-byte scale row (the
 pad past the sixteen UE4M3 bytes; halves cost tg128 5%). `Nv4GemvT` and `KqBatchNv4` multiply it into each sub-block scale;
 `Nv4Cm2T` stages the 128 UE4M3 codes at half under it once a workgroup (`UE4LUT`, off the region's first row) and decodes
-through that table and the e2m1 table - iq4nl's shape. The Metal tier binds the CPU scale row verbatim - its compact 16-byte
-form carries no pad word (`ARCHITECTURE_GPU_QUANT_PLANES.md#metal-kq-split-scale-plane`) - so a plane under a `.scale`
-declines there by site and member (`kq_load_gpu_unserved`), and the mints with no `.scale` serve.
+through that table and the e2m1 table - iq4nl's shape; the CUDA home's FP4 leaf `MmqFp4T` reads it once a tile off the tile's
+first row into its epilogue (a plane is whole 128-row tiles, so a tile never straddles two factors). No kernel takes the factor
+as an argument: the plane carries it, so a site the driver never named (a deltanet projection, a merged K/V pair) scales the same.
+The Metal tier binds the CPU scale row verbatim - its compact 16-byte form carries no pad word
+(`ARCHITECTURE_GPU_QUANT_PLANES.md#metal-kq-split-scale-plane`) - so a plane under a `.scale` declines there by site and
+member (`kq_load_gpu_unserved`), and the mints with no `.scale` serve.

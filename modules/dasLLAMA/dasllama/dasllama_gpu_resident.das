@@ -1120,6 +1120,8 @@ def resident_slab_cap_units(dt : KVDtype; regions : int64) : int64 {
     return cap > 0l ? cap / (max(regions, 1l) * kv_unit_bytes(dt)) : 0l
 }
 
+def private resident_ring_on() : bool => gpu_kv_ring_on() && rdec_can_ring_kv()
+
 //! the widest K/V row the mirror holds: the attention layers' (a sharer's row is its donor's), and the NextN head's where the driver takes the head;
 //! `flat_only` leaves out the sliding layers a ring holds
 def private resident_widest_kv_row(t : Model; flat_only : bool = false) : int64 {
@@ -1132,7 +1134,7 @@ def private resident_widest_kv_row(t : Model; flat_only : bool = false) : int64 
 [arch(at="../ARCHITECTURE_GPU_KV_RING.md#kv-sliding-ring")]
 def resident_layer_ring(t : Model; l, seq_cap : int64) : int64 {
     let c = t.config
-    return 0l if (l >= c.n_layers || layer_is_recurrent(c, l))
+    return 0l if (!rdec_can_ring_kv() || l >= c.n_layers || layer_is_recurrent(c, l))
     return kv_ring_rows(c, kv_shared_layer(t, l) ? t.kv_src[l] : l, seq_cap, pf_window_rows())
 }
 
@@ -1268,7 +1270,7 @@ def private resident_attn_maxima(c : Config; flat_only : bool = false) : tuple<q
     var kvd = 0l
     var hs = 0l
     for (l in range64(c.n_layers)) {
-        continue if (layer_is_recurrent(c, l) || (flat_only && gpu_kv_ring_on() && layer_is_sliding(c, l)))
+        continue if (layer_is_recurrent(c, l) || (flat_only && resident_ring_on() && layer_is_sliding(c, l)))
         qd = max(qd, layer_qd(c, l))
         kvd = max(kvd, layer_kv_dim(c, l))
         hs = max(hs, layer_head_size(c, l))
@@ -2375,7 +2377,7 @@ def resident_layer_decline(t : Model; l : int64) : string {
         return "layer {l} lacks an expert plane"
     } else {
         let lf = resident_layer_fmts(t, l)
-        if (rdec_quant_class(lf.f1) != rdec_quant_class(lf.f3)) return "layer {l} mixes activation-quant forms (ffn gate/up {lf.f1}/{lf.f3})"
+        if (!rdec_can_mix_site_forms() && rdec_quant_class(lf.f1) != rdec_quant_class(lf.f3)) return "layer {l} mixes activation-quant forms (ffn gate/up {lf.f1}/{lf.f3})"
     }
     if (layer_is_recurrent(c, l)) {
         if (l >= long_length(t.dnqkv_offs) || t.dnqkv_offs[l] < 0l || t.dngate_offs[l] < 0l || t.dnout_offs[l] < 0l) {
@@ -2386,7 +2388,7 @@ def resident_layer_decline(t : Model; l : int64) : string {
         if (!rdec_dn_fmt_ok(fqkv, c.dim) || !rdec_dn_fmt_ok(fz, c.dim)) {
             return "layer {l}'s deltanet qkv/z planes carry a format ({fqkv}/{fz}) the resident GEMVs do not serve at width {c.dim}"
         }
-        if (rdec_quant_class(fqkv) != rdec_quant_class(fz)) {
+        if (!rdec_can_mix_site_forms() && rdec_quant_class(fqkv) != rdec_quant_class(fz)) {
             return "layer {l}'s deltanet qkv and z planes mix activation-quant forms ({fqkv}/{fz}) - one x feed serves both"
         }
         let fout = fmt_at(t.dnout_fmt, l)
@@ -2416,7 +2418,7 @@ def private resident_attn_layer_decline(t : Model; l : int64) : string {
     if (hs % 32l != 0l || (hs > 256l && hs != 512l)) return "layer {l} head size {hs} (the attention kernels take 32-multiples up to 256, and 512)"
     let lf = resident_layer_fmts(t, l)
     let cq = rdec_quant_class(lf.fq)
-    if (!kvsh && (cq != rdec_quant_class(lf.fk) || (!resident_v_from_k(c, l) && cq != rdec_quant_class(lf.fv)))) {
+    if (!rdec_can_mix_site_forms() && !kvsh && (cq != rdec_quant_class(lf.fk) || (!resident_v_from_k(c, l) && cq != rdec_quant_class(lf.fv)))) {
         return "layer {l} mixes activation-quant forms (qkv {lf.fq}/{lf.fk}/{lf.fv})"
     }
     return ""
@@ -2498,10 +2500,7 @@ def private resident_layer_geom(t : Model; l, mir_base, mir_slab, ring : int64) 
     let sliding = layer_is_sliding(c, l)
     let swa_row = sliding && has_dual_rope(c)
     let vfk = resident_v_from_k(c, l)
-    let lf = resident_layer_fmts(t, l)
     return RdecLayerGeom(hs = layer_head_size(c, l), qd = layer_qd(c, l), kvd = layer_kv_dim(c, l),
-        site_scale = fixed_array<float>(site_scale(t, lf.fq, t.wq_offs[l]), site_scale(t, lf.fk, t.wk_offs[l]), site_scale(t, lf.fv, t.wv_offs[l]),
-            site_scale(t, lf.fo, t.wo_offs[l]), site_scale(t, lf.f1, t.w1_offs[l]), site_scale(t, lf.f3, t.w3_offs[l]), site_scale(t, lf.f2, t.w2_offs[l])),
         hid = resident_dense_width(t, l), rot = swa_row ? resident_rot_swa(c) : resident_rot(c),
         window = sliding ? c.sliding_window : 0l, ring = ring, mir_base = mir_base, mir_slab = mir_slab,
         cbase = swa_row ? resident_rot(c) : 0l, boff = resident_bias_off(c, l),
@@ -2793,6 +2792,8 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
     g_rdec_ring_slack = resident_ring_bytes(t, seq_cap, rkdt, 1l) > 0l ? pf_window_rows() : 0l
     if (g_rdec_ring_slack > 0l || !gpu_kv_ring_on()) {
         kv_ring_announce(c, "resident driver", "their window plus {pf_window_rows()} rows ({resident_ring_bytes(t, seq_cap, rkdt, g_rdec_regions_want) >> 20l} MB of the mirror)")
+    } elif (!rdec_can_ring_kv()) {
+        kv_ring_announce(c, "resident driver", "", "the home keeps flat slabs")
     }
     if (host_experts) {
         g_rdec_trace_header = (layers = int(resident_routed_layers(t)), experts = int(c.n_expert), k = int(c.n_expert_used))

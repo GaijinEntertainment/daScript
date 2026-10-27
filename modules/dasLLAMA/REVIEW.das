@@ -1858,14 +1858,14 @@ def private check_cm2_stamp_tiles {
     let bn0 = literal_after(base_lines, "@template_constant BN : uint = ")
     let bk0 = literal_after(base_lines, "@template_constant BK : uint = ")
     let unr0 = literal_after(base_lines, "@template_constant UNR : uint = ")
-    var inscope all_lines <- split(strip_line_comments(fread(VK_CLASSES)), "\n")
-    let s_rows = literal_after(all_lines, "let SCHED_S_ROWS = ")
-    let m_rows = literal_after(all_lines, "let SCHED_M_ROWS = ")
+    var inscope sched_lines <- split(strip_line_comments(fread(DISCRETE_KERNELS)), "\n")   //! the schedule's widths sit beside the schedule template both discrete homes stamp
+    let s_rows = literal_after(sched_lines, "let SCHED_S_ROWS = ")
+    let m_rows = literal_after(sched_lines, "let SCHED_M_ROWS = ")
     if (bn0 < 0 || bk0 < 0 || unr0 < 0) {
         gate_finding(DISCRETE_KERNELS, "no `@template_constant BN : uint = N` / `BK : uint = N` / `UNR : uint = N` inside `class template KqCm2BatchT` - the stamp tile rule has no defaults to read; keep the spelling or move this check with it")
     }
     if (s_rows < 0 || m_rows < 0) {
-        gate_finding(VK_CLASSES, "no `let SCHED_S_ROWS = N` / `let SCHED_M_ROWS = N` line - the stamp tile rule has no schedule widths to compare; keep the spelling or move this check with it")
+        gate_finding(DISCRETE_KERNELS, "no `let SCHED_S_ROWS = N` / `let SCHED_M_ROWS = N` line - the stamp tile rule has no schedule widths to compare; keep the spelling or move this check with it")
     }
     return if (bn0 < 0 || bk0 < 0 || unr0 < 0 || s_rows < 0 || m_rows < 0)
     let blkw0 = literal_after(base_lines, "@template_constant BLKW : uint = ")
@@ -2421,7 +2421,7 @@ let private METAL_KERNELS_FILE = "modules/dasLLAMA/dasllama/dasllama_metal_kerne
 //! the discrete templates one home stamps - the row of
 //! followup_general.md naming the stamps that wait on their families
 var private DISCRETE_ONE_HOME_STAMPS <- { "DaAttnBWT", "DaAttnBH128T", "F32RowsKhrT",
-    "FaH256T", "FaH512T", "Mx4Cm2T", "Mx4GemvGuT", "Q8GemvPleActT", "ArCombBase", "ArCombG4T" }
+    "FaH512T", "Mx4GemvGuT", "Q8GemvPleActT", "ArCombG4T" }
 
 //! `class [template] X : Y` lines of `path`: X's base, whether X is a
 //! template, and the home or shared file X lives in

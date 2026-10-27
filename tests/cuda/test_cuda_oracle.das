@@ -84,6 +84,16 @@ def private gpu_ready(cc : CudaContext?) : bool {
     return true
 }
 
+//! `gpu_ready` and the FP4 tensor rung: the block-scaled mma needs compute capability 120
+def private gpu_fp4_ready(cc : CudaContext?) : bool {
+    return false if (!gpu_ready(cc))
+    if (cuda_device_compute_capability(cc) < 120) {
+        feint("the FP4 tensor rung needs compute capability 120 (the block-scaled mma); GPU compare skipped\n")
+        return false
+    }
+    return true
+}
+
 [test]
 def test_arith_gpu_vs_cpu(t : T?) {
     t |> run("uint, int and float arithmetic: GPU == CPU-reference") <| @(t : T?) {
@@ -967,7 +977,11 @@ struct IntrinFp4Params {
     o : uint64
     xin : uint64
     cvt_out : uint64
+    o_mx : uint64
 }
+
+//! the UE8M0 code's value: 2^(code - 127), code 0 the smallest (no zero)
+def private ue8m0_value(c : uint) : float => pow(2.0, float(int(c) - 127))
 
 def private e2m1_value(c : uint) : float {
     let mag = fixed_array<float>(0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0)
@@ -999,7 +1013,7 @@ def private fp4_cvt_inputs() : array<float> {
 def test_intrin_fp4_gpu(t : T?) {
     t |> run("the FP4 tensor rung: the block-scaled e2m1 product through cp.async + ldmatrix == the CPU sum, the conversions == their CPU bodies") <| @(t : T?) {
         with_cuda_context() $(cc : CudaContext?) {
-            return if (!gpu_ready(cc))
+            return if (!gpu_fp4_ready(cc))
             var a8, b8 : array<uint8>
             var a_scale_words, b_scale_words : array<uint>
             a8 |> resize(16 * 32)
@@ -1018,31 +1032,47 @@ def test_intrin_fp4_gpu(t : T?) {
                 a_scale_words |> push(wa)
                 b_scale_words |> push(wb)
             }
+            for (i in range(16)) {   // the UE8M0 region: codes in [124, 131), scales 2^-3 .. 2^3, both k32 blocks of a row or column apart
+                a_scale_words |> push(uint(124 + (i * 3) % 7) | (uint(124 + (i * 5 + 1) % 7) << 8u))
+                b_scale_words |> push(uint(124 + (i * 2 + 3) % 7) | (uint(124 + (i * 7 + 2) % 7) << 8u))
+            }
             var inscope xin <- fp4_cvt_inputs()
             var err : string
             var p = IntrinFp4Params(a4 = buf_upload(a8), b4 = buf_upload(b8), a_scale_words = buf_upload(a_scale_words), b_scale_words = buf_upload(b_scale_words),
-                o = buf_fill(256, 0.0), xin = buf_upload(xin), cvt_out = buf_fill(128, 0u))
+                o = buf_fill(256, 0.0), xin = buf_upload(xin), cvt_out = buf_fill(128, 0u), o_mx = buf_fill(256, 0.0))
             t |> success(launch(cc, intrin_fp4_cuda, "intrin_fp4", intrin_fp4_cuda_entry, p, 32u, err, intrin_fp4_cuda_smem, 32u), "intrin_fp4 launch: {err}")
             let go <- buf_download(p.o, 256, type<float>)
+            let gmx <- buf_download(p.o_mx, 256, type<float>)
             let gcv <- buf_download(p.cvt_out, 128, type<uint>)
             var bad = 0
+            var badmx = 0
             var worst = 0.0
+            var worstmx = 0.0
             for (r in range(16)) {
                 for (n in range(16)) {
                     var s = 0.0
+                    var smx = 0.0
                     for (k in range(64)) {
                         let ac = (uint(a8[r * 32 + k / 2]) >> uint((k & 1) * 4)) & 15u
                         let bc = (uint(b8[n * 32 + k / 2]) >> uint((k & 1) * 4)) & 15u
                         let sc = ue4m3_value((a_scale_words[r] >> uint((k / 16) * 8)) & 0xFFu) * ue4m3_value((b_scale_words[n] >> uint((k / 16) * 8)) & 0xFFu)
-                        s += e2m1_value(ac) * e2m1_value(bc) * sc
+                        let p2 = e2m1_value(ac) * e2m1_value(bc)
+                        s += p2 * sc
+                        let smr = ue8m0_value((a_scale_words[int(FP4_MX_WORDS) + r] >> uint((k / 32) * 8)) & 0xFFu)
+                        let smc = ue8m0_value((b_scale_words[int(FP4_MX_WORDS) + n] >> uint((k / 32) * 8)) & 0xFFu)
+                        smx += p2 * smr * smc
                     }
                     s *= xin[int(FP4_XIN_COL_FACTORS) + n]
                     let d = abs(go[r * 16 + n] - s)
                     worst = max(worst, d)
                     bad += d <= 1.0e-4 * max(1.0, abs(s)) ? 0 : 1
+                    let dmx = abs(gmx[r * 16 + n] - smx)
+                    worstmx = max(worstmx, dmx)
+                    badmx += dmx <= 1.0e-4 * max(1.0, abs(smx)) ? 0 : 1
                 }
             }
             t |> equal(bad, 0, "the block-scaled e2m1 product under its column factors matches the CPU sum (worst difference {worst})")
+            t |> equal(badmx, 0, "the UE8M0 form (kind::mxf4, a scale a k32 block) matches the CPU sum (worst difference {worstmx})")
             var badc = 0
             for (l in range(32)) {
                 badc += gcv[l] == cvt_e2m1x2(xin[2 * l], xin[2 * l + 1]) ? 0 : 1
@@ -1051,7 +1081,7 @@ def test_intrin_fp4_gpu(t : T?) {
                 badc += gcv[int(FP4_CV_UE4M3) + 32 + l] == cvt_ue4m3(xin[int(FP4_XIN_UE4M3) + 32 + l]) ? 0 : 1
             }
             t |> equal(badc, 0, "cvt_e2m1x2 and cvt_ue4m3 match their CPU bodies over the sweep (ties to even, saturation, the subnormals)")
-            for (q in [p.a4, p.b4, p.a_scale_words, p.b_scale_words, p.o, p.xin, p.cvt_out]) {
+            for (q in [p.a4, p.b4, p.a_scale_words, p.b_scale_words, p.o, p.xin, p.cvt_out, p.o_mx]) {
                 cuda_mem_free(q)
             }
         }

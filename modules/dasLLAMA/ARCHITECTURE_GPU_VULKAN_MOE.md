@@ -28,7 +28,12 @@ role table these sections build on stays in `ARCHITECTURE_GPU.md#gpu-backends`.
 the attention head and the residual steps are shared.** The whole-model driver admits a MoE
 whose expert stacks fit the arena beside its attention quads (`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan`), and the window then never leaves the device between layers: the CPU's routing,
 bucketing and combine of the per-op tier (`ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-expert-chain`) become
-five device stages over the window's FFN-normed rows. Every window millisecond and per-layer
+five device stages over the window's FFN-normed rows. The CUDA home runs the same five stages on
+the same templates (`ARCHITECTURE_GPU_SHARED_KERNELS.md#gpu-kernel-pairs`, the routing kernels'
+paragraph) in `crd_window_moe`, its expert pieces on the cm2 tiles (the m pieces on the e column, the
+s pieces on the s column; the mx4 stacks on the schedule-fed FP4 leaf,
+`ARCHITECTURE_GPU_ASYMMETRIES.md#gpu-asymmetries`) - the f16-GEMM router route and the KHR arm below
+are this home's. Every window millisecond and per-layer
 microsecond below is the `DASLLAMA_GPU_PROF=1` window profile (`vk_rdpf`) on the RTX 5060 Ti,
 except where a probe arm is named.
 
@@ -46,57 +51,29 @@ except where a probe arm is named.
   store stages each fragment in workgroup memory and lands only the elements inside `rows` and `d`,
   so a width off the 16-lattice (the tower's rel-plane GEMM at 2 npos - 1 columns) never spills a
   fragment's tail into the next row. Off that route `RouterGemm` serves, the span's router
-  GEMV batched: a 64 x 32 tile of positions by router rows per workgroup, each invocation a 4 x 2
-  block whose two rows sit 16 apart, K in 64-wide steps through a float4 stage in shared memory
-  at a row stride of 17 float4, the next step's rows fetched into registers while the current
-  step computes, and each output's four products per float4 added in k order (the scalar loop's
-  sums to the bit). The stride and the row split are the bank rule: sixteen lanes reading
-  sixteen rows land on all eight 16-byte bank groups, so a warp's two weight loads take two
-  wavefronts each and its four activation loads (two distinct rows) one; the scalar tile is
-  bound by that shared-memory traffic at about six FMAs per staged float4. The 64-wide K step is
-  why the MoE seats ask for a 64-multiple row width. The router plane holds every MoE layer's
-  f32 rows, and a gated shared expert's gate vector rides as one more row past the experts, so
-  one dispatch writes the logits row `[ne | gate]` per position.
+  GEMV batched on the shared tile (`ARCHITECTURE_GPU_SHARED_KERNELS.md#moe-routing-kernels`),
+  whose 64-wide K step is why the MoE seats ask for a 64-multiple row width.
 - **The per-row select** (`TopKRows`, one workgroup per position) is the decode top-k's records
   without the GEMV meta (`TopKRecords` with `META` off) over each row: the softmax, k picks largest-first with ties to the lower index, the
   renormalized or scaled weights - the host `moe_select_core`'s arithmetic - written
   position-major as the picked expert and its weight per slot.
-- **The bucket schedule** (`MoeSched`, one workgroup) writes what the host fill writes for the
-  per-op chain: the experts' slot counts are an atomic tally over the window (a thread an expert,
-  256 of them or the 512-thread stamp `MoeSched2` past 256 experts, `moe_sched_enc`, stride the
-  picks, one workgroup atomic per slot), exclusive scans place each bucket's rows,
-  its region indices (experts with rows, in expert order) and its tile workgroups, and the
-  three expert planes' schedules land as 4-word records plus per-workgroup maps. A
-  bucket is cut into at most two pieces by the tile ladder: a bucket within the s column (32
-  rows) is one s piece; a bigger bucket takes whole m columns (128 rows) with the last one
-  partial, unless the remainder past the whole columns fits the s column, which then takes it
-  (`sched_ladder_m_rows`). The s pieces run the s stamp and the m pieces the e stamp - the m
+- **The bucket schedule** (`MoeSched`, one workgroup; the 512-thread stamp `MoeSched2` past 256
+  experts, `moe_sched_enc`) writes the shared schedule's records and maps
+  (`ARCHITECTURE_GPU_SHARED_KERNELS.md#moe-routing-kernels`: a bucket within the s column is one s
+  piece, a bigger one whole m columns with the last partial or the s column for the remainder).
+  The s pieces run the s stamp and the m pieces the e stamp - the m
   tile's column at the format's own k step, keyed `CM2_TC_E` in the class ladders
-  (`ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default`) - and every piece dispatches one workgroup per
-  column tile per 128-row weight tile of the plane. In mm mode both piece kinds run the KHR
+  (`ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default`). In mm mode both piece kinds run the KHR
   128 x 128 tile (`ARCHITECTURE_GPU_SHARED_GEMM.md#khr-mm-kq-tile`) over the same records and maps -
   a 32-row s piece is an edge tile there, and the workgroup counts agree because a column is one
   tile either way - so a KHR-mode card serves the resident MoE block (`vk_rdec_moe_ok`). The
   per-32 expert rails ride the same pieces through their own `<Fmt>Cm2T` stamps; the mx4 one's
-  decode is `ARCHITECTURE_GPU_SHARED_GEMM.md#cm2-mx4-decode`. The s pieces' records sit at `[0, ne)`,
-  the m pieces' at `[ne, 2 ne)`,
-  and each dispatch's map at its own offset past the records (`PF_MOE_MAP_OFF`, 4096 words for up
-  to 512 experts twice), the two tile counts scanned as one packed word (its halves stay under
-  65536 for any admitted shape: 512 tokens by 64 slots over 512 experts). Every dispatch is sized
-  for its worst case - one s tile per expert; every expert's whole columns plus a partial one -
-  and the map's tail past the real workgroup count carries the sentinel (`SCHED_NONE`): a tile
-  workgroup that reads it sees a zero-row region and returns before its first barrier. A real
+  decode is `ARCHITECTURE_GPU_SHARED_GEMM.md#cm2-mx4-decode`. A real
   window's router is skewed - on the Qwen3-30B-A3B at 512 tokens, 69 of 128 experts route, nine
   hold over 128 rows (the largest 467) - so the ladder runs about 90 column tiles where the s
   column alone ran 175 (`DASLLAMA_GPU_PROF=1` prints the last MoE layer's buckets and both
   counts): the expert planes at 563 / 652 us against 815 / 896 on the s column alone
-  (`harness/vk_gemm_probe.das -- moesk:iq2xxs`, that window's profile). The slot-to-bucket-row
-  map hands every slot the next row of its expert's bucket through an atomic cursor, so the
-  rows within a bucket land in an order the schedule does not fix - which nothing downstream
-  reads: the tiles compute rows apart and the combine reads each slot's row through the map, so
-  the sums are the CPU walk's to the bit (the kernel cell checks the map as a permutation of
-  each bucket's rows). The per-expert slot walks this replaced - thread e scanning every slot
-  twice, staged through workgroup memory in 256-slot chunks - cost 163 us per layer on the 30B.
+  (`harness/vk_gemm_probe.das -- moesk:iq2xxs`, that window's profile).
 - **The gather, the expert tiles and the act** are the per-op chain's: the f16 gather scatters
   each position's row into its bucket rows, gate and up run the cm2 tiles over the gathered
   image - each plane's m dispatch then its s dispatch, the two writing disjoint rows of one
@@ -138,7 +115,8 @@ run of 32-row tiles on the s column, no m piece, the column tiles 32 wide (`pf_m
 ### The whole-model driver's MoE token command {#resident-moe-token}
 
 **An MoE layer rides the same recorded token command as a dense layer; its FFN tail is a routed
-block over arena expert planes.** After the layer's attention head and the FFN norm, a layer
+block over arena expert planes.** (The CUDA home's token step runs the same tail in `crd_moe_tail`
+over its captured graph, the top-k's records as its GEMV regions.) After the layer's attention head and the FFN norm, a layer
 with a shared expert runs the dense tail over the shared triple (gate, up, the act, down into
 `ffnout`), then the routed block: the router GEMV (`RouterGemv`) over the f32 normed row reads
 the driver's router plane - every MoE layer's rows and, when the shared expert is gated, its gate

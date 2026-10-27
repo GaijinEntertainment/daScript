@@ -229,6 +229,27 @@ class CuQ8kActRq : ActRqT {
     }
 }
 
+//! the biased twins (`ActRqBT`): the picks' gate and up bias rows join before the activation (gpt-oss's stacks), into Q8_0 blocks
+//! and into Q8_K superblocks
+[cuda_dispatch(name = "q8_actrq_b_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class CuQ8ActRqB : ActRqBT {
+    [cuda_kernel(local_size_x = 256, name = "q8_actrq_b_cls_cuda")]
+    def run {
+        rq_body()
+    }
+}
+
+//! the biased act + requant into Q8_K superblocks (`ActRqBT`)
+[cuda_dispatch(name = "q8k_actrq_b_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class CuQ8kActRqB : ActRqBT {
+    override KBLK = true
+
+    [cuda_kernel(local_size_x = 256, name = "q8k_actrq_b_cls_cuda")]
+    def run {
+        rq_body()
+    }
+}
+
 //! the act straight to the f16 hidden plane (`ActF16T`)
 [cuda_dispatch(name = "actf16_cls", grid = "wgs", params = "wgs : int64")]
 class CuActF16 : ActF16T {
@@ -363,6 +384,59 @@ class CuDaAttnTq4G2 : DaAttnT {
     override G = 2
 
     [cuda_kernel(local_size_x = 256, name = "da_attn_tq4_g2_cls_cuda")]
+    def run {
+        da_attn_body()
+    }
+}
+
+//! the sink stamps (gpt-oss, `DaAttnT` under `SINK`): the head's sink logit joins the softmax's max and denominator, one a mirror codec
+[cuda_dispatch(name = "da_attn_sink_cls", grid = "wgs", params = "wgs : int64")]
+class CuDaAttnSink : DaAttnT {
+    typedef KT = float
+    override SINK = true
+
+    [cuda_kernel(local_size_x = 256, name = "da_attn_sink_cls_cuda")]
+    def run {
+        da_attn_body()
+    }
+}
+
+//! the f16-mirror sink stamp (`DaAttnT`)
+[cuda_dispatch(name = "da_attn_f16_sink_cls", grid = "wgs", params = "wgs : int64")]
+class CuDaAttnF16Sink : DaAttnT {
+    typedef KT = float16
+    override KV16 = true
+    override SINK = true
+
+    [cuda_kernel(local_size_x = 256, name = "da_attn_f16_sink_cls_cuda")]
+    def run {
+        da_attn_body()
+    }
+}
+
+//! the q8-mirror sink stamp (`DaAttnT`)
+[cuda_dispatch(name = "da_attn_q8_sink_cls", grid = "wgs", params = "wgs : int64")]
+class CuDaAttnQ8Sink : DaAttnT {
+    typedef KT = uint
+    override KVQ8 = true
+    override KVBLK = true
+    override SINK = true
+
+    [cuda_kernel(local_size_x = 256, name = "da_attn_q8_sink_cls_cuda")]
+    def run {
+        da_attn_body()
+    }
+}
+
+//! the tq4-mirror sink stamp (`DaAttnT`)
+[cuda_dispatch(name = "da_attn_tq4_sink_cls", grid = "wgs", params = "wgs : int64")]
+class CuDaAttnTq4Sink : DaAttnT {
+    typedef KT = uint
+    override KVTQ4 = true
+    override KVBLK = true
+    override SINK = true
+
+    [cuda_kernel(local_size_x = 256, name = "da_attn_tq4_sink_cls_cuda")]
     def run {
         da_attn_body()
     }
@@ -861,6 +935,32 @@ class CuQ51GemvN : Blk32GemvRunT {
     }
 }
 
+//! the native-MXFP4 expert rail's decode GEMVs (`Blk32GemvRunT` under `MX4`): gpt-oss's routed stacks over Q8_0 activations, a
+//! lane a block - the one per-32 form with no dense plane, so the ladders take it by name ahead of the per-32 arm
+[cuda_dispatch(name = "mx4_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class CuMx4Gemv : Blk32GemvRunT {
+    typedef FMT = KqTag_mx4
+    override MX4 = true
+
+    [cuda_kernel(local_size_x = 64, name = "mx4_gemv_cls_cuda")]
+    def run {
+        b32_body()
+    }
+}
+
+//! the MXFP4 decode GEMV's N-column stamp (`Blk32GemvRunT`)
+[cuda_dispatch(name = "mx4_gemv_n_cls", grid = "wgs", params = "wgs : int64")]
+class CuMx4GemvN : Blk32GemvRunT {
+    typedef FMT = KqTag_mx4
+    override MX4 = true
+    override NCOL = true
+
+    [cuda_kernel(local_size_x = 64, name = "mx4_gemv_n_cls_cuda")]
+    def run {
+        b32_body()
+    }
+}
+
 [cuda_dispatch(name = "iq4nl32_gemv_n_cls", grid = "wgs", params = "wgs : int64")]
 class CuIq4nl32GemvN : Iq4nl32GemvCudT {
     override NCOL = true
@@ -1141,6 +1241,7 @@ def cud_kq_grid() : uint64 {
 
 //! the decode GEMV leaf of format `fmt` loads
 def cud_gemv_ensure(fmt : int) : bool {   // nolint:STYLE037 - the stamp's ladder, one arm per KqFmt member
+    return ensure_mx4_gemv_cls() if (fmt == int(KqFmt.mx4))
     var r = false
     kq_tile_stamp(fmt, CUD_FMT_SKIP, "gemv") <| $() {
         r = tile_ensure_cls()
@@ -1198,6 +1299,8 @@ def cud_mmq_enc(fmt : int; var s : void?; bufs : uint64 const[6]; var pc : MmqAr
 def cud_gemv_cls_enc(fmt : int; var s : void?; bufs : uint64 const[6]; var pc : GemvArgs; wgs : int64) {   // nolint:STYLE037 — kq_tile_stamp's generated arms, one a format
     if (fmt == int(KqFmt.q8)) {
         enc_q8_gemv_cls(s, bufs, pc, wgs)
+    } elif (fmt == int(KqFmt.mx4)) {
+        enc_mx4_gemv_cls(s, bufs, pc, wgs)
     } elif (kq_sb(fmt)) {
         var kb = fixed_array(bufs[0], bufs[1], bufs[2], bufs[3], bufs[4], bufs[5], cud_kq_grid())
         kq_tile_stamp(fmt, CUD_SKIP_KQ, "gemv") <| $() {
@@ -1253,6 +1356,8 @@ def private cud_gemv_cls_enc_n(fmt : int; var s : void?; bufs : uint64 const[6];
         } else {
             enc_q8_gemv_n8_cls(s, bufs, pc, wgs)
         }
+    } elif (fmt == int(KqFmt.mx4)) {
+        enc_mx4_gemv_n_cls(s, bufs, pc, wgs)
     } elif (kq_sb(fmt)) {
         var kb = fixed_array(bufs[0], bufs[1], bufs[2], bufs[3], bufs[4], bufs[5], cud_kq_grid())
         kq_tile_stamp(fmt, CUD_SKIP_KQ, "gemv") <| $() {
@@ -2114,6 +2219,38 @@ class CuQ51Cm2S : Q51Cm2T {
     }
 }
 
+//! the mx4 rail's s column (`Mx4Cm2T`): the expert schedule's 32-row pieces (gpt-oss's routed stacks; a dense mx4 plane never exists)
+[cuda_dispatch(name = "mx4_batch_cm2s_cls", grid = "wgs", params = "wgs : int64")]
+class CuMx4Cm2S : Mx4Cm2T {
+    override BN = 32u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x32
+    typedef ACC = coopmatWgAcc_f16_128x32
+    typedef ACCW = coopmatWgAcc_f32_128x32
+
+    [cuda_kernel(local_size_x = 256, name = "mx4_batch_cm2s_cls_cuda")]
+    def run {
+        cm2_body()
+    }
+}
+
+//! ... and its e column (`Mx4Cm2T`): the schedule's 128-row pieces
+[cuda_dispatch(name = "mx4_batch_cm2e_cls", grid = "wgs", params = "wgs : int64")]
+class CuMx4Cm2E : Mx4Cm2T {
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+
+    [cuda_kernel(local_size_x = 256, name = "mx4_batch_cm2e_cls_cuda")]
+    def run {
+        cm2_body()
+    }
+}
+
 [cuda_dispatch(name = "iq4nl32_batch_cm2s_cls", grid = "wgs", params = "wgs : int64")]
 class CuIq4nl32Cm2S : Iq4nl32Cm2T {
     override BN = 32u
@@ -2159,22 +2296,118 @@ class CuQ5032Cm2S : Q5032Cm2T {
     }
 }
 
-//! the format no tile serves: mx4 is an expert-only form with no dense plane on the slice
-let private CUD_CM2_SKIP = "mx4"
+//! the columns no tile serves: mx4 is an expert-only form, so it has the expert schedule's s and e columns and no dense l or m tile
+let private CUD_CM2_SKIP = "mx4/cm2l_cls mx4/cm2m_cls"
+
+let CUD_CM2_TILES = "cm2l_cls cm2m_cls cm2s_cls cm2e_cls"   //! e is the expert schedule's m pieces at the format's own k step (the m stamp on the formats whose step is 64)
+let CUD_CM2_TC_L = 0
+let CUD_CM2_TC_M = 1
+let CUD_CM2_TC_S = 2
+let CUD_CM2_TC_E = 3   //! `tc` of the e column
 
 //! the cm2 tile of format `fmt` at column `tc` loads
 def cud_cm2_ensure(fmt, tc : int) : bool {   // nolint:STYLE037 — kq_tile_stamp's generated arms, one a format's column
     var r = false
-    kq_tile_stamp(fmt, CUD_CM2_SKIP, "batch", tc, "cm2l_cls cm2m_cls cm2s_cls") <| $() {
+    kq_tile_stamp(fmt, CUD_CM2_SKIP, "batch", tc, CUD_CM2_TILES) <| $() {
         r = tile_ensure()
     }
     return r
 }
 
-//! `tc` 0 is the l tile (256 tokens), 1 the m tile (128), 2 the s tile (32); `bufs` is [wq, ws, schedule, xf, y]
+//! `bufs` is [wq, ws, schedule, xf, y]
 def cud_cm2_enc(fmt, tc : int; var s : void?; bufs : uint64 const[5]; var pc : BatchArgs; wgs : int64) {   // nolint:STYLE037 — kq_tile_stamp's generated arms, one a format's column
-    kq_tile_stamp(fmt, CUD_CM2_SKIP, "batch", tc, "cm2l_cls cm2m_cls cm2s_cls") <| $() {
+    kq_tile_stamp(fmt, CUD_CM2_SKIP, "batch", tc, CUD_CM2_TILES) <| $() {
         tile_enc(s, bufs, pc, wgs)
+    }
+}
+
+//! the iq3_s e column (`Iq3sCm2T`)
+[cuda_dispatch(name = "kq_batch_iq3s_cm2e_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class CuIq3sCm2E : Iq3sCm2T {
+    override BN = 128u
+    override STILE = true
+    override BK = 32u
+    override UNR = 8u
+    typedef AT = coopmatWgA_f16_128x32
+    typedef BT = coopmatWgB_f16_32x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+
+    [cuda_kernel(local_size_x = 256, name = "kq_batch_iq3s_cm2e_cls_cuda")]
+    def run {
+        cm2_body()
+    }
+}
+
+//! the iq3_xxs e column (`Iq3xxsCm2T`)
+[cuda_dispatch(name = "kq_batch_iq3xxs_cm2e_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class CuIq3xxsCm2E : Iq3xxsCm2T {
+    override BN = 128u
+    override STILE = true
+    override BK = 32u
+    override UNR = 8u
+    typedef AT = coopmatWgA_f16_128x32
+    typedef BT = coopmatWgB_f16_32x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+
+    [cuda_kernel(local_size_x = 256, name = "kq_batch_iq3xxs_cm2e_cls_cuda")]
+    def run {
+        cm2_body()
+    }
+}
+
+//! the iq2_s e column (`Iq2sCm2T`)
+[cuda_dispatch(name = "kq_batch_iq2s_cm2e_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class CuIq2sCm2E : Iq2sCm2T {
+    override BN = 128u
+    override STILE = true
+    override BK = 32u
+    override UNR = 8u
+    typedef AT = coopmatWgA_f16_128x32
+    typedef BT = coopmatWgB_f16_32x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+
+    [cuda_kernel(local_size_x = 256, name = "kq_batch_iq2s_cm2e_cls_cuda")]
+    def run {
+        cm2_body()
+    }
+}
+
+//! the iq2_xs e column (`Iq2xsCm2T`)
+[cuda_dispatch(name = "kq_batch_iq2xs_cm2e_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class CuIq2xsCm2E : Iq2xsCm2T {
+    override BN = 128u
+    override STILE = true
+    override BK = 32u
+    override UNR = 8u
+    typedef AT = coopmatWgA_f16_128x32
+    typedef BT = coopmatWgB_f16_32x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+
+    [cuda_kernel(local_size_x = 256, name = "kq_batch_iq2xs_cm2e_cls_cuda")]
+    def run {
+        cm2_body()
+    }
+}
+
+//! the iq2_xxs e column (`Iq2xxsCm2T`)
+[cuda_dispatch(name = "kq_batch_iq2xxs_cm2e_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class CuIq2xxsCm2E : Iq2xxsCm2T {
+    override BN = 128u
+    override STILE = true
+    override BK = 32u
+    override UNR = 8u
+    typedef AT = coopmatWgA_f16_128x32
+    typedef BT = coopmatWgB_f16_32x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+
+    [cuda_kernel(local_size_x = 256, name = "kq_batch_iq2xxs_cm2e_cls_cuda")]
+    def run {
+        cm2_body()
     }
 }
 
@@ -2267,7 +2500,7 @@ class template MmqT {
         }
     }
 
-    [spirv_inline, arch(at="../ARCHITECTURE_GPU_ASYMMETRIES.md#gpu-asymmetries")]
+    [spirv_inline, arch(at="../ARCHITECTURE_GPU_ASYMMETRIES_CUDA.md#cuda-asymmetries")]
     def mmq_body {   // nolint:STYLE037,STYLE038 - the pipeline and its unrolled products, register- and barrier-coupled; the Q4_K arm's stage and scale rows ride the same barriers
         let nb = pa.n / 32u
         let nb4 = pa.n / 128u
@@ -2614,11 +2847,11 @@ class CuQ8Mmq : MmqT {
 }
 
 struct MmqFp4Args {
-    n : uint      //! reduction width, a multiple of 256 (a superblock the scale row)
-    d : uint      //! the weight rows (the output width), a multiple of 128
-    rows : uint   //! the tokens, a multiple of 128
-    wblk : uint   //! the plane's first superblock
-    site_scale : float    //! the plane's per-tensor scale (NVFP4's `.scale`; 1 where the file carries none)
+    n : uint      //! reduction width, a multiple of 256 (a superblock the scale row); a `KTAIL` stamp takes any multiple of 64
+    d : uint      //! the weight rows (the output width), a multiple of 128; a `MOE` stamp takes any width (its last tile stores under a guard)
+    rows : uint   //! the tokens, a multiple of 128 (unread on a `MOE` stamp: the record's rows)
+    wblk : uint   //! the plane's first superblock (an `MX` stamp: its first 32-block); unread on a `MOE` stamp (the record's)
+    map_off : uint   //! a `MOE` stamp: the dispatch's per-workgroup map word offset in the schedule plane
 }
 
 //! a k4-tiled 32-block re-paired into the FP4 feed's (k, k + 8) byte order: the scaled mma needs only both operands under one permutation a strip
@@ -2632,29 +2865,104 @@ def nv4_fp4_pairs(w : uint4) : uint4 {
 //! 128 x 128 tile of weight rows x tokens, k 128 a step - over raw e2m1 nibbles on both sides: the weights' k4-tiled 32-blocks
 //! re-paired through registers into the feed's (k, k + 8) order, the activations' FP4 feed staged by cp.async, each side's
 //! UE4M3 strip scales a word a k64 beside its row; no decode, no per-32 fold - the per-token row scale and the plane's
-//! factor land in the epilogue. A two-deep ring at 80-byte rows (four uint4 and a pad: eight rows on eight bank groups)
+//! factor (the fifth word of its scale rows, read once a tile off the tile's first row: a tile never straddles two planes, since
+//! every plane is whole 128-row tiles) land in the epilogue. A two-deep ring at 80-byte rows (four uint4 and a pad: eight rows
+//! on eight bank groups)
 [ |> template_struct_instance]
 class template MmqFp4T {
-    @ssbo @binding = 0 @readonly @role = "weight" wq4 : array<uint4>    //! the nv4 quant plane: superblock sb's 32-block g at sb * 8 + g
-    @ssbo @binding = 1 @readonly @role = "weight" wsu : array<uint>     //! the nv4 scale rows: five words a superblock, word j the k64 strip j's four UE4M3 codes
+    @template_constant MX : bool = false      //!< the MXFP4 form: the plane by 32-block (no superblock lattice), its UE8M0 byte a block read as the k64's pair, the feed's codes a UE8M0 a k32 block, the product through `mma_block_scaled_mx`; no per-tensor factor
+    @template_constant KTAIL : bool = false   //!< a width off the 128 lattice (a multiple of 64): the last step's second k64 under a zero scale on both sides (the weight stage zero codes, the feed stage the next row's codes the zero scale annuls)
+    @template_constant MOE : bool = false     //!< the expert schedule's form (`MmqT`'s): the workgroup's record names the plane's block base, the bucket's row base and count and the tile; a tile's columns past `d` stay unstored
+    @ssbo @binding = 0 @readonly @role = "weight" wq4 : array<uint4>    //! the nv4 quant plane: superblock sb's 32-block g at sb * 8 + g; an `MX` stamp's mx4 plane: 32-block b at b
+    @ssbo @binding = 1 @readonly @role = "weight" wsu : array<uint>     //! the nv4 scale rows: five words a superblock, word j < 4 the k64 strip j's four UE4M3 codes, word 4 the plane's per-tensor factor as f32 bits; an `MX` stamp's mx4 scale plane: a UE8M0 byte a block, four a word
     @ssbo @binding = 2 @readonly xq4 : array<uint4>    //! the FP4 feed: a token's k / 2 nibble bytes, (k, k + 8) pairs inside each 16
-    @ssbo @binding = 3 @readonly xsw : array<uint>     //! ... its k / 64 scale words, four UE4M3 codes each
+    @ssbo @binding = 3 @readonly xsw : array<uint>     //! ... its k / 64 scale words, four UE4M3 codes each (an `MX` stamp: two UE8M0 codes in the low bytes)
     @ssbo @binding = 4 @readonly xrs : array<float>    //! ... its row scale
     @ssbo @binding = 5 y : array<float>                //! [token][d]
+    @ssbo @binding = 6 @readonly @template_gate = MOE sched : array<uint>   //! the expert schedule: 4-word records [wblk0, row0, cnt, wg0], the per-workgroup map at `pa.map_off`
     @kargs pa : MmqFp4Args
     @workgroup sa : uint4[1280]     //! two stages x 128 rows x five uint4 (a step's four 32-blocks and a pad)
     @workgroup sb : uint4[1280]
     @workgroup swa : uint[512]      //! two stages x 128 rows x the step's two k64 scale words
     @workgroup swb : uint[512]      //! ... the tokens'
+    @workgroup @template_gate = MOE ystage : float[2048]   //! two warps' 32 x 32 tiles at a time, [token][d], the guarded store's stage
+
+    //! the tile's plane block base: record `rid`'s on a `MOE` stamp, the args' else
+    def tile_wblk(rid : uint) : uint {
+        static_if (MOE) {
+            return sched[rid * 4u]
+        } else {
+            return pa.wblk
+        }
+    }
+
+    //! the tile's first weight row and first token row: on a `MOE` stamp record `rid`'s bucket row base and the tile among the
+    //! bucket's `ceil(cnt / 128)` row tiles by the plane's `ceil(d / 128)` column tiles, else the grid's tile over `rows`
+    def tile_base(rid : uint) : uint2 {
+        static_if (MOE) {
+            let rb = rid * 4u
+            let ttiles = (sched[rb + 2u] + 127u) / 128u
+            let lt = gl_WorkGroupID.x - sched[rb + 3u]
+            return uint2((lt / ttiles) * 128u, sched[rb + 1u] + (lt % ttiles) * 128u)
+        } else {
+            let ttiles = pa.rows / 128u
+            let tix = gl_WorkGroupID.x
+            return uint2((tix / ttiles) * 128u, (tix % ttiles) * 128u)
+        }
+    }
+
+    def is_past_row_blocks(kb, h, nb : uint) : bool => KTAIL && kb * 4u + h * 2u >= nb
+
+    def wq_block_index(ksrc, kb : uint) : uint {
+        static_if (MX) {
+            return ksrc + kb * 4u
+        } else {
+            return ksrc + (kb >> 1u) * 8u + (kb & 1u) * 4u
+        }
+    }
+
+    //! the lane's staged quad of step `kb`: the block's nibbles re-paired, zero past the row's blocks and past the plane's rows
+    def w_stage(ksrc, kb, kblk, nb : uint; row_ok : bool) : uint4 => (!row_ok || is_past_row_blocks(kb, kblk >> 1u, nb)) ? uint4(0u) : nv4_fp4_pairs(wq4[wq_block_index(ksrc, kb)])
+
+    //! the weight row's scale word of step `kb`'s k64 half `h`: an `MX` stamp's two UE8M0 bytes off the byte plane (the pair sits in one
+    //! word: a row's first block is even), else the nv4 scale row's word; zero past the row's blocks and past the plane's rows
+    def w_scale_word(wblk, row, wsrow, kb, h, nb : uint; row_ok : bool) : uint {
+        if (!row_ok || is_past_row_blocks(kb, h, nb)) {
+            return 0u
+        }
+        static_if (MX) {
+            let bi = wblk + row * nb + kb * 4u + h * 2u
+            return (wsu[bi >> 2u] >> ((bi & 3u) * 8u)) & 0xFFFFu
+        } else {
+            return wsu[wsrow + (kb >> 1u) * 5u + (kb & 1u) * 2u + h]
+        }
+    }
+
+    //! the token row's scale word of step `kb`'s k64 half `h`, zero past the row's blocks
+    def x_scale_word(xsrow, kb, h, nb : uint) : uint => is_past_row_blocks(kb, h, nb) ? 0u : xsw[xsrow + kb * 2u + h]
 
     [spirv_inline]
-    def mmq_body {   // nolint:STYLE038 - the pipeline and its unrolled products, register- and barrier-coupled
+    def mmq_body {
+        static_if (MOE) {   // the workgroup's record off the map; a workgroup past the schedule's end (the sentinel) does nothing, as one block
+            let rid = sched[pa.map_off + gl_WorkGroupID.x]
+            if (rid != SCHED_NONE) {
+                mmq_tile(rid)
+            }
+        } else {
+            mmq_tile(0u)
+        }
+    }
+
+    //! the tile: the grid's (`rid` unread), or on a `MOE` stamp record `rid`'s
+    [spirv_inline, arch(at="../ARCHITECTURE_GPU_ASYMMETRIES_CUDA.md#cuda-asymmetries")]
+    def mmq_tile(rid : uint) {   // nolint:STYLE038 - the pipeline and its unrolled products, register- and barrier-coupled
+        let nb = pa.n / 32u
         let nsb = pa.n / 256u
-        let nb4 = pa.n / 128u
-        let ttiles = pa.rows / 128u
-        let tix = gl_WorkGroupID.x
-        let m0 = (tix / ttiles) * 128u
-        let t0 = (tix % ttiles) * 128u
+        let nb4 = KTAIL ? (nb + 3u) / 4u : pa.n / 128u
+        let wblk = tile_wblk(rid)
+        let tbase = tile_base(rid)
+        let m0 = tbase.x
+        let t0 = tbase.y
         let tid = gl_LocalInvocationID.x
         let warp = tid >> 5u
         let lane = tid & 31u
@@ -2668,28 +2976,30 @@ class template MmqFp4T {
         // a warp; the activation stage by cp.async: the same lane map, a token's four uint4 of the step
         let krow = (warp << 3u) + (lane >> 2u)
         let kblk = lane & 3u
-        let ksrc = (pa.wblk + (m0 + krow) * nsb) * 8u + kblk   // step kb adds (kb >> 1) * 8 + (kb & 1) * 4
+        let ksrc = MX ? wblk + (m0 + krow) * nb + kblk : (wblk + (m0 + krow) * nsb) * 8u + kblk   // the lane's block of step 0: `wq_block_index` steps it
         let kdst = krow * 5u + kblk
-        let xsrc = (t0 + krow) * (pa.n / 32u) + kblk             // a token's row is n / 32 uint4; step kb adds kb * 4
+        let xsrc = (t0 + krow) * nb + kblk             // a token's row is n / 32 uint4; step kb adds kb * 4
+        let krow_ok = m0 + krow < pa.d   // a `MOE` stamp's last column tile reaches past the plane's rows: those stage zero
         let wi = tid & 127u
         let wstage = tid < 128u
         let xstage = tid >= 128u && tid < 256u
-        let wsrow = (pa.wblk + (m0 + wi) * nsb) * 5u   // step kb: + (kb >> 1) * 5 + (kb & 1) * 2
+        let wsrow = (wblk + (m0 + wi) * nsb) * 5u   // the nv4 scale row (unread on an `MX` stamp: `w_scale_word` reads the byte plane)
+        let wrow_ok = m0 + wi < pa.d
         let xsrow = (t0 + wi) * (pa.n / 64u)           // step kb: + kb * 2
         var f00, f01, f10, f11 : coopmatAcc_f32_16x16
-        var wnext = wq4[ksrc]
-        sa[kdst] = nv4_fp4_pairs(wnext)
+        var wnext = w_stage(ksrc, 0u, kblk, nb, krow_ok)
+        sa[kdst] = wnext
         if (nb4 > 1u) {
-            wnext = wq4[ksrc + 4u]
+            wnext = w_stage(ksrc, 1u, kblk, nb, krow_ok)
         }
         cp_async_16(unsafe(addr(sb[kdst])), unsafe(addr(xq4[xsrc])))
         cp_async_commit()
         if (wstage) {
-            swa[wi * 2u] = wsu[wsrow]
-            swa[wi * 2u + 1u] = wsu[wsrow + 1u]
+            swa[wi * 2u] = w_scale_word(wblk, m0 + wi, wsrow, 0u, 0u, nb, wrow_ok)
+            swa[wi * 2u + 1u] = w_scale_word(wblk, m0 + wi, wsrow, 0u, 1u, nb, wrow_ok)
         } elif (xstage) {
-            swb[wi * 2u] = xsw[xsrow]
-            swb[wi * 2u + 1u] = xsw[xsrow + 1u]
+            swb[wi * 2u] = x_scale_word(xsrow, 0u, 0u, nb)
+            swb[wi * 2u + 1u] = x_scale_word(xsrow, 0u, 1u, nb)
         }
         var kb = 0u
         while (kb < nb4) {
@@ -2699,18 +3009,17 @@ class template MmqFp4T {
             let nk = kb + 1u
             if (nk < nb4) {
                 let st2 = nk & 1u
-                sa[st2 * 640u + kdst] = nv4_fp4_pairs(wnext)
+                sa[st2 * 640u + kdst] = wnext
                 if (nk + 1u < nb4) {
-                    wnext = wq4[ksrc + ((nk + 1u) >> 1u) * 8u + ((nk + 1u) & 1u) * 4u]
+                    wnext = w_stage(ksrc, nk + 1u, kblk, nb, krow_ok)
                 }
                 cp_async_16(unsafe(addr(sb[st2 * 640u + kdst])), unsafe(addr(xq4[xsrc + nk * 4u])))
                 if (wstage) {
-                    let so = wsrow + (nk >> 1u) * 5u + (nk & 1u) * 2u
-                    swa[st2 * 256u + wi * 2u] = wsu[so]
-                    swa[st2 * 256u + wi * 2u + 1u] = wsu[so + 1u]
+                    swa[st2 * 256u + wi * 2u] = w_scale_word(wblk, m0 + wi, wsrow, nk, 0u, nb, wrow_ok)
+                    swa[st2 * 256u + wi * 2u + 1u] = w_scale_word(wblk, m0 + wi, wsrow, nk, 1u, nb, wrow_ok)
                 } elif (xstage) {
-                    swb[st2 * 256u + wi * 2u] = xsw[xsrow + nk * 2u]
-                    swb[st2 * 256u + wi * 2u + 1u] = xsw[xsrow + nk * 2u + 1u]
+                    swb[st2 * 256u + wi * 2u] = x_scale_word(xsrow, nk, 0u, nb)
+                    swb[st2 * 256u + wi * 2u + 1u] = x_scale_word(xsrow, nk, 1u, nb)
                 }
             }
             cp_async_commit()
@@ -2732,27 +3041,73 @@ class template MmqFp4T {
                 let sb01 = swb[sx + 16u]
                 let sb10 = swb[sx + 32u]
                 let sb11 = swb[sx + 48u]
-                mma_block_scaled(f00, a0, b0, sa0, sb00, sb01)
-                mma_block_scaled(f01, a0, b1, sa0, sb10, sb11)
-                mma_block_scaled(f10, a1, b0, sa1, sb00, sb01)
-                mma_block_scaled(f11, a1, b1, sa1, sb10, sb11)
+                static_if (MX) {
+                    mma_block_scaled_mx(f00, a0, b0, sa0, sb00, sb01)
+                    mma_block_scaled_mx(f01, a0, b1, sa0, sb10, sb11)
+                    mma_block_scaled_mx(f10, a1, b0, sa1, sb00, sb01)
+                    mma_block_scaled_mx(f11, a1, b1, sa1, sb10, sb11)
+                } else {
+                    mma_block_scaled(f00, a0, b0, sa0, sb00, sb01)
+                    mma_block_scaled(f01, a0, b1, sa0, sb10, sb11)
+                    mma_block_scaled(f10, a1, b0, sa1, sb00, sb01)
+                    mma_block_scaled(f11, a1, b1, sa1, sb10, sb11)
+                }
             }
             kb++
         }
         // the store is column-major over [token][d]: a token's row is the fragment's column
+        let site_scale = MX ? 1.0 : uint_bits_to_float(wsu[(wblk + m0 * nsb) * 5u + 4u])
         let c0 = t0 + wn * 32u + 2u * t
-        let cs0 = float4(xrs[c0], xrs[c0 + 1u], xrs[c0 + 8u], xrs[c0 + 9u]) * pa.site_scale
-        let cs1 = float4(xrs[c0 + 16u], xrs[c0 + 17u], xrs[c0 + 24u], xrs[c0 + 25u]) * pa.site_scale
+        let cs0 = float4(xrs[c0], xrs[c0 + 1u], xrs[c0 + 8u], xrs[c0 + 9u]) * site_scale
+        let cs1 = float4(xrs[c0 + 16u], xrs[c0 + 17u], xrs[c0 + 24u], xrs[c0 + 25u]) * site_scale
         mma_scale_cols(f00, cs0)
         mma_scale_cols(f10, cs0)
         mma_scale_cols(f01, cs1)
         mma_scale_cols(f11, cs1)
-        let d = int(pa.d)
-        let ybase = int((t0 + wn * 32u) * pa.d + m0 + wm * 32u)
-        coopmatStore(f00, y, ybase, d, 1)
-        coopmatStore(f01, y, ybase + 16 * d, d, 1)
-        coopmatStore(f10, y, ybase + 16, d, 1)
-        coopmatStore(f11, y, ybase + 16 * d + 16, d, 1)
+        static_if (MOE) {
+            for [unroll] (rnd in range(8)) {
+                let mine = (warp >> 1u) == uint(rnd)
+                let slot = (warp & 1u) * 1024u
+                if (mine) {
+                    coopmatStore(f00, ystage, int(slot), 32, 1)
+                    coopmatStore(f01, ystage, int(slot + 512u), 32, 1)
+                    coopmatStore(f10, ystage, int(slot + 16u), 32, 1)
+                    coopmatStore(f11, ystage, int(slot + 512u + 16u), 32, 1)
+                }
+                barrier()
+                if (mine) {
+                    let col = m0 + wm * 32u + lane
+                    if (col < pa.d) {
+                        for [unroll] (j in range(32)) {
+                            y[(t0 + wn * 32u + uint(j)) * pa.d + col] = ystage[slot + uint(j) * 32u + lane]
+                        }
+                    }
+                }
+                barrier()
+            }
+        } else {
+            let d = int(pa.d)
+            let ybase = int((t0 + wn * 32u) * pa.d + m0 + wm * 32u)
+            coopmatStore(f00, y, ybase, d, 1)
+            coopmatStore(f01, y, ybase + 16 * d, d, 1)
+            coopmatStore(f10, y, ybase + 16, d, 1)
+            coopmatStore(f11, y, ybase + 16 * d + 16, d, 1)
+        }
+    }
+}
+
+//! the MXFP4 expert leaf on the FP4 tensor rung fed from the expert schedule (`MX`, `KTAIL`, `MOE`): gpt-oss's routed stacks over
+//! the gathered rows' MXFP4 feed - raw e2m1 nibbles on both sides under the UE8M0 block scales, a 2880-wide row on the k tail, a
+//! 2880-wide plane's last column tile under the store's guard
+[cuda_dispatch(name = "mx4_fp4_mmq_moe", grid = "wgs", params = "wgs : int64")]
+class CuMx4Fp4MmqMoe : MmqFp4T {
+    override MX = true
+    override KTAIL = true
+    override MOE = true
+
+    [cuda_kernel(local_size_x = 512, name = "mx4_fp4_mmq_moe_cuda")]
+    def run {
+        mmq_body()
     }
 }
 
@@ -2766,6 +3121,10 @@ class CuNv4Mmq : MmqFp4T {
 }
 
 let FP4_ROW_SCALE_DIV = 2688.0   //! 6 x 448: the e2m1 range times the UE4M3 range - the FP4 feed's row scale divides by it
+
+let FP4_NIBBLES_PER_BYTE = 2l   //! the FP4 feeds' quant plane: two e2m1 nibbles a byte
+let NV4_FEED_STRIP = 16l        //! the NVFP4 feed's code plane: one UE4M3 code byte a 16-element strip
+let MX4_FEED_WORD_ELEMS = 64l   //! the MXFP4 feed's code plane: one 32-bit word a k64 chunk (its two 32-blocks' UE8M0 codes)
 
 def fp4_amax4(v : float4) : float => max(max(abs(v.x), abs(v.y)), max(abs(v.z), abs(v.w)))
 
@@ -2792,6 +3151,26 @@ def fp4_chunk(v : float4; c : uint; var w, cw : uint&) {
     cw |= gk_subgroup_xor_u(cw, 8u)
 }
 
+//! the UE8M0 code of a 32-block of largest magnitude `m` by the MXFP4 rule (the nearest power of two to `m` over e2m1's top exponent, 2); 0 for an empty block
+def mx4_block_code(m : float) : uint => m > 0.0 ? uint(clamp(int(round(log2(m))) - 2 + 127, 0, 254)) : 0u
+
+//! the inverse of a UE8M0 code's scale: 2^(127 - code), exact
+def mx4_code_inv(code : uint) : float => e8m0_half_f32(255u - code)
+
+//! the MXFP4 strip pass over chunk `c` (a lane's four elements, eight lanes a 32-block): `w` its nibble word in the (k, k + 8) pairing, valid where c % 4 < 2; `cw` the k64's UE8M0 code word (byte i the k32 block i), valid where c % 16 == 0
+def mx4_chunk(v : float4; c : uint; var w, cw : uint&) {
+    var m = fp4_amax4(v)
+    m = max(m, gk_subgroup_xor(m, 1u))
+    m = max(m, gk_subgroup_xor(m, 2u))
+    m = max(m, gk_subgroup_xor(m, 4u))
+    let code = mx4_block_code(m)
+    let inv = mx4_code_inv(code)
+    let p = float4(gk_subgroup_xor(v.x, 2u), gk_subgroup_xor(v.y, 2u), gk_subgroup_xor(v.z, 2u), gk_subgroup_xor(v.w, 2u))
+    w = cvt_e2m1x2(v.x * inv, p.x * inv) | (cvt_e2m1x2(v.y * inv, p.y * inv) << 8u) | (cvt_e2m1x2(v.z * inv, p.z * inv) << 16u) | (cvt_e2m1x2(v.w * inv, p.w * inv) << 24u)
+    cw = code << (((c >> 3u) & 1u) * 8u)
+    cw |= gk_subgroup_xor_u(cw, 8u)
+}
+
 struct Fp4RowsArgs {
     k : uint        //! the row width, a multiple of 64
     inbase : uint   //! the source rows' element base
@@ -2799,6 +3178,8 @@ struct Fp4RowsArgs {
     ubase : uint    //! the act form's up side: its element base, and with `ustride` the rows of `ulen` elements sit `ustride` apart
     ustride : uint
     ulen : uint
+    gboff : uint    //! the biased act form: this layer's row base in the gate-bias plane ([ne x k] rows a layer)
+    uboff : uint    //! ... and in the up-bias plane
 }
 
 //! The FP4 activation feed a workgroup a row (256 lanes), a lane four consecutive elements a round: the row's largest magnitude
@@ -2807,7 +3188,9 @@ struct Fp4RowsArgs {
 //! read as float4 when the planes sit on the four lattice and the up rows are contiguous, and read twice
 [ |> template_struct_instance]
 class template Fp4FeedT : GkWgReduce {
-    @template_constant ACT : bool = false   //!< the act form: element e is act(gate[e]) x up[e] (`gk_up_at` for the up side's layout)
+    @template_constant ACT : bool = false    //!< the act form: element e is act(gate[e]) x up[e] (`gk_up_at` for the up side's layout)
+    @template_constant BIAS : bool = false   //!< ... the biased act form (gpt-oss's stacks): the row's expert (`rex`) names the gate and up bias rows added before the activation
+    @template_constant MX : bool = false     //!< the MXFP4 feed: a UE8M0 code a 32-block (two a k64 word), no row scale (1.0 stored)
     @ssbo @binding = 0 @readonly src : array<float>                      //! the rows (the act form's gate)
     @ssbo @binding = 1 @readonly @template_gate = ACT up : array<float>
     @ssbo @binding = 0 @readonly @role = "alias" src4 : array<float4>
@@ -2815,11 +3198,32 @@ class template Fp4FeedT : GkWgReduce {
     @ssbo @binding = 2 outq : array<uint>      //! [row][k / 8] nibble words
     @ssbo @binding = 3 outsw : array<uint>     //! [row][k / 64] code words
     @ssbo @binding = 4 outrs : array<float>    //! [row] scales
+    @ssbo @binding = 5 @readonly @role = "weight" @template_gate = BIAS gb : array<float>   //! the gate-bias plane
+    @ssbo @binding = 6 @readonly @role = "weight" @template_gate = BIAS ub : array<float>   //! the up-bias plane
+    @ssbo @binding = 7 @readonly @template_gate = BIAS rex : array<uint>                   //! row -> its expert
     @kargs pa : Fp4RowsArgs
+
+    //! element `e`'s column in its row (the biased form's bias column)
+    def bias_col(e : uint) : uint => e - pa.inbase - gl_WorkGroupID.x * pa.k
+
+    def gate_up_at(e, ue : uint) : float2 {
+        static_if (BIAS) {
+            let ex = rex[gl_WorkGroupID.x]
+            let c = bias_col(e)
+            return float2(src[e] + gb[pa.gboff + ex * pa.k + c], up[ue] + ub[pa.uboff + ex * pa.k + c])
+        } else {
+            static_if (ACT) {
+                return float2(src[e], up[ue])
+            } else {
+                return float2(src[e], 0.0)
+            }
+        }
+    }
 
     def load1(e : uint) : float {
         static_if (ACT) {
-            return gk_act_mul(src[e], up[gk_up_at(e, pa.ubase, pa.ustride, pa.ulen)], pa.act)
+            let p = gate_up_at(e, gk_up_at(e, pa.ubase, pa.ustride, pa.ulen))
+            return gk_act_mul(p.x, p.y, pa.act)
         } else {
             return src[e]
         }
@@ -2830,7 +3234,16 @@ class template Fp4FeedT : GkWgReduce {
         let g = src4[e / 4u]
         static_if (ACT) {
             let u = up4[(pa.ubase + e) / 4u]
-            return float4(gk_act_mul(g.x, u.x, pa.act), gk_act_mul(g.y, u.y, pa.act), gk_act_mul(g.z, u.z, pa.act), gk_act_mul(g.w, u.w, pa.act))
+            static_if (BIAS) {
+                let ex = rex[gl_WorkGroupID.x]
+                let c = bias_col(e)
+                let gbo = pa.gboff + ex * pa.k + c
+                let ubo = pa.uboff + ex * pa.k + c
+                return float4(gk_act_mul(g.x + gb[gbo], u.x + ub[ubo], pa.act), gk_act_mul(g.y + gb[gbo + 1u], u.y + ub[ubo + 1u], pa.act),
+                    gk_act_mul(g.z + gb[gbo + 2u], u.z + ub[ubo + 2u], pa.act), gk_act_mul(g.w + gb[gbo + 3u], u.w + ub[ubo + 3u], pa.act))
+            } else {
+                return float4(gk_act_mul(g.x, u.x, pa.act), gk_act_mul(g.y, u.y, pa.act), gk_act_mul(g.z, u.z, pa.act), gk_act_mul(g.w, u.w, pa.act))
+            }
         } else {
             return g
         }
@@ -2844,7 +3257,11 @@ class template Fp4FeedT : GkWgReduce {
     def strip_put(tok, cc : uint; on : bool; v : float4) {
         var w = 0u
         var cw = 0u
-        fp4_chunk(v, cc, w, cw)
+        static_if (MX) {
+            mx4_chunk(v, cc, w, cw)
+        } else {
+            fp4_chunk(v, cc, w, cw)
+        }
         if (on && (cc & 3u) < 2u) {
             outq[tok * (pa.k / 8u) + (cc >> 2u) * 2u + (cc & 3u)] = w
         }
@@ -2853,22 +3270,24 @@ class template Fp4FeedT : GkWgReduce {
         }
     }
 
-    [spirv_inline, arch(at="../ARCHITECTURE_GPU_ASYMMETRIES.md#gpu-asymmetries")]
+    [spirv_inline, arch(at="../ARCHITECTURE_GPU_ASYMMETRIES_CUDA.md#cuda-asymmetries")]
     def fp4_body {
         let tok = gl_WorkGroupID.x
         let base = pa.inbase + tok * pa.k
         let tid = gl_LocalInvocationID.x
         let nch = pa.k / 4u
-        var m = 0.0
-        var c = tid
-        while (c < nch) {
-            m = max(m, fp4_amax4(load4(base + c * 4u)))
-            c += 256u
+        var amax = 0.0   // an `MX` feed's blocks carry the range; else the row's largest magnitude over the strip code's and e2m1's tops
+        static_if (!MX) {
+            var m = 0.0
+            var c = tid
+            while (c < nch) {
+                m = max(m, fp4_amax4(load4(base + c * 4u)))
+                c += 256u
+            }
+            wg_max_into(m, 0u, amax)
         }
-        var amax = 0.0
-        wg_max_into(m, 0u, amax)
-        let rs = amax / FP4_ROW_SCALE_DIV
-        let inv_rs = rs > 0.0 ? 1.0 / rs : 0.0
+        let rs = MX ? 1.0 : amax / FP4_ROW_SCALE_DIV
+        let inv_rs = MX ? 1.0 : (rs > 0.0 ? 1.0 / rs : 0.0)
         if (tid == 0u) {
             outrs[tok] = rs
         }
@@ -2902,6 +3321,42 @@ class CuFp4ActRows : Fp4FeedT {
     override ACT = true
 
     [cuda_kernel(local_size_x = 256, name = "fp4_actrows_cuda", precise = true)]
+    def run {
+        fp4_body()
+    }
+}
+
+//! the MXFP4 feed of a float plane's rows: the routed block's gathered rows for the mx4 expert leaf
+[cuda_dispatch(name = "mx4_rows", grid = "nrows", params = "nrows : int64")]
+class CuMx4Rows : Fp4FeedT {
+    override MX = true
+
+    [cuda_kernel(local_size_x = 256, name = "mx4_rows_cuda", precise = true)]
+    def run {
+        fp4_body()
+    }
+}
+
+//! the MXFP4 feed of a gate / up pair through the activation: the routed block's hidden rows for the mx4 down leaf
+[cuda_dispatch(name = "mx4_actrows", grid = "nrows", params = "nrows : int64")]
+class CuMx4ActRows : Fp4FeedT {
+    override MX = true
+    override ACT = true
+
+    [cuda_kernel(local_size_x = 256, name = "mx4_actrows_cuda", precise = true)]
+    def run {
+        fp4_body()
+    }
+}
+
+//! ... the biased twin (gpt-oss's stacks): each row's expert's gate and up bias rows added before the activation
+[cuda_dispatch(name = "mx4_actrows_b", grid = "nrows", params = "nrows : int64")]
+class CuMx4ActRowsB : Fp4FeedT {
+    override MX = true
+    override ACT = true
+    override BIAS = true
+
+    [cuda_kernel(local_size_x = 256, name = "mx4_actrows_b_cuda", precise = true)]
     def run {
         fp4_body()
     }
@@ -3157,6 +3612,32 @@ class CuFaCm2H64F16 : FaH64T {
     }
 }
 
+//! the sink stamps at head 64 (gpt-oss, `FaH64T` under `SINK`): the online softmax seeded with the head's sink logit, the o rows
+//! as f32 and as f16
+[cuda_dispatch(name = "fa_cm2_h64_sink_cls", kernel = "run", family = "fa_cm2_sink_cls", grid = "wgs", params = "wgs : int64")]
+class CuFaCm2H64Sink : FaH64T {
+    typedef OT = float
+    override SINK = true
+
+    [cuda_kernel(local_size_x = 128, name = "fa_cm2_h64_sink_cls_cuda")]
+    def run {
+        fa_body()
+    }
+}
+
+//! the head-64 sink stamp with the f16 O store (`FaH64T`)
+[cuda_dispatch(name = "fa_cm2_h64_sink_f16_cls", kernel = "run", family = "fa_cm2_sink_cls", grid = "wgs", params = "wgs : int64")]
+class CuFaCm2H64SinkF16 : FaH64T {
+    typedef OT = float16
+    override OUT16 = true
+    override SINK = true
+
+    [cuda_kernel(local_size_x = 128, name = "fa_cm2_h64_sink_f16_cls_cuda")]
+    def run {
+        fa_body()
+    }
+}
+
 //! the flash tile at head 96 (`FaH96T`): phi-3's heads, 32 keys a step
 [cuda_dispatch(name = "fa_cm2_h96_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
 class CuFaCm2H96 : FaH96T {
@@ -3202,6 +3683,95 @@ class CuFaCm2H128F16 : FaH128T {
     }
 }
 
+//! the flash tile at head 256 (`FaH256T`): the deltanet hybrids' attention heads, 32 keys a step; the `G` stamps gate each head's
+//! output by the sigmoid of its [q | gate] half
+[cuda_dispatch(name = "fa_cm2_h256_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
+class CuFaCm2H256 : FaH256T {
+    typedef OT = float
+
+    [cuda_kernel(local_size_x = 128, name = "fa_cm2_h256_cls_cuda")]
+    def run {
+        fa_body()
+    }
+}
+
+//! the head-256 flash tile with the f16 O store (`FaH256T`)
+[cuda_dispatch(name = "fa_cm2_h256_f16_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
+class CuFaCm2H256F16 : FaH256T {
+    typedef OT = float16
+    override OUT16 = true
+
+    [cuda_kernel(local_size_x = 128, name = "fa_cm2_h256_f16_cls_cuda")]
+    def run {
+        fa_body()
+    }
+}
+
+//! the head-256 gated flash tile (`FaH256T` under `GATED`)
+[cuda_dispatch(name = "fa_cm2_h256_g_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
+class CuFaCm2H256G : FaH256T {
+    typedef OT = float
+    override GATED = true
+
+    [cuda_kernel(local_size_x = 128, name = "fa_cm2_h256_g_cls_cuda")]
+    def run {
+        fa_body()
+    }
+}
+
+//! the head-256 gated flash tile with the f16 O store (`FaH256T` under `GATED`)
+[cuda_dispatch(name = "fa_cm2_h256_g_f16_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
+class CuFaCm2H256GF16 : FaH256T {
+    typedef OT = float16
+    override OUT16 = true
+    override GATED = true
+
+    [cuda_kernel(local_size_x = 128, name = "fa_cm2_h256_g_f16_cls_cuda")]
+    def run {
+        fa_body()
+    }
+}
+
+//! the flash stamp of head size `hs` (64, 96, 128 or 256) with the f32 or the f16 O store; the gate arm is the h256 stamps' alone, and `sink` takes the h64 sink stamps over the per-head sink plane `sinks` (the sink upload holds the head size to 64)
+def cud_fa_enc(var s : void?; hs : int64; gated, f16out, sink : bool; bufs : uint64 const[4]; sinks : uint64; var pc : FaArgs; wgs : int64) {
+    if (sink) {
+        let sbufs = fixed_array(bufs[0], bufs[1], bufs[2], bufs[3], sinks)
+        if (f16out) {
+            enc_fa_cm2_h64_sink_f16_cls(s, sbufs, pc, wgs)
+        } else {
+            enc_fa_cm2_h64_sink_cls(s, sbufs, pc, wgs)
+        }
+    } elif (hs == 64l) {
+        if (f16out) {
+            enc_fa_cm2_h64_f16_cls(s, bufs, pc, wgs)
+        } else {
+            enc_fa_cm2_h64_cls(s, bufs, pc, wgs)
+        }
+    } elif (hs == 96l) {
+        if (f16out) {
+            enc_fa_cm2_h96_f16_cls(s, bufs, pc, wgs)
+        } else {
+            enc_fa_cm2_h96_cls(s, bufs, pc, wgs)
+        }
+    } elif (hs == 128l) {
+        if (f16out) {
+            enc_fa_cm2_h128_f16_cls(s, bufs, pc, wgs)
+        } else {
+            enc_fa_cm2_h128_cls(s, bufs, pc, wgs)
+        }
+    } elif (gated) {
+        if (f16out) {
+            enc_fa_cm2_h256_g_f16_cls(s, bufs, pc, wgs)
+        } else {
+            enc_fa_cm2_h256_g_cls(s, bufs, pc, wgs)
+        }
+    } elif (f16out) {
+        enc_fa_cm2_h256_f16_cls(s, bufs, pc, wgs)
+    } else {
+        enc_fa_cm2_h256_cls(s, bufs, pc, wgs)
+    }
+}
+
 //! the batch attention over the mirror (`DaAttnBT`): the window's rows at a head size or a mirror width the flash tiles do not serve
 [cuda_dispatch(name = "da_attn_b_cls", grid = "wgs", params = "wgs : int64")]
 class CuDaAttnB : DaAttnBT {
@@ -3220,5 +3790,270 @@ class CuDaAttnBF16 : DaAttnBT {
     [cuda_kernel(local_size_x = 256, name = "da_attn_b_f16_cls_cuda")]
     def run {
         at_attn_body()
+    }
+}
+
+//! the residual step with the Q8_0 requant and the normed row stored as floats (`ArRqT` under `STOREX`): the row the recurrent
+//! head's f32 beta/alpha GEMV reads
+[cuda_dispatch(name = "cls_ar_rqx", grid = "wgs", params = "wgs : int64")]
+class CuArAddRmsRqX : ArRqT {
+    override STOREX = true
+
+    [cuda_kernel(local_size_x = 256, name = "cls_ar_rqx_cuda")]
+    def run {
+        ar_rq_body()
+    }
+}
+
+//! ... and its Q8_K twin (`ArRqT` under `KBLK`)
+[cuda_dispatch(name = "cls_ar_rqkx", grid = "wgs", params = "wgs : int64")]
+class CuArAddRmsRqKX : ArRqT {
+    override KBLK = true
+    override STOREX = true
+
+    [cuda_kernel(local_size_x = 256, name = "cls_ar_rqkx_cuda")]
+    def run {
+        ar_rq_body()
+    }
+}
+
+//! the router GEMV over the f32 rows (`RouterGemvT`): the recurrent head's beta and alpha rows in one dispatch
+[cuda_dispatch(name = "router_gemv_cls", grid = "ne", params = "ne : int64")]
+class CuRouterGemv : RouterGemvT {
+    typedef KT = float
+    typedef XT = float
+
+    [cuda_kernel(local_size_x = 256, name = "router_gemv_cls_cuda")]
+    def run {
+        router_body()
+    }
+}
+
+//! the conv front (`DnConvT` over the template every home stamps, `GkDnConv`)
+[cuda_dispatch(name = "dn_conv_cls", grid = "wgs", params = "wgs : int64")]
+class CuDnConv : DnConvT {
+    [cuda_kernel(local_size_x = 256, name = "dn_conv_cls_cuda")]
+    def run {
+        dn_conv_body(gl_WorkGroupID.x, gl_LocalInvocationID.x)
+    }
+}
+
+//! the window's scan (`DnScanT`)
+[cuda_dispatch(name = "dn_scan_cls", grid = "wgs", params = "wgs : int64")]
+class CuDnScan : DnScanT {
+    [cuda_kernel(local_size_x = 128, name = "dn_scan_cls_cuda")]
+    def run {
+        dn_scan_body()
+    }
+}
+
+//! the gated out-norm (`DnScanP3T` over `GkDnGate`), silu and sigmoid out-gates
+[cuda_dispatch(name = "dn_scan_p3_cls", kernel = "run", grid = "npos", params = "npos : int64")]
+class CuDnScanP3 : DnScanP3T {
+    [cuda_kernel(local_size_x = 256, name = "dn_scan_p3_cls_cuda")]
+    def run {
+        dn_gate_body()
+    }
+}
+
+//! the gated out-norm's sigmoid out-gate stamp (`DnScanP3T`)
+[cuda_dispatch(name = "dn_scan_p3_sig_cls", kernel = "run", grid = "npos", params = "npos : int64")]
+class CuDnScanP3Sig : DnScanP3T {
+    override ZSIG = true
+
+    [cuda_kernel(local_size_x = 256, name = "dn_scan_p3_sig_cls_cuda")]
+    def run {
+        dn_gate_body()
+    }
+}
+
+//! the window's conv ring hand-off (`DnTailRingT`)
+[cuda_dispatch(name = "dn_tail_cls", grid = "wgs", params = "wgs : int64")]
+class CuDnTail : DnTailRingT {
+    [cuda_kernel(local_size_x = 256, name = "dn_tail_cls_cuda")]
+    def run {
+        tail_ring_body()
+    }
+}
+
+//! the window's f32 beta/alpha tile GEMM (`DnBaGemmT`) over the window's f16 rows
+[cuda_dispatch(name = "dn_ba_cls", grid = "wgs", params = "wgs : int64")]
+class CuDnBaGemm : DnBaGemmT {
+    typedef XT = float16
+
+    [cuda_kernel(local_size_x = 256, name = "dn_ba_cls_cuda")]
+    def run {
+        dn_ba_body()
+    }
+}
+
+//! the fused deltanet decode step (`DnStepFusedT`), silu and sigmoid out-gates
+[cuda_dispatch(name = "dn_step_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class CuDnStep : DnStepFusedT {
+    [cuda_kernel(local_size_x = 256, name = "dn_step_cls_cuda")]
+    def run {
+        dn_step_body()
+    }
+}
+
+//! the fused decode step's sigmoid out-gate stamp (`DnStepFusedT`)
+[cuda_dispatch(name = "dn_step_sig_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class CuDnStepSig : DnStepFusedT {
+    override ZSIG = true
+
+    [cuda_kernel(local_size_x = 256, name = "dn_step_sig_cls_cuda")]
+    def run {
+        dn_step_body()
+    }
+}
+
+//! the window's router GEMM (`RouterGemmT`)
+[cuda_dispatch(name = "router_gemm_cls", grid = "wgs", params = "wgs : int64")]
+class CuRouterGemm : RouterGemmT {
+    [cuda_kernel(local_size_x = 256, name = "router_gemm_cls_cuda")]
+    def run {
+        router_gemm_body()
+    }
+}
+
+//! the decode's per-row select with its slot records (`TopKRecords` under META): a row a workgroup, one logit a thread to 256 experts
+[cuda_dispatch(name = "topk_n_cls", grid = "npos", params = "npos : int64")]
+class CuTopKN : TopKRecords {
+    [cuda_kernel(local_size_x = 256, name = "topk_n_cls_cuda")]
+    def run {
+        row_picks(gl_WorkGroupID.x)
+    }
+}
+
+//! ... two logits a thread past 256 experts (`TopKRecords`)
+[cuda_dispatch(name = "topk_n2_cls", kernel = "run", family = "topk_n_cls", grid = "npos", params = "npos : int64")]
+class CuTopKN2 : TopKRecords {
+    override DEPTH = 2
+
+    [cuda_kernel(local_size_x = 256, name = "topk_n2_cls_cuda")]
+    def run {
+        row_picks(gl_WorkGroupID.x)
+    }
+}
+
+//! the window's per-row select (`TopKRecords`): the picks and weights alone, which the bucket schedule reads
+[cuda_dispatch(name = "topk_rows_cls", grid = "npos", params = "npos : int64")]
+class CuTopKRows : TopKRecords {
+    override META = false
+
+    [cuda_kernel(local_size_x = 256, name = "topk_rows_cls_cuda")]
+    def run {
+        row_picks(gl_WorkGroupID.x)
+    }
+}
+
+//! ... two logits a thread past 256 experts (`TopKRecords`)
+[cuda_dispatch(name = "topk_rows2_cls", kernel = "run", family = "topk_rows_cls", grid = "npos", params = "npos : int64")]
+class CuTopKRows2 : TopKRecords {
+    override META = false
+    override DEPTH = 2
+
+    [cuda_kernel(local_size_x = 256, name = "topk_rows2_cls_cuda")]
+    def run {
+        row_picks(gl_WorkGroupID.x)
+    }
+}
+
+//! the window's bucket schedule (`MoeSchedT`), a thread an expert: 256 experts, and the 512-thread stamp past them
+[cuda_dispatch(name = "moe_sched_cls", grid = "one", params = "one : int64")]
+class CuMoeSched : MoeSchedT {
+    [cuda_kernel(local_size_x = 256, name = "moe_sched_cls_cuda")]
+    def run {
+        sched_body()
+    }
+}
+
+//! the 512-thread bucket schedule past 256 experts (`MoeSchedT`)
+[cuda_dispatch(name = "moe_sched2_cls", kernel = "run", family = "moe_sched_cls", grid = "one", params = "one : int64")]
+class CuMoeSched2 : MoeSchedT {
+    override WG = 512u
+
+    [cuda_kernel(local_size_x = 512, name = "moe_sched2_cls_cuda")]
+    def run {
+        sched_body()
+    }
+}
+
+//! the routed block's gather (`MoeGatherT`): every slot row's normed row into its bucket row as halves, the expert tiles' feed
+[cuda_dispatch(name = "moe_gather_f16_cls", grid = "nk", params = "nk : int64")]
+class CuMoeGatherF16 : MoeGatherT {
+    typedef XG = float16
+
+    [cuda_kernel(local_size_x = 256, name = "moe_gather_f16_cls_cuda")]
+    def run {
+        gather_body()
+    }
+}
+
+//! the combine on the residual step (`ArCombBase`): the shared expert's row at its gate, the k weighted routed rows through the
+//! slot map under their down biases, then the next norm as floats - a row a workgroup, the token step's and the window's
+[cuda_dispatch(name = "cls_ar_comb", kernel = "run", grid = "nrows", params = "nrows : int64")]
+class CuClsArComb : ArCombBase {
+    override OUT_F32 = true
+
+    [cuda_kernel(local_size_x = 256, name = "cls_ar_comb_cuda")]
+    def run {
+        ar_body()
+    }
+}
+
+//! the gather as floats (`MoeGatherT` F16 off): the rows the FP4 expert chain's MXFP4 feed reads
+[cuda_dispatch(name = "moe_gather_f32_cls", grid = "nk", params = "nk : int64")]
+class CuMoeGatherF32 : MoeGatherT {
+    typedef XG = float
+    override F16 = false
+
+    [cuda_kernel(local_size_x = 256, name = "moe_gather_f32_cls_cuda")]
+    def run {
+        gather_body()
+    }
+}
+
+//! the act to the f16 hidden plane under the picks' gate and up bias rows (`ActF16T` BIASED): gpt-oss's stacks
+[cuda_dispatch(name = "actf16_b_cls", grid = "wgs", params = "wgs : int64")]
+class CuActF16B : ActF16T {
+    override BIASED = true
+
+    [cuda_kernel(local_size_x = 256, name = "actf16_b_cls_cuda")]
+    def run {
+        actf16_body()
+    }
+}
+
+//! the decode's per-row select over `ne` experts on the stamp its depth names
+def cud_topk_n_ensure(ne : int64) : bool => topk_depth(ne) > 1 ? ensure_topk_n2_cls() : ensure_topk_n_cls()
+
+def cud_topk_n_enc(ne : int64; var s : void?; bufs : uint64 const[8]; var pc : GkTopKArgs; npos : int64) {
+    if (topk_depth(ne) > 1) {
+        enc_topk_n2_cls(s, bufs, pc, npos)
+    } else {
+        enc_topk_n_cls(s, bufs, pc, npos)
+    }
+}
+
+//! the window's per-row select over `ne` experts, the same way
+def cud_topk_rows_ensure(ne : int64) : bool => topk_depth(ne) > 1 ? ensure_topk_rows2_cls() : ensure_topk_rows_cls()
+
+def cud_topk_rows_enc(ne : int64; var s : void?; bufs : uint64 const[5]; var pc : GkTopKArgs; npos : int64) {
+    if (topk_depth(ne) > 1) {
+        enc_topk_rows2_cls(s, bufs, pc, npos)
+    } else {
+        enc_topk_rows_cls(s, bufs, pc, npos)
+    }
+}
+
+//! the window's bucket schedule over `ne` experts on the stamp that reaches them
+def cud_moe_sched_ensure(ne : int64) : bool => ne > 256l ? ensure_moe_sched2_cls() : ensure_moe_sched_cls()
+
+def cud_moe_sched_enc(ne : int64; var s : void?; bufs : uint64 const[6]; var pc : SchedArgs) {
+    if (ne > 256l) {
+        enc_moe_sched2_cls(s, bufs, pc, 1l)
+    } else {
+        enc_moe_sched_cls(s, bufs, pc, 1l)
     }
 }

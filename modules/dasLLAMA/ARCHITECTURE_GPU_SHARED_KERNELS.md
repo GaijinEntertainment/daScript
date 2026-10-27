@@ -1,8 +1,10 @@
 # dasLLAMA Architecture - the kernels both GPU homes stamp
 
 Companion to `ARCHITECTURE_GPU.md`; a section is cited by its anchor. This document carries the kernels more than one
-home runs - the Metal, Vulkan and CUDA homes: the template mechanism of `dasllama_gpu_kernels_common.das`, and the
-ledger of which kernels ride one template and what each stamp reads there, and which stay per home and why.
+home runs - the Metal, Vulkan and CUDA homes: the template mechanism of `dasllama_gpu_kernels_common.das`, the
+ledger of which kernels ride one template and what each stamp reads there, and which stay per home and why, the routed
+block's routing kernels both discrete homes stamp (`#moe-routing-kernels`), and the deltanet kernels they stamp with
+their smalls layout and capacities (`#dn-discrete-kernels`).
 
 ### Kernels both homes stamp {#gpu-shared-kernels}
 
@@ -109,7 +111,7 @@ struct and the body; a stamp sets the template constants its home needs and maps
 | `GkPleGate` | `MetalPleGate` (the ring or the panel at `cin`) | `PleGate` (the ring slot off `tok`, or the panel) | `TG`, `RSQRT`, `cin_base` / `cin_store` |
 | `GkPleConv` | `MetalPleConv` | `PleConv` | `row_pos` / `tap`; the CPU chain's (res + gated) + silu(conv) |
 | `GkQkRms` | `MetalQkNorm` (the q and k heads of one buffer, `kwd` the no-wv V fill) | `QkRms` | the grid decode |
-| `GkTopKRow` | `MetalMoeSelect` / `512` (32 lanes, DEPTH 8 / 16, `raw` the gpt-oss form), their `Ds` twins (`DSCALE`: gemma-4's per-expert down scales, the layer's row bound) | `TopKRecords`' `TopKN` / `TopKN2` / `TopKRows` / `TopKRows2` (256 lanes, DEPTH 1 / 2, `DSCALE`, the row named at run time) | `LANES`, `DEPTH`, `DSCALE`, `DSOFF_SWITCH` |
+| `GkTopKRow` | `MetalMoeSelect` / `512` (32 lanes, DEPTH 8 / 16, `raw` the gpt-oss form), their `Ds` twins (`DSCALE`: gemma-4's per-expert down scales, the layer's row bound) | the discrete file's `TopKRecords`: `TopKN` / `TopKN2` / `TopKRows` / `TopKRows2` on Vulkan, `CuTopKN` / `CuTopKN2` / `CuTopKRows` / `CuTopKRows2` on CUDA (256 lanes, DEPTH 1 / 2, `DSCALE`, the row named at run time) | `LANES`, `DEPTH`, `DSCALE`, `DSOFF_SWITCH` |
 | `GkMoeCombine` | `MetalMoeCombine`, `MetalMoeReduce` (`GATHERED`) | `MoeCombine` (`WINDOW`: the chunk window, the accumulate, the zero-weight skip), `MoeCombineRow` (`BYROW`: a bundle's region rows) | `GATHERED`, `WINDOW`, `BYROW`, `SLOT_X4` |
 | `GkDnGate` | `MetalDnGate` / `Sig` (`rsqrt`) | `DnScanP3` / `Sig` | `ZSIG`, `RSQRT` |
 | `GkQknRopeKv` | `MetalQknRope16` / `32` (one row), `MetalQknRopeB16` / `B32` (rows), `MetalPfQkn` / `HX` (the window, the q twin) | `QknRopeKv` / `F16` | `KT`, `CLAMP16`, `V_WG`, `LANES` / `EPT`, `HX` |
@@ -120,7 +122,7 @@ struct and the body; a stamp sets the template constants its home needs and maps
 | `GkDnConv` | `MetalDnConvN` / `N4` (`PB` 1 / 4, `RING` 8: a group of 16 rows or fewer) | `DnConv` (`PB` 32, `RING` 4) | `PB`, `RING` |
 | `GkMoeCombG4` | `MetalMoeCombG4` / `Hx` (the selection rows' slots, the next norm in f32, `Hx` its f16 twin), `MetalMoeCombG4Pf` (the bucket inverse's slots, no norm out; 1024 lanes, `rsqrt`) | `ClsArCombG4` / `F16B` / `Rq` (the slot map, the next norm in f32, f16 or Q8_0 blocks; 256 lanes, `1 / sqrt`) | `TG`, `RSQRT`, `GATHERED`, `OUT_F32` / `OUT_F16` / `OUT_Q8`, `HX`, `PRESUM_SWITCH`; the stash and, on Metal, the norm rows' layout |
 | `GkClsEpilogue` | `MetalClsEpilogue` | `ClsEpilogue` | nothing; every row in one dispatch |
-| `GkWgScan` | (the selection's base) | `WgScanT` (`MoeSched` at 256 lanes, `MoeSched2` at 512: the value-form `excl_scan` over the statement form) | `WG`, the `scan` slot a thread sized by it |
+| `GkWgScan` | (the selection's base) | the discrete file's `WgScanT` (the value-form `excl_scan` over the statement form) under `MoeSchedT`: `MoeSched` at 256 lanes and `MoeSched2` at 512 on Vulkan, `CuMoeSched` / `CuMoeSched2` on CUDA | `WG`, the `scan` slot a thread sized by it |
 | `GkClsSelect` | `MetalClsSelect` (1024 lanes, no fast math) | `ClsSelect` (1024 lanes) | `WG` at 1024 over `GkWgScan`; the `SEL_*` layout as the template's constants, the max and sum `GkWgReduce`'s, the lane floor `sel_lane_val` of `dasllama_gpu_math`, the atomics the shader lingua franca's `atomicAdd` |
 | `GkAddRmsRows` | `MetalAddRms` / `HX` (the plain step), `MetalPreAddRms` / `HX` (the sandwich seam in one dispatch: the branch normed under its post norm, the add, the next norm), `MetalPreAdd` (no norm out); 256 lanes the window and a decode row within the slab, 1024 a decode row past it | `ClsArAddRms` / `F16B`, `ClsArAddRmsRqB` and the `ArAddRmsRq*` stamps (Q8_0 out), the combines' `ArCombBase` (256 lanes) | `LANES`, `PRE`, `PRE_SWITCH`, `NORM_SWITCH`, `ARMS`, `X4`, `HX`, `OUT_*`; on Metal, the norm rows' layout |
 | `GkPleAct` | `MetalGegluSide` (in place over the gate rows, 64 lanes) | `PleActF32` (`OUT`: the f32 projection's x, 256 lanes) | `OUT`; the side row's index is `gk_strided_at`, `ActRqT.up_at`'s |
@@ -164,12 +166,12 @@ stores keeps the deinterleave and the epilogue - the two dispatches the row abov
 
 **The pairs that stay per home, a reason each:**
 
-- `MetalDnScanT` / `DnScan`: 32 against 16 rows a lane, the half rows, the decay order - each measured on its home
+- `MetalDnScanT` / `DnScanT`: 32 against 16 rows a lane, the half rows, the decay order - each measured on its home
   (`ARCHITECTURE_GPU_PREFILL_WINDOW.md`, `ARCHITECTURE_GPU_VULKAN.md`).
 - Metal's five-kernel deltanet step / `DnStepFusedT`: the whole step in one dispatch is the Vulkan resident command's seat;
   Metal steps a session's rows against its own mirror.
-- `MetalDnConvHist` / `DnTail`: not one computation - a shadow dual store against a zero-filled ring hand-off.
-- `MetalDnBa` / `DnBaGemm`: a row GEMV against a tile GEMM.
+- `MetalDnConvHist` / `DnTailRingT`: not one computation - a shadow dual store against a zero-filled ring hand-off.
+- `MetalDnBa` / `DnBaGemmT`: a row GEMV against a tile GEMM.
 - Every GEMV and expert row (the deltanet projections, the routed and shared experts, the hc down and up, the n-gram
   projections, eh_proj, `MetalHcLo` / `HcLoRq`): Metal dots f32 x, Vulkan a requantized Q8 feed.
 - The expert, router and dense GEMM tiles (`MetalMoeMulMm*` / `*Cm2*` and the KHR tiles, `pf_enc_router_mm` / `F16GemmCm2`):
@@ -193,6 +195,90 @@ stores keeps the deinterleave and the epilogue - the two dispatches the row abov
 - The two MoE tile scaffolds keep one walk on Metal (`MetalMoeTileWalkT` under `MetalKqMulMmSplitTensorBase` and
   `MetalMoeMulMmKqTensorBase`), its stores the scaffold's hook; the tile lab holds the walk within 0.5% (two alternated rounds,
   best of three).
+
+### The routed block's routing kernels both discrete homes stamp {#moe-routing-kernels}
+
+**The routed block's routing kernels are the discrete file's templates, stamped by both discrete homes.** The batched
+router GEMM `RouterGemmT` (`RouterGemm` / `CuRouterGemm`, its grid `router_gemm_wgs`), the select records `TopKRecords`
+and the bucket schedule `MoeSchedT` (their rows in the pair table above), the f16 gather `MoeGatherT` (`MoeGatherF16` /
+`CuMoeGatherF16`), the combine-folded residual step `ArCombBase` (`ClsArComb` / `CuClsArComb`, the f32 normed-row form on
+both; the f16 and Q8_0 twins the Vulkan home's) the biased act `ActF16T` (`ActF16B` / `CuActF16B`) and the biased act + requant `ActRqBT` (`Q8ActRqB` on Vulkan;
+`CuQ8ActRqB` and its Q8_K twin `CuQ8kActRqB` on CUDA) share one body
+each; a stamp sets its lane count and output form and maps the grid onto the body's method. Their CPU oracles are one
+module the two homes' kernel cells read (`tests/_moe_routing_oracles.das`). How each home chains the five stages into its
+window and token step: `ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block`, `ARCHITECTURE_GPU_VULKAN_MOE.md#resident-moe-token`.
+
+**The router GEMM is the decode router GEMV batched:** a 64 x 32 tile of positions by router rows per workgroup, each
+invocation a 4 x 2 block whose two rows sit 16 apart, K in 64-wide steps through a float4 stage in shared memory at a row
+stride of 17 float4, the next step's rows fetched into registers while the current step computes, and each output's four
+products per float4 added in k order (the scalar loop's sums to the bit). The stride and the row split are the bank rule:
+sixteen lanes reading sixteen rows land on all eight 16-byte bank groups, so a warp's two weight loads take two
+wavefronts each and its four activation loads (two distinct rows) one; the scalar tile is bound by that shared-memory
+traffic at about six FMAs per staged float4. The 64-wide K step is why the MoE seats ask for a 64-multiple row width. The
+router plane holds every MoE layer's f32 rows, and a gated shared expert's gate vector rides as one more row past the
+experts, so one dispatch writes the logits row `[ne | gate]` per position.
+
+**The bucket schedule writes what the host fill writes for the per-op chain,** one workgroup: the experts' slot counts
+are an atomic tally over the window (a thread an expert, 256 of them or the 512-thread stamp past 256 experts, stride the
+picks, one workgroup atomic per slot), exclusive scans place each bucket's rows, its region indices (experts with rows, in
+expert order) and its tile workgroups, and the three expert planes' schedules land as 4-word records plus per-workgroup
+maps. A bucket is cut into at most two pieces by the tile ladder: a bucket within the s column (`SCHED_S_ROWS`, 32 rows)
+is one s piece; a bigger bucket takes whole m columns (`SCHED_M_ROWS`, 128 rows) with the last one partial, unless the
+remainder past the whole columns fits the s column, which then takes it (`sched_ladder_m_rows`); every piece dispatches
+one workgroup per column tile per 128-row weight tile of the plane. The s pieces' records sit at `[0, ne)`, the m pieces'
+at `[ne, 2 ne)`, and each dispatch's map at its own offset past the records (`PF_MOE_MAP_OFF` / `CUD_MOE_MAP_OFF`, 4096
+words for up to 512 experts twice), the two tile counts scanned as one packed word (its halves stay under 65536 for any
+admitted shape: 512 tokens by 64 slots over 512 experts). Every dispatch is sized for its worst case - one s tile per
+expert; every expert's whole columns plus a partial one - and the map's tail past the real workgroup count carries the
+sentinel (`SCHED_NONE`): a tile workgroup that reads it sees a zero-row region and returns before its first barrier. The
+slot-to-bucket-row map hands every slot the next row of its expert's bucket through an atomic cursor, so the rows within
+a bucket land in an order the schedule does not fix - which nothing downstream reads: the tiles compute rows apart and
+the combine reads each slot's row through the map, so the sums are the CPU walk's to the bit (the kernel cells check the
+map as a permutation of each bucket's rows). The per-expert slot walks this replaced - thread e scanning every slot twice,
+staged through workgroup memory in 256-slot chunks - cost 163 us per layer on the 30B.
+
+### The deltanet kernels both discrete homes stamp {#dn-discrete-kernels}
+
+**A recurrent layer's device kernels are one body a kernel in the discrete file, stamped by the Vulkan and the CUDA
+homes alike, and the two homes' drivers read one smalls layout.** The bodies: the fused decode step `DnStepFusedT` (one
+workgroup a value head of a row - the conv preamble over the head's channels off the row's ring image, the q and k norms and
+the raw q.k by subgroup adds, the delta rule with each of the 256 threads owning one state column's row part held in
+registers through the update, the out-norm's sum by the shared fold, the o row as Q8_0 blocks or as floats under
+`out_f32`; the row's region slot and ring parity off its token block, `TokMeta.dnslot` / `parity`), the window's scan
+`DnScanT` (the plain per-token delta rule, a column of a head's state a lane cluster, 16 state rows a lane in registers, the
+next token's k and q read ahead of the recurrence, a capture record writing the state after its row into the checkpoint
+rows), the conv front's bindings `DnConvT` over the common `GkDnConv` (the taps and the history out of the layer's smalls,
+the history per channel under `hist_mode` 1), the gate shell `DnScanP3T` over the common `GkDnGate` (a workgroup a row, its
+subgroups walking the value heads), the ring hand-off `DnTailRingT` over `DnTailT` (the window's last `taps` projected rows
+into the other ring image, a part shorter than the taps taking its leading rows off the entry image), the f32 beta/alpha
+tile `DnBaGemmT` (a workgroup 16 positions by 16 of the `2 nvh` output rows, the x rows in the stamp's element type `XT`:
+the Vulkan window's f32 normed rows, the CUDA window's f16 feed), and the router GEMV `RouterGemvT` over the common
+`GkRouterGemv` (the f32 arm's beta and alpha rows in one dispatch: `ne` 2 nvh split at nvh between the beta base and the g
+base). A home's leaf calls the body under its own kernel annotation and dispatch line (`dn_step_body`, `dn_scan_body`,
+`dn_conv_body`, `dn_gate_body`, `tail_ring_body`, `dn_ba_body`, `router_body`); the Vulkan home's capture tail
+`DnCapTail` stays its own leaf over `DnTailT`, since the CUDA home installs no snapshot seats.
+
+**The smalls plane is one layout on both homes** (`DN_SM_*`, `DN_WINDOW`, `DN_MAX_*`, the per-step scratch sizes
+`DND_*`): the beta and g rows a window deep at `DN_SM_BETA` / `DN_SM_G`, the conv taps at `DN_SM_TAPS`, the out-norm
+weights at `DN_SM_WNORM`, a and dt at `DN_SM_A` / `DN_SM_DT`, then from `DN_SM_HIST` a ring pair (two images of
+`cd x (dconv - 1)` floats) a region slot, `DN_SM_SLACK` floats past the last. The dispatch grids are the layout's too:
+`dn_conv_wgs` (256 channels by `DN_CONV_PB` positions a workgroup), `dn_scan_wgs` (a workgroup `4 x 32 / (ds / 16)`
+columns of one head), `dn_ba_wgs` (16-position by 16-row tiles). A kernel reads the offsets off its arguments, so a
+driver that moves a row moves it for both homes in the one place.
+
+**The chain's capacities are fixed constants, sized for the qwen35 family with headroom.** A window runs `DN_WINDOW`
+(4096) positions at a time with the state carried on the device, and the `DN_MAX_*` maxima (state size 128, 64 value
+heads, conv width 16384, q + k region 8192, 4 taps) cover the family through Qwen3.8-27B (state size 128, 48 value
+heads, conv width 10240, 4 taps). The per-op drivers assert them, and each home's resident plan (`vk_rdec_prepare`,
+`cud_rdec_prepare`) declines a larger deltanet geometry by name.
+
+The ring region sits last in the smalls plane, so a window's re-stage of a layer's smalls (`record_dn_cmd`) copies only
+the floats below `DN_SM_HIST` and never overwrites the conv history the previous window left on the device.
+
+The decode step's own smalls (`DND_SMALLS_BYTES`) carry a second conv-ring image after the shared layout, beside the
+step's scratch: the raw beta and g staging with the ring parity word (`DND_BG_BYTES`), and the o row's Q8_0 image the
+out GEMV reads (`DND_OQ_BYTES`, `DND_OS_BYTES`). The fused step reads the image the parity word names and writes the
+other one: a ring row's readers span workgroups, so an in-place update would race a workgroup still reading the row.
 
 **Within the Vulkan home, `KqCm2BatchT.cm2_tile` keeps its unsplit k-loop beside the split one.** At `ksplit` 0 the split
 arm computes the same sums, but the unsplit arm's loop bound off the push block and its store at element zero are what the

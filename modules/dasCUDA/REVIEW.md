@@ -34,10 +34,6 @@ of the struct passed as `params` - its fields in the kernel's parameter order at
 alignment - as the kernel's whole parameter space.** The emitter writes the kernel signature to
 that layout.
 
-**A diff to `cuda/cuda_emit.das` never makes an emitted text include a header - spell a
-conversion or tensor-core form as inline PTX instead.** NVRTC finds no header without the
-toolkit's include dir, and a deployed box does not have it.
-
 **A diff that adds, drops or changes an input of `cubin_cache_key` names in the PR body that
 input and why a cubin compiled before the change cannot be served after it.**
 
@@ -51,9 +47,9 @@ rejection's text, adds a case to `tests/cuda/test_cuda_reject.das` (repo root) a
 substring of that text, in the same change.**
 
 **A diff that changes the arithmetic, indexing or synchronization `cuda/cuda_emit.das` writes, or
-makes it write such a form it did not write before, adds a case to
-`tests/cuda/test_cuda_oracle.das` (repo root) that runs a kernel using the form on the CPU and on
-the device and compares the results.**
+makes it write a new such form, adds a case to `tests/cuda/test_cuda_oracle.das` (repo root)
+comparing the device run of a kernel using the form with its CPU run - or, when a name the kernel
+calls has an empty daslang body, with a reference the test computes.**
 
 **Never hand-write a kernel text under this module, in a string or a `.cu` file - emit it from a
 `[cuda_kernel]` body instead.**

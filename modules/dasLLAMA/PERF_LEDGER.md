@@ -389,7 +389,7 @@ half-width dot); the whole bf16 tower set shares that gap.
   date and `sha`; a das row is a `gen_bench_records.das` spawned cell of the released `lcpp_bench` exe, a reference
   row a spawned cell of the reference build at 9febe63d5 (its row's `cmd` the command line, its `versions` the
   packages) - the CPU rows on `ARCHITECTURE_MEASUREMENT.md#one-benchmark-rig`'s `--ref` recipe, the Vulkan rows on
-  `ARCHITECTURE_MEASUREMENT.md#vulkan-reference-rows`, the TTS rows on
+  `ARCHITECTURE_MEASUREMENT_REFERENCE_ROWS.md#vulkan-reference-rows`, the TTS rows on
   `ARCHITECTURE_MEASUREMENT_AUDIO.md#the-tts-reference-instrument`, the MLX ASR rows on
   `ARCHITECTURE_MEASUREMENT_AUDIO.md#mlx-asr-reference`. A ratio is the das row over the reference row of the same
   box, two processes. The CPU reference flavor is `clean-cpu` throughout.
@@ -6968,7 +6968,7 @@ so every figure is direction-grade.
 Every rate of ours is `debug-jit`, untuned: `DASLLAMA_GPU=1 DASLLAMA_ALLOW_UNTUNED=1 [DASLLAMA_CUDA=1] bin/daslang -jit
 modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m <gguf> -p 512 -n 128 -r 3 -t 16 --ngl 0 --for-debug-purposes` (the pod's runs
 add `-o md`), the CUDA home under `DASLLAMA_CUDA=1` and the Vulkan home without it. llama.cpp's run is its b10660 CUDA build,
-`llama-bench -ngl 99 -fa 1 -p 512 -n 128 -r 3` (`ARCHITECTURE_MEASUREMENT.md#cuda-reference-rows`). Each figure is the mean of
+`llama-bench -ngl 99 -fa 1 -p 512 -n 128 -r 3` (`ARCHITECTURE_MEASUREMENT_REFERENCE_ROWS.md#cuda-reference-rows`). Each figure is the mean of
 3 reps +/- their standard deviation, as each bench prints it. No record store carries a CUDA row (the bench stamps the
 device tier `vulkan`; `followup_general.md` item 227), so every figure is direction-grade; pp512 / tg128 in tok/s.
 
@@ -7199,3 +7199,123 @@ names the CPU arm).
   thread, the rig's sentences, scored by `harness/tts_rig.py`) 18m 5.41 / 4.364, 7m 5.59 / 4.378, 2m 9.18 / 3.817 - the WER gap is the English normalizer in front of
   our files (numeric 1.49 against 16.67), the UTMOS gap the served q8 lane's (0.02-0.04). The 100M
   `pocket-tts-en-kq.gguf` under the 4.0.1 text rules reads 3.86 / 4.319, where its 3.1.0-rules row read 4.09 / 4.333.
+
+### From the deltanet leg of the dasCUDA arc (2026-10-25, the reference box: Threadripper 3990X, RTX 5060 Ti 16 GB, driver 610.74, Windows, the GPU clock locked at 2392 MHz; `direction-grade` - every row compares separate processes or builds; flags `DASLLAMA_GPU=1 DASLLAMA_CUDA=1 DASLLAMA_IMAGE=0 DASLLAMA_ALLOW_UNTUNED=1`, `DASLLAMA_CUDA_MMQ`, `DASLLAMA_CUDA_PDL` and `DAS_TUNE_POLICY` unset unless a row names them, `-jit`)
+
+The bench invocation and the llama.cpp reference are the dasCUDA arc entry's above (`debug-jit`, untuned, `-p 512 -n 128
+-r 3 -t 16 --ngl 0`; llama.cpp b10660 CUDA `-ngl 99 -fa 1`); the profile is `nsys --cuda-graph-trace=node` under
+`DASLLAMA_CUDA_PDL=0` (the dasCUDA arc's instrument note: a kernel's span under programmatic launches counts its wait) over
+`-p 512 -n 64 -r 1`, each figure the mean of a kernel's launches at one grid, in us; pp512 / tg128 in tok/s.
+
+- **Qwen3.5-0.8B Q8_0, the deltanet hybrid, ours CUDA / ours Vulkan / llama.cpp CUDA.** 18569 +/- 409 / 339.8 +/- 9.4
+  (the window attention on the gated h256 flash tile; 14856 +/- 223 / 351.2 +/- 0.5 on the chunked tiles before it - the
+  token step is the same; one run between read 339.8 +/- 9.4, the run-to-run spread), 15028 +/- 14 / 301.5 +/- 3.0 (llama.cpp `external`:
+  14312 +/- 1342 / 283.6 +/- 3.8). Decode 1.13x Vulkan and 1.20x llama.cpp, prefill 1.24x Vulkan and 1.30x llama.cpp. The
+  flash-tile figure is 84613dac1f's build against 10751c4c10's (the chunked tiles), one process each under the bench protocol.
+- **Qwen3.5-4B Q8_0, ours CUDA / ours Vulkan / llama.cpp CUDA.** 5019 +/- 32 / 78.8 +/- 1.9, 4096 +/- 15 / 76.7 +/- 0.2 (the
+  Vulkan plan trimmed the mirror to 197571 of the 262144 positions asked), llama.cpp `external`: 4316 +/- 210 / 77.6 +/-
+  0.2. Decode at parity (1.02x llama.cpp, 1.03x Vulkan), prefill 1.16x llama.cpp and 1.23x Vulkan.
+- **Qwen3.8-27B, the 64-layer deltanet hybrid, on the 16 GB card** (the mirror pinned at 4096 positions through
+  `DASLLAMA_GPU_CTX_MAX`; the NextN head stays off the device on every row, the trunk is the row on ours and on llama-bench
+  alike). UD-Q3_K_XL (13.15 GB): ours CUDA 880.3 +/- 1.2 / 27.45 +/- 0.00, llama.cpp `external` 852.1 +/- 15.6 / 28.01 +/-
+  0.04 - prefill 1.03x, decode 0.98x; the Vulkan plan declines the same file (weights 12634 MB and the window scratch past
+  its 13257 MB usable), its per-op tier 108.5 / 15.75 (one rep) with 384 stacks resident. UD-IQ4_XS (14.25 GB: weights 13235 MB and
+  the 2048-row window's scratch 731 past the 13636 MB usable) and i1-IQ3_S (12.6 GB on disk, 13457 MB served - the IQ3_S
+  planes' served form outgrows the file) decline both homes at every context, the per-op rails serving (llama.cpp
+  `external` 871.7 +/- 15.4 / 26.71 +/- 0.04 and 837.0 +/- 14.7 / 27.90 +/- 0.02 on them).
+- **Qwen3.8-27B on the pod** (RTX PRO 4500 Blackwell 32 GB, Linux, llama.cpp b10660; the clock is not lockable in the
+  container; the mirror pinned at 8192 positions). Q4_K_M (19.0 GB): ours CUDA 1980.1 +/- 3.7 / 38.66 +/- 0.01, ours Vulkan
+  1781.5 +/- 3.6 / 38.79 +/- 0.01 (the pod's driver without `VK_NV_cooperative_matrix_decode_vector`, the cm2 tiles on
+  the scalar decode arm), llama.cpp `external` 1846.0 +/- 55.9 / 38.97 +/- 0.05 - prefill 1.07x llama.cpp and 1.11x
+  Vulkan, decode at parity (0.99x both). NVFP4-MTP iMatrix (17.1 GB, the trunk): ours CUDA 2299.6 +/- 1.9 / 43.07 +/-
+  0.01, ours Vulkan 1647.8 +/- 2.5 / 42.90 +/- 0.01, llama.cpp `external` 2569.7 +/- 114.5 / 44.21 +/- 0.06 - prefill
+  0.89x llama.cpp (1.40x Vulkan), decode 0.97x. The two files share the trunk's deltanet kernels, and the Q4_K_M window
+  leads llama.cpp where the NVFP4 window trails it (the 8B NVFP4 window above led it 1.17x), so the shortfall sits in the
+  NVFP4 window's GEMM tiles at the 27B's shape against llama.cpp's W4A4 path (the next entry's profile).
+- **The 27B NVFP4 window on the pod, kernel by kernel** (nsys 2026.3.2 installed on the pod, `--cuda-graph-trace=node`,
+  `DASLLAMA_CUDA_PDL=0`, p512 n64 r1, both runs the same pass count; every llama.cpp figure in this entry and the two
+  after it is `external`, its binary under the same tracer: llama.cpp under the tracer reads 2238 pp512 against its
+  untraced 2570 - the per-launch cost lands on its many small kernels - so the per-kernel times are the comparison, not
+  the traced rates). The file mixes formats a layer: NVFP4 on 57 of 64 FFNs, 34 of 48 deltanet qkv/z/out triples and
+  every beta/alpha plane (d 48), Q5_K on the rest and on every attention projection, Q6_K on 8 downs. Window time per
+  group, ours against llama.cpp: the NVFP4 GEMMs on the FP4 leaf 147.5 ms against 136.9 (the 544-tile gate/up 380 us a
+  call against 325, the down 332 against 288, the 320-tile qkv 212 against 185, the 192-tile z 158 against their 82-block
+  stream-k 116: the tile at k 128 a step on a two-deep ring against their k 512 and stream-k, 1.15x to 1.36x a call);
+  NVFP4 planes the leaf did not take 53.2 ms against 0 - the beta/alpha rows at d 48 on the cm2 s tile, 16 workgroups a
+  512-row window each walking all of k, 180 us a plane x 192 calls = 34.7 ms where llama.cpp's stream-k reads 11 us, and
+  the deltanet out site excluded from the leaf by name, 273 us a call on the cm2 l tile against their 111; the Q5_K planes
+  on the f16 cm2 tiles 101.2 ms against their int8 MMQ 80.4 (the Q6_K downs 13.2 against their 15.1 - ours ahead); the
+  deltanet scan and conv 64.5 against their 74.5. Two levers landed (2bfa6ffb34, the rows after it against 5cdf6dcdc7's build): the s tile's grid splits k like the l and
+  m grids (the beta/alpha planes 38 us a call on 112 workgroups, 7.3 ms), and the recurrent out site feeds the FP4 leaf
+  through `fp4_rows` over the scan's o rows (118 us a call). The rows after, same protocol: NVFP4 trunk ours CUDA 2437.6
+  +/- 3.7 / 43.02 +/- 0.02 (from 2299.6 / 43.07) - prefill 0.95x llama.cpp (from 0.89x), decode 0.97x; Q4_K_M 2013.3
+  +/- 3.7 / 38.66 +/- 0.01 (from 1980.1) - prefill 1.09x. The 16 GB card's UD-Q3_K_XL row 885.8 +/- 2.0 / 27.06 +/- 0.02
+  (from 880.3 / 27.45). Owed from the same trace: a Q5_K int8 MMQ leaf (24 ms of the 375 ms window at the 27B shape) and
+  the FP4 tile's k step and ring depth (13 ms).
+- **The token step kernel by kernel, ours CUDA against llama.cpp CUDA.** The classifier GEMV 660 against 673 (23% of the
+  ~2.85 ms step, the 254 MB table read on both); gate+up fused 21.6 against 22.5; the deltanet qkv GEMV (6144 rows) 17.4
+  against 20.0; the z GEMV 6.6 against 7.4; the fused deltanet step 9.7 against their chain of gated_delta_net 2.7, ssm_conv
+  2.8, two l2_norm 1.5, softplus 1.6, the sigmoid gate, the copies and get_rows (13 to 15); the wo and down epilogue GEMVs
+  11.4 against 12.7; the gated q GEMV (4096 rows) 12.0 against 13.7; k and v 2.7 against 3.0; beta and alpha 1.4 against
+  1.9; the residual step storing the normed row 3.0 against rms_norm 2.0 + quantize_q8_1 1.8. The one kernel behind: the
+  decode attention at head 256, `CuDaAttnF16` 11.6 against `flash_attn_ext_vec<256>` 7.4 (1.57x; six layers, under 1% of
+  the step).
+- **The window at 512 rows, a recurrent layer.** The scan 457 (+ the conv 87, the gated out-norm 13, the ring tail) against
+  llama.cpp's gated_delta_net window launches at ~617; the gated h256 flash tile 164 a layer-window; the gate/up MMQ 68
+  against their mul_mat_q 65.
+- **The token step, ours CUDA against ours Vulkan** (the Vulkan home's own role profile, `DASLLAMA_GPU_PROF=1`, its
+  per-token sums over 64 tokens divided by the layer count; 2945 us a token on Vulkan): an attention layer's q GEMV 12.0
+  against 16.5, the fused qk-norm rope 1.9 against 3.7, the decode attention 11.6 against 17.7, the wo epilogue 11.4
+  against 11.7, gate+up 21.6 against 22.8; a recurrent layer's qkv GEMV 17.4 against 22.4, the beta and alpha GEMVs 2.8
+  against 4.1, the fused step 9.7 against 11.4, the out GEMV 9.1 against 9.7, the residual step 3.0 against 3.7, gate+up
+  21.6 against 22.7, down 9.1 against 9.1; the classifier 660 against 647. The Vulkan z GEMV reads 3.3 because it co-runs
+  with the qkv GEMV under its own hazard class, where the CUDA graph serializes the two (6.6): the merged qkv+z GEMV
+  (`CudLayer.dnqkvz_merged`, one dispatch of `cd / di + 1` regions of `di` rows) is that gap's lever - 18893 +/- 34 /
+  352.9 +/- 0.8 with it, the token step one launch shorter a recurrent layer (5cdf6dcdc7's build against 84613dac1f's, one
+  process each under the bench protocol).
+
+### From the routed block on the CUDA home (2026-10-26, the reference box: Threadripper 3990X, RTX 5060 Ti 16 GB, driver 610.74, Windows, the GPU clock locked at 2392 MHz; `direction-grade` - every row compares separate processes or builds; flags `DASLLAMA_GPU=1 DASLLAMA_CUDA=1 DASLLAMA_IMAGE=0 DASLLAMA_ALLOW_UNTUNED=1`, `DASLLAMA_CUDA_MMQ`, `DASLLAMA_CUDA_PDL` and `DAS_TUNE_POLICY` unset unless a row names them, `-jit`)
+
+The bench invocation and the llama.cpp reference are the dasCUDA arc entry's (`debug-jit`, untuned, `-p 512 -n 128 -r 3
+-t 16 --ngl 0` under `DASLLAMA_GPU=1 [DASLLAMA_CUDA=1]`; llama.cpp b10660 CUDA `-ngl 99 -fa 1 -r 3`); pp512 / tg128 in
+tok/s, ours CUDA / ours Vulkan / llama.cpp CUDA. The routed block is the Vulkan home's on the discrete templates
+(`ARCHITECTURE_GPU_SHARED_KERNELS.md#moe-routing-kernels`): the window's router GEMM, select, bucket schedule, f16 gather,
+the expert pieces on the cm2 s and e columns and the combine-folded residual step; the token step's router GEMV, top-k
+records as the expert GEMVs' regions, the act and the combine.
+
+- **Qwen1.5-MoE-A2.7B-Chat Q4_K_M (60 experts, 4 routed, a gated shared expert, K-quant stacks).** 5476.0 +/- 8.6 /
+  196.2 +/- 0.9, 5271.3 +/- 15.0 / 173.2 +/- 0.3, llama.cpp `external` 4830.3 +/- 211.5 / 184.4 +/- 1.0 - prefill 1.13x
+  llama.cpp and 1.04x Vulkan, decode 1.06x llama.cpp and 1.13x Vulkan.
+- **Qwen3-30B-A3B-Instruct UD-IQ2_XXS (128 experts, 8 routed, no shared expert; the iq2xxs stacks on their own 32-step e
+  stamps).** 3230.2 +/- 10.4 / 171.9 +/- 0.2, 3302.3 +/- 48.1 / 130.5 +/- 0.3, llama.cpp `external` 2848.8 +/- 139.7 /
+  130.0 +/- 0.5 - prefill 1.13x llama.cpp and 0.98x Vulkan, decode 1.32x both.
+- **gpt-oss-20b MXFP4 (32 experts, 4 routed, the native-MXFP4 stacks on `CuMx4Gemv` and the `CuMx4Cm2S` / `CuMx4Cm2E`
+  tiles, every bias, the clamped swiglu, the attention sinks on the sink stamps, the sliding layers on flat slabs).**
+  Measured after a 150 s idle, the three engines back to back and the CUDA arm repeated last (the card drifts a tenth and
+  more under sustained runs with the clock locked - a reading taken right after a regression run sat at 2645 / 102.5, one rep):
+  3473.4 +/- 18.6 / 133.8 +/- 0.4 (the repeat 3351.2 +/- 124.6 / 133.2 +/- 0.2), 3571.2 +/- 7.5 / 124.7 +/- 0.0, llama.cpp
+  `external` 4945.1 +/- 200.0 / 125.1 +/- 1.8 - decode 1.07x both, prefill 0.97x Vulkan and 0.70x llama.cpp. The token step
+  is at parity kernel by kernel (`nsys --cuda-graph-trace=node`, PDL off, the llama.cpp figures `external` under the same
+  tracer: the expert GEMVs 132 us a layer against their
+  141, the fused qkv 40.7 against 49.4, the sink attention 6.3 against 8.5, the classifier 1488 against 1503); the window
+  is 99% busy and its loss is the expert tiles - the f16 cm2 e and s stamps over the mx4 planes 99 ms of the 146 ms window
+  (the e stamp 932 us a call at 1104 workgroups, the s stamp 444 us at 736 on the 21 small buckets of 32 experts) against
+  llama.cpp's `mul_mat_q<MXFP4>` on the native FP4 rung 56 ms of its 111 (`external`, the same tracer; the lever is the next entry: an mx4
+  leaf fed from the expert schedule).
+- **gpt-oss-20b MXFP4, the expert pieces fed from the expert schedule (`SchedArgs.row_pad` / `m_only`: every bucket from a
+  128-row multiple, all on the m column), two leaves measured against the cm2 tiles under the cool protocol (150 s idle, the
+  arms back to back, the first repeated last; same box, same clock).** The int8 leaf first (`MmqT` under a record arm, the
+  gathered rows requantized to Q8_0): pp512 3270.1 +/- 20.6 against the cm2 tiles' 3486.7 +/- 4.2 - behind, though the tile
+  ran at 55 TFLOP/s raw (1.58 ms a call at 1104 workgroups): a 512-row window's 32 buckets hold about 64 rows each, so
+  every 128-row tile computes half pad, and the int8 rate does not pay for it; its first wiring sized the feed and act
+  kernels by the residency's widest window (20448 rows) and read 2686 (one rep) before the per-window sizing. llama.cpp pays the same
+  pad: its `mul_mat_q<MXFP4>` picks the 128-row tile too (`J_best` over 512 columns, `external`) and runs it on the native FP4 rung
+  (`kind::mxf4`, 781 us a call). So the leaf moved to the FP4 rung (`CuMx4Fp4MmqMoe` over `MmqFp4T`'s `MX` / `KTAIL` /
+  `MOE` arms, the mx4 feed kernels, `mma_block_scaled_mx`): pp512 4948.1 +/- 16.5 / tg128 135.8 +/- 0.4, the cm2 tiles
+  3496.0 +/- 14.1 / 135.9 +/- 0.1, the FP4 arm repeated 4948.3 +/- 14.5 / 136.3 +/- 0.1 - against the cold references
+  above, prefill 1.00x llama.cpp (4945.1) and 1.39x Vulkan (3571.2), decode 1.09x both. The 4-bit activation widens the
+  gpt-oss parity cells' logit distance (the 40-token window 0.89 of the 1.58 bar, the steps 0.6, against 0.11 and 0.12 on
+  the Q8_0 feed); the Q8_0-fed leaf, correct and slower, is not kept. The int8 figure is an uncommitted build between
+  aeb9f401b0 and 0285da5862 (the leaf is not kept); the FP4 and cm2 figures are 0285da5862's build under
+  `DASLLAMA_CUDA_MMQ=1` and `DASLLAMA_CUDA_MMQ=0`, one process each under the bench protocol. The parity readings are
+  `test_gpu_resident_cuda_gptoss`'s cell of `test_gpu_resident_cuda_moe.das` through `tests/run.das`.

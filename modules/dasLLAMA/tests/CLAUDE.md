@@ -2103,7 +2103,7 @@ chain, no peel counted, on the same bar, as does the eight-row tail with the pee
 (`set_vulkan_prefill_peel`, put back as found) - the peel counter's control; the plan (`resident_plan_pick`) charges the per-row planes at `RDEC_NROW_MAX` rows. The forced-feed helpers it shares with the
 other resident files live in `_resident_feed.das`. Skips without the model or the armed tier.
 `test_gpu_resident_cuda_llama.das` - stocked suite, `-jit` only; the CUDA home's whole-model driver
-(`DASLLAMA_GPU=1 DASLLAMA_CUDA=1`, the dense slice: one Q8_0 arena, the f16 mirror, the token step as a
+(`DASLLAMA_GPU=1 DASLLAMA_CUDA=1`, the dense form: one Q8_0 arena, the f16 mirror, the token step as a
 captured graph, the prefill as the window chain over the cm2 tiles - one session's rows, or several sessions' chunks as
 the segmented window, which `test_gpu_resident_segments.das` holds on this home too) on Llama-3.2-1B Q8_0 in the llama file's
 forced-feed form at 40 tokens (one window) and at a prompt of two windows (the file pins `PF_WINDOW_ROWS` as the
@@ -2121,7 +2121,8 @@ and two; and the short window's peel through the N-row command on the CUDA drive
 carriers, after a 40-row opening, tails of 1, 2, 5 and 8 rows as one prefill call peel (a peel and a prefill counted)
 within the split bar of the same tail stepped a row at a time, the row one step off the control; one row past the
 per-row planes and the eight-row tail with the lever off take the window chain. Skips without `DASLLAMA_CUDA=1`, without
-the armed tier, without the file, or, on the forced-feed cells, where the prompt window is not `PF_WINDOW_ROWS` rows.
+the armed tier, without the file, on a card whose room the carrier's plan does not fit (the decline named, as every
+`cuda_forced_feed` cell skips), or, on the forced-feed cells, where the prompt window is not `PF_WINDOW_ROWS` rows.
 `test_gpu_resident_cuda_codec.das` - stocked suite, `-jit` only: the same
 driver under the block-codec mirrors: the codec rig's forced-feed form (`_kv_codec_cells`) under q8_0 on the 1B Q8_0 at
 one window and two and on the Q4_K_M at one, at the Vulkan codec carriers' 10% bar, and the distance form under tq4 on
@@ -2145,10 +2146,30 @@ Phi-3.5-mini Q4_K_M (head 96: the window's attention on the h96 flash tile, the 
 planes, the long-rope factors) in the same form at the two-window prompt - after the 40-token prompt the K-quant file's
 one-row steps at positions 41 and 44 sit 7.7 and 6.6 percent of the max logit off the CPU chain on both attention paths,
 past the llama bar, so that file holds no one-window arm - and the Q8_0 file (the q8 decode chain) at one window and two;
-the same skips. The CUDA kernel cells
+the same skips. `test_gpu_resident_cuda_qwen35.das` - stocked suite, `-jit` only: the same driver on the deltanet
+hybrids - Qwen3.5-0.8B Q8_0 at one window and two, Qwen3.5-4B Q8_0, the NextN-headed trunk with the head off (a plain
+decode is the same chain), the NVFP4 twin (nv4 qkv, z and out planes under their `.scale` factors on the FP4 tensor leaf
+under `set_cuda_mmq_pin(CUDA_MMQ_WINNERS)` at one window and two, at the leaf's W4A4 bar, with the MMQ route pinned off -
+`CUDA_MMQ_OFF`, the cm2 tiles over f16 activations at the K-quant bar - as the arm's control), the Q4_K_M twin and its
+mixed-site mint (K-quant qkv and z planes beside a Q8_0 out plane: the step's requant between sites of two activation
+classes) under `CUDA_MMQ_WINNERS`, every pinned cell naming its pin in its label and putting the pin back as it found it
+(`with_cuda_mmq_pin` of `_cuda_feed.das`); the same skips, and the two NVFP4 leaf cells on a card below the FP4 rung
+(compute capability 120, `fp4_rung_on`). `test_gpu_resident_cuda_moe.das` - stocked suite, `-jit` only:
+the same driver's routed block - Qwen1.5-MoE-A2.7B Q4_K_M (60 experts, 4 routed, a gated shared expert, Q/K/V biases) and
+Qwen3-30B-A3B UD-IQ2_XXS (128 experts, 8 routed, no shared expert, the iq2xxs stacks on their own e column), each at one
+window and two, every row within the MoE bar of the CPU chain, the Q8_0 carrier the Q4_K_M twin is minted from
+(`Qwen1.5-MoE-A2.7B-Chat.Q8_0.gguf`: the Q8_0 expert path - the act + requant, the q8 region GEMV, the q8 e column) at one
+window within the same bar under `set_cuda_mmq_pin(CUDA_MMQ_WINNERS)`, and gpt-oss-20b (the native-MXFP4 stacks on the
+window's schedule-fed FP4 leaf, every bias, the clamped swiglu, the attention sinks, the 128-key sliding layers on flat
+slabs) at one window and two under `set_cuda_mmq_pin(CUDA_MMQ_WINNERS)` within the routed block's bar (a router near-tie
+flips under this home's summation order on one step in twelve, the argmax intact, where the Vulkan file's 0.05 holds on
+its order); the same skips, and without `DASLLAMA_PARITY_FULL=1` (every carrier sits past the large tier's bytes), the
+gpt-oss cells also on a card below the FP4 rung. The CUDA kernel cells
 beside them, `test_cuda_kernels.das` (model-free; a CUDA device with NVRTC, else every cell but the leak gate skips;
-the per-format cells - the kq cm2 tiles, the kq and per-32 GEMVs, the token-table gathers, the Q8_K feeds - also skip
-without dasVulkan): the q8 GEMV and its rate, the MMQ int8 GEMM's leaves against their references - the Q8_0 one and
+the per-format cells - the kq cm2 tiles, the kq and per-32 GEMVs, the token-table gathers, the Q8_K feeds -, the biased
+act twins, the deltanet family and the mx4 FP4 leaf over the expert schedule also skip without dasVulkan, and the routing
+cell's bucket-schedule arms register a skip of their own there; the mx4 FP4 leaf over the expert schedule also skips on a
+card below the FP4 rung): the q8 GEMV and its rate, the MMQ int8 GEMM's leaves against their references - the Q8_0 one and
 the superblock ones without a min term (IQ4_XS and IQ4_NL through the codebook, Q4_0's nibbles less eight) per element
 against the block-scaled fold, the Q4_K one (its min terms f16-staged and folded sixteen blocks at a time over four
 superblocks) at the f16 tiles' bar, the NVFP4 one on the FP4 tensor rung (`test_cud_nv4_mmq`: the k4-tiled nv4 plane
@@ -2161,11 +2182,38 @@ against the f16-feed oracle whole and split in two k chunks through the reduce (
 the 1B window's shapes - each rate cell's warm-up held to the oracle first, the GEMV's every row and the tile's
 activation rows 0, 255, 256 and 511 over every column, the tile's bit for bit on a fixture its f16 accumulator holds
 exactly (sixteen +-1 activations a row over the 2^-7 block scale) - the word copy (a quad-lane run and a three-word tail, the
-device block and the out block under a word sentinel), the flash tiles at heads 64, 96 and 128 with their f16-out twins,
-whole and under a 40-key window, the fused q/k norm + rope + K/V store on the f32 and the f16 mirror stamps against the
+device block and the out block under a word sentinel), the flash tiles at heads 64, 96, 128 and 256 (`test_cud_fa_h256`:
+plain and gated, the gated rows under the sigmoid of the q panel's gate half, the ungated oracle over the q halves the
+control) with their f16-out twins, through the driver's own ladder (`cud_fa_enc`), against `fa_oracle` of `_attn_oracle.das`
+(the Vulkan flash cells' oracle too), whole and under a 40-key window, the deltanet family (`test_cud_dn_family`, at heads
+of 64 and 128: the conv, the fused step on its Q8_0, f32 and sigmoid-gated o rows - the state and the ring advanced in place
+and asserted moved off their inputs, the sigmoid stamp off the silu oracle as its control -, the two-phase scan with the
+silu and sigmoid out-norm (`dn_gate_ref` of `_kernel_oracles.das`, the Vulkan cell's oracle) and its state moved off its
+input, and the ring tail at 5 and 2 rows bit for bit the per-channel CPU form), the fused q/k norm + rope + K/V store on the f32 and the f16 mirror stamps against the
 oracle the Vulkan cell holds it to (`qkn_rope_rows` of `_kernel_oracles.das`, the rows ahead of the layer's kept at their
-fill), the compile gate over every `[cuda_dispatch]` kernel of the home, the shutdown leak
-gate, the K-quant and per-32 GEMV leaves and cm2 tiles against the Vulkan cells' oracles, the token-table gathers, the
+fill), the mx4 expert rail (the GEMV at 704 and gpt-oss's 2880 against the scalar dot in the per-32 GEMV cell, the s and e
+tiles in the cm2 family cell, and the FP4 tensor leaf fed from the expert schedule - `test_cud_mx4_fp4_mmq_moe`: two buckets of
+200 and 300 rows padded to 128-row tiles by the CPU schedule twin, 2880-wide rows on the k tail, a 320-wide plane under the
+store's column guard, two sentinel workgroups past the bound, every real row against the e2m1 x UE8M0 reference on both sides
+(`mx4_fp4_mmq_ref`); the routing cell's schedule arm also holds the padded m-only schedule word for word; the MXFP4 feed kernels
+(`test_cud_mx4_feeds`: `mx4_rows` bit for bit the CPU feed, `mx4_actrows` under the clamped swiglu and its biased twin with each
+row's expert's bias rows, the biased feed landing past the compare's allowance off the unbiased CPU feed as the control,
+every run's planes refilled under their sentinels); the leaf's width admission
+(`test_cud_moe_mmq_fits`: both reduction widths on the 64 lattice serve, a width at 32 past it on either side keeps the cm2
+tiles)), the biased act twins against the CPU act over the host-biased rows (`test_cud_act_biased`: the
+Q8_0 and Q8_K requant forms and the f16 form, under silu and the clamped swiglu, the second bias layer's rows bound, the
+unbiased act the control), the h64 flash and the q8_0 decode attention's sink stamps seeded with a per-head sink logit (the
+sink-free oracle the control), the q8_0 decode attention's split form at eight pieces, the last-arriving one combining,
+plain and with the sink seeded at the combine, the routed block's routing kernels against the oracles the Vulkan routing
+cell reads (`_moe_routing_oracles.das`: the router GEMM at two row counts, the per-row select renormalized, scaled and
+under gpt-oss's biased pick, the two-deep select (`topk_rows2_cls`) over 512 experts at ten picks a row on the Vulkan
+two-deep cell's planes (`topk_wide_planes`), plain and under the router bias, with the one-deep stamp over the same rows
+missing the host select's picks as the control, the bucket schedule at 256 and 512 experts against the CPU twin word for
+word, the gather (`moe_gather_f16_cls` as halves, `moe_gather_f32_cls` as floats) into a nine-row window of 21 bucket rows
+at widths of 100, 256 and 300 against `moe_gather_oracle`, the rows past the window kept at their sentinel and the gather
+over the window at 0 the control, the combine-folded residual step's f32 form under the gated, the ungated and no shared
+expert and under the down biases over twelve slots), the compile gate over every
+`[cuda_dispatch]` kernel of the home, the shutdown leak gate, the K-quant and per-32 GEMV leaves and cm2 tiles against the Vulkan cells' oracles, the token-table gathers, the
 Q8_K feeds (the quants a byte within one step, the scales and the in-place residual row through `check_rows`, the
 residual row moved off its input), and the K/V mirror's
 block codecs - the q8_0 store at token rows and window rows against the CPU cache's bytes, the tq4 store at seven arms

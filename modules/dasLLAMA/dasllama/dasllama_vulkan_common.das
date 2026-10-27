@@ -14,6 +14,7 @@ require dasllama/dasllama_math
 require dasllama/dasllama_gpu_tier
 require dasllama/dasllama_kv_dtype   // KVDtype and its unit arithmetic: the mirror's codec
 require dasllama/dasllama_gpu_math   // kv_ring_row: a mirror position's row
+require dasllama/dasllama_gpu_kernels_discrete public   // the deltanet smalls layout and dispatch grids both discrete homes read
 require dasllama/dasllama_gemm_schema
 require dasllama/dasllama_env
 require dasllama/dasllama_config
@@ -236,54 +237,6 @@ let STREAM_RESERVE = 1_100_000_000l  // LEGACY fallback stream-slot carve — us
                                              // the loader never reported the model's exact need
                                              // (moe_gpu_stream_need; big-expert geometries like
                                              // GLM Air exceed this constant by design)
-
-// deltanet chain capacities (npos chunks over DN_WINDOW windows, state carried device-side).
-// Maxima cover the qwen35 family through Qwen3.8-27B (ds 128, 48 v-heads, conv dim 10240, dconv 4)
-// with headroom — vk_moe_dn asserts them and the engine arm fail-closes on bigger models.
-let DN_MAX_DS = 128l
-
-[arch(at="../ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-dn-block")]
-def dn_scan_wgs(nvh, ds : int64) : int64 {
-    let cpg = 4l * (32l / (ds / 16l))
-    return nvh * ((ds + cpg - 1l) / cpg)
-}
-
-let DN_CONV_PB = 32u   //! the conv's positions per workgroup
-[arch(at="../ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-dn-block")]
-def dn_conv_wgs(cd, npos : int64) : int64 => ((cd + 255l) / 256l) * ((npos + int64(DN_CONV_PB) - 1l) / int64(DN_CONV_PB))
-
-//! The prefill's beta/alpha tile GEMM's workgroups: 16-position tiles x 16-output groups over the 2 x nvh rows.
-def dn_ba_wgs(npos, nvh : int64) : int64 => ((npos + 15l) / 16l) * ((2l * nvh + 15l) / 16l)
-let DN_MAX_HEADS = 64l
-let DN_MAX_CD = 16_384l
-let DN_MAX_QK = 8_192l   //! the conv row's q + k region (2 kd): the channels the conv's per-head norm covers
-let DN_MAX_DCONV = 4l
-let DN_WINDOW = 4_096l
-//! the scan workspace holds the raw o rows alone: position-major, di wide, rewritten in place by the out-norm
-let DN_O_OFF = 0l
-let DN_WS_BYTES = DN_WINDOW * DN_MAX_HEADS * DN_MAX_DS * 4l
-let DN_STATE_BYTES = DN_MAX_HEADS * DN_MAX_DS * DN_MAX_DS * 4l
-let DN_META_BYTES = 128l
-// smalls plane float offsets, ending in the conv history region — the per-window smalls
-// re-stage stops SHORT of it so it never clobbers the device-side prev-window tail
-let DN_SM_BETA = 16l
-let DN_SM_G = DN_SM_BETA + DN_WINDOW * DN_MAX_HEADS
-let DN_SM_TAPS = DN_SM_G + DN_WINDOW * DN_MAX_HEADS
-let DN_SM_WNORM = DN_SM_TAPS + DN_MAX_CD * DN_MAX_DCONV
-let DN_SM_A = DN_SM_WNORM + DN_MAX_DS
-let DN_SM_DT = DN_SM_A + DN_MAX_HEADS
-let DN_SM_HIST = DN_SM_DT + DN_MAX_HEADS
-let DN_SM_SLACK = 64l   //! floats past the last ring image, so a ring's last row never sits at the buffer's end
-let DN_SMALLS_BYTES = (DN_SM_HIST + DN_MAX_CD * (DN_MAX_DCONV - 1l) + DN_SM_SLACK) * 4l
-let DN_TAIL_BYTES = DN_MAX_CD * (DN_MAX_DCONV - 1l) * 4l
-
-// decode-step scratch: the raw β/γ staging (+ the ring parity word) and the o-row Q8_0 image
-// the out GEMV reads. Step smalls carry a SECOND conv-ring image after the shared layout — the
-// fused kernel reads one parity image and writes the other (readers span workgroups).
-let DND_BG_BYTES = (2l * DN_MAX_HEADS + 4l) * 4l
-let DND_OQ_BYTES = DN_MAX_HEADS * DN_MAX_DS
-let DND_OS_BYTES = (DN_MAX_HEADS * DN_MAX_DS / 32l) * 4l
-let DND_SMALLS_BYTES = DN_SMALLS_BYTES + DN_MAX_CD * (DN_MAX_DCONV - 1l) * 4l
 
 // heat-cache pool stacks live in a SYNTHETIC element-offset space far above any real plane
 // offset, so find_stack / fill_stack_sched_rows / the whole FFN GEMV rail run verbatim on them

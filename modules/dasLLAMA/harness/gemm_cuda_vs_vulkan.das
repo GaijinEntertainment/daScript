@@ -13,7 +13,8 @@ options stack = 524288
 // magnitude for the min-term leaves). Compare region: 64 sampled outputs, token (s x 7919) % 512
 // and row (s x 104729 + 13) % d for s < 64. Every Vulkan and CUDA tile, flash and decode-attention arm is timing-only.
 // The arms of a race run in turn, one round of each (a round: one submit of DISPATCHES dispatches); each arm drops 2 warmup
-// rounds, and every number is its best round after them, in microseconds a dispatch.
+// rounds, and every number is its best round after them, in microseconds a dispatch. A CUDA tile, MMQ or flash arm alternates
+// two output planes between consecutive dispatches.
 //   DASLLAMA_GPU=1 daslang -jit modules/dasLLAMA/harness/gemm_cuda_vs_vulkan.das
 
 require vulkan
@@ -27,6 +28,7 @@ require ../tests/_fp4_feed.das   // fp4_feed_rows, fp4_feed_value
 require ../tests/_mmq_ref.das   // the MMQ leaves' CPU references, the kernel cells' own
 require _cuda_probe_fixture
 require daslib/strings_boost
+require daslib/math_bits   // uint_bits_to_float: the nv4 fixture plane's per-tensor factor word
 require math
 require dasllama/dasllama_kqformat
 require dasllama/dasllama_gemm_schema
@@ -91,13 +93,14 @@ def race_tile(p : Planes; d : int; vk_why, cu_why_ : string;
             }
         }
     }
-    var cbufs : uint64[5]
+    var cbufs, calt : uint64[5]
     if (cu_why_ == "") {
         let s = g_cud.stream
         cbufs = fixed_array(buf_upload(p.wq, s), buf_upload(p.ws, s), buf_upload(p.sched, s), buf_upload(p.xf, s), buf_fill(ROWS * d, 0.0, s))
+        calt = fixed_array(cbufs[0], cbufs[1], cbufs[2], cbufs[3], buf_fill(ROWS * d, 0.0, s))
     }
-    let row = race(ROUNDS, WARMUPS, DISPATCHES, vk_why, raw, cu_why_) $(_i) {
-        invoke(cu_enc, cbufs)
+    let row = race(ROUNDS, WARMUPS, DISPATCHES, vk_why, raw, cu_why_) $(i) {
+        invoke(cu_enc, (i & 1) == 0 ? cbufs : calt)
     }
     if (vk_why == "") {
         for (b in vbufs) {
@@ -106,6 +109,7 @@ def race_tile(p : Planes; d : int; vk_why, cu_why_ : string;
     }
     if (cu_why_ == "") {
         cuda_mem_free(cbufs)
+        cuda_mem_free(calt[4])
     }
     return row
 }
@@ -280,10 +284,12 @@ def mmq_report(shape : string; p : Planes; m : MmqPlanes; k, d, fmt : int) : int
         print("{shape} cuda MISS: max rel err {err} > {bound}\n")
         return 0
     }
-    let row = cuda_rounds(ROUNDS, WARMUPS, DISPATCHES) $(_i) {
-        cud_mmq_enc(fmt, g_cud.stream, bufs, pc, wgs)
+    let alt = fixed_array(bufs[0], bufs[1], bufs[2], bufs[3], buf_fill(ROWS * d, 0.0, cs), bufs[5])
+    let row = cuda_rounds(ROUNDS, WARMUPS, DISPATCHES) $(i) {
+        cud_mmq_enc(fmt, g_cud.stream, (i & 1) == 0 ? bufs : alt, pc, wgs)
     }
     cuda_mem_free(bufs)
+    cuda_mem_free(alt[4])
     return report_cuda(shape, row, "bounded vs cpu: max rel err {err} <= {bound}", "TFLOP/s") $(us) => tflops(k, d, us)
 }
 
@@ -297,16 +303,17 @@ def fp4_mmq_report(shape : string; p : Planes; k, d : int) : int {
     var inscope feed <- fp4_feed_rows(xrows, ROWS, k)
     let cs = g_cud.stream
     var bufs = fixed_array(buf_upload(p.wq, cs), buf_upload(p.ws, cs), buf_upload(feed.xq, cs), buf_upload(feed.xsw, cs), buf_upload(feed.xrs, cs), buf_fill(ROWS * d, 0.0, cs))
-    var pc = MmqFp4Args(n = uint(k), d = uint(d), rows = uint(ROWS), wblk = 0u, site_scale = 1.0)
+    var pc = MmqFp4Args(n = uint(k), d = uint(d), rows = uint(ROWS), wblk = 0u)
     let wgs = dasllama_cuda_classes::mmq_wgs(int64(d), int64(ROWS))
     dasllama_cuda_classes::enc_nv4_mmq(g_cud.stream, bufs, pc, wgs)
     cud_sync()
     let y <- buf_download(bufs[5], ROWS * d, type<float>)
+    let plane_scale = uint_bits_to_float(p.ws[4])   // the fixture's per-tensor factor, the scale rows' fifth word
     var err = 0.0
     for (s in range(64)) {
         let tok = (s * 7919) % ROWS
         let row = (s * 104729 + 13) % d
-        let want = nv4_mmq_ref(p.wq, p.ws, feed, k, tok, row, 1.0)
+        let want = nv4_mmq_ref(p.wq, p.ws, feed, k, tok, row, plane_scale)
         let got = y[tok * d + row]
         err = max(err, abs(got - want) / max(1.0, max(abs(got), abs(want))))
     }
@@ -315,10 +322,12 @@ def fp4_mmq_report(shape : string; p : Planes; k, d : int) : int {
         print("{shape} cuda MISS: max rel err {err} > {MMQ_REL_BOUND}\n")
         return 0
     }
-    let row = cuda_rounds(ROUNDS, WARMUPS, DISPATCHES) $(_i) {
-        dasllama_cuda_classes::enc_nv4_mmq(g_cud.stream, bufs, pc, wgs)
+    let alt = fixed_array(bufs[0], bufs[1], bufs[2], bufs[3], bufs[4], buf_fill(ROWS * d, 0.0, cs))
+    let row = cuda_rounds(ROUNDS, WARMUPS, DISPATCHES) $(i) {
+        dasllama_cuda_classes::enc_nv4_mmq(g_cud.stream, (i & 1) == 0 ? bufs : alt, pc, wgs)
     }
     cuda_mem_free(bufs)
+    cuda_mem_free(alt[5])
     return report_cuda(shape, row, "bounded vs cpu: max rel err {err} <= {MMQ_REL_BOUND}", "TFLOP/s") $(us) => tflops(k, d, us)
 }
 
@@ -366,13 +375,14 @@ def race_fa(p : FaPlanes) : RaceRow {
             }
         }
     }
-    var cbufs : uint64[4]
+    var cbufs, calt : uint64[4]
     if (cuw == "") {
         let s = g_cud.stream
         cbufs = fixed_array(buf_upload(p.q, s), buf_upload(p.kh, s), buf_upload(p.vh, s), buf_fill(ROWS * FA_QD / 2, 0.0, s))
+        calt = fixed_array(cbufs[0], cbufs[1], cbufs[2], buf_fill(ROWS * FA_QD / 2, 0.0, s))
     }
-    let row = race(ROUNDS, WARMUPS, DISPATCHES, vk_why, raw, cuw) $(_i) {
-        dasllama_cuda_classes::enc_fa_cm2_h64_f16_cls(g_cud.stream, cbufs, pc, wgs)
+    let row = race(ROUNDS, WARMUPS, DISPATCHES, vk_why, raw, cuw) $(i) {
+        dasllama_cuda_classes::enc_fa_cm2_h64_f16_cls(g_cud.stream, (i & 1) == 0 ? cbufs : calt, pc, wgs)
     }
     if (vk_why == "") {
         for (b in vbufs) {
@@ -381,6 +391,7 @@ def race_fa(p : FaPlanes) : RaceRow {
     }
     if (cuw == "") {
         cuda_mem_free(cbufs)
+        cuda_mem_free(calt[3])
     }
     return row
 }

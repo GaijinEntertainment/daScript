@@ -671,3 +671,27 @@ def spawn_compile_only(src, tag : string; timeout : float) : tuple<rc : int; out
     let rc = run_and_capture([get_das_exe(), "-compile-only", path], out, timeout)
     return (rc = rc, out = out)
 }
+
+//! the signed bytes of the packed quant word `g` outside +-tol of `w`'s (act chains carry transcendental ulp noise)
+def qword_off(g, w : uint; tol : int) : int {
+    var bad = 0
+    for (sh in range(4)) {
+        let a = int(g >> uint(sh * 8)) & 0xFF
+        let b = int(w >> uint(sh * 8)) & 0xFF
+        let sa = a >= 128 ? a - 256 : a
+        let sb = b >= 128 ? b - 256 : b
+        if (!(abs(sa - sb) <= tol)) {
+            bad++
+        }
+    }
+    return bad
+}
+
+//! the signed bytes of got's quant words outside +-tol of want's, summed over the words
+def mismatch_qbytes(got, want : array<uint>; tol : int) : int {
+    var bad = 0
+    for (g, w in got, want) {
+        bad += qword_off(g, w, tol)
+    }
+    return bad
+}

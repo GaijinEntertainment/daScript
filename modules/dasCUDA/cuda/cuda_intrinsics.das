@@ -48,6 +48,9 @@ def public ldmatrix(var m : coopmatB_e2m1_64x16; p : uint4?) : void {}
 [unused_argument(f, a, b, scale_a, scale_b0, scale_b1), sideeffects, arch(at = "../ARCHITECTURE_EMIT.md#cuda-kernel-vocabulary-tiers")]
 def public mma_block_scaled(var f : coopmatAcc_f32_16x16; a : coopmatA_e2m1_16x64; b : coopmatB_e2m1_64x16; scale_a, scale_b0, scale_b1 : uint) : void {}
 
+[unused_argument(f, a, b, scale_a, scale_b0, scale_b1), sideeffects, arch(at = "../ARCHITECTURE_EMIT.md#cuda-kernel-vocabulary-tiers")]
+def public mma_block_scaled_mx(var f : coopmatAcc_f32_16x16; a : coopmatA_e2m1_16x64; b : coopmatB_e2m1_64x16; scale_a, scale_b0, scale_b1 : uint) : void {}
+
 [unused_argument(f, cs), sideeffects, arch(at = "../ARCHITECTURE_EMIT.md#cuda-kernel-vocabulary-tiers")]
 def public mma_scale_cols(var f : coopmatAcc_f32_16x16; cs : float4) : void {}
 

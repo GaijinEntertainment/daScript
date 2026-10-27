@@ -178,10 +178,14 @@ def moe_forced_feed(t : T?; n : int64; fx : MoeFixture) {
     }
     let device_routed_layers = tr.config.n_layers - host_layers   // a host layer runs its router alone
     let windows = (n + PF_WINDOW_ROWS - 1l) / PF_WINDOW_ROWS
+    let runs_deep_twins = tr.config.n_expert > 256l
+    let sched_key = runs_deep_twins ? "moe_sched2_cls_spv" : "moe_sched_cls_spv"
+    let rows_key = runs_deep_twins ? "topk_rows2_cls_spv" : "topk_rows_cls_spv"
+    let topk_key = runs_deep_twins ? "topk_n2_cls_spv" : "topk_n_cls_spv"
     with_dasllama_jobque_() {
-        let sched0 = census("moe_sched_cls_spv")
-        let rows0 = census("topk_rows_cls_spv")
-        let topk0 = census("topk_n_cls_spv")
+        let sched0 = census(sched_key)
+        let rows0 = census(rows_key)
+        let topk0 = census(topk_key)
         let ecol = expert_column()
         let e0 = column_census(ecol.col)
         let un0 = unsplit_tokens()
@@ -190,10 +194,10 @@ def moe_forced_feed(t : T?; n : int64; fx : MoeFixture) {
                 t |> equal(unsplit_tokens() - un0, unsplit_want(n), "the token command's unsplit twin served {unsplit_want(n)} of the {FED_STEPS} steps after {n} rows")
             }
             if (sched0 != NO_CENSUS) {
-                t |> equal(census("moe_sched_cls_spv") - sched0, device_routed_layers * windows, "the device bucket schedule ran once per device-routed layer per window ({device_routed_layers} layers, {windows} windows)")
-                t |> equal(census("topk_rows_cls_spv") - rows0, device_routed_layers * windows, "the window's per-row select ran once per device-routed layer per window")
+                t |> equal(census(sched_key) - sched0, device_routed_layers * windows, "the device bucket schedule ({sched_key}) ran once per device-routed layer per window ({device_routed_layers} layers, {windows} windows)")
+                t |> equal(census(rows_key) - rows0, device_routed_layers * windows, "the window's per-row select ({rows_key}) ran once per device-routed layer per window")
                 //! the token command records once and resubmits: the census counts its recording, one top-k per MoE layer per recorded form (a split device records the unsplit twin too)
-                let topk = census("topk_n_cls_spv") - topk0
+                let topk = census(topk_key) - topk0
                 t |> success(topk >= device_routed_layers && topk % device_routed_layers == 0l, "the token command recorded a top-k per device-routed layer ({topk} over {device_routed_layers} layers)")
                 let edelta = column_census(ecol.col) - e0
                 let ewant = 3l * ecol.per_plane * device_routed_layers * windows

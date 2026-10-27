@@ -4,11 +4,10 @@ options persistent_heap
 options _dasllama_internal = true
 
 require dastest/testing_boost public
-require dasllama/dasllama_transformer   // nolint:STYLE029 — the umbrella's [init] registrations arm the qwen3 arch and the CUDA home
+require dasllama/dasllama_transformer   // nolint:STYLE030 — the umbrella's [init] registrations arm the qwen3 arch and the CUDA home
 require dasllama/dasllama_common
 require daslib/jobque_boost
 require dasllama/dasllama_gpu_tier
-require dasllama/dasllama_env
 require dasllama/dasllama_gpu_resident
 require _model_tier
 require _resident_feed
@@ -19,14 +18,6 @@ require _cuda_feed
 // chain, through the forced-feed form the CUDA files share (`_cuda_feed.das`). Every cell skips off the JIT, without
 // DASLLAMA_CUDA=1, without DASLLAMA_GPU=1 on a device the driver serves, without the file under models_dir(), or where
 // the prompt window is not PF_WINDOW_ROWS rows.
-
-[init]
-def private allow_cpu_prefill_intent() {
-    allow_cpu_prefill()   // the control arm (the model off the device) prefills on the CPU
-    if (pf_window_rows_pin() <= 0l) {   // the cells size their prompts against PF_WINDOW_ROWS; the plan's own pick would run the two-window prompt as one
-        set_pf_window_rows_pin(PF_WINDOW_ROWS)
-    }
-}
 
 let private FILE_06B = "Qwen3-0.6B-Q8_0.gguf"   //! head 128 over 16 q heads and 8 k heads, the per-head q/k norm, no attention bias
 let private FILE_4B = "Qwen3-4B-Instruct-2507-Q8_0.gguf"   //! the larger dense qwen3: 36 layers over 2560, the same head geometry at 32 q heads

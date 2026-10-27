@@ -3,16 +3,16 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 docs: `ARCHITECTURE_GPU_RACE_SHAPES.md`, `ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md`,
 `ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md`, `ARCHITECTURE_MEASUREMENT.md`. Planned work:
-`followup_metal.md`, `followup_vulkan.md`.
+`followup_metal.md`, `followup_vulkan.md`, `followup_general.md` (the CUDA rows).
 
 This list reviews timing arms - code that dispatches a kernel to measure it rather than to serve
 a call: a race (two candidates for one computation, timed in one process), a knockout (a timing
 that skips a stage to measure its cost; the branch that reads a stage-drop knob - a knob whose
 runs do not serve correct output - is arm code, whoever sets it), or an overhead measurement (one
 chain timed with and without an interposed stage). A same-build knob A/B - two runs under an
-environment override, both serving correct output - is not an arm; its knob answers to the
-checklist that owns the knob's engine (`REVIEW_GPU.md` for a Metal or Vulkan engine knob,
-`REVIEW_TOWER.md` for a tower's). A two-candidate figure is a recorded timing comparing two candidates
+environment override, both serving correct output - is not an arm; its knob answers to
+`REVIEW_OVERRIDES.md`, and a tower's knob to `REVIEW_TOWER.md` too. A two-candidate figure is a
+recorded timing comparing two candidates
 for one computation - from a race, a same-build knob A/B, or one run on each of two builds; the
 knob itself still answers to its engine's checklist. A data race between
 serving dispatches is not this list's subject. An arm's ranking is decided once a checked-in document or a committed box profile records

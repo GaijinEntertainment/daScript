@@ -1,0 +1,4 @@
+# A records/ sidecar or store is content-addressed: its name carries the sha12 of its own bytes
+# (tests/test_exchange_schema.das re-derives it). A checkout under autocrlf=true would rewrite
+# every line ending and break the address, so these files are never converted.
+*.json -text

@@ -573,7 +573,9 @@ scales the `kq_dev_ssb(fmt)` row - 20 B decoded, or the codebook formats' two wo
 every shared read derived from `e & ~1u`, both elements computed, the element selected last
 (`ARCHITECTURE_GPU_SHARED_GEMM.md#cm2-decode-16bit-lanes`; iq2xxs's `decode` is the model) - plus
 its width stamps (the l, m and s columns, and on a 32-step decode the expert schedule's e column -
-the m column at the format's k step; each names its `BN`, `STILE`, the k step `BK` where it is not
+the m column at the format's k step - on BOTH discrete homes: the Vulkan stamp in `dasllama_vulkan_classes.das` and the
+CUDA `Cu<Fmt>Cm2E` stamp in `dasllama_cuda_classes.das`'s `CUD_CM2_TILES` ladder, since `kq_tile_stamp` asks each home
+for every 32-step format's e stamp; each names its `BN`, `STILE`, the k step `BK` where it is not
 the template's 64 with the unroll `UNR` that keeps the unrolled block at one superblock (`override
 UNR = 8u` beside `override BK = 32u`), and the `AT`/`BT`/`ACC`/`ACCW` tile types of that depth -
 copy k4's for a K-quant or LUT decode, iq2xxs's 32-deep s and e stamps for a grid-codebook decode,

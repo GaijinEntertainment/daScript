@@ -4,14 +4,13 @@ options persistent_heap
 options _dasllama_internal = true
 
 require dastest/testing_boost public
-require dasllama/dasllama_transformer   // the umbrella's [init] registrations arm the llama arch and the CUDA home
-require dasllama/dasllama
+require dasllama/dasllama_transformer   // nolint:STYLE029 — the umbrella's [init] registrations arm the llama arch and the CUDA home
 require dasllama/dasllama_gpu_tier
-require dasllama/dasllama_env
 require dasllama/dasllama_kv_dtype
 require _model_tier
 require _resident_feed
 require _kv_codec_cells
+require _cuda_feed   // its [init]: the CPU-prefill intent and the prompt-window pin
 
 // The CUDA home's whole-model driver under a q8_0 K/V mirror (`DASLLAMA_GPU=1 DASLLAMA_CUDA=1`): the rope stamps stage the
 // token's row, the codec's store quantizes it into the mirror, the decode attention's q8_0 stamps score the blocks, the window
@@ -19,14 +18,6 @@ require _kv_codec_cells
 // Q8_0 at one window and two, and on the Q4_K_M file, each at the 10% bar the Vulkan carriers hold (both chains quantize each
 // query, each its own, so two roundings part). Every cell skips off the JIT, without DASLLAMA_CUDA=1, without the armed tier,
 // without the file under models_dir(), or under DASLLAMA_VK_KV32=1 (the f32 mirror armed over the codec the cell asks).
-
-[init]
-def private allow_cpu_prefill_intent() {
-    allow_cpu_prefill()   // the control arm (the model off the device) prefills on the CPU
-    if (pf_window_rows_pin() <= 0l) {   // the cells size their prompts against PF_WINDOW_ROWS; the plan's own pick would run the two-window prompt as one
-        set_pf_window_rows_pin(PF_WINDOW_ROWS)
-    }
-}
 
 let private FILE_1B = "Llama-3.2-1B-Instruct-Q8_0.gguf"
 let private FILE_1B_K = "Llama-3.2-1B-Instruct-Q4_K_M.gguf"
