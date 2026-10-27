@@ -58,15 +58,15 @@ winners to a box and submits that box's winners back), to a validator it calls (
 `validate_sidecar_submission`, `validate_record_submission`), or to a tune-boot path (a startup path
 that loads a tune sidecar) reaching it, applies `performance/REVIEW.md` and `REVIEW_EXCHANGE.md`.**
 
-**A diff that adds a module under `dasllama/` whose code only some of `tests/run.das`'s areas
-(`audio`, `vision`, `tts`, `llm`, `infra`) run in their tests gives it a `MODULE_AREAS` row
-naming those areas, in the same change.** `run.das -- --changed` maps a module with no row to
-every area, so a missing row costs every later run the whole suite.
+**A diff that adds a module under `dasllama/` whose code only some of `tests/run.das`'s areas run
+gives it a `MODULE_AREAS` row naming those areas and a `MODULE_WITNESSES` row naming every
+`model-free` or `stocked` `llm` test file that runs its code, in the same change.** A module with
+no row runs every area, one with `llm` and no witness row the core set: safe, and slower each PR.
 
-**A diff after which an area's tests run an existing module's code, and that module's
-`MODULE_AREAS` row omits the area, adds the area to the row in the same change.** A new caller of
-the module counts, wherever it sits. A row missing an area makes `run.das -- --changed` skip that
-area's tests, so a regression there goes unrun.
+**A diff after which an area's tests, or a `model-free` or `stocked` `llm` test file, run an
+existing module's code that its `MODULE_AREAS` or `MODULE_WITNESSES` row omits adds the area or
+the file to the row in the same change.** A new caller counts, wherever it sits; a row missing an
+area or a file makes `run.das -- --changed` skip those tests, so a regression there goes unrun.
 
 **A `[test]` file with a `require dasllama/...` line of its own, wherever the diff puts it, and
 every `dasllama/` change answer to this folder's `tests/REVIEW.md` - open it; the walk does not

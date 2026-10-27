@@ -12,14 +12,16 @@ ONLY through `tests/run.das`).
 ## Test workflow
 
 After an edit: `./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --changed` runs the tests
-the changed files reach (areas `audio | vision | tts | llm | infra`; `--area <a,b>` names them
-directly). A changed file in a model suite (decode | mtp | prefill | matrix | image) reaches no
-area - `--changed` names it and runs nothing for it; run that suite with `--arm` scoped to the
-change. Before a PR: `--suite model-free`, then `--changed` on a box with models - the areas the
-changed files reach, never the whole `stocked` suite for its own sake (a core module with no
-`MODULE_AREAS` row reaches every area, and `--changed` then runs the whole model-gated set); a
-PR's run carries no `--exclude` - `--exclude test_ple_modes` is the between-PR iteration
-form. `--no-tune` runs any suite but the image suites on the reference kernel bodies
+the changed files reach, by file: a test file itself, a fixture the tests requiring it, an engine
+module its `MODULE_WITNESSES` row or - a core module - every model-free `llm` file and one
+stocked witness a family and home, and its other areas (`audio | vision | tts | infra`) whole;
+`--area <a,b>` names areas directly. A changed file in a model suite (decode | mtp | prefill |
+matrix | image) reaches nothing - `--changed` names it; run that suite with `--arm` scoped to the
+change. Before a PR: `--changed` on a box with models, and where the engine core changed the
+whole `stocked` suite too, sharded over a pod fleet (`harness/pod_fleet.das`); a PR's run carries
+no `--exclude` - `--exclude test_ple_modes` is the between-PR iteration form. `--shard i/n`
+splits one run over n boxes (the same command on each, its own `i`), and the PR cites every
+shard's `REPORT`. `--no-tune` runs any suite but the image suites on the reference kernel bodies
 (`DAS_TUNE_POLICY=reference`, the image rail off) - the portable tier's arm. The runner's `REPORT`
 and `NEXT` lines say what ran, what the run skipped (a filtered arm, an absent device, or a
 missing model), and what is still owed. The rest: `tests/CLAUDE.md`.

@@ -9,9 +9,11 @@ full-suite run turns a one-arm fix into an afternoon.
 ```
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --arm <filter> [--suite decode|mtp|prefill|matrix|kernels|image|image-vulkan|coverage|all] [--family llama]
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite model-free        # the per-PR gate that needs no models - runs the same on a bare box, no --arm
-./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --changed [--base origin/master]   # the per-PR run on a box with models, and after an edit: the areas the changed files reach
+./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --changed [--base origin/master]   # the per-PR run on a box with models, and after an edit: the files the changed paths reach
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite stocked           # every model-gated file, no --arm; a core-module change reaches every one of them through --changed
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite stocked --exclude test_ple_modes   # the iteration form - drops the PLE file
+DASLLAMA_GPU=1 DASLLAMA_CUDA=1 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --changed --only cuda,segments   # the CUDA home's pass: the run's CUDA files alone
+./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --changed --shard 1/3             # one of three boxes: every third file of the same run, from the first
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --area audio            # one area: audio | vision | tts | llm | infra (comma list)
 ```
 
@@ -19,18 +21,26 @@ An AREA is what someone working on audio, vision, TTS, the LLM engine or the too
 edit: every model-free and stocked file of the area (`area_tests` in `run.das`, a file may sit in
 two) plus the `image` suite's arms the area owns (`area_image_arms`; the `gemma` arm - the E2B
 image round-trip - belongs to no area, because as an `--arm` substring it would drag every other
-`gemma*` arm along; reach it with `--suite image --arm gemma`). `--changed` derives the areas
-from `git diff --name-only <base>` (`--base`, default `origin/master`; a base git cannot resolve
-is refused) plus the module's untracked files: a test file maps to its own areas, a
-`tests/_*.das` fixture to the areas it serves, an engine module through the `MODULE_AREAS` table
-(a module without a row is CORE and reaches every area - the safe default), the checked-in
-`models/` weights to `audio`, any non-`.das` file - `run.das` included - to `infra`,
-`performance/` and `harness/` to `infra`, `benchmarks/`'s `.das` to `llm`, and any other path
-under the module to every area. Each mapping prints as a `CHANGED path -> areas` line; a changed
-model-suite file prints a hint instead, because its arms are the caller's to scope. The run ends
-with `REPORT` (files, failures, cells skipped - a filtered arm, an absent device, or a missing
-model - and files excluded) and `NEXT` (the model suites' `--arm` form when `llm` ran; the per-PR
-suites still owed).
+`gemma*` arm along; reach it with `--suite image --arm gemma`). `--changed` plans by file from
+`git diff --name-only <base>` (`--base`, default `origin/master`; a base git cannot resolve is
+refused) plus the module's untracked files (`reach_for_path` in `run.das`): a test file reaches
+itself; a `tests/_*.das` fixture the test files whose `require _<stem>` reaches it, through the
+fixtures between (a fixture no test names by require falls to its areas); an engine module its
+`MODULE_AREAS` areas whole but `llm`, where it reaches its `MODULE_WITNESSES` row (a leaf module's
+own carriers and kernel cells) or, with no row there, the CORE set - every model-free `llm` file
+and the `LLM_CORE_WITNESSES`, one stocked witness a family and home, the codec rig, the regions
+form, the segmented window, the CPU chains; `benchmarks/`'s `.das` the bench rows' files; the
+checked-in `models/` weights `audio` whole; any non-`.das` file - `run.das` included -,
+`performance/` and `harness/` `infra` whole; any other path under the module every area, `llm` as
+the core. Each path prints as a `CHANGED path -> ...` line, the `PLAN` line counts the files and
+says when the core changed, and a changed model-suite file prints a hint instead, because its arms
+are the caller's to scope. A core change is the per-edit gate only: the whole stocked set
+(`--suite stocked`, sharded over the fleet, `../harness/pod_fleet.das`) is owed before the PR, and
+the `NEXT` line says so. The fleet's pods share one models directory, so its runs keep the image
+rail off (`DASLLAMA_IMAGE=0`, the tool's default environment) and the image suite's arms the plan
+owns run on one box with the rail on, through dastest's `--test` with `DASLLAMA_TEST_ARMS` set to
+them; the PR cites that run beside the shards. The run ends with `REPORT` (files, failures, cells skipped - a filtered
+arm, an absent device, or a missing model - and files excluded) and `NEXT` (what is still owed).
 
 `all` (the default) runs the decode, MTP and prefill parity files, the support matrix, the kernel
 files and `test_model_image` - it omits `test_mtp_gemma_drafter.das`, `image-vulkan`, `coverage`,
@@ -39,7 +49,17 @@ files and `test_model_image` - it omits `test_mtp_gemma_drafter.das`, `image-vul
 Every suite but `model-free` and `stocked` needs `--arm`. `--full` parses and is then refused, so
 `--arm` is the only way in. `--suite model-free` and `--suite stocked` take neither - each is a
 whole gate; `--exclude <substr,...>` drops the files whose name contains a token and names each
-on an `EXCLUDED` line, so a trimmed run cannot read as full. `--no-tune` composes with any suite:
+on an `EXCLUDED` line, so a trimmed run cannot read as full; `--only <substr,...>` keeps the files
+whose name contains a token and drops the rest, each kept file on an `ONLY` line and the tokens on
+the `REPORT` line - the CUDA home's pass is `--changed --only cuda,segments` under
+`DASLLAMA_GPU=1 DASLLAMA_CUDA=1`, beside the Vulkan home's whole run, never in its place (the
+other files run the Vulkan home's tests on a home that serves the dense slice alone, and red on
+its declines). `--shard i/n` splits one run over n
+boxes: each box runs the same command with its own `i` and takes every n-th file of the run's
+sorted list from the i-th, so the shards partition the run and spread its costly neighbours; the
+`SHARD` line counts the shard's files, the `REPORT` line carries `shard i/n`, and the `NEXT` line
+names the shards still owed - a run is whole only when every shard's `REPORT` is in hand.
+`--no-tune` composes with any suite:
 every child runs with `DAS_TUNE_POLICY=reference`, so the `[tune]` families and the `[tuned]`
 hints fall to their reference bodies - the portable tier's arm of the gate. That arm also runs
 with `DASLLAMA_IMAGE=0`: the reference policy is a different box identity, and a `.dlim` minted
@@ -51,9 +71,13 @@ the COMPLETE output to a log file, and prints that path on the DONE line. It own
 timeout - 3600 s per child on the stocked gate and under `--changed`, where the large tier's parity
 file alone runs past 20 minutes and the llama resident file's CPU chains run past 1200 s on a cold
 JIT cache; 1200 s in arm mode - and repeats a file only when `--nreps` is
-passed explicitly (default 1, never best-of-N). Every child runs `-jit -module-cache .cache/daslang/module_cache/dastest.dascache`;
-that cache serves dastest's own module graph only - the test program dastest compiles at
-runtime sits past it, so each child still pays the engine compile.
+passed explicitly (default 1, never best-of-N). Every child runs `-jit -module-cache .cache/daslang/module_cache/dastest.dascache`
+(dastest's own module graph) and `--module-cache-dir .cache/daslang/module_cache/dastest_tests/<size>-<mtime>` (the
+test program's AST record, one per file, the folder keyed by the daslang binary): a record serves the child's
+unchanged module prefix, so an engine test file that parses in ~90 s cold opens in a few seconds warm, and an
+engine edit re-parses the edited module and the modules after it alone. The `CACHE` line names the folder; a
+run on the runner's own binary removes the folders of earlier binaries, whose records can never serve again,
+and a `--das` dry run keeps them.
 No preflight tier runs the per-PR runs. `preflight -- --only dasllama-model-free` runs the
 model-free suite; the `--changed` run has no preflight lane; `-- --only dasllama-stocked` runs the
 whole stocked suite.
@@ -751,7 +775,7 @@ dispatch that skips `metal_set_threadgroup_memory_length` for a kernel with `@wo
 reads garbage silently - no error, a plausible wrong number - which is why the lens makes the
 omission a compile refusal (`test_lens_tgmem_gate` above).
 
-## The per-PR runs - model-free whole, the stocked files by area
+## The per-PR runs - model-free whole, the stocked files by reach
 
 The split between the `model-free` and `stocked` suites: a file that reaches a machine-local
 fixture root (`models_dir()`, `model_available()`, `llama2c_dir()`, `whisper_dir()`, the ASR corpus's `corpus_dir()` /
@@ -762,8 +786,8 @@ persistent_heap`, and the same gate fails one that does not: dastest compiles a 
 linear heap unless the program says otherwise, and there a `delete` frees nothing until collection - a
 cell's deleted carrier stays, and three carriers in one process held a 256 GB box. A `stocked` cell skips honestly
 when its file is absent, so on a bare box (CI) the suite is a run of skips; on a stocked box a PR
-owes the stocked files of the areas its change reaches (`--changed`), never the whole suite for
-its own sake - `test_ple_modes` alone is ~10 min, the suite hours. The runner sets
+owes the files its change reaches (`--changed`), and the whole suite only where the engine core
+changed, over the fleet - `test_ple_modes` alone is ~10 min, the suite hours. The runner sets
 `DASLLAMA_CPU_PREFILL=1` for every child. That is why the CPU-prefill tripwire cannot ride either
 suite: the runner disarms the guard that tripwire asserts. The map below is partial. `run.das`'s
 two lists together are the census.
@@ -3090,9 +3114,23 @@ listed file exists), the folder census (every test file sits in a `run.das` suit
 CPU-prefill tripwire the declared exemption; `run.das` carries no `[init]`), the area tables
 (every area file sits in the census, every census file has an area, every arm an area names
 exists, every image-suite arm is reachable from an area or listed as unclaimed), the pure
-planners behind an area run, the argument contracts, the change-to-area map behind `--changed`,
-the `--exclude` filter's semantics, and a dry run of the runner with a no-op child binary.
+planners behind an area run, the argument contracts, the area map, the reach plan behind
+`--changed` (a test file itself, a fixture the tests requiring it and no model-suite file, a leaf
+module its witness row, a core module the core set and its other areas whole, a benchmark the
+bench rows' files; every witness row and the core set census files, every row's module a file
+that reaches llm), the `--exclude` filter's semantics, the `--shard` partition (the shards of one list disjoint
+and whole, every refused form), the children's module-cache folder (keyed by the binary, the
+other binaries' folders removed on the runner's own binary alone, no folder for a binary that
+cannot be stat'd, the child command carrying it), and a dry run of the runner with a no-op
+child binary.
 Requires `run` by bare same-dir name.
+`test_pod_fleet.das` - model-free, pod-free: the pod fleet's planners (`../harness/pod_fleet.das`) -
+the `runpodctl pod create` argument list (the models volume and its data center, the GPU, the
+disk, the ssh port, the key in the boot's environment, the boot installing sshd, rsync, git and
+the Vulkan loader, `--wait` and JSON out), the ssh argument list (the pod's address and port,
+never prompting), the tree copy that leaves the caches out, the shard command (`--shard i/n`
+appended, `TMPDIR` and the runner's log under the run's folder on the volume, `RUN-EXIT` closing
+the log, detached so the ssh call returns), the status read over every shard, and the `~` path.
 `test_vk_spv_diff.das` - model-free: the SPIR-V dump differ (`../harness/vk_spv_diff.das`, the
 identity gate a kernel fold's "byte-identical" claim rests on) - its four bins over two in-memory
 dumps (a changed byte and a changed length both read as moved, name order), the verdict's refusal

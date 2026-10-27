@@ -18,6 +18,9 @@ require dasllama/dasllama_env
 require ../performance/box_ident.das   // derive_box_name — hardware-keyed, engine-free
 
 let MODULE_CACHE = ".cache/daslang/module_cache/dastest.dascache"
+//! the children's per-test AST records (dastest's --module-cache-dir), one folder per daslang binary: a record is
+//! keyed by the binary, so a rebuild opens a new folder and the run removes the folders of the binaries before it
+let CHILD_CACHE_ROOT = ".cache/daslang/module_cache/dastest_tests"
 
 [CommandLineArgs]
 struct RunArgs {
@@ -36,6 +39,11 @@ struct RunArgs {
     @clarg_short = "x"
     @clarg_doc = "Exclude — comma-separated substrings; a suite file whose name contains one is dropped, each named on an EXCLUDED line (e.g. --suite stocked --exclude test_ple_modes)"
     exclude : string
+
+    @clarg_doc = "Shard i/n — this box runs every n-th file of the run's file list from the i-th (1-based), so n boxes on the same command with --shard 1/n .. n/n cover the run once; the REPORT line names the shard and the NEXT line the shards still owed"
+    shard : string
+    @clarg_doc = "Only — comma-separated substrings; a file of the run whose name contains none is dropped, each kept file named on an ONLY line and the REPORT line carrying the tokens, so a narrowed run cannot read as whole (e.g. --changed --only cuda,segments under DASLLAMA_CUDA=1: the CUDA home's files of the run)"
+    only : string
 
     @clarg_doc = "Area — comma-separated: audio | vision | tts | llm | infra; runs every model-free and stocked file of the area plus the image suite's arms of the area (no --suite, no --arm)"
     area : string
@@ -144,6 +152,7 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
                     "modules/dasLLAMA/tests/test_jobque_tripwire.das",
                     "modules/dasLLAMA/tests/test_plane.das",
                     "modules/dasLLAMA/tests/test_ple_check.das",
+                    "modules/dasLLAMA/tests/test_pod_fleet.das",
                     "modules/dasLLAMA/tests/test_prefill_cpu_kernels.das",
                     "modules/dasLLAMA/tests/test_program_roots.das",
                     "modules/dasLLAMA/tests/test_q8q8_family.das",
@@ -233,6 +242,8 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
                     "modules/dasLLAMA/tests/test_gpu_resident_cuda_batch.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_cuda_qwen3.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_cuda_phi3.das",
+                    "modules/dasLLAMA/tests/test_gpu_resident_cuda_qwen35.das",
+                    "modules/dasLLAMA/tests/test_gpu_resident_cuda_moe.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_segments.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_moe.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_moe_host_pinned.das",
@@ -344,13 +355,13 @@ def area_tests(area : string) : array<string> {
                     "test_dasllama_lint_escape.das", "test_dlim_wipe.das",
                     "test_env_registry.das",
                     "test_exchange_schema.das", "test_exe_smoke.das", "test_facade_docs.das", "test_fat_hook_umbrella.das", "test_fat_start.das", "test_gen_records_args.das",
-                    "test_model_specs.das", "test_program_roots.das", "test_review_howto.das", "test_run_suites.das", "test_run_summary.das", "test_served_bench.das",
+                    "test_model_specs.das", "test_pod_fleet.das", "test_program_roots.das", "test_review_howto.das", "test_run_suites.das", "test_run_summary.das", "test_served_bench.das",
                     "test_site_records.das", "test_sizing_helpers.das", "test_tok_seed.das", "test_tune_interrupt.das", "test_vk_spv_diff.das" ]
     } elif (area == "llm") {
         return <- [ "test_accel_backend.das", "test_affinity_predicates.das", "test_arch_registry.das", "test_batch_decode.das", "test_bench_rows.das",
                     "test_batch_grid.das", "test_chat.das", "test_deltanet.das", "test_dispatch_shaping.das", "test_driver_knob_getters.das", "test_facade.das",
                     "test_flash.das", "test_forward.das", "test_from_template.das", "test_fused_decode.das", "test_gguf_quant.das", "test_gguf_shards.das",
-                    "test_gpu_model_swap.das", "test_gpu_moe_shexp.das", "test_gpu_perop_kv_codec.das", "test_gpu_perop_kv_codec_iq.das", "test_gpu_perop_kv_codec_k.das", "test_gpu_resident_codec_llama_iq.das", "test_gpu_resident_codec_llama_k.das", "test_gpu_resident_gemma2.das", "test_gpu_resident_gemma3_1b.das", "test_gpu_resident_gemma3_4b.das", "test_gpu_resident_gemma4_12b_k.das", "test_gpu_resident_gemma4_12b_q8.das", "test_gpu_resident_gemma4_26b.das", "test_gpu_resident_gemma4_26b_k.das", "test_gpu_resident_gemma4_26b_mx4.das", "test_gpu_resident_gemma4_26b_host.das", "test_gpu_resident_moe_host_pinned.das", "test_gpu_resident_gemma4_31b.das", "test_gpu_resident_gemma4_e2b.das", "test_gpu_resident_gemma4_e4b.das", "test_gpu_resident_gptoss.das", "test_gpu_resident_hc.das", "test_gpu_resident_hc_micro.das", "test_parity_dump.das", "test_gpu_resident_continuation.das", "test_gpu_resident_long_window.das", "test_gpu_resident_hybrid.das", "test_gpu_resident_llama.das", "test_gpu_resident_cuda_llama.das", "test_gpu_resident_cuda_codec.das", "test_gpu_resident_cuda_batch.das", "test_gpu_resident_cuda_qwen3.das", "test_gpu_resident_cuda_phi3.das", "test_gpu_resident_segments.das", "test_gpu_resident_moe.das", "test_gpu_resident_moe_host_rows.das", "test_gpu_resident_moe_formats.das", "test_gpu_resident_format_census.das", "test_gpu_resident_qwen2.das", "test_gpu_resident_regions.das", "test_gpu_resident_regions_e2b.das", "test_gpu_resident_regions_gptoss.das", "test_gpu_resident_regions_qwen3moe.das", "test_gpu_resident_regions_qwen35moe.das", "test_gpu_resident_regions_qwen2moe.das", "test_gpu_resident_regions_gemma4moe.das", "test_gpu_resident_regions_gemma2.das", "test_gpu_resident_regions_gemma3.das", "test_gpu_resident_regions_gemma4.das", "test_gpu_resident_regions_hybrid.das", "test_gpu_resident_regions_hybrid_k.das", "test_gpu_resident_regions_hybrid_iq3s.das", "test_gpu_resident_regions_hybrid_q3kxl.das", "test_gpu_resident_regions_llama_k.das", "test_gpu_resident_regions_llama3b_ctx32k.das", "test_gpu_resident_regions_gemma3_4b_ctx128k.das", "test_gpu_resident_regions_gemma4_e2b_ctx128k.das", "test_gpu_resident_regions_phi3.das", "test_gpu_resident_regions_qwen3.das", "test_gpu_resident_regions_q8kv.das", "test_gpu_resident_regions_tq4kv.das", "test_gpu_serving_declines.das", "test_gpu_slot_swap.das", "test_gpu_tier.das", "test_groupn.das",
+                    "test_gpu_model_swap.das", "test_gpu_moe_shexp.das", "test_gpu_perop_kv_codec.das", "test_gpu_perop_kv_codec_iq.das", "test_gpu_perop_kv_codec_k.das", "test_gpu_resident_codec_llama_iq.das", "test_gpu_resident_codec_llama_k.das", "test_gpu_resident_gemma2.das", "test_gpu_resident_gemma3_1b.das", "test_gpu_resident_gemma3_4b.das", "test_gpu_resident_gemma4_12b_k.das", "test_gpu_resident_gemma4_12b_q8.das", "test_gpu_resident_gemma4_26b.das", "test_gpu_resident_gemma4_26b_k.das", "test_gpu_resident_gemma4_26b_mx4.das", "test_gpu_resident_gemma4_26b_host.das", "test_gpu_resident_moe_host_pinned.das", "test_gpu_resident_gemma4_31b.das", "test_gpu_resident_gemma4_e2b.das", "test_gpu_resident_gemma4_e4b.das", "test_gpu_resident_gptoss.das", "test_gpu_resident_hc.das", "test_gpu_resident_hc_micro.das", "test_parity_dump.das", "test_gpu_resident_continuation.das", "test_gpu_resident_long_window.das", "test_gpu_resident_hybrid.das", "test_gpu_resident_llama.das", "test_gpu_resident_cuda_llama.das", "test_gpu_resident_cuda_codec.das", "test_gpu_resident_cuda_batch.das", "test_gpu_resident_cuda_qwen3.das", "test_gpu_resident_cuda_phi3.das", "test_gpu_resident_cuda_qwen35.das", "test_gpu_resident_cuda_moe.das", "test_gpu_resident_segments.das", "test_gpu_resident_moe.das", "test_gpu_resident_moe_host_rows.das", "test_gpu_resident_moe_formats.das", "test_gpu_resident_format_census.das", "test_gpu_resident_qwen2.das", "test_gpu_resident_regions.das", "test_gpu_resident_regions_e2b.das", "test_gpu_resident_regions_gptoss.das", "test_gpu_resident_regions_qwen3moe.das", "test_gpu_resident_regions_qwen35moe.das", "test_gpu_resident_regions_qwen2moe.das", "test_gpu_resident_regions_gemma4moe.das", "test_gpu_resident_regions_gemma2.das", "test_gpu_resident_regions_gemma3.das", "test_gpu_resident_regions_gemma4.das", "test_gpu_resident_regions_hybrid.das", "test_gpu_resident_regions_hybrid_k.das", "test_gpu_resident_regions_hybrid_iq3s.das", "test_gpu_resident_regions_hybrid_q3kxl.das", "test_gpu_resident_regions_llama_k.das", "test_gpu_resident_regions_llama3b_ctx32k.das", "test_gpu_resident_regions_gemma3_4b_ctx128k.das", "test_gpu_resident_regions_gemma4_e2b_ctx128k.das", "test_gpu_resident_regions_phi3.das", "test_gpu_resident_regions_qwen3.das", "test_gpu_resident_regions_q8kv.das", "test_gpu_resident_regions_tq4kv.das", "test_gpu_serving_declines.das", "test_gpu_slot_swap.das", "test_gpu_tier.das", "test_groupn.das",
                     "test_embeddings.das", "test_jobque_tripwire.das", "test_kernel_backend.das", "test_kgroup_repack.das", "test_kqformat.das", "test_kquant.das",
                     "test_kv_codec.das", "test_kv_paged.das", "test_kv_prefix.das", "test_metal_batched_row.das", "test_metal_format_census.das", "test_math_activations.das",
                     "test_math_elementwise.das", "test_matmul.das", "test_matmul_batch.das", "test_f32_batch_tile_perms.das",
@@ -430,6 +441,63 @@ let MODULE_AREAS <- {
     "dasllama_cuda_decode" => "llm", "dasllama_math_cuda" => "llm"
 }
 
+//! the stocked llm files a change to the engine core reaches - a witness a family and home, the codec rig, the regions
+//! form, the segmented window, the CPU chains - beside every model-free llm file: the per-edit gate. The whole stocked
+//! set stays the pre-merge gate (`--suite stocked`, sharded over the fleet). Non-private: test_run_suites.das pins it
+let LLM_CORE_WITNESSES <- [
+    "test_batch_decode.das", "test_deltanet.das", "test_forward.das", "test_gpu_perop_kv_codec.das",
+    "test_gpu_resident_codec_llama_k.das", "test_gpu_resident_cuda_llama.das", "test_gpu_resident_cuda_moe.das",
+    "test_gpu_resident_cuda_qwen35.das", "test_gpu_resident_gemma3_1b.das", "test_gpu_resident_gemma4_26b.das",
+    "test_gpu_resident_gemma4_e2b.das", "test_gpu_resident_gptoss.das", "test_gpu_resident_hybrid.das",
+    "test_gpu_resident_llama.das", "test_gpu_resident_moe.das", "test_gpu_resident_qwen2.das",
+    "test_gpu_resident_regions.das", "test_gpu_resident_regions_phi3.das", "test_gpu_resident_regions_qwen3.das",
+    "test_gpu_resident_segments.das", "test_kv_codec.das", "test_mtp.das", "test_prefill.das", "test_scheduler.das" ]
+
+let CUDA_WITNESSES = "test_cuda_kernels.das,test_gpu_resident_cuda_llama.das,test_gpu_resident_cuda_codec.das,test_gpu_resident_cuda_batch.das,test_gpu_resident_cuda_qwen3.das,test_gpu_resident_cuda_phi3.das,test_gpu_resident_cuda_qwen35.das,test_gpu_resident_cuda_moe.das,test_gpu_resident_segments.das"
+let KV_CODEC_WITNESSES = "test_kv_codec.das,test_vulkan_kv_codec_kernels.das,test_gpu_resident_codec_llama_k.das,test_gpu_resident_codec_llama_iq.das,test_gpu_perop_kv_codec.das,test_gpu_perop_kv_codec_k.das,test_gpu_perop_kv_codec_iq.das,test_gpu_resident_cuda_codec.das,test_gpu_resident_regions_q8kv.das,test_gpu_resident_regions_tq4kv.das"
+let TOKENIZER_WITNESSES = "test_tokenizer.das,test_unicode.das,test_chat.das,test_tok_seed.das"
+let METAL_WITNESSES = "test_metal_batched_row.das,test_metal_format_census.das,test_metal_gemm.das,test_metal_role_infer.das,test_metal_float_a_gate.das"
+
+//! engine module stem -> the llm files a change to it reaches (base names, comma-separated) in place of the core
+//! witnesses: a leaf module's own carriers and kernel cells. A module with no row here and an llm reach in
+//! MODULE_AREAS (or no row there) is core. Its other areas still come from MODULE_AREAS. Non-private:
+//! test_run_suites.das pins every row to the census
+let MODULE_WITNESSES <- {
+    "dasllama_cuda_common" => CUDA_WITNESSES, "dasllama_cuda_dispatch" => CUDA_WITNESSES, "dasllama_cuda_classes" => CUDA_WITNESSES,
+    "dasllama_cuda_decode" => CUDA_WITNESSES, "dasllama_math_cuda" => CUDA_WITNESSES,
+    "dasllama_arch_llama" => "test_gpu_resident_llama.das,test_gpu_resident_cuda_llama.das,test_gpu_resident_regions_llama_k.das,test_gpu_resident_codec_llama_k.das,test_forward.das,test_prefill.das",
+    "dasllama_arch_qwen2" => "test_gpu_resident_qwen2.das,test_gpu_perop_kv_codec.das,test_gpu_perop_kv_codec_iq.das,test_gpu_resident_regions.das",
+    "dasllama_arch_qwen3" => "test_gpu_resident_cuda_qwen3.das,test_gpu_resident_regions_qwen3.das,test_gpu_perop_kv_codec_k.das",
+    "dasllama_arch_qwen35" => "test_gpu_resident_hybrid.das,test_gpu_resident_continuation.das,test_gpu_resident_cuda_qwen35.das,test_gpu_resident_regions_hybrid.das,test_gpu_resident_long_window.das,test_deltanet.das,test_mtp.das,test_vulkan_mint.das",
+    "dasllama_arch_qwen3moe" => "test_gpu_resident_regions_qwen3moe.das,test_gpu_resident_moe_formats.das,test_gpu_resident_format_census.das",
+    "dasllama_arch_qwen2moe" => "test_gpu_resident_moe.das,test_gpu_resident_cuda_moe.das,test_gpu_resident_regions_qwen2moe.das,test_gpu_moe_shexp.das,test_gpu_resident_moe_host_rows.das,test_gpu_resident_moe_host_pinned.das",
+    "dasllama_arch_qwen4exp" => "test_qwen4exp.das,test_gpu_resident_hc.das,test_gpu_resident_hc_micro.das",
+    "dasllama_arch_gptoss" => "test_gpu_resident_gptoss.das,test_gpu_resident_regions_gptoss.das,test_gpu_resident_cuda_moe.das",
+    "dasllama_arch_gemma2" => "test_gpu_resident_gemma2.das,test_gpu_resident_regions_gemma2.das",
+    "dasllama_arch_gemma3" => "test_gpu_resident_gemma3_1b.das,test_gpu_resident_gemma3_4b.das,test_gpu_resident_regions_gemma3.das",
+    "dasllama_arch_gemma4" => "test_gpu_resident_gemma4_e2b.das,test_gpu_resident_gemma4_e4b.das,test_gpu_resident_gemma4_12b_k.das,test_gpu_resident_gemma4_26b.das,test_gpu_resident_gemma4_31b.das,test_gpu_resident_regions_gemma4.das,test_gpu_resident_regions_gemma4moe.das,test_ple_modes.das,test_mtp_gemma_drafter.das",
+    "dasllama_arch_phi3" => "test_gpu_resident_cuda_phi3.das,test_gpu_resident_regions_phi3.das",
+    "dasllama_arch_glm4moe" => "test_mtp.das", "dasllama_arch_mistral3" => "test_chat.das,test_model_specs.das",
+    "dasllama_moe" => "test_gpu_resident_moe.das,test_gpu_resident_moe_formats.das,test_gpu_resident_cuda_moe.das,test_gpu_resident_gptoss.das,test_gpu_resident_gemma4_26b.das,test_gpu_moe_shexp.das,test_vulkan_dec_tail.das,test_vulkan_moe_cm2.das,test_vulkan_host_twin.das",
+    "dasllama_mtp_gemma" => "test_mtp_gemma_drafter.das", "dasllama_vulkan_mtp_gemma" => "test_mtp_gemma_drafter.das",
+    "dasllama_metal_decode" => METAL_WITNESSES, "dasllama_metal_prefill" => METAL_WITNESSES, "dasllama_metal_mtp_gemma" => METAL_WITNESSES,
+    "dasllama_scheduler" => "test_scheduler.das",
+    "dasllama_sampling" => "test_sampling.das,test_sampling_landed.das,test_constraint.das,test_mtp_sampled_walk.das,test_mtp_accept_walks.das,test_scheduler.das",
+    "dasllama_batch" => "test_batch_decode.das,test_batch_grid.das,test_gpu_resident_cuda_batch.das",
+    "dasllama_kv_codec" => KV_CODEC_WITNESSES, "dasllama_kv_dtype" => KV_CODEC_WITNESSES,
+    "dasllama_prefix" => "test_kv_prefix.das,test_kv_paged.das",
+    "dasllama_ple" => "test_ple_check.das,test_ple_modes.das,test_gpu_resident_gemma4_e2b.das,test_gpu_resident_regions_e2b.das",
+    "dasllama_parity" => "test_parity.das,test_parity_pregate.das,test_parity_cache.das,test_parity_dump.das",
+    "dasllama_bench" => "test_bench_rows.das,test_served_bench.das",
+    "dasllama_tokenizer" => TOKENIZER_WITNESSES, "dasllama_bpe" => TOKENIZER_WITNESSES, "dasllama_spm" => TOKENIZER_WITNESSES,
+    "dasllama_pretok" => TOKENIZER_WITNESSES, "dasllama_unicode" => TOKENIZER_WITNESSES,
+    "dasllama_chat" => "test_chat.das,test_tool_formats.das,test_think_split.das,test_scheduler.das",
+    "dasllama_tools" => "test_chat.das,test_tool_formats.das,test_think_split.das,test_scheduler.das",
+    "dasllama_attn_prefill" => "test_prefill.das,test_prefill_cpu_kernels.das,test_flash.das,test_attn_span.das"
+}
+
+let BENCH_WITNESSES <- ["test_bench_rows.das", "test_served_bench.das", "test_bench_records_schema.das"]
+
 def private csv_list(csv : string) : array<string> =>
     <- [for (tok in split(csv, ",")); strip(tok); where !empty(strip(tok))]
 
@@ -446,7 +514,7 @@ def areas_for_path(path : string) : array<string> {
     if (rel |> starts_with("models/")) {
         return <- ["audio"]   //! the checked-in silero VAD weights
     }
-    if (!(name |> ends_with(".das")) || name == "run.das") {
+    if (!(name |> ends_with(".das")) || name == "run.das" || name == "REVIEW.das") {   //! a folder's lint gate is tooling
         return <- ["infra"]
     }
     if (rel |> starts_with("tests/")) {
@@ -482,6 +550,116 @@ def areas_for_path(path : string) : array<string> {
     return <- clone_to_move(AREAS)
 }
 
+//! what --changed runs for one changed path
+struct Reach {
+    files : array<string>   //! the test files it runs, base names
+    areas : array<string>   //! the areas it runs whole - never llm, whose files are named
+    core : bool             //! the engine core changed: the whole stocked set is owed before the PR
+    note : string           //! why a path runs nothing, "" when it runs something or lies outside the module
+}
+
+//! the llm area's model-free files - the kernel cells and the units every engine change reaches
+def private llm_model_free() : array<string> {
+    let free <- suite_files("model-free")
+    return <- [for (name in area_tests("llm")); name; where find_index(free, "{TESTS_DIR}/{name}") >= 0]
+}
+
+def private any_reached(stems : array<string>; reached : table<string>) : bool {
+    for (s in stems) {
+        return true if (key_exists(reached, s))
+    }
+    return false
+}
+
+//! the test files of the folder whose `require _<stem>` reaches `stem`, through the fixtures between: a fixture's
+//! change runs the tests that read it. Non-private: test_run_suites.das pins it
+def tests_requiring(stem : string) : array<string> {
+    var requires : table<string; array<string>>   // a file's base name -> the fixture stems it requires
+    fio::dir(TESTS_DIR) $(name) {
+        if (name |> ends_with(".das") && (name |> starts_with("test_") || name |> starts_with("failed_") || name |> starts_with("_"))) {
+            var stems : array<string>
+            fopen("{TESTS_DIR}/{name}", "rb") $(f) {
+                if (f != null) {
+                    for (line in split(fread(f), "\n")) {
+                        continue if (!(line |> starts_with("require _")))
+                        var inscope parts <- split_by_chars(slice(line, length("require ")), " \t/\r")
+                        stems |> push(parts[0])
+                    }
+                }
+            }
+            requires[name] <- stems
+        }
+    }
+    var reached <- { stem }
+    var grew = true
+    while (grew) {
+        grew = false
+        for (name, stems in keys(requires), values(requires)) {
+            continue if (!(name |> starts_with("_")))
+            let fstem = slice(name, 0, length(name) - 4)
+            if (!key_exists(reached, fstem) && any_reached(stems, reached)) {
+                reached |> insert(fstem)
+                grew = true
+            }
+        }
+    }
+    var listed <- suite_files("model-free")
+    listed |> push_from(suite_files("stocked"))
+    let census <- {for (f in listed); base_name(f) => null}   //! a model-suite file the fixture reaches takes --arm, not this run
+    var files <- [for (name, stems in keys(requires), values(requires)); name; where key_exists(census, name) && any_reached(stems, reached)]
+    sort(files)
+    return <- files
+}
+
+//! the llm reach of a change that lands in `areas`: nothing without llm among them, a module's own witness row, else
+//! the core - every model-free llm file and the core witnesses
+def private llm_reach(var r : Reach; areas : array<string>; witness : string) {
+    return if (find_index(areas, "llm") < 0)
+    if (!empty(witness)) {
+        r.files |> push_from(csv_list(witness))
+        return
+    }
+    r.core = true
+    r.files |> push_from(llm_model_free(), clone_to_move(LLM_CORE_WITNESSES))
+}
+
+//! a changed path -> what --changed runs for it: a test file itself, a fixture the tests requiring it, an engine
+//! module its MODULE_AREAS areas whole but llm, where it runs its MODULE_WITNESSES row or the core set, a
+//! benchmark the bench rows' files, any other path its areas the same way. Non-private: test_run_suites.das pins it
+def reach_for_path(path : string) : Reach {
+    var r : Reach
+    let p = path |> replace("\\", "/")
+    return <- r if (!(p |> starts_with("modules/dasLLAMA/")))
+    let rel = slice(p, length("modules/dasLLAMA/"))
+    let name = base_name(p)
+    if (rel |> starts_with("tests/") && name |> ends_with(".das") && name != "run.das") {
+        if (name |> starts_with("_")) {
+            r.files <- tests_requiring(slice(name, 0, length(name) - 4))
+            if (empty(r.files)) {   //! a fixture no test requires by name (a root a child spawns): its areas, the llm one by the core
+                let areas <- areas_for_path(p)
+                r.areas <- [for (a in areas); a; where a != "llm"]
+                llm_reach(r, areas, "")
+            }
+            return <- r
+        }
+        if (find_index(suite_files("model-free"), p) >= 0 || find_index(suite_files("stocked"), p) >= 0) {
+            r.files |> push(name)
+        } else {
+            r.note = "a model suite file: run its suite with --arm scoped to the change"
+        }
+        return <- r
+    }
+    if (rel |> starts_with("benchmarks/") && name |> ends_with(".das")) {
+        r.files := BENCH_WITNESSES
+        return <- r
+    }
+    let areas <- areas_for_path(p)
+    r.areas <- [for (a in areas); a; where a != "llm"]
+    let stem = (rel |> starts_with("dasllama/")) && name |> ends_with(".das") ? slice(name, 0, length(name) - 4) : ""
+    llm_reach(r, areas, empty(stem) ? "" : (MODULE_WITNESSES?[stem] ?? ""))
+    return <- r
+}
+
 //! --exclude: a file whose base name contains any comma-separated token is dropped. Non-private:
 //! test_run_suites.das gates it
 def exclude_files(files : array<string>; exclude : string) : tuple<kept : array<string>; dropped : array<string>> {
@@ -500,6 +678,47 @@ def exclude_files(files : array<string>; exclude : string) : tuple<kept : array<
         }
     }
     return <- (kept <- kept, dropped <- dropped)
+}
+
+//! --only: the files whose base name contains any comma-separated token, the rest dropped; "" keeps the whole list.
+//! Non-private: test_run_suites.das gates it
+def only_files(files : array<string>; only : string) : array<string> {
+    if (empty(only)) {
+        return <- clone_to_move(files)
+    }
+    let tokens <- csv_list(only)
+    var kept : array<string>
+    for (file in files) {
+        let name = base_name(file)
+        var hit = false
+        for (tok in tokens) {
+            hit ||= find(name, tok) >= 0
+        }
+        if (hit) {
+            kept |> push(file)
+        }
+    }
+    return <- kept
+}
+
+//! --shard i/n: the files at every n-th index from the (i - 1)-th of the list's order, which the
+//! planners sort, so the shards of one command partition its run and spread the costly
+//! neighbours. `why` names a form the flag refuses; "" takes the whole list. Non-private:
+//! test_run_suites.das gates it
+def shard_files(files : array<string>; shard : string) : tuple<kept : array<string>; why : string> {
+    if (empty(shard)) {
+        var whole := files
+        return <- (kept <- whole, why = "")
+    }
+    let parts <- split(shard, "/")
+    let i = length(parts) == 2 ? to_int(parts[0]) : 0
+    let n = length(parts) == 2 ? to_int(parts[1]) : 0
+    if (length(parts) != 2 || i < 1 || n < 1 || i > n || "{i}/{n}" != shard) {
+        var none : array<string>
+        return <- (kept <- none, why = "--shard '{shard}' is not i/n with 1 <= i <= n")
+    }
+    var kept <- [for (k in range(length(files))); files[k]; where k % n == i - 1]
+    return <- (kept <- kept, why = "")
 }
 
 // the trailing "N tests, ..." summary line of a dastest log ("" when the run died before
@@ -650,36 +869,72 @@ def select_areas(cfg : RunArgs) : tuple<status : int; areas : array<string>> {
         }
         want |> insert(a, null)
     }
-    if (cfg.changed) {
-        if (empty(git_lines("rev-parse --verify --quiet {cfg.base}"))) {   // a base git cannot resolve would read as "nothing changed"
-            to_log(LOG_ERROR, "--base '{cfg.base}' is not a commit git knows - fetch origin, or name another base\n")
-            return <- (status = 2, areas <- none)
-        }
-        for (p in changed_paths(cfg.base)) {
-            var inscope hit <- areas_for_path(p)
-            if (empty(hit)) {
-                if ((p |> replace("\\", "/")) |> starts_with("modules/dasLLAMA/")) {
-                    to_log(LOG_INFO, "CHANGED {p} -> a model suite file: run its suite with --arm scoped to the change\n")
-                }
-                continue
-            }
-            to_log(LOG_INFO, "CHANGED {p} -> {join(hit, ",")}\n")
-            for (a in hit) {
-                want |> insert(a, null)
-            }
-        }
-        if (empty(want)) {
-            to_log(LOG_INFO, "CHANGED nothing vs {cfg.base} reaches an area - nothing to run\n")
-            return <- (status = 0, areas <- none)
-        }
+    if (cfg.changed) {   //! the files are the reach plan's (`changed_plan`)
+        return <- (status = -1, areas <- none)
     }
     var areas <- [for (a in AREAS); a; where key_exists(want, a)]
     to_log(LOG_INFO, "AREAS {join(areas, ",")}\n")
     return <- (status = -1, areas <- areas)
 }
 
-//! a child's dastest timeout in seconds: the full gate, the stocked gate and --changed (the stocked files of the areas a
-//! change reaches) hold the large tier's tails - the parity file alone runs past 20 min there, the llama resident file's
+//! the --changed run: each changed path's reach (`reach_for_path`) on a CHANGED line, the small areas whole through
+//! `area_plan`, the llm files by name, the llm image arms when the core changed; `core` says the whole stocked set is
+//! owed before the PR. `status` >= 0 is main's exit code (a base git cannot resolve; a change that reaches nothing)
+def private changed_plan(cfg : RunArgs) : tuple<status : int; files : array<string>; image_arms : string; core : bool> {
+    var none : array<string>
+    if (empty(git_lines("rev-parse --verify --quiet {cfg.base}"))) {   // a base git cannot resolve would read as "nothing changed"
+        to_log(LOG_ERROR, "--base '{cfg.base}' is not a commit git knows - fetch origin, or name another base\n")
+        return <- (status = 2, files <- none, image_arms = "", core = false)
+    }
+    var picked, want : table<string; void?>
+    var core = false
+    for (p in changed_paths(cfg.base)) {
+        var inscope r <- reach_for_path(p)
+        to_log(LOG_INFO, "CHANGED {p} -> {describe_reach(r)}\n") if (!empty(r.files) || !empty(r.areas) || !empty(r.note))
+        for (f in r.files) {
+            picked |> insert("{TESTS_DIR}/{f}", null)
+        }
+        for (a in r.areas) {
+            want |> insert(a, null)
+        }
+        core ||= r.core
+    }
+    if (empty(picked) && empty(want)) {
+        to_log(LOG_INFO, "CHANGED nothing vs {cfg.base} reaches a test - nothing to run\n")
+        return <- (status = 0, files <- none, image_arms = "", core = false)
+    }
+    let areas <- [for (a in AREAS); a; where key_exists(want, a)]
+    let plan <- area_plan(areas)
+    for (f in plan.files) {
+        picked |> insert(f, null)
+    }
+    var arms <- csv_list(plan.image_arms)
+    if (core) {
+        arms |> push_from(csv_list(area_image_arms("llm")))
+    }
+    var files <- [for (f in keys(picked)); f; where base_name(f) != "test_model_image.das"]
+    sort(files)
+    if (!empty(arms)) {
+        files |> push("{TESTS_DIR}/test_model_image.das")
+    }
+    if (!empty(areas)) {
+        to_log(LOG_INFO, "AREAS {join(areas, ",")}\n")
+    }
+    to_log(LOG_INFO, "PLAN {length(files)} file(s){core ? " - the engine core changed, the whole stocked set is owed before the PR" : ""}\n")
+    return <- (status = -1, files <- files, image_arms = join(arms, ","), core = core)
+}
+
+//! a CHANGED line's tail: the files by name or the core, the areas run whole, or why nothing runs
+def private describe_reach(r : Reach) : string {
+    return r.note if (empty(r.files) && empty(r.areas))
+    let named = empty(r.files) ? "" : "{length(r.files)} file(s): {join(r.files, ", ")}"
+    let what = r.core ? "the engine core: every model-free llm file and the {length(LLM_CORE_WITNESSES)} core witnesses" : named
+    let sep = empty(what) ? "" : "; "
+    return empty(r.areas) ? what : "{what}{sep}areas {join(r.areas, ",")} whole"
+}
+
+//! a child's dastest timeout in seconds: the full gate, the stocked gate and --changed (the stocked files a change
+//! reaches) hold the large tier's tails - the parity file alone runs past 20 min there, the llama resident file's
 //! CPU chains past 1200 s on a cold JIT cache; 1200 s is the arm-mode budget
 def child_timeout(cfg : RunArgs) : int => (cfg.full || cfg.suite == "stocked" || cfg.changed) ? 3600 : 1200
 
@@ -728,6 +983,35 @@ struct RunTally {
     failed_tags : array<string>
 }
 
+//! the per-test cache folder of the run's binary, and the folders of earlier binaries removed when the run is
+//! on its own binary (a --das dry run keeps them); "" when the binary cannot be stat'd, and the children get
+//! no cache. A record serves a child's unchanged module prefix: the engine's compile (~90 s a file) becomes a
+//! read of a few seconds, so a re-run pays the test, not the parse. Non-private: test_run_suites.das gates it
+def child_cache_dir(das_exe : string; own_binary : bool) : string {
+    var st : FStat
+    if (!stat(das_exe, st)) {
+        return ""
+    }
+    let id = "{int64(st.size)}-{int64(st.mtime)}"
+    let dir = "{CHILD_CACHE_ROOT}/{id}"
+    mkdir_rec(dir)
+    if (own_binary) {
+        var dead : array<string>
+        fio::dir(CHILD_CACHE_ROOT) $(name) {
+            if (name != id && name != "." && name != "..") {
+                dead |> push(name)
+            }
+        }
+        for (name in dead) {
+            var why : string
+            rmdir_rec("{CHILD_CACHE_ROOT}/{name}", why)
+            let note = empty(why) ? "" : " - {why}"
+            to_log(LOG_INFO, "CACHE removed {CHILD_CACHE_ROOT}/{name} (an earlier binary's records){note}\n")
+        }
+    }
+    return dir
+}
+
 //! one dastest child per file, `--nreps` times. On an area run the image suite's child gets the
 //! areas' arms and every other child none; a suite run passes --arm through to every child
 def private run_files(cfg : RunArgs; files : array<string>; image_arms : string; area_run : bool) : RunTally {
@@ -739,13 +1023,16 @@ def private run_files(cfg : RunArgs; files : array<string>; image_arms : string;
     let reps = max(cfg.nreps, 1)
     let das_exe = empty(cfg.das) ? get_command_line_arguments()[0] : cfg.das
     mkdir(dir_name(MODULE_CACHE))
+    let cache_dir = child_cache_dir(das_exe, empty(cfg.das))
+    let cache_flag = empty(cache_dir) ? "" : " --module-cache-dir {cache_dir}"
+    to_log(LOG_INFO, empty(cache_dir) ? "CACHE none - the binary could not be stat'd, every child parses the engine\n" : "CACHE {cache_dir}\n")
     var tally : RunTally
     for (rep in range(reps)) {
         for (file in files) {
             let tag = base_name(file)
             let log_path = path_join(tmp, "dasllama_run_{tag}_{rep}_{ref_time_ticks()}.log")
             let file_envs = (area_run && tag == "test_model_image.das") ? image_envs : envs
-            let cmd = "{file_envs}\"{das_exe}\" -jit -module-cache {MODULE_CACHE} dastest/dastest.das -- --test \"{file}\" --timeout {tmo} > \"{log_path}\" 2>&1"
+            let cmd = "{file_envs}\"{das_exe}\" -jit -module-cache {MODULE_CACHE} dastest/dastest.das -- --test \"{file}\" --timeout {tmo}{cache_flag} > \"{log_path}\" 2>&1"
             let rep_tag = reps > 1 ? " rep {rep + 1}/{reps}" : ""
             to_log(LOG_INFO, "START {tag}{rep_tag}: {cmd}\n")
             let t0 = ref_time_ticks()
@@ -767,18 +1054,31 @@ def private run_files(cfg : RunArgs; files : array<string>; image_arms : string;
 }
 
 //! the run tells the next step itself: what ran, what a missing model skipped, what is still owed
-def private print_report(cfg : RunArgs; areas : array<string>; n_files, n_excluded : int; tally : RunTally) {
-    let scope = !empty(areas) ? "areas {join(areas, ",")}" : "suite {cfg.suite}"
+def private print_report(cfg : RunArgs; areas : array<string>; n_files, n_excluded : int; tally : RunTally; core : bool) {
+    let scope = ((cfg.changed ? "changed vs {cfg.base}" : (!empty(areas) ? "areas {join(areas, ",")}" : "suite {cfg.suite}"))
+        + (empty(cfg.only) ? "" : " only {cfg.only}") + (empty(cfg.shard) ? "" : " shard {cfg.shard}"))
     let failed_list = empty(tally.failed_tags) ? "" : " ({join(tally.failed_tags, ", ")})"
     let excluded = n_excluded == 0 ? "" : ", {n_excluded} file(s) excluded"
     to_log(tally.failures == 0 ? LOG_INFO : LOG_ERROR, "REPORT {scope}: {n_files} file(s), {tally.failures} failed{failed_list}, {tally.skipped} cell(s) skipped (a filtered arm, an absent device, or a missing model or fixture - each skips loudly){excluded}\n")
-    if (!empty(areas)) {
+    if (!empty(cfg.shard)) {
+        let n = to_int(split(cfg.shard, "/")[1])
+        let others <- [for (k in range(n)); "{k + 1}/{n}"; where "{k + 1}/{n}" != cfg.shard]
+        if (!empty(others)) {
+            to_log(LOG_INFO, "NEXT the run's other shard(s), each on its own box, with the same command: --shard {join(others, ", --shard ")}\n")
+        }
+    }
+    if (cfg.changed) {
+        if (core) {
+            to_log(LOG_INFO, "NEXT the engine core changed: the whole stocked set before the PR - run.das -- --suite stocked, sharded over the fleet (harness/pod_fleet.das)\n")
+            to_log(LOG_INFO, "NEXT the model suites (decode | prefill | matrix) take --arm scoped to the change: run.das -- --arm <arms> --suite <name>\n")
+        }
+    } elif (!empty(areas)) {
         if (find_index(areas, "llm") >= 0) {
             to_log(LOG_INFO, "NEXT the model suites (decode | prefill | matrix) take --arm scoped to the change: run.das -- --arm <arms> --suite <name>\n")
         }
         to_log(LOG_INFO, "NEXT before the PR: run.das -- --suite model-free, then this --changed run on a box with models\n")
     } elif (cfg.suite == "model-free") {
-        to_log(LOG_INFO, "NEXT before the PR: run.das -- --changed on a box with models (the stocked files of the areas the change reaches)\n")
+        to_log(LOG_INFO, "NEXT before the PR: run.das -- --changed on a box with models (the files the changed paths reach)\n")
     }
 }
 
@@ -805,17 +1105,27 @@ def main() : int {
         return sel.status
     }
     let areas <- sel.areas
-    let suite_rc = empty(areas) ? check_suite_args(cfg) : 0
+    let suite_rc = (empty(areas) && !cfg.changed) ? check_suite_args(cfg) : 0
     if (suite_rc != 0) {
         return suite_rc
     }
-    let plan <- plan_files(cfg, areas)
+    var plan <- plan_files(cfg, areas)
+    var core = false
+    if (cfg.changed) {
+        var changed <- changed_plan(cfg)
+        if (changed.status >= 0) {
+            return changed.status
+        }
+        plan.files <- changed.files
+        plan.image_arms = changed.image_arms
+        core = changed.core
+    }
     if (empty(plan.files)) {
         to_log(LOG_ERROR, "unknown --suite '{cfg.suite}' (decode | mtp | prefill | matrix | kernels | image | image-vulkan | coverage | model-free | stocked | all)\n")
         return 2
     }
-    if (cfg.no_tune && !empty(plan.image_arms) && !empty(areas)) {   //! an area's image arms ride the image rail --no-tune turns off
-        to_log(LOG_ERROR, "--no-tune sets DASLLAMA_IMAGE=0 in every child, and areas {join(areas, ",")} own the image arms {plan.image_arms} - drop --no-tune, or run those arms through --suite image --arm\n")
+    if (cfg.no_tune && !empty(plan.image_arms) && (!empty(areas) || cfg.changed)) {   //! an area's image arms ride the image rail --no-tune turns off
+        to_log(LOG_ERROR, "--no-tune sets DASLLAMA_IMAGE=0 in every child, and the run owns the image arms {plan.image_arms} - drop --no-tune, or run those arms through --suite image --arm\n")
         return 2
     }
     var split <- exclude_files(plan.files, cfg.exclude)
@@ -826,7 +1136,29 @@ def main() : int {
         to_log(LOG_ERROR, "--exclude '{cfg.exclude}' dropped every file of the run\n")
         return 2
     }
-    let tally <- run_files(cfg, split.kept, plan.image_arms, !empty(areas))
-    print_report(cfg, areas, length(split.kept), length(split.dropped), tally)
+    let only <- only_files(split.kept, cfg.only)
+    if (!empty(cfg.only)) {
+        for (file in only) {
+            to_log(LOG_INFO, "ONLY {base_name(file)} (--only {cfg.only})\n")
+        }
+        if (empty(only)) {
+            to_log(LOG_ERROR, "--only '{cfg.only}' keeps no file of the run's {length(split.kept)}\n")
+            return 2
+        }
+    }
+    let shard <- shard_files(only, cfg.shard)
+    if (!empty(shard.why)) {
+        to_log(LOG_ERROR, "{shard.why}\n")
+        return 2
+    }
+    if (!empty(cfg.shard)) {
+        to_log(LOG_INFO, "SHARD {cfg.shard}: {length(shard.kept)} of {length(only)} file(s)\n")
+    }
+    if (empty(shard.kept)) {
+        to_log(LOG_ERROR, "--shard {cfg.shard} holds no file of this run's {length(only)}\n")
+        return 2
+    }
+    let tally <- run_files(cfg, shard.kept, plan.image_arms, !empty(areas) || cfg.changed)
+    print_report(cfg, areas, length(shard.kept), length(split.dropped), tally, core)
     return tally.failures
 }
