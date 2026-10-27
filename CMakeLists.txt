@@ -2076,10 +2076,9 @@ install(DIRECTORY ${PROJECT_SOURCE_DIR}/utils/mcp/tests/
 # definition/references/hover/symbols/call hierarchy/implementation).
 #   the endpoint is `watchdog --lsp` (utils/watchdog/lsp_front.das, in the static exe)
 #   subtools/*.das — stateless spawn-per-request batch tools
-# The .claude/skills manifest auto-loads the plugin for Claude Code sessions
-# started at the install root; utils/lsp/plugin serves explicit --plugin-dir
-# registration from anywhere else. Same relative layout as the repo, so both
-# manifests work unchanged.
+# The plugin is opt-in: utils/lsp/plugin serves explicit --plugin-dir
+# registration (no manifest auto-loads it). Same relative layout as the repo,
+# so the manifest works unchanged.
 install(FILES
     ${PROJECT_SOURCE_DIR}/utils/lsp/README.md
     DESTINATION utils/lsp
@@ -2090,13 +2089,8 @@ install(FILES ${PROJECT_SOURCE_DIR}/utils/lsp/plugin/.claude-plugin/plugin.json
     DESTINATION utils/lsp/plugin/.claude-plugin
 )
 # prefix-root pinned (NOT ${DAS_INSTALL_DOCDIR}, which packagers may redirect):
-# auto-load needs the manifest at the root a session starts in, and its args
-# hop ../../../utils/lsp relative to this exact depth
-install(FILES ${PROJECT_SOURCE_DIR}/.claude/skills/daslang-lsp/.claude-plugin/plugin.json
-    DESTINATION .claude/skills/daslang-lsp/.claude-plugin
-)
-# Same prefix-root rationale: an agent session started at the SDK root picks up
-# the language skill and the dragon rule-document auditor with no configuration.
+# an agent session started at the SDK root picks up the language skill and the
+# dragon rule-document auditor with no configuration.
 install(DIRECTORY ${PROJECT_SOURCE_DIR}/skills/daslang/
     DESTINATION .claude/skills/daslang
     FILES_MATCHING

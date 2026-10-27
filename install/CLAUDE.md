@@ -230,4 +230,4 @@ For path/filename ops use `fio` helpers (`base_name`/`dir_name`/`path_join`/...)
 
 ## LSP Server (Push Diagnostics + Navigation)
 
-`utils/lsp/` is a language server for `.das`: the compiler and lint report after **every** edit with no explicit tool call, plus definition / references / hover / document & workspace symbols / call hierarchy / go-to-implementation. Claude Code sessions started at the SDK root load it automatically (shipped `.claude/skills/daslang-lsp/` manifest); elsewhere use `claude --plugin-dir <sdk-root>/utils/lsp/plugin`. Configuration (compiler override, `project_root` for native modules, `.das_project`): `utils/lsp/README.md`.
+`utils/lsp/` is a language server for `.das`: the compiler and lint report after **every** edit with no explicit tool call, plus definition / references / hover / document & workspace symbols / call hierarchy / go-to-implementation. It is opt-in (every validate spawns a compiler child after an edit): `claude --plugin-dir <sdk-root>/utils/lsp/plugin`. Configuration (compiler override, `project_root` for native modules, `.das_project`): `utils/lsp/README.md`.

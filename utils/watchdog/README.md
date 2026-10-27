@@ -213,7 +213,7 @@ directory the client started the watchdog in - the project root. `utils/mcp/setu
 ## Serving an LSP client
 
 `--lsp` makes the watchdog the daslang language server: an LSP client (Claude Code through the
-`.claude/skills/daslang-lsp` plugin manifest, or any stdio editor) spawns `bin/watchdog --lsp`,
+`utils/lsp/plugin` manifest under `--plugin-dir`, or any stdio editor) spawns `bin/watchdog --lsp`,
 and every request runs one short daslang process - `utils/lsp/subtools/validate.das` or
 `nav.das` - with the client's unsaved buffer along as an `--overlay` file. The front owns the
 framing, the `initialize` handshake, the `{uri -> text}` document shadow, a 100 ms validate

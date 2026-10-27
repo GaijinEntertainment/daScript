@@ -117,10 +117,9 @@ native definition / references / hover / symbols / call hierarchy /
 implementation navigation.  It needs only the daslang binary and
 Python 3.
 
-Claude Code sessions started at the repository root (or an installed
-SDK root) load it automatically via the checked-in
-``.claude/skills/daslang-lsp/`` plugin manifest.  From any other
-directory::
+It is opt-in --- every validate spawns a compiler child after an edit,
+which slows a session that edits large files.  Register it at launch
+when you want it::
 
    claude --plugin-dir /abs/path/to/daScript/utils/lsp/plugin
 
