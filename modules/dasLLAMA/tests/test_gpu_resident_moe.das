@@ -7,6 +7,9 @@ require dastest/testing_boost public
 require dasllama/dasllama_kv_dtype   // KVDtype: the block-codec cells' mirror ask
 require _moe_resident
 require dasllama/dasllama_math   // with_dasllama_jobque_ (the engine-standard jobque config)
+require dasllama/dasllama_common   // kv_codec_for: the serving rule the biased twin's tq4 ask meets
+require dasllama/dasllama   // moe_gpu_drop_model
+require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active
 
 // The whole-model resident driver on a MoE (Qwen1.5-MoE-A2.7B-Chat-Q4_K_M-local, the Q4_K_M mint of
 // the Q8_0 carrier, under DASLLAMA_GPU=1): the expert stacks in the arena beside the attention
@@ -19,7 +22,8 @@ require dasllama/dasllama_math   // with_dasllama_jobque_ (the engine-standard j
 // residual step's add partner off); the two UD-IQ2_XXS fixtures and the Q4_K_M host-layer fixture each hold the format census
 // first - every site the file carries read in its own format. Qwen3-Coder-Next (512 experts) holds the device select past
 // 256 experts beside the host-layer split. All the fixtures are large-tier (DASLLAMA_PARITY_FULL=1); the
-// file is -jit only, and skips without the file or the armed tier; the driver's admission of every fixture is asserted,
+// file is -jit only, and skips without the file or the armed tier; the twin's tq4 serving-rule cell also skips under
+// DASLLAMA_VK_KV32=1, which arms the f32 mirror over the codec asked; the driver's admission of every fixture is asserted,
 // never skipped - on a device with neither the cm2 tile family nor KHR cooperative matrices at subgroup 32 (or under
 // DASLLAMA_COOPMAT=sdot4) the expert pieces ride the Q8-fed chain's batch tiles.
 
@@ -75,10 +79,9 @@ def test_gpu_perop_moe_heat(t : T?) {
     }
 }
 
-//! the twin under tq4: the device's summed distance from the f16 chain reads 1.06 of the CPU tq4 chain's own (14.7 against
-//! 13.9, the f16 rows one step off 5.0 times it) and the two tq4 chains 1.11 of it apart (the CPU tq4 rows one step off 5.0):
-//! the router's near-ties part two tq4 chains as far as tq4 parts either from f16. In the forced-feed form the same rows read
-//! 1.4-1.9 against bars of 2.1-2.3
+//! the tq4 distance bars on the 30B (the twin's Q/K/V bias steps a tq4 ask down to q8_0, so it carries the serving-rule cell
+//! instead): the device's summed distance from the f16 chain within 1.15 of the CPU tq4 chain's own, and the two tq4 chains
+//! within 1.4 of it apart - the router's near-ties part two tq4 chains as far as tq4 parts either from f16
 let private MOE_CODEC_DIST_REL = 1.15
 let private MOE_CODEC_PAIR_REL = 1.4
 
@@ -89,9 +92,24 @@ def test_gpu_resident_moe_block_codecs(t : T?) {
             moe_forced_feed(t, 40l, TWIN)
         }
     }
-    t |> run("Qwen1.5-MoE-A2.7B-Q4_K_M: the routed chain over a tq4 mirror - the device, the CPU tq4 chain and the CPU f16 chain over one prompt, the distances held as ratios") @(t : T?) {
+    t |> run("Qwen1.5-MoE-A2.7B-Q4_K_M: a tq4 ask serves at q8_0 - the twin's Q/K/V bias steps the mirror down by the serving rule") @(t : T?) {
+        let path = path_join(models_dir(), TWIN.file)
+        return if (!resident_ready(t, path))
+        var tr <- load_resident_at(path, KVDtype.tq4)
+        if (mirror_kv_dtype() == KVDtype.f32) {
+            t |> skip("DASLLAMA_VK_KV32=1 arms the f32 mirror over the codec asked - the cell needs it unset")
+        } else {
+            t |> success(tr.config.attn_qkv_bias, "the twin's attention carries a Q/K/V bias")
+            t |> success(moe_gpu_resident_active(), "the whole-model driver armed (the load log names any decline)")
+            t |> equal(mirror_kv_dtype(), KVDtype.q8_0, "the tq4 ask armed the q8_0 mirror by the serving rule")
+            t |> equal(kv_codec_for(tr.config, KVDtype.tq4), KVDtype.q8_0, "and a session's codec steps down the same way")
+        }
+        moe_gpu_drop_model()
+        delete tr
+    }
+    t |> run("Qwen3-30B-A3B-UD-IQ2_XXS: the routed chain over a tq4 mirror - the device, the CPU tq4 chain and the CPU f16 chain over one prompt, the distances held as ratios") @(t : T?) {
         with_gpu_kv_dtype(t, KVDtype.tq4) {
-            moe_codec_distance(t, 40l, TWIN, KVDtype.tq4, MOE_CODEC_DIST_REL, MOE_CODEC_PAIR_REL)
+            moe_codec_distance(t, 40l, NO_SHEXP, KVDtype.tq4, MOE_CODEC_DIST_REL, MOE_CODEC_PAIR_REL)
         }
     }
 }

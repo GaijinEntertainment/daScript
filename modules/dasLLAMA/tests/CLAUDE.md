@@ -1820,11 +1820,14 @@ through the unset seat that brings the draft's K row down (the host row moved), 
 with the draft and the verify on the device (their counters, every call served, no pick asked so
 every row's logits land and no pick is published), its two verify rows - the token and the draft -
 against two one-row resident steps of the same tokens on a fresh session: each row's logits and
-post-norm hidden bit for bit the step's, the argmax both sides read logged, the other row's step
-as the control; every row's device pick the argmax of its landed logits, the region's rows at the
+post-norm hidden within twice the deltanet bar of the step's (the verify rows ride the N-row
+command's tiles, the step the GEMVs, and the two part by the tiles' rounding on a card), the
+argmax the same on both sides, the other row's step as the control past the bar; every row's
+device pick the argmax of its landed logits, the region's rows at the
 session's position (two past the prompt on an accept, one on a reject), the head's rows staying on
 the device (the host's count below the draft's row again) until the next pass brings them down,
-and the re-warm's K row at the prompt's last row bit for bit the draft command's.
+and the re-warm's K row at the prompt's last row the draft command's but for a hundredth of its
+bytes (a quant on a rounding edge).
 `test_gpu_resident_hybrid_mtp_verify_asked` runs six rounds under the caller's pick ask on one
 session and six with the logits landing on another from the same prompt - every round's draft,
 accept, position and the token `sample_` takes next (the published pick, or the landed row's
@@ -2761,12 +2764,14 @@ pins read first and put back after the load), asserting the armed region holds e
 and experts yielded to it. The census witnesses count the device's routed blocks (the layers less the
 host ones), and the unsplit-twin witness is skipped under host layers (the split command records the
 split form alone). `test_gpu_resident_moe_host_layers_short_window` holds a two-token prompt on the host-layers fixture to the window chain (the peel declines routed experts on the host). `test_gpu_resident_moe_block_codecs` runs the twin at one window with the
-mirror asked at a block codec (`with_gpu_kv_dtype`; the rig asserts the mirror armed at the codec
-asked): under q8_0 the forced-feed cell on q8_0 sessions at the same 20% bar (reads 0.83-1.17
-against bars of 2.1-2.3, the f16 mirror's own reading), under tq4 the codec rig's distance form
-(`moe_codec_distance` over `codec_distance_over`) - the device's summed distance from the f16
-chain within 1.15 of the CPU tq4 chain's own (reads 1.06, the control 5.0) and the two tq4 chains
-within 1.4 of that distance of each other (reads 1.11, the control 5.0).
+mirror asked at q8_0 (`with_gpu_kv_dtype`; the rig asserts the mirror armed at the codec
+asked): the forced-feed cell on q8_0 sessions at the same 20% bar (reads 0.83-1.17
+against bars of 2.1-2.3, the f16 mirror's own reading); the twin's serving-rule cell - its attention carries a Q/K/V
+bias, so a tq4 ask arms the q8_0 mirror and a session's codec (`kv_codec_for`) steps down the same way, the driver
+armed (it skips under `DASLLAMA_VK_KV32=1`, which arms the f32 mirror over the codec asked); and the tq4 leg on
+Qwen3-30B-A3B UD-IQ2_XXS in the codec rig's distance form (`moe_codec_distance` over `codec_distance_over`) - the
+device's summed distance from the f16 chain within 1.15 of the CPU tq4 chain's own and the two tq4 chains within 1.4 of
+that distance of each other (the router's near-ties part two tq4 chains as far as tq4 parts either from f16).
 `test_gpu_resident_moe_host_rows.das` - stocked suite, `-jit` only, `DASLLAMA_GPU=1`, large tier; the host-layers form's K/V
 mirror on Qwen3-30B-A3B Q4_K_M at 32768 positions asked whole (the first routed layers' experts on the host, the window chain cut
 at them): layer 0's stored rows after a 40-token prompt and the fed steps against the CPU cache's through the codec rig's
@@ -2813,7 +2818,10 @@ and two; the e-column witness counts the mx4 stamps beside the kq, q8 and q51 on
 `test_gpu_perop_gptoss` places every routed layer's mx4 stacks under the biased clamped swiglu and holds a 40-token window
 and six fed steps against the CPU chain; `test_gpu_perop_gptoss_heat` runs `_moe_resident.das`' heat cell
 (`moe_perop_heat_cell`: the last twelve routed layers placed, the rest streamed under eight hot slots a layer, 80 fed
-steps past the pool's re-pin interval, the pool's hits counted by `heat_totals`) against the CPU chain at the same bar.
+steps past the pool's re-pin interval, the pool's hits counted by `heat_totals`) against the CPU chain at the routed
+block's bar (`MOE_LOGIT_BAR_REL`, 0.20; the file's other cells hold 0.05) - over 80 steps a router near-tie flips, as
+the two-window prompt's first fed step does on the RTX PRO 4500 (0.458 against the 5% bar's 0.341, the argmax intact), so
+the resident two-window cell holds the routed block's bar too.
 `test_gpu_perop_moe_heat` (`test_gpu_resident_moe.das`) runs the same cell on Qwen3.6-35B-A3B-MTP-IQ4_XS-pure, twenty
 layers placed and sixteen slots, and holds every routed layer's shared expert on the device after the routed chain or
 the pool's hits every step (`shexp_gpu_after_rows`), none overlapped and none on the three dense GEMMs; its second
@@ -2837,9 +2845,9 @@ attention layer of the carrier. The cells are `cell_perop_codec` of `_kv_codec_c
 `test_gpu_perop_kv_codec_k.das` and `test_gpu_perop_kv_codec_iq.das` run the tq4 and q8_0 cells at
 40 tokens on the other two weight formats - Qwen3-4B-Instruct Q4_K_M and Qwen2.5-1.5B-Instruct
 IQ3_XS - on the same skips and bars (the device's distance reads 0.28 and 0.80 of the CPU codec
-chain's on the 4B, 0.79 under q8_0 on the 1.5B), but for the 1.5B's tq4 cell: tq4 moves that
-carrier's CPU chain nine points a row, near the distance of rows one step off, so its bar is half
-the CPU codec chain's distance (the device reads 0.11 of it, the control 0.84).
+chain's on the 4B, 0.79 under q8_0 on the 1.5B); the 1.5B carries a Q/K/V bias, so its tq4 cell is
+the serving rule's: the ask serves at q8_0 on both chains and the cell holds the q8_0 bars (the
+device reads 0.82 of the CPU codec chain's distance).
 `test_gpu_moe_shexp.das` - stocked suite, `-jit` only; the shared expert's prefill on the device
 (Qwen1.5-MoE-A2.7B-Chat-Q4_K_M-local, the Q4_K_M mint of the Q8_0 carrier, `DASLLAMA_GPU=1`): the
 shexp triple as one region over every position of the routed experts' chain, gated by the tier's

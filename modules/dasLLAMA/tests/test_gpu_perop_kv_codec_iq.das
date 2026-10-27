@@ -24,14 +24,12 @@ let private CARRIER = "Qwen2.5-1.5B-Instruct-IQ3_XS.gguf"
 //! the device's summed distance from the f16 chain, as a ratio of the CPU codec chain's own: reads 0.79 (8.6 against 11.0), the
 //! f16 rows one step off 6.2 times it
 let private Q8_BARS = PeropBars(rows = 0.05, dist_rel = 1.0)
-//! tq4 moves this carrier's CPU chain nine points a row (80.6 summed), near the 67.8 of rows one step off, so the bar is half
-//! the CPU codec chain's distance: the device reads 0.11 of it (its block attends its own float rows), the control 0.84 of it
-let private TQ4_BARS = PeropBars(rows = 0.05, dist_rel = 0.5)
-
+//! the serving rule on the biased carrier: a tq4 ask serves at q8_0 on both chains (the carrier's K bias outliers would set
+//! every 4-bit block's scale), so the session holds the q8_0 bars, and the cache's rows are the CPU's q8_0 rows
 [test]
 def test_gpu_perop_iq_tq4(t : T?) {
-    t |> run("Qwen2.5-1.5B IQ3_XS on the per-op rails, a tq4 session: the device prefill's rows and the steps' rows land rotated in the cache") @(t : T?) {
-        cell_perop_codec(t, CARRIER, 40l, KVDtype.tq4, TQ4_BARS)
+    t |> run("Qwen2.5-1.5B IQ3_XS on the per-op rails, a tq4 ask serving at q8_0 by the serving rule: the device prefill and the steps over the block's f16 mirror") @(t : T?) {
+        cell_perop_codec(t, CARRIER, 40l, KVDtype.tq4, Q8_BARS)
     }
 }
 

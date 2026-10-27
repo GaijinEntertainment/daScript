@@ -54,8 +54,12 @@ let private ROWS_BARS = StoredRowsBars(k = 0.02, v_step = 0.05, v_prefill_of_ctr
 let private CODEC_PAIR_REL_TQ4 = 1.0
 let private ROWS_BARS_TQ4 = StoredRowsBars(k = 0.08, v_step = 0.05, v_prefill_of_ctrl = 0.6)
 
+//! the iq4nl32 carrier's bar: its dense planes serve off the per-32 planes, the window's GEMMs on the s tile's f16 feed, and the
+//! 0.5B's rows read 0.69 of a 10.9 max logit on the RTX PRO 4500 (0.063), past the file's 0.06
+let private IQ4NL32_BAR_REL = 0.08
+
 [cold_path]
-def private qwen2_forced_feed(t : T?; n : int64; file : string = CARRIER; dense : KqFmt = KqFmt.q8) {
+def private qwen2_forced_feed(t : T?; n : int64; file : string = CARRIER; dense : KqFmt = KqFmt.q8; bar : float = LOGIT_BAR_REL) {
     let path = path_join(models_dir(), file)
     if (!resident_ready(t, path)) return
     var tr <- load_resident(path)   //! the window pinned for the load: unpinned, the driver's own pick outlives the cell and sizes every later plan
@@ -65,7 +69,7 @@ def private qwen2_forced_feed(t : T?; n : int64; file : string = CARRIER; dense 
         dense_planes_tagged(t, tr, path, dense)
     }
     with_dasllama_jobque_() {
-        forced_feed_over(t, tr, "{file} ", n, 8l, LOGIT_BAR_REL) $ {
+        forced_feed_over(t, tr, "{file} ", n, 8l, bar) $ {
             served_every_call(t)
         }
     }
@@ -91,11 +95,11 @@ def test_gpu_resident_qwen2_bias(t : T?) {
 def test_gpu_resident_qwen2_iq4nl32(t : T?) {
     let file = "Qwen2.5-0.5B-Instruct-IQ4_NL-local.gguf"
     t |> run("{file}: the dense iq4nl32 planes, resident prefill + decode vs the CPU chain, one window") @(t : T?) {
-        qwen2_forced_feed(t, 40l, file, KqFmt.iq4nl32)
+        qwen2_forced_feed(t, 40l, file, KqFmt.iq4nl32, IQ4NL32_BAR_REL)
     }
     t |> run("{file}: the same across two windows") @(t : T?) {
         assert_pf_window(t)
-        qwen2_forced_feed(t, PF_WINDOW_ROWS + 88l, file, KqFmt.iq4nl32)
+        qwen2_forced_feed(t, PF_WINDOW_ROWS + 88l, file, KqFmt.iq4nl32, IQ4NL32_BAR_REL)
     }
 }
 

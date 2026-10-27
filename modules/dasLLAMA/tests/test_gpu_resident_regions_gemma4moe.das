@@ -19,12 +19,12 @@ let private REGIONS_FILE = "gemma-4-26B-A4B-it-Q4_K_M.gguf"
 
 [test]
 def test_regions_batched_steps_g4moe(t : T?) {
-    cell_regions_batched_steps_split_forms(t, REGIONS_FILE, LogitsBar.wide_bar)
+    cell_regions_batched_steps_split_forms(t, REGIONS_FILE, LogitsBar.ctrl_bar)
 }
 
 [test]
 def test_regions_batched_down_fold_g4moe(t : T?) {
-    cell_regions_batched_down_fold(t, REGIONS_FILE, LogitsBar.wide_bar)
+    cell_regions_batched_down_fold(t, REGIONS_FILE, LogitsBar.ctrl_bar)
 }
 
 [test]
@@ -34,5 +34,5 @@ def test_regions_batched_embed_gather_g4moe(t : T?) {
 
 [test]
 def test_regions_batched_widen_g4moe(t : T?) {
-    cell_regions_batched_widen(t, REGIONS_FILE, LogitsBar.wide_bar, split_forms = true)
+    cell_regions_batched_widen(t, REGIONS_FILE, LogitsBar.ctrl_bar, split_forms = true)
 }
