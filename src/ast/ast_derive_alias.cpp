@@ -493,6 +493,16 @@ namespace das {
                 }
                 // we never get invoke(@@....,....) because its converted into a call
                 // we can analyze functions by signature, and collect all global variables referenced by matching functions
+                if ( anyGlobals && program->thisModule->isModule ) {
+                    if ( checkAliasing ) {
+                        program->error("invoke result potentially aliases a global through a function of a module that requires this one",
+                            "some form of ... global ... = invoke( ... ) in a module", "",
+                                expr->at, CompilationError::invalid_argument_global);
+                    } else {
+                        expr->cmresAlias = true;
+                    }
+                    return;
+                }
                 if ( anyGlobals) {
                     IndirectSources globSrc;
                     if ( argT->isGoodFunctionType() ) {
