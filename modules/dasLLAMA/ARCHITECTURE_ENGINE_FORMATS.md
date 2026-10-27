@@ -77,11 +77,11 @@ anchor.
 - **`dasllama_unicode.das`** - the codepoint tables (RANGES, WS) and the UTF-8 codepoint helpers over
   a `string` the tokenizers and the TTS front end share: classification, `cpt_count`, the
   decode/encode of one codepoint.
-- **`dasllama_spm.das`** - the SentencePiece backend: score-greedy merges over vocab pieces (Llama-2, Phi-3, Gemma),
-  the unigram Viterbi arm over the same pieces (`unigram_encode`, GGUF `"t5"`, `ARCHITECTURE_POCKET.md#pocket-tts`'s tokenizer), `<0xXX>` byte fallback.
-  A byte piece is found by its NAME (`byte_piece_id`, one of the derived tables), never by arithmetic on
-  the byte: Llama-2 and Phi-3 keep the byte pieces at 3 + the byte, Mistral v0.3 after its 768
-  control tokens, and a vocabulary with no piece for a byte it must spell panics, as the reference throws.
+- **`dasllama_spm.das`** - the SentencePiece backend: score-greedy merges over vocab pieces (Llama-2, Phi-3, Gemma), the unigram Viterbi arm
+  over the same pieces (`unigram_encode`, GGUF `"t5"`, `ARCHITECTURE_POCKET.md#pocket-tts`'s tokenizer), `<0xXX>` byte fallback, and the
+  model-file reader with its charsmap normalizer (`load_spm_model_file`, `ARCHITECTURE_TRANSLATE.md#nmt-charter`). A byte piece is found by
+  its NAME (`byte_piece_id`, one of the derived tables), never by arithmetic on the byte: Llama-2 and Phi-3 keep the byte pieces at 3 + the
+  byte, Mistral v0.3 after its 768 control tokens, and a vocabulary with no piece for a byte it must spell panics, as the reference throws.
 - **`dasllama_bpe.das`** - the byte-level BPE backend (Llama-3 / tiktoken family): vocab load, the
   GPT-2 byte alphabet, ranked merges, encode/decode. Split from SPM because the two algorithms
   share no state (their twin merge heaps are `ARCHITECTURE_ENGINE_FORMATS.md#bpe-merge-heap`'s); a third merge algorithm gets a fourth file. Two sanctioned family-name tests

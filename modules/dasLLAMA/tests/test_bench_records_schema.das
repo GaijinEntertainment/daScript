@@ -516,6 +516,21 @@ def test_mtmd_versions_bin_param(t : T?) {
 }
 
 [test]
+def test_marian_reference_stamp(t : T?) {
+    t |> run("the translation reference: the patched decoder under the checkout's inference build, its stamp the commit and both patches' hashes") @(tt : T?) {
+        let bin = marian_bin()
+        tt |> success(find(bin, "{marian_root()}/inference/build") == 0 && find(bin, "marian-decoder") >= 0, "the decoder under the checkout's inference build: {bin}")
+        let v = marian_versions()
+        if (!stat("{marian_root()}/.git").is_valid) {
+            tt |> equal(v, "", "no checkout stamps nothing")
+        } else {
+            tt |> success(starts_with(v, "Mozilla translations @ "), "the stamp names the checkout: {v}")
+            tt |> success(find(v, "marian-oracle.patch@") >= 0 && find(v, "marian-sentencepiece.patch@") >= 0, "both patches stamped by their hash: {v}")
+        }
+    }
+}
+
+[test]
 def test_image_ref_flag_invariants(t : T?) {
     t |> run("every committed llama.cpp image row's flags match its backend/flavor stamp") @(t : T?) {
         // the exact defect this gate pins: a stock -ngl 0 run without --no-mmproj-offload

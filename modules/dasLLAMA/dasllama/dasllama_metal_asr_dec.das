@@ -185,18 +185,6 @@ def metal_wdec_shutdown {
 def private metal_wdec_init : bool =>
     !g_wd_failed && metal_common_init() && metal_prefill_pso_init() && g_pso_wdec_kv != null && g_pso_wdec_kv_h != null
 
-// one region of the 34B-blob build: `off` is the SOURCE element offset in the dq planes; the
-// destination is the 16B-aligned cursor, recorded and advanced
-def private wd_region(w : WhisperModel; off, n, rows : int64; rep : bool; mr, kgroup, wbias : int64;
-                      var staging : array<uint8>; var cur : uint64&) : uint64 {
-    cur = (cur + 15ul) & ~15ul
-    let at = cur
-    q8_region_to_metal_blob(plane_at(w.dqblob, off), plane_at(w.dqscales, off / 32l),
-        n, rows, rep, mr, kgroup, wbias, unsafe(addr(staging[int64(cur)])))
-    cur += uint64((rows * n / 32l) * 34l)
-    return at
-}
-
 // Upload the decoder weights once: walk every dq region (te + 10 mats/layer, each its own
 // repack unit) through the 34B transform into one GPU blob at driver-chosen aligned
 // destinations. ~1.1x the dq plane, one-time.
@@ -216,7 +204,7 @@ def private wdec_attach(w : WhisperModel) : bool {
     // PURE read (the resident rail's form): re-running selection here desyncs from the load-time repack
     let lay = active_q8_repack_layout(kernel_backend_needs_repack(active_kernel_backend()))
     var cur = 0ul
-    g_wd_te_boff = wd_region(w, w.d_te_q_off, d, w.n_vocab, lay.repacked, lay.mr, lay.kgroup, lay.wbias, staging, cur)
+    g_wd_te_boff = q8_region_append(w.dqblob, w.dqscales, w.d_te_q_off, d, w.n_vocab, lay, staging, cur)
     let te_pad = (g_wd_nvpad - w.n_vocab) * (d / 32l) * 34l
     for (i in range64(te_pad)) {   // zero rows: the prompt-batch GEMM's floor-tiling needs them, their logits go unread
         staging[int64(cur) + i] = 0u8
@@ -227,11 +215,11 @@ def private wdec_attach(w : WhisperModel) : bool {
         let lo = dec_layer_offsets(w, l)
         var mi = 0l
         for (woff in [lo.q_w, lo.k_w, lo.v_w, lo.o_w, lo.cq_w, lo.ck_w, lo.cv_w, lo.co_w]) {
-            g_wd_boffs[l * WD_MATS + mi] = wd_region(w, woff, d, d, lay.repacked, lay.mr, lay.kgroup, lay.wbias, staging, cur)
+            g_wd_boffs[l * WD_MATS + mi] = q8_region_append(w.dqblob, w.dqscales, woff, d, d, lay, staging, cur)
             mi++
         }
-        g_wd_boffs[l * WD_MATS + 8l] = wd_region(w, lo.fc1_w, d, 4l * d, lay.repacked, lay.mr, lay.kgroup, lay.wbias, staging, cur)
-        g_wd_boffs[l * WD_MATS + 9l] = wd_region(w, lo.fc2_w, 4l * d, d, lay.repacked, lay.mr, lay.kgroup, lay.wbias, staging, cur)
+        g_wd_boffs[l * WD_MATS + 8l] = q8_region_append(w.dqblob, w.dqscales, lo.fc1_w, d, 4l * d, lay, staging, cur)
+        g_wd_boffs[l * WD_MATS + 9l] = q8_region_append(w.dqblob, w.dqscales, lo.fc2_w, 4l * d, d, lay, staging, cur)
         // the fused-QKV GEMV reads q..v as ONE 3d-row region — d%64 keeps the cursor gap-free
         assert(g_wd_boffs[l * WD_MATS + 2l] == g_wd_boffs[l * WD_MATS] + 2ul * uint64((d * d / 32l) * 34l),
             "wdec attach: q/k/v regions are not contiguous")

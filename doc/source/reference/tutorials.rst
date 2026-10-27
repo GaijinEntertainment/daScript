@@ -282,6 +282,7 @@ with ``-jit``::
    tutorials/dasLLAMA_14_vision_chat.rst
    tutorials/dasLLAMA_15_prefix_cache.rst
    tutorials/dasLLAMA_16_text_to_speech.rst
+   tutorials/dasLLAMA_17_translate.rst
 
 .. _tutorials_dasopenai:
 

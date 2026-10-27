@@ -23,6 +23,8 @@ let CATS = "coco-val2017-000000039769.jpg"
 // the fastest column
 let SMOL = "SmolLM2-135M-Instruct-Q8_0.gguf"
 let KITTEN = "kitten-nano.gguf"
+let BERGAMOT_RUEN = "bergamot/ru-en-base-memory/model.ruen.intgemm.alphas.bin"
+let MILMMT = "milmmt/MiLMMT-46-1B-v0.1.Q4_K_M.gguf"
 let QWEN_ASR = "Qwen3-ASR-0.6B-Q8_0.gguf"
 let QWEN_ASR_MMPROJ = "mmproj-Qwen3-ASR-0.6B-bf16.gguf"
 // the second column
@@ -549,6 +551,59 @@ def test_chat_edges(t : T?) {
     }
 }
 
+// ===== translate: the loop's commands and the direction flags =====
+
+[test]
+def test_translate_loop(t : T?) {
+    t |> run("the loop's commands on a Firefox Translations model: /help, /langs refused, /speak with no TTS, /exit; --quiet") @(t : T?) {
+        return if (model_missing(t, model(BERGAMOT_RUEN)))
+        let script = scratch("translate_cmds.txt")
+        t |> success(fwrite(script, "/help\n/langs ru de\n/speak on\nГде ближайшая аптека?\n/exit\nСпасибо.\n"), "script")
+        let r = run_cli(["translate", model(BERGAMOT_RUEN), "--script", script, "--quiet"])
+        return if (!pass_cell(t, r, "translate commands"))
+        t |> success(find(r.out, "picks the direction") >= 0, "/help prints the commands: {tail_of(r.out)}")
+        t |> success(find(r.out, "usage: /langs <from> <to>") >= 0, "/langs to a pair the model does not serve is refused")
+        t |> success(find(r.out, "no speech model - start with --tts") >= 0, "/speak with no TTS says so")
+        t |> success(find(to_lower(r.out), "pharmacy") >= 0, "the sentence translates")
+        t |> success(find(to_lower(r.out), "thank") < 0, "nothing after /exit translates")
+        t |> success(find(r.out, "translated in") < 0, "--quiet drops the timing")
+        let timed = run_cli(["translate", model(BERGAMOT_RUEN), "--script", script, "--exact"])
+        return if (!pass_cell(t, timed, "translate --exact"))
+        t |> success(find(timed.out, "translated in") >= 0, "the timing without --quiet")
+        t |> success(find(to_lower(timed.out), "pharmacy") >= 0, "the f32 lane translates too")
+        remove(script)
+    }
+    t |> run("--to a language a Firefox Translations model does not write is refused with its languages") @(t : T?) {
+        return if (model_missing(t, model(BERGAMOT_RUEN)))
+        let r = run_cli(["translate", model(BERGAMOT_RUEN), "--to", "de", "--script", JFK_PATH])
+        t |> success(r.rc != 0, "non-zero exit")
+        t |> success(find(r.out, "does not translate 'ru' to 'de'") >= 0, "names the pair: {tail_of(r.out)}")
+    }
+    t |> run("a translation model that does not exist is refused by name") @(t : T?) {
+        return if (model_missing(t, model(BERGAMOT_RUEN)))
+        let r = run_cli(["translate", "no-such-translator.bin"])
+        t |> success(r.rc != 0, "non-zero exit")
+        t |> success(find(r.out, "translation model not found: no-such-translator.bin") >= 0, "names it: {tail_of(r.out)}")
+    }
+    t |> run("a translation LLM: no --from is refused, --from/--to set the direction, /langs changes it") @(t : T?) {
+        return if (model_missing(t, model(MILMMT)))
+        let script = scratch("translate_llm.txt")
+        t |> success(fwrite(script, "Где ближайшая аптека?\n/langs en de\nWhere is the station?\n"), "script")
+        let unset = run_cli(["translate", model(MILMMT), "--script", script])
+        t |> success(unset.rc != 0, "no source: non-zero exit")
+        t |> success(find(unset.out, "pass --from <code>") >= 0, "asks for --from: {tail_of(unset.out)}")
+        let bogus = run_cli(["translate", model(MILMMT), "--from", "xx", "--script", script])
+        t |> success(bogus.rc != 0, "an unknown source: non-zero exit")
+        t |> success(find(bogus.out, "does not translate 'xx' to 'en'") >= 0, "names the pair: {tail_of(bogus.out)}")
+        let r = run_cli(["translate", model(MILMMT), "--from", "ru", "--to", "en", "--script", script, "--quiet"])
+        return if (!pass_cell(t, r, "translate LLM"))
+        t |> success(find(to_lower(r.out), "pharmacy") >= 0, "ru -> en: {tail_of(r.out)}")
+        t |> success(find(r.out, "now en -> de") >= 0, "/langs confirms the direction")
+        t |> success(find(r.out, "Bahnhof") >= 0, "en -> de after it: {tail_of(r.out)}")
+        remove(script)
+    }
+}
+
 // ===== the documented examples, as written (README + the RST page) =====
 
 [test]
@@ -583,6 +638,19 @@ def test_doc_examples(t : T?) {
         t |> success(find(r.out, "you: ") >= 0, "the transcript is echoed")
         t |> success(wav_seconds(t, out) > 0.5lf, "the spoken reply landed")
         remove(out)
+    }
+    t |> run("README: translate ru-en/model.ruen.intgemm.alphas.bin --tts kitten-nano.gguf --script sentences.txt") @(t : T?) {
+        return if (model_missing(t, model(BERGAMOT_RUEN)) || model_missing(t, model(KITTEN)))
+        let script = scratch("sentences.txt")
+        let wavs = scratch("translations")
+        t |> success(fwrite(script, "Где ближайшая аптека?\n/speak off\nСпасибо.\n"), "script")
+        let r = run_doc(["translate", model(BERGAMOT_RUEN), "--tts", KITTEN, "--script", script, "--out-dir", wavs])
+        return if (!pass_cell(t, r, "doc translate"))
+        t |> success(find(r.out, "pharmacy") >= 0, "the translation: {tail_of(r.out)}")
+        t |> success(wav_seconds(t, path_join(wavs, "translation_1.wav")) > 0.5lf, "the spoken translation landed")
+        t |> success(!stat(path_join(wavs, "translation_2.wav")).is_valid, "/speak off spoke nothing after it")
+        remove(path_join(wavs, "translation_1.wav"))
+        remove(script)
     }
     t |> run("README: chat -m gemma-4-E2B ... --image-mmproj X --audio-mmproj X (the same file twice)") @(t : T?) {
         return if (model_missing(t, model(E2B)) || model_missing(t, model(E2B_MMPROJ)))

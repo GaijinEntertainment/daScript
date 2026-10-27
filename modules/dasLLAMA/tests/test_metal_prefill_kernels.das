@@ -33,6 +33,8 @@ require _tts_kernel_oracles   // the StyleTTS2 cells' fixtures and double forms 
 require _vad_oracle   // the silero VAD cells' fixture and references the Vulkan cells share
 require _rnnt_oracle   // the transducer cells' fixture and references the Vulkan cells share
 require _ctc_oracle   // the CTC pick cells' fixture, cases and reference the Vulkan cell shares
+require _nmt_oracle   // the Bergamot step cells' fixtures and references the Vulkan cells share
+require ?das_metal dasllama/dasllama_metal_nmt   // the Bergamot step's three stamps
 require daslib/jobque_boost
 require math
 
@@ -6759,6 +6761,172 @@ def test_metal_ctc_pick_kernel(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
             with_metal_gate(t) $(var dev : MetalDevice?; var queue : MetalCommandQueue?) {
                 ctc_pick_gate(t, dev, queue)
+            }
+        } else {
+            t |> skip("das_metal is not built on this platform")
+        }
+    }
+}
+
+//! The Bergamot step's embed rows (`MetalNmtEmbed` on `GkNmtEmbed`, `enc_nmt_embed`) against `nmt_embed_ref`, bit for bit: the
+//! encoder's form over four ids at positions 0..3 (a `NMT_NO_TOKEN` row among them, the table behind `NMT_FIX_LEAD` floats) and the
+//! step's form, one row whose token and position the state words name; the plane sized to the 256-lane grid past the rows, its
+//! slack under the sentinel. The control a poisoned table element of a gathered row, through `check_exceeds`.
+def private nmt_embed_gate(t : T?; var dev, queue) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        for (step in [false, true]) {
+            let tag = "nmt_embed {step ? "step" : "encode"}"
+            with_metal_cell(dev, queue) $(var mc : MetalCell) {
+                var err : string
+                let kd = kernel_of(@@enc_nmt_embed)
+                var pso = mc |> keep_stamp(kd, err)
+                return if (!pso_ok(t, tag, pso, err))
+                var inscope fx <- nmt_embed_fix(8)
+                var inscope ids <- step ? [5u, 2u, 0u, 1u] : [3u, NMT_NO_TOKEN, 0u, 4u]
+                let rows = step ? 1 : 4
+                let n = rows * NMT_FIX_D
+                var inscope want_ids <- step ? [2u] : [3u, NMT_NO_TOKEN, 0u, 4u]
+                let scale = sqrt(float(NMT_FIX_D))
+                let bids = mc |> in_plain(ids)
+                let bwn = mc |> in_(fx.wn)
+                let bpos = mc |> in_(fx.pos)
+                let bx = mc |> out_(n, 0, nmt_slack(n))
+                var ka = GkNmtEmbedArgs(d = uint(NMT_FIX_D), rows = uint(rows), emb_off = uint(NMT_FIX_LEAD), scale = scale, from_state = step ? 1u : 0u)
+                for (leg in range(2)) {
+                    if (leg == 1) {
+                        fx.wn[NMT_FIX_LEAD + int(want_ids[0]) * NMT_FIX_D + 3]++
+                        mc |> plane_upload(bwn, fx.wn)
+                        mc |> plane_refill(bx)
+                    }
+                    let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+                        invoke(kd.enc, enc, pso, mc.buf[bids], mc.buf[bwn], mc.buf[bpos], mc.buf[bx], ka, int64(n))
+                    }
+                    return if (!ran)
+                    var inscope got <- mc |> plane_run(bx)
+                    var inscope fresh <- nmt_embed_fix(8)
+                    var inscope want <- nmt_embed_ref(fresh, want_ids, step ? 5 : 0, scale)
+                    if (leg == 0) {
+                        check_exact(t, "{tag}: the rows", got, want)
+                    } else {
+                        check_exceeds(t, "{tag}: the control - a poisoned table element of a gathered row moves the rows", got, want, BAR_EXACT)
+                    }
+                    var inscope whole <- mc |> plane_whole(bx)
+                    nmt_check_slack(t, "{tag} leg {leg}", whole, n)
+                }
+            }
+        }
+    }
+}
+
+//! The SSRU cell (`MetalNmtSsru` on `GkNmtSsru`, `enc_nmt_ssru`) on layer 1 of two cells against `nmt_ssru_ref` at 1e-6 relative
+//! (the device's exp against the CPU's), at a width off the thread grid: the cells after it - moved off their input past the bar -
+//! and the output row; layer 0's cells and the cell plane's slack kept, the output row's slack under the sentinel. The control a
+//! poisoned forget-bias element moving the rows, through `check_exceeds`.
+def private nmt_ssru_gate(t : T?; var dev, queue) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        let tag = "nmt_ssru"
+        with_metal_cell(dev, queue) $(var mc : MetalCell) {
+            var err : string
+            let kd = kernel_of(@@enc_nmt_ssru)
+            var pso = mc |> keep_stamp(kd, err)
+            return if (!pso_ok(t, tag, pso, err))
+            var inscope fx <- nmt_ssru_fix()
+            var inscope want <- nmt_ssru_ref(fx)
+            let slack = nmt_slack(NMT_FIX_D)
+            var inscope cell_in <- at_base(fx.cell, 0, slack)
+            let bh = mc |> in_(fx.h)
+            let bwn = mc |> in_(fx.wn)
+            let bcell = mc |> io_(fx.cell, 0, slack)
+            let bo = mc |> out_(NMT_FIX_D, 0, slack)
+            var ka = GkNmtSsruArgs(d = uint(NMT_FIX_D), bf_off = uint(NMT_FIX_LEAD), cell_off = uint(NMT_FIX_D))
+            let bar = Bar(rel = 1e-6, abs_floor = 1e-6, poison_scaled = true)
+            let moved_at = NMT_FIX_D + 5
+            t |> success(moved_off(want.cell, fx.cell, moved_at, bar), "{tag}: the reference's layer-1 cell {moved_at} sits past the bar off its input ({want.cell[moved_at]} from {fx.cell[moved_at]})")
+            for (leg in range(2)) {
+                if (leg == 1) {
+                    fx.wn[NMT_FIX_LEAD + 5] += 2.0
+                    mc |> plane_upload(bwn, fx.wn)
+                    mc |> plane_upload(bcell, fx.cell)
+                    mc |> plane_refill(bo)
+                }
+                let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+                    invoke(kd.enc, enc, pso, mc.buf[bh], mc.buf[bwn], mc.buf[bcell], mc.buf[bo], ka, int64(NMT_FIX_D))
+                }
+                return if (!ran)
+                var inscope o <- mc |> plane_run(bo)
+                var inscope cell <- mc |> plane_run(bcell)
+                if (leg == 0) {
+                    check_rows(t, "{tag}: the output row", o, want.o, bar, FLAT_ROWS)
+                    check_rows(t, "{tag}: the cells", cell, want.cell, bar, FLAT_ROWS)
+                    t |> success(moved_off(cell, fx.cell, moved_at, bar), "{tag}: the device's layer-1 cell {moved_at} moved off its input ({cell[moved_at]} from {fx.cell[moved_at]})")
+                } else {
+                    check_exceeds(t, "{tag}: the control - a poisoned forget bias moves the output row", o, want.o, bar)
+                }
+                var inscope ow <- mc |> plane_whole(bo)
+                nmt_check_slack(t, "{tag} output leg {leg}", ow, NMT_FIX_D)
+                var inscope cw <- mc |> plane_whole(bcell)
+                nmt_check_kept(t, "{tag} cells leg {leg}: layer 0 and the slack", cw, cell_in, NMT_FIX_D, NMT_FIX_D)
+            }
+        }
+    }
+}
+
+//! The greedy pick (`MetalNmtPick` on `GkNmtPick`, `enc_nmt_pick`) against `nmt_pick_ref` at vocabularies of 200 (under one
+//! 256-lane stride), 1000 and 32000: a plain step, a tie picking the lower index, the end token, the cap's last step and a done
+//! sentence - the state words and the whole record plane exact, `NMT_PICK_SLACK` words past the cap among them. The control, on
+//! every case, `nmt_pick_poisoned`: the bias at index 7 past every logit (a done case reopened), the device's words then those of
+//! the poisoned case's reference and off the clean case's.
+def private nmt_pick_gate(t : T?; var dev, queue) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        for (nv in [200, 1000, 32000]) {
+            var inscope cases <- nmt_pick_cases(nv)
+            for (c in cases) {
+                let tag = "nmt_pick nv {nv} {c.tag}"
+                with_metal_cell(dev, queue) $(var mc : MetalCell) {
+                    var err : string
+                    let kd = kernel_of(@@enc_nmt_pick)
+                    var pso = mc |> keep_stamp(kd, err)
+                    return if (!pso_ok(t, tag, pso, err))
+                    var inscope pc <- nmt_pick_poisoned(c)
+                    let nrec = int(c.cap) + NMT_PICK_SLACK
+                    let blg = mc |> in_(c.lg)
+                    let bwb = mc |> in_(c.wb)
+                    let bst = mc |> in_plain(c.st)
+                    let btoks = mc |> out_words(nrec, NMT_NO_TOKEN)
+                    var ka = GkNmtPickArgs(nv = uint(nv), boff = uint(NMT_FIX_LEAD), eos = c.eos, cap = c.cap)
+                    for (leg in range(2)) {
+                        if (leg == 1) {
+                            mc |> plane_upload(bwb, pc.wb)
+                            mc |> plane_upload(bst, pc.st)
+                            mc |> plane_refill(btoks)
+                        }
+                        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+                            invoke(kd.enc, enc, pso, mc.buf[blg], mc.buf[bwb], mc.buf[bst], mc.buf[btoks], ka)
+                        }
+                        return if (!ran)
+                        var inscope st <- mc |> plane_as(bst, 0u, int(NMT_ST_WORDS))
+                        var inscope toks <- mc |> plane_as(btoks, 0u, nrec)
+                        if (leg == 0) {
+                            nmt_pick_check(t, tag, st, toks, c)
+                        } else {
+                            nmt_pick_check(t, "{tag} poisoned", st, toks, pc)
+                            nmt_pick_moved(t, tag, st, toks, c)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+[test]
+def test_metal_nmt_kernels(t : T?) {
+    t |> run("the Bergamot step's three stamps == their CPU references") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            with_metal_gate(t) $(var dev : MetalDevice?; var queue : MetalCommandQueue?) {
+                nmt_embed_gate(t, dev, queue)
+                nmt_ssru_gate(t, dev, queue)
+                nmt_pick_gate(t, dev, queue)
             }
         } else {
             t |> skip("das_metal is not built on this platform")

@@ -20,7 +20,9 @@ require math
 //             SLR12) — fetched, converted to 16 kHz mono wav. Parakeet-v3 scope only.
 //   --refs    reference engines: whisper.cpp (whisper-cli + parakeet-cli) at the pinned commit,
 //             the mtmd reference at the pinned commit + patches/mtmd-timing.patch, CPU-only build,
-//             CrispASR at the pinned commit (a Metal build and a CPU-only build) + the GigaAM q8_0.
+//             CrispASR at the pinned commit (a Metal build and a CPU-only build) + the GigaAM q8_0,
+//             the Bergamot translation reference: Mozilla's marian-decoder at the pinned commit +
+//             benchmarks/nmt/patches (followup_general.md row 258 moves it to a translate rig).
 //   --venvs   the reference python environments from requirements-<name>.txt (reference_venvs).
 //   --check   verify every input and tool, print the env lines a sweep needs.
 //   bin/daslang modules/dasLLAMA/performance/setup_asr_rig.das -- --corpus --check
@@ -30,6 +32,7 @@ require math
 let WHISPER_CPP_COMMIT = "231638a07"
 let LLAMA_CPP_COMMIT = "9febe63d5"
 let CRISPASR_COMMIT = "119c40317"
+let MARIAN_COMMIT = "69455acae"
 let LIBRI_URL = "https://www.openslr.org/resources/12/test-clean.tar.gz"
 let HP0_URL = "https://upload.wikimedia.org/wikipedia/en/d/d4/En.henryfphillips.ogg"
 let GB1_URL = "https://upload.wikimedia.org/wikipedia/commons/1/1f/George_W_Bush_Columbia_FINAL.ogg"
@@ -42,10 +45,10 @@ struct Args {
     @clarg_doc = "Fetch + convert the 25-clip LibriSpeech dictation set"
     libri : bool
 
-    @clarg_doc = "Clone + build the reference engines (whisper.cpp, patched mtmd, CrispASR)"
+    @clarg_doc = "Clone + build the reference engines (whisper.cpp, patched mtmd, CrispASR, patched marian)"
     refs : bool
 
-    @clarg_doc = "Create the reference python venvs (onnx, nemo, tts, gigaam, mlx on Apple) from the committed requirements"
+    @clarg_doc = "Create the reference python venvs (onnx, nemo, tts, gigaam, nmt, mlx on Apple) from the committed requirements"
     venvs : bool
 
     @clarg_doc = "Verify every rig input and print the env lines a sweep needs"
@@ -368,7 +371,50 @@ def private setup_refs(cfg : Args) : bool {
             ok = false
         }
     }
+    ok = setup_marian() && ok
     return setup_crispasr() && ok
+}
+
+//! True when the marian checkout carries the stage-dump patch - an unpatched decoder translates
+//! and writes no stage, so every oracle dump of it comes back empty.
+def private marian_tree_patched(root : string) : bool =>
+    find(fread(normalize("{root}/inference/marian-fork/src/graph/expression_graph.cpp")), "MARIAN_DUMP_DIR") >= 0
+
+//! The Bergamot translation reference: Mozilla's `translations` repository at `MARIAN_COMMIT`, its `inference/`
+//! tree alone (the training pipeline stays unfetched) with every submodule but emsdk, patched with
+//! `benchmarks/nmt/patches`, and its `marian-decoder` built CPU-only.
+def private setup_marian() : bool {
+    let root = marian_root()
+    let present = stat(normalize("{root}/.git")).is_valid
+    if (present && at_commit(root, MARIAN_COMMIT) && marian_tree_patched(root) && stat(marian_bin()).is_valid) {
+        return true
+    }
+    if (!present) {
+        to_log(LOG_INFO, "setup_asr_rig: cloning Mozilla translations @ {MARIAN_COMMIT} (inference/ only)\n")
+        run_capture("git clone -q --filter=blob:none --sparse https://github.com/mozilla/translations.git \"{root}\" && git -C \"{root}\" sparse-checkout set inference", false)
+    }
+    let spm = "inference/marian-fork/src/3rd_party/sentencepiece"
+    // -f drops the previous pin's applied patch, so the patch lands on a clean tree
+    if (stat(normalize("{root}/{spm}/.git")).is_valid) {
+        run_capture("git -C \"{root}/{spm}\" checkout -q -f .", false)
+    }
+    run_capture("git -C \"{root}\" fetch -q origin && git -C \"{root}\" checkout -q -f {MARIAN_COMMIT}", false)
+    let subs = run_capture("git -C \"{root}\" config -f .gitmodules --get-regexp path", false)
+    let paths <- [for (line in split(subs, "\n")); line |> slice(find(line, " ") + 1) |> strip;
+                  where find(line, "inference/") >= 0 && find(line, "emsdk") < 0]
+    run_capture("git -C \"{root}\" submodule update -q --init --recursive --depth 1 {join(paths, " ")}", false)
+    let patches = get_full_file_name("{nmt_dir()}/patches")
+    run_capture("git -C \"{root}\" apply \"{patches}/marian-oracle.patch\" && git -C \"{root}/{spm}\" apply \"{patches}/marian-sentencepiece.patch\"", false)
+    if (!marian_tree_patched(root)) {
+        to_log(LOG_ERROR, "setup_asr_rig: marian-oracle.patch did not apply at {MARIAN_COMMIT} - port the patch to the pin (benchmarks/nmt/patches/README.md)\n")
+        return false
+    }
+    to_log(LOG_INFO, "setup_asr_rig: building marian-decoder (CPU-only)\n")
+    let build = "{root}/inference/build"
+    run_capture("cmake -S \"{root}/inference\" -B \"{build}\" -DCMAKE_BUILD_TYPE=Release -DCOMPILE_CUDA=off -DUSE_FBGEMM=off -DGIT_SUBMODULE=OFF -DCMAKE_POLICY_VERSION_MINIMUM=3.5 && cmake --build \"{build}\" --config Release -j 8 --target marian_decoder", false)
+    let built = stat(marian_bin()).is_valid
+    to_log(built ? LOG_INFO : LOG_ERROR, "setup_asr_rig: marian-decoder - {built ? "ok" : "did not materialize"} ({marian_bin()})\n")
+    return built
 }
 
 //! CrispASR (the GigaAM reference): the pinned checkout with its ggml submodule, built twice - `build/`
@@ -513,7 +559,8 @@ def private reference_venvs() : array<ReferenceVenv> {
         ReferenceVenv(name = "nemo", py = nemo_py(), probe = "nemo", env = "NEMO_PY"),
         ReferenceVenv(name = "mlx", py = mlx_py(), probe = "mlx_audio, mlx_lm", env = "MLX_PY", apple_only = true),
         ReferenceVenv(name = "tts", py = tts_py(), probe = "kokoro, kittentts, onnxruntime, pocket_tts", env = "TTS_PY"),
-        ReferenceVenv(name = "gigaam", py = gigaam_py(), probe = "gigaam, torch", env = "GIGAAM_PY")
+        ReferenceVenv(name = "gigaam", py = gigaam_py(), probe = "gigaam, torch", env = "GIGAAM_PY"),
+        ReferenceVenv(name = "nmt", py = nmt_py(), probe = "numpy, sentencepiece", env = "NMT_PY")
     ]
 }
 
@@ -597,6 +644,8 @@ def private check_all() : bool {
         ok = false
     }
     check_crispasr()
+    let mb = stat(marian_bin()).is_valid
+    to_log(mb ? LOG_INFO : LOG_WARNING, "setup_asr_rig: marian-decoder - {mb ? marian_versions() : "MISSING (the translation refs will skip - run --refs)"} ({marian_bin()})\n")
     for (spec in reference_venvs()) {
         continue if (spec.apple_only && !is_apple_silicon())
         let good = stat(spec.py).is_valid
@@ -606,6 +655,7 @@ def private check_all() : bool {
     to_log(LOG_INFO, "setup_asr_rig: export WHISPER_CPP={whisper_cpp_root()}\n")
     to_log(LOG_INFO, "setup_asr_rig: export MTMD_BIN={mtmd_bin()}\n")
     to_log(LOG_INFO, "setup_asr_rig: export CRISPASR={crispasr_root()}\n")
+    to_log(LOG_INFO, "setup_asr_rig: export MARIAN={marian_root()}\n")
     for (spec in reference_venvs()) {
         continue if (spec.apple_only && !is_apple_silicon())
         to_log(LOG_INFO, "setup_asr_rig: export {spec.env}={spec.py}\n")

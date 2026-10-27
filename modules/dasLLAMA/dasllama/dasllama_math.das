@@ -477,6 +477,23 @@ def public dispatch_phase_encode(rows : int64) {
     }
 }
 
+//! the multiply-adds a lane takes of a sequential decode step's widest stage before one more lane pays for meeting the team
+let STEP_LANE_WORK = 131072l
+
+var private g_step_lane_work = STEP_LANE_WORK
+
+//! The lanes a sequential decode step (a transducer's, a translation decoder's) publishes to: its widest stage's `work` over the
+//! lane work, at least one, at most the pool - the width `dispatch_lanes_narrow` narrows the pool to.
+def public step_lanes(work : int64) : int => int(clamp(work / g_step_lane_work, 1l, int64(get_dispatch_lanes())))
+
+//! Probe seam: the lane work `step_lanes` divides by, in place of `STEP_LANE_WORK` (0 restores it), so a race arm sweeps a decode
+//! team's width without narrowing an encoder's pool; answers the value it replaced.
+def public set_step_lane_work_probe_(work : int64) : int64 {
+    let was = g_step_lane_work
+    g_step_lane_work = work > 0l ? work : STEP_LANE_WORK
+    return was
+}
+
 //! A sequential run of steps too small to fill the pool - a transducer decode - narrows it to `lanes`: the workers past
 //! `lanes - 1` go dormant (the caller is a lane), and the answer is the limit it replaced, for `dispatch_lanes_restore`.
 //! Single-thread mode and an app's own worker limit leave the pool alone (-1).

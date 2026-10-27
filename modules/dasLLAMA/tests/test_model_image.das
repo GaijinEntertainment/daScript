@@ -18,6 +18,8 @@ require dasllama/dasllama_gemma3v // Gemma3vStaging/stage_gemma3v_tower — the 
 require dasllama/dasllama_vision_embedder // the carrier's .dlim route
 require dasllama/dasllama_parakeet // ParakeetStaging/stage_parakeet_model — same, for the parakeet arm
 require dasllama/dasllama_gigaam   // stage_gigaam_model/mint_gigaam_model/gigaam_serves_q8 — the gigaam arm's off-rail truth
+require dasllama/dasllama_nmt      // stage_nmt_model/mint_nmt_model/load_nmt_model — the bergamot arm
+require _nmt_oracle                // nmt_seat_pin — the bergamot arm pins the device seat off
 require dasllama/dasllama_config     // DlimConfiguration — the peek/round-trip mechanics arms
 require dasllama/dasllama_styletts2  // stage_styletts2/load_styletts2/mint_styletts2 + the two lane tags — the kitten arm's carrier, its family data riding the image meta
 require dasllama/dasllama_tts        // load_tts_model/caps/synthesize — the kitten arm's facade leg
@@ -315,7 +317,7 @@ def test_tower_exact_lanes_are_config_free(t : T?) {
             return
         }
         let seat = kernel_backend_seat()
-        let exact <- ["whisper-f32", "parakeet-f32", gigaam_image_tag(false), "canary-f32", "gemma4a-f32", "qwen3a-f32", "tower-f32", "gemma4v", "gemma3v", "gemma4uv", "qwen3v", "qwen25v"]
+        let exact <- ["whisper-f32", "parakeet-f32", gigaam_image_tag(false), nmt_image_tag(false), "canary-f32", "gemma4a-f32", "qwen3a-f32", "tower-f32", "gemma4v", "gemma3v", "gemma4uv", "qwen3v", "qwen25v"]
         var first : table<string; string>
         for (n in whole) {
             pin_kernel_backend(n)
@@ -2088,6 +2090,52 @@ def test_gigaam_image_roundtrip(t : T?) {
             t |> equal(asr_text(cold, samples), want, "the cold-built image's transcript")
             t |> equal(asr_text(mapped, samples), want, "the mapped image's transcript")
         }
+    }
+}
+
+//! Every line of `lines` through `m`, one translation a line.
+def private nmt_lines(m : NmtModel; lines : array<string>) : array<string> {
+    var inscope st = NmtState()
+    return <- [for (ln in lines); nmt_translate(m, st, ln)]
+}
+
+//! The in-memory mint, the cold-built image and the mapped image translate through one entry point (`nmt_translate`) on one
+//! lane - the CPU chain, the device seat pinned off and put back - so the three sides' logits are bit-identical and the lines
+//! compare exactly.
+[test]
+def test_bergamot_image_roundtrip(t : T?) {
+    t |> run("bergamot ru-en tiny: the .bin's cold load bakes each lane's image, the .dlim loads back, translation-exact") @(t : T?) {
+        if (!family_on(t, "bergamot") || !arm_on(t, "bergamot")) return
+        let path = path_join(models_dir(), "bergamot/ru-en-tiny/model.ruen.intgemm.alphas.bin")
+        return if (!jit_model_available(t, path))
+        let lines <- ["Лечи меня, у меня мало здоровья!", "Где ближайшая аптека?", "Сегодня мы идём в горы."]   // nolint:STYLE039
+        let seat = nmt_seat_pin(false)
+        with_dasllama_jobque_() {
+            for (q8 in [false, true]) {
+                let img = image_path_for(path, nmt_image_tag(q8))
+                remove(img)
+                var inscope truth = NmtModel()
+                var inscope stg <- stage_nmt_model(path, q8)
+                mint_nmt_model(stg, truth)
+                var inscope want <- nmt_lines(truth, lines)
+                var inscope cold <- load_nmt_model(path, q8)
+                t |> success(stat(img).is_valid, "q8={q8}: the cold load baked the image")
+                t |> equal(cold.q8, q8, "q8={q8}: the cold load serves the asked lane")
+                var inscope mapped <- load_nmt_model(img, q8)
+                t |> equal(mapped.q8, q8, "q8={q8}: the mapped image serves the baked lane")
+                var inscope got_cold <- nmt_lines(cold, lines)
+                var inscope got_mapped <- nmt_lines(mapped, lines)
+                for (li, w, c, mp in count(), want, got_cold, got_mapped) {
+                    to_log(LOG_INFO, "bergamot image q8={q8} line {li} in-memory: {w}\n")
+                    to_log(LOG_INFO, "bergamot image q8={q8} line {li} cold-built: {c}\n")
+                    to_log(LOG_INFO, "bergamot image q8={q8} line {li} mapped: {mp}\n")
+                    t |> success(!empty(w), "q8={q8}: the in-memory mint translates")
+                    t |> equal(c, w, "q8={q8}: the cold-built image's translation")
+                    t |> equal(mp, w, "q8={q8}: the mapped image's translation")
+                }
+            }
+        }
+        nmt_seat_pin(seat)
     }
 }
 

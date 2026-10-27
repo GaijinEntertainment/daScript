@@ -160,17 +160,11 @@ def test_kq_registries(t : T?) {
                     for (l in lens) {
                         present += l > 0 ? 1 : 0
                     }
-                    // HOW_TO_ADD_A_FORMAT.md: a format whose JIT emitter arm has not landed ships every registry but the tile
-                    let tile_pending = kf == KqFmt.nv4
-                    if (tile_pending) {
-                        t |> success(present == 7 && empty(r.tile), "{kf}: every registry but the tile until its emitter arm lands (lengths {lens})")
-                    } else {
-                        t |> success(present == 0 || present == 8, "{kf}: all eight registries or none (lengths {lens})")
-                    }
+                    t |> success(present == 0 || present == 8, "{kf}: all eight registries or none (lengths {lens})")
                     if (present == 8) {
                         t |> equal(r.tile[0]._0, "reference", "{kf}: the tile registry's first row is the reference body")
                     }
-                    if (present >= 7) {
+                    if (present == 8) {
                         families++
                         t |> equal(r.gemv[0]._0, "reference", "{kf}: the gemv registry's first row is the reference body")
                         t |> equal(r.panel[0]._0, "reference", "{kf}: the panel registry's first row is the reference body")

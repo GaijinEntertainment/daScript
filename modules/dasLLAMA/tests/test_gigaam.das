@@ -19,6 +19,7 @@ require math
 require daslib/linq   // sequence_equal
 require _model_tier
 require _json_file
+require _npy   // read_npy: the oracle's per-stage dumps
 require _compares   // nan_wide_diff: a NaN probability reads as outside the bar
 require _rnnt_oracle   // rnnt_seat_*: the build's device transducer seat, its pin and counters
 require _gpu_knobs   // with_gpu_knobs / set_serving_gpu_tower: the device decode's tower pin
@@ -46,12 +47,6 @@ let private Q8_WORD_AGREE = 0.9
 let private LONG_WORD_AGREE = 0.95
 let private PLOG_BAR = 1e-4
 
-struct private Npy {
-    rows : int64
-    cols : int64
-    data : array<float>
-}
-
 struct private FleursClip {
     text : string
 }
@@ -68,51 +63,6 @@ struct private OracleTokens {
 }
 
 def private dump_dir(clip, kind : string) : string => path_join(asr_oracle_dir("gigaam"), "{clip}_{kind}")
-
-//! A little-endian f32 .npy of one or two dims, read into row-major order (a Fortran-order dump transposes).
-def private read_npy(path : string) : Npy {
-    var r = Npy()
-    fopen(path, "rb") $(f) {
-        if (f == null) {
-            panic("test_gigaam: cannot open '{path}'")
-        }
-        fmap(f) $(var bytes : array<uint8>#) {
-            let hlen = int64(uint(bytes[8]) | (uint(bytes[9]) << 8u))
-            let header = build_string() $(var w) {
-                for (i in range64(10l, 10l + hlen)) {
-                    w |> write_char(int(bytes[i]))
-                }
-            }
-            if (find(header, "'<f4'") < 0) {
-                panic("test_gigaam: '{path}' is not a little-endian f32 array: {header}")
-            }
-            let fortran = find(header, "'fortran_order': True") >= 0
-            let lp = find(header, "(")
-            let rp = find(header, ")")
-            var dims : array<int64>
-            for (s in split(slice(header, lp + 1, rp), ",")) {
-                let v = strip(s)
-                if (!empty(v)) {
-                    dims |> push(to_int64(v, false))
-                }
-            }
-            r.rows = dims[0]
-            r.cols = length(dims) > 1 ? dims[1] : 1l
-            let n = r.rows * r.cols
-            r.data |> reserve(n)
-            r.data |> resize(n)
-            unsafe {
-                let src = addr<float const?>(bytes[10l + hlen])
-                for (i in range64(r.rows)) {
-                    for (j in range64(r.cols)) {
-                        r.data[i * r.cols + j] = fortran ? src[j * r.rows + i] : src[i * r.cols + j]
-                    }
-                }
-            }
-        }
-    }
-    return <- r
-}
 
 //! `rel` of the expectation's largest magnitude, the poisoned expected element that magnitude off
 def private stage_bar(rel : float) : Bar => Bar(kind = BarKind.rel_of_max, rel = rel, poison = 1.0, poison_of_max = true)

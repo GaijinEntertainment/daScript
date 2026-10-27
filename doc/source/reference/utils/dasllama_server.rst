@@ -260,6 +260,10 @@ Run under ``-jit`` --- the interpreter is refused, it is far too slow for infere
      -
      - ---
      - Directory of voice clips (wav / flac / mp3 / ogg, a few seconds of one speaker each, 60 s at most) a cloning speech model adds to its voices at boot (with several TTS models, the first one's), each under its file's stem; a clip that does not decode or runs past 60 s is logged and skipped, the key on a model that cannot clone is logged and ignored
+   * - ``--translate``
+     -
+     - ---
+     - Translation models, comma-separated: a Firefox Translations ``model.<pair>.intgemm.alphas.bin`` (its ``vocab.<pair>.spm`` beside it; one direction, its pair from the file name; listed under its directory's name) or a translation-LLM GGUF (MiLMMT-46: any two of its 46 languages; listed under its file's stem) --- enables ``/translate`` and ``/languages`` (the LibreTranslate routes) and the ``target`` field of ``/v1/audio/translations``. Each model loads on a worker thread of its own (the TTS worker's dispatch); a pair goes to the first model that serves it. A missing file is logged and left out, a model whose worker cannot load it serves no pair and the ``translate`` block of ``/v1/stats`` carries the reason; either way the boot serves on. Config key ``translate``: the same comma-separated string, or an array of paths
    * - ``--image-mmproj``
      -
      - ---
@@ -406,6 +410,15 @@ With a roster, the flat ``mmproj`` / ``asr_workers`` / ``tts_lane`` /
 ``tts_voices_dir`` config keys are not read --- each table carries its own ---
 while the same flag on the command line overrides the first table's value. Two models
 may not share an id: the second is logged and left out.
+
+Translation models ride the same speech thread, a worker each; ``translate``
+lists them, and a boot with only translation models serves the translation
+routes with no LLM:
+
+.. code-block:: toml
+
+   translate = ["models/bergamot/ru-en-base-memory/model.ruen.intgemm.alphas.bin",
+                "models/milmmt/MiLMMT-46-1B-v0.1.Q4_K_M.gguf"]
 
 Config precedence is ``defaults < config TOML < explicit CLI flags`` - unless
 the TOML carries ``authoritative = true`` (what the control page saves), which
@@ -575,7 +588,7 @@ Endpoints
      - The control page (``control.html`` beside the server): live stats and charts, the models panel (per-slot cards with state and GPU badges, prefix hit rate, activate buttons), the stream swimlane, a chat panel (every sampling knob, thinking inline, mic input, a speaker button under ``--tts``), a speech studio, the config editor with the ``[[models]]`` roster and save/restart, GC and drain buttons. Polls ``/v1/stats`` and ``/v1/streams`` at 1 Hz
    * - ``GET``
      - ``/v1/models``
-     - Lists every served slot, every TTS model under its id, and the ASR models: the default one as ``<default slot>-asr`` beside an LLM, and each under its own id when several serve or no LLM does; requests route on these ids through their ``"model"`` field
+     - Lists every served slot, every TTS model under its id, every translation model whose worker loaded it under its id, and the ASR models: the default one as ``<default slot>-asr`` beside an LLM, and each under its own id when several serve or no LLM does; requests route on these ids through their ``"model"`` field
    * - ``POST``
      - ``/v1/models/activate``
      - ``{"model": name}`` --- make ``name`` the default + stepped slot and move the GPU tier to it now (loopback-only; 409 while work is live)
@@ -601,7 +614,13 @@ Endpoints
      - Speech to text (multipart upload; needs ``--asr``). One ASR model takes every request, whatever ``model`` says; with several, ``model`` names one by its id (none, or the ``<default slot>-asr`` id: the first; any other name: 404); ``language`` defaults to English, to detection on a model that only detects, and to its own language on a one-language model. ``response_format=verbose_json`` adds timed segments
    * - ``POST``
      - ``/v1/audio/translations``
-     - Speech to English text (needs ``--asr``); ``model`` and ``language`` are read as the transcription route reads them, the 404 included; a model whose caps declare no translation is a 400
+     - Speech to English text (needs ``--asr``); ``model`` and ``language`` are read as the transcription route reads them, the 404 included; a model whose caps declare no translation is a 400. An optional ``target`` form field (needs ``--translate``) transcribes instead and routes the transcript through the translation model for (``language``, ``target``) --- ``language`` is the source, or, absent, the language the ASR model heard --- answering in the same ``response_format`` shapes (``verbose_json`` keeps the segments' timing, each segment's text translated). Errors with ``target``: before the audio is heard, a 400 naming the pair when ``language`` is given and no loaded translation model serves it, or naming the target when ``language`` is absent and no loaded model writes it; after the transcript, a 400 when ``language`` is absent and the ASR model reported none, or the language it heard has no served pair into ``target``; a 503 while the translation queue (32) is full; a 500 when the ASR model's verbose transcript does not parse or the translation worker panics. The caps check does not apply
+   * - ``POST``
+     - ``/translate``
+     - LibreTranslate's route (needs ``--translate``): a JSON or form body ``{q, source, target, format?, api_key?}``, ``q`` a string or an array of strings, answered ``{"translatedText": ...}`` (an array for an array). Each input is split into sentences (``.``, ``!`` or ``?`` before a space, or a newline) and translated a sentence at a time, the separators kept. Errors are ``{"error": "..."}``: 400 for a missing field, a body that is neither a JSON object nor a form, a ``format`` other than ``text``, ``source: "auto"`` (no language detection), an unserved pair or input past 20000 characters; 503 while no translation model is loaded, the queue (32) is full, the server drains or a benchmark runs; 500 when the translation worker panics. A urlencoded form's repeated ``q`` (``q=a&q=b``) is an array; a multipart form carries one value a field. ``api_key`` is ignored
+   * - ``GET``
+     - ``/languages``
+     - LibreTranslate's language list over every loaded translation model: ``[{"code", "name", "targets"}]``, codes sorted (``name`` is the language's English name where the translation facade knows it, else the code)
    * - ``POST``
      - ``/v1/audio/speech``
      - Text to speech (needs ``--tts``): ``{"model"?, "input", "voice"?, "speed"?, "response_format"?}``; ``model`` names the TTS model (none: the first; an id no model serves: 404), ``wav`` (default) is 16-bit PCM at the model's rate, ``pcm`` the raw samples, the compressed formats answer 400. One synthesis at a time a model, 16 queued
@@ -610,7 +629,7 @@ Endpoints
      - ``{"model"?, "input", "voice"?}`` (``model`` as the speech route reads it) gives the normalized text, the dialect the voice speaks (``lang``) and, per chunk a synthesis would take, its phoneme string --- empty for a text-reading model such as Pocket (needs ``--tts``)
    * - ``GET``
      - ``/v1/stats``
-     - Scheduler counters (``gen_tokens``, ``prefill_tokens``, TTFT, ``mtp_drafted`` / ``mtp_accepted``, the media counters), memory footprint, the hardware line, the ASR and speech worker state, the ``tts`` block while a speech model is configured, ``gpu_cpu_passes``, and ``models[]`` --- one entry per slot with ``served``, ``served_note``, the towers it loaded and its cache counters
+     - Scheduler counters (``gen_tokens``, ``prefill_tokens``, TTFT, ``mtp_drafted`` / ``mtp_accepted``, the media counters), memory footprint, the hardware line, the ASR and speech worker state, the ``tts`` block while a speech model is configured, the ``translate`` block (queue counters and each translation model's state, kind, pair and load error) while a translation model is configured, ``gpu_cpu_passes``, and ``models[]`` --- one entry per slot with ``served``, ``served_note``, the towers it loaded and its cache counters
    * - ``GET``
      - ``/v1/streams``
      - Per-stream states and text tails, the prefix-cache chains, recent ASR jobs

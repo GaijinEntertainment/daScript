@@ -149,17 +149,6 @@ def tool_available(exe : string) : bool => tool_available(exe, "--version")
 
 def seconds_since(t0 : int64) : double => double(get_time_usec(t0)) / 1000000.0lf
 
-def split_csv(s : string) : array<string> {
-    var out : array<string>
-    for (part in split(s, ",")) {
-        let p = strip(part)
-        if (!empty(p)) {
-            out |> push(p)
-        }
-    }
-    return <- out
-}
-
 def temp_dir_or_cwd() : string {
     var err : string
     let td = temp_directory(err)
@@ -1054,7 +1043,7 @@ def gate_ci_das(ctx : PreflightCtx) : GateResult {
         var inscope parts <- split(line, "|")
         continue if (length(parts) < 3)
         let pattern = strip(parts[0])
-        var inscope allow_skip <- split_csv(parts[1])
+        var inscope allow_skip <- split_trimmed(parts[1], ",")
         let hint = strip(parts[2])
         var inscope files : array<string>
         expand_glob(pattern, files)
@@ -1582,8 +1571,8 @@ def gate_table() : array<GateInfo> {
 //! --only and --skip name gates outright; otherwise the fast tier always runs, the lane tier under --full,
 //! and the module tier never
 def want_gate(cfg : Config; info : GateInfo) : bool {
-    let only_list <- split_csv(cfg.only)
-    let skip_list <- split_csv(cfg.skip)
+    let only_list <- split_trimmed(cfg.only, ",")
+    let skip_list <- split_trimmed(cfg.skip, ",")
     for (s in skip_list) {
         if (s == info.name) return false
     }

@@ -5685,6 +5685,51 @@ class CtcPick : GkCtcPick {
     }
 }
 
+//! the Bergamot translation step's embed rows (`GkNmtEmbed`)
+[vk_dispatch(name = "nmt_embed_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class NmtEmbed : GkNmtEmbed {
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        nmt_embed_body()
+    }
+}
+
+//! ... its SSRU cell (`GkNmtSsru`)
+[vk_dispatch(name = "nmt_ssru_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class NmtSsru : GkNmtSsru {
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        nmt_ssru_body()
+    }
+}
+
+//! ... its greedy pick, a workgroup of 256 (`GkNmtPick`)
+[vk_dispatch(name = "nmt_pick_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class NmtPick : GkNmtPick {
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        nmt_pick_body()
+    }
+}
+
+//! ... its attention partials at the head width `pa.hs` names (the family's 32, 48 and 64), on the whisper decoder's template
+[vk_dispatch(name = "nmt_attn_part_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class NmtAttnPart : GkWdecAttnPart {
+    [spirv_kernel(local_size_x = 128)]
+    def run {
+        wdec_attn_part_body()
+    }
+}
+
+//! ... and their combine, the f32 store
+[vk_dispatch(name = "nmt_attn_comb_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class NmtAttnComb : GkWdecAttnComb {
+    [spirv_kernel(local_size_x = 64)]
+    def run {
+        wdec_attn_comb_body()
+    }
+}
+
 //! the vision stems' and tails' row kernels on the templates both homes stamp
 [vk_dispatch(name = "tower_patch_im2col_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class TowerPatchIm2col : GkPatchIm2col {

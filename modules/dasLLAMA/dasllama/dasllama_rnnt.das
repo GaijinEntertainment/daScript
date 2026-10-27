@@ -298,24 +298,11 @@ def private rnnt_step(net : RnntNet; var s : RnntState; encp : array<float>; tok
     }
 }
 
-let private RNNT_LANE_WORK = 131072l   //!< the multiply-adds a lane takes of a decode step's widest stage before one more lane pays for meeting the team
-
-//! The lanes a decode step publishes to: its widest stage's work over `RNNT_LANE_WORK`, at least one, at most the pool.
+//! The lanes a decode step publishes to: `step_lanes` over its widest stage's work.
 [arch(at="../ARCHITECTURE_MEDIA_ASR.md#rnnt-decode-step")]
 def rnnt_step_lanes(net : RnntNet) : int {
     let pd = net.pred_dim
-    let work = max(8l * pd * pd, max(net.joint_dim * pd, rnnt_n_logits(net) * net.joint_dim))
-    return int(clamp(work / g_rnnt_lane_work, 1l, int64(get_dispatch_lanes())))
-}
-
-var private g_rnnt_lane_work = RNNT_LANE_WORK
-
-//! Probe seam: the lane work a decode step's width divides by, in place of `RNNT_LANE_WORK` (0 restores it), so a race arm
-//! sweeps the decode team's width without narrowing the encoder's pool; answers the value it replaced.
-def set_rnnt_lane_work_probe_(work : int64) : int64 {
-    let was = g_rnnt_lane_work
-    g_rnnt_lane_work = work > 0l ? work : RNNT_LANE_WORK
-    return was
+    return step_lanes(max(8l * pd * pd, max(net.joint_dim * pd, rnnt_n_logits(net) * net.joint_dim)))
 }
 
 var g_rnnt_trace = false

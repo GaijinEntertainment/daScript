@@ -6,10 +6,11 @@ module convert_sniff shared public
 
 require dasllama/dasllama               // CANARY_MAGIC, rd_u32
 require dasllama/dasllama_gguf          // GGUFMeta — bake-side, deliberately not facade
+require dasllama/dasllama_nmt           // is_marian_model: the translation carrier's sniff
 require daslib/fio
 
 //! What a source file carries: a regular decoder GGUF (the Model
-//! flow), an audio family, or a vision mmproj
+//! flow), an audio family, a vision mmproj, or a translation model
 enum AsrCarrierKind {
     decoder
     whisper
@@ -20,6 +21,7 @@ enum AsrCarrierKind {
     gemma4a
     audio_tower   //!< the qwen2a / ultravox / voxtral mmproj
     vision
+    bergamot      //!< a Marian translation student
 }
 
 //! The carrier kind of the file at `path`, off its magic and its GGUF
@@ -38,7 +40,9 @@ def sniff_asr_kind(path : string) : AsrCarrierKind {
     fmap(f) $(var bytes : array<uint8>#) {
         let magic = rd_u32(bytes, 0l)
         let ggml = asr_ggml_kind(magic, int(rd_u32(bytes, 4l)))
-        if (ggml != AsrGgmlKind.none) {
+        if (is_marian_model(bytes)) {
+            kind = AsrCarrierKind.bergamot
+        } elif (ggml != AsrGgmlKind.none) {
             kind = ggml == AsrGgmlKind.parakeet ? AsrCarrierKind.parakeet : AsrCarrierKind.whisper
         } elif (magic == CANARY_MAGIC) {
             kind = AsrCarrierKind.canary

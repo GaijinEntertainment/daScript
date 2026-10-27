@@ -13,6 +13,7 @@ require dasllama/dasllama_math_default  // k4_sc_mn — the k4 6-bit sc/mn decod
 require dasllama/dasllama_repack        // k45_nib/k5_hbit/k6_nib — the disk-order K-quant accessors
 require dasllama/dasllama_gguf          // K6_SSB — the k6 disk scale stride
 require dasllama/dasllama_gemm_schema   // kq_qsb/kq_ssb — the fmt-id plane strides
+require dasllama/dasllama_plane   // PlaneI8/PlaneF - q8_region_append reads the model planes
 require dasllama/dasllama_par           // maybe_parallel_for + jobque probes
 require dasllama/dasllama_load   // StreamReg + the streaming-fill hook contract this file registers into
 require dasllama/dasllama_ple   // ple_planes: the per-layer-embedding planes the walkers pack
@@ -855,6 +856,18 @@ def q8_repack(blob : array<uint8>; tensors : array<tuple<boff : int64; n : int64
         }
     }
     return <- bases
+}
+
+//! One GEMM region of the q8 planes (`rows` x `n` at element `off`, in the CPU backend's layout `lay`) appended to `staging` as the
+//! Metal 34-byte block stream at the 16-byte-aligned cursor `cur`; answers the region's byte offset and advances the cursor.
+def q8_region_append(qblob : PlaneI8; qscales : PlaneF; off, n, rows : int64; lay : Q8RepackLayout; var staging : array<uint8>;
+                     var cur : uint64&) : uint64 {
+    cur = (cur + 15ul) & ~15ul
+    let at = cur
+    q8_region_to_metal_blob(plane_at(qblob, off), plane_at(qscales, off / Q8_BLOCK_ELEMS), n, rows, lay.repacked, lay.mr, lay.kgroup,
+        lay.wbias, unsafe(addr(staging[int64(cur)])))
+    cur += uint64((rows * n / Q8_BLOCK_ELEMS) * (Q8_QPB + Q8_SPB))
+    return at
 }
 
 // Interleave one PREPARED Q8 region (split planes, f32 scales, possibly grp<mr>-repacked) into

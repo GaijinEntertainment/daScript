@@ -10,6 +10,41 @@ and coverage; this ledger is the backlog for the perf pass that follows them. Ev
 what it costs today and what the fix would change.
 
 ## Entries
+- **MEASURED (2026-10-27, `direction-grade`) - the Bergamot translation family on three homes
+  (`ARCHITECTURE_TRANSLATE.md#nmt-device-homes`).** Harness `harness/nmt_probe.das` (the race fixture: interleaved rounds of
+  the 30-line ru and en corpora, `benchmarks/nmt/corpus/`, best of 9 rounds after warm-up, ms a sentence, back to back),
+  branch `bbatkin/bergamot-translate`, `-jit`, `DAS_TUNE_POLICY` unset. Boxes: m5 (Apple M5 Max, macOS 27.0.1,
+  `DAS_TUNE_MANIFEST` = `performance/m5.tune.json`, which predated the binary - the kernels ran their fallback stamps) and
+  the RunPod RTX PRO 4500 Blackwell 32 GB (Linux, 48 vCPU, driver 595.91, `DASLLAMA_GPU=1`). Lasting allocations: the q8
+  lane adds a Q8_0 copy of the classifier beside the tied embedding (n_vocab x d x 34 / 32 bytes); each GPU home adds one
+  device slab of the block GEMMs' and the classifier's Q8_0 regions (the q8 planes' elements x 34 / 32 bytes) and
+  scratch sized to `NMT_DEVICE_SRC_CAP` (256) source rows; neither was measured as RSS.
+
+  | student | m5 CPU q8 | m5 Metal | pod CPU q8 | pod Vulkan |
+  |---|---|---|---|---|
+  | ru-en base-memory | 3.02 | 3.79 | 6.73 | 3.54 |
+  | en-ru base-memory | 3.23 | 3.76 | 6.63 | 3.50 |
+  | ru-en tiny | 1.91 | 2.68 | VOID | MISS 25/30 |
+  | en-ru base | 2.63 | 2.90 | VOID | VOID |
+
+  On the M5 the CPU wins by 10-30 %: a device step is a chain of single-row dispatches, latency-bound, and the Metal
+  sentence pays the command buffers' round trips. On the pod Vulkan is 1.9x the pod's CPU. VOID rows read cv above 3 % on
+  both pod passes (spread to 15 %). A third pass on a fresh container with the pod profile re-minted for the binary, the
+  VOID students first, kept the same picture: ru-en base-memory 6.40 CPU / 3.52 Vulkan (both valid), en-ru base-memory
+  6.95 / 3.62 (cv 3.5 % / 5.0 %), en-ru base 6.10 / 2.24 (cv 9.3 % / 12.2 %), ru-en tiny CPU 4.41 (cv 6.1 %) - the pod's
+  48 shared vCPUs read noisy whatever runs first, so its CPU rows stay VOID outside the base-memory pair. The tiny MISS is
+  the probe's agreement gate: Vulkan's lines match the CPU q8 chain on 25 of 30 against the floor of 26, deterministically
+  (Metal reads 26). Each of the five lines leaves the CPU's at one step where the device's token is the CPU's runner-up, a
+  top-two gap of 0.04 to 0.23 logits on a top logit near 13 (lines 2, 7, 16, 20, 27 of `corpus/ru.txt`): near-ties the
+  device's f16 keys and q8 activations decide the other way, and the step's own stamps hold their CPU references on the same device
+  (`test_vkt_nmt`, `test_vkt_nmt_attn`). Interactive
+  use pays more than these rows on either GPU home: after an idle gap the device's clocks and wake cost more than the CPU's.
+  The bars the suite holds (`tests/test_nmt.das`, m5, `run.das -- --area translate`): the exact lane's forced-feed stages
+  within 1e-4 of each stage's largest magnitude (worst 5.1e-6, en-de line 10, `dec_l2_rnn`) and its free run 30 of 30 lines
+  on all five students (floor 28); the q8 lane against the f32 oracle 26 (ru-en) and 27 (en-ru) of 30 (floor 25); a device
+  home against the CPU q8 chain 28 (ru-en) and 29 (en-ru) of 30 on Metal (floor 26); marian's own int8 path agrees with
+  its f32 graph on 20-23 of 30. Translation LLMs through the CLI, m5 Metal:
+  MiLMMT-46-1B Q4_K_M ~30-37 ms a sentence, Qwen3.6-35B-A3B (chat template, thinking off) ~120 ms.
 - **MEASURED (2026-10-26, `debug-jit`) - GigaAM's exact lane on the carrier's f16 halfwords, the streamed mint, and the
   q8 lane on the Metal chain (`ARCHITECTURE_MEDIA_ASR.md#gigaam-planes`).** Box m5 (Apple M5 Max, macOS 27.0.1), branch
   `bbatkin/gigaam-asr` at d4195376b9 with the change, `bin/daslang -jit`, `DAS_TUNE_MANIFEST` = `performance/m5.tune.json`

@@ -1418,6 +1418,14 @@ def crispasr_root() : string => g_env_prof.crispasr
 def crispasr_bin(gpu : bool; cli : string = "crispasr") : string =>
     cmake_built_bin("{crispasr_root()}/{gpu ? "build" : "build-cpu"}/bin", cli)
 
+def marian_root() : string => g_env_prof.marian
+
+//! The patched marian-decoder of the translation reference (setup_asr_rig --refs builds it).
+def marian_bin() : string => cmake_built_bin("{marian_root()}/inference/build", "marian-decoder")
+
+//! The translation benches, oracle and patches; these tools run from the repo-root cwd.
+def nmt_dir() : string => "modules/dasLLAMA/benchmarks/nmt"
+
 //! A venv's interpreter across layouts — POSIX puts it in bin/, Windows in Scripts/.
 def venv_python(venv : string) : string {
     // native separators: cmd parses a bare `foo/Scripts/python.exe` as command `foo` + switches
@@ -1436,6 +1444,8 @@ def nemo_py() : string => ref_py(g_env_prof.nemo_py, "nemo")
 def mlx_py() : string => ref_py(g_env_prof.mlx_py, "mlx")
 
 def gigaam_py() : string => ref_py(g_env_prof.gigaam_py, "gigaam")
+
+def nmt_py() : string => ref_py(g_env_prof.nmt_py, "nmt")
 
 //! The Metal twin of mtmd_bin() — the same patched checkout built with Metal ON
 //! (setup_asr_rig's build-metal, Apple boxes); "" when absent, and the gpu ref leg skips loudly.
@@ -1935,6 +1945,19 @@ def mtmd_versions(bin : string = "") : string {
     let patch = file_identity("{asr_dir()}/patches/mtmd-timing.patch", "patch")
     let ptag = empty(patch.sha256) ? "mtmd-timing.patch(unhashed)" : "mtmd-timing.patch@{slice(patch.sha256, 0, 8)}"
     return empty(commit) ? "llama.cpp + {ptag}" : "llama.cpp @ {commit} + {ptag}"
+}
+
+def private patch_tag(name : string) : string {
+    let patch = file_identity("{nmt_dir()}/patches/{name}", "patch")
+    return empty(patch.sha256) ? "{name}(unhashed)" : "{name}@{slice(patch.sha256, 0, 8)}"
+}
+
+//! `Mozilla translations @ <commit>` plus both marian patches' hashes; "" when the checkout is absent.
+def marian_versions() : string {
+    let commit = git_commit_at(marian_root())
+    return "" if (empty(commit))
+    let tags <- [for (name in ["marian-oracle.patch", "marian-sentencepiece.patch"]); patch_tag(name)]
+    return "Mozilla translations @ {commit} + {join(tags, " + ")}"
 }
 
 //! The `VERSIONS` line of a venv probe's stdout - the probe's stderr (a package's import-time

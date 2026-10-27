@@ -7,13 +7,16 @@ options _dasllama_internal = true
 // through the suites' gate (`model_available`): a file absent from
 // DASLLAMA_MODELS_DIR, a split with a missing shard, or a
 // large-tier file without DASLLAMA_PARITY_FULL=1. The absent-file
-// cell needs nothing.
+// cell needs nothing. The bake cell runs main.das as a child on a
+// temp copy of the ru-en student, so the models dir is never written.
 
 require dastest/testing_boost public
 require convert_sniff
 // models_dir / model_available: the suites' presence and tier gate
 require ../../modules/dasLLAMA/tests/_model_tier.das
 require daslib/fio
+require daslib/clargs                    // get_host_binary: the child bake runs under this daslang
+require daslib/module_path               // get_this_module_dir: main.das sits beside this test
 
 def private sniff_cell(t : T?; name : string; want : AsrCarrierKind) {
     let path = path_join(models_dir(), name)
@@ -34,8 +37,55 @@ def test_sniff_asr_kind(t : T?) {
     t |> run("a Qwen3-ASR audio mmproj sniffs as qwen3a") @(t : T?) {
         sniff_cell(t, "mmproj-Qwen3-ASR-0.6B-bf16.gguf", AsrCarrierKind.qwen3a)
     }
+    t |> run("the ru-en and en-ru Bergamot students sniff as bergamot") @(t : T?) {
+        for (m in ["ru-en-base-memory/model.ruen", "en-ru-base-memory/model.enru"]) {
+            sniff_cell(t, "bergamot/{m}.intgemm.alphas.bin", AsrCarrierKind.bergamot)
+        }
+    }
+    t |> run("a version-1 item table without the embedded model.yml is not Marian") @(t : T?) {
+        let path = path_join(test_temp_dir(), "not_marian.bin")
+        fopen(path, "wb") $(f) {
+            let head = [1ul, 1ul, 5ul, 0x0404ul, 1ul, 4ul]
+            var b <- [for (i in range(48)); uint8((head[i / 8] >> uint64(8 * (i % 8))) & 0xfful)]
+            b |> push_from([for (c in "Wemb"); uint8(c)])
+            b |> push(0u8)
+            fwrite(f, b)
+        }
+        t |> equal(sniff_asr_kind(path), AsrCarrierKind.decoder)
+        remove(path)
+    }
     t |> run("no file is a decoder - the Model flow reports the missing file") @(t : T?) {
         let absent = path_join(test_temp_dir(), "absent.gguf")
         t |> equal(sniff_asr_kind(absent), AsrCarrierKind.decoder)
     }
+}
+
+[test]
+def test_bake_bergamot(t : T?) {
+    let src_dir = path_join(models_dir(), "bergamot/ru-en-base-memory")
+    let src = path_join(src_dir, "model.ruen.intgemm.alphas.bin")
+    return if (!model_available(t, src))
+    let dir = path_join(test_temp_dir(), "ru-en-base-memory")
+    let model = path_join(dir, "model.ruen.intgemm.alphas.bin")
+    var err = ""
+    t |> success(mkdir_rec(dir), "made the copy's directory")
+    for (name in ["model.ruen.intgemm.alphas.bin", "vocab.ruen.spm"]) {
+        let copied = copy_file(path_join(src_dir, name), path_join(dir, name), true, err)
+        t |> success(copied, "copied {name}: {err}")
+    }
+    for (lane in [("q8", "bergamot-q8"), ("fp32", "bergamot-f32")]) {
+        t |> run("a Marian student bakes its {lane._0} image beside the source") @(t : T?) {
+            var out = ""
+            let main = path_join(get_this_module_dir(), "main.das")
+            let argv <- [get_host_binary(), "-jit", main, "--",
+                "--model", model, "--quant", lane._0]
+            let rc = run_and_capture(argv, out, 300.0)
+            t |> equal(rc, 0, "the bake exits 0: {out}")
+            let image = "{model}.{lane._1}.dlim"
+            t |> success(stat(image).is_valid, "{base_name(image)} landed: {out}")
+            remove(image)
+        }
+    }
+    remove(path_join(dir, "model.ruen.intgemm.alphas.bin"))
+    remove(path_join(dir, "vocab.ruen.spm"))
 }

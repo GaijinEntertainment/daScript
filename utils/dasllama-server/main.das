@@ -42,6 +42,8 @@ require daslib/fio
 require live_host               // init/update/shutdown lifecycle + standalone exit_requested
 require math
 require strings                 // to_lower / starts_with (pick_quant's file-quant spellings)
+require daslib/strings_boost    // join
+require ../common/text_lines.das   // split_trimmed: the comma-separated translate key
 
 [CommandLineArgs]
 struct ServerArgs {
@@ -108,6 +110,9 @@ struct ServerArgs {
     @clarg_name = "tts-voices-dir"
     @clarg_doc = "Directory of voice clips (wav / flac / mp3 / ogg, a few seconds each) a cloning TTS model adds to its voices at boot, each under its file's stem (with several TTS models, the first one's)"
     tts_voices_dir : string
+
+    @clarg_doc = "Translation models, comma-separated: a Firefox Translations model.<pair>.intgemm.alphas.bin (its vocab.<pair>.spm beside it; one direction, its pair from the file name) or a translation-LLM GGUF (MiLMMT-46: any two of its 46 languages) — enables /translate and /languages (the LibreTranslate routes) and the target field of /v1/audio/translations. Each model loads on a worker thread of its own; a pair goes to the first model that serves it"
+    translate : string
 
     @clarg_name = "image-mmproj"
     @clarg_doc = "Vision mmproj (gemma4uv, gemma4v, or gemma3v, sniffed) for the default model — enables image_url parts on /v1/chat/completions; a file that carries an audio tower too (the gemma-4 E-series) arms input_audio parts with it"
@@ -289,7 +294,7 @@ var private g_cfg_authoritative = false
 
 let CONFIG_KEYS = fixed_array("model", "port", "host", "quant", "kv_dtype", "metal", "gpu", "gpu_layers",
     "gpu_stream", "gpu_dn", "gpu_attn", "gpu_dense", "gpu_vram_mb", "asr", "mmproj", "image_mmproj", "audio_mmproj", "asr_workers", "tts", "tts_lane", "tts_voices_dir",
-    "ctx", "max_tokens", "streams", "threads", "team_dispatch", "affinity", "chunk", "chunk_idle", "page_rows",
+    "translate", "ctx", "max_tokens", "streams", "threads", "team_dispatch", "affinity", "chunk", "chunk_idle", "page_rows",
     "prefix", "prefix_states", "prefix_state_mb", "flat", "mtp", "rope_scaling", "rope_scale", "yarn_orig_ctx", "lcpp_bin", "models_dir", "models")
 
 def private from_cli(key : string) : bool
@@ -399,13 +404,17 @@ def set_cli_source(key : string; given : bool) {
 def speech_roster_ids(tts : bool) : array<string> =>
     <- [for (m in tts ? g_tts_models : g_asr_models); empty(m.id) ? m.path : m.id]
 
-//! whether any configured speech model has its whole file set: such a boot serves its speech route with no LLM
-def private any_speech_present : bool {
+//! whether any configured speech model has its whole file set, or a `cfg.translate` model its file: such a boot serves
+//! its speech or translation route with no LLM. Non-private: test_server_flags.das gates the translation arm.
+def any_speech_present(cfg : ServerArgs) : bool {
     for (m in g_tts_models) {
         return true if (tts_files_present(m.path))
     }
     for (a in g_asr_models) {
         return true if (stat(a.path).is_valid && (empty(a.mmproj) || stat(a.mmproj).is_valid))
+    }
+    for (p in translate_paths(cfg.translate)) {
+        return true if (stat(p).is_valid)
     }
     return false
 }
@@ -455,7 +464,9 @@ def private cfg_from_toml(root : JsonValue?; key : string; var field : float&; a
 // which keys the command line set explicitly — the fill-if-unset sentinels, plus flag-presence
 // probes for the keys where 0 is a meaningful explicit value (--threads / --affinity / --prefix
 // and the vulkan detail knobs)
-def private mark_cli_sources(cfg : ServerArgs) {   // nolint:STYLE037,STYLE038 — one flat presence test per CLI knob; a table would hide which knobs are checked how
+//! Each knob `cfg` carries a value for marked as the command line's. Non-private: test_server_flags.das reads a flag's
+//! source on the config surface.
+def mark_cli_sources(cfg : ServerArgs) {   // nolint:STYLE037,STYLE038 — one flat presence test per CLI knob; a table would hide which knobs are checked how
     if (!empty(cfg.model)) {
         g_cfg_sources["model"] = "cli"
     }
@@ -511,6 +522,9 @@ def private mark_cli_sources(cfg : ServerArgs) {   // nolint:STYLE037,STYLE038 �
     }
     if (!empty(cfg.tts_voices_dir)) {
         g_cfg_sources["tts_voices_dir"] = "cli"
+    }
+    if (!empty(cfg.translate)) {
+        g_cfg_sources["translate"] = "cli"
     }
     if (!empty(cfg.image_mmproj)) {
         g_cfg_sources["image_mmproj"] = "cli"
@@ -580,6 +594,22 @@ def private mark_cli_sources(cfg : ServerArgs) {   // nolint:STYLE037,STYLE038 �
     }
 }
 
+//! The `translate` key: the comma-separated paths the flag takes, or an array of paths, read as that string.
+def private translate_from_toml(root : JsonValue?; var cfg : ServerArgs; auth : bool) {
+    let v = root?["translate"]
+    if (v == null || !(v.value is _array)) {
+        cfg_from_toml(root, "translate", cfg.translate, auth)
+        return
+    }
+    if (auth || !from_cli("translate")) {
+        cfg.translate = join([for (e in v.value as _array); e ?? ""], ",")
+        g_cfg_sources["translate"] = "toml"
+    }
+}
+
+//! The translation models a `--translate` / `translate` value names, in order. Non-private: the translate suite reads it.
+def translate_paths(spec : string) : array<string> => <- split_trimmed(spec, ",")
+
 //! the flat keys that size a model's sessions and scheduler
 def private apply_session_keys(root : JsonValue?; var cfg : ServerArgs; auth : bool) {
     cfg_from_toml(root, "ctx", cfg.ctx, auth)
@@ -642,6 +672,7 @@ def apply_config(var cfg : ServerArgs) : bool {
     }
     cfg_from_toml(root, "tts_lane", cfg.tts_lane, auth)
     cfg_from_toml(root, "tts_voices_dir", cfg.tts_voices_dir, auth)
+    translate_from_toml(root, cfg, auth)
     cfg_from_toml(root, "image_mmproj", cfg.image_mmproj, auth)
     cfg_from_toml(root, "audio_mmproj", cfg.audio_mmproj, auth)
     cfg_from_toml(root, "asr_workers", cfg.asr_workers, auth)
@@ -880,9 +911,10 @@ def vulkan_serving_want(cfg : ServerArgs) : GpuTierWant
 
 // The GET /config surface: RESOLVED effective values (what init actually uses) + per-key
 // provenance. Sentinel-is-meaning keys stay raw: ctx 0 = model default, prefix 0 = auto /
-// -1 = unbounded, threads -1 = all cores, gpu "" = legacy metal/env path.
+// -1 = unbounded, threads -1 = all cores, gpu "" = legacy metal/env path. Non-private: test_server_flags.das reads
+// the translate row.
 [arch(at = "README.md#endpoints")]
-def private build_config_surface(cfg : ServerArgs; save_path : string) : string {
+def build_config_surface(cfg : ServerArgs; save_path : string) : string {
     let gpu = effective_gpu(cfg)
     var config = JV((
         model = cfg.model,
@@ -903,6 +935,7 @@ def private build_config_surface(cfg : ServerArgs; save_path : string) : string 
         tts = cfg.tts,
         tts_lane = pick_tts_lane(cfg.tts_lane),   // the lane configure_tts kept, not the spelling asked for
         tts_voices_dir = cfg.tts_voices_dir,
+        translate = cfg.translate,
         image_mmproj = cfg.image_mmproj,
         audio_mmproj = cfg.audio_mmproj,
         asr_workers = cfg.asr_workers > 0 ? cfg.asr_workers : 1,
@@ -992,10 +1025,10 @@ def parse_args() {
         request_exit()
         return
     }
-    // a [[models]] roster needs no flat model key; a --tts or --asr start with its file set complete
-    // is a SERVING server (the speech routes), so it never enters setup mode
+    // a [[models]] roster needs no flat model key; a --tts, --asr or --translate start with its file set complete
+    // is a SERVING server (the speech and translation routes), so it never enters setup mode
     speech_roster_from_flags(g_cfg)
-    if (empty(g_cfg.model) && empty(g_models) && !any_speech_present()) {
+    if (empty(g_cfg.model) && empty(g_models) && !any_speech_present(g_cfg)) {
         g_setup_mode = true
         print("no model configured - starting in setup mode (open the control page to download one from the catalog)\n")
     }
@@ -1177,12 +1210,12 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
     }
     delete g_models
     g_models <- roster
-    if (empty(g_models) && !g_setup_mode && !any_speech_present()) {
+    if (empty(g_models) && !g_setup_mode && !any_speech_present(g_cfg)) {
         // not an exit: a crash-looping boot under the watchdog never gets a page to fix the config from
         g_setup_mode = true
-        to_log(LOG_ERROR, "dasllama-server: no loadable model - no configured path survived its file check (roster entries, and the --tts and --asr file sets); starting in setup mode\n")
+        to_log(LOG_ERROR, "dasllama-server: no loadable model - no configured path survived its file check (roster entries, the --tts and --asr file sets, the --translate models); starting in setup mode\n")
     } elif (empty(g_models) && !g_setup_mode) {
-        to_log(LOG_WARNING, "dasllama-server: no loadable LLM model - serving the speech routes only (the TTS and ASR models still load)\n")
+        to_log(LOG_WARNING, "dasllama-server: no loadable LLM model - serving the speech and translation routes only (the TTS, ASR and translation models still load)\n")
     }
     if (!empty(g_cfg.image_mmproj) && !stat(g_cfg.image_mmproj).is_valid) {
         to_log(LOG_ERROR, "dasllama-server: dropping --image-mmproj - file not found: {g_cfg.image_mmproj}\n")
@@ -1295,6 +1328,7 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
     for (m in g_tts_models) {
         add_tts_model(m.path, m.lane, m.voices_dir, m.id)
     }
+    configure_translators(translate_paths(g_cfg.translate))   // a translation-only boot is a serving start too
 
     // the /config surface: a config-less start saves to the per-user directory, where the
     // auto-discovery in parse_args looks next

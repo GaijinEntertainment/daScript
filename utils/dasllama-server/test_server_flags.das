@@ -11,6 +11,7 @@ require dasllama/dasllama_gpu_tier                      // the K/V room seam a c
 require daslib/clargs                                   // get_user_args / flag_present: the match cli_has_flag rests on
 require strings
 require daslib/fio                                      // the roster cell writes its config
+require daslib/json_boost                               // the translate cell reads the config surface
 require math
 require _server_rig
 require dasllama/dasllama_gpu_resident
@@ -286,6 +287,67 @@ def test_audio_mmproj_flag_and_key(t : T?) {
         t |> success(apply_config(saved), "the authoritative config reads")
         set_cli_source("audio_mmproj", false)
         t |> equal(saved.audio_mmproj, "toml.gguf", "an authoritative config wins over the flag")
+    }
+    remove(path)
+}
+
+//! The `translate` key and flag: the flag's comma list and the config's string or array of paths read as one spec, its
+//! row and source on the /config surface, and a boot with a present translation model alone is a serving one.
+[test]
+def test_translate_key_and_flag(t : T?) {
+    let path = path_join(test_temp_dir(), "translate.toml")
+    t |> run("--translate is the config surface's translate row, sourced cli") @(t : T?) {
+        let r <- parse_args(type<ServerArgs>, ["--translate", "a.bin, b.gguf"])
+        t |> success(r |> is_ok, "the flag parses")
+        if (r |> is_ok) {
+            let cfg = r |> unwrap
+            mark_cli_sources(cfg)
+            let surface = build_config_surface(cfg, "")
+            set_cli_source("translate", false)
+            var err = ""
+            var js = read_json(surface, err)
+            t |> equal(js?["config"]?["translate"] ?? "", "a.bin, b.gguf", "the spec as given: {surface}")
+            t |> equal(js?["sources"]?["translate"] ?? "", "cli", "sourced from the command line")
+            unsafe {
+                delete js
+            }
+        }
+    }
+    t |> run("the config key takes a string or an array of paths, and a flag wins over a config that is not authoritative") @(t : T?) {
+        t |> success(fwrite(path, "translate = \"x.bin, y.gguf\"\n"), "wrote the string form")
+        var plain = ServerArgs(config = path)
+        t |> success(apply_config(plain), "the string form reads")
+        t |> equal(plain.translate, "x.bin, y.gguf", "the string is the spec")
+        t |> success(fwrite(path, "translate = [\"x.bin\", \"y.gguf\"]\n"), "wrote the array form")
+        var listed = ServerArgs(config = path)
+        t |> success(apply_config(listed), "the array form reads")
+        t |> equal(listed.translate, "x.bin,y.gguf", "the array joins into the comma spec")
+        var inscope paths <- translate_paths(listed.translate)
+        t |> success(length(paths) == 2 && paths[0] == "x.bin" && paths[1] == "y.gguf", "and splits back into its paths: {paths}")
+        var err = ""
+        var js = read_json(build_config_surface(listed, ""), err)
+        t |> equal(js?["sources"]?["translate"] ?? "", "toml", "the array's source is the config")
+        unsafe {
+            delete js
+        }
+        var flagged = ServerArgs(config = path, translate = "cli.bin")
+        set_cli_source("translate", true)
+        t |> success(apply_config(flagged), "the array form reads under a flag")
+        set_cli_source("translate", false)
+        t |> equal(flagged.translate, "cli.bin", "the flag wins over a config that is not authoritative")
+        t |> success(fwrite(path, "authoritative = true\ntranslate = [\"x.bin\"]\n"), "wrote the authoritative config")
+        var saved = ServerArgs(config = path, translate = "cli.bin")
+        set_cli_source("translate", true)
+        t |> success(apply_config(saved), "the authoritative config reads")
+        set_cli_source("translate", false)
+        t |> equal(saved.translate, "x.bin", "an authoritative config wins over the flag")
+    }
+    t |> run("a translation model whose file is present makes a serving boot, a missing one does not") @(t : T?) {
+        let model = path_join(test_temp_dir(), "model.ruen.intgemm.alphas.bin")
+        t |> success(fwrite(model, "x"), "planted the model file")
+        t |> success(any_speech_present(ServerArgs(translate = "{model}")), "a present file serves")
+        t |> success(!any_speech_present(ServerArgs(translate = "{model}.missing")), "a missing file does not")
+        remove(model)
     }
     remove(path)
 }

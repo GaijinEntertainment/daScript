@@ -5781,6 +5781,28 @@ class template GkRnntPick : GkWgArgmax {
     }
 }
 
+//! the picks' shared scan: a row of `lg` plus a bias row of `wb`, its workgroup argmax with the lowest index of a tie
+[ |> template_struct_instance]
+class template GkBiasedArgmax : GkWgArgmax {
+    @ssbo @binding = 0 @role = "read" lg : array<float>      //! the logit rows
+    @ssbo @binding = 1 @role = "weight" wb : array<float>    //! the plane holding the bias row
+
+    def biased_argmax(row, n, boff : uint; var mx : float&; var best : uint&) {
+        var bv = -3.4e38
+        var bi = 0u
+        var i = gl_LocalInvocationID.x
+        while (i < n) {
+            let v = lg[row + i] + wb[boff + i]
+            if (v > bv) {
+                bv = v
+                bi = i
+            }
+            i += 256u
+        }
+        wg_argmax_into(bv, bi, mx, best)
+    }
+}
+
 // ===== the CTC head's pick (GigaAM's CTC carrier): the head GEMM's rows land here =====
 
 struct GkCtcPickArgs {
@@ -5793,32 +5815,19 @@ struct GkCtcPickArgs {
 //! loop): the biased row's argmax, the lowest index of a tie (an all-NaN row picks 0), and -log of the row's sum of
 //! exp(logit - max), the emitted token's plog; the host collapses the repeats and the blanks off the records
 [ |> template_struct_instance]
-class template GkCtcPick : GkWgArgmax {
-    @ssbo @binding = 0 @role = "read" lg : array<float>      //! the head GEMM's rows [rows][ldl]
-    @ssbo @binding = 1 @role = "weight" wb : array<float>    //! the plane holding the head's bias
+class template GkCtcPick : GkBiasedArgmax {
     @ssbo @binding = 2 @role = "write" pk : array<uint>      //! a frame's record [rows][2]: the class, plog's bits
     @kargs pa : GkCtcPickArgs
 
     def ctc_pick_body {
         let tid = gl_LocalInvocationID.x
         let row = gl_WorkGroupID.x * pa.ldl
-        var bv = -3.4e38
-        var bi = 0u
-        var i = tid
-        while (i < pa.nc) {
-            let v = lg[row + i] + wb[pa.boff + i]
-            if (v > bv) {
-                bv = v
-                bi = i
-            }
-            i += 256u
-        }
         var mx = 0.0
         var best = 0u
-        wg_argmax_into(bv, bi, mx, best)
+        biased_argmax(row, pa.nc, pa.boff, mx, best)
         barrier()
         var s = 0.0
-        i = tid
+        var i = tid
         while (i < pa.nc) {
             s += exp((lg[row + i] + wb[pa.boff + i]) - mx)
             i += 256u
@@ -5829,6 +5838,112 @@ class template GkCtcPick : GkWgArgmax {
             let r = gl_WorkGroupID.x * 2u
             pk[r] = best
             pk[r + 1u] = float_bits_to_uint(-log(tot))
+        }
+    }
+}
+
+// ===== the Bergamot translation family's step (dasllama_nmt.das): the embed, the SSRU cell, the greedy pick =====
+
+let NMT_ST_T = 0u       //! the greedy state's words, the kernels' literals: the step about to run (the next embed's position)
+let NMT_ST_PREV = 1u    //! ... the token it embeds, `NMT_NO_TOKEN` at step 0 (a zero embedding)
+let NMT_ST_DONE = 2u    //! ... set once the end token or the length cap is reached; the pick then writes nothing
+let NMT_ST_NTOK = 3u    //! ... the tokens recorded
+let NMT_ST_WORDS = 4u
+let NMT_NO_TOKEN = 0xFFFFFFFFu
+
+struct GkNmtEmbedArgs {
+    d : uint
+    rows : uint
+    emb_off : uint   //! the embedding table's base in `wn`
+    scale : float    //! sqrt(d)
+    from_state : uint   //! 1: one row, its token and position off the greedy state words in `ids`; 0: row r is `ids[r]` at position r
+}
+
+//! The family's embedding rows: the token's row of the tied table times sqrt(d) (a zero row for `0xFFFFFFFFu`) plus the
+//! position's sinusoid row, one element an invocation; the CPU `nmt_embed_row`
+[ |> template_struct_instance]
+class template GkNmtEmbed {
+    @ssbo @binding = 0 @role = "read" ids : array<uint>
+    @ssbo @binding = 1 @role = "weight" wn : array<float>
+    @ssbo @binding = 2 @role = "read" pos : array<float>   //! [positions][d]
+    @ssbo @binding = 3 @role = "write" x : array<float>
+    @kargs pa : GkNmtEmbedArgs
+
+    def nmt_embed_body {
+        let gid = gl_GlobalInvocationID.x
+        if (gid < pa.rows * pa.d) {
+            let r = gid / max(1u, pa.d)
+            let i = gid % max(1u, pa.d)
+            let id = pa.from_state != 0u ? ids[1u] : ids[r]
+            let p = pa.from_state != 0u ? ids[0u] : r
+            let e = id == 0xFFFFFFFFu ? 0.0 : wn[pa.emb_off + id * pa.d + i] * pa.scale
+            x[gid] = e + pos[p * pa.d + i]
+        }
+    }
+}
+
+struct GkNmtSsruArgs {
+    d : uint
+    bf_off : uint     //! the forget gate's bias row in `wn`
+    cell_off : uint   //! the layer's cell row in `cell`
+}
+
+//! The SSRU block's recurrence over the stacked GEMM row [x W | x Wf]: f = sigmoid(x Wf + bf), c = f c + (1 - f) x W, the
+//! output relu(c); one element an invocation, the CPU `nmt_decode_step`'s loop
+[ |> template_struct_instance]
+class template GkNmtSsru {
+    @ssbo @binding = 0 @role = "read" h : array<float>
+    @ssbo @binding = 1 @role = "weight" wn : array<float>
+    @ssbo @binding = 2 @role = "readwrite" cell : array<float>
+    @ssbo @binding = 3 @role = "write" o : array<float>
+    @kargs pa : GkNmtSsruArgs
+
+    def nmt_ssru_body {
+        let i = gl_GlobalInvocationID.x
+        if (i < pa.d) {
+            let f = sigmoid_f32(h[pa.d + i] + wn[pa.bf_off + i])
+            let c = f * cell[pa.cell_off + i] + (1.0 - f) * h[i]
+            cell[pa.cell_off + i] = c
+            o[i] = max(c, 0.0)
+        }
+    }
+}
+
+struct GkNmtPickArgs {
+    nv : uint     //! the vocabulary
+    boff : uint   //! the output bias row in `wb`
+    eos : uint
+    cap : uint    //! the steps a sentence takes at most
+}
+
+//! The greedy step's end in one workgroup of 256: the argmax of the classifier row plus its bias (the lowest index of a tie),
+//! then lane 0 records the token and advances the state words - the end token or the cap marks the sentence done, and a
+//! done sentence's later steps write nothing; the CPU `nmt_translate_ids` loop
+[ |> template_struct_instance]
+class template GkNmtPick : GkBiasedArgmax {
+    @ssbo @binding = 2 @role = "readwrite" st : array<uint>
+    @ssbo @binding = 3 @role = "write" toks : array<uint>
+    @kargs pa : GkNmtPickArgs
+
+    def nmt_pick_body {
+        let tid = gl_LocalInvocationID.x
+        var mx = 0.0
+        var best = 0u
+        biased_argmax(0u, pa.nv, pa.boff, mx, best)
+        if (tid == 0u && st[2u] == 0u) {
+            let t = st[0u]
+            if (best == pa.eos) {
+                st[2u] = 1u
+                st[3u] = t
+            } else {
+                toks[t] = best
+                st[3u] = t + 1u
+                st[1u] = best
+                st[0u] = t + 1u
+                if (t + 1u >= pa.cap) {
+                    st[2u] = 1u
+                }
+            }
         }
     }
 }
