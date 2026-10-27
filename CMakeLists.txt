@@ -964,6 +964,7 @@ SOURCE_GROUP_FILES("vecmath" VECMATH_SRC)
 SET(AST_SRC
 src/ast/ast.cpp
 src/ast/ast_dispatch.cpp
+src/ast/ast_const_visitor.cpp
 src/ast/ast_interop.cpp
 src/ast/ast_tls.cpp
 src/ast/ast_visitor.cpp
@@ -987,6 +988,7 @@ include/daScript/ast/ast_typefactory.h
 include/daScript/ast/ast.h
 include/daScript/ast/ast_expressions.h
 include/daScript/ast/ast_visitor.h
+include/daScript/ast/ast_const_visitor.h
 include/daScript/ast/ast_gc_report.h
 include/daScript/ast/ast_generate.h
 include/daScript/ast/ast_match.h
@@ -1710,6 +1712,7 @@ SET(DAS_RELEASE_AST_INCLUDE
     include/daScript/ast/ast_typefactory.h
     include/daScript/ast/ast_visitor.h
     include/daScript/ast/ast_aot_cpp.h
+    include/daScript/ast/ast_const_visitor.h
     include/daScript/ast/compilation_errors.h
     include/daScript/ast/dyn_modules.h
 )

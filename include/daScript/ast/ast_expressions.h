@@ -12,6 +12,7 @@ namespace das
             : Expression(a), macro(rm) { __rtti = "ExprReader"; }
         virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual void visit ( ConstVisitor & vis ) const override;
         virtual void dispatch( Visitor & vis ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
         ReaderMacroPtr macro = nullptr;
@@ -24,6 +25,7 @@ namespace das
             : Expression(a), label(s), comment(cm) { __rtti = "ExprLabel"; }
         virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual void visit ( ConstVisitor & vis ) const override;
         virtual bool rtti_isLabel() const override { return true; }
         virtual void dispatch( Visitor & vis ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
@@ -39,6 +41,7 @@ namespace das
             : Expression(a), subexpr(s) { __rtti = "ExprGoto"; }
         virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual void visit ( ConstVisitor & vis ) const override;
         virtual bool rtti_isGoto() const override { return true; }
         virtual uint32_t getEvalFlags() const override { return EvalFlags::jumpToLabel; }
         virtual void dispatch( Visitor & vis ) override;
@@ -51,6 +54,7 @@ namespace das
         ExprRef2Value() { __rtti = "ExprRef2Value"; }
         virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual void visit ( ConstVisitor & vis ) const override;
         virtual bool rtti_isR2V() const override { return true; }
         virtual void dispatch( Visitor & vis ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
@@ -64,6 +68,7 @@ namespace das
             : Expression(a), subexpr(s) { __rtti = "ExprRef2Ptr"; }
         virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual void visit ( ConstVisitor & vis ) const override;
         virtual bool rtti_isRef2Ptr() const override { return true; }
         virtual void dispatch( Visitor & vis ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
@@ -77,6 +82,7 @@ namespace das
             : Expression(a), subexpr(s) { __rtti = "ExprPtr2Ref"; }
         virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual void visit ( ConstVisitor & vis ) const override;
         virtual bool rtti_isPtr2Ref() const override { return true; }
         virtual void dispatch( Visitor & vis ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
@@ -91,6 +97,7 @@ namespace das
             : Expression(a), target(n) { __rtti = "ExprAddr"; }
         virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual void visit ( ConstVisitor & vis ) const override;
         virtual bool rtti_isAddr() const override { return true; }
         virtual void dispatch( Visitor & vis ) override;
         virtual void gc_collect ( gc_root * to, gc_root * from ) override;
@@ -105,6 +112,7 @@ namespace das
             : ExprPtr2Ref(a,s), defaultValue(defVal) { __rtti = "ExprNullCoalescing"; }
         virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual void visit ( ConstVisitor & vis ) const override;
         virtual bool rtti_isNullCoalescing() const override { return true; }
         virtual void dispatch( Visitor & vis ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
@@ -119,6 +127,7 @@ namespace das
             : Expression(a), subexpr(s) { __rtti = "ExprDelete"; }
         virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual void visit ( ConstVisitor & vis ) const override;
         virtual void dispatch( Visitor & vis ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
         ExpressionPtr   subexpr = nullptr;
@@ -132,6 +141,7 @@ namespace das
             : Expression(a), subexpr(s), index(i) { __rtti = "ExprAt"; no_promotion = no_promo; }
         virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual void visit ( ConstVisitor & vis ) const override;
         virtual bool rtti_isAt() const override { return true; }
         virtual void dispatch( Visitor & vis ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
@@ -160,6 +170,7 @@ namespace das
             : ExprAt(a,s,i,no_promo) { __rtti = "ExprSafeAt"; }
         virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual void visit ( ConstVisitor & vis ) const override;
         virtual bool rtti_isAt() const override { return false; }
         virtual bool rtti_isSafeAt() const override { return true; }
         virtual void dispatch( Visitor & vis ) override;
@@ -173,6 +184,7 @@ namespace das
         virtual uint32_t getEvalFlags() const override;
         uint32_t getFinallyEvalFlags() const;
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual void visit ( ConstVisitor & vis ) const override;
         void visitFinally(Visitor & vis);
         virtual bool rtti_isBlock() const override { return true; }
         VariablePtr findArgument(const string & name);
@@ -229,6 +241,7 @@ namespace das
             : Expression(a), name(n) { __rtti = "ExprVar"; }
         virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual void visit ( ConstVisitor & vis ) const override;
         virtual bool rtti_isVar() const override { return true; }
         bool isGlobalVariable() const { return !local && !argument && !block; }
         virtual void dispatch( Visitor & vis ) override;
@@ -262,6 +275,7 @@ namespace das
             : Expression(a), subexpr(se), value(va), name(n) { __rtti = "ExprTag"; }
         virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual void visit ( ConstVisitor & vis ) const override;
         virtual void dispatch( Visitor & vis ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
         ExpressionPtr   subexpr = nullptr;
@@ -279,6 +293,7 @@ namespace das
             : Expression(a), value(val), name(n), atField(af) { __rtti = "ExprField"; no_promotion = no_promo; }
         virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual void visit ( ConstVisitor & vis ) const override;
         virtual bool rtti_isField() const override { return true; }
         virtual void dispatch( Visitor & vis ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
@@ -315,6 +330,7 @@ namespace das
             : ExprField(a,val,n) { __rtti = "ExprIsVariant"; }
         virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual void visit ( ConstVisitor & vis ) const override;
         virtual bool rtti_isField() const override { return false; }
         virtual bool rtti_isIsVariant() const override { return true; }
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
@@ -326,6 +342,7 @@ namespace das
             : ExprField(a,val,n) { __rtti = "ExprAsVariant"; }
         virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual void visit ( ConstVisitor & vis ) const override;
         virtual bool rtti_isField() const override { return false; }
         virtual bool rtti_isAsVariant() const override { return true; }
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
@@ -337,6 +354,7 @@ namespace das
             : ExprField(a,val,n) { __rtti = "ExprSafeAsVariant"; }
         virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual void visit ( ConstVisitor & vis ) const override;
         virtual bool rtti_isField() const override { return false; }
         virtual bool rtti_isSafeAsVariant() const override { return true; }
         virtual void dispatch( Visitor & vis ) override;
@@ -350,6 +368,7 @@ namespace das
             : Expression(a), value(val), mask(n) { __rtti = "ExprSwizzle"; }
         virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual void visit ( ConstVisitor & vis ) const override;
         virtual bool rtti_isSwizzle() const override { return true; }
         virtual void dispatch( Visitor & vis ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
@@ -375,6 +394,7 @@ namespace das
             : ExprField(a,af,val,n,no_promo) { __rtti = "ExprSafeField"; }
         virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual void visit ( ConstVisitor & vis ) const override;
         virtual bool rtti_isField() const override { return false; }
         virtual bool rtti_isSafeField() const override { return true; }
         virtual void dispatch( Visitor & vis ) override;
@@ -389,6 +409,7 @@ namespace das
         virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         void autoDereference();
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual void visit ( ConstVisitor & vis ) const override;
         virtual string describe() const;
         virtual bool rtti_isCallLikeExpr() const override { return true; }
         virtual void dispatch( Visitor & vis ) override;
@@ -406,6 +427,7 @@ namespace das
         ExprCallMacro ( const LineInfo & a, const string & n )
             : ExprLooksLikeCall(a,n) { __rtti = "ExprCallMacro"; }
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual void visit ( ConstVisitor & vis ) const override;
         virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual void dispatch( Visitor & vis ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
@@ -448,6 +470,7 @@ namespace das
             : ExprOp(a,o), subexpr(s) { __rtti = "ExprOp1"; }
         virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual void visit ( ConstVisitor & vis ) const override;
         virtual Expression * tail() override { return subexpr->tail(); }
         virtual bool swap_tail ( Expression * expr, Expression * swapExpr ) override;
         virtual bool rtti_isOp1() const override { return true; }
@@ -465,6 +488,7 @@ namespace das
             : ExprOp(a,o), left(l), right(r) { __rtti = "ExprOp2"; }
         virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual void visit ( ConstVisitor & vis ) const override;
         virtual Expression * tail() override { return right->tail(); }
         virtual bool swap_tail ( Expression * expr, Expression * swapExpr ) override;
         virtual bool rtti_isOp2() const override { return true; }
@@ -482,6 +506,7 @@ namespace das
             : ExprOp2(a, "=", l, r) { __rtti = "ExprCopy"; no_promotion = no_promo; };
         virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual void visit ( ConstVisitor & vis ) const override;
         virtual void dispatch( Visitor & vis ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
         virtual bool rtti_isCopy() const override { return true; }
@@ -504,6 +529,7 @@ namespace das
             : ExprOp2(a, "<-", l, r) { __rtti = "ExprMove"; no_promotion = no_promo; };
         virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual void visit ( ConstVisitor & vis ) const override;
         virtual void dispatch( Visitor & vis ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
         union {
@@ -524,6 +550,7 @@ namespace das
             : ExprOp2(a, ":=", l, r) { __rtti = "ExprClone"; no_promotion = no_promo; };
         virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual void visit ( ConstVisitor & vis ) const override;
         virtual void dispatch( Visitor & vis ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
         virtual bool rtti_isClone() const override { return true; }
@@ -554,6 +581,7 @@ namespace das
         virtual Expression * tail() override { return right->tail(); }
         virtual bool swap_tail ( Expression * expr, Expression * swapExpr ) override;
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual void visit ( ConstVisitor & vis ) const override;
         virtual bool rtti_isOp3() const override { return true; }
         virtual string describe() const override;
         virtual void dispatch( Visitor & vis ) override;
@@ -567,6 +595,7 @@ namespace das
         ExprTryCatch ( const LineInfo & a, ExpressionPtr t, ExpressionPtr c )
             : Expression(a), try_block(t), catch_block(c) { __rtti = "ExprTryCatch"; }
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual void visit ( ConstVisitor & vis ) const override;
         virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual uint32_t getEvalFlags() const override;
         virtual void dispatch( Visitor & vis ) override;
@@ -579,6 +608,7 @@ namespace das
         ExprReturn ( const LineInfo & a, ExpressionPtr s )
             : Expression(a), subexpr(s) { __rtti = "ExprReturn"; }
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual void visit ( ConstVisitor & vis ) const override;
         virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual uint32_t getEvalFlags() const override {
             uint32_t ef = EvalFlags::stopForReturn;
@@ -614,6 +644,7 @@ namespace das
         ExprBreak ( const LineInfo & a )
             : Expression(a) { __rtti = "ExprBreak"; }
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual void visit ( ConstVisitor & vis ) const override;
         virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual uint32_t getEvalFlags() const override { return EvalFlags::stopForBreak; }
         virtual bool rtti_isBreak() const override { return true; }
@@ -625,6 +656,7 @@ namespace das
         ExprContinue ( const LineInfo & a )
             : Expression(a) { __rtti = "ExprContinue"; }
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual void visit ( ConstVisitor & vis ) const override;
         virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual uint32_t getEvalFlags() const override { return EvalFlags::stopForContinue; }
         virtual bool rtti_isContinue() const override { return true; }
@@ -687,6 +719,7 @@ namespace das
             enumType = td->enumType;
         }
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual void visit ( ConstVisitor & vis ) const override;
         virtual ExpressionPtr clone( ExpressionPtr expr ) const override;
         virtual void dispatch( Visitor & vis ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
@@ -916,6 +949,7 @@ namespace das
         ExprConstString(const LineInfo & a, const string & str = string())
             : ExprConst(a,Type::tString), text(str) { __rtti = "ExprConstString"; }
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual void visit ( ConstVisitor & vis ) const override;
         virtual ExpressionPtr clone( ExpressionPtr expr ) const override;
         enum class BlobState : uint8_t { unknown, string, blob };
         const string & getValue() const { return text; }
@@ -939,6 +973,7 @@ namespace das
         virtual bool rtti_isStringBuilder() const override { return true; }
         virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual void visit ( ConstVisitor & vis ) const override;
         virtual void dispatch( Visitor & vis ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
         vector<ExpressionPtr>   elements;
@@ -955,6 +990,7 @@ namespace das
         Variable * find ( const string & name ) const;
         virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual void visit ( ConstVisitor & vis ) const override;
         virtual bool rtti_isLet() const override { return true; }
         virtual void dispatch( Visitor & vis ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
@@ -979,6 +1015,7 @@ namespace das
         Variable * findIterator ( const string & name ) const;
         virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual void visit ( ConstVisitor & vis ) const override;
         virtual uint32_t getEvalFlags() const override;
         virtual bool rtti_isFor() const override { return true; }
         virtual void dispatch( Visitor & vis ) override;
@@ -1005,6 +1042,7 @@ namespace das
         virtual uint32_t getEvalFlags() const override;
         virtual bool rtti_isUnsafe() const override { return true; }
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual void visit ( ConstVisitor & vis ) const override;
         virtual void dispatch( Visitor & vis ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
         ExpressionPtr   body = nullptr;
@@ -1018,6 +1056,7 @@ namespace das
         virtual uint32_t getEvalFlags() const override;
         virtual bool rtti_isWhile() const override { return true; }
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual void visit ( ConstVisitor & vis ) const override;
         virtual void dispatch( Visitor & vis ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
         ExpressionPtr   cond = nullptr, body = nullptr;
@@ -1030,6 +1069,7 @@ namespace das
             : Expression(a) { __rtti = "ExprWith"; }
         virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual void visit ( ConstVisitor & vis ) const override;
         virtual bool rtti_isWith() const override { return true; }
         virtual void dispatch( Visitor & vis ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
@@ -1047,6 +1087,7 @@ namespace das
             : Expression(a), alias(al), assumeType(at) { __rtti = "ExprAssume"; }
         virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual void visit ( ConstVisitor & vis ) const override;
         virtual bool rtti_isAssume() const override { return true; }
         virtual void dispatch( Visitor & vis ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
@@ -1061,6 +1102,7 @@ namespace das
         ExprLikeCall ( const LineInfo & a, const string & n )
             : ExprLooksLikeCall(a,n) { __rtti = "ExprLikeCall"; }
         virtual ExpressionPtr visit ( Visitor & vis ) override;
+        virtual void visit ( ConstVisitor & vis ) const override;
     };
 
     enum class CaptureMode {
@@ -1091,6 +1133,7 @@ namespace das
             blk->isLambdaBlock = isl;
         }
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual void visit ( ConstVisitor & vis ) const override;
         virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual bool rtti_isMakeBlock() const override { return true; }
         virtual void dispatch( Visitor & vis ) override;
@@ -1113,6 +1156,7 @@ namespace das
         ExprMakeGenerator () { __rtti = "ExprMakeGenerator"; };
         ExprMakeGenerator ( const LineInfo & a, ExpressionPtr b = nullptr );
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual void visit ( ConstVisitor & vis ) const override;
         virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual void dispatch( Visitor & vis ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
@@ -1125,6 +1169,7 @@ namespace das
         ExprYield () { __rtti = "ExprYield"; };
         ExprYield ( const LineInfo & a, ExpressionPtr val );
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual void visit ( ConstVisitor & vis ) const override;
         virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual uint32_t getEvalFlags() const override { return EvalFlags::yield; }
         virtual void dispatch( Visitor & vis ) override;
@@ -1170,6 +1215,7 @@ namespace das
         ExprQuote ( const LineInfo & a, const string & name )
             : ExprLikeCall<ExprQuote>(a,name) { __rtti = "ExprQuote"; }
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual void visit ( ConstVisitor & vis ) const override;
         virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual void dispatch( Visitor & vis ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
@@ -1210,6 +1256,7 @@ namespace das
             return cexpr;
         }
         virtual ExpressionPtr visit ( Visitor & vis ) override;
+        virtual void visit ( ConstVisitor & vis ) const override;
         virtual void dispatch( Visitor & vis ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
     };
@@ -1225,6 +1272,7 @@ namespace das
             return cexpr;
         }
         virtual ExpressionPtr visit ( Visitor & vis ) override;
+        virtual void visit ( ConstVisitor & vis ) const override;
         virtual void dispatch( Visitor & vis ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
     };
@@ -1271,6 +1319,7 @@ namespace das
             : Expression(a), trait(tr), typeexpr(d), subtrait(stt), extratrait(ett) { __rtti = "ExprTypeInfo"; }
         virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual void visit ( ConstVisitor & vis ) const override;
         virtual void dispatch( Visitor & vis ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
         string              trait;
@@ -1287,6 +1336,7 @@ namespace das
             : Expression(a), subexpr(s), typeexpr(t) { __rtti = "ExprIs"; }
         virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual void visit ( ConstVisitor & vis ) const override;
         virtual void dispatch( Visitor & vis ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
         ExpressionPtr   subexpr = nullptr;
@@ -1300,6 +1350,7 @@ namespace das
             : Expression(a), subexpr(se), ascType(as) { __rtti = "ExprAscend"; }
         virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual void visit ( ConstVisitor & vis ) const override;
         virtual bool rtti_isAscend() const override { return true; }
         virtual void dispatch( Visitor & vis ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
@@ -1322,6 +1373,7 @@ namespace das
             : Expression(a), subexpr(se), castType(ct) { __rtti = "ExprCast"; }
         virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual void visit ( ConstVisitor & vis ) const override;
         virtual bool rtti_isCast() const override { return true; }
         virtual void dispatch( Visitor & vis ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
@@ -1344,6 +1396,7 @@ namespace das
         virtual bool rtti_isNewExpr() const override { return true; }
         virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual void visit ( ConstVisitor & vis ) const override;
         virtual void dispatch( Visitor & vis ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
         TypeDeclPtr     typeexpr = nullptr;
@@ -1358,6 +1411,7 @@ namespace das
         virtual bool rtti_isCall() const override { return true; }
         virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual void visit ( ConstVisitor & vis ) const override;
         virtual void dispatch( Visitor & vis ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
         virtual void markNoDiscard() override;
@@ -1377,6 +1431,7 @@ namespace das
             : Expression(a), cond(c), if_true(ift), if_false(iff) { __rtti = "ExprIfThenElse"; }
         virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual void visit ( ConstVisitor & vis ) const override;
         virtual bool rtti_isIfThenElse() const override { return true; }
         virtual uint32_t getEvalFlags() const override;
         virtual void dispatch( Visitor & vis ) override;
@@ -1432,6 +1487,7 @@ namespace das
             : Expression(a), name(n) { __rtti = "ExprNamedCall";}
         virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual void visit ( ConstVisitor & vis ) const override;
         virtual bool rtti_isNamedCall() const override { return true; }
         virtual void dispatch( Visitor & vis ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
@@ -1472,6 +1528,7 @@ namespace das
             : ExprMakeLocal(at) { __rtti = "ExprMakeStruct"; }
         virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual void visit ( ConstVisitor & vis ) const override;
         virtual bool rtti_isMakeStruct() const override { return true; }
         virtual void dispatch( Visitor & vis ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
@@ -1504,6 +1561,7 @@ namespace das
             : ExprMakeLocal(at) { __rtti = "ExprMakeVariant"; }
         virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual void visit ( ConstVisitor & vis ) const override;
         virtual bool rtti_isMakeVariant() const override { return true; }
         virtual void dispatch( Visitor & vis ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
@@ -1517,6 +1575,7 @@ namespace das
             : ExprMakeLocal(at) { __rtti = "ExprMakeArray"; }
         virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual void visit ( ConstVisitor & vis ) const override;
         virtual bool rtti_isMakeArray() const override { return true; }
         virtual void dispatch( Visitor & vis ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
@@ -1535,6 +1594,7 @@ namespace das
         virtual bool rtti_isMakeTuple() const override { return true; }
         virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual void visit ( ConstVisitor & vis ) const override;
         virtual void dispatch( Visitor & vis ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
         bool isKeyValue = false;
@@ -1548,6 +1608,7 @@ namespace das
             : Expression(at) { __rtti = "ExprArrayComprehension"; }
         virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual void visit ( ConstVisitor & vis ) const override;
         virtual void dispatch( Visitor & vis ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
         ExpressionPtr   exprFor = nullptr;
@@ -1563,6 +1624,7 @@ namespace das
             : Expression(a), typeexpr(d) { __rtti = "ExprTypeDecl"; }
         virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual void visit ( ConstVisitor & vis ) const override;
         virtual bool rtti_isTypeDecl() const override { return true; }
         virtual void dispatch( Visitor & vis ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;

@@ -23,6 +23,7 @@ namespace das
 {
     struct AstSerializer;
     class Visitor;
+    class ConstVisitor;
 
     class Function;
     typedef Function * FunctionPtr;
@@ -616,6 +617,7 @@ namespace das
         virtual ~Expression() {}
         friend DAS_API StringWriter& operator<< (StringWriter& stream, const Expression & func);
         virtual ExpressionPtr visit(Visitor & /*vis*/ )  { DAS_ASSERT(0); return this; };
+        virtual void visit ( ConstVisitor & vis ) const;
         virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const;
         static ExpressionPtr autoDereference ( ExpressionPtr expr );
         virtual void markNoDiscard() { }
@@ -764,6 +766,7 @@ namespace das
             return cexpr;
         }
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual void visit ( ConstVisitor & vis ) const override;
         TT getValue() const { return cast<TT>::to(value); }
     };
 
