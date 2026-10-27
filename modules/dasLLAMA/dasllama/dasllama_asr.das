@@ -16,9 +16,11 @@ require dasllama/dasllama_image  // load_model_cached (decoders ride the .dlim r
 require dasllama/dasllama_plane public  // plane finalizers — re-exported so any module that deletes an ASR carrier sees them
 require dasllama/dasllama_asr_types public  // AsrCaps/AsrTimestamps/TranscribeSegment — the shared ASR floor
 require dasllama/dasllama_math  // guard_interp_inference — the library-seam -jit stop at session creation
+require dasllama/dasllama_audio  // audio_tower_gpu_serves - whisper's lane in asr_device_lane
 require dasllama/dasllama_whisper public
 require dasllama/dasllama_qwen3a public
 require dasllama/dasllama_parakeet public
+require dasllama/dasllama_gigaam public
 require dasllama/dasllama_canary public
 require dasllama/dasllama_gemma4a public
 require dasllama/dasllama_transformer   // the qwen3a decoder is a full LLM; umbrella fires arch [init]s
@@ -34,6 +36,7 @@ enum private AsrKind {
     canary
     gemma4a
     qwen3omni
+    gigaam
 }
 
 //! A loaded ASR model of whatever family the files turned out to be.
@@ -45,6 +48,7 @@ struct AsrModel {
     pk : ParakeetModel = ParakeetModel()
     cenc : CanaryEncoder = CanaryEncoder()   // canary: the FastConformer-32 encoder + projector
     g4a : Gemma4aEncoder = Gemma4aEncoder()  // gemma4a: the Conformer audio encoder + mm embedder
+    ga : GigaamModel = GigaamModel()
 }
 
 // Stated rather than inferred: the family carriers hold borrowed planes, and a generated
@@ -57,6 +61,7 @@ def finalize(var m : AsrModel) {
     delete m.pk
     delete m.cenc
     delete m.g4a
+    delete m.ga
 }
 
 //! One transcription stream over an AsrModel: per-family scratch bundles plus shared options.
@@ -68,6 +73,7 @@ struct AsrSession {
     pkst : ParakeetState = ParakeetState()        // parakeet hot-path scratch — zero allocation per transcribe
     cn : CanaryAsrSession = CanaryAsrSession()    // canary: decoder session + encoder scratch
     g4 : Gemma4aAsrSession = Gemma4aAsrSession()  // gemma4a: decoder session + encoder scratch
+    gast : GigaamState = GigaamState()
     translate : bool = false
     no_timestamps : bool = false
     context : string = ""
@@ -124,9 +130,18 @@ def set_asr_tower_fp32(on : bool) {
     g_asr_tower_fp32 = on
 }
 
-//! Load an ASR model, sniffing the format: ggml-bin magic = whisper vs parakeet (disambiguated
-//! on vocab size: whisper >= 51864, parakeet 1k/8k); GGUF needs the model's mmproj too — use the
-//! two-argument overload. A ``.dlim`` prepared image routes on its baked family tag. One loader, no family names.
+//! Pin the encoder's weight lane of every family whose lane follows the GPU tower (parakeet, canary, GigaAM, gemma4a) for
+//! models loaded AFTER this call: q8 (`on`) or the exact planes, whatever the tower serves.
+def set_asr_tower_q8(on : bool) {
+    set_parakeet_q8(on)
+    set_canary_enc_q8(on)
+    set_gigaam_q8(on)
+    set_gemma4a_q8(on)
+}
+
+//! Load an ASR model, sniffing the format: a ggml bin is whisper (vocab >= 51864) or parakeet (1k/8k); a GGUF of arch
+//! ``gigaam`` is the one-file GigaAM carrier, any other GGUF needs its mmproj too (the two-argument overload). A ``.dlim``
+//! routes on its baked family tag. One loader, no family names.
 def load_asr_model(path : string) : AsrModel {
     if (path |> ends_with(".dlim")) {
         let tag = image_family_tag(path)
@@ -139,6 +154,11 @@ def load_asr_model(path : string) : AsrModel {
             var pm = AsrModel(kind = AsrKind.parakeet)
             pm.pk <- load_parakeet_model(path, tag == "parakeet-q8")
             return <- pm
+        }
+        if (tag == "gigaam-q8" || tag == "gigaam-f16") {
+            var gm = AsrModel(kind = AsrKind.gigaam)
+            gm.ga <- load_gigaam_model(path, tag == "gigaam-q8")
+            return <- gm
         }
         panic("dasLLAMA asr: '{path}' is baked as '{tag}' - a decoder/tower image needs the pair: load_asr_model(decoder, mmproj)")
     }
@@ -159,12 +179,18 @@ def load_asr_model(path : string) : AsrModel {
     }
     fclose(f)
     if (magic == 0x46554747u) {   // "GGUF"
+        if (gguf_file_arch(path) == GIGAAM_ARCH) {
+            var gm = AsrModel(kind = AsrKind.gigaam)
+            gm.ga <- load_gigaam_model(path, !(g_asr_force_fp32 || g_asr_tower_fp32) && gigaam_serves_q8())
+            return <- gm
+        }
         panic("dasLLAMA asr: '{path}' is a GGUF decoder - pass its mmproj too: load_asr_model(path, mmproj_path)")
     }
-    if (magic != 0x67676d6cu) {
+    let ggml = asr_ggml_kind(magic, vocab)
+    if (ggml == AsrGgmlKind.none) {
         panic("dasLLAMA asr: '{path}' is neither a GGUF nor a ggml bin")
     }
-    if (vocab < 32768) {   // parakeet SPM vocabs: 1024 (v2, English) / 8192 (v3, 25-lang)
+    if (ggml == AsrGgmlKind.parakeet) {
         var pm = AsrModel(kind = AsrKind.parakeet)
         pm.pk <- load_parakeet_model(path, !(g_asr_force_fp32 || g_asr_tower_fp32) && parakeet_serves_q8())
         return <- pm
@@ -177,6 +203,40 @@ def load_asr_model(path : string) : AsrModel {
     var m = AsrModel(kind = AsrKind.whisper)
     m.whisper <- load_whisper_model(path, !(g_asr_force_fp32 || g_asr_tower_fp32), !g_asr_force_fp32)
     return <- m
+}
+
+//! The magic a ggml bin opens with - whisper's and parakeet's carriers.
+let ASR_GGML_MAGIC = 0x67676d6cu
+
+//! A ggml ASR bin's family: none for another magic.
+enum AsrGgmlKind {
+    none
+    whisper
+    parakeet
+}
+
+//! The family of a ggml bin off its magic and its first hparam, `n_vocab`: parakeet's SPM vocabularies (1024 on v2, 8192 on
+//! v3) sit under 32768, whisper's at 51864-51866; ``none`` where `magic` is not ``ASR_GGML_MAGIC``. The vocabulary's own
+//! range check stays the loader's.
+def asr_ggml_kind(magic : uint; n_vocab : int) : AsrGgmlKind {
+    return AsrGgmlKind.none if (magic != ASR_GGML_MAGIC)
+    return n_vocab < 32768 ? AsrGgmlKind.parakeet : AsrGgmlKind.whisper
+}
+
+//! True when ``path`` is a GGUF decoder that loads only beside its mmproj (the two-argument ``load_asr_model``);
+//! a ggml bin, a ``.dlim`` and a one-file GGUF (GigaAM) load alone
+def asr_needs_mmproj(path : string) : bool => ends_with(path, ".gguf") && !gguf_is_asr_carrier(path)
+
+def private is_asr_carrier_arch(arch : string) : bool => arch == GIGAAM_ARCH
+
+//! True when ``path`` is a one-file GGUF ASR carrier (GigaAM): it transcribes alone and is no chat model
+def gguf_is_asr_carrier(path : string) : bool => ends_with(path, ".gguf") && is_asr_carrier_arch(gguf_file_arch(path))
+
+//! True when ``path`` is a GGUF that serves no chat on its own: a one-file ASR carrier, or a projector (an mmproj, its
+//! architecture ``clip``) that loads beside a decoder
+def gguf_is_side_file(path : string) : bool {
+    let arch = gguf_file_arch(path)
+    return is_asr_carrier_arch(arch) || arch == "clip"
 }
 
 [arch(at="../ARCHITECTURE_MEDIA.md#asr-decoder-session")]
@@ -290,6 +350,7 @@ def asr_exec_fmt(m : AsrModel) : string {
     //! the store's ``exec_fmt`` stamp, so every benchmark row names the bits it ran on.
     if (m.kind == AsrKind.whisper) return whisper_exec_fmt(m.whisper)
     if (m.kind == AsrKind.parakeet) return parakeet_exec_fmt(m.pk)
+    if (m.kind == AsrKind.gigaam) return gigaam_exec_fmt(m.ga)
     if (m.kind == AsrKind.canary) return canary_exec_fmt(m.cenc, quant_fmt(m.dec.quant))
     if (m.kind == AsrKind.gemma4a) return gemma4a_exec_fmt(m.g4a, quant_fmt(m.dec.quant))
     return qwen3a_exec_fmt(m.q3t, quant_fmt(m.dec.quant))   // qwen3a / qwen3omni share the AuT tower
@@ -305,7 +366,39 @@ def asr_encode_bucket(m : AsrModel) : string {
         return qwen3a_encode_bucket(m.kind == AsrKind.qwen3omni)
     }
     if (m.kind == AsrKind.parakeet) return PARAKEET_ENCODE_BUCKET
+    if (m.kind == AsrKind.gigaam) return GIGAAM_ENCODE_BUCKET
     return ""
+}
+
+//! The GPU tier this build's device seats run on: "metal", "vulkan", or "cpu" on a build with neither.
+def private asr_gpu_tier_name() : string {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        return "metal"
+    } else {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            return "vulkan"
+        } else {
+            return "cpu"
+        }
+    }
+}
+
+//! Where the model serves: a two-file model's decoder on its Metal flavor ("metal") or the CPU; a one-file model's encoder
+//! tower on the build's GPU tier ("metal" or "vulkan") where the family's device seat serves the loaded lane, else "cpu" -
+//! whisper's answers the exact-lane question (`audio_tower_gpu_serves`), so its q8 tower on Vulkan reads "cpu".
+def asr_device_lane(m : AsrModel) : string {
+    if (m.kind == AsrKind.qwen3a || m.kind == AsrKind.qwen3omni || m.kind == AsrKind.canary || m.kind == AsrKind.gemma4a) {
+        return m.dec.metal_blob ? "metal" : "cpu"
+    }
+    var gpu = false
+    if (m.kind == AsrKind.gigaam) {
+        gpu = gigaam_device_gpu(m.ga)
+    } elif (m.kind == AsrKind.parakeet) {
+        gpu = parakeet_device_gpu(m.pk)
+    } else {
+        gpu = audio_tower_gpu_serves()
+    }
+    return gpu ? asr_gpu_tier_name() : "cpu"
 }
 
 def caps(m : AsrModel) : AsrCaps {
@@ -315,20 +408,32 @@ def caps(m : AsrModel) : AsrCaps {
     if (m.kind == AsrKind.qwen3omni) return <- qwen3a_asr_caps(true)
     if (m.kind == AsrKind.qwen3a) return <- qwen3a_asr_caps(false)
     if (m.kind == AsrKind.parakeet) return <- parakeet_asr_caps(m.pk)
+    if (m.kind == AsrKind.gigaam) return <- gigaam_asr_caps(m.ga)
     return <- whisper_asr_caps(m.whisper)
 }
 
-def create_session(m : AsrModel; lang : string = "en") : AsrSession {
-    //! Create a transcription session. ``lang`` is a code from ``caps().languages``, "auto" to detect (whisper
-    //! multilingual models; Qwen3-ASR only accepts "auto"), or "" for the family's default: detection where the
-    //! family only detects, English elsewhere. Validation lives with each family.
+//! The language a session takes when none is asked: the sheet's ``default_lang`` where it sets one, else the one code where
+//! ``c.languages`` lists one, "auto" where it lists none (the model detects the language), English elsewhere.
+def asr_default_lang(c : AsrCaps) : string {
+    return c.default_lang if (!empty(c.default_lang))
+    let n = length(c.languages)
+    return n == 1 ? c.languages[0] : (n == 0 ? "auto" : "en")
+}
+
+def create_session(m : AsrModel; lang : string = "") : AsrSession {
+    //! Create a transcription session. ``lang`` is a code from ``caps().languages``, "auto" to detect, or "" (the default)
+    //! for the model's default: the one code where ``caps().languages`` lists one, "auto" where it lists none (the model
+    //! detects the language), English elsewhere. Validation lives with each family.
     guard_interp_inference("ASR session creation")   // whisper/parakeet never cross make_run_state
     if (empty(lang)) {
-        return <- create_session(m, m.kind == AsrKind.qwen3a ? "auto" : "en")
+        var inscope c <- caps(m)
+        return <- create_session(m, asr_default_lang(c))
     }
     var s = AsrSession()
     if (m.kind == AsrKind.parakeet) {
         parakeet_check_lang(m.pk, lang)   // no language conditioning — validate, then unused
+    } elif (m.kind == AsrKind.gigaam) {
+        gigaam_check_lang(m.ga, lang)
     } elif (m.kind == AsrKind.canary) {
         s.cn <- create_canary_asr_session(m.dec, lang, g_asr_kv)
     } elif (m.kind == AsrKind.gemma4a) {
@@ -345,9 +450,18 @@ def create_session(m : AsrModel; lang : string = "en") : AsrSession {
 
 def transcribe(m : AsrModel; var s : AsrSession; samples : array<float> | #;
                blk : block<(seg : TranscribeSegment)>) : int {
-    //! Transcribe ``samples`` (16 kHz mono f32 PCM), one ``TranscribeSegment`` per trailing-block
-    //! call. Returns the segment count. Whisper honors ``translate``/``no_timestamps``; qwen3a
-    //! emits ONE segment (no timestamps) and fills ``detected_lang``.
+    //! Transcribe ``samples`` (16 kHz mono f32 PCM), one ``TranscribeSegment`` per trailing-block call; returns the segment
+    //! count. Whisper honors ``translate``/``no_timestamps``; qwen3a emits ONE segment and fills ``detected_lang``. A
+    //! ``translate`` session on a model whose ``caps()`` declare no translation panics.
+    if (s.translate || !empty(s.context)) {
+        var inscope c <- caps(m)
+        if (s.translate && !c.translate) {
+            panic("dasLLAMA asr: this model does not translate (caps().translate is false) - clear the session's translate")
+        }
+        if (!empty(s.context) && !c.prompt) {
+            panic("dasLLAMA asr: this model takes no context prompt (caps().prompt is false) - clear the session's context")
+        }
+    }
     if (m.kind == AsrKind.gemma4a) {
         return gemma4a_transcribe(m.dec, m.g4a, s.g4, samples, blk, s.detected_lang)
     }
@@ -362,6 +476,9 @@ def transcribe(m : AsrModel; var s : AsrSession; samples : array<float> | #;
     }
     if (m.kind == AsrKind.parakeet) {
         return parakeet_transcribe(m.pk, s.pkst, samples, blk, s.detected_lang)
+    }
+    if (m.kind == AsrKind.gigaam) {
+        return gigaam_transcribe(m.ga, s.gast, samples, blk, s.detected_lang)
     }
     return whisper_asr_transcribe(m.whisper, s.w, s.translate, s.no_timestamps, samples, blk, s.detected_lang)
 }

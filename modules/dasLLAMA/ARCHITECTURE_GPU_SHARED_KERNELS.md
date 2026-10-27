@@ -125,6 +125,17 @@ struct and the body; a stamp sets the template constants its home needs and maps
 | `GkAddRmsRows` | `MetalAddRms` / `HX` (the plain step), `MetalPreAddRms` / `HX` (the sandwich seam in one dispatch: the branch normed under its post norm, the add, the next norm), `MetalPreAdd` (no norm out); 256 lanes the window and a decode row within the slab, 1024 a decode row past it | `ClsArAddRms` / `F16B`, `ClsArAddRmsRqB` and the `ArAddRmsRq*` stamps (Q8_0 out), the combines' `ArCombBase` (256 lanes) | `LANES`, `PRE`, `PRE_SWITCH`, `NORM_SWITCH`, `ARMS`, `X4`, `HX`, `OUT_*`; on Metal, the norm rows' layout |
 | `GkPleAct` | `MetalGegluSide` (in place over the gate rows, 64 lanes) | `PleActF32` (`OUT`: the f32 projection's x, 256 lanes) | `OUT`; the side row's index is `gk_strided_at`, `ActRqT.up_at`'s |
 | `GkPleFinish` | `MetalPleFinish` (`XSCALE`: the projection's 1 / sqrt(dim) in the finish, `rsqrt`) | `PleFinish` (the projection arrives scaled, `1 / sqrt`) | `XSCALE`, `RSQRT`; 256 lanes a slice on both |
+| `GkRnntPred` / `GkRnntJoint` / `GkRnntPick` | `MetalRnntGates`, `MetalRnntProj` (`GATES` off), `MetalRnntJoint`, `MetalRnntPick` | `RnntGates`, `RnntProj`, `RnntJoint`, `RnntPick` | `GATES`; the pick's `WG` 256 on both (`ARCHITECTURE_MEDIA_ASR.md#rnnt-device-decode`) |
+| `GkCtcPick` | `MetalCtcPick` | `CtcPick` | nothing; 256 lanes a frame on both, the argmax on `GkWgArgmax` (`ARCHITECTURE_MEDIA_ASR.md#gigaam-planes`) |
+| `GkDwConvRows` | `MetalG4aDw` (`FORM` 1), `MetalCnDw` / `MetalPkDw` (2), `MetalGaDw` / `MetalGaDwH` (3, `TAP_F16`: the taps the carrier's halfwords at binding 3), `MetalSt2PoolDw` (0) | `TowerDwConv5`, `TowerCnDw` / `TowerPkDw`, `TowerGaDw` / `TowerGaDwH`, `TtsPoolDw` | `FORM`, `K`, `TAP_MAJOR`, `TAP_F16` |
+| `GkVadEnc` | `MetalVadEnc` | `TowerVadEnc` | nothing; 128 lanes a chunk on both |
+| `GkVadLstm` | `MetalVadLstm` | `TowerVadLstm` | `PTR_LOADS`: the Metal stamp reads the recurrent rows off a pointer, the SPIR-V stamp indexes them (SPIR-V takes no `addr`); one workgroup of 1024 on both, the recurrence's weights in registers |
+
+**The VAD's recurrence reads no weight from memory a step.** Two lanes a gate row each hold their half of the row's W_hh
+(64 floats) in registers for the whole walk, the plane laid k-major so the one load pass reads consecutive rows; a step
+is the two half dots, a barrier, the first 128 lanes' cell, and a second barrier that publishes h to the next step's dots
+and the decoder's per-subgroup partials (summed in the cell lanes' whole subgroups - 128 is a multiple of every subgroup
+size) to lane 0, which lands the probability.
 
 **The Metal E-series pre-step serves every table, ple width and model dim a blob model carries.** The gather reads the
 table on its own format's block grid - a K-quant table at whole superblocks, a per-32 table at whole 32-blocks, the

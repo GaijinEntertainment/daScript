@@ -7,6 +7,8 @@ module dasllama_repack shared public
 require dasllama/dasllama_kqformat   // iq3s_grid - the panel unpack gathers through the codebook
 require dasllama/dasllama_lint public
 require dasllama/dasllama_math_default  // k4_sc_mn — the kq 6-bit sc/mn decoder (stays there: hot in the kq dots, auto-inline is same-module-only)
+require dasllama/dasllama_math          // transpose_ct
+require dasllama/dasllama_convert       // cvt_f32_to_f16_sat - the transducer's halves
 
 // Disk-order -> compute-order kernel data repacking, ALL weight formats, platform-neutral.
 // Each repack rearranges one 2D tensor IN PLACE into the grp<mr> interleave the stamped CPU
@@ -667,6 +669,67 @@ def unpack_kq_panel_grp(fmt : int64; kqg : uint8 const?; var dst : uint8?; mr, n
                         r4 += 4l
                     }
                 }
+            }
+        }
+    }
+}
+
+// ===== f32 tower and transducer planes =====
+
+//! A conv1d weight `raw`, torch [nout][cin][k], into `dst` at `off` tap-major, [nout][k][cin] - the im2col column order;
+//! a depthwise conv is `nout` 1 over `cin` = its channels, [k][d].
+def repack_conv_out_tap_in(raw : array<auto(T)>; var dst : array<T>; off, nout, cin, k : int64) {
+    for (o in range64(nout)) {
+        for (c in range64(cin)) {
+            for (tap in range64(k)) {
+                dst[off + (o * k + tap) * cin + c] = raw[(o * cin + c) * k + tap]
+            }
+        }
+    }
+}
+
+//! A conv1d weight `src`, [cout][cin][k], into `dst` as [cin][k][cout]: a tap's weights over every output channel back to back.
+def repack_conv_in_tap_out(src : array<float>; var dst : array<float>; cout, cin, k : int64) {
+    transpose_ct(src, cout, cin * k, dst)
+}
+
+//! One LSTM layer's gate planes as halves at `wl` - the ih plane's four [pd][pd] gate blocks, then the hh plane's - in
+//! gate order i, f, o, g, and its gate bias at `bl` in that order, `b2` (null for none) summed in; `torch_gates` reads
+//! source rows packed i, f, g, o.
+def repack_lstm_gates_f16(var wl : uint16?; var bl : float?; ih, hh, b, b2 : float const?; pd : int64; torch_gates : bool) {
+    let gate_src = torch_gates ? int4(0, 1, 3, 2) : int4(0, 1, 2, 3)
+    unsafe {
+        for (k in range(4)) {
+            let src = int64(gate_src[k]) * pd
+            cvt_f32_to_f16_sat(wl + int64(k) * pd * pd, ih + src * pd, pd * pd)
+            cvt_f32_to_f16_sat(wl + 4l * pd * pd + int64(k) * pd * pd, hh + src * pd, pd * pd)
+            for (j in range64(pd)) {
+                bl[int64(k) * pd + j] = b[src + j]
+            }
+            if (b2 != null) {
+                for (j in range64(pd)) {
+                    bl[int64(k) * pd + j] += b2[src + j]
+                }
+            }
+        }
+    }
+}
+
+//! A joint net's weight `wp` [n_logits][jd] as halves at `tp`, [block][jd][blk]: a block of `blk` logits holds its input
+//! columns back to back, zeros past the last logit; `cp` is the caller's scratch of `blk` floats.
+def repack_joint_cols_f16(var tp : uint16?; var cp : float?; wp : float const?; jd, n_logits, blk : int64) {
+    let nblk = (n_logits + blk - 1l) / blk
+    unsafe {
+        for (b in range64(nblk)) {
+            let live = min(blk, n_logits - b * blk)
+            for (j in range64(jd)) {
+                for (i in range64(live)) {
+                    cp[i] = wp[(b * blk + i) * jd + j]
+                }
+                for (i in range64(live, blk)) {
+                    cp[i] = 0.0
+                }
+                cvt_f32_to_f16_sat(tp + (b * jd + j) * blk, cp, blk)
             }
         }
     }

@@ -1397,24 +1397,49 @@ def private asr_das_outlier_pass(spec : AsrModelSpec; cfg : Args; threads : int;
     }
 }
 
-// True when the reference tool's binary/interpreter exists on this box (skip-with-warning gate)
-def private asr_ref_available(tool : string) : bool {
+//! The binary or interpreter a reference tool's CPU leg runs; "" for a tool the rig does not know.
+def asr_ref_exe(tool : string) : string {
     if (tool == "parakeet-cli" || tool == "whisper-cli") {
-        return stat(whisper_cpp_bin(tool)).is_valid
+        return whisper_cpp_bin(tool)
     }
     if (tool == "mtmd") {
-        return stat(mtmd_bin()).is_valid
+        return mtmd_bin()
+    }
+    if (tool == "crispasr") {
+        return crispasr_bin(false)
     }
     if (tool == "onnx") {
-        return stat(onnx_py()).is_valid
+        return onnx_py()
     }
     if (tool == "nemo") {
-        return stat(nemo_py()).is_valid
+        return nemo_py()
     }
     if (tool == "mlx") {
-        return stat(mlx_py()).is_valid
+        return mlx_py()
     }
-    return false
+    return ""
+}
+
+// True when the reference tool's binary/interpreter exists on this box (skip-with-warning gate)
+def private asr_ref_available(tool : string) : bool {
+    let exe = asr_ref_exe(tool)
+    return !empty(exe) && stat(exe).is_valid
+}
+
+//! A reference row's flavor stamp: the catalog's, "stock" where it names none.
+def asr_ref_flavor(ref : AsrRef) : string => empty(ref.flavor) ? "stock" : ref.flavor
+
+//! Why a reference tool's GPU leg cannot run on this box ("" = it can): the mtmd and CrispASR legs run a Metal build of
+//! their own, absent where `present` refuses its exe; every other tool's GPU leg runs the tool it always runs.
+def asr_gpu_ref_missing(tool : string; present : block<(exe : string) : bool>) : string {
+    if (tool == "mtmd") {
+        let exe = mtmd_bin_metal()
+        return "no build-metal mtmd on this box (setup_asr_rig builds it on Apple)" if (empty(exe) || !invoke(present, exe))
+    } elif (tool == "crispasr") {
+        let exe = crispasr_bin(true)
+        return "no Metal CrispASR build at {exe} (setup_asr_rig --refs builds it)" if (!invoke(present, exe))
+    }
+    return ""
 }
 
 //! One reference clip through the tool's own process - the timing test and, in `cmd`, the
@@ -1435,6 +1460,11 @@ def private asr_ref_clip(spec : AsrModelSpec; ref : AsrRef; wav, model_path : st
     if (ref.tool == "parakeet-cli" || ref.tool == "whisper-cli") {
         return BenchTest(ms = max(run_asr_cli(ref.tool, model_path, wav_path, threads, reps, cmd, gpu), 0.0lf))
     }
+    if (ref.tool == "crispasr") {
+        var rtext = ""
+        let ms = run_asr_crispasr(model_path, wav_path, threads, reps, cmd, rtext, gpu)
+        return BenchTest(ms = max(ms, 0.0lf), text = rtext)
+    }
     let pyargs <- asr_pybench_args(ref.tool, ref.handle, [wav], threads, reps, gpu ? "mps" : "")
     cmd = argv_line(pyargs)
     var audio_s = -1.0lf
@@ -1451,15 +1481,18 @@ def private asr_ref_pass(spec : AsrModelSpec; ref : AsrRef; versions : string; c
         to_log(LOG_WARNING, "gen_bench_records: SKIP {spec.display} ref {ref.tool} - tool not on this box\n")
         return
     }
-    if (gpu && ref.tool == "mtmd" && empty(mtmd_bin_metal())) {
-        to_log(LOG_WARNING, "gen_bench_records: SKIP {spec.display} ref mtmd gpu - no build-metal mtmd on this box (setup_asr_rig builds it on Apple)\n")
-        return
+    if (gpu) {
+        let why = asr_gpu_ref_missing(ref.tool) $(exe) => stat(exe).is_valid
+        if (!empty(why)) {
+            to_log(LOG_WARNING, "gen_bench_records: SKIP {spec.display} ref {ref.tool} gpu - {why}\n")
+            return
+        }
     }
     let t0 = ref_time_ticks()
     cell_start(spec.display, "ref {ref.tool}", asr_engine_name(ref.tool), "asr")
     // cli tools time the ref's own carrier when the catalog names one (the q8_0 siblings);
     // mtmd's handle stays its mmproj, onnx/nemo weights are venv-managed
-    let cli_tool = ref.tool == "parakeet-cli" || ref.tool == "whisper-cli"
+    let cli_tool = ref.tool == "parakeet-cli" || ref.tool == "whisper-cli" || ref.tool == "crispasr"
     let model_path = (cli_tool && !empty(ref.handle)) ? "{spec.root}{ref.handle}" : "{spec.root}{spec.das_model}"
     // a slow reference caps its own clip ladder in the catalog; empty = the spec's
     var inscope rbuckets := spec.buckets
@@ -1469,7 +1502,7 @@ def private asr_ref_pass(spec : AsrModelSpec; ref : AsrRef; versions : string; c
     var rr = BenchRun(
         engine = asr_engine_name(ref.tool),
         backend = gpu ? "metal" : "cpu",
-        flavor = "stock",
+        flavor = asr_ref_flavor(ref),
         workload = asr_workload(spec),
         box = box,
         threads = threads,

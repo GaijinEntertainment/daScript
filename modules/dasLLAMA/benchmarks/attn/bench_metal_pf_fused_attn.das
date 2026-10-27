@@ -392,14 +392,14 @@ def main {   // nolint:STYLE037,STYLE038 — one-shot A/B race harness; buffers 
             var qh <- race_x_f32(np * qd)
             var kh <- race_x_f32(np * kvd)
             var vh <- race_x_f32(np * kvd)
-            var bq = race_buf(dev, uint64(np * qd * 4), unsafe(addr<void?>(qh[0])))
-            var bk = race_buf(dev, uint64(np * kvd * 4), unsafe(addr<void?>(kh[0])))
-            var bv = race_buf(dev, uint64(np * kvd * 4), unsafe(addr<void?>(vh[0])))
-            var bo = race_buf(dev, uint64(np * qd * 4), null)
-            var bs = race_buf(dev, uint64(np * qd * 4), null)     // three-pass out
-            var batt = race_buf(dev, uint64(heads * np * np * 2), null)   // f16 score slab
-            var bstat = race_buf(dev, uint64(heads * np * 2 * 4), null)
-            var bsink = race_buf(dev, uint64(heads * 4), null)
+            var bq = metal_buffer_from(dev, uint64(np * qd * 4), unsafe(addr<void?>(qh[0])))
+            var bk = metal_buffer_from(dev, uint64(np * kvd * 4), unsafe(addr<void?>(kh[0])))
+            var bv = metal_buffer_from(dev, uint64(np * kvd * 4), unsafe(addr<void?>(vh[0])))
+            var bo = metal_buffer_from(dev, uint64(np * qd * 4), null)
+            var bs = metal_buffer_from(dev, uint64(np * qd * 4), null)     // three-pass out
+            var batt = metal_buffer_from(dev, uint64(heads * np * np * 2), null)   // f16 score slab
+            var bstat = metal_buffer_from(dev, uint64(heads * np * 2 * 4), null)
+            var bsink = metal_buffer_from(dev, uint64(heads * 4), null)
             var t_fused = -1.0lf
             var t_three = -1.0lf
             race_pair_ms(queue, 5, t_three, t_fused, $(enc) {
@@ -509,10 +509,10 @@ def main {   // nolint:STYLE037,STYLE038 — one-shot A/B race harness; buffers 
                         }
                     }
                 }
-                var bqt = race_buf(dev, uint64(np * qdt * 4), unsafe(addr<void?>(qt[0])))
-                var bkt = race_buf(dev, uint64(np * qdt * 4), unsafe(addr<void?>(kt[0])))
-                var bvt = race_buf(dev, uint64((np * qdt + 256) * 4), unsafe(addr<void?>(vt[0])))
-                var bot = race_buf(dev, uint64(np * qdt * 4), null)
+                var bqt = metal_buffer_from(dev, uint64(np * qdt * 4), unsafe(addr<void?>(qt[0])))
+                var bkt = metal_buffer_from(dev, uint64(np * qdt * 4), unsafe(addr<void?>(kt[0])))
+                var bvt = metal_buffer_from(dev, uint64((np * qdt + 256) * 4), unsafe(addr<void?>(vt[0])))
+                var bot = metal_buffer_from(dev, uint64(np * qdt * 4), null)
                 var kat = AttnArgs(qd = uint(qdt), kv_dim = uint(qdt), head_size = uint(hst), kv_mul = 1u,
                     npos = uint(np), np32 = uint(np), scale = 0.125, qoff = 0u, qrows = uint(np),
                     window = 0u, softcap = 0.0, hass = 0u, uend = uint(np), ulo = 0u)
@@ -595,7 +595,7 @@ def main {   // nolint:STYLE037,STYLE038 — one-shot A/B race harness; buffers 
                 if (pso_port == null) {
                     print("  port pso: {perr}\n")
                 } else {
-                    var bop = race_buf(dev, uint64(np * qdt * 4), null)
+                    var bop = metal_buffer_from(dev, uint64(np * qdt * 4), null)
                     var t_slab2 = -1.0lf
                     var t_port = -1.0lf
                     race_pair_ms(queue, 5, t_slab2, t_port, $(enc) {
@@ -654,9 +654,9 @@ def main {   // nolint:STYLE037,STYLE038 — one-shot A/B race harness; buffers 
                         kth[ii] = float16(kt[ii])
                         vth[ii] = float16(vt[ii])
                     }
-                    var bkth = race_buf(dev, uint64(np * qdt * 2), unsafe(addr<void?>(kth[0])))
-                    var bvth = race_buf(dev, uint64((np * qdt + 256) * 2), unsafe(addr<void?>(vth[0])))
-                    var boph = race_buf(dev, uint64(np * qdt * 4), null)
+                    var bkth = metal_buffer_from(dev, uint64(np * qdt * 2), unsafe(addr<void?>(kth[0])))
+                    var bvth = metal_buffer_from(dev, uint64((np * qdt + 256) * 2), unsafe(addr<void?>(vth[0])))
+                    var boph = metal_buffer_from(dev, uint64(np * qdt * 4), null)
                     var t_slab3 = -1.0lf
                     var t_porth = -1.0lf
                     race_pair_ms(queue, 5, t_slab3, t_porth, $(enc) {
@@ -716,9 +716,9 @@ def main {   // nolint:STYLE037,STYLE038 — one-shot A/B race harness; buffers 
                                 }
                             }
                         }
-                        var bkhc = race_buf(dev, uint64(np * qdt * 2), unsafe(addr<void?>(khc[0])))
-                        var bvhc = race_buf(dev, uint64((np * qdt + 256) * 2), unsafe(addr<void?>(vhc[0])))
-                        var bohc = race_buf(dev, uint64(np * qdt * 4), null)
+                        var bkhc = metal_buffer_from(dev, uint64(np * qdt * 2), unsafe(addr<void?>(khc[0])))
+                        var bvhc = metal_buffer_from(dev, uint64((np * qdt + 256) * 2), unsafe(addr<void?>(vhc[0])))
+                        var bohc = metal_buffer_from(dev, uint64(np * qdt * 4), null)
                         var t_slab4 = -1.0lf
                         var t_hc = -1.0lf
                         race_pair_ms(queue, 5, t_slab4, t_hc, $(enc) {
@@ -767,7 +767,7 @@ def main {   // nolint:STYLE037,STYLE038 — one-shot A/B race harness; buffers 
                         if (pso_dial == null) {
                             print("  dial pso: {perrd}\n")
                         } else {
-                            var bod = race_buf(dev, uint64(np * qdt * 4), null)
+                            var bod = metal_buffer_from(dev, uint64(np * qdt * 4), null)
                             var t_slab5 = -1.0lf
                             var t_dial = -1.0lf
                             race_pair_ms(queue, 5, t_slab5, t_dial, $(enc) {

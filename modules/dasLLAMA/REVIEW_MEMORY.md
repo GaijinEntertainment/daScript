@@ -30,13 +30,11 @@ one that restores its built program, globals included, from a saved image at sta
 context restore globals as data, so a declaration initializer alone arrives null and dies at the
 first invoke while every `-jit` gate stays green.
 
-**Weakening `check_exe_fn_global_restore` (`REVIEW.das`) - the gate that reads those initializers -
-is a defect.**
-
 **A module-level value that a team-lane body reads is a `def` returning it, or a module `let` of a
-bool, number, enum or bitfield type whose initializer is a constant - never a module `var` or any
-other module `let`.** A pooled lane runs in another context, so a module global it reads comes back
-zero; the optimizer, when on, folds such a `let` into its literal at each read.
+bool, number, number-vector (`float2`-`float4`, `int2`-`int4`, `uint2`-`uint4`), enum or bitfield
+type whose initializer is a constant or a vector constructor over constants - never a module `var`
+or any other module `let`.** A pooled lane runs in another context, so a module global it reads
+comes back zero; the optimizer, when on, folds such a `let` into its literal at each read.
 
 **Nothing in a team-lane body names a module global it writes or resizes - write into a buffer the
 dispatching caller sizes and passes in instead.** A pooled lane runs in another context, so a

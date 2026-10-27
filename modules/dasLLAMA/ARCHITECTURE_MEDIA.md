@@ -10,41 +10,63 @@ carriers name, and no TTS family file (`dasllama_kitten`, `dasllama_kokoro`, `da
 `dasllama_styletts2`); only `dasllama_audio_io.das` requires `audio` and only
 `dasllama_vision_io.das` requires `stbimage`. It licenses no names.
 
-- **`dasllama_asr_types.das`** - the ASR floor: the capability/segment/timestamp types every
-  family file and the facade share (`AsrCaps`/`AsrTimestamps`/`TranscribeSegment`, plus
-  `asr_ctx_guard`). Family modules require this instead of each other - a shape needed by two
-  families moves up here, never sideways.
-- **`dasllama_tower.das`** - the family-neutral encoder-tower home, composed by every audio AND
-  vision tower: the oracle-exact activations (erf / tanh-LUT / quick-LUT gelu, swiglu, geglu),
-  the LayerNorm/RMS row forms, bias and residual row adds, the
-  `mm_blob_b`/`mm_bf16_b`/`mm_plane_b` GEMM wrappers, `Clamp`/`read_clamp` (`read_clamp` returns
-  the four scalars the projector file stores beside a weight tensor - `<base>.input_min` /
-  `.input_max` / `.output_min` / `.output_max` - or an inactive +/-FLT_MAX clamp where the file
-  carries none), `im2col_rgb_patches`, the Transformer-XL rel-position table `rel_pos_table`
-  (each FastConformer family keeps only its requant and memo), `rope_neox_2d_rows`, `rope_neox_tab_rows`, `avg_pool2d_rows`,
-  `interpolate_grid_bilinear_aa`, `tower_read_conv_pair_folded`, the padded stage readers
-  (`tower_read_gemm_q8`, `tower_stage_q8_zero_rows`/`tower_stage_q8_pad_cols` and their f32
-  twins `tower_stage_f32_zero_rows`/`tower_stage_f32_pad_cols` - the load-scope padded
-  stagers for FFN widths that are not 32-aligned - and `tower_zero_span`), blocked `attention_bidir` and
-  its per-window form `attention_bidir_windows`, and the encode-stage prof rail. The one home:
-  a family file that re-implements one of these is a defect, and nothing here names a family
-  type.
-- **`dasllama_audio.das`** - the audio encoder tower: the mel front-ends (mtmd and whisper.cpp
-  flavors), `AudioTower` with its staging, q8-quantize, and image rails, `EncoderState`, and the
-  whisper-class encode + block loop with its GPU hooks. Composes `dasllama_tower.das`.
+- **`dasllama_asr_types.das`** - the ASR floor: the capability/segment/timestamp types every family file and the facade
+  share (`AsrCaps`/`AsrTimestamps`/`TranscribeSegment`, plus `asr_ctx_guard`, the token segment builder `asr_segment`,
+  the SentencePiece detokenizer `asr_spm_detokenize`, and the FastConformer layer-offsets record `CanaryLayerOffs`
+  canary, parakeet and gigaam share). Family modules require this instead of each other - a shape needed by two families
+  moves up here, never sideways.
+- **`dasllama_tower.das`** - the family-neutral encoder-tower home, composed by every audio AND vision tower: the
+  oracle-exact activations (erf / tanh-LUT / quick-LUT gelu, swiglu, geglu), the LayerNorm/RMS row forms, bias and
+  residual row adds and the fused bias + ReLU (`bias_relu_rows`), the `mm_blob_b`/`mm_bf16_b`/`mm_plane_b` GEMM wrappers
+  and the q8-lane families' generic pair `tower_mm`/`tower_mm_rq`, the GGUF conv reader `tower_read_conv_tap_major` (its reorder is `dasllama_repack`'s), the
+  load's lane line `announce_lane`, `Clamp`/`read_clamp` (`read_clamp` returns the four scalars the projector file
+  stores beside a weight tensor - `<base>.input_min` / `.input_max` / `.output_min` / `.output_max` - or an inactive
+  +/-FLT_MAX clamp where the file carries none), `im2col_rgb_patches`, the Transformer-XL rel-position table
+  `rel_pos_table` (each FastConformer family keeps only its requant and memo), `rope_neox_2d_rows`,
+  `rope_neox_tab_rows`, `avg_pool2d_rows`, `interpolate_grid_bilinear_aa`, `tower_read_conv_pair_folded`, the padded
+  stage readers (`tower_read_gemm_q8`, `tower_stage_q8_zero_rows`/`tower_stage_q8_pad_cols` and their f32 twins
+  `tower_stage_f32_zero_rows`/`tower_stage_f32_pad_cols` - the load-scope padded stagers for FFN widths that are not
+  32-aligned - and `tower_zero_span`), blocked `attention_bidir` and its per-window form `attention_bidir_windows`, the
+  FastConformer CPU block `fc_block_cpu`, and the encode-stage prof rail. `fc_block_cpu` branches per family on its
+  `FcCpuForm` flags alone - `biased` (off for parakeet), `tap_major` (off for canary), `conv_ln` (gigaam's LayerNorm
+  conv module) and `vec4` (off for canary) - and on its position type, `FcRelPos` or `FcRotary`. The one home: a family
+  file that re-implements one of these is a defect, and nothing here names a family type.
+- **`dasllama_audio.das`** - the audio encoder tower: the mel front-ends (mtmd and whisper.cpp flavors, and the canary,
+  gemma4a, qwen3a and gigaam flavors - each a `MelForm` over the one `mel_spectrum_rows`, whose branches are the form's
+  `MelSum` sum order and `MelLog` log law), `AudioTower` with its staging, q8-quantize, and image rails, `EncoderState`,
+  and the whisper-class encode + block loop with its GPU hooks. Composes `dasllama_tower.das`.
 - **`dasllama_audio_io.das`** - decode-any-format -> mono f32 PCM at the asked rate (`load_audio_mono`;
   `load_audio_16k_mono` is the ASR rate, a voice clip goes in at a TTS model's own), and the reverse
   leg the TTS facade hands out: f32 samples -> 16-bit PCM bytes / a RIFF WAV file. The only file
   that talks to miniaudio.
-- **`dasllama_asr.das`** - the ASR facade: capability declaration, timestamp granularity, the
-  backend-neutral entry points. It and `dasllama_audio_embedder.das` are the union carriers that
-  route each facade function to one family; a family appears in a carrier at four places only -
-  its union field, its finalize line, its kind value, and its one-line arms.
-- **`dasllama_whisper.das`** / **`dasllama_parakeet.das`** / **`dasllama_canary.das`** /
-  **`dasllama_qwen3a.das`** / **`dasllama_gemma4a.das`** - one file per model family, each owning its
-  weights, its decode loop, and its quirks. Shared tower pieces go up into `dasllama_tower`, not
-  sideways between families.
-- **`dasllama_vad.das`** - Silero-VAD weights and per-stream state.
+- **`dasllama_asr.das`** - the ASR facade: capability declaration, timestamp granularity, the backend-neutral entry
+  points. It and `dasllama_audio_embedder.das` are the union carriers that route each facade function to one family; a
+  family appears in a carrier at four places only - its union field, its finalize line, its kind value, and its one-line
+  arms. `check_family_seams` over `AsrKind` licenses (`ASR_SEAM_EXEMPT`) the files driving a family past the facade's
+  verbs: the audio carrier, the four GPU family hooks, `asr_bench.das`, the bake tool, `harness/pk_parity_probe.das`,
+  `harness/cpu_asr_race.das`, `tests/`. `ASR_KIND_FILES` maps an `AsrKind` that has no family file of its own to the
+  family file that serves it: `qwen3omni` to `dasllama_qwen3a.das`.
+- **`dasllama_whisper.das`** / **`dasllama_parakeet.das`** / **`dasllama_gigaam.das`** / **`dasllama_canary.das`** /
+  **`dasllama_qwen3a.das`** / **`dasllama_gemma4a.das`** - one file per model family, each owning its weights, its
+  decode loop, and its quirks; the transducer families (parakeet, gigaam's RNN-T head) delegate the decode loop to
+  `dasllama_rnnt.das`. Shared tower pieces go up into `dasllama_tower`, not sideways between families.
+  `dasllama_gigaam.das` is GigaAM v3 (Russian, one-file GGUF): the rotary Conformer encoder with its CTC or RNN-T head.
+- **`dasllama_rnnt.das`** - the transducer home: the LSTM prediction network, the joint and the
+  greedy loop, serving parakeet's TDT (duration logits) and GigaAM's RNN-T (none) alike, the
+  device hook its `rnnt_decode` asks first (the ASR-decoder drivers fill it), and the device
+  seats' host form both drivers call (`rnnt_dev_*`).
+- **`dasllama_vad.das`** - Silero-VAD weights and per-stream state. A chunk is a sequential step
+  of about 0.7M multiply-adds, so its matvecs run on the calling lane - a fork costs more than it
+  splits - and its conv weights sit [cin][3][cout], a tap's output channels back to back, each
+  output summing its in-range taps in the file's order: the probabilities are bit-identical to the
+  scalar per-output nest's. It owns the GPU seat `register_vad_gpu`, which both tower drivers fill
+  (`#tower-gpu-hook`): the window, STFT and convs read raw samples alone, so every chunk of a call
+  runs in one encoder dispatch, and the LSTM recurrence with its decoder walks the chunks in one
+  workgroup. The batch VAD (`vad_probs`, `find_speech_timestamps`) asks the seat first; the
+  streaming `vad_iter_feed` asks it only under `set_vad_stream_gpu` (`DASLLAMA_VAD_STREAM_GPU`, off),
+  because one 32 ms chunk runs faster on the CPU chunk step than one command buffer's round trip.
+  The device copy of the weights is `VadModel.slab`, the STFT basis and the LSTM's two planes
+  transposed k-major, which `dasllama_layout`'s `vad_build_slab` lays at load.
 
 ### Vision
 
@@ -238,6 +260,12 @@ A family whose hook takes a whole stage splits its encode at the seam the driver
 driver writes into), and a `*_stem_finish` half only the CPU route runs. The driver reads the
 column buffer (`s.x0`, `st.xw`) and never the residual stream the CPU half would have filled.
 
+Two hooks reach past the encoder. GigaAM's CTC head seat (`register_gigaam_gpu_ctc`, the Metal driver's) runs the
+head's GEMM, argmax and log-sum on the device off the encode's held rows; the collapse stays on the host. The tower home's
+`register_tower_rows_gen` answers the generation of the driver's last encode, which a family records on its state after
+the encode (`enc_gen`), so the transducer seat finds that encode's rows on the device
+(`ARCHITECTURE_MEDIA_ASR.md#rnnt-device-decode`).
+
 ### The tower weight lane is a policy, not a default {#tower-weight-lane}
 
 A tower serves its GEMMs on one of two lanes: q8 planes (the CPU serving format) or the file's
@@ -267,24 +295,3 @@ the Metal blob included. The canary serving artifact is Q8_0 for exactly this re
 classifier serves the q8 plane, while the f16 parity carrier still mints planar on its own because
 the blob drivers decline a tied-fp32 classifier at mint. Whisper and parakeet stay planar - their
 decoders are hand-written CPU loops that read planes directly.
-
-### The parakeet decode step is one team publish over half-precision weights {#parakeet-decode-step}
-
-A TDT decode step is a few hundred thousand multiply-adds a lane, so two things other than
-arithmetic set its time: the bytes it reads and the times it meets the team. Both lanes of the
-model decode off HALVES the session lays once a weight plane - the LSTM stack and the joint's
-prediction projection as they sit (`ParakeetPredState.wh`), the joint net transposed into logit
-blocks (`ParakeetState.joint_wt`: a block of `PK_JOINT_BLOCK` logits holds its input columns back
-to back, so a lane walks its block forward; a lane's slice of a whole-row column table is short
-runs a column apart, which the prefetcher does not follow). The halves read through `dot_f16` and
-`axpy_f16`, and a token's predictor reads 13 MB where the f32 planes were 26.
-
-`pk_step` runs a step as ONE `team_parallel_stages` publish: a layer's gate dots (the input's and
-the hidden's dot of a row summed in one pass), its gate math, the next layer's pair, the joint's
-prediction projection, then the joint's logits a block a chunk - six stages for the two-layer
-predictor, the publish's limit. A blank step publishes the logits stage alone. Each lane applies
-the joint's ReLU itself: a column whose `enc + pred` is not positive is skipped, about half of
-them. Under one dispatch lane (`get_dispatch_lanes()` - single-thread mode) the stages run in
-order on the caller with no publish. The token probability's log-sum leaves out a logit
-`PK_LSE_CUT` under the row's maximum, which is under 1e-10 of the sum with every other logit
-beside it.

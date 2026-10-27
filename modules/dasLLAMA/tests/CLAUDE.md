@@ -426,7 +426,7 @@ contract, per-format key arithmetic, split-scale cover predicate - a 256-wide 64
 bakes, a 384-wide one and a 32-row one do not - and expert exclusion - an `*_exps.weight`
 slice bakes nothing, a shared-expert site and a mis-spelt suffix still bake - are pure taxonomy
 over a job list, plus the split-scale transform's idempotence over one carrier) `smol untied metal metal-untied gemma tower whisper voxtral
-parakeet qwen3a canary canary-dec gemma4a gemma4uv gemma4uv-metal gemma4v gemma3v gemma4e
+parakeet gigaam qwen3a canary canary-dec gemma4a gemma4uv gemma4uv-metal gemma4v gemma3v gemma4e
 mtower kitten mx4-stream b32-stream`; `mx4-stream` (families `gemma4moe` / `gptoss`, large tier: gemma-4-26B-A4B's MXFP4_MOE mint and
 gpt-oss-20b mxfp4) is the native-MXFP4 cold mint's streamed fill - a child (`_mx4_mint_root.das`) mints the planar image under
 `/usr/bin/time -l` and its peak memory footprint sits under the mxq + mxs bytes the image holds (macOS; elsewhere the leg skips
@@ -490,7 +490,8 @@ is its untied twin on TinyLlama-1.1B - the blob plane carrying the classifier AN
 embedding's linear q8 copy (`emb_q8` without `cls_q8`): the layout gate admits the copy, cold
 mint and warm map keep the q8 table with no fp32 copy, GPU serve, the same teacher-forced bar
 (`--arm metal` and `--arm untied` both select it - substring match). The ASR-family
-arms (`parakeet` transcript-exact, `qwen3a`/`canary`/`gemma4a` element-exact planes - the gemma4a and qwen3a q8-against-f32
+arms (`parakeet` transcript-exact, `gigaam` transcript-exact over the GGUF's cold bake and the `.dlim` loaded back
+through `load_asr_model`, `qwen3a`/`canary`/`gemma4a` element-exact planes - the gemma4a and qwen3a q8-against-f32
 transcribe cells comparing word lists, a comma riding a near-tie token between the two rails -,
 `canary-dec` = the opt-in fp32 Model rail, token-exact) re-save their images from cold each
 run like the voxtral arm. The canary arm carries both lanes: the f32 element-exact cell and
@@ -678,7 +679,17 @@ its row pad zero under a sentinel fill; the bias-and-ReLU row pass against max(x
 of both signs. The shared templates' other Metal stamps (the same file): the conv module's GLU
 against the CPU form with the halves swapped as the control, the subsample LayerNorm + ReLU off
 padded rows against a double form with a scaled weight row as the control, gemma4a's subsample
-depthwise conv against the CPU loop, qwen3a's conv-out shuffle bit for bit, and the FastConformers'
+depthwise conv against the CPU loop, gigaam's biased centered depthwise conv (`ga_dw_gate`: five tap-major taps
+over 13 rows of 32 against the CPU loop, a poisoned bias reddening it; `ga_dwh_gate`: the same conv over the carrier's f16
+taps, `MetalGaDwH`, at 13 rows of 64 and 5 taps and 40 rows of 96 and 31 taps against the CPU loop over the same halfwords,
+`fc_dw_bias_rows_f16` - itself held bit for bit to the f32 loop over the widened taps - a poisoned halfword tap reddening it;
+the fixture `_kernel_oracles.das`'s `dw_f16_fix`, the Vulkan cell `test_vkt_tower_ga_dwh` the same), the silero VAD's two stamps (`vad_enc_gate`: three
+chunks' input gates against `_vad_oracle.das`'s encoder, a poisoned conv tap reddening it; `vad_lstm_gate` at one chunk and
+five: the probabilities and the state left in place, a poisoned recurrence weight reddening it; the slab behind a NaN lead,
+the Vulkan cell `test_vkt_tower_vad` the same references), gigaam's device mel (`ga_frames_gate`: the frame
+window bit for bit the CPU frame loop's product with its row and column pads zero, a poisoned sample reddening it;
+`ga_mel_gate`: the clamped-log filterbank against the float sum's log with a frame at the floor and one past the ceiling, a
+poisoned filter reddening it), qwen3a's conv-out shuffle bit for bit, and the FastConformers'
 rel-position table against the CPU `rel_pos_table` with its zero pad rows and the table of one
 frame more as the control. The whisper-class projector tail's
 two row kernels (`tw_tail_rows_gate`): the pair pool and the row-split gate at a 70-wide row over
@@ -743,7 +754,8 @@ omission a compile refusal (`test_lens_tgmem_gate` above).
 ## The per-PR runs - model-free whole, the stocked files by area
 
 The split between the `model-free` and `stocked` suites: a file that reaches a machine-local
-fixture root (`models_dir()`, `model_available()`, `llama2c_dir()`, `whisper_dir()`) is `stocked`,
+fixture root (`models_dir()`, `model_available()`, `llama2c_dir()`, `whisper_dir()`, the ASR corpus's `corpus_dir()` /
+`asr_clip()`, `asr_oracle_dir()`) is `stocked`,
 every other suite-less file is `model-free`, and `test_run_suites.das` reads the files and fails a
 misfiled one (the pinned gate `REVIEW.md` names for the split). A `stocked` file declares `options
 persistent_heap`, and the same gate fails one that does not: dastest compiles a test program on the
@@ -1002,7 +1014,9 @@ rest at the approx bar), `test_vkt_tower_front_mel` (the spectrum on both arms a
 filterbank in its three forms - gemma4a's max floor, canary's added floor, the whisper
 preprocessors' mel-major log10 - against double-precision sums with the quiet frame flooring on
 the max arm and reading under it on the add arm, canary's per-feature normalization with its zero
-tail, the depthwise conv and the sinusoid rel table with its (0, 1) zero row) and
+tail, the depthwise conv and the sinusoid rel table with its (0, 1) zero row), `test_vkt_tower_ga_mel`
+(gigaam's device mel on the templates the Metal cells stamp - the frame window bit for bit with its zero pads, the
+clamped-log filterbank with a frame at the floor and one past the ceiling, each with its poisoned element) and
 `test_vkt_tower_cn_attn_rel_plane` (canary's rel-plane attention on both head widths over planes
 the CPU built as the f16 GEMM lands them, against `cn_attn_ref` - the full rel-pos loop with the
 u/v biases - the scaled keys and the scaled rel table as controls);
@@ -1018,7 +1032,11 @@ control; the Conformer classes (the silu rows - the bias class's silu arm with n
 GLU, the causal depthwise taps, the chunk-12 relative-position attention on both head-width stamps,
 the 128-wide one over scaled queries with the oracle at four times the cap as the softcap's
 control) and the FastConformer conv module tail (`test_vkt_tower_fastconformer`: the centered
-depthwise conv with the folded BatchNorm and silu) against the CPU loops' forms, the attention
+depthwise conv with the folded BatchNorm and silu; `test_vkt_tower_ga_dwh`: gigaam's conv over f16 taps, `TowerGaDwH`,
+on the Metal cell's shapes and CPU loop) against the CPU loops' forms, GigaAM's CTC head pick (`test_vkt_ctc_pick`:
+`CtcPick` on the Metal cell's cases, `_ctc_oracle.das`'s `ctc_pick_cases` - three widths, a tie every third row picking the
+lower class, NaN pad slots past the classes that red a plog if read, an all-NaN row picking class 0 - every record written,
+a poisoned bias the control), the attention
 controls scaling the keys (a uniform shift leaves a softmax alone); and the chat projector tails' row
 classes (`test_vkt_tower_tail_rows`: the pair pool against the mean of each row pair, the swapped SwiGLU
 against `swiglu_swapped_rows` with the halves-swapped form as the control). Every compare in the file
@@ -2864,6 +2882,38 @@ dispatch whose chunks panic, an ordinary round after them still completing, and 
 (the process-wide live-object count at shutdown) - is `tests/jobque/test_jobque_team.das` and
 `tests/jobque/test_jobque_stages.das` at the repo root. The tripwire reds any `with_job_que()`
 block a test opens around the engine without calling `setup_dasllama_jobque_()` first.
+`test_rnnt.das` - model-free (area audio): the shared transducer decoder (`rnnt_greedy`) over synthetic nets of tiny widths
+built in-test, against a scalar reference written in the file - the zero and blank first inputs, the symbol cap, the shapes
+(joint off pred, two layers in both gate orders, a predictor off the float4 lattice), the TDT duration table and the plain
+RNN-T, the one-lane step against the team publish, the layer-count refusal and the pool's narrowing; `PLOG_BAR`'s control a
+net with one joint row mutated landing outside it. The device-seat cells (`rnnt_seat_skip`: skip on a build or box with no
+device transducer seat) decode the same nets on the build's seat against the reference, a clip of no frames, each decline
+(the knob, a shape past the staged rows, a device fault, the round budget, a failed command buffer on Metal or a failed
+allocation on Vulkan) falling back to the CPU loop with its reason counted, and two sessions sharing one model's device
+weights. Its kernel references and fixture are `_rnnt_oracle.das`'s, at two shapes (`rc_shapes`: one off every lattice,
+one on them) run by `test_metal_rnnt_kernels` and `test_vkt_rnnt`; the pick's cases include a frame of NaN and one of -inf
+token logits, which must name token 0.
+`test_gigaam.das` - stocked suite (area audio): GigaAM v3 against the upstream package's per-stage dumps - the
+external-reference compare: the f16 lane stage by stage (mel, front, every layer, encoded; each stage bar's control the
+clip at 1.1x through the same stages) and its decoded ids, frames and transcript, the CTC probabilities against the
+oracle's softmax, the q8 lane by its transcript's words (the clip with its second half silenced the control), the
+long-form spans of ru_long, the facade arms, the hparam refusals, the foreign `.dlim` refusal (SmolLM2's image saved under
+the test's temp dir), the device decode twin on the build's transducer seat (`rnnt_device_twin`, the serving tower pinned
+on, its control the encoder rows at 1.05x) and, on Metal, the CTC head on the device seat against the CPU head (each frame's
+log-sum within `CTC_PLOG_BAR`, the picks but at a near-tie frame, the clip at 1.05x through the device chain the control, a
+CPU-encoded clip serving off the uploaded rows against the CPU head over those rows), and the CTC head alone against the
+oracle (`test_gigaam_ctc_head_oracle`: the ctc and e2e_ctc carriers on both lanes, the oracle's encoder rows through the head
+on the CPU and, on the build's device seat where it serves on the box (Metal's, else Vulkan's), counted through `ctc_seat_heads` - the
+picks the oracle's argmax but at a near-tie frame, the token
+probabilities within `PLOG_BAR`, the ids the oracle's; the control the head's halfwords zeroed in `wblob`, its ids off the
+oracle's on every leg); the pick's kernel cell is the prefill
+file's `test_metal_ctc_pick_kernel` (`_ctc_oracle.das`'s cases against the CPU row loop: three row widths, a tie, a row of
+NaN picking class 0, a poisoned bias the control), the Vulkan one `test_vkt_ctc_pick`. The CTC legs the device cells
+share (`ctc_leg`, `ctc_cpu_leg`, `ctc_hard_flips`, `CTC_PLOG_BAR`) live in `_ctc_oracle.das`. The cells skip
+without their carrier, the oracle dumps (`asr_oracle/gigaam/` under `models_dir()`) or the corpus clips; the facade, `.dlim` and CTC-head
+cells also when interpreted; the side-file arm without the Qwen3-ASR-0.6B mmproj and decoder.
+`test_review_howto.das` - model-free (area infra): the HOW_TO check of `../REVIEW.das` run as a child over fixture documents
+written under the test's temp dir - one document a defect, each red on its own finding, and a clean one green.
 `test_audio.das` - stocked suite; model-free cells: the audio front-end units (gelu-erf, hann
 window, mel filterbank, log-mel chunking, swapped swiglu); model-gated: the tower structure/oracle
 gates (ultravox/voxtral/omni shapes, the mtmd all-ones encode oracles - CPU-claim cells, tower
@@ -2884,7 +2934,33 @@ lattice served by the CPU with the counter unmoved, another clip's mel outside t
 `test_qwen3a_vulkan_front` (the three-way cells described under `test_vulkan_tower_kernels.das`),
 `test_parakeet_vulkan_twin` (parakeet-TDT 0.6B v2 over jfk through `parakeet_encode` - the front and the blocks on the
 device, the same three-way bar, counters and poison as the canary twin, the q8 and exact models minted in memory
-through `stage_parakeet_model`); and
+through `stage_parakeet_model`); `test_gigaam_vulkan_twin` (GigaAM v3 e2e-rnnt over `ru_short` and `ru_mid`: the q8 lane's
+three-way twin, front lever and poison, then the exact lane off the halfwords on the f16 GEMM against the CPU exact chain -
+one encode, its front and every block on the device with no `quant_mode` decline, the ids the CPU exact chain's, the
+device rows' rel_l2 from the exact chain within the CPU q8 chain's own, the halfword blocks zeroed from the middle on the
+control past it; off the f16 GEMM feed the `device` decline instead - and the lane policy under
+`set_vulkan_gigaam_exact_lane`, the tower off its control); `test_gigaam_ctc_vulkan_twin` (the ctc and e2e-ctc
+carriers on both lanes over `ru_short`: the CTC head on the Vulkan seat, `vulkan_gigaam_ctc`, against the CPU head over the
+encode's rows - an f16 head's CPU leg over the rows rounded to half - counted once on `vulkan_ctc_stats`, off the encode's
+held device rows where the chain served the encode (`handoffs`), the picks the CPU's but at a near-tie frame, each log-sum
+within `CTC_PLOG_BAR`, the ids and transcript the CPU's, the clip at 1.05x through the device chain the control; then a
+CPU-encoded clip serving off uploaded rows with no handoff counted; skips as the twins above do);
+`test_gigaam_metal_twin` (Apple builds: GigaAM v3 e2e-rnnt's f16 lane over the
+FLEURS `ru_short` and `ru_mid` clips through `gigaam_encode` and its greedy decode - the CPU exact chain with the tower
+off, the device chain with the conv front and every block on the driver (encodes, convs and blocks deltas), the other
+GEMM route under `set_metal_tower_f16`, the block seat behind the CPU front under `set_metal_gigaam_front(false)`,
+each within 1e-2 of the CPU rows' scale with the CPU's transcript, a x3 mel outside the bar as
+the control, and the q8 lane's one `quant_mode` decline with no encode and its mel seat's -1; on `ru_short` the seats' side
+arms - the mel seat declining on the knob, a clip under one window and a scratch past the device's largest buffer
+(`set_metal_tower_take_max_probe_`) with no mel counted, the encode off a CPU mel (`gigaam_encode`) on the device within
+the bar, the held encoder rows handing off under their host rows and refusing them rewritten in place, the scratch past
+the device's buffer declining the encode with one `memory` decline (the block seat's) and the CPU's transcript - then
+the asr_prof buckets: the CPU chain's stage and block buckets with the tower off, `ga.encode.gpu` / `.record` with it
+on, the replay's `ga.encode.gpu.restride` / `.attn` under `set_metal_fc_prof_replay` alone, `ga.mel.gpu` off the mel
+seat; skips without the carrier or the clips); `test_canary_metal_holds_no_rows` (Apple builds: canary's served Metal
+encode leaves no encoder rows held, `metal_tower_held_rows_elems` 0 - a transducer family's encode holds them);
+`test_mel_spectrum_magnitude` (model-free: `mel_spectrum_rows`' magnitude and power forms on a synthetic DFT table
+against a double DFT, the magnitude rows against the power reference the control); and
 `test_encoder_tail_vulkan`, the projector tail alone on the Vulkan chain, one cell a projector kind, three ways
 over the SAME device block rows (the f32 tail of the exact tower over those rows the reference, the CPU q8
 tail with `set_vulkan_tower_tail` off and the device tail with it on, the lever put back; the device within
@@ -3102,7 +3178,11 @@ das child's argv spelling on both arms (released exe vs the `--jit` bench source
 onto the pp and tg axes separately and `keep_cold` keeping the cold cell when the warm re-run is
 slower on either, each bar with its control - and the TTS cell's seams: the reference argv on the
 torch and mlx arms, its `BENCH` and `VERSIONS` lines read back, the das child's argv, the catalog
-lookup, the corpus head and the GPU seats' verdict (`none` / `all` / `partial`) - the branches that
+lookup, the corpus head and the GPU seats' verdict (`none` / `all` / `partial`) - and the CrispASR
+reference's: the summary line's two fields (the realtime factor over the samples where the seconds do not
+parse), the runs a process prints, the best rep (`crispasr_best`, none unless every rep timed), the row's
+flavor stamp (`asr_ref_flavor`), each tool's CPU exe (`asr_ref_exe`) and the GPU leg's own Metal build
+(`asr_gpu_ref_missing`), and `cmake_built_bin`'s three layouts in their order - the branches that
 decide what lands on the public board, which no model suite reaches.
 `test_sizing_helpers.das` - model-free: the sizing helpers (`reserve_resize` exact capacity,
 `grow_resize` geometric reuse and its re-added tail reading zero, `ensure_length` grow-only with
@@ -3190,7 +3270,7 @@ carries - `metal` on a das_metal build, `vulkan` where dasVulkan builds - regist
 walked (`test_batch_only_backends_refuse_the_whole_seat`), and the pin refusal
 (`test_env_pin_refuses_what_cannot_take`): `kernel_backend_pin_refusal` names why an unregistered
 or a batch-only name cannot pin and reads "" for the portable backend, and the pin
-`DASLLAMA_PIN_BACKEND` names panics where it cannot take (driven through the `pin_kernel_backend_`
+`DASLLAMA_PIN_BACKEND` names panics where it cannot take (driven through the `pin_kernel_backend_env`
 seam) while the same pin made in process, or a name the environment did not name, warns and keeps
 the active backend (the controls). `test_kq_registries` walks every `KqFmt`
 through `kq_registries`: a format carries all eight registries or none, each family's tile, gemv
@@ -3304,7 +3384,8 @@ q8 serving lane on its measured 3.2e-1*rms bar (27 blocks, ffn served at the lay
 sniff/exec_fmt cells. On Apple builds the CPU gate pins the tower knob off, and a GPU rung
 gates two fixtures through the Metal chain (the blocks and, behind them, the projector tail) on its measured 4e-2*rms bar - engage proven
 per fixture by the encodes/blocks counters, plus the knob-off decline leg (the 72-wide heads
-restride to the attention tiles' 128 on the driver), the q8-lane leg (a PINNED-q8 tower with
+restride to the attention tiles' 128 on the driver), a flash-off leg (`set_metal_tower_flash(false)`: the padded
+slab trio and its unpad serve the attention, on the GPU bar), the q8-lane leg (a PINNED-q8 tower with
 the knob ARMED serves off its Q8_0 planes through the prefill ladder's q8 GEMM over the vision q8
 slab, on the q8 lane's bar: one encode and every block counted, no `quant_mode` decline), and a third crowned encode on the twin-W route
 (`set_metal_tensor_crowns("mulmm_q8")` + `set_metal_tower_f16(true)`, the lane pinned exact so
@@ -3720,7 +3801,25 @@ oracle's spectrum and decoder output - its conv_post seam within `SEAM_CONV_POST
 peak) and the waveform within `SEAM_WAVE_BAR` (1e-3, absolute), the fp32 batch tile rounding apart from
 the per-token dot, each with the control of the generator fed `gen_in` rotated one row landing outside
 the bar; the end-to-end waveform difference is logged, not gated (the F0 phase drift the file header
-explains).
+explains). The whole rail runs under `with_reference_f32_tile` (`_f32_tile_pin.das`): every fp32 batch
+GEMM on `f32_batch_tile`'s declared fallback through the engine's f32 tile pin (`set_f32_tile_pin`), a
+seat of its own ahead of the float-batch override, so a sidecar crowning another permutation moves no bar
+and the rail holds under `DASLLAMA_ACCEL=1` - only the f32 tile is pinned, every other kernel keeps its
+stamp, and the pin is put back however the block leaves, a panic included.
+`test_f32_batch_tile_perms.das` - model-free: every permutation of `f32_batch_tile`'s grid
+(`_f32_tile_pin.das`'s `[dasllama_grid]` clones) over the 4x4 lattice of the inverse STFT's GEMM
+kitten mini ends on (n 11, d 20, 45480 frames) and of a 301-wide dot (d 20, 2048 tokens: past every
+permutation's lanes with a scalar remainder, asserted) under a NaN sentinel, against a double oracle within
+its own order's bound, `2 * eps_f32 * sqrt(depth) * sum |w x|` per output - depth the roundings a
+product passes through, `n / L + log2 L + n % L` over the permutation's `L` lanes, `n` when the loop
+is sequential or shorter than `L` - its largest difference logged with token and row; the control
+moves one weight so its output shifts by twice that output's bound, which must land past it. Then the
+pin itself (`test_f32_tile_pin_seat`): the plain and the offset `matmul_batch` forms under the pin bit for
+bit the reference permutation's lattice plus `dot` over the rest, the pin counting both, with a float-batch
+override armed - the accelerate tier under `DASLLAMA_ACCEL=1`, else a counting stand-in that is offered
+no GEMM while pinned, and unpinned is offered the offset form and never the plain one (the control); the
+pin alone arms no override seat (the lane announce reads that seat); a panic inside the block reaches the
+caller with the pin put back.
 `test_tower_helpers.das` - model-free: the shared encoder-tower helpers in `dasllama/dasllama_tower`
 (clamp, row norms, f16-table GEGLU-quick, im2col, two-axis rope, avg-pool, `attention_bidir`),
 each against an in-test reference; `rel_pos_table` against an fp64 sin/cos reference, its
@@ -3969,9 +4068,9 @@ carry no tag and always run. Family tokens: `llama` (`--suite decode`, `prefill`
 `coverage`, plus the image `smol`, `untied`, `metal` and `metal-untied` arms and the `image-vulkan` `vulkan` arm),
 `qwen2`, `qwen3`, `phi3`,
 `gemma2`, `gemma3`, `gemma4`, `qwen3moe`, `gemma4moe`, `gptoss`, `qwen35`, `qwen35moe`, `qwen2moe`, `qwen4exp` (the support-matrix family cells; `qwen35` also tags `test_vulkan_mint.das` and `test_metal_batched_row.das`), `gemma`,
-`ultravox`, `whisper`, `voxtral`, `parakeet`, `qwen3a`, `canary`, `gemma4a` (image suite arms),
+`ultravox`, `whisper`, `voxtral`, `parakeet`, `gigaam`, `qwen3a`, `canary`, `gemma4a` (image suite arms),
 `gemma3v`, `qwen25v`, `qwen3v` (the coverage census tower rows), `kitten` (the image suite's
-kitten arm), `kokoro`, `pocket` (the coverage census TTS rows),
+kitten arm), `kokoro`, `pocket` (the coverage census TTS rows), `vad` (the coverage census silero VAD row),
 `gemma4e` (support-matrix rows under `fam-gemma4e` - E4B PARITY_FULL-gated; E2B Q8_0, Q4_K_M,
 Q4_0 and the format carriers of `../performance/model_specs.das` (the token and PLE tables Q6_K and
 IQ4_XS, the per-layer gate and projection planes Q6_K and Q5_0) small-tier always-on - what the rows assert is the
@@ -4052,6 +4151,11 @@ Every `[test]` file requiring a `dasllama/*` module outside this folder, each wi
   live with dasLLVM under `modules/dasLLVM/REVIEW.md`.
 - `modules/dasLLAMA/benchmarks/matmul/test_matmul_par.das` - the bench self-check, requiring
   `matmul_variants` by bare same-dir name.
+- `utils/dasllama-convert/test_convert.das` - requires the converter's `convert_sniff` module by bare
+  same-dir name (the hyphenated directory is unreachable by path require): the carrier sniff over
+  the GigaAM carriers, a decoder and a Qwen3-ASR mmproj, gated through `_model_tier.das`'s
+  `model_available` (path-required), and the absent-file cell; run `-jit`
+  (`run_tests_dasllama_convert`).
 
 The ladder tests (`utils/internal/dasllama-ladder/test_*.das`) answer to that folder's own
 `REVIEW.md` - not dasLLAMA tests, not ledger entries. That holds even though two of them,

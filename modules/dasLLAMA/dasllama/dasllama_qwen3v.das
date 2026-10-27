@@ -214,11 +214,7 @@ def private serialize_image_meta(var arch : Archive; var st : Qwen3vStaging) {
 }
 
 def finalize(var st : Qwen3vStaging) {
-    delete st.blob
-    delete st.wblob
-    delete st.qblob
-    delete st.qscales
-    delete st.t
+    delete_staging(st)
 }
 
 [unused_argument(st)]
@@ -581,41 +577,14 @@ def load_qwen3v_tower(path : string) : Qwen3vTower {
         }
         // a named image serves the lane it was BAKED with, so the policy has no say here
         to_log(LOG_INFO, "dasLLAMA qwen3v: block GEMM lane {tag == QWEN3V_TAG_Q8 ? "q8" : "f32 planes"} - the named image's baked tag\n")
-        apply_box_profile_runtime()
-        let ts_img = ref_time_ticks()
-        var t = Qwen3vTower()
-        if (!load_image(path, t, tag)) {
-            panic("dasLLAMA: '{path}' is not a prepared qwen3v-tower image for this box/knobs (identity {image_identity(tag)}) - regenerate it from the source mmproj gguf")
-        }
-        to_log(LOG_INFO, "dasLLAMA: prepared qwen3v-tower image mapped in {get_time_usec(ts_img) / 1000} ms - {path}\n")
-        q3v_check_planes(t, path)
-        return <- t
+    } else {
+        q3v_announce_lane()
     }
-    q3v_announce_lane()
-    if (g_env_engine.image) {
-        apply_box_profile_runtime()   // a backend pin must precede the identity (it names the backend)
-        let img = image_path_for(path, tag)
-        let ts_img = ref_time_ticks()
-        var t = Qwen3vTower()
-        if (load_image(img, t, tag)) {
-            to_log(LOG_INFO, "dasLLAMA: prepared qwen3v-tower image mapped in {get_time_usec(ts_img) / 1000} ms - {img}\n")
-            q3v_check_planes(t, img)
-            return <- t
-        }
-        delete t
-        var inscope st <- stage_qwen3v_tower(path)
-        var built = Qwen3vTower()
-        if (cache_via_image_staged(st, built, img, tag)) {
-            dlim_gc_stale(path, tag)   // the fresh bake ON DISK proves its lane's siblings dead
-        }
-        q3v_check_planes(built, img)
-        return <- built
-    }
-    var inscope st <- stage_qwen3v_tower(path)
-    var built = Qwen3vTower()
-    mint_qwen3v_tower(st, built)
-    q3v_check_planes(built, path)
-    return <- built
+    return <- load_staged_image(path, tag, "qwen3v-tower", "source mmproj gguf", type<Qwen3vTower>, $ {
+        return <- stage_qwen3v_tower(path)
+    }, $ [unused_argument(t)] (t : Qwen3vTower) => true, $(t : Qwen3vTower; src : string) {
+        q3v_check_planes(t, src)
+    })
 }
 
 //! Mint a served tower from a staged read WITHOUT touching disk — the off-rail control for suites.

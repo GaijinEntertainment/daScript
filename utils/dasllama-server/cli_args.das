@@ -248,7 +248,7 @@ struct TranscribeArgs {
     out : string
 
     @clarg_short = "l"
-    @clarg_doc = "Language hint (default: auto for a model that detects it, else en)"
+    @clarg_doc = "Language hint (default: auto for a model that detects it, its one language for a one-language model, else en)"
     lang : string
 }
 
@@ -304,7 +304,7 @@ struct TalkArgs {
     system : string
 
     @clarg_short = "l"
-    @clarg_doc = "Language hint for the ASR model (default: auto for a model that detects it, else en)"
+    @clarg_doc = "Language hint for the ASR model (default: auto for a model that detects it, its one language for a one-language model, else en)"
     lang : string
 
     @clarg_doc = "The TTS model GGUF that speaks the reply"
@@ -843,4 +843,20 @@ def text_input(flag, file : string; bare : array<string>; var err : string&) : s
         return body
     }
     return empty(bare) ? "" : bare[0]
+}
+
+//! The language hint a session takes from `--lang` over the model's `languages` (its caps): the flag, else "" - the
+//! facade's `create_session` picks the model's default. A hint the model cannot take is refused with what it does
+//! take, in `why`.
+def asr_lang_hint(languages : array<string>; flag : string; var why : string&) : string {
+    return flag if (empty(flag) || flag == "auto")
+    if (empty(languages)) {
+        why = "this ASR model detects the language itself - drop --lang (or pass --lang auto)"
+        return ""
+    }
+    if (find_index(languages, flag) < 0) {
+        why = "'{flag}' is not a language this ASR model takes - it takes: {join(languages, ", ")}"
+        return ""
+    }
+    return flag
 }

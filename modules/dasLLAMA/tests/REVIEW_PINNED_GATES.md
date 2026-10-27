@@ -153,10 +153,11 @@ must keep holding:
 - `test_vulkan_tower_kernels.das`'s `test_vkt_fa_bidir`, `test_vkt_tower_rows`,
   `test_vkt_tower_ln_rows`, `test_vkt_tower_f16_feeds`, `test_vkt_tower_vision_rows`,
   `test_vkt_tower_win_rows`, `test_vkt_tower_tail_rows`, `test_vkt_tower_front_movers`,
-  `test_vkt_tower_front_mel`, `test_vkt_tower_cn_attn_rel_plane`, `test_vkt_tower_conformer`,
-  `test_vkt_tower_fastconformer`, `test_vkt_tower_dw2d`, `test_vkt_wdec_classes` and
-  `test_vkt_wdec_fused_rq` cells - the census's evidence for the tower classes - must hold each
-  class against its CPU oracle at the bar the cell sets, with the cell's poisoned-element control.
+  `test_vkt_tower_front_mel`, `test_vkt_tower_ga_mel`, `test_vkt_tower_cn_attn_rel_plane`,
+  `test_vkt_tower_conformer`, `test_vkt_tower_fastconformer`, `test_vkt_tower_ga_dwh`, `test_vkt_tower_dw2d`,
+  `test_vkt_wdec_classes`, `test_vkt_wdec_fused_rq`, `test_vkt_rnnt` and `test_vkt_ctc_pick` cells - the census's
+  evidence for the tower, transducer-decode and CTC-pick classes - must hold each class against its CPU
+  oracle at the bar the cell sets, with the cell's poisoned-element control.
 - `test_vulkan_kv_codec_kernels.das`'s `test_vkc_q8_da_attn` and `test_vkc_tq4_da_attn` cells must
   hold the codec attention arms (`codec_attn_arms`) against the CPU attention over the codec's
   rows, each arm with its controls.
@@ -211,12 +212,12 @@ testing the replacement, or names in the old cell's pinned-set entry the pinned 
 asserts the replacement's output to that bound.**
 
 **A diff that adds a cell or an assert whose expected value must be kept in step with something
-maintained outside the cell - a document, a checked-in table, a committed artifact's form, a
-roster, a knob list; not a value the cell's own claim defines - or that a checked-in table - the
-model table in `../README.md`, or a list of kernel names whose coverage note names a test cell as
-the evidence for each - names as its evidence, adds the cell carrying it to the pinned set in the
-same change** - as a named cell, or, when the new cell
-leaves every cell of its file pinned, by replacing the file's named cells with one file entry
-naming what it pins. A new entry in an existing cell's expectation list is not a new assert, and
-an assert that compares against a `../dasllama/` constant by name, not against a literal copy of
-it, keeps nothing in step.
+maintained outside the cell - a value the cell restates as a literal or a copied condition, or
+reads from an oracle dump, a truth cache or another expected-value file under `models_dir()` that
+it does not build itself, never a value the cell's own claim defines - or
+that a checked-in table (the model table in `../README.md`, or a list of kernel names whose
+coverage note names a test cell as each one's evidence) names as its evidence, adds the cell
+carrying it to the pinned set in the same change** - as a named cell, or, when the new cell leaves
+every cell of its file pinned, by replacing the file's named cells with one file entry naming what
+it pins. A new entry in an existing cell's expectation list is not a new assert, and an assert
+comparing against a `../dasllama/` constant by name keeps nothing in step.

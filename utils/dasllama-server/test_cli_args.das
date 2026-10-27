@@ -763,3 +763,34 @@ def test_repl_loop_toggles(t : T?) {
         unsafe { delete r.eng }
     }
 }
+
+def private empty_flag_cell(t : T?; langs : array<string>) {
+    var why = ""
+    t |> equal(asr_lang_hint(langs, "", why), "", "{length(langs)} languages")
+    t |> equal(why, "", "{length(langs)} languages: nothing refused")
+}
+
+[test]
+def test_asr_lang_hint(t : T?) {
+    t |> run("no --lang hands the facade \"\" whatever the model's languages - create_session picks its default") @(t : T?) {
+        let none : array<string>
+        empty_flag_cell(t, ["ru"])
+        empty_flag_cell(t, none)
+        empty_flag_cell(t, ["en", "de", "fr"])
+    }
+    t |> run("--lang auto passes as it is; a listed code passes") @(t : T?) {
+        var why = ""
+        t |> equal(asr_lang_hint(["ru"], "auto", why), "auto")
+        t |> equal(asr_lang_hint(["en", "de"], "de", why), "de")
+        t |> equal(why, "")
+    }
+    t |> run("a code the model does not take is refused with what it takes") @(t : T?) {
+        var why = ""
+        t |> equal(asr_lang_hint(["ru"], "en", why), "")
+        t |> success(find(why, "it takes: ru") >= 0, why)
+        let none : array<string>
+        var why_none = ""
+        t |> equal(asr_lang_hint(none, "en", why_none), "")
+        t |> success(find(why_none, "detects the language itself") >= 0, why_none)
+    }
+}

@@ -431,7 +431,10 @@ class CoveragePass : AstPassMacro {
     //! Pass macro that instruments modules with code coverage.
     def override apply(prog : ProgramPtr; mod : Module?) : bool {
         //! Applies the coverage instrumentation visitor to the program.
-        if (mod.name == "coverage" || (prog._options |> find_arg("no_coverage") ?as tBool ?? false)) return false
+        //! a shared module outlives this program: instrumenting it
+        //! pins coverage into every later compile in the process
+        if (mod.name == "coverage" || prog.flags.promoteToBuiltin
+                || (prog._options |> find_arg("no_coverage") ?as tBool ?? false)) return false
         var found = false
         mod |> for_each_function("__coverage_init") $(_fn) {
             found = true

@@ -26,6 +26,8 @@ require math
 //   - Gemma-4 E-series GGUF decoder + its Conformer mmproj — the same two-path shape
 //   - Canary-Qwen GGUF decoder + its "CNRY" FastConformer bin — the same two-path shape
 //   - Parakeet-TDT ggml bins (converted from the NVIDIA .nemo) — v2 English, v3 25-language
+//   - GigaAM v3 GGUFs (one file, Russian):
+//     https://huggingface.co/cstr/gigaam-v3-GGUF
 // A prepared .dlim image loads by either route as well — it routes on its baked family tag.
 //
 // Prerequisites: an ASR model file and a 16 kHz mono PCM16 WAV (e.g. whisper.cpp's
@@ -83,7 +85,8 @@ def main {  // nolint:STYLE038 - one linear tutorial walkthrough
     // ──────────────────────────────────────────────────────────────────────────
     //
     // One entry point for every family. A ggml bin routes to whisper or parakeet by its
-    // vocabulary size; a GGUF decoder needs its audio-encoder mmproj as the second path.
+    // vocabulary size; a GigaAM GGUF is one file; any other GGUF
+    // decoder needs its audio-encoder mmproj as the second path.
     let cmd <- get_command_line_arguments()
     let paths <- [for (a in cmd); a; where ends_with(a, ".bin") || ends_with(a, ".gguf") || ends_with(a, ".wav")]
     if (length(paths) < 2) {
@@ -118,8 +121,9 @@ def main {  // nolint:STYLE038 - one linear tutorial walkthrough
         // ──────────────────────────────────────────────────────────────────────
         //
         // "auto" asks whisper to detect the spoken language from the first 30 s window
-        // (one extra prompt decode, then it sticks); Qwen3-ASR always detects. English-only
-        // models take "en".
+        // (one extra prompt decode, then it sticks); Qwen3-ASR always
+        // detects. One-language models take their one code: "en" for
+        // Parakeet v2, "ru" for GigaAM.
         let lang = empty(c.languages) || length(c.languages) > 1 ? "auto" : c.languages[0]
         var s <- create_session(m, lang)
         let text = transcribe(m, s, samples)

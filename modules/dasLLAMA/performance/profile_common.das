@@ -1173,9 +1173,12 @@ def corpus_buckets() : array<string> =>
 //! the NeMo HF id, or the mtmd mmproj basename. Empty when the tool loads the model's own das_model
 //! directly (the whisper.cpp `parakeet-cli` / `whisper-cli`).
 struct AsrRef {
-    tool : string      // parakeet-cli | whisper-cli | onnx | nemo | mtmd
+    tool : string      // parakeet-cli | whisper-cli | crispasr | onnx | nemo | mtmd | mlx
     handle : string
     @optional exec_fmt : string   // the reference's precision, stamped onto its BenchRun rows
+    //! the row's flavor, "" = "stock": a second ref of one tool on one model (another carrier) names
+    //! its own, since the store keys a run by box, engine, backend, flavor and workload
+    @optional flavor : string
     // non-empty = this reference times ONLY these clips (a slow tool capped below the
     // spec's ladder); empty = the spec's buckets
     @optional buckets : array<string>
@@ -1221,6 +1224,7 @@ def asr_model_selected(spec : AsrModelSpec; tier : Tier) : bool {
 
 // The audio models the suite profiles. Absent files are skipped at run time. The das side is uniform
 // (load_asr_model + transcribe drives every entry); the heterogeneity is which reference tool(s) apply.
+[arch(at="../ARCHITECTURE_MEASUREMENT_AUDIO.md#asr-cpu-references")]
 def asr_catalog() : array<AsrModelSpec> {   // nolint:STYLE038 — flat catalog table, one entry per model
     let wroot = whisper_models_dir()
     let lroot = models_dir()
@@ -1248,6 +1252,29 @@ def asr_catalog() : array<AsrModelSpec> {   // nolint:STYLE038 — flat catalog 
             buckets <- corpus_buckets(), libri_short = "v3", lang = "en",
             prov = serve_asr_tower(),
             companions <- [ProvEntry(name = "ggml-parakeet-tdt-0.6b-v3-q8_0.bin", root = "whisper", recipe = REF_Q8_RECIPE)]),
+        AsrModelSpec(display = "GigaAM v3 e2e-RNNT", das_model = "gigaam-v3-e2e-rnnt-f16.gguf",
+            das_mmproj = "", root = lroot, metal_served = true,
+            refs <- [AsrRef(tool = "crispasr", handle = "gigaam-v3-e2e-rnnt-q8_0.gguf", exec_fmt = "q8_0"),
+                     AsrRef(tool = "crispasr", handle = "gigaam-v3-e2e-rnnt-f16.gguf", exec_fmt = "f16", flavor = "stock-f16"),
+                     AsrRef(tool = "onnx", handle = "gigaam-v3-e2e-rnnt-int8", exec_fmt = "int8")],
+            buckets <- ["ru_short.wav", "ru_mid.wav", "ru_long.wav"], libri_short = "", lang = "ru",
+            prov = ProvEntry(name = "gigaam-v3-e2e-rnnt-f16.gguf", root = "llm",
+                url = "{HF}/cstr/gigaam-v3-GGUF/resolve/main/gigaam-v3-e2e-rnnt-f16.gguf",
+                bytes = 452254784l, sha256 = "b2cf76333a2ceb4f0b8257166d91931429b11d4d935faaaeaa1b61b83d615b2d",
+                recipe = GIGAAM_RECIPE),
+            companions <- [ProvEntry(name = "gigaam-v3-e2e-ctc-f16.gguf", root = "llm",
+                url = "{HF}/cstr/gigaam-v3-GGUF/resolve/main/gigaam-v3-e2e-ctc-f16.gguf",
+                bytes = 448972736l, sha256 = "782c70d7eaa47dcc782f74dbd7a620802566f4b69d150db4aba8acf5937d888e",
+                recipe = GIGAAM_RECIPE),
+                         ProvEntry(name = "gigaam-v3-rnnt-f16.gguf", root = "llm",
+                url = "{HF}/cstr/gigaam-v3-GGUF/resolve/main/gigaam-v3-rnnt-f16.gguf",
+                bytes = 450966176l, sha256 = "fbf1118cfb695f60c9506546d69e8566784dfb9cfb5e739c0bc53c93ea3b868b",
+                recipe = GIGAAM_RECIPE),
+                         ProvEntry(name = "gigaam-v3-ctc-f16.gguf", root = "llm",
+                url = "{HF}/cstr/gigaam-v3-GGUF/resolve/main/gigaam-v3-ctc-f16.gguf",
+                bytes = 448626752l, sha256 = "63cd48a032ffb9ca41238af8cb7d31d9d71cc3b02d2658f479d05a9fe6dc7412",
+                recipe = GIGAAM_RECIPE),
+                         ProvEntry(name = "gigaam-v3-e2e-rnnt-q8_0.gguf", root = "llm", recipe = CRISPASR_Q8_RECIPE)]),
         AsrModelSpec(display = "Whisper tiny", das_model = "ggml-tiny.bin",
             das_mmproj = "", root = wroot, metal_served = true,
             refs <- [AsrRef(tool = "whisper-cli", handle = "ggml-tiny-q8_0.bin", exec_fmt = "q8_0"),
@@ -1392,19 +1419,29 @@ def asr_engine_name(tool : string) : string {
 // (the env vars remain the overrides). A laptop-absolute default here is a BRINGUP bug.
 def whisper_cpp_root() : string => g_env_prof.whisper_cpp
 
-def whisper_cpp_bin(cli : string) : string {
-    let root = whisper_cpp_root()
-    // Locate the built binary across cmake layouts: MSVC multi-config (build\bin\Release\x.exe),
-    // Ninja/single-config (build/bin/x.exe), Mac/Make (build/bin/x). stat picks the one that exists.
-    for (c in [normalize("{root}/build/bin/Release/{cli}.exe"),
-               normalize("{root}/build/bin/{cli}.exe"),
-               normalize("{root}/build/bin/{cli}")]) {
+//! A cmake-built binary under `bin_dir` across layouts: MSVC multi-config (`Release\x.exe`),
+//! Ninja/single-config (`x.exe`), Mac/Make (`x`); the bare path when none exists.
+def cmake_built_bin(bin_dir, cli : string) : string {
+    for (c in [normalize("{bin_dir}/Release/{cli}.exe"),
+               normalize("{bin_dir}/{cli}.exe"),
+               normalize("{bin_dir}/{cli}")]) {
         if (stat(c).is_valid) {
             return c
         }
     }
-    return normalize("{root}/build/bin/{cli}")
+    return normalize("{bin_dir}/{cli}")
 }
+
+def whisper_cpp_bin(cli : string) : string => cmake_built_bin("{whisper_cpp_root()}/build/bin", cli)
+
+[arch(at="../ARCHITECTURE_MEASUREMENT_AUDIO.md#asr-cpu-references")]
+def crispasr_root() : string => g_env_prof.crispasr
+
+//! The CrispASR exe of one build: `gpu` the Metal build (`build/`), else the CPU-only one
+//! (`build-cpu/`, Metal OFF) - setup_asr_rig builds both.
+[arch(at="../ARCHITECTURE_MEASUREMENT_AUDIO.md#asr-gpu-pairs")]
+def crispasr_bin(gpu : bool; cli : string = "crispasr") : string =>
+    cmake_built_bin("{crispasr_root()}/{gpu ? "build" : "build-cpu"}/bin", cli)
 
 //! A venv's interpreter across layouts — POSIX puts it in bin/, Windows in Scripts/.
 def venv_python(venv : string) : string {
@@ -1423,6 +1460,8 @@ def nemo_py() : string => ref_py(g_env_prof.nemo_py, "nemo")
 
 def mlx_py() : string => ref_py(g_env_prof.mlx_py, "mlx")
 
+def gigaam_py() : string => ref_py(g_env_prof.gigaam_py, "gigaam")
+
 //! The Metal twin of mtmd_bin() — the same patched checkout built with Metal ON
 //! (setup_asr_rig's build-metal, Apple boxes); "" when absent, and the gpu ref leg skips loudly.
 [arch(at="../ARCHITECTURE_MEASUREMENT_AUDIO.md#asr-gpu-pairs")]
@@ -1440,16 +1479,7 @@ def mtmd_bin() : string {
     if (!empty(env)) {
         return normalize(env)
     }
-    // same cmake-layout probe as whisper_cpp_bin: MSVC multi-config, Ninja, Mac/Make
-    let root = "../llama.cpp-mtmd-ref/build-cpu/bin"
-    for (c in [normalize("{root}/Release/llama-mtmd-cli.exe"),
-               normalize("{root}/llama-mtmd-cli.exe"),
-               normalize("{root}/llama-mtmd-cli")]) {
-        if (stat(c).is_valid) {
-            return c
-        }
-    }
-    return normalize("{root}/llama-mtmd-cli")
+    return cmake_built_bin("../llama.cpp-mtmd-ref/build-cpu/bin", "llama-mtmd-cli")
 }
 
 // The python bench scripts live beside the corpus (asr/); these tools run from the repo-root cwd.
@@ -1710,6 +1740,98 @@ def private mtmd_log_line(s : string) : bool {
     return tag_shape
 }
 
+//! One transcription of a CrispASR process: its wall in ms and the transcript it printed.
+struct CrispasrRun {
+    ms : double
+    text : string
+}
+
+//! The wall of one `crispasr: transcribed <a>s audio in <t>s (<r>x realtime)` line: the seconds
+//! field resolves 10 ms, the realtime factor 0.1 over the exact `samples` count, so the field
+//! with the finer relative step answers. -1 when neither field parses.
+[arch(at="../ARCHITECTURE_MEASUREMENT_AUDIO.md#asr-cpu-references")]
+def crispasr_line_ms(line : string; samples : int) : double {
+    var inscope toks <- [for (t in split(strip(line), " ")); t; where !empty(t)]
+    var stok = ""
+    var rtok = ""
+    for (i in range(length(toks))) {
+        if (toks[i] == "in" && i + 1 < length(toks) && ends_with(toks[i + 1], "s")) {
+            stok = toks[i + 1]
+        } elif (toks[i] == "realtime)" && i > 0 && starts_with(toks[i - 1], "(") && ends_with(toks[i - 1], "x")) {
+            rtok = toks[i - 1]
+        }
+    }
+    let secs = empty(stok) ? -1.0lf : (try_to_double(chop(stok, 0, length(stok) - 1)) |> unwrap_or(-1.0lf))
+    let rtf = empty(rtok) ? -1.0lf : (try_to_double(chop(rtok, 1, length(rtok) - 2)) |> unwrap_or(-1.0lf))
+    let rtf_ok = rtf > 0.0lf && samples > 0
+    if (secs <= 0.0lf) {
+        return rtf_ok ? 1000.0lf * double(samples) / 16000.0lf / rtf : -1.0lf
+    }
+    return (rtf_ok && 0.05lf / rtf < 0.005lf / secs) ? 1000.0lf * double(samples) / 16000.0lf / rtf : 1000.0lf * secs
+}
+
+//! Every transcription out of a captured CrispASR run, in the order the process took its files:
+//! a `crispasr: audio: <n> samples` line opens a file, its `transcribed` line times it, and the
+//! untagged lines after that are its transcript (the capture merges stderr; stdout is flushed).
+def parse_crispasr_runs(out : string) : array<CrispasrRun> {
+    var runs : array<CrispasrRun>
+    runs |> reserve(8)
+    var samples = 0
+    var timed = false
+    for (line in split(out, "\n")) {
+        let s = strip(line)
+        continue if (empty(s))
+        if (starts_with(s, "crispasr: audio: ")) {
+            var inscope toks <- split(s, " ")
+            samples = length(toks) > 2 ? (try_to_int(toks[2]) |> unwrap_or(0)) : 0
+            timed = false
+        } elif (starts_with(s, "crispasr: transcribed ")) {
+            let ms = crispasr_line_ms(s, samples)
+            timed = ms > 0.0lf
+            if (timed) {
+                runs |> push(CrispasrRun(ms = ms, text = ""))
+            }
+        } elif (timed && !starts_with(s, "crispasr") && !mtmd_log_line(s)) {
+            let last = length(runs) - 1
+            runs[last].text = empty(runs[last].text) ? s : "{runs[last].text} {s}"
+        }
+    }
+    return <- runs
+}
+
+//! CrispASR over one clip in one process: `--warmup` transcribes a silence buffer off the clock,
+//! then the clip runs `reps` times; the best rep's ms, its transcript in `text_out`. `gpu` runs
+//! the Metal build, else the CPU-only build ([[crispasr_bin]]). -1 when a rep went untimed.
+[arch(at="../ARCHITECTURE_MEASUREMENT_AUDIO.md#asr-cpu-references")]
+def run_asr_crispasr(model_path, wav_path : string; threads, reps : int;
+                     var cmd_out : string&; var text_out : string&; gpu : bool = false) : double {
+    var args <- [crispasr_bin(gpu), "-m", model_path, "--warmup", "-t", "{threads}"]
+    args |> reserve(length(args) + reps)
+    for (_rep in range(reps)) {
+        args |> push(wav_path)
+    }
+    cmd_out = argv_line(args)
+    var inscope runs <- parse_crispasr_runs(run_capture_argv(args))
+    let best = crispasr_best(runs, reps)
+    text_out = best.text
+    return best.ms
+}
+
+//! The fastest of a CrispASR process's `reps` timed runs, its ms and transcript; -1 ms and no text unless every rep timed.
+def crispasr_best(runs : array<CrispasrRun>; reps : int) : tuple<ms : double; text : string> {
+    if (length(runs) != reps) {
+        to_log(LOG_WARNING, "run_asr_crispasr: {length(runs)}/{reps} reps timed - clip discarded\n")
+        return (ms = -1.0lf, text = "")
+    }
+    var best = (ms = -1.0lf, text = "")
+    for (r in runs) {
+        if (best.ms < 0.0lf || r.ms < best.ms) {
+            best = (ms = r.ms, text = r.text)
+        }
+    }
+    return best
+}
+
 //! The onnx/nemo bench invocation over a clip set — ONE process for all clips (python model load
 //! is expensive, amortize it); the caller parses per-clip rows out with [[parse_bench_best]].
 //! The onnx rows ALSO land in [[asr_pybench_out_path]] via --out: parakeet-variant loaders
@@ -1740,7 +1862,7 @@ def asr_pybench_out_path() : string => "{asr_dir()}/_pybench_rows.txt"
 
 [arch(at="../ARCHITECTURE_MEASUREMENT_AUDIO.md#asr-gpu-pairs")]
 def asr_gpu_pair_tool(tool : string) : bool =>
-    tool == "whisper-cli" || tool == "mtmd" || tool == "nemo"
+    tool == "whisper-cli" || tool == "mtmd" || tool == "nemo" || tool == "crispasr"
 
 //! A reference that runs on the Apple GPU alone - its one row is the GPU leg, paired with
 //! whatever das legs the family serves, and a box without Metal has no row for it.
@@ -1810,17 +1932,23 @@ def private git_dirty_at(path : string) : bool =>
 
 //! Version line for the whisper.cpp checkout (whisper-cli AND parakeet-cli — one tree). A dirty
 //! tree taints the identity loudly: nobody can rebuild "+dirty".
-def whisper_cpp_versions() : string {
-    let root = whisper_cpp_root()
+def whisper_cpp_versions() : string => checkout_versions("whisper.cpp", whisper_cpp_root())
+
+//! Version line for the CrispASR checkout - both of its builds (Metal and CPU-only) are one tree.
+def crispasr_versions() : string => checkout_versions("CrispASR", crispasr_root())
+
+//! `<name> @ <commit>` for an unpatched reference checkout; "" when `root` is not one. A dirty
+//! tree taints the identity loudly: nobody can rebuild "+dirty".
+def private checkout_versions(name, root : string) : string {
     let commit = git_commit_at(root)
     if (empty(commit)) {
         return ""
     }
     if (git_dirty_at(root)) {
         to_log(LOG_WARNING, "dasLLAMA bench: {root} has uncommitted changes - reference identity is DIRTY\n")
-        return "whisper.cpp @ {commit}+dirty"
+        return "{name} @ {commit}+dirty"
     }
-    return "whisper.cpp @ {commit}"
+    return "{name} @ {commit}"
 }
 
 //! Version line for a patched mtmd build: base commit + the patch file's content hash. The
@@ -1857,6 +1985,9 @@ def asr_tool_versions(tool : string) : string {
     }
     if (tool == "mtmd") {
         return mtmd_versions()
+    }
+    if (tool == "crispasr") {
+        return crispasr_versions()
     }
     if (tool == "onnx") {
         return onnx_versions()

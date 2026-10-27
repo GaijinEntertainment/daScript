@@ -232,6 +232,7 @@ test rather than a check that silently stopped running.
 | dasllama.io news + metadata | `cmake --build build --config Release --target check_dasllama_site` | needs python `markdown` |
 | Browser model-set mint | `cmake --build build --config Release --target check_model_mint` | needs python `numpy` |
 | dasllama-server suites | `cmake --build build --config Release --target run_tests_dasllama_server` | the `modules` role; the model-gated suites are `--compile-only` |
+| dasllama-convert carrier sniff | `cmake --build build --config Release --target run_tests_dasllama_convert` | the `modules` role; a cell whose model is absent skips |
 | dasOPENAI client tests | `cmake --build build --config Release --target run_tests_dasopenai` | the `modules` role; a cell that talks to a server the repo does not start skips without it |
 | env-knob registries | `cmake --build build --config Release --target run_tests_dasllama_env_registry` | |
 | dasLLVM inline-polynomial rail | `cmake --build build --config Release --target run_tests_llvm_vector_math` | the darwin15 cell pins vecmath's answers; needs `-jit` |

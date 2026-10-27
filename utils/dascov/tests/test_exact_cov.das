@@ -8,6 +8,7 @@ require daslib/strings_boost
 require dastest/testing_boost
 
 require daslib/debugger
+require daslib/fio
 require daslib/rtti
 require strings
 
@@ -176,5 +177,40 @@ def test_nested_branch(t : T?) {
     t |> run("uncovered lines") @(t : T?) {
         t |> success(report |> has_line("DA:8,0"))  // feint("deep")
         t |> success(report |> has_line("DA:13,0")) // feint("low")
+    }
+}
+
+//! whether the registered (promoted) module ``name`` exists,
+//! and whether it requires ``dep``
+def private promoted_requires(name, dep : string) : tuple<registered : bool; requires : bool> {
+    var res : tuple<registered : bool; requires : bool>
+    program_for_each_registered_module() $(m) {
+        return if (m.name != name)
+        res.registered = true
+        module_for_each_dependency(m) $(d; _pub) {
+            res.requires ||= d.name == dep
+        }
+    }
+    return res
+}
+
+[test]
+def test_shared_module_not_instrumented(t : T?) {
+    let root = test_temp_dir()
+    fwrite(path_join(root, "cov_shared_probe.das"),
+        "options gen2\n\nmodule cov_shared_probe shared public\n\n" +
+        "def public twice(x : int) : int => x * 2\n")
+    fwrite(path_join(root, "cov_shared_main.das"),
+        "options gen2\n\nrequire cov_shared_probe\n\n[export]\n" +
+        "def main \{\n    print(\"\{twice(2)\}\\n\")\n\}\n")
+    let report = get_coverage_report(path_join(root, "cov_shared_main.das"))
+    t |> run("the program itself is instrumented") @(t : T?) {
+        t |> success(report |> has_line("FNDA:1,main"), report)
+    }
+    t |> run("the shared module outlives the program without a coverage dependency") @(t : T?) {
+        let probe = promoted_requires("cov_shared_probe", "coverage")
+        t |> success(probe.registered, "the probe module was promoted")
+        t |> success(!probe.requires,
+            "a promoted module pinned to coverage instruments every later compile in the process")
     }
 }

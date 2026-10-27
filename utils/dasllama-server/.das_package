@@ -46,6 +46,7 @@ def release() {
     release_include_from("modules/dasLLAMA/THIRD_PARTY_NOTICES.md", "licenses/DASLLAMA_THIRD_PARTY_NOTICES.md")
     release_include_from("modules/dasLLAMA/LICENSE.LLAMA_CPP", "licenses/LLAMA_CPP.LICENSE")
     release_include_from("modules/dasLLAMA/LICENSE.PARAKEET", "licenses/PARAKEET.LICENSE")
+    release_include_from("modules/dasLLAMA/LICENSE.GIGAAM", "licenses/GIGAAM.LICENSE")
     release_include_from("modules/dasLLAMA/LICENSE.VLLM", "licenses/VLLM.LICENSE")
     release_include_from("modules/dasLLAMA/LICENSE.MLX", "licenses/MLX.LICENSE")
     release_include_from("modules/dasLLAMA/LICENSE.SILERO", "licenses/SILERO.LICENSE")

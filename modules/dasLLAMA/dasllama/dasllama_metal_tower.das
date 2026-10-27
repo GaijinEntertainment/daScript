@@ -21,6 +21,9 @@ require dasllama/dasllama_qwen3a   // Qwen3aTower — the conv2d frontend hook
 require dasllama/dasllama_gemma4a   // Gemma4aEncoder/Gemma4aState — the Conformer block loop
 require dasllama/dasllama_canary    // CanaryEncoder/CanaryState — the FastConformer block loop
 require dasllama/dasllama_parakeet  // ParakeetModel/ParakeetState — the same chain, parakeet's blob layout
+require daslib/cmp   // cmp_by: the q8 slab's regions in offset order
+require dasllama/dasllama_gigaam
+require dasllama/dasllama_vad   // VadModel/VadState - the silero VAD seat
 require dasllama/dasllama_styletts2
 require dasllama/dasllama_pocket
 require dasllama/dasllama_convert
@@ -118,15 +121,19 @@ def private tw_decline(why : MetalTowerDecline) : bool {
 //! their homes; lazily re-initializes on the next served encode.
 def metal_tower_shutdown {
     residency_reset()   // the set references pooled buffers the drain below releases
+    tw_rows_drop()
     release_handle(g_tw_ones)
     st2_slab_free(g_tw_q3a_wpad)
     st2_slab_free(g_tw_fc_twin)
     st2_slab_free(g_tw_q8)
     st2_slab_free(g_tw_q8_vis)
+    st2_slab_free(g_tw_q8_fc)
     st2_slab_free(g_tw_conv1_pad)
     st2_slab_free(g_tw_cn_conv0_panel)
     st2_slab_free(g_tw_pk_conv0_panel)
+    st2_slab_free(g_tw_ga_mel_panel)
     st2_slab_drop()
+    tw_vad_release()
     pool_drain(g_tw_pool)
     g_tw_failed = false
 }
@@ -714,7 +721,9 @@ def private tw_ctx_make(var c : TwGpuCtx; blob : void?; blob_bytes : uint64; map
 }
 
 def private tw_ctx_release(var c : TwGpuCtx) {
-    pool_release(g_tw_pool, c.bx, c.bytes_row)
+    if (c.bx != null) {   //! a held encode's rows left the context (`tw_rows_keep`)
+        pool_release(g_tw_pool, c.bx, c.bytes_row)
+    }
     pool_release(g_tw_pool, c.bxb, c.bytes_row)
     pool_release(g_tw_pool, c.bq, c.bytes_row)
     pool_release(g_tw_pool, c.bk, c.bytes_row)
@@ -902,15 +911,36 @@ struct private TwBufSet {
     bufs : MetalBuffer? [TW_SET_MAX]
     sizes : uint64 [TW_SET_MAX]
     n : int
+    short : bool    //!< a required buffer came back null: the encode declines `memory` before its first dispatch
 }
 
-def private tw_take(var s : TwBufSet; bytes : uint64) : MetalBuffer? {
+var private g_tw_take_max_probe = 0ul   //! a test's stand-in for the device's largest buffer under the scratch takes; 0 = the device's
+
+//! A test's stand-in for the device's largest buffer under the tower's scratch takes (`bytes`; 0 reads the device's again) - the
+//! `memory` declines' seam. Answers the stand-in it replaced.
+def set_metal_tower_take_max_probe_(bytes : uint64) : uint64 {
+    let was = g_tw_take_max_probe
+    g_tw_take_max_probe = bytes
+    return was
+}
+
+//! the pool bucket of a `bytes` take fits the device's largest buffer: a bucket past it would fail the pool's allocation
+def private tw_take_fits(bytes : uint64) : bool {
+    let cap = g_tw_take_max_probe != 0ul ? g_tw_take_max_probe : metal_max_buffer_length(g_dev)
+    return pool_bucket(bytes) <= cap
+}
+
+//! One pooled buffer into the set, null where its bucket passes the device's largest buffer; a null `required` take marks the
+//! set short, an optional one (a half twin's panel) leaves the caller its fallback.
+def private tw_take(var s : TwBufSet; bytes : uint64; required : bool = true) : MetalBuffer? {
     assert(s.n < TW_SET_MAX)
-    var b = pool_acquire_pinned(g_tw_pool, g_dev, bytes)
+    var b = tw_take_fits(bytes) ? pool_acquire_pinned(g_tw_pool, g_dev, bytes) : null
     if (b != null) {
         s.bufs[s.n] = b
         s.sizes[s.n] = bytes
         s.n++
+    } elif (required) {
+        s.short = true
     }
     return b
 }
@@ -920,6 +950,7 @@ def private tw_release(var s : TwBufSet) {
         pool_release(g_tw_pool, s.bufs[i], s.sizes[i])
     }
     s.n = 0
+    s.short = false
 }
 
 //! The slab key of a device buffer built from `plane`: it stands while the plane's base address and length do.
@@ -927,7 +958,36 @@ def private tw_plane_key(plane : PlaneF) : uint64 => hash_combine64(intptr(plane
 
 let private FC_MAX_HEADS = 16   //!< the per-head uniform seats; the shape gate holds n_head to it
 
-//! The FastConformer driver's shared GPU context (canary and parakeet) - g4a's shape with the rel table in place of the windowed RPE, and no clamp records.
+//! What a FastConformer-shaped family's block runs: the depthwise taps' layout, the attention's position form - the
+//! Transformer-XL rel table, or rotary on the normed input rows - and the conv module's norm - the BatchNorm folded into the
+//! depthwise stamp, or a LayerNorm after it.
+struct private FcForm {
+    tap_major : bool      //!< parakeet's and gigaam's tap-major taps, or canary's channel-major
+    rotary : bool         //!< gigaam: the rope over the attention's normed input rows, the slab trio over restrided heads
+    conv_ln : bool        //!< gigaam: the biased depthwise conv, then a LayerNorm over the channels and the SiLU
+    holds_rows : bool     //!< a transducer family: a served encode's rows stay on the device for the decode (`metal_tower_enc_rows`)
+    prof : string         //!< the family's asr_prof prefix the chain's device time reports under
+}
+
+//! The rotary form's attention scratch: the head-padded q, k, v and output panels, the score slab, the row stats and the rope tables.
+struct private FcRotPlanes {
+    hs_pad : int64
+    nk64 : int64
+    ka : AttnArgs
+    rs_q : GkRestrideArgs
+    rs_kv : GkRestrideArgs
+    rope : GkRopeTabArgs
+    bqp : MetalBuffer?
+    bkp : MetalBuffer?
+    bvp : MetalBuffer?
+    bop : MetalBuffer?
+    batt : MetalBuffer?
+    bstat : MetalBuffer?
+    bcos : MetalBuffer?
+    bsin : MetalBuffer?
+}
+
+//! The FastConformer driver's shared GPU context (canary, parakeet and gigaam) - g4a's shape with the rel table or the rotary planes in place of the windowed RPE, and no clamp records.
 struct private FcGpuCtx : TwGpuCtx {
     bposl : MetalBuffer?
     nk : int64            //!< the conv module's depthwise taps
@@ -935,7 +995,8 @@ struct private FcGpuCtx : TwGpuCtx {
     wwp : int64
     ww : int64
     n_head : int64
-    tap_major : bool      //!< which depthwise stamp serves: parakeet's tap-major taps or canary's channel-major
+    form : FcForm
+    rot : FcRotPlanes
     nkp : int64
     wwpad : int64
     bqu : MetalBuffer?
@@ -952,9 +1013,12 @@ struct private FcGpuCtx : TwGpuCtx {
     u_nkp : MetalBuffer?
     u_wwpad : MetalBuffer?
     bytes_head : uint64
-    bwh : MetalBuffer?      //!< the blob's halfword twin, where the half tensor GEMM serves
-    bxh : MetalBuffer?      //!< its activation panel
+    bwh : MetalBuffer?      //!< the blob's halfword twin, or the family's own halfword GEMM plane (`wplane`), where the half tensor GEMM serves
+    bxh : MetalBuffer?      //!< its activation panel, or the q8 GEMM's
     f16w : bool
+    wplane : bool           //!< the GEMMs live in the family's halfword plane alone: the f32 blob holds none
+    btaps : MetalBuffer?    //!< the depthwise taps' halfword plane (`TwFc.taps`), where the family's taps are f16
+    q8 : bool               //!< the GEMMs serve off the q8 slab (`g_tw_q8_fc`)
     dev : FcDevPlanes       //!< the all-heads attention's scratch, in the per-head scratch's place where it serves
     dev_on : bool
     scratch : TwBufSet
@@ -1023,23 +1087,158 @@ def private fc_twin_attach(blob : PlaneF; bblob : MetalBuffer?) : MetalBuffer? {
     return twin
 }
 
-//! one weighted GEMM of the chain: the half tensor form over the twin where it serves, the f32 tile form otherwise
+//! one weighted GEMM of the chain: the q8 slab's region on the q8 lane, the half tensor form over the halfwords where it
+//! serves, the f32 tile form otherwise
 def private fc_mm(enc : MetalComputeEncoder?; c : FcGpuCtx; woff : int64; bx, by, bk, bn : MetalBuffer?; rows, nd, kdim : int64) {
+    if (c.q8) {
+        if (c.bxh != null) {
+            tw_half(enc, bx, c.bxh, rows * kdim)
+        }
+        pf_enc_q8_mm(enc, g_tw_q8_fc.buf, tw_fc_q8_boff(woff), bx, c.bxh, by, bk, bn, rows, nd, kdim)
+        return
+    }
     tw_mm(enc, c.f16w, false, c.bwh, c.bblob, woff, bx, c.bxh, by, 0ul, bk, bn, rows, nd, kdim, true)
 }
 
-def private fc_ctx_make(blob : PlaneF; mapped : bool; d, n_ff, n_head, nk : int64; eps : float;
-                        npos, ww : int64; tap_major : bool) : FcGpuCtx {
+var private g_tw_q8_fc : St2SlabBase                     //!< the served FastConformer family's q8 block GEMM planes as one device blob
+var private @exact_size g_tw_q8_fc_boffs : array<uint64>  //!< its regions' byte offsets, by ascending element offset in the family's ``qblob``
+var private @exact_size g_tw_q8_fc_woffs : array<int64>   //!< those element offsets, ascending: the chain's GEMMs name a region by its offset
+
+//! the q8 slab's byte offset of the region at element offset `woff` of the family's ``qblob``
+def private tw_fc_q8_boff(woff : int64) : uint64 {
+    var lo = 0l
+    var hi = long_length(g_tw_q8_fc_woffs)
+    while (lo < hi) {
+        let mid = (lo + hi) / 2l
+        if (g_tw_q8_fc_woffs[mid] < woff) {
+            lo = mid + 1l
+        } else {
+            hi = mid
+        }
+    }
+    assert(lo < long_length(g_tw_q8_fc_woffs) && g_tw_q8_fc_woffs[lo] == woff, "a FastConformer GEMM names no region of the q8 slab")
+    return g_tw_q8_fc_boffs[lo]
+}
+
+//! The family's q8 block GEMM planes on the device, uploaded once a model: every block's GEMM regions, ascending; false where
+//! the buffer cannot be made.
+[cold_path, arch(at="../ARCHITECTURE_GPU_TOWER_FC.md#tower-fc-rotary")]
+def private tw_fc_q8_attach(fc : TwFc) : bool {
+    return true if (st2_slab_current(g_tw_q8_fc, tw_q8_key(fc.qblob, fc.qscales)))
+    let d = fc.d
+    let ff = fc.ff
+    var @exact_size rg : array<Q8Region>
+    rg |> reserve(fc.n_layer * 11l)
+    for (l in range64(fc.n_layer)) {
+        let lo = g_tw_fc_offs[l]
+        rg |> push(Q8Region(woff = lo.ff1a_w, n = d, rows = ff))
+        rg |> push(Q8Region(woff = lo.ff1b_w, n = ff, rows = d))
+        rg |> push(Q8Region(woff = lo.q_w, n = d, rows = d))
+        rg |> push(Q8Region(woff = lo.k_w, n = d, rows = d))
+        rg |> push(Q8Region(woff = lo.v_w, n = d, rows = d))
+        if (lo.pos_w >= 0l) {
+            rg |> push(Q8Region(woff = lo.pos_w, n = d, rows = d))
+        }
+        rg |> push(Q8Region(woff = lo.o_w, n = d, rows = d))
+        rg |> push(Q8Region(woff = lo.pw1_w, n = d, rows = 2l * d))
+        rg |> push(Q8Region(woff = lo.pw2_w, n = d, rows = d))
+        rg |> push(Q8Region(woff = lo.ff2a_w, n = d, rows = ff))
+        rg |> push(Q8Region(woff = lo.ff2b_w, n = ff, rows = d))
+    }
+    rg |> sort() <| cmp_by(_.woff)
+    let ok = tw_q8_attach_slab(g_tw_q8_fc, g_tw_q8_fc_boffs, fc.qblob, fc.qscales, rg)
+    g_tw_q8_fc_woffs |> reserve(long_length(rg))
+    g_tw_q8_fc_woffs |> resize(long_length(rg))
+    for (i, r in range64(long_length(rg)), rg) {
+        g_tw_q8_fc_woffs[i] = r.woff
+    }
+    delete rg
+    return ok
+}
+
+//! the family's weights ready on the device for the chain: the q8 slab on the q8 lane, the half tensor crown where the GEMMs
+//! live in the family's halfword plane alone; the f32 blob needs nothing
+def private fc_weights_ready(fc : TwFc) : bool {
+    return tw_fc_q8_attach(fc) if (fc.q8)
+    return empty(fc.wblob) || (g_tw_env_tower_f16 && pf_hmm_ready())
+}
+
+[arch(at="../ARCHITECTURE_GPU_TOWER_FC.md#tower-fc-rotary")]
+def private fc_rot_attach(var c : FcGpuCtx; d, n_head, npos : int64) {
+    let hs = d / n_head
+    var r = FcRotPlanes(hs_pad = max(64l, round_up(hs, 32l)), nk64 = round_up(npos, 64l))
+    let dp = n_head * r.hs_pad
+    r.rs_q = GkRestrideArgs(rows = uint(npos), rows_pad = uint(c.mp), nheads = uint(n_head), hs = uint(hs), hsp = uint(r.hs_pad), sstride = uint(d))
+    r.rs_kv = r.rs_q
+    r.rs_kv.rows_pad = uint(r.nk64)
+    r.ka = AttnArgs(qd = uint(dp), kv_dim = uint(dp), head_size = uint(r.hs_pad), kv_mul = 1u, npos = uint(npos), np32 = uint(r.nk64),
+        scale = 1.0 / sqrt(float(hs)), qoff = 0u, qrows = uint(c.mp), window = 0u, softcap = 0.0, hass = 0u, uend = uint(npos))
+    r.rope = GkRopeTabArgs(rows = uint(npos), qs = uint(d), col = 0u, d = uint(d), dh = uint(hs), coff = 0u, soff = 0u)
+    r.bqp = tw_take(c.scratch, uint64(c.mp * dp * 4l))
+    r.bkp = tw_take(c.scratch, uint64(r.nk64 * dp * 4l))
+    r.bvp = tw_take(c.scratch, uint64(r.nk64 * dp * 4l))
+    r.bop = tw_take(c.scratch, uint64(c.mp * dp * 4l))
+    r.batt = tw_take(c.scratch, uint64(n_head * c.mp * r.nk64 * 2l))
+    r.bstat = tw_take(c.scratch, uint64(n_head * c.mp * 2l * 4l))
+    r.bcos = tw_take(c.scratch, uint64(npos * (hs / 2l) * 4l))
+    r.bsin = tw_take(c.scratch, uint64(npos * (hs / 2l) * 4l))
+    c.rot = r
+}
+
+//! the rope tables into the rotary planes; the family builds them for the encode's frames (`gigaam_rope_tables`), as its own
+//! CPU blocks read them
+[arch(at="../ARCHITECTURE_GPU_TOWER_FC.md#tower-fc-rotary")]
+def private fc_rot_tables(c : FcGpuCtx; cos_t, sin_t : array<float>) {
+    let n = c.npos * int64(c.rot.rope.dh / 2u)
+    assert(long_length(cos_t) >= n && long_length(sin_t) >= n, "the rope tables hold fewer rows than the encode's frames")
+    unsafe {
+        memcpy(metal_buffer_contents(c.rot.bcos), addr(cos_t[0]), uint64(n * 4l))
+        memcpy(metal_buffer_contents(c.rot.bsin), addr(sin_t[0]), uint64(n * 4l))
+    }
+}
+
+//! false with the context ready to record - its scratch whole and, on the rotary form, the rope tables in; else true with the
+//! context released and, where `counted`, the `memory` decline counted - a whole-encode chain's -1 counts nothing, the block
+//! seat behind it answering for itself
+def private fc_ctx_declined(var c : FcGpuCtx; rope_cos, rope_sin : array<float>; counted : bool = true) : bool {
+    if (!c.scratch.short) {
+        if (c.form.rotary) {
+            fc_rot_tables(c, rope_cos, rope_sin)
+        }
+        return false
+    }
+    fc_ctx_release(c)
+    if (counted) {
+        tw_decline(MetalTowerDecline.memory)
+    }
+    return true
+}
+
+//! `fc_ctx_declined` on a form with no rope tables
+def private fc_ctx_declined(var c : FcGpuCtx; counted : bool = true) : bool {
+    let none : array<float>
+    return fc_ctx_declined(c, none, none, counted)
+}
+
+def private fc_ctx_make(fc : TwFc; npos, ww : int64) : FcGpuCtx {
+    let d = fc.d
+    let n_head = fc.n_head
+    let n_ff = fc.ff
+    let form = fc.form
     let dh = d / n_head
-    var c = FcGpuCtx(wwp = round_up(ww, 32l), ww = ww, n_head = n_head, tap_major = tap_major,
+    var c = FcGpuCtx(wwp = round_up(ww, 32l), ww = ww, n_head = n_head, form = form,
         nkp = round_up(npos, 64l), wwpad = round_up(ww, 64l))
-    tw_ctx_make(c, unsafe(reinterpret<void?>(plane_at(blob, 0l))), uint64(length(blob) * 4l), mapped,
-        npos, d, n_ff, eps, 0.5, uint64(c.wwp * d * 4l))
-    c.bposl = tw_take(c.scratch, c.bytes_pos)
-    c.nk = nk
-    c.ka = fc_attn_args(d, dh, npos)
-    c.dev_on = fc_dev_attach(c, d)
-    if (!c.dev_on) {
+    tw_ctx_make(c, unsafe(reinterpret<void?>(plane_at(fc.blob, 0l))), uint64(length(fc.blob) * 4l), fc.mapped,
+        npos, d, n_ff, fc.eps, 0.5, uint64(max(c.wwp, 1l) * d * 4l))
+    c.nk = fc.nk
+    if (form.rotary) {
+        fc_rot_attach(c, d, n_head, npos)
+    } else {
+        c.bposl = tw_take(c.scratch, c.bytes_pos)
+        c.ka = fc_attn_args(d, dh, npos)
+        c.dev_on = fc_dev_attach(c, d)
+    }
+    if (!c.dev_on && !form.rotary) {
         c.bytes_head = uint64(c.mp * dh * 4l)
         let bytes_kh = uint64(c.nkp * dh * 4l)
         let bytes_sc = uint64(c.mp * c.nkp * 4l)
@@ -1059,9 +1258,23 @@ def private fc_ctx_make(blob : PlaneF; mapped : bool; d, n_ff, n_head, nk : int6
         c.u_nkp = uniform_u32(uint(c.nkp))
         c.u_wwpad = uniform_u32(uint(c.wwpad))
     }
-    if (g_tw_env_tower_f16 && pf_hmm_ready()) {
-        c.bwh = fc_twin_attach(blob, c.bblob)
-        c.bxh = tw_take(c.scratch, uint64(max(c.mp * max(n_ff, 2l * d), c.wwp * d) * 2l))
+    if (!empty(fc.taps)) {
+        c.btaps = plane_buffer(g_dev, unsafe(reinterpret<void?>(plane_at(fc.taps, 0l))), uint64(length(fc.taps) * 2l), fc.mapped)
+        c.scratch.short = c.scratch.short || c.btaps == null   //! no f32 taps stand behind the halfword plane
+    }
+    let bytes_xh = uint64(max(c.mp * max(n_ff, 2l * d), c.wwp * d) * 2l)
+    if (fc.q8) {
+        c.q8 = true
+        c.bxh = pf_q8_mm_half() ? tw_take(c.scratch, bytes_xh, false) : null
+    } elif (!empty(fc.wblob)) {
+        c.wplane = true
+        c.bwh = plane_buffer(g_dev, unsafe(reinterpret<void?>(plane_at(fc.wblob, 0l))), uint64(length(fc.wblob) * 2l), fc.mapped)
+        c.bxh = tw_take(c.scratch, bytes_xh)
+        c.f16w = c.bwh != null && c.bxh != null
+        c.scratch.short = c.scratch.short || !c.f16w   //! no f32 GEMM stands behind the halfword plane
+    } elif (g_tw_env_tower_f16 && pf_hmm_ready()) {
+        c.bwh = fc_twin_attach(fc.blob, c.bblob)
+        c.bxh = tw_take(c.scratch, bytes_xh, false)
         c.f16w = c.bwh != null && c.bxh != null
     }
     return <- c
@@ -1069,7 +1282,7 @@ def private fc_ctx_make(blob : PlaneF; mapped : bool; d, n_ff, n_head, nk : int6
 
 def private fc_ctx_release(var c : FcGpuCtx) {
     tw_release(c.scratch)
-    if (!c.dev_on) {
+    if (!c.dev_on && !c.form.rotary) {
         for (h in range64(c.n_head)) {
             pool_release(g_upool, c.u_heads[h], 4ul)
         }
@@ -1107,6 +1320,78 @@ def private fc_attention(enc : MetalComputeEncoder?; c : FcGpuCtx; lo : CanaryLa
     enc_fc_unpack(enc, c.boh, c.bao, ka, mp * int64(ka.d))
 }
 
+[arch(at="../ARCHITECTURE_GPU_TOWER_FC.md#tower-fc-rotary")]
+def private fc_rot_attention(enc : MetalComputeEncoder?; c : FcGpuCtx) {
+    var ka = c.rot.ka
+    var rs_q = c.rot.rs_q
+    var rs_kv = c.rot.rs_kv
+    let per_row = c.n_head * c.rot.hs_pad
+    enc_head_pad(enc, c.bq, c.rot.bqp, rs_q, c.mp * per_row)
+    enc_head_pad(enc, c.bk, c.rot.bkp, rs_kv, c.rot.nk64 * per_row)
+    enc_head_pad(enc, c.bv, c.rot.bvp, rs_kv, c.rot.nk64 * per_row)
+    tw_pad_attention(enc, c.rot.bqp, c.rot.bkp, c.rot.bvp, c.rot.batt, c.rot.bstat, c.rot.bop, c.bao, ka, rs_q,
+        c.mp, c.rot.nk64, c.npos, c.n_head, c.rot.hs_pad)
+}
+
+//! The padded slab attention over head-padded q/k/v panels - the score slab, its row stats, the value GEMM - then the
+//! unpad of the `npos` live rows into `bout`: the FastConformer rotary form's and the vision towers' unfused arm.
+def private tw_pad_attention(enc : MetalComputeEncoder?; bq, bk, bv, batt, bstat, bop, bout : MetalBuffer?; var ka : AttnArgs;
+                             var rs : GkRestrideArgs; mp, nk64, npos, n_head, hs_pad : int64) {
+    enc_qk_mm(enc, bq, bk, batt, ka, mp, nk64, n_head)
+    enc_rowstat(enc, batt, ka, bstat, null, npos, n_head)
+    enc_av_mm(enc, batt, bv, bop, ka, bstat, mp, n_head, hs_pad)
+    enc_head_unpad(enc, bop, bout, rs, npos * n_head * hs_pad)
+}
+
+//! the attention sublayer's projections and attention off the normed rows in ``bxb`` into ``bao``, in the form's projection order
+def private fc_attn_sublayer(enc : MetalComputeEncoder?; c : FcGpuCtx; lo : CanaryLayerOffs; d : int64) {
+    let npos = c.npos
+    let mp = c.mp
+    if (c.form.rotary) {
+        fc_mm(enc, c, lo.v_w, c.bxb, c.bv, c.u_d, c.u_d, mp, d, d)
+        fc_bias(enc, c, c.bv, lo.v_b, d, npos * d)
+        var rope = c.rot.rope
+        enc_tw_rope_tab(enc, c.bxb, c.rot.bcos, c.rot.bsin, rope, npos * d / 2l)
+        fc_mm(enc, c, lo.q_w, c.bxb, c.bq, c.u_d, c.u_d, mp, d, d)
+        fc_bias(enc, c, c.bq, lo.q_b, d, npos * d)
+        fc_mm(enc, c, lo.k_w, c.bxb, c.bk, c.u_d, c.u_d, mp, d, d)
+        fc_bias(enc, c, c.bk, lo.k_b, d, npos * d)
+        fc_rot_attention(enc, c)
+        return
+    }
+    fc_mm(enc, c, lo.q_w, c.bxb, c.bq, c.u_d, c.u_d, mp, d, d)
+    fc_bias(enc, c, c.bq, lo.q_b, d, npos * d)
+    fc_mm(enc, c, lo.k_w, c.bxb, c.bk, c.u_d, c.u_d, mp, d, d)
+    fc_bias(enc, c, c.bk, lo.k_b, d, npos * d)
+    fc_mm(enc, c, lo.v_w, c.bxb, c.bv, c.u_d, c.u_d, mp, d, d)
+    fc_bias(enc, c, c.bv, lo.v_b, d, npos * d)
+    fc_mm(enc, c, lo.pos_w, c.bpos, c.bposl, c.u_d, c.u_d, c.wwp, d, d)
+    fc_attention(enc, c, lo)
+}
+
+//! the conv module's depthwise conv and norm off the GLU rows in ``bglu`` into ``bcvd``, the SiLU applied
+[arch(at="../ARCHITECTURE_GPU_TOWER_FC.md#tower-fc-conv-ln")]
+def private fc_conv_dw(enc : MetalComputeEncoder?; c : FcGpuCtx; lo : CanaryLayerOffs; d : int64) {
+    let npos = c.npos
+    if (c.form.conv_ln) {
+        var dwa = GkDwConvRowsArgs(c = uint(d), k = uint(c.nk), t_in = uint(npos), woff = uint(lo.dw_w), boff = uint(lo.dw_b))
+        if (c.btaps != null) {
+            enc_ga_dwh(enc, c.bglu, c.bcvd, c.bblob, c.btaps, dwa, npos * d)
+        } else {
+            enc_ga_dw(enc, c.bglu, c.bcvd, c.bblob, dwa, npos * d)
+        }
+        enc_ln(enc, c.bcvd, c.bcvd, c.bblob, gk_ln_args(uint(d), uint(npos), c.eps, uint(lo.bn_w), uint(lo.bn_b)), npos)
+        tw_act(enc, c.bcvd, GkBiasActArgs(d = uint(0), nelem = uint(npos * d), boff = 0u, act = BIAS_ACT_SILU))
+        return
+    }
+    var dwa = GkDwConvRowsArgs(c = uint(d), k = uint(c.nk), t_in = uint(npos), woff = uint(lo.dw_w), bnwoff = uint(lo.bn_w), bnboff = uint(lo.bn_b))
+    if (c.form.tap_major) {
+        enc_pk_dw(enc, c.bglu, c.bcvd, c.bblob, dwa, npos * d)
+    } else {
+        enc_cn_dw(enc, c.bglu, c.bcvd, c.bblob, dwa, npos * d)
+    }
+}
+
 [arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-encode-chains")]
 def private fc_block(enc : MetalComputeEncoder?; c : FcGpuCtx; lo : CanaryLayerOffs; d, ff : int64) {
     let npos = c.npos
@@ -1119,14 +1404,7 @@ def private fc_block(enc : MetalComputeEncoder?; c : FcGpuCtx; lo : CanaryLayerO
     fc_bias(enc, c, c.bxb, lo.ff1b_b, d, npos * d)
     enc_g4a_axpy(enc, c.bx, c.bxb, GkAxpyArgs(nelem = uint(npos * d), scale = c.half, zero = 0u), npos * d)
     enc_ln(enc, c.bx, c.bxb, c.bblob, gk_ln_args(uint(d), uint(npos), c.eps, uint(lo.nat_w), uint(lo.nat_b)), npos)
-    fc_mm(enc, c, lo.q_w, c.bxb, c.bq, c.u_d, c.u_d, mp, d, d)
-    fc_bias(enc, c, c.bq, lo.q_b, d, npos * d)
-    fc_mm(enc, c, lo.k_w, c.bxb, c.bk, c.u_d, c.u_d, mp, d, d)
-    fc_bias(enc, c, c.bk, lo.k_b, d, npos * d)
-    fc_mm(enc, c, lo.v_w, c.bxb, c.bv, c.u_d, c.u_d, mp, d, d)
-    fc_bias(enc, c, c.bv, lo.v_b, d, npos * d)
-    fc_mm(enc, c, lo.pos_w, c.bpos, c.bposl, c.u_d, c.u_d, c.wwp, d, d)
-    fc_attention(enc, c, lo)
+    fc_attn_sublayer(enc, c, lo, d)
     fc_mm(enc, c, lo.o_w, c.bao, c.bxb, c.u_d, c.u_d, mp, d, d)
     fc_bias(enc, c, c.bxb, lo.o_b, d, npos * d)
     enc_add(enc, c.bx, 0ul, c.bxb, 0ul, c.u_totd, npos * d)
@@ -1134,12 +1412,7 @@ def private fc_block(enc : MetalComputeEncoder?; c : FcGpuCtx; lo : CanaryLayerO
     fc_mm(enc, c, lo.pw1_w, c.bxb, c.bh, c.u_d, c.u_2d, mp, 2l * d, d)
     fc_bias(enc, c, c.bh, lo.pw1_b, 2l * d, npos * 2l * d)
     enc_g4a_glu(enc, c.bh, c.bglu, GkGatedRowsArgs(d = uint(d), nelem = uint(npos * d)), npos * d)
-    var dwa = GkDwConvRowsArgs(c = uint(d), k = uint(c.nk), t_in = uint(npos), woff = uint(lo.dw_w), bnwoff = uint(lo.bn_w), bnboff = uint(lo.bn_b))
-    if (c.tap_major) {
-        enc_pk_dw(enc, c.bglu, c.bcvd, c.bblob, dwa, npos * d)
-    } else {
-        enc_cn_dw(enc, c.bglu, c.bcvd, c.bblob, dwa, npos * d)
-    }
+    fc_conv_dw(enc, c, lo, d)
     fc_mm(enc, c, lo.pw2_w, c.bcvd, c.bxb, c.u_d, c.u_d, mp, d, d)
     fc_bias(enc, c, c.bxb, lo.pw2_b, d, npos * d)
     enc_add(enc, c.bx, 0ul, c.bxb, 0ul, c.u_totd, npos * d)
@@ -1158,6 +1431,19 @@ def private fc_shape_ok(d, n_ff, n_head, nk, npos, ww : int64) : bool {
     return (d % 64l == 0l && n_ff % 64l == 0l && n_head * dh == d
         && dh % 64l == 0l && n_head <= int64(FC_MAX_HEADS) && nk % 2l == 1l && npos >= 1l && ww == 2l * npos - 1l)
 }
+
+[arch(at="../ARCHITECTURE_GPU_TOWER_FC.md#tower-fc-rotary")]
+def private fc_rot_shape_ok(d, n_ff, n_head, nk, npos : int64) : bool {
+    let dh = n_head > 0l ? d / n_head : 0l
+    let slab = uint64(n_head * round_up(npos, 32l) * round_up(npos, 64l) * 2l)
+    return (d % 64l == 0l && n_ff % 64l == 0l && n_head * dh == d && dh % 2l == 0l && dh <= 128l
+        && nk % 2l == 1l && npos >= 1l && slab <= FC_DEV_SLAB_MAX_BYTES)
+}
+
+def private fc_form_shape_ok(form : FcForm; d, n_ff, n_head, nk, npos, ww : int64) : bool => (form.rotary
+    ? fc_rot_shape_ok(d, n_ff, n_head, nk, npos) : fc_shape_ok(d, n_ff, n_head, nk, npos, ww))
+
+def private fc_form_ready(form : FcForm) : bool => form.rotary ? pf_ga_ready() : pf_fc_ready(form.tap_major)
 
 def private tw_count_encode(npos, n_layer : int64; f16 : bool) {
     g_tower_encodes++
@@ -1180,11 +1466,65 @@ def private tw_readback(c : TwGpuCtx; ran : bool; var x : array<float>; d, n_lay
     return true
 }
 
-//! The FastConformer chain's one command buffer as `encode` records it, then the readback into `x` with each route's engage counted and the context released; false, declined, where the command buffer failed.
-def private fc_submit(var c : FcGpuCtx; var x : array<float>; d, n_layer : int64; encode : block<(enc : MetalComputeEncoder?) : void>) : bool {
+var private g_tw_fc_replay = false
+var private g_tw_said : table<string>   //! the overrides' announces already made
+
+//! Under the asr_prof rail, replay the rotary chain's head restrides and slab trio after the encode for their device time
+//! (`on`); the replay's two command buffers land inside the encode's host wall. Answers the setting it replaced.
+def set_metal_fc_prof_replay(on : bool) : bool {
+    let was = g_tw_fc_replay
+    g_tw_fc_replay = on
+    return was
+}
+
+//! The chain's device time under the asr_prof rail: its command buffer's GPU and recording ms, then, with the replay armed,
+//! on the rotary form the head restrides and the slab trio over the last block's panels, `n_layer` times each in a command
+//! buffer of its own.
+[cold_path, arch(at="../ARCHITECTURE_GPU_TOWER_FC.md#tower-fc-rotary")]
+def private fc_prof_device(c : FcGpuCtx; gpu_ms, rec_ms : double; n_layer : int64) {
+    let p = c.form.prof
+    asr_prof_add_ms("{p}.encode.gpu", gpu_ms)
+    asr_prof_add_ms("{p}.encode.record", rec_ms)
+    return if (!c.form.rotary || !g_tw_fc_replay)
+    gpu_said_once(g_tw_said, LOG_INFO, "metal tower: ", "set_metal_fc_prof_replay(true) - the rotary chain replays its head restrides and slab trio after each encode, inside the encode's host wall")
+    let per_row = c.n_head * c.rot.hs_pad
     var err = ""
-    let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026 — the error-text fetch runs only on the failure leg
-        enc_tw_rel_sincos(enc, c.bpos, GkRelSinCosArgs(d = uint(d), tt = uint(c.npos), rows_pad = uint(c.wwp)), c.wwp * d)
+    var ms = 0.0lf
+    let restrided = with_compute_encoder_timed(g_queue, err, ms) $(enc : MetalComputeEncoder?) {
+        var rs_q = c.rot.rs_q
+        var rs_kv = c.rot.rs_kv
+        for (_l in range64(n_layer)) {
+            enc_head_pad(enc, c.bq, c.rot.bqp, rs_q, c.mp * per_row)
+            enc_head_pad(enc, c.bk, c.rot.bkp, rs_kv, c.rot.nk64 * per_row)
+            enc_head_pad(enc, c.bv, c.rot.bvp, rs_kv, c.rot.nk64 * per_row)
+            enc_head_unpad(enc, c.rot.bop, c.bao, rs_q, c.npos * per_row)
+        }
+    }
+    if (restrided) {
+        asr_prof_add_ms("{p}.encode.gpu.restride", ms)
+    }
+    let attended = with_compute_encoder_timed(g_queue, err, ms) $(enc : MetalComputeEncoder?) {
+        var ka = c.rot.ka
+        for (_l in range64(n_layer)) {
+            enc_qk_mm(enc, c.rot.bqp, c.rot.bkp, c.rot.batt, ka, c.mp, c.rot.nk64, c.n_head)
+            enc_rowstat(enc, c.rot.batt, ka, c.rot.bstat, null, c.npos, c.n_head)
+            enc_av_mm(enc, c.rot.batt, c.rot.bvp, c.rot.bop, ka, c.rot.bstat, c.mp, c.n_head, c.rot.hs_pad)
+        }
+    }
+    if (attended) {
+        asr_prof_add_ms("{p}.encode.gpu.attn", ms)
+    }
+}
+
+//! The FastConformer chain's one command buffer as `encode` records it, then the readback into `x` with each route's engage counted and the context released; false where the command buffer failed, the decline counted where `counted`.
+def private fc_submit(var c : FcGpuCtx; var x : array<float>; d, n_layer : int64; counted : bool; encode : block<(enc : MetalComputeEncoder?) : void>) : bool {
+    var err = ""
+    var gpu_ms = 0.0lf
+    var rec_ms = 0.0lf
+    let ran = with_compute_encoder_timed(g_queue, err, gpu_ms, rec_ms) $(enc : MetalComputeEncoder?) {   // nolint:PERF026 — the error-text fetch runs only on the failure leg
+        if (!c.form.rotary) {
+            enc_tw_rel_sincos(enc, c.bpos, GkRelSinCosArgs(d = uint(d), tt = uint(c.npos), rows_pad = uint(c.wwp)), c.wwp * d)
+        }
         invoke(encode, enc)
     }
     if (ran) {
@@ -1194,44 +1534,151 @@ def private fc_submit(var c : FcGpuCtx; var x : array<float>; d, n_layer : int64
     if (served && c.dev_on) {
         g_tw_fc_dev_encodes++
     }
+    if (served && g_asr_prof_on) {
+        fc_prof_device(c, gpu_ms, rec_ms, n_layer)
+    }
+    if (served && c.form.holds_rows) {
+        tw_rows_keep(c, d)
+    }
     fc_ctx_release(c)
-    return served || tw_decline(MetalTowerDecline.gpu_error)
+    return served || (counted && tw_decline(MetalTowerDecline.gpu_error))
 }
+
+var private g_tw_rows : MetalBuffer?   //!< the last served FastConformer encode's residual rows [mp][d], held past the encode for the transducer decode
+var private g_tw_rows_bytes = 0ul
+var private g_tw_rows_elems = 0l
+var private g_tw_rows_gen = 0ul        //!< the served FastConformer encodes that held their rows, counted: each hold's generation
+var private g_tw_rows_held_gen = 0ul   //!< the held rows' generation, 0 where none are held
+
+//! The held rows given back to the pool: an encode is starting, or the driver is shutting down.
+def private tw_rows_drop {
+    if (g_tw_rows != null) {
+        pool_release(g_tw_pool, g_tw_rows, g_tw_rows_bytes)
+        g_tw_rows = null
+    }
+    g_tw_rows_elems = 0l
+    g_tw_rows_held_gen = 0ul
+}
+
+//! A served encode's residual rows held on the device under a new generation; the context gives up its buffer, the previous
+//! hold goes back to the pool.
+def private tw_rows_keep(var c : FcGpuCtx; d : int64) {
+    tw_rows_drop()
+    g_tw_rows = c.bx
+    g_tw_rows_bytes = c.bytes_row
+    g_tw_rows_elems = c.npos * d
+    g_tw_rows_gen++
+    g_tw_rows_held_gen = g_tw_rows_gen
+    c.bx = null
+}
+
+//! The generation of the encoder rows the tower holds on the device, 0 where it holds none - what a family session records
+//! right after its encode (`register_tower_rows_gen`).
+def metal_tower_rows_gen() : uint64 => g_tw_rows != null ? g_tw_rows_held_gen : 0ul
+
+//! The device buffer holding the encoder rows of generation `gen` (`elems` floats, row-padded to whole 32-row tiles) where the
+//! tower still holds them - no encode has started since the one the session recorded; else null.
+def metal_tower_enc_rows(gen : uint64; elems : int64) : MetalBuffer?
+    => (gen != 0ul && g_tw_rows != null && g_tw_rows_held_gen == gen && g_tw_rows_elems == elems) ? g_tw_rows : null
+
+//! The element count of the encoder rows the tower holds on the device for a transducer decode, 0 where it holds none.
+def metal_tower_held_rows_elems() : int64 => g_tw_rows != null ? g_tw_rows_elems : 0l
 
 //! The FastConformer chain from the shape gate on - context, upload, the block loop over the
 //! family's layer offsets, readback - as ONE command buffer on the f32 blob; the family hook
 //! keeps its knob and quant-mode declines and the front stays CPU.
-def private fc_run(blob : PlaneF; mapped : bool; d, n_ff, n_head, nk, n_layer : int64; eps : float;
-                   var x : array<float>; npos, ww : int64; tap_major : bool; layer : block<(l : int64) : CanaryLayerOffs>) : bool {
-    if (!fc_shape_ok(d, n_ff, n_head, nk, npos, ww) || ww != 2l * npos - 1l) {
+def private fc_run(fc : TwFc; var x : array<float>; npos, ww : int64; rope_cos, rope_sin : array<float>) : bool {
+    let d = fc.d
+    if (!fc_form_shape_ok(fc.form, d, fc.ff, fc.n_head, fc.nk, npos, ww)) {
         return tw_decline(MetalTowerDecline.shape)
     }
-    if (!metal_tower_init() || !pf_fc_ready(tap_major)) {   //! per-encode: re-arms after any shutdown seat
+    if (!metal_tower_init() || !fc_form_ready(fc.form) || !fc_weights_ready(fc)) {   //! per-encode: re-arms after any shutdown seat
         return tw_decline(MetalTowerDecline.device)
     }
     residency_flush()   //! pin/commit before the first submission (the post-CPU-front slack)
-    var c <- fc_ctx_make(blob, mapped, d, n_ff, n_head, nk, eps, npos, ww, tap_major)
+    var c <- fc_ctx_make(fc, npos, ww)
+    return false if (fc_ctx_declined(c, rope_cos, rope_sin))
     upload_rows_padded(c.bx, unsafe(addr(x[0])), npos, c.mp, d)
-    return fc_submit(c, x, d, n_layer) $(enc) {
-        for (l in range64(n_layer)) {
-            fc_block(enc, c, invoke(layer, l), d, n_ff)
+    return fc_submit(c, x, d, fc.n_layer, true) $(enc) {
+        for (l in range64(fc.n_layer)) {
+            fc_block(enc, c, g_tw_fc_offs[l], d, fc.ff)
         }
     }
+}
+
+//! A FastConformer family as the Metal chain reads it, the twin of Vulkan's `VtFc`: the f32 blob, the block dims and the
+//! form; its block offsets ride `g_tw_fc_offs`, mapped onto canary's record.
+struct private TwFc {
+    blob : PlaneF = PlaneF()
+    wblob : PlaneU16 = PlaneU16()   //!< the GEMMs as the family's own halfwords, where the f32 blob holds none; empty otherwise
+    taps : PlaneU16 = PlaneU16()    //!< the conv_ln form's depthwise taps as the family's own halfwords, the layer offsets indexing it; empty: in the f32 blob
+    qblob : PlaneI8 = PlaneI8()     //!< the q8 lane's GEMM planes, where `q8_served`
+    qscales : PlaneF = PlaneF()
+    mapped : bool
+    q8 : bool
+    q8_served : bool                //!< the q8 lane's GEMMs serve on the device off the q8 slab; else the lane declines
+    d : int64
+    ff : int64
+    n_head : int64
+    nk : int64
+    n_layer : int64
+    eps : float
+    form : FcForm
+}
+
+var private @scratch @exact_size g_tw_fc_offs : array<CanaryLayerOffs>   //!< the FastConformer encode's block offsets, the family's record mapped onto canary's
+
+def private tw_fc_offs_size(n_layer : int64) {
+    g_tw_fc_offs |> reserve(n_layer)
+    g_tw_fc_offs |> resize(n_layer)
+}
+
+def private tw_fc_of_cn(t : CanaryEncoder) : TwFc {
+    tw_fc_offs_size(t.n_layer)
+    for (l in range64(t.n_layer)) {
+        g_tw_fc_offs[l] = t.layers[l]
+    }
+    return TwFc(blob = t.blob, mapped = t.image_map != null, q8 = t.q8, d = t.d_model, ff = t.n_ff, n_head = t.n_head,
+        nk = t.conv_kernel, n_layer = t.n_layer, eps = t.eps, form = FcForm(prof = "cn"))
+}
+
+//! parakeet's block offsets in the shared chain's layout: the same regions, no GEMM biases (-1)
+def private tw_fc_of_pk(t : ParakeetModel) : TwFc {
+    tw_fc_offs_size(t.n_layer)
+    for (l in range64(t.n_layer)) {
+        g_tw_fc_offs[l] = pk_fc_layer(pk_layer_offsets(t, l))
+    }
+    return TwFc(blob = t.blob, mapped = t.image_map != null, q8 = t.q8, d = t.n_state, ff = 4l * t.n_state, n_head = t.n_head,
+        nk = t.n_conv_kernel, n_layer = t.n_layer, eps = t.eps, form = FcForm(tap_major = true, holds_rows = true, prof = "pk"))
+}
+
+def private tw_fc_of_ga(m : GigaamModel) : TwFc {
+    tw_fc_offs_size(m.n_layer)
+    for (l in range64(m.n_layer)) {
+        g_tw_fc_offs[l] = gigaam_layer_offsets(m, l)
+    }
+    return TwFc(blob = m.blob, wblob = m.gemm_f16 ? m.wblob : PlaneU16(), taps = m.dw_f16 ? m.wblob : PlaneU16(), qblob = m.qblob, qscales = m.qscales, mapped = m.image_map != null,
+        q8 = m.q8, q8_served = true, d = m.d_model, ff = m.n_ff, n_head = m.n_head, nk = m.conv_kernel, n_layer = m.n_layer, eps = m.eps,
+        form = FcForm(tap_major = true, rotary = true, conv_ln = true, holds_rows = true, prof = "ga"))
+}
+
+//! One FastConformer family's block seat: the knob and quant-mode declines, then the chain over the family's descriptor.
+def private tw_fc_seat(fc : TwFc; var x : array<float>; npos, ww : int64; rope_cos, rope_sin : array<float>) : bool {
+    tw_rows_drop()
+    if (!g_tw_env_tower) {
+        return tw_decline(MetalTowerDecline.knob)
+    }
+    if (fc.q8 && !fc.q8_served) {
+        return tw_decline(MetalTowerDecline.quant_mode)
+    }
+    return fc_run(fc, x, npos, ww, rope_cos, rope_sin)
 }
 
 //! The canary FastConformer block loop as ONE command buffer on the f32 blob; the front seat runs the mel and the subsample front ahead of it, the final proj stays CPU.
 [hot_path]
 def private metal_canary_blocks(t : CanaryEncoder; var st : CanaryState; npos, ww : int64) : bool {
-    if (!g_tw_env_tower) {
-        return tw_decline(MetalTowerDecline.knob)
-    }
-    if (t.q8) {
-        return tw_decline(MetalTowerDecline.quant_mode)
-    }
-    return fc_run(t.blob, t.image_map != null, t.d_model, t.n_ff, t.n_head, t.conv_kernel, t.n_layer, t.eps,
-        st.x, npos, ww, false) $(l) {
-        return t.layers[l]
-    }
+    let none : array<float>
+    return tw_fc_seat(tw_fc_of_cn(t), st.x, npos, ww, none, none)
 }
 
 var private @scratch g_tw_cn_bufs : array<MetalBuffer?>   //!< the canary front's pooled buffers of one encode, taken and given back inside it
@@ -1428,19 +1875,10 @@ def private metal_canary_front(t : CanaryEncoder; var st : CanaryState) : int64 
     return ran ? tt : -1l
 }
 
-//! Parakeet's block offsets in the shared chain's layout: the same regions, no GEMM biases (-1).
 [hot_path]
 def private metal_parakeet_blocks(t : ParakeetModel; var st : ParakeetState; npos, ww : int64) : bool {
-    if (!g_tw_env_tower) {
-        return tw_decline(MetalTowerDecline.knob)
-    }
-    if (t.q8) {
-        return tw_decline(MetalTowerDecline.quant_mode)
-    }
-    return fc_run(t.blob, t.image_map != null, t.n_state, 4l * t.n_state, t.n_head, t.n_conv_kernel, t.n_layer, t.eps,
-        st.x, npos, ww, true) $(l) {
-        return pk_fc_layer(pk_layer_offsets(t, l))
-    }
+    let none : array<float>
+    return tw_fc_seat(tw_fc_of_pk(t), st.x, npos, ww, none, none)
 }
 
 let private PK_FRONT_MAX_BYTES = 1073741824l   //!< the first conv's output a clip may ask of the device (~5 minutes of audio): a longer clip keeps the CPU front
@@ -1488,7 +1926,7 @@ def private metal_parakeet_encode(t : ParakeetModel; var st : ParakeetState) : i
     var bw0 = tw_conv0_panel(g_tw_pk_conv0_panel, t.blob, t.c0_w, nch, true)
     return -1l if (bw0 == null)
     residency_flush()
-    var c <- fc_ctx_make(t.blob, t.image_map != null, d, 4l * d, t.n_head, t.n_conv_kernel, t.eps, tt, ww, true)
+    var c <- fc_ctx_make(tw_fc_of_pk(t), tt, ww)
     let mp2 = round_up(rows2, 32l)
     let mp3 = round_up(rows3, 32l)
     let bytes_mel = uint64(n_len * t.n_mel * 4l)
@@ -1502,7 +1940,8 @@ def private metal_parakeet_encode(t : ParakeetModel; var st : ParakeetState) : i
     var by5 = tw_take(c.scratch, bytes_y5)
     var by6 = tw_take(c.scratch, bytes_y5)
     var bxf = tw_take(c.scratch, uint64(c.mp * feat * 4l))
-    var bfxh = c.f16w ? tw_take(c.scratch, uint64(max(mp2 * nch, c.mp * feat) * 2l)) : null
+    var bfxh = c.f16w ? tw_take(c.scratch, uint64(max(mp2 * nch, c.mp * feat) * 2l), false) : null
+    return -1l if (fc_ctx_declined(c, false))
     unsafe {
         memcpy(metal_buffer_contents(bmel), addr(st.mel.data[0]), bytes_mel)
         //! the depthwise convs write their live rows alone, and the GEMM behind each reads the row pad: zero it, the buffers are pooled
@@ -1521,10 +1960,10 @@ def private metal_parakeet_encode(t : ParakeetModel; var st : ParakeetState) : i
     var front = TwFcFront(tap_major = true, f16w = f16w, bwh = c.bwh, bblob = c.bblob, bfxh = bfxh, bw0 = bw0, c0_b = t.c0_b, c3_w = t.c3_w, c3_b = t.c3_b,
         c6_w = t.c6_w, c6_b = t.c6_b, pre_w = t.pre_w, pre_b = t.pre_b, n_mel = t.n_mel, n_len = n_len, rows0 = rows0, mp0 = mp0, rows2 = rows2, mp2 = mp2,
         rows3 = rows3, mp3 = mp3, mpt = c.mp, nch = nch, feat = feat, d = d, tt = tt, d2 = d2, d5 = d5, axf = axf, u_k0 = u_k0, u_nch = u_nch, u_feat = u_feat, u_d = c.u_d)
-    let served = fc_submit(c, st.x, d, t.n_layer) $(enc) {
+    let served = fc_submit(c, st.x, d, t.n_layer, false) $(enc) {
         tw_fc_front_convs(enc, front, bmel, bcol0, by0, by2, by3, by5, by6, bxf, c.bx)
         for (l in range64(t.n_layer)) {
-            fc_block(enc, c, pk_fc_layer(pk_layer_offsets(t, l)), d, 4l * d)
+            fc_block(enc, c, g_tw_fc_offs[l], d, 4l * d)
         }
     }
     pool_release(g_upool, u_nch, 4ul)
@@ -1537,6 +1976,363 @@ def private metal_parakeet_encode(t : ParakeetModel; var st : ParakeetState) : i
     }
     g_tower_convs++
     return tt
+}
+
+[hot_path, arch(at="../ARCHITECTURE_GPU_TOWER_FC.md#tower-fc-rotary")]
+def private metal_gigaam_blocks(m : GigaamModel; var st : GigaamState; tt : int64) : bool
+    => tw_fc_seat(tw_fc_of_ga(m), st.x, tt, 0l, st.rope_cos, st.rope_sin)
+
+var private g_tw_ga_front = true
+
+//! Serve the GigaAM conv front on the device (`on`), or leave it to the CPU chain with the block seat serving behind it;
+//! answers the setting it replaced.
+def set_metal_gigaam_front(on : bool) : bool {
+    let was = g_tw_ga_front
+    g_tw_ga_front = on
+    return was
+}
+
+var private g_tw_ga_mel_panel : St2SlabBase   //!< the served gigaam model's mel planes as one buffer: the DFT's twiddle panel, the window, the filters
+var private g_tw_ga_mels = 0l                 //!< gigaam log-mels the device computed
+
+//! The gigaam log-mels the device computed - the encode chain's and the mel seat's (`metal_gigaam_mel`); cells assert deltas.
+def metal_tower_ga_mels() : int64 => g_tw_ga_mels
+
+//! the gigaam mel's planes in one device buffer: the DFT tile's transposed twiddle panel [dft_pad][n_fft] (its output rows
+//! padded to the tile's 64-row step), then the window at `woff`, then the filters [n_mel][n_bins] at `foff`
+struct private TwGaMelGeo {
+    n_fft : int64
+    hop : int64
+    n_bins : int64
+    n_mel : int64
+    dft_pad : int64
+    woff : int64
+    foff : int64
+}
+
+def private tw_ga_mel_geo(m : GigaamModel) : TwGaMelGeo {
+    let n_bins = m.n_fft / 2l + 1l
+    let dft_pad = round_up(2l * n_bins, 64l)
+    return TwGaMelGeo(n_fft = m.n_fft, hop = m.hop, n_bins = n_bins, n_mel = m.n_mel, dft_pad = dft_pad, woff = dft_pad * m.n_fft,
+        foff = dft_pad * m.n_fft + m.n_fft)
+}
+
+//! the device can cut `n_len` frames off `n_in` samples: the DFT tile's K lattice, the planes the geometry reads
+def private tw_ga_mel_shape_ok(m : GigaamModel; g : TwGaMelGeo; n_in, n_len : int64) : bool {
+    return (n_len >= 1l && g.n_fft % 32l == 0l && g.hop >= 1l && (n_len - 1l) * g.hop + g.n_fft <= n_in
+        && long_length(m.tabs.twiddles) >= g.n_fft * 2l * g.n_bins && length(m.window) >= g.n_fft
+        && length(m.filters) >= g.n_mel * g.n_bins)
+}
+
+//! the mel planes' buffer, built once a model; null where it cannot be made
+def private tw_ga_mel_panel(m : GigaamModel; g : TwGaMelGeo) : MetalBuffer? {
+    let tw_key = hash_combine64(intptr(unsafe(addr(m.tabs.twiddles[0]))), uint64(long_length(m.tabs.twiddles)))
+    let key = hash_combine64(hash_combine64(tw_plane_key(m.window), tw_plane_key(m.filters)), tw_key)
+    return g_tw_ga_mel_panel.buf if (st2_slab_current(g_tw_ga_mel_panel, key))
+    return tw_ga_mel_panel_build(m, g, key)
+}
+
+[cold_path]
+def private tw_ga_mel_panel_build(m : GigaamModel; g : TwGaMelGeo; key : uint64) : MetalBuffer? {
+    st2_slab_free(g_tw_ga_mel_panel)
+    var panel = metal_new_buffer(g_dev, uint64((g.foff + g.n_mel * g.n_bins) * 4l))
+    return null if (panel == null)
+    tw_twiddle_panel(panel, unsafe(addr<float const?>(m.tabs.twiddles[0])), g.n_bins, g.n_fft, g.n_fft, g.dft_pad)
+    unsafe {
+        let p = reinterpret<float?>(metal_buffer_contents(panel))
+        memcpy(p + g.woff, reinterpret<void?>(plane_at(m.window, 0l)), uint64(g.n_fft * 4l))
+        memcpy(p + g.foff, reinterpret<void?>(plane_at(m.filters, 0l)), uint64(g.n_mel * g.n_bins * 4l))
+    }
+    g_tw_ga_mel_panel.buf = panel
+    g_tw_ga_mel_panel.key = key
+    return panel
+}
+
+//! one gigaam log-mel's device record off the raw samples (`#gigaam-log-mel`): the frame window, the exact DFT tile against
+//! the twiddle panel, the power spectrum and the clamped-log filterbank into frame-major mel rows
+struct private TwGaMel {
+    bsamp : MetalBuffer?
+    bpan : MetalBuffer?
+    bxw : MetalBuffer?
+    breim : MetalBuffer?
+    bpow : MetalBuffer?
+    u_kfft : MetalBuffer?
+    u_dft : MetalBuffer?
+    u_nbins : MetalBuffer?
+    u_tot : MetalBuffer?
+    fw : GkFrameWindowArgs
+    ml : GkMelLogArgs
+    mp : int64
+    dft_pad : int64
+    n_bins : int64
+}
+
+//! the record's scratch out of `s` with the samples uploaded; `s` reads short where a buffer is missing
+def private tw_ga_mel_take(var s : TwBufSet; g : TwGaMelGeo; var bpan : MetalBuffer?; samples : float const?; n_in, n_len : int64) : TwGaMel {
+    let mp = round_up(n_len, 32l)
+    var r = TwGaMel(bpan = bpan, mp = mp, dft_pad = g.dft_pad, n_bins = g.n_bins,
+        fw = GkFrameWindowArgs(n_fft = uint(g.n_fft), hop = uint(g.hop), frames = uint(n_len), rows = uint(mp), woff = uint(g.woff)),
+        ml = GkMelLogArgs(n_bins = uint(g.n_bins), n_mel = uint(g.n_mel), frames = uint(n_len), foff = uint(g.foff)))
+    r.bsamp = tw_take(s, uint64(n_in * 4l))
+    r.bxw = tw_take(s, uint64(mp * g.n_fft * 4l))
+    r.breim = tw_take(s, uint64(mp * g.dft_pad * 4l))
+    r.bpow = tw_take(s, uint64(mp * g.n_bins * 4l))
+    if (r.bsamp != null) {
+        unsafe {
+            memcpy(metal_buffer_contents(r.bsamp), reinterpret<void?>(samples), uint64(n_in * 4l))
+        }
+    }
+    r.u_kfft = uniform_u32(uint(g.n_fft))
+    r.u_dft = uniform_u32(uint(g.dft_pad))
+    r.u_nbins = uniform_u32(uint(g.n_bins))
+    r.u_tot = uniform_u32(uint(mp * g.n_bins))
+    return r
+}
+
+def private tw_ga_mel_enc(enc : MetalComputeEncoder?; var r : TwGaMel; bmel : MetalBuffer?) {
+    enc_ga_frames(enc, r.bsamp, r.bpan, r.bxw, r.fw, r.mp * int64(r.fw.n_fft))
+    enc_f32_exact_mm(enc, r.bpan, 0ul, r.bxw, r.breim, 0ul, r.u_kfft, r.u_dft, r.mp, r.dft_pad)
+    enc_q3a_pow(enc, r.breim, r.bpow, r.u_nbins, r.u_dft, r.u_nbins, r.u_tot, r.mp * r.n_bins)
+    enc_ga_mel(enc, r.bpow, r.bpan, bmel, r.ml, int64(r.ml.frames) * int64(r.ml.n_mel))
+}
+
+def private tw_ga_mel_release(var r : TwGaMel) {
+    for (u in fixed_array(r.u_kfft, r.u_dft, r.u_nbins, r.u_tot)) {
+        if (u != null) {
+            pool_release(g_upool, u, 4ul)
+        }
+    }
+}
+
+//! The gigaam log-mel of `samples` on the device alone, read back frame-major into `mel` - the encode chain's mel dispatches in
+//! a command buffer of their own, the twin's seat; under the asr_prof rail its device time lands in `ga.mel.gpu`. Answers the
+//! frame count, or -1 where the device cannot serve it.
+def metal_gigaam_mel(m : GigaamModel; samples : array<float>; @exact_size var mel : array<float>) : int64 {
+    let g = tw_ga_mel_geo(m)
+    let n_in = long_length(samples)
+    let n_len = gigaam_mel_frames(m, n_in)
+    if (!g_tw_env_tower || !tw_ga_mel_shape_ok(m, g, n_in, n_len) || !metal_tower_init() || !pf_ga_mel_ready()) {
+        return -1l
+    }
+    var bpan = tw_ga_mel_panel(m, g)
+    return -1l if (bpan == null)
+    var s = TwBufSet()
+    let bytes_mel = uint64(n_len * g.n_mel * 4l)
+    var bmel = tw_take(s, bytes_mel)
+    var r = tw_ga_mel_take(s, g, bpan, unsafe(addr<float const?>(samples[0])), n_in, n_len)
+    var ran = false
+    if (!s.short) {
+        var err = ""
+        var gpu_ms = 0.0lf
+        ran = with_compute_encoder_timed(g_queue, err, gpu_ms) $(enc : MetalComputeEncoder?) {
+            tw_ga_mel_enc(enc, r, bmel)
+        }
+        if (ran) {
+            mel |> reserve(n_len * g.n_mel)
+            mel |> resize(n_len * g.n_mel)
+            unsafe {
+                memcpy(addr(mel[0]), metal_buffer_contents(bmel), bytes_mel)
+            }
+            g_tw_ga_mels++
+            if (g_asr_prof_on) {
+                asr_prof_add_ms("ga.mel.gpu", gpu_ms)
+            }
+        }
+    }
+    tw_ga_mel_release(r)
+    tw_release(s)
+    return ran ? n_len : -1l
+}
+
+//! the GigaAM encode seat stands down: the tower knob, or the front lever (announced once)
+def private tw_ga_encode_off() : bool {
+    if (g_tw_env_tower && !g_tw_ga_front) {
+        gpu_said_once(g_tw_said, LOG_INFO, "metal tower: ", "set_metal_gigaam_front(false) - the GigaAM mel and conv front run on the CPU, the block seat serves behind them")
+    }
+    return !g_tw_env_tower || !g_tw_ga_front
+}
+
+//! The GigaAM encode whole as ONE command buffer: off the raw samples the device mel (`samples` non-null), else the uploaded
+//! ``st.mel``, then the conv front and the block loop; -1 with nothing counted where the chain cannot serve.
+[hot_path, arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-encode-chains"), arch(at="../ARCHITECTURE_GPU_TOWER_FC.md#tower-fc-rotary")]
+def private metal_gigaam_encode(m : GigaamModel; var st : GigaamState; samples : float const?; n_in : int64) : int64 {
+    return -1l if (tw_ga_encode_off())
+    let d = m.d_model
+    let k = m.subs_kernel
+    let nch = m.n_sub_ch
+    let n_len = st.n_len
+    let t1 = gigaam_conv_out(n_len, k)
+    let tt = gigaam_conv_out(t1, k)
+    let k0 = k * m.n_mel
+    let k2 = k * nch
+    let dev_mel = samples != null
+    let g = tw_ga_mel_geo(m)
+    let fc = tw_fc_of_ga(m)
+    if (n_len < 1l || t1 < 1l || tt < 1l || k0 % 32l != 0l || k2 % 32l != 0l || nch % 64l != 0l
+            || !fc_rot_shape_ok(d, m.n_ff, m.n_head, m.conv_kernel, tt) || !metal_tower_init() || !pf_ga_ready()
+            || !fc_weights_ready(fc) || (dev_mel && (!tw_ga_mel_shape_ok(m, g, n_in, n_len) || !pf_ga_mel_ready()))) {
+        return -1l
+    }
+    var bpan = dev_mel ? tw_ga_mel_panel(m, g) : null
+    return -1l if (dev_mel && bpan == null)
+    gigaam_rope_tables(m, st, tt)
+    residency_flush()
+    var c <- fc_ctx_make(fc, tt, 0l)
+    let mp1 = round_up(t1, 32l)
+    let bytes_mel = uint64(n_len * m.n_mel * 4l)
+    var bmel = tw_take(c.scratch, bytes_mel)
+    var bcol0 = tw_take(c.scratch, uint64(mp1 * k0 * 4l))
+    var by1 = tw_take(c.scratch, uint64(mp1 * nch * 4l))
+    var bcol2 = tw_take(c.scratch, uint64(c.mp * k2 * 4l))
+    var bcolh = c.f16w && !c.wplane ? tw_take(c.scratch, uint64(c.mp * k2 * 2l), false) : null
+    var mr = dev_mel ? tw_ga_mel_take(c.scratch, g, bpan, samples, n_in, n_len) : TwGaMel()
+    if (fc_ctx_declined(c, st.rope_cos, st.rope_sin, false)) {
+        tw_ga_mel_release(mr)
+        return -1l
+    }
+    if (!dev_mel) {
+        unsafe {
+            memcpy(metal_buffer_contents(bmel), addr(st.mel[0]), bytes_mel)
+        }
+    }
+    var u_k0 = uniform_u32(uint(k0))
+    var u_k2 = uniform_u32(uint(k2))
+    var u_nch = uniform_u32(uint(nch))
+    let pad = uint((k - 1l) / 2l)
+    var a0 = GkIm2col1dArgs(cin = uint(m.n_mel), tin = uint(n_len), tout = uint(t1), k = uint(k), stride = 2u, pad_l = pad, dilation = 1u,
+        transposed = 0u, kdim = uint(k0), xoff = 0u, coloff = 0u, row_major = 1u, r0 = 0u, mp = uint(mp1))
+    var a2 = GkIm2col1dArgs(cin = uint(nch), tin = uint(t1), tout = uint(tt), k = uint(k), stride = 2u, pad_l = pad, dilation = 1u,
+        transposed = 0u, kdim = uint(k2), xoff = 0u, coloff = 0u, row_major = 1u, r0 = 0u, mp = uint(c.mp))
+    let f16w = c.f16w && !c.wplane && bcolh != null   //! the front's conv is f32 in the blob, never in the family's halfword plane
+    let served = fc_submit(c, st.x, d, m.n_layer, false) $(enc) {
+        if (dev_mel) {
+            tw_ga_mel_enc(enc, mr, bmel)
+        }
+        enc_st2_im2col(enc, bmel, bcol0, a0, mp1 * k0)
+        enc_f32_mm(enc, c.bblob, uint64(m.c0_w * 4l), bcol0, by1, 0ul, u_k0, u_nch, mp1, nch)
+        tw_bias(enc, by1, c.bblob, GkBiasActArgs(d = uint(nch), nelem = uint(t1 * nch), boff = uint(m.c0_b), act = BIAS_ACT_RELU))
+        enc_st2_im2col(enc, by1, bcol2, a2, c.mp * k2)
+        tw_mm(enc, f16w, false, c.bwh, c.bblob, m.c2_w, bcol2, bcolh, c.bx, 0ul, u_k2, c.u_d, c.mp, d, k2, true)
+        tw_bias(enc, c.bx, c.bblob, GkBiasActArgs(d = uint(d), nelem = uint(tt * d), boff = uint(m.c2_b), act = BIAS_ACT_RELU))
+        for (l in range64(fc.n_layer)) {
+            fc_block(enc, c, g_tw_fc_offs[l], d, fc.ff)
+        }
+    }
+    pool_release(g_upool, u_k0, 4ul)
+    pool_release(g_upool, u_k2, 4ul)
+    pool_release(g_upool, u_nch, 4ul)
+    tw_ga_mel_release(mr)
+    if (!served) {
+        return -1l
+    }
+    if (dev_mel) {
+        g_tw_ga_mels++
+    }
+    g_tower_convs++
+    return tt
+}
+
+var private g_tw_ga_ctc_panel : St2SlabBase   //!< the served gigaam CTC head as one buffer: the weights [ncp][d], the bias [nc] behind them
+var private g_tw_ga_ctcs = 0l                 //!< gigaam CTC heads the device served
+
+//! The gigaam CTC heads the device served (`metal_gigaam_ctc`); cells assert deltas.
+def metal_tower_ga_ctcs() : int64 => g_tw_ga_ctcs
+
+//! the CTC head's planes, built once a model: the weights' rows padded to the GEMM's 64-row column tile with zero rows, the
+//! bias behind them at `ncp * d`; null where the buffer cannot be made
+def private tw_ga_ctc_panel(m : GigaamModel; ncp : int64) : MetalBuffer? {
+    let key = hash_combine64(tw_plane_key(m.blob), hash_combine64(uint64(m.ctc_w), uint64(m.n_classes)))
+    return g_tw_ga_ctc_panel.buf if (st2_slab_current(g_tw_ga_ctc_panel, key))
+    return tw_ga_ctc_panel_build(m, ncp, key)
+}
+
+[cold_path]
+def private tw_ga_ctc_panel_build(m : GigaamModel; ncp : int64; key : uint64) : MetalBuffer? {
+    st2_slab_free(g_tw_ga_ctc_panel)
+    let d = m.d_model
+    let nc = m.n_classes
+    var panel = metal_new_buffer(g_dev, uint64((ncp * d + nc) * 4l))
+    return null if (panel == null)
+    unsafe {
+        var p = reinterpret<float?>(metal_buffer_contents(panel))
+        memcpy(p, reinterpret<void?>(plane_at(m.blob, m.ctc_w)), uint64(nc * d * 4l))
+        for (i in range64(nc * d, ncp * d)) {
+            p[i] = 0.0
+        }
+        memcpy(p + ncp * d, reinterpret<void?>(plane_at(m.blob, m.ctc_b)), uint64(nc * 4l))
+    }
+    g_tw_ga_ctc_panel.buf = panel
+    g_tw_ga_ctc_panel.key = key
+    return panel
+}
+
+//! GigaAM's CTC head as ONE command buffer (`#gigaam-planes`): the GEMM over the head's own plane and the encode's rows, then
+//! the pick - each frame's biased argmax and plog read back into ``st.picks`` / ``st.plogs``. False declines, the knob uncounted.
+[hot_path, arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-encode-chains")]
+def private metal_gigaam_ctc(m : GigaamModel; var st : GigaamState; n_frames : int64) : bool {
+    return false if (!g_tw_env_tower)
+    let d = m.d_model
+    let nc = m.n_classes
+    let ncp = round_up(nc, 64l)
+    if (n_frames < 1l || d % 32l != 0l || long_length(st.x) < n_frames * d) {
+        return tw_decline(MetalTowerDecline.shape)
+    }
+    let half = m.ctc_f16
+    if (!metal_tower_init() || !pf_ctc_pick_ready() || (half ? !(g_tw_env_tower_f16 && pf_hmm_ready()) : g_pso_f32_exact_mm == null)) {
+        return tw_decline(MetalTowerDecline.device)
+    }
+    let mapped = m.image_map != null
+    var bw = half ? plane_buffer(g_dev, unsafe(reinterpret<void?>(plane_at(m.wblob, 0l))), uint64(length(m.wblob) * 2l), mapped) : tw_ga_ctc_panel(m, ncp)
+    var bb = half ? plane_buffer(g_dev, unsafe(reinterpret<void?>(plane_at(m.blob, 0l))), uint64(length(m.blob) * 4l), mapped) : bw
+    if (bw == null || bb == null) {
+        return tw_decline(MetalTowerDecline.memory)
+    }
+    let mp = round_up(n_frames, 32l)
+    var s = TwBufSet()
+    var brows = metal_tower_enc_rows(st.enc_gen, n_frames * d)
+    if (brows == null) {
+        brows = tw_take(s, uint64(mp * d * 4l))
+        if (brows != null) {
+            upload_rows_padded(brows, unsafe(addr(st.x[0])), n_frames, mp, d)
+        }
+    }
+    var bxh = half ? tw_take(s, uint64(mp * d * 2l)) : null
+    var blg = tw_take(s, uint64(mp * ncp * 4l))
+    var bpk = tw_take(s, uint64(n_frames * 8l))
+    var ran = false
+    if (!s.short) {
+        var u_d = uniform_u32(uint(d))
+        var u_ncp = uniform_u32(uint(ncp))
+        var err = ""
+        ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026 — the error-text fetch runs only on the failure leg
+            if (half) {
+                tw_half(enc, brows, bxh, mp * d)
+                pf_enc_hmm(enc, bw, bxh, blg, 0ul, u_d, u_ncp, mp, ncp, ncp, d, uint64(m.ctc_w * 2l))
+                enc_ctc_pick(enc, blg, bb, bpk, GkCtcPickArgs(nc = uint(nc), ldl = uint(ncp), boff = uint(m.ctc_b)), n_frames)
+            } else {
+                enc_f32_exact_mm(enc, bw, 0ul, brows, blg, 0ul, u_d, u_ncp, mp, ncp)
+                enc_ctc_pick(enc, blg, bw, bpk, GkCtcPickArgs(nc = uint(nc), ldl = uint(ncp), boff = uint(ncp * d)), n_frames)
+            }
+        }
+        pool_release(g_upool, u_d, 4ul)
+        pool_release(g_upool, u_ncp, 4ul)
+        if (ran) {
+            unsafe {
+                let pp = reinterpret<uint const?>(metal_buffer_contents(bpk))
+                for (t in range64(n_frames)) {
+                    st.picks[t] = int(pp[2l * t])
+                    st.plogs[t] = reinterpret<float>(pp[2l * t + 1l])
+                }
+            }
+            g_tw_ga_ctcs++
+        }
+    }
+    let short = s.short
+    tw_release(s)
+    if (!ran) {
+        return tw_decline(short ? MetalTowerDecline.memory : MetalTowerDecline.gpu_error)
+    }
+    return true
 }
 
 //! the DFT's transposed twiddle panel [rows_pad x kstride]: row n (a bin, real rows then imaginary) the twiddles' column n, pads zero
@@ -2126,10 +2922,7 @@ def private metal_gemma3v_blocks(t : Gemma3vTower; var s : Gemma3vState; planes 
             tw_bias(enc, braw, bblob, GkBiasActArgs(d = uint(d), nelem = uint(npos * d), boff = uint(o.b[GEMMA3V_GEMM_V]), act = BIAS_ACT_NONE))
             if (!flash) {
                 enc_head_pad(enc, braw, bv, rs_args, npos * t.n_head * hs_pad)
-                enc_qk_mm(enc, bq, bk, batt, ka, mp, nk64, t.n_head)
-                enc_rowstat(enc, batt, ka, bstat, null, npos, t.n_head)
-                enc_av_mm(enc, batt, bv, bo_p, ka, bstat, mp, t.n_head, hs_pad)
-                enc_head_unpad(enc, bo_p, bxb2, rs_args, npos * t.n_head * hs_pad)
+                tw_pad_attention(enc, bq, bk, bv, batt, bstat, bo_p, bxb2, ka, rs_args, mp, nk64, npos, t.n_head, hs_pad)
             } else {
                 enc_tower_kv_hc(enc, braw, bvhc, u_hs, u_d, u_np, u_totd, npos * d)
                 enc_tower_flash(enc, bq, bkhc, bvhc, bxb2, kaf, mp, t.n_head)
@@ -2333,10 +3126,7 @@ def private metal_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; planes : a
             wt_mm(enc, true, t.q8, l * TW_Q8_VIS_SITES + 2l, f16w, bf16w, bwh, bblob, wqe + 2l * d * d, bxb, bxh, braw, u_d, u_d, mp, d, d, false)
             tw_bias(enc, braw, bblob, GkBiasActArgs(d = uint(d), nelem = uint(npos * d), boff = uint((o.qkv_b + 2l * d)), act = BIAS_ACT_NONE))
             enc_head_pad(enc, braw, bv, rs_args, npos * t.n_head * hs_pad)
-            enc_qk_mm(enc, bq, bk, batt, ka, mp, nk64, t.n_head)
-            enc_rowstat(enc, batt, ka, bstat, null, npos, t.n_head)
-            enc_av_mm(enc, batt, bv, bo_p, ka, bstat, mp, t.n_head, hs_pad)
-            enc_head_unpad(enc, bo_p, bxb2, rs_args, npos * t.n_head * hs_pad)
+            tw_pad_attention(enc, bq, bk, bv, batt, bstat, bo_p, bxb2, ka, rs_args, mp, nk64, npos, t.n_head, hs_pad)
             wt_mm(enc, true, t.q8, l * TW_Q8_VIS_SITES + 3l, f16w, bf16w, bwh, bblob, o.w[QWEN3V_GEMM_O], bxb2, bxh, bxb, u_d, u_d, mp, d, d, true)
             var sm_o = gk_add_ln_args(uint(d), uint(npos), t.eps, uint(o.out_b), true, uint(o.ln2_w), uint(o.ln2_b))
             enc_tw_add_ln(enc, bx, bxb, bxb, bblob, sm_o, npos)
@@ -2542,10 +3332,7 @@ def private metal_qwen25v_blocks(t : Qwen25vTower; var s : Qwen25vState; planes 
             tw_bias(enc, full ? braw : bv, bblob, GkBiasActArgs(d = uint(d), nelem = uint(npos * d), boff = uint(o.b[QWEN25V_GEMM_V]), act = BIAS_ACT_NONE))
             if (full) {
                 enc_head_pad(enc, braw, bv, rs_args, npos * t.n_head * hs_pad)
-                enc_qk_mm(enc, bq, bk, batt, ka, mp, nk64, t.n_head)
-                enc_rowstat(enc, batt, ka, bstat, null, npos, t.n_head)
-                enc_av_mm(enc, batt, bv, bo_p, ka, bstat, mp, t.n_head, hs_pad)
-                enc_head_unpad(enc, bo_p, bxb2, rs_args, npos * t.n_head * hs_pad)
+                tw_pad_attention(enc, bq, bk, bv, batt, bstat, bo_p, bxb2, ka, rs_args, mp, nk64, npos, t.n_head, hs_pad)
             } else {
                 enc_tower_win_attn(enc, bq, bk, bv, bxb2, bwlo, pc_win, nwin * t.n_head)
             }
@@ -5297,6 +6084,101 @@ def private metal_pocket_prompt(m : PocketModel; var vs : PocketVoiceState; n_tx
     return true
 }
 
+// ===== the silero VAD seat: the encoder over every chunk of a call, then the recurrence over them in one threadgroup =====
+
+var private g_tw_vad_w : St2SlabBase   //!< the VAD's weight slab on the device, keyed by its content hash
+var private g_tw_vad_calls = 0l
+var private g_tw_vad_chunks = 0l
+
+//! The VAD calls and chunks the device served.
+def metal_tower_vad_stats : tuple<calls : int64; chunks : int64> => (calls = g_tw_vad_calls, chunks = g_tw_vad_chunks)
+
+def private tw_vad_release {
+    st2_slab_free(g_tw_vad_w)
+}
+
+def private tw_vad_attach(m : VadModel) : bool {
+    return true if (st2_slab_current(g_tw_vad_w, m.slab_key))
+    return tw_vad_attach_build(m)
+}
+
+//! ... uploaded on a new model's slab
+[cold_path]
+def private tw_vad_attach_build(m : VadModel) : bool {
+    tw_vad_release()
+    return st2_slab_upload(g_tw_vad_w, m.slab, m.slab_key)
+}
+
+let private TW_VAD_LSTM_LANES = 1024u   //! the recurrence's one threadgroup (`MetalVadLstm`'s tg): a lane a gate row
+var private g_tw_vad_lanes_probe = 0u   //! a test's stand-in for the recurrence pipeline's thread cap; 0 = the pipeline's
+
+//! A test's stand-in for the VAD recurrence pipeline's largest threadgroup (`lanes`; 0 reads the pipeline's again) - the
+//! `device` decline's seam on a GPU whose cap sits under the kernel's 1024 lanes. Answers the stand-in it replaced.
+def set_metal_vad_lanes_probe_(lanes : uint) : uint {
+    let was = g_tw_vad_lanes_probe
+    g_tw_vad_lanes_probe = lanes
+    return was
+}
+
+def private tw_vad_lstm_lanes : uint => g_tw_vad_lanes_probe != 0u ? g_tw_vad_lanes_probe : pf_vad_lstm_lanes()
+
+//! the n samples at `src` as ceil(n / 512) chunks behind the stream's 64-sample context, one command buffer: the encoder a
+//! threadgroup a chunk, the recurrence walking them all; the probabilities and the stream's h and c read back once
+[hot_path, arch(at="../ARCHITECTURE_MEDIA.md#tower-gpu-hook")]
+def private metal_vad_chunks(m : VadModel; var st : VadState; src : float const?; n : int64; var probs : array<float>) : bool {
+    if (!g_tw_env_tower) {
+        return tw_decline(MetalTowerDecline.knob)
+    }
+    if (!gk_vad_shape_ok(m, st, n)) {
+        return tw_decline(MetalTowerDecline.shape)
+    }
+    if (!metal_tower_init() || !pf_vad_ready() || tw_vad_lstm_lanes() < TW_VAD_LSTM_LANES || !tw_vad_attach(m)) {
+        return tw_decline(MetalTowerDecline.device)
+    }
+    let nch = (n + GK_VAD_CHUNK - 1l) / GK_VAD_CHUNK
+    let bytes_p = uint64(nch * 4l)
+    var s = TwBufSet()
+    var bx = tw_take(s, uint64((64l + nch * GK_VAD_CHUNK) * 4l))
+    var bgx = tw_take(s, uint64(nch * 4l * GK_VAD_HIDDEN * 4l))
+    var bst = tw_take(s, uint64(2l * GK_VAD_HIDDEN * 4l))
+    var bp = tw_take(s, bytes_p)
+    let short = s.short
+    var ran = false
+    if (!short) {
+        unsafe {
+            gk_vad_stage(reinterpret<float?>(metal_buffer_contents(bx)), st, src, n, nch)
+            var sp = reinterpret<float?>(metal_buffer_contents(bst))
+            memcpy(sp, addr(st.h[0]), uint64(GK_VAD_HIDDEN * 4l))
+            memcpy(sp + GK_VAD_HIDDEN, addr(st.c[0]), uint64(GK_VAD_HIDDEN * 4l))
+        }
+        var ka = gk_vad_args(m.slab_offs, nch)
+        var err = ""
+        ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026 — the error-text fetch runs only on the failure leg
+            enc_vad_enc(enc, bx, g_tw_vad_w.buf, bgx, ka, nch)
+            enc_vad_lstm(enc, bgx, g_tw_vad_w.buf, bst, bp, ka)
+        }
+        if (ran) {
+            let p0 = length(probs)
+            probs |> resize(p0 + int(nch))   // nolint:PERF026 — the caller's probability row grows by the call's chunks: the seat's one output
+            unsafe {
+                let xp = reinterpret<float const?>(metal_buffer_contents(bx))
+                memcpy(addr(st.context[0]), xp + nch * GK_VAD_CHUNK, 256ul)
+                let sp = reinterpret<float const?>(metal_buffer_contents(bst))
+                memcpy(addr(st.h[0]), sp, uint64(GK_VAD_HIDDEN * 4l))
+                memcpy(addr(st.c[0]), sp + GK_VAD_HIDDEN, uint64(GK_VAD_HIDDEN * 4l))
+                memcpy(addr(probs[p0]), metal_buffer_contents(bp), bytes_p)
+            }
+            g_tw_vad_calls++
+            g_tw_vad_chunks += nch
+        }
+    }
+    tw_release(s)
+    if (!ran) {
+        return tw_decline(short ? MetalTowerDecline.memory : MetalTowerDecline.gpu_error)
+    }
+    return true
+}
+
 def private metal_pocket_driver : PocketGpuDriver => PocketGpuDriver(codec = @@metal_pocket_codec, frames = @@metal_pocket_frames, prompt = @@metal_pocket_prompt)
 
 def private metal_styletts2_driver : St2GpuDriver {
@@ -5305,16 +6187,22 @@ def private metal_styletts2_driver : St2GpuDriver {
         gen = @@metal_styletts2_generator)
 }
 
-//! The q3a pad, the FastConformer twin and the StyleTTS2 slabs key on host plane addresses, which a weights-epoch drop makes lie.
+//! The q3a pad, the FastConformer twin and the StyleTTS2 slabs key on host plane addresses, which a weights-epoch drop makes lie;
+//! the held encoder rows and the VAD slab outlive their model otherwise.
 def private tw_weights_drop {
     st2_slab_free(g_tw_q3a_wpad)
     st2_slab_free(g_tw_fc_twin)
     st2_slab_free(g_tw_q8)
     st2_slab_free(g_tw_q8_vis)
+    st2_slab_free(g_tw_q8_fc)
     st2_slab_free(g_tw_conv1_pad)
     st2_slab_free(g_tw_cn_conv0_panel)
     st2_slab_free(g_tw_pk_conv0_panel)
+    st2_slab_free(g_tw_ga_mel_panel)
+    st2_slab_free(g_tw_ga_ctc_panel)
     st2_slab_drop()
+    tw_rows_drop()
+    tw_vad_release()
 }
 
 [init]
@@ -5322,7 +6210,7 @@ def dasllama_metal_tower_register {
     register_reload_prep(@@tw_weights_drop)
     g_tw_env_tower = g_env_metal.tower
     if (!g_tw_env_tower) {
-        to_log(LOG_INFO, "dasLLAMA metal tower: DASLLAMA_METAL_TOWER=0 - every tower seat stays on the CPU chain, the StyleTTS2 synthesis and the Pocket TTS codec and frame loop included\n")
+        to_log(LOG_INFO, "dasLLAMA metal tower: DASLLAMA_METAL_TOWER=0 - every tower seat stays on the CPU chain, the StyleTTS2 synthesis, the Pocket TTS codec and frame loop, the silero VAD and the GigaAM encode and CTC head included\n")
     }
     g_tw_env_tower_f16 = g_env_metal.tower_f16
     if (!g_tw_env_tower_f16) {
@@ -5349,6 +6237,11 @@ def dasllama_metal_tower_register {
     register_canary_front_gpu(@@metal_canary_front)
     register_parakeet_gpu(@@metal_parakeet_blocks, @@metal_tower_serves)
     register_parakeet_gpu_encode(@@metal_parakeet_encode)
+    register_gigaam_gpu(@@metal_gigaam_blocks, @@metal_tower_serves)
+    register_gigaam_gpu_encode(@@metal_gigaam_encode)
+    register_gigaam_gpu_ctc(@@metal_gigaam_ctc)
+    register_tower_rows_gen(@@metal_tower_rows_gen)
+    register_vad_gpu(@@metal_vad_chunks)
     register_styletts2_gpu(metal_styletts2_driver())
     register_pocket_gpu(metal_pocket_driver())
 }

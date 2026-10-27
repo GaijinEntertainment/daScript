@@ -56,11 +56,20 @@ struct StoryArgs {
     @clarg_doc = "Stop after this many frames (0 = never) - the smoke rail"
     max_frames : int
 
-    @clarg_doc = "Start another story at this frame, as a space press would (0 = never) - the smoke rail's restart-while-writing check"
-    restart_at : int
+    @clarg_doc = "Smoke rail: restart once the first story said this many sentences (0 = never)"
+    restart_on_sentence : int
 
     @clarg_doc = "Start another story when this many clips have begun playing, as a space press would (0 = never) - the smoke rail's restart-while-reading check"
     restart_on_clip : int
+
+    @clarg_doc = "Smoke rail: hold speech until the first story is written or replaced"
+    hold_speech : bool
+
+    @clarg_doc = "Smoke rail: seed the sampler with this plus the story number (0 = the clock)"
+    seed : int
+
+    @clarg_doc = "Smoke rail: pause story N after a sentence until its first clip plays (0 = never)"
+    await_speech_story : int
 
     @clarg_short = "?"
     @clarg_name = "show-help"
@@ -109,12 +118,17 @@ var g_stories = 0
 var g_say : Stream?               // frame thread -> speech thread: sentences
 var g_speech : Stream?            // speech thread -> frame thread: clips
 var g_story_now : SeqBox?         // frame thread -> speech thread: the story being told, so a queued sentence of an older one is skipped
+// frame thread -> speech thread: the thread reads sentences once it
+// opens; --hold-speech keeps it shut until the first restart
+var g_speech_gate : Channel?
+var g_speech_gate_open = false
 var g_speech_done : Channel?
 var g_clips : array<Speech>
 var g_playing_sid = INVALID_SID   // the clip being read; a new story stops it
 var g_elapsed_s = 0.0
 var g_speaking_until = 0.0
 var g_unplayed_sentences = 0
+var g_said_sentences = 0          // the sentences the story being told has said
 var g_audio_initialized = false
 var g_asch : AudioSystemChannels
 var g_frames = 0
@@ -123,10 +137,13 @@ var g_rail_restarted = false      // the smoke rail's restart fires once
 
 //! the speech thread's setup rides its own stream ahead of the sentences: the model path, then the voice
 let IDLE_RELEASE_MS = 500   //! the speech thread waits this long for a sentence before it gives the engine's scratch back
+//! the story number shutdown publishes: every sentence still queued
+//! is older, so the thread skips to its stop line
+let CLOSING_STORY = 2147483647
 
 [arch(at = "../ARCHITECTURE.md#speech-thread-stream")]
-def start_speech_thread(var say, speech : Stream?; var now : SeqBox?; var done : Channel?) {
-    new_thread() <| @capture(= say, = speech, = now, = done) {
+def start_speech_thread(var say, speech : Stream?; var now : SeqBox?; var gate, done : Channel?) {
+    new_thread() <| @capture(= say, = speech, = now, = gate, = done) {
         setup_dasllama_jobque()   // the fork-context pool is per context: without it every parallel kernel clones the program
         var tts_path = ""
         var voice_pick = ""
@@ -139,6 +156,8 @@ def start_speech_thread(var say, speech : Stream?; var now : SeqBox?; var done :
         var inscope m <- load_tts_model(tts_path)
         var inscope c <- caps(m)
         let voice = empty(voice_pick) ? c.voices[length(c.voices) - 1] : voice_pick
+        gate |> join()
+        gate |> release()
         var running = true
         var released = false
         while (running) {
@@ -152,9 +171,13 @@ def start_speech_thread(var say, speech : Stream?; var now : SeqBox?; var done :
                     current = story
                 }
                 if (l.story < current) {   // a sentence of a story space already replaced: its clip would be dropped unheard, and the synthesis would keep the new story waiting
-                    to_log(LOG_INFO, "storyteller: a sentence of story {l.story} is skipped, story {current} is being told\n")
+                    let why = (current == CLOSING_STORY ? "the storyteller is closing"
+                        : "story {current} is being told")
+                    let story = l.story
+                    to_log(LOG_INFO, "storyteller: a sentence of story {story} is skipped, {why}\n")
                     return
                 }
+                to_log(LOG_INFO, "storyteller: a sentence of story {l.story} is synthesized\n")
                 var inscope a <- synthesize(m, l.text, voice, 1.0)
                 var inscope clip = Speech(pcm := a.pcm, rate = a.sample_rate, story = l.story)
                 speech |> push_archive(clip)
@@ -173,10 +196,26 @@ def start_speech_thread(var say, speech : Stream?; var now : SeqBox?; var done :
     }
 }
 
+def sentence_rail_pending() : bool => g_args.restart_on_sentence > 0 && !g_rail_restarted
+
+//! the story the speech rail names has said a sentence and none of
+//! its clips has begun: its writing waits
+def awaiting_speech() : bool {
+    let named = g_args.await_speech_story == g_stories
+    return named && g_said_sentences > 0 && g_unplayed_sentences == g_said_sentences
+}
+
+def open_speech_gate() {
+    return if (g_speech_gate_open)
+    g_speech_gate |> notify()
+    g_speech_gate_open = true
+}
+
 def say(text : string) {
     var l = Line(text = text, story = g_stories)
     g_say |> push_archive(l)
     g_unplayed_sentences++
+    g_said_sentences++
 }
 
 def poll_speech() {
@@ -201,6 +240,11 @@ def poll_speech() {
 }
 
 def start_story() {
+    if (g_stories > 0) {
+        let n = g_unplayed_sentences
+        let what = "story {g_stories} is replaced with {n} sentences of it unplayed"
+        to_log(LOG_INFO, "storyteller: {what}\n")
+    }
     if (g_playing_sid != INVALID_SID) {
         //! the smoke rail's witness lines, here and below: modules/dasLLAMA/tests/test_storyteller_restart.das reads them word for word
         to_log(LOG_INFO, "storyteller: the clip of story {g_stories} stops, {g_unplayed_sentences} sentences of it go unheard\n")
@@ -209,7 +253,9 @@ def start_story() {
     }
     delete g_session
     g_session <- create_session(g_model)
-    set_seed(g_session, int(ref_time_ticks() % 2147483647l))   // a fresh session samples the same story every time otherwise
+    // a fresh session samples the same story every time otherwise
+    let clock_seed = int(ref_time_ticks() % 2147483647l)
+    set_seed(g_session, g_args.seed != 0 ? g_args.seed + g_stories : clock_seed)
     g_story = ""
     g_sentence_pieces |> clear()
     g_follow_frames = 2         // the frame that shows the last line still scrolls to it
@@ -220,6 +266,7 @@ def start_story() {
     to_log(LOG_INFO, "storyteller: story {g_stories} starts at frame {g_frames}\n")
     delete g_clips    // clear() would drop the rows and leak every clip's pcm
     g_unplayed_sentences = 0
+    g_said_sentences = 0
     g_speaking_until = g_elapsed_s
     var prompt <- encode(g_model, PROMPT, true)
     eval(g_model, g_session, prompt)
@@ -272,6 +319,12 @@ def finish_story() {
     g_sentence_pieces |> clear()
     g_follow_frames = 2         // the frame that shows the last line still scrolls to it
     g_phase = Phase.told
+    to_log(LOG_INFO, "storyteller: story {g_stories} is written, {g_said_sentences} sentences\n")
+    // a pending restart opens the gate itself, with the story's
+    // sentences all queued
+    if (!sentence_rail_pending()) {
+        open_speech_gate()
+    }
 }
 
 def status_line() : string {
@@ -341,11 +394,16 @@ def init() {
     g_story_now |> publish(g_stories)
     g_speech_done = unsafe(channel_create())
     g_speech_done |> append(1)
+    g_speech_gate = unsafe(channel_create())
+    g_speech_gate |> append(1)
+    if (!g_args.hold_speech) {
+        open_speech_gate()
+    }
     var setup = Line(text = path_join(g_args.models, g_args.tts_model), story = -1)
     g_say |> push_archive(setup)
     setup.text = g_args.voice
     g_say |> push_archive(setup)
-    start_speech_thread(g_say, g_speech, g_story_now, g_speech_done)
+    start_speech_thread(g_say, g_speech, g_story_now, g_speech_gate, g_speech_done)
     if (g_args.autoplay || g_args.smoke) {
         start_story()
     }
@@ -362,14 +420,16 @@ def update() {
     if (IsKeyPressed(ImGuiKey.Escape, false) && !IsAnyItemActive()) {     // an active field takes Escape as "revert"
         request_exit()
     }
-    let rail_due = (!g_rail_restarted
-        && ((g_args.restart_at > 0 && g_frames == g_args.restart_at)
-            || (g_args.restart_on_clip > 0 && g_clips_played == g_args.restart_on_clip)))
+    let sentence_due = (sentence_rail_pending()
+        && (g_said_sentences >= g_args.restart_on_sentence || g_phase == Phase.told))
+    let clip_due = g_args.restart_on_clip > 0 && g_clips_played == g_args.restart_on_clip
+    let rail_due = !g_rail_restarted && (sentence_due || clip_due)
     if (IsKeyPressed(ImGuiKey.Space, false) || rail_due) {
         g_rail_restarted ||= rail_due
         start_story()
+        open_speech_gate()
     }
-    if (g_phase == Phase.writing) {
+    if (g_phase == Phase.writing && !awaiting_speech()) {
         write_step()
     }
     poll_speech()
@@ -379,11 +439,14 @@ def update() {
 
 [export]
 def shutdown() {
+    g_story_now |> publish(CLOSING_STORY)
+    open_speech_gate()
     say("")
     g_speech_done |> join()
     g_story_now |> seq_box_release()
     unsafe {
         channel_remove(g_speech_done)
+        channel_remove(g_speech_gate)
         stream_remove(g_say)
         stream_remove(g_speech)
     }

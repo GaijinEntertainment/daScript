@@ -6,10 +6,9 @@ doc: `ARCHITECTURE_MEDIA.md`. Planned work: `followup_general.md`, `followup_vul
 A vision family file is one `dasllama/dasllama_<family>.das` holding a single vision projector
 family.
 
-**A GEMM in a vision family file that does not go through a shared batch-GEMM entry point is a
-defect, a hand-written dot-product loop included** - the entry points are `mm_blob_b`,
-`mm_bf16_b`, `mm_plane_b` (`dasllama/dasllama_tower.das`) and `matmul_q8q8_batch`
-(`dasllama/dasllama_math.das`).
+**A GEMM in a vision family file that does not go through an `mm_*` or `*_mm*` function of
+`dasllama/dasllama_tower.das` or `matmul_q8q8_batch` (`dasllama/dasllama_math.das`) is a defect, a
+hand-written dot-product loop included.**
 
 **A per-encode buffer in `dasllama/dasllama_vision_embedder.das` or a vision family file whose
 size follows the input - patch count, pixel count, clip frames - is a defect without

@@ -883,8 +883,21 @@ def try_device_buf(bytes : int64) : uint64 => make_device_buf(bytes, false, true
 
 //! the soft allocations the tower and ASR-decoder drivers make: a failure marks `oom`, and the caller releases what it got
 [cold_path]
-def soft_device_buf(var oom : bool&; bytes : int64) : uint64 {
-    let h = try_device_buf(bytes)
+def soft_device_buf(var oom : bool&; bytes : int64) : uint64 => mark_oom(oom, try_device_buf(bytes))
+
+//! a per-call buffer: one the host refills on a later call after a device command read it - never the mapped ReBAR type
+[cold_path, arch(at = "../ARCHITECTURE_GPU_VULKAN_ROOM.md#vk-per-call-buffers")]
+def make_call_buf(bytes : int64; xfer_shared : bool = false) : uint64 => make_device_buf(bytes, xfer_shared, false, true)
+
+//! `make_call_buf`'s soft form: 0 on ERROR_OUT_OF_DEVICE_MEMORY
+[cold_path]
+def try_call_buf(bytes : int64) : uint64 => make_device_buf(bytes, false, true, true)
+
+//! `soft_device_buf`'s per-call form
+[cold_path]
+def soft_call_buf(var oom : bool&; bytes : int64) : uint64 => mark_oom(oom, try_call_buf(bytes))
+
+def private mark_oom(var oom : bool&; h : uint64) : uint64 {
     if (h == 0ul) {
         oom = true
     }
@@ -912,7 +925,7 @@ def private fail_device_buf(buf : uint64; bytes : int64; ares : VkResult; soft :
 }
 
 [cold_path]   // a device allocation is model setup, never a per-token step
-def make_device_buf(bytes : int64; xfer_shared : bool = false; soft : bool = false) : uint64 {
+def make_device_buf(bytes : int64; xfer_shared : bool = false; soft : bool = false; per_call : bool = false) : uint64 {
     var bci : BufferCreateInfo
     bci.size = uint64(bytes)
     bci.usage.storage_buffer = true
@@ -932,7 +945,7 @@ def make_device_buf(bytes : int64; xfer_shared : bool = false; soft : bool = fal
     if (g_gpu.has_memprio) {
         bda.pNext = unsafe(addr<void?>(prio))
     }
-    if (g_gpu.rebar_type >= 0 && (req.memoryTypeBits & (1u << uint(g_gpu.rebar_type))) != 0u) {
+    if (!per_call && g_gpu.rebar_type >= 0 && (req.memoryTypeBits & (1u << uint(g_gpu.rebar_type))) != 0u) {
         // ReBAR attempt — raw alloc so a decline falls back to plain device-local below
         var rmai = VkMemoryAllocateInfo()
         rmai.allocationSize = req.size
@@ -998,6 +1011,14 @@ def destroy_host_buf(hb : HostBuf) {   // vkFreeMemory implicitly unmaps
     }
     g_gpu.host_mem |> erase(hb.buf)
     g_gpu.host_bytes -= hb.bytes
+}
+
+//! a host buffer destroyed where its handle is set, the record zeroed after
+def release_host_buf(var hb : HostBuf&) {
+    if (hb.buf != 0ul) {
+        destroy_host_buf(hb)
+    }
+    hb = HostBuf()
 }
 
 //! a raw buffer handle as a boost `Buffer` the finalizer leaves alone (the handle stays the tier's)
@@ -1209,14 +1230,14 @@ def public vk_ext_roster(phys : VkPhysicalDevice) : array<VkExtEntry> {
         VkExtEntry(name = "VK_KHR_shader_integer_dot_product", present = integer_dot_product_supported(phys),
             rides = "the sdot4 integer tiles and the quant dot kernels; the tier is disabled without it"),
         VkExtEntry(name = "VK_KHR_cooperative_matrix", present = has_cm,
-            rides = "the KHR f16 and int8 tiles (the mm mode), the resident MoE block's expert pieces in mm mode, the KHR flash tile and its sink stamps, the KHR f16 GEMM off cm2 (at subgroup 32), the h128 attention twin, the tower driver's KHR route (the vision and whisper-class bidirectional flash tiles, the qwen25v f16 GEMM off cm2 and the audio fronts' f16 GEMMs - the conv stems, the qwen3a and canary fronts), the TTS seats' f16 tile off cm2 (the StyleTTS2 decoder and generator convs, at subgroup 32), and the per-layer-embedding window projection's f16 tile off cm2 (at subgroup 32, dim and rows 16-multiples); without it the sdot4 tiles and the chunked attention serve, a resident MoE's routed block rides the Q8-fed chain, the tower driver declines `device` off cm2, the TTS decoder convs ride the f32 tile, and the per-layer-embedding window projection rides the router GEMV"),
+            rides = "the KHR f16 and int8 tiles (the mm mode), the resident MoE block's expert pieces in mm mode, the KHR flash tile and its sink stamps, the KHR f16 GEMM off cm2 (at subgroup 32), the h128 attention twin, the tower driver's KHR route (the vision, whisper-class and rotary FastConformer (GigaAM) bidirectional flash tiles, the qwen25v f16 GEMM off cm2 and the audio fronts' f16 GEMMs - the conv stems, the qwen3a, canary and GigaAM fronts), the TTS seats' f16 tile off cm2 (the StyleTTS2 decoder and generator convs, at subgroup 32), and the per-layer-embedding window projection's f16 tile off cm2 (at subgroup 32, dim and rows 16-multiples); without it the sdot4 tiles and the chunked attention serve, a resident MoE's routed block rides the Q8-fed chain, the tower driver declines `device` off cm2, the TTS decoder convs ride the f32 tile, and the per-layer-embedding window projection rides the router GEMV"),
         VkExtEntry(name = "VK_NV_cooperative_matrix2 (workgroup scope, flexible dimensions, tensor addressing, block loads, bufferDeviceAddress)",
             present = has_cm2,
             rides = "the cm2 decode-in-load prefill tiles, the served default, and the per-layer-embedding window projection's f16 tile (dim a multiple of the small f16 GEMM's eight 64-deep chunks, else the router GEMV); without it the KHR tiles serve, the projection on the KHR f16 tile where that fits and on the router GEMV where none does (DASLLAMA_COOPMAT picks a mode by name)"),
         VkExtEntry(name = "VK_NV_cooperative_matrix2 reductions, conversions and per-element operations",
             present = has_cm2 && cooperative_matrix2_fa_supported(phys),
             knob = "DASLLAMA_COOPMAT", off = resolve_coopmat_mode(has_cm, has_cm2) != COOPMAT_CM2,
-            rides = "the cm2 flash-attention stamps, on a device created in cm2 mode, and the tower driver's cm2 route (the vision and whisper-class bidirectional flash tiles); without them the KHR flash tile serves at subgroup 32, the h128 twin and the chunked attention tiles where it declines, and the tower driver takes its KHR route"),
+            rides = "the cm2 flash-attention stamps, on a device created in cm2 mode, and the tower driver's cm2 route (the vision, whisper-class and rotary FastConformer (GigaAM) bidirectional flash tiles, and the GigaAM front's f16 GEMMs); without them the KHR flash tile serves at subgroup 32, the h128 twin and the chunked attention tiles where it declines, and the tower driver takes its KHR route"),
         VkExtEntry(name = "VK_NV_cooperative_matrix_decode_vector", present = has_cm2 && cooperative_matrix2_decode_vector_supported(phys),
             knob = "DASLLAMA_VK_DECVEC", off = !g_env_vulkan.vk_decvec || resolve_coopmat_mode(has_cm, has_cm2) != COOPMAT_CM2,
             rides = "the cm2 tiles' four-wide decode callback; without it the scalar callback serves and a MoE prefill window runs about half again as long"),
@@ -1226,7 +1247,7 @@ def public vk_ext_roster(phys : VkPhysicalDevice) : array<VkExtEntry> {
             knob = "DASLLAMA_VK_XFERQ", off = !g_env_vulkan.vk_xferq,
             rides = "the transfer queue that overlaps streamed weight copies with compute and lands the resident commands' rows behind a compute-timeline wait - the token command's logits and picks (or, for a sampled stream, the selection's four planes), the NextN draft's and the same-slab verify's, and the carry row every one of them lands beside; the per-expert chain's copies into the ring and the hot pool's DMA fill of a decode step's misses (DASLLAMA_GPU_HOT_DMA) ride it too; without it the compute timeline stands alone, the copies ride the compute queue, each command copies its own landing under its fence, and the pool's misses take the host fill"),
         VkExtEntry(name = "maxComputeWorkGroupInvocations of 1024 or more", present = props.limits.maxComputeWorkGroupInvocations >= 1024u,
-            rides = "the classifier tail's selection kernel, a 1024-thread workgroup a row ({int(props.limits.maxComputeWorkGroupInvocations)} here): a sampled stream's step lands its rows' survivors instead of the rows; without it every step lands its rows"),
+            rides = "the classifier tail's selection kernel, a 1024-thread workgroup a row ({int(props.limits.maxComputeWorkGroupInvocations)} here): a sampled stream's step lands its rows' survivors instead of the rows; and the silero VAD's recurrence (`TowerVadLstm`, one 1024-thread workgroup walks every chunk); without it every step lands its rows and the VAD declines `device` to the CPU"),
         VkExtEntry(name = "computeFullSubgroups (subgroupSizeControl, Vulkan 1.3)", present = compute_full_subgroups_supported(phys),
             knob = "DASLLAMA_VK_FULLSG", off = !g_env_vulkan.vk_fullsg,
             rides = "full subgroups on the one-dimensional workgroups, an A/B arm off by default"),
@@ -1242,7 +1263,7 @@ def public vk_ext_roster(phys : VkPhysicalDevice) : array<VkExtEntry> {
             knob = "DASLLAMA_VK_REBAR", off = !g_env_vulkan.vk_rebar,
             rides = "uploads write straight into VRAM; without it every upload stages through host memory"),
         VkExtEntry(name = "maxStorageBufferRange", present = props.limits.maxStorageBufferRange > 0u,
-            rides = "one side of a whole-model driver's K/V mirror slab - a contiguous run of attention layers - binds as one range ({int(props.limits.maxStorageBufferRange >> 20u)} MiB here): every stream's region shares it, so the region count divides each stream's context, and the widest layer's rows bound it; a layer past it declines the driver and the per-op tier serves; a hyper-connection model's mixer inject rows and window panels bind as one range each and decline the seats past it, and a routed layer's hot expert pool binds each plane as one range and keeps its experts on the host past it; the tower driver (the vision and audio towers) binds a tower's gathered weights, its largest scratch buffer and canary's rel table as one range each, and declines `shape` past it; the TTS seats bind each weight slab and each scratch slot as one range and decline a slot past it (the Pocket codec's column slots at a long chunk)"),
+            rides = "one side of a whole-model driver's K/V mirror slab - a contiguous run of attention layers - binds as one range ({int(props.limits.maxStorageBufferRange >> 20u)} MiB here): every stream's region shares it, so the region count divides each stream's context, and the widest layer's rows bound it; a layer past it declines the driver and the per-op tier serves; a hyper-connection model's mixer inject rows and window panels bind as one range each and decline the seats past it, and a routed layer's hot expert pool binds each plane as one range and keeps its experts on the host past it; the tower driver (the vision and audio towers, the audio fronts and the VAD) binds a tower's gathered weights, its largest scratch buffer, canary's rel table and the VAD's slab as one range each, and declines `shape` past it; the transducer seat (`register_rnnt_gpu`'s Vulkan decode) binds its weight planes and per-clip planes as one range each, and declines `shape` past it; the TTS seats bind each weight slab and each scratch slot as one range and decline a slot past it (the Pocket codec's column slots at a long chunk)"),
         VkExtEntry(name = "maxComputeSharedMemorySize of 33024 B or more", present = props.limits.maxComputeSharedMemorySize >= 33024u,
             rides = "the 8192-float row slabs of the add+rms family and the prefill-attention prep ({int(props.limits.maxComputeSharedMemorySize)} B here); without them the deltanet and prefill-attention chains stay on the CPU rail"),
         VkExtEntry(name = "VK_NV_cooperative_vector", present = cooperative_vector_supported(phys),
@@ -1592,11 +1613,11 @@ def stack_plane_bytes(n, rows : int64; fmt : int) : tuple<wq : int64; ws : int64
 // build a VkStack shell (weight plane buffers only — the GEMV/cls scratch is lazy, see
 // ensure_gemv_scratch). Resident stacks pass their exact plane sizes; streaming pseudo-stacks
 // pass slot capacities and a base of -1 (re-based per layer).
-def make_stack_shell(base, elems : int64; fmt : int; wqcap, wscap : int64; xfer_shared : bool = false) : int {
+def make_stack_shell(base, elems : int64; fmt : int; wqcap, wscap : int64; xfer_shared : bool = false; per_call : bool = false) : int {
     let wswords = round_up(wscap, 4l)   // whole words: a byte-scale plane (mx4) is read four blocks a word
     var st = VkStack(base = base, elems = elems, fmt = fmt, wqbytes = wqcap,
-                     wqbuf = g_gpu.dry ? 0ul : make_device_buf(wqcap, xfer_shared),
-                     wsbuf = g_gpu.dry ? 0ul : make_device_buf(ws_floored(wswords), xfer_shared), wsbytes = wswords)
+                     wqbuf = g_gpu.dry ? 0ul : make_device_buf(wqcap, xfer_shared, false, per_call),
+                     wsbuf = g_gpu.dry ? 0ul : make_device_buf(ws_floored(wswords), xfer_shared, false, per_call), wsbytes = wswords)
     g_gpu.stacks |> push(st)
     return length(g_gpu.stacks) - 1
 }
@@ -2357,6 +2378,7 @@ def vk_moe_would_accept(n : int64; rows : int64; fmt : int; stream : bool) : boo
 
 //! MoeGpuUploadFn: upload one weight stack ([rows x n] at element offset woff) from the loader's
 //! gathered row-major planes. stream = pinned host mirror for per-prefill DMA instead of VRAM.
+[cold_path]
 def vk_moe_upload_stack(wq : uint8 const?; ws : uint8 const?; woff : int64; n : int64; rows : int64; fmt : int; stream : bool) : bool {
     if (!vk_moe_init()) {
         return false
@@ -2819,6 +2841,7 @@ def arena_reserve(fmt : int; cap_blocks : int64) : bool {
 //! Place one [rows x n] tensor in its format's arena and upload it. Returns the encoded block
 //! index the meta needs (see `arena_slab_idx`; regions carry the LOCAL half), or -1 if the arena
 //! is exhausted or one tensor exceeds a whole slab.
+[cold_path]
 def arena_place(wq : uint8 const?; ws : uint8 const?; n, rows : int64; fmt : int) : int64 {
     if (!key_exists(g_gpu.arenas, fmt)) {
         return -1l
@@ -4866,7 +4889,7 @@ def dat_key(woq : int64; fq : int) : int64 => woq * DAT_KEY_FMTS + int64(fq)
 def dat_layer_ensure(key, kvd : int64) {
     if (!key_exists(g_gpu.dat_layers, key)) {
         let bytes = DAT_MIRROR_ROWS * kvd * 2l
-        g_gpu.dat_layers |> insert(key, DatLayer(k_mir = make_device_buf(bytes), v_mir = make_device_buf(bytes), cnt = 0l))
+        g_gpu.dat_layers |> insert(key, DatLayer(k_mir = make_call_buf(bytes), v_mir = make_call_buf(bytes), cnt = 0l))
     }
 }
 
@@ -4909,8 +4932,8 @@ def ensure_batch_state {
         return
     }
     ensure_ffn_state()
-    g_gpu.batch_xq_dev = make_device_buf(BATCH_XQ_BYTES)
-    g_gpu.batch_xs_dev = make_device_buf(BATCH_XS_BYTES)
+    g_gpu.batch_xq_dev = make_call_buf(BATCH_XQ_BYTES)
+    g_gpu.batch_xs_dev = make_call_buf(BATCH_XS_BYTES)
     g_gpu.batch_y1_dev = make_device_buf(BATCH_Y_BYTES)
     g_gpu.batch_y2_dev = make_device_buf(BATCH_Y_BYTES)
     g_gpu.batch_y1 = make_host_buf(BATCH_Y_BYTES, true, [cached = true])

@@ -14,6 +14,9 @@ require dasllama/dasllama_math
 require dasllama/dasllama_layout
 require dasllama/dasllama_plane
 require dasllama/dasllama_whisper
+require dasllama/dasllama_rnnt
+require dasllama/dasllama_gigaam   // the CTC head's device seat
+require dasllama/dasllama_gpu_kernels_common   // GkRnntArgs and the transducer stamps' staged widths
 require dasllama/dasllama_vulkan_common
 require dasllama/dasllama_vulkan_classes
 require dasllama/dasllama_vulkan_tower
@@ -198,6 +201,9 @@ def private wd_decline(why : VulkanWdecDecline) : bool
 
 [cold_path]
 def private wd_dev_buf(bytes : int64) : uint64 => soft_device_buf(g_wd.oom, bytes)
+
+[cold_path]
+def private wd_call_buf(bytes : int64) : uint64 => soft_call_buf(g_wd.oom, bytes)
 
 [cold_path]
 def private wd_host_buf(bytes : int64; cached : bool) : HostBuf => soft_host_buf(g_wd.oom, bytes, cached)
@@ -458,8 +464,8 @@ def private wd_build(w : WhisperModel; key : uint64) : bool {
     r.vxr_dev = wd_dev_buf(z.bkx)
     r.kc_dev = wd_dev_buf(z.bkc)
     r.vc_dev = wd_dev_buf(z.bkc)
-    r.x_dev = wd_dev_buf(z.bx)
-    r.xq_dev = wd_dev_buf(z.bq)
+    r.x_dev = wd_call_buf(z.bx)
+    r.xq_dev = wd_call_buf(z.bq)
     r.xs_dev = wd_dev_buf(z.bs)
     r.qkv_dev = wd_dev_buf(3l * z.bx)
     r.cq_dev = wd_dev_buf(z.bx)
@@ -468,7 +474,7 @@ def private wd_build(w : WhisperModel; key : uint64) : bool {
     r.pms_dev = wd_dev_buf(z.bpms)
     r.py_dev = wd_dev_buf(z.bpy)
     r.logits_dev = wd_dev_buf(r.nvocab * 4l)
-    r.xin_dev = wd_dev_buf(z.bt)
+    r.xin_dev = wd_call_buf(z.bt)
     if (r.cm2) {
         r.xh_dev = wd_dev_buf((r.ta_tile_rows + TILE_READ_SLACK) * d * 2l)
         r.xkv_q_dev = wd_dev_buf(64l)
@@ -753,12 +759,674 @@ def private vulkan_whisper_decode(w : WhisperModel; var ds : DecoderState; toks 
     return true
 }
 
+// ===== the transducer greedy decode (parakeet, GigaAM's RNNT head) =====
+
+enum private VulkanRnntDecline {
+    knob     //! DASLLAMA_VK_RNNT=0, or set_vulkan_rnnt(false)
+    shape    //! a predictor or joint past the bodies' staged widths, a third layer, a duration table past the state's
+    device   //! the tier has no device, or a class failed to build
+    memory   //! a device or host allocation failed
+    overrun  //! the rounds ran past the clip's budget with the clip not done
+}
+
+//! the hazard bits of the transducer seat's buffers
+let private RV_ST = 0x1u
+let private RV_HB = 0x2u
+let private RV_CB = 0x4u
+let private RV_XIN = 0x8u
+let private RV_PRED = 0x10u
+let private RV_LG = 0x20u
+let private RV_TOKS = 0x40u
+let private RV_ENCP = 0x80u
+let private RV_ROWS = 0x100u
+
+//! The transducer seat's device objects: the weights laid once a model (`rnnt_dev_key`: the state's halves `wh` and joint columns
+//! `jw`, the slab `wf` at `lay`'s offsets, the encoder projection's f32 rows `wenc`), and the per-clip planes sized to the longest
+//! clip yet.
+struct private RvResident {
+    key : uint64
+    lay : RnntDevLayout
+    wh_dev : uint64
+    jw_dev : uint64
+    wf_dev : uint64
+    wenc_dev : uint64
+    wh_bytes : int64
+    jw_bytes : int64
+    wf_bytes : int64
+    wenc_bytes : int64
+    cap_frames : int64     //! the per-clip planes' frames
+    cap_shape : uint64     //! the net shape the per-clip planes are sized for
+    st_dev : uint64
+    hb_dev : uint64
+    cb_dev : uint64
+    xin_dev : uint64
+    pred_dev : uint64
+    lg_dev : uint64
+    toks_dev : uint64
+    encp_dev : uint64
+    rows_dev : uint64
+    host : HostBuf         //! the state words, then the token records
+    st_bytes : int64
+    hb_bytes : int64
+    cb_bytes : int64
+    xin_bytes : int64
+    pred_bytes : int64
+    lg_bytes : int64
+    toks_bytes : int64
+    encp_bytes : int64
+    rows_bytes : int64
+    s_gates : VkDescriptorSet
+    s_proj : VkDescriptorSet
+    s_joint : VkDescriptorSet
+    s_pick : VkDescriptorSet
+    oom : bool
+    served_said : bool
+    miss_said : bool       //! the handoff miss said: a projecting decode uploaded its rows
+}
+
+var private g_rv : RvResident
+var private @scratch g_rv_words : array<uint>   //! the token records read back
+var private g_rv_env = true
+var private g_rv_declines : VkDeclineCounter
+var private g_rv_decodes = 0l
+var private g_rv_handoffs = 0l
+var private g_rv_projects = 0l
+var private g_rv_rounds = 0l
+var private g_rv_steps = 0l
+var private g_rv_tokens = 0l
+var private g_rv_cbs = 0l
+var private g_rv_uploads = 0l   //! the weight uploads: one a model, again only where another net takes the seat
+var private g_rv_rate = 0.3lf   //! the rounds a frame the last served clip took: the first command buffer's estimate
+
+//! Engage counters: `decodes` served on the device, `handoffs` among them off the encode's device rows, `projects` among them
+//! projected on the device, `rounds` / `steps` the picks' rounds and predictor steps, `tokens`, `cbs` the command buffers,
+//! `uploads` the weight uploads, `declines` every decline but the knob's.
+def vulkan_rnnt_stats : tuple<decodes : int64; handoffs : int64; projects : int64; rounds : int64; steps : int64; tokens : int64; cbs : int64; uploads : int64; declines : int64> {
+    return (decodes = g_rv_decodes, handoffs = g_rv_handoffs, projects = g_rv_projects, rounds = g_rv_rounds, steps = g_rv_steps,
+        tokens = g_rv_tokens, cbs = g_rv_cbs, uploads = g_rv_uploads, declines = g_rv_declines.total - (g_rv_declines.counts?["{VulkanRnntDecline.knob}"] ?? 0l))
+}
+
+//! The transducer seat's declines-by-reason table (a copy), keyed by the decline's name, the knob's among them.
+def vulkan_rnnt_declines : table<string; int64> => <- clone_to_move(g_rv_declines.counts)
+
+//! Pin the transducer decode on the device on/off in-process (DASLLAMA_VK_RNNT's twin); answers the setting it replaced.
+def set_vulkan_rnnt(on : bool) : bool {
+    let was = g_rv_env
+    g_rv_env = on
+    return was
+}
+
+[cold_path]
+def private rv_decline(why : VulkanRnntDecline) : bool {
+    let words = (why == VulkanRnntDecline.knob ? "the transducer knob is off (DASLLAMA_VK_RNNT=0 or set_vulkan_rnnt(false))"
+        : why == VulkanRnntDecline.shape ? "a predictor, joint or duration table past the stamps' staged widths, or a buffer past the device's range"
+        : why == VulkanRnntDecline.memory ? VK_DECLINE_WORDS_MEMORY
+        : why == VulkanRnntDecline.overrun ? "the rounds ran past the clip's budget with the clip not done" : VK_DECLINE_WORDS_DEVICE)
+    return g_rv_declines |> note("the transducer decode", "{why}", "the decode stays on the CPU loop: {words}")
+}
+
+[cold_path]
+def private rv_dev_buf(bytes : int64) : uint64 => soft_device_buf(g_rv.oom, bytes)
+
+[cold_path]
+def private rv_call_buf(bytes : int64) : uint64 => soft_call_buf(g_rv.oom, bytes)
+
+[cold_path]
+def private rv_release_scratch {
+    var r & = g_rv
+    release_device_buf(r.st_dev)
+    release_device_buf(r.hb_dev)
+    release_device_buf(r.cb_dev)
+    release_device_buf(r.xin_dev)
+    release_device_buf(r.pred_dev)
+    release_device_buf(r.lg_dev)
+    release_device_buf(r.toks_dev)
+    release_device_buf(r.encp_dev)
+    release_device_buf(r.rows_dev)
+    if (r.host.buf != 0ul) {
+        destroy_host_buf(r.host)
+    }
+    r.host = HostBuf()
+    r.cap_frames = 0l
+    r.cap_shape = 0ul
+}
+
+[cold_path]
+def private rv_release {
+    var r & = g_rv
+    rv_release_scratch()
+    release_device_buf(r.wh_dev)
+    release_device_buf(r.jw_dev)
+    release_device_buf(r.wf_dev)
+    release_device_buf(r.wenc_dev)
+    rv_forget()
+}
+
+//! the handles forgotten (the model drop's sweep destroys the objects); the next served decode uploads again and says its
+//! declines afresh
+[cold_path]
+def private rv_forget {
+    g_rv = RvResident()
+    g_rv_declines |> unsay("the transducer decode")
+}
+
+//! Release every device object the transducer seat owns (the tests' leak rail and the model-switch seat).
+def vulkan_rnnt_shutdown {
+    rv_release()
+}
+
+//! the weights laid once a weight plane, as the Metal seat lays them
+def private rv_attach(net : RnntNet; s : RnntState; enc : RnntEnc) : bool {
+    let key = rnnt_dev_key(net, enc)
+    return true if (g_rv.key == key && g_rv.wh_dev != 0ul)
+    return rv_attach_build(net, s, enc, key)
+}
+
+//! a new net's weights uploaded under `key`, the old seat released and its said declines forgotten
+[cold_path]
+def private rv_attach_build(net : RnntNet; s : RnntState; enc : RnntEnc; key : uint64) : bool {
+    var r & = g_rv
+    rv_release()
+    r.oom = false
+    r.lay = rnnt_dev_layout(net)
+    var inscope wf <- rnnt_dev_slab(net, s, enc, r.lay)
+    r.wh_bytes = r.lay.wh_halves * 2l
+    r.jw_bytes = r.lay.jw_halves * 2l
+    r.wf_bytes = long_length(wf) * 4l
+    r.wenc_bytes = enc.q8 ? 0l : net.joint_dim * enc.d * 4l
+    if (!vk_range_ok(max(max(r.wh_bytes, r.wf_bytes), max(r.jw_bytes, r.wenc_bytes)))) {
+        return rv_decline(VulkanRnntDecline.shape)
+    }
+    r.wh_dev = rv_dev_buf(r.wh_bytes)
+    r.jw_dev = rv_dev_buf(r.jw_bytes)
+    r.wf_dev = rv_dev_buf(r.wf_bytes)
+    r.wenc_dev = enc.q8 ? 0ul : rv_dev_buf(r.wenc_bytes)
+    r.oom = r.oom || rnnt_dev_faulted(RnntDevFault.memory)
+    if (r.oom) {
+        rv_release()
+        return rv_decline(VulkanRnntDecline.memory)
+    }
+    upload_region_at(r.wh_dev, 0l, unsafe(addr<uint8 const?>(s.wh[0])), r.wh_bytes)
+    upload_region_at(r.jw_dev, 0l, unsafe(addr<uint8 const?>(s.joint_wt[0])), r.jw_bytes)
+    upload_region_at(r.wf_dev, 0l, unsafe(addr<uint8 const?>(wf[0])), r.wf_bytes)
+    if (!enc.q8) {
+        upload_region_at(r.wenc_dev, 0l, unsafe(reinterpret<uint8 const?>(plane_at(net.blob, enc.w))), r.wenc_bytes)
+    }
+    r.key = key
+    g_rv_uploads++
+    return true
+}
+
+//! the per-clip planes for `n_frames` (a whole 64-frame step past the largest clip yet) and the round's four sets
+def private rv_scratch(net : RnntNet; n_frames, n_logits, d : int64) : bool {
+    let shape = hash_combine64(hash_combine64(uint64(net.pred_dim), uint64(net.joint_dim)),
+        hash_combine64(uint64(net.n_layers), hash_combine64(uint64(n_logits), uint64(d))))
+    return true if (g_rv.cap_frames >= n_frames && g_rv.cap_shape == shape && g_rv.st_dev != 0ul)
+    return rv_scratch_build(net, n_frames, n_logits, d, shape)
+}
+
+[cold_path]
+def private rv_scratch_build(net : RnntNet; n_frames, n_logits, d : int64; shape : uint64) : bool {
+    var r & = g_rv
+    let pd = net.pred_dim
+    let jd = net.joint_dim
+    rv_release_scratch()
+    let cap = (n_frames + 63l) / 64l * 64l
+    r.st_bytes = int64(GK_RNNT_ST_WORDS) * 4l
+    r.hb_bytes = 2l * net.n_layers * pd * 4l
+    r.cb_bytes = net.n_layers * pd * 4l
+    r.xin_bytes = pd * 4l
+    r.pred_bytes = jd * 4l
+    r.lg_bytes = int64(GK_RNNT_FRAMES) * rnnt_joint_blocks(n_logits) * RNNT_JOINT_BLOCK * 4l
+    r.toks_bytes = rnnt_dev_cap(net, cap) * int64(GK_RNNT_TOK_WORDS) * 4l
+    r.encp_bytes = cap * jd * 4l
+    r.rows_bytes = cap * d * 4l
+    if (!vk_range_ok(max(max(r.toks_bytes, r.lg_bytes), max(r.encp_bytes, r.rows_bytes)))) {
+        return rv_decline(VulkanRnntDecline.shape)
+    }
+    r.oom = false
+    r.st_dev = rv_call_buf(r.st_bytes)
+    r.hb_dev = rv_call_buf(r.hb_bytes)
+    r.cb_dev = rv_call_buf(r.cb_bytes)
+    r.xin_dev = rv_call_buf(r.xin_bytes)
+    r.pred_dev = rv_dev_buf(r.pred_bytes)
+    r.lg_dev = rv_dev_buf(r.lg_bytes)
+    r.toks_dev = rv_dev_buf(r.toks_bytes)
+    r.encp_dev = rv_call_buf(r.encp_bytes)
+    r.rows_dev = d > 0l ? rv_call_buf(r.rows_bytes) : 0ul   //! a net with no encoder half has no rows, and a 0-byte buffer faults the driver
+    r.host = soft_host_buf(r.oom, max(r.st_bytes + r.toks_bytes, r.hb_bytes + r.cb_bytes + r.xin_bytes), true)
+    if (r.oom) {
+        rv_release_scratch()
+        return rv_decline(VulkanRnntDecline.memory)
+    }
+    r.s_gates = set_rnnt_gates_cls(fixed_array(r.st_dev, r.wh_dev, r.wf_dev, r.xin_dev, r.hb_dev, r.cb_dev),
+        fixed_array(r.st_bytes, r.wh_bytes, r.wf_bytes, r.xin_bytes, r.hb_bytes, r.cb_bytes), fixed_array(RV_ST, 0u, 0u, RV_XIN, RV_HB, RV_CB))
+    r.s_proj = set_rnnt_proj_cls(fixed_array(r.st_dev, r.wh_dev, r.wf_dev, r.hb_dev, r.pred_dev),
+        fixed_array(r.st_bytes, r.wh_bytes, r.wf_bytes, r.hb_bytes, r.pred_bytes), fixed_array(RV_ST, 0u, 0u, RV_HB, RV_PRED))
+    r.s_joint = set_rnnt_joint_cls(fixed_array(r.st_dev, r.encp_dev, r.wf_dev, r.pred_dev, r.jw_dev, r.lg_dev),
+        fixed_array(r.st_bytes, r.encp_bytes, r.wf_bytes, r.pred_bytes, r.jw_bytes, r.lg_bytes), fixed_array(RV_ST, RV_ENCP, 0u, RV_PRED, 0u, RV_LG))
+    r.s_pick = set_rnnt_pick_cls(fixed_array(r.st_dev, r.lg_dev, r.wf_dev, r.xin_dev, r.toks_dev),
+        fixed_array(r.st_bytes, r.lg_bytes, r.wf_bytes, r.xin_bytes, r.toks_bytes), fixed_array(RV_ST, RV_LG, 0u, RV_XIN, RV_TOKS))
+    r.cap_frames = cap
+    r.cap_shape = shape
+    return true
+}
+
+//! The clip's start uploaded: the state words (the first round's predictor step asked, the duration table), the hidden pair and
+//! the cells zeroed, the first input - zeros, or the blank's embedding row.
+def private rv_state_init(net : RnntNet) {
+    var r & = g_rv
+    rnnt_dev_state_words(net, unsafe(reinterpret<uint?>(r.host.mapped)))
+    upload_region_at(r.st_dev, 0l, unsafe(reinterpret<uint8 const?>(r.host.mapped)), r.st_bytes)
+    unsafe {
+        var zp = reinterpret<float?>(r.host.mapped)
+        for (i in range64((r.hb_bytes + r.cb_bytes) / 4l)) {
+            zp[i] = 0.0
+        }
+        rnnt_dev_first_input(net, zp + (r.hb_bytes + r.cb_bytes) / 4l)
+        let hp = reinterpret<uint8 const?>(r.host.mapped)
+        upload_region_at(r.hb_dev, 0l, hp, r.hb_bytes)
+        upload_region_at(r.cb_dev, 0l, hp + r.hb_bytes, r.cb_bytes)
+        upload_region_at(r.xin_dev, 0l, hp + r.hb_bytes + r.cb_bytes, r.xin_bytes)
+    }
+}
+
+//! A round's dispatches: each layer's gates, joint.pred's projection, the joint window, the pick.
+def private rv_round(raw : VkCommandBuffer; var h : VkHaz; net : RnntNet; ka : GkRnntArgs; n_logits : int64) {
+    var r & = g_rv
+    for (l in range64(net.n_layers)) {
+        var kl = rnnt_dev_layer_args(ka, r.lay, l)
+        enc_rnnt_gates_cls(raw, h, r.s_gates, kl, (net.pred_dim + 7l) / 8l)
+    }
+    var kr = ka
+    enc_rnnt_proj_cls(raw, h, r.s_proj, kr, (net.joint_dim + 7l) / 8l)
+    enc_rnnt_joint_cls(raw, h, r.s_joint, kr, rnnt_joint_blocks(n_logits) * 4l)
+    enc_rnnt_pick_cls(raw, h, r.s_pick, kr, 1l)
+}
+
+//! a projecting decode that found no encode rows of its generation on the device uploads them; said once a seat, by reason
+[cold_path]
+def private rv_handoff_miss_say(gen : uint64) {
+    g_rv.miss_said = true
+    let why = gen == 0ul ? "the session recorded no device encode" : "another seat ran since the encode, or the rows are another clip's"
+    to_log(LOG_INFO, "dasLLAMA vulkan rnnt: the decode uploads its encoder rows - {why}\n")
+}
+
+[cold_path]
+def private rv_announce(pd, jd, n_logits : int64) {
+    g_rv.served_said = true
+    to_log(LOG_INFO, "dasLLAMA vulkan rnnt: the transducer decode serves on the device (pred {pd}, joint {jd}, {n_logits} logits)\n")
+}
+
+//! Whether the Vulkan seat projects a lane's encoder half: the f32 plane's, through the exact f32 tile.
+def private vulkan_rnnt_projects(enc : RnntEnc) : bool => g_rv_env && !enc.q8
+
+//! The transducer's greedy decode on the device, the Metal seat's form on the Vulkan stamps: the joint's encoder projection off
+//! the encode's own device rows (the exact f32 tile) or the family's projection uploaded, then command buffers of rounds until
+//! the pick marks the clip done; the state words read back a command buffer, the token records once.
+[hot_path, arch(at="../ARCHITECTURE_MEDIA_ASR.md#rnnt-device-decode")]
+def private vulkan_rnnt_greedy(net : RnntNet; var s : RnntState; enc : RnntEnc; x, encp : array<float>; n_frames : int64;   // nolint:STYLE038 — the dispatch chain is the shape
+                               @scratch var toks : array<RnntToken>) : bool {
+    if (!g_rv_env) {
+        return rv_decline(VulkanRnntDecline.knob)
+    }
+    let jd = net.joint_dim
+    let d = enc.d
+    let n_logits = rnnt_n_logits(net)
+    let projects = !enc.q8
+    if (!rnnt_dev_shape_ok(net, enc, 1l)) {
+        return rv_decline(VulkanRnntDecline.shape)
+    }
+    if (!vulkan_tower_arms() || !ensure_rnnt_gates_cls() || !ensure_rnnt_proj_cls() || !ensure_rnnt_joint_cls() || !ensure_rnnt_pick_cls()
+            || (projects && !ensure_f32_gemm_cls()) || rnnt_dev_faulted(RnntDevFault.device)) {
+        return rv_decline(VulkanRnntDecline.device)
+    }
+    if (!rv_attach(net, s, enc) || !rv_scratch(net, max(n_frames, 1l), n_logits, d)) {
+        return false
+    }
+    if (n_frames <= 0l) {
+        g_rv_decodes++
+        return true
+    }
+    var r & = g_rv
+    rv_state_init(net)
+    var rows_dev = 0ul
+    var handoff = false
+    if (projects) {
+        rows_dev = vulkan_tower_fc_rows(enc.gen, n_frames * d * 4l)
+        handoff = rows_dev != 0ul
+        if (!handoff) {
+            if (!r.miss_said) {
+                rv_handoff_miss_say(enc.gen)
+            }
+            upload_region_at(r.rows_dev, 0l, unsafe(addr<uint8 const?>(x[0])), n_frames * d * 4l)
+            rows_dev = r.rows_dev
+        }
+    } else {
+        upload_region_at(r.encp_dev, 0l, unsafe(addr<uint8 const?>(encp[0])), n_frames * jd * 4l)
+    }
+    var s_enc : VkDescriptorSet
+    if (projects) {
+        s_enc = set_f32_gemm_cls(fixed_array(r.wenc_dev, rows_dev, r.encp_dev), fixed_array(r.wenc_bytes, n_frames * d * 4l, r.encp_bytes),
+            fixed_array(0u, RV_ROWS, RV_ENCP))
+    }
+    var pc_enc = F32GemmArgs(n = uint(d), d = uint(jd), rows = uint(n_frames), woff = 0u, wstride = uint(d), boff = 0u, xoff = 0u, xstride = uint(d),
+        yoff = 0u, ystride = uint(jd))
+    let ka = rnnt_dev_args(net, r.lay, n_frames, projects)
+    let run = rnnt_dev_rounds(net, n_frames, unsafe(reinterpret<uint const?>(r.host.mapped)), g_rv_rate) $(rounds : int64; first : bool) : bool {
+        vt_chain_one_shot("rnnt decode", net.n_layers, n_frames) $(raw : VkCommandBuffer; var h : VkHaz) {   //! a failed submit panics in the chain's own check
+            if (first && projects) {
+                enc_f32_gemm_cls(raw, h, s_enc, pc_enc, f32_gemm_wgs(n_frames, jd))
+            }
+            for (_r in range64(rounds)) {
+                rv_round(raw, h, net, ka, n_logits)
+            }
+            vhz_dep(raw, h, RV_ST, 0u, true)
+            cmd_copy_range(raw, r.st_dev, 0l, r.host.buf, 0l, r.st_bytes)
+        }
+        return true
+    }
+    g_rv_cbs += run.cbs
+    if (!run.ok) {
+        return rv_decline(VulkanRnntDecline.overrun)
+    }
+    let ntok = run.p.ntok
+    g_rv_words |> resize(ntok * int(GK_RNNT_TOK_WORDS))
+    if (ntok > 0) {
+        readback_range(r.toks_dev, RV_TOKS, r.host, unsafe(addr<float?>(g_rv_words[0])), long_length(g_rv_words) * 4l)
+        rnnt_dev_land_tokens(unsafe(addr<uint const?>(g_rv_words[0])), ntok, toks)
+    }
+    if (!r.served_said) {
+        rv_announce(net.pred_dim, jd, n_logits)
+    }
+    g_rv_decodes++
+    g_rv_tokens += int64(ntok)
+    g_rv_rounds += run.p.rounds
+    g_rv_steps += run.p.steps
+    if (projects) {
+        g_rv_projects++
+    }
+    if (handoff) {
+        g_rv_handoffs++
+    }
+    return true
+}
+
+// ===== GigaAM's CTC head: the head GEMM over the head's own plane and the pick =====
+
+enum private VulkanCtcDecline {
+    knob     //! the tower knob is off (DASLLAMA_VK_TOWER=0, or set_vulkan_tower(false))
+    shape    //! d off the f16 GEMM's 64-wide K lattice, no frames, or a buffer past the device's range
+    device   //! the tier has no device, a class failed to build, or an f16 head on a device with no f16 GEMM tile
+    memory   //! a device or host allocation failed
+}
+
+//! the hazard bits of the CTC seat's buffers
+let private CV_ROWS = 0x1u
+let private CV_XH = 0x2u
+let private CV_LG = 0x4u
+let private CV_PK = 0x8u
+
+//! The CTC seat's device objects: the head's planes laid once a model (`key`: the f16 head's padded halfword rows off ``wblob``,
+//! or the f32 head's rows off ``blob``, and the bias row), and the per-clip planes sized to the longest clip yet.
+struct private CvResident {
+    key : uint64
+    w_dev : uint64
+    b_dev : uint64
+    w_bytes : int64
+    b_bytes : int64
+    cap_frames : int64
+    cap_shape : uint64
+    rows_dev : uint64      //! the encoder rows uploaded where no device encode of their generation is held
+    xh_dev : uint64        //! the f16 head's half feed, [cap + TILE_READ_SLACK][d]
+    lg_dev : uint64        //! the head GEMM's rows [cap][ncp]
+    pk_dev : uint64        //! a frame's record [cap][2]: the class, plog's bits
+    host : HostBuf
+    rows_bytes : int64
+    xh_bytes : int64
+    lg_bytes : int64
+    pk_bytes : int64
+    oom : bool
+    served_said : bool
+    miss_said : bool
+}
+
+var private g_cv : CvResident
+var private g_cv_declines : VkDeclineCounter
+var private g_cv_heads = 0l      //! CTC heads served on the device
+var private g_cv_handoffs = 0l   //! ... among them off the encode's own device rows
+var private g_cv_uploads = 0l
+
+//! Engage counters: `heads` served on the device, `handoffs` among them off the encode's device rows, `uploads` the head
+//! uploads, `declines` every decline but the knob's.
+def vulkan_ctc_stats : tuple<heads : int64; handoffs : int64; uploads : int64; declines : int64> {
+    return (heads = g_cv_heads, handoffs = g_cv_handoffs, uploads = g_cv_uploads,
+        declines = g_cv_declines.total - (g_cv_declines.counts?["{VulkanCtcDecline.knob}"] ?? 0l))
+}
+
+//! The CTC seat's declines-by-reason table (a copy), keyed by the decline's name, the knob's among them.
+def vulkan_ctc_declines : table<string; int64> => <- clone_to_move(g_cv_declines.counts)
+
+[cold_path]
+def private cv_decline(why : VulkanCtcDecline) : bool {
+    let words = (why == VulkanCtcDecline.knob ? VK_DECLINE_WORDS_TOWER_KNOB
+        : why == VulkanCtcDecline.shape ? "d off the f16 GEMM's 64-wide lattice, no frames, or a buffer past the device's range"
+        : why == VulkanCtcDecline.memory ? VK_DECLINE_WORDS_MEMORY : VK_DECLINE_WORDS_DEVICE)
+    return g_cv_declines |> note("the CTC head", "{why}", "the head stays on the CPU: {words}")
+}
+
+[cold_path]
+def private cv_release_scratch {
+    var r & = g_cv
+    release_device_buf(r.rows_dev)
+    release_device_buf(r.xh_dev)
+    release_device_buf(r.lg_dev)
+    release_device_buf(r.pk_dev)
+    if (r.host.buf != 0ul) {
+        destroy_host_buf(r.host)
+    }
+    r.host = HostBuf()
+    r.cap_frames = 0l
+    r.cap_shape = 0ul
+}
+
+[cold_path]
+def private cv_release {
+    cv_release_scratch()
+    release_device_buf(g_cv.w_dev)
+    release_device_buf(g_cv.b_dev)
+    cv_forget()
+}
+
+//! the handles forgotten (the model drop's sweep destroys the objects); the next served head uploads again
+[cold_path]
+def private cv_forget {
+    g_cv = CvResident()
+    g_cv_declines |> unsay("the CTC head")
+}
+
+//! Release every device object the CTC seat owns (the tests' leak rail and the model-switch seat).
+def vulkan_ctc_shutdown {
+    cv_release()
+}
+
+//! the head's padded rows: the f16 head's `ncp` halfword rows (the zero pad rows the mint wrote among them), or the f32 head's
+//! `nc` rows
+def private cv_head_n(m : GigaamModel) : int64 => (m.ctc_f16 ? round_up(m.n_classes, GIGAAM_CTC_ROW_TILE) : m.n_classes) * m.d_model
+
+//! the head's planes uploaded once a model, as the image holds them
+def private cv_attach(m : GigaamModel) : bool {
+    let nw = cv_head_n(m)
+    var key = hash_combine64(m.ctc_f16 ? intptr(unsafe(reinterpret<void?>(m.wblob.p))) : intptr(unsafe(reinterpret<void?>(m.blob.p))),
+        hash_combine64(uint64(m.ctc_w), uint64(m.ctc_b)))
+    key = hash_combine64(key, hash_combine64(uint64(nw), uint64(m.n_classes)))
+    return true if (g_cv.key == key && g_cv.w_dev != 0ul)
+    return cv_attach_build(m, key, nw)
+}
+
+[cold_path]
+def private cv_attach_build(m : GigaamModel; key : uint64; nw : int64) : bool {
+    var r & = g_cv
+    cv_release()
+    r.oom = false
+    r.w_bytes = nw * (m.ctc_f16 ? 2l : 4l)
+    r.b_bytes = m.n_classes * 4l
+    if (!vk_range_ok(r.w_bytes)) {
+        return cv_decline(VulkanCtcDecline.shape)
+    }
+    r.w_dev = soft_device_buf(r.oom, r.w_bytes)
+    r.b_dev = soft_device_buf(r.oom, r.b_bytes)
+    if (r.oom) {
+        cv_release()
+        return cv_decline(VulkanCtcDecline.memory)
+    }
+    if (m.ctc_f16) {
+        upload_region_at(r.w_dev, 0l, unsafe(reinterpret<uint8 const?>(plane_at(m.wblob, m.ctc_w))), r.w_bytes)
+    } else {
+        upload_region_at(r.w_dev, 0l, unsafe(reinterpret<uint8 const?>(plane_at(m.blob, m.ctc_w))), r.w_bytes)
+    }
+    upload_region_at(r.b_dev, 0l, unsafe(reinterpret<uint8 const?>(plane_at(m.blob, m.ctc_b))), r.b_bytes)
+    r.key = key
+    g_cv_uploads++
+    return true
+}
+
+//! the per-clip planes for `n_frames` (a whole 64-frame step past the largest clip yet)
+def private cv_scratch(n_frames, ncp, d : int64; f16 : bool) : bool {
+    let shape = hash_combine64(hash_combine64(uint64(ncp), uint64(d)), uint64(f16 ? 1 : 0))
+    return true if (g_cv.cap_frames >= n_frames && g_cv.cap_shape == shape && g_cv.lg_dev != 0ul)
+    return cv_scratch_build(n_frames, ncp, d, f16, shape)
+}
+
+[cold_path]
+def private cv_scratch_build(n_frames, ncp, d : int64; f16 : bool; shape : uint64) : bool {
+    var r & = g_cv
+    cv_release_scratch()
+    let cap = (n_frames + 63l) / 64l * 64l
+    r.rows_bytes = cap * d * 4l
+    r.xh_bytes = f16 ? (cap + TILE_READ_SLACK) * d * 2l : 0l
+    r.lg_bytes = cap * ncp * 4l
+    r.pk_bytes = cap * 2l * 4l
+    if (!vk_range_ok(max(r.rows_bytes, r.lg_bytes))) {
+        return cv_decline(VulkanCtcDecline.shape)
+    }
+    r.oom = false
+    r.rows_dev = soft_call_buf(r.oom, r.rows_bytes)
+    r.xh_dev = f16 ? soft_device_buf(r.oom, r.xh_bytes) : 0ul
+    r.lg_dev = soft_device_buf(r.oom, r.lg_bytes)
+    r.pk_dev = soft_device_buf(r.oom, r.pk_bytes)
+    r.host = soft_host_buf(r.oom, r.pk_bytes, true)
+    if (r.oom) {
+        cv_release_scratch()
+        return cv_decline(VulkanCtcDecline.memory)
+    }
+    r.cap_frames = cap
+    r.cap_shape = shape
+    return true
+}
+
+//! a head that found no encode rows of its generation on the device uploads them; said once a seat, by reason
+[cold_path]
+def private cv_handoff_miss_say(gen : uint64) {
+    g_cv.miss_said = true
+    let why = gen == 0ul ? "the session recorded no device encode" : "another seat ran since the encode, or the rows are another clip's"
+    to_log(LOG_INFO, "dasLLAMA vulkan ctc: the head uploads its encoder rows - {why}\n")
+}
+
+[cold_path]
+def private cv_announce(nc, d : int64; f16 : bool) {
+    g_cv.served_said = true
+    to_log(LOG_INFO, "dasLLAMA vulkan ctc: the CTC head serves on the device ({nc} classes over {d}, {f16 ? "the f16 GEMM over the carrier's halfwords" : "the f32 tile"})\n")
+}
+
+//! GigaAM's CTC head as ONE command buffer on the Vulkan stamps (`#gigaam-planes`): the encode's device rows by generation (else
+//! ``st.x`` uploaded), the head GEMM over its own plane, then the pick (`CtcPick`) - each frame's biased argmax and plog read
+//! back into ``st.picks`` / ``st.plogs``. False declines.
+[hot_path, arch(at="../ARCHITECTURE_MEDIA_ASR.md#gigaam-planes")]
+def private vulkan_gigaam_ctc(m : GigaamModel; var st : GigaamState; n_frames : int64) : bool {
+    if (!vulkan_tower_on()) {
+        return cv_decline(VulkanCtcDecline.knob)
+    }
+    let d = m.d_model
+    let nc = m.n_classes
+    let ncp = round_up(nc, GIGAAM_CTC_ROW_TILE)
+    let f16 = m.ctc_f16
+    if (n_frames < 1l || d % 64l != 0l || long_length(st.x) < n_frames * d) {
+        return cv_decline(VulkanCtcDecline.shape)
+    }
+    let khr = f16_gemm_khr()
+    if (!vulkan_tower_arms() || !ensure_ctc_pick_cls() || (f16 ? !(f16_gemm_on() && ensure_tower_clamp_cvt_cls() && f16_gemm_ensure(khr))
+            : !ensure_f32_gemm_cls())) {
+        return cv_decline(VulkanCtcDecline.device)
+    }
+    if (!cv_attach(m) || !cv_scratch(n_frames, ncp, d, f16)) {
+        return false
+    }
+    let r & = g_cv
+    let bx = n_frames * d * 4l
+    var rows_dev = vulkan_tower_fc_rows(st.enc_gen, bx)
+    let handoff = rows_dev != 0ul
+    if (!handoff) {
+        if (!r.miss_said) {
+            cv_handoff_miss_say(st.enc_gen)
+        }
+        upload_region_at(r.rows_dev, 0l, unsafe(addr<uint8 const?>(st.x[0])), bx)
+        rows_dev = r.rows_dev
+    }
+    var s_pick = set_ctc_pick_cls(fixed_array(r.lg_dev, r.b_dev, r.pk_dev), fixed_array(r.lg_bytes, r.b_bytes, r.pk_bytes), fixed_array(CV_LG, 0u, CV_PK))
+    var pc_pick = GkCtcPickArgs(nc = uint(nc), ldl = uint(ncp), boff = 0u)
+    let pk_n = n_frames * 2l * 4l
+    if (f16) {
+        var s_cvt = set_tower_clamp_cvt_cls(fixed_array(rows_dev, r.xh_dev), fixed_array(bx, r.xh_bytes), fixed_array(CV_ROWS, CV_XH))
+        var s_mm = f16_gemm_set(khr, fixed_array(r.w_dev, r.xh_dev, r.lg_dev), fixed_array(r.w_bytes, r.xh_bytes, r.lg_bytes), fixed_array(0u, CV_XH, CV_LG))
+        var pc_cvt = gk_f16_rows_args(uint(n_frames * d))
+        var pc_mm = F16GemmArgs(n = uint(d), d = uint(nc), rows = uint(n_frames), woff = 0u, ybase = 0u, ystride = uint(ncp), ksplit = 0u)
+        vt_chain_one_shot("gigaam ctc", 1l, n_frames) $(raw : VkCommandBuffer; var h : VkHaz) {
+            enc_tower_clamp_cvt_cls(raw, h, s_cvt, pc_cvt, (n_frames * d / 4l + 255l) / 256l)
+            f16_gemm_enc(khr, raw, h, s_mm, pc_mm, n_frames, nc)
+            enc_ctc_pick_cls(raw, h, s_pick, pc_pick, n_frames)
+            vhz_dep(raw, h, CV_PK, 0u, true)
+            cmd_copy_range(raw, r.pk_dev, 0l, r.host.buf, 0l, pk_n)
+        }
+    } else {
+        var s_mm = set_f32_gemm_cls(fixed_array(r.w_dev, rows_dev, r.lg_dev), fixed_array(r.w_bytes, bx, r.lg_bytes), fixed_array(0u, CV_ROWS, CV_LG))
+        var pc_mm = F32GemmArgs(n = uint(d), d = uint(nc), rows = uint(n_frames), woff = 0u, wstride = uint(d), boff = 0u, xoff = 0u, xstride = uint(d),
+            yoff = 0u, ystride = uint(ncp))
+        vt_chain_one_shot("gigaam ctc", 1l, n_frames) $(raw : VkCommandBuffer; var h : VkHaz) {
+            enc_f32_gemm_cls(raw, h, s_mm, pc_mm, f32_gemm_wgs(n_frames, nc))
+            enc_ctc_pick_cls(raw, h, s_pick, pc_pick, n_frames)
+            vhz_dep(raw, h, CV_PK, 0u, true)
+            cmd_copy_range(raw, r.pk_dev, 0l, r.host.buf, 0l, pk_n)
+        }
+    }
+    unsafe {
+        let pp = reinterpret<uint const?>(r.host.mapped)
+        for (t in range64(n_frames)) {
+            st.picks[t] = int(pp[2l * t])
+            st.plogs[t] = reinterpret<float>(pp[2l * t + 1l])
+        }
+    }
+    if (!r.served_said) {
+        cv_announce(nc, d, f16)
+    }
+    g_cv_heads++
+    if (handoff) {
+        g_cv_handoffs++
+    }
+    return true
+}
+
 [init]
 def dasllama_vulkan_asr_dec_register {
     g_wd_env = g_env_vulkan.vk_wdec
+    g_rv_env = g_env_vulkan.vk_rnnt
     register_vk_drop_hook(@@wd_forget)
+    register_vk_drop_hook(@@rv_forget)
+    register_vk_drop_hook(@@cv_forget)
     static_if (!typeinfo builtin_module_exists(das_metal)) {
         register_whisper_cross_kv_gpu(@@vulkan_whisper_cross_kv)
         register_whisper_decode_gpu(@@vulkan_whisper_decode)
+        register_rnnt_gpu(@@vulkan_rnnt_greedy, @@vulkan_rnnt_projects)
+        register_gigaam_gpu_ctc(@@vulkan_gigaam_ctc)
     }
 }

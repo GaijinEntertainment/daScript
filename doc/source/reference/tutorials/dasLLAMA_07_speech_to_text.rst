@@ -13,20 +13,22 @@ dasLLAMA transcribes speech through one uniform surface: a single loader that
 sniffs the file format, one verb set, and a ``caps()`` call that tells you what
 the loaded model honestly supports. No family names appear in the API — the
 same program runs a whisper.cpp bin, a Qwen3-ASR (or Qwen3-Omni) GGUF pair, a
-Gemma-4 E-series GGUF pair, a Canary-Qwen decoder + "CNRY" bin, or a
-Parakeet-TDT bin.
+Gemma-4 E-series GGUF pair, a Canary-Qwen decoder + "CNRY" bin, a
+Parakeet-TDT bin, or a GigaAM v3 GGUF (Russian).
 
 Run it with any supported model and a 16 kHz mono PCM16 WAV::
 
    daslang.exe -jit tutorials/dasLLAMA/07_speech_to_text.das -- ggml-tiny.bin jfk.wav
    daslang.exe -jit ... -- Qwen3-ASR-0.6B-Q8_0.gguf mmproj-Qwen3-ASR-0.6B-bf16.gguf jfk.wav
    daslang.exe -jit ... -- ggml-parakeet-tdt-0.6b-v2-f32.bin jfk.wav
+   daslang.exe -jit ... -- gigaam-v3-e2e-rnnt-f16.gguf russian_clip.wav
 
 One loader, sniffed formats
 ===========================
 
 ``load_asr_model`` looks at the file, not the filename: a ggml bin routes to
-whisper or Parakeet by its vocabulary size; a GGUF decoder takes its audio
+whisper or Parakeet by its vocabulary size; a GGUF whose architecture is
+``gigaam`` is the whole model in one file; any other GGUF decoder takes its audio
 front end as a second path — itself sniffed (a Qwen3-ASR/Qwen3-Omni AuT
 mmproj, a Gemma-4 Conformer mmproj, or a Canary-Qwen "CNRY" bin). A prepared
 ``.dlim`` image loads by either route and routes on its baked family tag. A

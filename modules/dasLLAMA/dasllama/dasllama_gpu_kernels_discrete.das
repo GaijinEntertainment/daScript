@@ -314,7 +314,7 @@ class template Q8GemvT {
                 let ws = float(wsh[wb0 + b])
                 let xs = axs[xb0 + b]
                 if (lane % 2u == 0u) {
-                    acc += float(idot) * ws * xs
+                    acc = mad(float(idot) * ws, xs, acc)
                 }
                 bi0 += bpp
             }
@@ -323,7 +323,7 @@ class template Q8GemvT {
                 if (b < nb) {
                     let idot = q8_pair_dot(wq4[(wb0 + bi0) * 2u + lane], xq4[(xb0 + bi0) * 2u + lane])
                     if (lane % 2u == 0u) {
-                        acc += float(idot) * float(wsh[wb0 + b]) * axs[xb0 + b]
+                        acc = mad(float(idot) * float(wsh[wb0 + b]), axs[xb0 + b], acc)
                     }
                 }
                 bi0 += bpp
@@ -384,12 +384,12 @@ class template Q8GemvNT {
                             let i1 = q8_pair_dot(wq4[(wb0 + nb + bi0) * 2u + lane], xv)
                             if (lane % 2u == 0u) {
                                 let xs = axs[xb + b]
-                                acc0[c] += float(i0) * ws0 * xs
-                                acc1[c] += float(i1) * float(wsh[wb0 + nb + b]) * xs
+                                acc0[c] = mad(float(i0) * ws0, xs, acc0[c])
+                                acc1[c] = mad(float(i1) * float(wsh[wb0 + nb + b]), xs, acc1[c])
                             }
                         } else {
                             if (lane % 2u == 0u) {
-                                acc0[c] += float(i0) * ws0 * axs[xb + b]
+                                acc0[c] = mad(float(i0) * ws0, axs[xb + b], acc0[c])
                             }
                         }
                     }
@@ -495,7 +495,7 @@ class template Q8GemvArT : GkResidualRow {
                 let ws = float(wsh[wb0 + b])
                 let xs = axs[pa.xblk + b]
                 if (lane % 2u == 0u) {
-                    acc += float(idot) * ws * xs
+                    acc = mad(float(idot) * ws, xs, acc)
                 }
                 bi0 += bpp
             }
@@ -505,7 +505,7 @@ class template Q8GemvArT : GkResidualRow {
                     let xbase = (pa.xblk + bi0) * 8u + lane * 4u
                     let idot = q8_pair_dot(wq4[(wb0 + bi0) * 2u + lane], uint4(xqw[xbase], xqw[xbase + 1u], xqw[xbase + 2u], xqw[xbase + 3u]))
                     if (lane % 2u == 0u) {
-                        acc += float(idot) * float(wsh[wb0 + b]) * axs[pa.xblk + b]
+                        acc = mad(float(idot) * float(wsh[wb0 + b]), axs[pa.xblk + b], acc)
                     }
                 }
                 bi0 += bpp
@@ -1189,7 +1189,7 @@ def kq_grid_words() : array<uint> {
 
 //! the codebook and grid formats: a block's decode gathers, so a lane wants more blocks in flight than the k-lattice's
 def gemv_grid_fmt(fmt : int) : bool =>
-    fmt == int(KqFmt.iq2s) || fmt == int(KqFmt.iq2xs) || fmt == int(KqFmt.iq2xxs) || fmt == int(KqFmt.iq3xxs) || fmt == int(KqFmt.iq4xs) || fmt == int(KqFmt.iq4nl) || fmt == int(KqFmt.iq3s4)
+    fmt == int(KqFmt.iq2s) || fmt == int(KqFmt.iq2xs) || fmt == int(KqFmt.iq2xxs) || fmt == int(KqFmt.iq3xxs) || fmt == int(KqFmt.iq4xs) || fmt == int(KqFmt.iq4nl) || fmt == int(KqFmt.iq3s4) || fmt == int(KqFmt.nv4)
 
 [arch(at="../ARCHITECTURE_GPU_SHARED_GEMM.md#kq-gemv-lanes")]
 def gemv_lanes_per_row(fmt : int; n : int64) : uint {
@@ -2594,33 +2594,16 @@ struct ArgmaxArgs {
     vocab : uint
 }
 
-//! the pick's fold, shared by the two passes: a workgroup's first maximum over its threads' candidates - the subgroups'
-//! maxes, then the lowest id among the lanes holding the widest (every thread returns the same answer)
+//! the pick's fold, shared by the two passes: a workgroup's first maximum over its threads' candidates (`wg_argmax_into`; every
+//! thread returns the same answer)
 [ |> template_struct_instance]
-class template ClsArgmaxBase {
-    @workgroup wm : float[32]   //! a subgroup's max: 256 threads make eight at the tier's subgroup floor of 32, thirty-two at a subgroup of 8
-    @workgroup wi : uint[32]
-
+class template ClsArgmaxBase : GkWgArgmax {
     def lane_val(v : float) : float => sel_lane_val(v)
 
     def fold(m : float; mi : uint) : uint {
-        let sm = subgroupMax(m)
-        let si = subgroupMin(m == sm ? mi : 0xFFFFFFFFu)
-        if (gl_SubgroupInvocationID == 0u) {
-            wm[gl_SubgroupID] = sm
-            wi[gl_SubgroupID] = si
-        }
-        barrier()
-        var bm = wm[0]
-        var bi = wi[0]
-        var sg = 1u
-        while (sg < gl_NumSubgroups) {
-            if (wm[sg] > bm || (wm[sg] == bm && wi[sg] < bi)) {
-                bm = wm[sg]
-                bi = wi[sg]
-            }
-            sg++
-        }
+        var bm = 0.0
+        var bi = 0u
+        wg_argmax_into(m, mi, bm, bi)
         return bi
     }
 }

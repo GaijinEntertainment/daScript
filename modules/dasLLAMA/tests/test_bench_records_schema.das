@@ -213,7 +213,7 @@ def test_asr_catalog_invariants(t : T?) {
         // the Metal-rail roster: metal_served decides which rows get GPU board cells and
         // which reference legs pair GPU-vs-GPU, so a silent flip re-lanes the public board
         let metal_families <- {"Parakeet-TDT v2", "Parakeet-TDT v3", "Whisper tiny", "Whisper large-v3-turbo", "Canary-Qwen 2.5B",
-                               "Qwen3-ASR-0.6B", "Gemma-4 E2B audio", "Qwen3-Omni-30B audio"}
+                               "Qwen3-ASR-0.6B", "Gemma-4 E2B audio", "Qwen3-Omni-30B audio", "GigaAM v3 e2e-RNNT"}
         for (spec in cat) {
             if (!empty(spec.libri_short)) {
                 libriCount++

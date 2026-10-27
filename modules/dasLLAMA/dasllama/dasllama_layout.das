@@ -1247,6 +1247,69 @@ def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice
     }
 }
 
+// ===== the VAD's device weight slab =====
+
+//! The element offsets of the VAD's tensors in its one weight slab, the layout both GPU drivers upload.
+struct VadSlabOffs {
+    stft : int64
+    c1w : int64
+    c1b : int64
+    c2w : int64
+    c2b : int64
+    c3w : int64
+    c3b : int64
+    c4w : int64
+    c4b : int64
+    ih : int64
+    hh : int64
+    lb : int64
+    fw : int64
+    fb : int64
+}
+
+//! `src` appended to the slab, answering its element offset
+def private sv_slab_put(var slab : array<float>; src : array<float>) : int64 {
+    let off = long_length(slab)
+    slab |> push_from(src)
+    return off
+}
+
+//! `src` [rows][cols] appended to the slab transposed, [cols][rows], answering its element offset
+def private sv_slab_put_t(var slab : array<float>; src : array<float>; rows, cols : int64) : int64 {
+    var t : array<float>
+    transpose_ct(src, rows, cols, t)
+    return sv_slab_put(slab, t)
+}
+
+//! a VAD model's tensors end to end into `m.slab` and the slab's FNV-1a hash: the STFT basis [stft_ch][nfft] and the
+//! LSTM's two weight planes [4 hidden][hidden] transposed (k-major, so a kernel's lanes read consecutive output rows),
+//! each conv in its load-time [cin][3][cout] layout. `m` is `dasllama_vad`'s `VadModel`, which requires this file.
+def vad_build_slab(var m : auto(VadT); stft_ch, nfft, hidden : int64) {
+    m.slab |> clear()
+    var o : VadSlabOffs   // nolint:STYLE013 — each offset is the slab's length after the put before it: a constructor's argument order is undefined
+    o.stft = sv_slab_put_t(m.slab, m.stft, stft_ch, nfft)
+    o.c1w = sv_slab_put(m.slab, m.conv1_w)
+    o.c1b = sv_slab_put(m.slab, m.conv1_b)
+    o.c2w = sv_slab_put(m.slab, m.conv2_w)
+    o.c2b = sv_slab_put(m.slab, m.conv2_b)
+    o.c3w = sv_slab_put(m.slab, m.conv3_w)
+    o.c3b = sv_slab_put(m.slab, m.conv3_b)
+    o.c4w = sv_slab_put(m.slab, m.conv4_w)
+    o.c4b = sv_slab_put(m.slab, m.conv4_b)
+    o.ih = sv_slab_put_t(m.slab, m.lstm_ih, 4l * hidden, hidden)
+    o.hh = sv_slab_put_t(m.slab, m.lstm_hh, 4l * hidden, hidden)
+    o.lb = sv_slab_put(m.slab, m.lstm_b)
+    o.fw = sv_slab_put(m.slab, m.final_w)
+    o.fb = long_length(m.slab)
+    m.slab |> push(m.final_b)
+    m.slab_offs = o
+    var h = 0xcbf29ce484222325ul
+    for (v in m.slab) {
+        h = (h ^ uint64(unsafe(reinterpret<uint>(v)))) * 0x100000001b3ul
+    }
+    m.slab_key = h
+}
+
 // ===== hook registration (the loader in dasllama_common reaches back through these) =====
 
 [init]

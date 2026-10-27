@@ -13,7 +13,7 @@ options _dasllama_internal = true
 // plane copy - the served size, L2-warm across the chain - so the row reads the dispatch's own floor past its
 // bytes at the streaming rate (the decode's small planes pay it once per GEMV).
 // ATTRIBUTION SWEEP - the `cols` mode: the N-column ruler, every format the batched decode step serves (q8 and the
-// thirteen kq leaves) at their served lanes, the one-column class beside the N-column class at 1, 2, 4 and 8 activation rows,
+// fifteen kq leaves) at their served lanes, the one-column class beside the N-column class at 1, 2, 4 and 8 activation rows,
 // each dispatch's wall attributed to its class and width; the last column is the N-column dispatch's wall over N
 // one-column dispatches - under 1 the weight pass is shared, at 1 it is not. The chain alternates two output planes,
 // so consecutive dispatches overlap as the batched step's do. The q8 rows engage the row-pair stamps
@@ -239,7 +239,7 @@ def main : int {
         cols_ruler(n, d)
         return 0
     }
-    let fmts = fixed_array(KqFmt.k4, KqFmt.q40, KqFmt.k5, KqFmt.k6, KqFmt.iq4xs, KqFmt.iq3s4, KqFmt.k3, KqFmt.iq3s, KqFmt.iq3xxs, KqFmt.iq4nl, KqFmt.k2, KqFmt.iq2s, KqFmt.iq2xs, KqFmt.iq2xxs)
+    let fmts = fixed_array(KqFmt.k4, KqFmt.q40, KqFmt.k5, KqFmt.k6, KqFmt.iq4xs, KqFmt.iq3s4, KqFmt.k3, KqFmt.iq3s, KqFmt.iq3xxs, KqFmt.iq4nl, KqFmt.k2, KqFmt.iq2s, KqFmt.iq2xs, KqFmt.iq2xxs, KqFmt.nv4)
     for (f in fmts) {
         verify(gemv_cls_ensure(int(f)), "vk_gemv_probe: every kq gemv class rail must engage on a live device")
     }

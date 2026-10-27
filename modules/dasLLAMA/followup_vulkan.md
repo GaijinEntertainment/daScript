@@ -2189,3 +2189,21 @@ module) is independent and can land any time - it is pure structure.
     CUDA cubin cache takes), passed by the two helpers, its bytes written at quit; a blob the driver does not recognize
     starts empty. Measure first: `g_vkd_pipe_build_us` cold (the vendor cache cleared) against warm. Done = a model's
     first load on a cleared vendor cache within 10% of its warm load's pipeline build share.
+
+161. **The Vulkan encode chains add the k bias to every key row, which no attention score can see.** A bias `b` on
+    every key adds `q . b` to each score of a query's row - one constant across the row, which the softmax removes -
+    so the k half of the biased head restride (`vt_enc_pad_b`'s k offset under `vt_ln_chain`'s `k_bias`, and the
+    FastConformer chains' k bias) is dead work on every block. The work: pass `-1l` for the k offset on every chain,
+    drop the k bias from the chain's offsets record, and keep the CPU form unchanged (the twin compares outputs, which
+    do not move past rounding). Done = the encode twins on the pod within their bars with the k bias gone, and the
+    block's restride pass timed before and after on one family.
+
+162. **No Vulkan driver on Apple Silicon exposes a cooperative matrix, so every KHR tile and flash-tile cell needs a
+    remote NVIDIA or RDNA box.** MoltenVK and KosmicKrisp (Mesa, `src/kosmickrisp`, MIT) both lack
+    `VK_KHR_cooperative_matrix`; with it, the M5 runs the KHR arms' cells locally. The work goes into KosmicKrisp, not
+    MoltenVK (whose route is a hand-written SPIRV-Cross mapping): first expose the extension through Mesa's generic
+    cooperative-matrix lowering (the per-lane arrays lavapipe serves it with), which makes the cells correct; then lower
+    the NIR cooperative-matrix intrinsics onto Metal's `simdgroup_matrix` in KosmicKrisp's shader backend for speed. The
+    subgroup is 32, which the KHR arms require. First step: build Mesa with KosmicKrisp on the M5, confirm its compiler
+    path, and enable the lowering. NV's coopmat2 (the cm2 arms) stays NVIDIA-only. Done = `test_vulkan_kernels`' KHR tile
+    cells and the KHR flash cells pass on the M5 under KosmicKrisp, upstreamed as a Mesa merge request.

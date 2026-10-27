@@ -2,7 +2,8 @@
 
 Companion to `ARCHITECTURE_GPU_TOWER.md`; a section is cited by its anchor. This document
 carries the Vulkan tower driver's row classes and attention routes, its encode chains, and the
-Vulkan ASR-decoder driver; the StyleTTS2 and Pocket seats are `ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md`. The
+Vulkan ASR-decoder driver; the StyleTTS2 and Pocket seats are `ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md`, the
+FastConformer chain's rotary form (GigaAM) `ARCHITECTURE_GPU_TOWER_VULKAN_FC.md`. The
 Metal sections cited - the attention routes (`ARCHITECTURE_GPU_TOWER.md#tower-attn-routes`) and
 the encode chain's shape (`ARCHITECTURE_GPU_TOWER.md#tower-encode-chains`) - stay in that file.
 
@@ -110,7 +111,7 @@ the chain runs it (the vision tails, the projector tails of gemma4a and of the c
   macaron halves as the post-add class with a half residual weight, the clamped GEMM sites as the arm's feed
   (the clamp + halfword store on the cm2 feed, the clamp-requant on the mul_mm tiles), the tile and the output
   clamp where the site's calibration record is live (`vt_mm_clamped`, the device twin of the CPU's
-  `g4a_mm_clamped`; canary's chain rides it with no clamp record, as its CPU `cn_mm_rq` has none), the chunk-12
+  `g4a_mm_clamped`; canary's chain rides it with no clamp record, as its CPU `tower_mm_rq` has none), the chunk-12
   relative-position attention in its own class with the query's per-dim scale and the key scale folded in, the
   conv module's GLU and causal depthwise taps as row classes. The RPE table rides the resident's rel quartet
   and its projection is a 13-row batch GEMM on its own set.
@@ -208,7 +209,12 @@ model drop's sweep tells the driver to forget its handles through `register_vk_d
 per-encode scratch is sized to the canvas and grown when a taller one arrives; every batch
 schedule of an encode sits in one meta buffer sized by the encode (a record and a map a
 dispatch), so nothing the command reads moves under it; the batch tile's variant is picked per
-output width - d, ff and qwen3v's fused 3d can each pick a different tile.
+output width - d, ff and qwen3v's fused 3d can each pick a different tile. A scratch builder records its capacity
+only after `vk_range_ok` passes: a range decline releases the buffers it was growing, and a capacity set above the check
+lets the next call skip the rebuild and dispatch into freed memory. `REVIEW.das`'s `check_vk_scratch_cap_order` finds a
+capacity field (`cap`, `cap_*`, `*_cap`, `*_cap_*`) set non-zero above a `vk_range_ok` call in a `dasllama_vulkan*`
+function; a `*_dev` field (a buffer handle, not a capacity) and a reset to zero (which forces the rebuild) claim no
+released buffer, so the check skips them.
 
 The declines: `quant_mode` on an exact-lane tower (or the bf16 twin), `shape` off the tile's head
 sizes, past the row cap (`VT_MAX_ENCODE_ROWS`; the canary chain reads the range instead), or with

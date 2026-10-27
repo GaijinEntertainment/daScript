@@ -9,11 +9,14 @@ require math
 
 // Speech-to-text over the uniform ASR surface: any audio format miniaudio decodes goes in,
 // segments come out. load_asr_model sniffs the file format — stock ggerganov/whisper.cpp
-// ggml-*.bin files (timestamped segments; --lang auto detects the language), or a Qwen3-ASR
-// GGUF decoder + its mmproj (one segment, the model reports the language; --context biases).
+// ggml-*.bin files (timestamped segments; --lang auto detects the
+// language), a one-file GGUF (GigaAM, Russian), or a Qwen3-ASR GGUF
+// decoder + its mmproj (one segment, the model reports the language;
+// --context biases).
 //
-//   bin/daslang -jit examples/dasLLAMA/transcribe.das -- <ggml-model.bin> <audio-file>
-//                    [--lang <code>] [--translate] [--no-timestamps]
+//   bin/daslang -jit examples/dasLLAMA/transcribe.das --
+//       <ggml-model.bin | gigaam.gguf> <audio-file>
+//       [--lang <code>] [--translate] [--no-timestamps]
 
 def pad2(v : int64) => v < 10l ? "0{v}" : "{v}"
 
@@ -58,14 +61,14 @@ def main {
         }
         i++
     }
-    if (empty(model_path) || empty(audio_path) || (ends_with(model_path, ".gguf") && empty(mmproj_path))) {
-        print("usage: daslang -jit examples/dasLLAMA/transcribe.das -- <ggml-model.bin | decoder.gguf mmproj.gguf> <audio-file> [--lang <code>] [--context <text>] [--translate] [--no-timestamps]\n")
+    let paired = !empty(model_path) && asr_needs_mmproj(model_path)
+    if (empty(model_path) || empty(audio_path) || (paired && empty(mmproj_path))) {
+        let models = "<ggml-model.bin | gigaam.gguf | decoder.gguf mmproj.gguf>"
+        let flags = "[--lang <code>] [--context <text>] [--translate] [--no-timestamps]"
+        let script = "examples/dasLLAMA/transcribe.das"
+        print("usage: daslang -jit {script} -- {models} <audio-file> {flags}\n")
         return
     }
-    if (empty(lang)) {
-        lang = ends_with(model_path, ".gguf") ? "auto" : "en"
-    }
-
     print("loading {model_path}\n")
     var w <- (empty(mmproj_path) ? load_asr_model(model_path) : load_asr_model(model_path, mmproj_path))
     allow_cpu_prefill()   // CPU inference, said explicitly — on a Mac, set_metal_mode(MetalMode.when_available) picks the GPU rails instead

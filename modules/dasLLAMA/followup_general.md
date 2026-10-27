@@ -1743,16 +1743,6 @@
     `-jit` script keeps HEAD), and `gen_bench_records` refuses a mint whose exe carries a dirty
     stamp or whose HEAD moved since the exe was built.
 
-165. **The TTS tests to fix at the end of the Metal-gaps arc, after its dedup pass.**
-   `tests/test_storyteller_restart.das`'s cell "a restart while the speech thread is still
-   loading its model skips the replaced story's queued sentences" is red on master (the same red
-   with the tower pinned off and on a master worktree): its premise - a speech thread starved
-   while the story is written, so a restart at frame 100 finds queued sentences to skip - no
-   longer holds on this box, and the cell asserts a skip that never comes. Done = the cell
-   constructs the starvation it asserts (a synthesis slowed under the test's control, or a
-   restart placed by the witness lines rather than a frame count), and the tts area runs green
-   through `tests/run.das -- --area tts`.
-
 167. **A sampler arm on `benchmarks/lcpp_bench.das`'s tg row.** The bench's only sampler knob
     is `--mtp-temp`, a temperature alone, so no board row holds a sampled decode rate and the
     candidate-list sampler's `PERF_LEDGER.md` entry reads its rates off `dasllama-cli`'s stats
@@ -2437,3 +2427,16 @@
     discrete template the CUDA home stamps too, so the stamp is both homes' work. Done = the KHR branch walking the head
     in 32-wide quarters where 96 asks it (six fragments over four subgroups), the `test_vkd_fa_khr` arms at 96 holding
     the oracle, and the stamp joining `FA_STAMPS` beside the cm2 pair.
+
+248. **The GigaAM v3 ASR cell and its CrispASR and ONNX references hold no board row.** The catalog row `GigaAM v3
+    e2e-RNNT` (`performance/profile_common.das`) pairs the das cell with two `crispasr` references and the `onnx-asr`
+    int8 export (`ARCHITECTURE_MEASUREMENT_AUDIO.md#asr-cpu-references`, `#asr-gpu-pairs`) over three model files:
+    `gigaam-v3-e2e-rnnt-f16.gguf` (the das carrier and the first CrispASR reference), `gigaam-v3-e2e-rnnt-q8_0.gguf`
+    (`crispasr-quantize` beside it) and the `gigaam-v3-e2e-rnnt-int8` export `onnx_bench.py` loads; the CrispASR
+    references run the Metal OFF and ON builds at `CRISPASR_COMMIT`, the onnx one the rig's `.venv-onnx`, and the das
+    cell `DAS_TUNE_MANIFEST` at the box's profile with `DAS_TUNE_POLICY` unset. No `performance/records/<box>.json`
+    carries any of them. The 2026-10-25 `PERF_LEDGER.md` GigaAM entry holds the M5's figures. Done = the release
+    re-mint runs `performance/gen_bench_records.das -- --workload asr -o GigaAM` with the release's rig exe on every
+    board box that can mint the cell - the das `cpu/tuned` row everywhere, the `metal` row and the `crispasr` Metal
+    reference on the Apple boxes, the `crispasr` CPU and `onnx` references wherever `setup_asr_rig --refs --venvs`
+    builds them - and puts each row beside the ledger entry's figure in its own dated entry.

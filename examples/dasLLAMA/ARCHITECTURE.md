@@ -36,7 +36,7 @@ checklist is `REVIEW.md` beside this file. The engine these programs drive is do
 - `chat.das`, `run.das`, `speak.das`, `speak_server.das`, `transcribe.das`, `dictate.das`,
   `audio_chat.das` - desktop-only programs over the facade; nothing here ships them to a page.
 
-## 2. Definitions
+## 2. Definitions {#definitions}
 
 - **A browser example** is a folder with a `web_shell.html`, wherever under `examples/` it sits: `daspkg release
   wasm` builds it to wasm64 for dasllama.io from the same `main.das` the desktop run uses. The
@@ -72,7 +72,12 @@ Speech runs on its own thread so the frame loop never blocks on synthesis. The f
 pushes its requests into a stream as archived records (a sentence for the story examples; for
 parrot a text to say or a take to clone, the PCM riding in the record) and pops finished clips
 from a second stream; a `SeqBox` carries the number of the story (parrot: the say) being told, so
-a queued sentence of one the user replaced is skipped instead of synthesized. The thread's own
+a queued sentence of one the user replaced is skipped instead of synthesized; the storyteller's
+shutdown publishes a number past every story, so the sentences still queued are skipped and the
+thread reaches its stop line without synthesizing them. The storyteller's thread starts reading requests only once
+its start gate opens (`g_speech_gate`, a channel the thread joins after its setup): the frame thread opens it at once,
+except under `--hold-speech`, where the first story's restart or its end opens it, so every sentence said before then
+is still queued when the thread reads; shutdown opens it too, so a thread held shut still reaches its stop line. The thread's own
 setup - the TTS model path and the voice - rides the same request stream ahead of the first
 request, and so does an engine knob the runtime keeps per context: the frame thread cannot reach
 the speech thread's copy of one, so it sends the value and the thread sets it on itself. Parrot's
@@ -91,7 +96,7 @@ activation scratch back once (`tts_release_scratch`) and waits again, so an idle
 model and the voices and not the last run's rows - the browser tab's budget is what a phone
 runs out of - and the next request grows the scratch back for a few milliseconds of allocation.
 
-### 3.3 Input is polled
+### 3.3 Input is polled {#input-is-polled}
 
 Every browser example reads its input inside its own frame. One on the imgui harness (sec.3.7),
 which every example is today, reads ImGui's key and mouse state there - `IsKeyPressed` edge-detects.
@@ -111,7 +116,7 @@ that box is the picture - so a shell sizes the canvas element to the letterboxed
 (`max-width`/`max-height` on the replaced element) instead of stretching it over the stage with
 `object-fit`.
 
-### 3.4 The model set is minted for the build that ships it
+### 3.4 The model set is minted for the build that ships it {#model-set-minted}
 
 Each browser example's `models.json` names its source files by Hugging Face repository, file
 and sha256, in three lists: `images` (a GGUF the build bakes into a `.dlim`), `packs` (a
@@ -210,7 +215,7 @@ output waveform keeps a fixed time scale
 (thirty seconds at least) so the playhead moves at one speed while chunks land. The chords are Ctrl (or Command) with Enter to say and with R
 to record and stop.
 
-### 3.8 The library's two backends
+### 3.8 The library's two backends {#library-two-backends}
 
 `library/dasllama_lib.das` is built by both standalone backends from the one source, and the
 difference decides what a host can do with it. `daslang -lib` jits it into a native shared

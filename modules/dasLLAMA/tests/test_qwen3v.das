@@ -17,6 +17,7 @@ require ?vulkan dasllama/dasllama_vulkan_tower
 require dasllama/dasllama_common   // set_metal_tensor_crowns - the f16-route cell's crown pin
 require _vision_oracle   // the mtmd dump parser, fixture generators, per-token compare
 require math   // nolint:STYLE030,LINT019 — used only inside the GPU static_if arms; the no-GPU lane sees it unused
+require _f32_tile_pin   // with_reference_f32_tile - the q8 legs' bars are measured at the tile's reference order
 require _tower_twin   // set_every_gpu_tower, the Vulkan twin's seat and instrument
 
 // Tier-1 qwen3v tower parity vs llama-mtmd-debug -p encode (the Omni-30B SigLIP-geometry ViT).
@@ -41,9 +42,14 @@ let private TIER1_REL = 1.5e-2
 // lands at 6.9-9.7 on the same probes, 600x this bar)
 let private TIER1_REL_DS = 4e-2
 
-// x token rms - the q8 serving lane vs the f32 oracle: measured 0.42 x rms worst (gray448) -
-// the qwen ViT's mid-network outlier channels roughly double gemma3v's 0.22-0.25 q8 floor.
-// The zero-layer poison leg proves the bar still discriminates; the caption is the product gate.
+// x token rms - the q8 serving lane vs the f32 oracle, both q8 legs measured at the fp32 batch tile's
+// reference permutation (with_reference_f32_tile): the q8 requant turns any change in the fp32 GEMMs'
+// summation order into a different draw of the q8 noise, and the low-rms gray448 fixture's worst token
+// reads 0.48 / 0.76 / 0.82 / 0.84 x rms under the row nest, the reference tile, the M5's crowned tile
+// and DAS_TUNE_POLICY=reference (the exact lane holds 1.5e-2 under all of them). The bar covers the
+// spread; the qwen ViT's mid-network outlier channels put it far above gemma3v's 0.22-0.25 q8 floor.
+// The zero-layer poison leg proves the bar still discriminates (2.7 x rms on gray448); the caption is
+// the product gate.
 // the Metal tower legs: the f32 mulmm stages f16 tiles (the gemma3v precedent, its own
 // TIER1_REL_GPU = 4e-2), so the GPU chain's floor runs ~6x the CPU chain's on the low-rms
 // uniform fixtures - measured 8.9e-3 worst on the Omni (gray448). The deepstack leg reads
@@ -54,13 +60,14 @@ let private TIER1_REL_DS = 4e-2
 let private TIER1_REL_GPU = 4e-2
 let private TIER1_REL_GPU_DS = 8e-2
 
-let private TIER1_REL_Q8 = 5.2e-1
+let private TIER1_REL_Q8 = 1.0
 // the deepstack q8 leg reads tap slices SAMPLED MID-NETWORK (blocks 5/11/17), where the q8
-// outlier noise arrives unwashed by the final post-LN: cb fixtures measure 0.51 x rms; the
+// outlier noise arrives unwashed by the final post-LN: cb448 measures 0.645 x rms under the
+// reference tile and the row nest, 0.66 under the M5's crowned tile; the
 // uniform gray fixture measures 7.9 x rms on the q1/q2/q3 slice probes and stays on the EXACT
 // lane's set only - the zeroed-slices decoder control in test_vision_chat is the gate that
 // proves the served slices still carry their signal
-let private TIER1_REL_Q8_DS = 6.5e-1
+let private TIER1_REL_Q8_DS = 8.2e-1
 
 def private gate_encode(t : T?; tw : Qwen3vTower; var st : Qwen3vState; kind : string; w, h : int; logname : string;
                         rel : float = TIER1_REL) : bool {
@@ -354,9 +361,11 @@ def test_qwen3v_tier1_q8(t : T?) {
         var st = Qwen3vState()
         tt |> success(tw.q8, "q8 lane loaded")
         tt |> equal(int(tw.ff_pad), 4352, "ffn served at the layout's padded width")
-        tt |> gate_encode(tw, st, "gray", 448, 448, "encode.gray448.log", TIER1_REL_Q8)
-        tt |> gate_encode(tw, st, "cb", 448, 448, "encode.cb448.log", TIER1_REL_Q8)
-        tt |> gate_encode(tw, st, "cb", 96, 96, "encode.cb96.log", TIER1_REL_Q8)
+        with_reference_f32_tile(tt) {
+            tt |> gate_encode(tw, st, "gray", 448, 448, "encode.gray448.log", TIER1_REL_Q8)
+            tt |> gate_encode(tw, st, "cb", 448, 448, "encode.cb448.log", TIER1_REL_Q8)
+            tt |> gate_encode(tw, st, "cb", 96, 96, "encode.cb96.log", TIER1_REL_Q8)
+        }
         // negative control: layer 13's qblob region zeroed through the staging planes (the
         // gemma4v knockout shape) must red the same fixture on the same bar
         var o = OracleEncode()
@@ -372,8 +381,10 @@ def test_qwen3v_tier1_q8(t : T?) {
             mint_qwen3v_tower(pst, ptw)
             let planes <- make_planes("gray", 448, 448)
             var pout : array<float>
-            with_dasllama_jobque_() {
-                qwen3v_encode(ptw, st, planes, 448l, 448l, pout)
+            with_reference_f32_tile(tt) {
+                with_dasllama_jobque_() {
+                    qwen3v_encode(ptw, st, planes, 448l, 448l, pout)
+                }
             }
             let excess = encode_excess(pout, int(qwen3v_row_width(ptw)), o, TIER1_ABS, TIER1_REL_Q8)
             to_log(LOG_INFO, "qwen3v q8 poison leg: zero layer 13 -> excess {excess} over the bar\n")
@@ -468,8 +479,10 @@ def test_qwen3v_tier1_q8_deepstack(t : T?) {
         set_every_gpu_tower(false)
         var st = Qwen3vState()
         tt |> success(tw.q8, "q8 lane loaded")
-        tt |> gate_encode(tw, st, "cb", 448, 448, "encode4b.cb448.log", TIER1_REL_Q8_DS)
-        tt |> gate_encode(tw, st, "cb", 96, 96, "encode4b.cb96.log", TIER1_REL_Q8_DS)
+        with_reference_f32_tile(tt) {
+            tt |> gate_encode(tw, st, "cb", 448, 448, "encode4b.cb448.log", TIER1_REL_Q8_DS)
+            tt |> gate_encode(tw, st, "cb", 96, 96, "encode4b.cb96.log", TIER1_REL_Q8_DS)
+        }
         // negative control for THIS bar: the same zero-layer knockout must red it (tap 1's
         // block, so the poison hits both the main path and a served slice)
         var o = OracleEncode()
@@ -485,8 +498,10 @@ def test_qwen3v_tier1_q8_deepstack(t : T?) {
             mint_qwen3v_tower(pst, ptw)
             let planes <- make_planes("cb", 448, 448)
             var pout : array<float>
-            with_dasllama_jobque_() {
-                qwen3v_encode(ptw, st, planes, 448l, 448l, pout)
+            with_reference_f32_tile(tt) {
+                with_dasllama_jobque_() {
+                    qwen3v_encode(ptw, st, planes, 448l, 448l, pout)
+                }
             }
             let excess = encode_excess(pout, int(qwen3v_row_width(ptw)), o, TIER1_ABS, TIER1_REL_Q8_DS)
             to_log(LOG_INFO, "qwen3v deepstack q8 poison leg: zero the tap-1 block -> excess {excess} over the bar\n")

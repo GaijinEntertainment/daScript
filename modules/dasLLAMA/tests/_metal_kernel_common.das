@@ -41,8 +41,6 @@ def dispatch_64_lanes(t : T?; queue; tag : string; pso; total : int; blk : block
     return ran
 }
 
-def sigmoid_d(x : double) : double => 1.0lf / (1.0lf + exp(-x))
-
 def silu_d(x : double) : double => x * sigmoid_d(x)
 
 //! One Metal kernel cell's planes: each plane's buffer, bytes, element base and live run, and for a plane the kernels write

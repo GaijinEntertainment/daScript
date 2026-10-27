@@ -16,7 +16,6 @@ require daslib/apply
 require daslib/archive
 require dasllama/dasllama_env
 require dasllama/dasllama_math
-require dasllama/dasllama_gpu_math
 require dasllama/dasllama_gguf
 require dasllama/dasllama_plane public   // PlaneF — the borrowed weight planes; re-exported so requirers can delete an encoder
 require dasllama/dasllama_asr_types public   // TranscribeSegment/AsrCaps — the shared ASR floor
@@ -37,10 +36,6 @@ require dasllama/dasllama_image
 // (set_asr_fp32); oracle = NeMo SALM greedy (harness/canary_qwen_expected.tsv).
 
 let CANARY_MAGIC = 0x59524e43u   // "CNRY"
-// Attention slab height in rows: 4-aligned (the gemm_f32 row-group invariant) and tall
-// enough that the Kᵀ/pos panel re-streams stay a few percent of the gemm time (the
-// parakeet twin's measured B).
-let private CN_ATN_BLOCK = 64l
 // Decode budget, mirroring the NeMo reference arm (canary_qwen_bench.py --max-new-tokens 256).
 // Uncapped, a missed EOS on out-of-envelope audio (trained: 40 s / 1024 tokens) decodes to
 // ctx-full — the cell then times runaway length, not ASR speed.
@@ -48,25 +43,6 @@ let private CN_MAX_NEW = 256l
 let private CN_PREEMPH = 0.97
 let private CN_HOP = 160l
 let private CN_MEL_FLOOR = 5.960464477539063e-08lf   // 2^-24 (the log zero guard)
-
-//! Per-layer weight offsets inside ``blob`` (biases carried on every projection — the
-//! parakeet delta). ``bn_w``/``bn_b`` become fold scale/shift at load (BN + depthwise bias).
-struct CanaryLayerOffs {
-    nf1_w : int64; nf1_b : int64
-    ff1a_w : int64; ff1a_b : int64; ff1b_w : int64; ff1b_b : int64
-    nat_w : int64; nat_b : int64
-    q_w : int64; q_b : int64; k_w : int64; k_b : int64
-    v_w : int64; v_b : int64; o_w : int64; o_b : int64
-    pos_w : int64; bias_u : int64; bias_v : int64
-    ncv_w : int64; ncv_b : int64
-    pw1_w : int64; pw1_b : int64
-    dw_w : int64; dw_b : int64
-    bn_w : int64; bn_b : int64; bn_mean : int64; bn_var : int64
-    pw2_w : int64; pw2_b : int64
-    nf2_w : int64; nf2_b : int64
-    ff2a_w : int64; ff2a_b : int64; ff2b_w : int64; ff2b_b : int64
-    nout_w : int64; nout_b : int64
-}
 
 //! Loaded canary encoder: hparams, mel filterbank + STFT window from the bin, the FastConformer
 //! weights (all fp32 in one ``blob``), and the projector into the decoder embedding space.
@@ -98,7 +74,7 @@ struct CanaryEncoder {
     proj_w : int64; proj_b : int64
     // Q8 fast path (default load): Q8_0 image of the GEMM regions, transcoded straight from
     // the bin and repacked for the active backend. GEMM offset fields index qblob on a q8
-    // load, blob on fp32 — cn_mm is the only sanctioned route through them.
+    // load, blob on fp32 — tower_mm is the only sanctioned route through them.
     q8 : bool
     qblob : PlaneI8 = PlaneI8()
     qscales : PlaneF = PlaneF()
@@ -206,14 +182,8 @@ def private serialize_image_meta(var arch : Archive; var st : CanaryStaging) {
     serialize_image_meta(arch, st.e)
 }
 
-// staging owns its plane bytes outright — every array here is heap, none is borrowed
 def finalize(var st : CanaryStaging) {
-    apply(st) $ [unused_argument(name)] (name : string; var field) {
-        static_if (typeinfo is_array(field)) {
-            delete field
-        }
-    }
-    delete st.e
+    delete_staging(st)
 }
 
 [unused_argument(st)]
@@ -236,7 +206,6 @@ struct CanaryState {
     padded : array<float>
     xw : array<float>
     reim : array<float>
-    power : array<float>
     // conv scratch
     col : array<float>
     y0 : array<float>
@@ -249,7 +218,6 @@ struct CanaryState {
     x : array<float>
     xb : array<float>
     h : array<float>
-    glu : array<float>
     ao : array<float>
     qq : array<float>
     kk : array<float>
@@ -269,26 +237,6 @@ struct CanaryState {
     xsi : array<float>
     posq : array<int8>        // pos_emb rows requantized once per encode (layer-invariant input)
     poss : array<float>
-}
-
-// mm_blob_b with the q8 route: activation image (xq, xs) pre-quantized by the caller so
-// q/k/v and repeat consumers share one requant
-def private cn_mm(m : CanaryEncoder; var y : array<float>; woff : int64; x : array<float>;
-                  xq : array<int8>; xs : array<float>; n, d, npos : int64) {
-    if (m.q8) {
-        matmul_q8q8_batch(y, m.qblob, m.qscales, woff, xq, xs, n, d, npos)
-    } else {
-        mm_blob_b(y, m.blob, woff, x, n, d, npos)
-    }
-}
-
-// requant-and-multiply for single-consumer activations (scratch grows lazily)
-def private cn_mm_rq(m : CanaryEncoder; var y : array<float>; woff : int64; x : array<float>;
-                     var xq : array<int8>; var xs : array<float>; n, d, npos : int64) {
-    if (m.q8) {
-        requant_rows_q8_sized(x, n, npos, xq, xs)
-    }
-    cn_mm(m, y, woff, x, xq, xs, n, d, npos)
 }
 
 // ===== bin container =====
@@ -439,40 +387,10 @@ def private cn_fold_bn(var blob : array<float>; w, b, mean, vr, dwb, d : int64; 
 //! Caches a box/knob-specific PREPARED IMAGE like ``load_model``; ``DASLLAMA_IMAGE=0`` disables it, a ``.dlim`` path loads one directly.
 def load_canary_encoder(path : string; q8 : bool = false) : CanaryEncoder {
     let tag = q8 ? "canary-q8" : "canary-f32"
-    cn_announce_lane(q8)
-    if (path |> ends_with(".dlim")) {
-        // named directly — no source bin to regenerate from, so a wrong identity panics
-        apply_box_profile_runtime()
-        let ts_img = ref_time_ticks()
-        var t = CanaryEncoder()
-        if (!load_image(path, t, tag)) {
-            panic("dasLLAMA: '{path}' is not a prepared canary-encoder image for this box/knobs (identity {image_identity(tag)}) - regenerate it from the source bin")
-        }
-        to_log(LOG_INFO, "dasLLAMA: prepared canary-encoder image mapped in {get_time_usec(ts_img) / 1000} ms - {path}\n")
-        return <- t
+    announce_lane("canary encoder", q8, "f32 planes", "set_canary_enc_q8", g_cn_pin != GemmLane.unset, canary_gpu_serves())
+    return <- load_staged_image(path, tag, "canary-encoder", "source bin", type<CanaryEncoder>) {
+        return <- stage_canary_encoder(path, q8)
     }
-    if (g_env_engine.image) {
-        apply_box_profile_runtime()   // a backend pin must precede the identity (it names the backend)
-        let img = image_path_for(path, tag)
-        let ts_img = ref_time_ticks()
-        var t = CanaryEncoder()
-        if (load_image(img, t, tag)) {
-            to_log(LOG_INFO, "dasLLAMA: prepared canary-encoder image mapped in {get_time_usec(ts_img) / 1000} ms - {img}\n")
-            return <- t
-        }
-        var inscope st <- stage_canary_encoder(path, q8)
-        var built = CanaryEncoder()
-        if (cache_via_image_staged(st, built, img, tag)) {
-            dlim_gc_stale(path, tag)   // the fresh bake ON DISK proves its lane's siblings dead; an in-memory build reaps nothing
-        }
-        return <- built
-    }
-    // no persisted image: mint one in memory and serve THAT — a served encoder is always
-    // image-backed, so there is no second, array-owning shape of this struct to maintain
-    var inscope st <- stage_canary_encoder(path, q8)
-    var built = CanaryEncoder()
-    cache_via_image_staged(st, built, "", tag)
-    return <- built
 }
 
 //! The loaded precision as ``<encoder>/<decoder>`` (the decoder tag comes from the facade,
@@ -565,7 +483,7 @@ def stage_canary_encoder(path : string; q8 : bool = false) : CanaryStaging {
         }
 
         // schema walk: each read consumes its record and returns the offset its field records
-        // (GEMM offsets index qblob on a q8 load — see cn_mm)
+        // (GEMM offsets index qblob on a q8 load — see tower_mm)
         var wscratch : array<float>
         var po = 0l
         var qo = 0l
@@ -712,67 +630,13 @@ def canary_window_frames(m : CanaryEncoder; samples : array<float> | #; var st :
 //! the mel's spectrum half off ``st.xw``: DFT (twiddle gemm), power, the mel dot and log, the per-feature normalization
 //! over the valid frames with the tail masked; frame-major ``st.mel`` [n_len x n_mel]
 def canary_mel_spectrum(m : CanaryEncoder; var st : CanaryState) {
-    let n_fft = m.n_fft
-    let n_bins = m.n_fb
-    let n_mel = m.n_mel
-    let n_len = st.n_len
-    ensure_length(st.mel, n_len * n_mel)
-    ensure_length(st.reim, n_len * n_bins * 2l)
-    for (i in range64(n_len * n_bins * 2l)) {
-        st.reim[i] = 0.0   //! gemm accumulates: the reused state buffer must start zeroed
-    }
-    gemm_f32(unsafe(addr(st.reim[0])), unsafe(addr(st.xw[0])), plane_at(m.twiddles, 0l),
-             n_len, n_fft, n_bins * 2l)
-
-    ensure_length(st.power, n_bins)
-    for (i in range64(n_len)) {
-        for (k in range64(n_bins)) {
-            let re = st.reim[i * n_bins * 2l + k * 2l]
-            let im = st.reim[i * n_bins * 2l + k * 2l + 1l]
-            st.power[k] = re * re + im * im
-        }
-        for (jm in range64(n_mel)) {
-            var sum = 0.0lf
-            for (k in range64(n_bins)) {
-                sum += double(st.power[k] * m.filters[jm * n_bins + k])
-            }
-            st.mel[i * n_mel + jm] = float(log(sum + CN_MEL_FLOOR))
-        }
-    }
-
-    // per-feature normalization over the valid frames, applied to all; tail masked to 0
-    let valid = st.n_valid
-    for (j in range64(n_mel)) {
-        var sum = 0.0lf
-        for (i in range64(valid)) {
-            sum += double(st.mel[i * n_mel + j])
-        }
-        let mean = sum / double(max(valid, 1l))
-        var sq = 0.0lf
-        for (i in range64(valid)) {
-            let dv = double(st.mel[i * n_mel + j]) - mean
-            sq += dv * dv
-        }
-        let denom = sqrt(sq / max(double(valid) - 1.0lf, 1.0lf)) + 1e-5lf
-        for (i in range64(n_len)) {
-            st.mel[i * n_mel + j] = float((double(st.mel[i * n_mel + j]) - mean) / denom)
-        }
-    }
-    for (i in range64(valid, n_len)) {   // frames past seq_len mask to zero
-        for (j in range64(n_mel)) {
-            st.mel[i * n_mel + j] = 0.0
-        }
-    }
+    mel_spectrum_rows(st.xw, plane_at(m.twiddles, 0l), plane_at(m.filters, 0l), st.n_len, m.n_fft, m.n_fb, m.n_mel,
+                      MelForm(log = MelLog.ln_add, floor = CN_MEL_FLOOR, feature_norm = true, n_valid = st.n_valid),
+                      st.reim, st.mel)
     st.mel_ready = true
 }
 
 // ===== conv subsampling =====
-
-def private cn_relu_rows(var y : array<float>; n : int64) {
-    for (i in range64(n)) {
-        y[i] = max(y[i], 0.0)
-    }
-}
 
 // Time-rows past the valid length are zeroed before each conv; here
 // that lands as: zero rows [from_row, n_rows) of a [n_rows × row_stride] image.
@@ -794,8 +658,7 @@ def private cn_conv0(m : CanaryEncoder; var st : CanaryState; ih, iw : int64) {
     }
     ensure_length(st.y0, rows * cout)
     mm_blob_b(st.y0, m.blob, m.c0_w, st.col, 9l, cout, rows)
-    add_bias_rows(st.y0, m.blob, m.c0_b, cout, rows)
-    cn_relu_rows(st.y0, rows * cout)
+    bias_relu_rows(st.y0, m.blob, m.c0_b, cout, rows)
 }
 
 // depthwise conv2d k3 s2 p1: per-channel 3x3, + bias, NO relu. w [ch × 9] (kh·3+kw).
@@ -832,9 +695,8 @@ def private cn_conv_pw(m : CanaryEncoder; var out : array<float>; x : array<floa
                        var xq : array<int8>; var xs : array<float>; w_off, b_off, rows : int64) {
     let ch = m.n_sub_ch
     ensure_length(out, rows * ch)
-    cn_mm_rq(m, out, w_off, x, xq, xs, ch, ch, rows)
-    add_bias_rows(out, m.blob, b_off, ch, rows)
-    cn_relu_rows(out, rows * ch)
+    tower_mm_rq(m, out, w_off, x, xq, xs, ch, ch, rows)
+    bias_relu_rows(out, m.blob, b_off, ch, rows)
 }
 
 //! the CPU subsample front: the stride-2 convs, the feature rows and the input projection into ``st.x``; returns the encoder rows
@@ -871,7 +733,7 @@ def private cn_front_cpu(m : CanaryEncoder; var st : CanaryState) : int64 {
         }
     }
     ensure_length(st.x, tt * d)
-    cn_mm_rq(m, st.x, m.pre_w, st.xf, st.xqi, st.xsi, feat, d, tt)
+    tower_mm_rq(m, st.x, m.pre_w, st.xf, st.xqi, st.xsi, feat, d, tt)
     add_bias_rows(st.x, m.blob, m.pre_b, d, tt)
     return tt
 }
@@ -938,203 +800,10 @@ def reset_canary_enc_q8() {
 [arch(at="../ARCHITECTURE_MEDIA.md#tower-weight-lane")]
 def canary_enc_serves_q8() : bool => lane_serves_q8(g_cn_pin, !canary_gpu_serves())
 
-[arch(at="../ARCHITECTURE_MEDIA.md#tower-weight-lane")]
-def private cn_announce_lane(q8 : bool) {
-    var why = "the default lane (no GPU driver serving the exact encoder)"
-    if (g_cn_pin != GemmLane.unset) {
-        why = "pinned via set_canary_enc_q8"
-    } elif (canary_gpu_serves()) {
-        why = "the Metal FastConformer driver serves f32 planes"
-    }
-    to_log(LOG_INFO, "dasLLAMA canary: encoder GEMM lane {q8 ? "q8" : "f32 planes"} - {why}\n")
-}
-
-[hot_path]
 def private cn_blocks_cpu(m : CanaryEncoder; var st : CanaryState; tt, ww : int64) {
-    let d = m.d_model
-    let ff = m.n_ff
-    let n_head = m.n_head
-    let dh = d / n_head
-    ensure_length(st.xb, tt * d)
-    ensure_length(st.h, tt * ff)
-    ensure_length(st.glu, tt * d)
-    ensure_length(st.ao, tt * d)
-    ensure_length(st.qq, tt * d)
-    ensure_length(st.kk, tt * d)
-    ensure_length(st.vv, tt * d)
-    ensure_length(st.posl, ww * d)
-    ensure_length(st.qu, tt * dh)
-    ensure_length(st.qv, tt * dh)
-    ensure_length(st.kt, dh * tt)
-    ensure_length(st.vh, tt * dh)
-    ensure_length(st.posh, dh * ww)
-    // nolint:STYLE015 — per-job B-row slabs, NOT tt-row matrices: the parakeet twin's slab dispatch (job li
-    // owns slab li; 4-aligned row groups keep gemm_f32's FMA order, bit-exact). Jobs never
-    // exceed blocks — the twin's short-clip dispatch-overhead lesson.
-    let atn_jobs = min(int64(lanes_for_work(tt * dh * (2l * tt + ww), 0)),
-        (tt + CN_ATN_BLOCK - 1l) / CN_ATN_BLOCK)
-    ensure_length(st.sc, atn_jobs * CN_ATN_BLOCK * tt)
-    ensure_length(st.rl, atn_jobs * CN_ATN_BLOCK * ww)
-    ensure_length(st.oh, atn_jobs * CN_ATN_BLOCK * dh)
-    let scale = 1.0 / sqrt(float(dh))
-    let nk = m.conv_kernel
-    let kpad = (nk - 1l) / 2l
-
+    let form = FcCpuForm(d = m.d_model, ff = m.n_ff, n_head = m.n_head, nk = m.conv_kernel, tap_major = false, vec4 = false)
     for (l in range64(m.n_layer)) {
-        let lo = m.layers[l]
-
-        // FFN1 (macaron half)
-        layernorm_batch(st.xb, st.x, m.blob, lo.nf1_w, lo.nf1_b, d, tt, m.eps)
-        cn_mm_rq(m, st.h, lo.ff1a_w, st.xb, st.xqi, st.xsi, d, ff, tt)
-        add_bias_rows(st.h, m.blob, lo.ff1a_b, ff, tt)
-        silu4_batch(st.h, ff, tt)
-        cn_mm_rq(m, st.xb, lo.ff1b_w, st.h, st.xqi, st.xsi, ff, d, tt)
-        add_bias_rows(st.xb, m.blob, lo.ff1b_b, d, tt)
-        for (i in range64(tt * d)) {
-            st.x[i] += 0.5 * st.xb[i]
-        }
-
-        // rel-pos self-attention (Transformer-XL u/v biases) — one requant feeds q/k/v
-        layernorm_batch(st.xb, st.x, m.blob, lo.nat_w, lo.nat_b, d, tt, m.eps)
-        if (m.q8) {
-            requant_rows_q8_sized(st.xb, d, tt, st.xqi, st.xsi)
-        }
-        cn_mm(m, st.qq, lo.q_w, st.xb, st.xqi, st.xsi, d, d, tt); add_bias_rows(st.qq, m.blob, lo.q_b, d, tt)
-        cn_mm(m, st.kk, lo.k_w, st.xb, st.xqi, st.xsi, d, d, tt); add_bias_rows(st.kk, m.blob, lo.k_b, d, tt)
-        cn_mm(m, st.vv, lo.v_w, st.xb, st.xqi, st.xsi, d, d, tt); add_bias_rows(st.vv, m.blob, lo.v_b, d, tt)
-        cn_mm(m, st.posl, lo.pos_w, st.pos_emb, st.posq, st.poss, d, d, ww)
-        for (hi in range64(n_head)) {
-            let hoff = hi * dh
-            unsafe {
-                var qup = addr(st.qu[0])
-                var qvp = addr(st.qv[0])
-                var ktp = addr(st.kt[0])
-                var vhp = addr(st.vh[0])
-                var pop = addr(st.posh[0])
-                var scp = addr(st.sc[0])
-                var rlp = addr(st.rl[0])
-                var ohp = addr(st.oh[0])
-                var aop = addr(st.ao[0])
-                let qqp = addr<float const?>(st.qq[0])
-                let kkp = addr<float const?>(st.kk[0])
-                let vvp = addr<float const?>(st.vv[0])
-                let plp = addr<float const?>(st.posl[0])
-                let bup = plane_at(m.blob, lo.bias_u + hoff)
-                let bvp = plane_at(m.blob, lo.bias_v + hoff)
-                // nolint:STYLE015 — transposed head views ((Q+u), (Q+v), Kᵀ, V_h, pos_hᵀ): the row GEMMs read
-                // these in full, so they build before the compute dispatch
-                maybe_parallel_for(0, int(tt), lanes_for_work(tt * dh * 4l, 0)) $(rb, re) {
-                    unsafe {
-                        for (t in range64(int64(rb), int64(re))) {
-                            for (j in range64(dh)) {
-                                let qv = qqp[t * d + hoff + j]
-                                qup[t * dh + j] = qv + bup[j]
-                                qvp[t * dh + j] = qv + bvp[j]
-                                ktp[j * tt + t] = kkp[t * d + hoff + j]
-                                vhp[t * dh + j] = vvp[t * d + hoff + j]
-                            }
-                        }
-                    }
-                }
-                maybe_parallel_for(0, int(ww), lanes_for_work(ww * dh, 0)) $(rb, re) {
-                    unsafe {
-                        for (w in range64(int64(rb), int64(re))) {
-                            for (j in range64(dh)) {
-                                pop[j * ww + w] = plp[w * d + hoff + j]
-                            }
-                        }
-                    }
-                }
-                // nolint:STYLE015 — content scores (Q+u)·Kᵀ + rel scores (Q+v)·pos_hᵀ + softmax + P·V_h: atn_jobs
-                // jobs over B-row blocks into per-job slabs: gemm_f32 never mixes accumulation
-                // across 4-row groups, so 4-aligned starts stay bit-exact and scratch is O(jobs·B)
-                let nblkb = (tt + CN_ATN_BLOCK - 1l) / CN_ATN_BLOCK
-                let npj = (nblkb + atn_jobs - 1l) / atn_jobs
-                maybe_parallel_for(0, int(atn_jobs), int(atn_jobs)) $(jb, je) {
-                    unsafe {
-                        for (li in range64(int64(jb), int64(je))) {
-                            var scs = scp + li * CN_ATN_BLOCK * tt
-                            var rls = rlp + li * CN_ATN_BLOCK * ww
-                            var ohs = ohp + li * CN_ATN_BLOCK * dh
-                            for (blk in range64(li * npj, min((li + 1l) * npj, nblkb))) {
-                                let r0 = blk * CN_ATN_BLOCK
-                                let r1 = min(r0 + CN_ATN_BLOCK, tt)
-                                let nr = r1 - r0
-                                for (i in range64(nr * tt)) {
-                                    scs[i] = 0.0
-                                }
-                                for (i in range64(nr * ww)) {
-                                    rls[i] = 0.0
-                                }
-                                gemm_f32_jo(scs, qup + r0 * dh, ktp, nr, dh, tt)
-                                gemm_f32_jo(rls, qvp + r0 * dh, pop, nr, dh, ww)
-                                for (q in range64(r0, r1)) {
-                                    let base = tt - 1l - q
-                                    var qs = scs + (q - r0) * tt
-                                    let rs = rls + (q - r0) * ww
-                                    for (k in range64(tt)) {
-                                        qs[k] = (qs[k] + rs[base + k]) * scale
-                                    }
-                                    softmax(qs, tt)
-                                }
-                                for (i in range64(nr * dh)) {
-                                    ohs[i] = 0.0
-                                }
-                                gemm_f32_jo(ohs, scs, vhp, nr, tt, dh)
-                                for (t in range64(r0, r1)) {
-                                    for (j in range64(dh)) {
-                                        aop[t * d + hoff + j] = ohs[(t - r0) * dh + j]
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        cn_mm_rq(m, st.xb, lo.o_w, st.ao, st.xqi, st.xsi, d, d, tt); add_bias_rows(st.xb, m.blob, lo.o_b, d, tt)
-        add_inplace_rows(st.x, st.xb, tt * d)
-
-        // conv module: LN -> pw1 -> GLU -> depthwise(k9) -> foldedBN -> silu -> pw2
-        layernorm_batch(st.xb, st.x, m.blob, lo.ncv_w, lo.ncv_b, d, tt, m.eps)
-        cn_mm_rq(m, st.h, lo.pw1_w, st.xb, st.xqi, st.xsi, d, 2l * d, tt)
-        add_bias_rows(st.h, m.blob, lo.pw1_b, 2l * d, tt)
-        for (t in range64(tt)) {   // GLU: signal · σ(gate)
-            for (j in range64(d)) {
-                let sg = st.h[t * 2l * d + j]
-                let gt = st.h[t * 2l * d + d + j]
-                st.glu[t * d + j] = sg * sigmoid_f32(gt)
-            }
-        }
-        for (t in range64(tt)) {   // depthwise conv1d over time + folded BN + silu
-            for (c in range64(d)) {
-                var acc = 0.0
-                for (k in range64(nk)) {
-                    let src = t + k - kpad
-                    if (src >= 0l && src < tt) {
-                        acc += m.blob[lo.dw_w + c * nk + k] * st.glu[src * d + c]
-                    }
-                }
-                let bv = acc * m.blob[lo.bn_w + c] + m.blob[lo.bn_b + c]
-                st.ao[t * d + c] = bv * sigmoid_f32(bv)
-            }
-        }
-        cn_mm_rq(m, st.xb, lo.pw2_w, st.ao, st.xqi, st.xsi, d, d, tt); add_bias_rows(st.xb, m.blob, lo.pw2_b, d, tt)
-        add_inplace_rows(st.x, st.xb, tt * d)
-
-        // FFN2 (second macaron half)
-        layernorm_batch(st.xb, st.x, m.blob, lo.nf2_w, lo.nf2_b, d, tt, m.eps)
-        cn_mm_rq(m, st.h, lo.ff2a_w, st.xb, st.xqi, st.xsi, d, ff, tt)
-        add_bias_rows(st.h, m.blob, lo.ff2a_b, ff, tt)
-        silu4_batch(st.h, ff, tt)
-        cn_mm_rq(m, st.xb, lo.ff2b_w, st.h, st.xqi, st.xsi, ff, d, tt)
-        add_bias_rows(st.xb, m.blob, lo.ff2b_b, d, tt)
-        for (i in range64(tt * d)) {
-            st.x[i] += 0.5 * st.xb[i]
-        }
-
-        // per-layer post norm
-        layernorm_batch(st.x, st.x, m.blob, lo.nout_w, lo.nout_b, d, tt, m.eps)
+        fc_block_cpu(m, st, form, FcRelPos(ww = ww, n_real = tt), m.layers[l], l, tt)
     }
 }
 
@@ -1179,7 +848,7 @@ def canary_encode(m : CanaryEncoder; var st : CanaryState) : int64 {
     // perception.proj: encoder rows (d) -> decoder embedding (proj_dim)
     ts = ref_time_ticks()
     ensure_length(st.out, tt * m.proj_dim)
-    cn_mm_rq(m, st.out, m.proj_w, st.x, st.xqi, st.xsi, d, m.proj_dim, tt)
+    tower_mm_rq(m, st.out, m.proj_w, st.x, st.xqi, st.xsi, d, m.proj_dim, tt)
     add_bias_rows(st.out, m.blob, m.proj_b, m.proj_dim, tt)
     asr_prof_add("cn.proj", ts)
     return tt
@@ -1194,7 +863,7 @@ struct CanaryAsrSession {
 //! Canary-Qwen's capability sheet: English, no timestamps, whole-clip.
 def canary_asr_caps() : AsrCaps {
     var c = AsrCaps(translate = false, timestamps = AsrTimestamps.none,
-                    streaming = false, prompt = false)
+                    streaming = false, prompt = false, default_lang = "en")
     c.languages <- ["en"]
     return <- c
 }

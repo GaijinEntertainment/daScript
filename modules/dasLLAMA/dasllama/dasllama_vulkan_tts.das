@@ -245,7 +245,8 @@ def private ts_scratch_fits(s : TsScratch; floats : TsFloats; aux_floats, stats_
     return s.hb_bytes >= ts_hb_floats(floats, hb_floats) * 4l
 }
 
-//! `bytes` on the device under `bit`, none at zero; false when the allocation failed or the rows would bind past the storage range (said naming `what`)
+//! `bytes` on the device under `bit`, none at zero; false when the allocation failed or the rows would bind past the storage range (said naming `what`).
+//! Per-call rows, the slabs too: `ts_upload` refills rows of every kind
 [cold_path]
 def private ts_rows_alloc(var r : TsRows; bytes : int64; bit : uint; what : string = "rows") : bool {
     r = TsRows(bit = bit)
@@ -253,7 +254,7 @@ def private ts_rows_alloc(var r : TsRows; bytes : int64; bit : uint; what : stri
     return false if (!ts_range_ok(what, bytes))
     var oom = false
     r.bytes = bytes
-    r.dev = soft_device_buf(oom, r.bytes)
+    r.dev = soft_call_buf(oom, r.bytes)
     return !oom && r.dev != 0ul
 }
 
@@ -280,7 +281,7 @@ def private ts_scratch_build(var s : TsScratch; floats : TsFloats; aux_floats, s
     for (i in range(TS_SCRATCH_BUFS)) {
         if (grown[i] > 0l) {
             s.bytes[i] = grown[i] * 4l
-            s.devs[i] = soft_device_buf(oom, s.bytes[i])
+            s.devs[i] = soft_call_buf(oom, s.bytes[i])
             total += grown[i]
         }
     }

@@ -92,7 +92,7 @@ struct ServerArgs {
     gpu_vram_mb : int
 
     @clarg_short = "a"
-    @clarg_doc = "Path to an ASR model (whisper/parakeet/qwen3-asr) — enables the /v1/audio/* routes. Repeatable: each model serves under its file's stem, the first is the default; the config's [[asr]] tables give each model its own id, mmproj and workers"
+    @clarg_doc = "Path to an ASR model (whisper/parakeet/gigaam/qwen3-asr) — enables the /v1/audio/* routes. Repeatable: each model serves under its file's stem, the first is the default; the config's [[asr]] tables give each model its own id, mmproj and workers"
     asr : string
 
     @clarg_doc = "mmproj for the GGUF Qwen3-ASR route (paired with --asr; with several ASR models, the first one's)"

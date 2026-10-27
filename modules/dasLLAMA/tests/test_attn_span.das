@@ -6,6 +6,7 @@ options _dasllama_internal = true
 require dastest/testing_boost public
 require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration
 require _model_tier
+require _f32_tile_pin
 
 [init]
 def private allow_cpu_prefill_intent() {
@@ -229,32 +230,34 @@ def test_mrope_span(t : T?) {
         tr.config.mrope_interleaved = true   // the qwen3vl proxy walk
         let dim = tr.config.dim
         let embd_a <- make_embd(dim, 0)
-        with_dasllama_jobque_() {
-            set_prefill_attn_mode(AttnPrefillMode.classic)
-            // span [7,29) = 22 rows = an 11x2 grid; position advance = max(11,2) = 11
-            let lg_fused <- mrope_turn_logits(tr, embd_a, true, 11l, 2l)
-            let lg_split <- mrope_turn_logits(tr, embd_a, false, 11l, 2l)
-            let fs = arr_maxdiff(lg_fused, lg_split)
-            log_argmax_sides("mrope_span fused-vs-splice", lg_fused, lg_split)
-            to_log(LOG_INFO, "mrope_span: fused-vs-splice decode-logits maxdiff = {fs}\n")
-            tt |> equal(fs, 0.0, "mrope fused == mrope splice, bit-exact (classic)")
-            // the delta: 22 rows advanced the position by 11
-            var s <- make_run_state(tr.config)
-            eval_embd_span_mrope_(tr, s, embd_a, NPOS, SPAN_LO, SPAN_HI, 11l, 2l)
-            tt |> equal(s.rope_pos_delta, 11l - 22l, "rope_pos_delta = max(grid) - span rows")
-            tt |> equal(int(long_length(s.mrope_pos)), 0, "the quantum map cleared after the call")
-            tt |> equal(s.n_past, NPOS, "KV rows advanced by the ROW count, not the position advance")
-            delete s
-            // the map must reach the rope math: grid positions differ from sequential ones
-            let lg_plain <- span_turn_logits(tr, embd_a, true)
-            let dm = arr_maxdiff(lg_fused, lg_plain)
-            log_argmax_sides("mrope_span mrope-vs-sequential", lg_fused, lg_plain)
-            to_log(LOG_INFO, "mrope_span: mrope-vs-sequential decode-logits maxdiff = {dm}\n")
-            tt |> success(dm > 1e-4, "grid rope positions change the outcome ({dm})")
-            // a different grid SHAPE of the same span changes the outcome too (h/w axes live)
-            let lg_tall <- mrope_turn_logits(tr, embd_a, true, 2l, 11l)
-            let dg = arr_maxdiff(lg_fused, lg_tall)
-            tt |> success(dg > 1e-4, "an 11x2 vs 2x11 grid differ ({dg})")
+        with_f32_row_nest() {
+            with_dasllama_jobque_() {
+                set_prefill_attn_mode(AttnPrefillMode.classic)
+                // span [7,29) = 22 rows = an 11x2 grid; position advance = max(11,2) = 11
+                let lg_fused <- mrope_turn_logits(tr, embd_a, true, 11l, 2l)
+                let lg_split <- mrope_turn_logits(tr, embd_a, false, 11l, 2l)
+                let fs = arr_maxdiff(lg_fused, lg_split)
+                log_argmax_sides("mrope_span fused-vs-splice", lg_fused, lg_split)
+                to_log(LOG_INFO, "mrope_span: fused-vs-splice decode-logits maxdiff = {fs}\n")
+                tt |> equal(fs, 0.0, "mrope fused == mrope splice, bit-exact (classic)")
+                // the delta: 22 rows advanced the position by 11
+                var s <- make_run_state(tr.config)
+                eval_embd_span_mrope_(tr, s, embd_a, NPOS, SPAN_LO, SPAN_HI, 11l, 2l)
+                tt |> equal(s.rope_pos_delta, 11l - 22l, "rope_pos_delta = max(grid) - span rows")
+                tt |> equal(int(long_length(s.mrope_pos)), 0, "the quantum map cleared after the call")
+                tt |> equal(s.n_past, NPOS, "KV rows advanced by the ROW count, not the position advance")
+                delete s
+                // the map must reach the rope math: grid positions differ from sequential ones
+                let lg_plain <- span_turn_logits(tr, embd_a, true)
+                let dm = arr_maxdiff(lg_fused, lg_plain)
+                log_argmax_sides("mrope_span mrope-vs-sequential", lg_fused, lg_plain)
+                to_log(LOG_INFO, "mrope_span: mrope-vs-sequential decode-logits maxdiff = {dm}\n")
+                tt |> success(dm > 1e-4, "grid rope positions change the outcome ({dm})")
+                // a different grid SHAPE of the same span changes the outcome too (h/w axes live)
+                let lg_tall <- mrope_turn_logits(tr, embd_a, true, 2l, 11l)
+                let dg = arr_maxdiff(lg_fused, lg_tall)
+                tt |> success(dg > 1e-4, "an 11x2 vs 2x11 grid differ ({dg})")
+            }
         }
         delete tr
     }
@@ -270,40 +273,42 @@ def test_attn_span_fused(t : T?) {
         var tr <- load_checkpoint(MODEL_PATH)
         let dim = tr.config.dim
         let embd_a <- make_embd(dim, 0)
-        with_dasllama_jobque_() {
-            // the fused single eval must leave the SAME cache as the three-eval splice: a decode
-            // step at NPOS attends every cached row, so its logits are the whole-cache witness
-            set_prefill_attn_mode(AttnPrefillMode.classic)
-            let lg_split <- span_turn_logits(tr, embd_a, false)
-            let lg_fused <- span_turn_logits(tr, embd_a, true)
-            tt |> equal(arr_maxdiff(lg_split, lg_fused), 0.0, "classic: fused == splice, bit-exact decode logits")
-            set_prefill_attn_mode(AttnPrefillMode.flash)
-            let lg_split_f <- span_turn_logits(tr, embd_a, false)
-            let lg_fused_f <- span_turn_logits(tr, embd_a, true)
-            let fdiff = arr_maxdiff(lg_split_f, lg_fused_f)
-            to_log(LOG_INFO, "attn_span fused: flash splice-vs-fused decode-logits maxdiff = {fdiff}\n")
-            tt |> success(fdiff < 1e-2, "flash: fused == splice within the online-softmax bar ({fdiff})")
-            set_prefill_attn_mode(AttnPrefillMode.classic)
-            // per-query mask direction inside ONE fused eval: a tail-row perturbation reaches no
-            // earlier row (span rows are bounded by uend, head/tail rows are causal)...
-            let base <- fused_plane(tr, embd_a)
-            let tail_p <- fused_plane(tr, make_embd(dim, 1))
-            var pre_tail = 0.0
-            for (r in range64(NPOS - 1l)) {
-                pre_tail = max(pre_tail, row_maxdiff(base, tail_p, r, dim))
+        with_f32_row_nest() {
+            with_dasllama_jobque_() {
+                // the fused single eval must leave the SAME cache as the three-eval splice: a decode
+                // step at NPOS attends every cached row, so its logits are the whole-cache witness
+                set_prefill_attn_mode(AttnPrefillMode.classic)
+                let lg_split <- span_turn_logits(tr, embd_a, false)
+                let lg_fused <- span_turn_logits(tr, embd_a, true)
+                tt |> equal(arr_maxdiff(lg_split, lg_fused), 0.0, "classic: fused == splice, bit-exact decode logits")
+                set_prefill_attn_mode(AttnPrefillMode.flash)
+                let lg_split_f <- span_turn_logits(tr, embd_a, false)
+                let lg_fused_f <- span_turn_logits(tr, embd_a, true)
+                let fdiff = arr_maxdiff(lg_split_f, lg_fused_f)
+                to_log(LOG_INFO, "attn_span fused: flash splice-vs-fused decode-logits maxdiff = {fdiff}\n")
+                tt |> success(fdiff < 1e-2, "flash: fused == splice within the online-softmax bar ({fdiff})")
+                set_prefill_attn_mode(AttnPrefillMode.classic)
+                // per-query mask direction inside ONE fused eval: a tail-row perturbation reaches no
+                // earlier row (span rows are bounded by uend, head/tail rows are causal)...
+                let base <- fused_plane(tr, embd_a)
+                let tail_p <- fused_plane(tr, make_embd(dim, 1))
+                var pre_tail = 0.0
+                for (r in range64(NPOS - 1l)) {
+                    pre_tail = max(pre_tail, row_maxdiff(base, tail_p, r, dim))
+                }
+                tt |> equal(pre_tail, 0.0, "fused: rows before a perturbed last row are blind to it")
+                tt |> success(row_maxdiff(base, tail_p, NPOS - 1l, dim) > 1e-4, "fused: the perturbed last row itself moved")
+                // ...while a perturbation on the LAST span row reaches the FIRST span row (non-causal
+                // within the span) and no head row (causal before the span)
+                let span_p <- fused_plane(tr, make_embd_at(dim, SPAN_HI - 1l))
+                var pre_span = 0.0
+                for (r in range64(SPAN_LO)) {
+                    pre_span = max(pre_span, row_maxdiff(base, span_p, r, dim))
+                }
+                tt |> equal(pre_span, 0.0, "fused: head rows are blind to a span perturbation")
+                let dspan = row_maxdiff(base, span_p, SPAN_LO, dim)
+                tt |> success(dspan > 1e-4, "fused: the first span row sees the last span row ({dspan})")
             }
-            tt |> equal(pre_tail, 0.0, "fused: rows before a perturbed last row are blind to it")
-            tt |> success(row_maxdiff(base, tail_p, NPOS - 1l, dim) > 1e-4, "fused: the perturbed last row itself moved")
-            // ...while a perturbation on the LAST span row reaches the FIRST span row (non-causal
-            // within the span) and no head row (causal before the span)
-            let span_p <- fused_plane(tr, make_embd_at(dim, SPAN_HI - 1l))
-            var pre_span = 0.0
-            for (r in range64(SPAN_LO)) {
-                pre_span = max(pre_span, row_maxdiff(base, span_p, r, dim))
-            }
-            tt |> equal(pre_span, 0.0, "fused: head rows are blind to a span perturbation")
-            let dspan = row_maxdiff(base, span_p, SPAN_LO, dim)
-            tt |> success(dspan > 1e-4, "fused: the first span row sees the last span row ({dspan})")
         }
         delete tr
     }

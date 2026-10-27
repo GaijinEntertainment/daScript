@@ -42,20 +42,21 @@ change** - the override and the gate live in `dasllama/dasllama_gpu_resident.das
 embed when that gate returns true, so a gate true where the prefill path declines hands the
 next consumer an unfilled residual stream.
 
-**A Vulkan-tier serving gate that decides at load - a predicate or per-layer loop whose true
-branch dispatches through a call into the tier (a `moe_gpu_*`, `vk_*` or `rdec_*` entry),
-wherever the diff puts it, and whose false branch or `continue` routes work off the path it
-armed, to the CPU path or to another path inside the tier - is a defect when it does not log, at
-load, how many layers or planes it routed off and why.** A silent decline is a fallback a user
-finds only by profiling.
+**A Vulkan-tier serving gate that decides at load - a predicate or per-layer loop whose true branch
+dispatches through a call into the tier (a function a `dasllama/dasllama_*vulkan*.das` or
+`dasllama/dasllama_gpu*.das` file declares), wherever the diff puts it, and whose false branch or
+`continue` routes work off the path it armed, to the CPU path or to another path inside the tier -
+is a defect when it does not log, at load, how many layers or planes it routed off and why.** A
+silent decline is a fallback a user finds only by profiling.
 
 **A Vulkan-tier serving gate that decides per call - a predicate or loop whose true branch
-dispatches through a call into the tier (a `moe_gpu_*`, `vk_*` or `rdec_*` entry), wherever the
-diff puts it, and whose false branch or `continue` routes work off the path it armed, to the CPU
-path, to another path inside the tier, or to a slower form inside the same path (a host upload in
-place of a device-to-device copy) because of a model, session or device property, never because
-of the work's size - that does not log the concrete reason it declined, once per reason per
-armed model, is a defect.**
+dispatches through a call into the tier (a function a `dasllama/dasllama_*vulkan*.das` or
+`dasllama/dasllama_gpu*.das` file declares), wherever the diff puts it, and whose false branch or
+`continue` routes work off the path it armed, to the CPU path, to another path inside the tier, or
+to a slower form inside the same path (a host upload in place of a device-to-device copy) because of
+a model, session or device property (a decline driven by the work's size is not one) - that does
+not log words
+naming the condition that failed, once per reason per armed model, is a defect.**
 
 **A `*_decline_words` return that a diff adds or changes, for a reason a `VK_DECLINE_WORDS_*`
 constant in `dasllama/dasllama_vulkan_tower.das` already states, returns that constant or starts
@@ -128,14 +129,6 @@ offset), never from a `*_grid_word` accessor.**
 The accessor is a constant composite the driver reads lane-serially per index, while the grid
 buffer is staged once per workgroup and read by every row that workgroup serves, whatever their
 number (`ARCHITECTURE_GPU_VULKAN.md#kq-gemv-grid-buffer`).
-
-**Never let a reduce write a workgroup slot while the previous reduce's partials still occupy it -
-pass the other slot, or put a `barrier()` between the two reduces.** A reduce sums a value across
-the workgroup through a `@workgroup` staging array - every `WgReduceBase` reduce
-(`dasllama/dasllama_vulkan_classes.das`) or `GkWgReduce` reduce
-(`dasllama/dasllama_gpu_kernels_common.das`) that takes a `slot` argument, 0 or 1; a slot is the
-run of partials one reduce writes into that array. A reduce carries one barrier, so a thread
-still summing the first reduce's partials would read the second's writes out of the same slot.
 
 **A diff that adds or changes a builder in `dasllama/dasllama_vulkan_decode.das` that asks
 `set_<family>` for a class ensures `ensure_<family>` on every path that reaches it.** A set asked
@@ -219,10 +212,15 @@ command buffers are allocated, in `vk_rdec_prepare`, and nowhere else.** A path 
 availability outside `vk_rdec_prepare` can turn a form on after the recording pass ran, and
 `rd_form_at` then picks a form whose command buffer nothing recorded.
 
-**A diff that writes through the host mapping of a device buffer in `g_gpu.dev_mapped`
-(`dasllama/dasllama_vulkan_common.das`; `upload_region_at` on such a buffer is one such write)
-after any device command has touched that buffer is a defect - finish every host write before the
-device's first touch, or stage through a pinned buffer on the transfer queue.** A per-call fill of
-a slot a device command read in an earlier call is the same cycle, spread across calls. The
-NVIDIA driver shadows a large mapped allocation and migrates it at the device's first touch, and
-a write-migrate-write cycle hangs the machine.
+**A diff that adds or changes a buffer the host refills, from a `[cold_path]` function or from the
+buffer's allocating function, on a later call after a device command read it allocates it per
+call - `make_call_buf` / `try_call_buf` / `soft_call_buf`, a driver's `*_call_buf`, or
+`make_stack_shell`'s `per_call` (`ARCHITECTURE_GPU_VULKAN_ROOM.md#vk-per-call-buffers`) - never
+through an allocator that may hand out ReBAR memory (device memory the host maps directly).**
+`REVIEW.das`'s `check_per_call_buffers` covers a refill from any other function; weakening
+`check_per_call_buffers` is a defect.
+
+**Never write through the host mapping of a buffer in `g_gpu.dev_mapped` after a device command
+has touched it - finish the write before the first touch, or allocate the buffer per call.** The
+NVIDIA driver shadows a large mapped allocation and migrates it at the device's first touch, and a
+write-migrate-write cycle hangs the machine.

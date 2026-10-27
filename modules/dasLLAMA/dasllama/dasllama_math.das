@@ -477,6 +477,26 @@ def public dispatch_phase_encode(rows : int64) {
     }
 }
 
+//! A sequential run of steps too small to fill the pool - a transducer decode - narrows it to `lanes`: the workers past
+//! `lanes - 1` go dormant (the caller is a lane), and the answer is the limit it replaced, for `dispatch_lanes_restore`.
+//! Single-thread mode and an app's own worker limit leave the pool alone (-1).
+[arch(at="../ARCHITECTURE_RUNTIME_JOBQUE.md#hybrid-pool-policy")]
+def public dispatch_lanes_narrow(lanes : int) : int {
+    return -1 if (!is_job_que_available() || get_single_thread_() || g_dispatch_worker_limit > 0)
+    let prev = get_jobque_worker_limit()
+    if (lanes - 1 < min(prev, get_total_hw_jobs())) {
+        set_jobque_worker_limit(max(lanes - 1, 0))
+    }
+    return prev
+}
+
+//! Puts back the worker limit `dispatch_lanes_narrow` answered; -1, a pool it left alone, stays as it is.
+def public dispatch_lanes_restore(prev : int) {
+    if (prev >= 0 && is_job_que_available()) {
+        set_jobque_worker_limit(prev)
+    }
+}
+
 //! Dispatch lanes proportional to work: clamp(work / target_chunk_work, 1,
 //! min(get_dispatch_lanes(), lane_cap)). 1 means "not worth a dispatch" — the matmul_chunks
 //! shapers return 1 and the num_jobs form of maybe_parallel_for runs inline. lane_cap 0 = uncapped.
@@ -653,16 +673,33 @@ def matmul(var y : array<float>; w : array<float>; woff : int64; x : array<float
     matmul_at(y, unsafe(addr<float const?>(w[woff])), x, n, d)
 }
 
+//! y[i] = W[i] . x for the rows [rb, re) of `wp` [d][n], on the calling lane: `matmul`'s chunk body, and the whole
+//! matvec where a dispatch costs more than it splits (the VAD's few-hundred-row chunks).
+def matvec_rows(var yp : float?; wp, xp : float const?; n, rb, re : int64) {
+    unsafe {
+        for (i in range64(rb, re)) {
+            yp[i] = dot(wp + i * n, xp, n)
+        }
+    }
+}
+
 def private matmul_at(var y : array<float>; wp : float const?; x : array<float>; n, d : int64) {
     unsafe {
         var yp = addr(y[0])
-        let xp = addr(x[0])
+        let xp = addr<float const?>(x[0])
         maybe_parallel_for(0, int(d), matmul_chunks_gemv(int(d), 1, n * d)) $(rb, re) {
-            unsafe {
-                for (i in range(rb, re)) {
-                    yp[i] = dot(wp + int64(i) * n, xp, n)
-                }
-            }
+            matvec_rows(yp, wp, xp, n, int64(rb), int64(re))
+        }
+    }
+}
+
+//! [C][T] -> [T][C]
+def transpose_ct(x : array<float>; c, t : int64; @scratch var y : array<float>) {
+    y |> reserve_resize(c * t)
+    for (ci in range64(c)) {
+        let row = ci * t
+        for (ti in range64(t)) {
+            y[ti * c + ci] = x[row + ti]
         }
     }
 }
@@ -828,6 +865,7 @@ def private batch_rows_core(var yp : float?; wp : auto const?; xp : float const?
 // grain 16 => 8 chunks idling half a 16-lane box) split tokens too — a flat (row-chunk × token-block)
 // domain. Disjoint stores, the same tile walk per (row range, token range) either way.
 def private matmul_batch_core(var yp : float?; wp : auto const?; xp : float const?; n, d, ntok : int64) {
+    return if (f32_tile_pin_serves(yp, wp, xp, n, d, ntok))
     var myp = yp
     if (n < g_f32_batch_tile_min_n) {   // the row nest: the knob's arm, reached under the lever alone
         batch_rows_core(yp, wp, xp, n, d, ntok)
@@ -902,6 +940,39 @@ def private restore_float_override_defaults {
 
 def float_batch_override_active() : bool => g_fp_override_active
 
+//! The installed float-batch override as ``set_float_batch_override`` takes it, and whether one is installed - a caller
+//! that clears it puts it back through ``set_float_batch_override`` where ``active`` reads true.
+def float_batch_override() : tuple<active : bool; fp : FpBatchOverrideFn; bf16 : Bf16BatchOverrideFn; min_ntok : int64>
+    => (active = g_fp_override_active, fp = g_mm_fp_batch_override, bf16 = g_mm_bf16_batch_override, min_ntok = g_fp_override_min_ntok)
+
+//! The f32 tile pin: a parity rail's own seat, apart from the float-batch override, serving every fp32 batch GEMM
+//! (`matmul_batch_core`'s f32 plane) ahead of that override; null is unpinned. The bf16 plane is never pinned.
+var private g_f32_tile_pin : FpBatchOverrideFn
+var private g_f32_tile_pin_said : table<string>   //! the pin's announce, made once
+
+//! Seats `fn` as the f32 tile pin (null unpins) and answers the pin it replaced, for the caller to put back
+def set_f32_tile_pin(fn : FpBatchOverrideFn) : FpBatchOverrideFn {
+    if (fn != null) {
+        gpu_said_once(g_f32_tile_pin_said, LOG_INFO, "math: ", "set_f32_tile_pin - a pinned tile serves every fp32 batch GEMM ahead of the float-batch override")
+    }
+    let prev = g_f32_tile_pin
+    g_f32_tile_pin = fn
+    return prev
+}
+
+def f32_tile_pinned() : bool => g_f32_tile_pin != null
+
+def private f32_tile_pin_serves(var yp : float?; wp : float const?; xp : float const?; n, d, ntok : int64) : bool =>
+    g_f32_tile_pin != null && invoke(g_f32_tile_pin, yp, wp, xp, n, d, ntok)
+[unused_argument(yp, wp, xp, n, d, ntok)]
+def private f32_tile_pin_serves(var yp : float?; wp : uint16 const?; xp : float const?; n, d, ntok : int64) : bool => false
+
+//! the float-plane override's answer for an f32 batch: off while the tile pin holds the plane
+def private fp_override_serves(var yp : float?; wp : float const?; xp : float const?; n, d, ntok : int64) : bool {
+    return (g_fp_override_active && g_f32_tile_pin == null && ntok >= g_fp_override_min_ntok
+        && invoke(g_mm_fp_batch_override, yp, wp, xp, n, d, ntok))
+}
+
 //! the stamped bf16-weight tile family's batch walk (dasllama_math_gen registers it): true when it
 //! served the call, false where the family declines or the shape is off its lattice
 typedef Bf16BatchGenFn = function<(var yp : float?; wp : uint16 const?; xp : float const?; n : int64; d : int64; ntok : int64) : bool>
@@ -917,9 +988,7 @@ def private matmul_batch_at(var y : array<float>; wp : float const?; x : array<f
     unsafe {
         var yp = addr(y[0])
         let xp = addr<float const?>(x[0])
-        if (g_fp_override_active && ntok >= g_fp_override_min_ntok && invoke(g_mm_fp_batch_override, yp, wp, xp, n, d, ntok)) {
-            return
-        }
+        return if (fp_override_serves(yp, wp, xp, n, d, ntok))
         matmul_batch_core(yp, wp, xp, n, d, ntok)
     }
 }
@@ -948,9 +1017,7 @@ def matmul_batch(var y : array<float>; w : PlaneF; woff : int64; x : PlaneF; n, 
     var yp = unsafe(addr(y[0]))
     let wp = plane_at(w, woff)
     let xp = plane_at(x, 0l)
-    if (g_fp_override_active && ntok >= g_fp_override_min_ntok && invoke(g_mm_fp_batch_override, yp, wp, xp, n, d, ntok)) {
-        return
-    }
+    return if (fp_override_serves(yp, wp, xp, n, d, ntok))
     matmul_batch_core(yp, wp, xp, n, d, ntok)
 }
 
@@ -1862,11 +1929,11 @@ def kernel_backend_pin_refusal(name : string) : string {
 //! A pin that cannot take keeps the active backend and warns, but `DASLLAMA_PIN_BACKEND`'s own pin panics:
 //! a run under it would measure the active backend under the pinned name.
 def pin_kernel_backend(name : string) {
-    pin_kernel_backend_(name, g_env_engine.pin_backend)
+    pin_kernel_backend_env(name, g_env_engine.pin_backend)
 }
 
 //! `pin_kernel_backend` with the environment's pin read as `env_pin` - the seam the refusal cell drives
-def pin_kernel_backend_(name, env_pin : string) {
+def pin_kernel_backend_env(name, env_pin : string) {
     let why = kernel_backend_pin_refusal(name)
     if (!empty(why)) {
         if (!empty(env_pin) && name == env_pin) {

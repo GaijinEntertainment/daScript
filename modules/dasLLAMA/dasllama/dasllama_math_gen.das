@@ -4250,6 +4250,57 @@ def bf16w_walk(var yp : float?; wp : uint16 const?; xrc : float const?; n, d, g0
     })
 }
 
+//! The batch GEMM over an f16 weight plane [d x n]: Y [ntok x d] token-major. Each lane widens a four-row group of the
+//! plane into its walk panel and runs the f32 tile and the f32 `dot` over it, so every output is the f32 batch walk's over
+//! the widened plane - the widen is exact - and the plane is read at half the bytes.
+[hot_path, arch(at = "../ARCHITECTURE_CPU_KERNELS.md#f32-batch-tile-lattice")]
+def matmul_f16_batch(var yp : float?; wp : uint16 const?; xp : float const?; n, d, ntok : int64) {
+    let row_tiles = int((d + 3l) / 4l)
+    let rch = matmul_chunks(row_tiles, get_q8_batch_chunks_per_job(), n * d * ntok)
+    let fit = min(get_q8_l2_budget(), get_f32_batch_x_block()) / max(n * 4l, 1l)
+    let x_block_tok = clamp((fit / 4l) * 4l, 4l, max(ntok, 4l))
+    var panels = walk_panels(4l * n * 4l)
+    var pbase = panels.base
+    let pstride = panels.stride
+    var myp = yp
+    maybe_parallel_for_indexed(0, row_tiles, rch) $(slot, rb, re) {
+        unsafe {
+            f16_tile_block(myp, wp, xp, n, d, int64(rb) * 4l, min(int64(re) * 4l, d), ntok, x_block_tok, reinterpret<float?>(pbase + int64(slot) * pstride))
+        }
+    }
+}
+
+//! rows [r0, r1) by every token in token blocks of `x_block_tok`, one lane: per block, each four-row group widened into
+//! `pan` once, then the f32 tile over whole four-token tiles and the f32 `dot` over the tails
+[hint(noalias = yp, noalias = wp, noalias = xp, noalias = pan)]
+def private f16_tile_block(var yp : float?; wp : uint16 const?; xp : float const?; n, d, r0, r1, ntok, x_block_tok : int64; var pan : float?) {
+    var tbeg = 0l
+    while (tbeg < ntok) {
+        let tend = min(tbeg + x_block_tok, ntok)
+        let t4 = tbeg + ((tend - tbeg) / 4l) * 4l
+        var i = r0
+        while (i < r1) {
+            let g = min(4l, r1 - i)
+            unsafe {
+                cvt_f16_to_f32(pan, wp + i * n, g * n)
+                let tiled = g == 4l ? t4 : tbeg
+                var tk = tbeg
+                while (tk < tiled) {
+                    f32_batch_tile(yp + tk * d + i, pan, xp + tk * n, n, d)
+                    tk += 4l
+                }
+                for (q in range64(g)) {
+                    for (t in range64(tiled, tend)) {
+                        yp[t * d + i + q] = dot(pan + q * n, xp + t * n, n)
+                    }
+                }
+            }
+            i += 4l
+        }
+        tbeg = tend
+    }
+}
+
 //! the bf16 walk's token block: the knob or the floor, whichever is larger, in whole tiles and under no L2 clamp - the walk builds a row group's panel once per block, so a block the clamp cuts pays a second panel and a token tail
 def bf16_token_block() : int64 {
     let ts = amx_bf16_tile_tokens()

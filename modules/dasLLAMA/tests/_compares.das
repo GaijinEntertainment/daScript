@@ -32,6 +32,29 @@ def row_fill(n : int; mul, add : int; scale, off : float; modulus : int = 97) : 
     return <- a
 }
 
+//! a weight in [-scale, scale) off an integer hash of index `i` and `salt`, snapped down to the 1/`lattice` grid where `lattice`
+//! is set - the synthetic oracles' weights
+def hash_weight(i, salt : int; scale : float; lattice : float = 0.0) : float {
+    var h = uint(i) * 2654435761u + uint(salt) * 40503u
+    h = (h ^ (h >> 15u)) * 2246822519u
+    h = h ^ (h >> 13u)
+    let v = (float(h & 0xFFFFu) / 32768.0 - 1.0) * scale
+    return lattice > 0.0 ? floor(v * lattice) / lattice : v
+}
+
+//! `n` hashed weights (`hash_weight`) appended to `plane`; their element base
+def put_hashed(var plane : array<float>; n, salt : int; scale : float; lattice : float = 0.0) : uint {
+    let at = length(plane)
+    plane |> resize(at + n)
+    for (i in range(n)) {
+        plane[at + i] = hash_weight(i, salt, scale, lattice)
+    }
+    return uint(at)
+}
+
+//! the logistic sigmoid in double: the oracles' gate reference
+def sigmoid_d(x : double) : double => 1.0lf / (1.0lf + exp(-x))
+
 //! `n` slots of `v`
 def plane_of(n : int; v : float) : array<float> {
     var a : array<float>
@@ -118,6 +141,25 @@ def maxdiff_at(got, want : array<float>) : int => span_maxdiff(got, want, 0, 0, 
 
 //! the NaN elements of `a`: the sentinel words a dispatch left
 def nan_count(a : array<float>) : int => count(a, $(v) => is_nan(v))
+
+//! the elements of `a` off the sentinel's bits: `nan_count`'s bits-exact twin, where a NaN of another payload is a write
+def sentinel_off(a : array<float>) : int => count(a, $(v) => float_bits_to_uint(v) != NAN_SENTINEL_BITS)
+
+//! the index of the first element of `a` off the sentinel's bits, -1 where every one keeps it - the slot a sentinel compare logs
+def first_sentinel_off(a : array<float>) : int {
+    for (v, i in a, count()) {
+        return i if (float_bits_to_uint(v) != NAN_SENTINEL_BITS)
+    }
+    return -1
+}
+
+//! `first_sentinel_off` over words: the first slot of `a` off `NAN_SENTINEL_BITS`, -1 where every one keeps it
+def first_sentinel_off(a : array<uint>) : int {
+    for (v, i in a, count()) {
+        return i if (v != NAN_SENTINEL_BITS)
+    }
+    return -1
+}
 
 //! true when every element of `a` is finite: no NaN, no infinity
 def all_finite(a : array<float>) : bool => all(a, $(v) => is_finite(v))

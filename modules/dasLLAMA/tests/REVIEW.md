@@ -33,12 +33,9 @@ through a `../dasllama/` function and calls no other `../dasllama/` function.
 **A diff that touches a test file or cell `REVIEW_PINNED_GATES.md` (beside this file) lists, or
 changes which `run.das` suites list one, applies that checklist too.**
 
-**A diff that adds a cell or an assert whose expected value must be kept in step with something
-maintained outside the cell - anything the cell restates as a literal or a copied condition: a
-document, a checked-in table, a committed artifact's form, a roster, a knob list, an engine dispatch
-condition - never a value the cell's own claim defines - or that a checked-in table names as its
-evidence, applies `REVIEW_PINNED_GATES.md` too.** An assert that compares against a `../dasllama/`
-constant by name, not against a literal copy of it, keeps nothing in step.
+**A diff that adds a cell or an assert whose expected value restates, or reads, something
+maintained outside the cell, or that a checked-in table names as its evidence, applies
+`REVIEW_PINNED_GATES.md` (beside this file) too.**
 
 **A cell that calls - in its own code or through a helper - a `../dasllama/` call that sets a
 module or process global a later load, route choice or kernel dispatch reads (a `set_*`,
@@ -121,9 +118,9 @@ class - the cells of one helper, or the arms of one name pattern - keeps that cl
 skip clauses true for every cell in the class.**
 
 **A diff that adds, renames, or drops an arm name - the literal passed to `arm_on(t, name)`
-(`_model_tier.das`), what `--arm` matches - updates the arm census in `CLAUDE.md`'s "Arm filter
-mechanics" section in the same change.** An arm the census does not name is unreachable to
-whoever is choosing what to run.
+(`_model_tier.das`), what `--arm` matches - updates its suite's backticked arm roster in
+`CLAUDE.md`'s "Arm filter mechanics" section in the same change.** An arm the roster does not name
+is unreachable to whoever is choosing what to run.
 
 **A diff that adds, changes, or drops a cell's skip condition other than the runner's own
 `--arm` / `--family` filter - a `t |> skip` or an early return - updates in the same change the
@@ -241,8 +238,8 @@ streams nothing beside the device's bytes, and the tier does not bind it.
 init - for its own process once that process has read it; it passes the value to a child it
 spawns, either as the spawn's environment argument or, for a spawn that inherits the parent's
 environment, by setting the knob right before the spawn and restoring the previous value right
-after (unsetting it if it was unset).** A set after that process starts is invisible to a config
-already read.
+after (the empty string where it was unset).** A set after that process starts is invisible to a
+config already read.
 
 **A cell that picks its bar, its route or its expected value by an environment-read knob its own
 process has already read - a skip gate on the knob is no such pick - names that knob's value in
@@ -260,8 +257,8 @@ cell the same file runs.** A counter that rises on both legs shows nothing about
 
 **A control for a bound assert in a cell that is not a kernel-unit cell changes an input the
 computation reads - a zeroed weight region, a poisoned input element, a mechanism disabled - and
-re-runs the compare, or holds the output against the reference computed over inputs one row off;
-a value added to the output after the fact is not one.**
+re-runs the compare, or holds the output against the reference computed over displaced inputs (a
+row or a layer off, a reordered sequence); a value added to the output after the fact is not one.**
 
 **A within-bar float compare that a diff adds, changes, moves or extracts into a helper reds on a
 NaN in the output, the reference or their difference: it passes on `d <= bar`, counts a miss on

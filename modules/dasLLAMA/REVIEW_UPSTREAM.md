@@ -11,12 +11,15 @@ semicolon, a colon or a dash.
 
 The reference build is any third-party engine, library or runtime whose figure a sentence
 compares with this module's own, whatever copy a box holds - a prebuilt release, or a checkout a
-setup script of this module pins. A library the build ships is part of it. A sentence does
+setup script of this module pins. A library the build's release or source tree bundles is part
+of it; a package an environment installs beside it is not. A model's name, and a family this
+module names after its model, name the model, not the reference build. A sentence does
 reference-build work when it reports a search through that build, a patch to it, a run of it, a
 regeneration from it, or a measurement against it - planned or performed - even when it also
-states what our own code or our own run does. Running a library the build ships to produce our
-own artifact is reference-build work; naming one of the build's symbols is not by itself such
-work.
+states what our own code or our own run does. A sentence saying what the build does inside a run
+it reports, and a licence or attribution notice the third party's licence requires, do
+reference-build work. Running a library the build bundles to produce our own artifact is
+reference-build work; naming one of the build's symbols is not by itself such work.
 
 **A diff that names the reference build - its organization, project, binary, library, source
 header, symbol, constant, or a label its output prints - outside a sentence doing reference-build

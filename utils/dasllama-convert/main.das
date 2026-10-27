@@ -31,6 +31,7 @@ require dasllama/dasllama_gguf          // GGUFMeta — bake-side, deliberately 
 require dasllama/dasllama_math          // pin_backend_for_bake — bake-side, deliberately not facade
 require dasllama/dasllama_gpu_tier      // moe_gpu_bake_tag — bake-side, deliberately not facade
 require dasllama/dasllama_styletts2     // bake_styletts2_image — the TTS arm, bake-side, deliberately not facade
+require convert_sniff                    // sniff_asr_kind: what a source file carries
 require daslib/clargs
 require daslib/jobque_boost
 require daslib/fio
@@ -166,51 +167,10 @@ def private list_images(cfg : ConvertArgs) : int {
     return 0
 }
 
-// "" = a regular decoder GGUF (the Model flow); else the audio family the source carries:
-// whisper | parakeet | canary | qwen3a | gemma4a | tower (qwen2a/ultravox/voxtral mmproj) |
-// vision (a vision mmproj — declined loudly in convert_asr)
-def private sniff_asr_kind(path : string) : string {
-    var st : FStat
-    if (!stat(path, st) || st.is_dir || int64(st.size) < 8l) {
-        return ""
-    }
-    var kind = ""
-    let f = fopen(path, "rb")
-    if (f == null) {
-        return ""
-    }
-    fmap(f) $(var bytes : array<uint8>#) {
-        let magic = rd_u32(bytes, 0l)
-        if (magic == 0x67676d6cu) {   // ggml bin: whisper vs parakeet on vocab size
-            kind = int(rd_u32(bytes, 4l)) < 32768 ? "parakeet" : "whisper"
-        } elif (magic == CANARY_MAGIC) {
-            kind = "canary"
-        } elif (magic == 0x46554747u) {   // GGUF: an audio mmproj or a plain decoder
-            var inscope m <- parse_gguf_meta(bytes)
-            var proj = ""
-            if (gguf_has(m, "clip.audio.projector_type")) {
-                proj = gguf_str(m, bytes, "clip.audio.projector_type")
-            } elif (gguf_has(m, "clip.projector_type")) {
-                proj = gguf_str(m, bytes, "clip.projector_type")
-            }
-            if (proj == "qwen3a" || proj == "gemma4a") {
-                kind = proj
-            } elif (proj == "qwen2a" || proj == "qwen2.5o" || proj == "ultravox" || proj == "voxtral") {
-                kind = "tower"
-            } elif (proj != "") {
-                kind = "vision"
-            }
-        }
-    }
-    fclose(f)
-    return kind
-}
 
-// ASR carriers (whisper/parakeet ggml bins, the CNRY encoder, audio mmproj GGUFs) bake through
-// their family loaders' own image cache: load once eagerly, the wrap saves the identity-named
-// image beside the source. -o is unsupported (family images are identity-named siblings).
-def private convert_asr(cfg : ConvertArgs; kind : string; qm : QuantMode) : int {
-    if (kind == "vision") {
+//! Bakes by one eager family load; the image lands beside the source
+def private convert_asr(cfg : ConvertArgs; kind : AsrCarrierKind; qm : QuantMode) : int {
+    if (kind == AsrCarrierKind.vision) {
         to_log(LOG_ERROR, "dasllama-convert: '{cfg.model}' is a VISION mmproj — its prepared image bakes on the first live load; there is no offline convert leg\n")
         return 2
     }
@@ -232,15 +192,17 @@ def private convert_asr(cfg : ConvertArgs; kind : string; qm : QuantMode) : int 
         return 2
     }
     var tag = ""
-    if (kind == "whisper") {
+    if (kind == AsrCarrierKind.whisper) {
         tag = q8 ? "whisper-q8" : "whisper-f32"
-    } elif (kind == "parakeet") {
+    } elif (kind == AsrCarrierKind.parakeet) {
         tag = q8 ? "parakeet-q8" : "parakeet-f32"
-    } elif (kind == "canary") {
+    } elif (kind == AsrCarrierKind.gigaam) {
+        tag = gigaam_image_tag(q8)   // the exact lane keeps the carrier's f16
+    } elif (kind == AsrCarrierKind.canary) {
         tag = q8 ? "canary-q8" : "canary-f32"
-    } elif (kind == "qwen3a") {
+    } elif (kind == AsrCarrierKind.qwen3a) {
         tag = "qwen3a-f32"
-    } elif (kind == "gemma4a") {
+    } elif (kind == AsrCarrierKind.gemma4a) {
         tag = "gemma4a-f32"
     } else {
         tag = q8 ? "tower-q8" : "tower-f32"
@@ -266,15 +228,17 @@ def private convert_asr(cfg : ConvertArgs; kind : string; qm : QuantMode) : int 
     with_job_que() {
         setup_dasllama_jobque()
         // the family wrap loads eagerly on the miss and saves the image itself
-        if (kind == "whisper") {
+        if (kind == AsrCarrierKind.whisper) {
             var inscope m <- load_whisper_model(cfg.model, q8)
-        } elif (kind == "parakeet") {
+        } elif (kind == AsrCarrierKind.parakeet) {
             var inscope m <- load_parakeet_model(cfg.model, q8)
-        } elif (kind == "canary") {
+        } elif (kind == AsrCarrierKind.gigaam) {
+            var inscope m <- load_gigaam_model(cfg.model, q8)
+        } elif (kind == AsrCarrierKind.canary) {
             var inscope m <- load_canary_encoder(cfg.model, q8)
-        } elif (kind == "qwen3a") {
+        } elif (kind == AsrCarrierKind.qwen3a) {
             var inscope m <- load_qwen3a_tower(cfg.model)
-        } elif (kind == "gemma4a") {
+        } elif (kind == AsrCarrierKind.gemma4a) {
             var inscope m <- load_gemma4a_encoder(cfg.model)
         } else {
             var inscope m <- load_audio_tower(cfg.model, q8)
@@ -488,7 +452,7 @@ def main() : int {
         have_want = true
     }
     let asr_kind = sniff_asr_kind(cfg.model)
-    if (asr_kind != "") {
+    if (asr_kind != AsrCarrierKind.decoder) {
         return convert_asr(cfg, asr_kind, qm)
     }
     let tts_family = sniff_tts_family(cfg.model)

@@ -3246,9 +3246,11 @@ struct public MetalTensorRaceResult {
     note : string
 }
 
-def race_buf(dev : MetalDevice?; bytes : uint64; src : void?) : MetalBuffer? {
+//! A new `bytes`-long buffer on `dev` holding a copy of the bytes at `src` (left as allocated where `src` is null); null
+//! where the buffer cannot be made.
+def metal_buffer_from(dev : MetalDevice?; bytes : uint64; src : void?) : MetalBuffer? {
     var b = metal_new_buffer(dev, bytes)
-    if (src != null) {
+    if (b != null && src != null) {
         unsafe(memcpy(metal_buffer_contents(b), src, bytes))
     }
     return b
@@ -3343,8 +3345,8 @@ def race_kq_planes(dev : MetalDevice?; nblk, qu_per_sb : int; sform : KqRaceScal
             }
         }
     }
-    var bq = race_buf(dev, uint64(nblk * qu_per_sb * 4), unsafe(addr<void?>(qplane[0])))
-    var bs = race_buf(dev, uint64(sbytes), unsafe(addr<void?>(splane[0])))
+    var bq = metal_buffer_from(dev, uint64(nblk * qu_per_sb * 4), unsafe(addr<void?>(qplane[0])))
+    var bs = metal_buffer_from(dev, uint64(sbytes), unsafe(addr<void?>(splane[0])))
     let doff = sform == KqRaceScaleForm.split_d || sform == KqRaceScaleForm.split_dmin ? uint64(nblk * 16) : 0ul
     delete qplane
     delete splane

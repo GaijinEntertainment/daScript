@@ -151,14 +151,8 @@ def private serialize_image_meta(var arch : Archive; var st : WhisperStaging) {
     serialize_image_meta(arch, st.e)
 }
 
-// staging owns its plane bytes outright — every array here is heap, none is borrowed
 def finalize(var st : WhisperStaging) {
-    delete st.filters
-    delete st.dblob
-    delete st.dqblob
-    delete st.dqscales
-    delete st.enc
-    delete st.e
+    delete_staging(st)
 }
 
 [unused_argument(st)]
@@ -459,37 +453,9 @@ def load_whisper_model(path : string; q8 : bool = false) : WhisperModel =>
 //! `set_asr_tower_fp32` routes here through the facade.
 def load_whisper_model(path : string; enc_q8, dec_q8 : bool) : WhisperModel {
     let tag = whisper_tag(enc_q8, dec_q8)
-    if (path |> ends_with(".dlim")) {
-        // named directly — no source bin to regenerate from, so a wrong identity panics
-        apply_box_profile_runtime()
-        let ts_img = ref_time_ticks()
-        var t = WhisperModel()
-        if (!load_image(path, t, tag)) {
-            panic("dasLLAMA: '{path}' is not a prepared whisper image for this box/knobs (identity {image_identity(tag)}) - regenerate it from the source model")
-        }
-        to_log(LOG_INFO, "dasLLAMA: prepared whisper image mapped in {get_time_usec(ts_img) / 1000} ms - {path}\n")
-        return <- t
-    }
-    if (g_env_engine.image) {
-        apply_box_profile_runtime()   // a backend pin must precede the identity (it names the backend)
-        let img = image_path_for(path, tag)
-        let ts_img = ref_time_ticks()
-        var t = WhisperModel()
-        if (load_image(img, t, tag)) {
-            to_log(LOG_INFO, "dasLLAMA: prepared whisper image mapped in {get_time_usec(ts_img) / 1000} ms - {img}\n")
-            return <- t
-        }
-        var built = WhisperModel()
-        if (stream_whisper_model(path, enc_q8, dec_q8, img, tag, built)) {
-            dlim_gc_stale(path, tag)   // the fresh bake ON DISK proves its lane's siblings dead; an in-memory build reaps nothing
-        }
-        return <- built
-    }
-    // no persisted image: stream one into memory and serve THAT — a served model is always
-    // image-backed, so there is no second, array-owning shape of this struct to maintain
-    var built = WhisperModel()
-    stream_whisper_model(path, enc_q8, dec_q8, "", tag, built)
-    return <- built
+    return <- load_through_image(path, tag, "whisper", "source model", type<WhisperModel>, $(img : string; var out : WhisperModel) {
+        return stream_whisper_model(path, enc_q8, dec_q8, img, tag, out)
+    }, $ [unused_argument(t)] (t : WhisperModel) => true, $ [unused_argument(t, src)] (t : WhisperModel; src : string) {})
 }
 
 [init]
@@ -1944,7 +1910,8 @@ def whisper_asr_caps(w : WhisperModel) : AsrCaps {
     var c = AsrCaps(translate = w.multilingual,
                     timestamps = AsrTimestamps.segment,
                     streaming = false,
-                    prompt = false)
+                    prompt = false,
+                    default_lang = "en")
     if (w.multilingual) {
         c.languages <- whisper_lang_list()
         if (long_length(c.languages) > w.n_lang) {   // 99-lang models predate "yue"

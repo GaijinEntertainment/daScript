@@ -234,7 +234,7 @@ server's names; the config file fills whatever they leave empty (below).
    * - ``--out`` / ``-o``
      - Write the transcript here instead of stdout
    * - ``--lang`` / ``-l``
-     - Language hint (default: auto for a model that detects it, else ``en``); a model that detects the language refuses a hint, a code the model does not speak is refused with the codes it does
+     - Language hint (default: auto for a model that detects it, its one language for a one-language model, else ``en``); a model that detects the language refuses a hint, a code the model does not speak is refused with the codes it does
 
 .. list-table:: ``speak``
    :header-rows: 1
@@ -276,7 +276,7 @@ server's names; the config file fills whatever they leave empty (below).
    * - ``--system``
      - The system prompt
    * - ``--lang`` / ``-l``
-     - Language hint for the ASR model (default: auto for a model that detects it, else ``en``)
+     - Language hint for the ASR model (default: auto for a model that detects it, its one language for a one-language model, else ``en``)
    * - ``--tts``
      - The TTS model GGUF that speaks the reply
    * - ``--voice`` / ``-v``

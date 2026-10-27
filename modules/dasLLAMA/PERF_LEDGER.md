@@ -10,6 +10,216 @@ and coverage; this ledger is the backlog for the perf pass that follows them. Ev
 what it costs today and what the fix would change.
 
 ## Entries
+- **MEASURED (2026-10-26, `debug-jit`) - GigaAM's exact lane on the carrier's f16 halfwords, the streamed mint, and the
+  q8 lane on the Metal chain (`ARCHITECTURE_MEDIA_ASR.md#gigaam-planes`).** Box m5 (Apple M5 Max, macOS 27.0.1), branch
+  `bbatkin/gigaam-asr` at d4195376b9 with the change, `bin/daslang -jit`, `DAS_TUNE_MANIFEST` = `performance/m5.tune.json`
+  (41352 bytes), carrier `gigaam-v3-e2e-rnnt-f16.gguf` (452 MB); load average 6.5 to 8.3 from other sessions on the box
+  through every run below. Lasting allocations: the exact lane's block GEMMs leave the f32 `blob` (n_layer x (4 ff d +
+  7 d^2) floats) for the halfword `wblob` (the same count in halfwords); the f16 image is 890 MB before, 456 MB after; the
+  q8 image is unchanged at 266 MB. The q8 lane on Metal adds one device slab of the block GEMMs' Q8_0 regions (n_layer x
+  (4 ff d + 7 d^2) x 34 / 32 bytes, 231 MB at d 768, ff 3072, 16 layers). Peak RSS of one process that compiles, loads and
+  mints the image cold (`/usr/bin/time -l`, the `.dlim` removed first, three runs each, the median; the compile alone reads
+  479 MB before and 480 MB after):
+
+  | lane | peak RSS before | peak RSS after | load + mint wall before / after |
+  |---|---|---|---|
+  | f16 (exact) | 1762.6 MB | 940.6 MB | 376 / 97 ms |
+  | q8 | 1156.2 MB | 949.8 MB | 438 / 404 ms |
+
+  The mint holds the carrier's mapping and one tensor's scratch; the rest of the after figure is the compile and the
+  mapped carrier's pages. The CPU exact lane's outputs are the f32 plane's to the bit (the oracle cells' 108 stage compares
+  read the same largest differences before and after). The q8 lane on the Metal chain: the encoder rows' rel_l2 from the CPU
+  exact chain 0.0126 (ru_short) and 0.0138 (ru_mid) against the CPU q8 chain's 0.0178 and 0.0189, the token ids the CPU q8
+  chain's. `lcpp_bench --asr -m gigaam-v3-e2e-rnnt-f16.gguf -r 5 -t 6 --ngl 1 [--asr-q8]`, best of 5 per run, three
+  processes per lane alternating, the median run and the cv over the three:
+
+  | lane | ru_short ms | ru_mid ms | ru_long ms |
+  |---|---|---|---|
+  | Metal q8 | 9.80 (cv 0.16%) | 15.22 (cv 0.35%) | 64.72 (cv 0.09%) |
+  | Metal f16 | 8.64 (cv 2.3%) | 13.91 (cv 1.6%) | 59.28 (cv 1.1%) |
+
+  On the device the q8 lane is 9 to 13% slower than the halfwords and serves off 58% of the f16 image's bytes; the policy
+  keeps the exact lane on Metal and `set_gigaam_q8(true)` picks the q8 lane for memory.
+- **MEASURED (2026-10-25, `debug-jit`, `direction-grade`) - GigaAM v3 e2e-RNNT against CrispASR on the M5, and where
+  its wall goes on each lane.** Box m5: Apple M5 Max (Mac17,6, 18 cores, 6 performance), macOS 27.0.1 (26A434),
+  branch `bbatkin/gigaam-asr` at c2362503cc plus the change that lands this entry (the VAD's calling-lane matvecs and
+  float conv, the transducer step's narrowed pool, the GigaAM CPU block's `ga.*` buckets, the Metal chain's timed
+  encoder), `bin/daslang -jit`, `DAS_TUNE_POLICY` unset, `DAS_TUNE_MANIFEST` = `performance/m5.tune.json` (41352
+  bytes, checked before every run, re-minted against this binary at 20:21; the scope reads untuned on 21 entries -
+  `nv4q8_tile_gen` and the twenty `<fmt>q8_rm_gemv_gen` (`q8q8`, `iq4nl32q8`, `q4032q8`, `q51q8`, `q5032q8`, `mx4q8`,
+  `k4q8`, `k5q8`, `k6q8`, `k3q8`, `k2q8`, `q40q8`, `iq4nlq8`, `iq4xsq8`, `iq3s4q8`, `iq3sq8`, `iq3xxsq8`, `iq2sq8`,
+  `iq2xsq8`, `iq2xxsq8`) - which fall back while `tune_kernel_pick` serves the 72 minted winners from their own
+  entries: the rm_gemv entries master drops from the profile on purpose (a35f08cc47, the fallback chain answers the
+  same mr4 on arm), and the tuner's generator plan does not race the nv4 tile yet; neither family is on the GigaAM or
+  parakeet path), carrier `gigaam-v3-e2e-rnnt-f16.gguf`, the clips `corpus/ru_short.wav` (7.92 s) / `ru_mid.wav`
+  (19.44 s) / `ru_long.wav` (84.72 s, past the 25 s window, so VAD spans). The das stage figures are
+  `harness/asr_stage_probe.das` (`bin/daslang -jit modules/dasLLAMA/harness/asr_stage_probe.das -- -m <carrier> -w <clip>
+  --lane <lane> --lang ru -r 5 --e2e [--warm 10 | --settle 60] [--vad]`: the model loaded off the clock, `--warm` untimed
+  transcribes, 5 profiled passes for the `ga.encode_total` encode-only figure and the buckets, then with `--vad` 5 passes
+  of `find_speech_timestamps` over the whole clip alone after one off the clock); the probe's turn walls are not stated
+  here, the das end-to-end figure being the `lcpp_bench --asr` cell's. Lanes `cpu-f16` (the CPU tower's exact
+  f16 planes) and `cpu-q8` under `DAS_JOBQUE_THREADS=6`, `metal` (the whole encode on the device, the transducer on
+  the CPU) at the default 18 lanes; one instrument process a row, nothing else loading the box, load under 3 at each
+  start. Settled is a row run with `--settle 60` and one warm-up; clocked a row after `--warm 10`. Word agreement is
+  the LCS of the normalized words (lowercase, punctuation stripped, yo (U+0451) read as ye (U+0435)) over the longer of the two word counts,
+  against `corpus/ru_fleurs.json`; every das row printed the transcripts the agreement column scores. The
+  `lcpp_bench --asr` witnesses (`bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- --for-debug-purposes
+  --asr -m gigaam-v3-e2e-rnnt-f16.gguf -r 5 -t 6 [--ngl 1]`, best of 5, 6 dispatch lanes, total / encode ms, taken at
+  c2362503cc before the change; the cell has no f16-CPU lever, and prints its best alone, so the witnesses carry no
+  spread - `followup_general.md` row 241 owes it): CPU q8 60.40 / 57.55, 153.09 / 148.06, 1053.47 / 572.88; Metal
+  9.90 / 6.94, 17.27 / 11.04, 543.13 / 50.52.
+
+  The other board boxes hold no figure in this entry: gnr, epyc9r14 and graviton4 cannot mint the CPU cell, the VAD
+  walls or the ru_long walls, because their AWS instances and images were deleted on 2026-10-26.
+
+  The CrispASR rows are CrispASR at `CRISPASR_COMMIT` 119c40317 (ggml submodule e2ae679a), the recipe
+  `ARCHITECTURE_MEASUREMENT_AUDIO.md#asr-cpu-references` and `#asr-gpu-pairs`: `crispasr -m <carrier> --warmup -t 6
+  <clip> x5` (`build-cpu/` Metal OFF, `build/` Metal ON), the q8_0 carrier `crispasr-quantize <f16> <q8_0> q8_0`; a
+  rep's wall its `transcribed <a>s audio in <t>s (<r>x realtime)` line. The ru_mid CPU q8_0 and Metal f16 rows are
+  re-takes run back to back with the scratch probe's ru_mid rows that preceded the instrument (Metal clocked: the clip
+  listed 15 times, the last 5 kept); every other CrispASR figure is the same recipe through the same scratch driver
+  earlier the same day, its settled and clocked rows the box states that run named. The CPU f16 rows and the re-taken
+  q8_0 row read cv 0.00 because the line resolves 10 ms and 0.1x: every rep printed the same value. The onnx-asr int8
+  reference (onnx-asr 0.11.0, onnxruntime 1.27.0, onnx 1.22.0, `benchmarks/asr/onnx_bench.py --variant
+  gigaam-v3-e2e-rnnt-int8 --threads 6 --reps 5`) read ru_long 1347.2 ms (cv 1.33%, agreement 0.852) and its short / mid
+  rows stayed void (cv 4-14% over three runs).
+
+  The CrispASR end-to-end walls (`external`), mean of 5 (min-max) and cv, beside the word agreement of the das and
+  the CrispASR transcripts on the same lane:
+
+  | lane | clip | CrispASR ms | CrispASR cv | agreement das / CrispASR |
+  |---|---|---|---|---|
+  | CPU f16 | short | 900.0 (900-900) | 0.00% | 1.000 / 1.000 |
+  | CPU f16 | mid | 2210.0 (2210-2210) | 0.00% | 0.962 / 0.962 |
+  | CPU f16 | long | 11224.0 (11110-11330) | 0.84% | 0.991 / 0.930 |
+  | CPU q8 / q8_0 | short | 195.4 (194.6-196.5) | 0.38% | 1.000 / 1.000 |
+  | CPU q8 / q8_0 | mid | 446.9 (446.9-446.9), re-take | 0.00% | 0.962 / 0.962 |
+  | CPU q8 / q8_0 | long | 2988.0 (2980-3000) | 0.28% | 0.991 / 0.930 |
+  | Metal settled | short | 77.3 (77.2-77.5) | 0.15% | 1.000 / 1.000 |
+  | Metal settled | mid | 108.2 (105.9-110.5); re-take VOID | 1.61% | 0.962 / 0.962 |
+  | Metal settled | long | 484.5 (480.0-489.4) | 0.70% | 0.991 / 0.930 |
+  | Metal clocked | short | 39.7 (39.4-40.6) | 1.21% | 1.000 / 1.000 |
+  | Metal clocked | mid | 54.88 (54.6-55.7), re-take | 0.89% | 0.962 / 0.962 |
+  | Metal clocked | long | 233.1 (231.2-238.6) | 1.32% | 0.991 / 0.930 |
+
+  The settled CrispASR Metal re-take on ru_mid stayed void over three runs (cv 12.7 / 22.9 / 17.9%): the first rep 71.5
+  / 87.3 / 79.1 ms, reps 2-5 at 54.7-57.2 - the box no longer reproduces the earlier settled 108 ms, and the earlier
+  figure stands in the table. The first clocked re-take was void too (cv 37.8%, a 116.8 ms first rep).
+
+  On ru_long the gap is the silero VAD. `find_speech_timestamps` over the whole clip read, before the change, in the
+  author's scratch stage probe (`external`: the same loop at c2362503cc on the same box and lanes, without the runtime
+  profile apply this instrument runs), 377.9 ms (cv 0.06%) at 6 lanes and 477.9 (cv 0.64%) settled / 485.4 (cv 0.54%)
+  clocked at 18; through the instrument it reads 94.60 ms (cv 0.09%) on the CPU f16 row's 6 lanes, 95.04 (cv 1.12%)
+  on the q8 row's, 92.50 (cv 0.37%) settled and 94.75 (cv 0.66%) clocked at 18 - 1.09 to 1.12 ms an audio second. The VAD's
+  probabilities on ru_long, jfk and gb1 dump bit-identical before and after the change at both lane counts
+  (a scratch dump of `vad_probs`' bits and the segments). On ru_mid the Metal gap is the transducer decode: 6.41 ms
+  before at the default 18 lanes against 4.98 at `DAS_JOBQUE_THREADS=6` (the probe's `ga.decode_total`, 5 passes), and
+  5.25 ms at 18 lanes after, the step narrowing the pool to 6 lanes for the decode (5.04 ms where the probe narrowed
+  it to 5); parakeet v3's 640-wide predictor keeps the whole pool, its gb1 Metal decode 69.3 ms before and 69.0 after
+  in the probe, and 88 ms in the probe when the slow tier was parked for it - why the narrowing follows the step's work
+  and not the box's decode-phase parking.
+
+  The das encode-only figure (`ga.encode_total`, mean of the 5 profiled passes, cv), short / mid / long: CPU q8 60.91
+  (1.34%) / 158.97 (0.12%) / 614.03 (0.28%); CPU f16 155.51 (0.36%) / 398.53 (0.19%) / 1554.15 (0.51%); Metal settled
+  6.95 (0.62%) / 11.07 (0.14%) / 50.33 (0.30%), clocked 6.98 (1.11%) / 11.01 (0.35%) / 50.37 (0.19%). CrispASR runs no
+  VAD (three fixed 30 s slices, its `--chunk-seconds` default).
+
+  The profile, ru_mid, ms per audio second (the instrument's profiled passes; the CPU block's `ga.*` buckets, the
+  attention its `ga.attn_proj` (rope 0.025) and `ga.attn_heads` buckets):
+
+  | bucket | CPU q8 | CPU f16 | Metal clocked |
+  |---|---|---|---|
+  | e2e | 8.408 | 20.611 | 0.868 |
+  | mel (CPU) | 0.073 | 0.071 | 0.035 |
+  | conv front (CPU im2col + GEMM) | 0.319 | 0.319 | on device |
+  | blocks: ffn (both halves + out-LN) | 4.281 | 12.701 | on device |
+  | blocks: attention (proj / heads) | 2.363 (0.842 / 1.521) | 4.083 (2.497 / 1.586) | on device |
+  | blocks: conv module | 0.943 | 2.583 | on device |
+  | blocks: attn_out | 0.267 | 0.809 | on device |
+  | encode total | 8.178 | 20.501 | 0.566 (855 dispatches; GPU 0.521) |
+  | decode (CPU RNNT) | 0.259 | 0.265 | 0.269 |
+
+  The decode on ru_mid is 485 joint calls and 95 predictor steps a transcription; a joint call costs 4.19 us and a
+  step 13.9 us on the CPU q8 row's 6 lanes, 4.95 and 14.4 us on the Metal row's narrowed 18. Shares of the CPU q8 e2e:
+  ffn 51%, attention 28%, conv 11%, front 4%, attn_out 3%, decode 3%, mel 1%; CPU f16: 62 / 20 / 13 / 2 / 4 / 1 /
+  0.3%; Metal: encode 65%, decode 31%, mel 4%. The Metal chain's command buffer reads 10.12 ms of GPU time and 0.18 ms
+  of recording an encode against the 11.01 ms encode wall (`ga.encode.gpu`, `ga.encode.record`); the replay
+  (`--replay`, one more run of the clocked ru_mid command, encode wall 13.47 ms with the replay inside it) reads the
+  head restrides at 0.40 ms an encode (16 blocks x 4 dispatches, 4% of the GPU time) and the slab trio over the
+  restrided heads at 1.75 ms (17%).
+
+  The parakeet v3 yardstick (`ggml-parakeet-tdt-0.6b-v3-f32.bin`, the same instrument and lanes, Metal clocked; 24
+  layers, d 1024, 8x subsampling against GigaAM's 16, 768, 4x), encode ms per audio second on jfk (11.0 s) / gb1
+  (198.73 s): CPU q8 11.563 / 22.482, f32 30.142 / 40.952, Metal 1.084 / 1.123 (1025 / 2083 dispatches; GPU 0.981 / 1.113). GigaAM over parakeet, encode a second
+  against jfk: CPU q8 0.71, CPU f16-against-f32 0.68, Metal 0.52; parakeet's Metal front stays on the CPU where
+  GigaAM's runs on the device.
+
+  Russian WER, scored 2026-10-26 by the author's scratch WER driver and scorer, outside the tree (the
+  driver one `bin/daslang -jit` process per engine over every file, the facade `load_asr_model` / `create_session` /
+  `transcribe` with the `lcpp_bench --asr --ngl` Metal arming, Metal tower encodes on every file and 0 declines; same
+  box, branch at ebb375ffe0, `DAS_TUNE_MANIFEST` = `performance/m5.tune.json`, `DASLLAMA_CPU_PREFILL=1`,
+  `DAS_TUNE_POLICY` unset). Sets: FLEURS ru_ru test whole (`google/fleurs` on Hugging Face, 775 utterances, 2.50 h,
+  reference = its `transcription` field) and Golos test (SberDevices, OpenSLR SLR114; audio from the Hugging Face
+  re-host `bond005/sberdevices_golos_10h_crowd` / `_100h_farfield` test splits, 9994 / 1916 utterances as SLR114
+  lists, the OpenSLR `test.tar` link being dead): 1000 utterances per part drawn with seed 20261026 (1.11 h crowd,
+  0.74 h farfield; widened from 300 because a GigaAM-minus-parakeet CI straddled zero at 300). Hypotheses and
+  references normalized alike (lowercase, yo (U+0451) read as ye (U+0435), non-letter/digit to space, digits kept); WER = corpus word edits
+  over reference words, 95% CI from 1000 utterance bootstraps. CrispASR is 0.8.45 at 119c40317, Metal build,
+  `crispasr -m gigaam-v3-e2e-rnnt-f16.gguf --warmup -t 6 -nt <every wav>`. Carriers `gigaam-v3-rnnt-f16.gguf`
+  (lowercase head), `gigaam-v3-e2e-rnnt-f16.gguf`, `ggml-parakeet-tdt-0.6b-v3-f32.bin` (lang `ru`). FLEURS references
+  keep numerals and Golos references spell them, so each GigaAM head loses on the set whose convention it does not
+  write; the digit-free rows drop every utterance with a digit on any side. The WER points (`external`):
+
+  | set | GigaAM rnnt | GigaAM e2e | CrispASR e2e | parakeet v3 | rnnt - parakeet [CI] | e2e - parakeet [CI] |
+  |---|---|---|---|---|---|---|
+  | FLEURS, all 775 | 7.09 | 4.49 | 4.52 | 5.54 | +1.56 [+0.93, +2.19] | -1.05 [-1.46, -0.62] |
+  | FLEURS, digit-free 611 | 3.37 | 3.21 | 3.20 | 4.60 | -1.23 [-1.63, -0.78] | -1.39 [-1.79, -0.98] |
+  | Golos farfield, 1000 | 3.82 | 6.95 | 6.97 | 7.09 | -3.26 [-4.07, -2.53] | -0.13 [-1.16, +0.93] |
+  | Golos farfield, digit-free 968 | 3.80 | 5.43 | 5.45 | 7.25 | -3.44 [-4.24, -2.70] | -1.82 [-2.72, -0.86] |
+  | Golos crowd, 1000 | 2.67 | 17.08 | 17.08 | 3.81 | -1.14 [-2.11, -0.32] | +13.27 [+11.09, +15.41] |
+  | Golos crowd, digit-free 874 | 2.96 | 8.05 | 8.05 | 4.25 | -1.29 [-2.64, -0.23] | +3.80 [+2.78, +4.87] |
+
+  das and CrispASR on the same e2e weights differ by at most 0.03 WER points (`external`); 9 / 3 / 3 utterances' hypotheses
+  differ at all (FLEURS / farfield / crowd).
+
+- **MEASURED (2026-10-26, `debug-jit`) - the GigaAM leg's device-against-CPU bars and the readings behind them.** Box
+  m5 (Apple M5 Max), the branch's working tree at d4195376b9 with this round's fixes, `bin/daslang -jit dastest/dastest.das
+  -- --test <file> [--test-names <cell>]` under `DAS_LOG_LEVEL=info`, `DAS_TUNE_MANIFEST` = `performance/m5.tune.json`;
+  each reading is the cell's own `largest difference` / `plog off by` line over its clips.
+
+  | bar | value | what it holds | reading | cell |
+  |---|---|---|---|---|
+  | `GA_TWIN_BAR` (test_audio) | 1e-2 of the CPU rows' largest magnitude | the Metal GigaAM encoder rows against the CPU exact chain | 1.3e-3 to 2.7e-3 against a bar of 2.5e-2 to 2.6e-2 (about 1.05e-3 relative) on ru_short / ru_mid | `test_gigaam_metal_twin` |
+  | `GA_MEL_BAR` (test_audio) | 1e-5 of each element's magnitude, floored at 1 | the device log-mel against `gigaam_log_mel` | 1.9e-6 against a bar of 1.2e-4 to 1.7e-4 | `test_gigaam_metal_twin` |
+  | `PK_DEVICE_PLOG_BAR` (test_audio) | 1e-4 | parakeet's device transducer plog against the CPU decoder's | 2.3e-5 (v2, gb1, 786 tokens); 1.5e-5 on v3 gb1 | `test_parakeet_device_decode_twin` |
+  | `DEVICE_PLOG_BAR` (test_gigaam) | 1e-5 | GigaAM's device transducer plog against the CPU decoder's | 2.9e-6 (rnnt q8, ru_mid, 221 tokens) | `test_gigaam_device_decode_twin` |
+  | `VAD_BAR` (test_vad) | 1e-5 absolute | the VAD seat's probabilities against the CPU chunk step | 2.8e-6 on ru_long (2648 chunks), 7.7e-7 on jfk | `test_vad_gpu_twin` |
+  | `TWIN_SLACK_VK` (_tower_twin) on the gigaam f16 carrier | 1.5x the tower twin bar | the Vulkan q8 tower against the CPU q8 tower | passed on the RTX PRO 4500 pod (2026-10-26); the largest difference was not kept, and the pod is stopped - the next Vulkan run of `test_gigaam_vulkan_twin` records it | `test_gigaam_vulkan_twin` |
+
+- **STATED (2026-10-26) - the lasting buffers the GigaAM leg adds, at `GIGAAM_MAX_CLIP_S` (25 s).** Derived from the
+  allocation sites and the e2e-RNNT carrier's header (d 768, 16 layers, 16 heads of 48, ff 3072, 64 mels, n_fft 320,
+  hop 160, predictor and joint 320, 1025 logits); no run. A 25 s clip is 400000 samples: 2499 mel frames, 1250 after the
+  first conv, T = 625 encoder frames. MiB = 2^20 B.
+
+  | allocation | formula | bytes at 25 s |
+  |---|---|---|
+  | `GigaamModel` planes, exact lane (`blob` + `wblob`, mapped from the `.dlim`) | f32 front, norms and heads; L(4 ff d + 7 d^2) halfwords | 455926788 (434.8 MiB) |
+  | `GigaamModel` planes, q8 lane (`blob` + `qblob` + `qscales`) | f32 front, norms and heads; L(4 ff d + 7 d^2) int8 + a scale a 32 | 266003460 (253.7 MiB) |
+  | `GigaamState` CPU scratch, q8 / exact lane | the mel, front and block rows at T, the rope tables, the transducer halves | 55060248 / 52900248 (52.5 / 50.4 MiB) |
+  | `GigaamState` with the encode and decode on a GPU | x, the rope tables and the transducer state | 4723072 (4.5 MiB) |
+  | `GigaamState.att` | (dispatch slots) x 128 x T x 4 | 6080000 at 19 slots |
+  | Metal `g_tw_rows` (the held encoder rows) | round_up(T, 32) x d x 4, a pool bucket | 2097152 (1966080 raw) |
+  | Metal `g_tw_ga_mel_panel` | (384 x n_fft + n_fft + n_mel x 161) x 4 | 534016 |
+  | Vulkan `g_vt_ga` (q8 lane: planes 259281924, front scratch 25544080, block scratch 62046208) | the scratch at 2500 frames and 768 rows | 346872212 (330.8 MiB); +5505024 on a cm2 device |
+  | Vulkan `g_vt_fc_out_*` | an alias of the block scratch's `x_dev`, T x d x 4 | 0 of its own |
+  | Metal `g_rd_w` (the transducer weights) + its pooled per-clip buffers | wh, joint halves, f32 rows, the encoder half; buckets | 4969220 + 3483904 |
+  | Vulkan `g_rv` (the same weights + its scratch and host words) | exact sizes | 8211780 (7.8 MiB) |
+
+  The VAD's resident Vulkan scratch takes `cap = max(chunks, 64)` 512-sample chunks: `vt_vad_scratch` is
+  (64 + 512 cap) x 4 + 2048 cap + 1024 + 4 cap bytes on the device plus its host words, 2497536 at ru_mid (608 chunks)
+  and 10869696 at ru_long (2648); `g_vt_vad_x` is (64 + 512 chunks) x 4, 1245440 and 5423360. GigaAM runs the VAD on
+  ru_long alone - a clip under 25 s encodes whole - so the ru_mid figure is the formula's, not a GigaAM allocation. The
+  VAD's weight slab (1236484 B) is resident whatever the clip.
 - **MEASURED (2026-10-25, `debug-jit`, `direction-grade`) - the float GELU, the bf16 plane on the tile walk, the AMX
   bf16 weight tile, the mel's lanes and the decoder's K/V bytes, on the four board boxes.** The author's board boxes: m5
   (M5 Max, 18 lanes), gnr (AWS m8i, Xeon 6975P-C, 8 cores), epyc9r14 (AWS m7a, Zen 4, 16 cores), graviton4 (AWS m8g,

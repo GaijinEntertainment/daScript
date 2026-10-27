@@ -12,18 +12,17 @@ which module it failed to require.
 **A diff that adds or changes a function in a `dasllama/` file that reports whether a hook another
 module registers is installed makes it return false when the hook is unset - never panic.**
 
-**A diff that moves a family encode stage - a `dasllama/dasllama_<family>.das` stage that turns
-input into embeddings or fills a cache the next stage reads - onto a GPU hook leaves the CPU form
-in place and changes no value that code after the stage reads.** The CPU form serves every
-machine with no GPU driver.
+**A diff that routes an existing `dasllama/` stage's work through a GPU hook keeps the stage's CPU
+code serving when the hook is unset, and lands a test that holds the hook's output to the CPU
+code's output within a stated bar.** The CPU form serves every machine with no GPU driver.
 
 An override is an environment knob, a non-private setter in a `dasllama/` file whose value no
-`dasllama/` code chooses (a test, harness, tool or host - a program embedding the engine - sets
-it), or an on-disk state file - one a run writes or a user places, never data a build ships -
-that moves a gate, policy, or threshold off its default and so changes what the run executes,
-writes, reads, mints (writes as a prepared image), or computes. A measured time, the run's own
-duration, or a different moment at which the same work happens is not such a change; a CLI flag
-is never an override, nor is an environment knob naming a program the run spawns whose path the
+`dasllama/` code chooses and that a file outside `tests/` calls (a harness, tool, example or host -
+a program embedding the engine), or an on-disk state file - one a run writes or a user places, never
+data a build ships - that moves a gate, policy, or threshold off its default and so changes what the
+run executes, writes, reads, mints (writes as a prepared image), or computes. A measured time, the
+run's own duration, or a different moment at which the same work happens is not such a change; a CLI
+flag is never an override, nor is an environment knob naming a program the run spawns whose path the
 run's record carries in its `cmd`.
 
 **A diff that adds an override without the announce is a defect.** An announce is the line the run

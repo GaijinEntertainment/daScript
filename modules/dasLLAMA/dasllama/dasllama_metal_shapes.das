@@ -58,6 +58,7 @@ enum MetalTowerDecline {
     shape               // a dim violating the GEMM grids (m%32 / ndim%64 / kdim%32) or a misaligned plane offset
     device              // metal init failed (no device / PSO build failure)
     gpu_error           // dispatch failed at execution time
+    memory              // a pinned scratch buffer the encode needs came back null: the tower stays on the CPU chain
 }
 
 // The whisper ASR-decoder driver's decline set — FIRST failing clause, .none = supported,

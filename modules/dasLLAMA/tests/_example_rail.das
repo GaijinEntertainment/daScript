@@ -21,9 +21,8 @@ def public example_daslang() : string {
 
 //! a Linux box reached over ssh has no window server, and that is the box's fact, not a red; macOS and
 //! Windows tell only by trying, which skip_without_window reads off the child's output
-def public has_window_server() : bool {
-    return get_platform_name() != "linux" || !empty(g_env_test.display) || !empty(g_env_test.wayland_display)
-}
+def public has_window_server() : bool =>
+    get_platform_name() != "linux" || !empty(g_env_test.display) || !empty(g_env_test.wayland_display)
 
 //! the child could not open its window (glfw_live's own panic in `out`): the cell skips on the box's fact instead of reading a red
 def public skip_without_window(t : T?; rc : int; out : string) : bool {
@@ -45,15 +44,23 @@ def public example_ready(t : T?; models : array<string>) : bool {
 }
 
 //! the example `examples/dasLLAMA/<main>` spawned in its smoke mode over the stocked models with `args` after, its output into
-//! `out` under a 300 s wall clock; DASLLAMA_IMAGE=0 for the child, so it never mints a sidecar beside the stocked models
+//! `out` under a 300 s wall clock; DASLLAMA_IMAGE=0 for the child, so it never mints a sidecar beside the stocked models,
+//! and DAS_LOG_LEVEL and DAS_LOGGER_LEVEL (which wins where both are set) both info, so the witness lines it logs at LOG_INFO reach
+//! `out` whatever level the test runs under
 def public run_example(main : string; args : array<string>; var out : string&) : int {
     let prev_image = env_value_of("DASLLAMA_IMAGE")
+    let prev_level = env_value_of("DAS_LOG_LEVEL")
+    let prev_logger_level = env_value_of("DAS_LOGGER_LEVEL")
     set_env_variable("DASLLAMA_IMAGE", "0")
+    set_env_variable("DAS_LOG_LEVEL", "info")
+    set_env_variable("DAS_LOGGER_LEVEL", "info")
     let root = get_das_root()
     var argv <- [example_daslang(), "-jit", "-dasroot", root, "{root}/examples/dasLLAMA/{main}", "--", "--models", models_dir(), "--smoke"]
     argv |> push_from(args)
     let rc = run_and_capture(argv, out, 300.0)
     set_env_variable("DASLLAMA_IMAGE", prev_image)
+    set_env_variable("DAS_LOG_LEVEL", prev_level)
+    set_env_variable("DAS_LOGGER_LEVEL", prev_logger_level)
     return rc
 }
 

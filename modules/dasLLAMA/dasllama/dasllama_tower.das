@@ -7,10 +7,13 @@ module dasllama_tower shared public
 require dasllama/dasllama_lint public
 require math
 require dasllama/dasllama_math
+require dasllama/dasllama_math_gen   // matmul_f16_batch: the f16-plane GEMM under mm_f16_b
 require dasllama/dasllama_gpu_math
 require dasllama/dasllama_plane public   // PlaneF/PlaneU16 — plane forms of the blob helpers
 require dasllama/dasllama_par
 require dasllama/dasllama_gguf   // read_clamp reads sidecar scalar tensors
+require dasllama/dasllama_common   // requant_rows_q8_sized: tower_mm_rq's q8 feed
+require dasllama/dasllama_repack   // repack_conv_out_tap_in: the conv reader's tap-major order
 require daslib/cmp
 
 // The family-neutral encoder-tower home: the row math, activations, GEMM wrappers, clamp
@@ -70,6 +73,14 @@ def lane_why(seat : GpuLaneSeat; pinned : bool) : string {
         return "DASLLAMA_ACCEL on: the float-batch tier serves the file's planes"
     }
     return "the CPU default (no GPU tower, no accelerate tier)"
+}
+
+//! A q8-lane family load's lane line: the lane taken (`q8`, else the `exact` planes) and why - the pin `setter` made, a GPU
+//! tower serving the exact planes, or the CPU default
+[arch(at="../ARCHITECTURE_MEDIA.md#tower-weight-lane")]
+def announce_lane(family : string; q8 : bool; exact, setter : string; pinned, gpu_serves : bool) {
+    let why = pinned ? "pinned via {setter}" : (gpu_serves ? "a GPU tower serves the {exact}" : "the CPU default (no GPU tower serving the exact planes)")
+    to_log(LOG_INFO, "dasLLAMA {family}: GEMM lane {q8 ? "q8" : exact} - {why}\n")
 }
 
 let LN_BLOCK_GEMMS = 6l   //! a pre-LN block's GEMM regions, in the order below
@@ -280,6 +291,34 @@ def add_bias_rows_at(var y : array<float>; bp : float const?; d, npos : int64; r
     }
 }
 
+//! y[p] = max(y[p] + blob[b_off .. b_off+d), 0) for `npos` rows: the conv epilogue's bias and ReLU fused into one float4
+//! pass, bit-exact vs `add_bias_rows` then a ReLU pass; `npos` is explicit because the scratch rows are oversized
+def bias_relu_rows(var y : array<float>; blob : PlaneF; b_off, d, npos : int64) {
+    let d4 = d - d % 4l
+    unsafe {
+        var yp = addr(y[0])
+        let bp = plane_at(blob, b_off)
+        let zero = float4(0.0)
+        maybe_parallel_for(0, int(npos), lanes_for_work(npos * d, 0)) $(rb, re) {
+            unsafe {
+                for (p in range64(int64(rb), int64(re))) {
+                    let row = p * d
+                    var i = 0l
+                    while (i < d4) {
+                        let v = (*reinterpret<float4 const?>(yp + row + i)) + (*reinterpret<float4 const?>(bp + i))
+                        *reinterpret<float4?>(yp + row + i) = max(v, zero)
+                        i += 4l
+                    }
+                    while (i < d) {
+                        yp[row + i] = max(yp[row + i] + bp[i], 0.0)
+                        i++
+                    }
+                }
+            }
+        }
+    }
+}
+
 //! x += r, elementwise (residual). float4 bulk in 4-aligned threaded chunks + scalar tail
 //! (gemv lane cap — pure streaming) — bit-exact vs the scalar loop at any lane count.
 def add_inplace_rows(var x : array<float>; r : array<float>; n : int64) {
@@ -318,11 +357,44 @@ def mm_blob_b(var y : array<float>; blob : PlaneF; woff : int64; x : PlaneF; n, 
     matmul_batch(y, blob, woff, x, n, d, npos)
 }
 
+//! A q8-lane family's weight GEMM over the model `m` (any record carrying ``q8``, ``qblob``/``qscales`` and ``blob``): on the
+//! q8 lane against the activation image (`xq`, `xs`) the caller quantized once for every consumer, else `mm_blob_b` off `x`
+def tower_mm(m : auto(MT); var y : array<float>; woff : int64; x : auto(XT); xq : array<int8>; xs : array<float>; n, d, npos : int64) {
+    static_if (typeinfo has_field<gemm_f16>(m)) {
+        if (m.gemm_f16) {
+            mm_f16_b(y, m.wblob, woff, x, n, d, npos)
+            return
+        }
+    }
+    if (m.q8) {
+        matmul_q8q8_batch(y, m.qblob, m.qscales, woff, xq, xs, n, d, npos)
+    } else {
+        mm_blob_b(y, m.blob, woff, x, n, d, npos)
+    }
+}
+
+//! `tower_mm` for a single-consumer activation: the q8 lane requantizes `x` into the scratch pair first
+def tower_mm_rq(m : auto(MT); var y : array<float>; woff : int64; x : array<float>; @scratch var xq : array<int8>;
+                @scratch var xs : array<float>; n, d, npos : int64) {
+    if (m.q8) {
+        requant_rows_q8_sized(x, n, npos, xq, xs)
+    }
+    tower_mm(m, y, woff, x, xq, xs, n, d, npos)
+}
+
 //! `mm_blob_b`'s BF16-weight twin — the tower form of `matmul_bf16_batch`, weights borrowed from
 //! a prepared image. Bit-for-bit the fp32 expand at half the weight read, so a tower can hold
 //! its GEMMs in bf16 with no parity move.
 def mm_bf16_b(var y : array<float>; blob : PlaneU16; woff : int64; x : array<float>; n, d, npos : int64) {
     matmul_bf16_batch(y, blob, woff, x, n, d, npos)
+}
+
+//! `mm_blob_b`'s f16-weight twin: the GEMM off the carrier's own halfwords, each lane widening a four-row group as it
+//! reads it, so the outputs are `mm_blob_b`'s over the widened plane at half the weight bytes.
+def mm_f16_b(var y : array<float>; blob : PlaneU16; woff : int64; x : array<float>; n, d, npos : int64) {
+    unsafe {
+        matmul_f16_batch(addr(y[0]), plane_at(blob, woff), addr<float const?>(x[0]), n, d, npos)
+    }
 }
 
 //! One GEMM on whichever plane a per-tensor flag picked at load: the bf16 halfword plane when
@@ -537,6 +609,16 @@ def tower_read_conv_pair_folded(m : GGUFMeta; b : array<uint8> | #; base : strin
     delete w1
 }
 
+//! A GGUF conv1d weight into `dst` at `off` in `repack_conv_out_tap_in`'s tap-major order, [nout][k][cin]. Panics, naming `who`, on an element count off the shape.
+def tower_read_conv_tap_major(m : GGUFMeta; b : array<uint8> | #; name : string; var dst : array<float>;
+                              off, nout, cin, k : int64; who : string) {
+    let raw <- gguf_read_f32_arr(m, b, name, who)
+    if (long_length(raw) != nout * cin * k) {
+        panic("dasLLAMA {who}: tensor '{name}' has {long_length(raw)} elements, expected {nout * cin * k}")
+    }
+    repack_conv_out_tap_in(raw, dst, off, nout, cin, k)
+}
+
 //! Per-op activation-quant calibration range: clamp(x, imin, imax) before
 //! the matmul, clamp the result to (omin, omax) after. ``active`` false = no sidecar scalars on
 //! disk, which means ±FLT_MAX — an identity clamp, so callers may skip the pass.
@@ -722,6 +804,30 @@ def im2col_k3s2p1(var colp : float?; xp : float const?; iw, ih, cin : int64) {
                                     ? xp[(iy * iw + ix) * cin + ic]
                                     : 0.0)
                             }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+//! The im2col of a conv1d of odd kernel `k` and centered pad at `stride` over rows [tin][cin] (whisper's conv2, gigaam's
+//! front): output row t holds the k input rows stride * t - pad .. stride * t - pad + k - 1 back to back (column tap * cin + c),
+//! zeros past the edges; the rows split across lanes - pure copies, the same bytes under any split.
+def im2col_conv1d_rows(var colp : float?; xp : float const?; tin, cin, tout, k, stride : int64) {
+    let pad = (k - 1l) / 2l
+    maybe_parallel_for(0, int(tout), lanes_for_work(tout * k * cin, 0)) $(rb, re) {
+        unsafe {
+            for (t in range64(int64(rb), int64(re))) {
+                for (tap in range64(k)) {
+                    let src = stride * t - pad + tap
+                    var dst = colp + (t * k + tap) * cin
+                    if (src >= 0l && src < tin) {
+                        copy_floats(dst, xp + src * cin, cin)
+                    } else {
+                        for (c in range64(cin)) {
+                            dst[c] = 0.0
                         }
                     }
                 }
@@ -1095,6 +1201,535 @@ def attention_bidir_windows(var out : array<float>; qq, kk, vv : array<float>; @
     }
 }
 
+// ===== the CPU FastConformer block (canary, parakeet, gigaam) =====
+
+//! the rel-pos attention's slab height in rows: 4-aligned (the gemm_f32 row-group invariant keeps a slab start bit-exact)
+//! and tall enough that the K^T and pos panel re-streams stay a few percent of the GEMM time
+let FC_ATN_BLOCK = 64l
+
+//! a stage-scan hook: the block's residual stream after stage `tag` of block `l`
+typedef FcScanFn = function<(tag : string; l : int64; x : array<float>; n : int64) : void>
+
+//! one macaron FFN half's stage buckets
+struct FcFfnProf {
+    ln : string
+    a : string
+    silu : string
+    b : string
+    res : string
+}
+
+//! the profile buckets a family's CPU block reports under; an empty name records nothing
+struct FcCpuProf {
+    ffn1 : FcFfnProf
+    ffn : string
+    proj_ln : string
+    proj_rq : string
+    proj_q : string
+    proj_k : string
+    proj_v : string
+    proj_pos : string         //!< the position stage: the rel-pos table's projection, or the rope over the normed rows
+    proj : string
+    heads_pack : string
+    heads_pos : string
+    heads_blocks : string
+    heads : string
+    attn_out : string
+    conv : string
+}
+
+//! What a FastConformer family's CPU block runs - the CPU twin of the Metal driver's `FcForm`: the geometry, the GEMM
+//! biases, the depthwise taps' layout, the conv module's norm, the float4 lane, the profile buckets and the stage-scan
+//! hook. The attention's position form is the type of `fc_block_cpu`'s `pos`: `FcRelPos` or `FcRotary`.
+struct FcCpuForm {
+    d : int64
+    ff : int64
+    n_head : int64
+    nk : int64                //!< the depthwise taps
+    biased : bool = true      //!< parakeet's GEMMs carry no bias
+    tap_major : bool = true   //!< depthwise taps [k][d], or canary's channel-major [d][k]
+    conv_ln : bool            //!< gigaam: the biased depthwise conv, then a LayerNorm and the SiLU; else the BatchNorm folded into the depthwise, fused with the SiLU
+    dw_taps : PlaneU16 = PlaneU16()   //!< the conv_ln form's taps as the carrier's f16 halfwords, the layer offsets indexing it; empty: the taps are f32 in ``blob``
+    vec4 : bool = true        //!< the float4 GLU and k9 depthwise; canary keeps the scalar sigmoid forms
+    prof : FcCpuProf
+    scan_on : bool
+    scan : FcScanFn
+}
+
+//! the Transformer-XL rel-pos form: the `ww` = 2 tt - 1 rows of ``st.pos_emb`` (its q8 image ``st.posq``/``st.poss``), keys at
+//! or past `n_real` masked
+struct FcRelPos {
+    ww : int64
+    n_real : int64
+}
+
+//! the rotary form: the rope from ``st.rope_cos``/``st.rope_sin`` over the attention's normed input rows, then `attention_bidir`
+struct FcRotary {
+    rope : bool = true
+}
+
+def private fc_scan(form : FcCpuForm; tag : string; l : int64; x : array<float>; n : int64) {
+    if (form.scan_on) {
+        invoke(form.scan, tag, l, x, n)
+    }
+}
+
+def private fc_size_block_scratch(var st : auto(ST); form : FcCpuForm; tt : int64) {
+    let d = form.d
+    ensure_length(st.xb, tt * d)
+    ensure_length(st.h, tt * max(form.ff, 2l * d))
+    ensure_length(st.qq, tt * d)
+    ensure_length(st.kk, tt * d)
+    ensure_length(st.vv, tt * d)
+    ensure_length(st.ao, tt * d)
+}
+
+def private fc_ffn_half_cpu(m : auto(MT); var st : auto(ST); form : FcCpuForm; p : FcFfnProf; ln_w, ln_b, wa, ba, wb, bb, tt : int64) {
+    let d = form.d
+    let ff = form.ff
+    var tf = ref_time_ticks()
+    layernorm_batch(st.xb, st.x, m.blob, ln_w, ln_b, d, tt, m.eps)
+    asr_prof_add(p.ln, tf)
+    tf = ref_time_ticks()
+    tower_mm_rq(m, st.h, wa, st.xb, st.xqi, st.xsi, d, ff, tt)
+    if (form.biased) {
+        add_bias_rows(st.h, m.blob, ba, ff, tt)
+    }
+    asr_prof_add(p.a, tf)
+    tf = ref_time_ticks()
+    silu4_batch(st.h, ff, tt)
+    asr_prof_add(p.silu, tf)
+    tf = ref_time_ticks()
+    tower_mm_rq(m, st.xb, wb, st.h, st.xqi, st.xsi, ff, d, tt)
+    if (form.biased) {
+        add_bias_rows(st.xb, m.blob, bb, d, tt)
+    }
+    asr_prof_add(p.b, tf)
+    tf = ref_time_ticks()
+    unsafe {
+        var xp = addr(st.x[0])
+        let rp = addr<float const?>(st.xb[0])
+        maybe_parallel_for(0, int(tt), lanes_for_work(tt * d, 0)) $(rb, re) {
+            unsafe {
+                for (i in range64(int64(rb) * d, int64(re) * d)) {
+                    xp[i] += 0.5 * rp[i]
+                }
+            }
+        }
+    }
+    asr_prof_add(p.res, tf)
+}
+
+//! The rel-pos attention: q, k, v off one normed activation (one q8 requant feeds all three) and the layer's projection of
+//! the pos table, then per head the content and rel scores over `FC_ATN_BLOCK`-row slabs, the mask, softmax and P V into
+//! ``st.ao``. Each job owns one slab; 4-aligned row groups keep `gemm_f32_jo` bit-exact.
+def private fc_attention_cpu(m : auto(MT); var st : auto(ST); form : FcCpuForm; lo : auto(LO); pos : FcRelPos; tt : int64) { // nolint:STYLE038 — the head loop's three phases share the pack pointers
+    let d = form.d
+    let n_head = form.n_head
+    let dh = d / n_head
+    let ww = pos.ww
+    let n_real = pos.n_real
+    ensure_length(st.posl, ww * d)
+    ensure_length(st.qu, tt * dh)
+    ensure_length(st.qv, tt * dh)
+    ensure_length(st.vh, tt * dh)
+    ensure_length(st.kt, dh * tt)
+    let atn_jobs = min(int64(lanes_for_work(tt * dh * (2l * tt + ww), 0)), (tt + FC_ATN_BLOCK - 1l) / FC_ATN_BLOCK)
+    ensure_length(st.sc, atn_jobs * FC_ATN_BLOCK * tt)
+    ensure_length(st.rl, atn_jobs * FC_ATN_BLOCK * ww)
+    ensure_length(st.oh, atn_jobs * FC_ATN_BLOCK * dh)
+    ensure_length(st.posh, dh * ww)
+    let scale = 1.0 / sqrt(float(dh))
+    var tp = ref_time_ticks()
+    var tq = tp
+    layernorm_batch(st.xb, st.x, m.blob, lo.nat_w, lo.nat_b, d, tt, m.eps)
+    asr_prof_add(form.prof.proj_ln, tq)
+    tq = ref_time_ticks()
+    if (m.q8) {
+        requant_rows_q8_sized(st.xb, d, tt, st.xqi, st.xsi)
+    }
+    asr_prof_add(form.prof.proj_rq, tq)
+    tq = ref_time_ticks()
+    tower_mm(m, st.qq, lo.q_w, st.xb, st.xqi, st.xsi, d, d, tt)
+    asr_prof_add(form.prof.proj_q, tq)
+    tq = ref_time_ticks()
+    tower_mm(m, st.kk, lo.k_w, st.xb, st.xqi, st.xsi, d, d, tt)
+    asr_prof_add(form.prof.proj_k, tq)
+    tq = ref_time_ticks()
+    tower_mm(m, st.vv, lo.v_w, st.xb, st.xqi, st.xsi, d, d, tt)
+    asr_prof_add(form.prof.proj_v, tq)
+    if (form.biased) {
+        add_bias_rows(st.qq, m.blob, lo.q_b, d, tt)
+        add_bias_rows(st.kk, m.blob, lo.k_b, d, tt)
+        add_bias_rows(st.vv, m.blob, lo.v_b, d, tt)
+    }
+    tq = ref_time_ticks()
+    tower_mm(m, st.posl, lo.pos_w, st.pos_emb, st.posq, st.poss, d, d, ww)
+    asr_prof_add(form.prof.proj_pos, tq)
+    asr_prof_add(form.prof.proj, tp)
+    tp = ref_time_ticks()
+    let nblkb = (tt + FC_ATN_BLOCK - 1l) / FC_ATN_BLOCK
+    let npj = (nblkb + atn_jobs - 1l) / atn_jobs
+    for (hi in range64(n_head)) {
+        let hoff = hi * dh
+        unsafe {
+            var qup = addr(st.qu[0])
+            var qvp = addr(st.qv[0])
+            var ktp = addr(st.kt[0])
+            var vhp = addr(st.vh[0])
+            var pop = addr(st.posh[0])
+            var scp = addr(st.sc[0])
+            var rlp = addr(st.rl[0])
+            var ohp = addr(st.oh[0])
+            var aop = addr(st.ao[0])
+            let qqp = addr<float const?>(st.qq[0])
+            let kkp = addr<float const?>(st.kk[0])
+            let vvp = addr<float const?>(st.vv[0])
+            let plp = addr<float const?>(st.posl[0])
+            let bup = plane_at(m.blob, lo.bias_u + hoff)
+            let bvp = plane_at(m.blob, lo.bias_v + hoff)
+            var th = ref_time_ticks()
+            maybe_parallel_for(0, int(tt), lanes_for_work(tt * dh * 4l, 0)) $(rb, re) {
+                unsafe {
+                    for (t in range64(int64(rb), int64(re))) {
+                        for (j in range64(dh)) {
+                            let qv = qqp[t * d + hoff + j]
+                            qup[t * dh + j] = qv + bup[j]
+                            qvp[t * dh + j] = qv + bvp[j]
+                            ktp[j * tt + t] = kkp[t * d + hoff + j]
+                            vhp[t * dh + j] = vvp[t * d + hoff + j]
+                        }
+                    }
+                }
+            }
+            asr_prof_add(form.prof.heads_pack, th)
+            th = ref_time_ticks()
+            maybe_parallel_for(0, int(ww), lanes_for_work(ww * dh, 0)) $(rb, re) {
+                unsafe {
+                    for (w in range64(int64(rb), int64(re))) {
+                        for (j in range64(dh)) {
+                            pop[j * ww + w] = plp[w * d + hoff + j]
+                        }
+                    }
+                }
+            }
+            asr_prof_add(form.prof.heads_pos, th)
+            th = ref_time_ticks()
+            maybe_parallel_for(0, int(atn_jobs), int(atn_jobs)) $(jb, je) {
+                unsafe {
+                    for (li in range64(int64(jb), int64(je))) {
+                        var scs = scp + li * FC_ATN_BLOCK * tt
+                        var rls = rlp + li * FC_ATN_BLOCK * ww
+                        var ohs = ohp + li * FC_ATN_BLOCK * dh
+                        for (blk in range64(li * npj, min((li + 1l) * npj, nblkb))) {
+                            let r0 = blk * FC_ATN_BLOCK
+                            let r1 = min(r0 + FC_ATN_BLOCK, tt)
+                            let nr = r1 - r0
+                            for (i in range64(nr * tt)) {
+                                scs[i] = 0.0
+                            }
+                            for (i in range64(nr * ww)) {
+                                rls[i] = 0.0
+                            }
+                            gemm_f32_jo(scs, qup + r0 * dh, ktp, nr, dh, tt)
+                            gemm_f32_jo(rls, qvp + r0 * dh, pop, nr, dh, ww)
+                            for (q in range64(r0, r1)) {
+                                let base = tt - 1l - q
+                                var qs = scs + (q - r0) * tt
+                                let rs = rls + (q - r0) * ww
+                                for (k in range64(tt)) {
+                                    var s = (qs[k] + rs[base + k]) * scale
+                                    if (k >= n_real) {
+                                        s = -1e30
+                                    }
+                                    qs[k] = s
+                                }
+                                softmax(qs, tt)
+                            }
+                            for (i in range64(nr * dh)) {
+                                ohs[i] = 0.0
+                            }
+                            gemm_f32_jo(ohs, scs, vhp, nr, tt, dh)
+                            for (t in range64(r0, r1)) {
+                                for (j in range64(dh)) {
+                                    aop[t * d + hoff + j] = ohs[(t - r0) * dh + j]
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            asr_prof_add(form.prof.heads_blocks, th)
+        }
+    }
+    asr_prof_add(form.prof.heads, tp)
+}
+
+//! The rotary attention: the rope over a copy of the normed rows feeds q and k (one q8 requant of the roped rows), v reads
+//! the unroped rows, then `attention_bidir` into ``st.ao``.
+[arch(at="../ARCHITECTURE_MEDIA_ASR.md#gigaam-rotary-input")]
+def private fc_attention_cpu(m : auto(MT); var st : auto(ST); form : FcCpuForm; lo : auto(LO); pos : FcRotary; tt : int64) {
+    let d = form.d
+    let hs = d / form.n_head
+    var tp = ref_time_ticks()
+    var tq = tp
+    layernorm_batch(st.xb, st.x, m.blob, lo.nat_w, lo.nat_b, d, tt, m.eps)
+    asr_prof_add(form.prof.proj_ln, tq)
+    tq = ref_time_ticks()
+    ensure_length(st.xr, tt * d)
+    unsafe {
+        copy_floats(addr(st.xr[0]), addr<float const?>(st.xb[0]), tt * d)
+    }
+    rope_neox_tab_rows(st.xr, tt, form.n_head, hs, st.rope_cos, st.rope_sin)
+    asr_prof_add(form.prof.proj_pos, tq)
+    tq = ref_time_ticks()
+    if (m.q8) {
+        requant_rows_q8_sized(st.xr, d, tt, st.xqi, st.xsi)
+    }
+    asr_prof_add(form.prof.proj_rq, tq)
+    tq = ref_time_ticks()
+    tower_mm(m, st.qq, lo.q_w, st.xr, st.xqi, st.xsi, d, d, tt)
+    asr_prof_add(form.prof.proj_q, tq)
+    tq = ref_time_ticks()
+    tower_mm(m, st.kk, lo.k_w, st.xr, st.xqi, st.xsi, d, d, tt)
+    asr_prof_add(form.prof.proj_k, tq)
+    tq = ref_time_ticks()
+    tower_mm_rq(m, st.vv, lo.v_w, st.xb, st.xqi, st.xsi, d, d, tt)
+    asr_prof_add(form.prof.proj_v, tq)
+    if (form.biased) {
+        add_bias_rows(st.qq, m.blob, lo.q_b, d, tt)
+        add_bias_rows(st.kk, m.blob, lo.k_b, d, tt)
+        add_bias_rows(st.vv, m.blob, lo.v_b, d, tt)
+    }
+    asr_prof_add(form.prof.proj, tp)
+    tp = ref_time_ticks()
+    attention_bidir(st.ao, st.qq, st.kk, st.vv, st.hp, st.att, tt, d, form.n_head, 1.0 / sqrt(float(hs)))
+    asr_prof_add(form.prof.heads, tp)
+}
+
+//! The GLU over pw1's [tt][2d] rows into `g` [tt][d]: signal (first half) times the sigmoid of the gate (second half) -
+//! the float4 `exp4` form when `vec4` and d % 4 == 0, else the scalar `sigmoid_f32` form.
+def private fc_glu_rows(var g : array<float>; h : array<float>; d, tt : int64; vec4 : bool) {
+    let n4 = d / 4l
+    let d4ok = vec4 && n4 * 4l == d
+    unsafe {
+        var gp = addr(g[0])
+        let hp = addr<float const?>(h[0])
+        let one = float4(1.0)
+        maybe_parallel_for(0, int(tt), lanes_for_work(tt * d * 4l, 0)) $(rb, re) {
+            unsafe {
+                for (t in range64(int64(rb), int64(re))) {
+                    if (d4ok) {
+                        let sgp = reinterpret<float4 const?>(hp + t * 2l * d)
+                        let gtp = reinterpret<float4 const?>(hp + t * 2l * d + d)
+                        var o4 = reinterpret<float4?>(gp + t * d)
+                        for (k in range64(n4)) {
+                            let arg = clamp(-gtp[k], EXP4_LO, EXP4_HI)
+                            o4[k] = sgp[k] / (one + exp4(arg))
+                        }
+                    } else {
+                        for (j in range64(d)) {
+                            gp[t * d + j] = hp[t * 2l * d + j] * sigmoid_f32(hp[t * 2l * d + d + j])
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+//! The depthwise conv1d over time (centered pad, tap-major weights [k][d] in ``blob``) plus its bias: the LayerNorm form's conv.
+def fc_dw_bias_rows(var o : array<float>; g : array<float>; blob : PlaneF; w_off, b_off, d, tt, k : int64) {
+    fc_dw_bias_rows_at(o, g, plane_at(blob, w_off), plane_at(blob, b_off), d, tt, k)
+}
+
+//! The same conv over taps the carrier holds as f16 halfwords in `taps` at `w_off`: the [k][d] taps widened once a call
+//! (exact) into the caller's scratch `wide`, then the f32 walk - every output the f32 taps' to the bit.
+[arch(at="../ARCHITECTURE_MEDIA_ASR.md#gigaam-planes")]
+def fc_dw_bias_rows_f16(var o : array<float>; g : array<float>; taps : PlaneU16; w_off : int64; blob : PlaneF; b_off, d, tt, k : int64;
+                        @scratch var wide : array<float>) {
+    ensure_length(wide, k * d)
+    unsafe {
+        cvt_f16_to_f32(addr(wide[0]), plane_at(taps, w_off), k * d)
+        fc_dw_bias_rows_at(o, g, addr<float const?>(wide[0]), plane_at(blob, b_off), d, tt, k)
+    }
+}
+
+def private fc_dw_bias_rows_at(var o : array<float>; g : array<float>; wp, bp : float const?; d, tt, k : int64) {
+    let pad = (k - 1l) / 2l
+    unsafe {
+        var op = addr(o[0])
+        let gp = addr<float const?>(g[0])
+        maybe_parallel_for(0, int(tt), lanes_for_work(tt * d * k, 0)) $(rb, re) {
+            unsafe {
+                for (t in range64(int64(rb), int64(re))) {
+                    var orow = op + t * d
+                    copy_floats(orow, bp, d)
+                    for (tap in range64(k)) {
+                        let src = t - pad + tap
+                        if (src >= 0l && src < tt) {
+                            let grow = gp + src * d
+                            let wrow = wp + tap * d
+                            for (c in range64(d)) {
+                                orow[c] += wrow[c] * grow[c]
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+//! The depthwise conv1d over time (centered pad) with the BatchNorm folded to a scale/shift, fused with the SiLU. Taps are
+//! tap-major [k][d] or channel-major [d][k]; `vec4` on tap-major k9 rows with d % 4 == 0 runs the float4 `exp4` form,
+//! everything else the scalar `sigmoid_f32` form.
+def private fc_dw_bn_silu_rows(var o : array<float>; g : array<float>; blob : PlaneF; w_off, sc_off, sh_off, d, tt, nk : int64;
+                               tap_major, vec4 : bool) {
+    let kpad = (nk - 1l) / 2l
+    let one = float4(1.0, 1.0, 1.0, 1.0)
+    let f4ok = vec4 && tap_major && nk == 9l && (d / 4l) * 4l == d
+    let wt = tap_major ? d : 1l    // weight stride per tap
+    let wc = tap_major ? 1l : nk   // weight stride per channel
+    unsafe {
+        let xbp = addr<float const?>(g[0])
+        var aop = addr(o[0])
+        let dwp = plane_at(blob, w_off)
+        let scp = plane_at(blob, sc_off)
+        let shp = plane_at(blob, sh_off)
+        maybe_parallel_for(0, int(tt), lanes_for_work(tt * d * (nk + 4l), 0)) $(rb, re) {
+            unsafe {
+                for (t in range64(int64(rb), int64(re))) {
+                    if (f4ok && t >= kpad && t < tt - kpad) {
+                        var j = 0l
+                        while (j < d) {
+                            let base = (t - 4l) * d + j
+                            var acc = (*reinterpret<float4 const?>(xbp + base)) * (*reinterpret<float4 const?>(dwp + j))
+                            acc = mad(*reinterpret<float4 const?>(xbp + base + d), *reinterpret<float4 const?>(dwp + d + j), acc)
+                            acc = mad(*reinterpret<float4 const?>(xbp + base + 2l * d), *reinterpret<float4 const?>(dwp + 2l * d + j), acc)
+                            acc = mad(*reinterpret<float4 const?>(xbp + base + 3l * d), *reinterpret<float4 const?>(dwp + 3l * d + j), acc)
+                            acc = mad(*reinterpret<float4 const?>(xbp + base + 4l * d), *reinterpret<float4 const?>(dwp + 4l * d + j), acc)
+                            acc = mad(*reinterpret<float4 const?>(xbp + base + 5l * d), *reinterpret<float4 const?>(dwp + 5l * d + j), acc)
+                            acc = mad(*reinterpret<float4 const?>(xbp + base + 6l * d), *reinterpret<float4 const?>(dwp + 6l * d + j), acc)
+                            acc = mad(*reinterpret<float4 const?>(xbp + base + 7l * d), *reinterpret<float4 const?>(dwp + 7l * d + j), acc)
+                            acc = mad(*reinterpret<float4 const?>(xbp + base + 8l * d), *reinterpret<float4 const?>(dwp + 8l * d + j), acc)
+                            let bv4 = mad(acc, *reinterpret<float4 const?>(scp + j), *reinterpret<float4 const?>(shp + j))
+                            let arg = clamp(-bv4, EXP4_LO, EXP4_HI)
+                            *reinterpret<float4?>(aop + t * d + j) = bv4 / (one + exp4(arg))
+                            j += 4l
+                        }
+                    } elif (f4ok) {
+                        var j = 0l
+                        while (j < d) {
+                            var acc = float4(0.0, 0.0, 0.0, 0.0)
+                            for (k in range64(9l)) {
+                                let src = t + k - kpad
+                                if (src >= 0l && src < tt) {
+                                    acc = mad(*reinterpret<float4 const?>(xbp + src * d + j), *reinterpret<float4 const?>(dwp + k * d + j), acc)
+                                }
+                            }
+                            let bv4 = mad(acc, *reinterpret<float4 const?>(scp + j), *reinterpret<float4 const?>(shp + j))
+                            let arg = clamp(-bv4, EXP4_LO, EXP4_HI)
+                            *reinterpret<float4?>(aop + t * d + j) = bv4 / (one + exp4(arg))
+                            j += 4l
+                        }
+                    } else {
+                        for (j in range64(d)) {
+                            var acc = 0.0
+                            for (k in range64(nk)) {
+                                let src = t + k - kpad
+                                if (src >= 0l && src < tt) {
+                                    acc += dwp[k * wt + j * wc] * xbp[src * d + j]
+                                }
+                            }
+                            let bv = acc * scp[j] + shp[j]
+                            aop[t * d + j] = bv * sigmoid_f32(bv)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+//! The conv module: LayerNorm, pw1, GLU, the depthwise conv and its norm, the SiLU, pw2, onto the residual stream.
+def private fc_conv_module_cpu(m : auto(MT); var st : auto(ST); form : FcCpuForm; lo : auto(LO); tt : int64) {
+    let d = form.d
+    layernorm_batch(st.xb, st.x, m.blob, lo.ncv_w, lo.ncv_b, d, tt, m.eps)
+    tower_mm_rq(m, st.h, lo.pw1_w, st.xb, st.xqi, st.xsi, d, 2l * d, tt)
+    if (form.biased) {
+        add_bias_rows(st.h, m.blob, lo.pw1_b, 2l * d, tt)
+    }
+    if (form.conv_ln) {
+        fc_glu_rows(st.xb, st.h, d, tt, form.vec4)
+        if (form.dw_taps.n > 0l) {
+            static_if (typeinfo has_field<dw_wide>(st)) {
+                fc_dw_bias_rows_f16(st.ao, st.xb, form.dw_taps, lo.dw_w, m.blob, lo.dw_b, d, tt, form.nk, st.dw_wide)
+            } else {
+                panic("dasLLAMA tower: a family with f16 depthwise taps carries the widened taps' scratch (`dw_wide`) in its state")
+            }
+        } else {
+            fc_dw_bias_rows(st.ao, st.xb, m.blob, lo.dw_w, lo.dw_b, d, tt, form.nk)
+        }
+        layernorm_batch(st.xb, st.ao, m.blob, lo.bn_w, lo.bn_b, d, tt, m.eps)
+        silu4_batch(st.xb, d, tt)
+    } else {
+        fc_glu_rows(st.ao, st.h, d, tt, form.vec4)
+        fc_dw_bn_silu_rows(st.xb, st.ao, m.blob, lo.dw_w, lo.bn_w, lo.bn_b, d, tt, form.nk, form.tap_major, form.vec4)
+    }
+    tower_mm_rq(m, st.ao, lo.pw2_w, st.xb, st.xqi, st.xsi, d, d, tt)
+    if (form.biased) {
+        add_bias_rows(st.ao, m.blob, lo.pw2_b, d, tt)
+    }
+    add_inplace_rows(st.x, st.ao, tt * d)
+}
+
+//! One CPU FastConformer block `l` over the `tt` rows of ``st.x``, in place: the macaron FFN halves around the attention
+//! (its position form is `pos`'s type) and the conv module, then the output LayerNorm; `lo` is canary's offsets record,
+//! -1 in a slot the form never reads.
+def fc_block_cpu(m : auto(MT); var st : auto(ST); form : FcCpuForm; pos : auto(PT); lo : auto(LO); l, tt : int64) {
+    let d = form.d
+    fc_size_block_scratch(st, form, tt)
+    var tp = ref_time_ticks()
+    fc_ffn_half_cpu(m, st, form, form.prof.ffn1, lo.nf1_w, lo.nf1_b, lo.ff1a_w, lo.ff1a_b, lo.ff1b_w, lo.ff1b_b, tt)
+    fc_scan(form, "ffn1", l, st.x, tt * d)
+    asr_prof_add(form.prof.ffn, tp)
+    fc_attention_cpu(m, st, form, lo, pos, tt)
+    tp = ref_time_ticks()
+    tower_mm_rq(m, st.xb, lo.o_w, st.ao, st.xqi, st.xsi, d, d, tt)
+    if (form.biased) {
+        add_bias_rows(st.xb, m.blob, lo.o_b, d, tt)
+    }
+    add_inplace_rows(st.x, st.xb, tt * d)
+    fc_scan(form, "attn", l, st.x, tt * d)
+    asr_prof_add(form.prof.attn_out, tp)
+    tp = ref_time_ticks()
+    fc_conv_module_cpu(m, st, form, lo, tt)
+    fc_scan(form, "conv", l, st.x, tt * d)
+    asr_prof_add(form.prof.conv, tp)
+    tp = ref_time_ticks()
+    fc_ffn_half_cpu(m, st, form, FcFfnProf(), lo.nf2_w, lo.nf2_b, lo.ff2a_w, lo.ff2a_b, lo.ff2b_w, lo.ff2b_b, tt)
+    layernorm_batch(st.x, st.x, m.blob, lo.nout_w, lo.nout_b, d, tt, m.eps)
+    fc_scan(form, "out", l, st.x, tt * d)
+    asr_prof_add(form.prof.ffn, tp)
+}
+
+//! the tower driver's held-rows hook: the generation of the FastConformer encoder rows the driver holds on the device for a
+//! transducer or CTC decode, 0 where it holds none
+typedef TowerRowsGenFn = function<() : uint64>
+var private g_tower_rows_gen : TowerRowsGenFn
+var private g_tower_rows_gen_set = false
+
+[arch(at="../ARCHITECTURE_MEDIA.md#tower-gpu-hook")]
+def register_tower_rows_gen(fn : TowerRowsGenFn) {
+    g_tower_rows_gen = fn
+    g_tower_rows_gen_set = true
+}
+
+//! The generation of the encoder rows a tower driver holds on the device, 0 with no driver or no rows - a family session
+//! records it right after its encode, and its decode hands it to the device seats as the held rows' key.
+def tower_rows_gen() : uint64 => g_tower_rows_gen_set ? invoke(g_tower_rows_gen) : 0ul
+
 // ===== encode-stage profiling rail =====
 // set_asr_prof(true) → the encode/decode paths accumulate wall us per stage label (asr.* and g4v.* buckets alike);
 // asr_prof_report() prints totals sorted desc and resets. Harness-only, off by default.
@@ -1106,13 +1741,27 @@ def set_asr_prof(on : bool) {
     g_asr_prof_on = on
 }
 
-//! Accumulate ``get_time_usec(t0)`` under ``name`` (no-op unless set_asr_prof(true)).
-[cold_path]
+//! Whether the profiling rail is on - the setting ``set_asr_prof`` last made, for a caller that puts it back.
+def asr_prof_on() : bool => g_asr_prof_on
+
+//! Accumulate ``get_time_usec(t0)`` under ``name`` (no-op unless set_asr_prof(true), and on an empty name).
 def asr_prof_add(name : string; t0 : int64) {
-    if (!g_asr_prof_on) {
-        return
+    if (g_asr_prof_on) {
+        asr_prof_accumulate(name, int64(get_time_usec(t0)))
     }
-    g_asr_prof[name] += int64(get_time_usec(t0))
+}
+
+//! Accumulate `ms` read off another clock - a command buffer's GPU time - under ``name`` (no-op unless set_asr_prof(true)).
+def asr_prof_add_ms(name : string; ms : double) {
+    if (g_asr_prof_on) {
+        asr_prof_accumulate(name, int64(ms * 1000.0lf))
+    }
+}
+
+[cold_path]
+def private asr_prof_accumulate(name : string; us : int64) {
+    return if (empty(name))
+    g_asr_prof[name] += us
     g_asr_prof_hits[name]++
 }
 

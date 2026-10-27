@@ -27,9 +27,13 @@ process with the jfk-only process subtracted (the first clip carries the pipelin
 --mmproj <mmproj bf16> --audio <clip> -p "Transcribe the audio." --temp 0 --jinja -ngl 99 -t 16` (E2B with `-n 256`), its encode the sum of the clip's
 `encoding done in N ms` lines; NeMo's `generate()` through `benchmarks/asr/canary_qwen_bench.py --device cuda`.
 
-Three reference tools carry a GPU arm the board pairs against a das Metal row, each with its own
-spelling: the whisper reference exe takes `-ngl`, the media-chat reference exe `-ngl 99`, and the
-NeMo bench script `--device mps`. The remaining two reference legs have no pair - the rig runs the
+Four reference tools carry a GPU arm the board pairs against a das Metal row, each with its own
+spelling: the whisper reference exe takes `-ngl`, the media-chat reference exe `-ngl 99`, the
+NeMo bench script `--device mps`, and `crispasr` runs its Metal build (`crispasr_bin(true)`,
+`$CRISPASR/build/`) where its CPU arm runs the Metal-OFF `build-cpu/`, which prints `gigaam:
+backend = CPU` with no Metal device to pick. The GigaAM das Metal row encodes on the device whole -
+the conv front and the sixteen blocks over the f16 planes - and decodes its transducer on the CPU,
+as parakeet's does. The remaining two reference legs have no pair - the rig runs the
 parakeet exe with `-ng`, though its Metal arm is the faster one (`PERF_LEDGER.md`), and the ONNX
 export is CPU-only - so their das rows stand alone in the CPU category.
 
@@ -56,6 +60,27 @@ prefill, so a reference encode cell carries the prefill the das cell's does not.
 quantizes beside the fp file; the ONNX and NeMo tools run from the rig's venvs. The reference's
 encoder runs its mmproj's bf16 weights in bf16 arithmetic and the das row widens them to f32, so an
 encode pair compares two arithmetics as well as two engines.
+
+GigaAM's row runs the three FLEURS ru clips; `corpus/ru_fleurs.json` carries their FLEURS ids and reference texts.
+`ru_long.wav` runs past the family's 25 s whole-clip window, so the das cell encodes it as VAD spans. Its `onnx` reference
+(`gigaam-v3-e2e-rnnt-int8`, `onnx-asr`'s export of the same e2e-RNNT) encodes it in one whole-clip pass. The long-clip pair
+therefore compares two long-form policies as well as two engines.
+
+GigaAM's two `crispasr` references are CrispASR at `CRISPASR_COMMIT` (`setup_asr_rig --refs` clones it with its ggml
+submodule to `$CRISPASR`, default `../CrispASR`, and builds `build/` with Metal ON and `build-cpu/` with Metal OFF, Accelerate
+on in both). `run_asr_crispasr` forks one `crispasr -m <carrier> --warmup -t <threads> <clip>` process a clip, the clip
+listed `--asr-reps` times; `--warmup` transcribes a silence buffer off the clock and the backend is read from the GGUF.
+The carriers are the f16 GGUF the das row loads, byte for byte, and `gigaam-v3-e2e-rnnt-q8_0.gguf`, which `crispasr-quantize
+<f16> <q8_0> q8_0` writes beside it with the ten block GEMMs a layer in q8_0 and every other tensor copied - the planes the das
+q8 lane quantizes (`ARCHITECTURE_MEDIA_ASR.md#gigaam-planes`), so the q8 pair compares the same quantized set. The tool
+prints no stage timing, so a rep's wall is its `crispasr: transcribed <a>s audio in <t>s (<r>x realtime)` line, timed from
+after the load to the transcript, decode included. `crispasr_line_ms` reads it from the realtime factor over the
+`crispasr: audio: <n> samples` count before it wherever that resolves finer than the 10 ms seconds field (a Metal clip runs
+tens of milliseconds); the best rep is kept with its transcript. CrispASR cuts a clip into fixed 30 s slices (its default
+`--chunk-seconds 30`, no VAD) and decodes each; `ru_long.wav` takes three. The CrispASR build at `CRISPASR_COMMIT` reports
+itself as 0.8.45. Two more forms of the same binary serve the ledger's GigaAM entry: a clocked Metal row lists the clip
+15 times and keeps the last 5 reps, and a WER run passes every wav of the set to one process
+(`crispasr -m <carrier> --warmup -t <threads> -nt <every wav>`, `-nt`: no timestamps).
 
 ### The MLX ASR reference {#mlx-asr-reference}
 

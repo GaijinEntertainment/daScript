@@ -8,29 +8,38 @@ work: `../followup_metal.md` for Metal, `../followup_vulkan.md` for Vulkan,
 An instrument is a file whose result is a time or rate it clocked itself (own clock or GPU
 timestamps), printed or returned for printing; a serving path's profiler report beside its served
 output is not one, and a `[test]` cell is not an instrument: its result is pass or fail. An
-instrument's timed body is the statements between its clock reads, and what they call.
+instrument's timed body is the statements between its clock reads, and the functions its own file
+defines that they call.
 
 A lever is a flag, an environment switch, a runtime setter or a profile key that picks what the run
-executes - never an input's size or content. A switch that only reorders a mode's arms is not a
-lever and does not select another mode. A diff that makes an instrument refuse one value of an input
-changes that input. A form is one compiled variant of a kernel. A GPU kernel emitter is code that
-generates a GPU kernel or its dispatch builder - a class or function that carries a `*_dispatch`
-or `*_kernel` annotation, or a global holding kernel source text. A race times two
-implementations of one computation in one process, each one either a form the engine serves or a
-candidate an instrument defines - a function, or a kernel a GPU kernel emitter generates (two
-values of one lever are not two implementations); an A/B is timed runs in one process differing
-only in one lever's value, arm order aside. An arm is every timed run of one implementation or one
-lever value; a round is one timed run of one arm, and a warmup round is a round the instrument's
-header comment says the report row drops; a compared arm is one whose output, from any run of it,
-the run reads back and measures against another arm's output or a CPU reference over the compare
-region, the output elements the instrument's header comment names; the baseline arm is the one the
-header comment names as baseline. A run of an arm refuses when it produces no figure or output, or
-runs on a backend other than the backend name the report row records. A board cell is a run whose
-reading lands as a records row of `../performance/records/<box>.json` or a figure in
-`../PERF_LEDGER.md`. A mode is one selectable run of the file, chosen by its own flag or argument;
-a file with none is one mode. A report row is one line an instrument prints carrying an arm's
-figure; it covers the arm's warmup rounds, the rounds it is computed over and the run whose output
-the compare reads - and a line an instrument prints for one round covers that round alone.
+executes - never an input's size or content. A mode is one selectable run of the file, chosen by
+its own flag or argument; a file with none is one mode. A switch that only reorders a mode's arms
+is not a lever and does not select another mode. A diff that makes an instrument refuse one value
+of an input changes that input.
+
+A form is one compiled variant of a kernel. A GPU kernel emitter is code that generates a GPU
+kernel or its dispatch builder - a class or function that carries a `*_dispatch` or `*_kernel`
+annotation, or a global holding kernel source text. A race times two implementations of one
+computation in one process, each one either a form the engine serves or a candidate an instrument
+defines - a function, or a kernel a GPU kernel emitter generates (two values of one lever are not
+two implementations); an A/B is timed runs in one process differing only in one lever's value, arm
+order aside. An arm is every timed run of one implementation or one lever value; a round is one
+timed run of one arm, and a warmup round is a round the instrument's header comment says the
+report row drops; a compared arm is one whose output, from any run of it, the run reads back and
+measures against another arm's output or a CPU reference over the compare region, the output
+elements the instrument's header comment names; the baseline arm is the one the header comment
+names as baseline. A run of an arm refuses when it produces no figure or output, or runs on a
+backend other than the backend name the report row records.
+
+A board cell is a run whose reading lands as a records row of `../performance/records/<box>.json`
+or a figure in `../PERF_LEDGER.md`.
+
+A report row is one line an instrument prints carrying an arm's figure; it covers the arm's warmup
+rounds, the rounds it is computed over and the run whose output the compare reads - and a line an
+instrument prints for one round covers that round alone.
+
+A round's codec is the number format its weights, activations or KV cache run in; its session
+shape is the batch size, context length and prompt length it runs at.
 
 **A diff that changes a board cell's input corpus or the pinned reference build
 (`DEFAULT_REF_SHA` in `setup_lcpp_ref.das`, or anything else deciding which reference binary or
@@ -47,8 +56,9 @@ instrument measures fallback kernels silently.
 
 **A diff that adds or changes the timed body of an instrument that dispatches a kernel of a
 `[tune]` family or a `[tuned]` kernel and does not require `../performance/profile_common.das`
-prints, on every report row, the tune manifest `DAS_TUNE_MANIFEST` names or the class profile
-(`../performance/defaults/<class>.tune-defaults.json`) the run compiled against.**
+prints, on every report row, the tune manifest `DAS_TUNE_MANIFEST` names, the class profile
+(`../performance/defaults/<class>.tune-defaults.json`) or the `.tune.json` sidecar path the run
+compiled against.**
 
 **A diff that adds a compared arm to an instrument, or changes a compared arm's run or report row,
 makes the instrument's header comment name the baseline arm and the compare region.**

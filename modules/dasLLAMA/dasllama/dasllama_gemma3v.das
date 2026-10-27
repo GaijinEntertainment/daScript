@@ -27,7 +27,6 @@ require math
 //! -p encode on the f32-widened mmproj, CPU, -fa off (gemma3-vision-oracle/mint_gemma3.sh).
 
 let private GEMMA3V_MERGE_DEFAULT = 4l
-let private GEMMA3V_STAGE_CAP = 1073741824ul   // the staged-mint line: a carrier source at or past 1 GiB streams instead
 
 // per-block GEMM order — the block GEMM plane stride follows it
 let GEMMA3V_GEMM_Q = 0l
@@ -168,11 +167,7 @@ def private serialize_image_meta(var arch : Archive; var st : Gemma3vStaging) {
 
 // staging owns its plane bytes outright — every array here is heap, none is borrowed
 def finalize(var st : Gemma3vStaging) {
-    delete st.blob
-    delete st.wblob
-    delete st.qblob
-    delete st.qscales
-    delete st.t
+    delete_staging(st)
 }
 
 [unused_argument(st)]
@@ -433,9 +428,7 @@ def stage_gemma3v_tower(path : string) : Gemma3vStaging {
     if (f == null) {
         panic("dasLLAMA: cannot open mmproj gguf '{path}'")
     }
-    if (stat(path).size >= GEMMA3V_STAGE_CAP) {
-        panic("dasLLAMA gemma3v: '{path}' is {int64(stat(path).size / 1048576ul)} MB - at or past the 1 GiB staged-mint line; serve the f16 mmproj (an f32-widened twin is an oracle artifact, not a serving file)")
-    }
+    refuse_staged_source_past_cap(path, "dasLLAMA gemma3v", "serve the f16 mmproj (an f32-widened twin is an oracle artifact, not a serving file)")
     fmap(f) $(var bytes : array<uint8>#) {
         var inscope m <- parse_gguf_meta(bytes)
         let proj = (gguf_has(m, "clip.vision.projector_type") ? gguf_str(m, bytes, "clip.vision.projector_type")
@@ -513,42 +506,14 @@ def load_gemma3v_tower(path : string) : Gemma3vTower {
         }
         // a named image serves the lane it was BAKED with, so the policy has no say here
         to_log(LOG_INFO, "dasLLAMA gemma3v: block GEMM lane {tag == GEMMA3V_TAG_Q8 ? "q8" : "exact planes"} - the named image's baked tag\n")
-        apply_box_profile_runtime()
-        let ts_img = ref_time_ticks()
-        var t = Gemma3vTower()
-        if (!load_image(path, t, tag)) {
-            panic("dasLLAMA: '{path}' is not a prepared gemma3v-tower image for this box/knobs (identity {image_identity(tag)}) - regenerate it from the source mmproj gguf")
-        }
-        to_log(LOG_INFO, "dasLLAMA: prepared gemma3v-tower image mapped in {get_time_usec(ts_img) / 1000} ms - {path}\n")
-        g3v_check_planes(t, path)
-        return <- t
+    } else {
+        g3v_announce_lane()
     }
-    g3v_announce_lane()
-    if (g_env_engine.image) {
-        apply_box_profile_runtime()   // a backend pin must precede the identity (it names the backend)
-        let img = image_path_for(path, tag)
-        let ts_img = ref_time_ticks()
-        var t = Gemma3vTower()
-        if (load_image(img, t, tag)) {
-            to_log(LOG_INFO, "dasLLAMA: prepared gemma3v-tower image mapped in {get_time_usec(ts_img) / 1000} ms - {img}\n")
-            g3v_check_planes(t, img)
-            return <- t
-        }
-        delete t
-        var inscope st <- stage_gemma3v_tower(path)
-        var built = Gemma3vTower()
-        if (cache_via_image_staged(st, built, img, tag)) {
-            dlim_gc_stale(path, tag)   // the fresh bake ON DISK proves its lane's siblings dead
-        }
-        g3v_check_planes(built, img)
-        return <- built
-    }
-    // no persisted image: mint one in memory and serve THAT — a served tower is always image-backed
-    var inscope st <- stage_gemma3v_tower(path)
-    var built = Gemma3vTower()
-    mint_gemma3v_tower(st, built)
-    g3v_check_planes(built, path)
-    return <- built
+    return <- load_staged_image(path, tag, "gemma3v-tower", "source mmproj gguf", type<Gemma3vTower>, $ {
+        return <- stage_gemma3v_tower(path)
+    }, $ [unused_argument(t)] (t : Gemma3vTower) => true, $(t : Gemma3vTower; src : string) {
+        g3v_check_planes(t, src)
+    })
 }
 
 //! Mint a served tower from a staged read WITHOUT touching disk — the off-rail control for suites.

@@ -1,8 +1,8 @@
 # dasLLAMA Documents Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-doc: `ARCHITECTURE.md`. Planned work: `followup_general.md`, `followup_vulkan.md`,
-`followup_metal.md`.
+docs: `ARCHITECTURE.md`, `ARCHITECTURE_DOCS.md`. Planned work: `followup_general.md`,
+`followup_vulkan.md`, `followup_metal.md`.
 
 **A diff that adds a `followup_*.md` entry asking that a function carrying a STYLE037/STYLE038
 suppression (`// nolint:`, `options _function_length` / `_cyclomatic_complexity`) be shortened or
@@ -39,18 +39,33 @@ problem reproduces only on macOS; `followup_vulkan.md` for work that would chang
 driver or dispatch, outside every template the CUDA home also stamps, and no Metal or CUDA one;
 `followup_general.md` for everything else, rig and instrument rows included.**
 
-**A number a run of this repository produced, written by a diff into an `ARCHITECTURE*.md` or a
+**A time, rate, ratio or error a box measured, written by a diff into an `ARCHITECTURE*.md` or a
 `followup_*.md`, has its entry in `PERF_LEDGER.md`; a `followup_*.md` row that carries one cites
 the entry it comes from.**
 
-**A diff that adds, removes, or moves a `##` or `###` heading of an `ARCHITECTURE_*.md` companion,
-or adds or removes a companion, updates every text that lists a companion's contents - the
-companion's line in `ARCHITECTURE.md`'s routing block (under `File charters` or `Mechanisms`), the
-companion's own opening, any other `ARCHITECTURE*.md` sentence that lists the companion's
-subjects - so that it names each added heading's subject and no removed one's, in the same
-change.**
+**A diff that adds or removes an `ARCHITECTURE_*.md` companion adds or drops its line in
+`ARCHITECTURE.md`'s routing block (under `File charters` or `Mechanisms`) in the same change.**
+
+**A diff that adds, removes, or moves a `##` or `###` heading of an `ARCHITECTURE_*.md` companion
+updates every text that lists the companion's contents - its own opening, any other
+`ARCHITECTURE*.md` sentence that lists its subjects - so that it names each added heading's
+subject and no removed one's, in the same change.**
 
 **A diff that moves or removes a heading of an `ARCHITECTURE_*.md` companion leaves no citation
 that names the companion file alone for that heading's subject - it repoints the citation to the
 heading's new home as `<doc>.md#<anchor>`, or drops it.** LINT026 checks a `<doc>.md#<anchor>`
 citation, never one that names a file alone.
+
+**A diff that adds or rewrites text in a `HOW_TO_*.md` under this folder writes each step as an
+imperative or a specification of the code to write - never a narrative - citing the
+`ARCHITECTURE*.md#<anchor>` section that owns the mechanism the step touches, and never restating
+that section's reasoning.**
+
+**A trap a diff writes into a `HOW_TO_*.md` under this folder - a place where the procedure does
+not hold - is one sentence at the step it applies to, naming the consequence the author meets.**
+
+**A HOW_TO trap that is a defect of this repository's own code cites that defect's `followup_*.md`
+row by number; a diff that writes one with no row files the row in the same change.**
+
+**A sentence a diff adds to a `HOW_TO_*.md` under this folder that tells of an event - a run, a
+probe, a fix, who found what - is a defect; git keeps what happened.**

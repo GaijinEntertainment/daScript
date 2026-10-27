@@ -14,6 +14,7 @@ require dasllama/dasllama_common   // Model, Session, kv_row_bytes
 require dasllama/dasllama   // create_session, moe_gpu_drop_model, set_gpu_resident_route
 require dasllama/dasllama_math   // with_dasllama_jobque_
 require dasllama/dasllama_kv_dtype   // kv_block_codec: the stored-rows cell's f16 arm
+require dasllama/dasllama_env   // the prompt window's pin: the plan probe's staged rows read the window
 require dasllama/dasllama_gpu_tier   // moe_gpu_attn_on_gpu: the per-op attention block's layer marks
 require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active, the resident prefill pin and its getter
 require _model_tier public
@@ -119,8 +120,11 @@ let private PLAN_PROBE_CTX = 4096l
 //! and the window's staged float rows (layer 0's K/V row is the carrier's widest)
 def private plan_charges_codec_scratch(t : T?; tr : Model; kv : KVDtype) {
     let kvd = layer_kv_dim(tr.config, 0l)
+    let pf_pin = pf_window_rows_pin()
+    set_pf_window_rows_pin(PF_WINDOW_ROWS)   //! the staged rows' charge reads the window, which a pick an earlier load made would move
     let codec_plan = resident_plan(tr, PLAN_PROBE_CTX, kv, kv)
     let f16_plan = resident_plan(tr, PLAN_PROBE_CTX, KVDtype.f16, KVDtype.f16)
+    set_pf_window_rows_pin(pf_pin)
     let want = kv_block_codec(kv) ? 2l * PLAN_PROBE_CTX * kvd * 2l + 2l * PF_WINDOW_ROWS * kvd * 4l : 0l
     t |> equal(codec_plan.scratch_bytes - f16_plan.scratch_bytes, want, "{kv}: the plan charges the shadow planes and the staged rows ({want} B at {PLAN_PROBE_CTX} positions of a {kvd}-wide row)")
 }

@@ -10,8 +10,8 @@ kernels (`../dasllama/dasllama_<family>.das`); its serving lane is the weight fo
 the family runs a model's weights in; the blob form is a model after `convert_model_to_metal_blob`,
 the only form the Metal drivers serve. A lane setter is a call that writes the value a family's
 loader or its `*_serves_q8` accessor reads to choose the family's serving lane (`set_<name>_q8`,
-whisper's `set_asr_fp32` / `set_asr_tower_fp32`), or a facade call that makes that call. A driver
-setter is any other `../dasllama/` call the cell makes whose purpose is to set a value - a `set_*`,
+the ASR facade's `set_asr_fp32` / `set_asr_tower_fp32`), or a facade call that makes that call.
+A driver setter is any other `../dasllama/` call the cell makes whose purpose is to set a value - a `set_*`,
 `enable_*`, `disable_*`, `pin_*`, `reset_*`, `restore_*`, `register_*`, `select_*_override` or
 `unset_*` call - stored in a module global or process-global state that a later load, route choice
 or kernel dispatch reads; a call a loader makes on its own is not the cell's. A driver setter's
@@ -34,13 +34,17 @@ a lane setter or a loader parameter that takes the lane - never in the file's `[
 that counts on the box declining the other lane, instead of pinning, measures whichever lane the
 box's policy picked.
 
-**A cell whose claim needs a family's serving lane unset calls that lane's unset call before the
-load that reads the lane - `reset_<name>_q8` for a lane `set_<name>_q8` pins, or, for whisper,
-`set_asr_fp32(false)` and `set_asr_tower_fp32(false)`.**
+**A cell that reads a family's serving lane - a load, or a `*_serves_q8` call - and expects the
+unpinned default calls, before the first such read, the unset call of every lane setter that read
+consults - `reset_<name>_q8` for `set_<name>_q8` and, for a facade setter that pins several
+families (`set_asr_tower_q8`), each pinned family's `reset_<name>_q8`, and `set_asr_fp32(false)` /
+`set_asr_tower_fp32(false)` for a load through the ASR facade (`load_asr_model`).**
+A pin an earlier cell leaked moves the accessor's answer and the load alike.
 
 **A diff that adds or edits a cell or `[test]` function, or code one reaches through a helper, that
 calls a lane setter - directly or through a helper it calls - makes it return with each lane it
-pinned unset through the lane setter's paired unset call.**
+pinned unset through the lane setter's paired unset call and, for a facade setter that pins
+several families (`set_asr_tower_q8`), each pinned family's `reset_<name>_q8`.**
 
 **A diff that adds or edits a cell or `[test]` function, or code one reaches through a helper, that
 calls a driver setter other than a `register_*` call - directly or through a helper it calls -

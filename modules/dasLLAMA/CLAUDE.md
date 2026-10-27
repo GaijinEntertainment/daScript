@@ -29,17 +29,18 @@ here.
 
 ## HOW_TO documents (REQUIRED for the task they name)
 
-A HOW_TO is a procedure: imperative, ordered, each step citing the architecture section that
-owns it, validated by execution. A place where the pattern broke is a trap sentence at the step
-where it bites when the author must know it, and a row of `followup_general.md` when it is work
-to unquirk - never a record of what happened, which git keeps. Read the one that matches your
-task before the first edit, and fix it in the same session when a step turns out wrong.
+What a `HOW_TO_*.md` is - its steps, traps and tense - is `ARCHITECTURE_DOCS.md#howto-documents`. Read
+the one that matches your task before the first edit, and fix it in the same session when a step
+turns out wrong.
 
 | Document | Read BEFORE... |
 |---|---|
-| `HOW_TO_ADD_A_FORMAT.md` | Adding a weight format (a new `KqFmt`), a served form of one, or a backend's (CPU, Vulkan, Metal) kernels for one at a site (a weight plane a backend's serving call reads) that reads it through a converted copy (any other form of its weights that outlives the kernel call or reaches the `.dlim`): GGUF type -> planes -> CPU kernels -> tune family -> Vulkan -> Metal -> the served cells per site x backend |
-| `BRINGUP.md` | Bringing a profiling box up from zero (the records rig; `METHODOLOGY.md` is the published method) |
+| `HOW_TO_ADD_A_FORMAT.md` | Adding a weight format (a new `KqFmt`), a served form of one, or a backend's (CPU, Vulkan, Metal) kernels for one at a site (a weight plane a backend's serving call reads) that reads it through a converted copy (any other form of its weights that outlives the kernel call or reaches the `.dlim`) |
+| `HOW_TO_ADD_ASR.md` | Adding a speech-recognition family (an encoder plus a CTC, transducer or LLM decoder head) |
 | `HOW_TO_GET_SIDECAR.md` | Taking an untuned box to a committed CPU-class profile (`performance/defaults/<class>.tune-defaults.json`) |
+
+Read `BRINGUP.md` before bringing a profiling box up from zero (the records rig;
+`METHODOLOGY.md` is the published method); it is not a `HOW_TO_*.md`.
 
 ## Skill files (REQUIRED)
 

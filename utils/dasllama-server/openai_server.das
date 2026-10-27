@@ -330,7 +330,8 @@ struct AsrSlot {
     mmproj : string
     workers : int
     ready : int                 //! workers that loaded and answered
-    decoder : string            //! where the workers decode, off a ready event: `metal` for a decoder loaded as the Metal flavor, else `cpu`
+    decoder : string            //! where the workers serve, off a ready event: the facade's `asr_device_lane` - `metal`, `vulkan` or `cpu`
+    translate : bool            //! the model's caps declare translation, off a ready event: /v1/audio/translations serves it
 }
 
 //! One served TTS model: one worker loads and owns it. The answer-side fields are the worker's own, off its ready event.
@@ -2070,6 +2071,7 @@ struct private AsrEvent {
     content_type : string
     body : string
     audio_s : float      // completed: decoded clip length in seconds (0 on failures)
+    translate : bool     // ready: the model's caps declare translation
 }
 
 //! One ASR job on the poll surface: running while the worker holds it, then done/failed with
@@ -4650,7 +4652,7 @@ def private handle_vad(req : FrontReq; var resp : Reply) : http_status {
         return resp_error(resp, http_status.SERVICE_UNAVAILABLE, ibench_hold_text())
     }
     if (!g_vad_loaded) {
-        let path = path_join(get_das_root(), "modules/dasLLAMA/models/silero_vad.bin")
+        let path = vad_model_path()
         if (!stat(path).is_valid) {
             drop_upload(req)
             return resp |> JSON(
@@ -4715,8 +4717,8 @@ def private push_picker_ggufs(scan_dir : string; var entries : array<JsonValue?>
         return
     }
     dir(scan_dir) $(fname) {
-        if (ends_with(to_lower(fname), ".gguf")) {
-            let full = path_join(scan_dir, fname)
+        let full = path_join(scan_dir, fname)
+        if (ends_with(to_lower(fname), ".gguf") && !gguf_is_side_file(full)) {   // the picker lists chat models
             let st = stat(full)
             entries |> push(JV((name = fname, size = int64(st.size), kind = "gguf", path = full)))
         }
@@ -5124,8 +5126,8 @@ def private asr_worker_main(
                             ) {
     this_context().name := "dasllama_asr_{worker_index}"
     configure_media_worker_dispatch(team_dispatch)
-    // a two-file model's decoder is a Model session and takes the engine's Metal mode; a one-file model (whisper,
-    // parakeet) decodes on hand-written CPU loops over planar weights, which the mode's portable pin would slow
+    // a two-file model's decoder is a Model session and takes the engine's Metal mode; a one-file model's (whisper,
+    // parakeet, gigaam) device seats gate on their own knobs, and its CPU loops run on planar weights the mode's portable pin would slow
     if (!empty(mmproj_path)) {
         set_metal_mode(metal)
     }
@@ -5142,7 +5144,8 @@ def private asr_worker_main(
         events |> release
         return
     }
-    emit_asr_event(events, AsrEvent(kind = AsrEventKind.ready, body = model.dec.metal_blob ? "metal" : "cpu"))
+    var inscope ready_caps <- caps(model)
+    emit_asr_event(events, AsrEvent(kind = AsrEventKind.ready, body = asr_device_lane(model), translate = ready_caps.translate))
     var session = AsrSession()
     var session_language = ""
     var has_session = false
@@ -5208,6 +5211,11 @@ def private queue_transcription(
         drop_upload(req)
         return
     }
+    if (translate && !g_asr[k].translate) {
+        bad_request(srv, writer, "ASR model '{g_asr[k].id}' does not translate - its caps declare no translation; use /v1/audio/transcriptions")
+        drop_upload(req)
+        return
+    }
     if (g_asr_pending >= ASR_QUEUE_LIMIT) {
         service_unavailable(srv, writer, "the ASR queue is at capacity ({ASR_QUEUE_LIMIT}) — retry shortly")
         drop_upload(req)
@@ -5262,6 +5270,7 @@ def private start_asr_worker_threads() {
                 if (event.kind == AsrEventKind.ready) {
                     a.ready++
                     a.decoder = clone_string(event.body)
+                    a.translate = event.translate
                     to_log(LOG_INFO, "dasllama-server: ASR worker ready ({a.id}: {a.ready}/{a.workers}, decoder on {a.decoder})\n")
                 } elif (event.kind == AsrEventKind.failed) {
                     load_failure = clone_string(event.body)

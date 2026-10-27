@@ -4,33 +4,17 @@
 docs: `ARCHITECTURE_GPU_ASYMMETRIES.md`, `ARCHITECTURE_GPU_TOWER_VULKAN.md`. Planned work:
 `followup_metal.md`, `followup_vulkan.md`.
 
-**A diff that adds to a Vulkan driver file (`dasllama/dasllama_*vulkan*.das`,
-`dasllama/dasllama_gpu*.das`) a module-level variable whose value derives from a loaded model's
-weights, or names, sizes or points at device content built from a loaded model (a served model, a
-draft or tower model, a TTS model or a voice loaded into one), and which a later call reads before
-that call writes it - a log of the decline reasons recorded for that model included - returns it to
-its no-model value in the body of `moe_gpu_model_marks_restore_` or `moe_gpu_drop_model_`
-(`dasllama/dasllama_gpu_resident.das`), in a function either one calls, or in a listener the file
-registers with `register_vk_drop_hook` (`dasllama/dasllama_vulkan_common.das`), in the same change.**
-A global with no discharge survives a model swap and routes the next model's dispatches at the old
-model's device buffers; a model drop calls every listener registered with `register_vk_drop_hook`.
-
-**A diff that adds to a Metal driver file (`dasllama/dasllama_metal*.das`, the tower driver
-included) a module-level variable whose value derives from a loaded model's weights, or names, sizes
-or points at device content built from a loaded model, and which a later call reads before that call
-writes it - a log of the decline reasons recorded for that model included - returns it to its
-no-model value in a function the file registers with `register_reload_prep`
-(`dasllama/dasllama_metal_common.das`), in the same change.** A model's unload or reload bumps the
-weights epoch - a counter every model load or unload increments - and the bump runs every
-registered reload prep.
-
-**A diff that adds to a CUDA driver file (`dasllama/dasllama_*cuda*.das`) a module-level variable
-whose value derives from a loaded model's weights, or names, sizes or points at device content built
-from a loaded model, and which a later call reads before that call writes it - a log of the decline
-reasons recorded for that model included - returns it to its no-model value in `cud_drop_model`
-(`dasllama/dasllama_cuda_decode.das`) - in its body or a function it calls - in the same change.**
-The tier's model drop runs `cud_drop_model` through the hook `dasllama/dasllama_math_cuda.das`
-installs with `set_moe_gpu_drop_model_hook`.
+**A diff that adds to a GPU driver file a module-level variable whose value derives from a loaded
+model's weights, or names, sizes or points at device content built from that model, or measures how
+a call served that model (a rate later calls size work by) - the decline reasons already logged for
+it included - and which a later call reads before that call writes it, returns it to its no-model
+value in the same change, in its backend's discharge: a Vulkan file
+(`dasllama/dasllama_*vulkan*.das`, `dasllama/dasllama_gpu*.das`) in `moe_gpu_model_marks_restore_`
+or `moe_gpu_drop_model_` (`dasllama/dasllama_gpu_resident.das`), a function either calls, or a
+`register_vk_drop_hook` listener; a Metal file (`dasllama/dasllama_metal*.das`) in a function the
+file registers with `register_reload_prep` (`dasllama/dasllama_metal_common.das`); a CUDA file
+(`dasllama/dasllama_*cuda*.das`) in `cud_drop_model` or a function it calls.** These sites are what
+each backend's unload or reload runs; a global reset elsewhere survives the swap.
 
 **A module-level variable in a Vulkan driver file (`dasllama/dasllama_*vulkan*.das`,
 `dasllama/dasllama_gpu*.das`) whose value derives from, or names, sizes or points at device content

@@ -55,7 +55,8 @@ in `dasllama/dasllama_vulkan_classes.das`.**
 
 **A function that reads shape values alone for its result, called from a
 `dasllama/dasllama_*vulkan*.das` file and a `dasllama/dasllama_metal*.das` file and from no
-`dasllama/dasllama_*cuda*.das` file, lands in a file that every calling file already requires.**
+`dasllama/dasllama_*cuda*.das` file, lands in a file that every calling file requires, directly or
+through a public require, after the change.**
 
 **A function that reads shape values alone for its result, called from both a
 `dasllama/dasllama_*vulkan*.das` file and a `dasllama/dasllama_*cuda*.das` file, lands in
@@ -100,11 +101,14 @@ already-decoded f32 row is not a codec primitive.
 tokenizer's own file (`dasllama/dasllama_spm.das` / `dasllama/dasllama_bpe.das`).**
 
 **A GPU kernel body under `dasllama/` - the arithmetic loop a dispatch class (a class a
-`[metal_dispatch]`, `[vk_dispatch]` or `[cuda_dispatch]` declares) picks one variant of - that
-one home stamps lands in that home's kernel file: `dasllama/dasllama_metal_kernels.das`,
-`dasllama/dasllama_vulkan_classes.das` or `dasllama/dasllama_cuda_classes.das`.** A class stamped
-from a template declared elsewhere is not a kernel body: it compiles its own pipeline where it is
-stamped.
+`[metal_dispatch]`, `[vk_dispatch]` or `[cuda_dispatch]` declares) picks one variant of - that one
+home stamps lands in that home's kernel file: `dasllama/dasllama_metal_kernels.das`,
+`dasllama/dasllama_vulkan_classes.das` or `dasllama/dasllama_cuda_classes.das` - a class stamped
+from a template declared in another file is not one; it lands by the next rule.**
+
+**A class stamped from a template declared in another file lands in its home's kernel file, or in a
+driver file whose role row in `ARCHITECTURE_GPU.md#gpu-backends` names that template's stamps; a
+diff that stamps one in a driver file whose row does not name them adds them to the row.**
 
 **A `class template` two homes stamp never sits in one home's kernel file: it lands in
 `dasllama/dasllama_gpu_kernels_discrete.das` when the Vulkan and the CUDA homes stamp it and Metal
@@ -136,7 +140,8 @@ in the kernel's file, and that file's charter line names the condition that sele
 branch.**
 
 **Code two tower families' files call directly that names no family type - compute, stage/read, or
-load orchestration - lands in `dasllama/dasllama_tower.das`.**
+load orchestration - lands in the file whose charter line names that shared concern, and in
+`dasllama/dasllama_tower.das` when no charter line does.**
 
 **No signature in `dasllama/dasllama_tower.das` takes a type that
 `dasllama/dasllama_audio.das`, `dasllama/dasllama_vision.das`, or a family file declares - the
@@ -164,7 +169,8 @@ whose module a build can lack, writes the umbrella's conditional require on the 
 
 **A diff that requires a backend's entry in `dasllama/dasllama_transformer.das`, for a backend
 whose module registers in every build that carries it (`dasCUDA`, under its CMake switch), writes
-a plain require guarded by the module's presence (`require ?cuda`), never a device probe.**
+the umbrella's conditional require on the `cuda` witness module (`require ?cuda`) - never a device
+probe.**
 
 **A registration only a program root (test, harness, benchmark, tool) needs gets no side-effect
 require in an engine file - the program root requires the registration module directly.**

@@ -7,6 +7,7 @@ require dasllama/dasllama_lint public
 require dastest/testing_boost public
 require daslib/fio
 require ../harness/tts_corpus.das public   // tts_corpus_path - the one path every TTS reader takes
+require _json_file public   // load_json_file
 
 //! One sentence of the TTS front-end fixture (`_tts_fixtures/g2p_corpus.json`, minted by
 //! `harness/mint_tts_g2p_fixture.py`): the raw text, the reference-normalized text every arm
@@ -28,16 +29,6 @@ struct TtsCorpusRow {
     ps_espeak : string
     tokens : array<array<string>>
     heteronym : TtsHeteronym
-}
-
-//! The JSON file at `path` into `m` (its type picks the schema): false when the file is missing or empty, a panic when it does not parse.
-def load_json_file(path : string; var m : auto(TT)) : bool {
-    let text = fread(path)
-    return false if (empty(text))
-    if (!sscan_json(text, m)) {
-        panic("{path} does not parse")
-    }
-    return true
 }
 
 //! The whole fixture, in file order. Panics on a missing or malformed file: the fixture is

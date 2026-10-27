@@ -182,9 +182,7 @@ def private serialize_image_meta(var arch : Archive; var st : Qwen25vStaging) {
 }
 
 def finalize(var st : Qwen25vStaging) {
-    delete st.blob
-    delete st.wblob
-    delete st.t
+    delete_staging(st)
 }
 
 [unused_argument(st)]
@@ -396,37 +394,9 @@ def load_qwen25v_tower(path : string) : Qwen25vTower {
     // the lane census every family tower load prints; this tower has a single tag, so the
     // line says so rather than leaving qwen25v the one family whose lane never appears
     to_log(LOG_INFO, "dasLLAMA qwen25v: tower GEMM lane f32 planes - exact-only, no q8 lane exists\n")
-    if (path |> ends_with(".dlim")) {
-        apply_box_profile_runtime()
-        let ts_img = ref_time_ticks()
-        var t = Qwen25vTower()
-        if (!load_image(path, t, QWEN25V_TAG)) {
-            panic("dasLLAMA: '{path}' is not a prepared qwen25v-tower image for this box/knobs (identity {image_identity(QWEN25V_TAG)}) - regenerate it from the source mmproj gguf")
-        }
-        to_log(LOG_INFO, "dasLLAMA: prepared qwen25v-tower image mapped in {get_time_usec(ts_img) / 1000} ms - {path}\n")
-        return <- t
+    return <- load_staged_image(path, QWEN25V_TAG, "qwen25v-tower", "source mmproj gguf", type<Qwen25vTower>) {
+        return <- stage_qwen25v_tower(path)
     }
-    if (g_env_engine.image) {
-        apply_box_profile_runtime()
-        let img = image_path_for(path, QWEN25V_TAG)
-        let ts_img = ref_time_ticks()
-        var t = Qwen25vTower()
-        if (load_image(img, t, QWEN25V_TAG)) {
-            to_log(LOG_INFO, "dasLLAMA: prepared qwen25v-tower image mapped in {get_time_usec(ts_img) / 1000} ms - {img}\n")
-            return <- t
-        }
-        delete t
-        var inscope st <- stage_qwen25v_tower(path)
-        var built = Qwen25vTower()
-        if (cache_via_image_staged(st, built, img, QWEN25V_TAG)) {
-            dlim_gc_stale(path, QWEN25V_TAG)
-        }
-        return <- built
-    }
-    var inscope st <- stage_qwen25v_tower(path)
-    var built = Qwen25vTower()
-    mint_qwen25v_tower(st, built)
-    return <- built
 }
 
 //! Mint a served tower from a staged read WITHOUT touching disk — the off-rail control for suites.

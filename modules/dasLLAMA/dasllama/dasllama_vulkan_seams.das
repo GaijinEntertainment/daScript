@@ -22,9 +22,9 @@ def private ensure_ar_state {
     }
     verify(ensure_cls_ar(), "vulkan seams: the ar class rail must engage on a live device")
     let bytes = RDEC_AR_MAX_DIM * 4l
-    g_gpu.ar_x_dev = make_device_buf(bytes)
-    g_gpu.ar_a_dev = make_device_buf(bytes)
-    g_gpu.ar_w_dev = make_device_buf(bytes)
+    g_gpu.ar_x_dev = make_call_buf(bytes)
+    g_gpu.ar_a_dev = make_call_buf(bytes)
+    g_gpu.ar_w_dev = make_call_buf(bytes)
     g_gpu.ar_y_dev = make_device_buf(bytes)
     g_gpu.ar_host = make_host_buf(bytes, false, [cached = true])   // x and y readback
     g_gpu.ar_set = set_cls_ar(fixed_array(g_gpu.ar_x_dev, g_gpu.ar_a_dev, g_gpu.ar_w_dev, g_gpu.ar_y_dev),
@@ -67,8 +67,8 @@ def private ensure_rks_state {
         return
     }
     verify(ensure_rope_kv_cls(), "vulkan seams: the rope class rail must engage on a live device")
-    g_gpu.rks_qkv_dev = make_device_buf((RKS_MAX_QD + 2l * RKS_MAX_KVD) * 4l)
-    g_gpu.rks_q_dev = make_device_buf(RKS_MAX_QD * 4l)
+    g_gpu.rks_qkv_dev = make_call_buf((RKS_MAX_QD + 2l * RKS_MAX_KVD) * 4l)
+    g_gpu.rks_q_dev = make_call_buf(RKS_MAX_QD * 4l)
     g_gpu.rks_k_dev = make_device_buf(RKS_MAX_CTX * RKS_MAX_KVD * 4l)
     g_gpu.rks_v_dev = make_device_buf(RKS_MAX_CTX * RKS_MAX_KVD * 4l)
     g_gpu.rks_scal = make_host_buf(XS_BYTES, true)   // the cos+sin row (data, not params)
@@ -121,7 +121,7 @@ def private ensure_da_state {
     }
     ensure_rks_state()   // shares the K/V mirror planes
     verify(ensure_da_attn_cls(), "vulkan seams: the decode-attn class rail must engage on a live device")
-    g_gpu.da_q_dev = make_device_buf(RKS_MAX_QD * 4l)
+    g_gpu.da_q_dev = make_call_buf(RKS_MAX_QD * 4l)
     g_gpu.da_out_dev = make_device_buf(RKS_MAX_QD * 4l)
     g_gpu.da_out_host = make_host_buf(RKS_MAX_QD * 4l, false, [cached = true])
     g_gpu.da_set = set_da_attn_cls(   //! the unsplit, unfolded pass: the out rows fill the partials and quant bindings, never read or written

@@ -181,7 +181,9 @@ struct public MetalBufferPool {
     @scratch free_bufs : table<uint64; array<MetalBuffer?>>   // size-bucketed free lists; recycle is the design
 }
 
-def private pool_bucket(bytes : uint64) : uint64 {
+//! The buffer size a pool acquire of `bytes` allocates: the next
+//! power of two, 256 at least.
+def public pool_bucket(bytes : uint64) : uint64 {
     var b = 256ul                   // floor keeps tiny uniforms from fragmenting buckets
     while (b < bytes) {
         b *= 2ul

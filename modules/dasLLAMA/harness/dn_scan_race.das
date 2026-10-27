@@ -59,18 +59,18 @@ def main {
         var cvh <- [for (v in cvf); float16(v)]
         var raw <- race_fill(NPOS * NVH, 2, 2.0, 0.0)
         var prep <- race_fill(NPOS * NVH, 3, 0.1, 0.9)
-        var bcv = race_buf(dev, uint64(NPOS * CD * 4), unsafe(addr<void?>(cvf[0])))
-        var bcvh = race_buf(dev, uint64(NPOS * CD * 2), unsafe(addr<void?>(cvh[0])))
-        var bst = race_buf(dev, uint64(NVH * DS * DS * 4), null)
-        var bstm = race_buf(dev, uint64(NVH * DS * DS * 4), null)
-        var braw = race_buf(dev, uint64(NPOS * NVH * 4), unsafe(addr<void?>(raw[0])))
-        var bprep = race_buf(dev, uint64(NPOS * NVH * 4), unsafe(addr<void?>(prep[0])))
-        var baa = race_buf(dev, uint64(NVH * 4), unsafe(addr<void?>(raw[0])))
-        var bo = race_buf(dev, uint64(NPOS * DI * 4), null)
+        var bcv = metal_buffer_from(dev, uint64(NPOS * CD * 4), unsafe(addr<void?>(cvf[0])))
+        var bcvh = metal_buffer_from(dev, uint64(NPOS * CD * 2), unsafe(addr<void?>(cvh[0])))
+        var bst = metal_buffer_from(dev, uint64(NVH * DS * DS * 4), null)
+        var bstm = metal_buffer_from(dev, uint64(NVH * DS * DS * 4), null)
+        var braw = metal_buffer_from(dev, uint64(NPOS * NVH * 4), unsafe(addr<void?>(raw[0])))
+        var bprep = metal_buffer_from(dev, uint64(NPOS * NVH * 4), unsafe(addr<void?>(prep[0])))
+        var baa = metal_buffer_from(dev, uint64(NVH * 4), unsafe(addr<void?>(raw[0])))
+        var bo = metal_buffer_from(dev, uint64(NPOS * DI * 4), null)
         var ka = DnArgs(cd = uint(CD), dconv = 4u, npos = uint(NPOS), kd = uint(KD), ds = uint(DS), nvh = uint(NVH),
             nkh = uint(NKH), di = uint(DI), eps = 1e-6, qscale = 1.0, mid = 0u, split = 0u, row = 0u, bstr = uint(NVH))
         var grp <- [0u, uint(NPOS), 0u, 0u, 0u, 0u, 0u, 0u]
-        var bgrp = race_buf(dev, 32ul, unsafe(addr<void?>(grp[0])))
+        var bgrp = metal_buffer_from(dev, 32ul, unsafe(addr<void?>(grp[0])))
         for (sgs in [4, 2, 1]) {
             var t_f = -1.0lf
             var t_h = -1.0lf

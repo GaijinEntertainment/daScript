@@ -237,7 +237,9 @@ def log_mel_chunks(samples : array<float> | #; n_mel : int64) : array<MelChunk> 
     wm.data |> reserve(n_mel * n_len)
     wm.data |> resize(n_mel * n_len)
     if (!whisper_mel_gpu(xw, n_len, n_fft, n_bins, n_mel, twiddles, filters, wm)) {
-        log_mel_spectrum_cpu(xw, twiddles, filters, n_len, n_fft, n_bins, n_mel, wm.data)
+        var inscope reim : array<float>
+        mel_spectrum_rows(xw, unsafe(addr<float const?>(twiddles[0])), unsafe(addr<float const?>(filters[0])),
+                          n_len, n_fft, n_bins, n_mel, MelForm(mel_major = true), reim, wm.data)
     }
 
     // whisper-style dynamic clamp + scale, GLOBAL over the padded spectrogram; the clamp value
@@ -270,33 +272,141 @@ def log_mel_chunks(samples : array<float> | #; n_mel : int64) : array<MelChunk> 
     return <- chunks
 }
 
-//! The whisper preprocessor's spectrum on the CPU: the DFT as one GEMM over the windowed frames `xw`, the power spectra,
-//! the mel sums in bin order and their log10 into the mel-major `mel` [n_mel][n_len] - what the mel seat serves on a device.
-def private log_mel_spectrum_cpu(xw, twiddles, filters : array<float>; n_len, n_fft, n_bins, n_mel : int64; var mel : array<float>) {
-    // DFT as one GEMM: [n_len × n_fft] · [n_fft × 2·n_bins] -> interleaved re/im
-    var inscope reim : array<float>
-    reim |> reserve(n_len * n_bins * 2l)
-    reim |> resize(n_len * n_bins * 2l)                    // gemm accumulates: starts zeroed
-    gemm_f32(unsafe(addr(reim[0])), unsafe(addr(xw[0])), unsafe(addr(twiddles[0])),
-             n_len, n_fft, n_bins * 2l)
+//! How a mel sum is accumulated over the bins: each float product widened into a double sum (whisper, canary,
+//! gemma4a), four float products summed in float then widened (qwen3a), or the float `dot` kernel (gigaam).
+enum MelSum {
+    double_each
+    double_quads
+    float_dot
+}
 
-    // power spectra -> mel (float products, double sum in bin order), log10
-    let mel_floor = 5.960464477539063e-08lf                // 2^-24, the fixed filterbank floor
+//! The log a mel sum takes: log10 of the floored sum (whisper, qwen3a), ln of the sum plus the floor (canary), ln of
+//! the floored sum (gemma4a), ln of the sum clamped to [floor, ceil] in float (gigaam).
+enum MelLog {
+    log10_max
+    ln_add
+    ln_max
+    ln_clamp_f
+}
+
+//! A family's spectrum form for [[mel_spectrum_rows]]; the defaults are the whisper preprocessor's.
+struct MelForm {
+    magnitude : bool = false                        //!< |X| instead of |X|^2
+    sum : MelSum = MelSum.double_each
+    log : MelLog = MelLog.log10_max
+    floor : double = 5.960464477539063e-08lf        //!< 2^-24
+    ceil : double = 1e9lf                           //!< ln_clamp_f's upper bound
+    mel_major : bool = false                        //!< [n_mel][n_len] instead of [n_len][n_mel]
+    feature_norm : bool = false                     //!< canary's per-feature mean/std over the first n_valid frames, tail zeroed
+    n_valid : int64 = 0l
+}
+
+//! frames a mel block: a multiple of gemm_f32's 4-row tile, so every frame's DFT row rounds as in one whole-clip GEMM
+let private MEL_BLOCK_ROWS = 64l
+
+//! The spectrum half every family's log-mel shares, off its windowed frames `xw` [n_len][n_fft]: the DFT as a GEMM
+//! against the `twiddles` table, the power or magnitude spectrum, the `filters` [n_mel][n_bins] dot and the form's log
+//! into `mel`, then the form's post pass. `reim` is scratch.
+def mel_spectrum_rows(xw : array<float>; twiddles, filters : float const?; n_len, n_fft, n_bins, n_mel : int64;
+                      form : MelForm; @scratch var reim : array<float>; @scratch var mel : array<float>) {
+    return if (n_len == 0l)
+    ensure_length(reim, n_len * n_bins * 2l)
+    ensure_length(mel, n_len * n_mel)
+    let magnitude = form.magnitude
+    let sum_form = form.sum
+    let log_form = form.log
+    let floor = form.floor
+    let ffloor = float(form.floor)
+    let fceil = float(form.ceil)
+    let mel_major = form.mel_major
     let log10_e = 0.43429448190325176lf
-    var inscope power : array<float>
-    power |> resize(n_bins)
-    for (i in range64(n_len)) {
-        for (k in range64(n_bins)) {
-            let re = reim[i * n_bins * 2l + k * 2l]
-            let im = reim[i * n_bins * 2l + k * 2l + 1l]
-            power[k] = re * re + im * im
-        }
-        for (m in range64(n_mel)) {
-            var sum = 0.0lf
-            for (k in range64(n_bins)) {
-                sum += double(power[k] * filters[m * n_bins + k])
+    let nblk = int((n_len + MEL_BLOCK_ROWS - 1l) / MEL_BLOCK_ROWS)
+    unsafe {
+        let xwp = addr<float const?>(xw[0])
+        var rp = addr(reim[0])
+        var mp = addr(mel[0])
+        maybe_parallel_for(0, nblk, lanes_for_work(n_len * n_fft * n_bins * 2l, 0)) $(bb, be) {
+            unsafe {
+                for (blk in range64(int64(bb), int64(be))) {
+                    let r0 = blk * MEL_BLOCK_ROWS
+                    let r1 = min(r0 + MEL_BLOCK_ROWS, n_len)
+                    for (i in range64(r0 * n_bins * 2l, r1 * n_bins * 2l)) {
+                        rp[i] = 0.0
+                    }
+                    gemm_f32(rp + r0 * n_bins * 2l, xwp + r0 * n_fft, twiddles, r1 - r0, n_fft, n_bins * 2l)
+                    for (i in range64(r0, r1)) {
+                        var pw = rp + i * n_bins * 2l
+                        for (k in range64(n_bins)) {
+                            let re = pw[2l * k]
+                            let im = pw[2l * k + 1l]
+                            let p = re * re + im * im
+                            pw[k] = magnitude ? sqrt(p) : p
+                        }
+                        for (jm in range64(n_mel)) {
+                            let fb = filters + jm * n_bins
+                            var sum = 0.0lf
+                            if (sum_form == MelSum.float_dot) {
+                                sum = double(dot(fb, pw, n_bins))
+                            } elif (sum_form == MelSum.double_quads) {
+                                var k = 0l
+                                while (k + 3l < n_bins) {
+                                    sum += double(pw[k] * fb[k] + pw[k + 1l] * fb[k + 1l]
+                                        + pw[k + 2l] * fb[k + 2l] + pw[k + 3l] * fb[k + 3l])
+                                    k += 4l
+                                }
+                                while (k < n_bins) {
+                                    sum += double(pw[k] * fb[k])
+                                    k++
+                                }
+                            } else {
+                                for (k in range64(n_bins)) {
+                                    sum += double(pw[k] * fb[k])
+                                }
+                            }
+                            var v = 0.0
+                            if (log_form == MelLog.log10_max) {
+                                v = float(log(max(sum, floor)) * log10_e)
+                            } elif (log_form == MelLog.ln_add) {
+                                v = float(log(sum + floor))
+                            } elif (log_form == MelLog.ln_max) {
+                                v = float(log(max(sum, floor)))
+                            } else {
+                                v = log(clamp(float(sum), ffloor, fceil))
+                            }
+                            mp[mel_major ? jm * n_len + i : i * n_mel + jm] = v
+                        }
+                    }
+                }
             }
-            mel[m * n_len + i] = float(log(max(sum, mel_floor)) * log10_e)
+        }
+    }
+    if (form.feature_norm) {
+        mel_feature_norm(mel, n_len, n_mel, form.n_valid)
+    }
+}
+
+//! Per-feature normalization of a frame-major mel over its first `valid` frames (Bessel n-1, std + 1e-5), applied to
+//! every frame; the frames past `valid` zeroed (the seq-len mask).
+def private mel_feature_norm(var mel : array<float>; n_len, n_mel, valid : int64) {
+    for (j in range64(n_mel)) {
+        var sum = 0.0lf
+        for (i in range64(valid)) {
+            sum += double(mel[i * n_mel + j])
+        }
+        let mean = sum / double(max(valid, 1l))
+        var sq = 0.0lf
+        for (i in range64(valid)) {
+            let dv = double(mel[i * n_mel + j]) - mean
+            sq += dv * dv
+        }
+        let denom = sqrt(sq / max(double(valid) - 1.0lf, 1.0lf)) + 1e-5lf
+        for (i in range64(n_len)) {
+            mel[i * n_mel + j] = float((double(mel[i * n_mel + j]) - mean) / denom)
+        }
+    }
+    for (i in range64(valid, n_len)) {
+        for (j in range64(n_mel)) {
+            mel[i * n_mel + j] = 0.0
         }
     }
 }
@@ -629,10 +739,7 @@ struct AudioTowerPlanes {
 }
 
 def finalize(var pl : AudioTowerPlanes) {
-    delete pl.fblob
-    delete pl.wblob
-    delete pl.qblob
-    delete pl.qscales
+    delete_staging(pl)
 }
 
 //! The standalone tower's mint-side carrier: ``e`` holds every scalar the meta blob carries,
@@ -650,11 +757,7 @@ def private serialize_image_meta(var arch : Archive; var st : AudioTowerStaging)
 }
 
 def finalize(var st : AudioTowerStaging) {
-    delete st.fblob
-    delete st.wblob
-    delete st.qblob
-    delete st.qscales
-    delete st.e
+    delete_staging(st)
 }
 
 [unused_argument(st)]
@@ -980,62 +1083,17 @@ def private tw_mm_rq(t : AudioTower; var y : array<float>; woff : int64; x : arr
     tw_mm(t, y, woff, x, xq, xs, n, d, npos)
 }
 
-// Read a conv1d weight (GGUF flat [c_out][c_in][k], k contiguous — torch layout) permuted to
-// the im2col order W'[o][dk·C + c].
-def private load_conv_permuted(m : GGUFMeta; bytes : array<uint8> | #; name : string;
-                               var blob : array<float>; off : int64; c_out, c_in : int64) {
-    var raw : array<float>
-    raw |> reserve_resize(int(c_out * c_in * 3l))
-    gguf_read_tensor_f32(m, bytes, name, raw, 0l, c_out * c_in * 3l)
-    for (o in range64(c_out)) {
-        for (c in range64(c_in)) {
-            for (k in range64(3l)) {
-                blob[off + o * c_in * 3l + k * c_in + c] = raw[o * c_in * 3l + c * 3l + k]
-            }
-        }
-    }
-}
-
 //! Loads an audio mmproj GGUF (qwen2a/qwen2.5o/ultravox/voxtral) into an AudioTower, skipping
 //! vision tensors in combined omni mmprojs. Like ``load_model``, caches a box/knob-specific
 //! PREPARED IMAGE for fast reload; ``DASLLAMA_IMAGE=0`` disables it, a ``.dlim`` path loads one directly.
 def load_audio_tower(path : string; q8 : bool = false) : AudioTower {
     let tag = q8 ? "tower-q8" : "tower-f32"
-    if (path |> ends_with(".dlim")) {
-        // named directly — no mmproj to regenerate from, so a wrong identity panics
-        apply_box_profile_runtime()
-        let ts_img = ref_time_ticks()
-        var t = AudioTower()
-        if (!load_image(path, t, tag)) {
-            panic("dasLLAMA: '{path}' is not a prepared audio-tower image for this box/knobs (identity {image_identity(tag)}) - regenerate it from the source mmproj gguf")
-        }
-        to_log(LOG_INFO, "dasLLAMA: prepared tower image mapped in {get_time_usec(ts_img) / 1000} ms - {path}\n")
-        return <- t
-    }
-    if (g_env_engine.image) {
-        apply_box_profile_runtime()   // a backend pin must precede the identity (it names the backend)
-        let img = image_path_for(path, tag)
-        let ts_img = ref_time_ticks()
-        var t = AudioTower()
+    return <- load_staged_image(path, tag, "audio-tower", "source mmproj gguf", type<AudioTower>, $ {
+        return <- stage_audio_tower(path, q8)
+    }, $(t : AudioTower) {
         // an exact-lane image minted before the half twin rode it carries none: where the file's GEMMs are halves, mint again
-        if (load_image(img, t, tag) && (q8 || length(t.wblob) > 0l || !audio_tower_half_gemms(path))) {
-            to_log(LOG_INFO, "dasLLAMA: prepared tower image mapped in {get_time_usec(ts_img) / 1000} ms - {img}\n")
-            return <- t
-        }
-        delete t
-        var inscope st <- stage_audio_tower(path, q8)
-        var built = AudioTower()
-        if (cache_via_image_staged(st, built, img, tag)) {
-            dlim_gc_stale(path, tag)   // the fresh bake ON DISK proves its lane's siblings dead; an in-memory build reaps nothing
-        }
-        return <- built
-    }
-    // no persisted image: mint one in memory and serve THAT — a served tower is always
-    // image-backed, so there is no second, array-owning shape of this struct to maintain
-    var inscope st <- stage_audio_tower(path, q8)
-    var built = AudioTower()
-    cache_via_image_staged(st, built, "", tag)
-    return <- built
+        return q8 || length(t.wblob) > 0l || !audio_tower_half_gemms(path)
+    }, $ [unused_argument(t, src)] (t : AudioTower; src : string) {})
 }
 
 //! whether every block GEMM of a whisper-class mmproj - q, k, v, out, the two FFN matrices of each of `n_layer` blocks - is
@@ -1212,9 +1270,9 @@ def stage_audio_tower(path : string; q8 : bool = false) : AudioTowerStaging {
         }
         st.fblob |> reserve_resize(o)
 
-        load_conv_permuted(m, bytes, "a.conv1d.1.weight", st.fblob, st.e.conv1_w_off, d, nm)
+        tower_read_conv_tap_major(m, bytes, "a.conv1d.1.weight", st.fblob, st.e.conv1_w_off, d, nm, 3l, "audio")
         gguf_read_tensor_f32(m, bytes, "a.conv1d.1.bias", st.fblob, st.e.conv1_b_off, d)
-        load_conv_permuted(m, bytes, "a.conv1d.2.weight", st.fblob, st.e.conv2_w_off, d, d)
+        tower_read_conv_tap_major(m, bytes, "a.conv1d.2.weight", st.fblob, st.e.conv2_w_off, d, d, 3l, "audio")
         gguf_read_tensor_f32(m, bytes, "a.conv1d.2.bias", st.fblob, st.e.conv2_b_off, d)
         gguf_read_tensor_f32(m, bytes, "a.position_embd.weight", st.fblob, st.e.pos_off, st.e.n_ctx * d)
         for (l in range64(st.e.n_layer)) {
@@ -1407,15 +1465,8 @@ def private audio_encode_stem(t : AudioTower; var s : EncoderState; mel : MelChu
     enc_gelu_batch(t, s.y1, d, tin)
 
     // conv2 k3 s2 same -> T = tin/2 positions
-    for (i in range64(tt)) {
-        for (dk in range64(3l)) {
-            let src = 2l * i + dk - 1l
-            for (c in range64(d)) {
-                s.x2[i * 3l * d + dk * d + c] = (src >= 0l && src < tin
-                    ? s.y1[src * d + c]
-                    : 0.0)
-            }
-        }
+    unsafe {
+        im2col_conv1d_rows(addr(s.x2[0]), addr<float const?>(s.y1[0]), tin, d, tt, 3l, 2l)
     }
     tw_mm_rq(t, s.x, t.conv2_w_off, s.x2, s.xqi, s.xsi, 3l * d, d, tt)
     add_bias_rows(s.x, t.fblob, t.conv2_b_off, d, tt)

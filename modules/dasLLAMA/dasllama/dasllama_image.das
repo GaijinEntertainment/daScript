@@ -1982,6 +1982,86 @@ def cache_via_image_staged_hooked(var st; var out; img : string; extra : uint64;
     return false
 }
 
+//! The one carrier load (`carrier` = `type<T>`): a named `.dlim` maps or panics; else the lane's image maps when `accept`
+//! takes it, or `mint` builds `out` through `img` ("" with the rail off) and says whether the FILE was written - only that
+//! reaps the lane. `check` vets every carrier handed back against its file; `who`/`source` name image and source in logs.
+[unused_argument(carrier)]
+def load_through_image(path, tag, who, source : string; carrier : auto(T);
+                       mint : block<(img : string; var out : T) : bool>; accept : block<(t : T) : bool>;
+                       check : block<(t : T; src : string) : void>) : T -const {
+    if (path |> ends_with(".dlim")) {
+        apply_box_profile_runtime()
+        let ts_img = ref_time_ticks()
+        var t = T()
+        if (!load_image(path, t, tag)) {
+            panic("dasLLAMA: '{path}' is not a prepared {who} image for this box/knobs (identity {image_identity(tag)}) - regenerate it from the {source}")
+        }
+        to_log(LOG_INFO, "dasLLAMA: prepared {who} image mapped in {get_time_usec(ts_img) / 1000} ms - {path}\n")
+        invoke(check, t, path)
+        return <- t
+    }
+    var img = ""
+    if (g_env_engine.image) {
+        apply_box_profile_runtime()
+        img = image_path_for(path, tag)
+        let ts_img = ref_time_ticks()
+        var t = T()
+        if (load_image(img, t, tag) && invoke(accept, t)) {
+            to_log(LOG_INFO, "dasLLAMA: prepared {who} image mapped in {get_time_usec(ts_img) / 1000} ms - {img}\n")
+            invoke(check, t, img)
+            return <- t
+        }
+        delete t
+    }
+    var built = T()
+    if (invoke(mint, img, built)) {
+        dlim_gc_stale(path, tag)
+    }
+    invoke(check, built, img != "" ? img : path)
+    return <- built
+}
+
+//! The staged-mint line: a staging holds its whole source widened in RAM, so a source at or past 1 GiB is refused.
+let STAGED_MINT_CAP = 1073741824ul
+
+//! Panics `who: '<path>' is N MB - at or past the 1 GiB staged-mint line; <hint>` where the source at `path` is at or past
+//! ``STAGED_MINT_CAP``.
+def refuse_staged_source_past_cap(path, who, hint : string) {
+    let size = stat(path).size
+    if (size >= STAGED_MINT_CAP) {
+        panic("{who}: '{path}' is {int64(size / 1048576ul)} MB - at or past the 1 GiB staged-mint line; {hint}")
+    }
+}
+
+//! load_through_image for a staged carrier: `stage` reads the source into its mint-side staging, and the mint is
+//! `cache_via_image_staged`.
+[unused_argument(carrier)]
+def load_staged_image(path, tag, who, source : string; carrier : auto(T); stage : block<() : auto(S)>;
+                      accept : block<(t : T) : bool>; check : block<(t : T; src : string) : void>) : T -const {
+    return <- load_through_image(path, tag, who, source, type<T>, $(img : string; var out : T) {
+        var inscope st <- invoke(stage)
+        return cache_via_image_staged(st, out, img, tag)
+    }, accept, check)
+}
+
+//! load_staged_image taking every mapped image of the lane, with no plane check.
+[unused_argument(carrier)]
+def load_staged_image(path, tag, who, source : string; carrier : auto(T); stage : block<() : auto(S)>) : T -const {
+    return <- load_staged_image(path, tag, who, source, type<T>, stage, $ [unused_argument(t)] (t : T) => true,
+                                $ [unused_argument(t, src)] (t : T; src : string) {})
+}
+
+//! A staging carrier's finalizer body: a staging owns every array and struct field it holds outright, so all are freed.
+def delete_staging(var st) {
+    apply(st) $ [unused_argument(name)] (name : string; var field) {
+        static_if (typeinfo is_array(field)) {
+            delete field
+        } static_elif (typeinfo is_struct(field)) {
+            delete field
+        }
+    }
+}
+
 def private cache_via_image_(var m; var out; img : string; tag : string; quant : string;
                              plane : block<(name : string; var w : ImgWriter; var sections : array<ImgSection>) : bool>) : bool {
     if (img == "" || !image_save_enabled()) {

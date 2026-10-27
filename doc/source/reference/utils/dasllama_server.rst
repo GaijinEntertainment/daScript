@@ -239,7 +239,7 @@ Run under ``-jit`` --- the interpreter is refused, it is far too slow for infere
    * - ``--asr``
      - ``-a``
      - ---
-     - ASR model (whisper / parakeet / qwen3-asr) --- enables the ``/v1/audio/*`` routes. Repeatable: each model serves under its file's stem, the first is the default (``--mmproj`` and ``--asr-workers`` are the first one's); the config's ``[[asr]]`` tables give each model its own ``id``, ``mmproj`` and ``workers``
+     - ASR model (whisper / parakeet / gigaam / qwen3-asr) --- enables the ``/v1/audio/*`` routes. Repeatable: each model serves under its file's stem, the first is the default (``--mmproj`` and ``--asr-workers`` are the first one's); the config's ``[[asr]]`` tables give each model its own ``id``, ``mmproj`` and ``workers``
    * - ``--asr-workers``
      -
      - ``1``
@@ -482,9 +482,10 @@ gate.
 server has no LLM slot, so ``/v1/stats`` answers the slotless shape with ``setup``
 false and its speech counters live. An ASR model whose decoder is an LLM - a
 two-file model, ``--asr`` with ``--mmproj`` - decodes where the server's LLMs do:
-its worker takes the boot's Metal mode, and ``/v1/stats`` names the outcome under
-``asr.models[]`` as ``decoder`` (``metal`` or ``cpu``). A one-file model (whisper,
-parakeet) decodes on the CPU.
+its worker takes the boot's Metal mode. A one-file model (whisper, parakeet,
+gigaam) serves on its own GPU seat when the build has one and the seat serves the
+model, and on the CPU otherwise. ``/v1/stats`` names the outcome under
+``asr.models[]`` as ``decoder`` (``metal``, ``vulkan`` or ``cpu``).
 A ``--tts`` the server cannot serve degrades, it does not die: a missing file
 or a failed load is logged, the speech route is dropped, and the boot serves
 whatever is left - the LLM slots if any loaded, else setup mode.
@@ -597,10 +598,10 @@ Endpoints
        ``last``) overrides, ``dimensions`` keeps the leading components and renormalizes
    * - ``POST``
      - ``/v1/audio/transcriptions``
-     - Speech to text (multipart upload; needs ``--asr``). One ASR model takes every request, whatever ``model`` says; with several, ``model`` names one by its id (none, or the ``<default slot>-asr`` id: the first; any other name: 404); ``language`` defaults to English, and to detection on a model that only detects. ``response_format=verbose_json`` adds timed segments
+     - Speech to text (multipart upload; needs ``--asr``). One ASR model takes every request, whatever ``model`` says; with several, ``model`` names one by its id (none, or the ``<default slot>-asr`` id: the first; any other name: 404); ``language`` defaults to English, to detection on a model that only detects, and to its own language on a one-language model. ``response_format=verbose_json`` adds timed segments
    * - ``POST``
      - ``/v1/audio/translations``
-     - Speech to English text (needs ``--asr``); ``model`` and ``language`` are read as the transcription route reads them
+     - Speech to English text (needs ``--asr``); ``model`` and ``language`` are read as the transcription route reads them, the 404 included; a model whose caps declare no translation is a 400
    * - ``POST``
      - ``/v1/audio/speech``
      - Text to speech (needs ``--tts``): ``{"model"?, "input", "voice"?, "speed"?, "response_format"?}``; ``model`` names the TTS model (none: the first; an id no model serves: 404), ``wav`` (default) is 16-bit PCM at the model's rate, ``pcm`` the raw samples, the compressed formats answer 400. One synthesis at a time a model, 16 queued

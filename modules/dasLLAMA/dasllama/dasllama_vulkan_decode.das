@@ -134,8 +134,8 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
     r.log_xfer = g_gpu.xfer_fam >= 0
     r.carry = carry
     r.carry_live = carry && get_mtp_spec()
-    r.x_dev = make_device_buf(dim * 4l * nb)
-    r.xb_dev = make_device_buf(dim * 4l * nb, r.log_xfer)   //! the carry's rows leave on the transfer queue as the logits do - an assistant drafter arms the carry after the load (`vk_rdec_carry_arm`)
+    r.x_dev = make_call_buf(dim * 4l * nb)
+    r.xb_dev = make_call_buf(dim * 4l * nb, r.log_xfer)   //! the carry's rows leave on the transfer queue as the logits do - an assistant drafter arms the carry after the load (`vk_rdec_carry_arm`)
     if (carry) {
         r.hid_host = make_host_buf(dim * 4l * nb, false, [cached = true, xfer_shared = r.log_xfer])
     }
@@ -152,7 +152,7 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
         r.head_cos_dev = make_device_buf(cos_elems * 4l * nb)
         r.head_cos_host = make_host_buf(cos_elems * 4l * nb, false, [cached = true])
     }
-    r.xq_dev = make_device_buf(wide * nb)              // int8 quants, 1 byte/elem
+    r.xq_dev = make_call_buf(wide * nb)            // int8 quants, 1 byte/elem
     r.xs_dev = make_device_buf((wide / 32l) * 4l * nb)
     r.kv_dev = make_device_buf((qd + 2l * kv_dim) * 4l * nb)
     r.q_dev = q_gated ? make_device_buf(2l * qd * 4l * nb) : r.kv_dev   //! an ungated q row is the k/v row's front (its first qd elements): one q+k+v GEMV dispatch lands all three
@@ -229,7 +229,7 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
     // cos layout: this token's cos[half]+sin[half] per rope class, one class's row after the other
     // (the qkn class twin reads its norm rows from the norms buffer directly, so nothing else rides the cos plane)
     r.cos_elems = cos_elems
-    r.cos_dev = make_device_buf(r.cos_elems * 4l * nb)   //! a row's rope row each, the N-row command's rows behind the first
+    r.cos_dev = make_call_buf(r.cos_elems * 4l * nb)   //! a row's rope row each, the N-row command's rows behind the first
     r.logits_dev = make_device_buf(vocab * 4l * nb, r.log_xfer)
     r.dummy = make_device_buf(256l)
     r.x_host = make_host_buf(dim * 4l * nb, false, [cached = true])
@@ -288,15 +288,14 @@ def private alloc_cmds(var arr : array<VkCommandBuffer>; n : int64; on : bool; x
 }
 
 def private zeroed_pair(bytes : int64) : tuple<a : uint64; b : uint64> {
-    let a = try_device_buf(bytes)
-    let b = try_device_buf(bytes)
-    if (a != 0ul && b != 0ul) {
+    let pair = (a = try_call_buf(bytes), b = try_call_buf(bytes))
+    if (pair.a != 0ul && pair.b != 0ul) {
         cmd_one_shot() $(raw : VkCommandBuffer; var _h : VkHaz) {
-            cmd_fill_zero(raw, a, 0l, bytes)
-            cmd_fill_zero(raw, b, 0l, bytes)
+            cmd_fill_zero(raw, pair.a, 0l, bytes)
+            cmd_fill_zero(raw, pair.b, 0l, bytes)
         }
     }
-    return (a = a, b = b)
+    return pair
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan")]
@@ -311,6 +310,7 @@ def vk_rdec_select_region(region : int64) {
 //! Upload the norm-weight rows once: [rms_att[0], rms_ffn[0], ..., rms_att[L-1], rms_ffn[L-1],
 //! rms_final], dim floats each, exactly the layout the layer w_offs index. Under qk_norm the
 //! per-head [rms_q[l], rms_k[l]] x L rows (head_size floats each) follow.
+[cold_path]
 def vk_rdec_upload_norms(norms : array<float>; obias : bool) {
     if (g_gpu != null && g_gpu.dry) {
         return
@@ -1426,7 +1426,7 @@ def vk_rdec_set_ngram(l, ind, nrows, kern, dil, bkey, bval : int64; norm_rows : 
     r.plegated_dev = make_device_buf(hcd * 4l * nb)
     r.plepanel_dev = make_device_buf(hcd * 4l * nb)
     let hist_bytes = r.regions * nrows * hcd * 4l
-    r.plehist_dev = make_device_buf(hist_bytes)
+    r.plehist_dev = make_call_buf(hist_bytes)
     upload_zeros(r.plehist_dev, 0l, hist_bytes)
     r.plew_bytes = (3l * hcd + hcd * kern) * 4l
     if (!vk_range_ok(hist_bytes) || !vk_range_ok(r.plew_bytes)) {
@@ -1545,7 +1545,7 @@ def private rd_hot_stack(base : int64; fmt : int; slots, blocks, elems : int64) 
 }
 
 def private rd_hot_stack(base : int64; fmt : int; slots, elems : int64; pb : tuple<wq : int64; ws : int64>) : int {
-    let si = make_stack_shell(base, slots * elems, fmt, slots * pb.wq, slots * pb.ws)
+    let si = make_stack_shell(base, slots * elems, fmt, slots * pb.wq, slots * pb.ws, [per_call = true])
     g_gpu.stacks[si].batch_meta_ring = XF_RING   //! the pool window runs the per-expert chain over these stacks: XF_RING metas ahead, as a stream slot's
     return si
 }

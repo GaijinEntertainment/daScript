@@ -58,7 +58,7 @@ let private ROWS_BARS_TQ4 = StoredRowsBars(k = 0.08, v_step = 0.05, v_prefill_of
 def private qwen2_forced_feed(t : T?; n : int64; file : string = CARRIER; dense : KqFmt = KqFmt.q8) {
     let path = path_join(models_dir(), file)
     if (!resident_ready(t, path)) return
-    var tr <- load_model_(path, QuantMode.q8)
+    var tr <- load_resident(path)   //! the window pinned for the load: unpinned, the driver's own pick outlives the cell and sizes every later plan
     t |> success(tr.config.attn_qkv_bias, "the qwen2 carries the q/k/v projection bias the arm exists for")
     t |> success(moe_gpu_resident_active(), "the whole-model driver armed on the biased model (the load log names any decline)")
     if (dense != KqFmt.q8) {

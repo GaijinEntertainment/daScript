@@ -2213,6 +2213,7 @@ install(FILES ${DAS_LLAMA_SERVER_FILES}
 
 # Install dasllama-convert (offline GGUF -> .dlim model prep)
 install(FILES ${PROJECT_SOURCE_DIR}/utils/dasllama-convert/main.das
+    ${PROJECT_SOURCE_DIR}/utils/dasllama-convert/convert_sniff.das
     DESTINATION utils/dasllama-convert
 )
 

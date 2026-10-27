@@ -118,6 +118,16 @@ def test_gemma3v_tier1_gpu(t : T?) {
             if (!model_available(tt, mm)) {
                 return
             }
+            // every lever the legs read pinned at the head - the tower on, the flash attention on, the f16 twin route on - and
+            // put back as found at the end
+            let knobs_found = gpu_knobs()
+            let flash_found = get_metal_tower_flash()
+            let f16_found = get_metal_tower_f16()
+            let crowns_found = get_metal_tensor_crowns()
+            set_metal_tower(true)
+            set_metal_tower_flash(true)
+            set_metal_tower_f16(true)
+            let knobs_pinned = gpu_knobs()
             let policy_q8 = gemma3v_serves_q8()
             var tw <- load_gemma3v_tower(mm)   // metal armed: the policy default is the exact lane
             var st = Gemma3vState()
@@ -130,6 +140,13 @@ def test_gemma3v_tier1_gpu(t : T?) {
                     device_leg_served(tt, fx.kind, s0, metal_tower_stats(), tw.n_layer, -1l)
                 }
             }
+            // the flash lever off: the padded slab trio and its unpad (`tw_pad_attention`) serve the attention instead
+            set_metal_tower_flash(false)
+            let sf0 = metal_tower_stats()
+            if (gate_encode(tt, tw, st, "cb", "g3.encode.cb896.log", TIER1_REL_GPU)) {
+                device_leg_served(tt, "cb, flash off", sf0, metal_tower_stats(), tw.n_layer, -1l)
+            }
+            set_metal_tower_flash(true)
             // the knob-off leg: the same tower, the CPU chain, no dispatch
             set_metal_tower(false)
             let sc0 = metal_tower_stats()
@@ -137,7 +154,7 @@ def test_gemma3v_tier1_gpu(t : T?) {
             let sc1 = metal_tower_stats()
             tt |> equal(sc1.encodes, sc0.encodes, "knob-off leg never dispatched")
             tt |> equal(sc1.declines - sc0.declines, 1l, "knob-off leg recorded the knob decline")
-            set_metal_tower(true)
+            set_gpu_knobs(knobs_pinned)
             delete st
             delete tw
             var twq <- mint_tower(mm, true, 0l, -1l)   //! in memory: a load under the pin would bake the q8 image beside the serving one
@@ -154,7 +171,6 @@ def test_gemma3v_tier1_gpu(t : T?) {
             tt |> success(!metal_tower_vis_slab_live(), "the shutdown freed the vision slab")
             set_metal_tensor_crowns("mulmm_q8")
             metal_prefill_shutdown()
-            set_metal_tower_f16(true)   // the twin route's own knob - established, never inherited
             set_gemma3v_q8(false)       // the exact lane is the one that bakes the twin
             var twt <- load_gemma3v_tower(mm)
             reset_gemma3v_q8()
@@ -163,8 +179,10 @@ def test_gemma3v_tier1_gpu(t : T?) {
             if (gate_encode(tt, twt, stt, "cb", "g3.encode.cb896.log", TIER1_REL_GPU)) {
                 tt |> success(metal_tower_f16_encodes() - tw0 >= 1l, "the f16-sourced tower rode the twin route")
             }
-            set_metal_tower_f16(true)
-            set_metal_tensor_crowns("")
+            set_metal_tower_f16(f16_found)
+            set_metal_tower_flash(flash_found)
+            set_metal_tensor_crowns(crowns_found)
+            set_gpu_knobs(knobs_found)
             metal_prefill_shutdown()
             delete stt
             delete twt

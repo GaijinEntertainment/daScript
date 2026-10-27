@@ -20,6 +20,38 @@ let TEST_PORT = 18135   // 18097/18098/18099/18101/18102/18120/18121/18131 belon
 // the test_openai_server harness minus the model: setup mode is exactly a slotless boot
 var private g_picker_dir = ""   // planted per run, removed by with_setup_server's teardown
 
+let private SIDE_FILES = fixed_array("planted-mmproj.gguf", "planted-gigaam.gguf")   //! GGUFs of arch clip and gigaam: no chat model, kept off the picker
+
+def private put_le(var b : array<uint8>; v : uint64; nbytes : int) {
+    b |> reserve(length(b) + nbytes)
+    for (i in range(nbytes)) {
+        b |> push(uint8((v >> uint64(i * 8)) & 0xfful))
+    }
+}
+
+def private put_bytes(var b : array<uint8>; s : string) {
+    b |> reserve(length(b) + length(s))
+    for (c in s) {
+        b |> push(uint8(c))
+    }
+}
+
+//! a GGUF v3 header with no tensors and one key, `general.architecture` = `arch`
+def private gguf_of_arch(arch : string) : array<uint8> {
+    var b : array<uint8>
+    put_bytes(b, "GGUF")
+    put_le(b, 3ul, 4)
+    put_le(b, 0ul, 8)
+    put_le(b, 1ul, 8)
+    let key = "general.architecture"
+    put_le(b, uint64(long_length(key)), 8)
+    put_bytes(b, key)
+    put_le(b, 8ul, 4)   // GGUF_TYPE_STRING
+    put_le(b, uint64(long_length(arch)), 8)
+    put_bytes(b, arch)
+    return <- b
+}
+
 def private plant_picker_dir : string {
     var terr : string
     let tmp = temp_directory(terr)
@@ -29,6 +61,14 @@ def private plant_picker_dir : string {
         fopen(path_join(g_picker_dir, fname), "wb") $(f) {
             if (f != null) {
                 f |> fwrite("GGUF")
+            }
+        }
+    }
+    for (fname, arch in SIDE_FILES, fixed_array("clip", "gigaam")) {
+        var inscope bytes <- gguf_of_arch(arch)
+        fopen(path_join(g_picker_dir, fname), "wb") $(f) {
+            if (f != null) {
+                f |> fwrite(bytes)
             }
         }
     }
@@ -58,6 +98,9 @@ def private remove_picker_dir {
         return
     }
     for (fname in ["planted.gguf", "planted.gguf.0xdead.dlim", PINNED_HEAD]) {
+        remove(path_join(g_picker_dir, fname))
+    }
+    for (fname in SIDE_FILES) {
         remove(path_join(g_picker_dir, fname))
     }
     rmdir(g_picker_dir)
@@ -254,6 +297,9 @@ def test_setup_mode(t : T?) {
                 let body = resp != null ? string(resp.body) : ""
                 t |> success(find(body, "planted.gguf") >= 0, "the picker lists the planted gguf")
                 t |> success(find(body, ".dlim") < 0, "a .dlim beside it never enters the model picker")
+                for (fname in SIDE_FILES) {
+                    t |> success(find(body, fname) < 0, "{fname}, a GGUF that serves no chat, never enters the model picker")
+                }
             }
         }
     }

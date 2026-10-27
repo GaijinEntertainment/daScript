@@ -117,6 +117,7 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
                     "modules/dasLLAMA/tests/test_dlim_wipe.das",
                     "modules/dasLLAMA/tests/test_env_registry.das",
                     "modules/dasLLAMA/tests/test_exchange_schema.das",
+                    "modules/dasLLAMA/tests/test_f32_batch_tile_perms.das",
                     "modules/dasLLAMA/tests/test_facade_docs.das",
                     "modules/dasLLAMA/tests/test_fat_hook_umbrella.das",
                     "modules/dasLLAMA/tests/test_fat_start.das",
@@ -150,7 +151,9 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
                     "modules/dasLLAMA/tests/test_qwen4exp.das",
                     "modules/dasLLAMA/tests/test_repack.das",
                     "modules/dasLLAMA/tests/test_repack_lane_context.das",
+                    "modules/dasLLAMA/tests/test_review_howto.das",
                     "modules/dasLLAMA/tests/test_rmsnorm.das",
+                    "modules/dasLLAMA/tests/test_rnnt.das",
                     "modules/dasLLAMA/tests/test_rope.das",
                     "modules/dasLLAMA/tests/test_rope_apply.das",
                     "modules/dasLLAMA/tests/test_run_suites.das",
@@ -202,6 +205,7 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
                     "modules/dasLLAMA/tests/test_gemma3v.das",
                     "modules/dasLLAMA/tests/test_gemma4uv.das",
                     "modules/dasLLAMA/tests/test_gemma4v.das",
+                    "modules/dasLLAMA/tests/test_gigaam.das",
                     "modules/dasLLAMA/tests/test_gpu_model_swap.das",
                     "modules/dasLLAMA/tests/test_gpu_moe_shexp.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_gemma2.das",
@@ -322,14 +326,14 @@ let TESTS_DIR = "modules/dasLLAMA/tests"
 //! Non-private: test_run_suites.das holds the union to the model-free + stocked census
 def area_tests(area : string) : array<string> {
     if (area == "audio") {
-        return <- [ "test_asr_verbs.das", "test_audio.das", "test_audio_embedder.das", "test_dasllama_lint_contracts.das",
-                    "test_parrot.das", "test_tower_asr_kernels.das", "test_tower_helpers.das", "test_vad.das", "test_vulkan_tower_kernels.das", "test_whisper.das" ]
+        return <- [ "test_asr_verbs.das", "test_audio.das", "test_audio_embedder.das", "test_dasllama_lint_contracts.das", "test_gigaam.das",
+                    "test_parrot.das", "test_rnnt.das", "test_tower_asr_kernels.das", "test_tower_helpers.das", "test_vad.das", "test_vulkan_tower_kernels.das", "test_whisper.das" ]
     } elif (area == "vision") {
         return <- [ "test_attn_span.das", "test_gemma3v.das", "test_gemma4uv.das", "test_gemma4v.das", "test_qwen25v.das",
                     "test_qwen3v.das", "test_tower_helpers.das", "test_vision.das", "test_vision_chat.das",
                     "test_vision_embedder.das", "test_vulkan_tower_kernels.das" ]
     } elif (area == "tts") {
-        return <- [ "test_parrot.das", "test_storyteller_restart.das", "test_storywish.das", "test_tts_blocks.das", "test_tts_facade.das",
+        return <- [ "test_f32_batch_tile_perms.das", "test_parrot.das", "test_storyteller_restart.das", "test_storywish.das", "test_tts_blocks.das", "test_tts_facade.das",
                     "test_tts_g2p.das", "test_tts_kitten.das", "test_tts_kokoro.das", "test_tts_pocket.das",
                     "test_tts_postag.das", "test_tts_textnorm.das", "test_tts_voice_prompts.das", "test_vulkan_tts_conv_kernels.das",
                     "test_vulkan_tts_kernels.das", "test_vulkan_tts_pocket_kernels.das", "test_vulkan_tts_source_kernels.das" ]
@@ -340,7 +344,7 @@ def area_tests(area : string) : array<string> {
                     "test_dasllama_lint_escape.das", "test_dlim_wipe.das",
                     "test_env_registry.das",
                     "test_exchange_schema.das", "test_exe_smoke.das", "test_facade_docs.das", "test_fat_hook_umbrella.das", "test_fat_start.das", "test_gen_records_args.das",
-                    "test_model_specs.das", "test_program_roots.das", "test_run_suites.das", "test_run_summary.das", "test_served_bench.das",
+                    "test_model_specs.das", "test_program_roots.das", "test_review_howto.das", "test_run_suites.das", "test_run_summary.das", "test_served_bench.das",
                     "test_site_records.das", "test_sizing_helpers.das", "test_tok_seed.das", "test_tune_interrupt.das", "test_vk_spv_diff.das" ]
     } elif (area == "llm") {
         return <- [ "test_accel_backend.das", "test_affinity_predicates.das", "test_arch_registry.das", "test_batch_decode.das", "test_bench_rows.das",
@@ -349,7 +353,7 @@ def area_tests(area : string) : array<string> {
                     "test_gpu_model_swap.das", "test_gpu_moe_shexp.das", "test_gpu_perop_kv_codec.das", "test_gpu_perop_kv_codec_iq.das", "test_gpu_perop_kv_codec_k.das", "test_gpu_resident_codec_llama_iq.das", "test_gpu_resident_codec_llama_k.das", "test_gpu_resident_gemma2.das", "test_gpu_resident_gemma3_1b.das", "test_gpu_resident_gemma3_4b.das", "test_gpu_resident_gemma4_12b_k.das", "test_gpu_resident_gemma4_12b_q8.das", "test_gpu_resident_gemma4_26b.das", "test_gpu_resident_gemma4_26b_k.das", "test_gpu_resident_gemma4_26b_mx4.das", "test_gpu_resident_gemma4_26b_host.das", "test_gpu_resident_moe_host_pinned.das", "test_gpu_resident_gemma4_31b.das", "test_gpu_resident_gemma4_e2b.das", "test_gpu_resident_gemma4_e4b.das", "test_gpu_resident_gptoss.das", "test_gpu_resident_hc.das", "test_gpu_resident_hc_micro.das", "test_parity_dump.das", "test_gpu_resident_continuation.das", "test_gpu_resident_long_window.das", "test_gpu_resident_hybrid.das", "test_gpu_resident_llama.das", "test_gpu_resident_cuda_llama.das", "test_gpu_resident_cuda_codec.das", "test_gpu_resident_cuda_batch.das", "test_gpu_resident_cuda_qwen3.das", "test_gpu_resident_cuda_phi3.das", "test_gpu_resident_segments.das", "test_gpu_resident_moe.das", "test_gpu_resident_moe_host_rows.das", "test_gpu_resident_moe_formats.das", "test_gpu_resident_format_census.das", "test_gpu_resident_qwen2.das", "test_gpu_resident_regions.das", "test_gpu_resident_regions_e2b.das", "test_gpu_resident_regions_gptoss.das", "test_gpu_resident_regions_qwen3moe.das", "test_gpu_resident_regions_qwen35moe.das", "test_gpu_resident_regions_qwen2moe.das", "test_gpu_resident_regions_gemma4moe.das", "test_gpu_resident_regions_gemma2.das", "test_gpu_resident_regions_gemma3.das", "test_gpu_resident_regions_gemma4.das", "test_gpu_resident_regions_hybrid.das", "test_gpu_resident_regions_hybrid_k.das", "test_gpu_resident_regions_hybrid_iq3s.das", "test_gpu_resident_regions_hybrid_q3kxl.das", "test_gpu_resident_regions_llama_k.das", "test_gpu_resident_regions_llama3b_ctx32k.das", "test_gpu_resident_regions_gemma3_4b_ctx128k.das", "test_gpu_resident_regions_gemma4_e2b_ctx128k.das", "test_gpu_resident_regions_phi3.das", "test_gpu_resident_regions_qwen3.das", "test_gpu_resident_regions_q8kv.das", "test_gpu_resident_regions_tq4kv.das", "test_gpu_serving_declines.das", "test_gpu_slot_swap.das", "test_gpu_tier.das", "test_groupn.das",
                     "test_embeddings.das", "test_jobque_tripwire.das", "test_kernel_backend.das", "test_kgroup_repack.das", "test_kqformat.das", "test_kquant.das",
                     "test_kv_codec.das", "test_kv_paged.das", "test_kv_prefix.das", "test_metal_batched_row.das", "test_metal_format_census.das", "test_math_activations.das",
-                    "test_math_elementwise.das", "test_matmul.das", "test_matmul_batch.das",
+                    "test_math_elementwise.das", "test_matmul.das", "test_matmul_batch.das", "test_f32_batch_tile_perms.das",
                     "test_metal_float_a_gate.das", "test_metal_gemm.das", "test_metal_role_infer.das", "test_mtp.das",
                     "test_mtp_gemma_drafter.das", "test_mtp_sampled_walk.das", "test_mtp_snapshot.das", "test_mtp_accept_walks.das", "test_sampling_landed.das", "test_mxfp4.das",
                     "test_par_indexed.das", "test_parity.das", "test_parity_cache.das", "test_parity_pregate.das",
@@ -368,7 +372,7 @@ def area_tests(area : string) : array<string> {
 //! the image suite's arms an area owns (substring tokens, `arm_on` semantics); "" = the area has none
 def area_image_arms(area : string) : string {
     if (area == "audio") {
-        return "whisper,voxtral,parakeet,qwen3a,canary,gemma4a,mtower"
+        return "whisper,voxtral,parakeet,gigaam,qwen3a,canary,gemma4a,mtower"
     } elif (area == "vision") {
         return "gemma4uv,gemma4v,gemma3v,gemma4e,tower"
     } elif (area == "llm") {
@@ -391,7 +395,7 @@ let MODULE_AREAS <- {
     "dasllama_asr" => "audio", "dasllama_asr_types" => "audio", "dasllama_audio" => "audio",
     "dasllama_audio_embedder" => "audio", "dasllama_audio_io" => "audio", "dasllama_canary" => "audio",
     "dasllama_gemma4a" => "audio", "dasllama_metal_asr_dec" => "audio", "dasllama_vulkan_asr_dec" => "audio", "dasllama_parakeet" => "audio",
-    "dasllama_qwen3a" => "audio", "dasllama_vad" => "audio", "dasllama_whisper" => "audio",
+    "dasllama_gigaam" => "audio", "dasllama_rnnt" => "audio", "dasllama_qwen3a" => "audio", "dasllama_vad" => "audio", "dasllama_whisper" => "audio",
     "dasllama_gemma3v" => "vision", "dasllama_gemma4uv" => "vision", "dasllama_gemma4v" => "vision",
     "dasllama_qwen25v" => "vision", "dasllama_qwen3v" => "vision", "dasllama_vision" => "vision",
     "dasllama_vision_embedder" => "vision", "dasllama_vision_io" => "vision",
@@ -458,8 +462,8 @@ def areas_for_path(path : string) : array<string> {
             } elif (name |> starts_with("_vk") || name == "_metal_kernel_common.das" || name == "_mtl_toy.das" || name == "_kq_dot.das" || name == "_kernel_oracles.das" || name == "_kv_codec_oracles.das"
                     || name == "_fp4_feed.das" || name == "_mmq_ref.das") {
                 return <- ["llm"]
-            } elif (name == "_kq_fixtures.das") {
-                return <- ["llm", "tts"]   //! the K-quant lane cell of test_tts_blocks reads its planes
+            } elif (name == "_kq_fixtures.das" || name == "_f32_tile_pin.das") {
+                return <- ["llm", "tts"]   //! test_tts_blocks' K-quant lane cell reads the planes; the TTS parity rail runs under the tile pin
             }
             return <- clone_to_move(AREAS)
         }

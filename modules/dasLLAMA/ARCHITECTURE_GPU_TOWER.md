@@ -7,6 +7,8 @@ one-command-buffer encode chain each family the Metal tower driver serves gets, 
 synthesis chain. The GPU backend role table these sections build on - the tower driver's role row
 included - stays in `ARCHITECTURE_GPU.md#gpu-backends`.
 
+- `ARCHITECTURE_GPU_TOWER_FC.md` - the FastConformer chain's rotary, LayerNorm-conv form, the
+  one GigaAM serves through.
 - `ARCHITECTURE_GPU_TOWER_POCKET.md` - the Metal tower driver's three Pocket TTS seats: the
   codec, the frame loop and the text prompt.
 - `ARCHITECTURE_GPU_TOWER_VULKAN.md` - the Vulkan tower driver's row classes and attention
@@ -128,9 +130,10 @@ its file, parakeet's tap-major - and the bias-and-ReLU rows); the two depthwise 
 (`GkDwConv2d`) over the file's taps, and a stage's valid rows ride the template's length mask
 (`ih_valid`), so a row past them adds nothing and no mask pass is dispatched.
 
-The FastConformer chain (canary and parakeet share it: one context, one block body over the
+The FastConformer chain (canary, parakeet and gigaam share it: one context, one block body over the
 canary offsets record, parakeet's offsets mapped onto it with no GEMM biases and its tap-major
-depthwise stamp) runs the rel-pos (Transformer-XL) attention one head at a time on the f32 GEMM
+depthwise stamp; gigaam's rotary, LayerNorm-conv form is `ARCHITECTURE_GPU_TOWER_FC.md#tower-fc-rotary`)
+in its rel form runs the rel-pos (Transformer-XL) attention one head at a time on the f32 GEMM
 builder, because a per-row kernel walking every key is the encode's cost past a minute of audio:
 a pack writes the head's (Q+u), (Q+v), K_h, V_h^T and pos_h panels contiguous and zero-padded to
 the GEMM lattice (rows to 32, keys and rel positions to 64), two GEMMs give the content scores
@@ -139,7 +142,11 @@ shift (npos - 1 - q + k), scales, and takes the softmax with zeros in every pad,
 gives P*V_h into the head's slot of the AV rows, and one unpack per layer writes the compact
 output. The score slabs are per-head scratch reused head after head - each head's writer is
 encoded after the previous head's reader. The head size is held to a multiple of 64 (the AV
-GEMM's column lattice) and the head count to the per-head uniform seats.
+GEMM's column lattice) and the head count to the per-head uniform seats. Behind gigaam's encode the CTC head
+(`metal_gigaam_ctc`, `register_gigaam_gpu_ctc`) is one command buffer on both weight lanes: the f32 GEMM over the held
+encoder rows (else `st.x` uploaded), its weight panel padded to the 64-row column tile with zero rows, then the pick
+(`enc_ctc_pick`, `MetalCtcPick` on the template both homes stamp, `GkCtcPick`) - the bias, each frame's argmax (the lowest index of a tie, as the CPU's) and the
+emitted class's log-sum - two words a frame read back; the collapse stays on the host.
 
 The chain's eleven weighted GEMMs a block read a DEVICE twin of the f32 blob where a tensor crown
 compiled the half GEMM (`pf_hmm_ready`): `fc_twin_attach` converts the whole blob to halfwords on
@@ -147,8 +154,10 @@ the device once a blob, at the f32 element offsets, and the half x half tensor G
 site over it with X converted into one shared half panel. The twin holds the halves the f16-staged tile stamp rounds a tile at
 a time, so the route changes the GEMM, not the values it multiplies; the file is f32, so no image
 carries this twin (`ARCHITECTURE_IMAGE.md#image-tower-twin-plane` is the f16-source form) and it
-drops with the weights epoch and the tower shutdown. `DASLLAMA_METAL_TOWER_F16=0` pins the f32
-tiles, and `metal_tower_f16_encodes()` counts the encodes that rode the twin. The per-head
+drops with the weights epoch and the tower shutdown. GigaAM's exact lane needs no device twin: its
+block GEMMs are the carrier's own halfwords (`wblob`), bound as the GEMM plane directly, and its q8 lane
+reads the q8 slab (`ARCHITECTURE_MEDIA_ASR.md#gigaam-planes`). `DASLLAMA_METAL_TOWER_F16=0` pins the f32
+tiles - on GigaAM's exact lane it declines the chain, its blob holding no block GEMM - and `metal_tower_f16_encodes()` counts the encodes that rode the twin. The per-head
 attention GEMMs multiply packed f32 panels and stay on the tile stamp.
 
 Under the `attn_dev` crown the attention runs over EVERY head in five dispatches a block instead
@@ -177,8 +186,8 @@ pad). The rel table is built on the device at the head of every FastConformer co
 (the shared `GkRelSinCos` into the context's zero-padded table, canary's and parakeet's alike), so
 no session table is uploaded. The seat answers -1 with nothing counted on a
 q8 model, a clip whose first conv output passes 1 GB (about five minutes of audio), a shape off
-the lattice or `set_metal_parakeet_front(false)`: the CPU front runs then and the block seat
-serves behind it. `metal_tower_stats().convs` counts the encodes whose front ran on the device.
+the lattice, `set_metal_parakeet_front(false)`, a scratch buffer it cannot take or a failed command
+buffer: the CPU front runs then and the block seat serves behind it, counting its own declines. `metal_tower_stats().convs` counts the encodes whose front ran on the device.
 
 ### The tower driver's StyleTTS2 synthesis chain {#tower-tts-chain}
 

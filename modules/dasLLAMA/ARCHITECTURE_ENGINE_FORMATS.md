@@ -30,7 +30,11 @@ anchor.
   dispatch in. ONE carve-out: a conversion that IS a KV-cache format's store/read half lives with
   its codec family (sec. below).
 - **`dasllama_repack.das`** - every disk-order -> compute-order kernel-LAYOUT transform (grp
-  interleaves, disk-order extractors, panel unpacks), any format, any platform. Number sources
+  interleaves, disk-order extractors, panel unpacks, the f32 conv weights' tap orders
+  `repack_conv_out_tap_in` / `repack_conv_in_tap_out`, the transducer's f16 halves
+  `repack_lstm_gates_f16` / `repack_joint_cols_f16`), any format, any platform. A transform here
+  takes plain arrays or pointers: the file read before it and the cache the result lands in stay
+  with their family. Number sources
   (tune stamps, bake overrides) stay with their owners and pass plain parameters in.
 - **`dasllama_kv_codec.das`** - the KV-cache runtime codec, one family per cache format, kept
   WHOLE: store (quantize), read (dequant), the attention score dot, and the V-accumulate axpy all
@@ -60,7 +64,8 @@ anchor.
 - **`dasllama_layout.das`** - disk-format -> compute-layout transforms at LOAD scope: the blob
   transform, the CPU repack walkers, the GPU tier gathers, the per-region q8->Metal-34B
   un-repack (`q8_region_to_metal_blob`, the ASR-decoder driver's upload form), the GGUF Q8_0 blocks'
-  split into the quant and f16 scale planes (`q8_repack`, the Vulkan assistant drafter's upload form), and the refusal
+  split into the quant and f16 scale planes (`q8_repack`, the Vulkan assistant drafter's upload form), the VAD's
+  device weight slab (`vad_build_slab` and its offsets record `VadSlabOffs`), and the refusal
   half (`can this model take the blob form`) split out so the image writer can commit without
   loading.
 - **`dasllama_tokenizer.das`** - the tokenizer facade: backend selection off the GGUF metadata and
@@ -248,7 +253,8 @@ repack walks that plane's region alone (`shexp_plane_q8`).
 
 - **`dasllama_math.das`** - the numeric ABSTRACTION: typedefs, active backend pointers, public
   wrappers, dispatch shaping, and the array-sizing helpers every tier and the engine share
-  (`reserve_resize`, `grow_resize`, `ensure_length`, `overwrite_resize`), the `[tuned]` fp32
+  (`reserve_resize`, `grow_resize`, `ensure_length`, `overwrite_resize`), the row-major
+  transpose `transpose_ct` ([C][T] to [T][C]), the `[tuned]` fp32
   loop-hint families (`dot`, `axpy`, the elementwise set, `f32_batch_tile`) and the fp32 batch walk
   (`matmul_batch_core`, `batch_tile_block`, generic over the f32 and bf16 weight lattices - `bf16_batch_tile`
   widens each halfword by the exact shift); every other kernel lives in a tier file.

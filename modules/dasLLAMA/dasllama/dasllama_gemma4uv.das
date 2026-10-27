@@ -114,9 +114,7 @@ def private serialize_image_meta(var arch : Archive; var st : Gemma4uvStaging) {
 
 // staging owns its plane bytes outright — every array here is heap, none is borrowed
 def finalize(var st : Gemma4uvStaging) {
-    delete st.blob
-    delete st.wblob
-    delete st.e
+    delete_staging(st)
 }
 
 [unused_argument(st)]
@@ -216,44 +214,11 @@ def stage_gemma4uv_embedder(path : string) : Gemma4uvStaging {
 //! borrows it, so there is no allocation and no processing at load; missing or stale, one is minted
 //! from the source mmproj first. Panics on any other projector (the E-series `gemma4v` is a v2 leg).
 def load_gemma4uv_embedder(path : string) : Gemma4uvEmbedder {
-    let tag = GEMMA4UV_TAG
-    if (path |> ends_with(".dlim")) {
-        // named directly — no mmproj to regenerate from, so a wrong identity panics
-        apply_box_profile_runtime()
-        let ts_img = ref_time_ticks()
-        var t = Gemma4uvEmbedder()
-        if (!load_image(path, t, tag)) {
-            panic("dasLLAMA: '{path}' is not a prepared gemma4uv-embedder image for this box/knobs (identity {image_identity(tag)}) - regenerate it from the source mmproj gguf")
-        }
-        to_log(LOG_INFO, "dasLLAMA: prepared gemma4uv-embedder image mapped in {get_time_usec(ts_img) / 1000} ms - {path}\n")
-        uv_check_planes(t, path)
-        return <- t
-    }
-    if (g_env_engine.image) {
-        apply_box_profile_runtime()   // a backend pin must precede the identity (it names the backend)
-        let img = image_path_for(path, tag)
-        let ts_img = ref_time_ticks()
-        var t = Gemma4uvEmbedder()
-        if (load_image(img, t, tag)) {
-            to_log(LOG_INFO, "dasLLAMA: prepared gemma4uv-embedder image mapped in {get_time_usec(ts_img) / 1000} ms - {img}\n")
-            uv_check_planes(t, img)
-            return <- t
-        }
-        delete t
-        var inscope st <- stage_gemma4uv_embedder(path)
-        var built = Gemma4uvEmbedder()
-        if (cache_via_image_staged(st, built, img, tag)) {
-            dlim_gc_stale(path, tag)   // the fresh bake ON DISK proves its lane's siblings dead; an in-memory build reaps nothing
-        }
-        uv_check_planes(built, img)
-        return <- built
-    }
-    // no persisted image: mint one in memory and serve THAT — a served embedder is always
-    // image-backed, so there is no second, array-owning shape of this struct to maintain
-    var inscope st <- stage_gemma4uv_embedder(path)
-    var built = Gemma4uvEmbedder()
-    mint_gemma4uv_embedder(st, built)
-    return <- built
+    return <- load_staged_image(path, GEMMA4UV_TAG, "gemma4uv-embedder", "source mmproj gguf", type<Gemma4uvEmbedder>, $ {
+        return <- stage_gemma4uv_embedder(path)
+    }, $ [unused_argument(t)] (t : Gemma4uvEmbedder) => true, $(t : Gemma4uvEmbedder; src : string) {
+        uv_check_planes(t, src)
+    })
 }
 
 //! the embedder minted in memory from its staging - no `.dlim` written, the served form image-backed all the same

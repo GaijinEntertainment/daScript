@@ -22,6 +22,7 @@ require daslib/linq
 require _tts_oracle
 require _model_tier
 require _gpu_knobs public
+require _f32_tile_pin   // with_reference_f32_tile: the parity bars at the tile's reference order
 
 // The parity rail both StyleTTS2 families run against their onnxruntime / PyTorch oracle
 // dumps (harness/kitten_oracle.py, harness/kokoro_oracle.py): the token ids against the
@@ -225,8 +226,6 @@ def private seam_check(t : T?; m, m8 : StyleTts2Model; tag : string; dump : tabl
         spec := spec_ref
     }
     var inscope wave : array<float>
-    let tile_min_n_was = get_f32_batch_tile_min_n()
-    set_f32_batch_tile_min_n(1l)   // the bars below are the tile's: pin its route
     styletts2_generator(m.decoder, gen_in, cw, f2, style_dec, spec, frames, tr, wave, sc)
     with_gpu_knobs() {
         gpu_seam_check(t, m, tag, gen_in, cw, f2, style_dec, spec, frames, wave, sc)
@@ -260,7 +259,6 @@ def private seam_check(t : T?; m, m8 : StyleTts2Model; tag : string; dump : tabl
     dump |> get("waveform") $(tensor) {
         check_exceeds(t, "{tag} SEAM waveform, the input rotated", wave2, tensor.f, Bar(kind = BarKind.rel_of_larger, rel = 0.0, abs_floor = SEAM_WAVE_BAR))
     }
-    set_f32_batch_tile_min_n(tile_min_n_was)
     unsafe {
         delete tr2
         delete tr
@@ -658,57 +656,59 @@ def tts_parity(t : T?; rig : TtsParityRig) {
         return
     }
     with_dasllama_jobque_() {
-        var inscope stg <- stage_styletts2(rig.gguf, false)   // the bars are the f32 lane's; minted in memory, no .dlim baked
-        var inscope m = StyleTts2Model()
-        mint_styletts2(stg, m)
-        var inscope stg8 <- stage_styletts2(rig.gguf, true)
-        var inscope m8 = StyleTts2Model()   // the served lane's planes, for the q8 decode cell
-        mint_styletts2(stg8, m8)
-        t |> equal(m.family, rig.family)
-        t |> equal(m.sample_rate, 24000)
-        var ids_ok = 0
-        var same_length = 0
-        var worst = 0.0
-        var worst_case = ""
-        for (c in mf.cases) {
-            let tag = "{rig.family} {c.id} {c.voice}"
-            var inscope dump <- load_tts_dump(path_join(rig.oracle_dir, c.file))
-            var inscope ids <- dump_tensor(dump, type<int>, "input_ids")
-            var inscope ours <- invoke(rig.ids, c.ps_espeak)
-            if (sequence_equal(ours, ids)) {
-                ids_ok++
-            } else {
-                to_log(LOG_INFO, "{tag}: token ids differ - ours {ours}\n   oracle {ids}\n")
-            }
-            var inscope noise <- case_noise(dump)
-            var tr = new StyleTts2Trace()
-            var tm = TtsTimings()
-            var inscope sc = St2Scratch()
-            styletts2_synthesize(m, ids, dump_tensor(dump, type<float>, "style"), c.speed, noise, 0ul, tr, tm, sc)
-            let wave & = sc.wave
-            dump |> get("waveform") $(ref) {
-                if (length(wave) != length(ref.f)) {
-                    t |> failure("{tag}: {length(wave)} samples, oracle has {length(ref.f)} (frames {tr.frames} vs {c.duration_sum})")
+        with_reference_f32_tile(t) {   // the bars are measured at the tile's reference order, whatever this box crowned
+            var inscope stg <- stage_styletts2(rig.gguf, false)   // the bars are the f32 lane's; minted in memory, no .dlim baked
+            var inscope m = StyleTts2Model()
+            mint_styletts2(stg, m)
+            var inscope stg8 <- stage_styletts2(rig.gguf, true)
+            var inscope m8 = StyleTts2Model()   // the served lane's planes, for the q8 decode cell
+            mint_styletts2(stg8, m8)
+            t |> equal(m.family, rig.family)
+            t |> equal(m.sample_rate, 24000)
+            var ids_ok = 0
+            var same_length = 0
+            var worst = 0.0
+            var worst_case = ""
+            for (c in mf.cases) {
+                let tag = "{rig.family} {c.id} {c.voice}"
+                var inscope dump <- load_tts_dump(path_join(rig.oracle_dir, c.file))
+                var inscope ids <- dump_tensor(dump, type<int>, "input_ids")
+                var inscope ours <- invoke(rig.ids, c.ps_espeak)
+                if (sequence_equal(ours, ids)) {
+                    ids_ok++
                 } else {
-                    same_length++
-                    let d = max_abs_diff(wave, ref.f)
-                    to_log(LOG_INFO, "{tag}: waveform maxdiff {d} over {length(ref.f)} samples (informational); {timings_line(tm, m.sample_rate)}\n")
-                    if (d > worst) {
-                        worst = d
-                        worst_case = "{c.id} {c.voice}"
+                    to_log(LOG_INFO, "{tag}: token ids differ - ours {ours}\n   oracle {ids}\n")
+                }
+                var inscope noise <- case_noise(dump)
+                var tr = new StyleTts2Trace()
+                var tm = TtsTimings()
+                var inscope sc = St2Scratch()
+                styletts2_synthesize(m, ids, dump_tensor(dump, type<float>, "style"), c.speed, noise, 0ul, tr, tm, sc)
+                let wave & = sc.wave
+                dump |> get("waveform") $(ref) {
+                    if (length(wave) != length(ref.f)) {
+                        t |> failure("{tag}: {length(wave)} samples, oracle has {length(ref.f)} (frames {tr.frames} vs {c.duration_sum})")
+                    } else {
+                        same_length++
+                        let d = max_abs_diff(wave, ref.f)
+                        to_log(LOG_INFO, "{tag}: waveform maxdiff {d} over {length(ref.f)} samples (informational); {timings_line(tm, m.sample_rate)}\n")
+                        if (d > worst) {
+                            worst = d
+                            worst_case = "{c.id} {c.voice}"
+                        }
                     }
                 }
+                if (c.stages) {
+                    seam_check(t, m, m8, tag, dump)
+                    stage_checks(t, tag, tr, dump)
+                }
+                unsafe {
+                    delete tr
+                }
             }
-            if (c.stages) {
-                seam_check(t, m, m8, tag, dump)
-                stage_checks(t, tag, tr, dump)
-            }
-            unsafe {
-                delete tr
-            }
+            t |> equal(ids_ok, length(mf.cases), "cases whose token ids match the reference driver")
+            t |> equal(same_length, length(mf.cases), "cases whose durations, hence sample counts, match the oracle")
+            to_log(LOG_INFO, "{rig.family}: worst end-to-end waveform maxdiff {worst} at {worst_case} over {length(mf.cases)} cases (informational)\n")
         }
-        t |> equal(ids_ok, length(mf.cases), "cases whose token ids match the reference driver")
-        t |> equal(same_length, length(mf.cases), "cases whose durations, hence sample counts, match the oracle")
-        to_log(LOG_INFO, "{rig.family}: worst end-to-end waveform maxdiff {worst} at {worst_case} over {length(mf.cases)} cases (informational)\n")
     }
 }
