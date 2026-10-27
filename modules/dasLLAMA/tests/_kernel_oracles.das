@@ -10,8 +10,9 @@ module _kernel_oracles shared public
 
 require dasllama/dasllama_lint public
 require math
-require dasllama/dasllama_math   // rope_scaled_tab, rope_scaled_neox_tab, rope_scaled_neox_tab_part
+require dasllama/dasllama_math   // rope_scaled_tab, rope_scaled_neox_tab, rope_scaled_neox_tab_part, l2_norm_rows
 require dasllama/dasllama_gpu_math
+require dasllama/dasllama_arch_qwen35   // dn_delta_head: the sequential delta rule the scan and step oracles walk
 require daslib/shader_lingua_franca
 require daslib/f16_cvt   // f32_to_f16: the depthwise taps' halfwords
 require dasllama/dasllama_plane   // PlaneF / PlaneU16: the CPU depthwise loops' planes
@@ -550,4 +551,162 @@ def dw_f16_cpu(fx : DwF16Fix; f32 : bool) : array<float> {
         }
     }
     return <- o
+}
+
+//! the sequential delta rule the dn scan cells hold the chunked scan to, every value head's `npos` steps over `convh` (q | k | v rows `cd` wide) from `sth`, beta / gate / decay / dt at their `smh` offsets: the raw o rows [npos x nvh x ds], then the final states [nvh x ds x ds]
+def dn_delta_ref(convh, sth, smh : array<float>; npos, nkh, nvh, ds, beta_off, g_off, a_off, dt_off : int) : array<float> {
+    let kd = nkh * ds
+    let di = nvh * ds
+    let cd = 2 * kd + di
+    var ref : array<float>
+    ref |> reserve(npos * di + nvh * ds * ds)   // the whole-window arm's rows pass the unreserved-growth guard
+    ref |> resize(npos * di + nvh * ds * ds)
+    var st_h, dvn : array<float>
+    st_h |> resize(ds * ds)
+    dvn |> resize(ds)
+    for (hh in range(nvh)) {
+        let kh = hh % nkh
+        for (e in range(ds * ds)) {
+            st_h[e] = sth[hh * ds * ds + e]
+        }
+        for (tt in range(npos)) {
+            let crow = tt * cd
+            let gt = smh[a_off + hh] * softplus(smh[g_off + tt * nvh + hh] + smh[dt_off + hh])
+            unsafe {
+                dn_delta_head(addr(st_h[0]), addr(convh[crow + kh * ds]), addr(convh[crow + kd + kh * ds]), addr(convh[crow + 2 * kd + hh * ds]),
+                    addr(ref[tt * di + hh * ds]), addr(dvn[0]), gt, sigmoid_f32(smh[beta_off + tt * nvh + hh]), int64(ds))
+            }
+        }
+        for (e in range(ds * ds)) {
+            ref[npos * di + hh * ds * ds + e] = st_h[e]
+        }
+    }
+    delete st_h
+    delete dvn
+    return <- ref
+}
+
+//! the scan's gated out-norm over `dn_delta_ref`'s rows: each head's raw o row (`npos` rows of `nvh` heads `ds` wide) rms-normed under
+//! the norm row at `smh[wnorm_off]`, times silu(z) - or sigmoid(z) under `sig`, the qwen4exp stamp's - of its `zh` row; the final
+//! states past the rows as they were
+def dn_gate_ref(o_raw, zh, smh : array<float>; npos, nvh, ds, wnorm_off : int; eps : float; sig : bool) : array<float> {
+    let di = nvh * ds
+    var o := o_raw
+    for (tt in range(npos)) {
+        for (hh in range(nvh)) {
+            let at = tt * di + hh * ds
+            var sum = 0.0
+            for (j in range(ds)) {
+                sum += o_raw[at + j] * o_raw[at + j]
+            }
+            let inv = 1.0 / sqrt(sum / float(ds) + eps)
+            for (j in range(ds)) {
+                let zv = zh[at + j]
+                let normed = o_raw[at + j] * inv * smh[wnorm_off + j]
+                o[at + j] = normed * (sig ? sigmoid_f32(zv) : silu_f32(zv))
+            }
+        }
+    }
+    return <- o
+}
+
+//! the window's ring hand-off on the CPU, per channel: new ring row k is `src` row `row0 + k - old_rows`, or for k under `old_rows` the entry image's (`old_off`) row `k + taps - old_rows`; the new image at `out_off`
+def dn_tail_oracle(src, smalls : array<float>; cd, taps, row0, old_rows, old_off, out_off : int) : array<float> {
+    var want := smalls
+    for (ch in range(cd)) {
+        for (k in range(taps)) {
+            want[out_off + ch * taps + k] = (k >= old_rows ? src[(row0 + k - old_rows) * cd + ch]
+                : smalls[old_off + ch * taps + k + taps - old_rows])
+        }
+    }
+    return <- want
+}
+
+//! the fused deltanet step's oracle over one row in slot 0: the o row under the silu out-gate and under the sigmoid one, the
+//! state and the smalls (the ring advanced into the other image) as the step leaves them
+struct DnStepRef {
+    out : array<float>
+    out_sig : array<float>
+    state : array<float>
+    smalls : array<float>
+}
+
+//! the fused deltanet step on the CPU over `projh` ([q | k | v | z] at `cd`): ring conv + silu, q / k l2 norms and q scale, the chunk-length-1 delta rule over `sth`, the gated out-norm; reads ring image `par`, advances the other; beta / g at `beta_off` / `g_off` (row 0), a, dt, taps, out-norm weights at their `smh` offsets
+def dn_step_ref(projh, sth, smh : array<float>; par, nvh, nkh, cd, ds, dconv, beta_off, g_off, a_off, dt_off, taps_off, wnorm_off, hist_off : int; eps, qscale : float) : DnStepRef {
+    let kd = nkh * ds
+    let taps = dconv - 1
+    var r : DnStepRef
+    r.smalls := smh
+    let rrb = hist_off + par * cd * taps
+    let wrb = hist_off + (1 - par) * cd * taps
+    for (ch in range(cd)) {
+        for (k in range(taps - 1)) {
+            r.smalls[wrb + ch * taps + k] = smh[rrb + ch * taps + k + 1]
+        }
+        r.smalls[wrb + ch * taps + taps - 1] = projh[ch]
+    }
+    r.state := sth
+    r.out |> resize(nvh * ds)
+    r.out_sig |> resize(nvh * ds)
+    var inscope dq, dk, dv, dvn, dout : array<float>
+    dq |> resize(ds)
+    dk |> resize(ds)
+    dv |> resize(ds)
+    dvn |> resize(ds)
+    dout |> resize(ds)
+    for (hh in range(nvh)) {
+        let kh = hh % nkh
+        for (sl in range(3)) {
+            for (j in range(ds)) {
+                let ch = (sl == 0 ? kh * ds : (sl == 1 ? kd + kh * ds : 2 * kd + hh * ds)) + j
+                var acc = projh[ch] * smh[taps_off + ch * dconv + taps]
+                for (k in range(taps)) {
+                    acc += smh[rrb + ch * taps + k] * smh[taps_off + ch * dconv + k]
+                }
+                let sv = silu_f32(acc)
+                if (sl == 0) {
+                    dq[j] = sv
+                } elif (sl == 1) {
+                    dk[j] = sv
+                } else {
+                    dv[j] = sv
+                }
+            }
+        }
+        l2_norm_rows(unsafe(addr(dq[0])), 1l, int64(ds), eps)
+        l2_norm_rows(unsafe(addr(dk[0])), 1l, int64(ds), eps)
+        let graw = smh[g_off + hh] + smh[dt_off + hh]
+        let eg = exp(smh[a_off + hh] * softplus(graw))
+        let bt = sigmoid_f32(smh[beta_off + hh])
+        var qk = 0.0
+        for (j in range(ds)) {
+            dq[j] *= qscale
+            qk += dq[j] * dk[j]
+        }
+        let sbase = hh * ds * ds
+        for (j in range(ds)) {
+            var ks = 0.0
+            var qs = 0.0
+            for (i in range(ds)) {
+                ks += dk[i] * sth[sbase + i * ds + j]
+                qs += dq[i] * sth[sbase + i * ds + j]
+            }
+            dvn[j] = bt * (dv[j] - eg * ks)
+            dout[j] = eg * qs + qk * dvn[j]
+        }
+        for (e in range(ds * ds)) {
+            r.state[sbase + e] = sth[sbase + e] * eg + dk[e / ds] * dvn[e % ds]
+        }
+        var sum = 0.0
+        for (j in range(ds)) {
+            sum += dout[j] * dout[j]
+        }
+        let inv = 1.0 / sqrt(sum / float(ds) + eps)
+        for (j in range(ds)) {
+            let zv = projh[cd + hh * ds + j]
+            r.out[hh * ds + j] = dout[j] * inv * smh[wnorm_off + j] * silu_f32(zv)
+            r.out_sig[hh * ds + j] = dout[j] * inv * smh[wnorm_off + j] * sigmoid_f32(zv)
+        }
+    }
+    return <- r
 }

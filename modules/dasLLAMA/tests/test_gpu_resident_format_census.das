@@ -178,6 +178,7 @@ def test_gpu_resident_format_census_iq4xs(t : T?) {
                 let emb0 = census(emb_kernel(KqFmt.iq4xs))
                 var gemv0 = 0l
                 var rows0 = 0l
+                let gathers = gpu_resident_embed_gathers()   //! read while the driver is armed: the CPU leg drops the model off the device
                 var fed <- resident_then_cpu_feed(t, tr, prompt, toks, $ {
                     pf_tile = census("kq_batch_iq4xs_cls_spv") - tile0
                     pf_emb = census(emb_kernel(KqFmt.iq4xs)) - emb0
@@ -192,7 +193,7 @@ def test_gpu_resident_format_census_iq4xs(t : T?) {
                 if (tile0 != NO_CENSUS) {
                     t |> success(pf_tile >= 2l * nrec, "the window read every recurrent layer's beta and alpha planes through the IQ4_XS tile ({pf_tile} dispatches, {2l * nrec} planes)")
                     t |> success(st_gemv >= 5l * nrec, "the token command read every recurrent layer's five planes through the IQ4_XS GEMV ({st_gemv} recorded, {5l * nrec} planes)")
-                    if (gpu_resident_embed_gathers()) {
+                    if (gathers) {
                         t |> success(pf_emb >= 1l, "the window gathered its token rows off the IQ4_XS table on the device ({pf_emb} dispatches)")
                         t |> equal(st_rows, STEPS, "every fed step's row gathered on the device off its token id, no host row uploaded")
                     } else {

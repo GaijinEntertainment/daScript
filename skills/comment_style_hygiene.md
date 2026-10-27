@@ -49,7 +49,7 @@ walking up from the file): ABSOLUTELY NO comments
 that are not documentation or lint suppression.** The kept set is exactly: `//!` docs on a
 contract a CALLER must know - public API always, a private helper only when callers inside
 the module need the contract (narration of an implementation goes to a name, a test, or the
-module's `.md`), and only where the contract is not reachable from the declaration's own
+module's `.md`), and only where the contract is not reachable from the declaration's (for a class, any of its methods')
 `[arch]` citation: a `//!` that restates the section its citation names is a duplicate and
 goes - the one-line `//!` site contract above a top-level definition (the rule below),
 `// nolint:CODE` / `@nolint` suppressions carrying their one-line why,

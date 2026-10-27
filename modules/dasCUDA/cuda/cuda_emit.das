@@ -3105,7 +3105,7 @@ def private atomic_call(var ctx : CudaCtx; ec : ExprCall?; cname : string) : str
 }
 
 //! the CUDA-only intrinsics a body calls as statements
-let private INTRINSIC_STATEMENTS : table<string> <- { "cp_async_16", "cp_async_commit", "cp_async_wait", "ldmatrix", "mma_scale_acc", "mma_block_scaled", "mma_scale_cols", "bar_sync", "cuda_asm" }
+let private INTRINSIC_STATEMENTS : table<string> <- { "cp_async_16", "cp_async_commit", "cp_async_wait", "ldmatrix", "mma_scale_acc", "mma_block_scaled", "mma_block_scaled_mx", "mma_scale_cols", "bar_sync", "cuda_asm" }
 
 [arch(at="../ARCHITECTURE_EMIT.md#cuda-kernel-vocabulary-tiers")]
 def private need_arch_a(var ctx : CudaCtx) {
@@ -3191,20 +3191,21 @@ def private cuda_intrinsic_call(var ctx : CudaCtx; ec : ExprCall?; cname : strin
         census_kind(ctx, "call.mma_scale_acc")
         return "__das_mma_scale_acc({emit_value(ctx, ec.arguments[0])}, {emit_value(ctx, ec.arguments[1])}, {emit_value(ctx, ec.arguments[2])}, {emit_value(ctx, ec.arguments[3])})"
     }
-    if (cname == "mma_block_scaled") {
+    if (cname == "mma_block_scaled" || cname == "mma_block_scaled_mx") {
         let fi = na == 6 ? coop_type_of(ec.arguments[0]._type) : CoopInfo(ok = false)
         let ai = na == 6 ? coop_type_of(ec.arguments[1]._type) : CoopInfo(ok = false)
         let bi = na == 6 ? coop_type_of(ec.arguments[2]._type) : CoopInfo(ok = false)
         if (!(fi.ok && ai.ok && bi.ok && fi.comp == "f32" && ai.comp == "e2m1" && ai.use == "A" && bi.comp == "e2m1" && bi.use == "B")) {
-            shader_error(ctx, ec.at, "mma_block_scaled(f32 accumulator, e2m1 A fragment, e2m1 B fragment, A scale word, B scale word of n-half 0, of n-half 1)")
-            return "/*mma_block_scaled*/"
+            shader_error(ctx, ec.at, "{cname}(f32 accumulator, e2m1 A fragment, e2m1 B fragment, A scale word, B scale word of n-half 0, of n-half 1)")
+            return "/*{cname}*/"
         }
         need_coopmat(ctx)
         need_arch_a(ctx)
-        let op = "mma.sync.aligned.kind::mxf4nvf4.block_scale.scale_vec::4X.m16n8k64.row.col.f32.e2m1.e2m1.f32.ue4m3"
-        register_helper(ctx, "{HELPER_RANK_INTRINSIC}mma_block_scaled", "__device__ __forceinline__ void __das_mma_block_scaled(__das_cmC_f32& f, const __das_cmA_e2m1& a, const __das_cmB_e2m1& b, unsigned sa, unsigned sb0, unsigned sb1) \{ asm volatile(\"{op} \{%0,%1,%2,%3\}, \{%4,%5,%6,%7\}, \{%8,%9\}, \{%0,%1,%2,%3\}, %10, \{0,0\}, %11, \{0,0\};\" : \"+f\"(f.r[0]), \"+f\"(f.r[1]), \"+f\"(f.r[2]), \"+f\"(f.r[3]) : \"r\"(a.r[0]), \"r\"(a.r[1]), \"r\"(a.r[2]), \"r\"(a.r[3]), \"r\"(b.r[0]), \"r\"(b.r[1]), \"r\"(sa), \"r\"(sb0)); asm volatile(\"{op} \{%0,%1,%2,%3\}, \{%4,%5,%6,%7\}, \{%8,%9\}, \{%0,%1,%2,%3\}, %10, \{0,0\}, %11, \{0,0\};\" : \"+f\"(f.r[4]), \"+f\"(f.r[5]), \"+f\"(f.r[6]), \"+f\"(f.r[7]) : \"r\"(a.r[0]), \"r\"(a.r[1]), \"r\"(a.r[2]), \"r\"(a.r[3]), \"r\"(b.r[2]), \"r\"(b.r[3]), \"r\"(sa), \"r\"(sb1)); \}")
-        census_kind(ctx, "call.mma_block_scaled")
-        return "__das_mma_block_scaled({emit_value(ctx, ec.arguments[0])}, {emit_value(ctx, ec.arguments[1])}, {emit_value(ctx, ec.arguments[2])}, {emit_value(ctx, ec.arguments[3])}, {emit_value(ctx, ec.arguments[4])}, {emit_value(ctx, ec.arguments[5])})"
+        let mx = cname == "mma_block_scaled_mx"
+        let op = mx ? "mma.sync.aligned.kind::mxf4.block_scale.scale_vec::2X.m16n8k64.row.col.f32.e2m1.e2m1.f32.ue8m0" : "mma.sync.aligned.kind::mxf4nvf4.block_scale.scale_vec::4X.m16n8k64.row.col.f32.e2m1.e2m1.f32.ue4m3"
+        register_helper(ctx, "{HELPER_RANK_INTRINSIC}{cname}", "__device__ __forceinline__ void __das_{cname}(__das_cmC_f32& f, const __das_cmA_e2m1& a, const __das_cmB_e2m1& b, unsigned sa, unsigned sb0, unsigned sb1) \{ asm volatile(\"{op} \{%0,%1,%2,%3\}, \{%4,%5,%6,%7\}, \{%8,%9\}, \{%0,%1,%2,%3\}, %10, \{0,0\}, %11, \{0,0\};\" : \"+f\"(f.r[0]), \"+f\"(f.r[1]), \"+f\"(f.r[2]), \"+f\"(f.r[3]) : \"r\"(a.r[0]), \"r\"(a.r[1]), \"r\"(a.r[2]), \"r\"(a.r[3]), \"r\"(b.r[0]), \"r\"(b.r[1]), \"r\"(sa), \"r\"(sb0)); asm volatile(\"{op} \{%0,%1,%2,%3\}, \{%4,%5,%6,%7\}, \{%8,%9\}, \{%0,%1,%2,%3\}, %10, \{0,0\}, %11, \{0,0\};\" : \"+f\"(f.r[4]), \"+f\"(f.r[5]), \"+f\"(f.r[6]), \"+f\"(f.r[7]) : \"r\"(a.r[0]), \"r\"(a.r[1]), \"r\"(a.r[2]), \"r\"(a.r[3]), \"r\"(b.r[2]), \"r\"(b.r[3]), \"r\"(sa), \"r\"(sb1)); \}")
+        census_kind(ctx, "call.{cname}")
+        return "__das_{cname}({emit_value(ctx, ec.arguments[0])}, {emit_value(ctx, ec.arguments[1])}, {emit_value(ctx, ec.arguments[2])}, {emit_value(ctx, ec.arguments[3])}, {emit_value(ctx, ec.arguments[4])}, {emit_value(ctx, ec.arguments[5])})"
     }
     if (cname == "mma_scale_cols") {
         let fi = na == 2 ? coop_type_of(ec.arguments[0]._type) : CoopInfo(ok = false)

@@ -20,7 +20,9 @@ configuration or a roster size is not one, nor is an index guard or a route coun
 artifact is a file a test reads from under `models_dir()` that neither this repo's build nor its
 tests produce - model files, mmprojs, front-end packs, image fixtures, oracle dumps. An area is a
 name in `run.das`'s `AREAS` list, standing for the files `run.das`'s `area_tests` returns for it;
-`--changed` maps the changed paths to areas.
+`--changed` prints, for each changed path, a `CHANGED` line naming what it runs - test files by
+name, areas whole, or the engine core (every model-free `llm` file plus `LLM_CORE_WITNESSES`) -
+and a `PLAN` line counting the run's files and saying when the engine core changed.
 
 **A kernel-unit cell - one in which test code outside a CPU oracle (the cell, a helper in its file
 or a `_*.das` helper module) dispatches a kernel class or calls a `../dasllama/dasllama_math*.das`
@@ -52,12 +54,11 @@ of a vision tower, an audio tower or a speech synthesizer - never the language m
 their rows.
 
 **Every PR runs `run.das -- --suite model-free`, and `run.das -- --changed` on a box with the
-models stocked (the stocked files of the areas the change reaches; a core module with no
-`MODULE_AREAS` row reaches every area), plus every test here the change reaches - never the whole
-directory, never the whole `stocked` suite where `--changed` reaches fewer than every area.** A
-change reaches a test when it alters anything the test's result depends on - the test file, a
-shared helper, engine code it exercises, an in-tree fixture or corpus it reads, or a name it
-asserts on; a comment-only edit reaches none.
+models stocked (every file its `PLAN` line counts), plus every test here the change reaches -
+never the whole directory, and the whole `stocked` suite only where the `--changed` run's `PLAN`
+line says the engine core changed.** A change reaches a test when it alters anything the test's
+result depends on - the test file, a shared helper, engine code it exercises, an in-tree fixture
+or corpus it reads, or a name it asserts on; a comment-only edit reaches none.
 
 **A PR whose change reaches a cell that skips on, or picks its tolerance or its code path by, a
 hardware or build capability the box may lack - a device, a module the build may omit, a kernel the
@@ -72,8 +73,15 @@ listing the cell's file - with `--arm` naming the cell when `run.das` accepts `-
 suite - and names the box in the PR body.** A run without `DASLLAMA_PARITY_FULL=1` skips every
 such cell and passes.
 
-**The `--changed` run a PR cites carries no `--exclude`** - an excluding run is the
-iteration form between PRs; a PR that ships on it never ran the coverage it dropped.
+**The `--changed` run a PR cites carries no `--exclude` and no `--only`; the one `--only` run a
+PR cites is the CUDA pass - `--changed --only <tokens>` under `DASLLAMA_GPU=1 DASLLAMA_CUDA=1`,
+its tokens matching every file of `run.das`'s `CUDA_WITNESSES` - beside the whole run.** A
+trimmed run never ran the coverage it dropped; an excluding run is the iteration form between PRs.
+
+**A PR cites every shard of a sharded run (`--shard i/n`) with its `REPORT` line and its box, and,
+where the `--changed` run's `PLAN` line says the engine core changed, a `--suite stocked` run with
+no `--exclude` or `--only`.** A shard is a fraction of the run's files; a core change's `--changed`
+run holds one stocked test a family and backend, the stocked suite every one.
 
 **A test file in this folder whose cells cannot hold under `DASLLAMA_CPU_PREFILL=1` says so in its
 header (its top comment block) and joins the list of files that sit in no suite (`exempt` in

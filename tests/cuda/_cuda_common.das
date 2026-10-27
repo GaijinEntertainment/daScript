@@ -1058,6 +1058,7 @@ class Intrin {
 let FP4_XIN_UE4M3 = 128u
 let FP4_XIN_COL_FACTORS = 192u
 let FP4_CV_UE4M3 = 64u
+let FP4_MX_WORDS = 16u   //! the scale-word planes' second region: a row's or column's UE8M0 pair for the k64, byte i the k32 block i
 
 //! the FP4 tensor rung over one warp: a 16x64 e2m1 A tile and a [n][k] 16x64 e2m1 B tile through cp.async and ldmatrix, the
 //! block-scaled product under a UE4M3 scale word a row and a column (the k16 strips' four codes), and the two conversions
@@ -1070,6 +1071,7 @@ class IntrinFp4 {
     @ssbo @binding = 4 o : array<float>       //! the 16x16 product
     @ssbo @binding = 5 xin : array<float>     //! the conversion sweep's inputs and the column factors, at the `FP4_XIN_*` offsets
     @ssbo @binding = 6 cvt_out : array<uint>  //! the conversions' codes, the UE4M3 ones from `FP4_CV_UE4M3`
+    @ssbo @binding = 7 o_mx : array<float>    //! the 16x16 product under the UE8M0 form: the scale words past `FP4_MX_WORDS` hold a row's two k32 codes
     @workgroup sa : uint4[32]
     @workgroup sb : uint4[32]
 
@@ -1093,6 +1095,9 @@ class IntrinFp4 {
         let t = lane & 3u
         mma_scale_cols(f, float4(xin[FP4_XIN_COL_FACTORS + 2u * t], xin[FP4_XIN_COL_FACTORS + 1u + 2u * t], xin[FP4_XIN_COL_FACTORS + 8u + 2u * t], xin[FP4_XIN_COL_FACTORS + 9u + 2u * t]))
         coopmatStore(f, o, 0, 16, 0)
+        var fm : coopmatAcc_f32_16x16
+        mma_block_scaled_mx(fm, fa, fb, a_scale_words[FP4_MX_WORDS + g + 8u * (lane & 1u)], b_scale_words[FP4_MX_WORDS + g], b_scale_words[FP4_MX_WORDS + 8u + g])
+        coopmatStore(fm, o_mx, 0, 16, 0)
         cvt_out[lane] = cvt_e2m1x2(xin[2u * lane], xin[2u * lane + 1u])
         cvt_out[32u + lane] = cvt_e2m1x2(xin[64u + 2u * lane], xin[64u + 2u * lane + 1u])
         cvt_out[FP4_CV_UE4M3 + lane] = cvt_ue4m3(xin[FP4_XIN_UE4M3 + lane])
@@ -1249,6 +1254,7 @@ def public declared_cuda_census : table<string> {   // nolint:STYLE038 - one fla
         "call.ldmatrix.A.e2m1",
         "call.ldmatrix.B.e2m1",
         "call.mma_block_scaled",
+        "call.mma_block_scaled_mx",
         "call.mma_scale_cols",
         "call.cvt_e2m1x2",
         "call.cvt_ue4m3",

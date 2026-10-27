@@ -7,11 +7,10 @@ findings: `utils/lsp/ROADMAP.md`.
 
 ## Session adoption (this repo)
 
-`.claude/skills/daslang-lsp/.claude-plugin/plugin.json` (checked in; the
-`.gitignore` has a `.claude/skills/` carve-out) loads the plugin on workspace
-trust with no CLI flag - skills-dir plugins load only when the session STARTS
-at the repo root and don't walk up. `--plugin-dir utils/lsp/plugin` still
-works for development and wins over the checked-in copy (name-keyed dedup).
+Opt-in: `claude --plugin-dir utils/lsp/plugin`. No checked-in manifest loads
+it - every validate spawns a `daslang` child after an edit (slow on large
+files, and that child holds the runtime DLL during a build, LNK1104), so a
+session takes it on purpose.
 
 ## Architecture (LOCKED - do not revisit without a new decision)
 

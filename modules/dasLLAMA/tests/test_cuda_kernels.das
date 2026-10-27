@@ -8,8 +8,11 @@ options stack = 524288
 // [cuda_kernel] / [cuda_dispatch] against the same CPU oracles the Vulkan cells hold them to.
 // Model-free; every cell but the closing leak gate skips without a CUDA device and NVRTC, and the
 // per-format cells (the kq cm2 tiles, the kq and per-32 GEMVs, the token-table gathers, the Q8_K
-// feeds) also skip without the dasVulkan module, whose cells carry their oracles. The leak gate
-// never skips.
+// feeds), the biased act twins, the deltanet family and the mx4 FP4 leaf over the expert schedule
+// also skip without the dasVulkan module, whose cells carry their oracles - the routing cell's
+// bucket-schedule arms register a skip of their own there; the mx4 FP4 leaf over the expert
+// schedule also skips on a card below compute capability 120 (`FP4_RUNG_SM`). The leak gate never
+// skips.
 
 require dastest/testing_boost public
 require math
@@ -29,6 +32,8 @@ require dasllama/dasllama_kqformat
 require dasllama/dasllama_gpu_math   // ue4m3_half_f32 - the nv4 MMQ cell's reference scales
 require _fp4_feed   // the FP4 feed kernels' CPU oracle
 require _mmq_ref   // the MMQ leaves' CPU references, shared with the GEMM race
+require _moe_routing_oracles   // the routed block's routing kernels' fixtures and oracles, the Vulkan kernel file's too
+require dasllama/dasllama_common   // MoeGate: the routing cells' select oracle takes the softmax router
 require dasllama/dasllama_gemm_schema   // nolint:STYLE029,LINT019 — the schedule widths, read only inside the vulkan arm
 require dasllama/dasllama_convert   // nolint:STYLE029,LINT019 — the plane converters, read only inside the vulkan arm
 require dasllama/dasllama_gpu_kernels_discrete
@@ -40,6 +45,7 @@ require dasllama/dasllama_common
 
 let Y_SENTINEL = 12345.0   //! a row the GEMV never stores keeps it
 let private Q8_GEMV_BAR = Bar(rel = 1e-3, poison_of_max = true, poison = 2.0, poison_abs = 1.0)   //! the q8 GEMV and MMQ cells' bar: 1e-3 of the larger magnitude floored at 1
+let private MMQ_ROW_PAD = 128   //! the MMQ-fed chain's bucket row pad: mirrors the engine's private `CUD_MOE_ROW_PAD`
 let private TILE_BAR = Bar(kind = BarKind.rel_of_max, rel = 2e-3, abs_floor = 2e-3, poison_of_max = true, poison = 2.0, poison_abs = 1.0)   //! the f16 tiles reassociate: 2e-3 of the plane's largest magnitude floored at 1
 
 //! `nreg` regions of `d` rows, `nb` blocks a row over the ramp scale plane, the activation scales `(i % 5) x 0.125 - 0.25`
@@ -319,6 +325,7 @@ def test_cud_nv4_mmq(t0 : T?) {
             for (j in range(4)) {
                 ws[sb * 5 + j] = nv4_test_scale_word(sb * 4 + j)
             }
+            ws[sb * 5 + 4] = float_bits_to_uint(site_scale_v)   // the plane's factor rides its scale rows' fifth word
         }
         var xq <- hashed_words(rows * k / 8, 5u, 7u)
         var xs : array<uint>
@@ -329,7 +336,7 @@ def test_cud_nv4_mmq(t0 : T?) {
         var xr <- [for (tok in range(rows)); 0.5 + 0.125 * float(tok % 7)]
         let s = g_cud.stream
         var bufs = fixed_array(buf_upload(wq, s), buf_upload(ws, s), buf_upload(xq, s), buf_upload(xs, s), buf_upload(xr, s), buf_fill(rows * d, Y_SENTINEL, s))
-        var pc = MmqFp4Args(n = uint(k), d = uint(d), rows = uint(rows), wblk = 0u, site_scale = site_scale_v)
+        var pc = MmqFp4Args(n = uint(k), d = uint(d), rows = uint(rows), wblk = 0u)
         enc_nv4_mmq(g_cud.stream, bufs, pc, mmq_wgs(int64(d), int64(rows)))
         t |> success(cud_sync(), "nv4 mmq: the launch completes ({cuda_last_error()})")
         let y <- buf_download(bufs[5], rows * d, type<float>)
@@ -472,11 +479,82 @@ def test_cud_b32_mmq(t0 : T?) {
     }
 }
 
+//! buckets of 200 and 300 rows padded to 128-row tiles by the CPU twin, k 2880 (the k tail: 22 full steps and a half), d 320 (a column past `d` stored into the next row reds that row), two sentinel workgroups
+[test]
+def test_cud_mx4_fp4_mmq_moe(t0 : T?) {
+    t0 |> run("CUDA mx4 FP4 leaf over the expert schedule == the e2m1 x UE8M0 reference: padded buckets, the k tail at 2880, the column guard at 320, sentinel workgroups") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!ensure_mx4_fp4_mmq_moe()) {
+                t |> skip("no CUDA device with NVRTC")
+                return
+            }
+            if (g_cud.sm < FP4_RUNG_SM) {
+                t |> skip("the FP4 tensor rung needs compute capability {FP4_RUNG_SM}: this card is {g_cud.sm}")
+                return
+            }
+            let n = 2880
+            let nb = n / 32
+            let d = 320
+            let ne = 2
+            let wt = (d + 127) / 128
+            let bucket_a = 200
+            let bucket_b = 300
+            var idx <- [for (r in range(bucket_a + bucket_b)); uint(r % 5 < 2 ? 0 : 1)]   // the two buckets' rows interleaved, two of expert 0 to three of expert 1
+            let nk = length(idx)
+            let start_b = bucket_start(idx, 1, MMQ_ROW_PAD)
+            let nk_pad = bucket_start(idx, ne, MMQ_ROW_PAD)
+            let sh = sched_shape(nk, ne, wt, wt)
+            let expert_blocks = uint(d * nb)
+            let bases = fixed_array(0u, expert_blocks, 0u, expert_blocks, 0u, expert_blocks)
+            var inv, s1, s3, s2 : array<uint>
+            sched_oracle(idx, ne, wt, wt, sh, bases, inv, s1, s3, s2, false, MMQ_ROW_PAD, true)
+            s1 |> push(SCHED_NONE)
+            s1 |> push(SCHED_NONE)
+            var wq <- hashed_words(ne * d * nb * 4, 53u, 977u)
+            var ws <- mx4_scale_words(ne * d * nb)
+            let xrows = nk_pad + int(TILE_READ_SLACK)
+            var inscope src <- row_fill(xrows * n, 37, 0, 0.09, 4.2, 101)
+            var inscope feed <- mx4_feed_rows(src, xrows, n)
+            var s = g_cud.stream
+            var bufs = fixed_array(buf_upload(wq, s), buf_upload(ws, s), buf_upload(feed.xq, s), buf_upload(feed.xsw, s), buf_upload(feed.xrs, s), buf_fill(nk_pad * d, Y_SENTINEL, s), buf_upload(s1, s))
+            var pc = MmqFp4Args(n = uint(n), d = uint(d), rows = 0u, wblk = 0u, map_off = uint(sh.map_off_mgu))
+            enc_mx4_fp4_mmq_moe(s, bufs, pc, int64(sh.bound_mgu + 2))
+            t |> success(cud_sync(), "mx4 FP4 leaf over the schedule: the launch completes ({cuda_last_error()})")
+            var y <- buf_download(bufs[5], nk_pad * d, type<float>)
+            cuda_mem_free(bufs)
+            var got, want : array<float>
+            got |> reserve(nk * d)
+            want |> reserve(nk * d)
+            for (b in range(nk_pad)) {
+                let e = b < start_b ? 0 : 1
+                continue if (e == 0 ? b >= bucket_a : b >= start_b + bucket_b)
+                for (col in range(d)) {
+                    got |> push(y[b * d + col])
+                    want |> push(mx4_fp4_mmq_ref(wq, ws, feed, e * int(expert_blocks), n, b, col))
+                }
+            }
+            check_rows(t, "mx4 FP4 leaf over the schedule vs the e2m1 x UE8M0 reference (the real rows of both buckets)", got, want, Q8_GEMV_BAR, d)
+            delete got
+            delete want
+            delete y
+            delete idx
+            delete inv
+            delete s1
+            delete s3
+            delete s2
+            delete wq
+            delete ws
+        } else {
+            t |> skip("dasVulkan not present: the schedule oracle lives with the Vulkan cells")
+        }
+    }
+}
+
 //! the K-quant cm2 tiles (the shared decode-in-load templates) on the l, m and s columns against the Vulkan cells' per-format oracles,
 //! over the Vulkan cells' hashed planes and two regions of activation rows (whole tiles and an edge each)
 [test]
 def test_cud_kq_cm2_family(t0 : T?) {
-    t0 |> run("CUDA kq cm2 l/m/s tiles == the CPU oracle (every superblock format)") <| @(t : T?) {
+    t0 |> run("CUDA kq cm2 l/m/s tiles == the CPU oracle (every superblock format; mx4 on its s and e columns alone)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!ensure_q8_batch_cm2l_cls()) {
                 t |> skip("no CUDA device with NVRTC")
@@ -487,14 +565,14 @@ def test_cud_kq_cm2_family(t0 : T?) {
             let tail = 2
             var tiles <- fmt_tile_rows()
             for (row in tiles) {
-                continue if (row.fmt == KqFmt.mx4)   // an expert-only form: no dense plane on the slice, no tile
                 let fmt = int(row.fmt)
                 var wqh, wsh : array<uint>
                 fmt_tile_planes(row, wqh, wsh)
                 var xfh <- ws_plane((rows + int(TILE_READ_SLACK)) * row.n / 2, 3u, row.xf_add)
-                for (tc in range(3)) {
+                var tcs <- row.fmt == KqFmt.mx4 ? [CUD_CM2_TC_S, CUD_CM2_TC_E] : [CUD_CM2_TC_L, CUD_CM2_TC_M, CUD_CM2_TC_S]
+                for (tc in tcs) {
                     t |> success(cud_cm2_ensure(fmt, tc), "{row.fmt} cm2 tile {tc}: the leaf compiles")
-                    let rows_per_wg = tc == 0 ? 256 : (tc == 1 ? 128 : 32)
+                    let rows_per_wg = tc == CUD_CM2_TC_L ? 256 : (tc == CUD_CM2_TC_S ? 32 : 128)
                     var sr <- two_region_sched(TILE_CELL_ROWS0, TILE_CELL_ROWS1, d * (row.n / row.blk_k), rows_per_wg, (d + 127) / 128, tail)
                     let wgs = sr.wgs
                     var sched <- sr.words
@@ -508,7 +586,7 @@ def test_cud_kq_cm2_family(t0 : T?) {
                     var bufs = fixed_array(buf_upload(wqh, s), buf_upload(wsh, s), buf_upload(sched, s), buf_upload(xfh, s), buf_fill(rows * d, Y_SENTINEL, s))
                     var pc = BatchArgs(n = uint(row.n), d = uint(d), map_off = uint(2 * 4))
                     cud_cm2_enc(fmt, tc, s, bufs, pc, int64(wgs + tail))
-                    let tag = "{row.fmt} cm2 {tc == 0 ? "l" : (tc == 1 ? "m" : "s")} tile"
+                    let tag = "{row.fmt} cm2 {tc == CUD_CM2_TC_L ? "l" : (tc == CUD_CM2_TC_M ? "m" : (tc == CUD_CM2_TC_S ? "s" : "e"))} tile"
                     t |> success(cud_sync(), "{tag}: the launch completes ({cuda_last_error()})")
                     var y <- buf_download(bufs[4], rows * d, type<float>)
                     cuda_mem_free(bufs)
@@ -517,6 +595,7 @@ def test_cud_kq_cm2_family(t0 : T?) {
                     delete y_ref
                     delete sched
                 }
+                delete tcs
                 delete xfh
                 delete wqh
                 delete wsh
@@ -585,6 +664,7 @@ def private b32_row_oracle(f : KqFmt; wq, ws, xq : array<uint>; xs : array<float
         if (f == KqFmt.q51) return q51_gemv_row_oracle(wq, ws, xq, xs, wb0, nb)
         if (f == KqFmt.iq4nl32) return iq4nl32_gemv_row_oracle(wq, ws, xq, xs, wb0, nb)
         if (f == KqFmt.q4032) return q4032_gemv_row_oracle(wq, ws, xq, xs, wb0, nb)
+        if (f == KqFmt.mx4) return mx4_gemv_row_oracle(wq, ws, xq, xs, wb0, nb)
         return q5032_gemv_row_oracle(wq, ws, xq, xs, wb0, nb)
     } else {
         return 0.0
@@ -595,7 +675,7 @@ def private b32_row_oracle(f : KqFmt; wq, ws, xq : array<uint>; xs : array<float
 //! subgroup a row, a lane a block over Q8_0 activations, two regions of three rows
 [test]
 def test_cud_b32_gemv_family(t0 : T?) {
-    t0 |> run("CUDA per-32 GEMV leaves == the scalar dot's float order (q51, iq4nl32, q4032, q5032)") <| @(t : T?) {
+    t0 |> run("CUDA per-32 GEMV leaves == the scalar dot's float order (q51, iq4nl32, q4032, q5032, and mx4 at gpt-oss's 2880)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!ensure_q8_gemv_cls()) {
                 t |> skip("no CUDA device with NVRTC")
@@ -607,7 +687,8 @@ def test_cud_b32_gemv_family(t0 : T?) {
             for (c in [B32Cell(f = KqFmt.q51, n0 = 704, n1 = 1408, qwords = 5, wq_seed = 61, xq_mul = 19, xq_add = 7),
                        B32Cell(f = KqFmt.iq4nl32, n0 = 640, n1 = 1280, qwords = 4, wq_seed = 67, xq_mul = 23, xq_add = 5),
                        B32Cell(f = KqFmt.q4032, n0 = 640, n1 = 896, qwords = 4, wq_seed = 71, xq_mul = 29, xq_add = 5),
-                       B32Cell(f = KqFmt.q5032, n0 = 896, n1 = 1408, qwords = int(KQ_Q5032_QWORDS), wq_seed = 73, xq_mul = 31, xq_add = 5)]) {
+                       B32Cell(f = KqFmt.q5032, n0 = 896, n1 = 1408, qwords = int(KQ_Q5032_QWORDS), wq_seed = 73, xq_mul = 31, xq_add = 5),
+                       B32Cell(f = KqFmt.mx4, n0 = 704, n1 = 2880, qwords = 4, wq_seed = 53, xq_mul = 19, xq_add = 7)]) {   // mx4: 22 blocks a row, then gpt-oss's 90 - three lane passes, the last partial
                 let fmt = int(c.f)
                 t |> success(cud_gemv_ensure(fmt), "{c.f}: the leaf compiles")
                 for (n in [c.n0, c.n1]) {
@@ -784,6 +865,95 @@ def private cud_feed_actrq(t : T?; var s : void?; sent : float; q8k : bool) {
     }
 }
 
+//! the biased act twins (`ActRqBT` Q8_0 / Q8_K, `ActF16T` BIASED) over four rows of experts `rex`, the second of two bias layers bound (`gboff` / `uboff`); the oracle is the unbiased act over the host-biased rows, the unbiased oracle each form's control
+def private cud_act_biased_arm(t : T?; var s : void?; act : uint; q8k : bool; f16 : bool) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        let brow = 256
+        let nrows = 4
+        let nelem = brow * nrows
+        let ne = 6
+        let nblk = q8k ? nelem / 256 : nelem / 32
+        var gh <- row_fill(nelem, 29, 0, 0.21, 6.0, 61)
+        var uh <- row_fill(nelem, 11, 0, 0.17, 4.0, 47)
+        var gbh <- row_fill(2 * ne * brow, 37, 0, 0.09, 0.8, 31)
+        var ubh <- row_fill(2 * ne * brow, 43, 0, 0.07, 0.6, 23)
+        var rex <- [for (i in range(nrows)); uint(fixed_array(1, 4, 0, 5)[i])]
+        let boff = ne * brow   // the second layer's rows
+        var gb_in <- [for (i in range(nelem)); gh[i] + gbh[boff + int(rex[i / brow]) * brow + i % brow]]
+        var ub_in <- [for (i in range(nelem)); uh[i] + ubh[boff + int(rex[i / brow]) * brow + i % brow]]
+        var pc = ActArgs(nelem = uint(nelem), act = act, nblk = uint(nblk), elem0 = 0u, bias_on = 1u, gboff = uint(boff), uboff = uint(boff), brow = uint(brow))
+        let tag = "{f16 ? "f16" : (q8k ? "q8k" : "q8")} biased act{act == ACT_OAI ? " under the clamped swiglu" : ""}"
+        if (f16) {
+            var bufs = fixed_array(buf_upload(gh, s), buf_upload(uh, s), buf_fill(nelem / 2, NAN_SENTINEL_BITS, s), buf_upload(gbh, s), buf_upload(ubh, s), buf_upload(rex, s))
+            enc_actf16_b_cls(s, bufs, pc, rq_wgs(false, int64(nelem)))
+            t |> success(cud_sync(), "{tag}: the launch completes ({cuda_last_error()})")
+            var hw <- buf_download(bufs[2], nelem / 2, type<uint>)
+            var got <- [for (i in range(nelem)); half_at(hw, i)]
+            var want <- [for (i in range(nelem)); float(float16(act_mul_ref(gb_in[i], ub_in[i], act)))]
+            var ctrl <- [for (i in range(nelem)); float(float16(act_mul_ref(gh[i], uh[i], act)))]
+            check_rows(t, "{tag} vs the CPU act over the host-biased rows, as halves", got, want, Bar(rel = 2e-3, abs_floor = 2e-3 * logits_maxabs(want)), brow)
+            check_exceeds(t, "{tag} control: the unbiased act", got, ctrl, Bar(rel = 2e-3, abs_floor = 2e-3 * logits_maxabs(want)))
+            cuda_mem_free(bufs)
+            delete hw
+            delete got
+            delete want
+            delete ctrl
+        } else {
+            var bufs = fixed_array(buf_upload(gh, s), buf_upload(uh, s), buf_fill(nelem / 4, I8_SENTINEL_BITS, s), buf_fill(nblk, NAN_SENTINEL, s), buf_upload(gbh, s), buf_upload(ubh, s), buf_upload(rex, s))
+            if (q8k) {
+                enc_q8k_actrq_b_cls(s, bufs, pc, rq_wgs(true, int64(nelem)))
+            } else {
+                enc_q8_actrq_b_cls(s, bufs, pc, rq_wgs(false, int64(nelem)))
+            }
+            t |> success(cud_sync(), "{tag}: the launch completes ({cuda_last_error()})")
+            var q <- buf_download(bufs[2], nelem / 4, type<uint>)
+            var sc <- buf_download(bufs[3], nblk, type<float>)
+            var q_ref, q_ctrl : array<uint>
+            var s_ref, s_ctrl : array<float>
+            actrq_oracle(gb_in, ub_in, nelem, q8k, act, q_ref, s_ref)
+            actrq_oracle(gh, uh, nelem, q8k, act, q_ctrl, s_ctrl)
+            let blk = nelem / nblk
+            check_rows(t, "{tag}'s quants vs the CPU oracle over the host-biased rows, a byte within one step (a row a block)", qbyte_values(q), qbyte_values(q_ref), QBYTE_BAR, blk)
+            check_rows(t, "{tag}'s scales vs the CPU oracle (a row a block)", sc, s_ref, BAR_APPROX_CTRL, 1)
+            check_exceeds(t, "{tag} control: the unbiased oracle's scales", sc, s_ctrl, BAR_APPROX_CTRL)
+            cuda_mem_free(bufs)
+            delete q
+            delete sc
+            delete q_ref
+            delete q_ctrl
+            delete s_ref
+            delete s_ctrl
+        }
+        delete gh
+        delete uh
+        delete gbh
+        delete ubh
+        delete rex
+        delete gb_in
+        delete ub_in
+    }
+}
+
+[test]
+def test_cud_act_biased(t0 : T?) {
+    t0 |> run("CUDA biased act twins (gpt-oss) == the CPU act over the host-biased rows: the Q8_0 and Q8_K requant forms and the f16 form, under silu and the clamped swiglu") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!(ensure_q8_actrq_b_cls() && ensure_q8k_actrq_b_cls() && ensure_actf16_b_cls())) {
+                t |> skip("no CUDA device with NVRTC")
+                return
+            }
+            var s = g_cud.stream
+            cud_act_biased_arm(t, s, ACT_OAI, false, false)
+            cud_act_biased_arm(t, s, ACT_OAI, true, false)
+            cud_act_biased_arm(t, s, ACT_OAI, false, true)
+            cud_act_biased_arm(t, s, ACT_SILU, false, false)
+            cud_act_biased_arm(t, s, ACT_SILU, false, true)
+        } else {
+            t |> skip("dasVulkan not present: the act oracles live with the Vulkan cells")
+        }
+    }
+}
+
 //! the fused residual step + requant, the Q8_K stamp (`q8k`) or the Q8_0 one
 def private cud_feed_ar(t : T?; var s : void?; sent : float; q8k : bool) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -834,20 +1004,42 @@ def private cud_feed_ar(t : T?; var s : void?; sent : float; q8k : bool) {
     }
 }
 
-//! the FP4 feed planes of `rows` rows of `k` read back against the CPU feed: nibble and code words off by count (at most `allowed`), the row scales at the approx bar
+let private FEED_WORD_SENTINEL = 0xFFFFFFFFu   //! an FP4 feed plane's fill: every scale code the format's NaN, which no finite strip takes, every nibble -6 (the compare asserts its CPU feed holds no such word)
+
+//! the feed planes of `rows` rows of `k` (`bufs[2..4]`: nibbles, codes, row scales) put back under their sentinels before a run
+def private fp4_feed_refill(var bufs : uint64[5]; rows, k : int) {
+    let s = g_cud.stream
+    cuda_mem_free(fixed_array(bufs[2], bufs[3], bufs[4]))
+    bufs[2] = buf_fill(rows * k / 8, FEED_WORD_SENTINEL, s)
+    bufs[3] = buf_fill(rows * k / 64, FEED_WORD_SENTINEL, s)
+    bufs[4] = buf_fill(rows, NAN_SENTINEL, s)
+}
+
+//! the nibble and code words of `q` / `sw` off `ref`'s: the count and the first index off (-1 where none is; the code words count past the nibble words)
+def private fp4_feed_words_off(q, sw : array<uint>; ref : Fp4Feed) : tuple<off : int; first : int> {
+    let fq = first_mismatch(q, ref.xq)
+    let fs = first_mismatch(sw, ref.xsw)
+    return (off = mismatch_exact(q, ref.xq) + mismatch_exact(sw, ref.xsw), first = fq >= 0 ? fq : (fs >= 0 ? length(q) + fs : -1))
+}
+
+//! the FP4 feed planes of `rows` rows of `k` read back against the CPU feed: nibble and code words off by count (at most `allowed`),
+//! the count and the first word off logged, the CPU feed with `allowed + 1` words flipped past the allowance (the count's control);
+//! the row scales at the approx bar
 def private fp4_feed_compare(t : T?; tag : string; bufs : uint64[5]; qi, si, ri : int; ref : Fp4Feed; rows, k : int; allowed : int) {
     var q <- buf_download(bufs[qi], rows * k / 8, type<uint>)
     var sw <- buf_download(bufs[si], rows * k / 64, type<uint>)
     var rs <- buf_download(bufs[ri], rows, type<float>)
-    var off = 0
-    for (i in range(rows * k / 8)) {
-        off += q[i] != ref.xq[i] ? 1 : 0
+    t |> success(find_index(ref.xq, FEED_WORD_SENTINEL) < 0 && find_index(ref.xsw, FEED_WORD_SENTINEL) < 0, "{tag}: the CPU feed holds no word of the fill, so the fill is a sentinel")
+    let o = fp4_feed_words_off(q, sw, ref)
+    to_log(LOG_INFO, "{tag}: {o.off} of {length(q) + length(sw)} nibble / code words off the CPU feed, the first at word {o.first}\n")
+    t |> success(o.off <= allowed, "{tag}: {o.off} nibble / code words off the CPU feed (at most {allowed}), the first at word {o.first}")
+    var poisoned := ref
+    for (i in range(min(2 * allowed + 1, length(poisoned.xq)))) {   // at most `allowed` of these words were off: flipping them leaves at least `allowed + 1` off
+        poisoned.xq[i] ^= 1u
     }
-    for (i in range(rows * k / 64)) {
-        off += sw[i] != ref.xsw[i] ? 1 : 0
-    }
-    t |> success(off <= allowed, "{tag}: {off} nibble / code words off the CPU feed (at most {allowed})")
+    t |> success(fp4_feed_words_off(q, sw, poisoned).off > allowed, "{tag}: the count's control - the CPU feed with {2 * allowed + 1} words flipped lands past the allowance")
     check_rows(t, "{tag}: the row scales vs the CPU feed", rs, ref.xrs, BAR_APPROX_CTRL, 1)
+    delete poisoned
     delete q
     delete sw
     delete rs
@@ -866,12 +1058,13 @@ def test_cud_fp4_feeds(t0 : T?) {
         let k = 2048
         var inscope src <- row_fill(rows * k, 37, 0, 0.09, 4.2, 101)
         var inscope ref <- fp4_feed_rows(src, rows, k)
-        var bufs = fixed_array(buf_upload(src, s), 0ul, buf_fill(rows * k / 8, 0u, s), buf_fill(rows * k / 64, 0u, s), buf_fill(rows, NAN_SENTINEL, s))
+        var bufs = fixed_array(buf_upload(src, s), 0ul, buf_fill(rows * k / 8, FEED_WORD_SENTINEL, s), buf_fill(rows * k / 64, FEED_WORD_SENTINEL, s), buf_fill(rows, NAN_SENTINEL, s))
         var pc = Fp4RowsArgs(k = uint(k), inbase = 0u)
         enc_fp4_rows(s, fixed_array(bufs[0], bufs[2], bufs[3], bufs[4]), pc, int64(rows))
         t |> success(cud_sync(), "fp4_rows: the launch completes ({cuda_last_error()})")
         fp4_feed_compare(t, "fp4_rows", bufs, 2, 3, 4, ref, rows, k, 0)
         cuda_mem_free(bufs[0])
+        fp4_feed_refill(bufs, rows, k)
         var inscope gh <- row_fill(rows * k, 29, 0, 0.21, 6.0, 61)
         var inscope uh <- row_fill(rows * k, 11, 0, 0.17, 4.0, 47)
         var inscope act <- [for (i in range(rows * k)); gk_act_mul(gh[i], uh[i], ACT_SILU)]
@@ -884,6 +1077,7 @@ def test_cud_fp4_feeds(t0 : T?) {
         fp4_feed_compare(t, "fp4_actrows", bufs, 2, 3, 4, aref, rows, k, rows * k / 800)
         cuda_mem_free(bufs[0])
         cuda_mem_free(bufs[1])
+        fp4_feed_refill(bufs, rows, k)
         let eps = 1e-5
         let ascale = 1.25
         var inscope x <- row_fill(rows * k, 37, 0, 0.09, 4.2, 101)
@@ -910,6 +1104,79 @@ def test_cud_fp4_feeds(t0 : T?) {
         fp4_feed_compare(t, "cls_ar_fp4_b", bufs, 2, 3, 4, nref, rows, k, rows * k / 800)
         cuda_mem_free(wb)
         cuda_mem_free(bufs)
+    }
+}
+
+//! the FP4 expert leaf's width admission: both reduction widths on the 64 lattice serve (gpt-oss's 2880 over 2880), a width at 32 past it on either side keeps the cm2 tiles
+[test]
+def test_cud_moe_mmq_fits(t : T?) {
+    t |> run("moe_mmq_fits: the gate/up and down reduction widths on the 64 lattice") @(t : T?) {
+        t |> equal(true, crd_moe_mmq_fits(2880l, 2880l))
+        t |> equal(true, crd_moe_mmq_fits(2048l, 768l))
+        t |> equal(false, crd_moe_mmq_fits(2912l, 2880l))
+        t |> equal(false, crd_moe_mmq_fits(2880l, 2912l))
+        t |> equal(false, crd_moe_mmq_fits(2880l, 2896l))
+    }
+}
+
+//! mx4_rows bit for bit with the CPU feed (the kernel is `precise`); mx4_actrows and its biased twin (each row's expert's gate and up bias added first) allowed a few strips the act's fast-math exponential rounds the other way
+[test]
+def test_cud_mx4_feeds(t0 : T?) {
+    t0 |> run("CUDA MXFP4 feed kernels (mx4_rows, mx4_actrows, mx4_actrows_b) == the CPU feed") <| @(t : T?) {
+        if (!ensure_mx4_rows() || !ensure_mx4_actrows() || !ensure_mx4_actrows_b()) {
+            t |> skip("no CUDA device with NVRTC")
+            return
+        }
+        var s = g_cud.stream
+        let rows = 6
+        let k = 2880   // gpt-oss's width: 45 k64 words a row
+        var inscope src <- row_fill(rows * k, 37, 0, 0.09, 4.2, 101)
+        var inscope ref <- mx4_feed_rows(src, rows, k)
+        var bufs = fixed_array(buf_upload(src, s), 0ul, buf_fill(rows * k / 8, FEED_WORD_SENTINEL, s), buf_fill(rows * k / 64, FEED_WORD_SENTINEL, s), buf_fill(rows, NAN_SENTINEL, s))
+        var pc = Fp4RowsArgs(k = uint(k), inbase = 0u)
+        enc_mx4_rows(s, fixed_array(bufs[0], bufs[2], bufs[3], bufs[4]), pc, int64(rows))
+        t |> success(cud_sync(), "mx4_rows: the launch completes ({cuda_last_error()})")
+        fp4_feed_compare(t, "mx4_rows", bufs, 2, 3, 4, ref, rows, k, 0)
+        cuda_mem_free(bufs[0])
+        fp4_feed_refill(bufs, rows, k)
+        var inscope gh <- row_fill(rows * k, 29, 0, 0.21, 6.0, 61)
+        var inscope uh <- row_fill(rows * k, 11, 0, 0.17, 4.0, 47)
+        var inscope act <- [for (i in range(rows * k)); gk_act_mul(gh[i], uh[i], ACT_OAI)]
+        var inscope aref <- mx4_feed_rows(act, rows, k)
+        bufs[0] = buf_upload(gh, s)
+        bufs[1] = buf_upload(uh, s)
+        var pca = Fp4RowsArgs(k = uint(k), inbase = 0u, act = ACT_OAI)
+        enc_mx4_actrows(s, fixed_array(bufs[0], bufs[1], bufs[2], bufs[3], bufs[4]), pca, int64(rows))
+        t |> success(cud_sync(), "mx4_actrows: the launch completes ({cuda_last_error()})")
+        fp4_feed_compare(t, "mx4_actrows", bufs, 2, 3, 4, aref, rows, k, rows * k / 800)
+        fp4_feed_refill(bufs, rows, k)
+        let ne = 3
+        let gboff = 2 * ne * k   // the third layer's rows in a [layers x ne x k] bias plane
+        var inscope gb <- row_fill(3 * ne * k, 5, 0, 0.3, 1.0, 19)
+        var inscope ub <- row_fill(3 * ne * k, 7, 0, 0.2, -0.7, 23)
+        var inscope rex <- [for (r in range(rows)); uint((r * 2 + 1) % ne)]
+        var inscope bact <- [for (i in range(rows * k)); gk_act_mul(gh[i] + gb[gboff + int(rex[i / k]) * k + i % k], uh[i] + ub[gboff + int(rex[i / k]) * k + i % k], ACT_OAI)]
+        var inscope bref <- mx4_feed_rows(bact, rows, k)
+        let gbb = buf_upload(gb, s)
+        let ubb = buf_upload(ub, s)
+        let rxb = buf_upload(rex, s)
+        var pcb = Fp4RowsArgs(k = uint(k), inbase = 0u, act = ACT_OAI, gboff = uint(gboff), uboff = uint(gboff))
+        enc_mx4_actrows_b(s, fixed_array(bufs[0], bufs[1], bufs[2], bufs[3], bufs[4], gbb, ubb, rxb), pcb, int64(rows))
+        t |> success(cud_sync(), "mx4_actrows_b: the launch completes ({cuda_last_error()})")
+        let allowed = rows * k / 800
+        fp4_feed_compare(t, "mx4_actrows_b", bufs, 2, 3, 4, bref, rows, k, allowed)
+        var inscope bq <- buf_download(bufs[2], rows * k / 8, type<uint>)
+        var inscope bsw <- buf_download(bufs[3], rows * k / 64, type<uint>)
+        let unb = fp4_feed_words_off(bq, bsw, aref)
+        t |> success(unb.off > allowed, "the control: the biased feed lands {unb.off} words off the unbiased CPU feed, past the {allowed} the compare allows - a kernel that dropped the biases fails it")
+        cuda_mem_free(gbb)
+        cuda_mem_free(ubb)
+        cuda_mem_free(rxb)
+        cuda_mem_free(bufs[0])
+        cuda_mem_free(bufs[1])
+        cuda_mem_free(bufs[2])
+        cuda_mem_free(bufs[3])
+        cuda_mem_free(bufs[4])
     }
 }
 
@@ -990,18 +1257,33 @@ def fa_h64_run(t : T?; window : int) {
     fa_run(t, 64, window)
 }
 
-//! the flash tile at head `hs` (64 or 128), f32 and f16 out, against the CPU attention oracle
-def fa_run(t : T?; hs, window : int) {
+//! the driver's flash ladder (`cud_fa_enc`) twice over the same rows: the f32 store into `bufs[3]`, the f16 one into `o16`
+def private fa_launch(t : T?; hs : int; gated, sink : bool; bufs : uint64[4]; o16 : uint64; sinkh : array<float>; var pc : FaArgs; wgs : int64) {
+    var s = g_cud.stream
+    let psink = sink ? buf_upload(sinkh, s) : 0ul
+    cud_fa_enc(s, int64(hs), gated, false, sink, bufs, psink, pc, wgs)
+    cud_fa_enc(s, int64(hs), gated, true, sink, fixed_array(bufs[0], bufs[1], bufs[2], o16), psink, pc, wgs)
+    if (sink) {
+        t |> success(cud_sync(), "fa h{hs} sink: the launches land before the sink plane goes ({cuda_last_error()})")
+        cuda_mem_free(psink)
+    }
+}
+
+//! the flash tile at head `hs` (64, 96, 128 or 256), f32 and f16 out, against the CPU attention oracle; under `gated` the q rows carry [q | gate] a head (the h256 `G` stamps); under `sink` a per-head sink logit inside the scaled scores' range (the gpt-oss h64 stamps)
+def fa_run(t : T?; hs, window : int; gated : bool = false; sink : bool = false) {
     let nheads = 4
     let kv_mul = 2
     let rows = 77
     let w0 = 64
     let scale = 0.125
+    var sinkh <- sink ? [for (hh in range(nheads)); 0.45 * float(hh) - 0.3] : array<float>()
     let qd = nheads * hs
+    let qhs = gated ? 2 * hs : hs
+    let qrow = nheads * qhs
     let kvd = (nheads / kv_mul) * hs
     let kpos = w0 + rows
     let kpad = kpos + int(RDEC_MIR_SLACK_ROWS)
-    var qh <- row_fill(rows * qd, 41, 0, 0.05, 1.8, 73)
+    var qh <- row_fill(rows * qrow, 41, 0, 0.05, 1.8, 73)
     var kh <- row_fill(kpos * kvd, 17, 0, 0.03, 1.4, 97)
     var vh <- row_fill(kpos * kvd, 53, 0, 0.04, 1.7, 89)
     var kh16, vh16 : array<float16>
@@ -1015,29 +1297,29 @@ def fa_run(t : T?; hs, window : int) {
     var bufs = fixed_array(buf_upload(qh, s), buf_upload(kh16, s), buf_upload(vh16, s), buf_fill(rows * qd, Y_SENTINEL, s))
     let o16 = buf_fill(rows * qd, HALF_NAN, s)
     var pc = FaArgs(rows = uint(rows), w0 = uint(w0), qd = uint(qd), kvd = uint(kvd), kv_mul = uint(kv_mul), kvbase = 0u, scale = scale,
-        qstride = uint(qd), qhs = uint(hs), window = uint(window), cap = 0.0, sinkoff = 0u, row0 = 0u, ring = 0u)
+        qstride = uint(qrow), qhs = uint(qhs), window = uint(window), cap = 0.0, sinkoff = 0u, row0 = 0u, ring = 0u)
     let wgs = int64(nheads * ((rows + 63) / 64))
-    var bufs16 = fixed_array(bufs[0], bufs[1], bufs[2], o16)
-    if (hs == 64) {
-        enc_fa_cm2_h64_cls(g_cud.stream, bufs, pc, wgs)
-        enc_fa_cm2_h64_f16_cls(g_cud.stream, bufs16, pc, wgs)
-    } elif (hs == 96) {
-        enc_fa_cm2_h96_cls(g_cud.stream, bufs, pc, wgs)
-        enc_fa_cm2_h96_f16_cls(g_cud.stream, bufs16, pc, wgs)
-    } else {
-        enc_fa_cm2_h128_cls(g_cud.stream, bufs, pc, wgs)
-        enc_fa_cm2_h128_f16_cls(g_cud.stream, bufs16, pc, wgs)
-    }
-    t |> success(cud_sync(), "fa h{hs} window {window}: the launches complete ({cuda_last_error()})")
+    fa_launch(t, hs, gated, sink, bufs, o16, sinkh, pc, wgs)
+    let tag = "fa h{hs}{gated ? " gated" : ""}{sink ? " sink" : ""} window {window}"
+    t |> success(cud_sync(), "{tag}: the launches complete ({cuda_last_error()})")
     var y <- buf_download(bufs[3], rows * qd, type<float>)
     var y16 <- buf_download(o16, rows * qd, type<float16>)
     cuda_mem_free(bufs)
     cuda_mem_free(o16)
-    var y_ref <- fa_h64_oracle(qh, kh, vh, rows, w0, nheads, hs, kv_mul, kvd, scale, window)
-    check_rows(t, "fa h{hs} window {window} vs the CPU attention oracle", y, y_ref, TILE_BAR, qd, hs)
+    var y_ref <- fa_oracle(qh, kh, vh, rows, w0, nheads, hs, kv_mul, kvd, scale, window, gated, sinkh)
+    check_rows(t, "{tag} vs the CPU attention oracle", y, y_ref, TILE_BAR, qd, hs)
     // the f16 twin's store rounds at 2^-11 = 4.9e-4 of the element, under the 2e-3 of the plane's largest the f32 tile's reassociation already takes
     var y16f <- [for (h in y16); float(h)]
-    check_rows(t, "fa h{hs} window {window}: the f16-out twin vs the CPU attention oracle", y16f, y_ref, TILE_BAR, qd, hs)
+    check_rows(t, "{tag}: the f16-out twin vs the CPU attention oracle", y16f, y_ref, TILE_BAR, qd, hs)
+    if (gated || sink) {   // the ungated (sink-free) oracle is the control the rows must miss
+        let nosink : array<float>
+        var qplain <- q_halves(qh, rows, nheads, hs, qhs)
+        var y_plain <- fa_oracle(qplain, kh, vh, rows, w0, nheads, hs, kv_mul, kvd, scale, window, false, nosink)
+        check_exceeds(t, "{tag}: the rows land off the {gated ? "ungated" : "sink-free"} oracle", y, y_plain, Bar(rel = 2e-3, abs_floor = 2e-3 * logits_maxabs(y_plain)))
+        delete qplain
+        delete y_plain
+    }
+    delete sinkh
     delete y16f
     delete y
     delete y16
@@ -1049,45 +1331,17 @@ def fa_run(t : T?; hs, window : int) {
     delete vh16
 }
 
-//! the attention oracle on the kernel's f16 grid: q pre-scaled then rounded, K/V rounded through the mirror, softmax in f32
-def fa_h64_oracle(qh, kh, vh : array<float>; rows, w0, nheads, hs, kv_mul, kvd : int; scale : float; window : int) : array<float> {
-    let qd = nheads * hs
-    let kpos = w0 + rows
-    var qh2, kh2, vh2 : array<float>
-    qh2 |> resize(rows * qd)
-    kh2 |> resize(kpos * kvd)
-    vh2 |> resize(kpos * kvd)
-    for (i in range(rows * qd)) {
-        qh2[i] = float(float16(qh[i] * scale))
-    }
-    for (i in range(kpos * kvd)) {
-        kh2[i] = float(float16(kh[i]))
-        vh2[i] = float(float16(vh[i]))
-    }
-    var y_ref : array<float>
-    y_ref |> resize(rows * qd)
-    for (r in range(rows)) {
-        for (hh in range(nheads)) {
-            let cnt = w0 + r + 1
-            attn_row_oracle(qh2, r * qd + hh * hs, kh2, 0, vh2, 0, kvd, hh, hs, kv_mul, cnt, 1.0, y_ref, r * qd + hh * hs,
-                window > 0 && cnt > window ? cnt - window : 0)
-        }
-    }
-    delete qh2
-    delete kh2
-    delete vh2
-    return <- y_ref
-}
-
 [test]
 def test_cud_fa_h64(t0 : T?) {
-    t0 |> run("CUDA cm2 flash tile at head 64, f32 and f16 out == the CPU attention oracle, whole and under a 40-key window") <| @(t : T?) {
-        if (!ensure_fa_cm2_h64_cls() || !ensure_fa_cm2_h64_f16_cls()) {
+    t0 |> run("CUDA cm2 flash tile at head 64, f32 and f16 out == the CPU attention oracle, whole and under a 40-key window; the sink stamps (gpt-oss) seeded with a per-head sink logit, whole and under the window") <| @(t : T?) {
+        if (!(ensure_fa_cm2_h64_cls() && ensure_fa_cm2_h64_f16_cls() && ensure_fa_cm2_h64_sink_cls() && ensure_fa_cm2_h64_sink_f16_cls())) {
             t |> skip("no CUDA device with NVRTC")
             return
         }
         fa_h64_run(t, 0)
         fa_h64_run(t, 40)
+        fa_run(t, 64, 0, false, true)
+        fa_run(t, 64, 40, false, true)
     }
 }
 
@@ -1213,14 +1467,15 @@ def test_cud_kv_shadow(t0 : T?) {
 }
 
 //! the oracle reads the rows back through the CPU codec; the control is the attention over the rows before their quantization
-def private cud_q8_attn_arm(t : T?; nheads, kv_mul : int) {
+def private cud_q8_attn_arm(t : T?; nheads, kv_mul : int; sink : bool = false; nsplit : int = 1) {
     let hs = 64
     let kvd = nheads / kv_mul * hs
     let qd = nheads * hs
-    let keys = 300   // past the 256-key chunk, so the running max rescales
+    let keys = 300   // past the 256-key chunk, so the running max rescales; under eight pieces of 64 the last three pieces are empty
     let base = ODD_LAYERBASE
-    let g2 = da_slab_is_g2(int64(kv_mul))
-    let tag = "da_attn_q8{g2 ? "_g2" : ""} {nheads} heads over {nheads / kv_mul}, {keys} keys"
+    let g2 = !sink && da_slab_is_g2(int64(kv_mul))   // the sink stamp is the four-head slab's
+    let pieces = nsplit > 1 ? " in {nsplit} pieces" : ""
+    let tag = "da_attn_q8{sink ? "_sink" : (g2 ? "_g2" : "")} {nheads} heads over {nheads / kv_mul}, {keys} keys{pieces}"
     var q <- row_fill(qd, 41, 3, 0.05, 1.8, 73)
     for (i in range(qd)) {   // an irregular factor an element: the query's q8_0 quant off a regular ramp is a coin flip between two f32 orders
         q[i] *= 1.0 + 0.011 * float((i * 7919) % 97) / 97.0
@@ -1231,25 +1486,36 @@ def private cud_q8_attn_arm(t : T?; nheads, kv_mul : int) {
     var vm <- codec_mirror_of_stored(KVDtype.q8_0, vf, keys, kvd, base)
     var qrt <- q8_query_roundtrip(q)
     let scale = 1.0 / sqrt(float(hs))
+    var sinks <- sink ? sink_logits(qrt, km.deq, nheads, hs, kv_mul, keys, kvd, scale) : array<float>()
     var y_ref, y_ctrl : array<float>
     y_ref |> resize(qd)
     y_ctrl |> resize(qd)
     for (hh in range(nheads)) {
-        attn_row_oracle(qrt, hh * hs, km.deq, 0, vm.deq, 0, kvd, hh, hs, kv_mul, keys, scale, y_ref, hh * hs)
-        attn_row_oracle(qrt, hh * hs, kf, 0, vf, 0, kvd, hh, hs, kv_mul, keys, scale, y_ctrl, hh * hs)
+        attn_row_oracle(qrt, hh * hs, km.deq, 0, vm.deq, 0, kvd, hh, hs, kv_mul, keys, scale, y_ref, hh * hs, 0, 0.0, sink, sink ? sinks[hh] : 0.0)
+        if (sink) {
+            attn_row_oracle(qrt, hh * hs, km.deq, 0, vm.deq, 0, kvd, hh, hs, kv_mul, keys, scale, y_ctrl, hh * hs)
+        } else {
+            attn_row_oracle(qrt, hh * hs, kf, 0, vf, 0, kvd, hh, hs, kv_mul, keys, scale, y_ctrl, hh * hs)
+        }
     }
     var toks : array<TokMeta>
     toks |> resize(1)
     toks[0].pos = uint(keys - 1)
     toks[0].cnt = uint(keys)
-    let rowwg = da_attn_row_wgs(int64(nheads), int64(kv_mul), 1l)
+    let rowwg = da_attn_row_wgs(int64(nheads), int64(kv_mul), int64(nsplit))
+    let cntoff = nheads * nsplit * (hs + 2)   // the split form's partials, the arrival counters past them (the driver's `attn_cnt_off` at one row)
     var pa = DaAttnArgs(kvd = uint(kvd), hs = uint(hs), kv_mul = uint(kv_mul), kbase = uint(base), vbase = uint(base), scale = scale,
-        qstride = uint(hs), gated = 0u, window = 0u, cap = 0.0, nsplit = 1u, rqk = DA_RQ_NONE, sinkoff = 0u, rowwg = uint(rowwg),
-        qrow = uint(qd), cntoff = 0u, ring = 0u)
+        qstride = uint(hs), gated = 0u, window = 0u, cap = 0.0, nsplit = uint(nsplit), rqk = DA_RQ_NONE, sinkoff = 0u, rowwg = uint(rowwg),
+        qrow = uint(qd), cntoff = uint(cntoff), ring = 0u)
     var s = g_cud.stream
     let bufs = fixed_array(buf_upload(q, s), buf_upload(km.bytes, s), buf_upload(vm.bytes, s), buf_fill(qd, Y_SENTINEL, s), buf_upload(toks, s),
-        buf_fill(64, 0.0, s), buf_fill(64, 0.0, s), buf_fill(64, 0.0, s))
-    if (g2) {
+        buf_fill(cntoff + 64, 0.0, s), buf_fill(64, 0.0, s), buf_fill(64, 0.0, s))
+    if (sink) {
+        let psink = buf_upload(sinks, s)
+        enc_da_attn_q8_sink_cls(s, fixed_array(bufs[0], bufs[1], bufs[2], bufs[3], bufs[4], bufs[5], bufs[6], bufs[7], psink), pa, rowwg)
+        t |> success(cud_sync(), "{tag}: the launch lands before the sink plane goes ({cuda_last_error()})")
+        cuda_mem_free(psink)
+    } elif (g2) {
         enc_da_attn_q8_g2_cls(s, bufs, pa, rowwg)
     } else {
         enc_da_attn_q8_cls(s, bufs, pa, rowwg)
@@ -1258,8 +1524,9 @@ def private cud_q8_attn_arm(t : T?; nheads, kv_mul : int) {
     var y <- buf_download(bufs[3], qd, type<float>)
     let bar = Bar(rel = 1e-4, poison_of_max = true, poison_abs = 0.5)
     check_rows(t, "{tag} vs the CPU attention over the dequantized rows", y, y_ref, bar, qd)
-    check_exceeds(t, "{tag} control: the attention over the rows before their quantization", y, y_ctrl, bar)
+    check_exceeds(t, "{tag} control: the attention over the {sink ? "same rows with no sink" : "rows before their quantization"}", y, y_ctrl, bar)
     cuda_mem_free(bufs)
+    delete sinks
     delete y
     delete y_ref
     delete y_ctrl
@@ -1274,13 +1541,16 @@ def private cud_q8_attn_arm(t : T?; nheads, kv_mul : int) {
 
 [test]
 def test_cud_q8_da_attn(t0 : T?) {
-    t0 |> run("CUDA decode attention's q8_0 stamps == the CPU attention over the dequantized mirror rows, the four-head and the two-head slab") <| @(t : T?) {
-        if (!ensure_da_attn_q8_cls() || !ensure_da_attn_q8_g2_cls()) {
+    t0 |> run("CUDA decode attention's q8_0 stamps == the CPU attention over the dequantized mirror rows, the four-head and the two-head slab, and the sink stamp (gpt-oss) under a per-head sink logit") <| @(t : T?) {
+        if (!(ensure_da_attn_q8_cls() && ensure_da_attn_q8_g2_cls() && ensure_da_attn_q8_sink_cls())) {
             t |> skip("no CUDA device with NVRTC")
             return
         }
         cud_q8_attn_arm(t, 8, 4)
         cud_q8_attn_arm(t, 4, 2)
+        cud_q8_attn_arm(t, 8, 4, false, 8)   // the split form: eight pieces, the last-arriving one combining
+        cud_q8_attn_arm(t, 8, 8, true)
+        cud_q8_attn_arm(t, 8, 8, true, 8)   // ... and the sink seeded at the combine
     }
 }
 
@@ -1538,6 +1808,21 @@ def test_cud_fa_h128(t0 : T?) {
     }
 }
 
+//! head 256 is the deltanet hybrids' attention head
+[test]
+def test_cud_fa_h256(t0 : T?) {
+    t0 |> run("CUDA cm2 flash tile at head 256, f32 and f16 out, plain and gated == the CPU attention oracle, whole and under a 40-key window") <| @(t : T?) {
+        if (!ensure_fa_cm2_h256_cls() || !ensure_fa_cm2_h256_f16_cls() || !ensure_fa_cm2_h256_g_cls() || !ensure_fa_cm2_h256_g_f16_cls()) {
+            t |> skip("no CUDA device with NVRTC")
+            return
+        }
+        fa_run(t, 256, 0)
+        fa_run(t, 256, 40)
+        fa_run(t, 256, 0, true)
+        fa_run(t, 256, 40, true)
+    }
+}
+
 let private RATE_ROWS = fixed_array(0, 255, 256, 511)   //! the activation rows the rate cell's warm-up is held on: both edges of both 256-row tiles, every weight column
 let private RATE_TAPS = 16   //! the rate fixture's nonzero activations a row: 16 x 128 steps of the 2^-7 scale stay within f16's 2048 exact integers
 let private RATE_SCALE_WORD = 0x20002000u   //! two f16 block scales of 2^-7
@@ -1714,6 +1999,431 @@ def test_cud_q8_cm2l_rate(t0 : T?) {
             delete wqh
             delete wsh
         }
+    }
+}
+
+enum private DnStepArm {
+    q8_out
+    f32_out
+    sig_f32_out
+}
+
+[test]
+def test_cud_dn_family(t0 : T?) {   // nolint:STYLE038 — the family's four cells over two head sizes, the Vulkan cell's shape
+    t0 |> run("CUDA deltanet kernels == the CPU oracles (conv, fused step, scan + gate, ring tail)") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!ensure_dn_step_cls()) {
+                t |> skip("no CUDA device with NVRTC")
+                return
+            }
+            verify(ensure_dn_conv_cls() && ensure_dn_scan_cls() && ensure_dn_scan_p3_cls() && ensure_dn_scan_p3_sig_cls() && ensure_dn_step_sig_cls() && ensure_dn_tail_cls(),
+                "the dn stamps must compile on a device that compiled the fused step")
+            var s = g_cud.stream
+            for (ds in fixed_array(64, 128)) {   // ds 64 keeps a state column in one row part of the fused step; 128, the served hybrids' head size, splits it in two and takes the scan's eight-lane clusters
+                let nkh = 2
+                let nvh = 4
+                let kd = nkh * ds
+                let cd = 2 * kd + nvh * ds
+                let dconv = 4
+                let taps = dconv - 1
+                let eps = 0.00001
+                let qscale = 1.25
+                {
+                    let npos = 37   // a second position block primed from window rows
+                    let taps_off = 16
+                    let hist_off = taps_off + cd * dconv
+                    let sm_n = hist_off + cd * taps
+                    var inscope srch <- row_fill(npos * cd, 19, 0, 0.03, 1.1, 79)
+                    var inscope smh <- row_fill(sm_n, 11, 0, 0.02, 0.35, 37)
+                    smh[0] = eps
+                    smh[1] = qscale
+                    var bufs = fixed_array(buf_upload(srch, s), buf_fill(npos * cd, Y_SENTINEL, s), buf_upload(smh, s))
+                    var pc = GkDnConvArgs(npos = uint(npos), cd = uint(cd), kd = uint(kd), ds = uint(ds), dconv = uint(dconv), hist_mode = 1u,
+                        taps_off = uint(taps_off), hist_off = uint(hist_off), eps = eps, qscale = qscale)
+                    enc_dn_conv_cls(s, bufs, pc, dn_conv_wgs(int64(cd), int64(npos)))
+                    t |> success(cud_sync(), "dn_conv at ds {ds}: the launch completes ({cuda_last_error()})")
+                    var inscope o_cls <- buf_download(bufs[1], npos * cd, type<float>)
+                    var inscope o_ref <- dn_conv_ref(srch, smh, hist_off, smh, taps_off, npos, cd, dconv, kd, ds, eps, qscale)
+                    check_rows(t, "dn_conv at ds {ds} against the CPU oracle", o_cls, o_ref, BAR_APPROX_CTRL, cd)
+                    cuda_mem_free(bufs)
+                }
+                {
+                    let par = 1
+                    let beta_off = 16
+                    let g_off = beta_off + nvh
+                    let a_off = g_off + nvh
+                    let dt_off = a_off + nvh
+                    let taps_off = dt_off + nvh
+                    let wnorm_off = taps_off + cd * dconv
+                    let hist_off = wnorm_off + ds
+                    let sm_n = hist_off + 2 * cd * taps
+                    let nblk = nvh * ds / 32
+                    var inscope projh <- row_fill(cd + nvh * ds, 23, 0, 0.03, 1.0, 71)
+                    var inscope sth <- row_fill(nvh * ds * ds, 13, 0, 0.02, 0.5, 53)
+                    var inscope smh <- row_fill(sm_n, 17, 0, 0.02, 0.4, 43)
+                    smh[0] = eps
+                    smh[1] = qscale
+                    for (i in range(nvh)) {
+                        smh[a_off + i] = -0.4 - float(i) * 0.1   // a stays negative (decay)
+                    }
+                    var inscope ref <- dn_step_ref(projh, sth, smh, par, nvh, nkh, cd, ds, dconv, beta_off, g_off, a_off, dt_off, taps_off, wnorm_off, hist_off, eps, qscale)
+                    var inscope q_ref : array<uint>
+                    var inscope s_ref : array<float>
+                    requant_oracle(ref.out, 0, nvh * ds, false, q_ref, s_ref)
+                    var inscope tok <- [TokMeta(parity = uint(par), dnslot = 0u)]
+                    for (arm in fixed_array(DnStepArm.q8_out, DnStepArm.f32_out, DnStepArm.sig_f32_out)) {
+                        let bufs = fixed_array(buf_upload(projh, s), buf_upload(sth, s), buf_upload(smh, s), buf_fill(nblk, NAN_SENTINEL, s), buf_fill(nblk * 8, I8_SENTINEL_BITS, s), buf_upload(tok, s), buf_fill(nvh * ds, Y_SENTINEL, s))
+                        var pc = DnStepArgs(cd = uint(cd), kd = uint(kd), nkh = uint(nkh), ds = uint(ds), dconv = uint(dconv),
+                            beta_off = uint(beta_off), g_off = uint(g_off), taps_off = uint(taps_off), wnorm_off = uint(wnorm_off),
+                            a_off = uint(a_off), dt_off = uint(dt_off), hist_off = uint(hist_off), eps = eps, qscale = qscale,
+                            out_f32 = arm != DnStepArm.q8_out ? 1u : 0u, beta_row_stride = 0u, row0 = 0u)
+                        if (arm == DnStepArm.sig_f32_out) {
+                            enc_dn_step_sig_cls(s, bufs, pc, int64(nvh))
+                        } else {
+                            enc_dn_step_cls(s, bufs, pc, int64(nvh))
+                        }
+                        t |> success(cud_sync(), "dn_step arm {arm} at ds {ds}: the launch completes ({cuda_last_error()})")
+                        var inscope state <- buf_download(bufs[1], nvh * ds * ds, type<float>)
+                        var inscope smalls <- buf_download(bufs[2], sm_n, type<float>)
+                        check_rows(t, "dn_step arm {arm} at ds {ds}: the state, advanced in place, against the CPU oracle", state, ref.state, BAR_APPROX_CTRL, ds)
+                        check_rows(t, "dn_step arm {arm} at ds {ds}: the smalls plane (the conv ring advanced in place) against the CPU oracle", smalls, ref.smalls, BAR_APPROX_CTRL, FLAT_ROWS)
+                        let st_at = maxdiff_at(ref.state, sth)   // where the oracle moved the state furthest: an in-place step that never ran leaves it there
+                        t |> success(moved_off(state, sth, st_at, BAR_APPROX), "dn_step arm {arm} at ds {ds}: the state moved off its input at element {st_at}")
+                        let sm_at = maxdiff_at(ref.smalls, smh)
+                        t |> success(moved_off(smalls, smh, sm_at, BAR_APPROX), "dn_step arm {arm} at ds {ds}: the ring moved off its input at element {sm_at}")
+                        if (arm == DnStepArm.q8_out) {
+                            var inscope oscales <- buf_download(bufs[3], nblk, type<float>)
+                            var inscope oquants <- buf_download(bufs[4], nblk * 8, type<uint>)
+                            check_rows(t, "dn_step's Q8_0 o row's scales at ds {ds} against the CPU oracle (a row a block)", oscales, s_ref, BAR_APPROX_CTRL, 1)
+                            check_rows(t, "dn_step's Q8_0 o row's quants at ds {ds} against the CPU oracle, a byte within one step (a row a block)", qbyte_values(oquants), qbyte_values(q_ref), QBYTE_BAR, 32)
+                        } else {
+                            var inscope of32 <- buf_download(bufs[6], nvh * ds, type<float>)
+                            let want & = arm == DnStepArm.f32_out ? ref.out : ref.out_sig
+                            check_rows(t, "dn_step arm {arm}'s o row at ds {ds} against the {arm == DnStepArm.sig_f32_out ? "sigmoid-gated" : "pre-quant"} oracle", of32, want, BAR_APPROX_CTRL, ds)
+                            if (arm == DnStepArm.sig_f32_out) {
+                                check_exceeds(t, "dn_step_sig at ds {ds} lands off the silu oracle (the two stamps differ)", of32, ref.out, BAR_APPROX)
+                            }
+                        }
+                        cuda_mem_free(bufs)
+                    }
+                }
+                {
+                    let npos = 70
+                    let di = nvh * ds
+                    let beta_off = 16
+                    let g_off = beta_off + npos * nvh
+                    let a_off = g_off + npos * nvh
+                    let dt_off = a_off + nvh
+                    let wnorm_off = dt_off + nvh
+                    let sm_n = wnorm_off + ds
+                    var inscope convh : array<float>
+                    convh |> resize(npos * cd)
+                    for (i in range(npos * cd)) {   // unit-scale q/k rows, the conv stage's L2-normed shape: on unnormed rows the delta rule's recurrence overflows float range within the window at ds 128
+                        convh[i] = (float((i * 19) % 79) * 0.025 - 0.9) * 0.15
+                    }
+                    var inscope zh <- row_fill(npos * di, 29, 0, 0.05, 1.5, 61)
+                    var inscope sth <- row_fill(nvh * ds * ds, 13, 0, 0.02, 0.5, 53)
+                    var inscope smh <- row_fill(sm_n, 17, 0, 0.03, 0.6, 43)
+                    smh[0] = eps
+                    for (i in range(nvh)) {
+                        smh[a_off + i] = -0.4 - float(i) * 0.1
+                    }
+                    for (i in range(ds)) {
+                        smh[wnorm_off + i] = 0.8 + float(i % 9) * 0.04
+                    }
+                    let cmp_n = npos * di + nvh * ds * ds
+                    var inscope o_raw <- dn_delta_ref(convh, sth, smh, npos, nkh, nvh, ds, beta_off, g_off, a_off, dt_off)
+                    var inscope o_ref <- dn_gate_ref(o_raw, zh, smh, npos, nvh, ds, wnorm_off, eps, false)
+                    var inscope o_ref_sig <- dn_gate_ref(o_raw, zh, smh, npos, nvh, ds, wnorm_off, eps, true)   // the sigmoid out-gate's rows (the `dn_scan_p3_sig_cls` stamp's), the state part alike
+                    var inscope st_ref <- copy_span(o_raw, npos * di, nvh * ds * ds)
+                    let st_at = maxdiff_at(st_ref, sth)   // where the oracle moved the state furthest: a scan that never wrote its state leaves it there
+                    let floor = 1e-2 * logits_maxabs(o_ref)
+                    let scan_bar = Bar(rel = 1e-2, abs_floor = floor, poison_of_max = true, poison = 2.0, poison_abs = 1.0)
+                    var inscope nocap <- [0u, 0u]
+                    var pcs = DnScanArgs(npos = uint(npos), cd = uint(cd), kd = uint(kd), nvh = uint(nvh), nkh = uint(nkh), ds = uint(ds),
+                        beta_off = uint(beta_off), g_off = uint(g_off), a_off = uint(a_off), dt_off = uint(dt_off), o_off = 0u, di = uint(di))
+                    var pc3 = GkDnGateArgs(nvh = uint(nvh), di = uint(di), ds = uint(ds), o_off = 0u, wnorm_off = uint(wnorm_off), eps = eps)
+                    for (sig in fixed_array(false, true)) {
+                        let bufs = fixed_array(buf_upload(convh, s), buf_upload(sth, s), buf_upload(smh, s), buf_fill(npos * di, Y_SENTINEL, s), buf_upload(nocap, s), buf_fill(16, 0.0, s), buf_upload(zh, s))
+                        enc_dn_scan_cls(s, fixed_array(bufs[0], bufs[1], bufs[2], bufs[3], bufs[4], bufs[5]), pcs, dn_scan_wgs(int64(nvh), int64(ds)))
+                        if (sig) {
+                            enc_dn_scan_p3_sig_cls(s, fixed_array(bufs[6], bufs[3], bufs[2]), pc3, int64(npos))
+                        } else {
+                            enc_dn_scan_p3_cls(s, fixed_array(bufs[6], bufs[3], bufs[2]), pc3, int64(npos))
+                        }
+                        t |> success(cud_sync(), "dn_scan{sig ? " + sig" : ""} at ds {ds}: the launches complete ({cuda_last_error()})")
+                        var inscope o <- buf_download(bufs[3], npos * di, type<float>)
+                        var inscope st_got <- buf_download(bufs[1], nvh * ds * ds, type<float>)
+                        t |> success(moved_off(st_got, sth, st_at, scan_bar), "dn_scan{sig ? " + sig" : ""} at ds {ds}: the state, written in place, moved off its input at element {st_at}")
+                        o |> push_from(st_got)
+                        let want & = sig ? o_ref_sig : o_ref
+                        check_rows(t, "dn_scan + the {sig ? "sigmoid" : "silu"} out-norm at ds {ds} against the CPU oracle ({cmp_n} elements: the o rows, then the states)", o, want, scan_bar, ds)
+                        if (sig) {
+                            check_exceeds(t, "dn_scan_p3_sig at ds {ds} lands off the silu oracle (the two stamps differ)", o, o_ref, Bar(rel = 1e-2, abs_floor = floor))
+                        } else {
+                            var inscope poison := o   // the bar's control: one normed o value pushed past both bars must red
+                            poison[0] += 1.0 + 2.0 * logits_maxabs(o_ref)
+                            check_exceeds(t, "dn_scan + out-norm at ds {ds}: the bar against a poisoned value", poison, o_ref, Bar(rel = 1e-2, abs_floor = floor))
+                        }
+                        cuda_mem_free(bufs)
+                    }
+                }
+                {
+                    let hist_off = 16
+                    let img = cd * taps
+                    let sm_n = hist_off + 2 * img
+                    for (rows in fixed_array(5, 2)) {
+                        var inscope src <- row_fill(rows * cd, 7, 0, 0.05, 0.9, 59)
+                        var inscope smh <- row_fill(sm_n, 5, 0, 0.04, 0.3, 41)
+                        let row0 = max(rows - taps, 0)
+                        let old_rows = max(taps - rows, 0)
+                        var inscope want <- dn_tail_oracle(src, smh, cd, taps, row0, old_rows, hist_off, hist_off + img)
+                        var bufs = fixed_array(buf_upload(src, s), buf_upload(smh, s))
+                        var pct = DnTailArgs(cd = uint(cd), taps = uint(taps), row0 = uint(row0), hist_off = uint(hist_off + img), old_rows = uint(old_rows), old_off = uint(hist_off))
+                        enc_dn_tail_cls(s, bufs, pct, int64((cd * taps + 255) / 256))
+                        t |> success(cud_sync(), "dn_tail over {rows} rows at cd {cd}: the launch completes ({cuda_last_error()})")
+                        var inscope got <- buf_download(bufs[1], sm_n, type<float>)
+                        check_exact(t, "dn_tail over {rows} rows at cd {cd} against the per-channel CPU form (the entry image and the words between untouched)", got, want)
+                        check_exceeds(t, "dn_tail over {rows} rows at cd {cd} wrote the other image", got, smh, BAR_EXACT)
+                        cuda_mem_free(bufs)
+                    }
+                }
+            }
+        } else {
+            t |> skip("dasVulkan not present: the requant oracle lives in its cells")
+        }
+    }
+}
+
+//! the router GEMM over two layers' [ner x dim] rows, the second layer's dispatched through woff, against the shared oracle
+def private cud_router_arm(t : T?; ner : int) {
+    var wh, xh : array<float>
+    router_gemm_planes(ner, wh, xh)
+    var s = g_cud.stream
+    var bufs = fixed_array(buf_upload(wh, s), buf_upload(xh, s), buf_fill(MR_NPOS * ner, Y_SENTINEL, s))
+    var pc = RouterGemmArgs(npos = uint(MR_NPOS), ne = uint(ner), dim = uint(MR_DIM), woff = uint(ner * MR_DIM), ostride = uint(ner))
+    enc_router_gemm_cls(s, bufs, pc, router_gemm_wgs(int64(MR_NPOS), int64(ner)))
+    t |> success(cud_sync(), "router GEMM ({ner} rows): the launch completes ({cuda_last_error()})")
+    var got <- buf_download(bufs[2], MR_NPOS * ner, type<float>)
+    cuda_mem_free(bufs)
+    var want <- router_gemm_oracle(wh, xh, ner)
+    router_gemm_check(t, ner, got, want)
+    delete wh
+    delete xh
+    delete got
+    delete want
+}
+
+//! the per-row select against the host select over the same rows
+def private cud_topk_rows_arm(t : T?; norm : bool; wscale : float; gate : MoeGate; rbias : bool) {
+    var lh, rb : array<float>
+    topk_rows_planes(rbias, lh, rb)
+    var s = g_cud.stream
+    let pl = buf_upload(lh, s)
+    // no down scale: the logits fill the ds binding, never read at GK_NO_DSCALE
+    var bufs = fixed_array(pl, buf_fill(MR_NPOS * MR_K, Y_SENTINEL, s), pl, buf_upload(rb, s), buf_fill(MR_NPOS * MR_K, 0xFFFFFFFFu, s))
+    var pc = GkTopKArgs(ne = uint(MR_NE), k = uint(MR_K), norm = norm || gate == MoeGate.softmax_weight ? 1u : 0u, lstride = uint(MR_NER), wscale = wscale, dsoff = GK_NO_DSCALE,
+        rbias_on = rbias ? 1u : 0u, rboff = uint(MR_NE))
+    cud_topk_rows_enc(int64(MR_NE), s, bufs, pc, int64(MR_NPOS))
+    t |> success(cud_sync(), "per-row top-k: the launch completes ({cuda_last_error()})")
+    var gw <- buf_download(bufs[1], MR_NPOS * MR_K, type<float>)
+    var gidx <- buf_download(bufs[4], MR_NPOS * MR_K, type<uint>)
+    cuda_mem_free(fixed_array(bufs[0], bufs[1], bufs[3], bufs[4]))
+    topk_rows_verdict(t, gidx, gw, lh, rb, norm, wscale, gate, rbias)
+    delete lh
+    delete rb
+    delete gw
+    delete gidx
+}
+
+//! the wide select (`topk_rows2_cls`, the two-deep stamp past 256 experts) over `ne` experts at `k` picks a row, on the Vulkan
+//! two-deep cell's planes, against the host select; under `depth1` the one-deep stamp over the same rows is the control that misses
+//! the host select's picks past the first 256
+def private cud_topk_wide_arm(t : T?; rbias : bool; ne, k : int; depth1 : bool = false) {
+    let npos = 4
+    let lstride = ne + 8
+    var lh, rb : array<float>
+    topk_wide_planes(ne, npos, lstride, rbias, lh, rb)
+    var s = g_cud.stream
+    let pl = buf_upload(lh, s)
+    // no down scale: the logits fill the ds binding, never read at GK_NO_DSCALE
+    var bufs = fixed_array(pl, buf_fill(npos * k, Y_SENTINEL, s), pl, buf_upload(rb, s), buf_fill(npos * k, 0xFFFFFFFFu, s))
+    var pc = GkTopKArgs(ne = uint(ne), k = uint(k), norm = 1u, lstride = uint(lstride), wscale = 0.0, dsoff = GK_NO_DSCALE,
+        rbias_on = rbias ? 1u : 0u, rboff = uint(ne))
+    cud_topk_rows_enc(depth1 ? 1l : int64(ne), s, bufs, pc, int64(npos))   // the stamp the depth of `ne` names, or under `depth1` the one-deep one
+    let tag = "per-row top-k over {ne} experts ({rbias ? "router bias" : "plain"}{depth1 ? ", the one-deep stamp" : ", the two-deep stamp"})"
+    t |> success(cud_sync(), "{tag}: the launch completes ({cuda_last_error()})")
+    var gw <- buf_download(bufs[1], npos * k, type<float>)
+    var gidx <- buf_download(bufs[4], npos * k, type<uint>)
+    cuda_mem_free(fixed_array(bufs[0], bufs[1], bufs[3], bufs[4]))
+    var sel <- topk_rows_select(MoeGate.softmax, lh, rb, npos, ne, k, lstride, ne, true, true, 0.0)
+    if (depth1) {
+        let off = mismatch_exact([for (g in gidx); int64(g)], sel.idx)
+        t |> success(off > 0, "{tag} control: the stamp that reaches 256 misses the host select's picks past them ({off} of {npos * k} off)")
+    } else {
+        topk_rows_compare(t, tag, gidx, gw, sel)
+    }
+    delete sel
+    delete gidx
+    delete gw
+    delete lh
+    delete rb
+}
+
+//! the routed block's gather (`moe_gather_f16_cls` as halves, `moe_gather_f32_cls` as floats) over seven positions of three slots,
+//! the slot map a permutation of the 21 bucket rows, into the window [r0, r0 + rows) at widths under one stride of the 256
+//! threads, whole strides and a tail, against the CPU gather; the rows past the window keep their sentinel, and the CPU gather over
+//! the window at 0 is the control that misses
+def private cud_gather_arm(t : T?; f16 : bool; r0, rows : int) {
+    let npos = 7
+    let k = 3
+    let nk = npos * k
+    let slack = 2   // rows past the window the dispatch never writes
+    var slot_idx <- [for (r in range(nk)); uint((r * 5) % nk)]   // 5 is coprime to 21: a permutation
+    var s = g_cud.stream
+    for (n in fixed_array(100, 256, 300)) {
+        var x <- hash_steps(npos * n, 91u)
+        let plane = (rows + slack) * n
+        var pc = GatherArgs(n = uint(n), k = uint(k), r0 = uint(r0), r1 = uint(r0 + rows))
+        var bufs = fixed_array(buf_upload(x, s), buf_upload(slot_idx, s), f16 ? buf_fill(plane / 2, HALF_NAN_PAIR, s) : buf_fill(plane, NAN_SENTINEL, s))
+        if (f16) {
+            enc_moe_gather_f16_cls(s, bufs, pc, int64(nk))
+        } else {
+            enc_moe_gather_f32_cls(s, bufs, pc, int64(nk))
+        }
+        let tag = "moe gather {f16 ? "f16" : "f32"} n {n}, window [{r0}, {r0 + rows})"
+        t |> success(cud_sync(), "{tag}: the launch completes ({cuda_last_error()})")
+        var got <- cud_mirror_floats(bufs[2], plane, f16)
+        cuda_mem_free(bufs)
+        var want <- moe_gather_oracle(x, slot_idx, n, k, r0, r0 + rows, f16)
+        var want0 <- moe_gather_oracle(x, slot_idx, n, k, 0, rows, f16)
+        // within 1e-3 of the largest magnitude on the half form: a half's step at |x| < 1 is under 1e-3, the two conversions round
+        // at most a step apart; the f32 form copies, bit for bit
+        let bar = f16 ? Bar(kind = BarKind.rel_of_max, rel = 1e-3, poison_abs = 0.05, poison_at = 0) : BAR_EXACT
+        check_rows(t, "{tag}: the window's rows against the CPU gather", copy_span(got, 0, rows * n), want, bar, n)
+        check_exceeds(t, "{tag}: control - the CPU gather over the window at 0 reads other positions", copy_span(got, 0, rows * n), want0, bar)
+        t |> success(outside_run(got, 0, rows * n, NAN_SENTINEL), "{tag}: the {slack} rows past the window keep their sentinel")
+        delete x
+        delete got
+        delete want
+        delete want0
+    }
+    delete slot_idx
+}
+
+//! the bucket schedule against its CPU twin, word for word over the whole planes (three empty experts, a sentinel fill); past 256 experts the 512-thread stamp
+def private cud_sched_arm(t : T?; ne : int; pad : bool = false) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {   // the schedule oracle lives with the Vulkan cells
+        let nk = 4 * MR_NPOS * MR_K
+        let wt_gu = 3
+        let wt_dn = 2
+        let sh = sched_shape(nk, ne, wt_gu, wt_dn)
+        var idx <- sched_cell_idx(nk, ne)
+        let bases = fixed_array(1_000u, 96u, 2_000u, 96u, 3_000u, 48u)
+        var winv, w1, w3, w2 : array<uint>
+        sched_oracle(idx, ne, wt_gu, wt_dn, sh, bases, winv, w1, w3, w2, false, pad ? MMQ_ROW_PAD : 0, pad)
+        var s = g_cud.stream
+        let nw = length(w1)
+        let row_pad = pad ? MMQ_ROW_PAD : 1
+        let nrows = bucket_start(idx, ne, row_pad)   // the bucket rows, the pads among them
+        var bufs = fixed_array(buf_upload(idx, s), buf_fill(nk, 0xFFFFFFFFu, s), buf_fill(nw, MR_SENT, s), buf_fill(nw, MR_SENT, s), buf_fill(nw, MR_SENT, s), buf_fill(nrows, 0xFFFFFFFFu, s))
+        var pc = SchedArgs(nk = uint(nk), ne = uint(ne), wt_gu = uint(wt_gu), wt_dn = uint(wt_dn),
+            map_off = uint(sh.map_off), map_off_mgu = uint(sh.map_off_mgu), map_off_mdn = uint(sh.map_off_mdn),
+            bound_gu = uint(sh.bound_gu), bound_dn = uint(sh.bound_dn), bound_mgu = uint(sh.bound_mgu), bound_mdn = uint(sh.bound_mdn),
+            base1 = bases[0], stride1 = bases[1], base3 = bases[2], stride3 = bases[3], base2 = bases[4], stride2 = bases[5], s_only = 0u,
+            row_pad = pad ? uint(MMQ_ROW_PAD) : 0u, m_only = pad ? 1u : 0u)
+        cud_moe_sched_enc(int64(ne), s, bufs, pc)
+        let pad_tag = pad ? ", padded to {MMQ_ROW_PAD}-row tiles on the m column" : ""
+        t |> success(cud_sync(), "bucket schedule ({ne} experts{pad_tag}): the launch completes ({cuda_last_error()})")
+        var ginv <- buf_download(bufs[1], nk, type<uint>)
+        var g1 <- buf_download(bufs[2], nw, type<uint>)
+        var g3 <- buf_download(bufs[3], nw, type<uint>)
+        var g2 <- buf_download(bufs[4], nw, type<uint>)
+        var gbex <- buf_download(bufs[5], nrows, type<uint>)
+        cuda_mem_free(bufs)
+        sched_maps_check(t, idx, ginv, gbex) $(e) => (start = bucket_start(idx, e, row_pad), rows = bucket_rows(idx, e))
+        check_exact(t, "the gate plane's s and m records, maps and sentinel tails against the CPU twin, word for word ({nw} words, {ne} experts{pad_tag})", g1, w1)
+        check_exact(t, "the up plane's schedule against the CPU twin ({ne} experts{pad_tag})", g3, w3)
+        check_exact(t, "the down plane's schedule against the CPU twin (its own tile counts and tails, {ne} experts{pad_tag})", g2, w2)
+        w2[sh.map_off_mdn + sh.bound_mdn - 1] = 0u
+        t |> success(mismatch_exact(g2, w2) > 0, "schedule control ({ne} experts): the last map's last sentinel word flipped reds the compare")
+        delete idx
+        delete winv
+        delete w1
+        delete w3
+        delete w2
+        delete ginv
+        delete g1
+        delete g3
+        delete g2
+        delete gbex
+    } else {
+        t |> skip("dasVulkan not present: the bucket schedule's CPU twin lives with the Vulkan cells, so the {ne}-expert{pad ? " padded" : ""} schedule arm does not run")
+    }
+}
+
+//! the combine-folded residual step (`ArCombBase`, the f32 normed-row form the home stamps) against the shared oracle (`ar_comb_oracle`)
+def private cud_ar_comb_arm(t : T?; gated, with_sh, dbias : bool) {
+    let n = 64
+    let k = dbias ? 12 : 3   // twelve slots on the biased arm: the row pass's eight-slot register form and its tail past them
+    let npos = 5
+    let ne = 6
+    let eps = 1.0e-6
+    var fx <- ar_comb_fixture(n, k, npos)
+    var wn, lg, db : array<float>
+    var sex : array<uint>
+    ar_comb_planes(n, k, npos, ne, dbias, wn, lg, db, sex)
+    var s = g_cud.stream
+    var bufs = fixed_array(buf_upload(fx.xs, s), buf_upload(fx.sh, s), buf_upload(wn, s), buf_fill(npos * n, Y_SENTINEL, s), buf_upload(fx.sidx, s),
+        buf_upload(fx.sw, s), buf_upload(fx.rows, s), buf_upload(lg, s), buf_upload(db, s), buf_upload(sex, s))
+    var pc = GkAddRmsArgs(dim = uint(n), add_on = with_sh ? 1u : 0u, woff = 0u, eps = eps, ascale = 1.0, row0 = 0u,
+        slots = uint(k), lstride = uint(MR_NER), gated = gated ? 1u : 0u, dbias_on = dbias ? 1u : 0u, dboff = dbias ? uint(ne * n) : 0u)
+    enc_cls_ar_comb(s, bufs, pc, int64(npos))
+    let arm = (with_sh ? (gated ? "gated shared" : "ungated shared") : "no shared") + " expert" + (dbias ? ", down biases" : "")
+    t |> success(cud_sync(), "the combine-folded residual step ({arm}): the launch completes ({cuda_last_error()})")
+    var got_x <- buf_download(bufs[0], npos * n, type<float>)
+    var got_y <- buf_download(bufs[3], npos * n, type<float>)
+    cuda_mem_free(bufs)
+    var want_x, want_y : array<float>
+    let got_h : array<uint>   // no f16 twin on this home: the CUDA stamp is the f32 form alone
+    ar_comb_oracle(fx, wn, lg, db, sex, n, k, npos, ne, gated, with_sh, dbias, eps, want_x, want_y)
+    ar_comb_check(t, "the combine-folded residual step ({arm})", "combine-folded residual control", fx.xs, got_x, got_y, got_h, false, want_x, want_y, n)
+    delete fx
+    delete wn
+    delete lg
+    delete db
+    delete sex
+    delete got_x
+    delete got_y
+    delete want_x
+    delete want_y
+}
+
+[test]
+def test_cud_moe_routing(t0 : T?) {
+    t0 |> run("CUDA routed-block routing kernels == the CPU oracles: router GEMM, per-row top-k (the one-deep stamp, and the two-deep one over 512 experts), the bucket schedule, the gather as halves and as floats, the combine-folded residual step") <| @(t : T?) {
+        if (!(ensure_router_gemm_cls() && ensure_topk_rows_cls() && ensure_moe_sched_cls() && ensure_moe_sched2_cls() && ensure_cls_ar_comb())) {
+            t |> skip("no CUDA device with NVRTC")
+            return
+        }
+        verify(cud_topk_rows_ensure(512l) && ensure_moe_gather_f16_cls() && ensure_moe_gather_f32_cls(), "the two-deep select and the gathers must compile on a device that compiled the one-deep select")
+        cud_router_arm(t, MR_NER)
+        cud_router_arm(t, 9)   // fewer rows than the tile's half: the second row of every invocation is guarded off
+        cud_topk_rows_arm(t, true, 0.0, MoeGate.softmax, false)
+        cud_topk_rows_arm(t, false, 2.5, MoeGate.softmax, false)
+        cud_topk_rows_arm(t, false, 0.0, MoeGate.softmax_weight, true)   // gpt-oss: the biased pick, softmax over the picks
+        cud_topk_wide_arm(t, false, 512, 10)   // Qwen3-Next's 512 experts at ten picks a row
+        cud_topk_wide_arm(t, true, 512, 10)
+        cud_topk_wide_arm(t, false, 512, 10, true)
+        cud_gather_arm(t, true, 5, 9)   // the window [5, 14) of the 21 bucket rows
+        cud_gather_arm(t, false, 5, 9)
+        cud_sched_arm(t, MR_NE)
+        cud_sched_arm(t, 512)   // past 256 experts: the 512-thread stamp, experts past 256 routed
+        cud_sched_arm(t, MR_NE, true)   // the MMQ form: every bucket's rows from a 128-multiple, all on the m column
+        cud_ar_comb_arm(t, true, true, false)
+        cud_ar_comb_arm(t, false, true, false)
+        cud_ar_comb_arm(t, false, false, false)
+        cud_ar_comb_arm(t, true, true, true)
     }
 }
 

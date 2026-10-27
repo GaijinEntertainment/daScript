@@ -13,6 +13,7 @@ require _compares
 require _kernel_oracles   // rope_tab_ref: the rope and KV-writer cells' oracle
 require _attn_oracle   // attn_row_oracle: the batched decode attention cells' oracle
 require _sel_oracle   // select_rows_oracle, sel_words, SelRow: the selection cell's oracle and its result shape (vulkan-free)
+require _moe_routing_oracles   // the routing cells' fixtures and oracles, the CUDA kernel file's too
 require _vk_kq_fixtures
 require _kq_fixtures
 require ?vulkan _vkd_toy
@@ -35,7 +36,6 @@ require dasllama/dasllama_gemm_schema   // nolint:STYLE029,LINT019 — kq_dev_ss
 require ?vulkan daslib/shader_lingua_franca   // gl_GlobalInvocationID — the CPU replay drives it per lane (only vulkan-guarded arms replay)
 require dasllama/dasllama_common   // MoeGate: the routing cells' select oracle takes the softmax router
 require dasllama/dasllama_arch_qwen35
-require ?vulkan dasllama/dasllama_moe   // moe_select_core: the host select the window's per-row top-k mirrors
 require daslib/strings_boost   // join: the spawned fixture's source
 require daslib/math_bits   // float_bits_to_uint / uint_bits_to_float: the NaN sentinel by bit pattern, the read-back planes as floats
 require daslib/f16_cvt   // nolint:STYLE030,LINT019 — the half conversions of the vulkan cells, unused in the darwin world
@@ -1587,29 +1587,6 @@ def private ba_plane_mismatches(got, want : array<float>; npos, ne, nvh, ob_b, o
     return bad
 }
 
-
-//! the signed bytes of the packed quant word `g` outside +-tol of `w`'s (act chains carry transcendental ulp noise)
-def private qword_off(g, w : uint; tol : int) : int {
-    var bad = 0
-    for (sh in range(4)) {
-        let a = int(g >> uint(sh * 8)) & 0xFF
-        let b = int(w >> uint(sh * 8)) & 0xFF
-        let sa = a >= 128 ? a - 256 : a
-        let sb = b >= 128 ? b - 256 : b
-        if (!(abs(sa - sb) <= tol)) {
-            bad++
-        }
-    }
-    return bad
-}
-
-def private mismatch_qbytes(got, want : array<uint>; tol : int) : int {
-    var bad = 0
-    for (g, w in got, want) {
-        bad += qword_off(g, w, tol)
-    }
-    return bad
-}
 
 //! the first word of `got` with a byte outside +-tol of `want`'s, -1 when none
 def private first_qbytes_off(got, want : array<uint>; tol : int) : int {
@@ -3322,38 +3299,13 @@ def private fa_tile_run(t : T?; khr : bool) {   // nolint:STYLE037,LINT019 — o
             // stays under the 2e-3 relative bar mismatch_approx holds against the f32 oracle, and the f16 O
             // twin against the f32 stamp pins the same bar - the bound is this fixture's magnitudes, not a proof.
             // The KHR kernel rounds P to f16 and sums each 64-key step in f16 before its f32 o row: the same bar.
-            var inscope qh2, kh2, vh2 : array<float>
-            qh2 |> resize(rows * qd)
-            kh2 |> resize(kpos * kvd)
-            vh2 |> resize(kpos * kvd)
-            for (i in range(rows * qd)) {
-                qh2[i] = float(float16(qh[i] * scale))
-            }
-            for (i in range(kpos * kvd)) {
-                kh2[i] = float(float16(kh[i]))
-                vh2[i] = float(float16(vh[i]))
-            }
-            var inscope y_ref : array<float>
-            y_ref |> resize(rows * qd)
-            for (r in range(rows)) {
-                for (hh in range(nheads)) {
-                    let cnt = w0 + r + 1
-                    attn_row_oracle(qh2, r * qd + hh * hs, kh2, 0, vh2, 0, kvd, hh, hs, kv_mul,
-                        cnt, 1.0, y_ref, r * qd + hh * hs, window > 0 && cnt > window ? cnt - window : 0, 0.0, sink, sinkh[hh])
-                }
-            }
+            var inscope nosink : array<float>
+            var inscope y_ref <- sink ? fa_oracle(qh, kh, vh, rows, w0, nheads, hs, kv_mul, kvd, scale, window, false, sinkh) : fa_oracle(qh, kh, vh, rows, w0, nheads, hs, kv_mul, kvd, scale, window, false, nosink)
             check_rows(t, "{tag} hs {hs} window {window}{stag} against the CPU oracle", y_cls, y_ref, BAR_APPROX_CTRL, qd, hs)
             fa_ring_control(t, "{tag} hs {hs} window {window}{stag}", y_flat_read, y_ref)
             if (sink) {   //! the sink control: the sink-free oracle over the same rows must miss - the phantom key carries mass
-                var inscope y_nosink : array<float>
-                y_nosink |> resize(rows * qd)
-                for (r in range(rows)) {
-                    let cnt = w0 + r + 1
-                    attn_heads_oracle(qh2, r * qd, kh2, 0, vh2, 0, kvd, nheads, hs, kv_mul, cnt, 1.0, y_nosink, r * qd, window > 0 && cnt > window ? cnt - window : 0)
-                }
-                let moved = mismatch_approx(y_cls, y_nosink)
-                t |> success(moved > 0, "{tag} hs {hs} window {window} sink control: the sink moves the output off the sink-free oracle ({moved} of {rows * qd})")
-                delete y_nosink
+                var inscope y_nosink <- fa_oracle(qh, kh, vh, rows, w0, nheads, hs, kv_mul, kvd, scale, window, false, nosink)
+                check_exceeds(t, "{tag} hs {hs} window {window} sink control: the sink moves the output off the sink-free oracle", y_cls, y_nosink, BAR_APPROX)
             }
             var bad16 = 0
             for (i in range(rows * qd)) {
@@ -3366,9 +3318,6 @@ def private fa_tile_run(t : T?; khr : bool) {   // nolint:STYLE037,LINT019 — o
             delete qh
             delete kh
             delete vh
-            delete qh2
-            delete kh2
-            delete vh2
             delete y_ref
             delete y_cls
             delete y16_fused
@@ -3472,26 +3421,10 @@ def private fa_h256_run(nheads, kv_mul, rows, w0 : int; gated : bool; cap : floa
             y16 <- cp |> plane_as(py16, type<float16>, rows * qd)
         }
         // oracle: q (the gate halves too) pre-scales and rounds to f16 like the kernel, K / V round through the shadow; the gate reads the f32 panel
-        var qp2 <- [for (x in qp); float(float16(x * scale))]
-        var kh2 <- [for (i in range(kpos * kvd)); float(float16(kh[i]))]
-        var vh2 <- [for (i in range(kpos * kvd)); float(float16(vh[i]))]
-        var y_ref, y_plain : array<float>
-        y_ref |> resize(rows * qd)
-        y_plain |> resize(rows * qd)
-        for (r in range(rows)) {
-            for (hh in range(nheads)) {
-                attn_row_oracle(qp2, r * qrow + hh * qhs, kh2, 0, vh2, 0, kvd, hh, hs, kv_mul,
-                    w0 + r + 1, 1.0, y_ref, r * qd + hh * hs, 0, cap)
-                attn_row_oracle(qp2, r * qrow + hh * qhs, kh2, 0, vh2, 0, kvd, hh, hs, kv_mul,
-                    w0 + r + 1, 1.0, y_plain, r * qd + hh * hs)
-                if (gated) {
-                    for (c in range(hs)) {
-                        let g = qp[r * qrow + hh * qhs + hs + c]
-                        y_ref[r * qd + hh * hs + c] *= sigmoid_f32(g)
-                    }
-                }
-            }
-        }
+        let nosink : array<float>
+        var y_ref <- fa_oracle(qp, kh, vh, rows, w0, nheads, hs, kv_mul, kvd, scale, 0, gated, nosink, cap)
+        var qplain <- q_halves(qp, rows, nheads, hs, qhs)
+        var y_plain <- fa_oracle(qplain, kh, vh, rows, w0, nheads, hs, kv_mul, kvd, scale, 0, false, nosink)   //! the plain rows: ungated, uncapped
         let bad = mismatch_approx(y_cls, y_ref)
         let bad_plain = mismatch_approx(y_cls, y_plain)   //! the control: the same rows without the gate or the cap must miss, or the fixture never reached them
         y_ref[hs + 3] += 0.5
@@ -3507,9 +3440,7 @@ def private fa_h256_run(nheads, kv_mul, rows, w0 : int; gated : bool; cap : floa
         delete qp
         delete kh
         delete vh
-        delete qp2
-        delete kh2
-        delete vh2
+        delete qplain
         delete y_ref
         delete y_plain
         delete y_cls
@@ -6668,54 +6599,6 @@ def private dn_cells_gate(t : T?) : bool {
     }
 }
 
-//! The sequential delta rule the dn scan cells hold the chunked scan to: every value head's `npos` steps over the conv rows
-//! `convh` (q | k | v rows `cd` wide) from the state `sth`, the step's beta, gate, decay and dt at their offsets into the smalls
-//! `smh` - the raw o rows [npos x nvh x ds], then the final states [nvh x ds x ds].
-def private dn_delta_ref(convh, sth, smh : array<float>; npos, nkh, nvh, ds, beta_off, g_off, a_off, dt_off : int) : array<float> {
-    let kd = nkh * ds
-    let di = nvh * ds
-    let cd = 2 * kd + di
-    var ref : array<float>
-    ref |> reserve(npos * di + nvh * ds * ds)   //! the whole-window arm's rows pass the unreserved-growth guard
-    ref |> resize(npos * di + nvh * ds * ds)
-    var st_h, dvn : array<float>
-    st_h |> resize(ds * ds)
-    dvn |> resize(ds)
-    for (hh in range(nvh)) {
-        let kh = hh % nkh
-        for (e in range(ds * ds)) {
-            st_h[e] = sth[hh * ds * ds + e]
-        }
-        for (tt in range(npos)) {
-            let crow = tt * cd
-            let gt = smh[a_off + hh] * softplus(smh[g_off + tt * nvh + hh] + smh[dt_off + hh])
-            unsafe {
-                dn_delta_head(addr(st_h[0]), addr(convh[crow + kh * ds]), addr(convh[crow + kd + kh * ds]), addr(convh[crow + 2 * kd + hh * ds]),
-                    addr(ref[tt * di + hh * ds]), addr(dvn[0]), gt, sigmoid_f32(smh[beta_off + tt * nvh + hh]), int64(ds))
-            }
-        }
-        for (e in range(ds * ds)) {
-            ref[npos * di + hh * ds * ds + e] = st_h[e]
-        }
-    }
-    delete st_h
-    delete dvn
-    return <- ref
-}
-
-//! the CPU form of the window's ring hand-off: new ring row k of channel ch is window row `row0 + k - old_rows` of `src`, or for
-//! k under `old_rows` the entry image's row `k + taps - old_rows` (both images per-channel, `old` at `old_off`, the new one at `out_off`)
-def private dn_tail_oracle(src, smalls : array<float>; cd, taps, row0, old_rows, old_off, out_off : int) : array<float> {
-    var want := smalls
-    for (ch in range(cd)) {
-        for (k in range(taps)) {
-            want[out_off + ch * taps + k] = (k >= old_rows ? src[(row0 + k - old_rows) * cd + ch]
-                : smalls[old_off + ch * taps + k + taps - old_rows])
-        }
-    }
-    return <- want
-}
-
 [test]
 def test_vkd_dn_cap_tail(t0 : T?) {
     t0 |> run("dn_cap_tail == the ring hand-off of a window cut at the capture's row, into the checkpoint row") <| @(t : T?) {
@@ -7058,115 +6941,28 @@ def test_vkd_dn_family(t0 : T?) {
                 var inscope slots <- [0]
                 let offs = fixed_array(beta_off, g_off, a_off, dt_off, taps_off, wnorm_off, hist_off, 0)
                 var got <- dn_step_rows_run(projh, sth, smh, pars, slots, 1, nblk, ds, nvh, nkh, cd, dconv, offs, eps, qscale, false)
-                // oracle: the whole fused chain — ring conv + silu, q/k L2, chunk-length-1 delta
-                // rule in place, gated out-norm, the head's Q8_0 blocks
-                var inscope sm_ref : array<float>
-                sm_ref := smh
-                let rrb = hist_off + par * cd * taps
-                let wrb = hist_off + (1 - par) * cd * taps
-                for (ch in range(cd)) {
-                    for (k in range(taps - 1)) {
-                        sm_ref[wrb + ch * taps + k] = smh[rrb + ch * taps + k + 1]
-                    }
-                    sm_ref[wrb + ch * taps + taps - 1] = projh[ch]
-                }
-                var inscope st_ref : array<float>
-                st_ref := sth
-                var inscope out_ref : array<float>
-                out_ref |> resize(nvh * ds)
-                var inscope out_ref_sig : array<float>   //! the same row under the sigmoid out-gate (the `dn_step_sig_cls` stamp's)
-                out_ref_sig |> resize(nvh * ds)
-                for (hh in range(nvh)) {
-                    let kh = hh % nkh
-                    var inscope dq, dk, dv : array<float>
-                    dq |> resize(ds)
-                    dk |> resize(ds)
-                    dv |> resize(ds)
-                    for (sl in range(3)) {
-                        for (j in range(ds)) {
-                            let ch = (sl == 0 ? kh * ds : (sl == 1 ? kd + kh * ds : 2 * kd + hh * ds)) + j
-                            var acc = projh[ch] * smh[taps_off + ch * dconv + taps]
-                            for (k in range(taps)) {
-                                acc += smh[rrb + ch * taps + k] * smh[taps_off + ch * dconv + k]
-                            }
-                            let sv = silu_f32(acc)
-                            if (sl == 0) {
-                                dq[j] = sv
-                            } elif (sl == 1) {
-                                dk[j] = sv
-                            } else {
-                                dv[j] = sv
-                            }
-                        }
-                    }
-                    l2_norm_rows(unsafe(addr(dq[0])), 1l, int64(ds), eps)
-                    l2_norm_rows(unsafe(addr(dk[0])), 1l, int64(ds), eps)
-                    let graw = smh[g_off + hh] + smh[dt_off + hh]
-                    let eg = exp(smh[a_off + hh] * softplus(graw))
-                    let bt = sigmoid_f32(smh[beta_off + hh])
-                    var qk = 0.0
-                    for (j in range(ds)) {
-                        dq[j] *= qscale
-                        qk += dq[j] * dk[j]
-                    }
-                    let sbase = hh * ds * ds
-                    var inscope dvn, dout : array<float>
-                    dvn |> resize(ds)
-                    dout |> resize(ds)
-                    for (j in range(ds)) {
-                        var ks = 0.0
-                        var qs = 0.0
-                        for (i in range(ds)) {
-                            ks += dk[i] * sth[sbase + i * ds + j]
-                            qs += dq[i] * sth[sbase + i * ds + j]
-                        }
-                        dvn[j] = bt * (dv[j] - eg * ks)
-                        dout[j] = eg * qs + qk * dvn[j]
-                    }
-                    for (e in range(ds * ds)) {
-                        st_ref[sbase + e] = sth[sbase + e] * eg + dk[e / ds] * dvn[e % ds]
-                    }
-                    var sum = 0.0
-                    for (j in range(ds)) {
-                        sum += dout[j] * dout[j]
-                    }
-                    let inv = 1.0 / sqrt(sum / float(ds) + eps)
-                    for (j in range(ds)) {
-                        let zv = projh[cd + hh * ds + j]
-                        out_ref[hh * ds + j] = dout[j] * inv * smh[wnorm_off + j] * silu_f32(zv)
-                        out_ref_sig[hh * ds + j] = dout[j] * inv * smh[wnorm_off + j] * sigmoid_f32(zv)
-                    }
-                    delete dq
-                    delete dk
-                    delete dv
-                    delete dvn
-                    delete dout
-                }
+                var inscope ref <- dn_step_ref(projh, sth, smh, par, nvh, nkh, cd, ds, dconv, beta_off, g_off, a_off, dt_off, taps_off, wnorm_off, hist_off, eps, qscale)
                 var inscope q_ref : array<uint>
                 var inscope s_ref : array<float>
-                requant_oracle(out_ref, 0, nvh * ds, false, q_ref, s_ref)
-                let bad = (mismatch_approx(got.state, st_ref) + mismatch_approx(got.smalls, sm_ref)
+                requant_oracle(ref.out, 0, nvh * ds, false, q_ref, s_ref)
+                let bad = (mismatch_approx(got.state, ref.state) + mismatch_approx(got.smalls, ref.smalls)
                     + mismatch_approx(got.oscales, s_ref) + mismatch_qbytes(got.oquants, q_ref, 1))
                 t |> success(bad == 0, "dn_step_fused matches the CPU oracle at ds {ds} ({bad} elements off)")
                 //! the f32 arm (oform 1): the same step leaves the o row as floats - the pre-quant oracle row - and advances state and ring alike
                 var gotf <- dn_step_rows_run(projh, sth, smh, pars, slots, 1, nblk, ds, nvh, nkh, cd, dconv, offs, eps, qscale, true)
-                let badf = mismatch_approx(gotf.of32, out_ref) + mismatch_approx(gotf.state, st_ref) + mismatch_approx(gotf.smalls, sm_ref)
+                let badf = mismatch_approx(gotf.of32, ref.out) + mismatch_approx(gotf.state, ref.state) + mismatch_approx(gotf.smalls, ref.smalls)
                 t |> success(badf == 0, "dn_step_fused's f32 o row (oform 1) at ds {ds} matches the pre-quant oracle with state and ring advanced alike ({badf} elements off)")
                 delete gotf
                 //! the sigmoid out-gate stamp (`dn_step_sig_cls`, qwen4exp): the same step, the o row gated by sigmoid(z); the silu oracle is its control
                 var gots <- dn_step_rows_run(projh, sth, smh, pars, slots, 1, nblk, ds, nvh, nkh, cd, dconv, offs, eps, qscale, true, false, true)
-                let bads = mismatch_approx(gots.of32, out_ref_sig) + mismatch_approx(gots.state, st_ref) + mismatch_approx(gots.smalls, sm_ref)
-                let wids = span_maxdiff(gots.of32, out_ref_sig, 0, 0, length(out_ref_sig))
+                let bads = mismatch_approx(gots.of32, ref.out_sig) + mismatch_approx(gots.state, ref.state) + mismatch_approx(gots.smalls, ref.smalls)
+                let wids = span_maxdiff(gots.of32, ref.out_sig, 0, 0, length(ref.out_sig))
                 t |> success(bads == 0, "dn_step_sig's f32 o row at ds {ds} matches the sigmoid-gated oracle with state and ring advanced alike ({bads} elements off, the o row's widest {wids.diff} at {wids.at})")
-                t |> success(mismatch_approx(gots.of32, out_ref) > 0, "dn_step_sig at ds {ds} lands off the silu oracle (the two stamps differ)")
+                t |> success(mismatch_approx(gots.of32, ref.out) > 0, "dn_step_sig at ds {ds} lands off the silu oracle (the two stamps differ)")
                 delete gots
-                delete out_ref_sig
                 delete projh
                 delete sth
                 delete smh
-                delete sm_ref
-                delete st_ref
-                delete out_ref
                 delete q_ref
                 delete s_ref
                 delete got
@@ -7250,24 +7046,9 @@ def test_vkd_dn_family(t0 : T?) {
                 var inscope o_cls <- outs[0]
                 var inscope o_cls_sig <- outs[1]
                 // the chunked WY form equals the sequential rule in exact arithmetic: the drift is reassociation, which the peak-floored bars absorb
-                var inscope o_ref <- dn_delta_ref(convh, sth, smh, npos, nkh, nvh, ds, beta_off, g_off, a_off, dt_off)
-                var inscope o_ref_sig := o_ref   //! the same rows under the sigmoid out-gate (the `dn_scan_p3_sig_cls` stamp's), the state part alike
-                for (tt in range(npos)) {
-                    for (hh in range(nvh)) {
-                        let at = tt * di + hh * ds
-                        var sum = 0.0
-                        for (j in range(ds)) {
-                            sum += o_ref[at + j] * o_ref[at + j]
-                        }
-                        let inv = 1.0 / sqrt(sum / float(ds) + eps)
-                        for (j in range(ds)) {
-                            let zv = zh[at + j]
-                            let normed = o_ref[at + j] * inv * smh[wnorm_off + j]
-                            o_ref[at + j] = normed * silu_f32(zv)
-                            o_ref_sig[at + j] = normed * sigmoid_f32(zv)
-                        }
-                    }
-                }
+                var inscope o_raw <- dn_delta_ref(convh, sth, smh, npos, nkh, nvh, ds, beta_off, g_off, a_off, dt_off)
+                var inscope o_ref <- dn_gate_ref(o_raw, zh, smh, npos, nvh, ds, wnorm_off, eps, false)
+                var inscope o_ref_sig <- dn_gate_ref(o_raw, zh, smh, npos, nvh, ds, wnorm_off, eps, true)   //! the sigmoid out-gate's rows (the `dn_scan_p3_sig_cls` stamp's), the state part alike
                 let floor = 1e-2 * logits_maxabs(o_ref)
                 let bad = mismatch_rel("", o_cls, o_ref, 1e-2, floor)
                 t |> success(bad == 0, "dn_scan + out-norm matches the CPU oracle at ds {ds} ({bad} of {cmp_n} off)")
@@ -8821,68 +8602,12 @@ def test_vkd_ar_f16_fused(t0 : T?) {
 
 // ===== the resident MoE block's routing kernels (router GEMM, per-row top-k, the bucket schedule, the gated combine) =====
 
-let private MR_NPOS = 37
-let private MR_NE = 20
-let private MR_K = 3
-let private MR_DIM = 2 * 64   //! two of the router tile's 64-wide K steps
-let private MR_NER = MR_NE + 1   //! the shared expert's gate row rides past the experts
-
-//! one 32-bit word to a float in [-2, 2)
-def private hash_unit(i : uint) : float => float(hash_word(i) % 4096u) / 1024.0 - 2.0
-
-//! the host select's picks and weights over the rows, `k` a row
-struct TopkSelect {
-    idx : array<int64>
-    w : array<float>
-}
-
-//! the host select (`moe_select_core`) a row at a time over `npos` rows of `logits` at `lstride`, each row under `rbias`'s row at `rboff` when `bias_on`
-def private topk_rows_select(gate : MoeGate; logits, rbias : array<float>; npos, ne, k, lstride, rboff : int; bias_on, norm : bool; wscale : float) : TopkSelect {
-    var sel : TopkSelect
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        sel.idx |> resize(npos * k)
-        sel.w |> resize(npos * k)
-        var row : array<float>
-        row |> resize(ne)
-        for (p in range(npos)) {
-            for (e in range(ne)) {
-                row[e] = logits[p * lstride + e] + (bias_on ? rbias[rboff + e] : 0.0)
-            }
-            unsafe {
-                moe_select_core(gate, int64(ne), int64(k), norm, wscale, addr(row[0]), addr(sel.idx[0]), addr(sel.w[0]), int64(p * k))
-            }
-        }
-        delete row
-    }
-    return <- sel
-}
-
-//! the device's picks and weights against the host select's: the picks exact, the weights within 1e-4
-def private topk_rows_compare(t : T?; tag : string; gidx : array<uint>; gw : array<float>; sel : TopkSelect) {
-    var badi = 0
-    for (g, w in gidx, sel.idx) {
-        if (int64(g) != w) {
-            badi++
-        }
-    }
-    t |> success(badi == 0 && length(gidx) == length(sel.idx), "{tag}: the picks are the host select's ({badi} of {length(gidx)} off, {length(sel.idx)} picks selected)")
-    check_rows(t, "{tag}: the weights against the host select", gw, sel.w, Bar(rel = 1e-4, poison_of_max = true, poison_abs = 0.5), FLAT_ROWS)
-}
-
 //! the router GEMM: two layers' [ner x dim] rows, the second layer's dispatched through woff; logits at the ner
 //! stride; `ner` past a half-tile exercises both rows of an invocation, under it the second row's guard alone
 def private moe_router_arm(t : T?; ner : int) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
-        let nw = 2 * ner * MR_DIM
         var wh, xh : array<float>
-        wh |> resize(nw)
-        xh |> resize(MR_NPOS * MR_DIM)
-        for (i in range(nw)) {
-            wh[i] = hash_unit(uint(i) + 11u) * 0.25
-        }
-        for (i in range(MR_NPOS * MR_DIM)) {
-            xh[i] = hash_unit(uint(i) + 7_777u)
-        }
+        router_gemm_planes(ner, wh, xh)
         var got : array<float>
         with_cell_planes() $(var cp : CellPlanes) {
             let pw = cp |> in_(wh)
@@ -8891,26 +8616,13 @@ def private moe_router_arm(t : T?; ner : int) {
             var sc = cp |> cls_set(fixed_array(pw, px, pl), @@set_router_gemm_cls)
             var pc = RouterGemmArgs(npos = uint(MR_NPOS), ne = uint(ner), dim = uint(MR_DIM), woff = uint(ner * MR_DIM), ostride = uint(ner))
             cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
-                enc_router_gemm_cls(raw, h, sc, pc, int64(((MR_NPOS + int(ROUTER_TP) - 1) / int(ROUTER_TP)) * ((ner + int(ROUTER_TE) - 1) / int(ROUTER_TE))))
+                enc_router_gemm_cls(raw, h, sc, pc, router_gemm_wgs(int64(MR_NPOS), int64(ner)))
             }
             delete got
             got <- cp |> plane_run(pl)
         }
-        var want : array<float>
-        want |> resize(MR_NPOS * ner)
-        for (p in range(MR_NPOS)) {
-            for (e in range(ner)) {
-                var acc = 0.0
-                for (c in range(MR_DIM)) {
-                    acc += wh[ner * MR_DIM + e * MR_DIM + c] * xh[p * MR_DIM + c]
-                }
-                want[p * ner + e] = acc
-            }
-        }
-        let bad = mismatch_rel("", got, want, 1e-4)
-        t |> success(bad == 0, "router GEMM over {ner} rows matches the CPU oracle at the second layer's offset ({bad} of {MR_NPOS * ner} off)")
-        want[5 * ner + 3] += 0.5
-        t |> success(mismatch_rel("", got, want, 1e-4) == 1, "router GEMM control ({ner} rows): the bar reds one poisoned element")
+        var want <- router_gemm_oracle(wh, xh, ner)
+        router_gemm_check(t, ner, got, want)
         delete wh
         delete xh
         delete got
@@ -8923,15 +8635,7 @@ def private moe_router_arm(t : T?; ner : int) {
 def private moe_topk_rows_arm(t : T?; norm : bool; wscale : float; gate : MoeGate; rbias : bool) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         var lh, rb : array<float>
-        lh |> resize(MR_NPOS * MR_NER)
-        rb |> resize(2 * MR_NE)   //! two layers' bias rows: the dispatch reads the second (rboff = MR_NE), the first is a decoy
-        for (i in range(MR_NPOS * MR_NER)) {
-            lh[i] = hash_unit(uint(i) * 3u + 101u) * 2.0 + float(i % 7) * 0.0625   //! spread past any near-tie
-        }
-        for (e in range(MR_NE)) {
-            rb[e] = 7.0
-            rb[MR_NE + e] = rbias ? hash_unit(uint(e) * 5u + 7u) * 3.0 - 1.5 : 0.0   //! a bias wide enough to move picks
-        }
+        topk_rows_planes(rbias, lh, rb)
         var gidx : array<uint>
         var gw : array<float>
         with_cell_planes() $(var cp : CellPlanes) {
@@ -8950,23 +8654,7 @@ def private moe_topk_rows_arm(t : T?; norm : bool; wscale : float; gate : MoeGat
             delete gw
             gw <- cp |> plane_run(pw)
         }
-        var sel <- topk_rows_select(gate, lh, rb, MR_NPOS, MR_NE, MR_K, MR_NER, MR_NE, true, norm, wscale)
-        let arm = (gate == MoeGate.softmax_weight ? "softmax over the picks" : (norm ? "renormalized" : "scaled by {wscale}")) + (rbias ? ", router bias" : "")
-        topk_rows_compare(t, "per-row top-k ({arm})", gidx, gw, sel)
-        sel.w[4] += 0.5
-        t |> success(mismatch_rel("", gw, sel.w, 1e-4) == 1, "per-row top-k control: the bar reds one poisoned weight")
-        if (rbias) {   //! the bias control: the select over the unbiased logits must pick differently somewhere
-            var sel0 <- topk_rows_select(gate, lh, rb, MR_NPOS, MR_NE, MR_K, MR_NER, MR_NE, false, norm, wscale)
-            var moved = 0
-            for (i0, i in sel0.idx, sel.idx) {
-                if (i0 != i) {
-                    moved++
-                }
-            }
-            t |> success(moved > 0, "router bias control: the bias moves {moved} of {MR_NPOS * MR_K} picks off the unbiased select")
-            delete sel0
-        }
-        delete sel
+        topk_rows_verdict(t, gidx, gw, lh, rb, norm, wscale, gate, rbias)
         delete rb
         delete lh
         delete gidx
@@ -8981,17 +8669,7 @@ def private moe_sched_arm(t : T?; ne : int = MR_NE; s_only : bool = false) {
         let wt_gu = 3
         let wt_dn = 2
         let sh = sched_shape(nk, ne, wt_gu, wt_dn, s_only)
-        var idx : array<uint>
-        idx |> resize(nk)
-        //! the ladder's four shapes: expert 0 a whole m column plus an s remainder, 1 and 2 one partial
-        //! m column each, 3 within the s column; the rest spread thin, the last three route nothing
-        let c0 = int(SCHED_M_ROWS) + int(SCHED_S_ROWS) - 10
-        let c1 = int(SCHED_M_ROWS) - 28
-        let c2 = int(SCHED_S_ROWS) + 8
-        let c3 = int(SCHED_S_ROWS) - 12
-        for (r in range(nk)) {
-            idx[r] = r < c0 ? 0u : (r < c0 + c1 ? 1u : (r < c0 + c1 + c2 ? 2u : (r < c0 + c1 + c2 + c3 ? 3u : 4u + hash_word(uint(r) + 55u) % uint(ne - 7))))
-        }
+        var idx <- sched_cell_idx(nk, ne)
         let bases = fixed_array(1_000u, 96u, 2_000u, 96u, 3_000u, 48u)
         var winv, w1, w3, w2 : array<uint>
         sched_oracle(idx, ne, wt_gu, wt_dn, sh, bases, winv, w1, w3, w2, s_only)
@@ -9024,28 +8702,7 @@ def private moe_sched_arm(t : T?; ne : int = MR_NE; s_only : bool = false) {
             delete gbex
             gbex <- cp |> plane_as(pbex, type<uint>, nk)
         }
-        //! the atomic cursor fixes no order within a bucket, so the check is per bucket: a permutation of its rows
-        var inv_bad = 0
-        var bex_bad = 0
-        var seen : array<bool>
-        seen |> resize(nk)
-        for (r in range(nk)) {
-            let e = int(idx[r])
-            let base = uint(bucket_start(idx, e))
-            let rows = uint(bucket_rows(idx, e))
-            let row = ginv[r]
-            if (row < base || row >= base + rows || seen[int(row)]) {
-                inv_bad++
-            } else {
-                seen[int(row)] = true
-                if (gbex[int(row)] != idx[r]) {
-                    bex_bad++
-                }
-            }
-        }
-        t |> success(inv_bad == 0, "the schedule's slot -> bucket row map is a permutation of each bucket's rows ({nk} slots, {inv_bad} off)")
-        t |> success(bex_bad == 0, "the schedule's bucket row -> expert map names each row's slot's expert ({bex_bad} of {nk} off)")
-        delete seen
+        sched_maps_check(t, idx, ginv, gbex) $(e) => (start = bucket_start(idx, e), rows = bucket_rows(idx, e))
         delete gbex
         t |> success(mismatch_qbytes(g1, w1, 0) == 0, "the gate plane's s and m records, maps and sentinel tails match the CPU twin word for word ({length(w1)} words)")
         t |> success(mismatch_qbytes(g3, w3, 0) == 0, "the up plane's schedule matches")
@@ -9074,30 +8731,12 @@ def private moe_ar_comb_arm(t : T?; gated, with_sh, dbias : bool) {   // nolint:
         let n = 64
         let k = dbias ? 12 : 3   //! twelve slots on the biased arm: the row pass's eight-slot register form and its tail past them
         let npos = 5
-        let nrows = npos * k
         let ne = 6
         let eps = 1.0e-6
         var fx <- ar_comb_fixture(n, k, npos)
-        var wn, lg : array<float>
+        var wn, lg, db : array<float>
         var sex : array<uint>
-        var db : array<float>
-        wn |> resize(n)
-        lg |> resize(npos * MR_NER)
-        sex |> resize(nrows)
-        let dbn = dbias ? 2 * ne * n : n   //! two layers' rows when biased (the dispatch reads the second), the biasless zero row of the model dim otherwise - the driver's own shapes
-        db |> resize(dbn)
-        for (i in range(nrows)) {
-            sex[i] = hash_word(uint(i) + 3u) % uint(ne)
-        }
-        for (i in range(dbn)) {
-            db[i] = dbias ? (i < ne * n ? 9.0 : float((i * 19) % 23) * 0.25 - 2.75) : 0.0   //! the first layer's rows are a decoy
-        }
-        for (i in range(n)) {
-            wn[i] = 0.5 + float(i % 7) * 0.125
-        }
-        for (i in range(npos * MR_NER)) {
-            lg[i] = hash_unit(uint(i) + 9u)
-        }
+        ar_comb_planes(n, k, npos, ne, dbias, wn, lg, db, sex)
         var got_x, got_y : array<float>
         var got_h : array<uint>
         var got_q : array<int8>
@@ -9147,31 +8786,14 @@ def private moe_ar_comb_arm(t : T?; gated, with_sh, dbias : bool) {   // nolint:
             got_s <- cp |> plane_run(pos)
         }
         var want_x, want_y : array<float>
-        want_x |> resize(npos * n)
-        want_y |> resize(npos * n)
-        for (p in range(npos)) {
-            let g = with_sh && gated ? sigmoid_f32(lg[p * MR_NER + MR_NE]) : 1.0
-            for (i in range(n)) {
-                var v = fx.xs[p * n + i]
-                if (with_sh) {
-                    v += g * fx.sh[p * n + i]
-                }
-                for (j in range(k)) {
-                    v += fx.sw[p * k + j] * (fx.rows[int(fx.sidx[p * k + j]) * n + i] + (dbias ? db[ne * n + int(sex[p * k + j]) * n + i] : 0.0))
-                }
-                want_x[p * n + i] = v
-            }
-            unsafe {
-                rmsnorm(addr<float?>(want_y[p * n]), addr<float const?>(want_x[p * n]), addr<float const?>(wn[0]), int64(n), eps)
-            }
-        }
+        ar_comb_oracle(fx, wn, lg, db, sex, n, k, npos, ne, gated, with_sh, dbias, eps, want_x, want_y)
         let arm = (with_sh ? (gated ? "gated shared" : "ungated shared") : "no shared") + " expert" + (dbias ? ", down biases" : "")
         //! the quantizing twin: every block's scale within 2e-3 of the oracle's amax over 127, every dequantized element within a quant step
         let off = q8_blocks_off(got_q, got_s, want_y, npos * n / 32)
         t |> success(off.scales == 0, "the combine-folded residual step ({arm}): the quantizing twin's block scales match the oracle ({off.scales} of {npos * n / 32} off)")
         t |> success(off.values == 0, "the combine-folded residual step ({arm}): the quantizing twin's rows sit within a quant step of the oracle ({off.values} of {npos * n} off)")
         t |> success(off.poison_inside == 0, "combine-folded residual control: the quant bar reds a poisoned oracle element in every block ({off.poison_inside} passed)")
-        ar_comb_check(t, "the combine-folded residual step ({arm})", "combine-folded residual control", fx.xs, got_x, got_y, got_h, want_x, want_y, n)
+        ar_comb_check(t, "the combine-folded residual step ({arm})", "combine-folded residual control", fx.xs, got_x, got_y, got_h, true, want_x, want_y, n)
         delete fx
         delete wn
         delete lg
@@ -9185,44 +8807,6 @@ def private moe_ar_comb_arm(t : T?; gated, with_sh, dbias : bool) {   // nolint:
         delete sex
         delete db
     }
-}
-
-//! the combine-folded residual cells' fixture rows: a permutation of the `npos` x `k` bucket rows as the slot map, the slot
-//! weights, the bucket rows `n` wide, the residual rows and the shared-expert rows
-struct private ArCombFix {
-    sidx : array<uint>
-    sw : array<float>
-    rows : array<float>
-    xs : array<float>
-    sh : array<float>
-}
-
-def private ar_comb_fixture(n, k, npos : int) : ArCombFix {
-    let nrows = npos * k
-    return <- ArCombFix(sidx <- [for (i in range(nrows)); uint((i * 7) % nrows)],
-        sw <- [for (i in range(nrows)); 0.125 + float(i % 5) * 0.25],
-        rows <- row_fill(nrows * n, 7, 0, 0.13, 5.5, 93),
-        xs <- row_fill(npos * n, 11, 0, 0.1, 1.7, 37),
-        sh <- row_fill(npos * n, 5, 0, 0.2, 3.0, 41))
-}
-
-//! a combine-folded residual step's three outputs under `tag`: the in-place residual rows moved off their input `xs` and within
-//! the approx bar of `want_x`, the f32 normed rows of `want_y`, and the f16 normed rows `got_h` within the half's rounding - a
-//! half rounds to 2^-11 of the value, the bar four halves of that with the same fraction of the row's largest value as the floor
-//! the near-zero elements read; then, under `ctrl`, one poisoned element of each expectation reds its bar
-def private ar_comb_check(t : T?; tag, ctrl : string; xs, got_x, got_y : array<float>; got_h; var want_x, want_y : array<float>; n : int) {
-    t |> success(mismatch_approx(got_x, xs) > 0, "{tag}: the in-place residual rows moved off their input")
-    check(t, "{tag}: the residual rows match the CPU oracle", got_x, want_x, BAR_APPROX, Shape(row_width = n))
-    check(t, "{tag}: the f32 normed rows match the CPU oracle", got_y, want_y, BAR_APPROX, Shape(row_width = n))
-    var got_yf <- [for (i in range(length(want_y))); half_at(got_h, i)]
-    let f16_bar = 2.0e-3
-    check(t, "{tag}: the f16 normed rows within the half's rounding of the oracle", got_yf, want_y, Bar(rel = f16_bar, abs_floor = f16_bar * logits_maxabs(want_y)), Shape(row_width = n))
-    want_x[2 * n + 9] += 0.5
-    t |> success(mismatch_approx(got_x, want_x) == 1, "{ctrl}: the residual bar reds one poisoned element")
-    want_y[3 * n + 5] += 0.5
-    t |> success(mismatch_approx(got_y, want_y) == 1, "{ctrl}: the f32 normed-row bar reds one poisoned element")
-    t |> success(mismatch_rel("", got_yf, want_y, f16_bar, f16_bar * logits_maxabs(want_y)) == 1, "{ctrl}: the f16 normed-row bar reds one poisoned element")
-    delete got_yf
 }
 
 //! the gemma-4 combine on the template both homes stamp (`GkMoeCombG4`): x = (x + post(post2(sum_j w_j d_j) + post1(dense))) *
@@ -9315,7 +8899,7 @@ def private moe_ar_comb_g4_arm(t : T?) {
         check(t, "the gemma-4 combine over presummed rows: the residual rows match the CPU oracle", got_xs, wsum.x, BAR_APPROX, Shape(row_width = n))
         check(t, "the gemma-4 combine over presummed rows: the normed rows match the CPU oracle", got_ys, wsum.y, BAR_APPROX, Shape(row_width = n))
         t |> success(mismatch_approx(got_xs, want.x) > 0, "gemma-4 combine control: the slot map's step misses the presummed rows' device step")
-        ar_comb_check(t, "the gemma-4 combine step", "gemma-4 combine control", fx.xs, got_x, got_y, got_h, want.x, want.y, n)
+        ar_comb_check(t, "the gemma-4 combine step", "gemma-4 combine control", fx.xs, got_x, got_y, got_h, true, want.x, want.y, n)
         delete fx
         delete wn
         delete summed
@@ -9341,20 +8925,7 @@ def private topk_n_arm(t : T?; gptoss_router_bias : bool; ne : int = 40; k : int
         let xnb1 = 7u
         let xnb2 = 5u
         var lh, rb : array<float>
-        lh |> resize(npos * lstride)
-        rb |> resize(2 * ne)
-        for (i in range(npos * lstride)) {
-            lh[i] = hash_unit(uint(i) * 3u + 211u) * 2.0 + float(i % 7) * 0.0625   //! spread past any near-tie
-        }
-        for (p in range(npos)) {   //! past 256 experts each row's largest logit sits past the first 256: a select that reaches 256 misses it
-            if (ne > 256) {
-                lh[p * lstride + 300 + 37 * p] += 8.0
-            }
-        }
-        for (e in range(ne)) {
-            rb[e] = 7.0
-            rb[ne + e] = gptoss_router_bias ? hash_unit(uint(e) * 5u + 7u) * 3.0 - 1.5 : 0.0
-        }
+        topk_wide_planes(ne, npos, lstride, gptoss_router_bias, lh, rb)
         let l_bytes = int64(npos * lstride) * 4l
         let l1_bytes = int64(lstride) * 4l
         let rb_bytes = int64(2 * ne) * 4l
@@ -9716,8 +9287,9 @@ def test_vkd_moe_routing(t0 : T?) {
 def test_vkd_gemv_lane_rule(t0 : T?) {
     t0 |> run("gemv_lanes_per_row: the measured lane split per format class and row length") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            let grid = fixed_array(KqFmt.iq2s, KqFmt.iq2xs, KqFmt.iq2xxs, KqFmt.iq3xxs, KqFmt.iq4xs, KqFmt.iq4nl, KqFmt.iq3s4, KqFmt.nv4)
-            let lattice = fixed_array(KqFmt.k2, KqFmt.k3, KqFmt.k4, KqFmt.k5, KqFmt.k6, KqFmt.q40, KqFmt.iq3s)
+            let grid = fixed_array(KqFmt.iq2s, KqFmt.iq2xs, KqFmt.iq2xxs, KqFmt.iq3xxs, KqFmt.iq4xs, KqFmt.iq4nl, KqFmt.iq3s4)
+            //! nv4 decodes its nibbles off a sixteen-entry table, no codebook gather, and rides the lattice split (`gemv_grid_fmt`)
+            let lattice = fixed_array(KqFmt.k2, KqFmt.k3, KqFmt.k4, KqFmt.k5, KqFmt.k6, KqFmt.q40, KqFmt.iq3s, KqFmt.nv4)
             //! row length -> (the grid formats' lanes, the k-lattice formats' lanes); 0 = the whole subgroup
             let rows = fixed_array((n = 768l, g = 8u, l = 8u), (n = 1024l, g = 8u, l = 16u), (n = 1536l, g = 8u, l = 16u),
                 (n = 2048l, g = 16u, l = 16u), (n = 3072l, g = 16u, l = 16u), (n = 4096l, g = 16u, l = 0u), (n = 8192l, g = 16u, l = 0u))

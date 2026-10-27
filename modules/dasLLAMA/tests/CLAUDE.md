@@ -9,9 +9,11 @@ full-suite run turns a one-arm fix into an afternoon.
 ```
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --arm <filter> [--suite decode|mtp|prefill|matrix|kernels|image|image-vulkan|coverage|all] [--family llama]
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite model-free        # the per-PR gate that needs no models - runs the same on a bare box, no --arm
-./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --changed [--base origin/master]   # the per-PR run on a box with models, and after an edit: the areas the changed files reach
+./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --changed [--base origin/master]   # the per-PR run on a box with models, and after an edit: the files the changed paths reach
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite stocked           # every model-gated file, no --arm; a core-module change reaches every one of them through --changed
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite stocked --exclude test_ple_modes   # the iteration form - drops the PLE file
+DASLLAMA_GPU=1 DASLLAMA_CUDA=1 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --changed --only cuda,segments   # the CUDA home's pass: the run's CUDA files alone
+./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --changed --shard 1/3             # one of three boxes: every third file of the same run, from the first
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --area audio            # one area: audio | vision | tts | llm | infra (comma list)
 ```
 
@@ -19,18 +21,26 @@ An AREA is what someone working on audio, vision, TTS, the LLM engine or the too
 edit: every model-free and stocked file of the area (`area_tests` in `run.das`, a file may sit in
 two) plus the `image` suite's arms the area owns (`area_image_arms`; the `gemma` arm - the E2B
 image round-trip - belongs to no area, because as an `--arm` substring it would drag every other
-`gemma*` arm along; reach it with `--suite image --arm gemma`). `--changed` derives the areas
-from `git diff --name-only <base>` (`--base`, default `origin/master`; a base git cannot resolve
-is refused) plus the module's untracked files: a test file maps to its own areas, a
-`tests/_*.das` fixture to the areas it serves, an engine module through the `MODULE_AREAS` table
-(a module without a row is CORE and reaches every area - the safe default), the checked-in
-`models/` weights to `audio`, any non-`.das` file - `run.das` included - to `infra`,
-`performance/` and `harness/` to `infra`, `benchmarks/`'s `.das` to `llm`, and any other path
-under the module to every area. Each mapping prints as a `CHANGED path -> areas` line; a changed
-model-suite file prints a hint instead, because its arms are the caller's to scope. The run ends
-with `REPORT` (files, failures, cells skipped - a filtered arm, an absent device, or a missing
-model - and files excluded) and `NEXT` (the model suites' `--arm` form when `llm` ran; the per-PR
-suites still owed).
+`gemma*` arm along; reach it with `--suite image --arm gemma`). `--changed` plans by file from
+`git diff --name-only <base>` (`--base`, default `origin/master`; a base git cannot resolve is
+refused) plus the module's untracked files (`reach_for_path` in `run.das`): a test file reaches
+itself; a `tests/_*.das` fixture the test files whose `require _<stem>` reaches it, through the
+fixtures between (a fixture no test names by require falls to its areas); an engine module its
+`MODULE_AREAS` areas whole but `llm`, where it reaches its `MODULE_WITNESSES` row (a leaf module's
+own carriers and kernel cells) or, with no row there, the CORE set - every model-free `llm` file
+and the `LLM_CORE_WITNESSES`, one stocked witness a family and home, the codec rig, the regions
+form, the segmented window, the CPU chains; `benchmarks/`'s `.das` the bench rows' files; the
+checked-in `models/` weights `audio` whole; any non-`.das` file - `run.das` included -,
+`performance/` and `harness/` `infra` whole; any other path under the module every area, `llm` as
+the core. Each path prints as a `CHANGED path -> ...` line, the `PLAN` line counts the files and
+says when the core changed, and a changed model-suite file prints a hint instead, because its arms
+are the caller's to scope. A core change is the per-edit gate only: the whole stocked set
+(`--suite stocked`, sharded over the fleet, `../harness/pod_fleet.das`) is owed before the PR, and
+the `NEXT` line says so. The fleet's pods share one models directory, so its runs keep the image
+rail off (`DASLLAMA_IMAGE=0`, the tool's default environment) and the image suite's arms the plan
+owns run on one box with the rail on, through dastest's `--test` with `DASLLAMA_TEST_ARMS` set to
+them; the PR cites that run beside the shards. The run ends with `REPORT` (files, failures, cells skipped - a filtered
+arm, an absent device, or a missing model - and files excluded) and `NEXT` (what is still owed).
 
 `all` (the default) runs the decode, MTP and prefill parity files, the support matrix, the kernel
 files and `test_model_image` - it omits `test_mtp_gemma_drafter.das`, `image-vulkan`, `coverage`,
@@ -39,7 +49,17 @@ files and `test_model_image` - it omits `test_mtp_gemma_drafter.das`, `image-vul
 Every suite but `model-free` and `stocked` needs `--arm`. `--full` parses and is then refused, so
 `--arm` is the only way in. `--suite model-free` and `--suite stocked` take neither - each is a
 whole gate; `--exclude <substr,...>` drops the files whose name contains a token and names each
-on an `EXCLUDED` line, so a trimmed run cannot read as full. `--no-tune` composes with any suite:
+on an `EXCLUDED` line, so a trimmed run cannot read as full; `--only <substr,...>` keeps the files
+whose name contains a token and drops the rest, each kept file on an `ONLY` line and the tokens on
+the `REPORT` line - the CUDA home's pass is `--changed --only cuda,segments` under
+`DASLLAMA_GPU=1 DASLLAMA_CUDA=1`, beside the Vulkan home's whole run, never in its place (the
+other files run the Vulkan home's tests on a home that serves the dense slice alone, and red on
+its declines). `--shard i/n` splits one run over n
+boxes: each box runs the same command with its own `i` and takes every n-th file of the run's
+sorted list from the i-th, so the shards partition the run and spread its costly neighbours; the
+`SHARD` line counts the shard's files, the `REPORT` line carries `shard i/n`, and the `NEXT` line
+names the shards still owed - a run is whole only when every shard's `REPORT` is in hand.
+`--no-tune` composes with any suite:
 every child runs with `DAS_TUNE_POLICY=reference`, so the `[tune]` families and the `[tuned]`
 hints fall to their reference bodies - the portable tier's arm of the gate. That arm also runs
 with `DASLLAMA_IMAGE=0`: the reference policy is a different box identity, and a `.dlim` minted
@@ -51,9 +71,13 @@ the COMPLETE output to a log file, and prints that path on the DONE line. It own
 timeout - 3600 s per child on the stocked gate and under `--changed`, where the large tier's parity
 file alone runs past 20 minutes and the llama resident file's CPU chains run past 1200 s on a cold
 JIT cache; 1200 s in arm mode - and repeats a file only when `--nreps` is
-passed explicitly (default 1, never best-of-N). Every child runs `-jit -module-cache .cache/daslang/module_cache/dastest.dascache`;
-that cache serves dastest's own module graph only - the test program dastest compiles at
-runtime sits past it, so each child still pays the engine compile.
+passed explicitly (default 1, never best-of-N). Every child runs `-jit -module-cache .cache/daslang/module_cache/dastest.dascache`
+(dastest's own module graph) and `--module-cache-dir .cache/daslang/module_cache/dastest_tests/<size>-<mtime>` (the
+test program's AST record, one per file, the folder keyed by the daslang binary): a record serves the child's
+unchanged module prefix, so an engine test file that parses in ~90 s cold opens in a few seconds warm, and an
+engine edit re-parses the edited module and the modules after it alone. The `CACHE` line names the folder; a
+run on the runner's own binary removes the folders of earlier binaries, whose records can never serve again,
+and a `--das` dry run keeps them.
 No preflight tier runs the per-PR runs. `preflight -- --only dasllama-model-free` runs the
 model-free suite; the `--changed` run has no preflight lane; `-- --only dasllama-stocked` runs the
 whole stocked suite.
@@ -751,7 +775,7 @@ dispatch that skips `metal_set_threadgroup_memory_length` for a kernel with `@wo
 reads garbage silently - no error, a plausible wrong number - which is why the lens makes the
 omission a compile refusal (`test_lens_tgmem_gate` above).
 
-## The per-PR runs - model-free whole, the stocked files by area
+## The per-PR runs - model-free whole, the stocked files by reach
 
 The split between the `model-free` and `stocked` suites: a file that reaches a machine-local
 fixture root (`models_dir()`, `model_available()`, `llama2c_dir()`, `whisper_dir()`, the ASR corpus's `corpus_dir()` /
@@ -762,8 +786,8 @@ persistent_heap`, and the same gate fails one that does not: dastest compiles a 
 linear heap unless the program says otherwise, and there a `delete` frees nothing until collection - a
 cell's deleted carrier stays, and three carriers in one process held a 256 GB box. A `stocked` cell skips honestly
 when its file is absent, so on a bare box (CI) the suite is a run of skips; on a stocked box a PR
-owes the stocked files of the areas its change reaches (`--changed`), never the whole suite for
-its own sake - `test_ple_modes` alone is ~10 min, the suite hours. The runner sets
+owes the files its change reaches (`--changed`), and the whole suite only where the engine core
+changed, over the fleet - `test_ple_modes` alone is ~10 min, the suite hours. The runner sets
 `DASLLAMA_CPU_PREFILL=1` for every child. That is why the CPU-prefill tripwire cannot ride either
 suite: the runner disarms the guard that tripwire asserts. The map below is partial. `run.das`'s
 two lists together are the census.
@@ -1820,11 +1844,14 @@ through the unset seat that brings the draft's K row down (the host row moved), 
 with the draft and the verify on the device (their counters, every call served, no pick asked so
 every row's logits land and no pick is published), its two verify rows - the token and the draft -
 against two one-row resident steps of the same tokens on a fresh session: each row's logits and
-post-norm hidden bit for bit the step's, the argmax both sides read logged, the other row's step
-as the control; every row's device pick the argmax of its landed logits, the region's rows at the
+post-norm hidden within twice the deltanet bar of the step's (the verify rows ride the N-row
+command's tiles, the step the GEMVs, and the two part by the tiles' rounding on a card), the
+argmax the same on both sides, the other row's step as the control past the bar; every row's
+device pick the argmax of its landed logits, the region's rows at the
 session's position (two past the prompt on an accept, one on a reject), the head's rows staying on
 the device (the host's count below the draft's row again) until the next pass brings them down,
-and the re-warm's K row at the prompt's last row bit for bit the draft command's.
+and the re-warm's K row at the prompt's last row the draft command's but for a hundredth of its
+bytes (a quant on a rounding edge).
 `test_gpu_resident_hybrid_mtp_verify_asked` runs six rounds under the caller's pick ask on one
 session and six with the logits landing on another from the same prompt - every round's draft,
 accept, position and the token `sample_` takes next (the published pick, or the landed row's
@@ -2076,7 +2103,7 @@ chain, no peel counted, on the same bar, as does the eight-row tail with the pee
 (`set_vulkan_prefill_peel`, put back as found) - the peel counter's control; the plan (`resident_plan_pick`) charges the per-row planes at `RDEC_NROW_MAX` rows. The forced-feed helpers it shares with the
 other resident files live in `_resident_feed.das`. Skips without the model or the armed tier.
 `test_gpu_resident_cuda_llama.das` - stocked suite, `-jit` only; the CUDA home's whole-model driver
-(`DASLLAMA_GPU=1 DASLLAMA_CUDA=1`, the dense slice: one Q8_0 arena, the f16 mirror, the token step as a
+(`DASLLAMA_GPU=1 DASLLAMA_CUDA=1`, the dense form: one Q8_0 arena, the f16 mirror, the token step as a
 captured graph, the prefill as the window chain over the cm2 tiles - one session's rows, or several sessions' chunks as
 the segmented window, which `test_gpu_resident_segments.das` holds on this home too) on Llama-3.2-1B Q8_0 in the llama file's
 forced-feed form at 40 tokens (one window) and at a prompt of two windows (the file pins `PF_WINDOW_ROWS` as the
@@ -2094,7 +2121,8 @@ and two; and the short window's peel through the N-row command on the CUDA drive
 carriers, after a 40-row opening, tails of 1, 2, 5 and 8 rows as one prefill call peel (a peel and a prefill counted)
 within the split bar of the same tail stepped a row at a time, the row one step off the control; one row past the
 per-row planes and the eight-row tail with the lever off take the window chain. Skips without `DASLLAMA_CUDA=1`, without
-the armed tier, without the file, or, on the forced-feed cells, where the prompt window is not `PF_WINDOW_ROWS` rows.
+the armed tier, without the file, on a card whose room the carrier's plan does not fit (the decline named, as every
+`cuda_forced_feed` cell skips), or, on the forced-feed cells, where the prompt window is not `PF_WINDOW_ROWS` rows.
 `test_gpu_resident_cuda_codec.das` - stocked suite, `-jit` only: the same
 driver under the block-codec mirrors: the codec rig's forced-feed form (`_kv_codec_cells`) under q8_0 on the 1B Q8_0 at
 one window and two and on the Q4_K_M at one, at the Vulkan codec carriers' 10% bar, and the distance form under tq4 on
@@ -2118,10 +2146,30 @@ Phi-3.5-mini Q4_K_M (head 96: the window's attention on the h96 flash tile, the 
 planes, the long-rope factors) in the same form at the two-window prompt - after the 40-token prompt the K-quant file's
 one-row steps at positions 41 and 44 sit 7.7 and 6.6 percent of the max logit off the CPU chain on both attention paths,
 past the llama bar, so that file holds no one-window arm - and the Q8_0 file (the q8 decode chain) at one window and two;
-the same skips. The CUDA kernel cells
+the same skips. `test_gpu_resident_cuda_qwen35.das` - stocked suite, `-jit` only: the same driver on the deltanet
+hybrids - Qwen3.5-0.8B Q8_0 at one window and two, Qwen3.5-4B Q8_0, the NextN-headed trunk with the head off (a plain
+decode is the same chain), the NVFP4 twin (nv4 qkv, z and out planes under their `.scale` factors on the FP4 tensor leaf
+under `set_cuda_mmq_pin(CUDA_MMQ_WINNERS)` at one window and two, at the leaf's W4A4 bar, with the MMQ route pinned off -
+`CUDA_MMQ_OFF`, the cm2 tiles over f16 activations at the K-quant bar - as the arm's control), the Q4_K_M twin and its
+mixed-site mint (K-quant qkv and z planes beside a Q8_0 out plane: the step's requant between sites of two activation
+classes) under `CUDA_MMQ_WINNERS`, every pinned cell naming its pin in its label and putting the pin back as it found it
+(`with_cuda_mmq_pin` of `_cuda_feed.das`); the same skips, and the two NVFP4 leaf cells on a card below the FP4 rung
+(compute capability 120, `fp4_rung_on`). `test_gpu_resident_cuda_moe.das` - stocked suite, `-jit` only:
+the same driver's routed block - Qwen1.5-MoE-A2.7B Q4_K_M (60 experts, 4 routed, a gated shared expert, Q/K/V biases) and
+Qwen3-30B-A3B UD-IQ2_XXS (128 experts, 8 routed, no shared expert, the iq2xxs stacks on their own e column), each at one
+window and two, every row within the MoE bar of the CPU chain, the Q8_0 carrier the Q4_K_M twin is minted from
+(`Qwen1.5-MoE-A2.7B-Chat.Q8_0.gguf`: the Q8_0 expert path - the act + requant, the q8 region GEMV, the q8 e column) at one
+window within the same bar under `set_cuda_mmq_pin(CUDA_MMQ_WINNERS)`, and gpt-oss-20b (the native-MXFP4 stacks on the
+window's schedule-fed FP4 leaf, every bias, the clamped swiglu, the attention sinks, the 128-key sliding layers on flat
+slabs) at one window and two under `set_cuda_mmq_pin(CUDA_MMQ_WINNERS)` within the routed block's bar (a router near-tie
+flips under this home's summation order on one step in twelve, the argmax intact, where the Vulkan file's 0.05 holds on
+its order); the same skips, and without `DASLLAMA_PARITY_FULL=1` (every carrier sits past the large tier's bytes), the
+gpt-oss cells also on a card below the FP4 rung. The CUDA kernel cells
 beside them, `test_cuda_kernels.das` (model-free; a CUDA device with NVRTC, else every cell but the leak gate skips;
-the per-format cells - the kq cm2 tiles, the kq and per-32 GEMVs, the token-table gathers, the Q8_K feeds - also skip
-without dasVulkan): the q8 GEMV and its rate, the MMQ int8 GEMM's leaves against their references - the Q8_0 one and
+the per-format cells - the kq cm2 tiles, the kq and per-32 GEMVs, the token-table gathers, the Q8_K feeds -, the biased
+act twins, the deltanet family and the mx4 FP4 leaf over the expert schedule also skip without dasVulkan, and the routing
+cell's bucket-schedule arms register a skip of their own there; the mx4 FP4 leaf over the expert schedule also skips on a
+card below the FP4 rung): the q8 GEMV and its rate, the MMQ int8 GEMM's leaves against their references - the Q8_0 one and
 the superblock ones without a min term (IQ4_XS and IQ4_NL through the codebook, Q4_0's nibbles less eight) per element
 against the block-scaled fold, the Q4_K one (its min terms f16-staged and folded sixteen blocks at a time over four
 superblocks) at the f16 tiles' bar, the NVFP4 one on the FP4 tensor rung (`test_cud_nv4_mmq`: the k4-tiled nv4 plane
@@ -2134,11 +2182,38 @@ against the f16-feed oracle whole and split in two k chunks through the reduce (
 the 1B window's shapes - each rate cell's warm-up held to the oracle first, the GEMV's every row and the tile's
 activation rows 0, 255, 256 and 511 over every column, the tile's bit for bit on a fixture its f16 accumulator holds
 exactly (sixteen +-1 activations a row over the 2^-7 block scale) - the word copy (a quad-lane run and a three-word tail, the
-device block and the out block under a word sentinel), the flash tiles at heads 64, 96 and 128 with their f16-out twins,
-whole and under a 40-key window, the fused q/k norm + rope + K/V store on the f32 and the f16 mirror stamps against the
+device block and the out block under a word sentinel), the flash tiles at heads 64, 96, 128 and 256 (`test_cud_fa_h256`:
+plain and gated, the gated rows under the sigmoid of the q panel's gate half, the ungated oracle over the q halves the
+control) with their f16-out twins, through the driver's own ladder (`cud_fa_enc`), against `fa_oracle` of `_attn_oracle.das`
+(the Vulkan flash cells' oracle too), whole and under a 40-key window, the deltanet family (`test_cud_dn_family`, at heads
+of 64 and 128: the conv, the fused step on its Q8_0, f32 and sigmoid-gated o rows - the state and the ring advanced in place
+and asserted moved off their inputs, the sigmoid stamp off the silu oracle as its control -, the two-phase scan with the
+silu and sigmoid out-norm (`dn_gate_ref` of `_kernel_oracles.das`, the Vulkan cell's oracle) and its state moved off its
+input, and the ring tail at 5 and 2 rows bit for bit the per-channel CPU form), the fused q/k norm + rope + K/V store on the f32 and the f16 mirror stamps against the
 oracle the Vulkan cell holds it to (`qkn_rope_rows` of `_kernel_oracles.das`, the rows ahead of the layer's kept at their
-fill), the compile gate over every `[cuda_dispatch]` kernel of the home, the shutdown leak
-gate, the K-quant and per-32 GEMV leaves and cm2 tiles against the Vulkan cells' oracles, the token-table gathers, the
+fill), the mx4 expert rail (the GEMV at 704 and gpt-oss's 2880 against the scalar dot in the per-32 GEMV cell, the s and e
+tiles in the cm2 family cell, and the FP4 tensor leaf fed from the expert schedule - `test_cud_mx4_fp4_mmq_moe`: two buckets of
+200 and 300 rows padded to 128-row tiles by the CPU schedule twin, 2880-wide rows on the k tail, a 320-wide plane under the
+store's column guard, two sentinel workgroups past the bound, every real row against the e2m1 x UE8M0 reference on both sides
+(`mx4_fp4_mmq_ref`); the routing cell's schedule arm also holds the padded m-only schedule word for word; the MXFP4 feed kernels
+(`test_cud_mx4_feeds`: `mx4_rows` bit for bit the CPU feed, `mx4_actrows` under the clamped swiglu and its biased twin with each
+row's expert's bias rows, the biased feed landing past the compare's allowance off the unbiased CPU feed as the control,
+every run's planes refilled under their sentinels); the leaf's width admission
+(`test_cud_moe_mmq_fits`: both reduction widths on the 64 lattice serve, a width at 32 past it on either side keeps the cm2
+tiles)), the biased act twins against the CPU act over the host-biased rows (`test_cud_act_biased`: the
+Q8_0 and Q8_K requant forms and the f16 form, under silu and the clamped swiglu, the second bias layer's rows bound, the
+unbiased act the control), the h64 flash and the q8_0 decode attention's sink stamps seeded with a per-head sink logit (the
+sink-free oracle the control), the q8_0 decode attention's split form at eight pieces, the last-arriving one combining,
+plain and with the sink seeded at the combine, the routed block's routing kernels against the oracles the Vulkan routing
+cell reads (`_moe_routing_oracles.das`: the router GEMM at two row counts, the per-row select renormalized, scaled and
+under gpt-oss's biased pick, the two-deep select (`topk_rows2_cls`) over 512 experts at ten picks a row on the Vulkan
+two-deep cell's planes (`topk_wide_planes`), plain and under the router bias, with the one-deep stamp over the same rows
+missing the host select's picks as the control, the bucket schedule at 256 and 512 experts against the CPU twin word for
+word, the gather (`moe_gather_f16_cls` as halves, `moe_gather_f32_cls` as floats) into a nine-row window of 21 bucket rows
+at widths of 100, 256 and 300 against `moe_gather_oracle`, the rows past the window kept at their sentinel and the gather
+over the window at 0 the control, the combine-folded residual step's f32 form under the gated, the ungated and no shared
+expert and under the down biases over twelve slots), the compile gate over every
+`[cuda_dispatch]` kernel of the home, the shutdown leak gate, the K-quant and per-32 GEMV leaves and cm2 tiles against the Vulkan cells' oracles, the token-table gathers, the
 Q8_K feeds (the quants a byte within one step, the scales and the in-place residual row through `check_rows`, the
 residual row moved off its input), and the K/V mirror's
 block codecs - the q8_0 store at token rows and window rows against the CPU cache's bytes, the tq4 store at seven arms
@@ -2761,12 +2836,14 @@ pins read first and put back after the load), asserting the armed region holds e
 and experts yielded to it. The census witnesses count the device's routed blocks (the layers less the
 host ones), and the unsplit-twin witness is skipped under host layers (the split command records the
 split form alone). `test_gpu_resident_moe_host_layers_short_window` holds a two-token prompt on the host-layers fixture to the window chain (the peel declines routed experts on the host). `test_gpu_resident_moe_block_codecs` runs the twin at one window with the
-mirror asked at a block codec (`with_gpu_kv_dtype`; the rig asserts the mirror armed at the codec
-asked): under q8_0 the forced-feed cell on q8_0 sessions at the same 20% bar (reads 0.83-1.17
-against bars of 2.1-2.3, the f16 mirror's own reading), under tq4 the codec rig's distance form
-(`moe_codec_distance` over `codec_distance_over`) - the device's summed distance from the f16
-chain within 1.15 of the CPU tq4 chain's own (reads 1.06, the control 5.0) and the two tq4 chains
-within 1.4 of that distance of each other (reads 1.11, the control 5.0).
+mirror asked at q8_0 (`with_gpu_kv_dtype`; the rig asserts the mirror armed at the codec
+asked): the forced-feed cell on q8_0 sessions at the same 20% bar (reads 0.83-1.17
+against bars of 2.1-2.3, the f16 mirror's own reading); the twin's serving-rule cell - its attention carries a Q/K/V
+bias, so a tq4 ask arms the q8_0 mirror and a session's codec (`kv_codec_for`) steps down the same way, the driver
+armed (it skips under `DASLLAMA_VK_KV32=1`, which arms the f32 mirror over the codec asked); and the tq4 leg on
+Qwen3-30B-A3B UD-IQ2_XXS in the codec rig's distance form (`moe_codec_distance` over `codec_distance_over`) - the
+device's summed distance from the f16 chain within 1.15 of the CPU tq4 chain's own and the two tq4 chains within 1.4 of
+that distance of each other (the router's near-ties part two tq4 chains as far as tq4 parts either from f16).
 `test_gpu_resident_moe_host_rows.das` - stocked suite, `-jit` only, `DASLLAMA_GPU=1`, large tier; the host-layers form's K/V
 mirror on Qwen3-30B-A3B Q4_K_M at 32768 positions asked whole (the first routed layers' experts on the host, the window chain cut
 at them): layer 0's stored rows after a 40-token prompt and the fed steps against the CPU cache's through the codec rig's
@@ -2813,7 +2890,10 @@ and two; the e-column witness counts the mx4 stamps beside the kq, q8 and q51 on
 `test_gpu_perop_gptoss` places every routed layer's mx4 stacks under the biased clamped swiglu and holds a 40-token window
 and six fed steps against the CPU chain; `test_gpu_perop_gptoss_heat` runs `_moe_resident.das`' heat cell
 (`moe_perop_heat_cell`: the last twelve routed layers placed, the rest streamed under eight hot slots a layer, 80 fed
-steps past the pool's re-pin interval, the pool's hits counted by `heat_totals`) against the CPU chain at the same bar.
+steps past the pool's re-pin interval, the pool's hits counted by `heat_totals`) against the CPU chain at the routed
+block's bar (`MOE_LOGIT_BAR_REL`, 0.20; the file's other cells hold 0.05) - over 80 steps a router near-tie flips, as
+the two-window prompt's first fed step does on the RTX PRO 4500 (0.458 against the 5% bar's 0.341, the argmax intact), so
+the resident two-window cell holds the routed block's bar too.
 `test_gpu_perop_moe_heat` (`test_gpu_resident_moe.das`) runs the same cell on Qwen3.6-35B-A3B-MTP-IQ4_XS-pure, twenty
 layers placed and sixteen slots, and holds every routed layer's shared expert on the device after the routed chain or
 the pool's hits every step (`shexp_gpu_after_rows`), none overlapped and none on the three dense GEMMs; its second
@@ -2837,9 +2917,9 @@ attention layer of the carrier. The cells are `cell_perop_codec` of `_kv_codec_c
 `test_gpu_perop_kv_codec_k.das` and `test_gpu_perop_kv_codec_iq.das` run the tq4 and q8_0 cells at
 40 tokens on the other two weight formats - Qwen3-4B-Instruct Q4_K_M and Qwen2.5-1.5B-Instruct
 IQ3_XS - on the same skips and bars (the device's distance reads 0.28 and 0.80 of the CPU codec
-chain's on the 4B, 0.79 under q8_0 on the 1.5B), but for the 1.5B's tq4 cell: tq4 moves that
-carrier's CPU chain nine points a row, near the distance of rows one step off, so its bar is half
-the CPU codec chain's distance (the device reads 0.11 of it, the control 0.84).
+chain's on the 4B, 0.79 under q8_0 on the 1.5B); the 1.5B carries a Q/K/V bias, so its tq4 cell is
+the serving rule's: the ask serves at q8_0 on both chains and the cell holds the q8_0 bars (the
+device reads 0.82 of the CPU codec chain's distance).
 `test_gpu_moe_shexp.das` - stocked suite, `-jit` only; the shared expert's prefill on the device
 (Qwen1.5-MoE-A2.7B-Chat-Q4_K_M-local, the Q4_K_M mint of the Q8_0 carrier, `DASLLAMA_GPU=1`): the
 shexp triple as one region over every position of the routed experts' chain, gated by the tier's
@@ -3082,9 +3162,23 @@ listed file exists), the folder census (every test file sits in a `run.das` suit
 CPU-prefill tripwire the declared exemption; `run.das` carries no `[init]`), the area tables
 (every area file sits in the census, every census file has an area, every arm an area names
 exists, every image-suite arm is reachable from an area or listed as unclaimed), the pure
-planners behind an area run, the argument contracts, the change-to-area map behind `--changed`,
-the `--exclude` filter's semantics, and a dry run of the runner with a no-op child binary.
+planners behind an area run, the argument contracts, the area map, the reach plan behind
+`--changed` (a test file itself, a fixture the tests requiring it and no model-suite file, a leaf
+module its witness row, a core module the core set and its other areas whole, a benchmark the
+bench rows' files; every witness row and the core set census files, every row's module a file
+that reaches llm), the `--exclude` filter's semantics, the `--shard` partition (the shards of one list disjoint
+and whole, every refused form), the children's module-cache folder (keyed by the binary, the
+other binaries' folders removed on the runner's own binary alone, no folder for a binary that
+cannot be stat'd, the child command carrying it), and a dry run of the runner with a no-op
+child binary.
 Requires `run` by bare same-dir name.
+`test_pod_fleet.das` - model-free, pod-free: the pod fleet's planners (`../harness/pod_fleet.das`) -
+the `runpodctl pod create` argument list (the models volume and its data center, the GPU, the
+disk, the ssh port, the key in the boot's environment, the boot installing sshd, rsync, git and
+the Vulkan loader, `--wait` and JSON out), the ssh argument list (the pod's address and port,
+never prompting), the tree copy that leaves the caches out, the shard command (`--shard i/n`
+appended, `TMPDIR` and the runner's log under the run's folder on the volume, `RUN-EXIT` closing
+the log, detached so the ssh call returns), the status read over every shard, and the `~` path.
 `test_vk_spv_diff.das` - model-free: the SPIR-V dump differ (`../harness/vk_spv_diff.das`, the
 identity gate a kernel fold's "byte-identical" claim rests on) - its four bins over two in-memory
 dumps (a changed byte and a changed length both read as moved, name order), the verdict's refusal
@@ -4001,7 +4095,10 @@ same stories15M fixture, deliberately never calls `allow_cpu_prefill()` (which i
 cannot live in test_attn_span - that file arms it in `[init]`). Metal-capable builds only;
 plain dastest only.
 `test_vision_chat.das` - stocked suite; the image chat turn end to end, one pair per vision
-carrier plus the showcase: the 12B gemma4uv pair (the cats fixture, so `DASLLAMA_PARITY_FULL=1`),
+carrier plus the showcase (the 12B pairs and the Omni pair skip by name on a box whose RAM is
+short of their served planes - `box_ram_gb`, the container's limit where one caps the process -
+since a 12B Q4_K_M serves 45 GB at f32 on the CPU chain): the 12B gemma4uv pair (the cats fixture,
+so `DASLLAMA_PARITY_FULL=1`),
 the E2B gemma4v pair (E2B Q8 decoder + bf16 mmproj - small tier, runs without the flag), the
 E2B instruct-mode cell (the Q4_K_M decoder + the same mmproj, thinking off, the image on the
 first turn under the chat sampler preset at seed 1234: the turn answers with the cats in the

@@ -1,5 +1,6 @@
-// The single-query attention oracle the Metal and the Vulkan kernel cells share - one plain two-pass softmax per (query
-// row, head) over a key range, with the softcap and the attention sink in the forms the kernels take.
+// The single-query attention oracle the Metal, Vulkan and CUDA kernel cells share - one plain two-pass softmax per (query
+// row, head) over a key range, with the softcap and the attention sink in the forms the kernels take - and the flash tiles'
+// oracle over it on the kernel's f16 grid.
 
 options gen2
 options _dasllama_internal = true
@@ -45,6 +46,43 @@ def attn_heads_oracle(q : array<float>; qbase : int; kk : array<float>; kbase : 
         attn_row_oracle(q, qbase + hh * hs, kk, kbase, vv, vbase, kvd, hh, hs, kv_mul, cnt, scale, out, obase + hh * hs, kstart, cap, true, sinks[hh])
     }
 }
+
+//! the flash tiles' attention oracle on the kernel's f16 grid over `rows` query rows at window base `w0`: q pre-scaled then
+//! rounded, K/V rounded through the mirror, softmax in f32 over the keys to each row's own (the last `window` of them where it is
+//! nonzero), the scores under `cap` where it is nonzero; under `gated` each head's q row carries its gate half after it (a head
+//! stride of 2 `hs`) and the head's row is scaled by the sigmoid of that raw half; a non-empty `sinks` puts head hh's sink logit in
+//! its softmax
+def fa_oracle(qh, kh, vh : array<float>; rows, w0, nheads, hs, kv_mul, kvd : int; scale : float; window : int; gated : bool;
+              sinks : array<float>; cap : float = 0.0) : array<float> {
+    let qd = nheads * hs
+    let qhs = gated ? 2 * hs : hs
+    let qrow = nheads * qhs
+    let kpos = w0 + rows
+    var qh2 <- [for (i in range(rows * qrow)); float(float16(qh[i] * scale))]
+    var kh2 <- [for (i in range(kpos * kvd)); float(float16(kh[i]))]
+    var vh2 <- [for (i in range(kpos * kvd)); float(float16(vh[i]))]
+    var y_ref : array<float>
+    y_ref |> resize(rows * qd)
+    for (r in range(rows)) {
+        for (hh in range(nheads)) {
+            let cnt = w0 + r + 1
+            attn_row_oracle(qh2, r * qrow + hh * qhs, kh2, 0, vh2, 0, kvd, hh, hs, kv_mul, cnt, 1.0, y_ref, r * qd + hh * hs,
+                window > 0 && cnt > window ? cnt - window : 0, cap, !empty(sinks), empty(sinks) ? 0.0 : sinks[hh])
+            if (gated) {
+                for (i in range(hs)) {
+                    y_ref[r * qd + hh * hs + i] *= sigmoid_f32(qh[r * qrow + hh * qhs + hs + i])
+                }
+            }
+        }
+    }
+    delete qh2
+    delete kh2
+    delete vh2
+    return <- y_ref
+}
+
+//! the q halves of a [q | gate] panel whose heads sit `qhs` apart: the rows `fa_oracle` reads ungated
+def q_halves(qh : array<float>; rows, nheads, hs, qhs : int) : array<float> => <- [for (i in range(rows * nheads * hs)); qh[(i / hs) * qhs + i % hs]]
 
 //! one attention sink logit a head for a single query row: past the head's top scaled score over `keys` keys by 2.5 + 0.5 x the head,
 //! so the phantom key carries measurable mass over a flat key row

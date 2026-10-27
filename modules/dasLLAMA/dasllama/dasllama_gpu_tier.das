@@ -200,7 +200,6 @@ struct RdecLayerGeom {
     out_scale : float               //! the layer's output scale on its FFN residual step; 1.0 = none
     kv_shared : bool                //! the layer projects Q only and attends over a donor layer's K/V rows (`mir_base` is the donor's; gemma-4 E-series)
     attn_cap : float                //! the attention logit softcap on the scaled scores (gemma-2: 50); 0 = none
-    site_scale : float[7]           //! each site's per-tensor weight scale - q, k, v, o, gate, up, down - NVFP4's `.scale`, 1 where the plane carries none
     moe_g4 : bool                   //! the gemma-4 MoE layer: a parallel dense shared expert, the routed branch and the router each on their own norm of x
 }
 //! qd / kv_dim / head_size / hidden / rot are the layers' maxima; `mir_units` one K/V mirror slab's units a region (elements, or 32-element blocks under a block codec; the widest slab's, every slab the same stride), `n_slabs` the slabs a side, `cos_elems` a position's cos/sin
@@ -283,6 +282,23 @@ var g_rdec_upload_dn_ba = @@rdec_unset_upload_dn_ba
 var g_rdec_dn_own = @@rdec_unset_dn_own
 var g_rdec_dn_prefill_own = @@rdec_unset_dn_prefill_own
 var g_rdec_dn_installed = false
+var g_rdec_site_feeds = false
+
+//! Declare that the installed home feeds every site in its plane's own activation form (the CUDA chain); off, a layer whose q/k/v, gate/up or deltanet qkv/z planes mix forms declines
+def public install_moe_gpu_resident_site_feeds(on : bool) {
+    g_rdec_site_feeds = on
+}
+
+def public rdec_can_mix_site_forms() : bool => g_rdec_site_feeds
+
+var private g_rdec_kv_ring = true
+
+//! Declare whether the installed home rings a sliding layer's mirror rows; off, the plan seats every position's row whatever `DASLLAMA_GPU_KV_RING` asks
+def public install_moe_gpu_resident_kv_ring(on : bool) {
+    g_rdec_kv_ring = on
+}
+
+def public rdec_can_ring_kv() : bool => g_rdec_kv_ring
 
 [unused_argument(rows)]
 def private rdec_unset_upload_bias(rows : array<float>) {

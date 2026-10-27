@@ -41,6 +41,10 @@ last `with_cuda_context` call.** Driver objects and device memory are invisible 
 detector; the live-object counter in `das_cuda_boost` is the only witness.
 
 **A `[test]` that calls `with_cuda_context` calls `feint` - the dastest skip, never a failure -
-when `cuda_available()` or `cuda_nvrtc_available()` is false or the context handed to it is
-null.** The file compiles on every lane; only a box with an NVIDIA driver and NVRTC runs its GPU
-arms.
+when the box cannot run the test: `cuda_available()` or `cuda_nvrtc_available()` false, the
+context handed to it null, or the device's compute capability below what a kernel text the test
+compiles needs.** Every CI lane runs the file, and a lane whose GPU cannot run the text must not
+fail.
+
+**A diff that removes or weakens `test_cuda_no_include` (`test_cuda_emit.das`), the check that no
+emitted CUDA text carries an `#include`, is a defect.**

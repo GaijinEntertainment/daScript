@@ -12,6 +12,7 @@ require math   // tanh, exp: the activation oracles' closed forms
 require daslib/shader_lingua_franca
 require vulkan   // VkCommandBuffer: the cell harness's record block
 require daslib/linq   // count: the bucket bounds
+require daslib/math_boost   // round_up: a padded bucket's rows
 require dasllama/dasllama_kqformat
 require dasllama/dasllama_convert   // quantize_q8_0_into, quantize_q8_k_into: the requant oracle
 require dasllama/dasllama_math
@@ -1135,8 +1136,25 @@ def sched_shape(nk, ne, wt_gu, wt_dn : int; s_only : bool = false) : SchedShape 
     return s
 }
 
-//! expert e's bucket: its first row (the slots of the experts before it) and its row count
-def bucket_start(idx : array<uint>; e : int) : int => count(idx, $(r) => int(r) < e)
+//! expert e's bucket's first row: the slots of the experts before it, each expert's rows rounded up to `pad` (a padded
+//! schedule's `row_pad`; 1 = unpadded)
+def bucket_start(idx : array<uint>; e : int; pad : int = 1) : int {
+    var cnt : array<int>
+    cnt |> resize(e)
+    for (r in idx) {
+        if (int(r) < e) {
+            cnt[int(r)]++
+        }
+    }
+    var run = 0
+    for (c in cnt) {
+        run += round_up(c, pad)
+    }
+    delete cnt
+    return run
+}
+
+//! expert e's bucket's row count
 
 def bucket_rows(idx : array<uint>; e : int) : int => count(idx, $(r) => int(r) == e)
 
@@ -1168,20 +1186,14 @@ def oracle_piece(var s1, s3, s2 : array<uint>; bases : uint[6]; e : int; ri : ui
 //! expert order (empty pieces skipped), the two dispatches' per-wg maps, the sentinel tails past the
 //! real workgroup counts, and inv in slot order
 def sched_oracle(idx : array<uint>; ne, wt_gu, wt_dn : int; sh : SchedShape; bases : uint[6];
-                 var inv : array<uint>; var s1, s3, s2 : array<uint>; s_only : bool = false) {
+                 var inv : array<uint>; var s1, s3, s2 : array<uint>; s_only : bool = false; row_pad : int = 0; m_only : bool = false) {
     let nk = length(idx)
     var cnt : array<int>
     cnt |> resize(ne)
     for (r in range(nk)) {
         cnt[int(idx[r])]++
     }
-    var start : array<int>
-    start |> resize(ne)
-    var run = 0
-    for (e in range(ne)) {
-        start[e] = run
-        run += cnt[e]
-    }
+    var start <- [for (e in range(ne)); bucket_start(idx, e, max(row_pad, 1))]   //! `row_pad`: every bucket's rows start at a multiple of it
     inv |> resize(nk)
     var cursor := start
     for (r in range(nk)) {
@@ -1211,7 +1223,7 @@ def sched_oracle(idx : array<uint>; ne, wt_gu, wt_dn : int; sh : SchedShape; bas
         //! the ladder spelled out (the shipped rule is the thing under test): a bucket within the s column
         //! takes it whole; past it, whole m columns, and a remainder past the s column joins the last as a partial
         let c = cnt[e]
-        let mrows = (s_only || c <= s_col) ? 0 : ((c % m_col) > s_col ? c : (c / m_col) * m_col)
+        let mrows = s_only ? 0 : (m_only ? c : (c <= s_col ? 0 : ((c % m_col) > s_col ? c : (c / m_col) * m_col)))   //! `m_only`: every row on the m column
         let srows = c - mrows
         if (mrows > 0) {
             let rt = (mrows + m_col - 1) / m_col

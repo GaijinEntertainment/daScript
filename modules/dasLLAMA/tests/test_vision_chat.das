@@ -13,6 +13,7 @@ require daslib/strings_boost
 require strings
 require math
 require _model_tier   // models_dir() + model_available() gate
+require ../performance/box_ident.das   // box_ram_gb - the room a large decoder's served planes need
 require ?das_metal dasllama/dasllama_metal_tower   // the tower engage/knob legs (the facade registers the hook)
 
 // The image chat turn: the prompt stream shape around the soft-token splice (tier 2) and the
@@ -54,6 +55,17 @@ let Q_IMAGE_CLOSE = 151653l
 let Q_CATS_ROWS = 300l
 let HOST_CTX_4B = 4096l   //! every host session's K/V on the 4B decoder: its file's 262144 positions commit 38 GB a flat session, and an image turn here holds under a thousand
 
+//! true where the box holds `need_gb` of RAM for the cell's decoder served (a 12B Q4_K_M serves its planes at f32 on the
+//! CPU chain: 45 GB off a 7 GB file, past a 62 GB pod); else the cell has registered its skip naming both
+def private room_for(tt : T?; what : string; need_gb : int) : bool {
+    let gb = box_ram_gb()
+    if (gb > 0 && gb < need_gb) {
+        tt |> skip("{what} needs about {need_gb} GB of RAM served; this box holds {gb} GB")
+        return false
+    }
+    return true
+}
+
 def load_dec_4b() : Model {
     var m <- load_model_(path_join(models_dir(), DEC_4B), QuantMode.q8)
     m.config.seq_len = min(m.config.seq_len, HOST_CTX_4B)
@@ -73,6 +85,7 @@ def test_vision_chat(t : T?) {   // nolint:STYLE038 — one sequential turn stor
             tt |> skip("{CATS} not present - fetch it into the models dir (gemma4-vision-oracle/mint.sh documents the URL)")
             return
         }
+        return if (!room_for(tt, DEC, 80))   //! 45 GB served at f32 beside the 7 GB file and the tower: a 62 GB pod dies
         let img <- load_image_rgb(cats)
         tt |> equal(img.width, 640, "cats fixture width")
         tt |> equal(img.height, 480, "cats fixture height")
@@ -323,6 +336,7 @@ def test_vision_chat_gemma3_12b(t : T?) {
             tt |> skip("{CATS} not present - fetch it into the models dir (gemma4-vision-oracle/mint.sh documents the URL)")
             return
         }
+        return if (!room_for(tt, DEC_G3_12B, 80))
         let img <- load_image_rgb(cats)
         var m <- load_model_(dec)   // the Q4_K_M file picks its serving mode like the gemma-4 12B turn
         allow_cpu_prefill()
@@ -364,6 +378,7 @@ def test_vision_chat_omni(t : T?) {
             tt |> skip("{CATS} not present - fetch it into the models dir (gemma4-vision-oracle/mint.sh documents the URL)")
             return
         }
+        return if (!room_for(tt, DEC_OMNI, 56))
         let img <- load_image_rgb(cats)
         var m <- load_model_(dec, QuantMode.q8)
         tt |> success(m.config.rope_sections.x + m.config.rope_sections.y + m.config.rope_sections.z > 0,

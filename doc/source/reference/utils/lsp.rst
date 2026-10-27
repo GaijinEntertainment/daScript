@@ -28,17 +28,11 @@ tree-sitter, no MCP server.
 Quick start
 ===========
 
-Claude Code sessions started at the daslang repository root (or at an
-installed SDK root) load the server automatically --- the checked-in
-``.claude/skills/daslang-lsp/.claude-plugin/plugin.json`` manifest
-registers it on workspace trust.  From any other directory, wire it in
-explicitly with::
+The server is opt-in --- every validate spawns a compiler child after an
+edit, which slows a session that edits large files --- so no checked-in
+manifest loads it.  Wire it in at launch when you want it::
 
    claude --plugin-dir /abs/path/to/daScript/utils/lsp/plugin
-
-(The explicit form also takes precedence over the checked-in manifest
-when both are present, which is what you want while developing the
-server itself.)
 
 Diagnostics then attach automatically to the next tool result after any
 edit of a ``.das`` file, and the LSP tool exposes definition,

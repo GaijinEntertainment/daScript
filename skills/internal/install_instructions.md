@@ -18,7 +18,7 @@ heads.
 | `.claude/agents/dragon.md` | `.claude/agents/` | The rule-document auditor |
 | `REVIEW_COMMON.md` | `REVIEW_COMMON.md` (root) | The review-checklist constitution `review_md.md` routes to |
 | `GETTING_STARTED.md` | `GETTING_STARTED.md` (root) | First-run walkthrough |
-| `utils/mcp/`, `utils/lsp/` | same paths | MCP / LSP servers (the `.claude/skills/daslang-lsp` manifest auto-loads the LSP) |
+| `utils/mcp/`, `utils/lsp/` | same paths | MCP / LSP servers (the LSP is opt-in: `--plugin-dir utils/lsp/plugin`) |
 
 The install rules live in the root `CMakeLists.txt` (search for "the FOLDER is the
 shipping decision"); `ci/check_shipped_skills.py <bundle>` is the per-PR content gate,

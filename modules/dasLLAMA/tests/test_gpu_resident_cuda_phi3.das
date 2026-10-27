@@ -4,11 +4,10 @@ options persistent_heap
 options _dasllama_internal = true
 
 require dastest/testing_boost public
-require dasllama/dasllama_transformer   // nolint:STYLE029 — the umbrella's [init] registrations arm the phi3 arch and the CUDA home
+require dasllama/dasllama_transformer   // nolint:STYLE030 — the umbrella's [init] registrations arm the phi3 arch and the CUDA home
 require dasllama/dasllama_common
 require daslib/jobque_boost
 require dasllama/dasllama_gpu_tier
-require dasllama/dasllama_env
 require dasllama/dasllama_gpu_resident
 require _model_tier
 require _resident_feed
@@ -20,14 +19,6 @@ require _cuda_feed
 // file at two windows alone, the Q8_0 file at 40 tokens (one window) and at two windows. Every cell skips off the JIT,
 // without DASLLAMA_CUDA=1, without DASLLAMA_GPU=1 on a device the driver serves, without the file under models_dir(), or
 // where the prompt window is not PF_WINDOW_ROWS rows.
-
-[init]
-def private allow_cpu_prefill_intent() {
-    allow_cpu_prefill()   // the control arm (the model off the device) prefills on the CPU
-    if (pf_window_rows_pin() <= 0l) {   // the cells size their prompts against PF_WINDOW_ROWS; the plan's own pick would run the two-window prompt as one
-        set_pf_window_rows_pin(PF_WINDOW_ROWS)
-    }
-}
 
 let private FILE_35 = "Phi-3.5-mini-instruct-Q4_K_M.gguf"   //! head 96: the h96 flash tile, the K-quant planes
 let private FILE_35_Q8 = "Phi-3.5-mini-instruct-Q8_0.gguf"   //! the same model on the q8 decode chain

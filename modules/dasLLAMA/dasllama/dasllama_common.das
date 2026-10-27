@@ -5346,14 +5346,16 @@ def kv_ring_rows(c : Config; l, ctx, slack : int64) : int64 {
 }
 
 //! The announce of a sliding-window model's K/V mirror on GPU home `home`: `ringed` the rings' line, else - the pin or the knob
-//! turned them off - the flat slab's; a model with no sliding layer says nothing
-def kv_ring_announce(c : Config; home, ringed : string) {
+//! turned them off - the flat slab's; a home that never rings passes its own reason as `flat_why`; a model with no sliding layer says nothing
+def kv_ring_announce(c : Config; home, ringed : string; flat_why : string = "") {
     var sliding = false
     for (l in range64(c.n_layers)) {
         sliding ||= layer_is_sliding(c, l)
     }
     return if (!sliding)
-    if (gpu_kv_ring_on()) {
+    if (!empty(flat_why)) {
+        to_log(LOG_INFO, "dasLLAMA: {home} - the sliding layers' K/V rows keep every position's row, no ring: {flat_why}\n")
+    } elif (gpu_kv_ring_on()) {
         to_log(LOG_INFO, "dasLLAMA: {home} - the sliding layers' K/V rows ride rings of {ringed} (set_gpu_kv_ring, DASLLAMA_GPU_KV_RING=0 keeps every row)\n")
     } else {
         to_log(LOG_WARNING, "dasLLAMA: {home} - the sliding layers' K/V rows keep every position's row, no ring, as asked (set_gpu_kv_ring, DASLLAMA_GPU_KV_RING=0)\n")

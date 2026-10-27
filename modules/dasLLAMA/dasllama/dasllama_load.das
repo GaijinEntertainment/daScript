@@ -1741,23 +1741,32 @@ def private refuse_site_scale(m : GGUFMeta; name : string) {
     }
 }
 
+//! a site the layout did not place (a routed layer with no dense FFN, a shared-KV layer's k and v) carries no scale to note
+def private note_plane_scale(var t : Model; m : GGUFMeta; bytes : array<uint8> | #; name : string; fmts : array<KqFmt>; offs : array<int64>; l : int64) {
+    return if (l >= long_length(offs) || offs[l] < 0l)
+    note_site_scale(t, m, bytes, name, fmt_at(fmts, l), offs[l])
+}
+
 [arch(at = "../ARCHITECTURE_ENGINE_FORMATS_NV4.md#nv4-site-scale")]
 def private detect_site_scales(var t : Model; m : GGUFMeta; bytes : array<uint8> | #) {
     t.site_scale |> clear()
     let layers = t.config.n_layers + t.config.n_layer_nextn
     for (l in range64(layers)) {
-        let qkv = t.config.fused_qkv
-        if (l < long_length(t.wq_offs)) {
-            note_site_scale(t, m, bytes, qkv ? "blk.{l}.attn_qkv.weight" : "blk.{l}.attn_q.weight", fmt_at(t.wq_fmt, l), t.wq_offs[l])
-            note_site_scale(t, m, bytes, qkv ? "blk.{l}.attn_qkv.weight" : "blk.{l}.attn_k.weight", fmt_at(t.wk_fmt, l), t.wk_offs[l])
-            note_site_scale(t, m, bytes, qkv ? "blk.{l}.attn_qkv.weight" : "blk.{l}.attn_v.weight", fmt_at(t.wv_fmt, l), t.wv_offs[l])
-            note_site_scale(t, m, bytes, "blk.{l}.attn_output.weight", fmt_at(t.wo_fmt, l), t.wo_offs[l])
+        if (t.config.fused_qkv) {
+            note_plane_scale(t, m, bytes, "blk.{l}.attn_qkv.weight", t.wq_fmt, t.wq_offs, l)
+            note_plane_scale(t, m, bytes, "blk.{l}.attn_qkv.weight", t.wk_fmt, t.wk_offs, l)
+            note_plane_scale(t, m, bytes, "blk.{l}.attn_qkv.weight", t.wv_fmt, t.wv_offs, l)
+            note_plane_scale(t, m, bytes, "blk.{l}.ffn_up.weight", t.w1_fmt, t.w1_offs, l)
+            note_plane_scale(t, m, bytes, "blk.{l}.ffn_up.weight", t.w3_fmt, t.w3_offs, l)
+        } else {
+            note_plane_scale(t, m, bytes, "blk.{l}.attn_q.weight", t.wq_fmt, t.wq_offs, l)
+            note_plane_scale(t, m, bytes, "blk.{l}.attn_k.weight", t.wk_fmt, t.wk_offs, l)
+            note_plane_scale(t, m, bytes, "blk.{l}.attn_v.weight", t.wv_fmt, t.wv_offs, l)
+            note_plane_scale(t, m, bytes, "blk.{l}.ffn_gate.weight", t.w1_fmt, t.w1_offs, l)
+            note_plane_scale(t, m, bytes, "blk.{l}.ffn_up.weight", t.w3_fmt, t.w3_offs, l)
         }
-        if (l < long_length(t.w1_offs)) {   //! a pure-MoE file carries no dense FFN planes
-            note_site_scale(t, m, bytes, qkv ? "blk.{l}.ffn_up.weight" : "blk.{l}.ffn_gate.weight", fmt_at(t.w1_fmt, l), t.w1_offs[l])
-            note_site_scale(t, m, bytes, "blk.{l}.ffn_up.weight", fmt_at(t.w3_fmt, l), t.w3_offs[l])
-            note_site_scale(t, m, bytes, "blk.{l}.ffn_down.weight", fmt_at(t.w2_fmt, l), t.w2_offs[l])
-        }
+        note_plane_scale(t, m, bytes, "blk.{l}.attn_output.weight", t.wo_fmt, t.wo_offs, l)
+        note_plane_scale(t, m, bytes, "blk.{l}.ffn_down.weight", t.w2_fmt, t.w2_offs, l)
         if (layer_is_recurrent(t.config, l) && l < long_length(t.dnqkv_offs)) {
             note_site_scale(t, m, bytes, "blk.{l}.attn_qkv.weight", fmt_at(t.dnqkv_fmt, l), t.dnqkv_offs[l])
             note_site_scale(t, m, bytes, "blk.{l}.attn_gate.weight", fmt_at(t.dngate_fmt, l), t.dngate_offs[l])
@@ -1772,6 +1781,8 @@ def private detect_site_scales(var t : Model; m : GGUFMeta; bytes : array<uint8>
             }
         }
         for (stem in ["ffn_gate_exps", "ffn_up_exps", "ffn_down_exps", "ffn_gate_up_exps", "ffn_gate_shexp", "ffn_up_shexp", "ffn_down_shexp", "nextn.eh_proj"]) {
+            //! gemma4's `ffn_down_exps.scale` is the routed block's per-expert down scale, not a site scale
+            if (stem == "ffn_down_exps" && t.config.moe_dense_shexp) continue
             refuse_site_scale(m, "blk.{l}.{stem}.weight")
         }
     }

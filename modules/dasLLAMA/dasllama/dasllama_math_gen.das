@@ -3930,7 +3930,7 @@ def kq_registries(_f : KqTag_iq3s4) : KqRegistries {
 //! no tile registry: a declined tile would run the reference body over planes repacked at the layout companion's mr (the gate reads maxdiff nan)
 def kq_registries(_f : KqTag_nv4) : KqRegistries {
     static_if (typeinfo module_exists(llvm_tune)) {
-        return <- KqRegistries(tile4 <- nv4q8_tile4_gen_variants(), gemv <- nv4q8_gemv_gen_variants(),
+        return <- KqRegistries(tile <- nv4q8_tile_gen_variants(), tile4 <- nv4q8_tile4_gen_variants(), gemv <- nv4q8_gemv_gen_variants(),
             layout <- nv4q8_layout_gen_variants(), tileform <- nv4q8_tileform_gen_variants(), amx_cfg <- nv4q8_amx_cfg_gen_variants(),
             witness <- nv4q8_witness_gen_variants(), panel <- nv4q8_panel_gen_variants())
     } else {

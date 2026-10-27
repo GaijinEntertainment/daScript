@@ -92,9 +92,10 @@ CPU.
 CUDA decode or prefill runs of the whole-model driver or the per-op tier logs no serving-tier line
 for the changed path is a defect.**
 
-**A diff that cites as parity evidence, or as driver-against-itself evidence, Vulkan or CUDA runs
-none of which armed a mirror codec the changed path serves - the storage form (f16, f32, q8_0 or
-tq4) of the K/V mirror, the device copy of the CPU's K/V cache - is a defect.**
+**A diff that changes a K/V mirror codec's code - its store, its reader, or tq4's pass that undoes
+the rotation of the attention row; a codec is the storage form (f16, f32, q8_0 or tq4) of the K/V
+mirror, the device copy of the CPU's K/V cache - and cites as parity or driver-against-itself
+evidence Vulkan or CUDA runs none of which armed that codec, is a defect.**
 `set_gpu_kv_dtype`, the server's `--kv-dtype` and `DASLLAMA_GPU_KV` request f16, q8_0 or tq4, and
 an f32 request through them arms f16; `DASLLAMA_VK_KV32=1` arms f32 over all three; f16 is the
 default.

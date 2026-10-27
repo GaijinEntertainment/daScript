@@ -15,7 +15,7 @@ require dasllama/dasllama_cuda_decode
 // The CUDA home's registration: under DASLLAMA_CUDA it takes the GPU tier's seats the Vulkan home otherwise fills - the
 // "cuda" kernel backend (no GEMV core: the resident driver is its only dispatch), the arm, the budget and report hooks,
 // and the resident seats dasllama_cuda_decode serves. The per-op MoE tier's seats are stubs that decline or panic by
-// name: the dense slice homes whole models, not expert layers.
+// name: the home serves whole models through the resident driver alone, never a per-op block.
 
 var private g_cud_arm_said = -1
 
@@ -36,7 +36,7 @@ def cuda_moe_gpu_arm : bool {
         install_moe_gpu_tier(@@cud_moe_ffn, @@cud_moe_upload_stack, @@cud_moe_cls, @@cud_moe_dense, @@cud_moe_drop_stacks, @@cud_moe_dn, @@cud_moe_attn)
         install_moe_gpu_os_memory(@@cud_os_memory_now)
     }
-    arm_say(g_cud_arm_said, 1, "GPU tier armed - cuda ({g_cud.name}), the whole-model driver's dense slice")
+    arm_say(g_cud_arm_said, 1, "GPU tier armed - cuda ({g_cud.name}), the whole-model driver")
     return true
 }
 
@@ -60,7 +60,7 @@ def private cuda_repack_noop(var wp : int8?; var sp : float?; n, d : int64) {}
 
 [unused_argument(goutp, offs1, offs3, offs2, nregions, xqp, xsp, wp, invp, n, nfe, nrows, npos, f1, f3, f2, is_gelu)]
 def private cud_moe_ffn(var goutp : float?; offs1 : int64 const?; offs3 : int64 const?; offs2 : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; wp : float const?; invp : uint const?; n, nfe, nrows, npos : int64; f1, f3, f2 : int; is_gelu : bool) {
-    panic("dasLLAMA cuda tier: the per-op MoE FFN is not served - the dense slice homes whole models")
+    panic("dasLLAMA cuda tier: the per-op MoE FFN is not served - the whole-model driver takes every call of a model it homes")
 }
 
 [unused_argument(wq, ws, woff, n, rows, fmt, stream)]
@@ -68,12 +68,12 @@ def private cud_moe_upload_stack(wq : uint8 const?; ws : uint8 const?; woff : in
 
 [unused_argument(yp, woff, xqp, xsp, n, d, fmt)]
 def private cud_moe_cls(var yp : float?; woff : int64; xqp : int8 const?; xsp : float const?; n, d : int64; fmt : int) {
-    panic("dasLLAMA cuda tier: the per-op classifier is not served - the dense slice homes whole models")
+    panic("dasLLAMA cuda tier: the per-op classifier is not served - the whole-model driver takes every call of a model it homes")
 }
 
 [unused_argument(yp, woff, xqp, xsp, n, d, nrows, fmt)]
 def private cud_moe_dense(var yp : float?; woff : int64; xqp : int8 const?; xsp : float const?; n, d, nrows : int64; fmt : int) {
-    panic("dasLLAMA cuda tier: the per-op dense GEMM is not served - the dense slice homes whole models")
+    panic("dasLLAMA cuda tier: the per-op dense GEMM is not served - the whole-model driver takes every call of a model it homes")
 }
 
 [unused_argument(n, stream)]
@@ -85,7 +85,7 @@ def private cud_moe_dn(var yp : float?; woq, woz, woo : int64; fq, fz, fo : int;
                        convw : float const?; wnormp : float const?; ap : float const?; dtp : float const?;
                        var stp : float?; var tailp : float?; histp : float const?;
                        npos, dim, cd, kd, di, nvh, nkh, ds, dconv : int64; eps : float) {
-    panic("dasLLAMA cuda tier: the per-op deltanet block is not served - the dense slice homes whole models")
+    panic("dasLLAMA cuda tier: the per-op deltanet block is not served - the whole-model driver takes every call of a model it homes")
 }
 
 [unused_argument(yp, kp, vp, woq, wok, wov, woo, fq, fk, fv, fo, xqp, xsp, rmsqp, rmskp, bqp, bkp, bvp, cosp, sinp, npos, dim, qd, kv_dim, hs, rot, n_heads, scale, eps, gated, qknorm)]
@@ -97,7 +97,7 @@ def private cud_moe_attn(var yp : float?; var kp : float?; var vp : float?;
                          cosp : float const?; sinp : float const?;
                          npos, dim, qd, kv_dim, hs, rot, n_heads : int64;
                          scale : float; eps : float; gated : bool; qknorm : bool) {
-    panic("dasLLAMA cuda tier: the per-op attention block is not served - the dense slice homes whole models")
+    panic("dasLLAMA cuda tier: the per-op attention block is not served - the whole-model driver takes every call of a model it homes")
 }
 
 let private CUD_VRAM_HEADROOM = 512l << 20l   //! the bytes the budget leaves the driver, the kernels' modules and the display
@@ -149,6 +149,13 @@ def dasllama_math_cuda_register() {
         @@cud_rdec_kv_sync, @@cud_rdec_kv_read)
     install_moe_gpu_resident_regions(@@cud_rdec_select_region)
     install_moe_gpu_resident_batch(@@cud_rdec_token_n, @@cud_rdec_token_n_rows)
+    install_moe_gpu_resident_dn(@@cud_rdec_set_dn_layer, @@cud_rdec_upload_dn_ba, @@cud_rdec_dn_own, @@cud_rdec_prefill_dn_own)
+    install_moe_gpu_resident_site_feeds(true)
+    install_moe_gpu_resident_moe(@@cud_rdec_moe_ok, @@cud_rdec_prepare_moe, @@cud_rdec_set_moe_layer, @@cud_rdec_set_moe_experts)
+    install_moe_gpu_resident_bias(@@cud_rdec_upload_bias)
+    install_moe_gpu_resident_sinks(@@cud_rdec_upload_sinks)
+    install_moe_gpu_resident_kv_ring(false)
+    set_moe_gpu_dn_state_hooks(@@cud_dn_step_flush, @@cud_dn_step_invalidate, @@cud_dn_step_release)
     install_rdec_prefill_segs(@@cud_rdec_prefill_segs)
     install_rdec_prefill_caps(@@cud_rdec_prefill_caps)
     set_moe_gpu_drop_model_hook(@@cud_drop_model)

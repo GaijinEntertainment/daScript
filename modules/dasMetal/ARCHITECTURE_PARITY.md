@@ -80,7 +80,7 @@ annotation carries `precise=`, which compiles that kernel without it; `textureGr
 the same bindings the other two lenses read. Its second vocabulary tier, `cuda_intrinsics`
 (`modules/dasCUDA/ARCHITECTURE_EMIT.md#cuda-kernel-vocabulary-tiers`: the `cp.async` copies,
 `ldmatrix`, the block-scale fixup `mma_scale_acc`, `bar_sync`, `byte_perm`, the clock and inline
-PTX, and the FP4 tensor rung - the e2m1 fragments, `mma_block_scaled`, `mma_scale_cols`,
+PTX, and the FP4 tensor rung - the e2m1 fragments, `mma_block_scaled`, `mma_block_scaled_mx`, `mma_scale_cols`,
 `cvt_e2m1x2`, `cvt_ue4m3`, the `__DAS_ARCH_A__` arch suffix a text that uses them takes), is
 CUDA-only by construction - every declaration of the module is a member, a new one included - a
 body that calls one is a CUDA-only kernel, and the dasLLAMA bodies that do (the codebook word

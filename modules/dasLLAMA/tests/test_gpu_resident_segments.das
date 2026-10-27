@@ -432,11 +432,11 @@ def test_gpu_resident_segments_llama_1b_k(t : T?) {
 
 //! the segmented window on a recurrent model: each segment's recurrent rows conv and scan over its own region's slot, a tail
 //! shorter than the conv taps among them; a NextN carrier's carry lands a row a segment, a routed model routes every row
-//! the CUDA home serves the dense slice alone: under its ask a recurrent or an E-series carrier skips, since the whole-model
+//! the CUDA home declines an E-series carrier (the per-layer embeddings), so under its ask that cell skips: the whole-model
 //! driver these cells assert armed is that home
-def private dense_home_only(t : T?) : bool {
+def private cuda_declines_eseries(t : T?) : bool {
     if (gpu_want_cuda()) {
-        t |> skip("the CUDA home serves the dense slice alone - this carrier's segmented window is the Vulkan home's")
+        t |> skip("the CUDA home declines the E-series - this carrier's segmented window is the Vulkan home's")
         return true
     }
     return false
@@ -522,7 +522,7 @@ def private captures_cell(t : T?; tr : Model) {
 
 def private recurrent_segments_cells(t : T?; file : string) {
     let path = path_join(models_dir(), file)
-    return if (dense_home_only(t) || !resident_ready(t, path))
+    return if (!resident_ready(t, path))
     var tr <- load_resident(path, 2l)
     return if (!resident_admitted(t, "the whole-model driver armed on {file} (the load log names any decline)", ""))
     t |> success(tr.config.recr_mask != 0ul, "the file is a recurrent hybrid")
@@ -534,7 +534,9 @@ def private recurrent_segments_cells(t : T?; file : string) {
         segments_cell(t, tr)
         tails_as_segments(t, tr, 2l, TAIL_B, "a tail under the conv taps")   //! the ring's leading rows off the history segment A continues
         tails_as_segments(t, tr, LONG_TAIL, LONG_TAIL, "tails past one window")
-        captures_cell(t, tr)
+        if (!gpu_want_cuda()) {   //! the CUDA home installs no snapshot seats, so a prefill asks no checkpoint captures of it
+            captures_cell(t, tr)
+        }
     }
     g_seg_bar_rel = SPLIT_BAR_REL
     set_resident_prefill_allowed(allowed)
@@ -565,7 +567,7 @@ def test_gpu_resident_segments_hybrid_moe(t : T?) {
 def test_gpu_resident_segments_gemma4_e2b(t : T?) {
     let file = "gemma-4-E2B-it-Q8_0.gguf"
     let path = path_join(models_dir(), file)
-    return if (!family_on(t, "gemma4e") || dense_home_only(t) || !resident_ready(t, path))
+    return if (!family_on(t, "gemma4e") || cuda_declines_eseries(t) || !resident_ready(t, path))
     with_gpu_resident_embed(1) {   //! the segmented window reads the side rows' ids: the load gathers the token table on the device
         var tr <- load_resident(path, 2l)
         if (resident_admitted(t, "the whole-model driver armed on {file} (the load log names any decline)", "")) {

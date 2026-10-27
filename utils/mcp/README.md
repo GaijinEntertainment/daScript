@@ -200,7 +200,8 @@ daslang                 utils/mcp/setup.das -- --root <worktree-abs-path>   # wh
 grammar), copies the platform `sgconfig.yml` template, and writes/merges
 `.mcp.json` with the `daslang` server entry and the `daslang-dap` entry (the
 DAP bridge, `utils/dap/main.das`, under the same front). The LSP needs no
-entry: its plugin manifest is checked in. It adds no new secrets, and
+entry: a session that wants it registers the plugin with
+`claude --plugin-dir utils/lsp/plugin`. It adds no new secrets, and
 preserves any existing server entries (e.g. `github`, including their env
 blocks) as-is. Pass `--no-build` to only wire the
 config to an already-built binary. On Windows it also points the build at a

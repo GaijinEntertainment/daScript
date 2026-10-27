@@ -411,8 +411,8 @@ def main() : int {
     print("Claude Code spawns the watchdog's stdio front, which spawns the server on the first tool call\n")
     print("and respawns it after a kill or a rebuild; no persistent process to keep running.\n")
     print("The DAP bridge (daslang-dap) is the same front over utils/dap/main.das.\n")
-    print("The daslang LSP plugin (.claude/skills/daslang-lsp, checked in) also loads automatically\n")
-    print("when the session starts at the worktree root — it is the watchdog exe built above.\n")
+    print("The daslang LSP (the watchdog exe built above, --lsp) is opt-in:\n")
+    print("  claude --plugin-dir {root}/utils/lsp/plugin\n")
     print("NOTE: the parse-aware tools (grep_usage/outline/cpp_*) also need the ast-grep `sg` CLI on PATH.\n")
     return 0
 }

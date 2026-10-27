@@ -128,9 +128,9 @@ compiler and lint report after every edit with no explicit tool call - plus
 definition / references / hover / document & workspace symbols / call
 hierarchy / go-to-implementation. Requires `python3` on `PATH`.
 
-Claude Code sessions started at the SDK root load it automatically (the
-shipped `.claude/skills/daslang-lsp/` plugin manifest). From anywhere else,
-register it explicitly:
+It is opt-in: every validate spawns a compiler child after an edit, which
+slows a session that edits large files. Register it explicitly when you
+want it:
 
 ```sh
 claude --plugin-dir <sdk-root>/utils/lsp/plugin

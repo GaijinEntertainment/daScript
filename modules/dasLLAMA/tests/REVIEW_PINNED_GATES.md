@@ -11,8 +11,11 @@ function and pins every cell that function runs. The pinned set, one entry a lin
 must keep holding:
 
 - `test_run_suites.das` must hold the per-PR split, the folder census, the area tables, the
-  `--exclude` filter, and the `options persistent_heap` line in every test file `run.das`'s
-  `stocked` suite lists.
+  `--exclude` and `--only` filters, the `--shard` partition, the reach plan behind `--changed` -
+  which test files each kind of changed path runs, every `MODULE_WITNESSES` row and
+  `LLM_CORE_WITNESSES` naming only census files, and every witness row's module existing with a
+  `MODULE_AREAS` row that holds `llm` -, the children's module-cache folder, and the
+  `options persistent_heap` line in every test file `run.das`'s `stocked` suite lists.
 - `test_program_roots.das` must hold the `ROOT_DIRS` sweep, `options stack = 524288` and the
   prefill intent.
 - `test_env_registry.das` must hold the `../ENVIRONMENT.md` knob contract.

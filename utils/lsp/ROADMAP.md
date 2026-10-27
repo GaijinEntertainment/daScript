@@ -41,10 +41,12 @@ one compile serves a burst (the das side never needs cancellation).
 ## Registration
 
 Claude Code has **no plugin-less LSP path** (no root `.lsp.json`, no settings key -
-unlike `.mcp.json`). The vehicle is one checked-in manifest:
+unlike `.mcp.json`). The vehicle is one manifest, registered by the session that wants
+the server (`claude --plugin-dir utils/lsp/plugin`; nothing checked in auto-loads it,
+since a loaded server spawns a compiler child on every `.das` edit):
 
 ```
-.claude/skills/daslang-lsp/.claude-plugin/plugin.json
+utils/lsp/plugin/.claude-plugin/plugin.json
 ```
 
 ```json
@@ -277,9 +279,9 @@ sessions first, then develop the new ops with live diagnostics on.
 
 PR for the whole branch AFTER wave 4 (single preflight + CI round).
 
-#### Session adoption - PROVEN (2026-07-02, CC v2.1.198)
+#### Session adoption - PROVEN (2026-07-02, CC v2.1.198); the checked-in manifest since removed, the plugin opt-in by `--plugin-dir`
 
-- Vehicle: `.claude/skills/daslang-lsp/.claude-plugin/plugin.json`, committed -
+- Vehicle (then): `.claude/skills/daslang-lsp/.claude-plugin/plugin.json`, committed -
   the documented "skills-directory plugin" path (loads as `daslang-lsp@skills-dir`
   on workspace trust). Headless probe from the repo root with NO `--plugin-dir`
   got the exact 30341 diagnostic end-to-end; supervisor log shows one startup

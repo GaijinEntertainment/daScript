@@ -169,6 +169,7 @@ def test_areas_for_path(t : T?) {
     t |> equal(join(areas_for_path("modules/dasLLAMA/performance/model_specs.das"), ","), "infra", "the performance tree reaches infra")
     t |> equal(join(areas_for_path("modules/dasLLAMA/tests/REVIEW.md"), ","), "infra", "a document under tests/ reaches infra, not a model suite")
     t |> equal(join(areas_for_path("modules/dasLLAMA/tests/run.das"), ","), "infra", "the runner itself reaches infra (its own tests live there)")
+    t |> equal(join(areas_for_path("modules/dasLLAMA/REVIEW.das"), ","), "infra", "a folder's lint gate reaches infra")
     t |> equal(join(areas_for_path("modules/dasLLAMA/models/silero_vad.bin"), ","), "audio", "the checked-in VAD weights reach audio")
     t |> equal(join(areas_for_path("modules\\dasLLAMA\\dasllama\\dasllama_tts.das"), ","), "tts", "a backslash path maps the same")
     t |> equal(length(areas_for_path("src/ast/ast_parse.cpp")), 0, "a path outside the module reaches nothing")
@@ -308,4 +309,141 @@ def test_exclude_filter(t : T?) {
     t |> equal(two.kept[0], files[1], "the survivor is the unmatched file")
     let dir <- exclude_files(files, "dasLLAMA")
     t |> equal(length(dir.kept), 3, "a token matches the base name, not the directory")
+}
+
+[test]
+def test_shard_filter(t : T?) {
+    let files <- [for (k in range(7)); "modules/dasLLAMA/tests/test_{k}.das"]
+    let whole <- shard_files(files, "")
+    t |> equal(length(whole.kept), 7, "no --shard keeps every file")
+    t |> success(empty(whole.why), "and refuses nothing")
+    let one <- shard_files(files, "1/1")
+    t |> equal(length(one.kept), 7, "1/1 is the whole run")
+    var seen : table<string>
+    for (k in range(3)) {
+        let part <- shard_files(files, "{k + 1}/3")
+        t |> success(empty(part.why), "{k + 1}/3 parses")
+        t |> success(length(part.kept) == (k == 0 ? 3 : 2), "{k + 1}/3 holds every third file from its own: {length(part.kept)}")
+        for (f in part.kept) {
+            t |> success(!key_exists(seen, f), "{f} sits in one shard alone")
+            seen |> insert(f)
+        }
+    }
+    t |> equal(length(seen), 7, "the three shards cover the run once")
+    let second <- shard_files(files, "2/3")
+    t |> equal(second.kept[0], files[1], "shard i starts at the i-th file")
+    t |> equal(second.kept[1], files[4], "and steps by n")
+    for (bad in ["0/2", "3/2", "2/0", "a/b", "1", "1/2/3", "01/2", " 1/2"]) {
+        let r <- shard_files(files, bad)
+        t |> success(!empty(r.why) && empty(r.kept), "'{bad}' is refused: {r.why}")
+    }
+    return if (get_platform_name() == "windows")   //! the dry run's no-op child binary is a POSIX one, as test_runner_dry_run's
+    var out : string
+    t |> equal(run_runner("--area infra --das /usr/bin/true --shard 2/2", out), 0, "an infra dry run under a shard exits clean:\n{out}")
+    t |> success(find(out, "SHARD 2/2: ") >= 0, "the SHARD line names the shard and its count:\n{out}")
+    t |> success(find(out, "REPORT areas infra shard 2/2:") >= 0, "the REPORT line carries the shard, so it cannot read as the whole run:\n{out}")
+    t |> success(find(out, "NEXT the run's other shard(s)") >= 0 && find(out, "--shard 1/2") >= 0, "the NEXT line owes the other shard:\n{out}")
+    var refused : string
+    t |> equal(run_runner("--area infra --das /usr/bin/true --shard 5/4", refused), 2, "a shard past n is refused")
+    t |> success(find(refused, "not i/n") >= 0, "and says so:\n{refused}")
+}
+
+//! --only keeps the files whose name contains a token and nothing else, "" the whole list; the dry run names each kept
+//! file on an ONLY line and the REPORT line carries the tokens, and a --only that keeps nothing is refused
+[test]
+def test_only_filter(t : T?) {
+    let files <- ["a/test_cuda_kernels.das", "a/test_gpu_resident_cuda_llama.das", "a/test_gpu_resident_segments.das", "a/test_kv_codec.das"]
+    let whole <- only_files(files, "")
+    t |> equal(length(whole), 4, "no --only keeps every file")
+    let cuda <- only_files(files, "cuda,segments")
+    t |> equal(join(cuda, ","), "a/test_cuda_kernels.das,a/test_gpu_resident_cuda_llama.das,a/test_gpu_resident_segments.das", "a token keeps the files whose name holds it, in the list's order")
+    let none <- only_files(files, "metal")
+    t |> equal(length(none), 0, "a token no name holds keeps nothing")
+    return if (get_platform_name() == "windows")   //! the dry run's no-op child binary is a POSIX one, as test_runner_dry_run's
+    var out : string
+    t |> equal(run_runner("--area infra --das /usr/bin/true --only exchange,facade", out), 0, "an infra dry run under --only exits clean:\n{out}")
+    t |> success(find(out, "ONLY test_exchange_schema.das (--only exchange,facade)") >= 0 && find(out, "ONLY test_facade_docs.das") >= 0, "each kept file sits on an ONLY line:\n{out}")
+    t |> success(find(out, "REPORT areas infra only exchange,facade: 2 file(s)") >= 0, "the REPORT line carries the tokens, so the run cannot read as whole:\n{out}")
+    var refused : string
+    t |> equal(run_runner("--area infra --das /usr/bin/true --only no-such-file", refused), 2, "a --only that keeps nothing is refused")
+    t |> success(find(refused, "keeps no file") >= 0, "and says so:\n{refused}")
+}
+
+//! the reach plan behind --changed: a test file itself, a fixture the tests requiring it through the fixtures between, an
+//! engine module its witness row or the core set beside its other areas whole, a benchmark the bench rows' files; every
+//! witness row and the core set name census files, and every row's module exists and reaches llm
+[test]
+def test_reach_for_path(t : T?) {
+    let own <- reach_for_path("modules/dasLLAMA/tests/test_gemma3v.das")
+    t |> equal(join(own.files, ","), "test_gemma3v.das", "a test file reaches itself")
+    t |> success(empty(own.areas) && !own.core, "and nothing else")
+    let suite <- reach_for_path("modules/dasLLAMA/tests/test_metal_decode_parity.das")
+    t |> success(empty(suite.files) && !empty(suite.note), "a model-suite file reaches nothing and says why")
+    let feed <- reach_for_path("modules/dasLLAMA/tests/_resident_feed.das")
+    t |> success(find_index(feed.files, "test_gpu_resident_llama.das") >= 0, "a fixture reaches the tests requiring it ({length(feed.files)})")
+    t |> success(find_index(feed.files, "test_tts_kitten.das") < 0, "and not the tests that do not")
+    let oracle <- reach_for_path("modules/dasLLAMA/tests/_attn_oracle.das")
+    t |> success(find_index(oracle.files, "test_vulkan_kernels.das") >= 0 && find_index(oracle.files, "test_metal_attn_kernels.das") < 0, "a fixture's reach stops at the census: a model-suite file takes --arm ({join(oracle.files, ", ")})")
+    let tier <- reach_for_path("modules/dasLLAMA/tests/_model_tier.das")
+    t |> success(length(tier.files) > length(feed.files), "the shared tier fixture reaches more, through the fixtures between ({length(tier.files)})")
+    let qwen35 <- reach_for_path("modules/dasLLAMA/dasllama/dasllama_arch_qwen35.das")
+    t |> success(!qwen35.core && empty(qwen35.areas) && find_index(qwen35.files, "test_gpu_resident_hybrid.das") >= 0, "a leaf module reaches its witness row, not the core")
+    let load <- reach_for_path("modules/dasLLAMA/dasllama/dasllama_load.das")
+    t |> success(load.core, "a core module reaches the core")
+    t |> success(find_index(load.files, "test_vulkan_kernels.das") >= 0 && find_index(load.files, "test_gpu_resident_llama.das") >= 0, "every model-free llm file and the core witnesses")
+    t |> success(find_index(load.files, "test_gpu_resident_moe_formats.das") < 0, "not the whole stocked set")
+    t |> equal(join(load.areas, ","), "audio,vision,tts,infra", "and every other area whole")
+    let audio <- reach_for_path("modules/dasLLAMA/dasllama/dasllama_audio.das")
+    t |> success(empty(audio.files) && join(audio.areas, ",") == "audio" && !audio.core, "an audio module reaches audio whole and no llm file")
+    let codec <- reach_for_path("modules/dasLLAMA/dasllama/dasllama_kv_codec.das")
+    t |> success(join(codec.areas, ",") == "audio" && find_index(codec.files, "test_kv_codec.das") >= 0 && !codec.core, "a two-area module reaches its other area whole and its llm witnesses")
+    let bench <- reach_for_path("modules/dasLLAMA/benchmarks/lcpp_bench.das")
+    t |> equal(join(bench.files, ","), join(BENCH_WITNESSES, ","), "a benchmark reaches the bench rows' files")
+    let outside <- reach_for_path("src/ast/ast_parse.cpp")
+    t |> success(empty(outside.files) && empty(outside.areas) && empty(outside.note), "a path outside the module reaches nothing")
+    var listed <- suite_files("model-free")
+    listed |> push_from(suite_files("stocked"))
+    let census <- {for (f in listed); base_name(f) => null}
+    for (name in LLM_CORE_WITNESSES) {
+        t |> success(key_exists(census, name), "a core witness is a census file: {name}")
+    }
+    for (stem, row in keys(MODULE_WITNESSES), values(MODULE_WITNESSES)) {
+        var st : FStat
+        t |> success(stat("modules/dasLLAMA/dasllama/{stem}.das", st), "a witness row names a module that exists: {stem}")
+        for (name in split(row, ",")) {
+            t |> success(key_exists(census, name), "a witness row names census files: {stem} -> {name}")
+        }
+        let areas = MODULE_AREAS?[stem] ?? ""
+        t |> success(find(areas, "llm") >= 0, "a witness row's module has a MODULE_AREAS row holding llm - a module with no row runs every area whole: {stem}")
+    }
+}
+
+//! the children's per-test module cache: a folder keyed by the binary, the folders of other binaries removed on
+//! the runner's own binary and kept on a --das dry run, no folder for a binary that cannot be stat'd, and the
+//! child command carrying --module-cache-dir
+[test]
+def test_child_cache_dir(t : T?) {
+    t |> equal(child_cache_dir("no/such/binary", true), "", "a binary that cannot be stat'd gets no cache folder")
+    let own = das_exe()
+    var st : FStat
+    t |> success(stat(own, st), "the running binary stats: {own}")
+    let want = "{CHILD_CACHE_ROOT}/{int64(st.size)}-{int64(st.mtime)}"
+    let stale = "{CHILD_CACHE_ROOT}/0-0"
+    mkdir_rec(stale)
+    t |> equal(child_cache_dir(own, false), want, "the folder is keyed by the binary's size and mtime")
+    var kept : FStat
+    t |> success(stat(stale, kept) && kept.is_dir, "a --das run keeps the other binaries' folders")
+    t |> equal(child_cache_dir(own, true), want, "the runner's own binary gets the same folder")
+    var gone : FStat
+    t |> success(!stat(stale, gone), "and removes the other binaries' folders")
+    var mine : FStat
+    t |> success(stat(want, mine) && mine.is_dir, "its own folder stands")
+    return if (get_platform_name() == "windows")   //! the dry run's no-op child binary is a POSIX one, as test_runner_dry_run's
+    var out : string
+    t |> equal(run_runner("--area infra --das /usr/bin/true", out), 0, "an infra dry run exits clean:\n{out}")
+    t |> success(find(out, "CACHE ") >= 0, "the CACHE line says where the children's records go, or that they get none:\n{out}")
+    t |> success(find(out, "CACHE removed") < 0, "a --das dry run removes no folder:\n{out}")
+    if (find(out, "CACHE none") < 0) {
+        t |> success(find(out, " --module-cache-dir {CHILD_CACHE_ROOT}/") >= 0, "every child command carries the cache folder:\n{out}")
+    }
 }

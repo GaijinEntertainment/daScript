@@ -965,7 +965,9 @@ def test_gemma_drafter_depth_knob(t : T?) {
                     t |> equal(budgeted[1][budget + i], close[i], "budget {budget}: the forced close's token {i} lands at the budget on the speculating stream")
                 }
                 log_gen_texts(trg, "gdraft budget {budget} (plain, speculating)", budgeted[0], budgeted[1])
-                t |> success(ids_equal(budgeted[1], budgeted[0]), "budget {budget}: the speculating stream reads as the plain one")
+                //! through the forced close: past it the streams free-run off a cut sentence, where a near-tie parts them on a card
+                let through = budget + long_length(close)
+                t |> success(ids_equal(subarray(budgeted[1], range64(0l, through)), subarray(budgeted[0], range64(0l, through))), "budget {budget}: the speculating stream reads as the plain one through the forced close")
                 delete budgeted
             }
             delete close
@@ -1047,6 +1049,7 @@ def test_gemma_drafter_codecs(t : T?) {
 struct private RingDraftRun {
     ok : bool
     ring : int64
+    count : int   //! the counting prompt's last number: sized off the ringed load's rows, the flat load's prompt the same
     anchor : int64
     pick : int64   //! the one-row chain's argmax at the anchor, the drafter's seed
     trunk : array<float>
@@ -1110,14 +1113,19 @@ def private gdraft_capture_ring(trg : Model; dr : GemmaDrafter) : int64 {
 
 //! the served drafter under ring pin `ring` over the long counting prompt: the prompt prefilled in `RING_PF_CHUNK`-row calls, one
 //! one-row step, the drafter's
-//! chain at the position past it, then a speculating scheduler stream over the same prompt
-def private ring_draft_run(t : T?; ring : int; budget : int64) : RingDraftRun {
+//! chain at the position past it, then a speculating scheduler stream over the same prompt; `count0` is the ringed run's
+//! count, which the flat run takes so both pins draft at one anchor (0 sizes the prompt off this load's ring)
+def private ring_draft_run(t : T?; ring : int; budget : int64; count0 : int = 0) : RingDraftRun {
     var run : RingDraftRun
     with_gpu_kv_ring(ring) {
         with_served_drafter(t, TARGET_FILE, 1l, KVDtype.f16, $(trg) {
             var dr <- load_gemma_drafter(mtp_drafter_sidecar(path_join(models_dir(), TARGET_FILE)), trg.config.n_layers)
             t |> success(dr.ok, "the drafter's geometry loads (why='{dr.why}')")
-            var prompt <- encode(trg, "Count from 1 to 600, separated by commas: {counting_prompt(1, 500)}", true, false)
+            let ring_rows = gdraft_capture_ring(trg, dr)
+            //! the prompt reaches past the ring's rows on any card (a number is about four tokens) and stays under the rig's context
+            let count = count0 > 0 ? count0 : clamp(int(ring_rows / 4l) + 150, 500, int((trg.config.seq_len - 300l) / 4l))
+            run.count = count
+            var prompt <- encode(trg, "Count from 1 to {count + 100}, separated by commas: {counting_prompt(1, count)}", true, false)
             let npos = long_length(prompt)
             var s <- make_run_state(trg.config, KVDtype.f16, KVDtype.f16)
             eval_chunked(trg, s, prompt, npos - 1l, RING_PF_CHUNK)
@@ -1126,7 +1134,7 @@ def private ring_draft_run(t : T?; ring : int; budget : int64) : RingDraftRun {
             static_if (typeinfo builtin_module_exists(das_metal)) {
                 finish_pending_step()
             }
-            run.ring = gdraft_capture_ring(trg, dr)
+            run.ring = ring_rows
             run.anchor = s.n_past
             run.trunk := s.logits
             t |> equal(s.mtp_h_pos1, s.n_past, "ring pin {ring}: the step carried the post-norm hidden for the drafter")
@@ -1145,7 +1153,7 @@ def private ring_draft_run(t : T?; ring : int; budget : int64) : RingDraftRun {
             delete prompt
             delete one
             delete dr
-        }, 4096l)
+        }, 8192l)   //! room for a prompt past the ring the card gives (2048 rows of slack on the RTX PRO 4500) with the 32-token walk after it
     }
     return <- run
 }
@@ -1158,7 +1166,7 @@ def test_gemma_drafter_past_ring(t : T?) {
     t |> run("the drafter past a sliding capture layer's ring reads the rows the flat mirror holds: drafts, acceptance and the trunk's logits") @(t : T?) {
         let budget = 24l
         var inscope ringed <- ring_draft_run(t, 1, budget)
-        var inscope flat <- ring_draft_run(t, 0, budget)
+        var inscope flat <- ring_draft_run(t, 0, budget, ringed.count)
         return if (!ringed.ok || !flat.ok)
         t |> success(ringed.ring > 0l && flat.ring == 0l, "the ringed load rings the sliding capture layer ({ringed.ring} rows), the flat load keeps a row a position ({flat.ring})")
         t |> success(ringed.anchor > ringed.ring, "the anchor {ringed.anchor} sits past the ring: the capture layer holds more keys than its ring's rows")
