@@ -4009,7 +4009,10 @@ same stories15M fixture, deliberately never calls `allow_cpu_prefill()` (which i
 cannot live in test_attn_span - that file arms it in `[init]`). Metal-capable builds only;
 plain dastest only.
 `test_vision_chat.das` - stocked suite; the image chat turn end to end, one pair per vision
-carrier plus the showcase: the 12B gemma4uv pair (the cats fixture, so `DASLLAMA_PARITY_FULL=1`),
+carrier plus the showcase (the 12B pairs and the Omni pair skip by name on a box whose RAM is
+short of their served planes - `box_ram_gb`, the container's limit where one caps the process -
+since a 12B Q4_K_M serves 45 GB at f32 on the CPU chain): the 12B gemma4uv pair (the cats fixture,
+so `DASLLAMA_PARITY_FULL=1`),
 the E2B gemma4v pair (E2B Q8 decoder + bf16 mmproj - small tier, runs without the flag), the
 E2B instruct-mode cell (the Q4_K_M decoder + the same mmproj, thinking off, the image on the
 first turn under the chat sampler preset at seed 1234: the turn answers with the cats in the

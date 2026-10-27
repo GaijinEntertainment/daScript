@@ -11,7 +11,9 @@ options no_unused_function_arguments = false
 module box_ident shared private
 
 require strings
+require math
 require daslib/fio
+require daslib/strings_boost
 
 // the recorded fleet: CPU brand substring -> the store tag its records already carry
 def private box_from_cpu(cpu : string) : string {
@@ -54,6 +56,52 @@ def private capture_line(cmd : string) : string {
         }
     })
     return out
+}
+
+//! the first line of `path`, "" without the file
+def private first_line(path : string) : string {
+    var out = ""
+    fopen(path, "rb") $(f) {
+        if (f != null) {
+            out = strip(fgets(f))
+        }
+    }
+    return out
+}
+
+//! the box's RAM in GiB, 0 where no probe answers: the physical memory, or the container's limit where a cgroup caps
+//! this process under it (a RunPod pod reads the host's 251 GB off /proc/meminfo and holds 62)
+def public box_ram_gb() : int {
+    let gib = 1024.0 * 1024.0 * 1024.0
+    let plat = get_platform_name()
+    if (plat == "windows") {
+        // wmic emits "TotalPhysicalMemory=68632934400"; clean Windows 11 24H2+ installs ship without wmic (it survives
+        // in-place upgrades), so CIM answers when it yields nothing - and 2>nul keeps the miss off the console
+        let raw = capture_line("wmic ComputerSystem get TotalPhysicalMemory /value 2>nul | findstr TotalPhysicalMemory")
+        let i = find(raw, "=")
+        if (i >= 0) {
+            return int(to_float(strip(slice(raw, i + 1))) / gib + 0.5)
+        }
+        let ps = capture_line("powershell -NoProfile -Command \"(Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory\"")
+        return empty(ps) ? 0 : int(to_float(ps) / gib + 0.5)
+    }
+    if (plat == "darwin") {
+        return int(to_float(capture_line("sysctl -n hw.memsize")) / gib + 0.5)
+    }
+    // linux /proc/meminfo: "MemTotal:       131842348 kB"; a cgroup v2 limit in bytes at memory.max ("max" = none)
+    let ln = first_line("/proc/meminfo")
+    let i = find(ln, ":")
+    var gb = 0
+    if (i >= 0) {
+        let toks <- split(strip(slice(ln, i + 1)), " ")
+        gb = empty(toks) ? 0 : int(to_float(toks[0]) / (1024.0 * 1024.0) + 0.5)
+    }
+    let cap = first_line("/sys/fs/cgroup/memory.max")
+    if (!empty(cap) && cap != "max") {
+        let cap_gb = int(to_float(cap) / gib + 0.5)
+        gb = gb == 0 ? cap_gb : min(gb, cap_gb)
+    }
+    return gb
 }
 
 def public probe_cpu_brand : string {

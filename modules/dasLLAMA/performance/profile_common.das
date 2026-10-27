@@ -684,32 +684,7 @@ def private platform_ram_gb() : int {
     if (is_some(g_env_prof.ram_gb)) {
         return unwrap(g_env_prof.ram_gb)
     }
-    let gib = 1024.0 * 1024.0 * 1024.0
-    if (is_windows()) {
-        // wmic emits "TotalPhysicalMemory=68632934400"; clean Windows 11 24H2+ installs ship
-        // without wmic (it survives in-place upgrades), so fall through to CIM when it yields
-        // nothing — and 2>nul keeps the miss off the console
-        let raw = run_capture("wmic ComputerSystem get TotalPhysicalMemory /value 2>nul", false)
-        for (ln in split(raw, "\n")) {
-            let i = find(ln, "=")
-            if (i >= 0 && find(ln, "TotalPhysicalMemory") >= 0) {
-                return int(to_float(strip(slice(ln, i + 1))) / gib + 0.5)
-            }
-        }
-        let ps = run_capture("powershell -NoProfile -Command \"(Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory\"", true)
-        return empty(ps) ? 0 : int(to_float(ps) / gib + 0.5)
-    }
-    if (is_macos()) {
-        return int(to_float(run_capture("sysctl -n hw.memsize", true)) / gib + 0.5)
-    }
-    // linux /proc/meminfo: "MemTotal:       131842348 kB"
-    let ln = run_capture("grep MemTotal /proc/meminfo", true)
-    let i = find(ln, ":")
-    if (i < 0) {
-        return 0
-    }
-    let toks <- split(strip(slice(ln, i + 1)), " ")
-    return empty(toks) ? 0 : int(to_float(toks[0]) / (1024.0 * 1024.0) + 0.5)
+    return box_ram_gb()
 }
 
 // after-colon tail of the first line of `raw` containing `key`; "" when absent
