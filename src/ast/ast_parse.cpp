@@ -46,7 +46,8 @@ DAS_CC_API das::smart_ptr<das::FileAccess> get_file_access( char * pak ) {
     if ( pak && *pak ) {
         das::ModuleGroup dummyLibGroup;
         das::TextWriter tout;
-        auto program = das::compileDaScript(pak, das::make_smart<das::FsFileAccess>(), tout, dummyLibGroup);
+        auto access = das::make_smart<das::FsFileAccess>();
+        auto program = das::compileDaScript(pak, access, tout, dummyLibGroup);
         return das::make_smart<das::FsFileAccess>(pak, program);
     } else {
         return das::make_smart<das::FsFileAccess>();
