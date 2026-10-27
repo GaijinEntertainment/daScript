@@ -190,7 +190,7 @@ the k4 band. `gemv_lanes_per_row` picks the lanes per row from the row's blocks 
 for the grid formats and 16 for the k-lattice to 48; 16 to 96; past that the whole subgroup for the
 k-lattice and 16 for the grid formats - and `gemv_enc` sizes the grid to match (a workgroup's
 subgroups each take subgroup_size / lanes rows). The grid formats are the codebook and grid decodes
-(iq2s, iq2xs, iq2xxs, iq3xxs, iq4xs, iq4nl, `gemv_grid_fmt`); iq3s takes the k-lattice split (K
+(iq2s, iq2xs, iq2xxs, iq3xxs, iq4xs, iq4nl, iq3s4, nv4, `gemv_grid_fmt`); iq3s takes the k-lattice split (K
 1408: 354 / 395 / 386 GB/s at 32 / 16 / 8 lanes). The push block carries the lanes (0 = the whole
 subgroup, the q8 GEMV's one form); the fold is an xor-shuffle butterfly over the row's lanes at 8 or
 16 and the whole-subgroup add otherwise, a dead row at zero, so the butterflies stay whole; the

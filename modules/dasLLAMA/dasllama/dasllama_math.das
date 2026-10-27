@@ -1929,11 +1929,11 @@ def kernel_backend_pin_refusal(name : string) : string {
 //! A pin that cannot take keeps the active backend and warns, but `DASLLAMA_PIN_BACKEND`'s own pin panics:
 //! a run under it would measure the active backend under the pinned name.
 def pin_kernel_backend(name : string) {
-    pin_kernel_backend_(name, g_env_engine.pin_backend)
+    pin_kernel_backend_env(name, g_env_engine.pin_backend)
 }
 
 //! `pin_kernel_backend` with the environment's pin read as `env_pin` - the seam the refusal cell drives
-def pin_kernel_backend_(name, env_pin : string) {
+def pin_kernel_backend_env(name, env_pin : string) {
     let why = kernel_backend_pin_refusal(name)
     if (!empty(why)) {
         if (!empty(env_pin) && name == env_pin) {

@@ -3270,7 +3270,7 @@ carries - `metal` on a das_metal build, `vulkan` where dasVulkan builds - regist
 walked (`test_batch_only_backends_refuse_the_whole_seat`), and the pin refusal
 (`test_env_pin_refuses_what_cannot_take`): `kernel_backend_pin_refusal` names why an unregistered
 or a batch-only name cannot pin and reads "" for the portable backend, and the pin
-`DASLLAMA_PIN_BACKEND` names panics where it cannot take (driven through the `pin_kernel_backend_`
+`DASLLAMA_PIN_BACKEND` names panics where it cannot take (driven through the `pin_kernel_backend_env`
 seam) while the same pin made in process, or a name the environment did not name, warns and keeps
 the active backend (the controls). `test_kq_registries` walks every `KqFmt`
 through `kq_registries`: a format carries all eight registries or none, each family's tile, gemv

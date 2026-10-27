@@ -314,7 +314,7 @@ class template Q8GemvT {
                 let ws = float(wsh[wb0 + b])
                 let xs = axs[xb0 + b]
                 if (lane % 2u == 0u) {
-                    acc += float(idot) * ws * xs
+                    acc = mad(float(idot) * ws, xs, acc)
                 }
                 bi0 += bpp
             }
@@ -323,7 +323,7 @@ class template Q8GemvT {
                 if (b < nb) {
                     let idot = q8_pair_dot(wq4[(wb0 + bi0) * 2u + lane], xq4[(xb0 + bi0) * 2u + lane])
                     if (lane % 2u == 0u) {
-                        acc += float(idot) * float(wsh[wb0 + b]) * axs[xb0 + b]
+                        acc = mad(float(idot) * float(wsh[wb0 + b]), axs[xb0 + b], acc)
                     }
                 }
                 bi0 += bpp
@@ -384,12 +384,12 @@ class template Q8GemvNT {
                             let i1 = q8_pair_dot(wq4[(wb0 + nb + bi0) * 2u + lane], xv)
                             if (lane % 2u == 0u) {
                                 let xs = axs[xb + b]
-                                acc0[c] += float(i0) * ws0 * xs
-                                acc1[c] += float(i1) * float(wsh[wb0 + nb + b]) * xs
+                                acc0[c] = mad(float(i0) * ws0, xs, acc0[c])
+                                acc1[c] = mad(float(i1) * float(wsh[wb0 + nb + b]), xs, acc1[c])
                             }
                         } else {
                             if (lane % 2u == 0u) {
-                                acc0[c] += float(i0) * ws0 * axs[xb + b]
+                                acc0[c] = mad(float(i0) * ws0, axs[xb + b], acc0[c])
                             }
                         }
                     }
@@ -495,7 +495,7 @@ class template Q8GemvArT : GkResidualRow {
                 let ws = float(wsh[wb0 + b])
                 let xs = axs[pa.xblk + b]
                 if (lane % 2u == 0u) {
-                    acc += float(idot) * ws * xs
+                    acc = mad(float(idot) * ws, xs, acc)
                 }
                 bi0 += bpp
             }
@@ -505,7 +505,7 @@ class template Q8GemvArT : GkResidualRow {
                     let xbase = (pa.xblk + bi0) * 8u + lane * 4u
                     let idot = q8_pair_dot(wq4[(wb0 + bi0) * 2u + lane], uint4(xqw[xbase], xqw[xbase + 1u], xqw[xbase + 2u], xqw[xbase + 3u]))
                     if (lane % 2u == 0u) {
-                        acc += float(idot) * float(wsh[wb0 + b]) * axs[pa.xblk + b]
+                        acc = mad(float(idot) * float(wsh[wb0 + b]), axs[pa.xblk + b], acc)
                     }
                 }
                 bi0 += bpp
@@ -1189,7 +1189,7 @@ def kq_grid_words() : array<uint> {
 
 //! the codebook and grid formats: a block's decode gathers, so a lane wants more blocks in flight than the k-lattice's
 def gemv_grid_fmt(fmt : int) : bool =>
-    fmt == int(KqFmt.iq2s) || fmt == int(KqFmt.iq2xs) || fmt == int(KqFmt.iq2xxs) || fmt == int(KqFmt.iq3xxs) || fmt == int(KqFmt.iq4xs) || fmt == int(KqFmt.iq4nl) || fmt == int(KqFmt.iq3s4)
+    fmt == int(KqFmt.iq2s) || fmt == int(KqFmt.iq2xs) || fmt == int(KqFmt.iq2xxs) || fmt == int(KqFmt.iq3xxs) || fmt == int(KqFmt.iq4xs) || fmt == int(KqFmt.iq4nl) || fmt == int(KqFmt.iq3s4) || fmt == int(KqFmt.nv4)
 
 [arch(at="../ARCHITECTURE_GPU_SHARED_GEMM.md#kq-gemv-lanes")]
 def gemv_lanes_per_row(fmt : int; n : int64) : uint {

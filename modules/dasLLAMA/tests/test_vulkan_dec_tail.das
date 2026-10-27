@@ -14,6 +14,7 @@ require dasllama/dasllama_common   // MoeGate, select_decode_override
 require dasllama/dasllama_blocks   // registers the vulkan_moe_span decode override at init
 require dasllama/dasllama_moe   // moe_select_core: the host select the span's device top-k mirrors
 require ?vulkan dasllama/dasllama_math_vulkan  // the decode attention block + FFN tail under test; the test installs the hooks explicitly (no env gate)
+require ?vulkan dasllama/dasllama_vulkan_common   // vk_stream_cache_layer: the heat cell declares its stacks' expert count the way the driver does
 require ?vulkan dasllama/dasllama_vulkan_decode   // vk_span_reset: the span records once per model, so the second span cell forgets the first's record
 require math
 require _vk_kq_fixtures
@@ -1014,13 +1015,16 @@ def test_vulkan_heat_mx4_form(t : T?) {
         set_moe_gpu_heat_hooks(@@vk_moe_heat_query, @@vk_moe_heat_advise, @@vk_moe_ffn_begin, @@vk_moe_ffn_join)
         set_gpu_tier_want_(GpuTierWant(heat = 2l))
         var f = Mx4Experts(o1 = 182l * STRIDE, o3 = 183l * STRIDE, o2 = 184l * STRIDE)   //! slots 182-184: past the two-forms cell's
+        vk_stream_cache_layer(NE, 0l)   //! the driver's declaration ahead of the uploads: the slot maps hold NE experts, the pool DMAs 1 and 3 off them
         if (!mx4_up(NE * NFE, N, 201l, f.o1, f.w1q, f.w1e, true)) {
+            vk_stream_cache_layer(0l, 0l)
             set_gpu_tier_want_(GpuTierWant())
             t |> skip("heat mx4 form: no Vulkan device (or probe refused the stream uploads)")
             return
         }
         t |> success(mx4_up(NE * NFE, N, 203l, f.o3, f.w3q, f.w3e, true), "heat mx4 form: the up stack streamed")
         t |> success(mx4_up(NE * N, NFE, 207l, f.o2, f.w2q, f.w2e, true), "heat mx4 form: the down stack streamed")
+        vk_stream_cache_layer(0l, 0l)   //! the declaration put back: the file's other streamed stacks are one-expert wholes
         f.gb <- [for (i in range64(NE * NFE)); 0.3 * sin(float(i) * 0.37)]
         f.ub <- [for (i in range64(NE * NFE)); 0.25 * cos(float(i) * 0.61)]
         t |> success(moe_gpu_upload_ffn_bias(f.gb, f.ub), "heat mx4 form: the bias rows uploaded")

@@ -98,3 +98,23 @@ def with_reference_f32_tile(t : T?; blk : block<() : void>) {
         panic(why)
     }
 }
+
+//! `blk` with every fp32 batch GEMM on the row nest - each output its own `dot`, so its bits never depend on
+//! the call's token count or the token's place in it - the knob found put back however `blk` leaves, a panic
+//! included. A cell comparing one sequence evaluated in different chunkings bit for bit runs under it.
+def with_f32_row_nest(blk : block<() : void>) {
+    let min_n_was = get_f32_batch_tile_min_n()
+    set_f32_batch_tile_min_n(1l << 40l)
+    var raised = false
+    var why = ""
+    try {
+        invoke(blk)
+    } recover {
+        raised = true
+        why = this_context().last_exception
+    }
+    set_f32_batch_tile_min_n(min_n_was)
+    if (raised) {
+        panic(why)
+    }
+}
