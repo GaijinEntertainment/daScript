@@ -252,7 +252,7 @@ namespace das {
             postponed.clear();
         }
         void tryResolve() {
-            if ( !locked ) {
+            if ( !locked && !postponed.empty() ) {
                 // note - the reason for the 'neworder', as oppose to regular push_back into objectsInOrder
                 //  is that there is an order dependency for compiling things like templates, where otherwise
                 //  it would require us to actually check, if the template aliasing has been addressed
