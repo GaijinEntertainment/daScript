@@ -223,7 +223,7 @@ add_das_target(check_gated_das
 )
 
 add_das_target(check_ast_verify_changed
-    COMMAND $<TARGET_FILE:daslang> ./utils/ast-verify/main.das -- --changed
+    COMMAND ${CMAKE_COMMAND} -E env DAS_LOG_LEVEL=info $<TARGET_FILE:daslang> ./utils/ast-verify/main.das -- --changed
     DEPENDS daslang
     WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     COMMENT "Running --ast-verify-batch over the .das files changed against origin/DAS_CI_BASE_REF"
