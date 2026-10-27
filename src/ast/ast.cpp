@@ -318,55 +318,63 @@ namespace das {
         return false;
     }
 
+    struct StructureWalkGuard {
+        const Structure * guarded = nullptr;
+        bool entered = true;
+        explicit StructureWalkGuard ( const Structure * st ) {
+            if ( st->module && st->module->frozen ) return;
+            entered = !st->circularGuard;
+            if ( entered ) {
+                st->circularGuard = true;
+                guarded = st;
+            }
+        }
+        ~StructureWalkGuard () {
+            if ( guarded ) guarded->circularGuard = false;
+        }
+    };
+
     bool Structure::canCopy(bool tempMatters) const {
-        if ( circularGuard ) return true;
-        circularGuard = true;
+        StructureWalkGuard guard(this);
+        if ( !guard.entered ) return true;
         for ( const auto & fd : fields ) {
             if ( !fd.type->canCopy(tempMatters) ) {
-                circularGuard = false;
                 return false;
             }
         }
-        circularGuard = false;
         return true;
     }
 
     bool Structure::canMove() const {
-        if ( circularGuard ) return true;
-        circularGuard = true;
+        StructureWalkGuard guard(this);
+        if ( !guard.entered ) return true;
         for ( const auto & fd : fields ) {
             if ( !fd.type->canMove() ) {
-                circularGuard = false;
                 return false;
             }
         }
-        circularGuard = false;
         return true;
     }
 
     bool Structure::canCloneFromConst() const {
-        if ( circularGuard ) return true;
-        circularGuard = true;
+        StructureWalkGuard guard(this);
+        if ( !guard.entered ) return true;
         for ( const auto & fd : fields ) {
             if ( !fd.type->canCloneFromConst() ) {
-                circularGuard = false;
                 return false;
             }
         }
-        circularGuard = false;
         return true;
     }
 
     bool Structure::canClone() const {
-        if ( circularGuard ) return true;
-        circularGuard = true;
+        StructureWalkGuard guard(this);
+        if ( !guard.entered ) return true;
         for ( const auto & fd : fields ) {
             if ( !fd.type->canClone() ) {
-                circularGuard = false;
                 return false;
             }
         }
-        circularGuard = false;
         return true;
     }
 
@@ -414,8 +422,9 @@ namespace das {
     }
 
     uint64_t Structure::getSizeOf64() const {
-        if ( circularGuard ) return 1;
-        circularGuard = true;
+        int structAl = getAlignOf() - 1;
+        StructureWalkGuard guard(this);
+        if ( !guard.entered ) return 1;
         uint64_t size = 0;
         const Structure * cppLayoutParent = nullptr;
         for ( const auto & fd : fields ) {
@@ -434,15 +443,14 @@ namespace das {
             // an empty struct field is 0 bytes in daScript but occupies >=1 byte in C++.
             size += das::max(uint64_t(1), fd.type->getSizeOf64());
         }
-        circularGuard = false;
-        int al = getAlignOf() - 1;
-        size = (size + al) & ~al;
+        size = (size + structAl) & ~structAl;
         return size;
     }
 
     uint64_t Structure::getSizeOf64(bool & failed) const {
-        if ( circularGuard ) return 1;
-        circularGuard = true;
+        int structAl = getAlignOfFailed(failed) - 1;
+        StructureWalkGuard guard(this);
+        if ( !guard.entered ) return 1;
         uint64_t size = 0;
         const Structure * cppLayoutParent = nullptr;
         for ( const auto & fd : fields ) {
@@ -460,31 +468,27 @@ namespace das {
             size = (size + al) & ~al;
             size += das::max(uint64_t(1), fd.type->getSizeOf64(failed));
         }
-        circularGuard = false;
-        int al = getAlignOfFailed(failed) - 1;
-        size = (size + al) & ~al;
+        size = (size + structAl) & ~structAl;
         return size;
     }
 
     int Structure::getAlignOf() const {
-        if ( circularGuard ) return 1;
-        circularGuard = true;
+        StructureWalkGuard guard(this);
+        if ( !guard.entered ) return 1;
         int align = 1;
         for ( const auto & fd : fields ) {
             align = das::max ( fd.type->getAlignOf(), align );
         }
-        circularGuard = false;
         return align;
     }
 
     int Structure::getAlignOfFailed(bool & failed) const {
-        if ( circularGuard ) return 1;
-        circularGuard = true;
+        StructureWalkGuard guard(this);
+        if ( !guard.entered ) return 1;
         int align = 1;
         for ( const auto & fd : fields ) {
             align = das::max ( fd.type->getAlignOfFailed(failed), align );
         }
-        circularGuard = false;
         return align;
     }
 
