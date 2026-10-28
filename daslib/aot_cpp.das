@@ -269,8 +269,12 @@ def buildStructEnumCollisions(program : ProgramPtr) {
     g_struct_enum_collide |> clear();
     program.get_ptr() |> for_each_module_no_order($(pm) {
         var enumNames : table<string>;
+        let ns = aotModuleName(pm)
         pm |> for_each_enumeration($(penum) {
             enumNames |> insert(string(penum.name));
+            if (penum.name == ns) {
+                g_struct_enum_collide |> insert(structEnumNsKey(ns, ns));
+            }
         });
         if (!empty(enumNames)) {
             pm |> for_each_structure($(ps) {
