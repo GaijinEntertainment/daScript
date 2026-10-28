@@ -232,8 +232,7 @@ namespace das
         for ( uint32_t i=0, is=total; i!=is; ++i, pTable-- ) {
             if ( pTable->data ) {
                 if ( !pTable->isLocked() ) {
-                    uint64_t oldSize = pTable->capacity * uint64_t(vts_add_kts) + pTable->capacity*tableHashSlotBytes(*pTable);
-                    context.free(pTable->data, oldSize, &debugInfo);
+                    context.free(pTable->data, tableAllocBytes(*pTable), &debugInfo);
                 } else {
                     context.throw_error_at(debugInfo, "deleting locked table%s", errorMessage);
                     return v_zero();

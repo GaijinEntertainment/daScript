@@ -68,8 +68,7 @@ namespace das {
         virtual void afterTable ( Table * pa, TypeInfo * ti ) override {
             if ( pa->data ) {
                 if ( !pa->isLocked() || pa->hopeless ) {
-                    uint64_t oldSize = pa->capacity*uint64_t(ti->firstType->size+ti->secondType->size) + pa->capacity*tableHashSlotBytes(*pa);
-                    __context__->free(pa->data, oldSize, __at__);
+                    __context__->free(pa->data, tableAllocBytes(*pa), __at__);
                 } else {
                     refuse("can't delete locked table");
                     return;
