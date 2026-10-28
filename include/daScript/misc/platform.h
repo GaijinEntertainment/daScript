@@ -478,7 +478,6 @@ inline void *das_aligned_alloc16(size_t size) {
     p = nullptr;
 #if defined(__unix__) || defined(__APPLE__) || defined(__HAIKU__) || defined(_EMSCRIPTEN_VER)
     if (posix_memalign(&p, das_alloc_alignment(size), size)) {
-        DAS_ASSERTF(0, "posix_memalign returned nullptr");
         return nullptr;
     }
 #else
@@ -487,7 +486,6 @@ inline void *das_aligned_alloc16(size_t size) {
         const size_t alignment = das_alloc_alignment(size);
         p = aligned_alloc(alignment, (size + alignment - 1) & ~(alignment - 1));
         if (!p) {
-            DAS_ASSERTF(0, "aligned_alloc returned nullptr");
             return nullptr;
         }
     }
