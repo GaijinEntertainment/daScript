@@ -52,7 +52,7 @@ struct ServerArgs {
     config : string
 
     @clarg_short = "m"
-    @clarg_doc = "Path to the GGUF model to serve (or model = in --config)"
+    @clarg_doc = "Path to the GGUF model to serve (or model = in --config); an embedding GGUF (one naming its pooling) serves /v1/embeddings from its own worker and is never the default"
     model : string
 
     @clarg_short = "p"
@@ -705,7 +705,9 @@ def apply_config(var cfg : ServerArgs) : bool {
 }
 
 // An EXPLICIT --model wins over the config's roster (the CLI-overrides-config contract): the
-// matching roster entry becomes the default, an unlisted path joins the roster AS the default.
+// matching roster entry becomes the default, an unlisted path joins the roster AS the default -
+// unless it is an embedding GGUF, which its worker serves and which never becomes the default
+// (``boot_default_index``).
 // Warn-and-degrade: a bad path or a route-name collision leaves the roster UNTOUCHED — clearing
 // the roster's default first would silently boot the wrong model on the very typo being made.
 def apply_model_override(var models : array<ModelEntry>; cli_model : string) {
@@ -736,6 +738,38 @@ def apply_model_override(var models : array<ModelEntry>; cli_model : string) {
         models |> push(ModelEntry(path = cli_model, is_default = true))
     }
     to_log(LOG_INFO, "dasllama-server: --model {route} overrides the config roster's default\n")
+}
+
+//! The roster entry the boot makes the default slot: the entry marked default when it is a chat model, else the first
+//! chat entry; -1 when every entry is an embedding model (`embedder[i]`), which its worker serves and which is never the
+//! default - the server then serves embeddings alone, and a request naming no `model` goes to the first embedding model.
+//! A default mark on an embedding model is logged, never dropped silently.
+def boot_default_index(models : array<ModelEntry>; embedder : array<bool>) : int {
+    var marked = -1
+    for (i in range(length(models))) {
+        if (models[i].is_default) {
+            marked = i
+            break
+        }
+    }
+    return marked if (marked >= 0 && !embedder[marked])
+    var first_chat = -1
+    for (i in range(length(models))) {
+        if (!embedder[i]) {
+            first_chat = i
+            break
+        }
+    }
+    if (marked >= 0) {
+        let route = empty(models[marked].name) ? base_name(models[marked].path) : models[marked].name
+        if (first_chat >= 0) {
+            let chat = empty(models[first_chat].name) ? base_name(models[first_chat].path) : models[first_chat].name
+            to_log(LOG_WARNING, "dasllama-server: the default '{route}' is an embedding model - its worker serves /v1/embeddings and it is never the default; '{chat}' is the default chat model\n")
+        } else {
+            to_log(LOG_WARNING, "dasllama-server: the default '{route}' is an embedding model - no chat model loads, so the server serves /v1/embeddings alone and a request naming no model goes to the first embedding model\n")
+        }
+    }
+    return first_chat
 }
 
 // [[models]] roster — per-model path + overrides; absent keys keep the ModelEntry sentinels
@@ -1226,13 +1260,9 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
         g_cfg.audio_mmproj = ""
     }
     if (!g_setup_mode) {
-        var def_idx = 0
-        for (i in range(length(g_models))) {
-            if (g_models[i].is_default) {
-                def_idx = i
-                break
-            }
-        }
+        //! an entry whose GGUF names its pooling is an embedding model: its own worker serves it, never an engine slot
+        let embedder <- [for (ent in g_models); embedding_gguf(ent.path)]
+        let def_idx = boot_default_index(g_models, embedder)
         // At load time exactly ONE slot arms the GPU tier — the default slot unless its backend pins
         // cpu, else the first gpu/auto entry. The want is toggled per load (the tier arms at each
         // load tail); every non-cpu slot RECORDS the want so the switch-on-demand path (P2b) can
@@ -1242,11 +1272,11 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
         // a --tts boot with no LLM has an EMPTY roster: nothing loads, so nothing arms the tier
         if (gpu == "vulkan" && !empty(g_models)) {
             slot_want = vulkan_serving_want(g_cfg)
-            if (g_models[def_idx].backend != "cpu") {
+            if (def_idx >= 0 && g_models[def_idx].backend != "cpu") {
                 gpu_idx = def_idx
             } else {
                 for (i in range(length(g_models))) {
-                    if (g_models[i].backend != "cpu") {
+                    if (g_models[i].backend != "cpu" && !embedder[i]) {
                         gpu_idx = i
                         break
                     }
@@ -1264,6 +1294,12 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
                 ent.name = base_name(ent.path)
             }
             let ectx = ent.ctx > 0 ? int64(ent.ctx) : ctx
+            if (embedder[i]) {
+                //! the embedder's worker arms a device tier of its own beside the GPU slot's: the card holds both models
+                add_embedding_model(ent.path, ent.name, pick_quant(!empty(ent.quant) ? ent.quant : g_cfg.quant), ectx,
+                    gpu == "vulkan" && ent.backend != "cpu" ? slot_want : GpuTierWant())
+                continue
+            }
             if (gpu == "vulkan") {
                 set_gpu_tier_want(i == gpu_idx ? slot_want : GpuTierWant())   // zero want: loads CPU-only
                 gpu_residency_ask(ent.streams > 0 ? int64(ent.streams) : streams, ectx, pick_kv_dtype(empty(ent.kv_dtype) ? g_cfg.kv_dtype : ent.kv_dtype))
@@ -1288,13 +1324,14 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
                 set_slot_gpu_want(ent.name, slot_want)   // the want switch-in re-arms with
             }
         }
-        if (!empty(g_models)) {
+        if (def_idx >= 0) {
             set_default_model(g_models[def_idx].name)
         }
         // 16384, not a chat-sized 256: thinking-default families spend the budget's head on the
         // thought channel, and a request that omits max_tokens must still get its whole answer
         set_default_max_tokens(g_cfg.max_tokens > 0 ? int64(g_cfg.max_tokens) : 16384l)
         for (i in range(length(g_models))) {
+            continue if (embedder[i])
             let path = (!empty(g_models[i].image_mmproj) ? g_models[i].image_mmproj
                                                          : (i == def_idx ? g_cfg.image_mmproj : ""))
             let audio = (!empty(g_models[i].audio_mmproj) ? g_models[i].audio_mmproj

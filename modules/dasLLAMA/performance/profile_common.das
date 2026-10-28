@@ -1336,7 +1336,7 @@ def private provenance_walk(spec_on : block<(s : ModelSpec) : bool>; companion_o
         continue if (!invoke(spec_on, s))
         if (!empty(s.url) || !empty(s.recipe)) {
             out |> push(ProvEntry(name = s.file, root = "llm", url = s.url,
-                bytes = s.bytes, sha256 = s.sha256, recipe = s.recipe))
+                bytes = s.bytes, sha256 = s.sha256, recipe = s.recipe, quantize = s.quantize))
         }
         for (c in s.companions) {
             if (invoke(companion_on, s, c)) {
@@ -1942,13 +1942,13 @@ def private checkout_versions(name, root : string) : string {
 //! (the stock build) to stamp that checkout instead.
 def mtmd_versions(bin : string = "") : string {
     let commit = git_commit_at(dir_name(empty(bin) ? mtmd_bin() : bin))
-    let patch = file_identity("{asr_dir()}/patches/mtmd-timing.patch", "patch")
-    let ptag = empty(patch.sha256) ? "mtmd-timing.patch(unhashed)" : "mtmd-timing.patch@{slice(patch.sha256, 0, 8)}"
+    let ptag = patch_tag("{asr_dir()}/patches", "mtmd-timing.patch")
     return empty(commit) ? "llama.cpp + {ptag}" : "llama.cpp @ {commit} + {ptag}"
 }
 
-def private patch_tag(name : string) : string {
-    let patch = file_identity("{nmt_dir()}/patches/{name}", "patch")
+//! the patch `name` under `dir` as a version tag: its name and the first 8 hex of its sha256, `(unhashed)` where unread
+def private patch_tag(dir, name : string) : string {
+    let patch = file_identity("{dir}/{name}", "patch")
     return empty(patch.sha256) ? "{name}(unhashed)" : "{name}@{slice(patch.sha256, 0, 8)}"
 }
 
@@ -1956,7 +1956,7 @@ def private patch_tag(name : string) : string {
 def marian_versions() : string {
     let commit = git_commit_at(marian_root())
     return "" if (empty(commit))
-    let tags <- [for (name in ["marian-oracle.patch", "marian-sentencepiece.patch"]); patch_tag(name)]
+    let tags <- [for (name in ["marian-oracle.patch", "marian-sentencepiece.patch"]); patch_tag("{nmt_dir()}/patches", name)]
     return "Mozilla translations @ {commit} + {join(tags, " + ")}"
 }
 

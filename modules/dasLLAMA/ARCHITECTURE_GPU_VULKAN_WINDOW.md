@@ -2,7 +2,8 @@
 
 Companion to `ARCHITECTURE_GPU_VULKAN.md`; a section is cited by its anchor. This document carries what a window does a
 session at a time: the recurrent block, whose state and ring belong to one region, the segmented window that holds several
-sessions' chunks, and the short window's peel through the token commands. The chain these sit in is
+sessions' chunks, the short window's peel through the token commands, the final residual rows a window lands for an
+embedding, and the scratch window that seats an embedding request's texts back to back in one region. The chain these sit in is
 `ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain`.
 
 ### The recurrent block of the prefill window {#vk-prefill-dn-block}
@@ -161,3 +162,46 @@ chain, as does every window under the lever `set_vulkan_prefill_peel(false)`, wh
 `harness/vk_short_window_race.das` races the two forms through. The rows stay on the device as the chain
 leaves them; `rdec_prefill_landed` is either form's bookkeeping; the witness is `moe_gpu_resident_peels`, a
 peel counting as a served prefill too.
+
+### The window lands its hidden rows for an embedding {#vk-prefill-hidden-rows}
+
+An embedding pools the post-final-norm rows of every prompt position (the mean, the last row, the first row), so its forward
+asks the session to keep every row's hidden state (`Session.keep_hidden`), and the window lands them: under the ask
+(`vk_rdec_hidden_ask`, through the tier's seat `install_rdec_hidden`; the resident overrides set it from the session and lift
+it after the call) every row runs the last layer's FFN - the last-row tail slice (`pf_ffn_slice_row0`) is off - and the
+window's final residual plane (`pf_x`) is copied into a host plane in place of the classifier - an embedding reads no
+logits, so its window runs none and lands none, and no segment needs a logits slot - then read into the call's `[npos x dim]`
+rows; `vk_rdec_hidden_rows` hands a session its rows - the one-session call's from row 0,
+a segment's from its `row0` - into its `x_b`, where the embed pool applies the final norm on the host. A window of an
+embedding never peels (the token commands land the last row alone), and the hyper-connection chain lands no rows, so a
+session keeping its hidden state passes there by name (`RdecPass.hidden`). A one-token text takes a one-row window too
+(`embed_forward`): the one-row command lands the logits and no hidden row. The witness is the device cell of
+`tests/test_embeddings.das`: the model card's cosines, batch against single, every window prefilled on the device and no
+call passed to the CPU rails.
+
+### The scratch window: an embedding request's texts back to back in one region {#vk-prefill-scratch}
+
+An embedding keeps no K/V past its call, so its texts need no region each: a segmented window whose every segment is an
+embedding's from position 0 (its session keeps its hidden rows, no checkpoint stop) on a model whose sessions keep nothing
+past their rows (`session_keeps_rows_only`: no recurrent state, NextN head row or per-layer-embedding n-gram ring - the state
+the embed pool's reuse reads too) seats all its segments in ONE
+region (`rdec_segs_scratch_why`, `rdec_segs_scratch_bind`: the least recently used unpinned region, its owner's rows saved
+first). A segment's rows start past the rows the segments before it hold (`RdecPfSeg.koff`): its mirror base is its region's
+plus `koff` rows (`pf_seg_mir_base`), folded into the rope-and-store's and the attention's `layerbase`, so its keys sit at
+positions 0.. of its own run and no segment reads another's; a window part carries its segment's `koff`. The driver seats
+segments this way where no layer is a sliding ring and no block codec stores (`vk_rdec_segs_packed`, the seat
+`install_rdec_segs_packed`). The texts' rows must fit the region's context; `embed_batch` cuts a request into windows of at
+most that many rows (`embed_window_rows`). After the window no session claims the region (`rdec_scratch_landed`,
+`rdec_scratch_release`): an embedding reads its hidden rows and starts its next call at position 0. Its sessions are therefore
+device-home - no host K/V - wherever the driver promises the model this window before the call
+(`moe_gpu_resident_scratch_serves`; `embed` pools them, one a text of the request, a one-token text and a single text riding
+the window too), so a request's host memory is its texts' rows, never a context-sized cache a text. The promise is the
+window's own admission - `rdec_segs_model_fits` (no hyper-connection residual, no host experts, a mirror codec the window
+serves, and for a per-layer-embedding model the device embed its side rows gather off) and the packed seat - plus one region
+no live device-home session holds. A
+served model the window is not promised takes host-cached sessions, one region a text, and logs why once per armed model. The server's embedding
+worker asks one region of `emb_scratch_tokens` (`EMB_SCRATCH_TOKENS`, 8192, or the embedder's context where wider) - 0.9 GB
+of K/V for Qwen3-Embedding-0.6B - and an input past the embedder's
+context is refused with a 400; the in-handler route on a chat model shares one unpinned region of the chat model's the same way,
+and answers 503 where every region holds a live device-home stream. The witness is `moe_gpu_resident_scratch_windows`.
+

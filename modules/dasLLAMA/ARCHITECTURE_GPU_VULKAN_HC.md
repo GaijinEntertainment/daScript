@@ -121,7 +121,7 @@ host's `ngram_gather` per position) requantize once, the key and value GEMMs run
 it off the ring (`pos0` names the window's first position), and the window's last `min(rows, nrows)` panel
 rows copy into the ring's slots (`pos % nrows`, the region the tok meta's `dnslot` names) for the rows after
 the window - the decode steps then advance the ring on the device (`Session.ple_ring_device`). A prompt
-served this way passes nothing to the CPU (the served-prefill counter `moe_gpu_resident_prefills` rises by one), and
+served this way passes nothing to the CPU (the served-prefill counter `gpu_resident_prefills_` rises by one), and
 the deltanet state and the ring stay on the device as any other hybrid's do.
 
 ### The window's experts streamed a layer at a time {#hc-stream-window}

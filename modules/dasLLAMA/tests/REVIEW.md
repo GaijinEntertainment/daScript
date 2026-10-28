@@ -19,10 +19,7 @@ computed sides, or a measured quality figure against a tolerance; a floor on a c
 configuration or a roster size is not one, nor is an index guard or a route counter. A stocked
 artifact is a file a test reads from under `models_dir()` that neither this repo's build nor its
 tests produce - model files, mmprojs, front-end packs, image fixtures, oracle dumps. An area is a
-name in `run.das`'s `AREAS` list, standing for the files `run.das`'s `area_tests` returns for it;
-`--changed` prints, for each changed path, a `CHANGED` line naming what it runs - test files by
-name, areas whole, or the engine core (every model-free `llm` file plus `LLM_CORE_WITNESSES`) -
-and a `PLAN` line counting the run's files and saying when the engine core changed.
+name in `run.das`'s `AREAS` list, standing for the files `run.das`'s `area_tests` returns for it.
 
 **A kernel-unit cell - one in which test code outside a CPU oracle (the cell, a helper in its file
 or a `_*.das` helper module) dispatches a kernel class or calls a `../dasllama/dasllama_math*.das`
@@ -55,8 +52,7 @@ their rows.
 
 **Every PR runs `run.das -- --suite model-free`, and `run.das -- --changed` on a box with the
 models stocked (every file its `PLAN` line counts), plus every test here the change reaches -
-never the whole directory, and the whole `stocked` suite only where the `--changed` run's `PLAN`
-line says the engine core changed.** A change reaches a test when it alters anything the test's
+never the whole directory.** A change reaches a test when it alters anything the test's
 result depends on - the test file, a shared helper, engine code it exercises, an in-tree fixture
 or corpus it reads, or a name it asserts on; a comment-only edit reaches none.
 
@@ -112,8 +108,9 @@ a run of skips is not the coverage the suite owes.
 **A diff that adds a test file here adds its `CLAUDE.md` entry in the same change, every clause
 of it true of the file as added.**
 
-**A diff that adds a cell or a gate function to a file whose `CLAUDE.md` entry names every cell,
-or every gate function, of that file adds the new name to that entry in the same change.**
+**A diff that adds a cell or a gate function to a file whose `CLAUDE.md` entry accounts for every
+cell, or every gate function, of that file - by name or by a clause of its own - adds the new one
+to that entry in the same change.**
 
 **A diff that removes, moves or renames a cell or a gate function, or changes a cell's suite, its
 skip condition, or any fact a `CLAUDE.md` entry states about it - the class it dispatches, the
@@ -171,9 +168,8 @@ own code or through a helper.** A test is about the image
 when it checks the image's mint, map or identity, including how a lane pin changes that identity (a
 lane pin is a call that picks the weight form, the Metal tensor crowns - the pin that compiles a
 family's half-precision GEMM twins - or the CPU kernel backend a load serves on). A baking loader
-writes a `.dlim` beside the model when `DASLLAMA_IMAGE` is unset, such as `load_<family>_tower`,
-`load_<family>_embedder`, `load_model_cached`, and `load_tts_model` on a Kokoro or KittenTTS GGUF.
-A test that sets no `DASLLAMA_IMAGE=0` loads its media carrier in memory through the family's
+is any load call that writes a `.dlim` beside the model when `DASLLAMA_IMAGE` is unset, itself or
+through a loader it calls. A test that sets no `DASLLAMA_IMAGE=0` loads its media carrier in memory through the family's
 `stage_*` function paired with its `mint_*`, or through `cache_via_image_staged` with an empty
 image path.
 
@@ -269,11 +265,12 @@ re-runs the compare, or holds the output against the reference computed over dis
 row or a layer off, a reordered sequence); a value added to the output after the fact is not one.**
 
 **A within-bar float compare that a diff adds, changes, moves or extracts into a helper reds on a
-NaN in the output, the reference or their difference: it passes on `d <= bar`, counts a miss on
-`!(d <= bar)`, and reads a NaN element as infinite in any largest difference it keeps - or it
-routes through `_compares.das`' `check`, `check_count` or `sweep_check`, which do.** `d > bar` is
-false on a NaN, and a running `max` drops a NaN that a later finite element follows, so an output
-holding one, or a NaN sentinel the kernel never overwrote, passes.
+NaN in the output, the reference or their difference: it passes only where its compare against the
+bar is true (`d <= bar`, `s >= floor`), counts a miss where it is not, and reads a NaN as the worst
+value in any extreme it keeps (a largest difference, a smallest similarity) - or it routes through
+`_compares.das`' `check`, `check_count` or `sweep_check`, which do.** `d > bar` is false on a NaN,
+and a running `max` or `min` drops a NaN that a later finite element follows, so an output holding
+one, or a NaN sentinel the kernel never overwrote, passes.
 
 **A must-exceed assert - one that passes only when a value lands outside its bar, by `d > bar` or
 by a miss count above zero, as a control does - that a diff adds, changes, moves or extracts into

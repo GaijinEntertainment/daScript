@@ -1112,18 +1112,13 @@ def tower_gemm_types_uniform(m : GGUFMeta; n_layer : int64; gt : int) : bool {
 //! Whether a whisper-class mmproj stores every block GEMM in one type a halfword holds - f16, bf16, or Q8_0, whose
 //! eight-bit quants times a half scale the device's f32 tile would stage as halves anyway; false for a file that cannot be read
 def private audio_tower_half_gemms(path : string) : bool {
-    let f = fopen(path, "rb")
-    return false if (f == null)
     var half = false
-    fmap(f) $(var bytes : array<uint8>#) {
-        return if (!gguf_magic_ok(bytes))
-        var inscope m <- parse_gguf_meta(bytes)
+    let read = gguf_header_read(path) $(m; bytes) {
         let gt = gguf_tensor_type(m, "a.blk.0.attn_q.weight")
         let n_layer = gguf_has(m, "clip.audio.block_count") ? gguf_int(m, bytes, "clip.audio.block_count") : 0l
         half = (gt == GGML_TYPE_BF16 || gt == GGML_TYPE_F16 || gt == GGML_TYPE_Q8_0) && n_layer > 0l && tower_gemm_types_uniform(m, n_layer, gt)
     }
-    fclose(f)
-    return half
+    return read && half
 }
 
 //! the projector kind an mmproj's `clip.projector_type` names, false for a type the audio tower does not serve
@@ -1157,11 +1152,7 @@ def private audio_tower_mlp_shape(m : GGUFMeta; kind : AudioProjKind; mm1_in : i
 def private audio_tower_probe(path : string) : tuple<dim : int64; kind : AudioProjKind> {
     var res = (dim = 0l, kind = AudioProjKind.qwen2a)
     return res if (path |> ends_with(".dlim"))
-    let f = fopen(path, "rb")
-    return res if (f == null)
-    fmap(f) $(var bytes : array<uint8>#) {
-        return if (!gguf_magic_ok(bytes))
-        var inscope m <- parse_gguf_meta(bytes)
+    let read = gguf_header_read(path) $(m; bytes) {
         var kind = AudioProjKind.qwen2a
         if (!gguf_has(m, "clip.projector_type") || !audio_tower_projector(gguf_str(m, bytes, "clip.projector_type"), kind)
                 || !gguf_has(m, "clip.audio.embedding_length") || gguf_find_tensor(m, "a.position_embd.weight") < 0) {
@@ -1175,7 +1166,9 @@ def private audio_tower_probe(path : string) : tuple<dim : int64; kind : AudioPr
             res.dim = audio_tower_mlp_shape(m, kind, gguf_int(m, bytes, "clip.audio.embedding_length") * stack).proj_dim
         }
     }
-    fclose(f)
+    if (!read) {
+        res.dim = 0l
+    }
     return res
 }
 

@@ -206,6 +206,7 @@ def private q8_devw_gate(t : T?; var dev, queue; m, kdim, ndim : int; mt : int =
             if (rant) {
                 check_buf(t, "{tag} tiled", mc.buf[by_t], ref.want, env_bar(2e-3, ref.env), Shape(row_width = ndim), ref.env)
             }
+            q8_devw_split_leg(t, mc, tag, kd, dq_pso, bw, bx, bk, bn, m, kdim, ndim, ref.want, ref.env)
         }
         // negative control: the GEMM alone over a poison-only panel (dequant skipped) must MISS
         // the oracle - proves the chained compare above actually rode the dequant output
@@ -218,6 +219,46 @@ def private q8_devw_gate(t : T?; var dev, queue; m, kdim, ndim : int; mt : int =
             let badp = poison_panel_over(mc, by_p, ref.want, ref.env, 2e-3)
             t |> success(badp > 0, "{tag}: poison-panel control reds the bar ({badp} over)")
         }
+    }
+}
+
+//! The dev-W column tiles with the half GEMM split along K (`MetalHalfMulMmTHSk`): each tile's partial planes summed into its
+//! column slice of the wider output by the strided reduce (`SkReduceArgs.cols4` / `ld4`), the production split form
+[arch(at="../ARCHITECTURE_GPU_PREFILL_GEMM.md#prefill-split-k")]
+def private q8_devw_split_leg(t : T?; var mc : MetalCell; tag : string; kd; dq_pso; bw, bx, bk, bn : int; m, kdim, ndim : int;
+                              want, env : array<float>) {
+    var err : string
+    let ks = kernel_of(@@enc_gemm_hmm_thsk)
+    var sk_pso = mc |> keep_stamp(ks, err)
+    return if (!tensor_pso_or_skip(t, "{tag} tiled split", sk_pso, mc.dev, err))
+    let kr = stamp_of(@@enc_sk_reduce_c)
+    var red_pso = mc |> keep_stamp(kr, err)
+    return if (!pso_ok(t, "{tag} split reduce", red_pso, err))
+    let nsk = 2
+    return if (kdim % (nsk * 64) != 0)   //! a share is whole 64-wide chunks, as the production rule sizes it
+    let td = ndim / 2
+    let nbr = kdim / 32
+    let by_s = mc |> out_words(m * ndim, NAN_SENTINEL)
+    let bwh_a = mc |> out_words(td * kdim, float16(-100.0))
+    let bwh_b = mc |> out_words(td * kdim, float16(-100.0))
+    let bpart = mc |> out_words(nsk * m * td, NAN_SENTINEL)
+    let bpart2 = mc |> out_words(nsk * m * td, NAN_SENTINEL)
+    var tka = CvtArgs(total = uint(td * nbr))
+    var ka = SkReduceArgs(total = uint(m * td / 4), ksplit = uint(nsk), cols4 = uint(td / 4), ld4 = uint(ndim / 4))
+    let ran = mc |> cell_record(t, "{tag} tiled split") $(enc : MetalComputeEncoder?) {
+        for (ti in range(2)) {
+            let tbase = ti * td
+            let bwh_ti = ti == 0 ? bwh_a : bwh_b
+            let bp = ti == 0 ? bpart : bpart2
+            invoke(kd.enc, enc, dq_pso, mc.buf[bw], uint64(tbase * nbr * 34), mc.buf[bw], mc.buf[bwh_ti], tka, int64(td * nbr))
+            invoke(ks.enc, enc, sk_pso, mc.buf[bwh_ti], 0ul, mc.buf[bx], 0ul, mc.buf[bp], 0ul, mc.buf[bk], mc.buf[bn], int64(m), int64(td), int64(nsk))
+            stamp_run(kr, red_pso) {
+                invoke(kr.enc, enc, mc.buf[bp], mc.buf[by_s], uint64(tbase * 4), ka, int64(((m - 1) * ndim + td) / 4))   //! the writes' reach from the tile's column
+            }
+        }
+    }
+    if (ran) {
+        check_buf(t, "{tag} tiled split", mc.buf[by_s], want, env_bar(2e-3, env), Shape(row_width = ndim), env)
     }
 }
 
@@ -418,6 +459,152 @@ def private kq_dbuf_gate(t : T?; var dev, queue; fmt : int; m, kdim, ndim : int;
         return if (!ran)
         dbuf_identity(t, mc, tag, by_a, by_b, m * ndim)
         check_buf(t, tag, mc.buf[by_a], ref.want, env_bar(2e-4, ref.env), Shape(row_width = ndim), ref.env)
+    }
+}
+
+//! the split-K form's reduce: `nsk` partial planes of `total` floats summed into `by` (the decode batch's shared stamp)
+//! The q8 blob's split-K stamp (`MetalQ8MulMmTHSk` / `TSk`, 32 output columns a threadgroup) against the CPU product: at one
+//! split it writes y itself, past one its partial planes go through the reduce; W staged to half, X f16-exact (one staged operand)
+[arch(at="../ARCHITECTURE_GPU_PREFILL_GEMM.md#prefill-split-k")]
+def private q8_split_gate(t : T?; var dev, queue; m, kdim, ndim, nsk : int; halfx : bool) {
+    let tag = "q8_split{halfx ? " halfx" : ""} m={m} k={kdim} n={ndim} nsk={nsk}"
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        //! m = 16: the short window's 16-row stamps
+        let kt = (m == 16 ? (halfx ? kernel_of(@@enc_gemm_mm_thsk16_c) : kernel_of(@@enc_gemm_mm_tsk16_c))
+            : (halfx ? kernel_of(@@enc_gemm_mm_thsk_c) : kernel_of(@@enc_gemm_mm_tsk_c)))
+        var pso = mc |> keep_stamp(kt, err)
+        return if (!tensor_pso_or_skip(t, tag, pso, dev, err))
+        var inscope blob : array<uint8>
+        var inscope wdeq : array<float>
+        q8_blob_fill(ndim, kdim / 32, blob, wdeq)
+        var inscope xf : array<float>
+        q8_x_fill(m * kdim, xf)
+        var inscope xh <- [for (x in xf); float16(x)]   // the fixture is f16-exact, so the oracle dot is unchanged
+        var inscope ref <- dense_ref_rows(wdeq, xf, m, kdim, ndim)
+        let bw = mc |> in_plain(blob)
+        let bx = halfx ? (mc |> in_plain(xh)) : (mc |> in_(xf))
+        split_cell(t, mc, tag, m, kdim, ndim, nsk, false, ref.want, ref.env, staged_bar(1, kdim, ref.env)) $(enc; bo, bk, bn) {
+            invoke(kt.enc, enc, pso, mc.buf[bw], 0ul, mc.buf[bw], mc.buf[bx], 0ul, bo, 0ul, bk, bn, int64(m), int64(ndim), int64(nsk))
+        }
+    }
+}
+
+//! the fixture a K-quant split gate runs: the format's planes over `ndim` rows of `kdim`, `m` activation rows (`x(i)`), and the
+//! dequantized rows' product
+struct private KqSplitFixture {
+    kq : array<uint8>
+    ks : array<uint8>
+    xf : array<float>
+    ref : DenseRef
+}
+
+def private kq_split_fixture(fmt, m, kdim, ndim : int; x : block<(i : int) : float>) : KqSplitFixture {
+    var fx : KqSplitFixture
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        let nb = kdim / 256
+        let nsb = ndim * nb
+        kq_fill_planes(fmt, nsb, fx.kq, fx.ks)
+        fx.xf <- [for (i in range(m * kdim)); invoke(x, i)]
+        fx.ref <- dense_ref_env(m, kdim, ndim, fx.xf) $(j; var wrow) {
+            kq_row_ref(fmt, j * nb, nb, nsb, fx.kq, fx.ks, wrow)
+        }
+    }
+    return <- fx
+}
+
+//! A dense K-quant or grid format's split-K stamp (`kq_mm:<fmt>:thsk` / `tsk`) against the dequantized rows' product, the same
+//! two paths as the q8 cell; W staged to half, X f16-exact
+[arch(at="../ARCHITECTURE_GPU_PREFILL_GEMM.md#prefill-split-k")]
+def private kq_split_gate(t : T?; var dev, queue; fmt : int; m, kdim, ndim, nsk : int; halfx : bool) {
+    let tag = "kq_split_k{fmt}{halfx ? " halfx" : ""} m={m} k={kdim} n={ndim} nsk={nsk}"
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let f = kq_fmt_of_id(fmt, "kq_split_gate")
+        let kt = m == 16 ? kq_mm_split16_kernel(f, halfx) : kq_mm_split_kernel(f, halfx)   //! m = 16: the short window's 16-row stamps
+        var pso = mc |> keep_stamp(kt, err)
+        return if (!tensor_pso_or_skip(t, tag, pso, dev, err))
+        var inscope fx <- kq_split_fixture(fmt, m, kdim, ndim) $(i) => float(float16(0.05 * float(i % 41) - 0.9))   //! f16 round-trip: the oracle dot stays exact
+        var inscope xh <- [for (x in fx.xf); float16(x)]
+        let bks = mc |> in_plain(fx.ks)
+        let bkq = mc |> in_plain(fx.kq)
+        let bx = halfx ? (mc |> in_plain(xh)) : (mc |> in_(fx.xf))
+        let doff = kq_split_doff(fmt, ndim * (kdim / 256))
+        split_cell(t, mc, tag, m, kdim, ndim, nsk, false, fx.ref.want, fx.ref.env, staged_bar(1, kdim, fx.ref.env)) $(enc; bo, bk, bn) {
+            invoke(kt.enc, enc, pso, mc.buf[bks], doff, mc.buf[bks], 0ul, mc.buf[bkq], 0ul, mc.buf[bx], 0ul, bo, 0ul, bk, bn, int64(m), int64(ndim), int64(nsk))
+        }
+    }
+}
+
+//! The simdgroup base tiles' split-K stamps (`MetalQ8MulMmSk`, `MetalKqMulMm<Fmt>Sk`) - the forms a box with no dense tensor
+//! crown splits on - against the CPU product, the partial planes through the reduce at every count; `fmt` 0 is the q8 blob. The
+//! base tiles stage W and X to half: the q8 X fixture is f16-exact (one staged operand), the K-quant one off the lattice (two)
+[arch(at="../ARCHITECTURE_GPU_PREFILL_GEMM.md#prefill-split-k")]
+def private base_split_gate(t : T?; var dev, queue; fmt : int; m, kdim, ndim, nsk : int) {
+    let tag = "base_split fmt{fmt} m={m} k={kdim} n={ndim} nsk={nsk}"
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        if (fmt == 0) {
+            let st = stamp_of(@@enc_gemm_mm_sk_c)
+            var pso = mc |> keep_stamp(st, err)
+            return if (!pso_ok(t, tag, pso, err))
+            var inscope blob : array<uint8>
+            var inscope wdeq : array<float>
+            q8_blob_fill(ndim, kdim / 32, blob, wdeq)
+            var inscope xf : array<float>
+            q8_x_fill(m * kdim, xf)
+            var inscope ref <- dense_ref_rows(wdeq, xf, m, kdim, ndim)
+            let bw = mc |> in_plain(blob)
+            let bx = mc |> in_(xf)
+            split_cell(t, mc, tag, m, kdim, ndim, nsk, true, ref.want, ref.env, staged_bar(1, kdim, ref.env)) $(enc; bo, bk, bn) {
+                stamp_run(st, pso) {
+                    invoke(st.enc, enc, mc.buf[bw], 0ul, mc.buf[bw], mc.buf[bx], bo, 0ul, bk, bn, int64(m), int64(ndim), int64(nsk))
+                }
+            }
+        } else {
+            let st = kq_mm_base_split_stamp(kq_fmt_of_id(fmt, "base_split_gate"))
+            var pso = mc |> keep_stamp(st, err)
+            return if (!pso_ok(t, tag, pso, err))
+            var inscope fx <- kq_split_fixture(fmt, m, kdim, ndim) $(i) => 0.07 * float(i % 39) - 1.3
+            let bks = mc |> in_plain(fx.ks)
+            let bkq = mc |> in_plain(fx.kq)
+            let bx = mc |> in_(fx.xf)
+            let doff = kq_split_doff(fmt, ndim * (kdim / 256))
+            split_cell(t, mc, tag, m, kdim, ndim, nsk, true, fx.ref.want, fx.ref.env, staged_bar(2, kdim, fx.ref.env)) $(enc; bo, bk, bn) {
+                stamp_run(st, pso) {
+                    invoke(st.enc, enc, mc.buf[bks], doff, mc.buf[bks], 0ul, mc.buf[bkq], 0ul, mc.buf[bx], bo, 0ul, bk, bn, int64(m), int64(ndim), int64(nsk))
+                }
+            }
+        }
+    }
+}
+
+//! The bf16 plane's split-K stamp (`MetalBf16MulMmTHSk` / `TSk`) against the exact widened rows' product: the fixture's W is
+//! f16-exact and its X too, so staging to half rounds nothing and the bar is the f32 sum's alone
+[arch(at="../ARCHITECTURE_GPU_PREFILL_GEMM.md#prefill-split-k")]
+def private bf16_split_gate(t : T?; var dev, queue; m, kdim, ndim, nsk : int; halfx : bool) {
+    let tag = "bf16_split{halfx ? " halfx" : ""} m={m} k={kdim} n={ndim} nsk={nsk}"
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let kt = halfx ? kernel_of(@@pf_enc_bf16_mm_thsk_c) : kernel_of(@@pf_enc_bf16_mm_tsk_c)
+        var pso = mc |> keep_stamp(kt, err)
+        return if (!tensor_pso_or_skip(t, tag, pso, dev, err))
+        var inscope wb : array<uint16>
+        wb |> resize(ndim * kdim)
+        var inscope wdeq : array<float>
+        wdeq |> resize(ndim * kdim)
+        for (i in range(ndim * kdim)) {
+            wb[i] = uint16(float_bits_to_uint(0.125 * float((i * 3) % 13 - 6)) >> 16u)
+            wdeq[i] = uint_bits_to_float(uint(wb[i]) << 16u)
+        }
+        var inscope xf <- [for (i in range(m * kdim)); float(float16(0.11 * float(i % 37) - 1.9))]   //! f16-exact: one oracle for both X forms
+        var inscope xh <- [for (x in xf); float16(x)]
+        var inscope ref <- dense_ref_rows(wdeq, xf, m, kdim, ndim)
+        let bw = mc |> in_plain(wb)
+        let bx = halfx ? (mc |> in_plain(xh)) : (mc |> in_(xf))
+        split_cell(t, mc, tag, m, kdim, ndim, nsk, false, ref.want, ref.env, staged_bar(0, kdim, ref.env)) $(enc; bo, bk, bn) {
+            invoke(kt.enc, enc, pso, mc.buf[bw], 0ul, mc.buf[bx], 0ul, bo, 0ul, bk, bn, int64(m), int64(ndim), int64(nsk))
+        }
     }
 }
 
@@ -748,7 +935,7 @@ def private q8_gemm_sk_gate(t : T?; var dev, queue; tensor : bool; kdim, ndim, k
             }
         }
         var ka = gemm_sk_ka(int64(kdim), int64(ndim), int64(ksplit))
-        var kaR = SkReduceArgs(total = uint(mp * ndim), ksplit = uint(ksplit))
+        var kaR = SkReduceArgs(total = uint(mp * ndim / 4), ksplit = uint(ksplit))
         let bw = mc |> in_plain(blob)
         let bx = mc |> in_(xf)
         let bpart = mc |> out_words(ksplit * mp * ndim, -1000.0)
@@ -758,7 +945,7 @@ def private q8_gemm_sk_gate(t : T?; var dev, queue; tensor : bool; kdim, ndim, k
                 invoke(st.enc, enc, mc.buf[bw], 0ul, mc.buf[bw], mc.buf[bx], mc.buf[bpart], 0ul, ka, int64(ndim), int64(ksplit))
             }
             stamp_run(sr, psoR) {
-                invoke(sr.enc, enc, mc.buf[bpart], mc.buf[by], kaR, int64(mp * ndim))
+                invoke(sr.enc, enc, mc.buf[bpart], mc.buf[by], 0ul, kaR, int64(mp * ndim / 4))
             }
         }
         return if (!ran)
@@ -1639,6 +1826,7 @@ def test_metal_gemm_kernels(t : T?) {
                 q8_mulmm_t_gate(t, dev, queue, 256, 256, 64, halfx = true, mt = 128)
                 q8_devw_gate(t, dev, queue, 64, 256, 64)
                 q8_devw_gate(t, dev, queue, 32, 288, 128)   // non-256-multiple block count arms the dequant tail guard
+                q8_devw_gate(t, dev, queue, 32, 512, 128)   //! the tiled chain's split leg: two 256-deep shares
                 q8_devw_gate(t, dev, queue, 128, 256, 128, mt = 128)   // tall dev-W GEMM stamp
                 for (fmt in [4, 5, 6, 44, 35, 45, 40, 49, 3, 33, 34, 2, 23, 24, 25]) {
                     kq_devw_gate(t, dev, queue, fmt, 64, 512, 64)
@@ -1654,6 +1842,27 @@ def test_metal_gemm_kernels(t : T?) {
                 for (fmt in [4, 5, 6, 44, 35, 45, 40, 49, 3, 33, 34, 2, 23, 24, 25]) {
                     kq_dbuf_gate(t, dev, queue, fmt, 128, 512, 64)
                     kq_dbuf_gate(t, dev, queue, fmt, 64, 512, 64, mt = 32)   //! the 32-row stamp pair
+                }
+                // ===== the short window's split-K forms: one split (the stamp writes y) and several (partial planes + reduce) =====
+                for (halfx in [false, true]) {
+                    q8_split_gate(t, dev, queue, 32, 1024, 64, 1, halfx)
+                    q8_split_gate(t, dev, queue, 32, 1024, 64, 4, halfx)
+                    q8_split_gate(t, dev, queue, 64, 1024, 96, 8, halfx)   //! two M tiles, three 32-column tiles, eight 4-block shares
+                    q8_split_gate(t, dev, queue, 16, 1024, 64, 1, halfx)   //! the 16-row stamps, whole and split
+                    q8_split_gate(t, dev, queue, 16, 1024, 64, 4, halfx)
+                    bf16_split_gate(t, dev, queue, 32, 512, 64, 1, halfx)
+                    bf16_split_gate(t, dev, queue, 64, 512, 128, 4, halfx)
+                    for (fmt in [4, 5, 6, 44, 35, 45, 40, 49, 3, 33, 34, 2, 23, 24, 25]) {
+                        kq_split_gate(t, dev, queue, fmt, 32, 1024, 64, 1, halfx)
+                        kq_split_gate(t, dev, queue, fmt, 64, 1024, 128, 4, halfx)   //! a 256-K share: one superblock a split
+                        kq_split_gate(t, dev, queue, fmt, 16, 1024, 64, 2, halfx)   //! the 16-row stamp
+                    }
+                }
+                //! the simdgroup base tiles' split-K stamps, every superblock format and the q8 blob
+                base_split_gate(t, dev, queue, 0, 32, 1024, 64, 4)
+                base_split_gate(t, dev, queue, 0, 64, 1024, 128, 2)
+                for (fmt in [4, 5, 6, 44, 35, 45, 40, 49, 3, 33, 34, 2, 23, 24, 25]) {
+                    base_split_gate(t, dev, queue, fmt, 32, 1024, 64, 4)
                 }
                 bf16_mulmm_gate(t, dev, queue, false, 64, 256, 64)
                 bf16_mulmm_gate(t, dev, queue, true, 64, 256, 64)

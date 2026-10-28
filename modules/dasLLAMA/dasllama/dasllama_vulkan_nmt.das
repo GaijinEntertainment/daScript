@@ -26,7 +26,6 @@ require dasllama/dasllama_vulkan_tower
 
 let private NV_ENC_SITES = 4l          //! an encoder layer's GEMV sites: [q | k | v], o, w1, w2
 let private NV_DEC_SITES = 6l          //! a decoder layer's: the cross [k | v] (the encode's), the SSRU's [W | Wf], q, o, w1, w2
-let private NV_SITE_META_BYTES = 64l   //! a GEMV site's region pair
 let private NV_TAIL_STEPS = 4l         //! the steps a command buffer carries after the first: a sentence's tail is short
 
 //! the hazard bits of the driver's buffers
@@ -235,16 +234,6 @@ def private nv_sizes(r : NvResident) : tuple<bx : int64; bh : int64; bq : int64;
             bpms = nch * r.hh * rows * 2l * 4l, bpy = nch * r.hh * rows * r.hs * 4l, bpos = NMT_MAX_LEN_FACTOR * rows * r.d * 4l)
 }
 
-//! a site's region pair: its first weight block in the gather, its activation rows at block 0
-[cold_path]
-def private nv_site_meta(woff : int64) : HostBuf {
-    let hb = soft_host_buf(g_nv.oom, NV_SITE_META_BYTES, false)
-    if (hb.buf != 0ul) {
-        fill_gemv_region(hb, 0, uint(woff / kq_elems(KqFmt.q8)))
-    }
-    return hb
-}
-
 //! the block GEMMs gathered row-major at their own element offsets - each its own repack unit, so a layer's [q | k | v] and
 //! [k | v] lie back to back and one site reads them as one region - and every site's region pair
 [cold_path]
@@ -267,7 +256,7 @@ def private nv_upload_weights(m : NmtModel) {
         regions |> push(Q8Region(woff = o.w1, n = d, rows = ff))
         regions |> push(Q8Region(woff = o.w2, n = ff, rows = d))
         for (w in fixed_array(o.wq, o.wo, o.w1, o.w2)) {
-            r.site_meta |> push(nv_site_meta(w))
+            r.site_meta |> push(q8_site_meta(r.oom, [w]))
         }
     }
     for (l in range64(m.n_dec)) {
@@ -279,24 +268,16 @@ def private nv_upload_weights(m : NmtModel) {
         regions |> push(Q8Region(woff = o.w1, n = d, rows = ff))
         regions |> push(Q8Region(woff = o.w2, n = ff, rows = d))
         for (w in fixed_array(o.wk, o.wrnn, o.wq, o.wo, o.w1, o.w2)) {
-            r.site_meta |> push(nv_site_meta(w))
+            r.site_meta |> push(q8_site_meta(r.oom, [w]))
         }
     }
     regions |> push(Q8Region(woff = m.cls_off, n = d, rows = m.n_vocab))
-    r.site_meta |> push(nv_site_meta(m.cls_off))
+    r.site_meta |> push(q8_site_meta(r.oom, [m.cls_off]))
     if (!r.oom) {
         vt_upload_regions(m.qblob, m.qscales, regions, active_q8_repack_layout(kernel_backend_needs_repack(active_kernel_backend())), r.wq_nv,
             r.ws_nv, r.wq_bytes, r.ws_bytes)
     }
     delete regions
-}
-
-[cold_path]
-def private nv_gemv_set(site : int; y : uint64; y_bytes : int64; y_bit : uint) : VkDescriptorSet {
-    let r & = g_nv
-    let z = nv_sizes(r)
-    return gemv_planes_set(int(KqFmt.q8), (wq = r.wq_nv, ws = r.ws_nv, wqb = r.wq_bytes, wsb = r.ws_bytes), r.site_meta[site].buf, NV_SITE_META_BYTES, 0u,
-        r.xq_nv, r.xs_nv, z.bq, z.bs, NV_XQ, y, y_bytes, y_bit)
 }
 
 [cold_path]
@@ -335,21 +316,23 @@ def private nv_sets {
     let nsites = nv_cls_site() + 1
     r.s_site |> reserve(nsites)
     r.s_site |> resize(nsites)
+    let f = Q8GemvFeed(planes = (wq = r.wq_nv, ws = r.ws_nv, wqb = r.wq_bytes, wsb = r.ws_bytes), xq = r.xq_nv, xs = r.xs_nv, x_elems = z.bq,
+        xbit = NV_XQ)
     for (l in range64(r.nenc)) {
-        r.s_site[nv_enc_site(l, 0l)] = nv_gemv_set(nv_enc_site(l, 0l), r.h_nv, z.bh, NV_H)
-        r.s_site[nv_enc_site(l, 1l)] = nv_gemv_set(nv_enc_site(l, 1l), r.y_nv, z.bx, NV_Y)
-        r.s_site[nv_enc_site(l, 2l)] = nv_gemv_set(nv_enc_site(l, 2l), r.h_nv, z.bh, NV_H)
-        r.s_site[nv_enc_site(l, 3l)] = nv_gemv_set(nv_enc_site(l, 3l), r.y_nv, z.bx, NV_Y)
+        r.s_site[nv_enc_site(l, 0l)] = q8_gemv_set(f, r.site_meta[nv_enc_site(l, 0l)].buf, r.h_nv, z.bh, NV_H)
+        r.s_site[nv_enc_site(l, 1l)] = q8_gemv_set(f, r.site_meta[nv_enc_site(l, 1l)].buf, r.y_nv, z.bx, NV_Y)
+        r.s_site[nv_enc_site(l, 2l)] = q8_gemv_set(f, r.site_meta[nv_enc_site(l, 2l)].buf, r.h_nv, z.bh, NV_H)
+        r.s_site[nv_enc_site(l, 3l)] = q8_gemv_set(f, r.site_meta[nv_enc_site(l, 3l)].buf, r.y_nv, z.bx, NV_Y)
     }
     for (l in range64(r.ndec)) {
-        r.s_site[nv_dec_site(l, 0l)] = nv_gemv_set(nv_dec_site(l, 0l), r.h_nv, z.bh, NV_H)
-        r.s_site[nv_dec_site(l, 1l)] = nv_gemv_set(nv_dec_site(l, 1l), r.h_nv, z.bh, NV_H)
-        r.s_site[nv_dec_site(l, 2l)] = nv_gemv_set(nv_dec_site(l, 2l), r.q_nv, r.d * 4l, NV_Q)
-        r.s_site[nv_dec_site(l, 3l)] = nv_gemv_set(nv_dec_site(l, 3l), r.y_nv, z.bx, NV_Y)
-        r.s_site[nv_dec_site(l, 4l)] = nv_gemv_set(nv_dec_site(l, 4l), r.h_nv, z.bh, NV_H)
-        r.s_site[nv_dec_site(l, 5l)] = nv_gemv_set(nv_dec_site(l, 5l), r.y_nv, z.bx, NV_Y)
+        r.s_site[nv_dec_site(l, 0l)] = q8_gemv_set(f, r.site_meta[nv_dec_site(l, 0l)].buf, r.h_nv, z.bh, NV_H)
+        r.s_site[nv_dec_site(l, 1l)] = q8_gemv_set(f, r.site_meta[nv_dec_site(l, 1l)].buf, r.h_nv, z.bh, NV_H)
+        r.s_site[nv_dec_site(l, 2l)] = q8_gemv_set(f, r.site_meta[nv_dec_site(l, 2l)].buf, r.q_nv, r.d * 4l, NV_Q)
+        r.s_site[nv_dec_site(l, 3l)] = q8_gemv_set(f, r.site_meta[nv_dec_site(l, 3l)].buf, r.y_nv, z.bx, NV_Y)
+        r.s_site[nv_dec_site(l, 4l)] = q8_gemv_set(f, r.site_meta[nv_dec_site(l, 4l)].buf, r.h_nv, z.bh, NV_H)
+        r.s_site[nv_dec_site(l, 5l)] = q8_gemv_set(f, r.site_meta[nv_dec_site(l, 5l)].buf, r.y_nv, z.bx, NV_Y)
     }
-    r.s_site[nv_cls_site()] = nv_gemv_set(nv_cls_site(), r.lg_nv, blg, NV_LG)
+    r.s_site[nv_cls_site()] = q8_gemv_set(f, r.site_meta[nv_cls_site()].buf, r.lg_nv, blg, NV_LG)
 }
 
 def private nv_attach(m : NmtModel) : bool {
@@ -417,13 +400,6 @@ def private nv_announce {
     to_log(LOG_INFO, "dasLLAMA vulkan nmt: the translation family serves on the device (d {g_nv.d}, {g_nv.nenc}+{g_nv.ndec} layers)\n")
 }
 
-//! a site's GEMV over `ncols` rows of `n` into `dout` outputs a row
-def private nv_gemv(raw : VkCommandBuffer; var h : VkHaz; site : int; n, dout, ncols : int64) {
-    var pc = GemvArgs(n = uint(n), d = uint(dout), nreg = 1u, ybase = 0u, lanes_per_row = 0u, act = 0u, bias_on = 0u, gboff = 0u, uboff = 0u,
-        ncols = uint(ncols), ystride = uint(dout))
-    gemv_enc(int(KqFmt.q8), raw, h, g_nv.s_site[site], pc, dout)
-}
-
 //! `nelem` floats of the set's source as the GEMVs' Q8_0 feed
 def private nv_rq(raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; nelem : int64) {
     var pc = RqArgs(inbase = 0u, nblk = uint(nelem / kq_elems(KqFmt.q8)), lo = -VT_NO_CLAMP, hi = VT_NO_CLAMP)
@@ -445,11 +421,11 @@ def private nv_seam(raw : VkCommandBuffer; var h : VkHaz; biased : bool; rows, b
 //! the ReLU FFN over `rows` rows with its seam: x = LN(x + W2 relu(W1 x + b1) + b2)
 def private nv_ffn(raw : VkCommandBuffer; var h : VkHaz; rows : int64; site_w1 : int; b1, b2, ln_s, ln_b : int64) {
     var r & = g_nv
-    nv_gemv(raw, h, site_w1, r.d, r.ff, rows)
+    q8_gemv(raw, h, g_nv.s_site[site_w1], r.d, r.ff, 1l, rows)
     var pb = GkBiasActArgs(d = uint(r.ff), nelem = uint(rows * r.ff), boff = uint(b1), act = BIAS_ACT_RELU, xoff = 0u)
     enc_tower_bias_act_cls(raw, h, r.s_bias, pb, (rows * r.ff / 4l + 255l) / 256l)
     nv_rq(raw, h, r.s_rq_h, rows * r.ff)
-    nv_gemv(raw, h, site_w1 + 1, r.ff, r.d, rows)
+    q8_gemv(raw, h, g_nv.s_site[site_w1 + 1], r.ff, r.d, 1l, rows)
     nv_seam(raw, h, true, rows, b2, ln_s, ln_b)
 }
 
@@ -491,17 +467,17 @@ def private nv_encode(raw : VkCommandBuffer; var h : VkHaz; m : NmtModel; s, npo
     nv_rq(raw, h, r.s_rq_x, s * d)
     for (l in range64(r.nenc)) {
         let o = nmt_enc_offsets(m, l)
-        nv_gemv(raw, h, nv_enc_site(l, 0l), d, 3l * d, s)
+        q8_gemv(raw, h, g_nv.s_site[nv_enc_site(l, 0l)], d, 3l * d, 1l, s)
         nv_kv(raw, h, r.s_kv_k, s, 3l * d, d, 0l, o.bk)
         nv_kv(raw, h, r.s_kv_v, s, 3l * d, 2l * d, 0l, o.bv)
         nv_attn(raw, h, r.s_part_enc, 3l * d, s, s, 0l, o.bq)
-        nv_gemv(raw, h, nv_enc_site(l, 1l), d, d, s)
+        q8_gemv(raw, h, g_nv.s_site[nv_enc_site(l, 1l)], d, d, 1l, s)
         nv_seam(raw, h, true, s, o.bo, o.ln1_s, o.ln1_b)
         nv_ffn(raw, h, s, nv_enc_site(l, 2l), o.b1, o.b2, o.ln2_s, o.ln2_b)
     }
     for (l in range64(r.ndec)) {
         let o = nmt_dec_offsets(m, l)
-        nv_gemv(raw, h, nv_dec_site(l, 0l), d, 2l * d, s)
+        q8_gemv(raw, h, g_nv.s_site[nv_dec_site(l, 0l)], d, 2l * d, 1l, s)
         nv_kv(raw, h, r.s_ckv_k, s, 2l * d, 0l, l * d * s, o.bk)
         nv_kv(raw, h, r.s_ckv_v, s, 2l * d, d, l * d * s, o.bv)
     }
@@ -516,17 +492,17 @@ def private nv_step(raw : VkCommandBuffer; var h : VkHaz; m : NmtModel; s, cap :
     nv_rq(raw, h, r.s_rq_x, d)
     for (l in range64(r.ndec)) {
         let o = nmt_dec_offsets(m, l)
-        nv_gemv(raw, h, nv_dec_site(l, 1l), d, 2l * d, 1l)
+        q8_gemv(raw, h, g_nv.s_site[nv_dec_site(l, 1l)], d, 2l * d, 1l, 1l)
         var ps = GkNmtSsruArgs(d = uint(d), bf_off = uint(o.bf), cell_off = uint(l * d))
         enc_nmt_ssru_cls(raw, h, r.s_ssru, ps, (d + 255l) / 256l)
         nv_seam(raw, h, false, 1l, 0l, o.rnn_ln_s, o.rnn_ln_b)
-        nv_gemv(raw, h, nv_dec_site(l, 2l), d, d, 1l)
+        q8_gemv(raw, h, g_nv.s_site[nv_dec_site(l, 2l)], d, d, 1l, 1l)
         nv_attn(raw, h, r.s_part_dec, d, s, 1l, l * d * s, o.bq)
-        nv_gemv(raw, h, nv_dec_site(l, 3l), d, d, 1l)
+        q8_gemv(raw, h, g_nv.s_site[nv_dec_site(l, 3l)], d, d, 1l, 1l)
         nv_seam(raw, h, true, 1l, o.bo, o.ctx_ln_s, o.ctx_ln_b)
         nv_ffn(raw, h, 1l, nv_dec_site(l, 4l), o.b1, o.b2, o.ffn_ln_s, o.ffn_ln_b)
     }
-    nv_gemv(raw, h, nv_cls_site(), d, r.nvocab, 1l)
+    q8_gemv(raw, h, g_nv.s_site[nv_cls_site()], d, r.nvocab, 1l, 1l)
     var pp = GkNmtPickArgs(nv = uint(r.nvocab), boff = uint(m.out_b), eos = uint(m.eos_id), cap = uint(cap))
     enc_nmt_pick_cls(raw, h, r.s_pick, pp, 1l)
 }

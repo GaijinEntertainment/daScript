@@ -16,6 +16,10 @@ require daslib/module_path   // get_this_module_dir, is_standalone_exe - the eng
 require [tune_framework]
 require ?das_metal dasllama/dasllama_metal_prefill  // metal_tensor_race (Apple static_if half)
 require ?das_metal dasllama/dasllama_metal_kernels  // metal_tensor_race_decode (Apple static_if half)
+require ?vulkan dasllama/dasllama_vulkan_classes  // vk_split_knee_race: the Vulkan short window's knee (a build with dasVulkan)
+require ?vulkan dasllama/dasllama_vulkan_common  // vk_moe_init: the race brings the device up where the GPU tier is asked for
+require dasllama/dasllama_gpu_tier   // gpu_want_arms_tier
+require dasllama/dasllama_gpu_knee   // vk_split_k_tgs: the snapshot's Vulkan knee
 
 //! The runtime section of the app sidecar, and the races that fill it without a tuner: the mint
 //! writes it at the end of the kernel half, and a fat exe - which ships no tuner and no policy
@@ -45,7 +49,10 @@ def public dasllama_runtime_snapshot(metal_crowns : string) : JsonValue? {
         threads = lanes, metal_tensor = metal_crowns,   // total lanes (workers + computing main), the DAS_JOBQUE_THREADS unit
         mtp_depth_nextn = get_mtp_depth_nextn(), mtp_depth_assistant = get_mtp_depth_assistant(),
         metal_tall_floor = metal_tall_floor(), metal_devw_small_panel_mb = metal_devw_small_panel_mb(),
-        metal_cvt_min_rows = metal_cvt_min_rows()))
+        metal_cvt_min_rows = metal_cvt_min_rows(), metal_split_k_tgs = metal_split_k_tgs(), metal_split_k_tgs_kq = metal_split_k_tgs_kq(),
+        metal_q8_n32_rows = metal_q8_n32_rows(), metal_split_k_tgs_base = metal_split_k_tgs_base(),
+        metal_split_k_tgs_kq_base = metal_split_k_tgs_kq_base(), metal_devw_min_tgs = metal_devw_min_tgs(),
+        metal_split_k_tgs_hmm = metal_split_k_tgs_hmm(), vk_split_k_tgs = vk_split_k_tgs()))
 }
 
 // one METAL_TWIN race row: log it and bank the family when the tensor twin won. Untyped `r` on
@@ -88,6 +95,41 @@ def public dasllama_metal_crown_race() : tuple<wins : array<string>; ran : bool>
     return <- (wins <- wins, ran = ran)
 }
 
+//! The box's split-K knees (`metal_split_knee_race`), applied to this process so the snapshot after it records them; `ran` false
+//! = no Metal device, the knobs keep their values
+def public dasllama_metal_knee_race() : bool {
+    var ran = false   // nolint:LINT003,LINT019 — written by the das_metal arm
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        let kn = metal_split_knee_race()
+        if (kn.ran) {
+            set_metal_split_k_tgs(kn.q8_tgs)
+            set_metal_split_k_tgs_kq(kn.kq_tgs)
+            set_metal_q8_n32_rows(kn.q8_n32_rows)
+            set_metal_split_k_tgs_base(kn.q8_base_tgs)
+            set_metal_split_k_tgs_kq_base(kn.kq_base_tgs)
+            set_metal_devw_min_tgs(kn.devw_min_tgs)
+            set_metal_split_k_tgs_hmm(kn.hmm_tgs)
+            to_log(LOG_INFO, "METAL_KNEE: metal_split_k_tgs={kn.q8_tgs} metal_split_k_tgs_kq={kn.kq_tgs} metal_q8_n32_rows={kn.q8_n32_rows} metal_split_k_tgs_base={kn.q8_base_tgs} metal_split_k_tgs_kq_base={kn.kq_base_tgs} metal_devw_min_tgs={kn.devw_min_tgs} metal_split_k_tgs_hmm={kn.hmm_tgs}\n")
+            ran = true
+        }
+    }
+    return ran
+}
+
+//! The Vulkan short window's knee (`vk_split_knee_race`) where the GPU tier is asked for and a device comes up; false = no race
+[arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#vk-short-split")]
+def public dasllama_vulkan_knee_race() : bool {
+    var ran = false   // nolint:LINT003,LINT019 — written by the vulkan arm
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        if (gpu_want_arms_tier() && vk_moe_init()) {
+            let tgs = vk_split_knee_race()
+            to_log(LOG_INFO, "dasLLAMA vulkan: short-window knee vk_split_k_tgs={tgs}\n")
+            ran = true
+        }
+    }
+    return ran
+}
+
 //! Race the runtime section on this box and write it into the app sidecar
 //! (`tune_manifest_path()`), the kernels section untouched: the Metal twins under the tune
 //! progress display, then the knob snapshot. True when the sidecar was written.
@@ -100,6 +142,8 @@ def public dasllama_race_runtime_section() : bool {
         tune_progress_kernel_begin("metal_crowns", 0)
         var race <- dasllama_metal_crown_race()
         let crowns = join(race.wins, ",")
+        dasllama_metal_knee_race()
+        dasllama_vulkan_knee_race()
         tune_progress_kernel_end("metal_crowns", crowns, !race.ran ? "skipped" : (empty(crowns) ? "holds" : "beats"))
         tune_progress_finish()
         if (!race.ran) {
@@ -255,9 +299,15 @@ def public dasllama_box_runtime_race(path, digest : string) : bool {
         let crowns = join(race.wins, ",")
         tune_progress_kernel_end("metal_crowns", crowns, !race.ran ? "skipped" : (empty(crowns) ? "holds" : "beats"))
         tune_progress_finish()
-        //! the crowns alone: the knobs a process holds at its first apply are its own, not the box's, so none of them ride here
+        //! the crowns and the raced knees alone: the knobs a process holds at its first apply are its own, not the box's
+        let knees = dasllama_metal_knee_race()
         var doc = JV((kernel_library = digest, provenance = JV((box = tune_box_identity(),
-            platform = get_platform_name(), arch = get_architecture_name())), runtime = JV((metal_tensor = crowns))))
+            platform = get_platform_name(), arch = get_architecture_name())),
+            runtime = (knees ? JV((metal_tensor = crowns, metal_split_k_tgs = metal_split_k_tgs(),
+                metal_split_k_tgs_kq = metal_split_k_tgs_kq(), metal_q8_n32_rows = metal_q8_n32_rows(),
+                metal_split_k_tgs_base = metal_split_k_tgs_base(), metal_split_k_tgs_kq_base = metal_split_k_tgs_kq_base(),
+                metal_devw_min_tgs = metal_devw_min_tgs(), metal_split_k_tgs_hmm = metal_split_k_tgs_hmm()))
+                : JV((metal_tensor = crowns)))))
         mkdir_rec(dir_name(path))
         let tmp = "{path}.{get_time_usec(0l)}.tmp"
         var wrote = fwrite(tmp, write_json(doc))

@@ -13,6 +13,8 @@ require daslib/ast
 require daslib/ast_boost
 require daslib/templates_boost   // qmacro: the pipeline-stamp macros
 require strings
+require daslib/enum_trait   // type<KqFmt>: kq_form_ladder's format words
+require dasllama/dasllama_kqformat   // KqFmt
 require daslib/strings_boost   // split: a stamp= family's fields
 require dasllama/dasllama_convert   // dequant_k{4,5,6}_plane_superblock — the kq reference dequant
 require dasllama/dasllama_gemm_schema  // kq_qsb — the ONE per-format quant-plane stride source
@@ -247,6 +249,11 @@ def with_metal_decode_gate(t : T?; blk : block<(var queue : MetalCommandQueue?) 
 //! env[0] x 0.1 + 1.0, past the bar at any envelope.
 def env_bar(rel : float; env : array<float>) : Bar => Bar(kind = BarKind.envelope, rel = rel, abs_floor = 1e-3, poison = env[0] * 0.1 + 1.0, poison_at = 0)
 
+//! The bar of a GEMM tile that rounds `staged` of its operands to half on the way in - W, and X where the fixture sits off the
+//! f16 lattice - and sums `kdim` products in f32: a staged operand moves each product by at most a half ulp, 2^-11 of its
+//! magnitude, and the f32 sum adds at most `kdim` x 2^-24 of it - relative to the products' magnitude sum, the envelope
+def staged_bar(staged, kdim : int; env : array<float>) : Bar => env_bar(float(staged) * 0.00048828125 + float(kdim) * 5.9604645e-8, env)
+
 //! `bar` with the q8 GEMV cells' control: element 0 moved by |want[0]| x 0.1 + 1.0, past a relative bar at any magnitude
 def lead_poisoned(bar : Bar; want : array<float>) : Bar {
     var b = bar
@@ -411,15 +418,73 @@ class private StampOfMacro : AstCallMacro {
             macro_error(prog, expr.at, "stamp_of: '{bfn.name}' is not a [metal_dispatch] builder (kernel stem '{stem}', pipeline global '{gl}')")
             return null
         }
-        return <- qmacro((make = @@(dev : MetalDevice?; var err : string&) : MetalComputePipeline? {
-                return pipeline_from_source(dev, $i(stem), $i("{stem}_entry"), $i("{stem}_fastmath"), err)
-            },
-            seat = @@(var p : MetalComputePipeline?) : MetalComputePipeline? {
-                var was = $i(gl)
-                $i(gl) = p
-                return was
-            },
-            enc = $e(fad)))
+        return <- stamp_of_expr(stem, gl, clone_expression(fad))
+    }
+}
+
+//! `stamp_of`'s value for a builder whose class kernel is `stem` and pipeline global `gl`, `fad` its address
+def private stamp_of_expr(stem, gl : string; var fad : ExpressionPtr) : ExpressionPtr {
+    return <- qmacro((make = @@(dev : MetalDevice?; var err : string&) : MetalComputePipeline? {
+            return pipeline_from_source(dev, $i(stem), $i("{stem}_entry"), $i("{stem}_fastmath"), err)
+        },
+        seat = @@(var p : MetalComputePipeline?) : MetalComputePipeline? {
+            var was = $i(gl)
+            $i(gl) = p
+            return was
+        },
+        enc = $e(fad)))
+}
+
+//! `kernel_of`'s value for a builder named `bname` whose class kernel is `stem`, `tgm` its threadgroup-memory global (empty: none)
+def private kernel_of_expr(at : LineInfo; stem, tgm, bname : string) : ExpressionPtr {
+    var tgmem <- empty(tgm) ? qmacro(0ul) : qmacro($i(tgm))
+    var enc = new ExprAddr(at = at, target := "{bname}_pso")
+    return <- qmacro((make = @@(dev : MetalDevice?; var err : string&) : MetalComputePipeline? {
+            return pipeline_from_source(dev, $i(stem), $i("{stem}_entry"), $i("{stem}_fastmath"), err)
+        },
+        tgmem = $e(tgmem),
+        enc = $e(enc)))
+}
+
+[call_macro(name = "kq_form_ladder")]
+class private KqFormLadderMacro : AstCallMacro {
+    //! ``kq_form_ladder(f, kind, "enc_kq_mm_%_thsk_c"[, "b32" | "!b32"])`` - a ladder on the format ``f`` over every ``KqFmt``
+    //! member a [metal_dispatch] builder exists for under the template's name with the member spliced at ``%`` - the per-32
+    //! members alone, or all but them, where a family's two halves bind different signatures - each arm ``kind``'s value
+    //! (``"kernel_of"`` or ``"stamp_of"``) for it; a format the family adds lands with its class, never as an arm
+    def override visit(prog : ProgramPtr; mod : Module?; var expr : ExprCallMacro?) : ExpressionPtr {
+        let nargs = length(expr.arguments)
+        if ((nargs != 3 && nargs != 4) || !(expr.arguments[1] is ExprConstString) || !(expr.arguments[2] is ExprConstString)
+                || (nargs == 4 && !(expr.arguments[3] is ExprConstString))) {
+            macro_error(prog, expr.at, "kq_form_ladder expects (f, \"kernel_of\" | \"stamp_of\", \"<builder with %>\"), got {describe(expr)}")
+            return null
+        }
+        let kind = string((expr.arguments[1] as ExprConstString).value)
+        let tmpl = string((expr.arguments[2] as ExprConstString).value)
+        let only = nargs == 4 ? string((expr.arguments[3] as ExprConstString).value) : ""
+        var ladder : ExpressionPtr
+        for (fv in type<KqFmt>) {
+            continue if ((only == "b32" && !kq_dense_b32(fv)) || (only == "!b32" && kq_dense_b32(fv)))
+            let bname = replace(tmpl, "%", "{fv}")
+            var found = (stem = "", pso = "", tgmem = "")
+            for (mn in ["dasllama_metal_prefill", "dasllama_metal_kernels"]) {
+                let m = find_module(prog, mn)
+                if (m != null && empty(found.stem)) {
+                    found = builder_stamp(m, bname)
+                }
+            }
+            continue if (empty(found.stem) || (kind == "stamp_of" && empty(found.pso)))
+            var arm = kind == "stamp_of" ? stamp_of_expr(found.stem, found.pso, new ExprAddr(at = expr.at, target := bname)) : kernel_of_expr(expr.at, found.stem, found.tgmem, bname)
+            if (ladder == null) {
+                ladder = arm
+            } else {
+                ladder = qmacro($e(expr.arguments[0]) == $v(fv) ? $e(arm) : $e(ladder))
+            }
+        }
+        if (ladder == null) {
+            macro_error(prog, expr.at, "kq_form_ladder: no KqFmt member has a [metal_dispatch] builder '{tmpl}'")
+        }
+        return <- ladder
     }
 }
 
@@ -444,13 +509,7 @@ class private KernelOfMacro : AstCallMacro {
             macro_error(prog, expr.at, "kernel_of: '{bfn.name}' is not a [metal_dispatch] builder")
             return null
         }
-        var tgmem <- empty(tgm) ? qmacro(0ul) : qmacro($i(tgm))
-        var enc = new ExprAddr(at = expr.at, target := "{bfn.name}_pso")
-        return <- qmacro((make = @@(dev : MetalDevice?; var err : string&) : MetalComputePipeline? {
-                return pipeline_from_source(dev, $i(stem), $i("{stem}_entry"), $i("{stem}_fastmath"), err)
-            },
-            tgmem = $e(tgmem),
-            enc = $e(enc)))
+        return <- kernel_of_expr(expr.at, stem, tgm, "{bfn.name}")
     }
 }
 
@@ -588,3 +647,4 @@ def kq_row_ref(fmt, sb_base, nb, nsb_total : int; kq, ks : array<uint8>; var wro
     let f = kq_fmt_of_id(fmt, "kq_row_ref")
     kq_plane_row_f32(f, kq, ks, int64(nb) * kq_elems(f), 1l, 1l, 0l, wrow, 0l, int64(sb_base), true)
 }
+

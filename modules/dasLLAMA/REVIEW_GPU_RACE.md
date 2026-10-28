@@ -40,7 +40,7 @@ class's declaration.** `check_race_bind_numbers` flags only a slot the class nev
 under `dasllama/`; a swapped pair of declared slots dispatches and ranks the kernels on the wrong data.
 
 **A diff that adds race or knockout code inside the engine (`dasllama/`) puts it in the file that
-owns the kernel family it races, or for a knockout, the file that owns the stage whose cost it
+declares the kernel classes it races, or for a knockout, the file that owns the stage whose cost it
 removes.**
 
 **Race or knockout scaffolding (the setup a timing of two candidates, or of a skipped stage,
@@ -101,9 +101,15 @@ write-after-write hazard, so where production overlaps those dispatches the race
 production never runs.
 
 **A diff that decides the ranking of a race whose code the tree holds, or adds or changes an
-arm of a race whose ranking is decided, makes every arm order its consecutive dispatches the
-same way - a barrier between each pair on every arm, or on none.** A barrier on one arm and
+arm of a race whose ranking is decided, makes every arm place its barriers between the same
+dispatch positions of its chain.** A barrier on one arm and
 overlap on the other price two different chains, so the ranking is not a comparison.
+
+**A diff that decides the ranking of a race whose code the tree holds, or adds or changes such a
+race, whose winner serves dispatches production issues concurrently - sites one window encodes
+without a barrier between them - times every arm on those sites issued
+concurrently, the way production issues them.** A site timed alone has the whole GPU to itself,
+so a split or tile ranked that way is ranked for an occupancy the served window never gives it.
 
 **Weakening the burn phase of `race_pair_ms` (`dasllama/dasllama_metal_common.das`) - the GPU
 work it runs on both arms before the first timed round - is a defect.**

@@ -868,8 +868,8 @@ Each pair below differs on the one axis named, and the fold is behavior-neutral 
 
 - **Tail scratch.** `tw_tail_make` / `_land`, `g4a_tail_make` / `_land`, `g4v_ends_make` / `_land`, `g3v_tail_make` /
   `_land` and `metal_canary_front`'s `g_tw_cn_bufs` each carry their own `bytes_*` fields and release list for
-  pool buffers that `TwBufSet` / `tw_take` / `tw_release` hold (`dasllama/dasllama_metal_tower.das`). The fold: a
-  `scratch : TwBufSet` a tail struct, one `tw_release` in its land. Proof: the audio and vision areas.
+  pool buffers that `MetalBufSet` / `buf_set_take` / `buf_set_release` hold (`dasllama/dasllama_metal_common.das`). The
+  fold: a `scratch : MetalBufSet` a tail struct, one `buf_set_release` in its land. Proof: the audio and vision areas.
 - **The prefix probe.** `prefix_match_len_` repeats `prefix_attach_`'s whole-page walk and partial-page pick with
   no side effect (`dasllama/dasllama_prefix.das`). The fold: one read-only walk that attach applies its effects
   over, so the probe equals the attach by construction. Proof: `test_kv_prefix.das`, `test_scheduler.das`.
@@ -923,19 +923,6 @@ the dense multi-column GEMV both carry (`mul_mv_ext` reading a dequantized chunk
 per-format `MetalGemvSiteT` bodies. The work: that stamp on the gathered site for every served format, raced against
 the route and the tiles at 8, 32, 64 and 128 tokens on the M1 Max and the M5 Max, and the two knees it moves
 (`metal_moe_gemv_max`, `set_metal_moe_tall_avg`) re-raced into the sidecars.
-
-## 48. The dense K-quant sites keep the tile from nine rows up
-
-A dense K-quant or grid-format projection rides the decode's row-batched GEMV forms on a window of eight rows or fewer
-(`ARCHITECTURE_GPU_PREFILL_GEMM.md#gemv-tail-peel`) and the 32-row mul_mm tile from nine rows up, remainder included - the
-q8 blob's peel takes the remainder off a padded tile, the K-quant sites' takes the whole window or nothing. A window of
-9 to 31 rows on Qwen3.6-27B Q4_K_M pays the tile's floor on the M1 Max - 235 to 282 ms, 3.6 decode steps, flat across
-the band - and 80 ms on the M5 Max's tensor twins (`debug-jit`, the window probe; the board row is the metal pp512 cell of
-`performance/records/m1.json` and `m5.json` on Qwen3.6-27B-MTP-Q4_K_M). The work: the remainder peel on the K-quant sites - the full tiles on
-the mul_mm, the `npos % 32` rows on the B8 form at their X and y offsets, as the q8 blob's `enc_gemm_mm` does - then the
-family sweep of `benchmarks/prefill_window_probe.das` across every stocked family on both boxes; and the two-stream
-decode measured on its own (`lcpp_bench --npl 2`) before any kernel is written for it, since the batched step already
-carries the row forms.
 
 ## 49. The gathered route's knee is one token count where the crossing is per model
 
@@ -1016,3 +1003,17 @@ against 1631.4 on release 16 (`PERF_LEDGER.md`, the 2026-10-22 release-17 boards
 mixed-speed lanes (more chunks than lanes, claimed dynamically, or the slow lanes weighted down), a cell holding a
 split's wall against its fastest lane's chunk time with one lane slowed artificially (the static split the control),
 and Whisper tiny CPU on the M5 back at its release-16 board figure with the GEMV tail kept.
+
+## 59. The 27B's short window reads its weights at 320 GB/s, where a decode step reads them at 432
+
+On the M5 Max (`PERF_LEDGER.md`'s split-K entry carries the readings and their commands), Qwen3.6-27B Q4_K_M's 9-row
+prompt window takes 65.5 ms, and its K-quant GEMMs take 53.5 ms of that: a
+knockout of those GEMMs leaves 11.9 ms. The window reads the 17.1 GB of weights once at about 320 GB/s, where a decode
+step reads them at 432 GB/s (39.6 ms), so the 16-row split stamps (`#prefill-split-k` in
+`ARCHITECTURE_GPU_PREFILL_GEMM.md`) do not read the weights twice. The tile's own pipeline holds the gap: a barrier and
+a tensor op for every 64-wide K chunk. These measured flat: a vectorized k4/k5 decode; a single-buffer stamp at twice the
+occupancy (1-3%, inside the run's spread); 4-way against 8-way splits. The reduce costs at most 5%. Separately, the
+dev-W floor race (`#devw-panel-knees`) scores the 27B gate site at 64 rows a win, and the served window loses about 4%
+there. Done = a wider K chunk per barrier (or another pipeline shape) raced against the 16-row split stamp, the 27B
+9-31-row windows at decode-step bandwidth, and the floor race's gate site matching the served window, or the
+measurement that bounds each.

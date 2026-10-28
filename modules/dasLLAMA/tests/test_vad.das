@@ -324,9 +324,9 @@ def test_vad_metal_declines(t : T?) {
                 var take_was = 0ul
                 vad_decline_leg(t, m, sig, "memory") $(on) {
                     if (on) {
-                        take_was = set_metal_tower_take_max_probe_(512ul)
+                        take_was = set_metal_take_max_probe_(512ul)
                     } else {
-                        set_metal_tower_take_max_probe_(take_was)
+                        set_metal_take_max_probe_(take_was)
                     }
                 }
                 twin_probs(t, m, "the seat serves again with every pin put back", sig)

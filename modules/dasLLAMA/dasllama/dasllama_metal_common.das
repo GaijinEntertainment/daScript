@@ -538,6 +538,26 @@ var g_gemm_b_tensor : bool                  // crowned tensor twins selected (no
 var g_gemm_b_sk_tensor : bool
 var g_gemm64_b_tensor : bool
 var g_pso_mm : MetalComputePipeline?        // the prefill module's MetalQ8MulMm (34B blob)
+var g_pso_mm_sk : MetalComputePipeline?   //! the base tiles' split-K stamps, compiled by the prefill driver under its knees
+var g_pso_kq_mm_b4_sk : MetalComputePipeline?
+var g_pso_kq_mm_b5_sk : MetalComputePipeline?
+var g_pso_kq_mm_b6_sk : MetalComputePipeline?
+var g_pso_kq_mm_b44_sk : MetalComputePipeline?
+var g_pso_kq_mm_b35_sk : MetalComputePipeline?
+var g_pso_kq_mm_b3_sk : MetalComputePipeline?
+var g_pso_kq_mm_b33_sk : MetalComputePipeline?
+var g_pso_kq_mm_b34_sk : MetalComputePipeline?
+var g_pso_kq_mm_b2_sk : MetalComputePipeline?
+var g_pso_kq_mm_b23_sk : MetalComputePipeline?
+var g_pso_kq_mm_b24_sk : MetalComputePipeline?
+var g_pso_kq_mm_b25_sk : MetalComputePipeline?
+var g_pso_kq_mm_b45_sk : MetalComputePipeline?
+var g_pso_kq_mm_b40_sk : MetalComputePipeline?
+var g_pso_kq_mm_b49_sk : MetalComputePipeline?
+var g_pso_kq_mm_b51_sk : MetalComputePipeline?
+var g_pso_kq_mm_b4n32_sk : MetalComputePipeline?
+var g_pso_kq_mm_b4032_sk : MetalComputePipeline?
+var g_pso_kq_mm_b5032_sk : MetalComputePipeline?
 var g_pso_attnb16 : MetalComputePipeline?
 var g_pso_attnb32 : MetalComputePipeline?
 var g_pso_attnb_q8 : MetalComputePipeline?
@@ -1031,6 +1051,60 @@ def pool_acquire_untracked_pinned(var pool : MetalBufferPool; dev : MetalDevice?
     var b = pool_acquire_untracked(pool, dev, bytes)
     residency_note(b)
     return b
+}
+
+let METAL_BUF_SET_MAX = 64   //! the buffers one chain takes: the 12-layer small Pocket decoder holds 24 K/V rows beside its ping-pong rows
+
+//! Pooled scratch taken one buffer at a time and released as one, each buffer's size kept beside it.
+struct MetalBufSet {
+    bufs : MetalBuffer? [METAL_BUF_SET_MAX]
+    sizes : uint64 [METAL_BUF_SET_MAX]
+    n : int
+    short : bool    //!< a required buffer came back null: the encode declines before its first dispatch
+    no_pin : bool   //!< the takes stay out of the residency set: a driver whose shutdown leaves the set standing
+}
+
+var private g_buf_set_take_max_probe = 0ul   //! a test's stand-in for the device's largest buffer under the set takes; 0 = the device's
+
+//! A test's stand-in for the device's largest buffer under the pooled-set takes (`bytes`; 0 reads the device's again) - the
+//! scratch declines' seam. Answers the stand-in it replaced.
+def set_metal_take_max_probe_(bytes : uint64) : uint64 {
+    let was = g_buf_set_take_max_probe
+    g_buf_set_take_max_probe = bytes
+    return was
+}
+
+//! the pool bucket of a `bytes` take fits the device's largest buffer: a bucket past it would fail the pool's allocation
+def private buf_set_take_fits(bytes : uint64) : bool {
+    let cap = g_buf_set_take_max_probe != 0ul ? g_buf_set_take_max_probe : metal_max_buffer_length(g_dev)
+    return pool_bucket(bytes) <= cap
+}
+
+//! One buffer of `pool` into the set, null where its bucket passes the device's largest buffer; a null `required` take marks
+//! the set short, an optional one (a half twin's panel) leaves the caller its fallback.
+def buf_set_take(var s : MetalBufSet; var pool : MetalBufferPool; bytes : uint64; required : bool = true) : MetalBuffer? {
+    assert(s.n < METAL_BUF_SET_MAX)
+    var b : MetalBuffer?
+    if (buf_set_take_fits(bytes)) {
+        b = s.no_pin ? pool_acquire(pool, g_dev, bytes) : pool_acquire_pinned(pool, g_dev, bytes)
+    }
+    if (b != null) {
+        s.bufs[s.n] = b
+        s.sizes[s.n] = bytes
+        s.n++
+    } elif (required) {
+        s.short = true
+    }
+    return b
+}
+
+//! every buffer of the set back to `pool`
+def buf_set_release(var s : MetalBufSet; var pool : MetalBufferPool) {
+    for (i in range(s.n)) {
+        pool_release(pool, s.bufs[i], s.sizes[i])
+    }
+    s.n = 0
+    s.short = false
 }
 
 [cold_path]   // first touch (or a wider re-touch) of a region — the upload, not the per-dispatch path
@@ -3296,6 +3370,22 @@ enum KqRaceScaleForm {
     pair_dm     //!< q5_1: d and m a 32-block, 16 f16 per superblock
     ue4m3       //!< nv4: sixteen UE4M3 sub-block scales a superblock, one byte each
 }
+
+//! a format's quant words a 256-element superblock, the unit `race_kq_planes` fills its quant plane in
+def race_qu(fmt : KqFmt) : int => int(kq_qsb(fmt) * (KQ_SB_ELEMS / kq_elems(fmt)) / 4l)
+
+//! the scale plane form a format's race planes take (`race_kq_planes`)
+def race_scale_form(fmt : KqFmt) : KqRaceScaleForm {
+    return KqRaceScaleForm.compact if (fmt == KqFmt.k4 || fmt == KqFmt.k5)
+    return KqRaceScaleForm.split_dmin if (fmt == KqFmt.k2)
+    return KqRaceScaleForm.pair_dm if (fmt == KqFmt.q51)
+    return KqRaceScaleForm.ue4m3 if (fmt == KqFmt.nv4)
+    return KqRaceScaleForm.pure_d if (fmt == KqFmt.iq4nl || fmt == KqFmt.q40 || kq_dense_b32(fmt))
+    return KqRaceScaleForm.split_d
+}
+
+//! the weight bytes of an `n` x `k` site in `fmt` on disk - the size a race ring streams past the SLC
+def race_weight_bytes(fmt : KqFmt; n, k : int64) : int64 => n * k / kq_elems(fmt) * kq_desc(fmt).disk_bytes
 
 //! A K-quant weight fixture in the engine's split-plane layout: random quant bits (any pattern is a
 //! valid plane, so a twin-vs-base envelope doubles as a layout-agreement check) and constant f16

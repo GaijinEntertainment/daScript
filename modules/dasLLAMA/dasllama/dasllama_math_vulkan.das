@@ -206,6 +206,10 @@ def private vulkan_backend_available : bool {
         return g_vk_available
     }
     g_vk_probed = true
+    if (vk_shared_device() != 0ul) {   //! another context made the process's device: no probe instance, no table reload
+        g_vk_available = true
+        return true
+    }
     vk_arm_moltenvk_env()   // must precede the FIRST volkInitialize — MVK config latches at ICD load
     // raw calls, not boost creators — those panic on failure instead of reporting absence
     if (volkInitialize() != 0) {
@@ -344,6 +348,8 @@ def private vk_dlim_source(var v : DlimVulkanConfig) : bool {
     vk_dlim_wants_fill(v)
     if (g_gpu != null) {
         vk_caps_fill(g_gpu.phys, v)
+    } elif (vk_shared_physical_device() != 0ul) {   //! the process's device: its physical device answers, no probe instance
+        vk_caps_fill(unsafe(reinterpret<VkPhysicalDevice>(vk_shared_physical_device())), v)
     } else {
         if (!g_vk_probe_done) {
             var inscope instance <- create_instance("dasLLAMA dlim config", make_api_version(1u, 3u, 0u))
@@ -626,6 +632,8 @@ def dasllama_math_vulkan_register() {
     set_rdec_chain_charged(vk_rdec_chain_mode() != 0)
     vk_rdec_chain_announce()
     install_rdec_head_warm(@@vk_rdec_head_warm_ask, @@vk_rdec_head_warm_rows)
+    install_rdec_hidden(@@vk_rdec_hidden_ask, @@vk_rdec_hidden_rows)
+    install_rdec_segs_packed(@@vk_rdec_segs_packed)
     install_moe_gpu_resident_dn(@@vk_rdec_set_dn_layer, @@vk_rdec_upload_dn_ba, @@vk_rdec_dn_own, @@vk_rdec_prefill_dn_own)
     install_moe_gpu_resident_moe(@@vk_rdec_moe_ok, @@vk_rdec_prepare_moe, @@vk_rdec_set_moe_layer, @@vk_rdec_set_moe_experts)
     install_moe_gpu_resident_hc(@@vk_rdec_set_hc, @@vk_rdec_set_ngram, @@vk_rdec_set_host_experts, @@vk_rdec_token_split, @@vk_rdec_ngram_ring, @@vk_rdec_prefill_hc)

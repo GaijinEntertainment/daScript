@@ -271,7 +271,7 @@ def private stamp_tall(form : string) : bool => form |> ends_with("128")
 
 def private stamp_form_ok(form : string; rem : bool) : bool {
     return (form == "t" || form == "th" || form == "th128"
-        || (rem ? form == "thr" : (form == "thdb" || form == "thdb128")))
+        || (rem ? form == "thr" : (form == "thdb" || form == "thdb128" || form == "thsk" || form == "tsk" || form == "thsk16" || form == "tsk16")))
 }
 
 //! an empty `name` back is an unknown family or an unserved form - the caller refuses the compile
@@ -280,8 +280,9 @@ def private stamp_spec(family, fmt, form : string) : StampSpec {
     s.tg = 128
     if (family == "kq_mm" && stamp_form_ok(form, false)) {
         s.name = "enc_kq_mm_{fmt}_{form}_c"   // pso: the dense globals carry a legacy format code
-        s.grid = stamp_tall(form) ? "mp/128, rows/64" : "mp/32, rows/64"
-        s.params = "mp : int64, rows : int64"
+        let split = form == "thsk" || form == "tsk" || form == "thsk16" || form == "tsk16"
+        s.grid = split ? (form |> ends_with("16") ? "mp/16, rows/64, nsk" : "mp/32, rows/64, nsk") : (stamp_tall(form) ? "mp/128, rows/64" : "mp/32, rows/64")
+        s.params = split ? "mp : int64, rows : int64, nsk : int64" : "mp : int64, rows : int64"
     } elif ((family == "moe_mm" || family == "moe_mm_split") && stamp_form_ok(form, true)) {
         let split = family == "moe_mm_split"
         s.name = "pf_enc_moe_mm_{fmt}_{form}_c"
@@ -340,7 +341,7 @@ class MetalDispatch : AstStructureAnnotation {
             }
             let spec <- stamp_spec(strip(parts[0]), strip(parts[1]), strip(parts[2]))
             if (empty(spec.name)) {
-                errors := "[metal_dispatch] {st.name}: stamp '{stamp}' names no family+form (kq_mm: t/th/th128/thdb/thdb128; moe_mm and moe_mm_split: t/th/th128/thr)"
+                errors := "[metal_dispatch] {st.name}: stamp '{stamp}' names no family+form (kq_mm: t/th/th128/thdb/thdb128/thsk/tsk/thsk16/tsk16; moe_mm and moe_mm_split: t/th/th128/thr)"
                 return false
             }
             fn_name = empty(fn_name) ? spec.name : fn_name

@@ -3617,8 +3617,7 @@ def private eval_embd_slice_mrope_(t : Model; var s : Session; whole : array<int
 //! `pooling` picks the rows that make the vector: POOLING_MEAN averages every position's post-final-norm row, POOLING_LAST
 //! takes the last position's (the EOS the tokenizer appends - what Qwen3-Embedding is trained to be read at), POOLING_CLS the first's
 def embed_forward(t : Model; var s : Session; tokens : array<int64>; npos : int64; var out : array<float>; pooling : int64 = POOLING_MEAN; dims : int64 = 0l) {
-    let c = t.config
-    let dim = c.dim
+    let dim = t.config.dim
     out |> resize(dim)
     for (i in range64(dim)) {
         out[i] = 0.0
@@ -3626,19 +3625,16 @@ def embed_forward(t : Model; var s : Session; tokens : array<int64>; npos : int6
     if (npos <= 0l) {
         return
     }
-    let first = pooling == POOLING_CLS ? 0l : (pooling == POOLING_LAST ? npos - 1l : 0l)
-    let last = pooling == POOLING_CLS ? 1l : npos
-    if (t.quant != QuantMode.q4_0 && npos > 1l) {
-        // batched prefill fills s.x_b (npos × dim residual) and leaves it intact; the body norms only
-        // the last position, so re-apply the final RMSNorm to the pooled positions and accumulate.
+    let first = embed_first_row(pooling, npos)
+    let last = embed_end_row(pooling, npos)
+    if (t.quant != QuantMode.q4_0) {
+        // batched prefill - one row included: a decode override's step lands no hidden row - fills s.x_b (npos × dim residual)
+        // and leaves it intact; the body norms only the last position, so re-apply the final RMSNorm to the pooled positions.
         s.keep_hidden = true
-        forward_prefill(t, s, tokens, npos, 0l)
-        for (p in range64(first, last)) {
-            rms_at(s.xb, t, t.rms_final_off, s.x_b, p * dim, dim)
-            add_inplace(unsafe(addr(out[0])), unsafe(addr(s.xb[0])), dim)
-        }
+        forward_prefill(t, s, tokens, npos, 0l, true)
+        embed_pool_rows(t, s, first, last, out)
     } else {
-        // q4_0 (no batched prefill) or a single token: per-token forward leaves s.xb = post-final-norm hidden.
+        // q4_0 (no batched prefill): per-token forward leaves s.xb = post-final-norm hidden.
         for (p in range64(npos)) {
             forward(t, s, tokens[p], p)
             if (p >= first && p < last) {
@@ -3647,10 +3643,30 @@ def embed_forward(t : Model; var s : Session; tokens : array<int64>; npos : int6
         }
     }
     s.n_past = npos   // KV now holds npos positions (start_pos was 0) — keep the session cursor consistent
-    // the pooled rows' mean, the cut, then L2-normalize: cutting before the normalize is the renormalized cut
+    embed_finish(out, last - first, dims, dim)
+}
+
+//! the first row `pooling` reads of an `npos`-row forward
+def private embed_first_row(pooling, npos : int64) : int64 => pooling == POOLING_LAST ? npos - 1l : 0l
+
+//! one past the last row `pooling` reads
+def private embed_end_row(pooling, npos : int64) : int64 => pooling == POOLING_CLS ? 1l : npos
+
+//! the post-final-norm rows `first` .. `last` of a keep_hidden forward's `s.x_b`, summed into `out`
+def private embed_pool_rows(t : Model; var s : Session; first, last : int64; var out : array<float>) {
+    let dim = t.config.dim
+    for (p in range64(first, last)) {
+        rms_at(s.xb, t, t.rms_final_off, s.x_b, p * dim, dim)
+        add_inplace(unsafe(addr(out[0])), unsafe(addr(s.xb[0])), dim)
+    }
+}
+
+//! the pooled rows' mean, the cut to the leading `dims`, then the L2 normalize: cutting before the normalize is the
+//! renormalized cut
+def private embed_finish(var out : array<float>; rows, dims, dim : int64) {
     let width = dims > 0l && dims < dim ? dims : dim
     out |> resize(width)
-    let inv = 1.0 / float(last - first)
+    let inv = 1.0 / float(rows)
     var ss = 0.0
     for (i in range64(width)) {
         out[i] *= inv
@@ -3662,11 +3678,66 @@ def embed_forward(t : Model; var s : Session; tokens : array<int64>; npos : int6
     }
 }
 
-//! L2-normalized sentence embedding of `text` (`dim` floats, or the leading `dims`): tokenize, run one forward, pool the
-//! decoder's last-layer hidden rows the way `pooling` asks (the mean for a chat model, the last row for an embedding model),
-//! cut, unit-normalize. A text past the model's context embeds its leading `seq_len` tokens: the session holds that many rows.
-def embed_(m : Model; text : string; pooling : int64 = POOLING_MEAN; dims : int64 = 0l) : array<float> {
-    var s <- create_session_(m)
+//! The calling context's embed sessions, reused: an embedding is one forward from position 0 that rewrites every row it
+//! reads, and building a context-sized session costs more than the forward. Keyed by the model's identity and geometry;
+//! a model whose session holds state past its rows (`session_keeps_rows_only` false) is never pooled.
+var private g_embed_pool : array<Session>
+var private g_embed_key = ""
+var private g_embed_pool_builds = 0
+
+var private g_embed_lone_forwards = 0
+
+//! how many times this context built its embed session pool - the test's view of the rebuild on a model change
+def embed_pool_builds() : int => g_embed_pool_builds
+
+//! how many batch texts ran `embed_forward` alone, outside the shared window (a one-row text, every q4_0 text) - the test's view
+def embed_lone_forwards() : int => g_embed_lone_forwards
+
+//! how many of the pool's sessions are device-home - no host K/V - the test's view of the scratch window's sessions
+def embed_pool_device_sessions() : int {
+    var n = 0
+    for (s in g_embed_pool) {
+        n += s.device_kv ? 1 : 0
+    }
+    return n
+}
+
+//! the embed pool's key: the model's planes (`model_planes_key`), its geometry, the codec and the form
+def embed_pool_key(m : Model; kvdt : KVDtype; device : bool) : string {
+    let c = m.config
+    return "{model_planes_key(m)}|{c.dim}|{c.hidden_dim}|{c.n_layers}|{c.n_heads}|{c.n_kv_heads}|{c.seq_len}|{c.vocab_size}|{kvdt}|{device}"
+}
+
+//! `n` of the context's pooled sessions for `m` in the K/V codec `kvdt`, each at position 0 - device-home ones (no host K/V,
+//! `device`) where the armed driver seats the texts in its scratch region; the pool is rebuilt when the model, the codec, the
+//! form or the count changes
+def private embed_pool_take(m : Model; n : int64; kvdt : KVDtype; device : bool) {
+    let key = embed_pool_key(m, kvdt, device)
+    if (key != g_embed_key || long_length(g_embed_pool) < n) {
+        delete g_embed_pool
+        g_embed_pool |> reserve(n)   // the window's segments point into it: it never grows past this
+        for (_ in range64(n)) {
+            g_embed_pool |> emplace(device ? create_device_session_(m, kvdt) : create_session_(m, kvdt, kvdt))
+        }
+        g_embed_key = key
+        g_embed_pool_builds++
+    }
+    for (k in range64(n)) {
+        assume s = g_embed_pool[k]
+        s.n_past = 0l
+        s.keep_hidden = false
+        sel_reset(s)
+    }
+}
+
+//! L2-normalized sentence embedding of `text` (`dim` floats, or the leading `dims`): one forward, the decoder's last-layer
+//! hidden rows pooled the way `pooling` asks, cut, unit-normalized; past the context its leading `seq_len` tokens. `kvdt` is the
+//! sessions' K/V codec, `device` the armed driver's scratch window (`embed_batch_`'s).
+def embed_(m : Model; text : string; pooling : int64 = POOLING_MEAN; dims : int64 = 0l; kvdt : KVDtype = KVDtype.f32; device : bool = false) : array<float> {
+    if (device) {
+        var inscope one <- embed_batch_(m, [text], pooling, dims, EMBED_WINDOW_ROWS, kvdt, true)
+        return <- one[0]
+    }
     let tokens = encode_(m, text)
     var npos = long_length(tokens)
     if (npos > m.config.seq_len) {
@@ -3674,9 +3745,100 @@ def embed_(m : Model; text : string; pooling : int64 = POOLING_MEAN; dims : int6
         npos = m.config.seq_len
     }
     var out : array<float>
-    embed_forward(m, s, tokens, npos, out, pooling, dims)
-    delete s
+    if (session_keeps_rows_only(m.config)) {
+        embed_pool_take(m, 1l, kvdt, false)
+        embed_forward(m, g_embed_pool[0], tokens, npos, out, pooling, dims)
+    } else {
+        var s <- create_session_(m, kvdt, kvdt)
+        embed_forward(m, s, tokens, npos, out, pooling, dims)
+        delete s
+    }
     return <- out
+}
+
+//! the rows one embedding window takes: past it, the batch's next texts start a window of their own
+let EMBED_WINDOW_ROWS = 4096l
+
+//! `embed_` over many texts, each its own unit vector, in input order: the texts share one prefill window (a segment and a
+//! session a text, every row's hidden state kept) up to `window_rows` rows; a one-token or q4_0 text runs `embed_forward` alone,
+//! except under `device`, where every text rides the driver's scratch window on a device-home session. `kvdt` as in `embed_`.
+def embed_batch_(m : Model; texts : array<string>; pooling : int64 = POOLING_MEAN; dims : int64 = 0l; window_rows : int64 = EMBED_WINDOW_ROWS;
+                 kvdt : KVDtype = KVDtype.f32; device : bool = false) : array<array<float>> {
+    let n = long_length(texts)
+    var toks : array<array<int64>>
+    toks |> reserve(n)
+    for (text in texts) {
+        var ids <- encode_(m, text)
+        if (long_length(ids) > m.config.seq_len) {
+            to_log(LOG_WARNING, "embed: {length(ids)} tokens past the model context of {m.config.seq_len}; the leading {m.config.seq_len} are embedded\n")
+            ids |> resize(m.config.seq_len)
+        }
+        toks |> emplace(ids)
+    }
+    var out : array<array<float>>
+    out |> resize(n)
+    var i = 0l
+    while (i < n) {
+        var j = i
+        var rows = 0l
+        while (j < n && (j == i || rows + long_length(toks[j]) <= window_rows)) {
+            rows += long_length(toks[j])
+            j++
+        }
+        embed_window(m, toks, i, j, pooling, dims, kvdt, device, out)
+        i = j
+    }
+    delete toks
+    return <- out
+}
+
+//! texts `lo` .. `hi` of `toks` as one window into `out`
+def private embed_window(m : Model; toks : array<array<int64>>; lo, hi, pooling, dims : int64; kvdt : KVDtype; device : bool;
+                         var out : array<array<float>>) {
+    let pooled = session_keeps_rows_only(m.config)
+    var sess : array<Session>
+    if (pooled) {
+        embed_pool_take(m, hi - lo, kvdt, device)
+    } else {
+        sess |> reserve(hi - lo)   // the segments point into it: it never grows after the first emplace
+    }
+    var segs : array<PrefillSeg>
+    for (k in range64(lo, hi)) {
+        let np = long_length(toks[k])
+        if (!pooled) {
+            sess |> emplace(create_session_(m, kvdt, kvdt))
+        }
+        assume s = pooled ? g_embed_pool[k - lo] : sess[k - lo]
+        if (!device && (m.quant == QuantMode.q4_0 || np <= 1l)) {
+            g_embed_lone_forwards++
+            embed_forward(m, s, toks[k], np, out[k], pooling, dims)
+        } else {
+            s.keep_hidden = true
+            segs |> push(PrefillSeg(s = unsafe(addr(s)), start_pos = 0l, npos = np, toki = k))
+        }
+    }
+    if (long_length(segs) == 1l && !device) {
+        assume sg = segs[0]
+        embed_forward(m, *sg.s, toks[sg.toki], sg.npos, out[sg.toki], pooling, dims)
+    } elif (!empty(segs)) {
+        forward_prefill_segments(m, segs, toks, true)
+        let dim = m.config.dim
+        for (sg in segs) {
+            assume v = out[sg.toki]
+            v |> reserve(dim)
+            v |> resize(dim)
+            for (d in range64(dim)) {
+                v[d] = 0.0
+            }
+            let first = embed_first_row(pooling, sg.npos)
+            let last = embed_end_row(pooling, sg.npos)
+            embed_pool_rows(m, *sg.s, first, last, v)
+            sg.s.n_past = sg.npos
+            embed_finish(v, last - first, dims, dim)
+        }
+    }
+    segs |> clear()   // the segments borrow sess's sessions: a delete would free them twice
+    delete sess
 }
 
 // MoE FFN, decode: rmsnorm -> routed top-k + shared expert -> residual. Mirrors ffn_dense_decode's

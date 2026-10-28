@@ -2124,7 +2124,7 @@ def load_model_image(path : string; var t : Model; tag : string = ""; quant : st
     }
     // after the plane borrows: the PLE tripwire and the MoE gather both need bound planes
     ple_check_table(t, "prepared image '{path}'")
-    moe_gpu_upload_resident(t)
+    moe_gpu_upload_lane(t, path)
     return true
 }
 
@@ -2197,7 +2197,7 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32;
                 let trim_why = t.planes_trimmed ? resident_trim_decline(t) : ""
                 if (empty(trim_why)) {
                     ple_check_table(t, "prepared image '{img_v}'")
-                    moe_gpu_upload_resident(t)
+                    moe_gpu_upload_lane(t, img_v)
                     vulkan_bake_slice_end(t)
                     to_log(LOG_INFO, "dasLLAMA: prepared vulkan image mapped in {get_time_usec(ts_img) / 1000} ms - {img_v}\n")
                     return <- t
@@ -2333,10 +2333,10 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32;
             if (served) {
                 if (vk_tag != "" && !empty(streamed.vkplan)) {
                     vulkan_bake_slice_begin()
-                    moe_gpu_upload_resident(streamed)
+                    moe_gpu_upload_lane(streamed, s_img)
                     vulkan_bake_slice_end(streamed)
                 } else {
-                    moe_gpu_upload_resident(streamed)
+                    moe_gpu_upload_lane(streamed, s_img)
                 }
                 return <- streamed
             }

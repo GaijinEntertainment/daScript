@@ -196,6 +196,7 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
                     "modules/dasLLAMA/tests/test_vulkan_moe_cm2.das",
                     "modules/dasLLAMA/tests/test_vulkan_host_twin.das",
                     "modules/dasLLAMA/tests/test_vulkan_tier.das",
+                    "modules/dasLLAMA/tests/test_vulkan_shared_device.das",
                     "modules/dasLLAMA/tests/test_cuda_kernels.das" ]
     } elif (name == "stocked") {
         return <- [
@@ -378,7 +379,7 @@ def area_tests(area : string) : array<string> {
                     "test_sampling.das", "test_constraint.das", "test_cuda_kernels.das",
                     "test_scheduler.das", "test_silu.das", "test_softmax.das", "test_storyteller_restart.das", "test_storywish.das", "test_think_split.das", "test_tokenizer.das",
                     "test_tool_formats.das", "test_unicode.das", "test_vulkan_dec_tail.das", "test_vulkan_host_twin.das", "test_vulkan_kernels.das", "test_vulkan_kv_codec_kernels.das",
-                    "test_vulkan_mint.das", "test_vulkan_moe_cm2.das", "test_vulkan_tier.das" ]
+                    "test_vulkan_mint.das", "test_vulkan_moe_cm2.das", "test_vulkan_tier.das", "test_vulkan_shared_device.das" ]
     }
     var none : array<string>
     return <- none

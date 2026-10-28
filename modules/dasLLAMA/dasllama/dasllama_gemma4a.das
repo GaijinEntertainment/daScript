@@ -298,11 +298,11 @@ def load_gemma4a_encoder(path : string) : Gemma4aEncoder {
     }, $ [unused_argument(t, src)] (t : Gemma4aEncoder; src : string) {})
 }
 
-//! Mint a served encoder from a staged read WITHOUT touching disk — the off-rail control for
-//! suites (no `.dlim` written, no sibling-lane GC).
-def mint_gemma4a_encoder(var st : Gemma4aStaging; var out : Gemma4aEncoder) {
+//! Mint a served encoder from a staged read - with no `img`, WITHOUT touching disk: the off-rail control for suites (no `.dlim`
+//! written, no sibling-lane GC); with one, the image written there under this box's identity, whatever the image rail says.
+def mint_gemma4a_encoder(var st : Gemma4aStaging; var out : Gemma4aEncoder; img : string = "") {
     // the tag is the staging's own precision — a caller-supplied flag could bake a lying tag
-    cache_via_image_staged(st, out, "", st.e.q8 ? "gemma4a-q8" : "gemma4a-f32")
+    cache_via_image_staged(st, out, img, st.e.q8 ? "gemma4a-q8" : "gemma4a-f32")
 }
 
 //! META-only probe of an mmproj gguf: the gemma4a audio encoder's projection width, or 0 for no

@@ -70,11 +70,26 @@ def da_nsplit(wgs, sm_count : int64) : int64 {
 //! the shadow starts on a 64-key step under the window from `pos0`; 0 on a flat layer or a window not yet past its span
 def kv_shadow_pos0(window, pos0 : int64) : int64 => window != 0l && pos0 > window ? ((pos0 - window) / 64l) * 64l : 0l
 
-//! the 256-aligned chunk `nsplit` pieces cut K into; 0 when the last piece would start past K
-def cm2_chunk(n, nsplit : int64) : int64 {
-    let ck = (((n + nsplit - 1l) / nsplit + 255l) / 256l) * 256l
-    return ck * (nsplit - 1l) < n ? ck : 0l
+//! A split-K knee: the grid target in threadgroups (0 keeps every tile whole), the least K a share walks, the K granularity a
+//! share's start keeps (the home's staging chunk), and whether the shares divide K evenly (`exact`) or the last runs short
+struct SplitKnee {
+    tgs : int64
+    min_k : int64
+    align : int64 = 64l
+    exact : bool = true
 }
+
+//! the share of `kdim` over `ways`: an even split's, or the `align`-rounded share whose last one runs short; 0 where none fits
+def split_k_share(kdim, ways : int64; knee : SplitKnee) : int64 {
+    if (knee.exact) {
+        return kdim % (ways * knee.align) == 0l ? kdim / ways : 0l
+    }
+    let ck = ((kdim + ways - 1l) / ways + knee.align - 1l) / knee.align * knee.align
+    return ck * (ways - 1l) < kdim ? ck : 0l
+}
+
+//! the 256-aligned chunk `nsplit` pieces cut K into; 0 when the last piece would start past K
+def cm2_chunk(n, nsplit : int64) : int64 => split_k_share(n, nsplit, SplitKnee(align = 256l, exact = false))
 
 //! the most k chunks, up to `want` and eight, `cm2_chunk` admits over K `n` whose partial planes of `plane_bytes` each fit
 //! `scratch_bytes` (1: whole)

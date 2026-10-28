@@ -86,12 +86,12 @@ slot itself keeps the GPU from serving more of it, and is empty when nothing abo
 does.** A slot waiting for the GPU says that in its `served` value.
 
 **A diff in this folder that opens a device-home session - a session whose K/V cache lives only
-in a K/V region of the GPU driver, with no host cache - directly (`create_device_session`) or
-through a call that homes streams itself (`bench_tg_batched_rep`), or turns a scheduler's device
-mode on (`set_device_kv`), keeps the host's live device-home sessions, every slot's and the ones
-the diff opens included, at or below the regions the driver armed (`gpu_device_sessions()`); a
-scheduler in device mode counts as its `max_streams`.** The driver panics on the session that
-finds no region.
+in a K/V region of the GPU driver, with no host cache - or takes a region by any other call that
+does not first check one is free, or turns a scheduler's device mode on (`set_device_kv`), keeps
+the live region holders of that context, every slot's and the ones the diff opens included, at or
+below the regions that context's driver armed (`gpu_device_sessions()`); a scheduler in device
+mode counts as its `max_streams`.** Each context arms its own regions on the shared device, and the
+driver panics on the call that finds no region free.
 
 **A diff in this folder that calls `moe_gpu_drop_model` turns off, before the dropped slot's next
 step, every scheduler device mode (`set_device_kv`) this folder turned on, in the same change.**

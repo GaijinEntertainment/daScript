@@ -93,6 +93,8 @@ var private FACADE_DEFS_WITHOUT_TUTORIAL <- {
     "prefix_share_pages", "prefix_insert_snapshot",   //! the scheduler's writes of shared pages and device-taken checkpoints into its prefix cache
     "gpu_device_kv_pool_armed",   //! the scheduler reads DASLLAMA_DEVICE_POOL through it; a user sets the variable
     "gpu_device_kv_pool_moves",   //! the region-pool traffic counter a fixture or a bench reads
+    "gpu_free_regions", "gpu_resident_prefills",   //! the server's region check before a chat-route embedding and its embedder's device-prefill report
+    "embed_session_dtype", "embed_window_rows",   //! the codec and window embed / embed_batch pass the embedding sessions; a user program calls embed / embed_batch
     "stage_gigaam_model", "mint_gigaam_model", "load_gigaam_model",   //! the ASR loader chain and dasllama-convert stage, mint and load GigaAM; a user program calls load_asr_model
     "gigaam_check_arch", "gigaam_check_hparams", "gigaam_image_tag",   //! the GigaAM loader chain's file checks and its prepared-image tag
     "gigaam_transcribe", "gigaam_asr_caps", "gigaam_check_lang", "gigaam_exec_fmt",   //! the ASR surface's GigaAM arm; a user program calls transcribe / caps / create_session
@@ -359,6 +361,12 @@ def private gate_banned_tokens(folders : array<string>; exempt : string; tokens 
     for (folder in folders) {
         collect_das_files(folder, files)
     }
+    gate_banned_tokens_in(files, exempt, tokens, msg, allowed)
+    delete files
+}
+
+//! `gate_banned_tokens` over a named file list - the folder walk's body, and a fixture rail's
+def private gate_banned_tokens_in(files : array<string>; exempt : string; tokens : array<string>; msg : string; allowed : block<(line : string) : bool>) {
     for (p in files) {
         continue if (base_name(p) == exempt)
         var line_no = 0
@@ -372,7 +380,6 @@ def private gate_banned_tokens(folders : array<string>; exempt : string; tokens 
             }
         }
     }
-    delete files
 }
 
 //! the K/V mirror's per-slab arrays - the slab pairs, the window store and shadow sets - are indexed by a layer's seat
@@ -2043,6 +2050,24 @@ def private check_no_hand_pipelines {
     }
 }
 
+//! every engine, harness and test context submits on the process's one shared device, whose queues other contexts' threads
+//! also submit on: a submit or a wait takes the queue's lock (ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#vk-shared-device)
+def private check_locked_queue_calls(files : array<string>) {
+    gate_banned_tokens_in(files, "", ["run_cmd_sync(", "vkQueueSubmit(", "vkQueueWaitIdle(", "vkDeviceWaitIdle("],
+        "submits or waits on a Vulkan queue without the shared device's queue lock - another context's thread can be on the same queue, and an unlocked vkQueueSubmit/vkQueueWaitIdle beside it is a validation-layer threading error and an intermittent DEVICE_LOST; record through cmd_one_shot or submit through submit_wait/timeline_submit, which call vk_queue_submit_locked and vk_queue_wait_idle_locked (ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#vk-shared-device)") $(_line) {
+        return false
+    }
+}
+
+def private check_locked_queue_calls {
+    var files : array<string>
+    for (folder in ["modules/dasLLAMA/dasllama", "modules/dasLLAMA/harness", "modules/dasLLAMA/tests"]) {
+        collect_das_files(folder, files)
+    }
+    check_locked_queue_calls(files)
+    delete files
+}
+
 let private RESIDENT_FILE = "modules/dasLLAMA/dasllama/dasllama_gpu_resident.das"
 
 //! the resident verify seat in call order: the gated entry, then the body it calls. Every decline in either - a `return`
@@ -2218,10 +2243,11 @@ def private check_gemm_gen_stamp {
 }
 
 // One device and queue per GPU family, from its _common file's init. The exceptions the rule
-// names: dasllama_metal_gemm.das owns its device (ARCHITECTURE_GPU.md#gpu-backends), and the two
-// tuner race entries build theirs because the tuner runs before the driver inits.
+// names: dasllama_metal_gemm.das owns its device (ARCHITECTURE_GPU.md#gpu-backends), and the three
+// tuner race entries - the tensor crowns, the decode crowns, the split-K knees - build theirs because the
+// tuner and a fat exe's first start race them before any driver inits.
 let private DEVICE_CREATION_FILES <- {"dasllama_metal_common.das", "dasllama_vulkan_common.das", "dasllama_cuda_common.das", "dasllama_metal_gemm.das"}
-let private DEVICE_CREATION_FUNCTIONS <- {"metal_tensor_race", "metal_tensor_race_decode"}
+let private DEVICE_CREATION_FUNCTIONS <- {"metal_tensor_race", "metal_tensor_race_decode", "metal_split_knee_race"}
 let private DEVICE_CREATION_CALLS <- ["metal_create_system_default_device(", "metal_new_command_queue(", "create_device_storage_8_16_int_dot",
     "cuda_create_context(", "cuda_stream_create("]
 
@@ -2252,7 +2278,7 @@ def private check_device_creation_sites {
             continue if (!creates)
             let fname = def_name_of(f.body)
             continue if (DEVICE_CREATION_FUNCTIONS |> key_exists(fname))
-            gate_finding(path, f.line, "`{fname}` creates a GPU device or queue of its own - a GPU family shares the one device and queue its _common file's init made; a tuner race entry that must run before the driver inits is named in REVIEW.das's DEVICE_CREATION_FUNCTIONS with its reason")
+            gate_finding(path, f.line, "`{fname}` creates a GPU device or queue of its own - a GPU family shares the one device and queue its _common file's init made; a tuner race entry that must run before the driver inits is named in REVIEW.das's DEVICE_CREATION_FUNCTIONS with its reason (ARCHITECTURE_GPU.md#gpu-backends)")
         }
     }
 }
@@ -3408,12 +3434,13 @@ def private check_howto_docs {
     }
 }
 
-//! `-- --howto <doc>...` reads only the named documents as HOW_TO documents: the fixture rail of the HOW_TO check.
-def private howto_fixture_args() : array<string> {
+//! the arguments after `flag` on the command line: `-- --howto <doc>...` reads only the named documents as HOW_TO
+//! documents, `-- --queue-calls <file>...` scans only the named sources for unlocked queue calls - the checks' fixture rails
+def private fixture_args(flag : string) : array<string> {
     var docs : array<string>
     var on = false
     for (a in get_command_line_arguments()) {
-        if (a == "--howto") {
+        if (a == flag) {
             on = true
         } elif (on) {
             docs |> push(a)
@@ -3424,12 +3451,17 @@ def private howto_fixture_args() : array<string> {
 
 [export]
 def main() : int {
-    let fixtures <- howto_fixture_args()
+    let fixtures <- fixture_args("--howto")
     if (!empty(fixtures)) {
         for (doc in fixtures) {
             check_howto_doc(doc)
         }
         return gate_verdict("dasllama --howto")
+    }
+    let queue_fixtures <- fixture_args("--queue-calls")
+    if (!empty(queue_fixtures)) {
+        check_locked_queue_calls(queue_fixtures)
+        return gate_verdict("dasllama --queue-calls")
     }
     if (!fexist("modules/dasLLAMA/REVIEW.das") || !fexist(FACADE)) {
         to_log(LOG_ERROR, "modules/dasLLAMA/REVIEW.das: run from the repo root\n")
@@ -3454,6 +3486,7 @@ def main() : int {
     check_vk_extension_roster()
     check_cuda_stream_discipline()
     check_no_hand_pipelines()
+    check_locked_queue_calls()
     check_verify_decline_before_state_move()
     check_vk_scratch_cap_order()
     check_test_file_placement()

@@ -94,6 +94,7 @@ enum private FrontKind {
     drain       //! engine -> speech thread: the server is draining, admit no new work
     halt        //! engine -> speech thread: stop the workers and exit
     query       //! engine -> speech thread: publish the state now, answering `wid`
+    wake        //! worker -> engine: a completion landed; the idle engine drains it now instead of at its wait's end
 }
 
 //! what crosses from the front to the engine; the zero value is a request for the unknown route
@@ -367,10 +368,29 @@ struct TranslatorSlot {
     langs : array<string>
 }
 
+//! One served embedding model - a GGUF that names its pooling: one worker loads and owns it, never an engine slot. The
+//! width and context are the worker's own, off its ready event.
+struct EmbedderSlot {
+    id : string                 //! the request's `model` names it: the roster entry's name
+    path : string
+    quant : QuantMode = QuantMode.q8
+    ctx : int64                 //! the context the worker clamps the model to; 0 keeps the file's, capped at `EMB_SCRATCH_TOKENS`
+    gpu_want : GpuTierWant      //! the tier the worker's own context arms for the model (zero: the env decides)
+    ready : int
+    error : string              //! why the worker could not load: the model serves nothing and the embed stats block carries this
+    dim : int64                 //! the hidden width: `dimensions` runs 1 .. this
+    seq_len : int64
+    backend : string            //! where the worker serves the model: "gpu:resident" or "cpu"
+    device_prefills : int64     //! the worker device's prompt windows, as of its last answer
+    cpu_passes : int64          //! the calls its device handed to the CPU rails, as of its last answer
+}
+
 var g_asr : array<AsrSlot>          //! the ASR models, the first the default a request with no `model` gets
 var g_tts : array<TtsSlot>          //! the TTS models, the first ARMED one the default
 var g_translators : array<TranslatorSlot>   //! the translation models, in the order a pair's first server is picked
 var private g_tr_jobs : array<Channel?>     //! a job channel a translation model, by its row
+var g_embedders : array<EmbedderSlot>       //! the embedding models, each on its worker; the engine owns them
+var private g_emb_jobs : array<Channel?>    //! a job channel an embedding model, by its row
 var private g_asr_alias = ""                //! the default ASR model's other name, `<default slot>-asr`; empty with no LLM slot
 var private g_asr_jobs : array<Channel?>   //! a job channel a running ASR model, by its row; the thread that started the workers holds them
 var private g_tts_jobs : array<Channel?>   //! the same a TTS model, null for one that is not armed
@@ -908,6 +928,37 @@ def configure_translators(paths : array<string>) {
     }
 }
 
+//! Serve one embedding model under `id`: a worker thread loads it (`quant`; its context clamped to `ctx` when > 0) and
+//! owns it in its own context, and /v1/embeddings naming `id` queues to it - the engine loop never runs its forward. A
+//! model whose worker cannot load degrades at ``init_server`` the way a translation model does. On a Vulkan box the
+//! worker's context arms its own device tier under `gpu_want` (zero: the env decides), so the embedding model is
+//! resident beside the chat slot's. Call before ``run_server``.
+def add_embedding_model(path, id : string; quant : QuantMode = QuantMode.q8; ctx : int64 = 0l; gpu_want : GpuTierWant = GpuTierWant()) {
+    g_embedders |> emplace(EmbedderSlot(id = id, path = path, quant = quant, ctx = ctx, gpu_want = gpu_want))
+}
+
+//! The test fixture's worker seam, set before ``run_server`` on the server's thread: `hold` non-zero parks every embedding
+//! worker before its next job, `bench_hold` non-zero holds the server as a running benchmark does (``bench_hold_active``),
+//! `wakes` counts the worker wakes the engine takes off the front channel, `embed_fault` is an input text whose embedding
+//! job panics on its worker, and `media_fault` panics every media encode job outside the encode's own catch. The zero
+//! value is off.
+struct WorkerSeam {
+    hold : Atomic32?
+    bench_hold : Atomic32?
+    wakes : Atomic32?
+    embed_fault : string
+    media_fault : bool
+}
+
+var private g_worker_seam : WorkerSeam
+
+//! the worker seam `set_worker_seam` last set - a cell restores it
+def worker_seam : WorkerSeam => g_worker_seam
+
+def set_worker_seam(var seam : WorkerSeam) {   // nolint:LINT014 - the global copy takes the seam's atomics non-const: a const argument does not compile
+    g_worker_seam = seam
+}
+
 //! True when a speech or translation model serves with no LLM slot beside it: an armed TTS model, a configured ASR
 //! model, or a configured translation model.
 def server_has_speech : bool
@@ -1185,7 +1236,7 @@ def ibench_running() : bool => g_ibench_phase != IBENCH_PHASE_IDLE
 
 //! True while any benchmark measures this box - the in-process rows, or the A/B child: every
 //! route that could contend with it holds on this, whichever mode runs.
-def bench_hold_active() : bool => server_bench_running()
+def bench_hold_active() : bool => server_bench_running() || (g_worker_seam.bench_hold != null && (g_worker_seam.bench_hold |> get) != 0)
 
 def private ibench_hold_text() : string =>
     "a benchmark is running on this server - retry when GET /bench reports it done"
@@ -2170,6 +2221,153 @@ def private await_stopped(events : Channel?; asked : int; deadline_ns : int64; i
     }
     return stopped
 }
+
+//! Ask every loaded worker of a family to stop - `workers` says how many of a model's workers answer, its channel in
+//! `jobs` takes one `stop_job` each - and wait for their stopped events, `settle` shown each event as ``await_stopped``
+//! shows it. A worker that never answers is logged under `what`; every model is left with no ready worker.
+def private stop_workers(var models : array<auto(SlotT)>; var jobs : array<Channel?>; events : Channel?; what : string; stop_job : auto(JobT);
+                         workers : block<(m : SlotT) : int>; settle : block<(ev : auto(EventT)#) : bool>) {
+    var asked = 0
+    for (m, ch in models, jobs) {
+        continue if (ch == null)
+        for (_w in range(invoke(workers, m))) {
+            ch |> push_clone(stop_job)
+            asked++
+        }
+    }
+    let stopped = await_stopped(events, asked, WORKER_STOP_WAIT_NS, settle)
+    if (stopped < asked) {
+        to_log(LOG_WARNING, "dasllama-server: {asked - stopped} {what} worker(s) did not answer the stop within {WORKER_STOP_WAIT_NS / 1_000_000_000l} s - a dead worker must not hang the teardown\n")
+    }
+    for (m in models) {
+        m.ready = 0
+    }
+}
+
+//! ``stop_workers`` for a family whose every ready model runs one worker and whose events of `EventT` carry its answers:
+//! a `completed_kind` event that lands during the stop is discarded (``discard_completion`` under `discarded`), a
+//! `stopped_kind` one counts as the stop.
+def private stop_workers(var models : array<auto(SlotT)>; var jobs : array<Channel?>; events : Channel?; what : string; stop_job : auto(JobT);
+                         _event : auto(EventT); completed_kind, stopped_kind : auto(KindT); var wires : table<int64; auto(WireT)>; var pending : int&;
+                         discarded : string) {
+    stop_workers(models, jobs, events, what, stop_job, $(m : SlotT) => m.ready > 0 ? 1 : 0) $(event : EventT#) {
+        if (event.kind == completed_kind) {
+            discard_completion(wires, pending, event.id, discarded)
+        }
+        return event.kind == stopped_kind
+    }
+}
+
+//! A job in flight when the stop arrives still lands: its wire is released and dropped, the pending count goes down,
+//! and the teardown logs the answer discarded as `what`.
+def private discard_completion(var wires : table<int64; auto(WireT)>; var pending : int&; id : int64; what : string) {
+    pending = max(pending - 1, 0)
+    let wire = unsafe(wires?[id])
+    if (wire != null) {
+        if (g_link.out != null) {
+            release_writer(g_link, wire.writer)
+        }
+        delete wires[id]
+        wires |> erase(id)
+    }
+    to_log(LOG_WARNING, "[req {id}] {what} discarded during teardown\n")
+}
+
+//! Answer every `completed_kind` event `events` holds on its wire: the pending count goes down, a 200 counts in
+//! `done_jobs`, a wire whose client is still there gets what `answer` makes of the event, a vanished one is released,
+//! and the job is logged under `what`.
+def private drain_completions(srv : FrontLink; events : Channel?; var wires : table<int64; auto(WireT)>; var pending : int&; var done_jobs : int64&;
+                              what : string; completed_kind : auto(KindT); answer : block<(ev : auto(EventT)#; wire : WireT) : Reply>) {
+    return if (events == null)
+    var draining = true
+    while (draining) {
+        draining = events |> try_pop_clone() $(event : EventT#) {
+            return if (event.kind != completed_kind)
+            pending = max(pending - 1, 0)
+            if (event.status == int(http_status.OK)) {
+                done_jobs++
+            }
+            let wire = unsafe(wires?[event.id])
+            if (wire != null) {
+                if (is_writer_connected(srv, wire.writer)) {
+                    let reply = invoke(answer, event, *wire)
+                    set_writer_keepalive_timeout(srv, wire.writer, DEFAULT_WRITER_KEEPALIVE_MS)
+                    respond(srv, wire.writer, reply.status, reply.ctype, reply.body)
+                } else {
+                    release_writer(srv, wire.writer)
+                }
+                delete wires[event.id]
+                wires |> erase(event.id)
+            }
+            to_log(LOG_INFO, "[req {event.id}] {what}: completed {event.status} (pending={pending})\n")
+        }
+    }
+}
+
+//! Open a model's jobs channel, start its `workers` threads through `spawn` (each handed the channel and its number),
+//! and wait until each answered `ready_kind` - the event handed to `adopt` - or one answered `failed_kind`: that
+//! event's reason, "" when every worker loaded.
+def private start_workers(var jobs : Channel?&; events : Channel?; workers : int; ready_kind, failed_kind : auto(KindT);
+                          spawn : block<(var ch : Channel?; worker : int) : void>; adopt : block<(ev : auto(EventT)#) : void>) : string {
+    jobs = worker_channel()
+    for (w in range(workers)) {
+        invoke(spawn, jobs, w)
+    }
+    var ready = 0
+    var failure = ""
+    while (ready < workers && empty(failure)) {
+        events |> pop_with_timeout_clone(1000) $(ev : EventT#) {
+            if (ev.kind == ready_kind) {
+                ready++
+                invoke(adopt, ev)
+            } elif (ev.kind == failed_kind) {
+                failure = clone_string(ev.body)
+            }
+        }
+    }
+    return failure
+}
+
+//! A worker thread's life past its setup: `load` under ``catch_worker_panic`` - a panic goes to `load_failed` and the
+//! thread leaves - then `ready`, then every job off `jobs` through `work` under ``catch_worker_panic`` (a panic to
+//! `job_failed` with its text) until one `is_stop` names, then `stopped`. Both channel references go with the thread.
+def private serve_worker(var jobs : Channel?&; var events : Channel?&; load : block<() : void>; load_failed : block<(failure : string) : void>;
+                         ready : block<() : void>; is_stop : block<(job : auto(JobT)#) : bool>; work : block<(job : JobT) : void>;
+                         job_failed : block<(job : JobT; failure : string) : void>; stopped : block<() : void>) {
+    var load_failure = ""
+    let not_loaded = catch_worker_panic(load_failure) {
+        invoke(load)
+    }
+    if (not_loaded) {   // an escaping panic here would kill only this thread and hang the ready-wait
+        invoke(load_failed, load_failure)
+        jobs |> release
+        events |> release
+        return
+    }
+    invoke(ready)
+    var stopping = false
+    while (!stopping) {
+        jobs |> pop_with_timeout_clone(250) $(job : JobT#) {
+            if (invoke(is_stop, job)) {
+                stopping = true
+                return
+            }
+            var job_copy : JobT -const -& -#
+            job_copy := job
+            var failure = ""
+            let failed = catch_worker_panic(failure) {
+                invoke(work, job_copy)
+            }
+            if (failed) {
+                invoke(job_failed, job_copy, failure)
+            }
+            delete job_copy
+        }
+    }
+    invoke(stopped)
+    jobs |> release
+    events |> release
+}
 let ASR_WRITER_KEEPALIVE_MS = 3600000
 let LLM_WRITER_KEEPALIVE_MS = 3600000
 let DEFAULT_WRITER_KEEPALIVE_MS = 75000
@@ -2717,7 +2915,7 @@ def private handle_unknown(req : FrontReq; var resp : Reply) : http_status {
 
 def private handle_models(var resp : Reply) : http_status {
     var list = OaiModelList(_object = "list")
-    list.data |> reserve(length(g_slots) + length(g_asr) + length(g_tts) + length(g_translators) + 1)
+    list.data |> reserve(length(g_slots) + length(g_asr) + length(g_tts) + length(g_translators) + length(g_embedders) + 1)
     for (s in g_slots) {
         list.data |> push(OaiModel(id = s.name, _object = "model", created = created_ts(), owned_by = "dasllama"))
     }
@@ -2739,24 +2937,22 @@ def private handle_models(var resp : Reply) : http_status {
             list.data |> push(OaiModel(id = m.id, _object = "model", created = created_ts(), owned_by = "dasllama"))
         }
     }
+    for (m in g_embedders) {
+        if (m.ready > 0) {
+            list.data |> push(OaiModel(id = m.id, _object = "model", created = created_ts(), owned_by = "dasllama"))
+        }
+    }
     let body = sprint_json(list, false)
     delete list
     return resp |> JSON(body, http_status.OK)
 }
 
-// /v1/embeddings: L2-normalized sentence embeddings over the facade `embed` verb, pooled the way the
-// file asks (its `pooling_type`; a chat model means mean) unless the request's `pooling` names one
-// ("mean" | "cls" | "last"); `dimensions` keeps the leading d components and renormalizes (the
-// Matryoshka read Qwen3-Embedding supports). `input` is a string or an array of strings; usage is
-// counted via the facade `encode` (cheap relative to the forward).
-def private handle_embeddings(req : FrontReq; var resp : Reply) : http_status {
-    var perr = ""
-    var js = read_json(req.body, perr)
-    if (js == null) {
-        return resp_error(resp, http_status.BAD_REQUEST, "invalid JSON: {perr}")
-    }
-    defer() { unsafe { delete js } }
-    warn_ignored_fields(js, EMB_FIELDS, "/v1/embeddings")
+// /v1/embeddings on a chat slot, in-handler: L2-normalized sentence embeddings over the facade `embed_batch` verb,
+// pooled the way the file asks (a chat model means mean) unless the request's `pooling` names one
+// ("mean" | "cls" | "last"); `dimensions` keeps the leading d components and renormalizes. `input` is a
+// string or an array of strings; usage is counted via the facade `encode` (cheap relative to the forward).
+// An embedding model's requests go to its worker instead (``embeddings_route``).
+def private handle_embeddings(js : JsonValue?; var resp : Reply) : http_status {
     let want_model = js?["model"] ?? ""
     let mi = slot_index(want_model)
     if (mi < 0) {
@@ -2767,55 +2963,24 @@ def private handle_embeddings(req : FrontReq; var resp : Reply) : http_status {
     }
     g_cur = mi
     install_slot_marks(mi)   // this handler evals IN-handler — the embed forward needs ITS marks
-    let iv = js?["input"]
-    if (iv == null) {
-        return resp_error(resp, http_status.BAD_REQUEST, "'input' is required (a string or array of strings)")
+    var inscope ask <- embeddings_ask(js, cur_model().config.dim)
+    if (!empty(ask.refusal)) {
+        return resp_error(resp, http_status.BAD_REQUEST, ask.refusal)
     }
-    var inscope inputs : array<string>
-    if (iv.value is _array) {
-        inputs <- from_JV(iv, type<array<string>>)   // nolint:PERF030 — first write to the empty decl above
-    } else {
-        let single = iv ?? ""
-        if (empty(single)) {
-            return resp_error(resp, http_status.BAD_REQUEST, "'input' must be a non-empty string or array of strings")
-        }
-        inputs |> push(single)
+    //! the forward rides the armed driver (a trimmed lane holds no CPU planes): the texts share one unpinned region as a scratch
+    //! window, so a live stream's device-home region stays its own - and with none free a trimmed lane cannot serve the request
+    if (cur_model().planes_trimmed && gpu_free_regions() == 0l) {
+        return resp_error(resp, http_status.SERVICE_UNAVAILABLE, "every device region of '{cur_name()}' holds a live stream, and its trimmed image has no CPU planes - retry when a stream finishes, or serve embeddings from an embedding model")
     }
-    if (empty(inputs)) {
-        return resp_error(resp, http_status.BAD_REQUEST, "'input' is empty")
-    }
-    let pool_name = js?["pooling"] ?? ""
-    let pooling = pool_name == "mean" ? POOLING_MEAN : (pool_name == "cls" ? POOLING_CLS : (pool_name == "last" ? POOLING_LAST : -1l))
-    if (!empty(pool_name) && pooling < 0l) {
-        return resp_error(resp, http_status.BAD_REQUEST, "'pooling' must be \"mean\", \"cls\" or \"last\" (got '{pool_name}'); unset, the model's own pooling_type applies")
-    }
-    let dv = js?["dimensions"]
-    let dims = int64(dv ?? 0)
-    if ((dv != null && !(dv.value is _null) && dims < 1l) || dims > cur_model().config.dim) {   //! `?[]` answers a missing key with a null-VALUED sentinel, never a null pointer
-        return resp_error(resp, http_status.BAD_REQUEST, "'dimensions' must be 1..{cur_model().config.dim} (the model's hidden width)")
-    }
-
-    var inscope out = OaiEmbeddingList(_object = "list", model = cur_name())
-    out.data |> reserve(length(inputs))
-    var prompt_tokens = 0l
-    var idx = 0
-    for (text in inputs) {
-        var inscope toks <- encode(cur_model(), text, true, false)
-        if (long_length(toks) > cur_model().config.seq_len) {   //! a cut input would embed another text and the engine's cut drops the end token the pooling reads
-            return resp_error(resp, http_status.BAD_REQUEST, "input {idx} is {length(toks)} tokens; the model context is {cur_model().config.seq_len} - shorten it")
-        }
-        prompt_tokens += long_length(toks)
-        var inscope vec = embed(cur_model(), text, pooling, dims)   // the engine renormalizes
-        out.data |> emplace(OaiEmbedding(_object = "embedding", embedding <- vec, index = idx))
-        idx ++
-    }
-    out.usage = OaiEmbUsage(prompt_tokens = prompt_tokens, total_tokens = prompt_tokens)
-    let body = sprint_json(out, false)
-    return resp |> JSON(body, http_status.OK)
+    let prefill_was = resident_prefill_allowed()
+    set_resident_prefill_allowed(true)
+    resp := embed_request(cur_model(), ask, cur_name())
+    set_resident_prefill_allowed(prefill_was)
+    return resp.status == int(http_status.OK) ? http_status.OK : http_status.BAD_REQUEST
 }
 
 def private streams_busy() : bool =>
-    total_active() > 0l || total_queued() > 0l || g_asr_pending > 0 || g_media_pending > 0
+    total_active() > 0l || total_queued() > 0l || g_asr_pending > 0 || g_media_pending > 0 || g_emb_pending > 0
 
 //! ``POST /cache/drop``: every slot's prompt cache - the donated pages and a recurrent model's checkpoints -
 //! goes back to its pool, so the next request prefills cold on a server that keeps its model loaded. A
@@ -3955,6 +4120,7 @@ def private reap_disconnected(srv : FrontLink) {
         }
     }
     reap_speech_wires(srv)
+    reap_wires(srv, g_emb_wires)
     var disconnected_vision <- gone_wires(srv, g_media_wires)
     for (id in disconnected_vision) {
         drop_media_wire(id, true)
@@ -4369,12 +4535,28 @@ def private translator_stats_row(m : TranslatorSlot) : string {
     return "\{\"id\":{json_str(m.id)},\"ready\":{m.ready > 0},\"kind\":{json_str(kind)},\"source\":{json_str(m.src)},\"target\":{json_str(m.trg)},\"languages\":{length(m.langs)}{failed}}"
 }
 
+//! a queue family's stats member: `key` over its `pending` and `done_jobs` counters and one JSON row a model
+def private family_stats_member(key : string; rows : array<string>; pending : int; done_jobs : int64) : string =>
+    ",\"{key}\":\{\"pending\":{pending},\"done_jobs\":{done_jobs},\"models\":[{join(rows, ",")}]}"
+
 def private translate_stats_member() : string {
     return "" if (empty(g_translators))
-    var models <- [for (m in g_translators); translator_stats_row(m)]
-    let member = ",\"translate\":\{\"pending\":{g_tr_pending},\"done_jobs\":{g_tr_done_jobs},\"models\":[{join(models, ",")}]}"
-    delete models
-    return member
+    var inscope rows <- [for (m in g_translators); translator_stats_row(m)]
+    return family_stats_member("translate", rows, g_tr_pending, g_tr_done_jobs)
+}
+
+//! the stats answer's `embed` member: the queue's counters and each embedding model - whether its worker loaded it, its
+//! width and context, and the loader's reason when it failed; "" with none configured. Never an engine slot: the
+//! `models` list does not carry them.
+def private embedder_stats_row(m : EmbedderSlot) : string {
+    let failed = empty(m.error) ? "" : ",\"error\":{json_str(m.error)}"
+    return "\{\"id\":{json_str(m.id)},\"ready\":{m.ready > 0},\"dim\":{m.dim},\"ctx\":{m.seq_len},\"backend\":{json_str(m.backend)},\"device_prefills\":{m.device_prefills},\"cpu_passes\":{m.cpu_passes}{failed}}"
+}
+
+def private embed_stats_member() : string {
+    return "" if (empty(g_embedders))
+    var inscope rows <- [for (m in g_embedders); embedder_stats_row(m)]
+    return family_stats_member("embed", rows, g_emb_pending, g_emb_done_jobs)
 }
 
 // splice a member into a compact JSON object body: sprint_json/write_json_compact both close on
@@ -4392,7 +4574,7 @@ def private handle_stats(var resp : Reply) : http_status {
         // `setup` is the MODE, not the slot count — a speech-only server serves the speech route
         // and must not draw the page's pick-a-model surface.
         return resp |> JSON(
-            "\{\"setup\":{g_setup_mode},\"model\":\"(no model)\",\"active_model\":\"\",\"ctx\":0,\"uptime_s\":{g_started_at > 0l ? get_time_nsec(g_started_at) / 1_000_000_000l : 0l},\"draining\":{g_shutdown_requested},\"active\":0,\"queued\":0,\"peak_active\":0,\"admitted\":0,\"finished\":0,\"evicted\":0,\"decode_steps\":0,\"gen_tokens\":0,\"avg_batch\":0,\"cached_tokens\":0,\"prefix_pages\":0,\"max_streams\":0,\"chunk_tokens\":0,\"asr_workers\":{[for (a in g_asr); a.workers] |> sum()},\"asr_ready\":{[for (a in g_asr); a.ready] |> sum()},\"asr_active\":{g_asr_active},\"asr_pending\":{g_asr_pending},\"mtp_drafted\":0,\"mtp_accepted\":0,\"prefill_tokens\":0,\"ttft_avg_ms\":0,\"ttft_last_ms\":0,\"weights_bytes\":0,\"kv_bytes\":0,\"gpu_vram_bytes\":0,\"gpu_budget_bytes\":0,\"hardware\":{json_str(g_hardware_line)},\"asr_done_jobs\":{g_asr_done_jobs},\"asr_audio_s\":{g_asr_audio_s},\"tts_done_jobs\":{g_tts_done_jobs},\"tts_audio_s\":{g_tts_audio_s},\"vision\":false,\"audio\":false,\"models\":[]{asr_stats_member()}{tts_stats_member()}{translate_stats_member()}}",
+            "\{\"setup\":{g_setup_mode},\"model\":\"(no model)\",\"active_model\":\"\",\"ctx\":0,\"uptime_s\":{g_started_at > 0l ? get_time_nsec(g_started_at) / 1_000_000_000l : 0l},\"draining\":{g_shutdown_requested},\"active\":0,\"queued\":0,\"peak_active\":0,\"admitted\":0,\"finished\":0,\"evicted\":0,\"decode_steps\":0,\"gen_tokens\":0,\"avg_batch\":0,\"cached_tokens\":0,\"prefix_pages\":0,\"max_streams\":0,\"chunk_tokens\":0,\"asr_workers\":{[for (a in g_asr); a.workers] |> sum()},\"asr_ready\":{[for (a in g_asr); a.ready] |> sum()},\"asr_active\":{g_asr_active},\"asr_pending\":{g_asr_pending},\"mtp_drafted\":0,\"mtp_accepted\":0,\"prefill_tokens\":0,\"ttft_avg_ms\":0,\"ttft_last_ms\":0,\"weights_bytes\":0,\"kv_bytes\":0,\"gpu_vram_bytes\":0,\"gpu_budget_bytes\":0,\"hardware\":{json_str(g_hardware_line)},\"asr_done_jobs\":{g_asr_done_jobs},\"asr_audio_s\":{g_asr_audio_s},\"tts_done_jobs\":{g_tts_done_jobs},\"tts_audio_s\":{g_tts_audio_s},\"vision\":false,\"audio\":false,\"models\":[]{asr_stats_member()}{tts_stats_member()}{translate_stats_member()}{embed_stats_member()}}",
             http_status.OK)
     }
     let tier = gpu_tier_status()
@@ -4461,7 +4643,7 @@ def private handle_stats(var resp : Reply) : http_status {
     }
     let body = sprint_json(out, false)
     delete out
-    return resp |> JSON(with_json_member(body, "{asr_stats_member()}{tts_stats_member()}{translate_stats_member()}"), http_status.OK)
+    return resp |> JSON(with_json_member(body, "{asr_stats_member()}{tts_stats_member()}{translate_stats_member()}{embed_stats_member()}"), http_status.OK)
 }
 
 // /v1/streams: the poll surface behind the page's swimlane + stream cards — per-stream state,
@@ -5210,58 +5392,38 @@ def private asr_worker_main(
     }
     allow_cpu_prefill()   // a decline lands the decoder's prefill on the CPU arm: served, not a profiling slip
     var model = AsrModel()
-    var load_failure = ""
-    let load_failed = catch_worker_panic(load_failure) {
-        model <- empty(mmproj_path) ? load_asr_model(model_path) : load_asr_model(model_path, mmproj_path)   // nolint:PERF030 - target is the fresh empty decl above; the load runs inside the catch block, so it cannot fold into the declaration
-    }
-    if (load_failed) {   // an escaping panic here would kill only this thread and hang the ready-wait
-        to_log(LOG_ERROR, "dasllama-server: ASR worker {worker_index} could not load {model_path}: {load_failure}\n")
-        emit_asr_event(events, AsrEvent(kind = AsrEventKind.failed, body = load_failure))
-        jobs |> release
-        events |> release
-        return
-    }
-    var inscope ready_caps <- caps(model)
-    emit_asr_event(events, AsrEvent(kind = AsrEventKind.ready, body = asr_device_lane(model), translate = ready_caps.translate))
     var session = AsrSession()
     var session_language = ""
     var has_session = false
-    var stopping = false
-    while (!stopping) {
-        jobs |> pop_with_timeout_clone(250) $(job : AsrJob#) {
-            if (job.stop) {
-                stopping = true
-            } else {
-                var job_copy : AsrJob
-                job_copy := job
-                var failure = ""
-                let failed = catch_worker_panic(failure) {
-                    process_asr_job(model, session, session_language, has_session, job_copy, events)
-                }
-                if (failed) {
-                    if (has_session) {
-                        delete session
-                        has_session = false
-                    }
-                    session_language = ""
-                    to_log(LOG_ERROR, "[req {job_copy.id}] asr: failed: {failure}\n")
-                    emit_asr_event(events, AsrEvent(
-                        kind = AsrEventKind.completed, id = job_copy.id,
-                        status = int(http_status.INTERNAL_SERVER_ERROR),
-                        content_type = "application/json",
-                        body = error_body(failure, "server_error")))
-                }
-                delete job_copy
-            }
+    serve_worker(jobs, events, $ {
+        model <- empty(mmproj_path) ? load_asr_model(model_path) : load_asr_model(model_path, mmproj_path)   // nolint:PERF030 - target is the fresh empty decl above; the load runs inside the catch block, so it cannot fold into the declaration
+    }, $(load_failure : string) {
+        to_log(LOG_ERROR, "dasllama-server: ASR worker {worker_index} could not load {model_path}: {load_failure}\n")
+        emit_asr_event(events, AsrEvent(kind = AsrEventKind.failed, body = load_failure))
+    }, $ {
+        var inscope ready_caps <- caps(model)
+        emit_asr_event(events, AsrEvent(kind = AsrEventKind.ready, body = asr_device_lane(model), translate = ready_caps.translate))
+    }, $(job : AsrJob#) => job.stop, $(job : AsrJob) {
+        process_asr_job(model, session, session_language, has_session, job, events)
+    }, $(job : AsrJob; failure : string) {
+        if (has_session) {
+            delete session
+            has_session = false
         }
-    }
-    if (has_session) {
-        delete session
-    }
-    delete model
-    emit_asr_event(events, AsrEvent(kind = AsrEventKind.stopped))
-    jobs |> release
-    events |> release
+        session_language = ""
+        to_log(LOG_ERROR, "[req {job.id}] asr: failed: {failure}\n")
+        emit_asr_event(events, AsrEvent(
+            kind = AsrEventKind.completed, id = job.id,
+            status = int(http_status.INTERNAL_SERVER_ERROR),
+            content_type = "application/json",
+            body = error_body(failure, "server_error")))
+    }, $ {
+        if (has_session) {
+            delete session
+        }
+        delete model
+        emit_asr_event(events, AsrEvent(kind = AsrEventKind.stopped))
+    })
 }
 
 //! Why a `target` cannot be served from `source`, "" when it can: a source no served translator takes into the target,
@@ -5349,15 +5511,14 @@ def private start_asr_worker_threads() {
     for (a, jobs in g_asr, g_asr_jobs) {
         break if (!empty(failure))
         a.ready = 0
-        jobs = worker_channel()
         to_log(LOG_INFO, "dasllama-server: starting {a.workers} asynchronous ASR worker(s) for {a.id}\n")
-        for (_w in range(a.workers)) {
+        let load_failure = start_workers(jobs, g_asr_events, a.workers, AsrEventKind.ready, AsrEventKind.failed, $(var ch : Channel?; _w : int) {
             let worker_index = index
             let model_path = a.path
             let mmproj_path = a.mmproj
             let team_dispatch = g_asr_team_dispatch
             let metal = g_speech_metal
-            var jobs_capture = jobs
+            var jobs_capture = ch
             var events_capture = g_asr_events
             new_thread() <| @capture(= worker_index, = model_path, = mmproj_path, = team_dispatch, = metal,
                                     = jobs_capture, = events_capture) {
@@ -5365,20 +5526,12 @@ def private start_asr_worker_threads() {
                     worker_index, model_path, mmproj_path, team_dispatch, metal, jobs_capture, events_capture)
             }
             index++
-        }
-        var load_failure = ""
-        while (a.ready < a.workers && empty(load_failure)) {
-            g_asr_events |> pop_with_timeout_clone(1000) $(event : AsrEvent#) {
-                if (event.kind == AsrEventKind.ready) {
-                    a.ready++
-                    a.decoder = clone_string(event.body)
-                    a.translate = event.translate
-                    to_log(LOG_INFO, "dasllama-server: ASR worker ready ({a.id}: {a.ready}/{a.workers}, decoder on {a.decoder})\n")
-                } elif (event.kind == AsrEventKind.failed) {
-                    load_failure = clone_string(event.body)
-                }
-            }
-        }
+        }, $(event : AsrEvent#) {
+            a.ready++
+            a.decoder = clone_string(event.body)
+            a.translate = event.translate
+            to_log(LOG_INFO, "dasllama-server: ASR worker ready ({a.id}: {a.ready}/{a.workers}, decoder on {a.decoder})\n")
+        })
         if (!empty(load_failure)) {
             failure = "dasllama-server: an ASR worker failed to load {a.path}: {load_failure}"
         }
@@ -5445,21 +5598,9 @@ def private drain_asr_events(srv : FrontLink) {
 }
 
 def private stop_asr_worker_threads() {
-    var asked = 0
-    for (a, jobs in g_asr, g_asr_jobs) {
-        continue if (jobs == null)
-        for (_index in range(a.ready)) {   // the workers that loaded: one that failed to has left already
-            jobs |> push_clone(AsrJob(stop = true))
-            asked++
-        }
-    }
-    let stopped = await_stopped(g_asr_events, asked, WORKER_STOP_WAIT_NS) $(event : AsrEvent#) => event.kind == AsrEventKind.stopped
-    if (stopped < asked) {
-        to_log(LOG_WARNING, "dasllama-server: {asked - stopped} ASR worker(s) did not answer the stop within {WORKER_STOP_WAIT_NS / 1_000_000_000l} s - a dead worker must not hang the teardown\n")
-    }
-    for (a in g_asr) {
-        a.ready = 0
-    }
+    // the workers that loaded answer: one that failed to has left already
+    stop_workers(g_asr, g_asr_jobs, g_asr_events, "ASR", AsrJob(stop = true), $(a : AsrSlot) => a.ready,
+        $(event : AsrEvent#) => event.kind == AsrEventKind.stopped)
 }
 
 // ===== /v1/audio/speech =====
@@ -5676,65 +5817,45 @@ def private tts_worker_main(slot : int; model_path : string; lane : string; voic
     this_context().name := "dasllama_tts_{slot}"
     configure_media_worker_dispatch(team_dispatch)
     var inscope model = TtsModel()
-    var load_failure = ""
     // the lane pins HERE, in the context that loads: this thread started every dasLLAMA module
     // global at its declared default, so a pin set by the spawning context never arrived
     set_tts_q8(lane == "q8")
     defer() {
         reset_tts_q8()
     }
-    let load_failed = catch_worker_panic(load_failure) {
+    serve_worker(jobs, events, $ {
         model <- load_tts_model(model_path)   // nolint:PERF030 - target is the fresh empty decl above; the load runs inside the catch block, so it cannot fold into the declaration
         refuse_voiceless_tts(model, model_path)
         register_voice_clips(model, voices_dir)
-    }
-    if (load_failed) {   // an escaping panic here would kill only this thread and hang the ready-wait
+    }, $(load_failure : string) {
         to_log(LOG_ERROR, "dasllama-server: the TTS worker could not load {model_path}: {load_failure}\n")
         emit_tts_event(events, TtsEvent(kind = TtsEventKind.failed, slot = slot, body = load_failure))
         // no delete: whatever the load built, whole or half, dies with this thread's context
-        jobs |> release
-        events |> release
-        return
-    }
-    var ready <- tts_ready_event(model)
-    ready.slot = slot
-    emit_tts_event(events, ready)
-    delete ready
-    var stopping = false
-    while (!stopping) {
-        jobs |> pop_with_timeout_clone(250) $(job : TtsJob#) {
-            if (job.kind == TtsJobKind.stop) {
-                stopping = true
-            } else {
-                var job_copy : TtsJob
-                job_copy := job
-                var failure = ""
-                let failed = catch_worker_panic(failure) {
-                    if (job_copy.kind == TtsJobKind.phonemes) {
-                        process_tts_phonemes(model, job_copy, events)
-                    } else {
-                        process_tts_job(model, job_copy, events)
-                    }
-                }
-                if (failed) {
-                    // a voice the model lacks, or a speed on a model with no speed control, is the
-                    // caller's mistake; anything else is ours
-                    let client = find(failure, "unknown voice") >= 0 || find(failure, "speed control") >= 0
-                    to_log(LOG_ERROR, "[req {job_copy.id}] tts: failed: {failure}\n")
-                    emit_tts_event(events, TtsEvent(
-                        kind = TtsEventKind.completed, id = job_copy.id,
-                        status = int(client ? http_status.BAD_REQUEST : http_status.INTERNAL_SERVER_ERROR),
-                        content_type = "application/json",
-                        body = error_body(failure, client ? "invalid_request_error" : "server_error")))
-                }
-                delete job_copy
-            }
+    }, $ {
+        var ready <- tts_ready_event(model)
+        ready.slot = slot
+        emit_tts_event(events, ready)
+        delete ready
+    }, $(job : TtsJob#) => job.kind == TtsJobKind.stop, $(job : TtsJob) {
+        if (job.kind == TtsJobKind.phonemes) {
+            process_tts_phonemes(model, job, events)
+        } else {
+            process_tts_job(model, job, events)
         }
-    }
-    delete model
-    emit_tts_event(events, TtsEvent(kind = TtsEventKind.stopped, slot = slot))
-    jobs |> release
-    events |> release
+    }, $(job : TtsJob; failure : string) {
+        // a voice the model lacks, or a speed on a model with no speed control, is the
+        // caller's mistake; anything else is ours
+        let client = find(failure, "unknown voice") >= 0 || find(failure, "speed control") >= 0
+        to_log(LOG_ERROR, "[req {job.id}] tts: failed: {failure}\n")
+        emit_tts_event(events, TtsEvent(
+            kind = TtsEventKind.completed, id = job.id,
+            status = int(client ? http_status.BAD_REQUEST : http_status.INTERNAL_SERVER_ERROR),
+            content_type = "application/json",
+            body = error_body(failure, client ? "invalid_request_error" : "server_error")))
+    }, $ {
+        delete model
+        emit_tts_event(events, TtsEvent(kind = TtsEventKind.stopped, slot = slot))
+    })
 }
 
 // The readiness gate both TTS routes answer with, since both ride the one worker queue. True when
@@ -5876,34 +5997,26 @@ def private adopt_tts_ready(var m : TtsSlot; event : TtsEvent#) {
 //! `tts` block of /v1/stats carries the reason so that page can say it.
 def private start_tts_worker() {
     g_tts_jobs |> resize(length(g_tts))
-    for (k in range(length(g_tts))) {
-        assume m = g_tts[k]
+    for (m, jobs, k in g_tts, g_tts_jobs, count()) {
         m.ready = 0
         continue if (!m.armed)
-        g_tts_jobs[k] = worker_channel()
         to_log(LOG_INFO, "dasllama-server: starting the TTS worker for {m.id} on the {m.lane} lane\n")
-        let slot = k
-        let model_path = m.path
-        let lane = m.lane
-        let voices_dir = m.voices_dir
-        let team_dispatch = g_tts_team_dispatch
-        var jobs_capture = g_tts_jobs[k]
-        var events_capture = g_tts_events
-        new_thread() <| @capture(= slot, = model_path, = lane, = voices_dir, = team_dispatch, = jobs_capture, = events_capture) {
-            tts_worker_main(slot, model_path, lane, voices_dir, team_dispatch, jobs_capture, events_capture)
-        }
-        var load_failure = ""
-        while (m.ready < 1 && empty(load_failure)) {
-            g_tts_events |> pop_with_timeout_clone(1000) $(event : TtsEvent#) {
-                if (event.kind == TtsEventKind.ready) {
-                    adopt_tts_ready(m, event)
-                    m.ready++
-                    to_log(LOG_INFO, "dasllama-server: TTS worker ready ({m.id}: {length(m.voices)} voice(s), {m.sample_rate} Hz, {m.lane_served} lane)\n")
-                } elif (event.kind == TtsEventKind.failed) {
-                    load_failure = clone_string(event.body)
-                }
+        let load_failure = start_workers(jobs, g_tts_events, 1, TtsEventKind.ready, TtsEventKind.failed, $(var ch : Channel?; _w : int) {
+            let slot = k
+            let model_path = m.path
+            let lane = m.lane
+            let voices_dir = m.voices_dir
+            let team_dispatch = g_tts_team_dispatch
+            var jobs_capture = ch
+            var events_capture = g_tts_events
+            new_thread() <| @capture(= slot, = model_path, = lane, = voices_dir, = team_dispatch, = jobs_capture, = events_capture) {
+                tts_worker_main(slot, model_path, lane, voices_dir, team_dispatch, jobs_capture, events_capture)
             }
-        }
+        }, $(event : TtsEvent#) {
+            adopt_tts_ready(m, event)
+            m.ready++
+            to_log(LOG_INFO, "dasllama-server: TTS worker ready ({m.id}: {length(m.voices)} voice(s), {m.sample_rate} Hz, {m.lane_served} lane)\n")
+        })
         if (!empty(load_failure)) {
             m.error = load_failure
             m.armed = false
@@ -5966,41 +6079,20 @@ def private drain_tts_events(srv : FrontLink) {
 // A synthesis in flight when the stop arrives still lands a completed event: its wire and its
 // temp file are ours to close, so the teardown finishes the job instead of dropping it.
 def private discard_tts_completion(id : int64; file_path : string) {
-    g_tts_pending = max(g_tts_pending - 1, 0)
-    let wire = unsafe(g_tts_wires?[id])
-    if (wire != null) {
-        if (g_link.out != null) {
-            release_writer(g_link, wire.writer)
-        }
-        delete g_tts_wires[id]
-        g_tts_wires |> erase(id)
-    }
     if (!empty(file_path)) {
         remove_result(file_path)
     }
-    to_log(LOG_WARNING, "[req {id}] tts result discarded during teardown\n")
+    discard_completion(g_tts_wires, g_tts_pending, id, "tts result")
 }
 
 def private stop_tts_worker() {
-    var asked = 0
-    for (m, jobs in g_tts, g_tts_jobs) {
-        if (m.armed && m.ready > 0 && jobs != null) {
-            jobs |> push_clone(TtsJob(kind = TtsJobKind.stop))
-            asked++
-        }
-    }
-    let stopped = await_stopped(g_tts_events, asked, WORKER_STOP_WAIT_NS) $(event : TtsEvent#) {
-        if (event.kind == TtsEventKind.completed) {
-            discard_tts_completion(event.id, clone_string(event.file_path))
-        }
-        return event.kind == TtsEventKind.stopped
-    }
-    if (stopped < asked) {
-        to_log(LOG_WARNING, "dasllama-server: {asked - stopped} TTS worker(s) did not answer the stop within {WORKER_STOP_WAIT_NS / 1_000_000_000l} s - a dead worker must not hang the teardown\n")
-    }
-    for (m in g_tts) {
-        m.ready = 0
-    }
+    stop_workers(g_tts, g_tts_jobs, g_tts_events, "TTS", TtsJob(kind = TtsJobKind.stop), $(m : TtsSlot) => m.armed && m.ready > 0 ? 1 : 0,
+        $(event : TtsEvent#) {
+            if (event.kind == TtsEventKind.completed) {
+                discard_tts_completion(event.id, clone_string(event.file_path))
+            }
+            return event.kind == TtsEventKind.stopped
+        })
 }
 
 // ===== Translation: /translate, /languages, and /v1/audio/translations' `target` =====
@@ -6126,47 +6218,27 @@ def private translator_worker_main(slot : int; model_path : string; team_dispatc
     set_metal_mode(metal)   // a translation LLM is a Model session: it serves where the engine's mode says
     allow_cpu_prefill()     // a decline lands its prefill on the CPU arm: served, not a profiling slip
     var tr = Translator()
-    var load_failure = ""
-    let load_failed = catch_worker_panic(load_failure) {
+    serve_worker(jobs, events, $ {
         tr <- load_translator(model_path)   // nolint:PERF030 - target is the fresh empty decl above; the load runs inside the catch block, so it cannot fold into the declaration
-    }
-    if (load_failed) {   // an escaping panic here would kill only this thread and hang the ready-wait
+    }, $(load_failure : string) {
         to_log(LOG_ERROR, "dasllama-server: the translation worker could not load {model_path}: {load_failure}\n")
         events |> push_clone(TrEvent(kind = TrEventKind.failed, slot = slot, body = load_failure))
-        jobs |> release
-        events |> release
-        return
-    }
-    let dir = translator_langs(tr)
-    var ready = TrEvent(kind = TrEventKind.ready, slot = slot, llm = tr.kind == TranslatorKind.llm, src = dir.src, trg = dir.trg)
-    ready.langs <- translator_languages(tr)
-    events |> push_clone(ready)
-    delete ready
-    var stopping = false
-    while (!stopping) {
-        jobs |> pop_with_timeout_clone(250) $(job : TrJob#) {
-            if (job.kind == TrJobKind.stop) {
-                stopping = true
-                return
-            }
-            var job_copy : TrJob
-            job_copy := job
-            var failure = ""
-            let failed = catch_worker_panic(failure) {
-                process_translation(tr, job_copy, events)
-            }
-            if (failed) {
-                to_log(LOG_ERROR, "[req {job_copy.id}] translate: failed: {failure}\n")
-                events |> push_clone(TrEvent(kind = TrEventKind.completed, id = job_copy.id,
-                    status = int(http_status.INTERNAL_SERVER_ERROR), body = failure))
-            }
-            delete job_copy
-        }
-    }
-    delete tr
-    events |> push_clone(TrEvent(kind = TrEventKind.stopped, slot = slot))
-    jobs |> release
-    events |> release
+    }, $ {
+        let dir = translator_langs(tr)
+        var ready = TrEvent(kind = TrEventKind.ready, slot = slot, llm = tr.kind == TranslatorKind.llm, src = dir.src, trg = dir.trg)
+        ready.langs <- translator_languages(tr)
+        events |> push_clone(ready)
+        delete ready
+    }, $(job : TrJob#) => job.kind == TrJobKind.stop, $(job : TrJob) {
+        process_translation(tr, job, events)
+    }, $(job : TrJob; failure : string) {
+        to_log(LOG_ERROR, "[req {job.id}] translate: failed: {failure}\n")
+        events |> push_clone(TrEvent(kind = TrEventKind.completed, id = job.id,
+            status = int(http_status.INTERNAL_SERVER_ERROR), body = failure))
+    }, $ {
+        delete tr
+        events |> push_clone(TrEvent(kind = TrEventKind.stopped, slot = slot))
+    })
 }
 
 //! the facade's translator as a loaded model's roster describes it - its kind and direction, no weights - so the
@@ -6197,13 +6269,6 @@ def private translator_writes(trg : string) : bool {
         for (src in m.langs) {
             return true if (translator_serves(roster, src, trg))
         }
-    }
-    return false
-}
-
-def private any_translator_ready : bool {
-    for (m in g_translators) {
-        return true if (m.ready > 0)
     }
     return false
 }
@@ -6293,7 +6358,7 @@ def private libre_refusal(js : JsonValue?; texts : array<string>; var status : h
     let chars = [for (t in texts); utf8_length(t)] |> sum()
     return "q is {chars} characters, past the {TR_MAX_INPUT_CHARS} this route takes - split the text" if (chars > TR_MAX_INPUT_CHARS)
     status = http_status.SERVICE_UNAVAILABLE
-    return "no translation model is ready - start the server with --translate <model>" if (!any_translator_ready())
+    return "no translation model is ready - start the server with --translate <model>" if (!any(g_translators, $(m) => m.ready > 0))
     return "the translation queue is at capacity ({TR_QUEUE_LIMIT}) - retry shortly" if (g_tr_pending >= TR_QUEUE_LIMIT)
     status = http_status.BAD_REQUEST
     return "{source} -> {target} is not a served translation pair (GET /languages lists the pairs)" if (translator_for(source, target) < 0)
@@ -6410,32 +6475,9 @@ def private translation_failure(wire : TrWire; status : int; reason : string) : 
 }
 
 def private drain_translation_events(srv : FrontLink) {
-    return if (g_tr_events == null)
-    var draining = true
-    while (draining) {
-        draining = g_tr_events |> try_pop_clone() $(event : TrEvent#) {
-            return if (event.kind != TrEventKind.completed)
-            g_tr_pending = max(g_tr_pending - 1, 0)
-            let ok = event.status == int(http_status.OK)
-            if (ok) {
-                g_tr_done_jobs++
-            }
-            let wire = unsafe(g_tr_wires?[event.id])
-            if (wire != null) {
-                if (is_writer_connected(srv, wire.writer)) {
-                    var texts <- [for (t in event.texts); clone_string(t)]
-                    let reply = ok ? translation_reply(*wire, texts) : translation_failure(*wire, event.status, clone_string(event.body))
-                    set_writer_keepalive_timeout(srv, wire.writer, DEFAULT_WRITER_KEEPALIVE_MS)
-                    respond(srv, wire.writer, reply.status, reply.ctype, reply.body)
-                    delete texts
-                } else {
-                    release_writer(srv, wire.writer)
-                }
-                delete g_tr_wires[event.id]
-                g_tr_wires |> erase(event.id)
-            }
-            to_log(LOG_INFO, "[req {event.id}] translate: completed {event.status} (pending={g_tr_pending})\n")
-        }
+    drain_completions(srv, g_tr_events, g_tr_wires, g_tr_pending, g_tr_done_jobs, "translate", TrEventKind.completed) $(event : TrEvent#; wire : TrWire) {
+        var inscope texts <- [for (t in event.texts); clone_string(t)]
+        return event.status == int(http_status.OK) ? translation_reply(wire, texts) : translation_failure(wire, event.status, clone_string(event.body))
     }
 }
 
@@ -6457,33 +6499,25 @@ def private adopt_translator_ready(var m : TranslatorSlot; event : TrEvent#) {
 //! reason. The workers take the TTS worker's dispatch.
 def private start_translator_workers() {
     g_tr_jobs |> resize(length(g_translators))
-    for (k in range(length(g_translators))) {
-        assume m = g_translators[k]
+    for (m, jobs, k in g_translators, g_tr_jobs, count()) {
         m.ready = 0
-        g_tr_jobs[k] = worker_channel()
         to_log(LOG_INFO, "dasllama-server: starting the translation worker for {m.id}\n")
-        let slot = k
-        let model_path = m.path
-        let team_dispatch = g_tts_team_dispatch
-        let metal = g_speech_metal
-        var jobs_capture = g_tr_jobs[k]
-        var events_capture = g_tr_events
-        new_thread() <| @capture(= slot, = model_path, = team_dispatch, = metal, = jobs_capture, = events_capture) {
-            translator_worker_main(slot, model_path, team_dispatch, metal, jobs_capture, events_capture)
-        }
-        var load_failure = ""
-        while (m.ready < 1 && empty(load_failure)) {
-            g_tr_events |> pop_with_timeout_clone(1000) $(event : TrEvent#) {
-                if (event.kind == TrEventKind.ready) {
-                    adopt_translator_ready(m, event)
-                    m.ready = 1
-                    let serves = m.llm ? "any two of {length(m.langs)} languages" : "{m.src} -> {m.trg}"
-                    to_log(LOG_INFO, "dasllama-server: translation worker ready ({m.id}: {serves})\n")
-                } elif (event.kind == TrEventKind.failed) {
-                    load_failure = clone_string(event.body)
-                }
+        let load_failure = start_workers(jobs, g_tr_events, 1, TrEventKind.ready, TrEventKind.failed, $(var ch : Channel?; _w : int) {
+            let slot = k
+            let model_path = m.path
+            let team_dispatch = g_tts_team_dispatch
+            let metal = g_speech_metal
+            var jobs_capture = ch
+            var events_capture = g_tr_events
+            new_thread() <| @capture(= slot, = model_path, = team_dispatch, = metal, = jobs_capture, = events_capture) {
+                translator_worker_main(slot, model_path, team_dispatch, metal, jobs_capture, events_capture)
             }
-        }
+        }, $(event : TrEvent#) {
+            adopt_translator_ready(m, event)
+            m.ready = 1
+            let serves = m.llm ? "any two of {length(m.langs)} languages" : "{m.src} -> {m.trg}"
+            to_log(LOG_INFO, "dasllama-server: translation worker ready ({m.id}: {serves})\n")
+        })
         if (!empty(load_failure)) {
             m.error = load_failure
             to_log(LOG_ERROR, "dasllama-server: {m.id} serves no translation - its worker could not load {m.path}: {load_failure} (fix the file, then POST /restart)\n")
@@ -6492,39 +6526,315 @@ def private start_translator_workers() {
 }
 
 //! A translation in flight when the stop arrives still lands: its wire is ours to close.
-def private discard_translation_completion(id : int64) {
-    g_tr_pending = max(g_tr_pending - 1, 0)
-    let wire = unsafe(g_tr_wires?[id])
-    if (wire != null) {
-        if (g_link.out != null) {
-            release_writer(g_link, wire.writer)
-        }
-        delete g_tr_wires[id]
-        g_tr_wires |> erase(id)
-    }
-    to_log(LOG_WARNING, "[req {id}] translation discarded during teardown\n")
+def private stop_translator_workers() {
+    stop_workers(g_translators, g_tr_jobs, g_tr_events, "translation", TrJob(kind = TrJobKind.stop), type<TrEvent>, TrEventKind.completed, TrEventKind.stopped,
+        g_tr_wires, g_tr_pending, "translation")
 }
 
-def private stop_translator_workers() {
-    var asked = 0
-    for (m, jobs in g_translators, g_tr_jobs) {
-        if (m.ready > 0 && jobs != null) {
-            jobs |> push_clone(TrJob(kind = TrJobKind.stop))
-            asked++
+// ===== /v1/embeddings on an embedding model: a worker of its own, off the engine loop =====
+// One worker thread owns each embedding model in its own context (the translation shape); a request is a job of inputs,
+// the answer the whole embeddings document, which the engine's drain hands to the wire - a chat stream decodes on.
+
+enum private EmbJobKind {
+    embed        // zero value — the channel pops zeroed clones
+    stop         // worker exits
+}
+
+//! what an embeddings request asks, read off its body before any model runs
+struct private EmbAsk {
+    refusal : string             //! why the request is refused (400); "" when it is servable
+    inputs : array<string>
+    pooling : int64              //! -1: the model's own pooling_type
+    dims : int64                 //! 0: the full width
+}
+
+struct private EmbJob {
+    kind : EmbJobKind
+    id : int64
+    ask : EmbAsk
+}
+
+enum private EmbEventKind {
+    ready
+    completed
+    stopped
+    failed       // the worker could not load its model: `body` carries the panic text
+}
+
+struct private EmbEvent {
+    kind : EmbEventKind
+    slot : int               //! the ready and failed events name which model answered
+    id : int64
+    status : int
+    body : string            //! completed: the answer's body; failed: the load's panic text
+    dim : int64              //! ready: the model's hidden width
+    seq_len : int64          //! ready: its context
+    backend : string         //! ready: "gpu:resident" where the worker's own device tier serves the model whole, else "cpu"
+    device_prefills : int64  //! ready and completed: the prompt windows the worker's device has prefilled so far
+    cpu_passes : int64       //! ready and completed: the calls its device handed to the CPU rails so far
+}
+
+struct private EmbWire {
+    @do_not_delete writer : WriterRef
+}
+
+var private g_emb_events : Channel?        //! every embedding worker's events; each names its model's slot
+var private g_emb_wires : table<int64; EmbWire>
+var g_emb_pending = 0
+var g_emb_done_jobs = 0l
+let EMB_QUEUE_LIMIT = 32
+let EMB_WRITER_KEEPALIVE_MS = 600000
+
+//! The `input`, `pooling` and `dimensions` of an embeddings request against a model `dim` wide, each refusal in the
+//! words the route has always answered with.
+def private embeddings_ask(js : JsonValue?; dim : int64) : EmbAsk {
+    var ask = EmbAsk()
+    let iv = js?["input"]
+    if (iv == null) {
+        ask.refusal = "'input' is required (a string or array of strings)"
+        return <- ask
+    }
+    if (iv.value is _array) {
+        ask.inputs <- from_JV(iv, type<array<string>>)
+    } else {
+        let single = iv ?? ""
+        if (empty(single)) {
+            ask.refusal = "'input' must be a non-empty string or array of strings"
+            return <- ask
         }
+        ask.inputs |> push(single)
     }
-    let stopped = await_stopped(g_tr_events, asked, WORKER_STOP_WAIT_NS) $(event : TrEvent#) {
-        if (event.kind == TrEventKind.completed) {
-            discard_translation_completion(event.id)
+    if (empty(ask.inputs)) {
+        ask.refusal = "'input' is empty"
+        return <- ask
+    }
+    let pool_name = js?["pooling"] ?? ""
+    ask.pooling = pool_name == "mean" ? POOLING_MEAN : (pool_name == "cls" ? POOLING_CLS : (pool_name == "last" ? POOLING_LAST : -1l))
+    if (!empty(pool_name) && ask.pooling < 0l) {
+        ask.refusal = "'pooling' must be \"mean\", \"cls\" or \"last\" (got '{pool_name}'); unset, the model's own pooling_type applies"
+        return <- ask
+    }
+    let dv = js?["dimensions"]
+    ask.dims = int64(dv ?? 0)
+    if ((dv != null && !(dv.value is _null) && ask.dims < 1l) || ask.dims > dim) {   //! `?[]` answers a missing key with a null-VALUED sentinel, never a null pointer
+        ask.refusal = "'dimensions' must be 1..{dim} (the model's hidden width)"
+    }
+    return <- ask
+}
+
+//! One request's answer from `model` under `model_id`: every input's context check and token count (`encode`), then
+//! the vectors - one `embed_batch` over the inputs - and the embeddings document; 400 with the refusal for an input past
+//! the context.
+def private embed_request(model : Model; ask : EmbAsk; model_id : string) : Reply {
+    var prompt_tokens = 0l
+    for (text, idx in ask.inputs, count()) {
+        var inscope toks <- encode(model, text, true, false)
+        if (long_length(toks) > model.config.seq_len) {   //! a cut input would embed another text and the engine's cut drops the end token the pooling reads
+            return Reply(status = int(http_status.BAD_REQUEST),
+                body = error_body("input {idx} is {length(toks)} tokens; the model context is {model.config.seq_len} - shorten it", "invalid_request_error"))
         }
-        return event.kind == TrEventKind.stopped
+        prompt_tokens += long_length(toks)
     }
-    if (stopped < asked) {
-        to_log(LOG_WARNING, "dasllama-server: {asked - stopped} translation worker(s) did not answer the stop within {WORKER_STOP_WAIT_NS / 1_000_000_000l} s - a dead worker must not hang the teardown\n")
+    var inscope vecs <- embed_batch(model, ask.inputs, ask.pooling, ask.dims)   // the engine renormalizes
+    var inscope out = OaiEmbeddingList(_object = "list", model = model_id)
+    out.data |> reserve(length(vecs))
+    for (idx in range(length(vecs))) {
+        out.data |> emplace(OaiEmbedding(_object = "embedding", embedding <- vecs[idx], index = idx))
     }
-    for (m in g_translators) {
+    out.usage = OaiEmbUsage(prompt_tokens = prompt_tokens, total_tokens = prompt_tokens)
+    return Reply(body = sprint_json(out, false))
+}
+
+//! the texts the embedding worker's warm-up batch embeds before it reports ready: a request of this many texts pays no
+//! first-window cost (the window's pipelines, the session pool, the KV mirror arena) - the size the house sends
+let EMB_WARM_TEXTS = 32
+
+//! the token budget of the embedding worker's one scratch K/V region: a request's texts sit in it back to back as one window's
+//! segments, a request past it takes several windows, and an input past the embedder's context is refused (a 400) -
+//! about 112 KB a token for Qwen3-Embedding-0.6B, so 8192 tokens hold 0.9 GB of the card
+let EMB_SCRATCH_TOKENS = 8192l
+
+//! the scratch region's tokens for an embedder of context `ctx` (0 = the file's): the budget, or the context where it is
+//! wider, so one input of the whole context fits
+def emb_scratch_tokens(ctx : int64) : int64 => max(EMB_SCRATCH_TOKENS, ctx)
+
+//! the calls this context's device tier handed to the CPU rails, every reason summed
+def private emb_cpu_passes : int64 {
+    var inscope passes <- gpu_cpu_passes()
+    return sum([for (p in passes); p.count])
+}
+
+def private embedder_worker_main(slot : int; model_path, model_id : string; quant : QuantMode; ctx : int64; want : GpuTierWant; team_dispatch : bool;
+                                 metal : MetalMode; var seam : WorkerSeam; var jobs : Channel?&; var events : Channel?&; var wake : Channel?&) {
+    this_context().name := "dasllama_embed_{slot}"
+    configure_media_worker_dispatch(team_dispatch)
+    set_metal_mode(metal)   // an embedding model is a Model session: it serves where the engine's mode says
+    allow_cpu_prefill()     // a decline lands its forward on the CPU arm: served, not a profiling slip
+    set_gpu_tier_want(want)   //! this context's own device tier: the chat slot's lives in the engine's context, beside it
+    set_gpu_resident_regions(1l)
+    set_gpu_ctx_max(emb_scratch_tokens(ctx))
+    var model = Model()
+    serve_worker(jobs, events, $ {
+        model <- load_model(model_path, quant)   // nolint:PERF030 - target is the fresh empty decl above; the load runs inside the catch block, so it cannot fold into the declaration
+        model.config.seq_len = min(model.config.seq_len, ctx > 0l ? ctx : EMB_SCRATCH_TOKENS)
+        model.config.seq_len = region_clamped_ctx(model.config.seq_len, gpu_device_sessions(), gpu_device_session_ctx())
+        let t_warm = ref_time_ticks()
+        var inscope warm_texts <- [for (i in range(EMB_WARM_TEXTS)); "warm {i}"]
+        var inscope warm <- embed_batch(model, warm_texts)
+        to_log(LOG_INFO, "dasllama-server: the embedding worker warmed a {EMB_WARM_TEXTS}-text window in {get_time_usec(t_warm) / 1000} ms\n")
+    }, $(load_failure : string) {
+        to_log(LOG_ERROR, "dasllama-server: the embedding worker could not load {model_path}: {load_failure}\n")
+        events |> push_clone(EmbEvent(kind = EmbEventKind.failed, slot = slot, body = load_failure))
+    }, $ {
+        events |> push_clone(EmbEvent(kind = EmbEventKind.ready, slot = slot, dim = model.config.dim, seq_len = model.config.seq_len,
+            backend = gpu_device_sessions() > 0l ? "gpu:resident" : "cpu", device_prefills = gpu_resident_prefills(), cpu_passes = emb_cpu_passes()))
+    }, $(job : EmbJob#) => job.kind == EmbJobKind.stop, $(job : EmbJob) {
+        while (seam.hold != null && (seam.hold |> get) != 0) {
+            sleep(1u)
+        }
+        if (!empty(seam.embed_fault) && find_index(job.ask.inputs, seam.embed_fault) >= 0) {
+            panic("the fixture's embedding fault (set_worker_seam)")
+        }
+        let t_job = ref_time_ticks()
+        let answer = embed_request(model, job.ask, model_id)
+        to_log(LOG_INFO, "[req {job.id}] embeddings: the worker embedded {length(job.ask.inputs)} input(s) in {get_time_usec(t_job)} us\n")
+        events |> push_clone(EmbEvent(kind = EmbEventKind.completed, slot = slot, id = job.id, status = answer.status, body = answer.body,
+            device_prefills = gpu_resident_prefills(), cpu_passes = emb_cpu_passes()))
+        wake |> push_clone(FrontReq(kind = FrontKind.wake))
+    }, $(job : EmbJob; failure : string) {
+        to_log(LOG_ERROR, "[req {job.id}] embeddings: failed: {failure}\n")
+        events |> push_clone(EmbEvent(kind = EmbEventKind.completed, slot = -1, id = job.id,
+            status = int(http_status.INTERNAL_SERVER_ERROR), body = error_body(failure, "server_error")))
+    }, $ {
+        delete model
+        events |> push_clone(EmbEvent(kind = EmbEventKind.stopped, slot = slot))
+    })
+    wake |> release
+}
+
+//! the loaded embedding model a request's `model` names, -1 when none does; an empty `model` names the first loaded one
+//! only on a server with no chat slot to take it
+def private embedder_index(model_field : string) : int {
+    for (i in range(length(g_embedders))) {
+        assume m = g_embedders[i]
+        continue if (m.ready == 0)
+        return i if (m.id == model_field || (empty(model_field) && empty(g_slots)))
+    }
+    return -1
+}
+
+//! Queue a request naming embedding model `ei` to its worker: true once queued, the drain answers it. A refusal - the
+//! bench hold, the request's fields, the queue at capacity - is answered in `resp` and false.
+def private queue_embedding(js : JsonValue?; ei : int; writer : WriterRef; var resp : Reply) : bool {
+    if (bench_hold_active()) {
+        resp_error(resp, http_status.SERVICE_UNAVAILABLE, ibench_hold_text())
+        return false
+    }
+    var inscope ask <- embeddings_ask(js, g_embedders[ei].dim)
+    if (!empty(ask.refusal)) {
+        resp_error(resp, http_status.BAD_REQUEST, ask.refusal)
+        return false
+    }
+    if (g_emb_pending >= EMB_QUEUE_LIMIT) {
+        resp |> JSON(error_body("the embeddings queue is at capacity ({EMB_QUEUE_LIMIT}) — retry shortly", "server_error"), http_status.SERVICE_UNAVAILABLE)
+        return false
+    }
+    var job = EmbJob(id = next_id())
+    job.ask <- ask
+    set_writer_keepalive_timeout(g_link, writer, EMB_WRITER_KEEPALIVE_MS)
+    g_emb_wires[job.id] <- EmbWire(writer = writer)
+    g_emb_pending++
+    g_emb_jobs[ei] |> push_clone(job)
+    to_log(LOG_INFO, "[req {job.id}] embeddings: queued {length(job.ask.inputs)} input(s) on {g_embedders[ei].id} (pending={g_emb_pending})\n")
+    delete job
+    return true
+}
+
+//! /v1/embeddings on the engine: a request naming an embedding model queues to its worker (false: the drain answers it);
+//! any other is answered in `resp` (true) - a chat model's forward runs here, in-handler.
+def private embeddings_route(req : FrontReq; writer : WriterRef; var resp : Reply) : bool {
+    if (g_shutdown_requested) {
+        resp |> JSON(error_body("the server is draining for shutdown — retry shortly", "server_error"), http_status.SERVICE_UNAVAILABLE)
+        return true
+    }
+    var perr = ""
+    var js = read_json(req.body, perr)
+    if (js == null) {
+        resp_error(resp, http_status.BAD_REQUEST, "invalid JSON: {perr}")
+        return true
+    }
+    defer() { unsafe { delete js } }
+    warn_ignored_fields(js, EMB_FIELDS, "/v1/embeddings")
+    let ei = embedder_index(js?["model"] ?? "")
+    if (ei < 0) {
+        handle_embeddings(js, resp)
+        return true
+    }
+    return !queue_embedding(js, ei, writer, resp)
+}
+
+def private drain_embedding_events(srv : FrontLink) {
+    drain_completions(srv, g_emb_events, g_emb_wires, g_emb_pending, g_emb_done_jobs, "embeddings", EmbEventKind.completed) $(event : EmbEvent#; _wire : EmbWire) {
+        if (event.slot >= 0 && event.slot < length(g_embedders)) {
+            g_embedders[event.slot].device_prefills = event.device_prefills
+            g_embedders[event.slot].cpu_passes = event.cpu_passes
+        }
+        return Reply(status = event.status, body = clone_string(event.body))
+    }
+}
+
+//! Start every embedding model's worker and wait for each to load. A worker that cannot load DEGRADES its model as a
+//! translation worker does: the model serves nothing, the boot serves on, and the `embed` block of /v1/stats carries
+//! the reason. The workers take the speech workers' dispatch and the engine's Metal mode.
+def private start_embedder_workers() {
+    return if (empty(g_embedders))
+    g_emb_events = worker_channel()
+    g_emb_jobs |> resize(length(g_embedders))
+    for (m, jobs, k in g_embedders, g_emb_jobs, count()) {
         m.ready = 0
+        to_log(LOG_INFO, "dasllama-server: starting the embedding worker for {m.id}\n")
+        let load_failure = start_workers(jobs, g_emb_events, 1, EmbEventKind.ready, EmbEventKind.failed, $(var ch : Channel?; _w : int) {
+            let slot = k
+            let model_path = m.path
+            let model_id = m.id
+            let quant = m.quant
+            let ctx = m.ctx
+            let want = m.gpu_want
+            let team_dispatch = g_tts_team_dispatch
+            let metal = get_metal_mode()
+            var jobs_capture = ch
+            var events_capture = g_emb_events
+            var seam = g_worker_seam
+            var wake_capture = g_front_in
+            new_thread() <| @capture(= slot, = model_path, = model_id, = quant, = ctx, = want, = team_dispatch, = metal, = seam, = jobs_capture, = events_capture, = wake_capture) {
+                embedder_worker_main(slot, model_path, model_id, quant, ctx, want, team_dispatch, metal, seam, jobs_capture, events_capture, wake_capture)
+            }
+        }, $(event : EmbEvent#) {
+            m.ready = 1
+            m.dim = event.dim
+            m.seq_len = event.seq_len
+            m.backend = clone_string(event.backend)
+            m.device_prefills = event.device_prefills
+            m.cpu_passes = event.cpu_passes
+            to_log(LOG_INFO, "dasllama-server: embedding worker ready ({m.id}: {m.dim} wide, context {m.seq_len})\n")
+        })
+        if (!empty(load_failure)) {
+            m.error = load_failure
+            to_log(LOG_ERROR, "dasllama-server: {m.id} serves no embeddings - its worker could not load {m.path}: {load_failure} (fix the file, then POST /restart)\n")
+        }
     }
+}
+
+//! An embeddings answer in flight when the stop arrives still lands: its wire is ours to close.
+def private stop_embedder_workers() {
+    stop_workers(g_embedders, g_emb_jobs, g_emb_events, "embedding", EmbJob(kind = EmbJobKind.stop), type<EmbEvent>, EmbEventKind.completed, EmbEventKind.stopped,
+        g_emb_wires, g_emb_pending, "embeddings answer")
+}
+
+//! the embedding models' wires, channels and roster, once their workers are down
+def private release_embedder_state {
+    release_worker_family(g_emb_wires, g_emb_events, g_emb_jobs, g_emb_pending)
+    delete g_embedders
 }
 
 // ===== async vision encode (the ASR worker pattern: own context, own embedder) =====
@@ -6668,76 +6978,71 @@ def private media_encode_one(job : MediaJob; var embs : table<string; VisionEmbe
     return <- out
 }
 
-def private media_worker_main(slot_path_lines : string; var jobs : Channel?&; var events : Channel?&) {
+def private media_worker_main(slot_path_lines : string; fault : bool; var jobs : Channel?&; var events : Channel?&) {
     this_context().name := "dasllama_media"
     configure_media_worker_dispatch(false)
     var embs : table<string; VisionEmbedder>
     var states : table<string; VisionState>
     var audio_embs : table<string; AudioEmbedder>
     var audio_states : table<string; AudioState>
-    for (line in split(slot_path_lines, "\n")) {   // "<slot name>\t<V|A>\t<path>" per line
-        continue if (empty(line))
-        let sep = find(line, "\t")
-        let name = slice(line, 0, sep)
-        let kind = slice(line, sep + 1, sep + 2)
-        let path = slice(line, sep + 3)
-        var load_failure = ""
-        let load_failed = catch_worker_panic(load_failure) {
-            if (kind == "A") {
-                audio_embs[name] <- load_audio_embedder(path)   // own mapping; pages shared with a vision arm on the same file
-                audio_states[name] <- AudioState()
-            } else {
-                embs[name] <- load_vision_embedder(path)   // own mapping; pages shared with the slot's
-                states[name] <- VisionState()
+    serve_worker(jobs, events, $ {
+        for (line in split(slot_path_lines, "\n")) {   // "<slot name>\t<V|A>\t<path>" per line
+            continue if (empty(line))
+            let sep = find(line, "\t")
+            let name = slice(line, 0, sep)
+            let kind = slice(line, sep + 1, sep + 2)
+            let path = slice(line, sep + 3)
+            var load_failure = ""
+            let load_failed = catch_worker_panic(load_failure) {
+                if (kind == "A") {
+                    audio_embs[name] <- load_audio_embedder(path)   // own mapping; pages shared with a vision arm on the same file
+                    audio_states[name] <- AudioState()
+                } else {
+                    embs[name] <- load_vision_embedder(path)   // own mapping; pages shared with the slot's
+                    states[name] <- VisionState()
+                }
+            }
+            if (load_failed) {   // the slot's requests take the no-encoder 400; one slot's failure loads the others on
+                to_log(LOG_ERROR, "dasllama-server: media worker could not load slot {name}'s {kind == "A" ? "audio encoder" : "vision embedder"}: {load_failure}\n")
+                if (kind == "A") {
+                    audio_embs |> erase(name)
+                    audio_states |> erase(name)
+                } else {
+                    embs |> erase(name)
+                    states |> erase(name)
+                }
             }
         }
-        if (load_failed) {   // the slot's requests take the no-encoder 400; the boot must not hang on this thread
-            to_log(LOG_ERROR, "dasllama-server: media worker could not load slot {name}'s {kind == "A" ? "audio encoder" : "vision embedder"}: {load_failure}\n")
-            if (kind == "A") {
-                audio_embs |> erase(name)
-                audio_states |> erase(name)
-            } else {
-                embs |> erase(name)
-                states |> erase(name)
-            }
+    }, $(load_failure : string) {   // each arm's load catches its own panic: the arms' walk itself raises none
+        to_log(LOG_ERROR, "dasllama-server: the media worker could not read its arms: {load_failure}\n")
+    }, $ {
+        events |> push_clone(MediaEvent(kind = MediaEventKind.ready))
+    }, $(job : MediaJob#) => job.kind == MediaJobKind.stop, $(job : MediaJob) {
+        if (job.kind == MediaJobKind.drop) {
+            embs |> erase(job.name)
+            states |> erase(job.name)
+            audio_embs |> erase(job.name)
+            audio_states |> erase(job.name)
+            return
         }
-    }
-    var hello = MediaEvent(kind = MediaEventKind.ready)
-    events |> push_clone(hello)
-    delete hello
-    var stopping = false
-    while (!stopping) {
-        jobs |> pop_with_timeout_clone(250) $(job : MediaJob#) {
-            if (job.kind == MediaJobKind.stop) {
-                stopping = true
-                return
-            }
-            if (job.kind == MediaJobKind.drop) {
-                embs |> erase(job.name)
-                states |> erase(job.name)
-                audio_embs |> erase(job.name)
-                audio_states |> erase(job.name)
-                return
-            }
-            var job_copy : MediaJob
-            job_copy := job
-            var out <- media_encode_one(job_copy, embs, states, audio_embs, audio_states)
-            events |> push_clone(out)
-            delete out
-            delete job_copy
+        if (fault) {
+            panic("the fixture's media fault (set_worker_seam)")
         }
-    }
+        var out <- media_encode_one(job, embs, states, audio_embs, audio_states)
+        events |> push_clone(out)
+        delete out
+    }, $(job : MediaJob; failure : string) {
+        to_log(LOG_ERROR, "[req {job.id}] media job failed: {failure}\n")
+        events |> push_clone(MediaEvent(id = job.id, is_audio = job.is_audio, why = "the {job.is_audio ? "audio" : "vision"} encode failed - see the server log"))
+    }, $ {
+        events |> push_clone(MediaEvent(kind = MediaEventKind.stopped))
+    })
     unsafe {
         delete embs
         delete states
         delete audio_embs
         delete audio_states
     }
-    var farewell = MediaEvent(kind = MediaEventKind.stopped)
-    events |> push_clone(farewell)
-    delete farewell
-    jobs |> release       // the captured channel refs, or the thread teardown panics
-    events |> release
 }
 
 def private start_media_worker() {
@@ -6761,8 +7066,9 @@ def private start_media_worker() {
     var jobs_capture = g_media_jobs
     var events_capture = g_media_events
     to_log(LOG_INFO, "dasllama-server: starting the asynchronous media encode worker\n")
-    new_thread() <| @capture(= arms_spec, = jobs_capture, = events_capture) {
-        media_worker_main(arms_spec, jobs_capture, events_capture)
+    let fault = g_worker_seam.media_fault
+    new_thread() <| @capture(= arms_spec, = fault, = jobs_capture, = events_capture) {
+        media_worker_main(arms_spec, fault, jobs_capture, events_capture)
     }
     while (g_media_ready < 1) {
         g_media_events |> pop_with_timeout_clone(1000) $(event : MediaEvent#) {
@@ -7212,14 +7518,6 @@ def private buffered_route(req : FrontReq; var resp : Reply) : http_status {   /
         refresh_speech_snapshot()
     }
     if (req.route == Route.models) return handle_models(resp)
-    if (req.route == Route.embeddings) {
-        if (g_shutdown_requested) {
-            return resp |> JSON(
-                error_body("the server is draining for shutdown — retry shortly", "server_error"),
-                http_status.SERVICE_UNAVAILABLE)
-        }
-        return handle_embeddings(req, resp)
-    }
     if (req.route == Route.activate) return handle_activate(req, resp)
     if (req.route == Route.load) return handle_model_load(req, resp)
     if (req.route == Route.unload) return handle_model_unload(req, resp)
@@ -7272,6 +7570,9 @@ def private engine_dispatch(req : FrontReq) {
         g_gone |> insert(req.wid)
         return
     }
+    if (req.kind == FrontKind.wake && g_worker_seam.wakes != null) {
+        g_worker_seam.wakes |> inc
+    }
     return if (req.kind != FrontKind.request)
     let writer = WriterRef(id = req.wid)
     if (req.route == Route.chat) {
@@ -7280,6 +7581,11 @@ def private engine_dispatch(req : FrontReq) {
         handle_completion(g_link, req, writer)
     } elif (speech_route(req.route)) {
         speech_dispatch(req, writer)
+    } elif (req.route == Route.embeddings) {
+        var resp = Reply()
+        if (embeddings_route(req, writer, resp)) {
+            reply_on(req.wid, resp)
+        }
     } else {
         var resp = Reply()
         buffered_route(req, resp)
@@ -7559,43 +7865,32 @@ def private speech_main(var boot : Channel?&; var inbox : Channel?&; var to_engi
 
 //! this context's speech wires, the synthesis files nobody collected, and its worker channels
 def private release_speech_state {
-    delete g_asr_wires
-    delete g_tts_wires
-    delete g_tr_wires
     for (served in g_tts_served) {   // the synthesis temp files outlive the process otherwise: nothing else sweeps tmpdir
         remove_result(served.path)
     }
     delete g_tts_served
-    var asr_events = g_asr_events
-    var tts_events = g_tts_events
-    var tr_events = g_tr_events
-    g_asr_events = null
-    g_tts_events = null
-    g_tr_events = null
-    for (jobs in g_asr_jobs) {
-        remove_worker_channels(jobs, null)
-    }
-    for (jobs in g_tts_jobs) {
-        remove_worker_channels(jobs, null)
-    }
-    for (jobs in g_tr_jobs) {
-        remove_worker_channels(jobs, null)
-    }
-    remove_worker_channels(asr_events, tts_events)
-    remove_worker_channels(tr_events, null)
-    g_asr_jobs |> clear()   // the channels are gone: only the buffers are left to free
-    g_tts_jobs |> clear()
-    g_tr_jobs |> clear()
-    unsafe {
-        delete g_asr_jobs
-        delete g_tts_jobs
-        delete g_tr_jobs
-    }
+    release_worker_family(g_asr_wires, g_asr_events, g_asr_jobs, g_asr_pending)
+    release_worker_family(g_tts_wires, g_tts_events, g_tts_jobs, g_tts_pending)
+    release_worker_family(g_tr_wires, g_tr_events, g_tr_jobs, g_tr_pending)
     delete g_asr_recent
     g_asr_active = 0
-    g_asr_pending = 0
-    g_tts_pending = 0
-    g_tr_pending = 0
+}
+
+//! one worker family's wires, its events channel and every model's jobs channel, and its pending count, once its workers
+//! are down
+def private release_worker_family(var wires : table<int64; auto(WireT)>; var events : Channel?&; var jobs : array<Channel?>; var pending : int&) {
+    delete wires
+    var family_events = events
+    events = null
+    for (ch in jobs) {
+        remove_worker_channels(ch, null)
+    }
+    remove_worker_channels(family_events, null)
+    jobs |> clear()   // the channels are gone: only the buffer is left to free
+    unsafe {
+        delete jobs
+    }
+    pending = 0
 }
 
 //! the engine's copy of the speech state, off a snapshot
@@ -7734,6 +8029,7 @@ def private init_worker_rails {
     catalog_events_init()
     start_speech_thread()
     start_media_worker()
+    start_embedder_workers()
 }
 
 // The boot-time scheduler knobs, kept for slots loaded at RUNTIME (POST /v1/models/load builds
@@ -7921,7 +8217,7 @@ def init_server(port : int; max_streams : int64 = 4l; max_queue : int64 = 32l; c
         to_log(LOG_ERROR, "dasllama-server: init_server called while already initialized\n")
         return false
     }
-    if (empty(g_slots) && !g_setup_mode && !server_has_speech()) {
+    if (empty(g_slots) && !g_setup_mode && !server_has_speech() && empty(g_embedders)) {
         to_log(LOG_ERROR, "dasllama-server: init_server with no model slots (call set_model/add_model first, or add_tts_model / add_asr_model for a speech-only server)\n")
         return false
     }
@@ -7945,7 +8241,7 @@ def init_server(port : int; max_streams : int64 = 4l; max_queue : int64 = 32l; c
     g_media_events = worker_channel()
     init_worker_rails()
     if (empty(g_slots)) {
-        if (!g_setup_mode && !server_has_speech()) {
+        if (!g_setup_mode && !server_has_speech() && !any(g_embedders, $(m) => m.ready > 0)) {
             // the speech-only boot's worker dropped the route as it loaded: the catalog/config
             // page is all that is left to serve, and it is where the config gets fixed
             to_log(LOG_WARNING, "dasllama-server: the speech route did not arm and no model is loaded - falling back to setup mode\n")
@@ -7968,6 +8264,11 @@ def init_server(port : int; max_streams : int64 = 4l; max_queue : int64 = 32l; c
     }
     // a resident prefill would strand device-only rows when host-cached sessions outnumber the driver's K/V regions; device-home streams prefill on the device regardless
     set_resident_prefill_allowed(false)
+    g_boot_refusal = trimmed_slot_refusal()
+    if (!empty(g_boot_refusal)) {
+        to_log(LOG_ERROR, "dasllama-server: {g_boot_refusal}\n")
+        return false
+    }
     let rc = start_front(port, bind_host(host))   // 0 on success; non-zero = bind/listen failed (e.g. port in use)
     if (rc != 0) {
         to_log(LOG_ERROR, "dasllama-server: could not start on port {port} (start rc {rc}; is the port already in use?)\n")
@@ -7983,6 +8284,26 @@ def init_server(port : int; max_streams : int64 = 4l; max_queue : int64 = 32l; c
     to_log(LOG_INFO, "dasllama-server listening on http://127.0.0.1:{port}/v1  (models: {join(names, ", ")}; streams: {max_streams}, prefill chunk: {chunk_note}, kv: {kv_mode})\n")
     delete names
     return true
+}
+
+var private g_boot_refusal = ""
+
+//! Why the last ``init_server`` refused to start, "" where it started or failed for another reason
+def server_boot_refusal : string => g_boot_refusal
+
+//! A slot whose model is a planes-trimmed vulkan lane serves only through the whole-model driver, and the scheduler keeps a
+//! host-cached stream's prompts off it: such a slot needs every stream device-home - a region each - or its first prompt has no
+//! rail to run on. "" where every trimmed slot qualifies, else the refusal naming the slot.
+def private trimmed_slot_refusal : string {
+    for (s, si in g_slots, count()) {
+        continue if (!s.model.planes_trimmed)
+        let holds = si == g_gpu_owner
+        sync_slot_device_kv(g_slots[si], holds)
+        continue if (holds && s.sched.device_kv)
+        let why = !holds ? "it does not hold the device tier" : "its {s.sched.max_streams} streams cannot each hold a device region ({s.gpu_regions} regions{s.backend_effective != "gpu:resident" ? ", the driver not armed" : ""})"
+        return "slot '{s.name}' serves a planes-trimmed vulkan lane - no CPU planes - and {why}: ask a region a stream (gpu_residency_ask, the server's --streams with --ctx), serve fewer streams, or load the gguf with DASLLAMA_TRIM=0"
+    }
+    return ""
 }
 
 // Round-robin pick of the next slot to step, starting AFTER the last stepped one so concurrent
@@ -8050,6 +8371,7 @@ def update_server() : bool {
     drain_asr_events(g_link)
     drain_tts_events(g_link)
     drain_media_events(g_link)
+    drain_embedding_events(g_link)
     drain_bench_events()
     if (g_shutdown_requested && ibench_running()) {
         ibench_stop("idle", "the server is shutting down")   // a benchmark holds nothing worth draining for, and no rep runs on the tick that learns it
@@ -8103,7 +8425,7 @@ def update_server() : bool {
         prof_window_report()
     }
     if (g_shutdown_requested && total_active() == 0l && total_queued() == 0l &&
-        g_asr_pending == 0 && g_tts_pending == 0 && g_tr_pending == 0 && g_media_pending == 0) {
+        g_asr_pending == 0 && g_tts_pending == 0 && g_tr_pending == 0 && g_media_pending == 0 && g_emb_pending == 0) {
         to_log(LOG_INFO, "dasllama-server: graceful shutdown drain complete\n")
         return false
     }
@@ -8142,6 +8464,9 @@ def shutdown_server() {   // nolint:STYLE038 — one ordered teardown: workers s
     if (g_media_jobs != null && g_media_events != null) {
         stop_media_worker()
     }
+    if (g_emb_events != null) {
+        stop_embedder_workers()
+    }
     // clean tier epoch: drop the owner's VRAM state and leave the engine globals bare, so a
     // same-context restart (tests) starts from an unarmed device with no stale marks
     if (g_gpu_owner >= 0 && g_gpu_owner < length(g_slots)) {
@@ -8162,6 +8487,7 @@ def shutdown_server() {   // nolint:STYLE038 — one ordered teardown: workers s
     delete g_events
     delete g_wires
     release_speech_state()   // the engine's own: empty rails on a server whose speech thread ran them
+    release_embedder_state()
     for (w in values(g_media_wires)) {   // parked image requests die with the server
         unsafe {
             delete w.js

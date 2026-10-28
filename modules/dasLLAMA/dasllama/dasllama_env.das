@@ -336,6 +336,9 @@ struct public MetalEnv {
     @clarg_doc = "Double-buffered W staging on the dense staged prefill GEMMs (q8 and kq stamps; the MoE family measured a loss and stays single-tile): two ping-pong tiles, one barrier per 64-chunk, staging overlaps the tensor op; 0 pins the single-tile forms (the A/B rail)."
     dbuf : bool = true
 
+    @clarg_doc = "Split-K on the short window's prefill tiles (q8, every dense K-quant, grid and per-32 format, bf16): a 32-row tile grid of at most half the sidecar's metal_split_k_tgs threadgroups divides its K across up to eight threadgroups a tile, the partial planes summed by one reduce dispatch; 0 pins the whole-K tiles (the A/B rail)."
+    split_k : bool = true
+
     @clarg_default_doc = "~4 layers/chunk"
     @clarg_doc = "Command-buffer split: each chunk commits as encoded so the scheduler overlaps chunk k with k-1."
     ncb : int = 0

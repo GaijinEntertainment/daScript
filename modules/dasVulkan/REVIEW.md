@@ -24,9 +24,10 @@ fails `vkCreateDevice` or lets a kernel use a feature the device never enabled.
 two the addition has - on a `*_supported` probe: an existing one, or one the diff adds.** Without
 that probe, the code that uses the feature cannot tell whether the device it was given has it.
 
-**A diff to `utils/vulkan2rst.das` gives a public helper of a module it documents a
-`group_by_regex` group whose title names what the helper does.** A helper filed under a title
-that does not cover it escapes the `Uncategorized` check in `doc/check_docs_fresh.cmake` (repo
+**A diff that adds a public helper to a module `utils/vulkan2rst.das` documents, or that edits
+`utils/vulkan2rst.das`, leaves every public helper of the modules it documents in a
+`group_by_regex` group whose title names what the helper does.** A helper filed under a title that
+does not cover it escapes the `Uncategorized` check in `doc/check_docs_fresh.cmake` (repo
 root), and no other check reports it.
 
 **A diff that adds or edits a call to raw `vkCreateDevice` appends `VK_KHR_portability_subset`

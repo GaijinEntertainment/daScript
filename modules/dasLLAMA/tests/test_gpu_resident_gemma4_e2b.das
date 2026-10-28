@@ -127,7 +127,9 @@ def test_gpu_resident_gemma4_e2b_ple_planes(t : T?) {
             let sdot0 = empty(spec.tile) ? 0l : census("{spec.tile}_cls_spv")
             let f16t0 = empty(spec.tile) ? 0l : f16_tile_count(spec.tile)
             var inscope gv0 <- [for (g in gemvs); format_gemv_count(g)]
-            gemma_forced_feed(t, 40l, gf, spec.f32)   //! the Q4_K_M file's CPU q8 chain sits off its f32 chain at one step: its `exact` form
+            let staged = staged_window_tile()
+            let route = staged ? " [the staged tile, DASLLAMA_VK_PLE_F32_TILE on]" : " [the scalar f32 tile]"
+            gemma_forced_feed(t, 40l, gf, spec.f32, staged ? F32_DIST_REL_STAGED : F32_DIST_REL, route)   //! the Q4_K_M file's CPU q8 chain sits off its f32 chain at one step: its `exact` form
             return if (!armed || act0 == NO_CENSUS)
             let act_n = census("ple_act_f32_cls_spv") - act0
             let gemm_n = census("dn_ba_cls_spv") - gemm0
@@ -158,6 +160,9 @@ def test_gpu_resident_gemma4_e2b_ple_planes(t : T?) {
         }
     }
 }
+
+//! the staged tile's f16 weights and f16 sums (`ARCHITECTURE_GPU_ASYMMETRIES.md`) read 1.16 on the RTX PRO 4500, the scalar tile 0.88
+let private F32_DIST_REL_STAGED = 1.3
 
 //! the window's f32 per-layer GEMMs ride the staged KHR tile on this device and knob (`pf_ple_f32_staged`'s answer at the E2B's
 //! dim and ple)
@@ -206,9 +211,9 @@ def test_gpu_resident_gemma4_e2b_ple_pre_step(t : T?) {
                 static_if (typeinfo builtin_module_exists(vulkan)) {
                     var prompt <- resident_prompt(40l)
                     var sg <- create_session(tr, mirror_kv_dtype())
-                    let served0 = moe_gpu_resident_prefills()
+                    let served0 = gpu_resident_prefills_()
                     forward_prefill(tr, sg, prompt, 40l, 0l)
-                    t |> equal(moe_gpu_resident_prefills(), served0 + 1l, "the resident window chain served the prompt")
+                    t |> equal(gpu_resident_prefills_(), served0 + 1l, "the resident window chain served the prompt")
                     let tok = 1234l
                     let g0 = vk_rdec_token_gathered()
                     let cpu0 = ple_cpu_pre_rows()

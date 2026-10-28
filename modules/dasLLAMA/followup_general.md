@@ -2498,38 +2498,6 @@
     beside the ASR and TTS references, because Bergamot is the only translation family. Done = when a second
     translation family lands, its references, the marian build and the venv move into a
     `performance/setup_translate_rig.das` of their own, and `setup_asr_rig.das` keeps only speech.
-259. **The Metal translation driver keeps its own pooled-buffer set.** `NmBufs` / `nm_take` / `nm_give`
-    (`dasllama/dasllama_metal_nmt.das`) and `TwBufSet` / `tw_take` / `tw_release` (`dasllama/dasllama_metal_tower.das`)
-    are one shape over two pool globals (`g_nm_pool`, `g_tw_pool`): take a buffer of `bytes` from the pool into the
-    set, give every buffer back at the end. The tower's form also checks the device's largest buffer (`tw_take_fits`)
-    and marks a short take against a `required` flag; the NMT form pushes whatever `pool_acquire` returns, null
-    included, so an oversized take surfaces as a null bind rather than a named decline. Done = one pooled-buffer set
-    in `dasllama_metal_common.das` taking the pool, with the fit check and the short mark, both drivers on it (17 NMT
-    takes, 57 tower takes), the NMT driver declining `device` on a short required take.
-260. **The Vulkan translation driver's GEMV sites repeat the whisper decoder's.** `nv_site_meta` / `nv_gemv_set` /
-    `nv_gemv` (`dasllama/dasllama_vulkan_nmt.das`) and `wd_site_meta` / `wd_gemv_set` / `wd_gemv`
-    (`dasllama/dasllama_vulkan_asr_dec.das`) differ in the resident global (`g_nv` vs `g_wd`), its meta-bytes
-    constant, one offset against an offset array, and `nreg` fixed at 1 on the NMT side; the bodies are otherwise line
-    for line (the `fill_gemv_region` loop, `gemv_planes_set(q8, ...)`, the 11-field `GemvArgs` and `gemv_enc`). Done =
-    free functions over (planes, meta bytes, the requant x / scales) in `dasllama_vulkan_tower.das` or
-    `dasllama_vulkan_common.das`, each driver passing its resident (9 + 3 + 11 NMT sites, 5 + 7 + 7 whisper sites),
-    `test_vkt_nmt`, `test_nmt`'s Vulkan cell and the whisper Vulkan decoder cells green on a Vulkan box.
-261. **The server's translator workers are the third copy of the worker-pool lifecycle.** `utils/dasllama-server/
-    openai_server.das`: `stop_translator_workers` against `stop_tts_worker` and `stop_asr_worker_threads`;
-    `discard_translation_completion` against `discard_tts_completion`; `start_translator_workers` against
-    `start_tts_worker`; `translator_worker_main` against `tts_worker_main`. They differ in the job and event types, the
-    slot table, the load block and the per-job block; the rest is line for line - the stop push, `await_stopped`, the
-    "did not answer the stop" warning and `ready = 0`; the wire release and `pending--`; the thread spawn and the
-    ready / failed wait loop. Done = generic functions over `auto(JobT)` / `auto(EventT)` with blocks for the load and
-    the job, the way `await_stopped` already is, the three worker families on them, `test_openai_server_translate`,
-    the speech and ASR server suites green.
-262. **The media rig's two patched checkouts are twins.** `performance/setup_asr_rig.das`: `mtmd_tree_patched` and
-    `marian_tree_patched` are one predicate over the marker file and the patch directory (`tree_carries(root, rel,
-    marker)`); `setup_marian`'s checkout / `-f` / apply / verify / "port the patch" block repeats `setup_refs`' mtmd
-    block; `profile_common.das`'s `patch_tag` repeats `mtmd_versions`' inline patch tag. Done = `tree_carries` and a
-    `patched_checkout(...)` beside `pinned_checkout`, both references through them, `mtmd_versions` calling
-    `patch_tag`, and `setup_asr_rig --refs` rebuilding both references unchanged on a rig box. With row 258's move the
-    helper lands where both rigs read it.
 263. **The translation cell holds no board row.** `harness/nmt_probe.das` measured the Bergamot students on the M5 (CPU
     q8 and Metal) and on the RunPod RTX PRO 4500 (x86 CPU q8 and Vulkan) - the dated `PERF_LEDGER.md` translation
     entry - but no catalog row in `performance/profile_common.das` and no `performance/records/<box>.json` row carries
@@ -2538,3 +2506,22 @@
     `cpu/tuned` row everywhere, the `metal` row on the Apple boxes, the `vulkan` row on a Vulkan box, the patched
     `marian-decoder` as the CPU reference wherever `setup_asr_rig` builds it), minted at the release re-mint beside the
     ledger entry's figures.
+
+264. **The pod's Vulkan pp32 and embeddings rows are unminted.** `/workspace/nmt_pod.tune.json` predates the rebuilt
+    binary, so `lcpp_bench` refuses it, and the pp32 rows in `followup_vulkan.md` 163 ran under
+    `DASLLAMA_ALLOW_UNTUNED=1` (GPU path unchanged, CPU stamps on fallbacks). The pod's GPU drops to 180 MHz between sparse windows and its clocks cannot be
+    locked, so a timed run needs a warm-up first. Done = the pod profile re-minted on the current binary, and the pp32
+    rows in `followup_vulkan.md` 163 plus the embeddings rows re-read with a warm-up as `PERF_LEDGER.md` rows. The
+    embeddings reference is `/workspace/llama.cpp-ref-9febe63/build-vulkan/bin/llama-server -m
+    /workspace/models/Qwen3-Embedding-0.6B-Q8_0.gguf --embedding -ngl 999 -c 8192 -b 2048 -ub 2048 --host 127.0.0.1
+    --port 8912`, no environment beyond the shell's, read over `/v1/embeddings` with a 255-text corpus in requests of
+    32 and one query a request, beside `utils/dasllama-server/main.das -- --gpu vulkan -m` the same file `--ctx 8192`.
+
+265. **The CPU q8 chain reads an embedding's first rows 1-3% of cosine off the f32 model.** The q8 GEMVs quantize the
+    activation row to Q8_0 blocks before the dot, and early-position rows lose the most: on Qwen3-Embedding-0.6B Q8_0
+    the EOS-alone row reads 0.9909 against the CPU f32 load of the same file, "Hello" alone 0.9741, an 8-row text's first
+    row 0.9785 and its last 0.9996, while the Metal window (f32 activations on its one-row GEMV, half on its tiles)
+    reads 1.0000 on every row. Last-token pooling barely sees it; mean and first-row pooling do. Done = the CPU q8
+    embedding path within the Metal window's distance of the f32 model on those rows (`test_embeddings`'
+    `EMB_FP32_BAR` cell, run on the CPU rail), or a measured reading that the cost of a wider activation row on the
+    CPU q8 GEMVs outweighs it.

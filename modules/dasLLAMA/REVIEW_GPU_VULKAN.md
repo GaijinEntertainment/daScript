@@ -14,14 +14,13 @@ GEMM tile stamp emits (its `DASLLAMA_VK_SPV_DUMP` output against the base branch
 
 **A diff that adds a Vulkan dispatch family - a `[vk_dispatch]` class and the `ensure_<family>` /
 `set_<family>` pair generated from it - or that caches a descriptor set or a host address (a
-pointer into CPU memory) across dispatches, puts every piece of state the family keeps per model,
+pointer into CPU memory) a later dispatch reads, puts every piece of state the family keeps per model,
 and every such cached set or address, where the model drop clears it, in the same change: in
 `vk_drop_model_state`'s sweep, or in a listener registered through `register_vk_drop_hook`
 (`dasllama/dasllama_vulkan_common.das`).** To clear is
 to zero the state or leave it unreachable to every later read. A `make_device_buf` result and any
 field of `RDec` - the resident decode driver's state struct - are swept already, a `*_ready` latch
-and a profiler accumulator are not; pipelines are device-lifetime state that survives the drop
-and rebuilds lazily.
+and a profiler accumulator are not; pipelines are device-lifetime state that survives the drop.
 
 **A diff that adds to `dasllama/dasllama_vulkan_classes.das` a host-side ensure/set/enc pick
 ladder over a family's class stamps - the stamps of one `[vk_dispatch]` class template, picked by a
@@ -39,8 +38,8 @@ rather than embeddings - accepts a call, or when the override that routes to it
 (`vulkan_resident_prefill`) accepts one, updates `vulkan_embed_gpu_gate` in the same
 change** - the override and the gate live in `dasllama/dasllama_gpu_resident.das`,
 `vk_rdec_prefill_ids` in `dasllama/dasllama_vulkan_prefill.das`. The engine skips the CPU
-embed when that gate returns true, so a gate true where the prefill path declines hands the
-next consumer an unfilled residual stream.
+embed when that gate returns true, so a gate true where the prefill path declines sets up a
+device gather for nothing, and the CPU embeds the rows after all (`embed_backfill_rows`).
 
 **A Vulkan-tier serving gate that decides at load - a predicate or per-layer loop whose true branch
 dispatches through a call into the tier (a function a `dasllama/dasllama_*vulkan*.das` or
@@ -191,10 +190,10 @@ Nothing else orders the copy's read before that write.
 
 **Every integer division or modulo a diff adds or changes in kernel code of
 `dasllama/dasllama_vulkan_classes.das`, `dasllama/dasllama_gpu_kernels_discrete.das` or
-`dasllama/dasllama_gpu_kernels_common.das` - a kernel body or any method it calls,
-`dasllama/dasllama_gpu_math.das`'s helpers included - whose divisor is not a literal or a template
+`dasllama/dasllama_gpu_kernels_common.das` - a kernel body, any method or
+`dasllama/dasllama_gpu_math.das` helper it calls - whose divisor is not a literal or a template
 constant clamps the divisor to at least one (`max(1u, ...)`) before the division, or sits inside
-an `if` whose condition compares that divisor expression itself with zero.** Editing the divisor,
+an `if` whose condition compares that divisor expression with zero.** Editing the divisor,
 the values feeding it, or its guard changes a division; moving one unchanged between these files,
 with the values feeding its divisor, does not add it. An integer division by zero is undefined in
 SPIR-V, and some drivers evaluate both arms of a `?:` select, so neither a select nor a condition

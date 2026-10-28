@@ -4010,8 +4010,8 @@ def bench_metal_gemm_kernels(b : B?) {
                        fastmath = true, bm = 32, bn = 64, grid2d = true, blob34 = true),
             // v25: the PRODUCTION mul_mm (metal_q8_mulmm in dasllama_metal_prefill) — zero
             // copy drift, exactly what the resident prefill dispatches
-            LabVariant(name = "v25_das_rolled", src = metal_q8_mulmm_msl, entry = metal_q8_mulmm_msl_entry,
-                       fastmath = metal_q8_mulmm_msl_fastmath, bm = 32, bn = 64, grid2d = true, blob34p = true, tgmem = metal_q8_mulmm_msl_tgmem),
+            LabVariant(name = "v25_das_rolled", src = MetalQ8MulMm_metal_q8_mulmm_msl, entry = MetalQ8MulMm_metal_q8_mulmm_msl_entry,
+                       fastmath = MetalQ8MulMm_metal_q8_mulmm_msl_fastmath, bm = 32, bn = 64, grid2d = true, blob34p = true, tgmem = MetalQ8MulMm_metal_q8_mulmm_msl_tgmem),
             LabVariant(name = "v26_shmem", src = LAB_V26_SHMEM_MSL, entry = "lab_shmem",
                        fastmath = true, bm = 32, bn = 64, grid2d = true, blob34 = true, tgmem = 6144ul),
             // v21 + [block][row]-transposed W scales — format-compatible (planar q8 unchanged,

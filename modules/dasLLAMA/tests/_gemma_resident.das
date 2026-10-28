@@ -134,11 +134,11 @@ def gemma_format_cell(t : T?; gf : GemmaFile; mx4 : bool) {
         t |> equal(tr.experts_mx4, mx4, "{gf.file}: the expert stacks load as the native-MXFP4 planes exactly where the file carries them")
         var inscope feed <- prose_feed(tr, 40l, 2l)
         var sg <- create_session(tr, mirror_kv_dtype())
-        let served0 = moe_gpu_resident_prefills()
+        let served0 = gpu_resident_prefills_()
         let gu0 = census("mx4_gemv_gu_cls_spv")
         let sum0 = census("mx4_gemv_sum_cls_spv")
         var rows <- feed_logits(tr, sg, feed.prompt, feed.toks) $ {}
-        t |> equal(moe_gpu_resident_prefills(), served0 + 1l, "{gf.file}: the resident window chain served the prompt")
+        t |> equal(gpu_resident_prefills_(), served0 + 1l, "{gf.file}: the resident window chain served the prompt")
         served_every_call(t)
         if (gu0 != NO_CENSUS) {   //! the fed steps' routed sites on the mx4 stamps: the fused gate + up and the summed down
             let gu_n = census("mx4_gemv_gu_cls_spv") - gu0
@@ -164,9 +164,9 @@ def gemma_format_cell(t : T?; gf : GemmaFile; mx4 : bool) {
 //! chaotic, so step 4's top logit reads 17.85 (arm64), 16.70 (x64) and 18.50 (x64 on the reference kernel bodies) where the f32
 //! chain reads 19.14, and the reference build's quantized CPU path reads 17.8 to 20.1 by its attention form and batching, each
 //! chain summing as far from the f32 rows - and adds that the device sits no further from that chain than the CPU q8 chain
-//! (`f32_chain_witness`)
+//! (`f32_chain_witness`, within `f32_ratio` of the CPU q8 chain's distance, `f32_route` naming the route that ratio is for)
 [cold_path, arch(at="../ARCHITECTURE_MEASUREMENT_FORCED_FEED.md#reference-forced-feed")]
-def gemma_forced_feed(t : T?; n : int64; gf : GemmaFile; exact : bool = false) {
+def gemma_forced_feed(t : T?; n : int64; gf : GemmaFile; exact : bool = false; f32_ratio : float = F32_DIST_REL; f32_route : string = "") {
     with_gemma_rig(t, gf) $(tr) {
         var inscope feed <- prose_feed(tr, n, 8l)
         var fed <- resident_then_cpu_feed(t, tr, feed.prompt, feed.toks) $ {
@@ -175,7 +175,7 @@ def gemma_forced_feed(t : T?; n : int64; gf : GemmaFile; exact : bool = false) {
         if (exact) {
             var f32_rows <- f32_chain_rows(path_join(models_dir(), gf.file), feed.prompt, feed.toks)
             feed_steps_within(t, tr, "", n, fed.gpu, f32_rows, feed.toks, GEMMA_LOGIT_BAR_REL, "resident", "the f32 chain")
-            f32_chain_witness(t, tr, "{gf.file}: {n} tokens against the f32 chain", fed, f32_rows)
+            f32_chain_witness(t, tr, "{gf.file}: {n} tokens against the f32 chain{f32_route}", fed, f32_rows, f32_ratio)
             delete f32_rows
         } else {
             feed_steps_within(t, tr, "", n, fed.gpu, fed.cpu, feed.toks, GEMMA_LOGIT_BAR_REL)
@@ -373,10 +373,10 @@ def ppl_compare(t : T?; n, steps : int64; gf : GemmaFile; hits_slack : int64 = 3
     with_gemma_rig(t, gf) $(tr) {
         var ids <- prose_tokens(tr, n + steps + 1l)
         var sg <- create_session(tr, mirror_kv_dtype())
-        let served0 = moe_gpu_resident_prefills()
+        let served0 = gpu_resident_prefills_()
         let g = forced_nll(tr, sg, ids, n, steps)
         t |> success(moe_gpu_resident_active(), "the whole-model driver stayed armed through the run")
-        t |> equal(moe_gpu_resident_prefills(), served0 + 1l, "the resident window chain served the {n}-token prompt")
+        t |> equal(gpu_resident_prefills_(), served0 + 1l, "the resident window chain served the {n}-token prompt")
         served_every_call(t)
         delete sg
         moe_gpu_drop_model()   // every later step is the CPU chain

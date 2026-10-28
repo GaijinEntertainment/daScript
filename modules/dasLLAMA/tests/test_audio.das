@@ -13,6 +13,7 @@ require daslib/defer
 require math
 require _model_tier   // models_dir() + model_available() presence/size-tier gate (see the file's header)
 require ?das_metal dasllama/dasllama_metal_tower   // pin the CPU-oracle encodes off-GPU + the blocks parity cell
+require ?das_metal dasllama/dasllama_metal_common   // set_metal_take_max_probe_: the scratch declines' seam
 require _rnnt_oracle   // rnnt_seat_*: the build's device transducer seat, its pin and counters
 require ?vulkan dasllama/dasllama_vulkan_tower
 require ?vulkan dasllama/dasllama_vulkan_common   // g_gpu: the storage range the blocks-refused legs stand in
@@ -961,9 +962,9 @@ def private ga_seat_arms_legs(t : T?; m : GigaamModel; samples : array<float>) {
         var inscope tiny : array<float>
         tiny |> resize(int(m.n_fft) - 1)
         t |> equal(metal_gigaam_mel(m, tiny, dev), -1l, "mel seat: a clip under one window declines")
-        let take_was = set_metal_tower_take_max_probe_(512ul)
+        let take_was = set_metal_take_max_probe_(512ul)
         t |> equal(metal_gigaam_mel(m, samples, dev), -1l, "mel seat: a scratch past the device's largest buffer declines")
-        set_metal_tower_take_max_probe_(take_was)
+        set_metal_take_max_probe_(take_was)
         t |> equal(metal_tower_ga_mels() - mel0, 0l, "mel seat: no declined call ran a mel")
         var st = GigaamState()
         gigaam_log_mel(samples, m, st)
@@ -992,9 +993,9 @@ def private ga_seat_arms_legs(t : T?; m : GigaamModel; samples : array<float>) {
         delete st
         let s0 = metal_tower_stats()
         let d0 = metal_tower_declines()?["memory"] ?? 0l
-        set_metal_tower_take_max_probe_(512ul)
+        set_metal_take_max_probe_(512ul)
         var inscope mem <- ga_leg(m, samples)
-        set_metal_tower_take_max_probe_(take_was)
+        set_metal_take_max_probe_(take_was)
         t |> equal(metal_tower_stats().encodes - s0.encodes, 0l, "a scratch the tower cannot take: no encode on the device")
         t |> equal((metal_tower_declines()?["memory"] ?? 0l) - d0, 1l, "... the memory decline counted once, by the block seat")
         t |> equal(mem.text, cpu.text, "... the CPU chain's transcript")

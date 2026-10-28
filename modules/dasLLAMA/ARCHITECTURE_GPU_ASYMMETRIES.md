@@ -106,6 +106,10 @@ prefill, the FP4 expert rung, the nv4 nibble decode, the MMQ pin) in `ARCHITECTU
   `kq_rows_half_<fmt>` crown the decode's two-to-eight-row K-quant sites read x as the f16 twin the row producer stores
   beside it (`ARCHITECTURE_GPU_MTP_DECODE.md#kq-rows-crown`), and the knob keeps the f32 forms for an A/B; Vulkan's rows
   sites read f32 x alone.
+- **The short window's split-K lever is Metal-only** (`DASLLAMA_METAL_SPLIT_K`, `set_metal_prefill_split_k`): `0` keeps every
+  prefill tile whole - the split sums a tile's K in another f32 order, so the window's numerics move with it
+  (`ARCHITECTURE_GPU_PREFILL_GEMM.md#prefill-split-k`); Vulkan's short-window split has no environment lever, its one control
+  the sidecar knee `vk_split_k_tgs` (`ARCHITECTURE_GPU_VULKAN_GEMM.md#vk-short-split`, `0` runs the window whole).
 - **The superblock MoE twins' knee is Metal-only** (`set_metal_moe_kq_twin_avg`): on a box whose sidecar carries no
   `moe_mulmm_<fmt>` crown for a routed format the site takes the tensor twin where the window's mean rows an expert sit
   at or under the knee (`ARCHITECTURE_GPU_PREFILL_MOE.md#prefill-moe-kq-twin-pick`); Vulkan's expert tiles have no twin
@@ -120,9 +124,10 @@ prefill, the FP4 expert rung, the nv4 nibble decode, the MMQ pin) in `ARCHITECTU
   command buffer, which leaves no per-kernel split, so under the asr_prof rail the lever replays the rotary form's head
   restrides and slab trio after the readback (`ARCHITECTURE_GPU_TOWER_FC.md#tower-fc-rotary`); the Vulkan chain
   carries no replay.
-- **The tower's decline stand-ins are Metal-only setters** (`set_metal_tower_take_max_probe_`: the device's largest
-  buffer under the scratch takes, the `memory` decline's seam; `set_metal_vad_lanes_probe_`: the VAD recurrence
-  pipeline's thread cap, the `device` decline's seam): Metal reads both limits off the device and the pipeline, so a
+- **The tower's decline stand-ins are Metal-only setters** (`set_metal_take_max_probe_`: the device's largest
+  buffer under the pooled scratch takes, the seam of the tower's `memory` decline and the translation driver's
+  `device` decline; `set_metal_vad_lanes_probe_`: the VAD recurrence pipeline's thread cap, the `device` decline's
+  seam): Metal reads both limits off the device and the pipeline, so a
   cell reaches those declines through a stand-in; the Vulkan limits are fields of the device record (`g_gpu.msr`,
   `g_gpu.has_coopmat`) a cell sets and restores directly, so the Vulkan tower has no such setter.
 - **The decode step's per-form A/B levers are Metal-only setters** (`set_metal_batch_gather`: the batched step takes the

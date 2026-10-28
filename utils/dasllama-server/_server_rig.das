@@ -14,6 +14,7 @@ require dashv/dashv_boost   // GET / POST: serve_clients polls and shuts the ser
 require dasllama/dasllama_env
 require daslib/json_boost   // stream_tally: the SSE chunks' deltas
 require daslib/strings_boost   // sse_datas: split / trim_prefix
+require daslib/module_path   // get_this_module_dir: with_spawned_server finds main.das beside the rig
 
 //! The server suites' model roots: ONE resolution - `DASLLAMA_MODELS_DIR`, else the rig default -
 //! so a test file never spells a second one.
@@ -223,4 +224,75 @@ def stream_tally(base_url, body : string) : StreamTally {
     tally.content = join(parts, "")
     delete parts
     return tally
+}
+
+let CHILD_TIMEOUT_SEC = 420.0   //! a spawned boot parses, JITs and loads before it listens
+let BOOT_POLL_ATTEMPTS = 720    //! x 500 ms - inside the child's own timeout, so a hung boot still joins
+
+struct private BootOutcome {
+    rc : int
+    tail : string
+}
+
+//! `main.das` (beside this rig) spawned as a child on `port` with `flags` after `--`, pinned by `--config` to a temp file
+//! holding `config_text` - main.das otherwise auto-discovers a dasllama-server.toml in the cwd or beside itself, and a
+//! developer's own would decide what the child serves. The child runs the daslang this test runs under with its -dasroot /
+//! -module-cache, so a worktree run never compiles main.das against another tree. `blk` runs once /v1/stats answers; the
+//! child is shut down after. A [tune] bootstrap exit relaunches once.
+def with_spawned_server(t : T?; what : string; port : int; flags : array<string>; config_text : string; blk : block<(base_url : string) : void>) {
+    let server_das = path_join(get_this_module_dir(), "main.das")
+    if (!stat(server_das).is_valid) {
+        t |> skip("main.das is not beside this test")
+        return
+    }
+    var terr : string
+    let tmp = temp_directory(terr)
+    let config = path_join(empty(tmp) ? "." : tmp, "dasllama_boot_{port}_{ref_time_ticks()}.toml")
+    if (!fwrite(config, config_text)) {
+        t |> skip("could not write the child's config at {config}")
+        return
+    }
+    let base_url = "http://127.0.0.1:{port}"
+    var ready = false
+    var why = ""
+    with_channel(1) $(ch) {
+        with_job_status(1) $(done) {
+            var inscope tail_args <- ["--"]
+            tail_args |> push_from(flags, ["--port", "{port}", "--config", config])
+            var inscope args <- child_daslang_argv(server_das, tail_args)
+            new_thread <| @capture(<- args) {
+                var out = ""
+                var rc = run_and_capture(args, out, CHILD_TIMEOUT_SEC)
+                if (rc == 3 && find(out, "restart to apply") >= 0) {
+                    out = ""   // [tune] bootstrap: the child adopted this box's kernels and exited with the restart code
+                    rc = run_and_capture(args, out, CHILD_TIMEOUT_SEC)
+                }
+                ch |> push_clone(BootOutcome(rc = rc, tail = slice(out, max(0, length(out) - 600))))
+                ch |> notify()
+                ch |> release()
+                done |> notify_and_release()
+            }
+            var died = false
+            for (_attempt in range(BOOT_POLL_ATTEMPTS)) {
+                GET("{base_url}/v1/stats") $(resp) {
+                    if (resp != null && resp.status_code == http_status.OK) {
+                        ready = true
+                    }
+                }
+                break if (ready)
+                died = ch |> try_pop_clone() $(o : BootOutcome#) {
+                    why = "the boot exited rc={o.rc} before it listened - tail: {clone_string(o.tail)}"
+                }
+                break if (died)
+                sleep(500u)
+            }
+            if (ready) {
+                invoke(blk, base_url)
+            }
+            POST("{base_url}/shutdown", "") $(_resp) {}
+            done |> join()
+        }
+    }
+    remove(config)
+    t |> success(ready, "{what} listened. {why}")
 }

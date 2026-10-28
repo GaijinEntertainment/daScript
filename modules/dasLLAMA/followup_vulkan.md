@@ -580,20 +580,6 @@ module) is independent and can land any time - it is pure structure.
     covers the cross-subgroup argmax, the tie rule and both weight arms (the Metal twin has one:
     `test_metal_prefill_kernels.das`'s select cell).
 
-33. **The vulkan prefill override never fills `x_b`, so a whole-plane consumer reads garbage.**
-    `rdec_prefill` takes `x_batch` non-`var` (`dasllama/dasllama_gpu_tier.das`, the
-    `rdec_prefill` typedef) and the override returns true without writing any residual row
-    (`dasllama/dasllama_gpu_resident.das`, `vulkan_resident_prefill`), while the
-    `PrefillOverrideFn` contract says "x_b holds the final residual stream" on true. A
-    `/v1/embeddings` turn on a vulkan-resident box pools token embeddings - or, when the
-    device embed-gather gate armed (`g_rdec_emb_gpu`), the `resize_no_init` bytes of
-    `forward_prefill_alloc` - and `Session.keep_hidden` (the Metal narrowing's opt-out) is
-    never consulted. Done = the override either writes the final residual stream into `x_b`
-    (readback or device fill) or declines when the session demands the plane
-    (`keep_hidden`), plus an override-capability row so a whole-plane consumer can test for
-    it; a cell that embeds through the vulkan override and compares against the CPU pool
-    proves it.
-
 34. **The pp512 gap on every sb format (0.67x-0.90x of llama.cpp on 1B shapes) - not one band, and
     not the tile.** The board spreads 1.34x (IQ4_XS 0.90, Q2_K 0.87, Q3_K 0.80, IQ4_NL 0.78, IQ2_XS
     0.77, IQ3_S/IQ2_S 0.70, IQ3_XXS 0.69, Q4_K 0.67) while the Q8 rows sit at 1.00x+, so the format
@@ -2207,3 +2193,14 @@ module) is independent and can land any time - it is pure structure.
     subgroup is 32, which the KHR arms require. First step: build Mesa with KosmicKrisp on the M5, confirm its compiler
     path, and enable the lowering. NV's coopmat2 (the cm2 arms) stays NVIDIA-only. Done = `test_vulkan_kernels`' KHR tile
     cells and the KHR flash cells pass on the M5 under KosmicKrisp, upstreamed as a Mesa merge request.
+
+163. **Qwen3.5-0.8B's short prompt runs at 0.63 of llama.cpp's rate, and the gap sits outside the GEMMs.** On the RTX
+    PRO 4500, pp31 reads 4080 tok/s against llama.cpp's 6476 (`PERF_LEDGER.md`'s split-K entry carries these readings and their
+    commands). The short-window split (`#vk-short-split` in
+    `ARCHITECTURE_GPU_VULKAN_GEMM.md`) moves the window 7.54 -> 6.72 ms in-process, and every dense model it reaches
+    beats llama.cpp at pp32 (Qwen3-0.6B 12386 vs 9178, gemma-3-1b 8181 vs 6673, Qwen2.5-0.5B 13548 vs 9632,
+    Llama-3.2-1B IQ4_XS 9771 vs 6573), so the hybrid model's own stages - the recurrent layers' scan and state, the
+    gated attention - hold the time. Done = the window profiled stage by stage (`DASLLAMA_GPU_PROF=1`), the stage that
+    holds the gap fixed or bounded by measurement, and pp31/pp32 on Qwen3.5-0.8B re-read against llama.cpp: the
+    reference is `/workspace/llama.cpp-ref-9febe63/build-vulkan/bin/llama-bench -m
+    /workspace/models/Qwen3.5-0.8B-Q8_0.gguf -p 31,32 -n 0 -ngl 99 -r 10`, no environment beyond the shell's, after one untimed warm-up run of the same line.

@@ -1735,7 +1735,7 @@ def private pf_qkn_rope_enc(raw : VkCommandBuffer; var h : VkHaz; l : int64; vof
     let nlfin = rd_norm_final()   // nolint:LINT021 — the norm row offsets multiply 64-bit before the push-field narrow
     for (sg in g_pf_wsegs) {
         var pcf = GkQknRopeArgs(qd = uint(L.qd), kvd = uint(L.kvd), hs = uint(hs), half = uint(L.rot / 2l),
-            neox = g_rd.neox ? 1u : 0u, nh = uint(g_rd.n_heads), layerbase = uint(rd_mir_base(L, sg.region)),
+            neox = g_rd.neox ? 1u : 0u, nh = uint(g_rd.n_heads), layerbase = uint(pf_seg_mir_base(L, sg)),
             qwoff = uint(nlfin + dim + l * 2l * hsmax), kwoff = uint(nlfin + dim + (l * 2l + 1l) * hsmax),
             eps = g_rd.eps, qstride = uint(qhs), boff = uint(L.boff), hasb = g_rd.has_bias ? 1u : 0u, cbase = uint(L.cbase),
             vfk = L.vfk ? 1u : 0u, vnorm = L.vnorm ? 1u : 0u, rowwg = uint(g_rd.n_heads + nkvh), kvrow = uint(kvrow), qrow = uint(qrow),
@@ -1782,6 +1782,39 @@ def vk_rdec_head_warm_ask(on : bool) {
 
 [hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-head-prompt-warm")]   // per prefill call, reached through the tier's registered seat
 def vk_rdec_head_warm_rows : int64 => g_rd != null ? g_rd.pf_head_rows : 0l
+
+//! a window segment's mirror base in layer `L`: its region's, past the rows the segments packed before it hold
+def private pf_seg_mir_base(L : RLayer; sg : RdecPfSeg) : int64 {
+    assert(sg.koff == 0l || L.ring == 0l, "vk prefill: a packed segment on a sliding layer's ring")
+    return rd_mir_base(L, sg.region) + sg.koff * rd_kv_row_units(L.kvd)
+}
+
+//! The armed driver seats several segments in one region: no sliding layer's ring, no block-codec store
+[arch(at="../ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-scratch")]
+def vk_rdec_segs_packed : bool {
+    return false if (g_rd == null || !g_rd.ready || rd_kv_block_codec())
+    for (L in g_rd.layers) {
+        return false if (L.ring != 0l)
+    }
+    return true
+}
+
+var private g_pf_hidden_ask = false
+var private @scratch @exact_size g_pf_hidden : array<float>   //! the last chain's final residual rows, [npos x dim], where it was asked for them
+
+//! Whether the next chains land every row's final residual - the rows an embedding pools - beside the logits; the ask stands until
+//! the next ask
+[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-hidden-rows")]   // per prefill call, reached through the tier's registered seat
+def vk_rdec_hidden_ask(on : bool) {
+    g_pf_hidden_ask = on
+}
+
+//! `nrows` of the last chain's final residual rows from window row `src_row` into `dst` at element `dst_off`
+[hot_path]   // per prefill call, reached through the tier's registered seat
+def vk_rdec_hidden_rows(var dst : array<float>; src_row, dst_off, nrows : int64) {
+    let dim = g_rd.dim
+    copy_floats(g_pf_hidden, src_row * dim, dst, dst_off, nrows * dim)
+}
 
 //! Resident-driver prefill: `npos` embedded rows (x_batch, [npos x dim]) + per-position rope rows
 //! (cos_batch, [npos x hs]) -> the last row's logits, filling the selected mirror region at positions [pos0, pos0 + npos).
@@ -2347,7 +2380,7 @@ def private pf_attn_block(raw : VkCommandBuffer; var h : VkHaz; l : int64; b : i
             let ropewg = (sg.npos * int64(pairs) + int64(WG_X) - 1l) / int64(WG_X)
             var pcr = RopeKvBArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs), half = uint(g_rd.layers[l].rot / 2l),
                 neox = g_rd.neox ? 1u : 0u, kpair0 = uint(qd / 2l), ppp = uint(pairs),
-                layerbase = kvq ? 0u : uint(rd_mir_base(g_rd.layers[l], sg.region)), npos = uint(sg.npos), pos0 = uint(kvq ? sg.row0 : sg.pos0),
+                layerbase = kvq ? 0u : uint(pf_seg_mir_base(g_rd.layers[l], sg)), npos = uint(sg.npos), pos0 = uint(kvq ? sg.row0 : sg.pos0),
                 voff = voff, kstride = uint(kv_merged ? 2l * kvd : kvd), qhs = uint(qhs),
                 boff = uint(g_rd.layers[l].boff), hasb = g_rd.has_bias ? 1u : 0u,
                 cstride = uint(cos_elems), cbase = uint(g_rd.layers[l].cbase), row0 = uint(sg.row0), ring = kvq ? 0u : uint(g_rd.layers[l].ring))
@@ -2371,7 +2404,7 @@ def private pf_attn_block(raw : VkCommandBuffer; var h : VkHaz; l : int64; b : i
     pfq_ts(raw)
     let fa_lands_f16 = pf_fa_lands_f16(fo6)
     for (sg in g_pf_wsegs) {
-        let kv_base = kvq ? 0u : uint(rd_mir_base(g_rd.layers[l], sg.region))   // the rows the attention reads: the mirror's, or a block codec's shadow of this layer from 0
+        let kv_base = kvq ? 0u : uint(pf_seg_mir_base(g_rd.layers[l], sg))   // the rows the attention reads: the mirror's, or a block codec's shadow of this layer from 0
         let kv_ring = kvq ? 0u : uint(g_rd.layers[l].ring)   //! the shadow holds its rows at their positions
         if (g_rd.layers[l].pf_fa || g_rd.layers[l].pf_fakhr) {
             let khr = g_rd.layers[l].pf_fakhr
@@ -2446,7 +2479,8 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
         g_pf_segs |> push_clone_from(segs)
     }
     let nseg = long_length(g_pf_segs)
-    assert(nseg <= g_rd.regions && long_length(logits) >= nseg * g_rd.vocab && (!g_rd.carry_live || nseg <= g_rd.nb),
+    let hidden = g_pf_hidden_ask   //! an embedding's call: every row's final residual lands, and no classifier runs
+    assert(hidden || (nseg <= g_rd.regions && long_length(logits) >= nseg * g_rd.vocab && (!g_rd.carry_live || nseg <= g_rd.nb)),
         "vk prefill: the segments outnumber the regions or the carry's rows, or the logits are short of a slot a segment")
     let ple_tbl = use_ids && ple_raw   //! the side rows gather on device from the token table
     assert(g_rd.ple == 0l || ple_tbl || long_length(ple_rows) >= npos * g_rd.n_layers * g_rd.ple, "vk prefill: the per-layer-embedding rows are short of the prompt")
@@ -2460,6 +2494,13 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
     let cos_elems = g_rd.cos_elems
     g_rd.pf_head_rows = 0l
     let warm = nseg == 1l && g_rd.pf_head_ask && g_rd.head_on && g_rd.carry_live && (g_rd.pf_head_ready || (!g_rd.pf_head_declined && pf_head_setup()))   //! a segmented window warms no head row
+    if (hidden) {
+        if (g_rd.pf_hid_host.buf == 0ul) {
+            g_rd.pf_hid_host = make_host_buf(g_rd.pf_np * dim * 4l, false, [cached = true])
+        }
+        g_pf_hidden |> reserve(npos * dim)
+        g_pf_hidden |> resize(npos * dim)
+    }
     unsafe {
         var w0 = 0l
         var last_wlen = 0l
@@ -2587,7 +2628,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                     }
                 }
                 pfq_ts(raw)
-                let ffn_row0 = warm || nwseg > 1l ? 0l : pf_ffn_slice_row0(l, g_rd.n_layers, wlen, gu6 && !moe, dn6)
+                let ffn_row0 = warm || nwseg > 1l || hidden ? 0l : pf_ffn_slice_row0(l, g_rd.n_layers, wlen, gu6 && !moe, dn6)
                 let ffn_rows = wlen - ffn_row0
                 if (has_dense_triple(g_rd.layers[l])) {
                     pf_ffn_block(raw, h, l, b, wlen, ffn_row0, gu6, dn6, dnk)
@@ -2626,8 +2667,13 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 }
                 pfq_ts(raw)
             }
+            if (hidden) {   //! every row's final residual, before the classifier's requant reads the normed rows
+                vhz_dep(raw, h, VHZ_X, 0u, true)
+                cmd_copy_range(raw, g_rd.pf_x, 0l, g_rd.pf_hid_host.buf, 0l, wlen * dim * 4l)
+            }
             var ends = 0l
             for (ws in g_pf_wsegs) {
+                break if (hidden)
                 let row = ws.row0 + ws.npos - 1l
                 let slot = pf_seg_ending_at(w0, row)
                 continue if (slot < 0l)
@@ -2646,8 +2692,11 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
             }
             if (ends > 0l) {
                 pfq_ts(raw)
+            } elif (hidden) {   //! the requant's and the classifier's stamps land empty, so the profile's roles stay in place
+                pfq_ts(raw)
+                pfq_ts(raw)
             }
-            assert(!last || ends > 0l, "vk prefill: the last window ends no segment")
+            assert(hidden || !last || ends > 0l, "vk prefill: the last window ends no segment")
             if (warm) {
                 pf_head_warm(raw, h, w0, wlen, pos0)
             }
@@ -2665,6 +2714,9 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
             cmd_close(raw)
             let t_record = get_time_usec(tp0) - t_prep
             submit_wait(raw)
+            if (hidden) {
+                host_buf_read(g_rd.pf_hid_host, addr<void?>(g_pf_hidden[w0 * dim]), wlen * dim * 4l)
+            }
             if (vk_prof()) {
                 to_log(LOG_INFO, "vk_rdpf w0 {w0} rows {wlen} prep {t_prep} record {t_record} submit {get_time_usec(tp0) - t_prep - t_record}\n")   // nolint:PERF026,PERF028 — vk_prof()-gated report leg
             }
@@ -2675,7 +2727,9 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
             pf_dn_end()
             pf_caps_done()
         }
-        host_buf_read(g_rd.pf_logits_host, addr<void?>(logits[0]), nseg * g_rd.vocab * 4l)
+        if (!hidden) {
+            host_buf_read(g_rd.pf_logits_host, addr<void?>(logits[0]), nseg * g_rd.vocab * 4l)
+        }
         // per-role GPU aggregation, LAST window, only when every stamp landed; overlapped levels (q|k|v, gate|up) bill the level on the last member's delta
         if (vk_prof()) {
             pf_prof_report(npos)

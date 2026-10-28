@@ -5110,7 +5110,7 @@ def private b32_mvb_gate(t : T?; var dev, queue; fmt : KqFmt; n, d, nr, w, ys : 
                 }
             }
             stamp_run(sm, psom) {
-                invoke(sm.enc, enc, pw, 0ul, ps, 0ul, px, pym, 0ul, pn, pd, mv, int64(d), gcols)
+                invoke(sm.enc, enc, pw, 0ul, ps, 0ul, px, 0ul, pym, 0ul, pn, pd, mv, int64(d), gcols)
             }
         }
         return if (!ran)
@@ -5231,6 +5231,52 @@ def private b32_mm_twin_gate(t : T?; var dev, queue; fmt : KqFmt; form : string;
     }
 }
 
+//! a per-32 format's split-K stamp on the exact fixture, BIT-exact against the CPU product: `half` picks thsk over tsk; one
+//! split writes y itself, several go through the reduce - the fixture's integer partial sums are exact in any order
+[arch(at="../ARCHITECTURE_GPU_PREFILL_GEMM.md#prefill-split-k")]
+def private b32_mm_split_gate(t : T?; var dev, queue; fmt : KqFmt; half : bool; kdim, ndim, mp, nsk : int) {
+    let tag = "dense mul_mm split {fmt} {half ? "thsk" : "tsk"} k={kdim} n={ndim} mp={mp} nsk={nsk}"
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let kt = mp == 16 ? kq_mm_split16_kernel(fmt, half) : kq_mm_split_kernel(fmt, half)   //! mp = 16: the short window's 16-row stamps
+        var pso = mc |> keep_stamp(kt, err)
+        return if (!tensor_pso_or_skip(t, tag, pso, dev, err))
+        var inscope(p0, p1, wref) <- moe_gemv_planes(fmt, ndim, kdim)
+        var inscope w <- b32_mm_want(wref, kdim, ndim, mp)
+        var inscope xh <- [for (x in w.xv); float16(x)]
+        let bw = mc |> in_plain(p0)
+        let bs = mc |> in_plain(p1)
+        let bx = half ? (mc |> in_plain(xh)) : (mc |> in_(w.xv))
+        var inscope noenv : array<float>
+        split_cell(t, mc, tag, mp, kdim, ndim, nsk, false, w.want, noenv, BAR_EXACT) $(enc; bo, bk, bn) {
+            invoke(kt.enc, enc, pso, mc.buf[bs], 0ul, mc.buf[bs], 0ul, mc.buf[bw], 0ul, mc.buf[bx], 0ul, bo, 0ul, bk, bn, int64(mp), int64(ndim), int64(nsk))
+        }
+    }
+}
+
+//! a per-32 format's simdgroup base split-K stamp on the exact fixture, BIT-exact against the CPU product through the reduce
+[arch(at="../ARCHITECTURE_GPU_PREFILL_GEMM.md#prefill-split-k")]
+def private b32_mm_base_split_gate(t : T?; var dev, queue; fmt : KqFmt; kdim, ndim, mp, nsk : int) {
+    let tag = "dense base mul_mm split {fmt} k={kdim} n={ndim} mp={mp} nsk={nsk}"
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let st = kq_mm_b32_split_stamp(fmt)
+        var pso = mc |> keep_stamp(st, err)
+        return if (!pso_ok(t, tag, pso, err))
+        var inscope(p0, p1, wref) <- moe_gemv_planes(fmt, ndim, kdim)
+        var inscope w <- b32_mm_want(wref, kdim, ndim, mp)
+        let bw = mc |> in_plain(p0)
+        let bs = mc |> in_plain(p1)
+        let bx = mc |> in_(w.xv)
+        var inscope noenv : array<float>
+        split_cell(t, mc, tag, mp, kdim, ndim, nsk, true, w.want, noenv, BAR_EXACT) $(enc; bo, bk, bn) {
+            stamp_run(st, pso) {
+                invoke(st.enc, enc, mc.buf[bs], 0ul, mc.buf[bw], 0ul, mc.buf[bx], bo, 0ul, bk, bn, int64(mp), int64(ndim), int64(nsk))
+            }
+        }
+    }
+}
+
 //! a per-32 dev-W chain: the format's dequant pass into a poison-filled f16 panel, then the shared all-device half GEMM,
 //! BIT-exact against the CPU product (the fixture's values are f16-exact)
 def private b32_devw_gate(t : T?; var dev, queue; fmt : KqFmt; kdim, ndim, mp : int) {
@@ -5261,7 +5307,8 @@ def private b32_devw_gate(t : T?; var dev, queue; fmt : KqFmt; kdim, ndim, mp : 
     }
 }
 
-//! every dense form of one per-32 format: the five twins at a 32-row and a 128-row panel, the dev-W chain whole and tiled
+//! every dense form of one per-32 format: the five twins at a 32-row and a 128-row panel, the split-K pair at one and four
+//! splits, the dev-W chain whole and tiled
 def private b32_dense_twins(t : T?; var dev, queue; fmt : KqFmt) {
     for (form in ["t", "th", "thdb"]) {
         b32_mm_twin_gate(t, dev, queue, fmt, form, 128, 128, 64)
@@ -5271,6 +5318,12 @@ def private b32_dense_twins(t : T?; var dev, queue; fmt : KqFmt) {
         b32_mm_twin_gate(t, dev, queue, fmt, form, 128, 128, 128)
         b32_mm_twin_gate(t, dev, queue, fmt, form, 192, 64, 256)
     }
+    for (half in [false, true]) {
+        b32_mm_split_gate(t, dev, queue, fmt, half, 256, 128, 32, 1)
+        b32_mm_split_gate(t, dev, queue, fmt, half, 256, 128, 64, 4)   //! four 64-wide shares, two M tiles
+        b32_mm_split_gate(t, dev, queue, fmt, half, 256, 128, 16, 2)   //! the 16-row stamp
+    }
+    b32_mm_base_split_gate(t, dev, queue, fmt, 256, 128, 64, 4)   //! the simdgroup base tile split four ways
     b32_devw_gate(t, dev, queue, fmt, 128, 128, 64)
     b32_devw_gate(t, dev, queue, fmt, 192, 64, 32)
 }

@@ -28,6 +28,7 @@ require dasllama/dasllama_gpu_math   // softcap_exp - the softcap cells' oracle
 require ?vulkan dasllama/dasllama_vulkan_prefill
 require ?vulkan dasllama/dasllama_vulkan_decode   // da_nsplit - the decode attention's key-split pick the tile-pick cell pins
 require ?vulkan dasllama/dasllama_vulkan_seams
+require ?vulkan dasllama/dasllama_gpu_knee   // vk_split_k_tgs: the tile-pick cell pins the short window's knee
 require ?vulkan dasllama/dasllama_kqformat
 require ?vulkan dasllama/dasllama_convert   // quantize_q8_0_into: the hyper-connection low-rank requant's oracle
 require ?vulkan spirv/spirv_dis   // foreach_inst / count_op_operand_at: the stamp-shape cells' instruction walks
@@ -2951,6 +2952,88 @@ def test_vkd_cm2e_batch(t0 : T?) {
 def test_vkd_cm2s_batch(t0 : T?) {
     t0 |> run("cm2 s-tile fmt-0 batch class kernel == the CPU oracle") <| @(t : T?) {
         q8_tile_cell(t, ARM_CM2_S, Q8_CELL_K, 29u, 733u, 5u, 11u)
+    }
+}
+
+//! One short window through the s column split along K (`ARCHITECTURE_GPU_VULKAN_GEMM.md#vk-short-split`): `rows` under the
+//! column's 32 in one region at row 0, `nsplit` 256-aligned chunks (`cm2_chunk`) into the partial planes and the reduce, against the format's
+//! oracle; `control` halves the chunk (the planes cover half of K, every element finite) and must red the bar
+[arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#vk-short-split")]
+def private short_split_arm(t : T?; tag : string; fmt : int; f : TileFixture; rows, nsplit : int; control : bool;
+                            oracle : function<(wq : array<uint>; wsu : array<uint>; xf : array<uint>; recs : array<uint>; nrec, n, d : int; var y : array<float>) : void>) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        let d = TILE_CELL_D
+        let ck = int(cm2_chunk(int64(f.n), int64(nsplit)))
+        verify(ck > 0, "a short-split cell's K takes its 256-aligned chunks")
+        let wgs = ((rows + 31) / 32) * ((d + 127) / 128) * nsplit
+        var inscope sched <- one_region_words(rows, wgs)
+        var inscope y_ref : array<float>
+        y_ref |> resize(rows * d)
+        invoke(oracle, f.wqh, f.wsh, f.xfh, sched, 1, f.n, d, y_ref)
+        with_cell_planes() $(var cp : CellPlanes) {
+            let pwq = cp |> in_plain(f.wqh)
+            let pws = cp |> in_plain(f.wsh)
+            let psc = cp |> in_plain(sched)
+            let pxf = cp |> in_plain(f.xfh)
+            let pad = ((rows + 31) / 32) * 32 - rows   //! the column's rows past the window: a store guard that slips writes there
+            let ppart = cp |> out_(rows * d * nsplit, 0, pad * d * nsplit)
+            let py = cp |> out_(rows * d, 0, pad * d)
+            let planes = fixed_array(pwq, pws, psc, pxf, ppart)
+            var sc = cell_arm_set(ARM_CM2_S, fmt, gather_planes(cp.dev, planes), gather_planes(cp.bytes, planes), gather_planes(cp.hazard_bit, planes))
+            var sr = cp |> cls_set(fixed_array(ppart, py), @@set_splitk_reduce_cls)
+            var pc = BatchArgs(n = uint(f.n), d = uint(d), map_off = 4u, ksplit = uint(control ? ck / 2 : ck))
+            cp |> cell_record() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
+                cell_arm_enc(ARM_CM2_S, fmt, raw2, h2, sc, pc, int64(wgs))
+                splitk_reduce_enc(raw2, h2, sr, int64(rows * d), int64(nsplit))
+            }
+            var inscope got <- cp |> plane_run(py)
+            let what = "{tag} s-tile short split, {rows} rows in {nsplit} chunks"
+            if (control) {
+                check_exceeds(t, "{what}: the whole-K control", got, y_ref, cm_bar(y_ref))
+            } else {
+                check_rows(t, "{what} vs the CPU oracle", got, y_ref, cm_bar(y_ref), d)
+            }
+            var inscope py_all <- cp |> plane_whole(py)
+            var inscope part_all <- cp |> plane_whole(ppart)
+            t |> equal(sentinel_off(copy_span(py_all, rows * d, pad * d)), 0, "{what}: the output's rows past the window keep their sentinel")
+            t |> equal(sentinel_off(copy_span(part_all, rows * d * nsplit, pad * d * nsplit)), 0, "{what}: the planes past the window's rows keep their sentinel")
+        }
+    }
+}
+
+[test]
+def test_vkd_cm2s_short_split(t0 : T?) {
+    t0 |> run("the s column split along K under 32 rows == the CPU oracle, q8 and every per-format tile row") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!ensure_q8_batch_cls()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            if (!cell_arm_served(ARM_CM2_S) || !ensure_splitk_reduce_cls()) {
+                t |> skip("the s column serves only in mode 4 on an NV_coopmat2 device (DASLLAMA_COOPMAT=cm2)")
+                return
+            }
+            let qn = 1024
+            var qwq, qws : array<uint>
+            q8_planes(qn, 43u, 337u, qwq, qws)
+            var qf <- tile_fixture(qn, 32, qwq, qws, 7u, 3u)
+            for (rows in [9, 31]) {
+                short_split_arm(t, "q8", int(KqFmt.q8), qf, rows, 4, false, @@q8f16_gemm_oracle)
+            }
+            short_split_arm(t, "q8", int(KqFmt.q8), qf, 31, 4, true, @@q8f16_gemm_oracle)
+            delete qf
+            var trows <- fmt_tile_rows()
+            for (r in trows) {
+                var wqh, wsuh : array<uint>
+                fmt_tile_planes(r, wqh, wsuh)
+                var f <- tile_fixture(r.n, r.blk_k, wqh, wsuh, 3u, r.xf_add)
+                short_split_arm(t, "{r.fmt}", int(r.fmt), f, 31, f.n % 256 == 0 ? f.n / 256 : 2, false, r.oracle)   //! a per-32 row's K off the 256 grid: its last chunk short
+                delete f
+            }
+            delete trows
+        } else {
+            t |> skip("dasVulkan not present")
+        }
     }
 }
 
@@ -8528,6 +8611,18 @@ def test_vk_coopmat_default_and_tile_pick(t0 : T?) {
             t |> equal(batch_tile_edges(int(KqFmt.mx4), 2880l, 512l, true).tc, 32l, "... and mx4")
             t |> equal(cm2_tiles(512l, 512l), 16l)                             // the 1B k/v shape: four m columns of four
             t |> equal(pick_str(cm2_gemm_pick(512l, 512l, 2048l)), "256x4x512")   // ... alone it fills under half the SMs: four l chunks (32 workgroups of 8 steps, 205 units with the reduce, against 320 whole)
+            let saved_knee = vk_split_k_tgs()
+            set_vk_split_k_tgs(0l)
+            t |> equal(pick_str(cm2_gemm_pick(1024l, 31l, 1024l)), "32x1x0")   //! the short window off its knee: under the column's rows the wave model splits nothing
+            set_vk_split_k_tgs(256l)
+            t |> equal(pick_str(cm2_gemm_pick(1024l, 31l, 1024l)), "32x4x256")   //! ... on it the shared rule splits the 8-workgroup grid into four 256-deep chunks
+            let short_plane = 31l * 1024l * 4l   //! one partial plane of the 31-row, 1024-wide window
+            t |> equal(pick_str(cm2_gemm_pick(1024l, 31l, 1024l, 0l, short_plane * 2l)), "32x2x512", "the short split halves to the two planes the scratch holds")
+            t |> equal(pick_str(cm2_gemm_pick(1024l, 31l, 1024l, 0l, short_plane * 2l - 1l)), "32x1x0", "... and stays whole where it holds fewer")
+            t |> equal(pick_str(cm2_gemm_pick(1024l, 31l, 1024l, 130l)), "32x1x0")   //! ... and keeps it whole where the co-running roles fill the grid past half the knee
+            t |> equal(pick_str(cm2_gemm_pick(1024l, 31l, 1536l)), "32x2x768")   //! a 1536-deep K stops doubling where the next share would leave the 256-wide chunks
+            t |> equal(pick_str(cm2_gemm_pick(1024l, 32l, 1024l)), "32x1x0")   //! a full column is the wave model's whatever the knee
+            set_vk_split_k_tgs(saved_knee)
             t |> equal(cm2_gemm_pick(512l, 512l, 2048l, 80l).nsplit, 1l)       // ... beside q and the other kv projection (96 in the group): never
             t |> equal(cm2_gemm_pick(2048l, 512l, 2048l).nsplit, 1l)           // the 1B q shape: 32 l tiles in one wave, no split pays
             t |> equal(cm2_gemm_pick(512l, 512l, 2048l, 16l).nsplit, 1l)       // the 35B shexp gate beside up (32 in the group): whole, the pair co-runs
@@ -9382,8 +9477,8 @@ def test_vkd_upload_batch(t0 : T?) {
             upload_batch_close()
             t |> success(!upload_batch_is_open(), "the close leaves no batch open")
             var back <- make_host_buf(total, false)
-            run_cmd_sync(g_gpu.device, g_gpu.pool, g_gpu.queue) $(cmd) {
-                cmd_copy_range(boost_value_to_vk(cmd), dev, 0l, back.buf, 0l, total)
+            cmd_one_shot() $(raw; var _h) {
+                cmd_copy_range(raw, dev, 0l, back.buf, 0l, total)
             }
             var wrong = 0l
             unsafe {
@@ -9436,8 +9531,8 @@ def test_vkd_upload_batch(t0 : T?) {
             upload_batch_close()
             t |> success(!upload_batch_is_open(), "the close leaves no batch open")
             var back <- make_host_buf(total, false)
-            run_cmd_sync(g_gpu.device, g_gpu.pool, g_gpu.queue) $(cmd) {
-                cmd_copy_range(boost_value_to_vk(cmd), dev, 0l, back.buf, 0l, total)
+            cmd_one_shot() $(raw; var _h) {
+                cmd_copy_range(raw, dev, 0l, back.buf, 0l, total)
             }
             var wrong = 0l
             var first_wrong = -1l

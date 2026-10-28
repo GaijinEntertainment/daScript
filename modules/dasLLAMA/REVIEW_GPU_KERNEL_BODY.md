@@ -44,7 +44,8 @@ builder then trips on the first misaligned dispatch instead of silently reading 
 row's bytes.
 
 **A diff that adds or changes host code that declines misaligned shapes before dispatching a
-kernel whose addressing assumes an alignment of a value its builder receives gates each dispatch
+kernel whose addressing assumes an alignment of a value the host binds - a `params=` name, a
+kargs field or a `@uniform` field - gates each dispatch
 site of that kernel on that site's own K - the extent the kernel's fixed-size chunk steps along, in
 a loop or across invocations; one gate shared by several sites conforms only when it tests every one
 of those sites' K.** Routing a misaligned shape to another kernel form (a kernel class or a template instance) that

@@ -4,9 +4,9 @@
 doc: `../ARCHITECTURE.md`. Planned work: `../followup_general.md`.
 
 A cell is one `t |> run` subtest, or a `[test]` function that runs no subtest, and owns the asserts
-of every helper it calls. A pinned test cell is a cell the pinned set lists,
-or any cell of a file the pinned set lists whole - a file entry, one naming the file and no cell -
-and the pinned set is the only test of whether a cell is one; a named-cell entry names a `[test]`
+of every helper it calls. A pinned test cell is a cell the pinned set lists, or any cell of a file
+the pinned set lists whole - a file entry, one naming the file and no cell - in the set before the
+diff or after it, and the pinned set is the only test of whether a cell is one; a named-cell entry names a `[test]`
 function and pins every cell that function runs. The pinned set, one entry a line, each with what it
 must keep holding:
 
@@ -23,7 +23,8 @@ must keep holding:
   `spec_by_file` answering by the models-dir path and by the gguf's base name (a split-shard row
   sits in a subfolder), the fixture compare (`prefix_match_len` / `fixture_ok`: a flipped last id
   red under the strict form and held under the half-span one, a flip inside the first half red
-  under both), and the board fetch (`board_provenance`) holding every file the board sweeps read
+  under both), `fetch_models --convert`'s route (`convert_route`) and quantize mint steps
+  (`mint_steps`), and the board fetch (`board_provenance`) holding every file the board sweeps read
   and no off-board row and no on-box parity oracle (`tts_oracle*`).
 - `test_metal_float_a_gate.das` must hold the MSL emitter's refusal of a float A operand (the
   activation input) to `tmm2d_q8u_f32` in a kernel that lacks `[metal_kernel(float_a_ok=true)]`,
@@ -59,6 +60,13 @@ must keep holding:
   - `ple_finish_gate` on the position-major side rows (`ple_fin_args`), at the E2B's slices
     (35 x 256), at a ple width past 1024 and at one off the 32-lane step, the finish without
     the prescale its control.
+  - `b32_mm_split_gate` on every per-32 format's split-K tensor stamps (half and f32 activations, one
+    and four 64-wide shares, the 16-row stamp) and `b32_mm_base_split_gate` on its simdgroup base
+    split stamp, each through the partial-plane reduce and bit for bit against the CPU product.
+- `test_metal_prefill_parity.das`'s `test_metal_prefill_kq_tail` cell must hold every stocked
+  K-quant, grid and per-32 short window's served form - the row-batched GEMV peel past the whole
+  tiles and the split stamps of a window under one tile, the 16-row split stamps on a window of 16
+  rows or fewer - against the CPU control at its bar.
 - `test_metal_prefill_kernels.das`'s `test_pf_bf16_tile_pick` cell must hold the window
   projection's tile pick: the bf16 tile only where layers x ple is a multiple of 64 and the dim a
   multiple of 32.
@@ -73,9 +81,11 @@ must keep holding:
   oracle, the row's max logit, the overflow flag and the recent ids' logits, the denominator
   within 2e-5, a poisoned id and a poisoned denominator its controls.
 - `test_metal_gemm_kernels.das`'s `test_metal_gemm_kernels` cell must hold every kernel gate it
-  calls, at the bar each gate sets - the census's evidence among them: `kq_mulmm_gate`,
-  `kq_devw_gate`, `kq_dbuf_gate`, `moe_mulmm_kq_gate`, `moe_mulmm_split_gate`, `attn_qk_mm_gate`
-  and `attn_dev_pair_gate`.
+  calls, at the bar each gate sets; and the short window's split-K stamps through the partial-plane reduce,
+  NaN-poisoned outputs and planes their controls, each at its derived staging bar against the
+  whole-K tile: `q8_split_gate`, `kq_split_gate` on every split K-quant format, `base_split_gate`
+  on the q8 and K-quant base split stamps, `bf16_split_gate`, and the dev-W half tile's split
+  (`q8_devw_split_leg`) through the reduce's strided mode, a column tile narrower than its row.
 - `test_metal_gemv_kernels.das`'s `test_metal_kq_gemv_kernels` cell must hold every GEMV gate it
   calls, at the bar each gate sets - `kq_mvb_gate` and `moe_kq_gemv_gate` among them - and its
   `test_metal_kq_half_forms` cell every format's half-x route against the CPU reference at every

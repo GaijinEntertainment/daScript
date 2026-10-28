@@ -1,14 +1,15 @@
 # dasLLAMA Architecture - the Metal prefill driver's GEMM forms
 
 Companion to `ARCHITECTURE_GPU_PREFILL.md`; a section is cited by its anchor. This document carries
-the GEMM form ladder every weight site picks from, the dev-W panel knee map, the GEMV tail peel and
-the dense-KQ tensor mul_mm scaffold.
+the GEMM form ladder every weight site picks from, the short window's split-K form, the dev-W panel knee
+map, the GEMV tail peel and the dense-KQ tensor mul_mm scaffold.
 
 ### The prefill GEMM form ladder {#prefill-gemm-ladder}
 
 Every weight GEMM in `dasllama/dasllama_metal_prefill.das` splits its rows across two decisions.
 First the GEMV tail peel (`ARCHITECTURE_GPU_PREFILL_GEMM.md#gemv-tail-peel`) takes up to `MM_TAIL_MAX` remainder rows off the padded tile.
-The rows that remain pick one of four forms, in this order, per site per forward:
+The rows that remain pick one of five forms, in this order, per site per forward (a K-quant site tries the
+split-K form ahead of dev-W; the q8 blob's dev-W floor sits far above the split-K knee):
 
 1. **tall in-kernel-dequant (K-quant deep class)** - a K-quant site whose f16 panel would
    reach `TALLKQ_MIN_PANEL` (96 MiB) is DRAM-resident, and there the `KqMulMm*TH128` stamp
@@ -28,7 +29,9 @@ The rows that remain pick one of four forms, in this order, per site per forward
    row count's 128-floor with the 32-row stamp on the remainder. The remainder arm strides X by
    `kdim`, so a caller that passes no `kdim` takes the tall stamp only when its row count is
    already a multiple of 128, and otherwise stays whole-dispatch 32-tile.
-4. **32-row tile** - the default stamp.
+4. **split-K 32-row tile** - a grid at or under the split-K knee divides each tile's K
+   (`ARCHITECTURE_GPU_PREFILL_GEMM.md#prefill-split-k`).
+5. **32-row tile** - the default stamp.
 
 **The dense staged stamps double-buffer their W staging** (`DASLLAMA_METAL_DBUF=0` is the
 single-tile rail): two 64-deep ping-pong tiles hold 18432 B of threadgroup memory - probed at
@@ -79,6 +82,48 @@ form there, the 30B 1% (`PERF_LEDGER.md`, the M4 Metal pass). Crowned, a tall gr
 `rows/128 * (d/64) >= TALL_OCC_FLOOR` (default 64, a sidecar knob): an under-occupied tall grid
 starves the GPU and small prompts regress hard without the floor.
 
+### The short window's split-K form {#prefill-split-k}
+
+A window of 9 to about 128 rows launches few 32-row tiles: `mp/32 * d/64` threadgroups, 16 to 48 at a 0.6B layer's sites
+on a 40-core GPU, each walking its whole K serially under barriers, so the GEMM is latency-bound rather than bound by its
+weights. The split-K form gives the grid a third axis of `nsk` threadgroups that share a tile's K, each walking `K/nsk` and
+storing its own partial plane of the scratch; one reduce dispatch (`MetalSkReduce`, the batched decode's split-K reduce)
+sums the planes into the output. Every 32-row tile family carries the axis as a template constant (`SK`) on its own stamp
+body, so the split adds no per-format code: the q8 blob (`MetalQ8MulMmTensorT`'s `THSk` / `TSk`), every dense K-quant, grid
+and per-32 format (the split scaffold's `db_shell`, stamped `kq_mm:<fmt>:thsk` / `tsk`), bf16 (`MetalBf16MulMmTensorT`'s
+`THSk` / `TSk`), the dev-W half tile (`MetalHalfMulMmTHSk`, its partial planes a column tile's own width, summed into the
+site's wider rows by the reduce's strided mode, `SkReduceArgs.cols4` / `ld4`), and the simdgroup base tiles a box with no
+tensor crown serves (`MetalQ8MulMmSk`, `MetalKqMulMm<Fmt>Sk`, compiled and released by `dasllama_metal_kernels`, which
+declares them, and picked through its per-format builder tables). The q8 split stamps hold 32 output columns a
+threadgroup, the others 64: the narrower q8 tile doubles the grid again, and the K-quant stage16 decode is laid out for 64
+rows. A shared K the planes sum in another f32 order than one walk, so the forms agree to rounding, not bit for bit.
+
+The rule is `dasllama_gpu_knee`'s, the one the Vulkan home serves too: a site takes the form while its grid is at most half
+its family's knee, and its split count doubles from one while the grid times the count stays at or under the knee, up to
+eight, each share a whole number of 64-wide chunks and at least four 32-blocks of K (eight on the K-quant scaffold, whose
+shorter shares lose to their reduce). Each family's knee is a box knob cached at init: `metal_split_k_tgs` (the q8 blob
+and bf16), `metal_split_k_tgs_kq` (the K-quant scaffold), `metal_split_k_tgs_base` and `metal_split_k_tgs_kq_base` (the base
+tiles), `metal_split_k_tgs_hmm` (the dev-W half tile); 0, or `DASLLAMA_METAL_SPLIT_K=0` for every knob, keeps the tiles
+whole. The K-quant knee sits higher because its stage decodes more per element, so a wider grid still waits on its serial
+K walk; past a knee the grid fills the GPU and the reduce is pure cost. The scratch is two alternating buffers sized for
+the largest knob's planes. Past the split knee the q8 blob's 32-column stamp still takes a grid of few M tiles at one way -
+no split, no reduce - while the padded rows are at most `metal_q8_n32_rows`: the narrower tile doubles a wide site's grid.
+A window of 16 rows or fewer that one 32-row tile holds takes the 16-row split stamps (`THSk16` / `TSk16`, the same bodies at
+`MT = 16`): the tensor op at 16 rows costs about 0.69 of the 32-row op the padding would pay.
+
+**A mint races the knobs** (`metal_split_knee_race`, run by `harness/tune_kernels.das` ahead of its CPU benches and by a fat
+exe's first start, which write them into the sidecar's runtime section): synthetic planes, no model. The race scaffold is
+the kernels file's (`knee_split_rungs`): a 32-row tile over the shared rung tables (`KNEE_Q8_WIDTHS` at K 2048,
+`KNEE_KQ_WIDTHS` at K 5120), each step two independent sites issued on a concurrent encoder - the way a window issues a
+layer's co-running sites - their weights streamed from a ring of copies past the SLC, outputs alternating, the tile against
+its split stamp at two, four and eight ways; `knee_pick` prices every candidate knob by the time the production rule gives
+each grid and the cheapest total wins. Each knee races the kernels it serves: the q8 knee the q8 tensor tile and the bf16
+plane's, priced together; the K-quant base knee a base arm a scale layout (k4, k6, iq4xs, q51); the half tile's knee its own
+stamp. The one-way rows race the 8B down site (14336 x 4096) as a co-running pair at 32 to 128 rows and stop at the first
+loss. Each race lives in the file declaring the classes it races (the base tiles' in `dasllama_metal_kernels`, the tensor,
+bf16 and half tiles' in `dasllama_metal_prefill`). The measured knees, windows and served rows are `PERF_LEDGER.md`'s split-K
+entry.
+
 ### The dev-W panel knee map {#devw-panel-knees}
 
 Panel SIZE dominates the dev-W decision, not shape - each threshold is a knee, the panel size at which the dev-W win flips
@@ -102,6 +147,16 @@ K-quant site, `DEVW_Q8_TWIN_ROWS` (2048) on a Q8_0 one. Scratch / own-bytes wind
 1.00 / 0.96 / 0.93 at 1024 / 2048 / 4096. The IQ4_XS file's 2967-row window spends 6.6 ms in its dequant passes - 2.68 GB of
 panel writes at the memory's rate - and the server's window line counts them (`devw_scratch=<sites>/<MB>`).
 
+**A scratch site also needs a grid.** A big panel splits into column tiles the window runs one after another through the
+scratch pair, and a tile's half GEMM launches `rows/32 x td/64` threadgroups over its whole K: a 27B's down (5120 x 17408, eight
+640-wide tiles) launches 20 at 64 rows, walking 17408 deep. The half tile splits its K under its own knee
+(`#prefill-split-k`), and a site whose tile grid stays under `metal_devw_min_tgs` keeps its quantized tiles
+(`pf_devw_grid_short`). The floor race (`knee_race_devw`) times dense k4 sites at a 1B-to-27B model's gate and down shapes, 64
+and 128 rows, each in the column tiles its panel takes, the quantized tile (split under the base knee) against the dev-W
+route the window encodes - the tiles in turn, the two sites one after the other since they share the scratch pair - and
+`knee_cut_pick` prices every rung's grid as the cutoff; a box where no rung's dev-W route wins sets the floor past every grid
+(the route off). The floors and the windows they move are `PERF_LEDGER.md`'s split-K entry.
+
 **Under the lever, resident panels remove the re-dequant** the scratch pair pays every window (8B, 512 rows: ~4.5 GB of
 panel writes and quant reads, ~7.7 ms, `harness/p0_ko_probe.das`'s `devw_cvt` knockout). A resident site is one full-panel
 GEMM at a `(buffer, offset)` seat - N-column tiling exists only for the scratch pair's capacity - keyed by its quant-plane
@@ -122,21 +177,27 @@ sites:
   Narrow tiles measure fine in the same A/B. Under the K-quant seat a site lowers the over-knee bar, the tiled-rows
   floor and the long-K floor (1024 rows to the wide-N floor), and leaves dev-W for the tall stamp past `TALLKQ_MIN_PANEL`.
 
-`CVT_MIN_ROWS`, `TALL_OCC_FLOOR` and `DEVW_SMALL_PANEL` are box-raced and cached at init from the sidecar
-(`metal_cvt_min_rows`, `metal_tall_floor`, `metal_devw_small_panel_mb`); the routed block's gathered-route knee
+`CVT_MIN_ROWS`, `TALL_OCC_FLOOR`, `DEVW_SMALL_PANEL` and `SPLIT_K_TGS` are box-raced and cached at init from the sidecar
+(`metal_cvt_min_rows`, `metal_tall_floor`, `metal_devw_small_panel_mb`, `metal_split_k_tgs`); the routed block's gathered-route knee
 (`metal_moe_gemv_max`, `ARCHITECTURE_GPU_PREFILL_MOE.md#prefill-moe-gemv-route`) is read per window; the other knees are fixed.
 
 ### The GEMV tail peel {#gemv-tail-peel}
 
 A prefill panel pads to `mp` rows, so `npos % 32` rows of every GEMM are padding. Up to `MM_TAIL_MAX` (8) remainder rows peel
 off the padded tile onto the fixed-B mv family instead; above that the padded tile is cheaper than three or more weight streams.
+Where the split-K form takes the padded tile, the peel reaches `MM_TAIL_SPLIT_MAX` (1) row past whole tiles and
+`MM_TAIL_SPLIT_WINDOW` (4) over a window of no whole tile - the rows one batched GEMV dispatch carries; a second dispatch is a
+second weight stream, which the split tile's padding undercuts (the readings are `PERF_LEDGER.md`'s split-K entry).
 One peeled row rides the reduction-split GEMV, two or more ride the b4 form only - the reduction-split GEMV walks per block and
 needs `kdim % 32`, while the b4 form - the batched fixed-B mv stamp, up to four rows a dispatch (`enc_mv_b4_c`) - reads whole
 128-quant rounds and needs `kdim % 128`. That peel is the q8 blob's. A dense K-quant, grid-format or per-32 site (`pf_enc_kq_site_mm`)
-has no remainder peel; a whole window of `MM_TAIL_MAX` rows or fewer rides the decode's row-batched forms instead
-(`enc_kq_site_b`: the B2, B4 and B8 stamps, which stream the plane once for every row) on a `kdim` of whole blocks (`kq_unit`), where
-the 32-row tile would walk K serially under barriers one threadgroup per core. From 9 rows up the remainder stays on the tile
-and the tile cost sets the window's floor; the form for that band is `followup_metal.md`'s.
+peels a whole window of `MM_TAIL_MAX` rows or fewer - `MM_TAIL_SPLIT_WINDOW` where its split-K form would take the window - onto
+the decode's row-batched forms (`enc_kq_site_b`: the B2, B4 and B8 stamps, which stream the plane once for every row) on a
+`kdim` of whole blocks (`kq_unit`), where the 32-row tile would walk K serially under barriers one threadgroup per core. Past
+eight rows it peels the remainder past whole tiles onto the same row forms at the remainder's x and y offsets - one row under the
+split-K knee, up to `MM_TAIL_KQ_PAST_KNEE` (2) past it - and the rest stays on the tile. Every row form binds x at a byte offset
+(the shared x view `MetalKqXT`, the per-32 `MetalB32MvbT`), so a remainder needs no copy. Past the knee two rows win on the
+row forms, four tie and eight lose (`PERF_LEDGER.md`'s split-K entry).
 
 ### The dense-KQ tensor mul_mm scaffold {#prefill-kq-tensor-scaffold}
 

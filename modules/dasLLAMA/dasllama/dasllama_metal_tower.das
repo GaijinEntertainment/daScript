@@ -894,55 +894,6 @@ def private metal_gemma4a_blocks(t : Gemma4aEncoder; var s : Gemma4aState; npos 
     return true
 }
 
-let private TW_SET_MAX = 64   //! the buffers one chain takes: the 12-layer small Pocket decoder holds 24 K/V rows beside its ping-pong rows
-
-//! Pooled scratch taken one buffer at a time and released as one, each buffer's size kept beside it.
-struct private TwBufSet {
-    bufs : MetalBuffer? [TW_SET_MAX]
-    sizes : uint64 [TW_SET_MAX]
-    n : int
-    short : bool    //!< a required buffer came back null: the encode declines `memory` before its first dispatch
-}
-
-var private g_tw_take_max_probe = 0ul   //! a test's stand-in for the device's largest buffer under the scratch takes; 0 = the device's
-
-//! A test's stand-in for the device's largest buffer under the tower's scratch takes (`bytes`; 0 reads the device's again) - the
-//! `memory` declines' seam. Answers the stand-in it replaced.
-def set_metal_tower_take_max_probe_(bytes : uint64) : uint64 {
-    let was = g_tw_take_max_probe
-    g_tw_take_max_probe = bytes
-    return was
-}
-
-//! the pool bucket of a `bytes` take fits the device's largest buffer: a bucket past it would fail the pool's allocation
-def private tw_take_fits(bytes : uint64) : bool {
-    let cap = g_tw_take_max_probe != 0ul ? g_tw_take_max_probe : metal_max_buffer_length(g_dev)
-    return pool_bucket(bytes) <= cap
-}
-
-//! One pooled buffer into the set, null where its bucket passes the device's largest buffer; a null `required` take marks the
-//! set short, an optional one (a half twin's panel) leaves the caller its fallback.
-def private tw_take(var s : TwBufSet; bytes : uint64; required : bool = true) : MetalBuffer? {
-    assert(s.n < TW_SET_MAX)
-    var b = tw_take_fits(bytes) ? pool_acquire_pinned(g_tw_pool, g_dev, bytes) : null
-    if (b != null) {
-        s.bufs[s.n] = b
-        s.sizes[s.n] = bytes
-        s.n++
-    } elif (required) {
-        s.short = true
-    }
-    return b
-}
-
-def private tw_release(var s : TwBufSet) {
-    for (i in range(s.n)) {
-        pool_release(g_tw_pool, s.bufs[i], s.sizes[i])
-    }
-    s.n = 0
-    s.short = false
-}
-
 //! The slab key of a device buffer built from `plane`: it stands while the plane's base address and length do.
 def private tw_plane_key(plane : PlaneF) : uint64 => hash_combine64(intptr(plane_at(plane, 0l)), uint64(length(plane)))
 
@@ -1011,7 +962,7 @@ struct private FcGpuCtx : TwGpuCtx {
     q8 : bool               //!< the GEMMs serve off the q8 slab (`g_tw_q8_fc`)
     dev : FcDevPlanes       //!< the all-heads attention's scratch, in the per-head scratch's place where it serves
     dev_on : bool
-    scratch : TwBufSet
+    scratch : MetalBufSet
 }
 
 let private FC_DEV_SLAB_MAX_BYTES = 268435456ul   //!< the all-heads score slabs' ceiling (about three minutes of audio at eight heads); past it the per-head loop's reused scratch serves
@@ -1039,14 +990,14 @@ def private fc_dev_attach(var c : FcGpuCtx; d : int64) : bool {
     }
     let bytes_qh = uint64(c.mp * d * 2l)
     let bytes_kvh = uint64(c.nkp * d * 2l)
-    c.dev.quh = tw_take(c.scratch, bytes_qh)
-    c.dev.qvh = tw_take(c.scratch, bytes_qh)
-    c.dev.kh = tw_take(c.scratch, bytes_kvh)
-    c.dev.vh = tw_take(c.scratch, bytes_kvh)
-    c.dev.ph = tw_take(c.scratch, uint64(c.wwpad * d * 2l))
-    c.dev.sc = tw_take(c.scratch, bytes_sch)
-    c.dev.sr = tw_take(c.scratch, bytes_srh)
-    c.dev.stat = tw_take(c.scratch, uint64(c.n_head * c.mp * 4l))
+    c.dev.quh = buf_set_take(c.scratch, g_tw_pool, bytes_qh)
+    c.dev.qvh = buf_set_take(c.scratch, g_tw_pool, bytes_qh)
+    c.dev.kh = buf_set_take(c.scratch, g_tw_pool, bytes_kvh)
+    c.dev.vh = buf_set_take(c.scratch, g_tw_pool, bytes_kvh)
+    c.dev.ph = buf_set_take(c.scratch, g_tw_pool, uint64(c.wwpad * d * 2l))
+    c.dev.sc = buf_set_take(c.scratch, g_tw_pool, bytes_sch)
+    c.dev.sr = buf_set_take(c.scratch, g_tw_pool, bytes_srh)
+    c.dev.stat = buf_set_take(c.scratch, g_tw_pool, uint64(c.n_head * c.mp * 4l))
     return true
 }
 
@@ -1164,14 +1115,14 @@ def private fc_rot_attach(var c : FcGpuCtx; d, n_head, npos : int64) {
     r.ka = AttnArgs(qd = uint(dp), kv_dim = uint(dp), head_size = uint(r.hs_pad), kv_mul = 1u, npos = uint(npos), np32 = uint(r.nk64),
         scale = 1.0 / sqrt(float(hs)), qoff = 0u, qrows = uint(c.mp), window = 0u, softcap = 0.0, hass = 0u, uend = uint(npos))
     r.rope = GkRopeTabArgs(rows = uint(npos), qs = uint(d), col = 0u, d = uint(d), dh = uint(hs), coff = 0u, soff = 0u)
-    r.bqp = tw_take(c.scratch, uint64(c.mp * dp * 4l))
-    r.bkp = tw_take(c.scratch, uint64(r.nk64 * dp * 4l))
-    r.bvp = tw_take(c.scratch, uint64(r.nk64 * dp * 4l))
-    r.bop = tw_take(c.scratch, uint64(c.mp * dp * 4l))
-    r.batt = tw_take(c.scratch, uint64(n_head * c.mp * r.nk64 * 2l))
-    r.bstat = tw_take(c.scratch, uint64(n_head * c.mp * 2l * 4l))
-    r.bcos = tw_take(c.scratch, uint64(npos * (hs / 2l) * 4l))
-    r.bsin = tw_take(c.scratch, uint64(npos * (hs / 2l) * 4l))
+    r.bqp = buf_set_take(c.scratch, g_tw_pool, uint64(c.mp * dp * 4l))
+    r.bkp = buf_set_take(c.scratch, g_tw_pool, uint64(r.nk64 * dp * 4l))
+    r.bvp = buf_set_take(c.scratch, g_tw_pool, uint64(r.nk64 * dp * 4l))
+    r.bop = buf_set_take(c.scratch, g_tw_pool, uint64(c.mp * dp * 4l))
+    r.batt = buf_set_take(c.scratch, g_tw_pool, uint64(n_head * c.mp * r.nk64 * 2l))
+    r.bstat = buf_set_take(c.scratch, g_tw_pool, uint64(n_head * c.mp * 2l * 4l))
+    r.bcos = buf_set_take(c.scratch, g_tw_pool, uint64(npos * (hs / 2l) * 4l))
+    r.bsin = buf_set_take(c.scratch, g_tw_pool, uint64(npos * (hs / 2l) * 4l))
     c.rot = r
 }
 
@@ -1224,7 +1175,7 @@ def private fc_ctx_make(fc : TwFc; npos, ww : int64) : FcGpuCtx {
     if (form.rotary) {
         fc_rot_attach(c, d, n_head, npos)
     } else {
-        c.bposl = tw_take(c.scratch, c.bytes_pos)
+        c.bposl = buf_set_take(c.scratch, g_tw_pool, c.bytes_pos)
         c.ka = fc_attn_args(d, dh, npos)
         c.dev_on = fc_dev_attach(c, d)
     }
@@ -1232,15 +1183,15 @@ def private fc_ctx_make(fc : TwFc; npos, ww : int64) : FcGpuCtx {
         c.bytes_head = uint64(c.mp * dh * 4l)
         let bytes_kh = uint64(c.nkp * dh * 4l)
         let bytes_sc = uint64(c.mp * c.nkp * 4l)
-        c.bqu = tw_take(c.scratch, c.bytes_head)
-        c.bqv = tw_take(c.scratch, c.bytes_head)
-        c.bkh = tw_take(c.scratch, bytes_kh)
-        c.bvt = tw_take(c.scratch, bytes_kh)
-        c.bph = tw_take(c.scratch, uint64(c.wwpad * dh * 4l))
-        c.bsc = tw_take(c.scratch, bytes_sc)
-        c.bsr = tw_take(c.scratch, uint64(c.mp * c.wwpad * 4l))
-        c.bp = tw_take(c.scratch, bytes_sc)
-        c.boh = tw_take(c.scratch, uint64(n_head * c.mp * dh * 4l))
+        c.bqu = buf_set_take(c.scratch, g_tw_pool, c.bytes_head)
+        c.bqv = buf_set_take(c.scratch, g_tw_pool, c.bytes_head)
+        c.bkh = buf_set_take(c.scratch, g_tw_pool, bytes_kh)
+        c.bvt = buf_set_take(c.scratch, g_tw_pool, bytes_kh)
+        c.bph = buf_set_take(c.scratch, g_tw_pool, uint64(c.wwpad * dh * 4l))
+        c.bsc = buf_set_take(c.scratch, g_tw_pool, bytes_sc)
+        c.bsr = buf_set_take(c.scratch, g_tw_pool, uint64(c.mp * c.wwpad * 4l))
+        c.bp = buf_set_take(c.scratch, g_tw_pool, bytes_sc)
+        c.boh = buf_set_take(c.scratch, g_tw_pool, uint64(n_head * c.mp * dh * 4l))
         for (h in range64(n_head)) {
             c.u_heads[h] = uniform_u32(uint(h))
         }
@@ -1255,23 +1206,23 @@ def private fc_ctx_make(fc : TwFc; npos, ww : int64) : FcGpuCtx {
     let bytes_xh = uint64(max(c.mp * max(n_ff, 2l * d), c.wwp * d) * 2l)
     if (fc.q8) {
         c.q8 = true
-        c.bxh = pf_q8_mm_half() ? tw_take(c.scratch, bytes_xh, false) : null
+        c.bxh = pf_q8_mm_half() ? buf_set_take(c.scratch, g_tw_pool, bytes_xh, false) : null
     } elif (!empty(fc.wblob)) {
         c.wplane = true
         c.bwh = plane_buffer(g_dev, unsafe(reinterpret<void?>(plane_at(fc.wblob, 0l))), uint64(length(fc.wblob) * 2l), fc.mapped)
-        c.bxh = tw_take(c.scratch, bytes_xh)
+        c.bxh = buf_set_take(c.scratch, g_tw_pool, bytes_xh)
         c.f16w = c.bwh != null && c.bxh != null
         c.scratch.short = c.scratch.short || !c.f16w   //! no f32 GEMM stands behind the halfword plane
     } elif (g_tw_env_tower_f16 && pf_hmm_ready()) {
         c.bwh = fc_twin_attach(fc.blob, c.bblob)
-        c.bxh = tw_take(c.scratch, bytes_xh, false)
+        c.bxh = buf_set_take(c.scratch, g_tw_pool, bytes_xh, false)
         c.f16w = c.bwh != null && c.bxh != null
     }
     return <- c
 }
 
 def private fc_ctx_release(var c : FcGpuCtx) {
-    tw_release(c.scratch)
+    buf_set_release(c.scratch, g_tw_pool)
     if (!c.dev_on && !c.form.rotary) {
         for (h in range64(c.n_head)) {
             pool_release(g_upool, c.u_heads[h], 4ul)
@@ -1922,15 +1873,15 @@ def private metal_parakeet_encode(t : ParakeetModel; var st : ParakeetState) : i
     let bytes_mel = uint64(n_len * t.n_mel * 4l)
     let bytes_y2 = uint64(mp2 * nch * 4l)
     let bytes_y5 = uint64(mp3 * nch * 4l)
-    var bmel = tw_take(c.scratch, bytes_mel)
-    var bcol0 = tw_take(c.scratch, uint64(mp0 * CONV0_KDP * 4l))
-    var by0 = tw_take(c.scratch, uint64(mp0 * nch * 4l))
-    var by2 = tw_take(c.scratch, bytes_y2)
-    var by3 = tw_take(c.scratch, bytes_y2)
-    var by5 = tw_take(c.scratch, bytes_y5)
-    var by6 = tw_take(c.scratch, bytes_y5)
-    var bxf = tw_take(c.scratch, uint64(c.mp * feat * 4l))
-    var bfxh = c.f16w ? tw_take(c.scratch, uint64(max(mp2 * nch, c.mp * feat) * 2l), false) : null
+    var bmel = buf_set_take(c.scratch, g_tw_pool, bytes_mel)
+    var bcol0 = buf_set_take(c.scratch, g_tw_pool, uint64(mp0 * CONV0_KDP * 4l))
+    var by0 = buf_set_take(c.scratch, g_tw_pool, uint64(mp0 * nch * 4l))
+    var by2 = buf_set_take(c.scratch, g_tw_pool, bytes_y2)
+    var by3 = buf_set_take(c.scratch, g_tw_pool, bytes_y2)
+    var by5 = buf_set_take(c.scratch, g_tw_pool, bytes_y5)
+    var by6 = buf_set_take(c.scratch, g_tw_pool, bytes_y5)
+    var bxf = buf_set_take(c.scratch, g_tw_pool, uint64(c.mp * feat * 4l))
+    var bfxh = c.f16w ? buf_set_take(c.scratch, g_tw_pool, uint64(max(mp2 * nch, c.mp * feat) * 2l), false) : null
     return -1l if (fc_ctx_declined(c, false))
     unsafe {
         memcpy(metal_buffer_contents(bmel), addr(st.mel.data[0]), bytes_mel)
@@ -2058,15 +2009,15 @@ struct private TwGaMel {
 }
 
 //! the record's scratch out of `s` with the samples uploaded; `s` reads short where a buffer is missing
-def private tw_ga_mel_take(var s : TwBufSet; g : TwGaMelGeo; var bpan : MetalBuffer?; samples : float const?; n_in, n_len : int64) : TwGaMel {
+def private tw_ga_mel_take(var s : MetalBufSet; g : TwGaMelGeo; var bpan : MetalBuffer?; samples : float const?; n_in, n_len : int64) : TwGaMel {
     let mp = round_up(n_len, 32l)
     var r = TwGaMel(bpan = bpan, mp = mp, dft_pad = g.dft_pad, n_bins = g.n_bins,
         fw = GkFrameWindowArgs(n_fft = uint(g.n_fft), hop = uint(g.hop), frames = uint(n_len), rows = uint(mp), woff = uint(g.woff)),
         ml = GkMelLogArgs(n_bins = uint(g.n_bins), n_mel = uint(g.n_mel), frames = uint(n_len), foff = uint(g.foff)))
-    r.bsamp = tw_take(s, uint64(n_in * 4l))
-    r.bxw = tw_take(s, uint64(mp * g.n_fft * 4l))
-    r.breim = tw_take(s, uint64(mp * g.dft_pad * 4l))
-    r.bpow = tw_take(s, uint64(mp * g.n_bins * 4l))
+    r.bsamp = buf_set_take(s, g_tw_pool, uint64(n_in * 4l))
+    r.bxw = buf_set_take(s, g_tw_pool, uint64(mp * g.n_fft * 4l))
+    r.breim = buf_set_take(s, g_tw_pool, uint64(mp * g.dft_pad * 4l))
+    r.bpow = buf_set_take(s, g_tw_pool, uint64(mp * g.n_bins * 4l))
     if (r.bsamp != null) {
         unsafe {
             memcpy(metal_buffer_contents(r.bsamp), reinterpret<void?>(samples), uint64(n_in * 4l))
@@ -2106,9 +2057,9 @@ def metal_gigaam_mel(m : GigaamModel; samples : array<float>; @exact_size var me
     }
     var bpan = tw_ga_mel_panel(m, g)
     return -1l if (bpan == null)
-    var s = TwBufSet()
+    var s = MetalBufSet()
     let bytes_mel = uint64(n_len * g.n_mel * 4l)
-    var bmel = tw_take(s, bytes_mel)
+    var bmel = buf_set_take(s, g_tw_pool, bytes_mel)
     var r = tw_ga_mel_take(s, g, bpan, unsafe(addr<float const?>(samples[0])), n_in, n_len)
     var ran = false
     if (!s.short) {
@@ -2130,7 +2081,7 @@ def metal_gigaam_mel(m : GigaamModel; samples : array<float>; @exact_size var me
         }
     }
     tw_ga_mel_release(r)
-    tw_release(s)
+    buf_set_release(s, g_tw_pool)
     return ran ? n_len : -1l
 }
 
@@ -2170,11 +2121,11 @@ def private metal_gigaam_encode(m : GigaamModel; var st : GigaamState; samples :
     var c <- fc_ctx_make(fc, tt, 0l)
     let mp1 = round_up(t1, 32l)
     let bytes_mel = uint64(n_len * m.n_mel * 4l)
-    var bmel = tw_take(c.scratch, bytes_mel)
-    var bcol0 = tw_take(c.scratch, uint64(mp1 * k0 * 4l))
-    var by1 = tw_take(c.scratch, uint64(mp1 * nch * 4l))
-    var bcol2 = tw_take(c.scratch, uint64(c.mp * k2 * 4l))
-    var bcolh = c.f16w && !c.wplane ? tw_take(c.scratch, uint64(c.mp * k2 * 2l), false) : null
+    var bmel = buf_set_take(c.scratch, g_tw_pool, bytes_mel)
+    var bcol0 = buf_set_take(c.scratch, g_tw_pool, uint64(mp1 * k0 * 4l))
+    var by1 = buf_set_take(c.scratch, g_tw_pool, uint64(mp1 * nch * 4l))
+    var bcol2 = buf_set_take(c.scratch, g_tw_pool, uint64(c.mp * k2 * 4l))
+    var bcolh = c.f16w && !c.wplane ? buf_set_take(c.scratch, g_tw_pool, uint64(c.mp * k2 * 2l), false) : null
     var mr = dev_mel ? tw_ga_mel_take(c.scratch, g, bpan, samples, n_in, n_len) : TwGaMel()
     if (fc_ctx_declined(c, st.rope_cos, st.rope_sin, false)) {
         tw_ga_mel_release(mr)
@@ -2278,17 +2229,17 @@ def private metal_gigaam_ctc(m : GigaamModel; var st : GigaamState; n_frames : i
         return tw_decline(MetalTowerDecline.memory)
     }
     let mp = round_up(n_frames, 32l)
-    var s = TwBufSet()
+    var s = MetalBufSet()
     var brows = metal_tower_enc_rows(st.enc_gen, n_frames * d)
     if (brows == null) {
-        brows = tw_take(s, uint64(mp * d * 4l))
+        brows = buf_set_take(s, g_tw_pool, uint64(mp * d * 4l))
         if (brows != null) {
             upload_rows_padded(brows, unsafe(addr(st.x[0])), n_frames, mp, d)
         }
     }
-    var bxh = half ? tw_take(s, uint64(mp * d * 2l)) : null
-    var blg = tw_take(s, uint64(mp * ncp * 4l))
-    var bpk = tw_take(s, uint64(n_frames * 8l))
+    var bxh = half ? buf_set_take(s, g_tw_pool, uint64(mp * d * 2l)) : null
+    var blg = buf_set_take(s, g_tw_pool, uint64(mp * ncp * 4l))
+    var bpk = buf_set_take(s, g_tw_pool, uint64(n_frames * 8l))
     var ran = false
     if (!s.short) {
         var u_d = uniform_u32(uint(d))
@@ -2318,7 +2269,7 @@ def private metal_gigaam_ctc(m : GigaamModel; var st : GigaamState; n_frames : i
         }
     }
     let short = s.short
-    tw_release(s)
+    buf_set_release(s, g_tw_pool)
     if (!ran) {
         return tw_decline(short ? MetalTowerDecline.memory : MetalTowerDecline.gpu_error)
     }
@@ -4101,7 +4052,7 @@ def private st2_slab_drop {
 }
 
 struct private St2GpuCtx {
-    rows : TwBufSet
+    rows : MetalBufSet
     us_v : uint [ST2_MAX_UNIFORMS]     //!< the value-keyed uniforms (a float's by its bits): a value binds once an encode
     us_b : MetalBuffer? [ST2_MAX_UNIFORMS]
     n_us : int
@@ -4133,13 +4084,13 @@ def private st2_ctx_make(var c : St2GpuCtx; var slab : MetalBuffer?; h_floats, s
 def private st2_rows_buf(var c : St2GpuCtx; rows, width : int64; zero_from : int64 = -1l) : MetalBuffer? {
     let mp = round_up(rows, 32l)
     let bytes = uint64(mp * width * 4l)
-    var b = tw_take(c.rows, bytes)
+    var b = buf_set_take(c.rows, g_tw_pool, bytes)
     zero_rows(b, zero_from < 0l ? rows : zero_from, mp, width)
     return b
 }
 
 def private st2_ctx_release(var c : St2GpuCtx) {
-    tw_release(c.rows)
+    buf_set_release(c.rows, g_tw_pool)
     pool_release(g_tw_pool, c.bh, c.bytes_h)
     pool_release(g_tw_pool, c.bstats, c.bytes_stats)
     pool_release(g_tw_pool, c.bcols, c.bytes_cols)
@@ -6127,11 +6078,11 @@ def private metal_vad_chunks(m : VadModel; var st : VadState; src : float const?
     }
     let nch = (n + GK_VAD_CHUNK - 1l) / GK_VAD_CHUNK
     let bytes_p = uint64(nch * 4l)
-    var s = TwBufSet()
-    var bx = tw_take(s, uint64((64l + nch * GK_VAD_CHUNK) * 4l))
-    var bgx = tw_take(s, uint64(nch * 4l * GK_VAD_HIDDEN * 4l))
-    var bst = tw_take(s, uint64(2l * GK_VAD_HIDDEN * 4l))
-    var bp = tw_take(s, bytes_p)
+    var s = MetalBufSet()
+    var bx = buf_set_take(s, g_tw_pool, uint64((64l + nch * GK_VAD_CHUNK) * 4l))
+    var bgx = buf_set_take(s, g_tw_pool, uint64(nch * 4l * GK_VAD_HIDDEN * 4l))
+    var bst = buf_set_take(s, g_tw_pool, uint64(2l * GK_VAD_HIDDEN * 4l))
+    var bp = buf_set_take(s, g_tw_pool, bytes_p)
     let short = s.short
     var ran = false
     if (!short) {
@@ -6162,7 +6113,7 @@ def private metal_vad_chunks(m : VadModel; var st : VadState; src : float const?
             g_tw_vad_chunks += nch
         }
     }
-    tw_release(s)
+    buf_set_release(s, g_tw_pool)
     if (!ran) {
         return tw_decline(short ? MetalTowerDecline.memory : MetalTowerDecline.gpu_error)
     }

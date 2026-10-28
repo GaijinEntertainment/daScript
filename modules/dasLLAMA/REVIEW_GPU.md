@@ -139,7 +139,8 @@ write-after-read hazards.
 
 **A diff that makes a path split one op - dividing an op's K, key span, row count or other work
 size across two or more dispatches whose partial outputs combine - gates the split only on the
-quantity it divides, or runs it at every work size, wherever one dispatch's scratch fits under the
+quantity it divides, or - for a split taken to occupy a device the unsplit grid leaves idle - on
+that grid's size and on the kernel form that has a split variant, or runs it at every work size, wherever one dispatch's scratch fits under the
 path's byte ceiling (the largest scratch buffer the path lets one dispatch allocate) and
 everywhere on a path with no ceiling; a split gated on any other condition is a defect.** Whole
 steps of an op run one after another are not a split.
@@ -239,7 +240,8 @@ any behavior a served call shows, or that a test shows by driving a setter or an
 variable the engine exposes - lands the same capability on every other backend that serves the
 family, in the same change, wherever that backend's API offers the operations it uses on any
 device it supports; a PR body that defers it is a defect.** A capability one backend
-has makes a served model's behavior depend on the box it runs on.
+has makes a served model's behavior depend on the box it runs on. The same path served faster or
+slower is not a capability.
 
 **A diff that changes how a dev-W resident panel's cache key is built - a dev-W panel is a
 weight plane dequantized once into a device f16 panel - changes both the seed site and the

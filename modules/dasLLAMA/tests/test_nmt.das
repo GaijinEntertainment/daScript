@@ -352,9 +352,19 @@ def private device_poison_controls(t : T?; models : array<NmtModel>; srcs, cpu :
     }
 }
 
-//! a source past `NMT_DEVICE_SRC_CAP` declining `length`, then the exact lane of `exact_path` declining `quant_mode`; both
-//! translate on the CPU
+//! a scratch take past the device's largest buffer declining `device` (where the seat reads that limit), a source past
+//! `NMT_DEVICE_SRC_CAP` declining `length`, then the exact lane of `exact_path` declining `quant_mode`; all translate on the CPU
 def private device_declines(t : T?; tag : string; m : NmtModel; var st : NmtState; src : array<int64>; exact_path : string) {
+    let probe = nmt_seat_take_max_probe(512ul)
+    if (probe.seam) {
+        let sh0 = nmt_seat_stats()
+        let d0 = nmt_seat_declines("device")
+        var inscope short_ids <- nmt_translate_ids(m, st, src)
+        nmt_seat_take_max_probe(probe.was)
+        t |> equal(nmt_seat_stats().sentences, sh0.sentences, "{tag}: a short scratch take is not served on the device")
+        t |> success(nmt_seat_declines("device") > d0, "{tag}: a scratch take past the device's largest buffer declines `device`")
+        t |> success(!empty(short_ids), "{tag}: and translates on the CPU")
+    }
     var long_src <- [for (i in range64(NMT_DEVICE_SRC_CAP + 1l)); src[i % (long_length(src) - 1l)]]
     long_src |> push(m.eos_id)
     let len0 = nmt_seat_stats()

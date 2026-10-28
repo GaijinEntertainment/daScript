@@ -15,6 +15,7 @@ require dasllama/dasllama_gpu_tier   // the device-cooperation seam (hooks the l
 require daslib/array_boost // nolint:STYLE030 — temp_array is [template]; STYLE030 misses template-fn refs and false-flags this as unused
 require dasllama/dasllama_math
 require dasllama/dasllama_gpu_math
+require dasllama/dasllama_gpu_knee   // the Vulkan short window's knee the runtime section applies
 require daslib/jobque_profile  // JOBQUE_PROFILING_ENABLED — the compile-time gate on prof_ticks/prof_add
 require dasllama/dasllama_kv_codec public  // the KV-cache codec families — kv_store_row/kv_load_row/kv_dot/kv_axpy dispatch into them
 require dasllama/dasllama_convert   // cvt_f32_to_f16/cvt_f16_to_f32 — the f16 rows (wscale plane + the f16 KV codec)
@@ -509,6 +510,14 @@ var private g_prefill_logits_done = false
 def prefill_override_logits_done {
     g_prefill_logits_done = true
 }
+
+var private g_prefill_logits_skipped = false
+
+//! The prefill an override is serving reads no logits from it: its caller passed `skip_logits` (an embedding's pooling, an
+//! image quantum's inner slice, a verify's batched classifier) - set before every invocation. Together with
+//! `Session.keep_hidden` it names a forward whose reader is the hidden plane alone.
+[arch(at="../ARCHITECTURE_GPU_PREFILL.md#prefill-hidden-only")]
+def prefill_logits_skipped : bool => g_prefill_logits_skipped
 
 //! The decode twin of PrefillOverrideFn: claims the ENTIRE per-layer stack of one single-token
 //! forward. On true the KV row is stored for `pos` and s.x holds the final residual; false =
@@ -2431,6 +2440,14 @@ def apply_box_profile_runtime_at(ppath : string) {   // nolint:STYLE038 — a fl
     apply_i64_knob(rt, "metal_devw_small_panel_mb") $(v) { set_metal_devw_small_panel_mb(v) }
     apply_i64_knob(rt, "metal_cvt_min_rows") $(v) { set_metal_cvt_min_rows(v) }
     apply_i64_knob(rt, "metal_moe_gemv_max") $(v) { set_metal_moe_gemv_max(v) }
+    apply_i64_knob(rt, "metal_split_k_tgs") $(v) { set_metal_split_k_tgs(v) }
+    apply_i64_knob(rt, "metal_split_k_tgs_kq") $(v) { set_metal_split_k_tgs_kq(v) }
+    apply_i64_knob(rt, "metal_q8_n32_rows") $(v) { set_metal_q8_n32_rows(v) }
+    apply_i64_knob(rt, "metal_split_k_tgs_base") $(v) { set_metal_split_k_tgs_base(v) }
+    apply_i64_knob(rt, "metal_devw_min_tgs") $(v) { set_metal_devw_min_tgs(v) }
+    apply_i64_knob(rt, "metal_split_k_tgs_hmm") $(v) { set_metal_split_k_tgs_hmm(v) }
+    apply_i64_knob(rt, "vk_split_k_tgs") $(v) { set_vk_split_k_tgs(v) }
+    apply_i64_knob(rt, "metal_split_k_tgs_kq_base") $(v) { set_metal_split_k_tgs_kq_base(v) }
     apply_i64_knob(rt, "mtp_depth_nextn") $(v) { set_mtp_depth_nextn(v) }
     apply_i64_knob(rt, "mtp_depth_assistant") $(v) { set_mtp_depth_assistant(v) }
     let mtc = read_json_field(rt, "metal_tensor", "")
@@ -3669,22 +3686,15 @@ var private g_metal_tall_floor = 64l           // tall M-tile occupancy floor, i
 var private g_metal_devw_small_panel_mb = 32l  // dev-W dequant-panel engage knee
 var private g_metal_cvt_min_rows = 256l        // half-X panel conversion row floor
 
+//! 0 is the measured-bad unfloored config, refused like any value under 1
 def public set_metal_tall_floor(v : int64) {
-    if (v < 1l) {   // 0 is the measured-bad unfloored config — refuse, keep the default
-        to_log(LOG_WARNING, "dasLLAMA: set_metal_tall_floor({v}) out of range - keeping {g_metal_tall_floor}\n")
-        return
-    }
-    g_metal_tall_floor = v
+    set_raced_knob(g_metal_tall_floor, v, 1l, "set_metal_tall_floor")
 }
 
 def public metal_tall_floor : int64 => g_metal_tall_floor
 
 def public set_metal_devw_small_panel_mb(v : int64) {
-    if (v < 1l) {
-        to_log(LOG_WARNING, "dasLLAMA: set_metal_devw_small_panel_mb({v}) out of range - keeping {g_metal_devw_small_panel_mb}\n")
-        return
-    }
-    g_metal_devw_small_panel_mb = v
+    set_raced_knob(g_metal_devw_small_panel_mb, v, 1l, "set_metal_devw_small_panel_mb")
 }
 
 def public metal_devw_small_panel_mb : int64 => g_metal_devw_small_panel_mb
@@ -3698,6 +3708,74 @@ def public set_metal_cvt_min_rows(v : int64) {
 }
 
 def public metal_cvt_min_rows : int64 => g_metal_cvt_min_rows
+
+//! The split-K knee: a short window's prefill tile grid of at most half this many threadgroups splits its K, doubling the
+//! split while the grid stays within it, up to eight ways; 0 keeps every tile whole. CACHED at metal_prefill_init like the knobs above.
+var private g_metal_split_k_tgs = 256l
+
+def public set_metal_split_k_tgs(v : int64) {
+    set_raced_knob(g_metal_split_k_tgs, v, 0l, "set_metal_split_k_tgs")
+}
+
+def public metal_split_k_tgs : int64 => g_metal_split_k_tgs
+
+//! The K-quant scaffold's split-K knee, read as `metal_split_k_tgs` is; its stage decodes more per element than the q8 blob's,
+//! so a wider grid still gains from the split. 0 keeps every K-quant tile whole.
+var private g_metal_split_k_tgs_kq = 2048l
+
+def public set_metal_split_k_tgs_kq(v : int64) {
+    set_raced_knob(g_metal_split_k_tgs_kq, v, 0l, "set_metal_split_k_tgs_kq")
+}
+
+def public metal_split_k_tgs_kq : int64 => g_metal_split_k_tgs_kq
+
+//! The padded rows up to which the q8 blob's 32-column tile takes a grid past the split-K knee at one way (no split, no
+//! reduce); 0 keeps those grids on the 64-column tile. CACHED at metal_prefill_init.
+var private g_metal_q8_n32_rows = 64l
+
+def public set_metal_q8_n32_rows(v : int64) {
+    set_raced_knob(g_metal_q8_n32_rows, v, 0l, "set_metal_q8_n32_rows")
+}
+
+def public metal_q8_n32_rows : int64 => g_metal_q8_n32_rows
+
+//! The simdgroup base tiles' split-K knees - the q8 blob's and the K-quant / per-32 scaffold's, read as `metal_split_k_tgs` is
+//! by the forms a box serves where its dense race crowned no tensor twin; 0 keeps those tiles whole. CACHED at metal_prefill_init.
+var private g_metal_split_k_tgs_base = 256l
+var private g_metal_split_k_tgs_kq_base = 2048l
+
+def public set_metal_split_k_tgs_base(v : int64) {
+    set_raced_knob(g_metal_split_k_tgs_base, v, 0l, "set_metal_split_k_tgs_base")
+}
+
+def public metal_split_k_tgs_base : int64 => g_metal_split_k_tgs_base
+
+def public set_metal_split_k_tgs_kq_base(v : int64) {
+    set_raced_knob(g_metal_split_k_tgs_kq_base, v, 0l, "set_metal_split_k_tgs_kq_base")
+}
+
+def public metal_split_k_tgs_kq_base : int64 => g_metal_split_k_tgs_kq_base
+
+//! The dev-W scratch panel's per-tile grid floor, in 32x64 threadgroups: a site whose dequantized panel tile would launch
+//! fewer keeps its quantized tiles - a narrow tile walks its long K serially on an idle GPU. 0 disables the floor.
+//! CACHED at metal_prefill_init.
+var private g_metal_devw_min_tgs = 64l
+
+def public set_metal_devw_min_tgs(v : int64) {
+    set_raced_knob(g_metal_devw_min_tgs, v, 0l, "set_metal_devw_min_tgs")
+}
+
+def public metal_devw_min_tgs : int64 => g_metal_devw_min_tgs
+
+//! The dev-W half tile's split-K knee, read as `metal_split_k_tgs` is: a dequantized panel tile over a long K splits its walk.
+//! 0 keeps the half tiles whole. CACHED at metal_prefill_init.
+var private g_metal_split_k_tgs_hmm = 64l
+
+def public set_metal_split_k_tgs_hmm(v : int64) {
+    set_raced_knob(g_metal_split_k_tgs_hmm, v, 0l, "set_metal_split_k_tgs_hmm")
+}
+
+def public metal_split_k_tgs_hmm : int64 => g_metal_split_k_tgs_hmm
 
 //! The widest prefill window whose routed experts ride the decode's gathered GEMV (one dispatch slice per token and
 //! expert slot) instead of the bucketed mul_mm tiles; 0 keeps every window on the tiles, -1 takes the prefill's default
@@ -5412,6 +5490,18 @@ def hc_dim(c : Config) : int64 => c.hyper_conn ? c.hc_count * c.dim : 0l
 
 //! the n-gram PLE side input is on: one layer's block is preceded by the hashed rows
 def has_ple_ngram(c : Config) : bool => c.ple_layer >= 0l
+
+//! a session of `c` keeps nothing past the rows it holds - no recurrent state, NextN head row or n-gram ring - so a forward from
+//! position 0 rewrites everything the next one reads: the embed pool reuses such sessions, the scratch window shares one region
+def session_keeps_rows_only(c : Config) : bool => c.recr_mask == 0ul && c.n_layer_nextn == 0l && !has_ple_ngram(c)
+
+//! a model's planes as one number: the mapped image's base, else the first plane array's - what tells two loaded models apart
+def model_planes_key(t : Model) : uint64 {
+    return intptr(t.image_map) if (t.image_map != null)
+    return intptr(unsafe(addr(t.fblob[0]))) if (!empty(t.fblob))
+    return intptr(unsafe(addr(t.qblob[0]))) if (!empty(t.qblob))
+    return 0ul
+}
 
 //! rows the n-gram gather lands per token: heads_per_ngram per n-gram order from bigram up
 def ple_n_heads(c : Config) : int64 => (c.ple_ngram_size - 1l) * c.ple_heads_per_ngram
@@ -7397,7 +7487,7 @@ def forward_prefill(t : Model; var s : Session; tokens : array<int64>; npos, sta
 }
 
 [no_alloc, no_env, no_io, arch(at="../ARCHITECTURE_GPU_PREFILL_WINDOW.md#prefill-segments")]
-def forward_prefill_segments(t : Model; var segs : array<PrefillSeg>; toks : array<array<int64>>) {
+def forward_prefill_segments(t : Model; var segs : array<PrefillSeg>; toks : array<array<int64>>; skip_logits : bool = false) {
     for (sg in segs) {
         kv_capacity_check(t, sg.npos, sg.start_pos)
         if (!empty(sg.s.dn_stops)) {
@@ -7407,6 +7497,7 @@ def forward_prefill_segments(t : Model; var segs : array<PrefillSeg>; toks : arr
         prefill_rope_tables(t, *sg.s, sg.npos, sg.start_pos)
     }
     g_prefill_logits_done = false
+    g_prefill_logits_skipped = skip_logits
     var done = false
     if (segs_served_by_override(segs)) {
         done = invoke(g_prefill_seg_override, t, segs)
@@ -7414,12 +7505,12 @@ def forward_prefill_segments(t : Model; var segs : array<PrefillSeg>; toks : arr
     if (done) {
         for (sg in segs) {
             if (!g_prefill_logits_done) {
-                prefill_cpu_logits(t, *sg.s, sg.npos, sg.start_pos, false)
+                prefill_cpu_logits(t, *sg.s, sg.npos, sg.start_pos, skip_logits)
             }
         }
     } else {
         for (sg in segs) {
-            forward_prefill_body(t, *sg.s, sg.npos, sg.start_pos)
+            forward_prefill_body(t, *sg.s, sg.npos, sg.start_pos, skip_logits)
         }
     }
     for (sg in segs) {
@@ -7708,6 +7799,7 @@ def forward_prefill_body(t : Model; var s : Session; npos, start_pos : int64; sk
     // to the CPU loop); a claimer must honor s.attn_uniform_end (metal: AttnArgs.uend)
     var stack_done = false
     g_prefill_logits_done = false
+    g_prefill_logits_skipped = skip_logits
     if (!empty(g_prefill_override_name) && !empty(s.mrope_pos) && !active_prefill_serves_mrope()) {
         to_log(LOG_INFO, "dasLLAMA: mrope image quantum ({npos} rows) declined to the CPU prefill loop - the `{g_prefill_override_name}` override does not rope from per-row tables\n")   // nolint:PERF026,PERF028 — once per image quantum, never per token
     } elif (!empty(g_prefill_override_name) && s.ds_active && !active_prefill_serves_ds()) {

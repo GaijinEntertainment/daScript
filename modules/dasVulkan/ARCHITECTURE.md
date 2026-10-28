@@ -2,7 +2,7 @@
 
 **Read `ARCHITECTURE_COMMON.md` (repo root) first - its contract binds this document.** The
 checklist that binds a diff here is `REVIEW.md` (this folder); `generator/` and `tutorials/`
-carry their own; how a frame is drawn and synchronized: the companion `ARCHITECTURE_RENDERING.md`. Planned work:
+carry their own; how a frame is drawn and synchronized: the companion `ARCHITECTURE_RENDERING.md`; the device a process's contexts share: `ARCHITECTURE_SHARED_DEVICE.md`. Planned work:
 `ROADMAP.md`. Agent instructions - build, run, test, where things live: `CLAUDE.md`.
 
 ## The two layers {#two-layers}

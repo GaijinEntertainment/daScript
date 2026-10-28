@@ -2549,6 +2549,27 @@ def private log_resident_image(planes : array<ResidentPlane>; plan : ResidentPla
     delete rows
 }
 
+var private g_resident_upload_fault = false
+let RESIDENT_UPLOAD_FAULT = "the fixture's upload fault (set_resident_upload_fault)"
+
+//! The fixture seam: while on, every whole-model upload declines after the plan accepted it - the gap the mapped-lane guard
+//! (`trimmed_lane_unarmed_panic`) refuses at load
+//! the fixture's upload fault `set_resident_upload_fault` last set - a cell restores it
+def resident_upload_fault() : bool => g_resident_upload_fault
+
+def set_resident_upload_fault(on : bool) {
+    g_resident_upload_fault = on
+}
+
+//! A planes-trimmed lane carries no planar families for the per-op rails or the CPU, so a mapped one the whole-model driver did
+//! not arm for is refused here, at its load, by name - never at its first CPU forward
+[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#vk-shared-device")]
+def private trimmed_lane_unarmed_panic(lane, why : string) {
+    vulkan_bake_disarm()
+    let named = empty(lane) ? "a mapped planes-trimmed vulkan lane" : "'{lane}', a planes-trimmed vulkan lane,"
+    panic("dasLLAMA: {named} loaded and the whole-model driver did not arm for it ({empty(why) ? "the tier did not attempt it" : why}) - the lane carries no planar families for the per-op rails or the CPU; give the driver the room or the knobs it declined on, or load the source gguf with DASLLAMA_TRIM=0")
+}
+
 //! Reserve arenas + place every dense plane + wire the resident decode driver. Returns false (and
 //! leaves the driver unarmed) if the model is not a servable dense shape or does not fit at seq_cap;
 //! every decline logs its reason through `rdec_decline`.
@@ -2561,13 +2582,14 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
     g_rdec_pass_said |> clear()
     g_rdec_seg_declined |> clear()
     g_rdec_seg_pass_said |> clear()
+    g_rdec_scratch_said |> clear()
     g_rdec_peel_declined |> clear()
     g_rdec_head_warm_decline_said = false
     g_rdec_pool_head_decline_said = false
     set_gpu_cpu_pass_reasons([for (k in type<RdecPass>); "{k}"], [for (k in type<RdecPass>); rdec_pass_words(k)])
     vulkan_bake_role(VkBakeRole.arena)
     vk_bake_mark_split(plan.host_layers)
-    let gate_why = resident_decline_reason(t)
+    let gate_why = g_resident_upload_fault ? RESIDENT_UPLOAD_FAULT : resident_decline_reason(t)
     if (!empty(gate_why)) return rdec_decline(gate_why)
     let c = t.config
     let n_recurrent = recurrent_layer_count(c)
@@ -3090,6 +3112,7 @@ enum private RdecPass {
     unhomed
     verify_rows
     verify_window
+    hidden
 }
 
 var private g_rdec_pass_said : table<int>
@@ -3134,6 +3157,7 @@ def private rdec_pass_words(kind : RdecPass) : string {
     if (kind == RdecPass.verify_rows) return "the GPU checks fewer drafted tokens at once than the stream drafted"
     if (kind == RdecPass.verify_window) return "the speculative round's CPU verify window: the head runs on the CPU, the trunk's rows stay on the device"
     if (kind == RdecPass.pinned_off) return "a prompt was read on the CPU: the server keeps host-cached streams off the GPU's prompt path"
+    if (kind == RdecPass.hidden) return "the request reads the model's output at every prompt word (an embedding), which this model's GPU path does not produce"
     return "{kind}"
 }
 
@@ -3162,6 +3186,8 @@ def private rdec_pass_text(kind : RdecPass; a, b : int64) : string {
         why = "the speculative verify's {a} rows pass the {b} rows the driver's same-slab verify steps at once (0: the NextN head or an N-column leaf is off the device - the lines above name it)"
     } elif (kind == RdecPass.verify_window) {
         why = "the CPU verify's two-row window: the round reads its rows on the host, so the resident prefill leaves the window to the CPU rails and the trunk's rows on the device"
+    } elif (kind == RdecPass.hidden) {
+        why = "the session keeps every row's hidden state (an embedding's read), and the hyper-connection chain - or a tier with no hidden-rows seat - lands none"
     } else {
         why = "the resident prefill is pinned off (a multi-stream scheduler owns the sessions)"
     }
@@ -4047,6 +4073,7 @@ def private resident_hot_arm(t : Model; plan : ResidentPlan) {
     g_rdec_hot_declined |> clear()
     g_rdec_seg_declined |> clear()
     g_rdec_seg_pass_said |> clear()
+    g_rdec_scratch_said |> clear()
     g_rdec_peel_declined |> clear()
     g_rdec_hot_hits = 0l
     g_rdec_hot_picks = 0l
@@ -5370,6 +5397,10 @@ struct private RdecGate {
     b : int64
 }
 
+//! an embedding's forward (every row's final residual kept) that this model's chain does not land: a hyper-connection model, or a
+//! driver with no hidden-rows seat
+def private rdec_hidden_passes(t : Model; s : Session) : bool => s.keep_hidden && (t.config.hyper_conn || !rdec_hidden_installed())
+
 def private rdec_prefill_gate(t : Model; s : Session; npos, start_pos : int64) : RdecGate {
     if (mtp_verify_window_active(s)) {
         return RdecGate(passes = true, kind = RdecPass.verify_window)
@@ -5381,6 +5412,9 @@ def private rdec_prefill_gate(t : Model; s : Session; npos, start_pos : int64) :
     return codec if (codec.passes)
     if (s.attn_uniform_end != 0l) {
         return RdecGate(passes = true, kind = RdecPass.span)
+    }
+    if (rdec_hidden_passes(t, s)) {
+        return RdecGate(passes = true, kind = RdecPass.hidden)
     }
     if (start_pos != 0l && t.config.recr_mask != 0ul && start_pos != s.dn_pos) {
         return RdecGate(passes = true, kind = RdecPass.rewind, a = start_pos, b = s.dn_pos)
@@ -5425,10 +5459,7 @@ def private rdec_segs_declined_pass_now(gate : RdecGate) {
 //! with its rows on the device alone would hydrate (the one-session call's `gap`), and the segments owning no region need as
 //! many unpinned regions as no segment of this call owns (`busy`); decided before any bind, so a declined call binds nothing
 def private rdec_segs_regions_why(segs : array<PrefillSeg>) : string {
-    var free = 0l
-    for (reg in g_rdec_regions) {
-        free += reg.pinned ? 0l : 1l
-    }
+    var free = gpu_free_regions_()
     var need = 0l
     for (sg in segs) {
         let s = sg.s
@@ -5480,6 +5511,73 @@ def private rdec_segs_regions(t : Model; var segs : array<PrefillSeg>) : bool {
     return true
 }
 
+var private g_rdec_seg_scratch = false   //! the segmented call in flight seats its segments in one region, back to back
+var private g_rdec_scratch_windows = 0l
+
+//! the segmented windows that seated their segments back to back in one region, in this context (a cell's witness)
+def moe_gpu_resident_scratch_windows() : int64 => g_rdec_scratch_windows
+
+//! why `segs` cannot share one scratch region, "" where they can: every segment an embedding's from position 0, a model whose
+//! sessions keep nothing past their rows (`session_keeps_rows_only`), a driver that seats segments back to back, and the rows
+//! within one region's context
+[arch(at="../ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-scratch")]
+def private rdec_segs_scratch_why(t : Model; segs : array<PrefillSeg>) : string {
+    return "the model keeps state past its rows" if (!session_keeps_rows_only(t.config))
+    return "the driver seats no segments back to back" if (!rdec_segs_packed())
+    var total = 0l
+    for (sg in segs) {
+        let s = sg.s
+        return "a segment is not an embedding's from position 0" if (!s.keep_hidden || sg.start_pos != 0l || !empty(s.dn_captures))
+        total += sg.npos
+    }
+    return total > g_rdec_cap ? "the segments' rows pass the region's context" : ""
+}
+
+//! the one region every segment of a scratch window seats in: the least recently used unpinned one, its owner's rows saved first
+def private rdec_segs_scratch_bind(t : Model; var segs : array<PrefillSeg>) : bool {
+    let r = rdec_bind_region(t, *segs[0].s)
+    if (r < 0l) {
+        rdec_segs_declined("every region is held by a live device-home session")
+        return false
+    }
+    let n = long_length(segs)
+    g_rdec_seg_regions |> clear()
+    g_rdec_seg_regions |> reserve(n)
+    g_rdec_seg_regions |> resize(n)
+    for (i in range64(n)) {
+        g_rdec_seg_regions[i] = r
+    }
+    return true
+}
+
+//! a scratch window's session after its rows landed: it claims nothing, so the region's rows stand for no session - an
+//! embedding reads its hidden rows and starts its next call at position 0
+def private rdec_scratch_landed(var s : Session) {
+    s.rdec_gen = 0l
+    s.rdec_region = -1l
+    g_rdec_prefills++
+    prefill_override_logits_done()
+}
+
+//! the scratch window's region left owned by no claim
+def private rdec_scratch_release(r : int64) {
+    assume reg = g_rdec_regions[r]
+    reg.gen = 0l
+    reg.cnt = 0l
+    reg.hw = 0l
+    reg.host_behind = false
+    reg.owner_uid = 0ul
+}
+
+//! how many of the segments' sessions keep every row's hidden state
+def private segs_keeping_hidden(segs : array<PrefillSeg>) : int64 {
+    var n = 0l
+    for (sg in segs) {
+        n += sg.s.keep_hidden ? 1l : 0l
+    }
+    return n
+}
+
 def private rdec_segs_gather(t : Model; var segs : array<PrefillSeg>; ids : bool) : int64 {
     let c = t.config
     let dim = c.dim
@@ -5502,7 +5600,8 @@ def private rdec_segs_gather(t : Model; var segs : array<PrefillSeg>; ids : bool
     var row0 = 0l
     for (sg, i in segs, count()) {
         var s & = unsafe(*sg.s)
-        g_rdec_segs |> push(RdecPfSeg(row0 = row0, npos = sg.npos, pos0 = sg.start_pos, region = g_rdec_seg_regions[i]))
+        g_rdec_segs |> push(RdecPfSeg(row0 = row0, npos = sg.npos, pos0 = sg.start_pos, region = g_rdec_seg_regions[i],
+            koff = g_rdec_seg_scratch ? row0 : 0l))
         if (ids) {
             for (k in range64(sg.npos)) {
                 g_rdec_seg_ids[row0 + k] = s.embed_gpu_tokens[k]
@@ -5533,7 +5632,7 @@ def private vulkan_resident_prefill_segments(t : Model; var segs : array<Prefill
     return false if (!g_rdec_active || !rdec_prefill_segs_installed())
     let c = t.config
     let n = long_length(segs)
-    return false if (n < 2l)
+    return false if (n < 2l && (n == 0l || !segs[0].s.keep_hidden))   //! one segment rides the window as an embedding's scratch alone
     if (!rdec_segs_model_fits(t)) {
         rdec_segs_declined("the model's chain takes one session a window (per-layer-embedding, hyper-connection, routed experts on the host, or a block-codec mirror)")
         return false
@@ -5543,11 +5642,25 @@ def private vulkan_resident_prefill_segments(t : Model; var segs : array<Prefill
         rdec_segs_declined("a per-layer-embedding window whose rows the host embedded (the side rows gather off the segments' ids)")
         return false
     }
-    return false if (!rdec_segs_admitted(t, segs, ids) || !rdec_segs_regions(t, segs))
+    return false if (!rdec_segs_admitted(t, segs, ids))
+    let keeping = segs_keeping_hidden(segs)
+    if (keeping != 0l && keeping != n) {
+        rdec_segs_declined("an embedding's segment beside a chat segment (a window lands hidden rows or logits, not both)")
+        return false
+    }
+    let scratch_why = rdec_segs_scratch_why(t, segs)
+    g_rdec_seg_scratch = empty(scratch_why)
+    if (keeping == n) {   //! an embedding's window that takes a region a segment says why, once
+        rdec_scratch_declined(scratch_why)
+    }
+    return false if (g_rdec_seg_scratch ? !rdec_segs_scratch_bind(t, segs) : !rdec_segs_regions(t, segs))
     let total = rdec_segs_gather(t, segs, ids)
     let vocab = long_length(segs[0].s.logits)
-    g_rdec_seg_logits |> reserve(n * vocab)
-    g_rdec_seg_logits |> resize(n * vocab)
+    let hidden = keeping == n   //! an embedding's window lands its hidden rows and no logits
+    if (!hidden) {
+        g_rdec_seg_logits |> reserve(n * vocab)
+        g_rdec_seg_logits |> resize(n * vocab)
+    }
     g_rdec_caps |> clear()
     for (sg, i in segs, count()) {
         if (!empty(sg.s.dn_captures)) {
@@ -5556,17 +5669,33 @@ def private vulkan_resident_prefill_segments(t : Model; var segs : array<Prefill
     }
     rdec_prefill_caps(g_rdec_caps)
     let ts_run = ref_time_ticks()
+    rdec_hidden_ask(hidden)
     rdec_prefill_segs(g_rdec_seg_x, g_rdec_seg_ids, ids, c.embed_scale, g_rdec_seg_cos, g_rdec_segs, g_rdec_seg_logits, @@rdec_host_experts_rows)
+    rdec_hidden_ask(false)
     for (sg, i in segs, count()) {
         var s & = unsafe(*sg.s)
-        copy_floats(g_rdec_seg_logits, int64(i) * vocab, s.logits, 0l, vocab)
+        if (hidden && s.keep_hidden) {
+            rdec_hidden_rows(s.x_b, g_rdec_segs[i].row0, 0l, sg.npos)
+        }
+        if (!hidden) {
+            copy_floats(g_rdec_seg_logits, int64(i) * vocab, s.logits, 0l, vocab)
+        }
         s.embed_gpu_pending = false
         s.ple_gpu_pending = false
         rdec_select_region(g_rdec_seg_regions[i])
+        if (g_rdec_seg_scratch) {
+            rdec_scratch_landed(s)
+            continue
+        }
         rdec_prefill_landed(t, s, g_rdec_seg_regions[i], sg.npos, sg.start_pos, int64(i), false)   //! a segmented window warms no head row
         if (!empty(s.dn_captures)) {
             rdec_caps_land(s, int64(i), g_rdec_seg_regions[i])
         }
+    }
+    if (g_rdec_seg_scratch) {
+        rdec_scratch_release(g_rdec_seg_regions[0])
+        g_rdec_scratch_windows++
+        g_rdec_seg_scratch = false
     }
     if (g_env_gpu.gpu_prof) {
         to_log(LOG_INFO, "dasLLAMA: resident segmented prefill host: {n} segments, {total} rows, the driver's run {get_time_usec(ts_run)} us\n")   // nolint:PERF026,PERF028 — the profile flag's report leg
@@ -5642,6 +5771,10 @@ def private vulkan_resident_prefill_go(t : Model; var s : Session; npos, start_p
         rdec_peel_declined("a checkpoint stop inside the window (the token commands leave no state at an interior row)")
         peel = false
     }
+    if (peel && s.keep_hidden) {
+        rdec_peel_declined("the forward keeps every row's hidden state (the token commands land the last row alone)")
+        peel = false
+    }
     g_rdec_caps |> clear()
     if (c.recr_mask != 0ul) {
         rdec_dn_prefill_entry(s, c, start_pos, peel)
@@ -5668,6 +5801,7 @@ def private vulkan_resident_prefill_go(t : Model; var s : Session; npos, start_p
     var us_gather = 0
     let ts_run = ref_time_ticks()
     rdec_head_warm_ask(rdec_head_warm_want(t))
+    rdec_hidden_ask(s.keep_hidden)
     if (c.hyper_conn) {
         rdec_prefill_hc_run(t, s, cb, npos, start_pos)
     } else {
@@ -5684,6 +5818,10 @@ def private vulkan_resident_prefill_go(t : Model; var s : Session; npos, start_p
                 rdec_prefill(s.x_b, cb, s.ple_inp, false, npos, start_pos, s.logits, @@rdec_host_experts_rows)   //! forward_prefill ran the PLE pre-step into s.ple_inp (position-major) before the override; empty elsewhere
             }
         }
+    }
+    if (s.keep_hidden) {
+        rdec_hidden_ask(false)
+        rdec_hidden_rows(s.x_b, 0l, 0l, npos)
     }
     if (g_env_gpu.gpu_prof) {
         to_log(LOG_INFO, "dasLLAMA: resident prefill host: {npos} rows, rope rows {us_rope} us, ple gather {us_gather} us, the driver's run {get_time_usec(ts_run) - us_gather} us\n")   // nolint:PERF026,PERF028 — the profile flag's report leg
@@ -6089,10 +6227,10 @@ def private vulkan_resident_batch_decode_go(t : Model; ws : BatchWorkspace; var 
     return true
 }
 
-[hot_path, unused_argument(t), arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]   // per prefill quantum - reached only through the engine's registered probe
+[hot_path, arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]   // per prefill quantum - reached only through the engine's registered probe
 def private vulkan_embed_gpu_gate(t : Model; s : Session; npos, start_pos : int64) : bool {
     return (active_prefill_override() == "vulkan" && g_rdec_active && !mtp_verify_window_active(s) && (g_resident_prefill_allowed || s.device_kv) && g_rdec_emb_gpu
-        && start_pos + npos <= g_rdec_cap
+        && start_pos + npos <= g_rdec_cap && !rdec_hidden_passes(t, s)
         && s.kv_dtype_k == g_rdec_kvdt && s.kv_dtype_v == g_rdec_kvdt
         && s.attn_uniform_end == 0l && empty(s.mrope_pos) && !s.ds_active)
 }
@@ -6147,6 +6285,7 @@ struct GpuModelMarks {
     rdec_emb_gpu : bool
     rdec_head_armed : bool   //! the NextN head rides the driver (`gpu_resident_mtp_device_home`)
     rdec_ple_proj : bool   //! the E-series pre-step's projection sits on the device (`forward()` skips its CPU form)
+    rdec_model : uint64    //! the armed model's planes (`model_planes_key`), 0 = none
 }
 
 //! A fresh no-model GpuModelMarks — the facade's ctor-shaped re-export delegates here
@@ -6166,6 +6305,8 @@ def moe_gpu_model_marks_save_(var st : GpuModelMarks) {
     st.rdec_emb_gpu = g_rdec_emb_gpu
     st.rdec_head_armed = g_rdec_head_armed
     st.rdec_ple_proj = rdec_ple_proj_on()
+    st.rdec_model = g_rdec_model
+    g_rdec_model = 0ul
     rdec_set_active(false)
     g_rdec_cap = 0l
     g_rdec_emb_gpu = false
@@ -6186,11 +6327,68 @@ def moe_gpu_model_marks_restore_(var st : GpuModelMarks) {
     g_rdec_emb_gpu = st.rdec_emb_gpu
     g_rdec_head_armed = st.rdec_head_armed
     rdec_ple_proj_set(st.rdec_ple_proj)
+    g_rdec_model = st.rdec_model
+    st.rdec_model = 0ul
     st.rdec_active = false
     st.rdec_cap = 0l
     st.rdec_emb_gpu = false
     st.rdec_head_armed = false
     st.rdec_ple_proj = false
+}
+
+var private g_rdec_model = 0ul   //! the armed model's planes (`model_planes_key`), 0 = none: the overrides serve only that model's calls
+
+//! why the armed driver, serving `t`, cannot promise `t`'s embedding texts its scratch region before the call ("" where it can):
+//! the window's own admission (`rdec_segs_scratch_why`'s model half, `rdec_segs_model_fits`, the packed seat) and one region no
+//! live device-home session holds
+[arch(at="../ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-scratch")]
+def private rdec_scratch_serves_why(t : Model) : string {
+    return "the model keeps state past its rows" if (!session_keeps_rows_only(t.config))
+    return "the model's chain takes one session a window" if (!rdec_segs_model_fits(t))
+    return "the driver seats no segments back to back" if (!rdec_segs_packed())
+    return gpu_free_regions_() == 0l ? "every region holds a live stream" : ""
+}
+
+var private g_rdec_scratch_said : table<string>   //! the scratch window's decline reasons, said once per armed model
+
+//! a scratch window declined for `why`, said once per reason per armed model
+[cold_path]
+def private rdec_scratch_declined(why : string) {
+    return if (empty(why) || key_exists(g_rdec_scratch_said, why))
+    g_rdec_scratch_said |> insert(why)
+    to_log(LOG_INFO, "dasLLAMA: resident embedding texts take a region each, not one shared region: {why} (said once per armed model)\n")
+}
+
+//! Whether the armed driver seats `t`'s embedding texts back to back in its scratch region, on device-home sessions; where it
+//! serves `t` and does not, the reason is logged once and the texts take host-cached sessions
+[arch(at="../ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-scratch")]
+def moe_gpu_resident_scratch_serves(t : Model) : bool {
+    return false if (!moe_gpu_resident_serves(t))
+    let why = rdec_scratch_serves_why(t)
+    rdec_scratch_declined(why)
+    return empty(why)
+}
+
+//! the rows one embedding window takes on `t`: where the armed driver serves `t` its texts share a region, so at most the
+//! region's context; `EMBED_WINDOW_ROWS` elsewhere
+def embed_window_rows_(t : Model) : int64 => moe_gpu_resident_serves(t) ? min(EMBED_WINDOW_ROWS, gpu_device_session_ctx_()) : EMBED_WINDOW_ROWS
+
+//! the K/V codec of `t`'s embedding sessions: the armed driver's mirror codec where it serves `t` (it serves no other codec),
+//! `f32` elsewhere
+def embed_session_dtype_(t : Model) : KVDtype => moe_gpu_resident_serves(t) ? gpu_device_session_dtype_() : KVDtype.f32
+
+//! Whether the armed whole-model driver serves `t` - the model it armed, not another loaded beside it in this context
+[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#vk-shared-device")]
+def moe_gpu_resident_serves(t : Model) : bool => g_rdec_active && g_rdec_model != 0ul && g_rdec_model == model_planes_key(t)
+
+//! the armed driver's regions no live device-home session holds
+def gpu_free_regions_() : int64 {
+    return 0l if (!g_rdec_active)
+    var n = 0l
+    for (reg in g_rdec_regions) {
+        n += reg.pinned ? 0l : 1l
+    }
+    return n
 }
 
 //! How many device-home sessions the INSTALLED model serves at once: the armed driver's region count, 0 when the driver is not armed.
@@ -6576,7 +6774,7 @@ def moe_gpu_resident_active() : bool => g_rdec_active
 var private g_rdec_prefills = 0l
 
 //! How many prompts the resident window chain has prefilled in this process (a test's served witness)
-def moe_gpu_resident_prefills() : int64 => g_rdec_prefills
+def gpu_resident_prefills_() : int64 => g_rdec_prefills
 
 //! Capture the INSTALLED model's tier state into `st` (see ``moe_gpu_model_marks_save_``) and
 //! classify what it had: "gpu:resident" | "gpu:rails" | "cpu". The load-time half of a
@@ -6643,6 +6841,7 @@ def moe_gpu_drop_model_() {
     rdec_set_host_experts(false)
     moe_gpu_dn_invalidate()
     rdec_set_active(false)
+    g_rdec_model = 0ul
     reset_gpu_cpu_passes()
     g_rdec_draft_pick = -1l
     g_rdec_verify_picks |> clear()
@@ -6788,8 +6987,13 @@ def private dense_ffn_cpu_say(t : Model) {
 // Upload the offloaded layers' expert stacks to the GPU tier from the PREPARED planes. Called at
 // the end of every load rail so DASLLAMA_GPU_MOE_LAYERS behaves identically however the model
 // arrived. Layers go resident from the end while the tier's VRAM budget holds.
+def moe_gpu_upload_resident(t : Model) {
+    moe_gpu_upload_lane(t, "")
+}
+
+//! `moe_gpu_upload_resident` of a model mapped off the lane at path `lane`, the name a trimmed lane's refusal carries
 [arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#decode-attention-block"), arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#whole-token-decode-span"), arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#gpu-slot-marks")]
-def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven sequential rail walks over one gather scratch, each reading the marks the walks before it set
+def moe_gpu_upload_lane(t : Model; lane : string) {   // nolint:STYLE037,STYLE038 — seven sequential rail walks over one gather scratch, each reading the marks the walks before it set
     moe_gpu_stream_cache_layer(t.config.n_expert, 0l)   //! every streamed stack of this walk holds the model's experts whole; the driver's arm sets its own quotas
     moe_gpu_drop_installed_before_load(t.config.n_layers)
     reset_gpu_cpu_passes()
@@ -6807,6 +7011,9 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
     if (!moe_gpu_tier_installed()
             || (moe_gpu_layer_count() == 0l && nstream <= 0l && !dn_want && !at_want
                 && !gpu_want_shexp() && !gpu_want_qkv() && !gpu_want_cls())) {
+        if (t.planes_trimmed && t.image_map != null) {
+            trimmed_lane_unarmed_panic(lane, "the tier is absent or nothing asked for it")
+        }
         return   // tier absent or nothing requested
     }
     // models that fully fit, MoE included: the whole-stack resident driver is tried FIRST - it
@@ -6848,6 +7055,7 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
     if (resident_try) {
         if (plan.fits) {
             if (resident_upload(t, seq_cap, rkdt, plan)) {
+                g_rdec_model = model_planes_key(t)
                 return
             }
             set_moe_gpu_stream_ring(false)   //! the per-op rails stream whole layers
@@ -6866,6 +7074,9 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
     } elif (moe_gpu_resident_installed() && t.config.n_expert == 0l) {
         g_rdec_decline_reason = "not attempted: nothing asked for the whole-model driver"
         to_log(LOG_INFO, "dasLLAMA: resident driver not attempted - nothing asked for it: DASLLAMA_GPU is not set and the want carries neither auto_tier nor resident (the individual DASLLAMA_GPU_* rails alone are armed)\n")
+    }
+    if (t.planes_trimmed && t.image_map != null) {
+        trimmed_lane_unarmed_panic(lane, g_rdec_decline_reason)
     }
     // capability guard: the tier needs q8 serving mode — record WHY for the status surface when it
     // is armed but this model cannot ride it. Dense archs pass: every non-expert rail (cls, dense

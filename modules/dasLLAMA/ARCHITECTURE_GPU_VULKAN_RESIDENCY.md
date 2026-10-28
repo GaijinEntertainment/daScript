@@ -2,7 +2,8 @@
 
 Companion to `ARCHITECTURE_GPU_VULKAN.md`; a section is cited by its anchor. This document carries the residency plan
 that sizes a whole model before a byte uploads, the checkpoints a device-home recurrent stream keeps on the device, the
-token rows' gather off the table's own plane, the marks swap that lets one GPU slot serve many models, and the hydrate a
+token rows' gather off the table's own plane, the marks swap that lets one GPU slot serve many models, the one device every
+thread's context shares, and the hydrate a
 call passing to the CPU rails takes first. The room the plan may fill on a shared card - the OS's answer, the
 headroom, the guards, the pageable allocation shapes - is `ARCHITECTURE_GPU_VULKAN_ROOM.md`. The driver's other parts are its siblings': the logits landing in
 `ARCHITECTURE_GPU_VULKAN_LANDING.md`, the NextN draft head in `ARCHITECTURE_GPU_VULKAN_MTP.md`, the N-row token command
@@ -212,7 +213,7 @@ A multi-model host runs one device tier under several loaded models, and the tie
 state is offset-keyed - two models' marks installed together route one model's dispatches at
 the other's planes. `GpuModelMarks` is that state WHOLE: the loader-contract marks plus every
 resident-driver per-model global (the activation, the mirror count, the mirror cap, the mirror
-codec, the device-embed arm, the NextN head's arm, and the per-layer-embedding projection arm). The save moves the installed state out and leaves the globals
+codec, the device-embed arm, the NextN head's arm, the per-layer-embedding projection arm, and the armed model's planes key). The save moves the installed state out and leaves the globals
 reading as no-model; the restore is its exact inverse. The whole-model drop clears the same set
 and deselects the `"vulkan"` overrides, so a dropped model's prefill and decode take the plain
 CPU path and a later re-arm passes `resident_upload`'s no-active-override gate. The three carry
@@ -225,6 +226,40 @@ Without that drop the second model's stacks
 land beside the first's, and the offset-keyed stack lookup serves whichever model's plane
 registered that offset first: the decode attention block asserts on the geometry change, and a
 model whose geometry matches decodes the earlier model's weights.
+
+### One device a process, shared by every context {#vk-shared-device}
+
+The tier's per-context state - the command pools, the buffers and their memory, the descriptor pools, the class pipelines,
+the fence and the timeline semaphores, the resident driver and its K/V - is daslang module globals, so every context keeps
+its own, a worker thread's included. The device is not: the first context to arm the tier makes the instance and the
+`VkDevice` under the dasVulkan holder's lock (`vk_shared_device_acquire`, `vk_shared_device_publish` - dasVulkan's
+shared-device document carries the holder) and every later one borrows it (`vk_device_borrow`), the
+handles never deleted by a context. The loader's device table is loaded once, by the context that made the device, so the
+process-wide function table is that device's by construction. The device asks `VK_DEVICE_QUEUES` queues of each family it
+uses; a context takes the next one round robin (`vk_shared_queue_take`), contexts past the count share a queue, and every
+submit and queue wait goes through the holder's per-queue lock (`vk_queue_submit_locked`, `vk_queue_wait_idle_locked`),
+uncontended where the queue is a context's own; `REVIEW.das`'s `check_locked_queue_calls` holds every engine, harness and
+test source to it, banning `run_cmd_sync`, `vkQueueSubmit`, `vkQueueWaitIdle` and `vkDeviceWaitIdle`, the calls that skip the
+lock. A context's shutdown (`vk_context_release`, a `[finalize]` that runs in the
+context that made the state alone) drains its queues, destroys everything it made, takes its bytes off the process count and
+releases its reference; the last context out destroys the device and the instance (`vk_shared_device_release`). The
+availability and caps probes read the shared physical device where one exists, so a worker makes no probe instance.
+
+The card's room is one budget: every device-local buffer is counted against its context and the process
+(`vk_shared_device_bytes`), and the resident plan's cap gives up what every other context holds (`vk_others_dev_bytes` in
+`carved_budget`), so a model loaded after another plans against what the first left. The server's embedding worker is such a
+context beside the chat slot's: it arms under the slot's want (`add_embedding_model`'s `gpu_want`; zero lets the env decide),
+asks one K/V region of `emb_scratch_tokens` - the scratch region every request's texts share
+(`ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-scratch`) - and clamps its context to it; the engine context's one-owner
+bookkeeping (`g_gpu_owner`, the marks swap above) is its own slots' alone.
+
+Within a context the overrides are global too, so they serve only the model they armed: the upload records the model's
+planes (`model_planes_key` - the mapped image's base, else the first plane array's), and `moe_gpu_resident_serves` tells the
+armed model from another loaded beside it; `embed` makes its sessions in the mirror codec only for the model the driver
+serves (`embed_session_dtype`), f32 - the CPU rails - for any other. A mapped planes-trimmed lane the driver did not arm for
+is refused at its load by name (`trimmed_lane_unarmed_panic`, from `moe_gpu_upload_lane`), never at its first CPU forward;
+the server refuses at its start a slot whose trimmed lane cannot give every stream a region (`trimmed_slot_refusal`), since
+the scheduler keeps host-cached streams' prompts off the driver.
 
 ### A call that passes to the CPU rails hydrates first {#resident-pass-hydrate}
 

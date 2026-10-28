@@ -53,6 +53,6 @@ is what keeps BPE merges from crossing the media.
 request carries in `media_embd` - also updates, in the same change, every file that fills or
 reads a `media_embd`.**
 
-**A vision or ASR family file's new arm for a media kind that reaches the layer stack by any path
+**A vision family file's new arm for a media kind that reaches the layer stack by any path
 but `forward_prefill_embd` is a defect, a second prefill body for it included** - write a sibling
 `eval_embd_span*` entry that feeds the same body instead.

@@ -239,8 +239,8 @@ arm's gates and the served arms' GPU home: the file's entry below), its arms:
 - `mtp-gdraft-cpu` - the CPU oracle's one step over a live gemma-4-26B-A4B session: finiteness and range only, no numeric
   oracle;
 - `mtp-gdraft-gpu` (served) - attach, then one device draft step against the CPU oracle at a short anchor and at one position
-  past the sliding window: the same token, logits within 0.25 and h_next within 0.05 on Metal, both within 0.5 on Vulkan's
-  Q8_0-fed rows, both argmax pieces logged; the control is the oracle drafted off another seed token, outside both bars. Past
+  past the sliding window: the same token, logits within 0.25 and h_next within 0.05 on Metal, both within 1.0 on Vulkan's
+  Q8_0-fed rows (the oracle's own flip envelope reads 0.38-0.62), both argmax pieces logged; the control is the oracle drafted off another seed token, outside both bars. Past
   the window, Metal holds the oracle run with a window one key wider eight times further off; Vulkan holds the host rows read
   back equal to the device's bit for bit, a poisoned key past the window moving nothing, a poisoned first window key moving
   the draft, and a prompt read on the CPU rails under the prefill pin counting no device prefill - the re-upload counter's
@@ -277,7 +277,7 @@ sandwich, each branch under its post norm, the E-series' per-layer embedding bra
 control), the same argmax, both picks decoded, the narrowed
 residual's row 0 off the full one's and `keep_hidden` restoring the full plane bit for bit - `lastrow_ab`, the mm-tail arm's
 SmolLM2 legs' form), `base mm-tail s16
-kq cont attn-dev mirror mirror-codec mirror-cap segs span span-fused span-mrope span-ds dim qkv moe-gemv moe-base kq-tail kq-scratch` (moe-base = the routed
+kq cont attn-dev mirror mirror-codec mirror-cap segs span span-fused span-mrope span-ds dim qkv moe-gemv moe-base kq-tail kq-scratch bf16-split` (moe-base = the routed
 block's two GEMM forms on split-format expert carriers (`test_metal_prefill_moe_base_form`, family `qwen3moe`, large
 tier: Qwen3-30B-A3B UD-Q3_K_XL and UD-IQ2_XXS, loaded under the Metal mode so IQ3_S planes read their grid form): a 280-row
 then a 20-row window on the tensor twins over the gather panel, then with the panel off - the gate and up sites on the
@@ -293,14 +293,23 @@ prefill by `metal_prefill_stats().prefills` (`segments_window` in `_metal_blob_t
 `test_metal_batched_row.das`, two Qwen3.5-0.8B sessions' tails as one window and 24 greedy steps each token for
 token their single windows' on the same witnesses; kq-tail = the dense
 K-quant and per-32 sites' row-batched GEMV peel on a window of eight rows or fewer (`test_metal_prefill_kq_tail`, Llama-3.2-1B
-Q4_K_M, IQ4_XS and the Q5_1 mint, Qwen3-4B Q4_K_M, Qwen2.5-0.5B's IQ4_NL mint, the same two-window shape as moe-gemv at 2, 5 and 8 rows, the peel's site
+Q4_K_M, IQ4_XS and the Q5_1 mint, Qwen3-4B Q4_K_M, Qwen2.5-0.5B's IQ4_NL mint, the same two-window shape as moe-gemv at 2, 4, 5 and 8 rows - past four rows the split-K tile takes the sites under its knee, its site counter the witness, and at 5 and 8 rows the 16-row
+split stamps (`THSk16` / `TSk16`, their census count) take them, the same windows with those stamps held
+(`set_metal_prefill_held("split_k16", true)`) dispatching none and the 32-row split stamps serving - and at 34 rows with split-K pinned off, the two-row remainder on the row forms at its x offset; the peel's site
 counter the engage witness and `set_metal_prefill_mm_tail(false)` the off-lever); kq-scratch = the dense sites' per-window
 scratch panels (`test_metal_prefill_kq_scratch`, Llama-3.2-1B IQ4_XS, Q4_K_M and Q8_0 on a blob twin that carries no stored
 panel): a 200-row and a 400-row window with the crowns pinned empty, then pinned to the format's twin crown - the short window
 on the twin, the long one on panels past a K-quant twin's floor and on the twin under a Q8_0 one's - each window's last-row
 logits within 0.08 of the CPU chain's largest, `metal_prefill_devw_scratch_stats` the engage witness, the same window with
 `set_metal_prefill_dev_w(false)` inside the bar with no panel counted, the control a window whose last token differs
-landing outside the bar; moe-gemv = the short
+landing outside the bar; on the base forms the 200-row window also runs under the dev-W knees (`scratch_knee_cells`): a grid
+floor no tile reaches (`set_metal_devw_min_tgs`) leaving every site on its quantized tiles, no panel counted, then the half
+tile's knee at 4096 (`set_metal_split_k_tgs_hmm`) - the same window's checks, the half GEMM's split stamp
+(`MetalHalfMulMmTHSk`) counted by the census, and split-K pinned off the control: panels taken, no split stamp; bf16-split =
+the per-layer embedding's bf16 projection on a short window (`test_metal_prefill_bf16_split`, family `gemma4e`, gemma-4-E2B
+Q8_0's blob twin, skipping where the box's profile crowns no bf16 tensor tile): a 24-row window under the q8 / bf16 knee at
+1024 rides the bf16 split stamps (`MetalBf16MulMmTHSk` / `TSk`, their census count), split-K pinned off the control
+dispatching none; moe-gemv = the short
 window's gathered expert route (`test_metal_prefill_moe_gemv_route`, families `qwen2moe` / `qwen3moe` /
 `gptoss` - the q8, K-quant and mx4 expert planes, every carrier large-tier; the hybrid holds its parity through
 the MTP parity file's served twin and `test_metal_format_census.das`'s blob twin of the pure IQ4_XS file): a 300-row window on the tiles then a 2-, 7-, 16- and 24-row window the
@@ -331,12 +340,13 @@ against the staged trio on one blob twin under the pair's pinned crown - a 300-r
 token on both forms, the census counting each stamp once a layer and the softmax pass twice a
 layer; mm-tail = the GEMV-tail residue peel -
 four fixtures, npos % 32 == 1 (the lone row rides the reduction-split GEMV), == 2 (the b4
-form at 2 rows), == 5 (two b4 dispatches, 4 rows + 1) and npos == 5 (the pure-tail leg,
-no mul_mm at all) - token parity vs the all-CPU control, the tail-off A/B twin, and the
-peeled sites/rows counters as the anti-vacuous witness; plus the SmolLM2 alignment-guard
-leg - the guard is per mul_mm site on that site's K width (b4 needs % 128, the gemv % 32),
-so at npos % 32 == 2 the 576-wide sites must refuse while exactly the hidden-kdim w2 site
-(1536) peels per layer, and == 1 rides the gemv everywhere; counters only (greedy token
+form at 2 rows), == 5 (two b4 dispatches, 4 rows + 1) and npos == 4 (the pure-tail leg,
+no mul_mm at all - the split-K tile takes a window of 5 to 8) - token parity vs the all-CPU control, the tail-off A/B
+twin, and the peeled sites/rows counters as the anti-vacuous witness; plus the SmolLM2 alignment-guard
+leg on the whole-K tile (split-K pinned off) - the guard is per mul_mm site on that site's K width (b4 needs % 128,
+the gemv % 32), so at npos % 32 == 2 the 576-wide sites must refuse while exactly the hidden-kdim w2 site
+(1536) peels per layer, and == 1 rides the gemv everywhere - then the same pair under the split-K knee, where the
+one-row remainder peels at every site and the two-row one at none; counters only (greedy token
 equality is not a valid instrument on a 135M); span = the non-causal media eval shape,
 head + embd span, per codec; span-fused = the image turn's ONE-eval shape - causal head + media rows + causal
 tail through the per-query mask, one GPU prefill, with a same-backend fused-vs-splice logits
@@ -568,7 +578,10 @@ before, the next load mints the trimmed lane over it and the driver serves it.
 `test_vulkan_mint_failed_write_leaves_nothing` fails the mint's write through the
 `set_image_write_fault` seam (the seam's hit count moves): no lane, no temp file of the mint's own,
 the load serves the streamed build from memory with neither lane's file on disk, and with the seam
-at 0 the next load mints the lane and the driver serves it.
+at 0 the next load mints the lane and the driver serves it. `test_vulkan_mint_trim_refused_unarmed` mints the trimmed
+lane, then loads it under the `set_resident_upload_fault` seam - the whole-model upload declining after the trim admitted
+the model: the load is refused, its text naming the lane, the seam's decline and the trim; the lane stays on disk at its
+minted size, and the same load with the seam off serves on the driver (the control).
 
 The `coverage` suite (test_kernel_coverage, arm `coverage`; arm `coverage-vk` = the vulkan
 SERVING census - needs a vulkan device + `DASLLAMA_GPU=1` + `DASLLAMA_MODELS_DIR`, MoE rows
@@ -820,6 +833,25 @@ engages the prefill batch tier and after a whole-model drop; then the per-op tie
 chains against CPU references; among them `test_vulkan_deltanet_two_forms` - a q8 qkv plane fed Q8_0 beside a k4 z plane fed
 Q8_K off the call's second image, on the window chain (70 rows) and the decode step (one row), against the CPU chain over each
 plane's own image, the z plane fed the qkv's Q8_0 image missing the rows as the control.
+`test_vulkan_shared_device.das` - model-free (a Vulkan device, else skips): one device a process
+(`../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#vk-shared-device`) - a worker thread's context arms the tier on the device this
+context made, holds a reference while it lives (the holder's count one up) and gives it back at its shutdown, sees the
+32 MB buffer this context holds among every other context's bytes (`vk_others_dev_bytes`) and its resident cap
+(`carved_budget`) give them up, and lands its upload and read-back round trips; the buffer destroyed, a second worker sees
+exactly its bytes gone from the others' count and back in its cap (`destroy_device_buf`'s take-back); then one worker more
+than the device's compute queues, so two contexts share a queue, the device's queue counts the family's at most
+`VK_DEVICE_QUEUES`, the workers' consecutive takes covering every compute (and transfer) queue - round robin, not one
+queue for all - every context's round trips landing and every reference given back; `test_vk_device_queue_ask` holds
+`set_device_queue_ask`'s clamp to one and `device_queue_count`'s min of the ask and the family's count;
+`test_vk_last_context_out` (in a child where another cell holds the device) holds the last-out release - a worker that
+made the device leaves the holder empty and its bytes at zero, and the next worker makes a fresh device and serves on it, and again after a `volkFinalize` (the next context's
+`volkInitialize` loads the loader anew);
+then the shared-queue cell and the lifecycle cell rerun in a child under the Khronos validation layer
+(`VK_INSTANCE_LAYERS`, the loader's layer line its witness; skips where the layer is not installed) - an unlocked
+submit or wait on a shared queue (`UNASSIGNED-Threading`) or an object left alive past its parent - a device past its instance
+(`VUID-vkDestroy*`) - or, in the lifecycle child, an instance never destroyed (the loader's layer log unloads the layer
+fewer times than it inserted it) turns them red; the layer's other errors (a packaged layer older than the driver's pNext structs)
+are not the lifecycle's and are not counted.
 `test_vulkan_kv_codec_kernels.das` - model-free (a Vulkan device, else skips): the K/V mirror's
 block-codec kernels against the CPU cache's own codec (`dasllama_kv_codec.das`).
 `test_vkc_q8_store` holds the q8_0 store's bytes to `quantize_q8kv_row` at token rows (two regions,
@@ -1385,7 +1417,9 @@ ledger-row hold the control.
 `test_fat_start.das` - model-free: the runtime section's writer and a fat exe's first-start race
 (`dasllama_fat_start`) - the snapshot's crowns and knobs, the race writing the redirected sidecar's
 runtime section and the checked apply reading it back (the Metal twins race on a Metal box, ~15 s),
-the box-profile apply firing an installed race hook exactly once for a missing section, and the
+the Vulkan short window's knee race (`test_the_vulkan_knee_race_sets_the_knee`: under an asked GPU tier on a cm2 device the
+knob, set to a value no rung offers first, lands on a rung of the race or 0 and the snapshot records it; elsewhere it
+stands - a correctness cell, not a verdict on which rung wins), the box-profile apply firing an installed race hook exactly once for a missing section, and the
 fat hook declining outside a fat exe; and the per-user sidecar placement - the `~/.dasllama/tune`
 path, the one-time adoption of a sidecar beside the exe, the placement hook's wiring (registered
 by the engine, run before the apply reads the path, absent without harm), and when a sidecar
@@ -2069,7 +2103,7 @@ control, a 48-token prompt and six fed steps, the CPU arm routing as the device 
 tape (`ARCHITECTURE_ENGINE_MECHANISMS.md#moe-pick-tape`: a near-tie of 512 experts flips on kernel-order noise and one
 flipped expert of ten moves the row past any bar; the cell asserts the tape aligned select for select, the
 prompt's rows first, and logs the CPU's own decode picks off it); the cell asserts the window chain served the
-prompt (`moe_gpu_resident_prefills` up by one) and the driver stayed armed; where the plan armed the hot
+prompt (`gpu_resident_prefills_` up by one) and the driver stayed armed; where the plan armed the hot
 expert pool (`gpu_resident_hot_slots`) it asserts every decode pick of every routed layer went through the
 pool, experts were uploaded, and the device served some of the picks and the host the rest, so the bar holds
 the sum of both shares, and - the prompt past the pool's 32-row window floor - that the tier's expert chain took
@@ -2410,7 +2444,7 @@ counter's control), every fed step runs each layer's FFN row on the device, and
 the steps hold the CPU chain at the llama file's bar (the qwen2 mint at 8%, its reading in the carrier list's `//!`). Arms `vk-per32-iq4nl32`,
 `vk-per32-q4032`, `vk-per32-q5032` (family `qwen2`) and `vk-per32-q51` (family `qwen35`): the per-32 `--pure` mints, every site native
 (the census), the table gathered by the window and every step off its `<fmt>_emb_cls_spv` leaf, the forced feed at the
-qwen2 file's bar, and on the Q5_1 hybrid the NextN head armed (`rdec_verify_rows`).
+qwen2 file's bar (the iq4nl32 mint at that file's iq4nl32 bar, 8%), and on the Q5_1 hybrid the NextN head armed (`rdec_verify_rows`).
 `test_metal_format_census.das` - stocked suite, `-jit` only: every site's tag against the file's own tensor type
 (`kq_ggml_type(tag)` against `gguf_tensor_type`; a tied classifier is the token table's plane), one soft check a site -
 attention q/k/v/o, routed experts, shared expert, deltanet qkv/gate/out, deltanet beta/alpha, token table, classifier,
@@ -2782,6 +2816,7 @@ rows off it against the CPU chain, the format's gather leaf counted (`<fmt>_emb_
 other format's leaf unmoved - on the Q8_0 file every one, the leaves' control.
 Arm `g4e-kq` (`test_gpu_resident_gemma4_e2b_ple_planes`): the E2B Q4_K_M (the per-layer gate and projection planes F32 on disk,
 read as the file's f32 rows; the feed held against the file's f32 chain with the same-or-better witness, `gemma_forced_feed`'s `exact` form,
+at 1.15 on the scalar f32 tile and 1.3 where the window's f32 GEMMs ride the staged KHR tile (its f16 weights and sums),
 since its CPU q8 chain reads one step's top logit under the f32 chain, the reference build and the device; the reference's
 recipe and the readings: `../ARCHITECTURE_MEASUREMENT_FORCED_FEED.md#reference-forced-feed`), Q4_0 (the
 planes Q4_0, arm `g4e-kq-q40`) and the ple-Q6_K / ple-Q5_0 mints (arms `g4e-kq-ple-q6k` / `g4e-kq-ple-q50`) in the forced feed, the
@@ -3014,7 +3049,9 @@ falling under the floor (the classifier reads the Q8_0 copy; the floor's control
 synthetic d 32 student declining `shape`, then on the two ru/en pairs the seat pinned off serving no sentence, then on, each pair
 in turn every line served with no decline at `DEVICE_LINES_FLOOR` lines of 30 the CPU q8 chain's, the second pair swapped in with no
 shutdown between (the weight-reuse key's model swap), both sides logged; the control each pair's device classifier zeroed, every
-line then differing; a source past `NMT_DEVICE_SRC_CAP` tokens declining `length`; the exact lane declining `quant_mode` and
+line then differing; on the Metal seat a scratch take past a 512-byte stand-in for the device's largest buffer
+(`set_metal_take_max_probe_`) declining `device` and translating on the CPU; a source past `NMT_DEVICE_SRC_CAP` tokens
+declining `length`; the exact lane declining `quant_mode` and
 translating on the CPU. The loader's refusals over synthetic files written to the test's temp directory
 (`test_nmt_loader_refusals`, `test_nmt_spm_file_refusals`): a Marian student of one encoder and one decoder layer at d 32, each
 fixture differing from a well-formed one (which stages - the control) in one fact - the version word, the blobs past the file's
@@ -3036,8 +3073,9 @@ and `nmt_device_shape_ok`. The step's kernel classes are the kernel files' cells
 `test_vkt_nmt_attn`). The tokenizer cell skips without the model or the dumps, the forward and LLM cells also when interpreted, the
 device cell without a seat; the `load_translator` loads bake a `.dlim` beside their model - ledgered at
 `../ARCHITECTURE_IMAGE_LEDGER.md#suite-image-mints`.
-`test_review_howto.das` - model-free (area infra): the HOW_TO check of `../REVIEW.das` run as a child over fixture documents
-written under the test's temp dir - one document a defect, each red on its own finding, and a clean one green.
+`test_review_howto.das` - model-free (area infra): the HOW_TO check and the unlocked-queue-call check of `../REVIEW.das`
+run as a child over fixture files written under the test's temp dir (its `--howto` and `--queue-calls` rails) - one file a
+defect, each red on its own finding, and a clean one green.
 `test_audio.das` - stocked suite; model-free cells: the audio front-end units (gelu-erf, hann
 window, mel filterbank, log-mel chunking, swapped swiglu); model-gated: the tower structure/oracle
 gates (ultravox/voxtral/omni shapes, the mtmd all-ones encode oracles - CPU-claim cells, tower
@@ -3076,7 +3114,7 @@ GEMM route under `set_metal_tower_f16`, the block seat behind the CPU front unde
 each within 1e-2 of the CPU rows' scale with the CPU's transcript, a x3 mel outside the bar as
 the control, and the q8 lane's one `quant_mode` decline with no encode and its mel seat's -1; on `ru_short` the seats' side
 arms - the mel seat declining on the knob, a clip under one window and a scratch past the device's largest buffer
-(`set_metal_tower_take_max_probe_`) with no mel counted, the encode off a CPU mel (`gigaam_encode`) on the device within
+(`set_metal_take_max_probe_`) with no mel counted, the encode off a CPU mel (`gigaam_encode`) on the device within
 the bar, the held encoder rows handing off under their host rows and refusing them rewritten in place, the scratch past
 the device's buffer declining the encode with one `memory` decline (the block seat's) and the CPU's transcript - then
 the asr_prof buckets: the CPU chain's stage and block buckets with the tower off, `ga.encode.gpu` / `.record` with it
@@ -3163,7 +3201,11 @@ parity-evidence shape - a `prefix_bar` carrier holds at least two ids, so its ha
 token or more), the fixture compare the gates read (`prefix_match_len` / `fixture_ok` on hand rows:
 the strict form reds a flipped last id where the half-span form holds it, a flip inside the first
 half reds both, the bar sits exactly at half the span), the derived provenance view's invariants (unique names, sha-or-recipe,
-https urls), the mmproj pairing lookup (`mmproj_companion` - the companion found by name, not
+https urls), the quantize-minted rows (`test_quantize_rows`: each names a fetched source row, carries the recipe
+`quantize_commands` spells, and reaches the provenance view with its `quantize`; `fetch_models --convert`'s route
+`convert_route` - a quantize row to the mint even under a canary name, a canary row to its conversion, any other to the
+no-recipe warning, Windows refused - and the mint's `mint_steps` - no source refused, an absent importance matrix built
+before the quantize, a present one skipped), the mmproj pairing lookup (`mmproj_companion` - the companion found by name, not
 by position; >= 2 official vision rows), the pinned image fixture's provenance
 (`bench_image_fixture` rides some spec's companion list), and the board fetch (`board_provenance`:
 every official row, the image fixture, every ASR carrier and mmproj and every TTS model, no
@@ -3285,15 +3327,39 @@ control id, the Llama-2 layout (byte pieces right after eos) reads the same piec
 vocabulary with no byte pieces panics on a byte it cannot spell; model-gated, Mistral-7B-Instruct-v0.3
 Q8_0 reads `<0x0A>` at 781 with 13 a control token, and the newline and tab samples encode to
 `llama-tokenize --no-bos`'s ids and decode back.
-`test_embeddings.das` - stocked suite, `-jit` only; the embeddings read per model: on
-Qwen3-Embedding-0.6B Q8_0 (small tier) the file's `pooling_type` reads last-token and its
-`add_eos_token` on, `encode` ends a text with the EOS, and the model card's own example - two
-instruction-prefixed queries against two passages - lands the card's published cosine matrix
-within 0.02 under the file's pooling (reads 0.005 at most on the M1 Max), while the mean read
-parts the relevant passage from the other by under 0.1 where the last-token read parts them by
-over 0.5 (the control); on tinyllama Q8 (a chat model, no key) the default read is the mean,
-float for float, no EOS is appended, and the last-token override differs; a text past the model's context
-embeds its leading seq_len tokens - a unit vector, the same floats the text cut at that token gives.
+`test_embeddings.das` - stocked suite, `-jit` only; every load in memory (no `.dlim`). The embeddings read per model
+(`test_embeddings_qwen3_embedding`, `_past_the_context`, `_chat_model_default_mean`): on Qwen3-Embedding-0.6B Q8_0 the
+file's `pooling_type` reads last-token and its `add_eos_token` on, `encode` ends a text with the EOS, and the model card's
+example lands the card's cosine matrix within 0.02 under the file's pooling while the mean read misses it (the control); on
+tinyllama Q8 (a chat model) the default read is the mean, float for float, no EOS appended; a text past the context embeds its
+leading seq_len tokens. `test_embeddings_batch_matches_single`: `embed_batch` gives each text the vector `embed` gives it
+alone, in input order, in one window, across windows of 40 rows and under the 256-wide cut. `test_embeddings_hidden_only_window`
+(a dasMetal build): an embedding's Metal window on the blob twin runs no classifier and feeds no decode mirror where a chat
+window does both, one window an embed, the card's matrix holding and the mean read missing it; the short window's q8 sites
+take the split-K form (`metal_prefill_split_k_sites` and the q8 split stamps' census count), `set_metal_prefill_split_k(false)`
+the control moving neither; the empty text - its EOS alone, one row - rides one Metal window and lands the planar f32 model's
+vector within `EMB_F32_BAR` (cosine 0.9999; the f32 "x" missing it; the reference is f32 because the CPU q8 chain's Q8_0 activations read a
+first row about a percent of cosine off it, logged beside), and a batch holding it reads the single's vector
+(the batch's other text missing it); with Metal off a planar model's embed rides no Metal window.
+`test_embeddings_lone_forwards` (0.6B Q8_0, then the same file loaded as q4_0): `embed_window` runs a one-row text and every
+q4_0 text through `embed_forward` alone (`embed_lone_forwards` up by one for the one-row text beside two others, by three
+for the q4_0 batch, unmoved for two several-row texts - the control), and each batch matches its singles (another text's
+single misses the bar). On an armed Vulkan tier (each device cell pins the whole-model route on and the region
+pin, and puts both back): `test_embeddings_on_the_resident_driver` - the sessions take the mirror codec, six texts are six
+device prefills, the card's matrix holds (the mean read misses it), the facade's batch is one scratch window of one
+device-home session a text matching its singles (another text's single misses the bar), a mean read past the last layer's
+32-row tail matches the planar CPU model's within `EMB_MEAN_BAR` (another text's CPU read misses it), no call passes to the
+CPU rails, and f32 host sessions move neither counter; `test_embeddings_window_rows_follow_the_region` - under a 256-row
+region `embed_window_rows` reads the region, a batch past it takes exactly the windows its rows cut into, matches its singles,
+and an unserved model reads `EMBED_WINDOW_ROWS`; `test_embeddings_every_region_held` - with every region held by a live
+device-home session the batch takes host-cached sessions and no scratch window and reads the free run's vectors;
+`test_embeddings_ple_model_takes_no_scratch` (gemma-4 E2B Q8_0) - a per-layer-embedding model with sliding layers is promised
+no scratch window, takes none, and its batch matches its singles. Model-free `test_embeddings_session_rules`: `session_keeps_rows_only` per
+config field, and two models of one geometry with no fblob read two embed pool keys. `test_embeddings_batch_fresh_sessions`:
+a recurrent model (Qwen3.5-0.8B) takes fresh sessions - its batch and singles leave `embed_pool_builds` where they found it
+- and matches its singles under the mean, and a pooled model of another
+geometry (tinyllama) between two reads rebuilds the pool and back (`embed_pool_builds`; the same model's next call keeps it),
+the second read unchanged.
 `test_exe_smoke.das` - stocked suite; model-gated (SmolLM2-135M, small tier): the
 standalone-exe context gate. Builds `_exe_smoke_root.das` with `-jit -exe` and runs the
 artifact - the rail where globals restore as DATA, so a function-typed global with no
@@ -3637,7 +3703,9 @@ q1/q2/q3 quarter-offset probe fields live here).
 `test_audio_embedder.das` - stocked suite; model-free cells: the `AudioEmbedder` carrier's own
 arms - the no-audio refusals and the probe's 0-not-panic contract; model-gated: the gemma4a arm on
 the E2B mmproj (and the E4B mmproj's probe reading the decoder's 2560 where the encoder's width differs), carrying the padding-contract cell (a 320-sample clip encodes to exactly 1 soft
-token) and the direct-image route on the lane-named `.dlim` of the lane the box serves; the
+token) and the direct-image route on the lane-named `.dlim` of the lane the box serves, mapped only where its verdict reads
+`CURRENT` (an image another box baked under the same name skips loudly), and the same route over an image the cell mints for
+this box into its scratch directory, `CURRENT` and mapped (the control); the
 whisper-class tower arm (`test_audio_embedder_tower_arm`: the ultravox v0_5 1b and the
 Qwen2.5-Omni-3B f16 mmprojs - the probed width, the projector kind, a 5 s clip one chunk of 187 and
 750 rows, finite and not all zero, a reused state reading the same rows bit for bit, another clip
