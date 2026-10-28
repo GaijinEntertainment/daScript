@@ -107,7 +107,10 @@ IF((NOT DAS_GLFW_INCLUDED) AND ((NOT ${DAS_GLFW_DISABLED}) OR (NOT DEFINED DAS_G
 
 	MACRO(BUILD_GLFW glfw_libraries glfw3_target build_shared_libs install_prefix prefix_dir)
 		LIST(APPEND CMAKE_MODULE_PATH ${DAS_GLFW_DIR})
-		SET(GLFW_PATCH_COMMAND ${CMAKE_COMMAND} -E env GIT_CEILING_DIRECTORIES=${prefix_dir}/src
+		# GIT_DIR names a path that does not exist, so git apply runs as a plain patch tool with no
+		# repository discovered: inside this checkout, msys2's git skips every file of the patch
+		# and exits 0 (a Windows-style GIT_CEILING_DIRECTORIES does not stop its discovery).
+		SET(GLFW_PATCH_COMMAND ${CMAKE_COMMAND} -E env GIT_DIR=${prefix_dir}/no-repository
 			${GIT_EXECUTABLE} apply --whitespace=nowarn ${GLFW_PATCH})
 		IF(APPLE)
 			# Forward the macOS SDK sysroot into the GLFW sub-build. Without it the
