@@ -631,19 +631,25 @@ jobs:
         # (re-imports are idempotent), a miss must not fail the site deploy. Store filter
         # mirrors the service's own official_dir import: records/<box>.json single-dot names
         # only - tune sidecars, annotations.json and _scratch are not stores.
+        # The answer is printed whole: a 400 (the deployed service's schema refusing a newer
+        # store) must read as what it is, not as an outage.
+        ladder_import() {
+            local route=$1 file=$2 name=$3 out
+            out=$($RSH deploy@89.167.63.131 \
+                "curl -s -S -m 60 -w ' HTTP %{http_code}' -X POST -H 'Content-Type: application/json' --data-binary @- http://127.0.0.1:8201/$route" \
+                < "$file" 2>&1 | tr -d '\n\t') || true   # set -eo pipefail: a refused connection must still reach the case
+            case "$out" in
+                *"HTTP 200") echo "imported $name: $out" ;;
+                *) echo "::warning::ladder import of $name FAILED: ${out:-no answer (service down?)}" ;;
+            esac
+        }
         for store in modules/dasLLAMA/performance/records/*.json; do
             name=$(basename "$store")
             case "$name" in
                 *.*.*|annotations.json|_*) continue ;;
             esac
-            $RSH deploy@89.167.63.131 \
-                "curl -sf -m 60 -X POST -H 'Content-Type: application/json' --data-binary @- http://127.0.0.1:8201/admin/import-official" \
-                < "$store" && echo "imported $name" \
-                || echo "ladder import of $name failed (service down?)"
+            ladder_import admin/import-official "$store" "$name"
         done
         # the holds ride annotations.json: a held model leaves the live board with the commit that holds it
-        $RSH deploy@89.167.63.131 \
-            "curl -sf -m 60 -X POST -H 'Content-Type: application/json' --data-binary @- http://127.0.0.1:8201/admin/import-annotations" \
-            < modules/dasLLAMA/performance/records/annotations.json && echo "imported annotations.json" \
-            || echo "ladder import of annotations.json failed (service down?)"
+        ladder_import admin/import-annotations modules/dasLLAMA/performance/records/annotations.json annotations.json
         echo "deployed $REL"
