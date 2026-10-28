@@ -60,6 +60,14 @@ Flags
   rules run (still subject to ``--disable``). Enabling explicitly
   bypasses repo-level defaults (see ``.lint_config`` below), so
   ``--enable STYLE005`` always fires STYLE005.
+- ``--fix`` --- apply the edits rules attach to their findings and
+  re-lint, pass after pass until a pass changes nothing; an edit that
+  breaks the compile is rolled back. The report lists each applied
+  edit as ``-`` / ``+`` lines. Without it, each fixable finding shows
+  its edit the same way.
+- ``--json`` --- print one JSON document and nothing else: each file's
+  findings with their positions and edits, the folder findings, and
+  the totals.
 - ``-?`` / ``--help`` --- show usage and exit.
 
 Repo-level defaults

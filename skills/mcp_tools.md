@@ -40,7 +40,7 @@ The daslang MCP server (`utils/mcp/main.das`) exposes compiler diagnostics, prog
 | `cpp_format_file` | Running clang-format manually (safe no-op unless a `.clang-format` is discoverable by walking up from the file) |
 | `cpp_status` | Hand-diagnosing why a cpp tool is missing/failing - reports which external deps (ast-grep, `compile_commands.json`, clang-format, MSVC vcvars `INCLUDE` env) are present |
 | `aot` | Manually running AOT generation and extracting function C++ |
-| `lint` | Running lint/perf_lint/style_lint manually |
+| `lint` | Running lint/perf_lint/style_lint manually; `fix: 'true'` applies the fixes rules attach (the runner's `--fix`), `json: 'true'` returns the runner's JSON report (`--json`) |
 | `export_corpus` | `detect-dupe --export-functions` from a shell |
 | `detect_duplicates` | `detect-dupe --against` to ask "did I just write this?" - wraps B2 mode end-to-end |
 | `judge_duplicates` | Manually invoking `find-dupe` over a `detect-dupe` JSON report. Returns Claude-judged verdicts (real / partial / false_positive). Requires daspkg-installed `anthropic/anthropic` and `ANTHROPIC_API_KEY` |

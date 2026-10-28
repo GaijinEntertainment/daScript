@@ -1880,6 +1880,85 @@ def test_perf_lint_warnings(t : T?) {
 }
 
 [test]
+def test_lint_fix(t : T?) {
+    t |> run("fix rewrites the file the way the runner's --fix does") <| @(t : T?) {
+        var terr : string
+        let dir = make_policy_dir("mcp_lint_fix", "", terr)
+        if (empty(dir)) {
+            t |> failure("temp dir: {terr}")
+            return
+        }
+        let dst = path_join(dir, "victim.das")
+        fwrite(dst, "options gen2\n\n[export]\ndef main() \{\n" +
+            "    var a <- [1, 2]\n    print(\"\{a\}\\n\")\n\}\n")
+        var text : string
+        var is_error = false
+        let fixed = do_lint(dst, "", "", array<string>(), true)
+        t |> success(parse_result(fixed, text, is_error), "parse result JSON")
+        t |> success(!is_error, "a fix run is not an error -- text={text}")
+        t |> success(find(fread(dst), "let a <- [1, 2]") >= 0, "the var became let")
+        var perr = false
+        let refused = do_lint(dst, "x.das_project", "", array<string>(), true)
+        parse_result(refused, text, perr)
+        t |> success(perr, "fix with a project is an error")
+    }
+}
+
+//! The fix ``replacement`` of the first ``code`` finding in the lint
+//! JSON document ``doc``; "" when there is none.
+def private json_fix_for(doc : JsonValue?; code : string) : string {
+    let results = doc?["results"]
+    if (results == null || !(results.value is _array)) return ""
+    for (r in results.value as _array) {
+        let issues = r?["issues"]
+        continue if (issues == null || !(issues.value is _array))
+        for (i in issues.value as _array) {
+            if ((i?["code"] ?? "") == code) return i?["fix"]?["replacement"] ?? ""
+        }
+    }
+    return ""
+}
+
+[test]
+def test_lint_json(t : T?) {
+    t |> run("json returns every finding with its fix and leaves the file alone") <| @(t : T?) {
+        var terr : string
+        let dir = make_policy_dir("mcp_lint_json", "", terr)
+        if (empty(dir)) {
+            t |> failure("temp dir: {terr}")
+            return
+        }
+        let dst = path_join(dir, "victim.das")
+        let src = ("options gen2\n\n[export]\ndef main() \{\n" +
+            "    var a <- [1, 2]\n    print(\"\{a\}\\n\")\n\}\n")
+        fwrite(dst, src)
+        var text : string
+        var is_error = false
+        let report = do_lint(dst, "", "", array<string>(), false, true)
+        t |> success(parse_result(report, text, is_error), "parse result JSON")
+        t |> success(!is_error, "a lint with findings is not an error -- text={text}")
+        var err : string
+        var doc = read_json(text, err)
+        t |> success(doc != null, "the report parses: {err}")
+        if (doc != null) {
+            t |> equal(json_fix_for(doc, "LINT003"), "let")
+            t |> equal(doc?["totals"]?["fixable"] ?? 0, 1)
+            unsafe { delete doc; }
+        }
+        t |> equal(fread(dst), src)
+        let fixed = do_lint(dst, "", "", array<string>(), true, true)
+        t |> success(parse_result(fixed, text, is_error), "parse fix result JSON")
+        var after = read_json(text, err)
+        t |> success(after != null, "the fix report parses: {err}")
+        if (after != null) {
+            t |> equal(after?["totals"]?["issues"] ?? -1, 0)
+            unsafe { delete after; }
+        }
+        t |> success(find(fread(dst), "let a <- [1, 2]") >= 0, "json with fix rewrote the file")
+    }
+}
+
+[test]
 def test_perf_lint_clean(t : T?) {
     t |> run("clean file has no warnings") <| @(t : T?) {
         var text : string

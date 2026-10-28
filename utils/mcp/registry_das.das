@@ -330,14 +330,23 @@ def build_das_tools(var reg : array<ToolDef>) { // nolint:STYLE038 — flat tool
             "Run lint and performance checks on daScript file(s). Combines paranoid lint (unused variables, const suggestions, unreachable code, naming, redundant reinterpret casts) with performance lint (PERF001-012: string concat in loops, character_at misuse, push without reserve, unnecessary string/get_ptr conversions, redundant move-return, string(das_string) in strings functions) and style lint (STYLE001-011: pipe/block syntax, rtti is, if true, decl-then-assign). Supports single file, comma-separated list, or glob pattern.",
             {
                 "file" => PropertySchema(_type = "string", description = "Path to .das file, comma-separated paths, or glob pattern"),
+                "fix" => PropertySchema(_type = "string",
+                    description = "If 'true', apply the edits rules attach to their findings " +
+                        "(the CLI runner's --fix) and report what is left"),
+                "json" => PropertySchema(_type = "string",
+                    description = "If 'true', return one JSON document: every finding with its " +
+                        "position and its fix (span and replacement), and the totals"),
                 "project" => PROJECT_PROP,
                 "project_root" => PROJECT_ROOT_PROP,
                 "load_modules" => LOAD_MODULES_PROP
             },
             ["file"]),
         required <- ["file"],
-        arg_names <- ["file"],
-        handler = @@(arg1, arg2, arg3, arg4, arg5, arg6, project, project_root : string; load_modules : array<string>) => do_lint(arg1, project, project_root, load_modules)))
+        arg_names <- ["file", "fix", "json"],
+        handler = @@(arg1, arg2, arg3, arg4, arg5, arg6, project, project_root : string;
+                     load_modules : array<string>) => do_lint(arg1, project, project_root,
+                                                              load_modules, arg2 == "true",
+                                                              arg3 == "true")))
     reg |> emplace(ToolDef(
         tool <- make_tool(
             "export_corpus",

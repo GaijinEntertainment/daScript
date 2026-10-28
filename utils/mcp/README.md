@@ -9,6 +9,7 @@ A [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) server that e
 | Tool | Description |
 |---|---|
 | `compile_check` | Compile a `.das` file and return errors/warnings plus a categorized function listing on success. Optional `json` for structured output |
+| `lint` | Lint `.das` file(s) - paranoid, performance and style passes. Optional `fix` applies the edits rules attach (the runner's `--fix`, repeated until nothing changes); optional `json` returns the runner's JSON report: each finding with its position and its edit, and the totals |
 | `list_functions` | Compile a `.das` file and list all user functions, class methods, and generic instances (after macro expansion) |
 | `list_types` | Compile a `.das` file and list all structs, classes (with fields), enums (with values), and type aliases |
 | `run_test` | Run dastest on a `.das` test file and return pass/fail results. Optional `json` for structured output |

@@ -37,6 +37,12 @@ struct LintResult {
     promoted_modules : int   // counted under --shared-modules alone
 }
 
+struct LintJson {
+    results : array<LintResult>
+    folder_issues : array<LintIssue>
+    totals : LintTotals
+}
+
 struct LintTotals {
     issues : int
     errors : int
@@ -74,6 +80,8 @@ struct Config {
 
     @clarg_doc = "Apply the fixes rules attach to their findings, then re-lint each changed file; a fix that breaks the compile is rolled back"
     fix : bool
+    @clarg_doc = "Print only one JSON document: every finding with its fix, and the totals"
+    json : bool
     @clarg_doc = "Skip the result cache: compile and lint every file, record nothing"
     no_cache : bool
     @clarg_doc = "Compile each file's modules in its own group; the default shares them"
@@ -326,21 +334,27 @@ def collect_folder_mds(folder : string; rule_docs : bool; var out : array<string
     }
 }
 
+//! A folder pass's finding: ``message`` starts with its code;
+//! ``line`` 0 when it is about the whole file.
+def folder_issue(file : string; line : int; message : string) : LintIssue =>
+    LintIssue(code = extract_lint_code(message), message = message, file = file, line = line,
+              last_line = line)
+
 // Folder-docs pass: one sweep per invocation over the folders the walk found armed.
 // A ledger or plan parked beside shipped code is read by nobody and goes stale unnoticed,
-// so a tagged folder admits rule documents only. Returns the finding count.
-def run_rule_docs_pass(folders : array<string>) : int {
-    var found = 0
+// so a tagged folder admits rule documents only.
+def run_rule_docs_pass(folders : array<string>) : array<LintIssue> {
+    var found : array<LintIssue>
     for (folder in folders) {
         var inscope strays : array<string>
         collect_folder_mds(folder, false, strays)
         strays |> sort
-        for (md in strays) {
-            print("{md}: LINT025: stray .md beside shipped code - rule documents only (REVIEW*.md, ARCHITECTURE*.md); ledgers and notes live at the module root, plan documents stay out of the tree\n")
-            found ++
-        }
+        found |> push_from([for (md in strays); folder_issue(md, 0,
+            "LINT025: stray .md beside shipped code - rule documents only (REVIEW*.md, " +
+            "ARCHITECTURE*.md); ledgers and notes live at the module root, plan " +
+            "documents stay out of the tree")])
     }
-    return found
+    return <- found
 }
 
 // The file extensions a backticked token in a rule document is read as a path by.
@@ -507,9 +521,9 @@ def backticked_tokens(line : string; var out : array<string>) {
 // Rule-document text passes: a checklist cites its neighbours by name, and a cite that stops
 // resolving turns the rule into noise nobody can apply. LINT032 reports a checklist citing a
 // rule by position; LINT033 a rule document naming a path or a test cell the tree no longer has.
-// Returns the finding count.
-def run_rule_doc_text_pass(folders : array<string>; roots : array<string>; want_pos, want_names : bool) : int {
-    var found = 0
+def run_rule_doc_text_pass(folders : array<string>; roots : array<string>;
+                           want_pos, want_names : bool) : array<LintIssue> {
+    var found : array<LintIssue>
     var names : table<string; void?>
     var names_indexed = false
     for (folder in folders) {
@@ -525,8 +539,9 @@ def run_rule_doc_text_pass(folders : array<string>; roots : array<string>; want_
             var inscope lines <- fread(md) |> split("\n")
             for (line, i in lines, count()) {
                 if (want_pos && line_cites_by_position(line)) {
-                    print("{md}:{i + 1}: LINT032: a checklist cites a rule by position (\"above\" / \"below\") - name what the rule binds instead; rules are order-independent\n")
-                    found ++
+                    found |> push(folder_issue(md, i + 1,
+                        "LINT032: a checklist cites a rule by position (\"above\" / \"below\") - " +
+                        "name what the rule binds instead; rules are order-independent"))
                 }
                 continue if (!want_names)
                 var inscope toks : array<string>
@@ -546,23 +561,27 @@ def run_rule_doc_text_pass(folders : array<string>; roots : array<string>; want_
                             }
                             continue if (names |> key_exists(tok))
                         }
-                        print("{md}:{i + 1}: LINT033: cited path `{tok}` does not resolve from {folder}, its tree, its ancestors or the working directory - the file moved or was renamed; fix the cite or drop it\n")
-                        found ++
+                        found |> push(folder_issue(md, i + 1,
+                            "LINT033: cited path `{tok}` does not resolve from {folder}, its " +
+                            "tree, its ancestors or the working directory - the file moved " +
+                            "or was renamed; fix the cite or drop it"))
                     } elif (token_is_test_cell(tok)) {
                         if (!cells_indexed) {
                             collect_test_cells(folder, cells)
                             cells_indexed = true
                         }
                         if (!(cells |> key_exists(tok))) {
-                            print("{md}:{i + 1}: LINT033: cited test cell `{tok}` is defined by no .das under {folder} - the cell was renamed or removed; fix the cite or drop it\n")
-                            found ++
+                            found |> push(folder_issue(md, i + 1,
+                                "LINT033: cited test cell `{tok}` is defined by no .das under " +
+                                "{folder} - the cell was renamed or removed; fix the cite or " +
+                                "drop it"))
                         }
                     }
                 }
             }
         }
     }
-    return found
+    return <- found
 }
 
 // Newline count, plus the last line when the file does not end in one.
@@ -581,9 +600,9 @@ def count_text_lines(text : string) : int {
 
 // Folder-docs pass: a rule document nobody reads end to end has stopped being a contract, so a
 // tagged folder's checklists and architecture docs are capped. The fix is always a companion
-// split, never a trim - every criterion survives. Returns the finding count.
-def run_doc_lines_pass(folders : array<string>) : int {
-    var found = 0
+// split, never a trim - every criterion survives.
+def run_doc_lines_pass(folders : array<string>) : array<LintIssue> {
+    var found : array<LintIssue>
     for (folder in folders) {
         var inscope docs : array<string>
         collect_folder_mds(folder, true, docs)
@@ -591,20 +610,21 @@ def run_doc_lines_pass(folders : array<string>) : int {
         for (md in docs) {
             let lines = count_text_lines(fread(md))
             continue if (lines <= RULE_DOC_MAX_LINES)
-            print("{md}: LINT027: rule document exceeds {RULE_DOC_MAX_LINES} lines ({lines}) - split it: ARCHITECTURE_<CONCERN>.md companions for architecture docs, routed REVIEW_<KIND>.md companions for checklists\n")
-            found ++
+            found |> push(folder_issue(md, 0,
+                "LINT027: rule document exceeds {RULE_DOC_MAX_LINES} lines ({lines}) - split " +
+                "it: ARCHITECTURE_<CONCERN>.md companions for architecture docs, routed " +
+                "REVIEW_<KIND>.md companions for checklists"))
         }
     }
-    return found
+    return <- found
 }
 
 // Forward direction: one finding per citation the shared scanner
-// (`utils/common/arch_citations.das`) cannot resolve, in that scanner's words.
-def private report_arch_citation(file : string; c : ArchCitation; var docs : ArchDocs) : int {
+// (`utils/common/arch_citations.das`) cannot resolve, in that
+// scanner's words; "" when it does.
+def private arch_citation_failure(file : string; c : ArchCitation; var docs : ArchDocs) : string {
     let reason = citation_failure_reason(docs, file, c)
-    return 0 if (empty(reason))
-    print("{file}:{c.line}: LINT026: [arch] citation does not resolve - {reason} (\"{c.raw}\")\n")
-    return 1
+    return empty(reason) ? "" : "LINT026: [arch] citation does not resolve - {reason} (\"{c.raw}\")"
 }
 
 // Both halves of the citation check in one walk: the .md files that declare anchors and the
@@ -658,7 +678,7 @@ def private ancestor_docs(roots : array<string>; seen : table<string; void?>) : 
 // to say so or a section that was never anyone's contract. The roots are read as ONE set (a
 // daslib citer satisfies a module's anchor), each .md parsed once through the shared index.
 // A folder pass like LINT025 - once per invocation, not once per file.
-def run_arch_pass(roots : array<string>) : int {
+def run_arch_pass(roots : array<string>) : array<LintIssue> {
     var mds, dases : array<string>
     var seen : table<string; void?>
     for (root in roots) {
@@ -666,22 +686,27 @@ def run_arch_pass(roots : array<string>) : int {
     }
     mds |> sort
     dases |> sort
-    var found = 0
+    var found : array<LintIssue>
     var docs : ArchDocs
     var cited : table<string>
     for (f in dases) {
         let text = fread(f)
         continue if (empty(text) || (find(text, "arch") < 0 && find(text, ".md#") < 0))
         for (c in collect_arch_citations(f, text)) {
-            found += report_arch_citation(f, c, docs)
+            let failure = arch_citation_failure(f, c, docs)
+            if (!empty(failure)) {
+                found |> push(folder_issue(f, c.line, failure))
+            }
             continue if (empty(c.anchor))
             cited |> insert("{c.doc}#{c.anchor}")
         }
         continue if (!(f |> ends_with(".das")))
         for (c in collect_commented_arch_citations(f, text)) {
             continue if (!empty(citation_failure_reason(docs, f, c)))
-            print("{f}:{c.line}: LINT026: [arch] citation sits inside a comment, where it annotates nothing - move it into the declaration's annotation list, or name the section as plain `<doc>.md#<anchor>` (\"{c.raw}\")\n")
-            found ++
+            found |> push(folder_issue(f, c.line,
+                "LINT026: [arch] citation sits inside a comment, where it annotates nothing " +
+                "- move it into the declaration's annotation list, or name the section as " +
+                "plain `<doc>.md#<anchor>` (\"{c.raw}\")"))
         }
     }
     for (md in mds) {
@@ -690,8 +715,8 @@ def run_arch_pass(roots : array<string>) : int {
         for (c in collect_md_citations(md, text)) {
             let reason = citation_failure_reason(docs, c)
             if (!empty(reason)) {
-                print("{md}:{c.line}: LINT026: citation does not resolve - {reason} (\"{c.raw}\")\n")
-                found ++
+                found |> push(folder_issue(md, c.line,
+                    "LINT026: citation does not resolve - {reason} (\"{c.raw}\")"))
                 continue
             }
             cited |> insert("{c.doc}#{c.anchor}")
@@ -710,11 +735,13 @@ def run_arch_pass(roots : array<string>) : int {
         let doc = arch_path(md)
         each_arch_anchor(docs, doc) $(a) {
             return if (cited |> key_exists("{doc}#{a.name}"))
-            print("{md}:{a.line}: LINT026: anchor \{#{a.name}\} has no citation - cite it from the owning code or from the rule document that leans on it, or strip the anchor to demote the section to narrative\n")
-            found ++
+            found |> push(folder_issue(md, a.line,
+                "LINT026: anchor \{#{a.name}\} has no citation - cite it from the owning " +
+                "code or from the rule document that leans on it, or strip the anchor to " +
+                "demote the section to narrative"))
         }
     }
-    return found
+    return <- found
 }
 
 // Validates a rule code: ^(LINT|PERF|STYLE)\d{3}$. Returns true if shape matches.
@@ -1253,7 +1280,7 @@ def run_parallel_lint(files : array<string>; cfg : Config) : array<LintResult> {
         argvs |> emplace(argv)
     }
 
-    if (!cfg.quiet) {
+    if (!cfg.quiet && !cfg.json) {
         print("Linting {length(files)} file(s) across {n_chunks} worker(s)...\n\n")
     }
 
@@ -1388,7 +1415,8 @@ def count_fixable(issues : array<LintIssue>) : int {
 // Folder policy, not file policy: the three folder rules answer for the run's scan ROOTS rather
 // than its file list, so they run once per invocation, in both driver modes. Returns the
 // combined finding count.
-def run_folder_passes(docs_roots : array<string>; disabled_codes, enabled_codes : table<string>) : int {
+def run_folder_passes(docs_roots : array<string>;
+                      disabled_codes, enabled_codes : table<string>) : array<LintIssue> {
     let want_rule_docs = rule_is_on("LINT025", disabled_codes, enabled_codes)
     let want_arch = rule_is_on("LINT026", disabled_codes, enabled_codes)
     let want_doc_lines = rule_is_on("LINT027", disabled_codes, enabled_codes)
@@ -1396,20 +1424,20 @@ def run_folder_passes(docs_roots : array<string>; disabled_codes, enabled_codes 
     let want_names = rule_is_on("LINT033", disabled_codes, enabled_codes)
     var rule_docs_folders, line_folders : array<string>
     collect_docs_folders(docs_roots, want_rule_docs, want_doc_lines || want_pos || want_names, rule_docs_folders, line_folders)
-    var found = 0
+    var found : array<LintIssue>
     if (want_rule_docs) {
-        found += run_rule_docs_pass(rule_docs_folders)
+        found |> push_from(run_rule_docs_pass(rule_docs_folders))
     }
     if (want_arch) {
-        found += run_arch_pass(docs_roots)
+        found |> push_from(run_arch_pass(docs_roots))
     }
     if (want_doc_lines) {
-        found += run_doc_lines_pass(line_folders)
+        found |> push_from(run_doc_lines_pass(line_folders))
     }
     if (want_pos || want_names) {
-        found += run_rule_doc_text_pass(line_folders, docs_roots, want_pos, want_names)
+        found |> push_from(run_rule_doc_text_pass(line_folders, docs_roots, want_pos, want_names))
     }
-    return found
+    return <- found
 }
 
 // Prints the summary block; returns the process exit code (0 clean, 1 errors, 2 issues).
@@ -1426,14 +1454,12 @@ def print_summary(files_count : int; totals : LintTotals; quiet, fix : bool) : i
     } elif (totals.fixable > 0) {
         print("{totals.fixable} issue(s) can be fixed inline - run lint with --fix to apply them\n")
     }
-    if (totals.errors > 0) {
-        return 1
-    } elif (totals.issues > 0) {
-        return 2
-    } else {
-        return 0
-    }
+    return lint_exit_code(totals)
 }
+
+//! 1 when a file failed to compile, 2 when there are findings,
+//! else 0.
+def lint_exit_code(totals : LintTotals) : int => totals.errors > 0 ? 1 : (totals.issues > 0 ? 2 : 0)
 
 // --help / bad-argv banner. Returns the process exit code so main stays a dispatcher.
 def print_lint_help(rc : int) : int {
@@ -1511,6 +1537,68 @@ def private release_order(var nodes : array<RequireNode>) : array<int> {
 def private lint_order(files : array<string>) : array<int> =>
     <- lint_shared_modules ? require_order(files) : [for (i in range(length(files))); i]
 
+//! Lints ``files`` - on workers when there are enough - and prints
+//! each file's result as it lands unless ``cfg.json`` asks for the
+//! one JSON document at the end.
+def lint_files(files : array<string>; cfg : Config; run_paranoid, run_perf, run_style : bool;
+               disabled_codes, enabled_codes : table<string>) : LintJson {
+    var report : LintJson
+    let quiet = cfg.quiet || cfg.json
+
+    if (parallel_workers::should_parallelize(length(files), cfg.workers)) {
+        var results <- run_parallel_lint(files, cfg)
+        // Sort by file path so output is deterministic across worker counts.
+        sort(results, cmp_by(_.file))
+        for (result in results) {
+            if (!cfg.json) {
+                print_result(result, cfg.quiet, cfg.silent)
+            }
+            tally_result(result, report.totals)
+        }
+        if (cfg.json) {
+            report.results <- results
+        }
+    } else {
+        if (!quiet) {
+            print("Linting {length(files)} file(s)...\n\n")
+        }
+        var since_collect = 0
+        var inscope order <- lint_order(files)
+        for (idx in order) {
+            let file = files[idx]
+            if (!quiet) {
+                print("checking {file}...\n")
+            }
+            var result <- lint_file_fixing(file, run_paranoid, run_perf, run_style,
+                cfg.comment_hygiene, cfg.lint_fixtures, cfg.lint_excluded_paths, disabled_codes,
+                enabled_codes, cfg.fix)
+            tally_result(result, report.totals)
+            if (cfg.json) {
+                report.results |> emplace(result)
+            } else {
+                print_result(result, cfg.quiet, cfg.silent)
+            }
+            maybe_collect(since_collect)
+        }
+    }
+
+    return <- report
+}
+
+//! Prints the JSON document, or the folder findings and the summary;
+//! returns the exit code.
+def print_report(report : LintJson; files_count : int; cfg : Config) : int {
+    if (cfg.json) {
+        print("{write_json(JV(report))}\n")
+        return lint_exit_code(report.totals)
+    }
+    for (issue in report.folder_issues) {
+        let at = issue.line > 0 ? "{issue.file}:{issue.line}" : issue.file
+        print("{at}: {issue.message}\n")
+    }
+    return print_summary(files_count, report.totals, cfg.quiet, cfg.fix)
+}
+
 [export, unsafe_heap_collect, lint_tool_entry]
 def main() : int {
     var r <- parse_args(type<Config>)
@@ -1554,37 +1642,9 @@ def main() : int {
     let collect_rc = collect_input_files(files, docs_roots)
     if (collect_rc >= 0) return collect_rc
 
-    var totals : LintTotals
-
-    if (parallel_workers::should_parallelize(length(files), cfg.workers)) {
-        var results <- run_parallel_lint(files, cfg)
-        // Sort by file path so output is deterministic across worker counts.
-        sort(results, cmp_by(_.file))
-        for (result in results) {
-            print_result(result, cfg.quiet, cfg.silent)
-            tally_result(result, totals)
-        }
-    } else {
-        if (!cfg.quiet) {
-            print("Linting {length(files)} file(s)...\n\n")
-        }
-        var since_collect = 0
-        var inscope order <- lint_order(files)
-        for (idx in order) {
-            let file = files[idx]
-            if (!cfg.quiet) {
-                print("checking {file}...\n")
-            }
-            let result = lint_file_fixing(file, run_paranoid, run_perf, run_style,
-                cfg.comment_hygiene, cfg.lint_fixtures, cfg.lint_excluded_paths, disabled_codes,
-                enabled_codes, cfg.fix)
-            print_result(result, cfg.quiet, cfg.silent)
-            tally_result(result, totals)
-            maybe_collect(since_collect)
-        }
-    }
-
-    totals.issues += run_folder_passes(docs_roots, disabled_codes, enabled_codes)
-
-    return print_summary(length(files), totals, cfg.quiet, cfg.fix)
+    var report <- lint_files(files, cfg, run_paranoid, run_perf, run_style, disabled_codes,
+                             enabled_codes)
+    report.folder_issues <- run_folder_passes(docs_roots, disabled_codes, enabled_codes)
+    report.totals.issues += length(report.folder_issues)
+    return print_report(report, length(files), cfg)
 }

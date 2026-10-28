@@ -84,7 +84,7 @@ Before reaching for `Bash`/`Grep`/`Read` to find a symbol or trace usages in thi
 | Goto definition at cursor | `goto_definition` (`.das`) / `cpp_goto_definition` (`.cpp`) |
 | All references to X (`.das`) | `find_references` |
 
-Same for lint/format (`mcp__daslang__lint` / `format_file`, not shell `bin/daslang`) and for GitHub (above). The exception is fixing: MCP `lint` only reports, so a finding ending `(fixable: run lint with --fix)` is applied with `bin/daslang utils/lint/main.das -- <files> --fix` (`--enable CODE` sweeps one rule) - review the diff, since a fix only proves the file still compiles. Fall back to `Bash`/`Grep`/`Read` only when the MCP tool errors or the question is genuinely outside MCP coverage (RST prose, CMake, Python tooling).
+Same for lint/format (`mcp__daslang__lint` / `format_file`, not shell `bin/daslang`) and for GitHub (above). A finding that carries a fix is applied with MCP `lint` `fix: 'true'` - the runner's `--fix`, which `bin/daslang utils/lint/main.das -- <files> --fix` also runs (`--enable CODE` sweeps one rule) - review the diff, since a fix only proves the file still compiles. Fall back to `Bash`/`Grep`/`Read` only when the MCP tool errors or the question is genuinely outside MCP coverage (RST prose, CMake, Python tooling).
 
 **Cross-tree guard:** MCP results and LSP diagnostics prepend a `CROSS-TREE WARNING` when you query a file **outside the server's own tree** - that answer used the *wrong* tree's module sources AND that binary's compiled-in C++ bindings, so it is likely stale (missing symbols, outdated signatures). Don't trust it: run the session *inside* the worktree. A main-tree-rooted session can never give correct diagnostics for a worktree file.
 

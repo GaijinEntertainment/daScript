@@ -109,9 +109,11 @@ Options:
 - ``--disable CODE[,CODE...]`` — disable specific rules; on overlap with ``--enable``, ``--disable`` wins
 - ``--lint-fixtures`` — also lint fixture-named files (underscore-led names containing ``fixture``)
 - ``--lint-excluded-paths`` — report findings the ``.lint_config`` ``[paths]`` exclude policy would drop
-- ``--fix`` — apply the edits rules attach to their findings, then re-lint each changed file; an edit
-  that breaks the compile is rolled back. A finding that carries an edit ends with
-  ``(fixable: run lint with --fix)``, and the summary counts them
+- ``--fix`` — apply the edits rules attach to their findings and re-lint, pass after pass until a
+  pass changes nothing; an edit that breaks the compile is rolled back. Without it, each finding
+  that carries an edit shows it as ``-`` / ``+`` lines, and the summary counts them
+- ``--json`` — print one JSON document and nothing else: each file's findings with their positions
+  and edits, the folder findings, and the totals; with ``--fix``, what is left after fixing
 
 Examples::
 
