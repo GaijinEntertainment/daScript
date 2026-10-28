@@ -3581,6 +3581,9 @@ inner ``if`` chain that is the whole body of an arm is flattened into the outer 
 conditions over several values become one ``match (a, b)``. The finding prints the header and
 the arm patterns; there is no ``--fix``, since bodies, comments and bindings are the author's.
 
+.. das-doc: given enum Mode { idle, run, stop }
+.. das-doc: given var m = Mode.idle
+.. das-doc: given var r = 0
 .. code-block:: das
 
     if (m == Mode.idle && n >= 0 && n < 10) {          // STYLE048

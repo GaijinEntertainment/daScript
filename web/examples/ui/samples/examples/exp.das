@@ -15,7 +15,9 @@ def expLoop(n) {
 
 def verifyExp(f) {
     let t = 1e+06
-    let eps = 10.
+    // the float32 sum lands 10 over t, the exact sum 15.47 over;
+    // the guard is against a broken exp, not rounding
+    let eps = 32.
     let q = abs(f - t)
     assert(q < eps)
 }

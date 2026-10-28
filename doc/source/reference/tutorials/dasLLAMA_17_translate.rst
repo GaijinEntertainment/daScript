@@ -77,6 +77,7 @@ the translation.
 Translate
 =========
 
+.. das-doc: given let lines = ["Where is the nearest pharmacy?", "Today we are going to the mountains."]
 .. code-block:: das
 
    for (ln in lines) {

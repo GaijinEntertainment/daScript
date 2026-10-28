@@ -68,9 +68,11 @@ jobs:
   extended_checks:
     needs: pre_job
     if: needs.pre_job.outputs.nightly == 'true'
+    # every permission a job of the called workflow asks for, or the run fails at startup
     permissions:
       contents: read
       actions: write
+      pull-requests: read
     uses: ./.github/workflows/extended_checks.yml
     with:
       lane: extended_nightly

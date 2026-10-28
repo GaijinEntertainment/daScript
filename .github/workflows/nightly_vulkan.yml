@@ -17,7 +17,9 @@ concurrency:
 
 jobs:
   integration_linux:
-    runs-on: ubuntu-latest
+    # pinned: on the 26.04 image the PPA's lavapipe (preliminary resolute build) segfaults
+    # inside libvulkan_lvp.so on test_compute_features; 24.04 + the PPA's noble build is green
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
       - name: "Checkout"
