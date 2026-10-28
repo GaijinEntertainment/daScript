@@ -94,7 +94,7 @@ def test_cuda_constructs(t : T?) {
         has(t, mathcalls_cuda, "__das_lw_expf_float4(v)", "lane-wise exp")
         has(t, mathcalls_cuda, "__das_lw_fmaf_float4(v, v, v)", "lane-wise mad")
         has(t, mathcalls_cuda, "__float_as_uint(a[i])", "bitcast")
-        has(t, mathcalls_cuda, "__int_as_float(ia[i])", "bitcast")
+        has(t, mathcalls_cuda, "__int_as_float((ia[i] & 1073741823))", "bitcast")
     }
 }
 

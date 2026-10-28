@@ -302,7 +302,11 @@ class MathCalls {
         ic[i] = abs(m) + min(m, 3) + max(m, -3) + clamp(m, -2, 2)
         let v = va[i]
         vc[i] = exp(v) + sqrt(abs(v)) + min(v, float4(1.0)) + clamp(v, float4(0.0), float4(1.0)) + mad(v, v, v)
-        uc[i] = float_bits_to_uint(a[i]) + uint(int_bits_to_float(ia[i])) + ua[i] + float_bits_to_uint(uint_bits_to_float(ua[i]))
+        // sign off, exponent at most 127: a finite non-negative float,
+        // so its uint cast is defined on the CPU reference as on the GPU
+        let fin = int_bits_to_float(ia[i] & 0x3FFFFFFF)
+        uc[i] = (float_bits_to_uint(a[i]) + uint(fin) + ua[i]
+            + float_bits_to_uint(uint_bits_to_float(ua[i])))
     }
 }
 
