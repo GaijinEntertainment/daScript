@@ -111,10 +111,10 @@ def special_id(tk : Tokenizer; name : string) : int64 {
     return special_id(tk.spm, name)
 }
 
-//! The tokenizer's BOS id (SPM per-model metadata / BPE bos_token_id) — for the chat-template add_bos.
-//! the end token of either backend
+//! The tokenizer's end token, of either backend.
 def eos_id(tk : Tokenizer) : int64 => tk.kind == TokKind.bpe ? tk.bpe.eos_id : tk.spm.eos_id
 
+//! The tokenizer's BOS id (SPM per-model metadata / BPE bos_token_id) — for the chat-template add_bos.
 def bos_id(tk : Tokenizer) : int64 {
     if (tk.kind == TokKind.bpe) {
         return tk.bpe.bos_id
