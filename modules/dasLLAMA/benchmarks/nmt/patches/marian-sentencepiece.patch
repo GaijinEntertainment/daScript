@@ -1,0 +1,13 @@
+diff --git a/src/trainer_interface.cc b/src/trainer_interface.cc
+index 31659cb..6400c1c 100644
+--- a/src/trainer_interface.cc
++++ b/src/trainer_interface.cc
+@@ -208,7 +208,7 @@ bool TrainerInterface::IsValidSentencePiece(
+     return false;
+   }
+ 
+-  constexpr unicode_script::ScriptType kAnyType =
++  const unicode_script::ScriptType kAnyType =
+       static_cast<unicode_script::ScriptType>(-1);
+ 
+   auto is_number = [](char32 c) { return (c >= 0x30 && c <= 0x39); };

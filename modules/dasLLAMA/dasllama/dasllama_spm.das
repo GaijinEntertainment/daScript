@@ -333,6 +333,7 @@ def unigram_unk_score(tk : SpmTokenizer) : float {
 }
 
 def private spm_piece_of(d : array<uint8> const#; i, n : int) : string {
+    return "" if (n <= 0)
     unsafe {
         return string(temp_array(addr<uint8?>(d[i]), n, type<uint8>))
     }
@@ -452,4 +453,234 @@ def spm_decode_ids(tk : SpmTokenizer; ids : array<int64>) : string {
         }
     }
     return (tk.add_space_prefix && !empty(s) && first_character(s) == ' ') ? slice(s, 1) : s
+}
+
+// ===== a SentencePiece model file (`.spm` / `.model`): the ModelProto protobuf, its unigram pieces and its normalizer =====
+
+//! The normalizer a SentencePiece model file carries: the precompiled character map (a darts double-array trie over the
+//! source bytes, each leaf an offset of the replacement in the NUL-separated strings after it) and the whitespace rules.
+struct SpmNormalizer {
+    @exact_size charsmap : array<uint8>
+    trie_units : int            //!< the double-array's unit count; the replacement strings start at byte `4 + 4 * trie_units`
+    remove_extra_ws : bool
+}
+
+//! A SentencePiece model file read whole: the tokenizer over its pieces, the normalizer, and the trainer's special ids.
+struct SpmModelFile {
+    tk : SpmTokenizer = SpmTokenizer()
+    norm : SpmNormalizer = SpmNormalizer()
+    unk_id : int64 = -1l
+    eos_id : int64 = -1l
+    byte_fallback : bool
+    unigram : bool
+}
+
+def private pb_varint(d : array<uint8> const#; var at : int&) : uint64 {
+    var v = 0ul
+    var sh = 0ul
+    while (at < length(d)) {
+        let b = uint64(d[at])
+        at++
+        v |= (b & 0x7Ful) << sh
+        return v if ((b & 0x80ul) == 0ul)
+        sh += 7ul
+    }
+    panic("dasLLAMA spm: a protobuf varint runs past the end of the model file")
+    return v
+}
+
+//! one protobuf field's span: its number, its wire type, and for a length-delimited or fixed field its payload bytes
+struct private PbField {
+    num : int
+    wire : int
+    value : uint64
+    at : int
+    len : int
+}
+
+def private pb_next(d : array<uint8> const#; var at : int&; stop : int) : PbField {
+    let key = int(pb_varint(d, at))
+    var f = PbField(num = key >> 3, wire = key & 7)
+    if (f.wire == 0) {
+        f.value = pb_varint(d, at)
+    } elif (f.wire == 2) {
+        f.len = int(pb_varint(d, at))
+        f.at = at
+        at += f.len
+    } elif (f.wire == 5) {
+        f.at = at
+        f.len = 4
+        at += 4
+    } elif (f.wire == 1) {
+        f.at = at
+        f.len = 8
+        at += 8
+    } else {
+        panic("dasLLAMA spm: protobuf wire type {f.wire} in the model file")
+    }
+    if (at > stop) {
+        panic("dasLLAMA spm: a protobuf field runs past its message")
+    }
+    return f
+}
+
+//! One `SentencePiece` message: its piece (U+2581 read as a space, as the GGUF loader does), score and type.
+def private pb_piece(d : array<uint8> const#; at0, stop : int; var tk : SpmTokenizer; var types : array<int>) {
+    var piece = ""
+    var score = 0.0
+    var kind = 1
+    var at = at0
+    while (at < stop) {
+        let f = pb_next(d, at, stop)
+        if (f.num == 1 && f.wire == 2) {
+            piece = replace(spm_piece_of(d, f.at, f.len), "▁", " ")   // nolint:STYLE039 (U+2581 is the SentencePiece space marker - vocabulary data, not prose)
+        } elif (f.num == 2 && f.wire == 5) {
+            score = rd_f32(d, int64(f.at))
+        } elif (f.num == 3 && f.wire == 0) {
+            kind = int(f.value)
+        }
+    }
+    tk.vocab |> push(piece)
+    tk.scores |> push(score)
+    types |> push(kind)
+}
+
+//! A model file's derived state from its pieces and normalizer: the lookup (the last duplicate wins, as `build_spm_derived`'s
+//! pair tables read it), the longest piece, the end id the tokenizer appends, the charsmap trie's unit count and the merge
+//! tables - the reader's tail, and the image's rebuild of a tokenizer stored as its fields.
+def spm_model_file_finish(var r : SpmModelFile) {
+    r.tk.lookup |> clear()
+    r.tk.max_token_length = 0
+    for (i, piece in count(), r.tk.vocab) {
+        r.tk.lookup[piece] = int64(i)
+        r.tk.max_token_length = max(r.tk.max_token_length, length(piece))
+    }
+    r.tk.eos_id = r.eos_id
+    r.norm.trie_units = length(r.norm.charsmap) >= 4 ? int(rd_u32(r.norm.charsmap, 0l)) / 4 : 0
+    build_spm_derived(r.tk)
+}
+
+//! Load a SentencePiece model file: every piece with its score, the unknown and end ids and the byte fallback from the
+//! trainer spec, the dummy prefix, the whitespace rule and the precompiled character map from the normalizer spec.
+def load_spm_model_file(path : string) : SpmModelFile {
+    var r = SpmModelFile()
+    var inscope types : array<int>
+    let f = fopen(path, "rb")
+    if (f == null) {
+        panic("dasLLAMA spm: cannot open model '{path}'")
+    }
+    var model_type = 1
+    fmap(f) $(var bytes : array<uint8>#) {
+        let n = length(bytes)
+        var at = 0
+        while (at < n) {
+            let top = pb_next(bytes, at, n)
+            continue if (top.wire != 2)
+            let stop = top.at + top.len
+            if (top.num == 1) {
+                pb_piece(bytes, top.at, stop, r.tk, types)
+                continue
+            }
+            var sub = top.at
+            while (sub < stop) {
+                let fl = pb_next(bytes, sub, stop)
+                if (top.num == 2) {
+                    model_type = (fl.num == 3 && fl.wire == 0) ? int(fl.value) : model_type
+                    r.byte_fallback = (fl.num == 35 && fl.wire == 0) ? fl.value != 0ul : r.byte_fallback
+                    r.unk_id = (fl.num == 40 && fl.wire == 0) ? int64(fl.value) : r.unk_id
+                    r.eos_id = (fl.num == 42 && fl.wire == 0) ? int64(fl.value) : r.eos_id
+                } elif (top.num == 3) {
+                    if (fl.num == 2 && fl.wire == 2) {
+                        r.norm.charsmap |> reserve(fl.len)
+                        r.norm.charsmap |> resize(fl.len)
+                        unsafe {
+                            memcpy(addr(r.norm.charsmap[0]), addr(bytes[fl.at]), fl.len)
+                        }
+                    }
+                    r.tk.add_space_prefix = (fl.num == 3 && fl.wire == 0) ? fl.value != 0ul : r.tk.add_space_prefix
+                    r.norm.remove_extra_ws = (fl.num == 4 && fl.wire == 0) ? fl.value != 0ul : r.norm.remove_extra_ws
+                }
+            }
+        }
+    }
+    fclose(f)
+    r.unigram = model_type == 1
+    spm_model_file_finish(r)
+    return <- r
+}
+
+//! the longest prefix of `d[at..]` the charsmap trie holds, as (match length, replacement offset); (0, 0) for none
+def private charsmap_longest(norm : SpmNormalizer; d : array<uint8> const#; at : int) : int2 {
+    var best = int2(0, 0)
+    unsafe {
+        let units = addr<uint const?>(norm.charsmap[4])
+        var unit = units[0]
+        var pos = (unit >> 10u) << ((unit & 0x200u) >> 6u)
+        for (i in range(at, length(d))) {
+            let c = uint(d[i])
+            pos ^= c
+            break if (int(pos) >= norm.trie_units)
+            unit = units[pos]
+            break if ((unit & 0x800000FFu) != c)
+            pos ^= (unit >> 10u) << ((unit & 0x200u) >> 6u)
+            if (((unit >> 8u) & 1u) != 0u) {
+                best = int2(i - at + 1, int(units[pos] & 0x7FFFFFFFu))
+            }
+        }
+    }
+    return best
+}
+
+//! `text` normalized as the model's normalizer does: each longest charsmap match replaced by its string, every other
+//! codepoint kept, then - with `remove_extra_ws` - leading and trailing spaces dropped and every run of spaces made one.
+def spm_normalize(norm : SpmNormalizer; text : string) : string {
+    let mapped = build_string() $(var wr) {
+        peek_data(text) $(d : array<uint8> const#) {
+            let n = length(d)
+            var at = 0
+            while (at < n) {
+                let hit = norm.trie_units > 0 ? charsmap_longest(norm, d, at) : int2(0, 0)
+                if (hit.x > 0) {
+                    var s = 4 + 4 * norm.trie_units + hit.y
+                    while (s < length(norm.charsmap) && norm.charsmap[s] != 0u8) {
+                        write_char(wr, int(norm.charsmap[s]))
+                        s++
+                    }
+                    at += hit.x
+                } else {
+                    let e = cpt_end(d, at, n)
+                    for (b in range(at, e)) {
+                        write_char(wr, int(d[b]))
+                    }
+                    at = e
+                }
+            }
+        }
+    }
+    return mapped if (!norm.remove_extra_ws)
+    return build_string() $(var wr) {
+        var pending = false
+        var any = false
+        peek_data(mapped) $(d : array<uint8> const#) {
+            for (b in d) {
+                if (int(b) == ' ') {
+                    pending = any
+                    continue
+                }
+                if (pending) {
+                    write_char(wr, ' ')
+                    pending = false
+                }
+                write_char(wr, int(b))
+                any = true
+            }
+        }
+    }
+}
+
+//! Encode text as the model file's own tokenizer does: normalized, then the unigram lattice with the file's unknown id and
+//! byte fallback.
+def spm_file_encode(sp : SpmModelFile; text : string) : array<int64> {
+    var inscope none : array<int64>
+    return <- unigram_encode(sp.tk, spm_normalize(sp.norm, text), sp.unk_id, sp.byte_fallback, none)
 }

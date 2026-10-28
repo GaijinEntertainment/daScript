@@ -27,6 +27,7 @@ require daslib/module_path      // get_this_module_dir: control.html ships besid
 require strings
 require math
 require daslib/base64                // base64_decode: the data: URI payload
+require uriparser                    // unescape_uri: a urlencoded /translate form
 
 // An OpenAI-compatible HTTP server over the dasLLAMA facade. The SERVING paths reach only public
 // facade verbs — no engine internals — which is the acceptance test for the API: if a full OpenAI
@@ -55,6 +56,8 @@ enum private Route {
     translate
     speech
     phonemes
+    text_translate
+    languages
     embeddings
     activate
     load
@@ -106,6 +109,7 @@ struct FrontReq {
     form_format : string    //! the upload's `response_format` field
     form_language : string  //! the upload's `language` field
     form_model : string     //! the upload's `model` field
+    form_target : string    //! the upload's `target` field: /v1/audio/translations translates the transcript into it
     status : int
     port : int
 }
@@ -351,8 +355,22 @@ struct TtsSlot {
     lang : string
 }
 
+//! One served translation model: one worker loads and owns it. The direction fields are the worker's own, off its ready event.
+struct TranslatorSlot {
+    id : string                 //! the model's name on /v1/models and the stats block: a Bergamot student's directory, else the file's stem
+    path : string
+    ready : int
+    error : string              //! why the worker could not load: the slot stays down and the translate stats block carries this
+    llm : bool                  //! a translation LLM: any two of `langs`; else a Bergamot student serving `src` -> `trg` alone
+    src : string
+    trg : string
+    langs : array<string>
+}
+
 var g_asr : array<AsrSlot>          //! the ASR models, the first the default a request with no `model` gets
 var g_tts : array<TtsSlot>          //! the TTS models, the first ARMED one the default
+var g_translators : array<TranslatorSlot>   //! the translation models, in the order a pair's first server is picked
+var private g_tr_jobs : array<Channel?>     //! a job channel a translation model, by its row
 var private g_asr_alias = ""                //! the default ASR model's other name, `<default slot>-asr`; empty with no LLM slot
 var private g_asr_jobs : array<Channel?>   //! a job channel a running ASR model, by its row; the thread that started the workers holds them
 var private g_tts_jobs : array<Channel?>   //! the same a TTS model, null for one that is not armed
@@ -763,6 +781,9 @@ def private speech_id_taken(id : string) : bool {
     for (m in g_tts) {
         return true if (m.id == id)
     }
+    for (m in g_translators) {
+        return true if (m.id == id)
+    }
     return false
 }
 
@@ -858,9 +879,39 @@ def add_tts_model(path : string; lane : string = TTS_LANE_DEFAULT; voices_dir : 
 //! one's file set was incomplete or its worker could not load it.
 def server_has_tts : bool => tts_default() >= 0
 
-//! True when a speech model serves with no LLM slot beside it: an armed TTS model or a configured ASR model.
+//! A translation model's name: a Bergamot student's file is `model.<pair>.intgemm.alphas.bin` in every download, so its
+//! directory names it; any other file its stem.
+def private translator_id(path : string) : string {
+    let base = base_name(path)
+    let dir = base_name(dir_name(path))
+    return starts_with(base, "model.") && !empty(dir) ? dir : stem(base)
+}
+
+//! Serve the translation models `paths` name, in order - the first that serves a pair takes its requests: one worker
+//! thread loads and owns each in its own context. Every model added before is dropped. A missing file is logged and
+//! left out, and a model whose worker cannot load it degrades at ``init_server`` the way a TTS model does - logged, the
+//! reason on the `translate` block of ``GET /v1/stats`` - so the boot serves on. Call before ``run_server``.
+def configure_translators(paths : array<string>) {
+    delete g_translators
+    for (path in paths) {
+        continue if (empty(path))
+        if (!stat(path).is_valid) {
+            to_log(LOG_ERROR, "dasllama-server: translation model left out - file not found: {path} (fix the config, then POST /restart)\n")
+            continue
+        }
+        let mid = translator_id(path)
+        if (speech_id_taken(mid)) {
+            to_log(LOG_ERROR, "dasllama-server: translation model {path} left out - the id '{mid}' is already served\n")
+            continue
+        }
+        g_translators |> emplace(TranslatorSlot(id = mid, path = path, llm = ends_with(path, ".gguf")))
+    }
+}
+
+//! True when a speech or translation model serves with no LLM slot beside it: an armed TTS model, a configured ASR
+//! model, or a configured translation model.
 def server_has_speech : bool
-    => server_has_tts() || !empty(g_asr)
+    => server_has_tts() || !empty(g_asr) || !empty(g_translators)
 
 //! Stop admitting new inference/ASR work and exit after all accepted work finishes. Also wired to
 //! ``POST /shutdown``.
@@ -2090,6 +2141,9 @@ struct private AsrJobInfo {
 struct private AsrWire {
     @do_not_delete writer : WriterRef
     model : string       // the id of the model the request was queued on
+    target : string      //! /v1/audio/translations with `target`: the transcript goes on to the translator for (`source`, this)
+    source : string      //! ... the request's `language`; empty takes the language the ASR model heard
+    reply_format : string   //! ... the request's `response_format`, which the translation answers in
 }
 
 var g_asr_recent : array<AsrJobInfo>   // running + lingering done jobs for the poll surface
@@ -2663,7 +2717,7 @@ def private handle_unknown(req : FrontReq; var resp : Reply) : http_status {
 
 def private handle_models(var resp : Reply) : http_status {
     var list = OaiModelList(_object = "list")
-    list.data |> reserve(length(g_slots) + length(g_asr) + length(g_tts) + 1)
+    list.data |> reserve(length(g_slots) + length(g_asr) + length(g_tts) + length(g_translators) + 1)
     for (s in g_slots) {
         list.data |> push(OaiModel(id = s.name, _object = "model", created = created_ts(), owned_by = "dasllama"))
     }
@@ -2677,6 +2731,11 @@ def private handle_models(var resp : Reply) : http_status {
     }
     for (m in g_tts) {
         if (m.armed) {
+            list.data |> push(OaiModel(id = m.id, _object = "model", created = created_ts(), owned_by = "dasllama"))
+        }
+    }
+    for (m in g_translators) {
+        if (m.ready > 0) {
             list.data |> push(OaiModel(id = m.id, _object = "model", created = created_ts(), owned_by = "dasllama"))
         }
     }
@@ -3879,10 +3938,11 @@ def private reap_wires(srv : FrontLink; var wires : table<int64; auto(TT)>) {
     delete gone
 }
 
-//! drop the transcription and synthesis wires whose client vanished (a synthesis's file is still swept when it lands)
+//! drop the transcription, synthesis and translation wires whose client vanished (a synthesis's file is still swept when it lands)
 def private reap_speech_wires(srv : FrontLink) {
     reap_wires(srv, g_asr_wires)
     reap_wires(srv, g_tts_wires)
+    reap_wires(srv, g_tr_wires)
 }
 
 // Evict streams whose client vanished: is_writer_connected reads false once the connection is
@@ -4300,6 +4360,23 @@ def private asr_stats_member() : string {
     return member
 }
 
+//! the stats answer's `translate` member: the queue's counters and each configured translation model - whether its worker
+//! loaded it, its kind, a Bergamot student's pair, how many languages it knows, and the loader's reason when it failed;
+//! "" with none configured
+def private translator_stats_row(m : TranslatorSlot) : string {
+    let kind = m.llm ? "llm" : "marian"
+    let failed = empty(m.error) ? "" : ",\"error\":{json_str(m.error)}"
+    return "\{\"id\":{json_str(m.id)},\"ready\":{m.ready > 0},\"kind\":{json_str(kind)},\"source\":{json_str(m.src)},\"target\":{json_str(m.trg)},\"languages\":{length(m.langs)}{failed}}"
+}
+
+def private translate_stats_member() : string {
+    return "" if (empty(g_translators))
+    var models <- [for (m in g_translators); translator_stats_row(m)]
+    let member = ",\"translate\":\{\"pending\":{g_tr_pending},\"done_jobs\":{g_tr_done_jobs},\"models\":[{join(models, ",")}]}"
+    delete models
+    return member
+}
+
 // splice a member into a compact JSON object body: sprint_json/write_json_compact both close on
 // the final `}`, and the stats shapes are objects with at least one member
 def private with_json_member(body : string; member : string) : string {
@@ -4315,7 +4392,7 @@ def private handle_stats(var resp : Reply) : http_status {
         // `setup` is the MODE, not the slot count — a speech-only server serves the speech route
         // and must not draw the page's pick-a-model surface.
         return resp |> JSON(
-            "\{\"setup\":{g_setup_mode},\"model\":\"(no model)\",\"active_model\":\"\",\"ctx\":0,\"uptime_s\":{g_started_at > 0l ? get_time_nsec(g_started_at) / 1_000_000_000l : 0l},\"draining\":{g_shutdown_requested},\"active\":0,\"queued\":0,\"peak_active\":0,\"admitted\":0,\"finished\":0,\"evicted\":0,\"decode_steps\":0,\"gen_tokens\":0,\"avg_batch\":0,\"cached_tokens\":0,\"prefix_pages\":0,\"max_streams\":0,\"chunk_tokens\":0,\"asr_workers\":{[for (a in g_asr); a.workers] |> sum()},\"asr_ready\":{[for (a in g_asr); a.ready] |> sum()},\"asr_active\":{g_asr_active},\"asr_pending\":{g_asr_pending},\"mtp_drafted\":0,\"mtp_accepted\":0,\"prefill_tokens\":0,\"ttft_avg_ms\":0,\"ttft_last_ms\":0,\"weights_bytes\":0,\"kv_bytes\":0,\"gpu_vram_bytes\":0,\"gpu_budget_bytes\":0,\"hardware\":{json_str(g_hardware_line)},\"asr_done_jobs\":{g_asr_done_jobs},\"asr_audio_s\":{g_asr_audio_s},\"tts_done_jobs\":{g_tts_done_jobs},\"tts_audio_s\":{g_tts_audio_s},\"vision\":false,\"audio\":false,\"models\":[]{asr_stats_member()}{tts_stats_member()}}",
+            "\{\"setup\":{g_setup_mode},\"model\":\"(no model)\",\"active_model\":\"\",\"ctx\":0,\"uptime_s\":{g_started_at > 0l ? get_time_nsec(g_started_at) / 1_000_000_000l : 0l},\"draining\":{g_shutdown_requested},\"active\":0,\"queued\":0,\"peak_active\":0,\"admitted\":0,\"finished\":0,\"evicted\":0,\"decode_steps\":0,\"gen_tokens\":0,\"avg_batch\":0,\"cached_tokens\":0,\"prefix_pages\":0,\"max_streams\":0,\"chunk_tokens\":0,\"asr_workers\":{[for (a in g_asr); a.workers] |> sum()},\"asr_ready\":{[for (a in g_asr); a.ready] |> sum()},\"asr_active\":{g_asr_active},\"asr_pending\":{g_asr_pending},\"mtp_drafted\":0,\"mtp_accepted\":0,\"prefill_tokens\":0,\"ttft_avg_ms\":0,\"ttft_last_ms\":0,\"weights_bytes\":0,\"kv_bytes\":0,\"gpu_vram_bytes\":0,\"gpu_budget_bytes\":0,\"hardware\":{json_str(g_hardware_line)},\"asr_done_jobs\":{g_asr_done_jobs},\"asr_audio_s\":{g_asr_audio_s},\"tts_done_jobs\":{g_tts_done_jobs},\"tts_audio_s\":{g_tts_audio_s},\"vision\":false,\"audio\":false,\"models\":[]{asr_stats_member()}{tts_stats_member()}{translate_stats_member()}}",
             http_status.OK)
     }
     let tier = gpu_tier_status()
@@ -4384,7 +4461,7 @@ def private handle_stats(var resp : Reply) : http_status {
     }
     let body = sprint_json(out, false)
     delete out
-    return resp |> JSON(with_json_member(body, "{asr_stats_member()}{tts_stats_member()}"), http_status.OK)
+    return resp |> JSON(with_json_member(body, "{asr_stats_member()}{tts_stats_member()}{translate_stats_member()}"), http_status.OK)
 }
 
 // /v1/streams: the poll surface behind the page's swimlane + stream cards — per-stream state,
@@ -4503,7 +4580,7 @@ let private CONFIG_KEY_KINDS <- {
     "model" => "s", "port" => "i", "quant" => "s", "kv_dtype" => "s", "metal" => "s",
     "gpu" => "s", "gpu_layers" => "i", "gpu_stream" => "i", "gpu_dn" => "b", "gpu_attn" => "b",
     "gpu_dense" => "b", "gpu_vram_mb" => "i", "asr" => "s", "mmproj" => "s", "asr_workers" => "i",
-    "tts" => "s", "tts_lane" => "s", "tts_voices_dir" => "s",
+    "tts" => "s", "tts_lane" => "s", "tts_voices_dir" => "s", "translate" => "s",
     "ctx" => "i", "max_tokens" => "i", "streams" => "i", "threads" => "i", "team_dispatch" => "s",
     "affinity" => "i", "chunk" => "i", "chunk_idle" => "i", "page_rows" => "i", "prefix" => "i", "prefix_states" => "i", "prefix_state_mb" => "i", "flat" => "b",
     "mtp" => "b", "rope_scaling" => "s", "rope_scale" => "f", "yarn_orig_ctx" => "i",
@@ -5187,8 +5264,27 @@ def private asr_worker_main(
     events |> release
 }
 
+//! Why a `target` cannot be served from `source`, "" when it can: a source no served translator takes into the target,
+//! or - an empty source, the language the ASR model will hear - no translator that writes the target at all.
+def private translation_target_refusal(source, target : string) : string {
+    if (empty(source)) {
+        return translator_writes(target) ? "" : "no served translation model translates into {target} - GET /languages lists the pairs"
+    }
+    return translator_for(source, target) >= 0 ? "" : "no served translation model translates {source} -> {target} - GET /languages lists the pairs"
+}
+
+//! The refusal a `target` gets before its audio is heard (``translation_target_refusal``). True when the request was refused.
+def private refuse_translation_target(srv : FrontLink; writer : WriterRef; source, target : string) : bool {
+    let why = translation_target_refusal(source, target)
+    if (!empty(why)) {
+        bad_request(srv, writer, why)
+    }
+    return !empty(why)
+}
+
 // /v1/audio/transcriptions (translate=false) and /v1/audio/translations (translate=true, to English).
 // Multipart upload: save the 'file' part to disk (binary-safe), decode to 16 kHz mono f32, transcribe.
+// /v1/audio/translations with a `target` field transcribes instead, and the transcript goes on to the translator.
 def private queue_transcription(
                                 srv : FrontLink;
                                 req : FrontReq;
@@ -5196,6 +5292,11 @@ def private queue_transcription(
                                 translate : bool
                                 ) {
     if (reject_deferred_while_draining(srv, writer) || reject_while_benching(srv, writer)) {
+        drop_upload(req)
+        return
+    }
+    let target = translate ? req.form_target : ""
+    if (!empty(target) && refuse_translation_target(srv, writer, req.form_language, target)) {
         drop_upload(req)
         return
     }
@@ -5211,8 +5312,8 @@ def private queue_transcription(
         drop_upload(req)
         return
     }
-    if (translate && !g_asr[k].translate) {
-        bad_request(srv, writer, "ASR model '{g_asr[k].id}' does not translate - its caps declare no translation; use /v1/audio/transcriptions")
+    if (translate && empty(target) && !g_asr[k].translate) {
+        bad_request(srv, writer, "ASR model '{g_asr[k].id}' does not translate - its caps declare no translation; use /v1/audio/transcriptions, or name a `target` a translation model serves")
         drop_upload(req)
         return
     }
@@ -5230,11 +5331,12 @@ def private queue_transcription(
     let temppath = req.file_path
     let fmt = req.form_format
     let lang = req.form_language   // empty = the worker's default for its model
-    g_asr_wires[rid] <- AsrWire(writer = writer, model = g_asr[k].id)
+    let chained = !empty(target)   // the verbose document carries the language heard and the segments the reply keeps
+    g_asr_wires[rid] <- AsrWire(writer = writer, model = g_asr[k].id, target = target, source = lang, reply_format = fmt)
     g_asr_pending++
     g_asr_jobs[k] |> push_clone(AsrJob(
-        id = rid, temp_path = temppath, language = lang, response_format = fmt,
-        translate = translate))
+        id = rid, temp_path = temppath, language = lang, response_format = chained ? "verbose_json" : fmt,
+        translate = translate && !chained))
     to_log(LOG_INFO, "[req {rid}] asr: queued on {g_asr[k].id} (pending={g_asr_pending}, active={g_asr_active})\n")
 }
 
@@ -5312,11 +5414,13 @@ def private drain_asr_events(srv : FrontLink) {
                 }
                 let wire = unsafe(g_asr_wires?[event.id])
                 if (wire != null) {
-                    if (is_writer_connected(srv, wire.writer)) {
+                    if (!is_writer_connected(srv, wire.writer)) {
+                        release_writer(srv, wire.writer)
+                    } elif (!empty(wire.target) && event.status == int(http_status.OK)) {
+                        chain_audio_translation(srv, *wire, clone_string(event.body))
+                    } else {
                         set_writer_keepalive_timeout(srv, wire.writer, DEFAULT_WRITER_KEEPALIVE_MS)
                         respond(srv, wire.writer, event.status, event.content_type, event.body)
-                    } else {
-                        release_writer(srv, wire.writer)
                     }
                     delete g_asr_wires[event.id]
                     g_asr_wires |> erase(event.id)
@@ -5899,6 +6003,530 @@ def private stop_tts_worker() {
     }
 }
 
+// ===== Translation: /translate, /languages, and /v1/audio/translations' `target` =====
+// One worker thread owns each translation model in its own context (the TTS shape); a request is a job of strings, each
+// split into sentences on the worker, and the answer is the strings translated, in order.
+
+enum private TrJobKind {
+    translate    // zero value — the channel pops zeroed clones
+    stop         // worker exits
+}
+
+struct private TrJob {
+    kind : TrJobKind
+    id : int64
+    src : string
+    trg : string
+    texts : array<string>
+}
+
+enum private TrEventKind {
+    ready
+    completed
+    stopped
+    failed       // the worker could not load its model: `body` carries the panic text
+}
+
+struct private TrEvent {
+    kind : TrEventKind
+    slot : int               //! the ready and failed events name which model answered
+    id : int64
+    status : int
+    body : string            //! the reason, on a failed load or a refused job
+    texts : array<string>    //! completed: the job's strings translated, in order
+    llm : bool               //! ready: the request picks the direction among `langs`
+    src : string             //! ready: a Bergamot student's pair
+    trg : string
+    langs : array<string>    //! ready: every language code the model reads or writes
+}
+
+//! the shape a translation answers in, picked by the route that queued it
+enum private TrReply {
+    libre_text      //! /translate with one `q`: {"translatedText": "..."}
+    libre_list      //! /translate with a `q` array: {"translatedText": [...]}
+    audio_json      //! /v1/audio/translations with `target`: {"text"}
+    audio_text      //! ... the bare text
+    audio_verbose   //! ... the ASR's verbose document, its text and every segment's text translated
+}
+
+struct private TrWire {
+    @do_not_delete writer : WriterRef
+    reply : TrReply
+    verbose : string   //! audio_verbose: the ASR's document whose texts the translations replace
+}
+
+var g_tr_events : Channel?             //! every translation worker's events; each names its model's slot
+var g_tr_wires : table<int64; TrWire>
+var g_tr_pending = 0
+var g_tr_done_jobs = 0l
+let TR_QUEUE_LIMIT = 32
+let TR_WRITER_KEEPALIVE_MS = 600000
+let TR_MAX_INPUT_CHARS = 20000
+let TRANSLATE_FIELDS : table<string> <- { "q", "source", "target", "format", "api_key", "alternatives" }
+let private LIBRE_FORM_FIELDS = fixed_array("q", "source", "target", "format")   // the form fields the translate route reads
+
+//! One input as its sentences, each with the text after it: a sentence ends at `.`, `!` or `?` followed by a space, and
+//! at a newline; the run of spaces, tabs and newlines after the end is its separator, kept verbatim. Non-private: the
+//! tests read it.
+def sentence_pieces(text : string) : array<tuple<sentence : string; sep : string>> {
+    var bounds : array<int3>   // sentence start, separator start, separator end
+    peek_data(text) $(d) {
+        let n = length(d)
+        var start = 0
+        var i = 0
+        while (i < n) {
+            let c = int(d[i])
+            let ends = c == '\n' || ((c == '.' || c == '!' || c == '?') && i + 1 < n && int(d[i + 1]) == ' ')
+            if (!ends) {
+                i++
+                continue
+            }
+            let sep_at = c == '\n' ? i : i + 1
+            var j = sep_at
+            while (j < n && (int(d[j]) == ' ' || int(d[j]) == '\n' || int(d[j]) == '\r' || int(d[j]) == '\t')) {
+                j++
+            }
+            bounds |> push(int3(start, sep_at, j))
+            start = j
+            i = j
+        }
+        if (start < n) {
+            bounds |> push(int3(start, n, n))
+        }
+    }
+    return <- [for (b in bounds); (sentence = slice(text, b.x, b.y), sep = slice(text, b.y, b.z))]
+}
+
+//! one input through the worker's translator a sentence at a time, each separator where it stood
+def private translate_pieces(var tr : Translator; text : string) : string {
+    var inscope pieces <- sentence_pieces(text)
+    return build_string() $(var w) {
+        for (p in pieces) {
+            w |> write(empty(strip(p.sentence)) ? p.sentence : translate(tr, p.sentence))
+            w |> write(p.sep)
+        }
+    }
+}
+
+def private process_translation(var tr : Translator; job : TrJob; events : Channel?) {
+    if (!set_translator_langs(tr, job.src, job.trg)) {   // the intake routed it here: a refusal is a roster the snapshot misread
+        events |> push_clone(TrEvent(kind = TrEventKind.completed, id = job.id, status = int(http_status.BAD_REQUEST),
+            body = "this translation model does not translate {job.src} -> {job.trg}"))
+        return
+    }
+    var done = TrEvent(kind = TrEventKind.completed, id = job.id, status = int(http_status.OK))
+    done.texts <- [for (t in job.texts); utf8_sanitize(translate_pieces(tr, t))]
+    events |> push_clone(done)
+    delete done
+}
+
+def private translator_worker_main(slot : int; model_path : string; team_dispatch : bool; metal : MetalMode; var jobs : Channel?&; var events : Channel?&) {
+    this_context().name := "dasllama_translate_{slot}"
+    configure_media_worker_dispatch(team_dispatch)
+    set_metal_mode(metal)   // a translation LLM is a Model session: it serves where the engine's mode says
+    allow_cpu_prefill()     // a decline lands its prefill on the CPU arm: served, not a profiling slip
+    var tr = Translator()
+    var load_failure = ""
+    let load_failed = catch_worker_panic(load_failure) {
+        tr <- load_translator(model_path)   // nolint:PERF030 - target is the fresh empty decl above; the load runs inside the catch block, so it cannot fold into the declaration
+    }
+    if (load_failed) {   // an escaping panic here would kill only this thread and hang the ready-wait
+        to_log(LOG_ERROR, "dasllama-server: the translation worker could not load {model_path}: {load_failure}\n")
+        events |> push_clone(TrEvent(kind = TrEventKind.failed, slot = slot, body = load_failure))
+        jobs |> release
+        events |> release
+        return
+    }
+    let dir = translator_langs(tr)
+    var ready = TrEvent(kind = TrEventKind.ready, slot = slot, llm = tr.kind == TranslatorKind.llm, src = dir.src, trg = dir.trg)
+    ready.langs <- translator_languages(tr)
+    events |> push_clone(ready)
+    delete ready
+    var stopping = false
+    while (!stopping) {
+        jobs |> pop_with_timeout_clone(250) $(job : TrJob#) {
+            if (job.kind == TrJobKind.stop) {
+                stopping = true
+                return
+            }
+            var job_copy : TrJob
+            job_copy := job
+            var failure = ""
+            let failed = catch_worker_panic(failure) {
+                process_translation(tr, job_copy, events)
+            }
+            if (failed) {
+                to_log(LOG_ERROR, "[req {job_copy.id}] translate: failed: {failure}\n")
+                events |> push_clone(TrEvent(kind = TrEventKind.completed, id = job_copy.id,
+                    status = int(http_status.INTERNAL_SERVER_ERROR), body = failure))
+            }
+            delete job_copy
+        }
+    }
+    delete tr
+    events |> push_clone(TrEvent(kind = TrEventKind.stopped, slot = slot))
+    jobs |> release
+    events |> release
+}
+
+//! the facade's translator as a loaded model's roster describes it - its kind and direction, no weights - so the
+//! facade's `translator_serves` answers for it
+def private slot_roster(m : TranslatorSlot) : Translator
+    => Translator(kind = m.llm ? TranslatorKind.llm : TranslatorKind.marian, src = m.src, trg = m.trg)
+
+//! the first loaded translation model that serves `src` -> `trg`, -1 when none does
+def private translator_for(src, trg : string) : int {
+    for (i in range(length(g_translators))) {
+        assume m = g_translators[i]
+        continue if (m.ready == 0)
+        var inscope roster <- slot_roster(m)
+        return i if (translator_serves(roster, src, trg))
+    }
+    return -1
+}
+
+//! whether some loaded translation model writes `trg`, from whichever language the ASR model hears
+def private translator_writes(trg : string) : bool {
+    for (m in g_translators) {
+        continue if (m.ready == 0)
+        var inscope roster <- slot_roster(m)
+        if (!m.llm) {
+            return true if (translator_serves(roster, m.src, trg))
+            continue
+        }
+        for (src in m.langs) {
+            return true if (translator_serves(roster, src, trg))
+        }
+    }
+    return false
+}
+
+def private any_translator_ready : bool {
+    for (m in g_translators) {
+        return true if (m.ready > 0)
+    }
+    return false
+}
+
+//! GET /languages (LibreTranslate): every language a loaded model reads, with the languages it translates that one into,
+//! codes sorted. The code stands as the name: no table of language names rides the translation facade.
+def private languages_json : string {
+    var targets : table<string; table<string>>
+    for (m in g_translators) {
+        continue if (m.ready == 0)
+        if (!m.llm) {
+            targets[m.src] |> insert(m.trg)
+            continue
+        }
+        for (a in m.langs) {
+            for (b in m.langs) {
+                if (a != b) {
+                    targets[a] |> insert(b)
+                }
+            }
+        }
+    }
+    var codes <- [for (k in keys(targets)); k]
+    sort(codes)
+    var rows : array<string>
+    rows |> reserve(length(codes))
+    for (code in codes) {
+        var to <- [for (t in keys(targets[code])); t]
+        sort(to)
+        rows |> push("\{\"code\":{json_str(code)},\"name\":{json_str(translator_language_name(code))},\"targets\":[{join([for (t in to); json_str(t)], ",")}]}")
+        delete to
+    }
+    let body = "[{join(rows, ",")}]"
+    delete rows
+    delete codes
+    delete targets
+    return body
+}
+
+//! a LibreTranslate-shaped refusal, {"error": "..."}, under `status`
+def private libre_error(srv : FrontLink; writer : WriterRef; status : http_status; msg : string) {
+    to_log(LOG_WARNING, "dasllama-server: /translate {int(status)}: {msg}\n")
+    respond(srv, writer, int(status), "application/json", "\{\"error\":{json_str(msg)}}")
+}
+
+//! the wire and the queue slot a translation answer needs, plus the keepalive the job outlives
+def private enqueue_translation(srv : FrontLink; slot : int; job : TrJob; var wire : TrWire) {
+    set_writer_keepalive_timeout(srv, wire.writer, TR_WRITER_KEEPALIVE_MS)
+    g_tr_wires[job.id] <- wire
+    g_tr_pending++
+    g_tr_jobs[slot] |> push_clone(job)
+    to_log(LOG_INFO, "[req {job.id}] translate: queued {job.src} -> {job.trg}, {length(job.texts)} text(s) on {g_translators[slot].id} (pending={g_tr_pending})\n")
+}
+
+//! the `q` field LibreTranslate takes: a string, or an array of strings; empty when it is neither
+def private libre_q(js : JsonValue?; var many : bool&) : array<string> {
+    var texts : array<string>
+    let q = js?["q"]
+    many = q != null && (q.value is _array)
+    if (q != null && (q.value is _string)) {
+        texts |> push(q.value as _string)
+    } elif (many) {
+        texts |> reserve(length(q.value as _array))
+        for (e in q.value as _array) {
+            if (e == null || !(e.value is _string)) {
+                delete texts
+                return <- texts
+            }
+            texts |> push(e.value as _string)
+        }
+    }
+    return <- texts
+}
+
+//! the refusal a /translate body gets before any queue: the fields LibreTranslate requires, the text format alone, a named
+//! source, a pair some loaded model serves. "" when the body is servable, `status` set otherwise.
+def private libre_refusal(js : JsonValue?; texts : array<string>; var status : http_status&) : string {
+    status = http_status.BAD_REQUEST
+    let source = js?["source"] ?? ""
+    let target = js?["target"] ?? ""
+    let format = js?["format"] ?? "text"
+    return "Invalid request: missing q parameter" if (empty(texts))
+    return "Invalid request: missing source parameter" if (empty(source))
+    return "Invalid request: missing target parameter" if (empty(target))
+    return "format '{format}' is not served - only \"text\" (no html)" if (format != "text")
+    return "source 'auto' asks for language detection, which this server does not do - name the source language (GET /languages lists the codes)" if (source == "auto")
+    let chars = [for (t in texts); utf8_length(t)] |> sum()
+    return "q is {chars} characters, past the {TR_MAX_INPUT_CHARS} this route takes - split the text" if (chars > TR_MAX_INPUT_CHARS)
+    status = http_status.SERVICE_UNAVAILABLE
+    return "no translation model is ready - start the server with --translate <model>" if (!any_translator_ready())
+    return "the translation queue is at capacity ({TR_QUEUE_LIMIT}) - retry shortly" if (g_tr_pending >= TR_QUEUE_LIMIT)
+    status = http_status.BAD_REQUEST
+    return "{source} -> {target} is not a served translation pair (GET /languages lists the pairs)" if (translator_for(source, target) < 0)
+    status = http_status.OK
+    return ""
+}
+
+// POST /translate (LibreTranslate): {q, source, target, format?, api_key?} as JSON or a form - `q` a string or an array
+// of strings; answered {"translatedText": "..."}, or an array for an array. `api_key` is accepted and ignored.
+def private queue_text_translation(srv : FrontLink; req : FrontReq; writer : WriterRef) {
+    if (g_shutdown_requested) {
+        libre_error(srv, writer, http_status.SERVICE_UNAVAILABLE, "the server is draining for shutdown - retry shortly")
+        return
+    }
+    if (bench_hold_active()) {
+        libre_error(srv, writer, http_status.SERVICE_UNAVAILABLE, ibench_hold_text())
+        return
+    }
+    var perr = ""
+    var js = read_json(req.body, perr)
+    defer() {
+        unsafe {
+            delete js
+        }
+    }
+    if (js == null || !(js.value is _object)) {
+        libre_error(srv, writer, http_status.BAD_REQUEST, "Invalid request: the body is neither a JSON object nor a form ({perr})")
+        return
+    }
+    warn_ignored_fields(js, TRANSLATE_FIELDS, "/translate")
+    var many = false
+    var texts <- libre_q(js, many)
+    var status = http_status.OK
+    let refused = libre_refusal(js, texts, status)
+    if (!empty(refused)) {
+        libre_error(srv, writer, status, refused)
+        delete texts
+        return
+    }
+    let source = js?["source"] ?? ""
+    let target = js?["target"] ?? ""
+    var job = TrJob(id = next_id(), src = source, trg = target)
+    job.texts <- texts
+    enqueue_translation(srv, translator_for(source, target), job,
+        TrWire(writer = writer, reply = many ? TrReply.libre_list : TrReply.libre_text))
+    delete job
+}
+
+//! A transcript the ASR model handed back for a `target` goes on to the translator: the source is the request's
+//! `language`, else the language the model heard; the texts are the transcript, then - for a verbose reply - each segment.
+def private chain_audio_translation(srv : FrontLink; wire : AsrWire; verbose : string) {
+    var vt : OaiVerboseTranscription
+    if (!sscan_json(verbose, vt)) {
+        respond(srv, wire.writer, int(http_status.INTERNAL_SERVER_ERROR), "application/json",
+            error_body("the ASR model's verbose transcript did not parse", "server_error"))
+        delete vt
+        return
+    }
+    let source = empty(wire.source) ? vt.language : wire.source
+    let refused = (empty(source) ? "the ASR model did not say which language it heard - pass `language` to translate into {wire.target}"
+        : translation_target_refusal(source, wire.target))
+    if (!empty(refused)) {
+        bad_request(srv, wire.writer, refused)
+    } elif (g_tr_pending >= TR_QUEUE_LIMIT) {
+        service_unavailable(srv, wire.writer, "the translation queue is at capacity ({TR_QUEUE_LIMIT}) - retry shortly")
+    } else {
+        let verbose_reply = wire.reply_format == "verbose_json"
+        var job = TrJob(id = next_id(), src = source, trg = wire.target)
+        job.texts |> push(vt.text)
+        if (verbose_reply) {
+            job.texts |> push_from([for (seg in vt.segments); seg.text])
+        }
+        let reply = verbose_reply ? TrReply.audio_verbose : (wire.reply_format == "text" ? TrReply.audio_text : TrReply.audio_json)
+        enqueue_translation(srv, translator_for(source, wire.target), job, TrWire(writer = wire.writer, reply = reply, verbose = verbose_reply ? verbose : ""))
+        delete job
+    }
+    delete vt
+}
+
+//! the answer a landed translation gives, in the shape its route asked for
+def private translation_reply(wire : TrWire; texts : array<string>) : Reply {
+    let first = empty(texts) ? "" : texts[0]
+    if (wire.reply == TrReply.libre_text) {
+        return Reply(body = "\{\"translatedText\":{json_str(first)}}")
+    }
+    if (wire.reply == TrReply.libre_list) {
+        return Reply(body = "\{\"translatedText\":[{join([for (t in texts); json_str(t)], ",")}]}")
+    }
+    if (wire.reply == TrReply.audio_text) {
+        return Reply(ctype = "text/plain; charset=utf-8", body = first)
+    }
+    if (wire.reply == TrReply.audio_json) {
+        return Reply(body = sprint_json(OaiTranscription(text = first), false))
+    }
+    var vt : OaiVerboseTranscription
+    sscan_json(wire.verbose, vt)
+    vt.task = "translate"
+    vt.text = first
+    for (i in range(length(vt.segments))) {
+        if (i + 1 < length(texts)) {
+            vt.segments[i].text = texts[i + 1]
+        }
+    }
+    let body = sprint_json(vt, false)
+    delete vt
+    return Reply(body = body)
+}
+
+//! a translation job that failed or was refused, in the error shape its route answers in
+def private translation_failure(wire : TrWire; status : int; reason : string) : Reply {
+    let libre = wire.reply == TrReply.libre_text || wire.reply == TrReply.libre_list
+    let kind = status == int(http_status.BAD_REQUEST) ? "invalid_request_error" : "server_error"
+    return Reply(status = status, body = libre ? "\{\"error\":{json_str(reason)}}" : error_body(reason, kind))
+}
+
+def private drain_translation_events(srv : FrontLink) {
+    return if (g_tr_events == null)
+    var draining = true
+    while (draining) {
+        draining = g_tr_events |> try_pop_clone() $(event : TrEvent#) {
+            return if (event.kind != TrEventKind.completed)
+            g_tr_pending = max(g_tr_pending - 1, 0)
+            let ok = event.status == int(http_status.OK)
+            if (ok) {
+                g_tr_done_jobs++
+            }
+            let wire = unsafe(g_tr_wires?[event.id])
+            if (wire != null) {
+                if (is_writer_connected(srv, wire.writer)) {
+                    var texts <- [for (t in event.texts); clone_string(t)]
+                    let reply = ok ? translation_reply(*wire, texts) : translation_failure(*wire, event.status, clone_string(event.body))
+                    set_writer_keepalive_timeout(srv, wire.writer, DEFAULT_WRITER_KEEPALIVE_MS)
+                    respond(srv, wire.writer, reply.status, reply.ctype, reply.body)
+                    delete texts
+                } else {
+                    release_writer(srv, wire.writer)
+                }
+                delete g_tr_wires[event.id]
+                g_tr_wires |> erase(event.id)
+            }
+            to_log(LOG_INFO, "[req {event.id}] translate: completed {event.status} (pending={g_tr_pending})\n")
+        }
+    }
+}
+
+// the ready event's payload into its model's slot: every string is cloned, because the popped clone lives in the
+// channel's heap and dies with this callback
+def private adopt_translator_ready(var m : TranslatorSlot; event : TrEvent#) {
+    m.llm = event.llm
+    m.src = event.llm ? "" : clone_string(event.src)
+    m.trg = event.llm ? "" : clone_string(event.trg)
+    m.langs |> clear()
+    m.langs |> reserve(length(event.langs))
+    for (code in event.langs) {
+        m.langs |> push(clone_string(code))
+    }
+}
+
+//! Start every translation model's worker and wait for each to load. A worker that cannot load DEGRADES its model as a
+//! TTS worker does: the model serves no pair, the boot serves on, and the `translate` block of /v1/stats carries the
+//! reason. The workers take the TTS worker's dispatch.
+def private start_translator_workers() {
+    g_tr_jobs |> resize(length(g_translators))
+    for (k in range(length(g_translators))) {
+        assume m = g_translators[k]
+        m.ready = 0
+        g_tr_jobs[k] = worker_channel()
+        to_log(LOG_INFO, "dasllama-server: starting the translation worker for {m.id}\n")
+        let slot = k
+        let model_path = m.path
+        let team_dispatch = g_tts_team_dispatch
+        let metal = g_speech_metal
+        var jobs_capture = g_tr_jobs[k]
+        var events_capture = g_tr_events
+        new_thread() <| @capture(= slot, = model_path, = team_dispatch, = metal, = jobs_capture, = events_capture) {
+            translator_worker_main(slot, model_path, team_dispatch, metal, jobs_capture, events_capture)
+        }
+        var load_failure = ""
+        while (m.ready < 1 && empty(load_failure)) {
+            g_tr_events |> pop_with_timeout_clone(1000) $(event : TrEvent#) {
+                if (event.kind == TrEventKind.ready) {
+                    adopt_translator_ready(m, event)
+                    m.ready = 1
+                    let serves = m.llm ? "any two of {length(m.langs)} languages" : "{m.src} -> {m.trg}"
+                    to_log(LOG_INFO, "dasllama-server: translation worker ready ({m.id}: {serves})\n")
+                } elif (event.kind == TrEventKind.failed) {
+                    load_failure = clone_string(event.body)
+                }
+            }
+        }
+        if (!empty(load_failure)) {
+            m.error = load_failure
+            to_log(LOG_ERROR, "dasllama-server: {m.id} serves no translation - its worker could not load {m.path}: {load_failure} (fix the file, then POST /restart)\n")
+        }
+    }
+}
+
+//! A translation in flight when the stop arrives still lands: its wire is ours to close.
+def private discard_translation_completion(id : int64) {
+    g_tr_pending = max(g_tr_pending - 1, 0)
+    let wire = unsafe(g_tr_wires?[id])
+    if (wire != null) {
+        if (g_link.out != null) {
+            release_writer(g_link, wire.writer)
+        }
+        delete g_tr_wires[id]
+        g_tr_wires |> erase(id)
+    }
+    to_log(LOG_WARNING, "[req {id}] translation discarded during teardown\n")
+}
+
+def private stop_translator_workers() {
+    var asked = 0
+    for (m, jobs in g_translators, g_tr_jobs) {
+        if (m.ready > 0 && jobs != null) {
+            jobs |> push_clone(TrJob(kind = TrJobKind.stop))
+            asked++
+        }
+    }
+    let stopped = await_stopped(g_tr_events, asked, WORKER_STOP_WAIT_NS) $(event : TrEvent#) {
+        if (event.kind == TrEventKind.completed) {
+            discard_translation_completion(event.id)
+        }
+        return event.kind == TrEventKind.stopped
+    }
+    if (stopped < asked) {
+        to_log(LOG_WARNING, "dasllama-server: {asked - stopped} translation worker(s) did not answer the stop within {WORKER_STOP_WAIT_NS / 1_000_000_000l} s - a dead worker must not hang the teardown\n")
+    }
+    for (m in g_translators) {
+        m.ready = 0
+    }
+}
+
 // ===== async vision encode (the ASR worker pattern: own context, own embedder) =====
 // The decode + letterbox + embedder GEMMs run on ONE worker thread, so an image request never
 // stalls the tick loop's decode of every live stream.
@@ -6236,6 +6864,8 @@ let private ROUTES = fixed_array(
     RouteRow(path = "/v1/audio/translations", method = "POST", route = Route.translate, upload = true),
     RouteRow(path = "/v1/audio/speech", method = "POST", route = Route.speech),
     RouteRow(path = "/v1/audio/phonemes", method = "POST", route = Route.phonemes),
+    RouteRow(path = "/translate", method = "POST", route = Route.text_translate),
+    RouteRow(path = "/languages", method = "GET", route = Route.languages),
     RouteRow(path = "/v1/embeddings", method = "POST", route = Route.embeddings),
     RouteRow(path = "/v1/models/activate", method = "POST", route = Route.activate),
     RouteRow(path = "/v1/models/load", method = "POST", route = Route.load),
@@ -6298,7 +6928,61 @@ def private route_row(path, method : string) : RouteRow {
 
 //! the routes the speech thread answers when the server has one
 def private speech_route(route : Route) : bool
-    => route == Route.transcribe || route == Route.translate || route == Route.speech || route == Route.phonemes
+    => (route == Route.transcribe || route == Route.translate || route == Route.speech || route == Route.phonemes
+        || route == Route.text_translate || route == Route.languages)
+
+//! a urlencoded or multipart form body, which LibreTranslate's clients send as often as JSON
+def private is_form_body(req : HttpRequest?) : bool {
+    let ctype = to_lower(get_header(req, "Content-Type"))
+    return find(ctype, "x-www-form-urlencoded") >= 0 || find(ctype, "multipart/form-data") >= 0
+}
+
+//! one urlencoded name or value decoded: `+` a space, `%XX` its byte
+def private form_unescape(text : string) : string => unescape_uri(replace(text, "+", " "))
+
+//! every non-empty value of the LibreTranslate fields a urlencoded body carries, a repeated field once each time it
+//! appears (libhv's own parse keeps the last only)
+def private url_encoded_fields(body : string) : table<string; array<string>> {
+    var fields : table<string; array<string>>
+    for (pair in split(body, "&")) {
+        let eq = find(pair, "=")
+        continue if (eq < 0)
+        let key = form_unescape(slice(pair, 0, eq))
+        let value = form_unescape(slice(pair, eq + 1))
+        if (!empty(value) && find_index(LIBRE_FORM_FIELDS, key) >= 0) {
+            fields[key] |> push(value)
+        }
+    }
+    return <- fields
+}
+
+//! the LibreTranslate fields a multipart form carries, one value each
+def private multipart_fields(var req : HttpRequest?) : table<string; array<string>> {
+    var fields : table<string; array<string>>
+    for (key in LIBRE_FORM_FIELDS) {
+        let value = get_form_data(req, key)
+        if (!empty(value)) {
+            fields[key] |> push(value)
+        }
+    }
+    return <- fields
+}
+
+//! a LibreTranslate form as the JSON body the translate route reads: a repeated `q` (`q=a&q=b`) becomes an array, as a
+//! JSON client sends it. A multipart form carries one value a field: libhv's form parse keeps one.
+def private libre_form_json(var req : HttpRequest?) : string {
+    let urlencoded = find(to_lower(get_header(req, "Content-Type")), "x-www-form-urlencoded") >= 0
+    var inscope fields <- urlencoded ? url_encoded_fields("{req.body}") : multipart_fields(req)
+    var members : array<string>
+    for (key in LIBRE_FORM_FIELDS) {
+        fields |> get(key) $(values) {
+            let many = key == "q" && length(values) > 1
+            let value = many ? "[{join([for (v in values); json_str(v)], ",")}]" : json_str(values[0])
+            members |> push("{json_str(key)}:{value}")
+        }
+    }
+    return "\{{join(members, ",")}}"
+}
 
 //! one request across to the engine: the wire parked under a fresh id, the upload saved, the body cloned
 def private front_forward(var req : HttpRequest?; var writer : HttpResponseWriter?) {
@@ -6327,6 +7011,9 @@ def private front_forward(var req : HttpRequest?; var writer : HttpResponseWrite
         fr.form_format = get_form_data(req, "response_format")
         fr.form_language = get_form_data(req, "language")
         fr.form_model = get_form_data(req, "model")
+        fr.form_target = get_form_data(req, "target")
+    } elif (row.route == Route.text_translate && is_form_body(req)) {
+        fr.body = libre_form_json(req)
     } else {
         fr.body = "{req.body}"
     }
@@ -6607,6 +7294,10 @@ def private speech_dispatch(req : FrontReq; writer : WriterRef) {
         queue_speech(g_link, req, writer)
     } elif (req.route == Route.phonemes) {
         queue_phonemes(g_link, req, writer)
+    } elif (req.route == Route.text_translate) {
+        queue_text_translation(g_link, req, writer)
+    } elif (req.route == Route.languages) {
+        respond(g_link, writer, int(http_status.OK), "application/json", languages_json())
     } else {
         queue_transcription(g_link, req, writer, req.route == Route.translate)
     }
@@ -6705,6 +7396,7 @@ def private stop_front() {
 struct private SpeechBoot {
     asr : array<AsrSlot>
     tts : array<TtsSlot>
+    translators : array<TranslatorSlot>
     asr_team : bool
     tts_team : bool
     asr_alias : string
@@ -6726,6 +7418,9 @@ struct private SpeechSnapshot {
     tts_pending : int
     tts_done_jobs : int64
     tts_audio_s : float
+    translators : array<TranslatorSlot>
+    tr_pending : int
+    tr_done_jobs : int64
 }
 
 var private g_speech_in : Channel?     //! front and engine -> speech thread: FrontReq
@@ -6741,9 +7436,10 @@ let private SPEECH_SNAPSHOT_EVERY_US = 250000l   //! a running job's progress re
 def private speech_snapshot(stopped : bool) : SpeechSnapshot {
     var snap = SpeechSnapshot(stopped = stopped, asr_done_jobs = g_asr_done_jobs, asr_audio_s = g_asr_audio_s,
         asr_active = g_asr_active, asr_pending = g_asr_pending, tts_pending = g_tts_pending,
-        tts_done_jobs = g_tts_done_jobs, tts_audio_s = g_tts_audio_s)
+        tts_done_jobs = g_tts_done_jobs, tts_audio_s = g_tts_audio_s, tr_pending = g_tr_pending, tr_done_jobs = g_tr_done_jobs)
     snap.asr := g_asr
     snap.tts := g_tts
+    snap.translators := g_translators
     snap.asr_recent := g_asr_recent
     return <- snap
 }
@@ -6756,6 +7452,10 @@ def private speech_signature : int64 {
     }
     for (m in g_tts) {
         sig = sig * 3l + int64(m.ready + (m.armed ? 2 : 0))
+    }
+    sig = sig * 13l + g_tr_done_jobs * 11l + int64(g_tr_pending)
+    for (m in g_translators) {
+        sig = sig * 3l + int64(m.ready)
     }
     return sig
 }
@@ -6796,6 +7496,7 @@ def private speech_main(var boot : Channel?&; var inbox : Channel?&; var to_engi
     boot |> pop_with_timeout_clone(SPEECH_START_WAIT_MS) $(b : SpeechBoot#) {
         g_asr := b.asr
         g_tts := b.tts
+        g_translators := b.translators
         g_asr_team_dispatch = b.asr_team
         g_tts_team_dispatch = b.tts_team
         g_speech_metal = b.metal
@@ -6807,10 +7508,12 @@ def private speech_main(var boot : Channel?&; var inbox : Channel?&; var to_engi
     g_shutdown_requested = false
     g_asr_events = worker_channel()
     g_tts_events = worker_channel()
+    g_tr_events = worker_channel()
     var failure = ""
     let failed = catch_worker_panic(failure) {   // an ASR model that cannot load panics its boot: here that is this thread, and the engine waits on its first snapshot
         start_asr_worker_threads()
         start_tts_worker()
+        start_translator_workers()
     }
     var first <- speech_snapshot(failed)
     first.failure = failure
@@ -6823,9 +7526,10 @@ def private speech_main(var boot : Channel?&; var inbox : Channel?&; var to_engi
         halt = speech_inbox(inbox, to_engine)
         drain_asr_events(g_link)
         drain_tts_events(g_link)
+        drain_translation_events(g_link)
         reap_speech_wires(g_link)
         let sig = speech_signature()
-        let busy = g_asr_active + g_asr_pending + g_tts_pending > 0
+        let busy = g_asr_active + g_asr_pending + g_tts_pending + g_tr_pending > 0
         if (sig != sent_sig || (busy && int64(get_time_usec(sent_at)) >= SPEECH_SNAPSHOT_EVERY_US)) {
             var snap <- speech_snapshot(false)
             to_engine |> push_clone(snap)
@@ -6836,6 +7540,7 @@ def private speech_main(var boot : Channel?&; var inbox : Channel?&; var to_engi
     }
     stop_asr_worker_threads()
     stop_tts_worker()
+    stop_translator_workers()
     release_speech_state()
     if (!failed) {   // a failed start said so in its one snapshot
         var last <- speech_snapshot(true)
@@ -6844,6 +7549,7 @@ def private speech_main(var boot : Channel?&; var inbox : Channel?&; var to_engi
     }
     delete g_asr
     delete g_tts
+    delete g_translators
     delete g_gone
     g_link.out = null
     to_front |> release
@@ -6855,31 +7561,41 @@ def private speech_main(var boot : Channel?&; var inbox : Channel?&; var to_engi
 def private release_speech_state {
     delete g_asr_wires
     delete g_tts_wires
+    delete g_tr_wires
     for (served in g_tts_served) {   // the synthesis temp files outlive the process otherwise: nothing else sweeps tmpdir
         remove_result(served.path)
     }
     delete g_tts_served
     var asr_events = g_asr_events
     var tts_events = g_tts_events
+    var tr_events = g_tr_events
     g_asr_events = null
     g_tts_events = null
+    g_tr_events = null
     for (jobs in g_asr_jobs) {
         remove_worker_channels(jobs, null)
     }
     for (jobs in g_tts_jobs) {
         remove_worker_channels(jobs, null)
     }
+    for (jobs in g_tr_jobs) {
+        remove_worker_channels(jobs, null)
+    }
     remove_worker_channels(asr_events, tts_events)
+    remove_worker_channels(tr_events, null)
     g_asr_jobs |> clear()   // the channels are gone: only the buffers are left to free
     g_tts_jobs |> clear()
+    g_tr_jobs |> clear()
     unsafe {
         delete g_asr_jobs
         delete g_tts_jobs
+        delete g_tr_jobs
     }
     delete g_asr_recent
     g_asr_active = 0
     g_asr_pending = 0
     g_tts_pending = 0
+    g_tr_pending = 0
 }
 
 //! the engine's copy of the speech state, off a snapshot
@@ -6894,13 +7610,16 @@ def private adopt_speech_snapshot(snap : SpeechSnapshot#) {
     g_tts_pending = snap.tts_pending
     g_tts_done_jobs = snap.tts_done_jobs
     g_tts_audio_s = snap.tts_audio_s
+    g_translators := snap.translators
+    g_tr_pending = snap.tr_pending
+    g_tr_done_jobs = snap.tr_done_jobs
 }
 
 //! Start the speech thread when a speech model is configured, and wait for its models to load: its first snapshot is
 //! their load state, which the boot's own checks read. A server with no speech model runs none - the engine answers
 //! the speech routes' refusals itself.
 def private start_speech_thread {
-    return if (empty(g_asr) && empty(g_tts))
+    return if (empty(g_asr) && empty(g_tts) && empty(g_translators))
     g_speech_in = worker_channel()
     g_speech_out = worker_channel()
     var boot = worker_channel()
@@ -6908,6 +7627,7 @@ def private start_speech_thread {
     var first = SpeechBoot(asr_team = g_asr_team_dispatch, tts_team = g_tts_team_dispatch, asr_alias = g_asr_alias, metal = get_metal_mode())
     first.asr := g_asr
     first.tts := g_tts
+    first.translators := g_translators
     boot |> push_clone(first)
     delete first
     var inbox = g_speech_in
@@ -7383,7 +8103,7 @@ def update_server() : bool {
         prof_window_report()
     }
     if (g_shutdown_requested && total_active() == 0l && total_queued() == 0l &&
-        g_asr_pending == 0 && g_tts_pending == 0 && g_media_pending == 0) {
+        g_asr_pending == 0 && g_tts_pending == 0 && g_tr_pending == 0 && g_media_pending == 0) {
         to_log(LOG_INFO, "dasllama-server: graceful shutdown drain complete\n")
         return false
     }
@@ -7493,6 +8213,7 @@ def shutdown_server() {   // nolint:STYLE038 — one ordered teardown: workers s
     }
     delete g_asr
     delete g_tts
+    delete g_translators
     g_media_pending = 0
     if (g_jobque_owned) {
         destroy_job_que()

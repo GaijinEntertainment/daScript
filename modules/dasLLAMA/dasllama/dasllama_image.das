@@ -658,8 +658,9 @@ def private read_u64(p : uint8 const?; at : int64) : uint64 {
 
 
 
+//! A POD array as its length and one bulk payload - the form a family's meta serializer routes a scalar table through.
 [arch(at = "../ARCHITECTURE_IMAGE.md#image-bulk-serialize")]
-def private serialize_pod_array(var arch : Archive; var a : array<auto(TT)>) {
+def serialize_pod_array(var arch : Archive; var a : array<auto(TT)>) {
     var n = length(a)
     arch |> serialize_raw(n)
     if (arch.reading) {

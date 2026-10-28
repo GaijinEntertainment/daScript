@@ -376,6 +376,15 @@ let TTS_POCKET_SMALL_RECIPE = "convert: modules/dasLLAMA/harness/convert_pocket.
 let TTS_POCKET_SMALL_F32_RECIPE = "convert: modules/dasLLAMA/harness/convert_pocket.py --language <config> --keep-f32 --name pocket-tts-en-<size>[-f32] over the sources of the small files' recipe (every tensor as the f32 bundle stores it; the parity rail's reference under tests/test_tts_pocket.das, local only)"
 let TTS_PACKS_RECIPE = "mint: modules/dasLLAMA/performance/build_tts_data.das -- --root <g2p experiment root> --out <models dir> runs harness/build_g2p_data.py (misaki 0.9.4 gold/silver + CMUdict 0.7a + the g2p_en 2.1.0 GRU + harness/g2p_local_additions.json into tts_g2p.bin) and harness/train_postag.py (UD English-EWT + spaCy-labelled silver prose into tts_postag.bin)"
 let TTS_ORACLE_RECIPE = "mint: modules/dasLLAMA/performance/build_tts_data.das -- --root <g2p experiment root> --out <models dir> runs the PyTorch / ONNX reference per model over the bring-up sentences and dumps every stage the parity rail (tests/_tts_parity.das) compares"
+//! the Bergamot translation students (tests/test_nmt.das): Firefox Translations' Marian int8 files, each with its shared
+//! vocabulary beside it; the rows pin the bytes the suite was held on
+//! Mozilla's translation-model bucket: each student's file and vocabulary under its training run's `exported/`, gzipped
+let BERGAMOT_BUCKET = "https://storage.googleapis.com/moz-fx-translations-data--303e-prod-translations-data"
+let BERGAMOT_RECIPE = "fetch: the url (Mozilla's translation-model bucket, the run Firefox serves for the pair and tier the folder names, `bergamot/<src>-<trg>-<tier>/`), gunzipped, byte for byte - the suite reads the Marian file and bakes its own `.dlim`"
+let NMT_ORACLE_RECIPE = "mint: modules/dasLLAMA/benchmarks/nmt/bergamot_oracle.py --marian <marian-decoder of setup_asr_rig.das --refs> --model <models dir>/bergamot/<dir> --fixture modules/dasLLAMA/benchmarks/nmt/corpus/<src>.txt --out <models dir>/nmt_oracle/<dir>/<src>_f32 (and _int8), plus --spm-edge corpus/spm_edge.txt for spm_edge.json: marian's f32 graph over the student's dequantized weights, every stage and the tokens"
+//! the translation LLM the facade's completion form serves (tests/test_nmt.das, tutorial 17)
+let MILMMT_RECIPE = "fetch: the url (mradermacher's GGUF quantization of MiLMMT-46-1B-v0.1 - Gemma 3 1B trained further on translation between 46 languages - at Q4_K_M), byte for byte"
+
 //! the storyteller example's story model: our conversion of the llama2.c checkpoint, published beside the storywish model
 let STORIES15M_RECIPE = "convert: the reference build's llama-convert-llama2c-to-ggml --copy-vocab-from-model tokenizer.bin --llama2c-model stories15M.bin over karpathy/tinyllamas ({HF}/karpathy/tinyllamas: stories15M.bin + tokenizer.bin, the llama2.c checkpoint), then its llama-quantize to Q8_0 and llama.context_length set to 256; the published file is that conversion - the gate is the storyteller's smoke rail (tests/test_storyteller_restart.das), which writes and reads a story out of it: a smoke, not a parity check, the toy model pins no reference output"
 
@@ -1066,7 +1075,52 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             sha256 = "80ca90b4a60716693722ed19a91945d326f4611f8573defe27f722d6f4bd50a2"),
         ModelSpec(file = "pocket-tts-en-2m-refl.gguf", recipe = TTS_POCKET_SMALL_RECIPE, serve_tts = true,
             url = "{TTS_HF}/pocket-tts-en-2m-refl.gguf", bytes = 23758432l,
-            sha256 = "54dead7cb04aa87971b32f4a25288d566c95c739290581df91742155fcc61230")
+            sha256 = "54dead7cb04aa87971b32f4a25288d566c95c739290581df91742155fcc61230"),
+        // the translation family: the five Bergamot students the suite holds to marian's graph (tests/test_nmt.das), each with
+        // its vocabulary and its oracle dumps as companions, and the translation LLM the facade's completion form serves
+        ModelSpec(file = "bergamot/ru-en-base-memory/model.ruen.intgemm.alphas.bin", recipe = BERGAMOT_RECIPE,
+            url = "{BERGAMOT_BUCKET}/models/ru-en/next26_RSpwfHrcSUC_rKTnhOEXzw/exported/model.ruen.intgemm.alphas.bin.gz",
+            bytes = 31561787l, sha256 = "aa0efa194b3dbd2da129ba0b8db8ef139126cb0914e57072f62061294746f1e2",
+            companions <- [
+                ProvEntry(name = "bergamot/ru-en-base-memory/vocab.ruen.spm", root = "llm", recipe = BERGAMOT_RECIPE,
+                    url = "{BERGAMOT_BUCKET}/models/ru-en/next26_RSpwfHrcSUC_rKTnhOEXzw/exported/vocab.ruen.spm.gz",
+                    bytes = 952371l, sha256 = "de8af5f87e231ee4016cec4bb482e6b584cb1ca34dcb624fc7b8398f25bb35df"),
+                ProvEntry(name = "nmt_oracle/ru-en-base-memory", root = "llm", recipe = NMT_ORACLE_RECIPE)]),
+        ModelSpec(file = "bergamot/en-ru-base-memory/model.enru.intgemm.alphas.bin", recipe = BERGAMOT_RECIPE,
+            url = "{BERGAMOT_BUCKET}/models/en-ru/retrain_base-memory_KJ23-iDVTcymG1ZldWY17w/exported/model.enru.intgemm.alphas.bin.gz",
+            bytes = 31561787l, sha256 = "184cb5cda528eeefc0f75f5d0035d787b71d74af135e3c5608d01ae02ecfb920",
+            companions <- [
+                ProvEntry(name = "bergamot/en-ru-base-memory/vocab.enru.spm", root = "llm", recipe = BERGAMOT_RECIPE,
+                    url = "{BERGAMOT_BUCKET}/models/en-ru/retrain_base-memory_KJ23-iDVTcymG1ZldWY17w/exported/vocab.enru.spm.gz",
+                    bytes = 904455l, sha256 = "56ee63e14e8cb926c394242adc3ed7cc602644c3d33058cff2ce2959d52a6258"),
+                ProvEntry(name = "nmt_oracle/en-ru-base-memory", root = "llm", recipe = NMT_ORACLE_RECIPE)]),
+        ModelSpec(file = "bergamot/en-ru-base/model.enru.intgemm.alphas.bin", recipe = BERGAMOT_RECIPE,
+            url = "{BERGAMOT_BUCKET}/models/en-ru/student_base_AYqN3ysXRp2EGkEqeaA5Rg/exported/model.enru.intgemm.alphas.bin.gz",
+            bytes = 42992955l, sha256 = "0ef9a209c5edc46692750e7505b3695655b1c7c3ec73058b641201ef18c481ce",
+            companions <- [
+                ProvEntry(name = "bergamot/en-ru-base/vocab.enru.spm", root = "llm", recipe = BERGAMOT_RECIPE,
+                    url = "{BERGAMOT_BUCKET}/models/en-ru/student_base_AYqN3ysXRp2EGkEqeaA5Rg/exported/vocab.enru.spm.gz",
+                    bytes = 904455l, sha256 = "56ee63e14e8cb926c394242adc3ed7cc602644c3d33058cff2ce2959d52a6258"),
+                ProvEntry(name = "nmt_oracle/en-ru-base", root = "llm", recipe = NMT_ORACLE_RECIPE)]),
+        ModelSpec(file = "bergamot/ru-en-tiny/model.ruen.intgemm.alphas.bin", recipe = BERGAMOT_RECIPE,
+            url = "{BERGAMOT_BUCKET}/models/ru-en/spring-2024_QrcdYgbwS7e7xbhtOSdoNQ/exported/model.ruen.intgemm.alphas.bin.gz",
+            bytes = 17141051l, sha256 = "b1d85c13cfbb05e1d326dd6f0fb5ef270a2011b547450260f96567a93f446c94",
+            companions <- [
+                ProvEntry(name = "bergamot/ru-en-tiny/vocab.ruen.spm", root = "llm", recipe = BERGAMOT_RECIPE,
+                    url = "{BERGAMOT_BUCKET}/models/ru-en/spring-2024_QrcdYgbwS7e7xbhtOSdoNQ/exported/vocab.ruen.spm.gz",
+                    bytes = 905257l, sha256 = "93bdc941b16e523695c319f74778bca9fd8b75a25ad75020cdc98aef74cdc0fc"),
+                ProvEntry(name = "nmt_oracle/ru-en-tiny", root = "llm", recipe = NMT_ORACLE_RECIPE)]),
+        ModelSpec(file = "bergamot/en-de-base-memory/model.ende.intgemm.alphas.bin", recipe = BERGAMOT_RECIPE,
+            url = "{BERGAMOT_BUCKET}/models/en-de/retrain_hr_fix_names_SCgGhxUPQ2WAECHLRtzrMg/exported/model.ende.intgemm.alphas.bin.gz",
+            bytes = 31561787l, sha256 = "8df29d9494d19f47fd5d97c6a73474c6f657e9f81c1a607c431d02befdf3810f",
+            companions <- [
+                ProvEntry(name = "bergamot/en-de-base-memory/vocab.ende.spm", root = "llm", recipe = BERGAMOT_RECIPE,
+                    url = "{BERGAMOT_BUCKET}/models/en-de/retrain_hr_fix_names_SCgGhxUPQ2WAECHLRtzrMg/exported/vocab.ende.spm.gz",
+                    bytes = 810073l, sha256 = "69f730becafa48e3bb2c244eab66456877c08959a02f2bd5519b5a3088b62f9c"),
+                ProvEntry(name = "nmt_oracle/en-de-base-memory", root = "llm", recipe = NMT_ORACLE_RECIPE)]),
+        ModelSpec(file = "milmmt/MiLMMT-46-1B-v0.1.Q4_K_M.gguf", recipe = MILMMT_RECIPE,
+            url = "https://huggingface.co/mradermacher/MiLMMT-46-1B-v0.1-GGUF/resolve/b1df0ed3a68176ac11281077fdf74a8c17e4938f/MiLMMT-46-1B-v0.1.Q4_K_M.gguf",
+            bytes = 1013675392l, sha256 = "9d5c10855eb2688d453e3069e7b6dee1756fc834d738d2dc04318511993fd54f")
     ]
 }
 

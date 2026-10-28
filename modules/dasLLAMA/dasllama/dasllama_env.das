@@ -816,6 +816,11 @@ struct public ProfilingEnv {
     @clarg_doc = "CrispASR checkout used for the GigaAM ASR reference baselines (its Metal build in build/, its CPU-only build in build-cpu/)."
     crispasr : string = "../CrispASR"
 
+    @clarg_env = "MARIAN"
+    @clarg_path
+    @clarg_doc = "Mozilla translations checkout whose patched inference/build/marian-decoder is the Bergamot translation reference."
+    marian : string = "../translations"
+
     @clarg_env = "MTMD_BIN"
     @clarg_path
     @clarg_doc = "llama-mtmd-cli binary for multimodal reference baselines."
@@ -850,6 +855,11 @@ struct public ProfilingEnv {
     @clarg_path
     @clarg_doc = "Python interpreter of the GigaAM oracle venv (upstream gigaam + torch), for the GigaAM external-reference dumps."
     gigaam_py : string = ""
+
+    @clarg_env = "NMT_PY"
+    @clarg_path
+    @clarg_doc = "Python interpreter of the translation oracle venv (numpy, sentencepiece), for the Bergamot marian stage dumps."
+    nmt_py : string = ""
 
     @clarg_env = "OS"
     @clarg_default_doc = "set by Windows"

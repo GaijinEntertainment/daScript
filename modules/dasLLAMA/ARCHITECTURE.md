@@ -60,6 +60,7 @@ any sibling companion that sends a reader to it.
   shared assembly, the families and the facade.
 - `ARCHITECTURE_POCKET.md` - the Pocket TTS family, a continuous-audio language model with its
   own assembly.
+- `ARCHITECTURE_TRANSLATE.md` - the Bergamot translation family (`ARCHITECTURE_TRANSLATE.md#nmt-charter`).
 
 Every file under `dasllama/` appears in a companion. Two carry generated CONTENT rather
 than being generated themselves: `dasllama_env.das` holds the `[EnvConfig]` knob declarations
@@ -262,6 +263,10 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
 - `ARCHITECTURE_POCKET.md` - the Pocket codec's windowed stream, a voice as the backbone's
   key-value memory, the one-step head's baked timestep constants, the released chunker, and the
   published file's served quants.
+- `ARCHITECTURE_TRANSLATE.md` - the Marian source's two served lanes (`ARCHITECTURE_TRANSLATE.md#nmt-lanes`), the
+  oracle the family is held to (`ARCHITECTURE_TRANSLATE.md#nmt-oracle`), the device homes' shared admission
+  (`ARCHITECTURE_TRANSLATE.md#nmt-device-homes`), and the decode step's narrowed pool
+  (`ARCHITECTURE_TRANSLATE.md#nmt-step-lanes`).
 
 ## Inherited invariants {#inherited-invariants}
 

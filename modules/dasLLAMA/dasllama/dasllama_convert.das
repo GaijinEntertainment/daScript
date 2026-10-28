@@ -32,6 +32,9 @@ def rd_u32(b : array<uint8> | #; o : int64) : uint =>
 
 def rd_f32(b : array<uint8> | #; o : int64) : float => unsafe(reinterpret<float>(rd_u32(b, o)))
 
+//! the little-endian u64 at byte `o` of `b`
+def rd_u64(b : array<uint8> | #; o : int64) : uint64 => uint64(rd_u32(b, o)) | (uint64(rd_u32(b, o + 4l)) << 32ul)
+
 let GGML_BIN_Q8_BLOCK_ELEMS = 32l   //!< a Q8_0 block of a ggml bin: an f16 scale, then this many quants
 let GGML_BIN_Q8_BLOCK_BYTES = 34l
 

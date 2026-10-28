@@ -235,16 +235,6 @@ let private TW_Q8_MATS = 6l
 let private TW_Q8_VIS_SITES = 6l   //! a vision block's q8 regions a layer: q, k, v, o, up, down (qwen3v's fused qkv split in three)
 let private TW_Q8_BLOCK_BYTES = Q8_QPB + Q8_SPB
 
-//! one GEMM region out of the CPU backend's layout into the q8 blob's blocks at the 16-byte-aligned cursor; answers its byte offset
-def private tw_q8_region_of(qblob : PlaneI8; qscales : PlaneF; off, n, rows : int64; lay : Q8RepackLayout; var staging : array<uint8>; var cur : uint64&) : uint64 {
-    cur = (cur + 15ul) & ~15ul
-    let at = cur
-    q8_region_to_metal_blob(plane_at(qblob, off), plane_at(qscales, off / Q8_BLOCK_ELEMS),
-        n, rows, lay.repacked, lay.mr, lay.kgroup, lay.wbias, unsafe(addr(staging[int64(cur)])))
-    cur += uint64((rows * n / Q8_BLOCK_ELEMS) * TW_Q8_BLOCK_BYTES)
-    return at
-}
-
 var private g_tw_q8_vis : St2SlabBase            //!< the served vision tower's q8 block GEMM planes as one device blob, beside the audio one
 var private @exact_size g_tw_q8_vis_boffs : array<uint64>    //!< its regions' byte offsets, the family's count a layer
 
@@ -279,7 +269,7 @@ def private tw_q8_attach_slab(var slab : St2SlabBase; var boffs : array<uint64>;
     boffs |> reserve_resize(long_length(regions))
     var cur = 0ul
     for (i, rg in range64(long_length(regions)), regions) {
-        boffs[i] = tw_q8_region_of(qblob, qscales, rg.woff, rg.n, rg.rows, lay, staging, cur)
+        boffs[i] = q8_region_append(qblob, qscales, rg.woff, rg.n, rg.rows, lay, staging, cur)
     }
     var blob = metal_new_buffer(g_dev, cur)
     if (blob != null) {

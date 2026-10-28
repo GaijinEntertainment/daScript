@@ -53,7 +53,7 @@ def test_plan_dispatch(t : T?) {
 [test]
 def test_plan_playback(t : T?) {
     t |> run("--play and --null-audio parse on the commands that speak, off by default") @(t : T?) {
-        for (cmd in ["chat", "speak", "talk"]) {
+        for (cmd in ["chat", "speak", "talk", "translate"]) {
             let off <- parse_cli([cmd, "--tts", "t.gguf", "hi"])
             t |> equal(off.error, "", cmd)
             t |> success(!off.playback.play && !off.playback.null_audio, "{cmd}: off by default")
@@ -73,7 +73,7 @@ def test_plan_verbose(t : T?) {
     t |> run("--verbose is a shared flag on every command, off by default") @(t : T?) {
         let quiet <- parse_cli(["complete", "-m", "x.gguf", "hi"])
         t |> success(!quiet.common.verbose, "off by default")
-        for (cmd in ["complete", "chat", "transcribe", "speak", "talk", "embed", "tokenize", "bench"]) {
+        for (cmd in ["complete", "chat", "transcribe", "speak", "talk", "translate", "embed", "tokenize", "bench"]) {
             let plan <- parse_cli([cmd, "--verbose", "-m", "x.gguf"])
             t |> equal(plan.error, "", cmd)
             t |> success(plan.common.verbose, "{cmd} --verbose")
@@ -152,6 +152,44 @@ def test_plan_flags(t : T?) {
         t |> equal(b.error, "")
         t |> equal(b.embed.text, "x")
         t |> success(b.embed.json, "json")
+    }
+}
+
+[test]
+def test_plan_translate(t : T?) {
+    t |> run("translate: the model by flag or bare, the speech model, the script and the lane") @(t : T?) {
+        let plan <- parse_cli(["translate", "--nmt", "model.ruen.intgemm.alphas.bin", "--tts", "t.gguf", "-v", "af", "--script", "s.txt", "--out-dir", "w", "--exact", "--quiet"])
+        t |> equal(plan.error, "")
+        t |> equal(plan.translate.nmt, "model.ruen.intgemm.alphas.bin")
+        t |> equal(plan.translate.tts, "t.gguf")
+        t |> equal(plan.translate.voice, "af")
+        t |> equal(plan.translate.script, "s.txt")
+        t |> equal(plan.translate.out_dir, "w")
+        t |> success(plan.translate.exact && plan.translate.quiet, "exact, quiet")
+        let llm <- parse_cli(["translate", "milmmt.gguf", "--from", "ru", "--to", "de"])
+        t |> equal(llm.error, "")
+        t |> equal(llm.translate.from, "ru")
+        t |> equal(llm.translate.to, "de")
+        let bare <- parse_cli(["translate", "model.enru.intgemm.alphas.bin"])
+        t |> equal(bare.error, "")
+        t |> equal(bare.bare[0], "model.enru.intgemm.alphas.bin")
+        t |> success(!bare.translate.exact, "the q8 lane by default")
+    }
+}
+
+[test]
+def test_plan_mic(t : T?) {
+    t |> run("--mic, --asr, --asr-mmproj and --lang parse on the commands that listen") @(t : T?) {
+        for (cmd in ["chat", "translate"]) {
+            let plan <- parse_cli([cmd, "m.bin", "--mic", "ptt", "--asr", "a.gguf", "--asr-mmproj", "mm.gguf", "-l", "ru"])
+            t |> equal(plan.error, "", cmd)
+            t |> equal(plan.mic.mic, "ptt", cmd)
+            t |> equal(plan.mic.asr, "a.gguf", cmd)
+            t |> equal(plan.mic.asr_mmproj, "mm.gguf", cmd)
+            t |> equal(plan.mic.lang, "ru", cmd)
+        }
+        t |> success(find(command_help(CliCommand.translate), "--mic") >= 0, "the translate help lists the microphone flags")
+        t |> success(find(command_help(CliCommand.speak), "--mic") < 0, "the speak help does not")
     }
 }
 
@@ -458,6 +496,12 @@ def test_validate_plan(t : T?) {
             (args = ["talk", "--tts", "t.gguf", "--in", "q.wav"], wants = "no ASR model to hear"),
             (args = ["talk", "--prompt", "hi"], wants = "no TTS model to speak"),
             (args = ["chat", "-m", "x.gguf", "--play"], wants = "--play needs a speech model"),
+            (args = ["translate"], wants = "no translation model"),
+            (args = ["translate", "m.bin", "--mic", "push"], wants = "--mic is vad | ptt"),
+            (args = ["translate", "m.bin", "--mic", "vad"], wants = "--mic needs an ASR model"),
+            (args = ["chat", "-m", "x.gguf", "--mic", "ptt", "--asr", "a.gguf", "--script", "s.txt"], wants = "--mic with --script"),
+            (args = ["translate", "m.bin", "--script", "/no/such/script.txt"], wants = "could not read --script"),
+            (args = ["translate", "m.bin", "--play"], wants = "--play needs a speech model"),
             (args = ["embed", "-m", "x.gguf"], wants = "nothing to embed"),
             (args = ["tokenize", "-m", "x.gguf"], wants = "nothing to tokenize"),
             (args = ["bench", "-m", "x.gguf", "-o", "csv"], wants = "--output is txt | md"),

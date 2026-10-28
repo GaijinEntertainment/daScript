@@ -17,7 +17,8 @@ let private FACADE = "modules/dasLLAMA/dasllama/dasllama.das"
 // family and the shared transducer, so their defs are facade defs and the coverage floor reads
 // every one of these files.
 let private FACADE_FILES = [FACADE, "modules/dasLLAMA/dasllama/dasllama_core.das", "modules/dasLLAMA/dasllama/dasllama_tts.das",
-                            "modules/dasLLAMA/dasllama/dasllama_gigaam.das", "modules/dasLLAMA/dasllama/dasllama_rnnt.das"]
+                            "modules/dasLLAMA/dasllama/dasllama_gigaam.das", "modules/dasLLAMA/dasllama/dasllama_rnnt.das",
+                            "modules/dasLLAMA/dasllama/dasllama_translate.das"]
 let private TUTORIAL_DIR = "tutorials/dasLLAMA"
 let private RST_DIR = "doc/source/reference/tutorials"
 
@@ -105,7 +106,7 @@ var private FACADE_DEFS_WITHOUT_TUTORIAL <- {
     "rnnt_dev_args", "rnnt_dev_cap", "rnnt_dev_faulted", "rnnt_dev_first_input", "rnnt_dev_key",   //! the host half of the device transducer decode the Metal and Vulkan seats call
     "rnnt_dev_land_tokens", "rnnt_dev_layer_args", "rnnt_dev_layout", "rnnt_dev_round_budget",   //! the host half of the device transducer decode the Metal and Vulkan seats call
     "rnnt_dev_rounds", "rnnt_dev_shape_ok", "rnnt_dev_slab", "rnnt_dev_state_words",   //! the host half of the device transducer decode the Metal and Vulkan seats call
-    "set_rnnt_dev_fault", "set_rnnt_dev_round_budget", "set_rnnt_lane_work_probe_",   //! probe seams a fixture sets to force a device fault, a round budget or a lane split
+    "set_rnnt_dev_fault", "set_rnnt_dev_round_budget",    //! probe seams a fixture sets to force a device fault, a round budget or a lane split
     "set_rnnt_trace"   //! the CPU transducer decode's per-frame trace an engine developer flips while bringing a family up
 }
 
@@ -272,12 +273,12 @@ def private check_family_seams(carrier, kind_enum : string; exempt : table<strin
 // The backend-role partition, mechanically: every dasllama_<gpu>_*.das file's suffix is a role
 // ARCHITECTURE_GPU.md#gpu-backends's role table carries — a new role file adds its role to BOTH.
 var private GPU_ROLES_METAL <- {
-    "kernels", "common", "decode", "prefill", "gemm", "shapes", "tower", "asr_dec", "lens", "mtp_gemma"
+    "kernels", "common", "decode", "prefill", "gemm", "shapes", "tower", "asr_dec", "nmt", "lens", "mtp_gemma"
 }
 
 var private GPU_ROLES_VULKAN <- {
     "tts",
-    "classes", "common", "decode", "prefill", "seams", "dispatch", "tower", "asr_dec", "mtp_gemma"
+    "classes", "common", "decode", "prefill", "seams", "dispatch", "tower", "asr_dec", "nmt", "mtp_gemma"
 }
 
 var private GPU_ROLES_CUDA <- {
@@ -1216,7 +1217,7 @@ let private TTS_BLOCKS_FILE = "modules/dasLLAMA/dasllama/dasllama_tts_blocks.das
 // lines, hashed in file order. A closure change with IMAGE_VERSION unmoved is red; the finding prints the
 // value to re-stamp with.
 let private IMAGE_LAYOUT_STAMP_VERSION = 54
-let private IMAGE_LAYOUT_STAMP_HASH = 0xff3e9603a75ad1beul
+let private IMAGE_LAYOUT_STAMP_HASH = 0xc09575b08a4d273eul
 
 // The helpers that decide WHERE bytes land: the page pad, the plane and total sizing, the
 // writer's append / zero-fill / header patch, the header's scalar stores, the lattice

@@ -14,7 +14,7 @@ full-suite run turns a one-arm fix into an afternoon.
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite stocked --exclude test_ple_modes   # the iteration form - drops the PLE file
 DASLLAMA_GPU=1 DASLLAMA_CUDA=1 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --changed --only cuda,segments   # the CUDA home's pass: the run's CUDA files alone
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --changed --shard 1/3             # one of three boxes: every third file of the same run, from the first
-./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --area audio            # one area: audio | vision | tts | llm | infra (comma list)
+./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --area audio            # one area: audio | vision | tts | translate | llm | infra (comma list)
 ```
 
 An AREA is what someone working on audio, vision, TTS, the LLM engine or the tooling runs after an
@@ -437,9 +437,9 @@ the file name's lane segment read back, a hash-named legacy image adopted into i
 reaping only its own lane's legacy other while another lane's OTHER survives, a version-stale
 image going in any lane, and the rope-scaling override as a lane suffix and an identity element
 that leaves the tag parsing intact, the IQ3_S serve pin's `-lut` / `-grid` on the planar and blob lanes and the dev-W
-panel lever's `-devw` on the blob lane alone; a tower's exact lane - the whisper, parakeet, canary,
-gemma4a, qwen3a and whisper-class tower f32 lanes, the gemma4v, gemma3v, gemma4uv, qwen3v and qwen25v
-towers - keying one identity under every whole CPU backend, while the q8 lane names the backend; the per-format
+panel lever's `-devw` on the blob lane alone; a tower's exact lane - the whisper, parakeet, gigaam, canary,
+gemma4a, qwen3a and whisper-class tower f32 lanes, the Bergamot students' f32 lane (`bergamot-f32`), the gemma4v, gemma3v,
+gemma4uv, qwen3v and qwen25v towers - keying one identity under every whole CPU backend, while the q8 lane names the backend; the per-format
 plane table's slot claim - a `kq_sb` slot's planes ride the image under the slot's section names
 while a non-sb slot rides no section, its planes being the top-level pair; the split-scale
 plane's two arms against hand-built superblocks - k6 and k3 strip-first at `strip_at` 0 / `tail_at` 16,
@@ -451,7 +451,7 @@ bakes, a 384-wide one and a 32-row one do not - and expert exclusion - an `*_exp
 slice bakes nothing, a shared-expert site and a mis-spelt suffix still bake - are pure taxonomy
 over a job list, plus the split-scale transform's idempotence over one carrier) `smol untied metal metal-untied gemma tower whisper voxtral
 parakeet gigaam qwen3a canary canary-dec gemma4a gemma4uv gemma4uv-metal gemma4v gemma3v gemma4e
-mtower kitten mx4-stream b32-stream`; `mx4-stream` (families `gemma4moe` / `gptoss`, large tier: gemma-4-26B-A4B's MXFP4_MOE mint and
+mtower kitten bergamot mx4-stream b32-stream`; `bergamot` (family `bergamot`) is the translate area's arm - ru-en tiny's two lanes, each image baked by the `.bin`'s cold load and loaded back by its own path, three Russian lines translated as the in-memory mint translates them, every side through `nmt_translate` with the device seat pinned off and put back (one entry point, one lane), each side logged; `mx4-stream` (families `gemma4moe` / `gptoss`, large tier: gemma-4-26B-A4B's MXFP4_MOE mint and
 gpt-oss-20b mxfp4) is the native-MXFP4 cold mint's streamed fill - a child (`_mx4_mint_root.das`) mints the planar image under
 `/usr/bin/time -l` and its peak memory footprint sits under the mxq + mxs bytes the image holds (macOS; elsewhere the leg skips
 loudly), then the mapped planes are the eager load's byte for byte; `b32-stream` (family `qwen2`, small tier: Qwen2.5-0.5B's
@@ -578,7 +578,9 @@ Q4_K_M and UD-IQ2_XXS: the resident MoE block's s stamps (the 32-row column) and
 `VK_CENSUS_NEVER_DISPATCHED` entry in `test_kernel_coverage.das` naming its kernel-unit cell; the
 TTS classes are dispatched by `cov_tower_styletts2` and `cov_tower_pocket` on their carriers, their
 kernel cells the `test_vulkan_tts_*` files, and a box without the carriers reads them at zero - a
-warning, never an entry;
+warning, never an entry; the Bergamot translation driver's five classes (`nmt_*_cls`) are `VK_CENSUS_NEVER_DISPATCHED`
+entries - the serving census loads no translation model, and its Bergamot row (`cov_tower_bergamot`, ru-en tiny minted in
+memory) serves on the Metal seat alone - their kernel cells `test_vkt_nmt` and `test_vkt_nmt_attn`;
 the K/V mirror's block codecs ride two carriers under q8_0 and tq4 (`vk_cov_codecs`: Qwen2.5-0.5B
 Q8_0 for the four-head slab, gemma-2-2b Q8_0 for the two-head slab) - a prefill and two decode
 steps each, reaching the staged stores, the shadows, the codec attention stamps and tq4's
@@ -1060,7 +1062,11 @@ depthwise conv with the folded BatchNorm and silu; `test_vkt_tower_ga_dwh`: giga
 on the Metal cell's shapes and CPU loop) against the CPU loops' forms, GigaAM's CTC head pick (`test_vkt_ctc_pick`:
 `CtcPick` on the Metal cell's cases, `_ctc_oracle.das`'s `ctc_pick_cases` - three widths, a tie every third row picking the
 lower class, NaN pad slots past the classes that red a plog if read, an all-NaN row picking class 0 - every record written,
-a poisoned bias the control), the attention
+a poisoned bias the control), the Bergamot step's three stamps (`test_vkt_nmt`: `NmtEmbed`, `NmtSsru`, `NmtPick` on the Metal
+cells' legs over `_nmt_oracle.das` - the planes sized to the 256-lane grid with their slack under the sentinel, the SSRU's
+layer-1 cells moved off their input, the pick at vocabularies of 200, 1000 and 32000 with every case's poisoned leg, the controls
+through `check_exceeds` and `nmt_pick_moved`) and its attention pair (`test_vkt_nmt_attn`: `NmtAttnPart` + `NmtAttnComb` at heads
+of 32, 48 and 64 over 300 and 150 keys against `wdec_attn_ref`, the keys scaled twice the control), the attention
 controls scaling the keys (a uniform shift leaves a softmax alone); and the chat projector tails' row
 classes (`test_vkt_tower_tail_rows`: the pair pool against the mean of each row pair, the swapped SwiGLU
 against `swiglu_swapped_rows` with the halves-swapped form as the control). Every compare in the file
@@ -2992,6 +2998,44 @@ NaN picking class 0, a poisoned bias the control), the Vulkan one `test_vkt_ctc_
 share (`ctc_leg`, `ctc_cpu_leg`, `ctc_hard_flips`, `CTC_PLOG_BAR`) live in `_ctc_oracle.das`. The cells skip
 without their carrier, the oracle dumps (`asr_oracle/gigaam/` under `models_dir()`) or the corpus clips; the facade, `.dlim` and CTC-head
 cells also when interpreted; the side-file arm without the Qwen3-ASR-0.6B mmproj and decoder.
+`test_nmt.das` - stocked suite (area translate): the Bergamot students (ru-en and en-ru base-memory, en-ru base, ru-en tiny,
+en-de base-memory under `bergamot/` in `models_dir()`, rows of `../performance/model_specs.das` with their vocabularies and dumps
+as companions) against marian's own f32 graph over the int8 weights dequantized (`nmt_oracle/<pair>-<tier>/`, minted by
+`../benchmarks/nmt/bergamot_oracle.py`): the model-file tokenizer id for id against Python sentencepiece over the fixture lines and
+the normalizer fixture (`spm_edge.json` off `corpus/spm_edge.txt`; the control the same reader with the charsmap dropped, spelling
+the fixture differently); the exact lane under the oracle's own tokens (the forced feed: every step fed the oracle's previous id,
+every tapped stage - the logits among them - within `STAGE_BAR` of the dump's largest magnitude, the poisoned-element control, and
+a displaced source token landing the last encoder layer outside the bar, through `check_exceeds`), its cls offset -1, and its free
+run at `EXACT_LINES_FLOOR` lines of 30 the oracle's, each line logged both sides decoded, the lines fed the next line's source
+falling under the floor (the control); the q8 lane on the two ru/en pairs at `Q8_LINES_FLOOR` lines of 30 the f32 oracle's, the
+GEMMs and the classifier on the q8 plane, and the same file minted with its classifier's Q8_0 copy zeroed moving every line and
+falling under the floor (the classifier reads the Q8_0 copy; the floor's control); the build's device seat (`test_nmt_device`,
+`_nmt_oracle.das`'s `nmt_seat_*`: Metal on a das_metal build, Vulkan on a build without das_metal under `DASLLAMA_GPU=1`) - a
+synthetic d 32 student declining `shape`, then on the two ru/en pairs the seat pinned off serving no sentence, then on, each pair
+in turn every line served with no decline at `DEVICE_LINES_FLOOR` lines of 30 the CPU q8 chain's, the second pair swapped in with no
+shutdown between (the weight-reuse key's model swap), both sides logged; the control each pair's device classifier zeroed, every
+line then differing; a source past `NMT_DEVICE_SRC_CAP` tokens declining `length`; the exact lane declining `quant_mode` and
+translating on the CPU. The loader's refusals over synthetic files written to the test's temp directory
+(`test_nmt_loader_refusals`, `test_nmt_spm_file_refusals`): a Marian student of one encoder and one decoder layer at d 32, each
+fixture differing from a well-formed one (which stages - the control) in one fact - the version word, the blobs past the file's
+end, a name past it, no embedded config, each config check, the embedding's width and rows, its item type, a missing or
+overlong item, an intgemm8 item short of its multiplier, a split vocabulary, no vocabulary, a BPE vocabulary - each refused by
+its own text (`panic_text`); a SentencePiece file cut inside a varint, carrying a group wire type or a field past its message,
+each refused, a fixed64 field skipped. `test_nmt_float32_student`: a float32 student widens to its intgemm8 twin's planes bit for
+bit, the twin laid [out][in] the control. `test_translate_facade_contracts`: an LLM shell refusing to translate with no direction
+and a language to itself, `translator_serves` and `translator_languages` on both kinds, a synthetic student through
+`load_translator` on both lanes with a pair name that is not two codes. The facade's LLM translators:
+`test_nmt_llm_translator` (MiLMMT-46 Q4_K_M under `milmmt/`, no chat template: no source before `set_translator_langs`, an
+unknown code refused, ru -> en reading the expected word on one line, the same prompt with no stop at the line's end running on
+past it - the control -, en -> ru, the GGUF's baked `.dlim` loading back through `load_translator` as an LLM and translating;
+then the ru-en Bergamot student keeping its one direction and its f32 lane translating),
+`test_nmt_chat_translator` (Qwen3-4B-Instruct-2507 Q4_K_M, a chat template: ru -> en on one line with no reasoning) and
+`test_nmt_chat_thinking_off` (Qwen3.5-0.8B Q8_0, whose template carries the thinking switch: the translation with no reasoning, its
+reply within `CHAT_REPLY_TOKENS`); `test_nmt_step_lanes_and_device_gate` the step's lanes through `step_lanes` and its probe seam,
+and `nmt_device_shape_ok`. The step's kernel classes are the kernel files' cells (`test_metal_nmt_kernels`, `test_vkt_nmt`,
+`test_vkt_nmt_attn`). The tokenizer cell skips without the model or the dumps, the forward and LLM cells also when interpreted, the
+device cell without a seat; the `load_translator` loads bake a `.dlim` beside their model - ledgered at
+`../ARCHITECTURE_IMAGE_LEDGER.md#suite-image-mints`.
 `test_review_howto.das` - model-free (area infra): the HOW_TO check of `../REVIEW.das` run as a child over fixture documents
 written under the test's temp dir - one document a defect, each red on its own finding, and a clean one green.
 `test_audio.das` - stocked suite; model-free cells: the audio front-end units (gelu-erf, hann
@@ -4167,7 +4211,8 @@ carry no tag and always run. Family tokens: `llama` (`--suite decode`, `prefill`
 `gemma2`, `gemma3`, `gemma4`, `qwen3moe`, `gemma4moe`, `gptoss`, `qwen35`, `qwen35moe`, `qwen2moe`, `qwen4exp` (the support-matrix family cells; `qwen35` also tags `test_vulkan_mint.das` and `test_metal_batched_row.das`), `gemma`,
 `ultravox`, `whisper`, `voxtral`, `parakeet`, `gigaam`, `qwen3a`, `canary`, `gemma4a` (image suite arms),
 `gemma3v`, `qwen25v`, `qwen3v` (the coverage census tower rows), `kitten` (the image suite's
-kitten arm), `kokoro`, `pocket` (the coverage census TTS rows), `vad` (the coverage census silero VAD row),
+kitten arm), `kokoro`, `pocket` (the coverage census TTS rows), `vad` (the coverage census silero VAD row), `bergamot` (the image suite's
+bergamot arm and the coverage census Bergamot row, ru-en tiny on the Metal seat),
 `gemma4e` (support-matrix rows under `fam-gemma4e` - E4B PARITY_FULL-gated; E2B Q8_0, Q4_K_M,
 Q4_0 and the format carriers of `../performance/model_specs.das` (the token and PLE tables Q6_K and
 IQ4_XS, the per-layer gate and projection planes Q6_K and Q5_0) small-tier always-on - what the rows assert is the

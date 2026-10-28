@@ -31,6 +31,7 @@ require dasllama/dasllama_gguf          // GGUFMeta — bake-side, deliberately 
 require dasllama/dasllama_math          // pin_backend_for_bake — bake-side, deliberately not facade
 require dasllama/dasllama_gpu_tier      // moe_gpu_bake_tag — bake-side, deliberately not facade
 require dasllama/dasllama_styletts2     // bake_styletts2_image — the TTS arm, bake-side, deliberately not facade
+require dasllama/dasllama_nmt           // load_nmt_model — the translation arm, bake-side
 require convert_sniff                    // sniff_asr_kind: what a source file carries
 require daslib/clargs
 require daslib/jobque_boost
@@ -175,20 +176,21 @@ def private convert_asr(cfg : ConvertArgs; kind : AsrCarrierKind; qm : QuantMode
         return 2
     }
     if (cfg.flavor != Flavor.planar) {
-        to_log(LOG_ERROR, "dasllama-convert: ASR sources have a single (planar) image flavor\n")
+        to_log(LOG_ERROR, "dasllama-convert: ASR and translation sources: one (planar) flavor\n")
         return 2
     }
     if (cfg.trim || cfg.stream) {
-        to_log(LOG_ERROR, "dasllama-convert: --trim/--stream apply to decoder GGUFs, not ASR sources\n")
+        to_log(LOG_ERROR, "dasllama-convert: --trim/--stream apply to decoder GGUFs only\n")
         return 2
     }
     if (cfg.out != "") {
-        to_log(LOG_ERROR, "dasllama-convert: -o is unsupported for ASR sources — the image lands beside the source under its identity name\n")
+        to_log(LOG_ERROR, "dasllama-convert: -o is unsupported for ASR and translation sources - " +
+            "the image lands beside the source under its identity name\n")
         return 2
     }
     let q8 = qm == QuantMode.q8
     if (!q8 && qm != QuantMode.fp32) {
-        to_log(LOG_ERROR, "dasllama-convert: ASR sources bake q8 or fp32\n")
+        to_log(LOG_ERROR, "dasllama-convert: ASR and translation sources bake q8 or fp32\n")
         return 2
     }
     var tag = ""
@@ -204,6 +206,8 @@ def private convert_asr(cfg : ConvertArgs; kind : AsrCarrierKind; qm : QuantMode
         tag = "qwen3a-f32"
     } elif (kind == AsrCarrierKind.gemma4a) {
         tag = "gemma4a-f32"
+    } elif (kind == AsrCarrierKind.bergamot) {
+        tag = nmt_image_tag(q8)
     } else {
         tag = q8 ? "tower-q8" : "tower-f32"
     }
@@ -240,6 +244,8 @@ def private convert_asr(cfg : ConvertArgs; kind : AsrCarrierKind; qm : QuantMode
             var inscope m <- load_qwen3a_tower(cfg.model)
         } elif (kind == AsrCarrierKind.gemma4a) {
             var inscope m <- load_gemma4a_encoder(cfg.model)
+        } elif (kind == AsrCarrierKind.bergamot) {
+            var inscope m <- load_nmt_model(cfg.model, q8)
         } else {
             var inscope m <- load_audio_tower(cfg.model, q8)
         }

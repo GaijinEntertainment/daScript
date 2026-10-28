@@ -1,7 +1,9 @@
 // The parakeet tower row needs ggml-parakeet-tdt-0.6b-v2-f32.bin under whisper_dir() and skips without it, the GigaAM row
 // gigaam-v3-e2e-rnnt-f16.gguf under models_dir() and the gigaam family on; the
 // StyleTTS2 tower row needs kitten-nano.gguf (and kokoro-82m.gguf for the torch-law stamps) under models_dir() and the kitten
-// family on, and skips without them; the Pocket row needs pocket-tts-en.gguf (and pocket-tts-en-kq.gguf for the q8 head stamps) and the pocket family on.
+// family on, and skips without them; the Pocket row needs pocket-tts-en.gguf (and pocket-tts-en-kq.gguf for the q8 head stamps) and the pocket family on;
+// the Bergamot row needs bergamot/ru-en-tiny/model.ruen.intgemm.alphas.bin (its vocab.ruen.spm beside it) under models_dir() and
+// the bergamot family on, and runs on das_metal builds alone.
 options gen2
 options persistent_heap   // + explicit deletes: the models free before the process exits
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
@@ -28,6 +30,8 @@ require dasllama/dasllama_gemma4a   // the cov_tower Conformer whole-chunk row
 require dasllama/dasllama_canary    // the cov_tower FastConformer row
 require dasllama/dasllama_parakeet  // the cov_tower parakeet row
 require dasllama/dasllama_gigaam    // the cov_tower GigaAM row
+require dasllama/dasllama_nmt       // stage_nmt_model/mint_nmt_model: the cov_tower Bergamot row, minted in memory
+require ?das_metal dasllama/dasllama_metal_nmt   // set_metal_nmt - the cov_tower Bergamot row's knob
 require dasllama/dasllama_vad       // nolint:STYLE030,LINT019 — the cov_tower silero VAD row, inside the GPU static_if halves
 require dasllama/dasllama_qwen25v   // the cov_tower window-ViT row
 require dasllama/dasllama_qwen3v    // the cov_tower GPU-stem row
@@ -578,6 +582,29 @@ def private cov_tower_gigaam(t : T?; samples : array<float>) {
     }
 }
 
+//! the Bergamot translation row: two Russian sentences through ru-en tiny on the q8 lane, the whole sentence on the device -
+//! the embed, SSRU and pick stamps beside the borrowed GEMM, attention and seam kernels
+[unused_argument(t)]   // off-Apple the gated body is empty
+def private cov_tower_bergamot(t : T?) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        let path = path_join(models_dir(), "bergamot/ru-en-tiny/model.ruen.intgemm.alphas.bin")
+        if (family_on(t, "bergamot") && model_available(t, path)) {
+            let was = metal_nmt_knob()
+            set_metal_nmt(true)
+            with_dasllama_jobque() {
+                var inscope m = NmtModel()
+                var inscope stg <- stage_nmt_model(path, true)
+                mint_nmt_model(stg, m)   //! minted in memory: the census row writes no image
+                var inscope st = NmtState()
+                for (ln in ["Где ближайшая аптека?", "Сегодня мы идём в горы."]) {   // nolint:STYLE039 - the source language's own text
+                    nmt_translate(m, st, ln)
+                }
+            }
+            set_metal_nmt(was)
+        }
+    }
+}
+
 // the gemma4v row of cov_tower: a 96x96 canvas through the E2B ViT tower on the file's planes
 [unused_argument(t)]   // off-Apple the gated body is empty
 def private cov_tower_gemma4v(t : T?) {
@@ -670,6 +697,7 @@ def private cov_tower(t : T?) {
         cov_tower_canary(t, samples)
         cov_tower_parakeet(t, samples)
         cov_tower_gigaam(t, samples)
+        cov_tower_bergamot(t)
         delete samples
         cov_tower_gemma4uv(t)
         cov_tower_gemma4v(t)
@@ -1004,6 +1032,10 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // test_vkd_combine_row in test_vulkan_kernels.das, the chain's test_vulkan_moe_cm2_split, and the model-level
     // test_gpu_resident_moe_formats cells (large-tier, DASLLAMA_PARITY_FULL=1)
     "moe_gather_f16_row_cls_spv", "combine_row_cls_spv",
+    // the Bergamot translation driver's step and attention stamps: the Vulkan serving census loads no translation model (its
+    // Bergamot row, `cov_tower_bergamot`, serves on the Metal seat alone); their coverage is test_vkt_nmt and test_vkt_nmt_attn
+    // in test_vulkan_tower_kernels.das, the driver's whole sentence test_nmt_device in test_nmt.das
+    "nmt_embed_cls", "nmt_ssru_cls", "nmt_pick_cls", "nmt_attn_part_cls", "nmt_attn_comb_cls",
     // the KHR flash-attention tile's 256 and 512 heads: the mode sweep's mm row reaches the 64 and 128 heads through the
     // zoo's qwens, and no zoo row carries a wider head (the gemmas sit above the tier); their coverage is test_vkd_fa_khr
     // and test_vkd_fa_khr_h256_softcap in test_vulkan_kernels.das

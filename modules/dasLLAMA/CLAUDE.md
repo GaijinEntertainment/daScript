@@ -14,7 +14,7 @@ ONLY through `tests/run.das`).
 After an edit: `./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --changed` runs the tests
 the changed files reach, by file: a test file itself, a fixture the tests requiring it, an engine
 module its `MODULE_WITNESSES` row or - a core module - every model-free `llm` file and one
-stocked witness a family and home, and its other areas (`audio | vision | tts | infra`) whole;
+stocked witness a family and home, and its other areas (`audio | vision | tts | translate | infra`) whole;
 `--area <a,b>` names areas directly. A changed file in a model suite (decode | mtp | prefill |
 matrix | image) reaches nothing - `--changed` names it; run that suite with `--arm` scoped to the
 change. Before a PR: `--changed` on a box with models, and where the engine core changed the

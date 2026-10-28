@@ -38,6 +38,7 @@ require dasllama/dasllama_asr public           // uniform ASR surface (whisper t
 require dasllama/dasllama_vad public           // Silero-VAD (voice-activity detection): segments + streaming iterator
 require dasllama/dasllama_wav public           // mono f32 PCM to WAV / PCM16 bytes and files
 require dasllama/dasllama_tts public           // uniform TTS surface (KittenTTS, Kokoro, Pocket TTS): load_tts_model / synthesize / synthesize_stream / tts_register_voice
+require dasllama/dasllama_translate public     // the translation surface (Bergamot): load_translator / translate / translator_langs
 require dasllama/dasllama_config public        // the explicit .dlim bake configuration — the --config / identity contract
 require dasllama/dasllama_math                 // engine-level knobs (wrapped below, not re-exported)
 require dasllama/dasllama_par                  // the single-thread gate of the dispatch macros (wrapped below, not re-exported)

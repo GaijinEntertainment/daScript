@@ -16,6 +16,7 @@ require strings
 require math
 require dasllama/dasllama_env
 require ../performance/box_ident.das   // derive_box_name — hardware-keyed, engine-free
+require ../../../utils/common/text_lines.das   // split_trimmed: the comma lists
 
 let MODULE_CACHE = ".cache/daslang/module_cache/dastest.dascache"
 //! the children's per-test AST records (dastest's --module-cache-dir), one folder per daslang binary: a record is
@@ -45,7 +46,7 @@ struct RunArgs {
     @clarg_doc = "Only — comma-separated substrings; a file of the run whose name contains none is dropped, each kept file named on an ONLY line and the REPORT line carrying the tokens, so a narrowed run cannot read as whole (e.g. --changed --only cuda,segments under DASLLAMA_CUDA=1: the CUDA home's files of the run)"
     only : string
 
-    @clarg_doc = "Area — comma-separated: audio | vision | tts | llm | infra; runs every model-free and stocked file of the area plus the image suite's arms of the area (no --suite, no --arm)"
+    @clarg_doc = "Area — comma-separated: audio | vision | tts | translate | llm | infra; runs every model-free and stocked file of the area plus the image suite's arms of the area (no --suite, no --arm)"
     area : string
 
     @clarg_doc = "Run what the changed files reach: git diff against --base plus untracked files under modules/dasLLAMA/, each path mapped to its areas (printed), then the areas' tests"
@@ -215,6 +216,7 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
                     "modules/dasLLAMA/tests/test_gemma4uv.das",
                     "modules/dasLLAMA/tests/test_gemma4v.das",
                     "modules/dasLLAMA/tests/test_gigaam.das",
+                    "modules/dasLLAMA/tests/test_nmt.das",
                     "modules/dasLLAMA/tests/test_gpu_model_swap.das",
                     "modules/dasLLAMA/tests/test_gpu_moe_shexp.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_gemma2.das",
@@ -329,7 +331,7 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
     return <- none
 }
 
-let AREAS <- ["audio", "vision", "tts", "llm", "infra"]
+let AREAS <- ["audio", "vision", "tts", "translate", "llm", "infra"]
 let TESTS_DIR = "modules/dasLLAMA/tests"
 
 //! the suite-less test files by AREA - what someone working on audio, vision, TTS, the LLM engine or the
@@ -348,6 +350,8 @@ def area_tests(area : string) : array<string> {
                     "test_tts_g2p.das", "test_tts_kitten.das", "test_tts_kokoro.das", "test_tts_pocket.das",
                     "test_tts_postag.das", "test_tts_textnorm.das", "test_tts_voice_prompts.das", "test_vulkan_tts_conv_kernels.das",
                     "test_vulkan_tts_kernels.das", "test_vulkan_tts_pocket_kernels.das", "test_vulkan_tts_source_kernels.das" ]
+    } elif (area == "translate") {
+        return <- [ "test_nmt.das" ]
     } elif (area == "infra") {
         return <- [ "failed_dasllama_lint_require.das", "failed_dasllama_lint_sidedoor.das", "test_bench_records_schema.das", "test_bench_rows.das",
                     "test_box_ident.das", "test_box_profile.das", "test_compares.das", "test_dasllama_lint_contracts.das",
@@ -390,6 +394,8 @@ def area_image_arms(area : string) : string {
         return "mechanics,smol,untied,metal,mx4,b32"
     } elif (area == "tts") {
         return "kitten"
+    } elif (area == "translate") {
+        return "bergamot"
     }
     return ""
 }
@@ -397,15 +403,16 @@ def area_image_arms(area : string) : string {
 //! engine module stem -> the areas a change to it reaches. A module not in the table is CORE and
 //! reaches every area (the safe default for a new module until it gets a row)
 let MODULE_AREAS <- {
-    "dasllama_tower" => "audio,vision,tts",   // the TTS blocks, Pocket and StyleTTS2 call its row kernels
+    "dasllama_tower" => "audio,vision,tts,translate",   // the TTS blocks, Pocket and StyleTTS2 call its row kernels; the Bergamot chain its GEMMs
     "dasllama_metal_tower" => "audio,vision,tts",
-    "dasllama_vulkan_tower" => "audio,vision,tts",   // the Vulkan TTS driver rides the tower's classes
+    "dasllama_vulkan_tower" => "audio,vision,tts,translate",   // the Vulkan TTS and translation drivers ride the tower's classes
     "dasllama_tts_slab" => "audio,vision,tts",   // the Metal tower requires it for every seat
     "dasllama_vulkan_tts" => "tts",
-    "dasllama_gpu_kernels_common" => "audio,vision,tts,llm",   // the kernels both GPU homes stamp: the TTS chains', and the depthwise rows and rope the audio and vision towers stamp
+    "dasllama_gpu_kernels_common" => "audio,vision,tts,translate,llm",   // the kernels both GPU homes stamp: the TTS chains', the depthwise rows and rope the audio and vision towers stamp, the Bergamot step's
     "dasllama_asr" => "audio", "dasllama_asr_types" => "audio", "dasllama_audio" => "audio",
     "dasllama_audio_embedder" => "audio", "dasllama_audio_io" => "audio", "dasllama_canary" => "audio",
     "dasllama_gemma4a" => "audio", "dasllama_metal_asr_dec" => "audio", "dasllama_vulkan_asr_dec" => "audio", "dasllama_parakeet" => "audio",
+    "dasllama_nmt" => "translate", "dasllama_metal_nmt" => "translate", "dasllama_vulkan_nmt" => "translate", "dasllama_translate" => "translate",
     "dasllama_gigaam" => "audio", "dasllama_rnnt" => "audio", "dasllama_qwen3a" => "audio", "dasllama_vad" => "audio", "dasllama_whisper" => "audio",
     "dasllama_gemma3v" => "vision", "dasllama_gemma4uv" => "vision", "dasllama_gemma4v" => "vision",
     "dasllama_qwen25v" => "vision", "dasllama_qwen3v" => "vision", "dasllama_vision" => "vision",
@@ -424,7 +431,7 @@ let MODULE_AREAS <- {
     "dasllama_bpe" => "llm", "dasllama_gpu_resident" => "llm,audio,vision", "dasllama_gpu_tier" => "llm",
     "dasllama_kv_dtype" => "llm", "dasllama_metal_decode" => "llm", "dasllama_metal_mtp_gemma" => "llm",
     "dasllama_kv_codec" => "llm,audio",   // its f16 dot and axpy serve the parakeet decode
-    "dasllama_metal_prefill" => "llm,tts,audio,vision",   // its rope serves the Pocket codec transformer, its attention pair and FastConformer kernels the audio towers, its half convert the vision tower
+    "dasllama_metal_prefill" => "llm,tts,audio,vision,translate",   // its rope serves the Pocket codec transformer, its attention pair and FastConformer kernels the audio towers, its half convert the vision tower, its q8 GEMM the Bergamot chain
     "dasllama_moe" => "llm", "dasllama_mtp_gemma" => "llm", "dasllama_vulkan_mtp_gemma" => "llm",
     "dasllama_parity" => "llm", "dasllama_ple" => "llm", "dasllama_prefix" => "llm", "dasllama_pretok" => "llm",
     // the TTS slab builds its rope tables through it; every gguf load
@@ -432,7 +439,7 @@ let MODULE_AREAS <- {
     // tests load decoders
     "dasllama_rope" => "llm,tts,vision,audio",
     "dasllama_sampling" => "llm,vision,audio", "dasllama_scheduler" => "llm",
-    "dasllama_spm" => "llm,tts",   // the unigram arm is the Pocket tokenizer (test_tts_pocket)
+    "dasllama_spm" => "llm,tts,translate",   // the unigram arm is the Pocket tokenizer (test_tts_pocket); the model-file reader is Bergamot's
     "dasllama_bench" => "llm,infra",   // the rows serve lcpp_bench (llm) and the server's /bench (infra's tooling)
     "dasllama_tokenizer" => "llm", "dasllama_transformer" => "llm",
     "dasllama_unicode" => "llm,tts",   // cpt_count serves the TTS front end and its chunker
@@ -498,8 +505,30 @@ let MODULE_WITNESSES <- {
 
 let BENCH_WITNESSES <- ["test_bench_rows.das", "test_served_bench.das", "test_bench_records_schema.das"]
 
-def private csv_list(csv : string) : array<string> =>
-    <- [for (tok in split(csv, ",")); strip(tok); where !empty(strip(tok))]
+def private csv_list(csv : string) : array<string> => <- split_trimmed(csv, ",")
+
+//! a `tests/_*.das` fixture -> the areas a change to it reaches when no test requires it by name
+def private fixture_areas(name : string) : array<string> {
+    if (name |> starts_with("_tts_")) {
+        return <- ["tts"]
+    } elif (name == "_vision_oracle.das") {
+        return <- ["vision"]
+    } elif (name == "_nmt_oracle.das") {
+        return <- ["translate", "llm"]   //! the Bergamot step's kernel cells ride the kernels files
+    } elif (name == "_npy.das") {
+        return <- ["audio", "translate"]   //! the GigaAM and Bergamot oracle dumps
+    } elif (name == "_tower_twin.das") {
+        return <- ["audio", "vision"]
+    } elif (name == "_vkd_oracles.das") {
+        return <- ["llm", "tts", "audio", "vision"]   //! CellPlanes is the harness of the TTS and tower Vulkan cells too
+    } elif (name |> starts_with("_vk") || name == "_metal_kernel_common.das" || name == "_mtl_toy.das" || name == "_kq_dot.das" || name == "_kernel_oracles.das" || name == "_kv_codec_oracles.das"
+            || name == "_fp4_feed.das" || name == "_mmq_ref.das") {
+        return <- ["llm"]
+    } elif (name == "_kq_fixtures.das" || name == "_f32_tile_pin.das") {
+        return <- ["llm", "tts"]   //! test_tts_blocks' K-quant lane cell reads the planes; the TTS parity rail runs under the tile pin
+    }
+    return <- clone_to_move(AREAS)
+}
 
 //! a changed path -> the areas it reaches (empty for a path outside the module, and for a model-suite
 //! test file - those take --arm). Non-private: test_run_suites.das pins the table
@@ -519,21 +548,7 @@ def areas_for_path(path : string) : array<string> {
     }
     if (rel |> starts_with("tests/")) {
         if (name |> starts_with("_")) {
-            if (name |> starts_with("_tts_")) {
-                return <- ["tts"]
-            } elif (name == "_vision_oracle.das") {
-                return <- ["vision"]
-            } elif (name == "_tower_twin.das") {
-                return <- ["audio", "vision"]
-            } elif (name == "_vkd_oracles.das") {
-                return <- ["llm", "tts", "audio", "vision"]   //! CellPlanes is the harness of the TTS and tower Vulkan cells too
-            } elif (name |> starts_with("_vk") || name == "_metal_kernel_common.das" || name == "_mtl_toy.das" || name == "_kq_dot.das" || name == "_kernel_oracles.das" || name == "_kv_codec_oracles.das"
-                    || name == "_fp4_feed.das" || name == "_mmq_ref.das") {
-                return <- ["llm"]
-            } elif (name == "_kq_fixtures.das" || name == "_f32_tile_pin.das") {
-                return <- ["llm", "tts"]   //! test_tts_blocks' K-quant lane cell reads the planes; the TTS parity rail runs under the tile pin
-            }
-            return <- clone_to_move(AREAS)
+            return <- fixture_areas(name)
         }
         return <- [for (a in AREAS); a; where find_index(area_tests(a), name) >= 0]
     }

@@ -2,7 +2,7 @@ options gen2
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 
 // dasllama-cli — the shell front end of dasLLAMA, a sibling of dasllama-server on the same
-// facade: complete, chat, transcribe, speak, talk (audio in, spoken reply out), embed,
+// facade: complete, chat, transcribe, speak, talk (audio in, spoken reply out), translate, embed,
 // tokenize, and the llama-bench rows. It shares this box's tune winners with the server: NO
 // scope declaration of its own — requiring dasLLAMA pulls in the [tune_scope]. The policy is
 // "auto" (like the server): the first run on an untuned box tunes and relaunches; --tune forces
@@ -32,6 +32,7 @@ require model_catalog           // catalog_models_dir
 require user_state              // open_logs - the log lives under ~/.dasllama in a shipped exe
 require dasllama/dasllama_bench // the llama-bench rows - the same rows dasllama-bench and the server's in-process bench run
 require audio/audio_boost       // --play: the spoken reply through the speaker (dasAudio ships with the facade's audio decoding)
+require audio/audio_record      // --mic: the microphone capture
 
 let TOOL = "dasllama-cli"
 
@@ -403,7 +404,174 @@ def private speak_to(var sp : Speech; text : string; out : string; var why : str
     return true
 }
 
+// ===== the microphone =====
+
+let private MIC_RATE = 16000
+let private MIC_RING_SECONDS = 120   //! the capture ring: a push-to-talk take longer than this loses its head
+let private MIC_IDLE_SECONDS = 30    //! the silence a vad listen keeps before it drops the samples and starts over
+
+//! The microphone a run listens through; `armed` false when none was asked for. Under `vad` each utterance ends at a pause,
+//! else push-to-talk: Enter on an empty line starts a take, Enter again stops it.
+struct private Mic {
+    armed : bool
+    vad : bool
+    asr : AsrModel = AsrModel()
+    lang : string
+    vm : VadModel = VadModel()
+    vit : VadIter = VadIter()
+    take : array<float>
+    scratch : array<float>
+    seg0 : int64   //!< the open utterance's first sample in `take`, -1 with none open
+}
+
+//! The ASR model and the capture device `args` ask for, the language hint `lang_flag`, else `default_lang`.
+def private open_mic(rig : Rig; args : MicArgs; cfg : CliConfig; lang_flag, default_lang : string; var why : string&) : Mic {
+    var mic = Mic(vad = args.mic == "vad", seg0 = -1l)
+    if (empty(args.mic)) {
+        return <- mic
+    }
+    mic.asr <- load_asr(rig, !empty(args.asr) ? args.asr : cfg.asr, args.asr_mmproj, cfg, why)
+    if (!empty(why)) {
+        return <- mic
+    }
+    mic.lang = asr_lang(mic.asr, !empty(lang_flag) ? lang_flag : default_lang, why)
+    if (!empty(why)) {
+        return <- mic
+    }
+    if (mic.vad) {
+        mic.vm <- load_vad_model(vad_model_path())
+        vad_iter_reset(mic.vit, default_vad_opts())
+    }
+    if (!sound_record_start(MIC_RATE, 1, MIC_RATE * MIC_RING_SECONDS, -1)) {
+        why = "could not open the microphone (no capture device, or access denied)"
+        return <- mic
+    }
+    mic.scratch |> resize(MIC_RATE / 4)
+    mic.armed = true
+    return <- mic
+}
+
+def private close_mic(var mic : Mic) {
+    if (mic.armed) {
+        sound_record_stop()
+        mic.armed = false
+    }
+}
+
+//! Everything captured so far dropped, the segmenter started over: the audio of a spoken reply, or what came before a take.
+def private mic_flush(var mic : Mic) {
+    return if (!mic.armed)
+    while (sound_record_read(mic.scratch) > 0) {
+        pass
+    }
+    mic.take |> clear()
+    mic.seg0 = -1l
+    if (mic.vad) {
+        vad_iter_reset(mic.vit, default_vad_opts())
+    }
+}
+
+//! The samples the ring holds now, appended to the take; the count.
+def private mic_drain(var mic : Mic) : int {
+    let n = sound_record_read(mic.scratch)
+    mic.take |> reserve(length(mic.take) + n)
+    for (i in range(n)) {
+        mic.take |> push(mic.scratch[i])
+    }
+    return n
+}
+
+def private mic_text(var mic : Mic; from, to : int64) : string {
+    var inscope seg <- [for (i in range64(from, to)); mic.take[i]]
+    var inscope s <- create_session(mic.asr, mic.lang)
+    return strip(transcribe(mic.asr, s, seg))
+}
+
+//! A push-to-talk take: recording from now until Enter, then its transcript.
+def private mic_take(var mic : Mic) : string {
+    mic_flush(mic)
+    emit("(recording - press Enter to stop)\n")
+    fgets(fstdin())
+    while (mic_drain(mic) > 0) {
+        pass
+    }
+    return empty(mic.take) ? "" : mic_text(mic, 0l, long_length(mic.take))
+}
+
+//! A hands-free listen: blocks until an utterance ends at a pause, then its transcript.
+def private mic_listen(var mic : Mic) : string {
+    emit("(listening)\n")
+    while (true) {
+        let had = long_length(mic.take)
+        if (mic_drain(mic) == 0) {
+            sleep(5u)
+            continue
+        }
+        var inscope fresh <- [for (i in range64(had, long_length(mic.take))); mic.take[i]]
+        var end = -1l
+        vad_iter_feed(mic.vm, mic.vit, fresh) $(ev : VadEvent) {
+            if (ev.kind == VadEventKind.speech_start) {
+                mic.seg0 = max(0l, ev.sample)
+            } elif (mic.seg0 >= 0l) {
+                end = min(ev.sample, long_length(mic.take))
+            }
+        }
+        if (end > mic.seg0 && mic.seg0 >= 0l) {
+            let text = mic_text(mic, mic.seg0, end)
+            mic_flush(mic)
+            return text if (!empty(text))
+            emit("(listening)\n")
+        } elif (mic.seg0 < 0l && long_length(mic.take) > int64(MIC_RATE * MIC_IDLE_SECONDS)) {
+            mic_flush(mic)
+        }
+    }
+    return ""
+}
+
+//! The next line a listening loop reads: under `vad` the next utterance; under push-to-talk the terminal's line, an empty one
+//! starting a take; echoed as `you: ...` when heard. False at the end of input.
+def private mic_line(var mic : Mic; var line : string&) : bool {
+    if (mic.vad) {
+        line = mic_listen(mic)
+    } else {
+        emit("> ")
+        line = fgets(fstdin())
+        return false if (empty(line))
+        return true if (!empty(strip(line)))
+        line = mic_take(mic)
+    }
+    emit("you: {line}\n")
+    return true
+}
+
 //! Everything a chat turn needs beside the model: the towers, the speech model, the flags.
+//! One line of a chat or translate loop: the microphone's, the script's next line (echoed), else the terminal's; false at
+//! the end of input.
+def private next_line(var mic : Mic; interactive : bool; script : array<string>; var at : int&; var line : string&) : bool {
+    if (mic.armed) {
+        return mic_line(mic, line)
+    }
+    if (!interactive) {
+        return false if (at >= length(script))
+        line = script[at]
+        at++
+        emit("> {line}\n")
+        return true
+    }
+    emit("> ")
+    line = fgets(fstdin())
+    return !empty(line)   // EOF reads as "" - a blank line is "\n"
+}
+
+//! A script file's lines, the trailing blank ones dropped; no lines for "" (the terminal's run).
+def private script_lines(path : string) : array<string> {
+    var lines <- split(empty(path) ? "" : fread(path), "\n")
+    while (!empty(lines) && empty(strip(lines[length(lines) - 1]))) {
+        lines |> pop()
+    }
+    return <- lines
+}
+
 struct private ChatRig {
     system : string
     seed : int          // 0 = the session's fixed default
@@ -494,6 +662,7 @@ class CliEngine : ReplEngine {
     v : Vision = Vision()
     h : Hearing = Hearing()
     sp : Speech = Speech()
+    mic : Mic = Mic()
     cr : ChatRig = ChatRig()
     params : SamplingParams = SamplingParams()
     stats_line_text : string
@@ -502,20 +671,7 @@ class CliEngine : ReplEngine {
     interactive : bool
 
     //! The lines a chat reads: the script file, else stdin; false at the end of input.
-    def override read_line(var line : string&) : bool {
-        if (!interactive) {
-            if (at >= length(script)) {
-                return false
-            }
-            line = script[at]
-            at++
-            emit("> {line}\n")
-            return true
-        }
-        emit("> ")
-        line = fgets(fstdin())
-        return !empty(line)   // EOF reads as "" - a blank line is "\n"
-    }
+    def override read_line(var line : string&) : bool => next_line(mic, interactive, script, at, line)
 
     def override emit(text : string) : void {
         emit(text)
@@ -548,6 +704,7 @@ class CliEngine : ReplEngine {
             if (!speak_to(sp, split.content, out, why)) {
                 note(why)
             }
+            mic_flush(mic)
         }
     }
 
@@ -585,11 +742,7 @@ def private run_chat(plan : CliPlan; cfg : CliConfig) : int {
     let audio_mmproj = resolve_aux(rig, chat_audio_mmproj(plan, cfg), "audio mmproj", why)
     if (!empty(why)) return fail(why)
     eng.interactive = empty(plan.chat.script)
-    let body = eng.interactive ? "" : fread(plan.chat.script)   // validate_plan held: it reads
-    eng.script <- split(body, "\n")
-    while (!empty(eng.script) && empty(strip(eng.script[length(eng.script) - 1]))) {
-        eng.script |> pop()
-    }
+    eng.script <- script_lines(plan.chat.script)   // validate_plan held: it reads
     var rc = 0
     with_job_que() {
         setup_dasllama_jobque()
@@ -608,17 +761,129 @@ def private run_chat(plan : CliPlan; cfg : CliConfig) : int {
             rc = fail(why)
             return
         }
+        eng.mic <- open_mic(rig, plan.mic, cfg, plan.mic.lang, "", why)
+        if (!empty(why)) {
+            rc = fail(why)
+            return
+        }
         var st = ReplState(system = eng.cr.system, speak = eng.sp.armed)
         eng.chat <- open_chat(eng.m, eng.cr, st.turns)
         if (eng.interactive) {
             eng->emit("{TOOL}: {base_name(plan.common.model)} ready - /help lists the commands, /exit quits\n")
         }
         repl_run(st, eng)
+        close_mic(eng.mic)
         close_speaker(eng.sp)
         delete eng.chat
     }
     unsafe {
         delete eng
+    }
+    return rc
+}
+
+// ===== translate =====
+
+let private TRANSLATE_HELP = "type a sentence and press enter; /langs <from> <to> picks the direction (a translation LLM), /speak on|off toggles the spoken translation, /exit quits"
+
+//! The direction `plan` asks of `tr` set, or the refusal; "" when it holds (a translation LLM needs a source).
+def private translate_direction(var tr : Translator; plan : CliPlan; path : string) : string {
+    if (!empty(plan.translate.from) || !empty(plan.translate.to)) {
+        let cur = translator_langs(tr)
+        let src = !empty(plan.translate.from) ? plan.translate.from : cur.src
+        let trg = !empty(plan.translate.to) ? plan.translate.to : cur.trg
+        if (!set_translator_langs(tr, src, trg)) {
+            return "{base_name(path)} does not translate '{src}' to '{trg}' - it knows: {join(translator_languages(tr), " ")}"
+        }
+    }
+    if (empty(translator_langs(tr).src)) {
+        return "{base_name(path)} translates many languages - pass --from <code> (and --to, default en); it knows: {join(translator_languages(tr), " ")}"
+    }
+    return ""
+}
+
+//! A slash command of the translate loop run: true when `line` was one (`exit` set by /exit).
+def private translate_command(var tr : Translator; sp : Speech; var speak, exit : bool&; line, path : string) : bool {
+    if (line == "/exit" || line == "/quit") {
+        exit = true
+    } elif (line == "/help") {
+        emit("{TRANSLATE_HELP}\n")
+    } elif (starts_with(line, "/langs")) {
+        var inscope parts <- [for (w in split(line, " ")); w; where !empty(w)]
+        if (length(parts) != 3 || !set_translator_langs(tr, parts[1], parts[2])) {
+            emit("usage: /langs <from> <to> - {base_name(path)} knows: {join(translator_languages(tr), " ")}\n")
+        } else {
+            emit("now {parts[1]} -> {parts[2]}\n")
+        }
+    } elif (line == "/speak on" || line == "/speak off") {
+        if (!sp.armed) {
+            emit("no speech model - start with --tts <gguf>\n")
+        } else {
+            speak = line == "/speak on"
+        }
+    } else {
+        return false
+    }
+    return true
+}
+
+def private run_translate(plan : CliPlan; cfg : CliConfig) : int {
+    let rig = arm_rig(plan.common, cfg, plan.sampler, 0l)
+    let spec = !empty(plan.translate.nmt) ? plan.translate.nmt : plan.bare[0]   // validate_plan held: one of them is set
+    let path = resolve_model_path(spec, rig.models_dir)
+    if (empty(path)) return fail("translation model not found: {spec}")
+    let interactive = empty(plan.translate.script)
+    let script <- script_lines(plan.translate.script)   // validate_plan held: it reads
+    var rc = 0
+    with_job_que() {
+        setup_dasllama_jobque()
+        note("loading translation model {path}")
+        var inscope tr <- load_translator(path, plan.translate.exact)
+        var why = translate_direction(tr, plan, path)
+        if (!empty(why)) {
+            rc = fail(why)
+            return
+        }
+        let langs = translator_langs(tr)
+        var sp <- load_speech(rig, plan.translate.tts, plan.translate.voice, plan.translate.speed, plan.playback.play, why)
+        if (!empty(why)) {
+            rc = fail(why)
+            return
+        }
+        var mic <- open_mic(rig, plan.mic, cfg, plan.mic.lang, langs.src, why)
+        if (!empty(why)) {
+            rc = fail(why)
+            return
+        }
+        var speak = sp.armed
+        if (interactive) {
+            emit("{TOOL}: {base_name(path)} ready, {langs.src} -> {langs.trg} - {TRANSLATE_HELP}\n")
+        }
+        var at = 0
+        var n = 0
+        var raw = ""
+        var exit = false
+        while (!exit && next_line(mic, interactive, script, at, raw)) {
+            let line = strip(raw)
+            continue if (empty(line) || translate_command(tr, sp, speak, exit, line, path))
+            let t0 = ref_time_ticks()
+            let out = translate(tr, line)
+            let ms = double(get_time_usec(t0)) / 1000.0lf
+            emit("{out}\n")
+            if (!plan.translate.quiet) {
+                note("translated in {ms} ms")
+            }
+            if (speak) {
+                n++
+                var serr = ""
+                if (!speak_to(sp, out, path_join(plan.translate.out_dir, "translation_{n}.wav"), serr)) {
+                    emit("{serr}\n")
+                }
+                mic_flush(mic)
+            }
+        }
+        close_mic(mic)
+        close_speaker(sp)
     }
     return rc
 }
@@ -973,6 +1238,7 @@ def private dispatch(plan : CliPlan; cfg : CliConfig) : int {
     if (plan.cmd == CliCommand.transcribe) return run_transcribe(plan, cfg)
     if (plan.cmd == CliCommand.speak) return run_speak(plan, cfg)
     if (plan.cmd == CliCommand.talk) return run_talk(plan, cfg)
+    if (plan.cmd == CliCommand.translate) return run_translate(plan, cfg)
     if (plan.cmd == CliCommand.embed) return run_embed(plan, cfg)
     if (plan.cmd == CliCommand.bench) return run_bench(plan, cfg)
     return run_tokenize(plan, cfg)

@@ -26,3 +26,10 @@ fire it and are ruled acceptable, each with its reason.
   target through `gdraft_target` (the Q4_K_M target and, for `mtp-gdraft-iq3`, the UD-IQ3_XXS one) - mint the target's
   metal-blob `.dlim`. The reason: the metal-blob flavor is what the Metal MTP rail and the drafter's attach serve. They pin
   no lane, and `--no-tune` runs them with `DASLLAMA_IMAGE=0`, so the image they mint is the box's own.
+- **The translation facade cells** - `test_nmt_llm_translator`, `test_nmt_chat_translator` and
+  `test_nmt_chat_thinking_off` in `tests/test_nmt.das` load through `load_translator`: a GGUF through `load_model_cached`, a
+  Bergamot student through `load_nmt_model`, each baking its `.dlim` beside the model (`bergamot-q8`, and `bergamot-f32` for
+  the `exact = true` load). `test_translate_facade_contracts` loads a synthetic student the same way, its image landing in
+  the test's temp directory beside the student. The reason: the facade's load is the cells' subject - the kind it picks
+  off the file and the lane `exact` asks - and it has no in-memory form; they pin no lane, and `--no-tune` runs them with
+  `DASLLAMA_IMAGE=0`, so the image they mint is the box's own.

@@ -23,12 +23,13 @@ enum CliCommand {
     transcribe
     speak
     talk
+    translate
     embed
     tokenize
     bench
 }
 
-let CLI_COMMANDS : array<string> <- ["complete", "chat", "transcribe", "speak", "talk", "embed", "tokenize", "bench"]
+let CLI_COMMANDS : array<string> <- ["complete", "chat", "transcribe", "speak", "talk", "translate", "embed", "tokenize", "bench"]
 
 let CLI_USAGE_LINES : array<string> <- [
     "usage: dasllama-cli <command> [flags]",
@@ -38,6 +39,7 @@ let CLI_USAGE_LINES : array<string> <- [
     "  transcribe   audio file to text with an ASR model",
     "  speak        text to a WAV file with a TTS model",
     "  talk         audio or text in, the model's reply spoken to a WAV file",
+    "  translate    type a sentence, read its translation (a Firefox Translations model), optionally spoken",
     "  embed        a text's embedding vector",
     "  tokenize     a text's token ids and pieces",
     "  bench        the llama-bench rows (pp512 / tg128, tg128@N) on a model",
@@ -231,6 +233,40 @@ struct ChatArgs {
 }
 
 [CommandLineArgs]
+struct TranslateArgs {
+    @clarg_doc = "The translation model: a Firefox Translations `model.<pair>.intgemm.alphas.bin` with its `vocab.<pair>.spm` beside it (or its .dlim), or an LLM GGUF (MiLMMT-46, or any instruct model - it answers through its chat template, thinking off); the first bare argument works too; a path, or a file name under --models-dir"
+    nmt : string
+
+    @clarg_doc = "The source language code for a translation LLM (ru, en, de, ...); a Firefox Translations model reads its own"
+    from : string
+
+    @clarg_doc = "The target language code for a translation LLM (default en); a Firefox Translations model writes its own"
+    to : string
+
+    @clarg_doc = "Read the sentences from this file instead of the terminal, one a line (slash commands work); the translation follows each"
+    script : string
+
+    @clarg_doc = "Serve the weights widened to f32 (default: the Q8_0 lane, the faster one)"
+    exact : bool
+
+    @clarg_doc = "A TTS model GGUF: speaks every translation from the start, translation_<n>.wav under --out-dir (/speak off stops, /speak on resumes); pick one that speaks the target language"
+    tts : string
+
+    @clarg_short = "v"
+    @clarg_doc = "Voice name for --tts (default: the model's first voice)"
+    voice : string
+
+    @clarg_doc = "Speech speed multiplier for --tts (default 1.0)"
+    speed : float
+
+    @clarg_doc = "Where the spoken translations land, translation_<n>.wav each (default: the cwd)"
+    out_dir : string
+
+    @clarg_doc = "Print the translation only - no timing after it"
+    quiet : bool
+}
+
+[CommandLineArgs]
 struct TranscribeArgs {
     @clarg_short = "a"
     @clarg_doc = "The ASR model (GGUF or .bin): a path, or a file name under --models-dir"
@@ -339,6 +375,24 @@ struct PlayArgs {
     null_audio : bool
 }
 
+//! The microphone flags of the commands that listen (chat, translate): an utterance heard by the ASR model becomes the
+//! next line, as if typed.
+[CommandLineArgs]
+struct MicArgs {
+    @clarg_doc = "Listen to the microphone: vad (each utterance ends at a pause, hands-free) | ptt (Enter on an empty line starts recording, Enter again stops; typing still works)"
+    mic : string
+
+    @clarg_doc = "The ASR model that hears the microphone (GGUF or .bin): a path, or a file name under --models-dir (default: the config's asr)"
+    asr : string
+
+    @clarg_doc = "mmproj for the microphone's GGUF ASR model, the --asr one or the config's (default: the config's mmproj when the ASR is the config's)"
+    asr_mmproj : string
+
+    @clarg_short = "l"
+    @clarg_doc = "Language hint for the ASR model (default: a translator's source language; else auto for a model that detects it, its one language for a one-language model, else en)"
+    lang : string
+}
+
 [CommandLineArgs]
 struct EmbedArgs {
     @clarg_doc = "The text to embed (or --file, or the first bare argument)"
@@ -401,7 +455,9 @@ struct CliPlan {
     transcribe : TranscribeArgs
     speak : SpeakArgs
     talk : TalkArgs
-    playback : PlayArgs      // chat, speak, talk
+    translate : TranslateArgs
+    playback : PlayArgs      // chat, speak, talk, translate
+    mic : MicArgs            // chat, translate
     embed : EmbedArgs
     tokenize : TokenizeArgs
     bench : BenchArgs = BenchArgs()
@@ -441,6 +497,9 @@ def private command_infos(cmd : CliCommand) : array<CommandInfo> {
     if (speaks(cmd)) {
         infos |> emplace(get_command_info(type<PlayArgs>))
     }
+    if (listens(cmd)) {
+        infos |> emplace(get_command_info(type<MicArgs>))
+    }
     if (cmd == CliCommand.complete) {
         infos |> emplace(get_command_info(type<CompleteArgs>))
     } elif (cmd == CliCommand.chat) {
@@ -451,6 +510,8 @@ def private command_infos(cmd : CliCommand) : array<CommandInfo> {
         infos |> emplace(get_command_info(type<SpeakArgs>))
     } elif (cmd == CliCommand.talk) {
         infos |> emplace(get_command_info(type<TalkArgs>))
+    } elif (cmd == CliCommand.translate) {
+        infos |> emplace(get_command_info(type<TranslateArgs>))
     } elif (cmd == CliCommand.embed) {
         infos |> emplace(get_command_info(type<EmbedArgs>))
     } elif (cmd == CliCommand.tokenize) {
@@ -461,8 +522,11 @@ def private command_infos(cmd : CliCommand) : array<CommandInfo> {
     return <- infos
 }
 
+//! The commands that can hear their input from the microphone, and so take the microphone flags.
+def listens(cmd : CliCommand) : bool => cmd == CliCommand.chat || cmd == CliCommand.translate
+
 //! The commands that can speak a reply, and so take the speaker flags.
-def speaks(cmd : CliCommand) : bool => cmd == CliCommand.chat || cmd == CliCommand.speak || cmd == CliCommand.talk
+def speaks(cmd : CliCommand) : bool => cmd == CliCommand.chat || cmd == CliCommand.speak || cmd == CliCommand.talk || cmd == CliCommand.translate
 
 //! The help for one subcommand: its own flags, the sampler where it samples, the speaker flags
 //! where it speaks, then the shared flags.
@@ -479,6 +543,8 @@ def command_help(cmd : CliCommand) : string {
         text = format_help(get_command_info(type<SpeakArgs>), name)
     } elif (cmd == CliCommand.talk) {
         text = format_help(get_command_info(type<TalkArgs>), name)
+    } elif (cmd == CliCommand.translate) {
+        text = format_help(get_command_info(type<TranslateArgs>), name)
     } elif (cmd == CliCommand.embed) {
         text = format_help(get_command_info(type<EmbedArgs>), name)
     } elif (cmd == CliCommand.tokenize) {
@@ -491,6 +557,9 @@ def command_help(cmd : CliCommand) : string {
     }
     if (speaks(cmd)) {
         text = "{text}\nspeaker:\n{format_help(get_command_info(type<PlayArgs>), name)}"
+    }
+    if (listens(cmd)) {
+        text = "{text}\nmicrophone:\n{format_help(get_command_info(type<MicArgs>), name)}"
     }
     return "{text}\nshared flags:\n{format_help(get_command_info(type<CommonArgs>), name)}"
 }
@@ -537,6 +606,9 @@ def parse_cli(argv : array<string>) : CliPlan {
     if (ok && speaks(plan.cmd)) {
         ok = parse_into(plan.playback, plan.rest, err)
     }
+    if (ok && listens(plan.cmd)) {
+        ok = parse_into(plan.mic, plan.rest, err)
+    }
     if (ok) {
         ok = parse_command_args(plan, err)
     }
@@ -561,6 +633,8 @@ def private parse_command_args(var plan : CliPlan; var err : string&) : bool {
         return parse_into(plan.speak, plan.rest, err)
     } elif (plan.cmd == CliCommand.talk) {
         return parse_into(plan.talk, plan.rest, err)
+    } elif (plan.cmd == CliCommand.translate) {
+        return parse_into(plan.translate, plan.rest, err)
     } elif (plan.cmd == CliCommand.embed) {
         return parse_into(plan.embed, plan.rest, err)
     } elif (plan.cmd == CliCommand.tokenize) {
@@ -789,6 +863,11 @@ def resolve_model_path(spec : string; models_dir : string) : string {
 //! stay with the run: they need the rig.
 def validate_plan(plan : CliPlan; cfg : CliConfig) : string {   // nolint:STYLE037 - one flat ladder, an arm per command
     var err = ""
+    if (listens(plan.cmd) && !empty(plan.mic.mic)) {
+        return "--mic is vad | ptt, not '{plan.mic.mic}'" if (plan.mic.mic != "vad" && plan.mic.mic != "ptt")
+        return "--mic needs an ASR model - pass --asr <gguf|bin> or configure one" if (empty(plan.mic.asr) && empty(cfg.asr))
+        return "--mic with --script: the script is the input - drop one" if (!empty(plan.chat.script) || !empty(plan.translate.script))
+    }
     if (plan.cmd == CliCommand.complete) {
         let prompt = text_input(plan.complete.prompt, plan.complete.file, plan.bare, err)
         return err if (!empty(err))
@@ -800,6 +879,12 @@ def validate_plan(plan : CliPlan; cfg : CliConfig) : string {   // nolint:STYLE0
             return "could not read --script {plan.chat.script}"
         }
         return "--play needs a speech model - pass --tts <gguf> or configure one" if (plan.playback.play && empty(plan.chat.tts) && empty(cfg.tts))
+    } elif (plan.cmd == CliCommand.translate) {
+        return "no translation model - pass --nmt <model.bin> or the model as the first argument" if (empty(plan.translate.nmt) && empty(plan.bare))
+        if (!empty(plan.translate.script) && empty(fread(plan.translate.script))) {
+            return "could not read --script {plan.translate.script}"
+        }
+        return "--play needs a speech model - pass --tts <gguf>" if (plan.playback.play && empty(plan.translate.tts))
     } elif (plan.cmd == CliCommand.transcribe) {
         let file = !empty(plan.transcribe.file) ? plan.transcribe.file : (empty(plan.bare) ? "" : plan.bare[0])
         return "nothing to transcribe - pass --file <audio> or the file as the first argument" if (empty(file))

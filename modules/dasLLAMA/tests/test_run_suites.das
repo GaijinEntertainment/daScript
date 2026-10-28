@@ -144,8 +144,17 @@ def test_area_tables_match_the_census(t : T?) {
 def test_areas_for_path(t : T?) {
     let every = join(AREAS, ",")
     t |> equal(join(areas_for_path("modules/dasLLAMA/dasllama/dasllama_audio.das"), ","), "audio", "an audio module reaches audio")
-    t |> equal(join(areas_for_path("modules/dasLLAMA/dasllama/dasllama_tower.das"), ","), "audio,vision,tts", "the shared tower reaches both towers and the TTS blocks calling its row kernels")
-    t |> equal(join(areas_for_path("modules/dasLLAMA/dasllama/dasllama_vulkan_tower.das"), ","), "audio,vision,tts", "the Vulkan tower reaches both towers and the TTS driver riding its classes")
+    t |> equal(join(areas_for_path("modules/dasLLAMA/dasllama/dasllama_tower.das"), ","), "audio,vision,tts,translate", "the shared tower reaches both towers, the TTS blocks calling its row kernels and the Bergamot chain its GEMMs")
+    t |> equal(join(areas_for_path("modules/dasLLAMA/dasllama/dasllama_vulkan_tower.das"), ","), "audio,vision,tts,translate", "the Vulkan tower reaches both towers and the TTS and translation drivers riding its classes")
+    for (stem in ["dasllama_nmt", "dasllama_metal_nmt", "dasllama_vulkan_nmt", "dasllama_translate"]) {
+        t |> equal(join(areas_for_path("modules/dasLLAMA/dasllama/{stem}.das"), ","), "translate", "a translation module reaches translate: {stem}")
+    }
+    t |> equal(join(areas_for_path("modules/dasLLAMA/dasllama/dasllama_metal_prefill.das"), ","), "llm,tts,audio,vision,translate", "the Metal prefill reaches the Bergamot chain riding its q8 GEMM")
+    t |> equal(join(areas_for_path("modules/dasLLAMA/dasllama/dasllama_gpu_kernels_common.das"), ","), "audio,vision,tts,translate,llm", "the shared GPU kernels reach the Bergamot step's stamps")
+    t |> equal(join(areas_for_path("modules/dasLLAMA/dasllama/dasllama_spm.das"), ","), "llm,tts,translate", "the SentencePiece module reaches the Bergamot model-file reader")
+    t |> equal(join(areas_for_path("modules/dasLLAMA/tests/_nmt_oracle.das"), ","), "translate,llm", "the Bergamot oracle fixture reaches translate and the kernel cells")
+    t |> equal(join(areas_for_path("modules/dasLLAMA/tests/_npy.das"), ","), "audio,translate", "the npy reader reaches the GigaAM and Bergamot dumps")
+    t |> equal(join(areas_for_path("modules/dasLLAMA/tests/test_nmt.das"), ","), "translate", "the translation file reaches its own area")
     t |> equal(join(areas_for_path("modules/dasLLAMA/dasllama/dasllama_tts_slab.das"), ","), "audio,vision,tts", "the shared TTS slab writer reaches every tower seat")
     t |> equal(join(areas_for_path("modules/dasLLAMA/dasllama/dasllama_vulkan_tts.das"), ","), "tts", "the Vulkan TTS driver reaches tts")
     t |> equal(join(areas_for_path("modules/dasLLAMA/dasllama/dasllama_rope.das"), ","),
@@ -195,6 +204,9 @@ def test_area_plan(t : T?) {
     for (i in range(1, length(tts.files) - 1)) {
         t |> success(tts.files[i - 1] < tts.files[i], "the plan is sorted: {tts.files[i - 1]} < {tts.files[i]}")
     }
+    let translate <- area_plan(["translate"])
+    t |> equal(join(translate.files, ","), "{TESTS_DIR}/test_nmt.das,{TESTS_DIR}/test_model_image.das", "translate plans its file and the image file its bergamot arm rides")
+    t |> equal(translate.image_arms, "bergamot", "translate owns the bergamot image arm")
     let infra <- area_plan(["infra"])
     t |> equal(infra.image_arms, "", "infra owns no image arms, so no image file")
     t |> success(find_index(infra.files, "{TESTS_DIR}/test_model_image.das") < 0, "no image file without arms")
@@ -392,7 +404,7 @@ def test_reach_for_path(t : T?) {
     t |> success(load.core, "a core module reaches the core")
     t |> success(find_index(load.files, "test_vulkan_kernels.das") >= 0 && find_index(load.files, "test_gpu_resident_llama.das") >= 0, "every model-free llm file and the core witnesses")
     t |> success(find_index(load.files, "test_gpu_resident_moe_formats.das") < 0, "not the whole stocked set")
-    t |> equal(join(load.areas, ","), "audio,vision,tts,infra", "and every other area whole")
+    t |> equal(join(load.areas, ","), "audio,vision,tts,translate,infra", "and every other area whole")
     let audio <- reach_for_path("modules/dasLLAMA/dasllama/dasllama_audio.das")
     t |> success(empty(audio.files) && join(audio.areas, ",") == "audio" && !audio.core, "an audio module reaches audio whole and no llm file")
     let codec <- reach_for_path("modules/dasLLAMA/dasllama/dasllama_kv_codec.das")

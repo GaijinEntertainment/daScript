@@ -1,0 +1,143 @@
+diff --git a/inference/marian-fork/CMakeLists.txt b/inference/marian-fork/CMakeLists.txt
+index e22af91e..838521b6 100644
+--- a/inference/marian-fork/CMakeLists.txt
++++ b/inference/marian-fork/CMakeLists.txt
+@@ -195,8 +195,6 @@ include(GetVersionFromFile)
+ message(STATUS "Project name: ${PROJECT_NAME}")
+ message(STATUS "Project version: ${PROJECT_VERSION_STRING_FULL}")
+ 
+-execute_process(COMMAND git submodule update --init --recursive --no-fetch
+-                WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+ 
+ # Note that with CMake MSVC build, the option CMAKE_BUILD_TYPE is automatically derived from the key
+ # 'configurationType' in CMakeSettings.json configurations
+diff --git a/inference/marian-fork/src/3rd_party/ExceptionWithCallStack.cpp b/inference/marian-fork/src/3rd_party/ExceptionWithCallStack.cpp
+index 3ce38a2a..d05455cd 100644
+--- a/inference/marian-fork/src/3rd_party/ExceptionWithCallStack.cpp
++++ b/inference/marian-fork/src/3rd_party/ExceptionWithCallStack.cpp
+@@ -199,7 +199,7 @@ static void CollectCallStack(size_t skipLevels, bool makeFunctionNamesStandOut,
+ 
+ #else // Linux
+ 
+-    unsigned int MAX_NUM_FRAMES = 1024;
++    const unsigned int MAX_NUM_FRAMES = 1024;
+     void* backtraceAddresses[MAX_NUM_FRAMES];
+     unsigned int numFrames = backtrace(backtraceAddresses, MAX_NUM_FRAMES);
+     char** symbolList = backtrace_symbols(backtraceAddresses, numFrames);
+@@ -232,7 +232,7 @@ static void CollectCallStack(size_t skipLevels, bool makeFunctionNamesStandOut,
+ 
+             // Mangled name is now in [beginName, beginOffset) and caller offset in [beginOffset, beginAddress).
+             int status = 0;
+-            unsigned int MAX_FUNCNAME_SIZE = 4096;
++            const unsigned int MAX_FUNCNAME_SIZE = 4096;
+             size_t funcNameSize = MAX_FUNCNAME_SIZE;
+             char funcName[MAX_FUNCNAME_SIZE]; // working buffer
+             const char* ret = abi::__cxa_demangle(beginName, funcName, &funcNameSize, &status);
+diff --git a/inference/marian-fork/src/3rd_party/zlib/zutil.h b/inference/marian-fork/src/3rd_party/zlib/zutil.h
+index b079ea6a..7439d6c8 100644
+--- a/inference/marian-fork/src/3rd_party/zlib/zutil.h
++++ b/inference/marian-fork/src/3rd_party/zlib/zutil.h
+@@ -130,7 +130,7 @@ extern z_const char * const z_errmsg[10]; /* indexed by 2-zlib_error */
+ #  endif
+ #endif
+ 
+-#if defined(MACOS) || defined(TARGET_OS_MAC)
++#if defined(MACOS)
+ #  define OS_CODE  7
+ #  ifndef Z_SOLO
+ #    if defined(__MWERKS__) && __dest_os != __be_os && __dest_os != __win32_os
+diff --git a/inference/marian-fork/src/graph/expression_graph.cpp b/inference/marian-fork/src/graph/expression_graph.cpp
+index 7d42e811..5895a4d3 100644
+--- a/inference/marian-fork/src/graph/expression_graph.cpp
++++ b/inference/marian-fork/src/graph/expression_graph.cpp
+@@ -1,3 +1,6 @@
++#include <map>
++#include <cstdlib>
++#include <cstdio>
+ #include "graph/expression_graph.h"
+ #include "tensors/tensor_operators.h"
+ 
+@@ -128,7 +131,27 @@ void ExpressionGraph::forward(std::list<Expr>& forwardTape, bool finalPass) {
+       }
+     }
+ 
+-    if(v->marked_for_debug()) {
++    if(v->marked_for_debug() && std::getenv("MARIAN_DUMP_DIR")) {
++      static std::map<std::string, int> dumpCount;
++      std::vector<float> host;
++      v->val()->get(host);
++      std::string msg = v->debug_message();
++      char idx[16];
++      snprintf(idx, sizeof(idx), "%03d", dumpCount[msg]++);
++      std::string path = std::string(std::getenv("MARIAN_DUMP_DIR")) + "/" + msg + "_" + idx + ".npy";
++      std::string shape;
++      for(auto d : v->shape()) shape += std::to_string(d) + ",";
++      std::string hdr = "{'descr': '<f4', 'fortran_order': False, 'shape': (" + shape + "), }";
++      while((hdr.size() + 11) % 64) hdr += " ";
++      hdr += "\n";
++      FILE* fp = fopen(path.c_str(), "wb");
++      uint16_t hl = (uint16_t)hdr.size();
++      fwrite("\x93NUMPY\x01\x00", 1, 8, fp);
++      fwrite(&hl, 2, 1, fp);
++      fwrite(hdr.data(), 1, hdr.size(), fp);
++      fwrite(host.data(), sizeof(float), host.size(), fp);
++      fclose(fp);
++    } else if(v->marked_for_debug() && std::getenv("MARIAN_DEBUG_LOG")) {
+       Logger log = spdlog::get("general");
+       if(log) {
+         LOG(info, "Debug: {} op={}", v->debug_message(), v->type());
+diff --git a/inference/marian-fork/src/models/transformer.h b/inference/marian-fork/src/models/transformer.h
+index 2d9ced33..f8f1d5de 100755
+--- a/inference/marian-fork/src/models/transformer.h
++++ b/inference/marian-fork/src/models/transformer.h
+@@ -563,6 +563,7 @@ public:
+     auto opsEmb = opt<std::string>("transformer-postprocess-emb");
+     float dropProb = inference_ ? 0 : opt<float>("transformer-dropout");
+     layer = preProcess(prefix_ + "_emb", opsEmb, layer, dropProb);
++    debug(layer, "enc_emb");
+ 
+     // LayerAttention expects mask in a different layout
+     layerMask = reshape(layerMask, {1, dimBatch, 1, dimSrcWords}); // [1,          batch size,            1,                      max length]
+@@ -579,6 +580,7 @@ public:
+                              layerMask, // [batch size, num heads broadcast=1, max length broadcast=1, max length]
+                              opt<int>("transformer-heads"));
+       layer = LayerFFN(prefix_ + "_l" + std::to_string(i) + "_ffn", layer);
++      debug(layer, "enc_l" + std::to_string(i));
+       checkpoint(layer); // sets a manually specified checkpoint if gradient checkpointing is enabled, does nothing otherwise.
+     }
+ 
+@@ -720,6 +722,7 @@ public:
+     float dropProb = inference_ ? 0 : opt<float>("transformer-dropout");
+ 
+     query = preProcess(prefix_ + "_emb", opsEmb, query, dropProb);
++    debug(query, "dec_emb");
+ 
+     int dimTrgWords = query->shape()[-2];
+     int dimBatch    = query->shape()[-3];
+@@ -791,7 +794,7 @@ public:
+       else if(layerType == "average-attention")
+         query = DecoderLayerAAN(decoderState, prevDecoderState, prefix_ + "_l" + layerNo + "_aan", query, selfMask, startPos);
+       else if(layerType == "rnn")
+-        query = DecoderLayerRNN(perLayerRnn_, decoderState, prevDecoderState, prefix_ + "_l" + layerNo + "_rnn", query, selfMask, startPos);
++      { query = DecoderLayerRNN(perLayerRnn_, decoderState, prevDecoderState, prefix_ + "_l" + layerNo + "_rnn", query, selfMask, startPos); debug(query, "dec_l" + layerNo + "_rnn"); }
+       else
+         ABORT("Unknown auto-regressive layer type in transformer decoder {}",
+               layerType);
+@@ -846,7 +849,9 @@ public:
+       // remember decoder state
+       decoderStates.push_back(decoderState);
+ 
++      debug(query, "dec_l" + layerNo + "_ctx");
+       query = LayerFFN(prefix_ + "_l" + layerNo + "_ffn", query); // [-4: beam depth=1, -3: batch size, -2: max length, -1: vector dim]
++      debug(query, "dec_l" + layerNo + "_ffn");
+ 
+       checkpoint(query);
+     }
+@@ -865,6 +870,7 @@ public:
+     if(shortlist_)
+       output_->setShortlist(shortlist_);
+     auto logits = output_->applyAsLogits(decoderContext); // [-4: beam depth=1, -3: max length, -2: batch size, -1: vocab or shortlist dim]
++    debug(logits.getLogits(), "logits");
+     
+     // return unormalized(!) probabilities
+     Ptr<DecoderState> nextState;

@@ -59,6 +59,14 @@ Commands
      - The chain: ``--in <audio>`` heard by ``--asr``, answered by ``--model``, spoken by
        ``--tts`` into ``--out``. ``--prompt <text>`` skips the hearing. The transcript, the
        reply and the three stage times are printed.
+   * - ``translate``
+     - Type (or say) a sentence, read its translation: a Firefox Translations model (``--nmt``,
+       or the first bare argument - ``model.<pair>.intgemm.alphas.bin`` with ``vocab.<pair>.spm``
+       beside it; one direction) or a translation LLM GGUF (MiLMMT-46; ``--from`` / ``--to``, or
+       ``/langs <from> <to>``, pick any direction among its 46 languages), one sentence a line from
+       the terminal, the microphone or ``--script``. With ``--tts`` every
+       translation is also spoken into ``translation_<n>.wav``; ``/speak on|off`` toggles it,
+       ``/exit`` quits.
    * - ``embed``
      - A text's embedding vector, one float per line, or ``--json``.
    * - ``tokenize``
@@ -77,6 +85,7 @@ files; ``utils/dasllama-server/test_cli.das`` runs each one:
    dasllama-cli speak --tts kitten-nano.gguf -o hello.wav "Hello from the command line."
    dasllama-cli transcribe --asr Qwen3-ASR-0.6B-Q8_0.gguf --mmproj mmproj-Qwen3-ASR-0.6B-bf16.gguf question.wav
    dasllama-cli talk --asr Qwen3-ASR-0.6B-Q8_0.gguf --mmproj mmproj-Qwen3-ASR-0.6B-bf16.gguf --model Qwen3.5-0.8B-Q8_0.gguf --tts kokoro-82m.gguf --in question.wav --out answer.wav
+   dasllama-cli translate ru-en/model.ruen.intgemm.alphas.bin --tts kitten-nano.gguf --script sentences.txt
    dasllama-cli chat -m gemma-4-E2B-it-Q4_K_M.gguf --image-mmproj mmproj-gemma-4-E2B-it-bf16.gguf --audio-mmproj mmproj-gemma-4-E2B-it-bf16.gguf
    dasllama-cli bench -m SmolLM2-135M-Instruct-Q8_0.gguf --npl 2 -o md
 
@@ -162,7 +171,7 @@ server's names; the config file fills whatever they leave empty (below).
    * - ``--max-tokens`` / ``-n``
      - Reply token budget (default 256 for ``complete``, 16384 for ``chat`` and ``talk``)
 
-.. list-table:: Speaker (``chat``, ``speak``, ``talk``)
+.. list-table:: Speaker (``chat``, ``speak``, ``talk``, ``translate``)
    :header-rows: 1
    :widths: 22 78
 
@@ -172,6 +181,21 @@ server's names; the config file fills whatever they leave empty (below).
      - Also play each spoken reply through the speaker once its WAV has landed; the run blocks until the clip ends. A box with no audio device says so once and keeps writing the files
    * - ``--null-audio``
      - With ``--play``: drive the null audio backend instead of a device (a test box, a CI runner)
+
+.. list-table:: Microphone (``chat``, ``translate``)
+   :header-rows: 1
+   :widths: 22 78
+
+   * - Flag
+     - Meaning
+   * - ``--mic``
+     - ``vad``: listen hands-free, each utterance ending at a pause becomes the next line | ``ptt``: Enter on an empty line starts recording, Enter again stops (typing still works). Each heard line is echoed as ``you: ...``; the capture is dropped while a reply is spoken
+   * - ``--asr``
+     - The ASR model that hears the microphone (GGUF or ``.bin``; default: the config's)
+   * - ``--asr-mmproj``
+     - mmproj for the microphone's GGUF ASR model, the ``--asr`` one or the config's (default: the config's mmproj when the ASR is the config's)
+   * - ``--lang`` / ``-l``
+     - Language hint for the ASR model (default: a translator's source language; else the model's own default)
 
 .. list-table:: ``complete``
    :header-rows: 1
@@ -289,6 +313,31 @@ server's names; the config file fills whatever they leave empty (below).
      - Answer directly on a hybrid thinking model (default: the model's own default)
    * - ``--quiet``
      - Print the reply only - no transcript, stage times or token counts
+
+.. list-table:: ``translate``
+   :header-rows: 1
+   :widths: 22 78
+
+   * - Flag
+     - Meaning
+   * - ``--nmt``
+     - The translation model: a path, or a file name under ``--models-dir`` (or the first bare argument); its ``.dlim`` loads too
+   * - ``--from`` / ``--to``
+     - A translation LLM's direction as language codes (``--to`` default ``en``); a Firefox Translations model keeps its own pair
+   * - ``--script``
+     - Read the sentences from this file instead of the terminal, one a line (slash commands work); the translation follows each
+   * - ``--exact``
+     - Serve the weights widened to f32 (default: the Q8_0 lane, the faster one)
+   * - ``--tts``
+     - A TTS model GGUF: speaks every translation from the start, ``translation_<n>.wav`` under ``--out-dir`` (``/speak off`` stops, ``/speak on`` resumes); pick one that speaks the target language
+   * - ``--voice`` / ``-v``
+     - Voice name for ``--tts`` (default: the model's first voice)
+   * - ``--speed``
+     - Speech speed multiplier for ``--tts`` (default 1.0)
+   * - ``--out-dir``
+     - Where the spoken translations land, ``translation_<n>.wav`` each (default: the cwd)
+   * - ``--quiet``
+     - Print the translation only - no timing after it
 
 .. list-table:: ``embed``
    :header-rows: 1

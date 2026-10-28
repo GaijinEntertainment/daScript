@@ -29,6 +29,7 @@ require _vk_kq_fixtures   // nolint:STYLE030,LINT019 — f16r, inside the vulkan
 require _vad_oracle   // nolint:STYLE030,LINT019 — the silero VAD cells' fixture and references, inside the vulkan arm alone
 require _rnnt_oracle   // nolint:STYLE030,LINT019 — the transducer cells' fixture and references, inside the vulkan arm alone
 require _ctc_oracle   // nolint:STYLE030,LINT019 — the CTC pick cells' fixture, cases and reference, inside the vulkan arm alone
+require _nmt_oracle   // nolint:STYLE030,LINT019 — the Bergamot step cells' fixtures and references, inside the vulkan arm alone
 require dasllama/dasllama_math
 require dasllama/dasllama_gpu_math   // nolint:STYLE030,LINT019 - the oracles' device-math twins, used only inside the vulkan static_if arms (a build without the module drops them)
 require daslib/jobque_boost
@@ -2727,6 +2728,239 @@ def private vkt_rnnt_pick(t : T?; fx : RnntFix) {
                 var inscope toks <- cp |> plane_as(tp, 0u, int(c.pa.cap) * 8)
                 rnnt_pick_verify(t, tag, c, stg, toks, cp |> plane_run(xp), want)
             }
+        }
+    }
+}
+
+//! The Bergamot step's three stamps (`NmtEmbed`, `NmtSsru`, `NmtPick`) on the legs the Metal cells run (`test_metal_nmt_kernels`),
+//! against `_nmt_oracle.das`
+[test]
+def test_vkt_nmt(t0 : T?) {
+    t0 |> run("the Bergamot step's embed, SSRU cell and pick == their CPU references") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!vk_moe_init() || !ensure_nmt_embed_cls() || !ensure_nmt_ssru_cls() || !ensure_nmt_pick_cls()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            vkt_nmt_embed(t)
+            vkt_nmt_ssru(t)
+            vkt_nmt_pick(t)
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
+//! the embed rows bit for bit in both forms: the encoder's over four ids at positions 0..3 (a `NMT_NO_TOKEN` row among them) and
+//! the step's, one row whose token and position the state words name; the plane sized to the dispatch's 256-lane grid, its slack
+//! under the sentinel; the control a poisoned table element of a gathered row, through `check_exceeds`
+[unused_argument(t)]
+def private vkt_nmt_embed(t : T?) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        for (step in fixed_array(false, true)) {
+            let tag = "nmt_embed {step ? "step" : "encode"}"
+            var inscope fx <- nmt_embed_fix(8)
+            var inscope ids <- step ? [5u, 2u, 0u, 1u] : [3u, NMT_NO_TOKEN, 0u, 4u]
+            let rows = step ? 1 : 4
+            let n = rows * NMT_FIX_D
+            var inscope want_ids <- step ? [2u] : [3u, NMT_NO_TOKEN, 0u, 4u]
+            let scale = sqrt(float(NMT_FIX_D))
+            with_cell_planes() $(var cp : CellPlanes) {
+                let ip = cp |> in_plain(ids)
+                let wp = cp |> in_(fx.wn)
+                let pp = cp |> in_(fx.pos)
+                let xp = cp |> out_(n, 0, nmt_slack(n))
+                var s = cp |> cls_set(fixed_array(ip, wp, pp, xp), @@set_nmt_embed_cls)
+                var ka = GkNmtEmbedArgs(d = uint(NMT_FIX_D), rows = uint(rows), emb_off = uint(NMT_FIX_LEAD), scale = scale, from_state = step ? 1u : 0u)
+                for (leg in range(2)) {
+                    if (leg == 1) {
+                        fx.wn[NMT_FIX_LEAD + int(want_ids[0]) * NMT_FIX_D + 3]++
+                        cp |> plane_upload(wp, fx.wn)
+                        cp |> plane_refill(xp)
+                    }
+                    cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                        enc_nmt_embed_cls(raw, h, s, ka, int64((n + 255) / 256))
+                    }
+                    var inscope got <- cp |> plane_run(xp)
+                    var inscope fresh <- nmt_embed_fix(8)
+                    var inscope want <- nmt_embed_ref(fresh, want_ids, step ? 5 : 0, scale)
+                    if (leg == 0) {
+                        check_exact(t, "{tag}: the rows", got, want)
+                    } else {
+                        check_exceeds(t, "{tag}: the control - a poisoned table element of a gathered row moves the rows", got, want, BAR_EXACT)
+                    }
+                    var inscope whole <- cp |> plane_whole(xp)
+                    nmt_check_slack(t, "{tag} leg {leg}", whole, n)
+                }
+            }
+        }
+    }
+}
+
+//! the SSRU cell on layer 1 of two cells at 1e-6 relative (the device's exp against the CPU's), at a width off the thread grid: the
+//! cells after it - moved off their input past the bar - and the output row; layer 0's cells and the cell plane's slack kept, the
+//! output row's slack under the sentinel; the control a poisoned forget-bias element moving the rows, through `check_exceeds`
+[unused_argument(t)]
+def private vkt_nmt_ssru(t : T?) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        let tag = "nmt_ssru"
+        var inscope fx <- nmt_ssru_fix()
+        var inscope want <- nmt_ssru_ref(fx)
+        let bar = Bar(rel = 1e-6, abs_floor = 1e-6, poison_scaled = true)
+        let slack = nmt_slack(NMT_FIX_D)
+        var inscope cell_in <- at_base(fx.cell, 0, slack)
+        let moved_at = NMT_FIX_D + 5
+        t |> success(moved_off(want.cell, fx.cell, moved_at, bar), "{tag}: the reference's layer-1 cell {moved_at} sits past the bar off its input ({want.cell[moved_at]} from {fx.cell[moved_at]})")
+        with_cell_planes() $(var cp : CellPlanes) {
+            let hp = cp |> in_(fx.h)
+            let wp = cp |> in_(fx.wn)
+            let cellp = cp |> io_(fx.cell, 0, slack)
+            let op = cp |> out_(NMT_FIX_D, 0, slack)
+            var s = cp |> cls_set(fixed_array(hp, wp, cellp, op), @@set_nmt_ssru_cls)
+            var ka = GkNmtSsruArgs(d = uint(NMT_FIX_D), bf_off = uint(NMT_FIX_LEAD), cell_off = uint(NMT_FIX_D))
+            for (leg in range(2)) {
+                if (leg == 1) {
+                    fx.wn[NMT_FIX_LEAD + 5] += 2.0
+                    cp |> plane_upload(wp, fx.wn)
+                    cp |> plane_upload(cellp, fx.cell)
+                    cp |> plane_refill(op)
+                }
+                cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                    enc_nmt_ssru_cls(raw, h, s, ka, int64((NMT_FIX_D + 255) / 256))
+                }
+                var inscope o <- cp |> plane_run(op)
+                var inscope cell <- cp |> plane_run(cellp)
+                if (leg == 0) {
+                    check_rows(t, "{tag}: the output row", o, want.o, bar, FLAT_ROWS)
+                    check_rows(t, "{tag}: the cells", cell, want.cell, bar, FLAT_ROWS)
+                    t |> success(moved_off(cell, fx.cell, moved_at, bar), "{tag}: the device's layer-1 cell {moved_at} moved off its input ({cell[moved_at]} from {fx.cell[moved_at]})")
+                } else {
+                    check_exceeds(t, "{tag}: the control - a poisoned forget bias moves the output row", o, want.o, bar)
+                }
+                var inscope ow <- cp |> plane_whole(op)
+                nmt_check_slack(t, "{tag} output leg {leg}", ow, NMT_FIX_D)
+                var inscope cw <- cp |> plane_whole(cellp)
+                nmt_check_kept(t, "{tag} cells leg {leg}: layer 0 and the slack", cw, cell_in, NMT_FIX_D, NMT_FIX_D)
+            }
+        }
+    }
+}
+
+//! the greedy pick at vocabularies of 200 (under one 256-lane stride), 1000 and 32000 over `nmt_pick_cases`: the state words and
+//! the whole record plane exact, `NMT_PICK_SLACK` words past the cap among them; the control, on every case,
+//! `nmt_pick_poisoned` - the device's words the poisoned case's reference's and off the clean case's
+[unused_argument(t)]
+def private vkt_nmt_pick(t : T?) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        for (nv in fixed_array(200, 1000, 32000)) {
+            var inscope cases <- nmt_pick_cases(nv)
+            for (c in cases) {
+                let tag = "nmt_pick nv {nv} {c.tag}"
+                var inscope pc <- nmt_pick_poisoned(c)
+                let nrec = int(c.cap) + NMT_PICK_SLACK
+                with_cell_planes() $(var cp : CellPlanes) {
+                    let lp = cp |> in_(c.lg)
+                    let wp = cp |> in_(c.wb)
+                    let sp = cp |> out_words(int64(NMT_ST_WORDS) * 4l, 0u)
+                    let tp = cp |> out_words(int64(nrec) * 4l, NMT_NO_TOKEN)
+                    var s = cp |> cls_set(fixed_array(lp, wp, sp, tp), @@set_nmt_pick_cls)
+                    var ka = GkNmtPickArgs(nv = uint(nv), boff = uint(NMT_FIX_LEAD), eos = c.eos, cap = c.cap)
+                    for (leg in range(2)) {
+                        if (leg == 1) {
+                            cp |> plane_upload(wp, pc.wb)
+                            cp |> plane_refill(tp)
+                        }
+                        cp |> plane_upload(sp, leg == 0 ? c.st : pc.st)
+                        cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                            enc_nmt_pick_cls(raw, h, s, ka, 1l)
+                        }
+                        var inscope st <- cp |> plane_as(sp, 0u, int(NMT_ST_WORDS))
+                        var inscope toks <- cp |> plane_as(tp, 0u, nrec)
+                        if (leg == 0) {
+                            nmt_pick_check(t, tag, st, toks, c)
+                        } else {
+                            nmt_pick_check(t, "{tag} poisoned", st, toks, pc)
+                            nmt_pick_moved(t, tag, st, toks, c)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+let private NMT_ATTN_HEADS = 4
+let private NMT_ATTN_ROWS = 3
+let private NMT_ATTN_KV_LEAD = 37   //! the halves ahead of the K/V run: a kernel reading from element 0 instead of `koff` misses
+let private NMT_ATTN_Q_LEAD = 7     //! the floats ahead of the q bias row in `wn`
+
+//! The Bergamot attention pair (`NmtAttnPart` + `NmtAttnComb`, head width `pa.hs`) at heads of 32, 48 and 64 over 300 keys (two
+//! chunks) and 150 against `wdec_attn_ref` over the same halves; q rows strided twice the width, the K/V run behind a lead, the
+//! partial and output slack under the sentinel. The control the keys scaled twice, through `check_exceeds`.
+[test]
+def test_vkt_nmt_attn(t0 : T?) {
+    t0 |> run("the Bergamot attention pair at heads of 32, 48 and 64 == the CPU attention") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!vk_moe_init() || !ensure_nmt_attn_part_cls() || !ensure_nmt_attn_comb_cls()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            for (hs in fixed_array(32, 48, 64)) {
+                for (len in fixed_array(300, 150)) {
+                    vkt_nmt_attn(t, hs, len)
+                }
+            }
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
+//! one attention pair dispatch at head width `hs` over `len` keys, its compare and control
+[unused_argument(t, hs, len)]
+def private vkt_nmt_attn(t : T?; hs, len : int) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        let tag = "nmt_attn hs {hs} keys {len}"
+        let heads = NMT_ATTN_HEADS
+        let rows = NMT_ATTN_ROWS
+        let d = heads * hs
+        let dim = 2 * d
+        let kvn = heads * len * hs
+        let nch = (len + int(WDEC_CHUNK) - 1) / int(WDEC_CHUNK)
+        let scale = 1.0 / sqrt(float(hs))
+        let q <- row_fill(rows * dim, 31, 5, 0.05, 2.3)
+        let wn <- row_fill(NMT_ATTN_Q_LEAD + d, 11, 3, 0.02, 0.9)
+        let kh <- [for (i in range(NMT_ATTN_KV_LEAD + kvn)); uint16(f32_to_f16(float((i * 29) % 41) * 0.05 - 1.0))]
+        let vh <- [for (i in range(NMT_ATTN_KV_LEAD + kvn)); uint16(f32_to_f16(float((i * 17) % 23) * 0.08 - 0.9))]
+        let krun <- copy_span(kh, NMT_ATTN_KV_LEAD, kvn)
+        let vrun <- copy_span(vh, NMT_ATTN_KV_LEAD, kvn)
+        let y_ref <- wdec_attn_ref(q, krun, vrun, wn, rows, dim, d, heads, hs, len, len, NMT_ATTN_Q_LEAD, false, scale)
+        let ys_ref <- wdec_attn_ref(q, krun, vrun, wn, rows, dim, d, heads, hs, len, len, NMT_ATTN_Q_LEAD, false, scale * 2.0)
+        let npy = nch * heads * rows * hs
+        with_cell_planes() $(var cp : CellPlanes) {
+            let qp = cp |> in_(q)
+            let kp = cp |> in_plain(kh)
+            let vp = cp |> in_plain(vh)
+            let wp = cp |> in_(wn)
+            let pmsp = cp |> out_(nch * heads * rows * 2)
+            let pyp = cp |> out_(npy, 0, 128)
+            let yp = cp |> out_(rows * d, 0, 64)
+            var s_part = cp |> cls_set(fixed_array(qp, kp, vp, pmsp, pyp, wp), @@set_nmt_attn_part_cls)
+            var s_comb = cp |> cls_set(fixed_array(pmsp, pyp, yp), @@set_nmt_attn_comb_cls)
+            var pa = GkWdecAttnArgs(dim = uint(dim), tstride = uint(len), len0 = uint(len), causal = 0u, nheads = uint(heads), nrows = uint(rows),
+                koff = uint(NMT_ATTN_KV_LEAD), voff = uint(NMT_ATTN_KV_LEAD), qboff = uint(NMT_ATTN_Q_LEAD), hs = uint(hs), scale = scale)
+            var pc = GkWdecCombArgs(dim = uint(d), nchunks = uint(nch), nheads = uint(heads), nrows = uint(rows), hs = uint(hs))
+            cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                enc_nmt_attn_part_cls(raw, h, s_part, pa, int64(nch * heads * rows))
+                enc_nmt_attn_comb_cls(raw, h, s_comb, pc, int64(heads * rows))
+            }
+            let y <- cp |> plane_run(yp)
+            check_rows(t, "{tag}: the rows against the CPU attention", y, y_ref, BAR_APPROX, d, hs)
+            check_exceeds(t, "{tag}: the control - the keys scaled twice move the rows", y, ys_ref, BAR_APPROX)
+            let yw <- cp |> plane_whole(yp)
+            nmt_check_slack(t, "{tag} the output rows", yw, rows * d)
+            let pw <- cp |> plane_whole(pyp)
+            nmt_check_slack(t, "{tag} the partial rows", pw, npy)
         }
     }
 }

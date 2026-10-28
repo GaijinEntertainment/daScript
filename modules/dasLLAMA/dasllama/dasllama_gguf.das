@@ -113,9 +113,6 @@ let private MXFP4_KVALUES = fixed_array(0.0, 1.0, 2.0, 3.0, 4.0, 6.0, 8.0, 12.0,
                                         0.0, -1.0, -2.0, -3.0, -4.0, -6.0, -8.0, -12.0)
 
 
-def private rd_u64(b : array<uint8> | #; o : int64) : uint64 =>
-    uint64(rd_u32(b, o)) | (uint64(rd_u32(b, o + 4l)) << 32ul)
-
 def private rd_i64(b : array<uint8> | #; o : int64) : int64 => int64(rd_u64(b, o))
 
 // Read a length-prefixed string (u64 length + raw bytes), advancing the cursor.

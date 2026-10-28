@@ -158,9 +158,9 @@ must keep holding:
   `test_vkt_tower_win_rows`, `test_vkt_tower_tail_rows`, `test_vkt_tower_front_movers`,
   `test_vkt_tower_front_mel`, `test_vkt_tower_ga_mel`, `test_vkt_tower_cn_attn_rel_plane`,
   `test_vkt_tower_conformer`, `test_vkt_tower_fastconformer`, `test_vkt_tower_ga_dwh`, `test_vkt_tower_dw2d`,
-  `test_vkt_wdec_classes`, `test_vkt_wdec_fused_rq`, `test_vkt_rnnt` and `test_vkt_ctc_pick` cells - the census's
-  evidence for the tower, transducer-decode and CTC-pick classes - must hold each class against its CPU
-  oracle at the bar the cell sets, with the cell's poisoned-element control.
+  `test_vkt_wdec_classes`, `test_vkt_wdec_fused_rq`, `test_vkt_rnnt`, `test_vkt_ctc_pick`, `test_vkt_nmt` and
+  `test_vkt_nmt_attn` cells - the census's evidence for the tower, transducer-decode, CTC-pick and translation classes -
+  must hold each class against its CPU oracle at the bar the cell sets, with the cell's poisoned-element control.
 - `test_vulkan_kv_codec_kernels.das`'s `test_vkc_q8_da_attn` and `test_vkc_tq4_da_attn` cells must
   hold the codec attention arms (`codec_attn_arms`) against the CPU attention over the codec's
   rows, each arm with its controls.
@@ -190,6 +190,17 @@ must keep holding:
   argmax at every step of its three clips, on the CPU chain and on the Metal tower, its control the
   same walk fed each id one step early with the oracle id outside the bar at every step that input
   moved, and the greedy ids equal to the oracle's up to the first tie.
+- `test_nmt.das`'s `test_nmt_spm` cell, an external-reference compare, must hold the model-file
+  tokenizer id for id against `nmt_oracle/<dir>/`'s `tokens.json` source ids and `spm_edge.json` on
+  every stocked student, its control the charsmap dropped spelling the normalizer fixture apart.
+- `test_nmt.das`'s `test_nmt_exact_lane` cell, an external-reference compare, must hold every tapped
+  stage of the exact lane under the oracle's own tokens within `STAGE_BAR` (1e-4 of the stage's
+  largest magnitude) of the `.npy` dumps, the element counts equal, a displaced source token landing
+  the last encoder layer outside the bar; and the free run at `EXACT_LINES_FLOOR` (28 of 30) lines
+  of `tokens.json`'s ids, the lines fed the next line's source under it.
+- `test_nmt.das`'s `test_nmt_q8_lane` cell, an external-reference compare, must hold the q8 lane at
+  `Q8_LINES_FLOOR` (25 of 30) lines of `tokens.json`'s ids on the ru/en base-memory pairs, the same
+  file with its classifier's Q8_0 copy zeroed moving every line and falling under the floor.
 
 **A diff that changes the contract a pinned test cell holds fixed - what its entry says it must
 keep holding, an axis gained or lost - updates that cell's entry in the pinned set in the same
