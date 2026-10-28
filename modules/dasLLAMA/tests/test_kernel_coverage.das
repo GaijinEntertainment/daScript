@@ -596,7 +596,7 @@ def private cov_tower_bergamot(t : T?) {
                 var inscope stg <- stage_nmt_model(path, true)
                 mint_nmt_model(stg, m)   //! minted in memory: the census row writes no image
                 var inscope st = NmtState()
-                for (ln in ["Где ближайшая аптека?", "Сегодня мы идём в горы."]) {   // nolint:STYLE039 - the source language's own text
+                for (ln in ["Где ближайшая аптека?", "Сегодня мы идём в горы."]) {   // nolint:STYLE039,LINT019 - the source language's own text; the rule fires only on the darwin flavor
                     nmt_translate(m, st, ln)
                 }
             }
