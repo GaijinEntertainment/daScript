@@ -781,6 +781,8 @@ function makeWasiShim(memoryRef) {
             return 0;
         },
         fd_read() { return 0; },
+        fd_pread() { return 8; /* BADF - the runtime's fio binding imports both, no sample opens a file */ },
+        fd_pwrite() { return 8; },
         fd_close() { return 0; },
         fd_seek(fd, offset, whence, newOffPtr) {
             // __wasi_filesize_t result is u64 on both wasm32 and wasm64.
