@@ -411,7 +411,9 @@ def private setup_marian() : bool {
     }
     to_log(LOG_INFO, "setup_asr_rig: building marian-decoder (CPU-only)\n")
     let build = "{root}/inference/build"
-    run_capture("cmake -S \"{root}/inference\" -B \"{build}\" -DCMAKE_BUILD_TYPE=Release -DCOMPILE_CUDA=off -DUSE_FBGEMM=off -DGIT_SUBMODULE=OFF -DCMAKE_POLICY_VERSION_MINIMUM=3.5 && cmake --build \"{build}\" --config Release -j 8 --target marian_decoder", false)
+    // gcc 12 flags the reference build's bundled GEMM kernels maybe-uninitialized under -march=native; the cache seed puts -Wno-error for that one warning ahead of its own -Werror
+    let werror_relief = is_apple_box() || is_windows_box() ? "" : " -DALL_WARNINGS=-Wno-error=maybe-uninitialized"
+    run_capture("cmake -S \"{root}/inference\" -B \"{build}\" -DCMAKE_BUILD_TYPE=Release -DCOMPILE_CUDA=off -DUSE_FBGEMM=off -DGIT_SUBMODULE=OFF -DCMAKE_POLICY_VERSION_MINIMUM=3.5{werror_relief} && cmake --build \"{build}\" --config Release -j 8 --target marian_decoder", false)
     let built = stat(marian_bin()).is_valid
     to_log(built ? LOG_INFO : LOG_ERROR, "setup_asr_rig: marian-decoder - {built ? "ok" : "did not materialize"} ({marian_bin()})\n")
     return built
