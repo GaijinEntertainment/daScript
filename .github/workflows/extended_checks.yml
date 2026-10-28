@@ -120,10 +120,11 @@ jobs:
             ;;
           linux)
             echo "MARCH=64" >> $GITHUB_ENV
-            # apt.llvm.org provides LLVM 22 packages for Noble (not yet in main archive).
+            # apt.llvm.org carries LLVM 22 per Ubuntu codename; ubuntu-latest moves between them.
             wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key \
               | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/llvm.gpg
-            echo 'deb http://apt.llvm.org/noble/ llvm-toolchain-noble-22 main' \
+            codename=$(lsb_release -cs)
+            echo "deb http://apt.llvm.org/$codename/ llvm-toolchain-$codename-22 main" \
               | sudo tee /etc/apt/sources.list.d/llvm.list
             sudo bash ci/apt_install.sh --no-install-recommends \
               mesa-common-dev \
