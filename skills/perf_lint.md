@@ -13,7 +13,7 @@ message - fix the text in `daslib/perf_lint.das`, don't document around it.
 ```bash
 bin/daslang utils/lint/main.das -- file.das [dir ...] \
   [--quiet] [--silent] [--perf-only|--style-only|--paranoid-only] \
-  [--disable CODE,...] [--enable CODE,...] [--workers N] [--fix] \
+  [--disable CODE,...] [--enable CODE,...] [--workers N] [--fix] [--json] \
   [--no-shared-modules] [--exclude PATH ...]
 ```
 
@@ -22,7 +22,8 @@ run); on overlap `--disable` wins. A run compiles each shared module once per pr
 the files in require order; `--no-shared-modules` compiles every file's modules in its own group.
 `--exclude PATH` leaves a folder out of a directory walk. `--fix` writes the edits rules attach to their findings and
 re-lints; a fix that breaks the compile is rolled back. Pair it with `--enable CODE` to sweep one
-rule, and review the diff - a fix only proves the file still compiles.
+rule, and review the diff - a fix only proves the file still compiles. `--json` prints one JSON
+document instead of text: every finding with its position and its edit, and the totals.
 
 Four ways to silence a rule, narrowest first:
 

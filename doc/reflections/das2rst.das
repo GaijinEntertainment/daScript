@@ -1466,6 +1466,14 @@ def document_module_lint(_root : string) {
     document("Paranoid lint pass", mod, "lint.rst", groups)
 }
 
+def document_module_lint_fixups(_root : string) {
+    var mod = find_module("lint_fixups")
+    var groups <- array<DocGroup>(
+        group_by_regex("Fixes", mod, %regex~(lint_fix_message|lint_fix|lint_range|lint_span_text|lint_expr_text|lint_has_comment|lint_replace_fix|lint_span_fix|lint_call_fix|lint_fix_site_ok|lint_merge_fixes|lint_unwritten_arg|lint_is_operand|lint_operand_text|lint_indent_of|lint_fills_lines|lint_token_fix|lint_name_counts|lint_function_names|lint_module_visible)$%%)
+    )
+    document("Lint fix helpers", mod, "lint_fixups.rst", groups)
+}
+
 def document_module_lint_config(_root : string) {
     var mod = find_module("lint_config")
     var groups <- array<DocGroup>(
@@ -1474,7 +1482,7 @@ def document_module_lint_config(_root : string) {
         group_by_regex("Path-based rule defaults", mod, %regex~(is_daslib_source|is_shipped_library_source|is_core_library_source|lint029_source_exempt)$%%),
         group_by_regex("Lint-surface predicates", mod, %regex~(is_user_authored_body|is_lint_fixture_name|lint_file_skip_reason|drop_skipped_file_issues)$%%),
         group_by_regex("Structured findings", mod, %regex~(make_lint_issue)$%%),
-        group_by_regex("Fixes", mod, %regex~(apply_lint_fixes|lint_source_line)$%%),
+        group_by_regex("Fixes", mod, %regex~(apply_lint_fixes|applied_lint_fix_spans|lint_source_line)$%%),
         group_by_regex("Format policy", mod,
             %regex~(format_policy_for|partition_by_format_policy)$%%),
         group_by_regex("Line-length policy", mod, %regex~(line_length_policy_for)$%%)
@@ -2141,6 +2149,7 @@ def main {  // nolint:STYLE038 — flat one-call-per-documented-module dispatch 
     document_module_linq_fold(root)
     document_module_lint(root)
     document_module_lint_config(root)
+    document_module_lint_fixups(root)
     document_module_toml(root)
     document_module_logger(root)
     document_module_sha_256(root)

@@ -2,12 +2,15 @@ options gen2
 
 require dastest/testing_boost
 require daslib/ast
+require daslib/ast_boost
 require daslib/rtti
 require daslib/fio
+require strings
 require daslib/lint
 require daslib/perf_lint
 require daslib/style_lint
 require daslib/lint_config
+require daslib/lint_fixups
 
 def fixture(name : string) : string => "{get_das_root()}/tests/lint/{name}"
 
@@ -95,10 +98,75 @@ def test_lint_fix(t : T?) {
         let fixed = apply_lint_fixes("abcdef\n", fixes)
         t |> equal(fixed.applied, 1)
         t |> equal(fixed.text, "Xdef\n")
+        let used <- applied_lint_fix_spans("abcdef\n", fixes)
+        t |> equal(length(used), 1)
+        t |> equal(used[0], int3(0, 3, 0))
+    }
+    t |> run("a fix starting where an applied one ends waits for the next run") @@(t : T?) {
+        let fixes <- [
+            LintFix(line = 1, column = 2, last_line = 1, last_column = 2, replacement = "X"),
+            LintFix(line = 1, column = 2, last_line = 1, last_column = 2, replacement = "X"),
+            LintFix(line = 1, column = 2, last_line = 1, last_column = 4, replacement = "Y")]
+        let fixed = apply_lint_fixes("abcdef\n", fixes)
+        t |> equal(fixed.applied, 1)
+        t |> equal(fixed.text, "abXcdef\n")
+        let used <- applied_lint_fix_spans("abcdef\n", fixes)
+        t |> equal(length(used), 1)
+        t |> equal(used[0].z, 0)
     }
     t |> run("a line break in a replacement follows CRLF text") @@(t : T?) {
         let fixes <- [LintFix(line = 1, column = 3, last_line = 1, last_column = 6, replacement = "\n  x")]
         let fixed = apply_lint_fixes("abcdef\r\nnext\r\n", fixes)
         t |> equal(fixed.text, "abc\r\n  x\r\nnext\r\n")
+    }
+}
+
+[test]
+def test_lint_text_helpers(t : T?) {
+    t |> run("comment openers and indentation") @@(t : T?) {
+        t |> equal(lint_has_comment("a // b"), true)
+        t |> equal(lint_has_comment("a /* b */"), true)
+        t |> equal(lint_has_comment("a + b"), false)
+        t |> equal(lint_indent_of("    x"), 4)
+    }
+}
+
+[test]
+def test_lint_fix_helpers(t : T?) {
+    t |> run("identical fixes from sibling instantiations apply once") @@(t : T?) {
+        let fixes <- [
+            LintFix(line = 1, column = 2, last_line = 1, last_column = 2, replacement = "Y"),
+            LintFix(line = 1, column = 2, last_line = 1, last_column = 2, replacement = "Y")]
+        let fixed = apply_lint_fixes("abcdef\n", fixes)
+        t |> equal(fixed.applied, 1)
+        t |> equal(fixed.text, "abYcdef\n")
+    }
+    t |> run("merged edits become one fix over their span") @@(t : T?) {
+        var inscope access <- make_file_access("")
+        using() $(var mg : ModuleGroup) {
+            using() $(var cop : CodeOfPolicies) {
+                cop.export_all = true
+                compile_file(fixture("_fixture_lint_span.das"), access, unsafe(addr(mg)),
+                             cop) $(ok; program; _issues) {
+                    t |> success(ok)
+                    return if (!ok)
+                    let fn = program.getThisModule |> find_unique_function("spans")
+                    let edits <- [
+                        LintFix(line = 6, column = 11, last_line = 6, last_column = 16,
+                                replacement = "count"),
+                        LintFix(line = 5, column = 4, last_line = 5, last_column = 9,
+                                replacement = "count")]
+                    let merged = lint_merge_fixes(fn.at, edits)
+                    t |> equal(merged.line, 5)
+                    t |> equal(merged.last_line, 6)
+                    let src = fread(fixture("_fixture_lint_span.das"))
+                    let fixed = apply_lint_fixes(src, [merged])
+                    t |> equal(fixed.applied, 1)
+                    let text = replace(fixed.text, "\r\n", "\n")
+                    t |> success(find(text, "    count += n\n    return count\n") >= 0)
+                    t |> equal(lint_merge_fixes(fn.at, [edits[0], edits[0]]).line, 0)
+                }
+            }
+        }
     }
 }
