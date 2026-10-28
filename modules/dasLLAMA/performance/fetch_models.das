@@ -98,25 +98,57 @@ def private convert_canary(path : string) {
     // the serving artifact is the f16 decoder re-quantized to Q8_0 by the same checkout's quantize tool
     let f16 = "{dir_name(path)}/canary-qwen-2.5b-decoder-f16.gguf"
     let q8 = "{dir_name(path)}/canary-qwen-2.5b-decoder-q8_0.gguf"
-    let quant = normalize("{lcpp}/build-cpu/bin/llama-quantize")
-    if (!stat(quant).is_valid) {
-        run_capture("cmake --build \"{lcpp}/build-cpu\" --config Release --target llama-quantize -j 8", false)
-    }
     if (stat(f16).is_valid && !stat(q8).is_valid) {
-        run_capture("\"{quant}\" \"{f16}\" \"{q8}\" Q8_0", false)
+        run_capture("\"{ref_tool("llama-quantize")}\" \"{f16}\" \"{q8}\" Q8_0", false)
     }
     if (!stat(q8).is_valid) {
         to_log(LOG_ERROR, "fetch_models: the canary decoder's Q8_0 serving artifact did not materialize ({q8}) - the f16 conversion or the quantize failed\n")
     }
 }
 
-// one canary invocation produces both the encoder and the decoder
-def private try_convert(e : ProvEntry; path : string; var canary_done : bool&) {
-    if (get_platform_name() == "windows") {
-        to_log(LOG_ERROR, "fetch_models: --convert is POSIX-only (the venv/converter paths differ on Windows) - run the recipes by hand: {e.recipe}\n")
+// ===== the rows llama-quantize mints from a fetched row (each row's `quantize`) =====
+
+//! the reference build's `tool` (the bin dir beside MTMD_BIN's), built into that tree when absent
+def private ref_tool(tool : string) : string {
+    let bin_dir = dir_name(mtmd_bin())
+    if (!stat(cmake_built_bin(bin_dir, tool)).is_valid) {
+        run_capture("cmake --build \"{dir_name(bin_dir)}\" --config Release --target {tool} -j 8", false)
+    }
+    return cmake_built_bin(bin_dir, tool)
+}
+
+//! The row `e` at `path`: its `quantize` source quantized with every plane in its format, the low-bit types reading an
+//! importance matrix built once from benchmarks/nmt/corpus en + ru, the commands the row's recipe spells.
+def private mint_quantized(e : ProvEntry; path : string) {
+    let root = models_dir()
+    let q = e.quantize
+    let steps = mint_steps(stat("{root}{q.source}").is_valid, stat("{root}{q.imatrix}").is_valid)
+    if (steps == MintSteps.refuse_no_source) {
+        to_log(LOG_ERROR, "fetch_models: {base_name(path)} needs its source - run with --fetch -o {q.source} first\n")
         return
     }
-    if (find(e.name, "canary") >= 0) {
+    let dir = dir_name("{root}{q.imatrix}")
+    mkdir_rec(dir)
+    mkdir_rec(dir_name(path))
+    let calib = "{dir}/calib.txt"
+    if (steps == MintSteps.imatrix_then_quantize) {   // a tool resolves only when its step runs: resolving builds it
+        fwrite(calib, fread("modules/dasLLAMA/benchmarks/nmt/corpus/en.txt") + fread("modules/dasLLAMA/benchmarks/nmt/corpus/ru.txt"))
+        run_capture(quantize_commands(q, e.name, root, calib, "\"{ref_tool("llama-imatrix")}\"", "").imatrix, false)
+    }
+    run_capture(quantize_commands(q, e.name, root, calib, "", "\"{ref_tool("llama-quantize")}\"").quantize, false)
+    if (!stat(path).is_valid) {
+        to_log(LOG_ERROR, "fetch_models: {base_name(path)} did not materialize - the quantize tool refused {q.fmt}\n")
+    }
+}
+
+// one canary invocation produces both the encoder and the decoder
+def private try_convert(e : ProvEntry; path : string; var canary_done : bool&) {
+    let route = convert_route(e, get_platform_name())
+    if (route == ConvertRoute.refuse_platform) {
+        to_log(LOG_ERROR, "fetch_models: --convert is POSIX-only (the venv/converter paths differ on Windows) - run the recipes by hand: {e.recipe}\n")
+    } elif (route == ConvertRoute.quantize) {
+        mint_quantized(e, path)
+    } elif (route == ConvertRoute.canary) {
         if (!canary_done) {
             convert_canary(path)
             canary_done = true
