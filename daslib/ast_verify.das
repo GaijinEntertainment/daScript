@@ -170,6 +170,7 @@ class private AstVerifyVisitor : AstVisitor {
     type_ancestors : table<void?>
     closure_depth : int = 0
     quote_depth : int = 0
+    template_depth : int = 0
 
     def override canVisitFunction(fun : Function?) : bool => !fun.flags.generated
 
@@ -442,7 +443,8 @@ class private AstVerifyVisitor : AstVisitor {
             report(expr.at, "ExprOp1 has op '{expr.op}', which is not a unary operator")
             expr.op := "-"
         }
-        if (quote_depth == 0 && key_exists(LVALUE_OPS, string(expr.op)) && expr.subexpr != null
+        if (quote_depth == 0 && template_depth == 0 && key_exists(LVALUE_OPS, string(expr.op))
+                && expr.subexpr != null
                 && starts_with(expr.subexpr.__rtti, "ExprConst")) {
             report(expr.at, "ExprOp1 '{expr.op}' needs an l-value, but its subexpr is {expr.subexpr.__rtti}")
             expr.op := "+"
@@ -516,6 +518,19 @@ class private AstVerifyVisitor : AstVisitor {
     def override visitExprQuote(var expr : ExprQuote?) : ExpressionPtr {
         quote_depth--
         return expr
+    }
+
+    def override preVisitStructure(str : StructurePtr) : void {
+        if (str.flags.isTemplate) {
+            template_depth++
+        }
+    }
+
+    def override visitStructure(var str : StructurePtr) : StructurePtr {
+        if (str.flags.isTemplate) {
+            template_depth--
+        }
+        return str
     }
 
     def override preVisitExprBlock(var expr : ExprBlock?) : void {
