@@ -1,6 +1,7 @@
 #include "daScript/misc/platform.h"
 
 #include "daScript/simulate/name_lookup.h"
+#include "daScript/simulate/das_qsort_r.h"
 #include "daScript/misc/anyhash.h"
 
 namespace das {
@@ -74,7 +75,7 @@ namespace das {
         }
         vector<uint32_t> order(nbuckets);
         for ( uint32_t b=0; b!=nbuckets; ++b ) order[b] = b;
-        das::stable_sort(order.begin(), order.end(), [&](uint32_t a, uint32_t b) {
+        das_stable_sort(order.data(), order.data() + order.size(), [&](uint32_t a, uint32_t b) {
             return bucketSize[a] > bucketSize[b];
         });
         dispOut.assign(nbuckets, 0);
